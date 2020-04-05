@@ -49,10 +49,16 @@ spec:
         spec:
           description: HelmRepositorySpec defines the desired state of HelmRepository
           properties:
+            interval:
+              description: The interval at which to check for repository updates
+              type: string
             url:
               description: The repository address
               minLength: 4
               type: string
+          required:
+          - interval
+          - url
           type: object
         status:
           description: HelmRepositoryStatus defines the observed state of HelmRepository

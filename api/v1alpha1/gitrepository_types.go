@@ -25,7 +25,10 @@ type GitRepositorySpec struct {
 	// +kubebuilder:validation:MinLength=4
 
 	// The repository address
-	Url string `json:"url,omitempty"`
+	Url string `json:"url"`
+
+	// The interval at which to check for repository updates
+	Interval metav1.Duration `json:"interval"`
 }
 
 // GitRepositoryStatus defines the observed state of GitRepository

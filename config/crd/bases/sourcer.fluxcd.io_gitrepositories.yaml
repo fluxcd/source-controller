@@ -49,10 +49,16 @@ spec:
         spec:
           description: GitRepositorySpec defines the desired state of GitRepository
           properties:
+            interval:
+              description: The interval at which to check for repository updates
+              type: string
             url:
               description: The repository address
               minLength: 4
               type: string
+          required:
+          - interval
+          - url
           type: object
         status:
           description: GitRepositoryStatus defines the observed state of GitRepository

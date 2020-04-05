@@ -101,7 +101,7 @@ func (r *HelmRepositoryReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 		return ctrl.Result{}, err
 	}
 
-	return ctrl.Result{RequeueAfter: time.Minute}, nil
+	return ctrl.Result{RequeueAfter: repo.Spec.Interval.Duration}, nil
 }
 
 func (r *HelmRepositoryReconciler) SetupWithManager(mgr ctrl.Manager) error {
