@@ -32,6 +32,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	sourcerv1 "github.com/fluxcd/sourcer/api/v1alpha1"
 )
@@ -47,7 +48,9 @@ type HelmRepositoryReconciler struct {
 // +kubebuilder:rbac:groups=sourcer.fluxcd.io,resources=helmrepositories/status,verbs=get;update;patch
 
 func (r *HelmRepositoryReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
 	log := r.Log.WithValues("helmrepository", req.NamespacedName)
 
 	var repo sourcerv1.HelmRepository
@@ -77,7 +80,7 @@ func (r *HelmRepositoryReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 		}
 	}
 
-	if err := downloadIndex(repo.Spec.Url); err != nil {
+	if err := r.downloadIndex(repo.Spec.Url); err != nil {
 		log.Info("Index download error", "error", err.Error())
 		readyCondition.Reason = sourcerv1.IndexDownloadFailedReason
 		readyCondition.Message = err.Error()
@@ -98,18 +101,17 @@ func (r *HelmRepositoryReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 		return ctrl.Result{}, err
 	}
 
-	log.Info("Sync finished")
 	return ctrl.Result{RequeueAfter: time.Minute}, nil
 }
 
 func (r *HelmRepositoryReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&sourcerv1.HelmRepository{}).
+		WithEventFilter(predicate.GenerationChangedPredicate{}).
 		Complete(r)
 }
 
-func downloadIndex(repoUrl string) error {
-	//time.Sleep(10 * time.Second)
+func (r *HelmRepositoryReconciler) downloadIndex(repoUrl string) error {
 	parsedURL, err := url.Parse(repoUrl)
 	if err != nil {
 		return fmt.Errorf("unable to parse repository url %w", err)
