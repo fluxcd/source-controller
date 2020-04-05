@@ -62,3 +62,8 @@ type HelmRepositoryList struct {
 func init() {
 	SchemeBuilder.Register(&HelmRepository{}, &HelmRepositoryList{})
 }
+
+const (
+	IndexDownloadFailedReason  string = "IndexDownloadFailed"
+	IndexDownloadSucceedReason string = "IndexDownloadSucceed"
+)
