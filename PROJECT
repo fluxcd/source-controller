@@ -1,0 +1,10 @@
+domain: fluxcd.io
+repo: github.com/fluxcd/sourcer
+resources:
+- group: sourcer
+  kind: GitRepository
+  version: v1alpha1
+- group: sourcer
+  kind: HelmRepository
+  version: v1alpha1
+version: "2"

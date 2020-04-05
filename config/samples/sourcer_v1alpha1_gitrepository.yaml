@@ -1,0 +1,7 @@
+apiVersion: sourcer.fluxcd.io/v1alpha1
+kind: GitRepository
+metadata:
+  name: gitrepository-sample
+spec:
+  # Add fields here
+  foo: bar

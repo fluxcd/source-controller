@@ -1,0 +1,24 @@
+# permissions for end users to edit helmrepositories.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: helmrepository-editor-role
+rules:
+- apiGroups:
+  - sourcer.fluxcd.io
+  resources:
+  - helmrepositories
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - sourcer.fluxcd.io
+  resources:
+  - helmrepositories/status
+  verbs:
+  - get
