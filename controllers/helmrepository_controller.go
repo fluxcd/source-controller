@@ -25,6 +25,7 @@ import (
 	"path"
 	"time"
 
+	sourcerv1 "github.com/fluxcd/sourcer/api/v1alpha1"
 	"github.com/go-logr/logr"
 	"gopkg.in/yaml.v2"
 	corev1 "k8s.io/api/core/v1"
@@ -32,9 +33,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/predicate"
-
-	sourcerv1 "github.com/fluxcd/sourcer/api/v1alpha1"
 )
 
 // HelmRepositoryReconciler reconciles a HelmRepository object
@@ -107,7 +105,7 @@ func (r *HelmRepositoryReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 func (r *HelmRepositoryReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&sourcerv1.HelmRepository{}).
-		WithEventFilter(predicate.GenerationChangedPredicate{}).
+		WithEventFilter(RepositoryChangePredicate{}).
 		Complete(r)
 }
 

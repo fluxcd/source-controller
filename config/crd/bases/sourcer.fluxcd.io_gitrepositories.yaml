@@ -50,16 +50,16 @@ spec:
           description: GitRepositorySpec defines the desired state of GitRepository
           properties:
             branch:
-              description: The branch to checkout
+              description: The git branch to checkout, defaults to ('master').
               type: string
             interval:
-              description: The interval at which to check for repository updates
+              description: The interval at which to check for repository updates.
               type: string
             tag:
-              description: The tag to checkout
+              description: The git tag to checkout, takes precedence over branch.
               type: string
             url:
-              description: The repository address
+              description: The repository URL, can be a HTTP or SSH address.
               pattern: ^(http|https|ssh)://
               type: string
           required:

@@ -19,6 +19,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"time"
 
 	"github.com/go-git/go-git/v5"
@@ -97,7 +98,13 @@ func (r *GitRepositoryReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 func (r *GitRepositoryReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&sourcerv1.GitRepository{}).
-		WithEventFilter(predicate.GenerationChangedPredicate{}).
+		WithEventFilter(predicate.Funcs{
+			DeleteFunc: func(e event.DeleteEvent) bool {
+				//TODO: cleanup
+				return false
+			},
+		}).
+		WithEventFilter(RepositoryChangePredicate{}).
 		Complete(r)
 }
 
@@ -116,6 +123,7 @@ func (r *GitRepositoryReconciler) sync(spec sourcerv1.GitRepositorySpec) (source
 		URL:           spec.Url,
 		Depth:         2,
 		ReferenceName: refName,
+		SingleBranch:  true,
 	})
 	if err != nil {
 		ex := fmt.Errorf("git clone error %w", err)
