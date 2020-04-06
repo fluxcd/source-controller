@@ -21,19 +21,32 @@ spec:
     metadata:
       labels:
         control-plane: controller-manager
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
     spec:
+      terminationGracePeriodSeconds: 10
       containers:
-      - command:
-        - /manager
+      - name: manager
+        image: fluxcd/sourcer:latest
+        ports:
+          - containerPort: 8080
+            name: http
+          - containerPort: 9090
+            name: http-prom
         args:
-        - --enable-leader-election
-        image: controller:latest
-        name: manager
+          - --enable-leader-election
+          - --storage-path=/data
         resources:
           limits:
-            cpu: 100m
-            memory: 30Mi
+            cpu: 1000m
+            memory: 1Gi
           requests:
-            cpu: 100m
-            memory: 20Mi
-      terminationGracePeriodSeconds: 10
+            cpu: 50m
+            memory: 64Mi
+        volumeMounts:
+          - name: data
+            mountPath: /data
+      volumes:
+        - name: data
+          emptyDir: {}
