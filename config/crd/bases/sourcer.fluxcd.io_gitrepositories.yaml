@@ -69,6 +69,9 @@ spec:
         status:
           description: GitRepositoryStatus defines the observed state of GitRepository
           properties:
+            artifacts:
+              description: Path to the artifacts of the last repository sync.
+              type: string
             conditions:
               items:
                 description: RepositoryCondition contains condition information for
@@ -99,6 +102,11 @@ spec:
                 - type
                 type: object
               type: array
+            lastUpdateTime:
+              description: LastUpdateTime is the timestamp corresponding to the last
+                status change of this repository.
+              format: date-time
+              type: string
           type: object
       type: object
   version: v1alpha1

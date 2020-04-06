@@ -43,6 +43,15 @@ type GitRepositorySpec struct {
 type GitRepositoryStatus struct {
 	// +optional
 	Conditions []RepositoryCondition `json:"conditions,omitempty"`
+
+	// LastUpdateTime is the timestamp corresponding to the last status
+	// change of this repository.
+	// +optional
+	LastUpdateTime *metav1.Time `json:"lastUpdateTime,omitempty"`
+
+	// Path to the artifacts of the last repository sync.
+	// +optional
+	Artifacts string `json:"artifacts,omitempty"`
 }
 
 // +kubebuilder:object:root=true
