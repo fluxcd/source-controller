@@ -22,13 +22,21 @@ import (
 
 // GitRepositorySpec defines the desired state of GitRepository
 type GitRepositorySpec struct {
-	// +kubebuilder:validation:MinLength=4
+	// +kubebuilder:validation:Pattern="^(http|https|ssh)://"
 
-	// The repository address
+	// The repository URL, can be a HTTP or SSH address.
 	Url string `json:"url"`
 
-	// The interval at which to check for repository updates
+	// The interval at which to check for repository updates.
 	Interval metav1.Duration `json:"interval"`
+
+	// The git branch to checkout, defaults to ('master').
+	// +optional
+	Branch string `json:"branch"`
+
+	// The git tag to checkout, takes precedence over branch.
+	// +optional
+	Tag string `json:"tag"`
 }
 
 // GitRepositoryStatus defines the observed state of GitRepository

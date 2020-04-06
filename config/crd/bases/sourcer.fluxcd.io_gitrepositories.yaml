@@ -49,12 +49,18 @@ spec:
         spec:
           description: GitRepositorySpec defines the desired state of GitRepository
           properties:
+            branch:
+              description: The branch to checkout
+              type: string
             interval:
               description: The interval at which to check for repository updates
               type: string
+            tag:
+              description: The tag to checkout
+              type: string
             url:
               description: The repository address
-              minLength: 4
+              pattern: ^(http|https|ssh)://
               type: string
           required:
           - interval
