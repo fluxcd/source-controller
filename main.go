@@ -18,7 +18,10 @@ package main
 
 import (
 	"flag"
+	"github.com/go-logr/logr"
+	"net/http"
 	"os"
+	"path/filepath"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -46,10 +49,15 @@ func init() {
 func main() {
 	var metricsAddr string
 	var enableLeaderElection bool
-	flag.StringVar(&metricsAddr, "metrics-addr", ":8080", "The address the metric endpoint binds to.")
+	var storagePath string
+	var storageAddr string
+	flag.StringVar(&metricsAddr, "metrics-addr", ":9090", "The address the metric endpoint binds to.")
 	flag.BoolVar(&enableLeaderElection, "enable-leader-election", false,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
+	flag.StringVar(&storagePath, "storage-path", "", "The local storage path.")
+	flag.StringVar(&storageAddr, "storage-addr", ":8080", "The address the static file server binds to.")
+
 	flag.Parse()
 
 	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
@@ -66,10 +74,17 @@ func main() {
 		os.Exit(1)
 	}
 
+	if storagePath == "" {
+		p, _ := os.Getwd()
+		storagePath = filepath.Join(p, "bin")
+	}
+	go startFileServer(storagePath, storageAddr, setupLog)
+
 	if err = (&controllers.GitRepositoryReconciler{
-		Client: mgr.GetClient(),
-		Log:    ctrl.Log.WithName("controllers").WithName("GitRepository"),
-		Scheme: mgr.GetScheme(),
+		Client:      mgr.GetClient(),
+		Log:         ctrl.Log.WithName("controllers").WithName("GitRepository"),
+		Scheme:      mgr.GetScheme(),
+		StoragePath: storagePath,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "GitRepository")
 		os.Exit(1)
@@ -88,5 +103,14 @@ func main() {
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
+	}
+}
+
+func startFileServer(path string, address string, l logr.Logger) {
+	fs := http.FileServer(http.Dir(path))
+	http.Handle("/", fs)
+	err := http.ListenAndServe(address, nil)
+	if err != nil {
+		l.Error(err, "file server error")
 	}
 }
