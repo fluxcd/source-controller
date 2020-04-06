@@ -1,7 +1,8 @@
 apiVersion: sourcer.fluxcd.io/v1alpha1
 kind: HelmRepository
 metadata:
-  name: helmrepository-sample
+  name: podinfo
 spec:
-  # Add fields here
-  foo: bar
+  interval: 1m
+  url: https://stefanprodan.github.io/podinfo
+

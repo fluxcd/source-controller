@@ -1,7 +1,9 @@
 apiVersion: sourcer.fluxcd.io/v1alpha1
 kind: GitRepository
 metadata:
-  name: gitrepository-sample
+  name: podinfo
 spec:
-  # Add fields here
-  foo: bar
+  interval: 1m
+  url: https://github.com/stefanprodan/podinfo
+  branch: master
+  tag: "3.2.2"
