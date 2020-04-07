@@ -24,6 +24,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sigs.k8s.io/controller-runtime/pkg/event"
+	"strings"
 	"time"
 
 	"github.com/go-git/go-git/v5"
@@ -197,7 +198,7 @@ func (r *GitRepositoryReconciler) sync(gr sourcerv1.GitRepository) (sourcerv1.Re
 
 	// store artifacts
 	artifacts := filepath.Join(storage, fmt.Sprintf("%s.tar.gz", ref.Hash().String()))
-	excludes := "--exclude=\\*.{jpg,gif,png,wmv,flv,tar.gz,zip} --exclude .git"
+	excludes := "--exclude=\\*.{jpg,jpeg,gif,png,wmv,flv,tar.gz,zip} --exclude .git"
 	command := exec.Command("/bin/sh", "-c",
 		fmt.Sprintf("cd %s && tar -c %s -f - . | gzip > %s", dir, excludes, artifacts))
 	err = command.Run()
@@ -211,13 +212,22 @@ func (r *GitRepositoryReconciler) sync(gr sourcerv1.GitRepository) (sourcerv1.Re
 		}, "", ex
 	}
 
-	output := fmt.Sprintf("/repositories/%s-%s/%s.tar.gz", gr.Name, gr.Namespace, ref.Hash().String())
+	// compose artifacts URL
+	hostname := "localhost"
+	if os.Getenv("RUNTIME_NAMESPACE") != "" {
+		svcParts := strings.Split(os.Getenv("HOSTNAME"), "-")
+		hostname = fmt.Sprintf("%s.%s",
+			strings.Join(svcParts[:len(svcParts)-2], "-"), os.Getenv("RUNTIME_NAMESPACE"))
+	}
+	artifactsURL := fmt.Sprintf("http://%s/repositories/%s-%s/%s.tar.gz",
+		hostname, gr.Name, gr.Namespace, ref.Hash().String())
+
 	return sourcerv1.RepositoryCondition{
 		Type:    sourcerv1.RepositoryConditionReady,
 		Status:  corev1.ConditionTrue,
 		Reason:  "GitCloneSucceed",
 		Message: fmt.Sprintf("Fetched artifacts are available at %s", artifacts),
-	}, output, nil
+	}, artifactsURL, nil
 }
 
 func (r *GitRepositoryReconciler) shouldResetStatus(gr sourcerv1.GitRepository) bool {

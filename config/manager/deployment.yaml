@@ -1,26 +1,19 @@
-apiVersion: v1
-kind: Namespace
-metadata:
-  labels:
-    control-plane: controller-manager
-  name: system
----
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: controller-manager
+  name: controller
   namespace: system
   labels:
-    control-plane: controller-manager
+    control-plane: controller
 spec:
   selector:
     matchLabels:
-      control-plane: controller-manager
+      app: sourcer
   replicas: 1
   template:
     metadata:
       labels:
-        control-plane: controller-manager
+        app: sourcer
       annotations:
         prometheus.io/scrape: "true"
         prometheus.io/port: "9090"
@@ -28,7 +21,7 @@ spec:
       terminationGracePeriodSeconds: 10
       containers:
       - name: manager
-        image: fluxcd/sourcer:latest
+        image: controller
         ports:
           - containerPort: 8080
             name: http
@@ -37,6 +30,11 @@ spec:
         args:
           - --enable-leader-election
           - --storage-path=/data
+        env:
+          - name: RUNTIME_NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
         resources:
           limits:
             cpu: 1000m
