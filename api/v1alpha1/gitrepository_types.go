@@ -37,6 +37,10 @@ type GitRepositorySpec struct {
 	// The git tag to checkout, takes precedence over branch.
 	// +optional
 	Tag string `json:"tag"`
+
+	// The git tag semver expression, takes precedence over tag.
+	// +optional
+	SemVer string `json:"semver"`
 }
 
 // GitRepositoryStatus defines the observed state of GitRepository

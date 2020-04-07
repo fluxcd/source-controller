@@ -55,6 +55,9 @@ spec:
             interval:
               description: The interval at which to check for repository updates.
               type: string
+            semver:
+              description: The git tag semver expression, takes precedence over tag.
+              type: string
             tag:
               description: The git tag to checkout, takes precedence over branch.
               type: string

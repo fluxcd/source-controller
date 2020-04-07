@@ -3,6 +3,7 @@ module github.com/fluxcd/sourcer
 go 1.13
 
 require (
+	github.com/blang/semver v3.5.0+incompatible
 	github.com/go-git/go-git/v5 v5.0.0
 	github.com/go-logr/logr v0.1.0
 	github.com/onsi/ginkgo v1.11.0

@@ -23,10 +23,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"sigs.k8s.io/controller-runtime/pkg/event"
 	"strings"
 	"time"
 
+	"github.com/blang/semver"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-logr/logr"
@@ -35,6 +35,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	sourcerv1 "github.com/fluxcd/sourcer/api/v1alpha1"
@@ -141,6 +142,7 @@ func (r *GitRepositoryReconciler) sync(gr sourcerv1.GitRepository) (sourcerv1.Re
 		refName = plumbing.NewTagReferenceName(gr.Spec.Tag)
 	}
 
+	// create tmp dir
 	dir, err := ioutil.TempDir("", gr.Name)
 	if err != nil {
 		ex := fmt.Errorf("tmp dir error %w", err)
@@ -159,6 +161,7 @@ func (r *GitRepositoryReconciler) sync(gr sourcerv1.GitRepository) (sourcerv1.Re
 		Depth:         2,
 		ReferenceName: refName,
 		SingleBranch:  true,
+		Tags:          git.AllTags,
 	})
 	if err != nil {
 		ex := fmt.Errorf("git clone error %w", err)
@@ -168,6 +171,86 @@ func (r *GitRepositoryReconciler) sync(gr sourcerv1.GitRepository) (sourcerv1.Re
 			Reason:  "GitCloneFailed",
 			Message: ex.Error(),
 		}, "", ex
+	}
+
+	// checkout tag based on semver expression
+	if gr.Spec.SemVer != "" {
+		rng, err := semver.ParseRange(gr.Spec.SemVer)
+		if err != nil {
+			ex := fmt.Errorf("semver parse range error %w", err)
+			return sourcerv1.RepositoryCondition{
+				Type:    sourcerv1.RepositoryConditionReady,
+				Status:  corev1.ConditionFalse,
+				Reason:  "GitCloneFailed",
+				Message: ex.Error(),
+			}, "", ex
+		}
+
+		repoTags, err := repo.Tags()
+		if err != nil {
+			ex := fmt.Errorf("git list tags error %w", err)
+			return sourcerv1.RepositoryCondition{
+				Type:    sourcerv1.RepositoryConditionReady,
+				Status:  corev1.ConditionFalse,
+				Reason:  "GitCloneFailed",
+				Message: ex.Error(),
+			}, "", ex
+		}
+
+		tags := make(map[string]string)
+		_ = repoTags.ForEach(func(t *plumbing.Reference) error {
+			tags[t.Name().Short()] = t.Strings()[1]
+			return nil
+		})
+
+		svTags := make(map[string]string)
+		svers := []semver.Version{}
+		for tag, _ := range tags {
+			v, _ := semver.ParseTolerant(tag)
+			if rng(v) {
+				svers = append(svers, v)
+				svTags[v.String()] = tag
+			}
+		}
+
+		if len(svers) > 0 {
+			semver.Sort(svers)
+			v := svers[len(svers)-1]
+			t := svTags[v.String()]
+			commit := tags[t]
+
+			w, err := repo.Worktree()
+			if err != nil {
+				ex := fmt.Errorf("git worktree error %w", err)
+				return sourcerv1.RepositoryCondition{
+					Type:    sourcerv1.RepositoryConditionReady,
+					Status:  corev1.ConditionFalse,
+					Reason:  "GitCheckoutFailed",
+					Message: ex.Error(),
+				}, "", ex
+			}
+
+			err = w.Checkout(&git.CheckoutOptions{
+				Hash: plumbing.NewHash(commit),
+			})
+			if err != nil {
+				ex := fmt.Errorf("git checkout error %w", err)
+				return sourcerv1.RepositoryCondition{
+					Type:    sourcerv1.RepositoryConditionReady,
+					Status:  corev1.ConditionFalse,
+					Reason:  "GitCheckoutFailed",
+					Message: ex.Error(),
+				}, "", ex
+			}
+		} else {
+			ex := fmt.Errorf("no match found for semver %s", gr.Spec.SemVer)
+			return sourcerv1.RepositoryCondition{
+				Type:    sourcerv1.RepositoryConditionReady,
+				Status:  corev1.ConditionFalse,
+				Reason:  "GitCheckoutFailed",
+				Message: ex.Error(),
+			}, "", ex
+		}
 	}
 
 	// read commit hash
@@ -233,7 +316,9 @@ func (r *GitRepositoryReconciler) sync(gr sourcerv1.GitRepository) (sourcerv1.Re
 func (r *GitRepositoryReconciler) shouldResetStatus(gr sourcerv1.GitRepository) bool {
 	resetStatus := false
 	if gr.Status.Artifacts != "" {
-		if _, err := os.Stat(filepath.Join(r.StoragePath, gr.Status.Artifacts)); err != nil {
+		pathParts := strings.Split(gr.Status.Artifacts, "/")
+		path := fmt.Sprintf("repositories/%s-%s/%s", gr.Name, gr.Namespace, pathParts[len(pathParts)-1])
+		if _, err := os.Stat(filepath.Join(r.StoragePath, path)); err != nil {
 			resetStatus = true
 		}
 	}
