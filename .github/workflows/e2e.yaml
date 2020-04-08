@@ -1,0 +1,46 @@
+name: e2e
+
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+
+jobs:
+  kind:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Restore Go cache
+        uses: actions/cache@v1
+        with:
+          path: ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+      - name: Setup Go
+        uses: actions/setup-go@v2-beta
+        with:
+          go-version: 1.13.x
+      - name: Setup Kubernetes
+        uses: engineerd/setup-kind@v0.3.0
+      - name: Setup Kustomize
+        uses: ./.github/actions/kustomize
+      - name: Setup Kubebuilder
+        uses: ./.github/actions/kubebuilder
+      - name: Run tests and build image
+        run: make docker-build IMG=test/source-controller:latest
+        env:
+          KUBEBUILDER_ASSETS: ${{ github.workspace }}/kubebuilder/bin
+      - name: Load test image
+        run: kind load docker-image test/source-controller:latest
+      - name: Deploy controller
+        run: make dev-deploy IMG=test/source-controller:latest
+        env:
+          KUBEBUILDER_ASSETS: ${{ github.workspace }}/kubebuilder/bin
+      - name: Debug failure
+        if: failure()
+        run: |
+          kubectl -n sourcer-system get all
+          kubectl -n sourcer-system logs deploy/sourcer-controller

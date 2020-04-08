@@ -35,8 +35,12 @@ uninstall: manifests
 
 # Deploy controller in the configured Kubernetes cluster in ~/.kube/config
 deploy: manifests
-	cd config/manager && kustomize edit set image controller=${IMG}
+	cd config/manager && kustomize edit set image fluxcd/sourcer=${IMG}
 	kustomize build config/default | kubectl apply -f -
+
+# Deploy controller dev image in the configured Kubernetes cluster in ~/.kube/config
+dev-deploy: manifests
+	./hack/dev-deploy.sh $(IMG)
 
 # Generate manifests e.g. CRD, RBAC etc.
 manifests: controller-gen
@@ -78,3 +82,5 @@ CONTROLLER_GEN=$(GOBIN)/controller-gen
 else
 CONTROLLER_GEN=$(shell which controller-gen)
 endif
+
+

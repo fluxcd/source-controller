@@ -21,7 +21,8 @@ spec:
       terminationGracePeriodSeconds: 10
       containers:
       - name: manager
-        image: controller
+        image: fluxcd/sourcer
+        imagePullPolicy: IfNotPresent
         ports:
           - containerPort: 8080
             name: http
