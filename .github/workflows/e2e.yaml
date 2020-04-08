@@ -39,8 +39,15 @@ jobs:
         run: make dev-deploy IMG=test/source-controller:latest
         env:
           KUBEBUILDER_ASSETS: ${{ github.workspace }}/kubebuilder/bin
+      - name: Run smoke tests
+        run: |
+          kubectl apply -f ./config/samples
+          kubectl wait gitrepository/podinfo --for=condition=ready --timeout=1m
+          kubectl wait helmrepository/podinfo --for=condition=ready --timeout=1m
       - name: Debug failure
         if: failure()
         run: |
+          kubectl get gitrepositories -oyaml
+          kubectl get helmrepositories -oyaml
           kubectl -n sourcer-system get all
           kubectl -n sourcer-system logs deploy/sourcer-controller
