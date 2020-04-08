@@ -1,7 +1,7 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
-- bases/sourcer.fluxcd.io_gitrepositories.yaml
-- bases/sourcer.fluxcd.io_helmrepositories.yaml
+- bases/source.fluxcd.io_gitrepositories.yaml
+- bases/source.fluxcd.io_helmrepositories.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 

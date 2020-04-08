@@ -1,4 +1,4 @@
-module github.com/fluxcd/sourcer
+module github.com/fluxcd/source-controller
 
 go 1.13
 

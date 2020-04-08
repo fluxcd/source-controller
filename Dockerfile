@@ -15,12 +15,12 @@ COPY api/ api/
 COPY controllers/ controllers/
 
 # build
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GO111MODULE=on go build -a -o sourcer main.go
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GO111MODULE=on go build -a -o source-controller main.go
 
 FROM alpine:3.11
 
 RUN apk add --no-cache openssh-client ca-certificates tini 'git>=2.12.0' socat curl bash
 
-COPY --from=builder /workspace/sourcer /usr/local/bin/
+COPY --from=builder /workspace/source-controller /usr/local/bin/
 
-ENTRYPOINT [ "/sbin/tini", "--", "sourcer" ]
+ENTRYPOINT [ "/sbin/tini", "--", "source-controller" ]

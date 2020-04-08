@@ -29,8 +29,8 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	sourcerv1alpha1 "github.com/fluxcd/sourcer/api/v1alpha1"
-	"github.com/fluxcd/sourcer/controllers"
+	sourcev1alpha1 "github.com/fluxcd/source-controller/api/v1alpha1"
+	"github.com/fluxcd/source-controller/controllers"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -42,7 +42,7 @@ var (
 func init() {
 	_ = clientgoscheme.AddToScheme(scheme)
 
-	_ = sourcerv1alpha1.AddToScheme(scheme)
+	_ = sourcev1alpha1.AddToScheme(scheme)
 	// +kubebuilder:scaffold:scheme
 }
 

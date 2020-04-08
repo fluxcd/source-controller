@@ -35,5 +35,5 @@ func (RepositoryChangePredicate) Update(e event.UpdateEvent) bool {
 }
 
 const (
-	ForceSyncAnnotation string = "sourcer.fluxcd.io/syncAt"
+	ForceSyncAnnotation string = "source.fluxcd.io/syncAt"
 )

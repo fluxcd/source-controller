@@ -8,7 +8,7 @@ metadata:
 spec:
   type: ClusterIP
   selector:
-    app: sourcer
+    app: source-controller
   ports:
     - name: http
       port: 80

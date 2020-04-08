@@ -7,7 +7,7 @@ metadata:
   name: manager-role
 rules:
 - apiGroups:
-  - sourcer.fluxcd.io
+  - source.fluxcd.io
   resources:
   - gitrepositories
   verbs:
@@ -19,7 +19,7 @@ rules:
   - update
   - watch
 - apiGroups:
-  - sourcer.fluxcd.io
+  - source.fluxcd.io
   resources:
   - gitrepositories/status
   verbs:
@@ -27,7 +27,7 @@ rules:
   - patch
   - update
 - apiGroups:
-  - sourcer.fluxcd.io
+  - source.fluxcd.io
   resources:
   - helmrepositories
   verbs:
@@ -39,7 +39,7 @@ rules:
   - update
   - watch
 - apiGroups:
-  - sourcer.fluxcd.io
+  - source.fluxcd.io
   resources:
   - helmrepositories/status
   verbs:

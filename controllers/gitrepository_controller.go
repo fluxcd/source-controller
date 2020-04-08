@@ -38,7 +38,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
-	sourcerv1 "github.com/fluxcd/sourcer/api/v1alpha1"
+	sourcev1 "github.com/fluxcd/source-controller/api/v1alpha1"
 )
 
 // GitRepositoryReconciler reconciles a GitRepository object
@@ -49,8 +49,8 @@ type GitRepositoryReconciler struct {
 	StoragePath string
 }
 
-// +kubebuilder:rbac:groups=sourcer.fluxcd.io,resources=gitrepositories,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=sourcer.fluxcd.io,resources=gitrepositories/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=source.fluxcd.io,resources=gitrepositories,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=source.fluxcd.io,resources=gitrepositories/status,verbs=get;update;patch
 
 func (r *GitRepositoryReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
@@ -58,7 +58,7 @@ func (r *GitRepositoryReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 
 	log := r.Log.WithValues("gitrepository", req.NamespacedName)
 
-	var repo sourcerv1.GitRepository
+	var repo sourcev1.GitRepository
 	if err := r.Get(ctx, req.NamespacedName, &repo); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
@@ -70,9 +70,9 @@ func (r *GitRepositoryReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 		log.Info("Initialising repository")
 		repo.Status.Artifacts = ""
 		repo.Status.LastUpdateTime = nil
-		repo.Status.Conditions = []sourcerv1.RepositoryCondition{
+		repo.Status.Conditions = []sourcev1.RepositoryCondition{
 			{
-				Type:   sourcerv1.RepositoryConditionReady,
+				Type:   sourcev1.RepositoryConditionReady,
 				Status: corev1.ConditionUnknown,
 			},
 		}
@@ -99,7 +99,7 @@ func (r *GitRepositoryReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 	// update status
 	timeNew := metav1.Now()
 	readyCondition.LastTransitionTime = &timeNew
-	repo.Status.Conditions = []sourcerv1.RepositoryCondition{readyCondition}
+	repo.Status.Conditions = []sourcev1.RepositoryCondition{readyCondition}
 
 	if err := r.Status().Update(ctx, &repo); err != nil {
 		log.Error(err, "unable to update GitRepository status")
@@ -112,7 +112,7 @@ func (r *GitRepositoryReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 
 func (r *GitRepositoryReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&sourcerv1.GitRepository{}).
+		For(&sourcev1.GitRepository{}).
 		WithEventFilter(RepositoryChangePredicate{}).
 		WithEventFilter(predicate.Funcs{
 			DeleteFunc: func(e event.DeleteEvent) bool {
@@ -132,7 +132,7 @@ func (r *GitRepositoryReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-func (r *GitRepositoryReconciler) sync(gr sourcerv1.GitRepository) (sourcerv1.RepositoryCondition, string, error) {
+func (r *GitRepositoryReconciler) sync(gr sourcev1.GitRepository) (sourcev1.RepositoryCondition, string, error) {
 	// determine ref
 	refName := plumbing.NewBranchReferenceName("master")
 	if gr.Spec.Branch != "" {
@@ -146,8 +146,8 @@ func (r *GitRepositoryReconciler) sync(gr sourcerv1.GitRepository) (sourcerv1.Re
 	dir, err := ioutil.TempDir("", gr.Name)
 	if err != nil {
 		ex := fmt.Errorf("tmp dir error %w", err)
-		return sourcerv1.RepositoryCondition{
-			Type:    sourcerv1.RepositoryConditionReady,
+		return sourcev1.RepositoryCondition{
+			Type:    sourcev1.RepositoryConditionReady,
 			Status:  corev1.ConditionFalse,
 			Reason:  "ExecFailed",
 			Message: ex.Error(),
@@ -165,8 +165,8 @@ func (r *GitRepositoryReconciler) sync(gr sourcerv1.GitRepository) (sourcerv1.Re
 	})
 	if err != nil {
 		ex := fmt.Errorf("git clone error %w", err)
-		return sourcerv1.RepositoryCondition{
-			Type:    sourcerv1.RepositoryConditionReady,
+		return sourcev1.RepositoryCondition{
+			Type:    sourcev1.RepositoryConditionReady,
 			Status:  corev1.ConditionFalse,
 			Reason:  "GitCloneFailed",
 			Message: ex.Error(),
@@ -178,8 +178,8 @@ func (r *GitRepositoryReconciler) sync(gr sourcerv1.GitRepository) (sourcerv1.Re
 		rng, err := semver.ParseRange(gr.Spec.SemVer)
 		if err != nil {
 			ex := fmt.Errorf("semver parse range error %w", err)
-			return sourcerv1.RepositoryCondition{
-				Type:    sourcerv1.RepositoryConditionReady,
+			return sourcev1.RepositoryCondition{
+				Type:    sourcev1.RepositoryConditionReady,
 				Status:  corev1.ConditionFalse,
 				Reason:  "GitCloneFailed",
 				Message: ex.Error(),
@@ -189,8 +189,8 @@ func (r *GitRepositoryReconciler) sync(gr sourcerv1.GitRepository) (sourcerv1.Re
 		repoTags, err := repo.Tags()
 		if err != nil {
 			ex := fmt.Errorf("git list tags error %w", err)
-			return sourcerv1.RepositoryCondition{
-				Type:    sourcerv1.RepositoryConditionReady,
+			return sourcev1.RepositoryCondition{
+				Type:    sourcev1.RepositoryConditionReady,
 				Status:  corev1.ConditionFalse,
 				Reason:  "GitCloneFailed",
 				Message: ex.Error(),
@@ -222,8 +222,8 @@ func (r *GitRepositoryReconciler) sync(gr sourcerv1.GitRepository) (sourcerv1.Re
 			w, err := repo.Worktree()
 			if err != nil {
 				ex := fmt.Errorf("git worktree error %w", err)
-				return sourcerv1.RepositoryCondition{
-					Type:    sourcerv1.RepositoryConditionReady,
+				return sourcev1.RepositoryCondition{
+					Type:    sourcev1.RepositoryConditionReady,
 					Status:  corev1.ConditionFalse,
 					Reason:  "GitCheckoutFailed",
 					Message: ex.Error(),
@@ -235,8 +235,8 @@ func (r *GitRepositoryReconciler) sync(gr sourcerv1.GitRepository) (sourcerv1.Re
 			})
 			if err != nil {
 				ex := fmt.Errorf("git checkout error %w", err)
-				return sourcerv1.RepositoryCondition{
-					Type:    sourcerv1.RepositoryConditionReady,
+				return sourcev1.RepositoryCondition{
+					Type:    sourcev1.RepositoryConditionReady,
 					Status:  corev1.ConditionFalse,
 					Reason:  "GitCheckoutFailed",
 					Message: ex.Error(),
@@ -244,8 +244,8 @@ func (r *GitRepositoryReconciler) sync(gr sourcerv1.GitRepository) (sourcerv1.Re
 			}
 		} else {
 			ex := fmt.Errorf("no match found for semver %s", gr.Spec.SemVer)
-			return sourcerv1.RepositoryCondition{
-				Type:    sourcerv1.RepositoryConditionReady,
+			return sourcev1.RepositoryCondition{
+				Type:    sourcev1.RepositoryConditionReady,
 				Status:  corev1.ConditionFalse,
 				Reason:  "GitCheckoutFailed",
 				Message: ex.Error(),
@@ -257,8 +257,8 @@ func (r *GitRepositoryReconciler) sync(gr sourcerv1.GitRepository) (sourcerv1.Re
 	ref, err := repo.Head()
 	if err != nil {
 		ex := fmt.Errorf("git resolve HEAD error %w", err)
-		return sourcerv1.RepositoryCondition{
-			Type:    sourcerv1.RepositoryConditionReady,
+		return sourcev1.RepositoryCondition{
+			Type:    sourcev1.RepositoryConditionReady,
 			Status:  corev1.ConditionFalse,
 			Reason:  "GitHeadFailed",
 			Message: ex.Error(),
@@ -271,8 +271,8 @@ func (r *GitRepositoryReconciler) sync(gr sourcerv1.GitRepository) (sourcerv1.Re
 	err = os.MkdirAll(storage, 0777)
 	if err != nil {
 		ex := fmt.Errorf("mkdir dir error %w", err)
-		return sourcerv1.RepositoryCondition{
-			Type:    sourcerv1.RepositoryConditionReady,
+		return sourcev1.RepositoryCondition{
+			Type:    sourcev1.RepositoryConditionReady,
 			Status:  corev1.ConditionFalse,
 			Reason:  "ExecFailed",
 			Message: ex.Error(),
@@ -287,8 +287,8 @@ func (r *GitRepositoryReconciler) sync(gr sourcerv1.GitRepository) (sourcerv1.Re
 	err = command.Run()
 	if err != nil {
 		ex := fmt.Errorf("tar %s error %w", artifacts, err)
-		return sourcerv1.RepositoryCondition{
-			Type:    sourcerv1.RepositoryConditionReady,
+		return sourcev1.RepositoryCondition{
+			Type:    sourcev1.RepositoryConditionReady,
 			Status:  corev1.ConditionFalse,
 			Reason:  "ExecFailed",
 			Message: ex.Error(),
@@ -305,15 +305,15 @@ func (r *GitRepositoryReconciler) sync(gr sourcerv1.GitRepository) (sourcerv1.Re
 	artifactsURL := fmt.Sprintf("http://%s/repositories/%s-%s/%s.tar.gz",
 		hostname, gr.Name, gr.Namespace, ref.Hash().String())
 
-	return sourcerv1.RepositoryCondition{
-		Type:    sourcerv1.RepositoryConditionReady,
+	return sourcev1.RepositoryCondition{
+		Type:    sourcev1.RepositoryConditionReady,
 		Status:  corev1.ConditionTrue,
 		Reason:  "GitCloneSucceed",
 		Message: fmt.Sprintf("Fetched artifacts are available at %s", artifacts),
 	}, artifactsURL, nil
 }
 
-func (r *GitRepositoryReconciler) shouldResetStatus(gr sourcerv1.GitRepository) bool {
+func (r *GitRepositoryReconciler) shouldResetStatus(gr sourcev1.GitRepository) bool {
 	resetStatus := false
 	if gr.Status.Artifacts != "" {
 		pathParts := strings.Split(gr.Status.Artifacts, "/")

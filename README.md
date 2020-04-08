@@ -1,2 +1,3 @@
-# sourcer
-Experimental source manager
+# Source controller
+
+Experimental source manager and artifact provider.
