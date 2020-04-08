@@ -1,7 +1,7 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
-namespace: sourcer-system
-namePrefix: sourcer-
+namespace: source-system
+namePrefix: source-
 bases:
 - ../crd
 - ../rbac

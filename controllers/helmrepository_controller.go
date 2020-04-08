@@ -25,7 +25,6 @@ import (
 	"path"
 	"time"
 
-	sourcerv1 "github.com/fluxcd/sourcer/api/v1alpha1"
 	"github.com/go-logr/logr"
 	"gopkg.in/yaml.v2"
 	corev1 "k8s.io/api/core/v1"
@@ -33,6 +32,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	sourcev1 "github.com/fluxcd/source-controller/api/v1alpha1"
 )
 
 // HelmRepositoryReconciler reconciles a HelmRepository object
@@ -42,8 +43,8 @@ type HelmRepositoryReconciler struct {
 	Scheme *runtime.Scheme
 }
 
-// +kubebuilder:rbac:groups=sourcer.fluxcd.io,resources=helmrepositories,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=sourcer.fluxcd.io,resources=helmrepositories/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=source.fluxcd.io,resources=helmrepositories,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=source.fluxcd.io,resources=helmrepositories/status,verbs=get;update;patch
 
 func (r *HelmRepositoryReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
@@ -51,27 +52,27 @@ func (r *HelmRepositoryReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 
 	log := r.Log.WithValues("helmrepository", req.NamespacedName)
 
-	var repo sourcerv1.HelmRepository
+	var repo sourcev1.HelmRepository
 
 	if err := r.Get(ctx, req.NamespacedName, &repo); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	readyCondition := sourcerv1.RepositoryCondition{
-		Type:   sourcerv1.RepositoryConditionReady,
+	readyCondition := sourcev1.RepositoryCondition{
+		Type:   sourcev1.RepositoryConditionReady,
 		Status: corev1.ConditionUnknown,
 	}
 
 	if len(repo.Status.Conditions) == 0 {
 		log.Info("Starting index download")
-		repo.Status.Conditions = []sourcerv1.RepositoryCondition{readyCondition}
+		repo.Status.Conditions = []sourcev1.RepositoryCondition{readyCondition}
 		if err := r.Status().Update(ctx, &repo); err != nil {
 			log.Error(err, "unable to update HelmRepository status")
 			return ctrl.Result{}, err
 		}
 	} else {
 		for _, condition := range repo.Status.Conditions {
-			if condition.Type == sourcerv1.RepositoryConditionReady {
+			if condition.Type == sourcev1.RepositoryConditionReady {
 				readyCondition = condition
 				break
 			}
@@ -80,19 +81,19 @@ func (r *HelmRepositoryReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 
 	if err := r.downloadIndex(repo.Spec.Url); err != nil {
 		log.Info("Index download error", "error", err.Error())
-		readyCondition.Reason = sourcerv1.IndexDownloadFailedReason
+		readyCondition.Reason = sourcev1.IndexDownloadFailedReason
 		readyCondition.Message = err.Error()
 		readyCondition.Status = corev1.ConditionFalse
 	} else {
 		log.Info("Index download successful")
-		readyCondition.Reason = sourcerv1.IndexDownloadSucceedReason
+		readyCondition.Reason = sourcev1.IndexDownloadSucceedReason
 		readyCondition.Message = "Repository is ready"
 		readyCondition.Status = corev1.ConditionTrue
 	}
 
 	timeNew := metav1.Now()
 	readyCondition.LastTransitionTime = &timeNew
-	repo.Status.Conditions = []sourcerv1.RepositoryCondition{readyCondition}
+	repo.Status.Conditions = []sourcev1.RepositoryCondition{readyCondition}
 
 	if err := r.Status().Update(ctx, &repo); err != nil {
 		log.Error(err, "unable to update HelmRepository status")
@@ -104,7 +105,7 @@ func (r *HelmRepositoryReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 
 func (r *HelmRepositoryReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&sourcerv1.HelmRepository{}).
+		For(&sourcev1.HelmRepository{}).
 		WithEventFilter(RepositoryChangePredicate{}).
 		Complete(r)
 }

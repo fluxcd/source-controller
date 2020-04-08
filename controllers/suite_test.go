@@ -30,7 +30,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	sourcerv1alpha1 "github.com/fluxcd/sourcer/api/v1alpha1"
+	sourcev1 "github.com/fluxcd/source-controller/api/v1alpha1"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -62,10 +62,10 @@ var _ = BeforeSuite(func(done Done) {
 	Expect(err).ToNot(HaveOccurred())
 	Expect(cfg).ToNot(BeNil())
 
-	err = sourcerv1alpha1.AddToScheme(scheme.Scheme)
+	err = sourcev1.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
-	err = sourcerv1alpha1.AddToScheme(scheme.Scheme)
+	err = sourcev1.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
 	// +kubebuilder:scaffold:scheme

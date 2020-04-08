@@ -42,14 +42,14 @@ jobs:
       - name: Run smoke tests
         run: |
           kubectl apply -f ./config/samples
-          kubectl -n sourcer-system rollout status deploy/sourcer-controller --timeout=1m
+          kubectl -n source-system rollout status deploy/source-controller --timeout=1m
           kubectl wait gitrepository/podinfo --for=condition=ready --timeout=1m
           kubectl wait helmrepository/podinfo --for=condition=ready --timeout=1m
-          kubectl -n sourcer-system logs deploy/sourcer-controller
+          kubectl -n source-system logs deploy/source-controller
       - name: Debug failure
         if: failure()
         run: |
           kubectl get gitrepositories -oyaml
           kubectl get helmrepositories -oyaml
-          kubectl -n sourcer-system get all
-          kubectl -n sourcer-system logs deploy/sourcer-controller
+          kubectl -n source-system get all
+          kubectl -n source-system logs deploy/source-controller

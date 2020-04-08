@@ -8,12 +8,12 @@ metadata:
 spec:
   selector:
     matchLabels:
-      app: sourcer
+      app: source-controller
   replicas: 1
   template:
     metadata:
       labels:
-        app: sourcer
+        app: source-controller
       annotations:
         prometheus.io/scrape: "true"
         prometheus.io/port: "9090"
@@ -21,7 +21,7 @@ spec:
       terminationGracePeriodSeconds: 10
       containers:
       - name: manager
-        image: fluxcd/sourcer
+        image: fluxcd/source-controller
         imagePullPolicy: IfNotPresent
         ports:
           - containerPort: 8080

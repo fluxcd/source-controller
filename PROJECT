@@ -1,10 +1,10 @@
 domain: fluxcd.io
-repo: github.com/fluxcd/sourcer
+repo: github.com/fluxcd/source-controller
 resources:
-- group: sourcer
+- group: source
   kind: GitRepository
   version: v1alpha1
-- group: sourcer
+- group: source
   kind: HelmRepository
   version: v1alpha1
 version: "2"

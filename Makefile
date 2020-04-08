@@ -1,6 +1,6 @@
 
 # Image URL to use all building/pushing image targets
-IMG ?= fluxcd/sourcer:latest
+IMG ?= fluxcd/source-controller:latest
 # Produce CRDs that work back to Kubernetes 1.13
 CRD_OPTIONS ?= crd
 
@@ -35,13 +35,13 @@ uninstall: manifests
 
 # Deploy controller in the configured Kubernetes cluster in ~/.kube/config
 deploy: manifests
-	cd config/manager && kustomize edit set image fluxcd/sourcer=${IMG}
+	cd config/manager && kustomize edit set image fluxcd/source-controller=${IMG}
 	kustomize build config/default | kubectl apply -f -
 
 # Deploy controller dev image in the configured Kubernetes cluster in ~/.kube/config
 dev-deploy: manifests
 	mkdir -p config/dev && cp config/default/* config/dev
-	cd config/dev && kustomize edit set image fluxcd/sourcer=${IMG}
+	cd config/dev && kustomize edit set image fluxcd/source-controller=${IMG}
 	kustomize build config/dev | kubectl apply -f -
 	rm -rf config/dev
 

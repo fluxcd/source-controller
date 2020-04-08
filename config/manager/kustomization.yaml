@@ -5,5 +5,5 @@ resources:
 - service.yaml
 - deployment.yaml
 images:
-- name: fluxcd/sourcer
+- name: fluxcd/source-controller
   newTag: 0.0.1-alpha.1
