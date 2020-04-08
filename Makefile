@@ -35,8 +35,15 @@ uninstall: manifests
 
 # Deploy controller in the configured Kubernetes cluster in ~/.kube/config
 deploy: manifests
-	cd config/manager && kustomize edit set image controller=${IMG}
+	cd config/manager && kustomize edit set image fluxcd/sourcer=${IMG}
 	kustomize build config/default | kubectl apply -f -
+
+# Deploy controller dev image in the configured Kubernetes cluster in ~/.kube/config
+dev-deploy: manifests
+	mkdir -p config/dev && cp config/default/* config/dev
+	cd config/dev && kustomize edit set image fluxcd/sourcer=${IMG}
+	kustomize build config/dev | kubectl apply -f -
+	rm -rf config/dev
 
 # Generate manifests e.g. CRD, RBAC etc.
 manifests: controller-gen
@@ -62,8 +69,7 @@ docker-build: test
 docker-push:
 	docker push ${IMG}
 
-# find or download controller-gen
-# download controller-gen if necessary
+# Find or download controller-gen
 controller-gen:
 ifeq (, $(shell which controller-gen))
 	@{ \
