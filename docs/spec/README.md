@@ -23,11 +23,11 @@ Decoupling the Kubernetes objects acquisition from the reconciliation process wi
 source manager would make Flux and Helm Operator resilient to outbound connectivity issues and would
 simplify the state machine(s) that these controllers operate.
 
-Managing the source operations in a dedicated controller could allow Flux to compose the desire state of a cluster
+Managing the source operations in a dedicated controller could enable Flux to compose the desire state of a cluster
 from multiple source.
 Further more the manifests transformation process could be performed by 3rd party tools
 (e.g. kustomize, jk, tanka, cue run by Tekton pipelines or Kubernetes Jobs)
-that would output the final state of the Kubernetes objects into an artifacts repository maintained by the source controller.
+that subscribe to source changes events.
 
 ## Goals
 
