@@ -170,19 +170,19 @@ type: Opaque
 data:
   identity: <BASE64> 
   identity.pub: <BASE64> 
-  know_hosts: <BASE64> 
+  known_hosts: <BASE64> 
 ```
 
 Example of generating the SSH credentials secret:
 
 ```bash
 ssh-keygen -q -N "" -f ./identity
-ssh-keyscan github.com > ./know_hosts
+ssh-keyscan github.com > ./known_hosts
 
 kubectl create secret generic ssh-credentials \
     --from-file=./identity \
     --from-file=./identity.pub \
-    --from-file=./know_hosts
+    --from-file=./known_hosts
 ```
 
 ## Status examples
