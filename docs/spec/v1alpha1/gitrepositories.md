@@ -39,6 +39,10 @@ type GitRepositoryRef struct {
 	// The git tag semver expression, takes precedence over tag.
 	// +optional
 	SemVer string `json:"semver"`
+
+	// The git commit sha to checkout, if specified branch and tag filters will be ignored.
+	// +optional
+	Commit string `json:"commit"`
 }
 ```
 
