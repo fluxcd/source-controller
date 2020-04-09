@@ -17,7 +17,7 @@ private HTTPS servers.
 
 Each Flux or Helm Operator instance maintains its own Git repository mirror even if all of them
 point to the same source. If the Git repository host becomes unavailable, the cluster state will diverge from the last
-know desired state since the operators will stop the reconciliation due to pull errors. 
+known desired state since the operators will stop the reconciliation due to pull errors. 
 
 Decoupling the Kubernetes objects acquisition from the reconciliation process with an in-cluster 
 source manager would make Flux and Helm Operator resilient to outbound connectivity issues and would
@@ -25,7 +25,7 @@ simplify the state machine(s) that these controllers operate.
 
 Managing the source operations in a dedicated controller could enable Flux to compose the desire state of a cluster
 from multiple source.
-Further more the manifests transformation process could be performed by 3rd party tools
+Furthermore, the manifests transformation process could be performed by 3rd party tools
 (e.g. kustomize, jk, tanka, cue run by Tekton pipelines or Kubernetes Jobs)
 that subscribe to source changes events.
 
