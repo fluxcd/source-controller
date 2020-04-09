@@ -24,10 +24,15 @@ source manager would make Flux and Helm Operator resilient to outbound connectiv
 simplify the state machine(s) that these controllers operate.
 
 Managing the source operations in a dedicated controller could enable Flux to compose the desire state of a cluster
-from multiple source.
-Furthermore, the manifests transformation process could be performed by 3rd party tools
+from multiple source. Furthermore, the manifests transformation process could be performed by 3rd party tools
 (e.g. kustomize, jk, tanka, cue run by Tekton pipelines or Kubernetes Jobs)
 that subscribe to source changes events.
+
+The source controller could enable pinning the cluster desired state to a specific Git commit or Git tag.
+
+For teams that are using semantic versioning, the source controller could monitor the Git repository tags 
+and set the cluster desired state to the latest release or to a tag that matches a semver pattern.
+In a similar fashion, a semver pattern could trigger Helm chart upgrades without manual intervention from users.
 
 ## Goals
 

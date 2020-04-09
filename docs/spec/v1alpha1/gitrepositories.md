@@ -18,7 +18,7 @@ type GitRepositorySpec struct {
 	// +optional
 	SecretRef *v1.LocalObjectReference `json:"secretRef,omitempty"`
 	
-	// The git reference to checkout and monitor for changes.
+	// The git reference to checkout and monitor for changes, defaults to master branch.
 	// +optional
 	Reference *GitRepositoryRef `json:"ref,omitempty"`
 
@@ -28,7 +28,7 @@ type GitRepositorySpec struct {
 
 // GitRepositoryRef defines the git ref used for pull and checkout operations
 type GitRepositoryRef struct {
-	// The git branch to checkout, defaults to ('master').
+	// The git branch to checkout, defaults to master.
 	// +optional
 	Branch string `json:"branch"`
 
