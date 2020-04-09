@@ -22,10 +22,9 @@ import (
 
 // HelmRepositorySpec defines the desired state of HelmRepository
 type HelmRepositorySpec struct {
-	// +kubebuilder:validation:MinLength=4
-
 	// The repository address
-	Url string `json:"url"`
+	// +kubebuilder:validation:MinLength=4
+	URL string `json:"url"`
 
 	// The interval at which to check for repository updates
 	Interval metav1.Duration `json:"interval"`
@@ -35,6 +34,15 @@ type HelmRepositorySpec struct {
 type HelmRepositoryStatus struct {
 	// +optional
 	Conditions []RepositoryCondition `json:"conditions,omitempty"`
+
+	// LastUpdateTime is the timestamp corresponding to the last status
+	// change of this repository.
+	// +optional
+	LastUpdateTime *metav1.Time `json:"lastUpdateTime,omitempty"`
+
+	// Path to the artifact of the last repository index.
+	// +optional
+	Artifact string `json:"artifact,omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -67,6 +75,7 @@ func init() {
 }
 
 const (
-	IndexDownloadFailedReason  string = "IndexDownloadFailed"
-	IndexDownloadSucceedReason string = "IndexDownloadSucceed"
+	InvalidHelmRepositoryURLReason string = "InvalidHelmRepositoryURL"
+	IndexFetchFailedReason         string = "IndexFetchFailedReason"
+	IndexFetchSucceededReason      string = "IndexFetchSucceed"
 )

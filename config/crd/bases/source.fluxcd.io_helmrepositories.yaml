@@ -63,6 +63,10 @@ spec:
         status:
           description: HelmRepositoryStatus defines the observed state of HelmRepository
           properties:
+            artifact:
+              description: Path to the artifact (index file) of the last repository
+                sync.
+              type: string
             conditions:
               items:
                 description: RepositoryCondition contains condition information for
@@ -93,6 +97,11 @@ spec:
                 - type
                 type: object
               type: array
+            lastUpdateTime:
+              description: LastUpdateTime is the timestamp corresponding to the last
+                status change of this repository.
+              format: date-time
+              type: string
           type: object
       type: object
   version: v1alpha1

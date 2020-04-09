@@ -19,6 +19,8 @@ package main
 import (
 	"flag"
 	"github.com/go-logr/logr"
+	"helm.sh/helm/v3/pkg/getter"
+
 	"net/http"
 	"os"
 	"path/filepath"
@@ -90,9 +92,16 @@ func main() {
 		os.Exit(1)
 	}
 	if err = (&controllers.HelmRepositoryReconciler{
-		Client: mgr.GetClient(),
-		Log:    ctrl.Log.WithName("controllers").WithName("HelmRepository"),
-		Scheme: mgr.GetScheme(),
+		Client:      mgr.GetClient(),
+		Log:         ctrl.Log.WithName("controllers").WithName("HelmRepository"),
+		Scheme:      mgr.GetScheme(),
+		StoragePath: storagePath,
+		Getters: getter.Providers{
+			getter.Provider{
+				Schemes: []string{"http", "https"},
+				New:     getter.NewHTTPGetter,
+			},
+		},
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "HelmRepository")
 		os.Exit(1)
