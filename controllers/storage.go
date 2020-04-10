@@ -12,6 +12,8 @@ import (
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/fluxcd/source-controller/internal/lockedfile"
 )
 
 // Storage manages artifacts
@@ -77,7 +79,7 @@ func (s *Storage) RemoveAllButCurrent(artifact Artifact) error {
 	dir := filepath.Dir(artifact.Path)
 	errors := []string{}
 	_ = filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
-		if path != artifact.Path {
+		if path != artifact.Path && !info.IsDir() {
 			if err := os.Remove(path); err != nil {
 				errors = append(errors, info.Name())
 			}
@@ -134,4 +136,10 @@ func (s *Storage) WriteFile(artifact Artifact, data []byte) error {
 // Checksum returns the SHA1 checksum for the given bytes as a string
 func (s *Storage) Checksum(b []byte) string {
 	return fmt.Sprintf("%x", sha1.Sum(b))
+}
+
+func (s *Storage) Lock(artifact Artifact) (unlock func(), err error) {
+	lockFile := artifact.Path + ".lock"
+	mutex := lockedfile.MutexAt(lockFile)
+	return mutex.Lock()
 }
