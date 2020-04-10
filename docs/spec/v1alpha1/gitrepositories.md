@@ -4,15 +4,14 @@ The `GitReposiory` API defines a source for artifacts coming from Git.
 
 ## Specification
 
-Git repository spec:
+Git repository:
 
 ```go
 // GitRepositorySpec defines the desired state of GitRepository
 type GitRepositorySpec struct {
-	// +kubebuilder:validation:Pattern="^(http|https|ssh)://"
-
 	// The repository URL, can be a HTTP or SSH address.
-	Url string `json:"url"`
+	// +kubebuilder:validation:Pattern="^(http|https|ssh)://"
+	URL string `json:"url"`
 
 	// The secret name containing the Git credentials
 	// +optional
@@ -25,7 +24,11 @@ type GitRepositorySpec struct {
 	// The interval at which to check for repository updates.
 	Interval metav1.Duration `json:"interval"`
 }
+```
 
+Git repository reference:
+
+```go
 // GitRepositoryRef defines the git ref used for pull and checkout operations
 type GitRepositoryRef struct {
 	// The git branch to checkout, defaults to master.
@@ -46,65 +49,41 @@ type GitRepositoryRef struct {
 }
 ```
 
-Git repository status:
+#### Status
 
 ```go
 // GitRepositoryStatus defines the observed state of GitRepository
 type GitRepositoryStatus struct {
 	// +optional
-	Conditions []RepositoryCondition `json:"conditions,omitempty"`
+	Conditions []SourceCondition `json:"conditions,omitempty"`
 
 	// LastUpdateTime is the timestamp corresponding to the last status
 	// change of this repository.
 	// +optional
 	LastUpdateTime *metav1.Time `json:"lastUpdateTime,omitempty"`
 
-	// URI for the artifacts of the last successful repository sync.
+	// Path to the artifact output of the last repository sync.
 	// +optional
-	Artifacts string `json:"artifacts,omitempty"`
+	Artifact string `json:"artifacts,omitempty"`
 }
 ```
 
-Git repository status conditions:
+#### Condition reasons
 
 ```go
-// RepositoryCondition contains condition information for a repository
-type RepositoryCondition struct {
-	// Type of the condition, currently ('Ready').
-	Type RepositoryConditionType `json:"type"`
-
-	// Status of the condition, one of ('True', 'False', 'Unknown').
-	Status corev1.ConditionStatus `json:"status"`
-
-	// LastTransitionTime is the timestamp corresponding to the last status
-	// change of this condition.
-	// +optional
-	LastTransitionTime *metav1.Time `json:"lastTransitionTime,omitempty"`
-
-	// Reason is a brief machine readable explanation for the condition's last
-	// transition.
-	// +optional
-	Reason string `json:"reason,omitempty"`
-
-	// Message is a human readable description of the details of the last
-	// transition, complementing reason.
-	// +optional
-	Message string `json:"message,omitempty"`
-}
-
-// RepositoryConditionType represents an repository condition value
-type RepositoryConditionType string
-
 const (
-	// RepositoryConditionReady represents the fact that a given repository condition
-	// is in ready state.
-	RepositoryConditionReady RepositoryConditionType = "Ready"
+	// GitOperationSucceedReason represents the fact that the git
+	// clone, pull and checkout operations succeeded.
+	GitOperationSucceedReason string = "GitOperationSucceed"
+	// GitOperationFailedReason represents the fact that the git
+	// clone, pull or checkout operations failed.
+	GitOperationFailedReason  string = "GitOperationFailed"
 )
 ```
 
 ## Spec examples
 
-Public repository:
+Public Git repository:
 
 ```yaml
 apiVersion: source.fluxcd.io/v1alpha1
@@ -113,7 +92,7 @@ metadata:
   name: podinfo
   namespace: default
   annotations:
-    # force sync trigger
+    # on-demand sync trigger
     source.fluxcd.io/syncAt: "2020-04-06T15:39:52+03:00"
 spec:
   interval: 1m
@@ -124,7 +103,7 @@ spec:
     semver: ">= 3.2.0 <3.3.0"
 ```
 
-HTTPS authentication:
+HTTPS authentication (requires a secret with `username` and `password` fields):
 
 ```yaml
 apiVersion: source.fluxcd.io/v1alpha1
@@ -148,7 +127,7 @@ data:
   password: <BASE64> 
 ```
 
-SSH authentication:
+SSH authentication (requires a secret with `identity` and `known_hosts` fields):
 
 ```yaml
 apiVersion: source.fluxcd.io/v1alpha1
@@ -196,7 +175,7 @@ status:
   - lastTransitionTime: "2020-04-07T06:59:23Z"
     message: 'Fetched artifacts are available at
       /data/repositories/podinfo-default/5e747d3e088cd7a34ace4abc8cf7f3c3696e402f.tar.gz'
-    reason: GitCloneSucceed
+    reason: GitOperationSucceed
     status: "True"
     type: Ready
   lastUpdateTime: "2020-04-07T06:59:23Z"
@@ -210,7 +189,7 @@ status:
   - lastTransitionTime: "2020-04-06T06:48:59Z"
     message: 'git clone error ssh: handshake failed: ssh: unable to authenticate,
       attempted methods [none publickey], no supported methods remain'
-    reason: GitCloneFailed
+    reason: AuthenticationFailed
     status: "False"
     type: Ready
 ```

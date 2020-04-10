@@ -54,6 +54,10 @@ const (
 	InitializingReason string = "Initializing"
     // URLInvalidReason represents the fact that a given source has an invalid URL.
 	URLInvalidReason string = "URLInvalid"
+	// StorageOperationFailedReason signals a failure caused by a storage operation.
+	StorageOperationFailedReason string = "StorageOperationFailed"
+	// AuthenticationFailedReason represents the fact that the provided credentials are not valid.
+	AuthenticationFailedReason string = "AuthenticationFailed"
 )
 ```
 
