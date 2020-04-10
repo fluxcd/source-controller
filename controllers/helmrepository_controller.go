@@ -130,22 +130,12 @@ func (r *HelmRepositoryReconciler) SetupWithManager(mgr ctrl.Manager) error {
 func (r *HelmRepositoryReconciler) index(repository sourcev1.HelmRepository) (sourcev1.SourceCondition, string, error) {
 	u, err := url.Parse(repository.Spec.URL)
 	if err != nil {
-		return sourcev1.SourceCondition{
-			Type:    sourcev1.ReadyCondition,
-			Status:  corev1.ConditionFalse,
-			Reason:  sourcev1.InvalidHelmRepositoryURLReason,
-			Message: err.Error(),
-		}, "", err
+		return NotReadyCondition(sourcev1.URLInvalidReason, err.Error()), "", err
 	}
 
 	c, err := r.Getters.ByScheme(u.Scheme)
 	if err != nil {
-		return sourcev1.SourceCondition{
-			Type:    sourcev1.ReadyCondition,
-			Status:  corev1.ConditionFalse,
-			Reason:  sourcev1.InvalidHelmRepositoryURLReason,
-			Message: err.Error(),
-		}, "", err
+		return NotReadyCondition(sourcev1.URLInvalidReason, err.Error()), "", err
 	}
 
 	u.RawPath = path.Join(u.RawPath, "index.yaml")
@@ -155,42 +145,22 @@ func (r *HelmRepositoryReconciler) index(repository sourcev1.HelmRepository) (so
 	// TODO(hidde): add authentication config
 	res, err := c.Get(indexURL, getter.WithURL(repository.Spec.URL))
 	if err != nil {
-		return sourcev1.SourceCondition{
-			Type:    sourcev1.ReadyCondition,
-			Status:  corev1.ConditionFalse,
-			Reason:  sourcev1.IndexFetchFailedReason,
-			Message: err.Error(),
-		}, "", err
+		return NotReadyCondition(sourcev1.IndexationFailedReason, err.Error()), "", err
 	}
 
 	data, err := ioutil.ReadAll(res)
 	if err != nil {
-		return sourcev1.SourceCondition{
-			Type:    sourcev1.ReadyCondition,
-			Status:  corev1.ConditionFalse,
-			Reason:  sourcev1.IndexFetchFailedReason,
-			Message: err.Error(),
-		}, "", err
+		return NotReadyCondition(sourcev1.IndexationFailedReason, err.Error()), "", err
 	}
 
 	i := &repo.IndexFile{}
 	if err := yaml.Unmarshal(data, i); err != nil {
-		return sourcev1.SourceCondition{
-			Type:    sourcev1.ReadyCondition,
-			Status:  corev1.ConditionFalse,
-			Reason:  sourcev1.IndexFetchFailedReason,
-			Message: err.Error(),
-		}, "", err
+		return NotReadyCondition(sourcev1.IndexationFailedReason, err.Error()), "", err
 	}
 
 	index, err := yaml.Marshal(i)
 	if err != nil {
-		return sourcev1.SourceCondition{
-			Type:    sourcev1.ReadyCondition,
-			Status:  corev1.ConditionFalse,
-			Reason:  sourcev1.IndexFetchFailedReason,
-			Message: err.Error(),
-		}, "", err
+		return NotReadyCondition(sourcev1.IndexationFailedReason, err.Error()), "", err
 	}
 
 	sum := r.Storage.Checksum(index)
@@ -201,24 +171,14 @@ func (r *HelmRepositoryReconciler) index(repository sourcev1.HelmRepository) (so
 	err = r.Storage.MkdirAll(artifact)
 	if err != nil {
 		err = fmt.Errorf("unable to create repository index directory: %w", err)
-		return sourcev1.SourceCondition{
-			Type:    sourcev1.ReadyCondition,
-			Status:  corev1.ConditionFalse,
-			Reason:  sourcev1.IndexFetchFailedReason,
-			Message: err.Error(),
-		}, "", err
+		return NotReadyCondition(sourcev1.StorageOperationFailedReason, err.Error()), "", err
 	}
 
 	// acquire lock
 	unlock, err := r.Storage.Lock(artifact)
 	if err != nil {
 		err = fmt.Errorf("unable to acquire lock: %w", err)
-		return sourcev1.SourceCondition{
-			Type:    sourcev1.ReadyCondition,
-			Status:  corev1.ConditionFalse,
-			Reason:  sourcev1.IndexFetchFailedReason,
-			Message: err.Error(),
-		}, "", err
+		return NotReadyCondition(sourcev1.StorageOperationFailedReason, err.Error()), "", err
 	}
 	defer unlock()
 
@@ -226,20 +186,11 @@ func (r *HelmRepositoryReconciler) index(repository sourcev1.HelmRepository) (so
 	err = r.Storage.WriteFile(artifact, index)
 	if err != nil {
 		err = fmt.Errorf("unable to write repository index file: %w", err)
-		return sourcev1.SourceCondition{
-			Type:    sourcev1.ReadyCondition,
-			Status:  corev1.ConditionFalse,
-			Reason:  sourcev1.IndexFetchFailedReason,
-			Message: err.Error(),
-		}, "", err
+		return NotReadyCondition(sourcev1.StorageOperationFailedReason, err.Error()), "", err
 	}
 
-	return sourcev1.SourceCondition{
-		Type:    sourcev1.ReadyCondition,
-		Status:  corev1.ConditionTrue,
-		Reason:  sourcev1.IndexFetchSucceededReason,
-		Message: fmt.Sprintf("Artifact is available at %s", artifact.Path),
-	}, artifact.URL, nil
+	message := fmt.Sprintf("Artifact is available at %s", artifact.Path)
+	return ReadyCondition(sourcev1.IndexationSucceededReason, message), artifact.URL, nil
 }
 
 func (r *HelmRepositoryReconciler) shouldResetStatus(repository sourcev1.HelmRepository) (bool, sourcev1.HelmRepositoryStatus) {

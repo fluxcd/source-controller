@@ -24,9 +24,11 @@ import (
 type HelmRepositorySpec struct {
 	// The repository address
 	// +kubebuilder:validation:MinLength=4
+	// +required
 	URL string `json:"url"`
 
 	// The interval at which to check for repository updates
+	// +required
 	Interval metav1.Duration `json:"interval"`
 }
 
@@ -61,9 +63,8 @@ type HelmRepository struct {
 	Status HelmRepositoryStatus `json:"status,omitempty"`
 }
 
-// +kubebuilder:object:root=true
-
 // HelmRepositoryList contains a list of HelmRepository
+// +kubebuilder:object:root=true
 type HelmRepositoryList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
@@ -75,7 +76,11 @@ func init() {
 }
 
 const (
-	InvalidHelmRepositoryURLReason string = "InvalidHelmRepositoryURL"
-	IndexFetchFailedReason         string = "IndexFetchFailedReason"
-	IndexFetchSucceededReason      string = "IndexFetchSucceed"
+	// IndexationFailedReason represents the fact that the indexation
+	// of the given Helm repository failed.
+	IndexationFailedReason string = "IndexationFailed"
+
+	// IndexationSucceededReason represents the fact that the indexation
+	// of the given Helm repository succeeded.
+	IndexationSucceededReason string = "IndexationSucceed"
 )

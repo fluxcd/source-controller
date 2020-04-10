@@ -22,12 +22,13 @@ import (
 
 // GitRepositorySpec defines the desired state of GitRepository
 type GitRepositorySpec struct {
-	// +kubebuilder:validation:Pattern="^(http|https|ssh)://"
-
 	// The repository URL, can be a HTTP or SSH address.
-	Url string `json:"url"`
+	// +kubebuilder:validation:Pattern="^(http|https|ssh)://"
+	// +required
+	URL string `json:"url"`
 
 	// The interval at which to check for repository updates.
+	// +required
 	Interval metav1.Duration `json:"interval"`
 
 	// The git branch to checkout, defaults to ('master').
@@ -74,9 +75,8 @@ type GitRepository struct {
 	Status GitRepositoryStatus `json:"status,omitempty"`
 }
 
-// +kubebuilder:object:root=true
-
 // GitRepositoryList contains a list of GitRepository
+// +kubebuilder:object:root=true
 type GitRepositoryList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
@@ -86,3 +86,8 @@ type GitRepositoryList struct {
 func init() {
 	SchemeBuilder.Register(&GitRepository{}, &GitRepositoryList{})
 }
+
+const (
+	GitOperationSucceedReason string = "GitOperationSucceed"
+	GitOperationFailedReason  string = "GitOperationFailed"
+)

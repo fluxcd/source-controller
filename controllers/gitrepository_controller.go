@@ -138,56 +138,36 @@ func (r *GitRepositoryReconciler) sync(repository sourcev1.GitRepository) (sourc
 	// create tmp dir
 	dir, err := ioutil.TempDir("", repository.Name)
 	if err != nil {
-		ex := fmt.Errorf("tmp dir error %w", err)
-		return sourcev1.SourceCondition{
-			Type:    sourcev1.ReadyCondition,
-			Status:  corev1.ConditionFalse,
-			Reason:  "ExecFailed",
-			Message: ex.Error(),
-		}, "", ex
+		err = fmt.Errorf("tmp dir error %w", err)
+		return NotReadyCondition(sourcev1.StorageOperationFailedReason, err.Error()), "", err
 	}
 	defer os.RemoveAll(dir)
 
 	// clone to tmp
 	repo, err := git.PlainClone(dir, false, &git.CloneOptions{
-		URL:           repository.Spec.Url,
+		URL:           repository.Spec.URL,
 		Depth:         2,
 		ReferenceName: refName,
 		SingleBranch:  true,
 		Tags:          git.AllTags,
 	})
 	if err != nil {
-		ex := fmt.Errorf("git clone error %w", err)
-		return sourcev1.SourceCondition{
-			Type:    sourcev1.ReadyCondition,
-			Status:  corev1.ConditionFalse,
-			Reason:  "GitCloneFailed",
-			Message: ex.Error(),
-		}, "", ex
+		err = fmt.Errorf("git clone error %w", err)
+		return NotReadyCondition(sourcev1.GitOperationFailedReason, err.Error()), "", err
 	}
 
 	// checkout tag based on semver expression
 	if repository.Spec.SemVer != "" {
 		rng, err := semver.ParseRange(repository.Spec.SemVer)
 		if err != nil {
-			ex := fmt.Errorf("semver parse range error %w", err)
-			return sourcev1.SourceCondition{
-				Type:    sourcev1.ReadyCondition,
-				Status:  corev1.ConditionFalse,
-				Reason:  "GitCloneFailed",
-				Message: ex.Error(),
-			}, "", ex
+			err = fmt.Errorf("semver parse range error %w", err)
+			return NotReadyCondition(sourcev1.GitOperationFailedReason, err.Error()), "", err
 		}
 
 		repoTags, err := repo.Tags()
 		if err != nil {
-			ex := fmt.Errorf("git list tags error %w", err)
-			return sourcev1.SourceCondition{
-				Type:    sourcev1.ReadyCondition,
-				Status:  corev1.ConditionFalse,
-				Reason:  "GitCloneFailed",
-				Message: ex.Error(),
-			}, "", ex
+			err = fmt.Errorf("git list tags error %w", err)
+			return NotReadyCondition(sourcev1.GitOperationFailedReason, err.Error()), "", err
 		}
 
 		tags := make(map[string]string)
@@ -214,48 +194,28 @@ func (r *GitRepositoryReconciler) sync(repository sourcev1.GitRepository) (sourc
 
 			w, err := repo.Worktree()
 			if err != nil {
-				ex := fmt.Errorf("git worktree error %w", err)
-				return sourcev1.SourceCondition{
-					Type:    sourcev1.ReadyCondition,
-					Status:  corev1.ConditionFalse,
-					Reason:  "GitCheckoutFailed",
-					Message: ex.Error(),
-				}, "", ex
+				err = fmt.Errorf("git worktree error %w", err)
+				return NotReadyCondition(sourcev1.GitOperationFailedReason, err.Error()), "", err
 			}
 
 			err = w.Checkout(&git.CheckoutOptions{
 				Hash: plumbing.NewHash(commit),
 			})
 			if err != nil {
-				ex := fmt.Errorf("git checkout error %w", err)
-				return sourcev1.SourceCondition{
-					Type:    sourcev1.ReadyCondition,
-					Status:  corev1.ConditionFalse,
-					Reason:  "GitCheckoutFailed",
-					Message: ex.Error(),
-				}, "", ex
+				err = fmt.Errorf("git checkout error %w", err)
+				return NotReadyCondition(sourcev1.GitOperationFailedReason, err.Error()), "", err
 			}
 		} else {
-			ex := fmt.Errorf("no match found for semver %s", repository.Spec.SemVer)
-			return sourcev1.SourceCondition{
-				Type:    sourcev1.ReadyCondition,
-				Status:  corev1.ConditionFalse,
-				Reason:  "GitCheckoutFailed",
-				Message: ex.Error(),
-			}, "", ex
+			err = fmt.Errorf("no match found for semver %s", repository.Spec.SemVer)
+			return NotReadyCondition(sourcev1.GitOperationFailedReason, err.Error()), "", err
 		}
 	}
 
 	// read commit hash
 	ref, err := repo.Head()
 	if err != nil {
-		ex := fmt.Errorf("git resolve HEAD error %w", err)
-		return sourcev1.SourceCondition{
-			Type:    sourcev1.ReadyCondition,
-			Status:  corev1.ConditionFalse,
-			Reason:  "GitHeadFailed",
-			Message: ex.Error(),
-		}, "", ex
+		err = fmt.Errorf("git resolve HEAD error %w", err)
+		return NotReadyCondition(sourcev1.GitOperationFailedReason, err.Error()), "", err
 	}
 
 	artifact := r.Storage.ArtifactFor(r.Kind, repository.ObjectMeta.GetObjectMeta(),
@@ -264,33 +224,27 @@ func (r *GitRepositoryReconciler) sync(repository sourcev1.GitRepository) (sourc
 	// create artifact dir
 	err = r.Storage.MkdirAll(artifact)
 	if err != nil {
-		ex := fmt.Errorf("mkdir dir error %w", err)
-		return sourcev1.SourceCondition{
-			Type:    sourcev1.ReadyCondition,
-			Status:  corev1.ConditionFalse,
-			Reason:  "ExecFailed",
-			Message: ex.Error(),
-		}, "", ex
+		err = fmt.Errorf("mkdir dir error %w", err)
+		return NotReadyCondition(sourcev1.StorageOperationFailedReason, err.Error()), "", err
 	}
+
+	// acquire lock
+	unlock, err := r.Storage.Lock(artifact)
+	if err != nil {
+		err = fmt.Errorf("unable to acquire lock: %w", err)
+		return NotReadyCondition(sourcev1.StorageOperationFailedReason, err.Error()), "", err
+	}
+	defer unlock()
 
 	// archive artifact
 	err = r.Storage.Archive(artifact, dir, "")
 	if err != nil {
-		ex := fmt.Errorf("storage error %w", err)
-		return sourcev1.SourceCondition{
-			Type:    sourcev1.ReadyCondition,
-			Status:  corev1.ConditionFalse,
-			Reason:  "ExecFailed",
-			Message: ex.Error(),
-		}, "", ex
+		err = fmt.Errorf("storage error %w", err)
+		return NotReadyCondition(sourcev1.StorageOperationFailedReason, err.Error()), "", err
 	}
 
-	return sourcev1.SourceCondition{
-		Type:    sourcev1.ReadyCondition,
-		Status:  corev1.ConditionTrue,
-		Reason:  "GitCloneSucceed",
-		Message: fmt.Sprintf("Artifact is available at %s", artifact.Path),
-	}, artifact.URL, nil
+	message := fmt.Sprintf("Artifact is available at %s", artifact.Path)
+	return ReadyCondition(sourcev1.GitOperationSucceedReason, message), artifact.URL, nil
 }
 
 func (r *GitRepositoryReconciler) shouldResetStatus(repository sourcev1.GitRepository) (bool, sourcev1.GitRepositoryStatus) {

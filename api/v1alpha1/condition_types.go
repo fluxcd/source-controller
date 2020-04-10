@@ -37,4 +37,10 @@ const (
 
 	// InitializingReason represents the fact that a given source is being initialize.
 	InitializingReason string = "Initializing"
+
+	// StorageOperationFailedReason signals a failure caused by a storage operation.
+	StorageOperationFailedReason string = "StorageOperationFailed"
+
+	// URLInvalidReason represents the fact that a given source has an invalid URL.
+	URLInvalidReason string = "URLInvalid"
 )
