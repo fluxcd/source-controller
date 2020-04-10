@@ -21,8 +21,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
-	"os/exec"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -44,9 +42,10 @@ import (
 // GitRepositoryReconciler reconciles a GitRepository object
 type GitRepositoryReconciler struct {
 	client.Client
-	Log         logr.Logger
-	Scheme      *runtime.Scheme
-	StoragePath string
+	Log     logr.Logger
+	Scheme  *runtime.Scheme
+	Storage *Storage
+	Kind    string
 }
 
 // +kubebuilder:rbac:groups=source.fluxcd.io,resources=gitrepositories,verbs=get;list;watch;create;update;patch;delete
@@ -56,7 +55,7 @@ func (r *GitRepositoryReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	log := r.Log.WithValues("gitrepository", req.NamespacedName)
+	log := r.Log.WithValues(r.Kind, req.NamespacedName)
 
 	var repo sourcev1.GitRepository
 	if err := r.Get(ctx, req.NamespacedName, &repo); err != nil {
@@ -75,16 +74,19 @@ func (r *GitRepositoryReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 		}
 	}
 
+	// try to remove old artifacts
+	r.gc(repo)
+
 	// try git clone
 	readyCondition, artifacts, err := r.sync(repo)
 	if err != nil {
 		log.Info("Repository sync failed", "error", err.Error())
 	} else {
 		// update artifacts if commit hash changed
-		if repo.Status.Artifacts != artifacts {
+		if repo.Status.Artifact != artifacts {
 			timeNew := metav1.Now()
 			repo.Status.LastUpdateTime = &timeNew
-			repo.Status.Artifacts = artifacts
+			repo.Status.Artifact = artifacts
 		}
 		log.Info("Repository sync succeeded", "msg", readyCondition.Message)
 	}
@@ -109,14 +111,13 @@ func (r *GitRepositoryReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		WithEventFilter(predicate.Funcs{
 			DeleteFunc: func(e event.DeleteEvent) bool {
 				// delete artifacts
-				repoDir := filepath.Join(r.StoragePath,
-					fmt.Sprintf("repositories/%s-%s", e.Meta.GetName(), e.Meta.GetNamespace()))
-				if err := os.RemoveAll(repoDir); err != nil {
+				artifact := r.Storage.ArtifactFor(r.Kind, e.Meta, "dummy")
+				if err := r.Storage.RemoveAll(artifact); err != nil {
 					r.Log.Error(err, "unable to delete artifacts",
-						"gitrepository", fmt.Sprintf("%s/%s", e.Meta.GetNamespace(), e.Meta.GetName()))
+						r.Kind, fmt.Sprintf("%s/%s", e.Meta.GetNamespace(), e.Meta.GetName()))
 				} else {
 					r.Log.Info("Repository artifacts deleted",
-						"gitrepository", fmt.Sprintf("%s/%s", e.Meta.GetNamespace(), e.Meta.GetName()))
+						r.Kind, fmt.Sprintf("%s/%s", e.Meta.GetNamespace(), e.Meta.GetName()))
 				}
 				return false
 			},
@@ -124,18 +125,18 @@ func (r *GitRepositoryReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-func (r *GitRepositoryReconciler) sync(gr sourcev1.GitRepository) (sourcev1.SourceCondition, string, error) {
+func (r *GitRepositoryReconciler) sync(repository sourcev1.GitRepository) (sourcev1.SourceCondition, string, error) {
 	// determine ref
 	refName := plumbing.NewBranchReferenceName("master")
-	if gr.Spec.Branch != "" {
-		refName = plumbing.NewBranchReferenceName(gr.Spec.Branch)
+	if repository.Spec.Branch != "" {
+		refName = plumbing.NewBranchReferenceName(repository.Spec.Branch)
 	}
-	if gr.Spec.Tag != "" {
-		refName = plumbing.NewTagReferenceName(gr.Spec.Tag)
+	if repository.Spec.Tag != "" {
+		refName = plumbing.NewTagReferenceName(repository.Spec.Tag)
 	}
 
 	// create tmp dir
-	dir, err := ioutil.TempDir("", gr.Name)
+	dir, err := ioutil.TempDir("", repository.Name)
 	if err != nil {
 		ex := fmt.Errorf("tmp dir error %w", err)
 		return sourcev1.SourceCondition{
@@ -149,7 +150,7 @@ func (r *GitRepositoryReconciler) sync(gr sourcev1.GitRepository) (sourcev1.Sour
 
 	// clone to tmp
 	repo, err := git.PlainClone(dir, false, &git.CloneOptions{
-		URL:           gr.Spec.Url,
+		URL:           repository.Spec.Url,
 		Depth:         2,
 		ReferenceName: refName,
 		SingleBranch:  true,
@@ -166,8 +167,8 @@ func (r *GitRepositoryReconciler) sync(gr sourcev1.GitRepository) (sourcev1.Sour
 	}
 
 	// checkout tag based on semver expression
-	if gr.Spec.SemVer != "" {
-		rng, err := semver.ParseRange(gr.Spec.SemVer)
+	if repository.Spec.SemVer != "" {
+		rng, err := semver.ParseRange(repository.Spec.SemVer)
 		if err != nil {
 			ex := fmt.Errorf("semver parse range error %w", err)
 			return sourcev1.SourceCondition{
@@ -235,7 +236,7 @@ func (r *GitRepositoryReconciler) sync(gr sourcev1.GitRepository) (sourcev1.Sour
 				}, "", ex
 			}
 		} else {
-			ex := fmt.Errorf("no match found for semver %s", gr.Spec.SemVer)
+			ex := fmt.Errorf("no match found for semver %s", repository.Spec.SemVer)
 			return sourcev1.SourceCondition{
 				Type:    sourcev1.ReadyCondition,
 				Status:  corev1.ConditionFalse,
@@ -257,10 +258,11 @@ func (r *GitRepositoryReconciler) sync(gr sourcev1.GitRepository) (sourcev1.Sour
 		}, "", ex
 	}
 
-	// create artifacts dir
-	repoDir := fmt.Sprintf("repositories/%s-%s", gr.Name, gr.Namespace)
-	storage := filepath.Join(r.StoragePath, repoDir)
-	err = os.MkdirAll(storage, 0777)
+	artifact := r.Storage.ArtifactFor(r.Kind, repository.ObjectMeta.GetObjectMeta(),
+		fmt.Sprintf("%s.tar.gz", ref.Hash().String()))
+
+	// create artifact dir
+	err = r.Storage.MkdirAll(artifact)
 	if err != nil {
 		ex := fmt.Errorf("mkdir dir error %w", err)
 		return sourcev1.SourceCondition{
@@ -271,14 +273,10 @@ func (r *GitRepositoryReconciler) sync(gr sourcev1.GitRepository) (sourcev1.Sour
 		}, "", ex
 	}
 
-	// store artifacts
-	artifacts := filepath.Join(storage, fmt.Sprintf("%s.tar.gz", ref.Hash().String()))
-	excludes := "--exclude=\\*.{jpg,jpeg,gif,png,wmv,flv,tar.gz,zip} --exclude .git"
-	command := exec.Command("/bin/sh", "-c",
-		fmt.Sprintf("cd %s && tar -c %s -f - . | gzip > %s", dir, excludes, artifacts))
-	err = command.Run()
+	// archive artifact
+	err = r.Storage.Archive(artifact, dir, "")
 	if err != nil {
-		ex := fmt.Errorf("tar %s error %w", artifacts, err)
+		ex := fmt.Errorf("storage error %w", err)
 		return sourcev1.SourceCondition{
 			Type:    sourcev1.ReadyCondition,
 			Status:  corev1.ConditionFalse,
@@ -287,36 +285,26 @@ func (r *GitRepositoryReconciler) sync(gr sourcev1.GitRepository) (sourcev1.Sour
 		}, "", ex
 	}
 
-	// compose artifacts URL
-	hostname := "localhost"
-	if os.Getenv("RUNTIME_NAMESPACE") != "" {
-		svcParts := strings.Split(os.Getenv("HOSTNAME"), "-")
-		hostname = fmt.Sprintf("%s.%s",
-			strings.Join(svcParts[:len(svcParts)-2], "-"), os.Getenv("RUNTIME_NAMESPACE"))
-	}
-	artifactsURL := fmt.Sprintf("http://%s/repositories/%s-%s/%s.tar.gz",
-		hostname, gr.Name, gr.Namespace, ref.Hash().String())
-
 	return sourcev1.SourceCondition{
 		Type:    sourcev1.ReadyCondition,
 		Status:  corev1.ConditionTrue,
 		Reason:  "GitCloneSucceed",
-		Message: fmt.Sprintf("Fetched artifacts are available at %s", artifacts),
-	}, artifactsURL, nil
+		Message: fmt.Sprintf("Artifact is available at %s", artifact.Path),
+	}, artifact.URL, nil
 }
 
-func (r *GitRepositoryReconciler) shouldResetStatus(gr sourcev1.GitRepository) (bool, sourcev1.GitRepositoryStatus) {
+func (r *GitRepositoryReconciler) shouldResetStatus(repository sourcev1.GitRepository) (bool, sourcev1.GitRepositoryStatus) {
 	resetStatus := false
-	if gr.Status.Artifacts != "" {
-		pathParts := strings.Split(gr.Status.Artifacts, "/")
-		path := fmt.Sprintf("repositories/%s-%s/%s", gr.Name, gr.Namespace, pathParts[len(pathParts)-1])
-		if _, err := os.Stat(filepath.Join(r.StoragePath, path)); err != nil {
+	if repository.Status.Artifact != "" {
+		parts := strings.Split(repository.Status.Artifact, "/")
+		artifact := r.Storage.ArtifactFor(r.Kind, repository.ObjectMeta.GetObjectMeta(), parts[len(parts)-1])
+		if !r.Storage.ArtifactExist(artifact) {
 			resetStatus = true
 		}
 	}
 
 	// set initial status
-	if len(gr.Status.Conditions) == 0 || resetStatus {
+	if len(repository.Status.Conditions) == 0 || resetStatus {
 		resetStatus = true
 	}
 
@@ -329,5 +317,15 @@ func (r *GitRepositoryReconciler) shouldResetStatus(gr sourcev1.GitRepository) (
 				LastTransitionTime: metav1.Now(),
 			},
 		},
+	}
+}
+
+func (r *GitRepositoryReconciler) gc(repository sourcev1.GitRepository) {
+	if repository.Status.Artifact != "" {
+		parts := strings.Split(repository.Status.Artifact, "/")
+		artifact := r.Storage.ArtifactFor(r.Kind, repository.ObjectMeta.GetObjectMeta(), parts[len(parts)-1])
+		if err := r.Storage.RemoveAllButCurrent(artifact); err != nil {
+			r.Log.Info("Artifacts GC failed", "error", err)
+		}
 	}
 }

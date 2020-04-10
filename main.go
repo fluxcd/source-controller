@@ -18,20 +18,22 @@ package main
 
 import (
 	"flag"
-	"github.com/go-logr/logr"
-	"helm.sh/helm/v3/pkg/getter"
-
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
+	"time"
 
+	"github.com/go-logr/logr"
+	"helm.sh/helm/v3/pkg/getter"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	sourcev1alpha1 "github.com/fluxcd/source-controller/api/v1alpha1"
+	sourcev1 "github.com/fluxcd/source-controller/api/v1alpha1"
 	"github.com/fluxcd/source-controller/controllers"
 	// +kubebuilder:scaffold:imports
 )
@@ -44,7 +46,7 @@ var (
 func init() {
 	_ = clientgoscheme.AddToScheme(scheme)
 
-	_ = sourcev1alpha1.AddToScheme(scheme)
+	_ = sourcev1.AddToScheme(scheme)
 	// +kubebuilder:scaffold:scheme
 }
 
@@ -76,17 +78,16 @@ func main() {
 		os.Exit(1)
 	}
 
-	if storagePath == "" {
-		p, _ := os.Getwd()
-		storagePath = filepath.Join(p, "bin")
-	}
-	go startFileServer(storagePath, storageAddr, setupLog)
+	storage := mustInitStorage(storagePath, setupLog)
+
+	go startFileServer(storage.BasePath, storageAddr, setupLog)
 
 	if err = (&controllers.GitRepositoryReconciler{
-		Client:      mgr.GetClient(),
-		Log:         ctrl.Log.WithName("controllers").WithName("GitRepository"),
-		Scheme:      mgr.GetScheme(),
-		StoragePath: storagePath,
+		Client:  mgr.GetClient(),
+		Log:     ctrl.Log.WithName("controllers").WithName("GitRepository"),
+		Scheme:  mgr.GetScheme(),
+		Kind:    "gitrepository",
+		Storage: storage,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "GitRepository")
 		os.Exit(1)
@@ -122,4 +123,26 @@ func startFileServer(path string, address string, l logr.Logger) {
 	if err != nil {
 		l.Error(err, "file server error")
 	}
+}
+
+func mustInitStorage(path string, l logr.Logger) *controllers.Storage {
+	if path == "" {
+		p, _ := os.Getwd()
+		path = filepath.Join(p, "bin")
+	}
+
+	hostname := "localhost"
+	if os.Getenv("RUNTIME_NAMESPACE") != "" {
+		svcParts := strings.Split(os.Getenv("HOSTNAME"), "-")
+		hostname = fmt.Sprintf("%s.%s",
+			strings.Join(svcParts[:len(svcParts)-2], "-"), os.Getenv("RUNTIME_NAMESPACE"))
+	}
+
+	storage, err := controllers.NewStorage(path, hostname, 5*time.Minute)
+	if err != nil {
+		l.Error(err, "unable to initialise storage")
+		os.Exit(1)
+	}
+
+	return storage
 }

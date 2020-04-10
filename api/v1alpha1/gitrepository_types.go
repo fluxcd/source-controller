@@ -53,9 +53,9 @@ type GitRepositoryStatus struct {
 	// +optional
 	LastUpdateTime *metav1.Time `json:"lastUpdateTime,omitempty"`
 
-	// Path to the artifacts of the last repository sync.
+	// Path to the artifact output of the last repository sync.
 	// +optional
-	Artifacts string `json:"artifacts,omitempty"`
+	Artifact string `json:"artifacts,omitempty"`
 }
 
 // +kubebuilder:object:root=true
