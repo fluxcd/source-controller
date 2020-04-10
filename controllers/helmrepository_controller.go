@@ -209,6 +209,19 @@ func (r *HelmRepositoryReconciler) index(repository sourcev1.HelmRepository) (so
 		}, "", err
 	}
 
+	// acquire lock
+	unlock, err := r.Storage.Lock(artifact)
+	if err != nil {
+		err = fmt.Errorf("unable to acquire lock: %w", err)
+		return sourcev1.SourceCondition{
+			Type:    sourcev1.ReadyCondition,
+			Status:  corev1.ConditionFalse,
+			Reason:  sourcev1.IndexFetchFailedReason,
+			Message: err.Error(),
+		}, "", err
+	}
+	defer unlock()
+
 	// save artifact to storage
 	err = r.Storage.WriteFile(artifact, index)
 	if err != nil {
