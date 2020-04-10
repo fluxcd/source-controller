@@ -46,7 +46,7 @@ type GitRepositorySpec struct {
 // GitRepositoryStatus defines the observed state of GitRepository
 type GitRepositoryStatus struct {
 	// +optional
-	Conditions []RepositoryCondition `json:"conditions,omitempty"`
+	Conditions []SourceCondition `json:"conditions,omitempty"`
 
 	// LastUpdateTime is the timestamp corresponding to the last status
 	// change of this repository.

@@ -77,8 +77,8 @@ spec:
               type: string
             conditions:
               items:
-                description: RepositoryCondition contains condition information for
-                  a repository
+                description: SourceCondition contains condition information for a
+                  source
                 properties:
                   lastTransitionTime:
                     description: LastTransitionTime is the timestamp corresponding

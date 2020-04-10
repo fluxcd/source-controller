@@ -33,7 +33,7 @@ type HelmRepositorySpec struct {
 // HelmRepositoryStatus defines the observed state of HelmRepository
 type HelmRepositoryStatus struct {
 	// +optional
-	Conditions []RepositoryCondition `json:"conditions,omitempty"`
+	Conditions []SourceCondition `json:"conditions,omitempty"`
 
 	// LastUpdateTime is the timestamp corresponding to the last status
 	// change of this repository.
