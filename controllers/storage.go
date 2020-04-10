@@ -2,7 +2,9 @@ package controllers
 
 import (
 	"context"
+	"crypto/sha1"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -115,4 +117,21 @@ func (s *Storage) Archive(artifact Artifact, dir string, excludes string) error 
 		return fmt.Errorf("command '%s' failed: %w", cmd, err)
 	}
 	return nil
+}
+
+// WriteFile writes the given bytes to the artifact path if the checksum differs
+func (s *Storage) WriteFile(artifact Artifact, data []byte) error {
+	sum := s.Checksum(data)
+	if file, err := os.Stat(artifact.Path); !os.IsNotExist(err) && !file.IsDir() {
+		if fb, err := ioutil.ReadFile(artifact.Path); err == nil && sum == s.Checksum(fb) {
+			return nil
+		}
+	}
+
+	return ioutil.WriteFile(artifact.Path, data, 0644)
+}
+
+// Checksum returns the SHA1 checksum for the given bytes as a string
+func (s *Storage) Checksum(b []byte) string {
+	return fmt.Sprintf("%x", sha1.Sum(b))
 }

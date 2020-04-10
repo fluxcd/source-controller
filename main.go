@@ -93,10 +93,11 @@ func main() {
 		os.Exit(1)
 	}
 	if err = (&controllers.HelmRepositoryReconciler{
-		Client:      mgr.GetClient(),
-		Log:         ctrl.Log.WithName("controllers").WithName("HelmRepository"),
-		Scheme:      mgr.GetScheme(),
-		StoragePath: storagePath,
+		Client:  mgr.GetClient(),
+		Log:     ctrl.Log.WithName("controllers").WithName("HelmRepository"),
+		Scheme:  mgr.GetScheme(),
+		Kind:    "helmrepository",
+		Storage: storage,
 		Getters: getter.Providers{
 			getter.Provider{
 				Schemes: []string{"http", "https"},
