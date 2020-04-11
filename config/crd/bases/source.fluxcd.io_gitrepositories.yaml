@@ -49,18 +49,28 @@ spec:
         spec:
           description: GitRepositorySpec defines the desired state of GitRepository
           properties:
-            branch:
-              description: The git branch to checkout, defaults to ('master').
-              type: string
             interval:
               description: The interval at which to check for repository updates.
               type: string
-            semver:
-              description: The git tag semver expression, takes precedence over tag.
-              type: string
-            tag:
-              description: The git tag to checkout, takes precedence over branch.
-              type: string
+            ref:
+              description: The git reference to checkout and monitor for changes,
+                defaults to master branch.
+              properties:
+                branch:
+                  description: The git branch to checkout, defaults to master.
+                  type: string
+                commit:
+                  description: The git commit sha to checkout, if specified tag filters
+                    will be ignored.
+                  type: string
+                semver:
+                  description: The git tag semver expression, takes precedence over
+                    tag.
+                  type: string
+                tag:
+                  description: The git tag to checkout, takes precedence over branch.
+                  type: string
+              type: object
             url:
               description: The repository URL, can be a HTTP or SSH address.
               pattern: ^(http|https|ssh)://

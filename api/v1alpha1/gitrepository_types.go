@@ -31,7 +31,14 @@ type GitRepositorySpec struct {
 	// +required
 	Interval metav1.Duration `json:"interval"`
 
-	// The git branch to checkout, defaults to ('master').
+	// The git reference to checkout and monitor for changes, defaults to master branch.
+	// +optional
+	Reference *GitRepositoryRef `json:"ref,omitempty"`
+}
+
+// GitRepositoryRef defines the git ref used for pull and checkout operations
+type GitRepositoryRef struct {
+	// The git branch to checkout, defaults to master.
 	// +optional
 	Branch string `json:"branch"`
 
@@ -42,6 +49,10 @@ type GitRepositorySpec struct {
 	// The git tag semver expression, takes precedence over tag.
 	// +optional
 	SemVer string `json:"semver"`
+
+	// The git commit sha to checkout, if specified tag filters will be ignored.
+	// +optional
+	Commit string `json:"commit"`
 }
 
 // GitRepositoryStatus defines the observed state of GitRepository

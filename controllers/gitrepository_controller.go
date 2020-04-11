@@ -126,13 +126,28 @@ func (r *GitRepositoryReconciler) SetupWithManager(mgr ctrl.Manager) error {
 }
 
 func (r *GitRepositoryReconciler) sync(repository sourcev1.GitRepository) (sourcev1.SourceCondition, string, error) {
+	// set defaults: master branch, no tags fetching, max two commits
+	branch := "master"
+	tagMode := git.NoTags
+	depth := 2
+
 	// determine ref
-	refName := plumbing.NewBranchReferenceName("master")
-	if repository.Spec.Branch != "" {
-		refName = plumbing.NewBranchReferenceName(repository.Spec.Branch)
-	}
-	if repository.Spec.Tag != "" {
-		refName = plumbing.NewTagReferenceName(repository.Spec.Tag)
+	refName := plumbing.NewBranchReferenceName(branch)
+	if repository.Spec.Reference != nil {
+		if repository.Spec.Reference.Branch != "" {
+			branch = repository.Spec.Reference.Branch
+			refName = plumbing.NewBranchReferenceName(branch)
+		}
+		if repository.Spec.Reference.Commit != "" {
+			depth = 0
+		} else {
+			if repository.Spec.Reference.Tag != "" {
+				refName = plumbing.NewTagReferenceName(repository.Spec.Reference.Tag)
+			}
+			if repository.Spec.Reference.SemVer != "" {
+				tagMode = git.AllTags
+			}
+		}
 	}
 
 	// create tmp dir
@@ -145,53 +160,25 @@ func (r *GitRepositoryReconciler) sync(repository sourcev1.GitRepository) (sourc
 
 	// clone to tmp
 	repo, err := git.PlainClone(dir, false, &git.CloneOptions{
-		URL:           repository.Spec.URL,
-		Depth:         2,
-		ReferenceName: refName,
-		SingleBranch:  true,
-		Tags:          git.AllTags,
+		URL:               repository.Spec.URL,
+		Auth:              nil,
+		RemoteName:        "origin",
+		ReferenceName:     refName,
+		SingleBranch:      true,
+		NoCheckout:        false,
+		Depth:             depth,
+		RecurseSubmodules: 0,
+		Progress:          nil,
+		Tags:              tagMode,
 	})
 	if err != nil {
 		err = fmt.Errorf("git clone error %w", err)
 		return NotReadyCondition(sourcev1.GitOperationFailedReason, err.Error()), "", err
 	}
 
-	// checkout tag based on semver expression
-	if repository.Spec.SemVer != "" {
-		rng, err := semver.ParseRange(repository.Spec.SemVer)
-		if err != nil {
-			err = fmt.Errorf("semver parse range error %w", err)
-			return NotReadyCondition(sourcev1.GitOperationFailedReason, err.Error()), "", err
-		}
-
-		repoTags, err := repo.Tags()
-		if err != nil {
-			err = fmt.Errorf("git list tags error %w", err)
-			return NotReadyCondition(sourcev1.GitOperationFailedReason, err.Error()), "", err
-		}
-
-		tags := make(map[string]string)
-		_ = repoTags.ForEach(func(t *plumbing.Reference) error {
-			tags[t.Name().Short()] = t.Strings()[1]
-			return nil
-		})
-
-		svTags := make(map[string]string)
-		svers := []semver.Version{}
-		for tag, _ := range tags {
-			v, _ := semver.ParseTolerant(tag)
-			if rng(v) {
-				svers = append(svers, v)
-				svTags[v.String()] = tag
-			}
-		}
-
-		if len(svers) > 0 {
-			semver.Sort(svers)
-			v := svers[len(svers)-1]
-			t := svTags[v.String()]
-			commit := tags[t]
-
+	// checkout commit or tag
+	if repository.Spec.Reference != nil {
+		if commit := repository.Spec.Reference.Commit; commit != "" {
 			w, err := repo.Worktree()
 			if err != nil {
 				err = fmt.Errorf("git worktree error %w", err)
@@ -199,18 +186,67 @@ func (r *GitRepositoryReconciler) sync(repository sourcev1.GitRepository) (sourc
 			}
 
 			err = w.Checkout(&git.CheckoutOptions{
-				Hash: plumbing.NewHash(commit),
+				Hash:  plumbing.NewHash(commit),
+				Force: true,
 			})
 			if err != nil {
-				err = fmt.Errorf("git checkout error %w", err)
+				err = fmt.Errorf("git checkout %s for %s error %w", commit, branch, err)
 				return NotReadyCondition(sourcev1.GitOperationFailedReason, err.Error()), "", err
 			}
-		} else {
-			err = fmt.Errorf("no match found for semver %s", repository.Spec.SemVer)
-			return NotReadyCondition(sourcev1.GitOperationFailedReason, err.Error()), "", err
+		} else if exp := repository.Spec.Reference.SemVer; exp != "" {
+			rng, err := semver.ParseRange(exp)
+			if err != nil {
+				err = fmt.Errorf("semver parse range error %w", err)
+				return NotReadyCondition(sourcev1.GitOperationFailedReason, err.Error()), "", err
+			}
+
+			repoTags, err := repo.Tags()
+			if err != nil {
+				err = fmt.Errorf("git list tags error %w", err)
+				return NotReadyCondition(sourcev1.GitOperationFailedReason, err.Error()), "", err
+			}
+
+			tags := make(map[string]string)
+			_ = repoTags.ForEach(func(t *plumbing.Reference) error {
+				tags[t.Name().Short()] = t.Strings()[1]
+				return nil
+			})
+
+			svTags := make(map[string]string)
+			svers := []semver.Version{}
+			for tag, _ := range tags {
+				v, _ := semver.ParseTolerant(tag)
+				if rng(v) {
+					svers = append(svers, v)
+					svTags[v.String()] = tag
+				}
+			}
+
+			if len(svers) > 0 {
+				semver.Sort(svers)
+				v := svers[len(svers)-1]
+				t := svTags[v.String()]
+				commit := tags[t]
+
+				w, err := repo.Worktree()
+				if err != nil {
+					err = fmt.Errorf("git worktree error %w", err)
+					return NotReadyCondition(sourcev1.GitOperationFailedReason, err.Error()), "", err
+				}
+
+				err = w.Checkout(&git.CheckoutOptions{
+					Hash: plumbing.NewHash(commit),
+				})
+				if err != nil {
+					err = fmt.Errorf("git checkout error %w", err)
+					return NotReadyCondition(sourcev1.GitOperationFailedReason, err.Error()), "", err
+				}
+			} else {
+				err = fmt.Errorf("no match found for semver %s", repository.Spec.Reference.SemVer)
+				return NotReadyCondition(sourcev1.GitOperationFailedReason, err.Error()), "", err
+			}
 		}
 	}
-
 	// read commit hash
 	ref, err := repo.Head()
 	if err != nil {
