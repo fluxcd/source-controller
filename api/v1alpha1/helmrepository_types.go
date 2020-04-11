@@ -47,34 +47,6 @@ type HelmRepositoryStatus struct {
 	Artifact *Artifact `json:"artifact,omitempty"`
 }
 
-// +kubebuilder:object:root=true
-// +kubebuilder:subresource:status
-// +kubebuilder:printcolumn:name="URL",type=string,JSONPath=`.spec.url`
-// +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type==\"Ready\")].status",description=""
-// +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.conditions[?(@.type==\"Ready\")].message",description=""
-// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description=""
-
-// HelmRepository is the Schema for the helmrepositories API
-type HelmRepository struct {
-	metav1.TypeMeta   `json:",inline"`
-	metav1.ObjectMeta `json:"metadata,omitempty"`
-
-	Spec   HelmRepositorySpec   `json:"spec,omitempty"`
-	Status HelmRepositoryStatus `json:"status,omitempty"`
-}
-
-// HelmRepositoryList contains a list of HelmRepository
-// +kubebuilder:object:root=true
-type HelmRepositoryList struct {
-	metav1.TypeMeta `json:",inline"`
-	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []HelmRepository `json:"items"`
-}
-
-func init() {
-	SchemeBuilder.Register(&HelmRepository{}, &HelmRepositoryList{})
-}
-
 const (
 	// IndexationFailedReason represents the fact that the indexation
 	// of the given Helm repository failed.
@@ -128,4 +100,32 @@ func HelmRepositoryReadyMessage(repository HelmRepository) string {
 		}
 	}
 	return ""
+}
+
+// +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:name="URL",type=string,JSONPath=`.spec.url`
+// +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type==\"Ready\")].status",description=""
+// +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.conditions[?(@.type==\"Ready\")].message",description=""
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description=""
+
+// HelmRepository is the Schema for the helmrepositories API
+type HelmRepository struct {
+	metav1.TypeMeta   `json:",inline"`
+	metav1.ObjectMeta `json:"metadata,omitempty"`
+
+	Spec   HelmRepositorySpec   `json:"spec,omitempty"`
+	Status HelmRepositoryStatus `json:"status,omitempty"`
+}
+
+// HelmRepositoryList contains a list of HelmRepository
+// +kubebuilder:object:root=true
+type HelmRepositoryList struct {
+	metav1.TypeMeta `json:",inline"`
+	metav1.ListMeta `json:"metadata,omitempty"`
+	Items           []HelmRepository `json:"items"`
+}
+
+func init() {
+	SchemeBuilder.Register(&HelmRepository{}, &HelmRepositoryList{})
 }
