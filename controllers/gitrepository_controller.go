@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -29,6 +30,7 @@ import (
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/transport"
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
+	"github.com/go-git/go-git/v5/plumbing/transport/ssh"
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -153,22 +155,30 @@ func (r *GitRepositoryReconciler) sync(repository sourcev1.GitRepository) (sourc
 		}
 	}
 
-	auth, err := r.auth(repository)
+	// create tmp dir for SSH known_hosts
+	tmpSSH, err := ioutil.TempDir("", repository.Name)
+	if err != nil {
+		err = fmt.Errorf("tmp dir error %w", err)
+		return NotReadyCondition(sourcev1.StorageOperationFailedReason, err.Error()), "", err
+	}
+	defer os.RemoveAll(tmpSSH)
+
+	auth, err := r.auth(repository, tmpSSH)
 	if err != nil {
 		err = fmt.Errorf("auth error %w", err)
 		return NotReadyCondition(sourcev1.AuthenticationFailedReason, err.Error()), "", err
 	}
 
-	// create tmp dir
-	dir, err := ioutil.TempDir("", repository.Name)
+	// create tmp dir for the Git clone
+	tmpGit, err := ioutil.TempDir("", repository.Name)
 	if err != nil {
 		err = fmt.Errorf("tmp dir error %w", err)
 		return NotReadyCondition(sourcev1.StorageOperationFailedReason, err.Error()), "", err
 	}
-	defer os.RemoveAll(dir)
+	defer os.RemoveAll(tmpGit)
 
 	// clone to tmp
-	repo, err := git.PlainClone(dir, false, &git.CloneOptions{
+	repo, err := git.PlainClone(tmpGit, false, &git.CloneOptions{
 		URL:               repository.Spec.URL,
 		Auth:              auth,
 		RemoteName:        "origin",
@@ -256,6 +266,7 @@ func (r *GitRepositoryReconciler) sync(repository sourcev1.GitRepository) (sourc
 			}
 		}
 	}
+
 	// read commit hash
 	ref, err := repo.Head()
 	if err != nil {
@@ -282,7 +293,7 @@ func (r *GitRepositoryReconciler) sync(repository sourcev1.GitRepository) (sourc
 	defer unlock()
 
 	// archive artifact
-	err = r.Storage.Archive(artifact, dir, "")
+	err = r.Storage.Archive(artifact, tmpGit, "")
 	if err != nil {
 		err = fmt.Errorf("storage error %w", err)
 		return NotReadyCondition(sourcev1.StorageOperationFailedReason, err.Error()), "", err
@@ -329,7 +340,7 @@ func (r *GitRepositoryReconciler) gc(repository sourcev1.GitRepository) {
 	}
 }
 
-func (r *GitRepositoryReconciler) auth(repository sourcev1.GitRepository) (transport.AuthMethod, error) {
+func (r *GitRepositoryReconciler) auth(repository sourcev1.GitRepository, tmp string) (transport.AuthMethod, error) {
 	if repository.Spec.SecretRef == nil {
 		return nil, nil
 	}
@@ -347,20 +358,52 @@ func (r *GitRepositoryReconciler) auth(repository sourcev1.GitRepository) (trans
 
 	credentials := secret.Data
 
-	// extract HTTP credentials
+	// HTTP auth
 	if strings.HasPrefix(repository.Spec.URL, "http") {
 		auth := &http.BasicAuth{}
 		if username, ok := credentials["username"]; ok {
 			auth.Username = string(username)
 		} else {
-			return nil, fmt.Errorf("%s secret does not contain a username", repository.Spec.SecretRef.Name)
+			return nil, fmt.Errorf("%s secret does not contain username", repository.Spec.SecretRef.Name)
 		}
 		if password, ok := credentials["password"]; ok {
 			auth.Password = string(password)
 		} else {
-			return nil, fmt.Errorf("%s secret does not contain a password", repository.Spec.SecretRef.Name)
+			return nil, fmt.Errorf("%s secret does not contain password", repository.Spec.SecretRef.Name)
 		}
 		return auth, nil
+	}
+
+	// SSH auth
+	if strings.HasPrefix(repository.Spec.URL, "ssh") {
+		var privateKey []byte
+		if identity, ok := credentials["identity"]; ok {
+			privateKey = identity
+		} else {
+			return nil, fmt.Errorf("%s secret does not contain identity", repository.Spec.SecretRef.Name)
+		}
+
+		pk, err := ssh.NewPublicKeys("git", privateKey, "")
+		if err != nil {
+			return nil, err
+		}
+
+		known_hosts := filepath.Join(tmp, "known_hosts")
+		if kh, ok := credentials["known_hosts"]; ok {
+			if err := ioutil.WriteFile(filepath.Join(tmp, "known_hosts"), kh, 0644); err != nil {
+				return nil, err
+			}
+		} else {
+			return nil, fmt.Errorf("%s secret does not contain known_hosts", repository.Spec.SecretRef.Name)
+		}
+
+		callback, err := ssh.NewKnownHostsCallback(known_hosts)
+		if err != nil {
+			return nil, err
+		}
+		pk.HostKeyCallback = callback
+
+		return pk, nil
 	}
 
 	return nil, nil
