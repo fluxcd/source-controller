@@ -22,12 +22,13 @@ import (
 
 // GitRepositorySpec defines the desired state of GitRepository
 type GitRepositorySpec struct {
-	// +kubebuilder:validation:Pattern="^(http|https|ssh)://"
-
 	// The repository URL, can be a HTTP or SSH address.
-	Url string `json:"url"`
+	// +kubebuilder:validation:Pattern="^(http|https|ssh)://"
+	// +required
+	URL string `json:"url"`
 
 	// The interval at which to check for repository updates.
+	// +required
 	Interval metav1.Duration `json:"interval"`
 
 	// The git branch to checkout, defaults to ('master').
@@ -46,16 +47,16 @@ type GitRepositorySpec struct {
 // GitRepositoryStatus defines the observed state of GitRepository
 type GitRepositoryStatus struct {
 	// +optional
-	Conditions []RepositoryCondition `json:"conditions,omitempty"`
+	Conditions []SourceCondition `json:"conditions,omitempty"`
 
 	// LastUpdateTime is the timestamp corresponding to the last status
 	// change of this repository.
 	// +optional
 	LastUpdateTime *metav1.Time `json:"lastUpdateTime,omitempty"`
 
-	// Path to the artifacts of the last repository sync.
+	// Path to the artifact output of the last repository sync.
 	// +optional
-	Artifacts string `json:"artifacts,omitempty"`
+	Artifact string `json:"artifacts,omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -74,9 +75,8 @@ type GitRepository struct {
 	Status GitRepositoryStatus `json:"status,omitempty"`
 }
 
-// +kubebuilder:object:root=true
-
 // GitRepositoryList contains a list of GitRepository
+// +kubebuilder:object:root=true
 type GitRepositoryList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
@@ -86,3 +86,8 @@ type GitRepositoryList struct {
 func init() {
 	SchemeBuilder.Register(&GitRepository{}, &GitRepositoryList{})
 }
+
+const (
+	GitOperationSucceedReason string = "GitOperationSucceed"
+	GitOperationFailedReason  string = "GitOperationFailed"
+)

@@ -64,13 +64,12 @@ spec:
           description: HelmRepositoryStatus defines the observed state of HelmRepository
           properties:
             artifact:
-              description: Path to the artifact (index file) of the last repository
-                sync.
+              description: Path to the artifact of the last repository index.
               type: string
             conditions:
               items:
-                description: RepositoryCondition contains condition information for
-                  a repository
+                description: SourceCondition contains condition information for a
+                  source
                 properties:
                   lastTransitionTime:
                     description: LastTransitionTime is the timestamp corresponding

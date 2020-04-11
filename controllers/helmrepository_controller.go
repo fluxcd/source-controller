@@ -18,13 +18,10 @@ package controllers
 
 import (
 	"context"
-	"crypto/sha1"
 	"fmt"
 	"io/ioutil"
 	"net/url"
-	"os"
 	"path"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -46,10 +43,11 @@ import (
 // HelmRepositoryReconciler reconciles a HelmRepository object
 type HelmRepositoryReconciler struct {
 	client.Client
-	Log         logr.Logger
-	Scheme      *runtime.Scheme
-	StoragePath string
-	Getters     getter.Providers
+	Log     logr.Logger
+	Scheme  *runtime.Scheme
+	Storage *Storage
+	Kind    string
+	Getters getter.Providers
 }
 
 // +kubebuilder:rbac:groups=source.fluxcd.io,resources=helmrepositories,verbs=get;list;watch;create;update;patch;delete
@@ -69,20 +67,17 @@ func (r *HelmRepositoryReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 	result := ctrl.Result{RequeueAfter: repository.Spec.Interval.Duration}
 
 	// set initial status
-	if r.shouldResetStatus(repository) {
-		log.Info("Initialising repository")
-		repository.Status = sourcev1.HelmRepositoryStatus{}
-		repository.Status.Conditions = []sourcev1.RepositoryCondition{
-			{
-				Type:   sourcev1.RepositoryConditionReady,
-				Status: corev1.ConditionUnknown,
-			},
-		}
+	if reset, status := r.shouldResetStatus(repository); reset {
+		log.Info("Initializing repository")
+		repository.Status = status
 		if err := r.Status().Update(ctx, &repository); err != nil {
 			log.Error(err, "unable to update HelmRepository status")
 			return result, err
 		}
 	}
+
+	// try to remove old artifacts
+	r.gc(repository)
 
 	// try to download index
 	readyCondition, artifact, err := r.index(repository)
@@ -99,9 +94,8 @@ func (r *HelmRepositoryReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 	}
 
 	// update status
-	timeNew := metav1.Now()
-	readyCondition.LastTransitionTime = &timeNew
-	repository.Status.Conditions = []sourcev1.RepositoryCondition{readyCondition}
+	readyCondition.LastTransitionTime = metav1.Now()
+	repository.Status.Conditions = []sourcev1.SourceCondition{readyCondition}
 
 	if err := r.Status().Update(ctx, &repository); err != nil {
 		log.Error(err, "unable to update HelmRepository status")
@@ -119,14 +113,13 @@ func (r *HelmRepositoryReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		WithEventFilter(predicate.Funcs{
 			DeleteFunc: func(e event.DeleteEvent) bool {
 				// delete artifacts
-				repoDir := filepath.Join(r.StoragePath,
-					fmt.Sprintf("helmrepositories/%s-%s", e.Meta.GetName(), e.Meta.GetNamespace()))
-				if err := os.RemoveAll(repoDir); err != nil {
+				artifact := r.Storage.ArtifactFor(r.Kind, e.Meta, "dummy")
+				if err := r.Storage.RemoveAll(artifact); err != nil {
 					r.Log.Error(err, "unable to delete artifacts",
-						"helmrepository", fmt.Sprintf("%s/%s", e.Meta.GetNamespace(), e.Meta.GetName()))
+						r.Kind, fmt.Sprintf("%s/%s", e.Meta.GetNamespace(), e.Meta.GetName()))
 				} else {
-					r.Log.Info("Helm repository artifacts deleted",
-						"helmrepository", fmt.Sprintf("%s/%s", e.Meta.GetNamespace(), e.Meta.GetName()))
+					r.Log.Info("Repository artifacts deleted",
+						r.Kind, fmt.Sprintf("%s/%s", e.Meta.GetNamespace(), e.Meta.GetName()))
 				}
 				return false
 			},
@@ -134,25 +127,15 @@ func (r *HelmRepositoryReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-func (r *HelmRepositoryReconciler) index(repository sourcev1.HelmRepository) (sourcev1.RepositoryCondition, string, error) {
+func (r *HelmRepositoryReconciler) index(repository sourcev1.HelmRepository) (sourcev1.SourceCondition, string, error) {
 	u, err := url.Parse(repository.Spec.URL)
 	if err != nil {
-		return sourcev1.RepositoryCondition{
-			Type:    sourcev1.RepositoryConditionReady,
-			Status:  corev1.ConditionFalse,
-			Reason:  sourcev1.InvalidHelmRepositoryURLReason,
-			Message: err.Error(),
-		}, "", err
+		return NotReadyCondition(sourcev1.URLInvalidReason, err.Error()), "", err
 	}
 
 	c, err := r.Getters.ByScheme(u.Scheme)
 	if err != nil {
-		return sourcev1.RepositoryCondition{
-			Type:    sourcev1.RepositoryConditionReady,
-			Status:  corev1.ConditionFalse,
-			Reason:  sourcev1.InvalidHelmRepositoryURLReason,
-			Message: err.Error(),
-		}, "", err
+		return NotReadyCondition(sourcev1.URLInvalidReason, err.Error()), "", err
 	}
 
 	u.RawPath = path.Join(u.RawPath, "index.yaml")
@@ -162,96 +145,60 @@ func (r *HelmRepositoryReconciler) index(repository sourcev1.HelmRepository) (so
 	// TODO(hidde): add authentication config
 	res, err := c.Get(indexURL, getter.WithURL(repository.Spec.URL))
 	if err != nil {
-		return sourcev1.RepositoryCondition{
-			Type:    sourcev1.RepositoryConditionReady,
-			Status:  corev1.ConditionFalse,
-			Reason:  sourcev1.IndexFetchFailedReason,
-			Message: err.Error(),
-		}, "", err
+		return NotReadyCondition(sourcev1.IndexationFailedReason, err.Error()), "", err
 	}
 
-	index, err := ioutil.ReadAll(res)
+	data, err := ioutil.ReadAll(res)
 	if err != nil {
-		return sourcev1.RepositoryCondition{
-			Type:    sourcev1.RepositoryConditionReady,
-			Status:  corev1.ConditionFalse,
-			Reason:  sourcev1.IndexFetchFailedReason,
-			Message: err.Error(),
-		}, "", err
+		return NotReadyCondition(sourcev1.IndexationFailedReason, err.Error()), "", err
 	}
 
 	i := &repo.IndexFile{}
-	if err := yaml.Unmarshal(index, i); err != nil {
-		return sourcev1.RepositoryCondition{
-			Type:    sourcev1.RepositoryConditionReady,
-			Status:  corev1.ConditionFalse,
-			Reason:  sourcev1.IndexFetchFailedReason,
-			Message: err.Error(),
-		}, "", err
+	if err := yaml.Unmarshal(data, i); err != nil {
+		return NotReadyCondition(sourcev1.IndexationFailedReason, err.Error()), "", err
 	}
 
-	b, err := yaml.Marshal(i)
+	index, err := yaml.Marshal(i)
 	if err != nil {
-		return sourcev1.RepositoryCondition{
-			Type:    sourcev1.RepositoryConditionReady,
-			Status:  corev1.ConditionFalse,
-			Reason:  sourcev1.IndexFetchFailedReason,
-			Message: err.Error(),
-		}, "", err
+		return NotReadyCondition(sourcev1.IndexationFailedReason, err.Error()), "", err
 	}
 
-	repoPath := fmt.Sprintf("helmrepositories/%s-%s", repository.Name, repository.Namespace)
-	storage := filepath.Join(r.StoragePath, repoPath)
-	sum := checksum(b)
-	indexFileName := fmt.Sprintf("index-%s.yaml", sum)
-	indexFilePath := filepath.Join(storage, indexFileName)
-	artifactsURL := fmt.Sprintf("http://%s/helmrepositories/%s/%s", host(), repoPath, indexFileName)
+	sum := r.Storage.Checksum(index)
+	artifact := r.Storage.ArtifactFor(r.Kind, repository.ObjectMeta.GetObjectMeta(),
+		fmt.Sprintf("index-%s.yaml", sum))
 
-	if file, err := os.Stat(indexFilePath); !os.IsNotExist(err) && !file.IsDir() {
-		if fb, err := ioutil.ReadFile(indexFilePath); err == nil && sum == checksum(fb) {
-			return sourcev1.RepositoryCondition{
-				Type:    sourcev1.RepositoryConditionReady,
-				Status:  corev1.ConditionTrue,
-				Reason:  "GitCloneSucceed",
-				Message: fmt.Sprintf("Fetched artifact is available at %s", indexFilePath),
-			}, artifactsURL, nil
-		}
-	}
-
-	err = os.MkdirAll(storage, 0755)
+	// create artifact dir
+	err = r.Storage.MkdirAll(artifact)
 	if err != nil {
 		err = fmt.Errorf("unable to create repository index directory: %w", err)
-		return sourcev1.RepositoryCondition{
-			Type:    sourcev1.RepositoryConditionReady,
-			Status:  corev1.ConditionFalse,
-			Reason:  sourcev1.IndexFetchFailedReason,
-			Message: err.Error(),
-		}, "", err
+		return NotReadyCondition(sourcev1.StorageOperationFailedReason, err.Error()), "", err
 	}
-	err = ioutil.WriteFile(indexFilePath, index, 0644)
+
+	// acquire lock
+	unlock, err := r.Storage.Lock(artifact)
+	if err != nil {
+		err = fmt.Errorf("unable to acquire lock: %w", err)
+		return NotReadyCondition(sourcev1.StorageOperationFailedReason, err.Error()), "", err
+	}
+	defer unlock()
+
+	// save artifact to storage
+	err = r.Storage.WriteFile(artifact, index)
 	if err != nil {
 		err = fmt.Errorf("unable to write repository index file: %w", err)
-		return sourcev1.RepositoryCondition{
-			Type:    sourcev1.RepositoryConditionReady,
-			Status:  corev1.ConditionFalse,
-			Reason:  sourcev1.IndexFetchFailedReason,
-			Message: err.Error(),
-		}, "", err
+		return NotReadyCondition(sourcev1.StorageOperationFailedReason, err.Error()), "", err
 	}
-	return sourcev1.RepositoryCondition{
-		Type:    sourcev1.RepositoryConditionReady,
-		Status:  corev1.ConditionTrue,
-		Reason:  sourcev1.IndexFetchSucceededReason,
-		Message: fmt.Sprintf("Fetched artifact is available at %s", indexFilePath),
-	}, artifactsURL, nil
+
+	message := fmt.Sprintf("Artifact is available at %s", artifact.Path)
+	return ReadyCondition(sourcev1.IndexationSucceededReason, message), artifact.URL, nil
 }
 
-func (r *HelmRepositoryReconciler) shouldResetStatus(repository sourcev1.HelmRepository) bool {
+func (r *HelmRepositoryReconciler) shouldResetStatus(repository sourcev1.HelmRepository) (bool, sourcev1.HelmRepositoryStatus) {
 	resetStatus := false
 	if repository.Status.Artifact != "" {
-		pathParts := strings.Split(repository.Status.Artifact, "/")
-		path := fmt.Sprintf("helmrepositories/%s-%s/%s", repository.Name, repository.Namespace, pathParts[len(pathParts)-1])
-		if _, err := os.Stat(filepath.Join(r.StoragePath, path)); err != nil {
+		parts := strings.Split(repository.Status.Artifact, "/")
+		artifact := r.Storage.ArtifactFor(r.Kind, repository.ObjectMeta.GetObjectMeta(), parts[len(parts)-1])
+		if !r.Storage.ArtifactExist(artifact) {
 			resetStatus = true
 		}
 	}
@@ -261,20 +208,24 @@ func (r *HelmRepositoryReconciler) shouldResetStatus(repository sourcev1.HelmRep
 		resetStatus = true
 	}
 
-	return resetStatus
-}
-
-// Checksum returns the SHA1 checksum for the given bytes as a string.
-func checksum(b []byte) string {
-	return fmt.Sprintf("%x", sha1.Sum(b))
-}
-
-func host() string {
-	hostname := "localhost"
-	if os.Getenv("RUNTIME_NAMESPACE") != "" {
-		svcParts := strings.Split(os.Getenv("HOSTNAME"), "-")
-		hostname = fmt.Sprintf("%s.%s",
-			strings.Join(svcParts[:len(svcParts)-2], "-"), os.Getenv("RUNTIME_NAMESPACE"))
+	return resetStatus, sourcev1.HelmRepositoryStatus{
+		Conditions: []sourcev1.SourceCondition{
+			{
+				Type:               sourcev1.ReadyCondition,
+				Status:             corev1.ConditionUnknown,
+				Reason:             sourcev1.InitializingReason,
+				LastTransitionTime: metav1.Now(),
+			},
+		},
 	}
-	return hostname
+}
+
+func (r *HelmRepositoryReconciler) gc(repository sourcev1.HelmRepository) {
+	if repository.Status.Artifact != "" {
+		parts := strings.Split(repository.Status.Artifact, "/")
+		artifact := r.Storage.ArtifactFor(r.Kind, repository.ObjectMeta.GetObjectMeta(), parts[len(parts)-1])
+		if err := r.Storage.RemoveAllButCurrent(artifact); err != nil {
+			r.Log.Info("Artifacts GC failed", "error", err)
+		}
+	}
 }

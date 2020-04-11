@@ -73,12 +73,12 @@ spec:
           description: GitRepositoryStatus defines the observed state of GitRepository
           properties:
             artifacts:
-              description: Path to the artifacts of the last repository sync.
+              description: Path to the artifact output of the last repository sync.
               type: string
             conditions:
               items:
-                description: RepositoryCondition contains condition information for
-                  a repository
+                description: SourceCondition contains condition information for a
+                  source
                 properties:
                   lastTransitionTime:
                     description: LastTransitionTime is the timestamp corresponding

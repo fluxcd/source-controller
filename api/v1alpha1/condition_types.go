@@ -5,22 +5,24 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// RepositoryCondition contains condition information for a repository
-type RepositoryCondition struct {
+// SourceCondition contains condition information for a source
+type SourceCondition struct {
 	// Type of the condition, currently ('Ready').
-	Type RepositoryConditionType `json:"type"`
+	// +required
+	Type string `json:"type"`
 
 	// Status of the condition, one of ('True', 'False', 'Unknown').
+	// +required
 	Status corev1.ConditionStatus `json:"status"`
 
 	// LastTransitionTime is the timestamp corresponding to the last status
 	// change of this condition.
-	// +optional
-	LastTransitionTime *metav1.Time `json:"lastTransitionTime,omitempty"`
+	// +required
+	LastTransitionTime metav1.Time `json:"lastTransitionTime,omitempty"`
 
 	// Reason is a brief machine readable explanation for the condition's last
 	// transition.
-	// +optional
+	// +required
 	Reason string `json:"reason,omitempty"`
 
 	// Message is a human readable description of the details of the last
@@ -29,11 +31,16 @@ type RepositoryCondition struct {
 	Message string `json:"message,omitempty"`
 }
 
-// RepositoryConditionType represents an repository condition value
-type RepositoryConditionType string
-
 const (
-	// RepositoryConditionReady represents the fact that a given repository condition
-	// is in ready state.
-	RepositoryConditionReady RepositoryConditionType = "Ready"
+	// ReadyCondition represents the fact that a given source is in ready state.
+	ReadyCondition string = "Ready"
+
+	// InitializingReason represents the fact that a given source is being initialize.
+	InitializingReason string = "Initializing"
+
+	// StorageOperationFailedReason signals a failure caused by a storage operation.
+	StorageOperationFailedReason string = "StorageOperationFailed"
+
+	// URLInvalidReason represents the fact that a given source has an invalid URL.
+	URLInvalidReason string = "URLInvalid"
 )
