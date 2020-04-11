@@ -71,6 +71,17 @@ spec:
                   description: The git tag to checkout, takes precedence over branch.
                   type: string
               type: object
+            secretRef:
+              description: The secret name containing the Git credentials. For HTTPS
+                repositories the secret must contain username and password fields.
+                For SSH repositories the secret must contain identity, identity.pub
+                and known_hosts fields.
+              properties:
+                name:
+                  description: 'Name of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                    TODO: Add other useful fields. apiVersion, kind, uid?'
+                  type: string
+              type: object
             url:
               description: The repository URL, can be a HTTP or SSH address.
               pattern: ^(http|https|ssh)://

@@ -17,6 +17,7 @@ limitations under the License.
 package v1alpha1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -26,6 +27,12 @@ type GitRepositorySpec struct {
 	// +kubebuilder:validation:Pattern="^(http|https|ssh)://"
 	// +required
 	URL string `json:"url"`
+
+	// The secret name containing the Git credentials.
+	// For HTTPS repositories the secret must contain username and password fields.
+	// For SSH repositories the secret must contain identity, identity.pub and known_hosts fields.
+	// +optional
+	SecretRef *corev1.LocalObjectReference `json:"secretRef,omitempty"`
 
 	// The interval at which to check for repository updates.
 	// +required

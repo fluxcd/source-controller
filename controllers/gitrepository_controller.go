@@ -27,10 +27,13 @@ import (
 	"github.com/blang/semver"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/plumbing/transport"
+	"github.com/go-git/go-git/v5/plumbing/transport/http"
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
@@ -150,6 +153,12 @@ func (r *GitRepositoryReconciler) sync(repository sourcev1.GitRepository) (sourc
 		}
 	}
 
+	auth, err := r.auth(repository)
+	if err != nil {
+		err = fmt.Errorf("auth error %w", err)
+		return NotReadyCondition(sourcev1.AuthenticationFailedReason, err.Error()), "", err
+	}
+
 	// create tmp dir
 	dir, err := ioutil.TempDir("", repository.Name)
 	if err != nil {
@@ -161,7 +170,7 @@ func (r *GitRepositoryReconciler) sync(repository sourcev1.GitRepository) (sourc
 	// clone to tmp
 	repo, err := git.PlainClone(dir, false, &git.CloneOptions{
 		URL:               repository.Spec.URL,
-		Auth:              nil,
+		Auth:              auth,
 		RemoteName:        "origin",
 		ReferenceName:     refName,
 		SingleBranch:      true,
@@ -318,4 +327,41 @@ func (r *GitRepositoryReconciler) gc(repository sourcev1.GitRepository) {
 			r.Log.Info("Artifacts GC failed", "error", err)
 		}
 	}
+}
+
+func (r *GitRepositoryReconciler) auth(repository sourcev1.GitRepository) (transport.AuthMethod, error) {
+	if repository.Spec.SecretRef == nil {
+		return nil, nil
+	}
+
+	name := types.NamespacedName{
+		Namespace: repository.GetNamespace(),
+		Name:      repository.Spec.SecretRef.Name,
+	}
+
+	var secret corev1.Secret
+	err := r.Client.Get(context.TODO(), name, &secret)
+	if err != nil {
+		return nil, err
+	}
+
+	credentials := secret.Data
+
+	// extract HTTP credentials
+	if strings.HasPrefix(repository.Spec.URL, "http") {
+		auth := &http.BasicAuth{}
+		if username, ok := credentials["username"]; ok {
+			auth.Username = string(username)
+		} else {
+			return nil, fmt.Errorf("%s secret does not contain a username", repository.Spec.SecretRef.Name)
+		}
+		if password, ok := credentials["password"]; ok {
+			auth.Password = string(password)
+		} else {
+			return nil, fmt.Errorf("%s secret does not contain a password", repository.Spec.SecretRef.Name)
+		}
+		return auth, nil
+	}
+
+	return nil, nil
 }
