@@ -67,14 +67,13 @@ type GitRepositoryStatus struct {
 	// +optional
 	Conditions []SourceCondition `json:"conditions,omitempty"`
 
-	// LastUpdateTime is the timestamp corresponding to the last status
-	// change of this repository.
+	// URL is the download link for the artifact output of the last repository sync.
 	// +optional
-	LastUpdateTime *metav1.Time `json:"lastUpdateTime,omitempty"`
+	URL string `json:"url,omitempty"`
 
-	// Path to the artifact output of the last repository sync.
+	// Artifact represents the output of the last successful repository sync.
 	// +optional
-	Artifact string `json:"artifacts,omitempty"`
+	Artifact *Artifact `json:"artifact,omitempty"`
 }
 
 // +kubebuilder:object:root=true

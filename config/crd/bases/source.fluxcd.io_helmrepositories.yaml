@@ -64,8 +64,29 @@ spec:
           description: HelmRepositoryStatus defines the observed state of HelmRepository
           properties:
             artifact:
-              description: Path to the artifact of the last repository index.
-              type: string
+              description: Artifact represents the output of the last successful repository
+                sync.
+              properties:
+                lastUpdateTime:
+                  description: LastUpdateTime is the timestamp corresponding to the
+                    last update of this artifact.
+                  format: date-time
+                  type: string
+                path:
+                  description: Path is the local file path of this artifact.
+                  type: string
+                revision:
+                  description: Revision is a human readable identifier traceable in
+                    the origin source system. It can be a commit sha, git tag, a helm
+                    index timestamp, a helm chart version, a checksum, etc.
+                  type: string
+                url:
+                  description: URL is the HTTP address of this artifact.
+                  type: string
+              required:
+              - path
+              - url
+              type: object
             conditions:
               items:
                 description: SourceCondition contains condition information for a
@@ -96,10 +117,8 @@ spec:
                 - type
                 type: object
               type: array
-            lastUpdateTime:
-              description: LastUpdateTime is the timestamp corresponding to the last
-                status change of this repository.
-              format: date-time
+            url:
+              description: URL is the download link for the last index fetched.
               type: string
           type: object
       type: object

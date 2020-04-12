@@ -37,14 +37,13 @@ type HelmRepositoryStatus struct {
 	// +optional
 	Conditions []SourceCondition `json:"conditions,omitempty"`
 
-	// LastUpdateTime is the timestamp corresponding to the last status
-	// change of this repository.
+	// URL is the download link for the last index fetched.
 	// +optional
-	LastUpdateTime *metav1.Time `json:"lastUpdateTime,omitempty"`
+	URL string `json:"url,omitempty"`
 
-	// Path to the artifact of the last repository index.
+	// Artifact represents the output of the last successful repository sync.
 	// +optional
-	Artifact string `json:"artifact,omitempty"`
+	Artifact *Artifact `json:"artifact,omitempty"`
 }
 
 // +kubebuilder:object:root=true
