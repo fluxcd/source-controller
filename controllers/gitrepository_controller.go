@@ -101,7 +101,7 @@ func (r *GitRepositoryReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 func (r *GitRepositoryReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&sourcev1.GitRepository{}).
-		WithEventFilter(RepositoryChangePredicate{}).
+		WithEventFilter(SourceChangePredicate{}).
 		WithEventFilter(predicate.Funcs{
 			DeleteFunc: func(e event.DeleteEvent) bool {
 				gvk, err := apiutil.GVKForObject(e.Object, r.Scheme)

@@ -21,12 +21,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
 
-type RepositoryChangePredicate struct {
+type SourceChangePredicate struct {
 	predicate.Funcs
 }
 
 // Update implements default UpdateEvent filter for validating repository change
-func (RepositoryChangePredicate) Update(e event.UpdateEvent) bool {
+func (SourceChangePredicate) Update(e event.UpdateEvent) bool {
 	if e.MetaOld == nil || e.MetaNew == nil {
 		// ignore objects without metadata
 		return false

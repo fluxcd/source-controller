@@ -77,6 +77,7 @@ func (r *HelmChartReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	// try to remove old artifacts
 	r.gc(chart)
 
+	// get referenced chart repository
 	repository, err := r.chartRepository(ctx, chart)
 	if err != nil {
 		chart = sourcev1.HelmChartNotReady(*chart.DeepCopy(), sourcev1.ChartPullFailedReason, err.Error())
@@ -108,7 +109,7 @@ func (r *HelmChartReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 func (r *HelmChartReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&sourcev1.HelmChart{}).
-		WithEventFilter(RepositoryChangePredicate{}).
+		WithEventFilter(SourceChangePredicate{}).
 		WithEventFilter(predicate.Funcs{
 			DeleteFunc: func(e event.DeleteEvent) bool {
 				gvk, err := apiutil.GVKForObject(e.Object, r.Scheme)
@@ -236,6 +237,7 @@ func (r *HelmChartReconciler) chartRepository(ctx context.Context, chart sourcev
 	err := r.Client.Get(ctx, name, &repository)
 	if err != nil {
 		err = fmt.Errorf("failed to get HelmRepository '%s': %w", name, err)
+		return repository, err
 	}
 
 	if repository.Status.Artifact == nil {
