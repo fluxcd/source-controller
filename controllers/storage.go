@@ -48,7 +48,7 @@ type Storage struct {
 // NewStorage creates the storage helper for a given path and hostname
 func NewStorage(basePath string, hostname string, timeout time.Duration) (*Storage, error) {
 	if f, err := os.Stat(basePath); os.IsNotExist(err) || !f.IsDir() {
-		return nil, fmt.Errorf("invalid dir path %s", basePath)
+		return nil, fmt.Errorf("invalid dir path: %s", basePath)
 	}
 
 	return &Storage{
