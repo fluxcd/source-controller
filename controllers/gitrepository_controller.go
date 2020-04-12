@@ -158,21 +158,21 @@ func (r *GitRepositoryReconciler) sync(repository sourcev1.GitRepository) (sourc
 	// create tmp dir for SSH known_hosts
 	tmpSSH, err := ioutil.TempDir("", repository.Name)
 	if err != nil {
-		err = fmt.Errorf("tmp dir error %w", err)
+		err = fmt.Errorf("tmp dir error: %w", err)
 		return NotReadyCondition(sourcev1.StorageOperationFailedReason, err.Error()), "", err
 	}
 	defer os.RemoveAll(tmpSSH)
 
 	auth, err := r.auth(repository, tmpSSH)
 	if err != nil {
-		err = fmt.Errorf("auth error %w", err)
+		err = fmt.Errorf("auth error: %w", err)
 		return NotReadyCondition(sourcev1.AuthenticationFailedReason, err.Error()), "", err
 	}
 
 	// create tmp dir for the Git clone
 	tmpGit, err := ioutil.TempDir("", repository.Name)
 	if err != nil {
-		err = fmt.Errorf("tmp dir error %w", err)
+		err = fmt.Errorf("tmp dir error: %w", err)
 		return NotReadyCondition(sourcev1.StorageOperationFailedReason, err.Error()), "", err
 	}
 	defer os.RemoveAll(tmpGit)
@@ -191,7 +191,7 @@ func (r *GitRepositoryReconciler) sync(repository sourcev1.GitRepository) (sourc
 		Tags:              tagMode,
 	})
 	if err != nil {
-		err = fmt.Errorf("git clone error %w", err)
+		err = fmt.Errorf("git clone error: %w", err)
 		return NotReadyCondition(sourcev1.GitOperationFailedReason, err.Error()), "", err
 	}
 
@@ -200,7 +200,7 @@ func (r *GitRepositoryReconciler) sync(repository sourcev1.GitRepository) (sourc
 		if commit := repository.Spec.Reference.Commit; commit != "" {
 			w, err := repo.Worktree()
 			if err != nil {
-				err = fmt.Errorf("git worktree error %w", err)
+				err = fmt.Errorf("git worktree error: %w", err)
 				return NotReadyCondition(sourcev1.GitOperationFailedReason, err.Error()), "", err
 			}
 
@@ -209,19 +209,19 @@ func (r *GitRepositoryReconciler) sync(repository sourcev1.GitRepository) (sourc
 				Force: true,
 			})
 			if err != nil {
-				err = fmt.Errorf("git checkout %s for %s error %w", commit, branch, err)
+				err = fmt.Errorf("git checkout %s for %s error: %w", commit, branch, err)
 				return NotReadyCondition(sourcev1.GitOperationFailedReason, err.Error()), "", err
 			}
 		} else if exp := repository.Spec.Reference.SemVer; exp != "" {
 			rng, err := semver.ParseRange(exp)
 			if err != nil {
-				err = fmt.Errorf("semver parse range error %w", err)
+				err = fmt.Errorf("semver parse range error: %w", err)
 				return NotReadyCondition(sourcev1.GitOperationFailedReason, err.Error()), "", err
 			}
 
 			repoTags, err := repo.Tags()
 			if err != nil {
-				err = fmt.Errorf("git list tags error %w", err)
+				err = fmt.Errorf("git list tags error: %w", err)
 				return NotReadyCondition(sourcev1.GitOperationFailedReason, err.Error()), "", err
 			}
 
@@ -249,7 +249,7 @@ func (r *GitRepositoryReconciler) sync(repository sourcev1.GitRepository) (sourc
 
 				w, err := repo.Worktree()
 				if err != nil {
-					err = fmt.Errorf("git worktree error %w", err)
+					err = fmt.Errorf("git worktree error: %w", err)
 					return NotReadyCondition(sourcev1.GitOperationFailedReason, err.Error()), "", err
 				}
 
@@ -257,11 +257,11 @@ func (r *GitRepositoryReconciler) sync(repository sourcev1.GitRepository) (sourc
 					Hash: plumbing.NewHash(commit),
 				})
 				if err != nil {
-					err = fmt.Errorf("git checkout error %w", err)
+					err = fmt.Errorf("git checkout error: %w", err)
 					return NotReadyCondition(sourcev1.GitOperationFailedReason, err.Error()), "", err
 				}
 			} else {
-				err = fmt.Errorf("no match found for semver %s", repository.Spec.Reference.SemVer)
+				err = fmt.Errorf("no match found for semver: %s", repository.Spec.Reference.SemVer)
 				return NotReadyCondition(sourcev1.GitOperationFailedReason, err.Error()), "", err
 			}
 		}
@@ -270,7 +270,7 @@ func (r *GitRepositoryReconciler) sync(repository sourcev1.GitRepository) (sourc
 	// read commit hash
 	ref, err := repo.Head()
 	if err != nil {
-		err = fmt.Errorf("git resolve HEAD error %w", err)
+		err = fmt.Errorf("git resolve HEAD error: %w", err)
 		return NotReadyCondition(sourcev1.GitOperationFailedReason, err.Error()), "", err
 	}
 
@@ -280,7 +280,7 @@ func (r *GitRepositoryReconciler) sync(repository sourcev1.GitRepository) (sourc
 	// create artifact dir
 	err = r.Storage.MkdirAll(artifact)
 	if err != nil {
-		err = fmt.Errorf("mkdir dir error %w", err)
+		err = fmt.Errorf("mkdir dir error: %w", err)
 		return NotReadyCondition(sourcev1.StorageOperationFailedReason, err.Error()), "", err
 	}
 
@@ -295,18 +295,18 @@ func (r *GitRepositoryReconciler) sync(repository sourcev1.GitRepository) (sourc
 	// archive artifact
 	err = r.Storage.Archive(artifact, tmpGit, "")
 	if err != nil {
-		err = fmt.Errorf("storage error %w", err)
+		err = fmt.Errorf("storage archive error: %w", err)
 		return NotReadyCondition(sourcev1.StorageOperationFailedReason, err.Error()), "", err
 	}
 
 	// update latest symlink
 	err = r.Storage.Symlink(artifact, "latest.tar.gz")
 	if err != nil {
-		err = fmt.Errorf("storage error %w", err)
+		err = fmt.Errorf("storage lock error: %w", err)
 		return NotReadyCondition(sourcev1.StorageOperationFailedReason, err.Error()), "", err
 	}
 
-	message := fmt.Sprintf("Artifact is available at %s", artifact.Path)
+	message := fmt.Sprintf("Artifact is available at: %s", artifact.Path)
 	return ReadyCondition(sourcev1.GitOperationSucceedReason, message), artifact.URL, nil
 }
 
@@ -370,14 +370,16 @@ func (r *GitRepositoryReconciler) auth(repository sourcev1.GitRepository, tmp st
 		auth := &http.BasicAuth{}
 		if username, ok := credentials["username"]; ok {
 			auth.Username = string(username)
-		} else {
-			return nil, fmt.Errorf("%s secret does not contain username", repository.Spec.SecretRef.Name)
 		}
 		if password, ok := credentials["password"]; ok {
 			auth.Password = string(password)
-		} else {
-			return nil, fmt.Errorf("%s secret does not contain password", repository.Spec.SecretRef.Name)
 		}
+
+		if auth.Username == "" || auth.Password == "" {
+			return nil, fmt.Errorf("invalid '%s' secret data: required fields username and password",
+				repository.Spec.SecretRef.Name)
+		}
+
 		return auth, nil
 	}
 
@@ -387,7 +389,7 @@ func (r *GitRepositoryReconciler) auth(repository sourcev1.GitRepository, tmp st
 		if identity, ok := credentials["identity"]; ok {
 			privateKey = identity
 		} else {
-			return nil, fmt.Errorf("%s secret does not contain identity", repository.Spec.SecretRef.Name)
+			return nil, fmt.Errorf("invalid '%s' secret data: required field identity", repository.Spec.SecretRef.Name)
 		}
 
 		pk, err := ssh.NewPublicKeys("git", privateKey, "")
@@ -401,7 +403,7 @@ func (r *GitRepositoryReconciler) auth(repository sourcev1.GitRepository, tmp st
 				return nil, err
 			}
 		} else {
-			return nil, fmt.Errorf("%s secret does not contain known_hosts", repository.Spec.SecretRef.Name)
+			return nil, fmt.Errorf("invalid '%s' secret data: required field known_hosts", repository.Spec.SecretRef.Name)
 		}
 
 		callback, err := ssh.NewKnownHostsCallback(known_hosts)
