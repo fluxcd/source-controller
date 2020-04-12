@@ -43,4 +43,8 @@ const (
 
 	// URLInvalidReason represents the fact that a given source has an invalid URL.
 	URLInvalidReason string = "URLInvalid"
+
+	// AuthenticationFailedReason represents the fact that a given secret doesn't
+	// have the required fields or the provided credentials don't match.
+	AuthenticationFailedReason string = "AuthenticationFailed"
 )

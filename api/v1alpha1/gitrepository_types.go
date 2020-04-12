@@ -17,6 +17,7 @@ limitations under the License.
 package v1alpha1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -27,11 +28,24 @@ type GitRepositorySpec struct {
 	// +required
 	URL string `json:"url"`
 
+	// The secret name containing the Git credentials.
+	// For HTTPS repositories the secret must contain username and password fields.
+	// For SSH repositories the secret must contain identity, identity.pub and known_hosts fields.
+	// +optional
+	SecretRef *corev1.LocalObjectReference `json:"secretRef,omitempty"`
+
 	// The interval at which to check for repository updates.
 	// +required
 	Interval metav1.Duration `json:"interval"`
 
-	// The git branch to checkout, defaults to ('master').
+	// The git reference to checkout and monitor for changes, defaults to master branch.
+	// +optional
+	Reference *GitRepositoryRef `json:"ref,omitempty"`
+}
+
+// GitRepositoryRef defines the git ref used for pull and checkout operations
+type GitRepositoryRef struct {
+	// The git branch to checkout, defaults to master.
 	// +optional
 	Branch string `json:"branch"`
 
@@ -42,6 +56,10 @@ type GitRepositorySpec struct {
 	// The git tag semver expression, takes precedence over tag.
 	// +optional
 	SemVer string `json:"semver"`
+
+	// The git commit sha to checkout, if specified tag filters will be ignored.
+	// +optional
+	Commit string `json:"commit"`
 }
 
 // GitRepositoryStatus defines the observed state of GitRepository

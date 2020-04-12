@@ -49,18 +49,39 @@ spec:
         spec:
           description: GitRepositorySpec defines the desired state of GitRepository
           properties:
-            branch:
-              description: The git branch to checkout, defaults to ('master').
-              type: string
             interval:
               description: The interval at which to check for repository updates.
               type: string
-            semver:
-              description: The git tag semver expression, takes precedence over tag.
-              type: string
-            tag:
-              description: The git tag to checkout, takes precedence over branch.
-              type: string
+            ref:
+              description: The git reference to checkout and monitor for changes,
+                defaults to master branch.
+              properties:
+                branch:
+                  description: The git branch to checkout, defaults to master.
+                  type: string
+                commit:
+                  description: The git commit sha to checkout, if specified tag filters
+                    will be ignored.
+                  type: string
+                semver:
+                  description: The git tag semver expression, takes precedence over
+                    tag.
+                  type: string
+                tag:
+                  description: The git tag to checkout, takes precedence over branch.
+                  type: string
+              type: object
+            secretRef:
+              description: The secret name containing the Git credentials. For HTTPS
+                repositories the secret must contain username and password fields.
+                For SSH repositories the secret must contain identity, identity.pub
+                and known_hosts fields.
+              properties:
+                name:
+                  description: 'Name of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                    TODO: Add other useful fields. apiVersion, kind, uid?'
+                  type: string
+              type: object
             url:
               description: The repository URL, can be a HTTP or SSH address.
               pattern: ^(http|https|ssh)://
