@@ -42,3 +42,61 @@ func NotReadyCondition(reason, message string) sourcev1.SourceCondition {
 		Message:            message,
 	}
 }
+
+func ReadyGitRepository(repository sourcev1.GitRepository, artifact sourcev1.Artifact, url, reason, message string) sourcev1.GitRepository {
+	repository.Status.Conditions = []sourcev1.SourceCondition{ReadyCondition(reason, message)}
+	repository.Status.URL = url
+
+	if repository.Status.Artifact != nil {
+		if repository.Status.Artifact.Path != artifact.Path {
+			repository.Status.Artifact = &artifact
+		}
+	} else {
+		repository.Status.Artifact = &artifact
+	}
+
+	return repository
+}
+
+func NotReadyGitRepository(repository sourcev1.GitRepository, reason, message string) sourcev1.GitRepository {
+	repository.Status.Conditions = []sourcev1.SourceCondition{NotReadyCondition(reason, message)}
+	return repository
+}
+
+func GitRepositoryReadyMessage(repository sourcev1.GitRepository) string {
+	for _, condition := range repository.Status.Conditions {
+		if condition.Type == sourcev1.ReadyCondition {
+			return condition.Message
+		}
+	}
+	return ""
+}
+
+func ReadyHelmRepository(repository sourcev1.HelmRepository, artifact sourcev1.Artifact, url, reason, message string) sourcev1.HelmRepository {
+	repository.Status.Conditions = []sourcev1.SourceCondition{ReadyCondition(reason, message)}
+	repository.Status.URL = url
+
+	if repository.Status.Artifact != nil {
+		if repository.Status.Artifact.Path != artifact.Path {
+			repository.Status.Artifact = &artifact
+		}
+	} else {
+		repository.Status.Artifact = &artifact
+	}
+
+	return repository
+}
+
+func NotReadyHelmRepository(repository sourcev1.HelmRepository, reason, message string) sourcev1.HelmRepository {
+	repository.Status.Conditions = []sourcev1.SourceCondition{NotReadyCondition(reason, message)}
+	return repository
+}
+
+func HelmRepositoryReadyMessage(repository sourcev1.HelmRepository) string {
+	for _, condition := range repository.Status.Conditions {
+		if condition.Type == sourcev1.ReadyCondition {
+			return condition.Message
+		}
+	}
+	return ""
+}
