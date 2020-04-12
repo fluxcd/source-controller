@@ -60,7 +60,8 @@ func NewStorage(basePath string, hostname string, timeout time.Duration) (*Stora
 
 // ArtifactFor returns an artifact for the given Kubernetes object
 func (s *Storage) ArtifactFor(kind string, metadata metav1.Object, fileName, revision string) sourcev1.Artifact {
-	path := fmt.Sprintf("%s/%s-%s/%s", kind, metadata.GetName(), metadata.GetNamespace(), fileName)
+	kind = strings.ToLower(kind)
+	path := fmt.Sprintf("%s/%s-%s/%s", kind, metadata.GetNamespace(), metadata.GetName(), fileName)
 	localPath := filepath.Join(s.BasePath, path)
 	url := fmt.Sprintf("http://%s/%s", s.Hostname, path)
 
