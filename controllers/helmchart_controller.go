@@ -33,6 +33,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/yaml"
@@ -46,7 +47,6 @@ type HelmChartReconciler struct {
 	Log     logr.Logger
 	Scheme  *runtime.Scheme
 	Storage *Storage
-	Kind    string
 	Getters getter.Providers
 }
 
@@ -90,7 +90,7 @@ func (r *HelmChartReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	// try to pull chart
 	pulledChart, err := r.sync(repository, *chart.DeepCopy())
 	if err != nil {
-		log.Info("Helm chart pull failed", "error", err.Error())
+		log.Info("Helm chart sync failed", "error", err.Error())
 	}
 
 	// update status
@@ -111,16 +111,21 @@ func (r *HelmChartReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		WithEventFilter(RepositoryChangePredicate{}).
 		WithEventFilter(predicate.Funcs{
 			DeleteFunc: func(e event.DeleteEvent) bool {
+				gvk, err := apiutil.GVKForObject(e.Object, r.Scheme)
+				if err != nil {
+					r.Log.Error(err, "unable to get GroupVersionKind for deleted object")
+					return false
+				}
 				// delete artifacts
-				artifact := r.Storage.ArtifactFor(r.Kind, e.Meta, "", "")
+				artifact := r.Storage.ArtifactFor(gvk.Kind, e.Meta, "*", "")
 				if err := r.Storage.RemoveAll(artifact); err != nil {
 					r.Log.Error(err, "unable to delete artifacts",
-						r.Kind, fmt.Sprintf("%s/%s", e.Meta.GetNamespace(), e.Meta.GetName()))
+						gvk.Kind, fmt.Sprintf("%s/%s", e.Meta.GetNamespace(), e.Meta.GetName()))
 				} else {
 					r.Log.Info("Helm chart artifacts deleted",
-						r.Kind, fmt.Sprintf("%s/%s", e.Meta.GetNamespace(), e.Meta.GetName()))
+						gvk.Kind, fmt.Sprintf("%s/%s", e.Meta.GetNamespace(), e.Meta.GetName()))
 				}
-				return false
+				return true
 			},
 		}).
 		Complete(r)

@@ -38,6 +38,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
@@ -50,7 +51,6 @@ type GitRepositoryReconciler struct {
 	Log     logr.Logger
 	Scheme  *runtime.Scheme
 	Storage *Storage
-	Kind    string
 }
 
 // +kubebuilder:rbac:groups=source.fluxcd.io,resources=gitrepositories,verbs=get;list;watch;create;update;patch;delete
@@ -60,16 +60,16 @@ func (r *GitRepositoryReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	log := r.Log.WithValues(r.Kind, req.NamespacedName)
-
 	var repo sourcev1.GitRepository
 	if err := r.Get(ctx, req.NamespacedName, &repo); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
+	log := r.Log.WithValues(repo.Kind, req.NamespacedName)
+
 	// set initial status
 	if reset, status := r.shouldResetStatus(repo); reset {
-		log.Info("Initializing repository")
+		log.Info("Initializing Git repository")
 		repo.Status = status
 		if err := r.Status().Update(ctx, &repo); err != nil {
 			log.Error(err, "unable to update GitRepository status")
@@ -83,7 +83,7 @@ func (r *GitRepositoryReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 	// try git clone
 	syncedRepo, err := r.sync(*repo.DeepCopy())
 	if err != nil {
-		log.Info("Repository sync failed", "error", err.Error())
+		log.Info("Git repository sync failed", "error", err.Error())
 	}
 
 	// update status
@@ -92,7 +92,7 @@ func (r *GitRepositoryReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 		return ctrl.Result{Requeue: true}, err
 	}
 
-	log.Info("Repository sync succeeded", "msg", sourcev1.GitRepositoryReadyMessage(syncedRepo))
+	log.Info("Git repository sync succeeded", "msg", sourcev1.GitRepositoryReadyMessage(syncedRepo))
 
 	// requeue repository
 	return ctrl.Result{RequeueAfter: repo.Spec.Interval.Duration}, nil
@@ -104,16 +104,21 @@ func (r *GitRepositoryReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		WithEventFilter(RepositoryChangePredicate{}).
 		WithEventFilter(predicate.Funcs{
 			DeleteFunc: func(e event.DeleteEvent) bool {
+				gvk, err := apiutil.GVKForObject(e.Object, r.Scheme)
+				if err != nil {
+					r.Log.Error(err, "unable to get GroupVersionKind for deleted object")
+					return false
+				}
 				// delete artifacts
-				artifact := r.Storage.ArtifactFor(r.Kind, e.Meta, "dummy", "")
+				artifact := r.Storage.ArtifactFor(gvk.Kind, e.Meta, "*", "")
 				if err := r.Storage.RemoveAll(artifact); err != nil {
 					r.Log.Error(err, "unable to delete artifacts",
-						r.Kind, fmt.Sprintf("%s/%s", e.Meta.GetNamespace(), e.Meta.GetName()))
+						gvk.Kind, fmt.Sprintf("%s/%s", e.Meta.GetNamespace(), e.Meta.GetName()))
 				} else {
-					r.Log.Info("Repository artifacts deleted",
-						r.Kind, fmt.Sprintf("%s/%s", e.Meta.GetNamespace(), e.Meta.GetName()))
+					r.Log.Info("Git repository artifacts deleted",
+						gvk.Kind, fmt.Sprintf("%s/%s", e.Meta.GetNamespace(), e.Meta.GetName()))
 				}
-				return false
+				return true
 			},
 		}).
 		Complete(r)
@@ -199,7 +204,7 @@ func (r *GitRepositoryReconciler) sync(repository sourcev1.GitRepository) (sourc
 				Force: true,
 			})
 			if err != nil {
-				err = fmt.Errorf("git checkout %s for %s error: %w", commit, branch, err)
+				err = fmt.Errorf("git checkout '%s' for '%s' error: %w", commit, branch, err)
 				return sourcev1.GitRepositoryNotReady(repository, sourcev1.GitOperationFailedReason, err.Error()), err
 			}
 		} else if exp := repository.Spec.Reference.SemVer; exp != "" {
@@ -222,7 +227,7 @@ func (r *GitRepositoryReconciler) sync(repository sourcev1.GitRepository) (sourc
 			})
 
 			svTags := make(map[string]string)
-			svers := []semver.Version{}
+			var svers []semver.Version
 			for tag, _ := range tags {
 				v, _ := semver.ParseTolerant(tag)
 				if rng(v) {
@@ -269,7 +274,7 @@ func (r *GitRepositoryReconciler) sync(repository sourcev1.GitRepository) (sourc
 		revision = fmt.Sprintf("%s/%s", branch, ref.Hash().String())
 	}
 
-	artifact := r.Storage.ArtifactFor(r.Kind, repository.ObjectMeta.GetObjectMeta(),
+	artifact := r.Storage.ArtifactFor(repository.Kind, repository.ObjectMeta.GetObjectMeta(),
 		fmt.Sprintf("%s.tar.gz", ref.Hash().String()), revision)
 
 	// create artifact dir
@@ -301,7 +306,7 @@ func (r *GitRepositoryReconciler) sync(repository sourcev1.GitRepository) (sourc
 		return sourcev1.GitRepositoryNotReady(repository, sourcev1.StorageOperationFailedReason, err.Error()), err
 	}
 
-	message := fmt.Sprintf("Artifact is available at: %s", artifact.Path)
+	message := fmt.Sprintf("Git repoistory artifacts are available at: %s", artifact.Path)
 	return sourcev1.GitRepositoryReady(repository, artifact, url, sourcev1.GitOperationSucceedReason, message), nil
 }
 
@@ -361,13 +366,9 @@ func (r *GitRepositoryReconciler) auth(repository sourcev1.GitRepository, tmp st
 		auth := &http.BasicAuth{}
 		if username, ok := credentials["username"]; ok {
 			auth.Username = string(username)
-		} else {
-			return nil, fmt.Errorf("%s secret does not contain username", repository.Spec.SecretRef.Name)
 		}
 		if password, ok := credentials["password"]; ok {
 			auth.Password = string(password)
-		} else {
-			return nil, fmt.Errorf("%s secret does not contain password", repository.Spec.SecretRef.Name)
 		}
 
 		if auth.Username == "" || auth.Password == "" {

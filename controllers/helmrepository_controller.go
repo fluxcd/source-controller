@@ -32,6 +32,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/yaml"
@@ -45,7 +46,6 @@ type HelmRepositoryReconciler struct {
 	Log     logr.Logger
 	Scheme  *runtime.Scheme
 	Storage *Storage
-	Kind    string
 	Getters getter.Providers
 }
 
@@ -56,16 +56,16 @@ func (r *HelmRepositoryReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	log := r.Log.WithValues(r.Kind, req.NamespacedName)
-
 	var repository sourcev1.HelmRepository
 	if err := r.Get(ctx, req.NamespacedName, &repository); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
+	log := r.Log.WithValues(repository.Kind, req.NamespacedName)
+
 	// set initial status
 	if reset, status := r.shouldResetStatus(repository); reset {
-		log.Info("Initializing repository")
+		log.Info("Initializing Helm repository")
 		repository.Status = status
 		if err := r.Status().Update(ctx, &repository); err != nil {
 			log.Error(err, "unable to update HelmRepository status")
@@ -79,7 +79,7 @@ func (r *HelmRepositoryReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 	// try to download index
 	syncedRepo, err := r.sync(*repository.DeepCopy())
 	if err != nil {
-		log.Info("Helm repository index failed", "error", err.Error())
+		log.Info("Helm repository sync failed", "error", err.Error())
 	}
 
 	// update status
@@ -88,7 +88,7 @@ func (r *HelmRepositoryReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 		return ctrl.Result{Requeue: true}, err
 	}
 
-	log.Info("Repository sync succeeded", "msg", sourcev1.HelmRepositoryReadyMessage(syncedRepo))
+	log.Info("Helm repository sync succeeded", "msg", sourcev1.HelmRepositoryReadyMessage(syncedRepo))
 
 	// requeue repository
 	return ctrl.Result{RequeueAfter: repository.Spec.Interval.Duration}, nil
@@ -100,16 +100,21 @@ func (r *HelmRepositoryReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		WithEventFilter(RepositoryChangePredicate{}).
 		WithEventFilter(predicate.Funcs{
 			DeleteFunc: func(e event.DeleteEvent) bool {
+				gvk, err := apiutil.GVKForObject(e.Object, r.Scheme)
+				if err != nil {
+					r.Log.Error(err, "unable to get GroupVersionKind for deleted object")
+					return false
+				}
 				// delete artifacts
-				artifact := r.Storage.ArtifactFor(r.Kind, e.Meta, "", "")
+				artifact := r.Storage.ArtifactFor(gvk.Kind, e.Meta, "*", "")
 				if err := r.Storage.RemoveAll(artifact); err != nil {
 					r.Log.Error(err, "unable to delete artifacts",
-						r.Kind, fmt.Sprintf("%s/%s", e.Meta.GetNamespace(), e.Meta.GetName()))
+						gvk.Kind, fmt.Sprintf("%s/%s", e.Meta.GetNamespace(), e.Meta.GetName()))
 				} else {
-					r.Log.Info("Repository artifacts deleted",
-						r.Kind, fmt.Sprintf("%s/%s", e.Meta.GetNamespace(), e.Meta.GetName()))
+					r.Log.Info("Helm repository artifacts deleted",
+						gvk.Kind, fmt.Sprintf("%s/%s", e.Meta.GetNamespace(), e.Meta.GetName()))
 				}
-				return false
+				return true
 			},
 		}).
 		Complete(r)
@@ -152,7 +157,7 @@ func (r *HelmRepositoryReconciler) sync(repository sourcev1.HelmRepository) (sou
 	}
 
 	sum := r.Storage.Checksum(index)
-	artifact := r.Storage.ArtifactFor(r.Kind, repository.ObjectMeta.GetObjectMeta(),
+	artifact := r.Storage.ArtifactFor(repository.Kind, repository.ObjectMeta.GetObjectMeta(),
 		fmt.Sprintf("index-%s.yaml", sum), sum)
 
 	// create artifact dir
@@ -180,11 +185,11 @@ func (r *HelmRepositoryReconciler) sync(repository sourcev1.HelmRepository) (sou
 	// update index symlink
 	indexUrl, err := r.Storage.Symlink(artifact, "index.yaml")
 	if err != nil {
-		err = fmt.Errorf("storage error %w", err)
+		err = fmt.Errorf("storage error: %w", err)
 		return sourcev1.HelmRepositoryNotReady(repository, sourcev1.StorageOperationFailedReason, err.Error()), err
 	}
 
-	message := fmt.Sprintf("Index is available at %s", artifact.Path)
+	message := fmt.Sprintf("Helm repository index is available at: %s", artifact.Path)
 	return sourcev1.HelmRepositoryReady(repository, artifact, indexUrl, sourcev1.IndexationSucceededReason, message), nil
 }
 

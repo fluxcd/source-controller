@@ -92,7 +92,6 @@ func main() {
 		Client:  mgr.GetClient(),
 		Log:     ctrl.Log.WithName("controllers").WithName("GitRepository"),
 		Scheme:  mgr.GetScheme(),
-		Kind:    "gitrepository",
 		Storage: storage,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "GitRepository")
@@ -102,7 +101,6 @@ func main() {
 		Client:  mgr.GetClient(),
 		Log:     ctrl.Log.WithName("controllers").WithName("HelmRepository"),
 		Scheme:  mgr.GetScheme(),
-		Kind:    "helmrepository",
 		Storage: storage,
 		Getters: getters,
 	}).SetupWithManager(mgr); err != nil {
@@ -113,7 +111,6 @@ func main() {
 		Client:  mgr.GetClient(),
 		Log:     ctrl.Log.WithName("controllers").WithName("HelmChart"),
 		Scheme:  mgr.GetScheme(),
-		Kind:    "helmchart",
 		Storage: storage,
 		Getters: getters,
 	}).SetupWithManager(mgr); err != nil {
