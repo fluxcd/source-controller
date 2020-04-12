@@ -299,6 +299,13 @@ func (r *GitRepositoryReconciler) sync(repository sourcev1.GitRepository) (sourc
 		return NotReadyCondition(sourcev1.StorageOperationFailedReason, err.Error()), "", err
 	}
 
+	// update latest symlink
+	err = r.Storage.Symlink(artifact, "latest.tar.gz")
+	if err != nil {
+		err = fmt.Errorf("storage error %w", err)
+		return NotReadyCondition(sourcev1.StorageOperationFailedReason, err.Error()), "", err
+	}
+
 	message := fmt.Sprintf("Artifact is available at %s", artifact.Path)
 	return ReadyCondition(sourcev1.GitOperationSucceedReason, message), artifact.URL, nil
 }
