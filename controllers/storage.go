@@ -29,6 +29,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	sourcev1 "github.com/fluxcd/source-controller/api/v1alpha1"
 	"github.com/fluxcd/source-controller/internal/lockedfile"
 )
 
@@ -42,15 +43,6 @@ type Storage struct {
 
 	// Timeout for artifacts operations
 	Timeout time.Duration `json:"timeout"`
-}
-
-// Artifact represents the output of a source synchronisation
-type Artifact struct {
-	// Path is the local file path of this artifact
-	Path string `json:"path"`
-
-	// URL is the HTTP address of this artifact
-	URL string `json:"url"`
 }
 
 // NewStorage creates the storage helper for a given path and hostname
@@ -67,31 +59,33 @@ func NewStorage(basePath string, hostname string, timeout time.Duration) (*Stora
 }
 
 // ArtifactFor returns an artifact for the given Kubernetes object
-func (s *Storage) ArtifactFor(kind string, metadata metav1.Object, fileName string) Artifact {
+func (s *Storage) ArtifactFor(kind string, metadata metav1.Object, fileName, revision string) sourcev1.Artifact {
 	path := fmt.Sprintf("%s/%s-%s/%s", kind, metadata.GetName(), metadata.GetNamespace(), fileName)
 	localPath := filepath.Join(s.BasePath, path)
 	url := fmt.Sprintf("http://%s/%s", s.Hostname, path)
 
-	return Artifact{
-		Path: localPath,
-		URL:  url,
+	return sourcev1.Artifact{
+		Path:           localPath,
+		URL:            url,
+		Revision:       revision,
+		LastUpdateTime: metav1.Now(),
 	}
 }
 
 // MkdirAll calls os.MkdirAll for the given artifact base dir
-func (s *Storage) MkdirAll(artifact Artifact) error {
+func (s *Storage) MkdirAll(artifact sourcev1.Artifact) error {
 	dir := filepath.Dir(artifact.Path)
 	return os.MkdirAll(dir, 0777)
 }
 
 // RemoveAll calls os.RemoveAll for the given artifact base dir
-func (s *Storage) RemoveAll(artifact Artifact) error {
+func (s *Storage) RemoveAll(artifact sourcev1.Artifact) error {
 	dir := filepath.Dir(artifact.Path)
 	return os.RemoveAll(dir)
 }
 
 // RemoveAllButCurrent removes all files for the given artifact base dir excluding the current one
-func (s *Storage) RemoveAllButCurrent(artifact Artifact) error {
+func (s *Storage) RemoveAllButCurrent(artifact sourcev1.Artifact) error {
 	dir := filepath.Dir(artifact.Path)
 	errors := []string{}
 	_ = filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
@@ -110,7 +104,7 @@ func (s *Storage) RemoveAllButCurrent(artifact Artifact) error {
 }
 
 // ArtifactExist returns a boolean indicating whether the artifact file exists in storage
-func (s *Storage) ArtifactExist(artifact Artifact) bool {
+func (s *Storage) ArtifactExist(artifact sourcev1.Artifact) bool {
 	if _, err := os.Stat(artifact.Path); os.IsNotExist(err) {
 		return false
 	}
@@ -118,7 +112,7 @@ func (s *Storage) ArtifactExist(artifact Artifact) bool {
 }
 
 // Archive creates a tar.gz to the artifact path from the given dir excluding the provided file extensions
-func (s *Storage) Archive(artifact Artifact, dir string, excludes string) error {
+func (s *Storage) Archive(artifact sourcev1.Artifact, dir string, excludes string) error {
 	if excludes == "" {
 		excludes = "jpg,jpeg,gif,png,wmv,flv,tar.gz,zip"
 	}
@@ -138,7 +132,7 @@ func (s *Storage) Archive(artifact Artifact, dir string, excludes string) error 
 }
 
 // WriteFile writes the given bytes to the artifact path if the checksum differs
-func (s *Storage) WriteFile(artifact Artifact, data []byte) error {
+func (s *Storage) WriteFile(artifact sourcev1.Artifact, data []byte) error {
 	sum := s.Checksum(data)
 	if file, err := os.Stat(artifact.Path); !os.IsNotExist(err) && !file.IsDir() {
 		if fb, err := ioutil.ReadFile(artifact.Path); err == nil && sum == s.Checksum(fb) {
@@ -150,24 +144,27 @@ func (s *Storage) WriteFile(artifact Artifact, data []byte) error {
 }
 
 // Symlink creates or updates a symbolic link for the given artifact
-func (s *Storage) Symlink(artifact Artifact, linkName string) error {
+// and returns the URL for the symlink
+func (s *Storage) Symlink(artifact sourcev1.Artifact, linkName string) (string, error) {
 	dir := filepath.Dir(artifact.Path)
 	link := filepath.Join(dir, linkName)
 	tmpLink := link + ".tmp"
 
 	if err := os.Remove(tmpLink); err != nil && !os.IsNotExist(err) {
-		return err
+		return "", err
 	}
 
 	if err := os.Symlink(artifact.Path, tmpLink); err != nil {
-		return err
+		return "", err
 	}
 
 	if err := os.Rename(tmpLink, link); err != nil {
-		return err
+		return "", err
 	}
 
-	return nil
+	parts := strings.Split(artifact.URL, "/")
+	url := strings.Replace(artifact.URL, parts[len(parts)-1], linkName, 1)
+	return url, nil
 }
 
 // Checksum returns the SHA1 checksum for the given bytes as a string
@@ -176,7 +173,7 @@ func (s *Storage) Checksum(b []byte) string {
 }
 
 // Lock creates a file lock for the given artifact
-func (s *Storage) Lock(artifact Artifact) (unlock func(), err error) {
+func (s *Storage) Lock(artifact sourcev1.Artifact) (unlock func(), err error) {
 	lockFile := artifact.Path + ".lock"
 	mutex := lockedfile.MutexAt(lockFile)
 	return mutex.Lock()

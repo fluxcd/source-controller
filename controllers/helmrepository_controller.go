@@ -22,7 +22,6 @@ import (
 	"io/ioutil"
 	"net/url"
 	"path"
-	"strings"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -57,14 +56,12 @@ func (r *HelmRepositoryReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	log := r.Log.WithValues("helmrepository", req.NamespacedName)
+	log := r.Log.WithValues(r.Kind, req.NamespacedName)
 
 	var repository sourcev1.HelmRepository
 	if err := r.Get(ctx, req.NamespacedName, &repository); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
-
-	result := ctrl.Result{RequeueAfter: repository.Spec.Interval.Duration}
 
 	// set initial status
 	if reset, status := r.shouldResetStatus(repository); reset {
@@ -72,7 +69,7 @@ func (r *HelmRepositoryReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 		repository.Status = status
 		if err := r.Status().Update(ctx, &repository); err != nil {
 			log.Error(err, "unable to update HelmRepository status")
-			return result, err
+			return ctrl.Result{Requeue: true}, err
 		}
 	}
 
@@ -80,30 +77,21 @@ func (r *HelmRepositoryReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 	r.gc(repository)
 
 	// try to download index
-	readyCondition, artifact, err := r.index(repository)
+	syncedRepo, err := r.sync(*repository.DeepCopy())
 	if err != nil {
 		log.Info("Helm repository index failed", "error", err.Error())
-	} else {
-		// update artifact if path changed
-		if repository.Status.Artifact != artifact {
-			timeNew := metav1.Now()
-			repository.Status.LastUpdateTime = &timeNew
-			repository.Status.Artifact = artifact
-		}
-		log.Info("Helm repository index succeeded", "msg", readyCondition.Message)
 	}
 
 	// update status
-	readyCondition.LastTransitionTime = metav1.Now()
-	repository.Status.Conditions = []sourcev1.SourceCondition{readyCondition}
-
-	if err := r.Status().Update(ctx, &repository); err != nil {
+	if err := r.Status().Update(ctx, &syncedRepo); err != nil {
 		log.Error(err, "unable to update HelmRepository status")
-		return result, err
+		return ctrl.Result{Requeue: true}, err
 	}
 
+	log.Info("Repository sync succeeded", "msg", sourcev1.HelmRepositoryReadyMessage(syncedRepo))
+
 	// requeue repository
-	return result, nil
+	return ctrl.Result{RequeueAfter: repository.Spec.Interval.Duration}, nil
 }
 
 func (r *HelmRepositoryReconciler) SetupWithManager(mgr ctrl.Manager) error {
@@ -113,7 +101,7 @@ func (r *HelmRepositoryReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		WithEventFilter(predicate.Funcs{
 			DeleteFunc: func(e event.DeleteEvent) bool {
 				// delete artifacts
-				artifact := r.Storage.ArtifactFor(r.Kind, e.Meta, "dummy")
+				artifact := r.Storage.ArtifactFor(r.Kind, e.Meta, "", "")
 				if err := r.Storage.RemoveAll(artifact); err != nil {
 					r.Log.Error(err, "unable to delete artifacts",
 						r.Kind, fmt.Sprintf("%s/%s", e.Meta.GetNamespace(), e.Meta.GetName()))
@@ -127,15 +115,15 @@ func (r *HelmRepositoryReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-func (r *HelmRepositoryReconciler) index(repository sourcev1.HelmRepository) (sourcev1.SourceCondition, string, error) {
+func (r *HelmRepositoryReconciler) sync(repository sourcev1.HelmRepository) (sourcev1.HelmRepository, error) {
 	u, err := url.Parse(repository.Spec.URL)
 	if err != nil {
-		return NotReadyCondition(sourcev1.URLInvalidReason, err.Error()), "", err
+		return sourcev1.HelmRepositoryNotReady(repository, sourcev1.URLInvalidReason, err.Error()), err
 	}
 
 	c, err := r.Getters.ByScheme(u.Scheme)
 	if err != nil {
-		return NotReadyCondition(sourcev1.URLInvalidReason, err.Error()), "", err
+		return sourcev1.HelmRepositoryNotReady(repository, sourcev1.URLInvalidReason, err.Error()), err
 	}
 
 	u.RawPath = path.Join(u.RawPath, "index.yaml")
@@ -145,40 +133,40 @@ func (r *HelmRepositoryReconciler) index(repository sourcev1.HelmRepository) (so
 	// TODO(hidde): add authentication config
 	res, err := c.Get(indexURL, getter.WithURL(repository.Spec.URL))
 	if err != nil {
-		return NotReadyCondition(sourcev1.IndexationFailedReason, err.Error()), "", err
+		return sourcev1.HelmRepositoryNotReady(repository, sourcev1.IndexationFailedReason, err.Error()), err
 	}
 
 	data, err := ioutil.ReadAll(res)
 	if err != nil {
-		return NotReadyCondition(sourcev1.IndexationFailedReason, err.Error()), "", err
+		return sourcev1.HelmRepositoryNotReady(repository, sourcev1.IndexationFailedReason, err.Error()), err
 	}
 
 	i := &repo.IndexFile{}
 	if err := yaml.Unmarshal(data, i); err != nil {
-		return NotReadyCondition(sourcev1.IndexationFailedReason, err.Error()), "", err
+		return sourcev1.HelmRepositoryNotReady(repository, sourcev1.IndexationFailedReason, err.Error()), err
 	}
 
 	index, err := yaml.Marshal(i)
 	if err != nil {
-		return NotReadyCondition(sourcev1.IndexationFailedReason, err.Error()), "", err
+		return sourcev1.HelmRepositoryNotReady(repository, sourcev1.IndexationFailedReason, err.Error()), err
 	}
 
 	sum := r.Storage.Checksum(index)
 	artifact := r.Storage.ArtifactFor(r.Kind, repository.ObjectMeta.GetObjectMeta(),
-		fmt.Sprintf("index-%s.yaml", sum))
+		fmt.Sprintf("index-%s.yaml", sum), sum)
 
 	// create artifact dir
 	err = r.Storage.MkdirAll(artifact)
 	if err != nil {
 		err = fmt.Errorf("unable to create repository index directory: %w", err)
-		return NotReadyCondition(sourcev1.StorageOperationFailedReason, err.Error()), "", err
+		return sourcev1.HelmRepositoryNotReady(repository, sourcev1.StorageOperationFailedReason, err.Error()), err
 	}
 
 	// acquire lock
 	unlock, err := r.Storage.Lock(artifact)
 	if err != nil {
 		err = fmt.Errorf("unable to acquire lock: %w", err)
-		return NotReadyCondition(sourcev1.StorageOperationFailedReason, err.Error()), "", err
+		return sourcev1.HelmRepositoryNotReady(repository, sourcev1.StorageOperationFailedReason, err.Error()), err
 	}
 	defer unlock()
 
@@ -186,19 +174,24 @@ func (r *HelmRepositoryReconciler) index(repository sourcev1.HelmRepository) (so
 	err = r.Storage.WriteFile(artifact, index)
 	if err != nil {
 		err = fmt.Errorf("unable to write repository index file: %w", err)
-		return NotReadyCondition(sourcev1.StorageOperationFailedReason, err.Error()), "", err
+		return sourcev1.HelmRepositoryNotReady(repository, sourcev1.StorageOperationFailedReason, err.Error()), err
 	}
 
-	message := fmt.Sprintf("Artifact is available at %s", artifact.Path)
-	return ReadyCondition(sourcev1.IndexationSucceededReason, message), artifact.URL, nil
+	// update index symlink
+	indexUrl, err := r.Storage.Symlink(artifact, "index.yaml")
+	if err != nil {
+		err = fmt.Errorf("storage error %w", err)
+		return sourcev1.HelmRepositoryNotReady(repository, sourcev1.StorageOperationFailedReason, err.Error()), err
+	}
+
+	message := fmt.Sprintf("Index is available at %s", artifact.Path)
+	return sourcev1.HelmRepositoryReady(repository, artifact, indexUrl, sourcev1.IndexationSucceededReason, message), nil
 }
 
 func (r *HelmRepositoryReconciler) shouldResetStatus(repository sourcev1.HelmRepository) (bool, sourcev1.HelmRepositoryStatus) {
 	resetStatus := false
-	if repository.Status.Artifact != "" {
-		parts := strings.Split(repository.Status.Artifact, "/")
-		artifact := r.Storage.ArtifactFor(r.Kind, repository.ObjectMeta.GetObjectMeta(), parts[len(parts)-1])
-		if !r.Storage.ArtifactExist(artifact) {
+	if repository.Status.Artifact != nil {
+		if !r.Storage.ArtifactExist(*repository.Status.Artifact) {
 			resetStatus = true
 		}
 	}
@@ -221,10 +214,8 @@ func (r *HelmRepositoryReconciler) shouldResetStatus(repository sourcev1.HelmRep
 }
 
 func (r *HelmRepositoryReconciler) gc(repository sourcev1.HelmRepository) {
-	if repository.Status.Artifact != "" {
-		parts := strings.Split(repository.Status.Artifact, "/")
-		artifact := r.Storage.ArtifactFor(r.Kind, repository.ObjectMeta.GetObjectMeta(), parts[len(parts)-1])
-		if err := r.Storage.RemoveAllButCurrent(artifact); err != nil {
+	if repository.Status.Artifact != nil {
+		if err := r.Storage.RemoveAllButCurrent(*repository.Status.Artifact); err != nil {
 			r.Log.Info("Artifacts GC failed", "error", err)
 		}
 	}

@@ -17,6 +17,7 @@ limitations under the License.
 package v1alpha1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -37,14 +38,13 @@ type HelmRepositoryStatus struct {
 	// +optional
 	Conditions []SourceCondition `json:"conditions,omitempty"`
 
-	// LastUpdateTime is the timestamp corresponding to the last status
-	// change of this repository.
+	// URL is the download link for the last index fetched.
 	// +optional
-	LastUpdateTime *metav1.Time `json:"lastUpdateTime,omitempty"`
+	URL string `json:"url,omitempty"`
 
-	// Path to the artifact of the last repository index.
+	// Artifact represents the output of the last successful repository sync.
 	// +optional
-	Artifact string `json:"artifact,omitempty"`
+	Artifact *Artifact `json:"artifact,omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -84,3 +84,48 @@ const (
 	// of the given Helm repository succeeded.
 	IndexationSucceededReason string = "IndexationSucceed"
 )
+
+func HelmRepositoryReady(repository HelmRepository, artifact Artifact, url, reason, message string) HelmRepository {
+	repository.Status.Conditions = []SourceCondition{
+		{
+			Type:               ReadyCondition,
+			Status:             corev1.ConditionTrue,
+			LastTransitionTime: metav1.Now(),
+			Reason:             reason,
+			Message:            message,
+		},
+	}
+	repository.Status.URL = url
+
+	if repository.Status.Artifact != nil {
+		if repository.Status.Artifact.Path != artifact.Path {
+			repository.Status.Artifact = &artifact
+		}
+	} else {
+		repository.Status.Artifact = &artifact
+	}
+
+	return repository
+}
+
+func HelmRepositoryNotReady(repository HelmRepository, reason, message string) HelmRepository {
+	repository.Status.Conditions = []SourceCondition{
+		{
+			Type:               ReadyCondition,
+			Status:             corev1.ConditionFalse,
+			LastTransitionTime: metav1.Now(),
+			Reason:             reason,
+			Message:            message,
+		},
+	}
+	return repository
+}
+
+func HelmRepositoryReadyMessage(repository HelmRepository) string {
+	for _, condition := range repository.Status.Conditions {
+		if condition.Type == ReadyCondition {
+			return condition.Message
+		}
+	}
+	return ""
+}

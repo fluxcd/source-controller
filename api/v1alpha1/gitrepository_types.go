@@ -67,14 +67,13 @@ type GitRepositoryStatus struct {
 	// +optional
 	Conditions []SourceCondition `json:"conditions,omitempty"`
 
-	// LastUpdateTime is the timestamp corresponding to the last status
-	// change of this repository.
+	// URL is the download link for the artifact output of the last repository sync.
 	// +optional
-	LastUpdateTime *metav1.Time `json:"lastUpdateTime,omitempty"`
+	URL string `json:"url,omitempty"`
 
-	// Path to the artifact output of the last repository sync.
+	// Artifact represents the output of the last successful repository sync.
 	// +optional
-	Artifact string `json:"artifacts,omitempty"`
+	Artifact *Artifact `json:"artifact,omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -109,3 +108,48 @@ const (
 	GitOperationSucceedReason string = "GitOperationSucceed"
 	GitOperationFailedReason  string = "GitOperationFailed"
 )
+
+func GitRepositoryReady(repository GitRepository, artifact Artifact, url, reason, message string) GitRepository {
+	repository.Status.Conditions = []SourceCondition{
+		{
+			Type:               ReadyCondition,
+			Status:             corev1.ConditionTrue,
+			LastTransitionTime: metav1.Now(),
+			Reason:             reason,
+			Message:            message,
+		},
+	}
+	repository.Status.URL = url
+
+	if repository.Status.Artifact != nil {
+		if repository.Status.Artifact.Path != artifact.Path {
+			repository.Status.Artifact = &artifact
+		}
+	} else {
+		repository.Status.Artifact = &artifact
+	}
+
+	return repository
+}
+
+func GitRepositoryNotReady(repository GitRepository, reason, message string) GitRepository {
+	repository.Status.Conditions = []SourceCondition{
+		{
+			Type:               ReadyCondition,
+			Status:             corev1.ConditionFalse,
+			LastTransitionTime: metav1.Now(),
+			Reason:             reason,
+			Message:            message,
+		},
+	}
+	return repository
+}
+
+func GitRepositoryReadyMessage(repository GitRepository) string {
+	for _, condition := range repository.Status.Conditions {
+		if condition.Type == ReadyCondition {
+			return condition.Message
+		}
+	}
+	return ""
+}
