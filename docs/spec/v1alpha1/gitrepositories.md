@@ -82,7 +82,7 @@ const (
 
 ## Spec examples
 
-Pull the master of a public repository every minute:
+Pull the master branch of a public repository every minute:
 
 ```yaml
 apiVersion: source.fluxcd.io/v1alpha1
@@ -96,8 +96,21 @@ metadata:
 spec:
   interval: 1m
   url: https://github.com/stefanprodan/podinfo
+```
+
+Pull a specific branch:
+
+```yaml
+apiVersion: source.fluxcd.io/v1alpha1
+kind: GitRepository
+metadata:
+  name: podinfo
+  namespace: default
+spec:
+  interval: 1m
+  url: https://github.com/stefanprodan/podinfo
   ref:
-    branch: master
+    branch: v3.x
 ```
 
 Checkout a specific commit from a branch:
@@ -131,7 +144,7 @@ spec:
     tag: 3.2.0
 ```
 
-Pull tag based on semver expression:
+Pull tag based on a [semver range](https://github.com/blang/semver#ranges):
 
 ```yaml
 apiVersion: source.fluxcd.io/v1alpha1
