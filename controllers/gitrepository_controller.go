@@ -110,7 +110,7 @@ func (r *GitRepositoryReconciler) SetupWithManager(mgr ctrl.Manager) error {
 					return false
 				}
 				// delete artifacts
-				artifact := r.Storage.ArtifactFor(gvk.Kind, e.Meta, "", "")
+				artifact := r.Storage.ArtifactFor(gvk.Kind, e.Meta, "*", "")
 				if err := r.Storage.RemoveAll(artifact); err != nil {
 					r.Log.Error(err, "unable to delete artifacts",
 						gvk.Kind, fmt.Sprintf("%s/%s", e.Meta.GetNamespace(), e.Meta.GetName()))
