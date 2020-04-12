@@ -95,7 +95,7 @@ func (s *Storage) RemoveAllButCurrent(artifact Artifact) error {
 	dir := filepath.Dir(artifact.Path)
 	errors := []string{}
 	_ = filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
-		if path != artifact.Path && !info.IsDir() {
+		if path != artifact.Path && !info.IsDir() && info.Mode()&os.ModeSymlink != os.ModeSymlink {
 			if err := os.Remove(path); err != nil {
 				errors = append(errors, info.Name())
 			}
@@ -149,11 +149,33 @@ func (s *Storage) WriteFile(artifact Artifact, data []byte) error {
 	return ioutil.WriteFile(artifact.Path, data, 0644)
 }
 
+// Symlink creates or updates a symbolic link for the given artifact
+func (s *Storage) Symlink(artifact Artifact, linkName string) error {
+	dir := filepath.Dir(artifact.Path)
+	link := filepath.Join(dir, linkName)
+	tmpLink := link + ".tmp"
+
+	if err := os.Remove(tmpLink); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+
+	if err := os.Symlink(artifact.Path, tmpLink); err != nil {
+		return err
+	}
+
+	if err := os.Rename(tmpLink, link); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 // Checksum returns the SHA1 checksum for the given bytes as a string
 func (s *Storage) Checksum(b []byte) string {
 	return fmt.Sprintf("%x", sha1.Sum(b))
 }
 
+// Lock creates a file lock for the given artifact
 func (s *Storage) Lock(artifact Artifact) (unlock func(), err error) {
 	lockFile := artifact.Path + ".lock"
 	mutex := lockedfile.MutexAt(lockFile)
