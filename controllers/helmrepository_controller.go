@@ -63,15 +63,13 @@ func (r *HelmRepositoryReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	result := ctrl.Result{RequeueAfter: repository.Spec.Interval.Duration}
-
 	// set initial status
 	if reset, status := r.shouldResetStatus(repository); reset {
 		log.Info("Initializing repository")
 		repository.Status = status
 		if err := r.Status().Update(ctx, &repository); err != nil {
 			log.Error(err, "unable to update HelmRepository status")
-			return result, err
+			return ctrl.Result{Requeue: true}, err
 		}
 	}
 
@@ -87,13 +85,13 @@ func (r *HelmRepositoryReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 	// update status
 	if err := r.Status().Update(ctx, &syncedRepo); err != nil {
 		log.Error(err, "unable to update HelmRepository status")
-		return result, err
+		return ctrl.Result{Requeue: true}, err
 	}
 
-	log.Info("Repository sync succeeded", "msg", HelmRepositoryReadyMessage(syncedRepo))
+	log.Info("Repository sync succeeded", "msg", sourcev1.HelmRepositoryReadyMessage(syncedRepo))
 
 	// requeue repository
-	return result, nil
+	return ctrl.Result{RequeueAfter: repository.Spec.Interval.Duration}, nil
 }
 
 func (r *HelmRepositoryReconciler) SetupWithManager(mgr ctrl.Manager) error {
@@ -120,12 +118,12 @@ func (r *HelmRepositoryReconciler) SetupWithManager(mgr ctrl.Manager) error {
 func (r *HelmRepositoryReconciler) sync(repository sourcev1.HelmRepository) (sourcev1.HelmRepository, error) {
 	u, err := url.Parse(repository.Spec.URL)
 	if err != nil {
-		return NotReadyHelmRepository(repository, sourcev1.URLInvalidReason, err.Error()), err
+		return sourcev1.HelmRepositoryNotReady(repository, sourcev1.URLInvalidReason, err.Error()), err
 	}
 
 	c, err := r.Getters.ByScheme(u.Scheme)
 	if err != nil {
-		return NotReadyHelmRepository(repository, sourcev1.URLInvalidReason, err.Error()), err
+		return sourcev1.HelmRepositoryNotReady(repository, sourcev1.URLInvalidReason, err.Error()), err
 	}
 
 	u.RawPath = path.Join(u.RawPath, "index.yaml")
@@ -135,22 +133,22 @@ func (r *HelmRepositoryReconciler) sync(repository sourcev1.HelmRepository) (sou
 	// TODO(hidde): add authentication config
 	res, err := c.Get(indexURL, getter.WithURL(repository.Spec.URL))
 	if err != nil {
-		return NotReadyHelmRepository(repository, sourcev1.IndexationFailedReason, err.Error()), err
+		return sourcev1.HelmRepositoryNotReady(repository, sourcev1.IndexationFailedReason, err.Error()), err
 	}
 
 	data, err := ioutil.ReadAll(res)
 	if err != nil {
-		return NotReadyHelmRepository(repository, sourcev1.IndexationFailedReason, err.Error()), err
+		return sourcev1.HelmRepositoryNotReady(repository, sourcev1.IndexationFailedReason, err.Error()), err
 	}
 
 	i := &repo.IndexFile{}
 	if err := yaml.Unmarshal(data, i); err != nil {
-		return NotReadyHelmRepository(repository, sourcev1.IndexationFailedReason, err.Error()), err
+		return sourcev1.HelmRepositoryNotReady(repository, sourcev1.IndexationFailedReason, err.Error()), err
 	}
 
 	index, err := yaml.Marshal(i)
 	if err != nil {
-		return NotReadyHelmRepository(repository, sourcev1.IndexationFailedReason, err.Error()), err
+		return sourcev1.HelmRepositoryNotReady(repository, sourcev1.IndexationFailedReason, err.Error()), err
 	}
 
 	sum := r.Storage.Checksum(index)
@@ -161,14 +159,14 @@ func (r *HelmRepositoryReconciler) sync(repository sourcev1.HelmRepository) (sou
 	err = r.Storage.MkdirAll(artifact)
 	if err != nil {
 		err = fmt.Errorf("unable to create repository index directory: %w", err)
-		return NotReadyHelmRepository(repository, sourcev1.StorageOperationFailedReason, err.Error()), err
+		return sourcev1.HelmRepositoryNotReady(repository, sourcev1.StorageOperationFailedReason, err.Error()), err
 	}
 
 	// acquire lock
 	unlock, err := r.Storage.Lock(artifact)
 	if err != nil {
 		err = fmt.Errorf("unable to acquire lock: %w", err)
-		return NotReadyHelmRepository(repository, sourcev1.StorageOperationFailedReason, err.Error()), err
+		return sourcev1.HelmRepositoryNotReady(repository, sourcev1.StorageOperationFailedReason, err.Error()), err
 	}
 	defer unlock()
 
@@ -176,18 +174,18 @@ func (r *HelmRepositoryReconciler) sync(repository sourcev1.HelmRepository) (sou
 	err = r.Storage.WriteFile(artifact, index)
 	if err != nil {
 		err = fmt.Errorf("unable to write repository index file: %w", err)
-		return NotReadyHelmRepository(repository, sourcev1.StorageOperationFailedReason, err.Error()), err
+		return sourcev1.HelmRepositoryNotReady(repository, sourcev1.StorageOperationFailedReason, err.Error()), err
 	}
 
 	// update index symlink
 	indexUrl, err := r.Storage.Symlink(artifact, "index.yaml")
 	if err != nil {
 		err = fmt.Errorf("storage error %w", err)
-		return NotReadyHelmRepository(repository, sourcev1.StorageOperationFailedReason, err.Error()), err
+		return sourcev1.HelmRepositoryNotReady(repository, sourcev1.StorageOperationFailedReason, err.Error()), err
 	}
 
 	message := fmt.Sprintf("Index is available at %s", artifact.Path)
-	return ReadyHelmRepository(repository, artifact, indexUrl, sourcev1.IndexationSucceededReason, message), nil
+	return sourcev1.HelmRepositoryReady(repository, artifact, indexUrl, sourcev1.IndexationSucceededReason, message), nil
 }
 
 func (r *HelmRepositoryReconciler) shouldResetStatus(repository sourcev1.HelmRepository) (bool, sourcev1.HelmRepositoryStatus) {

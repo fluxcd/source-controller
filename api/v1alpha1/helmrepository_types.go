@@ -17,6 +17,7 @@ limitations under the License.
 package v1alpha1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -83,3 +84,48 @@ const (
 	// of the given Helm repository succeeded.
 	IndexationSucceededReason string = "IndexationSucceed"
 )
+
+func HelmRepositoryReady(repository HelmRepository, artifact Artifact, url, reason, message string) HelmRepository {
+	repository.Status.Conditions = []SourceCondition{
+		{
+			Type:               ReadyCondition,
+			Status:             corev1.ConditionTrue,
+			LastTransitionTime: metav1.Now(),
+			Reason:             reason,
+			Message:            message,
+		},
+	}
+	repository.Status.URL = url
+
+	if repository.Status.Artifact != nil {
+		if repository.Status.Artifact.Path != artifact.Path {
+			repository.Status.Artifact = &artifact
+		}
+	} else {
+		repository.Status.Artifact = &artifact
+	}
+
+	return repository
+}
+
+func HelmRepositoryNotReady(repository HelmRepository, reason, message string) HelmRepository {
+	repository.Status.Conditions = []SourceCondition{
+		{
+			Type:               ReadyCondition,
+			Status:             corev1.ConditionFalse,
+			LastTransitionTime: metav1.Now(),
+			Reason:             reason,
+			Message:            message,
+		},
+	}
+	return repository
+}
+
+func HelmRepositoryReadyMessage(repository HelmRepository) string {
+	for _, condition := range repository.Status.Conditions {
+		if condition.Type == ReadyCondition {
+			return condition.Message
+		}
+	}
+	return ""
+}

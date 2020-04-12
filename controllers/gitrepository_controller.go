@@ -67,15 +67,13 @@ func (r *GitRepositoryReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	result := ctrl.Result{RequeueAfter: repo.Spec.Interval.Duration}
-
 	// set initial status
 	if reset, status := r.shouldResetStatus(repo); reset {
 		log.Info("Initializing repository")
 		repo.Status = status
 		if err := r.Status().Update(ctx, &repo); err != nil {
 			log.Error(err, "unable to update GitRepository status")
-			return result, err
+			return ctrl.Result{Requeue: true}, err
 		}
 	}
 
@@ -91,13 +89,13 @@ func (r *GitRepositoryReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 	// update status
 	if err := r.Status().Update(ctx, &syncedRepo); err != nil {
 		log.Error(err, "unable to update GitRepository status")
-		return result, err
+		return ctrl.Result{Requeue: true}, err
 	}
 
-	log.Info("Repository sync succeeded", "msg", GitRepositoryReadyMessage(syncedRepo))
+	log.Info("Repository sync succeeded", "msg", sourcev1.GitRepositoryReadyMessage(syncedRepo))
 
 	// requeue repository
-	return result, nil
+	return ctrl.Result{RequeueAfter: repo.Spec.Interval.Duration}, nil
 }
 
 func (r *GitRepositoryReconciler) SetupWithManager(mgr ctrl.Manager) error {
@@ -151,21 +149,21 @@ func (r *GitRepositoryReconciler) sync(repository sourcev1.GitRepository) (sourc
 	tmpSSH, err := ioutil.TempDir("", repository.Name)
 	if err != nil {
 		err = fmt.Errorf("tmp dir error: %w", err)
-		return NotReadyGitRepository(repository, sourcev1.StorageOperationFailedReason, err.Error()), err
+		return sourcev1.GitRepositoryNotReady(repository, sourcev1.StorageOperationFailedReason, err.Error()), err
 	}
 	defer os.RemoveAll(tmpSSH)
 
 	auth, err := r.auth(repository, tmpSSH)
 	if err != nil {
 		err = fmt.Errorf("auth error: %w", err)
-		return NotReadyGitRepository(repository, sourcev1.StorageOperationFailedReason, err.Error()), err
+		return sourcev1.GitRepositoryNotReady(repository, sourcev1.StorageOperationFailedReason, err.Error()), err
 	}
 
 	// create tmp dir for the Git clone
 	tmpGit, err := ioutil.TempDir("", repository.Name)
 	if err != nil {
 		err = fmt.Errorf("tmp dir error: %w", err)
-		return NotReadyGitRepository(repository, sourcev1.StorageOperationFailedReason, err.Error()), err
+		return sourcev1.GitRepositoryNotReady(repository, sourcev1.StorageOperationFailedReason, err.Error()), err
 	}
 	defer os.RemoveAll(tmpGit)
 
@@ -184,7 +182,7 @@ func (r *GitRepositoryReconciler) sync(repository sourcev1.GitRepository) (sourc
 	})
 	if err != nil {
 		err = fmt.Errorf("git clone error: %w", err)
-		return NotReadyGitRepository(repository, sourcev1.GitOperationFailedReason, err.Error()), err
+		return sourcev1.GitRepositoryNotReady(repository, sourcev1.GitOperationFailedReason, err.Error()), err
 	}
 
 	// checkout commit or tag
@@ -193,7 +191,7 @@ func (r *GitRepositoryReconciler) sync(repository sourcev1.GitRepository) (sourc
 			w, err := repo.Worktree()
 			if err != nil {
 				err = fmt.Errorf("git worktree error: %w", err)
-				return NotReadyGitRepository(repository, sourcev1.GitOperationFailedReason, err.Error()), err
+				return sourcev1.GitRepositoryNotReady(repository, sourcev1.GitOperationFailedReason, err.Error()), err
 			}
 
 			err = w.Checkout(&git.CheckoutOptions{
@@ -202,19 +200,19 @@ func (r *GitRepositoryReconciler) sync(repository sourcev1.GitRepository) (sourc
 			})
 			if err != nil {
 				err = fmt.Errorf("git checkout %s for %s error: %w", commit, branch, err)
-				return NotReadyGitRepository(repository, sourcev1.GitOperationFailedReason, err.Error()), err
+				return sourcev1.GitRepositoryNotReady(repository, sourcev1.GitOperationFailedReason, err.Error()), err
 			}
 		} else if exp := repository.Spec.Reference.SemVer; exp != "" {
 			rng, err := semver.ParseRange(exp)
 			if err != nil {
 				err = fmt.Errorf("semver parse range error: %w", err)
-				return NotReadyGitRepository(repository, sourcev1.GitOperationFailedReason, err.Error()), err
+				return sourcev1.GitRepositoryNotReady(repository, sourcev1.GitOperationFailedReason, err.Error()), err
 			}
 
 			repoTags, err := repo.Tags()
 			if err != nil {
 				err = fmt.Errorf("git list tags error: %w", err)
-				return NotReadyGitRepository(repository, sourcev1.GitOperationFailedReason, err.Error()), err
+				return sourcev1.GitRepositoryNotReady(repository, sourcev1.GitOperationFailedReason, err.Error()), err
 			}
 
 			tags := make(map[string]string)
@@ -243,7 +241,7 @@ func (r *GitRepositoryReconciler) sync(repository sourcev1.GitRepository) (sourc
 				w, err := repo.Worktree()
 				if err != nil {
 					err = fmt.Errorf("git worktree error: %w", err)
-					return NotReadyGitRepository(repository, sourcev1.GitOperationFailedReason, err.Error()), err
+					return sourcev1.GitRepositoryNotReady(repository, sourcev1.GitOperationFailedReason, err.Error()), err
 				}
 
 				err = w.Checkout(&git.CheckoutOptions{
@@ -251,11 +249,11 @@ func (r *GitRepositoryReconciler) sync(repository sourcev1.GitRepository) (sourc
 				})
 				if err != nil {
 					err = fmt.Errorf("git checkout error: %w", err)
-					return NotReadyGitRepository(repository, sourcev1.GitOperationFailedReason, err.Error()), err
+					return sourcev1.GitRepositoryNotReady(repository, sourcev1.GitOperationFailedReason, err.Error()), err
 				}
 			} else {
 				err = fmt.Errorf("no match found for semver: %s", repository.Spec.Reference.SemVer)
-				return NotReadyGitRepository(repository, sourcev1.GitOperationFailedReason, err.Error()), err
+				return sourcev1.GitRepositoryNotReady(repository, sourcev1.GitOperationFailedReason, err.Error()), err
 			}
 		}
 	}
@@ -264,7 +262,7 @@ func (r *GitRepositoryReconciler) sync(repository sourcev1.GitRepository) (sourc
 	ref, err := repo.Head()
 	if err != nil {
 		err = fmt.Errorf("git resolve HEAD error: %w", err)
-		return NotReadyGitRepository(repository, sourcev1.GitOperationFailedReason, err.Error()), err
+		return sourcev1.GitRepositoryNotReady(repository, sourcev1.GitOperationFailedReason, err.Error()), err
 	}
 
 	if revision == "" {
@@ -278,14 +276,14 @@ func (r *GitRepositoryReconciler) sync(repository sourcev1.GitRepository) (sourc
 	err = r.Storage.MkdirAll(artifact)
 	if err != nil {
 		err = fmt.Errorf("mkdir dir error: %w", err)
-		return NotReadyGitRepository(repository, sourcev1.StorageOperationFailedReason, err.Error()), err
+		return sourcev1.GitRepositoryNotReady(repository, sourcev1.StorageOperationFailedReason, err.Error()), err
 	}
 
 	// acquire lock
 	unlock, err := r.Storage.Lock(artifact)
 	if err != nil {
 		err = fmt.Errorf("unable to acquire lock: %w", err)
-		return NotReadyGitRepository(repository, sourcev1.StorageOperationFailedReason, err.Error()), err
+		return sourcev1.GitRepositoryNotReady(repository, sourcev1.StorageOperationFailedReason, err.Error()), err
 	}
 	defer unlock()
 
@@ -293,18 +291,18 @@ func (r *GitRepositoryReconciler) sync(repository sourcev1.GitRepository) (sourc
 	err = r.Storage.Archive(artifact, tmpGit, "")
 	if err != nil {
 		err = fmt.Errorf("storage archive error: %w", err)
-		return NotReadyGitRepository(repository, sourcev1.StorageOperationFailedReason, err.Error()), err
+		return sourcev1.GitRepositoryNotReady(repository, sourcev1.StorageOperationFailedReason, err.Error()), err
 	}
 
 	// update latest symlink
 	url, err := r.Storage.Symlink(artifact, "latest.tar.gz")
 	if err != nil {
 		err = fmt.Errorf("storage lock error: %w", err)
-		return NotReadyGitRepository(repository, sourcev1.StorageOperationFailedReason, err.Error()), err
+		return sourcev1.GitRepositoryNotReady(repository, sourcev1.StorageOperationFailedReason, err.Error()), err
 	}
 
 	message := fmt.Sprintf("Artifact is available at: %s", artifact.Path)
-	return ReadyGitRepository(repository, artifact, url, sourcev1.GitOperationSucceedReason, message), nil
+	return sourcev1.GitRepositoryReady(repository, artifact, url, sourcev1.GitOperationSucceedReason, message), nil
 }
 
 func (r *GitRepositoryReconciler) shouldResetStatus(repository sourcev1.GitRepository) (bool, sourcev1.GitRepositoryStatus) {
