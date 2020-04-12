@@ -76,34 +76,6 @@ type GitRepositoryStatus struct {
 	Artifact *Artifact `json:"artifact,omitempty"`
 }
 
-// +kubebuilder:object:root=true
-// +kubebuilder:subresource:status
-// +kubebuilder:printcolumn:name="URL",type=string,JSONPath=`.spec.url`
-// +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type==\"Ready\")].status",description=""
-// +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.conditions[?(@.type==\"Ready\")].message",description=""
-// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description=""
-
-// GitRepository is the Schema for the gitrepositories API
-type GitRepository struct {
-	metav1.TypeMeta   `json:",inline"`
-	metav1.ObjectMeta `json:"metadata,omitempty"`
-
-	Spec   GitRepositorySpec   `json:"spec,omitempty"`
-	Status GitRepositoryStatus `json:"status,omitempty"`
-}
-
-// GitRepositoryList contains a list of GitRepository
-// +kubebuilder:object:root=true
-type GitRepositoryList struct {
-	metav1.TypeMeta `json:",inline"`
-	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []GitRepository `json:"items"`
-}
-
-func init() {
-	SchemeBuilder.Register(&GitRepository{}, &GitRepositoryList{})
-}
-
 const (
 	GitOperationSucceedReason string = "GitOperationSucceed"
 	GitOperationFailedReason  string = "GitOperationFailed"
@@ -152,4 +124,32 @@ func GitRepositoryReadyMessage(repository GitRepository) string {
 		}
 	}
 	return ""
+}
+
+// +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:name="URL",type=string,JSONPath=`.spec.url`
+// +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type==\"Ready\")].status",description=""
+// +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.conditions[?(@.type==\"Ready\")].message",description=""
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description=""
+
+// GitRepository is the Schema for the gitrepositories API
+type GitRepository struct {
+	metav1.TypeMeta   `json:",inline"`
+	metav1.ObjectMeta `json:"metadata,omitempty"`
+
+	Spec   GitRepositorySpec   `json:"spec,omitempty"`
+	Status GitRepositoryStatus `json:"status,omitempty"`
+}
+
+// GitRepositoryList contains a list of GitRepository
+// +kubebuilder:object:root=true
+type GitRepositoryList struct {
+	metav1.TypeMeta `json:",inline"`
+	metav1.ListMeta `json:"metadata,omitempty"`
+	Items           []GitRepository `json:"items"`
+}
+
+func init() {
+	SchemeBuilder.Register(&GitRepository{}, &GitRepositoryList{})
 }

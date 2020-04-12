@@ -1,0 +1,24 @@
+# permissions for end users to edit helmcharts.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: helmchart-editor-role
+rules:
+- apiGroups:
+  - source.fluxcd.io
+  resources:
+  - helmcharts
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - source.fluxcd.io
+  resources:
+  - helmcharts/status
+  verbs:
+  - get

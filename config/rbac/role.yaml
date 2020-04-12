@@ -29,6 +29,26 @@ rules:
 - apiGroups:
   - source.fluxcd.io
   resources:
+  - helmcharts
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - source.fluxcd.io
+  resources:
+  - helmcharts/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - source.fluxcd.io
+  resources:
   - helmrepositories
   verbs:
   - create

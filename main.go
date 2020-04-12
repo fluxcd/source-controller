@@ -41,6 +41,12 @@ import (
 var (
 	scheme   = runtime.NewScheme()
 	setupLog = ctrl.Log.WithName("setup")
+	getters  = getter.Providers{
+		getter.Provider{
+			Schemes: []string{"http", "https"},
+			New:     getter.NewHTTPGetter,
+		},
+	}
 )
 
 func init() {
@@ -98,14 +104,20 @@ func main() {
 		Scheme:  mgr.GetScheme(),
 		Kind:    "helmrepository",
 		Storage: storage,
-		Getters: getter.Providers{
-			getter.Provider{
-				Schemes: []string{"http", "https"},
-				New:     getter.NewHTTPGetter,
-			},
-		},
+		Getters: getters,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "HelmRepository")
+		os.Exit(1)
+	}
+	if err = (&controllers.HelmChartReconciler{
+		Client:  mgr.GetClient(),
+		Log:     ctrl.Log.WithName("controllers").WithName("HelmChart"),
+		Scheme:  mgr.GetScheme(),
+		Kind:    "helmchart",
+		Storage: storage,
+		Getters: getters,
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "HelmChart")
 		os.Exit(1)
 	}
 	// +kubebuilder:scaffold:builder

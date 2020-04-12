@@ -3,5 +3,6 @@ kind: Kustomization
 resources:
 - bases/source.fluxcd.io_gitrepositories.yaml
 - bases/source.fluxcd.io_helmrepositories.yaml
+- bases/source.fluxcd.io_helmcharts.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 

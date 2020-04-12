@@ -43,13 +43,15 @@ jobs:
         run: |
           kubectl apply -f ./config/samples
           kubectl -n source-system rollout status deploy/source-controller --timeout=1m
-          kubectl wait gitrepository/podinfo --for=condition=ready --timeout=1m
-          kubectl wait helmrepository/podinfo --for=condition=ready --timeout=1m
+          kubectl wait gitrepository/gitrepository-sample --for=condition=ready --timeout=1m
+          kubectl wait helmrepository/helmrepository-sample --for=condition=ready --timeout=1m
+          kubectl wait helmchart/helmchart-sample --for=condition=ready --timeout=1m
           kubectl -n source-system logs deploy/source-controller
       - name: Debug failure
         if: failure()
         run: |
           kubectl get gitrepositories -oyaml
           kubectl get helmrepositories -oyaml
+          kubectl get helmcharts -oyaml
           kubectl -n source-system get all
           kubectl -n source-system logs deploy/source-controller
