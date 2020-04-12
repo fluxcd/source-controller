@@ -29,19 +29,18 @@ type HelmRepositorySpec struct {
 #### Helm repository status
 
 ```go
-// HelmRepositoryStatus defines the observed state of the HelmRepository.
+// HelmRepositoryStatus defines the observed state of HelmRepository
 type HelmRepositoryStatus struct {
 	// +optional
 	Conditions []SourceCondition `json:"conditions,omitempty"`
 
-	// LastUpdateTime is the timestamp corresponding to the last status
-	// change of this Helm repository.
+	// URL is the download link for the last index fetched.
 	// +optional
-	LastUpdateTime *metav1.Time `json:"lastUpdateTime,omitempty"`
+	URL string `json:"url,omitempty"`
 
-	// URI for the artifact of the last successful repository index.
+	// Artifact represents the output of the last successful repository sync.
 	// +optional
-	Artifact string `json:"artifact,omitempty"`
+	Artifact *Artifact `json:"artifact,omitempty"`
 }
 ```
 
@@ -88,18 +87,17 @@ type HelmChartSpec struct {
 
 ```go
 // HelmChartStatus defines the observed state of the HelmChart.
-type HelmChartStatus struct {
+type HelmRepositoryStatus struct {
 	// +optional
 	Conditions []SourceCondition `json:"conditions,omitempty"`
 
-	// LastUpdateTime is the timestamp corresponding to the last status
-	// change of this Helm chart.
+	// URL is the download link for the last chart fetched.
 	// +optional
-	LastUpdateTime *metav1.Time `json:"lastUpdateTime,omitempty"`
+	URL string `json:"url,omitempty"`
 
-	// URI for the artifact of the latest successful Helm chart pull.
+	// Artifact represents the output of the last successful sync.
 	// +optional
-	Artifact string `json:"artifact,omitempty"`
+	Artifact *Artifact `json:"artifact,omitempty"`
 }
 ```
 
@@ -224,14 +222,13 @@ Successful indexation:
 
 ```yaml
 status:
-  artifact: http://<host>/helmrepositories/podinfo-default/index-21c195d78e699e4b656e2885887d019627838993.yaml
+  url: http://<host>/helmrepository/podinfo-default/index.yaml
   conditions:
     - lastTransitionTime: "2020-04-10T09:34:45Z"
       message: Fetched artifact are available at /data/helmrepositories/podinfo-default/index-21c195d78e699e4b656e2885887d019627838993.yaml
       reason: IndexationSucceeded
       status: "True"
       type: Ready
-  lastUpdateTime: "2020-04-10T09:34:45Z"
 ```
 
 Failed indexation:
@@ -264,14 +261,13 @@ Successful chart pull:
 
 ```yaml
 status:
-  artifact: http://<host>/helmcharts/redis-default/redis-10.5.7.tgz
+  url: http://<host>/helmcharts/redis-default/redis-10.5.7.tgz
   conditions:
     - lastTransitionTime: "2020-04-10T09:34:45Z"
       message: Fetched artifact are available at /data/helmcharts/redis-default/redis-10.5.7.tgz
       reason: ChartPullSucceeded
       status: "True"
       type: Ready
-  lastUpdateTime: "2020-04-10T09:34:45Z"
 ```
 
 Failed chart pull:

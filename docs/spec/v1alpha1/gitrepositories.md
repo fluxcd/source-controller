@@ -57,14 +57,13 @@ type GitRepositoryStatus struct {
 	// +optional
 	Conditions []SourceCondition `json:"conditions,omitempty"`
 
-	// LastUpdateTime is the timestamp corresponding to the last status
-	// change of this repository.
+	// URL is the download link for the artifact output of the last repository sync.
 	// +optional
-	LastUpdateTime *metav1.Time `json:"lastUpdateTime,omitempty"`
+	URL string `json:"url,omitempty"`
 
-	// Path to the artifact output of the last repository sync.
+	// Artifact represents the output of the last successful repository sync.
 	// +optional
-	Artifact string `json:"artifacts,omitempty"`
+	Artifact *Artifact `json:"artifact,omitempty"`
 }
 ```
 
@@ -83,7 +82,7 @@ const (
 
 ## Spec examples
 
-Public Git repository:
+Pull the master of a public repository every minute:
 
 ```yaml
 apiVersion: source.fluxcd.io/v1alpha1
@@ -99,8 +98,52 @@ spec:
   url: https://github.com/stefanprodan/podinfo
   ref:
     branch: master
-    tag: "3.2.0"
-    semver: ">= 3.2.0 <3.3.0"
+```
+
+Checkout a specific commit from a branch:
+
+```yaml
+apiVersion: source.fluxcd.io/v1alpha1
+kind: GitRepository
+metadata:
+  name: podinfo
+  namespace: default
+spec:
+  interval: 1m
+  url: https://github.com/stefanprodan/podinfo
+  ref:
+    branch: master
+    commit: 363a6a8fe6a7f13e05d34c163b0ef02a777da20a
+```
+
+Pull a specific tag:
+
+```yaml
+apiVersion: source.fluxcd.io/v1alpha1
+kind: GitRepository
+metadata:
+  name: podinfo
+  namespace: default
+spec:
+  interval: 1m
+  url: https://github.com/stefanprodan/podinfo
+  ref:
+    tag: 3.2.0
+```
+
+Pull tag based on semver expression:
+
+```yaml
+apiVersion: source.fluxcd.io/v1alpha1
+kind: GitRepository
+metadata:
+  name: podinfo
+  namespace: default
+spec:
+  interval: 1m
+  url: https://github.com/stefanprodan/podinfo
+  ref:
+    semver: ">=3.1.0-rc.1 <3.2.0"
 ```
 
 HTTPS authentication (requires a secret with `username` and `password` fields):
@@ -136,7 +179,7 @@ metadata:
   name: podinfo
   namespace: default
 spec:
-  url: ssh://git@github.com:stefanprodan/podinfo
+  url: ssh://git@github.com/stefanprodan/podinfo
   secretRef:
     name: ssh-credentials
 ---
@@ -170,15 +213,19 @@ Successful sync:
 
 ```yaml
 status:
-  artifacts: http://source-controller.source-system/repositories/podinfo-default/5e747d3e088cd7a34ace4abc8cf7f3c3696e402f.tar.gz
+  artifact:
+    lastUpdateTime: "2020-04-07T06:59:23Z"
+    path: /data/gitrepository/podinfo-default/363a6a8fe6a7f13e05d34c163b0ef02a777da20a.tar.gz
+    revision: master/363a6a8fe6a7f13e05d34c163b0ef02a777da20a
+    url: http://<host>/gitrepository/podinfo-default/363a6a8fe6a7f13e05d34c163b0ef02a777da20a.tar.gz
   conditions:
   - lastTransitionTime: "2020-04-07T06:59:23Z"
     message: 'Fetched artifacts are available at
-      /data/repositories/podinfo-default/5e747d3e088cd7a34ace4abc8cf7f3c3696e402f.tar.gz'
+      /data/gitrepository/podinfo-default/363a6a8fe6a7f13e05d34c163b0ef02a777da20a.tar.gz'
     reason: GitOperationSucceed
     status: "True"
     type: Ready
-  lastUpdateTime: "2020-04-07T06:59:23Z"
+  url: http://<host>/gitrepository/podinfo-default/latest.tar.gz
 ```
 
 Failed sync:

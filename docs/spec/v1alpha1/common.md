@@ -4,6 +4,34 @@ Common defines resources used across types.
 
 ## Specification
 
+### Source status
+
+Source objects should contain a status sub-resource that embeds an artifact object:
+
+```go
+// Artifact represents the output of a source synchronisation
+type Artifact struct {
+	// Path is the local file path of this artifact.
+	// +required
+	Path string `json:"path"`
+
+	// URL is the HTTP address of this artifact.
+	// +required
+	URL string `json:"url"`
+
+	// Revision is a human readable identifier traceable in the origin source system.
+	// It can be a commit sha, git tag, a helm index timestamp,
+	// a helm chart version, a checksum, etc.
+	// +optional
+	Revision string `json:"revision"`
+
+	// LastUpdateTime is the timestamp corresponding to the last
+	// update of this artifact.
+	// +required
+	LastUpdateTime metav1.Time `json:"lastUpdateTime,omitempty"`
+}
+```
+
 ### Source condition
 
 > **Note:** to be replaced with <https://github.com/kubernetes/enhancements/pull/1624>
@@ -52,7 +80,7 @@ const (
 const (
 	// InitializingReason represents the fact that a given source is being initialized.
 	InitializingReason string = "Initializing"
-    // URLInvalidReason represents the fact that a given source has an invalid URL.
+	// URLInvalidReason represents the fact that a given source has an invalid URL.
 	URLInvalidReason string = "URLInvalid"
 	// StorageOperationFailedReason signals a failure caused by a storage operation.
 	StorageOperationFailedReason string = "StorageOperationFailed"
