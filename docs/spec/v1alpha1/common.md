@@ -22,7 +22,7 @@ The controller can be told to check for updates right away by setting an annotat
 
 ```go
 const (
-    // ForceSyncAnnotation is the timestamp corresponding to an on-demand source sync.
+	// ForceSyncAnnotation is the timestamp corresponding to an on-demand source sync.
 	ForceSyncAnnotation string = "source.fluxcd.io/syncAt"
 )
 ```

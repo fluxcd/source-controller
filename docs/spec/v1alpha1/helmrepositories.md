@@ -160,7 +160,6 @@ data:
   certFile:              <BASE64>
   keyFile:               <BASE64>
   caFile:                <BASE64>
-  insecureSkipTLSVerify: <base64>
 ```
 
 ### Helm chart
