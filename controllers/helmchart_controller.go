@@ -86,6 +86,10 @@ func (r *HelmChartReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		return ctrl.Result{Requeue: true}, err
 	}
 
+	// set ownership reference so chart is garbage collected on
+	// repository removal
+	r.setOwnerRef(ctx, &chart, repository)
+
 	// try to pull chart
 	pulledChart, err := r.sync(repository, *chart.DeepCopy())
 	if err != nil {
@@ -280,5 +284,16 @@ func (r *HelmChartReconciler) gc(chart sourcev1.HelmChart) {
 		if err := r.Storage.RemoveAllButCurrent(*chart.Status.Artifact); err != nil {
 			r.Log.Info("Artifacts GC failed", "error", err)
 		}
+	}
+}
+
+func (r *HelmChartReconciler) setOwnerRef(ctx context.Context, chart *sourcev1.HelmChart, repository sourcev1.HelmRepository) {
+	if metav1.IsControlledBy(chart.GetObjectMeta(), repository.GetObjectMeta()) {
+		return
+	}
+	chart.SetOwnerReferences(append(chart.GetOwnerReferences(),
+		*metav1.NewControllerRef(repository.GetObjectMeta(), repository.GroupVersionKind())))
+	if err := r.Update(ctx, chart); err != nil {
+		r.Log.Error(err, fmt.Sprintf("failed to set owner reference to HelmRepository '%s'", repository.Name))
 	}
 }
