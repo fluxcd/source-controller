@@ -52,9 +52,18 @@ spec:
             interval:
               description: The interval at which to check for repository updates
               type: string
+            secretRef:
+              description: The name of the secret containing authentication credentials
+                for the Helm repository.
+              properties:
+                name:
+                  description: 'Name of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                    TODO: Add other useful fields. apiVersion, kind, uid?'
+                  type: string
+              type: object
             url:
-              description: The repository address
-              minLength: 4
+              description: The Helm repository URL, a valid URL contains at least
+                a protocol and host.
               type: string
           required:
           - interval

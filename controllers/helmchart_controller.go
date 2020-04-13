@@ -36,6 +36,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1alpha1"
+	"github.com/fluxcd/source-controller/internal/helm"
 )
 
 // HelmChartReconciler reconciles a HelmChart object
@@ -155,7 +156,30 @@ func (r *HelmChartReconciler) sync(repository sourcev1.HelmRepository, chart sou
 		return sourcev1.HelmChartNotReady(chart, sourcev1.ChartPullFailedReason, err.Error()), err
 	}
 
-	res, err := c.Get(u.String(), getter.WithURL(repository.Spec.URL))
+	var clientOpts []getter.Option
+	if repository.Spec.SecretRef != nil {
+		name := types.NamespacedName{
+			Namespace: repository.GetNamespace(),
+			Name:      repository.Spec.SecretRef.Name,
+		}
+
+		var secret corev1.Secret
+		err := r.Client.Get(context.TODO(), name, &secret)
+		if err != nil {
+			err = fmt.Errorf("auth secret error: %w", err)
+			return sourcev1.HelmChartNotReady(chart, sourcev1.AuthenticationFailedReason, err.Error()), err
+		}
+
+		opts, cleanup, err := helm.ClientOptionsFromSecret(secret)
+		if err != nil {
+			err = fmt.Errorf("auth options error: %w", err)
+			return sourcev1.HelmChartNotReady(chart, sourcev1.AuthenticationFailedReason, err.Error()), err
+		}
+		defer cleanup()
+		clientOpts = opts
+	}
+
+	res, err := c.Get(u.String(), clientOpts...)
 	if err != nil {
 		return sourcev1.HelmChartNotReady(chart, sourcev1.ChartPullFailedReason, err.Error()), err
 	}

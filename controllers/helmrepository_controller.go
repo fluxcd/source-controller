@@ -30,11 +30,13 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/yaml"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1alpha1"
+	"github.com/fluxcd/source-controller/internal/helm"
 )
 
 // HelmRepositoryReconciler reconciles a HelmRepository object
@@ -113,9 +115,30 @@ func (r *HelmRepositoryReconciler) sync(repository sourcev1.HelmRepository) (sou
 	u.RawPath = path.Join(u.RawPath, "index.yaml")
 	u.Path = path.Join(u.Path, "index.yaml")
 
-	indexURL := u.String()
-	// TODO(hidde): add authentication config
-	res, err := c.Get(indexURL, getter.WithURL(repository.Spec.URL))
+	var clientOpts []getter.Option
+	if repository.Spec.SecretRef != nil {
+		name := types.NamespacedName{
+			Namespace: repository.GetNamespace(),
+			Name:      repository.Spec.SecretRef.Name,
+		}
+
+		var secret corev1.Secret
+		err := r.Client.Get(context.TODO(), name, &secret)
+		if err != nil {
+			err = fmt.Errorf("auth secret error: %w", err)
+			return sourcev1.HelmRepositoryNotReady(repository, sourcev1.AuthenticationFailedReason, err.Error()), err
+		}
+
+		opts, cleanup, err := helm.ClientOptionsFromSecret(secret)
+		if err != nil {
+			err = fmt.Errorf("auth options error: %w", err)
+			return sourcev1.HelmRepositoryNotReady(repository, sourcev1.AuthenticationFailedReason, err.Error()), err
+		}
+		defer cleanup()
+		clientOpts = opts
+	}
+
+	res, err := c.Get(u.String(), clientOpts...)
 	if err != nil {
 		return sourcev1.HelmRepositoryNotReady(repository, sourcev1.IndexationFailedReason, err.Error()), err
 	}
@@ -162,14 +185,14 @@ func (r *HelmRepositoryReconciler) sync(repository sourcev1.HelmRepository) (sou
 	}
 
 	// update index symlink
-	indexUrl, err := r.Storage.Symlink(artifact, "index.yaml")
+	indexURL, err := r.Storage.Symlink(artifact, "index.yaml")
 	if err != nil {
 		err = fmt.Errorf("storage error: %w", err)
 		return sourcev1.HelmRepositoryNotReady(repository, sourcev1.StorageOperationFailedReason, err.Error()), err
 	}
 
 	message := fmt.Sprintf("Helm repository index is available at: %s", artifact.Path)
-	return sourcev1.HelmRepositoryReady(repository, artifact, indexUrl, sourcev1.IndexationSucceededReason, message), nil
+	return sourcev1.HelmRepositoryReady(repository, artifact, indexURL, sourcev1.IndexationSucceededReason, message), nil
 }
 
 func (r *HelmRepositoryReconciler) shouldResetStatus(repository sourcev1.HelmRepository) (bool, sourcev1.HelmRepositoryStatus) {

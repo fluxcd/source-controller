@@ -140,7 +140,7 @@ func (r *GitRepositoryReconciler) sync(repository sourcev1.GitRepository) (sourc
 	auth, err := r.auth(repository, tmpSSH)
 	if err != nil {
 		err = fmt.Errorf("auth error: %w", err)
-		return sourcev1.GitRepositoryNotReady(repository, sourcev1.StorageOperationFailedReason, err.Error()), err
+		return sourcev1.GitRepositoryNotReady(repository, sourcev1.AuthenticationFailedReason, err.Error()), err
 	}
 
 	// create tmp dir for the Git clone

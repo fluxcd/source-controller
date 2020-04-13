@@ -23,10 +23,15 @@ import (
 
 // HelmRepositorySpec defines the desired state of HelmRepository
 type HelmRepositorySpec struct {
-	// The repository address
-	// +kubebuilder:validation:MinLength=4
+	// The Helm repository URL, a valid URL contains at least a
+	// protocol and host.
 	// +required
 	URL string `json:"url"`
+
+	// The name of the secret containing authentication credentials
+	// for the Helm repository.
+	// +optional
+	SecretRef *corev1.LocalObjectReference `json:"secretRef,omitempty"`
 
 	// The interval at which to check for repository updates
 	// +required
