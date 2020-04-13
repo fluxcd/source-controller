@@ -59,7 +59,7 @@ func TestAuthMethodFromSecret(t *testing.T) {
 	}{
 		{"HTTP", "http://git.example.com/org/repo.git", basicAuthSecretFixture, &http.BasicAuth{}, false},
 		{"HTTPS", "https://git.example.com/org/repo.git", basicAuthSecretFixture, &http.BasicAuth{}, false},
-		{"SSH", "ssh://git.example.com:2222/org/repo.git", privateKeySecretFixture,  &ssh.PublicKeys{}, false},
+		{"SSH", "ssh://git.example.com:2222/org/repo.git", privateKeySecretFixture, &ssh.PublicKeys{}, false},
 		{"unsupported", "protocol://git.example.com/org/repo.git", corev1.Secret{}, nil, false},
 	}
 	for _, tt := range tests {
@@ -83,13 +83,13 @@ func TestBasicAuthFromSecret(t *testing.T) {
 	tests := []struct {
 		name    string
 		secret  corev1.Secret
-		modify 	func(secret *corev1.Secret)
+		modify  func(secret *corev1.Secret)
 		want    *http.BasicAuth
 		wantErr bool
 	}{
 		{"username and password", basicAuthSecretFixture, nil, &http.BasicAuth{Username: "git", Password: "password"}, false},
-		{"without username", basicAuthSecretFixture, func(s *corev1.Secret) { delete(s.Data, "username")}, nil, true},
-		{"without password", basicAuthSecretFixture, func(s *corev1.Secret) { delete(s.Data, "password")}, nil, true},
+		{"without username", basicAuthSecretFixture, func(s *corev1.Secret) { delete(s.Data, "username") }, nil, true},
+		{"without password", basicAuthSecretFixture, func(s *corev1.Secret) { delete(s.Data, "password") }, nil, true},
 		{"empty", corev1.Secret{}, nil, nil, true},
 	}
 	for _, tt := range tests {
@@ -114,7 +114,7 @@ func TestPublicKeysFromSecret(t *testing.T) {
 	tests := []struct {
 		name    string
 		secret  corev1.Secret
-		modify 	func(secret *corev1.Secret)
+		modify  func(secret *corev1.Secret)
 		wantErr bool
 	}{
 		{"private key and known_hosts", privateKeySecretFixture, nil, false},
