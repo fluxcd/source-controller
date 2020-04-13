@@ -1,13 +1,15 @@
 # Git Repositories
 
-The `GitReposiory` API defines a source for artifacts coming from Git. 
+The `GitReposiory` API defines a source for artifacts coming from Git. The
+resource exposes the latest synchronized state from Git as an artifact in
+an archive.
 
 ## Specification
 
 Git repository:
 
 ```go
-// GitRepositorySpec defines the desired state of GitRepository
+// GitRepositorySpec defines the desired state of GitRepository.
 type GitRepositorySpec struct {
 	// The repository URL, can be a HTTP or SSH address.
 	// +kubebuilder:validation:Pattern="^(http|https|ssh)://"
@@ -17,7 +19,8 @@ type GitRepositorySpec struct {
 	// +optional
 	SecretRef *v1.LocalObjectReference `json:"secretRef,omitempty"`
 	
-	// The git reference to checkout and monitor for changes, defaults to master branch.
+	// The git reference to checkout and monitor for changes, defaults to
+	// master branch.
 	// +optional
 	Reference *GitRepositoryRef `json:"ref,omitempty"`
 
@@ -29,7 +32,7 @@ type GitRepositorySpec struct {
 Git repository reference:
 
 ```go
-// GitRepositoryRef defines the git ref used for pull and checkout operations
+// GitRepositoryRef defines the git ref used for pull and checkout operations.
 type GitRepositoryRef struct {
 	// The git branch to checkout, defaults to master.
 	// +optional
@@ -43,21 +46,23 @@ type GitRepositoryRef struct {
 	// +optional
 	SemVer string `json:"semver"`
 
-	// The git commit sha to checkout, if specified branch and tag filters will be ignored.
+	// The git commit sha to checkout, if specified branch and tag filters will
+	// be ignored.
 	// +optional
 	Commit string `json:"commit"`
 }
 ```
 
-#### Status
+### Status
 
 ```go
-// GitRepositoryStatus defines the observed state of GitRepository
+// GitRepositoryStatus defines the observed state of GitRepository.
 type GitRepositoryStatus struct {
 	// +optional
 	Conditions []SourceCondition `json:"conditions,omitempty"`
 
-	// URL is the download link for the artifact output of the last repository sync.
+	// URL is the download link for the artifact output of the last repository
+	// sync.
 	// +optional
 	URL string `json:"url,omitempty"`
 
@@ -67,7 +72,7 @@ type GitRepositoryStatus struct {
 }
 ```
 
-#### Condition reasons
+### Condition reasons
 
 ```go
 const (

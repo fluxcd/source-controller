@@ -8,7 +8,7 @@ The is the v1alpha1 API specification for defining the desired state sources of 
 * Source kinds:
   + [GitRepository](gitrepositories.md)
   + [HelmRepository](helmrepositories.md)
-    - [HelmChart](helmrepositories.md)
+  + [HelmChart](helmcharts.md)
 
 ## Implementation
 
