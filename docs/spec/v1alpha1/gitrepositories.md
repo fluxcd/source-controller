@@ -13,7 +13,7 @@ type GitRepositorySpec struct {
 	// +kubebuilder:validation:Pattern="^(http|https|ssh)://"
 	URL string `json:"url"`
 
-	// The secret name containing the Git credentials
+	// The secret name containing the Git credentials.
 	// +optional
 	SecretRef *v1.LocalObjectReference `json:"secretRef,omitempty"`
 	
@@ -90,9 +90,6 @@ kind: GitRepository
 metadata:
   name: podinfo
   namespace: default
-  annotations:
-    # on-demand sync trigger
-    source.fluxcd.io/syncAt: "2020-04-06T15:39:52+03:00"
 spec:
   interval: 1m
   url: https://github.com/stefanprodan/podinfo
@@ -208,6 +205,9 @@ data:
   known_hosts: <BASE64> 
 ```
 
+> **Note:** that the SSH address does not support SCP syntax. The URL format is
+> `ssh://user@host:port/org/repository`.
+
 Example of generating the SSH credentials secret:
 
 ```bash
@@ -252,4 +252,10 @@ status:
     reason: AuthenticationFailed
     status: "False"
     type: Ready
+```
+
+Wait for condition:
+
+```bash
+kubectl wait gitrepository/podinfo --for=condition=ready --timeout=1m
 ```
