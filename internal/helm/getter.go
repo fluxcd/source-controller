@@ -16,12 +16,16 @@ func ClientOptionsFromSecret(secret corev1.Secret) ([]getter.Option, func(), err
 	if err != nil {
 		return opts, nil, err
 	}
-	opts = append(opts, basicAuth)
+	if basicAuth != nil {
+		opts = append(opts, basicAuth)
+	}
 	tlsClientConfig, cleanup, err := TLSClientConfigFromSecret(secret)
 	if err != nil {
 		return opts, nil, err
 	}
-	opts = append(opts, tlsClientConfig)
+	if tlsClientConfig != nil {
+		opts = append(opts, tlsClientConfig)
+	}
 	return opts, cleanup, nil
 }
 
