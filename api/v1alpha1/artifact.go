@@ -16,7 +16,11 @@ limitations under the License.
 
 package v1alpha1
 
-import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+import (
+	"fmt"
+
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+)
 
 // Artifact represents the output of a source synchronisation
 type Artifact struct {
@@ -38,4 +42,10 @@ type Artifact struct {
 	// update of this artifact.
 	// +required
 	LastUpdateTime metav1.Time `json:"lastUpdateTime,omitempty"`
+}
+
+// ArtifactPath returns the artifact path in the form of
+// <source-kind>/<source-namespace>/<source-name>/<artifact-filename>
+func ArtifactPath(kind, namespace, name, filename string) string {
+	return fmt.Sprintf("%s/%s/%s/%s", kind, namespace, name, filename)
 }

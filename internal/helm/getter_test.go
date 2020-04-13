@@ -16,8 +16,8 @@ var (
 	tlsSecretFixture = corev1.Secret{
 		Data: map[string][]byte{
 			"certFile": []byte(`fixture`),
-			"keyFile": []byte(`fixture`),
-			"caFile": []byte(`fixture`),
+			"keyFile":  []byte(`fixture`),
+			"caFile":   []byte(`fixture`),
 		},
 	}
 )
@@ -63,7 +63,7 @@ func TestBasicAuthFromSecret(t *testing.T) {
 		wantErr bool
 		wantNil bool
 	}{
-		{"username and password", basicAuthSecretFixture, nil,false, false},
+		{"username and password", basicAuthSecretFixture, nil, false, false},
 		{"without username", basicAuthSecretFixture, func(s *corev1.Secret) { delete(s.Data, "username") }, true, true},
 		{"without password", basicAuthSecretFixture, func(s *corev1.Secret) { delete(s.Data, "password") }, true, true},
 		{"empty", corev1.Secret{}, nil, false, true},
@@ -95,7 +95,7 @@ func TestTLSClientConfigFromSecret(t *testing.T) {
 		wantErr bool
 		wantNil bool
 	}{
-		{"certFile, keyFile and caFile", tlsSecretFixture, nil,false, false},
+		{"certFile, keyFile and caFile", tlsSecretFixture, nil, false, false},
 		{"without certFile", tlsSecretFixture, func(s *corev1.Secret) { delete(s.Data, "certFile") }, true, true},
 		{"without keyFile", tlsSecretFixture, func(s *corev1.Secret) { delete(s.Data, "keyFile") }, true, true},
 		{"without caFile", tlsSecretFixture, func(s *corev1.Secret) { delete(s.Data, "caFile") }, true, true},

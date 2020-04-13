@@ -24,7 +24,6 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	"github.com/pkg/errors"
 	"helm.sh/helm/v3/pkg/getter"
 	"helm.sh/helm/v3/pkg/repo"
 	corev1 "k8s.io/api/core/v1"
@@ -149,7 +148,7 @@ func (r *HelmChartReconciler) sync(repository sourcev1.HelmRepository, chart sou
 	ref := cv.URLs[0]
 	u, err := url.Parse(ref)
 	if err != nil {
-		err = errors.Errorf("invalid chart URL format '%s': %w", ref, err)
+		err = fmt.Errorf("invalid chart URL format '%s': %w", ref, err)
 		return sourcev1.HelmChartNotReady(chart, sourcev1.ChartPullFailedReason, err.Error()), err
 	}
 
