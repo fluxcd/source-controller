@@ -22,14 +22,24 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v2-beta
         with:
-          go-version: 1.13.x
+          go-version: 1.14.x
       - name: Setup Kubernetes
         uses: engineerd/setup-kind@v0.3.0
       - name: Setup Kustomize
         uses: ./.github/actions/kustomize
       - name: Setup Kubebuilder
         uses: ./.github/actions/kubebuilder
-      - name: Run tests and build image
+      - name: Run tests
+        run: make test
+        env:
+          KUBEBUILDER_ASSETS: ${{ github.workspace }}/kubebuilder/bin
+      - name: Check if working tree is dirty
+        run: |
+          if [[ $(git diff --stat) != '' ]]; then
+            echo 'run make test and commit changes'
+            exit 1
+          fi
+      - name: Build container image
         run: make docker-build IMG=test/source-controller:latest
         env:
           KUBEBUILDER_ASSETS: ${{ github.workspace }}/kubebuilder/bin
