@@ -1,8 +1,37 @@
 # Common
 
-Common defines resources used across types.
+Common defines resources used across all source types.
 
 ## Specification
+
+### Source synchronization
+
+Source objects should contain a `spec.interval` field that tells the controller at which interval to check for updates:
+
+```go
+type SourceSpec struct {
+	// The interval at which to check for source updates.
+	// +required
+	Interval metav1.Duration `json:"interval"`
+}
+```
+
+Valid time units are `s`, `m` and `h` e.g. `interval: 5m`.
+
+The controller can be told to check for updates right away by setting an annotation on source objects:
+
+```go
+const (
+    // ForceSyncAnnotation is the timestamp corresponding to an on-demand source sync.
+	ForceSyncAnnotation string = "source.fluxcd.io/syncAt"
+)
+```
+
+Force sync example:
+
+```bash
+kubectl annotate --overwrite gitrepository/podinfo source.fluxcd.io/syncAt="$(date +%s)"
+```
 
 ### Source status
 
