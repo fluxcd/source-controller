@@ -38,9 +38,6 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
-	"sigs.k8s.io/controller-runtime/pkg/event"
-	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1alpha1"
 )
@@ -101,26 +98,8 @@ func (r *GitRepositoryReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 func (r *GitRepositoryReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&sourcev1.GitRepository{}).
-		WithEventFilter(RepositoryChangePredicate{}).
-		WithEventFilter(predicate.Funcs{
-			DeleteFunc: func(e event.DeleteEvent) bool {
-				gvk, err := apiutil.GVKForObject(e.Object, r.Scheme)
-				if err != nil {
-					r.Log.Error(err, "unable to get GroupVersionKind for deleted object")
-					return false
-				}
-				// delete artifacts
-				artifact := r.Storage.ArtifactFor(gvk.Kind, e.Meta, "*", "")
-				if err := r.Storage.RemoveAll(artifact); err != nil {
-					r.Log.Error(err, "unable to delete artifacts",
-						gvk.Kind, fmt.Sprintf("%s/%s", e.Meta.GetNamespace(), e.Meta.GetName()))
-				} else {
-					r.Log.Info("Git repository artifacts deleted",
-						gvk.Kind, fmt.Sprintf("%s/%s", e.Meta.GetNamespace(), e.Meta.GetName()))
-				}
-				return true
-			},
-		}).
+		WithEventFilter(SourceChangePredicate{}).
+		WithEventFilter(GarbageCollectPredicate{Scheme: r.Scheme, Log: r.Log, Storage: r.Storage}).
 		Complete(r)
 }
 
