@@ -21,16 +21,12 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
-	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/blang/semver"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/transport"
-	"github.com/go-git/go-git/v5/plumbing/transport/http"
-	"github.com/go-git/go-git/v5/plumbing/transport/ssh"
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -40,6 +36,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1alpha1"
+	internalgit "github.com/fluxcd/source-controller/internal/git"
 )
 
 // GitRepositoryReconciler reconciles a GitRepository object
@@ -78,7 +75,7 @@ func (r *GitRepositoryReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 	r.gc(repo)
 
 	// try git clone
-	syncedRepo, err := r.sync(*repo.DeepCopy())
+	syncedRepo, err := r.sync(ctx, *repo.DeepCopy())
 	if err != nil {
 		log.Info("Git repository sync failed", "error", err.Error())
 	}
@@ -103,7 +100,7 @@ func (r *GitRepositoryReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-func (r *GitRepositoryReconciler) sync(repository sourcev1.GitRepository) (sourcev1.GitRepository, error) {
+func (r *GitRepositoryReconciler) sync(ctx context.Context, repository sourcev1.GitRepository) (sourcev1.GitRepository, error) {
 	// set defaults: master branch, no tags fetching, max two commits
 	branch := "master"
 	revision := ""
@@ -129,18 +126,29 @@ func (r *GitRepositoryReconciler) sync(repository sourcev1.GitRepository) (sourc
 		}
 	}
 
-	// create tmp dir for SSH known_hosts
-	tmpSSH, err := ioutil.TempDir("", repository.Name)
-	if err != nil {
-		err = fmt.Errorf("tmp dir error: %w", err)
-		return sourcev1.GitRepositoryNotReady(repository, sourcev1.StorageOperationFailedReason, err.Error()), err
-	}
-	defer os.RemoveAll(tmpSSH)
+	var auth transport.AuthMethod
+	if repository.Spec.SecretRef != nil {
+		name := types.NamespacedName{
+			Namespace: repository.GetNamespace(),
+			Name:      repository.Spec.SecretRef.Name,
+		}
 
-	auth, err := r.auth(repository, tmpSSH)
-	if err != nil {
-		err = fmt.Errorf("auth error: %w", err)
-		return sourcev1.GitRepositoryNotReady(repository, sourcev1.AuthenticationFailedReason, err.Error()), err
+		var secret corev1.Secret
+		err := r.Client.Get(ctx, name, &secret)
+		if err != nil {
+			err = fmt.Errorf("auth secret error: %w", err)
+			return sourcev1.GitRepositoryNotReady(repository, sourcev1.AuthenticationFailedReason, err.Error()), err
+		}
+
+		method, cleanup, err := internalgit.AuthMethodFromSecret(repository.Spec.URL, secret)
+		if err != nil {
+			err = fmt.Errorf("auth error: %w", err)
+			return sourcev1.GitRepositoryNotReady(repository, sourcev1.AuthenticationFailedReason, err.Error()), err
+		}
+		if cleanup != nil {
+			defer cleanup()
+		}
+		auth = method
 	}
 
 	// create tmp dir for the Git clone
@@ -320,75 +328,4 @@ func (r *GitRepositoryReconciler) gc(repository sourcev1.GitRepository) {
 			r.Log.Info("Artifacts GC failed", "error", err)
 		}
 	}
-}
-
-func (r *GitRepositoryReconciler) auth(repository sourcev1.GitRepository, tmp string) (transport.AuthMethod, error) {
-	if repository.Spec.SecretRef == nil {
-		return nil, nil
-	}
-
-	name := types.NamespacedName{
-		Namespace: repository.GetNamespace(),
-		Name:      repository.Spec.SecretRef.Name,
-	}
-
-	var secret corev1.Secret
-	err := r.Client.Get(context.TODO(), name, &secret)
-	if err != nil {
-		return nil, err
-	}
-
-	credentials := secret.Data
-
-	// HTTP auth
-	if strings.HasPrefix(repository.Spec.URL, "http") {
-		auth := &http.BasicAuth{}
-		if username, ok := credentials["username"]; ok {
-			auth.Username = string(username)
-		}
-		if password, ok := credentials["password"]; ok {
-			auth.Password = string(password)
-		}
-
-		if auth.Username == "" || auth.Password == "" {
-			return nil, fmt.Errorf("invalid '%s' secret data: required fields username and password",
-				repository.Spec.SecretRef.Name)
-		}
-
-		return auth, nil
-	}
-
-	// SSH auth
-	if strings.HasPrefix(repository.Spec.URL, "ssh") {
-		var privateKey []byte
-		if identity, ok := credentials["identity"]; ok {
-			privateKey = identity
-		} else {
-			return nil, fmt.Errorf("invalid '%s' secret data: required field identity", repository.Spec.SecretRef.Name)
-		}
-
-		pk, err := ssh.NewPublicKeys("git", privateKey, "")
-		if err != nil {
-			return nil, err
-		}
-
-		known_hosts := filepath.Join(tmp, "known_hosts")
-		if kh, ok := credentials["known_hosts"]; ok {
-			if err := ioutil.WriteFile(filepath.Join(tmp, "known_hosts"), kh, 0644); err != nil {
-				return nil, err
-			}
-		} else {
-			return nil, fmt.Errorf("invalid '%s' secret data: required field known_hosts", repository.Spec.SecretRef.Name)
-		}
-
-		callback, err := ssh.NewKnownHostsCallback(known_hosts)
-		if err != nil {
-			return nil, err
-		}
-		pk.HostKeyCallback = callback
-
-		return pk, nil
-	}
-
-	return nil, nil
 }
