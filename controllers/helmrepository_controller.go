@@ -74,12 +74,14 @@ func (r *HelmRepositoryReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 	}
 
 	// try to remove old artifacts
-	r.gc(repository)
+	if err := r.gc(repository); err != nil {
+		log.Error(err, "artifacts GC failed")
+	}
 
 	// try to download index
 	syncedRepo, err := r.sync(*repository.DeepCopy())
 	if err != nil {
-		log.Info("Helm repository sync failed", "error", err.Error())
+		log.Error(err, "Helm repository sync failed")
 	}
 
 	// update status
@@ -221,10 +223,9 @@ func (r *HelmRepositoryReconciler) shouldResetStatus(repository sourcev1.HelmRep
 	}
 }
 
-func (r *HelmRepositoryReconciler) gc(repository sourcev1.HelmRepository) {
+func (r *HelmRepositoryReconciler) gc(repository sourcev1.HelmRepository) error {
 	if repository.Status.Artifact != nil {
-		if err := r.Storage.RemoveAllButCurrent(*repository.Status.Artifact); err != nil {
-			r.Log.Info("Artifacts GC failed", "error", err)
-		}
+		return r.Storage.RemoveAllButCurrent(*repository.Status.Artifact)
 	}
+	return nil
 }

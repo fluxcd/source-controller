@@ -72,12 +72,14 @@ func (r *GitRepositoryReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 	}
 
 	// try to remove old artifacts
-	r.gc(repo)
+	if err := r.gc(repo); err != nil {
+		log.Error(err, "artifacts GC failed")
+	}
 
 	// try git clone
 	syncedRepo, err := r.sync(ctx, *repo.DeepCopy())
 	if err != nil {
-		log.Info("Git repository sync failed", "error", err.Error())
+		log.Error(err, "Git repository sync failed")
 	}
 
 	// update status
@@ -322,10 +324,9 @@ func (r *GitRepositoryReconciler) shouldResetStatus(repository sourcev1.GitRepos
 	}
 }
 
-func (r *GitRepositoryReconciler) gc(repository sourcev1.GitRepository) {
+func (r *GitRepositoryReconciler) gc(repository sourcev1.GitRepository) error {
 	if repository.Status.Artifact != nil {
-		if err := r.Storage.RemoveAllButCurrent(*repository.Status.Artifact); err != nil {
-			r.Log.Info("Artifacts GC failed", "error", err)
-		}
+		return r.Storage.RemoveAllButCurrent(*repository.Status.Artifact)
 	}
+	return nil
 }
