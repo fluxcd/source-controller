@@ -104,7 +104,7 @@ func (r *HelmChartReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	log.Info("Helm chart sync succeeded", "msg", sourcev1.HelmChartReadyMessage(pulledChart))
 
 	// requeue chart
-	return ctrl.Result{RequeueAfter: repository.Spec.Interval.Duration}, nil
+	return ctrl.Result{RequeueAfter: chart.GetInterval().Duration}, nil
 }
 
 func (r *HelmChartReconciler) SetupWithManager(mgr ctrl.Manager) error {

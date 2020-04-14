@@ -91,7 +91,7 @@ func (r *HelmRepositoryReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 	log.Info("Helm repository sync succeeded", "msg", sourcev1.HelmRepositoryReadyMessage(syncedRepo))
 
 	// requeue repository
-	return ctrl.Result{RequeueAfter: repository.Spec.Interval.Duration}, nil
+	return ctrl.Result{RequeueAfter: repository.GetInterval().Duration}, nil
 }
 
 func (r *HelmRepositoryReconciler) SetupWithManager(mgr ctrl.Manager) error {

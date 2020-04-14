@@ -38,18 +38,8 @@ type HelmChartSpec struct {
 	HelmRepositoryRef corev1.LocalObjectReference `json:"helmRepositoryRef"`
 
 	// The interval at which to check the Helm repository for updates.
-	// Defaults to the interval of the Helm repository.
-	// +optional
-	Interval *metav1.Duration `json:"interval,omitempty"`
-}
-
-// IntervalOrDefault returns the defined interval on the HelmChartSpec
-// or the given default.
-func (s HelmChartSpec) IntervalOrDefault(interval metav1.Duration) metav1.Duration {
-	if s.Interval == nil {
-		return interval
-	}
-	return *s.Interval
+	// +required
+	Interval metav1.Duration `json:"interval,omitempty"`
 }
 
 // HelmChartStatus defines the observed state of HelmChart
@@ -119,6 +109,17 @@ func HelmChartReadyMessage(chart HelmChart) string {
 		}
 	}
 	return ""
+}
+
+// GetArtifact returns the latest artifact from the source
+// if present in the status sub-resource.
+func (in *HelmChart) GetArtifact() *Artifact {
+	return in.Status.Artifact
+}
+
+// GetInterval returns the interval at which the source is updated.
+func (in *HelmChart) GetInterval() metav1.Duration {
+	return in.Spec.Interval
 }
 
 // +kubebuilder:object:root=true
