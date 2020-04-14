@@ -65,4 +65,8 @@ const (
 	// AuthenticationFailedReason represents the fact that a given secret does not
 	// have the required fields or the provided credentials do not match.
 	AuthenticationFailedReason string = "AuthenticationFailed"
+
+	// VerificationFailedReason represents the fact that the cryptographic provenance
+	// verification for the source failed.
+	VerificationFailedReason string = "VerificationFailed"
 )

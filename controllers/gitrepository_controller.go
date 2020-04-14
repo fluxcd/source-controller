@@ -36,7 +36,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1alpha1"
-	internalgit "github.com/fluxcd/source-controller/internal/git"
+	intgit "github.com/fluxcd/source-controller/internal/git"
 )
 
 // GitRepositoryReconciler reconciles a GitRepository object
@@ -76,10 +76,11 @@ func (r *GitRepositoryReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 		log.Error(err, "artifacts GC failed")
 	}
 
-	// try git clone
+	// try git sync
 	syncedRepo, err := r.sync(ctx, *repo.DeepCopy())
 	if err != nil {
 		log.Error(err, "Git repository sync failed")
+		return ctrl.Result{Requeue: true}, err
 	}
 
 	// update status
@@ -128,6 +129,7 @@ func (r *GitRepositoryReconciler) sync(ctx context.Context, repository sourcev1.
 		}
 	}
 
+	// determine auth method
 	var auth transport.AuthMethod
 	if repository.Spec.SecretRef != nil {
 		name := types.NamespacedName{
@@ -142,7 +144,7 @@ func (r *GitRepositoryReconciler) sync(ctx context.Context, repository sourcev1.
 			return sourcev1.GitRepositoryNotReady(repository, sourcev1.AuthenticationFailedReason, err.Error()), err
 		}
 
-		method, cleanup, err := internalgit.AuthMethodFromSecret(repository.Spec.URL, secret)
+		method, cleanup, err := intgit.AuthMethodFromSecret(repository.Spec.URL, secret)
 		if err != nil {
 			err = fmt.Errorf("auth error: %w", err)
 			return sourcev1.GitRepositoryNotReady(repository, sourcev1.AuthenticationFailedReason, err.Error()), err
@@ -259,6 +261,45 @@ func (r *GitRepositoryReconciler) sync(ctx context.Context, repository sourcev1.
 		return sourcev1.GitRepositoryNotReady(repository, sourcev1.GitOperationFailedReason, err.Error()), err
 	}
 
+	// verify PGP signature
+	if repository.Spec.Verification != nil {
+		commit, err := repo.CommitObject(ref.Hash())
+		if err != nil {
+			err = fmt.Errorf("git resolve HEAD error: %w", err)
+			return sourcev1.GitRepositoryNotReady(repository, sourcev1.GitOperationFailedReason, err.Error()), err
+		}
+
+		if commit.PGPSignature == "" {
+			err = fmt.Errorf("PGP signature not found for commit '%s'", ref.Hash())
+			return sourcev1.GitRepositoryNotReady(repository, sourcev1.VerificationFailedReason, err.Error()), err
+		}
+
+		name := types.NamespacedName{
+			Namespace: repository.GetNamespace(),
+			Name:      repository.Spec.Verification.SecretRef.Name,
+		}
+
+		var secret corev1.Secret
+		err = r.Client.Get(ctx, name, &secret)
+		if err != nil {
+			err = fmt.Errorf("PGP public keys secret error: %w", err)
+			return sourcev1.GitRepositoryNotReady(repository, sourcev1.VerificationFailedReason, err.Error()), err
+		}
+
+		var verified bool
+		for _, bytes := range secret.Data {
+			if _, err := commit.Verify(string(bytes)); err == nil {
+				verified = true
+				break
+			}
+		}
+
+		if !verified {
+			err = fmt.Errorf("PGP signature of '%s' can't be verified", commit.Author)
+			return sourcev1.GitRepositoryNotReady(repository, sourcev1.VerificationFailedReason, err.Error()), err
+		}
+	}
+
 	if revision == "" {
 		revision = fmt.Sprintf("%s/%s", branch, ref.Hash().String())
 	}
@@ -307,7 +348,6 @@ func (r *GitRepositoryReconciler) shouldResetStatus(repository sourcev1.GitRepos
 		}
 	}
 
-	// set initial status
 	if len(repository.Status.Conditions) == 0 || resetStatus {
 		resetStatus = true
 	}
