@@ -18,6 +18,9 @@ type HelmRepositorySpec struct {
     
 	// The name of the secret containing authentication credentials
 	// for the Helm repository.
+	// For HTTP/S basic auth the secret must contain username and password
+	// fields.
+	// For TLS the secret must contain caFile, keyFile and caCert fields.
 	// +optional
 	SecretRef *v1.LocalObjectReference `json:"secretRef,omitempty"`
 
@@ -30,7 +33,7 @@ type HelmRepositorySpec struct {
 ### Status
 
 ```go
-// HelmRepositoryStatus defines the observed state of HelmRepository
+// HelmRepositoryStatus defines the observed state of the HelmRepository.
 type HelmRepositoryStatus struct {
 	// +optional
 	Conditions []SourceCondition `json:"conditions,omitempty"`
@@ -52,6 +55,7 @@ const (
 	// IndexationFailedReason represents the fact that the indexation
 	// of the given Helm repository failed.
 	IndexationFailedReason  string = "IndexationFailed"
+
 	// IndexationSucceededReason represents the fact that the indexation
 	// of the given Helm repository succeeded.
 	IndexationSucceedReason string = "IndexationSucceed"

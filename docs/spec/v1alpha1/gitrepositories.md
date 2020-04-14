@@ -9,13 +9,17 @@ an archive.
 Git repository:
 
 ```go
-// GitRepositorySpec defines the desired state of GitRepository.
+// GitRepositorySpec defines the desired state of a Git repository.
 type GitRepositorySpec struct {
 	// The repository URL, can be a HTTP or SSH address.
 	// +kubebuilder:validation:Pattern="^(http|https|ssh)://"
 	URL string `json:"url"`
 
 	// The secret name containing the Git credentials.
+	// For HTTPS repositories the secret must contain username and password
+	// fields.
+	// For SSH repositories the secret must contain identity, identity.pub and
+	// known_hosts fields.
 	// +optional
 	SecretRef *v1.LocalObjectReference `json:"secretRef,omitempty"`
 	
@@ -47,7 +51,7 @@ type GitRepositoryRef struct {
 	SemVer string `json:"semver"`
 
 	// The git commit sha to checkout, if specified branch and tag filters will
-	// be ignored.
+	// ignored.
 	// +optional
 	Commit string `json:"commit"`
 }
@@ -56,7 +60,7 @@ type GitRepositoryRef struct {
 ### Status
 
 ```go
-// GitRepositoryStatus defines the observed state of GitRepository.
+// GitRepositoryStatus defines the observed state of the GitRepository.
 type GitRepositoryStatus struct {
 	// +optional
 	Conditions []SourceCondition `json:"conditions,omitempty"`
@@ -79,6 +83,7 @@ const (
 	// GitOperationSucceedReason represents the fact that the git
 	// clone, pull and checkout operations succeeded.
 	GitOperationSucceedReason string = "GitOperationSucceed"
+
 	// GitOperationFailedReason represents the fact that the git
 	// clone, pull or checkout operations failed.
 	GitOperationFailedReason  string = "GitOperationFailed"
