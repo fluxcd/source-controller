@@ -21,7 +21,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// HelmRepositorySpec defines the desired state of HelmRepository
+// HelmRepositorySpec defines the reference to a Helm repository.
 type HelmRepositorySpec struct {
 	// The Helm repository URL, a valid URL contains at least a
 	// protocol and host.
@@ -30,15 +30,18 @@ type HelmRepositorySpec struct {
 
 	// The name of the secret containing authentication credentials
 	// for the Helm repository.
+	// For HTTP/S basic auth the secret must contain username and password
+	// fields.
+	// For TLS the secret must contain caFile, keyFile and caCert fields.
 	// +optional
 	SecretRef *corev1.LocalObjectReference `json:"secretRef,omitempty"`
 
-	// The interval at which to check for repository updates
+	// The interval at which to check the upstream for updates.
 	// +required
 	Interval metav1.Duration `json:"interval"`
 }
 
-// HelmRepositoryStatus defines the observed state of HelmRepository
+// HelmRepositoryStatus defines the observed state of the HelmRepository.
 type HelmRepositoryStatus struct {
 	// +optional
 	Conditions []SourceCondition `json:"conditions,omitempty"`

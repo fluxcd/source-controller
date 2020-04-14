@@ -21,7 +21,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// SourceCondition contains condition information for a source
+// SourceCondition contains condition information for a source.
 type SourceCondition struct {
 	// Type of the condition, currently ('Ready').
 	// +required
@@ -50,17 +50,19 @@ type SourceCondition struct {
 const (
 	// ReadyCondition represents the fact that a given source is in ready state.
 	ReadyCondition string = "Ready"
+)
 
-	// InitializingReason represents the fact that a given source is being initialize.
+const (
+	// InitializingReason represents the fact that a given source is being initialized.
 	InitializingReason string = "Initializing"
-
-	// StorageOperationFailedReason signals a failure caused by a storage operation.
-	StorageOperationFailedReason string = "StorageOperationFailed"
 
 	// URLInvalidReason represents the fact that a given source has an invalid URL.
 	URLInvalidReason string = "URLInvalid"
 
-	// AuthenticationFailedReason represents the fact that a given secret doesn't
-	// have the required fields or the provided credentials don't match.
+	// StorageOperationFailedReason signals a failure caused by a storage operation.
+	StorageOperationFailedReason string = "StorageOperationFailed"
+
+	// AuthenticationFailedReason represents the fact that a given secret does not
+	// have the required fields or the provided credentials do not match.
 	AuthenticationFailedReason string = "AuthenticationFailed"
 )

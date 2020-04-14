@@ -21,7 +21,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// HelmChartSpec defines the desired state of HelmChart
+// HelmChartSpec defines the desired state of a Helm chart.
 type HelmChartSpec struct {
 	// The name of the Helm chart, as made available by the referenced
 	// Helm repository.
@@ -39,10 +39,10 @@ type HelmChartSpec struct {
 
 	// The interval at which to check the Helm repository for updates.
 	// +required
-	Interval metav1.Duration `json:"interval,omitempty"`
+	Interval metav1.Duration `json:"interval"`
 }
 
-// HelmChartStatus defines the observed state of HelmChart
+// HelmChartStatus defines the observed state of the HelmChart.
 type HelmChartStatus struct {
 	// +optional
 	Conditions []SourceCondition `json:"conditions,omitempty"`
@@ -51,7 +51,7 @@ type HelmChartStatus struct {
 	// +optional
 	URL string `json:"url,omitempty"`
 
-	// URI for the artifact of the latest successful chart pull.
+	// Artifact represents the output of the last successful chart sync.
 	// +optional
 	Artifact *Artifact `json:"artifact,omitempty"`
 }

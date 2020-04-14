@@ -47,14 +47,16 @@ spec:
         metadata:
           type: object
         spec:
-          description: HelmRepositorySpec defines the desired state of HelmRepository
+          description: HelmRepositorySpec defines the reference to a Helm repository.
           properties:
             interval:
-              description: The interval at which to check for repository updates
+              description: The interval at which to check the upstream for updates.
               type: string
             secretRef:
               description: The name of the secret containing authentication credentials
-                for the Helm repository.
+                for the Helm repository. For HTTP/S basic auth the secret must contain
+                username and password fields. For TLS the secret must contain caFile,
+                keyFile and caCert fields.
               properties:
                 name:
                   description: 'Name of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
@@ -70,7 +72,7 @@ spec:
           - url
           type: object
         status:
-          description: HelmRepositoryStatus defines the observed state of HelmRepository
+          description: HelmRepositoryStatus defines the observed state of the HelmRepository.
           properties:
             artifact:
               description: Artifact represents the output of the last successful repository
@@ -99,7 +101,7 @@ spec:
             conditions:
               items:
                 description: SourceCondition contains condition information for a
-                  source
+                  source.
                 properties:
                   lastTransitionTime:
                     description: LastTransitionTime is the timestamp corresponding
