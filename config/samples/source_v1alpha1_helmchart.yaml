@@ -7,3 +7,4 @@ spec:
   version: '^2.0.0'
   helmRepositoryRef:
     name: helmrepository-sample
+  interval: 1m

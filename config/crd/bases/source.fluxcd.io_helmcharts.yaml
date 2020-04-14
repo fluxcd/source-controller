@@ -53,7 +53,7 @@ spec:
         metadata:
           type: object
         spec:
-          description: HelmChartSpec defines the desired state of HelmChart
+          description: HelmChartSpec defines the desired state of a Helm chart.
           properties:
             helmRepositoryRef:
               description: The name of the HelmRepository the chart is available at.
@@ -77,13 +77,15 @@ spec:
               type: string
           required:
           - helmRepositoryRef
+          - interval
           - name
           type: object
         status:
-          description: HelmChartStatus defines the observed state of HelmChart
+          description: HelmChartStatus defines the observed state of the HelmChart.
           properties:
             artifact:
-              description: URI for the artifact of the latest successful chart pull.
+              description: Artifact represents the output of the last successful chart
+                sync.
               properties:
                 lastUpdateTime:
                   description: LastUpdateTime is the timestamp corresponding to the
@@ -108,7 +110,7 @@ spec:
             conditions:
               items:
                 description: SourceCondition contains condition information for a
-                  source
+                  source.
                 properties:
                   lastTransitionTime:
                     description: LastTransitionTime is the timestamp corresponding

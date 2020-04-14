@@ -21,7 +21,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// GitRepositorySpec defines the desired state of GitRepository
+// GitRepositorySpec defines the desired state of a Git repository.
 type GitRepositorySpec struct {
 	// The repository URL, can be a HTTP or SSH address.
 	// +kubebuilder:validation:Pattern="^(http|https|ssh)://"
@@ -29,8 +29,10 @@ type GitRepositorySpec struct {
 	URL string `json:"url"`
 
 	// The secret name containing the Git credentials.
-	// For HTTPS repositories the secret must contain username and password fields.
-	// For SSH repositories the secret must contain identity, identity.pub and known_hosts fields.
+	// For HTTPS repositories the secret must contain username and password
+	// fields.
+	// For SSH repositories the secret must contain identity, identity.pub and
+	// known_hosts fields.
 	// +optional
 	SecretRef *corev1.LocalObjectReference `json:"secretRef,omitempty"`
 
@@ -38,12 +40,13 @@ type GitRepositorySpec struct {
 	// +required
 	Interval metav1.Duration `json:"interval"`
 
-	// The git reference to checkout and monitor for changes, defaults to master branch.
+	// The git reference to checkout and monitor for changes, defaults to
+	// master branch.
 	// +optional
 	Reference *GitRepositoryRef `json:"ref,omitempty"`
 }
 
-// GitRepositoryRef defines the git ref used for pull and checkout operations
+// GitRepositoryRef defines the git ref used for pull and checkout operations.
 type GitRepositoryRef struct {
 	// The git branch to checkout, defaults to master.
 	// +optional
@@ -57,17 +60,19 @@ type GitRepositoryRef struct {
 	// +optional
 	SemVer string `json:"semver"`
 
-	// The git commit sha to checkout, if specified tag filters will be ignored.
+	// The git commit sha to checkout, if specified tag filters will be
+	// ignored.
 	// +optional
 	Commit string `json:"commit"`
 }
 
-// GitRepositoryStatus defines the observed state of GitRepository
+// GitRepositoryStatus defines the observed state of the GitRepository.
 type GitRepositoryStatus struct {
 	// +optional
 	Conditions []SourceCondition `json:"conditions,omitempty"`
 
-	// URL is the download link for the artifact output of the last repository sync.
+	// URL is the download link for the artifact output of the last repository
+	// sync.
 	// +optional
 	URL string `json:"url,omitempty"`
 
@@ -77,8 +82,13 @@ type GitRepositoryStatus struct {
 }
 
 const (
+	// GitOperationSucceedReason represents the fact that the git clone, pull
+	// and checkout operations succeeded.
 	GitOperationSucceedReason string = "GitOperationSucceed"
-	GitOperationFailedReason  string = "GitOperationFailed"
+
+	// GitOperationFailedReason represents the fact that the git clone, pull or
+	// checkout operations failed.
+	GitOperationFailedReason string = "GitOperationFailed"
 )
 
 func GitRepositoryReady(repository GitRepository, artifact Artifact, url, reason, message string) GitRepository {
