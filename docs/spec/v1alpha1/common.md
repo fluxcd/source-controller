@@ -4,6 +4,21 @@ Common defines resources used across all source types.
 
 ## Specification
 
+### Source interface
+
+Source objects should adhere to the `Source` interface. This interface exposes the [interval](#source-synchronization)
+and [artifact](#source-status) of the source to clients without the prerequisite of knowing the source kind:
+
+````go
+type Source interface {
+	// GetInterval returns the interval at which the source is updated.
+	GetInterval() metav1.Duration
+
+	// GetArtifact returns the latest artifact from the source, or nil.
+	GetArtifact() *Artifact
+}
+````
+
 ### Source synchronization
 
 Source objects should contain a `spec.interval` field that tells the controller at which interval to check for updates:
