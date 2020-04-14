@@ -72,7 +72,9 @@ func (r *HelmChartReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	}
 
 	// try to remove old artifacts
-	r.gc(chart)
+	if err := r.gc(chart); err != nil {
+		log.Error(err, "artifacts GC failed")
+	}
 
 	// get referenced chart repository
 	repository, err := r.chartRepository(ctx, chart)
@@ -87,12 +89,14 @@ func (r *HelmChartReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 
 	// set ownership reference so chart is garbage collected on
 	// repository removal
-	r.setOwnerRef(ctx, &chart, repository)
+	if err := r.setOwnerRef(ctx, &chart, repository); err != nil {
+		log.Error(err, "failed to set owner reference")
+	}
 
 	// try to pull chart
 	pulledChart, err := r.sync(repository, *chart.DeepCopy())
 	if err != nil {
-		log.Info("Helm chart sync failed", "error", err.Error())
+		log.Error(err, "Helm chart sync failed")
 	}
 
 	// update status
@@ -278,21 +282,18 @@ func (r *HelmChartReconciler) shouldResetStatus(chart sourcev1.HelmChart) (bool,
 	}
 }
 
-func (r *HelmChartReconciler) gc(chart sourcev1.HelmChart) {
+func (r *HelmChartReconciler) gc(chart sourcev1.HelmChart) error {
 	if chart.Status.Artifact != nil {
-		if err := r.Storage.RemoveAllButCurrent(*chart.Status.Artifact); err != nil {
-			r.Log.Info("Artifacts GC failed", "error", err)
-		}
+		return r.Storage.RemoveAllButCurrent(*chart.Status.Artifact)
 	}
+	return nil
 }
 
-func (r *HelmChartReconciler) setOwnerRef(ctx context.Context, chart *sourcev1.HelmChart, repository sourcev1.HelmRepository) {
-	if metav1.IsControlledBy(chart.GetObjectMeta(), repository.GetObjectMeta()) {
-		return
+func (r *HelmChartReconciler) setOwnerRef(ctx context.Context, chart *sourcev1.HelmChart, repository sourcev1.HelmRepository) error {
+	if !metav1.IsControlledBy(chart.GetObjectMeta(), repository.GetObjectMeta()) {
+		chart.SetOwnerReferences(append(chart.GetOwnerReferences(),
+			*metav1.NewControllerRef(repository.GetObjectMeta(), repository.GroupVersionKind())))
+		return r.Update(ctx, chart)
 	}
-	chart.SetOwnerReferences(append(chart.GetOwnerReferences(),
-		*metav1.NewControllerRef(repository.GetObjectMeta(), repository.GroupVersionKind())))
-	if err := r.Update(ctx, chart); err != nil {
-		r.Log.Error(err, fmt.Sprintf("failed to set owner reference to HelmRepository '%s'", repository.Name))
-	}
+	return nil
 }

@@ -104,7 +104,7 @@ func HelmChartNotReady(chart HelmChart, reason, message string) HelmChart {
 
 func HelmChartReadyMessage(chart HelmChart) string {
 	for _, condition := range chart.Status.Conditions {
-		if condition.Type == ReadyCondition {
+		if condition.Type == ReadyCondition && condition.Status == corev1.ConditionTrue {
 			return condition.Message
 		}
 	}
