@@ -100,7 +100,7 @@ func HelmRepositoryNotReady(repository HelmRepository, reason, message string) H
 
 func HelmRepositoryReadyMessage(repository HelmRepository) string {
 	for _, condition := range repository.Status.Conditions {
-		if condition.Type == ReadyCondition {
+		if condition.Type == ReadyCondition && condition.Status == corev1.ConditionTrue {
 			return condition.Message
 		}
 	}
