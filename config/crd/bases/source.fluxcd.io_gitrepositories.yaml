@@ -87,10 +87,12 @@ spec:
               pattern: ^(http|https|ssh)://
               type: string
             verify:
-              description: Verify PGP signature for the commit that HEAD points to.
+              description: Verify OpenPGP signature for the commit that HEAD points
+                to.
               properties:
                 mode:
-                  description: Mode describes what git object should be verified.
+                  description: Mode describes what git object should be verified,
+                    currently ('head').
                   enum:
                   - head
                   type: string
@@ -111,7 +113,7 @@ spec:
           - url
           type: object
         status:
-          description: GitRepositoryStatus defines the observed state of the GitRepository.
+          description: GitRepositoryStatus defines the observed state of a Git repository.
           properties:
             artifact:
               description: Artifact represents the output of the last successful repository

@@ -80,7 +80,7 @@ type GitRepositoryVerification struct {
 	SecretRef corev1.LocalObjectReference `json:"secretRef,omitempty"`
 }
 
-// GitRepositoryStatus defines the observed state of Git repository.
+// GitRepositoryStatus defines the observed state of a Git repository.
 type GitRepositoryStatus struct {
 	// +optional
 	Conditions []SourceCondition `json:"conditions,omitempty"`

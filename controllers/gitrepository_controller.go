@@ -271,7 +271,7 @@ func (r *GitRepositoryReconciler) sync(ctx context.Context, repository sourcev1.
 
 		if commit.PGPSignature == "" {
 			err = fmt.Errorf("PGP signature not found for commit '%s'", ref.Hash())
-			return sourcev1.GitRepositoryNotReady(repository, sourcev1.GitOperationFailedReason, err.Error()), err
+			return sourcev1.GitRepositoryNotReady(repository, sourcev1.VerificationFailedReason, err.Error()), err
 		}
 
 		name := types.NamespacedName{
@@ -283,7 +283,7 @@ func (r *GitRepositoryReconciler) sync(ctx context.Context, repository sourcev1.
 		err = r.Client.Get(ctx, name, &secret)
 		if err != nil {
 			err = fmt.Errorf("PGP public keys secret error: %w", err)
-			return sourcev1.GitRepositoryNotReady(repository, sourcev1.GitOperationFailedReason, err.Error()), err
+			return sourcev1.GitRepositoryNotReady(repository, sourcev1.VerificationFailedReason, err.Error()), err
 		}
 
 		var verified bool
@@ -296,7 +296,7 @@ func (r *GitRepositoryReconciler) sync(ctx context.Context, repository sourcev1.
 
 		if !verified {
 			err = fmt.Errorf("PGP signature of '%s' can't be verified", commit.Author)
-			return sourcev1.GitRepositoryNotReady(repository, sourcev1.GitOperationFailedReason, err.Error()), err
+			return sourcev1.GitRepositoryNotReady(repository, sourcev1.VerificationFailedReason, err.Error()), err
 		}
 	}
 
