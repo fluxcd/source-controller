@@ -45,7 +45,7 @@ type GitRepositorySpec struct {
 	// +optional
 	Reference *GitRepositoryRef `json:"ref,omitempty"`
 
-	// Verify PGP signature for the commit that HEAD points to.
+	// Verify OpenPGP signature for the commit that HEAD points to.
 	// +optional
 	Verification *GitRepositoryVerification `json:"verify,omitempty"`
 }
@@ -70,10 +70,9 @@ type GitRepositoryRef struct {
 	Commit string `json:"commit"`
 }
 
-// GitRepositoryStatus defines the observed state of the GitRepository.
-// GitRepositoryVerification defines the GPG signature verification process
+// GitRepositoryVerification defines the OpenPGP signature verification process.
 type GitRepositoryVerification struct {
-	// Mode describes what git object should be verified.
+	// Mode describes what git object should be verified, currently ('head').
 	// +kubebuilder:validation:Enum=head
 	Mode string `json:"mode"`
 
@@ -81,7 +80,7 @@ type GitRepositoryVerification struct {
 	SecretRef corev1.LocalObjectReference `json:"secretRef,omitempty"`
 }
 
-// GitRepositoryStatus defines the observed state of GitRepository
+// GitRepositoryStatus defines the observed state of Git repository.
 type GitRepositoryStatus struct {
 	// +optional
 	Conditions []SourceCondition `json:"conditions,omitempty"`

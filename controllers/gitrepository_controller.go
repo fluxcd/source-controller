@@ -282,7 +282,7 @@ func (r *GitRepositoryReconciler) sync(ctx context.Context, repository sourcev1.
 		var secret corev1.Secret
 		err = r.Client.Get(ctx, name, &secret)
 		if err != nil {
-			err = fmt.Errorf("GPG public keys secret error: %w", err)
+			err = fmt.Errorf("PGP public keys secret error: %w", err)
 			return sourcev1.GitRepositoryNotReady(repository, sourcev1.GitOperationFailedReason, err.Error()), err
 		}
 
