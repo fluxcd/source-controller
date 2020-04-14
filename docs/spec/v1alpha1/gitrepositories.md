@@ -22,14 +22,18 @@ type GitRepositorySpec struct {
 	// known_hosts fields.
 	// +optional
 	SecretRef *v1.LocalObjectReference `json:"secretRef,omitempty"`
-	
+
+	// The interval at which to check for repository updates.
+	Interval metav1.Duration `json:"interval"`
+
 	// The git reference to checkout and monitor for changes, defaults to
 	// master branch.
 	// +optional
 	Reference *GitRepositoryRef `json:"ref,omitempty"`
 
-	// The interval at which to check for repository updates.
-	Interval metav1.Duration `json:"interval"`
+	// Verify OpenPGP signature for the commit that HEAD points to.
+	// +optional
+	Verification *GitRepositoryVerification `json:"verify,omitempty"`
 }
 ```
 
@@ -54,6 +58,20 @@ type GitRepositoryRef struct {
 	// ignored.
 	// +optional
 	Commit string `json:"commit"`
+}
+```
+
+Git repository cryptographic provenance verification:
+
+```go
+// GitRepositoryVerification defines the OpenPGP signature verification process.
+type GitRepositoryVerification struct {
+	// Mode describes what git object should be verified, currently ('head').
+	// +kubebuilder:validation:Enum=head
+	Mode string `json:"mode"`
+
+	// The secret name containing the public keys of all trusted git authors.
+	SecretRef corev1.LocalObjectReference `json:"secretRef"`
 }
 ```
 
@@ -230,6 +248,46 @@ kubectl create secret generic ssh-credentials \
     --from-file=./known_hosts
 ```
 
+Verify the OpenPGP signature for the commit that master branch HEAD points to:
+
+```yaml
+apiVersion: source.fluxcd.io/v1alpha1
+kind: GitRepository
+metadata:
+  name: podinfo
+  namespace: default
+spec:
+  interval: 1m
+  url: https://github.com/stefanprodan/podinfo
+  ref:
+    branch: master
+  verify:
+    mode: head
+    secretRef:
+      name: pgp-public-keys
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: pgp-public-keys
+  namespace: default
+type: Opaque
+data:
+  author1.asc: <BASE64> 
+  author2.asc: <BASE64> 
+```
+
+Example of generating the PGP public keys secret:
+
+```bash
+gpg --export --armor 3CB12BA185C47B67 > author1.asc
+gpg --export --armor 6A7436E8790F8689 > author2.asc
+
+kubectl create secret generic pgp-public-keys \
+    --from-file=author1.asc \
+    --from-file=author2.asc
+```
+
 ## Status examples
 
 Successful sync:
@@ -251,7 +309,7 @@ status:
   url: http://<host>/gitrepository/podinfo-default/latest.tar.gz
 ```
 
-Failed sync:
+Failed authentication:
 
 ```yaml
 status:
@@ -260,6 +318,18 @@ status:
     message: 'git clone error ssh: handshake failed: ssh: unable to authenticate,
       attempted methods [none publickey], no supported methods remain'
     reason: AuthenticationFailed
+    status: "False"
+    type: Ready
+```
+
+Failed PGP signature verification:
+
+```yaml
+status:
+  conditions:
+  - lastTransitionTime: "2020-04-06T06:48:59Z"
+    message: 'PGP signature of {Stefan Prodan 2020-04-04 13:36:58 +0300 +0300} can not be verified'
+    reason: VerificationFailed
     status: "False"
     type: Ready
 ```
