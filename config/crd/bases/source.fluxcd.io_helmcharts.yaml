@@ -65,7 +65,7 @@ spec:
               type: object
             interval:
               description: The interval at which to check the Helm repository for
-                updates. Defaults to the interval of the Helm repository.
+                updates.
               type: string
             name:
               description: The name of the Helm chart, as made available by the referenced

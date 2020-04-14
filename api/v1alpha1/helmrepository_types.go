@@ -107,6 +107,17 @@ func HelmRepositoryReadyMessage(repository HelmRepository) string {
 	return ""
 }
 
+// GetArtifact returns the latest artifact from the source
+// if present in the status sub-resource.
+func (in *HelmRepository) GetArtifact() *Artifact {
+	return in.Status.Artifact
+}
+
+// GetInterval returns the interval at which the source is updated.
+func (in *HelmRepository) GetInterval() metav1.Duration {
+	return in.Spec.Interval
+}
+
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="URL",type=string,JSONPath=`.spec.url`

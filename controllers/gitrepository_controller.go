@@ -89,7 +89,7 @@ func (r *GitRepositoryReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 	log.Info("Git repository sync succeeded", "msg", sourcev1.GitRepositoryReadyMessage(syncedRepo))
 
 	// requeue repository
-	return ctrl.Result{RequeueAfter: repo.Spec.Interval.Duration}, nil
+	return ctrl.Result{RequeueAfter: repo.GetInterval().Duration}, nil
 }
 
 func (r *GitRepositoryReconciler) SetupWithManager(mgr ctrl.Manager) error {
