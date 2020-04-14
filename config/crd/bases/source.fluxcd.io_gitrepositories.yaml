@@ -86,6 +86,26 @@ spec:
               description: The repository URL, can be a HTTP or SSH address.
               pattern: ^(http|https|ssh)://
               type: string
+            verify:
+              description: Verify PGP signature for the commit that HEAD points to.
+              properties:
+                mode:
+                  description: Mode describes what git object should be verified.
+                  enum:
+                  - head
+                  type: string
+                secretRef:
+                  description: The secret name containing the public keys of all trusted
+                    git authors.
+                  properties:
+                    name:
+                      description: 'Name of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                        TODO: Add other useful fields. apiVersion, kind, uid?'
+                      type: string
+                  type: object
+              required:
+              - mode
+              type: object
           required:
           - interval
           - url

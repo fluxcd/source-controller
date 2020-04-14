@@ -44,6 +44,10 @@ type GitRepositorySpec struct {
 	// master branch.
 	// +optional
 	Reference *GitRepositoryRef `json:"ref,omitempty"`
+
+	// Verify PGP signature for the commit that HEAD points to.
+	// +optional
+	Verification *GitRepositoryVerification `json:"verify,omitempty"`
 }
 
 // GitRepositoryRef defines the git ref used for pull and checkout operations.
@@ -67,6 +71,17 @@ type GitRepositoryRef struct {
 }
 
 // GitRepositoryStatus defines the observed state of the GitRepository.
+// GitRepositoryVerification defines the GPG signature verification process
+type GitRepositoryVerification struct {
+	// Mode describes what git object should be verified.
+	// +kubebuilder:validation:Enum=head
+	Mode string `json:"mode"`
+
+	// The secret name containing the public keys of all trusted git authors.
+	SecretRef corev1.LocalObjectReference `json:"secretRef,omitempty"`
+}
+
+// GitRepositoryStatus defines the observed state of GitRepository
 type GitRepositoryStatus struct {
 	// +optional
 	Conditions []SourceCondition `json:"conditions,omitempty"`
