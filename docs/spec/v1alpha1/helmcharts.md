@@ -26,9 +26,9 @@ type HelmChartSpec struct {
 	HelmRepositoryRef v1.LocalObjectReference `json:"helmRepositoryRef"`
 
 	// The interval at which to check the referenced HelmRepository index
-	// for updates. Defaults to the interval of the referenced HelmRepository.
-	// +optional
-	Interval metav1.Duration `json:"interval,omitempty"`
+	// for updates.
+	// +required
+	Interval metav1.Duration `json:"interval"`
 }
 ```
 
