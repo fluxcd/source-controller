@@ -1,44 +1,28 @@
 # Source Controller Proposal
 
-## Context
-
-The desired state of a cluster is made out of Kubernetes objects, these objects are expressed in `.yaml` format and 
-are applied on the cluster by operators running inside the cluster. An operator's role is to fetch the Kubernetes
-objects, run transformations on them and reconcile the cluster state with the resulting manifest.
-
-For an operator to acquire the resources that make up the desired state it needs to understand the communication 
-protocol and the authentication scheme, verify the authenticity of a source and deal with rate limits and retries.
-In the FluxCD organization there are currently two operators that perform such operations. Both Flux and 
-Helm Operator connect to Git repositories to fetch Kubernetes objects, they need to maintain an up-to-date mirror 
-of one or several repos. Besides Git, Helm Operator needs to connect to Helm repositories hosted on public or 
-private HTTPS servers.
+The main goal is to define a set of Kubernetes objects that cluster
+admins and various automated operators can interact with to offload
+the sources (e.g. Git and Helm repositories) registration, authentication,
+verification and resource fetching to a dedicated controller.
 
 ## Motivation
 
-Each Flux or Helm Operator instance maintains its own Git repository mirror even if all of them
-point to the same source. If the Git repository host becomes unavailable, the cluster state will diverge from the last
-known desired state since the operators will stop the reconciliation due to pull errors. 
+Each Flux and each Helm operator mirrors the Git repositories they are
+using, in the same way, using the same code. But other components
+might benefit from access to the source mirrors, and Flux and the Helm
+operator could work more in sympathy with Kubernetes by factoring it out.
 
-Decoupling the Kubernetes objects acquisition from the reconciliation process with an in-cluster 
-source manager would make Flux and Helm Operator resilient to outbound connectivity issues and would
-simplify the state machine(s) that these controllers operate.
+If "sources" (usually git repos, but also Helm charts and potentially
+other things) existed in their own right as Kubernetes resources,
+components like Flux and Helm operator could use standard Kubernetes
+mechanisms to build on them; and, they could be managed independently
+of the components using them.
 
-Managing the source operations in a dedicated controller could enable Flux to compose the desire state of a cluster
-from multiple source. Furthermore, the manifests transformation process could be performed by 3rd party tools
-(e.g. kustomize, jk, tanka, cue run by Tekton pipelines or Kubernetes Jobs)
-that subscribe to source changes events.
+## API Specification
 
-The source controller could enable pinning the cluster desired state to a specific Git commit or Git tag.
+* [v1alpha1](v1alpha1/README.md)
 
-For teams that are using semantic versioning, the source controller could monitor the Git repository tags 
-and set the cluster desired state to the latest release or to a tag that matches a semver pattern.
-In a similar fashion, a semver pattern could trigger Helm chart upgrades without manual intervention from users.
-
-## Goals
-
-The main goal is to define a set of Kubernetes objects that cluster admins and various automated operators
-can interact with to offload the sources (e.g. Git and Helm repositories)
-registration, authentication and resource fetching to a dedicated controller.
+## Implementation
 
 The controller implementation will watch for source objects in a cluster and act on them.
 The actions performed by the source controller could be:
@@ -46,12 +30,25 @@ The actions performed by the source controller could be:
 * authenticate to sources and validate authenticity
 * detect source changes based on update policies (semver)
 * fetch resources on-demand and on-a-schedule
-* package the fetched resources into a well known format (tar.gz)
+* package the fetched resources into a well known format (tar.gz, yaml)
 * store the artifacts locally
 * make the artifacts addressable by their source identifier (sha, version, ts)
 * make the artifacts available in-cluster to interested 3rd parties
 * notify interested 3rd parties of source changes and availability (status conditions, events, hooks)
 
-## API Specification
+## Impact to Flux
 
-* [v1alpha1](v1alpha1/README.md)
+Having a dedicated controller that manages Git repositories defined with Kubernetes custom resources would:
+* simplify Flux configuration as fluxd could subscribe to Git sources in-cluster and pull the artifacts
+automatically without manual intervention from users to reconfigure and redeploy FLux
+* improve the installation experience as users will not have to patch fluxd's deployment to inject
+the HTTPS basic auth credentials, change the source URL or other Git and PGP related settings
+* enable fluxd to compose the desired state of a cluster from multiple sources by applying all artifacts present in flux namespace
+* enable fluxd to apply manifests coming from other sources than Git, e.g. S3 buckets
+* allow fluxd to run under a non-root user as it wouldn't need to shell out to ssh-keygen, git or pgp 
+* enable fluxd to apply manifests coming from the most recent semver tag of a Git repository
+* allow user to pin the cluster desired state to a specific Git commit or Git tag
+
+## Impact to Helm Operator
+
+TODO
