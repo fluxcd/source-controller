@@ -26,6 +26,7 @@ of the components using them.
 
 The controller implementation will watch for source objects in a cluster and act on them.
 The actions performed by the source controller could be:
+
 * validate source definitions
 * authenticate to sources and validate authenticity
 * detect source changes based on update policies (semver)
@@ -39,6 +40,7 @@ The actions performed by the source controller could be:
 ## Impact to Flux
 
 Having a dedicated controller that manages Git repositories defined with Kubernetes custom resources would:
+
 * simplify Flux configuration as fluxd could subscribe to Git sources in-cluster and pull the artifacts
 automatically without manual intervention from users to reconfigure and redeploy FLux
 * improve the installation experience as users will not have to patch fluxd's deployment to inject
@@ -51,4 +53,13 @@ the HTTPS basic auth credentials, change the source URL or other Git and PGP rel
 
 ## Impact to Helm Operator
 
-TODO
+Having a dedicated controller that manages Helm repositories and charts defined with Kubernetes custom
+resources would:
+
+* simplify the Helm Operator configuration as repository and chart definitions can be re-used across
+  `HelmRelease` resources (see [fluxcd/helm-operator#142](https://github.com/fluxcd/helm-operator/issues/142))
+* improve the user experience as repositories requiring authentication will no longer require a
+  `repositories.yaml` import / file mount
+* simplify the architecture of the Helm Operator as it allows the operator to work with a single
+  source type (`HelmChart`) and way of preparing and executing installations and/or upgrades
+* allow the Helm Operator to run under a non-root user as it wouldn't need to shell out to git
