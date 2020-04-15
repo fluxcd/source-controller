@@ -84,7 +84,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	storage := mustInitStorage(storagePath, setupLog)
+	storage := mustInitStorage(storagePath, storageAddr, setupLog)
 
 	go startFileServer(storage.BasePath, storageAddr, setupLog)
 
@@ -135,13 +135,14 @@ func startFileServer(path string, address string, l logr.Logger) {
 	}
 }
 
-func mustInitStorage(path string, l logr.Logger) *controllers.Storage {
+func mustInitStorage(path string, storageAddr string, l logr.Logger) *controllers.Storage {
 	if path == "" {
 		p, _ := os.Getwd()
 		path = filepath.Join(p, "bin")
+		os.MkdirAll(path, 0777)
 	}
 
-	hostname := "localhost"
+	hostname := "localhost" + storageAddr
 	if os.Getenv("RUNTIME_NAMESPACE") != "" {
 		svcParts := strings.Split(os.Getenv("HOSTNAME"), "-")
 		hostname = fmt.Sprintf("%s.%s",
