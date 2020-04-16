@@ -182,7 +182,9 @@ func (r *HelmChartReconciler) sync(repository sourcev1.HelmRepository, chart sou
 			err = fmt.Errorf("auth options error: %w", err)
 			return sourcev1.HelmChartNotReady(chart, sourcev1.AuthenticationFailedReason, err.Error()), err
 		}
-		defer cleanup()
+		if cleanup != nil {
+			defer cleanup()
+		}
 		clientOpts = opts
 	}
 

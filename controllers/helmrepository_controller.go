@@ -137,7 +137,9 @@ func (r *HelmRepositoryReconciler) sync(repository sourcev1.HelmRepository) (sou
 			err = fmt.Errorf("auth options error: %w", err)
 			return sourcev1.HelmRepositoryNotReady(repository, sourcev1.AuthenticationFailedReason, err.Error()), err
 		}
-		defer cleanup()
+		if cleanup != nil {
+			defer cleanup()
+		}
 		clientOpts = opts
 	}
 
