@@ -17,6 +17,7 @@ limitations under the License.
 package controllers
 
 import (
+	"io/ioutil"
 	"math/rand"
 	"os"
 	"path/filepath"
@@ -25,7 +26,7 @@ import (
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	"github.com/onsi/gomega/gexec"
+	"helm.sh/helm/v3/pkg/getter"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -46,6 +47,7 @@ var cfg *rest.Config
 var k8sClient client.Client
 var k8sManager ctrl.Manager
 var testEnv *envtest.Environment
+var storage *Storage
 
 func TestAPIs(t *testing.T) {
 	RegisterFailHandler(Fail)
@@ -86,10 +88,33 @@ var _ = BeforeSuite(func(done Done) {
 
 	// +kubebuilder:scaffold:scheme
 
+	tmpStoragePath, err := ioutil.TempDir("", "helmrepository")
+	Expect(err).NotTo(HaveOccurred(), "failed to create tmp storage dir")
+
+	storage, err = NewStorage(tmpStoragePath, "localhost", time.Second*30)
+	Expect(err).NotTo(HaveOccurred(), "failed to create tmp storage")
+
 	k8sManager, err = ctrl.NewManager(cfg, ctrl.Options{
 		Scheme: scheme.Scheme,
 	})
 	Expect(err).ToNot(HaveOccurred())
+
+	err = (&HelmRepositoryReconciler{
+		Client:  k8sManager.GetClient(),
+		Log:     ctrl.Log.WithName("controllers").WithName("HelmRepository"),
+		Scheme:  scheme.Scheme,
+		Storage: storage,
+		Getters: getter.Providers{getter.Provider{
+			Schemes: []string{"http", "https"},
+			New:     getter.NewHTTPGetter,
+		}},
+	}).SetupWithManager(k8sManager)
+	Expect(err).ToNot(HaveOccurred(), "failed to setup HelmRepositoryReconciler")
+
+	go func() {
+		err = k8sManager.Start(ctrl.SetupSignalHandler())
+		Expect(err).ToNot(HaveOccurred())
+	}()
 
 	k8sClient = k8sManager.GetClient()
 	Expect(k8sClient).ToNot(BeNil())
@@ -99,7 +124,10 @@ var _ = BeforeSuite(func(done Done) {
 
 var _ = AfterSuite(func() {
 	By("tearing down the test environment")
-	gexec.KillAndWait(5 * time.Second)
+	if storage != nil {
+		err := os.RemoveAll(storage.BasePath)
+		Expect(err).NotTo(HaveOccurred())
+	}
 	err := testEnv.Stop()
 	Expect(err).ToNot(HaveOccurred())
 })
