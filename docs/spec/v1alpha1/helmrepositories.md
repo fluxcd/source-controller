@@ -9,7 +9,7 @@ an artifact.
 Helm repository:
 
 ```go
-// HelmRepository defines the reference to a Helm repository.
+// HelmRepositorySpec defines the reference to a Helm repository.
 type HelmRepositorySpec struct {
 	// The Helm repository URL, a valid URL contains at least a
 	// protocol and host.

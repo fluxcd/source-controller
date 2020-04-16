@@ -9,7 +9,7 @@ exposes the latest pulled chart for the defined version as an artifact.
 Helm chart:
 
 ```go
-// HelmChart defines the desired state of a Helm chart.
+// HelmChartSpec defines the desired state of a Helm chart source.
 type HelmChartSpec struct {
 	// The name of the Helm chart, as made available by the referenced
 	// Helm repository.
@@ -36,7 +36,7 @@ type HelmChartSpec struct {
 
 ```go
 // HelmChartStatus defines the observed state of the HelmChart.
-type HelmRepositoryStatus struct {
+type HelmChartStatus struct {
 	// +optional
 	Conditions []SourceCondition `json:"conditions,omitempty"`
 
@@ -56,10 +56,11 @@ type HelmRepositoryStatus struct {
 const (
 	// ChartPullFailedReason represents the fact that the pull of the
 	// given Helm chart failed.
-	ChartPullFailedReason  string = "ChartPullFailed"
+	ChartPullFailedReason string = "ChartPullFailed"
+
 	// ChartPullSucceededReason represents the fact that the pull of
 	// the given Helm chart succeeded.
-	ChartPullSucceedReason string = "ChartPullSucceeded"
+	ChartPullSucceededReason string = "ChartPullSucceeded"
 )
 ```
 

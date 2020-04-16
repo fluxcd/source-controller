@@ -1,6 +1,6 @@
 # Git Repositories
 
-The `GitReposiory` API defines a source for artifacts coming from Git. The
+The `GitRepository` API defines a source for artifacts coming from Git. The
 resource exposes the latest synchronized state from Git as an artifact in
 an archive.
 
@@ -9,7 +9,8 @@ an archive.
 Git repository:
 
 ```go
-// GitRepositorySpec defines the desired state of a Git repository.
+// GitRepositorySpec gives the specification for fetching a Git repository as
+// a source.
 type GitRepositorySpec struct {
 	// The repository URL, can be a HTTP or SSH address.
 	// +kubebuilder:validation:Pattern="^(http|https|ssh)://"
