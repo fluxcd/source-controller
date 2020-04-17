@@ -156,8 +156,6 @@ func (r *HelmChartReconciler) sync(repository sourcev1.HelmRepository, chart sou
 		return sourcev1.HelmChartNotReady(chart, sourcev1.ChartPullFailedReason, err.Error()), err
 	}
 
-	// TODO(hidde): auth options from Helm repository probably need to be
-	//  substituted here
 	c, err := r.Getters.ByScheme(u.Scheme)
 	if err != nil {
 		return sourcev1.HelmChartNotReady(chart, sourcev1.ChartPullFailedReason, err.Error()), err
