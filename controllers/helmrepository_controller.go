@@ -82,6 +82,10 @@ func (r *HelmRepositoryReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 	syncedRepo, err := r.sync(*repository.DeepCopy())
 	if err != nil {
 		log.Error(err, "Helm repository sync failed")
+		if err := r.Status().Update(ctx, &syncedRepo); err != nil {
+			log.Error(err, "unable to update HelmRepository status")
+		}
+		return ctrl.Result{Requeue: true}, err
 	}
 
 	// update status
@@ -89,7 +93,6 @@ func (r *HelmRepositoryReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 		log.Error(err, "unable to update HelmRepository status")
 		return ctrl.Result{Requeue: true}, err
 	}
-
 	log.Info("Helm repository sync succeeded", "msg", sourcev1.HelmRepositoryReadyMessage(syncedRepo))
 
 	// requeue repository
@@ -209,7 +212,7 @@ func (r *HelmRepositoryReconciler) shouldResetStatus(repository sourcev1.HelmRep
 	}
 
 	// set initial status
-	if len(repository.Status.Conditions) == 0 || resetStatus {
+	if len(repository.Status.Conditions) == 0 {
 		resetStatus = true
 	}
 

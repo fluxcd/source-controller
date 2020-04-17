@@ -17,13 +17,19 @@ limitations under the License.
 package controllers
 
 import (
+	"io/ioutil"
+	"math/rand"
+	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"helm.sh/helm/v3/pkg/getter"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	"sigs.k8s.io/controller-runtime/pkg/envtest/printer"
@@ -39,7 +45,13 @@ import (
 
 var cfg *rest.Config
 var k8sClient client.Client
+var k8sManager ctrl.Manager
 var testEnv *envtest.Environment
+var storage *Storage
+
+var examplePublicKey []byte
+var examplePrivateKey []byte
+var exampleCA []byte
 
 func TestAPIs(t *testing.T) {
 	RegisterFailHandler(Fail)
@@ -53,8 +65,15 @@ var _ = BeforeSuite(func(done Done) {
 	logf.SetLogger(zap.LoggerTo(GinkgoWriter, true))
 
 	By("bootstrapping test environment")
-	testEnv = &envtest.Environment{
-		CRDDirectoryPaths: []string{filepath.Join("..", "config", "crd", "bases")},
+	t := true
+	if os.Getenv("TEST_USE_EXISTING_CLUSTER") == "true" {
+		testEnv = &envtest.Environment{
+			UseExistingCluster: &t,
+		}
+	} else {
+		testEnv = &envtest.Environment{
+			CRDDirectoryPaths: []string{filepath.Join("..", "config", "crd", "bases")},
+		}
 	}
 
 	var err error
@@ -73,8 +92,37 @@ var _ = BeforeSuite(func(done Done) {
 
 	// +kubebuilder:scaffold:scheme
 
-	k8sClient, err = client.New(cfg, client.Options{Scheme: scheme.Scheme})
+	Expect(loadExampleKeys()).To(Succeed())
+
+	tmpStoragePath, err := ioutil.TempDir("", "helmrepository")
+	Expect(err).NotTo(HaveOccurred(), "failed to create tmp storage dir")
+
+	storage, err = NewStorage(tmpStoragePath, "localhost", time.Second*30)
+	Expect(err).NotTo(HaveOccurred(), "failed to create tmp storage")
+
+	k8sManager, err = ctrl.NewManager(cfg, ctrl.Options{
+		Scheme: scheme.Scheme,
+	})
 	Expect(err).ToNot(HaveOccurred())
+
+	err = (&HelmRepositoryReconciler{
+		Client:  k8sManager.GetClient(),
+		Log:     ctrl.Log.WithName("controllers").WithName("HelmRepository"),
+		Scheme:  scheme.Scheme,
+		Storage: storage,
+		Getters: getter.Providers{getter.Provider{
+			Schemes: []string{"http", "https"},
+			New:     getter.NewHTTPGetter,
+		}},
+	}).SetupWithManager(k8sManager)
+	Expect(err).ToNot(HaveOccurred(), "failed to setup HelmRepositoryReconciler")
+
+	go func() {
+		err = k8sManager.Start(ctrl.SetupSignalHandler())
+		Expect(err).ToNot(HaveOccurred())
+	}()
+
+	k8sClient = k8sManager.GetClient()
 	Expect(k8sClient).ToNot(BeNil())
 
 	close(done)
@@ -82,6 +130,37 @@ var _ = BeforeSuite(func(done Done) {
 
 var _ = AfterSuite(func() {
 	By("tearing down the test environment")
+	if storage != nil {
+		err := os.RemoveAll(storage.BasePath)
+		Expect(err).NotTo(HaveOccurred())
+	}
 	err := testEnv.Stop()
 	Expect(err).ToNot(HaveOccurred())
 })
+
+func init() {
+	rand.Seed(time.Now().UnixNano())
+}
+
+func loadExampleKeys() (err error) {
+	examplePublicKey, err = ioutil.ReadFile(filepath.Join("testdata/certs/server.pem"))
+	if err != nil {
+		return err
+	}
+	examplePrivateKey, err = ioutil.ReadFile(filepath.Join("testdata/certs/server-key.pem"))
+	if err != nil {
+		return err
+	}
+	exampleCA, err = ioutil.ReadFile(filepath.Join("testdata/certs/ca.pem"))
+	return err
+}
+
+var letterRunes = []rune("abcdefghijklmnopqrstuvwxyz1234567890")
+
+func randStringRunes(n int) string {
+	b := make([]rune, n)
+	for i := range b {
+		b[i] = letterRunes[rand.Intn(len(letterRunes))]
+	}
+	return string(b)
+}
