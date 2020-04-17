@@ -1,3 +1,19 @@
+/*
+Copyright 2020 The Flux CD contributors.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package controllers
 
 import (
@@ -199,5 +215,86 @@ var _ = Describe("HelmRepositoryReconciler", func() {
 				return got.Status.Artifact != nil
 			}, timeout, interval).Should(BeTrue())
 		})
+	})
+
+	It("Authenticates when TLS credentials are provided", func() {
+		helmServer, err = testserver.NewTempHelmServer()
+		Expect(err).NotTo(HaveOccurred())
+		defer os.RemoveAll(helmServer.Root())
+		defer helmServer.Stop()
+		err = helmServer.StartTLS(examplePublicKey, examplePrivateKey, exampleCA)
+		Expect(err).NotTo(HaveOccurred())
+
+		Expect(helmServer.PackageChart(path.Join("testdata/helmchart"))).Should(Succeed())
+		Expect(helmServer.GenerateIndex()).Should(Succeed())
+
+		secretKey := types.NamespacedName{
+			Name:      "helmrepository-auth-" + randStringRunes(5),
+			Namespace: namespace.Name,
+		}
+		secret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      secretKey.Name,
+				Namespace: secretKey.Namespace,
+			},
+			Data: map[string][]byte{},
+		}
+		Expect(k8sClient.Create(context.Background(), secret)).Should(Succeed())
+
+		key := types.NamespacedName{
+			Name:      "helmrepository-sample-" + randStringRunes(5),
+			Namespace: namespace.Name,
+		}
+		created := &sourcev1.HelmRepository{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      key.Name,
+				Namespace: key.Namespace,
+			},
+			Spec: sourcev1.HelmRepositorySpec{
+				URL: helmServer.URL(),
+				SecretRef: &corev1.LocalObjectReference{
+					Name: secretKey.Name,
+				},
+				Interval: metav1.Duration{Duration: interval},
+			},
+		}
+		Expect(k8sClient.Create(context.Background(), created)).Should(Succeed())
+
+		By("Expecting unknown authority error")
+		Eventually(func() bool {
+			got := &sourcev1.HelmRepository{}
+			_ = k8sClient.Get(context.Background(), key, got)
+			for _, c := range got.Status.Conditions {
+				if c.Reason == sourcev1.IndexationFailedReason &&
+					strings.Contains(c.Message, "certificate signed by unknown authority") {
+					return true
+				}
+			}
+			return false
+		}, timeout, interval).Should(BeTrue())
+
+		By("Expecting missing field error")
+		secret.Data["certFile"] = examplePublicKey
+		secret.Data["keyFile"] = examplePrivateKey
+		Expect(k8sClient.Update(context.Background(), secret)).Should(Succeed())
+		Eventually(func() bool {
+			got := &sourcev1.HelmRepository{}
+			_ = k8sClient.Get(context.Background(), key, got)
+			for _, c := range got.Status.Conditions {
+				if c.Reason == sourcev1.AuthenticationFailedReason {
+					return true
+				}
+			}
+			return false
+		}, timeout, interval).Should(BeTrue())
+
+		By("Expecting artifact")
+		secret.Data["caFile"] = exampleCA
+		Expect(k8sClient.Update(context.Background(), secret)).Should(Succeed())
+		Eventually(func() bool {
+			got := &sourcev1.HelmRepository{}
+			_ = k8sClient.Get(context.Background(), key, got)
+			return got.Status.Artifact != nil
+		}, timeout, interval).Should(BeTrue())
 	})
 })

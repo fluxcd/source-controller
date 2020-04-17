@@ -1,6 +1,8 @@
 package testserver
 
 import (
+	"crypto/tls"
+	"crypto/x509"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
@@ -46,6 +48,36 @@ func (s *HTTP) Start() {
 		}
 		handler.ServeHTTP(w, r)
 	}))
+}
+
+func (s *HTTP) StartTLS(cert, key, ca []byte) error {
+	s.server = httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		handler := http.FileServer(http.Dir(s.docroot))
+		if s.middleware != nil {
+			s.middleware(handler).ServeHTTP(w, r)
+			return
+		}
+		handler.ServeHTTP(w, r)
+	}))
+
+	config := tls.Config{}
+
+	keyPair, err := tls.X509KeyPair(cert, key)
+	if err != nil {
+		return err
+	}
+	config.Certificates = []tls.Certificate{keyPair}
+
+	cp := x509.NewCertPool()
+	cp.AppendCertsFromPEM(ca)
+	config.RootCAs = cp
+
+	config.BuildNameToCertificate()
+	config.ServerName = "example.com"
+	s.server.TLS = &config
+
+	s.server.StartTLS()
+	return nil
 }
 
 func (s *HTTP) Stop() {

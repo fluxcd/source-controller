@@ -49,6 +49,10 @@ var k8sManager ctrl.Manager
 var testEnv *envtest.Environment
 var storage *Storage
 
+var examplePublicKey []byte
+var examplePrivateKey []byte
+var exampleCA []byte
+
 func TestAPIs(t *testing.T) {
 	RegisterFailHandler(Fail)
 
@@ -87,6 +91,8 @@ var _ = BeforeSuite(func(done Done) {
 	Expect(err).NotTo(HaveOccurred())
 
 	// +kubebuilder:scaffold:scheme
+
+	Expect(loadExampleKeys()).To(Succeed())
 
 	tmpStoragePath, err := ioutil.TempDir("", "helmrepository")
 	Expect(err).NotTo(HaveOccurred(), "failed to create tmp storage dir")
@@ -134,6 +140,19 @@ var _ = AfterSuite(func() {
 
 func init() {
 	rand.Seed(time.Now().UnixNano())
+}
+
+func loadExampleKeys() (err error) {
+	examplePublicKey, err = ioutil.ReadFile(filepath.Join("testdata/certs/server.pem"))
+	if err != nil {
+		return err
+	}
+	examplePrivateKey, err = ioutil.ReadFile(filepath.Join("testdata/certs/server-key.pem"))
+	if err != nil {
+		return err
+	}
+	exampleCA, err = ioutil.ReadFile(filepath.Join("testdata/certs/ca.pem"))
+	return err
 }
 
 var letterRunes = []rune("abcdefghijklmnopqrstuvwxyz1234567890")
