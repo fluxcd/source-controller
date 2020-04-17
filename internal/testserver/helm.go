@@ -36,8 +36,13 @@ func (s *Helm) GenerateIndex() error {
 }
 
 func (s *Helm) PackageChart(path string) error {
+	return s.PackageChartWithVersion(path, "")
+}
+
+func (s *Helm) PackageChartWithVersion(path, version string) error {
 	pkg := action.NewPackage()
 	pkg.Destination = s.HTTP.docroot
+	pkg.Version = version
 	_, err := pkg.Run(path, nil)
 	return err
 }

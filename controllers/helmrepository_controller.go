@@ -160,6 +160,7 @@ func (r *HelmRepositoryReconciler) sync(repository sourcev1.HelmRepository) (sou
 	if err := yaml.Unmarshal(data, i); err != nil {
 		return sourcev1.HelmRepositoryNotReady(repository, sourcev1.IndexationFailedReason, err.Error()), err
 	}
+	i.SortEntries()
 
 	index, err := yaml.Marshal(i)
 	if err != nil {

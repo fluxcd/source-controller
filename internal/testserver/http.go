@@ -89,6 +89,7 @@ func (s *HTTP) Stop() {
 func (s *HTTP) Root() string {
 	return s.docroot
 }
+
 func (s *HTTP) URL() string {
 	if s.server != nil {
 		return s.server.URL
