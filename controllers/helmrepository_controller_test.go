@@ -107,8 +107,18 @@ var _ = Describe("HelmRepositoryReconciler", func() {
 
 			updated := &sourcev1.HelmRepository{}
 			Expect(k8sClient.Get(context.Background(), key, updated)).Should(Succeed())
-			updated.Spec.Interval = metav1.Duration{Duration: 60 * time.Second}
+			updated.Spec.URL = "invalid#url?"
 			Expect(k8sClient.Update(context.Background(), updated)).Should(Succeed())
+			Eventually(func() bool {
+				_ = k8sClient.Get(context.Background(), key, updated)
+				for _, c := range updated.Status.Conditions {
+					if c.Reason == sourcev1.URLInvalidReason {
+						return true
+					}
+				}
+				return false
+			}, timeout, interval).Should(BeTrue())
+			Expect(updated.Status.Artifact).ToNot(BeNil())
 
 			By("Expecting to delete successfully")
 			got = &sourcev1.HelmRepository{}
