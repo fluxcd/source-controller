@@ -82,7 +82,6 @@ func (r *HelmChartReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		chart = sourcev1.HelmChartNotReady(*chart.DeepCopy(), sourcev1.ChartPullFailedReason, err.Error())
 		if err := r.Status().Update(ctx, &chart); err != nil {
 			log.Error(err, "unable to update HelmChart status")
-			return ctrl.Result{Requeue: true}, err
 		}
 		return ctrl.Result{Requeue: true}, err
 	}
@@ -97,6 +96,10 @@ func (r *HelmChartReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	pulledChart, err := r.sync(repository, *chart.DeepCopy())
 	if err != nil {
 		log.Error(err, "Helm chart sync failed")
+		if err := r.Status().Update(ctx, &pulledChart); err != nil {
+			log.Error(err, "unable to update HelmChart status")
+		}
+		return ctrl.Result{Requeue: true}, err
 	}
 
 	// update status
