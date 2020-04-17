@@ -127,6 +127,23 @@ var _ = Describe("HelmChartReconciler", func() {
 					!storage.ArtifactExist(*got.Status.Artifact)
 			}, timeout, interval).Should(BeTrue())
 
+			By("Expecting missing HelmRepository error")
+			updated := &sourcev1.HelmChart{}
+			Expect(k8sClient.Get(context.Background(), key, updated)).Should(Succeed())
+			updated.Spec.HelmRepositoryRef.Name = "invalid"
+			Expect(k8sClient.Update(context.Background(), updated)).Should(Succeed())
+			Eventually(func() bool {
+				_ = k8sClient.Get(context.Background(), key, updated)
+				for _, c := range updated.Status.Conditions {
+					if c.Reason == sourcev1.ChartPullFailedReason &&
+						strings.Contains(c.Message, "failed to get HelmRepository") {
+						return true
+					}
+				}
+				return false
+			}, timeout, interval).Should(BeTrue())
+			Expect(updated.Status.Artifact).ToNot(BeNil())
+
 			By("Expecting to delete successfully")
 			got = &sourcev1.HelmChart{}
 			Eventually(func() error {

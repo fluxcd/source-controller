@@ -269,7 +269,7 @@ func (r *HelmChartReconciler) shouldResetStatus(chart sourcev1.HelmChart) (bool,
 	}
 
 	// set initial status
-	if len(chart.Status.Conditions) == 0 || resetStatus {
+	if len(chart.Status.Conditions) == 0 {
 		resetStatus = true
 	}
 
