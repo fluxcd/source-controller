@@ -37,35 +37,39 @@ import (
 var _ = Describe("HelmRepositoryReconciler", func() {
 
 	const (
-		timeout  = time.Second * 30
-		interval = time.Second * 1
+		timeout       = time.Second * 30
+		interval      = time.Second * 1
+		indexInterval = time.Second * 2
 	)
-
-	var (
-		namespace  *corev1.Namespace
-		helmServer *testserver.Helm
-		err        error
-	)
-
-	BeforeEach(func() {
-		namespace = &corev1.Namespace{
-			ObjectMeta: metav1.ObjectMeta{Name: "helm-repository-" + randStringRunes(5)},
-		}
-		err = k8sClient.Create(context.Background(), namespace)
-		Expect(err).NotTo(HaveOccurred(), "failed to create test namespace")
-	})
-
-	AfterEach(func() {
-		err = k8sClient.Delete(context.Background(), namespace)
-		Expect(err).NotTo(HaveOccurred(), "failed to delete test namespace")
-	})
 
 	Context("HelmRepository", func() {
-		It("Creates artifacts for", func() {
+		var (
+			namespace  *corev1.Namespace
+			helmServer *testserver.Helm
+			err        error
+		)
+
+		BeforeEach(func() {
+			namespace = &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{Name: "helm-repository-" + randStringRunes(5)},
+			}
+			err = k8sClient.Create(context.Background(), namespace)
+			Expect(err).NotTo(HaveOccurred(), "failed to create test namespace")
+
 			helmServer, err = testserver.NewTempHelmServer()
 			Expect(err).To(Succeed())
-			defer os.RemoveAll(helmServer.Root())
-			defer helmServer.Stop()
+		})
+
+		AfterEach(func() {
+			os.RemoveAll(helmServer.Root())
+			helmServer.Stop()
+
+			Eventually(func() error {
+				return k8sClient.Delete(context.Background(), namespace)
+			}, timeout, interval).Should(Succeed(), "failed to delete test namespace")
+		})
+
+		It("Creates artifacts for", func() {
 			helmServer.Start()
 
 			Expect(helmServer.PackageChart(path.Join("testdata/helmchart"))).Should(Succeed())
@@ -82,7 +86,7 @@ var _ = Describe("HelmRepositoryReconciler", func() {
 				},
 				Spec: sourcev1.HelmRepositorySpec{
 					URL:      helmServer.URL(),
-					Interval: metav1.Duration{Duration: interval},
+					Interval: metav1.Duration{Duration: indexInterval},
 				},
 			}
 			Expect(k8sClient.Create(context.Background(), created)).Should(Succeed())
@@ -97,6 +101,8 @@ var _ = Describe("HelmRepositoryReconciler", func() {
 			By("Updating the chart index")
 			// Regenerating the index is sufficient to make the revision change
 			Expect(helmServer.GenerateIndex()).Should(Succeed())
+
+			By("Expecting revision change and GC")
 			Eventually(func() bool {
 				now := &sourcev1.HelmRepository{}
 				_ = k8sClient.Get(context.Background(), key, now)
@@ -132,6 +138,8 @@ var _ = Describe("HelmRepositoryReconciler", func() {
 				r := &sourcev1.HelmRepository{}
 				return k8sClient.Get(context.Background(), key, r)
 			}).ShouldNot(Succeed())
+
+			By("Expecting GC after delete")
 			Eventually(storage.ArtifactExist(*got.Status.Artifact), timeout, interval).ShouldNot(BeTrue())
 		})
 
@@ -184,7 +192,7 @@ var _ = Describe("HelmRepositoryReconciler", func() {
 					SecretRef: &corev1.LocalObjectReference{
 						Name: secretKey.Name,
 					},
-					Interval: metav1.Duration{Duration: interval},
+					Interval: metav1.Duration{Duration: indexInterval},
 				},
 			}
 			Expect(k8sClient.Create(context.Background(), created)).Should(Succeed())
@@ -240,101 +248,97 @@ var _ = Describe("HelmRepositoryReconciler", func() {
 			}, timeout, interval).Should(BeTrue())
 			Expect(got.Status.Artifact).ShouldNot(BeNil())
 		})
-	})
 
-	It("Authenticates when TLS credentials are provided", func() {
-		helmServer, err = testserver.NewTempHelmServer()
-		Expect(err).NotTo(HaveOccurred())
-		defer os.RemoveAll(helmServer.Root())
-		defer helmServer.Stop()
-		err = helmServer.StartTLS(examplePublicKey, examplePrivateKey, exampleCA)
-		Expect(err).NotTo(HaveOccurred())
+		It("Authenticates when TLS credentials are provided", func() {
+			err = helmServer.StartTLS(examplePublicKey, examplePrivateKey, exampleCA)
+			Expect(err).NotTo(HaveOccurred())
 
-		Expect(helmServer.PackageChart(path.Join("testdata/helmchart"))).Should(Succeed())
-		Expect(helmServer.GenerateIndex()).Should(Succeed())
+			Expect(helmServer.PackageChart(path.Join("testdata/helmchart"))).Should(Succeed())
+			Expect(helmServer.GenerateIndex()).Should(Succeed())
 
-		secretKey := types.NamespacedName{
-			Name:      "helmrepository-auth-" + randStringRunes(5),
-			Namespace: namespace.Name,
-		}
-		secret := &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      secretKey.Name,
-				Namespace: secretKey.Namespace,
-			},
-			Data: map[string][]byte{},
-		}
-		Expect(k8sClient.Create(context.Background(), secret)).Should(Succeed())
-
-		key := types.NamespacedName{
-			Name:      "helmrepository-sample-" + randStringRunes(5),
-			Namespace: namespace.Name,
-		}
-		created := &sourcev1.HelmRepository{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      key.Name,
-				Namespace: key.Namespace,
-			},
-			Spec: sourcev1.HelmRepositorySpec{
-				URL: helmServer.URL(),
-				SecretRef: &corev1.LocalObjectReference{
-					Name: secretKey.Name,
+			secretKey := types.NamespacedName{
+				Name:      "helmrepository-auth-" + randStringRunes(5),
+				Namespace: namespace.Name,
+			}
+			secret := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      secretKey.Name,
+					Namespace: secretKey.Namespace,
 				},
-				Interval: metav1.Duration{Duration: interval},
-			},
-		}
-		Expect(k8sClient.Create(context.Background(), created)).Should(Succeed())
-
-		By("Expecting unknown authority error")
-		Eventually(func() bool {
-			got := &sourcev1.HelmRepository{}
-			_ = k8sClient.Get(context.Background(), key, got)
-			for _, c := range got.Status.Conditions {
-				if c.Reason == sourcev1.IndexationFailedReason &&
-					strings.Contains(c.Message, "certificate signed by unknown authority") {
-					return true
-				}
+				Data: map[string][]byte{},
 			}
-			return false
-		}, timeout, interval).Should(BeTrue())
+			Expect(k8sClient.Create(context.Background(), secret)).Should(Succeed())
 
-		By("Expecting missing field error")
-		secret.Data["certFile"] = examplePublicKey
-		secret.Data["keyFile"] = examplePrivateKey
-		Expect(k8sClient.Update(context.Background(), secret)).Should(Succeed())
-		Eventually(func() bool {
-			got := &sourcev1.HelmRepository{}
-			_ = k8sClient.Get(context.Background(), key, got)
-			for _, c := range got.Status.Conditions {
-				if c.Reason == sourcev1.AuthenticationFailedReason {
-					return true
-				}
+			key := types.NamespacedName{
+				Name:      "helmrepository-sample-" + randStringRunes(5),
+				Namespace: namespace.Name,
 			}
-			return false
-		}, timeout, interval).Should(BeTrue())
-
-		By("Expecting artifact")
-		secret.Data["caFile"] = exampleCA
-		Expect(k8sClient.Update(context.Background(), secret)).Should(Succeed())
-		Eventually(func() bool {
-			got := &sourcev1.HelmRepository{}
-			_ = k8sClient.Get(context.Background(), key, got)
-			return got.Status.Artifact != nil &&
-				storage.ArtifactExist(*got.Status.Artifact)
-		}, timeout, interval).Should(BeTrue())
-
-		By("Expecting missing secret error")
-		Expect(k8sClient.Delete(context.Background(), secret)).Should(Succeed())
-		got := &sourcev1.HelmRepository{}
-		Eventually(func() bool {
-			_ = k8sClient.Get(context.Background(), key, got)
-			for _, c := range got.Status.Conditions {
-				if c.Reason == sourcev1.AuthenticationFailedReason {
-					return true
-				}
+			created := &sourcev1.HelmRepository{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      key.Name,
+					Namespace: key.Namespace,
+				},
+				Spec: sourcev1.HelmRepositorySpec{
+					URL: helmServer.URL(),
+					SecretRef: &corev1.LocalObjectReference{
+						Name: secretKey.Name,
+					},
+					Interval: metav1.Duration{Duration: indexInterval},
+				},
 			}
-			return false
-		}, timeout, interval).Should(BeTrue())
-		Expect(got.Status.Artifact).ShouldNot(BeNil())
+			Expect(k8sClient.Create(context.Background(), created)).Should(Succeed())
+
+			By("Expecting unknown authority error")
+			Eventually(func() bool {
+				got := &sourcev1.HelmRepository{}
+				_ = k8sClient.Get(context.Background(), key, got)
+				for _, c := range got.Status.Conditions {
+					if c.Reason == sourcev1.IndexationFailedReason &&
+						strings.Contains(c.Message, "certificate signed by unknown authority") {
+						return true
+					}
+				}
+				return false
+			}, timeout, interval).Should(BeTrue())
+
+			By("Expecting missing field error")
+			secret.Data["certFile"] = examplePublicKey
+			secret.Data["keyFile"] = examplePrivateKey
+			Expect(k8sClient.Update(context.Background(), secret)).Should(Succeed())
+			Eventually(func() bool {
+				got := &sourcev1.HelmRepository{}
+				_ = k8sClient.Get(context.Background(), key, got)
+				for _, c := range got.Status.Conditions {
+					if c.Reason == sourcev1.AuthenticationFailedReason {
+						return true
+					}
+				}
+				return false
+			}, timeout, interval).Should(BeTrue())
+
+			By("Expecting artifact")
+			secret.Data["caFile"] = exampleCA
+			Expect(k8sClient.Update(context.Background(), secret)).Should(Succeed())
+			Eventually(func() bool {
+				got := &sourcev1.HelmRepository{}
+				_ = k8sClient.Get(context.Background(), key, got)
+				return got.Status.Artifact != nil &&
+					storage.ArtifactExist(*got.Status.Artifact)
+			}, timeout, interval).Should(BeTrue())
+
+			By("Expecting missing secret error")
+			Expect(k8sClient.Delete(context.Background(), secret)).Should(Succeed())
+			got := &sourcev1.HelmRepository{}
+			Eventually(func() bool {
+				_ = k8sClient.Get(context.Background(), key, got)
+				for _, c := range got.Status.Conditions {
+					if c.Reason == sourcev1.AuthenticationFailedReason {
+						return true
+					}
+				}
+				return false
+			}, timeout, interval).Should(BeTrue())
+			Expect(got.Status.Artifact).ShouldNot(BeNil())
+		})
 	})
 })
