@@ -212,7 +212,7 @@ func (r *HelmRepositoryReconciler) shouldResetStatus(repository sourcev1.HelmRep
 	}
 
 	// set initial status
-	if len(repository.Status.Conditions) == 0 || resetStatus {
+	if len(repository.Status.Conditions) == 0 {
 		resetStatus = true
 	}
 

@@ -212,8 +212,23 @@ var _ = Describe("HelmRepositoryReconciler", func() {
 			Eventually(func() bool {
 				got := &sourcev1.HelmRepository{}
 				_ = k8sClient.Get(context.Background(), key, got)
-				return got.Status.Artifact != nil
+				return got.Status.Artifact != nil &&
+					storage.ArtifactExist(*got.Status.Artifact)
 			}, timeout, interval).Should(BeTrue())
+
+			By("Expecting missing secret error")
+			Expect(k8sClient.Delete(context.Background(), secret)).Should(Succeed())
+			got := &sourcev1.HelmRepository{}
+			Eventually(func() bool {
+				_ = k8sClient.Get(context.Background(), key, got)
+				for _, c := range got.Status.Conditions {
+					if c.Reason == sourcev1.AuthenticationFailedReason {
+						return true
+					}
+				}
+				return false
+			}, timeout, interval).Should(BeTrue())
+			Expect(got.Status.Artifact).ShouldNot(BeNil())
 		})
 	})
 
@@ -294,7 +309,22 @@ var _ = Describe("HelmRepositoryReconciler", func() {
 		Eventually(func() bool {
 			got := &sourcev1.HelmRepository{}
 			_ = k8sClient.Get(context.Background(), key, got)
-			return got.Status.Artifact != nil
+			return got.Status.Artifact != nil &&
+				storage.ArtifactExist(*got.Status.Artifact)
 		}, timeout, interval).Should(BeTrue())
+
+		By("Expecting missing secret error")
+		Expect(k8sClient.Delete(context.Background(), secret)).Should(Succeed())
+		got := &sourcev1.HelmRepository{}
+		Eventually(func() bool {
+			_ = k8sClient.Get(context.Background(), key, got)
+			for _, c := range got.Status.Conditions {
+				if c.Reason == sourcev1.AuthenticationFailedReason {
+					return true
+				}
+			}
+			return false
+		}, timeout, interval).Should(BeTrue())
+		Expect(got.Status.Artifact).ShouldNot(BeNil())
 	})
 })
