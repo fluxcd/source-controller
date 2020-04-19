@@ -33,6 +33,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/yaml"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1alpha1"
@@ -99,11 +100,20 @@ func (r *HelmRepositoryReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 	return ctrl.Result{RequeueAfter: repository.GetInterval().Duration}, nil
 }
 
+type HelmRepositoryReconcilerOptions struct {
+	MaxConcurrentReconciles int
+}
+
 func (r *HelmRepositoryReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	return r.SetupWithManagerAndOptions(mgr, HelmRepositoryReconcilerOptions{})
+}
+
+func (r *HelmRepositoryReconciler) SetupWithManagerAndOptions(mgr ctrl.Manager, opts HelmRepositoryReconcilerOptions) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&sourcev1.HelmRepository{}).
 		WithEventFilter(SourceChangePredicate{}).
 		WithEventFilter(GarbageCollectPredicate{Scheme: r.Scheme, Log: r.Log, Storage: r.Storage}).
+		WithOptions(controller.Options{MaxConcurrentReconciles: opts.MaxConcurrentReconciles}).
 		Complete(r)
 }
 

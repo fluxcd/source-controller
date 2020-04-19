@@ -32,6 +32,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/yaml"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1alpha1"
@@ -114,11 +115,20 @@ func (r *HelmChartReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	return ctrl.Result{RequeueAfter: chart.GetInterval().Duration}, nil
 }
 
+type HelmChartReconcilerOptions struct {
+	MaxConcurrentReconciles int
+}
+
 func (r *HelmChartReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	return r.SetupWithManagerAndOptions(mgr, HelmChartReconcilerOptions{})
+}
+
+func (r *HelmChartReconciler) SetupWithManagerAndOptions(mgr ctrl.Manager, opts HelmChartReconcilerOptions) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&sourcev1.HelmChart{}).
 		WithEventFilter(SourceChangePredicate{}).
 		WithEventFilter(GarbageCollectPredicate{Scheme: r.Scheme, Log: r.Log, Storage: r.Storage}).
+		WithOptions(controller.Options{MaxConcurrentReconciles: opts.MaxConcurrentReconciles}).
 		Complete(r)
 }
 
