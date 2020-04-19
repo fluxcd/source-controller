@@ -34,6 +34,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1alpha1"
 	intgit "github.com/fluxcd/source-controller/internal/git"
@@ -95,11 +96,20 @@ func (r *GitRepositoryReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 	return ctrl.Result{RequeueAfter: repo.GetInterval().Duration}, nil
 }
 
+type GitRepositoryReconcilerOptions struct {
+	MaxConcurrentReconciles int
+}
+
 func (r *GitRepositoryReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	return r.SetupWithManagerAndOptions(mgr, GitRepositoryReconcilerOptions{})
+}
+
+func (r *GitRepositoryReconciler) SetupWithManagerAndOptions(mgr ctrl.Manager, opts GitRepositoryReconcilerOptions) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&sourcev1.GitRepository{}).
 		WithEventFilter(SourceChangePredicate{}).
 		WithEventFilter(GarbageCollectPredicate{Scheme: r.Scheme, Log: r.Log, Storage: r.Storage}).
+		WithOptions(controller.Options{MaxConcurrentReconciles: opts.MaxConcurrentReconciles}).
 		Complete(r)
 }
 

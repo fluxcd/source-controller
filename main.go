@@ -57,16 +57,21 @@ func init() {
 }
 
 func main() {
-	var metricsAddr string
-	var enableLeaderElection bool
-	var storagePath string
-	var storageAddr string
+	var (
+		metricsAddr          string
+		enableLeaderElection bool
+		storagePath          string
+		storageAddr          string
+		concurrent           int
+	)
+
 	flag.StringVar(&metricsAddr, "metrics-addr", ":9090", "The address the metric endpoint binds to.")
 	flag.BoolVar(&enableLeaderElection, "enable-leader-election", false,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
 	flag.StringVar(&storagePath, "storage-path", "", "The local storage path.")
 	flag.StringVar(&storageAddr, "storage-addr", ":8080", "The address the static file server binds to.")
+	flag.IntVar(&concurrent, "concurrent", 2, "The number of concurrent reconciles per controller.")
 
 	flag.Parse()
 
@@ -93,7 +98,9 @@ func main() {
 		Log:     ctrl.Log.WithName("controllers").WithName("GitRepository"),
 		Scheme:  mgr.GetScheme(),
 		Storage: storage,
-	}).SetupWithManager(mgr); err != nil {
+	}).SetupWithManagerAndOptions(mgr, controllers.GitRepositoryReconcilerOptions{
+		MaxConcurrentReconciles: concurrent,
+	}); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "GitRepository")
 		os.Exit(1)
 	}
@@ -103,7 +110,9 @@ func main() {
 		Scheme:  mgr.GetScheme(),
 		Storage: storage,
 		Getters: getters,
-	}).SetupWithManager(mgr); err != nil {
+	}).SetupWithManagerAndOptions(mgr, controllers.HelmRepositoryReconcilerOptions{
+		MaxConcurrentReconciles: concurrent,
+	}); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "HelmRepository")
 		os.Exit(1)
 	}
@@ -113,7 +122,9 @@ func main() {
 		Scheme:  mgr.GetScheme(),
 		Storage: storage,
 		Getters: getters,
-	}).SetupWithManager(mgr); err != nil {
+	}).SetupWithManagerAndOptions(mgr, controllers.HelmChartReconcilerOptions{
+		MaxConcurrentReconciles: concurrent,
+	}); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "HelmChart")
 		os.Exit(1)
 	}
