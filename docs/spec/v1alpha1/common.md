@@ -37,12 +37,12 @@ The controller can be told to check for updates right away by setting an annotat
 
 ```go
 const (
-	// ForceSyncAnnotation is the timestamp corresponding to an on-demand source sync.
-	ForceSyncAnnotation string = "source.fluxcd.io/syncAt"
+	// SyncAtAnnotation is the timestamp corresponding to an on-demand source sync.
+	SyncAtAnnotation string = "source.fluxcd.io/syncAt"
 )
 ```
 
-Force sync example:
+Trigger source sync example:
 
 ```bash
 kubectl annotate --overwrite gitrepository/podinfo source.fluxcd.io/syncAt="$(date +%s)"
@@ -143,4 +143,4 @@ const (
 
 ## Examples
 
-See the [Git repository](gitrepositories.md) and [Helm chart](helmrepositories.md) APIs.
+See the [Git repository](gitrepositories.md) and [Helm chart](helmcharts.md) APIs.

@@ -64,7 +64,7 @@ const (
 
 ## Spec examples
 
-Public Helm repository:
+Pull the index of a public Helm repository every ten minutes:
 
 ```yaml
 apiVersion: source.fluxcd.io/v1alpha1
@@ -72,15 +72,12 @@ kind: HelmRepository
 metadata:
   name: stable
   namespace: default
-  annotations:
-    # force sync trigger
-    source.fluxcd.io/syncAt: "2020-04-06T15:39:52+03:00"
 spec:
   url: https://kubernetes-charts.storage.googleapis.com/
-  interval: 1m
+  interval: 10m
 ```
 
-Private Helm repository:
+Pull the index of a private Helm repository every minute:
 
 ```yaml
 apiVersion: source.fluxcd.io/v1alpha1
@@ -114,10 +111,10 @@ Successful indexation:
 
 ```yaml
 status:
-  url: http://<host>/helmrepository/podinfo-default/index.yaml
+  url: http://<host>/helmrepository/default/stable/index.yaml
   conditions:
     - lastTransitionTime: "2020-04-10T09:34:45Z"
-      message: Fetched artifact are available at /data/helmrepositories/podinfo-default/index-21c195d78e699e4b656e2885887d019627838993.yaml
+      message: Helm repository index is available at /data/helmrepository/default/stable/index-21c195d78e699e4b656e2885887d019627838993.yaml
       reason: IndexationSucceeded
       status: "True"
       type: Ready
@@ -145,4 +142,10 @@ status:
     reason: URLInvalid
     status: "False"
     type: Ready
+```
+
+Wait for ready condition:
+
+```bash
+kubectl wait helmrepository/stable --for=condition=ready --timeout=1m
 ```

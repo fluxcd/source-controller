@@ -66,7 +66,7 @@ const (
 
 ## Spec examples
 
-Pinned version:
+Pull a specific chart version every five minutes:
 
 ```yaml
 apiVersion: source.fluxcd.io/v1alpha1
@@ -82,9 +82,10 @@ spec:
   version: 10.5.7
   helmRepositoryRef:
     name: stable
+  interval: 5m
 ```
 
-Semver range:
+Pull the latest chart version that matches the sermver range every ten minutes:
 
 ```yaml
 apiVersion: source.fluxcd.io/v1alpha1
@@ -97,22 +98,7 @@ spec:
   version: ^10.0.0
   helmRepositoryRef:
     name: stable
-```
-
-Interval:
-
-```yaml
-apiVersion: source.fluxcd.io/v1alpha1
-kind: HelmChart
-metadata:
-  name: redis
-  namespace: default
-spec:
-  name: redis
-  version: ^10.0.0
-  helmRepositoryRef:
-    name: stable
-  interval: 30m
+  interval: 10m
 ```
 
 ## Status examples
@@ -121,10 +107,10 @@ Successful chart pull:
 
 ```yaml
 status:
-  url: http://<host>/helmcharts/redis-default/redis-10.5.7.tgz
+  url: http://<host>/helmchart/default/redis/redis-10.5.7.tgz
   conditions:
     - lastTransitionTime: "2020-04-10T09:34:45Z"
-      message: Fetched artifact are available at /data/helmcharts/redis-default/redis-10.5.7.tgz
+      message: Helm chart is available at /data/helmchart/default/redis/redis-10.5.7.tgz
       reason: ChartPullSucceeded
       status: "True"
       type: Ready
@@ -136,8 +122,14 @@ Failed chart pull:
 status:
   conditions:
     - lastTransitionTime: "2020-04-10T09:34:45Z"
-      message: ''
+      message: 'invalid chart URL format'
       reason: ChartPullFailed
       status: "False"
       type: Ready
+```
+
+Wait for ready condition:
+
+```bash
+kubectl wait helmchart/redis --for=condition=ready --timeout=1m
 ```
