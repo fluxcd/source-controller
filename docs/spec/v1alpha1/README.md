@@ -1,6 +1,6 @@
 # source.fluxcd.io/v1alpha1
 
-The is the v1alpha1 API specification for defining the desired state sources of Kubernetes clusters.
+This is the v1alpha1 API specification for defining the desired state sources of Kubernetes clusters.
 
 ## Specification
 
@@ -12,4 +12,8 @@ The is the v1alpha1 API specification for defining the desired state sources of 
 
 ## Implementation
 
-* source-controller [v0.0.1-alpha.1](https://github.com/fluxcd/source-controller/releases)
+* [source-controller](https://github.com/fluxcd/source-controller/)
+
+## Consumers
+
+* [kustomize-controller](https://github.com/fluxcd/kustomize-controller/)

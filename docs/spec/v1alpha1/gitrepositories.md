@@ -297,17 +297,17 @@ Successful sync:
 status:
   artifact:
     lastUpdateTime: "2020-04-07T06:59:23Z"
-    path: /data/gitrepository/podinfo-default/363a6a8fe6a7f13e05d34c163b0ef02a777da20a.tar.gz
+    path: /data/gitrepository/default/podinfo/363a6a8fe6a7f13e05d34c163b0ef02a777da20a.tar.gz
     revision: master/363a6a8fe6a7f13e05d34c163b0ef02a777da20a
-    url: http://<host>/gitrepository/podinfo-default/363a6a8fe6a7f13e05d34c163b0ef02a777da20a.tar.gz
+    url: http://<host>/gitrepository/default/podinfo/363a6a8fe6a7f13e05d34c163b0ef02a777da20a.tar.gz
   conditions:
   - lastTransitionTime: "2020-04-07T06:59:23Z"
-    message: 'Fetched artifacts are available at
-      /data/gitrepository/podinfo-default/363a6a8fe6a7f13e05d34c163b0ef02a777da20a.tar.gz'
+    message: 'Git repoistory artifacts are available at:
+      /data/gitrepository/default/podinfo/363a6a8fe6a7f13e05d34c163b0ef02a777da20a.tar.gz'
     reason: GitOperationSucceed
     status: "True"
     type: Ready
-  url: http://<host>/gitrepository/podinfo-default/latest.tar.gz
+  url: http://<host>/gitrepository/default/podinfo/latest.tar.gz
 ```
 
 Failed authentication:
@@ -335,7 +335,7 @@ status:
     type: Ready
 ```
 
-Wait for condition:
+Wait for ready condition:
 
 ```bash
 kubectl wait gitrepository/podinfo --for=condition=ready --timeout=1m

@@ -11,3 +11,8 @@ type Source interface {
 	// GetInterval returns the interval at which the source is updated.
 	GetInterval() metav1.Duration
 }
+
+const (
+	// SyncAtAnnotation is the timestamp corresponding to an on-demand source sync.
+	SyncAtAnnotation string = "source.fluxcd.io/syncAt"
+)
