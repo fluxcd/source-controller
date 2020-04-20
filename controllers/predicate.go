@@ -24,6 +24,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
+
+	sourcev1 "github.com/fluxcd/source-controller/api/v1alpha1"
 )
 
 type SourceChangePredicate struct {
@@ -43,8 +45,8 @@ func (SourceChangePredicate) Update(e event.UpdateEvent) bool {
 	}
 
 	// handle force sync
-	if val, ok := e.MetaNew.GetAnnotations()[ForceSyncAnnotation]; ok {
-		if valOld, okOld := e.MetaOld.GetAnnotations()[ForceSyncAnnotation]; okOld {
+	if val, ok := e.MetaNew.GetAnnotations()[sourcev1.SyncAtAnnotation]; ok {
+		if valOld, okOld := e.MetaOld.GetAnnotations()[sourcev1.SyncAtAnnotation]; okOld {
 			if val != valOld {
 				return true
 			}
@@ -55,10 +57,6 @@ func (SourceChangePredicate) Update(e event.UpdateEvent) bool {
 
 	return false
 }
-
-const (
-	ForceSyncAnnotation string = "source.fluxcd.io/syncAt"
-)
 
 type GarbageCollectPredicate struct {
 	predicate.Funcs
