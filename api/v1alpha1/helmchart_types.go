@@ -66,6 +66,10 @@ const (
 	ChartPullSucceededReason string = "ChartPullSucceeded"
 )
 
+// HelmChartReady sets the given artifact and url on the HelmChart
+// and resets the conditions to SourceCondition of type Ready with
+// status true and the given reason and message. It returns the
+// modified HelmChart.
 func HelmChartReady(chart HelmChart, artifact Artifact, url, reason, message string) HelmChart {
 	chart.Status.Conditions = []SourceCondition{
 		{
@@ -89,6 +93,9 @@ func HelmChartReady(chart HelmChart, artifact Artifact, url, reason, message str
 	return chart
 }
 
+// HelmChartNotReady resets the conditions of the HelmChart to
+// SourceCondition of type Ready with status false and the given
+// reason and message. It returns the modified HelmChart.
 func HelmChartNotReady(chart HelmChart, reason, message string) HelmChart {
 	chart.Status.Conditions = []SourceCondition{
 		{
@@ -102,6 +109,8 @@ func HelmChartNotReady(chart HelmChart, reason, message string) HelmChart {
 	return chart
 }
 
+// HelmChartReadyMessage returns the message of the SourceCondition
+// of type Ready with status true if present, or an empty string.
 func HelmChartReadyMessage(chart HelmChart) string {
 	for _, condition := range chart.Status.Conditions {
 		if condition.Type == ReadyCondition && condition.Status == corev1.ConditionTrue {

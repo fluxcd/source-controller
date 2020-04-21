@@ -17,6 +17,8 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"time"
+
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -39,6 +41,11 @@ type GitRepositorySpec struct {
 	// The interval at which to check for repository updates.
 	// +required
 	Interval metav1.Duration `json:"interval"`
+
+	// The timeout for remote git operations like cloning.
+	// +kubebuilder:validation:Default=20s
+	// +optional
+	Timeout *metav1.Duration `json:"timeout,omitempty"`
 
 	// The git reference to checkout and monitor for changes, defaults to
 	// master branch.
@@ -105,6 +112,10 @@ const (
 	GitOperationFailedReason string = "GitOperationFailed"
 )
 
+// GitRepositoryReady sets the given artifact and url on the
+// HelmRepository and resets the conditions to SourceCondition of
+// type Ready with status true and the given reason and message.
+// It returns the modified GitRepository.
 func GitRepositoryReady(repository GitRepository, artifact Artifact, url, reason, message string) GitRepository {
 	repository.Status.Conditions = []SourceCondition{
 		{
@@ -128,6 +139,9 @@ func GitRepositoryReady(repository GitRepository, artifact Artifact, url, reason
 	return repository
 }
 
+// GitRepositoryNotReady resets the conditions of the HelmRepository
+// to SourceCondition of type Ready with status false and the given
+// reason and message. It returns the modified GitRepository.
 func GitRepositoryNotReady(repository GitRepository, reason, message string) GitRepository {
 	repository.Status.Conditions = []SourceCondition{
 		{
@@ -141,13 +155,23 @@ func GitRepositoryNotReady(repository GitRepository, reason, message string) Git
 	return repository
 }
 
+// ReadyMessage returns the message of the SourceCondition
+// of type Ready with status true if present, or an empty string.
 func GitRepositoryReadyMessage(repository GitRepository) string {
 	for _, condition := range repository.Status.Conditions {
-		if condition.Type == ReadyCondition {
+		if condition.Type == ReadyCondition && condition.Status == corev1.ConditionTrue {
 			return condition.Message
 		}
 	}
 	return ""
+}
+
+// GetTimeout returns the configured timeout or the default.
+func (in *GitRepository) GetTimeout() time.Duration {
+	if in.Spec.Timeout != nil {
+		return in.Spec.Timeout.Duration
+	}
+	return time.Second * 20
 }
 
 // GetArtifact returns the latest artifact from the source

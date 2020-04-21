@@ -22,6 +22,7 @@ package v1alpha1
 
 import (
 	"k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 )
 
@@ -124,6 +125,11 @@ func (in *GitRepositorySpec) DeepCopyInto(out *GitRepositorySpec) {
 		**out = **in
 	}
 	out.Interval = in.Interval
+	if in.Timeout != nil {
+		in, out := &in.Timeout, &out.Timeout
+		*out = new(metav1.Duration)
+		**out = **in
+	}
 	if in.Reference != nil {
 		in, out := &in.Reference, &out.Reference
 		*out = new(GitRepositoryRef)
