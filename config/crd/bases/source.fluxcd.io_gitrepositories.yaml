@@ -82,6 +82,9 @@ spec:
                     TODO: Add other useful fields. apiVersion, kind, uid?'
                   type: string
               type: object
+            timeout:
+              description: The timeout for remote git operations like cloning.
+              type: string
             url:
               description: The repository URL, can be a HTTP or SSH address.
               pattern: ^(http|https|ssh)://

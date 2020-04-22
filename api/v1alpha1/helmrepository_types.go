@@ -65,6 +65,10 @@ const (
 	IndexationSucceededReason string = "IndexationSucceed"
 )
 
+// HelmRepositoryReady sets the given artifact and url on the
+// HelmRepository and resets the conditions to SourceCondition of
+// type Ready with status true and the given reason and message.
+// It returns the modified HelmRepository.
 func HelmRepositoryReady(repository HelmRepository, artifact Artifact, url, reason, message string) HelmRepository {
 	repository.Status.Conditions = []SourceCondition{
 		{
@@ -88,6 +92,9 @@ func HelmRepositoryReady(repository HelmRepository, artifact Artifact, url, reas
 	return repository
 }
 
+// HelmRepositoryNotReady resets the conditions of the HelmRepository
+// to SourceCondition of type Ready with status false and the given
+// reason and message. It returns the modified HelmRepository.
 func HelmRepositoryNotReady(repository HelmRepository, reason, message string) HelmRepository {
 	repository.Status.Conditions = []SourceCondition{
 		{
@@ -101,6 +108,8 @@ func HelmRepositoryNotReady(repository HelmRepository, reason, message string) H
 	return repository
 }
 
+// HelmRepositoryReadyMessage returns the message of the SourceCondition
+// of type Ready with status true if present, or an empty string.
 func HelmRepositoryReadyMessage(repository HelmRepository) string {
 	for _, condition := range repository.Status.Conditions {
 		if condition.Type == ReadyCondition && condition.Status == corev1.ConditionTrue {

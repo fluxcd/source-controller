@@ -22,7 +22,6 @@ import (
 	"io/ioutil"
 	"net/url"
 	"path"
-	"time"
 
 	"github.com/go-logr/logr"
 	"helm.sh/helm/v3/pkg/getter"
@@ -54,8 +53,7 @@ type HelmRepositoryReconciler struct {
 // +kubebuilder:rbac:groups=source.fluxcd.io,resources=helmcharts/finalizers,verbs=get;update;patch
 
 func (r *HelmRepositoryReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
+	ctx := context.Background()
 
 	var repository sourcev1.HelmRepository
 	if err := r.Get(ctx, req.NamespacedName, &repository); err != nil {
@@ -80,7 +78,7 @@ func (r *HelmRepositoryReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 	}
 
 	// try to download index
-	syncedRepo, err := r.sync(*repository.DeepCopy())
+	syncedRepo, err := r.sync(ctx, *repository.DeepCopy())
 	if err != nil {
 		log.Error(err, "Helm repository sync failed")
 		if err := r.Status().Update(ctx, &syncedRepo); err != nil {
@@ -117,7 +115,7 @@ func (r *HelmRepositoryReconciler) SetupWithManagerAndOptions(mgr ctrl.Manager, 
 		Complete(r)
 }
 
-func (r *HelmRepositoryReconciler) sync(repository sourcev1.HelmRepository) (sourcev1.HelmRepository, error) {
+func (r *HelmRepositoryReconciler) sync(ctx context.Context, repository sourcev1.HelmRepository) (sourcev1.HelmRepository, error) {
 	u, err := url.Parse(repository.Spec.URL)
 	if err != nil {
 		return sourcev1.HelmRepositoryNotReady(repository, sourcev1.URLInvalidReason, err.Error()), err
@@ -139,7 +137,7 @@ func (r *HelmRepositoryReconciler) sync(repository sourcev1.HelmRepository) (sou
 		}
 
 		var secret corev1.Secret
-		err := r.Client.Get(context.TODO(), name, &secret)
+		err := r.Client.Get(ctx, name, &secret)
 		if err != nil {
 			err = fmt.Errorf("auth secret error: %w", err)
 			return sourcev1.HelmRepositoryNotReady(repository, sourcev1.AuthenticationFailedReason, err.Error()), err
@@ -156,6 +154,8 @@ func (r *HelmRepositoryReconciler) sync(repository sourcev1.HelmRepository) (sou
 		clientOpts = opts
 	}
 
+	// TODO(hidde): implement timeout from the HelmRepository
+	//  https://github.com/helm/helm/pull/7950
 	res, err := c.Get(u.String(), clientOpts...)
 	if err != nil {
 		return sourcev1.HelmRepositoryNotReady(repository, sourcev1.IndexationFailedReason, err.Error()), err
@@ -214,6 +214,8 @@ func (r *HelmRepositoryReconciler) sync(repository sourcev1.HelmRepository) (sou
 	return sourcev1.HelmRepositoryReady(repository, artifact, indexURL, sourcev1.IndexationSucceededReason, message), nil
 }
 
+// shouldResetStatus returns a boolean indicating if the status of the
+// given repository should be reset and a reset HelmChartStatus.
 func (r *HelmRepositoryReconciler) shouldResetStatus(repository sourcev1.HelmRepository) (bool, sourcev1.HelmRepositoryStatus) {
 	resetStatus := false
 	if repository.Status.Artifact != nil {
@@ -239,6 +241,8 @@ func (r *HelmRepositoryReconciler) shouldResetStatus(repository sourcev1.HelmRep
 	}
 }
 
+// gc performs a garbage collection on all but current artifacts of
+// the given repository.
 func (r *HelmRepositoryReconciler) gc(repository sourcev1.HelmRepository) error {
 	if repository.Status.Artifact != nil {
 		return r.Storage.RemoveAllButCurrent(*repository.Status.Artifact)

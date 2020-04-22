@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
-	"time"
 
 	"github.com/blang/semver"
 	"github.com/go-git/go-git/v5"
@@ -52,8 +51,7 @@ type GitRepositoryReconciler struct {
 // +kubebuilder:rbac:groups=source.fluxcd.io,resources=gitrepositories/status,verbs=get;update;patch
 
 func (r *GitRepositoryReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
+	ctx := context.Background()
 
 	var repo sourcev1.GitRepository
 	if err := r.Get(ctx, req.NamespacedName, &repo); err != nil {
@@ -174,7 +172,8 @@ func (r *GitRepositoryReconciler) sync(ctx context.Context, repository sourcev1.
 	defer os.RemoveAll(tmpGit)
 
 	// clone to tmp
-	repo, err := git.PlainClone(tmpGit, false, &git.CloneOptions{
+	gitCtx, cancel := context.WithTimeout(ctx, repository.GetTimeout())
+	repo, err := git.PlainCloneContext(gitCtx, tmpGit, false, &git.CloneOptions{
 		URL:               repository.Spec.URL,
 		Auth:              auth,
 		RemoteName:        "origin",
@@ -186,6 +185,7 @@ func (r *GitRepositoryReconciler) sync(ctx context.Context, repository sourcev1.
 		Progress:          nil,
 		Tags:              tagMode,
 	})
+	cancel()
 	if err != nil {
 		err = fmt.Errorf("git clone error: %w", err)
 		return sourcev1.GitRepositoryNotReady(repository, sourcev1.GitOperationFailedReason, err.Error()), err
@@ -350,6 +350,8 @@ func (r *GitRepositoryReconciler) sync(ctx context.Context, repository sourcev1.
 	return sourcev1.GitRepositoryReady(repository, artifact, url, sourcev1.GitOperationSucceedReason, message), nil
 }
 
+// shouldResetStatus returns a boolean indicating if the status of the
+// given repository should be reset and a reset HelmChartStatus.
 func (r *GitRepositoryReconciler) shouldResetStatus(repository sourcev1.GitRepository) (bool, sourcev1.GitRepositoryStatus) {
 	resetStatus := false
 	if repository.Status.Artifact != nil {
@@ -374,6 +376,8 @@ func (r *GitRepositoryReconciler) shouldResetStatus(repository sourcev1.GitRepos
 	}
 }
 
+// gc performs a garbage collection on all but current artifacts of
+// the given repository.
 func (r *GitRepositoryReconciler) gc(repository sourcev1.GitRepository) error {
 	if repository.Status.Artifact != nil {
 		return r.Storage.RemoveAllButCurrent(*repository.Status.Artifact)

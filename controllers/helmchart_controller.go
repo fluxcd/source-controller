@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/url"
-	"time"
 
 	"github.com/go-logr/logr"
 	"helm.sh/helm/v3/pkg/getter"
@@ -52,8 +51,7 @@ type HelmChartReconciler struct {
 // +kubebuilder:rbac:groups=source.fluxcd.io,resources=helmcharts/status,verbs=get;update;patch
 
 func (r *HelmChartReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
+	ctx := context.Background()
 
 	var chart sourcev1.HelmChart
 	if err := r.Get(ctx, req.NamespacedName, &chart); err != nil {
@@ -78,7 +76,7 @@ func (r *HelmChartReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	}
 
 	// get referenced chart repository
-	repository, err := r.chartRepository(ctx, chart)
+	repository, err := r.getChartRepositoryWithArtifact(ctx, chart)
 	if err != nil {
 		chart = sourcev1.HelmChartNotReady(*chart.DeepCopy(), sourcev1.ChartPullFailedReason, err.Error())
 		if err := r.Status().Update(ctx, &chart); err != nil {
@@ -94,7 +92,7 @@ func (r *HelmChartReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	}
 
 	// try to pull chart
-	pulledChart, err := r.sync(repository, *chart.DeepCopy())
+	pulledChart, err := r.sync(ctx, repository, *chart.DeepCopy())
 	if err != nil {
 		log.Error(err, "Helm chart sync failed")
 		if err := r.Status().Update(ctx, &pulledChart); err != nil {
@@ -132,7 +130,7 @@ func (r *HelmChartReconciler) SetupWithManagerAndOptions(mgr ctrl.Manager, opts 
 		Complete(r)
 }
 
-func (r *HelmChartReconciler) sync(repository sourcev1.HelmRepository, chart sourcev1.HelmChart) (sourcev1.HelmChart, error) {
+func (r *HelmChartReconciler) sync(ctx context.Context, repository sourcev1.HelmRepository, chart sourcev1.HelmChart) (sourcev1.HelmChart, error) {
 	indexBytes, err := ioutil.ReadFile(repository.Status.Artifact.Path)
 	if err != nil {
 		err = fmt.Errorf("failed to read Helm repository index file: %w", err)
@@ -182,7 +180,7 @@ func (r *HelmChartReconciler) sync(repository sourcev1.HelmRepository, chart sou
 		}
 
 		var secret corev1.Secret
-		err := r.Client.Get(context.TODO(), name, &secret)
+		err := r.Client.Get(ctx, name, &secret)
 		if err != nil {
 			err = fmt.Errorf("auth secret error: %w", err)
 			return sourcev1.HelmChartNotReady(chart, sourcev1.AuthenticationFailedReason, err.Error()), err
@@ -199,6 +197,8 @@ func (r *HelmChartReconciler) sync(repository sourcev1.HelmRepository, chart sou
 		clientOpts = opts
 	}
 
+	// TODO(hidde): implement timeout from the HelmRepository
+	//  https://github.com/helm/helm/pull/7950
 	res, err := c.Get(u.String(), clientOpts...)
 	if err != nil {
 		return sourcev1.HelmChartNotReady(chart, sourcev1.ChartPullFailedReason, err.Error()), err
@@ -246,7 +246,10 @@ func (r *HelmChartReconciler) sync(repository sourcev1.HelmRepository, chart sou
 	return sourcev1.HelmChartReady(chart, artifact, chartUrl, sourcev1.ChartPullSucceededReason, message), nil
 }
 
-func (r *HelmChartReconciler) chartRepository(ctx context.Context, chart sourcev1.HelmChart) (sourcev1.HelmRepository, error) {
+// getChartRepositoryWithArtifact attempts to get the ChartRepository
+// for the given chart. It returns an error if the HelmRepository could
+// not be retrieved or if does not have an artifact.
+func (r *HelmChartReconciler) getChartRepositoryWithArtifact(ctx context.Context, chart sourcev1.HelmChart) (sourcev1.HelmRepository, error) {
 	if chart.Spec.HelmRepositoryRef.Name == "" {
 		return sourcev1.HelmRepository{}, fmt.Errorf("no HelmRepository reference given")
 	}
@@ -270,6 +273,8 @@ func (r *HelmChartReconciler) chartRepository(ctx context.Context, chart sourcev
 	return repository, err
 }
 
+// shouldResetStatus returns a boolean indicating if the status of the
+// given chart should be reset and a reset HelmChartStatus.
 func (r *HelmChartReconciler) shouldResetStatus(chart sourcev1.HelmChart) (bool, sourcev1.HelmChartStatus) {
 	resetStatus := false
 	if chart.Status.Artifact != nil {
@@ -295,6 +300,8 @@ func (r *HelmChartReconciler) shouldResetStatus(chart sourcev1.HelmChart) (bool,
 	}
 }
 
+// gc performs a garbage collection on all but current artifacts of
+// the given chart.
 func (r *HelmChartReconciler) gc(chart sourcev1.HelmChart) error {
 	if chart.Status.Artifact != nil {
 		return r.Storage.RemoveAllButCurrent(*chart.Status.Artifact)
@@ -302,11 +309,14 @@ func (r *HelmChartReconciler) gc(chart sourcev1.HelmChart) error {
 	return nil
 }
 
+// setOwnerRef appends the owner reference of the given chart to the
+// repository if it is not present.
 func (r *HelmChartReconciler) setOwnerRef(ctx context.Context, chart *sourcev1.HelmChart, repository sourcev1.HelmRepository) error {
-	if !metav1.IsControlledBy(chart.GetObjectMeta(), repository.GetObjectMeta()) {
-		chart.SetOwnerReferences(append(chart.GetOwnerReferences(),
-			*metav1.NewControllerRef(repository.GetObjectMeta(), repository.GroupVersionKind())))
-		return r.Update(ctx, chart)
+	if metav1.IsControlledBy(chart.GetObjectMeta(), repository.GetObjectMeta()) {
+		return nil
 	}
-	return nil
+	chart.SetOwnerReferences(append(chart.GetOwnerReferences(), *metav1.NewControllerRef(
+		repository.GetObjectMeta(), repository.GroupVersionKind(),
+	)))
+	return r.Update(ctx, chart)
 }
