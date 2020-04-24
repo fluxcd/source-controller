@@ -63,6 +63,7 @@ func main() {
 		storagePath          string
 		storageAddr          string
 		concurrent           int
+		logJSON              bool
 	)
 
 	flag.StringVar(&metricsAddr, "metrics-addr", ":9090", "The address the metric endpoint binds to.")
@@ -72,10 +73,11 @@ func main() {
 	flag.StringVar(&storagePath, "storage-path", "", "The local storage path.")
 	flag.StringVar(&storageAddr, "storage-addr", ":8080", "The address the static file server binds to.")
 	flag.IntVar(&concurrent, "concurrent", 2, "The number of concurrent reconciles per controller.")
+	flag.BoolVar(&logJSON, "log-json", false, "Set logging to JSON format.")
 
 	flag.Parse()
 
-	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
+	ctrl.SetLogger(zap.New(zap.UseDevMode(!logJSON)))
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:             scheme,
