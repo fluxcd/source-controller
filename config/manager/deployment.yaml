@@ -23,6 +23,9 @@ spec:
       - name: manager
         image: fluxcd/source-controller
         imagePullPolicy: IfNotPresent
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
         ports:
           - containerPort: 8080
             name: http
@@ -37,6 +40,14 @@ spec:
             valueFrom:
               fieldRef:
                 fieldPath: metadata.namespace
+        livenessProbe:
+          httpGet:
+            port: http
+            path: /
+        readinessProbe:
+          httpGet:
+            port: http
+            path: /
         resources:
           limits:
             cpu: 1000m
@@ -47,6 +58,10 @@ spec:
         volumeMounts:
           - name: data
             mountPath: /data
+          - name: tmp
+            mountPath: /tmp
       volumes:
         - name: data
+          emptyDir: {}
+        - name: tmp
           emptyDir: {}
