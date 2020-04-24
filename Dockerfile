@@ -24,4 +24,8 @@ RUN apk add --no-cache openssh-client ca-certificates tini 'git>=2.12.0' socat c
 
 COPY --from=builder /workspace/source-controller /usr/local/bin/
 
+RUN addgroup -S controller && adduser -S -g controller controller
+
+USER controller
+
 ENTRYPOINT [ "/sbin/tini", "--", "source-controller" ]
