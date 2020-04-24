@@ -1,8 +1,7 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: controller
-  namespace: system
+  name: source-controller
   labels:
     control-plane: controller
 spec:
