@@ -27,6 +27,11 @@ type GitRepositorySpec struct {
 	// The interval at which to check for repository updates.
 	Interval metav1.Duration `json:"interval"`
 
+	// The timeout for remote git operations like cloning.
+	// +kubebuilder:validation:Default=20s
+	// +optional
+	Timeout *metav1.Duration `json:"timeout,omitempty"`
+
 	// The git reference to checkout and monitor for changes, defaults to
 	// master branch.
 	// +optional
