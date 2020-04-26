@@ -79,6 +79,9 @@ func (r *GitRepositoryReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 	syncedRepo, err := r.sync(ctx, *repo.DeepCopy())
 	if err != nil {
 		log.Error(err, "Git repository sync failed")
+		if err := r.Status().Update(ctx, &syncedRepo); err != nil {
+			log.Error(err, "unable to update GitRepository status")
+		}
 		return ctrl.Result{Requeue: true}, err
 	}
 
