@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.0.1-alpha.3 (2020-04-27)
+
+This alpha release contains a [bug fix](https://github.com/fluxcd/source-controller/pull/42)
+for `GitRepositories` status reporting and allows
+[waiting for sources on-demand sync](https://github.com/fluxcd/source-controller/pull/43).
+
 ## 0.0.1-alpha.2 (2020-04-24)
 
 This is the second alpha release of source controller.
