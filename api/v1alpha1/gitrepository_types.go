@@ -113,7 +113,7 @@ const (
 )
 
 // GitRepositoryReady sets the given artifact and url on the
-// HelmRepository and resets the conditions to SourceCondition of
+// GitRepository and resets the conditions to SourceCondition of
 // type Ready with status true and the given reason and message.
 // It returns the modified GitRepository.
 func GitRepositoryReady(repository GitRepository, artifact Artifact, url, reason, message string) GitRepository {
@@ -139,7 +139,23 @@ func GitRepositoryReady(repository GitRepository, artifact Artifact, url, reason
 	return repository
 }
 
-// GitRepositoryNotReady resets the conditions of the HelmRepository
+// GitRepositoryProgressing resets the conditions of the GitRepository
+// to SourceCondition of type Ready with status unknown and
+// progressing reason and message. It returns the modified GitRepository.
+func GitRepositoryProgressing(repository GitRepository) GitRepository {
+	repository.Status.Conditions = []SourceCondition{
+		{
+			Type:               ReadyCondition,
+			Status:             corev1.ConditionUnknown,
+			LastTransitionTime: metav1.Now(),
+			Reason:             ProgressingReason,
+			Message:            "reconciliation in progress",
+		},
+	}
+	return repository
+}
+
+// GitRepositoryNotReady resets the conditions of the GitRepository
 // to SourceCondition of type Ready with status false and the given
 // reason and message. It returns the modified GitRepository.
 func GitRepositoryNotReady(repository GitRepository, reason, message string) GitRepository {

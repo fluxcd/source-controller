@@ -69,4 +69,8 @@ const (
 	// VerificationFailedReason represents the fact that the cryptographic provenance
 	// verification for the source failed.
 	VerificationFailedReason string = "VerificationFailed"
+
+	// ProgressingReason represents the fact that a source reconciliation
+	// is underway.
+	ProgressingReason string = "Progressing"
 )
