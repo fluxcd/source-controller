@@ -93,6 +93,22 @@ func HelmChartReady(chart HelmChart, artifact Artifact, url, reason, message str
 	return chart
 }
 
+// HelmChartProgressing resets the conditions of the HelmChart
+// to SourceCondition of type Ready with status unknown and
+// progressing reason and message. It returns the modified HelmChart.
+func HelmChartProgressing(chart HelmChart) HelmChart {
+	chart.Status.Conditions = []SourceCondition{
+		{
+			Type:               ReadyCondition,
+			Status:             corev1.ConditionUnknown,
+			LastTransitionTime: metav1.Now(),
+			Reason:             ProgressingReason,
+			Message:            "reconciliation in progress",
+		},
+	}
+	return chart
+}
+
 // HelmChartNotReady resets the conditions of the HelmChart to
 // SourceCondition of type Ready with status false and the given
 // reason and message. It returns the modified HelmChart.

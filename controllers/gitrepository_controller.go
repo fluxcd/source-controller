@@ -68,6 +68,12 @@ func (r *GitRepositoryReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 			log.Error(err, "unable to update GitRepository status")
 			return ctrl.Result{Requeue: true}, err
 		}
+	} else {
+		repo = sourcev1.GitRepositoryProgressing(repo)
+		if err := r.Status().Update(ctx, &repo); err != nil {
+			log.Error(err, "unable to update GitRepository status")
+			return ctrl.Result{Requeue: true}, err
+		}
 	}
 
 	// try to remove old artifacts

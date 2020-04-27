@@ -92,6 +92,22 @@ func HelmRepositoryReady(repository HelmRepository, artifact Artifact, url, reas
 	return repository
 }
 
+// HelmRepositoryProgressing resets the conditions of the HelmRepository
+// to SourceCondition of type Ready with status unknown and
+// progressing reason and message. It returns the modified HelmRepository.
+func HelmRepositoryProgressing(repository HelmRepository) HelmRepository {
+	repository.Status.Conditions = []SourceCondition{
+		{
+			Type:               ReadyCondition,
+			Status:             corev1.ConditionUnknown,
+			LastTransitionTime: metav1.Now(),
+			Reason:             ProgressingReason,
+			Message:            "reconciliation in progress",
+		},
+	}
+	return repository
+}
+
 // HelmRepositoryNotReady resets the conditions of the HelmRepository
 // to SourceCondition of type Ready with status false and the given
 // reason and message. It returns the modified HelmRepository.

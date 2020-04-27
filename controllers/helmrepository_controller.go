@@ -70,6 +70,12 @@ func (r *HelmRepositoryReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 			log.Error(err, "unable to update HelmRepository status")
 			return ctrl.Result{Requeue: true}, err
 		}
+	} else {
+		repository = sourcev1.HelmRepositoryProgressing(repository)
+		if err := r.Status().Update(ctx, &repository); err != nil {
+			log.Error(err, "unable to update HelmRepository status")
+			return ctrl.Result{Requeue: true}, err
+		}
 	}
 
 	// try to remove old artifacts

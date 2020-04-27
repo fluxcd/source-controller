@@ -68,6 +68,12 @@ func (r *HelmChartReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 			log.Error(err, "unable to update HelmChart status")
 			return ctrl.Result{Requeue: true}, err
 		}
+	} else {
+		chart = sourcev1.HelmChartProgressing(chart)
+		if err := r.Status().Update(ctx, &chart); err != nil {
+			log.Error(err, "unable to update HelmChart status")
+			return ctrl.Result{Requeue: true}, err
+		}
 	}
 
 	// try to remove old artifacts
