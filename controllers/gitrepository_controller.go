@@ -321,6 +321,9 @@ func (r *GitRepositoryReconciler) sync(ctx context.Context, repository sourcev1.
 
 	if revision == "" {
 		revision = fmt.Sprintf("%s/%s", branch, ref.Hash().String())
+		if repository.Spec.Reference.Tag != "" {
+			revision = fmt.Sprintf("%s/%s", repository.Spec.Reference.Tag, ref.Hash().String())
+		}
 	}
 
 	artifact := r.Storage.ArtifactFor(repository.Kind, repository.ObjectMeta.GetObjectMeta(),
