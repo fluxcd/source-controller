@@ -113,7 +113,7 @@ func (s *Storage) ArtifactExist(artifact sourcev1.Artifact) bool {
 }
 
 // Archive creates a tar.gz to the artifact path from the given dir excluding the provided file extensions
-func (s *Storage) Archive(artifact sourcev1.Artifact, dir string, excludes string) error {
+func (s *Storage) Archive(artifact sourcev1.Artifact, dir string, excludes string, integrityCheck bool) error {
 	if excludes == "" {
 		excludes = "jpg,jpeg,gif,png,wmv,flv,tar.gz,zip"
 	}
@@ -129,6 +129,23 @@ func (s *Storage) Archive(artifact sourcev1.Artifact, dir string, excludes strin
 	if err != nil {
 		return fmt.Errorf("command '%s' failed: %w", cmd, err)
 	}
+
+	if integrityCheck {
+		cmd = fmt.Sprintf("gunzip -t %s", artifact.Path)
+		command = exec.CommandContext(ctx, "/bin/sh", "-c", cmd)
+		err = command.Run()
+		if err != nil {
+			return fmt.Errorf("gzip integrity check failed")
+		}
+
+		cmd = fmt.Sprintf("tar -tzf %s >/dev/null", artifact.Path)
+		command = exec.CommandContext(ctx, "/bin/sh", "-c", cmd)
+		err = command.Run()
+		if err != nil {
+			return fmt.Errorf("tar integrity check failed")
+		}
+	}
+
 	return nil
 }
 
