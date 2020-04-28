@@ -20,7 +20,7 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GO111MODULE=on go build -a -o source-c
 
 FROM alpine:3.11
 
-RUN apk add --no-cache openssh-client ca-certificates tini 'git>=2.12.0' socat curl bash
+RUN apk add --no-cache openssh-client ca-certificates tar tini 'git>=2.12.0' socat curl bash
 
 COPY --from=builder /workspace/source-controller /usr/local/bin/
 
