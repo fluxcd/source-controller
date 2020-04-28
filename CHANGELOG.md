@@ -2,6 +2,11 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.0.1-alpha.4 (2020-04-28)
+
+This alpha release comes with [integrity checks](https://github.com/fluxcd/source-controller/pull/45)
+for artifacts produced from Git repositories.
+
 ## 0.0.1-alpha.3 (2020-04-27)
 
 This alpha release contains a [bug fix](https://github.com/fluxcd/source-controller/pull/42)
