@@ -94,7 +94,7 @@ var _ = BeforeSuite(func(done Done) {
 
 	Expect(loadExampleKeys()).To(Succeed())
 
-	tmpStoragePath, err := ioutil.TempDir("", "helmrepository")
+	tmpStoragePath, err := ioutil.TempDir("", "source-controller-storage-")
 	Expect(err).NotTo(HaveOccurred(), "failed to create tmp storage dir")
 
 	storage, err = NewStorage(tmpStoragePath, "localhost", time.Second*30)
@@ -104,6 +104,14 @@ var _ = BeforeSuite(func(done Done) {
 		Scheme: scheme.Scheme,
 	})
 	Expect(err).ToNot(HaveOccurred())
+
+	err = (&GitRepositoryReconciler{
+		Client:  k8sManager.GetClient(),
+		Log:     ctrl.Log.WithName("controllers").WithName("GitRepository"),
+		Scheme:  scheme.Scheme,
+		Storage: storage,
+	}).SetupWithManager(k8sManager)
+	Expect(err).ToNot(HaveOccurred(), "failed to setup GtRepositoryReconciler")
 
 	err = (&HelmRepositoryReconciler{
 		Client:  k8sManager.GetClient(),

@@ -55,6 +55,13 @@ type GitServer struct {
 	sshServer  *gitkit.SSH
 }
 
+// AutoCreate enables the automatic creation of a non-existing Git
+// repository on push.
+func (s *GitServer) AutoCreate() *GitServer {
+	s.config.AutoCreate = true
+	return s
+}
+
 // StartHTTP starts a new HTTP git server with the current configuration.
 func (s *GitServer) StartHTTP() error {
 	s.StopHTTP()
