@@ -248,7 +248,7 @@ func (r *HelmChartReconciler) sync(ctx context.Context, repository sourcev1.Helm
 		return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
 	}
 
-	message := fmt.Sprintf("Helm chart is available at: %s", artifact.Path)
+	message := fmt.Sprintf("Fetched revision: %s", artifact.Revision)
 	return sourcev1.HelmChartReady(chart, artifact, chartUrl, sourcev1.ChartPullSucceededReason, message), nil
 }
 
