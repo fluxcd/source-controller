@@ -216,7 +216,7 @@ func (r *HelmRepositoryReconciler) sync(ctx context.Context, repository sourcev1
 		return sourcev1.HelmRepositoryNotReady(repository, sourcev1.StorageOperationFailedReason, err.Error()), err
 	}
 
-	message := fmt.Sprintf("Helm repository index is available at: %s", artifact.Path)
+	message := fmt.Sprintf("Fetched revision: %s", artifact.Revision)
 	return sourcev1.HelmRepositoryReady(repository, artifact, indexURL, sourcev1.IndexationSucceededReason, message), nil
 }
 

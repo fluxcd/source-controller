@@ -358,7 +358,7 @@ func (r *GitRepositoryReconciler) sync(ctx context.Context, repository sourcev1.
 		return sourcev1.GitRepositoryNotReady(repository, sourcev1.StorageOperationFailedReason, err.Error()), err
 	}
 
-	message := fmt.Sprintf("Git repoistory artifacts are available at: %s", artifact.Path)
+	message := fmt.Sprintf("Fetched revision: %s", artifact.Revision)
 	return sourcev1.GitRepositoryReady(repository, artifact, url, sourcev1.GitOperationSucceedReason, message), nil
 }
 
