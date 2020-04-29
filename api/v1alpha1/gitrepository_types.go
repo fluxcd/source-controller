@@ -42,8 +42,7 @@ type GitRepositorySpec struct {
 	// +required
 	Interval metav1.Duration `json:"interval"`
 
-	// The timeout for remote git operations like cloning.
-	// +kubebuilder:validation:Default=20s
+	// The timeout for remote git operations like cloning, default to 20s.
 	// +optional
 	Timeout *metav1.Duration `json:"timeout,omitempty"`
 
@@ -61,20 +60,19 @@ type GitRepositorySpec struct {
 type GitRepositoryRef struct {
 	// The git branch to checkout, defaults to master.
 	// +optional
-	Branch string `json:"branch"`
+	Branch string `json:"branch,omitempty"`
 
 	// The git tag to checkout, takes precedence over branch.
 	// +optional
-	Tag string `json:"tag"`
+	Tag string `json:"tag,omitempty"`
 
 	// The git tag semver expression, takes precedence over tag.
 	// +optional
-	SemVer string `json:"semver"`
+	SemVer string `json:"semver,omitempty"`
 
-	// The git commit sha to checkout, if specified tag filters will be
-	// ignored.
+	// The git commit sha to checkout, if specified tag filters will be ignored.
 	// +optional
-	Commit string `json:"commit"`
+	Commit string `json:"commit,omitempty"`
 }
 
 // GitRepositoryVerification defines the OpenPGP signature verification process.
