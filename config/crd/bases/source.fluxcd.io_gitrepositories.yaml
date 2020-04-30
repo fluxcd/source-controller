@@ -83,7 +83,8 @@ spec:
                   type: string
               type: object
             timeout:
-              description: The timeout for remote git operations like cloning.
+              description: The timeout for remote git operations like cloning, default
+                to 20s.
               type: string
             url:
               description: The repository URL, can be a HTTP or SSH address.
