@@ -139,8 +139,15 @@ var _ = Describe("HelmRepositoryReconciler", func() {
 				return k8sClient.Get(context.Background(), key, r)
 			}).ShouldNot(Succeed())
 
+			exists := func(path string) bool {
+				// wait for tmp sync on macOS
+				time.Sleep(time.Second)
+				_, err := os.Stat(path)
+				return err == nil
+			}
+
 			By("Expecting GC after delete")
-			Eventually(storage.ArtifactExist(*got.Status.Artifact), timeout, interval).ShouldNot(BeTrue())
+			Eventually(exists(got.Status.Artifact.Path), timeout, interval).ShouldNot(BeTrue())
 		})
 
 		It("Authenticates when basic auth credentials are provided", func() {

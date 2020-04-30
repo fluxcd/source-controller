@@ -157,8 +157,15 @@ var _ = Describe("HelmChartReconciler", func() {
 				return k8sClient.Get(context.Background(), key, c)
 			}).ShouldNot(Succeed())
 
+			exists := func(path string) bool {
+				// wait for tmp sync on macOS
+				time.Sleep(time.Second)
+				_, err := os.Stat(path)
+				return err == nil
+			}
+
 			By("Expecting GC on delete")
-			Eventually(storage.ArtifactExist(*got.Status.Artifact), timeout, interval).ShouldNot(BeTrue())
+			Eventually(exists(got.Status.Artifact.Path), timeout, interval).ShouldNot(BeTrue())
 		})
 
 		It("Filters versions", func() {
