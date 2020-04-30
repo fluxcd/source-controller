@@ -2,6 +2,15 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.0.1-alpha.5 (2020-04-30)
+
+This alpha release contains several bug fixes
+[#47](https://github.com/fluxcd/source-controller/pull/47)
+[#49](https://github.com/fluxcd/source-controller/pull/49)
+[#50](https://github.com/fluxcd/source-controller/pull/50).
+After a successful synchronization, the controller reports the revision in the 
+status ready condition.
+
 ## 0.0.1-alpha.4 (2020-04-28)
 
 This alpha release comes with [integrity checks](https://github.com/fluxcd/source-controller/pull/45)
