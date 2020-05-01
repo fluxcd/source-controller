@@ -18,6 +18,7 @@ package controllers
 
 import (
 	"context"
+	"fmt"
 	"net/url"
 	"os"
 	"path"
@@ -49,7 +50,7 @@ var _ = Describe("GitRepositoryReconciler", func() {
 		indexInterval = time.Second * 1
 	)
 
-	Context("GitRepsoitory", func() {
+	Context("GitRepository", func() {
 		var (
 			namespace *corev1.Namespace
 			gitServer *testserver.GitServer
@@ -75,159 +76,52 @@ var _ = Describe("GitRepositoryReconciler", func() {
 			Expect(err).NotTo(HaveOccurred(), "failed to delete test namespace")
 		})
 
-		It("Creates artifacts for", func() {
-			err = gitServer.StartHTTP()
-			Expect(err).NotTo(HaveOccurred())
-
-			By("Creating a new git repository with a single commit")
-			u, err := url.Parse(gitServer.HTTPAddress())
-			Expect(err).NotTo(HaveOccurred())
-			u.Path = path.Join(u.Path, "repository.git")
-
-			fs := memfs.New()
-			r, err := git.Init(memory.NewStorage(), fs)
-			Expect(err).NotTo(HaveOccurred())
-
-			_, err = r.CreateRemote(&config.RemoteConfig{
-				Name: "origin",
-				URLs: []string{u.String()},
-			})
-			Expect(err).NotTo(HaveOccurred())
-
-			ff, err := fs.Create("fixture")
-			Expect(err).NotTo(HaveOccurred())
-			_ = ff.Close()
-
-			wt, err := r.Worktree()
-			Expect(err).NotTo(HaveOccurred())
-
-			_, err = wt.Add(fs.Join("fixture"))
-			Expect(err).NotTo(HaveOccurred())
-
-			cHash, err := wt.Commit("Sample", &git.CommitOptions{Author: &object.Signature{
-				Name:  "John Doe",
-				Email: "john@example.com",
-				When:  time.Now(),
-			}})
-			Expect(err).NotTo(HaveOccurred())
-
-			err = r.Push(&git.PushOptions{})
-			Expect(err).NotTo(HaveOccurred())
-
-			By("Creating a new resource for the repository")
-			key := types.NamespacedName{
-				Name:      "gitrepository-sample-" + randStringRunes(5),
-				Namespace: namespace.Name,
-			}
-			created := &sourcev1.GitRepository{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      key.Name,
-					Namespace: key.Namespace,
-				},
-				Spec: sourcev1.GitRepositorySpec{
-					URL:      u.String(),
-					Interval: metav1.Duration{Duration: indexInterval},
-				},
-			}
-			Expect(k8sClient.Create(context.Background(), created)).Should(Succeed())
-
-			By("Expecting artifact and revision")
-			got := &sourcev1.GitRepository{}
-			Eventually(func() bool {
-				_ = k8sClient.Get(context.Background(), key, got)
-				return got.Status.Artifact != nil && storage.ArtifactExist(*got.Status.Artifact)
-			}, timeout, interval).Should(BeTrue())
-			Expect(got.Status.Artifact.Revision).To(Equal("master/" + cHash.String()))
-
-			By("Pushing a change to the repository")
-			ff, err = fs.Create("fixture2")
-			Expect(err).NotTo(HaveOccurred())
-			_ = ff.Close()
-
-			_, err = wt.Add(fs.Join("fixture2"))
-			Expect(err).NotTo(HaveOccurred())
-
-			cHash, err = wt.Commit("Sample", &git.CommitOptions{Author: &object.Signature{
-				Name:  "John Doe",
-				Email: "john@example.com",
-				When:  time.Now(),
-			}})
-			Expect(err).NotTo(HaveOccurred())
-
-			err = r.Push(&git.PushOptions{})
-			Expect(err).NotTo(HaveOccurred())
-
-			By("Expecting new artifact revision and GC")
-			Eventually(func() bool {
-				now := &sourcev1.GitRepository{}
-				_ = k8sClient.Get(context.Background(), key, now)
-				return now.Status.Artifact.Revision != got.Status.Artifact.Revision &&
-					!storage.ArtifactExist(*got.Status.Artifact)
-			}, timeout, interval).Should(BeTrue())
-
-			By("Expecting git clone error")
-			updated := &sourcev1.GitRepository{}
-			Expect(k8sClient.Get(context.Background(), key, updated)).Should(Succeed())
-			updated.Spec.URL = "https://invalid.com"
-			Expect(k8sClient.Update(context.Background(), updated)).Should(Succeed())
-			Eventually(func() bool {
-				_ = k8sClient.Get(context.Background(), key, updated)
-				for _, c := range updated.Status.Conditions {
-					if c.Reason == sourcev1.GitOperationFailedReason &&
-						strings.Contains(c.Message, "git clone error") {
-						return true
-					}
-				}
-				return false
-			}, timeout, interval).Should(BeTrue())
-			Expect(updated.Status.Artifact).ToNot(BeNil())
-
-			By("Expecting to delete successfully")
-			got = &sourcev1.GitRepository{}
-			Eventually(func() error {
-				_ = k8sClient.Get(context.Background(), key, got)
-				return k8sClient.Delete(context.Background(), got)
-			}, timeout, interval).Should(Succeed())
-
-			By("Expecting delete to finish")
-			Eventually(func() error {
-				return k8sClient.Get(context.Background(), key, &sourcev1.GitRepository{})
-			}).ShouldNot(Succeed())
-
-			By("Expecting GC on delete")
-			exists := func(path string) bool {
-				// wait for tmp sync on macOS
-				time.Sleep(time.Second)
-				_, err := os.Stat(path)
-				return err == nil
-			}
-			Eventually(exists(got.Status.Artifact.Path), timeout, interval).ShouldNot(BeTrue())
-		})
-
 		type refTestCase struct {
-			reference      *sourcev1.GitRepositoryRef
-			createBranches []string
-			createTags     []string
+			reference  *sourcev1.GitRepositoryRef
+			createRefs []string
 
-			waitForReason  string
+			waitForReason string
+
 			expectStatus   corev1.ConditionStatus
 			expectMessage  string
 			expectRevision string
 		}
 
-		DescribeTable("Reference test configuration", func(t refTestCase) {
+		DescribeTable("Git references tests", func(t refTestCase) {
 			err = gitServer.StartHTTP()
-			defer os.RemoveAll(gitServer.Root())
 			defer gitServer.StopHTTP()
 			Expect(err).NotTo(HaveOccurred())
 
 			u, err := url.Parse(gitServer.HTTPAddress())
 			Expect(err).NotTo(HaveOccurred())
-			u.Path = path.Join(u.Path, "repository.git")
+			u.Path = path.Join(u.Path, fmt.Sprintf("repository-%s.git", randStringRunes(5)))
 
 			fs := memfs.New()
 			gitrepo, err := git.Init(memory.NewStorage(), fs)
 			Expect(err).NotTo(HaveOccurred())
+
+			wt, err := gitrepo.Worktree()
+			Expect(err).NotTo(HaveOccurred())
+
+			ff, _ := fs.Create("fixture")
+			_ = ff.Close()
+			_, err = wt.Add(fs.Join("fixture"))
+			Expect(err).NotTo(HaveOccurred())
+
+			commit, err := wt.Commit("Sample", &git.CommitOptions{Author: &object.Signature{
+				Name:  "John Doe",
+				Email: "john@example.com",
+				When:  time.Now(),
+			}})
+			Expect(err).NotTo(HaveOccurred())
+
+			gitrepo.Worktree()
+
+			for _, ref := range t.createRefs {
+				hRef := plumbing.NewHashReference(plumbing.ReferenceName(ref), commit)
+				err = gitrepo.Storer.SetReference(hRef)
+				Expect(err).NotTo(HaveOccurred())
+			}
 
 			remote, err := gitrepo.CreateRemote(&config.RemoteConfig{
 				Name: "origin",
@@ -235,45 +129,15 @@ var _ = Describe("GitRepositoryReconciler", func() {
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			ff, err := fs.Create("fixture")
-			Expect(err).NotTo(HaveOccurred())
-			_ = ff.Close()
-
-			wt, err := gitrepo.Worktree()
+			err = remote.Push(&git.PushOptions{
+				RefSpecs: []config.RefSpec{"refs/heads/*:refs/heads/*", "refs/tags/*:refs/tags/*"},
+			})
 			Expect(err).NotTo(HaveOccurred())
 
-			_, err = wt.Add(fs.Join("fixture"))
-			Expect(err).NotTo(HaveOccurred())
-
-			cHash, err := wt.Commit("Sample", &git.CommitOptions{Author: &object.Signature{
-				Name:  "John Doe",
-				Email: "john@example.com",
-				When:  time.Now(),
-			}})
-			Expect(err).NotTo(HaveOccurred())
-			err = remote.Push(&git.PushOptions{})
-			Expect(err).NotTo(HaveOccurred())
-
-			for _, branch := range t.createBranches {
-				ref := plumbing.NewHashReference(plumbing.ReferenceName("refs/heads/"+branch), cHash)
-				err = gitrepo.Storer.SetReference(ref)
-				Expect(err).NotTo(HaveOccurred())
-				err = remote.Push(&git.PushOptions{})
-				Expect(err).NotTo(HaveOccurred())
-			}
-
-			for _, tag := range t.createTags {
-				ref := plumbing.NewHashReference(plumbing.ReferenceName("refs/tags/"+tag), cHash)
-				err = gitrepo.Storer.SetReference(ref)
-				Expect(err).NotTo(HaveOccurred())
-				err = remote.Push(&git.PushOptions{
-					RefSpecs: []config.RefSpec{"refs/tags/*:refs/tags/*"},
-				})
-				Expect(err).NotTo(HaveOccurred())
-			}
+			t.reference.Commit = strings.Replace(t.reference.Commit, "<commit>", commit.String(), 1)
 
 			key := types.NamespacedName{
-				Name:      "gitrepository-sample-" + randStringRunes(5),
+				Name:      fmt.Sprintf("git-ref-test-%s", randStringRunes(5)),
 				Namespace: namespace.Name,
 			}
 			created := &sourcev1.GitRepository{
@@ -307,12 +171,12 @@ var _ = Describe("GitRepositoryReconciler", func() {
 			Expect(cond.Message).To(ContainSubstring(t.expectMessage))
 			Expect(got.Status.Artifact == nil).To(Equal(t.expectRevision == ""))
 			if t.expectRevision != "" {
-				Expect(got.Status.Artifact.Revision).To(Equal(t.expectRevision + "/" + cHash.String()))
+				Expect(got.Status.Artifact.Revision).To(Equal(t.expectRevision + "/" + commit.String()))
 			}
 		},
 			Entry("branch", refTestCase{
 				reference:      &sourcev1.GitRepositoryRef{Branch: "some-branch"},
-				createBranches: []string{"some-branch"},
+				createRefs:     []string{"refs/heads/some-branch"},
 				waitForReason:  sourcev1.GitOperationSucceedReason,
 				expectStatus:   corev1.ConditionTrue,
 				expectRevision: "some-branch",
@@ -325,7 +189,7 @@ var _ = Describe("GitRepositoryReconciler", func() {
 			}),
 			Entry("tag", refTestCase{
 				reference:      &sourcev1.GitRepositoryRef{Tag: "some-tag"},
-				createTags:     []string{"some-tag"},
+				createRefs:     []string{"refs/tags/some-tag"},
 				waitForReason:  sourcev1.GitOperationSucceedReason,
 				expectStatus:   corev1.ConditionTrue,
 				expectRevision: "some-tag",
@@ -338,14 +202,14 @@ var _ = Describe("GitRepositoryReconciler", func() {
 			}),
 			Entry("semver", refTestCase{
 				reference:      &sourcev1.GitRepositoryRef{SemVer: "1.0.0"},
-				createTags:     []string{"v1.0.0"},
+				createRefs:     []string{"refs/tags/v1.0.0"},
 				waitForReason:  sourcev1.GitOperationSucceedReason,
 				expectStatus:   corev1.ConditionTrue,
 				expectRevision: "v1.0.0",
 			}),
 			Entry("semver range", refTestCase{
 				reference:      &sourcev1.GitRepositoryRef{SemVer: ">=0.1.0 <1.0.0"},
-				createTags:     []string{"0.1.0", "0.1.1", "0.2.0", "1.0.0"},
+				createRefs:     []string{"refs/tags/0.1.0", "refs/tags/0.1.1", "refs/tags/0.2.0", "refs/tags/1.0.0"},
 				waitForReason:  sourcev1.GitOperationSucceedReason,
 				expectStatus:   corev1.ConditionTrue,
 				expectRevision: "0.2.0",
@@ -361,6 +225,33 @@ var _ = Describe("GitRepositoryReconciler", func() {
 				waitForReason: sourcev1.GitOperationFailedReason,
 				expectStatus:  corev1.ConditionFalse,
 				expectMessage: "no match found for semver: 1.0.0",
+			}),
+			Entry("commit", refTestCase{
+				reference: &sourcev1.GitRepositoryRef{
+					Commit: "<commit>",
+				},
+				waitForReason:  sourcev1.GitOperationSucceedReason,
+				expectStatus:   corev1.ConditionTrue,
+				expectRevision: "master",
+			}),
+			Entry("commit in branch", refTestCase{
+				reference: &sourcev1.GitRepositoryRef{
+					Branch: "some-branch",
+					Commit: "<commit>",
+				},
+				createRefs:     []string{"refs/heads/some-branch"},
+				waitForReason:  sourcev1.GitOperationSucceedReason,
+				expectStatus:   corev1.ConditionTrue,
+				expectRevision: "some-branch",
+			}),
+			Entry("invalid commit", refTestCase{
+				reference: &sourcev1.GitRepositoryRef{
+					Branch: "master",
+					Commit: "invalid",
+				},
+				waitForReason: sourcev1.GitOperationFailedReason,
+				expectStatus:  corev1.ConditionFalse,
+				expectMessage: "git commit 'invalid' not found: object not found",
 			}),
 		)
 	})

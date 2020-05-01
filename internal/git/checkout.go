@@ -43,7 +43,11 @@ func CheckoutStrategyForRef(ref *sourcev1.GitRepositoryRef) CheckoutStrategy {
 	case ref.Tag != "":
 		return &CheckoutTag{tag: ref.Tag}
 	case ref.Commit != "":
-		return &CheckoutCommit{branch: ref.Branch, commit: ref.Commit}
+		strategy := &CheckoutCommit{branch: ref.Branch, commit: ref.Commit}
+		if strategy.branch == "" {
+			strategy.branch = defaultBranch
+		}
+		return strategy
 	case ref.Branch != "":
 		return &CheckoutBranch{branch: ref.Branch}
 	default:
@@ -81,7 +85,7 @@ func (c *CheckoutBranch) Checkout(ctx context.Context, path, url string, auth tr
 	}
 	commit, err := repo.CommitObject(head.Hash())
 	if err != nil {
-		return nil, "", fmt.Errorf("git commit not found: %w", err)
+		return nil, "", fmt.Errorf("git commit '%s' not found: %w", head.Hash(), err)
 	}
 	return commit, fmt.Sprintf("%s/%s", c.branch, head.Hash().String()), nil
 }
@@ -112,7 +116,7 @@ func (c *CheckoutTag) Checkout(ctx context.Context, path, url string, auth trans
 	}
 	commit, err := repo.CommitObject(head.Hash())
 	if err != nil {
-		return nil, "", fmt.Errorf("git commit not found: %w", err)
+		return nil, "", fmt.Errorf("git commit '%s' not found: %w", head.Hash(), err)
 	}
 	return commit, fmt.Sprintf("%s/%s", c.tag, head.Hash().String()), nil
 }
@@ -143,7 +147,7 @@ func (c *CheckoutCommit) Checkout(ctx context.Context, path, url string, auth tr
 	}
 	commit, err := repo.CommitObject(plumbing.NewHash(c.commit))
 	if err != nil {
-		return nil, "", fmt.Errorf("git commit not found: %w", err)
+		return nil, "", fmt.Errorf("git commit '%s' not found: %w", c.commit, err)
 	}
 	err = w.Checkout(&git.CheckoutOptions{
 		Hash:  commit.Hash,
@@ -217,7 +221,7 @@ func (c *CheckoutSemVer) Checkout(ctx context.Context, path, url string, auth tr
 
 	commit, err := repo.CommitObject(plumbing.NewHash(commitRef))
 	if err != nil {
-		return nil, "", fmt.Errorf("git commit not found: %w", err)
+		return nil, "", fmt.Errorf("git commit '%s' not found: %w", commitRef, err)
 	}
 	err = w.Checkout(&git.CheckoutOptions{
 		Hash: commit.Hash,
