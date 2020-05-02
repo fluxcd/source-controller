@@ -163,13 +163,10 @@ func (r *GitRepositoryReconciler) sync(ctx context.Context, repository sourcev1.
 			return sourcev1.GitRepositoryNotReady(repository, sourcev1.AuthenticationFailedReason, err.Error()), err
 		}
 
-		method, cleanup, err := intgit.AuthMethodFromSecret(repository.Spec.URL, secret)
+		method, err := intgit.AuthMethodFromSecret(repository.Spec.URL, secret)
 		if err != nil {
 			err = fmt.Errorf("auth error: %w", err)
 			return sourcev1.GitRepositoryNotReady(repository, sourcev1.AuthenticationFailedReason, err.Error()), err
-		}
-		if cleanup != nil {
-			defer cleanup()
 		}
 		auth = method
 	}
@@ -292,7 +289,7 @@ func (r *GitRepositoryReconciler) sync(ctx context.Context, repository sourcev1.
 	if repository.Spec.Verification != nil {
 		err := r.verify(ctx, types.NamespacedName{
 			Namespace: repository.Namespace,
-			Name: repository.Spec.Verification.SecretRef.Name,
+			Name:      repository.Spec.Verification.SecretRef.Name,
 		}, commit)
 		if err != nil {
 			return sourcev1.GitRepositoryNotReady(repository, sourcev1.VerificationFailedReason, err.Error()), err

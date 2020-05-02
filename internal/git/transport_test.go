@@ -80,10 +80,7 @@ func TestAuthMethodFromSecret(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, cleanup, err := AuthMethodFromSecret(tt.url, tt.secret)
-			if cleanup != nil {
-				defer cleanup()
-			}
+			got, err := AuthMethodFromSecret(tt.url, tt.secret)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("AuthMethodFromSecret() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -146,10 +143,7 @@ func TestPublicKeysFromSecret(t *testing.T) {
 			if tt.modify != nil {
 				tt.modify(secret)
 			}
-			_, cleanup, err := PublicKeysFromSecret(*secret)
-			if cleanup != nil {
-				defer cleanup()
-			}
+			_, err := PublicKeysFromSecret(*secret)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("PublicKeysFromSecret() error = %v, wantErr %v", err, tt.wantErr)
 				return
