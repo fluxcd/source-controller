@@ -25,6 +25,7 @@ import (
 	"github.com/blang/semver"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/go-git/go-git/v5/plumbing/transport"
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
@@ -129,6 +130,7 @@ func (r *GitRepositoryReconciler) sync(ctx context.Context, repository sourcev1.
 
 	// determine ref
 	refName := plumbing.NewBranchReferenceName(branch)
+
 	if repository.Spec.Reference != nil {
 		if repository.Spec.Reference.Branch != "" {
 			branch = repository.Spec.Reference.Branch
@@ -280,41 +282,19 @@ func (r *GitRepositoryReconciler) sync(ctx context.Context, repository sourcev1.
 		return sourcev1.GitRepositoryNotReady(repository, sourcev1.GitOperationFailedReason, err.Error()), err
 	}
 
+	commit, err := repo.CommitObject(ref.Hash())
+	if err != nil {
+		err = fmt.Errorf("git resolve HEAD error: %w", err)
+		return sourcev1.GitRepositoryNotReady(repository, sourcev1.GitOperationFailedReason, err.Error()), err
+	}
+
 	// verify PGP signature
 	if repository.Spec.Verification != nil {
-		commit, err := repo.CommitObject(ref.Hash())
+		err := r.verify(ctx, types.NamespacedName{
+			Namespace: repository.Namespace,
+			Name: repository.Spec.Verification.SecretRef.Name,
+		}, commit)
 		if err != nil {
-			err = fmt.Errorf("git resolve HEAD error: %w", err)
-			return sourcev1.GitRepositoryNotReady(repository, sourcev1.GitOperationFailedReason, err.Error()), err
-		}
-
-		if commit.PGPSignature == "" {
-			err = fmt.Errorf("PGP signature not found for commit '%s'", ref.Hash())
-			return sourcev1.GitRepositoryNotReady(repository, sourcev1.VerificationFailedReason, err.Error()), err
-		}
-
-		name := types.NamespacedName{
-			Namespace: repository.GetNamespace(),
-			Name:      repository.Spec.Verification.SecretRef.Name,
-		}
-
-		var secret corev1.Secret
-		err = r.Client.Get(ctx, name, &secret)
-		if err != nil {
-			err = fmt.Errorf("PGP public keys secret error: %w", err)
-			return sourcev1.GitRepositoryNotReady(repository, sourcev1.VerificationFailedReason, err.Error()), err
-		}
-
-		var verified bool
-		for _, bytes := range secret.Data {
-			if _, err := commit.Verify(string(bytes)); err == nil {
-				verified = true
-				break
-			}
-		}
-
-		if !verified {
-			err = fmt.Errorf("PGP signature of '%s' can't be verified", commit.Author)
 			return sourcev1.GitRepositoryNotReady(repository, sourcev1.VerificationFailedReason, err.Error()), err
 		}
 	}
@@ -386,6 +366,29 @@ func (r *GitRepositoryReconciler) shouldResetStatus(repository sourcev1.GitRepos
 			},
 		},
 	}
+}
+
+func (r *GitRepositoryReconciler) verify(ctx context.Context, publicKeySecret types.NamespacedName, commit *object.Commit) error {
+	if commit.PGPSignature == "" {
+		return fmt.Errorf("no PGP signature found for commit: %s", commit.Hash)
+	}
+
+	var secret corev1.Secret
+	if err := r.Client.Get(ctx, publicKeySecret, &secret); err != nil {
+		return fmt.Errorf("PGP public keys secret error: %w", err)
+	}
+
+	var verified bool
+	for _, bytes := range secret.Data {
+		if _, err := commit.Verify(string(bytes)); err == nil {
+			verified = true
+			break
+		}
+	}
+	if !verified {
+		return fmt.Errorf("PGP signature '%s' of '%s' can't be verified", commit.PGPSignature, commit.Author)
+	}
+	return nil
 }
 
 // gc performs a garbage collection on all but current artifacts of
