@@ -28,17 +28,23 @@ import (
 	"github.com/fluxcd/source-controller/internal/crypto/ssh/knownhosts"
 )
 
-func AuthMethodFromSecret(url string, secret corev1.Secret) (transport.AuthMethod, error) {
+func AuthSecretStrategyForURL(url string) AuthSecretStrategy {
 	switch {
 	case strings.HasPrefix(url, "http"):
-		return BasicAuthFromSecret(secret)
+		return &BasicAuth{}
 	case strings.HasPrefix(url, "ssh"):
-		return PublicKeysFromSecret(secret)
+		return &PublicKeyAuth{}
 	}
-	return nil, nil
+	return nil
 }
 
-func BasicAuthFromSecret(secret corev1.Secret) (*http.BasicAuth, error) {
+type AuthSecretStrategy interface {
+	Method(secret corev1.Secret) (transport.AuthMethod, error)
+}
+
+type BasicAuth struct{}
+
+func (s *BasicAuth) Method(secret corev1.Secret) (transport.AuthMethod, error) {
 	auth := &http.BasicAuth{}
 	if username, ok := secret.Data["username"]; ok {
 		auth.Username = string(username)
@@ -52,7 +58,9 @@ func BasicAuthFromSecret(secret corev1.Secret) (*http.BasicAuth, error) {
 	return auth, nil
 }
 
-func PublicKeysFromSecret(secret corev1.Secret) (*ssh.PublicKeys, error) {
+type PublicKeyAuth struct{}
+
+func (s *PublicKeyAuth) Method(secret corev1.Secret) (transport.AuthMethod, error) {
 	identity := secret.Data["identity"]
 	knownHosts := secret.Data["known_hosts"]
 	if len(identity) == 0 || len(knownHosts) == 0 {

@@ -149,6 +149,7 @@ func (r *GitRepositoryReconciler) sync(ctx context.Context, repository sourcev1.
 	}
 
 	// determine auth method
+	strategy := intgit.AuthSecretStrategyForURL(repository.Spec.URL)
 	var auth transport.AuthMethod
 	if repository.Spec.SecretRef != nil {
 		name := types.NamespacedName{
@@ -163,12 +164,11 @@ func (r *GitRepositoryReconciler) sync(ctx context.Context, repository sourcev1.
 			return sourcev1.GitRepositoryNotReady(repository, sourcev1.AuthenticationFailedReason, err.Error()), err
 		}
 
-		method, err := intgit.AuthMethodFromSecret(repository.Spec.URL, secret)
+		auth, err = strategy.Method(secret)
 		if err != nil {
 			err = fmt.Errorf("auth error: %w", err)
 			return sourcev1.GitRepositoryNotReady(repository, sourcev1.AuthenticationFailedReason, err.Error()), err
 		}
-		auth = method
 	}
 
 	// create tmp dir for the Git clone
