@@ -8,7 +8,7 @@ require (
 	github.com/go-logr/logr v0.1.0
 	github.com/onsi/ginkgo v1.11.0
 	github.com/onsi/gomega v1.8.1
-	github.com/pkg/errors v0.9.1
+	golang.org/x/crypto v0.0.0-20200302210943-78000ba7a073
 	helm.sh/helm/v3 v3.1.2
 	k8s.io/api v0.17.2
 	k8s.io/apimachinery v0.17.2

@@ -22,7 +22,6 @@ import (
 
 	"github.com/go-git/go-git/v5/plumbing/transport"
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
-	"github.com/go-git/go-git/v5/plumbing/transport/ssh"
 	corev1 "k8s.io/api/core/v1"
 )
 
@@ -65,42 +64,33 @@ var (
 	}
 )
 
-func TestAuthMethodFromSecret(t *testing.T) {
+func TestAuthSecretStrategyForURL(t *testing.T) {
 	tests := []struct {
-		name    string
-		url     string
-		secret  corev1.Secret
-		want    transport.AuthMethod
-		wantErr bool
+		name string
+		url  string
+		want AuthSecretStrategy
 	}{
-		{"HTTP", "http://git.example.com/org/repo.git", basicAuthSecretFixture, &http.BasicAuth{}, false},
-		{"HTTPS", "https://git.example.com/org/repo.git", basicAuthSecretFixture, &http.BasicAuth{}, false},
-		{"SSH", "ssh://git.example.com:2222/org/repo.git", privateKeySecretFixture, &ssh.PublicKeys{}, false},
-		{"unsupported", "protocol://git.example.com/org/repo.git", corev1.Secret{}, nil, false},
+		{"HTTP", "http://git.example.com/org/repo.git", &BasicAuth{}},
+		{"HTTPS", "https://git.example.com/org/repo.git", &BasicAuth{}},
+		{"SSH", "ssh://git.example.com:2222/org/repo.git", &PublicKeyAuth{}},
+		{"unsupported", "protocol://example.com", nil},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, cleanup, err := AuthMethodFromSecret(tt.url, tt.secret)
-			if cleanup != nil {
-				defer cleanup()
-			}
-			if (err != nil) != tt.wantErr {
-				t.Errorf("AuthMethodFromSecret() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
+			got := AuthSecretStrategyForURL(tt.url)
 			if reflect.TypeOf(got) != reflect.TypeOf(tt.want) {
-				t.Errorf("AuthMethodFromSecret() got = %v, want %v", got, tt.want)
+				t.Errorf("AuthSecretStrategyForURL() got = %v, want %v", got, tt.want)
 			}
 		})
 	}
 }
 
-func TestBasicAuthFromSecret(t *testing.T) {
+func TestBasicAuthStrategy_Method(t *testing.T) {
 	tests := []struct {
 		name    string
 		secret  corev1.Secret
 		modify  func(secret *corev1.Secret)
-		want    *http.BasicAuth
+		want    transport.AuthMethod
 		wantErr bool
 	}{
 		{"username and password", basicAuthSecretFixture, nil, &http.BasicAuth{Username: "git", Password: "password"}, false},
@@ -114,19 +104,20 @@ func TestBasicAuthFromSecret(t *testing.T) {
 			if tt.modify != nil {
 				tt.modify(secret)
 			}
-			got, err := BasicAuthFromSecret(*secret)
+			s := &BasicAuth{}
+			got, err := s.Method(*secret)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("BasicAuthFromSecret() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("Method() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("BasicAuthFromSecret() got = %v, want %v", got, tt.want)
+				t.Errorf("Method() got = %v, want %v", got, tt.want)
 			}
 		})
 	}
 }
 
-func TestPublicKeysFromSecret(t *testing.T) {
+func TestPublicKeyStrategy_Method(t *testing.T) {
 	tests := []struct {
 		name    string
 		secret  corev1.Secret
@@ -146,12 +137,10 @@ func TestPublicKeysFromSecret(t *testing.T) {
 			if tt.modify != nil {
 				tt.modify(secret)
 			}
-			_, cleanup, err := PublicKeysFromSecret(*secret)
-			if cleanup != nil {
-				defer cleanup()
-			}
+			s := &PublicKeyAuth{}
+			_, err := s.Method(*secret)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("PublicKeysFromSecret() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("Method() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 		})
