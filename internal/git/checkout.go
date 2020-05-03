@@ -23,21 +23,47 @@ import (
 	"github.com/blang/semver"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/plumbing/object"
+	"github.com/go-git/go-git/v5/plumbing/transport"
+
+	sourcev1 "github.com/fluxcd/source-controller/api/v1alpha1"
 )
 
+const (
+	defaultOrigin = "origin"
+	defaultBranch = "master"
+)
+
+func CheckoutStrategyForRef(ref *sourcev1.GitRepositoryRef) CheckoutStrategy {
+	switch {
+	case ref == nil:
+		return &CheckoutBranch{branch: defaultBranch}
+	case ref.SemVer != "":
+		return &CheckoutSemVer{semVer: ref.SemVer}
+	case ref.Tag != "":
+		return &CheckoutTag{tag: ref.Tag}
+	case ref.Commit != "":
+		return &CheckoutCommit{branch: ref.Branch, commit: ref.Commit}
+	case ref.Branch != "":
+		return &CheckoutBranch{branch: ref.Branch}
+	default:
+		return &CheckoutBranch{branch: defaultBranch}
+	}
+}
+
 type CheckoutStrategy interface {
-	Checkout(ctx context.Context, path string) error
+	Checkout(ctx context.Context, path, url string, auth transport.AuthMethod) (*object.Commit, string, error)
 }
 
 type CheckoutBranch struct {
-	url    string
 	branch string
 }
 
-func (c *CheckoutBranch) Checkout(ctx context.Context, path string) (string, error) {
+func (c *CheckoutBranch) Checkout(ctx context.Context, path, url string, auth transport.AuthMethod) (*object.Commit, string, error) {
 	repo, err := git.PlainCloneContext(ctx, path, false, &git.CloneOptions{
-		URL:               c.url,
-		RemoteName:        "origin",
+		URL:               url,
+		Auth:              auth,
+		RemoteName:        defaultOrigin,
 		ReferenceName:     plumbing.NewBranchReferenceName(c.branch),
 		SingleBranch:      true,
 		NoCheckout:        false,
@@ -47,24 +73,28 @@ func (c *CheckoutBranch) Checkout(ctx context.Context, path string) (string, err
 		Tags:              git.NoTags,
 	})
 	if err != nil {
-		return "", fmt.Errorf("git clone error: %w", err)
+		return nil, "", fmt.Errorf("git clone error: %w", err)
 	}
 	head, err := repo.Head()
 	if err != nil {
-		return "", fmt.Errorf(" git resolve HEAD error: %w", err)
+		return nil, "", fmt.Errorf("git resolve HEAD error: %w", err)
 	}
-	return fmt.Sprintf("%s/%s", c.branch, head.Hash().String()), nil
+	commit, err := repo.CommitObject(head.Hash())
+	if err != nil {
+		return nil, "", fmt.Errorf("git commit not found: %w", err)
+	}
+	return commit, fmt.Sprintf("%s/%s", c.branch, head.Hash().String()), nil
 }
 
 type CheckoutTag struct {
-	url string
 	tag string
 }
 
-func (c *CheckoutTag) Checkout(ctx context.Context, path string) (string, error) {
+func (c *CheckoutTag) Checkout(ctx context.Context, path, url string, auth transport.AuthMethod) (*object.Commit, string, error) {
 	repo, err := git.PlainCloneContext(ctx, path, false, &git.CloneOptions{
-		URL:               c.url,
-		RemoteName:        "origin",
+		URL:               url,
+		Auth:              auth,
+		RemoteName:        defaultOrigin,
 		ReferenceName:     plumbing.NewTagReferenceName(c.tag),
 		SingleBranch:      true,
 		NoCheckout:        false,
@@ -74,25 +104,29 @@ func (c *CheckoutTag) Checkout(ctx context.Context, path string) (string, error)
 		Tags:              git.NoTags,
 	})
 	if err != nil {
-		return "", fmt.Errorf("git clone error: %w", err)
+		return nil, "", fmt.Errorf("git clone error: %w", err)
 	}
 	head, err := repo.Head()
 	if err != nil {
-		return "", fmt.Errorf(" git resolve HEAD error: %w", err)
+		return nil, "", fmt.Errorf("git resolve HEAD error: %w", err)
 	}
-	return fmt.Sprintf("%s/%s", c.tag, head.Hash().String()), nil
+	commit, err := repo.CommitObject(head.Hash())
+	if err != nil {
+		return nil, "", fmt.Errorf("git commit not found: %w", err)
+	}
+	return commit, fmt.Sprintf("%s/%s", c.tag, head.Hash().String()), nil
 }
 
 type CheckoutCommit struct {
-	url    string
 	branch string
 	commit string
 }
 
-func (c *CheckoutCommit) Checkout(ctx context.Context, path string) (string, error) {
+func (c *CheckoutCommit) Checkout(ctx context.Context, path, url string, auth transport.AuthMethod) (*object.Commit, string, error) {
 	repo, err := git.PlainCloneContext(ctx, path, false, &git.CloneOptions{
-		URL:               c.url,
-		RemoteName:        "origin",
+		URL:               url,
+		Auth:              auth,
+		RemoteName:        defaultOrigin,
 		ReferenceName:     plumbing.NewBranchReferenceName(c.branch),
 		SingleBranch:      true,
 		NoCheckout:        false,
@@ -101,40 +135,40 @@ func (c *CheckoutCommit) Checkout(ctx context.Context, path string) (string, err
 		Tags:              git.NoTags,
 	})
 	if err != nil {
-		return "", fmt.Errorf("git clone error: %w", err)
+		return nil, "", fmt.Errorf("git clone error: %w", err)
 	}
 	w, err := repo.Worktree()
 	if err != nil {
-		return "", fmt.Errorf("git worktree error: %w", err)
+		return nil, "", fmt.Errorf("git worktree error: %w", err)
 	}
 	commit, err := repo.CommitObject(plumbing.NewHash(c.commit))
 	if err != nil {
-		return "", fmt.Errorf("git commit not found: %w", err)
+		return nil, "", fmt.Errorf("git commit not found: %w", err)
 	}
 	err = w.Checkout(&git.CheckoutOptions{
 		Hash:  commit.Hash,
 		Force: true,
 	})
 	if err != nil {
-		return "", fmt.Errorf("git checkout error: %w", err)
+		return nil, "", fmt.Errorf("git checkout error: %w", err)
 	}
-	return fmt.Sprintf("%s/%s", c.branch, commit.Hash.String()), nil
+	return commit, fmt.Sprintf("%s/%s", c.branch, commit.Hash.String()), nil
 }
 
 type CheckoutSemVer struct {
-	url    string
-	semver string
+	semVer string
 }
 
-func (c *CheckoutSemVer) Checkout(ctx context.Context, path string) (string, error) {
-	rng, err := semver.ParseRange(c.semver)
+func (c *CheckoutSemVer) Checkout(ctx context.Context, path, url string, auth transport.AuthMethod) (*object.Commit, string, error) {
+	rng, err := semver.ParseRange(c.semVer)
 	if err != nil {
-		return "", fmt.Errorf("semver parse range error: %w", err)
+		return nil, "", fmt.Errorf("semver parse range error: %w", err)
 	}
 
 	repo, err := git.PlainCloneContext(ctx, path, false, &git.CloneOptions{
-		URL:               c.url,
-		RemoteName:        "origin",
+		URL:               url,
+		Auth:              auth,
+		RemoteName:        defaultOrigin,
 		SingleBranch:      true,
 		NoCheckout:        false,
 		Depth:             1,
@@ -143,12 +177,12 @@ func (c *CheckoutSemVer) Checkout(ctx context.Context, path string) (string, err
 		Tags:              git.AllTags,
 	})
 	if err != nil {
-		return "", fmt.Errorf("git clone error: %w", err)
+		return nil, "", fmt.Errorf("git clone error: %w", err)
 	}
 
 	repoTags, err := repo.Tags()
 	if err != nil {
-		return "", fmt.Errorf("git list tags error: %w", err)
+		return nil, "", fmt.Errorf("git list tags error: %w", err)
 	}
 
 	tags := make(map[string]string)
@@ -168,25 +202,29 @@ func (c *CheckoutSemVer) Checkout(ctx context.Context, path string) (string, err
 	}
 
 	if len(svers) == 0 {
-		return "", fmt.Errorf("no match found for semver: %s", c.semver)
+		return nil, "", fmt.Errorf("no match found for semver: %s", c.semVer)
 	}
 
 	semver.Sort(svers)
 	v := svers[len(svers)-1]
 	t := svTags[v.String()]
-	commit := tags[t]
+	commitRef := tags[t]
 
 	w, err := repo.Worktree()
 	if err != nil {
-		return "", fmt.Errorf("git worktree error: %w", err)
+		return nil, "", fmt.Errorf("git worktree error: %w", err)
 	}
 
+	commit, err := repo.CommitObject(plumbing.NewHash(commitRef))
+	if err != nil {
+		return nil, "", fmt.Errorf("git commit not found: %w", err)
+	}
 	err = w.Checkout(&git.CheckoutOptions{
-		Hash: plumbing.NewHash(commit),
+		Hash: commit.Hash,
 	})
 	if err != nil {
-		return "", fmt.Errorf("git checkout error: %w", err)
+		return nil, "", fmt.Errorf("git checkout error: %w", err)
 	}
 
-	return fmt.Sprintf("%s/%s", t, commit), nil
+	return commit, fmt.Sprintf("%s/%s", t, commitRef), nil
 }

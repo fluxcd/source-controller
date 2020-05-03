@@ -22,9 +22,6 @@ import (
 	"io/ioutil"
 	"os"
 
-	"github.com/blang/semver"
-	"github.com/go-git/go-git/v5"
-	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/go-git/go-git/v5/plumbing/transport"
 	"github.com/go-logr/logr"
@@ -122,36 +119,18 @@ func (r *GitRepositoryReconciler) SetupWithManagerAndOptions(mgr ctrl.Manager, o
 }
 
 func (r *GitRepositoryReconciler) sync(ctx context.Context, repository sourcev1.GitRepository) (sourcev1.GitRepository, error) {
-	// set defaults: master branch, no tags fetching, max two commits
-	branch := "master"
-	revision := ""
-	tagMode := git.NoTags
-	depth := 2
-
-	// determine ref
-	refName := plumbing.NewBranchReferenceName(branch)
-
-	if repository.Spec.Reference != nil {
-		if repository.Spec.Reference.Branch != "" {
-			branch = repository.Spec.Reference.Branch
-			refName = plumbing.NewBranchReferenceName(branch)
-		}
-		if repository.Spec.Reference.Commit != "" {
-			depth = 0
-		} else {
-			if repository.Spec.Reference.Tag != "" {
-				refName = plumbing.NewTagReferenceName(repository.Spec.Reference.Tag)
-			}
-			if repository.Spec.Reference.SemVer != "" {
-				tagMode = git.AllTags
-			}
-		}
+	// create tmp dir for the Git clone
+	tmpGit, err := ioutil.TempDir("", repository.Name)
+	if err != nil {
+		err = fmt.Errorf("tmp dir error: %w", err)
+		return sourcev1.GitRepositoryNotReady(repository, sourcev1.StorageOperationFailedReason, err.Error()), err
 	}
+	defer os.RemoveAll(tmpGit)
 
 	// determine auth method
-	strategy := intgit.AuthSecretStrategyForURL(repository.Spec.URL)
 	var auth transport.AuthMethod
-	if repository.Spec.SecretRef != nil {
+	authStrategy := intgit.AuthSecretStrategyForURL(repository.Spec.URL)
+	if repository.Spec.SecretRef != nil && authStrategy != nil {
 		name := types.NamespacedName{
 			Namespace: repository.GetNamespace(),
 			Name:      repository.Spec.SecretRef.Name,
@@ -164,124 +143,16 @@ func (r *GitRepositoryReconciler) sync(ctx context.Context, repository sourcev1.
 			return sourcev1.GitRepositoryNotReady(repository, sourcev1.AuthenticationFailedReason, err.Error()), err
 		}
 
-		auth, err = strategy.Method(secret)
+		auth, err = authStrategy.Method(secret)
 		if err != nil {
 			err = fmt.Errorf("auth error: %w", err)
 			return sourcev1.GitRepositoryNotReady(repository, sourcev1.AuthenticationFailedReason, err.Error()), err
 		}
 	}
 
-	// create tmp dir for the Git clone
-	tmpGit, err := ioutil.TempDir("", repository.Name)
+	checkoutStrategy := intgit.CheckoutStrategyForRef(repository.Spec.Reference)
+	commit, revision, err := checkoutStrategy.Checkout(ctx, tmpGit, repository.Spec.URL, auth)
 	if err != nil {
-		err = fmt.Errorf("tmp dir error: %w", err)
-		return sourcev1.GitRepositoryNotReady(repository, sourcev1.StorageOperationFailedReason, err.Error()), err
-	}
-	defer os.RemoveAll(tmpGit)
-
-	// clone to tmp
-	gitCtx, cancel := context.WithTimeout(ctx, repository.GetTimeout())
-	repo, err := git.PlainCloneContext(gitCtx, tmpGit, false, &git.CloneOptions{
-		URL:               repository.Spec.URL,
-		Auth:              auth,
-		RemoteName:        "origin",
-		ReferenceName:     refName,
-		SingleBranch:      true,
-		NoCheckout:        false,
-		Depth:             depth,
-		RecurseSubmodules: 0,
-		Progress:          nil,
-		Tags:              tagMode,
-	})
-	cancel()
-	if err != nil {
-		err = fmt.Errorf("git clone error: %w", err)
-		return sourcev1.GitRepositoryNotReady(repository, sourcev1.GitOperationFailedReason, err.Error()), err
-	}
-
-	// checkout commit or tag
-	if repository.Spec.Reference != nil {
-		if commit := repository.Spec.Reference.Commit; commit != "" {
-			w, err := repo.Worktree()
-			if err != nil {
-				err = fmt.Errorf("git worktree error: %w", err)
-				return sourcev1.GitRepositoryNotReady(repository, sourcev1.GitOperationFailedReason, err.Error()), err
-			}
-
-			err = w.Checkout(&git.CheckoutOptions{
-				Hash:  plumbing.NewHash(commit),
-				Force: true,
-			})
-			if err != nil {
-				err = fmt.Errorf("git checkout '%s' for '%s' error: %w", commit, branch, err)
-				return sourcev1.GitRepositoryNotReady(repository, sourcev1.GitOperationFailedReason, err.Error()), err
-			}
-		} else if exp := repository.Spec.Reference.SemVer; exp != "" {
-			rng, err := semver.ParseRange(exp)
-			if err != nil {
-				err = fmt.Errorf("semver parse range error: %w", err)
-				return sourcev1.GitRepositoryNotReady(repository, sourcev1.GitOperationFailedReason, err.Error()), err
-			}
-
-			repoTags, err := repo.Tags()
-			if err != nil {
-				err = fmt.Errorf("git list tags error: %w", err)
-				return sourcev1.GitRepositoryNotReady(repository, sourcev1.GitOperationFailedReason, err.Error()), err
-			}
-
-			tags := make(map[string]string)
-			_ = repoTags.ForEach(func(t *plumbing.Reference) error {
-				tags[t.Name().Short()] = t.Strings()[1]
-				return nil
-			})
-
-			svTags := make(map[string]string)
-			var svers []semver.Version
-			for tag, _ := range tags {
-				v, _ := semver.ParseTolerant(tag)
-				if rng(v) {
-					svers = append(svers, v)
-					svTags[v.String()] = tag
-				}
-			}
-
-			if len(svers) > 0 {
-				semver.Sort(svers)
-				v := svers[len(svers)-1]
-				t := svTags[v.String()]
-				commit := tags[t]
-				revision = fmt.Sprintf("%s/%s", t, commit)
-
-				w, err := repo.Worktree()
-				if err != nil {
-					err = fmt.Errorf("git worktree error: %w", err)
-					return sourcev1.GitRepositoryNotReady(repository, sourcev1.GitOperationFailedReason, err.Error()), err
-				}
-
-				err = w.Checkout(&git.CheckoutOptions{
-					Hash: plumbing.NewHash(commit),
-				})
-				if err != nil {
-					err = fmt.Errorf("git checkout error: %w", err)
-					return sourcev1.GitRepositoryNotReady(repository, sourcev1.GitOperationFailedReason, err.Error()), err
-				}
-			} else {
-				err = fmt.Errorf("no match found for semver: %s", repository.Spec.Reference.SemVer)
-				return sourcev1.GitRepositoryNotReady(repository, sourcev1.GitOperationFailedReason, err.Error()), err
-			}
-		}
-	}
-
-	// read commit hash
-	ref, err := repo.Head()
-	if err != nil {
-		err = fmt.Errorf("git resolve HEAD error: %w", err)
-		return sourcev1.GitRepositoryNotReady(repository, sourcev1.GitOperationFailedReason, err.Error()), err
-	}
-
-	commit, err := repo.CommitObject(ref.Hash())
-	if err != nil {
-		err = fmt.Errorf("git resolve HEAD error: %w", err)
 		return sourcev1.GitRepositoryNotReady(repository, sourcev1.GitOperationFailedReason, err.Error()), err
 	}
 
@@ -296,15 +167,8 @@ func (r *GitRepositoryReconciler) sync(ctx context.Context, repository sourcev1.
 		}
 	}
 
-	if revision == "" {
-		revision = fmt.Sprintf("%s/%s", branch, ref.Hash().String())
-		if repository.Spec.Reference != nil && repository.Spec.Reference.Tag != "" {
-			revision = fmt.Sprintf("%s/%s", repository.Spec.Reference.Tag, ref.Hash().String())
-		}
-	}
-
 	artifact := r.Storage.ArtifactFor(repository.Kind, repository.ObjectMeta.GetObjectMeta(),
-		fmt.Sprintf("%s.tar.gz", ref.Hash().String()), revision)
+		fmt.Sprintf("%s.tar.gz", commit.Hash.String()), revision)
 
 	// create artifact dir
 	err = r.Storage.MkdirAll(artifact)
