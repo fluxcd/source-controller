@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.0.1-alpha.6 (2020-05-06)
+
+This alpha release comes with [improvements](https://github.com/fluxcd/source-controller/pull/52)
+to the `GitRepository` reconciler. Starting with this version, the controller
+watches for sources only in the namespace where it's deployed.
+
 ## 0.0.1-alpha.5 (2020-04-30)
 
 This alpha release contains several bug fixes
