@@ -33,6 +33,12 @@ import (
 	"github.com/fluxcd/source-controller/internal/lockedfile"
 )
 
+const (
+	excludeFile     = ".sourceignore"
+	excludeVCS      = ".git/,.gitignore,.gitmodules,.gitattributes"
+	defaultExcludes = "jpg,jpeg,gif,png,wmv,flv,tar.gz,zip"
+)
+
 // Storage manages artifacts
 type Storage struct {
 	// BasePath is the local directory path where the source artifacts are stored.
@@ -112,17 +118,22 @@ func (s *Storage) ArtifactExist(artifact sourcev1.Artifact) bool {
 	return true
 }
 
-// Archive creates a tar.gz to the artifact path from the given dir excluding the provided file extensions
-func (s *Storage) Archive(artifact sourcev1.Artifact, dir string, excludes string, integrityCheck bool) error {
-	if excludes == "" {
-		excludes = "jpg,jpeg,gif,png,wmv,flv,tar.gz,zip"
-	}
-
+// Archive creates a tar.gz to the artifact path from the given dir excluding any VCS specific
+// files and directories, or any of the excludes defined in the excludeFiles.
+func (s *Storage) Archive(artifact sourcev1.Artifact, dir string, integrityCheck bool) error {
 	ctx, cancel := context.WithTimeout(context.Background(), s.Timeout)
 	defer cancel()
 
-	tarExcludes := fmt.Sprintf("--exclude=\\*.{%s} --exclude .git", excludes)
-	cmd := fmt.Sprintf("cd %s && tar -c %s -f - . | gzip > %s", dir, tarExcludes, artifact.Path)
+	var tarExcludes []string
+	if _, err := os.Stat(filepath.Join(dir, excludeFile)); !os.IsNotExist(err) {
+		tarExcludes = append(tarExcludes, "--exclude-file="+excludeFile)
+	} else {
+		tarExcludes = append(tarExcludes, fmt.Sprintf("--exclude=\\*.{%s}", defaultExcludes))
+	}
+	for _, excl := range strings.Split(excludeVCS, ",") {
+		tarExcludes = append(tarExcludes, "--exclude="+excl)
+	}
+	cmd := fmt.Sprintf("cd %s && tar -c %s -f - . | gzip > %s", dir, strings.Join(tarExcludes, " "), artifact.Path)
 	command := exec.CommandContext(ctx, "/bin/sh", "-c", cmd)
 
 	err := command.Run()
