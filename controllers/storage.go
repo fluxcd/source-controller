@@ -94,7 +94,7 @@ func (s *Storage) RemoveAll(artifact sourcev1.Artifact) error {
 // RemoveAllButCurrent removes all files for the given artifact base dir excluding the current one
 func (s *Storage) RemoveAllButCurrent(artifact sourcev1.Artifact) error {
 	dir := filepath.Dir(artifact.Path)
-	errors := []string{}
+	var errors []string
 	_ = filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 		if path != artifact.Path && !info.IsDir() && info.Mode()&os.ModeSymlink != os.ModeSymlink {
 			if err := os.Remove(path); err != nil {
