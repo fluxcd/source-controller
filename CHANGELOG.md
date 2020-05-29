@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.0.1-beta.1 (2020-05-29)
+
+This is the first beta release of source controller. This release adds
+support for [excluding files](https://github.com/fluxcd/source-controller/pull/55)
+when packaging artifacts from Git repositories.
+
 ## 0.0.1-alpha.6 (2020-05-06)
 
 This alpha release comes with [improvements](https://github.com/fluxcd/source-controller/pull/52)
