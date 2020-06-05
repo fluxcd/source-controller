@@ -186,7 +186,7 @@ func (r *GitRepositoryReconciler) sync(ctx context.Context, repository sourcev1.
 	defer unlock()
 
 	// archive artifact and check integrity
-	err = r.Storage.Archive(artifact, tmpGit, true)
+	err = r.Storage.Archive(artifact, tmpGit)
 	if err != nil {
 		err = fmt.Errorf("storage archive error: %w", err)
 		return sourcev1.GitRepositoryNotReady(repository, sourcev1.StorageOperationFailedReason, err.Error()), err

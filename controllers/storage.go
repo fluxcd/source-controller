@@ -17,16 +17,19 @@ limitations under the License.
 package controllers
 
 import (
-	"context"
+	"archive/tar"
+	"bufio"
+	"compress/gzip"
 	"crypto/sha1"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/go-git/go-git/v5/plumbing/format/gitignore"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1alpha1"
@@ -34,9 +37,9 @@ import (
 )
 
 const (
-	excludeFile     = ".sourceignore"
-	excludeVCS      = ".git/,.gitignore,.gitmodules,.gitattributes"
-	defaultExcludes = "jpg,jpeg,gif,png,wmv,flv,tar.gz,zip"
+	excludeFile = ".sourceignore"
+	excludeVCS  = ".git/,.gitignore,.gitmodules,.gitattributes"
+	excludeExt  = "*.jpg,*.jpeg,*.gif,*.png,*.wmv,.*flv,.*tar.gz,*.zip"
 )
 
 // Storage manages artifacts
@@ -120,44 +123,74 @@ func (s *Storage) ArtifactExist(artifact sourcev1.Artifact) bool {
 
 // Archive creates a tar.gz to the artifact path from the given dir excluding any VCS specific
 // files and directories, or any of the excludes defined in the excludeFiles.
-func (s *Storage) Archive(artifact sourcev1.Artifact, dir string, integrityCheck bool) error {
-	ctx, cancel := context.WithTimeout(context.Background(), s.Timeout)
-	defer cancel()
-
-	var tarExcludes []string
-	if _, err := os.Stat(filepath.Join(dir, excludeFile)); !os.IsNotExist(err) {
-		tarExcludes = append(tarExcludes, "--exclude-file="+excludeFile)
-	} else {
-		tarExcludes = append(tarExcludes, fmt.Sprintf("--exclude=\\*.{%s}", defaultExcludes))
+func (s *Storage) Archive(artifact sourcev1.Artifact, dir string) error {
+	if _, err := os.Stat(dir); err != nil {
+		return err
 	}
-	for _, excl := range strings.Split(excludeVCS, ",") {
-		tarExcludes = append(tarExcludes, "--exclude="+excl)
-	}
-	cmd := fmt.Sprintf("cd %s && tar -c %s -f - . | gzip > %s", dir, strings.Join(tarExcludes, " "), artifact.Path)
-	command := exec.CommandContext(ctx, "/bin/sh", "-c", cmd)
 
-	err := command.Run()
+	ps, err := loadExcludePatterns(dir)
 	if err != nil {
-		return fmt.Errorf("command '%s' failed: %w", cmd, err)
+		return err
 	}
+	matcher := gitignore.NewMatcher(ps)
 
-	if integrityCheck {
-		cmd = fmt.Sprintf("gunzip -t %s", artifact.Path)
-		command = exec.CommandContext(ctx, "/bin/sh", "-c", cmd)
-		err = command.Run()
+	gzFile, err := os.Create(artifact.Path)
+	if err != nil {
+		return err
+	}
+	defer gzFile.Close()
+
+	gw := gzip.NewWriter(gzFile)
+	defer gw.Close()
+
+	tw := tar.NewWriter(gw)
+	defer tw.Close()
+
+	return filepath.Walk(dir, func(p string, fi os.FileInfo, err error) error {
 		if err != nil {
-			return fmt.Errorf("gzip integrity check failed")
+			return err
 		}
 
-		cmd = fmt.Sprintf("tar -tzf %s >/dev/null", artifact.Path)
-		command = exec.CommandContext(ctx, "/bin/sh", "-c", cmd)
-		err = command.Run()
-		if err != nil {
-			return fmt.Errorf("tar integrity check failed")
+		// Ignore anything that is not a file (directories, symlinks)
+		if !fi.Mode().IsRegular() {
+			return nil
 		}
-	}
 
-	return nil
+		// Ignore excluded extensions and files
+		if matcher.Match(strings.Split(p, "/"), false) {
+			return nil
+		}
+
+		header, err := tar.FileInfoHeader(fi, p)
+		if err != nil {
+			return err
+		}
+		// The name needs to be modified to maintain directory structure
+		// as tar.FileInfoHeader only has access to the base name of the file.
+		// Ref: https://golang.org/src/archive/tar/common.go?#L626
+		relFilePath := p
+		if filepath.IsAbs(dir) {
+			relFilePath, err = filepath.Rel(dir, p)
+			if err != nil {
+				return err
+			}
+		}
+		header.Name = relFilePath
+
+		if err := tw.WriteHeader(header); err != nil {
+			return err
+		}
+
+		f, err := os.Open(p)
+		if err != nil {
+			return err
+		}
+		if _, err := io.Copy(tw, f); err != nil {
+			f.Close()
+			return err
+		}
+		return f.Close()
+	})
 }
 
 // WriteFile writes the given bytes to the artifact path if the checksum differs
@@ -206,4 +239,29 @@ func (s *Storage) Lock(artifact sourcev1.Artifact) (unlock func(), err error) {
 	lockFile := artifact.Path + ".lock"
 	mutex := lockedfile.MutexAt(lockFile)
 	return mutex.Lock()
+}
+
+func loadExcludePatterns(dir string) ([]gitignore.Pattern, error) {
+	path := strings.Split(dir, "/")
+	var ps []gitignore.Pattern
+	for _, p := range strings.Split(excludeVCS, ",") {
+		ps = append(ps, gitignore.ParsePattern(p, path))
+	}
+	for _, p := range strings.Split(excludeExt, ",") {
+		ps = append(ps, gitignore.ParsePattern(p, path))
+	}
+	if f, err := os.Open(filepath.Join(dir, excludeFile)); err == nil {
+		defer f.Close()
+
+		scanner := bufio.NewScanner(f)
+		for scanner.Scan() {
+			s := scanner.Text()
+			if !strings.HasPrefix(s, "#") && len(strings.TrimSpace(s)) > 0 {
+				ps = append(ps, gitignore.ParsePattern(s, path))
+			}
+		}
+	} else if !os.IsNotExist(err) {
+		return nil, err
+	}
+	return ps, nil
 }
