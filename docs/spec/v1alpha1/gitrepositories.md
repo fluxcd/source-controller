@@ -1,8 +1,8 @@
 # Git Repositories
 
 The `GitRepository` API defines a source for artifacts coming from Git. The
-resource exposes the latest synchronized state from Git as an artifact in
-an archive.
+resource exposes the latest synchronized state from Git as an artifact in a
+[gzip compressed TAR archive](#artifact).
 
 ## Specification
 
@@ -111,6 +111,24 @@ const (
 	GitOperationFailedReason  string = "GitOperationFailed"
 )
 ```
+
+## Artifact
+
+The `GitRepository` API defines a source for artifacts coming from Git. The
+resource exposes the latest synchronized state from Git as an artifact in a
+gzip compressed TAR archive (`<commit hash>.tar.gz`).
+
+### Excluding files
+
+Git files (`.git/`, `.gitignore`, `.gitmodules`, and `.gitattributes`) are
+excluded from the archive by default, as well as some extensions (`.jpg, .jpeg,
+.gif, .png, .wmv, .flv, .tar.gz, .zip`)
+
+Excluding additional files from the archive is possible by adding a
+`.sourceignore` file in the root of the repository. The `.sourceignore` file
+follows [the `.gitignore` pattern
+format](https://git-scm.com/docs/gitignore#_pattern_format), pattern
+entries may overrule default exclusions.
 
 ## Spec examples
 
