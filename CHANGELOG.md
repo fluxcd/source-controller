@@ -2,6 +2,11 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.0.1-beta.2 (2020-06-10)
+
+This beta release comes with improvements to the
+[artifacts archiving](https://github.com/fluxcd/source-controller/pull/59).
+
 ## 0.0.1-beta.1 (2020-05-29)
 
 This is the first beta release of source controller. This release adds

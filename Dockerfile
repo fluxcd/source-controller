@@ -18,7 +18,7 @@ COPY internal/ internal/
 # build
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GO111MODULE=on go build -a -o source-controller main.go
 
-FROM alpine:3.11
+FROM alpine:3.12
 
 RUN apk add --no-cache ca-certificates tini
 
