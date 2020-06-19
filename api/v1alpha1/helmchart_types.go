@@ -147,6 +147,8 @@ func (in *HelmChart) GetInterval() metav1.Duration {
 	return in.Spec.Interval
 }
 
+// +genclient
+// +genclient:Namespaced
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="Name",type=string,JSONPath=`.spec.name`
