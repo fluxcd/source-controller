@@ -1,4 +1,4 @@
-# Source Controller Proposal
+# Source Controller
 
 The main goal is to define a set of Kubernetes objects that cluster
 admins and various automated operators can interact with to offload
