@@ -32,8 +32,8 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/format/gitignore"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	"github.com/fluxcd/pkg/lockedfile"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1alpha1"
-	"github.com/fluxcd/source-controller/internal/lockedfile"
 )
 
 const (

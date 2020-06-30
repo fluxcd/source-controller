@@ -25,7 +25,7 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/transport/ssh"
 	corev1 "k8s.io/api/core/v1"
 
-	"github.com/fluxcd/source-controller/internal/crypto/ssh/knownhosts"
+	"github.com/fluxcd/pkg/ssh/knownhosts"
 )
 
 func AuthSecretStrategyForURL(url string) AuthSecretStrategy {
