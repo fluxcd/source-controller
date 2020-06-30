@@ -62,23 +62,23 @@ func (s *ArtifactServer) ArtifactFromBytes(files []File) (string, error) {
 	tw := tar.NewWriter(gw)
 	defer tw.Close()
 
-	for _, file := range files {
+	for _, f := range files {
 		hdr := &tar.Header{
-			Name: file.Name,
+			Name: f.Name,
 			Mode: 0600,
-			Size: int64(len(file.Body)),
+			Size: int64(len(f.Body)),
 		}
 		if err := tw.WriteHeader(hdr); err != nil {
 			return "", err
 		}
-		if _, err := tw.Write([]byte(file.Body)); err != nil {
+		if _, err := tw.Write([]byte(f.Body)); err != nil {
 			return "", err
 		}
 	}
 	return fileName, nil
 }
 
-// URLForFile returns the URL the given file path can be reached at or
+// URLForFile returns the URL the given file can be reached at or
 // an error if the server has not been started.
 func (s *ArtifactServer) URLForFile(file string) (string, error) {
 	if s.URL() == "" {
