@@ -25,7 +25,7 @@ import (
 	"path/filepath"
 )
 
-func NewTempHTTPServer() (*HTTP, error) {
+func NewTempHTTPServer() (*HTTPServer, error) {
 	tmpDir, err := ioutil.TempDir("", "http-test-")
 	if err != nil {
 		return nil, err
@@ -34,28 +34,28 @@ func NewTempHTTPServer() (*HTTP, error) {
 	return srv, nil
 }
 
-func NewHTTPServer(docroot string) *HTTP {
+func NewHTTPServer(docroot string) *HTTPServer {
 	root, err := filepath.Abs(docroot)
 	if err != nil {
 		panic(err)
 	}
-	return &HTTP{
+	return &HTTPServer{
 		docroot: root,
 	}
 }
 
-type HTTP struct {
+type HTTPServer struct {
 	docroot    string
 	middleware func(http.Handler) http.Handler
 	server     *httptest.Server
 }
 
-func (s *HTTP) WithMiddleware(m func(handler http.Handler) http.Handler) *HTTP {
+func (s *HTTPServer) WithMiddleware(m func(handler http.Handler) http.Handler) *HTTPServer {
 	s.middleware = m
 	return s
 }
 
-func (s *HTTP) Start() {
+func (s *HTTPServer) Start() {
 	s.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		handler := http.FileServer(http.Dir(s.docroot))
 		if s.middleware != nil {
@@ -66,7 +66,7 @@ func (s *HTTP) Start() {
 	}))
 }
 
-func (s *HTTP) StartTLS(cert, key, ca []byte) error {
+func (s *HTTPServer) StartTLS(cert, key, ca []byte) error {
 	s.server = httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		handler := http.FileServer(http.Dir(s.docroot))
 		if s.middleware != nil {
@@ -88,7 +88,6 @@ func (s *HTTP) StartTLS(cert, key, ca []byte) error {
 	cp.AppendCertsFromPEM(ca)
 	config.RootCAs = cp
 
-	config.BuildNameToCertificate()
 	config.ServerName = "example.com"
 	s.server.TLS = &config
 
@@ -96,17 +95,17 @@ func (s *HTTP) StartTLS(cert, key, ca []byte) error {
 	return nil
 }
 
-func (s *HTTP) Stop() {
+func (s *HTTPServer) Stop() {
 	if s.server != nil {
 		s.server.Close()
 	}
 }
 
-func (s *HTTP) Root() string {
+func (s *HTTPServer) Root() string {
 	return s.docroot
 }
 
-func (s *HTTP) URL() string {
+func (s *HTTPServer) URL() string {
 	if s.server != nil {
 		return s.server.URL
 	}

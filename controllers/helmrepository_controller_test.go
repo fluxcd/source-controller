@@ -31,7 +31,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1alpha1"
-	"github.com/fluxcd/source-controller/internal/testserver"
+	"github.com/fluxcd/source-controller/pkg/testserver"
 )
 
 var _ = Describe("HelmRepositoryReconciler", func() {
@@ -45,7 +45,7 @@ var _ = Describe("HelmRepositoryReconciler", func() {
 	Context("HelmRepository", func() {
 		var (
 			namespace  *corev1.Namespace
-			helmServer *testserver.Helm
+			helmServer *testserver.HelmServer
 			err        error
 		)
 

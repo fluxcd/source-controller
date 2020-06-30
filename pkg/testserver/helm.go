@@ -25,21 +25,21 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
-func NewTempHelmServer() (*Helm, error) {
+func NewTempHelmServer() (*HelmServer, error) {
 	server, err := NewTempHTTPServer()
 	if err != nil {
 		return nil, err
 	}
-	helm := &Helm{server}
+	helm := &HelmServer{server}
 	return helm, nil
 }
 
-type Helm struct {
-	*HTTP
+type HelmServer struct {
+	*HTTPServer
 }
 
-func (s *Helm) GenerateIndex() error {
-	index, err := repo.IndexDirectory(s.HTTP.docroot, s.HTTP.URL())
+func (s *HelmServer) GenerateIndex() error {
+	index, err := repo.IndexDirectory(s.HTTPServer.docroot, s.HTTPServer.URL())
 	if err != nil {
 		return err
 	}
@@ -47,17 +47,17 @@ func (s *Helm) GenerateIndex() error {
 	if err != nil {
 		return err
 	}
-	f := filepath.Join(s.HTTP.docroot, "index.yaml")
+	f := filepath.Join(s.HTTPServer.docroot, "index.yaml")
 	return ioutil.WriteFile(f, d, 0644)
 }
 
-func (s *Helm) PackageChart(path string) error {
+func (s *HelmServer) PackageChart(path string) error {
 	return s.PackageChartWithVersion(path, "")
 }
 
-func (s *Helm) PackageChartWithVersion(path, version string) error {
+func (s *HelmServer) PackageChartWithVersion(path, version string) error {
 	pkg := action.NewPackage()
-	pkg.Destination = s.HTTP.docroot
+	pkg.Destination = s.HTTPServer.docroot
 	pkg.Version = version
 	_, err := pkg.Run(path, nil)
 	return err
