@@ -45,9 +45,9 @@ type File struct {
 	Body string
 }
 
-// ArtifactFromBytes creates a tar.gz artifact from the given files and
+// ArtifactFromFiles creates a tar.gz artifact from the given files and
 // returns the file name of the artifact.
-func (s *ArtifactServer) ArtifactFromBytes(files []File) (string, error) {
+func (s *ArtifactServer) ArtifactFromFiles(files []File) (string, error) {
 	fileName := calculateArtifactName(files)
 	filePath := filepath.Join(s.docroot, fileName)
 	gzFile, err := os.Create(filePath)
