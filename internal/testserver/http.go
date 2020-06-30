@@ -88,7 +88,6 @@ func (s *HTTP) StartTLS(cert, key, ca []byte) error {
 	cp.AppendCertsFromPEM(ca)
 	config.RootCAs = cp
 
-	config.BuildNameToCertificate()
 	config.ServerName = "example.com"
 	s.server.TLS = &config
 
