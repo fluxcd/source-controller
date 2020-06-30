@@ -45,7 +45,7 @@ var _ = Describe("HelmRepositoryReconciler", func() {
 	Context("HelmRepository", func() {
 		var (
 			namespace  *corev1.Namespace
-			helmServer *testserver.Helm
+			helmServer *testserver.HelmServer
 			err        error
 		)
 

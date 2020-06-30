@@ -46,7 +46,7 @@ var _ = Describe("HelmChartReconciler", func() {
 	Context("HelmChart", func() {
 		var (
 			namespace  *corev1.Namespace
-			helmServer *testserver.Helm
+			helmServer *testserver.HelmServer
 			err        error
 		)
 
