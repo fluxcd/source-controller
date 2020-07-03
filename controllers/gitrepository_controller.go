@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"strings"
 
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/go-git/go-git/v5/plumbing/transport"
@@ -29,10 +30,13 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	kuberecorder "k8s.io/client-go/tools/record"
+	"k8s.io/client-go/tools/reference"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 
+	"github.com/fluxcd/pkg/recorder"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1alpha1"
 	intgit "github.com/fluxcd/source-controller/internal/git"
 )
@@ -40,9 +44,11 @@ import (
 // GitRepositoryReconciler reconciles a GitRepository object
 type GitRepositoryReconciler struct {
 	client.Client
-	Log     logr.Logger
-	Scheme  *runtime.Scheme
-	Storage *Storage
+	Log                   logr.Logger
+	Scheme                *runtime.Scheme
+	Storage               *Storage
+	EventRecorder         kuberecorder.EventRecorder
+	ExternalEventRecorder *recorder.EventRecorder
 }
 
 // +kubebuilder:rbac:groups=source.fluxcd.io,resources=gitrepositories,verbs=get;list;watch;create;update;patch;delete
@@ -51,42 +57,48 @@ type GitRepositoryReconciler struct {
 func (r *GitRepositoryReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	ctx := context.Background()
 
-	var repo sourcev1.GitRepository
-	if err := r.Get(ctx, req.NamespacedName, &repo); err != nil {
+	var repository sourcev1.GitRepository
+	if err := r.Get(ctx, req.NamespacedName, &repository); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	log := r.Log.WithValues(repo.Kind, req.NamespacedName)
+	log := r.Log.WithValues(repository.Kind, req.NamespacedName)
 
 	// set initial status
-	if reset, status := r.shouldResetStatus(repo); reset {
+	if reset, status := r.shouldResetStatus(repository); reset {
 		log.Info("Initializing Git repository")
-		repo.Status = status
-		if err := r.Status().Update(ctx, &repo); err != nil {
+		repository.Status = status
+		if err := r.Status().Update(ctx, &repository); err != nil {
 			log.Error(err, "unable to update GitRepository status")
 			return ctrl.Result{Requeue: true}, err
 		}
 	} else {
-		repo = sourcev1.GitRepositoryProgressing(repo)
-		if err := r.Status().Update(ctx, &repo); err != nil {
+		repository = sourcev1.GitRepositoryProgressing(repository)
+		if err := r.Status().Update(ctx, &repository); err != nil {
 			log.Error(err, "unable to update GitRepository status")
 			return ctrl.Result{Requeue: true}, err
 		}
 	}
 
 	// try to remove old artifacts
-	if err := r.gc(repo); err != nil {
+	if err := r.gc(repository); err != nil {
 		log.Error(err, "artifacts GC failed")
 	}
 
 	// try git sync
-	syncedRepo, err := r.sync(ctx, *repo.DeepCopy())
+	syncedRepo, err := r.sync(ctx, *repository.DeepCopy())
 	if err != nil {
 		log.Error(err, "Git repository sync failed")
+		r.event(repository, recorder.EventSeverityError, err.Error())
 		if err := r.Status().Update(ctx, &syncedRepo); err != nil {
 			log.Error(err, "unable to update GitRepository status")
 		}
 		return ctrl.Result{Requeue: true}, err
+	} else {
+		// emit revision change event
+		if repository.Status.Artifact == nil || syncedRepo.Status.Artifact.Revision != repository.Status.Artifact.Revision {
+			r.event(syncedRepo, recorder.EventSeverityInfo, sourcev1.GitRepositoryReadyMessage(syncedRepo))
+		}
 	}
 
 	// update status
@@ -98,7 +110,7 @@ func (r *GitRepositoryReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 	log.Info("Git repository sync succeeded", "msg", sourcev1.GitRepositoryReadyMessage(syncedRepo))
 
 	// requeue repository
-	return ctrl.Result{RequeueAfter: repo.GetInterval().Duration}, nil
+	return ctrl.Result{RequeueAfter: repository.GetInterval().Duration}, nil
 }
 
 type GitRepositoryReconcilerOptions struct {
@@ -259,4 +271,29 @@ func (r *GitRepositoryReconciler) gc(repository sourcev1.GitRepository) error {
 		return r.Storage.RemoveAllButCurrent(*repository.Status.Artifact)
 	}
 	return nil
+}
+
+// emit Kubernetes event and forward event to notification controller if configured
+func (r *GitRepositoryReconciler) event(repository sourcev1.GitRepository, severity, msg string) {
+	if r.EventRecorder != nil {
+		r.EventRecorder.Eventf(&repository, "Normal", severity, msg)
+	}
+	if r.ExternalEventRecorder != nil {
+		objRef, err := reference.GetReference(r.Scheme, &repository)
+		if err != nil {
+			r.Log.WithValues(
+				strings.ToLower(repository.Kind),
+				fmt.Sprintf("%s/%s", repository.GetNamespace(), repository.GetName()),
+			).Error(err, "unable to send event")
+			return
+		}
+
+		if err := r.ExternalEventRecorder.Eventf(*objRef, nil, severity, severity, msg); err != nil {
+			r.Log.WithValues(
+				strings.ToLower(repository.Kind),
+				fmt.Sprintf("%s/%s", repository.GetNamespace(), repository.GetName()),
+			).Error(err, "unable to send event")
+			return
+		}
+	}
 }

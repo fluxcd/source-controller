@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/url"
+	"strings"
 
 	"github.com/go-logr/logr"
 	"helm.sh/helm/v3/pkg/getter"
@@ -29,11 +30,14 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	kuberecorder "k8s.io/client-go/tools/record"
+	"k8s.io/client-go/tools/reference"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/yaml"
 
+	"github.com/fluxcd/pkg/recorder"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1alpha1"
 	"github.com/fluxcd/source-controller/internal/helm"
 )
@@ -41,10 +45,12 @@ import (
 // HelmChartReconciler reconciles a HelmChart object
 type HelmChartReconciler struct {
 	client.Client
-	Log     logr.Logger
-	Scheme  *runtime.Scheme
-	Storage *Storage
-	Getters getter.Providers
+	Log                   logr.Logger
+	Scheme                *runtime.Scheme
+	Storage               *Storage
+	Getters               getter.Providers
+	EventRecorder         kuberecorder.EventRecorder
+	ExternalEventRecorder *recorder.EventRecorder
 }
 
 // +kubebuilder:rbac:groups=source.fluxcd.io,resources=helmcharts,verbs=get;list;watch;create;update;patch;delete
@@ -101,10 +107,16 @@ func (r *HelmChartReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	pulledChart, err := r.sync(ctx, repository, *chart.DeepCopy())
 	if err != nil {
 		log.Error(err, "Helm chart sync failed")
+		r.event(chart, recorder.EventSeverityError, err.Error())
 		if err := r.Status().Update(ctx, &pulledChart); err != nil {
 			log.Error(err, "unable to update HelmChart status")
 		}
 		return ctrl.Result{Requeue: true}, err
+	} else {
+		// emit version change event
+		if chart.Status.Artifact == nil || pulledChart.Status.Artifact.Revision != chart.Status.Artifact.Revision {
+			r.event(pulledChart, recorder.EventSeverityInfo, sourcev1.HelmChartReadyMessage(pulledChart))
+		}
 	}
 
 	// update status
@@ -325,4 +337,29 @@ func (r *HelmChartReconciler) setOwnerRef(ctx context.Context, chart *sourcev1.H
 		repository.GetObjectMeta(), repository.GroupVersionKind(),
 	)))
 	return r.Update(ctx, chart)
+}
+
+// emit Kubernetes event and forward event to notification controller if configured
+func (r *HelmChartReconciler) event(chart sourcev1.HelmChart, severity, msg string) {
+	if r.EventRecorder != nil {
+		r.EventRecorder.Eventf(&chart, "Normal", severity, msg)
+	}
+	if r.ExternalEventRecorder != nil {
+		objRef, err := reference.GetReference(r.Scheme, &chart)
+		if err != nil {
+			r.Log.WithValues(
+				strings.ToLower(chart.Kind),
+				fmt.Sprintf("%s/%s", chart.GetNamespace(), chart.GetName()),
+			).Error(err, "unable to send event")
+			return
+		}
+
+		if err := r.ExternalEventRecorder.Eventf(*objRef, nil, severity, severity, msg); err != nil {
+			r.Log.WithValues(
+				strings.ToLower(chart.Kind),
+				fmt.Sprintf("%s/%s", chart.GetNamespace(), chart.GetName()),
+			).Error(err, "unable to send event")
+			return
+		}
+	}
 }

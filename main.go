@@ -33,6 +33,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
+	"github.com/fluxcd/pkg/recorder"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1alpha1"
 	"github.com/fluxcd/source-controller/controllers"
 	// +kubebuilder:scaffold:imports
@@ -59,6 +60,7 @@ func init() {
 func main() {
 	var (
 		metricsAddr          string
+		eventsAddr           string
 		enableLeaderElection bool
 		storagePath          string
 		storageAddr          string
@@ -66,18 +68,29 @@ func main() {
 		logJSON              bool
 	)
 
-	flag.StringVar(&metricsAddr, "metrics-addr", ":9090", "The address the metric endpoint binds to.")
+	flag.StringVar(&metricsAddr, "metrics-addr", ":8080", "The address the metric endpoint binds to.")
+	flag.StringVar(&eventsAddr, "events-addr", "", "The address of the events receiver.")
 	flag.BoolVar(&enableLeaderElection, "enable-leader-election", false,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
 	flag.StringVar(&storagePath, "storage-path", "", "The local storage path.")
-	flag.StringVar(&storageAddr, "storage-addr", ":8080", "The address the static file server binds to.")
+	flag.StringVar(&storageAddr, "storage-addr", ":9090", "The address the static file server binds to.")
 	flag.IntVar(&concurrent, "concurrent", 2, "The number of concurrent reconciles per controller.")
 	flag.BoolVar(&logJSON, "log-json", false, "Set logging to JSON format.")
 
 	flag.Parse()
 
 	ctrl.SetLogger(zap.New(zap.UseDevMode(!logJSON)))
+
+	var eventRecorder *recorder.EventRecorder
+	if eventsAddr != "" {
+		if er, err := recorder.NewEventRecorder(eventsAddr, "source-controller"); err != nil {
+			setupLog.Error(err, "unable to create event recorder")
+			os.Exit(1)
+		} else {
+			eventRecorder = er
+		}
+	}
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:             scheme,
@@ -97,10 +110,12 @@ func main() {
 	go startFileServer(storage.BasePath, storageAddr, setupLog)
 
 	if err = (&controllers.GitRepositoryReconciler{
-		Client:  mgr.GetClient(),
-		Log:     ctrl.Log.WithName("controllers").WithName("GitRepository"),
-		Scheme:  mgr.GetScheme(),
-		Storage: storage,
+		Client:                mgr.GetClient(),
+		Log:                   ctrl.Log.WithName("controllers").WithName("GitRepository"),
+		Scheme:                mgr.GetScheme(),
+		Storage:               storage,
+		EventRecorder:         mgr.GetEventRecorderFor("source-controller"),
+		ExternalEventRecorder: eventRecorder,
 	}).SetupWithManagerAndOptions(mgr, controllers.GitRepositoryReconcilerOptions{
 		MaxConcurrentReconciles: concurrent,
 	}); err != nil {
@@ -108,11 +123,13 @@ func main() {
 		os.Exit(1)
 	}
 	if err = (&controllers.HelmRepositoryReconciler{
-		Client:  mgr.GetClient(),
-		Log:     ctrl.Log.WithName("controllers").WithName("HelmRepository"),
-		Scheme:  mgr.GetScheme(),
-		Storage: storage,
-		Getters: getters,
+		Client:                mgr.GetClient(),
+		Log:                   ctrl.Log.WithName("controllers").WithName("HelmRepository"),
+		Scheme:                mgr.GetScheme(),
+		Storage:               storage,
+		Getters:               getters,
+		EventRecorder:         mgr.GetEventRecorderFor("source-controller"),
+		ExternalEventRecorder: eventRecorder,
 	}).SetupWithManagerAndOptions(mgr, controllers.HelmRepositoryReconcilerOptions{
 		MaxConcurrentReconciles: concurrent,
 	}); err != nil {
@@ -120,11 +137,13 @@ func main() {
 		os.Exit(1)
 	}
 	if err = (&controllers.HelmChartReconciler{
-		Client:  mgr.GetClient(),
-		Log:     ctrl.Log.WithName("controllers").WithName("HelmChart"),
-		Scheme:  mgr.GetScheme(),
-		Storage: storage,
-		Getters: getters,
+		Client:                mgr.GetClient(),
+		Log:                   ctrl.Log.WithName("controllers").WithName("HelmChart"),
+		Scheme:                mgr.GetScheme(),
+		Storage:               storage,
+		Getters:               getters,
+		EventRecorder:         mgr.GetEventRecorderFor("source-controller"),
+		ExternalEventRecorder: eventRecorder,
 	}).SetupWithManagerAndOptions(mgr, controllers.HelmChartReconcilerOptions{
 		MaxConcurrentReconciles: concurrent,
 	}); err != nil {
