@@ -17,3 +17,4 @@ This is the v1alpha1 API specification for defining the desired state sources of
 ## Consumers
 
 * [kustomize-controller](https://github.com/fluxcd/kustomize-controller/)
+* [helm-controller](https://github.com/fluxcd/helm-controller/)
