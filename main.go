@@ -68,13 +68,13 @@ func main() {
 		logJSON              bool
 	)
 
-	flag.StringVar(&metricsAddr, "metrics-addr", ":9090", "The address the metric endpoint binds to.")
+	flag.StringVar(&metricsAddr, "metrics-addr", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&eventsAddr, "events-addr", "", "The address of the events receiver.")
 	flag.BoolVar(&enableLeaderElection, "enable-leader-election", false,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
 	flag.StringVar(&storagePath, "storage-path", "", "The local storage path.")
-	flag.StringVar(&storageAddr, "storage-addr", ":8080", "The address the static file server binds to.")
+	flag.StringVar(&storageAddr, "storage-addr", ":9090", "The address the static file server binds to.")
 	flag.IntVar(&concurrent, "concurrent", 2, "The number of concurrent reconciles per controller.")
 	flag.BoolVar(&logJSON, "log-json", false, "Set logging to JSON format.")
 

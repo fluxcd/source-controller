@@ -15,7 +15,7 @@ spec:
         app: source-controller
       annotations:
         prometheus.io/scrape: "true"
-        prometheus.io/port: "9090"
+        prometheus.io/port: "8080"
     spec:
       terminationGracePeriodSeconds: 10
       containers:
@@ -26,9 +26,9 @@ spec:
           allowPrivilegeEscalation: false
           readOnlyRootFilesystem: true
         ports:
-          - containerPort: 8080
-            name: http
           - containerPort: 9090
+            name: http
+          - containerPort: 8080
             name: http-prom
         args:
           - --enable-leader-election
