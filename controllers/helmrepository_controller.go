@@ -22,6 +22,7 @@ import (
 	"io/ioutil"
 	"net/url"
 	"path"
+	"strings"
 
 	"github.com/go-logr/logr"
 	"helm.sh/helm/v3/pkg/getter"
@@ -30,11 +31,14 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	kuberecorder "k8s.io/client-go/tools/record"
+	"k8s.io/client-go/tools/reference"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/yaml"
 
+	"github.com/fluxcd/pkg/recorder"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1alpha1"
 	"github.com/fluxcd/source-controller/internal/helm"
 )
@@ -42,10 +46,12 @@ import (
 // HelmRepositoryReconciler reconciles a HelmRepository object
 type HelmRepositoryReconciler struct {
 	client.Client
-	Log     logr.Logger
-	Scheme  *runtime.Scheme
-	Storage *Storage
-	Getters getter.Providers
+	Log                   logr.Logger
+	Scheme                *runtime.Scheme
+	Storage               *Storage
+	Getters               getter.Providers
+	EventRecorder         kuberecorder.EventRecorder
+	ExternalEventRecorder *recorder.EventRecorder
 }
 
 // +kubebuilder:rbac:groups=source.fluxcd.io,resources=helmrepositories,verbs=get;list;watch;create;update;patch;delete
@@ -87,10 +93,16 @@ func (r *HelmRepositoryReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 	syncedRepo, err := r.sync(ctx, *repository.DeepCopy())
 	if err != nil {
 		log.Error(err, "Helm repository sync failed")
+		r.event(repository, recorder.EventSeverityError, err.Error())
 		if err := r.Status().Update(ctx, &syncedRepo); err != nil {
 			log.Error(err, "unable to update HelmRepository status")
 		}
 		return ctrl.Result{Requeue: true}, err
+	} else {
+		// emit revision change event
+		if repository.Status.Artifact == nil || syncedRepo.Status.Artifact.Revision != repository.Status.Artifact.Revision {
+			r.event(syncedRepo, recorder.EventSeverityInfo, sourcev1.HelmRepositoryReadyMessage(syncedRepo))
+		}
 	}
 
 	// update status
@@ -254,4 +266,29 @@ func (r *HelmRepositoryReconciler) gc(repository sourcev1.HelmRepository) error 
 		return r.Storage.RemoveAllButCurrent(*repository.Status.Artifact)
 	}
 	return nil
+}
+
+// emit Kubernetes event and forward event to notification controller if configured
+func (r *HelmRepositoryReconciler) event(repository sourcev1.HelmRepository, severity, msg string) {
+	if r.EventRecorder != nil {
+		r.EventRecorder.Eventf(&repository, "Normal", severity, msg)
+	}
+	if r.ExternalEventRecorder != nil {
+		objRef, err := reference.GetReference(r.Scheme, &repository)
+		if err != nil {
+			r.Log.WithValues(
+				strings.ToLower(repository.Kind),
+				fmt.Sprintf("%s/%s", repository.GetNamespace(), repository.GetName()),
+			).Error(err, "unable to send event")
+			return
+		}
+
+		if err := r.ExternalEventRecorder.Eventf(*objRef, nil, severity, severity, msg); err != nil {
+			r.Log.WithValues(
+				strings.ToLower(repository.Kind),
+				fmt.Sprintf("%s/%s", repository.GetNamespace(), repository.GetName()),
+			).Error(err, "unable to send event")
+			return
+		}
+	}
 }
