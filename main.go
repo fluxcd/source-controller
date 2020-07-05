@@ -19,6 +19,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -175,7 +176,30 @@ func mustInitStorage(path string, storageAddr string, l logr.Logger) *controller
 		os.MkdirAll(path, 0777)
 	}
 
-	hostname := "localhost" + storageAddr
+	host, port, err := net.SplitHostPort(storageAddr)
+	if err != nil {
+		l.Error(err, "unable to parse storage address")
+		os.Exit(1)
+	}
+
+	switch host {
+	case "":
+		host = "localhost"
+	case "0.0.0.0":
+		host = os.Getenv("HOSTNAME")
+		if host == "" {
+			hn, err := os.Hostname()
+			if err != nil {
+				l.Error(err, "0.0.0.0 specified in storage addr but hostname is invalid")
+				os.Exit(1)
+			}
+
+			host = hn
+		}
+	}
+
+	hostname := net.JoinHostPort(host, port)
+
 	if os.Getenv("RUNTIME_NAMESPACE") != "" {
 		svcParts := strings.Split(os.Getenv("HOSTNAME"), "-")
 		hostname = fmt.Sprintf("%s.%s",
