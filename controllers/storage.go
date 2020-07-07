@@ -19,6 +19,7 @@ package controllers
 import (
 	"archive/tar"
 	"bufio"
+	"bytes"
 	"compress/gzip"
 	"crypto/sha1"
 	"fmt"
@@ -108,7 +109,7 @@ func (s *Storage) RemoveAllButCurrent(artifact sourcev1.Artifact) error {
 	})
 
 	if len(errors) > 0 {
-		return fmt.Errorf("faild to remove files: %s", strings.Join(errors, " "))
+		return fmt.Errorf("failed to remove files: %s", strings.Join(errors, " "))
 	}
 	return nil
 }
@@ -123,15 +124,17 @@ func (s *Storage) ArtifactExist(artifact sourcev1.Artifact) bool {
 
 // Archive creates a tar.gz to the artifact path from the given dir excluding any VCS specific
 // files and directories, or any of the excludes defined in the excludeFiles.
-func (s *Storage) Archive(artifact sourcev1.Artifact, dir string) error {
+// Returns a modified sourcev1.Artifact and any error.
+func (s *Storage) Archive(artifact sourcev1.Artifact, dir string, spec sourcev1.GitRepositorySpec) error {
 	if _, err := os.Stat(dir); err != nil {
 		return err
 	}
 
-	ps, err := loadExcludePatterns(dir)
+	ps, err := loadExcludePatterns(dir, spec)
 	if err != nil {
 		return err
 	}
+
 	matcher := gitignore.NewMatcher(ps)
 
 	gzFile, err := os.Create(artifact.Path)
@@ -241,27 +244,44 @@ func (s *Storage) Lock(artifact sourcev1.Artifact) (unlock func(), err error) {
 	return mutex.Lock()
 }
 
-func loadExcludePatterns(dir string) ([]gitignore.Pattern, error) {
+func getPatterns(reader io.Reader, path []string) []gitignore.Pattern {
+	ps := []gitignore.Pattern{}
+	scanner := bufio.NewScanner(reader)
+
+	for scanner.Scan() {
+		s := scanner.Text()
+		if !strings.HasPrefix(s, "#") && len(strings.TrimSpace(s)) > 0 {
+			ps = append(ps, gitignore.ParsePattern(s, path))
+		}
+	}
+
+	return ps
+}
+
+// loadExcludePatterns loads the excluded patterns from sourceignore or other
+// sources.
+func loadExcludePatterns(dir string, spec sourcev1.GitRepositorySpec) ([]gitignore.Pattern, error) {
 	path := strings.Split(dir, "/")
+
 	var ps []gitignore.Pattern
 	for _, p := range strings.Split(excludeVCS, ",") {
 		ps = append(ps, gitignore.ParsePattern(p, path))
 	}
-	for _, p := range strings.Split(excludeExt, ",") {
-		ps = append(ps, gitignore.ParsePattern(p, path))
-	}
-	if f, err := os.Open(filepath.Join(dir, excludeFile)); err == nil {
-		defer f.Close()
 
-		scanner := bufio.NewScanner(f)
-		for scanner.Scan() {
-			s := scanner.Text()
-			if !strings.HasPrefix(s, "#") && len(strings.TrimSpace(s)) > 0 {
-				ps = append(ps, gitignore.ParsePattern(s, path))
-			}
+	if spec.SourceIgnore == nil {
+		for _, p := range strings.Split(excludeExt, ",") {
+			ps = append(ps, gitignore.ParsePattern(p, path))
 		}
-	} else if !os.IsNotExist(err) {
-		return nil, err
+
+		if f, err := os.Open(filepath.Join(dir, excludeFile)); err == nil {
+			defer f.Close()
+			ps = append(ps, getPatterns(f, path)...)
+		} else if !os.IsNotExist(err) {
+			return nil, err
+		}
+	} else {
+		ps = append(ps, getPatterns(bytes.NewBufferString(*spec.SourceIgnore), path)...)
 	}
+
 	return ps, nil
 }

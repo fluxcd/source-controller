@@ -54,6 +54,13 @@ type GitRepositorySpec struct {
 	// Verify OpenPGP signature for the commit that HEAD points to.
 	// +optional
 	Verification *GitRepositoryVerification `json:"verify,omitempty"`
+
+	// SourceIgnore overrides the set of excluded patterns in the .sourceignore
+	// format (which is the same as .gitignore). If not provided, a default will
+	// be used, consult the documentation for your version to find out what those
+	// are.
+	// +optional
+	SourceIgnore *string `json:"sourceIgnore,omitempty"`
 }
 
 // GitRepositoryRef defines the git ref used for pull and checkout operations.
