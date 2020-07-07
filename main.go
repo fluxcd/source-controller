@@ -19,6 +19,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -68,13 +69,13 @@ func main() {
 		logJSON              bool
 	)
 
-	flag.StringVar(&metricsAddr, "metrics-addr", ":8080", "The address the metric endpoint binds to.")
-	flag.StringVar(&eventsAddr, "events-addr", "", "The address of the events receiver.")
+	flag.StringVar(&metricsAddr, "metrics-addr", envOrDefault("METRICS_ADDR", ":8080"), "The address the metric endpoint binds to.")
+	flag.StringVar(&eventsAddr, "events-addr", envOrDefault("EVENTS_ADDR", ""), "The address of the events receiver.")
 	flag.BoolVar(&enableLeaderElection, "enable-leader-election", false,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
-	flag.StringVar(&storagePath, "storage-path", "", "The local storage path.")
-	flag.StringVar(&storageAddr, "storage-addr", ":9090", "The address the static file server binds to.")
+	flag.StringVar(&storagePath, "storage-path", envOrDefault("STORAGE_PATH", ""), "The local storage path.")
+	flag.StringVar(&storageAddr, "storage-addr", envOrDefault("STORAGE_ADDR", ":9090"), "The address the static file server binds to.")
 	flag.IntVar(&concurrent, "concurrent", 2, "The number of concurrent reconciles per controller.")
 	flag.BoolVar(&logJSON, "log-json", false, "Set logging to JSON format.")
 
@@ -175,7 +176,30 @@ func mustInitStorage(path string, storageAddr string, l logr.Logger) *controller
 		os.MkdirAll(path, 0777)
 	}
 
-	hostname := "localhost" + storageAddr
+	host, port, err := net.SplitHostPort(storageAddr)
+	if err != nil {
+		l.Error(err, "unable to parse storage address")
+		os.Exit(1)
+	}
+
+	switch host {
+	case "":
+		host = "localhost"
+	case "0.0.0.0":
+		host = os.Getenv("HOSTNAME")
+		if host == "" {
+			hn, err := os.Hostname()
+			if err != nil {
+				l.Error(err, "0.0.0.0 specified in storage addr but hostname is invalid")
+				os.Exit(1)
+			}
+
+			host = hn
+		}
+	}
+
+	hostname := net.JoinHostPort(host, port)
+
 	if os.Getenv("RUNTIME_NAMESPACE") != "" {
 		svcParts := strings.Split(os.Getenv("HOSTNAME"), "-")
 		hostname = fmt.Sprintf("%s.%s",
@@ -189,4 +213,13 @@ func mustInitStorage(path string, storageAddr string, l logr.Logger) *controller
 	}
 
 	return storage
+}
+
+func envOrDefault(envName, dflt string) string {
+	ret := os.Getenv(envName)
+	if ret != "" {
+		return ret
+	}
+
+	return dflt
 }
