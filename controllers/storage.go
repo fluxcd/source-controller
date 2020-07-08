@@ -40,7 +40,7 @@ import (
 const (
 	excludeFile = ".sourceignore"
 	excludeVCS  = ".git/,.gitignore,.gitmodules,.gitattributes"
-	excludeExt  = "*.jpg,*.jpeg,*.gif,*.png,*.wmv,.*flv,.*tar.gz,*.zip"
+	excludeExt  = "*.jpg,*.jpeg,*.gif,*.png,*.wmv,*.flv,*.tar.gz,*.zip"
 )
 
 // Storage manages artifacts
