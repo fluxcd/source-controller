@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.0.3 (2020-07-09)
+
+This prerelease adds support for
+[ignore patterns](docs/spec/v1alpha1/gitrepositories.md#excluding-files)
+to be specified on `GitRepository` objects.
+
 ## 0.0.2 (2020-07-03)
 
 This prerelease comes with Kubernetes events dispatching.
