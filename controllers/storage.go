@@ -268,7 +268,7 @@ func loadExcludePatterns(dir string, spec sourcev1.GitRepositorySpec) ([]gitigno
 		ps = append(ps, gitignore.ParsePattern(p, path))
 	}
 
-	if spec.SourceIgnore == nil {
+	if spec.Ignore == nil {
 		for _, p := range strings.Split(excludeExt, ",") {
 			ps = append(ps, gitignore.ParsePattern(p, path))
 		}
@@ -280,7 +280,7 @@ func loadExcludePatterns(dir string, spec sourcev1.GitRepositorySpec) ([]gitigno
 			return nil, err
 		}
 	} else {
-		ps = append(ps, getPatterns(bytes.NewBufferString(*spec.SourceIgnore), path)...)
+		ps = append(ps, getPatterns(bytes.NewBufferString(*spec.Ignore), path)...)
 	}
 
 	return ps, nil

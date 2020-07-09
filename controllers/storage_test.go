@@ -230,7 +230,7 @@ func TestArchiveIgnore(t *testing.T) {
 	}
 
 	t.Run("only vcs ignored files", func(t *testing.T) {
-		testPatterns(t, createArchive(t, filenames, "", sourcev1.GitRepositorySpec{SourceIgnore: stringPtr("")}), table)
+		testPatterns(t, createArchive(t, filenames, "", sourcev1.GitRepositorySpec{Ignore: stringPtr("")}), table)
 	})
 
 	filenames = append(filenames, "test.txt")
@@ -238,7 +238,7 @@ func TestArchiveIgnore(t *testing.T) {
 	sourceIgnoreFile := "*.txt"
 
 	t.Run("sourceignore injected via CRD", func(t *testing.T) {
-		testPatterns(t, createArchive(t, filenames, "", sourcev1.GitRepositorySpec{SourceIgnore: stringPtr(sourceIgnoreFile)}), table)
+		testPatterns(t, createArchive(t, filenames, "", sourcev1.GitRepositorySpec{Ignore: stringPtr(sourceIgnoreFile)}), table)
 	})
 
 	table = ignoreMap{}

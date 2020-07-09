@@ -39,6 +39,14 @@ type GitRepositorySpec struct {
 	// Verify OpenPGP signature for the commit that HEAD points to.
 	// +optional
 	Verification *GitRepositoryVerification `json:"verify,omitempty"`
+
+	// Ignore overrides the set of excluded patterns in the .sourceignore
+	// format (which is the same as .gitignore). If not provided, a default will
+	// be used, consult the documentation for your version to find out what those
+	// are.
+	// +optional
+	Ignore *string `json:"ignore,omitempty"`
+
 }
 ```
 
@@ -130,6 +138,28 @@ follows [the `.gitignore` pattern
 format](https://git-scm.com/docs/gitignore#_pattern_format), pattern
 entries may overrule default exclusions.
 
+Another option is to use the `spec.ignore` field, for example:
+
+```yaml
+apiVersion: source.fluxcd.io/v1alpha1
+kind: GitRepository
+metadata:
+  name: podinfo
+spec:
+  interval: 5m
+  url: https://github.com/stefanprodan/podinfo
+  ignore: |
+    # exclude all
+    /*
+    # include deploy dir
+    !/deploy
+    # exclude file extensions from deploy dir
+    /deploy/**/*.md
+    /deploy/**/*.txt
+```
+
+When specified, `spec.ignore` overrides the default exclusion list.
+
 ## Spec examples
 
 Pull the master branch of a public repository every minute:
@@ -139,7 +169,6 @@ apiVersion: source.fluxcd.io/v1alpha1
 kind: GitRepository
 metadata:
   name: podinfo
-  namespace: default
 spec:
   interval: 1m
   url: https://github.com/stefanprodan/podinfo
@@ -152,7 +181,6 @@ apiVersion: source.fluxcd.io/v1alpha1
 kind: GitRepository
 metadata:
   name: podinfo
-  namespace: default
 spec:
   interval: 1m
   url: https://github.com/stefanprodan/podinfo
@@ -167,7 +195,6 @@ apiVersion: source.fluxcd.io/v1alpha1
 kind: GitRepository
 metadata:
   name: podinfo
-  namespace: default
 spec:
   interval: 1m
   url: https://github.com/stefanprodan/podinfo
@@ -183,7 +210,6 @@ apiVersion: source.fluxcd.io/v1alpha1
 kind: GitRepository
 metadata:
   name: podinfo
-  namespace: default
 spec:
   interval: 1m
   url: https://github.com/stefanprodan/podinfo
@@ -198,7 +224,6 @@ apiVersion: source.fluxcd.io/v1alpha1
 kind: GitRepository
 metadata:
   name: podinfo
-  namespace: default
 spec:
   interval: 1m
   url: https://github.com/stefanprodan/podinfo
@@ -213,7 +238,6 @@ apiVersion: source.fluxcd.io/v1alpha1
 kind: GitRepository
 metadata:
   name: podinfo
-  namespace: default
 spec:
   url: https://github.com/stefanprodan/podinfo
   secretRef:
@@ -237,7 +261,6 @@ apiVersion: source.fluxcd.io/v1alpha1
 kind: GitRepository
 metadata:
   name: podinfo
-  namespace: default
 spec:
   url: ssh://git@github.com/stefanprodan/podinfo
   secretRef:
@@ -277,7 +300,6 @@ apiVersion: source.fluxcd.io/v1alpha1
 kind: GitRepository
 metadata:
   name: podinfo
-  namespace: default
 spec:
   interval: 1m
   url: https://github.com/stefanprodan/podinfo
