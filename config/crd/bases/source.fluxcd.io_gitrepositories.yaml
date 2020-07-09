@@ -82,6 +82,12 @@ spec:
                     TODO: Add other useful fields. apiVersion, kind, uid?'
                   type: string
               type: object
+            sourceIgnore:
+              description: SourceIgnore overrides the set of excluded patterns in
+                the .sourceignore format (which is the same as .gitignore). If not
+                provided, a default will be used, consult the documentation for your
+                version to find out what those are.
+              type: string
             timeout:
               description: The timeout for remote git operations like cloning, default
                 to 20s.

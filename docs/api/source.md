@@ -157,6 +157,21 @@ GitRepositoryVerification
 <p>Verify OpenPGP signature for the commit that HEAD points to.</p>
 </td>
 </tr>
+<tr>
+<td>
+<code>sourceIgnore</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>SourceIgnore overrides the set of excluded patterns in the .sourceignore
+format (which is the same as .gitignore). If not provided, a default will
+be used, consult the documentation for your version to find out what those
+are.</p>
+</td>
+</tr>
 </table>
 </td>
 </tr>
@@ -664,6 +679,21 @@ GitRepositoryVerification
 <td>
 <em>(Optional)</em>
 <p>Verify OpenPGP signature for the commit that HEAD points to.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>sourceIgnore</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>SourceIgnore overrides the set of excluded patterns in the .sourceignore
+format (which is the same as .gitignore). If not provided, a default will
+be used, consult the documentation for your version to find out what those
+are.</p>
 </td>
 </tr>
 </tbody>
