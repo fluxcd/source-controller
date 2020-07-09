@@ -140,8 +140,8 @@ func (in *GitRepositorySpec) DeepCopyInto(out *GitRepositorySpec) {
 		*out = new(GitRepositoryVerification)
 		**out = **in
 	}
-	if in.SourceIgnore != nil {
-		in, out := &in.SourceIgnore, &out.SourceIgnore
+	if in.Ignore != nil {
+		in, out := &in.Ignore, &out.Ignore
 		*out = new(string)
 		**out = **in
 	}
