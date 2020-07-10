@@ -23,7 +23,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path"
 	"path/filepath"
 )
 
@@ -84,7 +83,7 @@ func (s *ArtifactServer) URLForFile(file string) (string, error) {
 	if s.URL() == "" {
 		return "", errors.New("server must be started to be able to determine the URL of the given file")
 	}
-	return path.Join(s.URL(), file), nil
+	return fmt.Sprintf("%s/%s", s.URL(), file), nil
 }
 
 func calculateArtifactName(files []File) string {
