@@ -112,7 +112,7 @@ func main() {
 
 	if err = (&controllers.GitRepositoryReconciler{
 		Client:                mgr.GetClient(),
-		Log:                   ctrl.Log.WithName("controllers").WithName("GitRepository"),
+		Log:                   ctrl.Log.WithName("controllers").WithName(sourcev1.GitRepositoryKind),
 		Scheme:                mgr.GetScheme(),
 		Storage:               storage,
 		EventRecorder:         mgr.GetEventRecorderFor("source-controller"),
@@ -120,12 +120,12 @@ func main() {
 	}).SetupWithManagerAndOptions(mgr, controllers.GitRepositoryReconcilerOptions{
 		MaxConcurrentReconciles: concurrent,
 	}); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "GitRepository")
+		setupLog.Error(err, "unable to create controller", "controller", sourcev1.GitRepositoryKind)
 		os.Exit(1)
 	}
 	if err = (&controllers.HelmRepositoryReconciler{
 		Client:                mgr.GetClient(),
-		Log:                   ctrl.Log.WithName("controllers").WithName("HelmRepository"),
+		Log:                   ctrl.Log.WithName("controllers").WithName(sourcev1.HelmRepositoryKind),
 		Scheme:                mgr.GetScheme(),
 		Storage:               storage,
 		Getters:               getters,
@@ -134,12 +134,12 @@ func main() {
 	}).SetupWithManagerAndOptions(mgr, controllers.HelmRepositoryReconcilerOptions{
 		MaxConcurrentReconciles: concurrent,
 	}); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "HelmRepository")
+		setupLog.Error(err, "unable to create controller", "controller", sourcev1.HelmRepositoryKind)
 		os.Exit(1)
 	}
 	if err = (&controllers.HelmChartReconciler{
 		Client:                mgr.GetClient(),
-		Log:                   ctrl.Log.WithName("controllers").WithName("HelmChart"),
+		Log:                   ctrl.Log.WithName("controllers").WithName(sourcev1.HelmChartKind),
 		Scheme:                mgr.GetScheme(),
 		Storage:               storage,
 		Getters:               getters,
@@ -148,7 +148,7 @@ func main() {
 	}).SetupWithManagerAndOptions(mgr, controllers.HelmChartReconcilerOptions{
 		MaxConcurrentReconciles: concurrent,
 	}); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "HelmChart")
+		setupLog.Error(err, "unable to create controller", "controller", sourcev1.HelmChartKind)
 		os.Exit(1)
 	}
 	// +kubebuilder:scaffold:builder

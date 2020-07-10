@@ -23,6 +23,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+const GitRepositoryKind = "GitRepository"
+
 // GitRepositorySpec defines the desired state of a Git repository.
 type GitRepositorySpec struct {
 	// The repository URL, can be a HTTP or SSH address.

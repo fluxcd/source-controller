@@ -107,7 +107,7 @@ var _ = BeforeSuite(func(done Done) {
 
 	err = (&GitRepositoryReconciler{
 		Client:  k8sManager.GetClient(),
-		Log:     ctrl.Log.WithName("controllers").WithName("GitRepository"),
+		Log:     ctrl.Log.WithName("controllers").WithName(sourcev1.GitRepositoryKind),
 		Scheme:  scheme.Scheme,
 		Storage: storage,
 	}).SetupWithManager(k8sManager)
@@ -115,7 +115,7 @@ var _ = BeforeSuite(func(done Done) {
 
 	err = (&HelmRepositoryReconciler{
 		Client:  k8sManager.GetClient(),
-		Log:     ctrl.Log.WithName("controllers").WithName("HelmRepository"),
+		Log:     ctrl.Log.WithName("controllers").WithName(sourcev1.HelmRepositoryKind),
 		Scheme:  scheme.Scheme,
 		Storage: storage,
 		Getters: getter.Providers{getter.Provider{
@@ -127,7 +127,7 @@ var _ = BeforeSuite(func(done Done) {
 
 	err = (&HelmChartReconciler{
 		Client:  k8sManager.GetClient(),
-		Log:     ctrl.Log.WithName("controllers").WithName("HelmChart"),
+		Log:     ctrl.Log.WithName("controllers").WithName(sourcev1.HelmChartKind),
 		Scheme:  scheme.Scheme,
 		Storage: storage,
 		Getters: getter.Providers{getter.Provider{
