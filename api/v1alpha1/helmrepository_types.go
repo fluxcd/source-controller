@@ -21,6 +21,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+const HelmRepositoryKind = "HelmRepository"
+
 // HelmRepositorySpec defines the reference to a Helm repository.
 type HelmRepositorySpec struct {
 	// The Helm repository URL, a valid URL contains at least a

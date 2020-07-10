@@ -21,6 +21,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+const HelmChartKind = "HelmChart"
+
 // HelmChartSpec defines the desired state of a Helm chart.
 type HelmChartSpec struct {
 	// The name of the Helm chart, as made available by the referenced
