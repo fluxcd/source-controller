@@ -4,11 +4,23 @@
 [![report](https://goreportcard.com/badge/github.com/fluxcd/source-controller)](https://goreportcard.com/report/github.com/fluxcd/source-controller)
 [![license](https://img.shields.io/github/license/fluxcd/source-controller.svg)](https://github.com/fluxcd/source-controller/blob/master/LICENSE)
 [![release](https://img.shields.io/github/release/fluxcd/source-controller/all.svg)](https://github.com/fluxcd/source-controller/releases)
-
-The source-controller is an implementation of the
+ 
+The source-controller is a Kubernetes operator, specialised in artifacts acquisition
+from external sources such as Git and Helm repositories.
+The source-controller implements the
 [source.fluxcd.io](https://github.com/fluxcd/source-controller/tree/master/docs/spec/v1alpha1) API
-based on the specifications described in the
-[Source Controller Proposal](https://github.com/fluxcd/source-controller/tree/master/docs/spec).
+and is a core component of the [GitOps toolkit](https://toolkit.fluxcd.io).
 
-Integrations:
-* [kustomize-controller](https://github.com/fluxcd/kustomize-controller)
+![overview](docs/diagrams/source-controller-overview.png)
+
+Features:
+
+* authenticates to sources (SSH, user/password, API token)
+* validates source authenticity (PGP)
+* detects source changes based on update policies (semver)
+* fetches resources on-demand and on-a-schedule
+* packages the fetched resources into a well-known format (tar.gz, yaml)
+* makes the artifacts addressable by their source identifier (sha, version, ts)
+* makes the artifacts available in-cluster to interested 3rd parties
+* notifies interested 3rd parties of source changes and availability (status conditions, events, hooks)
+* reacts to Git push and Helm chart upload events (via [notification-controller](https://github.com/fluxcd/notification-controller))
