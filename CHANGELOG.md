@@ -2,6 +2,10 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.0.4 (2020-07-10)
+
+This prerelease comes with fixes to the testing framework.
+
 ## 0.0.3 (2020-07-09)
 
 This prerelease adds support for
