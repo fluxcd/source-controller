@@ -73,10 +73,6 @@ apiVersion: source.fluxcd.io/v1alpha1
 kind: HelmChart
 metadata:
   name: redis
-  namespace: default
-  annotations:
-    # force sync trigger
-    source.fluxcd.io/syncAt: "2020-04-06T15:39:52+03:00"
 spec:
   name: redis
   version: 10.5.7
@@ -92,7 +88,6 @@ apiVersion: source.fluxcd.io/v1alpha1
 kind: HelmChart
 metadata:
   name: redis
-  namespace: default
 spec:
   name: redis
   version: ^10.0.0
