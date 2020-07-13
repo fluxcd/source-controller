@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.0.5 (2020-07-13)
+
+This prerelease comes with improvements to logging.
+The default logging format is JSON and the timestamp format is ISO8601.
+Introduce `fluxcd.io/reconcileA` annotation for on-demand reconciliation
+of source objects.
+
 ## 0.0.4 (2020-07-10)
 
 This prerelease comes with fixes to the testing framework.
