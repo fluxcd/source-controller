@@ -19,7 +19,7 @@ type Source interface {
 }
 ````
 
-### Source synchronization
+### Source reconciliation
 
 Source objects should contain a `spec.interval` field that tells the controller at which interval to check for updates:
 
@@ -37,15 +37,16 @@ The controller can be told to check for updates right away by setting an annotat
 
 ```go
 const (
-	// SyncAtAnnotation is the timestamp corresponding to an on-demand source sync.
-	SyncAtAnnotation string = "source.fluxcd.io/syncAt"
+	// ReconcileAtAnnotation is the annotation used for triggering a
+	// reconciliation outside of the defined schedule.
+	ReconcileAtAnnotation string = "fluxcd.io/reconcileAt"
 )
 ```
 
-Trigger source sync example:
+Trigger source reconciliation example:
 
 ```bash
-kubectl annotate --overwrite gitrepository/podinfo source.fluxcd.io/syncAt="$(date +%s)"
+kubectl annotate --overwrite gitrepository/podinfo fluxcd.io/reconcileAt="$(date +%s)"
 ```
 
 ### Source status

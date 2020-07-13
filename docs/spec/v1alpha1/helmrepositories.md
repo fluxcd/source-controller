@@ -71,7 +71,6 @@ apiVersion: source.fluxcd.io/v1alpha1
 kind: HelmRepository
 metadata:
   name: stable
-  namespace: default
 spec:
   url: https://kubernetes-charts.storage.googleapis.com/
   interval: 10m
@@ -84,7 +83,6 @@ apiVersion: source.fluxcd.io/v1alpha1
 kind: HelmRepository
 metadata:
   name: private
-  namespace: default
 spec:
   url: https://charts.example.com
   secretRef:

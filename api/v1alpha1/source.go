@@ -13,6 +13,7 @@ type Source interface {
 }
 
 const (
-	// SyncAtAnnotation is the timestamp corresponding to an on-demand source sync.
-	SyncAtAnnotation string = "source.fluxcd.io/syncAt"
+	// ReconcileAtAnnotation is the annotation used for triggering a
+	// reconciliation outside of the defined schedule.
+	ReconcileAtAnnotation string = "fluxcd.io/reconcileAt"
 )

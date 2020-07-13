@@ -45,8 +45,8 @@ func (SourceChangePredicate) Update(e event.UpdateEvent) bool {
 	}
 
 	// handle force sync
-	if val, ok := e.MetaNew.GetAnnotations()[sourcev1.SyncAtAnnotation]; ok {
-		if valOld, okOld := e.MetaOld.GetAnnotations()[sourcev1.SyncAtAnnotation]; okOld {
+	if val, ok := e.MetaNew.GetAnnotations()[sourcev1.ReconcileAtAnnotation]; ok {
+		if valOld, okOld := e.MetaOld.GetAnnotations()[sourcev1.ReconcileAtAnnotation]; okOld {
 			if val != valOld {
 				return true
 			}
