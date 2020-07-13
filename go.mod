@@ -11,6 +11,7 @@ require (
 	github.com/onsi/ginkgo v1.11.0
 	github.com/onsi/gomega v1.8.1
 	github.com/sosedoff/gitkit v0.2.1-0.20191202022816-7182d43c6254
+	go.uber.org/zap v1.10.0
 	helm.sh/helm/v3 v3.2.4
 	k8s.io/api v0.18.4
 	k8s.io/apimachinery v0.18.4
