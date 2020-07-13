@@ -33,6 +33,7 @@ spec:
         args:
           - --enable-leader-election
           - --storage-path=/data
+          - --log-level=debug
           - --log-json
         env:
           - name: RUNTIME_NAMESPACE

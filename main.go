@@ -27,6 +27,8 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
+	uzap "go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 	"helm.sh/helm/v3/pkg/getter"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -66,6 +68,7 @@ func main() {
 		storagePath          string
 		storageAddr          string
 		concurrent           int
+		logLevel             string
 		logJSON              bool
 	)
 
@@ -77,11 +80,12 @@ func main() {
 	flag.StringVar(&storagePath, "storage-path", envOrDefault("STORAGE_PATH", ""), "The local storage path.")
 	flag.StringVar(&storageAddr, "storage-addr", envOrDefault("STORAGE_ADDR", ":9090"), "The address the static file server binds to.")
 	flag.IntVar(&concurrent, "concurrent", 2, "The number of concurrent reconciles per controller.")
+	flag.StringVar(&logLevel, "log-level", "info", "Set logging level. Can be debug, info or error.")
 	flag.BoolVar(&logJSON, "log-json", false, "Set logging to JSON format.")
 
 	flag.Parse()
 
-	ctrl.SetLogger(zap.New(zap.UseDevMode(!logJSON)))
+	ctrl.SetLogger(newLogger(logLevel, logJSON))
 
 	var eventRecorder *recorder.EventRecorder
 	if eventsAddr != "" {
@@ -158,6 +162,32 @@ func main() {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
 	}
+}
+
+// newLogger returns a logger configured for dev or production use.
+// For production the log format is JSON, the timestamps format is ISO8601
+// and stack traces are logged when the level is set to debug.
+func newLogger(level string, production bool) logr.Logger {
+	if !production {
+		return zap.New(zap.UseDevMode(true))
+	}
+
+	encCfg := uzap.NewProductionEncoderConfig()
+	encCfg.EncodeTime = zapcore.ISO8601TimeEncoder
+	encoder := zap.Encoder(zapcore.NewJSONEncoder(encCfg))
+
+	logLevel := zap.Level(zapcore.InfoLevel)
+	stacktraceLevel := zap.StacktraceLevel(zapcore.PanicLevel)
+
+	switch level {
+	case "debug":
+		logLevel = zap.Level(zapcore.DebugLevel)
+		stacktraceLevel = zap.StacktraceLevel(zapcore.ErrorLevel)
+	case "error":
+		logLevel = zap.Level(zapcore.ErrorLevel)
+	}
+
+	return zap.New(encoder, logLevel, stacktraceLevel)
 }
 
 func startFileServer(path string, address string, l logr.Logger) {
