@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"testing"
 	"time"
@@ -248,5 +249,24 @@ func TestArchiveIgnore(t *testing.T) {
 
 	t.Run("sourceignore injected via filename", func(t *testing.T) {
 		testPatterns(t, createArchive(t, filenames, sourceIgnoreFile, sourcev1.GitRepositorySpec{}), table)
+	})
+}
+
+func TestStorageRemoveAllButCurrent(t *testing.T) {
+	t.Run("bad directory in archive", func(t *testing.T) {
+		dir, err := ioutil.TempDir("", "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { os.RemoveAll(dir) })
+
+		s, err := NewStorage(dir, "hostname", time.Minute)
+		if err != nil {
+			t.Fatalf("Valid path did not successfully return: %v", err)
+		}
+
+		if err := s.RemoveAllButCurrent(sourcev1.Artifact{Path: path.Join(dir, "really", "nonexistent")}); err == nil {
+			t.Fatal("Did not error while pruning non-existent path")
+		}
 	})
 }
