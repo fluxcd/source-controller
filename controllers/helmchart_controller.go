@@ -22,6 +22,7 @@ import (
 	"io/ioutil"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/go-logr/logr"
 	"helm.sh/helm/v3/pkg/getter"
@@ -58,33 +59,33 @@ type HelmChartReconciler struct {
 
 func (r *HelmChartReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	ctx := context.Background()
+	start := time.Now()
 
 	var chart sourcev1.HelmChart
 	if err := r.Get(ctx, req.NamespacedName, &chart); err != nil {
 		return ctrl.Result{Requeue: true}, client.IgnoreNotFound(err)
 	}
 
-	log := r.Log.WithValues(chart.Kind, req.NamespacedName)
+	log := r.Log.WithValues("controller", strings.ToLower(sourcev1.HelmChartKind), "request", req.NamespacedName)
 
 	// set initial status
 	if reset, status := r.shouldResetStatus(chart); reset {
-		log.Info("Initializing Helm chart")
 		chart.Status = status
 		if err := r.Status().Update(ctx, &chart); err != nil {
-			log.Error(err, "unable to update HelmChart status")
+			log.Error(err, "unable to update status")
 			return ctrl.Result{Requeue: true}, err
 		}
 	} else {
 		chart = sourcev1.HelmChartProgressing(chart)
 		if err := r.Status().Update(ctx, &chart); err != nil {
-			log.Error(err, "unable to update HelmChart status")
+			log.Error(err, "unable to update status")
 			return ctrl.Result{Requeue: true}, err
 		}
 	}
 
-	// try to remove old artifacts
+	// purge old artifacts from storage
 	if err := r.gc(chart); err != nil {
-		log.Error(err, "artifacts GC failed")
+		log.Error(err, "unable to purge old artifacts")
 	}
 
 	// get referenced chart repository
@@ -92,7 +93,7 @@ func (r *HelmChartReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	if err != nil {
 		chart = sourcev1.HelmChartNotReady(*chart.DeepCopy(), sourcev1.ChartPullFailedReason, err.Error())
 		if err := r.Status().Update(ctx, &chart); err != nil {
-			log.Error(err, "unable to update HelmChart status")
+			log.Error(err, "unable to update status")
 		}
 		return ctrl.Result{Requeue: true}, err
 	}
@@ -100,34 +101,34 @@ func (r *HelmChartReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	// set ownership reference so chart is garbage collected on
 	// repository removal
 	if err := r.setOwnerRef(ctx, &chart, repository); err != nil {
-		log.Error(err, "failed to set owner reference")
+		log.Error(err, "unable to set owner reference")
 	}
 
-	// try to pull chart
-	pulledChart, err := r.sync(ctx, repository, *chart.DeepCopy())
-	if err != nil {
-		log.Error(err, "Helm chart sync failed")
-		r.event(chart, recorder.EventSeverityError, err.Error())
-		if err := r.Status().Update(ctx, &pulledChart); err != nil {
-			log.Error(err, "unable to update HelmChart status")
-		}
-		return ctrl.Result{Requeue: true}, err
-	} else {
-		// emit version change event
-		if chart.Status.Artifact == nil || pulledChart.Status.Artifact.Revision != chart.Status.Artifact.Revision {
-			r.event(pulledChart, recorder.EventSeverityInfo, sourcev1.HelmChartReadyMessage(pulledChart))
-		}
-	}
+	// reconcile repository by downloading the chart tarball
+	reconciledChart, reconcileErr := r.reconcile(ctx, repository, *chart.DeepCopy())
 
-	// update status
-	if err := r.Status().Update(ctx, &pulledChart); err != nil {
-		log.Error(err, "unable to update HelmChart status")
+	// update status with the reconciliation result
+	if err := r.Status().Update(ctx, &reconciledChart); err != nil {
+		log.Error(err, "unable to update status")
 		return ctrl.Result{Requeue: true}, err
 	}
 
-	log.Info("Helm chart sync succeeded", "msg", sourcev1.HelmChartReadyMessage(pulledChart))
+	// if reconciliation failed, record the failure and requeue immediately
+	if reconcileErr != nil {
+		r.event(reconciledChart, recorder.EventSeverityError, reconcileErr.Error())
+		return ctrl.Result{Requeue: true}, reconcileErr
+	}
 
-	// requeue chart
+	// emit revision change event
+	if chart.Status.Artifact == nil || reconciledChart.Status.Artifact.Revision != chart.Status.Artifact.Revision {
+		r.event(reconciledChart, recorder.EventSeverityInfo, sourcev1.HelmChartReadyMessage(reconciledChart))
+	}
+
+	log.Info(fmt.Sprintf("Reconciliation finished in %s, next run in %s",
+		time.Now().Sub(start).String(),
+		chart.GetInterval().Duration.String(),
+	))
+
 	return ctrl.Result{RequeueAfter: chart.GetInterval().Duration}, nil
 }
 
@@ -148,7 +149,7 @@ func (r *HelmChartReconciler) SetupWithManagerAndOptions(mgr ctrl.Manager, opts 
 		Complete(r)
 }
 
-func (r *HelmChartReconciler) sync(ctx context.Context, repository sourcev1.HelmRepository, chart sourcev1.HelmChart) (sourcev1.HelmChart, error) {
+func (r *HelmChartReconciler) reconcile(ctx context.Context, repository sourcev1.HelmRepository, chart sourcev1.HelmChart) (sourcev1.HelmChart, error) {
 	indexBytes, err := ioutil.ReadFile(repository.Status.Artifact.Path)
 	if err != nil {
 		err = fmt.Errorf("failed to read Helm repository index file: %w", err)
@@ -339,7 +340,7 @@ func (r *HelmChartReconciler) setOwnerRef(ctx context.Context, chart *sourcev1.H
 	return r.Update(ctx, chart)
 }
 
-// emit Kubernetes event and forward event to notification controller if configured
+// event emits a Kubernetes event and forwards the event to notification controller if configured
 func (r *HelmChartReconciler) event(chart sourcev1.HelmChart, severity, msg string) {
 	if r.EventRecorder != nil {
 		r.EventRecorder.Eventf(&chart, "Normal", severity, msg)
@@ -348,7 +349,7 @@ func (r *HelmChartReconciler) event(chart sourcev1.HelmChart, severity, msg stri
 		objRef, err := reference.GetReference(r.Scheme, &chart)
 		if err != nil {
 			r.Log.WithValues(
-				strings.ToLower(chart.Kind),
+				"request",
 				fmt.Sprintf("%s/%s", chart.GetNamespace(), chart.GetName()),
 			).Error(err, "unable to send event")
 			return
@@ -356,7 +357,7 @@ func (r *HelmChartReconciler) event(chart sourcev1.HelmChart, severity, msg stri
 
 		if err := r.ExternalEventRecorder.Eventf(*objRef, nil, severity, severity, msg); err != nil {
 			r.Log.WithValues(
-				strings.ToLower(chart.Kind),
+				"request",
 				fmt.Sprintf("%s/%s", chart.GetNamespace(), chart.GetName()),
 			).Error(err, "unable to send event")
 			return

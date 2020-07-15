@@ -22,6 +22,7 @@ import (
 	"io/ioutil"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/go-git/go-git/v5/plumbing/transport"
@@ -56,61 +57,62 @@ type GitRepositoryReconciler struct {
 
 func (r *GitRepositoryReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	ctx := context.Background()
+	start := time.Now()
 
 	var repository sourcev1.GitRepository
 	if err := r.Get(ctx, req.NamespacedName, &repository); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	log := r.Log.WithValues(repository.Kind, req.NamespacedName)
+	log := r.Log.WithValues("controller", strings.ToLower(sourcev1.GitRepositoryKind), "request", req.NamespacedName)
 
 	// set initial status
 	if reset, status := r.shouldResetStatus(repository); reset {
-		log.Info("Initializing Git repository")
 		repository.Status = status
 		if err := r.Status().Update(ctx, &repository); err != nil {
-			log.Error(err, "unable to update GitRepository status")
+			log.Error(err, "unable to update status")
 			return ctrl.Result{Requeue: true}, err
 		}
 	} else {
 		repository = sourcev1.GitRepositoryProgressing(repository)
 		if err := r.Status().Update(ctx, &repository); err != nil {
-			log.Error(err, "unable to update GitRepository status")
+			log.Error(err, "unable to update status")
 			return ctrl.Result{Requeue: true}, err
 		}
 	}
 
-	// try to remove old artifacts
+	// purge old artifacts from storage
 	if err := r.gc(repository); err != nil {
-		log.Error(err, "artifacts GC failed")
+		log.Error(err, "unable to purge old artifacts")
 	}
 
-	// try git sync
-	syncedRepo, err := r.sync(ctx, *repository.DeepCopy())
-	if err != nil {
-		log.Error(err, "Git repository sync failed")
-		r.event(repository, recorder.EventSeverityError, err.Error())
-		if err := r.Status().Update(ctx, &syncedRepo); err != nil {
-			log.Error(err, "unable to update GitRepository status")
-		}
-		return ctrl.Result{Requeue: true}, err
-	} else {
-		// emit revision change event
-		if repository.Status.Artifact == nil || syncedRepo.Status.Artifact.Revision != repository.Status.Artifact.Revision {
-			r.event(syncedRepo, recorder.EventSeverityInfo, sourcev1.GitRepositoryReadyMessage(syncedRepo))
-		}
-	}
+	// reconcile repository by pulling the latest Git commit
+	reconciledRepository, reconcileErr := r.reconcile(ctx, *repository.DeepCopy())
 
-	// update status
-	if err := r.Status().Update(ctx, &syncedRepo); err != nil {
-		log.Error(err, "unable to update GitRepository status")
+	// update status with the reconciliation result
+	if err := r.Status().Update(ctx, &reconciledRepository); err != nil {
+		log.Error(err, "unable to update status")
 		return ctrl.Result{Requeue: true}, err
 	}
 
-	log.Info("Git repository sync succeeded", "msg", sourcev1.GitRepositoryReadyMessage(syncedRepo))
+	// if reconciliation failed, record the failure and requeue immediately
+	if reconcileErr != nil {
+		r.event(reconciledRepository, recorder.EventSeverityError, reconcileErr.Error())
+		return ctrl.Result{Requeue: true}, reconcileErr
+	}
 
-	// requeue repository
+	// emit revision change event
+	if repository.Status.Artifact == nil || reconciledRepository.Status.Artifact.Revision != repository.Status.Artifact.Revision {
+		r.event(reconciledRepository, recorder.EventSeverityInfo, sourcev1.GitRepositoryReadyMessage(reconciledRepository))
+	}
+
+	log.Info(fmt.Sprintf("Reconciliation finished in %s, next run in %s",
+		time.Now().Sub(start).String(),
+		repository.GetInterval().Duration.String(),
+	))
+
 	return ctrl.Result{RequeueAfter: repository.GetInterval().Duration}, nil
+
 }
 
 type GitRepositoryReconcilerOptions struct {
@@ -130,7 +132,7 @@ func (r *GitRepositoryReconciler) SetupWithManagerAndOptions(mgr ctrl.Manager, o
 		Complete(r)
 }
 
-func (r *GitRepositoryReconciler) sync(ctx context.Context, repository sourcev1.GitRepository) (sourcev1.GitRepository, error) {
+func (r *GitRepositoryReconciler) reconcile(ctx context.Context, repository sourcev1.GitRepository) (sourcev1.GitRepository, error) {
 	// create tmp dir for the Git clone
 	tmpGit, err := ioutil.TempDir("", repository.Name)
 	if err != nil {
@@ -215,7 +217,7 @@ func (r *GitRepositoryReconciler) sync(ctx context.Context, repository sourcev1.
 }
 
 // shouldResetStatus returns a boolean indicating if the status of the
-// given repository should be reset and a reset HelmChartStatus.
+// given repository should be reset.
 func (r *GitRepositoryReconciler) shouldResetStatus(repository sourcev1.GitRepository) (bool, sourcev1.GitRepositoryStatus) {
 	resetStatus := false
 	if repository.Status.Artifact != nil {
@@ -240,6 +242,7 @@ func (r *GitRepositoryReconciler) shouldResetStatus(repository sourcev1.GitRepos
 	}
 }
 
+// verify returns an error if the PGP signature can't be verified
 func (r *GitRepositoryReconciler) verify(ctx context.Context, publicKeySecret types.NamespacedName, commit *object.Commit) error {
 	if commit.PGPSignature == "" {
 		return fmt.Errorf("no PGP signature found for commit: %s", commit.Hash)
@@ -272,7 +275,7 @@ func (r *GitRepositoryReconciler) gc(repository sourcev1.GitRepository) error {
 	return nil
 }
 
-// emit Kubernetes event and forward event to notification controller if configured
+// event emits a Kubernetes event and forwards the event to notification controller if configured
 func (r *GitRepositoryReconciler) event(repository sourcev1.GitRepository, severity, msg string) {
 	if r.EventRecorder != nil {
 		r.EventRecorder.Eventf(&repository, "Normal", severity, msg)
@@ -281,7 +284,7 @@ func (r *GitRepositoryReconciler) event(repository sourcev1.GitRepository, sever
 		objRef, err := reference.GetReference(r.Scheme, &repository)
 		if err != nil {
 			r.Log.WithValues(
-				strings.ToLower(repository.Kind),
+				"request",
 				fmt.Sprintf("%s/%s", repository.GetNamespace(), repository.GetName()),
 			).Error(err, "unable to send event")
 			return
@@ -289,7 +292,7 @@ func (r *GitRepositoryReconciler) event(repository sourcev1.GitRepository, sever
 
 		if err := r.ExternalEventRecorder.Eventf(*objRef, nil, severity, severity, msg); err != nil {
 			r.Log.WithValues(
-				strings.ToLower(repository.Kind),
+				"request",
 				fmt.Sprintf("%s/%s", repository.GetNamespace(), repository.GetName()),
 			).Error(err, "unable to send event")
 			return
