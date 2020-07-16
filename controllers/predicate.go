@@ -17,11 +17,6 @@ limitations under the License.
 package controllers
 
 import (
-	"fmt"
-
-	"github.com/go-logr/logr"
-	"k8s.io/apimachinery/pkg/runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
@@ -56,31 +51,4 @@ func (SourceChangePredicate) Update(e event.UpdateEvent) bool {
 	}
 
 	return false
-}
-
-type GarbageCollectPredicate struct {
-	predicate.Funcs
-	Scheme  *runtime.Scheme
-	Log     logr.Logger
-	Storage *Storage
-}
-
-// Delete removes all artifacts from storage that belong to the
-// referenced object.
-func (gc GarbageCollectPredicate) Delete(e event.DeleteEvent) bool {
-	gvk, err := apiutil.GVKForObject(e.Object, gc.Scheme)
-	if err != nil {
-		gc.Log.Error(err, "unable to get GroupVersionKind for deleted object")
-		return false
-	}
-	// delete artifacts
-	artifact := gc.Storage.ArtifactFor(gvk.Kind, e.Meta, "*", "")
-	if err := gc.Storage.RemoveAll(artifact); err != nil {
-		gc.Log.Error(err, "unable to delete artifacts",
-			gvk.Kind, fmt.Sprintf("%s/%s", e.Meta.GetNamespace(), e.Meta.GetName()))
-	} else {
-		gc.Log.Info(gvk.Kind+" artifacts deleted",
-			gvk.Kind, fmt.Sprintf("%s/%s", e.Meta.GetNamespace(), e.Meta.GetName()))
-	}
-	return true
 }
