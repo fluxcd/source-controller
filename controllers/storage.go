@@ -100,6 +100,11 @@ func (s *Storage) RemoveAllButCurrent(artifact sourcev1.Artifact) error {
 	dir := filepath.Dir(artifact.Path)
 	var errors []string
 	_ = filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			errors = append(errors, err.Error())
+			return nil
+		}
+
 		if path != artifact.Path && !info.IsDir() && info.Mode()&os.ModeSymlink != os.ModeSymlink {
 			if err := os.Remove(path); err != nil {
 				errors = append(errors, info.Name())
