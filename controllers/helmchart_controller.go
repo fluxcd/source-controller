@@ -98,12 +98,6 @@ func (r *HelmChartReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		return ctrl.Result{Requeue: true}, err
 	}
 
-	// set ownership reference so chart is garbage collected on
-	// repository removal
-	if err := r.setOwnerRef(ctx, &chart, repository); err != nil {
-		log.Error(err, "unable to set owner reference")
-	}
-
 	// reconcile repository by downloading the chart tarball
 	reconciledChart, reconcileErr := r.reconcile(ctx, repository, *chart.DeepCopy())
 
@@ -326,18 +320,6 @@ func (r *HelmChartReconciler) gc(chart sourcev1.HelmChart) error {
 		return r.Storage.RemoveAllButCurrent(*chart.Status.Artifact)
 	}
 	return nil
-}
-
-// setOwnerRef appends the owner reference of the given chart to the
-// repository if it is not present.
-func (r *HelmChartReconciler) setOwnerRef(ctx context.Context, chart *sourcev1.HelmChart, repository sourcev1.HelmRepository) error {
-	if metav1.IsControlledBy(chart.GetObjectMeta(), repository.GetObjectMeta()) {
-		return nil
-	}
-	chart.SetOwnerReferences(append(chart.GetOwnerReferences(), *metav1.NewControllerRef(
-		repository.GetObjectMeta(), repository.GroupVersionKind(),
-	)))
-	return r.Update(ctx, chart)
 }
 
 // event emits a Kubernetes event and forwards the event to notification controller if configured
