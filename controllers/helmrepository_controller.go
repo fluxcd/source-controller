@@ -70,6 +70,37 @@ func (r *HelmRepositoryReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 
 	log := r.Log.WithValues("controller", strings.ToLower(sourcev1.HelmRepositoryKind), "request", req.NamespacedName)
 
+	// Examine if the object is under deletion
+	if repository.ObjectMeta.DeletionTimestamp.IsZero() {
+		// The object is not being deleted, so if it does not have our finalizer,
+		// then lets add the finalizer and update the object. This is equivalent
+		// registering our finalizer.
+		if !containsString(repository.ObjectMeta.Finalizers, sourcev1.SourceFinalizer) {
+			repository.ObjectMeta.Finalizers = append(repository.ObjectMeta.Finalizers, sourcev1.SourceFinalizer)
+			if err := r.Update(ctx, &repository); err != nil {
+				log.Error(err, "unable to register finalizer")
+				return ctrl.Result{}, err
+			}
+		}
+	} else {
+		// The object is being deleted
+		if containsString(repository.ObjectMeta.Finalizers, sourcev1.SourceFinalizer) {
+			// Our finalizer is still present, so lets handle garbage collection
+			if err := r.gc(repository, true); err != nil {
+				r.event(repository, recorder.EventSeverityError, fmt.Sprintf("garbage collection for deleted resource failed: %s", err.Error()))
+				// Return the error so we retry the failed garbage collection
+				return ctrl.Result{}, err
+			}
+			// Remove our finalizer from the list and update it
+			repository.ObjectMeta.Finalizers = removeString(repository.ObjectMeta.Finalizers, sourcev1.SourceFinalizer)
+			if err := r.Update(ctx, &repository); err != nil {
+				return ctrl.Result{}, err
+			}
+			// Stop reconciliation as the object is being deleted
+			return ctrl.Result{}, nil
+		}
+	}
+
 	// set initial status
 	if reset, status := r.shouldResetStatus(repository); reset {
 		repository.Status = status
@@ -86,7 +117,7 @@ func (r *HelmRepositoryReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 	}
 
 	// purge old artifacts from storage
-	if err := r.gc(repository); err != nil {
+	if err := r.gc(repository, false); err != nil {
 		log.Error(err, "unable to purge old artifacts")
 	}
 
@@ -130,7 +161,6 @@ func (r *HelmRepositoryReconciler) SetupWithManagerAndOptions(mgr ctrl.Manager, 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&sourcev1.HelmRepository{}).
 		WithEventFilter(SourceChangePredicate{}).
-		WithEventFilter(GarbageCollectPredicate{Scheme: r.Scheme, Log: r.Log, Storage: r.Storage}).
 		WithOptions(controller.Options{MaxConcurrentReconciles: opts.MaxConcurrentReconciles}).
 		Complete(r)
 }
@@ -263,8 +293,11 @@ func (r *HelmRepositoryReconciler) shouldResetStatus(repository sourcev1.HelmRep
 
 // gc performs a garbage collection on all but current artifacts of
 // the given repository.
-func (r *HelmRepositoryReconciler) gc(repository sourcev1.HelmRepository) error {
+func (r *HelmRepositoryReconciler) gc(repository sourcev1.HelmRepository, all bool) error {
 	if repository.Status.Artifact != nil {
+		if all {
+			return r.Storage.RemoveAll(*repository.Status.Artifact)
+		}
 		return r.Storage.RemoveAllButCurrent(*repository.Status.Artifact)
 	}
 	return nil

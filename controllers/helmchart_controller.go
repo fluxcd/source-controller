@@ -68,6 +68,37 @@ func (r *HelmChartReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 
 	log := r.Log.WithValues("controller", strings.ToLower(sourcev1.HelmChartKind), "request", req.NamespacedName)
 
+	// Examine if the object is under deletion
+	if chart.ObjectMeta.DeletionTimestamp.IsZero() {
+		// The object is not being deleted, so if it does not have our finalizer,
+		// then lets add the finalizer and update the object. This is equivalent
+		// registering our finalizer.
+		if !containsString(chart.ObjectMeta.Finalizers, sourcev1.SourceFinalizer) {
+			chart.ObjectMeta.Finalizers = append(chart.ObjectMeta.Finalizers, sourcev1.SourceFinalizer)
+			if err := r.Update(ctx, &chart); err != nil {
+				log.Error(err, "unable to register finalizer")
+				return ctrl.Result{}, err
+			}
+		}
+	} else {
+		// The object is being deleted
+		if containsString(chart.ObjectMeta.Finalizers, sourcev1.SourceFinalizer) {
+			// Our finalizer is still present, so lets handle garbage collection
+			if err := r.gc(chart, true); err != nil {
+				r.event(chart, recorder.EventSeverityError, fmt.Sprintf("garbage collection for deleted resource failed: %s", err.Error()))
+				// Return the error so we retry the failed garbage collection
+				return ctrl.Result{}, err
+			}
+			// Remove our finalizer from the list and update it
+			chart.ObjectMeta.Finalizers = removeString(chart.ObjectMeta.Finalizers, sourcev1.SourceFinalizer)
+			if err := r.Update(ctx, &chart); err != nil {
+				return ctrl.Result{}, err
+			}
+			// Stop reconciliation as the object is being deleted
+			return ctrl.Result{}, nil
+		}
+	}
+
 	// set initial status
 	if reset, status := r.shouldResetStatus(chart); reset {
 		chart.Status = status
@@ -84,7 +115,7 @@ func (r *HelmChartReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	}
 
 	// purge old artifacts from storage
-	if err := r.gc(chart); err != nil {
+	if err := r.gc(chart, false); err != nil {
 		log.Error(err, "unable to purge old artifacts")
 	}
 
@@ -138,7 +169,6 @@ func (r *HelmChartReconciler) SetupWithManagerAndOptions(mgr ctrl.Manager, opts 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&sourcev1.HelmChart{}).
 		WithEventFilter(SourceChangePredicate{}).
-		WithEventFilter(GarbageCollectPredicate{Scheme: r.Scheme, Log: r.Log, Storage: r.Storage}).
 		WithOptions(controller.Options{MaxConcurrentReconciles: opts.MaxConcurrentReconciles}).
 		Complete(r)
 }
@@ -315,8 +345,11 @@ func (r *HelmChartReconciler) shouldResetStatus(chart sourcev1.HelmChart) (bool,
 
 // gc performs a garbage collection on all but current artifacts of
 // the given chart.
-func (r *HelmChartReconciler) gc(chart sourcev1.HelmChart) error {
+func (r *HelmChartReconciler) gc(chart sourcev1.HelmChart, all bool) error {
 	if chart.Status.Artifact != nil {
+		if all {
+			return r.Storage.RemoveAll(*chart.Status.Artifact)
+		}
 		return r.Storage.RemoveAllButCurrent(*chart.Status.Artifact)
 	}
 	return nil

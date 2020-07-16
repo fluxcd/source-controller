@@ -21,6 +21,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+const SourceFinalizer = "finalizers.fluxcd.io"
+
 // SourceCondition contains condition information for a source.
 type SourceCondition struct {
 	// Type of the condition, currently ('Ready').
