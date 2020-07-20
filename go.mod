@@ -1,6 +1,6 @@
 module github.com/fluxcd/source-controller
 
-go 1.13
+go 1.14
 
 require (
 	github.com/blang/semver v3.5.0+incompatible
@@ -8,8 +8,8 @@ require (
 	github.com/go-git/go-billy/v5 v5.0.0
 	github.com/go-git/go-git/v5 v5.1.0
 	github.com/go-logr/logr v0.1.0
-	github.com/onsi/ginkgo v1.11.0
-	github.com/onsi/gomega v1.8.1
+	github.com/onsi/ginkgo v1.12.1
+	github.com/onsi/gomega v1.10.1
 	github.com/sosedoff/gitkit v0.2.1-0.20191202022816-7182d43c6254
 	go.uber.org/zap v1.10.0
 	helm.sh/helm/v3 v3.2.4
@@ -17,7 +17,7 @@ require (
 	k8s.io/apimachinery v0.18.4
 	k8s.io/client-go v0.18.4
 	rsc.io/letsencrypt v0.0.3 // indirect
-	sigs.k8s.io/controller-runtime v0.6.0
+	sigs.k8s.io/controller-runtime v0.6.1
 	sigs.k8s.io/yaml v1.2.0
 )
 
