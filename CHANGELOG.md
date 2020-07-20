@@ -2,6 +2,11 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.0.6 (2020-07-20)
+
+This prerelease drops support for Kubernetes <1.16.
+The CRDs have been updated to `apiextensions.k8s.io/v1`.
+
 ## 0.0.5 (2020-07-13)
 
 This prerelease comes with improvements to logging.
