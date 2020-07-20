@@ -40,7 +40,7 @@ import (
 	"github.com/fluxcd/pkg/recorder"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1alpha1"
-	intgit "github.com/fluxcd/source-controller/internal/git"
+	"github.com/fluxcd/source-controller/pkg/git"
 )
 
 // GitRepositoryReconciler reconciles a GitRepository object
@@ -174,7 +174,7 @@ func (r *GitRepositoryReconciler) reconcile(ctx context.Context, repository sour
 
 	// determine auth method
 	var auth transport.AuthMethod
-	authStrategy := intgit.AuthSecretStrategyForURL(repository.Spec.URL)
+	authStrategy := git.AuthSecretStrategyForURL(repository.Spec.URL)
 	if repository.Spec.SecretRef != nil && authStrategy != nil {
 		name := types.NamespacedName{
 			Namespace: repository.GetNamespace(),
@@ -195,7 +195,7 @@ func (r *GitRepositoryReconciler) reconcile(ctx context.Context, repository sour
 		}
 	}
 
-	checkoutStrategy := intgit.CheckoutStrategyForRef(repository.Spec.Reference)
+	checkoutStrategy := git.CheckoutStrategyForRef(repository.Spec.Reference)
 	commit, revision, err := checkoutStrategy.Checkout(ctx, tmpGit, repository.Spec.URL, auth)
 	if err != nil {
 		return sourcev1.GitRepositoryNotReady(repository, sourcev1.GitOperationFailedReason, err.Error()), err
