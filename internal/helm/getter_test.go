@@ -114,7 +114,7 @@ func TestTLSClientConfigFromSecret(t *testing.T) {
 		{"certFile, keyFile and caFile", tlsSecretFixture, nil, false, false},
 		{"without certFile", tlsSecretFixture, func(s *corev1.Secret) { delete(s.Data, "certFile") }, true, true},
 		{"without keyFile", tlsSecretFixture, func(s *corev1.Secret) { delete(s.Data, "keyFile") }, true, true},
-		{"without caFile", tlsSecretFixture, func(s *corev1.Secret) { delete(s.Data, "caFile") }, true, true},
+		{"without caFile", tlsSecretFixture, func(s *corev1.Secret) { delete(s.Data, "caFile") }, false, false},
 		{"empty", corev1.Secret{}, nil, false, true},
 	}
 	for _, tt := range tests {

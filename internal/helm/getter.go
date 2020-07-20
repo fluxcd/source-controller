@@ -61,8 +61,8 @@ func TLSClientConfigFromSecret(secret corev1.Secret) (getter.Option, func(), err
 	switch {
 	case len(certBytes)+len(keyBytes)+len(caBytes) == 0:
 		return nil, nil, nil
-	case len(certBytes) == 0 || len(keyBytes) == 0 || len(caBytes) == 0:
-		return nil, nil, fmt.Errorf("invalid '%s' secret data: required fields 'certFile', 'keyFile' and 'caFile'",
+	case (len(certBytes) > 0 && len(keyBytes) == 0) || (len(keyBytes) > 0 && len(certBytes) == 0):
+		return nil, nil, fmt.Errorf("invalid '%s' secret data: fields 'certFile' and 'keyFile' require each other's presence",
 			secret.Name)
 	}
 
@@ -73,20 +73,27 @@ func TLSClientConfigFromSecret(secret corev1.Secret) (getter.Option, func(), err
 	}
 	cleanup := func() { os.RemoveAll(tmp) }
 
-	certFile := filepath.Join(tmp, "cert.crt")
-	if err := ioutil.WriteFile(certFile, certBytes, 0644); err != nil {
-		cleanup()
-		return nil, nil, err
+	var certFile, keyFile, caFile string
+
+	if len(certBytes) > 0 && len(keyBytes) > 0 {
+		certFile = filepath.Join(tmp, "cert.crt")
+		if err := ioutil.WriteFile(certFile, certBytes, 0644); err != nil {
+			cleanup()
+			return nil, nil, err
+		}
+		keyFile = filepath.Join(tmp, "key.crt")
+		if err := ioutil.WriteFile(keyFile, keyBytes, 0644); err != nil {
+			cleanup()
+			return nil, nil, err
+		}
 	}
-	keyFile := filepath.Join(tmp, "key.crt")
-	if err := ioutil.WriteFile(keyFile, keyBytes, 0644); err != nil {
-		cleanup()
-		return nil, nil, err
-	}
-	caFile := filepath.Join(tmp, "ca.pem")
-	if err := ioutil.WriteFile(caFile, caBytes, 0644); err != nil {
-		cleanup()
-		return nil, nil, err
+
+	if len(caBytes) > 0 {
+		caFile = filepath.Join(tmp, "ca.pem")
+		if err := ioutil.WriteFile(caFile, caBytes, 0644); err != nil {
+			cleanup()
+			return nil, nil, err
+		}
 	}
 
 	return getter.WithTLSClientConfig(certFile, keyFile, caFile), cleanup, nil

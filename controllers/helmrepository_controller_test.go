@@ -310,7 +310,6 @@ var _ = Describe("HelmRepositoryReconciler", func() {
 
 			By("Expecting missing field error")
 			secret.Data["certFile"] = examplePublicKey
-			secret.Data["keyFile"] = examplePrivateKey
 			Expect(k8sClient.Update(context.Background(), secret)).Should(Succeed())
 			Eventually(func() bool {
 				got := &sourcev1.HelmRepository{}
@@ -324,6 +323,7 @@ var _ = Describe("HelmRepositoryReconciler", func() {
 			}, timeout, interval).Should(BeTrue())
 
 			By("Expecting artifact")
+			secret.Data["keyFile"] = examplePrivateKey
 			secret.Data["caFile"] = exampleCA
 			Expect(k8sClient.Update(context.Background(), secret)).Should(Succeed())
 			Eventually(func() bool {
