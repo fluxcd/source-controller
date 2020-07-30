@@ -2,20 +2,20 @@
 <p>Packages:</p>
 <ul class="simple">
 <li>
-<a href="#source.fluxcd.io%2fv1alpha1">source.fluxcd.io/v1alpha1</a>
+<a href="#source.toolkit.fluxcd.io%2fv1alpha1">source.toolkit.fluxcd.io/v1alpha1</a>
 </li>
 </ul>
-<h2 id="source.fluxcd.io/v1alpha1">source.fluxcd.io/v1alpha1</h2>
+<h2 id="source.toolkit.fluxcd.io/v1alpha1">source.toolkit.fluxcd.io/v1alpha1</h2>
 <p>Package v1alpha1 contains API Schema definitions for the source v1alpha1 API group</p>
 Resource Types:
 <ul class="simple"><li>
-<a href="#source.fluxcd.io/v1alpha1.GitRepository">GitRepository</a>
+<a href="#source.toolkit.fluxcd.io/v1alpha1.GitRepository">GitRepository</a>
 </li><li>
-<a href="#source.fluxcd.io/v1alpha1.HelmChart">HelmChart</a>
+<a href="#source.toolkit.fluxcd.io/v1alpha1.HelmChart">HelmChart</a>
 </li><li>
-<a href="#source.fluxcd.io/v1alpha1.HelmRepository">HelmRepository</a>
+<a href="#source.toolkit.fluxcd.io/v1alpha1.HelmRepository">HelmRepository</a>
 </li></ul>
-<h3 id="source.fluxcd.io/v1alpha1.GitRepository">GitRepository
+<h3 id="source.toolkit.fluxcd.io/v1alpha1.GitRepository">GitRepository
 </h3>
 <p>GitRepository is the Schema for the gitrepositories API</p>
 <div class="md-typeset__scrollwrap">
@@ -33,7 +33,7 @@ Resource Types:
 <code>apiVersion</code><br>
 string</td>
 <td>
-<code>source.fluxcd.io/v1alpha1</code>
+<code>source.toolkit.fluxcd.io/v1alpha1</code>
 </td>
 </tr>
 <tr>
@@ -63,7 +63,7 @@ Refer to the Kubernetes API documentation for the fields of the
 <td>
 <code>spec</code><br>
 <em>
-<a href="#source.fluxcd.io/v1alpha1.GitRepositorySpec">
+<a href="#source.toolkit.fluxcd.io/v1alpha1.GitRepositorySpec">
 GitRepositorySpec
 </a>
 </em>
@@ -132,7 +132,7 @@ Kubernetes meta/v1.Duration
 <td>
 <code>ref</code><br>
 <em>
-<a href="#source.fluxcd.io/v1alpha1.GitRepositoryRef">
+<a href="#source.toolkit.fluxcd.io/v1alpha1.GitRepositoryRef">
 GitRepositoryRef
 </a>
 </em>
@@ -147,7 +147,7 @@ master branch.</p>
 <td>
 <code>verify</code><br>
 <em>
-<a href="#source.fluxcd.io/v1alpha1.GitRepositoryVerification">
+<a href="#source.toolkit.fluxcd.io/v1alpha1.GitRepositoryVerification">
 GitRepositoryVerification
 </a>
 </em>
@@ -179,7 +179,7 @@ are.</p>
 <td>
 <code>status</code><br>
 <em>
-<a href="#source.fluxcd.io/v1alpha1.GitRepositoryStatus">
+<a href="#source.toolkit.fluxcd.io/v1alpha1.GitRepositoryStatus">
 GitRepositoryStatus
 </a>
 </em>
@@ -191,7 +191,7 @@ GitRepositoryStatus
 </table>
 </div>
 </div>
-<h3 id="source.fluxcd.io/v1alpha1.HelmChart">HelmChart
+<h3 id="source.toolkit.fluxcd.io/v1alpha1.HelmChart">HelmChart
 </h3>
 <p>HelmChart is the Schema for the helmcharts API</p>
 <div class="md-typeset__scrollwrap">
@@ -209,7 +209,7 @@ GitRepositoryStatus
 <code>apiVersion</code><br>
 string</td>
 <td>
-<code>source.fluxcd.io/v1alpha1</code>
+<code>source.toolkit.fluxcd.io/v1alpha1</code>
 </td>
 </tr>
 <tr>
@@ -239,7 +239,7 @@ Refer to the Kubernetes API documentation for the fields of the
 <td>
 <code>spec</code><br>
 <em>
-<a href="#source.fluxcd.io/v1alpha1.HelmChartSpec">
+<a href="#source.toolkit.fluxcd.io/v1alpha1.HelmChartSpec">
 HelmChartSpec
 </a>
 </em>
@@ -306,7 +306,7 @@ Kubernetes meta/v1.Duration
 <td>
 <code>status</code><br>
 <em>
-<a href="#source.fluxcd.io/v1alpha1.HelmChartStatus">
+<a href="#source.toolkit.fluxcd.io/v1alpha1.HelmChartStatus">
 HelmChartStatus
 </a>
 </em>
@@ -318,7 +318,7 @@ HelmChartStatus
 </table>
 </div>
 </div>
-<h3 id="source.fluxcd.io/v1alpha1.HelmRepository">HelmRepository
+<h3 id="source.toolkit.fluxcd.io/v1alpha1.HelmRepository">HelmRepository
 </h3>
 <p>HelmRepository is the Schema for the helmrepositories API</p>
 <div class="md-typeset__scrollwrap">
@@ -336,7 +336,7 @@ HelmChartStatus
 <code>apiVersion</code><br>
 string</td>
 <td>
-<code>source.fluxcd.io/v1alpha1</code>
+<code>source.toolkit.fluxcd.io/v1alpha1</code>
 </td>
 </tr>
 <tr>
@@ -366,7 +366,7 @@ Refer to the Kubernetes API documentation for the fields of the
 <td>
 <code>spec</code><br>
 <em>
-<a href="#source.fluxcd.io/v1alpha1.HelmRepositorySpec">
+<a href="#source.toolkit.fluxcd.io/v1alpha1.HelmRepositorySpec">
 HelmRepositorySpec
 </a>
 </em>
@@ -425,7 +425,7 @@ Kubernetes meta/v1.Duration
 <td>
 <code>status</code><br>
 <em>
-<a href="#source.fluxcd.io/v1alpha1.HelmRepositoryStatus">
+<a href="#source.toolkit.fluxcd.io/v1alpha1.HelmRepositoryStatus">
 HelmRepositoryStatus
 </a>
 </em>
@@ -437,13 +437,13 @@ HelmRepositoryStatus
 </table>
 </div>
 </div>
-<h3 id="source.fluxcd.io/v1alpha1.Artifact">Artifact
+<h3 id="source.toolkit.fluxcd.io/v1alpha1.Artifact">Artifact
 </h3>
 <p>
 (<em>Appears on:</em>
-<a href="#source.fluxcd.io/v1alpha1.GitRepositoryStatus">GitRepositoryStatus</a>, 
-<a href="#source.fluxcd.io/v1alpha1.HelmChartStatus">HelmChartStatus</a>, 
-<a href="#source.fluxcd.io/v1alpha1.HelmRepositoryStatus">HelmRepositoryStatus</a>)
+<a href="#source.toolkit.fluxcd.io/v1alpha1.GitRepositoryStatus">GitRepositoryStatus</a>, 
+<a href="#source.toolkit.fluxcd.io/v1alpha1.HelmChartStatus">HelmChartStatus</a>, 
+<a href="#source.toolkit.fluxcd.io/v1alpha1.HelmRepositoryStatus">HelmRepositoryStatus</a>)
 </p>
 <p>Artifact represents the output of a source synchronisation</p>
 <div class="md-typeset__scrollwrap">
@@ -510,11 +510,11 @@ update of this artifact.</p>
 </table>
 </div>
 </div>
-<h3 id="source.fluxcd.io/v1alpha1.GitRepositoryRef">GitRepositoryRef
+<h3 id="source.toolkit.fluxcd.io/v1alpha1.GitRepositoryRef">GitRepositoryRef
 </h3>
 <p>
 (<em>Appears on:</em>
-<a href="#source.fluxcd.io/v1alpha1.GitRepositorySpec">GitRepositorySpec</a>)
+<a href="#source.toolkit.fluxcd.io/v1alpha1.GitRepositorySpec">GitRepositorySpec</a>)
 </p>
 <p>GitRepositoryRef defines the git ref used for pull and checkout operations.</p>
 <div class="md-typeset__scrollwrap">
@@ -579,11 +579,11 @@ string
 </table>
 </div>
 </div>
-<h3 id="source.fluxcd.io/v1alpha1.GitRepositorySpec">GitRepositorySpec
+<h3 id="source.toolkit.fluxcd.io/v1alpha1.GitRepositorySpec">GitRepositorySpec
 </h3>
 <p>
 (<em>Appears on:</em>
-<a href="#source.fluxcd.io/v1alpha1.GitRepository">GitRepository</a>)
+<a href="#source.toolkit.fluxcd.io/v1alpha1.GitRepository">GitRepository</a>)
 </p>
 <p>GitRepositorySpec defines the desired state of a Git repository.</p>
 <div class="md-typeset__scrollwrap">
@@ -656,7 +656,7 @@ Kubernetes meta/v1.Duration
 <td>
 <code>ref</code><br>
 <em>
-<a href="#source.fluxcd.io/v1alpha1.GitRepositoryRef">
+<a href="#source.toolkit.fluxcd.io/v1alpha1.GitRepositoryRef">
 GitRepositoryRef
 </a>
 </em>
@@ -671,7 +671,7 @@ master branch.</p>
 <td>
 <code>verify</code><br>
 <em>
-<a href="#source.fluxcd.io/v1alpha1.GitRepositoryVerification">
+<a href="#source.toolkit.fluxcd.io/v1alpha1.GitRepositoryVerification">
 GitRepositoryVerification
 </a>
 </em>
@@ -700,11 +700,11 @@ are.</p>
 </table>
 </div>
 </div>
-<h3 id="source.fluxcd.io/v1alpha1.GitRepositoryStatus">GitRepositoryStatus
+<h3 id="source.toolkit.fluxcd.io/v1alpha1.GitRepositoryStatus">GitRepositoryStatus
 </h3>
 <p>
 (<em>Appears on:</em>
-<a href="#source.fluxcd.io/v1alpha1.GitRepository">GitRepository</a>)
+<a href="#source.toolkit.fluxcd.io/v1alpha1.GitRepository">GitRepository</a>)
 </p>
 <p>GitRepositoryStatus defines the observed state of a Git repository.</p>
 <div class="md-typeset__scrollwrap">
@@ -721,7 +721,7 @@ are.</p>
 <td>
 <code>conditions</code><br>
 <em>
-<a href="#source.fluxcd.io/v1alpha1.SourceCondition">
+<a href="#source.toolkit.fluxcd.io/v1alpha1.SourceCondition">
 []SourceCondition
 </a>
 </em>
@@ -747,7 +747,7 @@ sync.</p>
 <td>
 <code>artifact</code><br>
 <em>
-<a href="#source.fluxcd.io/v1alpha1.Artifact">
+<a href="#source.toolkit.fluxcd.io/v1alpha1.Artifact">
 Artifact
 </a>
 </em>
@@ -761,11 +761,11 @@ Artifact
 </table>
 </div>
 </div>
-<h3 id="source.fluxcd.io/v1alpha1.GitRepositoryVerification">GitRepositoryVerification
+<h3 id="source.toolkit.fluxcd.io/v1alpha1.GitRepositoryVerification">GitRepositoryVerification
 </h3>
 <p>
 (<em>Appears on:</em>
-<a href="#source.fluxcd.io/v1alpha1.GitRepositorySpec">GitRepositorySpec</a>)
+<a href="#source.toolkit.fluxcd.io/v1alpha1.GitRepositorySpec">GitRepositorySpec</a>)
 </p>
 <p>GitRepositoryVerification defines the OpenPGP signature verification process.</p>
 <div class="md-typeset__scrollwrap">
@@ -806,11 +806,11 @@ Kubernetes core/v1.LocalObjectReference
 </table>
 </div>
 </div>
-<h3 id="source.fluxcd.io/v1alpha1.HelmChartSpec">HelmChartSpec
+<h3 id="source.toolkit.fluxcd.io/v1alpha1.HelmChartSpec">HelmChartSpec
 </h3>
 <p>
 (<em>Appears on:</em>
-<a href="#source.fluxcd.io/v1alpha1.HelmChart">HelmChart</a>)
+<a href="#source.toolkit.fluxcd.io/v1alpha1.HelmChart">HelmChart</a>)
 </p>
 <p>HelmChartSpec defines the desired state of a Helm chart.</p>
 <div class="md-typeset__scrollwrap">
@@ -878,11 +878,11 @@ Kubernetes meta/v1.Duration
 </table>
 </div>
 </div>
-<h3 id="source.fluxcd.io/v1alpha1.HelmChartStatus">HelmChartStatus
+<h3 id="source.toolkit.fluxcd.io/v1alpha1.HelmChartStatus">HelmChartStatus
 </h3>
 <p>
 (<em>Appears on:</em>
-<a href="#source.fluxcd.io/v1alpha1.HelmChart">HelmChart</a>)
+<a href="#source.toolkit.fluxcd.io/v1alpha1.HelmChart">HelmChart</a>)
 </p>
 <p>HelmChartStatus defines the observed state of the HelmChart.</p>
 <div class="md-typeset__scrollwrap">
@@ -899,7 +899,7 @@ Kubernetes meta/v1.Duration
 <td>
 <code>conditions</code><br>
 <em>
-<a href="#source.fluxcd.io/v1alpha1.SourceCondition">
+<a href="#source.toolkit.fluxcd.io/v1alpha1.SourceCondition">
 []SourceCondition
 </a>
 </em>
@@ -924,7 +924,7 @@ string
 <td>
 <code>artifact</code><br>
 <em>
-<a href="#source.fluxcd.io/v1alpha1.Artifact">
+<a href="#source.toolkit.fluxcd.io/v1alpha1.Artifact">
 Artifact
 </a>
 </em>
@@ -938,11 +938,11 @@ Artifact
 </table>
 </div>
 </div>
-<h3 id="source.fluxcd.io/v1alpha1.HelmRepositorySpec">HelmRepositorySpec
+<h3 id="source.toolkit.fluxcd.io/v1alpha1.HelmRepositorySpec">HelmRepositorySpec
 </h3>
 <p>
 (<em>Appears on:</em>
-<a href="#source.fluxcd.io/v1alpha1.HelmRepository">HelmRepository</a>)
+<a href="#source.toolkit.fluxcd.io/v1alpha1.HelmRepository">HelmRepository</a>)
 </p>
 <p>HelmRepositorySpec defines the reference to a Helm repository.</p>
 <div class="md-typeset__scrollwrap">
@@ -1002,11 +1002,11 @@ Kubernetes meta/v1.Duration
 </table>
 </div>
 </div>
-<h3 id="source.fluxcd.io/v1alpha1.HelmRepositoryStatus">HelmRepositoryStatus
+<h3 id="source.toolkit.fluxcd.io/v1alpha1.HelmRepositoryStatus">HelmRepositoryStatus
 </h3>
 <p>
 (<em>Appears on:</em>
-<a href="#source.fluxcd.io/v1alpha1.HelmRepository">HelmRepository</a>)
+<a href="#source.toolkit.fluxcd.io/v1alpha1.HelmRepository">HelmRepository</a>)
 </p>
 <p>HelmRepositoryStatus defines the observed state of the HelmRepository.</p>
 <div class="md-typeset__scrollwrap">
@@ -1023,7 +1023,7 @@ Kubernetes meta/v1.Duration
 <td>
 <code>conditions</code><br>
 <em>
-<a href="#source.fluxcd.io/v1alpha1.SourceCondition">
+<a href="#source.toolkit.fluxcd.io/v1alpha1.SourceCondition">
 []SourceCondition
 </a>
 </em>
@@ -1048,7 +1048,7 @@ string
 <td>
 <code>artifact</code><br>
 <em>
-<a href="#source.fluxcd.io/v1alpha1.Artifact">
+<a href="#source.toolkit.fluxcd.io/v1alpha1.Artifact">
 Artifact
 </a>
 </em>
@@ -1062,16 +1062,16 @@ Artifact
 </table>
 </div>
 </div>
-<h3 id="source.fluxcd.io/v1alpha1.Source">Source
+<h3 id="source.toolkit.fluxcd.io/v1alpha1.Source">Source
 </h3>
 <p>Source interface must be supported by all API types.</p>
-<h3 id="source.fluxcd.io/v1alpha1.SourceCondition">SourceCondition
+<h3 id="source.toolkit.fluxcd.io/v1alpha1.SourceCondition">SourceCondition
 </h3>
 <p>
 (<em>Appears on:</em>
-<a href="#source.fluxcd.io/v1alpha1.GitRepositoryStatus">GitRepositoryStatus</a>, 
-<a href="#source.fluxcd.io/v1alpha1.HelmChartStatus">HelmChartStatus</a>, 
-<a href="#source.fluxcd.io/v1alpha1.HelmRepositoryStatus">HelmRepositoryStatus</a>)
+<a href="#source.toolkit.fluxcd.io/v1alpha1.GitRepositoryStatus">GitRepositoryStatus</a>, 
+<a href="#source.toolkit.fluxcd.io/v1alpha1.HelmChartStatus">HelmChartStatus</a>, 
+<a href="#source.toolkit.fluxcd.io/v1alpha1.HelmRepositoryStatus">HelmRepositoryStatus</a>)
 </p>
 <p>SourceCondition contains condition information for a source.</p>
 <div class="md-typeset__scrollwrap">

@@ -5,7 +5,7 @@ metadata:
   name: helmchart-editor-role
 rules:
 - apiGroups:
-  - source.fluxcd.io
+  - source.toolkit.fluxcd.io
   resources:
   - helmcharts
   verbs:
@@ -17,7 +17,7 @@ rules:
   - update
   - watch
 - apiGroups:
-  - source.fluxcd.io
+  - source.toolkit.fluxcd.io
   resources:
   - helmcharts/status
   verbs:
