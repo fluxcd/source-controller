@@ -141,7 +141,7 @@ entries may overrule default exclusions.
 Another option is to use the `spec.ignore` field, for example:
 
 ```yaml
-apiVersion: source.fluxcd.io/v1alpha1
+apiVersion: source.toolkit.fluxcd.io/v1alpha1
 kind: GitRepository
 metadata:
   name: podinfo
@@ -165,7 +165,7 @@ When specified, `spec.ignore` overrides the default exclusion list.
 Pull the master branch of a public repository every minute:
 
 ```yaml
-apiVersion: source.fluxcd.io/v1alpha1
+apiVersion: source.toolkit.fluxcd.io/v1alpha1
 kind: GitRepository
 metadata:
   name: podinfo
@@ -177,7 +177,7 @@ spec:
 Pull a specific branch:
 
 ```yaml
-apiVersion: source.fluxcd.io/v1alpha1
+apiVersion: source.toolkit.fluxcd.io/v1alpha1
 kind: GitRepository
 metadata:
   name: podinfo
@@ -191,7 +191,7 @@ spec:
 Checkout a specific commit from a branch:
 
 ```yaml
-apiVersion: source.fluxcd.io/v1alpha1
+apiVersion: source.toolkit.fluxcd.io/v1alpha1
 kind: GitRepository
 metadata:
   name: podinfo
@@ -206,7 +206,7 @@ spec:
 Pull a specific tag:
 
 ```yaml
-apiVersion: source.fluxcd.io/v1alpha1
+apiVersion: source.toolkit.fluxcd.io/v1alpha1
 kind: GitRepository
 metadata:
   name: podinfo
@@ -220,7 +220,7 @@ spec:
 Pull tag based on a [semver range](https://github.com/blang/semver#ranges):
 
 ```yaml
-apiVersion: source.fluxcd.io/v1alpha1
+apiVersion: source.toolkit.fluxcd.io/v1alpha1
 kind: GitRepository
 metadata:
   name: podinfo
@@ -234,7 +234,7 @@ spec:
 HTTPS authentication (requires a secret with `username` and `password` fields):
 
 ```yaml
-apiVersion: source.fluxcd.io/v1alpha1
+apiVersion: source.toolkit.fluxcd.io/v1alpha1
 kind: GitRepository
 metadata:
   name: podinfo
@@ -257,7 +257,7 @@ data:
 SSH authentication (requires a secret with `identity` and `known_hosts` fields):
 
 ```yaml
-apiVersion: source.fluxcd.io/v1alpha1
+apiVersion: source.toolkit.fluxcd.io/v1alpha1
 kind: GitRepository
 metadata:
   name: podinfo
@@ -296,7 +296,7 @@ kubectl create secret generic ssh-credentials \
 Verify the OpenPGP signature for the commit that master branch HEAD points to:
 
 ```yaml
-apiVersion: source.fluxcd.io/v1alpha1
+apiVersion: source.toolkit.fluxcd.io/v1alpha1
 kind: GitRepository
 metadata:
   name: podinfo

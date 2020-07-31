@@ -54,8 +54,8 @@ type HelmChartReconciler struct {
 	ExternalEventRecorder *recorder.EventRecorder
 }
 
-// +kubebuilder:rbac:groups=source.fluxcd.io,resources=helmcharts,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=source.fluxcd.io,resources=helmcharts/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=helmcharts,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=helmcharts/status,verbs=get;update;patch
 
 func (r *HelmChartReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	ctx := context.Background()

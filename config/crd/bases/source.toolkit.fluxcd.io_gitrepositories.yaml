@@ -6,14 +6,14 @@ metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.3.0
   creationTimestamp: null
-  name: helmrepositories.source.fluxcd.io
+  name: gitrepositories.source.toolkit.fluxcd.io
 spec:
-  group: source.fluxcd.io
+  group: source.toolkit.fluxcd.io
   names:
-    kind: HelmRepository
-    listKind: HelmRepositoryList
-    plural: helmrepositories
-    singular: helmrepository
+    kind: GitRepository
+    listKind: GitRepositoryList
+    plural: gitrepositories
+    singular: gitrepository
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
@@ -32,7 +32,7 @@ spec:
     name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: HelmRepository is the Schema for the helmrepositories API
+        description: GitRepository is the Schema for the gitrepositories API
         properties:
           apiVersion:
             description: 'APIVersion defines the versioned schema of this representation
@@ -47,32 +47,83 @@ spec:
           metadata:
             type: object
           spec:
-            description: HelmRepositorySpec defines the reference to a Helm repository.
+            description: GitRepositorySpec defines the desired state of a Git repository.
             properties:
-              interval:
-                description: The interval at which to check the upstream for updates.
+              ignore:
+                description: Ignore overrides the set of excluded patterns in the
+                  .sourceignore format (which is the same as .gitignore). If not provided,
+                  a default will be used, consult the documentation for your version
+                  to find out what those are.
                 type: string
+              interval:
+                description: The interval at which to check for repository updates.
+                type: string
+              ref:
+                description: The git reference to checkout and monitor for changes,
+                  defaults to master branch.
+                properties:
+                  branch:
+                    description: The git branch to checkout, defaults to master.
+                    type: string
+                  commit:
+                    description: The git commit sha to checkout, if specified tag
+                      filters will be ignored.
+                    type: string
+                  semver:
+                    description: The git tag semver expression, takes precedence over
+                      tag.
+                    type: string
+                  tag:
+                    description: The git tag to checkout, takes precedence over branch.
+                    type: string
+                type: object
               secretRef:
-                description: The name of the secret containing authentication credentials
-                  for the Helm repository. For HTTP/S basic auth the secret must contain
-                  username and password fields. For TLS the secret must contain caFile,
-                  keyFile and caCert fields.
+                description: The secret name containing the Git credentials. For HTTPS
+                  repositories the secret must contain username and password fields.
+                  For SSH repositories the secret must contain identity, identity.pub
+                  and known_hosts fields.
                 properties:
                   name:
                     description: 'Name of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
                       TODO: Add other useful fields. apiVersion, kind, uid?'
                     type: string
                 type: object
-              url:
-                description: The Helm repository URL, a valid URL contains at least
-                  a protocol and host.
+              timeout:
+                description: The timeout for remote git operations like cloning, default
+                  to 20s.
                 type: string
+              url:
+                description: The repository URL, can be a HTTP or SSH address.
+                pattern: ^(http|https|ssh)://
+                type: string
+              verify:
+                description: Verify OpenPGP signature for the commit that HEAD points
+                  to.
+                properties:
+                  mode:
+                    description: Mode describes what git object should be verified,
+                      currently ('head').
+                    enum:
+                    - head
+                    type: string
+                  secretRef:
+                    description: The secret name containing the public keys of all
+                      trusted git authors.
+                    properties:
+                      name:
+                        description: 'Name of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                          TODO: Add other useful fields. apiVersion, kind, uid?'
+                        type: string
+                    type: object
+                required:
+                - mode
+                type: object
             required:
             - interval
             - url
             type: object
           status:
-            description: HelmRepositoryStatus defines the observed state of the HelmRepository.
+            description: GitRepositoryStatus defines the observed state of a Git repository.
             properties:
               artifact:
                 description: Artifact represents the output of the last successful
@@ -129,7 +180,8 @@ spec:
                   type: object
                 type: array
               url:
-                description: URL is the download link for the last index fetched.
+                description: URL is the download link for the artifact output of the
+                  last repository sync.
                 type: string
             type: object
         type: object

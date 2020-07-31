@@ -69,7 +69,7 @@ const (
 Pull a specific chart version every five minutes:
 
 ```yaml
-apiVersion: source.fluxcd.io/v1alpha1
+apiVersion: source.toolkit.fluxcd.io/v1alpha1
 kind: HelmChart
 metadata:
   name: redis
@@ -84,7 +84,7 @@ spec:
 Pull the latest chart version that matches the sermver range every ten minutes:
 
 ```yaml
-apiVersion: source.fluxcd.io/v1alpha1
+apiVersion: source.toolkit.fluxcd.io/v1alpha1
 kind: HelmChart
 metadata:
   name: redis

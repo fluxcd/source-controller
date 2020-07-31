@@ -6,19 +6,25 @@ metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.3.0
   creationTimestamp: null
-  name: gitrepositories.source.fluxcd.io
+  name: helmcharts.source.toolkit.fluxcd.io
 spec:
-  group: source.fluxcd.io
+  group: source.toolkit.fluxcd.io
   names:
-    kind: GitRepository
-    listKind: GitRepositoryList
-    plural: gitrepositories
-    singular: gitrepository
+    kind: HelmChart
+    listKind: HelmChartList
+    plural: helmcharts
+    singular: helmchart
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - jsonPath: .spec.url
-      name: URL
+    - jsonPath: .spec.name
+      name: Name
+      type: string
+    - jsonPath: .spec.version
+      name: Version
+      type: string
+    - jsonPath: .spec.helmRepositoryRef.name
+      name: Repository
       type: string
     - jsonPath: .status.conditions[?(@.type=="Ready")].status
       name: Ready
@@ -32,7 +38,7 @@ spec:
     name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: GitRepository is the Schema for the gitrepositories API
+        description: HelmChart is the Schema for the helmcharts API
         properties:
           apiVersion:
             description: 'APIVersion defines the versioned schema of this representation
@@ -47,87 +53,40 @@ spec:
           metadata:
             type: object
           spec:
-            description: GitRepositorySpec defines the desired state of a Git repository.
+            description: HelmChartSpec defines the desired state of a Helm chart.
             properties:
-              ignore:
-                description: Ignore overrides the set of excluded patterns in the
-                  .sourceignore format (which is the same as .gitignore). If not provided,
-                  a default will be used, consult the documentation for your version
-                  to find out what those are.
-                type: string
-              interval:
-                description: The interval at which to check for repository updates.
-                type: string
-              ref:
-                description: The git reference to checkout and monitor for changes,
-                  defaults to master branch.
-                properties:
-                  branch:
-                    description: The git branch to checkout, defaults to master.
-                    type: string
-                  commit:
-                    description: The git commit sha to checkout, if specified tag
-                      filters will be ignored.
-                    type: string
-                  semver:
-                    description: The git tag semver expression, takes precedence over
-                      tag.
-                    type: string
-                  tag:
-                    description: The git tag to checkout, takes precedence over branch.
-                    type: string
-                type: object
-              secretRef:
-                description: The secret name containing the Git credentials. For HTTPS
-                  repositories the secret must contain username and password fields.
-                  For SSH repositories the secret must contain identity, identity.pub
-                  and known_hosts fields.
+              helmRepositoryRef:
+                description: The name of the HelmRepository the chart is available
+                  at.
                 properties:
                   name:
                     description: 'Name of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
                       TODO: Add other useful fields. apiVersion, kind, uid?'
                     type: string
                 type: object
-              timeout:
-                description: The timeout for remote git operations like cloning, default
-                  to 20s.
+              interval:
+                description: The interval at which to check the Helm repository for
+                  updates.
                 type: string
-              url:
-                description: The repository URL, can be a HTTP or SSH address.
-                pattern: ^(http|https|ssh)://
+              name:
+                description: The name of the Helm chart, as made available by the
+                  referenced Helm repository.
                 type: string
-              verify:
-                description: Verify OpenPGP signature for the commit that HEAD points
-                  to.
-                properties:
-                  mode:
-                    description: Mode describes what git object should be verified,
-                      currently ('head').
-                    enum:
-                    - head
-                    type: string
-                  secretRef:
-                    description: The secret name containing the public keys of all
-                      trusted git authors.
-                    properties:
-                      name:
-                        description: 'Name of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
-                          TODO: Add other useful fields. apiVersion, kind, uid?'
-                        type: string
-                    type: object
-                required:
-                - mode
-                type: object
+              version:
+                description: The chart version semver expression, defaults to latest
+                  when omitted.
+                type: string
             required:
+            - helmRepositoryRef
             - interval
-            - url
+            - name
             type: object
           status:
-            description: GitRepositoryStatus defines the observed state of a Git repository.
+            description: HelmChartStatus defines the observed state of the HelmChart.
             properties:
               artifact:
                 description: Artifact represents the output of the last successful
-                  repository sync.
+                  chart sync.
                 properties:
                   lastUpdateTime:
                     description: LastUpdateTime is the timestamp corresponding to
@@ -180,8 +139,7 @@ spec:
                   type: object
                 type: array
               url:
-                description: URL is the download link for the artifact output of the
-                  last repository sync.
+                description: URL is the download link for the last chart pulled.
                 type: string
             type: object
         type: object

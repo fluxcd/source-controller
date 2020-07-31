@@ -1,4 +1,4 @@
-domain: fluxcd.io
+domain: toolkit.fluxcd.io
 repo: github.com/fluxcd/source-controller
 resources:
 - group: source

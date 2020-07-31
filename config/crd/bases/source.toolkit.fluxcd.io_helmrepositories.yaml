@@ -6,25 +6,19 @@ metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.3.0
   creationTimestamp: null
-  name: helmcharts.source.fluxcd.io
+  name: helmrepositories.source.toolkit.fluxcd.io
 spec:
-  group: source.fluxcd.io
+  group: source.toolkit.fluxcd.io
   names:
-    kind: HelmChart
-    listKind: HelmChartList
-    plural: helmcharts
-    singular: helmchart
+    kind: HelmRepository
+    listKind: HelmRepositoryList
+    plural: helmrepositories
+    singular: helmrepository
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - jsonPath: .spec.name
-      name: Name
-      type: string
-    - jsonPath: .spec.version
-      name: Version
-      type: string
-    - jsonPath: .spec.helmRepositoryRef.name
-      name: Repository
+    - jsonPath: .spec.url
+      name: URL
       type: string
     - jsonPath: .status.conditions[?(@.type=="Ready")].status
       name: Ready
@@ -38,7 +32,7 @@ spec:
     name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: HelmChart is the Schema for the helmcharts API
+        description: HelmRepository is the Schema for the helmrepositories API
         properties:
           apiVersion:
             description: 'APIVersion defines the versioned schema of this representation
@@ -53,40 +47,36 @@ spec:
           metadata:
             type: object
           spec:
-            description: HelmChartSpec defines the desired state of a Helm chart.
+            description: HelmRepositorySpec defines the reference to a Helm repository.
             properties:
-              helmRepositoryRef:
-                description: The name of the HelmRepository the chart is available
-                  at.
+              interval:
+                description: The interval at which to check the upstream for updates.
+                type: string
+              secretRef:
+                description: The name of the secret containing authentication credentials
+                  for the Helm repository. For HTTP/S basic auth the secret must contain
+                  username and password fields. For TLS the secret must contain caFile,
+                  keyFile and caCert fields.
                 properties:
                   name:
                     description: 'Name of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
                       TODO: Add other useful fields. apiVersion, kind, uid?'
                     type: string
                 type: object
-              interval:
-                description: The interval at which to check the Helm repository for
-                  updates.
-                type: string
-              name:
-                description: The name of the Helm chart, as made available by the
-                  referenced Helm repository.
-                type: string
-              version:
-                description: The chart version semver expression, defaults to latest
-                  when omitted.
+              url:
+                description: The Helm repository URL, a valid URL contains at least
+                  a protocol and host.
                 type: string
             required:
-            - helmRepositoryRef
             - interval
-            - name
+            - url
             type: object
           status:
-            description: HelmChartStatus defines the observed state of the HelmChart.
+            description: HelmRepositoryStatus defines the observed state of the HelmRepository.
             properties:
               artifact:
                 description: Artifact represents the output of the last successful
-                  chart sync.
+                  repository sync.
                 properties:
                   lastUpdateTime:
                     description: LastUpdateTime is the timestamp corresponding to
@@ -139,7 +129,7 @@ spec:
                   type: object
                 type: array
               url:
-                description: URL is the download link for the last chart pulled.
+                description: URL is the download link for the last index fetched.
                 type: string
             type: object
         type: object
