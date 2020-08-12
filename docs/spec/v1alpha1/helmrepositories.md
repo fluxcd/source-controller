@@ -27,6 +27,10 @@ type HelmRepositorySpec struct {
 	// The interval at which to check the upstream for updates.
 	// +required
 	Interval metav1.Duration `json:"interval"`
+
+	// The timeout of index downloading, defaults to 60s.
+	// +optional
+	Timeout *metav1.Duration `json:"timeout,omitempty"`
 }
 ```
 

@@ -37,9 +37,10 @@ import (
 var _ = Describe("HelmRepositoryReconciler", func() {
 
 	const (
-		timeout       = time.Second * 30
-		interval      = time.Second * 1
-		indexInterval = time.Second * 2
+		timeout           = time.Second * 30
+		interval          = time.Second * 1
+		indexInterval     = time.Second * 2
+		repositoryTimeout = time.Second * 5
 	)
 
 	Context("HelmRepository", func() {
@@ -87,6 +88,7 @@ var _ = Describe("HelmRepositoryReconciler", func() {
 				Spec: sourcev1.HelmRepositorySpec{
 					URL:      helmServer.URL(),
 					Interval: metav1.Duration{Duration: indexInterval},
+					Timeout:  &metav1.Duration{Duration: repositoryTimeout},
 				},
 			}
 			Expect(k8sClient.Create(context.Background(), created)).Should(Succeed())

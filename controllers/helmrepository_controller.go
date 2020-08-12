@@ -204,8 +204,8 @@ func (r *HelmRepositoryReconciler) reconcile(ctx context.Context, repository sou
 		clientOpts = opts
 	}
 
-	// TODO(hidde): implement timeout from the HelmRepository
-	//  https://github.com/helm/helm/pull/7950
+	clientOpts = append(clientOpts, getter.WithTimeout(repository.GetTimeout()))
+
 	res, err := c.Get(u.String(), clientOpts...)
 	if err != nil {
 		return sourcev1.HelmRepositoryNotReady(repository, sourcev1.IndexationFailedReason, err.Error()), err
