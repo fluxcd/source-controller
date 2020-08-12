@@ -152,6 +152,57 @@ var _ = Describe("HelmRepositoryReconciler", func() {
 			Eventually(exists(got.Status.Artifact.Path), timeout, interval).ShouldNot(BeTrue())
 		})
 
+		It("Handles timeout", func() {
+			helmServer.Start()
+
+			Expect(helmServer.PackageChart(path.Join("testdata/helmchart"))).Should(Succeed())
+			Expect(helmServer.GenerateIndex()).Should(Succeed())
+
+			key := types.NamespacedName{
+				Name:      "helmrepository-sample-" + randStringRunes(5),
+				Namespace: namespace.Name,
+			}
+			created := &sourcev1.HelmRepository{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      key.Name,
+					Namespace: key.Namespace,
+				},
+				Spec: sourcev1.HelmRepositorySpec{
+					URL:      helmServer.URL(),
+					Interval: metav1.Duration{Duration: indexInterval},
+				},
+			}
+			Expect(k8sClient.Create(context.Background(), created)).Should(Succeed())
+
+			By("Expecting index download to succeed")
+			Eventually(func() bool {
+				got := &sourcev1.HelmRepository{}
+				_ = k8sClient.Get(context.Background(), key, got)
+				for _, condition := range got.Status.Conditions {
+					if condition.Reason == sourcev1.IndexationSucceededReason {
+						return true
+					}
+				}
+				return false
+			}, timeout, interval).Should(BeTrue())
+
+			By("Expecting index download to timeout")
+			updated := &sourcev1.HelmRepository{}
+			Expect(k8sClient.Get(context.Background(), key, updated)).Should(Succeed())
+			updated.Spec.Timeout = &metav1.Duration{Duration: time.Microsecond}
+			Expect(k8sClient.Update(context.Background(), updated)).Should(Succeed())
+			Eventually(func() string {
+				got := &sourcev1.HelmRepository{}
+				_ = k8sClient.Get(context.Background(), key, got)
+				for _, condition := range got.Status.Conditions {
+					if condition.Reason == sourcev1.IndexationFailedReason {
+						return condition.Message
+					}
+				}
+				return ""
+			}, timeout, interval).Should(MatchRegexp("(?i)timeout"))
+		})
+
 		It("Authenticates when basic auth credentials are provided", func() {
 			helmServer, err = testserver.NewTempHelmServer()
 			Expect(err).NotTo(HaveOccurred())
