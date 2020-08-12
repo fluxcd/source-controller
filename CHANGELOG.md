@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.0.8 (2020-08-12)
+
+This prerelease comes with improvements to Helm repository
+index fetching. The Helm getter was upgraded to v3.3.0,
+and it's possible to configure the timeout of index downloads.
+
 ## 0.0.7 (2020-07-31)
 
 This prerelease comes with a breaking change, the 
