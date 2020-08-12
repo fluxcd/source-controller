@@ -17,11 +17,16 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"time"
+
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-const HelmRepositoryKind = "HelmRepository"
+const (
+	HelmRepositoryKind    = "HelmRepository"
+	HelmRepositoryTimeout = time.Second * 60
+)
 
 // HelmRepositorySpec defines the reference to a Helm repository.
 type HelmRepositorySpec struct {
@@ -41,6 +46,10 @@ type HelmRepositorySpec struct {
 	// The interval at which to check the upstream for updates.
 	// +required
 	Interval metav1.Duration `json:"interval"`
+
+	// The timeout of index downloading, defaults to 60s.
+	// +optional
+	Timeout *metav1.Duration `json:"timeout,omitempty"`
 }
 
 // HelmRepositoryStatus defines the observed state of the HelmRepository.
@@ -146,6 +155,14 @@ func (in *HelmRepository) GetArtifact() *Artifact {
 // GetInterval returns the interval at which the source is updated.
 func (in *HelmRepository) GetInterval() metav1.Duration {
 	return in.Spec.Interval
+}
+
+// GetTimeout returns the configured timeout or the default.
+func (in *HelmRepository) GetTimeout() time.Duration {
+	if in.Spec.Timeout != nil {
+		return in.Spec.Timeout.Duration
+	}
+	return HelmRepositoryTimeout
 }
 
 // +genclient

@@ -418,6 +418,20 @@ Kubernetes meta/v1.Duration
 <p>The interval at which to check the upstream for updates.</p>
 </td>
 </tr>
+<tr>
+<td>
+<code>timeout</code><br>
+<em>
+<a href="https://godoc.org/k8s.io/apimachinery/pkg/apis/meta/v1#Duration">
+Kubernetes meta/v1.Duration
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>The timeout of index downloading, defaults to 60s.</p>
+</td>
+</tr>
 </table>
 </td>
 </tr>
@@ -996,6 +1010,20 @@ Kubernetes meta/v1.Duration
 </td>
 <td>
 <p>The interval at which to check the upstream for updates.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>timeout</code><br>
+<em>
+<a href="https://godoc.org/k8s.io/apimachinery/pkg/apis/meta/v1#Duration">
+Kubernetes meta/v1.Duration
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>The timeout of index downloading, defaults to 60s.</p>
 </td>
 </tr>
 </tbody>

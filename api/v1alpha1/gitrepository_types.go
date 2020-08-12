@@ -23,7 +23,10 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-const GitRepositoryKind = "GitRepository"
+const (
+	GitRepositoryKind    = "GitRepository"
+	GitRepositoryTimeout = time.Second * 20
+)
 
 // GitRepositorySpec defines the desired state of a Git repository.
 type GitRepositorySpec struct {
@@ -194,7 +197,7 @@ func (in *GitRepository) GetTimeout() time.Duration {
 	if in.Spec.Timeout != nil {
 		return in.Spec.Timeout.Duration
 	}
-	return time.Second * 20
+	return GitRepositoryTimeout
 }
 
 // GetArtifact returns the latest artifact from the source

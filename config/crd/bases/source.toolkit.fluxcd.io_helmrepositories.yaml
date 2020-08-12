@@ -63,6 +63,9 @@ spec:
                       TODO: Add other useful fields. apiVersion, kind, uid?'
                     type: string
                 type: object
+              timeout:
+                description: The timeout of index downloading, defaults to 60s.
+                type: string
               url:
                 description: The Helm repository URL, a valid URL contains at least
                   a protocol and host.
