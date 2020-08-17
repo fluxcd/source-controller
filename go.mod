@@ -4,7 +4,9 @@ go 1.14
 
 require (
 	github.com/blang/semver v3.5.0+incompatible
-	github.com/fluxcd/pkg v0.0.3
+	github.com/fluxcd/pkg/lockedfile v0.0.5
+	github.com/fluxcd/pkg/recorder v0.0.5
+	github.com/fluxcd/pkg/ssh v0.0.5
 	github.com/go-git/go-billy/v5 v5.0.0
 	github.com/go-git/go-git/v5 v5.1.0
 	github.com/go-logr/logr v0.1.0
