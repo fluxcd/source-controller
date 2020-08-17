@@ -2,6 +2,11 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.0.9 (2020-08-17)
+
+This prerelease upgrades the `github.com/fluxcd/pkg/*` dependencies
+to dedicated versioned modules.
+
 ## 0.0.8 (2020-08-12)
 
 This prerelease comes with improvements to Helm repository
