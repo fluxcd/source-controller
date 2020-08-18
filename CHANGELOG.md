@@ -2,6 +2,10 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.0.10 (2020-08-18)
+
+This prerelease comes with a bug fix to the Git semver checkout.
+
 ## 0.0.9 (2020-08-17)
 
 This prerelease upgrades the `github.com/fluxcd/pkg/*` dependencies
