@@ -30,7 +30,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
-	"github.com/fluxcd/pkg/testserver"
+	"github.com/fluxcd/pkg/helmtestserver"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1alpha1"
 )
@@ -47,7 +47,7 @@ var _ = Describe("HelmChartReconciler", func() {
 	Context("HelmChart", func() {
 		var (
 			namespace  *corev1.Namespace
-			helmServer *testserver.HelmServer
+			helmServer *helmtestserver.HelmServer
 			err        error
 		)
 
@@ -58,7 +58,7 @@ var _ = Describe("HelmChartReconciler", func() {
 			err = k8sClient.Create(context.Background(), namespace)
 			Expect(err).NotTo(HaveOccurred(), "failed to create test namespace")
 
-			helmServer, err = testserver.NewTempHelmServer()
+			helmServer, err = helmtestserver.NewTempHelmServer()
 			Expect(err).To(Succeed())
 			helmServer.Start()
 		})

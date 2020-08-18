@@ -30,7 +30,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
-	"github.com/fluxcd/pkg/testserver"
+	"github.com/fluxcd/pkg/helmtestserver"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1alpha1"
 )
@@ -47,7 +47,7 @@ var _ = Describe("HelmRepositoryReconciler", func() {
 	Context("HelmRepository", func() {
 		var (
 			namespace  *corev1.Namespace
-			helmServer *testserver.HelmServer
+			helmServer *helmtestserver.HelmServer
 			err        error
 		)
 
@@ -58,7 +58,7 @@ var _ = Describe("HelmRepositoryReconciler", func() {
 			err = k8sClient.Create(context.Background(), namespace)
 			Expect(err).NotTo(HaveOccurred(), "failed to create test namespace")
 
-			helmServer, err = testserver.NewTempHelmServer()
+			helmServer, err = helmtestserver.NewTempHelmServer()
 			Expect(err).To(Succeed())
 		})
 
@@ -205,7 +205,7 @@ var _ = Describe("HelmRepositoryReconciler", func() {
 		})
 
 		It("Authenticates when basic auth credentials are provided", func() {
-			helmServer, err = testserver.NewTempHelmServer()
+			helmServer, err = helmtestserver.NewTempHelmServer()
 			Expect(err).NotTo(HaveOccurred())
 
 			var username, password = "john", "doe"
@@ -311,7 +311,7 @@ var _ = Describe("HelmRepositoryReconciler", func() {
 		})
 
 		It("Authenticates when TLS credentials are provided", func() {
-			err = helmServer.StartTLS(examplePublicKey, examplePrivateKey, exampleCA)
+			err = helmServer.StartTLS(examplePublicKey, examplePrivateKey, exampleCA, "example.com")
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(helmServer.PackageChart(path.Join("testdata/helmchart"))).Should(Succeed())
