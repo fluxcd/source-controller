@@ -212,23 +212,28 @@ func (c *CheckoutSemVer) Checkout(ctx context.Context, path, url string, auth tr
 	semver.Sort(svers)
 	v := svers[len(svers)-1]
 	t := svTags[v.String()]
-	commitRef := tags[t]
 
 	w, err := repo.Worktree()
 	if err != nil {
 		return nil, "", fmt.Errorf("git worktree error: %w", err)
 	}
 
-	commit, err := repo.CommitObject(plumbing.NewHash(commitRef))
-	if err != nil {
-		return nil, "", fmt.Errorf("git commit '%s' not found: %w", commitRef, err)
-	}
 	err = w.Checkout(&git.CheckoutOptions{
-		Hash: commit.Hash,
+		Branch: plumbing.NewTagReferenceName(t),
 	})
 	if err != nil {
 		return nil, "", fmt.Errorf("git checkout error: %w", err)
 	}
 
-	return commit, fmt.Sprintf("%s/%s", t, commitRef), nil
+	head, err := repo.Head()
+	if err != nil {
+		return nil, "", fmt.Errorf("git resolve HEAD error: %w", err)
+	}
+
+	commit, err := repo.CommitObject(head.Hash())
+	if err != nil {
+		return nil, "", fmt.Errorf("git commit '%s' not found: %w", head.Hash(), err)
+	}
+
+	return commit, fmt.Sprintf("%s/%s", t, head.Hash().String()), nil
 }
