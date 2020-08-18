@@ -38,8 +38,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
+	"github.com/fluxcd/pkg/gittestserver"
+
 	sourcev1 "github.com/fluxcd/source-controller/api/v1alpha1"
-	"github.com/fluxcd/source-controller/pkg/testserver"
 )
 
 var _ = Describe("GitRepositoryReconciler", func() {
@@ -53,7 +54,7 @@ var _ = Describe("GitRepositoryReconciler", func() {
 	Context("GitRepository", func() {
 		var (
 			namespace *corev1.Namespace
-			gitServer *testserver.GitServer
+			gitServer *gittestserver.GitServer
 			err       error
 		)
 
@@ -64,7 +65,7 @@ var _ = Describe("GitRepositoryReconciler", func() {
 			err = k8sClient.Create(context.Background(), namespace)
 			Expect(err).NotTo(HaveOccurred(), "failed to create test namespace")
 
-			gitServer, err = testserver.NewTempGitServer()
+			gitServer, err = gittestserver.NewTempGitServer()
 			Expect(err).NotTo(HaveOccurred())
 			gitServer.AutoCreate()
 		})
