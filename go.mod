@@ -6,7 +6,7 @@ replace github.com/fluxcd/source-controller/api => ./api
 
 require (
 	github.com/blang/semver v3.5.0+incompatible
-	github.com/fluxcd/pkg/gittestserver v0.0.1
+	github.com/fluxcd/pkg/gittestserver v0.0.2
 	github.com/fluxcd/pkg/helmtestserver v0.0.1
 	github.com/fluxcd/pkg/lockedfile v0.0.5
 	github.com/fluxcd/pkg/recorder v0.0.5
@@ -25,7 +25,3 @@ require (
 	sigs.k8s.io/controller-runtime v0.6.1
 	sigs.k8s.io/yaml v1.2.0
 )
-
-// TODO(hidde): drop when PR is accepted:
-//  https://github.com/sosedoff/gitkit/pull/21
-replace github.com/sosedoff/gitkit => github.com/hiddeco/gitkit v0.2.1-0.20200422093229-4355fec70348
