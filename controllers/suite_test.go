@@ -163,15 +163,15 @@ func init() {
 }
 
 func loadExampleKeys() (err error) {
-	examplePublicKey, err = ioutil.ReadFile(filepath.Join("testdata/certs/server.pem"))
+	examplePublicKey, err = ioutil.ReadFile("testdata/certs/server.pem")
 	if err != nil {
 		return err
 	}
-	examplePrivateKey, err = ioutil.ReadFile(filepath.Join("testdata/certs/server-key.pem"))
+	examplePrivateKey, err = ioutil.ReadFile("testdata/certs/server-key.pem")
 	if err != nil {
 		return err
 	}
-	exampleCA, err = ioutil.ReadFile(filepath.Join("testdata/certs/ca.pem"))
+	exampleCA, err = ioutil.ReadFile("testdata/certs/ca.pem")
 	return err
 }
 

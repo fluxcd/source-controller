@@ -17,3 +17,16 @@ const (
 	// reconciliation outside of the defined schedule.
 	ReconcileAtAnnotation string = "fluxcd.io/reconcileAt"
 )
+
+// filterOutSourceCondition returns a new SourceCondition slice without the
+// SourceCondition of the given type.
+func filterOutSourceCondition(conditions []SourceCondition, condition string) []SourceCondition {
+	var newConditions []SourceCondition
+	for _, c := range conditions {
+		if c.Type == condition {
+			continue
+		}
+		newConditions = append(newConditions, c)
+	}
+	return newConditions
+}

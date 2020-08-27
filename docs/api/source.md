@@ -250,14 +250,13 @@ HelmChartSpec
 <table>
 <tr>
 <td>
-<code>name</code><br>
+<code>chart</code><br>
 <em>
 string
 </em>
 </td>
 <td>
-<p>The name of the Helm chart, as made available by the referenced
-Helm repository.</p>
+<p>The name or path the Helm chart is available at in the SourceRef.</p>
 </td>
 </tr>
 <tr>
@@ -269,21 +268,21 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>The chart version semver expression, defaults to latest when
-omitted.</p>
+<p>The chart version semver expression, ignored for charts from GitRepository
+sources. Defaults to latest when omitted.</p>
 </td>
 </tr>
 <tr>
 <td>
-<code>helmRepositoryRef</code><br>
+<code>sourceRef</code><br>
 <em>
-<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.18/#localobjectreference-v1-core">
-Kubernetes core/v1.LocalObjectReference
+<a href="#source.toolkit.fluxcd.io/v1alpha1.LocalHelmChartSourceReference">
+LocalHelmChartSourceReference
 </a>
 </em>
 </td>
 <td>
-<p>The name of the HelmRepository the chart is available at.</p>
+<p>The reference to the Source the chart is available at.</p>
 </td>
 </tr>
 <tr>
@@ -296,7 +295,7 @@ Kubernetes meta/v1.Duration
 </em>
 </td>
 <td>
-<p>The interval at which to check the Helm repository for updates.</p>
+<p>The interval at which to check the Source for updates.</p>
 </td>
 </tr>
 </table>
@@ -839,14 +838,13 @@ Kubernetes core/v1.LocalObjectReference
 <tbody>
 <tr>
 <td>
-<code>name</code><br>
+<code>chart</code><br>
 <em>
 string
 </em>
 </td>
 <td>
-<p>The name of the Helm chart, as made available by the referenced
-Helm repository.</p>
+<p>The name or path the Helm chart is available at in the SourceRef.</p>
 </td>
 </tr>
 <tr>
@@ -858,21 +856,21 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>The chart version semver expression, defaults to latest when
-omitted.</p>
+<p>The chart version semver expression, ignored for charts from GitRepository
+sources. Defaults to latest when omitted.</p>
 </td>
 </tr>
 <tr>
 <td>
-<code>helmRepositoryRef</code><br>
+<code>sourceRef</code><br>
 <em>
-<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.18/#localobjectreference-v1-core">
-Kubernetes core/v1.LocalObjectReference
+<a href="#source.toolkit.fluxcd.io/v1alpha1.LocalHelmChartSourceReference">
+LocalHelmChartSourceReference
 </a>
 </em>
 </td>
 <td>
-<p>The name of the HelmRepository the chart is available at.</p>
+<p>The reference to the Source the chart is available at.</p>
 </td>
 </tr>
 <tr>
@@ -885,7 +883,7 @@ Kubernetes meta/v1.Duration
 </em>
 </td>
 <td>
-<p>The interval at which to check the Helm repository for updates.</p>
+<p>The interval at which to check the Source for updates.</p>
 </td>
 </tr>
 </tbody>
@@ -1084,6 +1082,62 @@ Artifact
 <td>
 <em>(Optional)</em>
 <p>Artifact represents the output of the last successful repository sync.</p>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<h3 id="source.toolkit.fluxcd.io/v1alpha1.LocalHelmChartSourceReference">LocalHelmChartSourceReference
+</h3>
+<p>
+(<em>Appears on:</em>
+<a href="#source.toolkit.fluxcd.io/v1alpha1.HelmChartSpec">HelmChartSpec</a>)
+</p>
+<p>LocalHelmChartSourceReference contains enough information to let you locate the
+typed referenced object at namespace level.</p>
+<div class="md-typeset__scrollwrap">
+<div class="md-typeset__table">
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>apiVersion</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>APIVersion of the referent.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>kind</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<p>Kind of the referent, valid values are (&lsquo;HelmRepository&rsquo;, &lsquo;GitRepository&rsquo;).</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>name</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<p>Name of the referent.</p>
 </td>
 </tr>
 </tbody>

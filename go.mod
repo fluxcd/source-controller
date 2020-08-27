@@ -12,6 +12,7 @@ require (
 	github.com/fluxcd/pkg/logger v0.0.1
 	github.com/fluxcd/pkg/recorder v0.0.6
 	github.com/fluxcd/pkg/ssh v0.0.5
+	github.com/fluxcd/pkg/untar v0.0.5
 	github.com/fluxcd/source-controller/api v0.0.10
 	github.com/go-git/go-billy/v5 v5.0.0
 	github.com/go-git/go-git/v5 v5.1.0
