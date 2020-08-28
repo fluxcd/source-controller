@@ -26,7 +26,6 @@ import (
 
 	"github.com/go-logr/logr"
 	"helm.sh/helm/v3/pkg/getter"
-	"helm.sh/helm/v3/pkg/repo"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -36,9 +35,9 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
-	"sigs.k8s.io/yaml"
 
 	"github.com/fluxcd/pkg/recorder"
+
 	sourcev1 "github.com/fluxcd/source-controller/api/v1alpha1"
 	"github.com/fluxcd/source-controller/internal/helm"
 )
@@ -174,30 +173,8 @@ func (r *HelmChartReconciler) SetupWithManagerAndOptions(mgr ctrl.Manager, opts 
 }
 
 func (r *HelmChartReconciler) reconcile(ctx context.Context, repository sourcev1.HelmRepository, chart sourcev1.HelmChart) (sourcev1.HelmChart, error) {
-	indexBytes, err := ioutil.ReadFile(repository.Status.Artifact.Path)
+	cv, err := helm.GetDownloadableChartVersionFromIndex(repository.Status.Artifact.Path, chart.Spec.Name, chart.Spec.Version)
 	if err != nil {
-		err = fmt.Errorf("failed to read Helm repository index file: %w", err)
-		return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
-	}
-	index := &repo.IndexFile{}
-	if err := yaml.Unmarshal(indexBytes, index); err != nil {
-		return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
-	}
-
-	// find referenced chart in index
-	cv, err := index.Get(chart.Spec.Name, chart.Spec.Version)
-	if err != nil {
-		switch err {
-		case repo.ErrNoChartName:
-			err = fmt.Errorf("chart '%s' could not be found in Helm repository '%s'", chart.Spec.Name, repository.Name)
-		case repo.ErrNoChartVersion:
-			err = fmt.Errorf("no chart with version '%s' found for '%s'", chart.Spec.Version, chart.Spec.Name)
-		}
-		return sourcev1.HelmChartNotReady(chart, sourcev1.ChartPullFailedReason, err.Error()), err
-	}
-
-	if len(cv.URLs) == 0 {
-		err = fmt.Errorf("chart '%s' has no downloadable URLs", cv.Name)
 		return sourcev1.HelmChartNotReady(chart, sourcev1.ChartPullFailedReason, err.Error()), err
 	}
 
@@ -207,7 +184,6 @@ func (r *HelmChartReconciler) reconcile(ctx context.Context, repository sourcev1
 	u, err := url.Parse(ref)
 	if err != nil {
 		err = fmt.Errorf("invalid chart URL format '%s': %w", ref, err)
-		return sourcev1.HelmChartNotReady(chart, sourcev1.ChartPullFailedReason, err.Error()), err
 	}
 
 	c, err := r.Getters.ByScheme(u.Scheme)

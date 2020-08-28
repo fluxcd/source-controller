@@ -4,7 +4,7 @@ metadata:
   name: helmchart-sample
 spec:
   name: podinfo
-  version: '^2.0.0'
+  version: '>=2.0.0 <3.0.0'
   helmRepositoryRef:
     name: helmrepository-sample
   interval: 1m
