@@ -162,6 +162,8 @@ When specified, `spec.ignore` overrides the default exclusion list.
 
 ## Spec examples
 
+### Checkout strategies
+
 Pull the master branch of a public repository every minute:
 
 ```yaml
@@ -231,7 +233,9 @@ spec:
     semver: ">=3.1.0-rc.1 <3.2.0"
 ```
 
-HTTPS authentication (requires a secret with `username` and `password` fields):
+### HTTPS authentication
+
+HTTPS authentication requires a Kubernetes secret with `username` and `password` fields:
 
 ```yaml
 apiVersion: source.toolkit.fluxcd.io/v1alpha1
@@ -254,7 +258,11 @@ data:
   password: <BASE64> 
 ```
 
-SSH authentication (requires a secret with `identity` and `known_hosts` fields):
+> **Note:** that self-signed certificates are not supported.
+
+### SSH authentication
+
+SSH authentication requires a Kubernetes secret with `identity` and `known_hosts` fields:
 
 ```yaml
 apiVersion: source.toolkit.fluxcd.io/v1alpha1
@@ -292,6 +300,8 @@ kubectl create secret generic ssh-credentials \
     --from-file=./identity.pub \
     --from-file=./known_hosts
 ```
+
+### GPG signature verification
 
 Verify the OpenPGP signature for the commit that master branch HEAD points to:
 
