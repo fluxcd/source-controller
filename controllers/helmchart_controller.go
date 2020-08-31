@@ -180,10 +180,25 @@ func (r *HelmChartReconciler) reconcile(ctx context.Context, repository sourcev1
 
 	// TODO(hidde): according to the Helm source the first item is not
 	//  always the correct one to pick, check for updates once in awhile.
+	//  Ref: https://github.com/helm/helm/blob/v3.3.0/pkg/downloader/chart_downloader.go#L241
 	ref := cv.URLs[0]
 	u, err := url.Parse(ref)
 	if err != nil {
 		err = fmt.Errorf("invalid chart URL format '%s': %w", ref, err)
+	}
+
+	// Prepend the chart repository base URL if the URL is relative
+	if !u.IsAbs() {
+		repoURL, err := url.Parse(repository.Spec.URL)
+		if err != nil {
+			err = fmt.Errorf("invalid repository URL format '%s': %w", repository.Spec.URL, err)
+			return sourcev1.HelmChartNotReady(chart, sourcev1.ChartPullFailedReason, err.Error()), err
+		}
+		q := repoURL.Query()
+		// Trailing slash is required for ResolveReference to work
+		repoURL.Path = strings.TrimSuffix(repoURL.Path, "/") + "/"
+		u = repoURL.ResolveReference(u)
+		u.RawQuery = q.Encode()
 	}
 
 	c, err := r.Getters.ByScheme(u.Scheme)
