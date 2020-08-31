@@ -2,6 +2,30 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.0.12 (2020-08-31)
+
+This prerelease adds support for `HelmChart` artifacts build from
+`GitRepository` sources, and includes several (breaking) changes
+to the API:
+
+* The `Name` field in the `HelmChartSpec` has been renamed to `Chart`,
+  and may now contain the path a chart is available at in a referred
+  Source.
+* The `HelmRepositoryRef` field in the `HelmChartSpec` has been renamed
+  to `SourceRef`, and may now contain a reference to `HelmRepository`
+  and `GitRepository` resources.
+* The `Kind` field in the `SourceRef` object is now mandatory.
+
+Other notable changes: the `HelmChart` `Version` field now supports the
+same ranges as the `GitRepository` SemVer checkout strategy, support for
+relative URLs in `HelmRepository` indexes, and several other bug fixes.
+
+## 0.0.11 (2020-08-21)
+
+This prerelease only included a version change of
+`github.com/fluxcd/source-controller/api` to publish `go.mod`
+changes.
+
 ## 0.0.10 (2020-08-18)
 
 This prerelease comes with a bug fix to the Git semver checkout.
