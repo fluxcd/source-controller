@@ -5,7 +5,7 @@ go 1.14
 replace github.com/fluxcd/source-controller/api => ./api
 
 require (
-	github.com/blang/semver v3.5.0+incompatible
+	github.com/blang/semver/v4 v4.0.0
 	github.com/fluxcd/pkg/gittestserver v0.0.2
 	github.com/fluxcd/pkg/helmtestserver v0.0.1
 	github.com/fluxcd/pkg/lockedfile v0.0.5

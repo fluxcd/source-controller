@@ -101,7 +101,7 @@ var _ = Describe("HelmChartReconciler", func() {
 				},
 				Spec: sourcev1.HelmChartSpec{
 					Name:              "helmchart",
-					Version:           "*",
+					Version:           "",
 					HelmRepositoryRef: corev1.LocalObjectReference{Name: repositoryKey.Name},
 					Interval:          metav1.Duration{Duration: pullInterval},
 				},
@@ -203,7 +203,6 @@ var _ = Describe("HelmChartReconciler", func() {
 				},
 				Spec: sourcev1.HelmChartSpec{
 					Name:              "helmchart",
-					Version:           "*",
 					HelmRepositoryRef: corev1.LocalObjectReference{Name: repositoryKey.Name},
 					Interval:          metav1.Duration{Duration: 1 * time.Hour},
 				},
@@ -218,7 +217,7 @@ var _ = Describe("HelmChartReconciler", func() {
 				return ""
 			}, timeout, interval).Should(Equal("1.0.0"))
 
-			chart.Spec.Version = "~0.1.0"
+			chart.Spec.Version = "<0.2.0"
 			Expect(k8sClient.Update(context.Background(), chart)).Should(Succeed())
 			Eventually(func() string {
 				_ = k8sClient.Get(context.Background(), key, chart)
