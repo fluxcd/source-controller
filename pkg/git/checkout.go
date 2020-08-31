@@ -173,7 +173,6 @@ func (c *CheckoutSemVer) Checkout(ctx context.Context, path, url string, auth tr
 		URL:               url,
 		Auth:              auth,
 		RemoteName:        defaultOrigin,
-		SingleBranch:      true,
 		NoCheckout:        false,
 		Depth:             1,
 		RecurseSubmodules: 0,
