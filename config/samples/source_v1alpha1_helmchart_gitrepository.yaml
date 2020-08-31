@@ -1,0 +1,11 @@
+apiVersion: source.toolkit.fluxcd.io/v1alpha1
+kind: HelmChart
+metadata:
+  name: helmchart-git-sample
+spec:
+  chart: charts/podinfo
+  version: '^2.0.0'
+  sourceRef:
+    kind: GitRepository
+    name: gitrepository-sample
+  interval: 1m

@@ -18,19 +18,31 @@ package controllers
 
 import (
 	"context"
+	"fmt"
+	"io/ioutil"
 	"net/http"
+	"net/url"
 	"os"
 	"path"
+	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/fluxcd/pkg/gittestserver"
+	"github.com/fluxcd/pkg/helmtestserver"
+	"github.com/go-git/go-billy/v5/memfs"
+	"github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/config"
+	"github.com/go-git/go-git/v5/plumbing/object"
+	"github.com/go-git/go-git/v5/storage/memory"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	helmchart "helm.sh/helm/v3/pkg/chart"
+	"helm.sh/helm/v3/pkg/chartutil"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-
-	"github.com/fluxcd/pkg/helmtestserver"
+	"sigs.k8s.io/yaml"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1alpha1"
 )
@@ -44,7 +56,7 @@ var _ = Describe("HelmChartReconciler", func() {
 		pullInterval  = time.Second * 3
 	)
 
-	Context("HelmChart", func() {
+	Context("HelmChart from HelmRepository", func() {
 		var (
 			namespace  *corev1.Namespace
 			helmServer *helmtestserver.HelmServer
@@ -53,7 +65,7 @@ var _ = Describe("HelmChartReconciler", func() {
 
 		BeforeEach(func() {
 			namespace = &corev1.Namespace{
-				ObjectMeta: metav1.ObjectMeta{Name: "helm-chart-test" + randStringRunes(5)},
+				ObjectMeta: metav1.ObjectMeta{Name: "helm-chart-test-" + randStringRunes(5)},
 			}
 			err = k8sClient.Create(context.Background(), namespace)
 			Expect(err).NotTo(HaveOccurred(), "failed to create test namespace")
@@ -100,10 +112,13 @@ var _ = Describe("HelmChartReconciler", func() {
 					Namespace: key.Namespace,
 				},
 				Spec: sourcev1.HelmChartSpec{
-					Name:              "helmchart",
-					Version:           "",
-					HelmRepositoryRef: corev1.LocalObjectReference{Name: repositoryKey.Name},
-					Interval:          metav1.Duration{Duration: pullInterval},
+					Chart:   "helmchart",
+					Version: "",
+					SourceRef: sourcev1.LocalHelmChartSourceReference{
+						Kind: sourcev1.HelmRepositoryKind,
+						Name: repositoryKey.Name,
+					},
+					Interval: metav1.Duration{Duration: pullInterval},
 				},
 			}
 			Expect(k8sClient.Create(context.Background(), created)).Should(Succeed())
@@ -131,7 +146,7 @@ var _ = Describe("HelmChartReconciler", func() {
 			By("Expecting missing HelmRepository error")
 			updated := &sourcev1.HelmChart{}
 			Expect(k8sClient.Get(context.Background(), key, updated)).Should(Succeed())
-			updated.Spec.HelmRepositoryRef.Name = "invalid"
+			updated.Spec.SourceRef.Name = "invalid"
 			Expect(k8sClient.Update(context.Background(), updated)).Should(Succeed())
 			Eventually(func() bool {
 				_ = k8sClient.Get(context.Background(), key, updated)
@@ -156,7 +171,7 @@ var _ = Describe("HelmChartReconciler", func() {
 			Eventually(func() error {
 				c := &sourcev1.HelmChart{}
 				return k8sClient.Get(context.Background(), key, c)
-			}).ShouldNot(Succeed())
+			}, timeout, interval).ShouldNot(Succeed())
 
 			exists := func(path string) bool {
 				// wait for tmp sync on macOS
@@ -181,7 +196,7 @@ var _ = Describe("HelmChartReconciler", func() {
 				Name:      "helmrepository-sample-" + randStringRunes(5),
 				Namespace: namespace.Name,
 			}
-			Expect(k8sClient.Create(context.Background(), &sourcev1.HelmRepository{
+			repository := &sourcev1.HelmRepository{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      repositoryKey.Name,
 					Namespace: repositoryKey.Namespace,
@@ -190,7 +205,9 @@ var _ = Describe("HelmChartReconciler", func() {
 					URL:      helmServer.URL(),
 					Interval: metav1.Duration{Duration: 1 * time.Hour},
 				},
-			})).Should(Succeed())
+			}
+			Expect(k8sClient.Create(context.Background(), repository)).Should(Succeed())
+			defer k8sClient.Delete(context.Background(), repository)
 
 			key := types.NamespacedName{
 				Name:      "helmchart-sample-" + randStringRunes(5),
@@ -202,12 +219,17 @@ var _ = Describe("HelmChartReconciler", func() {
 					Namespace: key.Namespace,
 				},
 				Spec: sourcev1.HelmChartSpec{
-					Name:              "helmchart",
-					HelmRepositoryRef: corev1.LocalObjectReference{Name: repositoryKey.Name},
-					Interval:          metav1.Duration{Duration: 1 * time.Hour},
+					Chart:   "helmchart",
+					Version: "*",
+					SourceRef: sourcev1.LocalHelmChartSourceReference{
+						Kind: sourcev1.HelmRepositoryKind,
+						Name: repositoryKey.Name,
+					},
+					Interval: metav1.Duration{Duration: 1 * time.Hour},
 				},
 			}
 			Expect(k8sClient.Create(context.Background(), chart)).Should(Succeed())
+			defer k8sClient.Delete(context.Background(), chart)
 
 			Eventually(func() string {
 				_ = k8sClient.Get(context.Background(), key, chart)
@@ -293,6 +315,7 @@ var _ = Describe("HelmChartReconciler", func() {
 				},
 			}
 			Expect(k8sClient.Create(context.Background(), repository)).Should(Succeed())
+			defer k8sClient.Delete(context.Background(), repository)
 
 			key := types.NamespacedName{
 				Name:      "helmchart-sample-" + randStringRunes(5),
@@ -304,13 +327,17 @@ var _ = Describe("HelmChartReconciler", func() {
 					Namespace: key.Namespace,
 				},
 				Spec: sourcev1.HelmChartSpec{
-					Name:              "helmchart",
-					Version:           "*",
-					HelmRepositoryRef: corev1.LocalObjectReference{Name: repositoryKey.Name},
-					Interval:          metav1.Duration{Duration: pullInterval},
+					Chart:   "helmchart",
+					Version: "*",
+					SourceRef: sourcev1.LocalHelmChartSourceReference{
+						Kind: sourcev1.HelmRepositoryKind,
+						Name: repositoryKey.Name,
+					},
+					Interval: metav1.Duration{Duration: pullInterval},
 				},
 			}
 			Expect(k8sClient.Create(context.Background(), chart)).Should(Succeed())
+			defer k8sClient.Delete(context.Background(), chart)
 
 			By("Expecting artifact")
 			Expect(k8sClient.Update(context.Background(), secret)).Should(Succeed())
@@ -369,6 +396,187 @@ var _ = Describe("HelmChartReconciler", func() {
 				return false
 			}, timeout, interval).Should(BeTrue())
 			Expect(got.Status.Artifact).ShouldNot(BeNil())
+		})
+	})
+
+	Context("HelmChart from GitRepository", func() {
+		var (
+			namespace *corev1.Namespace
+			gitServer *gittestserver.GitServer
+			err       error
+		)
+
+		BeforeEach(func() {
+			namespace = &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-git-repository-" + randStringRunes(5)},
+			}
+			err = k8sClient.Create(context.Background(), namespace)
+			Expect(err).NotTo(HaveOccurred(), "failed to create test namespace")
+
+			gitServer, err = gittestserver.NewTempGitServer()
+			Expect(err).NotTo(HaveOccurred())
+			gitServer.AutoCreate()
+			Expect(gitServer.StartHTTP()).To(Succeed())
+		})
+
+		AfterEach(func() {
+			gitServer.StopHTTP()
+			os.RemoveAll(gitServer.Root())
+
+			err = k8sClient.Delete(context.Background(), namespace)
+			Expect(err).NotTo(HaveOccurred(), "failed to delete test namespace")
+		})
+
+		It("Creates artifacts for", func() {
+			fs := memfs.New()
+			gitrepo, err := git.Init(memory.NewStorage(), fs)
+			Expect(err).NotTo(HaveOccurred())
+
+			wt, err := gitrepo.Worktree()
+			Expect(err).NotTo(HaveOccurred())
+
+			u, err := url.Parse(gitServer.HTTPAddress())
+			Expect(err).NotTo(HaveOccurred())
+			u.Path = path.Join(u.Path, fmt.Sprintf("repository-%s.git", randStringRunes(5)))
+
+			_, err = gitrepo.CreateRemote(&config.RemoteConfig{
+				Name: "origin",
+				URLs: []string{u.String()},
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			chartDir := "testdata/helmchart"
+			Expect(filepath.Walk(chartDir, func(p string, fi os.FileInfo, err error) error {
+				if err != nil {
+					return err
+				}
+
+				switch {
+				case fi.Mode().IsDir():
+					return fs.MkdirAll(p, os.ModeDir)
+				case !fi.Mode().IsRegular():
+					return nil
+				}
+
+				b, err := ioutil.ReadFile(p)
+				if err != nil {
+					return err
+				}
+
+				ff, err := fs.Create(p)
+				if err != nil {
+					return err
+				}
+				if _, err := ff.Write(b); err != nil {
+					return err
+				}
+				_ = ff.Close()
+				_, err = wt.Add(p)
+
+				return err
+			})).To(Succeed())
+
+			_, err = wt.Commit("Helm chart", &git.CommitOptions{Author: &object.Signature{
+				Name:  "John Doe",
+				Email: "john@example.com",
+				When:  time.Now(),
+			}})
+			Expect(err).NotTo(HaveOccurred())
+
+			err = gitrepo.Push(&git.PushOptions{})
+			Expect(err).NotTo(HaveOccurred())
+
+			repositoryKey := types.NamespacedName{
+				Name:      fmt.Sprintf("git-repository-sample-%s", randStringRunes(5)),
+				Namespace: namespace.Name,
+			}
+			repository := &sourcev1.GitRepository{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      repositoryKey.Name,
+					Namespace: repositoryKey.Namespace,
+				},
+				Spec: sourcev1.GitRepositorySpec{
+					URL:      u.String(),
+					Interval: metav1.Duration{Duration: indexInterval},
+				},
+			}
+			Expect(k8sClient.Create(context.Background(), repository)).Should(Succeed())
+			defer k8sClient.Delete(context.Background(), repository)
+
+			key := types.NamespacedName{
+				Name:      "helmchart-sample-" + randStringRunes(5),
+				Namespace: namespace.Name,
+			}
+			chart := &sourcev1.HelmChart{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      key.Name,
+					Namespace: key.Namespace,
+				},
+				Spec: sourcev1.HelmChartSpec{
+					Chart:   "testdata/helmchart",
+					Version: "*",
+					SourceRef: sourcev1.LocalHelmChartSourceReference{
+						Kind: sourcev1.GitRepositoryKind,
+						Name: repositoryKey.Name,
+					},
+					Interval: metav1.Duration{Duration: pullInterval},
+				},
+			}
+			Expect(k8sClient.Create(context.Background(), chart)).Should(Succeed())
+			defer k8sClient.Delete(context.Background(), chart)
+
+			By("Expecting artifact")
+			got := &sourcev1.HelmChart{}
+			Eventually(func() bool {
+				_ = k8sClient.Get(context.Background(), key, got)
+				return got.Status.Artifact != nil &&
+					storage.ArtifactExist(*got.Status.Artifact)
+			}, timeout, interval).Should(BeTrue())
+
+			By("Committing a new version in the chart metadata")
+			f, err := fs.OpenFile(fs.Join(chartDir, chartutil.ChartfileName), os.O_RDWR, os.FileMode(0600))
+			Expect(err).NotTo(HaveOccurred())
+
+			b := make([]byte, 1024)
+			n, err := f.Read(b)
+			Expect(err).NotTo(HaveOccurred())
+			b = b[0:n]
+
+			y := new(helmchart.Metadata)
+			err = yaml.Unmarshal(b, y)
+			Expect(err).NotTo(HaveOccurred())
+
+			y.Version = "0.2.0"
+			b, err = yaml.Marshal(y)
+			Expect(err).NotTo(HaveOccurred())
+
+			_, err = f.Write(b)
+			Expect(err).NotTo(HaveOccurred())
+
+			err = f.Close()
+			Expect(err).NotTo(HaveOccurred())
+
+			_, err = wt.Commit("Chart version bump", &git.CommitOptions{
+				Author: &object.Signature{
+					Name:  "John Doe",
+					Email: "john@example.com",
+					When:  time.Now(),
+				},
+				All: true,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			err = gitrepo.Push(&git.PushOptions{})
+			Expect(err).NotTo(HaveOccurred())
+
+			By("Expecting new artifact revision and GC")
+			Eventually(func() bool {
+				now := &sourcev1.HelmChart{}
+				_ = k8sClient.Get(context.Background(), key, now)
+				// Test revision change and garbage collection
+				return now.Status.Artifact.Revision != got.Status.Artifact.Revision &&
+					!storage.ArtifactExist(*got.Status.Artifact)
+			}, timeout, interval).Should(BeTrue())
 		})
 	})
 })

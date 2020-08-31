@@ -17,14 +17,17 @@ spec:
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - jsonPath: .spec.name
-      name: Name
+    - jsonPath: .spec.chart
+      name: Chart
       type: string
     - jsonPath: .spec.version
       name: Version
       type: string
-    - jsonPath: .spec.helmRepositoryRef.name
-      name: Repository
+    - jsonPath: .spec.sourceRef.kind
+      name: Source Kind
+      type: string
+    - jsonPath: .spec.sourceRef.name
+      name: Source Name
       type: string
     - jsonPath: .status.conditions[?(@.type=="Ready")].status
       name: Ready
@@ -55,31 +58,41 @@ spec:
           spec:
             description: HelmChartSpec defines the desired state of a Helm chart.
             properties:
-              helmRepositoryRef:
-                description: The name of the HelmRepository the chart is available
-                  at.
-                properties:
-                  name:
-                    description: 'Name of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
-                      TODO: Add other useful fields. apiVersion, kind, uid?'
-                    type: string
-                type: object
+              chart:
+                description: The name or path the Helm chart is available at in the
+                  SourceRef.
+                type: string
               interval:
-                description: The interval at which to check the Helm repository for
-                  updates.
+                description: The interval at which to check the Source for updates.
                 type: string
-              name:
-                description: The name of the Helm chart, as made available by the
-                  referenced Helm repository.
-                type: string
+              sourceRef:
+                description: The reference to the Source the chart is available at.
+                properties:
+                  apiVersion:
+                    description: APIVersion of the referent.
+                    type: string
+                  kind:
+                    description: Kind of the referent, valid values are ('HelmRepository',
+                      'GitRepository').
+                    enum:
+                    - HelmRepository
+                    - GitRepository
+                    type: string
+                  name:
+                    description: Name of the referent.
+                    type: string
+                required:
+                - kind
+                - name
+                type: object
               version:
-                description: The chart version semver expression, defaults to latest
-                  when omitted.
+                description: The chart version semver expression, ignored for charts
+                  from GitRepository sources. Defaults to latest when omitted.
                 type: string
             required:
-            - helmRepositoryRef
+            - chart
             - interval
-            - name
+            - sourceRef
             type: object
           status:
             description: HelmChartStatus defines the observed state of the HelmChart.

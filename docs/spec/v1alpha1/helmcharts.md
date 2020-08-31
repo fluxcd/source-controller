@@ -11,24 +11,43 @@ Helm chart:
 ```go
 // HelmChartSpec defines the desired state of a Helm chart source.
 type HelmChartSpec struct {
-	// The name of the Helm chart, as made available by the referenced
-	// Helm repository.
+	// The name or path the Helm chart is available at in the SourceRef.
 	// +required
-	Name string `json:"name"`
+	Chart string `json:"chart"`
 
-	// The chart version semver expression, defaults to latest when
-	// omitted.
+	// The chart version semver expression, ignored for charts from GitRepository
+	// sources. Defaults to latest when omitted.
 	// +optional
 	Version string `json:"version,omitempty"`
 
-	// The name of the HelmRepository the chart is available at.
+	// The reference to the Source the chart is available at.
 	// +required
-	HelmRepositoryRef v1.LocalObjectReference `json:"helmRepositoryRef"`
+	SourceRef LocalHelmChartSourceReference `json:"sourceRef"`
 
-	// The interval at which to check the referenced HelmRepository index
-	// for updates.
+	// The interval at which to check the Source for updates.
 	// +required
 	Interval metav1.Duration `json:"interval"`
+}
+```
+
+### Reference types
+
+```go
+// LocalHelmChartSourceReference contains enough information to let you locate the
+// typed referenced object at namespace level.
+type LocalHelmChartSourceReference struct {
+	// APIVersion of the referent.
+	// +optional
+	APIVersion string `json:"apiVersion,omitempty"`
+
+	// Kind of the referent, valid values are ('HelmRepository', 'GitRepository').
+	// +kubebuilder:validation:Enum=HelmRepository;GitRepository
+	// +required
+	Kind string `json:"kind"`
+
+	// Name of the referent.
+	// +required
+	Name string `json:"name"`
 }
 ```
 
@@ -61,6 +80,14 @@ const (
 	// ChartPullSucceededReason represents the fact that the pull of
 	// the given Helm chart succeeded.
 	ChartPullSucceededReason string = "ChartPullSucceeded"
+
+	// ChartPackageFailedReason represent the fact that the package of
+	// the Helm chart failed.
+	ChartPackageFailedReason string = "ChartPackageFailed"
+
+	// ChartPackageSucceededReason represents the fact that the package of
+	// the Helm chart succeeded.
+	ChartPackageSucceededReason string = "ChartPackageSucceeded"
 )
 ```
 

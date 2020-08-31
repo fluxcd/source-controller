@@ -34,6 +34,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fluxcd/pkg/lockedfile"
+
 	sourcev1 "github.com/fluxcd/source-controller/api/v1alpha1"
 )
 
@@ -129,7 +130,6 @@ func (s *Storage) ArtifactExist(artifact sourcev1.Artifact) bool {
 
 // Archive creates a tar.gz to the artifact path from the given dir excluding any VCS specific
 // files and directories, or any of the excludes defined in the excludeFiles.
-// Returns a modified sourcev1.Artifact and any error.
 func (s *Storage) Archive(artifact sourcev1.Artifact, dir string, spec sourcev1.GitRepositorySpec) error {
 	if _, err := os.Stat(dir); err != nil {
 		return err
@@ -250,7 +250,7 @@ func (s *Storage) Lock(artifact sourcev1.Artifact) (unlock func(), err error) {
 }
 
 func getPatterns(reader io.Reader, path []string) []gitignore.Pattern {
-	ps := []gitignore.Pattern{}
+	var ps []gitignore.Pattern
 	scanner := bufio.NewScanner(reader)
 
 	for scanner.Scan() {
