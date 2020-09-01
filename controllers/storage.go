@@ -120,12 +120,14 @@ func (s *Storage) RemoveAllButCurrent(artifact sourcev1.Artifact) error {
 	return nil
 }
 
-// ArtifactExist returns a boolean indicating whether the artifact file exists in storage
+// ArtifactExist returns a boolean indicating whether the artifact exists in storage and is a
+// regular file.
 func (s *Storage) ArtifactExist(artifact sourcev1.Artifact) bool {
-	if _, err := os.Stat(artifact.Path); os.IsNotExist(err) {
+	fi, err := os.Lstat(artifact.Path)
+	if err != nil {
 		return false
 	}
-	return true
+	return fi.Mode().IsRegular()
 }
 
 // Archive creates a tar.gz to the artifact path from the given dir excluding any VCS specific
