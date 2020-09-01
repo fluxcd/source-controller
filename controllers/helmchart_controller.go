@@ -23,6 +23,7 @@ import (
 	"net/url"
 	"os"
 	"path"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -383,7 +384,7 @@ func (r *HelmChartReconciler) reconcileFromGitRepository(ctx context.Context,
 
 	// package chart
 	pkg := action.NewPackage()
-	pkg.Destination = artifact.Path
+	pkg.Destination = filepath.Dir(artifact.Path)
 	_, err = pkg.Run(chartPath, nil)
 	if err != nil {
 		err = fmt.Errorf("chart package error: %w", err)
