@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.0.13 (2020-09-01)
+
+This prerelease fixes a bug in the packaging of `HelmChart` artifacts
+build from `GitRepository` sources, and improves the logic of the
+`Storage.ArtifactExist` method to not follow symlinks and only return
+`true` for regular files.
+
 ## 0.0.12 (2020-08-31)
 
 This prerelease adds support for `HelmChart` artifacts build from
