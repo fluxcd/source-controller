@@ -2,6 +2,11 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.0.14 (2020-09-04)
+
+This prerelease comes with Helm v3.3.1.
+Container images for linux/amd64 and linux/arm64 are published to GHCR.
+
 ## 0.0.13 (2020-09-01)
 
 This prerelease fixes a bug in the packaging of `HelmChart` artifacts
