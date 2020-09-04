@@ -2,7 +2,7 @@
 
 The `HelmChart` API defines a source for Helm chart artifacts coming
 from [`HelmRepository` sources](helmrepositories.md). The resource
-exposes the latest pulled chart for the defined version as an artifact.
+exposes the latest pulled or packaged chart as an artifact.
 
 ## Specification
 
@@ -101,14 +101,15 @@ kind: HelmChart
 metadata:
   name: redis
 spec:
-  name: redis
+  chart: redis
   version: 10.5.7
-  helmRepositoryRef:
+  sourceRef:
     name: stable
+    kind: HelmRepository
   interval: 5m
 ```
 
-Pull the latest chart version that matches the sermver range every ten minutes:
+Pull the latest chart version that matches the semver range every ten minutes:
 
 ```yaml
 apiVersion: source.toolkit.fluxcd.io/v1alpha1
@@ -116,10 +117,27 @@ kind: HelmChart
 metadata:
   name: redis
 spec:
-  name: redis
-  version: ^10.0.0
-  helmRepositoryRef:
+  chart: redis
+  version: 10.5.x
+  sourceRef:
     name: stable
+    kind: HelmRepository
+  interval: 10m
+```
+
+Check a Git repository every ten minutes for a new `version` in the
+`Chart.yaml`, and package a new chart if the revision differs:
+
+```yaml
+apiVersion: source.toolkit.fluxcd.io/v1alpha1
+kind: HelmChart
+metadata:
+  name: podinfo
+spec:
+  chart: ./charts/podinfo
+  sourceRef:
+    name: podinfo
+    kind: GitRepository
   interval: 10m
 ```
 
