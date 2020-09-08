@@ -17,6 +17,7 @@ limitations under the License.
 package controllers
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io/ioutil"
@@ -212,23 +213,23 @@ func (r *HelmRepositoryReconciler) reconcile(ctx context.Context, repository sou
 		return sourcev1.HelmRepositoryNotReady(repository, sourcev1.IndexationFailedReason, err.Error()), err
 	}
 
-	data, err := ioutil.ReadAll(res)
+	b, err := ioutil.ReadAll(res)
 	if err != nil {
 		return sourcev1.HelmRepositoryNotReady(repository, sourcev1.IndexationFailedReason, err.Error()), err
 	}
 
-	i := &repo.IndexFile{}
-	if err := yaml.Unmarshal(data, i); err != nil {
+	i := repo.IndexFile{}
+	if err := yaml.Unmarshal(b, &i); err != nil {
 		return sourcev1.HelmRepositoryNotReady(repository, sourcev1.IndexationFailedReason, err.Error()), err
 	}
 	i.SortEntries()
 
-	index, err := yaml.Marshal(i)
+	b, err = yaml.Marshal(&i)
 	if err != nil {
 		return sourcev1.HelmRepositoryNotReady(repository, sourcev1.IndexationFailedReason, err.Error()), err
 	}
 
-	sum := r.Storage.Checksum(index)
+	sum := r.Storage.Checksum(bytes.NewReader(b))
 	artifact := r.Storage.ArtifactFor(repository.Kind, repository.ObjectMeta.GetObjectMeta(),
 		fmt.Sprintf("index-%s.yaml", sum), i.Generated.Format(time.RFC3339Nano), sum)
 
@@ -248,7 +249,7 @@ func (r *HelmRepositoryReconciler) reconcile(ctx context.Context, repository sou
 	defer unlock()
 
 	// save artifact to storage
-	err = r.Storage.WriteFile(artifact, index)
+	err = r.Storage.AtomicWriteFile(artifact, bytes.NewReader(b), 0644)
 	if err != nil {
 		err = fmt.Errorf("unable to write repository index file: %w", err)
 		return sourcev1.HelmRepositoryNotReady(repository, sourcev1.StorageOperationFailedReason, err.Error()), err

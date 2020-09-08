@@ -17,8 +17,10 @@ limitations under the License.
 package controllers
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net/url"
 	"os"
@@ -255,12 +257,8 @@ func (r *HelmChartReconciler) reconcileFromHelmRepository(ctx context.Context,
 		return sourcev1.HelmChartNotReady(chart, sourcev1.ChartPullFailedReason, err.Error()), err
 	}
 
-	chartBytes, err := ioutil.ReadAll(res)
-	if err != nil {
-		return sourcev1.HelmChartNotReady(chart, sourcev1.ChartPullFailedReason, err.Error()), err
-	}
-
-	sum := r.Storage.Checksum(chartBytes)
+	var buf bytes.Buffer
+	sum := r.Storage.Checksum(io.TeeReader(res, &buf))
 	artifact := r.Storage.ArtifactFor(chart.Kind, chart.GetObjectMeta(),
 		fmt.Sprintf("%s-%s-%s.tgz", cv.Name, cv.Version, sum), cv.Version, sum)
 
@@ -280,7 +278,7 @@ func (r *HelmChartReconciler) reconcileFromHelmRepository(ctx context.Context,
 	defer unlock()
 
 	// save artifact to storage
-	err = r.Storage.WriteFile(artifact, chartBytes)
+	err = r.Storage.AtomicWriteFile(artifact, &buf, 0644)
 	if err != nil {
 		err = fmt.Errorf("unable to write chart file: %w", err)
 		return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
