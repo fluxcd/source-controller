@@ -17,7 +17,8 @@ limitations under the License.
 package v1alpha1
 
 import (
-	"fmt"
+	"path"
+	"strings"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -44,8 +45,15 @@ type Artifact struct {
 	LastUpdateTime metav1.Time `json:"lastUpdateTime,omitempty"`
 }
 
+// ArtifactDir returns the artifact dir path in the form of
+// <source-kind>/<source-namespace>/<source-name>
+func ArtifactDir(kind, namespace, name string) string {
+	kind = strings.ToLower(kind)
+	return path.Join(kind, namespace, name)
+}
+
 // ArtifactPath returns the artifact path in the form of
 // <source-kind>/<source-namespace>/<source-name>/<artifact-filename>
 func ArtifactPath(kind, namespace, name, filename string) string {
-	return fmt.Sprintf("%s/%s/%s/%s", kind, namespace, name, filename)
+	return path.Join(ArtifactDir(kind, namespace, name), filename)
 }
