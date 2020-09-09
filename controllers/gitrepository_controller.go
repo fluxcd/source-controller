@@ -302,10 +302,10 @@ func (r *GitRepositoryReconciler) verify(ctx context.Context, publicKeySecret ty
 // gc performs a garbage collection on all but current artifacts of
 // the given repository.
 func (r *GitRepositoryReconciler) gc(repository sourcev1.GitRepository, all bool) error {
+	if all {
+		return r.Storage.RemoveAll(r.Storage.ArtifactFor(repository.Kind, repository.GetObjectMeta(), "", "", ""))
+	}
 	if repository.Status.Artifact != nil {
-		if all {
-			return r.Storage.RemoveAll(*repository.Status.Artifact)
-		}
 		return r.Storage.RemoveAllButCurrent(*repository.Status.Artifact)
 	}
 	return nil

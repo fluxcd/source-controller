@@ -435,10 +435,10 @@ func (r *HelmChartReconciler) getGitRepositoryWithArtifact(ctx context.Context, 
 // gc performs a garbage collection on all but current artifacts of
 // the given chart.
 func (r *HelmChartReconciler) gc(chart sourcev1.HelmChart, all bool) error {
+	if all {
+		return r.Storage.RemoveAll(r.Storage.ArtifactFor(chart.Kind, chart.GetObjectMeta(), "", "", ""))
+	}
 	if chart.Status.Artifact != nil {
-		if all {
-			return r.Storage.RemoveAll(*chart.Status.Artifact)
-		}
 		return r.Storage.RemoveAllButCurrent(*chart.Status.Artifact)
 	}
 	return nil
