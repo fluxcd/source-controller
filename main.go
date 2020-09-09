@@ -102,6 +102,7 @@ func main() {
 		LeaderElection:     enableLeaderElection,
 		LeaderElectionID:   "305740c0.fluxcd.io",
 		Namespace:          os.Getenv("RUNTIME_NAMESPACE"),
+		Logger:             ctrl.Log,
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
