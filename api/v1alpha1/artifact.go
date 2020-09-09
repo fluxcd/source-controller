@@ -17,14 +17,15 @@ limitations under the License.
 package v1alpha1
 
 import (
-	"fmt"
+	"path"
+	"strings"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// Artifact represents the output of a source synchronisation
+// Artifact represents the output of a source synchronisation.
 type Artifact struct {
-	// Path is the local file path of this artifact.
+	// Path is the relative file path of this artifact.
 	// +required
 	Path string `json:"path"`
 
@@ -32,11 +33,15 @@ type Artifact struct {
 	// +required
 	URL string `json:"url"`
 
-	// Revision is a human readable identifier traceable in the origin source system.
-	// It can be a commit sha, git tag, a helm index timestamp,
-	// a helm chart version, a checksum, etc.
+	// Revision is a human readable identifier traceable in the origin
+	// source system. It can be a Git commit sha, Git tag, a Helm index
+	// timestamp, a Helm chart version, etc.
 	// +optional
 	Revision string `json:"revision"`
+
+	// Checksum is the SHA1 checksum of the artifact.
+	// +optional
+	Checksum string `json:"checksum"`
 
 	// LastUpdateTime is the timestamp corresponding to the last
 	// update of this artifact.
@@ -44,8 +49,15 @@ type Artifact struct {
 	LastUpdateTime metav1.Time `json:"lastUpdateTime,omitempty"`
 }
 
+// ArtifactDir returns the artifact dir path in the form of
+// <source-kind>/<source-namespace>/<source-name>.
+func ArtifactDir(kind, namespace, name string) string {
+	kind = strings.ToLower(kind)
+	return path.Join(kind, namespace, name)
+}
+
 // ArtifactPath returns the artifact path in the form of
-// <source-kind>/<source-namespace>/<source-name>/<artifact-filename>
+// <source-kind>/<source-namespace>/<source-name>/<artifact-filename>.
 func ArtifactPath(kind, namespace, name, filename string) string {
-	return fmt.Sprintf("%s/%s/%s/%s", kind, namespace, name, filename)
+	return path.Join(ArtifactDir(kind, namespace, name), filename)
 }

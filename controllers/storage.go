@@ -69,9 +69,8 @@ func NewStorage(basePath string, hostname string, timeout time.Duration) (*Stora
 	}, nil
 }
 
-// ArtifactFor returns an artifact for the given Kubernetes object
-func (s *Storage) ArtifactFor(kind string, metadata metav1.Object, fileName, revision string) sourcev1.Artifact {
-	kind = strings.ToLower(kind)
+// ArtifactFor returns an artifact for the v1alpha1.Source.
+func (s *Storage) ArtifactFor(kind string, metadata metav1.Object, fileName, revision, checksum string) sourcev1.Artifact {
 	path := sourcev1.ArtifactPath(kind, metadata.GetNamespace(), metadata.GetName(), fileName)
 	localPath := filepath.Join(s.BasePath, path)
 	url := fmt.Sprintf("http://%s/%s", s.Hostname, path)
@@ -80,25 +79,27 @@ func (s *Storage) ArtifactFor(kind string, metadata metav1.Object, fileName, rev
 		Path:           localPath,
 		URL:            url,
 		Revision:       revision,
+		Checksum:       checksum,
 		LastUpdateTime: metav1.Now(),
 	}
 }
 
-// MkdirAll calls os.MkdirAll for the given artifact base dir
+// MkdirAll calls os.MkdirAll for the given v1alpha1.Artifact base dir.
 func (s *Storage) MkdirAll(artifact sourcev1.Artifact) error {
-	dir := filepath.Dir(artifact.Path)
+	dir := filepath.Dir(s.LocalPath(artifact))
 	return os.MkdirAll(dir, 0777)
 }
 
-// RemoveAll calls os.RemoveAll for the given artifact base dir
+// RemoveAll calls os.RemoveAll for the given v1alpha1.Artifact base dir.
 func (s *Storage) RemoveAll(artifact sourcev1.Artifact) error {
-	dir := filepath.Dir(artifact.Path)
+	dir := filepath.Dir(s.LocalPath(artifact))
 	return os.RemoveAll(dir)
 }
 
 // RemoveAllButCurrent removes all files for the given artifact base dir excluding the current one
 func (s *Storage) RemoveAllButCurrent(artifact sourcev1.Artifact) error {
-	dir := filepath.Dir(artifact.Path)
+	localPath := s.LocalPath(artifact)
+	dir := filepath.Dir(localPath)
 	var errors []string
 	_ = filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
@@ -106,7 +107,7 @@ func (s *Storage) RemoveAllButCurrent(artifact sourcev1.Artifact) error {
 			return nil
 		}
 
-		if path != artifact.Path && !info.IsDir() && info.Mode()&os.ModeSymlink != os.ModeSymlink {
+		if path != localPath && !info.IsDir() && info.Mode()&os.ModeSymlink != os.ModeSymlink {
 			if err := os.Remove(path); err != nil {
 				errors = append(errors, info.Name())
 			}
@@ -123,7 +124,7 @@ func (s *Storage) RemoveAllButCurrent(artifact sourcev1.Artifact) error {
 // ArtifactExist returns a boolean indicating whether the artifact exists in storage and is a
 // regular file.
 func (s *Storage) ArtifactExist(artifact sourcev1.Artifact) bool {
-	fi, err := os.Lstat(artifact.Path)
+	fi, err := os.Lstat(s.LocalPath(artifact))
 	if err != nil {
 		return false
 	}
@@ -144,7 +145,7 @@ func (s *Storage) Archive(artifact sourcev1.Artifact, dir string, spec sourcev1.
 
 	matcher := gitignore.NewMatcher(ps)
 
-	gzFile, err := os.Create(artifact.Path)
+	gzFile, err := os.Create(s.LocalPath(artifact))
 	if err != nil {
 		return err
 	}
@@ -205,20 +206,22 @@ func (s *Storage) Archive(artifact sourcev1.Artifact, dir string, spec sourcev1.
 
 // WriteFile writes the given bytes to the artifact path if the checksum differs
 func (s *Storage) WriteFile(artifact sourcev1.Artifact, data []byte) error {
+	localPath := s.LocalPath(artifact)
 	sum := s.Checksum(data)
-	if file, err := os.Stat(artifact.Path); !os.IsNotExist(err) && !file.IsDir() {
-		if fb, err := ioutil.ReadFile(artifact.Path); err == nil && sum == s.Checksum(fb) {
+	if file, err := os.Stat(localPath); !os.IsNotExist(err) && !file.IsDir() {
+		if fb, err := ioutil.ReadFile(localPath); err == nil && sum == s.Checksum(fb) {
 			return nil
 		}
 	}
 
-	return ioutil.WriteFile(artifact.Path, data, 0644)
+	return ioutil.WriteFile(localPath, data, 0644)
 }
 
 // Symlink creates or updates a symbolic link for the given artifact
-// and returns the URL for the symlink
+// and returns the URL for the symlink.
 func (s *Storage) Symlink(artifact sourcev1.Artifact, linkName string) (string, error) {
-	dir := filepath.Dir(artifact.Path)
+	localPath := s.LocalPath(artifact)
+	dir := filepath.Dir(localPath)
 	link := filepath.Join(dir, linkName)
 	tmpLink := link + ".tmp"
 
@@ -226,7 +229,7 @@ func (s *Storage) Symlink(artifact sourcev1.Artifact, linkName string) (string, 
 		return "", err
 	}
 
-	if err := os.Symlink(artifact.Path, tmpLink); err != nil {
+	if err := os.Symlink(localPath, tmpLink); err != nil {
 		return "", err
 	}
 
@@ -246,9 +249,18 @@ func (s *Storage) Checksum(b []byte) string {
 
 // Lock creates a file lock for the given artifact
 func (s *Storage) Lock(artifact sourcev1.Artifact) (unlock func(), err error) {
-	lockFile := artifact.Path + ".lock"
+	lockFile := s.LocalPath(artifact) + ".lock"
 	mutex := lockedfile.MutexAt(lockFile)
 	return mutex.Lock()
+}
+
+// LocalPath returns the local path of the given artifact (that is: relative to
+// the Storage.BasePath).
+func (s *Storage) LocalPath(artifact sourcev1.Artifact) string {
+	if artifact.Path == "" {
+		return ""
+	}
+	return filepath.Join(s.BasePath, artifact.Path)
 }
 
 func getPatterns(reader io.Reader, path []string) []gitignore.Pattern {

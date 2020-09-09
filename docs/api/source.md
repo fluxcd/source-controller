@@ -458,7 +458,7 @@ HelmRepositoryStatus
 <a href="#source.toolkit.fluxcd.io/v1alpha1.HelmChartStatus">HelmChartStatus</a>, 
 <a href="#source.toolkit.fluxcd.io/v1alpha1.HelmRepositoryStatus">HelmRepositoryStatus</a>)
 </p>
-<p>Artifact represents the output of a source synchronisation</p>
+<p>Artifact represents the output of a source synchronisation.</p>
 <div class="md-typeset__scrollwrap">
 <div class="md-typeset__table">
 <table>
@@ -477,7 +477,7 @@ string
 </em>
 </td>
 <td>
-<p>Path is the local file path of this artifact.</p>
+<p>Path is the relative file path of this artifact.</p>
 </td>
 </tr>
 <tr>
@@ -500,9 +500,21 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>Revision is a human readable identifier traceable in the origin source system.
-It can be a commit sha, git tag, a helm index timestamp,
-a helm chart version, a checksum, etc.</p>
+<p>Revision is a human readable identifier traceable in the origin
+source system. It can be a Git commit sha, Git tag, a Helm index
+timestamp, a Helm chart version, etc.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>checksum</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Checksum is the SHA1 checksum of the artifact.</p>
 </td>
 </tr>
 <tr>

@@ -188,7 +188,8 @@ func (r *HelmChartReconciler) SetupWithManagerAndOptions(mgr ctrl.Manager, opts 
 
 func (r *HelmChartReconciler) reconcileFromHelmRepository(ctx context.Context,
 	repository sourcev1.HelmRepository, chart sourcev1.HelmChart) (sourcev1.HelmChart, error) {
-	cv, err := helm.GetDownloadableChartVersionFromIndex(repository.Status.Artifact.Path, chart.Spec.Chart, chart.Spec.Version)
+	cv, err := helm.GetDownloadableChartVersionFromIndex(r.Storage.LocalPath(*repository.GetArtifact()),
+		chart.Spec.Chart, chart.Spec.Version)
 	if err != nil {
 		return sourcev1.HelmChartNotReady(chart, sourcev1.ChartPullFailedReason, err.Error()), err
 	}
@@ -260,7 +261,7 @@ func (r *HelmChartReconciler) reconcileFromHelmRepository(ctx context.Context,
 
 	sum := r.Storage.Checksum(chartBytes)
 	artifact := r.Storage.ArtifactFor(chart.Kind, chart.GetObjectMeta(),
-		fmt.Sprintf("%s-%s-%s.tgz", cv.Name, cv.Version, sum), cv.Version)
+		fmt.Sprintf("%s-%s-%s.tgz", cv.Name, cv.Version, sum), cv.Version, sum)
 
 	// create artifact dir
 	err = r.Storage.MkdirAll(artifact)
@@ -333,7 +334,7 @@ func (r *HelmChartReconciler) reconcileFromGitRepository(ctx context.Context,
 	defer os.RemoveAll(tmpDir)
 
 	// open file
-	f, err := os.Open(repository.GetArtifact().Path)
+	f, err := os.Open(r.Storage.LocalPath(*repository.GetArtifact()))
 	if err != nil {
 		err = fmt.Errorf("artifact open error: %w", err)
 		return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
@@ -364,8 +365,10 @@ func (r *HelmChartReconciler) reconcileFromGitRepository(ctx context.Context,
 		return chart, nil
 	}
 
+	// TODO(hidde): implement checksum when https://github.com/fluxcd/source-controller/pull/133
+	//   has been merged.
 	artifact := r.Storage.ArtifactFor(chart.Kind, chart.ObjectMeta.GetObjectMeta(),
-		fmt.Sprintf("%s-%s.tgz", chartMetadata.Name, chartMetadata.Version), chartMetadata.Version)
+		fmt.Sprintf("%s-%s.tgz", chartMetadata.Name, chartMetadata.Version), chartMetadata.Version, "")
 
 	// create artifact dir
 	err = r.Storage.MkdirAll(artifact)
@@ -384,7 +387,7 @@ func (r *HelmChartReconciler) reconcileFromGitRepository(ctx context.Context,
 
 	// package chart
 	pkg := action.NewPackage()
-	pkg.Destination = filepath.Dir(artifact.Path)
+	pkg.Destination = filepath.Dir(r.Storage.LocalPath(artifact))
 	_, err = pkg.Run(chartPath, nil)
 	if err != nil {
 		err = fmt.Errorf("chart package error: %w", err)
@@ -432,10 +435,10 @@ func (r *HelmChartReconciler) getGitRepositoryWithArtifact(ctx context.Context, 
 // gc performs a garbage collection on all but current artifacts of
 // the given chart.
 func (r *HelmChartReconciler) gc(chart sourcev1.HelmChart, all bool) error {
+	if all {
+		return r.Storage.RemoveAll(r.Storage.ArtifactFor(chart.Kind, chart.GetObjectMeta(), "", "", ""))
+	}
 	if chart.Status.Artifact != nil {
-		if all {
-			return r.Storage.RemoveAll(*chart.Status.Artifact)
-		}
 		return r.Storage.RemoveAllButCurrent(*chart.Status.Artifact)
 	}
 	return nil

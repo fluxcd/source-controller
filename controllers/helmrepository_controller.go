@@ -229,7 +229,7 @@ func (r *HelmRepositoryReconciler) reconcile(ctx context.Context, repository sou
 
 	sum := r.Storage.Checksum(index)
 	artifact := r.Storage.ArtifactFor(repository.Kind, repository.ObjectMeta.GetObjectMeta(),
-		fmt.Sprintf("index-%s.yaml", sum), sum)
+		fmt.Sprintf("index-%s.yaml", sum), i.Generated.Format(time.RFC3339Nano), sum)
 
 	// create artifact dir
 	err = r.Storage.MkdirAll(artifact)
@@ -294,10 +294,10 @@ func (r *HelmRepositoryReconciler) shouldResetStatus(repository sourcev1.HelmRep
 // gc performs a garbage collection on all but current artifacts of
 // the given repository.
 func (r *HelmRepositoryReconciler) gc(repository sourcev1.HelmRepository, all bool) error {
+	if all {
+		return r.Storage.RemoveAll(r.Storage.ArtifactFor(repository.Kind, repository.GetObjectMeta(), "", "", ""))
+	}
 	if repository.Status.Artifact != nil {
-		if all {
-			return r.Storage.RemoveAll(*repository.Status.Artifact)
-		}
 		return r.Storage.RemoveAllButCurrent(*repository.Status.Artifact)
 	}
 	return nil

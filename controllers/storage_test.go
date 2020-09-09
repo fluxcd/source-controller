@@ -113,9 +113,9 @@ func walkTar(tarFile string, match string) (bool, error) {
 	return false, nil
 }
 
-func testPatterns(t *testing.T, artifact sourcev1.Artifact, table ignoreMap) {
+func testPatterns(t *testing.T, dir string, artifact sourcev1.Artifact, table ignoreMap) {
 	for name, expected := range table {
-		res, err := walkTar(artifact.Path, name)
+		res, err := walkTar(filepath.Join(dir, artifact.Path), name)
 		if err != nil {
 			t.Fatalf("while reading tarball: %v", err)
 		}
@@ -130,13 +130,7 @@ func testPatterns(t *testing.T, artifact sourcev1.Artifact, table ignoreMap) {
 	}
 }
 
-func createArchive(t *testing.T, filenames []string, sourceIgnore string, spec sourcev1.GitRepositorySpec) sourcev1.Artifact {
-	dir, err := createStoragePath()
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(cleanupStoragePath(dir))
-
+func createArchive(t *testing.T, dir string, filenames []string, sourceIgnore string, spec sourcev1.GitRepositorySpec) sourcev1.Artifact {
 	storage, err := NewStorage(dir, "hostname", time.Minute)
 	if err != nil {
 		t.Fatalf("Error while bootstrapping storage: %v", err)
@@ -197,7 +191,13 @@ func TestArchiveBasic(t *testing.T) {
 		".gitignore": false,
 	}
 
-	testPatterns(t, createArchive(t, []string{"README.md", ".gitignore"}, "", sourcev1.GitRepositorySpec{}), table)
+	dir, err := createStoragePath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(cleanupStoragePath(dir))
+
+	testPatterns(t, dir, createArchive(t, dir, []string{"README.md", ".gitignore"}, "", sourcev1.GitRepositorySpec{}), table)
 }
 
 func TestArchiveIgnore(t *testing.T) {
@@ -221,8 +221,14 @@ func TestArchiveIgnore(t *testing.T) {
 		table[item] = false
 	}
 
+	dir, err := createStoragePath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(cleanupStoragePath(dir))
+
 	t.Run("automatically ignored files", func(t *testing.T) {
-		testPatterns(t, createArchive(t, filenames, "", sourcev1.GitRepositorySpec{}), table)
+		testPatterns(t, dir, createArchive(t, dir, filenames, "", sourcev1.GitRepositorySpec{}), table)
 	})
 
 	table = ignoreMap{}
@@ -231,7 +237,7 @@ func TestArchiveIgnore(t *testing.T) {
 	}
 
 	t.Run("only vcs ignored files", func(t *testing.T) {
-		testPatterns(t, createArchive(t, filenames, "", sourcev1.GitRepositorySpec{Ignore: stringPtr("")}), table)
+		testPatterns(t, dir, createArchive(t, dir, filenames, "", sourcev1.GitRepositorySpec{Ignore: stringPtr("")}), table)
 	})
 
 	filenames = append(filenames, "test.txt")
@@ -239,7 +245,7 @@ func TestArchiveIgnore(t *testing.T) {
 	sourceIgnoreFile := "*.txt"
 
 	t.Run("sourceignore injected via CRD", func(t *testing.T) {
-		testPatterns(t, createArchive(t, filenames, "", sourcev1.GitRepositorySpec{Ignore: stringPtr(sourceIgnoreFile)}), table)
+		testPatterns(t, dir, createArchive(t, dir, filenames, "", sourcev1.GitRepositorySpec{Ignore: stringPtr(sourceIgnoreFile)}), table)
 	})
 
 	table = ignoreMap{}
@@ -248,7 +254,7 @@ func TestArchiveIgnore(t *testing.T) {
 	}
 
 	t.Run("sourceignore injected via filename", func(t *testing.T) {
-		testPatterns(t, createArchive(t, filenames, sourceIgnoreFile, sourcev1.GitRepositorySpec{}), table)
+		testPatterns(t, dir, createArchive(t, dir, filenames, sourceIgnoreFile, sourcev1.GitRepositorySpec{}), table)
 	})
 }
 
