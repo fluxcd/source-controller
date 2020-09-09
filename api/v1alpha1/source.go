@@ -14,12 +14,6 @@ type Source interface {
 	GetInterval() metav1.Duration
 }
 
-const (
-	// ReconcileAtAnnotation is the annotation used for triggering a
-	// reconciliation outside of the defined schedule.
-	ReconcileAtAnnotation string = "fluxcd.io/reconcileAt"
-)
-
 // filterOutSourceCondition returns a new SourceCondition slice without the
 // SourceCondition of the given type.
 func filterOutSourceCondition(conditions []SourceCondition, condition string) []SourceCondition {
