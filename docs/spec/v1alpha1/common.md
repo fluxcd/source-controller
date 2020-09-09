@@ -54,9 +54,9 @@ kubectl annotate --overwrite gitrepository/podinfo fluxcd.io/reconcileAt="$(date
 Source objects should contain a status sub-resource that embeds an artifact object:
 
 ```go
-// Artifact represents the output of a source synchronisation
+// Artifact represents the output of a source synchronisation.
 type Artifact struct {
-	// Path is the local file path of this artifact.
+	// Path is the relative file path of this artifact.
 	// +required
 	Path string `json:"path"`
 
@@ -64,11 +64,15 @@ type Artifact struct {
 	// +required
 	URL string `json:"url"`
 
-	// Revision is a human readable identifier traceable in the origin source system.
-	// It can be a commit sha, git tag, a helm index timestamp,
-	// a helm chart version, a checksum, etc.
+	// Revision is a human readable identifier traceable in the origin
+	// source system. It can be a Git commit sha, Git tag, a Helm index
+	// timestamp, a Helm chart version, etc.
 	// +optional
 	Revision string `json:"revision"`
+
+	// Checksum is the SHA1 checksum of the artifact.
+	// +optional
+	Checksum string `json:"checksum"`
 
 	// LastUpdateTime is the timestamp corresponding to the last
 	// update of this artifact.

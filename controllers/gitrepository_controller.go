@@ -212,8 +212,10 @@ func (r *GitRepositoryReconciler) reconcile(ctx context.Context, repository sour
 		}
 	}
 
+	// TODO(hidde): implement checksum when https://github.com/fluxcd/source-controller/pull/133
+	//   has been merged.
 	artifact := r.Storage.ArtifactFor(repository.Kind, repository.ObjectMeta.GetObjectMeta(),
-		fmt.Sprintf("%s.tar.gz", commit.Hash.String()), revision)
+		fmt.Sprintf("%s.tar.gz", commit.Hash.String()), revision, "")
 
 	// create artifact dir
 	err = r.Storage.MkdirAll(artifact)

@@ -229,7 +229,7 @@ func (r *HelmRepositoryReconciler) reconcile(ctx context.Context, repository sou
 
 	sum := r.Storage.Checksum(index)
 	artifact := r.Storage.ArtifactFor(repository.Kind, repository.ObjectMeta.GetObjectMeta(),
-		fmt.Sprintf("index-%s.yaml", sum), sum)
+		fmt.Sprintf("index-%s.yaml", sum), i.Generated.Format(time.RFC3339Nano), sum)
 
 	// create artifact dir
 	err = r.Storage.MkdirAll(artifact)

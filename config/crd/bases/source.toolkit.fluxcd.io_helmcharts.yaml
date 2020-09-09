@@ -101,18 +101,21 @@ spec:
                 description: Artifact represents the output of the last successful
                   chart sync.
                 properties:
+                  checksum:
+                    description: Checksum is the SHA1 checksum of the artifact.
+                    type: string
                   lastUpdateTime:
                     description: LastUpdateTime is the timestamp corresponding to
                       the last update of this artifact.
                     format: date-time
                     type: string
                   path:
-                    description: Path is the local file path of this artifact.
+                    description: Path is the relative file path of this artifact.
                     type: string
                   revision:
                     description: Revision is a human readable identifier traceable
-                      in the origin source system. It can be a commit sha, git tag,
-                      a helm index timestamp, a helm chart version, a checksum, etc.
+                      in the origin source system. It can be a Git commit sha, Git
+                      tag, a Helm index timestamp, a Helm chart version, etc.
                     type: string
                   url:
                     description: URL is the HTTP address of this artifact.

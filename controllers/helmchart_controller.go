@@ -261,7 +261,7 @@ func (r *HelmChartReconciler) reconcileFromHelmRepository(ctx context.Context,
 
 	sum := r.Storage.Checksum(chartBytes)
 	artifact := r.Storage.ArtifactFor(chart.Kind, chart.GetObjectMeta(),
-		fmt.Sprintf("%s-%s-%s.tgz", cv.Name, cv.Version, sum), cv.Version)
+		fmt.Sprintf("%s-%s-%s.tgz", cv.Name, cv.Version, sum), cv.Version, sum)
 
 	// create artifact dir
 	err = r.Storage.MkdirAll(artifact)
@@ -365,8 +365,10 @@ func (r *HelmChartReconciler) reconcileFromGitRepository(ctx context.Context,
 		return chart, nil
 	}
 
+	// TODO(hidde): implement checksum when https://github.com/fluxcd/source-controller/pull/133
+	//   has been merged.
 	artifact := r.Storage.ArtifactFor(chart.Kind, chart.ObjectMeta.GetObjectMeta(),
-		fmt.Sprintf("%s-%s.tgz", chartMetadata.Name, chartMetadata.Version), chartMetadata.Version)
+		fmt.Sprintf("%s-%s.tgz", chartMetadata.Name, chartMetadata.Version), chartMetadata.Version, "")
 
 	// create artifact dir
 	err = r.Storage.MkdirAll(artifact)

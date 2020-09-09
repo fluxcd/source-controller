@@ -70,7 +70,7 @@ func NewStorage(basePath string, hostname string, timeout time.Duration) (*Stora
 }
 
 // ArtifactFor returns an artifact for the v1alpha1.Source.
-func (s *Storage) ArtifactFor(kind string, metadata metav1.Object, fileName, revision string) sourcev1.Artifact {
+func (s *Storage) ArtifactFor(kind string, metadata metav1.Object, fileName, revision, checksum string) sourcev1.Artifact {
 	path := sourcev1.ArtifactPath(kind, metadata.GetNamespace(), metadata.GetName(), fileName)
 	localPath := filepath.Join(s.BasePath, path)
 	url := fmt.Sprintf("http://%s/%s", s.Hostname, path)
@@ -79,6 +79,7 @@ func (s *Storage) ArtifactFor(kind string, metadata metav1.Object, fileName, rev
 		Path:           localPath,
 		URL:            url,
 		Revision:       revision,
+		Checksum:       checksum,
 		LastUpdateTime: metav1.Now(),
 	}
 }
