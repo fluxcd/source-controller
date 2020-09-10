@@ -104,7 +104,8 @@ func (r *HelmRepositoryReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 	}
 
 	// set initial status
-	if repository.Generation == 0 || repository.GetArtifact() != nil && !r.Storage.ArtifactExist(*repository.GetArtifact()) {
+	if repository.Generation != repository.Status.ObservedGeneration ||
+		repository.GetArtifact() != nil && !r.Storage.ArtifactExist(*repository.GetArtifact()) {
 		repository = sourcev1.HelmRepositoryProgressing(repository)
 		if err := r.Status().Update(ctx, &repository); err != nil {
 			log.Error(err, "unable to update status")

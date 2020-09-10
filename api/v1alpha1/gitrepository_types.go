@@ -99,6 +99,11 @@ type GitRepositoryVerification struct {
 
 // GitRepositoryStatus defines the observed state of a Git repository.
 type GitRepositoryStatus struct {
+	// ObservedGeneration is the last observed generation.
+	// +optional
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+
+	// Conditions holds the conditions for the GitRepository.
 	// +optional
 	Conditions []SourceCondition `json:"conditions,omitempty"`
 
@@ -126,6 +131,7 @@ const (
 // to SourceCondition of type Ready with status unknown and
 // progressing reason and message. It returns the modified GitRepository.
 func GitRepositoryProgressing(repository GitRepository) GitRepository {
+	repository.Status.ObservedGeneration = repository.Generation
 	repository.Status.URL = ""
 	repository.Status.Artifact = nil
 	repository.Status.Conditions = []SourceCondition{}

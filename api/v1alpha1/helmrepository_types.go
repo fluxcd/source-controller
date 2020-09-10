@@ -54,6 +54,11 @@ type HelmRepositorySpec struct {
 
 // HelmRepositoryStatus defines the observed state of the HelmRepository.
 type HelmRepositoryStatus struct {
+	// ObservedGeneration is the last observed generation.
+	// +optional
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+
+	// Conditions holds the conditions for the HelmRepository.
 	// +optional
 	Conditions []SourceCondition `json:"conditions,omitempty"`
 
@@ -80,6 +85,7 @@ const (
 // to SourceCondition of type Ready with status unknown and
 // progressing reason and message. It returns the modified HelmRepository.
 func HelmRepositoryProgressing(repository HelmRepository) HelmRepository {
+	repository.Status.ObservedGeneration = repository.Generation
 	repository.Status.URL = ""
 	repository.Status.Artifact = nil
 	repository.Status.Conditions = []SourceCondition{}

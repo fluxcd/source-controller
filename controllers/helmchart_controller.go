@@ -104,7 +104,8 @@ func (r *HelmChartReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	}
 
 	// set initial status
-	if chart.Generation == 0 || chart.GetArtifact() != nil && !r.Storage.ArtifactExist(*chart.GetArtifact()) {
+	if chart.Generation != chart.Status.ObservedGeneration ||
+		chart.GetArtifact() != nil && !r.Storage.ArtifactExist(*chart.GetArtifact()) {
 		chart = sourcev1.HelmChartProgressing(chart)
 		if err := r.Status().Update(ctx, &chart); err != nil {
 			log.Error(err, "unable to update status")

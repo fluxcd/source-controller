@@ -99,7 +99,8 @@ func (r *GitRepositoryReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 	}
 
 	// set initial status
-	if repository.Generation == 0 || repository.GetArtifact() != nil && !r.Storage.ArtifactExist(*repository.GetArtifact()) {
+	if repository.Generation != repository.Status.ObservedGeneration ||
+		repository.GetArtifact() != nil && !r.Storage.ArtifactExist(*repository.GetArtifact()) {
 		repository = sourcev1.GitRepositoryProgressing(repository)
 		if err := r.Status().Update(ctx, &repository); err != nil {
 			log.Error(err, "unable to update status")

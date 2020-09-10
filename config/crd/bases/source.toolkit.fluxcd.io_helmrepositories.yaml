@@ -105,6 +105,7 @@ spec:
                 - url
                 type: object
               conditions:
+                description: Conditions holds the conditions for the HelmRepository.
                 items:
                   description: SourceCondition contains condition information for
                     a source.
@@ -134,6 +135,10 @@ spec:
                   - type
                   type: object
                 type: array
+              observedGeneration:
+                description: ObservedGeneration is the last observed generation.
+                format: int64
+                type: integer
               url:
                 description: URL is the download link for the last index fetched.
                 type: string

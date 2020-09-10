@@ -62,6 +62,11 @@ type LocalHelmChartSourceReference struct {
 
 // HelmChartStatus defines the observed state of the HelmChart.
 type HelmChartStatus struct {
+	// ObservedGeneration is the last observed generation.
+	// +optional
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+
+	// Conditions holds the conditions for the HelmChart.
 	// +optional
 	Conditions []SourceCondition `json:"conditions,omitempty"`
 
@@ -95,6 +100,7 @@ const (
 // HelmChartProgressing resets any failures and registers progress toward reconciling the given HelmChart
 // by setting the ReadyCondition to ConditionUnknown for ProgressingReason.
 func HelmChartProgressing(chart HelmChart) HelmChart {
+	chart.Status.ObservedGeneration = chart.Generation
 	chart.Status.URL = ""
 	chart.Status.Artifact = nil
 	chart.Status.Conditions = []SourceCondition{}
