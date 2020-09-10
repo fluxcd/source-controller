@@ -54,6 +54,11 @@ type HelmRepositorySpec struct {
 
 // HelmRepositoryStatus defines the observed state of the HelmRepository.
 type HelmRepositoryStatus struct {
+	// ObservedGeneration is the last observed generation.
+	// +optional
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+
+	// Conditions holds the conditions for the HelmRepository.
 	// +optional
 	Conditions []SourceCondition `json:"conditions,omitempty"`
 
@@ -76,62 +81,46 @@ const (
 	IndexationSucceededReason string = "IndexationSucceed"
 )
 
-// HelmRepositoryReady sets the given artifact and url on the
-// HelmRepository and resets the conditions to SourceCondition of
-// type Ready with status true and the given reason and message.
-// It returns the modified HelmRepository.
-func HelmRepositoryReady(repository HelmRepository, artifact Artifact, url, reason, message string) HelmRepository {
-	repository.Status.Conditions = []SourceCondition{
-		{
-			Type:               ReadyCondition,
-			Status:             corev1.ConditionTrue,
-			LastTransitionTime: metav1.Now(),
-			Reason:             reason,
-			Message:            message,
-		},
-	}
-	repository.Status.URL = url
-
-	if repository.Status.Artifact != nil {
-		if repository.Status.Artifact.Path != artifact.Path {
-			repository.Status.Artifact = &artifact
-		}
-	} else {
-		repository.Status.Artifact = &artifact
-	}
-
-	return repository
-}
-
 // HelmRepositoryProgressing resets the conditions of the HelmRepository
 // to SourceCondition of type Ready with status unknown and
 // progressing reason and message. It returns the modified HelmRepository.
 func HelmRepositoryProgressing(repository HelmRepository) HelmRepository {
-	repository.Status.Conditions = []SourceCondition{
-		{
-			Type:               ReadyCondition,
-			Status:             corev1.ConditionUnknown,
-			LastTransitionTime: metav1.Now(),
-			Reason:             ProgressingReason,
-			Message:            "reconciliation in progress",
-		},
-	}
+	repository.Status.ObservedGeneration = repository.Generation
+	repository.Status.URL = ""
+	repository.Status.Artifact = nil
+	repository.Status.Conditions = []SourceCondition{}
+	SetHelmRepositoryCondition(&repository, ReadyCondition, corev1.ConditionUnknown, ProgressingReason, "reconciliation in progress")
 	return repository
 }
 
-// HelmRepositoryNotReady resets the conditions of the HelmRepository
-// to SourceCondition of type Ready with status false and the given
-// reason and message. It returns the modified HelmRepository.
+// SetHelmRepositoryCondition sets the given condition with the given status,
+// reason and message on the HelmRepository.
+func SetHelmRepositoryCondition(repository *HelmRepository, condition string, status corev1.ConditionStatus, reason, message string) {
+	repository.Status.Conditions = filterOutSourceCondition(repository.Status.Conditions, condition)
+	repository.Status.Conditions = append(repository.Status.Conditions, SourceCondition{
+		Type:               condition,
+		Status:             status,
+		LastTransitionTime: metav1.Now(),
+		Reason:             reason,
+		Message:            message,
+	})
+}
+
+// HelmRepositoryReady sets the given artifact and url on the HelmRepository
+// and sets the ReadyCondition to True, with the given reason and
+// message. It returns the modified HelmRepository.
+func HelmRepositoryReady(repository HelmRepository, artifact Artifact, url, reason, message string) HelmRepository {
+	repository.Status.Artifact = &artifact
+	repository.Status.URL = url
+	SetHelmRepositoryCondition(&repository, ReadyCondition, corev1.ConditionTrue, reason, message)
+	return repository
+}
+
+// HelmRepositoryNotReady sets the ReadyCondition on the given HelmRepository
+// to False, with the given reason and message. It returns the modified
+// HelmRepository.
 func HelmRepositoryNotReady(repository HelmRepository, reason, message string) HelmRepository {
-	repository.Status.Conditions = []SourceCondition{
-		{
-			Type:               ReadyCondition,
-			Status:             corev1.ConditionFalse,
-			LastTransitionTime: metav1.Now(),
-			Reason:             reason,
-			Message:            message,
-		},
-	}
+	SetHelmRepositoryCondition(&repository, ReadyCondition, corev1.ConditionFalse, reason, message)
 	return repository
 }
 

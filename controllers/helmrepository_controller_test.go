@@ -140,7 +140,7 @@ var _ = Describe("HelmRepositoryReconciler", func() {
 			Eventually(func() error {
 				r := &sourcev1.HelmRepository{}
 				return k8sClient.Get(context.Background(), key, r)
-			}).ShouldNot(Succeed())
+			}, timeout, interval).ShouldNot(Succeed())
 
 			exists := func(path string) bool {
 				// wait for tmp sync on macOS

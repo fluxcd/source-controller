@@ -10,7 +10,7 @@ require (
 	github.com/fluxcd/pkg/helmtestserver v0.0.1
 	github.com/fluxcd/pkg/lockedfile v0.0.5
 	github.com/fluxcd/pkg/recorder v0.0.6
-	github.com/fluxcd/pkg/runtime v0.0.0-20200909163337-e7e634246495
+	github.com/fluxcd/pkg/runtime v0.0.1
 	github.com/fluxcd/pkg/ssh v0.0.5
 	github.com/fluxcd/pkg/untar v0.0.5
 	github.com/fluxcd/source-controller/api v0.0.14

@@ -744,6 +744,18 @@ are.</p>
 <tbody>
 <tr>
 <td>
+<code>observedGeneration</code><br>
+<em>
+int64
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>ObservedGeneration is the last observed generation.</p>
+</td>
+</tr>
+<tr>
+<td>
 <code>conditions</code><br>
 <em>
 <a href="#source.toolkit.fluxcd.io/v1alpha1.SourceCondition">
@@ -753,6 +765,7 @@ are.</p>
 </td>
 <td>
 <em>(Optional)</em>
+<p>Conditions holds the conditions for the GitRepository.</p>
 </td>
 </tr>
 <tr>
@@ -921,6 +934,18 @@ Kubernetes meta/v1.Duration
 <tbody>
 <tr>
 <td>
+<code>observedGeneration</code><br>
+<em>
+int64
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>ObservedGeneration is the last observed generation.</p>
+</td>
+</tr>
+<tr>
+<td>
 <code>conditions</code><br>
 <em>
 <a href="#source.toolkit.fluxcd.io/v1alpha1.SourceCondition">
@@ -930,6 +955,7 @@ Kubernetes meta/v1.Duration
 </td>
 <td>
 <em>(Optional)</em>
+<p>Conditions holds the conditions for the HelmChart.</p>
 </td>
 </tr>
 <tr>
@@ -1059,6 +1085,18 @@ Kubernetes meta/v1.Duration
 <tbody>
 <tr>
 <td>
+<code>observedGeneration</code><br>
+<em>
+int64
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>ObservedGeneration is the last observed generation.</p>
+</td>
+</tr>
+<tr>
+<td>
 <code>conditions</code><br>
 <em>
 <a href="#source.toolkit.fluxcd.io/v1alpha1.SourceCondition">
@@ -1068,6 +1106,7 @@ Kubernetes meta/v1.Duration
 </td>
 <td>
 <em>(Optional)</em>
+<p>Conditions holds the conditions for the HelmRepository.</p>
 </td>
 </tr>
 <tr>

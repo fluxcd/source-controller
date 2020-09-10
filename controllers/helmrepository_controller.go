@@ -17,6 +17,7 @@ limitations under the License.
 package controllers
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io/ioutil"
@@ -29,7 +30,6 @@ import (
 	"helm.sh/helm/v3/pkg/getter"
 	"helm.sh/helm/v3/pkg/repo"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	kuberecorder "k8s.io/client-go/tools/record"
@@ -41,6 +41,7 @@ import (
 
 	"github.com/fluxcd/pkg/recorder"
 	"github.com/fluxcd/pkg/runtime/predicates"
+
 	sourcev1 "github.com/fluxcd/source-controller/api/v1alpha1"
 	"github.com/fluxcd/source-controller/internal/helm"
 )
@@ -103,13 +104,8 @@ func (r *HelmRepositoryReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 	}
 
 	// set initial status
-	if reset, status := r.shouldResetStatus(repository); reset {
-		repository.Status = status
-		if err := r.Status().Update(ctx, &repository); err != nil {
-			log.Error(err, "unable to update status")
-			return ctrl.Result{Requeue: true}, err
-		}
-	} else {
+	if repository.Generation != repository.Status.ObservedGeneration ||
+		repository.GetArtifact() != nil && !r.Storage.ArtifactExist(*repository.GetArtifact()) {
 		repository = sourcev1.HelmRepositoryProgressing(repository)
 		if err := r.Status().Update(ctx, &repository); err != nil {
 			log.Error(err, "unable to update status")
@@ -206,31 +202,36 @@ func (r *HelmRepositoryReconciler) reconcile(ctx context.Context, repository sou
 	}
 
 	clientOpts = append(clientOpts, getter.WithTimeout(repository.GetTimeout()))
-
 	res, err := c.Get(u.String(), clientOpts...)
 	if err != nil {
 		return sourcev1.HelmRepositoryNotReady(repository, sourcev1.IndexationFailedReason, err.Error()), err
 	}
 
-	data, err := ioutil.ReadAll(res)
+	b, err := ioutil.ReadAll(res)
 	if err != nil {
 		return sourcev1.HelmRepositoryNotReady(repository, sourcev1.IndexationFailedReason, err.Error()), err
 	}
-
-	i := &repo.IndexFile{}
-	if err := yaml.Unmarshal(data, i); err != nil {
+	i := repo.IndexFile{}
+	if err := yaml.Unmarshal(b, &i); err != nil {
 		return sourcev1.HelmRepositoryNotReady(repository, sourcev1.IndexationFailedReason, err.Error()), err
 	}
+
+	// return early on unchanged generation
+	artifact := r.Storage.NewArtifactFor(repository.Kind, repository.ObjectMeta.GetObjectMeta(), i.Generated.Format(time.RFC3339Nano),
+		fmt.Sprintf("index-%s.yaml", url.PathEscape(i.Generated.Format(time.RFC3339Nano))))
+	if repository.GetArtifact() != nil && repository.GetArtifact().Revision == i.Generated.Format(time.RFC3339Nano) {
+		if artifact.URL != repository.GetArtifact().URL {
+			r.Storage.SetArtifactURL(repository.GetArtifact())
+			repository.Status.URL = r.Storage.SetHostname(repository.Status.URL)
+		}
+		return repository, nil
+	}
+
 	i.SortEntries()
-
-	index, err := yaml.Marshal(i)
+	b, err = yaml.Marshal(&i)
 	if err != nil {
 		return sourcev1.HelmRepositoryNotReady(repository, sourcev1.IndexationFailedReason, err.Error()), err
 	}
-
-	sum := r.Storage.Checksum(index)
-	artifact := r.Storage.ArtifactFor(repository.Kind, repository.ObjectMeta.GetObjectMeta(),
-		fmt.Sprintf("index-%s.yaml", sum), i.Generated.Format(time.RFC3339Nano), sum)
 
 	// create artifact dir
 	err = r.Storage.MkdirAll(artifact)
@@ -248,8 +249,7 @@ func (r *HelmRepositoryReconciler) reconcile(ctx context.Context, repository sou
 	defer unlock()
 
 	// save artifact to storage
-	err = r.Storage.WriteFile(artifact, index)
-	if err != nil {
+	if err := r.Storage.AtomicWriteFile(&artifact, bytes.NewReader(b), 0644); err != nil {
 		err = fmt.Errorf("unable to write repository index file: %w", err)
 		return sourcev1.HelmRepositoryNotReady(repository, sourcev1.StorageOperationFailedReason, err.Error()), err
 	}
@@ -265,41 +265,14 @@ func (r *HelmRepositoryReconciler) reconcile(ctx context.Context, repository sou
 	return sourcev1.HelmRepositoryReady(repository, artifact, indexURL, sourcev1.IndexationSucceededReason, message), nil
 }
 
-// shouldResetStatus returns a boolean indicating if the status of the
-// given repository should be reset.
-func (r *HelmRepositoryReconciler) shouldResetStatus(repository sourcev1.HelmRepository) (bool, sourcev1.HelmRepositoryStatus) {
-	resetStatus := false
-	if repository.Status.Artifact != nil {
-		if !r.Storage.ArtifactExist(*repository.Status.Artifact) {
-			resetStatus = true
-		}
-	}
-
-	// set initial status
-	if len(repository.Status.Conditions) == 0 {
-		resetStatus = true
-	}
-
-	return resetStatus, sourcev1.HelmRepositoryStatus{
-		Conditions: []sourcev1.SourceCondition{
-			{
-				Type:               sourcev1.ReadyCondition,
-				Status:             corev1.ConditionUnknown,
-				Reason:             sourcev1.InitializingReason,
-				LastTransitionTime: metav1.Now(),
-			},
-		},
-	}
-}
-
 // gc performs a garbage collection on all but current artifacts of
 // the given repository.
 func (r *HelmRepositoryReconciler) gc(repository sourcev1.HelmRepository, all bool) error {
 	if all {
-		return r.Storage.RemoveAll(r.Storage.ArtifactFor(repository.Kind, repository.GetObjectMeta(), "", "", ""))
+		return r.Storage.RemoveAll(r.Storage.NewArtifactFor(repository.Kind, repository.GetObjectMeta(), "", ""))
 	}
-	if repository.Status.Artifact != nil {
-		return r.Storage.RemoveAllButCurrent(*repository.Status.Artifact)
+	if repository.GetArtifact() != nil {
+		return r.Storage.RemoveAllButCurrent(*repository.GetArtifact())
 	}
 	return nil
 }

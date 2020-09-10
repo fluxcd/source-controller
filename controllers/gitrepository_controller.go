@@ -28,7 +28,6 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/transport"
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	kuberecorder "k8s.io/client-go/tools/record"
@@ -100,13 +99,8 @@ func (r *GitRepositoryReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 	}
 
 	// set initial status
-	if reset, status := r.shouldResetStatus(repository); reset {
-		repository.Status = status
-		if err := r.Status().Update(ctx, &repository); err != nil {
-			log.Error(err, "unable to update status")
-			return ctrl.Result{Requeue: true}, err
-		}
-	} else {
+	if repository.Generation != repository.Status.ObservedGeneration ||
+		repository.GetArtifact() != nil && !r.Storage.ArtifactExist(*repository.GetArtifact()) {
 		repository = sourcev1.GitRepositoryProgressing(repository)
 		if err := r.Status().Update(ctx, &repository); err != nil {
 			log.Error(err, "unable to update status")
@@ -202,6 +196,16 @@ func (r *GitRepositoryReconciler) reconcile(ctx context.Context, repository sour
 		return sourcev1.GitRepositoryNotReady(repository, sourcev1.GitOperationFailedReason, err.Error()), err
 	}
 
+	// return early on unchanged revision
+	artifact := r.Storage.NewArtifactFor(repository.Kind, repository.GetObjectMeta(), revision, fmt.Sprintf("%s.tar.gz", commit.Hash.String()))
+	if repository.GetArtifact() != nil && repository.GetArtifact().Revision == revision {
+		if artifact.URL != repository.GetArtifact().URL {
+			r.Storage.SetArtifactURL(repository.GetArtifact())
+			repository.Status.URL = r.Storage.SetHostname(repository.Status.URL)
+		}
+		return repository, nil
+	}
+
 	// verify PGP signature
 	if repository.Spec.Verification != nil {
 		err := r.verify(ctx, types.NamespacedName{
@@ -212,11 +216,6 @@ func (r *GitRepositoryReconciler) reconcile(ctx context.Context, repository sour
 			return sourcev1.GitRepositoryNotReady(repository, sourcev1.VerificationFailedReason, err.Error()), err
 		}
 	}
-
-	// TODO(hidde): implement checksum when https://github.com/fluxcd/source-controller/pull/133
-	//   has been merged.
-	artifact := r.Storage.ArtifactFor(repository.Kind, repository.ObjectMeta.GetObjectMeta(),
-		fmt.Sprintf("%s.tar.gz", commit.Hash.String()), revision, "")
 
 	// create artifact dir
 	err = r.Storage.MkdirAll(artifact)
@@ -234,7 +233,7 @@ func (r *GitRepositoryReconciler) reconcile(ctx context.Context, repository sour
 	defer unlock()
 
 	// archive artifact and check integrity
-	if err := r.Storage.Archive(artifact, tmpGit, repository.Spec); err != nil {
+	if err := r.Storage.Archive(&artifact, tmpGit, repository.Spec); err != nil {
 		err = fmt.Errorf("storage archive error: %w", err)
 		return sourcev1.GitRepositoryNotReady(repository, sourcev1.StorageOperationFailedReason, err.Error()), err
 	}
@@ -248,32 +247,6 @@ func (r *GitRepositoryReconciler) reconcile(ctx context.Context, repository sour
 
 	message := fmt.Sprintf("Fetched revision: %s", artifact.Revision)
 	return sourcev1.GitRepositoryReady(repository, artifact, url, sourcev1.GitOperationSucceedReason, message), nil
-}
-
-// shouldResetStatus returns a boolean indicating if the status of the
-// given repository should be reset.
-func (r *GitRepositoryReconciler) shouldResetStatus(repository sourcev1.GitRepository) (bool, sourcev1.GitRepositoryStatus) {
-	resetStatus := false
-	if repository.Status.Artifact != nil {
-		if !r.Storage.ArtifactExist(*repository.Status.Artifact) {
-			resetStatus = true
-		}
-	}
-
-	if len(repository.Status.Conditions) == 0 || resetStatus {
-		resetStatus = true
-	}
-
-	return resetStatus, sourcev1.GitRepositoryStatus{
-		Conditions: []sourcev1.SourceCondition{
-			{
-				Type:               sourcev1.ReadyCondition,
-				Status:             corev1.ConditionUnknown,
-				Reason:             sourcev1.InitializingReason,
-				LastTransitionTime: metav1.Now(),
-			},
-		},
-	}
 }
 
 // verify returns an error if the PGP signature can't be verified
@@ -304,10 +277,10 @@ func (r *GitRepositoryReconciler) verify(ctx context.Context, publicKeySecret ty
 // the given repository.
 func (r *GitRepositoryReconciler) gc(repository sourcev1.GitRepository, all bool) error {
 	if all {
-		return r.Storage.RemoveAll(r.Storage.ArtifactFor(repository.Kind, repository.GetObjectMeta(), "", "", ""))
+		return r.Storage.RemoveAll(r.Storage.NewArtifactFor(repository.Kind, repository.GetObjectMeta(), "", ""))
 	}
-	if repository.Status.Artifact != nil {
-		return r.Storage.RemoveAllButCurrent(*repository.Status.Artifact)
+	if repository.GetArtifact() != nil {
+		return r.Storage.RemoveAllButCurrent(*repository.GetArtifact())
 	}
 	return nil
 }
