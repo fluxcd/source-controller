@@ -41,6 +41,11 @@ type HelmChartSpec struct {
 	// The interval at which to check the Source for updates.
 	// +required
 	Interval metav1.Duration `json:"interval"`
+
+	// Alternative values file to use as the default chart values, expected to be
+	// a relative path in the SourceRef. Ignored when omitted.
+	// +optional
+	ValuesFile string `json:"valuesFile,omitempty"`
 }
 
 // LocalHelmChartSourceReference contains enough information to let you locate the
