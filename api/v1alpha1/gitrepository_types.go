@@ -122,62 +122,45 @@ const (
 	GitOperationFailedReason string = "GitOperationFailed"
 )
 
-// GitRepositoryReady sets the given artifact and url on the
-// GitRepository and resets the conditions to SourceCondition of
-// type Ready with status true and the given reason and message.
-// It returns the modified GitRepository.
-func GitRepositoryReady(repository GitRepository, artifact Artifact, url, reason, message string) GitRepository {
-	repository.Status.Conditions = []SourceCondition{
-		{
-			Type:               ReadyCondition,
-			Status:             corev1.ConditionTrue,
-			LastTransitionTime: metav1.Now(),
-			Reason:             reason,
-			Message:            message,
-		},
-	}
-	repository.Status.URL = url
-
-	if repository.Status.Artifact != nil {
-		if repository.Status.Artifact.Path != artifact.Path {
-			repository.Status.Artifact = &artifact
-		}
-	} else {
-		repository.Status.Artifact = &artifact
-	}
-
-	return repository
-}
-
 // GitRepositoryProgressing resets the conditions of the GitRepository
 // to SourceCondition of type Ready with status unknown and
 // progressing reason and message. It returns the modified GitRepository.
 func GitRepositoryProgressing(repository GitRepository) GitRepository {
-	repository.Status.Conditions = []SourceCondition{
-		{
-			Type:               ReadyCondition,
-			Status:             corev1.ConditionUnknown,
-			LastTransitionTime: metav1.Now(),
-			Reason:             ProgressingReason,
-			Message:            "reconciliation in progress",
-		},
-	}
+	repository.Status.URL = ""
+	repository.Status.Artifact = nil
+	repository.Status.Conditions = []SourceCondition{}
+	SetGitRepositoryCondition(&repository, ReadyCondition, corev1.ConditionUnknown, ProgressingReason, "reconciliation in progress")
 	return repository
 }
 
-// GitRepositoryNotReady resets the conditions of the GitRepository
-// to SourceCondition of type Ready with status false and the given
-// reason and message. It returns the modified GitRepository.
+// SetGitRepositoryCondition sets the given condition with the given status, reason and message
+// on the GitRepository.
+func SetGitRepositoryCondition(repository *GitRepository, condition string, status corev1.ConditionStatus, reason, message string) {
+	repository.Status.Conditions = filterOutSourceCondition(repository.Status.Conditions, condition)
+	repository.Status.Conditions = append(repository.Status.Conditions, SourceCondition{
+		Type:               condition,
+		Status:             status,
+		LastTransitionTime: metav1.Now(),
+		Reason:             reason,
+		Message:            message,
+	})
+}
+
+// GitRepositoryReady sets the given artifact and url on the GitRepository
+// and sets the ReadyCondition to True, with the given reason and
+// message. It returns the modified GitRepository.
+func GitRepositoryReady(repository GitRepository, artifact Artifact, url, reason, message string) GitRepository {
+	repository.Status.Artifact = &artifact
+	repository.Status.URL = url
+	SetGitRepositoryCondition(&repository, ReadyCondition, corev1.ConditionTrue, reason, message)
+	return repository
+}
+
+// GitRepositoryNotReady sets the ReadyCondition on the given GitRepository
+// to False, with the given reason and message. It returns the modified
+// GitRepository.
 func GitRepositoryNotReady(repository GitRepository, reason, message string) GitRepository {
-	repository.Status.Conditions = []SourceCondition{
-		{
-			Type:               ReadyCondition,
-			Status:             corev1.ConditionFalse,
-			LastTransitionTime: metav1.Now(),
-			Reason:             reason,
-			Message:            message,
-		},
-	}
+	SetGitRepositoryCondition(&repository, ReadyCondition, corev1.ConditionFalse, reason, message)
 	return repository
 }
 

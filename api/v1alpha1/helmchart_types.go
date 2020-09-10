@@ -92,7 +92,7 @@ const (
 	ChartPackageSucceededReason string = "ChartPackageSucceeded"
 )
 
-// HelmReleaseProgressing resets any failures and registers progress toward reconciling the given HelmRelease
+// HelmChartProgressing resets any failures and registers progress toward reconciling the given HelmChart
 // by setting the ReadyCondition to ConditionUnknown for ProgressingReason.
 func HelmChartProgressing(chart HelmChart) HelmChart {
 	chart.Status.URL = ""

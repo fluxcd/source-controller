@@ -159,7 +159,7 @@ func createArchive(t *testing.T, storage *Storage, filenames []string, sourceIgn
 		t.Fatalf("artifact directory creation failed: %v", err)
 	}
 
-	if err := storage.Archive(artifact, gitDir, spec); err != nil {
+	if err := storage.Archive(&artifact, gitDir, spec); err != nil {
 		t.Fatalf("archiving failed: %v", err)
 	}
 

@@ -23,6 +23,7 @@ import (
 	"compress/gzip"
 	"crypto/sha1"
 	"fmt"
+	"hash"
 	"io"
 	"io/ioutil"
 	"os"
@@ -62,7 +63,6 @@ func NewStorage(basePath string, hostname string, timeout time.Duration) (*Stora
 	if f, err := os.Stat(basePath); os.IsNotExist(err) || !f.IsDir() {
 		return nil, fmt.Errorf("invalid dir path: %s", basePath)
 	}
-
 	return &Storage{
 		BasePath: basePath,
 		Hostname: hostname,
@@ -70,18 +70,23 @@ func NewStorage(basePath string, hostname string, timeout time.Duration) (*Stora
 	}, nil
 }
 
-// ArtifactFor returns an artifact for the v1alpha1.Source.
-func (s *Storage) ArtifactFor(kind string, metadata metav1.Object, fileName, revision, checksum string) sourcev1.Artifact {
+// NewArtifactFor returns a new v1alpha1.Artifact.
+func (s *Storage) NewArtifactFor(kind string, metadata metav1.Object, revision, fileName string) sourcev1.Artifact {
 	path := sourcev1.ArtifactPath(kind, metadata.GetNamespace(), metadata.GetName(), fileName)
-	url := fmt.Sprintf("http://%s/%s", s.Hostname, path)
-
-	return sourcev1.Artifact{
-		Path:           path,
-		URL:            url,
-		Revision:       revision,
-		Checksum:       checksum,
-		LastUpdateTime: metav1.Now(),
+	artifact := sourcev1.Artifact{
+		Path:     path,
+		Revision: revision,
 	}
+	s.SetArtifactURL(&artifact)
+	return artifact
+}
+
+// SetArtifactURL sets the URL on the given v1alpha1.Artifact.
+func (s Storage) SetArtifactURL(artifact *sourcev1.Artifact) {
+	if artifact.Path == "" {
+		return
+	}
+	artifact.URL = fmt.Sprintf("http://%s/%s", s.Hostname, artifact.Path)
 }
 
 // MkdirAll calls os.MkdirAll for the given v1alpha1.Artifact base dir.
@@ -132,12 +137,12 @@ func (s *Storage) ArtifactExist(artifact sourcev1.Artifact) bool {
 	return fi.Mode().IsRegular()
 }
 
-// Archive atomically creates a tar.gz to the v1alpha1.Artifact path from the given dir,
-// excluding any VCS specific files and directories, or any of the excludes defined in
-// the excludeFiles.
-func (s *Storage) Archive(artifact sourcev1.Artifact, dir string, spec sourcev1.GitRepositorySpec) (err error) {
-	if _, err := os.Stat(dir); err != nil {
-		return err
+// Archive atomically archives the given directory as a tarball to the given v1alpha1.Artifact
+// path, excluding any VCS specific files and directories, or any of the excludes defined in
+// the excludeFiles. If successful, it sets the checksum and last update time on the artifact.
+func (s *Storage) Archive(artifact *sourcev1.Artifact, dir string, spec sourcev1.GitRepositorySpec) (err error) {
+	if f, err := os.Stat(dir); os.IsNotExist(err) || !f.IsDir() {
+		return fmt.Errorf("invalid dir path: %s", dir)
 	}
 
 	ps, err := loadExcludePatterns(dir, spec)
@@ -146,37 +151,40 @@ func (s *Storage) Archive(artifact sourcev1.Artifact, dir string, spec sourcev1.
 	}
 	matcher := gitignore.NewMatcher(ps)
 
-	localPath := s.LocalPath(artifact)
-	tmpGzFile, err := ioutil.TempFile(filepath.Split(localPath))
+	localPath := s.LocalPath(*artifact)
+	tf, err := ioutil.TempFile(filepath.Split(localPath))
 	if err != nil {
 		return err
 	}
-	tmpName := tmpGzFile.Name()
+	tmpName := tf.Name()
 	defer func() {
 		if err != nil {
 			os.Remove(tmpName)
 		}
 	}()
 
-	gw := gzip.NewWriter(tmpGzFile)
+	h := newHash()
+	mw := io.MultiWriter(h, tf)
+
+	gw := gzip.NewWriter(mw)
 	tw := tar.NewWriter(gw)
 	if err := writeToArchiveExcludeMatches(dir, matcher, tw); err != nil {
 		tw.Close()
 		gw.Close()
-		tmpGzFile.Close()
+		tf.Close()
 		return err
 	}
 
 	if err := tw.Close(); err != nil {
 		gw.Close()
-		tmpGzFile.Close()
+		tf.Close()
 		return err
 	}
 	if err := gw.Close(); err != nil {
-		tmpGzFile.Close()
+		tf.Close()
 		return err
 	}
-	if err := tmpGzFile.Close(); err != nil {
+	if err := tf.Close(); err != nil {
 		return err
 	}
 
@@ -184,7 +192,13 @@ func (s *Storage) Archive(artifact sourcev1.Artifact, dir string, spec sourcev1.
 		return err
 	}
 
-	return fs.RenameWithFallback(tmpName, localPath)
+	if err := fs.RenameWithFallback(tmpName, localPath); err != nil {
+		return err
+	}
+
+	artifact.Checksum = fmt.Sprintf("%x", h.Sum(nil))
+	artifact.LastUpdateTime = metav1.Now()
+	return nil
 }
 
 // writeToArchiveExcludeMatches walks over the given dir and writes any regular file that does
@@ -239,33 +253,81 @@ func writeToArchiveExcludeMatches(dir string, matcher gitignore.Matcher, writer 
 	return filepath.Walk(dir, fn)
 }
 
-// AtomicWriteFile atomically writes a file to the v1alpha1.Artifact Path.
-func (s *Storage) AtomicWriteFile(artifact sourcev1.Artifact, reader io.Reader, mode os.FileMode) (err error) {
-	localPath := s.LocalPath(artifact)
-	tmpFile, err := ioutil.TempFile(filepath.Split(localPath))
+// AtomicWriteFile atomically writes the io.Reader contents to the v1alpha1.Artifact path.
+// If successful, it sets the checksum and last update time on the artifact.
+func (s *Storage) AtomicWriteFile(artifact *sourcev1.Artifact, reader io.Reader, mode os.FileMode) (err error) {
+	localPath := s.LocalPath(*artifact)
+	tf, err := ioutil.TempFile(filepath.Split(localPath))
 	if err != nil {
 		return err
 	}
-	tmpName := tmpFile.Name()
+	tfName := tf.Name()
 	defer func() {
 		if err != nil {
-			os.Remove(tmpName)
+			os.Remove(tfName)
 		}
 	}()
-	if _, err := io.Copy(tmpFile, reader); err != nil {
-		tmpFile.Close()
+
+	h := newHash()
+	mw := io.MultiWriter(h, tf)
+
+	if _, err := io.Copy(mw, reader); err != nil {
+		tf.Close()
 		return err
 	}
-	if err := tmpFile.Close(); err != nil {
+	if err := tf.Close(); err != nil {
 		return err
 	}
-	if err := os.Chmod(tmpName, mode); err != nil {
+
+	if err := os.Chmod(tfName, mode); err != nil {
 		return err
 	}
-	return fs.RenameWithFallback(tmpName, localPath)
+
+	if err := fs.RenameWithFallback(tfName, localPath); err != nil {
+		return err
+	}
+
+	artifact.Checksum = fmt.Sprintf("%x", h.Sum(nil))
+	artifact.LastUpdateTime = metav1.Now()
+	return nil
 }
 
-// Symlink creates or updates a symbolic link for the given artifact
+// Copy atomically copies the io.Reader contents to the v1alpha1.Artifact path.
+// If successful, it sets the checksum and last update time on the artifact.
+func (s *Storage) Copy(artifact *sourcev1.Artifact, reader io.Reader) (err error) {
+	localPath := s.LocalPath(*artifact)
+	tf, err := ioutil.TempFile(filepath.Split(localPath))
+	if err != nil {
+		return err
+	}
+	tfName := tf.Name()
+	defer func() {
+		if err != nil {
+			os.Remove(tfName)
+		}
+	}()
+
+	h := newHash()
+	mw := io.MultiWriter(h, tf)
+
+	if _, err := io.Copy(mw, reader); err != nil {
+		tf.Close()
+		return err
+	}
+	if err := tf.Close(); err != nil {
+		return err
+	}
+
+	if err := fs.RenameWithFallback(tfName, localPath); err != nil {
+		return err
+	}
+
+	artifact.Checksum = fmt.Sprintf("%x", h.Sum(nil))
+	artifact.LastUpdateTime = metav1.Now()
+	return nil
+}
+
+// Symlink creates or updates a symbolic link for the given v1alpha1.Artifact
 // and returns the URL for the symlink.
 func (s *Storage) Symlink(artifact sourcev1.Artifact, linkName string) (string, error) {
 	localPath := s.LocalPath(artifact)
@@ -285,14 +347,13 @@ func (s *Storage) Symlink(artifact sourcev1.Artifact, linkName string) (string, 
 		return "", err
 	}
 
-	parts := strings.Split(artifact.URL, "/")
-	url := strings.Replace(artifact.URL, parts[len(parts)-1], linkName, 1)
+	url := fmt.Sprintf("http://%s/%s", s.Hostname, filepath.Join(filepath.Dir(artifact.Path), linkName))
 	return url, nil
 }
 
 // Checksum returns the SHA1 checksum for the data of the given io.Reader as a string.
 func (s *Storage) Checksum(reader io.Reader) string {
-	h := sha1.New()
+	h := newHash()
 	_, _ = io.Copy(h, reader)
 	return fmt.Sprintf("%x", h.Sum(nil))
 }
@@ -355,4 +416,9 @@ func loadExcludePatterns(dir string, spec sourcev1.GitRepositorySpec) ([]gitigno
 	}
 
 	return ps, nil
+}
+
+// newHash returns a new SHA1 hash.
+func newHash() hash.Hash {
+	return sha1.New()
 }
