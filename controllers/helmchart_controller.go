@@ -196,7 +196,12 @@ func (r *HelmChartReconciler) reconcileFromHelmRepository(ctx context.Context,
 	}
 
 	// return early on unchanged chart version
+	artifact := r.Storage.NewArtifactFor(chart.Kind, chart.GetObjectMeta(), cv.Version, fmt.Sprintf("%s-%s.tgz", cv.Name, cv.Version))
 	if repository.GetArtifact() != nil && repository.GetArtifact().Revision == cv.Version {
+		if artifact.URL != repository.GetArtifact().URL {
+			r.Storage.SetArtifactURL(repository.GetArtifact())
+			repository.Status.URL = r.Storage.SetHostname(repository.Status.URL)
+		}
 		return chart, nil
 	}
 
@@ -259,8 +264,6 @@ func (r *HelmChartReconciler) reconcileFromHelmRepository(ctx context.Context,
 	if err != nil {
 		return sourcev1.HelmChartNotReady(chart, sourcev1.ChartPullFailedReason, err.Error()), err
 	}
-
-	artifact := r.Storage.NewArtifactFor(chart.Kind, chart.GetObjectMeta(), cv.Version, fmt.Sprintf("%s-%s.tgz", cv.Name, cv.Version))
 
 	// create artifact dir
 	err = r.Storage.MkdirAll(artifact)
@@ -359,11 +362,14 @@ func (r *HelmChartReconciler) reconcileFromGitRepository(ctx context.Context,
 	}
 
 	// return early on unchanged chart version
+	artifact := r.Storage.NewArtifactFor(chart.Kind, chart.ObjectMeta.GetObjectMeta(), chartMetadata.Version, fmt.Sprintf("%s-%s.tgz", chartMetadata.Name, chartMetadata.Version))
 	if chart.GetArtifact() != nil && chart.GetArtifact().Revision == chartMetadata.Version {
+		if artifact.URL != repository.GetArtifact().URL {
+			r.Storage.SetArtifactURL(repository.GetArtifact())
+			repository.Status.URL = r.Storage.SetHostname(repository.Status.URL)
+		}
 		return chart, nil
 	}
-
-	artifact := r.Storage.NewArtifactFor(chart.Kind, chart.ObjectMeta.GetObjectMeta(), chartMetadata.Version, fmt.Sprintf("%s-%s.tgz", chartMetadata.Name, chartMetadata.Version))
 
 	// create artifact dir
 	err = r.Storage.MkdirAll(artifact)

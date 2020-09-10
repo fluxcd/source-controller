@@ -26,6 +26,7 @@ import (
 	"hash"
 	"io"
 	"io/ioutil"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -87,6 +88,17 @@ func (s Storage) SetArtifactURL(artifact *sourcev1.Artifact) {
 		return
 	}
 	artifact.URL = fmt.Sprintf("http://%s/%s", s.Hostname, artifact.Path)
+}
+
+// SetHostname sets the hostname of the given URL string to the current Storage.Hostname
+// and returns the result.
+func (s Storage) SetHostname(URL string) string {
+	u, err := url.Parse(URL)
+	if err != nil {
+		return ""
+	}
+	u.Host = s.Hostname
+	return u.String()
 }
 
 // MkdirAll calls os.MkdirAll for the given v1alpha1.Artifact base dir.
