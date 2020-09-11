@@ -30,16 +30,17 @@ spec:
             name: http
           - containerPort: 8080
             name: http-prom
-        args:
-          - --enable-leader-election
-          - --storage-path=/data
-          - --log-level=info
-          - --log-json
         env:
           - name: RUNTIME_NAMESPACE
             valueFrom:
               fieldRef:
                 fieldPath: metadata.namespace
+        args:
+          - --watch-all-namespaces
+          - --log-level=info
+          - --log-json
+          - --enable-leader-election
+          - --storage-path=/data
         livenessProbe:
           httpGet:
             port: http
