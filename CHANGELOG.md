@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.0.15 (2020-09-11)
+
+This prerelease adds support for overwriting the default values of a
+`HelmChart` by defining a `ValuesFile`, adds a `Checksum` field to the
+`Artifact` object, and comes with several improvements to the storage
+and handling of artifacts.
+
 ## 0.0.14 (2020-09-04)
 
 This prerelease comes with Helm v3.3.1.
