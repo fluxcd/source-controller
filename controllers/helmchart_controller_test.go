@@ -260,6 +260,7 @@ var _ = Describe("HelmChartReconciler", func() {
 				}
 				return false
 			}, timeout, interval).Should(BeTrue())
+			Expect(chart.GetArtifact()).NotTo(BeNil())
 			Expect(chart.Status.Artifact.Revision).Should(Equal("0.1.1"))
 		})
 

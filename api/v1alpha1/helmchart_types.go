@@ -102,7 +102,6 @@ const (
 func HelmChartProgressing(chart HelmChart) HelmChart {
 	chart.Status.ObservedGeneration = chart.Generation
 	chart.Status.URL = ""
-	chart.Status.Artifact = nil
 	chart.Status.Conditions = []SourceCondition{}
 	SetHelmChartCondition(&chart, ReadyCondition, corev1.ConditionUnknown, ProgressingReason, "reconciliation in progress")
 	return chart

@@ -133,7 +133,6 @@ const (
 func GitRepositoryProgressing(repository GitRepository) GitRepository {
 	repository.Status.ObservedGeneration = repository.Generation
 	repository.Status.URL = ""
-	repository.Status.Artifact = nil
 	repository.Status.Conditions = []SourceCondition{}
 	SetGitRepositoryCondition(&repository, ReadyCondition, corev1.ConditionUnknown, ProgressingReason, "reconciliation in progress")
 	return repository
