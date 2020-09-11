@@ -298,6 +298,19 @@ Kubernetes meta/v1.Duration
 <p>The interval at which to check the Source for updates.</p>
 </td>
 </tr>
+<tr>
+<td>
+<code>valuesFile</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Alternative values file to use as the default chart values, expected to be
+a relative path in the SourceRef. Ignored when omitted.</p>
+</td>
+</tr>
 </table>
 </td>
 </tr>
@@ -909,6 +922,19 @@ Kubernetes meta/v1.Duration
 </td>
 <td>
 <p>The interval at which to check the Source for updates.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>valuesFile</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Alternative values file to use as the default chart values, expected to be
+a relative path in the SourceRef. Ignored when omitted.</p>
 </td>
 </tr>
 </tbody>

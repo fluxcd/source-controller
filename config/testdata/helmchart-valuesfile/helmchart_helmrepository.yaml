@@ -1,0 +1,11 @@
+apiVersion: source.toolkit.fluxcd.io/v1alpha1
+kind: HelmChart
+metadata:
+  name: mariadb
+spec:
+  chart: mariadb
+  valuesFile: values-production.yaml
+  sourceRef:
+    kind: HelmRepository
+    name: bitnami-charts
+  interval: 1m

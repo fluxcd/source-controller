@@ -1,0 +1,12 @@
+apiVersion: source.toolkit.fluxcd.io/v1alpha1
+kind: GitRepository
+metadata:
+  name: bitnami-charts
+spec:
+  interval: 1m
+  url: https://github.com/bitnami/charts
+  ref:
+    branch: master
+  ignore:
+    /*
+    !/bitnami/
