@@ -100,9 +100,8 @@ func (r *GitRepositoryReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 	}
 
 	// set initial status
-	if repository.Generation != repository.Status.ObservedGeneration ||
-		repository.GetArtifact() != nil && !r.Storage.ArtifactExist(*repository.GetArtifact()) {
-		repository = sourcev1.GitRepositoryProgressing(repository)
+	if resetRepository, ok := r.resetStatus(repository); ok {
+		repository = resetRepository
 		if err := r.Status().Update(ctx, &repository); err != nil {
 			log.Error(err, "unable to update status")
 			return ctrl.Result{Requeue: true}, err
@@ -272,6 +271,20 @@ func (r *GitRepositoryReconciler) verify(ctx context.Context, publicKeySecret ty
 		return fmt.Errorf("PGP signature '%s' of '%s' can't be verified", commit.PGPSignature, commit.Author)
 	}
 	return nil
+}
+
+// resetStatus returns a modified v1alpha1.GitRepository and a boolean indicating
+// if the status field has been reset.
+func (r *GitRepositoryReconciler) resetStatus(repository sourcev1.GitRepository) (sourcev1.GitRepository, bool) {
+	if repository.GetArtifact() != nil && !r.Storage.ArtifactExist(*repository.GetArtifact()) {
+		repository = sourcev1.GitRepositoryProgressing(repository)
+		repository.Status.Artifact = nil
+		return repository, true
+	}
+	if repository.Generation != repository.Status.ObservedGeneration {
+		return sourcev1.GitRepositoryProgressing(repository), true
+	}
+	return repository, false
 }
 
 // gc performs a garbage collection on all but current artifacts of

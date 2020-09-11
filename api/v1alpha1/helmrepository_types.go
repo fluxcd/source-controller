@@ -87,7 +87,6 @@ const (
 func HelmRepositoryProgressing(repository HelmRepository) HelmRepository {
 	repository.Status.ObservedGeneration = repository.Generation
 	repository.Status.URL = ""
-	repository.Status.Artifact = nil
 	repository.Status.Conditions = []SourceCondition{}
 	SetHelmRepositoryCondition(&repository, ReadyCondition, corev1.ConditionUnknown, ProgressingReason, "reconciliation in progress")
 	return repository

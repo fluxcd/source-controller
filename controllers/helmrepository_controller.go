@@ -105,9 +105,8 @@ func (r *HelmRepositoryReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 	}
 
 	// set initial status
-	if repository.Generation != repository.Status.ObservedGeneration ||
-		repository.GetArtifact() != nil && !r.Storage.ArtifactExist(*repository.GetArtifact()) {
-		repository = sourcev1.HelmRepositoryProgressing(repository)
+	if resetRepository, ok := r.resetStatus(repository); ok {
+		repository = resetRepository
 		if err := r.Status().Update(ctx, &repository); err != nil {
 			log.Error(err, "unable to update status")
 			return ctrl.Result{Requeue: true}, err
@@ -264,6 +263,20 @@ func (r *HelmRepositoryReconciler) reconcile(ctx context.Context, repository sou
 
 	message := fmt.Sprintf("Fetched revision: %s", artifact.Revision)
 	return sourcev1.HelmRepositoryReady(repository, artifact, indexURL, sourcev1.IndexationSucceededReason, message), nil
+}
+
+// resetStatus returns a modified v1alpha1.HelmRepository and a boolean indicating
+// if the status field has been reset.
+func (r *HelmRepositoryReconciler) resetStatus(repository sourcev1.HelmRepository) (sourcev1.HelmRepository, bool) {
+	if repository.GetArtifact() != nil && !r.Storage.ArtifactExist(*repository.GetArtifact()) {
+		repository = sourcev1.HelmRepositoryProgressing(repository)
+		repository.Status.Artifact = nil
+		return repository, true
+	}
+	if repository.Generation != repository.Status.ObservedGeneration {
+		return sourcev1.HelmRepositoryProgressing(repository), true
+	}
+	return repository, false
 }
 
 // gc performs a garbage collection on all but current artifacts of

@@ -105,9 +105,8 @@ func (r *HelmChartReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	}
 
 	// set initial status
-	if chart.Generation != chart.Status.ObservedGeneration ||
-		chart.GetArtifact() != nil && !r.Storage.ArtifactExist(*chart.GetArtifact()) {
-		chart = sourcev1.HelmChartProgressing(chart)
+	if resetChart, ok := r.resetStatus(chart); ok {
+		chart = resetChart
 		if err := r.Status().Update(ctx, &chart); err != nil {
 			log.Error(err, "unable to update status")
 			return ctrl.Result{Requeue: true}, err
@@ -445,6 +444,20 @@ func (r *HelmChartReconciler) getGitRepositoryWithArtifact(ctx context.Context, 
 	}
 
 	return repository, err
+}
+
+// resetStatus returns a modified v1alpha1.HelmChart and a boolean indicating
+// if the status field has been reset.
+func (r *HelmChartReconciler) resetStatus(chart sourcev1.HelmChart) (sourcev1.HelmChart, bool) {
+	if chart.GetArtifact() != nil && !r.Storage.ArtifactExist(*chart.GetArtifact()) {
+		chart = sourcev1.HelmChartProgressing(chart)
+		chart.Status.Artifact = nil
+		return chart, true
+	}
+	if chart.Generation != chart.Status.ObservedGeneration {
+		return sourcev1.HelmChartProgressing(chart), true
+	}
+	return chart, false
 }
 
 // gc performs a garbage collection on all but current artifacts of
