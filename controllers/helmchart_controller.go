@@ -19,7 +19,6 @@ package controllers
 import (
 	"context"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"net/url"
 	"os"
@@ -106,7 +105,8 @@ func (r *HelmChartReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	}
 
 	// Conditionally set progressing condition in status
-	if resetChart, ok := r.resetStatus(chart); ok {
+	resetChart, changed := r.resetStatus(chart)
+	if changed {
 		chart = resetChart
 		if err := r.Status().Update(ctx, &chart); err != nil {
 			log.Error(err, "unable to update status")
@@ -132,7 +132,7 @@ func (r *HelmChartReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 			}
 			return ctrl.Result{Requeue: true}, err
 		}
-		reconciledChart, reconcileErr = r.reconcileFromHelmRepository(ctx, repository, *chart.DeepCopy())
+		reconciledChart, reconcileErr = r.reconcileFromHelmRepository(ctx, repository, *chart.DeepCopy(), changed)
 	case sourcev1.GitRepositoryKind:
 		repository, err := r.getGitRepositoryWithArtifact(ctx, chart)
 		if err != nil {
@@ -142,7 +142,7 @@ func (r *HelmChartReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 			}
 			return ctrl.Result{Requeue: true}, err
 		}
-		reconciledChart, reconcileErr = r.reconcileFromGitRepository(ctx, repository, *chart.DeepCopy())
+		reconciledChart, reconcileErr = r.reconcileFromGitRepository(ctx, repository, *chart.DeepCopy(), changed)
 	default:
 		err := fmt.Errorf("unable to reconcile unsupported source reference kind '%s'", chart.Spec.SourceRef.Kind)
 		return ctrl.Result{}, err
@@ -189,7 +189,7 @@ func (r *HelmChartReconciler) SetupWithManagerAndOptions(mgr ctrl.Manager, opts 
 }
 
 func (r *HelmChartReconciler) reconcileFromHelmRepository(ctx context.Context,
-	repository sourcev1.HelmRepository, chart sourcev1.HelmChart) (sourcev1.HelmChart, error) {
+	repository sourcev1.HelmRepository, chart sourcev1.HelmChart, force bool) (sourcev1.HelmChart, error) {
 	cv, err := helm.GetDownloadableChartVersionFromIndex(r.Storage.LocalPath(*repository.GetArtifact()),
 		chart.Spec.Chart, chart.Spec.Version)
 	if err != nil {
@@ -199,7 +199,7 @@ func (r *HelmChartReconciler) reconcileFromHelmRepository(ctx context.Context,
 	// Return early if the revision is still the same as the current artifact
 	artifact := r.Storage.NewArtifactFor(chart.Kind, chart.GetObjectMeta(), cv.Version,
 		fmt.Sprintf("%s-%s.tgz", cv.Name, cv.Version))
-	if repository.GetArtifact() != nil && repository.GetArtifact().Revision == cv.Version {
+	if !force && repository.GetArtifact() != nil && repository.GetArtifact().Revision == cv.Version {
 		if artifact.URL != repository.GetArtifact().URL {
 			r.Storage.SetArtifactURL(repository.GetArtifact())
 			repository.Status.URL = r.Storage.SetHostname(repository.Status.URL)
@@ -283,6 +283,12 @@ func (r *HelmChartReconciler) reconcileFromHelmRepository(ctx context.Context,
 		return sourcev1.HelmChartNotReady(chart, sourcev1.ChartPullFailedReason, err.Error()), err
 	}
 
+	// Either repackage the chart with the declared default values file,
+	// or write the chart directly to storage.
+	var (
+		readyReason  = sourcev1.ChartPullSucceededReason
+		readyMessage = fmt.Sprintf("Fetched revision: %s", artifact.Revision)
+	)
 	switch {
 	case chart.Spec.ValuesFile != "" && chart.Spec.ValuesFile != chartutil.ValuesfileName:
 		// Create temporary working directory
@@ -301,33 +307,11 @@ func (r *HelmChartReconciler) reconcileFromHelmRepository(ctx context.Context,
 
 		// Overwrite values file
 		chartPath := path.Join(tmpDir, cv.Name)
-		srcPath := path.Join(chartPath, chart.Spec.ValuesFile)
-		if f, err := os.Stat(srcPath); os.IsNotExist(err) || !f.Mode().IsRegular() {
-			err = fmt.Errorf("invalid values file: %s", chart.Spec.ValuesFile)
+		if err := helm.OverwriteChartDefaultValues(chartPath, chart.Spec.ValuesFile); err != nil {
 			return sourcev1.HelmChartNotReady(chart, sourcev1.ChartPackageFailedReason, err.Error()), err
 		}
-		src, err := os.Open(srcPath)
-		if err != nil {
-			err = fmt.Errorf("failed to open values file '%s': %w", chart.Spec.ValuesFile, err)
-			return sourcev1.HelmChartNotReady(chart, sourcev1.ChartPackageFailedReason, err.Error()), err
-		}
-		t, err := os.OpenFile(path.Join(chartPath, chartutil.ValuesfileName), os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0644)
-		if err != nil {
-			src.Close()
-			err = fmt.Errorf("failed to open default values: %w", err)
-			return sourcev1.HelmChartNotReady(chart, sourcev1.ChartPackageFailedReason, err.Error()), err
-		}
-		if _, err := io.Copy(t, src); err != nil {
-			t.Close()
-			src.Close()
-			err = fmt.Errorf("failed to overwrite default values with '%s: %w", chart.Spec.ValuesFile, err)
-			return sourcev1.HelmChartNotReady(chart, sourcev1.ChartPackageFailedReason, err.Error()), err
-		}
-		t.Close()
-		src.Close()
 
-		// Package the chart, we use the action here instead of relying on the
-		// chartutil.Save method as the action performs a dependency check for us
+		// Package the chart with the new default values
 		pkg := action.NewPackage()
 		pkg.Destination = tmpDir
 		pkgPath, err := pkg.Run(chartPath, nil)
@@ -348,6 +332,9 @@ func (r *HelmChartReconciler) reconcileFromHelmRepository(ctx context.Context,
 			return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
 		}
 		cf.Close()
+
+		readyMessage = fmt.Sprintf("Fetched and packaged revision: %s", artifact.Revision)
+		readyReason = sourcev1.ChartPackageSucceededReason
 	default:
 		// Write artifact to storage
 		if err := r.Storage.AtomicWriteFile(&artifact, res, 0644); err != nil {
@@ -363,8 +350,7 @@ func (r *HelmChartReconciler) reconcileFromHelmRepository(ctx context.Context,
 		return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
 	}
 
-	message := fmt.Sprintf("Fetched revision: %s", artifact.Revision)
-	return sourcev1.HelmChartReady(chart, artifact, chartUrl, sourcev1.ChartPullSucceededReason, message), nil
+	return sourcev1.HelmChartReady(chart, artifact, chartUrl, readyReason, readyMessage), nil
 }
 
 // getChartRepositoryWithArtifact attempts to get the v1alpha1.HelmRepository
@@ -388,14 +374,14 @@ func (r *HelmChartReconciler) getChartRepositoryWithArtifact(ctx context.Context
 	}
 
 	if repository.GetArtifact() == nil {
-		err = fmt.Errorf("no repository index artifact found in HelmRepository '%s'", name)
+		err = fmt.Errorf("no repository index artifact found for HelmRepository '%s'", name)
 	}
 
 	return repository, err
 }
 
 func (r *HelmChartReconciler) reconcileFromGitRepository(ctx context.Context,
-	repository sourcev1.GitRepository, chart sourcev1.HelmChart) (sourcev1.HelmChart, error) {
+	repository sourcev1.GitRepository, chart sourcev1.HelmChart, force bool) (sourcev1.HelmChart, error) {
 	// Create temporary working directory
 	tmpDir, err := ioutil.TempDir("", fmt.Sprintf("%s-%s-", chart.Namespace, chart.Name))
 	if err != nil {
@@ -434,7 +420,7 @@ func (r *HelmChartReconciler) reconcileFromGitRepository(ctx context.Context,
 	// Return early if the revision is still the same as the current chart artifact
 	artifact := r.Storage.NewArtifactFor(chart.Kind, chart.ObjectMeta.GetObjectMeta(), chartMetadata.Version,
 		fmt.Sprintf("%s-%s.tgz", chartMetadata.Name, chartMetadata.Version))
-	if chart.GetArtifact() != nil && chart.GetArtifact().Revision == chartMetadata.Version {
+	if !force && chart.GetArtifact() != nil && chart.GetArtifact().Revision == chartMetadata.Version {
 		if artifact.URL != repository.GetArtifact().URL {
 			r.Storage.SetArtifactURL(repository.GetArtifact())
 			repository.Status.URL = r.Storage.SetHostname(repository.Status.URL)
@@ -443,31 +429,10 @@ func (r *HelmChartReconciler) reconcileFromGitRepository(ctx context.Context,
 	}
 
 	// Overwrite default values if instructed to
-	if chart.Spec.ValuesFile != "" && chart.Spec.ValuesFile != chartutil.ValuesfileName {
-		srcPath := path.Join(chartPath, chart.Spec.ValuesFile)
-		if f, err := os.Stat(srcPath); os.IsNotExist(err) || !f.Mode().IsRegular() {
-			err = fmt.Errorf("invalid values file path: %s", chart.Spec.ValuesFile)
+	if chart.Spec.ValuesFile != "" {
+		if err := helm.OverwriteChartDefaultValues(chartPath, chart.Spec.ValuesFile); err != nil {
 			return sourcev1.HelmChartNotReady(chart, sourcev1.ChartPackageFailedReason, err.Error()), err
 		}
-		src, err := os.Open(srcPath)
-		if err != nil {
-			err = fmt.Errorf("failed to open values file '%s': %w", chart.Spec.ValuesFile, err)
-			return sourcev1.HelmChartNotReady(chart, sourcev1.ChartPackageFailedReason, err.Error()), err
-		}
-		t, err := os.OpenFile(path.Join(tmpDir, chartutil.ValuesfileName), os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0644)
-		if err != nil {
-			src.Close()
-			err = fmt.Errorf("failed to open values file '%s': %w", chartutil.ValuesfileName, err)
-			return sourcev1.HelmChartNotReady(chart, sourcev1.ChartPackageFailedReason, err.Error()), err
-		}
-		if _, err := io.Copy(t, src); err != nil {
-			t.Close()
-			src.Close()
-			err = fmt.Errorf("failed to copy values file '%s' to '%s: %w", chart.Spec.ValuesFile, chartutil.ValuesfileName, err)
-			return sourcev1.HelmChartNotReady(chart, sourcev1.ChartPackageFailedReason, err.Error()), err
-		}
-		t.Close()
-		src.Close()
 	}
 
 	// Ensure artifact directory exists
