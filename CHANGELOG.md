@@ -2,6 +2,11 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.0.16 (2020-09-12)
+
+This prerelease comes with the option to watch for resources
+in the runtime namespace of the controller or at cluster level.
+
 ## 0.0.15 (2020-09-11)
 
 This prerelease adds support for overwriting the default values of a
