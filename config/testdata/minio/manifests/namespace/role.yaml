@@ -10,4 +10,4 @@ roleRef:
 subjects:
   - apiGroup: rbac.authorization.k8s.io
     kind: User
-    name: gotk:web-team:reconciler
+    name: gotk:minio-test:reconciler
