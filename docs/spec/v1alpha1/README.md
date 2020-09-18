@@ -9,7 +9,8 @@ This is the v1alpha1 API specification for defining the desired state sources of
   + [GitRepository](gitrepositories.md)
   + [HelmRepository](helmrepositories.md)
   + [HelmChart](helmcharts.md)
-
+  + [Bucket](buckets.md)
+  
 ## Implementation
 
 * [source-controller](https://github.com/fluxcd/source-controller/)
