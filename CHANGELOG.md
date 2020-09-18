@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.0.17 (2020-09-18)
+
+This prerelease comes with support for S3 compatible storage sources
+defined as [buckets](https://github.com/fluxcd/source-controller/blob/master/docs/spec/v1alpha1/buckets.md).
+The Helm package was updated to v3.3.2.
+
 ## 0.0.16 (2020-09-12)
 
 This prerelease comes with the option to watch for resources
