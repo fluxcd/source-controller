@@ -152,12 +152,12 @@ func (s *Storage) ArtifactExist(artifact sourcev1.Artifact) bool {
 // Archive atomically archives the given directory as a tarball to the given v1alpha1.Artifact
 // path, excluding any VCS specific files and directories, or any of the excludes defined in
 // the excludeFiles. If successful, it sets the checksum and last update time on the artifact.
-func (s *Storage) Archive(artifact *sourcev1.Artifact, dir string, spec sourcev1.GitRepositorySpec) (err error) {
+func (s *Storage) Archive(artifact *sourcev1.Artifact, dir string, ignore *string) (err error) {
 	if f, err := os.Stat(dir); os.IsNotExist(err) || !f.IsDir() {
 		return fmt.Errorf("invalid dir path: %s", dir)
 	}
 
-	ps, err := loadExcludePatterns(dir, spec)
+	ps, err := loadExcludePatterns(dir, ignore)
 	if err != nil {
 		return err
 	}
@@ -404,7 +404,7 @@ func getPatterns(reader io.Reader, path []string) []gitignore.Pattern {
 
 // loadExcludePatterns loads the excluded patterns from sourceignore or other
 // sources.
-func loadExcludePatterns(dir string, spec sourcev1.GitRepositorySpec) ([]gitignore.Pattern, error) {
+func loadExcludePatterns(dir string, ignore *string) ([]gitignore.Pattern, error) {
 	path := strings.Split(dir, "/")
 
 	var ps []gitignore.Pattern
@@ -412,7 +412,7 @@ func loadExcludePatterns(dir string, spec sourcev1.GitRepositorySpec) ([]gitigno
 		ps = append(ps, gitignore.ParsePattern(p, path))
 	}
 
-	if spec.Ignore == nil {
+	if ignore == nil {
 		for _, p := range strings.Split(excludeExt, ",") {
 			ps = append(ps, gitignore.ParsePattern(p, path))
 		}
@@ -424,7 +424,7 @@ func loadExcludePatterns(dir string, spec sourcev1.GitRepositorySpec) ([]gitigno
 			return nil, err
 		}
 	} else {
-		ps = append(ps, getPatterns(bytes.NewBufferString(*spec.Ignore), path)...)
+		ps = append(ps, getPatterns(bytes.NewBufferString(*ignore), path)...)
 	}
 
 	return ps, nil
