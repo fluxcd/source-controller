@@ -35,6 +35,7 @@ import (
 
 	"github.com/fluxcd/pkg/recorder"
 	"github.com/fluxcd/pkg/runtime/logger"
+
 	sourcev1 "github.com/fluxcd/source-controller/api/v1alpha1"
 	"github.com/fluxcd/source-controller/controllers"
 	// +kubebuilder:scaffold:imports
@@ -159,6 +160,19 @@ func main() {
 		MaxConcurrentReconciles: concurrent,
 	}); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", sourcev1.HelmChartKind)
+		os.Exit(1)
+	}
+	if err = (&controllers.BucketReconciler{
+		Client:                mgr.GetClient(),
+		Log:                   ctrl.Log.WithName("controllers").WithName("Bucket"),
+		Scheme:                mgr.GetScheme(),
+		Storage:               storage,
+		EventRecorder:         mgr.GetEventRecorderFor("source-controller"),
+		ExternalEventRecorder: eventRecorder,
+	}).SetupWithManagerAndOptions(mgr, controllers.BucketReconcilerOptions{
+		MaxConcurrentReconciles: concurrent,
+	}); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "Bucket")
 		os.Exit(1)
 	}
 	// +kubebuilder:scaffold:builder

@@ -10,4 +10,7 @@ resources:
 - group: source
   kind: HelmChart
   version: v1alpha1
+- group: source
+  kind: Bucket
+  version: v1alpha1
 version: "2"

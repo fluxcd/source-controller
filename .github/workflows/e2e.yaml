@@ -29,6 +29,8 @@ jobs:
         uses: fluxcd/pkg/actions/kustomize@master
       - name: Setup Kubebuilder
         uses: fluxcd/pkg/actions/kubebuilder@master
+      - name: Setup Helm
+        uses: fluxcd/pkg/actions/helm@master
       - name: Run tests
         run: make test
         env:
@@ -64,6 +66,27 @@ jobs:
           kubectl -n source-system wait helmchart/mariadb --for=condition=ready --timeout=5m
           kubectl -n source-system wait helmchart/mariadb-git --for=condition=ready --timeout=5m
           kubectl -n source-system delete -f ./config/testdata/helmchart-valuesfile
+      - name: Setup Minio
+        run: |
+          kubectl create ns minio
+          helm repo add minio https://helm.min.io/
+          helm upgrade --wait -i minio minio/minio \
+          --namespace minio \
+          --set accessKey=myaccesskey \
+          --set secretKey=mysecretkey \
+          --set resources.requests.memory=128Mi \
+          --set persistence.enable=false
+          kubectl -n minio port-forward svc/minio 9000:9000 &>/dev/null &
+          sleep 2
+          wget -q https://dl.min.io/client/mc/release/linux-amd64/mc
+          chmod +x mc
+          ./mc alias set minio http://localhost:9000 myaccesskey mysecretkey --api S3v4
+          ./mc mb minio/podinfo
+          ./mc cp --recursive ./config/testdata/minio/manifests minio/podinfo
+      - name: Run S3 tests
+        run: |
+          kubectl -n source-system apply -f ./config/testdata/minio/source.yaml
+          kubectl -n source-system wait bucket/podinfo --for=condition=ready --timeout=1m
       - name: Debug failure
         if: failure()
         run: |
@@ -72,3 +95,4 @@ jobs:
           kubectl -n source-system get helmcharts -oyaml
           kubectl -n source-system get all
           kubectl -n source-system logs deploy/source-controller
+          kubectl -n minio get all

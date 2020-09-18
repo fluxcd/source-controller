@@ -233,7 +233,7 @@ func (r *GitRepositoryReconciler) reconcile(ctx context.Context, repository sour
 	defer unlock()
 
 	// archive artifact and check integrity
-	if err := r.Storage.Archive(&artifact, tmpGit, repository.Spec); err != nil {
+	if err := r.Storage.Archive(&artifact, tmpGit, repository.Spec.Ignore); err != nil {
 		err = fmt.Errorf("storage archive error: %w", err)
 		return sourcev1.GitRepositoryNotReady(repository, sourcev1.StorageOperationFailedReason, err.Error()), err
 	}
@@ -241,7 +241,7 @@ func (r *GitRepositoryReconciler) reconcile(ctx context.Context, repository sour
 	// update latest symlink
 	url, err := r.Storage.Symlink(artifact, "latest.tar.gz")
 	if err != nil {
-		err = fmt.Errorf("storage lock error: %w", err)
+		err = fmt.Errorf("storage symlink error: %w", err)
 		return sourcev1.GitRepositoryNotReady(repository, sourcev1.StorageOperationFailedReason, err.Error()), err
 	}
 
