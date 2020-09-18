@@ -1,0 +1,12 @@
+apiVersion: source.toolkit.fluxcd.io/v1alpha1
+kind: Bucket
+metadata:
+  name: bucket-sample
+  namespace: gitops-system
+spec:
+  interval: 1m
+  provider: generic
+  bucketName: podinfo
+  endpoint: minio.minio.svc.cluster.local:9000
+  region: us-east-1
+  insecure: true

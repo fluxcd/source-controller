@@ -9,12 +9,202 @@
 <p>Package v1alpha1 contains API Schema definitions for the source v1alpha1 API group</p>
 Resource Types:
 <ul class="simple"><li>
+<a href="#source.toolkit.fluxcd.io/v1alpha1.Bucket">Bucket</a>
+</li><li>
 <a href="#source.toolkit.fluxcd.io/v1alpha1.GitRepository">GitRepository</a>
 </li><li>
 <a href="#source.toolkit.fluxcd.io/v1alpha1.HelmChart">HelmChart</a>
 </li><li>
 <a href="#source.toolkit.fluxcd.io/v1alpha1.HelmRepository">HelmRepository</a>
 </li></ul>
+<h3 id="source.toolkit.fluxcd.io/v1alpha1.Bucket">Bucket
+</h3>
+<p>Bucket is the Schema for the buckets API</p>
+<div class="md-typeset__scrollwrap">
+<div class="md-typeset__table">
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>apiVersion</code><br>
+string</td>
+<td>
+<code>source.toolkit.fluxcd.io/v1alpha1</code>
+</td>
+</tr>
+<tr>
+<td>
+<code>kind</code><br>
+string
+</td>
+<td>
+<code>Bucket</code>
+</td>
+</tr>
+<tr>
+<td>
+<code>metadata</code><br>
+<em>
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.18/#objectmeta-v1-meta">
+Kubernetes meta/v1.ObjectMeta
+</a>
+</em>
+</td>
+<td>
+Refer to the Kubernetes API documentation for the fields of the
+<code>metadata</code> field.
+</td>
+</tr>
+<tr>
+<td>
+<code>spec</code><br>
+<em>
+<a href="#source.toolkit.fluxcd.io/v1alpha1.BucketSpec">
+BucketSpec
+</a>
+</em>
+</td>
+<td>
+<br/>
+<br/>
+<table>
+<tr>
+<td>
+<code>provider</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>The S3 compatible storage provider name, default (&lsquo;generic&rsquo;).</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>bucketName</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<p>The bucket name.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>endpoint</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<p>The bucket endpoint address.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>insecure</code><br>
+<em>
+bool
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Insecure allows connecting to a non-TLS S3 HTTP endpoint.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>region</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>The bucket region.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>secretRef</code><br>
+<em>
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.18/#localobjectreference-v1-core">
+Kubernetes core/v1.LocalObjectReference
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>The secret name containing the bucket accesskey and secretkey.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>interval</code><br>
+<em>
+<a href="https://godoc.org/k8s.io/apimachinery/pkg/apis/meta/v1#Duration">
+Kubernetes meta/v1.Duration
+</a>
+</em>
+</td>
+<td>
+<p>The interval at which to check for bucket updates.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>timeout</code><br>
+<em>
+<a href="https://godoc.org/k8s.io/apimachinery/pkg/apis/meta/v1#Duration">
+Kubernetes meta/v1.Duration
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>The timeout for download operations, default (&lsquo;20s&rsquo;).</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>ignore</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Ignore overrides the set of excluded patterns in the .sourceignore
+format (which is the same as .gitignore).</p>
+</td>
+</tr>
+</table>
+</td>
+</tr>
+<tr>
+<td>
+<code>status</code><br>
+<em>
+<a href="#source.toolkit.fluxcd.io/v1alpha1.BucketStatus">
+BucketStatus
+</a>
+</em>
+</td>
+<td>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
 <h3 id="source.toolkit.fluxcd.io/v1alpha1.GitRepository">GitRepository
 </h3>
 <p>GitRepository is the Schema for the gitrepositories API</p>
@@ -467,6 +657,7 @@ HelmRepositoryStatus
 </h3>
 <p>
 (<em>Appears on:</em>
+<a href="#source.toolkit.fluxcd.io/v1alpha1.BucketStatus">BucketStatus</a>, 
 <a href="#source.toolkit.fluxcd.io/v1alpha1.GitRepositoryStatus">GitRepositoryStatus</a>, 
 <a href="#source.toolkit.fluxcd.io/v1alpha1.HelmChartStatus">HelmChartStatus</a>, 
 <a href="#source.toolkit.fluxcd.io/v1alpha1.HelmRepositoryStatus">HelmRepositoryStatus</a>)
@@ -542,6 +733,212 @@ Kubernetes meta/v1.Time
 <td>
 <p>LastUpdateTime is the timestamp corresponding to the last
 update of this artifact.</p>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<h3 id="source.toolkit.fluxcd.io/v1alpha1.BucketSpec">BucketSpec
+</h3>
+<p>
+(<em>Appears on:</em>
+<a href="#source.toolkit.fluxcd.io/v1alpha1.Bucket">Bucket</a>)
+</p>
+<p>BucketSpec defines the desired state of an S3 compatible bucket</p>
+<div class="md-typeset__scrollwrap">
+<div class="md-typeset__table">
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>provider</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>The S3 compatible storage provider name, default (&lsquo;generic&rsquo;).</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>bucketName</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<p>The bucket name.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>endpoint</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<p>The bucket endpoint address.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>insecure</code><br>
+<em>
+bool
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Insecure allows connecting to a non-TLS S3 HTTP endpoint.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>region</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>The bucket region.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>secretRef</code><br>
+<em>
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.18/#localobjectreference-v1-core">
+Kubernetes core/v1.LocalObjectReference
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>The secret name containing the bucket accesskey and secretkey.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>interval</code><br>
+<em>
+<a href="https://godoc.org/k8s.io/apimachinery/pkg/apis/meta/v1#Duration">
+Kubernetes meta/v1.Duration
+</a>
+</em>
+</td>
+<td>
+<p>The interval at which to check for bucket updates.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>timeout</code><br>
+<em>
+<a href="https://godoc.org/k8s.io/apimachinery/pkg/apis/meta/v1#Duration">
+Kubernetes meta/v1.Duration
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>The timeout for download operations, default (&lsquo;20s&rsquo;).</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>ignore</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Ignore overrides the set of excluded patterns in the .sourceignore
+format (which is the same as .gitignore).</p>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<h3 id="source.toolkit.fluxcd.io/v1alpha1.BucketStatus">BucketStatus
+</h3>
+<p>
+(<em>Appears on:</em>
+<a href="#source.toolkit.fluxcd.io/v1alpha1.Bucket">Bucket</a>)
+</p>
+<p>BucketStatus defines the observed state of a bucket</p>
+<div class="md-typeset__scrollwrap">
+<div class="md-typeset__table">
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>observedGeneration</code><br>
+<em>
+int64
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>ObservedGeneration is the last observed generation.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>conditions</code><br>
+<em>
+<a href="#source.toolkit.fluxcd.io/v1alpha1.SourceCondition">
+[]SourceCondition
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Conditions holds the conditions for the Bucket.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>url</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>URL is the download link for the artifact output of the last Bucket sync.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>artifact</code><br>
+<em>
+<a href="#source.toolkit.fluxcd.io/v1alpha1.Artifact">
+Artifact
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Artifact represents the output of the last successful Bucket sync.</p>
 </td>
 </tr>
 </tbody>
@@ -1228,6 +1625,7 @@ string
 </h3>
 <p>
 (<em>Appears on:</em>
+<a href="#source.toolkit.fluxcd.io/v1alpha1.BucketStatus">BucketStatus</a>, 
 <a href="#source.toolkit.fluxcd.io/v1alpha1.GitRepositoryStatus">GitRepositoryStatus</a>, 
 <a href="#source.toolkit.fluxcd.io/v1alpha1.HelmChartStatus">HelmChartStatus</a>, 
 <a href="#source.toolkit.fluxcd.io/v1alpha1.HelmRepositoryStatus">HelmRepositoryStatus</a>)
