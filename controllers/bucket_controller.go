@@ -175,6 +175,15 @@ func (r *BucketReconciler) reconcile(ctx context.Context, bucket sourcev1.Bucket
 	ctxTimeout, cancel := context.WithTimeout(ctx, bucket.GetTimeout())
 	defer cancel()
 
+	exists, err := s3Client.BucketExists(ctxTimeout, bucket.Spec.BucketName)
+	if err != nil {
+		return sourcev1.BucketNotReady(bucket, sourcev1.BucketOperationFailedReason, err.Error()), err
+	}
+	if !exists {
+		err = fmt.Errorf("bucket '%s' not found", bucket.Spec.BucketName)
+		return sourcev1.BucketNotReady(bucket, sourcev1.BucketOperationFailedReason, err.Error()), err
+	}
+
 	// download bucket content
 	for object := range s3Client.ListObjects(ctxTimeout, bucket.Spec.BucketName, minio.ListObjectsOptions{Recursive: true}) {
 		if object.Err != nil {
@@ -270,8 +279,12 @@ func (r *BucketReconciler) auth(ctx context.Context, bucket sourcev1.Bucket) (*m
 			return nil, fmt.Errorf("invalid '%s' secret data: required fields 'accesskey' and 'secretkey'", secret.Name)
 		}
 		opt.Creds = credentials.NewStaticV4(accesskey, secretkey, "")
-	} else if bucket.Spec.Provider == "aws" {
+	} else if bucket.Spec.Provider == sourcev1.AmazonBucketProvider {
 		opt.Creds = credentials.NewIAM("")
+	}
+
+	if opt.Creds == nil {
+		return nil, fmt.Errorf("no bucket credentials found")
 	}
 
 	return minio.New(bucket.Spec.Endpoint, &opt)

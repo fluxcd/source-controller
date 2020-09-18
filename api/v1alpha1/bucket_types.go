@@ -69,6 +69,11 @@ type BucketSpec struct {
 	Ignore *string `json:"ignore,omitempty"`
 }
 
+const (
+	GenericBucketProvider string = "generic"
+	AmazonBucketProvider  string = "aws"
+)
+
 // BucketStatus defines the observed state of a bucket
 type BucketStatus struct {
 	// ObservedGeneration is the last observed generation.
