@@ -2,7 +2,6 @@ apiVersion: source.toolkit.fluxcd.io/v1alpha1
 kind: Bucket
 metadata:
   name: bucket-sample
-  namespace: gitops-system
 spec:
   interval: 1m
   provider: generic
