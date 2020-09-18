@@ -152,7 +152,7 @@ var _ = Describe("HelmChartReconciler", func() {
 				_ = k8sClient.Get(context.Background(), key, updated)
 				for _, c := range updated.Status.Conditions {
 					if c.Reason == sourcev1.ChartPullFailedReason &&
-						strings.Contains(c.Message, "failed to get HelmRepository") {
+						strings.Contains(c.Message, "failed to retrieve source") {
 						return true
 					}
 				}

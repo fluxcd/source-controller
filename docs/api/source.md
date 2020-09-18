@@ -1600,7 +1600,7 @@ string
 </em>
 </td>
 <td>
-<p>Kind of the referent, valid values are (&lsquo;HelmRepository&rsquo;, &lsquo;GitRepository&rsquo;).</p>
+<p>Kind of the referent, valid values are (&lsquo;HelmRepository&rsquo;, &lsquo;GitRepository&rsquo;, &lsquo;Bucket&rsquo;).</p>
 </td>
 </tr>
 <tr>
