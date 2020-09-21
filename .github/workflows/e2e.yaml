@@ -81,12 +81,22 @@ jobs:
           wget -q https://dl.min.io/client/mc/release/linux-amd64/mc
           chmod +x mc
           ./mc alias set minio http://localhost:9000 myaccesskey mysecretkey --api S3v4
-          ./mc mb minio/podinfo
-          ./mc cp --recursive ./config/testdata/minio/manifests minio/podinfo
-      - name: Run S3 tests
+          kubectl -n source-system apply -f ./config/testdata/minio/secret.yaml
+      - name: Run Bucket tests
         run: |
-          kubectl -n source-system apply -f ./config/testdata/minio/source.yaml
+          ./mc mb minio/podinfo
+          ./mc mirror ./config/testdata/minio/manifests/ minio/podinfo
+
+          kubectl -n source-system apply -f ./config/testdata/bucket/source.yaml
           kubectl -n source-system wait bucket/podinfo --for=condition=ready --timeout=1m
+      - name: Run HelmChart from Bucket tests
+        run: |
+          ./mc mb minio/charts
+          ./mc mirror ./controllers/testdata/helmchart/ minio/charts/helmchart
+
+          kubectl -n source-system apply -f ./config/testdata/helmchart-from-bucket/source.yaml
+          kubectl -n source-system wait bucket/charts --for=condition=ready --timeout=1m
+          kubectl -n source-system wait helmchart/helmchart-bucket --for=condition=ready --timeout=1m
       - name: Debug failure
         if: failure()
         run: |
