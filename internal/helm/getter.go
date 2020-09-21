@@ -60,7 +60,7 @@ func TLSClientConfigFromSecret(secret corev1.Secret) (getter.Option, func(), err
 	certBytes, keyBytes, caBytes := secret.Data["certFile"], secret.Data["keyFile"], secret.Data["caFile"]
 	switch {
 	case len(certBytes)+len(keyBytes)+len(caBytes) == 0:
-		return nil, nil, nil
+		return nil, func() {}, nil
 	case (len(certBytes) > 0 && len(keyBytes) == 0) || (len(keyBytes) > 0 && len(certBytes) == 0):
 		return nil, nil, fmt.Errorf("invalid '%s' secret data: fields 'certFile' and 'keyFile' require each other's presence",
 			secret.Name)

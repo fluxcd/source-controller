@@ -195,9 +195,7 @@ func (r *HelmRepositoryReconciler) reconcile(ctx context.Context, repository sou
 			err = fmt.Errorf("auth options error: %w", err)
 			return sourcev1.HelmRepositoryNotReady(repository, sourcev1.AuthenticationFailedReason, err.Error()), err
 		}
-		if cleanup != nil {
-			defer cleanup()
-		}
+		defer cleanup()
 		clientOpts = opts
 	}
 

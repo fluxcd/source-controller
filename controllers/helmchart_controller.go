@@ -296,9 +296,7 @@ func (r *HelmChartReconciler) reconcileFromHelmRepository(ctx context.Context,
 			err = fmt.Errorf("auth options error: %w", err)
 			return sourcev1.HelmChartNotReady(chart, sourcev1.AuthenticationFailedReason, err.Error()), err
 		}
-		if cleanup != nil {
-			defer cleanup()
-		}
+		defer cleanup()
 		clientOpts = opts
 	}
 
@@ -435,11 +433,9 @@ func (r *HelmChartReconciler) reconcileFromTarballArtifact(ctx context.Context,
 		return chart, nil
 	}
 
-	// Overwrite default values if instructed to
-	if chart.Spec.ValuesFile != "" {
-		if err := helm.OverwriteChartDefaultValues(chartPath, chart.Spec.ValuesFile); err != nil {
-			return sourcev1.HelmChartNotReady(chart, sourcev1.ChartPackageFailedReason, err.Error()), err
-		}
+	// Overwrite default values if configured
+	if err := helm.OverwriteChartDefaultValues(chartPath, chart.Spec.ValuesFile); err != nil {
+		return sourcev1.HelmChartNotReady(chart, sourcev1.ChartPackageFailedReason, err.Error()), err
 	}
 
 	// Ensure artifact directory exists
