@@ -459,7 +459,7 @@ string
 <td>
 <em>(Optional)</em>
 <p>The chart version semver expression, ignored for charts from GitRepository
-sources. Defaults to latest when omitted.</p>
+and Bucket sources. Defaults to latest when omitted.</p>
 </td>
 </tr>
 <tr>
@@ -1292,7 +1292,7 @@ string
 <td>
 <em>(Optional)</em>
 <p>The chart version semver expression, ignored for charts from GitRepository
-sources. Defaults to latest when omitted.</p>
+and Bucket sources. Defaults to latest when omitted.</p>
 </td>
 </tr>
 <tr>
@@ -1600,7 +1600,7 @@ string
 </em>
 </td>
 <td>
-<p>Kind of the referent, valid values are (&lsquo;HelmRepository&rsquo;, &lsquo;GitRepository&rsquo;).</p>
+<p>Kind of the referent, valid values are (&lsquo;HelmRepository&rsquo;, &lsquo;GitRepository&rsquo;, &lsquo;Bucket&rsquo;).</p>
 </td>
 </tr>
 <tr>

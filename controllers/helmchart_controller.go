@@ -119,33 +119,39 @@ func (r *HelmChartReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		log.Error(err, "unable to purge old artifacts")
 	}
 
+	// Retrieve the source
+	source, err := r.getSource(ctx, chart)
+	if err != nil {
+		chart = sourcev1.HelmChartNotReady(*chart.DeepCopy(), sourcev1.ChartPullFailedReason, err.Error())
+		if err := r.Status().Update(ctx, &chart); err != nil {
+			log.Error(err, "unable to update status")
+		}
+		return ctrl.Result{Requeue: true}, err
+	}
+
+	// Assert source is ready
+	if source.GetArtifact() == nil {
+		err = fmt.Errorf("no artifact found for source `%s` kind '%s'",
+			chart.Spec.SourceRef.Name, chart.Spec.SourceRef.Kind)
+		chart = sourcev1.HelmChartNotReady(*chart.DeepCopy(), sourcev1.ChartPullFailedReason, err.Error())
+		if err := r.Status().Update(ctx, &chart); err != nil {
+			log.Error(err, "unable to update status")
+		}
+		return ctrl.Result{Requeue: true}, err
+	}
+
 	// Perform the reconciliation for the chart source type
 	var reconciledChart sourcev1.HelmChart
 	var reconcileErr error
-	switch chart.Spec.SourceRef.Kind {
-	case sourcev1.HelmRepositoryKind:
-		repository, err := r.getChartRepositoryWithArtifact(ctx, chart)
-		if err != nil {
-			chart = sourcev1.HelmChartNotReady(*chart.DeepCopy(), sourcev1.ChartPullFailedReason, err.Error())
-			if err := r.Status().Update(ctx, &chart); err != nil {
-				log.Error(err, "unable to update status")
-			}
-			return ctrl.Result{Requeue: true}, err
-		}
-		reconciledChart, reconcileErr = r.reconcileFromHelmRepository(ctx, repository, *chart.DeepCopy(), changed)
-	case sourcev1.GitRepositoryKind:
-		repository, err := r.getGitRepositoryWithArtifact(ctx, chart)
-		if err != nil {
-			chart = sourcev1.HelmChartNotReady(*chart.DeepCopy(), sourcev1.ChartPullFailedReason, err.Error())
-			if err := r.Status().Update(ctx, &chart); err != nil {
-				log.Error(err, "unable to update status")
-			}
-			return ctrl.Result{Requeue: true}, err
-		}
-		reconciledChart, reconcileErr = r.reconcileFromGitRepository(ctx, repository, *chart.DeepCopy(), changed)
+	switch typedSource := source.(type) {
+	case *sourcev1.HelmRepository:
+		reconciledChart, reconcileErr = r.reconcileFromHelmRepository(ctx, *typedSource, *chart.DeepCopy(), changed)
+	case *sourcev1.GitRepository, *sourcev1.Bucket:
+		reconciledChart, reconcileErr = r.reconcileFromTarballArtifact(ctx, *typedSource.GetArtifact(),
+			*chart.DeepCopy(), changed)
 	default:
 		err := fmt.Errorf("unable to reconcile unsupported source reference kind '%s'", chart.Spec.SourceRef.Kind)
-		return ctrl.Result{}, err
+		return ctrl.Result{Requeue: false}, err
 	}
 
 	// Update status with the reconciliation result
@@ -188,6 +194,41 @@ func (r *HelmChartReconciler) SetupWithManagerAndOptions(mgr ctrl.Manager, opts 
 		Complete(r)
 }
 
+func (r *HelmChartReconciler) getSource(ctx context.Context, chart sourcev1.HelmChart) (sourcev1.Source, error) {
+	var source sourcev1.Source
+	namespacedName := types.NamespacedName{
+		Namespace: chart.GetNamespace(),
+		Name:      chart.Spec.SourceRef.Name,
+	}
+	switch chart.Spec.SourceRef.Kind {
+	case sourcev1.HelmRepositoryKind:
+		var repository sourcev1.HelmRepository
+		err := r.Client.Get(ctx, namespacedName, &repository)
+		if err != nil {
+			return source, fmt.Errorf("failed to retrieve source: %w", err)
+		}
+		source = &repository
+	case sourcev1.GitRepositoryKind:
+		var repository sourcev1.GitRepository
+		err := r.Client.Get(ctx, namespacedName, &repository)
+		if err != nil {
+			return source, fmt.Errorf("failed to retrieve source: %w", err)
+		}
+		source = &repository
+	case sourcev1.BucketKind:
+		var bucket sourcev1.Bucket
+		err := r.Client.Get(ctx, namespacedName, &bucket)
+		if err != nil {
+			return source, fmt.Errorf("failed to retrieve source: %w", err)
+		}
+		source = &bucket
+	default:
+		return source, fmt.Errorf("source `%s` kind '%s' not supported",
+			chart.Spec.SourceRef.Name, chart.Spec.SourceRef.Kind)
+	}
+	return source, nil
+}
+
 func (r *HelmChartReconciler) reconcileFromHelmRepository(ctx context.Context,
 	repository sourcev1.HelmRepository, chart sourcev1.HelmChart, force bool) (sourcev1.HelmChart, error) {
 	cv, err := helm.GetDownloadableChartVersionFromIndex(r.Storage.LocalPath(*repository.GetArtifact()),
@@ -201,8 +242,8 @@ func (r *HelmChartReconciler) reconcileFromHelmRepository(ctx context.Context,
 		fmt.Sprintf("%s-%s.tgz", cv.Name, cv.Version))
 	if !force && repository.GetArtifact() != nil && repository.GetArtifact().Revision == cv.Version {
 		if artifact.URL != repository.GetArtifact().URL {
-			r.Storage.SetArtifactURL(repository.GetArtifact())
-			repository.Status.URL = r.Storage.SetHostname(repository.Status.URL)
+			r.Storage.SetArtifactURL(chart.GetArtifact())
+			repository.Status.URL = r.Storage.SetHostname(chart.Status.URL)
 		}
 		return chart, nil
 	}
@@ -353,35 +394,8 @@ func (r *HelmChartReconciler) reconcileFromHelmRepository(ctx context.Context,
 	return sourcev1.HelmChartReady(chart, artifact, chartUrl, readyReason, readyMessage), nil
 }
 
-// getChartRepositoryWithArtifact attempts to get the v1alpha1.HelmRepository
-// for the given chart. It returns an error if the HelmRepository could
-// not be retrieved or if does not have an artifact.
-func (r *HelmChartReconciler) getChartRepositoryWithArtifact(ctx context.Context, chart sourcev1.HelmChart) (sourcev1.HelmRepository, error) {
-	if chart.Spec.SourceRef.Name == "" {
-		return sourcev1.HelmRepository{}, fmt.Errorf("no HelmRepository reference given")
-	}
-
-	name := types.NamespacedName{
-		Namespace: chart.GetNamespace(),
-		Name:      chart.Spec.SourceRef.Name,
-	}
-
-	var repository sourcev1.HelmRepository
-	err := r.Client.Get(ctx, name, &repository)
-	if err != nil {
-		err = fmt.Errorf("failed to get HelmRepository '%s': %w", name, err)
-		return repository, err
-	}
-
-	if repository.GetArtifact() == nil {
-		err = fmt.Errorf("no repository index artifact found for HelmRepository '%s'", name)
-	}
-
-	return repository, err
-}
-
-func (r *HelmChartReconciler) reconcileFromGitRepository(ctx context.Context,
-	repository sourcev1.GitRepository, chart sourcev1.HelmChart, force bool) (sourcev1.HelmChart, error) {
+func (r *HelmChartReconciler) reconcileFromTarballArtifact(ctx context.Context,
+	artifact sourcev1.Artifact, chart sourcev1.HelmChart, force bool) (sourcev1.HelmChart, error) {
 	// Create temporary working directory
 	tmpDir, err := ioutil.TempDir("", fmt.Sprintf("%s-%s-", chart.Namespace, chart.Name))
 	if err != nil {
@@ -390,8 +404,8 @@ func (r *HelmChartReconciler) reconcileFromGitRepository(ctx context.Context,
 	}
 	defer os.RemoveAll(tmpDir)
 
-	// Open GitRepository artifact file and untar files into working directory
-	f, err := os.Open(r.Storage.LocalPath(*repository.GetArtifact()))
+	// Open the tarball artifact file and untar files into working directory
+	f, err := os.Open(r.Storage.LocalPath(artifact))
 	if err != nil {
 		err = fmt.Errorf("artifact open error: %w", err)
 		return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
@@ -418,12 +432,12 @@ func (r *HelmChartReconciler) reconcileFromGitRepository(ctx context.Context,
 	}
 
 	// Return early if the revision is still the same as the current chart artifact
-	artifact := r.Storage.NewArtifactFor(chart.Kind, chart.ObjectMeta.GetObjectMeta(), chartMetadata.Version,
+	chartArtifact := r.Storage.NewArtifactFor(chart.Kind, chart.ObjectMeta.GetObjectMeta(), chartMetadata.Version,
 		fmt.Sprintf("%s-%s.tgz", chartMetadata.Name, chartMetadata.Version))
 	if !force && chart.GetArtifact() != nil && chart.GetArtifact().Revision == chartMetadata.Version {
-		if artifact.URL != repository.GetArtifact().URL {
-			r.Storage.SetArtifactURL(repository.GetArtifact())
-			repository.Status.URL = r.Storage.SetHostname(repository.Status.URL)
+		if chartArtifact.URL != artifact.URL {
+			r.Storage.SetArtifactURL(&chartArtifact)
+			chart.Status.URL = r.Storage.SetHostname(chart.Status.URL)
 		}
 		return chart, nil
 	}
@@ -436,14 +450,14 @@ func (r *HelmChartReconciler) reconcileFromGitRepository(ctx context.Context,
 	}
 
 	// Ensure artifact directory exists
-	err = r.Storage.MkdirAll(artifact)
+	err = r.Storage.MkdirAll(chartArtifact)
 	if err != nil {
 		err = fmt.Errorf("unable to create artifact directory: %w", err)
 		return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
 	}
 
 	// Acquire a lock for the artifact
-	unlock, err := r.Storage.Lock(artifact)
+	unlock, err := r.Storage.Lock(chartArtifact)
 	if err != nil {
 		err = fmt.Errorf("unable to acquire lock: %w", err)
 		return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
@@ -466,7 +480,7 @@ func (r *HelmChartReconciler) reconcileFromGitRepository(ctx context.Context,
 		err = fmt.Errorf("failed to open chart package: %w", err)
 		return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
 	}
-	if err := r.Storage.Copy(&artifact, cf); err != nil {
+	if err := r.Storage.Copy(&chartArtifact, cf); err != nil {
 		cf.Close()
 		err = fmt.Errorf("failed to copy chart package to storage: %w", err)
 		return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
@@ -474,41 +488,14 @@ func (r *HelmChartReconciler) reconcileFromGitRepository(ctx context.Context,
 	cf.Close()
 
 	// Update symlink
-	cUrl, err := r.Storage.Symlink(artifact, fmt.Sprintf("%s-latest.tgz", chartMetadata.Name))
+	cUrl, err := r.Storage.Symlink(chartArtifact, fmt.Sprintf("%s-latest.tgz", chartMetadata.Name))
 	if err != nil {
 		err = fmt.Errorf("storage error: %w", err)
 		return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
 	}
 
-	message := fmt.Sprintf("Fetched and packaged revision: %s", artifact.Revision)
-	return sourcev1.HelmChartReady(chart, artifact, cUrl, sourcev1.ChartPackageSucceededReason, message), nil
-}
-
-// getGitRepositoryWithArtifact attempts to get the GitRepository for the given
-// chart. It returns an error if the v1alpha1.GitRepository could not be retrieved
-// or does not have an artifact.
-func (r *HelmChartReconciler) getGitRepositoryWithArtifact(ctx context.Context, chart sourcev1.HelmChart) (sourcev1.GitRepository, error) {
-	if chart.Spec.SourceRef.Name == "" {
-		return sourcev1.GitRepository{}, fmt.Errorf("no GitRepository reference given")
-	}
-
-	name := types.NamespacedName{
-		Namespace: chart.GetNamespace(),
-		Name:      chart.Spec.SourceRef.Name,
-	}
-
-	var repository sourcev1.GitRepository
-	err := r.Client.Get(ctx, name, &repository)
-	if err != nil {
-		err = fmt.Errorf("failed to get GitRepository '%s': %w", name, err)
-		return repository, err
-	}
-
-	if repository.GetArtifact() == nil {
-		err = fmt.Errorf("no artifact found for GitRepository '%s'", repository.Name)
-	}
-
-	return repository, err
+	message := fmt.Sprintf("Fetched and packaged revision: %s", chartArtifact.Revision)
+	return sourcev1.HelmChartReady(chart, chartArtifact, cUrl, sourcev1.ChartPackageSucceededReason, message), nil
 }
 
 // resetStatus returns a modified v1alpha1.HelmChart and a boolean indicating

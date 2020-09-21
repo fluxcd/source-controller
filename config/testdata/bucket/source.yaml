@@ -1,3 +1,4 @@
+---
 apiVersion: source.toolkit.fluxcd.io/v1alpha1
 kind: Bucket
 metadata:
@@ -11,11 +12,3 @@ spec:
   insecure: true
   secretRef:
     name: minio-credentials
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: minio-credentials
-data:
-  accesskey: bXlhY2Nlc3NrZXk=
-  secretkey: bXlzZWNyZXRrZXk=
