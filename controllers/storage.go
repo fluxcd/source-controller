@@ -339,6 +339,18 @@ func (s *Storage) Copy(artifact *sourcev1.Artifact, reader io.Reader) (err error
 	return nil
 }
 
+// CopyFromPath atomically copies the contents of the given path to the path of
+// the v1alpha1.Artifact. If successful, the checksum and last update time on the
+// artifact is set.
+func (s *Storage) CopyFromPath(artifact *sourcev1.Artifact, path string) (err error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	return s.Copy(artifact, f)
+}
+
 // Symlink creates or updates a symbolic link for the given v1alpha1.Artifact
 // and returns the URL for the symlink.
 func (s *Storage) Symlink(artifact sourcev1.Artifact, linkName string) (string, error) {

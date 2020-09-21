@@ -238,10 +238,10 @@ func (r *HelmChartReconciler) reconcileFromHelmRepository(ctx context.Context,
 	}
 
 	// Return early if the revision is still the same as the current artifact
-	artifact := r.Storage.NewArtifactFor(chart.Kind, chart.GetObjectMeta(), cv.Version,
+	newArtifact := r.Storage.NewArtifactFor(chart.Kind, chart.GetObjectMeta(), cv.Version,
 		fmt.Sprintf("%s-%s.tgz", cv.Name, cv.Version))
-	if !force && repository.GetArtifact().HasRevision(artifact.Revision) {
-		if artifact.URL != repository.GetArtifact().URL {
+	if !force && repository.GetArtifact().HasRevision(newArtifact.Revision) {
+		if newArtifact.URL != repository.GetArtifact().URL {
 			r.Storage.SetArtifactURL(chart.GetArtifact())
 			chart.Status.URL = r.Storage.SetHostname(chart.Status.URL)
 		}
@@ -303,14 +303,14 @@ func (r *HelmChartReconciler) reconcileFromHelmRepository(ctx context.Context,
 	}
 
 	// Ensure artifact directory exists
-	err = r.Storage.MkdirAll(artifact)
+	err = r.Storage.MkdirAll(newArtifact)
 	if err != nil {
 		err = fmt.Errorf("unable to create chart directory: %w", err)
 		return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
 	}
 
 	// Acquire a lock for the artifact
-	unlock, err := r.Storage.Lock(artifact)
+	unlock, err := r.Storage.Lock(newArtifact)
 	if err != nil {
 		err = fmt.Errorf("unable to acquire lock: %w", err)
 		return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
@@ -328,7 +328,7 @@ func (r *HelmChartReconciler) reconcileFromHelmRepository(ctx context.Context,
 	// or write the chart directly to storage.
 	var (
 		readyReason  = sourcev1.ChartPullSucceededReason
-		readyMessage = fmt.Sprintf("Fetched revision: %s", artifact.Revision)
+		readyMessage = fmt.Sprintf("Fetched revision: %s", newArtifact.Revision)
 	)
 	switch {
 	case chart.Spec.ValuesFile != "" && chart.Spec.ValuesFile != chartutil.ValuesfileName:
@@ -362,36 +362,29 @@ func (r *HelmChartReconciler) reconcileFromHelmRepository(ctx context.Context,
 		}
 
 		// Copy the packaged chart to the artifact path
-		cf, err := os.Open(pkgPath)
-		if err != nil {
-			err = fmt.Errorf("failed to open chart package: %w", err)
+		if err := r.Storage.CopyFromPath(&newArtifact, pkgPath); err != nil {
+			err = fmt.Errorf("failed to write chart package to storage: %w", err)
 			return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
 		}
-		if err := r.Storage.Copy(&artifact, cf); err != nil {
-			cf.Close()
-			err = fmt.Errorf("failed to copy chart package to storage: %w", err)
-			return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
-		}
-		cf.Close()
 
-		readyMessage = fmt.Sprintf("Fetched and packaged revision: %s", artifact.Revision)
+		readyMessage = fmt.Sprintf("Fetched and packaged revision: %s", newArtifact.Revision)
 		readyReason = sourcev1.ChartPackageSucceededReason
 	default:
 		// Write artifact to storage
-		if err := r.Storage.AtomicWriteFile(&artifact, res, 0644); err != nil {
+		if err := r.Storage.AtomicWriteFile(&newArtifact, res, 0644); err != nil {
 			err = fmt.Errorf("unable to write chart file: %w", err)
 			return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
 		}
 	}
 
 	// Update symlink
-	chartUrl, err := r.Storage.Symlink(artifact, fmt.Sprintf("%s-latest.tgz", cv.Name))
+	chartUrl, err := r.Storage.Symlink(newArtifact, fmt.Sprintf("%s-latest.tgz", cv.Name))
 	if err != nil {
 		err = fmt.Errorf("storage error: %w", err)
 		return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
 	}
 
-	return sourcev1.HelmChartReady(chart, artifact, chartUrl, readyReason, readyMessage), nil
+	return sourcev1.HelmChartReady(chart, newArtifact, chartUrl, readyReason, readyMessage), nil
 }
 
 func (r *HelmChartReconciler) reconcileFromTarballArtifact(ctx context.Context,
@@ -432,11 +425,11 @@ func (r *HelmChartReconciler) reconcileFromTarballArtifact(ctx context.Context,
 	}
 
 	// Return early if the revision is still the same as the current chart artifact
-	chartArtifact := r.Storage.NewArtifactFor(chart.Kind, chart.ObjectMeta.GetObjectMeta(), chartMetadata.Version,
+	newArtifact := r.Storage.NewArtifactFor(chart.Kind, chart.ObjectMeta.GetObjectMeta(), chartMetadata.Version,
 		fmt.Sprintf("%s-%s.tgz", chartMetadata.Name, chartMetadata.Version))
-	if !force && chart.GetArtifact().HasRevision(chartArtifact.Revision) {
-		if chartArtifact.URL != artifact.URL {
-			r.Storage.SetArtifactURL(&chartArtifact)
+	if !force && chart.GetArtifact().HasRevision(newArtifact.Revision) {
+		if newArtifact.URL != artifact.URL {
+			r.Storage.SetArtifactURL(&newArtifact)
 			chart.Status.URL = r.Storage.SetHostname(chart.Status.URL)
 		}
 		return chart, nil
@@ -450,14 +443,14 @@ func (r *HelmChartReconciler) reconcileFromTarballArtifact(ctx context.Context,
 	}
 
 	// Ensure artifact directory exists
-	err = r.Storage.MkdirAll(chartArtifact)
+	err = r.Storage.MkdirAll(newArtifact)
 	if err != nil {
 		err = fmt.Errorf("unable to create artifact directory: %w", err)
 		return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
 	}
 
 	// Acquire a lock for the artifact
-	unlock, err := r.Storage.Lock(chartArtifact)
+	unlock, err := r.Storage.Lock(newArtifact)
 	if err != nil {
 		err = fmt.Errorf("unable to acquire lock: %w", err)
 		return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
@@ -475,27 +468,20 @@ func (r *HelmChartReconciler) reconcileFromTarballArtifact(ctx context.Context,
 	}
 
 	// Copy the packaged chart to the artifact path
-	cf, err := os.Open(pkgPath)
-	if err != nil {
-		err = fmt.Errorf("failed to open chart package: %w", err)
+	if err := r.Storage.CopyFromPath(&newArtifact, pkgPath); err != nil {
+		err = fmt.Errorf("failed to write chart package to storage: %w", err)
 		return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
 	}
-	if err := r.Storage.Copy(&chartArtifact, cf); err != nil {
-		cf.Close()
-		err = fmt.Errorf("failed to copy chart package to storage: %w", err)
-		return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
-	}
-	cf.Close()
 
 	// Update symlink
-	cUrl, err := r.Storage.Symlink(chartArtifact, fmt.Sprintf("%s-latest.tgz", chartMetadata.Name))
+	cUrl, err := r.Storage.Symlink(newArtifact, fmt.Sprintf("%s-latest.tgz", chartMetadata.Name))
 	if err != nil {
 		err = fmt.Errorf("storage error: %w", err)
 		return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
 	}
 
-	message := fmt.Sprintf("Fetched and packaged revision: %s", chartArtifact.Revision)
-	return sourcev1.HelmChartReady(chart, chartArtifact, cUrl, sourcev1.ChartPackageSucceededReason, message), nil
+	message := fmt.Sprintf("Fetched and packaged revision: %s", newArtifact.Revision)
+	return sourcev1.HelmChartReady(chart, newArtifact, cUrl, sourcev1.ChartPackageSucceededReason, message), nil
 }
 
 // resetStatus returns a modified v1alpha1.HelmChart and a boolean indicating
