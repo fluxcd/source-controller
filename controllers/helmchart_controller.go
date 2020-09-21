@@ -240,10 +240,10 @@ func (r *HelmChartReconciler) reconcileFromHelmRepository(ctx context.Context,
 	// Return early if the revision is still the same as the current artifact
 	artifact := r.Storage.NewArtifactFor(chart.Kind, chart.GetObjectMeta(), cv.Version,
 		fmt.Sprintf("%s-%s.tgz", cv.Name, cv.Version))
-	if !force && repository.GetArtifact() != nil && repository.GetArtifact().Revision == cv.Version {
+	if !force && repository.GetArtifact().HasRevision(artifact.Revision) {
 		if artifact.URL != repository.GetArtifact().URL {
 			r.Storage.SetArtifactURL(chart.GetArtifact())
-			repository.Status.URL = r.Storage.SetHostname(chart.Status.URL)
+			chart.Status.URL = r.Storage.SetHostname(chart.Status.URL)
 		}
 		return chart, nil
 	}
@@ -434,7 +434,7 @@ func (r *HelmChartReconciler) reconcileFromTarballArtifact(ctx context.Context,
 	// Return early if the revision is still the same as the current chart artifact
 	chartArtifact := r.Storage.NewArtifactFor(chart.Kind, chart.ObjectMeta.GetObjectMeta(), chartMetadata.Version,
 		fmt.Sprintf("%s-%s.tgz", chartMetadata.Name, chartMetadata.Version))
-	if !force && chart.GetArtifact() != nil && chart.GetArtifact().Revision == chartMetadata.Version {
+	if !force && chart.GetArtifact().HasRevision(chartArtifact.Revision) {
 		if chartArtifact.URL != artifact.URL {
 			r.Storage.SetArtifactURL(&chartArtifact)
 			chart.Status.URL = r.Storage.SetHostname(chart.Status.URL)

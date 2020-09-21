@@ -211,7 +211,7 @@ func (r *BucketReconciler) reconcile(ctx context.Context, bucket sourcev1.Bucket
 
 	// return early on unchanged revision
 	artifact := r.Storage.NewArtifactFor(bucket.Kind, bucket.GetObjectMeta(), revision, fmt.Sprintf("%s.tar.gz", revision))
-	if bucket.GetArtifact() != nil && bucket.GetArtifact().Revision == revision {
+	if bucket.GetArtifact().HasRevision(artifact.Revision) {
 		if artifact.URL != bucket.GetArtifact().URL {
 			r.Storage.SetArtifactURL(bucket.GetArtifact())
 			bucket.Status.URL = r.Storage.SetHostname(bucket.Status.URL)

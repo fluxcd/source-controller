@@ -49,6 +49,15 @@ type Artifact struct {
 	LastUpdateTime metav1.Time `json:"lastUpdateTime,omitempty"`
 }
 
+// HasRevision returns true if the given revision matches the current
+// Revision of the Artifact.
+func (in *Artifact) HasRevision(revision string) bool {
+	if in == nil {
+		return false
+	}
+	return in.Revision == revision
+}
+
 // ArtifactDir returns the artifact dir path in the form of
 // <source-kind>/<source-namespace>/<source-name>.
 func ArtifactDir(kind, namespace, name string) string {

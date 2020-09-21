@@ -219,7 +219,7 @@ func (r *HelmRepositoryReconciler) reconcile(ctx context.Context, repository sou
 	// return early on unchanged generation
 	artifact := r.Storage.NewArtifactFor(repository.Kind, repository.ObjectMeta.GetObjectMeta(), i.Generated.Format(time.RFC3339Nano),
 		fmt.Sprintf("index-%s.yaml", url.PathEscape(i.Generated.Format(time.RFC3339Nano))))
-	if repository.GetArtifact() != nil && repository.GetArtifact().Revision == i.Generated.Format(time.RFC3339Nano) {
+	if repository.GetArtifact().HasRevision(artifact.Revision) {
 		if artifact.URL != repository.GetArtifact().URL {
 			r.Storage.SetArtifactURL(repository.GetArtifact())
 			repository.Status.URL = r.Storage.SetHostname(repository.Status.URL)
