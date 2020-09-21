@@ -16,7 +16,7 @@ type HelmChartSpec struct {
 	Chart string `json:"chart"`
 
 	// The chart version semver expression, ignored for charts from GitRepository
-	// sources. Defaults to latest when omitted.
+	// and Bucket sources. Defaults to latest when omitted.
 	// +optional
 	Version string `json:"version,omitempty"`
 
@@ -40,8 +40,8 @@ type LocalHelmChartSourceReference struct {
 	// +optional
 	APIVersion string `json:"apiVersion,omitempty"`
 
-	// Kind of the referent, valid values are ('HelmRepository', 'GitRepository').
-	// +kubebuilder:validation:Enum=HelmRepository;GitRepository
+	// Kind of the referent, valid values are ('HelmRepository', 'GitRepository', 'Bucket').
+	// +kubebuilder:validation:Enum=HelmRepository;GitRepository;Bucket
 	// +required
 	Kind string `json:"kind"`
 
@@ -138,6 +138,22 @@ spec:
   sourceRef:
     name: podinfo
     kind: GitRepository
+  interval: 10m
+```
+
+Check a S3 compatible bucket every ten minutes for a new `version` in the
+`Chart.yaml`, and package a new chart if the revision differs:
+
+```yaml
+apiVersion: source.toolkit.fluxcd.io/v1alpha1
+kind: HelmChart
+metadata:
+  name: podinfo
+spec:
+  chart: ./podinfo
+  sourceRef:
+    name: charts
+    kind: Bucket
   interval: 10m
 ```
 

@@ -92,7 +92,7 @@ spec:
                 type: string
               version:
                 description: The chart version semver expression, ignored for charts
-                  from GitRepository sources. Defaults to latest when omitted.
+                  from GitRepository and Bucket sources. Defaults to latest when omitted.
                 type: string
             required:
             - chart

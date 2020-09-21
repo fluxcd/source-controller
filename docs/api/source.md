@@ -459,7 +459,7 @@ string
 <td>
 <em>(Optional)</em>
 <p>The chart version semver expression, ignored for charts from GitRepository
-sources. Defaults to latest when omitted.</p>
+and Bucket sources. Defaults to latest when omitted.</p>
 </td>
 </tr>
 <tr>
@@ -1292,7 +1292,7 @@ string
 <td>
 <em>(Optional)</em>
 <p>The chart version semver expression, ignored for charts from GitRepository
-sources. Defaults to latest when omitted.</p>
+and Bucket sources. Defaults to latest when omitted.</p>
 </td>
 </tr>
 <tr>
