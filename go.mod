@@ -20,7 +20,7 @@ require (
 	github.com/minio/minio-go/v7 v7.0.5
 	github.com/onsi/ginkgo v1.12.1
 	github.com/onsi/gomega v1.10.1
-	helm.sh/helm/v3 v3.3.2
+	helm.sh/helm/v3 v3.3.3
 	k8s.io/api v0.18.8
 	k8s.io/apimachinery v0.18.8
 	k8s.io/client-go v0.18.8
