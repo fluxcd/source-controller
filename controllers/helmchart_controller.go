@@ -240,7 +240,7 @@ func (r *HelmChartReconciler) reconcileFromHelmRepository(ctx context.Context,
 	// Return early if the revision is still the same as the current artifact
 	newArtifact := r.Storage.NewArtifactFor(chart.Kind, chart.GetObjectMeta(), cv.Version,
 		fmt.Sprintf("%s-%s.tgz", cv.Name, cv.Version))
-	if !force && repository.GetArtifact().HasRevision(newArtifact.Revision) {
+	if !force && sourcev1.InReadyCondition(chart.Status.Conditions) && chart.GetArtifact().HasRevision(newArtifact.Revision) {
 		if newArtifact.URL != repository.GetArtifact().URL {
 			r.Storage.SetArtifactURL(chart.GetArtifact())
 			chart.Status.URL = r.Storage.SetHostname(chart.Status.URL)
@@ -425,9 +425,9 @@ func (r *HelmChartReconciler) reconcileFromTarballArtifact(ctx context.Context,
 	// Return early if the revision is still the same as the current chart artifact
 	newArtifact := r.Storage.NewArtifactFor(chart.Kind, chart.ObjectMeta.GetObjectMeta(), chartMetadata.Version,
 		fmt.Sprintf("%s-%s.tgz", chartMetadata.Name, chartMetadata.Version))
-	if !force && chart.GetArtifact().HasRevision(newArtifact.Revision) {
+	if !force && sourcev1.InReadyCondition(chart.Status.Conditions) && chart.GetArtifact().HasRevision(newArtifact.Revision) {
 		if newArtifact.URL != artifact.URL {
-			r.Storage.SetArtifactURL(&newArtifact)
+			r.Storage.SetArtifactURL(chart.GetArtifact())
 			chart.Status.URL = r.Storage.SetHostname(chart.Status.URL)
 		}
 		return chart, nil
@@ -483,8 +483,8 @@ func (r *HelmChartReconciler) reconcileFromTarballArtifact(ctx context.Context,
 // resetStatus returns a modified v1alpha1.HelmChart and a boolean indicating
 // if the status field has been reset.
 func (r *HelmChartReconciler) resetStatus(chart sourcev1.HelmChart) (sourcev1.HelmChart, bool) {
-	// The artifact does no longer exist
-	if chart.GetArtifact() != nil && !r.Storage.ArtifactExist(*chart.GetArtifact()) {
+	// We do not have an artifact, or it does no longer exist
+	if chart.GetArtifact() == nil || !r.Storage.ArtifactExist(*chart.GetArtifact()) {
 		chart = sourcev1.HelmChartProgressing(chart)
 		chart.Status.Artifact = nil
 		return chart, true

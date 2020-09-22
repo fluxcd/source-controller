@@ -279,7 +279,7 @@ var _ = Describe("HelmChartReconciler", func() {
 			})
 			helmServer.Start()
 
-			Expect(helmServer.PackageChart(path.Join("testdata/helmchart"))).Should(Succeed())
+			Expect(helmServer.PackageChartWithVersion(path.Join("testdata/helmchart"), "0.1.0")).Should(Succeed())
 			Expect(helmServer.GenerateIndex()).Should(Succeed())
 
 			secretKey := types.NamespacedName{
@@ -298,6 +298,7 @@ var _ = Describe("HelmChartReconciler", func() {
 			}
 			Expect(k8sClient.Create(context.Background(), secret)).Should(Succeed())
 
+			By("Creating repository and waiting for artifact")
 			repositoryKey := types.NamespacedName{
 				Name:      "helmrepository-sample-" + randStringRunes(5),
 				Namespace: namespace.Name,
@@ -312,12 +313,21 @@ var _ = Describe("HelmChartReconciler", func() {
 					SecretRef: &corev1.LocalObjectReference{
 						Name: secretKey.Name,
 					},
-					Interval: metav1.Duration{Duration: time.Hour * 1},
+					Interval: metav1.Duration{Duration: pullInterval},
 				},
 			}
 			Expect(k8sClient.Create(context.Background(), repository)).Should(Succeed())
 			defer k8sClient.Delete(context.Background(), repository)
 
+			Eventually(func() bool {
+				_ = k8sClient.Get(context.Background(), repositoryKey, repository)
+				return repository.Status.Artifact != nil
+			}, timeout, interval).Should(BeTrue())
+
+			By("Deleting secret before applying HelmChart")
+			Expect(k8sClient.Delete(context.Background(), secret)).Should(Succeed())
+
+			By("Applying HelmChart")
 			key := types.NamespacedName{
 				Name:      "helmchart-sample-" + randStringRunes(5),
 				Namespace: namespace.Name,
@@ -340,35 +350,24 @@ var _ = Describe("HelmChartReconciler", func() {
 			Expect(k8sClient.Create(context.Background(), chart)).Should(Succeed())
 			defer k8sClient.Delete(context.Background(), chart)
 
-			By("Expecting artifact")
-			Expect(k8sClient.Update(context.Background(), secret)).Should(Succeed())
-			Eventually(func() bool {
-				got := &sourcev1.HelmChart{}
-				_ = k8sClient.Get(context.Background(), key, got)
-				return got.Status.Artifact != nil &&
-					storage.ArtifactExist(*got.Status.Artifact)
-			}, timeout, interval).Should(BeTrue())
-
-			delete(secret.Data, "username")
-			Expect(k8sClient.Update(context.Background(), secret)).Should(Succeed())
-
-			By("Expecting missing field error")
-			delete(secret.Data, "username")
-			Expect(k8sClient.Update(context.Background(), secret)).Should(Succeed())
+			By("Expecting missing secret error")
 			got := &sourcev1.HelmChart{}
 			Eventually(func() bool {
 				_ = k8sClient.Get(context.Background(), key, got)
 				for _, c := range got.Status.Conditions {
-					if c.Reason == sourcev1.AuthenticationFailedReason {
+					if c.Reason == sourcev1.AuthenticationFailedReason &&
+						strings.Contains(c.Message, "auth secret error") {
 						return true
 					}
 				}
 				return false
 			}, timeout, interval).Should(BeTrue())
-			Expect(got.Status.Artifact).ToNot(BeNil())
 
-			delete(secret.Data, "password")
-			Expect(k8sClient.Update(context.Background(), secret)).Should(Succeed())
+			By("Applying secret with missing keys")
+			secret.ResourceVersion = ""
+			secret.Data["username"] = []byte{}
+			secret.Data["password"] = []byte{}
+			Expect(k8sClient.Create(context.Background(), secret)).Should(Succeed())
 
 			By("Expecting 401")
 			Eventually(func() bool {
@@ -383,20 +382,36 @@ var _ = Describe("HelmChartReconciler", func() {
 				return false
 			}, timeout, interval).Should(BeTrue())
 
-			By("Expecting missing secret error")
-			Expect(k8sClient.Delete(context.Background(), secret)).Should(Succeed())
-			got = &sourcev1.HelmChart{}
+			By("Adding username key")
+			secret.Data["username"] = []byte(username)
+			Expect(k8sClient.Update(context.Background(), secret)).Should(Succeed())
+
+			By("Expecting missing field error")
 			Eventually(func() bool {
 				_ = k8sClient.Get(context.Background(), key, got)
 				for _, c := range got.Status.Conditions {
-					if c.Reason == sourcev1.AuthenticationFailedReason &&
-						strings.Contains(c.Message, "auth secret error") {
+					if c.Reason == sourcev1.AuthenticationFailedReason {
 						return true
 					}
 				}
 				return false
 			}, timeout, interval).Should(BeTrue())
-			Expect(got.Status.Artifact).ShouldNot(BeNil())
+
+			By("Adding password key")
+			secret.Data["password"] = []byte(password)
+			Expect(k8sClient.Update(context.Background(), secret)).Should(Succeed())
+
+			By("Expecting artifact")
+			Eventually(func() bool {
+				_ = k8sClient.Get(context.Background(), key, got)
+				for _, c := range got.Status.Conditions {
+					if c.Type == sourcev1.ReadyCondition && c.Status == corev1.ConditionTrue {
+						return true
+					}
+				}
+				return false
+			}, timeout, interval).Should(BeTrue())
+			Expect(got.Status.Artifact).ToNot(BeNil())
 		})
 	})
 

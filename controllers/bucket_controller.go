@@ -211,7 +211,7 @@ func (r *BucketReconciler) reconcile(ctx context.Context, bucket sourcev1.Bucket
 
 	// return early on unchanged revision
 	artifact := r.Storage.NewArtifactFor(bucket.Kind, bucket.GetObjectMeta(), revision, fmt.Sprintf("%s.tar.gz", revision))
-	if bucket.GetArtifact().HasRevision(artifact.Revision) {
+	if sourcev1.InReadyCondition(bucket.Status.Conditions) && bucket.GetArtifact().HasRevision(artifact.Revision) {
 		if artifact.URL != bucket.GetArtifact().URL {
 			r.Storage.SetArtifactURL(bucket.GetArtifact())
 			bucket.Status.URL = r.Storage.SetHostname(bucket.Status.URL)
@@ -317,7 +317,8 @@ func (r *BucketReconciler) checksum(root string) (string, error) {
 // resetStatus returns a modified v1alpha1.Bucket and a boolean indicating
 // if the status field has been reset.
 func (r *BucketReconciler) resetStatus(bucket sourcev1.Bucket) (sourcev1.Bucket, bool) {
-	if bucket.GetArtifact() != nil && !r.Storage.ArtifactExist(*bucket.GetArtifact()) {
+	// We do not have an artifact, or it does no longer exist
+	if bucket.GetArtifact() == nil || !r.Storage.ArtifactExist(*bucket.GetArtifact()) {
 		bucket = sourcev1.BucketProgressing(bucket)
 		bucket.Status.Artifact = nil
 		return bucket, true
