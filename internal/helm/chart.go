@@ -28,7 +28,7 @@ import (
 // OverwriteChartDefaultValues overwrites the chart default values file in the
 // given chartPath with the contents of the given valuesFile.
 func OverwriteChartDefaultValues(chartPath, valuesFile string) error {
-	if valuesFile == chartutil.ValuesfileName {
+	if valuesFile == "" || valuesFile == chartutil.ValuesfileName {
 		return nil
 	}
 	srcPath := path.Join(chartPath, valuesFile)
