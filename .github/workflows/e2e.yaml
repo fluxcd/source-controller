@@ -67,10 +67,13 @@ jobs:
           kubectl -n source-system wait helmchart/mariadb-git --for=condition=ready --timeout=5m
           kubectl -n source-system delete -f ./config/testdata/helmchart-valuesfile
       - name: Setup Minio
+        env:
+          MINIO_VER: ${{ 'v6.3.1' }}
         run: |
           kubectl create ns minio
           helm repo add minio https://helm.min.io/
           helm upgrade --wait -i minio minio/minio \
+          --version $MINIO_VER \
           --namespace minio \
           --set accessKey=myaccesskey \
           --set secretKey=mysecretkey \
