@@ -174,6 +174,7 @@ var _ = Describe("HelmRepositoryReconciler", func() {
 				},
 			}
 			Expect(k8sClient.Create(context.Background(), created)).Should(Succeed())
+			defer k8sClient.Delete(context.Background(), created)
 
 			By("Expecting index download to succeed")
 			Eventually(func() bool {
@@ -257,6 +258,7 @@ var _ = Describe("HelmRepositoryReconciler", func() {
 				},
 			}
 			Expect(k8sClient.Create(context.Background(), created)).Should(Succeed())
+			defer k8sClient.Delete(context.Background(), created)
 
 			By("Expecting 401")
 			Eventually(func() bool {
@@ -348,6 +350,7 @@ var _ = Describe("HelmRepositoryReconciler", func() {
 				},
 			}
 			Expect(k8sClient.Create(context.Background(), created)).Should(Succeed())
+			defer k8sClient.Delete(context.Background(), created)
 
 			By("Expecting unknown authority error")
 			Eventually(func() bool {

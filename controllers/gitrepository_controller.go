@@ -198,7 +198,7 @@ func (r *GitRepositoryReconciler) reconcile(ctx context.Context, repository sour
 
 	// return early on unchanged revision
 	artifact := r.Storage.NewArtifactFor(repository.Kind, repository.GetObjectMeta(), revision, fmt.Sprintf("%s.tar.gz", commit.Hash.String()))
-	if repository.GetArtifact().HasRevision(artifact.Revision) {
+	if sourcev1.InReadyCondition(repository.Status.Conditions) && repository.GetArtifact().HasRevision(artifact.Revision) {
 		if artifact.URL != repository.GetArtifact().URL {
 			r.Storage.SetArtifactURL(repository.GetArtifact())
 			repository.Status.URL = r.Storage.SetHostname(repository.Status.URL)
@@ -276,7 +276,8 @@ func (r *GitRepositoryReconciler) verify(ctx context.Context, publicKeySecret ty
 // resetStatus returns a modified v1alpha1.GitRepository and a boolean indicating
 // if the status field has been reset.
 func (r *GitRepositoryReconciler) resetStatus(repository sourcev1.GitRepository) (sourcev1.GitRepository, bool) {
-	if repository.GetArtifact() != nil && !r.Storage.ArtifactExist(*repository.GetArtifact()) {
+	// We do not have an artifact, or it does no longer exist
+	if repository.GetArtifact() == nil || !r.Storage.ArtifactExist(*repository.GetArtifact()) {
 		repository = sourcev1.GitRepositoryProgressing(repository)
 		repository.Status.Artifact = nil
 		return repository, true

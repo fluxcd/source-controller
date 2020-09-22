@@ -76,3 +76,13 @@ const (
 	// is underway.
 	ProgressingReason string = "Progressing"
 )
+
+// InReadyCondition returns if the given SourceCondition slice has a ReadyCondition with
+// a 'True' status.
+func InReadyCondition(conditions []SourceCondition) bool {
+	condition := getCondition(conditions, ReadyCondition)
+	if condition == nil {
+		return false
+	}
+	return condition.Status == corev1.ConditionTrue
+}

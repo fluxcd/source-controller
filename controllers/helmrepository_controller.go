@@ -217,7 +217,7 @@ func (r *HelmRepositoryReconciler) reconcile(ctx context.Context, repository sou
 	// return early on unchanged generation
 	artifact := r.Storage.NewArtifactFor(repository.Kind, repository.ObjectMeta.GetObjectMeta(), i.Generated.Format(time.RFC3339Nano),
 		fmt.Sprintf("index-%s.yaml", url.PathEscape(i.Generated.Format(time.RFC3339Nano))))
-	if repository.GetArtifact().HasRevision(artifact.Revision) {
+	if sourcev1.InReadyCondition(repository.Status.Conditions) && repository.GetArtifact().HasRevision(artifact.Revision) {
 		if artifact.URL != repository.GetArtifact().URL {
 			r.Storage.SetArtifactURL(repository.GetArtifact())
 			repository.Status.URL = r.Storage.SetHostname(repository.Status.URL)
@@ -266,7 +266,8 @@ func (r *HelmRepositoryReconciler) reconcile(ctx context.Context, repository sou
 // resetStatus returns a modified v1alpha1.HelmRepository and a boolean indicating
 // if the status field has been reset.
 func (r *HelmRepositoryReconciler) resetStatus(repository sourcev1.HelmRepository) (sourcev1.HelmRepository, bool) {
-	if repository.GetArtifact() != nil && !r.Storage.ArtifactExist(*repository.GetArtifact()) {
+	// We do not have an artifact, or it does no longer exist
+	if repository.GetArtifact() == nil || !r.Storage.ArtifactExist(*repository.GetArtifact()) {
 		repository = sourcev1.HelmRepositoryProgressing(repository)
 		repository.Status.Artifact = nil
 		return repository, true

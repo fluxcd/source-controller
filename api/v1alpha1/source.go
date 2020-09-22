@@ -26,3 +26,15 @@ func filterOutSourceCondition(conditions []SourceCondition, condition string) []
 	}
 	return newConditions
 }
+
+// getCondition returns the SourceCondition from the given slice that matches
+// the given condition.
+func getCondition(conditions []SourceCondition, condition string) *SourceCondition {
+	for i := range conditions {
+		c := conditions[i]
+		if c.Type == condition {
+			return &c
+		}
+	}
+	return nil
+}
