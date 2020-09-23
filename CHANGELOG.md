@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.0.18 (2020-09-23)
+
+This prerelease fixes a reconciliation bug that prevented
+resources recovering from transient errors.
+Container images for ARMv7 and ARMv8 are published to
+`ghcr.io/fluxcd/source-controller-arm64`.
+The Helm package was updated to v3.3.4.
+
 ## 0.0.17 (2020-09-18)
 
 This prerelease comes with support for S3 compatible storage sources
