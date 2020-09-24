@@ -20,15 +20,12 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io/ioutil"
 	"net/url"
-	"path"
 	"strings"
 	"time"
 
 	"github.com/go-logr/logr"
 	"helm.sh/helm/v3/pkg/getter"
-	"helm.sh/helm/v3/pkg/repo"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -163,19 +160,6 @@ func (r *HelmRepositoryReconciler) SetupWithManagerAndOptions(mgr ctrl.Manager, 
 }
 
 func (r *HelmRepositoryReconciler) reconcile(ctx context.Context, repository sourcev1.HelmRepository) (sourcev1.HelmRepository, error) {
-	u, err := url.Parse(repository.Spec.URL)
-	if err != nil {
-		return sourcev1.HelmRepositoryNotReady(repository, sourcev1.URLInvalidReason, err.Error()), err
-	}
-
-	c, err := r.Getters.ByScheme(u.Scheme)
-	if err != nil {
-		return sourcev1.HelmRepositoryNotReady(repository, sourcev1.URLInvalidReason, err.Error()), err
-	}
-
-	u.RawPath = path.Join(u.RawPath, "index.yaml")
-	u.Path = path.Join(u.Path, "index.yaml")
-
 	var clientOpts []getter.Option
 	if repository.Spec.SecretRef != nil {
 		name := types.NamespacedName{
@@ -198,37 +182,33 @@ func (r *HelmRepositoryReconciler) reconcile(ctx context.Context, repository sou
 		defer cleanup()
 		clientOpts = opts
 	}
-
 	clientOpts = append(clientOpts, getter.WithTimeout(repository.GetTimeout()))
-	res, err := c.Get(u.String(), clientOpts...)
-	if err != nil {
-		return sourcev1.HelmRepositoryNotReady(repository, sourcev1.IndexationFailedReason, err.Error()), err
-	}
 
-	b, err := ioutil.ReadAll(res)
+	chartRepo, err := helm.NewChartRepository(repository.Spec.URL, r.Getters, clientOpts)
 	if err != nil {
-		return sourcev1.HelmRepositoryNotReady(repository, sourcev1.IndexationFailedReason, err.Error()), err
+		switch err.(type) {
+		case *url.Error:
+			return sourcev1.HelmRepositoryNotReady(repository, sourcev1.URLInvalidReason, err.Error()), err
+		default:
+			return sourcev1.HelmRepositoryNotReady(repository, sourcev1.IndexationFailedReason, err.Error()), err
+		}
 	}
-	i := repo.IndexFile{}
-	if err := yaml.Unmarshal(b, &i); err != nil {
+	if err := chartRepo.DownloadIndex(); err != nil {
+		err = fmt.Errorf("failed to download repository index: %w", err)
 		return sourcev1.HelmRepositoryNotReady(repository, sourcev1.IndexationFailedReason, err.Error()), err
 	}
 
 	// return early on unchanged generation
-	artifact := r.Storage.NewArtifactFor(repository.Kind, repository.ObjectMeta.GetObjectMeta(), i.Generated.Format(time.RFC3339Nano),
-		fmt.Sprintf("index-%s.yaml", url.PathEscape(i.Generated.Format(time.RFC3339Nano))))
+	artifact := r.Storage.NewArtifactFor(repository.Kind,
+		repository.ObjectMeta.GetObjectMeta(),
+		chartRepo.Index.Generated.Format(time.RFC3339Nano),
+		fmt.Sprintf("index-%s.yaml", url.PathEscape(chartRepo.Index.Generated.Format(time.RFC3339Nano))))
 	if sourcev1.InReadyCondition(repository.Status.Conditions) && repository.GetArtifact().HasRevision(artifact.Revision) {
 		if artifact.URL != repository.GetArtifact().URL {
 			r.Storage.SetArtifactURL(repository.GetArtifact())
 			repository.Status.URL = r.Storage.SetHostname(repository.Status.URL)
 		}
 		return repository, nil
-	}
-
-	i.SortEntries()
-	b, err = yaml.Marshal(&i)
-	if err != nil {
-		return sourcev1.HelmRepositoryNotReady(repository, sourcev1.IndexationFailedReason, err.Error()), err
 	}
 
 	// create artifact dir
@@ -247,6 +227,10 @@ func (r *HelmRepositoryReconciler) reconcile(ctx context.Context, repository sou
 	defer unlock()
 
 	// save artifact to storage
+	b, err := yaml.Marshal(&chartRepo.Index)
+	if err != nil {
+		return sourcev1.HelmRepositoryNotReady(repository, sourcev1.IndexationFailedReason, err.Error()), err
+	}
 	if err := r.Storage.AtomicWriteFile(&artifact, bytes.NewReader(b), 0644); err != nil {
 		err = fmt.Errorf("unable to write repository index file: %w", err)
 		return sourcev1.HelmRepositoryNotReady(repository, sourcev1.StorageOperationFailedReason, err.Error()), err

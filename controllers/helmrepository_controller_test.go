@@ -121,7 +121,7 @@ var _ = Describe("HelmRepositoryReconciler", func() {
 			Eventually(func() bool {
 				_ = k8sClient.Get(context.Background(), key, updated)
 				for _, c := range updated.Status.Conditions {
-					if c.Reason == sourcev1.URLInvalidReason {
+					if c.Reason == sourcev1.IndexationFailedReason {
 						return true
 					}
 				}

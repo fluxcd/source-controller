@@ -231,52 +231,6 @@ func (r *HelmChartReconciler) getSource(ctx context.Context, chart sourcev1.Helm
 
 func (r *HelmChartReconciler) reconcileFromHelmRepository(ctx context.Context,
 	repository sourcev1.HelmRepository, chart sourcev1.HelmChart, force bool) (sourcev1.HelmChart, error) {
-	cv, err := helm.GetDownloadableChartVersionFromIndex(r.Storage.LocalPath(*repository.GetArtifact()),
-		chart.Spec.Chart, chart.Spec.Version)
-	if err != nil {
-		return sourcev1.HelmChartNotReady(chart, sourcev1.ChartPullFailedReason, err.Error()), err
-	}
-
-	// Return early if the revision is still the same as the current artifact
-	newArtifact := r.Storage.NewArtifactFor(chart.Kind, chart.GetObjectMeta(), cv.Version,
-		fmt.Sprintf("%s-%s.tgz", cv.Name, cv.Version))
-	if !force && sourcev1.InReadyCondition(chart.Status.Conditions) && chart.GetArtifact().HasRevision(newArtifact.Revision) {
-		if newArtifact.URL != repository.GetArtifact().URL {
-			r.Storage.SetArtifactURL(chart.GetArtifact())
-			chart.Status.URL = r.Storage.SetHostname(chart.Status.URL)
-		}
-		return chart, nil
-	}
-
-	// TODO(hidde): according to the Helm source the first item is not
-	//  always the correct one to pick, check for updates once in awhile.
-	//  Ref: https://github.com/helm/helm/blob/v3.3.0/pkg/downloader/chart_downloader.go#L241
-	ref := cv.URLs[0]
-	u, err := url.Parse(ref)
-	if err != nil {
-		err = fmt.Errorf("invalid chart URL format '%s': %w", ref, err)
-	}
-
-	// Prepend the chart repository base URL if the URL is relative
-	if !u.IsAbs() {
-		repoURL, err := url.Parse(repository.Spec.URL)
-		if err != nil {
-			err = fmt.Errorf("invalid repository URL format '%s': %w", repository.Spec.URL, err)
-			return sourcev1.HelmChartNotReady(chart, sourcev1.ChartPullFailedReason, err.Error()), err
-		}
-		q := repoURL.Query()
-		// Trailing slash is required for ResolveReference to work
-		repoURL.Path = strings.TrimSuffix(repoURL.Path, "/") + "/"
-		u = repoURL.ResolveReference(u)
-		u.RawQuery = q.Encode()
-	}
-
-	// Get the getter for the protocol
-	c, err := r.Getters.ByScheme(u.Scheme)
-	if err != nil {
-		return sourcev1.HelmChartNotReady(chart, sourcev1.ChartPullFailedReason, err.Error()), err
-	}
-
 	var clientOpts []getter.Option
 	if repository.Spec.SecretRef != nil {
 		name := types.NamespacedName{
@@ -299,6 +253,46 @@ func (r *HelmChartReconciler) reconcileFromHelmRepository(ctx context.Context,
 		defer cleanup()
 		clientOpts = opts
 	}
+	clientOpts = append(clientOpts, getter.WithTimeout(repository.GetTimeout()))
+
+	// Initialize the chart repository and load the index file
+	chartRepo, err := helm.NewChartRepository(repository.Spec.URL, r.Getters, clientOpts)
+	if err != nil {
+		switch err.(type) {
+		case *url.Error:
+			return sourcev1.HelmChartNotReady(chart, sourcev1.URLInvalidReason, err.Error()), err
+		default:
+			return sourcev1.HelmChartNotReady(chart, sourcev1.ChartPullFailedReason, err.Error()), err
+		}
+	}
+	indexFile, err := os.Open(r.Storage.LocalPath(*repository.GetArtifact()))
+	if err != nil {
+		return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
+	}
+	b, err := ioutil.ReadAll(indexFile)
+	if err != nil {
+		return sourcev1.HelmChartNotReady(chart, sourcev1.ChartPullFailedReason, err.Error()), err
+	}
+	if err = chartRepo.LoadIndex(b); err != nil {
+		return sourcev1.HelmChartNotReady(chart, sourcev1.ChartPullFailedReason, err.Error()), err
+	}
+
+	// Lookup the chart version in the chart repository index
+	chartVer, err := chartRepo.Get(chart.Spec.Chart, chart.Spec.Version)
+	if err != nil {
+		return sourcev1.HelmChartNotReady(chart, sourcev1.ChartPullFailedReason, err.Error()), err
+	}
+
+	// Return early if the revision is still the same as the current artifact
+	newArtifact := r.Storage.NewArtifactFor(chart.Kind, chart.GetObjectMeta(), chartVer.Version,
+		fmt.Sprintf("%s-%s.tgz", chartVer.Name, chartVer.Version))
+	if !force && repository.GetArtifact().HasRevision(newArtifact.Revision) {
+		if newArtifact.URL != chart.GetArtifact().URL {
+			r.Storage.SetArtifactURL(chart.GetArtifact())
+			chart.Status.URL = r.Storage.SetHostname(chart.Status.URL)
+		}
+		return chart, nil
+	}
 
 	// Ensure artifact directory exists
 	err = r.Storage.MkdirAll(newArtifact)
@@ -315,9 +309,8 @@ func (r *HelmChartReconciler) reconcileFromHelmRepository(ctx context.Context,
 	}
 	defer unlock()
 
-	// TODO(hidde): implement timeout from the HelmRepository
-	//  https://github.com/helm/helm/pull/7950
-	res, err := c.Get(u.String(), clientOpts...)
+	// Attempt to download the chart
+	res, err := chartRepo.DownloadChart(chartVer)
 	if err != nil {
 		return sourcev1.HelmChartNotReady(chart, sourcev1.ChartPullFailedReason, err.Error()), err
 	}
@@ -345,7 +338,7 @@ func (r *HelmChartReconciler) reconcileFromHelmRepository(ctx context.Context,
 		}
 
 		// Overwrite values file
-		chartPath := path.Join(tmpDir, cv.Name)
+		chartPath := path.Join(tmpDir, chartVer.Name)
 		if err := helm.OverwriteChartDefaultValues(chartPath, chart.Spec.ValuesFile); err != nil {
 			return sourcev1.HelmChartNotReady(chart, sourcev1.ChartPackageFailedReason, err.Error()), err
 		}
@@ -376,7 +369,7 @@ func (r *HelmChartReconciler) reconcileFromHelmRepository(ctx context.Context,
 	}
 
 	// Update symlink
-	chartUrl, err := r.Storage.Symlink(newArtifact, fmt.Sprintf("%s-latest.tgz", cv.Name))
+	chartUrl, err := r.Storage.Symlink(newArtifact, fmt.Sprintf("%s-latest.tgz", chartVer.Name))
 	if err != nil {
 		err = fmt.Errorf("storage error: %w", err)
 		return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err

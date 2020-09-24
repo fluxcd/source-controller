@@ -26,6 +26,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
+// ClientOptionsFromSecret constructs a getter.Option slice for the given secret.
+// It returns the slice, and a callback to remove temporary files.
 func ClientOptionsFromSecret(secret corev1.Secret) ([]getter.Option, func(), error) {
 	var opts []getter.Option
 	basicAuth, err := BasicAuthFromSecret(secret)
@@ -45,6 +47,11 @@ func ClientOptionsFromSecret(secret corev1.Secret) ([]getter.Option, func(), err
 	return opts, cleanup, nil
 }
 
+// BasicAuthFromSecret attempts to construct a basic auth getter.Option for the
+// given v1.Secret and returns the result.
+//
+// Secrets with no username AND password are ignored, if only one is defined it
+// returns an error.
 func BasicAuthFromSecret(secret corev1.Secret) (getter.Option, error) {
 	username, password := string(secret.Data["username"]), string(secret.Data["password"])
 	switch {
@@ -56,6 +63,12 @@ func BasicAuthFromSecret(secret corev1.Secret) (getter.Option, error) {
 	return getter.WithBasicAuth(username, password), nil
 }
 
+// TLSClientConfigFromSecret attempts to construct a TLS client config
+// getter.Option for the given v1.Secret. It returns the getter.Option and a
+// callback to remove the temporary TLS files.
+//
+// Secrets with no certFile, keyFile, AND caFile are ignored, if only a
+// certBytes OR keyBytes is defined it returns an error.
 func TLSClientConfigFromSecret(secret corev1.Secret) (getter.Option, func(), error) {
 	certBytes, keyBytes, caBytes := secret.Data["certFile"], secret.Data["keyFile"], secret.Data["caFile"]
 	switch {
