@@ -143,7 +143,8 @@ Kubernetes core/v1.LocalObjectReference
 </td>
 <td>
 <em>(Optional)</em>
-<p>The secret name containing the bucket accesskey and secretkey.</p>
+<p>The name of the secret containing authentication credentials
+for the Bucket.</p>
 </td>
 </tr>
 <tr>
@@ -182,8 +183,8 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>Ignore overrides the set of excluded patterns in the .sourceignore
-format (which is the same as .gitignore).</p>
+<p>Ignore overrides the set of excluded patterns in the .sourceignore format
+(which is the same as .gitignore).</p>
 </td>
 </tr>
 </table>
@@ -356,10 +357,9 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>Ignore overrides the set of excluded patterns in the .sourceignore
-format (which is the same as .gitignore). If not provided, a default will
-be used, consult the documentation for your version to find out what those
-are.</p>
+<p>Ignore overrides the set of excluded patterns in the .sourceignore format
+(which is the same as .gitignore). If not provided, a default will be used,
+consult the documentation for your version to find out what those are.</p>
 </td>
 </tr>
 </table>
@@ -497,8 +497,8 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>Alternative values file to use as the default chart values, expected to be
-a relative path in the SourceRef. Ignored when omitted.</p>
+<p>Alternative values file to use as the default chart values, expected to be a
+relative path in the SourceRef. Ignored when omitted.</p>
 </td>
 </tr>
 </table>
@@ -585,8 +585,7 @@ string
 </em>
 </td>
 <td>
-<p>The Helm repository URL, a valid URL contains at least a
-protocol and host.</p>
+<p>The Helm repository URL, a valid URL contains at least a protocol and host.</p>
 </td>
 </tr>
 <tr>
@@ -600,11 +599,12 @@ Kubernetes core/v1.LocalObjectReference
 </td>
 <td>
 <em>(Optional)</em>
-<p>The name of the secret containing authentication credentials
-for the Helm repository.
-For HTTP/S basic auth the secret must contain username and password
-fields.
-For TLS the secret must contain caFile, keyFile and caCert fields.</p>
+<p>The name of the secret containing authentication credentials for the Helm
+repository.
+For HTTP/S basic auth the secret must contain username and
+password fields.
+For TLS the secret must contain caFile, keyFile and caCert
+fields.</p>
 </td>
 </tr>
 <tr>
@@ -704,9 +704,9 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>Revision is a human readable identifier traceable in the origin
-source system. It can be a Git commit sha, Git tag, a Helm index
-timestamp, a Helm chart version, etc.</p>
+<p>Revision is a human readable identifier traceable in the origin source
+system. It can be a Git commit sha, Git tag, a Helm index timestamp, a Helm
+chart version, etc.</p>
 </td>
 </tr>
 <tr>
@@ -731,8 +731,8 @@ Kubernetes meta/v1.Time
 </em>
 </td>
 <td>
-<p>LastUpdateTime is the timestamp corresponding to the last
-update of this artifact.</p>
+<p>LastUpdateTime is the timestamp corresponding to the last update of this
+artifact.</p>
 </td>
 </tr>
 </tbody>
@@ -825,7 +825,8 @@ Kubernetes core/v1.LocalObjectReference
 </td>
 <td>
 <em>(Optional)</em>
-<p>The secret name containing the bucket accesskey and secretkey.</p>
+<p>The name of the secret containing authentication credentials
+for the Bucket.</p>
 </td>
 </tr>
 <tr>
@@ -864,8 +865,8 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>Ignore overrides the set of excluded patterns in the .sourceignore
-format (which is the same as .gitignore).</p>
+<p>Ignore overrides the set of excluded patterns in the .sourceignore format
+(which is the same as .gitignore).</p>
 </td>
 </tr>
 </tbody>
@@ -905,8 +906,8 @@ int64
 <td>
 <code>conditions</code><br>
 <em>
-<a href="#source.toolkit.fluxcd.io/v1alpha1.SourceCondition">
-[]SourceCondition
+<a href="https://godoc.org/github.com/fluxcd/pkg/apis/meta#Condition">
+[]github.com/fluxcd/pkg/apis/meta.Condition
 </a>
 </em>
 </td>
@@ -1125,10 +1126,9 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>Ignore overrides the set of excluded patterns in the .sourceignore
-format (which is the same as .gitignore). If not provided, a default will
-be used, consult the documentation for your version to find out what those
-are.</p>
+<p>Ignore overrides the set of excluded patterns in the .sourceignore format
+(which is the same as .gitignore). If not provided, a default will be used,
+consult the documentation for your version to find out what those are.</p>
 </td>
 </tr>
 </tbody>
@@ -1168,8 +1168,8 @@ int64
 <td>
 <code>conditions</code><br>
 <em>
-<a href="#source.toolkit.fluxcd.io/v1alpha1.SourceCondition">
-[]SourceCondition
+<a href="https://godoc.org/github.com/fluxcd/pkg/apis/meta#Condition">
+[]github.com/fluxcd/pkg/apis/meta.Condition
 </a>
 </em>
 </td>
@@ -1330,8 +1330,8 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>Alternative values file to use as the default chart values, expected to be
-a relative path in the SourceRef. Ignored when omitted.</p>
+<p>Alternative values file to use as the default chart values, expected to be a
+relative path in the SourceRef. Ignored when omitted.</p>
 </td>
 </tr>
 </tbody>
@@ -1371,8 +1371,8 @@ int64
 <td>
 <code>conditions</code><br>
 <em>
-<a href="#source.toolkit.fluxcd.io/v1alpha1.SourceCondition">
-[]SourceCondition
+<a href="https://godoc.org/github.com/fluxcd/pkg/apis/meta#Condition">
+[]github.com/fluxcd/pkg/apis/meta.Condition
 </a>
 </em>
 </td>
@@ -1436,8 +1436,7 @@ string
 </em>
 </td>
 <td>
-<p>The Helm repository URL, a valid URL contains at least a
-protocol and host.</p>
+<p>The Helm repository URL, a valid URL contains at least a protocol and host.</p>
 </td>
 </tr>
 <tr>
@@ -1451,11 +1450,12 @@ Kubernetes core/v1.LocalObjectReference
 </td>
 <td>
 <em>(Optional)</em>
-<p>The name of the secret containing authentication credentials
-for the Helm repository.
-For HTTP/S basic auth the secret must contain username and password
-fields.
-For TLS the secret must contain caFile, keyFile and caCert fields.</p>
+<p>The name of the secret containing authentication credentials for the Helm
+repository.
+For HTTP/S basic auth the secret must contain username and
+password fields.
+For TLS the secret must contain caFile, keyFile and caCert
+fields.</p>
 </td>
 </tr>
 <tr>
@@ -1522,8 +1522,8 @@ int64
 <td>
 <code>conditions</code><br>
 <em>
-<a href="#source.toolkit.fluxcd.io/v1alpha1.SourceCondition">
-[]SourceCondition
+<a href="https://godoc.org/github.com/fluxcd/pkg/apis/meta#Condition">
+[]github.com/fluxcd/pkg/apis/meta.Condition
 </a>
 </em>
 </td>
@@ -1568,8 +1568,8 @@ Artifact
 (<em>Appears on:</em>
 <a href="#source.toolkit.fluxcd.io/v1alpha1.HelmChartSpec">HelmChartSpec</a>)
 </p>
-<p>LocalHelmChartSourceReference contains enough information to let you locate the
-typed referenced object at namespace level.</p>
+<p>LocalHelmChartSourceReference contains enough information to let you locate
+the typed referenced object at namespace level.</p>
 <div class="md-typeset__scrollwrap">
 <div class="md-typeset__table">
 <table>
@@ -1600,7 +1600,8 @@ string
 </em>
 </td>
 <td>
-<p>Kind of the referent, valid values are (&lsquo;HelmRepository&rsquo;, &lsquo;GitRepository&rsquo;, &lsquo;Bucket&rsquo;).</p>
+<p>Kind of the referent, valid values are (&lsquo;HelmRepository&rsquo;, &lsquo;GitRepository&rsquo;,
+&lsquo;Bucket&rsquo;).</p>
 </td>
 </tr>
 <tr>
@@ -1621,93 +1622,6 @@ string
 <h3 id="source.toolkit.fluxcd.io/v1alpha1.Source">Source
 </h3>
 <p>Source interface must be supported by all API types.</p>
-<h3 id="source.toolkit.fluxcd.io/v1alpha1.SourceCondition">SourceCondition
-</h3>
-<p>
-(<em>Appears on:</em>
-<a href="#source.toolkit.fluxcd.io/v1alpha1.BucketStatus">BucketStatus</a>, 
-<a href="#source.toolkit.fluxcd.io/v1alpha1.GitRepositoryStatus">GitRepositoryStatus</a>, 
-<a href="#source.toolkit.fluxcd.io/v1alpha1.HelmChartStatus">HelmChartStatus</a>, 
-<a href="#source.toolkit.fluxcd.io/v1alpha1.HelmRepositoryStatus">HelmRepositoryStatus</a>)
-</p>
-<p>SourceCondition contains condition information for a source.</p>
-<div class="md-typeset__scrollwrap">
-<div class="md-typeset__table">
-<table>
-<thead>
-<tr>
-<th>Field</th>
-<th>Description</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>
-<code>type</code><br>
-<em>
-string
-</em>
-</td>
-<td>
-<p>Type of the condition, currently (&lsquo;Ready&rsquo;).</p>
-</td>
-</tr>
-<tr>
-<td>
-<code>status</code><br>
-<em>
-<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.18/#conditionstatus-v1-core">
-Kubernetes core/v1.ConditionStatus
-</a>
-</em>
-</td>
-<td>
-<p>Status of the condition, one of (&lsquo;True&rsquo;, &lsquo;False&rsquo;, &lsquo;Unknown&rsquo;).</p>
-</td>
-</tr>
-<tr>
-<td>
-<code>lastTransitionTime</code><br>
-<em>
-<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.18/#time-v1-meta">
-Kubernetes meta/v1.Time
-</a>
-</em>
-</td>
-<td>
-<p>LastTransitionTime is the timestamp corresponding to the last status
-change of this condition.</p>
-</td>
-</tr>
-<tr>
-<td>
-<code>reason</code><br>
-<em>
-string
-</em>
-</td>
-<td>
-<p>Reason is a brief machine readable explanation for the condition&rsquo;s last
-transition.</p>
-</td>
-</tr>
-<tr>
-<td>
-<code>message</code><br>
-<em>
-string
-</em>
-</td>
-<td>
-<em>(Optional)</em>
-<p>Message is a human readable description of the details of the last
-transition, complementing reason.</p>
-</td>
-</tr>
-</tbody>
-</table>
-</div>
-</div>
 <div class="admonition note">
 <p class="last">This page was automatically generated with <code>gen-crd-api-reference-docs</code></p>
 </div>

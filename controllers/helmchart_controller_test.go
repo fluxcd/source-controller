@@ -28,6 +28,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/gittestserver"
 	"github.com/fluxcd/pkg/helmtestserver"
 	"github.com/go-git/go-billy/v5/memfs"
@@ -404,12 +405,7 @@ var _ = Describe("HelmChartReconciler", func() {
 			By("Expecting artifact")
 			Eventually(func() bool {
 				_ = k8sClient.Get(context.Background(), key, got)
-				for _, c := range got.Status.Conditions {
-					if c.Type == sourcev1.ReadyCondition && c.Status == corev1.ConditionTrue {
-						return true
-					}
-				}
-				return false
+				return meta.HasReadyCondition(got.Status.Conditions)
 			}, timeout, interval).Should(BeTrue())
 			Expect(got.Status.Artifact).ToNot(BeNil())
 		})

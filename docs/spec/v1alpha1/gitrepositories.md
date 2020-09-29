@@ -9,11 +9,11 @@ resource exposes the latest synchronized state from Git as an artifact in a
 Git repository:
 
 ```go
-// GitRepositorySpec gives the specification for fetching a Git repository as
-// a source.
+// GitRepositorySpec defines the desired state of a Git repository.
 type GitRepositorySpec struct {
 	// The repository URL, can be a HTTP or SSH address.
 	// +kubebuilder:validation:Pattern="^(http|https|ssh)://"
+	// +required
 	URL string `json:"url"`
 
 	// The secret name containing the Git credentials.
@@ -22,9 +22,10 @@ type GitRepositorySpec struct {
 	// For SSH repositories the secret must contain identity, identity.pub and
 	// known_hosts fields.
 	// +optional
-	SecretRef *v1.LocalObjectReference `json:"secretRef,omitempty"`
+	SecretRef *corev1.LocalObjectReference `json:"secretRef,omitempty"`
 
 	// The interval at which to check for repository updates.
+	// +required
 	Interval metav1.Duration `json:"interval"`
 
 	// The timeout for remote git operations like cloning, default to 20s.
@@ -40,13 +41,11 @@ type GitRepositorySpec struct {
 	// +optional
 	Verification *GitRepositoryVerification `json:"verify,omitempty"`
 
-	// Ignore overrides the set of excluded patterns in the .sourceignore
-	// format (which is the same as .gitignore). If not provided, a default will
-	// be used, consult the documentation for your version to find out what those
-	// are.
+	// Ignore overrides the set of excluded patterns in the .sourceignore format
+	// (which is the same as .gitignore). If not provided, a default will be used,
+	// consult the documentation for your version to find out what those are.
 	// +optional
 	Ignore *string `json:"ignore,omitempty"`
-
 }
 ```
 
@@ -93,7 +92,7 @@ type GitRepositoryVerification struct {
 // GitRepositoryStatus defines the observed state of the GitRepository.
 type GitRepositoryStatus struct {
 	// +optional
-	Conditions []SourceCondition `json:"conditions,omitempty"`
+	Conditions []meta.Condition `json:"conditions,omitempty"`
 
 	// URL is the download link for the artifact output of the last repository
 	// sync.

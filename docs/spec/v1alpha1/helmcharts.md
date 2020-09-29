@@ -9,7 +9,7 @@ exposes the latest pulled or packaged chart as an artifact.
 Helm chart:
 
 ```go
-// HelmChartSpec defines the desired state of a Helm chart source.
+// HelmChartSpec defines the desired state of a Helm chart.
 type HelmChartSpec struct {
 	// The name or path the Helm chart is available at in the SourceRef.
 	// +required
@@ -27,20 +27,26 @@ type HelmChartSpec struct {
 	// The interval at which to check the Source for updates.
 	// +required
 	Interval metav1.Duration `json:"interval"`
+
+	// Alternative values file to use as the default chart values, expected to be a
+	// relative path in the SourceRef. Ignored when omitted.
+	// +optional
+	ValuesFile string `json:"valuesFile,omitempty"`
 }
 ```
 
 ### Reference types
 
 ```go
-// LocalHelmChartSourceReference contains enough information to let you locate the
-// typed referenced object at namespace level.
+// LocalHelmChartSourceReference contains enough information to let you locate
+// the typed referenced object at namespace level.
 type LocalHelmChartSourceReference struct {
 	// APIVersion of the referent.
 	// +optional
 	APIVersion string `json:"apiVersion,omitempty"`
 
-	// Kind of the referent, valid values are ('HelmRepository', 'GitRepository', 'Bucket').
+	// Kind of the referent, valid values are ('HelmRepository', 'GitRepository',
+	// 'Bucket').
 	// +kubebuilder:validation:Enum=HelmRepository;GitRepository;Bucket
 	// +required
 	Kind string `json:"kind"`
@@ -57,7 +63,7 @@ type LocalHelmChartSourceReference struct {
 // HelmChartStatus defines the observed state of the HelmChart.
 type HelmChartStatus struct {
 	// +optional
-	Conditions []SourceCondition `json:"conditions,omitempty"`
+	Conditions []meta.Condition `json:"conditions,omitempty"`
 
 	// URL is the download link for the last chart fetched.
 	// +optional
@@ -73,20 +79,20 @@ type HelmChartStatus struct {
 
 ```go
 const (
-	// ChartPullFailedReason represents the fact that the pull of the
-	// given Helm chart failed.
+	// ChartPullFailedReason represents the fact that the pull of the Helm chart
+	// failed.
 	ChartPullFailedReason string = "ChartPullFailed"
 
-	// ChartPullSucceededReason represents the fact that the pull of
-	// the given Helm chart succeeded.
+	// ChartPullSucceededReason represents the fact that the pull of the Helm chart
+	// succeeded.
 	ChartPullSucceededReason string = "ChartPullSucceeded"
 
-	// ChartPackageFailedReason represent the fact that the package of
-	// the Helm chart failed.
+	// ChartPackageFailedReason represent the fact that the package of the Helm
+	// chart failed.
 	ChartPackageFailedReason string = "ChartPackageFailed"
 
-	// ChartPackageSucceededReason represents the fact that the package of
-	// the Helm chart succeeded.
+	// ChartPackageSucceededReason represents the fact that the package of the Helm
+	// chart succeeded.
 	ChartPackageSucceededReason string = "ChartPackageSucceeded"
 )
 ```

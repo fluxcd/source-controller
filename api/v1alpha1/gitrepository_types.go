@@ -19,6 +19,7 @@ package v1alpha1
 import (
 	"time"
 
+	"github.com/fluxcd/pkg/apis/meta"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -60,10 +61,9 @@ type GitRepositorySpec struct {
 	// +optional
 	Verification *GitRepositoryVerification `json:"verify,omitempty"`
 
-	// Ignore overrides the set of excluded patterns in the .sourceignore
-	// format (which is the same as .gitignore). If not provided, a default will
-	// be used, consult the documentation for your version to find out what those
-	// are.
+	// Ignore overrides the set of excluded patterns in the .sourceignore format
+	// (which is the same as .gitignore). If not provided, a default will be used,
+	// consult the documentation for your version to find out what those are.
 	// +optional
 	Ignore *string `json:"ignore,omitempty"`
 }
@@ -105,7 +105,7 @@ type GitRepositoryStatus struct {
 
 	// Conditions holds the conditions for the GitRepository.
 	// +optional
-	Conditions []SourceCondition `json:"conditions,omitempty"`
+	Conditions []meta.Condition `json:"conditions,omitempty"`
 
 	// URL is the download link for the artifact output of the last repository
 	// sync.
@@ -127,22 +127,23 @@ const (
 	GitOperationFailedReason string = "GitOperationFailed"
 )
 
-// GitRepositoryProgressing resets the conditions of the GitRepository
-// to SourceCondition of type Ready with status unknown and
-// progressing reason and message. It returns the modified GitRepository.
+// GitRepositoryProgressing resets the conditions of the GitRepository to
+// meta.Condition of type meta.ReadyCondition with status 'Unknown' and
+// meta.ProgressingReason reason and message. It returns the modified
+// GitRepository.
 func GitRepositoryProgressing(repository GitRepository) GitRepository {
 	repository.Status.ObservedGeneration = repository.Generation
 	repository.Status.URL = ""
-	repository.Status.Conditions = []SourceCondition{}
-	SetGitRepositoryCondition(&repository, ReadyCondition, corev1.ConditionUnknown, ProgressingReason, "reconciliation in progress")
+	repository.Status.Conditions = []meta.Condition{}
+	SetGitRepositoryCondition(&repository, meta.ReadyCondition, corev1.ConditionUnknown, meta.ProgressingReason, "reconciliation in progress")
 	return repository
 }
 
-// SetGitRepositoryCondition sets the given condition with the given status, reason and message
-// on the GitRepository.
+// SetGitRepositoryCondition sets the given condition with the given status,
+// reason and message on the GitRepository.
 func SetGitRepositoryCondition(repository *GitRepository, condition string, status corev1.ConditionStatus, reason, message string) {
-	repository.Status.Conditions = filterOutSourceCondition(repository.Status.Conditions, condition)
-	repository.Status.Conditions = append(repository.Status.Conditions, SourceCondition{
+	repository.Status.Conditions = meta.FilterOutCondition(repository.Status.Conditions, condition)
+	repository.Status.Conditions = append(repository.Status.Conditions, meta.Condition{
 		Type:               condition,
 		Status:             status,
 		LastTransitionTime: metav1.Now(),
@@ -151,30 +152,30 @@ func SetGitRepositoryCondition(repository *GitRepository, condition string, stat
 	})
 }
 
-// GitRepositoryReady sets the given artifact and url on the GitRepository
-// and sets the ReadyCondition to True, with the given reason and
-// message. It returns the modified GitRepository.
+// GitRepositoryReady sets the given Artifact and URL on the GitRepository and
+// sets the meta.ReadyCondition to 'True', with the given reason and message. It
+// returns the modified GitRepository.
 func GitRepositoryReady(repository GitRepository, artifact Artifact, url, reason, message string) GitRepository {
 	repository.Status.Artifact = &artifact
 	repository.Status.URL = url
-	SetGitRepositoryCondition(&repository, ReadyCondition, corev1.ConditionTrue, reason, message)
+	SetGitRepositoryCondition(&repository, meta.ReadyCondition, corev1.ConditionTrue, reason, message)
 	return repository
 }
 
-// GitRepositoryNotReady sets the ReadyCondition on the given GitRepository
-// to False, with the given reason and message. It returns the modified
+// GitRepositoryNotReady sets the meta.ReadyCondition on the given GitRepository
+// to 'False', with the given reason and message. It returns the modified
 // GitRepository.
 func GitRepositoryNotReady(repository GitRepository, reason, message string) GitRepository {
-	SetGitRepositoryCondition(&repository, ReadyCondition, corev1.ConditionFalse, reason, message)
+	SetGitRepositoryCondition(&repository, meta.ReadyCondition, corev1.ConditionFalse, reason, message)
 	return repository
 }
 
-// ReadyMessage returns the message of the SourceCondition
-// of type Ready with status true if present, or an empty string.
+// GitRepositoryReadyMessage returns the message of the meta.Condition of type
+// meta.ReadyCondition with status 'True' if present, or an empty string.
 func GitRepositoryReadyMessage(repository GitRepository) string {
-	for _, condition := range repository.Status.Conditions {
-		if condition.Type == ReadyCondition && condition.Status == corev1.ConditionTrue {
-			return condition.Message
+	if c := meta.GetCondition(repository.Status.Conditions, meta.ReadyCondition); c != nil {
+		if c.Status == corev1.ConditionTrue {
+			return c.Message
 		}
 	}
 	return ""
@@ -188,8 +189,8 @@ func (in *GitRepository) GetTimeout() time.Duration {
 	return GitRepositoryTimeout
 }
 
-// GetArtifact returns the latest artifact from the source
-// if present in the status sub-resource.
+// GetArtifact returns the latest artifact from the source if present in the
+// status sub-resource.
 func (in *GitRepository) GetArtifact() *Artifact {
 	return in.Status.Artifact
 }

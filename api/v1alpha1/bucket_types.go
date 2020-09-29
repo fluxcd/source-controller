@@ -19,6 +19,7 @@ package v1alpha1
 import (
 	"time"
 
+	"github.com/fluxcd/pkg/apis/meta"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -51,7 +52,8 @@ type BucketSpec struct {
 	// +optional
 	Region string `json:"region,omitempty"`
 
-	// The secret name containing the bucket accesskey and secretkey.
+	// The name of the secret containing authentication credentials
+	// for the Bucket.
 	// +optional
 	SecretRef *corev1.LocalObjectReference `json:"secretRef,omitempty"`
 
@@ -63,8 +65,8 @@ type BucketSpec struct {
 	// +optional
 	Timeout *metav1.Duration `json:"timeout,omitempty"`
 
-	// Ignore overrides the set of excluded patterns in the .sourceignore
-	// format (which is the same as .gitignore).
+	// Ignore overrides the set of excluded patterns in the .sourceignore format
+	// (which is the same as .gitignore).
 	// +optional
 	Ignore *string `json:"ignore,omitempty"`
 }
@@ -82,7 +84,7 @@ type BucketStatus struct {
 
 	// Conditions holds the conditions for the Bucket.
 	// +optional
-	Conditions []SourceCondition `json:"conditions,omitempty"`
+	Conditions []meta.Condition `json:"conditions,omitempty"`
 
 	// URL is the download link for the artifact output of the last Bucket sync.
 	// +optional
@@ -94,31 +96,32 @@ type BucketStatus struct {
 }
 
 const (
-	// BucketOperationSucceedReason represents the fact that the bucket listing
-	// and download operations succeeded.
+	// BucketOperationSucceedReason represents the fact that the bucket listing and
+	// download operations succeeded.
 	BucketOperationSucceedReason string = "BucketOperationSucceed"
 
-	// BucketOperationFailedReason represents the fact that the bucket listing
-	// or download operations failed.
+	// BucketOperationFailedReason represents the fact that the bucket listing or
+	// download operations failed.
 	BucketOperationFailedReason string = "BucketOperationFailed"
 )
 
-// BucketProgressing resets the conditions of the Bucket
-// to SourceCondition of type Ready with status unknown and
-// progressing reason and message. It returns the modified Bucket.
+// BucketProgressing resets the conditions of the Bucket to meta.Condition of
+// type meta.ReadyCondition with status 'Unknown' and meta.ProgressingReason
+// reason and message. It returns the modified Bucket.
 func BucketProgressing(bucket Bucket) Bucket {
 	bucket.Status.ObservedGeneration = bucket.Generation
 	bucket.Status.URL = ""
-	bucket.Status.Conditions = []SourceCondition{}
-	SetBucketCondition(&bucket, ReadyCondition, corev1.ConditionUnknown, ProgressingReason, "reconciliation in progress")
+	bucket.Status.Conditions = []meta.Condition{}
+	SetBucketCondition(&bucket, meta.ReadyCondition, corev1.ConditionUnknown, meta.ProgressingReason, "reconciliation in progress")
 	return bucket
 }
 
-// SetBucketCondition sets the given condition with the given status, reason and message on the Bucket.
-func SetBucketCondition(bucket *Bucket, condition string, status corev1.ConditionStatus, reason, message string) {
-	bucket.Status.Conditions = filterOutSourceCondition(bucket.Status.Conditions, condition)
-	bucket.Status.Conditions = append(bucket.Status.Conditions, SourceCondition{
-		Type:               condition,
+// SetBucketCondition sets the given condition with the given status, reason and
+// message on the Bucket.
+func SetBucketCondition(bucket *Bucket, conditionType string, status corev1.ConditionStatus, reason, message string) {
+	bucket.Status.Conditions = meta.FilterOutCondition(bucket.Status.Conditions, conditionType)
+	bucket.Status.Conditions = append(bucket.Status.Conditions, meta.Condition{
+		Type:               conditionType,
 		Status:             status,
 		LastTransitionTime: metav1.Now(),
 		Reason:             reason,
@@ -126,29 +129,29 @@ func SetBucketCondition(bucket *Bucket, condition string, status corev1.Conditio
 	})
 }
 
-// BucketReady sets the given artifact and url on the Bucket
-// and sets the ReadyCondition to True, with the given reason and
-// message. It returns the modified Bucket.
-func BucketReady(repository Bucket, artifact Artifact, url, reason, message string) Bucket {
-	repository.Status.Artifact = &artifact
-	repository.Status.URL = url
-	SetBucketCondition(&repository, ReadyCondition, corev1.ConditionTrue, reason, message)
-	return repository
+// BucketReady sets the given Artifact and URL on the Bucket and sets the
+// meta.ReadyCondition to 'True', with the given reason and message. It returns
+// the modified Bucket.
+func BucketReady(bucket Bucket, artifact Artifact, url, reason, message string) Bucket {
+	bucket.Status.Artifact = &artifact
+	bucket.Status.URL = url
+	SetBucketCondition(&bucket, meta.ReadyCondition, corev1.ConditionTrue, reason, message)
+	return bucket
 }
 
-// BucketNotReady sets the ReadyCondition on the given Bucket
-// to False, with the given reason and message. It returns the modified Bucket.
-func BucketNotReady(repository Bucket, reason, message string) Bucket {
-	SetBucketCondition(&repository, ReadyCondition, corev1.ConditionFalse, reason, message)
-	return repository
+// BucketNotReady sets the meta.ReadyCondition on the Bucket to 'False', with
+// the given reason and message. It returns the modified Bucket.
+func BucketNotReady(bucket Bucket, reason, message string) Bucket {
+	SetBucketCondition(&bucket, meta.ReadyCondition, corev1.ConditionFalse, reason, message)
+	return bucket
 }
 
-// BucketReadyMessage returns the message of the SourceCondition
-// of type Ready with status true if present, or an empty string.
-func BucketReadyMessage(repository Bucket) string {
-	for _, condition := range repository.Status.Conditions {
-		if condition.Type == ReadyCondition && condition.Status == corev1.ConditionTrue {
-			return condition.Message
+// BucketReadyMessage returns the message of the meta.Condition of type
+// meta.ReadyCondition with status 'True' if present, or an empty string.
+func BucketReadyMessage(bucket Bucket) string {
+	if c := meta.GetCondition(bucket.Status.Conditions, meta.ReadyCondition); c != nil {
+		if c.Status == corev1.ConditionTrue {
+			return c.Message
 		}
 	}
 	return ""
@@ -162,8 +165,8 @@ func (in *Bucket) GetTimeout() time.Duration {
 	return BucketTimeout
 }
 
-// GetArtifact returns the latest artifact from the source
-// if present in the status sub-resource.
+// GetArtifact returns the latest artifact from the source if present in the
+// status sub-resource.
 func (in *Bucket) GetArtifact() *Artifact {
 	return in.Status.Artifact
 }

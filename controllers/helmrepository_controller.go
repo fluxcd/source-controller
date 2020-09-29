@@ -24,6 +24,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/go-logr/logr"
 	"helm.sh/helm/v3/pkg/getter"
 	corev1 "k8s.io/api/core/v1"
@@ -203,7 +204,7 @@ func (r *HelmRepositoryReconciler) reconcile(ctx context.Context, repository sou
 		repository.ObjectMeta.GetObjectMeta(),
 		chartRepo.Index.Generated.Format(time.RFC3339Nano),
 		fmt.Sprintf("index-%s.yaml", url.PathEscape(chartRepo.Index.Generated.Format(time.RFC3339Nano))))
-	if sourcev1.InReadyCondition(repository.Status.Conditions) && repository.GetArtifact().HasRevision(artifact.Revision) {
+	if meta.HasReadyCondition(repository.Status.Conditions) && repository.GetArtifact().HasRevision(artifact.Revision) {
 		if artifact.URL != repository.GetArtifact().URL {
 			r.Storage.SetArtifactURL(repository.GetArtifact())
 			repository.Status.URL = r.Storage.SetHostname(repository.Status.URL)

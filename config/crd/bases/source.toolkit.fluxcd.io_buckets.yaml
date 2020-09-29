@@ -76,7 +76,8 @@ spec:
                 description: The bucket region.
                 type: string
               secretRef:
-                description: The secret name containing the bucket accesskey and secretkey.
+                description: The name of the secret containing authentication credentials
+                  for the Bucket.
                 properties:
                   name:
                     description: 'Name of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
@@ -124,8 +125,8 @@ spec:
               conditions:
                 description: Conditions holds the conditions for the Bucket.
                 items:
-                  description: SourceCondition contains condition information for
-                    a source.
+                  description: Condition contains condition information of a toolkit
+                    resource.
                   properties:
                     lastTransitionTime:
                       description: LastTransitionTime is the timestamp corresponding
@@ -145,7 +146,7 @@ spec:
                         'Unknown').
                       type: string
                     type:
-                      description: Type of the condition, currently ('Ready').
+                      description: Type of the condition.
                       type: string
                   required:
                   - status

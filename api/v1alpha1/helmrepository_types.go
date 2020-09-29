@@ -19,6 +19,7 @@ package v1alpha1
 import (
 	"time"
 
+	"github.com/fluxcd/pkg/apis/meta"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -30,16 +31,16 @@ const (
 
 // HelmRepositorySpec defines the reference to a Helm repository.
 type HelmRepositorySpec struct {
-	// The Helm repository URL, a valid URL contains at least a
-	// protocol and host.
+	// The Helm repository URL, a valid URL contains at least a protocol and host.
 	// +required
 	URL string `json:"url"`
 
-	// The name of the secret containing authentication credentials
-	// for the Helm repository.
-	// For HTTP/S basic auth the secret must contain username and password
+	// The name of the secret containing authentication credentials for the Helm
+	// repository.
+	// For HTTP/S basic auth the secret must contain username and
+	// password fields.
+	// For TLS the secret must contain caFile, keyFile and caCert
 	// fields.
-	// For TLS the secret must contain caFile, keyFile and caCert fields.
 	// +optional
 	SecretRef *corev1.LocalObjectReference `json:"secretRef,omitempty"`
 
@@ -60,7 +61,7 @@ type HelmRepositoryStatus struct {
 
 	// Conditions holds the conditions for the HelmRepository.
 	// +optional
-	Conditions []SourceCondition `json:"conditions,omitempty"`
+	Conditions []meta.Condition `json:"conditions,omitempty"`
 
 	// URL is the download link for the last index fetched.
 	// +optional
@@ -72,31 +73,32 @@ type HelmRepositoryStatus struct {
 }
 
 const (
-	// IndexationFailedReason represents the fact that the indexation
-	// of the given Helm repository failed.
+	// IndexationFailedReason represents the fact that the indexation of the given
+	// Helm repository failed.
 	IndexationFailedReason string = "IndexationFailed"
 
-	// IndexationSucceededReason represents the fact that the indexation
-	// of the given Helm repository succeeded.
+	// IndexationSucceededReason represents the fact that the indexation of the
+	// given Helm repository succeeded.
 	IndexationSucceededReason string = "IndexationSucceed"
 )
 
-// HelmRepositoryProgressing resets the conditions of the HelmRepository
-// to SourceCondition of type Ready with status unknown and
-// progressing reason and message. It returns the modified HelmRepository.
+// HelmRepositoryProgressing resets the conditions of the HelmRepository to
+// meta.Condition of type meta.ReadyCondition with status 'Unknown' and
+// meta.ProgressingReason reason and message. It returns the modified
+// HelmRepository.
 func HelmRepositoryProgressing(repository HelmRepository) HelmRepository {
 	repository.Status.ObservedGeneration = repository.Generation
 	repository.Status.URL = ""
-	repository.Status.Conditions = []SourceCondition{}
-	SetHelmRepositoryCondition(&repository, ReadyCondition, corev1.ConditionUnknown, ProgressingReason, "reconciliation in progress")
+	repository.Status.Conditions = []meta.Condition{}
+	SetHelmRepositoryCondition(&repository, meta.ReadyCondition, corev1.ConditionUnknown, meta.ProgressingReason, "reconciliation in progress")
 	return repository
 }
 
 // SetHelmRepositoryCondition sets the given condition with the given status,
 // reason and message on the HelmRepository.
 func SetHelmRepositoryCondition(repository *HelmRepository, condition string, status corev1.ConditionStatus, reason, message string) {
-	repository.Status.Conditions = filterOutSourceCondition(repository.Status.Conditions, condition)
-	repository.Status.Conditions = append(repository.Status.Conditions, SourceCondition{
+	repository.Status.Conditions = meta.FilterOutCondition(repository.Status.Conditions, condition)
+	repository.Status.Conditions = append(repository.Status.Conditions, meta.Condition{
 		Type:               condition,
 		Status:             status,
 		LastTransitionTime: metav1.Now(),
@@ -105,37 +107,37 @@ func SetHelmRepositoryCondition(repository *HelmRepository, condition string, st
 	})
 }
 
-// HelmRepositoryReady sets the given artifact and url on the HelmRepository
-// and sets the ReadyCondition to True, with the given reason and
-// message. It returns the modified HelmRepository.
+// HelmRepositoryReady sets the given Artifact and URL on the HelmRepository and
+// sets the meta.ReadyCondition to 'True', with the given reason and message. It
+// returns the modified HelmRepository.
 func HelmRepositoryReady(repository HelmRepository, artifact Artifact, url, reason, message string) HelmRepository {
 	repository.Status.Artifact = &artifact
 	repository.Status.URL = url
-	SetHelmRepositoryCondition(&repository, ReadyCondition, corev1.ConditionTrue, reason, message)
+	SetHelmRepositoryCondition(&repository, meta.ReadyCondition, corev1.ConditionTrue, reason, message)
 	return repository
 }
 
-// HelmRepositoryNotReady sets the ReadyCondition on the given HelmRepository
-// to False, with the given reason and message. It returns the modified
-// HelmRepository.
+// HelmRepositoryNotReady sets the meta.ReadyCondition on the given
+// HelmRepository to 'False', with the given reason and message. It returns the
+// modified HelmRepository.
 func HelmRepositoryNotReady(repository HelmRepository, reason, message string) HelmRepository {
-	SetHelmRepositoryCondition(&repository, ReadyCondition, corev1.ConditionFalse, reason, message)
+	SetHelmRepositoryCondition(&repository, meta.ReadyCondition, corev1.ConditionFalse, reason, message)
 	return repository
 }
 
-// HelmRepositoryReadyMessage returns the message of the SourceCondition
-// of type Ready with status true if present, or an empty string.
+// HelmRepositoryReadyMessage returns the message of the meta.Condition of type
+// meta.ReadyCondition with status 'True' if present, or an empty string.
 func HelmRepositoryReadyMessage(repository HelmRepository) string {
-	for _, condition := range repository.Status.Conditions {
-		if condition.Type == ReadyCondition && condition.Status == corev1.ConditionTrue {
-			return condition.Message
+	if c := meta.GetCondition(repository.Status.Conditions, meta.ReadyCondition); c != nil {
+		if c.Status == corev1.ConditionTrue {
+			return c.Message
 		}
 	}
 	return ""
 }
 
-// GetArtifact returns the latest artifact from the source
-// if present in the status sub-resource.
+// GetArtifact returns the latest artifact from the source if present in the
+// status sub-resource.
 func (in *HelmRepository) GetArtifact() *Artifact {
 	return in.Status.Artifact
 }

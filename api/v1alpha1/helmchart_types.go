@@ -17,6 +17,7 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"github.com/fluxcd/pkg/apis/meta"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -42,20 +43,21 @@ type HelmChartSpec struct {
 	// +required
 	Interval metav1.Duration `json:"interval"`
 
-	// Alternative values file to use as the default chart values, expected to be
-	// a relative path in the SourceRef. Ignored when omitted.
+	// Alternative values file to use as the default chart values, expected to be a
+	// relative path in the SourceRef. Ignored when omitted.
 	// +optional
 	ValuesFile string `json:"valuesFile,omitempty"`
 }
 
-// LocalHelmChartSourceReference contains enough information to let you locate the
-// typed referenced object at namespace level.
+// LocalHelmChartSourceReference contains enough information to let you locate
+// the typed referenced object at namespace level.
 type LocalHelmChartSourceReference struct {
 	// APIVersion of the referent.
 	// +optional
 	APIVersion string `json:"apiVersion,omitempty"`
 
-	// Kind of the referent, valid values are ('HelmRepository', 'GitRepository', 'Bucket').
+	// Kind of the referent, valid values are ('HelmRepository', 'GitRepository',
+	// 'Bucket').
 	// +kubebuilder:validation:Enum=HelmRepository;GitRepository;Bucket
 	// +required
 	Kind string `json:"kind"`
@@ -73,7 +75,7 @@ type HelmChartStatus struct {
 
 	// Conditions holds the conditions for the HelmChart.
 	// +optional
-	Conditions []SourceCondition `json:"conditions,omitempty"`
+	Conditions []meta.Condition `json:"conditions,omitempty"`
 
 	// URL is the download link for the last chart pulled.
 	// +optional
@@ -85,38 +87,39 @@ type HelmChartStatus struct {
 }
 
 const (
-	// ChartPullFailedReason represents the fact that the pull of the
-	// Helm chart failed.
+	// ChartPullFailedReason represents the fact that the pull of the Helm chart
+	// failed.
 	ChartPullFailedReason string = "ChartPullFailed"
 
-	// ChartPullSucceededReason represents the fact that the pull of
-	// the Helm chart succeeded.
+	// ChartPullSucceededReason represents the fact that the pull of the Helm chart
+	// succeeded.
 	ChartPullSucceededReason string = "ChartPullSucceeded"
 
-	// ChartPackageFailedReason represent the fact that the package of
-	// the Helm chart failed.
+	// ChartPackageFailedReason represent the fact that the package of the Helm
+	// chart failed.
 	ChartPackageFailedReason string = "ChartPackageFailed"
 
-	// ChartPackageSucceededReason represents the fact that the package of
-	// the Helm chart succeeded.
+	// ChartPackageSucceededReason represents the fact that the package of the Helm
+	// chart succeeded.
 	ChartPackageSucceededReason string = "ChartPackageSucceeded"
 )
 
-// HelmChartProgressing resets any failures and registers progress toward reconciling the given HelmChart
-// by setting the ReadyCondition to ConditionUnknown for ProgressingReason.
+// HelmChartProgressing resets the conditions of the HelmChart to meta.Condition
+// of type meta.ReadyCondition with status 'Unknown' and meta.ProgressingReason
+// reason and message. It returns the modified HelmChart.
 func HelmChartProgressing(chart HelmChart) HelmChart {
 	chart.Status.ObservedGeneration = chart.Generation
 	chart.Status.URL = ""
-	chart.Status.Conditions = []SourceCondition{}
-	SetHelmChartCondition(&chart, ReadyCondition, corev1.ConditionUnknown, ProgressingReason, "reconciliation in progress")
+	chart.Status.Conditions = []meta.Condition{}
+	SetHelmChartCondition(&chart, meta.ReadyCondition, corev1.ConditionUnknown, meta.ProgressingReason, "reconciliation in progress")
 	return chart
 }
 
-// SetHelmChartCondition sets the given condition with the given status, reason and message
-// on the HelmChart.
+// SetHelmChartCondition sets the given condition with the given status, reason
+// and message on the HelmChart.
 func SetHelmChartCondition(chart *HelmChart, condition string, status corev1.ConditionStatus, reason, message string) {
-	chart.Status.Conditions = filterOutSourceCondition(chart.Status.Conditions, condition)
-	chart.Status.Conditions = append(chart.Status.Conditions, SourceCondition{
+	chart.Status.Conditions = meta.FilterOutCondition(chart.Status.Conditions, condition)
+	chart.Status.Conditions = append(chart.Status.Conditions, meta.Condition{
 		Type:               condition,
 		Status:             status,
 		LastTransitionTime: metav1.Now(),
@@ -125,37 +128,37 @@ func SetHelmChartCondition(chart *HelmChart, condition string, status corev1.Con
 	})
 }
 
-// HelmChartReady sets the given artifact and url on the HelmChart
-// and sets the ReadyCondition to True, with the given reason and
-// message. It returns the modified HelmChart.
+// HelmChartReady sets the given Artifact and URL on the HelmChart and sets the
+// meta.ReadyCondition to 'True', with the given reason and message. It returns
+// the modified HelmChart.
 func HelmChartReady(chart HelmChart, artifact Artifact, url, reason, message string) HelmChart {
 	chart.Status.Artifact = &artifact
 	chart.Status.URL = url
-	SetHelmChartCondition(&chart, ReadyCondition, corev1.ConditionTrue, reason, message)
+	SetHelmChartCondition(&chart, meta.ReadyCondition, corev1.ConditionTrue, reason, message)
 	return chart
 }
 
-// HelmChartNotReady sets the ReadyCondition on the given HelmChart
-// to False, with the given reason and message. It returns the modified
+// HelmChartNotReady sets the meta.ReadyCondition on the given HelmChart to
+// 'False', with the given reason and message. It returns the modified
 // HelmChart.
 func HelmChartNotReady(chart HelmChart, reason, message string) HelmChart {
-	SetHelmChartCondition(&chart, ReadyCondition, corev1.ConditionFalse, reason, message)
+	SetHelmChartCondition(&chart, meta.ReadyCondition, corev1.ConditionFalse, reason, message)
 	return chart
 }
 
-// HelmChartReadyMessage returns the message of the ReadyCondition
-// with status True, or an empty string.
+// HelmChartReadyMessage returns the message of the meta.ReadyCondition with
+// status 'True', or an empty string.
 func HelmChartReadyMessage(chart HelmChart) string {
-	for _, condition := range chart.Status.Conditions {
-		if condition.Type == ReadyCondition && condition.Status == corev1.ConditionTrue {
-			return condition.Message
+	if c := meta.GetCondition(chart.Status.Conditions, meta.ReadyCondition); c != nil {
+		if c.Status == corev1.ConditionTrue {
+			return c.Message
 		}
 	}
 	return ""
 }
 
-// GetArtifact returns the latest artifact from the source
-// if present in the status sub-resource.
+// GetArtifact returns the latest artifact from the source if present in the
+// status sub-resource.
 func (in *HelmChart) GetArtifact() *Artifact {
 	return in.Status.Artifact
 }

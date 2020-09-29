@@ -26,6 +26,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/go-logr/logr"
 	"helm.sh/helm/v3/pkg/action"
 	"helm.sh/helm/v3/pkg/chartutil"
@@ -418,7 +419,7 @@ func (r *HelmChartReconciler) reconcileFromTarballArtifact(ctx context.Context,
 	// Return early if the revision is still the same as the current chart artifact
 	newArtifact := r.Storage.NewArtifactFor(chart.Kind, chart.ObjectMeta.GetObjectMeta(), chartMetadata.Version,
 		fmt.Sprintf("%s-%s.tgz", chartMetadata.Name, chartMetadata.Version))
-	if !force && sourcev1.InReadyCondition(chart.Status.Conditions) && chart.GetArtifact().HasRevision(newArtifact.Revision) {
+	if !force && meta.HasReadyCondition(chart.Status.Conditions) && chart.GetArtifact().HasRevision(newArtifact.Revision) {
 		if newArtifact.URL != artifact.URL {
 			r.Storage.SetArtifactURL(chart.GetArtifact())
 			chart.Status.URL = r.Storage.SetHostname(chart.Status.URL)

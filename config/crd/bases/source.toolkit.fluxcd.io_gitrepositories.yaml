@@ -155,8 +155,8 @@ spec:
               conditions:
                 description: Conditions holds the conditions for the GitRepository.
                 items:
-                  description: SourceCondition contains condition information for
-                    a source.
+                  description: Condition contains condition information of a toolkit
+                    resource.
                   properties:
                     lastTransitionTime:
                       description: LastTransitionTime is the timestamp corresponding
@@ -176,7 +176,7 @@ spec:
                         'Unknown').
                       type: string
                     type:
-                      description: Type of the condition, currently ('Ready').
+                      description: Type of the condition.
                       type: string
                   required:
                   - status
