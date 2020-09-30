@@ -37,7 +37,7 @@ import (
 
 	"github.com/fluxcd/pkg/lockedfile"
 
-	sourcev1 "github.com/fluxcd/source-controller/api/v1alpha1"
+	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
 	"github.com/fluxcd/source-controller/internal/fs"
 )
 
@@ -71,7 +71,7 @@ func NewStorage(basePath string, hostname string, timeout time.Duration) (*Stora
 	}, nil
 }
 
-// NewArtifactFor returns a new v1alpha1.Artifact.
+// NewArtifactFor returns a new v1beta1.Artifact.
 func (s *Storage) NewArtifactFor(kind string, metadata metav1.Object, revision, fileName string) sourcev1.Artifact {
 	path := sourcev1.ArtifactPath(kind, metadata.GetNamespace(), metadata.GetName(), fileName)
 	artifact := sourcev1.Artifact{
@@ -82,7 +82,7 @@ func (s *Storage) NewArtifactFor(kind string, metadata metav1.Object, revision, 
 	return artifact
 }
 
-// SetArtifactURL sets the URL on the given v1alpha1.Artifact.
+// SetArtifactURL sets the URL on the given v1beta1.Artifact.
 func (s Storage) SetArtifactURL(artifact *sourcev1.Artifact) {
 	if artifact.Path == "" {
 		return
@@ -101,19 +101,19 @@ func (s Storage) SetHostname(URL string) string {
 	return u.String()
 }
 
-// MkdirAll calls os.MkdirAll for the given v1alpha1.Artifact base dir.
+// MkdirAll calls os.MkdirAll for the given v1beta1.Artifact base dir.
 func (s *Storage) MkdirAll(artifact sourcev1.Artifact) error {
 	dir := filepath.Dir(s.LocalPath(artifact))
 	return os.MkdirAll(dir, 0777)
 }
 
-// RemoveAll calls os.RemoveAll for the given v1alpha1.Artifact base dir.
+// RemoveAll calls os.RemoveAll for the given v1beta1.Artifact base dir.
 func (s *Storage) RemoveAll(artifact sourcev1.Artifact) error {
 	dir := filepath.Dir(s.LocalPath(artifact))
 	return os.RemoveAll(dir)
 }
 
-// RemoveAllButCurrent removes all files for the given v1alpha1.Artifact base dir,
+// RemoveAllButCurrent removes all files for the given v1beta1.Artifact base dir,
 // excluding the current one.
 func (s *Storage) RemoveAllButCurrent(artifact sourcev1.Artifact) error {
 	localPath := s.LocalPath(artifact)
@@ -139,7 +139,7 @@ func (s *Storage) RemoveAllButCurrent(artifact sourcev1.Artifact) error {
 	return nil
 }
 
-// ArtifactExist returns a boolean indicating whether the v1alpha1.Artifact exists in storage
+// ArtifactExist returns a boolean indicating whether the v1beta1.Artifact exists in storage
 // and is a regular file.
 func (s *Storage) ArtifactExist(artifact sourcev1.Artifact) bool {
 	fi, err := os.Lstat(s.LocalPath(artifact))
@@ -149,7 +149,7 @@ func (s *Storage) ArtifactExist(artifact sourcev1.Artifact) bool {
 	return fi.Mode().IsRegular()
 }
 
-// Archive atomically archives the given directory as a tarball to the given v1alpha1.Artifact
+// Archive atomically archives the given directory as a tarball to the given v1beta1.Artifact
 // path, excluding any VCS specific files and directories, or any of the excludes defined in
 // the excludeFiles. If successful, it sets the checksum and last update time on the artifact.
 func (s *Storage) Archive(artifact *sourcev1.Artifact, dir string, ignore *string) (err error) {
@@ -265,7 +265,7 @@ func writeToArchiveExcludeMatches(dir string, matcher gitignore.Matcher, writer 
 	return filepath.Walk(dir, fn)
 }
 
-// AtomicWriteFile atomically writes the io.Reader contents to the v1alpha1.Artifact path.
+// AtomicWriteFile atomically writes the io.Reader contents to the v1beta1.Artifact path.
 // If successful, it sets the checksum and last update time on the artifact.
 func (s *Storage) AtomicWriteFile(artifact *sourcev1.Artifact, reader io.Reader, mode os.FileMode) (err error) {
 	localPath := s.LocalPath(*artifact)
@@ -304,7 +304,7 @@ func (s *Storage) AtomicWriteFile(artifact *sourcev1.Artifact, reader io.Reader,
 	return nil
 }
 
-// Copy atomically copies the io.Reader contents to the v1alpha1.Artifact path.
+// Copy atomically copies the io.Reader contents to the v1beta1.Artifact path.
 // If successful, it sets the checksum and last update time on the artifact.
 func (s *Storage) Copy(artifact *sourcev1.Artifact, reader io.Reader) (err error) {
 	localPath := s.LocalPath(*artifact)
@@ -340,7 +340,7 @@ func (s *Storage) Copy(artifact *sourcev1.Artifact, reader io.Reader) (err error
 }
 
 // CopyFromPath atomically copies the contents of the given path to the path of
-// the v1alpha1.Artifact. If successful, the checksum and last update time on the
+// the v1beta1.Artifact. If successful, the checksum and last update time on the
 // artifact is set.
 func (s *Storage) CopyFromPath(artifact *sourcev1.Artifact, path string) (err error) {
 	f, err := os.Open(path)
@@ -351,7 +351,7 @@ func (s *Storage) CopyFromPath(artifact *sourcev1.Artifact, path string) (err er
 	return s.Copy(artifact, f)
 }
 
-// Symlink creates or updates a symbolic link for the given v1alpha1.Artifact
+// Symlink creates or updates a symbolic link for the given v1beta1.Artifact
 // and returns the URL for the symlink.
 func (s *Storage) Symlink(artifact sourcev1.Artifact, linkName string) (string, error) {
 	localPath := s.LocalPath(artifact)
@@ -382,7 +382,7 @@ func (s *Storage) Checksum(reader io.Reader) string {
 	return fmt.Sprintf("%x", h.Sum(nil))
 }
 
-// Lock creates a file lock for the given v1alpha1.Artifact.
+// Lock creates a file lock for the given v1beta1.Artifact.
 func (s *Storage) Lock(artifact sourcev1.Artifact) (unlock func(), err error) {
 	lockFile := s.LocalPath(artifact) + ".lock"
 	mutex := lockedfile.MutexAt(lockFile)

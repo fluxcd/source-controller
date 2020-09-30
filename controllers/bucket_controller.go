@@ -42,7 +42,7 @@ import (
 	"github.com/fluxcd/pkg/recorder"
 	"github.com/fluxcd/pkg/runtime/predicates"
 
-	sourcev1 "github.com/fluxcd/source-controller/api/v1alpha1"
+	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
 )
 
 // BucketReconciler reconciles a Bucket object
@@ -315,7 +315,7 @@ func (r *BucketReconciler) checksum(root string) (string, error) {
 	return fmt.Sprintf("%x", sha1.Sum([]byte(checksum))), nil
 }
 
-// resetStatus returns a modified v1alpha1.Bucket and a boolean indicating
+// resetStatus returns a modified v1beta1.Bucket and a boolean indicating
 // if the status field has been reset.
 func (r *BucketReconciler) resetStatus(bucket sourcev1.Bucket) (sourcev1.Bucket, bool) {
 	// We do not have an artifact, or it does no longer exist

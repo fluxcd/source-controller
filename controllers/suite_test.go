@@ -36,7 +36,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	sourcev1 "github.com/fluxcd/source-controller/api/v1alpha1"
+	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
 	// +kubebuilder:scaffold:imports
 )
 

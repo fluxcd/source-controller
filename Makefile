@@ -52,7 +52,7 @@ manifests: controller-gen
 
 # Generate API reference documentation
 api-docs: gen-crd-api-reference-docs
-	$(API_REF_GEN) -api-dir=./api/v1alpha1 -config=./hack/api-docs/config.json -template-dir=./hack/api-docs/template -out-file=./docs/api/source.md
+	$(API_REF_GEN) -api-dir=./api/v1beta1 -config=./hack/api-docs/config.json -template-dir=./hack/api-docs/template -out-file=./docs/api/source.md
 
 # Run go fmt against code
 fmt:

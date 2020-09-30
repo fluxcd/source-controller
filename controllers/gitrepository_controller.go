@@ -40,7 +40,7 @@ import (
 	"github.com/fluxcd/pkg/recorder"
 	"github.com/fluxcd/pkg/runtime/predicates"
 
-	sourcev1 "github.com/fluxcd/source-controller/api/v1alpha1"
+	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
 	"github.com/fluxcd/source-controller/pkg/git"
 )
 
@@ -274,7 +274,7 @@ func (r *GitRepositoryReconciler) verify(ctx context.Context, publicKeySecret ty
 	return nil
 }
 
-// resetStatus returns a modified v1alpha1.GitRepository and a boolean indicating
+// resetStatus returns a modified v1beta1.GitRepository and a boolean indicating
 // if the status field has been reset.
 func (r *GitRepositoryReconciler) resetStatus(repository sourcev1.GitRepository) (sourcev1.GitRepository, bool) {
 	// We do not have an artifact, or it does no longer exist

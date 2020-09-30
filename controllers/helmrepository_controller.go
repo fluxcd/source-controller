@@ -40,7 +40,7 @@ import (
 	"github.com/fluxcd/pkg/recorder"
 	"github.com/fluxcd/pkg/runtime/predicates"
 
-	sourcev1 "github.com/fluxcd/source-controller/api/v1alpha1"
+	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
 	"github.com/fluxcd/source-controller/internal/helm"
 )
 
@@ -248,7 +248,7 @@ func (r *HelmRepositoryReconciler) reconcile(ctx context.Context, repository sou
 	return sourcev1.HelmRepositoryReady(repository, artifact, indexURL, sourcev1.IndexationSucceededReason, message), nil
 }
 
-// resetStatus returns a modified v1alpha1.HelmRepository and a boolean indicating
+// resetStatus returns a modified v1beta1.HelmRepository and a boolean indicating
 // if the status field has been reset.
 func (r *HelmRepositoryReconciler) resetStatus(repository sourcev1.HelmRepository) (sourcev1.HelmRepository, bool) {
 	// We do not have an artifact, or it does no longer exist
