@@ -33,9 +33,9 @@ type Artifact struct {
 	// +required
 	URL string `json:"url"`
 
-	// Revision is a human readable identifier traceable in the origin
-	// source system. It can be a Git commit sha, Git tag, a Helm index
-	// timestamp, a Helm chart version, etc.
+	// Revision is a human readable identifier traceable in the origin source
+	// system. It can be a Git commit sha, Git tag, a Helm index timestamp, a Helm
+	// chart version, etc.
 	// +optional
 	Revision string `json:"revision"`
 
@@ -43,14 +43,14 @@ type Artifact struct {
 	// +optional
 	Checksum string `json:"checksum"`
 
-	// LastUpdateTime is the timestamp corresponding to the last
-	// update of this artifact.
+	// LastUpdateTime is the timestamp corresponding to the last update of this
+	// artifact.
 	// +required
 	LastUpdateTime metav1.Time `json:"lastUpdateTime,omitempty"`
 }
 
-// HasRevision returns true if the given revision matches the current
-// Revision of the Artifact.
+// HasRevision returns true if the given revision matches the current Revision
+// of the Artifact.
 func (in *Artifact) HasRevision(revision string) bool {
 	if in == nil {
 		return false

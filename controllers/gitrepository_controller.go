@@ -24,6 +24,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/go-git/go-git/v5/plumbing/transport"
 	"github.com/go-logr/logr"
@@ -198,7 +199,7 @@ func (r *GitRepositoryReconciler) reconcile(ctx context.Context, repository sour
 
 	// return early on unchanged revision
 	artifact := r.Storage.NewArtifactFor(repository.Kind, repository.GetObjectMeta(), revision, fmt.Sprintf("%s.tar.gz", commit.Hash.String()))
-	if sourcev1.InReadyCondition(repository.Status.Conditions) && repository.GetArtifact().HasRevision(artifact.Revision) {
+	if meta.HasReadyCondition(repository.Status.Conditions) && repository.GetArtifact().HasRevision(artifact.Revision) {
 		if artifact.URL != repository.GetArtifact().URL {
 			r.Storage.SetArtifactURL(repository.GetArtifact())
 			repository.Status.URL = r.Storage.SetHostname(repository.Status.URL)

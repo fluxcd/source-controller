@@ -8,6 +8,7 @@ such as Minio, Amazon S3, Google Cloud Storage, Alibaba Cloud OSS and others.
 Bucket:
 
 ```go
+// BucketSpec defines the desired state of an S3 compatible bucket
 type BucketSpec struct {
 	// The S3 compatible storage provider name, default ('generic').
 	// +kubebuilder:validation:Enum=generic;aws
@@ -30,7 +31,8 @@ type BucketSpec struct {
 	// +optional
 	Region string `json:"region,omitempty"`
 
-	// The secret name containing the bucket accesskey and secretkey.
+	// The name of the secret containing authentication credentials
+	// for the Bucket.
 	// +optional
 	SecretRef *corev1.LocalObjectReference `json:"secretRef,omitempty"`
 
@@ -42,8 +44,8 @@ type BucketSpec struct {
 	// +optional
 	Timeout *metav1.Duration `json:"timeout,omitempty"`
 
-	// Ignore overrides the set of excluded patterns in the .sourceignore
-	// format (which is the same as .gitignore).
+	// Ignore overrides the set of excluded patterns in the .sourceignore format
+	// (which is the same as .gitignore).
 	// +optional
 	Ignore *string `json:"ignore,omitempty"`
 }
@@ -69,7 +71,7 @@ type BucketStatus struct {
 
 	// Conditions holds the conditions for the Bucket.
 	// +optional
-	Conditions []SourceCondition `json:"conditions,omitempty"`
+	Conditions []meta.Condition `json:"conditions,omitempty"`
 
 	// URL is the download link for the artifact output of the last Bucket sync.
 	// +optional
@@ -85,12 +87,12 @@ type BucketStatus struct {
 
 ```go
 const (
-	// BucketOperationSucceedReason represents the fact that the bucket listing
-	// and download operations succeeded.
+	// BucketOperationSucceedReason represents the fact that the bucket listing and
+	// download operations succeeded.
 	BucketOperationSucceedReason string = "BucketOperationSucceed"
 
-	// BucketOperationFailedReason represents the fact that the bucket listing
-	// or download operations failed.
+	// BucketOperationFailedReason represents the fact that the bucket listing or
+	// download operations failed.
 	BucketOperationFailedReason string = "BucketOperationFailed"
 )
 ```

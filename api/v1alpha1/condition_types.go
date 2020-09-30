@@ -16,48 +16,9 @@ limitations under the License.
 
 package v1alpha1
 
-import (
-	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-)
-
 const SourceFinalizer = "finalizers.fluxcd.io"
 
-// SourceCondition contains condition information for a source.
-type SourceCondition struct {
-	// Type of the condition, currently ('Ready').
-	// +required
-	Type string `json:"type"`
-
-	// Status of the condition, one of ('True', 'False', 'Unknown').
-	// +required
-	Status corev1.ConditionStatus `json:"status"`
-
-	// LastTransitionTime is the timestamp corresponding to the last status
-	// change of this condition.
-	// +required
-	LastTransitionTime metav1.Time `json:"lastTransitionTime,omitempty"`
-
-	// Reason is a brief machine readable explanation for the condition's last
-	// transition.
-	// +required
-	Reason string `json:"reason,omitempty"`
-
-	// Message is a human readable description of the details of the last
-	// transition, complementing reason.
-	// +optional
-	Message string `json:"message,omitempty"`
-}
-
 const (
-	// ReadyCondition represents the fact that a given source is in ready state.
-	ReadyCondition string = "Ready"
-)
-
-const (
-	// InitializingReason represents the fact that a given source is being initialized.
-	InitializingReason string = "Initializing"
-
 	// URLInvalidReason represents the fact that a given source has an invalid URL.
 	URLInvalidReason string = "URLInvalid"
 
@@ -68,21 +29,7 @@ const (
 	// have the required fields or the provided credentials do not match.
 	AuthenticationFailedReason string = "AuthenticationFailed"
 
-	// VerificationFailedReason represents the fact that the cryptographic provenance
-	// verification for the source failed.
+	// VerificationFailedReason represents the fact that the cryptographic
+	// provenance verification for the source failed.
 	VerificationFailedReason string = "VerificationFailed"
-
-	// ProgressingReason represents the fact that a source reconciliation
-	// is underway.
-	ProgressingReason string = "Progressing"
 )
-
-// InReadyCondition returns if the given SourceCondition slice has a ReadyCondition with
-// a 'True' status.
-func InReadyCondition(conditions []SourceCondition) bool {
-	condition := getCondition(conditions, ReadyCondition)
-	if condition == nil {
-		return false
-	}
-	return condition.Status == corev1.ConditionTrue
-}

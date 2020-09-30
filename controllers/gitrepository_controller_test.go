@@ -25,6 +25,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/go-git/go-billy/v5/memfs"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
@@ -156,7 +157,7 @@ var _ = Describe("GitRepositoryReconciler", func() {
 			defer k8sClient.Delete(context.Background(), created)
 
 			got := &sourcev1.GitRepository{}
-			var cond sourcev1.SourceCondition
+			var cond meta.Condition
 			Eventually(func() bool {
 				_ = k8sClient.Get(context.Background(), key, got)
 				for _, c := range got.Status.Conditions {

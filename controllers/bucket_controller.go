@@ -26,6 +26,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/go-logr/logr"
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
@@ -211,7 +212,7 @@ func (r *BucketReconciler) reconcile(ctx context.Context, bucket sourcev1.Bucket
 
 	// return early on unchanged revision
 	artifact := r.Storage.NewArtifactFor(bucket.Kind, bucket.GetObjectMeta(), revision, fmt.Sprintf("%s.tar.gz", revision))
-	if sourcev1.InReadyCondition(bucket.Status.Conditions) && bucket.GetArtifact().HasRevision(artifact.Revision) {
+	if meta.HasReadyCondition(bucket.Status.Conditions) && bucket.GetArtifact().HasRevision(artifact.Revision) {
 		if artifact.URL != bucket.GetArtifact().URL {
 			r.Storage.SetArtifactURL(bucket.GetArtifact())
 			bucket.Status.URL = r.Storage.SetHostname(bucket.Status.URL)

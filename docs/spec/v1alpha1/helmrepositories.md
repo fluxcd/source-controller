@@ -11,18 +11,18 @@ Helm repository:
 ```go
 // HelmRepositorySpec defines the reference to a Helm repository.
 type HelmRepositorySpec struct {
-	// The Helm repository URL, a valid URL contains at least a
-	// protocol and host.
-    // +required
+	// The Helm repository URL, a valid URL contains at least a protocol and host.
+	// +required
 	URL string `json:"url"`
-    
-	// The name of the secret containing authentication credentials
-	// for the Helm repository.
-	// For HTTP/S basic auth the secret must contain username and password
+
+	// The name of the secret containing authentication credentials for the Helm
+	// repository.
+	// For HTTP/S basic auth the secret must contain username and
+	// password fields.
+	// For TLS the secret must contain caFile, keyFile and caCert
 	// fields.
-	// For TLS the secret must contain caFile, keyFile and caCert fields.
-	// +optional
-	SecretRef *v1.LocalObjectReference `json:"secretRef,omitempty"`
+    // +optional
+	SecretRef *corev1.LocalObjectReference `json:"secretRef,omitempty"`
 
 	// The interval at which to check the upstream for updates.
 	// +required
@@ -40,7 +40,7 @@ type HelmRepositorySpec struct {
 // HelmRepositoryStatus defines the observed state of the HelmRepository.
 type HelmRepositoryStatus struct {
 	// +optional
-	Conditions []SourceCondition `json:"conditions,omitempty"`
+	Conditions []meta.Condition `json:"conditions,omitempty"`
 
 	// URL is the download link for the last index fetched.
 	// +optional
@@ -56,13 +56,13 @@ type HelmRepositoryStatus struct {
 
 ```go
 const (
-	// IndexationFailedReason represents the fact that the indexation
-	// of the given Helm repository failed.
-	IndexationFailedReason  string = "IndexationFailed"
+	// IndexationFailedReason represents the fact that the indexation of the given
+	// Helm repository failed.
+	IndexationFailedReason string = "IndexationFailed"
 
-	// IndexationSucceededReason represents the fact that the indexation
-	// of the given Helm repository succeeded.
-	IndexationSucceedReason string = "IndexationSucceed"
+	// IndexationSucceededReason represents the fact that the indexation of the
+	// given Helm repository succeeded.
+	IndexationSucceededReason string = "IndexationSucceed"
 )
 ```
 
