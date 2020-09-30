@@ -44,7 +44,7 @@ import (
 	"github.com/fluxcd/pkg/runtime/predicates"
 	"github.com/fluxcd/pkg/untar"
 
-	sourcev1 "github.com/fluxcd/source-controller/api/v1alpha1"
+	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
 	"github.com/fluxcd/source-controller/internal/helm"
 )
 
@@ -474,7 +474,7 @@ func (r *HelmChartReconciler) reconcileFromTarballArtifact(ctx context.Context,
 	return sourcev1.HelmChartReady(chart, newArtifact, cUrl, sourcev1.ChartPackageSucceededReason, message), nil
 }
 
-// resetStatus returns a modified v1alpha1.HelmChart and a boolean indicating
+// resetStatus returns a modified v1beta1.HelmChart and a boolean indicating
 // if the status field has been reset.
 func (r *HelmChartReconciler) resetStatus(chart sourcev1.HelmChart) (sourcev1.HelmChart, bool) {
 	// We do not have an artifact, or it does no longer exist

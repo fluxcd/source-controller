@@ -20,7 +20,7 @@ of the components using them.
 
 ## API Specification
 
-* [v1alpha1](v1alpha1/README.md)
+* [v1beta1](v1beta1/README.md)
 
 ## Implementation
 

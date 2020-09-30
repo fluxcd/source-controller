@@ -6,9 +6,9 @@
 [![release](https://img.shields.io/github/release/fluxcd/source-controller/all.svg)](https://github.com/fluxcd/source-controller/releases)
  
 The source-controller is a Kubernetes operator, specialised in artifacts acquisition
-from external sources such as Git and Helm repositories.
+from external sources such as Git, Helm repositories and S3 buckets.
 The source-controller implements the
-[source.toolkit.fluxcd.io](https://github.com/fluxcd/source-controller/tree/master/docs/spec/v1alpha1) API
+[source.toolkit.fluxcd.io](https://github.com/fluxcd/source-controller/tree/master/docs/spec/v1beta1) API
 and is a core component of the [GitOps toolkit](https://toolkit.fluxcd.io).
 
 ![overview](docs/diagrams/source-controller-overview.png)

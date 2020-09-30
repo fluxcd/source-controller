@@ -36,7 +36,7 @@ import (
 	"github.com/fluxcd/pkg/recorder"
 	"github.com/fluxcd/pkg/runtime/logger"
 
-	sourcev1 "github.com/fluxcd/source-controller/api/v1alpha1"
+	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
 	"github.com/fluxcd/source-controller/controllers"
 	// +kubebuilder:scaffold:imports
 )
@@ -239,11 +239,11 @@ func mustInitStorage(path string, storageAddr string, l logr.Logger) *controller
 	return storage
 }
 
-func envOrDefault(envName, dflt string) string {
+func envOrDefault(envName, defaultValue string) string {
 	ret := os.Getenv(envName)
 	if ret != "" {
 		return ret
 	}
 
-	return dflt
+	return defaultValue
 }
