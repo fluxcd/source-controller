@@ -146,7 +146,6 @@ apiVersion: source.toolkit.fluxcd.io/v1beta1
 kind: Bucket
 metadata:
   name: podinfo
-  namespace: gitops-system
 spec:
   interval: 1m
   provider: generic
@@ -160,7 +159,6 @@ apiVersion: v1
 kind: Secret
 metadata:
   name: minio-credentials
-  namespace: gitops-system
 type: Opaque
 data:
   accesskey: <BASE64> 
@@ -180,7 +178,6 @@ apiVersion: source.toolkit.fluccd.io/v1beta1
 kind: Bucket
 metadata:
   name: podinfo
-  namespace: gitops-system
 spec:
   interval: 5m
   provider: aws
@@ -202,9 +199,9 @@ Successful download:
     artifact:
       checksum: b249024b8544521792a079c4037d0a06dd0497a9
       lastUpdateTime: "2020-09-18T08:34:49Z"
-      path: bucket/gitops-system/podinfo/aeaba8b6dd51c53084f99b098cfae4f5148ad410.tar.gz
+      path: bucket/source-system/podinfo/aeaba8b6dd51c53084f99b098cfae4f5148ad410.tar.gz
       revision: aeaba8b6dd51c53084f99b098cfae4f5148ad410
-      url: http://localhost:9090/bucket/gitops-system/podinfo/aeaba8b6dd51c53084f99b098cfae4f5148ad410.tar.gz
+      url: http://localhost:9090/bucket/source-system/podinfo/aeaba8b6dd51c53084f99b098cfae4f5148ad410.tar.gz
     conditions:
     - lastTransitionTime: "2020-09-18T08:34:49Z"
       message: 'Fetched revision: aeaba8b6dd51c53084f99b098cfae4f5148ad410'
@@ -212,7 +209,7 @@ Successful download:
       status: "True"
       type: Ready
     observedGeneration: 2
-    url: http://localhost:9090/bucket/gitops-system/podinfo/latest.tar.gz
+    url: http://localhost:9090/bucket/source-system/podinfo/latest.tar.gz
 ```
 
 Failed download:
