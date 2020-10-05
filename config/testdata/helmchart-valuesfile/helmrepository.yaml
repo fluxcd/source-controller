@@ -1,7 +1,7 @@
 apiVersion: source.toolkit.fluxcd.io/v1beta1
 kind: HelmRepository
 metadata:
-  name: bitnami-charts
+  name: podinfo
 spec:
-  interval: 1m
-  url: https://charts.bitnami.com/bitnami
+  interval: 5m
+  url: https://stefanprodan.github.io/podinfo
