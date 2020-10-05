@@ -24,7 +24,7 @@ The Helm package was updated to v3.3.4.
 ## 0.0.17 (2020-09-18)
 
 This prerelease comes with support for S3 compatible storage sources
-defined as [buckets](https://github.com/fluxcd/source-controller/blob/master/docs/spec/v1alpha1/buckets.md).
+defined as [buckets](https://github.com/fluxcd/source-controller/blob/main/docs/spec/v1alpha1/buckets.md).
 The Helm package was updated to v3.3.2.
 
 ## 0.0.16 (2020-09-12)
@@ -122,7 +122,7 @@ to be specified on `GitRepository` objects.
 This prerelease comes with Kubernetes events dispatching.
 The reconciliation events can be forwarded to notification controller
 and alerting can be configured for Slack, MS Teams, Discord and Rocket chat
-using the [notification.fluxcd.io API](https://github.com/fluxcd/notification-controller/tree/master/docs/spec).
+using the [notification.fluxcd.io API](https://github.com/fluxcd/notification-controller/tree/main/docs/spec).
 
 ## 0.0.1 (2020-06-24)
 
