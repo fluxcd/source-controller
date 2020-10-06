@@ -242,6 +242,7 @@ kind: GitRepository
 metadata:
   name: podinfo
 spec:
+  interval: 1m
   url: https://github.com/stefanprodan/podinfo
   secretRef:
     name: https-credentials
@@ -269,6 +270,7 @@ kind: GitRepository
 metadata:
   name: podinfo
 spec:
+  interval: 1m
   url: ssh://git@github.com/stefanprodan/podinfo
   secretRef:
     name: ssh-credentials
