@@ -26,11 +26,11 @@ jobs:
       - name: Setup Kubernetes
         uses: engineerd/setup-kind@v0.3.0
       - name: Setup Kustomize
-        uses: fluxcd/pkg/actions/kustomize@master
+        uses: fluxcd/pkg/actions/kustomize@main
       - name: Setup Kubebuilder
-        uses: fluxcd/pkg/actions/kubebuilder@master
+        uses: fluxcd/pkg/actions/kubebuilder@main
       - name: Setup Helm
-        uses: fluxcd/pkg/actions/helm@master
+        uses: fluxcd/pkg/actions/helm@main
       - name: Run tests
         run: make test
         env:
@@ -63,8 +63,8 @@ jobs:
       - name: Run HelmChart values file tests
         run: |
           kubectl -n source-system apply -f ./config/testdata/helmchart-valuesfile
-          kubectl -n source-system wait helmchart/mariadb --for=condition=ready --timeout=5m
-          kubectl -n source-system wait helmchart/mariadb-git --for=condition=ready --timeout=5m
+          kubectl -n source-system wait helmchart/podinfo --for=condition=ready --timeout=5m
+          kubectl -n source-system wait helmchart/podinfo-git --for=condition=ready --timeout=5m
           kubectl -n source-system delete -f ./config/testdata/helmchart-valuesfile
       - name: Setup Minio
         env:

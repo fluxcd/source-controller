@@ -1,11 +1,11 @@
 apiVersion: source.toolkit.fluxcd.io/v1beta1
 kind: HelmChart
 metadata:
-  name: mariadb-git
+  name: podinfo-git
 spec:
-  chart: bitnami/mariadb
-  valuesFile: values-production.yaml
+  interval: 1m
   sourceRef:
     kind: GitRepository
-    name: bitnami-charts
-  interval: 1m
+    name: podinfo
+  chart: charts/podinfo
+  valuesFile: values-prod.yaml
