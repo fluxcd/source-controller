@@ -121,6 +121,7 @@ apiVersion: source.toolkit.fluxcd.io/v1beta1
 kind: Bucket
 metadata:
   name: podinfo
+  namespace: default
 spec:
   ignore: |
     # exclude all
@@ -146,6 +147,7 @@ apiVersion: source.toolkit.fluxcd.io/v1beta1
 kind: Bucket
 metadata:
   name: podinfo
+  namespace: default
 spec:
   interval: 1m
   provider: generic
@@ -159,6 +161,7 @@ apiVersion: v1
 kind: Secret
 metadata:
   name: minio-credentials
+  namespace: default
 type: Opaque
 data:
   accesskey: <BASE64> 
@@ -178,6 +181,7 @@ apiVersion: source.toolkit.fluccd.io/v1beta1
 kind: Bucket
 metadata:
   name: podinfo
+  namespace: default
 spec:
   interval: 5m
   provider: aws

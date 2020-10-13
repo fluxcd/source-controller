@@ -106,6 +106,7 @@ apiVersion: source.toolkit.fluxcd.io/v1beta1
 kind: HelmChart
 metadata:
   name: redis
+  namespace: default
 spec:
   chart: redis
   version: 10.5.7
@@ -122,6 +123,7 @@ apiVersion: source.toolkit.fluxcd.io/v1beta1
 kind: HelmChart
 metadata:
   name: redis
+  namespace: default
 spec:
   chart: redis
   version: 10.5.x
@@ -139,6 +141,7 @@ apiVersion: source.toolkit.fluxcd.io/v1beta1
 kind: HelmChart
 metadata:
   name: podinfo
+  namespace: default
 spec:
   chart: ./charts/podinfo
   sourceRef:
@@ -155,6 +158,7 @@ apiVersion: source.toolkit.fluxcd.io/v1beta1
 kind: HelmChart
 metadata:
   name: podinfo
+  namespace: default
 spec:
   chart: ./podinfo
   sourceRef:
