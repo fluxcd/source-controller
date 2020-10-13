@@ -40,7 +40,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 
-	"github.com/fluxcd/pkg/recorder"
+	"github.com/fluxcd/pkg/runtime/events"
+	"github.com/fluxcd/pkg/runtime/metrics"
 	"github.com/fluxcd/pkg/runtime/predicates"
 	"github.com/fluxcd/pkg/untar"
 
@@ -56,7 +57,8 @@ type HelmChartReconciler struct {
 	Storage               *Storage
 	Getters               getter.Providers
 	EventRecorder         kuberecorder.EventRecorder
-	ExternalEventRecorder *recorder.EventRecorder
+	ExternalEventRecorder *events.Recorder
+	MetricsRecorder       *metrics.Recorder
 }
 
 // +kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=helmcharts,verbs=get;list;watch;create;update;patch;delete
@@ -91,10 +93,12 @@ func (r *HelmChartReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		if containsString(chart.ObjectMeta.Finalizers, sourcev1.SourceFinalizer) {
 			// Our finalizer is still present, so lets handle garbage collection
 			if err := r.gc(chart, true); err != nil {
-				r.event(chart, recorder.EventSeverityError, fmt.Sprintf("garbage collection for deleted resource failed: %s", err.Error()))
+				r.event(chart, events.EventSeverityError, fmt.Sprintf("garbage collection for deleted resource failed: %s", err.Error()))
 				// Return the error so we retry the failed garbage collection
 				return ctrl.Result{}, err
 			}
+			// Record deleted status
+			r.recordReadiness(chart, true)
 			// Remove our finalizer from the list and update it
 			chart.ObjectMeta.Finalizers = removeString(chart.ObjectMeta.Finalizers, sourcev1.SourceFinalizer)
 			if err := r.Update(ctx, &chart); err != nil {
@@ -105,6 +109,15 @@ func (r *HelmChartReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		}
 	}
 
+	// record reconciliation duration
+	if r.MetricsRecorder != nil {
+		objRef, err := reference.GetReference(r.Scheme, &chart)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		defer r.MetricsRecorder.RecordDuration(*objRef, start)
+	}
+
 	// Conditionally set progressing condition in status
 	resetChart, changed := r.resetStatus(chart)
 	if changed {
@@ -113,6 +126,7 @@ func (r *HelmChartReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 			log.Error(err, "unable to update status")
 			return ctrl.Result{Requeue: true}, err
 		}
+		r.recordReadiness(chart, false)
 	}
 
 	// Purge all but current artifact from storage
@@ -138,6 +152,7 @@ func (r *HelmChartReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		if err := r.Status().Update(ctx, &chart); err != nil {
 			log.Error(err, "unable to update status")
 		}
+		r.recordReadiness(chart, false)
 		return ctrl.Result{Requeue: true}, err
 	}
 
@@ -163,14 +178,16 @@ func (r *HelmChartReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 
 	// If reconciliation failed, record the failure and requeue immediately
 	if reconcileErr != nil {
-		r.event(reconciledChart, recorder.EventSeverityError, reconcileErr.Error())
+		r.event(reconciledChart, events.EventSeverityError, reconcileErr.Error())
+		r.recordReadiness(reconciledChart, false)
 		return ctrl.Result{Requeue: true}, reconcileErr
 	}
 
 	// Emit an event if we did not have an artifact before, or the revision has changed
 	if chart.Status.Artifact == nil || reconciledChart.Status.Artifact.Revision != chart.Status.Artifact.Revision {
-		r.event(reconciledChart, recorder.EventSeverityInfo, sourcev1.HelmChartReadyMessage(reconciledChart))
+		r.event(reconciledChart, events.EventSeverityInfo, sourcev1.HelmChartReadyMessage(reconciledChart))
 	}
+	r.recordReadiness(reconciledChart, false)
 
 	log.Info(fmt.Sprintf("Reconciliation finished in %s, next run in %s",
 		time.Now().Sub(start).String(),
@@ -525,5 +542,28 @@ func (r *HelmChartReconciler) event(chart sourcev1.HelmChart, severity, msg stri
 			).Error(err, "unable to send event")
 			return
 		}
+	}
+}
+
+func (r *HelmChartReconciler) recordReadiness(chart sourcev1.HelmChart, deleted bool) {
+	if r.MetricsRecorder == nil {
+		return
+	}
+
+	objRef, err := reference.GetReference(r.Scheme, &chart)
+	if err != nil {
+		r.Log.WithValues(
+			strings.ToLower(chart.Kind),
+			fmt.Sprintf("%s/%s", chart.GetNamespace(), chart.GetName()),
+		).Error(err, "unable to record readiness metric")
+		return
+	}
+	if rc := meta.GetCondition(chart.Status.Conditions, meta.ReadyCondition); rc != nil {
+		r.MetricsRecorder.RecordCondition(*objRef, *rc, deleted)
+	} else {
+		r.MetricsRecorder.RecordCondition(*objRef, meta.Condition{
+			Type:   meta.ReadyCondition,
+			Status: corev1.ConditionUnknown,
+		}, deleted)
 	}
 }

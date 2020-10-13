@@ -37,7 +37,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/yaml"
 
-	"github.com/fluxcd/pkg/recorder"
+	"github.com/fluxcd/pkg/runtime/events"
+	"github.com/fluxcd/pkg/runtime/metrics"
 	"github.com/fluxcd/pkg/runtime/predicates"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
@@ -52,7 +53,8 @@ type HelmRepositoryReconciler struct {
 	Storage               *Storage
 	Getters               getter.Providers
 	EventRecorder         kuberecorder.EventRecorder
-	ExternalEventRecorder *recorder.EventRecorder
+	ExternalEventRecorder *events.Recorder
+	MetricsRecorder       *metrics.Recorder
 }
 
 // +kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=helmrepositories,verbs=get;list;watch;create;update;patch;delete
@@ -88,10 +90,12 @@ func (r *HelmRepositoryReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 		if containsString(repository.ObjectMeta.Finalizers, sourcev1.SourceFinalizer) {
 			// Our finalizer is still present, so lets handle garbage collection
 			if err := r.gc(repository, true); err != nil {
-				r.event(repository, recorder.EventSeverityError, fmt.Sprintf("garbage collection for deleted resource failed: %s", err.Error()))
+				r.event(repository, events.EventSeverityError, fmt.Sprintf("garbage collection for deleted resource failed: %s", err.Error()))
 				// Return the error so we retry the failed garbage collection
 				return ctrl.Result{}, err
 			}
+			// Record deleted status
+			r.recordReadiness(repository, true)
 			// Remove our finalizer from the list and update it
 			repository.ObjectMeta.Finalizers = removeString(repository.ObjectMeta.Finalizers, sourcev1.SourceFinalizer)
 			if err := r.Update(ctx, &repository); err != nil {
@@ -102,6 +106,15 @@ func (r *HelmRepositoryReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 		}
 	}
 
+	// record reconciliation duration
+	if r.MetricsRecorder != nil {
+		objRef, err := reference.GetReference(r.Scheme, &repository)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		defer r.MetricsRecorder.RecordDuration(*objRef, start)
+	}
+
 	// set initial status
 	if resetRepository, ok := r.resetStatus(repository); ok {
 		repository = resetRepository
@@ -109,6 +122,7 @@ func (r *HelmRepositoryReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 			log.Error(err, "unable to update status")
 			return ctrl.Result{Requeue: true}, err
 		}
+		r.recordReadiness(repository, false)
 	}
 
 	// purge old artifacts from storage
@@ -127,14 +141,16 @@ func (r *HelmRepositoryReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 
 	// if reconciliation failed, record the failure and requeue immediately
 	if reconcileErr != nil {
-		r.event(reconciledRepository, recorder.EventSeverityError, reconcileErr.Error())
+		r.event(reconciledRepository, events.EventSeverityError, reconcileErr.Error())
+		r.recordReadiness(reconciledRepository, false)
 		return ctrl.Result{Requeue: true}, reconcileErr
 	}
 
 	// emit revision change event
 	if repository.Status.Artifact == nil || reconciledRepository.Status.Artifact.Revision != repository.Status.Artifact.Revision {
-		r.event(reconciledRepository, recorder.EventSeverityInfo, sourcev1.HelmRepositoryReadyMessage(reconciledRepository))
+		r.event(reconciledRepository, events.EventSeverityInfo, sourcev1.HelmRepositoryReadyMessage(reconciledRepository))
 	}
+	r.recordReadiness(reconciledRepository, false)
 
 	log.Info(fmt.Sprintf("Reconciliation finished in %s, next run in %s",
 		time.Now().Sub(start).String(),
@@ -297,5 +313,28 @@ func (r *HelmRepositoryReconciler) event(repository sourcev1.HelmRepository, sev
 			).Error(err, "unable to send event")
 			return
 		}
+	}
+}
+
+func (r *HelmRepositoryReconciler) recordReadiness(repository sourcev1.HelmRepository, deleted bool) {
+	if r.MetricsRecorder == nil {
+		return
+	}
+
+	objRef, err := reference.GetReference(r.Scheme, &repository)
+	if err != nil {
+		r.Log.WithValues(
+			strings.ToLower(repository.Kind),
+			fmt.Sprintf("%s/%s", repository.GetNamespace(), repository.GetName()),
+		).Error(err, "unable to record readiness metric")
+		return
+	}
+	if rc := meta.GetCondition(repository.Status.Conditions, meta.ReadyCondition); rc != nil {
+		r.MetricsRecorder.RecordCondition(*objRef, *rc, deleted)
+	} else {
+		r.MetricsRecorder.RecordCondition(*objRef, meta.Condition{
+			Type:   meta.ReadyCondition,
+			Status: corev1.ConditionUnknown,
+		}, deleted)
 	}
 }
