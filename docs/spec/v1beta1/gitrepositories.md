@@ -144,6 +144,7 @@ apiVersion: source.toolkit.fluxcd.io/v1beta1
 kind: GitRepository
 metadata:
   name: podinfo
+  namespace: default
 spec:
   interval: 5m
   url: https://github.com/stefanprodan/podinfo
@@ -170,6 +171,7 @@ apiVersion: source.toolkit.fluxcd.io/v1beta1
 kind: GitRepository
 metadata:
   name: podinfo
+  namespace: default
 spec:
   interval: 1m
   url: https://github.com/stefanprodan/podinfo
@@ -182,6 +184,7 @@ apiVersion: source.toolkit.fluxcd.io/v1beta1
 kind: GitRepository
 metadata:
   name: podinfo
+  namespace: default
 spec:
   interval: 1m
   url: https://github.com/stefanprodan/podinfo
@@ -196,6 +199,7 @@ apiVersion: source.toolkit.fluxcd.io/v1beta1
 kind: GitRepository
 metadata:
   name: podinfo
+  namespace: default
 spec:
   interval: 1m
   url: https://github.com/stefanprodan/podinfo
@@ -211,6 +215,7 @@ apiVersion: source.toolkit.fluxcd.io/v1beta1
 kind: GitRepository
 metadata:
   name: podinfo
+  namespace: default
 spec:
   interval: 1m
   url: https://github.com/stefanprodan/podinfo
@@ -225,6 +230,7 @@ apiVersion: source.toolkit.fluxcd.io/v1beta1
 kind: GitRepository
 metadata:
   name: podinfo
+  namespace: default
 spec:
   interval: 1m
   url: https://github.com/stefanprodan/podinfo
@@ -241,6 +247,7 @@ apiVersion: source.toolkit.fluxcd.io/v1beta1
 kind: GitRepository
 metadata:
   name: podinfo
+  namespace: default
 spec:
   interval: 1m
   url: https://github.com/stefanprodan/podinfo
@@ -269,6 +276,7 @@ apiVersion: source.toolkit.fluxcd.io/v1beta1
 kind: GitRepository
 metadata:
   name: podinfo
+  namespace: default
 spec:
   interval: 1m
   url: ssh://git@github.com/stefanprodan/podinfo
@@ -311,6 +319,7 @@ apiVersion: source.toolkit.fluxcd.io/v1beta1
 kind: GitRepository
 metadata:
   name: podinfo
+  namespace: default
 spec:
   interval: 1m
   url: https://github.com/stefanprodan/podinfo
