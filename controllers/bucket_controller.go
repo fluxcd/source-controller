@@ -40,6 +40,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 
 	"github.com/fluxcd/pkg/runtime/events"
+	"github.com/fluxcd/pkg/runtime/metrics"
 	"github.com/fluxcd/pkg/runtime/predicates"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
@@ -53,6 +54,7 @@ type BucketReconciler struct {
 	Storage               *Storage
 	EventRecorder         kuberecorder.EventRecorder
 	ExternalEventRecorder *events.Recorder
+	MetricsRecorder       *metrics.Recorder
 }
 
 // +kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=buckets,verbs=get;list;watch;create;update;patch;delete
@@ -91,6 +93,8 @@ func (r *BucketReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 				// Return the error so we retry the failed garbage collection
 				return ctrl.Result{}, err
 			}
+			// Record deleted status
+			r.recordReadiness(bucket, true)
 			// Remove our finalizer from the list and update it
 			bucket.ObjectMeta.Finalizers = removeString(bucket.ObjectMeta.Finalizers, sourcev1.SourceFinalizer)
 			if err := r.Update(ctx, &bucket); err != nil {
@@ -101,6 +105,15 @@ func (r *BucketReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		}
 	}
 
+	// record reconciliation duration
+	if r.MetricsRecorder != nil {
+		objRef, err := reference.GetReference(r.Scheme, &bucket)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		defer r.MetricsRecorder.RecordDuration(*objRef, start)
+	}
+
 	// set initial status
 	if resetBucket, ok := r.resetStatus(bucket); ok {
 		bucket = resetBucket
@@ -108,6 +121,7 @@ func (r *BucketReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 			log.Error(err, "unable to update status")
 			return ctrl.Result{Requeue: true}, err
 		}
+		r.recordReadiness(bucket, false)
 	}
 
 	// purge old artifacts from storage
@@ -127,6 +141,7 @@ func (r *BucketReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	// if reconciliation failed, record the failure and requeue immediately
 	if reconcileErr != nil {
 		r.event(reconciledBucket, events.EventSeverityError, reconcileErr.Error())
+		r.recordReadiness(reconciledBucket, false)
 		return ctrl.Result{Requeue: true}, reconcileErr
 	}
 
@@ -134,6 +149,7 @@ func (r *BucketReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	if bucket.Status.Artifact == nil || reconciledBucket.Status.Artifact.Revision != bucket.Status.Artifact.Revision {
 		r.event(reconciledBucket, events.EventSeverityInfo, sourcev1.BucketReadyMessage(reconciledBucket))
 	}
+	r.recordReadiness(reconciledBucket, false)
 
 	log.Info(fmt.Sprintf("Reconciliation finished in %s, next run in %s",
 		time.Now().Sub(start).String(),
@@ -363,5 +379,28 @@ func (r *BucketReconciler) event(bucket sourcev1.Bucket, severity, msg string) {
 			).Error(err, "unable to send event")
 			return
 		}
+	}
+}
+
+func (r *BucketReconciler) recordReadiness(bucket sourcev1.Bucket, deleted bool) {
+	if r.MetricsRecorder == nil {
+		return
+	}
+
+	objRef, err := reference.GetReference(r.Scheme, &bucket)
+	if err != nil {
+		r.Log.WithValues(
+			strings.ToLower(bucket.Kind),
+			fmt.Sprintf("%s/%s", bucket.GetNamespace(), bucket.GetName()),
+		).Error(err, "unable to record readiness metric")
+		return
+	}
+	if rc := meta.GetCondition(bucket.Status.Conditions, meta.ReadyCondition); rc != nil {
+		r.MetricsRecorder.RecordCondition(*objRef, *rc, deleted)
+	} else {
+		r.MetricsRecorder.RecordCondition(*objRef, meta.Condition{
+			Type:   meta.ReadyCondition,
+			Status: corev1.ConditionUnknown,
+		}, deleted)
 	}
 }

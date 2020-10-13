@@ -32,9 +32,11 @@ import (
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	ctrl "sigs.k8s.io/controller-runtime"
+	crtlmetrics "sigs.k8s.io/controller-runtime/pkg/metrics"
 
 	"github.com/fluxcd/pkg/runtime/events"
 	"github.com/fluxcd/pkg/runtime/logger"
+	"github.com/fluxcd/pkg/runtime/metrics"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
 	"github.com/fluxcd/source-controller/controllers"
@@ -98,6 +100,9 @@ func main() {
 		}
 	}
 
+	metricsRecorder := metrics.NewRecorder()
+	crtlmetrics.Registry.MustRegister(metricsRecorder.Collectors()...)
+
 	watchNamespace := ""
 	if !watchAllNamespaces {
 		watchNamespace = os.Getenv("RUNTIME_NAMESPACE")
@@ -128,6 +133,7 @@ func main() {
 		Storage:               storage,
 		EventRecorder:         mgr.GetEventRecorderFor("source-controller"),
 		ExternalEventRecorder: eventRecorder,
+		MetricsRecorder:       metricsRecorder,
 	}).SetupWithManagerAndOptions(mgr, controllers.GitRepositoryReconcilerOptions{
 		MaxConcurrentReconciles: concurrent,
 	}); err != nil {
@@ -142,6 +148,7 @@ func main() {
 		Getters:               getters,
 		EventRecorder:         mgr.GetEventRecorderFor("source-controller"),
 		ExternalEventRecorder: eventRecorder,
+		MetricsRecorder:       metricsRecorder,
 	}).SetupWithManagerAndOptions(mgr, controllers.HelmRepositoryReconcilerOptions{
 		MaxConcurrentReconciles: concurrent,
 	}); err != nil {
@@ -156,6 +163,7 @@ func main() {
 		Getters:               getters,
 		EventRecorder:         mgr.GetEventRecorderFor("source-controller"),
 		ExternalEventRecorder: eventRecorder,
+		MetricsRecorder:       metricsRecorder,
 	}).SetupWithManagerAndOptions(mgr, controllers.HelmChartReconcilerOptions{
 		MaxConcurrentReconciles: concurrent,
 	}); err != nil {
@@ -169,6 +177,7 @@ func main() {
 		Storage:               storage,
 		EventRecorder:         mgr.GetEventRecorderFor("source-controller"),
 		ExternalEventRecorder: eventRecorder,
+		MetricsRecorder:       metricsRecorder,
 	}).SetupWithManagerAndOptions(mgr, controllers.BucketReconcilerOptions{
 		MaxConcurrentReconciles: concurrent,
 	}); err != nil {
