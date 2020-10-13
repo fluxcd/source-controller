@@ -37,7 +37,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/yaml"
 
-	"github.com/fluxcd/pkg/recorder"
+	"github.com/fluxcd/pkg/runtime/events"
 	"github.com/fluxcd/pkg/runtime/predicates"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
@@ -52,7 +52,7 @@ type HelmRepositoryReconciler struct {
 	Storage               *Storage
 	Getters               getter.Providers
 	EventRecorder         kuberecorder.EventRecorder
-	ExternalEventRecorder *recorder.EventRecorder
+	ExternalEventRecorder *events.Recorder
 }
 
 // +kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=helmrepositories,verbs=get;list;watch;create;update;patch;delete
@@ -88,7 +88,7 @@ func (r *HelmRepositoryReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 		if containsString(repository.ObjectMeta.Finalizers, sourcev1.SourceFinalizer) {
 			// Our finalizer is still present, so lets handle garbage collection
 			if err := r.gc(repository, true); err != nil {
-				r.event(repository, recorder.EventSeverityError, fmt.Sprintf("garbage collection for deleted resource failed: %s", err.Error()))
+				r.event(repository, events.EventSeverityError, fmt.Sprintf("garbage collection for deleted resource failed: %s", err.Error()))
 				// Return the error so we retry the failed garbage collection
 				return ctrl.Result{}, err
 			}
@@ -127,13 +127,13 @@ func (r *HelmRepositoryReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 
 	// if reconciliation failed, record the failure and requeue immediately
 	if reconcileErr != nil {
-		r.event(reconciledRepository, recorder.EventSeverityError, reconcileErr.Error())
+		r.event(reconciledRepository, events.EventSeverityError, reconcileErr.Error())
 		return ctrl.Result{Requeue: true}, reconcileErr
 	}
 
 	// emit revision change event
 	if repository.Status.Artifact == nil || reconciledRepository.Status.Artifact.Revision != repository.Status.Artifact.Revision {
-		r.event(reconciledRepository, recorder.EventSeverityInfo, sourcev1.HelmRepositoryReadyMessage(reconciledRepository))
+		r.event(reconciledRepository, events.EventSeverityInfo, sourcev1.HelmRepositoryReadyMessage(reconciledRepository))
 	}
 
 	log.Info(fmt.Sprintf("Reconciliation finished in %s, next run in %s",

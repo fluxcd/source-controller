@@ -39,7 +39,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 
-	"github.com/fluxcd/pkg/recorder"
+	"github.com/fluxcd/pkg/runtime/events"
 	"github.com/fluxcd/pkg/runtime/predicates"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
@@ -52,7 +52,7 @@ type BucketReconciler struct {
 	Scheme                *runtime.Scheme
 	Storage               *Storage
 	EventRecorder         kuberecorder.EventRecorder
-	ExternalEventRecorder *recorder.EventRecorder
+	ExternalEventRecorder *events.Recorder
 }
 
 // +kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=buckets,verbs=get;list;watch;create;update;patch;delete
@@ -87,7 +87,7 @@ func (r *BucketReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		if containsString(bucket.ObjectMeta.Finalizers, sourcev1.SourceFinalizer) {
 			// Our finalizer is still present, so lets handle garbage collection
 			if err := r.gc(bucket, true); err != nil {
-				r.event(bucket, recorder.EventSeverityError, fmt.Sprintf("garbage collection for deleted resource failed: %s", err.Error()))
+				r.event(bucket, events.EventSeverityError, fmt.Sprintf("garbage collection for deleted resource failed: %s", err.Error()))
 				// Return the error so we retry the failed garbage collection
 				return ctrl.Result{}, err
 			}
@@ -126,13 +126,13 @@ func (r *BucketReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 
 	// if reconciliation failed, record the failure and requeue immediately
 	if reconcileErr != nil {
-		r.event(reconciledBucket, recorder.EventSeverityError, reconcileErr.Error())
+		r.event(reconciledBucket, events.EventSeverityError, reconcileErr.Error())
 		return ctrl.Result{Requeue: true}, reconcileErr
 	}
 
 	// emit revision change event
 	if bucket.Status.Artifact == nil || reconciledBucket.Status.Artifact.Revision != bucket.Status.Artifact.Revision {
-		r.event(reconciledBucket, recorder.EventSeverityInfo, sourcev1.BucketReadyMessage(reconciledBucket))
+		r.event(reconciledBucket, events.EventSeverityInfo, sourcev1.BucketReadyMessage(reconciledBucket))
 	}
 
 	log.Info(fmt.Sprintf("Reconciliation finished in %s, next run in %s",

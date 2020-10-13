@@ -40,7 +40,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 
-	"github.com/fluxcd/pkg/recorder"
+	"github.com/fluxcd/pkg/runtime/events"
 	"github.com/fluxcd/pkg/runtime/predicates"
 	"github.com/fluxcd/pkg/untar"
 
@@ -56,7 +56,7 @@ type HelmChartReconciler struct {
 	Storage               *Storage
 	Getters               getter.Providers
 	EventRecorder         kuberecorder.EventRecorder
-	ExternalEventRecorder *recorder.EventRecorder
+	ExternalEventRecorder *events.Recorder
 }
 
 // +kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=helmcharts,verbs=get;list;watch;create;update;patch;delete
@@ -91,7 +91,7 @@ func (r *HelmChartReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		if containsString(chart.ObjectMeta.Finalizers, sourcev1.SourceFinalizer) {
 			// Our finalizer is still present, so lets handle garbage collection
 			if err := r.gc(chart, true); err != nil {
-				r.event(chart, recorder.EventSeverityError, fmt.Sprintf("garbage collection for deleted resource failed: %s", err.Error()))
+				r.event(chart, events.EventSeverityError, fmt.Sprintf("garbage collection for deleted resource failed: %s", err.Error()))
 				// Return the error so we retry the failed garbage collection
 				return ctrl.Result{}, err
 			}
@@ -163,13 +163,13 @@ func (r *HelmChartReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 
 	// If reconciliation failed, record the failure and requeue immediately
 	if reconcileErr != nil {
-		r.event(reconciledChart, recorder.EventSeverityError, reconcileErr.Error())
+		r.event(reconciledChart, events.EventSeverityError, reconcileErr.Error())
 		return ctrl.Result{Requeue: true}, reconcileErr
 	}
 
 	// Emit an event if we did not have an artifact before, or the revision has changed
 	if chart.Status.Artifact == nil || reconciledChart.Status.Artifact.Revision != chart.Status.Artifact.Revision {
-		r.event(reconciledChart, recorder.EventSeverityInfo, sourcev1.HelmChartReadyMessage(reconciledChart))
+		r.event(reconciledChart, events.EventSeverityInfo, sourcev1.HelmChartReadyMessage(reconciledChart))
 	}
 
 	log.Info(fmt.Sprintf("Reconciliation finished in %s, next run in %s",

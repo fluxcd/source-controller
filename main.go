@@ -33,7 +33,7 @@ import (
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	ctrl "sigs.k8s.io/controller-runtime"
 
-	"github.com/fluxcd/pkg/recorder"
+	"github.com/fluxcd/pkg/runtime/events"
 	"github.com/fluxcd/pkg/runtime/logger"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
@@ -88,9 +88,9 @@ func main() {
 
 	ctrl.SetLogger(logger.NewLogger(logLevel, logJSON))
 
-	var eventRecorder *recorder.EventRecorder
+	var eventRecorder *events.Recorder
 	if eventsAddr != "" {
-		if er, err := recorder.NewEventRecorder(eventsAddr, "source-controller"); err != nil {
+		if er, err := events.NewRecorder(eventsAddr, "source-controller"); err != nil {
 			setupLog.Error(err, "unable to create event recorder")
 			os.Exit(1)
 		} else {
