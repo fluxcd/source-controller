@@ -19,8 +19,9 @@ package git
 import (
 	"context"
 	"fmt"
+	"sort"
 
-	"github.com/blang/semver/v4"
+	"github.com/Masterminds/semver/v3"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
@@ -164,7 +165,7 @@ type CheckoutSemVer struct {
 }
 
 func (c *CheckoutSemVer) Checkout(ctx context.Context, path, url string, auth transport.AuthMethod) (*object.Commit, string, error) {
-	rng, err := semver.ParseRange(c.semVer)
+	rng, err := semver.NewConstraint(c.semVer)
 	if err != nil {
 		return nil, "", fmt.Errorf("semver parse range error: %w", err)
 	}
@@ -195,10 +196,14 @@ func (c *CheckoutSemVer) Checkout(ctx context.Context, path, url string, auth tr
 	})
 
 	svTags := make(map[string]string)
-	var svers []semver.Version
+	var svers semver.Collection
 	for tag, _ := range tags {
-		v, _ := semver.ParseTolerant(tag)
-		if rng(v) {
+		v, err := semver.NewVersion(tag)
+		if err != nil {
+			continue
+		}
+
+		if rng.Check(v) {
 			svers = append(svers, v)
 			svTags[v.String()] = tag
 		}
@@ -208,7 +213,7 @@ func (c *CheckoutSemVer) Checkout(ctx context.Context, path, url string, auth tr
 		return nil, "", fmt.Errorf("no match found for semver: %s", c.semVer)
 	}
 
-	semver.Sort(svers)
+	sort.Sort(svers)
 	v := svers[len(svers)-1]
 	t := svTags[v.String()]
 

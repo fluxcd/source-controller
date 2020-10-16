@@ -25,7 +25,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/blang/semver/v4"
+	"github.com/Masterminds/semver/v3"
 	"helm.sh/helm/v3/pkg/getter"
 	"helm.sh/helm/v3/pkg/repo"
 	"sigs.k8s.io/yaml"
@@ -83,18 +83,18 @@ func (r *ChartRepository) Get(name, version string) (*repo.ChartVersion, error) 
 
 	// Continue to look for a (semantic) version match
 	latestStable := len(version) == 0 || version == "*"
-	var match semver.Range
+	var match *semver.Constraints
 	if !latestStable {
-		rng, err := semver.ParseRange(version)
+		rng, err := semver.NewConstraint(version)
 		if err != nil {
 			return nil, err
 		}
 		match = rng
 	}
-	var filteredVersions semver.Versions
+	var filteredVersions semver.Collection
 	lookup := make(map[string]*repo.ChartVersion)
 	for _, cv := range cvs {
-		v, err := semver.ParseTolerant(cv.Version)
+		v, err := semver.NewVersion(cv.Version)
 		if err != nil {
 			continue
 		}
@@ -103,7 +103,7 @@ func (r *ChartRepository) Get(name, version string) (*repo.ChartVersion, error) 
 		// the right match to return. However, due to the fact that
 		// we use a different semver package than Helm does, we still
 		// need to sort it by our own rules.
-		if match != nil && !match(v) {
+		if match != nil && !match.Check(v) {
 			continue
 		}
 		filteredVersions = append(filteredVersions, v)
@@ -117,7 +117,7 @@ func (r *ChartRepository) Get(name, version string) (*repo.ChartVersion, error) 
 	latest := filteredVersions[0]
 	if latestStable {
 		for _, v := range filteredVersions {
-			if len(v.Pre) == 0 {
+			if len(v.Prerelease()) == 0 {
 				latest = v
 				break
 			}

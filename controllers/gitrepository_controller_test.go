@@ -220,7 +220,7 @@ var _ = Describe("GitRepositoryReconciler", func() {
 				reference:     &sourcev1.GitRepositoryRef{SemVer: "v1.0.0"},
 				waitForReason: sourcev1.GitOperationFailedReason,
 				expectStatus:  corev1.ConditionFalse,
-				expectMessage: "semver parse range error",
+				expectMessage: "no match found for semver: v1.0.0",
 			}),
 			Entry("semver no match", refTestCase{
 				reference:     &sourcev1.GitRepositoryRef{SemVer: "1.0.0"},
