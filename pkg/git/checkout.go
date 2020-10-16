@@ -77,7 +77,7 @@ func (c *CheckoutBranch) Checkout(ctx context.Context, path, url string, auth tr
 		Tags:              git.NoTags,
 	})
 	if err != nil {
-		return nil, "", fmt.Errorf("git clone error: %w", err)
+		return nil, "", fmt.Errorf("unable to clone '%s', error: %w", url, err)
 	}
 	head, err := repo.Head()
 	if err != nil {
@@ -108,7 +108,7 @@ func (c *CheckoutTag) Checkout(ctx context.Context, path, url string, auth trans
 		Tags:              git.NoTags,
 	})
 	if err != nil {
-		return nil, "", fmt.Errorf("git clone error: %w", err)
+		return nil, "", fmt.Errorf("unable to clone '%s', error: %w", url, err)
 	}
 	head, err := repo.Head()
 	if err != nil {
@@ -139,7 +139,7 @@ func (c *CheckoutCommit) Checkout(ctx context.Context, path, url string, auth tr
 		Tags:              git.NoTags,
 	})
 	if err != nil {
-		return nil, "", fmt.Errorf("git clone error: %w", err)
+		return nil, "", fmt.Errorf("unable to clone '%s', error: %w", url, err)
 	}
 	w, err := repo.Worktree()
 	if err != nil {
@@ -180,7 +180,7 @@ func (c *CheckoutSemVer) Checkout(ctx context.Context, path, url string, auth tr
 		Tags:              git.AllTags,
 	})
 	if err != nil {
-		return nil, "", fmt.Errorf("git clone error: %w", err)
+		return nil, "", fmt.Errorf("unable to clone '%s', error: %w", url, err)
 	}
 
 	repoTags, err := repo.Tags()
