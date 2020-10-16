@@ -23,6 +23,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"helm.sh/helm/v3/pkg/chart"
 	"helm.sh/helm/v3/pkg/getter"
@@ -101,12 +102,18 @@ func TestNewChartRepository(t *testing.T) {
 
 func TestChartRepository_Get(t *testing.T) {
 	i := repo.NewIndexFile()
-	i.Add(&chart.Metadata{Name: "chart", Version: "exact"}, "chart-exact.tgz", "http://example.com/charts", "sha256:1234567890")
+	i.Add(&chart.Metadata{Name: "chart", Version: "0.0.1"}, "chart-0.0.1.tgz", "http://example.com/charts", "sha256:1234567890")
 	i.Add(&chart.Metadata{Name: "chart", Version: "0.1.0"}, "chart-0.1.0.tgz", "http://example.com/charts", "sha256:1234567890abc")
 	i.Add(&chart.Metadata{Name: "chart", Version: "0.1.1"}, "chart-0.1.1.tgz", "http://example.com/charts", "sha256:1234567890abc")
+	i.Add(&chart.Metadata{Name: "chart", Version: "0.1.5+b.min.minute"}, "chart-0.1.5+b.min.minute.tgz", "http://example.com/charts", "sha256:1234567890abc")
+	i.Entries["chart"][len(i.Entries["chart"])-1].Created = time.Now().Add(-time.Minute)
+	i.Add(&chart.Metadata{Name: "chart", Version: "0.1.5+a.min.hour"}, "chart-0.1.5+a.min.hour.tgz", "http://example.com/charts", "sha256:1234567890abc")
+	i.Entries["chart"][len(i.Entries["chart"])-1].Created = time.Now().Add(-time.Hour)
+	i.Add(&chart.Metadata{Name: "chart", Version: "0.1.5+c.now"}, "chart-0.1.5+c.now.tgz", "http://example.com/charts", "sha256:1234567890abc")
 	i.Add(&chart.Metadata{Name: "chart", Version: "0.2.0"}, "chart-0.2.0.tgz", "http://example.com/charts", "sha256:1234567890abc")
 	i.Add(&chart.Metadata{Name: "chart", Version: "1.0.0"}, "chart-1.0.0.tgz", "http://example.com/charts", "sha256:1234567890abc")
-	i.Add(&chart.Metadata{Name: "chart", Version: "1.1.0-rc.1"}, "chart-1.1.0-rc.1.tgz", "http://example.com/charts", "sha256:1234567890abc")
+	i.Add(&chart.Metadata{Name: "chart", Version: "1.0.0"}, "chart-1.0.0.tgz", "http://example.com/charts", "sha256:1234567890abc")
+	i.Add(&chart.Metadata{Name: "chart", Version: "1.5.0-rc.1"}, "chart-1.5.0-rc.1.tgz", "http://example.com/charts", "sha256:1234567890abc")
 	i.SortEntries()
 	r := &ChartRepository{Index: i}
 
@@ -118,10 +125,10 @@ func TestChartRepository_Get(t *testing.T) {
 		wantErr      bool
 	}{
 		{
-			name:         "exact matth",
+			name:         "exact match",
 			chartName:    "chart",
-			chartVersion: "exact",
-			wantVersion:  "exact",
+			chartVersion: "0.0.1",
+			wantVersion:  "0.0.1",
 		},
 		{
 			name:         "stable version",
@@ -151,6 +158,30 @@ func TestChartRepository_Get(t *testing.T) {
 			name:      "invalid chart",
 			chartName: "non-existing",
 			wantErr:   true,
+		},
+		{
+			name:         "non-semver",
+			chartName:    "chart",
+			chartVersion: "v1x5",
+			wantErr:      true,
+		},
+		{
+			name:         "do not match pre-release",
+			chartName:    "chart",
+			chartVersion: ">=1.5.0",
+			wantErr:      true,
+		},
+		{
+			name:         "match pre-release",
+			chartName:    "chart",
+			chartVersion: ">=1.5.0-0",
+			wantVersion:  "1.5.0-rc.1",
+		},
+		{
+			name:         "match newest build",
+			chartName:    "chart",
+			chartVersion: "0.1.5",
+			wantVersion:  "0.1.5+c.now",
 		},
 	}
 

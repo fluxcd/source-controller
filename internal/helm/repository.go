@@ -61,69 +61,85 @@ func NewChartRepository(repositoryURL string, providers getter.Providers, opts [
 }
 
 // Get returns the repo.ChartVersion for the given name, the version is expected
-// to be a semver.Constraints compatible string. If version is empty, the latest
-// stable version will be returned and prerelease versions will be ignored.
+// to be a semver.Constraints compatible string. In case of an ambiguous match,
+// takes the freshest chart. If version is empty, the latest stable version will
+// be returned and prerelease versions will be ignored.
 func (r *ChartRepository) Get(name, version string) (*repo.ChartVersion, error) {
-	cvs, ok := r.Index.Entries[name]
+	chartVersions, ok := r.Index.Entries[name]
 	if !ok {
 		return nil, repo.ErrNoChartName
 	}
-	if len(cvs) == 0 {
+	if len(chartVersions) == 0 {
 		return nil, repo.ErrNoChartVersion
 	}
 
-	// Check for exact matches first
-	if len(version) != 0 {
-		for _, cv := range cvs {
-			if version == cv.Version {
-				return cv, nil
-			}
-		}
-	}
-
-	// Continue to look for a (semantic) version match
-	latestStable := len(version) == 0 || version == "*"
-	var match *semver.Constraints
-	if !latestStable {
+	// Parse version constraints if given (default strategy: latest)
+	var versionLatestStable = len(version) == 0 || version == "*"
+	var versionConstraints *semver.Constraints
+	if !versionLatestStable {
 		rng, err := semver.NewConstraint(version)
 		if err != nil {
 			return nil, err
 		}
-		match = rng
+		versionConstraints = rng
 	}
-	var filteredVersions semver.Collection
-	lookup := make(map[string]*repo.ChartVersion)
-	for _, cv := range cvs {
-		v, err := semver.NewVersion(cv.Version)
+
+	// Filter out chart versions that doesn't satisfy constraints if any,
+	// parse semver and build a lookup table
+	matchingVersions := make(semver.Collection, 0)
+	chartVersionLookup := make(map[*semver.Version]*repo.ChartVersion)
+	for _, chartVersion := range chartVersions {
+		// Check for exact matches first
+		if version == chartVersion.Version {
+			return chartVersion, nil
+		}
+
+		version, err := semver.NewVersion(chartVersion.Version)
 		if err != nil {
 			continue
 		}
-		// NB: given the entries are already sorted in LoadIndex,
-		// there is a high probability the first match would be
-		// the right match to return. However, due to the fact that
-		// we use a different semver package than Helm does, we still
-		// need to sort it by our own rules.
-		if match != nil && !match.Check(v) {
+
+		if versionConstraints != nil && !versionConstraints.Check(version) {
 			continue
 		}
-		filteredVersions = append(filteredVersions, v)
-		lookup[v.String()] = cv
+
+		matchingVersions = append(matchingVersions, version)
+		chartVersionLookup[version] = chartVersion
 	}
-	if len(filteredVersions) == 0 {
+	if len(matchingVersions) == 0 {
 		return nil, fmt.Errorf("no chart version found for %s-%s", name, version)
 	}
-	sort.Sort(sort.Reverse(filteredVersions))
 
-	latest := filteredVersions[0]
-	if latestStable {
-		for _, v := range filteredVersions {
+	// Sort versions
+	sort.SliceStable(matchingVersions, func(i, j int) bool {
+		// Reverse
+		return !(func() bool {
+			left := matchingVersions[i]
+			right := matchingVersions[j]
+
+			if !left.Equal(right) {
+				return left.LessThan(right)
+			}
+
+			// Having chart creation timestamp at our disposal, we keep chronological
+			// order for packages with the same version, especially build metadata, since
+			// versions can be equal with different metadata, because it is not considered
+			// a part of the comparable version.
+			return chartVersionLookup[left].Created.Before(chartVersionLookup[right].Created)
+		})()
+	})
+
+	topMatchingVersion := matchingVersions[0]
+	if versionLatestStable {
+		for _, v := range matchingVersions {
 			if len(v.Prerelease()) == 0 {
-				latest = v
+				topMatchingVersion = v
 				break
 			}
 		}
 	}
-	return lookup[latest.String()], nil
+
+	return chartVersionLookup[topMatchingVersion], nil
 }
 
 // DownloadChart confirms the given repo.ChartVersion has a downloadable URL,
