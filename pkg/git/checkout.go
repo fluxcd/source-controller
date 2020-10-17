@@ -19,6 +19,8 @@ package git
 import (
 	"context"
 	"fmt"
+	"sort"
+	"time"
 
 	"github.com/blang/semver/v4"
 	"github.com/go-git/go-git/v5"
@@ -189,7 +191,19 @@ func (c *CheckoutSemVer) Checkout(ctx context.Context, path, url string, auth tr
 	}
 
 	tags := make(map[string]string)
+	tagTimestamps := make(map[string]time.Time)
 	_ = repoTags.ForEach(func(t *plumbing.Reference) error {
+		revision := plumbing.Revision(t.Name().String())
+		hash, err := repo.ResolveRevision(revision)
+		if err != nil {
+			return fmt.Errorf("unable to resolve tag revision: %w", err)
+		}
+		commit, err := repo.CommitObject(*hash)
+		if err != nil {
+			return fmt.Errorf("unable to resolve commit of a tag revision: %w", err)
+		}
+		tagTimestamps[t.Name().Short()] = commit.Committer.When
+
 		tags[t.Name().Short()] = t.Strings()[1]
 		return nil
 	})
@@ -203,12 +217,25 @@ func (c *CheckoutSemVer) Checkout(ctx context.Context, path, url string, auth tr
 			svTags[v.String()] = tag
 		}
 	}
-
 	if len(svers) == 0 {
 		return nil, "", fmt.Errorf("no match found for semver: %s", c.semVer)
 	}
 
-	semver.Sort(svers)
+	// Sort versions
+	sort.SliceStable(svers, func(i, j int) bool {
+		left := svers[i]
+		right := svers[j]
+
+		if !left.EQ(right) {
+			return left.LT(right)
+		}
+
+		// Having tag target timestamps at our disposal, we further try to sort
+		// versions into a chronological order. This is especially important for
+		// versions that differ only by build metadata, because it is not considered
+		// a part of the comparable version in Semver
+		return tagTimestamps[left.String()].Before(tagTimestamps[right.String()])
+	})
 	v := svers[len(svers)-1]
 	t := svTags[v.String()]
 

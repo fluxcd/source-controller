@@ -23,6 +23,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"helm.sh/helm/v3/pkg/chart"
 	"helm.sh/helm/v3/pkg/getter"
@@ -104,6 +105,11 @@ func TestChartRepository_Get(t *testing.T) {
 	i.Add(&chart.Metadata{Name: "chart", Version: "exact"}, "chart-exact.tgz", "http://example.com/charts", "sha256:1234567890")
 	i.Add(&chart.Metadata{Name: "chart", Version: "0.1.0"}, "chart-0.1.0.tgz", "http://example.com/charts", "sha256:1234567890abc")
 	i.Add(&chart.Metadata{Name: "chart", Version: "0.1.1"}, "chart-0.1.1.tgz", "http://example.com/charts", "sha256:1234567890abc")
+	i.Add(&chart.Metadata{Name: "chart", Version: "0.1.5+b.min.minute"}, "chart-0.1.5+b.min.minute.tgz", "http://example.com/charts", "sha256:1234567890abc")
+	i.Entries["chart"][len(i.Entries["chart"])-1].Created = time.Now().Add(-time.Minute)
+	i.Add(&chart.Metadata{Name: "chart", Version: "0.1.5+a.min.hour"}, "chart-0.1.5+a.min.hour.tgz", "http://example.com/charts", "sha256:1234567890abc")
+	i.Entries["chart"][len(i.Entries["chart"])-1].Created = time.Now().Add(-time.Hour)
+	i.Add(&chart.Metadata{Name: "chart", Version: "0.1.5+c.now"}, "chart-0.1.5+c.now.tgz", "http://example.com/charts", "sha256:1234567890abc")
 	i.Add(&chart.Metadata{Name: "chart", Version: "0.2.0"}, "chart-0.2.0.tgz", "http://example.com/charts", "sha256:1234567890abc")
 	i.Add(&chart.Metadata{Name: "chart", Version: "1.0.0"}, "chart-1.0.0.tgz", "http://example.com/charts", "sha256:1234567890abc")
 	i.Add(&chart.Metadata{Name: "chart", Version: "1.1.0-rc.1"}, "chart-1.1.0-rc.1.tgz", "http://example.com/charts", "sha256:1234567890abc")
@@ -151,6 +157,12 @@ func TestChartRepository_Get(t *testing.T) {
 			name:      "invalid chart",
 			chartName: "non-existing",
 			wantErr:   true,
+		},
+		{
+			name:         "match newest if ambiguous",
+			chartName:    "chart",
+			chartVersion: "0.1.5",
+			wantVersion:  "0.1.5+c.now",
 		},
 	}
 

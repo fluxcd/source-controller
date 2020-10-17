@@ -98,11 +98,7 @@ func (r *ChartRepository) Get(name, version string) (*repo.ChartVersion, error) 
 		if err != nil {
 			continue
 		}
-		// NB: given the entries are already sorted in LoadIndex,
-		// there is a high probability the first match would be
-		// the right match to return. However, due to the fact that
-		// we use a different semver package than Helm does, we still
-		// need to sort it by our own rules.
+
 		if match != nil && !match(v) {
 			continue
 		}
@@ -112,7 +108,25 @@ func (r *ChartRepository) Get(name, version string) (*repo.ChartVersion, error) 
 	if len(filteredVersions) == 0 {
 		return nil, fmt.Errorf("no chart version found for %s-%s", name, version)
 	}
-	sort.Sort(sort.Reverse(filteredVersions))
+
+	// Sort versions
+	sort.SliceStable(filteredVersions, func(i, j int) bool {
+		// Reverse
+		return !(func() bool {
+			left := filteredVersions[i]
+			right := filteredVersions[j]
+
+			if !left.EQ(right) {
+				return left.LT(right)
+			}
+
+			// Having chart creation timestamp at our disposal, we put package with the
+			// same version into a chronological order. This is especially important for
+			// versions that differ only by build metadata, because it is not considered
+			// a part of the comparable version in Semver
+			return lookup[left.String()].Created.Before(lookup[right.String()].Created)
+		})()
+	})
 
 	latest := filteredVersions[0]
 	if latestStable {
