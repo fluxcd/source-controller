@@ -30,6 +30,8 @@ import (
 	"github.com/go-logr/logr"
 	"helm.sh/helm/v3/pkg/action"
 	"helm.sh/helm/v3/pkg/chartutil"
+	"helm.sh/helm/v3/pkg/cli"
+	"helm.sh/helm/v3/pkg/downloader"
 	"helm.sh/helm/v3/pkg/getter"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -430,6 +432,27 @@ func (r *HelmChartReconciler) reconcileFromTarballArtifact(ctx context.Context,
 	chartMetadata, err := chartutil.LoadChartfile(path.Join(chartPath, chartutil.ChartfileName))
 	if err != nil {
 		err = fmt.Errorf("load chart metadata error: %w", err)
+		return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
+	}
+
+	// Ensure dependencies
+	newDepClient := action.NewDependency()
+	settings := &cli.EnvSettings{}
+	man := &downloader.Manager{
+		Out:              os.Stdout,
+		ChartPath:        chartPath,
+		Keyring:          newDepClient.Keyring,
+		Getters:          getter.All(settings),
+		RepositoryConfig: settings.RepositoryConfig,
+		RepositoryCache:  settings.RepositoryCache,
+		Debug:            settings.Debug,
+	}
+	if newDepClient.Verify {
+		man.Verify = downloader.VerifyIfPossible
+	}
+	err = man.Build()
+	if err != nil {
+		err = fmt.Errorf("building chart dependencies error: %w", err)
 		return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
 	}
 

@@ -74,7 +74,7 @@ var _ = Describe("HelmRepositoryReconciler", func() {
 		It("Creates artifacts for", func() {
 			helmServer.Start()
 
-			Expect(helmServer.PackageChart(path.Join("testdata/helmchart"))).Should(Succeed())
+			Expect(helmServer.PackageChart(path.Join("testdata/charts/helmchart"))).Should(Succeed())
 			Expect(helmServer.GenerateIndex()).Should(Succeed())
 
 			key := types.NamespacedName{
@@ -156,7 +156,7 @@ var _ = Describe("HelmRepositoryReconciler", func() {
 		It("Handles timeout", func() {
 			helmServer.Start()
 
-			Expect(helmServer.PackageChart(path.Join("testdata/helmchart"))).Should(Succeed())
+			Expect(helmServer.PackageChart(path.Join("testdata/charts/helmchart"))).Should(Succeed())
 			Expect(helmServer.GenerateIndex()).Should(Succeed())
 
 			key := types.NamespacedName{
@@ -224,7 +224,7 @@ var _ = Describe("HelmRepositoryReconciler", func() {
 			defer helmServer.Stop()
 			helmServer.Start()
 
-			Expect(helmServer.PackageChart(path.Join("testdata/helmchart"))).Should(Succeed())
+			Expect(helmServer.PackageChart(path.Join("testdata/charts/helmchart"))).Should(Succeed())
 			Expect(helmServer.GenerateIndex()).Should(Succeed())
 
 			secretKey := types.NamespacedName{
@@ -316,7 +316,7 @@ var _ = Describe("HelmRepositoryReconciler", func() {
 			err = helmServer.StartTLS(examplePublicKey, examplePrivateKey, exampleCA, "example.com")
 			Expect(err).NotTo(HaveOccurred())
 
-			Expect(helmServer.PackageChart(path.Join("testdata/helmchart"))).Should(Succeed())
+			Expect(helmServer.PackageChart(path.Join("testdata/charts/helmchart"))).Should(Succeed())
 			Expect(helmServer.GenerateIndex()).Should(Succeed())
 
 			secretKey := types.NamespacedName{
