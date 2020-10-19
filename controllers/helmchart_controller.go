@@ -188,6 +188,11 @@ func (r *HelmChartReconciler) SetupWithManager(mgr ctrl.Manager) error {
 }
 
 func (r *HelmChartReconciler) SetupWithManagerAndOptions(mgr ctrl.Manager, opts HelmChartReconcilerOptions) error {
+	if err := mgr.GetCache().IndexField(context.TODO(), &sourcev1.HelmRepository{}, sourcev1.HelmRepositoryURLIndexKey,
+		r.indexHelmRepositoryByURL); err != nil {
+		return fmt.Errorf("failed setting index fields: %w", err)
+	}
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&sourcev1.HelmChart{}).
 		WithEventFilter(predicates.ChangePredicate{}).
@@ -579,4 +584,18 @@ func (r *HelmChartReconciler) recordReadiness(chart sourcev1.HelmChart, deleted 
 			Status: corev1.ConditionUnknown,
 		}, deleted)
 	}
+}
+
+func (r *HelmChartReconciler) indexHelmRepositoryByURL(o runtime.Object) []string {
+	repo, ok := o.(*sourcev1.HelmRepository)
+	if !ok {
+		panic(fmt.Sprintf("Expected a HelmRepository, got %T", o))
+	}
+	if repo.Spec.URL != "" {
+		// TODO(hidde): move this to a dedicated function in the internal Helm package
+		//   so it can be re-used for e.g. lookups.
+		u := strings.TrimRight(repo.Spec.URL, "/") + "/"
+		return []string{u}
+	}
+	return nil
 }
