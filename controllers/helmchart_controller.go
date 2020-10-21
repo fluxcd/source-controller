@@ -39,6 +39,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	"github.com/fluxcd/pkg/runtime/events"
 	"github.com/fluxcd/pkg/runtime/metrics"
@@ -76,37 +77,18 @@ func (r *HelmChartReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 
 	log := r.Log.WithValues("controller", strings.ToLower(sourcev1.HelmChartKind), "request", req.NamespacedName)
 
+	// Add our finalizer if it does not exist
+	if !controllerutil.ContainsFinalizer(&chart, sourcev1.SourceFinalizer) {
+		controllerutil.AddFinalizer(&chart, sourcev1.SourceFinalizer)
+		if err := r.Update(ctx, &chart); err != nil {
+			log.Error(err, "unable to register finalizer")
+			return ctrl.Result{}, err
+		}
+	}
+
 	// Examine if the object is under deletion
-	if chart.ObjectMeta.DeletionTimestamp.IsZero() {
-		// The object is not being deleted, so if it does not have our finalizer,
-		// then lets add the finalizer and update the object. This is equivalent
-		// registering our finalizer.
-		if !containsString(chart.ObjectMeta.Finalizers, sourcev1.SourceFinalizer) {
-			chart.ObjectMeta.Finalizers = append(chart.ObjectMeta.Finalizers, sourcev1.SourceFinalizer)
-			if err := r.Update(ctx, &chart); err != nil {
-				log.Error(err, "unable to register finalizer")
-				return ctrl.Result{}, err
-			}
-		}
-	} else {
-		// The object is being deleted
-		if containsString(chart.ObjectMeta.Finalizers, sourcev1.SourceFinalizer) {
-			// Our finalizer is still present, so lets handle garbage collection
-			if err := r.gc(chart, true); err != nil {
-				r.event(chart, events.EventSeverityError, fmt.Sprintf("garbage collection for deleted resource failed: %s", err.Error()))
-				// Return the error so we retry the failed garbage collection
-				return ctrl.Result{}, err
-			}
-			// Record deleted status
-			r.recordReadiness(chart, true)
-			// Remove our finalizer from the list and update it
-			chart.ObjectMeta.Finalizers = removeString(chart.ObjectMeta.Finalizers, sourcev1.SourceFinalizer)
-			if err := r.Update(ctx, &chart); err != nil {
-				return ctrl.Result{}, err
-			}
-			// Stop reconciliation as the object is being deleted
-			return ctrl.Result{}, nil
-		}
+	if !chart.ObjectMeta.DeletionTimestamp.IsZero() {
+		return r.reconcileDelete(ctx, chart)
 	}
 
 	// record reconciliation duration
@@ -489,6 +471,27 @@ func (r *HelmChartReconciler) reconcileFromTarballArtifact(ctx context.Context,
 
 	message := fmt.Sprintf("Fetched and packaged revision: %s", newArtifact.Revision)
 	return sourcev1.HelmChartReady(chart, newArtifact, cUrl, sourcev1.ChartPackageSucceededReason, message), nil
+}
+
+func (r *HelmChartReconciler) reconcileDelete(ctx context.Context, chart sourcev1.HelmChart) (ctrl.Result, error) {
+	// Our finalizer is still present, so lets handle garbage collection
+	if err := r.gc(chart, true); err != nil {
+		r.event(chart, events.EventSeverityError, fmt.Sprintf("garbage collection for deleted resource failed: %s", err.Error()))
+		// Return the error so we retry the failed garbage collection
+		return ctrl.Result{}, err
+	}
+
+	// Record deleted status
+	r.recordReadiness(chart, true)
+
+	// Remove our finalizer from the list and update it
+	controllerutil.RemoveFinalizer(&chart, sourcev1.SourceFinalizer)
+	if err := r.Update(ctx, &chart); err != nil {
+		return ctrl.Result{}, err
+	}
+
+	// Stop reconciliation as the object is being deleted
+	return ctrl.Result{}, nil
 }
 
 // resetStatus returns a modified v1beta1.HelmChart and a boolean indicating

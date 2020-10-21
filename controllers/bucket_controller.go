@@ -38,6 +38,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	"github.com/fluxcd/pkg/runtime/events"
 	"github.com/fluxcd/pkg/runtime/metrics"
@@ -72,37 +73,18 @@ func (r *BucketReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 
 	log := r.Log.WithValues("controller", strings.ToLower(sourcev1.BucketKind), "request", req.NamespacedName)
 
+	// Add our finalizer if it does not exist
+	if !controllerutil.ContainsFinalizer(&bucket, sourcev1.SourceFinalizer) {
+		controllerutil.AddFinalizer(&bucket, sourcev1.SourceFinalizer)
+		if err := r.Update(ctx, &bucket); err != nil {
+			log.Error(err, "unable to register finalizer")
+			return ctrl.Result{}, err
+		}
+	}
+
 	// Examine if the object is under deletion
-	if bucket.ObjectMeta.DeletionTimestamp.IsZero() {
-		// The object is not being deleted, so if it does not have our finalizer,
-		// then lets add the finalizer and update the object. This is equivalent
-		// registering our finalizer.
-		if !containsString(bucket.ObjectMeta.Finalizers, sourcev1.SourceFinalizer) {
-			bucket.ObjectMeta.Finalizers = append(bucket.ObjectMeta.Finalizers, sourcev1.SourceFinalizer)
-			if err := r.Update(ctx, &bucket); err != nil {
-				log.Error(err, "unable to register finalizer")
-				return ctrl.Result{}, err
-			}
-		}
-	} else {
-		// The object is being deleted
-		if containsString(bucket.ObjectMeta.Finalizers, sourcev1.SourceFinalizer) {
-			// Our finalizer is still present, so lets handle garbage collection
-			if err := r.gc(bucket, true); err != nil {
-				r.event(bucket, events.EventSeverityError, fmt.Sprintf("garbage collection for deleted resource failed: %s", err.Error()))
-				// Return the error so we retry the failed garbage collection
-				return ctrl.Result{}, err
-			}
-			// Record deleted status
-			r.recordReadiness(bucket, true)
-			// Remove our finalizer from the list and update it
-			bucket.ObjectMeta.Finalizers = removeString(bucket.ObjectMeta.Finalizers, sourcev1.SourceFinalizer)
-			if err := r.Update(ctx, &bucket); err != nil {
-				return ctrl.Result{}, err
-			}
-			// Stop reconciliation as the object is being deleted
-			return ctrl.Result{}, nil
-		}
+	if !bucket.ObjectMeta.DeletionTimestamp.IsZero() {
+		return r.reconcileDelete(ctx, bucket)
 	}
 
 	// record reconciliation duration
@@ -266,6 +248,26 @@ func (r *BucketReconciler) reconcile(ctx context.Context, bucket sourcev1.Bucket
 
 	message := fmt.Sprintf("Fetched revision: %s", artifact.Revision)
 	return sourcev1.BucketReady(bucket, artifact, url, sourcev1.BucketOperationSucceedReason, message), nil
+}
+
+func (r *BucketReconciler) reconcileDelete(ctx context.Context, bucket sourcev1.Bucket) (ctrl.Result, error) {
+	if err := r.gc(bucket, true); err != nil {
+		r.event(bucket, events.EventSeverityError, fmt.Sprintf("garbage collection for deleted resource failed: %s", err.Error()))
+		// Return the error so we retry the failed garbage collection
+		return ctrl.Result{}, err
+	}
+
+	// Record deleted status
+	r.recordReadiness(bucket, true)
+
+	// Remove our finalizer from the list and update it
+	controllerutil.RemoveFinalizer(&bucket, sourcev1.SourceFinalizer)
+	if err := r.Update(ctx, &bucket); err != nil {
+		return ctrl.Result{}, err
+	}
+
+	// Stop reconciliation as the object is being deleted
+	return ctrl.Result{}, nil
 }
 
 func (r *BucketReconciler) auth(ctx context.Context, bucket sourcev1.Bucket) (*minio.Client, error) {

@@ -35,6 +35,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/yaml"
 
 	"github.com/fluxcd/pkg/runtime/events"
@@ -73,37 +74,18 @@ func (r *HelmRepositoryReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 
 	log := r.Log.WithValues("controller", strings.ToLower(sourcev1.HelmRepositoryKind), "request", req.NamespacedName)
 
+	// Add our finalizer if it does not exist
+	if !controllerutil.ContainsFinalizer(&repository, sourcev1.SourceFinalizer) {
+		controllerutil.AddFinalizer(&repository, sourcev1.SourceFinalizer)
+		if err := r.Update(ctx, &repository); err != nil {
+			log.Error(err, "unable to register finalizer")
+			return ctrl.Result{}, err
+		}
+	}
+
 	// Examine if the object is under deletion
-	if repository.ObjectMeta.DeletionTimestamp.IsZero() {
-		// The object is not being deleted, so if it does not have our finalizer,
-		// then lets add the finalizer and update the object. This is equivalent
-		// registering our finalizer.
-		if !containsString(repository.ObjectMeta.Finalizers, sourcev1.SourceFinalizer) {
-			repository.ObjectMeta.Finalizers = append(repository.ObjectMeta.Finalizers, sourcev1.SourceFinalizer)
-			if err := r.Update(ctx, &repository); err != nil {
-				log.Error(err, "unable to register finalizer")
-				return ctrl.Result{}, err
-			}
-		}
-	} else {
-		// The object is being deleted
-		if containsString(repository.ObjectMeta.Finalizers, sourcev1.SourceFinalizer) {
-			// Our finalizer is still present, so lets handle garbage collection
-			if err := r.gc(repository, true); err != nil {
-				r.event(repository, events.EventSeverityError, fmt.Sprintf("garbage collection for deleted resource failed: %s", err.Error()))
-				// Return the error so we retry the failed garbage collection
-				return ctrl.Result{}, err
-			}
-			// Record deleted status
-			r.recordReadiness(repository, true)
-			// Remove our finalizer from the list and update it
-			repository.ObjectMeta.Finalizers = removeString(repository.ObjectMeta.Finalizers, sourcev1.SourceFinalizer)
-			if err := r.Update(ctx, &repository); err != nil {
-				return ctrl.Result{}, err
-			}
-			// Stop reconciliation as the object is being deleted
-			return ctrl.Result{}, nil
-		}
+	if !repository.ObjectMeta.DeletionTimestamp.IsZero() {
+		return r.reconcileDelete(ctx, repository)
 	}
 
 	// record reconciliation duration
@@ -262,6 +244,27 @@ func (r *HelmRepositoryReconciler) reconcile(ctx context.Context, repository sou
 
 	message := fmt.Sprintf("Fetched revision: %s", artifact.Revision)
 	return sourcev1.HelmRepositoryReady(repository, artifact, indexURL, sourcev1.IndexationSucceededReason, message), nil
+}
+
+func (r *HelmRepositoryReconciler) reconcileDelete(ctx context.Context, repository sourcev1.HelmRepository) (ctrl.Result, error) {
+	// Our finalizer is still present, so lets handle garbage collection
+	if err := r.gc(repository, true); err != nil {
+		r.event(repository, events.EventSeverityError, fmt.Sprintf("garbage collection for deleted resource failed: %s", err.Error()))
+		// Return the error so we retry the failed garbage collection
+		return ctrl.Result{}, err
+	}
+
+	// Record deleted status
+	r.recordReadiness(repository, true)
+
+	// Remove our finalizer from the list and update it
+	controllerutil.RemoveFinalizer(&repository, sourcev1.SourceFinalizer)
+	if err := r.Update(ctx, &repository); err != nil {
+		return ctrl.Result{}, err
+	}
+
+	// Stop reconciliation as the object is being deleted
+	return ctrl.Result{}, nil
 }
 
 // resetStatus returns a modified v1beta1.HelmRepository and a boolean indicating
