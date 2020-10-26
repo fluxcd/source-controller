@@ -32,6 +32,7 @@ type HelmChartSpec struct {
 
 	// The chart version semver expression, ignored for charts from GitRepository
 	// and Bucket sources. Defaults to latest when omitted.
+	// +kubebuilder:default:=latest
 	// +optional
 	Version string `json:"version,omitempty"`
 

@@ -49,11 +49,13 @@ type GitRepositorySpec struct {
 	Interval metav1.Duration `json:"interval"`
 
 	// The timeout for remote Git operations like cloning, defaults to 20s.
+	// +kubebuilder:default:=20
 	// +optional
 	Timeout *metav1.Duration `json:"timeout,omitempty"`
 
 	// The Git reference to checkout and monitor for changes, defaults to
 	// master branch.
+	// +kubebuilder:default:=master
 	// +optional
 	Reference *GitRepositoryRef `json:"ref,omitempty"`
 
@@ -71,6 +73,7 @@ type GitRepositorySpec struct {
 // GitRepositoryRef defines the Git ref used for pull and checkout operations.
 type GitRepositoryRef struct {
 	// The Git branch to checkout, defaults to master.
+	// +kubebuilder:default:=master
 	// +optional
 	Branch string `json:"branch,omitempty"`
 
