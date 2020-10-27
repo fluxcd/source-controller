@@ -237,26 +237,18 @@ func (r *HelmChartReconciler) getSource(ctx context.Context, chart sourcev1.Helm
 
 func (r *HelmChartReconciler) reconcileFromHelmRepository(ctx context.Context,
 	repository sourcev1.HelmRepository, chart sourcev1.HelmChart, force bool) (sourcev1.HelmChart, error) {
+	// Configure ChartRepository getter options
 	var clientOpts []getter.Option
-	if repository.Spec.SecretRef != nil {
-		name := types.NamespacedName{
-			Namespace: repository.GetNamespace(),
-			Name:      repository.Spec.SecretRef.Name,
-		}
-
-		var secret corev1.Secret
-		err := r.Client.Get(ctx, name, &secret)
-		if err != nil {
-			err = fmt.Errorf("auth secret error: %w", err)
-			return sourcev1.HelmChartNotReady(chart, sourcev1.AuthenticationFailedReason, err.Error()), err
-		}
-
-		opts, cleanup, err := helm.ClientOptionsFromSecret(secret)
+	if secret, err := r.getHelmRepositorySecret(ctx, &repository); err != nil {
+		return sourcev1.HelmChartNotReady(chart, sourcev1.AuthenticationFailedReason, err.Error()), err
+	} else if secret != nil {
+		opts, cleanup, err := helm.ClientOptionsFromSecret(*secret)
 		if err != nil {
 			err = fmt.Errorf("auth options error: %w", err)
 			return sourcev1.HelmChartNotReady(chart, sourcev1.AuthenticationFailedReason, err.Error()), err
 		}
 		defer cleanup()
+
 		clientOpts = opts
 	}
 	clientOpts = append(clientOpts, getter.WithTimeout(repository.GetTimeout()))
@@ -596,4 +588,23 @@ func (r *HelmChartReconciler) indexHelmRepositoryByURL(o runtime.Object) []strin
 		return []string{u}
 	}
 	return nil
+}
+
+func (r *HelmChartReconciler) getHelmRepositorySecret(ctx context.Context, repository *sourcev1.HelmRepository) (*corev1.Secret, error) {
+	if repository.Spec.SecretRef != nil {
+		name := types.NamespacedName{
+			Namespace: repository.GetNamespace(),
+			Name:      repository.Spec.SecretRef.Name,
+		}
+
+		var secret corev1.Secret
+		err := r.Client.Get(ctx, name, &secret)
+		if err != nil {
+			err = fmt.Errorf("auth secret error: %w", err)
+			return nil, err
+		}
+		return &secret, nil
+	}
+
+	return nil, nil
 }
