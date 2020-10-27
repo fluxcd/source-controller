@@ -19,8 +19,8 @@ type HelmRepositorySpec struct {
 	// repository.
 	// For HTTP/S basic auth the secret must contain username and
 	// password fields.
-	// For TLS the secret must contain caFile, keyFile and caCert
-	// fields.
+	// For TLS the secret must contain a certFile and keyFile, and/or
+	// caCert fields.
     // +optional
 	SecretRef *corev1.LocalObjectReference `json:"secretRef,omitempty"`
 
@@ -39,6 +39,11 @@ type HelmRepositorySpec struct {
 ```go
 // HelmRepositoryStatus defines the observed state of the HelmRepository.
 type HelmRepositoryStatus struct {
+	// ObservedGeneration is the last observed generation.
+	// +optional
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+
+	// Conditions holds the conditions for the HelmRepository.
 	// +optional
 	Conditions []meta.Condition `json:"conditions,omitempty"`
 

@@ -62,10 +62,15 @@ type LocalHelmChartSourceReference struct {
 ```go
 // HelmChartStatus defines the observed state of the HelmChart.
 type HelmChartStatus struct {
+	// ObservedGeneration is the last observed generation.
+	// +optional
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+
+	// Conditions holds the conditions for the HelmChart.
 	// +optional
 	Conditions []meta.Condition `json:"conditions,omitempty"`
 
-	// URL is the download link for the last chart fetched.
+	// URL is the download link for the last chart pulled.
 	// +optional
 	URL string `json:"url,omitempty"`
 

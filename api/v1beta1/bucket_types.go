@@ -61,12 +61,13 @@ type BucketSpec struct {
 	// +required
 	Interval metav1.Duration `json:"interval"`
 
-	// The timeout for download operations, default ('20s').
+	// The timeout for download operations, defaults to 20s.
 	// +optional
 	Timeout *metav1.Duration `json:"timeout,omitempty"`
 
 	// Ignore overrides the set of excluded patterns in the .sourceignore format
-	// (which is the same as .gitignore).
+	// (which is the same as .gitignore). If not provided, a default will be used,
+	// consult the documentation for your version to find out what those are.
 	// +optional
 	Ignore *string `json:"ignore,omitempty"`
 }

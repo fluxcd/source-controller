@@ -171,7 +171,7 @@ Kubernetes meta/v1.Duration
 </td>
 <td>
 <em>(Optional)</em>
-<p>The timeout for download operations, default (&lsquo;20s&rsquo;).</p>
+<p>The timeout for download operations, defaults to 20s.</p>
 </td>
 </tr>
 <tr>
@@ -184,7 +184,8 @@ string
 <td>
 <em>(Optional)</em>
 <p>Ignore overrides the set of excluded patterns in the .sourceignore format
-(which is the same as .gitignore).</p>
+(which is the same as .gitignore). If not provided, a default will be used,
+consult the documentation for your version to find out what those are.</p>
 </td>
 </tr>
 </table>
@@ -271,7 +272,7 @@ string
 </em>
 </td>
 <td>
-<p>The repository URL, can be a HTTP or SSH address.</p>
+<p>The repository URL, can be a HTTP/S or SSH address.</p>
 </td>
 </tr>
 <tr>
@@ -316,7 +317,7 @@ Kubernetes meta/v1.Duration
 </td>
 <td>
 <em>(Optional)</em>
-<p>The timeout for remote git operations like cloning, default to 20s.</p>
+<p>The timeout for remote Git operations like cloning, defaults to 20s.</p>
 </td>
 </tr>
 <tr>
@@ -330,7 +331,7 @@ GitRepositoryRef
 </td>
 <td>
 <em>(Optional)</em>
-<p>The git reference to checkout and monitor for changes, defaults to
+<p>The Git reference to checkout and monitor for changes, defaults to
 master branch.</p>
 </td>
 </tr>
@@ -345,7 +346,7 @@ GitRepositoryVerification
 </td>
 <td>
 <em>(Optional)</em>
-<p>Verify OpenPGP signature for the commit that HEAD points to.</p>
+<p>Verify OpenPGP signature for the Git commit HEAD points to.</p>
 </td>
 </tr>
 <tr>
@@ -603,8 +604,8 @@ Kubernetes core/v1.LocalObjectReference
 repository.
 For HTTP/S basic auth the secret must contain username and
 password fields.
-For TLS the secret must contain caFile, keyFile and caCert
-fields.</p>
+For TLS the secret must contain a certFile and keyFile, and/or
+caCert fields.</p>
 </td>
 </tr>
 <tr>
@@ -705,7 +706,7 @@ string
 <td>
 <em>(Optional)</em>
 <p>Revision is a human readable identifier traceable in the origin source
-system. It can be a Git commit sha, Git tag, a Helm index timestamp, a Helm
+system. It can be a Git commit SHA, Git tag, a Helm index timestamp, a Helm
 chart version, etc.</p>
 </td>
 </tr>
@@ -853,7 +854,7 @@ Kubernetes meta/v1.Duration
 </td>
 <td>
 <em>(Optional)</em>
-<p>The timeout for download operations, default (&lsquo;20s&rsquo;).</p>
+<p>The timeout for download operations, defaults to 20s.</p>
 </td>
 </tr>
 <tr>
@@ -866,7 +867,8 @@ string
 <td>
 <em>(Optional)</em>
 <p>Ignore overrides the set of excluded patterns in the .sourceignore format
-(which is the same as .gitignore).</p>
+(which is the same as .gitignore). If not provided, a default will be used,
+consult the documentation for your version to find out what those are.</p>
 </td>
 </tr>
 </tbody>
@@ -952,7 +954,7 @@ Artifact
 (<em>Appears on:</em>
 <a href="#source.toolkit.fluxcd.io/v1beta1.GitRepositorySpec">GitRepositorySpec</a>)
 </p>
-<p>GitRepositoryRef defines the git ref used for pull and checkout operations.</p>
+<p>GitRepositoryRef defines the Git ref used for pull and checkout operations.</p>
 <div class="md-typeset__scrollwrap">
 <div class="md-typeset__table">
 <table>
@@ -972,7 +974,7 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>The git branch to checkout, defaults to master.</p>
+<p>The Git branch to checkout, defaults to master.</p>
 </td>
 </tr>
 <tr>
@@ -984,7 +986,7 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>The git tag to checkout, takes precedence over branch.</p>
+<p>The Git tag to checkout, takes precedence over Branch.</p>
 </td>
 </tr>
 <tr>
@@ -996,7 +998,7 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>The git tag semver expression, takes precedence over tag.</p>
+<p>The Git tag semver expression, takes precedence over Tag.</p>
 </td>
 </tr>
 <tr>
@@ -1008,7 +1010,7 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>The git commit sha to checkout, if specified tag filters will be ignored.</p>
+<p>The Git commit SHA to checkout, if specified Tag filters will be ignored.</p>
 </td>
 </tr>
 </tbody>
@@ -1040,7 +1042,7 @@ string
 </em>
 </td>
 <td>
-<p>The repository URL, can be a HTTP or SSH address.</p>
+<p>The repository URL, can be a HTTP/S or SSH address.</p>
 </td>
 </tr>
 <tr>
@@ -1085,7 +1087,7 @@ Kubernetes meta/v1.Duration
 </td>
 <td>
 <em>(Optional)</em>
-<p>The timeout for remote git operations like cloning, default to 20s.</p>
+<p>The timeout for remote Git operations like cloning, defaults to 20s.</p>
 </td>
 </tr>
 <tr>
@@ -1099,7 +1101,7 @@ GitRepositoryRef
 </td>
 <td>
 <em>(Optional)</em>
-<p>The git reference to checkout and monitor for changes, defaults to
+<p>The Git reference to checkout and monitor for changes, defaults to
 master branch.</p>
 </td>
 </tr>
@@ -1114,7 +1116,7 @@ GitRepositoryVerification
 </td>
 <td>
 <em>(Optional)</em>
-<p>Verify OpenPGP signature for the commit that HEAD points to.</p>
+<p>Verify OpenPGP signature for the Git commit HEAD points to.</p>
 </td>
 </tr>
 <tr>
@@ -1247,7 +1249,7 @@ Kubernetes core/v1.LocalObjectReference
 </em>
 </td>
 <td>
-<p>The secret name containing the public keys of all trusted git authors.</p>
+<p>The secret name containing the public keys of all trusted Git authors.</p>
 </td>
 </tr>
 </tbody>
@@ -1454,8 +1456,8 @@ Kubernetes core/v1.LocalObjectReference
 repository.
 For HTTP/S basic auth the secret must contain username and
 password fields.
-For TLS the secret must contain caFile, keyFile and caCert
-fields.</p>
+For TLS the secret must contain a certFile and keyFile, and/or
+caCert fields.</p>
 </td>
 </tr>
 <tr>

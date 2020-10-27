@@ -119,7 +119,7 @@ spec:
                     type: string
                   revision:
                     description: Revision is a human readable identifier traceable
-                      in the origin source system. It can be a Git commit sha, Git
+                      in the origin source system. It can be a Git commit SHA, Git
                       tag, a Helm index timestamp, a Helm chart version, etc.
                     type: string
                   url:

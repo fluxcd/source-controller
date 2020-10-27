@@ -11,7 +11,7 @@ Git repository:
 ```go
 // GitRepositorySpec defines the desired state of a Git repository.
 type GitRepositorySpec struct {
-	// The repository URL, can be a HTTP or SSH address.
+	// The repository URL, can be a HTTP/S or SSH address.
 	// +kubebuilder:validation:Pattern="^(http|https|ssh)://"
 	// +required
 	URL string `json:"url"`
@@ -28,16 +28,16 @@ type GitRepositorySpec struct {
 	// +required
 	Interval metav1.Duration `json:"interval"`
 
-	// The timeout for remote git operations like cloning, default to 20s.
+	// The timeout for remote Git operations like cloning, defaults to 20s.
 	// +optional
 	Timeout *metav1.Duration `json:"timeout,omitempty"`
 
-	// The git reference to checkout and monitor for changes, defaults to
+	// The Git reference to checkout and monitor for changes, defaults to
 	// master branch.
 	// +optional
 	Reference *GitRepositoryRef `json:"ref,omitempty"`
 
-	// Verify OpenPGP signature for the commit that HEAD points to.
+	// Verify OpenPGP signature for the Git commit HEAD points to.
 	// +optional
 	Verification *GitRepositoryVerification `json:"verify,omitempty"`
 
@@ -52,21 +52,21 @@ type GitRepositorySpec struct {
 Git repository reference:
 
 ```go
-// GitRepositoryRef defines the git ref used for pull and checkout operations.
+// GitRepositoryRef defines the Git ref used for pull and checkout operations.
 type GitRepositoryRef struct {
-	// The git branch to checkout, defaults to master.
+	// The Git branch to checkout, defaults to master.
 	// +optional
 	Branch string `json:"branch,omitempty"`
 
-	// The git tag to checkout, takes precedence over branch.
+	// The Git tag to checkout, takes precedence over Branch.
 	// +optional
 	Tag string `json:"tag,omitempty"`
 
-	// The git tag semver expression, takes precedence over tag.
+	// The Git tag semver expression, takes precedence over Tag.
 	// +optional
 	SemVer string `json:"semver,omitempty"`
 
-	// The git commit sha to checkout, if specified tag filters will be ignored.
+	// The Git commit SHA to checkout, if specified Tag filters will be ignored.
 	// +optional
 	Commit string `json:"commit,omitempty"`
 }
@@ -81,8 +81,8 @@ type GitRepositoryVerification struct {
 	// +kubebuilder:validation:Enum=head
 	Mode string `json:"mode"`
 
-	// The secret name containing the public keys of all trusted git authors.
-	SecretRef corev1.LocalObjectReference `json:"secretRef"`
+	// The secret name containing the public keys of all trusted Git authors.
+	SecretRef corev1.LocalObjectReference `json:"secretRef,omitempty"`
 }
 ```
 
@@ -91,6 +91,7 @@ type GitRepositoryVerification struct {
 ```go
 // GitRepositoryStatus defines the observed state of the GitRepository.
 type GitRepositoryStatus struct {
+	// Conditions holds the conditions for the GitRepository.
 	// +optional
 	Conditions []meta.Condition `json:"conditions,omitempty"`
 

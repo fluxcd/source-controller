@@ -34,7 +34,7 @@ type Artifact struct {
 	URL string `json:"url"`
 
 	// Revision is a human readable identifier traceable in the origin source
-	// system. It can be a Git commit sha, Git tag, a Helm index timestamp, a Helm
+	// system. It can be a Git commit SHA, Git tag, a Helm index timestamp, a Helm
 	// chart version, etc.
 	// +optional
 	Revision string `json:"revision"`
