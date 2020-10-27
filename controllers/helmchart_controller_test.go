@@ -86,7 +86,7 @@ var _ = Describe("HelmChartReconciler", func() {
 		})
 
 		It("Creates artifacts for", func() {
-			Expect(helmServer.PackageChart(path.Join("testdata/helmchart"))).Should(Succeed())
+			Expect(helmServer.PackageChart(path.Join("testdata/charts/helmchart"))).Should(Succeed())
 			Expect(helmServer.GenerateIndex()).Should(Succeed())
 
 			repositoryKey := types.NamespacedName{
@@ -133,7 +133,7 @@ var _ = Describe("HelmChartReconciler", func() {
 			}, timeout, interval).Should(BeTrue())
 
 			By("Packaging a new chart version and regenerating the index")
-			Expect(helmServer.PackageChartWithVersion(path.Join("testdata/helmchart"), "0.2.0")).Should(Succeed())
+			Expect(helmServer.PackageChartWithVersion(path.Join("testdata/charts/helmchart"), "0.2.0")).Should(Succeed())
 			Expect(helmServer.GenerateIndex()).Should(Succeed())
 
 			By("Expecting new artifact revision and GC")
@@ -189,7 +189,7 @@ var _ = Describe("HelmChartReconciler", func() {
 		It("Filters versions", func() {
 			versions := []string{"0.1.0", "0.1.1", "0.2.0", "0.3.0-rc.1", "1.0.0-alpha.1", "1.0.0"}
 			for k := range versions {
-				Expect(helmServer.PackageChartWithVersion(path.Join("testdata/helmchart"), versions[k])).Should(Succeed())
+				Expect(helmServer.PackageChartWithVersion(path.Join("testdata/charts/helmchart"), versions[k])).Should(Succeed())
 			}
 
 			Expect(helmServer.GenerateIndex()).Should(Succeed())
@@ -281,7 +281,7 @@ var _ = Describe("HelmChartReconciler", func() {
 			})
 			helmServer.Start()
 
-			Expect(helmServer.PackageChartWithVersion(path.Join("testdata/helmchart"), "0.1.0")).Should(Succeed())
+			Expect(helmServer.PackageChartWithVersion(path.Join("testdata/charts/helmchart"), "0.1.0")).Should(Succeed())
 			Expect(helmServer.GenerateIndex()).Should(Succeed())
 
 			secretKey := types.NamespacedName{
@@ -458,7 +458,7 @@ var _ = Describe("HelmChartReconciler", func() {
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			chartDir := "testdata/helmchart"
+			chartDir := "testdata/charts"
 			Expect(filepath.Walk(chartDir, func(p string, fi os.FileInfo, err error) error {
 				if err != nil {
 					return err
@@ -489,7 +489,7 @@ var _ = Describe("HelmChartReconciler", func() {
 				return err
 			})).To(Succeed())
 
-			_, err = wt.Commit("Helm chart", &git.CommitOptions{Author: &object.Signature{
+			_, err = wt.Commit("Helm charts", &git.CommitOptions{Author: &object.Signature{
 				Name:  "John Doe",
 				Email: "john@example.com",
 				When:  time.Now(),
@@ -526,7 +526,7 @@ var _ = Describe("HelmChartReconciler", func() {
 					Namespace: key.Namespace,
 				},
 				Spec: sourcev1.HelmChartSpec{
-					Chart:   "testdata/helmchart",
+					Chart:   "testdata/charts/helmchartwithdeps",
 					Version: "*",
 					SourceRef: sourcev1.LocalHelmChartSourceReference{
 						Kind: sourcev1.GitRepositoryKind,
@@ -547,10 +547,10 @@ var _ = Describe("HelmChartReconciler", func() {
 			}, timeout, interval).Should(BeTrue())
 
 			By("Committing a new version in the chart metadata")
-			f, err := fs.OpenFile(fs.Join(chartDir, chartutil.ChartfileName), os.O_RDWR, os.FileMode(0600))
+			f, err := fs.OpenFile(fs.Join(chartDir, "helmchartwithdeps", chartutil.ChartfileName), os.O_RDWR, os.FileMode(0600))
 			Expect(err).NotTo(HaveOccurred())
 
-			b := make([]byte, 1024)
+			b := make([]byte, 2048)
 			n, err := f.Read(b)
 			Expect(err).NotTo(HaveOccurred())
 			b = b[0:n]
@@ -610,7 +610,7 @@ var _ = Describe("HelmChartReconciler", func() {
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			chartDir := "testdata/helmchart"
+			chartDir := "testdata/charts/helmchart"
 			helmChart, err := loader.LoadDir(chartDir)
 			Expect(err).NotTo(HaveOccurred())
 
