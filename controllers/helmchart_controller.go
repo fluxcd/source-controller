@@ -591,10 +591,8 @@ func (r *HelmChartReconciler) indexHelmRepositoryByURL(o runtime.Object) []strin
 	if !ok {
 		panic(fmt.Sprintf("Expected a HelmRepository, got %T", o))
 	}
-	if repo.Spec.URL != "" {
-		// TODO(hidde): move this to a dedicated function in the internal Helm package
-		//   so it can be re-used for e.g. lookups.
-		u := strings.TrimRight(repo.Spec.URL, "/") + "/"
+	u := helm.NormalizeChartRepositoryURL(repo.Spec.URL)
+	if u != "" {
 		return []string{u}
 	}
 	return nil
