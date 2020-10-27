@@ -28,7 +28,7 @@ import (
 
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/go-logr/logr"
-	"helm.sh/helm/v3/pkg/action"
+	"helm.sh/helm/v3/pkg/chart/loader"
 	"helm.sh/helm/v3/pkg/chartutil"
 	"helm.sh/helm/v3/pkg/getter"
 	corev1 "k8s.io/api/core/v1"
@@ -323,30 +323,35 @@ func (r *HelmChartReconciler) reconcileFromHelmRepository(ctx context.Context,
 	)
 	switch {
 	case chart.Spec.ValuesFile != "" && chart.Spec.ValuesFile != chartutil.ValuesfileName:
+		var (
+			tmpDir  string
+			pkgPath string
+		)
+		// Load the chart
+		helmChart, err := loader.LoadArchive(res)
+		if err != nil {
+			err = fmt.Errorf("load chart error: %w", err)
+			return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
+		}
+
+		// Overwrite values file
+		if changed, err := helm.OverwriteChartDefaultValues(helmChart, chart.Spec.ValuesFile); err != nil {
+			return sourcev1.HelmChartNotReady(chart, sourcev1.ChartPackageFailedReason, err.Error()), err
+		} else if !changed {
+			// No changes, skip to write original package to storage
+			goto skipToDefault
+		}
+
 		// Create temporary working directory
-		tmpDir, err := ioutil.TempDir("", fmt.Sprintf("%s-%s-", chart.Namespace, chart.Name))
+		tmpDir, err = ioutil.TempDir("", fmt.Sprintf("%s-%s-", chart.Namespace, chart.Name))
 		if err != nil {
 			err = fmt.Errorf("tmp dir error: %w", err)
 			return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
 		}
 		defer os.RemoveAll(tmpDir)
 
-		// Untar chart into working directory
-		if _, err = untar.Untar(res, tmpDir); err != nil {
-			err = fmt.Errorf("chart untar error: %w", err)
-			return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
-		}
-
-		// Overwrite values file
-		chartPath := path.Join(tmpDir, chartVer.Name)
-		if err := helm.OverwriteChartDefaultValues(chartPath, chart.Spec.ValuesFile); err != nil {
-			return sourcev1.HelmChartNotReady(chart, sourcev1.ChartPackageFailedReason, err.Error()), err
-		}
-
 		// Package the chart with the new default values
-		pkg := action.NewPackage()
-		pkg.Destination = tmpDir
-		pkgPath, err := pkg.Run(chartPath, nil)
+		pkgPath, err = chartutil.Save(helmChart, tmpDir)
 		if err != nil {
 			err = fmt.Errorf("chart package error: %w", err)
 			return sourcev1.HelmChartNotReady(chart, sourcev1.ChartPackageFailedReason, err.Error()), err
@@ -360,6 +365,8 @@ func (r *HelmChartReconciler) reconcileFromHelmRepository(ctx context.Context,
 
 		readyMessage = fmt.Sprintf("Fetched and packaged revision: %s", newArtifact.Revision)
 		readyReason = sourcev1.ChartPackageSucceededReason
+	skipToDefault:
+		fallthrough
 	default:
 		// Write artifact to storage
 		if err := r.Storage.AtomicWriteFile(&newArtifact, res, 0644); err != nil {
@@ -401,23 +408,22 @@ func (r *HelmChartReconciler) reconcileFromTarballArtifact(ctx context.Context,
 	}
 	f.Close()
 
-	// Ensure configured path is a chart directory
+	// Load the chart
 	chartPath := path.Join(tmpDir, chart.Spec.Chart)
-	if _, err := chartutil.IsChartDir(chartPath); err != nil {
-		err = fmt.Errorf("chart path error: %w", err)
+	chartFileInfo, err := os.Stat(chartPath)
+	if err != nil {
+		err = fmt.Errorf("chart location read error: %w", err)
 		return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
 	}
-
-	// Read the chart metadata
-	chartMetadata, err := chartutil.LoadChartfile(path.Join(chartPath, chartutil.ChartfileName))
+	helmChart, err := loader.Load(chartPath)
 	if err != nil {
-		err = fmt.Errorf("load chart metadata error: %w", err)
+		err = fmt.Errorf("load chart error: %w", err)
 		return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
 	}
 
 	// Return early if the revision is still the same as the current chart artifact
-	newArtifact := r.Storage.NewArtifactFor(chart.Kind, chart.ObjectMeta.GetObjectMeta(), chartMetadata.Version,
-		fmt.Sprintf("%s-%s.tgz", chartMetadata.Name, chartMetadata.Version))
+	newArtifact := r.Storage.NewArtifactFor(chart.Kind, chart.ObjectMeta.GetObjectMeta(), helmChart.Metadata.Version,
+		fmt.Sprintf("%s-%s.tgz", helmChart.Metadata.Name, helmChart.Metadata.Version))
 	if !force && meta.HasReadyCondition(chart.Status.Conditions) && chart.GetArtifact().HasRevision(newArtifact.Revision) {
 		if newArtifact.URL != artifact.URL {
 			r.Storage.SetArtifactURL(chart.GetArtifact())
@@ -426,9 +432,22 @@ func (r *HelmChartReconciler) reconcileFromTarballArtifact(ctx context.Context,
 		return chart, nil
 	}
 
-	// Overwrite default values if configured
-	if err := helm.OverwriteChartDefaultValues(chartPath, chart.Spec.ValuesFile); err != nil {
-		return sourcev1.HelmChartNotReady(chart, sourcev1.ChartPackageFailedReason, err.Error()), err
+	// Either (re)package the chart with the declared default values file,
+	// or write the chart directly to storage.
+	pkgPath := chartPath
+	isDir := chartFileInfo.IsDir()
+	if isDir || (chart.Spec.ValuesFile != "" && chart.Spec.ValuesFile != chartutil.ValuesfileName) {
+		// Overwrite default values if configured
+		if changed, err := helm.OverwriteChartDefaultValues(helmChart, chart.Spec.ValuesFile); err != nil {
+			return sourcev1.HelmChartNotReady(chart, sourcev1.ChartPackageFailedReason, err.Error()), err
+		} else if isDir || changed {
+			// Package the chart
+			pkgPath, err = chartutil.Save(helmChart, tmpDir)
+			if err != nil {
+				err = fmt.Errorf("chart package error: %w", err)
+				return sourcev1.HelmChartNotReady(chart, sourcev1.ChartPackageFailedReason, err.Error()), err
+			}
+		}
 	}
 
 	// Ensure artifact directory exists
@@ -446,16 +465,6 @@ func (r *HelmChartReconciler) reconcileFromTarballArtifact(ctx context.Context,
 	}
 	defer unlock()
 
-	// Package the chart, we use the action here instead of relying on the
-	// chartutil.Save method as the action performs a dependency check for us
-	pkg := action.NewPackage()
-	pkg.Destination = tmpDir
-	pkgPath, err := pkg.Run(chartPath, nil)
-	if err != nil {
-		err = fmt.Errorf("chart package error: %w", err)
-		return sourcev1.HelmChartNotReady(chart, sourcev1.ChartPackageFailedReason, err.Error()), err
-	}
-
 	// Copy the packaged chart to the artifact path
 	if err := r.Storage.CopyFromPath(&newArtifact, pkgPath); err != nil {
 		err = fmt.Errorf("failed to write chart package to storage: %w", err)
@@ -463,7 +472,7 @@ func (r *HelmChartReconciler) reconcileFromTarballArtifact(ctx context.Context,
 	}
 
 	// Update symlink
-	cUrl, err := r.Storage.Symlink(newArtifact, fmt.Sprintf("%s-latest.tgz", chartMetadata.Name))
+	cUrl, err := r.Storage.Symlink(newArtifact, fmt.Sprintf("%s-latest.tgz", helmChart.Metadata.Name))
 	if err != nil {
 		err = fmt.Errorf("storage error: %w", err)
 		return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err

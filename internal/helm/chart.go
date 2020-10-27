@@ -18,35 +18,58 @@ package helm
 
 import (
 	"fmt"
-	"io"
-	"os"
-	"path"
+	"reflect"
 
+	helmchart "helm.sh/helm/v3/pkg/chart"
 	"helm.sh/helm/v3/pkg/chartutil"
 )
 
-// OverwriteChartDefaultValues overwrites the chart default values file in the
-// given chartPath with the contents of the given valuesFile.
-func OverwriteChartDefaultValues(chartPath, valuesFile string) error {
+// OverwriteChartDefaultValues overwrites the chart default values file with the
+// contents of the given valuesFile.
+func OverwriteChartDefaultValues(chart *helmchart.Chart, valuesFile string) (bool, error) {
 	if valuesFile == "" || valuesFile == chartutil.ValuesfileName {
-		return nil
+		return false, nil
 	}
-	srcPath := path.Join(chartPath, valuesFile)
-	if f, err := os.Stat(srcPath); os.IsNotExist(err) || !f.Mode().IsRegular() {
-		return fmt.Errorf("invalid values file path: %s", valuesFile)
+
+	// Find override file and retrieve contents
+	var valuesData []byte
+	for _, f := range chart.Files {
+		if f.Name == valuesFile {
+			valuesData = f.Data
+			break
+		}
 	}
-	src, err := os.Open(srcPath)
+	if valuesData == nil {
+		return false, fmt.Errorf("failed to locate override values file: %s", valuesFile)
+	}
+
+	// Read override values file data
+	values, err := chartutil.ReadValues(valuesData)
 	if err != nil {
-		return fmt.Errorf("failed to open values file '%s': %w", valuesFile, err)
+		return false, fmt.Errorf("failed to parse override values file: %s", valuesFile)
 	}
-	defer src.Close()
-	t, err := os.OpenFile(path.Join(chartPath, chartutil.ValuesfileName), os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0644)
-	if err != nil {
-		return fmt.Errorf("failed to open values file '%s': %w", chartutil.ValuesfileName, err)
+
+	// Replace current values file in Raw field
+	for _, f := range chart.Raw {
+		if f.Name == chartutil.ValuesfileName {
+			// Do nothing if contents are equal
+			if reflect.DeepEqual(f.Data, valuesData) {
+				return false, nil
+			}
+
+			// Replace in Files field
+			for _, f := range chart.Files {
+				if f.Name == chartutil.ValuesfileName {
+					f.Data = valuesData
+				}
+			}
+
+			f.Data = valuesData
+			chart.Values = values
+			return true, nil
+		}
 	}
-	defer t.Close()
-	if _, err := io.Copy(t, src); err != nil {
-		return fmt.Errorf("failed to overwrite default values with '%s': %w", valuesFile, err)
-	}
-	return nil
+
+	// This should never happen, helm charts must have a values.yaml file to be valid
+	return false, fmt.Errorf("failed to locate values file: %s", chartutil.ValuesfileName)
 }
