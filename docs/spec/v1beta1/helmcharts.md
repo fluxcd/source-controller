@@ -121,7 +121,8 @@ spec:
   interval: 5m
 ```
 
-Pull the latest chart version that matches the semver range every ten minutes:
+Pull the latest chart version that matches the [semver range](https://github.com/Masterminds/semver#checking-version-constraints)
+every ten minutes:
 
 ```yaml
 apiVersion: source.toolkit.fluxcd.io/v1beta1
