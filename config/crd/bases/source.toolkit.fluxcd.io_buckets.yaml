@@ -88,12 +88,8 @@ spec:
                     type: string
                 type: object
               timeout:
-<<<<<<< HEAD
-                description: The timeout for download operations, defaults to 20s.
-=======
                 default: 20s
-                description: The timeout for download operations, default ('20s').
->>>>>>> 0948720 (Fix duration default values)
+                description: The timeout for download operations, defaults to 20s.
                 type: string
             required:
             - bucketName
