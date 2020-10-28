@@ -59,22 +59,22 @@ spec:
                 description: The interval at which to check for repository updates.
                 type: string
               ref:
-                description: The git reference to checkout and monitor for changes,
+                description: The Git reference to checkout and monitor for changes,
                   defaults to master branch.
                 properties:
                   branch:
-                    description: The git branch to checkout, defaults to master.
+                    description: The Git branch to checkout, defaults to master.
                     type: string
                   commit:
-                    description: The git commit sha to checkout, if specified tag
+                    description: The Git commit SHA to checkout, if specified Tag
                       filters will be ignored.
                     type: string
                   semver:
-                    description: The git tag semver expression, takes precedence over
-                      tag.
+                    description: The Git tag semver expression, takes precedence over
+                      Tag.
                     type: string
                   tag:
-                    description: The git tag to checkout, takes precedence over branch.
+                    description: The Git tag to checkout, takes precedence over Branch.
                     type: string
                 type: object
               secretRef:
@@ -89,15 +89,15 @@ spec:
                     type: string
                 type: object
               timeout:
-                description: The timeout for remote git operations like cloning, default
+                description: The timeout for remote Git operations like cloning, defaults
                   to 20s.
                 type: string
               url:
-                description: The repository URL, can be a HTTP or SSH address.
+                description: The repository URL, can be a HTTP/S or SSH address.
                 pattern: ^(http|https|ssh)://
                 type: string
               verify:
-                description: Verify OpenPGP signature for the commit that HEAD points
+                description: Verify OpenPGP signature for the Git commit HEAD points
                   to.
                 properties:
                   mode:
@@ -108,7 +108,7 @@ spec:
                     type: string
                   secretRef:
                     description: The secret name containing the public keys of all
-                      trusted git authors.
+                      trusted Git authors.
                     properties:
                       name:
                         description: 'Name of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
@@ -142,7 +142,7 @@ spec:
                     type: string
                   revision:
                     description: Revision is a human readable identifier traceable
-                      in the origin source system. It can be a Git commit sha, Git
+                      in the origin source system. It can be a Git commit SHA, Git
                       tag, a Helm index timestamp, a Helm chart version, etc.
                     type: string
                   url:
