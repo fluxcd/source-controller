@@ -17,8 +17,6 @@ limitations under the License.
 package v1beta1
 
 import (
-	"time"
-
 	"github.com/fluxcd/pkg/apis/meta"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -27,9 +25,6 @@ import (
 const (
 	// HelmRepositoryKind is the string representation of a HelmRepository.
 	HelmRepositoryKind = "HelmRepository"
-	// HelmRepositoryTimeout is the default timeout used for Helm repository
-	// operations like fetching indexes, or downloading charts from a repository.
-	HelmRepositoryTimeout = time.Second * 60
 	// HelmRepositoryURLIndexKey is the key to use for indexing HelmRepository
 	// resources by their HelmRepositorySpec.URL.
 	HelmRepositoryURLIndexKey = ".metadata.helmRepositoryURL"
@@ -55,6 +50,7 @@ type HelmRepositorySpec struct {
 	Interval metav1.Duration `json:"interval"`
 
 	// The timeout of index downloading, defaults to 60s.
+	// +kubebuilder:default:="60s"
 	// +optional
 	Timeout *metav1.Duration `json:"timeout,omitempty"`
 }
@@ -151,14 +147,6 @@ func (in *HelmRepository) GetArtifact() *Artifact {
 // GetInterval returns the interval at which the source is updated.
 func (in *HelmRepository) GetInterval() metav1.Duration {
 	return in.Spec.Interval
-}
-
-// GetTimeout returns the configured timeout or the default.
-func (in *HelmRepository) GetTimeout() time.Duration {
-	if in.Spec.Timeout != nil {
-		return in.Spec.Timeout.Duration
-	}
-	return HelmRepositoryTimeout
 }
 
 // +genclient

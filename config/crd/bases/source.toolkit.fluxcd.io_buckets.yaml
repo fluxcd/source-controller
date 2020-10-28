@@ -69,6 +69,7 @@ spec:
                 description: The interval at which to check for bucket updates.
                 type: string
               provider:
+                default: generic
                 description: The S3 compatible storage provider name, default ('generic').
                 enum:
                 - generic
@@ -87,7 +88,12 @@ spec:
                     type: string
                 type: object
               timeout:
+<<<<<<< HEAD
                 description: The timeout for download operations, defaults to 20s.
+=======
+                default: 20s
+                description: The timeout for download operations, default ('20s').
+>>>>>>> 0948720 (Fix duration default values)
                 type: string
             required:
             - bucketName

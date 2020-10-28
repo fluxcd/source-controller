@@ -181,7 +181,7 @@ func (r *HelmRepositoryReconciler) reconcile(ctx context.Context, repository sou
 		defer cleanup()
 		clientOpts = opts
 	}
-	clientOpts = append(clientOpts, getter.WithTimeout(repository.GetTimeout()))
+	clientOpts = append(clientOpts, getter.WithTimeout(repository.Spec.Timeout.Duration))
 
 	chartRepo, err := helm.NewChartRepository(repository.Spec.URL, r.Getters, clientOpts)
 	if err != nil {

@@ -91,6 +91,7 @@ spec:
                   expected to be a relative path in the SourceRef. Ignored when omitted.
                 type: string
               version:
+                default: '*'
                 description: The chart version semver expression, ignored for charts
                   from GitRepository and Bucket sources. Defaults to latest when omitted.
                 type: string

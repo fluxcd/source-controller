@@ -173,7 +173,7 @@ func (r *BucketReconciler) reconcile(ctx context.Context, bucket sourcev1.Bucket
 	}
 	defer os.RemoveAll(tempDir)
 
-	ctxTimeout, cancel := context.WithTimeout(ctx, bucket.GetTimeout())
+	ctxTimeout, cancel := context.WithTimeout(ctx, bucket.Spec.Timeout.Duration)
 	defer cancel()
 
 	exists, err := s3Client.BucketExists(ctxTimeout, bucket.Spec.BucketName)

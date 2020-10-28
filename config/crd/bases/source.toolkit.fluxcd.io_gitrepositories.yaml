@@ -63,7 +63,12 @@ spec:
                   defaults to master branch.
                 properties:
                   branch:
+<<<<<<< HEAD
                     description: The Git branch to checkout, defaults to master.
+=======
+                    default: master
+                    description: The git branch to checkout, defaults to master.
+>>>>>>> 0948720 (Fix duration default values)
                     type: string
                   commit:
                     description: The Git commit SHA to checkout, if specified Tag
@@ -89,7 +94,12 @@ spec:
                     type: string
                 type: object
               timeout:
+<<<<<<< HEAD
                 description: The timeout for remote Git operations like cloning, defaults
+=======
+                default: 20s
+                description: The timeout for remote git operations like cloning, default
+>>>>>>> 0948720 (Fix duration default values)
                   to 20s.
                 type: string
               url:
