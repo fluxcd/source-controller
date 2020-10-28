@@ -224,7 +224,7 @@ spec:
     tag: 3.2.0
 ```
 
-Pull tag based on a [semver range](https://github.com/blang/semver#ranges):
+Pull tag based on a [semver range](https://github.com/Masterminds/semver#checking-version-constraints):
 
 ```yaml
 apiVersion: source.toolkit.fluxcd.io/v1beta1
