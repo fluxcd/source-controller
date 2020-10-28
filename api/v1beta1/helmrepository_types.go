@@ -25,8 +25,14 @@ import (
 )
 
 const (
-	HelmRepositoryKind    = "HelmRepository"
+	// HelmRepositoryKind is the string representation of a HelmRepository.
+	HelmRepositoryKind = "HelmRepository"
+	// HelmRepositoryTimeout is the default timeout used for Helm repository
+	// operations like fetching indexes, or downloading charts from a repository.
 	HelmRepositoryTimeout = time.Second * 60
+	// HelmRepositoryURLIndexKey is the key to use for indexing HelmRepository
+	// resources by their HelmRepositorySpec.URL.
+	HelmRepositoryURLIndexKey = ".metadata.helmRepositoryURL"
 )
 
 // HelmRepositorySpec defines the reference to a Helm repository.

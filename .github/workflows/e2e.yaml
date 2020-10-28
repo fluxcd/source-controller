@@ -95,7 +95,7 @@ jobs:
       - name: Run HelmChart from Bucket tests
         run: |
           ./mc mb minio/charts
-          ./mc mirror ./controllers/testdata/helmchart/ minio/charts/helmchart
+          ./mc mirror ./controllers/testdata/charts/helmchart/ minio/charts/helmchart
 
           kubectl -n source-system apply -f ./config/testdata/helmchart-from-bucket/source.yaml
           kubectl -n source-system wait bucket/charts --for=condition=ready --timeout=1m

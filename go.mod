@@ -21,6 +21,7 @@ require (
 	github.com/minio/minio-go/v7 v7.0.5
 	github.com/onsi/ginkgo v1.12.1
 	github.com/onsi/gomega v1.10.1
+	golang.org/x/sync v0.0.0-20190911185100-cd5d95a43a6e
 	helm.sh/helm/v3 v3.3.4
 	k8s.io/api v0.18.9
 	k8s.io/apimachinery v0.18.9

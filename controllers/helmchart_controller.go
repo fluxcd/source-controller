@@ -28,6 +28,7 @@ import (
 
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/go-logr/logr"
+	helmchart "helm.sh/helm/v3/pkg/chart"
 	"helm.sh/helm/v3/pkg/chart/loader"
 	"helm.sh/helm/v3/pkg/chartutil"
 	"helm.sh/helm/v3/pkg/getter"
@@ -188,6 +189,11 @@ func (r *HelmChartReconciler) SetupWithManager(mgr ctrl.Manager) error {
 }
 
 func (r *HelmChartReconciler) SetupWithManagerAndOptions(mgr ctrl.Manager, opts HelmChartReconcilerOptions) error {
+	if err := mgr.GetCache().IndexField(context.TODO(), &sourcev1.HelmRepository{}, sourcev1.HelmRepositoryURLIndexKey,
+		r.indexHelmRepositoryByURL); err != nil {
+		return fmt.Errorf("failed setting index fields: %w", err)
+	}
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&sourcev1.HelmChart{}).
 		WithEventFilter(predicates.ChangePredicate{}).
@@ -232,26 +238,18 @@ func (r *HelmChartReconciler) getSource(ctx context.Context, chart sourcev1.Helm
 
 func (r *HelmChartReconciler) reconcileFromHelmRepository(ctx context.Context,
 	repository sourcev1.HelmRepository, chart sourcev1.HelmChart, force bool) (sourcev1.HelmChart, error) {
+	// Configure ChartRepository getter options
 	var clientOpts []getter.Option
-	if repository.Spec.SecretRef != nil {
-		name := types.NamespacedName{
-			Namespace: repository.GetNamespace(),
-			Name:      repository.Spec.SecretRef.Name,
-		}
-
-		var secret corev1.Secret
-		err := r.Client.Get(ctx, name, &secret)
-		if err != nil {
-			err = fmt.Errorf("auth secret error: %w", err)
-			return sourcev1.HelmChartNotReady(chart, sourcev1.AuthenticationFailedReason, err.Error()), err
-		}
-
-		opts, cleanup, err := helm.ClientOptionsFromSecret(secret)
+	if secret, err := r.getHelmRepositorySecret(ctx, &repository); err != nil {
+		return sourcev1.HelmChartNotReady(chart, sourcev1.AuthenticationFailedReason, err.Error()), err
+	} else if secret != nil {
+		opts, cleanup, err := helm.ClientOptionsFromSecret(*secret)
 		if err != nil {
 			err = fmt.Errorf("auth options error: %w", err)
 			return sourcev1.HelmChartNotReady(chart, sourcev1.AuthenticationFailedReason, err.Error()), err
 		}
 		defer cleanup()
+
 		clientOpts = opts
 	}
 	clientOpts = append(clientOpts, getter.WithTimeout(repository.GetTimeout()))
@@ -436,18 +434,130 @@ func (r *HelmChartReconciler) reconcileFromTarballArtifact(ctx context.Context,
 	// Either (re)package the chart with the declared default values file,
 	// or write the chart directly to storage.
 	pkgPath := chartPath
-	isDir := chartFileInfo.IsDir()
-	if isDir || (chart.Spec.ValuesFile != "" && chart.Spec.ValuesFile != chartutil.ValuesfileName) {
+	isValuesFileOverriden := false
+	if chart.Spec.ValuesFile != "" && chart.Spec.ValuesFile != chartutil.ValuesfileName {
 		// Overwrite default values if configured
-		if changed, err := helm.OverwriteChartDefaultValues(helmChart, chart.Spec.ValuesFile); err != nil {
+		isValuesFileOverriden, err = helm.OverwriteChartDefaultValues(helmChart, chart.Spec.ValuesFile)
+		if err != nil {
 			return sourcev1.HelmChartNotReady(chart, sourcev1.ChartPackageFailedReason, err.Error()), err
-		} else if isDir || changed {
-			// Package the chart
-			pkgPath, err = chartutil.Save(helmChart, tmpDir)
-			if err != nil {
-				err = fmt.Errorf("chart package error: %w", err)
-				return sourcev1.HelmChartNotReady(chart, sourcev1.ChartPackageFailedReason, err.Error()), err
+		}
+	}
+
+	isDir := chartFileInfo.IsDir()
+	switch {
+	case isDir:
+		// Load dependencies
+		if err = chartutil.ProcessDependencies(helmChart, helmChart.Values); err != nil {
+			err = fmt.Errorf("failed to process chart dependencies: %w", err)
+			return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
+		}
+
+		// Determine chart dependencies
+		deps := helmChart.Dependencies()
+		reqs := helmChart.Metadata.Dependencies
+		lock := helmChart.Lock
+		if lock != nil {
+			// Load from lockfile if exists
+			reqs = lock.Dependencies
+		}
+		var dwr []*DependencyWithRepository
+		for _, dep := range reqs {
+			// Exclude existing dependencies
+			for _, existing := range deps {
+				if existing.Name() == dep.Name {
+					continue
+				}
 			}
+
+			// Continue loop if file scheme detected
+			if strings.HasPrefix(dep.Repository, "file://") {
+				dwr = append(dwr, &DependencyWithRepository{
+					Dependency: dep,
+					Repo:       nil,
+				})
+				continue
+			}
+
+			// Discover existing HelmRepository by URL
+			repository, err := r.resolveDependencyRepository(ctx, dep, chart.Namespace)
+			if err != nil {
+				repository = &sourcev1.HelmRepository{
+					Spec: sourcev1.HelmRepositorySpec{
+						URL: dep.Repository,
+					},
+				}
+			}
+
+			// Configure ChartRepository getter options
+			var clientOpts []getter.Option
+			if secret, err := r.getHelmRepositorySecret(ctx, repository); err != nil {
+				return sourcev1.HelmChartNotReady(chart, sourcev1.AuthenticationFailedReason, err.Error()), err
+			} else if secret != nil {
+				opts, cleanup, err := helm.ClientOptionsFromSecret(*secret)
+				if err != nil {
+					err = fmt.Errorf("auth options error: %w", err)
+					return sourcev1.HelmChartNotReady(chart, sourcev1.AuthenticationFailedReason, err.Error()), err
+				}
+				defer cleanup()
+
+				clientOpts = opts
+			}
+
+			// Initialize the chart repository and load the index file
+			chartRepo, err := helm.NewChartRepository(repository.Spec.URL, r.Getters, clientOpts)
+			if err != nil {
+				switch err.(type) {
+				case *url.Error:
+					return sourcev1.HelmChartNotReady(chart, sourcev1.URLInvalidReason, err.Error()), err
+				default:
+					return sourcev1.HelmChartNotReady(chart, sourcev1.ChartPullFailedReason, err.Error()), err
+				}
+			}
+			if repository.Status.Artifact != nil {
+				indexFile, err := os.Open(r.Storage.LocalPath(*repository.GetArtifact()))
+				if err != nil {
+					return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
+				}
+				b, err := ioutil.ReadAll(indexFile)
+				if err != nil {
+					return sourcev1.HelmChartNotReady(chart, sourcev1.ChartPullFailedReason, err.Error()), err
+				}
+				if err = chartRepo.LoadIndex(b); err != nil {
+					return sourcev1.HelmChartNotReady(chart, sourcev1.ChartPullFailedReason, err.Error()), err
+				}
+			} else {
+				// Download index
+				err = chartRepo.DownloadIndex()
+				if err != nil {
+					return sourcev1.HelmChartNotReady(chart, sourcev1.ChartPullFailedReason, err.Error()), err
+				}
+			}
+
+			dwr = append(dwr, &DependencyWithRepository{
+				Dependency: dep,
+				Repo:       chartRepo,
+			})
+		}
+
+		// Construct dependencies for chart if any
+		if len(dwr) > 0 {
+			dm := &DependencyManager{
+				Chart:        helmChart,
+				ChartPath:    chartPath,
+				Dependencies: dwr,
+			}
+			err = dm.Build()
+			if err != nil {
+				return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
+			}
+		}
+
+		fallthrough
+	case isValuesFileOverriden:
+		pkgPath, err = chartutil.Save(helmChart, tmpDir)
+		if err != nil {
+			err = fmt.Errorf("chart package error: %w", err)
+			return sourcev1.HelmChartNotReady(chart, sourcev1.ChartPackageFailedReason, err.Error()), err
 		}
 	}
 
@@ -579,4 +689,57 @@ func (r *HelmChartReconciler) recordReadiness(chart sourcev1.HelmChart, deleted 
 			Status: corev1.ConditionUnknown,
 		}, deleted)
 	}
+}
+
+func (r *HelmChartReconciler) indexHelmRepositoryByURL(o runtime.Object) []string {
+	repo, ok := o.(*sourcev1.HelmRepository)
+	if !ok {
+		panic(fmt.Sprintf("Expected a HelmRepository, got %T", o))
+	}
+	u := helm.NormalizeChartRepositoryURL(repo.Spec.URL)
+	if u != "" {
+		return []string{u}
+	}
+	return nil
+}
+
+func (r *HelmChartReconciler) resolveDependencyRepository(ctx context.Context, dep *helmchart.Dependency, namespace string) (*sourcev1.HelmRepository, error) {
+	url := helm.NormalizeChartRepositoryURL(dep.Repository)
+	if url == "" {
+		return nil, fmt.Errorf("invalid repository URL")
+	}
+
+	listOpts := []client.ListOption{
+		client.InNamespace(namespace),
+		client.MatchingField(sourcev1.HelmRepositoryURLIndexKey, url),
+	}
+	var list sourcev1.HelmRepositoryList
+	err := r.Client.List(ctx, &list, listOpts...)
+	if err != nil {
+		return nil, fmt.Errorf("unable to retrieve HelmRepositoryList: %w", err)
+	}
+	if len(list.Items) > 0 {
+		return &list.Items[0], nil
+	}
+
+	return nil, fmt.Errorf("no HelmRepository found")
+}
+
+func (r *HelmChartReconciler) getHelmRepositorySecret(ctx context.Context, repository *sourcev1.HelmRepository) (*corev1.Secret, error) {
+	if repository.Spec.SecretRef != nil {
+		name := types.NamespacedName{
+			Namespace: repository.GetNamespace(),
+			Name:      repository.Spec.SecretRef.Name,
+		}
+
+		var secret corev1.Secret
+		err := r.Client.Get(ctx, name, &secret)
+		if err != nil {
+			err = fmt.Errorf("auth secret error: %w", err)
+			return nil, err
+		}
+		return &secret, nil
+	}
+
+	return nil, nil
 }
