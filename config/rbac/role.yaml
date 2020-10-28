@@ -36,6 +36,16 @@ rules:
 - apiGroups:
   - source.toolkit.fluxcd.io
   resources:
+  - buckets/finalizers
+  verbs:
+  - create
+  - delete
+  - get
+  - patch
+  - update
+- apiGroups:
+  - source.toolkit.fluxcd.io
+  resources:
   - buckets/status
   verbs:
   - get
@@ -53,6 +63,16 @@ rules:
   - patch
   - update
   - watch
+- apiGroups:
+  - source.toolkit.fluxcd.io
+  resources:
+  - gitrepositories/finalizers
+  verbs:
+  - create
+  - delete
+  - get
+  - patch
+  - update
 - apiGroups:
   - source.toolkit.fluxcd.io
   resources:
@@ -78,6 +98,8 @@ rules:
   resources:
   - helmcharts/finalizers
   verbs:
+  - create
+  - delete
   - get
   - patch
   - update
@@ -101,6 +123,16 @@ rules:
   - patch
   - update
   - watch
+- apiGroups:
+  - source.toolkit.fluxcd.io
+  resources:
+  - helmrepositories/finalizers
+  verbs:
+  - create
+  - delete
+  - get
+  - patch
+  - update
 - apiGroups:
   - source.toolkit.fluxcd.io
   resources:
