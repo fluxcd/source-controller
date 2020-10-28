@@ -64,6 +64,7 @@ type HelmChartReconciler struct {
 
 // +kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=helmcharts,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=helmcharts/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=helmcharts/finalizers,verbs=get;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 
 func (r *HelmChartReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
