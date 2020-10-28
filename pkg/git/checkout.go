@@ -22,11 +22,13 @@ import (
 	"sort"
 	"time"
 
-	"github.com/blang/semver/v4"
+	"github.com/Masterminds/semver/v3"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/go-git/go-git/v5/plumbing/transport"
+
+	"github.com/fluxcd/pkg/version"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
 )
@@ -166,7 +168,7 @@ type CheckoutSemVer struct {
 }
 
 func (c *CheckoutSemVer) Checkout(ctx context.Context, path, url string, auth transport.AuthMethod) (*object.Commit, string, error) {
-	rng, err := semver.ParseRange(c.semVer)
+	verConstraint, err := semver.NewConstraint(c.semVer)
 	if err != nil {
 		return nil, "", fmt.Errorf("semver parse range error: %w", err)
 	}
@@ -208,26 +210,28 @@ func (c *CheckoutSemVer) Checkout(ctx context.Context, path, url string, auth tr
 		return nil
 	})
 
-	svTags := make(map[string]string)
-	var svers []semver.Version
+	var matchedVersions semver.Collection
 	for tag, _ := range tags {
-		v, _ := semver.ParseTolerant(tag)
-		if rng(v) {
-			svers = append(svers, v)
-			svTags[v.String()] = tag
+		v, err := version.ParseVersion(tag)
+		if err != nil {
+			continue
 		}
+		if !verConstraint.Check(v) {
+			continue
+		}
+		matchedVersions = append(matchedVersions, v)
 	}
-	if len(svers) == 0 {
+	if len(matchedVersions) == 0 {
 		return nil, "", fmt.Errorf("no match found for semver: %s", c.semVer)
 	}
 
 	// Sort versions
-	sort.SliceStable(svers, func(i, j int) bool {
-		left := svers[i]
-		right := svers[j]
+	sort.SliceStable(matchedVersions, func(i, j int) bool {
+		left := matchedVersions[i]
+		right := matchedVersions[j]
 
-		if !left.EQ(right) {
-			return left.LT(right)
+		if !left.Equal(right) {
+			return left.LessThan(right)
 		}
 
 		// Having tag target timestamps at our disposal, we further try to sort
@@ -236,8 +240,8 @@ func (c *CheckoutSemVer) Checkout(ctx context.Context, path, url string, auth tr
 		// a part of the comparable version in Semver
 		return tagTimestamps[left.String()].Before(tagTimestamps[right.String()])
 	})
-	v := svers[len(svers)-1]
-	t := svTags[v.String()]
+	v := matchedVersions[len(matchedVersions)-1]
+	t := v.Original()
 
 	w, err := repo.Worktree()
 	if err != nil {

@@ -216,11 +216,18 @@ var _ = Describe("GitRepositoryReconciler", func() {
 				expectStatus:   corev1.ConditionTrue,
 				expectRevision: "0.2.0",
 			}),
+			Entry("mixed semver range", refTestCase{
+				reference:      &sourcev1.GitRepositoryRef{SemVer: ">=0.1.0 <1.0.0"},
+				createRefs:     []string{"refs/tags/0.1.0", "refs/tags/v0.1.1", "refs/tags/v0.2.0", "refs/tags/1.0.0"},
+				waitForReason:  sourcev1.GitOperationSucceedReason,
+				expectStatus:   corev1.ConditionTrue,
+				expectRevision: "v0.2.0",
+			}),
 			Entry("semver invalid", refTestCase{
-				reference:     &sourcev1.GitRepositoryRef{SemVer: "v1.0.0"},
+				reference:     &sourcev1.GitRepositoryRef{SemVer: "1.2.3.4"},
 				waitForReason: sourcev1.GitOperationFailedReason,
 				expectStatus:  corev1.ConditionFalse,
-				expectMessage: "semver parse range error",
+				expectMessage: "semver parse range error: improper constraint: 1.2.3.4",
 			}),
 			Entry("semver no match", refTestCase{
 				reference:     &sourcev1.GitRepositoryRef{SemVer: "1.0.0"},

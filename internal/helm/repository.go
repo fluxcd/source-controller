@@ -25,10 +25,12 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/blang/semver/v4"
+	"github.com/Masterminds/semver/v3"
 	"helm.sh/helm/v3/pkg/getter"
 	"helm.sh/helm/v3/pkg/repo"
 	"sigs.k8s.io/yaml"
+
+	"github.com/fluxcd/pkg/version"
 )
 
 // ChartRepository represents a Helm chart repository, and the configuration
@@ -63,7 +65,7 @@ func NewChartRepository(repositoryURL string, providers getter.Providers, opts [
 // Get returns the repo.ChartVersion for the given name, the version is expected
 // to be a semver.Constraints compatible string. If version is empty, the latest
 // stable version will be returned and prerelease versions will be ignored.
-func (r *ChartRepository) Get(name, version string) (*repo.ChartVersion, error) {
+func (r *ChartRepository) Get(name, ver string) (*repo.ChartVersion, error) {
 	cvs, ok := r.Index.Entries[name]
 	if !ok {
 		return nil, repo.ErrNoChartName
@@ -73,71 +75,69 @@ func (r *ChartRepository) Get(name, version string) (*repo.ChartVersion, error) 
 	}
 
 	// Check for exact matches first
-	if len(version) != 0 {
+	if len(ver) != 0 {
 		for _, cv := range cvs {
-			if version == cv.Version {
+			if ver == cv.Version {
 				return cv, nil
 			}
 		}
 	}
 
 	// Continue to look for a (semantic) version match
-	latestStable := len(version) == 0 || version == "*"
-	var match semver.Range
+	verConstraint, err := semver.NewConstraint("*")
+	if err != nil {
+		return nil, err
+	}
+	latestStable := len(ver) == 0 || ver == "*"
 	if !latestStable {
-		rng, err := semver.ParseRange(version)
+		verConstraint, err = semver.NewConstraint(ver)
 		if err != nil {
 			return nil, err
 		}
-		match = rng
 	}
-	var filteredVersions semver.Versions
-	lookup := make(map[string]*repo.ChartVersion)
+
+	// Filter out chart versions that doesn't satisfy constraints if any,
+	// parse semver and build a lookup table
+	var matchedVersions semver.Collection
+	lookup := make(map[*semver.Version]*repo.ChartVersion)
 	for _, cv := range cvs {
-		v, err := semver.ParseTolerant(cv.Version)
+		v, err := version.ParseVersion(cv.Version)
 		if err != nil {
 			continue
 		}
 
-		if match != nil && !match(v) {
+		if !verConstraint.Check(v) {
 			continue
 		}
-		filteredVersions = append(filteredVersions, v)
-		lookup[v.String()] = cv
+
+		matchedVersions = append(matchedVersions, v)
+		lookup[v] = cv
 	}
-	if len(filteredVersions) == 0 {
-		return nil, fmt.Errorf("no chart version found for %s-%s", name, version)
+	if len(matchedVersions) == 0 {
+		return nil, fmt.Errorf("no chart version found for %s-%s", name, ver)
 	}
 
 	// Sort versions
-	sort.SliceStable(filteredVersions, func(i, j int) bool {
+	sort.SliceStable(matchedVersions, func(i, j int) bool {
 		// Reverse
 		return !(func() bool {
-			left := filteredVersions[i]
-			right := filteredVersions[j]
+			left := matchedVersions[i]
+			right := matchedVersions[j]
 
-			if !left.EQ(right) {
-				return left.LT(right)
+			if !left.Equal(right) {
+				return left.LessThan(right)
 			}
 
 			// Having chart creation timestamp at our disposal, we put package with the
 			// same version into a chronological order. This is especially important for
 			// versions that differ only by build metadata, because it is not considered
 			// a part of the comparable version in Semver
-			return lookup[left.String()].Created.Before(lookup[right.String()].Created)
+			return lookup[left].Created.Before(lookup[right].Created)
 		})()
 	})
 
-	latest := filteredVersions[0]
-	if latestStable {
-		for _, v := range filteredVersions {
-			if len(v.Pre) == 0 {
-				latest = v
-				break
-			}
-		}
-	}
-	return lookup[latest.String()], nil
+	latest := matchedVersions[0]
+	return lookup[latest], nil
 }
 
 // DownloadChart confirms the given repo.ChartVersion has a downloadable URL,
