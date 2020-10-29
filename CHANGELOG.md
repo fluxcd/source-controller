@@ -2,6 +2,27 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.2.0 (2020-10-29)
+
+This is the second MINOR prerelease, it comes with breaking changes:
+
+* Due to a change of semver library to exclude pre-releases from `1.0.x`
+  ranges, support for more complex ranges like
+  `>=1.0.0 <2.0.0 || >=3.0.0 !3.0.1-beta.1` has been dropped.
+* The histogram metric `gotk_reconcile_duration` was renamed to `gotk_reconcile_duration_seconds`
+
+Other notable changes:
+
+* Ambiguous semver matches are now sorted by the timestamp of the source
+  system to use the most recent match.
+* Added support for downloading dependencies for Helm charts from
+  `GitRepository` and `Bucket` sources.
+* Added support for creating artifacts for packaged Helm charts (`.tgz`)
+  from `GitRepository` and `Bucket` sources.
+* The annotation `fluxcd.io/reconcileAt` was renamed to `reconcile.fluxcd.io/requestedAt`,
+  the former will be removed in a next release but is backwards
+  compatible for now.
+
 ## 0.1.1 (2020-10-13)
 
 This prerelease comes with Prometheus instrumentation for the controller's resources.
