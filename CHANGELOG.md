@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.2.1 (2020-10-30)
+
+This prerelease comes with a fix for a regression bug (introduced in
+`v0.2.0`) where dependency entries in the `Chart.yaml` file during the
+(re)packaging of the Helm chart artifact would have their names
+overwritten with the alias if defined.
+
 ## 0.2.0 (2020-10-29)
 
 This is the second MINOR prerelease, it comes with breaking changes:
