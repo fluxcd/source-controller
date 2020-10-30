@@ -17,15 +17,16 @@ require (
 	github.com/fluxcd/source-controller/api v0.2.1
 	github.com/go-git/go-billy/v5 v5.0.0
 	github.com/go-git/go-git/v5 v5.1.0
-	github.com/go-logr/logr v0.1.0
+	github.com/go-logr/logr v0.2.1
+	github.com/go-logr/zapr v0.2.0 // indirect
 	github.com/minio/minio-go/v7 v7.0.5
 	github.com/onsi/ginkgo v1.12.1
 	github.com/onsi/gomega v1.10.1
 	golang.org/x/sync v0.0.0-20190911185100-cd5d95a43a6e
-	helm.sh/helm/v3 v3.3.4
-	k8s.io/api v0.18.9
-	k8s.io/apimachinery v0.18.9
-	k8s.io/client-go v0.18.9
+	helm.sh/helm/v3 v3.4.0
+	k8s.io/api v0.19.2
+	k8s.io/apimachinery v0.19.2
+	k8s.io/client-go v0.19.2
 	sigs.k8s.io/controller-runtime v0.6.3
 	sigs.k8s.io/yaml v1.2.0
 )
