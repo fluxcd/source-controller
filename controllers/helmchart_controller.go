@@ -446,12 +446,6 @@ func (r *HelmChartReconciler) reconcileFromTarballArtifact(ctx context.Context,
 	isDir := chartFileInfo.IsDir()
 	switch {
 	case isDir:
-		// Load dependencies
-		if err = chartutil.ProcessDependencies(helmChart, helmChart.Values); err != nil {
-			err = fmt.Errorf("failed to process chart dependencies: %w", err)
-			return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
-		}
-
 		// Determine chart dependencies
 		deps := helmChart.Dependencies()
 		reqs := helmChart.Metadata.Dependencies
