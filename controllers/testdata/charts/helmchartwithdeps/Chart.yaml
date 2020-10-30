@@ -24,6 +24,10 @@ dependencies:
   - name: helmchart
     version: "0.1.0"
     repository: "file://../helmchart"
+  - name: helmchart
+    alias: aliased
+    version: "0.1.0"
+    repository: "file://../helmchart"
   - name: grafana
     version: ">=5.7.0"
     repository: "https://grafana.github.io/helm-charts"

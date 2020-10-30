@@ -18,6 +18,7 @@ package controllers
 
 import (
 	"bytes"
+	"fmt"
 	"io/ioutil"
 	"strings"
 	"testing"
@@ -31,14 +32,12 @@ import (
 var (
 	helmPackageFile = "testdata/charts/helmchart-0.1.0.tgz"
 
-	localDepFixture helmchart.Dependency = helmchart.Dependency{
-		Name:       "helmchart",
-		Version:    "0.1.0",
-		Repository: "file://../helmchart",
-	}
-	remoteDepFixture helmchart.Dependency = helmchart.Dependency{
-		Name:       "helmchart",
-		Version:    "0.1.0",
+	chartName                                 = "helmchart"
+	chartVersion                              = "0.1.0"
+	chartLocalRepository                      = "file://../helmchart"
+	remoteDepFixture     helmchart.Dependency = helmchart.Dependency{
+		Name:       chartName,
+		Version:    chartVersion,
 		Repository: "https://example.com/charts",
 	}
 	chartFixture helmchart.Chart = helmchart.Chart{
@@ -58,72 +57,65 @@ func TestBuild_WithEmptyDependencies(t *testing.T) {
 }
 
 func TestBuild_WithLocalChart(t *testing.T) {
-	loc := localDepFixture
-	chart := chartFixture
-	dm := DependencyManager{
-		Chart:     &chart,
-		ChartPath: "testdata/charts/helmchart",
-		Dependencies: []*DependencyWithRepository{
-			{
-				Dependency: &loc,
-				Repo:       nil,
+	tests := []struct {
+		name    string
+		dep     helmchart.Dependency
+		wantErr bool
+		errMsg  string
+	}{
+		{
+			name: "valid path",
+			dep: helmchart.Dependency{
+				Name:       chartName,
+				Version:    chartVersion,
+				Repository: chartLocalRepository,
 			},
 		},
-	}
-
-	if err := dm.Build(); err != nil {
-		t.Errorf("Build() expected to not return error: %s", err)
-	}
-
-	deps := dm.Chart.Dependencies()
-	if len(deps) != 1 {
-		t.Fatalf("chart expected to have one dependency registered")
-	}
-	if deps[0].Metadata.Name != localDepFixture.Name {
-		t.Errorf("chart dependency has incorrect name, expected: %s, got: %s", localDepFixture.Name, deps[0].Metadata.Name)
-	}
-	if deps[0].Metadata.Version != localDepFixture.Version {
-		t.Errorf("chart dependency has incorrect version, expected: %s, got: %s", localDepFixture.Version, deps[0].Metadata.Version)
-	}
-
-	tests := []struct {
-		name        string
-		dep         helmchart.Dependency
-		expectError string
-	}{
+		{
+			name: "valid path",
+			dep: helmchart.Dependency{
+				Name:       chartName,
+				Alias:      "aliased",
+				Version:    chartVersion,
+				Repository: chartLocalRepository,
+			},
+		},
 		{
 			name: "invalid path",
 			dep: helmchart.Dependency{
-				Name:       "helmchart",
-				Version:    "0.1.0",
+				Name:       chartName,
+				Version:    chartVersion,
 				Repository: "file://../invalid",
 			},
-			expectError: "no such file or directory",
+			wantErr: true,
+			errMsg:  "no such file or directory",
 		},
 		{
 			name: "invalid version constraint format",
 			dep: helmchart.Dependency{
-				Name:       "helmchart",
+				Name:       chartName,
 				Version:    "!2.0",
-				Repository: "file://../helmchart",
+				Repository: chartLocalRepository,
 			},
-			expectError: "has an invalid version/constraint format",
+			wantErr: true,
+			errMsg:  "has an invalid version/constraint format",
 		},
 		{
 			name: "invalid version",
 			dep: helmchart.Dependency{
-				Name:       "helmchart",
-				Version:    "1.0.0",
-				Repository: "file://../helmchart",
+				Name:       chartName,
+				Version:    chartVersion,
+				Repository: chartLocalRepository,
 			},
-			expectError: "can't get a valid version for dependency",
+			wantErr: true,
+			errMsg:  "can't get a valid version for dependency",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := chartFixture
-			dm = DependencyManager{
+			dm := DependencyManager{
 				Chart:     &c,
 				ChartPath: "testdata/charts/helmchart",
 				Dependencies: []*DependencyWithRepository{
@@ -134,13 +126,30 @@ func TestBuild_WithLocalChart(t *testing.T) {
 				},
 			}
 
-			if err := dm.Build(); err == nil {
+			err := dm.Build()
+			deps := dm.Chart.Dependencies()
+
+			if (err != nil) && tt.wantErr {
+				if !strings.Contains(err.Error(), tt.errMsg) {
+					t.Errorf("Build() expected to return error: %s, got: %s", tt.errMsg, err)
+				}
+				if len(deps) > 0 {
+					t.Fatalf("chart expected to have no dependencies registered")
+				}
+				return
+			} else if err != nil {
 				t.Errorf("Build() expected to return error")
-			} else if !strings.Contains(err.Error(), tt.expectError) {
-				t.Errorf("Build() expected to return error: %s, got: %s", tt.expectError, err)
+				return
 			}
-			if len(dm.Chart.Dependencies()) > 0 {
-				t.Fatalf("chart expected to have no dependencies registered")
+
+			if len(deps) == 0 {
+				t.Fatalf("chart expected to have at least one dependency registered")
+			}
+			if deps[0].Metadata.Name != chartName {
+				t.Errorf("chart dependency has incorrect name, expected: %s, got: %s", chartName, deps[0].Metadata.Name)
+			}
+			if deps[0].Metadata.Version != chartVersion {
+				t.Errorf("chart dependency has incorrect version, expected: %s, got: %s", chartVersion, deps[0].Metadata.Version)
 			}
 		})
 	}
@@ -153,7 +162,7 @@ func TestBuild_WithRemoteChart(t *testing.T) {
 		t.Fatal(err)
 	}
 	i := repo.NewIndexFile()
-	i.Add(&helmchart.Metadata{Name: "helmchart", Version: "0.1.0"}, "helmchart-0.1.0.tgz", "http://example.com/charts", "sha256:1234567890")
+	i.Add(&helmchart.Metadata{Name: chartName, Version: chartVersion}, fmt.Sprintf("%s-%s.tgz", chartName, chartVersion), "http://example.com/charts", "sha256:1234567890")
 	mg := mockGetter{response: b}
 	cr := &helm.ChartRepository{
 		URL:    remoteDepFixture.Repository,
@@ -178,11 +187,11 @@ func TestBuild_WithRemoteChart(t *testing.T) {
 	if len(deps) != 1 {
 		t.Fatalf("chart expected to have one dependency registered")
 	}
-	if deps[0].Metadata.Name != remoteDepFixture.Name {
-		t.Errorf("chart dependency has incorrect name, expected: %s, got: %s", remoteDepFixture.Name, deps[0].Metadata.Name)
+	if deps[0].Metadata.Name != chartName {
+		t.Errorf("chart dependency has incorrect name, expected: %s, got: %s", chartName, deps[0].Metadata.Name)
 	}
-	if deps[0].Metadata.Version != remoteDepFixture.Version {
-		t.Errorf("chart dependency has incorrect version, expected: %s, got: %s", remoteDepFixture.Version, deps[0].Metadata.Version)
+	if deps[0].Metadata.Version != chartVersion {
+		t.Errorf("chart dependency has incorrect version, expected: %s, got: %s", chartVersion, deps[0].Metadata.Version)
 	}
 
 	// When repo is not set
