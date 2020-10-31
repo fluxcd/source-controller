@@ -23,6 +23,7 @@ import (
 )
 
 const (
+	// GitRepositoryKind is the string representation of a GitRepository.
 	GitRepositoryKind = "GitRepository"
 )
 

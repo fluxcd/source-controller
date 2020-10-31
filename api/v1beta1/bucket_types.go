@@ -23,6 +23,7 @@ import (
 )
 
 const (
+	// BucketKind is the string representation of a Bucket.
 	BucketKind = "Bucket"
 )
 
