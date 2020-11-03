@@ -17,16 +17,14 @@ limitations under the License.
 package v1beta1
 
 import (
-	"time"
-
 	"github.com/fluxcd/pkg/apis/meta"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 const (
-	GitRepositoryKind    = "GitRepository"
-	GitRepositoryTimeout = time.Second * 20
+	// GitRepositoryKind is the string representation of a GitRepository.
+	GitRepositoryKind = "GitRepository"
 )
 
 // GitRepositorySpec defines the desired state of a Git repository.
@@ -49,6 +47,7 @@ type GitRepositorySpec struct {
 	Interval metav1.Duration `json:"interval"`
 
 	// The timeout for remote Git operations like cloning, defaults to 20s.
+	// +kubebuilder:default="20s"
 	// +optional
 	Timeout *metav1.Duration `json:"timeout,omitempty"`
 
@@ -71,6 +70,7 @@ type GitRepositorySpec struct {
 // GitRepositoryRef defines the Git ref used for pull and checkout operations.
 type GitRepositoryRef struct {
 	// The Git branch to checkout, defaults to master.
+	// +kubebuilder:default:=master
 	// +optional
 	Branch string `json:"branch,omitempty"`
 
@@ -179,14 +179,6 @@ func GitRepositoryReadyMessage(repository GitRepository) string {
 		}
 	}
 	return ""
-}
-
-// GetTimeout returns the configured timeout or the default.
-func (in *GitRepository) GetTimeout() time.Duration {
-	if in.Spec.Timeout != nil {
-		return in.Spec.Timeout.Duration
-	}
-	return GitRepositoryTimeout
 }
 
 // GetArtifact returns the latest artifact from the source if present in the

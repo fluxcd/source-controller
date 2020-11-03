@@ -63,6 +63,7 @@ spec:
                   defaults to master branch.
                 properties:
                   branch:
+                    default: master
                     description: The Git branch to checkout, defaults to master.
                     type: string
                   commit:
@@ -89,6 +90,7 @@ spec:
                     type: string
                 type: object
               timeout:
+                default: 20s
                 description: The timeout for remote Git operations like cloning, defaults
                   to 20s.
                 type: string

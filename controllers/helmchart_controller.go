@@ -252,7 +252,7 @@ func (r *HelmChartReconciler) reconcileFromHelmRepository(ctx context.Context,
 
 		clientOpts = opts
 	}
-	clientOpts = append(clientOpts, getter.WithTimeout(repository.GetTimeout()))
+	clientOpts = append(clientOpts, getter.WithTimeout(repository.Spec.Timeout.Duration))
 
 	// Initialize the chart repository and load the index file
 	chartRepo, err := helm.NewChartRepository(repository.Spec.URL, r.Getters, clientOpts)

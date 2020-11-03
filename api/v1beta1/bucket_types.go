@@ -17,22 +17,21 @@ limitations under the License.
 package v1beta1
 
 import (
-	"time"
-
 	"github.com/fluxcd/pkg/apis/meta"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 const (
-	BucketKind    = "Bucket"
-	BucketTimeout = time.Second * 20
+	// BucketKind is the string representation of a Bucket.
+	BucketKind = "Bucket"
 )
 
 // BucketSpec defines the desired state of an S3 compatible bucket
 type BucketSpec struct {
 	// The S3 compatible storage provider name, default ('generic').
 	// +kubebuilder:validation:Enum=generic;aws
+	// +kubebuilder:default:=generic
 	// +optional
 	Provider string `json:"provider,omitempty"`
 
@@ -62,6 +61,7 @@ type BucketSpec struct {
 	Interval metav1.Duration `json:"interval"`
 
 	// The timeout for download operations, defaults to 20s.
+	// +kubebuilder:default="20s"
 	// +optional
 	Timeout *metav1.Duration `json:"timeout,omitempty"`
 
@@ -156,14 +156,6 @@ func BucketReadyMessage(bucket Bucket) string {
 		}
 	}
 	return ""
-}
-
-// GetTimeout returns the configured timeout or the default.
-func (in *Bucket) GetTimeout() time.Duration {
-	if in.Spec.Timeout != nil {
-		return in.Spec.Timeout.Duration
-	}
-	return BucketTimeout
 }
 
 // GetArtifact returns the latest artifact from the source if present in the

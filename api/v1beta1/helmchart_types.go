@@ -22,6 +22,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// HelmChartKind is the string representation of a HelmChart.
 const HelmChartKind = "HelmChart"
 
 // HelmChartSpec defines the desired state of a Helm chart.
@@ -32,6 +33,7 @@ type HelmChartSpec struct {
 
 	// The chart version semver expression, ignored for charts from GitRepository
 	// and Bucket sources. Defaults to latest when omitted.
+	// +kubebuilder:default:=*
 	// +optional
 	Version string `json:"version,omitempty"`
 
