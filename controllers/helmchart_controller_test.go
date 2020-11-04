@@ -406,7 +406,7 @@ var _ = Describe("HelmChartReconciler", func() {
 			By("Expecting artifact")
 			Eventually(func() bool {
 				_ = k8sClient.Get(context.Background(), key, got)
-				return meta.HasReadyCondition(got.Status.Conditions)
+				return meta.InReadyCondition(got.Status.Conditions)
 			}, timeout, interval).Should(BeTrue())
 			Expect(got.Status.Artifact).ToNot(BeNil())
 		})

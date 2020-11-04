@@ -31,6 +31,8 @@ import (
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 	corev1 "k8s.io/api/core/v1"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	kuberecorder "k8s.io/client-go/tools/record"
@@ -211,7 +213,7 @@ func (r *BucketReconciler) reconcile(ctx context.Context, bucket sourcev1.Bucket
 
 	// return early on unchanged revision
 	artifact := r.Storage.NewArtifactFor(bucket.Kind, bucket.GetObjectMeta(), revision, fmt.Sprintf("%s.tar.gz", revision))
-	if meta.HasReadyCondition(bucket.Status.Conditions) && bucket.GetArtifact().HasRevision(artifact.Revision) {
+	if meta.InReadyCondition(bucket.Status.Conditions) && bucket.GetArtifact().HasRevision(artifact.Revision) {
 		if artifact.URL != bucket.GetArtifact().URL {
 			r.Storage.SetArtifactURL(bucket.GetArtifact())
 			bucket.Status.URL = r.Storage.SetHostname(bucket.Status.URL)
@@ -401,12 +403,12 @@ func (r *BucketReconciler) recordReadiness(bucket sourcev1.Bucket) {
 		).Error(err, "unable to record readiness metric")
 		return
 	}
-	if rc := meta.GetCondition(bucket.Status.Conditions, meta.ReadyCondition); rc != nil {
+	if rc := apimeta.FindStatusCondition(bucket.Status.Conditions, meta.ReadyCondition); rc != nil {
 		r.MetricsRecorder.RecordCondition(*objRef, *rc, !bucket.DeletionTimestamp.IsZero())
 	} else {
-		r.MetricsRecorder.RecordCondition(*objRef, meta.Condition{
+		r.MetricsRecorder.RecordCondition(*objRef, metav1.Condition{
 			Type:   meta.ReadyCondition,
-			Status: corev1.ConditionUnknown,
+			Status: metav1.ConditionUnknown,
 		}, !bucket.DeletionTimestamp.IsZero())
 	}
 }

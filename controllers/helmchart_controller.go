@@ -33,6 +33,8 @@ import (
 	"helm.sh/helm/v3/pkg/chartutil"
 	"helm.sh/helm/v3/pkg/getter"
 	corev1 "k8s.io/api/core/v1"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	kuberecorder "k8s.io/client-go/tools/record"
@@ -423,7 +425,7 @@ func (r *HelmChartReconciler) reconcileFromTarballArtifact(ctx context.Context,
 	// Return early if the revision is still the same as the current chart artifact
 	newArtifact := r.Storage.NewArtifactFor(chart.Kind, chart.ObjectMeta.GetObjectMeta(), helmChart.Metadata.Version,
 		fmt.Sprintf("%s-%s.tgz", helmChart.Metadata.Name, helmChart.Metadata.Version))
-	if !force && meta.HasReadyCondition(chart.Status.Conditions) && chart.GetArtifact().HasRevision(newArtifact.Revision) {
+	if !force && meta.InReadyCondition(chart.Status.Conditions) && chart.GetArtifact().HasRevision(newArtifact.Revision) {
 		if newArtifact.URL != artifact.URL {
 			r.Storage.SetArtifactURL(chart.GetArtifact())
 			chart.Status.URL = r.Storage.SetHostname(chart.Status.URL)
@@ -677,12 +679,12 @@ func (r *HelmChartReconciler) recordReadiness(chart sourcev1.HelmChart) {
 		).Error(err, "unable to record readiness metric")
 		return
 	}
-	if rc := meta.GetCondition(chart.Status.Conditions, meta.ReadyCondition); rc != nil {
+	if rc := apimeta.FindStatusCondition(chart.Status.Conditions, meta.ReadyCondition); rc != nil {
 		r.MetricsRecorder.RecordCondition(*objRef, *rc, !chart.DeletionTimestamp.IsZero())
 	} else {
-		r.MetricsRecorder.RecordCondition(*objRef, meta.Condition{
+		r.MetricsRecorder.RecordCondition(*objRef, metav1.Condition{
 			Type:   meta.ReadyCondition,
-			Status: corev1.ConditionUnknown,
+			Status: metav1.ConditionUnknown,
 		}, !chart.DeletionTimestamp.IsZero())
 	}
 }

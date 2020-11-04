@@ -19,6 +19,7 @@ package v1beta1
 import (
 	"github.com/fluxcd/pkg/apis/meta"
 	corev1 "k8s.io/api/core/v1"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -63,7 +64,7 @@ type HelmRepositoryStatus struct {
 
 	// Conditions holds the conditions for the HelmRepository.
 	// +optional
-	Conditions []meta.Condition `json:"conditions,omitempty"`
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
 
 	// URL is the download link for the last index fetched.
 	// +optional
@@ -85,22 +86,22 @@ const (
 )
 
 // HelmRepositoryProgressing resets the conditions of the HelmRepository to
-// meta.Condition of type meta.ReadyCondition with status 'Unknown' and
+// metav1.Condition of type meta.ReadyCondition with status 'Unknown' and
 // meta.ProgressingReason reason and message. It returns the modified
 // HelmRepository.
 func HelmRepositoryProgressing(repository HelmRepository) HelmRepository {
 	repository.Status.ObservedGeneration = repository.Generation
 	repository.Status.URL = ""
-	repository.Status.Conditions = []meta.Condition{}
-	SetHelmRepositoryCondition(&repository, meta.ReadyCondition, corev1.ConditionUnknown, meta.ProgressingReason, "reconciliation in progress")
+	repository.Status.Conditions = []metav1.Condition{}
+	SetHelmRepositoryCondition(&repository, meta.ReadyCondition, metav1.ConditionUnknown, meta.ProgressingReason, "reconciliation in progress")
 	return repository
 }
 
 // SetHelmRepositoryCondition sets the given condition with the given status,
 // reason and message on the HelmRepository.
-func SetHelmRepositoryCondition(repository *HelmRepository, condition string, status corev1.ConditionStatus, reason, message string) {
+func SetHelmRepositoryCondition(repository *HelmRepository, condition string, status metav1.ConditionStatus, reason, message string) {
 	repository.Status.Conditions = meta.FilterOutCondition(repository.Status.Conditions, condition)
-	repository.Status.Conditions = append(repository.Status.Conditions, meta.Condition{
+	repository.Status.Conditions = append(repository.Status.Conditions, metav1.Condition{
 		Type:               condition,
 		Status:             status,
 		LastTransitionTime: metav1.Now(),
@@ -115,7 +116,7 @@ func SetHelmRepositoryCondition(repository *HelmRepository, condition string, st
 func HelmRepositoryReady(repository HelmRepository, artifact Artifact, url, reason, message string) HelmRepository {
 	repository.Status.Artifact = &artifact
 	repository.Status.URL = url
-	SetHelmRepositoryCondition(&repository, meta.ReadyCondition, corev1.ConditionTrue, reason, message)
+	SetHelmRepositoryCondition(&repository, meta.ReadyCondition, metav1.ConditionTrue, reason, message)
 	return repository
 }
 
@@ -123,15 +124,15 @@ func HelmRepositoryReady(repository HelmRepository, artifact Artifact, url, reas
 // HelmRepository to 'False', with the given reason and message. It returns the
 // modified HelmRepository.
 func HelmRepositoryNotReady(repository HelmRepository, reason, message string) HelmRepository {
-	SetHelmRepositoryCondition(&repository, meta.ReadyCondition, corev1.ConditionFalse, reason, message)
+	SetHelmRepositoryCondition(&repository, meta.ReadyCondition, metav1.ConditionFalse, reason, message)
 	return repository
 }
 
-// HelmRepositoryReadyMessage returns the message of the meta.Condition of type
+// HelmRepositoryReadyMessage returns the message of the metav1.Condition of type
 // meta.ReadyCondition with status 'True' if present, or an empty string.
 func HelmRepositoryReadyMessage(repository HelmRepository) string {
-	if c := meta.GetCondition(repository.Status.Conditions, meta.ReadyCondition); c != nil {
-		if c.Status == corev1.ConditionTrue {
+	if c := apimeta.FindStatusCondition(repository.Status.Conditions, meta.ReadyCondition); c != nil {
+		if c.Status == metav1.ConditionTrue {
 			return c.Message
 		}
 	}

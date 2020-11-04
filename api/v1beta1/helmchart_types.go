@@ -18,7 +18,7 @@ package v1beta1
 
 import (
 	"github.com/fluxcd/pkg/apis/meta"
-	corev1 "k8s.io/api/core/v1"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -77,7 +77,7 @@ type HelmChartStatus struct {
 
 	// Conditions holds the conditions for the HelmChart.
 	// +optional
-	Conditions []meta.Condition `json:"conditions,omitempty"`
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
 
 	// URL is the download link for the last chart pulled.
 	// +optional
@@ -112,16 +112,16 @@ const (
 func HelmChartProgressing(chart HelmChart) HelmChart {
 	chart.Status.ObservedGeneration = chart.Generation
 	chart.Status.URL = ""
-	chart.Status.Conditions = []meta.Condition{}
-	SetHelmChartCondition(&chart, meta.ReadyCondition, corev1.ConditionUnknown, meta.ProgressingReason, "reconciliation in progress")
+	chart.Status.Conditions = []metav1.Condition{}
+	SetHelmChartCondition(&chart, meta.ReadyCondition, metav1.ConditionUnknown, meta.ProgressingReason, "reconciliation in progress")
 	return chart
 }
 
 // SetHelmChartCondition sets the given condition with the given status, reason
 // and message on the HelmChart.
-func SetHelmChartCondition(chart *HelmChart, condition string, status corev1.ConditionStatus, reason, message string) {
+func SetHelmChartCondition(chart *HelmChart, condition string, status metav1.ConditionStatus, reason, message string) {
 	chart.Status.Conditions = meta.FilterOutCondition(chart.Status.Conditions, condition)
-	chart.Status.Conditions = append(chart.Status.Conditions, meta.Condition{
+	chart.Status.Conditions = append(chart.Status.Conditions, metav1.Condition{
 		Type:               condition,
 		Status:             status,
 		LastTransitionTime: metav1.Now(),
@@ -136,7 +136,7 @@ func SetHelmChartCondition(chart *HelmChart, condition string, status corev1.Con
 func HelmChartReady(chart HelmChart, artifact Artifact, url, reason, message string) HelmChart {
 	chart.Status.Artifact = &artifact
 	chart.Status.URL = url
-	SetHelmChartCondition(&chart, meta.ReadyCondition, corev1.ConditionTrue, reason, message)
+	SetHelmChartCondition(&chart, meta.ReadyCondition, metav1.ConditionTrue, reason, message)
 	return chart
 }
 
@@ -144,15 +144,15 @@ func HelmChartReady(chart HelmChart, artifact Artifact, url, reason, message str
 // 'False', with the given reason and message. It returns the modified
 // HelmChart.
 func HelmChartNotReady(chart HelmChart, reason, message string) HelmChart {
-	SetHelmChartCondition(&chart, meta.ReadyCondition, corev1.ConditionFalse, reason, message)
+	SetHelmChartCondition(&chart, meta.ReadyCondition, metav1.ConditionFalse, reason, message)
 	return chart
 }
 
 // HelmChartReadyMessage returns the message of the meta.ReadyCondition with
 // status 'True', or an empty string.
 func HelmChartReadyMessage(chart HelmChart) string {
-	if c := meta.GetCondition(chart.Status.Conditions, meta.ReadyCondition); c != nil {
-		if c.Status == corev1.ConditionTrue {
+	if c := apimeta.FindStatusCondition(chart.Status.Conditions, meta.ReadyCondition); c != nil {
+		if c.Status == metav1.ConditionTrue {
 			return c.Message
 		}
 	}
