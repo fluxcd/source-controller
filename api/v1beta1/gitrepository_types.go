@@ -143,14 +143,18 @@ func GitRepositoryProgressing(repository GitRepository) GitRepository {
 // SetGitRepositoryCondition sets the given condition with the given status,
 // reason and message on the GitRepository.
 func SetGitRepositoryCondition(repository *GitRepository, condition string, status metav1.ConditionStatus, reason, message string) {
-	repository.Status.Conditions = meta.FilterOutCondition(repository.Status.Conditions, condition)
-	repository.Status.Conditions = append(repository.Status.Conditions, metav1.Condition{
+	conditions := &repository.Status.Conditions
+	generation := repository.GetGeneration()
+	newCondition := metav1.Condition{
 		Type:               condition,
 		Status:             status,
 		LastTransitionTime: metav1.Now(),
 		Reason:             reason,
 		Message:            message,
-	})
+		ObservedGeneration: generation,
+	}
+
+	apimeta.SetStatusCondition(conditions, newCondition)
 }
 
 // GitRepositoryReady sets the given Artifact and URL on the GitRepository and

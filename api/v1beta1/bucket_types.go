@@ -120,15 +120,19 @@ func BucketProgressing(bucket Bucket) Bucket {
 
 // SetBucketCondition sets the given condition with the given status, reason and
 // message on the Bucket.
-func SetBucketCondition(bucket *Bucket, conditionType string, status metav1.ConditionStatus, reason, message string) {
-	bucket.Status.Conditions = meta.FilterOutCondition(bucket.Status.Conditions, conditionType)
-	bucket.Status.Conditions = append(bucket.Status.Conditions, metav1.Condition{
-		Type:               conditionType,
+func SetBucketCondition(bucket *Bucket, condition string, status metav1.ConditionStatus, reason, message string) {
+	conditions := &bucket.Status.Conditions
+	generation := bucket.GetGeneration()
+	newCondition := metav1.Condition{
+		Type:               condition,
 		Status:             status,
 		LastTransitionTime: metav1.Now(),
 		Reason:             reason,
 		Message:            message,
-	})
+		ObservedGeneration: generation,
+	}
+
+	apimeta.SetStatusCondition(conditions, newCondition)
 }
 
 // BucketReady sets the given Artifact and URL on the Bucket and sets the

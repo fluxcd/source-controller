@@ -120,14 +120,18 @@ func HelmChartProgressing(chart HelmChart) HelmChart {
 // SetHelmChartCondition sets the given condition with the given status, reason
 // and message on the HelmChart.
 func SetHelmChartCondition(chart *HelmChart, condition string, status metav1.ConditionStatus, reason, message string) {
-	chart.Status.Conditions = meta.FilterOutCondition(chart.Status.Conditions, condition)
-	chart.Status.Conditions = append(chart.Status.Conditions, metav1.Condition{
+	conditions := &chart.Status.Conditions
+	generation := chart.GetGeneration()
+	newCondition := metav1.Condition{
 		Type:               condition,
 		Status:             status,
 		LastTransitionTime: metav1.Now(),
 		Reason:             reason,
 		Message:            message,
-	})
+		ObservedGeneration: generation,
+	}
+
+	apimeta.SetStatusCondition(conditions, newCondition)
 }
 
 // HelmChartReady sets the given Artifact and URL on the HelmChart and sets the
