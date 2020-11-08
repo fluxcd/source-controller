@@ -178,7 +178,7 @@ When the provider is `aws` and the `secretRef` is not specified,
 the credentials are retrieve from the EC2 service:
 
 ```yaml
-apiVersion: source.toolkit.fluccd.io/v1beta1
+apiVersion: source.toolkit.fluxcd.io/v1beta1
 kind: Bucket
 metadata:
   name: podinfo
