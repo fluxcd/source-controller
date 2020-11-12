@@ -106,11 +106,11 @@ func (r *HelmChartReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	resetChart, changed := r.resetStatus(chart)
 	if changed {
 		chart = resetChart
-		if err := r.Status().Update(ctx, &chart); err != nil {
+		if err := r.updateStatus(ctx, req, chart.Status); err != nil {
 			log.Error(err, "unable to update status")
 			return ctrl.Result{Requeue: true}, err
 		}
-		r.recordReadiness(chart, false)
+		r.recordReadiness(chart)
 	}
 
 	// Purge all but current artifact from storage
@@ -122,7 +122,7 @@ func (r *HelmChartReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	source, err := r.getSource(ctx, chart)
 	if err != nil {
 		chart = sourcev1.HelmChartNotReady(*chart.DeepCopy(), sourcev1.ChartPullFailedReason, err.Error())
-		if err := r.Status().Update(ctx, &chart); err != nil {
+		if err := r.updateStatus(ctx, req, chart.Status); err != nil {
 			log.Error(err, "unable to update status")
 		}
 		return ctrl.Result{Requeue: true}, err
@@ -133,10 +133,10 @@ func (r *HelmChartReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		err = fmt.Errorf("no artifact found for source `%s` kind '%s'",
 			chart.Spec.SourceRef.Name, chart.Spec.SourceRef.Kind)
 		chart = sourcev1.HelmChartNotReady(*chart.DeepCopy(), sourcev1.ChartPullFailedReason, err.Error())
-		if err := r.Status().Update(ctx, &chart); err != nil {
+		if err := r.updateStatus(ctx, req, chart.Status); err != nil {
 			log.Error(err, "unable to update status")
 		}
-		r.recordReadiness(chart, false)
+		r.recordReadiness(chart)
 		return ctrl.Result{Requeue: true}, err
 	}
 
@@ -155,7 +155,7 @@ func (r *HelmChartReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	}
 
 	// Update status with the reconciliation result
-	if err := r.Status().Update(ctx, &reconciledChart); err != nil {
+	if err := r.updateStatus(ctx, req, reconciledChart.Status); err != nil {
 		log.Error(err, "unable to update status")
 		return ctrl.Result{Requeue: true}, err
 	}
@@ -163,7 +163,7 @@ func (r *HelmChartReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	// If reconciliation failed, record the failure and requeue immediately
 	if reconcileErr != nil {
 		r.event(reconciledChart, events.EventSeverityError, reconcileErr.Error())
-		r.recordReadiness(reconciledChart, false)
+		r.recordReadiness(reconciledChart)
 		return ctrl.Result{Requeue: true}, reconcileErr
 	}
 
@@ -171,7 +171,7 @@ func (r *HelmChartReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	if chart.Status.Artifact == nil || reconciledChart.Status.Artifact.Revision != chart.Status.Artifact.Revision {
 		r.event(reconciledChart, events.EventSeverityInfo, sourcev1.HelmChartReadyMessage(reconciledChart))
 	}
-	r.recordReadiness(reconciledChart, false)
+	r.recordReadiness(reconciledChart)
 
 	log.Info(fmt.Sprintf("Reconciliation finished in %s, next run in %s",
 		time.Now().Sub(start).String(),
@@ -596,7 +596,7 @@ func (r *HelmChartReconciler) reconcileDelete(ctx context.Context, chart sourcev
 	}
 
 	// Record deleted status
-	r.recordReadiness(chart, true)
+	r.recordReadiness(chart)
 
 	// Remove our finalizer from the list and update it
 	controllerutil.RemoveFinalizer(&chart, sourcev1.SourceFinalizer)
@@ -662,7 +662,7 @@ func (r *HelmChartReconciler) event(chart sourcev1.HelmChart, severity, msg stri
 	}
 }
 
-func (r *HelmChartReconciler) recordReadiness(chart sourcev1.HelmChart, deleted bool) {
+func (r *HelmChartReconciler) recordReadiness(chart sourcev1.HelmChart) {
 	if r.MetricsRecorder == nil {
 		return
 	}
@@ -676,13 +676,25 @@ func (r *HelmChartReconciler) recordReadiness(chart sourcev1.HelmChart, deleted 
 		return
 	}
 	if rc := meta.GetCondition(chart.Status.Conditions, meta.ReadyCondition); rc != nil {
-		r.MetricsRecorder.RecordCondition(*objRef, *rc, deleted)
+		r.MetricsRecorder.RecordCondition(*objRef, *rc, !chart.DeletionTimestamp.IsZero())
 	} else {
 		r.MetricsRecorder.RecordCondition(*objRef, meta.Condition{
 			Type:   meta.ReadyCondition,
 			Status: corev1.ConditionUnknown,
-		}, deleted)
+		}, !chart.DeletionTimestamp.IsZero())
 	}
+}
+
+func (r *HelmChartReconciler) updateStatus(ctx context.Context, req ctrl.Request, newStatus sourcev1.HelmChartStatus) error {
+	var chart sourcev1.HelmChart
+	if err := r.Get(ctx, req.NamespacedName, &chart); err != nil {
+		return err
+	}
+
+	patch := client.MergeFrom(chart.DeepCopy())
+	chart.Status = newStatus
+
+	return r.Status().Patch(ctx, &chart, patch)
 }
 
 func (r *HelmChartReconciler) indexHelmRepositoryByURL(o runtime.Object) []string {
