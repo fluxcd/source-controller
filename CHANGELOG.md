@@ -2,6 +2,11 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.2.2 (2020-11-12)
+
+This prerelease comes with improvements to status reporting.
+The Kubernetes packages have been updated to v1.19.
+
 ## 0.2.1 (2020-10-30)
 
 This prerelease comes with a fix for a regression bug (introduced in
