@@ -100,11 +100,11 @@ func (r *BucketReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	// set initial status
 	if resetBucket, ok := r.resetStatus(bucket); ok {
 		bucket = resetBucket
-		if err := r.Status().Update(ctx, &bucket); err != nil {
+		if err := r.updateStatus(ctx, req, bucket.Status); err != nil {
 			log.Error(err, "unable to update status")
 			return ctrl.Result{Requeue: true}, err
 		}
-		r.recordReadiness(bucket, false)
+		r.recordReadiness(bucket)
 	}
 
 	// purge old artifacts from storage
@@ -116,7 +116,7 @@ func (r *BucketReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	reconciledBucket, reconcileErr := r.reconcile(ctx, *bucket.DeepCopy())
 
 	// update status with the reconciliation result
-	if err := r.Status().Update(ctx, &reconciledBucket); err != nil {
+	if err := r.updateStatus(ctx, req, reconciledBucket.Status); err != nil {
 		log.Error(err, "unable to update status")
 		return ctrl.Result{Requeue: true}, err
 	}
@@ -124,7 +124,7 @@ func (r *BucketReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	// if reconciliation failed, record the failure and requeue immediately
 	if reconcileErr != nil {
 		r.event(reconciledBucket, events.EventSeverityError, reconcileErr.Error())
-		r.recordReadiness(reconciledBucket, false)
+		r.recordReadiness(reconciledBucket)
 		return ctrl.Result{Requeue: true}, reconcileErr
 	}
 
@@ -132,7 +132,7 @@ func (r *BucketReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	if bucket.Status.Artifact == nil || reconciledBucket.Status.Artifact.Revision != bucket.Status.Artifact.Revision {
 		r.event(reconciledBucket, events.EventSeverityInfo, sourcev1.BucketReadyMessage(reconciledBucket))
 	}
-	r.recordReadiness(reconciledBucket, false)
+	r.recordReadiness(reconciledBucket)
 
 	log.Info(fmt.Sprintf("Reconciliation finished in %s, next run in %s",
 		time.Now().Sub(start).String(),
@@ -259,7 +259,7 @@ func (r *BucketReconciler) reconcileDelete(ctx context.Context, bucket sourcev1.
 	}
 
 	// Record deleted status
-	r.recordReadiness(bucket, true)
+	r.recordReadiness(bucket)
 
 	// Remove our finalizer from the list and update it
 	controllerutil.RemoveFinalizer(&bucket, sourcev1.SourceFinalizer)
@@ -385,7 +385,7 @@ func (r *BucketReconciler) event(bucket sourcev1.Bucket, severity, msg string) {
 	}
 }
 
-func (r *BucketReconciler) recordReadiness(bucket sourcev1.Bucket, deleted bool) {
+func (r *BucketReconciler) recordReadiness(bucket sourcev1.Bucket) {
 	if r.MetricsRecorder == nil {
 		return
 	}
@@ -399,11 +399,23 @@ func (r *BucketReconciler) recordReadiness(bucket sourcev1.Bucket, deleted bool)
 		return
 	}
 	if rc := meta.GetCondition(bucket.Status.Conditions, meta.ReadyCondition); rc != nil {
-		r.MetricsRecorder.RecordCondition(*objRef, *rc, deleted)
+		r.MetricsRecorder.RecordCondition(*objRef, *rc, !bucket.DeletionTimestamp.IsZero())
 	} else {
 		r.MetricsRecorder.RecordCondition(*objRef, meta.Condition{
 			Type:   meta.ReadyCondition,
 			Status: corev1.ConditionUnknown,
-		}, deleted)
+		}, !bucket.DeletionTimestamp.IsZero())
 	}
+}
+
+func (r *BucketReconciler) updateStatus(ctx context.Context, req ctrl.Request, newStatus sourcev1.BucketStatus) error {
+	var bucket sourcev1.Bucket
+	if err := r.Get(ctx, req.NamespacedName, &bucket); err != nil {
+		return err
+	}
+
+	patch := client.MergeFrom(bucket.DeepCopy())
+	bucket.Status = newStatus
+
+	return r.Status().Patch(ctx, &bucket, patch)
 }

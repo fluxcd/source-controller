@@ -100,11 +100,11 @@ func (r *HelmRepositoryReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 	// set initial status
 	if resetRepository, ok := r.resetStatus(repository); ok {
 		repository = resetRepository
-		if err := r.Status().Update(ctx, &repository); err != nil {
+		if err := r.updateStatus(ctx, req, repository.Status); err != nil {
 			log.Error(err, "unable to update status")
 			return ctrl.Result{Requeue: true}, err
 		}
-		r.recordReadiness(repository, false)
+		r.recordReadiness(repository)
 	}
 
 	// purge old artifacts from storage
@@ -116,7 +116,7 @@ func (r *HelmRepositoryReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 	reconciledRepository, reconcileErr := r.reconcile(ctx, *repository.DeepCopy())
 
 	// update status with the reconciliation result
-	if err := r.Status().Update(ctx, &reconciledRepository); err != nil {
+	if err := r.updateStatus(ctx, req, reconciledRepository.Status); err != nil {
 		log.Error(err, "unable to update status")
 		return ctrl.Result{Requeue: true}, err
 	}
@@ -124,7 +124,7 @@ func (r *HelmRepositoryReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 	// if reconciliation failed, record the failure and requeue immediately
 	if reconcileErr != nil {
 		r.event(reconciledRepository, events.EventSeverityError, reconcileErr.Error())
-		r.recordReadiness(reconciledRepository, false)
+		r.recordReadiness(reconciledRepository)
 		return ctrl.Result{Requeue: true}, reconcileErr
 	}
 
@@ -132,7 +132,7 @@ func (r *HelmRepositoryReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 	if repository.Status.Artifact == nil || reconciledRepository.Status.Artifact.Revision != repository.Status.Artifact.Revision {
 		r.event(reconciledRepository, events.EventSeverityInfo, sourcev1.HelmRepositoryReadyMessage(reconciledRepository))
 	}
-	r.recordReadiness(reconciledRepository, false)
+	r.recordReadiness(reconciledRepository)
 
 	log.Info(fmt.Sprintf("Reconciliation finished in %s, next run in %s",
 		time.Now().Sub(start).String(),
@@ -255,7 +255,7 @@ func (r *HelmRepositoryReconciler) reconcileDelete(ctx context.Context, reposito
 	}
 
 	// Record deleted status
-	r.recordReadiness(repository, true)
+	r.recordReadiness(repository)
 
 	// Remove our finalizer from the list and update it
 	controllerutil.RemoveFinalizer(&repository, sourcev1.SourceFinalizer)
@@ -319,7 +319,7 @@ func (r *HelmRepositoryReconciler) event(repository sourcev1.HelmRepository, sev
 	}
 }
 
-func (r *HelmRepositoryReconciler) recordReadiness(repository sourcev1.HelmRepository, deleted bool) {
+func (r *HelmRepositoryReconciler) recordReadiness(repository sourcev1.HelmRepository) {
 	if r.MetricsRecorder == nil {
 		return
 	}
@@ -333,11 +333,23 @@ func (r *HelmRepositoryReconciler) recordReadiness(repository sourcev1.HelmRepos
 		return
 	}
 	if rc := meta.GetCondition(repository.Status.Conditions, meta.ReadyCondition); rc != nil {
-		r.MetricsRecorder.RecordCondition(*objRef, *rc, deleted)
+		r.MetricsRecorder.RecordCondition(*objRef, *rc, !repository.DeletionTimestamp.IsZero())
 	} else {
 		r.MetricsRecorder.RecordCondition(*objRef, meta.Condition{
 			Type:   meta.ReadyCondition,
 			Status: corev1.ConditionUnknown,
-		}, deleted)
+		}, !repository.DeletionTimestamp.IsZero())
 	}
+}
+
+func (r *HelmRepositoryReconciler) updateStatus(ctx context.Context, req ctrl.Request, newStatus sourcev1.HelmRepositoryStatus) error {
+	var repository sourcev1.HelmRepository
+	if err := r.Get(ctx, req.NamespacedName, &repository); err != nil {
+		return err
+	}
+
+	patch := client.MergeFrom(repository.DeepCopy())
+	repository.Status = newStatus
+
+	return r.Status().Patch(ctx, &repository, patch)
 }

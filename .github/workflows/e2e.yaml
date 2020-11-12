@@ -100,6 +100,9 @@ jobs:
           kubectl -n source-system apply -f ./config/testdata/helmchart-from-bucket/source.yaml
           kubectl -n source-system wait bucket/charts --for=condition=ready --timeout=1m
           kubectl -n source-system wait helmchart/helmchart-bucket --for=condition=ready --timeout=1m
+      - name: Logs
+        run: |
+          kubectl -n source-system logs deploy/source-controller
       - name: Debug failure
         if: failure()
         run: |
