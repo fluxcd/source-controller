@@ -425,7 +425,7 @@ func (r *HelmChartReconciler) reconcileFromTarballArtifact(ctx context.Context,
 	// Return early if the revision is still the same as the current chart artifact
 	newArtifact := r.Storage.NewArtifactFor(chart.Kind, chart.ObjectMeta.GetObjectMeta(), helmChart.Metadata.Version,
 		fmt.Sprintf("%s-%s.tgz", helmChart.Metadata.Name, helmChart.Metadata.Version))
-	if !force && meta.InReadyCondition(chart.Status.Conditions) && chart.GetArtifact().HasRevision(newArtifact.Revision) {
+	if !force && apimeta.IsStatusConditionTrue(chart.Status.Conditions, meta.ReadyCondition) && chart.GetArtifact().HasRevision(newArtifact.Revision) {
 		if newArtifact.URL != artifact.URL {
 			r.Storage.SetArtifactURL(chart.GetArtifact())
 			chart.Status.URL = r.Storage.SetHostname(chart.Status.URL)

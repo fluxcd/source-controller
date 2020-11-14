@@ -200,7 +200,7 @@ func (r *GitRepositoryReconciler) reconcile(ctx context.Context, repository sour
 
 	// return early on unchanged revision
 	artifact := r.Storage.NewArtifactFor(repository.Kind, repository.GetObjectMeta(), revision, fmt.Sprintf("%s.tar.gz", commit.Hash.String()))
-	if meta.InReadyCondition(repository.Status.Conditions) && repository.GetArtifact().HasRevision(artifact.Revision) {
+	if apimeta.IsStatusConditionTrue(repository.Status.Conditions, meta.ReadyCondition) && repository.GetArtifact().HasRevision(artifact.Revision) {
 		if artifact.URL != repository.GetArtifact().URL {
 			r.Storage.SetArtifactURL(repository.GetArtifact())
 			repository.Status.URL = r.Storage.SetHostname(repository.Status.URL)

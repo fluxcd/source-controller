@@ -136,25 +136,8 @@ func GitRepositoryProgressing(repository GitRepository) GitRepository {
 	repository.Status.ObservedGeneration = repository.Generation
 	repository.Status.URL = ""
 	repository.Status.Conditions = []metav1.Condition{}
-	SetGitRepositoryCondition(&repository, meta.ReadyCondition, metav1.ConditionUnknown, meta.ProgressingReason, "reconciliation in progress")
+	meta.SetResourceCondition(&repository, meta.ReadyCondition, metav1.ConditionUnknown, meta.ProgressingReason, "reconciliation in progress")
 	return repository
-}
-
-// SetGitRepositoryCondition sets the given condition with the given status,
-// reason and message on the GitRepository.
-func SetGitRepositoryCondition(repository *GitRepository, condition string, status metav1.ConditionStatus, reason, message string) {
-	conditions := &repository.Status.Conditions
-	generation := repository.GetGeneration()
-	newCondition := metav1.Condition{
-		Type:               condition,
-		Status:             status,
-		LastTransitionTime: metav1.Now(),
-		Reason:             reason,
-		Message:            message,
-		ObservedGeneration: generation,
-	}
-
-	apimeta.SetStatusCondition(conditions, newCondition)
 }
 
 // GitRepositoryReady sets the given Artifact and URL on the GitRepository and
@@ -163,7 +146,7 @@ func SetGitRepositoryCondition(repository *GitRepository, condition string, stat
 func GitRepositoryReady(repository GitRepository, artifact Artifact, url, reason, message string) GitRepository {
 	repository.Status.Artifact = &artifact
 	repository.Status.URL = url
-	SetGitRepositoryCondition(&repository, meta.ReadyCondition, metav1.ConditionTrue, reason, message)
+	meta.SetResourceCondition(&repository, meta.ReadyCondition, metav1.ConditionTrue, reason, message)
 	return repository
 }
 
@@ -171,7 +154,7 @@ func GitRepositoryReady(repository GitRepository, artifact Artifact, url, reason
 // to 'False', with the given reason and message. It returns the modified
 // GitRepository.
 func GitRepositoryNotReady(repository GitRepository, reason, message string) GitRepository {
-	SetGitRepositoryCondition(&repository, meta.ReadyCondition, metav1.ConditionFalse, reason, message)
+	meta.SetResourceCondition(&repository, meta.ReadyCondition, metav1.ConditionFalse, reason, message)
 	return repository
 }
 
@@ -190,6 +173,11 @@ func GitRepositoryReadyMessage(repository GitRepository) string {
 // status sub-resource.
 func (in *GitRepository) GetArtifact() *Artifact {
 	return in.Status.Artifact
+}
+
+// GetStatusConditions returns a pointer to the Status.Conditions slice
+func (in *GitRepository) GetStatusConditions() *[]metav1.Condition {
+	return &in.Status.Conditions
 }
 
 // GetInterval returns the interval at which the source is updated.

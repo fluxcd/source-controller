@@ -114,25 +114,8 @@ func BucketProgressing(bucket Bucket) Bucket {
 	bucket.Status.ObservedGeneration = bucket.Generation
 	bucket.Status.URL = ""
 	bucket.Status.Conditions = []metav1.Condition{}
-	SetBucketCondition(&bucket, meta.ReadyCondition, metav1.ConditionUnknown, meta.ProgressingReason, "reconciliation in progress")
+	meta.SetResourceCondition(&bucket, meta.ReadyCondition, metav1.ConditionUnknown, meta.ProgressingReason, "reconciliation in progress")
 	return bucket
-}
-
-// SetBucketCondition sets the given condition with the given status, reason and
-// message on the Bucket.
-func SetBucketCondition(bucket *Bucket, condition string, status metav1.ConditionStatus, reason, message string) {
-	conditions := &bucket.Status.Conditions
-	generation := bucket.GetGeneration()
-	newCondition := metav1.Condition{
-		Type:               condition,
-		Status:             status,
-		LastTransitionTime: metav1.Now(),
-		Reason:             reason,
-		Message:            message,
-		ObservedGeneration: generation,
-	}
-
-	apimeta.SetStatusCondition(conditions, newCondition)
 }
 
 // BucketReady sets the given Artifact and URL on the Bucket and sets the
@@ -141,14 +124,14 @@ func SetBucketCondition(bucket *Bucket, condition string, status metav1.Conditio
 func BucketReady(bucket Bucket, artifact Artifact, url, reason, message string) Bucket {
 	bucket.Status.Artifact = &artifact
 	bucket.Status.URL = url
-	SetBucketCondition(&bucket, meta.ReadyCondition, metav1.ConditionTrue, reason, message)
+	meta.SetResourceCondition(&bucket, meta.ReadyCondition, metav1.ConditionTrue, reason, message)
 	return bucket
 }
 
 // BucketNotReady sets the meta.ReadyCondition on the Bucket to 'False', with
 // the given reason and message. It returns the modified Bucket.
 func BucketNotReady(bucket Bucket, reason, message string) Bucket {
-	SetBucketCondition(&bucket, meta.ReadyCondition, metav1.ConditionFalse, reason, message)
+	meta.SetResourceCondition(&bucket, meta.ReadyCondition, metav1.ConditionFalse, reason, message)
 	return bucket
 }
 
@@ -167,6 +150,11 @@ func BucketReadyMessage(bucket Bucket) string {
 // status sub-resource.
 func (in *Bucket) GetArtifact() *Artifact {
 	return in.Status.Artifact
+}
+
+// GetStatusConditions returns a pointer to the Status.Conditions slice
+func (in *Bucket) GetStatusConditions() *[]metav1.Condition {
+	return &in.Status.Conditions
 }
 
 // GetInterval returns the interval at which the source is updated.

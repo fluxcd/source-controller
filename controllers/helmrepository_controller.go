@@ -204,7 +204,7 @@ func (r *HelmRepositoryReconciler) reconcile(ctx context.Context, repository sou
 		repository.ObjectMeta.GetObjectMeta(),
 		chartRepo.Index.Generated.Format(time.RFC3339Nano),
 		fmt.Sprintf("index-%s.yaml", url.PathEscape(chartRepo.Index.Generated.Format(time.RFC3339Nano))))
-	if meta.InReadyCondition(repository.Status.Conditions) && repository.GetArtifact().HasRevision(artifact.Revision) {
+	if apimeta.IsStatusConditionTrue(repository.Status.Conditions, meta.ReadyCondition) && repository.GetArtifact().HasRevision(artifact.Revision) {
 		if artifact.URL != repository.GetArtifact().URL {
 			r.Storage.SetArtifactURL(repository.GetArtifact())
 			repository.Status.URL = r.Storage.SetHostname(repository.Status.URL)

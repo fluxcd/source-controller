@@ -42,6 +42,7 @@ import (
 	"helm.sh/helm/v3/pkg/chart/loader"
 	"helm.sh/helm/v3/pkg/chartutil"
 	corev1 "k8s.io/api/core/v1"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/yaml"
@@ -406,7 +407,7 @@ var _ = Describe("HelmChartReconciler", func() {
 			By("Expecting artifact")
 			Eventually(func() bool {
 				_ = k8sClient.Get(context.Background(), key, got)
-				return meta.InReadyCondition(got.Status.Conditions)
+				return apimeta.IsStatusConditionTrue(got.Status.Conditions, meta.ReadyCondition)
 			}, timeout, interval).Should(BeTrue())
 			Expect(got.Status.Artifact).ToNot(BeNil())
 		})

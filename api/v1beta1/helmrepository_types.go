@@ -93,25 +93,8 @@ func HelmRepositoryProgressing(repository HelmRepository) HelmRepository {
 	repository.Status.ObservedGeneration = repository.Generation
 	repository.Status.URL = ""
 	repository.Status.Conditions = []metav1.Condition{}
-	SetHelmRepositoryCondition(&repository, meta.ReadyCondition, metav1.ConditionUnknown, meta.ProgressingReason, "reconciliation in progress")
+	meta.SetResourceCondition(&repository, meta.ReadyCondition, metav1.ConditionUnknown, meta.ProgressingReason, "reconciliation in progress")
 	return repository
-}
-
-// SetHelmRepositoryCondition sets the given condition with the given status,
-// reason and message on the HelmRepository.
-func SetHelmRepositoryCondition(repository *HelmRepository, condition string, status metav1.ConditionStatus, reason, message string) {
-	conditions := &repository.Status.Conditions
-	generation := repository.GetGeneration()
-	newCondition := metav1.Condition{
-		Type:               condition,
-		Status:             status,
-		LastTransitionTime: metav1.Now(),
-		Reason:             reason,
-		Message:            message,
-		ObservedGeneration: generation,
-	}
-
-	apimeta.SetStatusCondition(conditions, newCondition)
 }
 
 // HelmRepositoryReady sets the given Artifact and URL on the HelmRepository and
@@ -120,7 +103,7 @@ func SetHelmRepositoryCondition(repository *HelmRepository, condition string, st
 func HelmRepositoryReady(repository HelmRepository, artifact Artifact, url, reason, message string) HelmRepository {
 	repository.Status.Artifact = &artifact
 	repository.Status.URL = url
-	SetHelmRepositoryCondition(&repository, meta.ReadyCondition, metav1.ConditionTrue, reason, message)
+	meta.SetResourceCondition(&repository, meta.ReadyCondition, metav1.ConditionTrue, reason, message)
 	return repository
 }
 
@@ -128,7 +111,7 @@ func HelmRepositoryReady(repository HelmRepository, artifact Artifact, url, reas
 // HelmRepository to 'False', with the given reason and message. It returns the
 // modified HelmRepository.
 func HelmRepositoryNotReady(repository HelmRepository, reason, message string) HelmRepository {
-	SetHelmRepositoryCondition(&repository, meta.ReadyCondition, metav1.ConditionFalse, reason, message)
+	meta.SetResourceCondition(&repository, meta.ReadyCondition, metav1.ConditionFalse, reason, message)
 	return repository
 }
 
@@ -147,6 +130,11 @@ func HelmRepositoryReadyMessage(repository HelmRepository) string {
 // status sub-resource.
 func (in *HelmRepository) GetArtifact() *Artifact {
 	return in.Status.Artifact
+}
+
+// GetStatusConditions returns a pointer to the Status.Conditions slice
+func (in *HelmRepository) GetStatusConditions() *[]metav1.Condition {
+	return &in.Status.Conditions
 }
 
 // GetInterval returns the interval at which the source is updated.
