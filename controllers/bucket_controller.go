@@ -108,7 +108,7 @@ func (r *BucketReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	}
 
 	// purge old artifacts from storage
-	if err := r.gc(bucket, false); err != nil {
+	if err := r.gc(bucket); err != nil {
 		log.Error(err, "unable to purge old artifacts")
 	}
 
@@ -252,7 +252,7 @@ func (r *BucketReconciler) reconcile(ctx context.Context, bucket sourcev1.Bucket
 }
 
 func (r *BucketReconciler) reconcileDelete(ctx context.Context, bucket sourcev1.Bucket) (ctrl.Result, error) {
-	if err := r.gc(bucket, true); err != nil {
+	if err := r.gc(bucket); err != nil {
 		r.event(bucket, events.EventSeverityError, fmt.Sprintf("garbage collection for deleted resource failed: %s", err.Error()))
 		// Return the error so we retry the failed garbage collection
 		return ctrl.Result{}, err
@@ -349,9 +349,12 @@ func (r *BucketReconciler) resetStatus(bucket sourcev1.Bucket) (sourcev1.Bucket,
 	return bucket, false
 }
 
-// gc performs a garbage collection on all but current artifacts of the given bucket.
-func (r *BucketReconciler) gc(bucket sourcev1.Bucket, all bool) error {
-	if all {
+// gc performs a garbage collection for the given v1beta1.Bucket.
+// It removes all but the current artifact except for when the
+// deletion timestamp is set, which will result in the removal of
+// all artifacts for the resource.
+func (r *BucketReconciler) gc(bucket sourcev1.Bucket) error {
+	if !bucket.DeletionTimestamp.IsZero() {
 		return r.Storage.RemoveAll(r.Storage.NewArtifactFor(bucket.Kind, bucket.GetObjectMeta(), "", "*"))
 	}
 	if bucket.GetArtifact() != nil {

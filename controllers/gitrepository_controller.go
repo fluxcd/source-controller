@@ -107,7 +107,7 @@ func (r *GitRepositoryReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 	}
 
 	// purge old artifacts from storage
-	if err := r.gc(repository, false); err != nil {
+	if err := r.gc(repository); err != nil {
 		log.Error(err, "unable to purge old artifacts")
 	}
 
@@ -250,7 +250,7 @@ func (r *GitRepositoryReconciler) reconcile(ctx context.Context, repository sour
 }
 
 func (r *GitRepositoryReconciler) reconcileDelete(ctx context.Context, repository sourcev1.GitRepository) (ctrl.Result, error) {
-	if err := r.gc(repository, true); err != nil {
+	if err := r.gc(repository); err != nil {
 		r.event(repository, events.EventSeverityError, fmt.Sprintf("garbage collection for deleted resource failed: %s", err.Error()))
 		// Return the error so we retry the failed garbage collection
 		return ctrl.Result{}, err
@@ -308,10 +308,12 @@ func (r *GitRepositoryReconciler) resetStatus(repository sourcev1.GitRepository)
 	return repository, false
 }
 
-// gc performs a garbage collection on all but current artifacts of
-// the given repository.
-func (r *GitRepositoryReconciler) gc(repository sourcev1.GitRepository, all bool) error {
-	if all {
+// gc performs a garbage collection for the given v1beta1.GitRepository.
+// It removes all but the current artifact except for when the
+// deletion timestamp is set, which will result in the removal of
+// all artifacts for the resource.
+func (r *GitRepositoryReconciler) gc(repository sourcev1.GitRepository) error {
+	if !repository.DeletionTimestamp.IsZero() {
 		return r.Storage.RemoveAll(r.Storage.NewArtifactFor(repository.Kind, repository.GetObjectMeta(), "", "*"))
 	}
 	if repository.GetArtifact() != nil {
