@@ -352,7 +352,7 @@ func (r *BucketReconciler) resetStatus(bucket sourcev1.Bucket) (sourcev1.Bucket,
 // gc performs a garbage collection on all but current artifacts of the given bucket.
 func (r *BucketReconciler) gc(bucket sourcev1.Bucket, all bool) error {
 	if all {
-		return r.Storage.RemoveAll(r.Storage.NewArtifactFor(bucket.Kind, bucket.GetObjectMeta(), "", ""))
+		return r.Storage.RemoveAll(r.Storage.NewArtifactFor(bucket.Kind, bucket.GetObjectMeta(), "", "*"))
 	}
 	if bucket.GetArtifact() != nil {
 		return r.Storage.RemoveAllButCurrent(*bucket.GetArtifact())

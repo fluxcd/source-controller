@@ -286,7 +286,7 @@ func (r *HelmRepositoryReconciler) resetStatus(repository sourcev1.HelmRepositor
 // the given repository.
 func (r *HelmRepositoryReconciler) gc(repository sourcev1.HelmRepository, all bool) error {
 	if all {
-		return r.Storage.RemoveAll(r.Storage.NewArtifactFor(repository.Kind, repository.GetObjectMeta(), "", ""))
+		return r.Storage.RemoveAll(r.Storage.NewArtifactFor(repository.Kind, repository.GetObjectMeta(), "", "*"))
 	}
 	if repository.GetArtifact() != nil {
 		return r.Storage.RemoveAllButCurrent(*repository.GetArtifact())

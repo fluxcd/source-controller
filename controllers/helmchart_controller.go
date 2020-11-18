@@ -628,7 +628,7 @@ func (r *HelmChartReconciler) resetStatus(chart sourcev1.HelmChart) (sourcev1.He
 // the given chart.
 func (r *HelmChartReconciler) gc(chart sourcev1.HelmChart, all bool) error {
 	if all {
-		return r.Storage.RemoveAll(r.Storage.NewArtifactFor(chart.Kind, chart.GetObjectMeta(), "", ""))
+		return r.Storage.RemoveAll(r.Storage.NewArtifactFor(chart.Kind, chart.GetObjectMeta(), "", "*"))
 	}
 	if chart.GetArtifact() != nil {
 		return r.Storage.RemoveAllButCurrent(*chart.GetArtifact())

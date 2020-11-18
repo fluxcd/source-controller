@@ -312,7 +312,7 @@ func (r *GitRepositoryReconciler) resetStatus(repository sourcev1.GitRepository)
 // the given repository.
 func (r *GitRepositoryReconciler) gc(repository sourcev1.GitRepository, all bool) error {
 	if all {
-		return r.Storage.RemoveAll(r.Storage.NewArtifactFor(repository.Kind, repository.GetObjectMeta(), "", ""))
+		return r.Storage.RemoveAll(r.Storage.NewArtifactFor(repository.Kind, repository.GetObjectMeta(), "", "*"))
 	}
 	if repository.GetArtifact() != nil {
 		return r.Storage.RemoveAllButCurrent(*repository.GetArtifact())
