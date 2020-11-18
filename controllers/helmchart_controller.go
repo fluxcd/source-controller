@@ -454,7 +454,7 @@ func (r *HelmChartReconciler) reconcileFromTarballArtifact(ctx context.Context,
 			// Load from lockfile if exists
 			reqs = lock.Dependencies
 		}
-		var dwr []*DependencyWithRepository
+		var dwr []*helm.DependencyWithRepository
 		for _, dep := range reqs {
 			// Exclude existing dependencies
 			for _, existing := range deps {
@@ -465,7 +465,7 @@ func (r *HelmChartReconciler) reconcileFromTarballArtifact(ctx context.Context,
 
 			// Continue loop if file scheme detected
 			if strings.HasPrefix(dep.Repository, "file://") {
-				dwr = append(dwr, &DependencyWithRepository{
+				dwr = append(dwr, &helm.DependencyWithRepository{
 					Dependency: dep,
 					Repo:       nil,
 				})
@@ -527,7 +527,7 @@ func (r *HelmChartReconciler) reconcileFromTarballArtifact(ctx context.Context,
 				}
 			}
 
-			dwr = append(dwr, &DependencyWithRepository{
+			dwr = append(dwr, &helm.DependencyWithRepository{
 				Dependency: dep,
 				Repo:       chartRepo,
 			})
@@ -535,7 +535,7 @@ func (r *HelmChartReconciler) reconcileFromTarballArtifact(ctx context.Context,
 
 		// Construct dependencies for chart if any
 		if len(dwr) > 0 {
-			dm := &DependencyManager{
+			dm := &helm.DependencyManager{
 				Chart:        helmChart,
 				ChartPath:    chartPath,
 				Dependencies: dwr,
