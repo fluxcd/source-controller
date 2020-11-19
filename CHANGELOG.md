@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.2.3 (2020-11-19)
+
+This prerelease comes with a fix to garbage collection.
+The status sub-resource has a new field called `LastHandledReconcileAt`
+tht can be used to track the reconciliation progress.
+
 ## 0.2.2 (2020-11-12)
 
 This prerelease comes with improvements to status reporting.
