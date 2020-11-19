@@ -114,7 +114,7 @@ func (r *HelmChartReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	}
 
 	// Purge all but current artifact from storage
-	if err := r.gc(chart, false); err != nil {
+	if err := r.gc(chart); err != nil {
 		log.Error(err, "unable to purge old artifacts")
 	}
 
@@ -589,7 +589,7 @@ func (r *HelmChartReconciler) reconcileFromTarballArtifact(ctx context.Context,
 
 func (r *HelmChartReconciler) reconcileDelete(ctx context.Context, chart sourcev1.HelmChart) (ctrl.Result, error) {
 	// Our finalizer is still present, so lets handle garbage collection
-	if err := r.gc(chart, true); err != nil {
+	if err := r.gc(chart); err != nil {
 		r.event(chart, events.EventSeverityError, fmt.Sprintf("garbage collection for deleted resource failed: %s", err.Error()))
 		// Return the error so we retry the failed garbage collection
 		return ctrl.Result{}, err
@@ -624,11 +624,13 @@ func (r *HelmChartReconciler) resetStatus(chart sourcev1.HelmChart) (sourcev1.He
 	return chart, false
 }
 
-// gc performs a garbage collection on all but the current artifact of
-// the given chart.
-func (r *HelmChartReconciler) gc(chart sourcev1.HelmChart, all bool) error {
-	if all {
-		return r.Storage.RemoveAll(r.Storage.NewArtifactFor(chart.Kind, chart.GetObjectMeta(), "", ""))
+// gc performs a garbage collection for the given v1beta1.HelmChart.
+// It removes all but the current artifact except for when the
+// deletion timestamp is set, which will result in the removal of
+// all artifacts for the resource.
+func (r *HelmChartReconciler) gc(chart sourcev1.HelmChart) error {
+	if !chart.DeletionTimestamp.IsZero() {
+		return r.Storage.RemoveAll(r.Storage.NewArtifactFor(chart.Kind, chart.GetObjectMeta(), "", "*"))
 	}
 	if chart.GetArtifact() != nil {
 		return r.Storage.RemoveAllButCurrent(*chart.GetArtifact())

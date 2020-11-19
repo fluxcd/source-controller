@@ -108,7 +108,7 @@ func (r *HelmRepositoryReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 	}
 
 	// purge old artifacts from storage
-	if err := r.gc(repository, false); err != nil {
+	if err := r.gc(repository); err != nil {
 		log.Error(err, "unable to purge old artifacts")
 	}
 
@@ -248,7 +248,7 @@ func (r *HelmRepositoryReconciler) reconcile(ctx context.Context, repository sou
 
 func (r *HelmRepositoryReconciler) reconcileDelete(ctx context.Context, repository sourcev1.HelmRepository) (ctrl.Result, error) {
 	// Our finalizer is still present, so lets handle garbage collection
-	if err := r.gc(repository, true); err != nil {
+	if err := r.gc(repository); err != nil {
 		r.event(repository, events.EventSeverityError, fmt.Sprintf("garbage collection for deleted resource failed: %s", err.Error()))
 		// Return the error so we retry the failed garbage collection
 		return ctrl.Result{}, err
@@ -282,11 +282,13 @@ func (r *HelmRepositoryReconciler) resetStatus(repository sourcev1.HelmRepositor
 	return repository, false
 }
 
-// gc performs a garbage collection on all but current artifacts of
-// the given repository.
-func (r *HelmRepositoryReconciler) gc(repository sourcev1.HelmRepository, all bool) error {
-	if all {
-		return r.Storage.RemoveAll(r.Storage.NewArtifactFor(repository.Kind, repository.GetObjectMeta(), "", ""))
+// gc performs a garbage collection for the given v1beta1.HelmRepository.
+// It removes all but the current artifact except for when the
+// deletion timestamp is set, which will result in the removal of
+// all artifacts for the resource.
+func (r *HelmRepositoryReconciler) gc(repository sourcev1.HelmRepository) error {
+	if !repository.DeletionTimestamp.IsZero() {
+		return r.Storage.RemoveAll(r.Storage.NewArtifactFor(repository.Kind, repository.GetObjectMeta(), "", "*"))
 	}
 	if repository.GetArtifact() != nil {
 		return r.Storage.RemoveAllButCurrent(*repository.GetArtifact())
