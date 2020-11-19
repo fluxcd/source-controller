@@ -6,11 +6,11 @@ replace github.com/fluxcd/source-controller/api => ./api
 
 require (
 	github.com/Masterminds/semver/v3 v3.1.0
-	github.com/fluxcd/pkg/apis/meta v0.2.0
+	github.com/fluxcd/pkg/apis/meta v0.4.0
 	github.com/fluxcd/pkg/gittestserver v0.0.2
 	github.com/fluxcd/pkg/helmtestserver v0.0.1
 	github.com/fluxcd/pkg/lockedfile v0.0.5
-	github.com/fluxcd/pkg/runtime v0.2.0
+	github.com/fluxcd/pkg/runtime v0.3.0
 	github.com/fluxcd/pkg/ssh v0.0.5
 	github.com/fluxcd/pkg/untar v0.0.5
 	github.com/fluxcd/pkg/version v0.0.1

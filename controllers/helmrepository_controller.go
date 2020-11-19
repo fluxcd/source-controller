@@ -28,6 +28,8 @@ import (
 	"github.com/go-logr/logr"
 	"helm.sh/helm/v3/pkg/getter"
 	corev1 "k8s.io/api/core/v1"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	kuberecorder "k8s.io/client-go/tools/record"
@@ -202,7 +204,7 @@ func (r *HelmRepositoryReconciler) reconcile(ctx context.Context, repository sou
 		repository.ObjectMeta.GetObjectMeta(),
 		chartRepo.Index.Generated.Format(time.RFC3339Nano),
 		fmt.Sprintf("index-%s.yaml", url.PathEscape(chartRepo.Index.Generated.Format(time.RFC3339Nano))))
-	if meta.HasReadyCondition(repository.Status.Conditions) && repository.GetArtifact().HasRevision(artifact.Revision) {
+	if apimeta.IsStatusConditionTrue(repository.Status.Conditions, meta.ReadyCondition) && repository.GetArtifact().HasRevision(artifact.Revision) {
 		if artifact.URL != repository.GetArtifact().URL {
 			r.Storage.SetArtifactURL(repository.GetArtifact())
 			repository.Status.URL = r.Storage.SetHostname(repository.Status.URL)
@@ -334,12 +336,12 @@ func (r *HelmRepositoryReconciler) recordReadiness(repository sourcev1.HelmRepos
 		).Error(err, "unable to record readiness metric")
 		return
 	}
-	if rc := meta.GetCondition(repository.Status.Conditions, meta.ReadyCondition); rc != nil {
+	if rc := apimeta.FindStatusCondition(repository.Status.Conditions, meta.ReadyCondition); rc != nil {
 		r.MetricsRecorder.RecordCondition(*objRef, *rc, !repository.DeletionTimestamp.IsZero())
 	} else {
-		r.MetricsRecorder.RecordCondition(*objRef, meta.Condition{
+		r.MetricsRecorder.RecordCondition(*objRef, metav1.Condition{
 			Type:   meta.ReadyCondition,
-			Status: corev1.ConditionUnknown,
+			Status: metav1.ConditionUnknown,
 		}, !repository.DeletionTimestamp.IsZero())
 	}
 }

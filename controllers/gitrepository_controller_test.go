@@ -25,7 +25,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/go-git/go-billy/v5/memfs"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
@@ -84,7 +83,7 @@ var _ = Describe("GitRepositoryReconciler", func() {
 
 			waitForReason string
 
-			expectStatus   corev1.ConditionStatus
+			expectStatus   metav1.ConditionStatus
 			expectMessage  string
 			expectRevision string
 		}
@@ -157,7 +156,7 @@ var _ = Describe("GitRepositoryReconciler", func() {
 			defer k8sClient.Delete(context.Background(), created)
 
 			got := &sourcev1.GitRepository{}
-			var cond meta.Condition
+			var cond metav1.Condition
 			Eventually(func() bool {
 				_ = k8sClient.Get(context.Background(), key, got)
 				for _, c := range got.Status.Conditions {
@@ -180,59 +179,59 @@ var _ = Describe("GitRepositoryReconciler", func() {
 				reference:      &sourcev1.GitRepositoryRef{Branch: "some-branch"},
 				createRefs:     []string{"refs/heads/some-branch"},
 				waitForReason:  sourcev1.GitOperationSucceedReason,
-				expectStatus:   corev1.ConditionTrue,
+				expectStatus:   metav1.ConditionTrue,
 				expectRevision: "some-branch",
 			}),
 			Entry("branch non existing", refTestCase{
 				reference:     &sourcev1.GitRepositoryRef{Branch: "invalid-branch"},
 				waitForReason: sourcev1.GitOperationFailedReason,
-				expectStatus:  corev1.ConditionFalse,
+				expectStatus:  metav1.ConditionFalse,
 				expectMessage: "couldn't find remote ref",
 			}),
 			Entry("tag", refTestCase{
 				reference:      &sourcev1.GitRepositoryRef{Tag: "some-tag"},
 				createRefs:     []string{"refs/tags/some-tag"},
 				waitForReason:  sourcev1.GitOperationSucceedReason,
-				expectStatus:   corev1.ConditionTrue,
+				expectStatus:   metav1.ConditionTrue,
 				expectRevision: "some-tag",
 			}),
 			Entry("tag non existing", refTestCase{
 				reference:     &sourcev1.GitRepositoryRef{Tag: "invalid-tag"},
 				waitForReason: sourcev1.GitOperationFailedReason,
-				expectStatus:  corev1.ConditionFalse,
+				expectStatus:  metav1.ConditionFalse,
 				expectMessage: "couldn't find remote ref",
 			}),
 			Entry("semver", refTestCase{
 				reference:      &sourcev1.GitRepositoryRef{SemVer: "1.0.0"},
 				createRefs:     []string{"refs/tags/v1.0.0"},
 				waitForReason:  sourcev1.GitOperationSucceedReason,
-				expectStatus:   corev1.ConditionTrue,
+				expectStatus:   metav1.ConditionTrue,
 				expectRevision: "v1.0.0",
 			}),
 			Entry("semver range", refTestCase{
 				reference:      &sourcev1.GitRepositoryRef{SemVer: ">=0.1.0 <1.0.0"},
 				createRefs:     []string{"refs/tags/0.1.0", "refs/tags/0.1.1", "refs/tags/0.2.0", "refs/tags/1.0.0"},
 				waitForReason:  sourcev1.GitOperationSucceedReason,
-				expectStatus:   corev1.ConditionTrue,
+				expectStatus:   metav1.ConditionTrue,
 				expectRevision: "0.2.0",
 			}),
 			Entry("mixed semver range", refTestCase{
 				reference:      &sourcev1.GitRepositoryRef{SemVer: ">=0.1.0 <1.0.0"},
 				createRefs:     []string{"refs/tags/0.1.0", "refs/tags/v0.1.1", "refs/tags/v0.2.0", "refs/tags/1.0.0"},
 				waitForReason:  sourcev1.GitOperationSucceedReason,
-				expectStatus:   corev1.ConditionTrue,
+				expectStatus:   metav1.ConditionTrue,
 				expectRevision: "v0.2.0",
 			}),
 			Entry("semver invalid", refTestCase{
 				reference:     &sourcev1.GitRepositoryRef{SemVer: "1.2.3.4"},
 				waitForReason: sourcev1.GitOperationFailedReason,
-				expectStatus:  corev1.ConditionFalse,
+				expectStatus:  metav1.ConditionFalse,
 				expectMessage: "semver parse range error: improper constraint: 1.2.3.4",
 			}),
 			Entry("semver no match", refTestCase{
 				reference:     &sourcev1.GitRepositoryRef{SemVer: "1.0.0"},
 				waitForReason: sourcev1.GitOperationFailedReason,
-				expectStatus:  corev1.ConditionFalse,
+				expectStatus:  metav1.ConditionFalse,
 				expectMessage: "no match found for semver: 1.0.0",
 			}),
 			Entry("commit", refTestCase{
@@ -240,7 +239,7 @@ var _ = Describe("GitRepositoryReconciler", func() {
 					Commit: "<commit>",
 				},
 				waitForReason:  sourcev1.GitOperationSucceedReason,
-				expectStatus:   corev1.ConditionTrue,
+				expectStatus:   metav1.ConditionTrue,
 				expectRevision: "master",
 			}),
 			Entry("commit in branch", refTestCase{
@@ -250,7 +249,7 @@ var _ = Describe("GitRepositoryReconciler", func() {
 				},
 				createRefs:     []string{"refs/heads/some-branch"},
 				waitForReason:  sourcev1.GitOperationSucceedReason,
-				expectStatus:   corev1.ConditionTrue,
+				expectStatus:   metav1.ConditionTrue,
 				expectRevision: "some-branch",
 			}),
 			Entry("invalid commit", refTestCase{
@@ -259,7 +258,7 @@ var _ = Describe("GitRepositoryReconciler", func() {
 					Commit: "invalid",
 				},
 				waitForReason: sourcev1.GitOperationFailedReason,
-				expectStatus:  corev1.ConditionFalse,
+				expectStatus:  metav1.ConditionFalse,
 				expectMessage: "git commit 'invalid' not found: object not found",
 			}),
 		)
