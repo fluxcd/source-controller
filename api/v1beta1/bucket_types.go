@@ -95,6 +95,8 @@ type BucketStatus struct {
 	// Artifact represents the output of the last successful Bucket sync.
 	// +optional
 	Artifact *Artifact `json:"artifact,omitempty"`
+
+	meta.ReconcileRequestStatus `json:",inline"`
 }
 
 const (

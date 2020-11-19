@@ -73,6 +73,8 @@ type HelmRepositoryStatus struct {
 	// Artifact represents the output of the last successful repository sync.
 	// +optional
 	Artifact *Artifact `json:"artifact,omitempty"`
+
+	meta.ReconcileRequestStatus `json:",inline"`
 }
 
 const (

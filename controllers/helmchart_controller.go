@@ -95,7 +95,7 @@ func (r *HelmChartReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		return r.reconcileDelete(ctx, chart)
 	}
 
-	// record reconciliation duration
+	// Record reconciliation duration
 	if r.MetricsRecorder != nil {
 		objRef, err := reference.GetReference(r.Scheme, &chart)
 		if err != nil {
@@ -113,6 +113,13 @@ func (r *HelmChartReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 			return ctrl.Result{Requeue: true}, err
 		}
 		r.recordReadiness(chart)
+	}
+
+	// Record the value of the reconciliation request, if any
+	// TODO(hidde): would be better to defer this in combination with
+	//   always patching the status sub-resource after a reconciliation.
+	if v, ok := meta.ReconcileAnnotationValue(chart.GetAnnotations()); ok {
+		chart.Status.SetLastHandledReconcileRequest(v)
 	}
 
 	// Purge all but current artifact from storage

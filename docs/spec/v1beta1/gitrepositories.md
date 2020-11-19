@@ -103,6 +103,11 @@ type GitRepositoryStatus struct {
 	// Artifact represents the output of the last successful repository sync.
 	// +optional
 	Artifact *Artifact `json:"artifact,omitempty"`
+
+	// LastHandledReconcileAt is the last manual reconciliation request (by
+	// annotating the GitRepository) handled by the reconciler.
+	// +optional
+	LastHandledReconcileAt string `json:"lastHandledReconcileAt,omitempty"`
 }
 ```
 
