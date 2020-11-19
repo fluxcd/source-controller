@@ -86,6 +86,8 @@ type HelmChartStatus struct {
 	// Artifact represents the output of the last successful chart sync.
 	// +optional
 	Artifact *Artifact `json:"artifact,omitempty"`
+
+	meta.ReconcileRequestStatus `json:",inline"`
 }
 
 const (

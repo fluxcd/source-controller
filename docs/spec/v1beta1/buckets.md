@@ -81,6 +81,11 @@ type BucketStatus struct {
 	// Artifact represents the output of the last successful Bucket sync.
 	// +optional
 	Artifact *Artifact `json:"artifact,omitempty"`
+
+	// LastHandledReconcileAt is the last manual reconciliation request (by
+	// annotating the Bucket) handled by the reconciler.
+	// +optional
+	LastHandledReconcileAt string `json:"lastHandledReconcileAt,omitempty"`
 }
 ```
 

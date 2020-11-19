@@ -109,6 +109,13 @@ func (r *HelmRepositoryReconciler) Reconcile(req ctrl.Request) (ctrl.Result, err
 		r.recordReadiness(repository)
 	}
 
+	// record the value of the reconciliation request, if any
+	// TODO(hidde): would be better to defer this in combination with
+	//   always patching the status sub-resource after a reconciliation.
+	if v, ok := meta.ReconcileAnnotationValue(repository.GetAnnotations()); ok {
+		repository.Status.SetLastHandledReconcileRequest(v)
+	}
+
 	// purge old artifacts from storage
 	if err := r.gc(repository); err != nil {
 		log.Error(err, "unable to purge old artifacts")

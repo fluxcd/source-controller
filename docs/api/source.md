@@ -908,7 +908,7 @@ int64
 <td>
 <code>conditions</code><br>
 <em>
-<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.19/#condition-v1-meta">
+<a href="https://godoc.org/k8s.io/apimachinery/pkg/apis/meta/v1#Condition">
 []Kubernetes meta/v1.Condition
 </a>
 </em>
@@ -942,6 +942,21 @@ Artifact
 <td>
 <em>(Optional)</em>
 <p>Artifact represents the output of the last successful Bucket sync.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>ReconcileRequestStatus</code><br>
+<em>
+<a href="https://godoc.org/github.com/fluxcd/pkg/apis/meta#ReconcileRequestStatus">
+github.com/fluxcd/pkg/apis/meta.ReconcileRequestStatus
+</a>
+</em>
+</td>
+<td>
+<p>
+(Members of <code>ReconcileRequestStatus</code> are embedded into this type.)
+</p>
 </td>
 </tr>
 </tbody>
@@ -1170,7 +1185,7 @@ int64
 <td>
 <code>conditions</code><br>
 <em>
-<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.19/#condition-v1-meta">
+<a href="https://godoc.org/k8s.io/apimachinery/pkg/apis/meta/v1#Condition">
 []Kubernetes meta/v1.Condition
 </a>
 </em>
@@ -1205,6 +1220,21 @@ Artifact
 <td>
 <em>(Optional)</em>
 <p>Artifact represents the output of the last successful repository sync.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>ReconcileRequestStatus</code><br>
+<em>
+<a href="https://godoc.org/github.com/fluxcd/pkg/apis/meta#ReconcileRequestStatus">
+github.com/fluxcd/pkg/apis/meta.ReconcileRequestStatus
+</a>
+</em>
+</td>
+<td>
+<p>
+(Members of <code>ReconcileRequestStatus</code> are embedded into this type.)
+</p>
 </td>
 </tr>
 </tbody>
@@ -1373,7 +1403,7 @@ int64
 <td>
 <code>conditions</code><br>
 <em>
-<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.19/#condition-v1-meta">
+<a href="https://godoc.org/k8s.io/apimachinery/pkg/apis/meta/v1#Condition">
 []Kubernetes meta/v1.Condition
 </a>
 </em>
@@ -1407,6 +1437,21 @@ Artifact
 <td>
 <em>(Optional)</em>
 <p>Artifact represents the output of the last successful chart sync.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>ReconcileRequestStatus</code><br>
+<em>
+<a href="https://godoc.org/github.com/fluxcd/pkg/apis/meta#ReconcileRequestStatus">
+github.com/fluxcd/pkg/apis/meta.ReconcileRequestStatus
+</a>
+</em>
+</td>
+<td>
+<p>
+(Members of <code>ReconcileRequestStatus</code> are embedded into this type.)
+</p>
 </td>
 </tr>
 </tbody>
@@ -1524,7 +1569,7 @@ int64
 <td>
 <code>conditions</code><br>
 <em>
-<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.19/#condition-v1-meta">
+<a href="https://godoc.org/k8s.io/apimachinery/pkg/apis/meta/v1#Condition">
 []Kubernetes meta/v1.Condition
 </a>
 </em>
@@ -1558,6 +1603,21 @@ Artifact
 <td>
 <em>(Optional)</em>
 <p>Artifact represents the output of the last successful repository sync.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>ReconcileRequestStatus</code><br>
+<em>
+<a href="https://godoc.org/github.com/fluxcd/pkg/apis/meta#ReconcileRequestStatus">
+github.com/fluxcd/pkg/apis/meta.ReconcileRequestStatus
+</a>
+</em>
+</td>
+<td>
+<p>
+(Members of <code>ReconcileRequestStatus</code> are embedded into this type.)
+</p>
 </td>
 </tr>
 </tbody>

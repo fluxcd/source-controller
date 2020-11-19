@@ -77,6 +77,11 @@ type HelmChartStatus struct {
 	// Artifact represents the output of the last successful chart sync.
 	// +optional
 	Artifact *Artifact `json:"artifact,omitempty"`
+
+	// LastHandledReconcileAt is the last manual reconciliation request (by
+	// annotating the HelmChart) handled by the reconciler.
+	// +optional
+	LastHandledReconcileAt string `json:"lastHandledReconcileAt,omitempty"`
 }
 ```
 

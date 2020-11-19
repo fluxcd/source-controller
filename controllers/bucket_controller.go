@@ -109,6 +109,13 @@ func (r *BucketReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		r.recordReadiness(bucket)
 	}
 
+	// record the value of the reconciliation request, if any
+	// TODO(hidde): would be better to defer this in combination with
+	//   always patching the status sub-resource after a reconciliation.
+	if v, ok := meta.ReconcileAnnotationValue(bucket.GetAnnotations()); ok {
+		bucket.Status.SetLastHandledReconcileRequest(v)
+	}
+
 	// purge old artifacts from storage
 	if err := r.gc(bucket); err != nil {
 		log.Error(err, "unable to purge old artifacts")
