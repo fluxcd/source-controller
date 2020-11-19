@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package controllers
+package helm
 
 import (
 	"context"
@@ -25,7 +25,6 @@ import (
 	"strings"
 
 	"github.com/Masterminds/semver/v3"
-	"github.com/fluxcd/source-controller/internal/helm"
 	"golang.org/x/sync/errgroup"
 	helmchart "helm.sh/helm/v3/pkg/chart"
 	"helm.sh/helm/v3/pkg/chart/loader"
@@ -35,7 +34,7 @@ import (
 // repository
 type DependencyWithRepository struct {
 	Dependency *helmchart.Dependency
-	Repo       *helm.ChartRepository
+	Repo       *ChartRepository
 }
 
 // DependencyManager manages dependencies for helm charts
@@ -115,7 +114,7 @@ func chartForLocalDependency(dep *helmchart.Dependency, cp string) (*helmchart.C
 	return ch, nil
 }
 
-func chartForRemoteDependency(dep *helmchart.Dependency, chartrepo *helm.ChartRepository) (*helmchart.Chart, error) {
+func chartForRemoteDependency(dep *helmchart.Dependency, chartrepo *ChartRepository) (*helmchart.Chart, error) {
 	if chartrepo == nil {
 		err := fmt.Errorf("chartrepo should not be nil")
 		return nil, err

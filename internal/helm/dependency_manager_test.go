@@ -14,36 +14,28 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package controllers
+package helm
 
 import (
-	"bytes"
 	"fmt"
 	"io/ioutil"
 	"strings"
 	"testing"
 
-	"github.com/fluxcd/source-controller/internal/helm"
 	helmchart "helm.sh/helm/v3/pkg/chart"
-	"helm.sh/helm/v3/pkg/getter"
 	"helm.sh/helm/v3/pkg/repo"
 )
 
 var (
 	helmPackageFile = "testdata/charts/helmchart-0.1.0.tgz"
 
-	chartName                                 = "helmchart"
-	chartVersion                              = "0.1.0"
-	chartLocalRepository                      = "file://../helmchart"
-	remoteDepFixture     helmchart.Dependency = helmchart.Dependency{
+	chartName            = "helmchart"
+	chartVersion         = "0.1.0"
+	chartLocalRepository = "file://../helmchart"
+	remoteDepFixture     = helmchart.Dependency{
 		Name:       chartName,
 		Version:    chartVersion,
 		Repository: "https://example.com/charts",
-	}
-	chartFixture helmchart.Chart = helmchart.Chart{
-		Metadata: &helmchart.Metadata{
-			Name: "test",
-		},
 	}
 )
 
@@ -164,7 +156,7 @@ func TestBuild_WithRemoteChart(t *testing.T) {
 	i := repo.NewIndexFile()
 	i.Add(&helmchart.Metadata{Name: chartName, Version: chartVersion}, fmt.Sprintf("%s-%s.tgz", chartName, chartVersion), "http://example.com/charts", "sha256:1234567890")
 	mg := mockGetter{response: b}
-	cr := &helm.ChartRepository{
+	cr := &ChartRepository{
 		URL:    remoteDepFixture.Repository,
 		Index:  i,
 		Client: &mg,
@@ -201,12 +193,4 @@ func TestBuild_WithRemoteChart(t *testing.T) {
 	} else if !strings.Contains(err.Error(), "chartrepo should not be nil") {
 		t.Errorf("Build() expected to return different error, got: %s", err)
 	}
-}
-
-type mockGetter struct {
-	response []byte
-}
-
-func (g *mockGetter) Get(url string, options ...getter.Option) (*bytes.Buffer, error) {
-	return bytes.NewBuffer(g.response), nil
 }
