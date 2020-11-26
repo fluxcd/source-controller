@@ -377,22 +377,26 @@ consult the documentation for your version to find out what those are.</p>
 </tr>
 <tr>
 <td>
-<<<<<<< HEAD
 <code>suspend</code><br>
-=======
-<code>gitProtocolV2Compatibility</code><br>
->>>>>>> 780d289 (Refactor to support v1 and v2 git clients)
 <em>
 bool
 </em>
 </td>
 <td>
 <em>(Optional)</em>
-<<<<<<< HEAD
 <p>This flag tells the controller to suspend the reconciliation of this source.</p>
-=======
+</td>
+</tr>
+<tr>
+<td>
+<code>gitProtocolV2Compatibility</code><br>
+<em>
+bool
+</em>
+</td>
+<td>
+<em>(Optional)</em>
 <p>Enables support for git servers that require v2.</p>
->>>>>>> 780d289 (Refactor to support v1 and v2 git clients)
 </td>
 </tr>
 </table>
@@ -714,9 +718,9 @@ HelmRepositoryStatus
 </h3>
 <p>
 (<em>Appears on:</em>
-<a href="#source.toolkit.fluxcd.io/v1beta1.BucketStatus">BucketStatus</a>,
-<a href="#source.toolkit.fluxcd.io/v1beta1.GitRepositoryStatus">GitRepositoryStatus</a>,
-<a href="#source.toolkit.fluxcd.io/v1beta1.HelmChartStatus">HelmChartStatus</a>,
+<a href="#source.toolkit.fluxcd.io/v1beta1.BucketStatus">BucketStatus</a>, 
+<a href="#source.toolkit.fluxcd.io/v1beta1.GitRepositoryStatus">GitRepositoryStatus</a>, 
+<a href="#source.toolkit.fluxcd.io/v1beta1.HelmChartStatus">HelmChartStatus</a>, 
 <a href="#source.toolkit.fluxcd.io/v1beta1.HelmRepositoryStatus">HelmRepositoryStatus</a>)
 </p>
 <p>Artifact represents the output of a source synchronisation.</p>
@@ -1218,10 +1222,7 @@ consult the documentation for your version to find out what those are.</p>
 </tr>
 <tr>
 <td>
-<<<<<<< HEAD
 <code>suspend</code><br>
-=======
-<code>gitProtocolV2Compatibility</code><br>
 <em>
 bool
 </em>
@@ -1229,6 +1230,17 @@ bool
 <td>
 <em>(Optional)</em>
 <p>This flag tells the controller to suspend the reconciliation of this source.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>gitProtocolV2Compatibility</code><br>
+<em>
+bool
+</em>
+</td>
+<td>
+<em>(Optional)</em>
 <p>Enables support for git servers that require v2.</p>
 </td>
 </tr>
