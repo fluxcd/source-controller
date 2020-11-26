@@ -50,6 +50,10 @@ type GitRepositorySpec struct {
 	// This flag tells the controller to suspend the reconciliation of this source.
 	// +optional
 	Suspend bool `json:"suspend,omitempty"`
+
+  // Enables support for git servers that require v2.
+	// +optional
+	GitProtocolV2Compatibility bool `json:"gitProtocolV2Compatibility"`
 }
 ```
 
@@ -170,6 +174,41 @@ spec:
 
 When specified, `spec.ignore` overrides the default exclusion list.
 
+## Git V2
+
+You should skip this unless you know that you need v2 compatibility. Enabling
+this feature comes with its own set of drawbacks.
+
+Some git providers like Azure DevOps require special features in the users git client
+to be able to communicate. The initial library used in source-controller did not support
+this functionality while other libraries that did were missinging other critical functionality,
+specifically the ability to do shallow cloning. Shallow cloning is important as it allows
+source-controller to only fetch the latest commits, instead of the whole git history.
+For some very large repositories this means downloading GB of data that could fill the disk
+and also impact the traffic costs.
+
+To be able to support Azure DevOps a compromise solution was built, giving the user the
+option to enable V2 compatibility with the drawbacks it brings.
+
+| V2 Compatibility | Shallow Clones | Azure DevOps Support |
+|---|---|---|
+| false | true | false |
+| true | false | true |
+
+Pull the master branch from a repository in Azure DevOps.
+
+```yaml
+apiVersion: source.toolkit.fluxcd.io/v1beta1
+kind: GitRepository
+metadata:
+  name: podinfo
+  namespace: default
+spec:
+  interval: 1m
+  url: https://dev.azure.com/org/proj/_git/repo
+  gitProtocolV2Compatibility: true
+```
+
 ## Spec examples
 
 ### Checkout strategies
@@ -271,8 +310,8 @@ metadata:
   namespace: default
 type: Opaque
 data:
-  username: <BASE64> 
-  password: <BASE64> 
+  username: <BASE64>
+  password: <BASE64>
 ```
 
 > **Note:** that self-signed certificates are not supported.
@@ -300,9 +339,9 @@ metadata:
   namespace: default
 type: Opaque
 data:
-  identity: <BASE64> 
-  identity.pub: <BASE64> 
-  known_hosts: <BASE64> 
+  identity: <BASE64>
+  identity.pub: <BASE64>
+  known_hosts: <BASE64>
 ```
 
 > **Note:** that the SSH address does not support SCP syntax. The URL format is
@@ -347,8 +386,8 @@ metadata:
   namespace: default
 type: Opaque
 data:
-  author1.asc: <BASE64> 
-  author2.asc: <BASE64> 
+  author1.asc: <BASE64>
+  author2.asc: <BASE64>
 ```
 
 Example of generating the PGP public keys secret:
