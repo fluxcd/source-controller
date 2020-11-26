@@ -4,6 +4,12 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+const (
+	// SourceIndexKey is the key used for indexing resources based on
+	// their sources.
+	SourceIndexKey string = ".metadata.source"
+)
+
 // Source interface must be supported by all API types.
 // +k8s:deepcopy-gen=false
 type Source interface {
