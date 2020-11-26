@@ -32,6 +32,10 @@ type HelmChartSpec struct {
 	// relative path in the SourceRef. Ignored when omitted.
 	// +optional
 	ValuesFile string `json:"valuesFile,omitempty"`
+
+	// This flag tells the controller to suspend the reconciliation of this source.
+	// +optional
+	Suspend bool `json:"suspend,omitempty"`
 }
 ```
 

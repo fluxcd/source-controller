@@ -54,6 +54,10 @@ type HelmRepositorySpec struct {
 	// +kubebuilder:default:="60s"
 	// +optional
 	Timeout *metav1.Duration `json:"timeout,omitempty"`
+
+	// This flag tells the controller to suspend the reconciliation of this source.
+	// +optional
+	Suspend bool `json:"suspend,omitempty"`
 }
 
 // HelmRepositoryStatus defines the observed state of the HelmRepository.

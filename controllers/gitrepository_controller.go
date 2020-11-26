@@ -89,6 +89,12 @@ func (r *GitRepositoryReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 		return r.reconcileDelete(ctx, repository)
 	}
 
+	// Return early if the object is suspended.
+	if repository.Spec.Suspend {
+		log.Info("Reconciliation is suspended for this object")
+		return ctrl.Result{}, nil
+	}
+
 	// record reconciliation duration
 	if r.MetricsRecorder != nil {
 		objRef, err := reference.GetReference(r.Scheme, &repository)

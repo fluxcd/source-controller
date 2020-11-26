@@ -86,6 +86,10 @@ spec:
                 - kind
                 - name
                 type: object
+              suspend:
+                description: This flag tells the controller to suspend the reconciliation
+                  of this source.
+                type: boolean
               valuesFile:
                 description: Alternative values file to use as the default chart values,
                   expected to be a relative path in the SourceRef. Ignored when omitted.

@@ -49,6 +49,10 @@ type BucketSpec struct {
 	// consult the documentation for your version to find out what those are.
 	// +optional
 	Ignore *string `json:"ignore,omitempty"`
+
+	// This flag tells the controller to suspend the reconciliation of this source.
+	// +optional
+	Suspend bool `json:"suspend,omitempty"`
 }
 ```
 
