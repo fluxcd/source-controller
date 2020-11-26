@@ -49,6 +49,9 @@ spec:
           spec:
             description: GitRepositorySpec defines the desired state of a Git repository.
             properties:
+              gitProtocolV2Compatibility:
+                description: Enables support for git servers that require v2.
+                type: boolean
               ignore:
                 description: Ignore overrides the set of excluded patterns in the
                   .sourceignore format (which is the same as .gitignore). If not provided,

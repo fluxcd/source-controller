@@ -1,5 +1,5 @@
 /*
-Copyright 2020 The Flux authors
+Copyright 2020 The Flux CD contributors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -14,15 +14,15 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package git
+package v2
 
 import (
 	"reflect"
 	"testing"
 
-	"github.com/go-git/go-git/v5/plumbing/transport"
-	"github.com/go-git/go-git/v5/plumbing/transport/http"
 	corev1 "k8s.io/api/core/v1"
+
+	"github.com/fluxcd/source-controller/pkg/git/common"
 )
 
 const (
@@ -66,25 +66,19 @@ var (
 
 func TestAuthSecretStrategyForURL(t *testing.T) {
 	tests := []struct {
-		name    string
-		url     string
-		want    AuthSecretStrategy
-		wantErr bool
+		name string
+		url  string
+		want common.AuthSecretStrategy
 	}{
-		{"HTTP", "http://git.example.com/org/repo.git", &BasicAuth{}, false},
-		{"HTTPS", "https://git.example.com/org/repo.git", &BasicAuth{}, false},
-		{"SSH", "ssh://git.example.com:2222/org/repo.git", &PublicKeyAuth{}, false},
-		{"SSH with username", "ssh://example@git.example.com:2222/org/repo.git", &PublicKeyAuth{user: "example"}, false},
-		{"unsupported", "protocol://example.com", nil, true},
+		{"HTTP", "http://git.example.com/org/repo.git", &BasicAuth{}},
+		{"HTTPS", "https://git.example.com/org/repo.git", &BasicAuth{}},
+		{"SSH", "ssh://git.example.com:2222/org/repo.git", &PublicKeyAuth{}},
+		{"unsupported", "protocol://example.com", nil},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := AuthSecretStrategyForURL(tt.url)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("AuthSecretStrategyForURL() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if !reflect.DeepEqual(got, tt.want) {
+			got := AuthSecretStrategyForURL(tt.url)
+			if reflect.TypeOf(got) != reflect.TypeOf(tt.want) {
 				t.Errorf("AuthSecretStrategyForURL() got = %v, want %v", got, tt.want)
 			}
 		})
@@ -96,10 +90,9 @@ func TestBasicAuthStrategy_Method(t *testing.T) {
 		name    string
 		secret  corev1.Secret
 		modify  func(secret *corev1.Secret)
-		want    transport.AuthMethod
+		want    *common.Auth
 		wantErr bool
 	}{
-		{"username and password", basicAuthSecretFixture, nil, &http.BasicAuth{Username: "git", Password: "password"}, false},
 		{"without username", basicAuthSecretFixture, func(s *corev1.Secret) { delete(s.Data, "username") }, nil, true},
 		{"without password", basicAuthSecretFixture, func(s *corev1.Secret) { delete(s.Data, "password") }, nil, true},
 		{"empty", corev1.Secret{}, nil, nil, true},

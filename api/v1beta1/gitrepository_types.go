@@ -70,6 +70,10 @@ type GitRepositorySpec struct {
 	// This flag tells the controller to suspend the reconciliation of this source.
 	// +optional
 	Suspend bool `json:"suspend,omitempty"`
+
+	// Enables support for git servers that require v2.
+	// +optional
+	GitProtocolV2Compatibility bool `json:"gitProtocolV2Compatibility"`
 }
 
 // GitRepositoryRef defines the Git ref used for pull and checkout operations.
