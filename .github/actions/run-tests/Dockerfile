@@ -1,0 +1,12 @@
+FROM golang:1.15-alpine
+
+# Add any build or testing essential system packages
+RUN apk add --no-cache build-base git
+
+# Use the GitHub Actions uid:gid combination for proper fs permissions
+RUN addgroup -g 116 -S test && adduser -u 1001 -S -g test test
+
+# Run as test user
+USER test
+
+ENTRYPOINT ["/bin/sh", "-c"]

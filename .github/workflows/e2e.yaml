@@ -15,14 +15,10 @@ jobs:
       - name: Restore Go cache
         uses: actions/cache@v1
         with:
-          path: ~/go/pkg/mod
+          path: /home/runner/work/_temp/_github_home/go/pkg/mod
           key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
           restore-keys: |
             ${{ runner.os }}-go-
-      - name: Setup Go
-        uses: actions/setup-go@v2
-        with:
-          go-version: 1.15.x
       - name: Setup Kubernetes
         uses: engineerd/setup-kind@v0.5.0
       - name: Setup Kustomize
@@ -32,8 +28,9 @@ jobs:
       - name: Setup Helm
         uses: fluxcd/pkg/actions/helm@main
       - name: Run tests
-        run: make test
+        uses: ./.github/actions/run-tests
         env:
+          GOPATH: /github/home/go
           KUBEBUILDER_ASSETS: ${{ github.workspace }}/kubebuilder/bin
       - name: Check if working tree is dirty
         run: |
