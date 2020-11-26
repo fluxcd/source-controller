@@ -808,7 +808,7 @@ func (r *HelmChartReconciler) requestsForHelmRepositoryChange(obj handler.MapObj
 	}
 
 	ctx := context.Background()
-	var list sourcev1.HelmRepositoryList
+	var list sourcev1.HelmChartList
 	if err := r.List(ctx, &list, client.MatchingFields{
 		sourcev1.SourceIndexKey: fmt.Sprintf("%s/%s", repo.Kind, repo.Name),
 	}); err != nil {
