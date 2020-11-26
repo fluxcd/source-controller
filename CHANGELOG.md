@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.4.0 (2020-11-26)
+
+This is the fourth MINOR prerelease, adding support for suspension
+of resources using `.spec.suspend`, and watchers for the upstream
+sources of `HelmChart` resources to detect revision changes faster.
+
 ## 0.3.0 (2020-11-19)
 
 This prerelease comes with a fix to garbage collection.
