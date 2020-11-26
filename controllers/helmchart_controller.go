@@ -95,6 +95,12 @@ func (r *HelmChartReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		return r.reconcileDelete(ctx, chart)
 	}
 
+	// Return early if the object is suspended.
+	if chart.Spec.Suspend {
+		log.Info("Reconciliation is suspended for this object")
+		return ctrl.Result{}, nil
+	}
+
 	// Record reconciliation duration
 	if r.MetricsRecorder != nil {
 		objRef, err := reference.GetReference(r.Scheme, &chart)

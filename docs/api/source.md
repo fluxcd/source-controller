@@ -188,6 +188,18 @@ string
 consult the documentation for your version to find out what those are.</p>
 </td>
 </tr>
+<tr>
+<td>
+<code>suspend</code><br>
+<em>
+bool
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>This flag tells the controller to suspend the reconciliation of this source.</p>
+</td>
+</tr>
 </table>
 </td>
 </tr>
@@ -363,6 +375,18 @@ string
 consult the documentation for your version to find out what those are.</p>
 </td>
 </tr>
+<tr>
+<td>
+<code>suspend</code><br>
+<em>
+bool
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>This flag tells the controller to suspend the reconciliation of this source.</p>
+</td>
+</tr>
 </table>
 </td>
 </tr>
@@ -502,6 +526,18 @@ string
 relative path in the SourceRef. Ignored when omitted.</p>
 </td>
 </tr>
+<tr>
+<td>
+<code>suspend</code><br>
+<em>
+bool
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>This flag tells the controller to suspend the reconciliation of this source.</p>
+</td>
+</tr>
 </table>
 </td>
 </tr>
@@ -633,6 +669,18 @@ Kubernetes meta/v1.Duration
 <td>
 <em>(Optional)</em>
 <p>The timeout of index downloading, defaults to 60s.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>suspend</code><br>
+<em>
+bool
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>This flag tells the controller to suspend the reconciliation of this source.</p>
 </td>
 </tr>
 </table>
@@ -869,6 +917,18 @@ string
 <p>Ignore overrides the set of excluded patterns in the .sourceignore format
 (which is the same as .gitignore). If not provided, a default will be used,
 consult the documentation for your version to find out what those are.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>suspend</code><br>
+<em>
+bool
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>This flag tells the controller to suspend the reconciliation of this source.</p>
 </td>
 </tr>
 </tbody>
@@ -1148,6 +1208,18 @@ string
 consult the documentation for your version to find out what those are.</p>
 </td>
 </tr>
+<tr>
+<td>
+<code>suspend</code><br>
+<em>
+bool
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>This flag tells the controller to suspend the reconciliation of this source.</p>
+</td>
+</tr>
 </tbody>
 </table>
 </div>
@@ -1366,6 +1438,18 @@ string
 relative path in the SourceRef. Ignored when omitted.</p>
 </td>
 </tr>
+<tr>
+<td>
+<code>suspend</code><br>
+<em>
+bool
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>This flag tells the controller to suspend the reconciliation of this source.</p>
+</td>
+</tr>
 </tbody>
 </table>
 </div>
@@ -1530,6 +1614,18 @@ Kubernetes meta/v1.Duration
 <td>
 <em>(Optional)</em>
 <p>The timeout of index downloading, defaults to 60s.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>suspend</code><br>
+<em>
+bool
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>This flag tells the controller to suspend the reconciliation of this source.</p>
 </td>
 </tr>
 </tbody>
