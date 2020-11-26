@@ -2,6 +2,11 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.4.1 (2020-11-26)
+
+This prerelease fixes a bug in the listing of HelmChart resources
+for GitRepository changes.
+
 ## 0.4.0 (2020-11-26)
 
 This is the fourth MINOR prerelease, adding support for suspension
