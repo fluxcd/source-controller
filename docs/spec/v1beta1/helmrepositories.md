@@ -31,6 +31,10 @@ type HelmRepositorySpec struct {
 	// The timeout of index downloading, defaults to 60s.
 	// +optional
 	Timeout *metav1.Duration `json:"timeout,omitempty"`
+
+	// This flag tells the controller to suspend the reconciliation of this source.
+	// +optional
+	Suspend bool `json:"suspend,omitempty"`
 }
 ```
 

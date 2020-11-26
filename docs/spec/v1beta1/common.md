@@ -6,7 +6,7 @@ Common defines resources used across all source types.
 
 ### Source interface
 
-Source objects should adhere to the `Source` interface. This interface exposes the [interval](#source-synchronization)
+Source objects adhere to the `Source` interface. This interface exposes the [interval](#source-reconciliation)
 and [artifact](#source-status) of the source to clients without the prerequisite of knowing the source kind:
 
 ````go
@@ -21,7 +21,7 @@ type Source interface {
 
 ### Source reconciliation
 
-Source objects should contain a `spec.interval` field that tells the controller at which interval to check for updates:
+Source objects contain a `spec.interval` field that tells the controller at which interval to check for updates:
 
 ```go
 type SourceSpec struct {
@@ -38,6 +38,8 @@ The controller can be told to check for updates right away by setting an annotat
 ```bash
 kubectl annotate --overwrite gitrepository/podinfo fluxcd.io/reconcileAt="$(date +%s)"
 ```
+
+The source objects reconciliation can be suspended by setting `spec.suspend` to `true`.
 
 ### Source status
 

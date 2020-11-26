@@ -89,6 +89,10 @@ spec:
                       TODO: Add other useful fields. apiVersion, kind, uid?'
                     type: string
                 type: object
+              suspend:
+                description: This flag tells the controller to suspend the reconciliation
+                  of this source.
+                type: boolean
               timeout:
                 default: 20s
                 description: The timeout for remote Git operations like cloning, defaults

@@ -63,6 +63,10 @@ spec:
                       TODO: Add other useful fields. apiVersion, kind, uid?'
                     type: string
                 type: object
+              suspend:
+                description: This flag tells the controller to suspend the reconciliation
+                  of this source.
+                type: boolean
               timeout:
                 default: 60s
                 description: The timeout of index downloading, defaults to 60s.
