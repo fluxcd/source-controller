@@ -22,6 +22,7 @@ import (
 	"crypto/sha1"
 	"fmt"
 	"golang.org/x/crypto/ssh"
+	"net/url"
 	"strings"
 
 	"github.com/fluxcd/source-controller/pkg/git/common"
@@ -29,14 +30,20 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
-func AuthSecretStrategyForURL(url string) common.AuthSecretStrategy {
-	switch {
-	case strings.HasPrefix(url, "http"):
-		return &BasicAuth{}
-	case strings.HasPrefix(url, "ssh"):
-		return &PublicKeyAuth{}
+func AuthSecretStrategyForURL(URL string) (common.AuthSecretStrategy, error) {
+	u, err := url.Parse(URL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse URL to determine auth strategy: %w", err)
 	}
-	return nil
+
+	switch {
+	case u.Scheme == "http", u.Scheme == "https":
+		return &BasicAuth{}, nil
+	case u.Scheme == "ssh":
+		return &PublicKeyAuth{user: u.User.Username()}, nil
+	default:
+		return nil, fmt.Errorf("no auth secret strategy for scheme %s", u.Scheme)
+	}
 }
 
 type BasicAuth struct{}
@@ -65,7 +72,9 @@ func (s *BasicAuth) Method(secret corev1.Secret) (*common.Auth, error) {
 	return &common.Auth{CredCallback: credCallback, CertCallback: nil}, nil
 }
 
-type PublicKeyAuth struct{}
+type PublicKeyAuth struct {
+	user string
+}
 
 func (s *PublicKeyAuth) Method(secret corev1.Secret) (*common.Auth, error) {
 	identity := secret.Data["identity"]
@@ -79,14 +88,20 @@ func (s *PublicKeyAuth) Method(secret corev1.Secret) (*common.Auth, error) {
 		return nil, err
 	}
 
-	// Need to validate private key
+	// Need to validate private key as it is not
+	// done by git2go when loading the key
 	_, err = ssh.ParsePrivateKey(identity)
 	if err != nil {
 		return nil, err
 	}
 
+	user := s.user
+	if user == "" {
+		user = common.DefaultPublicKeyAuthUser
+	}
+
 	credCallback := func(url string, username_from_url string, allowed_types git2go.CredType) (*git2go.Cred, error) {
-		cred, err := git2go.NewCredSshKeyFromMemory("git", "", string(identity), "")
+		cred, err := git2go.NewCredSshKeyFromMemory(user, "", string(identity), "")
 		if err != nil {
 			return nil, err
 		}

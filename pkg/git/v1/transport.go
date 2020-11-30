@@ -28,8 +28,6 @@ import (
 	"github.com/fluxcd/source-controller/pkg/git/common"
 )
 
-const defaultPublicKeyAuthUser = "git"
-
 func AuthSecretStrategyForURL(URL string) (common.AuthSecretStrategy, error) {
 	u, err := url.Parse(URL)
 	if err != nil {
@@ -75,7 +73,7 @@ func (s *PublicKeyAuth) Method(secret corev1.Secret) (*common.Auth, error) {
 
 	user := s.user
 	if user == "" {
-		user = defaultPublicKeyAuthUser
+		user = common.DefaultPublicKeyAuthUser
 	}
 
 	pk, err := ssh.NewPublicKeys(user, identity, "")

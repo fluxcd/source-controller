@@ -66,19 +66,25 @@ var (
 
 func TestAuthSecretStrategyForURL(t *testing.T) {
 	tests := []struct {
-		name string
-		url  string
-		want common.AuthSecretStrategy
+		name    string
+		url     string
+		want    common.AuthSecretStrategy
+		wantErr bool
 	}{
-		{"HTTP", "http://git.example.com/org/repo.git", &BasicAuth{}},
-		{"HTTPS", "https://git.example.com/org/repo.git", &BasicAuth{}},
-		{"SSH", "ssh://git.example.com:2222/org/repo.git", &PublicKeyAuth{}},
-		{"unsupported", "protocol://example.com", nil},
+		{"HTTP", "http://git.example.com/org/repo.git", &BasicAuth{}, false},
+		{"HTTPS", "https://git.example.com/org/repo.git", &BasicAuth{}, false},
+		{"SSH", "ssh://git.example.com:2222/org/repo.git", &PublicKeyAuth{}, false},
+		{"SSH with username", "ssh://example@git.example.com:2222/org/repo.git", &PublicKeyAuth{user: "example"}, false},
+		{"unsupported", "protocol://example.com", nil, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := AuthSecretStrategyForURL(tt.url)
-			if reflect.TypeOf(got) != reflect.TypeOf(tt.want) {
+			got, err := AuthSecretStrategyForURL(tt.url)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("AuthSecretStrategyForURL() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("AuthSecretStrategyForURL() got = %v, want %v", got, tt.want)
 			}
 		})

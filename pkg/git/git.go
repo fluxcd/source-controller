@@ -35,7 +35,7 @@ func CheckoutStrategyForRef(ref *sourcev1.GitRepositoryRef, useGitV2 bool) commo
 	return gitv1.CheckoutStrategyForRef(ref)
 }
 
-func AuthSecretStrategyForURL(url string, useGitV2 bool) common.AuthSecretStrategy {
+func AuthSecretStrategyForURL(url string, useGitV2 bool) (common.AuthSecretStrategy, error) {
 	if useGitV2 {
 		return gitv2.AuthSecretStrategyForURL(url)
 	}

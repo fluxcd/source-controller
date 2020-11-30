@@ -25,8 +25,9 @@ import (
 )
 
 const (
-	DefaultOrigin = "origin"
-	DefaultBranch = "master"
+	DefaultOrigin            = "origin"
+	DefaultBranch            = "master"
+	DefaultPublicKeyAuthUser = "git"
 )
 
 type Commit interface {
