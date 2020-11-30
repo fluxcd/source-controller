@@ -184,15 +184,19 @@ func (r *GitRepositoryReconciler) reconcile(ctx context.Context, repository sour
 
 	// determine auth method
 	var auth transport.AuthMethod
-	authStrategy := git.AuthSecretStrategyForURL(repository.Spec.URL)
-	if repository.Spec.SecretRef != nil && authStrategy != nil {
+	if repository.Spec.SecretRef != nil {
+		authStrategy, err := git.AuthSecretStrategyForURL(repository.Spec.URL)
+		if err != nil {
+			return sourcev1.GitRepositoryNotReady(repository, sourcev1.AuthenticationFailedReason, err.Error()), err
+		}
+
 		name := types.NamespacedName{
 			Namespace: repository.GetNamespace(),
 			Name:      repository.Spec.SecretRef.Name,
 		}
 
 		var secret corev1.Secret
-		err := r.Client.Get(ctx, name, &secret)
+		err = r.Client.Get(ctx, name, &secret)
 		if err != nil {
 			err = fmt.Errorf("auth secret error: %w", err)
 			return sourcev1.GitRepositoryNotReady(repository, sourcev1.AuthenticationFailedReason, err.Error()), err
