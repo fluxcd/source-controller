@@ -86,6 +86,8 @@ var _ = Describe("GitRepositoryReconciler", func() {
 			expectStatus   metav1.ConditionStatus
 			expectMessage  string
 			expectRevision string
+
+			v2 bool
 		}
 
 		DescribeTable("Git references tests", func(t refTestCase) {
@@ -260,6 +262,66 @@ var _ = Describe("GitRepositoryReconciler", func() {
 				waitForReason: sourcev1.GitOperationFailedReason,
 				expectStatus:  metav1.ConditionFalse,
 				expectMessage: "git commit 'invalid' not found: object not found",
+			}),
+		)
+
+		DescribeTable("Git self signed cert tests", func(t refTestCase) {
+			err = gitServer.StartHTTPTLS(examplePublicKey, examplePrivateKey, exampleCA, "example.com")
+			defer gitServer.StopHTTP()
+			Expect(err).NotTo(HaveOccurred())
+
+			u, err := url.Parse(gitServer.HTTPAddress())
+			Expect(err).NotTo(HaveOccurred())
+			u.Path = path.Join(u.Path, fmt.Sprintf("repository-%s.git", randStringRunes(5)))
+
+			key := types.NamespacedName{
+				Name:      fmt.Sprintf("git-ref-test-%s", randStringRunes(5)),
+				Namespace: namespace.Name,
+			}
+			created := &sourcev1.GitRepository{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      key.Name,
+					Namespace: key.Namespace,
+				},
+				Spec: sourcev1.GitRepositorySpec{
+					URL:                        u.String(),
+					Interval:                   metav1.Duration{Duration: indexInterval},
+					Reference:                  t.reference,
+					GitProtocolV2Compatibility: t.v2,
+				},
+			}
+			Expect(k8sClient.Create(context.Background(), created)).Should(Succeed())
+			defer k8sClient.Delete(context.Background(), created)
+
+			got := &sourcev1.GitRepository{}
+			var cond metav1.Condition
+			Eventually(func() bool {
+				_ = k8sClient.Get(context.Background(), key, got)
+				for _, c := range got.Status.Conditions {
+					if c.Reason == t.waitForReason {
+						cond = c
+						return true
+					}
+				}
+				return false
+			}, timeout, interval).Should(BeTrue())
+
+			Expect(cond.Status).To(Equal(t.expectStatus))
+			Expect(cond.Message).To(ContainSubstring(t.expectMessage))
+			Expect(got.Status.Artifact == nil).To(Equal(t.expectRevision == ""))
+		},
+			Entry("self signed v1", refTestCase{
+				reference:     &sourcev1.GitRepositoryRef{Branch: "main"},
+				waitForReason: sourcev1.GitOperationFailedReason,
+				expectStatus:  metav1.ConditionFalse,
+				expectMessage: "x509: certificate signed by unknown authority",
+			}),
+			Entry("self signed v2", refTestCase{
+				reference:     &sourcev1.GitRepositoryRef{Branch: "main"},
+				waitForReason: sourcev1.GitOperationFailedReason,
+				expectStatus:  metav1.ConditionFalse,
+				expectMessage: "error: user rejected certificate",
+				v2:            true,
 			}),
 		)
 	})
