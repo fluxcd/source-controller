@@ -4,13 +4,11 @@ go 1.15
 
 replace github.com/fluxcd/source-controller/api => ./api
 
-replace github.com/fluxcd/pkg/gittestserver => github.com/fluxcd/pkg/gittestserver v0.0.3-0.20201202222244-96033b836a6a
-
 require (
 	github.com/Masterminds/semver/v3 v3.1.0
 	github.com/blang/semver/v4 v4.0.0
 	github.com/fluxcd/pkg/apis/meta v0.4.0
-	github.com/fluxcd/pkg/gittestserver v0.0.2
+	github.com/fluxcd/pkg/gittestserver v0.1.0
 	github.com/fluxcd/pkg/helmtestserver v0.0.1
 	github.com/fluxcd/pkg/lockedfile v0.0.5
 	github.com/fluxcd/pkg/runtime v0.3.0

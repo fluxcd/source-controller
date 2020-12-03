@@ -266,7 +266,7 @@ var _ = Describe("GitRepositoryReconciler", func() {
 		)
 
 		DescribeTable("Git self signed cert tests", func(t refTestCase) {
-			err = gitServer.StartHTTPTLS(examplePublicKey, examplePrivateKey, exampleCA, "example.com")
+			err = gitServer.StartHTTPS(examplePublicKey, examplePrivateKey, exampleCA, "example.com")
 			defer gitServer.StopHTTP()
 			Expect(err).NotTo(HaveOccurred())
 
