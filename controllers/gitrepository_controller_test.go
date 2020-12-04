@@ -87,7 +87,7 @@ var _ = Describe("GitRepositoryReconciler", func() {
 			expectMessage  string
 			expectRevision string
 
-			v2 bool
+			gitImplementation string
 		}
 
 		DescribeTable("Git references tests", func(t refTestCase) {
@@ -284,10 +284,10 @@ var _ = Describe("GitRepositoryReconciler", func() {
 					Namespace: key.Namespace,
 				},
 				Spec: sourcev1.GitRepositorySpec{
-					URL:                        u.String(),
-					Interval:                   metav1.Duration{Duration: indexInterval},
-					Reference:                  t.reference,
-					GitProtocolV2Compatibility: t.v2,
+					URL:               u.String(),
+					Interval:          metav1.Duration{Duration: indexInterval},
+					Reference:         t.reference,
+					GitImplementation: t.gitImplementation,
 				},
 			}
 			Expect(k8sClient.Create(context.Background(), created)).Should(Succeed())
@@ -317,11 +317,11 @@ var _ = Describe("GitRepositoryReconciler", func() {
 				expectMessage: "x509: certificate signed by unknown authority",
 			}),
 			Entry("self signed v2", refTestCase{
-				reference:     &sourcev1.GitRepositoryRef{Branch: "main"},
-				waitForReason: sourcev1.GitOperationFailedReason,
-				expectStatus:  metav1.ConditionFalse,
-				expectMessage: "error: user rejected certificate",
-				v2:            true,
+				reference:         &sourcev1.GitRepositoryRef{Branch: "main"},
+				waitForReason:     sourcev1.GitOperationFailedReason,
+				expectStatus:      metav1.ConditionFalse,
+				expectMessage:     "error: user rejected certificate",
+				gitImplementation: sourcev1.Git2GoImplementation,
 			}),
 		)
 	})

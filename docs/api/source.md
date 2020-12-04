@@ -389,14 +389,15 @@ bool
 </tr>
 <tr>
 <td>
-<code>gitProtocolV2Compatibility</code><br>
+<code>gitImplementation</code><br>
 <em>
-bool
+string
 </em>
 </td>
 <td>
 <em>(Optional)</em>
-<p>Enables support for git servers that require v2.</p>
+<p>Determines which git client library to use.
+Defaults to go-git, valid values are (&lsquo;go-git&rsquo;, &lsquo;git2go&rsquo;).</p>
 </td>
 </tr>
 </table>
@@ -1234,14 +1235,15 @@ bool
 </tr>
 <tr>
 <td>
-<code>gitProtocolV2Compatibility</code><br>
+<code>gitImplementation</code><br>
 <em>
-bool
+string
 </em>
 </td>
 <td>
 <em>(Optional)</em>
-<p>Enables support for git servers that require v2.</p>
+<p>Determines which git client library to use.
+Defaults to go-git, valid values are (&lsquo;go-git&rsquo;, &lsquo;git2go&rsquo;).</p>
 </td>
 </tr>
 </tbody>

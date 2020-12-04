@@ -51,9 +51,12 @@ type GitRepositorySpec struct {
 	// +optional
 	Suspend bool `json:"suspend,omitempty"`
 
-  // Enables support for git servers that require v2.
+	// Determines which git client library to use.
+	// Defaults to go-git, valid values are ('go-git', 'git2go').
+	// +kubebuilder:validation:Enum=go-git;git2go
+	// +kubebuilder:default:=go-git
 	// +optional
-	GitProtocolV2Compatibility bool `json:"gitProtocolV2Compatibility"`
+	GitImplementation string `json:"gitImplementation,omitempty"`
 }
 ```
 
@@ -174,12 +177,13 @@ spec:
 
 When specified, `spec.ignore` overrides the default exclusion list.
 
-## Git V2
+## Git Implementation
 
-You should skip this unless you know that you need v2 compatibility. Enabling
-this feature comes with its own set of drawbacks.
+You can skip this section unless you know that you need support for either
+specific git wire protocol functionality. Changing the git implementation
+comes with its own set of drawbacks.
 
-Some git providers like Azure DevOps require special features in the users git client
+Some git providers like Azure DevOps require that the git client supports specific capabilities
 to be able to communicate. The initial library used in source-controller did not support
 this functionality while other libraries that did were missinging other critical functionality,
 specifically the ability to do shallow cloning. Shallow cloning is important as it allows
@@ -188,12 +192,12 @@ For some very large repositories this means downloading GB of data that could fi
 and also impact the traffic costs.
 
 To be able to support Azure DevOps a compromise solution was built, giving the user the
-option to enable V2 compatibility with the drawbacks it brings.
+option to select the git library while accepting the drawbacks.
 
-| V2 Compatibility | Shallow Clones | Azure DevOps Support |
+| Git Implementation | Shallow Clones | Azure DevOps Support |
 |---|---|---|
-| false | true | false |
-| true | false | true |
+| 'go-git' | true | false |
+| 'git2go' | false | true |
 
 Pull the master branch from a repository in Azure DevOps.
 
@@ -206,7 +210,7 @@ metadata:
 spec:
   interval: 1m
   url: https://dev.azure.com/org/proj/_git/repo
-  gitProtocolV2Compatibility: true
+  gitImplementation: git2go
 ```
 
 ## Spec examples

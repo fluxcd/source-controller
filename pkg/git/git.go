@@ -17,6 +17,8 @@ limitations under the License.
 package git
 
 import (
+	"fmt"
+
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
 	"github.com/fluxcd/source-controller/pkg/git/common"
 	gitv1 "github.com/fluxcd/source-controller/pkg/git/v1"
@@ -27,18 +29,24 @@ const (
 	defaultBranch = "master"
 )
 
-func CheckoutStrategyForRef(ref *sourcev1.GitRepositoryRef, useGitV2 bool) common.CheckoutStrategy {
-	if useGitV2 {
-		return gitv2.CheckoutStrategyForRef(ref)
+func CheckoutStrategyForRef(ref *sourcev1.GitRepositoryRef, gitImplementation string) (common.CheckoutStrategy, error) {
+	switch gitImplementation {
+	case sourcev1.GoGitImplementation:
+		return gitv1.CheckoutStrategyForRef(ref), nil
+	case sourcev1.Git2GoImplementation:
+		return gitv2.CheckoutStrategyForRef(ref), nil
+	default:
+		return nil, fmt.Errorf("invalid git implementation %s", gitImplementation)
 	}
-
-	return gitv1.CheckoutStrategyForRef(ref)
 }
 
-func AuthSecretStrategyForURL(url string, useGitV2 bool) (common.AuthSecretStrategy, error) {
-	if useGitV2 {
+func AuthSecretStrategyForURL(url string, gitImplementation string) (common.AuthSecretStrategy, error) {
+	switch gitImplementation {
+	case sourcev1.GoGitImplementation:
+		return gitv1.AuthSecretStrategyForURL(url)
+	case sourcev1.Git2GoImplementation:
 		return gitv2.AuthSecretStrategyForURL(url)
+	default:
+		return nil, fmt.Errorf("invalid git implementation %s", gitImplementation)
 	}
-
-	return gitv1.AuthSecretStrategyForURL(url)
 }

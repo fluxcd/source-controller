@@ -224,8 +224,6 @@ github.com/fatih/color v1.7.0/go.mod h1:Zm6kSWBoL9eyXnKyktHP6abPY2pDugNf5Kwzbycv
 github.com/fluxcd/pkg/apis/meta v0.3.0/go.mod h1:wOzQQx8CdtUQCGaLzqGu4QgnNxYkI6/wvdvlovxWhF0=
 github.com/fluxcd/pkg/apis/meta v0.4.0 h1:JChqB9GGgorW9HWKxirTVV0rzrcLyzBaVjinmqZ0iHA=
 github.com/fluxcd/pkg/apis/meta v0.4.0/go.mod h1:wOzQQx8CdtUQCGaLzqGu4QgnNxYkI6/wvdvlovxWhF0=
-github.com/fluxcd/pkg/gittestserver v0.0.3-0.20201202222244-96033b836a6a h1:fmfbt5VrEPUb4X0UI14a0K2FWr0iv/NRUadk8X35byc=
-github.com/fluxcd/pkg/gittestserver v0.0.3-0.20201202222244-96033b836a6a/go.mod h1:HWZaoib03fQeSsauCAN2iAFdr6bnjKQ+CFxMFD2mwDY=
 github.com/fluxcd/pkg/gittestserver v0.1.0 h1:BvIG+bBhgbmqhtpSS2qUpOXRIL1P1Ow2jauloH8X86U=
 github.com/fluxcd/pkg/gittestserver v0.1.0/go.mod h1:HWZaoib03fQeSsauCAN2iAFdr6bnjKQ+CFxMFD2mwDY=
 github.com/fluxcd/pkg/helmtestserver v0.0.1 h1:8RcLZdg7Zr9ZqyijsIIASjjMXQtF4UWP4Uds4iK2VJM=
