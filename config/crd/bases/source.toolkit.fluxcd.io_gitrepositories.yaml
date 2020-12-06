@@ -52,10 +52,10 @@ spec:
               gitImplementation:
                 default: go-git
                 description: Determines which git client library to use. Defaults
-                  to go-git, valid values are ('go-git', 'git2go').
+                  to go-git, valid values are ('go-git', 'libgit2').
                 enum:
                 - go-git
-                - git2go
+                - libgit2
                 type: string
               ignore:
                 description: Ignore overrides the set of excluded patterns in the

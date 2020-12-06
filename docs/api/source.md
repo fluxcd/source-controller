@@ -397,7 +397,7 @@ string
 <td>
 <em>(Optional)</em>
 <p>Determines which git client library to use.
-Defaults to go-git, valid values are (&lsquo;go-git&rsquo;, &lsquo;git2go&rsquo;).</p>
+Defaults to go-git, valid values are (&lsquo;go-git&rsquo;, &lsquo;libgit2&rsquo;).</p>
 </td>
 </tr>
 </table>
@@ -1243,7 +1243,7 @@ string
 <td>
 <em>(Optional)</em>
 <p>Determines which git client library to use.
-Defaults to go-git, valid values are (&lsquo;go-git&rsquo;, &lsquo;git2go&rsquo;).</p>
+Defaults to go-git, valid values are (&lsquo;go-git&rsquo;, &lsquo;libgit2&rsquo;).</p>
 </td>
 </tr>
 </tbody>

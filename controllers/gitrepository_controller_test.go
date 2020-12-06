@@ -321,7 +321,7 @@ var _ = Describe("GitRepositoryReconciler", func() {
 				waitForReason:     sourcev1.GitOperationFailedReason,
 				expectStatus:      metav1.ConditionFalse,
 				expectMessage:     "error: user rejected certificate",
-				gitImplementation: sourcev1.Git2GoImplementation,
+				gitImplementation: sourcev1.LibGit2Implementation,
 			}),
 		)
 	})

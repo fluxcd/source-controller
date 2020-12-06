@@ -33,7 +33,7 @@ func CheckoutStrategyForRef(ref *sourcev1.GitRepositoryRef, gitImplementation st
 	switch gitImplementation {
 	case sourcev1.GoGitImplementation:
 		return gitv1.CheckoutStrategyForRef(ref), nil
-	case sourcev1.Git2GoImplementation:
+	case sourcev1.LibGit2Implementation:
 		return gitv2.CheckoutStrategyForRef(ref), nil
 	default:
 		return nil, fmt.Errorf("invalid git implementation %s", gitImplementation)
@@ -44,7 +44,7 @@ func AuthSecretStrategyForURL(url string, gitImplementation string) (common.Auth
 	switch gitImplementation {
 	case sourcev1.GoGitImplementation:
 		return gitv1.AuthSecretStrategyForURL(url)
-	case sourcev1.Git2GoImplementation:
+	case sourcev1.LibGit2Implementation:
 		return gitv2.AuthSecretStrategyForURL(url)
 	default:
 		return nil, fmt.Errorf("invalid git implementation %s", gitImplementation)

@@ -52,8 +52,8 @@ type GitRepositorySpec struct {
 	Suspend bool `json:"suspend,omitempty"`
 
 	// Determines which git client library to use.
-	// Defaults to go-git, valid values are ('go-git', 'git2go').
-	// +kubebuilder:validation:Enum=go-git;git2go
+	// Defaults to go-git, valid values are ('go-git', 'libgit2').
+	// +kubebuilder:validation:Enum=go-git;libgit2
 	// +kubebuilder:default:=go-git
 	// +optional
 	GitImplementation string `json:"gitImplementation,omitempty"`
@@ -194,10 +194,10 @@ and also impact the traffic costs.
 To be able to support Azure DevOps a compromise solution was built, giving the user the
 option to select the git library while accepting the drawbacks.
 
-| Git Implementation | Shallow Clones | Azure DevOps Support |
+| Git Implementation | Shallow Clones | V2 Protocol Support |
 |---|---|---|
 | 'go-git' | true | false |
-| 'git2go' | false | true |
+| 'libgit2' | false | true |
 
 Pull the master branch from a repository in Azure DevOps.
 
@@ -210,7 +210,7 @@ metadata:
 spec:
   interval: 1m
   url: https://dev.azure.com/org/proj/_git/repo
-  gitImplementation: git2go
+  gitImplementation: libgit2
 ```
 
 ## Spec examples
