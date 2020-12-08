@@ -49,6 +49,14 @@ spec:
           spec:
             description: GitRepositorySpec defines the desired state of a Git repository.
             properties:
+              gitImplementation:
+                default: go-git
+                description: Determines which git client library to use. Defaults
+                  to go-git, valid values are ('go-git', 'libgit2').
+                enum:
+                - go-git
+                - libgit2
+                type: string
               ignore:
                 description: Ignore overrides the set of excluded patterns in the
                   .sourceignore format (which is the same as .gitignore). If not provided,

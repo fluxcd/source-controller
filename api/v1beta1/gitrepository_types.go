@@ -26,6 +26,10 @@ import (
 const (
 	// GitRepositoryKind is the string representation of a GitRepository.
 	GitRepositoryKind = "GitRepository"
+	// Represents the go-git git implementation kind
+	GoGitImplementation = "go-git"
+	// Represents the gi2go git implementation kind
+	LibGit2Implementation = "libgit2"
 )
 
 // GitRepositorySpec defines the desired state of a Git repository.
@@ -70,6 +74,13 @@ type GitRepositorySpec struct {
 	// This flag tells the controller to suspend the reconciliation of this source.
 	// +optional
 	Suspend bool `json:"suspend,omitempty"`
+
+	// Determines which git client library to use.
+	// Defaults to go-git, valid values are ('go-git', 'libgit2').
+	// +kubebuilder:validation:Enum=go-git;libgit2
+	// +kubebuilder:default:=go-git
+	// +optional
+	GitImplementation string `json:"gitImplementation,omitempty"`
 }
 
 // GitRepositoryRef defines the Git ref used for pull and checkout operations.

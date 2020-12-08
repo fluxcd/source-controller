@@ -50,6 +50,13 @@ type GitRepositorySpec struct {
 	// This flag tells the controller to suspend the reconciliation of this source.
 	// +optional
 	Suspend bool `json:"suspend,omitempty"`
+
+	// Determines which git client library to use.
+	// Defaults to go-git, valid values are ('go-git', 'libgit2').
+	// +kubebuilder:validation:Enum=go-git;libgit2
+	// +kubebuilder:default:=go-git
+	// +optional
+	GitImplementation string `json:"gitImplementation,omitempty"`
 }
 ```
 
@@ -170,6 +177,42 @@ spec:
 
 When specified, `spec.ignore` overrides the default exclusion list.
 
+## Git Implementation
+
+You can skip this section unless you know that you need support for either
+specific git wire protocol functionality. Changing the git implementation
+comes with its own set of drawbacks.
+
+Some git providers like Azure DevOps require that the git client supports specific capabilities
+to be able to communicate. The initial library used in source-controller did not support
+this functionality while other libraries that did were missinging other critical functionality,
+specifically the ability to do shallow cloning. Shallow cloning is important as it allows
+source-controller to only fetch the latest commits, instead of the whole git history.
+For some very large repositories this means downloading GB of data that could fill the disk
+and also impact the traffic costs.
+
+To be able to support Azure DevOps a compromise solution was built, giving the user the
+option to select the git library while accepting the drawbacks.
+
+| Git Implementation | Shallow Clones | V2 Protocol Support |
+|---|---|---|
+| 'go-git' | true | false |
+| 'libgit2' | false | true |
+
+Pull the master branch from a repository in Azure DevOps.
+
+```yaml
+apiVersion: source.toolkit.fluxcd.io/v1beta1
+kind: GitRepository
+metadata:
+  name: podinfo
+  namespace: default
+spec:
+  interval: 1m
+  url: https://dev.azure.com/org/proj/_git/repo
+  gitImplementation: libgit2
+```
+
 ## Spec examples
 
 ### Checkout strategies
@@ -271,8 +314,8 @@ metadata:
   namespace: default
 type: Opaque
 data:
-  username: <BASE64> 
-  password: <BASE64> 
+  username: <BASE64>
+  password: <BASE64>
 ```
 
 > **Note:** that self-signed certificates are not supported.
@@ -300,9 +343,9 @@ metadata:
   namespace: default
 type: Opaque
 data:
-  identity: <BASE64> 
-  identity.pub: <BASE64> 
-  known_hosts: <BASE64> 
+  identity: <BASE64>
+  identity.pub: <BASE64>
+  known_hosts: <BASE64>
 ```
 
 > **Note:** that the SSH address does not support SCP syntax. The URL format is
@@ -347,8 +390,8 @@ metadata:
   namespace: default
 type: Opaque
 data:
-  author1.asc: <BASE64> 
-  author2.asc: <BASE64> 
+  author1.asc: <BASE64>
+  author2.asc: <BASE64>
 ```
 
 Example of generating the PGP public keys secret:

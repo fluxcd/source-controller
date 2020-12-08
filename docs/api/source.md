@@ -387,6 +387,19 @@ bool
 <p>This flag tells the controller to suspend the reconciliation of this source.</p>
 </td>
 </tr>
+<tr>
+<td>
+<code>gitImplementation</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Determines which git client library to use.
+Defaults to go-git, valid values are (&lsquo;go-git&rsquo;, &lsquo;libgit2&rsquo;).</p>
+</td>
+</tr>
 </table>
 </td>
 </tr>
@@ -1218,6 +1231,19 @@ bool
 <td>
 <em>(Optional)</em>
 <p>This flag tells the controller to suspend the reconciliation of this source.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>gitImplementation</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Determines which git client library to use.
+Defaults to go-git, valid values are (&lsquo;go-git&rsquo;, &lsquo;libgit2&rsquo;).</p>
 </td>
 </tr>
 </tbody>

@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package git
+package v1
 
 import (
 	"context"
@@ -25,23 +25,16 @@ import (
 	"github.com/Masterminds/semver/v3"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
-	"github.com/go-git/go-git/v5/plumbing/object"
-	"github.com/go-git/go-git/v5/plumbing/transport"
 
 	"github.com/fluxcd/pkg/version"
-
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
+	"github.com/fluxcd/source-controller/pkg/git/common"
 )
 
-const (
-	defaultOrigin = "origin"
-	defaultBranch = "master"
-)
-
-func CheckoutStrategyForRef(ref *sourcev1.GitRepositoryRef) CheckoutStrategy {
+func CheckoutStrategyForRef(ref *sourcev1.GitRepositoryRef) common.CheckoutStrategy {
 	switch {
 	case ref == nil:
-		return &CheckoutBranch{branch: defaultBranch}
+		return &CheckoutBranch{branch: common.DefaultBranch}
 	case ref.SemVer != "":
 		return &CheckoutSemVer{semVer: ref.SemVer}
 	case ref.Tag != "":
@@ -49,29 +42,25 @@ func CheckoutStrategyForRef(ref *sourcev1.GitRepositoryRef) CheckoutStrategy {
 	case ref.Commit != "":
 		strategy := &CheckoutCommit{branch: ref.Branch, commit: ref.Commit}
 		if strategy.branch == "" {
-			strategy.branch = defaultBranch
+			strategy.branch = common.DefaultBranch
 		}
 		return strategy
 	case ref.Branch != "":
 		return &CheckoutBranch{branch: ref.Branch}
 	default:
-		return &CheckoutBranch{branch: defaultBranch}
+		return &CheckoutBranch{branch: common.DefaultBranch}
 	}
-}
-
-type CheckoutStrategy interface {
-	Checkout(ctx context.Context, path, url string, auth transport.AuthMethod) (*object.Commit, string, error)
 }
 
 type CheckoutBranch struct {
 	branch string
 }
 
-func (c *CheckoutBranch) Checkout(ctx context.Context, path, url string, auth transport.AuthMethod) (*object.Commit, string, error) {
+func (c *CheckoutBranch) Checkout(ctx context.Context, path, url string, auth *common.Auth) (common.Commit, string, error) {
 	repo, err := git.PlainCloneContext(ctx, path, false, &git.CloneOptions{
 		URL:               url,
-		Auth:              auth,
-		RemoteName:        defaultOrigin,
+		Auth:              auth.AuthMethod,
+		RemoteName:        common.DefaultOrigin,
 		ReferenceName:     plumbing.NewBranchReferenceName(c.branch),
 		SingleBranch:      true,
 		NoCheckout:        false,
@@ -91,18 +80,18 @@ func (c *CheckoutBranch) Checkout(ctx context.Context, path, url string, auth tr
 	if err != nil {
 		return nil, "", fmt.Errorf("git commit '%s' not found: %w", head.Hash(), err)
 	}
-	return commit, fmt.Sprintf("%s/%s", c.branch, head.Hash().String()), nil
+	return &Commit{commit}, fmt.Sprintf("%s/%s", c.branch, head.Hash().String()), nil
 }
 
 type CheckoutTag struct {
 	tag string
 }
 
-func (c *CheckoutTag) Checkout(ctx context.Context, path, url string, auth transport.AuthMethod) (*object.Commit, string, error) {
+func (c *CheckoutTag) Checkout(ctx context.Context, path, url string, auth *common.Auth) (common.Commit, string, error) {
 	repo, err := git.PlainCloneContext(ctx, path, false, &git.CloneOptions{
 		URL:               url,
-		Auth:              auth,
-		RemoteName:        defaultOrigin,
+		Auth:              auth.AuthMethod,
+		RemoteName:        common.DefaultOrigin,
 		ReferenceName:     plumbing.NewTagReferenceName(c.tag),
 		SingleBranch:      true,
 		NoCheckout:        false,
@@ -122,7 +111,7 @@ func (c *CheckoutTag) Checkout(ctx context.Context, path, url string, auth trans
 	if err != nil {
 		return nil, "", fmt.Errorf("git commit '%s' not found: %w", head.Hash(), err)
 	}
-	return commit, fmt.Sprintf("%s/%s", c.tag, head.Hash().String()), nil
+	return &Commit{commit}, fmt.Sprintf("%s/%s", c.tag, head.Hash().String()), nil
 }
 
 type CheckoutCommit struct {
@@ -130,11 +119,11 @@ type CheckoutCommit struct {
 	commit string
 }
 
-func (c *CheckoutCommit) Checkout(ctx context.Context, path, url string, auth transport.AuthMethod) (*object.Commit, string, error) {
+func (c *CheckoutCommit) Checkout(ctx context.Context, path, url string, auth *common.Auth) (common.Commit, string, error) {
 	repo, err := git.PlainCloneContext(ctx, path, false, &git.CloneOptions{
 		URL:               url,
-		Auth:              auth,
-		RemoteName:        defaultOrigin,
+		Auth:              auth.AuthMethod,
+		RemoteName:        common.DefaultOrigin,
 		ReferenceName:     plumbing.NewBranchReferenceName(c.branch),
 		SingleBranch:      true,
 		NoCheckout:        false,
@@ -160,14 +149,14 @@ func (c *CheckoutCommit) Checkout(ctx context.Context, path, url string, auth tr
 	if err != nil {
 		return nil, "", fmt.Errorf("git checkout error: %w", err)
 	}
-	return commit, fmt.Sprintf("%s/%s", c.branch, commit.Hash.String()), nil
+	return &Commit{commit}, fmt.Sprintf("%s/%s", c.branch, commit.Hash.String()), nil
 }
 
 type CheckoutSemVer struct {
 	semVer string
 }
 
-func (c *CheckoutSemVer) Checkout(ctx context.Context, path, url string, auth transport.AuthMethod) (*object.Commit, string, error) {
+func (c *CheckoutSemVer) Checkout(ctx context.Context, path, url string, auth *common.Auth) (common.Commit, string, error) {
 	verConstraint, err := semver.NewConstraint(c.semVer)
 	if err != nil {
 		return nil, "", fmt.Errorf("semver parse range error: %w", err)
@@ -175,8 +164,8 @@ func (c *CheckoutSemVer) Checkout(ctx context.Context, path, url string, auth tr
 
 	repo, err := git.PlainCloneContext(ctx, path, false, &git.CloneOptions{
 		URL:               url,
-		Auth:              auth,
-		RemoteName:        defaultOrigin,
+		Auth:              auth.AuthMethod,
+		RemoteName:        common.DefaultOrigin,
 		NoCheckout:        false,
 		Depth:             1,
 		RecurseSubmodules: 0,
@@ -265,5 +254,5 @@ func (c *CheckoutSemVer) Checkout(ctx context.Context, path, url string, auth tr
 		return nil, "", fmt.Errorf("git commit '%s' not found: %w", head.Hash(), err)
 	}
 
-	return commit, fmt.Sprintf("%s/%s", t, head.Hash().String()), nil
+	return &Commit{commit}, fmt.Sprintf("%s/%s", t, head.Hash().String()), nil
 }

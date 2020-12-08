@@ -1,6 +1,9 @@
 # Docker buildkit multi-arch build requires golang alpine
 FROM golang:1.15-alpine as builder
 
+RUN apk add gcc pkgconfig libc-dev
+RUN apk add --no-cache --repository http://dl-cdn.alpinelinux.org/alpine/edge/community libgit2-dev=1.1.0-r1
+
 WORKDIR /workspace
 
 # copy api submodule
@@ -20,7 +23,7 @@ COPY pkg/ pkg/
 COPY internal/ internal/
 
 # build without specifing the arch
-RUN CGO_ENABLED=0 go build -a -o source-controller main.go
+RUN CGO_ENABLED=1 go build -o source-controller main.go
 
 FROM alpine:3.12
 
@@ -28,6 +31,7 @@ FROM alpine:3.12
 LABEL org.opencontainers.image.source="https://github.com/fluxcd/source-controller"
 
 RUN apk add --no-cache ca-certificates tini
+RUN apk add --no-cache --repository http://dl-cdn.alpinelinux.org/alpine/edge/community libgit2=1.1.0-r1
 
 COPY --from=builder /workspace/source-controller /usr/local/bin/
 

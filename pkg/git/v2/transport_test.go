@@ -14,15 +14,15 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package git
+package v2
 
 import (
 	"reflect"
 	"testing"
 
-	"github.com/go-git/go-git/v5/plumbing/transport"
-	"github.com/go-git/go-git/v5/plumbing/transport/http"
 	corev1 "k8s.io/api/core/v1"
+
+	"github.com/fluxcd/source-controller/pkg/git/common"
 )
 
 const (
@@ -68,7 +68,7 @@ func TestAuthSecretStrategyForURL(t *testing.T) {
 	tests := []struct {
 		name    string
 		url     string
-		want    AuthSecretStrategy
+		want    common.AuthSecretStrategy
 		wantErr bool
 	}{
 		{"HTTP", "http://git.example.com/org/repo.git", &BasicAuth{}, false},
@@ -96,10 +96,9 @@ func TestBasicAuthStrategy_Method(t *testing.T) {
 		name    string
 		secret  corev1.Secret
 		modify  func(secret *corev1.Secret)
-		want    transport.AuthMethod
+		want    *common.Auth
 		wantErr bool
 	}{
-		{"username and password", basicAuthSecretFixture, nil, &http.BasicAuth{Username: "git", Password: "password"}, false},
 		{"without username", basicAuthSecretFixture, func(s *corev1.Secret) { delete(s.Data, "username") }, nil, true},
 		{"without password", basicAuthSecretFixture, func(s *corev1.Secret) { delete(s.Data, "password") }, nil, true},
 		{"empty", corev1.Secret{}, nil, nil, true},

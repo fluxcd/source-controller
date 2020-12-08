@@ -25,8 +25,6 @@ import (
 	"time"
 
 	"github.com/fluxcd/pkg/apis/meta"
-	"github.com/go-git/go-git/v5/plumbing/object"
-	"github.com/go-git/go-git/v5/plumbing/transport"
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
@@ -46,6 +44,7 @@ import (
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
 	"github.com/fluxcd/source-controller/pkg/git"
+	"github.com/fluxcd/source-controller/pkg/git/common"
 )
 
 // GitRepositoryReconciler reconciles a GitRepository object
@@ -154,7 +153,6 @@ func (r *GitRepositoryReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 	))
 
 	return ctrl.Result{RequeueAfter: repository.GetInterval().Duration}, nil
-
 }
 
 type GitRepositoryReconcilerOptions struct {
@@ -183,9 +181,9 @@ func (r *GitRepositoryReconciler) reconcile(ctx context.Context, repository sour
 	defer os.RemoveAll(tmpGit)
 
 	// determine auth method
-	var auth transport.AuthMethod
+	auth := &common.Auth{}
 	if repository.Spec.SecretRef != nil {
-		authStrategy, err := git.AuthSecretStrategyForURL(repository.Spec.URL)
+		authStrategy, err := git.AuthSecretStrategyForURL(repository.Spec.URL, repository.Spec.GitImplementation)
 		if err != nil {
 			return sourcev1.GitRepositoryNotReady(repository, sourcev1.AuthenticationFailedReason, err.Error()), err
 		}
@@ -209,14 +207,17 @@ func (r *GitRepositoryReconciler) reconcile(ctx context.Context, repository sour
 		}
 	}
 
-	checkoutStrategy := git.CheckoutStrategyForRef(repository.Spec.Reference)
+	checkoutStrategy, err := git.CheckoutStrategyForRef(repository.Spec.Reference, repository.Spec.GitImplementation)
+	if err != nil {
+		return sourcev1.GitRepositoryNotReady(repository, sourcev1.GitOperationFailedReason, err.Error()), err
+	}
 	commit, revision, err := checkoutStrategy.Checkout(ctx, tmpGit, repository.Spec.URL, auth)
 	if err != nil {
 		return sourcev1.GitRepositoryNotReady(repository, sourcev1.GitOperationFailedReason, err.Error()), err
 	}
 
 	// return early on unchanged revision
-	artifact := r.Storage.NewArtifactFor(repository.Kind, repository.GetObjectMeta(), revision, fmt.Sprintf("%s.tar.gz", commit.Hash.String()))
+	artifact := r.Storage.NewArtifactFor(repository.Kind, repository.GetObjectMeta(), revision, fmt.Sprintf("%s.tar.gz", commit.Hash()))
 	if apimeta.IsStatusConditionTrue(repository.Status.Conditions, meta.ReadyCondition) && repository.GetArtifact().HasRevision(artifact.Revision) {
 		if artifact.URL != repository.GetArtifact().URL {
 			r.Storage.SetArtifactURL(repository.GetArtifact())
@@ -227,10 +228,17 @@ func (r *GitRepositoryReconciler) reconcile(ctx context.Context, repository sour
 
 	// verify PGP signature
 	if repository.Spec.Verification != nil {
-		err := r.verify(ctx, types.NamespacedName{
+		publicKeySecret := types.NamespacedName{
 			Namespace: repository.Namespace,
 			Name:      repository.Spec.Verification.SecretRef.Name,
-		}, commit)
+		}
+		var secret corev1.Secret
+		if err := r.Client.Get(ctx, publicKeySecret, &secret); err != nil {
+			err = fmt.Errorf("PGP public keys secret error: %w", err)
+			return sourcev1.GitRepositoryNotReady(repository, sourcev1.VerificationFailedReason, err.Error()), err
+		}
+
+		err := commit.Verify(secret)
 		if err != nil {
 			return sourcev1.GitRepositoryNotReady(repository, sourcev1.VerificationFailedReason, err.Error()), err
 		}
@@ -286,30 +294,6 @@ func (r *GitRepositoryReconciler) reconcileDelete(ctx context.Context, repositor
 
 	// Stop reconciliation as the object is being deleted
 	return ctrl.Result{}, nil
-}
-
-// verify returns an error if the PGP signature can't be verified
-func (r *GitRepositoryReconciler) verify(ctx context.Context, publicKeySecret types.NamespacedName, commit *object.Commit) error {
-	if commit.PGPSignature == "" {
-		return fmt.Errorf("no PGP signature found for commit: %s", commit.Hash)
-	}
-
-	var secret corev1.Secret
-	if err := r.Client.Get(ctx, publicKeySecret, &secret); err != nil {
-		return fmt.Errorf("PGP public keys secret error: %w", err)
-	}
-
-	var verified bool
-	for _, bytes := range secret.Data {
-		if _, err := commit.Verify(string(bytes)); err == nil {
-			verified = true
-			break
-		}
-	}
-	if !verified {
-		return fmt.Errorf("PGP signature '%s' of '%s' can't be verified", commit.PGPSignature, commit.Author)
-	}
-	return nil
 }
 
 // resetStatus returns a modified v1beta1.GitRepository and a boolean indicating

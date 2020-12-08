@@ -28,6 +28,21 @@ to join the conversation (this will also add an invitation to your
 Google calendar for our [Flux
 meeting](https://docs.google.com/document/d/1l_M0om0qUEN_NNiGgpqJ2tvsF2iioHkaARDeh6b70B0/edit#)).
 
+### Installing required dependencies
+
+The dependency [libgit2](https://libgit2.org/) needs to be installed to be able to run
+Source Controller or its test-suite locally (not in a container).
+
+**macOS**
+```
+brew install libgit2
+```
+
+**Arch Linux**
+```
+pacman -S libgit2
+```
+
 ### How to run the test suite
 
 You can run the unit tests by simply doing
