@@ -3,6 +3,7 @@ FROM golang:1.15-alpine as builder
 
 RUN apk add gcc pkgconfig libc-dev
 RUN apk add --no-cache --repository http://dl-cdn.alpinelinux.org/alpine/edge/community libgit2-dev~=1.1.0
+RUN apk add --no-cache --repository http://dl-cdn.alpinelinux.org/alpine/edge/main musl=1.2.2_pre5-r0
 
 WORKDIR /workspace
 
