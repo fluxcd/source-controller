@@ -23,6 +23,7 @@ import (
 	"net/url"
 	"os"
 	"path"
+	"regexp"
 	"strings"
 	"time"
 
@@ -187,7 +188,8 @@ func (r *HelmChartReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	}
 
 	// Emit an event if we did not have an artifact before, or the revision has changed
-	if chart.Status.Artifact == nil || reconciledChart.Status.Artifact.Revision != chart.Status.Artifact.Revision {
+	if (chart.Status.Artifact == nil && reconciledChart.Status.Artifact != nil) ||
+		reconciledChart.Status.Artifact.Revision != chart.Status.Artifact.Revision {
 		r.event(reconciledChart, events.EventSeverityInfo, sourcev1.HelmChartReadyMessage(reconciledChart))
 	}
 	r.recordReadiness(reconciledChart)
@@ -275,6 +277,12 @@ func (r *HelmChartReconciler) getSource(ctx context.Context, chart sourcev1.Helm
 
 func (r *HelmChartReconciler) reconcileFromHelmRepository(ctx context.Context,
 	repository sourcev1.HelmRepository, chart sourcev1.HelmChart, force bool) (sourcev1.HelmChart, error) {
+	// TODO: move this to a validation webhook once the discussion around
+	//  certificates has settled: https://github.com/fluxcd/image-reflector-controller/issues/69
+	if err := validHelmChartName(chart.Spec.Chart); err != nil {
+		return sourcev1.HelmChartNotReady(chart, sourcev1.ChartPullFailedReason, err.Error()), nil
+	}
+
 	// Configure ChartRepository getter options
 	var clientOpts []getter.Option
 	if secret, err := r.getHelmRepositorySecret(ctx, &repository); err != nil {
@@ -876,4 +884,16 @@ func (r *HelmChartReconciler) requestsForBucketChange(obj handler.MapObject) []r
 		reqs = append(reqs, req)
 	}
 	return reqs
+}
+
+// validHelmChartName returns an error if the given string is not a
+// valid Helm chart name; a valid name must be lower case letters
+// and numbers, words may be separated with dashes (-).
+// Ref: https://helm.sh/docs/chart_best_practices/conventions/#chart-names
+func validHelmChartName(s string) error {
+	chartFmt := regexp.MustCompile("^([-a-z0-9]*)$")
+	if !chartFmt.MatchString(s) {
+		return fmt.Errorf("invalid chart name %q, a valid name must be lower case letters and numbers and MAY be seperated with dashes (-)", s)
+	}
+	return nil
 }
