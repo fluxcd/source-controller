@@ -2,6 +2,27 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.5.0
+
+**Release date:** 2020-12-09
+
+This is the fifth MINOR prerelease, adding a new Git implementation
+(`libgit2`) to allow for communication with Git servers that just
+support the Git v2 protocol, like Azure Devops.
+
+The new Git implementation can be enabled by configuring the
+`GitImplementation` in a `GitRepository` to `libgit2` (default:
+`go-git`). Note that this implementation does not support shallow
+cloning, and it is therefore advised to only resort to this option
+if a connection fails with the default configuration.
+
+Other notable changes in this release:
+
+* Bug fix to respect the configured SSH user in `GitRepository` URLs
+* Chart name validation for charts from a `HelmRepository` resource
+* Kubernetes dependency upgrades to `v1.19.4`
+* Helm upgrade to `v3.4.2`
+
 ## 0.4.1
 
 **Release date:** 2020-11-26
