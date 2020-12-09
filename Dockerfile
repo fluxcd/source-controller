@@ -2,7 +2,7 @@
 FROM golang:1.15-alpine as builder
 
 RUN apk add gcc pkgconfig libc-dev
-RUN apk add --no-cache --repository http://dl-cdn.alpinelinux.org/alpine/edge/community libgit2-dev=1.1.0-r1
+RUN apk add --no-cache --repository http://dl-cdn.alpinelinux.org/alpine/edge/community libgit2-dev~=1.1.0
 
 WORKDIR /workspace
 
@@ -31,7 +31,7 @@ FROM alpine:3.12
 LABEL org.opencontainers.image.source="https://github.com/fluxcd/source-controller"
 
 RUN apk add --no-cache ca-certificates tini
-RUN apk add --no-cache --repository http://dl-cdn.alpinelinux.org/alpine/edge/community libgit2=1.1.0-r1
+RUN apk add --no-cache --repository http://dl-cdn.alpinelinux.org/alpine/edge/community libgit2-dev~=1.1.0
 
 COPY --from=builder /workspace/source-controller /usr/local/bin/
 

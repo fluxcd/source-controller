@@ -43,6 +43,25 @@ brew install libgit2
 pacman -S libgit2
 ```
 
+**Building from source**
+
+1. Ensure [`cmake`](https://cmake.org) is available on your system.
+1. Download and unarchive [the right `libgit2` version](https://github.com/libgit2/git2go#which-go-version-to-use)
+   for our current `git2go` dependency:
+
+   ```console
+   $ LIBGIT2_VER=1.1.0
+   $ curl -L https://github.com/libgit2/libgit2/releases/download/v$LIBGIT2_VER/libgit2-$LIBGIT2_VER.tar.gz -o /tmp/libgit2.tar.gz
+   $ tar -xvf /tmp/libgit2.tar.gz -C /tmp/libgit2-$LIBGIT2_VER
+   ```
+1. Build and install the library on your system:
+
+   ```console
+   $ mkdir /tmp/libgit2-$LIBGIT2_VER/build && cd /tmp/libgit2-$LIBGIT2_VER/build
+   $ cmake .. -DCMAKE_INSTALL_PREFIX=/usr
+   $ sudo cmake --build . --target install
+   ```
+
 ### How to run the test suite
 
 You can run the unit tests by simply doing
