@@ -68,19 +68,26 @@ func main() {
 		enableLeaderElection bool
 		storagePath          string
 		storageAddr          string
+		storageAdvAddr       string
 		concurrent           int
 		logLevel             string
 		logJSON              bool
 		watchAllNamespaces   bool
 	)
 
-	flag.StringVar(&metricsAddr, "metrics-addr", envOrDefault("METRICS_ADDR", ":8080"), "The address the metric endpoint binds to.")
-	flag.StringVar(&eventsAddr, "events-addr", envOrDefault("EVENTS_ADDR", ""), "The address of the events receiver.")
+	flag.StringVar(&metricsAddr, "metrics-addr", envOrDefault("METRICS_ADDR", ":8080"),
+		"The address the metric endpoint binds to.")
+	flag.StringVar(&eventsAddr, "events-addr", envOrDefault("EVENTS_ADDR", ""),
+		"The address of the events receiver.")
 	flag.BoolVar(&enableLeaderElection, "enable-leader-election", false,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
-	flag.StringVar(&storagePath, "storage-path", envOrDefault("STORAGE_PATH", ""), "The local storage path.")
-	flag.StringVar(&storageAddr, "storage-addr", envOrDefault("STORAGE_ADDR", ":9090"), "The address the static file server binds to.")
+	flag.StringVar(&storagePath, "storage-path", envOrDefault("STORAGE_PATH", ""),
+		"The local storage path.")
+	flag.StringVar(&storageAddr, "storage-addr", envOrDefault("STORAGE_ADDR", ":9090"),
+		"The address the static file server binds to.")
+	flag.StringVar(&storageAdvAddr, "storage-adv-addr", envOrDefault("STORAGE_ADV_ADDR", ""),
+		"The advertised address of the static file server.")
 	flag.IntVar(&concurrent, "concurrent", 2, "The number of concurrent reconciles per controller.")
 	flag.StringVar(&logLevel, "log-level", "info", "Set logging level. Can be debug, info or error.")
 	flag.BoolVar(&logJSON, "log-json", false, "Set logging to JSON format.")
@@ -122,8 +129,10 @@ func main() {
 		os.Exit(1)
 	}
 
-	storage := mustInitStorage(storagePath, storageAddr, setupLog)
-
+	if storageAdvAddr == "" {
+		storageAdvAddr = determineAdvStorageAddr(storageAddr, setupLog)
+	}
+	storage := mustInitStorage(storagePath, storageAdvAddr, setupLog)
 	go startFileServer(storage.BasePath, storageAddr, setupLog)
 
 	if err = (&controllers.GitRepositoryReconciler{
@@ -202,11 +211,29 @@ func startFileServer(path string, address string, l logr.Logger) {
 	}
 }
 
-func mustInitStorage(path string, storageAddr string, l logr.Logger) *controllers.Storage {
+func mustInitStorage(path string, storageAdvAddr string, l logr.Logger) *controllers.Storage {
 	if path == "" {
 		p, _ := os.Getwd()
 		path = filepath.Join(p, "bin")
 		os.MkdirAll(path, 0777)
+	}
+
+	storage, err := controllers.NewStorage(path, storageAdvAddr, 5*time.Minute)
+	if err != nil {
+		l.Error(err, "unable to initialise storage")
+		os.Exit(1)
+	}
+
+	return storage
+}
+
+func determineAdvStorageAddr(storageAddr string, l logr.Logger) string {
+	// TODO(hidde): remove next MINOR prerelease as it can be passed in using
+	//  Kubernetes' substitution.
+	if os.Getenv("RUNTIME_NAMESPACE") != "" {
+		svcParts := strings.Split(os.Getenv("HOSTNAME"), "-")
+		return fmt.Sprintf("%s.%s",
+			strings.Join(svcParts[:len(svcParts)-2], "-"), os.Getenv("RUNTIME_NAMESPACE"))
 	}
 
 	host, port, err := net.SplitHostPort(storageAddr)
@@ -214,7 +241,6 @@ func mustInitStorage(path string, storageAddr string, l logr.Logger) *controller
 		l.Error(err, "unable to parse storage address")
 		os.Exit(1)
 	}
-
 	switch host {
 	case "":
 		host = "localhost"
@@ -226,26 +252,10 @@ func mustInitStorage(path string, storageAddr string, l logr.Logger) *controller
 				l.Error(err, "0.0.0.0 specified in storage addr but hostname is invalid")
 				os.Exit(1)
 			}
-
 			host = hn
 		}
 	}
-
-	hostname := net.JoinHostPort(host, port)
-
-	if os.Getenv("RUNTIME_NAMESPACE") != "" {
-		svcParts := strings.Split(os.Getenv("HOSTNAME"), "-")
-		hostname = fmt.Sprintf("%s.%s",
-			strings.Join(svcParts[:len(svcParts)-2], "-"), os.Getenv("RUNTIME_NAMESPACE"))
-	}
-
-	storage, err := controllers.NewStorage(path, hostname, 5*time.Minute)
-	if err != nil {
-		l.Error(err, "unable to initialise storage")
-		os.Exit(1)
-	}
-
-	return storage
+	return net.JoinHostPort(host, port)
 }
 
 func envOrDefault(envName, defaultValue string) string {
