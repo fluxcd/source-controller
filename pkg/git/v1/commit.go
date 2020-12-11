@@ -28,7 +28,7 @@ type Commit struct {
 }
 
 func (c *Commit) Hash() string {
-	return ""
+	return c.commit.Hash.String()
 }
 
 // Verify returns an error if the PGP signature can't be verified
