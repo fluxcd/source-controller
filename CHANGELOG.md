@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.5.2
+
+**Release date:** 2020-12-11
+
+This prerelease adds the option to configure the advertised storage
+address using the `--storage-adv-addr` flag.
+
+The default deployment manifest uses this to configure the FQDN of
+the service (`source-controller.$(RUNTIME_NAMESPACE).svc.cluster.local.`),
+but omitting the flag will result in a fallback to the previous behavior
+for backwards compatibility.
+
 ## 0.5.1
 
 **Release date:** 2020-12-09
