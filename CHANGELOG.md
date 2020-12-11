@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.5.3
+
+**Release date:** 2020-12-11
+
+This prerelease fixes a regression bug causing the commit hash for the
+`go-git` implementation to not be forwarded, introduced by the support
+for multiple Git implementations. 
+
 ## 0.5.2
 
 **Release date:** 2020-12-11
