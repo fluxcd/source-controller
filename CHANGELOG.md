@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.5.4
+
+**Release date:** 2020-12-12
+
+This prerelease fixes a bug in the build process that caused the
+ARMv7 image to fail due to `libgit2` requiring `musl>=1.2.0`.
+
 ## 0.5.3
 
 **Release date:** 2020-12-11
