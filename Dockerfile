@@ -36,6 +36,7 @@ LABEL org.opencontainers.image.source="https://github.com/fluxcd/source-controll
 
 RUN apk add --no-cache ca-certificates tini
 RUN apk add --no-cache --repository http://dl-cdn.alpinelinux.org/alpine/edge/community libgit2~=1.1
+RUN apk add --no-cache --repository http://dl-cdn.alpinelinux.org/alpine/edge/main musl~=1.2
 
 COPY --from=builder /workspace/source-controller /usr/local/bin/
 
