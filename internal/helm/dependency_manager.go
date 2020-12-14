@@ -20,11 +20,11 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"path"
 	"path/filepath"
 	"strings"
 
 	"github.com/Masterminds/semver/v3"
+	securejoin "github.com/cyphar/filepath-securejoin"
 	"golang.org/x/sync/errgroup"
 	helmchart "helm.sh/helm/v3/pkg/chart"
 	"helm.sh/helm/v3/pkg/chart/loader"
@@ -39,14 +39,15 @@ type DependencyWithRepository struct {
 
 // DependencyManager manages dependencies for helm charts
 type DependencyManager struct {
-	Chart        *helmchart.Chart
+	BaseDir      string
 	ChartPath    string
+	Chart        *helmchart.Chart
 	Dependencies []*DependencyWithRepository
 }
 
 // Build compiles and builds the chart dependencies
 func (dm *DependencyManager) Build() error {
-	if dm.Dependencies == nil {
+	if len(dm.Dependencies) == 0 {
 		return nil
 	}
 
@@ -54,17 +55,15 @@ func (dm *DependencyManager) Build() error {
 	errs, ctx := errgroup.WithContext(ctx)
 
 	for _, item := range dm.Dependencies {
-		dep := item.Dependency
-		chartRepo := item.Repo
 		errs.Go(func() error {
 			var (
 				ch  *helmchart.Chart
 				err error
 			)
-			if strings.HasPrefix(dep.Repository, "file://") {
-				ch, err = chartForLocalDependency(dep, dm.ChartPath)
+			if strings.HasPrefix(item.Dependency.Repository, "file://") {
+				ch, err = chartForLocalDependency(item.Dependency, dm.BaseDir, dm.ChartPath)
 			} else {
-				ch, err = chartForRemoteDependency(dep, chartRepo)
+				ch, err = chartForRemoteDependency(item.Dependency, item.Repo)
 			}
 			if err != nil {
 				return err
@@ -77,8 +76,9 @@ func (dm *DependencyManager) Build() error {
 	return errs.Wait()
 }
 
-func chartForLocalDependency(dep *helmchart.Dependency, cp string) (*helmchart.Chart, error) {
-	origPath, err := filepath.Abs(path.Join(cp, strings.TrimPrefix(dep.Repository, "file://")))
+func chartForLocalDependency(dep *helmchart.Dependency, baseDir, chartPath string) (*helmchart.Chart, error) {
+	origPath, err := securejoin.SecureJoin(baseDir,
+		filepath.Join(strings.TrimPrefix(chartPath, baseDir), strings.TrimPrefix(dep.Repository, "file://")))
 	if err != nil {
 		return nil, err
 	}
@@ -114,20 +114,19 @@ func chartForLocalDependency(dep *helmchart.Dependency, cp string) (*helmchart.C
 	return ch, nil
 }
 
-func chartForRemoteDependency(dep *helmchart.Dependency, chartrepo *ChartRepository) (*helmchart.Chart, error) {
-	if chartrepo == nil {
-		err := fmt.Errorf("chartrepo should not be nil")
-		return nil, err
+func chartForRemoteDependency(dep *helmchart.Dependency, chartRepo *ChartRepository) (*helmchart.Chart, error) {
+	if chartRepo == nil {
+		return nil, fmt.Errorf("chartrepo should not be nil")
 	}
 
 	// Lookup the chart version in the chart repository index
-	chartVer, err := chartrepo.Get(dep.Name, dep.Version)
+	chartVer, err := chartRepo.Get(dep.Name, dep.Version)
 	if err != nil {
 		return nil, err
 	}
 
 	// Download chart
-	res, err := chartrepo.DownloadChart(chartVer)
+	res, err := chartRepo.DownloadChart(chartVer)
 	if err != nil {
 		return nil, err
 	}

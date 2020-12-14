@@ -108,8 +108,9 @@ func TestBuild_WithLocalChart(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			c := chartFixture
 			dm := DependencyManager{
-				Chart:     &c,
+				BaseDir:   "./",
 				ChartPath: "testdata/charts/helmchart",
+				Chart:     &c,
 				Dependencies: []*DependencyWithRepository{
 					{
 						Dependency: &tt.dep,
