@@ -589,7 +589,7 @@ func (r *HelmChartReconciler) reconcileFromTarballArtifact(ctx context.Context,
 				Chart:        helmChart,
 				Dependencies: dwr,
 			}
-			err = dm.Build()
+			err = dm.Build(ctx)
 			if err != nil {
 				return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
 			}

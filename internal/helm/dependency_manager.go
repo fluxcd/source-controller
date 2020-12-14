@@ -46,16 +46,20 @@ type DependencyManager struct {
 }
 
 // Build compiles and builds the chart dependencies
-func (dm *DependencyManager) Build() error {
+func (dm *DependencyManager) Build(ctx context.Context) error {
 	if len(dm.Dependencies) == 0 {
 		return nil
 	}
 
-	ctx := context.Background()
 	errs, ctx := errgroup.WithContext(ctx)
-
 	for _, item := range dm.Dependencies {
 		errs.Go(func() error {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			default:
+			}
+
 			var (
 				ch  *helmchart.Chart
 				err error

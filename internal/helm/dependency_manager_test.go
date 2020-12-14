@@ -17,6 +17,7 @@ limitations under the License.
 package helm
 
 import (
+	"context"
 	"fmt"
 	"io/ioutil"
 	"strings"
@@ -43,7 +44,7 @@ func TestBuild_WithEmptyDependencies(t *testing.T) {
 	dm := DependencyManager{
 		Dependencies: nil,
 	}
-	if err := dm.Build(); err != nil {
+	if err := dm.Build(context.TODO()); err != nil {
 		t.Errorf("Build() should return nil")
 	}
 }
@@ -119,7 +120,7 @@ func TestBuild_WithLocalChart(t *testing.T) {
 				},
 			}
 
-			err := dm.Build()
+			err := dm.Build(context.TODO())
 			deps := dm.Chart.Dependencies()
 
 			if (err != nil) && tt.wantErr {
@@ -172,7 +173,7 @@ func TestBuild_WithRemoteChart(t *testing.T) {
 		},
 	}
 
-	if err := dm.Build(); err != nil {
+	if err := dm.Build(context.TODO()); err != nil {
 		t.Errorf("Build() expected to not return error: %s", err)
 	}
 
@@ -189,7 +190,7 @@ func TestBuild_WithRemoteChart(t *testing.T) {
 
 	// When repo is not set
 	dm.Dependencies[0].Repo = nil
-	if err := dm.Build(); err == nil {
+	if err := dm.Build(context.TODO()); err == nil {
 		t.Errorf("Build() expected to return error")
 	} else if !strings.Contains(err.Error(), "chartrepo should not be nil") {
 		t.Errorf("Build() expected to return different error, got: %s", err)
