@@ -22,11 +22,11 @@ import (
 	"io/ioutil"
 	"net/url"
 	"os"
-	"path"
 	"regexp"
 	"strings"
 	"time"
 
+	securejoin "github.com/cyphar/filepath-securejoin"
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/go-logr/logr"
 	helmchart "helm.sh/helm/v3/pkg/chart"
@@ -453,7 +453,10 @@ func (r *HelmChartReconciler) reconcileFromTarballArtifact(ctx context.Context,
 	f.Close()
 
 	// Load the chart
-	chartPath := path.Join(tmpDir, chart.Spec.Chart)
+	chartPath, err := securejoin.SecureJoin(tmpDir, chart.Spec.Chart)
+	if err != nil {
+		return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
+	}
 	chartFileInfo, err := os.Stat(chartPath)
 	if err != nil {
 		err = fmt.Errorf("chart location read error: %w", err)
@@ -512,7 +515,7 @@ func (r *HelmChartReconciler) reconcileFromTarballArtifact(ctx context.Context,
 			if strings.HasPrefix(dep.Repository, "file://") {
 				dwr = append(dwr, &helm.DependencyWithRepository{
 					Dependency: dep,
-					Repo:       nil,
+					Repository: nil,
 				})
 				continue
 			}
@@ -574,18 +577,19 @@ func (r *HelmChartReconciler) reconcileFromTarballArtifact(ctx context.Context,
 
 			dwr = append(dwr, &helm.DependencyWithRepository{
 				Dependency: dep,
-				Repo:       chartRepo,
+				Repository: chartRepo,
 			})
 		}
 
 		// Construct dependencies for chart if any
 		if len(dwr) > 0 {
 			dm := &helm.DependencyManager{
+				WorkingDir:   tmpDir,
+				ChartPath:    chart.Spec.Chart,
 				Chart:        helmChart,
-				ChartPath:    chartPath,
 				Dependencies: dwr,
 			}
-			err = dm.Build()
+			err = dm.Build(ctx)
 			if err != nil {
 				return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
 			}

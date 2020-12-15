@@ -17,6 +17,7 @@ limitations under the License.
 package helm
 
 import (
+	"context"
 	"fmt"
 	"io/ioutil"
 	"strings"
@@ -43,7 +44,7 @@ func TestBuild_WithEmptyDependencies(t *testing.T) {
 	dm := DependencyManager{
 		Dependencies: nil,
 	}
-	if err := dm.Build(); err != nil {
+	if err := dm.Build(context.TODO()); err != nil {
 		t.Errorf("Build() should return nil")
 	}
 }
@@ -73,6 +74,15 @@ func TestBuild_WithLocalChart(t *testing.T) {
 			},
 		},
 		{
+			name: "allowed traversing path",
+			dep: helmchart.Dependency{
+				Name:       chartName,
+				Alias:      "aliased",
+				Version:    chartVersion,
+				Repository: "file://../../../testdata/charts/helmchartwithdeps/../helmchart",
+			},
+		},
+		{
 			name: "invalid path",
 			dep: helmchart.Dependency{
 				Name:       chartName,
@@ -80,7 +90,17 @@ func TestBuild_WithLocalChart(t *testing.T) {
 				Repository: "file://../invalid",
 			},
 			wantErr: true,
-			errMsg:  "no such file or directory",
+			errMsg:  "no chart found at",
+		},
+		{
+			name: "illegal traversing path",
+			dep: helmchart.Dependency{
+				Name:       chartName,
+				Version:    chartVersion,
+				Repository: "file://../../../../../controllers/testdata/charts/helmchart",
+			},
+			wantErr: true,
+			errMsg:  "no chart found at",
 		},
 		{
 			name: "invalid version constraint format",
@@ -108,17 +128,18 @@ func TestBuild_WithLocalChart(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			c := chartFixture
 			dm := DependencyManager{
-				Chart:     &c,
-				ChartPath: "testdata/charts/helmchart",
+				WorkingDir: "./",
+				ChartPath:  "testdata/charts/helmchart",
+				Chart:      &c,
 				Dependencies: []*DependencyWithRepository{
 					{
 						Dependency: &tt.dep,
-						Repo:       nil,
+						Repository: nil,
 					},
 				},
 			}
 
-			err := dm.Build()
+			err := dm.Build(context.TODO())
 			deps := dm.Chart.Dependencies()
 
 			if (err != nil) && tt.wantErr {
@@ -130,7 +151,7 @@ func TestBuild_WithLocalChart(t *testing.T) {
 				}
 				return
 			} else if err != nil {
-				t.Errorf("Build() expected to return error")
+				t.Errorf("Build() not expected to return an error: %s", err)
 				return
 			}
 
@@ -166,12 +187,12 @@ func TestBuild_WithRemoteChart(t *testing.T) {
 		Dependencies: []*DependencyWithRepository{
 			{
 				Dependency: &remoteDepFixture,
-				Repo:       cr,
+				Repository: cr,
 			},
 		},
 	}
 
-	if err := dm.Build(); err != nil {
+	if err := dm.Build(context.TODO()); err != nil {
 		t.Errorf("Build() expected to not return error: %s", err)
 	}
 
@@ -187,10 +208,10 @@ func TestBuild_WithRemoteChart(t *testing.T) {
 	}
 
 	// When repo is not set
-	dm.Dependencies[0].Repo = nil
-	if err := dm.Build(); err == nil {
+	dm.Dependencies[0].Repository = nil
+	if err := dm.Build(context.TODO()); err == nil {
 		t.Errorf("Build() expected to return error")
-	} else if !strings.Contains(err.Error(), "chartrepo should not be nil") {
+	} else if !strings.Contains(err.Error(), "is not a local chart reference") {
 		t.Errorf("Build() expected to return different error, got: %s", err)
 	}
 }
