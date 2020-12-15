@@ -515,7 +515,7 @@ func (r *HelmChartReconciler) reconcileFromTarballArtifact(ctx context.Context,
 			if strings.HasPrefix(dep.Repository, "file://") {
 				dwr = append(dwr, &helm.DependencyWithRepository{
 					Dependency: dep,
-					Repo:       nil,
+					Repository: nil,
 				})
 				continue
 			}
@@ -577,15 +577,15 @@ func (r *HelmChartReconciler) reconcileFromTarballArtifact(ctx context.Context,
 
 			dwr = append(dwr, &helm.DependencyWithRepository{
 				Dependency: dep,
-				Repo:       chartRepo,
+				Repository: chartRepo,
 			})
 		}
 
 		// Construct dependencies for chart if any
 		if len(dwr) > 0 {
 			dm := &helm.DependencyManager{
-				BaseDir:      tmpDir,
-				ChartPath:    chartPath,
+				WorkingDir:   tmpDir,
+				ChartPath:    chart.Spec.Chart,
 				Chart:        helmChart,
 				Dependencies: dwr,
 			}

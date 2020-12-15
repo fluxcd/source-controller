@@ -19,6 +19,7 @@ package helm
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -30,22 +31,35 @@ import (
 	"helm.sh/helm/v3/pkg/chart/loader"
 )
 
-// DependencyWithRepository is a container for a dependency and its respective
-// repository
+// DependencyWithRepository is a container for a Helm chart dependency
+// and its respective repository.
 type DependencyWithRepository struct {
+	// Dependency holds the reference to a chart.Chart dependency.
 	Dependency *helmchart.Dependency
-	Repo       *ChartRepository
+	// Repository is the ChartRepository the dependency should be
+	// available at and can be downloaded from. If there is none,
+	// a local ('file://') dependency is assumed.
+	Repository *ChartRepository
 }
 
-// DependencyManager manages dependencies for helm charts
+// DependencyManager manages dependencies for a Helm chart.
 type DependencyManager struct {
-	BaseDir      string
-	ChartPath    string
-	Chart        *helmchart.Chart
+	// WorkingDir is the chroot path for dependency manager operations,
+	// Dependencies that hold a local (relative) path reference are not
+	// allowed to traverse outside this directory.
+	WorkingDir string
+	// ChartPath is the path of the Chart relative to the WorkingDir,
+	// the combination of the WorkingDir and ChartPath is used to
+	// determine the absolute path of a local dependency.
+	ChartPath string
+	// Chart holds the loaded chart.Chart from the ChartPath.
+	Chart *helmchart.Chart
+	// Dependencies contains a list of dependencies, and the respective
+	// repository the dependency can be found at.
 	Dependencies []*DependencyWithRepository
 }
 
-// Build compiles and builds the chart dependencies
+// Build compiles and builds the dependencies of the Chart.
 func (dm *DependencyManager) Build(ctx context.Context) error {
 	if len(dm.Dependencies) == 0 {
 		return nil
@@ -60,85 +74,90 @@ func (dm *DependencyManager) Build(ctx context.Context) error {
 			default:
 			}
 
-			var (
-				ch  *helmchart.Chart
-				err error
-			)
-			if strings.HasPrefix(item.Dependency.Repository, "file://") {
-				ch, err = chartForLocalDependency(item.Dependency, dm.BaseDir, dm.ChartPath)
-			} else {
-				ch, err = chartForRemoteDependency(item.Dependency, item.Repo)
+			var err error
+			switch item.Repository {
+			case nil:
+				err = dm.addLocalDependency(item)
+			default:
+				err = dm.addRemoteDependency(item)
 			}
-			if err != nil {
-				return err
-			}
-			dm.Chart.AddDependency(ch)
-			return nil
+			return err
 		})
 	}
 
 	return errs.Wait()
 }
 
-func chartForLocalDependency(dep *helmchart.Dependency, baseDir, chartPath string) (*helmchart.Chart, error) {
-	origPath, err := securejoin.SecureJoin(baseDir,
-		filepath.Join(strings.TrimPrefix(chartPath, baseDir), strings.TrimPrefix(dep.Repository, "file://")))
+func (dm *DependencyManager) addLocalDependency(dpr *DependencyWithRepository) error {
+	sLocalChartPath, err := dm.secureLocalChartPath(dpr)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	if _, err := os.Stat(origPath); os.IsNotExist(err) {
-		err := fmt.Errorf("chart path %s not found: %w", origPath, err)
-		return nil, err
-	} else if err != nil {
-		return nil, err
+	if _, err := os.Stat(sLocalChartPath); err != nil {
+		if os.IsNotExist(err) {
+			return fmt.Errorf("no chart found at '%s' (reference '%s') for dependency '%s'",
+				strings.TrimPrefix(sLocalChartPath, dm.WorkingDir), dpr.Dependency.Repository, dpr.Dependency.Name)
+		}
+		return err
 	}
 
-	ch, err := loader.Load(origPath)
+	ch, err := loader.Load(sLocalChartPath)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	constraint, err := semver.NewConstraint(dep.Version)
+	constraint, err := semver.NewConstraint(dpr.Dependency.Version)
 	if err != nil {
-		err := fmt.Errorf("dependency %s has an invalid version/constraint format: %w", dep.Name, err)
-		return nil, err
+		err := fmt.Errorf("dependency '%s' has an invalid version/constraint format: %w", dpr.Dependency.Name, err)
+		return err
 	}
 
 	v, err := semver.NewVersion(ch.Metadata.Version)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	if !constraint.Check(v) {
-		err = fmt.Errorf("can't get a valid version for dependency %s", dep.Name)
-		return nil, err
+		err = fmt.Errorf("can't get a valid version for dependency '%s'", dpr.Dependency.Name)
+		return err
 	}
 
-	return ch, nil
+	dm.Chart.AddDependency(ch)
+	return nil
 }
 
-func chartForRemoteDependency(dep *helmchart.Dependency, chartRepo *ChartRepository) (*helmchart.Chart, error) {
-	if chartRepo == nil {
-		return nil, fmt.Errorf("chartrepo should not be nil")
+func (dm *DependencyManager) addRemoteDependency(dpr *DependencyWithRepository) error {
+	if dpr.Repository == nil {
+		return fmt.Errorf("no ChartRepository given for '%s' dependency", dpr.Dependency.Name)
 	}
 
-	// Lookup the chart version in the chart repository index
-	chartVer, err := chartRepo.Get(dep.Name, dep.Version)
+	chartVer, err := dpr.Repository.Get(dpr.Dependency.Name, dpr.Dependency.Version)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	// Download chart
-	res, err := chartRepo.DownloadChart(chartVer)
+	res, err := dpr.Repository.DownloadChart(chartVer)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	ch, err := loader.LoadArchive(res)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	return ch, nil
+	dm.Chart.AddDependency(ch)
+	return nil
+}
+
+func (dm *DependencyManager) secureLocalChartPath(dep *DependencyWithRepository) (string, error) {
+	localUrl, err := url.Parse(dep.Dependency.Repository)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse alleged local chart reference: %w", err)
+	}
+	if localUrl.Scheme != "file" {
+		return "", fmt.Errorf("'%s' is not a local chart reference", dep.Dependency.Repository)
+	}
+	return securejoin.SecureJoin(dm.WorkingDir, filepath.Join(dm.ChartPath, localUrl.Host, localUrl.Path))
 }
