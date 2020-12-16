@@ -188,8 +188,8 @@ func (r *HelmChartReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	}
 
 	// Emit an event if we did not have an artifact before, or the revision has changed
-	if (chart.Status.Artifact == nil && reconciledChart.Status.Artifact != nil) ||
-		reconciledChart.Status.Artifact.Revision != chart.Status.Artifact.Revision {
+	if (chart.GetArtifact() == nil && reconciledChart.GetArtifact() != nil) ||
+		(chart.GetArtifact() != nil && reconciledChart.GetArtifact() != nil && reconciledChart.GetArtifact().Revision != chart.GetArtifact().Revision) {
 		r.event(reconciledChart, events.EventSeverityInfo, sourcev1.HelmChartReadyMessage(reconciledChart))
 	}
 	r.recordReadiness(reconciledChart)
