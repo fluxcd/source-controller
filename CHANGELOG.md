@@ -2,6 +2,20 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.5.5
+
+**Release date:** 2020-12-16
+
+This prerelease adds safe guards for user defined relative paths,
+ensuring they never traverse outside working directories.
+
+Other notable changes:
+
+* ListObjects V1 fallback for GCS S3 endpoints, ensuring generic
+  `Bucket` resources connecting to GCS are able to list object
+* HelmChart controller panic regression bug fix, introduced in
+  `v0.5.0`
+
 ## 0.5.4
 
 **Release date:** 2020-12-12
