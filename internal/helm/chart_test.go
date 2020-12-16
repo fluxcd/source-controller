@@ -18,7 +18,6 @@ package helm
 
 import (
 	"reflect"
-	"strings"
 	"testing"
 
 	helmchart "helm.sh/helm/v3/pkg/chart"
@@ -27,23 +26,10 @@ import (
 
 var (
 	originalValuesFixture []byte            = []byte("override: original")
-	overrideValuesFixture []byte            = []byte("override: test")
 	chartFilesFixture     []*helmchart.File = []*helmchart.File{
 		{
 			Name: "values.yaml",
 			Data: originalValuesFixture,
-		},
-		{
-			Name: "values-identical.yaml",
-			Data: originalValuesFixture,
-		},
-		{
-			Name: "values-override.yaml",
-			Data: overrideValuesFixture,
-		},
-		{
-			Name: "values-invalid.yaml",
-			Data: []byte(":fail!"),
 		},
 	}
 	chartFixture helmchart.Chart = helmchart.Chart{
@@ -57,104 +43,71 @@ var (
 )
 
 func TestOverwriteChartDefaultValues(t *testing.T) {
-	for _, tt := range []string{"", "values.yaml", "values-identical.yaml"} {
-		t.Run(tt, func(t *testing.T) {
-			fixture := chartFixture
-			ok, err := OverwriteChartDefaultValues(&fixture, tt)
-			if ok {
-				t.Error("OverwriteChartDefaultValues() should return false")
-				return
+	invalidChartFixture := chartFixture
+	invalidChartFixture.Raw = []*helmchart.File{}
+	invalidChartFixture.Files = []*helmchart.File{}
+
+	testCases := []struct {
+		desc      string
+		chart     helmchart.Chart
+		data      []byte
+		ok        bool
+		expectErr bool
+	}{
+		{
+			desc:      "invalid chart",
+			chart:     invalidChartFixture,
+			data:      originalValuesFixture,
+			expectErr: true,
+		},
+		{
+			desc:  "identical override",
+			chart: chartFixture,
+			data:  originalValuesFixture,
+		},
+		{
+			desc:  "valid override",
+			chart: chartFixture,
+			ok:    true,
+			data:  []byte("override: test"),
+		},
+		{
+			desc:  "empty override",
+			chart: chartFixture,
+			ok:    true,
+			data:  []byte(""),
+		},
+		{
+			desc:      "invalid",
+			chart:     chartFixture,
+			data:      []byte("!fail:"),
+			expectErr: true,
+		},
+	}
+	for _, tt := range testCases {
+		t.Run(tt.desc, func(t *testing.T) {
+			fixture := tt.chart
+			ok, err := OverwriteChartDefaultValues(&fixture, tt.data)
+			if ok != tt.ok {
+				t.Fatalf("should return %v, returned %v", tt.ok, ok)
 			}
-			if err != nil {
-				t.Errorf("OverwriteChartDefaultValues() error = %v", err)
-				return
+			if err != nil && !tt.expectErr {
+				t.Fatalf("returned unexpected error: %v", err)
 			}
+			if err == nil && tt.expectErr {
+				t.Fatal("expected error")
+			}
+
 			for _, f := range fixture.Raw {
-				if f.Name == chartutil.ValuesfileName && !reflect.DeepEqual(f.Data, originalValuesFixture) {
-					t.Error("OverwriteChartDefaultValues() should not override values.yaml in Raw field")
-					return
+				if f.Name == chartutil.ValuesfileName && reflect.DeepEqual(f.Data, originalValuesFixture) && tt.ok {
+					t.Error("should override values.yaml in Raw field")
 				}
 			}
 			for _, f := range fixture.Files {
-				if f.Name == chartutil.ValuesfileName && !reflect.DeepEqual(f.Data, originalValuesFixture) {
-					t.Error("OverwriteChartDefaultValues() should not override values.yaml in Files field")
-					return
+				if f.Name == chartutil.ValuesfileName && reflect.DeepEqual(f.Data, originalValuesFixture) && tt.ok {
+					t.Error("should override values.yaml in Files field")
 				}
 			}
 		})
 	}
-
-	t.Run("values-error.yaml", func(t *testing.T) {
-		fixture := chartFixture
-		ok, err := OverwriteChartDefaultValues(&fixture, "values-error.yaml")
-		if ok {
-			t.Error("OverwriteChartDefaultValues() should return false")
-		}
-		if err == nil {
-			t.Error("OverwriteChartDefaultValues() expects an error")
-			return
-		} else if !strings.Contains(err.Error(), "failed to locate override values file") {
-			t.Error("OverwriteChartDefaultValues() returned invalid error")
-			return
-		}
-	})
-
-	t.Run("values-override.yaml", func(t *testing.T) {
-		fixture := chartFixture
-		ok, err := OverwriteChartDefaultValues(&fixture, "values-override.yaml")
-		if err != nil {
-			t.Errorf("OverwriteChartDefaultValues() error = %v", err)
-			return
-		}
-		if !ok {
-			t.Error("OverwriteChartDefaultValues() should return true")
-			return
-		}
-		for _, f := range fixture.Raw {
-			if f.Name == chartutil.ValuesfileName && string(f.Data) != string(overrideValuesFixture) {
-				t.Error("OverwriteChartDefaultValues() should override values.yaml in Raw field")
-				return
-			}
-		}
-		for _, f := range fixture.Files {
-			if f.Name == chartutil.ValuesfileName && string(f.Data) != string(overrideValuesFixture) {
-				t.Error("OverwriteChartDefaultValues() should override values.yaml in Files field")
-				return
-			}
-		}
-
-		// Context: the impossible chart, no values.yaml file defined!
-		fixture.Raw = fixture.Raw[1:]
-		fixture.Files = fixture.Files[1:]
-		ok, err = OverwriteChartDefaultValues(&fixture, "values-override.yaml")
-		if ok {
-			t.Error("OverwriteChartDefaultValues() should return false")
-			return
-		}
-		if err == nil {
-			t.Error("OverwriteChartDefaultValues() expects an error")
-			return
-		} else if !strings.Contains(err.Error(), "failed to locate values file") {
-			t.Error("OverwriteChartDefaultValues() returned invalid error")
-			return
-		}
-	})
-
-	t.Run("values-invalid.yaml", func(t *testing.T) {
-		fixture := chartFixture
-		fixture.Raw[0].Data = fixture.Raw[1].Data
-		fixture.Files[0].Data = fixture.Files[1].Data
-		ok, err := OverwriteChartDefaultValues(&fixture, "values-invalid.yaml")
-		if ok {
-			t.Error("OverwriteChartDefaultValues() should return false")
-			return
-		}
-		if err == nil {
-			t.Error("OverwriteChartDefaultValues() expects an error")
-			return
-		} else if !strings.Contains(err.Error(), "failed to parse override values file") {
-			t.Error("OverwriteChartDefaultValues() returned invalid error")
-			return
-		}
-	})
 }
