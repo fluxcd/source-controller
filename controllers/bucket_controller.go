@@ -26,7 +26,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/go-logr/logr"
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
@@ -42,7 +41,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
+	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/runtime/events"
 	"github.com/fluxcd/pkg/runtime/metrics"
 	"github.com/fluxcd/pkg/runtime/predicates"
@@ -50,10 +51,14 @@ import (
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
 )
 
+// +kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=buckets,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=buckets/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=buckets/finalizers,verbs=get;create;update;patch;delete
+// +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch
+
 // BucketReconciler reconciles a Bucket object
 type BucketReconciler struct {
 	client.Client
-	Log                   logr.Logger
 	Scheme                *runtime.Scheme
 	Storage               *Storage
 	EventRecorder         kuberecorder.EventRecorder
@@ -61,21 +66,30 @@ type BucketReconciler struct {
 	MetricsRecorder       *metrics.Recorder
 }
 
-// +kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=buckets,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=buckets/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=buckets/finalizers,verbs=get;create;update;patch;delete
-// +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch
+type BucketReconcilerOptions struct {
+	MaxConcurrentReconciles int
+}
 
-func (r *BucketReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
-	ctx := context.Background()
+func (r *BucketReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	return r.SetupWithManagerAndOptions(mgr, BucketReconcilerOptions{})
+}
+
+func (r *BucketReconciler) SetupWithManagerAndOptions(mgr ctrl.Manager, opts BucketReconcilerOptions) error {
+	return ctrl.NewControllerManagedBy(mgr).
+		For(&sourcev1.Bucket{}).
+		WithEventFilter(predicate.Or(predicate.GenerationChangedPredicate{}, predicates.ReconcilateAtChangedPredicate{})).
+		WithOptions(controller.Options{MaxConcurrentReconciles: opts.MaxConcurrentReconciles}).
+		Complete(r)
+}
+
+func (r *BucketReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	start := time.Now()
+	log := ctrl.LoggerFrom(ctx)
 
 	var bucket sourcev1.Bucket
 	if err := r.Get(ctx, req.NamespacedName, &bucket); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
-
-	log := r.Log.WithValues("controller", strings.ToLower(sourcev1.BucketKind), "request", req.NamespacedName)
 
 	// Add our finalizer if it does not exist
 	if !controllerutil.ContainsFinalizer(&bucket, sourcev1.SourceFinalizer) {
@@ -113,7 +127,7 @@ func (r *BucketReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 			log.Error(err, "unable to update status")
 			return ctrl.Result{Requeue: true}, err
 		}
-		r.recordReadiness(bucket)
+		r.recordReadiness(ctx, bucket)
 	}
 
 	// record the value of the reconciliation request, if any
@@ -139,16 +153,16 @@ func (r *BucketReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 
 	// if reconciliation failed, record the failure and requeue immediately
 	if reconcileErr != nil {
-		r.event(reconciledBucket, events.EventSeverityError, reconcileErr.Error())
-		r.recordReadiness(reconciledBucket)
+		r.event(ctx, reconciledBucket, events.EventSeverityError, reconcileErr.Error())
+		r.recordReadiness(ctx, reconciledBucket)
 		return ctrl.Result{Requeue: true}, reconcileErr
 	}
 
 	// emit revision change event
 	if bucket.Status.Artifact == nil || reconciledBucket.Status.Artifact.Revision != bucket.Status.Artifact.Revision {
-		r.event(reconciledBucket, events.EventSeverityInfo, sourcev1.BucketReadyMessage(reconciledBucket))
+		r.event(ctx, reconciledBucket, events.EventSeverityInfo, sourcev1.BucketReadyMessage(reconciledBucket))
 	}
-	r.recordReadiness(reconciledBucket)
+	r.recordReadiness(ctx, reconciledBucket)
 
 	log.Info(fmt.Sprintf("Reconciliation finished in %s, next run in %s",
 		time.Now().Sub(start).String(),
@@ -156,22 +170,6 @@ func (r *BucketReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	))
 
 	return ctrl.Result{RequeueAfter: bucket.GetInterval().Duration}, nil
-}
-
-type BucketReconcilerOptions struct {
-	MaxConcurrentReconciles int
-}
-
-func (r *BucketReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	return r.SetupWithManagerAndOptions(mgr, BucketReconcilerOptions{})
-}
-
-func (r *BucketReconciler) SetupWithManagerAndOptions(mgr ctrl.Manager, opts BucketReconcilerOptions) error {
-	return ctrl.NewControllerManagedBy(mgr).
-		For(&sourcev1.Bucket{}).
-		WithEventFilter(predicates.ChangePredicate{}).
-		WithOptions(controller.Options{MaxConcurrentReconciles: opts.MaxConcurrentReconciles}).
-		Complete(r)
 }
 
 func (r *BucketReconciler) reconcile(ctx context.Context, bucket sourcev1.Bucket) (sourcev1.Bucket, error) {
@@ -272,13 +270,14 @@ func (r *BucketReconciler) reconcile(ctx context.Context, bucket sourcev1.Bucket
 
 func (r *BucketReconciler) reconcileDelete(ctx context.Context, bucket sourcev1.Bucket) (ctrl.Result, error) {
 	if err := r.gc(bucket); err != nil {
-		r.event(bucket, events.EventSeverityError, fmt.Sprintf("garbage collection for deleted resource failed: %s", err.Error()))
+		r.event(ctx, bucket, events.EventSeverityError,
+			fmt.Sprintf("garbage collection for deleted resource failed: %s", err.Error()))
 		// Return the error so we retry the failed garbage collection
 		return ctrl.Result{}, err
 	}
 
 	// Record deleted status
-	r.recordReadiness(bucket)
+	r.recordReadiness(ctx, bucket)
 
 	// Remove our finalizer from the list and update it
 	controllerutil.RemoveFinalizer(&bucket, sourcev1.SourceFinalizer)
@@ -383,41 +382,33 @@ func (r *BucketReconciler) gc(bucket sourcev1.Bucket) error {
 }
 
 // event emits a Kubernetes event and forwards the event to notification controller if configured
-func (r *BucketReconciler) event(bucket sourcev1.Bucket, severity, msg string) {
+func (r *BucketReconciler) event(ctx context.Context, bucket sourcev1.Bucket, severity, msg string) {
+	log := logr.FromContext(ctx)
 	if r.EventRecorder != nil {
 		r.EventRecorder.Eventf(&bucket, "Normal", severity, msg)
 	}
 	if r.ExternalEventRecorder != nil {
 		objRef, err := reference.GetReference(r.Scheme, &bucket)
 		if err != nil {
-			r.Log.WithValues(
-				"request",
-				fmt.Sprintf("%s/%s", bucket.GetNamespace(), bucket.GetName()),
-			).Error(err, "unable to send event")
+			log.Error(err, "unable to send event")
 			return
 		}
 
 		if err := r.ExternalEventRecorder.Eventf(*objRef, nil, severity, severity, msg); err != nil {
-			r.Log.WithValues(
-				"request",
-				fmt.Sprintf("%s/%s", bucket.GetNamespace(), bucket.GetName()),
-			).Error(err, "unable to send event")
+			log.Error(err, "unable to send event")
 			return
 		}
 	}
 }
 
-func (r *BucketReconciler) recordReadiness(bucket sourcev1.Bucket) {
+func (r *BucketReconciler) recordReadiness(ctx context.Context, bucket sourcev1.Bucket) {
+	log := logr.FromContext(ctx)
 	if r.MetricsRecorder == nil {
 		return
 	}
-
 	objRef, err := reference.GetReference(r.Scheme, &bucket)
 	if err != nil {
-		r.Log.WithValues(
-			strings.ToLower(bucket.Kind),
-			fmt.Sprintf("%s/%s", bucket.GetNamespace(), bucket.GetName()),
-		).Error(err, "unable to record readiness metric")
+		log.Error(err, "unable to record readiness metric")
 		return
 	}
 	if rc := apimeta.FindStatusCondition(bucket.Status.Conditions, meta.ReadyCondition); rc != nil {

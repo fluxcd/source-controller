@@ -17,7 +17,7 @@ limitations under the License.
 package main
 
 import (
-	"flag"
+	goflag "flag"
 	"fmt"
 	"net"
 	"net/http"
@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
+	flag "github.com/spf13/pflag"
 	"helm.sh/helm/v3/pkg/getter"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -70,9 +71,8 @@ func main() {
 		storageAddr          string
 		storageAdvAddr       string
 		concurrent           int
-		logLevel             string
-		logJSON              bool
 		watchAllNamespaces   bool
+		logOptions           logger.Options
 	)
 
 	flag.StringVar(&metricsAddr, "metrics-addr", envOrDefault("METRICS_ADDR", ":8080"),
@@ -89,13 +89,18 @@ func main() {
 	flag.StringVar(&storageAdvAddr, "storage-adv-addr", envOrDefault("STORAGE_ADV_ADDR", ""),
 		"The advertised address of the static file server.")
 	flag.IntVar(&concurrent, "concurrent", 2, "The number of concurrent reconciles per controller.")
-	flag.StringVar(&logLevel, "log-level", "info", "Set logging level. Can be debug, info or error.")
-	flag.BoolVar(&logJSON, "log-json", false, "Set logging to JSON format.")
 	flag.BoolVar(&watchAllNamespaces, "watch-all-namespaces", true,
 		"Watch for custom resources in all namespaces, if set to false it will only watch the runtime namespace.")
+	flag.Bool("log-json", false, "Set logging to JSON format.")
+	flag.CommandLine.MarkDeprecated("log-json", "Please use --log-encoding=json instead.")
+	{
+		var fs goflag.FlagSet
+		logOptions.BindFlags(&fs)
+		flag.CommandLine.AddGoFlagSet(&fs)
+	}
 	flag.Parse()
 
-	ctrl.SetLogger(logger.NewLogger(logLevel, logJSON))
+	ctrl.SetLogger(logger.NewLogger(logOptions))
 
 	var eventRecorder *events.Recorder
 	if eventsAddr != "" {
@@ -137,7 +142,6 @@ func main() {
 
 	if err = (&controllers.GitRepositoryReconciler{
 		Client:                mgr.GetClient(),
-		Log:                   ctrl.Log.WithName("controllers").WithName(sourcev1.GitRepositoryKind),
 		Scheme:                mgr.GetScheme(),
 		Storage:               storage,
 		EventRecorder:         mgr.GetEventRecorderFor("source-controller"),
@@ -151,7 +155,6 @@ func main() {
 	}
 	if err = (&controllers.HelmRepositoryReconciler{
 		Client:                mgr.GetClient(),
-		Log:                   ctrl.Log.WithName("controllers").WithName(sourcev1.HelmRepositoryKind),
 		Scheme:                mgr.GetScheme(),
 		Storage:               storage,
 		Getters:               getters,
@@ -166,7 +169,6 @@ func main() {
 	}
 	if err = (&controllers.HelmChartReconciler{
 		Client:                mgr.GetClient(),
-		Log:                   ctrl.Log.WithName("controllers").WithName(sourcev1.HelmChartKind),
 		Scheme:                mgr.GetScheme(),
 		Storage:               storage,
 		Getters:               getters,
@@ -181,7 +183,6 @@ func main() {
 	}
 	if err = (&controllers.BucketReconciler{
 		Client:                mgr.GetClient(),
-		Log:                   ctrl.Log.WithName("controllers").WithName("Bucket"),
 		Scheme:                mgr.GetScheme(),
 		Storage:               storage,
 		EventRecorder:         mgr.GetEventRecorderFor("source-controller"),

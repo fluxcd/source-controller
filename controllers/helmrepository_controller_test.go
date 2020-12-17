@@ -236,7 +236,6 @@ var _ = Describe("HelmRepositoryReconciler", func() {
 					Name:      secretKey.Name,
 					Namespace: secretKey.Namespace,
 				},
-				Data: map[string][]byte{},
 			}
 			Expect(k8sClient.Create(context.Background(), secret)).Should(Succeed())
 
@@ -274,7 +273,9 @@ var _ = Describe("HelmRepositoryReconciler", func() {
 			}, timeout, interval).Should(BeTrue())
 
 			By("Expecting missing field error")
-			secret.Data["username"] = []byte(username)
+			secret.Data = map[string][]byte{
+				"username": []byte(username),
+			}
 			Expect(k8sClient.Update(context.Background(), secret)).Should(Succeed())
 			Eventually(func() bool {
 				got := &sourcev1.HelmRepository{}
@@ -328,7 +329,6 @@ var _ = Describe("HelmRepositoryReconciler", func() {
 					Name:      secretKey.Name,
 					Namespace: secretKey.Namespace,
 				},
-				Data: map[string][]byte{},
 			}
 			Expect(k8sClient.Create(context.Background(), secret)).Should(Succeed())
 
@@ -366,7 +366,9 @@ var _ = Describe("HelmRepositoryReconciler", func() {
 			}, timeout, interval).Should(BeTrue())
 
 			By("Expecting missing field error")
-			secret.Data["certFile"] = examplePublicKey
+			secret.Data = map[string][]byte{
+				"certFile": examplePublicKey,
+			}
 			Expect(k8sClient.Update(context.Background(), secret)).Should(Succeed())
 			Eventually(func() bool {
 				got := &sourcev1.HelmRepository{}

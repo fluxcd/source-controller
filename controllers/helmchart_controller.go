@@ -28,7 +28,6 @@ import (
 	"time"
 
 	securejoin "github.com/cyphar/filepath-securejoin"
-	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/go-logr/logr"
 	helmchart "helm.sh/helm/v3/pkg/chart"
 	"helm.sh/helm/v3/pkg/chart/loader"
@@ -47,9 +46,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
+	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/runtime/events"
 	"github.com/fluxcd/pkg/runtime/metrics"
 	"github.com/fluxcd/pkg/runtime/predicates"
@@ -57,12 +58,17 @@ import (
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
 	"github.com/fluxcd/source-controller/internal/helm"
+	"github.com/fluxcd/source-controller/internal/util"
 )
+
+// +kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=helmcharts,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=helmcharts/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=helmcharts/finalizers,verbs=get;create;update;patch;delete
+// +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 
 // HelmChartReconciler reconciles a HelmChart object
 type HelmChartReconciler struct {
 	client.Client
-	Log                   logr.Logger
 	Scheme                *runtime.Scheme
 	Storage               *Storage
 	Getters               getter.Providers
@@ -71,21 +77,51 @@ type HelmChartReconciler struct {
 	MetricsRecorder       *metrics.Recorder
 }
 
-// +kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=helmcharts,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=helmcharts/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=helmcharts/finalizers,verbs=get;create;update;patch;delete
-// +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
+func (r *HelmChartReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	return r.SetupWithManagerAndOptions(mgr, HelmChartReconcilerOptions{})
+}
 
-func (r *HelmChartReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
-	ctx := context.Background()
+func (r *HelmChartReconciler) SetupWithManagerAndOptions(mgr ctrl.Manager, opts HelmChartReconcilerOptions) error {
+	if err := mgr.GetCache().IndexField(context.TODO(), &sourcev1.HelmRepository{}, sourcev1.HelmRepositoryURLIndexKey,
+		r.indexHelmRepositoryByURL); err != nil {
+		return fmt.Errorf("failed setting index fields: %w", err)
+	}
+	if err := mgr.GetCache().IndexField(context.TODO(), &sourcev1.HelmChart{}, sourcev1.GitRepositoryIndexKey,
+		r.indexHelmChartBySource); err != nil {
+		return fmt.Errorf("failed setting index fields: %w", err)
+	}
+
+	return ctrl.NewControllerManagedBy(mgr).
+		For(&sourcev1.HelmChart{}, builder.WithPredicates(
+			predicate.Or(predicate.GenerationChangedPredicate{}, predicates.ReconcilateAtChangedPredicate{}),
+		)).
+		Watches(
+			&source.Kind{Type: &sourcev1.HelmRepository{}},
+			handler.EnqueueRequestsFromMapFunc(r.requestsForHelmRepositoryChange),
+			builder.WithPredicates(SourceRevisionChangePredicate{}),
+		).
+		Watches(
+			&source.Kind{Type: &sourcev1.GitRepository{}},
+			handler.EnqueueRequestsFromMapFunc(r.requestsForGitRepositoryChange),
+			builder.WithPredicates(SourceRevisionChangePredicate{}),
+		).
+		Watches(
+			&source.Kind{Type: &sourcev1.Bucket{}},
+			handler.EnqueueRequestsFromMapFunc(r.requestsForBucketChange),
+			builder.WithPredicates(SourceRevisionChangePredicate{}),
+		).
+		WithOptions(controller.Options{MaxConcurrentReconciles: opts.MaxConcurrentReconciles}).
+		Complete(r)
+}
+
+func (r *HelmChartReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	start := time.Now()
+	log := logr.FromContext(ctx)
 
 	var chart sourcev1.HelmChart
 	if err := r.Get(ctx, req.NamespacedName, &chart); err != nil {
 		return ctrl.Result{Requeue: true}, client.IgnoreNotFound(err)
 	}
-
-	log := r.Log.WithValues("controller", strings.ToLower(sourcev1.HelmChartKind), "request", req.NamespacedName)
 
 	// Add our finalizer if it does not exist
 	if !controllerutil.ContainsFinalizer(&chart, sourcev1.SourceFinalizer) {
@@ -124,7 +160,7 @@ func (r *HelmChartReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 			log.Error(err, "unable to update status")
 			return ctrl.Result{Requeue: true}, err
 		}
-		r.recordReadiness(chart)
+		r.recordReadiness(ctx, chart)
 	}
 
 	// Record the value of the reconciliation request, if any
@@ -157,7 +193,7 @@ func (r *HelmChartReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		if err := r.updateStatus(ctx, req, chart.Status); err != nil {
 			log.Error(err, "unable to update status")
 		}
-		r.recordReadiness(chart)
+		r.recordReadiness(ctx, chart)
 		return ctrl.Result{Requeue: true}, err
 	}
 
@@ -183,17 +219,17 @@ func (r *HelmChartReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 
 	// If reconciliation failed, record the failure and requeue immediately
 	if reconcileErr != nil {
-		r.event(reconciledChart, events.EventSeverityError, reconcileErr.Error())
-		r.recordReadiness(reconciledChart)
+		r.event(ctx, reconciledChart, events.EventSeverityError, reconcileErr.Error())
+		r.recordReadiness(ctx, reconciledChart)
 		return ctrl.Result{Requeue: true}, reconcileErr
 	}
 
 	// Emit an event if we did not have an artifact before, or the revision has changed
 	if (chart.GetArtifact() == nil && reconciledChart.GetArtifact() != nil) ||
 		(chart.GetArtifact() != nil && reconciledChart.GetArtifact() != nil && reconciledChart.GetArtifact().Revision != chart.GetArtifact().Revision) {
-		r.event(reconciledChart, events.EventSeverityInfo, sourcev1.HelmChartReadyMessage(reconciledChart))
+		r.event(ctx, reconciledChart, events.EventSeverityInfo, sourcev1.HelmChartReadyMessage(reconciledChart))
 	}
-	r.recordReadiness(reconciledChart)
+	r.recordReadiness(ctx, reconciledChart)
 
 	log.Info(fmt.Sprintf("Reconciliation finished in %s, next run in %s",
 		time.Now().Sub(start).String(),
@@ -204,41 +240,6 @@ func (r *HelmChartReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 
 type HelmChartReconcilerOptions struct {
 	MaxConcurrentReconciles int
-}
-
-func (r *HelmChartReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	return r.SetupWithManagerAndOptions(mgr, HelmChartReconcilerOptions{})
-}
-
-func (r *HelmChartReconciler) SetupWithManagerAndOptions(mgr ctrl.Manager, opts HelmChartReconcilerOptions) error {
-	if err := mgr.GetCache().IndexField(context.TODO(), &sourcev1.HelmRepository{}, sourcev1.HelmRepositoryURLIndexKey,
-		r.indexHelmRepositoryByURL); err != nil {
-		return fmt.Errorf("failed setting index fields: %w", err)
-	}
-	if err := mgr.GetCache().IndexField(context.TODO(), &sourcev1.HelmChart{}, sourcev1.SourceIndexKey,
-		r.indexHelmChartBySource); err != nil {
-		return fmt.Errorf("failed setting index fields: %w", err)
-	}
-
-	return ctrl.NewControllerManagedBy(mgr).
-		For(&sourcev1.HelmChart{}, builder.WithPredicates(predicates.ChangePredicate{})).
-		Watches(
-			&source.Kind{Type: &sourcev1.HelmRepository{}},
-			&handler.EnqueueRequestsFromMapFunc{ToRequests: handler.ToRequestsFunc(r.requestsForHelmRepositoryChange)},
-			builder.WithPredicates(SourceRevisionChangePredicate{}),
-		).
-		Watches(
-			&source.Kind{Type: &sourcev1.GitRepository{}},
-			&handler.EnqueueRequestsFromMapFunc{ToRequests: handler.ToRequestsFunc(r.requestsForGitRepositoryChange)},
-			builder.WithPredicates(SourceRevisionChangePredicate{}),
-		).
-		Watches(
-			&source.Kind{Type: &sourcev1.Bucket{}},
-			&handler.EnqueueRequestsFromMapFunc{ToRequests: handler.ToRequestsFunc(r.requestsForBucketChange)},
-			builder.WithPredicates(SourceRevisionChangePredicate{}),
-		).
-		WithOptions(controller.Options{MaxConcurrentReconciles: opts.MaxConcurrentReconciles}).
-		Complete(r)
 }
 
 func (r *HelmChartReconciler) getSource(ctx context.Context, chart sourcev1.HelmChart) (sourcev1.Source, error) {
@@ -668,13 +669,14 @@ func (r *HelmChartReconciler) reconcileFromTarballArtifact(ctx context.Context,
 func (r *HelmChartReconciler) reconcileDelete(ctx context.Context, chart sourcev1.HelmChart) (ctrl.Result, error) {
 	// Our finalizer is still present, so lets handle garbage collection
 	if err := r.gc(chart); err != nil {
-		r.event(chart, events.EventSeverityError, fmt.Sprintf("garbage collection for deleted resource failed: %s", err.Error()))
+		r.event(ctx, chart, events.EventSeverityError,
+			fmt.Sprintf("garbage collection for deleted resource failed: %s", err.Error()))
 		// Return the error so we retry the failed garbage collection
 		return ctrl.Result{}, err
 	}
 
 	// Record deleted status
-	r.recordReadiness(chart)
+	r.recordReadiness(ctx, chart)
 
 	// Remove our finalizer from the list and update it
 	controllerutil.RemoveFinalizer(&chart, sourcev1.SourceFinalizer)
@@ -718,41 +720,33 @@ func (r *HelmChartReconciler) gc(chart sourcev1.HelmChart) error {
 
 // event emits a Kubernetes event and forwards the event to notification
 // controller if configured.
-func (r *HelmChartReconciler) event(chart sourcev1.HelmChart, severity, msg string) {
+func (r *HelmChartReconciler) event(ctx context.Context, chart sourcev1.HelmChart, severity, msg string) {
+	log := logr.FromContext(ctx)
 	if r.EventRecorder != nil {
 		r.EventRecorder.Eventf(&chart, "Normal", severity, msg)
 	}
 	if r.ExternalEventRecorder != nil {
 		objRef, err := reference.GetReference(r.Scheme, &chart)
 		if err != nil {
-			r.Log.WithValues(
-				"request",
-				fmt.Sprintf("%s/%s", chart.GetNamespace(), chart.GetName()),
-			).Error(err, "unable to send event")
+			log.Error(err, "unable to send event")
 			return
 		}
 
 		if err := r.ExternalEventRecorder.Eventf(*objRef, nil, severity, severity, msg); err != nil {
-			r.Log.WithValues(
-				"request",
-				fmt.Sprintf("%s/%s", chart.GetNamespace(), chart.GetName()),
-			).Error(err, "unable to send event")
+			log.Error(err, "unable to send event")
 			return
 		}
 	}
 }
 
-func (r *HelmChartReconciler) recordReadiness(chart sourcev1.HelmChart) {
+func (r *HelmChartReconciler) recordReadiness(ctx context.Context, chart sourcev1.HelmChart) {
+	log := logr.FromContext(ctx)
 	if r.MetricsRecorder == nil {
 		return
 	}
-
 	objRef, err := reference.GetReference(r.Scheme, &chart)
 	if err != nil {
-		r.Log.WithValues(
-			strings.ToLower(chart.Kind),
-			fmt.Sprintf("%s/%s", chart.GetNamespace(), chart.GetName()),
-		).Error(err, "unable to record readiness metric")
+		log.Error(err, "unable to record readiness metric")
 		return
 	}
 	if rc := apimeta.FindStatusCondition(chart.Status.Conditions, meta.ReadyCondition); rc != nil {
@@ -777,7 +771,7 @@ func (r *HelmChartReconciler) updateStatus(ctx context.Context, req ctrl.Request
 	return r.Status().Patch(ctx, &chart, patch)
 }
 
-func (r *HelmChartReconciler) indexHelmRepositoryByURL(o runtime.Object) []string {
+func (r *HelmChartReconciler) indexHelmRepositoryByURL(o client.Object) []string {
 	repo, ok := o.(*sourcev1.HelmRepository)
 	if !ok {
 		panic(fmt.Sprintf("Expected a HelmRepository, got %T", o))
@@ -789,7 +783,7 @@ func (r *HelmChartReconciler) indexHelmRepositoryByURL(o runtime.Object) []strin
 	return nil
 }
 
-func (r *HelmChartReconciler) indexHelmChartBySource(o runtime.Object) []string {
+func (r *HelmChartReconciler) indexHelmChartBySource(o client.Object) []string {
 	hc, ok := o.(*sourcev1.HelmChart)
 	if !ok {
 		panic(fmt.Sprintf("Expected a HelmChart, got %T", o))
@@ -798,14 +792,14 @@ func (r *HelmChartReconciler) indexHelmChartBySource(o runtime.Object) []string 
 }
 
 func (r *HelmChartReconciler) resolveDependencyRepository(ctx context.Context, dep *helmchart.Dependency, namespace string) (*sourcev1.HelmRepository, error) {
-	url := helm.NormalizeChartRepositoryURL(dep.Repository)
-	if url == "" {
+	u := helm.NormalizeChartRepositoryURL(dep.Repository)
+	if u == "" {
 		return nil, fmt.Errorf("invalid repository URL")
 	}
 
 	listOpts := []client.ListOption{
 		client.InNamespace(namespace),
-		client.MatchingField(sourcev1.HelmRepositoryURLIndexKey, url),
+		client.MatchingFields{sourcev1.HelmRepositoryURLIndexKey: u},
 	}
 	var list sourcev1.HelmRepositoryList
 	err := r.Client.List(ctx, &list, listOpts...)
@@ -838,10 +832,10 @@ func (r *HelmChartReconciler) getHelmRepositorySecret(ctx context.Context, repos
 	return nil, nil
 }
 
-func (r *HelmChartReconciler) requestsForHelmRepositoryChange(obj handler.MapObject) []reconcile.Request {
-	repo, ok := obj.Object.(*sourcev1.HelmRepository)
+func (r *HelmChartReconciler) requestsForHelmRepositoryChange(o client.Object) []reconcile.Request {
+	repo, ok := o.(*sourcev1.HelmRepository)
 	if !ok {
-		panic(fmt.Sprintf("Expected a HelmRepository, got %T", repo))
+		panic(fmt.Sprintf("Expected a HelmRepository, got %T", o))
 	}
 	// If we do not have an artifact, we have no requests to make
 	if repo.GetArtifact() == nil {
@@ -851,70 +845,75 @@ func (r *HelmChartReconciler) requestsForHelmRepositoryChange(obj handler.MapObj
 	ctx := context.Background()
 	var list sourcev1.HelmChartList
 	if err := r.List(ctx, &list, client.MatchingFields{
-		sourcev1.SourceIndexKey: fmt.Sprintf("%s/%s", repo.Kind, repo.Name),
+		sourcev1.HelmRepositoryIndexKey: util.ObjectKey(o).String(),
 	}); err != nil {
-		r.Log.Error(err, "failed to list HelmCharts for HelmRepository")
 		return nil
 	}
 
+	// TODO(hidde): unlike other places (e.g. the helm-controller),
+	//  we have no reference here to determine if the request is coming
+	//  from the _old_ or _new_ update event, and resources are thus
+	//  enqueued twice.
 	var reqs []reconcile.Request
 	for _, i := range list.Items {
-		req := reconcile.Request{NamespacedName: types.NamespacedName{Namespace: i.GetNamespace(), Name: i.GetName()}}
-		reqs = append(reqs, req)
+		reqs = append(reqs, reconcile.Request{NamespacedName: util.ObjectKey(&i)})
 	}
 	return reqs
 }
 
-func (r *HelmChartReconciler) requestsForGitRepositoryChange(obj handler.MapObject) []reconcile.Request {
-	repo, ok := obj.Object.(*sourcev1.GitRepository)
+func (r *HelmChartReconciler) requestsForGitRepositoryChange(o client.Object) []reconcile.Request {
+	repo, ok := o.(*sourcev1.GitRepository)
 	if !ok {
-		panic(fmt.Sprintf("Expected a GitRepository, got %T", repo))
+		panic(fmt.Sprintf("Expected a GitRepository, got %T", o))
 	}
 	// If we do not have an artifact, we have no requests to make
 	if repo.GetArtifact() == nil {
 		return nil
 	}
 
-	ctx := context.Background()
 	var list sourcev1.HelmChartList
-	if err := r.List(ctx, &list, client.MatchingFields{
-		sourcev1.SourceIndexKey: fmt.Sprintf("%s/%s", repo.Kind, repo.Name),
+	if err := r.List(context.TODO(), &list, client.MatchingFields{
+		sourcev1.GitRepositoryIndexKey: util.ObjectKey(o).String(),
 	}); err != nil {
-		r.Log.Error(err, "failed to list HelmCharts for GitRepository")
 		return nil
 	}
 
+	// TODO(hidde): unlike other places (e.g. the helm-controller),
+	//  we have no reference here to determine if the request is coming
+	//  from the _old_ or _new_ update event, and resources are thus
+	//  enqueued twice.
 	var reqs []reconcile.Request
 	for _, i := range list.Items {
-		req := reconcile.Request{NamespacedName: types.NamespacedName{Namespace: i.GetNamespace(), Name: i.GetName()}}
-		reqs = append(reqs, req)
+		reqs = append(reqs, reconcile.Request{NamespacedName: util.ObjectKey(&i)})
 	}
 	return reqs
 }
 
-func (r *HelmChartReconciler) requestsForBucketChange(obj handler.MapObject) []reconcile.Request {
-	bucket, ok := obj.Object.(*sourcev1.Bucket)
+func (r *HelmChartReconciler) requestsForBucketChange(o client.Object) []reconcile.Request {
+	bucket, ok := o.(*sourcev1.Bucket)
 	if !ok {
-		panic(fmt.Sprintf("Expected a Bucket, got %T", bucket))
+		panic(fmt.Sprintf("Expected a Bucket, got %T", o))
 	}
+
 	// If we do not have an artifact, we have no requests to make
 	if bucket.GetArtifact() == nil {
 		return nil
 	}
 
-	ctx := context.Background()
 	var list sourcev1.HelmChartList
-	if err := r.List(ctx, &list, client.MatchingFields{
-		sourcev1.SourceIndexKey: fmt.Sprintf("%s/%s", bucket.Kind, bucket.Name),
+	if err := r.List(context.TODO(), &list, client.MatchingFields{
+		sourcev1.BucketIndexKey: util.ObjectKey(o).String(),
 	}); err != nil {
-		r.Log.Error(err, "failed to list HelmCharts for Bucket")
 		return nil
 	}
 
+	// TODO(hidde): unlike other places (e.g. the helm-controller),
+	//  we have no reference here to determine if the request is coming
+	//  from the _old_ or _new_ update event, and resources are thus
+	//  enqueued twice.
 	var reqs []reconcile.Request
 	for _, i := range list.Items {
-		req := reconcile.Request{NamespacedName: types.NamespacedName{Namespace: i.GetNamespace(), Name: i.GetName()}}
-		reqs = append(reqs, req)
+		reqs = append(reqs, reconcile.Request{NamespacedName: util.ObjectKey(&i)})
 	}
 	return reqs
 }
