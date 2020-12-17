@@ -25,46 +25,30 @@ import (
 )
 
 // OverwriteChartDefaultValues overwrites the chart default values file with the
-// contents of the given valuesFile.
-func OverwriteChartDefaultValues(chart *helmchart.Chart, valuesFile string) (bool, error) {
-	if valuesFile == "" || valuesFile == chartutil.ValuesfileName {
-		return false, nil
-	}
-
-	// Find override file and retrieve contents
-	var valuesData []byte
-	for _, f := range chart.Files {
-		if f.Name == valuesFile {
-			valuesData = f.Data
-			break
-		}
-	}
-	if valuesData == nil {
-		return false, fmt.Errorf("failed to locate override values file: %s", valuesFile)
-	}
-
+// given data.
+func OverwriteChartDefaultValues(chart *helmchart.Chart, data []byte) (bool, error) {
 	// Read override values file data
-	values, err := chartutil.ReadValues(valuesData)
+	values, err := chartutil.ReadValues(data)
 	if err != nil {
-		return false, fmt.Errorf("failed to parse override values file: %s", valuesFile)
+		return false, fmt.Errorf("failed to parse provided override values file data")
 	}
 
 	// Replace current values file in Raw field
 	for _, f := range chart.Raw {
 		if f.Name == chartutil.ValuesfileName {
 			// Do nothing if contents are equal
-			if reflect.DeepEqual(f.Data, valuesData) {
+			if reflect.DeepEqual(f.Data, data) {
 				return false, nil
 			}
 
 			// Replace in Files field
 			for _, f := range chart.Files {
 				if f.Name == chartutil.ValuesfileName {
-					f.Data = valuesData
+					f.Data = data
 				}
 			}
 
-			f.Data = valuesData
+			f.Data = data
 			chart.Values = values
 			return true, nil
 		}

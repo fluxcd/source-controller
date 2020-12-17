@@ -693,6 +693,31 @@ var _ = Describe("HelmChartReconciler", func() {
 				return got.Status.Artifact != nil &&
 					storage.ArtifactExist(*got.Status.Artifact)
 			}, timeout, interval).Should(BeTrue())
+
+			When("Setting valid valuesFile attribute", func() {
+				updated := &sourcev1.HelmChart{}
+				Expect(k8sClient.Get(context.Background(), key, updated)).To(Succeed())
+				chart.Spec.ValuesFile = "./charts/helmchart/override.yaml"
+				Expect(k8sClient.Update(context.Background(), updated)).To(Succeed())
+				got := &sourcev1.HelmChart{}
+				Eventually(func() bool {
+					_ = k8sClient.Get(context.Background(), key, got)
+					return got.Status.Artifact != nil &&
+						storage.ArtifactExist(*got.Status.Artifact)
+				}, timeout, interval).Should(BeTrue())
+			})
+
+			When("Setting invalid valuesFile attribute", func() {
+				updated := &sourcev1.HelmChart{}
+				Expect(k8sClient.Get(context.Background(), key, updated)).To(Succeed())
+				chart.Spec.ValuesFile = "invalid.yaml"
+				Expect(k8sClient.Update(context.Background(), updated)).To(Succeed())
+				got := &sourcev1.HelmChart{}
+				Eventually(func() bool {
+					_ = k8sClient.Get(context.Background(), key, got)
+					return got.Status.Artifact != nil && got.Status.Artifact.Revision == updated.Status.Artifact.Revision
+				}, timeout, interval).Should(BeTrue())
+			})
 		})
 	})
 
@@ -936,6 +961,31 @@ var _ = Describe("HelmChartReconciler", func() {
 				return got.Status.Artifact != nil &&
 					storage.ArtifactExist(*got.Status.Artifact)
 			}, timeout, interval).Should(BeTrue())
+
+			When("Setting valid valuesFile attribute", func() {
+				updated := &sourcev1.HelmChart{}
+				Expect(k8sClient.Get(context.Background(), key, updated)).To(Succeed())
+				chart.Spec.ValuesFile = "override.yaml"
+				Expect(k8sClient.Update(context.Background(), updated)).To(Succeed())
+				got := &sourcev1.HelmChart{}
+				Eventually(func() bool {
+					_ = k8sClient.Get(context.Background(), key, got)
+					return got.Status.Artifact != nil &&
+						storage.ArtifactExist(*got.Status.Artifact)
+				}, timeout, interval).Should(BeTrue())
+			})
+
+			When("Setting invalid valuesFile attribute", func() {
+				updated := &sourcev1.HelmChart{}
+				Expect(k8sClient.Get(context.Background(), key, updated)).To(Succeed())
+				chart.Spec.ValuesFile = "./charts/helmchart/override.yaml"
+				Expect(k8sClient.Update(context.Background(), updated)).To(Succeed())
+				got := &sourcev1.HelmChart{}
+				Eventually(func() bool {
+					_ = k8sClient.Get(context.Background(), key, got)
+					return got.Status.Artifact != nil && got.Status.Artifact.Revision == updated.Status.Artifact.Revision
+				}, timeout, interval).Should(BeTrue())
+			})
 		})
 	})
 })

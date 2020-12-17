@@ -22,6 +22,7 @@ import (
 	"io/ioutil"
 	"net/url"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -378,8 +379,18 @@ func (r *HelmChartReconciler) reconcileFromHelmRepository(ctx context.Context,
 			return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
 		}
 
+		// Find override file and retrieve contents
+		var valuesData []byte
+		cfn := filepath.Clean(chart.Spec.ValuesFile)
+		for _, f := range helmChart.Files {
+			if f.Name == cfn {
+				valuesData = f.Data
+				break
+			}
+		}
+
 		// Overwrite values file
-		if changed, err := helm.OverwriteChartDefaultValues(helmChart, chart.Spec.ValuesFile); err != nil {
+		if changed, err := helm.OverwriteChartDefaultValues(helmChart, valuesData); err != nil {
 			return sourcev1.HelmChartNotReady(chart, sourcev1.ChartPackageFailedReason, err.Error()), err
 		} else if !changed {
 			// No changes, skip to write original package to storage
@@ -483,9 +494,27 @@ func (r *HelmChartReconciler) reconcileFromTarballArtifact(ctx context.Context,
 	// or write the chart directly to storage.
 	pkgPath := chartPath
 	isValuesFileOverriden := false
-	if chart.Spec.ValuesFile != "" && chart.Spec.ValuesFile != chartutil.ValuesfileName {
-		// Overwrite default values if configured
-		isValuesFileOverriden, err = helm.OverwriteChartDefaultValues(helmChart, chart.Spec.ValuesFile)
+	if chart.Spec.ValuesFile != "" {
+		srcPath, err := securejoin.SecureJoin(tmpDir, chart.Spec.ValuesFile)
+		if err != nil {
+			return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
+		}
+		if f, err := os.Stat(srcPath); os.IsNotExist(err) || !f.Mode().IsRegular() {
+			err = fmt.Errorf("invalid values file path: %s", chart.Spec.ValuesFile)
+			return chart, err
+		}
+		src, err := os.Open(srcPath)
+		if err != nil {
+			err = fmt.Errorf("failed to open values file '%s': %w", chart.Spec.ValuesFile, err)
+			return chart, err
+		}
+		defer src.Close()
+
+		var valuesData []byte
+		if _, err := src.Read(valuesData); err == nil {
+			isValuesFileOverriden, err = helm.OverwriteChartDefaultValues(helmChart, valuesData)
+		}
+
 		if err != nil {
 			return sourcev1.HelmChartNotReady(chart, sourcev1.ChartPackageFailedReason, err.Error()), err
 		}
