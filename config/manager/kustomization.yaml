@@ -6,4 +6,4 @@ resources:
 images:
 - name: fluxcd/source-controller
   newName: fluxcd/source-controller
-  newTag: v0.5.5
+  newTag: v0.5.6
