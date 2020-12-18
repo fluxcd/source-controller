@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.5.6
+
+**Release date:** 2020-12-18
+
+This prerelease fixes a regression bug that made it impossible to
+reference to a `HelmChart.ValuesFile` in a path relative to the
+root of the `Bucket` or `GitRepository` source.
+
 ## 0.5.5
 
 **Release date:** 2020-12-16
