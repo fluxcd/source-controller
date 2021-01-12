@@ -2,6 +2,17 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.6.0
+
+**Release date:** 2021-01-12
+
+This is the sixth MINOR prerelease, upgrading the `controller-runtime`
+dependencies to `v0.7.0`.
+
+The container image for ARMv7 and ARM64 that used to be published
+separately as `source-controller:*-arm64` has been merged with the
+AMD64 image.
+
 ## 0.5.6
 
 **Release date:** 2020-12-18
