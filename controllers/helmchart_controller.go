@@ -93,7 +93,7 @@ func (r *HelmChartReconciler) SetupWithManagerAndOptions(mgr ctrl.Manager, opts 
 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&sourcev1.HelmChart{}, builder.WithPredicates(
-			predicate.Or(predicate.GenerationChangedPredicate{}, predicates.ReconcilateAtChangedPredicate{}),
+			predicate.Or(predicate.GenerationChangedPredicate{}, predicates.ReconcileRequestedPredicate{}),
 		)).
 		Watches(
 			&source.Kind{Type: &sourcev1.HelmRepository{}},
