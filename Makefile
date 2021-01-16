@@ -54,6 +54,11 @@ manifests: controller-gen
 api-docs: gen-crd-api-reference-docs
 	$(API_REF_GEN) -api-dir=./api/v1beta1 -config=./hack/api-docs/config.json -template-dir=./hack/api-docs/template -out-file=./docs/api/source.md
 
+# Run go mod tidy
+tidy:
+	go mod tidy
+	cd api; go mod tidy
+
 # Run go fmt against code
 fmt:
 	go fmt ./...
