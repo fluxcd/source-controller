@@ -86,7 +86,7 @@ func (r *HelmChartReconciler) SetupWithManagerAndOptions(mgr ctrl.Manager, opts 
 		r.indexHelmRepositoryByURL); err != nil {
 		return fmt.Errorf("failed setting index fields: %w", err)
 	}
-	if err := mgr.GetCache().IndexField(context.TODO(), &sourcev1.HelmChart{}, sourcev1.GitRepositoryIndexKey,
+	if err := mgr.GetCache().IndexField(context.TODO(), &sourcev1.HelmChart{}, sourcev1.SourceIndexKey,
 		r.indexHelmChartBySource); err != nil {
 		return fmt.Errorf("failed setting index fields: %w", err)
 	}
@@ -845,7 +845,7 @@ func (r *HelmChartReconciler) requestsForHelmRepositoryChange(o client.Object) [
 	ctx := context.Background()
 	var list sourcev1.HelmChartList
 	if err := r.List(ctx, &list, client.MatchingFields{
-		sourcev1.HelmRepositoryIndexKey: util.ObjectKey(o).String(),
+		sourcev1.SourceIndexKey: fmt.Sprintf("%s/%s", sourcev1.HelmRepositoryKind, repo.Name),
 	}); err != nil {
 		return nil
 	}
@@ -866,6 +866,7 @@ func (r *HelmChartReconciler) requestsForGitRepositoryChange(o client.Object) []
 	if !ok {
 		panic(fmt.Sprintf("Expected a GitRepository, got %T", o))
 	}
+
 	// If we do not have an artifact, we have no requests to make
 	if repo.GetArtifact() == nil {
 		return nil
@@ -873,7 +874,7 @@ func (r *HelmChartReconciler) requestsForGitRepositoryChange(o client.Object) []
 
 	var list sourcev1.HelmChartList
 	if err := r.List(context.TODO(), &list, client.MatchingFields{
-		sourcev1.GitRepositoryIndexKey: util.ObjectKey(o).String(),
+		sourcev1.SourceIndexKey: fmt.Sprintf("%s/%s", sourcev1.GitRepositoryKind, repo.Name),
 	}); err != nil {
 		return nil
 	}
@@ -902,7 +903,7 @@ func (r *HelmChartReconciler) requestsForBucketChange(o client.Object) []reconci
 
 	var list sourcev1.HelmChartList
 	if err := r.List(context.TODO(), &list, client.MatchingFields{
-		sourcev1.BucketIndexKey: util.ObjectKey(o).String(),
+		sourcev1.SourceIndexKey: fmt.Sprintf("%s/%s", sourcev1.BucketKind, bucket.Name),
 	}); err != nil {
 		return nil
 	}

@@ -21,15 +21,9 @@ import (
 )
 
 const (
-	// GitRepositoryIndexKey is the key used for indexing resources
-	// resources based on their GitRepository source.
-	GitRepositoryIndexKey string = ".metadata.gitRepository"
-	// HelmRepositoryIndexKey is the key used for indexing resources
-	// resources based on their HelmRepository source.
-	HelmRepositoryIndexKey string = ".meta.helmRepository"
-	// BucketIndexKey is the key used for indexing resources based on
-	// their Bucket source.
-	BucketIndexKey string = ".meta.bucket"
+	// SourceIndexKey is the key used for indexing resources
+	// resources based on their Source.
+	SourceIndexKey string = ".metadata.source"
 )
 
 // Source interface must be supported by all API types.
