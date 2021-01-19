@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.6.3
+
+**Release date:** 2021-01-19
+
+This prereleases comes with bug fixes to the `HelmChart` indexes,
+watches, and the overwrite of chart values.
+
 ## 0.6.2
 
 **Release date:** 2021-01-16
