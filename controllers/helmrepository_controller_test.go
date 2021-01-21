@@ -30,6 +30,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
+	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/helmtestserver"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
@@ -250,7 +251,7 @@ var _ = Describe("HelmRepositoryReconciler", func() {
 				},
 				Spec: sourcev1.HelmRepositorySpec{
 					URL: helmServer.URL(),
-					SecretRef: &corev1.LocalObjectReference{
+					SecretRef: &meta.LocalObjectReference{
 						Name: secretKey.Name,
 					},
 					Interval: metav1.Duration{Duration: indexInterval},
@@ -343,7 +344,7 @@ var _ = Describe("HelmRepositoryReconciler", func() {
 				},
 				Spec: sourcev1.HelmRepositorySpec{
 					URL: helmServer.URL(),
-					SecretRef: &corev1.LocalObjectReference{
+					SecretRef: &meta.LocalObjectReference{
 						Name: secretKey.Name,
 					},
 					Interval: metav1.Duration{Duration: indexInterval},

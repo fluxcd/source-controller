@@ -93,9 +93,10 @@ spec:
                   and known_hosts fields.
                 properties:
                   name:
-                    description: 'Name of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
-                      TODO: Add other useful fields. apiVersion, kind, uid?'
+                    description: Name of the referent
                     type: string
+                required:
+                - name
                 type: object
               suspend:
                 description: This flag tells the controller to suspend the reconciliation
@@ -125,9 +126,10 @@ spec:
                       trusted Git authors.
                     properties:
                       name:
-                        description: 'Name of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
-                          TODO: Add other useful fields. apiVersion, kind, uid?'
+                        description: Name of the referent
                         type: string
+                    required:
+                    - name
                     type: object
                 required:
                 - mode

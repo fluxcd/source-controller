@@ -18,7 +18,6 @@ package v1beta1
 
 import (
 	"github.com/fluxcd/pkg/apis/meta"
-	corev1 "k8s.io/api/core/v1"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -45,7 +44,7 @@ type GitRepositorySpec struct {
 	// For SSH repositories the secret must contain identity, identity.pub and
 	// known_hosts fields.
 	// +optional
-	SecretRef *corev1.LocalObjectReference `json:"secretRef,omitempty"`
+	SecretRef *meta.LocalObjectReference `json:"secretRef,omitempty"`
 
 	// The interval at which to check for repository updates.
 	// +required
@@ -110,7 +109,7 @@ type GitRepositoryVerification struct {
 	Mode string `json:"mode"`
 
 	// The secret name containing the public keys of all trusted Git authors.
-	SecretRef corev1.LocalObjectReference `json:"secretRef,omitempty"`
+	SecretRef meta.LocalObjectReference `json:"secretRef,omitempty"`
 }
 
 // GitRepositoryStatus defines the observed state of a Git repository.

@@ -314,7 +314,7 @@ var _ = Describe("HelmChartReconciler", func() {
 				},
 				Spec: sourcev1.HelmRepositorySpec{
 					URL: helmServer.URL(),
-					SecretRef: &corev1.LocalObjectReference{
+					SecretRef: &meta.LocalObjectReference{
 						Name: secretKey.Name,
 					},
 					Interval: metav1.Duration{Duration: pullInterval},
@@ -803,7 +803,7 @@ var _ = Describe("HelmChartReconciler", func() {
 				},
 				Spec: sourcev1.HelmRepositorySpec{
 					URL: helmServer.URL(),
-					SecretRef: &corev1.LocalObjectReference{
+					SecretRef: &meta.LocalObjectReference{
 						Name: secretKey.Name,
 					},
 					Interval: metav1.Duration{Duration: pullInterval},
