@@ -136,8 +136,8 @@ string
 <td>
 <code>secretRef</code><br>
 <em>
-<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.19/#localobjectreference-v1-core">
-Kubernetes core/v1.LocalObjectReference
+<a href="https://godoc.org/github.com/fluxcd/pkg/apis/meta#LocalObjectReference">
+github.com/fluxcd/pkg/apis/meta.LocalObjectReference
 </a>
 </em>
 </td>
@@ -291,8 +291,8 @@ string
 <td>
 <code>secretRef</code><br>
 <em>
-<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.19/#localobjectreference-v1-core">
-Kubernetes core/v1.LocalObjectReference
+<a href="https://godoc.org/github.com/fluxcd/pkg/apis/meta#LocalObjectReference">
+github.com/fluxcd/pkg/apis/meta.LocalObjectReference
 </a>
 </em>
 </td>
@@ -642,8 +642,8 @@ string
 <td>
 <code>secretRef</code><br>
 <em>
-<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.19/#localobjectreference-v1-core">
-Kubernetes core/v1.LocalObjectReference
+<a href="https://godoc.org/github.com/fluxcd/pkg/apis/meta#LocalObjectReference">
+github.com/fluxcd/pkg/apis/meta.LocalObjectReference
 </a>
 </em>
 </td>
@@ -880,8 +880,8 @@ string
 <td>
 <code>secretRef</code><br>
 <em>
-<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.19/#localobjectreference-v1-core">
-Kubernetes core/v1.LocalObjectReference
+<a href="https://godoc.org/github.com/fluxcd/pkg/apis/meta#LocalObjectReference">
+github.com/fluxcd/pkg/apis/meta.LocalObjectReference
 </a>
 </em>
 </td>
@@ -1137,8 +1137,8 @@ string
 <td>
 <code>secretRef</code><br>
 <em>
-<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.19/#localobjectreference-v1-core">
-Kubernetes core/v1.LocalObjectReference
+<a href="https://godoc.org/github.com/fluxcd/pkg/apis/meta#LocalObjectReference">
+github.com/fluxcd/pkg/apis/meta.LocalObjectReference
 </a>
 </em>
 </td>
@@ -1371,8 +1371,8 @@ string
 <td>
 <code>secretRef</code><br>
 <em>
-<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.19/#localobjectreference-v1-core">
-Kubernetes core/v1.LocalObjectReference
+<a href="https://godoc.org/github.com/fluxcd/pkg/apis/meta#LocalObjectReference">
+github.com/fluxcd/pkg/apis/meta.LocalObjectReference
 </a>
 </em>
 </td>
@@ -1600,8 +1600,8 @@ string
 <td>
 <code>secretRef</code><br>
 <em>
-<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.19/#localobjectreference-v1-core">
-Kubernetes core/v1.LocalObjectReference
+<a href="https://godoc.org/github.com/fluxcd/pkg/apis/meta#LocalObjectReference">
+github.com/fluxcd/pkg/apis/meta.LocalObjectReference
 </a>
 </em>
 </td>

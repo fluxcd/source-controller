@@ -18,7 +18,6 @@ package v1beta1
 
 import (
 	"github.com/fluxcd/pkg/apis/meta"
-	corev1 "k8s.io/api/core/v1"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -55,7 +54,7 @@ type BucketSpec struct {
 	// The name of the secret containing authentication credentials
 	// for the Bucket.
 	// +optional
-	SecretRef *corev1.LocalObjectReference `json:"secretRef,omitempty"`
+	SecretRef *meta.LocalObjectReference `json:"secretRef,omitempty"`
 
 	// The interval at which to check for bucket updates.
 	// +required

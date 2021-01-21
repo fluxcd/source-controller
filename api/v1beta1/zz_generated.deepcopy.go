@@ -21,8 +21,8 @@ limitations under the License.
 package v1beta1
 
 import (
-	"k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"github.com/fluxcd/pkg/apis/meta"
+	"k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 )
 
@@ -106,13 +106,13 @@ func (in *BucketSpec) DeepCopyInto(out *BucketSpec) {
 	*out = *in
 	if in.SecretRef != nil {
 		in, out := &in.SecretRef, &out.SecretRef
-		*out = new(v1.LocalObjectReference)
+		*out = new(meta.LocalObjectReference)
 		**out = **in
 	}
 	out.Interval = in.Interval
 	if in.Timeout != nil {
 		in, out := &in.Timeout, &out.Timeout
-		*out = new(metav1.Duration)
+		*out = new(v1.Duration)
 		**out = **in
 	}
 	if in.Ignore != nil {
@@ -137,7 +137,7 @@ func (in *BucketStatus) DeepCopyInto(out *BucketStatus) {
 	*out = *in
 	if in.Conditions != nil {
 		in, out := &in.Conditions, &out.Conditions
-		*out = make([]metav1.Condition, len(*in))
+		*out = make([]v1.Condition, len(*in))
 		for i := range *in {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
@@ -239,13 +239,13 @@ func (in *GitRepositorySpec) DeepCopyInto(out *GitRepositorySpec) {
 	*out = *in
 	if in.SecretRef != nil {
 		in, out := &in.SecretRef, &out.SecretRef
-		*out = new(v1.LocalObjectReference)
+		*out = new(meta.LocalObjectReference)
 		**out = **in
 	}
 	out.Interval = in.Interval
 	if in.Timeout != nil {
 		in, out := &in.Timeout, &out.Timeout
-		*out = new(metav1.Duration)
+		*out = new(v1.Duration)
 		**out = **in
 	}
 	if in.Reference != nil {
@@ -280,7 +280,7 @@ func (in *GitRepositoryStatus) DeepCopyInto(out *GitRepositoryStatus) {
 	*out = *in
 	if in.Conditions != nil {
 		in, out := &in.Conditions, &out.Conditions
-		*out = make([]metav1.Condition, len(*in))
+		*out = make([]v1.Condition, len(*in))
 		for i := range *in {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
@@ -400,7 +400,7 @@ func (in *HelmChartStatus) DeepCopyInto(out *HelmChartStatus) {
 	*out = *in
 	if in.Conditions != nil {
 		in, out := &in.Conditions, &out.Conditions
-		*out = make([]metav1.Condition, len(*in))
+		*out = make([]v1.Condition, len(*in))
 		for i := range *in {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
@@ -487,13 +487,13 @@ func (in *HelmRepositorySpec) DeepCopyInto(out *HelmRepositorySpec) {
 	*out = *in
 	if in.SecretRef != nil {
 		in, out := &in.SecretRef, &out.SecretRef
-		*out = new(v1.LocalObjectReference)
+		*out = new(meta.LocalObjectReference)
 		**out = **in
 	}
 	out.Interval = in.Interval
 	if in.Timeout != nil {
 		in, out := &in.Timeout, &out.Timeout
-		*out = new(metav1.Duration)
+		*out = new(v1.Duration)
 		**out = **in
 	}
 }
@@ -513,7 +513,7 @@ func (in *HelmRepositoryStatus) DeepCopyInto(out *HelmRepositoryStatus) {
 	*out = *in
 	if in.Conditions != nil {
 		in, out := &in.Conditions, &out.Conditions
-		*out = make([]metav1.Condition, len(*in))
+		*out = make([]v1.Condition, len(*in))
 		for i := range *in {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}

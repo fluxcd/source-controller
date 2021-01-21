@@ -18,7 +18,6 @@ package v1beta1
 
 import (
 	"github.com/fluxcd/pkg/apis/meta"
-	corev1 "k8s.io/api/core/v1"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -44,7 +43,7 @@ type HelmRepositorySpec struct {
 	// For TLS the secret must contain a certFile and keyFile, and/or
 	// caCert fields.
 	// +optional
-	SecretRef *corev1.LocalObjectReference `json:"secretRef,omitempty"`
+	SecretRef *meta.LocalObjectReference `json:"secretRef,omitempty"`
 
 	// The interval at which to check the upstream for updates.
 	// +required
