@@ -2,6 +2,24 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.7.0
+
+**Release date:** 2021-01-21
+
+This is the seventh MINOR prerelease.
+
+Two new argument flags are introduced to support configuring the QPS
+(`--kube-api-qps`) and burst (`--kube-api-burst`) while communicating
+with the Kubernetes API server.
+
+The `LocalObjectReference` from the Kubernetes core has been replaced
+with our own, making `Name` a required field. The impact of this should
+be limited to direct API consumers only, as the field was already
+required by controller logic.
+
+Overwrite of chart values has been patched to correctly read the data
+from the defined YAML file.
+
 ## 0.6.3
 
 **Release date:** 2021-01-19
