@@ -504,19 +504,12 @@ func (r *HelmChartReconciler) reconcileFromTarballArtifact(ctx context.Context,
 			err = fmt.Errorf("invalid values file path: %s", chart.Spec.ValuesFile)
 			return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
 		}
-		src, err := os.Open(srcPath)
-		if err != nil {
-			err = fmt.Errorf("failed to open values file '%s': %w", chart.Spec.ValuesFile, err)
-			return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
-		}
-		defer src.Close()
 
-		var valuesData []byte
-		if _, err := src.Read(valuesData); err != nil {
+		valuesData, err := ioutil.ReadFile(srcPath)
+		if err != nil {
 			err = fmt.Errorf("failed to read from values file '%s': %w", chart.Spec.ValuesFile, err)
 			return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
 		}
-
 		isValuesFileOverriden, err = helm.OverwriteChartDefaultValues(helmChart, valuesData)
 		if err != nil {
 			return sourcev1.HelmChartNotReady(chart, sourcev1.ChartPackageFailedReason, err.Error()), err
