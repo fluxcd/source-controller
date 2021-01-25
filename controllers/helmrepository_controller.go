@@ -209,11 +209,16 @@ func (r *HelmRepositoryReconciler) reconcile(ctx context.Context, repository sou
 		return sourcev1.HelmRepositoryNotReady(repository, sourcev1.IndexationFailedReason, err.Error()), err
 	}
 
-	// return early on unchanged generation
+	indexBytes, err := yaml.Marshal(&chartRepo.Index)
+	if err != nil {
+		return sourcev1.HelmRepositoryNotReady(repository, sourcev1.StorageOperationFailedReason, err.Error()), err
+	}
+	hash := r.Storage.Checksum(bytes.NewReader(indexBytes))
 	artifact := r.Storage.NewArtifactFor(repository.Kind,
 		repository.ObjectMeta.GetObjectMeta(),
-		chartRepo.Index.Generated.Format(time.RFC3339Nano),
-		fmt.Sprintf("index-%s.yaml", url.PathEscape(chartRepo.Index.Generated.Format(time.RFC3339Nano))))
+		hash,
+		fmt.Sprintf("index-%s.yaml", hash))
+	// return early on unchanged index
 	if apimeta.IsStatusConditionTrue(repository.Status.Conditions, meta.ReadyCondition) && repository.GetArtifact().HasRevision(artifact.Revision) {
 		if artifact.URL != repository.GetArtifact().URL {
 			r.Storage.SetArtifactURL(repository.GetArtifact())
@@ -238,11 +243,7 @@ func (r *HelmRepositoryReconciler) reconcile(ctx context.Context, repository sou
 	defer unlock()
 
 	// save artifact to storage
-	b, err := yaml.Marshal(&chartRepo.Index)
-	if err != nil {
-		return sourcev1.HelmRepositoryNotReady(repository, sourcev1.IndexationFailedReason, err.Error()), err
-	}
-	if err := r.Storage.AtomicWriteFile(&artifact, bytes.NewReader(b), 0644); err != nil {
+	if err := r.Storage.AtomicWriteFile(&artifact, bytes.NewReader(indexBytes), 0644); err != nil {
 		err = fmt.Errorf("unable to write repository index file: %w", err)
 		return sourcev1.HelmRepositoryNotReady(repository, sourcev1.StorageOperationFailedReason, err.Error()), err
 	}
