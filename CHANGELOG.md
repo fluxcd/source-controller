@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.7.1
+
+**Release date:** 2021-01-25
+
+This prerelease changes the recorded revision for a `HelmRepository` resource
+to a SHA1 checksum, this to improve the detection of changes for repositories
+that do not correctly update their advertised generation timestamp.
+
 ## 0.7.0
 
 **Release date:** 2021-01-21
