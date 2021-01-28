@@ -537,7 +537,7 @@ func (r *HelmChartReconciler) reconcileFromTarballArtifact(ctx context.Context,
 			}
 
 			// Continue loop if file scheme detected
-			if strings.HasPrefix(dep.Repository, "file://") {
+			if dep.Repository == "" || strings.HasPrefix(dep.Repository, "file://") {
 				dwr = append(dwr, &helm.DependencyWithRepository{
 					Dependency: dep,
 					Repository: nil,
