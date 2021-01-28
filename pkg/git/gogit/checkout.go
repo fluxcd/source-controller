@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package v1
+package gogit
 
 import (
 	"context"
@@ -27,6 +27,7 @@ import (
 	"github.com/go-git/go-git/v5/plumbing"
 
 	"github.com/fluxcd/pkg/version"
+
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
 	"github.com/fluxcd/source-controller/pkg/git/common"
 )

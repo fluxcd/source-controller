@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package v2
+package gogit
 
 import (
 	"context"
@@ -23,15 +23,10 @@ import (
 	"testing"
 
 	"github.com/fluxcd/source-controller/pkg/git/common"
-	git2go "github.com/libgit2/git2go/v31"
 )
 
 func TestCheckoutTagSemVer_Checkout(t *testing.T) {
-	certCallback := func(cert *git2go.Certificate, valid bool, hostname string) git2go.ErrorCode {
-		return 0
-	}
-	auth := &common.Auth{CertCallback: certCallback}
-
+	auth := &common.Auth{}
 	tag := CheckoutTag{
 		tag: "v1.7.0",
 	}

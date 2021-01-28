@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package v2
+package libgit2
 
 import (
 	"bufio"
@@ -27,9 +27,10 @@ import (
 
 	"golang.org/x/crypto/ssh"
 
-	"github.com/fluxcd/source-controller/pkg/git/common"
 	git2go "github.com/libgit2/git2go/v31"
 	corev1 "k8s.io/api/core/v1"
+
+	"github.com/fluxcd/source-controller/pkg/git/common"
 )
 
 func AuthSecretStrategyForURL(URL string) (common.AuthSecretStrategy, error) {

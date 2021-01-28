@@ -21,20 +21,16 @@ import (
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
 	"github.com/fluxcd/source-controller/pkg/git/common"
-	gitv1 "github.com/fluxcd/source-controller/pkg/git/v1"
-	gitv2 "github.com/fluxcd/source-controller/pkg/git/v2"
-)
-
-const (
-	defaultBranch = "master"
+	"github.com/fluxcd/source-controller/pkg/git/gogit"
+	"github.com/fluxcd/source-controller/pkg/git/libgit2"
 )
 
 func CheckoutStrategyForRef(ref *sourcev1.GitRepositoryRef, gitImplementation string) (common.CheckoutStrategy, error) {
 	switch gitImplementation {
 	case sourcev1.GoGitImplementation:
-		return gitv1.CheckoutStrategyForRef(ref), nil
+		return gogit.CheckoutStrategyForRef(ref), nil
 	case sourcev1.LibGit2Implementation:
-		return gitv2.CheckoutStrategyForRef(ref), nil
+		return libgit2.CheckoutStrategyForRef(ref), nil
 	default:
 		return nil, fmt.Errorf("invalid git implementation %s", gitImplementation)
 	}
@@ -43,9 +39,9 @@ func CheckoutStrategyForRef(ref *sourcev1.GitRepositoryRef, gitImplementation st
 func AuthSecretStrategyForURL(url string, gitImplementation string) (common.AuthSecretStrategy, error) {
 	switch gitImplementation {
 	case sourcev1.GoGitImplementation:
-		return gitv1.AuthSecretStrategyForURL(url)
+		return gogit.AuthSecretStrategyForURL(url)
 	case sourcev1.LibGit2Implementation:
-		return gitv2.AuthSecretStrategyForURL(url)
+		return libgit2.AuthSecretStrategyForURL(url)
 	default:
 		return nil, fmt.Errorf("invalid git implementation %s", gitImplementation)
 	}
