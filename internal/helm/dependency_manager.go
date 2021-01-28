@@ -156,7 +156,7 @@ func (dm *DependencyManager) secureLocalChartPath(dep *DependencyWithRepository)
 	if err != nil {
 		return "", fmt.Errorf("failed to parse alleged local chart reference: %w", err)
 	}
-	if localUrl.Scheme != "file" {
+	if localUrl.Scheme != "" && localUrl.Scheme != "file" {
 		return "", fmt.Errorf("'%s' is not a local chart reference", dep.Dependency.Repository)
 	}
 	return securejoin.SecureJoin(dm.WorkingDir, filepath.Join(dm.ChartPath, localUrl.Host, localUrl.Path))
