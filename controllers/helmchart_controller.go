@@ -202,6 +202,21 @@ func (r *HelmChartReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	var reconcileErr error
 	switch typedSource := source.(type) {
 	case *sourcev1.HelmRepository:
+		// TODO: move this to a validation webhook once the discussion around
+		//  certificates has settled: https://github.com/fluxcd/image-reflector-controller/issues/69
+		if err := validHelmChartName(chart.Spec.Chart); err != nil {
+			reconciledChart = sourcev1.HelmChartNotReady(chart, sourcev1.ChartPullFailedReason, err.Error())
+			log.Error(err, "validation failed")
+			if err := r.updateStatus(ctx, req, reconciledChart.Status); err != nil {
+				log.Info(fmt.Sprintf("%v", reconciledChart.Status))
+				log.Error(err, "unable to update status")
+				return ctrl.Result{Requeue: true}, err
+			}
+			r.event(ctx, reconciledChart, events.EventSeverityError, err.Error())
+			r.recordReadiness(ctx, reconciledChart)
+			// Do not requeue as there is no chance on recovery.
+			return ctrl.Result{Requeue: false}, nil
+		}
 		reconciledChart, reconcileErr = r.reconcileFromHelmRepository(ctx, *typedSource, *chart.DeepCopy(), changed)
 	case *sourcev1.GitRepository, *sourcev1.Bucket:
 		reconciledChart, reconcileErr = r.reconcileFromTarballArtifact(ctx, *typedSource.GetArtifact(),
@@ -279,12 +294,6 @@ func (r *HelmChartReconciler) getSource(ctx context.Context, chart sourcev1.Helm
 
 func (r *HelmChartReconciler) reconcileFromHelmRepository(ctx context.Context,
 	repository sourcev1.HelmRepository, chart sourcev1.HelmChart, force bool) (sourcev1.HelmChart, error) {
-	// TODO: move this to a validation webhook once the discussion around
-	//  certificates has settled: https://github.com/fluxcd/image-reflector-controller/issues/69
-	if err := validHelmChartName(chart.Spec.Chart); err != nil {
-		return sourcev1.HelmChartNotReady(chart, sourcev1.ChartPullFailedReason, err.Error()), nil
-	}
-
 	// Configure ChartRepository getter options
 	var clientOpts []getter.Option
 	if secret, err := r.getHelmRepositorySecret(ctx, &repository); err != nil {
