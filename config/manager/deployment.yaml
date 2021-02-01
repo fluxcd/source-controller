@@ -30,6 +30,8 @@ spec:
             name: http
           - containerPort: 8080
             name: http-prom
+          - containerPort: 9440
+            name: healthz
         env:
           - name: RUNTIME_NAMESPACE
             valueFrom:
@@ -44,8 +46,8 @@ spec:
           - --storage-adv-addr=source-controller.$(RUNTIME_NAMESPACE).svc.cluster.local.
         livenessProbe:
           httpGet:
-            port: http
-            path: /
+            port: healthz
+            path: /healthz
         readinessProbe:
           httpGet:
             port: http

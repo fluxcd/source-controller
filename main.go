@@ -38,6 +38,7 @@ import (
 	"github.com/fluxcd/pkg/runtime/events"
 	"github.com/fluxcd/pkg/runtime/logger"
 	"github.com/fluxcd/pkg/runtime/metrics"
+	"github.com/fluxcd/pkg/runtime/probes"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
 	"github.com/fluxcd/source-controller/controllers"
@@ -66,6 +67,7 @@ func main() {
 	var (
 		metricsAddr          string
 		eventsAddr           string
+		healthAddr           string
 		enableLeaderElection bool
 		storagePath          string
 		storageAddr          string
@@ -80,6 +82,7 @@ func main() {
 		"The address the metric endpoint binds to.")
 	flag.StringVar(&eventsAddr, "events-addr", envOrDefault("EVENTS_ADDR", ""),
 		"The address of the events receiver.")
+	flag.StringVar(&healthAddr, "health-addr", ":9440", "The address the health endpoint binds to.")
 	flag.BoolVar(&enableLeaderElection, "enable-leader-election", false,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
@@ -120,24 +123,26 @@ func main() {
 
 	restConfig := client.GetConfigOrDie(clientOptions)
 	mgr, err := ctrl.NewManager(restConfig, ctrl.Options{
-		Scheme:             scheme,
-		MetricsBindAddress: metricsAddr,
-		Port:               9443,
-		LeaderElection:     enableLeaderElection,
-		LeaderElectionID:   "305740c0.fluxcd.io",
-		Namespace:          watchNamespace,
-		Logger:             ctrl.Log,
+		Scheme:                 scheme,
+		MetricsBindAddress:     metricsAddr,
+		HealthProbeBindAddress: healthAddr,
+		Port:                   9443,
+		LeaderElection:         enableLeaderElection,
+		LeaderElectionID:       "305740c0.fluxcd.io",
+		Namespace:              watchNamespace,
+		Logger:                 ctrl.Log,
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
 		os.Exit(1)
 	}
 
+	probes.SetupChecks(mgr, setupLog)
+
 	if storageAdvAddr == "" {
 		storageAdvAddr = determineAdvStorageAddr(storageAddr, setupLog)
 	}
 	storage := mustInitStorage(storagePath, storageAdvAddr, setupLog)
-	go startFileServer(storage.BasePath, storageAddr, setupLog)
 
 	if err = (&controllers.GitRepositoryReconciler{
 		Client:                mgr.GetClient(),
@@ -195,6 +200,15 @@ func main() {
 	}
 	// +kubebuilder:scaffold:builder
 
+	go func() {
+		// Block until our controller manager is elected leader. We presume our
+		// entire process will terminate if we lose leadership, so we don't need
+		// to handle that.
+		<-mgr.Elected()
+
+		startFileServer(storage.BasePath, storageAddr, setupLog)
+	}()
+
 	setupLog.Info("starting manager")
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
 		setupLog.Error(err, "problem running manager")
@@ -203,6 +217,7 @@ func main() {
 }
 
 func startFileServer(path string, address string, l logr.Logger) {
+	l.Info("starting file server")
 	fs := http.FileServer(http.Dir(path))
 	http.Handle("/", fs)
 	err := http.ListenAndServe(address, nil)
