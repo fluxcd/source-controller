@@ -137,7 +137,6 @@ func main() {
 		storageAdvAddr = determineAdvStorageAddr(storageAddr, setupLog)
 	}
 	storage := mustInitStorage(storagePath, storageAdvAddr, setupLog)
-	go startFileServer(storage.BasePath, storageAddr, setupLog)
 
 	if err = (&controllers.GitRepositoryReconciler{
 		Client:                mgr.GetClient(),
@@ -195,6 +194,15 @@ func main() {
 	}
 	// +kubebuilder:scaffold:builder
 
+	go func() {
+		// Block until our controller manager is elected leader. We presume our
+		// entire process will terminate if we lose leadership, so we don't need
+		// to handle that.
+		<-mgr.Elected()
+
+		startFileServer(storage.BasePath, storageAddr, setupLog)
+	}()
+
 	setupLog.Info("starting manager")
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
 		setupLog.Error(err, "problem running manager")
@@ -203,6 +211,7 @@ func main() {
 }
 
 func startFileServer(path string, address string, l logr.Logger) {
+	l.Info("starting file server")
 	fs := http.FileServer(http.Dir(path))
 	http.Handle("/", fs)
 	err := http.ListenAndServe(address, nil)
