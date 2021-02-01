@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.7.2
+
+**Release date:** 2021-02-01
+
+This prerelease ensures the file server of the controller only starts for the
+elected leader, and improves the visibility of chart name validation errors.
+
 ## 0.7.1
 
 **Release date:** 2021-01-25
