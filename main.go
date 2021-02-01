@@ -38,6 +38,7 @@ import (
 	"github.com/fluxcd/pkg/runtime/events"
 	"github.com/fluxcd/pkg/runtime/logger"
 	"github.com/fluxcd/pkg/runtime/metrics"
+	"github.com/fluxcd/pkg/runtime/probes"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
 	"github.com/fluxcd/source-controller/controllers"
@@ -66,6 +67,7 @@ func main() {
 	var (
 		metricsAddr          string
 		eventsAddr           string
+		healthAddr           string
 		enableLeaderElection bool
 		storagePath          string
 		storageAddr          string
@@ -80,6 +82,7 @@ func main() {
 		"The address the metric endpoint binds to.")
 	flag.StringVar(&eventsAddr, "events-addr", envOrDefault("EVENTS_ADDR", ""),
 		"The address of the events receiver.")
+	flag.StringVar(&healthAddr, "health-addr", ":9440", "The address the health endpoint binds to.")
 	flag.BoolVar(&enableLeaderElection, "enable-leader-election", false,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
@@ -120,18 +123,21 @@ func main() {
 
 	restConfig := client.GetConfigOrDie(clientOptions)
 	mgr, err := ctrl.NewManager(restConfig, ctrl.Options{
-		Scheme:             scheme,
-		MetricsBindAddress: metricsAddr,
-		Port:               9443,
-		LeaderElection:     enableLeaderElection,
-		LeaderElectionID:   "305740c0.fluxcd.io",
-		Namespace:          watchNamespace,
-		Logger:             ctrl.Log,
+		Scheme:                 scheme,
+		MetricsBindAddress:     metricsAddr,
+		HealthProbeBindAddress: healthAddr,
+		Port:                   9443,
+		LeaderElection:         enableLeaderElection,
+		LeaderElectionID:       "305740c0.fluxcd.io",
+		Namespace:              watchNamespace,
+		Logger:                 ctrl.Log,
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
 		os.Exit(1)
 	}
+
+	probes.SetupChecks(mgr, setupLog)
 
 	if storageAdvAddr == "" {
 		storageAdvAddr = determineAdvStorageAddr(storageAddr, setupLog)
