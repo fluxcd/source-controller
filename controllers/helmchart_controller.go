@@ -930,7 +930,7 @@ func (r *HelmChartReconciler) requestsForBucketChange(o client.Object) []reconci
 func validHelmChartName(s string) error {
 	chartFmt := regexp.MustCompile("^([-a-z0-9]*)$")
 	if !chartFmt.MatchString(s) {
-		return fmt.Errorf("invalid chart name %q, a valid name must be lower case letters and numbers and MAY be seperated with dashes (-)", s)
+		return fmt.Errorf("invalid chart name %q, a valid name must be lower case letters and numbers and MAY be separated with dashes (-)", s)
 	}
 	return nil
 }
