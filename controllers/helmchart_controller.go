@@ -539,10 +539,14 @@ func (r *HelmChartReconciler) reconcileFromTarballArtifact(ctx context.Context,
 		var dwr []*helm.DependencyWithRepository
 		for _, dep := range reqs {
 			// Exclude existing dependencies
+			found := false
 			for _, existing := range deps {
 				if existing.Name() == dep.Name {
-					continue
+					found = true
 				}
+			}
+			if found {
+				continue
 			}
 
 			// Continue loop if file scheme detected
