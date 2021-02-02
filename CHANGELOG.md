@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.7.3
+
+**Release date:** 2021-02-02
+
+This prerelease changes the strategy of the controller's deployment to Recreate
+to prevent a deadlock during upgrades and to ensure safe usage of backing
+persistent (RW) volumes.
+
 ## 0.7.2
 
 **Release date:** 2021-02-01
