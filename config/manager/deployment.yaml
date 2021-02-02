@@ -9,6 +9,8 @@ spec:
     matchLabels:
       app: source-controller
   replicas: 1
+  strategy:
+    type: Recreate
   template:
     metadata:
       labels:
