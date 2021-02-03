@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.7.4
+
+**Release date:** 2021-02-03
+
+This prerelease fixes a bug where the controller tried to update dependencies
+for Helm charts even when dependencies were already present.
+
 ## 0.7.3
 
 **Release date:** 2021-02-02
