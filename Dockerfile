@@ -29,7 +29,7 @@ COPY internal/ internal/
 # build without specifing the arch
 RUN CGO_ENABLED=1 go build -o source-controller main.go
 
-FROM alpine:3.12
+FROM alpine:3.13
 
 # link repo to the GitHub Container Registry image
 LABEL org.opencontainers.image.source="https://github.com/fluxcd/source-controller"
