@@ -96,12 +96,9 @@ func TestBasicAuthStrategy_Method(t *testing.T) {
 		name    string
 		secret  corev1.Secret
 		modify  func(secret *corev1.Secret)
-		want    *common.Auth
 		wantErr bool
 	}{
-		{"without username", basicAuthSecretFixture, func(s *corev1.Secret) { delete(s.Data, "username") }, nil, true},
-		{"without password", basicAuthSecretFixture, func(s *corev1.Secret) { delete(s.Data, "password") }, nil, true},
-		{"empty", corev1.Secret{}, nil, nil, true},
+		{"with username and password", basicAuthSecretFixture, nil, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -110,13 +107,10 @@ func TestBasicAuthStrategy_Method(t *testing.T) {
 				tt.modify(secret)
 			}
 			s := &BasicAuth{}
-			got, err := s.Method(*secret)
+			_, err := s.Method(*secret)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Method() error = %v, wantErr %v", err, tt.wantErr)
 				return
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("Method() got = %v, want %v", got, tt.want)
 			}
 		})
 	}

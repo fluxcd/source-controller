@@ -47,6 +47,10 @@ func AuthSecretStrategyForURL(URL string) (common.AuthSecretStrategy, error) {
 type BasicAuth struct{}
 
 func (s *BasicAuth) Method(secret corev1.Secret) (*common.Auth, error) {
+	if _, ok := secret.Data[common.CAFile]; ok {
+		return nil, fmt.Errorf("found caFile key in secret '%s' but go-git HTTP transport does not support custom certificates", secret.Name)
+	}
+
 	auth := &http.BasicAuth{}
 	if username, ok := secret.Data["username"]; ok {
 		auth.Username = string(username)
@@ -65,6 +69,10 @@ type PublicKeyAuth struct {
 }
 
 func (s *PublicKeyAuth) Method(secret corev1.Secret) (*common.Auth, error) {
+	if _, ok := secret.Data[common.CAFile]; ok {
+		return nil, fmt.Errorf("found caFile key in secret '%s' but go-git SSH transport does not support custom certificates", secret.Name)
+	}
+
 	identity := secret.Data["identity"]
 	knownHosts := secret.Data["known_hosts"]
 	if len(identity) == 0 || len(knownHosts) == 0 {

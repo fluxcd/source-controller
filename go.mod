@@ -20,12 +20,12 @@ require (
 	github.com/go-git/go-billy/v5 v5.0.0
 	github.com/go-git/go-git/v5 v5.2.0
 	github.com/go-logr/logr v0.3.0
-	github.com/libgit2/git2go/v31 v31.3.0
+	github.com/libgit2/git2go/v31 v31.4.7
 	github.com/minio/minio-go/v7 v7.0.5
 	github.com/onsi/ginkgo v1.14.1
 	github.com/onsi/gomega v1.10.2
 	github.com/spf13/pflag v1.0.5
-	golang.org/x/crypto v0.0.0-20201002170205-7f63de1d35b0
+	golang.org/x/crypto v0.0.0-20201203163018-be400aefbc4c
 	golang.org/x/sync v0.0.0-20190911185100-cd5d95a43a6e
 	helm.sh/helm/v3 v3.5.0
 	k8s.io/api v0.20.2
