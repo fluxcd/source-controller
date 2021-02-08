@@ -29,7 +29,7 @@ COPY internal/ internal/
 # build without specifing the arch
 RUN CGO_ENABLED=1 go build -o source-controller main.go
 
-FROM alpine:3.12
+FROM alpine:3.13
 
 # link repo to the GitHub Container Registry image
 LABEL org.opencontainers.image.source="https://github.com/fluxcd/source-controller"
@@ -44,7 +44,7 @@ COPY --from=builder /workspace/source-controller /usr/local/bin/
 # https://github.com/gliderlabs/docker-alpine/issues/367#issuecomment-354316460
 RUN [ ! -e /etc/nsswitch.conf ] && echo 'hosts: files dns' > /etc/nsswitch.conf
 
-RUN addgroup -S controller && adduser -S -g controller controller
+RUN addgroup -S controller && adduser -S controller -G controller
 
 USER controller
 
