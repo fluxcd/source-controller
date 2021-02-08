@@ -17,36 +17,37 @@ limitations under the License.
 package git
 
 import (
-	"fmt"
+	"context"
 
-	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
-	"github.com/fluxcd/source-controller/pkg/git/common"
-	gitv1 "github.com/fluxcd/source-controller/pkg/git/v1"
-	gitv2 "github.com/fluxcd/source-controller/pkg/git/v2"
+	"github.com/go-git/go-git/v5/plumbing/transport"
+	git2go "github.com/libgit2/git2go/v31"
+	corev1 "k8s.io/api/core/v1"
 )
 
 const (
-	defaultBranch = "master"
+	DefaultOrigin            = "origin"
+	DefaultBranch            = "master"
+	DefaultPublicKeyAuthUser = "git"
+	CAFile                   = "caFile"
 )
 
-func CheckoutStrategyForRef(ref *sourcev1.GitRepositoryRef, gitImplementation string) (common.CheckoutStrategy, error) {
-	switch gitImplementation {
-	case sourcev1.GoGitImplementation:
-		return gitv1.CheckoutStrategyForRef(ref), nil
-	case sourcev1.LibGit2Implementation:
-		return gitv2.CheckoutStrategyForRef(ref), nil
-	default:
-		return nil, fmt.Errorf("invalid git implementation %s", gitImplementation)
-	}
+type Commit interface {
+	Verify(secret corev1.Secret) error
+	Hash() string
 }
 
-func AuthSecretStrategyForURL(url string, gitImplementation string) (common.AuthSecretStrategy, error) {
-	switch gitImplementation {
-	case sourcev1.GoGitImplementation:
-		return gitv1.AuthSecretStrategyForURL(url)
-	case sourcev1.LibGit2Implementation:
-		return gitv2.AuthSecretStrategyForURL(url)
-	default:
-		return nil, fmt.Errorf("invalid git implementation %s", gitImplementation)
-	}
+type CheckoutStrategy interface {
+	Checkout(ctx context.Context, path, url string, auth *Auth) (Commit, string, error)
+}
+
+// TODO(hidde): candidate for refactoring, so that we do not directly
+//  depend on implementation specifics here.
+type Auth struct {
+	AuthMethod   transport.AuthMethod
+	CredCallback git2go.CredentialsCallback
+	CertCallback git2go.CertificateCheckCallback
+}
+
+type AuthSecretStrategy interface {
+	Method(secret corev1.Secret) (*Auth, error)
 }

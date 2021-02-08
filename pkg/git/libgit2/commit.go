@@ -14,13 +14,14 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package v2
+package libgit2
 
 import (
 	"bytes"
 	"fmt"
-	"golang.org/x/crypto/openpgp"
 	"strings"
+
+	"golang.org/x/crypto/openpgp"
 
 	git2go "github.com/libgit2/git2go/v31"
 	corev1 "k8s.io/api/core/v1"

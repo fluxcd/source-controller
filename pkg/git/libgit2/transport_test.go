@@ -14,16 +14,15 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package v1
+package libgit2
 
 import (
 	"reflect"
 	"testing"
 
-	"github.com/go-git/go-git/v5/plumbing/transport/http"
 	corev1 "k8s.io/api/core/v1"
 
-	"github.com/fluxcd/source-controller/pkg/git/common"
+	"github.com/fluxcd/source-controller/pkg/git"
 )
 
 const (
@@ -69,7 +68,7 @@ func TestAuthSecretStrategyForURL(t *testing.T) {
 	tests := []struct {
 		name    string
 		url     string
-		want    common.AuthSecretStrategy
+		want    git.AuthSecretStrategy
 		wantErr bool
 	}{
 		{"HTTP", "http://git.example.com/org/repo.git", &BasicAuth{}, false},
@@ -97,13 +96,9 @@ func TestBasicAuthStrategy_Method(t *testing.T) {
 		name    string
 		secret  corev1.Secret
 		modify  func(secret *corev1.Secret)
-		want    *common.Auth
 		wantErr bool
 	}{
-		{"username and password", basicAuthSecretFixture, nil, &common.Auth{AuthMethod: &http.BasicAuth{Username: "git", Password: "password"}}, false},
-		{"without username", basicAuthSecretFixture, func(s *corev1.Secret) { delete(s.Data, "username") }, nil, true},
-		{"without password", basicAuthSecretFixture, func(s *corev1.Secret) { delete(s.Data, "password") }, nil, true},
-		{"empty", corev1.Secret{}, nil, nil, true},
+		{"with username and password", basicAuthSecretFixture, nil, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -112,13 +107,10 @@ func TestBasicAuthStrategy_Method(t *testing.T) {
 				tt.modify(secret)
 			}
 			s := &BasicAuth{}
-			got, err := s.Method(*secret)
+			_, err := s.Method(*secret)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Method() error = %v, wantErr %v", err, tt.wantErr)
 				return
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("Method() got = %v, want %v", got, tt.want)
 			}
 		})
 	}

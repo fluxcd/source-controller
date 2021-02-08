@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package v1
+package gogit
 
 import (
 	"fmt"
@@ -25,10 +25,11 @@ import (
 	corev1 "k8s.io/api/core/v1"
 
 	"github.com/fluxcd/pkg/ssh/knownhosts"
-	"github.com/fluxcd/source-controller/pkg/git/common"
+
+	"github.com/fluxcd/source-controller/pkg/git"
 )
 
-func AuthSecretStrategyForURL(URL string) (common.AuthSecretStrategy, error) {
+func AuthSecretStrategyForURL(URL string) (git.AuthSecretStrategy, error) {
 	u, err := url.Parse(URL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse URL to determine auth strategy: %w", err)
@@ -46,8 +47,8 @@ func AuthSecretStrategyForURL(URL string) (common.AuthSecretStrategy, error) {
 
 type BasicAuth struct{}
 
-func (s *BasicAuth) Method(secret corev1.Secret) (*common.Auth, error) {
-	if _, ok := secret.Data[common.CAFile]; ok {
+func (s *BasicAuth) Method(secret corev1.Secret) (*git.Auth, error) {
+	if _, ok := secret.Data[git.CAFile]; ok {
 		return nil, fmt.Errorf("found caFile key in secret '%s' but go-git HTTP transport does not support custom certificates", secret.Name)
 	}
 
@@ -61,18 +62,17 @@ func (s *BasicAuth) Method(secret corev1.Secret) (*common.Auth, error) {
 	if auth.Username == "" || auth.Password == "" {
 		return nil, fmt.Errorf("invalid '%s' secret data: required fields 'username' and 'password'", secret.Name)
 	}
-	return &common.Auth{AuthMethod: auth}, nil
+	return &git.Auth{AuthMethod: auth}, nil
 }
 
 type PublicKeyAuth struct {
 	user string
 }
 
-func (s *PublicKeyAuth) Method(secret corev1.Secret) (*common.Auth, error) {
-	if _, ok := secret.Data[common.CAFile]; ok {
+func (s *PublicKeyAuth) Method(secret corev1.Secret) (*git.Auth, error) {
+	if _, ok := secret.Data[git.CAFile]; ok {
 		return nil, fmt.Errorf("found caFile key in secret '%s' but go-git SSH transport does not support custom certificates", secret.Name)
 	}
-
 	identity := secret.Data["identity"]
 	knownHosts := secret.Data["known_hosts"]
 	if len(identity) == 0 || len(knownHosts) == 0 {
@@ -81,7 +81,7 @@ func (s *PublicKeyAuth) Method(secret corev1.Secret) (*common.Auth, error) {
 
 	user := s.user
 	if user == "" {
-		user = common.DefaultPublicKeyAuthUser
+		user = git.DefaultPublicKeyAuthUser
 	}
 
 	pk, err := ssh.NewPublicKeys(user, identity, "")
@@ -94,5 +94,5 @@ func (s *PublicKeyAuth) Method(secret corev1.Secret) (*common.Auth, error) {
 		return nil, err
 	}
 	pk.HostKeyCallback = callback
-	return &common.Auth{AuthMethod: pk}, nil
+	return &git.Auth{AuthMethod: pk}, nil
 }

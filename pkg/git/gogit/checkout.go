@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package v1
+package gogit
 
 import (
 	"context"
@@ -23,18 +23,19 @@ import (
 	"time"
 
 	"github.com/Masterminds/semver/v3"
-	"github.com/go-git/go-git/v5"
+	extgogit "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 
 	"github.com/fluxcd/pkg/version"
+
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
-	"github.com/fluxcd/source-controller/pkg/git/common"
+	"github.com/fluxcd/source-controller/pkg/git"
 )
 
-func CheckoutStrategyForRef(ref *sourcev1.GitRepositoryRef) common.CheckoutStrategy {
+func CheckoutStrategyForRef(ref *sourcev1.GitRepositoryRef) git.CheckoutStrategy {
 	switch {
 	case ref == nil:
-		return &CheckoutBranch{branch: common.DefaultBranch}
+		return &CheckoutBranch{branch: git.DefaultBranch}
 	case ref.SemVer != "":
 		return &CheckoutSemVer{semVer: ref.SemVer}
 	case ref.Tag != "":
@@ -42,13 +43,13 @@ func CheckoutStrategyForRef(ref *sourcev1.GitRepositoryRef) common.CheckoutStrat
 	case ref.Commit != "":
 		strategy := &CheckoutCommit{branch: ref.Branch, commit: ref.Commit}
 		if strategy.branch == "" {
-			strategy.branch = common.DefaultBranch
+			strategy.branch = git.DefaultBranch
 		}
 		return strategy
 	case ref.Branch != "":
 		return &CheckoutBranch{branch: ref.Branch}
 	default:
-		return &CheckoutBranch{branch: common.DefaultBranch}
+		return &CheckoutBranch{branch: git.DefaultBranch}
 	}
 }
 
@@ -56,18 +57,18 @@ type CheckoutBranch struct {
 	branch string
 }
 
-func (c *CheckoutBranch) Checkout(ctx context.Context, path, url string, auth *common.Auth) (common.Commit, string, error) {
-	repo, err := git.PlainCloneContext(ctx, path, false, &git.CloneOptions{
+func (c *CheckoutBranch) Checkout(ctx context.Context, path, url string, auth *git.Auth) (git.Commit, string, error) {
+	repo, err := extgogit.PlainCloneContext(ctx, path, false, &extgogit.CloneOptions{
 		URL:               url,
 		Auth:              auth.AuthMethod,
-		RemoteName:        common.DefaultOrigin,
+		RemoteName:        git.DefaultOrigin,
 		ReferenceName:     plumbing.NewBranchReferenceName(c.branch),
 		SingleBranch:      true,
 		NoCheckout:        false,
 		Depth:             1,
 		RecurseSubmodules: 0,
 		Progress:          nil,
-		Tags:              git.NoTags,
+		Tags:              extgogit.NoTags,
 	})
 	if err != nil {
 		return nil, "", fmt.Errorf("unable to clone '%s', error: %w", url, err)
@@ -87,18 +88,18 @@ type CheckoutTag struct {
 	tag string
 }
 
-func (c *CheckoutTag) Checkout(ctx context.Context, path, url string, auth *common.Auth) (common.Commit, string, error) {
-	repo, err := git.PlainCloneContext(ctx, path, false, &git.CloneOptions{
+func (c *CheckoutTag) Checkout(ctx context.Context, path, url string, auth *git.Auth) (git.Commit, string, error) {
+	repo, err := extgogit.PlainCloneContext(ctx, path, false, &extgogit.CloneOptions{
 		URL:               url,
 		Auth:              auth.AuthMethod,
-		RemoteName:        common.DefaultOrigin,
+		RemoteName:        git.DefaultOrigin,
 		ReferenceName:     plumbing.NewTagReferenceName(c.tag),
 		SingleBranch:      true,
 		NoCheckout:        false,
 		Depth:             1,
 		RecurseSubmodules: 0,
 		Progress:          nil,
-		Tags:              git.NoTags,
+		Tags:              extgogit.NoTags,
 	})
 	if err != nil {
 		return nil, "", fmt.Errorf("unable to clone '%s', error: %w", url, err)
@@ -119,17 +120,17 @@ type CheckoutCommit struct {
 	commit string
 }
 
-func (c *CheckoutCommit) Checkout(ctx context.Context, path, url string, auth *common.Auth) (common.Commit, string, error) {
-	repo, err := git.PlainCloneContext(ctx, path, false, &git.CloneOptions{
+func (c *CheckoutCommit) Checkout(ctx context.Context, path, url string, auth *git.Auth) (git.Commit, string, error) {
+	repo, err := extgogit.PlainCloneContext(ctx, path, false, &extgogit.CloneOptions{
 		URL:               url,
 		Auth:              auth.AuthMethod,
-		RemoteName:        common.DefaultOrigin,
+		RemoteName:        git.DefaultOrigin,
 		ReferenceName:     plumbing.NewBranchReferenceName(c.branch),
 		SingleBranch:      true,
 		NoCheckout:        false,
 		RecurseSubmodules: 0,
 		Progress:          nil,
-		Tags:              git.NoTags,
+		Tags:              extgogit.NoTags,
 	})
 	if err != nil {
 		return nil, "", fmt.Errorf("unable to clone '%s', error: %w", url, err)
@@ -142,7 +143,7 @@ func (c *CheckoutCommit) Checkout(ctx context.Context, path, url string, auth *c
 	if err != nil {
 		return nil, "", fmt.Errorf("git commit '%s' not found: %w", c.commit, err)
 	}
-	err = w.Checkout(&git.CheckoutOptions{
+	err = w.Checkout(&extgogit.CheckoutOptions{
 		Hash:  commit.Hash,
 		Force: true,
 	})
@@ -156,21 +157,21 @@ type CheckoutSemVer struct {
 	semVer string
 }
 
-func (c *CheckoutSemVer) Checkout(ctx context.Context, path, url string, auth *common.Auth) (common.Commit, string, error) {
+func (c *CheckoutSemVer) Checkout(ctx context.Context, path, url string, auth *git.Auth) (git.Commit, string, error) {
 	verConstraint, err := semver.NewConstraint(c.semVer)
 	if err != nil {
 		return nil, "", fmt.Errorf("semver parse range error: %w", err)
 	}
 
-	repo, err := git.PlainCloneContext(ctx, path, false, &git.CloneOptions{
+	repo, err := extgogit.PlainCloneContext(ctx, path, false, &extgogit.CloneOptions{
 		URL:               url,
 		Auth:              auth.AuthMethod,
-		RemoteName:        common.DefaultOrigin,
+		RemoteName:        git.DefaultOrigin,
 		NoCheckout:        false,
 		Depth:             1,
 		RecurseSubmodules: 0,
 		Progress:          nil,
-		Tags:              git.AllTags,
+		Tags:              extgogit.AllTags,
 	})
 	if err != nil {
 		return nil, "", fmt.Errorf("unable to clone '%s', error: %w", url, err)
@@ -237,7 +238,7 @@ func (c *CheckoutSemVer) Checkout(ctx context.Context, path, url string, auth *c
 		return nil, "", fmt.Errorf("git worktree error: %w", err)
 	}
 
-	err = w.Checkout(&git.CheckoutOptions{
+	err = w.Checkout(&extgogit.CheckoutOptions{
 		Branch: plumbing.NewTagReferenceName(t),
 	})
 	if err != nil {
