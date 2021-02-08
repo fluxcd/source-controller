@@ -18,7 +18,9 @@ package controllers
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
+	"net/http"
 	"net/url"
 	"os"
 	"path"
@@ -30,6 +32,8 @@ import (
 	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
+	"github.com/go-git/go-git/v5/plumbing/transport/client"
+	httptransport "github.com/go-git/go-git/v5/plumbing/transport/http"
 	"github.com/go-git/go-git/v5/storage/memory"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
@@ -40,6 +44,7 @@ import (
 
 	"github.com/fluxcd/pkg/gittestserver"
 
+	"github.com/fluxcd/pkg/apis/meta"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
 )
 
@@ -65,6 +70,18 @@ var _ = Describe("GitRepositoryReconciler", func() {
 			err = k8sClient.Create(context.Background(), namespace)
 			Expect(err).NotTo(HaveOccurred(), "failed to create test namespace")
 
+			cert := corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "cert",
+					Namespace: namespace.Name,
+				},
+				Data: map[string][]byte{
+					"caFile": exampleCA,
+				},
+			}
+			err = k8sClient.Create(context.Background(), &cert)
+			Expect(err).NotTo(HaveOccurred())
+
 			gitServer, err = gittestserver.NewTempGitServer()
 			Expect(err).NotTo(HaveOccurred())
 			gitServer.AutoCreate()
@@ -87,6 +104,7 @@ var _ = Describe("GitRepositoryReconciler", func() {
 			expectMessage  string
 			expectRevision string
 
+			secretRef         *meta.LocalObjectReference
 			gitImplementation string
 		}
 
@@ -274,6 +292,55 @@ var _ = Describe("GitRepositoryReconciler", func() {
 			Expect(err).NotTo(HaveOccurred())
 			u.Path = path.Join(u.Path, fmt.Sprintf("repository-%s.git", randStringRunes(5)))
 
+			var transport = httptransport.NewClient(&http.Client{
+				Transport: &http.Transport{
+					TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+				},
+			})
+			client.InstallProtocol("https", transport)
+
+			fs := memfs.New()
+			gitrepo, err := git.Init(memory.NewStorage(), fs)
+			Expect(err).NotTo(HaveOccurred())
+
+			wt, err := gitrepo.Worktree()
+			Expect(err).NotTo(HaveOccurred())
+
+			ff, _ := fs.Create("fixture")
+			_ = ff.Close()
+			_, err = wt.Add(fs.Join("fixture"))
+			Expect(err).NotTo(HaveOccurred())
+
+			commit, err := wt.Commit("Sample", &git.CommitOptions{Author: &object.Signature{
+				Name:  "John Doe",
+				Email: "john@example.com",
+				When:  time.Now(),
+			}})
+			Expect(err).NotTo(HaveOccurred())
+
+			gitrepo.Worktree()
+
+			for _, ref := range t.createRefs {
+				hRef := plumbing.NewHashReference(plumbing.ReferenceName(ref), commit)
+				err = gitrepo.Storer.SetReference(hRef)
+				Expect(err).NotTo(HaveOccurred())
+			}
+
+			remote, err := gitrepo.CreateRemote(&config.RemoteConfig{
+				Name: "origin",
+				URLs: []string{u.String()},
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			err = remote.Push(&git.PushOptions{
+				RefSpecs: []config.RefSpec{"refs/heads/*:refs/heads/*", "refs/tags/*:refs/tags/*"},
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			t.reference.Commit = strings.Replace(t.reference.Commit, "<commit>", commit.String(), 1)
+
+			client.InstallProtocol("https", httptransport.DefaultClient)
+
 			key := types.NamespacedName{
 				Name:      fmt.Sprintf("git-ref-test-%s", randStringRunes(5)),
 				Namespace: namespace.Name,
@@ -288,6 +355,7 @@ var _ = Describe("GitRepositoryReconciler", func() {
 					Interval:          metav1.Duration{Duration: indexInterval},
 					Reference:         t.reference,
 					GitImplementation: t.gitImplementation,
+					SecretRef:         t.secretRef,
 				},
 			}
 			Expect(k8sClient.Create(context.Background(), created)).Should(Succeed())
@@ -316,11 +384,20 @@ var _ = Describe("GitRepositoryReconciler", func() {
 				expectStatus:  metav1.ConditionFalse,
 				expectMessage: "x509: certificate signed by unknown authority",
 			}),
-			Entry("self signed v2", refTestCase{
+			Entry("self signed v2 without CA", refTestCase{
 				reference:         &sourcev1.GitRepositoryRef{Branch: "main"},
 				waitForReason:     sourcev1.GitOperationFailedReason,
 				expectStatus:      metav1.ConditionFalse,
 				expectMessage:     "error: user rejected certificate",
+				gitImplementation: sourcev1.LibGit2Implementation,
+			}),
+			Entry("self signed v2 with CA", refTestCase{
+				reference:         &sourcev1.GitRepositoryRef{Branch: "some-branch"},
+				createRefs:        []string{"refs/heads/some-branch"},
+				waitForReason:     sourcev1.GitOperationSucceedReason,
+				expectStatus:      metav1.ConditionTrue,
+				expectRevision:    "some-branch",
+				secretRef:         &meta.LocalObjectReference{Name: "cert"},
 				gitImplementation: sourcev1.LibGit2Implementation,
 			}),
 		)

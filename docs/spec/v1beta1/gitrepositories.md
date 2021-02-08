@@ -405,6 +405,39 @@ kubectl create secret generic pgp-public-keys \
     --from-file=author2.asc
 ```
 
+## Self-signed certificates
+
+Cloning over HTTPS from a Git repository with a self-signed certificate:
+
+```yaml
+apiVersion: source.toolkit.fluxcd.io/v1beta1
+kind: GitRepository
+metadata:
+  name: podinfo
+  namespace: default
+spec:
+  interval: 1m
+  url: https://customdomain.com/stefanprodan/podinfo
+  secretRef:
+    name: https-credentials
+  gitImplementation: libgit2
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: https-credentials
+  namespace: default
+type: Opaque
+data:
+  username: <BASE64>
+  password: <BASE64>
+  caFile: <BASE64>
+```
+
+Note that the Git implementation has to be `libgit2` as `go-git` does not support custom CA verification.
+It is also possible to specify a `caFile` for public repositories, in that case the username and password
+can be omitted.
+
 ## Status examples
 
 Successful sync:
