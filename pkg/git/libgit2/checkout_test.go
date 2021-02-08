@@ -22,15 +22,16 @@ import (
 	"os"
 	"testing"
 
-	"github.com/fluxcd/source-controller/pkg/git/common"
 	git2go "github.com/libgit2/git2go/v31"
+
+	"github.com/fluxcd/source-controller/pkg/git"
 )
 
 func TestCheckoutTagSemVer_Checkout(t *testing.T) {
 	certCallback := func(cert *git2go.Certificate, valid bool, hostname string) git2go.ErrorCode {
 		return 0
 	}
-	auth := &common.Auth{CertCallback: certCallback}
+	auth := &git.Auth{CertCallback: certCallback}
 
 	tag := CheckoutTag{
 		tag: "v1.7.0",

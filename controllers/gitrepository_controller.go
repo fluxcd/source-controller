@@ -44,7 +44,7 @@ import (
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
 	"github.com/fluxcd/source-controller/pkg/git"
-	"github.com/fluxcd/source-controller/pkg/git/common"
+	"github.com/fluxcd/source-controller/pkg/git/strategy"
 )
 
 // +kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=gitrepositories,verbs=get;list;watch;create;update;patch;delete
@@ -178,9 +178,9 @@ func (r *GitRepositoryReconciler) reconcile(ctx context.Context, repository sour
 	defer os.RemoveAll(tmpGit)
 
 	// determine auth method
-	auth := &common.Auth{}
+	auth := &git.Auth{}
 	if repository.Spec.SecretRef != nil {
-		authStrategy, err := git.AuthSecretStrategyForURL(repository.Spec.URL, repository.Spec.GitImplementation)
+		authStrategy, err := strategy.AuthSecretStrategyForURL(repository.Spec.URL, repository.Spec.GitImplementation)
 		if err != nil {
 			return sourcev1.GitRepositoryNotReady(repository, sourcev1.AuthenticationFailedReason, err.Error()), err
 		}
@@ -204,7 +204,7 @@ func (r *GitRepositoryReconciler) reconcile(ctx context.Context, repository sour
 		}
 	}
 
-	checkoutStrategy, err := git.CheckoutStrategyForRef(repository.Spec.Reference, repository.Spec.GitImplementation)
+	checkoutStrategy, err := strategy.CheckoutStrategyForRef(repository.Spec.Reference, repository.Spec.GitImplementation)
 	if err != nil {
 		return sourcev1.GitRepositoryNotReady(repository, sourcev1.GitOperationFailedReason, err.Error()), err
 	}

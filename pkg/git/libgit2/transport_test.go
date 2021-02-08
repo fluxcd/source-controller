@@ -22,7 +22,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 
-	"github.com/fluxcd/source-controller/pkg/git/common"
+	"github.com/fluxcd/source-controller/pkg/git"
 )
 
 const (
@@ -68,7 +68,7 @@ func TestAuthSecretStrategyForURL(t *testing.T) {
 	tests := []struct {
 		name    string
 		url     string
-		want    common.AuthSecretStrategy
+		want    git.AuthSecretStrategy
 		wantErr bool
 	}{
 		{"HTTP", "http://git.example.com/org/repo.git", &BasicAuth{}, false},

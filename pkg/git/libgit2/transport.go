@@ -30,10 +30,10 @@ import (
 	git2go "github.com/libgit2/git2go/v31"
 	corev1 "k8s.io/api/core/v1"
 
-	"github.com/fluxcd/source-controller/pkg/git/common"
+	"github.com/fluxcd/source-controller/pkg/git"
 )
 
-func AuthSecretStrategyForURL(URL string) (common.AuthSecretStrategy, error) {
+func AuthSecretStrategyForURL(URL string) (git.AuthSecretStrategy, error) {
 	u, err := url.Parse(URL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse URL to determine auth strategy: %w", err)
@@ -51,7 +51,7 @@ func AuthSecretStrategyForURL(URL string) (common.AuthSecretStrategy, error) {
 
 type BasicAuth struct{}
 
-func (s *BasicAuth) Method(secret corev1.Secret) (*common.Auth, error) {
+func (s *BasicAuth) Method(secret corev1.Secret) (*git.Auth, error) {
 	var credCallback git2go.CredentialsCallback
 	var username string
 	if d, ok := secret.Data["username"]; ok {
@@ -72,7 +72,7 @@ func (s *BasicAuth) Method(secret corev1.Secret) (*common.Auth, error) {
 	}
 
 	var certCallback git2go.CertificateCheckCallback
-	if caFile, ok := secret.Data[common.CAFile]; ok {
+	if caFile, ok := secret.Data[git.CAFile]; ok {
 		certCallback = func(cert *git2go.Certificate, valid bool, hostname string) git2go.ErrorCode {
 			roots := x509.NewCertPool()
 			ok := roots.AppendCertsFromPEM(caFile)
@@ -92,18 +92,17 @@ func (s *BasicAuth) Method(secret corev1.Secret) (*common.Auth, error) {
 		}
 	}
 
-	return &common.Auth{CredCallback: credCallback, CertCallback: certCallback}, nil
+	return &git.Auth{CredCallback: credCallback, CertCallback: certCallback}, nil
 }
 
 type PublicKeyAuth struct {
 	user string
 }
 
-func (s *PublicKeyAuth) Method(secret corev1.Secret) (*common.Auth, error) {
-	if _, ok := secret.Data[common.CAFile]; ok {
+func (s *PublicKeyAuth) Method(secret corev1.Secret) (*git.Auth, error) {
+	if _, ok := secret.Data[git.CAFile]; ok {
 		return nil, fmt.Errorf("found caFile key in secret '%s' but libgit2 SSH transport does not support custom certificates", secret.Name)
 	}
-
 	identity := secret.Data["identity"]
 	knownHosts := secret.Data["known_hosts"]
 	if len(identity) == 0 || len(knownHosts) == 0 {
@@ -124,7 +123,7 @@ func (s *PublicKeyAuth) Method(secret corev1.Secret) (*common.Auth, error) {
 
 	user := s.user
 	if user == "" {
-		user = common.DefaultPublicKeyAuthUser
+		user = git.DefaultPublicKeyAuthUser
 	}
 
 	credCallback := func(url string, username_from_url string, allowed_types git2go.CredType) (*git2go.Cred, error) {
@@ -143,7 +142,7 @@ func (s *PublicKeyAuth) Method(secret corev1.Secret) (*common.Auth, error) {
 		return git2go.ErrGeneric
 	}
 
-	return &common.Auth{CredCallback: credCallback, CertCallback: certCallback}, nil
+	return &git.Auth{CredCallback: credCallback, CertCallback: certCallback}, nil
 }
 
 type knownKey struct {

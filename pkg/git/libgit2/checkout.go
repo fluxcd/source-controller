@@ -24,13 +24,13 @@ import (
 	git2go "github.com/libgit2/git2go/v31"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
-	"github.com/fluxcd/source-controller/pkg/git/common"
+	"github.com/fluxcd/source-controller/pkg/git"
 )
 
-func CheckoutStrategyForRef(ref *sourcev1.GitRepositoryRef) common.CheckoutStrategy {
+func CheckoutStrategyForRef(ref *sourcev1.GitRepositoryRef) git.CheckoutStrategy {
 	switch {
 	case ref == nil:
-		return &CheckoutBranch{branch: common.DefaultBranch}
+		return &CheckoutBranch{branch: git.DefaultBranch}
 	case ref.SemVer != "":
 		return &CheckoutSemVer{semVer: ref.SemVer}
 	case ref.Tag != "":
@@ -38,13 +38,13 @@ func CheckoutStrategyForRef(ref *sourcev1.GitRepositoryRef) common.CheckoutStrat
 	case ref.Commit != "":
 		strategy := &CheckoutCommit{branch: ref.Branch, commit: ref.Commit}
 		if strategy.branch == "" {
-			strategy.branch = common.DefaultBranch
+			strategy.branch = git.DefaultBranch
 		}
 		return strategy
 	case ref.Branch != "":
 		return &CheckoutBranch{branch: ref.Branch}
 	default:
-		return &CheckoutBranch{branch: common.DefaultBranch}
+		return &CheckoutBranch{branch: git.DefaultBranch}
 	}
 }
 
@@ -52,7 +52,7 @@ type CheckoutBranch struct {
 	branch string
 }
 
-func (c *CheckoutBranch) Checkout(ctx context.Context, path, url string, auth *common.Auth) (common.Commit, string, error) {
+func (c *CheckoutBranch) Checkout(ctx context.Context, path, url string, auth *git.Auth) (git.Commit, string, error) {
 	repo, err := git2go.Clone(url, path, &git2go.CloneOptions{
 		FetchOptions: &git2go.FetchOptions{
 			DownloadTags: git2go.DownloadTagsNone,
@@ -81,7 +81,7 @@ type CheckoutTag struct {
 	tag string
 }
 
-func (c *CheckoutTag) Checkout(ctx context.Context, path, url string, auth *common.Auth) (common.Commit, string, error) {
+func (c *CheckoutTag) Checkout(ctx context.Context, path, url string, auth *git.Auth) (git.Commit, string, error) {
 	repo, err := git2go.Clone(url, path, &git2go.CloneOptions{
 		FetchOptions: &git2go.FetchOptions{
 			DownloadTags: git2go.DownloadTagsAll,
@@ -118,7 +118,7 @@ type CheckoutCommit struct {
 	commit string
 }
 
-func (c *CheckoutCommit) Checkout(ctx context.Context, path, url string, auth *common.Auth) (common.Commit, string, error) {
+func (c *CheckoutCommit) Checkout(ctx context.Context, path, url string, auth *git.Auth) (git.Commit, string, error) {
 	repo, err := git2go.Clone(url, path, &git2go.CloneOptions{
 		FetchOptions: &git2go.FetchOptions{
 			DownloadTags: git2go.DownloadTagsNone,
@@ -158,7 +158,7 @@ type CheckoutSemVer struct {
 	semVer string
 }
 
-func (c *CheckoutSemVer) Checkout(ctx context.Context, path, url string, auth *common.Auth) (common.Commit, string, error) {
+func (c *CheckoutSemVer) Checkout(ctx context.Context, path, url string, auth *git.Auth) (git.Commit, string, error) {
 	rng, err := semver.ParseRange(c.semVer)
 	if err != nil {
 		return nil, "", fmt.Errorf("semver parse range error: %w", err)

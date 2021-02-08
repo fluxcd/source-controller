@@ -22,11 +22,11 @@ import (
 	"os"
 	"testing"
 
-	"github.com/fluxcd/source-controller/pkg/git/common"
+	"github.com/fluxcd/source-controller/pkg/git"
 )
 
 func TestCheckoutTagSemVer_Checkout(t *testing.T) {
-	auth := &common.Auth{}
+	auth := &git.Auth{}
 	tag := CheckoutTag{
 		tag: "v1.7.0",
 	}
