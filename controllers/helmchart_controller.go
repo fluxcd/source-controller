@@ -430,6 +430,7 @@ func (r *HelmChartReconciler) reconcileFromHelmRepository(ctx context.Context,
 
 		readyMessage = fmt.Sprintf("Fetched and packaged revision: %s", newArtifact.Revision)
 		readyReason = sourcev1.ChartPackageSucceededReason
+		break
 	skipToDefault:
 		fallthrough
 	default:
