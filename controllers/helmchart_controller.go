@@ -403,8 +403,13 @@ func (r *HelmChartReconciler) reconcileFromHelmRepository(ctx context.Context,
 		if changed, err := helm.OverwriteChartDefaultValues(helmChart, valuesData); err != nil {
 			return sourcev1.HelmChartNotReady(chart, sourcev1.ChartPackageFailedReason, err.Error()), err
 		} else if !changed {
-			// No changes, skip to write original package to storage
-			goto skipToDefault
+			// No changes, write original package to storage
+			if err := r.Storage.AtomicWriteFile(&newArtifact, res, 0644); err != nil {
+				err = fmt.Errorf("unable to write chart file: %w", err)
+				return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
+			}
+
+			break
 		}
 
 		// Create temporary working directory
@@ -430,8 +435,6 @@ func (r *HelmChartReconciler) reconcileFromHelmRepository(ctx context.Context,
 
 		readyMessage = fmt.Sprintf("Fetched and packaged revision: %s", newArtifact.Revision)
 		readyReason = sourcev1.ChartPackageSucceededReason
-	skipToDefault:
-		fallthrough
 	default:
 		// Write artifact to storage
 		if err := r.Storage.AtomicWriteFile(&newArtifact, res, 0644); err != nil {
