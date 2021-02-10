@@ -73,8 +73,8 @@ func TestAuthSecretStrategyForURL(t *testing.T) {
 	}{
 		{"HTTP", "http://git.example.com/org/repo.git", &BasicAuth{}, false},
 		{"HTTPS", "https://git.example.com/org/repo.git", &BasicAuth{}, false},
-		{"SSH", "ssh://git.example.com:2222/org/repo.git", &PublicKeyAuth{}, false},
-		{"SSH with username", "ssh://example@git.example.com:2222/org/repo.git", &PublicKeyAuth{user: "example"}, false},
+		{"SSH", "ssh://git.example.com:2222/org/repo.git", &PublicKeyAuth{host: "git.example.com:2222"}, false},
+		{"SSH with username", "ssh://example@git.example.com:2222/org/repo.git", &PublicKeyAuth{user: "example", host: "git.example.com:2222"}, false},
 		{"unsupported", "protocol://example.com", nil, true},
 	}
 	for _, tt := range tests {
