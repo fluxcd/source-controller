@@ -2,11 +2,7 @@
 FROM golang:1.15-alpine as builder
 
 RUN apk add gcc pkgconfig libc-dev
-RUN apk add --no-cache --repository http://dl-cdn.alpinelinux.org/alpine/edge/community libgit2-dev~=1.1
-# TODO: replace with non-edge musl 1.2.x when made available
-#  musl 1.2.x is a strict requirement of libgit2 due to time_t changes
-#  ref: https://musl.libc.org/time64.html
-RUN apk add --no-cache --repository http://dl-cdn.alpinelinux.org/alpine/edge/main musl~=1.2
+RUN apk add --no-cache musl~=1.2 libgit2-dev~=1.1
 
 WORKDIR /workspace
 
@@ -34,9 +30,7 @@ FROM alpine:3.13
 # link repo to the GitHub Container Registry image
 LABEL org.opencontainers.image.source="https://github.com/fluxcd/source-controller"
 
-RUN apk add --no-cache ca-certificates tini
-RUN apk add --no-cache --repository http://dl-cdn.alpinelinux.org/alpine/edge/community libgit2~=1.1
-RUN apk add --no-cache --repository http://dl-cdn.alpinelinux.org/alpine/edge/main musl~=1.2
+RUN apk add --no-cache ca-certificates tini libgit2~=1.1 musl~=1.2
 
 COPY --from=builder /workspace/source-controller /usr/local/bin/
 
