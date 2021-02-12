@@ -219,11 +219,7 @@ func (k knownKey) matches(host string, hostkey git2go.HostkeyCertificate) bool {
 		return false
 	}
 	hasher.Write(k.key.Marshal())
-	if bytes.Compare(hasher.Sum(nil), fingerprint) != 0 {
-		return false
-	}
-
-	return true
+	return bytes.Compare(hasher.Sum(nil), fingerprint) == 0
 }
 
 func containsHost(hosts []string, host string) bool {
