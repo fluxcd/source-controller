@@ -19,9 +19,12 @@ package libgit2
 import (
 	"bufio"
 	"bytes"
+	"crypto/md5"
 	"crypto/sha1"
+	"crypto/sha256"
 	"crypto/x509"
 	"fmt"
+	"hash"
 	"net"
 	"net/url"
 	"strings"
@@ -157,7 +160,7 @@ func (s *PublicKeyAuth) Method(secret corev1.Secret) (*git.Auth, error) {
 		// is an entry for the hostname _and_ port.
 		host = knownhosts.Normalize(s.host)
 		for _, k := range kk {
-			if k.matches(host, cert.Hostkey.HashSHA1[:]) {
+			if k.matches(host, cert.Hostkey) {
 				return git2go.ErrOk
 			}
 		}
@@ -195,17 +198,28 @@ func parseKnownHosts(s string) ([]knownKey, error) {
 	return knownHosts, nil
 }
 
-func (k knownKey) matches(host string, key []byte) bool {
+func (k knownKey) matches(host string, hostkey git2go.HostkeyCertificate) bool {
 	if !containsHost(k.hosts, host) {
 		return false
 	}
 
-	hash := sha1.Sum(k.key.Marshal())
-	if bytes.Compare(hash[:], key) != 0 {
+	var fingerprint []byte
+	var hasher hash.Hash
+	switch {
+	case hostkey.Kind&git2go.HostkeySHA256 > 0:
+		fingerprint = hostkey.HashSHA256[:]
+		hasher = sha256.New()
+	case hostkey.Kind&git2go.HostkeySHA1 > 0:
+		fingerprint = hostkey.HashSHA1[:]
+		hasher = sha1.New()
+	case hostkey.Kind&git2go.HostkeyMD5 > 0:
+		fingerprint = hostkey.HashMD5[:]
+		hasher = md5.New()
+	default:
 		return false
 	}
-
-	return true
+	hasher.Write(k.key.Marshal())
+	return bytes.Compare(hasher.Sum(nil), fingerprint) == 0
 }
 
 func containsHost(hosts []string, host string) bool {
