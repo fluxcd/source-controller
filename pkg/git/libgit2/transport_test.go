@@ -154,9 +154,12 @@ func TestKnownKeyHash(t *testing.T) {
 		hostkey     git2go.HostkeyCertificate
 		wantMatches bool
 	}{
-		{"good sha256 hostkey", git2go.HostkeyCertificate{Kind: git2go.HostkeySHA256, HashSHA256: sha256Fingerprint("nThbg6kXUpJWGl7E1IGOCspRomTxdCARLviKw6E5SY8")}, true},
-		{"bad sha256 hostkey", git2go.HostkeyCertificate{Kind: git2go.HostkeySHA256, HashSHA256: sha256Fingerprint("ROQFvPThGrW4RuWLoL9tq9I9zJ42fK4XywyRtbOz/EQ")}, false},
-		{"good sha1 hostkey", git2go.HostkeyCertificate{Kind: git2go.HostkeySHA1, HashSHA1: sha1Fingerprint("v2toJdKXfFEaR1u++4iq1UqSrHM")}, true},
+		{"good sha256 hostkey", git2go.HostkeyCertificate{Kind: git2go.HostkeySHA256 | git2go.HostkeySHA1 | git2go.HostkeyMD5, HashSHA256: sha256Fingerprint("nThbg6kXUpJWGl7E1IGOCspRomTxdCARLviKw6E5SY8")}, true},
+		{"bad sha256 hostkey", git2go.HostkeyCertificate{Kind: git2go.HostkeySHA256 | git2go.HostkeySHA1 | git2go.HostkeyMD5, HashSHA256: sha256Fingerprint("ROQFvPThGrW4RuWLoL9tq9I9zJ42fK4XywyRtbOz/EQ")}, false},
+		{"good sha1 hostkey", git2go.HostkeyCertificate{Kind: git2go.HostkeySHA1 | git2go.HostkeyMD5, HashSHA1: sha1Fingerprint("v2toJdKXfFEaR1u++4iq1UqSrHM")}, true},
+		{"bad sha1 hostkey", git2go.HostkeyCertificate{Kind: git2go.HostkeySHA1 | git2go.HostkeyMD5, HashSHA1: sha1Fingerprint("tfpLlQhDDFP3yGdewTvHNxWmAdk")}, false},
+		{"good md5 hostkey", git2go.HostkeyCertificate{Kind: git2go.HostkeyMD5, HashMD5: md5Fingerprint("\x16\x27\xac\xa5\x76\x28\x2d\x36\x63\x1b\x56\x4d\xeb\xdf\xa6\x48")}, true},
+		{"bad md5 hostkey", git2go.HostkeyCertificate{Kind: git2go.HostkeyMD5, HashMD5: md5Fingerprint("\xb6\x03\x0e\x39\x97\x9e\xd0\xe7\x24\xce\xa3\x77\x3e\x01\x42\x09")}, false},
 		{"invalid hostkey", git2go.HostkeyCertificate{}, false},
 	}
 	for _, tt := range tests {
@@ -174,6 +177,12 @@ func TestKnownKeyHash(t *testing.T) {
 			}
 		})
 	}
+}
+
+func md5Fingerprint(in string) [16]byte {
+	var out [16]byte
+	copy(out[:], []byte(in))
+	return out
 }
 
 func sha1Fingerprint(in string) [20]byte {
