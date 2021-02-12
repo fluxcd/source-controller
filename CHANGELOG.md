@@ -2,6 +2,44 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.8.0
+
+**Release date:** 2021-02-12
+
+This is the eight MINOR prerelease.
+
+The `libgit2` Git implementation now has support for Certificate Authority
+validation for Git over HTTPS, as well as various bug fixes around working
+with SSH host key fingerprints.
+
+Alpine has been updated to `3.13`, making it possible to move away from `edge`
+for `libgit2` and `musl` dependencies.
+
+`pprof` endpoints have been enabled on the metrics server, making it easier to
+collect runtime information to for example debug performance issues.
+
+Features:
+* Add custom CA validation for Git over HTTPS
+  [#283](https://github.com/fluxcd/source-controller/pull/283)
+
+Improvements:
+* Rename Git packages to implementations
+  [#270](https://github.com/fluxcd/source-controller/pull/270)
+* Enable pprof endpoints on metrics server
+  [#282](https://github.com/fluxcd/source-controller/pull/282)
+* Add fsGroup to pod security context
+  [#285](https://github.com/fluxcd/source-controller/pull/285)
+* Use musl and libit2 packages from v3.13 branch
+  [#289](https://github.com/fluxcd/source-controller/pull/289)
+
+Fixes:
+* Fix chart with custom valuesFile (0bytes tgz)
+  [#286](https://github.com/fluxcd/source-controller/pull/286)
+* libgit2: use provided host to validate public key
+  [#288](https://github.com/fluxcd/source-controller/pull/288)
+* libgit2: check hostkey type when validating hostkey
+  [#290](https://github.com/fluxcd/source-controller/pull/290)
+
 ## 0.7.4
 
 **Release date:** 2021-02-03
