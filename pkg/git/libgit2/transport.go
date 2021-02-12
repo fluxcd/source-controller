@@ -205,16 +205,16 @@ func (k knownKey) matches(host string, hostkey git2go.HostkeyCertificate) bool {
 
 	var fingerprint []byte
 	var hasher hash.Hash
-	switch hostkey.Kind {
-	case git2go.HostkeyMD5:
-		fingerprint = hostkey.HashMD5[:]
-		hasher = md5.New()
-	case git2go.HostkeySHA1:
-		fingerprint = hostkey.HashSHA1[:]
-		hasher = sha1.New()
-	case git2go.HostkeySHA256:
+	switch {
+	case hostkey.Kind&git2go.HostkeySHA256 > 0:
 		fingerprint = hostkey.HashSHA256[:]
 		hasher = sha256.New()
+	case hostkey.Kind&git2go.HostkeySHA1 > 0:
+		fingerprint = hostkey.HashSHA1[:]
+		hasher = sha1.New()
+	case hostkey.Kind&git2go.HostkeyMD5 > 0:
+		fingerprint = hostkey.HashMD5[:]
+		hasher = md5.New()
 	default:
 		return false
 	}
