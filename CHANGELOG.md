@@ -2,6 +2,17 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.8.1
+
+**Release date:** 2021-02-18
+
+This prerelease fixes a bug where only one dependency of a Helm
+chart would be included.
+
+Fixes:
+* Copy loop iterator var for use by goroutine
+  [#294](https://github.com/fluxcd/source-controller/pull/294)
+
 ## 0.8.0
 
 **Release date:** 2021-02-12
