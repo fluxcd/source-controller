@@ -23,6 +23,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/Masterminds/semver/v3"
 	securejoin "github.com/cyphar/filepath-securejoin"
@@ -57,6 +58,8 @@ type DependencyManager struct {
 	// Dependencies contains a list of dependencies, and the respective
 	// repository the dependency can be found at.
 	Dependencies []*DependencyWithRepository
+
+	mu sync.Mutex
 }
 
 // Build compiles and builds the dependencies of the Chart.
@@ -66,7 +69,8 @@ func (dm *DependencyManager) Build(ctx context.Context) error {
 	}
 
 	errs, ctx := errgroup.WithContext(ctx)
-	for _, item := range dm.Dependencies {
+	for _, i := range dm.Dependencies {
+		item := i
 		errs.Go(func() error {
 			select {
 			case <-ctx.Done():
@@ -123,7 +127,10 @@ func (dm *DependencyManager) addLocalDependency(dpr *DependencyWithRepository) e
 		return err
 	}
 
+	dm.mu.Lock()
 	dm.Chart.AddDependency(ch)
+	dm.mu.Unlock()
+
 	return nil
 }
 
@@ -147,7 +154,10 @@ func (dm *DependencyManager) addRemoteDependency(dpr *DependencyWithRepository) 
 		return err
 	}
 
+	dm.mu.Lock()
 	dm.Chart.AddDependency(ch)
+	dm.mu.Unlock()
+
 	return nil
 }
 
