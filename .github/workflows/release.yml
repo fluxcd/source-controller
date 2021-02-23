@@ -66,14 +66,14 @@ jobs:
           docker pull ghcr.io/fluxcd/source-controller:${{ steps.prep.outputs.VERSION }}
       - name: Generate release manifests
         run: |
-          mkdir -p bin/release
-          kustomize build ./config/crd > ./bin/release/source-controller.crds.yaml
-          kustomize build ./config/manager > ./bin/release/source-controller.deployment.yaml
+          mkdir -p config/release
+          kustomize build ./config/crd > ./config/release/source-controller.crds.yaml
+          kustomize build ./config/manager > ./config/release/source-controller.deployment.yaml
       - name: Create release
         uses: ncipollo/release-action@v1
         with:
           prerelease: true
-          artifacts: "bin/release/*.yaml"
+          artifacts: "config/release/*.yaml"
           artifactContentType: "text/plain"
           body: |
             [CHANGELOG](https://github.com/fluxcd/source-controller/blob/main/CHANGELOG.md)
