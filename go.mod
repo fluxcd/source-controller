@@ -8,11 +8,11 @@ require (
 	github.com/Masterminds/semver/v3 v3.1.1
 	github.com/blang/semver/v4 v4.0.0
 	github.com/cyphar/filepath-securejoin v0.2.2
-	github.com/fluxcd/pkg/apis/meta v0.7.0
+	github.com/fluxcd/pkg/apis/meta v0.8.0
 	github.com/fluxcd/pkg/gittestserver v0.1.0
 	github.com/fluxcd/pkg/helmtestserver v0.1.0
 	github.com/fluxcd/pkg/lockedfile v0.0.5
-	github.com/fluxcd/pkg/runtime v0.8.1
+	github.com/fluxcd/pkg/runtime v0.8.3
 	github.com/fluxcd/pkg/ssh v0.0.5
 	github.com/fluxcd/pkg/untar v0.0.5
 	github.com/fluxcd/pkg/version v0.0.1
@@ -25,12 +25,18 @@ require (
 	github.com/onsi/ginkgo v1.14.1
 	github.com/onsi/gomega v1.10.2
 	github.com/spf13/pflag v1.0.5
-	golang.org/x/crypto v0.0.0-20201203163018-be400aefbc4c
-	golang.org/x/sync v0.0.0-20190911185100-cd5d95a43a6e
-	helm.sh/helm/v3 v3.5.0
+	golang.org/x/crypto v0.0.0-20201221181555-eec23a3978ad
+	golang.org/x/sync v0.0.0-20201207232520-09787c993a3a
+	helm.sh/helm/v3 v3.5.2
 	k8s.io/api v0.20.2
 	k8s.io/apimachinery v0.20.2
 	k8s.io/client-go v0.20.2
-	sigs.k8s.io/controller-runtime v0.8.0
+	sigs.k8s.io/controller-runtime v0.8.2
 	sigs.k8s.io/yaml v1.2.0
+)
+
+// required by https://github.com/helm/helm/blob/v3.5.2/go.mod
+replace (
+	github.com/docker/distribution => github.com/docker/distribution v0.0.0-20191216044856-a8371794149d
+	github.com/docker/docker => github.com/moby/moby v17.12.0-ce-rc1.0.20200618181300-9dc6525e6118+incompatible
 )

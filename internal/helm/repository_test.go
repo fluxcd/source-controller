@@ -102,7 +102,7 @@ func TestNewChartRepository(t *testing.T) {
 
 func TestChartRepository_Get(t *testing.T) {
 	i := repo.NewIndexFile()
-	i.Add(&chart.Metadata{Name: "chart", Version: "exact"}, "chart-exact.tgz", "http://example.com/charts", "sha256:1234567890")
+	i.Add(&chart.Metadata{Name: "chart", Version: "0.0.1"}, "chart-0.0.1.tgz", "http://example.com/charts", "sha256:1234567890")
 	i.Add(&chart.Metadata{Name: "chart", Version: "0.1.0"}, "chart-0.1.0.tgz", "http://example.com/charts", "sha256:1234567890abc")
 	i.Add(&chart.Metadata{Name: "chart", Version: "0.1.1"}, "chart-0.1.1.tgz", "http://example.com/charts", "sha256:1234567890abc")
 	i.Add(&chart.Metadata{Name: "chart", Version: "0.1.5+b.min.minute"}, "chart-0.1.5+b.min.minute.tgz", "http://example.com/charts", "sha256:1234567890abc")
@@ -124,10 +124,10 @@ func TestChartRepository_Get(t *testing.T) {
 		wantErr      bool
 	}{
 		{
-			name:         "exact matth",
+			name:         "exact match",
 			chartName:    "chart",
-			chartVersion: "exact",
-			wantVersion:  "exact",
+			chartVersion: "0.0.1",
+			wantVersion:  "0.0.1",
 		},
 		{
 			name:         "stable version",
