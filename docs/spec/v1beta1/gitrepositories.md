@@ -185,7 +185,7 @@ comes with its own set of drawbacks.
 
 Some git providers like Azure DevOps require that the git client supports specific capabilities
 to be able to communicate. The initial library used in source-controller did not support
-this functionality while other libraries that did were missinging other critical functionality,
+this functionality while other libraries that did were missing other critical functionality,
 specifically the ability to do shallow cloning. Shallow cloning is important as it allows
 source-controller to only fetch the latest commits, instead of the whole git history.
 For some very large repositories this means downloading GB of data that could fill the disk
