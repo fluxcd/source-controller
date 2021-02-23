@@ -2,6 +2,23 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.9.0
+
+**Release date:** 2021-02-23
+
+This is the ninth MINOR prerelease.
+
+Due to changes in Helm [v3.5.2](https://github.com/helm/helm/releases/tag/v3.5.2),
+charts not versioned using **strict semver** are no longer compatible with
+source-controller. When using charts from Git, make sure that the `version`
+field is set in `Chart.yaml`.
+
+Improvements:
+* Update dependencies
+  [#299](https://github.com/fluxcd/source-controller/pull/299)
+* Refactor release workflow
+  [#300](https://github.com/fluxcd/source-controller/pull/300)
+
 ## 0.8.1
 
 **Release date:** 2021-02-18
