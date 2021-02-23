@@ -64,35 +64,17 @@ jobs:
           docker buildx imagetools inspect ghcr.io/fluxcd/source-controller:${{ steps.prep.outputs.VERSION }}
           docker pull docker.io/fluxcd/source-controller:${{ steps.prep.outputs.VERSION }}
           docker pull ghcr.io/fluxcd/source-controller:${{ steps.prep.outputs.VERSION }}
-      - name: Generate release asset
-        if: github.event_name == 'push' && contains(github.ref, 'refs/tags/')
+      - name: Generate release manifests
         run: |
-          mkdir -p config/release
-          cp config/default/* config/release
-          cd config/release
-          kustomize edit set image fluxcd/source-controller=fluxcd/source-controller:${{ steps.get_version.outputs.VERSION }}
-          kustomize build . > source-controller.yaml
+          mkdir -p bin/release
+          kustomize build ./config/crd > ./bin/release/source-controller.crds.yaml
+          kustomize build ./config/manager > ./bin/release/source-controller.deployment.yaml
       - name: Create release
-        if: github.event_name == 'push' && contains(github.ref, 'refs/tags/')
-        id: create_release
-        uses: actions/create-release@latest
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        uses: ncipollo/release-action@v1
         with:
-          tag_name: ${{ github.ref }}
-          release_name: ${{ github.ref }}
-          draft: false
           prerelease: true
+          artifacts: "bin/release/*.yaml"
+          artifactContentType: "text/plain"
           body: |
             [CHANGELOG](https://github.com/fluxcd/source-controller/blob/main/CHANGELOG.md)
-      - name: Upload artifacts
-        if: github.event_name == 'push' && contains(github.ref, 'refs/tags/')
-        id: upload-release-asset
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./config/release/source-controller.yaml
-          asset_name: source-controller.yaml
-          asset_content_type: text/plain
+          token: ${{ secrets.GITHUB_TOKEN }}
