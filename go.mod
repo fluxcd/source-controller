@@ -10,6 +10,7 @@ require (
 	github.com/cyphar/filepath-securejoin v0.2.2
 	github.com/fluxcd/pkg/apis/meta v0.8.0
 	github.com/fluxcd/pkg/gittestserver v0.1.0
+	github.com/fluxcd/pkg/gitutil v0.0.1
 	github.com/fluxcd/pkg/helmtestserver v0.1.0
 	github.com/fluxcd/pkg/lockedfile v0.0.5
 	github.com/fluxcd/pkg/runtime v0.8.3

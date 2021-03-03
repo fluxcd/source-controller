@@ -23,6 +23,8 @@ import (
 	"github.com/blang/semver/v4"
 	git2go "github.com/libgit2/git2go/v31"
 
+	"github.com/fluxcd/pkg/gitutil"
+
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
 	"github.com/fluxcd/source-controller/pkg/git"
 )
@@ -64,7 +66,7 @@ func (c *CheckoutBranch) Checkout(ctx context.Context, path, url string, auth *g
 		CheckoutBranch: c.branch,
 	})
 	if err != nil {
-		return nil, "", fmt.Errorf("unable to clone '%s', error: %w", url, err)
+		return nil, "", fmt.Errorf("unable to clone '%s', error: %w", url, gitutil.LibGit2Error(err))
 	}
 	head, err := repo.Head()
 	if err != nil {
