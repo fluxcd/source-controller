@@ -26,6 +26,7 @@ import (
 	extgogit "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 
+	"github.com/fluxcd/pkg/gitutil"
 	"github.com/fluxcd/pkg/version"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
@@ -71,7 +72,7 @@ func (c *CheckoutBranch) Checkout(ctx context.Context, path, url string, auth *g
 		Tags:              extgogit.NoTags,
 	})
 	if err != nil {
-		return nil, "", fmt.Errorf("unable to clone '%s', error: %w", url, err)
+		return nil, "", fmt.Errorf("unable to clone '%s', error: %w", url, gitutil.GoGitError(err))
 	}
 	head, err := repo.Head()
 	if err != nil {
