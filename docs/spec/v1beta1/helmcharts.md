@@ -28,9 +28,19 @@ type HelmChartSpec struct {
 	// +required
 	Interval metav1.Duration `json:"interval"`
 
-	// Alternative values file to use as the default chart values, expected to be a
-	// relative path in the SourceRef. Ignored when omitted.
+	// Alternative list of values files to use as the chart values (values.yaml
+	// is not included by default), expected to be a relative path in the SourceRef.
+	// Values files are merged in the order of this list with the last file overriding
+	// the first. Ignored when omitted.
 	// +optional
+	ValuesFiles []string `json:"valuesFiles,omitempty"`
+
+	// Alternative values file to use as the default chart values, expected to
+	// be a relative path in the SourceRef. Deprecated in favor of ValuesFiles,
+	// for backwards compatibility the file defined here is merged before the
+	// ValuesFiles items. Ignored when omitted.
+	// +optional
+	// +deprecated
 	ValuesFile string `json:"valuesFile,omitempty"`
 
 	// This flag tells the controller to suspend the reconciliation of this source.
@@ -180,6 +190,44 @@ spec:
     name: charts
     kind: Bucket
   interval: 10m
+```
+
+Override default values with alternative values files relative to the
+path in the SourceRef:
+
+```yaml
+apiVersion: source.toolkit.fluxcd.io/v1beta1
+kind: HelmChart
+metadata:
+  name: redis
+  namespace: default
+spec:
+  chart: redis
+  version: 10.5.7
+  sourceRef:
+    name: stable
+    kind: HelmRepository
+  interval: 5m
+  valuesFiles:
+    - values.yaml
+    - values-production.yaml
+```
+
+```yaml
+apiVersion: source.toolkit.fluxcd.io/v1beta1
+kind: HelmChart
+metadata:
+  name: podinfo
+  namespace: default
+spec:
+  chart: ./charts/podinfo
+  sourceRef:
+    name: podinfo
+    kind: GitRepository
+  interval: 10m
+  valuesFiles:
+    - ./charts/podinfo/values.yaml
+    - ./charts/podinfo/values-production.yaml
 ```
 
 ## Status examples

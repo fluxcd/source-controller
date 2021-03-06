@@ -542,6 +542,21 @@ Kubernetes meta/v1.Duration
 </tr>
 <tr>
 <td>
+<code>valuesFiles</code><br>
+<em>
+[]string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Alternative list of values files to use as the chart values (values.yaml
+is not included by default), expected to be a relative path in the SourceRef.
+Values files are merged in the order of this list with the last file overriding
+the first. Ignored when omitted.</p>
+</td>
+</tr>
+<tr>
+<td>
 <code>valuesFile</code><br>
 <em>
 string
@@ -549,8 +564,10 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>Alternative values file to use as the default chart values, expected to be a
-relative path in the SourceRef. Ignored when omitted.</p>
+<p>Alternative values file to use as the default chart values, expected to
+be a relative path in the SourceRef. Deprecated in favor of ValuesFiles,
+for backwards compatibility the file defined here is merged before the
+ValuesFiles items. Ignored when omitted.</p>
 </td>
 </tr>
 <tr>
@@ -1481,6 +1498,21 @@ Kubernetes meta/v1.Duration
 </tr>
 <tr>
 <td>
+<code>valuesFiles</code><br>
+<em>
+[]string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Alternative list of values files to use as the chart values (values.yaml
+is not included by default), expected to be a relative path in the SourceRef.
+Values files are merged in the order of this list with the last file overriding
+the first. Ignored when omitted.</p>
+</td>
+</tr>
+<tr>
+<td>
 <code>valuesFile</code><br>
 <em>
 string
@@ -1488,8 +1520,10 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>Alternative values file to use as the default chart values, expected to be a
-relative path in the SourceRef. Ignored when omitted.</p>
+<p>Alternative values file to use as the default chart values, expected to
+be a relative path in the SourceRef. Deprecated in favor of ValuesFiles,
+for backwards compatibility the file defined here is merged before the
+ValuesFiles items. Ignored when omitted.</p>
 </td>
 </tr>
 <tr>

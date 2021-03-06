@@ -45,9 +45,19 @@ type HelmChartSpec struct {
 	// +required
 	Interval metav1.Duration `json:"interval"`
 
-	// Alternative values file to use as the default chart values, expected to be a
-	// relative path in the SourceRef. Ignored when omitted.
+	// Alternative list of values files to use as the chart values (values.yaml
+	// is not included by default), expected to be a relative path in the SourceRef.
+	// Values files are merged in the order of this list with the last file overriding
+	// the first. Ignored when omitted.
 	// +optional
+	ValuesFiles []string `json:"valuesFiles,omitempty"`
+
+	// Alternative values file to use as the default chart values, expected to
+	// be a relative path in the SourceRef. Deprecated in favor of ValuesFiles,
+	// for backwards compatibility the file defined here is merged before the
+	// ValuesFiles items. Ignored when omitted.
+	// +optional
+	// +deprecated
 	ValuesFile string `json:"valuesFile,omitempty"`
 
 	// This flag tells the controller to suspend the reconciliation of this source.
@@ -166,6 +176,17 @@ func (in *HelmChart) GetStatusConditions() *[]metav1.Condition {
 // GetInterval returns the interval at which the source is updated.
 func (in *HelmChart) GetInterval() metav1.Duration {
 	return in.Spec.Interval
+}
+
+// GetValuesFiles returns a merged list of ValuesFiles.
+func (in *HelmChart) GetValuesFiles() []string {
+	valuesFiles := in.Spec.ValuesFiles
+
+	// Prepend the deprecated ValuesFile to the list
+	if in.Spec.ValuesFile != "" {
+		valuesFiles = append([]string{in.Spec.ValuesFile}, valuesFiles...)
+	}
+	return valuesFiles
 }
 
 // +genclient
