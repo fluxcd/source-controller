@@ -13,7 +13,7 @@ require (
 	github.com/fluxcd/pkg/gitutil v0.0.1
 	github.com/fluxcd/pkg/helmtestserver v0.1.0
 	github.com/fluxcd/pkg/lockedfile v0.0.5
-	github.com/fluxcd/pkg/runtime v0.8.3
+	github.com/fluxcd/pkg/runtime v0.8.4
 	github.com/fluxcd/pkg/ssh v0.0.5
 	github.com/fluxcd/pkg/untar v0.0.5
 	github.com/fluxcd/pkg/version v0.0.1
@@ -22,17 +22,17 @@ require (
 	github.com/go-git/go-git/v5 v5.2.0
 	github.com/go-logr/logr v0.3.0
 	github.com/libgit2/git2go/v31 v31.4.7
-	github.com/minio/minio-go/v7 v7.0.5
+	github.com/minio/minio-go/v7 v7.0.10
 	github.com/onsi/ginkgo v1.14.1
 	github.com/onsi/gomega v1.10.2
 	github.com/spf13/pflag v1.0.5
 	golang.org/x/crypto v0.0.0-20201221181555-eec23a3978ad
 	golang.org/x/sync v0.0.0-20201207232520-09787c993a3a
-	helm.sh/helm/v3 v3.5.2
+	helm.sh/helm/v3 v3.5.3
 	k8s.io/api v0.20.2
 	k8s.io/apimachinery v0.20.2
 	k8s.io/client-go v0.20.2
-	sigs.k8s.io/controller-runtime v0.8.2
+	sigs.k8s.io/controller-runtime v0.8.3
 	sigs.k8s.io/yaml v1.2.0
 )
 
