@@ -709,7 +709,7 @@ var _ = Describe("HelmChartReconciler", func() {
 			err = f.Close()
 			Expect(err).NotTo(HaveOccurred())
 
-			_, err = wt.Commit("Chart version bump", &git.CommitOptions{
+			commit, err := wt.Commit("Chart version bump", &git.CommitOptions{
 				Author: &object.Signature{
 					Name:  "John Doe",
 					Email: "john@example.com",
@@ -734,6 +734,21 @@ var _ = Describe("HelmChartReconciler", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(helmChart.Values["testDefault"]).To(BeTrue())
 			Expect(helmChart.Values["testOverride"]).To(BeFalse())
+
+			When("Setting reconcileStrategy to Revision", func() {
+				updated := &sourcev1.HelmChart{}
+				Expect(k8sClient.Get(context.Background(), key, updated)).To(Succeed())
+				updated.Spec.ReconcileStrategy = sourcev1.ReconcileStrategyRevision
+				Expect(k8sClient.Update(context.Background(), updated)).To(Succeed())
+				got := &sourcev1.HelmChart{}
+				Eventually(func() bool {
+					_ = k8sClient.Get(context.Background(), key, got)
+					return got.Status.Artifact.Revision != updated.Status.Artifact.Revision &&
+						storage.ArtifactExist(*got.Status.Artifact)
+				}, timeout, interval).Should(BeTrue())
+				Expect(got.Status.Artifact.Revision).To(ContainSubstring(updated.Status.Artifact.Revision))
+				Expect(got.Status.Artifact.Revision).To(ContainSubstring(commit.String()))
+			})
 
 			When("Setting valid valuesFiles attribute", func() {
 				updated := &sourcev1.HelmChart{}
