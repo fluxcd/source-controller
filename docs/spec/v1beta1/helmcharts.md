@@ -28,6 +28,15 @@ type HelmChartSpec struct {
 	// +required
 	Interval metav1.Duration `json:"interval"`
 
+	// Determines what enables the creation of a new artifact. Valid values are
+	// ('ChartVersion', 'Revision').
+	// See the documentation of the values for an explanation on their behavior.
+	// Defaults to ChartVersion when omitted.
+	// +kubebuilder:validation:Enum=ChartVersion;Revision
+	// +kubebuilder:default:=ChartVersion
+	// +optional
+	ReconcileStrategy string `json:"reconcileStrategy,omitempty"`
+
 	// Alternative list of values files to use as the chart values (values.yaml
 	// is not included by default), expected to be a relative path in the SourceRef.
 	// Values files are merged in the order of this list with the last file overriding
@@ -47,6 +56,18 @@ type HelmChartSpec struct {
 	// +optional
 	Suspend bool `json:"suspend,omitempty"`
 }
+```
+
+### Reconciliation strategies
+
+```go
+const (
+	// ReconcileStrategyChartVersion creates a new chart artifact when the version of the Helm chart is different.
+	ReconcileStrategyChartVersion string = "ChartVersion"
+
+	// ReconcileStrategyRevision creates a new chart artifact when the Revision of the SourceRef is different.
+	ReconcileStrategyRevision string = "Revision"
+)
 ```
 
 ### Reference types
@@ -228,6 +249,23 @@ spec:
   valuesFiles:
     - ./charts/podinfo/values.yaml
     - ./charts/podinfo/values-production.yaml
+```
+
+Reconcile with every change to the source revision:
+
+```yaml
+apiVersion: source.toolkit.fluxcd.io/v1beta1
+kind: HelmChart
+metadata:
+  name: podinfo
+  namespace: default
+spec:
+  chart: ./charts/podinfo
+  sourceRef:
+    name: podinfo
+    kind: GitRepository
+  interval: 10m
+  reconcileStrategy: Revision
 ```
 
 ## Status examples

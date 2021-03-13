@@ -62,6 +62,13 @@ spec:
               interval:
                 description: The interval at which to check the Source for updates.
                 type: string
+              reconcileStrategy:
+                default: ChartVersion
+                description: Determines what enables the creation of a new artifact. Valid values are ('ChartVersion', 'Revision'). See the documentation of the values for an explanation on their behavior. Defaults to ChartVersion when omitted.
+                enum:
+                - ChartVersion
+                - Revision
+                type: string
               sourceRef:
                 description: The reference to the Source the chart is available at.
                 properties:

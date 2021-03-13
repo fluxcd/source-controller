@@ -555,6 +555,21 @@ Kubernetes meta/v1.Duration
 </tr>
 <tr>
 <td>
+<code>reconcileStrategy</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Determines what enables reconciliation. Valid values are (&lsquo;ChartVersion&rsquo;,
+&lsquo;Revision&rsquo;). See the documentation of the values for an explanation on their
+behavior.
+Defaults to ChartVersion when omitted.</p>
+</td>
+</tr>
+<tr>
+<td>
 <code>valuesFiles</code><br>
 <em>
 []string
@@ -1609,6 +1624,21 @@ Kubernetes meta/v1.Duration
 </td>
 <td>
 <p>The interval at which to check the Source for updates.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>reconcileStrategy</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Determines what enables reconciliation. Valid values are (&lsquo;ChartVersion&rsquo;,
+&lsquo;Revision&rsquo;). See the documentation of the values for an explanation on their
+behavior.
+Defaults to ChartVersion when omitted.</p>
 </td>
 </tr>
 <tr>
