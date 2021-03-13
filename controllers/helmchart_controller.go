@@ -28,6 +28,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Masterminds/semver/v3"
 	securejoin "github.com/cyphar/filepath-securejoin"
 	"github.com/go-logr/logr"
 	helmchart "helm.sh/helm/v3/pkg/chart"
@@ -528,9 +529,23 @@ func (r *HelmChartReconciler) reconcileFromTarballArtifact(ctx context.Context,
 		return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
 	}
 
+	version, err := semver.NewVersion(helmChart.Metadata.Version)
+	if err != nil {
+		err = fmt.Errorf("load chart error: %w", err)
+		return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
+	}
+	// Replace / with - in version metadata for SemVer spec
+	version.SetMetadata(strings.Replace(artifact.Revision, "/", "-", -1))
+	helmChart.Metadata.Version = version.String()
+
+	revision := version.Original()
+	if chart.Spec.IgnoreVersion {
+		revision = version.String()
+	}
+
 	// Return early if the revision is still the same as the current chart artifact
-	newArtifact := r.Storage.NewArtifactFor(chart.Kind, chart.ObjectMeta.GetObjectMeta(), helmChart.Metadata.Version,
-		fmt.Sprintf("%s-%s.tgz", helmChart.Metadata.Name, helmChart.Metadata.Version))
+	newArtifact := r.Storage.NewArtifactFor(chart.Kind, chart.ObjectMeta.GetObjectMeta(), revision,
+		fmt.Sprintf("%s-%s.tgz", helmChart.Metadata.Name, revision))
 	if !force && apimeta.IsStatusConditionTrue(chart.Status.Conditions, meta.ReadyCondition) && chart.GetArtifact().HasRevision(newArtifact.Revision) {
 		if newArtifact.URL != artifact.URL {
 			r.Storage.SetArtifactURL(chart.GetArtifact())

@@ -710,7 +710,7 @@ var _ = Describe("HelmChartReconciler", func() {
 			err = f.Close()
 			Expect(err).NotTo(HaveOccurred())
 
-			_, err = wt.Commit("Chart version bump", &git.CommitOptions{
+			commit, err := wt.Commit("Chart version bump", &git.CommitOptions{
 				Author: &object.Signature{
 					Name:  "John Doe",
 					Email: "john@example.com",
@@ -847,6 +847,18 @@ var _ = Describe("HelmChartReconciler", func() {
 				_, exists := helmChart.Values["testDefault"]
 				Expect(exists).To(BeFalse())
 				Expect(helmChart.Values["testOverride"]).To(BeTrue())
+			})
+
+			When("Ignoring the version", func() {
+				updated := &sourcev1.HelmChart{}
+				Expect(k8sClient.Get(context.Background(), key, updated)).To(Succeed())
+				updated.Spec.IgnoreVersion = true
+				Eventually(func() bool {
+					return got.Status.Artifact.Revision != updated.Status.Artifact.Revision &&
+						storage.ArtifactExist(*got.Status.Artifact)
+				}, timeout, interval).Should(BeTrue())
+				Expect(got.Status.Artifact.Revision).To(ContainSubstring(updated.Status.Artifact.Revision))
+				Expect(got.Status.Artifact.Revision).To(ContainSubstring(commit.String()))
 			})
 		})
 

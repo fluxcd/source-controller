@@ -585,6 +585,20 @@ ValuesFiles items. Ignored when omitted.</p>
 </tr>
 <tr>
 <td>
+<code>ignoreVersion</code><br>
+<em>
+bool
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Ignore the version of the chart, allowing reconciliation if the source has
+changed. Only applies to GitRepository and Bucket sources. Defaults to false
+when omitted.</p>
+</td>
+</tr>
+<tr>
+<td>
 <code>suspend</code><br>
 <em>
 bool
@@ -1639,6 +1653,20 @@ string
 be a relative path in the SourceRef. Deprecated in favor of ValuesFiles,
 for backwards compatibility the file defined here is merged before the
 ValuesFiles items. Ignored when omitted.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>ignoreVersion</code><br>
+<em>
+bool
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Ignore the version of the chart, allowing reconciliation if the source has
+changed. Only applies to GitRepository and Bucket sources. Defaults to false
+when omitted.</p>
 </td>
 </tr>
 <tr>
