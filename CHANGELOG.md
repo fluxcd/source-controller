@@ -2,6 +2,19 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.9.1
+
+**Release date:** 2021-03-15
+
+This prerelease comes with improvements to Git clone errors and
+patch updates to dependencies.
+
+Improvements:
+* Tidy git clone errors
+  [#304](https://github.com/fluxcd/source-controller/pull/304)
+* Update dependencies
+  [#307](https://github.com/fluxcd/source-controller/pull/307)
+
 ## 0.9.0
 
 **Release date:** 2021-02-23
