@@ -119,7 +119,11 @@ func testPatterns(t *testing.T, storage *Storage, artifact sourcev1.Artifact, ta
 	}
 }
 
-func createArchive(t *testing.T, storage *Storage, filenames []string, sourceIgnore string, spec sourcev1.GitRepositorySpec) sourcev1.Artifact {
+type artifactOptFunc func(*sourcev1.Artifact)
+
+func createArchive(t *testing.T, storage *Storage, filenames []string, sourceIgnore string,
+	spec sourcev1.GitRepositorySpec,
+	opts ...artifactOptFunc) sourcev1.Artifact {
 	gitDir, err := ioutil.TempDir("", "")
 	if err != nil {
 		t.Fatalf("could not create temporary directory: %v", err)
@@ -154,6 +158,9 @@ func createArchive(t *testing.T, storage *Storage, filenames []string, sourceIgn
 	}
 	artifact := sourcev1.Artifact{
 		Path: filepath.Join(randStringRunes(10), randStringRunes(10), randStringRunes(10)+".tar.gz"),
+	}
+	for _, o := range opts {
+		o(&artifact)
 	}
 	if err := storage.MkdirAll(artifact); err != nil {
 		t.Fatalf("artifact directory creation failed: %v", err)
@@ -274,4 +281,30 @@ func TestStorageRemoveAllButCurrent(t *testing.T) {
 			t.Fatal("Did not error while pruning non-existent path")
 		}
 	})
+}
+
+func TestSymlinkURL(t *testing.T) {
+	dir, err := createStoragePath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(cleanupStoragePath(dir))
+
+	s, err := NewStorage(dir, "source-controller.source-system.svc.cluster.local.", time.Minute)
+	if err != nil {
+		t.Fatalf("failed to create a new storage: %s", err)
+	}
+	a := createArchive(t, s, []string{"README.md"}, "", sourcev1.GitRepositorySpec{}, func(a *sourcev1.Artifact) {
+		a.Path = "testing/file/abc123.tar.gz"
+	})
+
+	url, err := s.Symlink(a, "latest.tar.gz")
+	if err != nil {
+		t.Fatalf("failed to symlink artifact:  %s", err)
+	}
+
+	wantURL := "http://source-controller.source-system.svc.cluster.local/testing/file/latest.tar.gz"
+	if url != wantURL {
+		t.Fatalf("got url %q, want %q", url, wantURL)
+	}
 }

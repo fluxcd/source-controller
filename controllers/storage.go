@@ -87,7 +87,11 @@ func (s Storage) SetArtifactURL(artifact *sourcev1.Artifact) {
 	if artifact.Path == "" {
 		return
 	}
-	artifact.URL = fmt.Sprintf("http://%s/%s", s.Hostname, artifact.Path)
+	artifact.URL = artifactURL(s.Hostname, artifact.Path)
+}
+
+func artifactURL(host, path string) string {
+	return fmt.Sprintf("http://%s/%s", strings.TrimSuffix(host, "."), path)
 }
 
 // SetHostname sets the hostname of the given URL string to the current Storage.Hostname
@@ -371,8 +375,7 @@ func (s *Storage) Symlink(artifact sourcev1.Artifact, linkName string) (string, 
 		return "", err
 	}
 
-	url := fmt.Sprintf("http://%s/%s", s.Hostname, filepath.Join(filepath.Dir(artifact.Path), linkName))
-	return url, nil
+	return artifactURL(s.Hostname, filepath.Join(filepath.Dir(artifact.Path), linkName)), nil
 }
 
 // Checksum returns the SHA1 checksum for the data of the given io.Reader as a string.
