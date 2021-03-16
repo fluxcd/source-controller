@@ -91,6 +91,9 @@ func (r *BucketReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
+	// Record suspended status metric
+	defer r.recordSuspension(ctx, bucket)
+
 	// Add our finalizer if it does not exist
 	if !controllerutil.ContainsFinalizer(&bucket, sourcev1.SourceFinalizer) {
 		controllerutil.AddFinalizer(&bucket, sourcev1.SourceFinalizer)
@@ -418,6 +421,25 @@ func (r *BucketReconciler) recordReadiness(ctx context.Context, bucket sourcev1.
 			Type:   meta.ReadyCondition,
 			Status: metav1.ConditionUnknown,
 		}, !bucket.DeletionTimestamp.IsZero())
+	}
+}
+
+func (r *BucketReconciler) recordSuspension(ctx context.Context, bucket sourcev1.Bucket) {
+	if r.MetricsRecorder == nil {
+		return
+	}
+	log := logr.FromContext(ctx)
+
+	objRef, err := reference.GetReference(r.Scheme, &bucket)
+	if err != nil {
+		log.Error(err, "unable to record suspended metric")
+		return
+	}
+
+	if !bucket.DeletionTimestamp.IsZero() {
+		r.MetricsRecorder.RecordSuspend(*objRef, false)
+	} else {
+		r.MetricsRecorder.RecordSuspend(*objRef, bucket.Spec.Suspend)
 	}
 }
 
