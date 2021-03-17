@@ -87,6 +87,9 @@ func (r *GitRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
+	// Record suspended status metric
+	defer r.recordSuspension(ctx, repository)
+
 	// Add our finalizer if it does not exist
 	if !controllerutil.ContainsFinalizer(&repository, sourcev1.SourceFinalizer) {
 		controllerutil.AddFinalizer(&repository, sourcev1.SourceFinalizer)
@@ -361,6 +364,25 @@ func (r *GitRepositoryReconciler) recordReadiness(ctx context.Context, repositor
 			Type:   meta.ReadyCondition,
 			Status: metav1.ConditionUnknown,
 		}, !repository.DeletionTimestamp.IsZero())
+	}
+}
+
+func (r *GitRepositoryReconciler) recordSuspension(ctx context.Context, gitrepository sourcev1.GitRepository) {
+	if r.MetricsRecorder == nil {
+		return
+	}
+	log := logr.FromContext(ctx)
+
+	objRef, err := reference.GetReference(r.Scheme, &gitrepository)
+	if err != nil {
+		log.Error(err, "unable to record suspended metric")
+		return
+	}
+
+	if !gitrepository.DeletionTimestamp.IsZero() {
+		r.MetricsRecorder.RecordSuspend(*objRef, false)
+	} else {
+		r.MetricsRecorder.RecordSuspend(*objRef, gitrepository.Spec.Suspend)
 	}
 }
 

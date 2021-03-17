@@ -361,3 +361,22 @@ func (r *HelmRepositoryReconciler) updateStatus(ctx context.Context, req ctrl.Re
 
 	return r.Status().Patch(ctx, &repository, patch)
 }
+
+func (r *HelmRepositoryReconciler) recordSuspension(ctx context.Context, hr sourcev1.HelmRepository) {
+	if r.MetricsRecorder == nil {
+		return
+	}
+	log := logr.FromContext(ctx)
+
+	objRef, err := reference.GetReference(r.Scheme, &hr)
+	if err != nil {
+		log.Error(err, "unable to record suspended metric")
+		return
+	}
+
+	if !hr.DeletionTimestamp.IsZero() {
+		r.MetricsRecorder.RecordSuspend(*objRef, false)
+	} else {
+		r.MetricsRecorder.RecordSuspend(*objRef, hr.Spec.Suspend)
+	}
+}
