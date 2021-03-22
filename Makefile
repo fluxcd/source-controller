@@ -1,5 +1,11 @@
 # Image URL to use all building/pushing image targets
 IMG ?= fluxcd/source-controller:latest
+RELEASE_NAME ?= flux
+
+IMG_PARTS := $(subst :, ,$(IMG))
+IMG_REPOSITORY := $(word 1, $(IMG_PARTS))
+IMG_TAG := $(word 2, $(IMG_PARTS))
+
 # Produce CRDs that work back to Kubernetes 1.16
 CRD_OPTIONS ?= crd:crdVersions=v1
 
@@ -13,7 +19,7 @@ endif
 all: manager
 
 # Run tests
-test: generate fmt vet manifests api-docs
+test: generate fmt vet manifests api-docs sync-chart
 	go test ./... -coverprofile cover.out
 	cd api; go test ./... -coverprofile cover.out
 
@@ -33,10 +39,30 @@ install: manifests
 uninstall: manifests
 	kustomize build config/crd | kubectl delete -f -
 
+# Synchronize the manifest CRDs and RBAC roles into the helm chart
+sync-chart: manifests
+	./hack/sync-chart.sh
+
 # Deploy controller in the configured Kubernetes cluster in ~/.kube/config
 deploy: manifests
 	cd config/manager && kustomize edit set image fluxcd/source-controller=${IMG}
 	kustomize build config/default | kubectl apply -f -
+
+# Deploy controller in the configured Kubernetes cluster in ~/.kube/config using helm
+chart-deploy: sync-chart
+	helm upgrade ${RELEASE_NAME} \
+		--install \
+		--namespace=source-system \
+		--create-namespace \
+		--wait \
+		--timeout=1m \
+		--set image.repository=${IMG_REPOSITORY} \
+		--set image.tag=${IMG_TAG} \
+		./chart
+
+	sleep 5
+
+	helm test ${RELEASE_NAME} --namespace=source-system --timeout 1m --logs
 
 # Deploy controller dev image in the configured Kubernetes cluster in ~/.kube/config
 dev-deploy:

@@ -1,0 +1,23 @@
+{{- if and .Values.rbac.create .Values.watchAllNamespaces -}}
+apiVersion: {{ include "source-controller.rbac.apiVersion" . }}
+kind: ClusterRole
+metadata:
+  name: {{ include "source-controller.rbac.fullname" . }}:bucket-viewer
+  labels:
+    {{- include "source-controller.labels" . | nindent 4 }}
+rules:
+  - apiGroups:
+      - source.toolkit.fluxcd.io
+    resources:
+      - buckets
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - source.toolkit.fluxcd.io
+    resources:
+      - buckets/status
+    verbs:
+      - get
+{{- end }}

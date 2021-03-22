@@ -1,0 +1,47 @@
+{{- if and .Values.rbac.create -}}
+apiVersion: {{ include "source-controller.rbac.apiVersion" . }}
+kind: Role
+metadata:
+  name: {{ include "source-controller.rbac.fullname" . }}:leader-election
+  labels:
+    {{- include "source-controller.labels" . | nindent 4 }}
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - configmaps
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete
+  - apiGroups:
+      - ""
+    resources:
+      - configmaps/status
+    verbs:
+      - get
+      - update
+      - patch
+  - apiGroups:
+      - ""
+    resources:
+      - events
+    verbs:
+      - create
+  - apiGroups:
+      - "coordination.k8s.io"
+    resources:
+      - leases
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete
+{{- end }}

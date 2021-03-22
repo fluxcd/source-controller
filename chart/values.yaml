@@ -1,0 +1,56 @@
+# set the number of replicas; the controller supports leader-election
+replicas: 1
+
+image:
+  repository: fluxcd/source-controller
+  pullPolicy: IfNotPresent
+  # override the image tag, which is the application version by default
+  tag: ""
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+# a value indicating whether or not to watch all namespaces
+watchAllNamespaces: true
+
+# the number of reconcilers per controller type
+reconcilers: 2
+
+# log level and encoding options
+logLevel: info # debug, info, error
+logEncoding: json # json, console
+
+rbac:
+  # a value indicating whether or not to create rbac roles
+  create: true
+
+serviceAccount:
+  # a value indicating whether or not to create a service account
+  create: true
+
+  # additional annotations to add to the service account
+  annotations: {}
+
+  # the name to use for the service account, which is auto-generated if not set
+  name: ""
+
+podAnnotations: {}
+  # prometheus.io/port: "8080"
+  # prometheus.io/scrape: "true"
+
+service:
+  type: ClusterIP
+  port: 80
+
+resources: {}
+  # limits:
+  #   cpu: 1000m
+  #   memory: 1Gi
+  # requests:
+  #   cpu: 50m
+  #   memory: 64Mi
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

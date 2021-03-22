@@ -1,0 +1,15 @@
+{{- if and .Values.rbac.create -}}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "source-controller.fullname" . }}-leader-election
+  labels:
+    {{- include "source-controller.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "source-controller.rbac.fullname" . }}:leader-election
+subjects:
+- kind: ServiceAccount
+  name: {{ include "source-controller.serviceAccountName" . }}
+{{- end }}

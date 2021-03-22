@@ -1,0 +1,23 @@
+{{- if and .Values.rbac.create (not .Values.watchAllNamespaces) -}}
+apiVersion: {{ include "source-controller.rbac.apiVersion" . }}
+kind: Role
+metadata:
+  name: {{ include "source-controller.rbac.fullname" . }}:helmrepository-viewer
+  labels:
+    {{- include "source-controller.labels" . | nindent 4 }}
+rules:
+  - apiGroups:
+      - source.toolkit.fluxcd.io
+    resources:
+      - helmrepositories
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - source.toolkit.fluxcd.io
+    resources:
+      - helmrepositories/status
+    verbs:
+      - get
+{{- end }}

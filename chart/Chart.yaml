@@ -1,0 +1,28 @@
+apiVersion: v2
+type: application
+name: source-controller
+description: |
+  A Helm chart for deploying the source-controller, which is a component of the Flux GitOps Toolkit. The
+  source-controller is a Kubernetes operator specialised in artifacts acquisition from external sources such as Git,
+  Helm repositories, and Cloud Platform Provider buckets, including AWS S3, GCP GCS, and Azure Blob Storage.
+keywords:
+- helm
+- fluxcd
+- gitops
+- source-controller
+annotations:
+  app: fluxcd
+  component: source-controller
+home: https://toolkit.fluxcd.io/components/source/controller
+sources:
+- https://github.com/fluxcd/source-controller
+- https://github.com/fluxcd/flux2
+
+maintainers:
+- name: Flux Authors and Contributors
+  url: https://github.com/fluxcd/source-controller/graphs/contributors
+- name: Deavon M. McCaffery
+  url: https://github.com/dmccaffery
+
+version: 0.1.0
+appVersion: "v0.9.1"
