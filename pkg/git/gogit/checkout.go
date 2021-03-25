@@ -126,13 +126,12 @@ func (c *CheckoutCommit) Checkout(ctx context.Context, path, url string, auth *g
 		URL:               url,
 		Auth:              auth.AuthMethod,
 		RemoteName:        git.DefaultOrigin,
-		ReferenceName:     plumbing.NewBranchReferenceName(c.branch),
-		SingleBranch:      true,
-		NoCheckout:        false,
+		NoCheckout:        true,
 		RecurseSubmodules: 0,
 		Progress:          nil,
 		Tags:              extgogit.NoTags,
 	})
+
 	if err != nil {
 		return nil, "", fmt.Errorf("unable to clone '%s', error: %w", url, err)
 	}

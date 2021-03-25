@@ -129,7 +129,6 @@ func (c *CheckoutCommit) Checkout(ctx context.Context, path, url string, auth *g
 				CertificateCheckCallback: auth.CertCallback,
 			},
 		},
-		CheckoutBranch: c.branch,
 	})
 	if err != nil {
 		return nil, "", fmt.Errorf("unable to clone '%s', error: %w", url, err)
