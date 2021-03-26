@@ -47,6 +47,8 @@ import (
 	// +kubebuilder:scaffold:imports
 )
 
+const controllerName = "source-controller"
+
 var (
 	scheme   = runtime.NewScheme()
 	setupLog = ctrl.Log.WithName("setup")
@@ -103,7 +105,7 @@ func main() {
 
 	var eventRecorder *events.Recorder
 	if eventsAddr != "" {
-		if er, err := events.NewRecorder(eventsAddr, "source-controller"); err != nil {
+		if er, err := events.NewRecorder(eventsAddr, controllerName); err != nil {
 			setupLog.Error(err, "unable to create event recorder")
 			os.Exit(1)
 		} else {
@@ -130,7 +132,7 @@ func main() {
 		LeaseDuration:                 &leaderElectionOptions.LeaseDuration,
 		RenewDeadline:                 &leaderElectionOptions.RenewDeadline,
 		RetryPeriod:                   &leaderElectionOptions.RetryPeriod,
-		LeaderElectionID:              "305740c0.fluxcd.io",
+		LeaderElectionID:              fmt.Sprintf("%s-leader-election", controllerName),
 		Namespace:                     watchNamespace,
 		Logger:                        ctrl.Log,
 	})
@@ -151,7 +153,7 @@ func main() {
 		Client:                mgr.GetClient(),
 		Scheme:                mgr.GetScheme(),
 		Storage:               storage,
-		EventRecorder:         mgr.GetEventRecorderFor("source-controller"),
+		EventRecorder:         mgr.GetEventRecorderFor(controllerName),
 		ExternalEventRecorder: eventRecorder,
 		MetricsRecorder:       metricsRecorder,
 	}).SetupWithManagerAndOptions(mgr, controllers.GitRepositoryReconcilerOptions{
@@ -165,7 +167,7 @@ func main() {
 		Scheme:                mgr.GetScheme(),
 		Storage:               storage,
 		Getters:               getters,
-		EventRecorder:         mgr.GetEventRecorderFor("source-controller"),
+		EventRecorder:         mgr.GetEventRecorderFor(controllerName),
 		ExternalEventRecorder: eventRecorder,
 		MetricsRecorder:       metricsRecorder,
 	}).SetupWithManagerAndOptions(mgr, controllers.HelmRepositoryReconcilerOptions{
@@ -179,7 +181,7 @@ func main() {
 		Scheme:                mgr.GetScheme(),
 		Storage:               storage,
 		Getters:               getters,
-		EventRecorder:         mgr.GetEventRecorderFor("source-controller"),
+		EventRecorder:         mgr.GetEventRecorderFor(controllerName),
 		ExternalEventRecorder: eventRecorder,
 		MetricsRecorder:       metricsRecorder,
 	}).SetupWithManagerAndOptions(mgr, controllers.HelmChartReconcilerOptions{
@@ -192,7 +194,7 @@ func main() {
 		Client:                mgr.GetClient(),
 		Scheme:                mgr.GetScheme(),
 		Storage:               storage,
-		EventRecorder:         mgr.GetEventRecorderFor("source-controller"),
+		EventRecorder:         mgr.GetEventRecorderFor(controllerName),
 		ExternalEventRecorder: eventRecorder,
 		MetricsRecorder:       metricsRecorder,
 	}).SetupWithManagerAndOptions(mgr, controllers.BucketReconcilerOptions{
