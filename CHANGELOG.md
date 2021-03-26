@@ -2,6 +2,30 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.10.0
+
+**Release date:** 2021-03-26
+
+This is the tenth MINOR prerelease.
+
+This prerelease comes with a breaking change to the leader election ID
+from `305740c0.fluxcd.io` to `source-controller-leader-election`
+to be more descriptive. This change should not have an impact on most
+installations, as the default replica count is `1`. If you are running
+a setup with multiple replicas, it is however advised to scale down
+before  upgrading.
+
+The suspended status of resources is now recorded to a
+`gotk_suspend_status` Prometheus gauge metric.
+
+Improvements:
+* Record suspend metrics in controllers
+  [#311](https://github.com/fluxcd/source-controller/pull/311)
+* Set leader election deadline to 30s
+  [#318](https://github.com/fluxcd/notification-controller/pull/318)
+* Change leader election ID to be more descriptive
+  [#319](https://github.com/fluxcd/notification-controller/pull/319)
+
 ## 0.9.1
 
 **Release date:** 2021-03-15
