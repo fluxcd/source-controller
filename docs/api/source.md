@@ -400,6 +400,20 @@ string
 Defaults to go-git, valid values are (&lsquo;go-git&rsquo;, &lsquo;libgit2&rsquo;).</p>
 </td>
 </tr>
+<tr>
+<td>
+<code>recurseSubmodules</code><br>
+<em>
+bool
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>When enabled, after the clone is created, initializes all submodules within,
+using their default settings.
+This option is available only when using the &lsquo;go-git&rsquo; GitImplementation.</p>
+</td>
+</tr>
 </table>
 </td>
 </tr>
@@ -1244,6 +1258,20 @@ string
 <em>(Optional)</em>
 <p>Determines which git client library to use.
 Defaults to go-git, valid values are (&lsquo;go-git&rsquo;, &lsquo;libgit2&rsquo;).</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>recurseSubmodules</code><br>
+<em>
+bool
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>When enabled, after the clone is created, initializes all submodules within,
+using their default settings.
+This option is available only when using the &lsquo;go-git&rsquo; GitImplementation.</p>
 </td>
 </tr>
 </tbody>

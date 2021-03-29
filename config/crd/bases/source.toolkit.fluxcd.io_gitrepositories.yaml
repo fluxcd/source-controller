@@ -66,6 +66,11 @@ spec:
               interval:
                 description: The interval at which to check for repository updates.
                 type: string
+              recurseSubmodules:
+                description: When enabled, after the clone is created, initializes
+                  all submodules within, using their default settings. This option
+                  is available only when using the 'go-git' GitImplementation.
+                type: boolean
               ref:
                 description: The Git reference to checkout and monitor for changes,
                   defaults to master branch.

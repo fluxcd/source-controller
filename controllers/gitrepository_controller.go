@@ -183,7 +183,12 @@ func (r *GitRepositoryReconciler) reconcile(ctx context.Context, repository sour
 	// determine auth method
 	auth := &git.Auth{}
 	if repository.Spec.SecretRef != nil {
-		authStrategy, err := strategy.AuthSecretStrategyForURL(repository.Spec.URL, repository.Spec.GitImplementation)
+		authStrategy, err := strategy.AuthSecretStrategyForURL(
+			repository.Spec.URL,
+			git.CheckoutOptions{
+				GitImplementation: repository.Spec.GitImplementation,
+				RecurseSubmodules: repository.Spec.RecurseSubmodules,
+			})
 		if err != nil {
 			return sourcev1.GitRepositoryNotReady(repository, sourcev1.AuthenticationFailedReason, err.Error()), err
 		}
@@ -207,7 +212,12 @@ func (r *GitRepositoryReconciler) reconcile(ctx context.Context, repository sour
 		}
 	}
 
-	checkoutStrategy, err := strategy.CheckoutStrategyForRef(repository.Spec.Reference, repository.Spec.GitImplementation)
+	checkoutStrategy, err := strategy.CheckoutStrategyForRef(
+		repository.Spec.Reference,
+		git.CheckoutOptions{
+			GitImplementation: repository.Spec.GitImplementation,
+			RecurseSubmodules: repository.Spec.RecurseSubmodules,
+		})
 	if err != nil {
 		return sourcev1.GitRepositoryNotReady(repository, sourcev1.GitOperationFailedReason, err.Error()), err
 	}
