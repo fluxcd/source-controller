@@ -204,6 +204,28 @@ spec:
 > **Note:** that on EKS you have to create an IAM role for the source-controller
 > service account that grants access to the bucket.
 
+### AWS IAM bucket policy example
+
+```json
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "",
+            "Effect": "Allow",
+            "Action": "s3:GetObject",
+            "Resource": "arn:aws:s3:::podinfo/*"
+        },
+        {
+            "Sid": "",
+            "Effect": "Allow",
+            "Action": "s3:ListBucket",
+            "Resource": "arn:aws:s3:::podinfo"
+        }
+    ]
+}
+```
+
 ## Status examples
 
 Successful download:
