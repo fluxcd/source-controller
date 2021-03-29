@@ -194,10 +194,10 @@ and also impact the traffic costs.
 To be able to support Azure DevOps a compromise solution was built, giving the user the
 option to select the git library while accepting the drawbacks.
 
-| Git Implementation | Shallow Clones | V2 Protocol Support |
-|---|---|---|
-| 'go-git' | true | false |
-| 'libgit2' | false | true |
+| Git Implementation | Shallow Clones | Git Submodules | V2 Protocol Support |
+|---|---|---|---|
+| 'go-git' | true | true | false |
+| 'libgit2' | false | false | true |
 
 Pull the master branch from a repository in Azure DevOps.
 
@@ -318,7 +318,7 @@ data:
   password: <BASE64>
 ```
 
-## HTTPS self-signed certificates
+### HTTPS self-signed certificates
 
 Cloning over HTTPS from a Git repository with a self-signed certificate:
 
