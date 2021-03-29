@@ -378,20 +378,14 @@ var _ = Describe("GitRepositoryReconciler", func() {
 			Expect(cond.Message).To(ContainSubstring(t.expectMessage))
 			Expect(got.Status.Artifact == nil).To(Equal(t.expectRevision == ""))
 		},
-			Entry("self signed v1", refTestCase{
-				reference:     &sourcev1.GitRepositoryRef{Branch: "main"},
-				waitForReason: sourcev1.GitOperationFailedReason,
-				expectStatus:  metav1.ConditionFalse,
-				expectMessage: "x509: certificate signed by unknown authority",
-			}),
-			Entry("self signed v2 without CA", refTestCase{
+			Entry("self signed libgit2 without CA", refTestCase{
 				reference:         &sourcev1.GitRepositoryRef{Branch: "main"},
 				waitForReason:     sourcev1.GitOperationFailedReason,
 				expectStatus:      metav1.ConditionFalse,
 				expectMessage:     "error: user rejected certificate",
 				gitImplementation: sourcev1.LibGit2Implementation,
 			}),
-			Entry("self signed v2 with CA", refTestCase{
+			Entry("self signed libgit2 with CA", refTestCase{
 				reference:         &sourcev1.GitRepositoryRef{Branch: "some-branch"},
 				createRefs:        []string{"refs/heads/some-branch"},
 				waitForReason:     sourcev1.GitOperationSucceedReason,
@@ -399,6 +393,21 @@ var _ = Describe("GitRepositoryReconciler", func() {
 				expectRevision:    "some-branch",
 				secretRef:         &meta.LocalObjectReference{Name: "cert"},
 				gitImplementation: sourcev1.LibGit2Implementation,
+			}),
+			Entry("self signed go-git without CA", refTestCase{
+				reference:     &sourcev1.GitRepositoryRef{Branch: "main"},
+				waitForReason: sourcev1.GitOperationFailedReason,
+				expectStatus:  metav1.ConditionFalse,
+				expectMessage: "x509: certificate signed by unknown authority",
+			}),
+			Entry("self signed go-git with CA", refTestCase{
+				reference:         &sourcev1.GitRepositoryRef{Branch: "some-branch"},
+				createRefs:        []string{"refs/heads/some-branch"},
+				waitForReason:     sourcev1.GitOperationSucceedReason,
+				expectStatus:      metav1.ConditionTrue,
+				expectRevision:    "some-branch",
+				secretRef:         &meta.LocalObjectReference{Name: "cert"},
+				gitImplementation: sourcev1.GoGitImplementation,
 			}),
 		)
 	})

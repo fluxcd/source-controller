@@ -44,6 +44,7 @@ type CheckoutStrategy interface {
 //  depend on implementation specifics here.
 type Auth struct {
 	AuthMethod   transport.AuthMethod
+	CABundle     []byte
 	CredCallback git2go.CredentialsCallback
 	CertCallback git2go.CertificateCheckCallback
 }

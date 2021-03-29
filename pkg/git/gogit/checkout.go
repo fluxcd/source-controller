@@ -70,6 +70,7 @@ func (c *CheckoutBranch) Checkout(ctx context.Context, path, url string, auth *g
 		RecurseSubmodules: 0,
 		Progress:          nil,
 		Tags:              extgogit.NoTags,
+		CABundle:          auth.CABundle,
 	})
 	if err != nil {
 		return nil, "", fmt.Errorf("unable to clone '%s', error: %w", url, gitutil.GoGitError(err))
@@ -101,6 +102,7 @@ func (c *CheckoutTag) Checkout(ctx context.Context, path, url string, auth *git.
 		RecurseSubmodules: 0,
 		Progress:          nil,
 		Tags:              extgogit.NoTags,
+		CABundle:          auth.CABundle,
 	})
 	if err != nil {
 		return nil, "", fmt.Errorf("unable to clone '%s', error: %w", url, err)
@@ -132,6 +134,7 @@ func (c *CheckoutCommit) Checkout(ctx context.Context, path, url string, auth *g
 		RecurseSubmodules: 0,
 		Progress:          nil,
 		Tags:              extgogit.NoTags,
+		CABundle:          auth.CABundle,
 	})
 	if err != nil {
 		return nil, "", fmt.Errorf("unable to clone '%s', error: %w", url, err)
@@ -173,6 +176,7 @@ func (c *CheckoutSemVer) Checkout(ctx context.Context, path, url string, auth *g
 		RecurseSubmodules: 0,
 		Progress:          nil,
 		Tags:              extgogit.AllTags,
+		CABundle:          auth.CABundle,
 	})
 	if err != nil {
 		return nil, "", fmt.Errorf("unable to clone '%s', error: %w", url, err)
