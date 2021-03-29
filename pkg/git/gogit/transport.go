@@ -48,21 +48,25 @@ func AuthSecretStrategyForURL(URL string) (git.AuthSecretStrategy, error) {
 type BasicAuth struct{}
 
 func (s *BasicAuth) Method(secret corev1.Secret) (*git.Auth, error) {
-	if _, ok := secret.Data[git.CAFile]; ok {
-		return nil, fmt.Errorf("found caFile key in secret '%s' but go-git HTTP transport does not support custom certificates", secret.Name)
-	}
+	auth := &git.Auth{}
+	basicAuth := &http.BasicAuth{}
 
-	auth := &http.BasicAuth{}
+	if caBundle, ok := secret.Data[git.CAFile]; ok {
+		auth.CABundle = caBundle
+	}
 	if username, ok := secret.Data["username"]; ok {
-		auth.Username = string(username)
+		basicAuth.Username = string(username)
 	}
 	if password, ok := secret.Data["password"]; ok {
-		auth.Password = string(password)
+		basicAuth.Password = string(password)
 	}
-	if auth.Username == "" || auth.Password == "" {
+	if (basicAuth.Username == "" && basicAuth.Password != "") || (basicAuth.Username != "" && basicAuth.Password == "") {
 		return nil, fmt.Errorf("invalid '%s' secret data: required fields 'username' and 'password'", secret.Name)
 	}
-	return &git.Auth{AuthMethod: auth}, nil
+	if basicAuth.Username != "" && basicAuth.Password != "" {
+		auth.AuthMethod = basicAuth
+	}
+	return auth, nil
 }
 
 type PublicKeyAuth struct {

@@ -103,7 +103,6 @@ func TestBasicAuthStrategy_Method(t *testing.T) {
 		{"username and password", basicAuthSecretFixture, nil, &git.Auth{AuthMethod: &http.BasicAuth{Username: "git", Password: "password"}}, false},
 		{"without username", basicAuthSecretFixture, func(s *corev1.Secret) { delete(s.Data, "username") }, nil, true},
 		{"without password", basicAuthSecretFixture, func(s *corev1.Secret) { delete(s.Data, "password") }, nil, true},
-		{"empty", corev1.Secret{}, nil, nil, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
