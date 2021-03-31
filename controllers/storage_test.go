@@ -206,6 +206,8 @@ func TestArchiveIgnore(t *testing.T) {
 		"video.wmv",
 		"bar.png",
 		"foo.zip",
+		".drone.yml",
+		".flux.yaml",
 	}
 
 	// this is the table of ignored files and their values. true means that it's
