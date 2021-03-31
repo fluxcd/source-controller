@@ -2,6 +2,25 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.11.0
+
+**Release date:** 2021-03-31
+
+This prerelease comes with support for
+[Git submodules](https://github.com/fluxcd/source-controller/blob/api/v0.11.0/docs/spec/v1beta1/gitrepositories.md#git-submodules)
+and [self-signed TLS certs](https://github.com/fluxcd/source-controller/blob/api/v0.11.0/docs/spec/v1beta1/gitrepositories.md#https-self-signed-certificates)
+when using `gitProvider: go-git`.
+
+Features:
+* Add support for Git submodules with go-git
+  [#327](https://github.com/fluxcd/source-controller/pull/327)
+* Enable self-signed certs for go-git
+  [#324](https://github.com/fluxcd/source-controller/pull/324)
+
+Improvements:
+* Add well-known CI configs to exclusion list
+  [#329](https://github.com/fluxcd/source-controller/pull/329)
+
 ## 0.10.0
 
 **Release date:** 2021-03-26
