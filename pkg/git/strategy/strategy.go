@@ -25,24 +25,24 @@ import (
 	"github.com/fluxcd/source-controller/pkg/git/libgit2"
 )
 
-func CheckoutStrategyForRef(ref *sourcev1.GitRepositoryRef, gitImplementation string) (git.CheckoutStrategy, error) {
-	switch gitImplementation {
+func CheckoutStrategyForRef(ref *sourcev1.GitRepositoryRef, opt git.CheckoutOptions) (git.CheckoutStrategy, error) {
+	switch opt.GitImplementation {
 	case sourcev1.GoGitImplementation:
-		return gogit.CheckoutStrategyForRef(ref), nil
+		return gogit.CheckoutStrategyForRef(ref, opt), nil
 	case sourcev1.LibGit2Implementation:
-		return libgit2.CheckoutStrategyForRef(ref), nil
+		return libgit2.CheckoutStrategyForRef(ref, opt), nil
 	default:
-		return nil, fmt.Errorf("invalid git implementation %s", gitImplementation)
+		return nil, fmt.Errorf("invalid Git implementation %s", opt.GitImplementation)
 	}
 }
 
-func AuthSecretStrategyForURL(url string, gitImplementation string) (git.AuthSecretStrategy, error) {
-	switch gitImplementation {
+func AuthSecretStrategyForURL(url string, opt git.CheckoutOptions) (git.AuthSecretStrategy, error) {
+	switch opt.GitImplementation {
 	case sourcev1.GoGitImplementation:
 		return gogit.AuthSecretStrategyForURL(url)
 	case sourcev1.LibGit2Implementation:
 		return libgit2.AuthSecretStrategyForURL(url)
 	default:
-		return nil, fmt.Errorf("invalid git implementation %s", gitImplementation)
+		return nil, fmt.Errorf("invalid Git implementation %s", opt.GitImplementation)
 	}
 }

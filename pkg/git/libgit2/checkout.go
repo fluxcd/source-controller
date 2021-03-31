@@ -29,7 +29,7 @@ import (
 	"github.com/fluxcd/source-controller/pkg/git"
 )
 
-func CheckoutStrategyForRef(ref *sourcev1.GitRepositoryRef) git.CheckoutStrategy {
+func CheckoutStrategyForRef(ref *sourcev1.GitRepositoryRef, opt git.CheckoutOptions) git.CheckoutStrategy {
 	switch {
 	case ref == nil:
 		return &CheckoutBranch{branch: git.DefaultBranch}

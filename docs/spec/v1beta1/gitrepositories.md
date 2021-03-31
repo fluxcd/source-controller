@@ -57,6 +57,11 @@ type GitRepositorySpec struct {
 	// +kubebuilder:default:=go-git
 	// +optional
 	GitImplementation string `json:"gitImplementation,omitempty"`
+	
+	// When enabled, after the clone is created, initializes all submodules within.
+	// This option is available only when using the 'go-git' GitImplementation.
+	// +optional
+	RecurseSubmodules bool `json:"recurseSubmodules,omitempty"`
 }
 ```
 
@@ -433,6 +438,42 @@ kubectl create secret generic pgp-public-keys \
     --from-file=author1.asc \
     --from-file=author2.asc
 ```
+
+### Git submodules
+
+With `spec.recurseSubmodules` you can configure the controller to
+clone a specific branch including its Git submodules:
+
+```yaml
+apiVersion: source.toolkit.fluxcd.io/v1beta1
+kind: GitRepository
+metadata:
+  name: repo-with-submodules
+  namespace: default
+spec:
+  interval: 1m
+  url: https://github.com/<organization>/<repository>
+  secretRef:
+    name: https-credentials
+  ref:
+    branch: main
+  recurseSubmodules: true
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: https-credentials
+  namespace: default
+type: Opaque
+data:
+  username: <GitHub Username>
+  password: <GitHub Token>
+```
+
+Note that deploy keys can't be used to pull submodules from private repositories
+as GitHub and GitLab doesn't allow a deploy key to be reused across repositories.
+You have to use either HTTPS token-based authentication, or an SSH key belonging
+to a user that has access to the main repository and all its submodules.
 
 ## Status examples
 
