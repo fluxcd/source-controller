@@ -42,9 +42,11 @@ import (
 )
 
 const (
-	excludeFile = ".sourceignore"
-	excludeVCS  = ".git/,.gitignore,.gitmodules,.gitattributes"
-	excludeExt  = "*.jpg,*.jpeg,*.gif,*.png,*.wmv,*.flv,*.tar.gz,*.zip"
+	excludeFile  = ".sourceignore"
+	excludeVCS   = ".git/,.gitignore,.gitmodules,.gitattributes"
+	excludeExt   = "*.jpg,*.jpeg,*.gif,*.png,*.wmv,*.flv,*.tar.gz,*.zip"
+	excludeCI    = ".github/,.circleci/,.travis.yml,.gitlab-ci.yml,appveyor.yml,.drone.yml,cloudbuild.yaml,codeship-services.yml,codeship-steps.yml"
+	excludeExtra = "**/.goreleaser.yml,**/.sops.yaml,**/.flux.yaml"
 )
 
 // Storage manages artifacts
@@ -425,7 +427,8 @@ func loadExcludePatterns(dir string, ignore *string) ([]gitignore.Pattern, error
 	}
 
 	if ignore == nil {
-		for _, p := range strings.Split(excludeExt, ",") {
+		all := strings.Join([]string{excludeExt, excludeCI, excludeExtra}, ",")
+		for _, p := range strings.Split(all, ",") {
 			ps = append(ps, gitignore.ParsePattern(p, path))
 		}
 
