@@ -20,10 +20,13 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"path"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -42,9 +45,10 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
-	"github.com/fluxcd/pkg/gittestserver"
-
 	"github.com/fluxcd/pkg/apis/meta"
+	"github.com/fluxcd/pkg/gittestserver"
+	"github.com/fluxcd/pkg/untar"
+
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
 )
 
@@ -135,8 +139,6 @@ var _ = Describe("GitRepositoryReconciler", func() {
 				When:  time.Now(),
 			}})
 			Expect(err).NotTo(HaveOccurred())
-
-			gitrepo.Worktree()
 
 			for _, ref := range t.createRefs {
 				hRef := plumbing.NewHashReference(plumbing.ReferenceName(ref), commit)
@@ -410,5 +412,137 @@ var _ = Describe("GitRepositoryReconciler", func() {
 				gitImplementation: sourcev1.GoGitImplementation,
 			}),
 		)
+
+		Context("recurse submodules", func() {
+			It("downloads submodules when asked", func() {
+				Expect(gitServer.StartHTTP()).To(Succeed())
+				defer gitServer.StopHTTP()
+
+				u, err := url.Parse(gitServer.HTTPAddress())
+				Expect(err).NotTo(HaveOccurred())
+
+				subRepoURL := *u
+				subRepoURL.Path = path.Join(u.Path, fmt.Sprintf("subrepository-%s.git", randStringRunes(5)))
+
+				// create the git repo to use as a submodule
+				fs := memfs.New()
+				subRepo, err := git.Init(memory.NewStorage(), fs)
+				Expect(err).NotTo(HaveOccurred())
+
+				wt, err := subRepo.Worktree()
+				Expect(err).NotTo(HaveOccurred())
+
+				ff, _ := fs.Create("fixture")
+				_ = ff.Close()
+				_, err = wt.Add(fs.Join("fixture"))
+				Expect(err).NotTo(HaveOccurred())
+
+				_, err = wt.Commit("Sample", &git.CommitOptions{Author: &object.Signature{
+					Name:  "John Doe",
+					Email: "john@example.com",
+					When:  time.Now(),
+				}})
+				Expect(err).NotTo(HaveOccurred())
+
+				remote, err := subRepo.CreateRemote(&config.RemoteConfig{
+					Name: "origin",
+					URLs: []string{subRepoURL.String()},
+				})
+				Expect(err).NotTo(HaveOccurred())
+
+				err = remote.Push(&git.PushOptions{
+					RefSpecs: []config.RefSpec{"refs/heads/*:refs/heads/*", "refs/tags/*:refs/tags/*"},
+				})
+				Expect(err).NotTo(HaveOccurred())
+
+				// this one is linked to a real directory, so that I can
+				// exec `git submodule add` later
+				tmp, err := ioutil.TempDir("", "flux-test")
+				Expect(err).NotTo(HaveOccurred())
+				defer os.RemoveAll(tmp)
+
+				repoDir := filepath.Join(tmp, "git")
+				repo, err := git.PlainInit(repoDir, false)
+				Expect(err).NotTo(HaveOccurred())
+
+				wt, err = repo.Worktree()
+				Expect(err).NotTo(HaveOccurred())
+				_, err = wt.Commit("Initial revision", &git.CommitOptions{
+					Author: &object.Signature{
+						Name:  "John Doe",
+						Email: "john@example.com",
+						When:  time.Now(),
+					}})
+				Expect(err).NotTo(HaveOccurred())
+
+				submodAdd := exec.Command("git", "submodule", "add", "-b", "master", subRepoURL.String(), "sub")
+				submodAdd.Dir = repoDir
+				out, err := submodAdd.CombinedOutput()
+				os.Stdout.Write(out)
+				Expect(err).NotTo(HaveOccurred())
+
+				_, err = wt.Commit("Add submodule", &git.CommitOptions{
+					Author: &object.Signature{
+						Name:  "John Doe",
+						Email: "john@example.com",
+						When:  time.Now(),
+					}})
+				Expect(err).NotTo(HaveOccurred())
+
+				mainRepoURL := *u
+				mainRepoURL.Path = path.Join(u.Path, fmt.Sprintf("repository-%s.git", randStringRunes(5)))
+				remote, err = repo.CreateRemote(&config.RemoteConfig{
+					Name: "origin",
+					URLs: []string{mainRepoURL.String()},
+				})
+				Expect(err).NotTo(HaveOccurred())
+
+				err = remote.Push(&git.PushOptions{
+					RefSpecs: []config.RefSpec{"refs/heads/*:refs/heads/*", "refs/tags/*:refs/tags/*"},
+				})
+				Expect(err).NotTo(HaveOccurred())
+
+				key := types.NamespacedName{
+					Name:      fmt.Sprintf("git-ref-test-%s", randStringRunes(5)),
+					Namespace: namespace.Name,
+				}
+				created := &sourcev1.GitRepository{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      key.Name,
+						Namespace: key.Namespace,
+					},
+					Spec: sourcev1.GitRepositorySpec{
+						URL:               mainRepoURL.String(),
+						Interval:          metav1.Duration{Duration: indexInterval},
+						Reference:         &sourcev1.GitRepositoryRef{Branch: "master"},
+						GitImplementation: sourcev1.GoGitImplementation, // only works with go-git
+						RecurseSubmodules: true,
+					},
+				}
+				Expect(k8sClient.Create(context.Background(), created)).Should(Succeed())
+				defer k8sClient.Delete(context.Background(), created)
+
+				got := &sourcev1.GitRepository{}
+				Eventually(func() bool {
+					_ = k8sClient.Get(context.Background(), key, got)
+					for _, c := range got.Status.Conditions {
+						if c.Reason == sourcev1.GitOperationSucceedReason {
+							return true
+						}
+					}
+					return false
+				}, timeout, interval).Should(BeTrue())
+
+				// check that the downloaded artifact includes the
+				// file from the submodule
+				res, err := http.Get(got.Status.URL)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(res.StatusCode).To(Equal(http.StatusOK))
+
+				_, err = untar.Untar(res.Body, filepath.Join(tmp, "tar"))
+				Expect(err).NotTo(HaveOccurred())
+				Expect(filepath.Join(tmp, "tar", "sub", "fixture")).To(BeAnExistingFile())
+			})
+		})
 	})
 })

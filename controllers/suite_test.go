@@ -19,6 +19,7 @@ package controllers
 import (
 	"io/ioutil"
 	"math/rand"
+	"net/http"
 	"os"
 	"path/filepath"
 	"testing"
@@ -99,8 +100,12 @@ var _ = BeforeSuite(func(done Done) {
 	tmpStoragePath, err := ioutil.TempDir("", "source-controller-storage-")
 	Expect(err).NotTo(HaveOccurred(), "failed to create tmp storage dir")
 
-	storage, err = NewStorage(tmpStoragePath, "localhost", time.Second*30)
+	storage, err = NewStorage(tmpStoragePath, "localhost:5050", time.Second*30)
 	Expect(err).NotTo(HaveOccurred(), "failed to create tmp storage")
+	// serve artifacts from the filesystem, as done in main.go
+	fs := http.FileServer(http.Dir(tmpStoragePath))
+	http.Handle("/", fs)
+	go http.ListenAndServe(":5050", nil)
 
 	k8sManager, err = ctrl.NewManager(cfg, ctrl.Options{
 		Scheme: scheme.Scheme,
