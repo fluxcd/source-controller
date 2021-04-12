@@ -83,13 +83,12 @@ func (s *PublicKeyAuth) Method(secret corev1.Secret) (*git.Auth, error) {
 		return nil, fmt.Errorf("invalid '%s' secret data: required fields 'identity' and 'known_hosts'", secret.Name)
 	}
 
-	password := secret.Data["password"]
-
 	user := s.user
 	if user == "" {
 		user = git.DefaultPublicKeyAuthUser
 	}
 
+	password := secret.Data["password"]
 	pk, err := ssh.NewPublicKeys(user, identity, string(password))
 	if err != nil {
 		return nil, err

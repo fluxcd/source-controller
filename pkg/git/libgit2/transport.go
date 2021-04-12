@@ -119,13 +119,13 @@ func (s *PublicKeyAuth) Method(secret corev1.Secret) (*git.Auth, error) {
 		return nil, err
 	}
 
-	password := secret.Data["password"]
 	// Need to validate private key as it is not
 	// done by git2go when loading the key
-	if len(password) == 0 {
-		_, err = ssh.ParsePrivateKey(identity)
-	} else {
+	password, ok := secret.Data["password"]
+	if ok {
 		_, err = ssh.ParsePrivateKeyWithPassphrase(identity, password)
+	} else {
+		_, err = ssh.ParsePrivateKey(identity)
 	}
 
 	if err != nil {
