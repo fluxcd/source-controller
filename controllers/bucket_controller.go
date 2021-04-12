@@ -17,6 +17,7 @@ limitations under the License.
 package controllers
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha1"
 	"fmt"
@@ -49,6 +50,7 @@ import (
 	"github.com/fluxcd/pkg/runtime/predicates"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
+	"github.com/fluxcd/source-controller/pkg/sourceignore"
 )
 
 // +kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=buckets,verbs=get;list;watch;create;update;patch;delete
@@ -202,6 +204,9 @@ func (r *BucketReconciler) reconcile(ctx context.Context, bucket sourcev1.Bucket
 		return sourcev1.BucketNotReady(bucket, sourcev1.BucketOperationFailedReason, err.Error()), err
 	}
 
+	ps := sourceignore.GetPatterns(bytes.NewBufferString(*bucket.Spec.Ignore), nil)
+	matcher := sourceignore.NewMatcher(ps)
+
 	// download bucket content
 	for object := range s3Client.ListObjects(ctxTimeout, bucket.Spec.BucketName, minio.ListObjectsOptions{
 		Recursive: true,
@@ -213,6 +218,10 @@ func (r *BucketReconciler) reconcile(ctx context.Context, bucket sourcev1.Bucket
 		}
 
 		if strings.HasSuffix(object.Key, "/") {
+			continue
+		}
+
+		if matcher.Match([]string{object.Key}, false) {
 			continue
 		}
 

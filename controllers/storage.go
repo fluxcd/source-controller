@@ -18,8 +18,6 @@ package controllers
 
 import (
 	"archive/tar"
-	"bufio"
-	"bytes"
 	"compress/gzip"
 	"crypto/sha1"
 	"fmt"
@@ -39,6 +37,7 @@ import (
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
 	"github.com/fluxcd/source-controller/internal/fs"
+	"github.com/fluxcd/source-controller/pkg/sourceignore"
 )
 
 const (
@@ -159,11 +158,11 @@ func (s *Storage) Archive(artifact *sourcev1.Artifact, dir string, ignore *strin
 		return fmt.Errorf("invalid dir path: %s", dir)
 	}
 
-	ps, err := loadExcludePatterns(dir, ignore)
+	ps, err := sourceignore.LoadExcludePatterns(dir, ignore)
 	if err != nil {
 		return err
 	}
-	matcher := gitignore.NewMatcher(ps)
+	matcher := sourceignore.NewMatcher(ps)
 
 	localPath := s.LocalPath(*artifact)
 	tf, err := ioutil.TempFile(filepath.Split(localPath))
@@ -398,51 +397,6 @@ func (s *Storage) LocalPath(artifact sourcev1.Artifact) string {
 		return ""
 	}
 	return filepath.Join(s.BasePath, artifact.Path)
-}
-
-// getPatterns collects ignore patterns from the given reader and returns them
-// as a gitignore.Pattern slice.
-func getPatterns(reader io.Reader, path []string) []gitignore.Pattern {
-	var ps []gitignore.Pattern
-	scanner := bufio.NewScanner(reader)
-
-	for scanner.Scan() {
-		s := scanner.Text()
-		if !strings.HasPrefix(s, "#") && len(strings.TrimSpace(s)) > 0 {
-			ps = append(ps, gitignore.ParsePattern(s, path))
-		}
-	}
-
-	return ps
-}
-
-// loadExcludePatterns loads the excluded patterns from sourceignore or other
-// sources.
-func loadExcludePatterns(dir string, ignore *string) ([]gitignore.Pattern, error) {
-	path := strings.Split(dir, "/")
-
-	var ps []gitignore.Pattern
-	for _, p := range strings.Split(excludeVCS, ",") {
-		ps = append(ps, gitignore.ParsePattern(p, path))
-	}
-
-	if ignore == nil {
-		all := strings.Join([]string{excludeExt, excludeCI, excludeExtra}, ",")
-		for _, p := range strings.Split(all, ",") {
-			ps = append(ps, gitignore.ParsePattern(p, path))
-		}
-
-		if f, err := os.Open(filepath.Join(dir, excludeFile)); err == nil {
-			defer f.Close()
-			ps = append(ps, getPatterns(f, path)...)
-		} else if !os.IsNotExist(err) {
-			return nil, err
-		}
-	} else {
-		ps = append(ps, getPatterns(bytes.NewBufferString(*ignore), path)...)
-	}
-
-	return ps, nil
 }
 
 // newHash returns a new SHA1 hash.
