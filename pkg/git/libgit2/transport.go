@@ -121,7 +121,13 @@ func (s *PublicKeyAuth) Method(secret corev1.Secret) (*git.Auth, error) {
 
 	// Need to validate private key as it is not
 	// done by git2go when loading the key
-	_, err = ssh.ParsePrivateKey(identity)
+	password, ok := secret.Data["password"]
+	if ok {
+		_, err = ssh.ParsePrivateKeyWithPassphrase(identity, password)
+	} else {
+		_, err = ssh.ParsePrivateKey(identity)
+	}
+
 	if err != nil {
 		return nil, err
 	}
@@ -132,7 +138,7 @@ func (s *PublicKeyAuth) Method(secret corev1.Secret) (*git.Auth, error) {
 	}
 
 	credCallback := func(url string, usernameFromURL string, allowedTypes git2go.CredType) (*git2go.Cred, error) {
-		cred, err := git2go.NewCredSshKeyFromMemory(user, "", string(identity), "")
+		cred, err := git2go.NewCredSshKeyFromMemory(user, "", string(identity), string(password))
 		if err != nil {
 			return nil, err
 		}

@@ -88,7 +88,8 @@ func (s *PublicKeyAuth) Method(secret corev1.Secret) (*git.Auth, error) {
 		user = git.DefaultPublicKeyAuthUser
 	}
 
-	pk, err := ssh.NewPublicKeys(user, identity, "")
+	password := secret.Data["password"]
+	pk, err := ssh.NewPublicKeys(user, identity, string(password))
 	if err != nil {
 		return nil, err
 	}
