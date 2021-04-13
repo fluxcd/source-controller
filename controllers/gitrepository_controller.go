@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -45,6 +46,7 @@ import (
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
 	"github.com/fluxcd/source-controller/pkg/git"
 	"github.com/fluxcd/source-controller/pkg/git/strategy"
+	"github.com/fluxcd/source-controller/pkg/sourceignore"
 )
 
 // +kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=gitrepositories,verbs=get;list;watch;create;update;patch;delete
@@ -270,7 +272,15 @@ func (r *GitRepositoryReconciler) reconcile(ctx context.Context, repository sour
 	defer unlock()
 
 	// archive artifact and check integrity
-	if err := r.Storage.Archive(&artifact, tmpGit, repository.Spec.Ignore); err != nil {
+	ps, err := sourceignore.LoadIgnorePatterns(tmpGit, nil)
+	if err != nil {
+		err = fmt.Errorf(".sourceignore error: %w", err)
+		return sourcev1.GitRepositoryNotReady(repository, sourcev1.StorageOperationFailedReason, err.Error()), err
+	}
+	if repository.Spec.Ignore != nil {
+		ps = append(ps, sourceignore.ReadPatterns(strings.NewReader(*repository.Spec.Ignore), nil)...)
+	}
+	if err := r.Storage.Archive(&artifact, tmpGit, SourceIgnoreFilter(ps, nil)); err != nil {
 		err = fmt.Errorf("storage archive error: %w", err)
 		return sourcev1.GitRepositoryNotReady(repository, sourcev1.StorageOperationFailedReason, err.Error()), err
 	}

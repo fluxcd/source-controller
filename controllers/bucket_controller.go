@@ -17,7 +17,6 @@ limitations under the License.
 package controllers
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha1"
 	"fmt"
@@ -204,7 +203,23 @@ func (r *BucketReconciler) reconcile(ctx context.Context, bucket sourcev1.Bucket
 		return sourcev1.BucketNotReady(bucket, sourcev1.BucketOperationFailedReason, err.Error()), err
 	}
 
-	ps := sourceignore.GetPatterns(bytes.NewBufferString(*bucket.Spec.Ignore), nil)
+	// Look for file with ignore rules first
+	// NB: S3 has flat filepath keys making it impossible to look
+	// for files in "subdirectories" without building up a tree first.
+	path := filepath.Join(tempDir, sourceignore.IgnoreFile)
+	if err := s3Client.FGetObject(ctxTimeout, bucket.Spec.BucketName, sourceignore.IgnoreFile, path, minio.GetObjectOptions{}); err != nil {
+		if resp, ok := err.(minio.ErrorResponse); ok && resp.Code != "NoSuchKey" {
+			return sourcev1.BucketNotReady(bucket, sourcev1.BucketOperationFailedReason, err.Error()), err
+		}
+	}
+	ps, err := sourceignore.ReadIgnoreFile(path, nil)
+	if err != nil {
+		return sourcev1.BucketNotReady(bucket, sourcev1.BucketOperationFailedReason, err.Error()), err
+	}
+	// In-spec patterns take precedence
+	if bucket.Spec.Ignore != nil {
+		ps = append(ps, sourceignore.ReadPatterns(strings.NewReader(*bucket.Spec.Ignore), nil)...)
+	}
 	matcher := sourceignore.NewMatcher(ps)
 
 	// download bucket content
@@ -217,7 +232,7 @@ func (r *BucketReconciler) reconcile(ctx context.Context, bucket sourcev1.Bucket
 			return sourcev1.BucketNotReady(bucket, sourcev1.BucketOperationFailedReason, err.Error()), err
 		}
 
-		if strings.HasSuffix(object.Key, "/") {
+		if strings.HasSuffix(object.Key, "/") || object.Key == sourceignore.IgnoreFile {
 			continue
 		}
 
@@ -264,7 +279,7 @@ func (r *BucketReconciler) reconcile(ctx context.Context, bucket sourcev1.Bucket
 	defer unlock()
 
 	// archive artifact and check integrity
-	if err := r.Storage.Archive(&artifact, tempDir, bucket.Spec.Ignore); err != nil {
+	if err := r.Storage.Archive(&artifact, tempDir, nil); err != nil {
 		err = fmt.Errorf("storage archive error: %w", err)
 		return sourcev1.BucketNotReady(bucket, sourcev1.StorageOperationFailedReason, err.Error()), err
 	}
