@@ -1,4 +1,4 @@
-FROM golang:1.15-alpine
+FROM golang:1.16-alpine
 
 # Add any build or testing essential system packages
 RUN apk add --no-cache build-base git pkgconf
