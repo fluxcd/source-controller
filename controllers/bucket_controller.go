@@ -49,6 +49,7 @@ import (
 	"github.com/fluxcd/pkg/runtime/predicates"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
+	"github.com/fluxcd/source-controller/pkg/sourceignore"
 )
 
 // +kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=buckets,verbs=get;list;watch;create;update;patch;delete
@@ -202,6 +203,25 @@ func (r *BucketReconciler) reconcile(ctx context.Context, bucket sourcev1.Bucket
 		return sourcev1.BucketNotReady(bucket, sourcev1.BucketOperationFailedReason, err.Error()), err
 	}
 
+	// Look for file with ignore rules first
+	// NB: S3 has flat filepath keys making it impossible to look
+	// for files in "subdirectories" without building up a tree first.
+	path := filepath.Join(tempDir, sourceignore.IgnoreFile)
+	if err := s3Client.FGetObject(ctxTimeout, bucket.Spec.BucketName, sourceignore.IgnoreFile, path, minio.GetObjectOptions{}); err != nil {
+		if resp, ok := err.(minio.ErrorResponse); ok && resp.Code != "NoSuchKey" {
+			return sourcev1.BucketNotReady(bucket, sourcev1.BucketOperationFailedReason, err.Error()), err
+		}
+	}
+	ps, err := sourceignore.ReadIgnoreFile(path, nil)
+	if err != nil {
+		return sourcev1.BucketNotReady(bucket, sourcev1.BucketOperationFailedReason, err.Error()), err
+	}
+	// In-spec patterns take precedence
+	if bucket.Spec.Ignore != nil {
+		ps = append(ps, sourceignore.ReadPatterns(strings.NewReader(*bucket.Spec.Ignore), nil)...)
+	}
+	matcher := sourceignore.NewMatcher(ps)
+
 	// download bucket content
 	for object := range s3Client.ListObjects(ctxTimeout, bucket.Spec.BucketName, minio.ListObjectsOptions{
 		Recursive: true,
@@ -212,7 +232,11 @@ func (r *BucketReconciler) reconcile(ctx context.Context, bucket sourcev1.Bucket
 			return sourcev1.BucketNotReady(bucket, sourcev1.BucketOperationFailedReason, err.Error()), err
 		}
 
-		if strings.HasSuffix(object.Key, "/") {
+		if strings.HasSuffix(object.Key, "/") || object.Key == sourceignore.IgnoreFile {
+			continue
+		}
+
+		if matcher.Match([]string{object.Key}, false) {
 			continue
 		}
 
@@ -255,7 +279,7 @@ func (r *BucketReconciler) reconcile(ctx context.Context, bucket sourcev1.Bucket
 	defer unlock()
 
 	// archive artifact and check integrity
-	if err := r.Storage.Archive(&artifact, tempDir, bucket.Spec.Ignore); err != nil {
+	if err := r.Storage.Archive(&artifact, tempDir, nil); err != nil {
 		err = fmt.Errorf("storage archive error: %w", err)
 		return sourcev1.BucketNotReady(bucket, sourcev1.StorageOperationFailedReason, err.Error()), err
 	}

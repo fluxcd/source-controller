@@ -1,6 +1,6 @@
 module github.com/fluxcd/source-controller
 
-go 1.15
+go 1.16
 
 replace github.com/fluxcd/source-controller/api => ./api
 
@@ -28,6 +28,7 @@ require (
 	github.com/spf13/pflag v1.0.5
 	golang.org/x/crypto v0.0.0-20210322153248-0c34fe9e7dc2
 	golang.org/x/sync v0.0.0-20201207232520-09787c993a3a
+	gotest.tools v2.2.0+incompatible
 	helm.sh/helm/v3 v3.5.3
 	k8s.io/api v0.20.2
 	k8s.io/apimachinery v0.20.2

@@ -1,6 +1,6 @@
 module github.com/fluxcd/source-controller/api
 
-go 1.15
+go 1.16
 
 require (
 	github.com/fluxcd/pkg/apis/meta v0.8.0

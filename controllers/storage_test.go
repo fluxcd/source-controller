@@ -1,3 +1,19 @@
+/*
+Copyright 2020, 2021 The Flux authors
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package controllers
 
 import (
@@ -7,27 +23,15 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
-	"os/exec"
 	"path"
 	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/go-git/go-git/v5/plumbing/format/gitignore"
+
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
 )
-
-type ignoreMap map[string]bool
-
-var remoteRepository = "https://github.com/fluxcd/source-controller"
-
-func init() {
-	// if this remote repo ever gets in your way, this is an escape; just set
-	// this to the url you want to clone. Be the source you want to be.
-	s := os.Getenv("REMOTE_REPOSITORY")
-	if s != "" {
-		remoteRepository = s
-	}
-}
 
 func createStoragePath() (string, error) {
 	return ioutil.TempDir("", "")
@@ -67,16 +71,16 @@ func TestStorageConstructor(t *testing.T) {
 
 // walks a tar.gz and looks for paths with the basename. It does not match
 // symlinks properly at this time because that's painful.
-func walkTar(tarFile string, match string) (bool, error) {
+func walkTar(tarFile string, match string) (int64, bool, error) {
 	f, err := os.Open(tarFile)
 	if err != nil {
-		return false, fmt.Errorf("could not open file: %w", err)
+		return 0, false, fmt.Errorf("could not open file: %w", err)
 	}
 	defer f.Close()
 
 	gzr, err := gzip.NewReader(f)
 	if err != nil {
-		return false, fmt.Errorf("could not unzip file: %w", err)
+		return 0, false, fmt.Errorf("could not unzip file: %w", err)
 	}
 	defer gzr.Close()
 
@@ -86,177 +90,156 @@ func walkTar(tarFile string, match string) (bool, error) {
 		if err == io.EOF {
 			break
 		} else if err != nil {
-			return false, fmt.Errorf("Corrupt tarball reading header: %w", err)
+			return 0, false, fmt.Errorf("corrupt tarball reading header: %w", err)
 		}
 
 		switch header.Typeflag {
 		case tar.TypeDir, tar.TypeReg:
-			if filepath.Base(header.Name) == match {
-				return true, nil
+			if header.Name == match {
+				return header.Size, true, nil
 			}
 		default:
 			// skip
 		}
 	}
 
-	return false, nil
+	return 0, false, nil
 }
 
-func testPatterns(t *testing.T, storage *Storage, artifact sourcev1.Artifact, table ignoreMap) {
-	for name, expected := range table {
-		res, err := walkTar(storage.LocalPath(artifact), name)
-		if err != nil {
-			t.Fatalf("while reading tarball: %v", err)
-		}
+func TestStorage_Archive(t *testing.T) {
+	dir, err := createStoragePath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(cleanupStoragePath(dir))
 
-		if res != expected {
-			if expected {
-				t.Fatalf("Could not find repository file matching %q in tarball for repo %q", name, remoteRepository)
-			} else {
-				t.Fatalf("Repository contained ignored file %q in tarball for repo %q", name, remoteRepository)
+	storage, err := NewStorage(dir, "hostname", time.Minute)
+	if err != nil {
+		t.Fatalf("error while bootstrapping storage: %v", err)
+	}
+
+	createFiles := func(files map[string][]byte) (dir string, err error) {
+		defer func() {
+			if err != nil && dir != "" {
+				os.RemoveAll(dir)
+			}
+		}()
+		dir, err = ioutil.TempDir("", "archive-test-files-")
+		if err != nil {
+			return
+		}
+		for name, b := range files {
+			absPath := filepath.Join(dir, name)
+			if err = os.MkdirAll(filepath.Dir(absPath), 0755); err != nil {
+				return
+			}
+			f, err := os.Create(absPath)
+			if err != nil {
+				return "", fmt.Errorf("could not create file %q: %w", absPath, err)
+			}
+			if n, err := f.Write(b); err != nil {
+				f.Close()
+				return "", fmt.Errorf("could not write %d bytes to file %q: %w", n, f.Name(), err)
+			}
+			f.Close()
+		}
+		return
+	}
+
+	matchFiles := func(t *testing.T, storage *Storage, artifact sourcev1.Artifact, files map[string][]byte) {
+		for name, b := range files {
+			mustExist := !(name[0:1] == "!")
+			if !mustExist {
+				name = name[1:]
+			}
+			s, exist, err := walkTar(storage.LocalPath(artifact), name)
+			if err != nil {
+				t.Fatalf("failed reading tarball: %v", err)
+			}
+			if bs := int64(len(b)); s != bs {
+				t.Fatalf("%q size %v != %v", name, s, bs)
+			}
+			if exist != mustExist {
+				if mustExist {
+					t.Errorf("could not find file %q in tarball", name)
+				} else {
+					t.Errorf("tarball contained excluded file %q", name)
+				}
 			}
 		}
 	}
-}
 
-func createArchive(t *testing.T, storage *Storage, filenames []string, sourceIgnore string, spec sourcev1.GitRepositorySpec) sourcev1.Artifact {
-	gitDir, err := ioutil.TempDir("", "")
-	if err != nil {
-		t.Fatalf("could not create temporary directory: %v", err)
+	tests := []struct {
+		name    string
+		files   map[string][]byte
+		filter  ArchiveFileFilter
+		want    map[string][]byte
+		wantErr bool
+	}{
+		{
+			name: "no filter",
+			files: map[string][]byte{
+				".git/config":   nil,
+				"file.jpg":      []byte(`contents`),
+				"manifest.yaml": nil,
+			},
+			filter: nil,
+			want: map[string][]byte{
+				".git/config":   nil,
+				"file.jpg":      []byte(`contents`),
+				"manifest.yaml": nil,
+			},
+		},
+		{
+			name: "exclude VCS",
+			files: map[string][]byte{
+				".git/config":   nil,
+				"manifest.yaml": nil,
+			},
+			filter: SourceIgnoreFilter(nil, nil),
+			want: map[string][]byte{
+				"!.git/config":  nil,
+				"manifest.yaml": nil,
+			},
+		},
+		{
+			name: "custom",
+			files: map[string][]byte{
+				".git/config": nil,
+				"custom":      nil,
+				"horse.jpg":   nil,
+			},
+			filter: SourceIgnoreFilter([]gitignore.Pattern{
+				gitignore.ParsePattern("custom", nil),
+			}, nil),
+			want: map[string][]byte{
+				"!git/config": nil,
+				"!custom":     nil,
+				"horse.jpg":   nil,
+			},
+			wantErr: false,
+		},
 	}
-	t.Cleanup(func() { os.RemoveAll(gitDir) })
-
-	if err := exec.Command("git", "clone", remoteRepository, gitDir).Run(); err != nil {
-		t.Fatalf("Could not clone remote repository: %v", err)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir, err := createFiles(tt.files)
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			defer os.RemoveAll(dir)
+			artifact := sourcev1.Artifact{
+				Path: filepath.Join(randStringRunes(10), randStringRunes(10), randStringRunes(10)+".tar.gz"),
+			}
+			if err := storage.MkdirAll(artifact); err != nil {
+				t.Fatalf("artifact directory creation failed: %v", err)
+			}
+			if err := storage.Archive(&artifact, dir, tt.filter); (err != nil) != tt.wantErr {
+				t.Errorf("Archive() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			matchFiles(t, storage, artifact, tt.want)
+		})
 	}
-
-	// inject files.. just empty files
-	for _, name := range filenames {
-		f, err := os.Create(filepath.Join(gitDir, name))
-		if err != nil {
-			t.Fatalf("Could not inject filename %q: %v", name, err)
-		}
-		f.Close()
-	}
-
-	// inject sourceignore if not empty
-	if sourceIgnore != "" {
-		si, err := os.Create(filepath.Join(gitDir, ".sourceignore"))
-		if err != nil {
-			t.Fatalf("Could not create .sourceignore: %v", err)
-		}
-
-		if _, err := io.WriteString(si, sourceIgnore); err != nil {
-			t.Fatalf("Could not write to .sourceignore: %v", err)
-		}
-
-		si.Close()
-	}
-	artifact := sourcev1.Artifact{
-		Path: filepath.Join(randStringRunes(10), randStringRunes(10), randStringRunes(10)+".tar.gz"),
-	}
-	if err := storage.MkdirAll(artifact); err != nil {
-		t.Fatalf("artifact directory creation failed: %v", err)
-	}
-
-	if err := storage.Archive(&artifact, gitDir, spec.Ignore); err != nil {
-		t.Fatalf("archiving failed: %v", err)
-	}
-
-	if !storage.ArtifactExist(artifact) {
-		t.Fatalf("artifact was created but does not exist: %+v", artifact)
-	}
-
-	return artifact
-}
-
-func stringPtr(s string) *string {
-	return &s
-}
-
-func TestArchiveBasic(t *testing.T) {
-	table := ignoreMap{
-		"README.md":  true,
-		".gitignore": false,
-	}
-
-	dir, err := createStoragePath()
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(cleanupStoragePath(dir))
-
-	storage, err := NewStorage(dir, "hostname", time.Minute)
-	if err != nil {
-		t.Fatalf("Error while bootstrapping storage: %v", err)
-	}
-
-	testPatterns(t, storage, createArchive(t, storage, []string{"README.md", ".gitignore"}, "", sourcev1.GitRepositorySpec{}), table)
-}
-
-func TestArchiveIgnore(t *testing.T) {
-	// this is a list of files that will be created in the repository for each
-	// subtest. it is manipulated later on.
-	filenames := []string{
-		"foo.tar.gz",
-		"bar.jpg",
-		"bar.gif",
-		"foo.jpeg",
-		"video.flv",
-		"video.wmv",
-		"bar.png",
-		"foo.zip",
-		".drone.yml",
-		".flux.yaml",
-	}
-
-	// this is the table of ignored files and their values. true means that it's
-	// present in the resulting tarball.
-	table := ignoreMap{}
-	for _, item := range filenames {
-		table[item] = false
-	}
-
-	dir, err := createStoragePath()
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(cleanupStoragePath(dir))
-
-	storage, err := NewStorage(dir, "hostname", time.Minute)
-	if err != nil {
-		t.Fatalf("Error while bootstrapping storage: %v", err)
-	}
-
-	t.Run("automatically ignored files", func(t *testing.T) {
-		testPatterns(t, storage, createArchive(t, storage, filenames, "", sourcev1.GitRepositorySpec{}), table)
-	})
-
-	table = ignoreMap{}
-	for _, item := range filenames {
-		table[item] = true
-	}
-
-	t.Run("only vcs ignored files", func(t *testing.T) {
-		testPatterns(t, storage, createArchive(t, storage, filenames, "", sourcev1.GitRepositorySpec{Ignore: stringPtr("")}), table)
-	})
-
-	filenames = append(filenames, "test.txt")
-	table["test.txt"] = false
-	sourceIgnoreFile := "*.txt"
-
-	t.Run("sourceignore injected via CRD", func(t *testing.T) {
-		testPatterns(t, storage, createArchive(t, storage, filenames, "", sourcev1.GitRepositorySpec{Ignore: stringPtr(sourceIgnoreFile)}), table)
-	})
-
-	table = ignoreMap{}
-	for _, item := range filenames {
-		table[item] = false
-	}
-
-	t.Run("sourceignore injected via filename", func(t *testing.T) {
-		testPatterns(t, storage, createArchive(t, storage, filenames, sourceIgnoreFile, sourcev1.GitRepositorySpec{}), table)
-	})
 }
 
 func TestStorageRemoveAllButCurrent(t *testing.T) {

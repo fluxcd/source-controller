@@ -18,8 +18,6 @@ package controllers
 
 import (
 	"archive/tar"
-	"bufio"
-	"bytes"
 	"compress/gzip"
 	"crypto/sha1"
 	"fmt"
@@ -39,14 +37,7 @@ import (
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
 	"github.com/fluxcd/source-controller/internal/fs"
-)
-
-const (
-	excludeFile  = ".sourceignore"
-	excludeVCS   = ".git/,.gitignore,.gitmodules,.gitattributes"
-	excludeExt   = "*.jpg,*.jpeg,*.gif,*.png,*.wmv,*.flv,*.tar.gz,*.zip"
-	excludeCI    = ".github/,.circleci/,.travis.yml,.gitlab-ci.yml,appveyor.yml,.drone.yml,cloudbuild.yaml,codeship-services.yml,codeship-steps.yml"
-	excludeExtra = "**/.goreleaser.yml,**/.sops.yaml,**/.flux.yaml"
+	"github.com/fluxcd/source-controller/pkg/sourceignore"
 )
 
 // Storage manages artifacts
@@ -151,19 +142,35 @@ func (s *Storage) ArtifactExist(artifact sourcev1.Artifact) bool {
 	return fi.Mode().IsRegular()
 }
 
-// Archive atomically archives the given directory as a tarball to the given v1beta1.Artifact
-// path, excluding any VCS specific files and directories, or any of the excludes defined in
-// the excludeFiles. If successful, it sets the checksum and last update time on the artifact.
-func (s *Storage) Archive(artifact *sourcev1.Artifact, dir string, ignore *string) (err error) {
+// ArchiveFileFilter must return true if a file should not be included
+// in the archive after inspecting the given path and/or os.FileInfo.
+type ArchiveFileFilter func(p string, fi os.FileInfo) bool
+
+// SourceIgnoreFilter returns an ArchiveFileFilter that filters out
+// files matching sourceignore.VCSPatterns and any of the provided
+// patterns. If an empty gitignore.Pattern slice is given, the matcher
+// is set to sourceignore.NewDefaultMatcher.
+func SourceIgnoreFilter(ps []gitignore.Pattern, domain []string) ArchiveFileFilter {
+	matcher := sourceignore.NewDefaultMatcher(ps, domain)
+	if len(ps) > 0 {
+		ps = append(sourceignore.VCSPatterns(domain), ps...)
+		matcher = sourceignore.NewMatcher(ps)
+	}
+	return func(p string, fi os.FileInfo) bool {
+		// The directory is always false as the archiver does already skip
+		// directories.
+		return matcher.Match(strings.Split(p, string(filepath.Separator)), false)
+	}
+}
+
+// Archive atomically archives the given directory as a tarball to the
+// given v1beta1.Artifact path, excluding directories and any
+// ArchiveFileFilter matches. If successful, it sets the checksum and
+// last update time on the artifact.
+func (s *Storage) Archive(artifact *sourcev1.Artifact, dir string, filter ArchiveFileFilter) (err error) {
 	if f, err := os.Stat(dir); os.IsNotExist(err) || !f.IsDir() {
 		return fmt.Errorf("invalid dir path: %s", dir)
 	}
-
-	ps, err := loadExcludePatterns(dir, ignore)
-	if err != nil {
-		return err
-	}
-	matcher := gitignore.NewMatcher(ps)
 
 	localPath := s.LocalPath(*artifact)
 	tf, err := ioutil.TempFile(filepath.Split(localPath))
@@ -182,7 +189,52 @@ func (s *Storage) Archive(artifact *sourcev1.Artifact, dir string, ignore *strin
 
 	gw := gzip.NewWriter(mw)
 	tw := tar.NewWriter(gw)
-	if err := writeToArchiveExcludeMatches(dir, matcher, tw); err != nil {
+	if err := filepath.Walk(dir, func(p string, fi os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		// Ignore anything that is not a file (directories, symlinks)
+		if !fi.Mode().IsRegular() {
+			return nil
+		}
+
+		// Skip filtered files
+		if filter != nil && filter(p, fi) {
+			return nil
+		}
+
+		header, err := tar.FileInfoHeader(fi, p)
+		if err != nil {
+			return err
+		}
+		// The name needs to be modified to maintain directory structure
+		// as tar.FileInfoHeader only has access to the base name of the file.
+		// Ref: https://golang.org/src/archive/tar/common.go?#L626
+		relFilePath := p
+		if filepath.IsAbs(dir) {
+			relFilePath, err = filepath.Rel(dir, p)
+			if err != nil {
+				return err
+			}
+		}
+		header.Name = relFilePath
+
+		if err := tw.WriteHeader(header); err != nil {
+			return err
+		}
+
+		f, err := os.Open(p)
+		if err != nil {
+			f.Close()
+			return err
+		}
+		if _, err := io.Copy(tw, f); err != nil {
+			f.Close()
+			return err
+		}
+		return f.Close()
+	}); err != nil {
 		tw.Close()
 		gw.Close()
 		tf.Close()
@@ -213,58 +265,6 @@ func (s *Storage) Archive(artifact *sourcev1.Artifact, dir string, ignore *strin
 	artifact.Checksum = fmt.Sprintf("%x", h.Sum(nil))
 	artifact.LastUpdateTime = metav1.Now()
 	return nil
-}
-
-// writeToArchiveExcludeMatches walks over the given dir and writes any regular file that does
-// not match the given gitignore.Matcher.
-func writeToArchiveExcludeMatches(dir string, matcher gitignore.Matcher, writer *tar.Writer) error {
-	fn := func(p string, fi os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-
-		// Ignore anything that is not a file (directories, symlinks)
-		if !fi.Mode().IsRegular() {
-			return nil
-		}
-
-		// Ignore excluded extensions and files
-		if matcher.Match(strings.Split(p, "/"), false) {
-			return nil
-		}
-
-		header, err := tar.FileInfoHeader(fi, p)
-		if err != nil {
-			return err
-		}
-		// The name needs to be modified to maintain directory structure
-		// as tar.FileInfoHeader only has access to the base name of the file.
-		// Ref: https://golang.org/src/archive/tar/common.go?#L626
-		relFilePath := p
-		if filepath.IsAbs(dir) {
-			relFilePath, err = filepath.Rel(dir, p)
-			if err != nil {
-				return err
-			}
-		}
-		header.Name = relFilePath
-
-		if err := writer.WriteHeader(header); err != nil {
-			return err
-		}
-
-		f, err := os.Open(p)
-		if err != nil {
-			f.Close()
-			return err
-		}
-		if _, err := io.Copy(writer, f); err != nil {
-			f.Close()
-			return err
-		}
-		return f.Close()
-	}
-	return filepath.Walk(dir, fn)
 }
 
 // AtomicWriteFile atomically writes the io.Reader contents to the v1beta1.Artifact path.
@@ -398,51 +398,6 @@ func (s *Storage) LocalPath(artifact sourcev1.Artifact) string {
 		return ""
 	}
 	return filepath.Join(s.BasePath, artifact.Path)
-}
-
-// getPatterns collects ignore patterns from the given reader and returns them
-// as a gitignore.Pattern slice.
-func getPatterns(reader io.Reader, path []string) []gitignore.Pattern {
-	var ps []gitignore.Pattern
-	scanner := bufio.NewScanner(reader)
-
-	for scanner.Scan() {
-		s := scanner.Text()
-		if !strings.HasPrefix(s, "#") && len(strings.TrimSpace(s)) > 0 {
-			ps = append(ps, gitignore.ParsePattern(s, path))
-		}
-	}
-
-	return ps
-}
-
-// loadExcludePatterns loads the excluded patterns from sourceignore or other
-// sources.
-func loadExcludePatterns(dir string, ignore *string) ([]gitignore.Pattern, error) {
-	path := strings.Split(dir, "/")
-
-	var ps []gitignore.Pattern
-	for _, p := range strings.Split(excludeVCS, ",") {
-		ps = append(ps, gitignore.ParsePattern(p, path))
-	}
-
-	if ignore == nil {
-		all := strings.Join([]string{excludeExt, excludeCI, excludeExtra}, ",")
-		for _, p := range strings.Split(all, ",") {
-			ps = append(ps, gitignore.ParsePattern(p, path))
-		}
-
-		if f, err := os.Open(filepath.Join(dir, excludeFile)); err == nil {
-			defer f.Close()
-			ps = append(ps, getPatterns(f, path)...)
-		} else if !os.IsNotExist(err) {
-			return nil, err
-		}
-	} else {
-		ps = append(ps, getPatterns(bytes.NewBufferString(*ignore), path)...)
-	}
-
-	return ps, nil
 }
 
 // newHash returns a new SHA1 hash.
