@@ -22,6 +22,7 @@ import (
 
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
 	"github.com/go-git/go-git/v5/plumbing/transport/ssh"
+	cryptossh "golang.org/x/crypto/ssh"
 	corev1 "k8s.io/api/core/v1"
 
 	"github.com/fluxcd/pkg/ssh/knownhosts"
@@ -88,16 +89,20 @@ func (s *PublicKeyAuth) Method(secret corev1.Secret) (*git.Auth, error) {
 		user = git.DefaultPublicKeyAuthUser
 	}
 
-	password := secret.Data["password"]
-	pk, err := ssh.NewPublicKeys(user, identity, string(password))
+	signer, err := cryptossh.ParsePrivateKey(identity)
+	if _, ok := err.(*cryptossh.PassphraseMissingError); ok {
+		signer, err = cryptossh.ParsePrivateKeyWithPassphrase(identity, secret.Data["password"])
+	}
 	if err != nil {
 		return nil, err
 	}
 
+	pk := &ssh.PublicKeys{Signer: signer, User: user}
 	callback, err := knownhosts.New(knownHosts)
 	if err != nil {
 		return nil, err
 	}
 	pk.HostKeyCallback = callback
+
 	return &git.Auth{AuthMethod: pk}, nil
 }

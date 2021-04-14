@@ -60,6 +60,16 @@ wGctSx4kHsZGhJv5qwKqqPEFPhUzph8D2tm2TABk8HJa5KJFDbGrcfvk2uODAoZr
 MbcpIxCfl8oB09bWfY6tDQjyvwSYYo2Phdwm7kT92xc=
 -----END RSA PRIVATE KEY-----`
 
+	// generated with sshkey-gen with password `password`. Fails test
+	secretEDCSAFicture = `-----BEGIN OPENSSH PRIVATE KEY-----
+b3BlbnNzaC1rZXktdjEAAAAACmFlczI1Ni1jdHIAAAAGYmNyeXB0AAAAGAAAABCUNUDYpS
+GJ0GjHSoOJvNzrAAAAEAAAAAEAAAAzAAAAC3NzaC1lZDI1NTE5AAAAIAUwMlCdqwINTCFe
+0QTLK2w04AMyMDkH4keEHnTDB9KAAAAAoLv9vPS65ie3CQ9XYDXhX4TQUKg15kYmbt/Lqu
+Eg5i6G2aJOIeq/ZwBOjySG328zucwptzScx1bgwIHfkPmUSBBoATcilGtglVFDmBuYSrky
+r2bP9MJYmUIx3RkMZI0RcYIwuH/fMNPnyBbGMCwEEZP3xYXst8oNyGz47s9k6Woqy64bgh
+Q0YEW1Vyqn/Tt8nBJrbtyY1iLnQjOZ167bYxc=
+-----END OPENSSH PRIVATE KEY-----`
+
 	// knownHostsFixture is known_hosts fixture in the expected
 	// format.
 	knownHostsFixture string = `github.com ssh-rsa AAAAB3NzaC1yc2EAAAABIwAAAQEAq2A7hRGmdnm9tUDbO9IDSwBK6TbQa+PXYPCPy6rbTrTtw7PHkccKrpp0yVhp5HdEIcKr6pLlVDBfOLX9QUsyCOV0wzfjIJNlGEYsdlLJizHhbn2mUjvSAHQqZETYP81eFzLQNnPHt4EVVUh7VfDESU84KezmD5QlWpXLmvU31/yMf+Se8xhHTvKSCZIFImWwoG6mbUoWf9nzpIoaSjB+weqqUUmpaaasXVal72J+UX2B+2RPW3RcT0eOzQgqlJL3RKrTJvdsjE3JEAvGq3lGHSZXy28G3skua2SmVi/w4yCE6gbODqnTWlg7+wC604ydGXA8VJiS5ap43JXiUFFAaQ==`
@@ -83,6 +93,13 @@ var (
 			"identity":    []byte(secretPassphraseFixture),
 			"known_hosts": []byte(knownHostsFixture),
 			"password":    []byte("foobar"),
+		},
+	}
+	failingPrivateKey = corev1.Secret{
+		Data: map[string][]byte{
+			"identity":    []byte(secretEDCSAFicture),
+			"known_hosts": []byte(knownHostsFixture),
+			"password":    []byte("password"),
 		},
 	}
 )
@@ -154,6 +171,7 @@ func TestPublicKeyStrategy_Method(t *testing.T) {
 	}{
 		{"private key and known_hosts", privateKeySecretFixture, nil, false},
 		{"private key with passphrase and known_hosts", privateKeySecretWithPassphraseFixture, nil, false},
+		{"edcsa private key with passphrase and known_hosts", failingPrivateKey, nil, false},
 		{"missing private key", privateKeySecretFixture, func(s *corev1.Secret) { delete(s.Data, "identity") }, true},
 		{"invalid private key", privateKeySecretFixture, func(s *corev1.Secret) { s.Data["identity"] = []byte(`-----BEGIN RSA PRIVATE KEY-----`) }, true},
 		{"missing known_hosts", privateKeySecretFixture, func(s *corev1.Secret) { delete(s.Data, "known_hosts") }, true},
