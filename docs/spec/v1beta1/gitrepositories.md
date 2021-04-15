@@ -57,7 +57,7 @@ type GitRepositorySpec struct {
 	// +kubebuilder:default:=go-git
 	// +optional
 	GitImplementation string `json:"gitImplementation,omitempty"`
-	
+
 	// When enabled, after the clone is created, initializes all submodules within.
 	// This option is available only when using the 'go-git' GitImplementation.
 	// +optional
@@ -154,7 +154,7 @@ The following files and extensions are excluded from the archive by default:
 - Git files (`.git/ ,.gitignore, .gitmodules, .gitattributes`)
 - File extensions (`.jpg, .jpeg, .gif, .png, .wmv, .flv, .tar.gz, .zip`)
 - CI configs (`.github/, .circleci/, .travis.yml, .gitlab-ci.yml, appveyor.yml, .drone.yml, cloudbuild.yaml, codeship-services.yml, codeship-steps.yml`)
-- CLI configs (`.goreleaser.yml, .sops.yaml`)  
+- CLI configs (`.goreleaser.yml, .sops.yaml`)
 - Flux v1 config (`.flux.yaml`)
 
 Excluding additional files from the archive is possible by adding a
@@ -489,6 +489,63 @@ Note that deploy keys can't be used to pull submodules from private repositories
 as GitHub and GitLab doesn't allow a deploy key to be reused across repositories.
 You have to use either HTTPS token-based authentication, or an SSH key belonging
 to a user that has access to the main repository and all its submodules.
+
+### Including GitRepository
+
+With `spec.include` you can map the contents of a git repository into another.
+This may look identical to git submodules but has multiple benefits over
+regular submodules.
+
+* Including a GitRepository allows you to use different authentication methods for different repositories.
+* A change in the included repository will trigger an update of the including repository.
+* Multiple GitRepositories could include the same repository, which decreases the amount of cloning done compared to using submodules.
+
+```yaml
+apiVersion: source.toolkit.fluxcd.io/v1beta1
+kind: GitRepository
+metadata:
+  name: repo1
+  namespace: default
+spec:
+  interval: 1m
+  url: https://github.com/<organization>/repo1
+  secretRef:
+    name: https-credentials
+  ref:
+    branch: main
+---
+apiVersion: source.toolkit.fluxcd.io/v1beta1
+kind: GitRepository
+metadata:
+  name: repo2
+  namespace: default
+spec:
+  interval: 1m
+  url: https://github.com/<organization>/repo2
+  secretRef:
+    name: https-credentials
+  ref:
+    branch: main
+  include:
+    - repository:
+        name: repo1
+      from: manifests
+      to: manifests
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: https-credentials
+  namespace: default
+type: Opaque
+data:
+  username: <GitHub Username>
+  password: <GitHub Token>
+```
+
+The `from` and `to` parameters allows you to limit the files included and where they will be
+copied to in the main repository. If you do not specify a value for `from` all files in the
+repository will be included. The `to` value will default to the name of the repository.
 
 ## Status examples
 

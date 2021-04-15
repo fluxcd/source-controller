@@ -25,6 +25,7 @@ import (
 	"strings"
 	"time"
 
+	securejoin "github.com/cyphar/filepath-securejoin"
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
@@ -34,6 +35,7 @@ import (
 	kuberecorder "k8s.io/client-go/tools/record"
 	"k8s.io/client-go/tools/reference"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -58,6 +60,7 @@ import (
 // GitRepositoryReconciler reconciles a GitRepository object
 type GitRepositoryReconciler struct {
 	client.Client
+	requeueDependency     time.Duration
 	Scheme                *runtime.Scheme
 	Storage               *Storage
 	EventRecorder         kuberecorder.EventRecorder
@@ -66,7 +69,8 @@ type GitRepositoryReconciler struct {
 }
 
 type GitRepositoryReconcilerOptions struct {
-	MaxConcurrentReconciles int
+	MaxConcurrentReconciles   int
+	DependencyRequeueInterval time.Duration
 }
 
 func (r *GitRepositoryReconciler) SetupWithManager(mgr ctrl.Manager) error {
@@ -74,9 +78,12 @@ func (r *GitRepositoryReconciler) SetupWithManager(mgr ctrl.Manager) error {
 }
 
 func (r *GitRepositoryReconciler) SetupWithManagerAndOptions(mgr ctrl.Manager, opts GitRepositoryReconcilerOptions) error {
+	r.requeueDependency = opts.DependencyRequeueInterval
+
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&sourcev1.GitRepository{}).
-		WithEventFilter(predicate.Or(predicate.GenerationChangedPredicate{}, predicates.ReconcileRequestedPredicate{})).
+		For(&sourcev1.GitRepository{}, builder.WithPredicates(
+			predicate.Or(predicate.GenerationChangedPredicate{}, predicates.ReconcileRequestedPredicate{}),
+		)).
 		WithOptions(controller.Options{MaxConcurrentReconciles: opts.MaxConcurrentReconciles}).
 		Complete(r)
 }
@@ -111,6 +118,25 @@ func (r *GitRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	if repository.Spec.Suspend {
 		log.Info("Reconciliation is suspended for this object")
 		return ctrl.Result{}, nil
+	}
+
+	// check dependencies
+	if len(repository.Spec.Include) > 0 {
+		if err := r.checkDependencies(repository); err != nil {
+			repository = sourcev1.GitRepositoryNotReady(repository, meta.DependencyNotReadyReason, err.Error())
+			if err := r.updateStatus(ctx, req, repository.Status); err != nil {
+				log.Error(err, "unable to update status for dependency not ready")
+				return ctrl.Result{Requeue: true}, err
+			}
+			// we can't rely on exponential backoff because it will prolong the execution too much,
+			// instead we requeue on a fix interval.
+			msg := fmt.Sprintf("Dependencies do not meet ready condition, retrying in %s", r.requeueDependency.String())
+			log.Info(msg)
+			r.event(ctx, repository, events.EventSeverityInfo, msg)
+			r.recordReadiness(ctx, repository)
+			return ctrl.Result{RequeueAfter: r.requeueDependency}, nil
+		}
+		log.Info("All dependencies area ready, proceeding with reconciliation")
 	}
 
 	// record reconciliation duration
@@ -174,6 +200,27 @@ func (r *GitRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	return ctrl.Result{RequeueAfter: repository.GetInterval().Duration}, nil
 }
 
+func (r *GitRepositoryReconciler) checkDependencies(repository sourcev1.GitRepository) error {
+	for _, d := range repository.Spec.Include {
+		dName := types.NamespacedName{Name: d.GitRepositoryRef.Name, Namespace: repository.Namespace}
+		var gr sourcev1.GitRepository
+		err := r.Get(context.Background(), dName, &gr)
+		if err != nil {
+			return fmt.Errorf("unable to get '%s' dependency: %w", dName, err)
+		}
+
+		if len(gr.Status.Conditions) == 0 || gr.Generation != gr.Status.ObservedGeneration {
+			return fmt.Errorf("dependency '%s' is not ready", dName)
+		}
+
+		if !apimeta.IsStatusConditionTrue(gr.Status.Conditions, meta.ReadyCondition) {
+			return fmt.Errorf("dependency '%s' is not ready", dName)
+		}
+	}
+
+	return nil
+}
+
 func (r *GitRepositoryReconciler) reconcile(ctx context.Context, repository sourcev1.GitRepository) (sourcev1.GitRepository, error) {
 	// create tmp dir for the Git clone
 	tmpGit, err := ioutil.TempDir("", repository.Name)
@@ -220,7 +267,8 @@ func (r *GitRepositoryReconciler) reconcile(ctx context.Context, repository sour
 		git.CheckoutOptions{
 			GitImplementation: repository.Spec.GitImplementation,
 			RecurseSubmodules: repository.Spec.RecurseSubmodules,
-		})
+		},
+	)
 	if err != nil {
 		return sourcev1.GitRepositoryNotReady(repository, sourcev1.GitOperationFailedReason, err.Error()), err
 	}
@@ -228,10 +276,22 @@ func (r *GitRepositoryReconciler) reconcile(ctx context.Context, repository sour
 	if err != nil {
 		return sourcev1.GitRepositoryNotReady(repository, sourcev1.GitOperationFailedReason, err.Error()), err
 	}
-
-	// return early on unchanged revision
 	artifact := r.Storage.NewArtifactFor(repository.Kind, repository.GetObjectMeta(), revision, fmt.Sprintf("%s.tar.gz", commit.Hash()))
-	if apimeta.IsStatusConditionTrue(repository.Status.Conditions, meta.ReadyCondition) && repository.GetArtifact().HasRevision(artifact.Revision) {
+
+	// copy all included repository into the artifact
+	includedArtifacts := []*sourcev1.Artifact{}
+	for _, incl := range repository.Spec.Include {
+		dName := types.NamespacedName{Name: incl.GitRepositoryRef.Name, Namespace: repository.Namespace}
+		var gr sourcev1.GitRepository
+		err := r.Get(context.Background(), dName, &gr)
+		if err != nil {
+			return sourcev1.GitRepositoryNotReady(repository, meta.DependencyNotReadyReason, err.Error()), err
+		}
+		includedArtifacts = append(includedArtifacts, gr.GetArtifact())
+	}
+
+	// return early on unchanged revision and unchanged included repositories
+	if apimeta.IsStatusConditionTrue(repository.Status.Conditions, meta.ReadyCondition) && repository.GetArtifact().HasRevision(artifact.Revision) && !hasArtifactUpdated(repository.Status.IncludedArtifacts, includedArtifacts) {
 		if artifact.URL != repository.GetArtifact().URL {
 			r.Storage.SetArtifactURL(repository.GetArtifact())
 			repository.Status.URL = r.Storage.SetHostname(repository.Status.URL)
@@ -262,6 +322,17 @@ func (r *GitRepositoryReconciler) reconcile(ctx context.Context, repository sour
 	if err != nil {
 		err = fmt.Errorf("mkdir dir error: %w", err)
 		return sourcev1.GitRepositoryNotReady(repository, sourcev1.StorageOperationFailedReason, err.Error()), err
+	}
+
+	for i, incl := range repository.Spec.Include {
+		toPath, err := securejoin.SecureJoin(tmpGit, incl.GetToPath())
+		if err != nil {
+			return sourcev1.GitRepositoryNotReady(repository, meta.DependencyNotReadyReason, err.Error()), err
+		}
+		err = r.Storage.CopyToPath(includedArtifacts[i], incl.GetFromPath(), toPath)
+		if err != nil {
+			return sourcev1.GitRepositoryNotReady(repository, meta.DependencyNotReadyReason, err.Error()), err
+		}
 	}
 
 	// acquire lock
@@ -295,7 +366,7 @@ func (r *GitRepositoryReconciler) reconcile(ctx context.Context, repository sour
 	}
 
 	message := fmt.Sprintf("Fetched revision: %s", artifact.Revision)
-	return sourcev1.GitRepositoryReady(repository, artifact, url, sourcev1.GitOperationSucceedReason, message), nil
+	return sourcev1.GitRepositoryReady(repository, artifact, includedArtifacts, url, sourcev1.GitOperationSucceedReason, message), nil
 }
 
 func (r *GitRepositoryReconciler) reconcileDelete(ctx context.Context, repository sourcev1.GitRepository) (ctrl.Result, error) {

@@ -87,6 +87,34 @@ type GitRepositorySpec struct {
 	// This option is available only when using the 'go-git' GitImplementation.
 	// +optional
 	RecurseSubmodules bool `json:"recurseSubmodules,omitempty"`
+
+	// Extra git repositories to map into the repository
+	Include []GitRepositoryInclude `json:"include,omitempty"`
+}
+
+func (in *GitRepositoryInclude) GetFromPath() string {
+	return in.FromPath
+}
+
+func (in *GitRepositoryInclude) GetToPath() string {
+	if in.ToPath == "" {
+		return in.GitRepositoryRef.Name
+	}
+	return in.ToPath
+}
+
+// GitRepositoryInclude defines a source with a from and to path.
+type GitRepositoryInclude struct {
+	// Reference to a GitRepository to include.
+	GitRepositoryRef meta.LocalObjectReference `json:"repository"`
+
+	// The path to copy contents from, defaults to the root directory.
+	// +optional
+	FromPath string `json:"fromPath"`
+
+	// The path to copy contents to, defaults to the name of the source ref.
+	// +optional
+	ToPath string `json:"toPath"`
 }
 
 // GitRepositoryRef defines the Git ref used for pull and checkout operations.
@@ -138,6 +166,10 @@ type GitRepositoryStatus struct {
 	// +optional
 	Artifact *Artifact `json:"artifact,omitempty"`
 
+	// IncludedArtifacts represents the included artifacts from the last successful repository sync.
+	// +optional
+	IncludedArtifacts []*Artifact `json:"includedArtifacts,omitempty"`
+
 	meta.ReconcileRequestStatus `json:",inline"`
 }
 
@@ -166,8 +198,9 @@ func GitRepositoryProgressing(repository GitRepository) GitRepository {
 // GitRepositoryReady sets the given Artifact and URL on the GitRepository and
 // sets the meta.ReadyCondition to 'True', with the given reason and message. It
 // returns the modified GitRepository.
-func GitRepositoryReady(repository GitRepository, artifact Artifact, url, reason, message string) GitRepository {
+func GitRepositoryReady(repository GitRepository, artifact Artifact, includedArtifacts []*Artifact, url, reason, message string) GitRepository {
 	repository.Status.Artifact = &artifact
+	repository.Status.IncludedArtifacts = includedArtifacts
 	repository.Status.URL = url
 	meta.SetResourceCondition(&repository, meta.ReadyCondition, metav1.ConditionTrue, reason, message)
 	return repository
