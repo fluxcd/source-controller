@@ -20,7 +20,7 @@ require (
 	github.com/fluxcd/source-controller/api v0.11.0
 	github.com/go-git/go-billy/v5 v5.1.0
 	github.com/go-git/go-git/v5 v5.3.0
-	github.com/go-logr/logr v0.3.0
+	github.com/go-logr/logr v0.4.0
 	github.com/libgit2/git2go/v31 v31.4.7
 	github.com/minio/minio-go/v7 v7.0.10
 	github.com/onsi/ginkgo v1.14.1
@@ -29,10 +29,10 @@ require (
 	golang.org/x/crypto v0.0.0-20210322153248-0c34fe9e7dc2
 	golang.org/x/sync v0.0.0-20201207232520-09787c993a3a
 	gotest.tools v2.2.0+incompatible
-	helm.sh/helm/v3 v3.5.3
-	k8s.io/api v0.20.2
-	k8s.io/apimachinery v0.20.2
-	k8s.io/client-go v0.20.2
+	helm.sh/helm/v3 v3.5.4
+	k8s.io/api v0.20.4
+	k8s.io/apimachinery v0.20.4
+	k8s.io/client-go v0.20.4
 	sigs.k8s.io/controller-runtime v0.8.3
 	sigs.k8s.io/yaml v1.2.0
 )
