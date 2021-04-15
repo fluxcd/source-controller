@@ -13,6 +13,8 @@ spec:
     kind: GitRepository
     listKind: GitRepositoryList
     plural: gitrepositories
+    shortNames:
+    - gitrepo
     singular: gitrepository
   scope: Namespaced
   versions:
