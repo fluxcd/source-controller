@@ -8,4 +8,6 @@ spec:
     kind: HelmRepository
     name: podinfo
   chart: podinfo
-  valuesFile: values-prod.yaml
+  valuesFile: values.yaml
+  valuesFiles:
+    - values-prod.yaml

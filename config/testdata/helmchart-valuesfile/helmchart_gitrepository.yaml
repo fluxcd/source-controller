@@ -8,4 +8,6 @@ spec:
     kind: GitRepository
     name: podinfo
   chart: charts/podinfo
-  valuesFile: charts/podinfo/values-prod.yaml
+  valuesFile: charts/podinfo/values.yaml
+  valuesFiles:
+    - charts/podinfo/values-prod.yaml
