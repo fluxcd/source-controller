@@ -13,7 +13,7 @@ require (
 	github.com/fluxcd/pkg/gitutil v0.0.1
 	github.com/fluxcd/pkg/helmtestserver v0.1.0
 	github.com/fluxcd/pkg/lockedfile v0.0.5
-	github.com/fluxcd/pkg/runtime v0.10.1
+	github.com/fluxcd/pkg/runtime v0.10.2
 	github.com/fluxcd/pkg/ssh v0.0.5
 	github.com/fluxcd/pkg/untar v0.0.5
 	github.com/fluxcd/pkg/version v0.0.1
