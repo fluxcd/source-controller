@@ -261,8 +261,8 @@ github.com/fluxcd/pkg/helmtestserver v0.1.0 h1:RiVVxIHD6PJdKinW46feFIYf1LUj6xXSp
 github.com/fluxcd/pkg/helmtestserver v0.1.0/go.mod h1:3L+tbPn74PsHwHsyhbfk/kZAosrwMFTTA92XEFiwVAE=
 github.com/fluxcd/pkg/lockedfile v0.0.5 h1:C3T8wfdff1UY1bvplmCkGOLrdMWJHO8Q8+tdlEXJYzQ=
 github.com/fluxcd/pkg/lockedfile v0.0.5/go.mod h1:uAtPUBId6a2RqO84MTH5HKGX0SbM1kNW3Wr/FhYyDVA=
-github.com/fluxcd/pkg/runtime v0.10.1 h1:NV0pe6lFzodKBIz0dT3xkoR0wJnTCicXwM/v/d5T0+Y=
-github.com/fluxcd/pkg/runtime v0.10.1/go.mod h1:JD0eZIn5xkTeHHQUWXSqJPIh/ecO0d0qrUKbSVHnpnw=
+github.com/fluxcd/pkg/runtime v0.10.2 h1:JAI/pOfU3Rgr4MysWJoWenEP6vq03EspBmoekSZMUfo=
+github.com/fluxcd/pkg/runtime v0.10.2/go.mod h1:JD0eZIn5xkTeHHQUWXSqJPIh/ecO0d0qrUKbSVHnpnw=
 github.com/fluxcd/pkg/ssh v0.0.5 h1:rnbFZ7voy2JBlUfMbfyqArX2FYaLNpDhccGFC3qW83A=
 github.com/fluxcd/pkg/ssh v0.0.5/go.mod h1:7jXPdXZpc0ttMNz2kD9QuMi3RNn/e0DOFbj0Tij/+Hs=
 github.com/fluxcd/pkg/testserver v0.0.2 h1:SoaMtO9cE5p/wl2zkGudzflnEHd9mk68CGjZOo7w0Uk=
