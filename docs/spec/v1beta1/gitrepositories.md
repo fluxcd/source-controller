@@ -401,6 +401,17 @@ kubectl create secret generic ssh-credentials \
     --from-file=./known_hosts
 ```
 
+If your SSH key is protected with a passphrase,
+you can specify it in the Kubernetes secret under the `password` key:
+
+```sh
+kubectl create secret generic ssh-credentials \
+    --from-file=./identity \
+    --from-file=./identity.pub \
+    --from-file=./known_hosts \
+    --from-literal=password=<passphrase>
+```
+
 ### GPG signature verification
 
 Verify the OpenPGP signature for the commit that master branch HEAD points to:

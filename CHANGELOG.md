@@ -2,6 +2,39 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.12.0
+
+**Release date:** 2021-04-21
+
+This prerelease comes with support for SSH keys with a passphrase.
+
+The `.sourceignore` files are now loaded by traversing through the directory tree,
+instead of just looking at the root.
+
+The HelmChart `ValueFile` string field has been deprecated in favour of
+`ValuesFiles` string array.
+
+Features:
+* Support SSH private key with password
+  [#338](https://github.com/fluxcd/source-controller/pull/338)
+  [#339](https://github.com/fluxcd/source-controller/pull/339)
+* Add `ValuesFiles` to HelmChart spec
+  [#305](https://github.com/fluxcd/source-controller/pull/305)
+
+Improvements:
+* Check ignore matches before Bucket item downloads
+  [#337](https://github.com/fluxcd/source-controller/pull/337)
+* Add short name for Git and Helm repositories
+  [#334](https://github.com/fluxcd/source-controller/pull/334)
+* Update Helm to v3.5.4
+  [#340](https://github.com/fluxcd/source-controller/pull/340)
+
+Fixes:
+* Write chart data on identical values overwrite
+  [#345](https://github.com/fluxcd/source-controller/pull/345)
+* Fix HelmChart values tests
+  [#332](https://github.com/fluxcd/source-controller/pull/332)
+
 ## 0.11.0
 
 **Release date:** 2021-03-31
