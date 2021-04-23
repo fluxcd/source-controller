@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -272,15 +273,16 @@ func (r *GitRepositoryReconciler) reconcile(ctx context.Context, repository sour
 	defer unlock()
 
 	// archive artifact and check integrity
-	ps, err := sourceignore.LoadIgnorePatterns(tmpGit, nil)
+	ignoreDomain := strings.Split(tmpGit, string(filepath.Separator))
+	ps, err := sourceignore.LoadIgnorePatterns(tmpGit, ignoreDomain)
 	if err != nil {
 		err = fmt.Errorf(".sourceignore error: %w", err)
 		return sourcev1.GitRepositoryNotReady(repository, sourcev1.StorageOperationFailedReason, err.Error()), err
 	}
 	if repository.Spec.Ignore != nil {
-		ps = append(ps, sourceignore.ReadPatterns(strings.NewReader(*repository.Spec.Ignore), nil)...)
+		ps = append(ps, sourceignore.ReadPatterns(strings.NewReader(*repository.Spec.Ignore), ignoreDomain)...)
 	}
-	if err := r.Storage.Archive(&artifact, tmpGit, SourceIgnoreFilter(ps, nil)); err != nil {
+	if err := r.Storage.Archive(&artifact, tmpGit, SourceIgnoreFilter(ps, ignoreDomain)); err != nil {
 		err = fmt.Errorf("storage archive error: %w", err)
 		return sourcev1.GitRepositoryNotReady(repository, sourcev1.StorageOperationFailedReason, err.Error()), err
 	}
