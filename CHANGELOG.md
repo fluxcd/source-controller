@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.12.1
+
+**Release date:** 2021-04-23
+
+This prerelease comes with a bug fix to source ignore handling.
+
+Fixes:
+* Configure ignore domain for GitRepository rules
+  [#351](https://github.com/fluxcd/source-controller/pull/351)
+
 ## 0.12.0
 
 **Release date:** 2021-04-21
