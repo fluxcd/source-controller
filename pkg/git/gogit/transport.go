@@ -20,6 +20,8 @@ import (
 	"fmt"
 	"net/url"
 
+	pkgssh "github.com/fluxcd/pkg/ssh"
+	transportClient "github.com/go-git/go-git/v5/plumbing/transport/client"
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
 	"github.com/go-git/go-git/v5/plumbing/transport/ssh"
 	cryptossh "golang.org/x/crypto/ssh"
@@ -103,6 +105,14 @@ func (s *PublicKeyAuth) Method(secret corev1.Secret) (*git.Auth, error) {
 		return nil, err
 	}
 	pk.HostKeyCallback = callback
+
+	// override default ssh protocol to use our preferred key algorithms
+	cfg, err := pk.ClientConfig()
+	if err != nil {
+		return nil, err
+	}
+	pkgssh.SetPreferredKeyAlgos(cfg)
+	transportClient.InstallProtocol("ssh", ssh.NewClient(cfg))
 
 	return &git.Auth{AuthMethod: pk}, nil
 }
