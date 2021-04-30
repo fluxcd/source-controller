@@ -236,7 +236,7 @@ func (r *BucketReconciler) reconcile(ctx context.Context, bucket sourcev1.Bucket
 			continue
 		}
 
-		if matcher.Match([]string{object.Key}, false) {
+		if matcher.Match(strings.Split(object.Key, "/"), false) {
 			continue
 		}
 
