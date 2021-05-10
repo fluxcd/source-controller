@@ -2,6 +2,17 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.12.2
+
+**Release date:** 2021-05-10
+
+This prerelease comes with a bug fix to `Bucket` source ignore
+handling.
+
+Fixes:
+* Split bucket item key by `/` to satisfy matcher
+  [#356](https://github.com/fluxcd/source-controller/pull/356)
+
 ## 0.12.1
 
 **Release date:** 2021-04-23
