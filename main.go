@@ -76,6 +76,7 @@ func main() {
 		storageAddr           string
 		storageAdvAddr        string
 		concurrent            int
+		requeueDependency     time.Duration
 		watchAllNamespaces    bool
 		clientOptions         client.Options
 		logOptions            logger.Options
@@ -96,6 +97,7 @@ func main() {
 	flag.IntVar(&concurrent, "concurrent", 2, "The number of concurrent reconciles per controller.")
 	flag.BoolVar(&watchAllNamespaces, "watch-all-namespaces", true,
 		"Watch for custom resources in all namespaces, if set to false it will only watch the runtime namespace.")
+	flag.DurationVar(&requeueDependency, "requeue-dependency", 30*time.Second, "The interval at which failing dependencies are reevaluated.")
 	clientOptions.BindFlags(flag.CommandLine)
 	logOptions.BindFlags(flag.CommandLine)
 	leaderElectionOptions.BindFlags(flag.CommandLine)
@@ -157,7 +159,8 @@ func main() {
 		ExternalEventRecorder: eventRecorder,
 		MetricsRecorder:       metricsRecorder,
 	}).SetupWithManagerAndOptions(mgr, controllers.GitRepositoryReconcilerOptions{
-		MaxConcurrentReconciles: concurrent,
+		MaxConcurrentReconciles:   concurrent,
+		DependencyRequeueInterval: requeueDependency,
 	}); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", sourcev1.GitRepositoryKind)
 		os.Exit(1)

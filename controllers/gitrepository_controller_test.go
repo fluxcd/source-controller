@@ -24,21 +24,25 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+
 	"os/exec"
 	"path"
 	"path/filepath"
+
 	"strings"
 	"time"
 
 	"github.com/go-git/go-billy/v5/memfs"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
+
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/go-git/go-git/v5/plumbing/transport/client"
 	httptransport "github.com/go-git/go-git/v5/plumbing/transport/http"
 	"github.com/go-git/go-git/v5/storage/memory"
 	. "github.com/onsi/ginkgo"
+
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
@@ -320,8 +324,6 @@ var _ = Describe("GitRepositoryReconciler", func() {
 			}})
 			Expect(err).NotTo(HaveOccurred())
 
-			gitrepo.Worktree()
-
 			for _, ref := range t.createRefs {
 				hRef := plumbing.NewHashReference(plumbing.ReferenceName(ref), commit)
 				err = gitrepo.Storer.SetReference(hRef)
@@ -544,5 +546,222 @@ var _ = Describe("GitRepositoryReconciler", func() {
 				Expect(filepath.Join(tmp, "tar", "sub", "fixture")).To(BeAnExistingFile())
 			})
 		})
+
+		type includeTestCase struct {
+			fromPath    string
+			toPath      string
+			createFiles []string
+			checkFiles  []string
+		}
+
+		DescribeTable("Include git repositories", func(t includeTestCase) {
+			Expect(gitServer.StartHTTP()).To(Succeed())
+			defer gitServer.StopHTTP()
+
+			u, err := url.Parse(gitServer.HTTPAddress())
+			Expect(err).NotTo(HaveOccurred())
+
+			// create the main git repository
+			mainRepoURL := *u
+			mainRepoURL.Path = path.Join(u.Path, fmt.Sprintf("repository-%s.git", randStringRunes(5)))
+
+			mainFs := memfs.New()
+			mainRepo, err := git.Init(memory.NewStorage(), mainFs)
+			Expect(err).NotTo(HaveOccurred())
+
+			mainWt, err := mainRepo.Worktree()
+			Expect(err).NotTo(HaveOccurred())
+
+			ff, _ := mainFs.Create("fixture")
+			_ = ff.Close()
+			_, err = mainWt.Add(mainFs.Join("fixture"))
+			Expect(err).NotTo(HaveOccurred())
+
+			_, err = mainWt.Commit("Sample", &git.CommitOptions{Author: &object.Signature{
+				Name:  "John Doe",
+				Email: "john@example.com",
+				When:  time.Now(),
+			}})
+			Expect(err).NotTo(HaveOccurred())
+
+			mainRemote, err := mainRepo.CreateRemote(&config.RemoteConfig{
+				Name: "origin",
+				URLs: []string{mainRepoURL.String()},
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			err = mainRemote.Push(&git.PushOptions{
+				RefSpecs: []config.RefSpec{"refs/heads/*:refs/heads/*", "refs/tags/*:refs/tags/*"},
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			// create the sub git repository
+			subRepoURL := *u
+			subRepoURL.Path = path.Join(u.Path, fmt.Sprintf("subrepository-%s.git", randStringRunes(5)))
+
+			subFs := memfs.New()
+			subRepo, err := git.Init(memory.NewStorage(), subFs)
+			Expect(err).NotTo(HaveOccurred())
+
+			subWt, err := subRepo.Worktree()
+			Expect(err).NotTo(HaveOccurred())
+
+			for _, v := range t.createFiles {
+				if dir := filepath.Base(v); dir != v {
+					err := subFs.MkdirAll(dir, 0700)
+					Expect(err).NotTo(HaveOccurred())
+				}
+				ff, err := subFs.Create(v)
+				Expect(err).NotTo(HaveOccurred())
+				_ = ff.Close()
+				_, err = subWt.Add(subFs.Join(v))
+				Expect(err).NotTo(HaveOccurred())
+			}
+
+			_, err = subWt.Commit("Sample", &git.CommitOptions{Author: &object.Signature{
+				Name:  "John Doe",
+				Email: "john@example.com",
+				When:  time.Now(),
+			}})
+			Expect(err).NotTo(HaveOccurred())
+
+			subRemote, err := subRepo.CreateRemote(&config.RemoteConfig{
+				Name: "origin",
+				URLs: []string{subRepoURL.String()},
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			err = subRemote.Push(&git.PushOptions{
+				RefSpecs: []config.RefSpec{"refs/heads/*:refs/heads/*", "refs/tags/*:refs/tags/*"},
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			// create main and sub resetRepositories
+			subKey := types.NamespacedName{
+				Name:      fmt.Sprintf("git-ref-test-%s", randStringRunes(5)),
+				Namespace: namespace.Name,
+			}
+			subCreated := &sourcev1.GitRepository{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      subKey.Name,
+					Namespace: subKey.Namespace,
+				},
+				Spec: sourcev1.GitRepositorySpec{
+					URL:       subRepoURL.String(),
+					Interval:  metav1.Duration{Duration: indexInterval},
+					Reference: &sourcev1.GitRepositoryRef{Branch: "master"},
+				},
+			}
+			Expect(k8sClient.Create(context.Background(), subCreated)).Should(Succeed())
+			defer k8sClient.Delete(context.Background(), subCreated)
+
+			mainKey := types.NamespacedName{
+				Name:      fmt.Sprintf("git-ref-test-%s", randStringRunes(5)),
+				Namespace: namespace.Name,
+			}
+			mainCreated := &sourcev1.GitRepository{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      mainKey.Name,
+					Namespace: mainKey.Namespace,
+				},
+				Spec: sourcev1.GitRepositorySpec{
+					URL:       mainRepoURL.String(),
+					Interval:  metav1.Duration{Duration: indexInterval},
+					Reference: &sourcev1.GitRepositoryRef{Branch: "master"},
+					Include: []sourcev1.GitRepositoryInclude{
+						{
+							GitRepositoryRef: meta.LocalObjectReference{
+								Name: subKey.Name,
+							},
+							FromPath: t.fromPath,
+							ToPath:   t.toPath,
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(context.Background(), mainCreated)).Should(Succeed())
+			defer k8sClient.Delete(context.Background(), mainCreated)
+
+			got := &sourcev1.GitRepository{}
+			Eventually(func() bool {
+				_ = k8sClient.Get(context.Background(), mainKey, got)
+				for _, c := range got.Status.Conditions {
+					if c.Reason == sourcev1.GitOperationSucceedReason {
+						return true
+					}
+				}
+				return false
+			}, timeout, interval).Should(BeTrue())
+
+			// check the contents of the repository
+			res, err := http.Get(got.Status.URL)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(res.StatusCode).To(Equal(http.StatusOK))
+			tmp, err := ioutil.TempDir("", "flux-test")
+			Expect(err).NotTo(HaveOccurred())
+			defer os.RemoveAll(tmp)
+			_, err = untar.Untar(res.Body, filepath.Join(tmp, "tar"))
+			Expect(err).NotTo(HaveOccurred())
+			for _, v := range t.checkFiles {
+				Expect(filepath.Join(tmp, "tar", v)).To(BeAnExistingFile())
+			}
+
+			// add new file to check that the change is reconciled
+			ff, err = subFs.Create(subFs.Join(t.fromPath, "test"))
+			Expect(err).NotTo(HaveOccurred())
+			err = ff.Close()
+			Expect(err).NotTo(HaveOccurred())
+			_, err = subWt.Add(subFs.Join(t.fromPath, "test"))
+			Expect(err).NotTo(HaveOccurred())
+
+			hash, err := subWt.Commit("Sample", &git.CommitOptions{Author: &object.Signature{
+				Name:  "John Doe",
+				Email: "john@example.com",
+				When:  time.Now(),
+			}})
+			Expect(err).NotTo(HaveOccurred())
+
+			err = subRemote.Push(&git.PushOptions{
+				RefSpecs: []config.RefSpec{"refs/heads/*:refs/heads/*", "refs/tags/*:refs/tags/*"},
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			got = &sourcev1.GitRepository{}
+			Eventually(func() bool {
+				_ = k8sClient.Get(context.Background(), mainKey, got)
+				if got.Status.IncludedArtifacts[0].Revision == fmt.Sprintf("master/%s", hash.String()) {
+					for _, c := range got.Status.Conditions {
+						if c.Reason == sourcev1.GitOperationSucceedReason {
+							return true
+						}
+					}
+				}
+				return false
+			}, timeout, interval).Should(BeTrue())
+
+			// get the main repository artifact
+			res, err = http.Get(got.Status.URL)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(res.StatusCode).To(Equal(http.StatusOK))
+			tmp, err = ioutil.TempDir("", "flux-test")
+			Expect(err).NotTo(HaveOccurred())
+			defer os.RemoveAll(tmp)
+			_, err = untar.Untar(res.Body, filepath.Join(tmp, "tar"))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(filepath.Join(tmp, "tar", t.toPath, "test")).To(BeAnExistingFile())
+		},
+			Entry("only to path", includeTestCase{
+				fromPath:    "",
+				toPath:      "sub",
+				createFiles: []string{"dir1", "dir2"},
+				checkFiles:  []string{"sub/dir1", "sub/dir2"},
+			}),
+			Entry("from and to path", includeTestCase{
+				fromPath:    "nested",
+				toPath:      "sub",
+				createFiles: []string{"dir1", "nested/dir2", "nested/dir3", "nested/foo/bar"},
+				checkFiles:  []string{"sub/dir2", "sub/dir3", "sub/foo/bar"},
+			}),
+		)
 	})
 })

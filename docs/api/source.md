@@ -414,6 +414,19 @@ using their default settings.
 This option is available only when using the &lsquo;go-git&rsquo; GitImplementation.</p>
 </td>
 </tr>
+<tr>
+<td>
+<code>include</code><br>
+<em>
+<a href="#source.toolkit.fluxcd.io/v1beta1.GitRepositoryInclude">
+[]GitRepositoryInclude
+</a>
+</em>
+</td>
+<td>
+<p>Extra git repositories to map into the repository</p>
+</td>
+</tr>
 </table>
 </td>
 </tr>
@@ -1067,6 +1080,64 @@ github.com/fluxcd/pkg/apis/meta.ReconcileRequestStatus
 </table>
 </div>
 </div>
+<h3 id="source.toolkit.fluxcd.io/v1beta1.GitRepositoryInclude">GitRepositoryInclude
+</h3>
+<p>
+(<em>Appears on:</em>
+<a href="#source.toolkit.fluxcd.io/v1beta1.GitRepositorySpec">GitRepositorySpec</a>)
+</p>
+<p>GitRepositoryInclude defines a source with a from and to path.</p>
+<div class="md-typeset__scrollwrap">
+<div class="md-typeset__table">
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>repository</code><br>
+<em>
+<a href="https://godoc.org/github.com/fluxcd/pkg/apis/meta#LocalObjectReference">
+github.com/fluxcd/pkg/apis/meta.LocalObjectReference
+</a>
+</em>
+</td>
+<td>
+<p>Reference to a GitRepository to include.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>fromPath</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>The path to copy contents from, defaults to the root directory.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>toPath</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>The path to copy contents to, defaults to the name of the source ref.</p>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
 <h3 id="source.toolkit.fluxcd.io/v1beta1.GitRepositoryRef">GitRepositoryRef
 </h3>
 <p>
@@ -1291,6 +1362,19 @@ using their default settings.
 This option is available only when using the &lsquo;go-git&rsquo; GitImplementation.</p>
 </td>
 </tr>
+<tr>
+<td>
+<code>include</code><br>
+<em>
+<a href="#source.toolkit.fluxcd.io/v1beta1.GitRepositoryInclude">
+[]GitRepositoryInclude
+</a>
+</em>
+</td>
+<td>
+<p>Extra git repositories to map into the repository</p>
+</td>
+</tr>
 </tbody>
 </table>
 </div>
@@ -1363,6 +1447,20 @@ Artifact
 <td>
 <em>(Optional)</em>
 <p>Artifact represents the output of the last successful repository sync.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>includedArtifacts</code><br>
+<em>
+<a href="#source.toolkit.fluxcd.io/v1beta1.*./api/v1beta1.Artifact">
+[]*./api/v1beta1.Artifact
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>IncludedArtifacts represents the included artifacts from the last successful repository sync.</p>
 </td>
 </tr>
 <tr>

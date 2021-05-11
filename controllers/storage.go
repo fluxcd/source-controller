@@ -35,6 +35,7 @@ import (
 
 	"github.com/fluxcd/pkg/lockedfile"
 
+	"github.com/fluxcd/pkg/untar"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
 	"github.com/fluxcd/source-controller/internal/fs"
 	"github.com/fluxcd/source-controller/pkg/sourceignore"
@@ -351,6 +352,34 @@ func (s *Storage) CopyFromPath(artifact *sourcev1.Artifact, path string) (err er
 	}
 	defer f.Close()
 	return s.Copy(artifact, f)
+}
+
+// CopyToPath copies the contents of the given atrifact to the path.
+func (s *Storage) CopyToPath(atrifact *sourcev1.Artifact, subPath, toPath string) error {
+	// create a tmp directory to store artifact
+	tmp, err := ioutil.TempDir("", "flux-include")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(tmp)
+	// read artifact file content
+	localPath := s.LocalPath(*atrifact)
+	f, err := os.Open(localPath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	// untar the artifact
+	untarPath := filepath.Join(tmp, "tar")
+	if _, err = untar.Untar(f, untarPath); err != nil {
+		return err
+	}
+	// copy the folder to the path
+	fromPath := filepath.Join(untarPath, subPath)
+	if err := fs.RenameWithFallback(fromPath, toPath); err != nil {
+		return err
+	}
+	return nil
 }
 
 // Symlink creates or updates a symbolic link for the given v1beta1.Artifact
