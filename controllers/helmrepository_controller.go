@@ -27,11 +27,7 @@ import (
 	"helm.sh/helm/v3/pkg/getter"
 	corev1 "k8s.io/api/core/v1"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	kuberecorder "k8s.io/client-go/tools/record"
-	"k8s.io/client-go/tools/reference"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -40,8 +36,8 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"github.com/fluxcd/pkg/apis/meta"
+	helper "github.com/fluxcd/pkg/runtime/controller"
 	"github.com/fluxcd/pkg/runtime/events"
-	"github.com/fluxcd/pkg/runtime/metrics"
 	"github.com/fluxcd/pkg/runtime/predicates"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
@@ -56,12 +52,11 @@ import (
 // HelmRepositoryReconciler reconciles a HelmRepository object
 type HelmRepositoryReconciler struct {
 	client.Client
-	Scheme                *runtime.Scheme
-	Storage               *Storage
-	Getters               getter.Providers
-	EventRecorder         kuberecorder.EventRecorder
-	ExternalEventRecorder *events.Recorder
-	MetricsRecorder       *metrics.Recorder
+	helper.Events
+	helper.Metrics
+
+	Getters getter.Providers
+	Storage *Storage
 }
 
 type HelmRepositoryReconcilerOptions struct {
@@ -110,13 +105,7 @@ func (r *HelmRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	}
 
 	// record reconciliation duration
-	if r.MetricsRecorder != nil {
-		objRef, err := reference.GetReference(r.Scheme, &repository)
-		if err != nil {
-			return ctrl.Result{}, err
-		}
-		defer r.MetricsRecorder.RecordDuration(*objRef, start)
-	}
+	defer r.Metrics.RecordDuration(ctx, &repository, start)
 
 	// set initial status
 	if resetRepository, ok := r.resetStatus(repository); ok {
@@ -125,7 +114,7 @@ func (r *HelmRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 			log.Error(err, "unable to update status")
 			return ctrl.Result{Requeue: true}, err
 		}
-		r.recordReadiness(ctx, repository)
+		r.Metrics.RecordReadinessMetric(ctx, &repository)
 	}
 
 	// record the value of the reconciliation request, if any
@@ -151,16 +140,18 @@ func (r *HelmRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 
 	// if reconciliation failed, record the failure and requeue immediately
 	if reconcileErr != nil {
-		r.event(ctx, reconciledRepository, events.EventSeverityError, reconcileErr.Error())
-		r.recordReadiness(ctx, reconciledRepository)
+		r.Events.Event(ctx, &reconciledRepository, nil, events.EventSeverityError, "ReconciliationFailed", reconcileErr.Error())
+		r.Metrics.RecordReadinessMetric(ctx, &reconciledRepository)
 		return ctrl.Result{Requeue: true}, reconcileErr
 	}
 
 	// emit revision change event
-	if repository.Status.Artifact == nil || reconciledRepository.Status.Artifact.Revision != repository.Status.Artifact.Revision {
-		r.event(ctx, reconciledRepository, events.EventSeverityInfo, sourcev1.HelmRepositoryReadyMessage(reconciledRepository))
+	if repository.GetArtifact() == nil || reconciledRepository.GetArtifact().Revision != repository.GetArtifact().Revision {
+		r.Events.Event(ctx, &reconciledRepository, map[string]string{
+			"revision": reconciledRepository.GetArtifact().Revision,
+		}, events.EventSeverityInfo, "NewArtifactRevision", sourcev1.HelmRepositoryReadyMessage(reconciledRepository))
 	}
-	r.recordReadiness(ctx, reconciledRepository)
+	r.RecordReadinessMetric(ctx, &reconciledRepository)
 
 	log.Info(fmt.Sprintf("Reconciliation finished in %s, next run in %s",
 		time.Now().Sub(start).String(),
@@ -265,14 +256,14 @@ func (r *HelmRepositoryReconciler) reconcile(ctx context.Context, repository sou
 func (r *HelmRepositoryReconciler) reconcileDelete(ctx context.Context, repository sourcev1.HelmRepository) (ctrl.Result, error) {
 	// Our finalizer is still present, so lets handle garbage collection
 	if err := r.gc(repository); err != nil {
-		r.event(ctx, repository, events.EventSeverityError,
-			fmt.Sprintf("garbage collection for deleted resource failed: %s", err.Error()))
+		r.Events.Eventf(ctx, &repository, nil, events.EventSeverityError, "GarbageCollectionFailed",
+			"garbage collection for deleted resource failed: %s", err.Error())
 		// Return the error so we retry the failed garbage collection
 		return ctrl.Result{}, err
 	}
 
 	// Record deleted status
-	r.recordReadiness(ctx, repository)
+	r.Metrics.RecordReadinessMetric(ctx, &repository)
 
 	// Remove our finalizer from the list and update it
 	controllerutil.RemoveFinalizer(&repository, sourcev1.SourceFinalizer)
@@ -313,46 +304,6 @@ func (r *HelmRepositoryReconciler) gc(repository sourcev1.HelmRepository) error 
 	return nil
 }
 
-// event emits a Kubernetes event and forwards the event to notification controller if configured
-func (r *HelmRepositoryReconciler) event(ctx context.Context, repository sourcev1.HelmRepository, severity, msg string) {
-	log := logr.FromContext(ctx)
-	if r.EventRecorder != nil {
-		r.EventRecorder.Eventf(&repository, "Normal", severity, msg)
-	}
-	if r.ExternalEventRecorder != nil {
-		objRef, err := reference.GetReference(r.Scheme, &repository)
-		if err != nil {
-			log.Error(err, "unable to send event")
-			return
-		}
-
-		if err := r.ExternalEventRecorder.Eventf(*objRef, nil, severity, severity, msg); err != nil {
-			log.Error(err, "unable to send event")
-			return
-		}
-	}
-}
-
-func (r *HelmRepositoryReconciler) recordReadiness(ctx context.Context, repository sourcev1.HelmRepository) {
-	log := logr.FromContext(ctx)
-	if r.MetricsRecorder == nil {
-		return
-	}
-	objRef, err := reference.GetReference(r.Scheme, &repository)
-	if err != nil {
-		log.Error(err, "unable to record readiness metric")
-		return
-	}
-	if rc := apimeta.FindStatusCondition(repository.Status.Conditions, meta.ReadyCondition); rc != nil {
-		r.MetricsRecorder.RecordCondition(*objRef, *rc, !repository.DeletionTimestamp.IsZero())
-	} else {
-		r.MetricsRecorder.RecordCondition(*objRef, metav1.Condition{
-			Type:   meta.ReadyCondition,
-			Status: metav1.ConditionUnknown,
-		}, !repository.DeletionTimestamp.IsZero())
-	}
-}
-
 func (r *HelmRepositoryReconciler) updateStatus(ctx context.Context, req ctrl.Request, newStatus sourcev1.HelmRepositoryStatus) error {
 	var repository sourcev1.HelmRepository
 	if err := r.Get(ctx, req.NamespacedName, &repository); err != nil {
@@ -363,23 +314,4 @@ func (r *HelmRepositoryReconciler) updateStatus(ctx context.Context, req ctrl.Re
 	repository.Status = newStatus
 
 	return r.Status().Patch(ctx, &repository, patch)
-}
-
-func (r *HelmRepositoryReconciler) recordSuspension(ctx context.Context, hr sourcev1.HelmRepository) {
-	if r.MetricsRecorder == nil {
-		return
-	}
-	log := logr.FromContext(ctx)
-
-	objRef, err := reference.GetReference(r.Scheme, &hr)
-	if err != nil {
-		log.Error(err, "unable to record suspended metric")
-		return
-	}
-
-	if !hr.DeletionTimestamp.IsZero() {
-		r.MetricsRecorder.RecordSuspend(*objRef, false)
-	} else {
-		r.MetricsRecorder.RecordSuspend(*objRef, hr.Spec.Suspend)
-	}
 }

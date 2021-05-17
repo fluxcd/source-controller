@@ -29,11 +29,7 @@ import (
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	kuberecorder "k8s.io/client-go/tools/record"
-	"k8s.io/client-go/tools/reference"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -42,8 +38,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	"github.com/fluxcd/pkg/apis/meta"
+	helper "github.com/fluxcd/pkg/runtime/controller"
 	"github.com/fluxcd/pkg/runtime/events"
-	"github.com/fluxcd/pkg/runtime/metrics"
 	"github.com/fluxcd/pkg/runtime/predicates"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
@@ -60,12 +56,12 @@ import (
 // GitRepositoryReconciler reconciles a GitRepository object
 type GitRepositoryReconciler struct {
 	client.Client
-	requeueDependency     time.Duration
-	Scheme                *runtime.Scheme
-	Storage               *Storage
-	EventRecorder         kuberecorder.EventRecorder
-	ExternalEventRecorder *events.Recorder
-	MetricsRecorder       *metrics.Recorder
+	helper.Events
+	helper.Metrics
+
+	Storage *Storage
+
+	requeueDependency time.Duration
 }
 
 type GitRepositoryReconcilerOptions struct {
@@ -98,7 +94,7 @@ func (r *GitRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	}
 
 	// Record suspended status metric
-	defer r.recordSuspension(ctx, repository)
+	defer r.RecordSuspend(ctx, &repository, repository.Spec.Suspend)
 
 	// Add our finalizer if it does not exist
 	if !controllerutil.ContainsFinalizer(&repository, sourcev1.SourceFinalizer) {
@@ -132,21 +128,15 @@ func (r *GitRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 			// instead we requeue on a fix interval.
 			msg := fmt.Sprintf("Dependencies do not meet ready condition, retrying in %s", r.requeueDependency.String())
 			log.Info(msg)
-			r.event(ctx, repository, events.EventSeverityInfo, msg)
-			r.recordReadiness(ctx, repository)
+			r.Events.Event(ctx, &repository, nil, events.EventSeverityInfo, "DependencyNotReady", msg)
+			r.Metrics.RecordReadinessMetric(ctx, &repository)
 			return ctrl.Result{RequeueAfter: r.requeueDependency}, nil
 		}
 		log.Info("All dependencies area ready, proceeding with reconciliation")
 	}
 
 	// record reconciliation duration
-	if r.MetricsRecorder != nil {
-		objRef, err := reference.GetReference(r.Scheme, &repository)
-		if err != nil {
-			return ctrl.Result{}, err
-		}
-		defer r.MetricsRecorder.RecordDuration(*objRef, start)
-	}
+	defer r.Metrics.RecordDuration(ctx, &repository, start)
 
 	// set initial status
 	if resetRepository, ok := r.resetStatus(repository); ok {
@@ -155,7 +145,7 @@ func (r *GitRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 			log.Error(err, "unable to update status")
 			return ctrl.Result{Requeue: true}, err
 		}
-		r.recordReadiness(ctx, repository)
+		r.Metrics.RecordReadinessMetric(ctx, &repository)
 	}
 
 	// record the value of the reconciliation request, if any
@@ -181,16 +171,18 @@ func (r *GitRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 
 	// if reconciliation failed, record the failure and requeue immediately
 	if reconcileErr != nil {
-		r.event(ctx, reconciledRepository, events.EventSeverityError, reconcileErr.Error())
-		r.recordReadiness(ctx, reconciledRepository)
+		r.Events.Event(ctx, &reconciledRepository, nil, events.EventSeverityError, "ReconciliationFailed", reconcileErr.Error())
+		r.Metrics.RecordReadinessMetric(ctx, &reconciledRepository)
 		return ctrl.Result{Requeue: true}, reconcileErr
 	}
 
 	// emit revision change event
-	if repository.Status.Artifact == nil || reconciledRepository.Status.Artifact.Revision != repository.Status.Artifact.Revision {
-		r.event(ctx, reconciledRepository, events.EventSeverityInfo, sourcev1.GitRepositoryReadyMessage(reconciledRepository))
+	if repository.GetArtifact() == nil || reconciledRepository.GetArtifact().Revision != repository.GetArtifact().Revision {
+		r.Events.Event(ctx, &reconciledRepository, map[string]string{
+			"revision": reconciledRepository.GetArtifact().Revision,
+		}, events.EventSeverityInfo, "NewRevision", sourcev1.GitRepositoryReadyMessage(reconciledRepository))
 	}
-	r.recordReadiness(ctx, reconciledRepository)
+	r.Metrics.RecordReadinessMetric(ctx, &reconciledRepository)
 
 	log.Info(fmt.Sprintf("Reconciliation finished in %s, next run in %s",
 		time.Now().Sub(start).String(),
@@ -376,14 +368,14 @@ func (r *GitRepositoryReconciler) reconcile(ctx context.Context, repository sour
 
 func (r *GitRepositoryReconciler) reconcileDelete(ctx context.Context, repository sourcev1.GitRepository) (ctrl.Result, error) {
 	if err := r.gc(repository); err != nil {
-		r.event(ctx, repository, events.EventSeverityError,
-			fmt.Sprintf("garbage collection for deleted resource failed: %s", err.Error()))
+		r.Events.Eventf(ctx, &repository, nil, events.EventSeverityError, "GarbageCollectionFailed",
+			"garbage collection for deleted resource failed: %s", err.Error())
 		// Return the error so we retry the failed garbage collection
 		return ctrl.Result{}, err
 	}
 
 	// Record deleted status
-	r.recordReadiness(ctx, repository)
+	r.Metrics.RecordReadinessMetric(ctx, &repository)
 
 	// Remove our finalizer from the list and update it
 	controllerutil.RemoveFinalizer(&repository, sourcev1.SourceFinalizer)
@@ -422,66 +414,6 @@ func (r *GitRepositoryReconciler) gc(repository sourcev1.GitRepository) error {
 		return r.Storage.RemoveAllButCurrent(*repository.GetArtifact())
 	}
 	return nil
-}
-
-// event emits a Kubernetes event and forwards the event to notification controller if configured
-func (r *GitRepositoryReconciler) event(ctx context.Context, repository sourcev1.GitRepository, severity, msg string) {
-	log := logr.FromContext(ctx)
-
-	if r.EventRecorder != nil {
-		r.EventRecorder.Eventf(&repository, "Normal", severity, msg)
-	}
-	if r.ExternalEventRecorder != nil {
-		objRef, err := reference.GetReference(r.Scheme, &repository)
-		if err != nil {
-			log.Error(err, "unable to send event")
-			return
-		}
-
-		if err := r.ExternalEventRecorder.Eventf(*objRef, nil, severity, severity, msg); err != nil {
-			log.Error(err, "unable to send event")
-			return
-		}
-	}
-}
-
-func (r *GitRepositoryReconciler) recordReadiness(ctx context.Context, repository sourcev1.GitRepository) {
-	log := logr.FromContext(ctx)
-	if r.MetricsRecorder == nil {
-		return
-	}
-	objRef, err := reference.GetReference(r.Scheme, &repository)
-	if err != nil {
-		log.Error(err, "unable to record readiness metric")
-		return
-	}
-	if rc := apimeta.FindStatusCondition(repository.Status.Conditions, meta.ReadyCondition); rc != nil {
-		r.MetricsRecorder.RecordCondition(*objRef, *rc, !repository.DeletionTimestamp.IsZero())
-	} else {
-		r.MetricsRecorder.RecordCondition(*objRef, metav1.Condition{
-			Type:   meta.ReadyCondition,
-			Status: metav1.ConditionUnknown,
-		}, !repository.DeletionTimestamp.IsZero())
-	}
-}
-
-func (r *GitRepositoryReconciler) recordSuspension(ctx context.Context, gitrepository sourcev1.GitRepository) {
-	if r.MetricsRecorder == nil {
-		return
-	}
-	log := logr.FromContext(ctx)
-
-	objRef, err := reference.GetReference(r.Scheme, &gitrepository)
-	if err != nil {
-		log.Error(err, "unable to record suspended metric")
-		return
-	}
-
-	if !gitrepository.DeletionTimestamp.IsZero() {
-		r.MetricsRecorder.RecordSuspend(*objRef, false)
-	} else {
-		r.MetricsRecorder.RecordSuspend(*objRef, gitrepository.Spec.Suspend)
-	}
 }
 
 func (r *GitRepositoryReconciler) updateStatus(ctx context.Context, req ctrl.Request, newStatus sourcev1.GitRepositoryStatus) error {

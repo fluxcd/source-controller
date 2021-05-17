@@ -36,11 +36,7 @@ import (
 	"helm.sh/helm/v3/pkg/getter"
 	corev1 "k8s.io/api/core/v1"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	kuberecorder "k8s.io/client-go/tools/record"
-	"k8s.io/client-go/tools/reference"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -53,8 +49,8 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"github.com/fluxcd/pkg/apis/meta"
+	helper "github.com/fluxcd/pkg/runtime/controller"
 	"github.com/fluxcd/pkg/runtime/events"
-	"github.com/fluxcd/pkg/runtime/metrics"
 	"github.com/fluxcd/pkg/runtime/predicates"
 	"github.com/fluxcd/pkg/runtime/transform"
 	"github.com/fluxcd/pkg/untar"
@@ -71,12 +67,11 @@ import (
 // HelmChartReconciler reconciles a HelmChart object
 type HelmChartReconciler struct {
 	client.Client
-	Scheme                *runtime.Scheme
-	Storage               *Storage
-	Getters               getter.Providers
-	EventRecorder         kuberecorder.EventRecorder
-	ExternalEventRecorder *events.Recorder
-	MetricsRecorder       *metrics.Recorder
+	helper.Events
+	helper.Metrics
+
+	Getters getter.Providers
+	Storage *Storage
 }
 
 func (r *HelmChartReconciler) SetupWithManager(mgr ctrl.Manager) error {
@@ -126,7 +121,7 @@ func (r *HelmChartReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 
 	// Record suspended status metric
-	defer r.recordSuspension(ctx, chart)
+	defer r.RecordSuspend(ctx, &chart, chart.Spec.Suspend)
 
 	// Add our finalizer if it does not exist
 	if !controllerutil.ContainsFinalizer(&chart, sourcev1.SourceFinalizer) {
@@ -149,13 +144,7 @@ func (r *HelmChartReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 
 	// Record reconciliation duration
-	if r.MetricsRecorder != nil {
-		objRef, err := reference.GetReference(r.Scheme, &chart)
-		if err != nil {
-			return ctrl.Result{}, err
-		}
-		defer r.MetricsRecorder.RecordDuration(*objRef, start)
-	}
+	defer r.Metrics.RecordDuration(ctx, &chart, start)
 
 	// Conditionally set progressing condition in status
 	resetChart, changed := r.resetStatus(chart)
@@ -165,7 +154,7 @@ func (r *HelmChartReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			log.Error(err, "unable to update status")
 			return ctrl.Result{Requeue: true}, err
 		}
-		r.recordReadiness(ctx, chart)
+		r.Metrics.RecordReadinessMetric(ctx, &chart)
 	}
 
 	// Record the value of the reconciliation request, if any
@@ -198,7 +187,7 @@ func (r *HelmChartReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		if err := r.updateStatus(ctx, req, chart.Status); err != nil {
 			log.Error(err, "unable to update status")
 		}
-		r.recordReadiness(ctx, chart)
+		r.Metrics.RecordReadinessMetric(ctx, &chart)
 		return ctrl.Result{Requeue: true}, err
 	}
 
@@ -217,8 +206,8 @@ func (r *HelmChartReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 				log.Error(err, "unable to update status")
 				return ctrl.Result{Requeue: true}, err
 			}
-			r.event(ctx, reconciledChart, events.EventSeverityError, err.Error())
-			r.recordReadiness(ctx, reconciledChart)
+			r.Events.Event(ctx, &reconciledChart, nil, events.EventSeverityError, "InvalidChartName", err.Error())
+			r.RecordReadinessMetric(ctx, &reconciledChart)
 			// Do not requeue as there is no chance on recovery.
 			return ctrl.Result{Requeue: false}, nil
 		}
@@ -239,17 +228,19 @@ func (r *HelmChartReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 	// If reconciliation failed, record the failure and requeue immediately
 	if reconcileErr != nil {
-		r.event(ctx, reconciledChart, events.EventSeverityError, reconcileErr.Error())
-		r.recordReadiness(ctx, reconciledChart)
+		r.Events.Event(ctx, &reconciledChart, nil, events.EventSeverityError, "ReconciliationFailed", reconcileErr.Error())
+		r.Metrics.RecordReadinessMetric(ctx, &reconciledChart)
 		return ctrl.Result{Requeue: true}, reconcileErr
 	}
 
 	// Emit an event if we did not have an artifact before, or the revision has changed
 	if (chart.GetArtifact() == nil && reconciledChart.GetArtifact() != nil) ||
 		(chart.GetArtifact() != nil && reconciledChart.GetArtifact() != nil && reconciledChart.GetArtifact().Revision != chart.GetArtifact().Revision) {
-		r.event(ctx, reconciledChart, events.EventSeverityInfo, sourcev1.HelmChartReadyMessage(reconciledChart))
+		r.Events.Event(ctx, &reconciledChart, map[string]string{
+			"revision": reconciledChart.GetArtifact().Revision,
+		}, events.EventSeverityInfo, "NewRevision", sourcev1.HelmChartReadyMessage(reconciledChart))
 	}
-	r.recordReadiness(ctx, reconciledChart)
+	r.Metrics.RecordReadinessMetric(ctx, &reconciledChart)
 
 	log.Info(fmt.Sprintf("Reconciliation finished in %s, next run in %s",
 		time.Now().Sub(start).String(),
@@ -738,14 +729,14 @@ func (r *HelmChartReconciler) reconcileFromTarballArtifact(ctx context.Context,
 func (r *HelmChartReconciler) reconcileDelete(ctx context.Context, chart sourcev1.HelmChart) (ctrl.Result, error) {
 	// Our finalizer is still present, so lets handle garbage collection
 	if err := r.gc(chart); err != nil {
-		r.event(ctx, chart, events.EventSeverityError,
-			fmt.Sprintf("garbage collection for deleted resource failed: %s", err.Error()))
+		r.Events.Eventf(ctx, &chart, nil, events.EventSeverityError, "GarbageCollectionFailed",
+			"garbage collection for deleted resource failed: %s", err.Error())
 		// Return the error so we retry the failed garbage collection
 		return ctrl.Result{}, err
 	}
 
 	// Record deleted status
-	r.recordReadiness(ctx, chart)
+	r.Metrics.RecordReadinessMetric(ctx, &chart)
 
 	// Remove our finalizer from the list and update it
 	controllerutil.RemoveFinalizer(&chart, sourcev1.SourceFinalizer)
@@ -785,47 +776,6 @@ func (r *HelmChartReconciler) gc(chart sourcev1.HelmChart) error {
 		return r.Storage.RemoveAllButCurrent(*chart.GetArtifact())
 	}
 	return nil
-}
-
-// event emits a Kubernetes event and forwards the event to notification
-// controller if configured.
-func (r *HelmChartReconciler) event(ctx context.Context, chart sourcev1.HelmChart, severity, msg string) {
-	log := logr.FromContext(ctx)
-	if r.EventRecorder != nil {
-		r.EventRecorder.Eventf(&chart, "Normal", severity, msg)
-	}
-	if r.ExternalEventRecorder != nil {
-		objRef, err := reference.GetReference(r.Scheme, &chart)
-		if err != nil {
-			log.Error(err, "unable to send event")
-			return
-		}
-
-		if err := r.ExternalEventRecorder.Eventf(*objRef, nil, severity, severity, msg); err != nil {
-			log.Error(err, "unable to send event")
-			return
-		}
-	}
-}
-
-func (r *HelmChartReconciler) recordReadiness(ctx context.Context, chart sourcev1.HelmChart) {
-	log := logr.FromContext(ctx)
-	if r.MetricsRecorder == nil {
-		return
-	}
-	objRef, err := reference.GetReference(r.Scheme, &chart)
-	if err != nil {
-		log.Error(err, "unable to record readiness metric")
-		return
-	}
-	if rc := apimeta.FindStatusCondition(chart.Status.Conditions, meta.ReadyCondition); rc != nil {
-		r.MetricsRecorder.RecordCondition(*objRef, *rc, !chart.DeletionTimestamp.IsZero())
-	} else {
-		r.MetricsRecorder.RecordCondition(*objRef, metav1.Condition{
-			Type:   meta.ReadyCondition,
-			Status: metav1.ConditionUnknown,
-		}, !chart.DeletionTimestamp.IsZero())
-	}
 }
 
 func (r *HelmChartReconciler) updateStatus(ctx context.Context, req ctrl.Request, newStatus sourcev1.HelmChartStatus) error {
@@ -998,23 +948,4 @@ func validHelmChartName(s string) error {
 		return fmt.Errorf("invalid chart name %q, a valid name must be lower case letters and numbers and MAY be separated with dashes (-)", s)
 	}
 	return nil
-}
-
-func (r *HelmChartReconciler) recordSuspension(ctx context.Context, chart sourcev1.HelmChart) {
-	if r.MetricsRecorder == nil {
-		return
-	}
-	log := logr.FromContext(ctx)
-
-	objRef, err := reference.GetReference(r.Scheme, &chart)
-	if err != nil {
-		log.Error(err, "unable to record suspended metric")
-		return
-	}
-
-	if !chart.DeletionTimestamp.IsZero() {
-		r.MetricsRecorder.RecordSuspend(*objRef, false)
-	} else {
-		r.MetricsRecorder.RecordSuspend(*objRef, chart.Spec.Suspend)
-	}
 }

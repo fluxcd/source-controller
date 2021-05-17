@@ -26,17 +26,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-logr/logr"
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 	"github.com/minio/minio-go/v7/pkg/s3utils"
 	corev1 "k8s.io/api/core/v1"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	kuberecorder "k8s.io/client-go/tools/record"
-	"k8s.io/client-go/tools/reference"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -44,8 +39,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	"github.com/fluxcd/pkg/apis/meta"
+	helper "github.com/fluxcd/pkg/runtime/controller"
 	"github.com/fluxcd/pkg/runtime/events"
-	"github.com/fluxcd/pkg/runtime/metrics"
 	"github.com/fluxcd/pkg/runtime/predicates"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
@@ -60,11 +55,10 @@ import (
 // BucketReconciler reconciles a Bucket object
 type BucketReconciler struct {
 	client.Client
-	Scheme                *runtime.Scheme
-	Storage               *Storage
-	EventRecorder         kuberecorder.EventRecorder
-	ExternalEventRecorder *events.Recorder
-	MetricsRecorder       *metrics.Recorder
+	helper.Events
+	helper.Metrics
+
+	Storage *Storage
 }
 
 type BucketReconcilerOptions struct {
@@ -93,7 +87,7 @@ func (r *BucketReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	}
 
 	// Record suspended status metric
-	defer r.recordSuspension(ctx, bucket)
+	defer r.Metrics.RecordSuspend(ctx, &bucket, bucket.Spec.Suspend)
 
 	// Add our finalizer if it does not exist
 	if !controllerutil.ContainsFinalizer(&bucket, sourcev1.SourceFinalizer) {
@@ -116,13 +110,7 @@ func (r *BucketReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	}
 
 	// record reconciliation duration
-	if r.MetricsRecorder != nil {
-		objRef, err := reference.GetReference(r.Scheme, &bucket)
-		if err != nil {
-			return ctrl.Result{}, err
-		}
-		defer r.MetricsRecorder.RecordDuration(*objRef, start)
-	}
+	defer r.Metrics.RecordDuration(ctx, &bucket, start)
 
 	// set initial status
 	if resetBucket, ok := r.resetStatus(bucket); ok {
@@ -131,7 +119,7 @@ func (r *BucketReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 			log.Error(err, "unable to update status")
 			return ctrl.Result{Requeue: true}, err
 		}
-		r.recordReadiness(ctx, bucket)
+		r.Metrics.RecordReadinessMetric(ctx, &bucket)
 	}
 
 	// record the value of the reconciliation request, if any
@@ -157,16 +145,18 @@ func (r *BucketReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 
 	// if reconciliation failed, record the failure and requeue immediately
 	if reconcileErr != nil {
-		r.event(ctx, reconciledBucket, events.EventSeverityError, reconcileErr.Error())
-		r.recordReadiness(ctx, reconciledBucket)
+		r.Events.Event(ctx, &reconciledBucket, nil, events.EventSeverityError, "ReconciliationFailed", reconcileErr.Error())
+		r.Metrics.RecordReadinessMetric(ctx, &bucket)
 		return ctrl.Result{Requeue: true}, reconcileErr
 	}
 
 	// emit revision change event
 	if bucket.Status.Artifact == nil || reconciledBucket.Status.Artifact.Revision != bucket.Status.Artifact.Revision {
-		r.event(ctx, reconciledBucket, events.EventSeverityInfo, sourcev1.BucketReadyMessage(reconciledBucket))
+		r.Events.Event(ctx, &reconciledBucket, map[string]string{
+			"revision": reconciledBucket.GetArtifact().Revision,
+		}, events.EventSeverityInfo, "NewRevision", sourcev1.BucketReadyMessage(reconciledBucket))
 	}
-	r.recordReadiness(ctx, reconciledBucket)
+	r.Metrics.RecordReadinessMetric(ctx, &bucket)
 
 	log.Info(fmt.Sprintf("Reconciliation finished in %s, next run in %s",
 		time.Now().Sub(start).String(),
@@ -297,14 +287,14 @@ func (r *BucketReconciler) reconcile(ctx context.Context, bucket sourcev1.Bucket
 
 func (r *BucketReconciler) reconcileDelete(ctx context.Context, bucket sourcev1.Bucket) (ctrl.Result, error) {
 	if err := r.gc(bucket); err != nil {
-		r.event(ctx, bucket, events.EventSeverityError,
-			fmt.Sprintf("garbage collection for deleted resource failed: %s", err.Error()))
+		r.Events.Eventf(ctx, &bucket, nil, events.EventSeverityError, "GarbageCollectionFailed",
+			"garbage collection for deleted resource failed: %s", err.Error())
 		// Return the error so we retry the failed garbage collection
 		return ctrl.Result{}, err
 	}
 
 	// Record deleted status
-	r.recordReadiness(ctx, bucket)
+	r.Metrics.RecordReadinessMetric(ctx, &bucket)
 
 	// Remove our finalizer from the list and update it
 	controllerutil.RemoveFinalizer(&bucket, sourcev1.SourceFinalizer)
@@ -411,65 +401,6 @@ func (r *BucketReconciler) gc(bucket sourcev1.Bucket) error {
 		return r.Storage.RemoveAllButCurrent(*bucket.GetArtifact())
 	}
 	return nil
-}
-
-// event emits a Kubernetes event and forwards the event to notification controller if configured
-func (r *BucketReconciler) event(ctx context.Context, bucket sourcev1.Bucket, severity, msg string) {
-	log := logr.FromContext(ctx)
-	if r.EventRecorder != nil {
-		r.EventRecorder.Eventf(&bucket, "Normal", severity, msg)
-	}
-	if r.ExternalEventRecorder != nil {
-		objRef, err := reference.GetReference(r.Scheme, &bucket)
-		if err != nil {
-			log.Error(err, "unable to send event")
-			return
-		}
-
-		if err := r.ExternalEventRecorder.Eventf(*objRef, nil, severity, severity, msg); err != nil {
-			log.Error(err, "unable to send event")
-			return
-		}
-	}
-}
-
-func (r *BucketReconciler) recordReadiness(ctx context.Context, bucket sourcev1.Bucket) {
-	log := logr.FromContext(ctx)
-	if r.MetricsRecorder == nil {
-		return
-	}
-	objRef, err := reference.GetReference(r.Scheme, &bucket)
-	if err != nil {
-		log.Error(err, "unable to record readiness metric")
-		return
-	}
-	if rc := apimeta.FindStatusCondition(bucket.Status.Conditions, meta.ReadyCondition); rc != nil {
-		r.MetricsRecorder.RecordCondition(*objRef, *rc, !bucket.DeletionTimestamp.IsZero())
-	} else {
-		r.MetricsRecorder.RecordCondition(*objRef, metav1.Condition{
-			Type:   meta.ReadyCondition,
-			Status: metav1.ConditionUnknown,
-		}, !bucket.DeletionTimestamp.IsZero())
-	}
-}
-
-func (r *BucketReconciler) recordSuspension(ctx context.Context, bucket sourcev1.Bucket) {
-	if r.MetricsRecorder == nil {
-		return
-	}
-	log := logr.FromContext(ctx)
-
-	objRef, err := reference.GetReference(r.Scheme, &bucket)
-	if err != nil {
-		log.Error(err, "unable to record suspended metric")
-		return
-	}
-
-	if !bucket.DeletionTimestamp.IsZero() {
-		r.MetricsRecorder.RecordSuspend(*objRef, false)
-	} else {
-		r.MetricsRecorder.RecordSuspend(*objRef, bucket.Spec.Suspend)
-	}
 }
 
 func (r *BucketReconciler) updateStatus(ctx context.Context, req ctrl.Request, newStatus sourcev1.BucketStatus) error {
