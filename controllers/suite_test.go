@@ -25,7 +25,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/fluxcd/pkg/runtime/controller"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"helm.sh/helm/v3/pkg/getter"
@@ -113,21 +112,18 @@ var _ = BeforeSuite(func(done Done) {
 	})
 	Expect(err).ToNot(HaveOccurred())
 
-	metrics := controller.MustMakeMetrics(k8sManager)
-	events := controller.MakeEvents(k8sManager, "source-controller", nil)
-
 	err = (&GitRepositoryReconciler{
 		Client:  k8sManager.GetClient(),
-		Events:  events,
-		Metrics: metrics,
+		Events:  eventsHelper,
+		Metrics: metricsHelper,
 		Storage: storage,
 	}).SetupWithManager(k8sManager)
 	Expect(err).ToNot(HaveOccurred(), "failed to setup GtRepositoryReconciler")
 
 	err = (&HelmRepositoryReconciler{
 		Client:  k8sManager.GetClient(),
-		Events:  events,
-		Metrics: metrics,
+		Events:  eventsHelper,
+		Metrics: metricsHelper,
 		Storage: storage,
 		Getters: getter.Providers{getter.Provider{
 			Schemes: []string{"http", "https"},
@@ -138,8 +134,8 @@ var _ = BeforeSuite(func(done Done) {
 
 	err = (&HelmChartReconciler{
 		Client:  k8sManager.GetClient(),
-		Events:  events,
-		Metrics: metrics,
+		Events:  eventsHelper,
+		Metrics: metricsHelper,
 		Storage: storage,
 		Getters: getter.Providers{getter.Provider{
 			Schemes: []string{"http", "https"},
@@ -149,7 +145,7 @@ var _ = BeforeSuite(func(done Done) {
 	Expect(err).ToNot(HaveOccurred(), "failed to setup HelmChartReconciler")
 
 	go func() {
-		err = k8sManager.Start(ctrl.SetupSignalHandler())
+		err = k8sManager.Start(ctx)
 		Expect(err).ToNot(HaveOccurred())
 	}()
 

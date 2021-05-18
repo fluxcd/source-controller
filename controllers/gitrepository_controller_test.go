@@ -17,757 +17,984 @@ limitations under the License.
 package controllers
 
 import (
-	"context"
-	"crypto/tls"
 	"fmt"
 	"io/ioutil"
 	"net/http"
 	"net/url"
 	"os"
-
-	"os/exec"
-	"path"
 	"path/filepath"
-
 	"strings"
+	"testing"
 	"time"
 
+	"github.com/fluxcd/pkg/gittestserver"
+	"github.com/fluxcd/pkg/ssh"
 	"github.com/go-git/go-billy/v5/memfs"
-	"github.com/go-git/go-git/v5"
+	gogit "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
-
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
-	"github.com/go-git/go-git/v5/plumbing/transport/client"
-	httptransport "github.com/go-git/go-git/v5/plumbing/transport/http"
 	"github.com/go-git/go-git/v5/storage/memory"
-	. "github.com/onsi/ginkgo"
-
-	. "github.com/onsi/ginkgo/extensions/table"
+	"github.com/go-logr/logr"
 	. "github.com/onsi/gomega"
+	sshtestdata "golang.org/x/crypto/ssh/testdata"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/runtime"
+	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/utils/pointer"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	fakeclient "sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/fluxcd/pkg/apis/meta"
-	"github.com/fluxcd/pkg/gittestserver"
-	"github.com/fluxcd/pkg/untar"
+	"github.com/fluxcd/pkg/runtime/conditions"
+	"github.com/fluxcd/pkg/runtime/controller"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
+	"github.com/fluxcd/source-controller/internal/testenv"
+	"github.com/fluxcd/source-controller/pkg/git"
+	"github.com/fluxcd/source-controller/pkg/git/fake"
 )
 
-var _ = Describe("GitRepositoryReconciler", func() {
+var (
+	timeout                = 10 * time.Second
+	mockInterval           = 1 * time.Second
+	testGitImplementations = []string{sourcev1.GoGitImplementation, sourcev1.LibGit2Implementation}
+)
 
-	const (
-		timeout       = time.Second * 30
-		interval      = time.Second * 1
-		indexInterval = time.Second * 1
-	)
+var (
+	testTLSPublicKey  []byte
+	testTLSPrivateKey []byte
+	testTLSCA         []byte
+)
 
-	Context("GitRepository", func() {
-		var (
-			namespace *corev1.Namespace
-			gitServer *gittestserver.GitServer
-			err       error
-		)
+var (
+	newTestEnv    *testenv.TestEnvironment
+	eventsHelper  controller.Events
+	metricsHelper controller.Metrics
+	ctx           = ctrl.SetupSignalHandler()
+)
 
-		BeforeEach(func() {
-			namespace = &corev1.Namespace{
-				ObjectMeta: metav1.ObjectMeta{Name: "git-repository-test" + randStringRunes(5)},
-			}
-			err = k8sClient.Create(context.Background(), namespace)
-			Expect(err).NotTo(HaveOccurred(), "failed to create test namespace")
+func TestGitRepositoryReconciler_Reconcile(t *testing.T) {
+	g := NewWithT(t)
 
-			cert := corev1.Secret{
+	obj := &sourcev1.GitRepository{
+		ObjectMeta: metav1.ObjectMeta{
+			GenerateName: "gitrepository-reconcile-",
+			Namespace:    "default",
+		},
+		Spec: sourcev1.GitRepositorySpec{
+			URL: "https://github.com/stefanprodan/podinfo.git",
+		},
+	}
+	g.Expect(newTestEnv.Create(ctx, obj)).To(Succeed())
+
+	key := client.ObjectKey{Name: obj.Name, Namespace: obj.Namespace}
+
+	// Wait for finalizer to be set
+	g.Eventually(func() bool {
+		if err := newTestEnv.Get(ctx, key, obj); err != nil {
+			return false
+		}
+		return len(obj.Finalizers) > 0
+	}, timeout).Should(BeTrue())
+
+	// Wait for GitRepository to be Ready
+	g.Eventually(func() bool {
+		if err := newTestEnv.Get(ctx, key, obj); err != nil {
+			return false
+		}
+
+		if !conditions.Has(obj, sourcev1.ArtifactAvailableCondition) ||
+			!conditions.Has(obj, sourcev1.SourceAvailableCondition) ||
+			!conditions.Has(obj, meta.ReadyCondition) ||
+			obj.Status.Artifact == nil {
+			return false
+		}
+
+		readyCondition := conditions.Get(obj, meta.ReadyCondition)
+
+		return readyCondition.Status == metav1.ConditionTrue &&
+			obj.Generation == readyCondition.ObservedGeneration
+	}, timeout).Should(BeTrue())
+
+	g.Expect(newTestEnv.Delete(ctx, obj)).To(Succeed())
+
+	// Wait for GitRepository to be deleted
+	g.Eventually(func() bool {
+		if err := newTestEnv.Get(ctx, key, obj); err != nil {
+			return apierrors.IsNotFound(err)
+		}
+		return false
+	}, timeout).Should(BeTrue())
+}
+
+func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
+	type options struct {
+		username   string
+		password   string
+		publicKey  []byte
+		privateKey []byte
+		ca         []byte
+	}
+
+	tests := []struct {
+		name                  string
+		skipForImplementation string
+		protocol              string
+		server                options
+		secret                *corev1.Secret
+		beforeFunc            func(obj *sourcev1.GitRepository)
+		want                  ctrl.Result
+		wantErr               bool
+		assertConditions      []metav1.Condition
+	}{
+		{
+			name:     "HTTP",
+			protocol: "http",
+			want:     ctrl.Result{RequeueAfter: mockInterval},
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.SourceAvailableCondition, "SuccessfulCheckout", "Checked out revision master/<commit> from <url>"),
+			},
+		},
+		{
+			name:     "HTTP with BasicAuth",
+			protocol: "http",
+			server: options{
+				username: "git",
+				password: "1234",
+			},
+			secret: &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "cert",
-					Namespace: namespace.Name,
+					Name: "basic-auth",
 				},
 				Data: map[string][]byte{
-					"caFile": exampleCA,
+					"username": []byte("git"),
+					"password": []byte("1234"),
 				},
-			}
-			err = k8sClient.Create(context.Background(), &cert)
-			Expect(err).NotTo(HaveOccurred())
+			},
+			beforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Spec.SecretRef = &meta.LocalObjectReference{Name: "basic-auth"}
+			},
+			want: ctrl.Result{RequeueAfter: mockInterval},
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.SourceAvailableCondition, "SuccessfulCheckout", "Checked out revision master/<commit> from <url>"),
+			},
+		},
+		{
+			name:     "HTTPS with CAFile",
+			protocol: "https",
+			server: options{
+				publicKey:  testTLSPublicKey,
+				privateKey: testTLSPrivateKey,
+				ca:         testTLSCA,
+			},
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "ca-file",
+				},
+				Data: map[string][]byte{
+					"caFile": testTLSCA,
+				},
+			},
+			beforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Spec.SecretRef = &meta.LocalObjectReference{Name: "ca-file"}
+			},
+			want: ctrl.Result{RequeueAfter: mockInterval},
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.SourceAvailableCondition, "SuccessfulCheckout", "Checked out revision master/<commit> from <url>"),
+			},
+		},
+		{
+			name:                  "HTTPS with invalid CAFile (go-git)",
+			skipForImplementation: sourcev1.LibGit2Implementation,
+			protocol:              "https",
+			server: options{
+				publicKey:  testTLSPublicKey,
+				privateKey: testTLSPrivateKey,
+				ca:         testTLSCA,
+			},
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "invalid-ca",
+				},
+				Data: map[string][]byte{
+					"caFile": []byte("invalid"),
+				},
+			},
+			beforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Spec.SecretRef = &meta.LocalObjectReference{Name: "invalid-ca"}
+			},
+			wantErr: true,
+			assertConditions: []metav1.Condition{
+				*conditions.FalseCondition(sourcev1.SourceAvailableCondition, "GitOperationFailed", "Failed to checkout and determine HEAD revision: unable to clone '<url>', error: Get \"<url>/info/refs?service=git-upload-pack\": x509: certificate signed by unknown authority"),
+			},
+		},
+		{
+			name:                  "HTTPS with invalid CAFile (libgit2)",
+			skipForImplementation: sourcev1.GoGitImplementation,
+			protocol:              "https",
+			server: options{
+				publicKey:  testTLSPublicKey,
+				privateKey: testTLSPrivateKey,
+				ca:         testTLSCA,
+			},
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "invalid-ca",
+				},
+				Data: map[string][]byte{
+					"caFile": []byte("invalid"),
+				},
+			},
+			beforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Spec.SecretRef = &meta.LocalObjectReference{Name: "invalid-ca"}
+			},
+			wantErr: true,
+			assertConditions: []metav1.Condition{
+				*conditions.FalseCondition(sourcev1.SourceAvailableCondition, "GitOperationFailed", "Failed to checkout and determine HEAD revision: unable to clone '<url>', error: Certificate"),
+			},
+		},
+		{
+			name:     "SSH with private key",
+			protocol: "ssh",
+			server: options{
+				username: "git",
+			},
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "private-key",
+				},
+				Data: map[string][]byte{
+					"username": []byte("git"),
+					"identity": sshtestdata.PEMBytes["rsa"],
+				},
+			},
+			beforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Spec.SecretRef = &meta.LocalObjectReference{Name: "private-key"}
+			},
+			want: ctrl.Result{RequeueAfter: mockInterval},
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.SourceAvailableCondition, "SuccessfulCheckout", "Checked out revision master/<commit> from <url>"),
+			},
+		},
+		{
+			name:     "SSH with password protected private key",
+			protocol: "ssh",
+			server: options{
+				username: "git",
+			},
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "private-key",
+				},
+				Data: map[string][]byte{
+					"username": []byte("git"),
+					"identity": sshtestdata.PEMEncryptedKeys[2].PEMBytes,
+					"password": []byte("password"),
+				},
+			},
+			beforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Spec.SecretRef = &meta.LocalObjectReference{Name: "private-key"}
+			},
+			want: ctrl.Result{RequeueAfter: mockInterval},
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.SourceAvailableCondition, "SuccessfulCheckout", "Checked out revision master/<commit> from <url>"),
+			},
+		},
+		{
+			name:     "Missing secret",
+			protocol: "http",
+			server: options{
+				username: "git",
+			},
+			beforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Spec.SecretRef = &meta.LocalObjectReference{Name: "non-existing"}
+			},
+			want: ctrl.Result{RequeueAfter: mockInterval},
+			assertConditions: []metav1.Condition{
+				*conditions.FalseCondition(sourcev1.SourceAvailableCondition, "AuthenticationFailed", "Failed to get auth secret /non-existing: secrets \"non-existing\" not found"),
+			},
+		},
+	}
 
-			gitServer, err = gittestserver.NewTempGitServer()
-			Expect(err).NotTo(HaveOccurred())
-			gitServer.AutoCreate()
-		})
-
-		AfterEach(func() {
-			os.RemoveAll(gitServer.Root())
-
-			err = k8sClient.Delete(context.Background(), namespace)
-			Expect(err).NotTo(HaveOccurred(), "failed to delete test namespace")
-		})
-
-		type refTestCase struct {
-			reference  *sourcev1.GitRepositoryRef
-			createRefs []string
-
-			waitForReason string
-
-			expectStatus   metav1.ConditionStatus
-			expectMessage  string
-			expectRevision string
-
-			secretRef         *meta.LocalObjectReference
-			gitImplementation string
+	for _, tt := range tests {
+		obj := &sourcev1.GitRepository{
+			ObjectMeta: metav1.ObjectMeta{
+				GenerateName: "auth-strategy-",
+			},
+			Spec: sourcev1.GitRepositorySpec{
+				Interval: metav1.Duration{Duration: mockInterval},
+				Timeout:  &metav1.Duration{Duration: mockInterval},
+			},
 		}
 
-		DescribeTable("Git references tests", func(t refTestCase) {
-			err = gitServer.StartHTTP()
-			defer gitServer.StopHTTP()
-			Expect(err).NotTo(HaveOccurred())
+		s := runtime.NewScheme()
+		utilruntime.Must(corev1.AddToScheme(s))
 
-			u, err := url.Parse(gitServer.HTTPAddress())
-			Expect(err).NotTo(HaveOccurred())
-			u.Path = path.Join(u.Path, fmt.Sprintf("repository-%s.git", randStringRunes(5)))
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
 
-			fs := memfs.New()
-			gitrepo, err := git.Init(memory.NewStorage(), fs)
-			Expect(err).NotTo(HaveOccurred())
+			server, err := gittestserver.NewTempGitServer()
+			g.Expect(err).NotTo(HaveOccurred())
+			defer os.RemoveAll(server.Root())
+			server.AutoCreate()
 
-			wt, err := gitrepo.Worktree()
-			Expect(err).NotTo(HaveOccurred())
+			repoPath := "/test.git"
+			localRepo, err := initGitRepo(server, "testdata/git/repository", git.DefaultBranch, repoPath)
+			g.Expect(err).NotTo(HaveOccurred())
 
-			ff, _ := fs.Create("fixture")
-			_ = ff.Close()
-			_, err = wt.Add(fs.Join("fixture"))
-			Expect(err).NotTo(HaveOccurred())
-
-			commit, err := wt.Commit("Sample", &git.CommitOptions{Author: &object.Signature{
-				Name:  "John Doe",
-				Email: "john@example.com",
-				When:  time.Now(),
-			}})
-			Expect(err).NotTo(HaveOccurred())
-
-			for _, ref := range t.createRefs {
-				hRef := plumbing.NewHashReference(plumbing.ReferenceName(ref), commit)
-				err = gitrepo.Storer.SetReference(hRef)
-				Expect(err).NotTo(HaveOccurred())
+			if len(tt.server.username+tt.server.password) > 0 {
+				server.Auth(tt.server.username, tt.server.password)
 			}
 
-			remote, err := gitrepo.CreateRemote(&config.RemoteConfig{
-				Name: "origin",
-				URLs: []string{u.String()},
-			})
-			Expect(err).NotTo(HaveOccurred())
+			secret := tt.secret.DeepCopy()
+			switch tt.protocol {
+			case "http":
+				g.Expect(server.StartHTTP()).To(Succeed())
+				defer server.StopHTTP()
+				obj.Spec.URL = server.HTTPAddress() + repoPath
+			case "https":
+				g.Expect(server.StartHTTPS(tt.server.publicKey, tt.server.privateKey, tt.server.ca, "example.com")).To(Succeed())
+				obj.Spec.URL = server.HTTPAddress() + repoPath
+			case "ssh":
+				server.KeyDir(filepath.Join(server.Root(), "keys"))
 
-			err = remote.Push(&git.PushOptions{
-				RefSpecs: []config.RefSpec{"refs/heads/*:refs/heads/*", "refs/tags/*:refs/tags/*"},
-			})
-			Expect(err).NotTo(HaveOccurred())
+				g.Expect(server.ListenSSH()).To(Succeed())
+				obj.Spec.URL = server.SSHAddress() + repoPath
 
-			t.reference.Commit = strings.Replace(t.reference.Commit, "<commit>", commit.String(), 1)
+				go func() {
+					server.StartSSH()
+				}()
+				defer server.StopSSH()
 
-			key := types.NamespacedName{
-				Name:      fmt.Sprintf("git-ref-test-%s", randStringRunes(5)),
-				Namespace: namespace.Name,
+				if secret != nil && len(secret.Data["known_hosts"]) == 0 {
+					u, err := url.Parse(obj.Spec.URL)
+					g.Expect(err).NotTo(HaveOccurred())
+					g.Expect(u.Host).ToNot(BeEmpty())
+					knownHosts, err := ssh.ScanHostKey(u.Host, timeout)
+					g.Expect(err).NotTo(HaveOccurred())
+					secret.Data["known_hosts"] = knownHosts
+				}
+			default:
+				t.Fatalf("unsupported protocol %q", tt.protocol)
 			}
-			created := &sourcev1.GitRepository{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      key.Name,
-					Namespace: key.Namespace,
-				},
-				Spec: sourcev1.GitRepositorySpec{
-					URL:       u.String(),
-					Interval:  metav1.Duration{Duration: indexInterval},
-					Reference: t.reference,
-				},
-			}
-			Expect(k8sClient.Create(context.Background(), created)).Should(Succeed())
-			defer k8sClient.Delete(context.Background(), created)
 
-			got := &sourcev1.GitRepository{}
-			var cond metav1.Condition
-			Eventually(func() bool {
-				_ = k8sClient.Get(context.Background(), key, got)
-				for _, c := range got.Status.Conditions {
-					if c.Reason == t.waitForReason {
-						cond = c
-						return true
+			if tt.beforeFunc != nil {
+				tt.beforeFunc(obj)
+			}
+
+			builder := fakeclient.NewClientBuilder().WithScheme(s)
+			if secret != nil {
+				builder.WithObjects(secret.DeepCopy())
+			}
+
+			r := &GitRepositoryReconciler{
+				Client:  builder.Build(),
+				Storage: storage,
+			}
+
+			for _, i := range testGitImplementations {
+				t.Run(i, func(t *testing.T) {
+					g := NewWithT(t)
+
+					if tt.skipForImplementation == i {
+						t.Skipf("Skipped for Git implementation %q", i)
 					}
-				}
-				return false
-			}, timeout, interval).Should(BeTrue())
 
-			Expect(cond.Status).To(Equal(t.expectStatus))
-			Expect(cond.Message).To(ContainSubstring(t.expectMessage))
-			Expect(got.Status.Artifact == nil).To(Equal(t.expectRevision == ""))
-			if t.expectRevision != "" {
-				Expect(got.Status.Artifact.Revision).To(Equal(t.expectRevision + "/" + commit.String()))
-			}
-		},
-			Entry("branch", refTestCase{
-				reference:      &sourcev1.GitRepositoryRef{Branch: "some-branch"},
-				createRefs:     []string{"refs/heads/some-branch"},
-				waitForReason:  sourcev1.GitOperationSucceedReason,
-				expectStatus:   metav1.ConditionTrue,
-				expectRevision: "some-branch",
-			}),
-			Entry("branch non existing", refTestCase{
-				reference:     &sourcev1.GitRepositoryRef{Branch: "invalid-branch"},
-				waitForReason: sourcev1.GitOperationFailedReason,
-				expectStatus:  metav1.ConditionFalse,
-				expectMessage: "couldn't find remote ref",
-			}),
-			Entry("tag", refTestCase{
-				reference:      &sourcev1.GitRepositoryRef{Tag: "some-tag"},
-				createRefs:     []string{"refs/tags/some-tag"},
-				waitForReason:  sourcev1.GitOperationSucceedReason,
-				expectStatus:   metav1.ConditionTrue,
-				expectRevision: "some-tag",
-			}),
-			Entry("tag non existing", refTestCase{
-				reference:     &sourcev1.GitRepositoryRef{Tag: "invalid-tag"},
-				waitForReason: sourcev1.GitOperationFailedReason,
-				expectStatus:  metav1.ConditionFalse,
-				expectMessage: "couldn't find remote ref",
-			}),
-			Entry("semver", refTestCase{
-				reference:      &sourcev1.GitRepositoryRef{SemVer: "1.0.0"},
-				createRefs:     []string{"refs/tags/v1.0.0"},
-				waitForReason:  sourcev1.GitOperationSucceedReason,
-				expectStatus:   metav1.ConditionTrue,
-				expectRevision: "v1.0.0",
-			}),
-			Entry("semver range", refTestCase{
-				reference:      &sourcev1.GitRepositoryRef{SemVer: ">=0.1.0 <1.0.0"},
-				createRefs:     []string{"refs/tags/0.1.0", "refs/tags/0.1.1", "refs/tags/0.2.0", "refs/tags/1.0.0"},
-				waitForReason:  sourcev1.GitOperationSucceedReason,
-				expectStatus:   metav1.ConditionTrue,
-				expectRevision: "0.2.0",
-			}),
-			Entry("mixed semver range", refTestCase{
-				reference:      &sourcev1.GitRepositoryRef{SemVer: ">=0.1.0 <1.0.0"},
-				createRefs:     []string{"refs/tags/0.1.0", "refs/tags/v0.1.1", "refs/tags/v0.2.0", "refs/tags/1.0.0"},
-				waitForReason:  sourcev1.GitOperationSucceedReason,
-				expectStatus:   metav1.ConditionTrue,
-				expectRevision: "v0.2.0",
-			}),
-			Entry("semver invalid", refTestCase{
-				reference:     &sourcev1.GitRepositoryRef{SemVer: "1.2.3.4"},
-				waitForReason: sourcev1.GitOperationFailedReason,
-				expectStatus:  metav1.ConditionFalse,
-				expectMessage: "semver parse range error: improper constraint: 1.2.3.4",
-			}),
-			Entry("semver no match", refTestCase{
-				reference:     &sourcev1.GitRepositoryRef{SemVer: "1.0.0"},
-				waitForReason: sourcev1.GitOperationFailedReason,
-				expectStatus:  metav1.ConditionFalse,
-				expectMessage: "no match found for semver: 1.0.0",
-			}),
-			Entry("commit", refTestCase{
-				reference: &sourcev1.GitRepositoryRef{
-					Commit: "<commit>",
-				},
-				waitForReason:  sourcev1.GitOperationSucceedReason,
-				expectStatus:   metav1.ConditionTrue,
-				expectRevision: "master",
-			}),
-			Entry("commit in branch", refTestCase{
-				reference: &sourcev1.GitRepositoryRef{
-					Branch: "some-branch",
-					Commit: "<commit>",
-				},
-				createRefs:     []string{"refs/heads/some-branch"},
-				waitForReason:  sourcev1.GitOperationSucceedReason,
-				expectStatus:   metav1.ConditionTrue,
-				expectRevision: "some-branch",
-			}),
-			Entry("invalid commit", refTestCase{
-				reference: &sourcev1.GitRepositoryRef{
-					Branch: "master",
-					Commit: "invalid",
-				},
-				waitForReason: sourcev1.GitOperationFailedReason,
-				expectStatus:  metav1.ConditionFalse,
-				expectMessage: "git commit 'invalid' not found: object not found",
-			}),
-		)
+					tmpDir, err := ioutil.TempDir("", "auth-strategy-")
+					g.Expect(err).To(BeNil())
+					defer os.RemoveAll(tmpDir)
 
-		DescribeTable("Git self signed cert tests", func(t refTestCase) {
-			err = gitServer.StartHTTPS(examplePublicKey, examplePrivateKey, exampleCA, "example.com")
-			defer gitServer.StopHTTP()
-			Expect(err).NotTo(HaveOccurred())
+					obj := obj.DeepCopy()
+					obj.Spec.GitImplementation = i
 
-			u, err := url.Parse(gitServer.HTTPAddress())
-			Expect(err).NotTo(HaveOccurred())
-			u.Path = path.Join(u.Path, fmt.Sprintf("repository-%s.git", randStringRunes(5)))
-
-			var transport = httptransport.NewClient(&http.Client{
-				Transport: &http.Transport{
-					TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-				},
-			})
-			client.InstallProtocol("https", transport)
-
-			fs := memfs.New()
-			gitrepo, err := git.Init(memory.NewStorage(), fs)
-			Expect(err).NotTo(HaveOccurred())
-
-			wt, err := gitrepo.Worktree()
-			Expect(err).NotTo(HaveOccurred())
-
-			ff, _ := fs.Create("fixture")
-			_ = ff.Close()
-			_, err = wt.Add(fs.Join("fixture"))
-			Expect(err).NotTo(HaveOccurred())
-
-			commit, err := wt.Commit("Sample", &git.CommitOptions{Author: &object.Signature{
-				Name:  "John Doe",
-				Email: "john@example.com",
-				When:  time.Now(),
-			}})
-			Expect(err).NotTo(HaveOccurred())
-
-			for _, ref := range t.createRefs {
-				hRef := plumbing.NewHashReference(plumbing.ReferenceName(ref), commit)
-				err = gitrepo.Storer.SetReference(hRef)
-				Expect(err).NotTo(HaveOccurred())
-			}
-
-			remote, err := gitrepo.CreateRemote(&config.RemoteConfig{
-				Name: "origin",
-				URLs: []string{u.String()},
-			})
-			Expect(err).NotTo(HaveOccurred())
-
-			err = remote.Push(&git.PushOptions{
-				RefSpecs: []config.RefSpec{"refs/heads/*:refs/heads/*", "refs/tags/*:refs/tags/*"},
-			})
-			Expect(err).NotTo(HaveOccurred())
-
-			t.reference.Commit = strings.Replace(t.reference.Commit, "<commit>", commit.String(), 1)
-
-			client.InstallProtocol("https", httptransport.DefaultClient)
-
-			key := types.NamespacedName{
-				Name:      fmt.Sprintf("git-ref-test-%s", randStringRunes(5)),
-				Namespace: namespace.Name,
-			}
-			created := &sourcev1.GitRepository{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      key.Name,
-					Namespace: key.Namespace,
-				},
-				Spec: sourcev1.GitRepositorySpec{
-					URL:               u.String(),
-					Interval:          metav1.Duration{Duration: indexInterval},
-					Reference:         t.reference,
-					GitImplementation: t.gitImplementation,
-					SecretRef:         t.secretRef,
-				},
-			}
-			Expect(k8sClient.Create(context.Background(), created)).Should(Succeed())
-			defer k8sClient.Delete(context.Background(), created)
-
-			got := &sourcev1.GitRepository{}
-			var cond metav1.Condition
-			Eventually(func() bool {
-				_ = k8sClient.Get(context.Background(), key, got)
-				for _, c := range got.Status.Conditions {
-					if c.Reason == t.waitForReason {
-						cond = c
-						return true
+					head, _ := localRepo.Head()
+					assertConditions := tt.assertConditions
+					for k := range assertConditions {
+						assertConditions[k].Message = strings.ReplaceAll(assertConditions[k].Message, "<commit>", head.Hash().String())
+						assertConditions[k].Message = strings.ReplaceAll(assertConditions[k].Message, "<url>", obj.Spec.URL)
 					}
-				}
-				return false
-			}, timeout, interval).Should(BeTrue())
 
-			Expect(cond.Status).To(Equal(t.expectStatus))
-			Expect(cond.Message).To(ContainSubstring(t.expectMessage))
-			Expect(got.Status.Artifact == nil).To(Equal(t.expectRevision == ""))
-		},
-			Entry("self signed libgit2 without CA", refTestCase{
-				reference:         &sourcev1.GitRepositoryRef{Branch: "main"},
-				waitForReason:     sourcev1.GitOperationFailedReason,
-				expectStatus:      metav1.ConditionFalse,
-				expectMessage:     "error: user rejected certificate",
-				gitImplementation: sourcev1.LibGit2Implementation,
-			}),
-			Entry("self signed libgit2 with CA", refTestCase{
-				reference:         &sourcev1.GitRepositoryRef{Branch: "some-branch"},
-				createRefs:        []string{"refs/heads/some-branch"},
-				waitForReason:     sourcev1.GitOperationSucceedReason,
-				expectStatus:      metav1.ConditionTrue,
-				expectRevision:    "some-branch",
-				secretRef:         &meta.LocalObjectReference{Name: "cert"},
-				gitImplementation: sourcev1.LibGit2Implementation,
-			}),
-			Entry("self signed go-git without CA", refTestCase{
-				reference:     &sourcev1.GitRepositoryRef{Branch: "main"},
-				waitForReason: sourcev1.GitOperationFailedReason,
-				expectStatus:  metav1.ConditionFalse,
-				expectMessage: "x509: certificate signed by unknown authority",
-			}),
-			Entry("self signed go-git with CA", refTestCase{
-				reference:         &sourcev1.GitRepositoryRef{Branch: "some-branch"},
-				createRefs:        []string{"refs/heads/some-branch"},
-				waitForReason:     sourcev1.GitOperationSucceedReason,
-				expectStatus:      metav1.ConditionTrue,
-				expectRevision:    "some-branch",
-				secretRef:         &meta.LocalObjectReference{Name: "cert"},
-				gitImplementation: sourcev1.GoGitImplementation,
-			}),
-		)
-
-		Context("recurse submodules", func() {
-			It("downloads submodules when asked", func() {
-				Expect(gitServer.StartHTTP()).To(Succeed())
-				defer gitServer.StopHTTP()
-
-				u, err := url.Parse(gitServer.HTTPAddress())
-				Expect(err).NotTo(HaveOccurred())
-
-				subRepoURL := *u
-				subRepoURL.Path = path.Join(u.Path, fmt.Sprintf("subrepository-%s.git", randStringRunes(5)))
-
-				// create the git repo to use as a submodule
-				fs := memfs.New()
-				subRepo, err := git.Init(memory.NewStorage(), fs)
-				Expect(err).NotTo(HaveOccurred())
-
-				wt, err := subRepo.Worktree()
-				Expect(err).NotTo(HaveOccurred())
-
-				ff, _ := fs.Create("fixture")
-				_ = ff.Close()
-				_, err = wt.Add(fs.Join("fixture"))
-				Expect(err).NotTo(HaveOccurred())
-
-				_, err = wt.Commit("Sample", &git.CommitOptions{Author: &object.Signature{
-					Name:  "John Doe",
-					Email: "john@example.com",
-					When:  time.Now(),
-				}})
-				Expect(err).NotTo(HaveOccurred())
-
-				remote, err := subRepo.CreateRemote(&config.RemoteConfig{
-					Name: "origin",
-					URLs: []string{subRepoURL.String()},
+					var artifact sourcev1.Artifact
+					got, err := r.reconcileSource(logr.NewContext(ctx, log.NullLogger{}), obj, &artifact, tmpDir)
+					g.Expect(obj.Status.Conditions).To(conditions.MatchConditions(tt.assertConditions))
+					g.Expect(err != nil).To(Equal(tt.wantErr))
+					g.Expect(got).To(Equal(tt.want))
+					g.Expect(artifact).ToNot(BeNil())
 				})
-				Expect(err).NotTo(HaveOccurred())
-
-				err = remote.Push(&git.PushOptions{
-					RefSpecs: []config.RefSpec{"refs/heads/*:refs/heads/*", "refs/tags/*:refs/tags/*"},
-				})
-				Expect(err).NotTo(HaveOccurred())
-
-				// this one is linked to a real directory, so that I can
-				// exec `git submodule add` later
-				tmp, err := ioutil.TempDir("", "flux-test")
-				Expect(err).NotTo(HaveOccurred())
-				defer os.RemoveAll(tmp)
-
-				repoDir := filepath.Join(tmp, "git")
-				repo, err := git.PlainInit(repoDir, false)
-				Expect(err).NotTo(HaveOccurred())
-
-				wt, err = repo.Worktree()
-				Expect(err).NotTo(HaveOccurred())
-				_, err = wt.Commit("Initial revision", &git.CommitOptions{
-					Author: &object.Signature{
-						Name:  "John Doe",
-						Email: "john@example.com",
-						When:  time.Now(),
-					}})
-				Expect(err).NotTo(HaveOccurred())
-
-				submodAdd := exec.Command("git", "submodule", "add", "-b", "master", subRepoURL.String(), "sub")
-				submodAdd.Dir = repoDir
-				out, err := submodAdd.CombinedOutput()
-				os.Stdout.Write(out)
-				Expect(err).NotTo(HaveOccurred())
-
-				_, err = wt.Commit("Add submodule", &git.CommitOptions{
-					Author: &object.Signature{
-						Name:  "John Doe",
-						Email: "john@example.com",
-						When:  time.Now(),
-					}})
-				Expect(err).NotTo(HaveOccurred())
-
-				mainRepoURL := *u
-				mainRepoURL.Path = path.Join(u.Path, fmt.Sprintf("repository-%s.git", randStringRunes(5)))
-				remote, err = repo.CreateRemote(&config.RemoteConfig{
-					Name: "origin",
-					URLs: []string{mainRepoURL.String()},
-				})
-				Expect(err).NotTo(HaveOccurred())
-
-				err = remote.Push(&git.PushOptions{
-					RefSpecs: []config.RefSpec{"refs/heads/*:refs/heads/*", "refs/tags/*:refs/tags/*"},
-				})
-				Expect(err).NotTo(HaveOccurred())
-
-				key := types.NamespacedName{
-					Name:      fmt.Sprintf("git-ref-test-%s", randStringRunes(5)),
-					Namespace: namespace.Name,
-				}
-				created := &sourcev1.GitRepository{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      key.Name,
-						Namespace: key.Namespace,
-					},
-					Spec: sourcev1.GitRepositorySpec{
-						URL:               mainRepoURL.String(),
-						Interval:          metav1.Duration{Duration: indexInterval},
-						Reference:         &sourcev1.GitRepositoryRef{Branch: "master"},
-						GitImplementation: sourcev1.GoGitImplementation, // only works with go-git
-						RecurseSubmodules: true,
-					},
-				}
-				Expect(k8sClient.Create(context.Background(), created)).Should(Succeed())
-				defer k8sClient.Delete(context.Background(), created)
-
-				got := &sourcev1.GitRepository{}
-				Eventually(func() bool {
-					_ = k8sClient.Get(context.Background(), key, got)
-					for _, c := range got.Status.Conditions {
-						if c.Reason == sourcev1.GitOperationSucceedReason {
-							return true
-						}
-					}
-					return false
-				}, timeout, interval).Should(BeTrue())
-
-				// check that the downloaded artifact includes the
-				// file from the submodule
-				res, err := http.Get(got.Status.URL)
-				Expect(err).NotTo(HaveOccurred())
-				Expect(res.StatusCode).To(Equal(http.StatusOK))
-
-				_, err = untar.Untar(res.Body, filepath.Join(tmp, "tar"))
-				Expect(err).NotTo(HaveOccurred())
-				Expect(filepath.Join(tmp, "tar", "sub", "fixture")).To(BeAnExistingFile())
-			})
+			}
 		})
+	}
+}
 
-		type includeTestCase struct {
-			fromPath    string
-			toPath      string
-			createFiles []string
-			checkFiles  []string
+func TestGitRepositoryReconciler_reconcileSource_checkoutStrategy(t *testing.T) {
+	g := NewWithT(t)
+
+	branches := []string{"staging"}
+	tags := []string{"non-semver-tag", "v0.1.0", "0.2.0", "v0.2.1", "v1.0.0-alpha", "v1.1.0", "v2.0.0"}
+
+	tests := []struct {
+		name         string
+		reference    *sourcev1.GitRepositoryRef
+		want         ctrl.Result
+		wantErr      bool
+		wantRevision string
+	}{
+		{
+			name:         "Nil reference (default branch)",
+			want:         ctrl.Result{RequeueAfter: mockInterval},
+			wantRevision: "master/<commit>",
+		},
+		{
+			name: "Branch",
+			reference: &sourcev1.GitRepositoryRef{
+				Branch: "staging",
+			},
+			want:         ctrl.Result{RequeueAfter: mockInterval},
+			wantRevision: "staging/<commit>",
+		},
+		{
+			name: "Tag",
+			reference: &sourcev1.GitRepositoryRef{
+				Tag: "v0.1.0",
+			},
+			want:         ctrl.Result{RequeueAfter: mockInterval},
+			wantRevision: "v0.1.0/<commit>",
+		},
+		{
+			name: "Branch commit",
+			reference: &sourcev1.GitRepositoryRef{
+				Branch: "staging",
+				Commit: "<commit>",
+			},
+			want:         ctrl.Result{RequeueAfter: mockInterval},
+			wantRevision: "staging/<commit>",
+		},
+		{
+			name: "SemVer",
+			reference: &sourcev1.GitRepositoryRef{
+				SemVer: "*",
+			},
+			want:         ctrl.Result{RequeueAfter: mockInterval},
+			wantRevision: "v2.0.0/<commit>",
+		},
+		{
+			name: "SemVer range",
+			reference: &sourcev1.GitRepositoryRef{
+				SemVer: "<v0.2.1",
+			},
+			want:         ctrl.Result{RequeueAfter: mockInterval},
+			wantRevision: "0.2.0/<commit>",
+		},
+		{
+			name: "SemVer prerelease",
+			reference: &sourcev1.GitRepositoryRef{
+				SemVer: ">=1.0.0-0 <1.1.0-0",
+			},
+			wantRevision: "v1.0.0-alpha/<commit>",
+			want:         ctrl.Result{RequeueAfter: mockInterval},
+		},
+	}
+
+	server, err := gittestserver.NewTempGitServer()
+	g.Expect(err).To(BeNil())
+	server.AutoCreate()
+	g.Expect(server.StartHTTP()).To(Succeed())
+	defer server.StopHTTP()
+
+	repoPath := "/test.git"
+	localRepo, err := initGitRepo(server, "testdata/git/repository", git.DefaultBranch, repoPath)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	headRef, err := localRepo.Head()
+	g.Expect(err).NotTo(HaveOccurred())
+
+	for _, branch := range branches {
+		g.Expect(remoteBranchForHead(localRepo, headRef, branch)).To(Succeed())
+	}
+	for _, tag := range tags {
+		g.Expect(remoteTagForHead(localRepo, headRef, tag)).To(Succeed())
+	}
+
+	r := &GitRepositoryReconciler{
+		Client:  fakeclient.NewClientBuilder().WithScheme(runtime.NewScheme()).Build(),
+		Storage: storage,
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			obj := &sourcev1.GitRepository{
+				ObjectMeta: metav1.ObjectMeta{
+					GenerateName: "checkout-strategy-",
+				},
+				Spec: sourcev1.GitRepositorySpec{
+					Interval:  metav1.Duration{Duration: mockInterval},
+					Timeout:   &metav1.Duration{Duration: mockInterval},
+					URL:       server.HTTPAddress() + repoPath,
+					Reference: tt.reference,
+				},
+			}
+
+			if obj.Spec.Reference != nil && obj.Spec.Reference.Commit == "<commit>" {
+				obj.Spec.Reference.Commit = headRef.Hash().String()
+			}
+
+			for _, i := range testGitImplementations {
+				t.Run(i, func(t *testing.T) {
+					g := NewWithT(t)
+
+					tmpDir, err := ioutil.TempDir("", "checkout-strategy-")
+					g.Expect(err).NotTo(HaveOccurred())
+
+					obj := obj.DeepCopy()
+					obj.Spec.GitImplementation = i
+
+					var artifact sourcev1.Artifact
+					got, err := r.reconcileSource(ctx, obj, &artifact, tmpDir)
+					if err != nil {
+						println(err.Error())
+					}
+					g.Expect(err != nil).To(Equal(tt.wantErr))
+					g.Expect(got).To(Equal(tt.want))
+					if tt.wantRevision != "" {
+						revision := strings.ReplaceAll(tt.wantRevision, "<commit>", headRef.Hash().String())
+						g.Expect(artifact.Revision).To(Equal(revision))
+					}
+				})
+			}
+		})
+	}
+}
+
+func TestGitRepositoryReconciler_reconcileArtifact(t *testing.T) {
+	tests := []struct {
+		name             string
+		dir              string
+		beforeFunc       func(obj *sourcev1.GitRepository)
+		afterFunc        func(t *WithT, obj *sourcev1.GitRepository, artifact sourcev1.Artifact)
+		want             ctrl.Result
+		wantErr          bool
+		assertConditions []metav1.Condition
+	}{
+		{
+			name: "Archive artifact",
+			dir:  "testdata/git/repository",
+			beforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Spec.Interval = metav1.Duration{Duration: mockInterval}
+			},
+			afterFunc: func(t *WithT, obj *sourcev1.GitRepository, artifact sourcev1.Artifact) {
+				t.Expect(obj.GetArtifact()).ToNot(BeNil())
+				t.Expect(obj.GetArtifact().Checksum).NotTo(BeEmpty())
+			},
+			want: ctrl.Result{RequeueAfter: mockInterval},
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.ArtifactAvailableCondition, "ArchivedArtifact", "Archived artifact revision main/revision"),
+			},
+		},
+		{
+			name: "Invalid directory",
+			dir:  "/a/random/invalid/path",
+			afterFunc: func(t *WithT, obj *sourcev1.GitRepository, artifact sourcev1.Artifact) {
+				t.Expect(obj.GetArtifact()).To(BeNil())
+			},
+			wantErr: true,
+			assertConditions: []metav1.Condition{
+				{
+					Type:    sourcev1.ArtifactAvailableCondition,
+					Status:  metav1.ConditionFalse,
+					Reason:  sourcev1.StorageOperationFailedReason,
+					Message: "Failed to stat source path: stat /a/random/invalid/path: no such file or directory",
+				},
+			},
+		},
+		{
+			name: "Spec ignore overwrite",
+			dir:  "testdata/git/repository",
+			beforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Spec.Interval = metav1.Duration{Duration: mockInterval}
+				obj.Spec.Ignore = pointer.StringPtr("!**.txt\n")
+			},
+			afterFunc: func(t *WithT, obj *sourcev1.GitRepository, artifact sourcev1.Artifact) {
+				t.Expect(obj.GetArtifact()).ToNot(BeNil())
+				t.Expect(obj.GetArtifact().Checksum).NotTo(BeEmpty())
+			},
+			want: ctrl.Result{RequeueAfter: mockInterval},
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.ArtifactAvailableCondition, "ArchivedArtifact", "Archived artifact revision main/revision"),
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			r := &GitRepositoryReconciler{
+				Storage: storage,
+			}
+
+			obj := &sourcev1.GitRepository{
+				ObjectMeta: metav1.ObjectMeta{
+					GenerateName: "reconcile-artifact-",
+					Generation:   1,
+				},
+				Status: sourcev1.GitRepositoryStatus{},
+			}
+
+			if tt.beforeFunc != nil {
+				tt.beforeFunc(obj)
+			}
+
+			artifact := storage.NewArtifactFor(obj.Kind, obj, "main/revision", "checksum.tar.gz")
+
+			got, err := r.reconcileArtifact(ctx, obj, artifact, tt.dir)
+			g.Expect(obj.Status.Conditions).To(conditions.MatchConditions(tt.assertConditions))
+			g.Expect(err != nil).To(Equal(tt.wantErr))
+			g.Expect(got).To(Equal(tt.want))
+
+			if tt.afterFunc != nil {
+				tt.afterFunc(g, obj, artifact)
+			}
+		})
+	}
+}
+
+func TestGitRepositoryReconciler_verifyCommitSignature(t *testing.T) {
+	tests := []struct {
+		name             string
+		secret           *corev1.Secret
+		commit           git.Commit
+		beforeFunc       func(obj *sourcev1.GitRepository)
+		want             ctrl.Result
+		wantErr          bool
+		assertConditions []metav1.Condition
+	}{
+		{
+			name: "Valid commit",
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "existing",
+				},
+			},
+			commit: fake.NewCommit(true, "shasum"),
+			beforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Spec.Interval = metav1.Duration{Duration: mockInterval}
+				obj.Spec.Verification = &sourcev1.GitRepositoryVerification{
+					Mode: "head",
+					SecretRef: meta.LocalObjectReference{
+						Name: "existing",
+					},
+				}
+			},
+			want: ctrl.Result{RequeueAfter: mockInterval},
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.SourceVerifiedCondition, "ValidCommitSignature", "Verified signature of commit \"shasum\""),
+			},
+		},
+		{
+			name: "Invalid commit",
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "existing",
+				},
+			},
+			commit: fake.NewCommit(false, "shasum"),
+			beforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Spec.Interval = metav1.Duration{Duration: mockInterval}
+				obj.Spec.Verification = &sourcev1.GitRepositoryVerification{
+					Mode: "head",
+					SecretRef: meta.LocalObjectReference{
+						Name: "existing",
+					},
+				}
+			},
+			want: ctrl.Result{RequeueAfter: mockInterval},
+			assertConditions: []metav1.Condition{
+				*conditions.FalseCondition(sourcev1.SourceVerifiedCondition, "InvalidCommitSignature", "Commit signature verification failed: invalid signature"),
+			},
+		},
+		{
+			name: "Non existing secret",
+			beforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Spec.Interval = metav1.Duration{Duration: mockInterval}
+				obj.Spec.Verification = &sourcev1.GitRepositoryVerification{
+					Mode: "head",
+					SecretRef: meta.LocalObjectReference{
+						Name: "none-existing",
+					},
+				}
+			},
+			want: ctrl.Result{RequeueAfter: mockInterval},
+			assertConditions: []metav1.Condition{
+				*conditions.FalseCondition(sourcev1.SourceVerifiedCondition, "FailedToGetSecret", "PGP public keys secret error: secrets \"none-existing\" not found"),
+			},
+		},
+		{
+			name: "Nil verification in spec deletes SourceVerified condition",
+			beforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Spec.Interval = metav1.Duration{Duration: mockInterval}
+				conditions.MarkTrue(obj, sourcev1.SourceVerifiedCondition, "Foo", "")
+			},
+			want:             ctrl.Result{RequeueAfter: mockInterval},
+			assertConditions: []metav1.Condition{},
+		},
+		{
+			name: "Empty verification mode in spec deletes SourceVerified condition",
+			beforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Spec.Interval = metav1.Duration{Duration: mockInterval}
+				obj.Spec.Verification = &sourcev1.GitRepositoryVerification{}
+				conditions.MarkTrue(obj, sourcev1.SourceVerifiedCondition, "Foo", "")
+			},
+			want:             ctrl.Result{RequeueAfter: mockInterval},
+			assertConditions: []metav1.Condition{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			s := runtime.NewScheme()
+			utilruntime.Must(corev1.AddToScheme(s))
+
+			builder := fakeclient.NewClientBuilder().WithScheme(s)
+			if tt.secret != nil {
+				builder.WithObjects(tt.secret)
+			}
+
+			r := &GitRepositoryReconciler{
+				Client: builder.Build(),
+			}
+
+			obj := &sourcev1.GitRepository{
+				ObjectMeta: metav1.ObjectMeta{
+					GenerateName: "verify-commit-",
+					Generation:   1,
+				},
+				Status: sourcev1.GitRepositoryStatus{},
+			}
+
+			if tt.beforeFunc != nil {
+				tt.beforeFunc(obj)
+			}
+
+			got, err := r.verifyCommitSignature(logr.NewContext(ctx, log.NullLogger{}), obj, tt.commit)
+			g.Expect(obj.Status.Conditions).To(conditions.MatchConditions(tt.assertConditions))
+			g.Expect(err != nil).To(Equal(tt.wantErr))
+			g.Expect(got).To(Equal(tt.want))
+		})
+	}
+}
+
+// TODO(hidde): move the below when more reconcilers have refactored tests
+
+func TestMain(m *testing.M) {
+	initTestTLS()
+
+	utilruntime.Must(sourcev1.AddToScheme(scheme.Scheme))
+
+	newTestEnv = testenv.NewTestEnvironment([]string{filepath.Join("..", "config", "crd", "bases")})
+
+	storage, err := newTestStorage()
+	if err != nil {
+		panic(fmt.Sprintf("Failed to create a test storage: %v", err))
+	}
+	fmt.Println("Starting the test storage server")
+	go serveTestStorage(storage)
+
+	eventsHelper = controller.MakeEvents(newTestEnv, "test", nil)
+	metricsHelper = controller.MustMakeMetrics(newTestEnv)
+
+	if err := (&GitRepositoryReconciler{
+		Client:  newTestEnv,
+		Events:  eventsHelper,
+		Metrics: metricsHelper,
+		Storage: storage,
+	}).SetupWithManager(newTestEnv); err != nil {
+		panic(fmt.Sprintf("Failed to start GitRepositoryReconciler: %v", err))
+	}
+
+	go func() {
+		fmt.Println("Starting the test environment manager")
+		if err := newTestEnv.StartManager(ctx); err != nil {
+			panic(fmt.Sprintf("Failed to start the test environment manager: %v", err))
+		}
+	}()
+	<-newTestEnv.Manager.Elected()
+
+	code := m.Run()
+
+	fmt.Println("Stopping the test environment")
+	if err := newTestEnv.Stop(); err != nil {
+		panic(fmt.Sprintf("Failed to stop the test environment: %v", err))
+	}
+
+	os.Exit(code)
+}
+
+func initTestTLS() {
+	var err error
+	testTLSPublicKey, err = ioutil.ReadFile("testdata/certs/server.pem")
+	if err != nil {
+		panic(err)
+	}
+	testTLSPrivateKey, err = ioutil.ReadFile("testdata/certs/server-key.pem")
+	if err != nil {
+		panic(err)
+	}
+	testTLSCA, err = ioutil.ReadFile("testdata/certs/ca.pem")
+	if err != nil {
+		panic(err)
+	}
+}
+
+func newTestStorage() (*Storage, error) {
+	tmp, err := ioutil.TempDir("", "test-storage-")
+	if err != nil {
+		return nil, err
+	}
+	storage, err = NewStorage(tmp, "localhost:5050", time.Second*30)
+	if err != nil {
+		_ = os.RemoveAll(tmp)
+		return nil, err
+	}
+	return storage, nil
+}
+
+func serveTestStorage(storage *Storage) error {
+	fs := http.FileServer(http.Dir(storage.BasePath))
+	handler := http.NewServeMux()
+	handler.Handle("/", fs)
+	return http.ListenAndServe(":5555", handler)
+}
+
+// helpers
+
+func initGitRepo(server *gittestserver.GitServer, fixture, branch, repositoryPath string) (*gogit.Repository, error) {
+	fs := memfs.New()
+	repo, err := gogit.Init(memory.NewStorage(), fs)
+	if err != nil {
+		return nil, err
+	}
+
+	branchRef := plumbing.NewBranchReferenceName(branch)
+	if err = repo.CreateBranch(&config.Branch{
+		Name:   branch,
+		Remote: gogit.DefaultRemoteName,
+		Merge:  branchRef,
+	}); err != nil {
+		return nil, err
+	}
+
+	err = commitFromFixture(repo, fixture)
+	if err != nil {
+		return nil, err
+	}
+
+	if server.HTTPAddress() == "" {
+		if err = server.StartHTTP(); err != nil {
+			return nil, err
+		}
+		defer server.StopHTTP()
+	}
+	if _, err = repo.CreateRemote(&config.RemoteConfig{
+		Name: gogit.DefaultRemoteName,
+		URLs: []string{server.HTTPAddressWithCredentials() + repositoryPath},
+	}); err != nil {
+		return nil, err
+	}
+
+	if err = repo.Push(&gogit.PushOptions{
+		RefSpecs: []config.RefSpec{"refs/heads/*:refs/heads/*"},
+	}); err != nil {
+		return nil, err
+	}
+
+	return repo, nil
+}
+
+func Test_commitFromFixture(t *testing.T) {
+	g := NewWithT(t)
+
+	repo, err := gogit.Init(memory.NewStorage(), memfs.New())
+	g.Expect(err).ToNot(HaveOccurred())
+
+	err = commitFromFixture(repo, "testdata/git/repository")
+	g.Expect(err).ToNot(HaveOccurred())
+}
+
+func commitFromFixture(repo *gogit.Repository, fixture string) error {
+	working, err := repo.Worktree()
+	if err != nil {
+		return err
+	}
+	fs := working.Filesystem
+
+	if err = filepath.Walk(fixture, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() {
+			return fs.MkdirAll(fs.Join(path[len(fixture):]), info.Mode())
 		}
 
-		DescribeTable("Include git repositories", func(t includeTestCase) {
-			Expect(gitServer.StartHTTP()).To(Succeed())
-			defer gitServer.StopHTTP()
+		fileBytes, err := ioutil.ReadFile(path)
+		if err != nil {
+			return err
+		}
 
-			u, err := url.Parse(gitServer.HTTPAddress())
-			Expect(err).NotTo(HaveOccurred())
+		ff, err := fs.Create(path[len(fixture):])
+		if err != nil {
+			return err
+		}
+		defer ff.Close()
 
-			// create the main git repository
-			mainRepoURL := *u
-			mainRepoURL.Path = path.Join(u.Path, fmt.Sprintf("repository-%s.git", randStringRunes(5)))
+		_, err = ff.Write(fileBytes)
+		return err
+	}); err != nil {
+		return err
+	}
 
-			mainFs := memfs.New()
-			mainRepo, err := git.Init(memory.NewStorage(), mainFs)
-			Expect(err).NotTo(HaveOccurred())
+	_, err = working.Add(".")
+	if err != nil {
+		return err
+	}
 
-			mainWt, err := mainRepo.Worktree()
-			Expect(err).NotTo(HaveOccurred())
-
-			ff, _ := mainFs.Create("fixture")
-			_ = ff.Close()
-			_, err = mainWt.Add(mainFs.Join("fixture"))
-			Expect(err).NotTo(HaveOccurred())
-
-			_, err = mainWt.Commit("Sample", &git.CommitOptions{Author: &object.Signature{
-				Name:  "John Doe",
-				Email: "john@example.com",
-				When:  time.Now(),
-			}})
-			Expect(err).NotTo(HaveOccurred())
-
-			mainRemote, err := mainRepo.CreateRemote(&config.RemoteConfig{
-				Name: "origin",
-				URLs: []string{mainRepoURL.String()},
-			})
-			Expect(err).NotTo(HaveOccurred())
-
-			err = mainRemote.Push(&git.PushOptions{
-				RefSpecs: []config.RefSpec{"refs/heads/*:refs/heads/*", "refs/tags/*:refs/tags/*"},
-			})
-			Expect(err).NotTo(HaveOccurred())
-
-			// create the sub git repository
-			subRepoURL := *u
-			subRepoURL.Path = path.Join(u.Path, fmt.Sprintf("subrepository-%s.git", randStringRunes(5)))
-
-			subFs := memfs.New()
-			subRepo, err := git.Init(memory.NewStorage(), subFs)
-			Expect(err).NotTo(HaveOccurred())
-
-			subWt, err := subRepo.Worktree()
-			Expect(err).NotTo(HaveOccurred())
-
-			for _, v := range t.createFiles {
-				if dir := filepath.Base(v); dir != v {
-					err := subFs.MkdirAll(dir, 0700)
-					Expect(err).NotTo(HaveOccurred())
-				}
-				ff, err := subFs.Create(v)
-				Expect(err).NotTo(HaveOccurred())
-				_ = ff.Close()
-				_, err = subWt.Add(subFs.Join(v))
-				Expect(err).NotTo(HaveOccurred())
-			}
-
-			_, err = subWt.Commit("Sample", &git.CommitOptions{Author: &object.Signature{
-				Name:  "John Doe",
-				Email: "john@example.com",
-				When:  time.Now(),
-			}})
-			Expect(err).NotTo(HaveOccurred())
-
-			subRemote, err := subRepo.CreateRemote(&config.RemoteConfig{
-				Name: "origin",
-				URLs: []string{subRepoURL.String()},
-			})
-			Expect(err).NotTo(HaveOccurred())
-
-			err = subRemote.Push(&git.PushOptions{
-				RefSpecs: []config.RefSpec{"refs/heads/*:refs/heads/*", "refs/tags/*:refs/tags/*"},
-			})
-			Expect(err).NotTo(HaveOccurred())
-
-			// create main and sub resetRepositories
-			subKey := types.NamespacedName{
-				Name:      fmt.Sprintf("git-ref-test-%s", randStringRunes(5)),
-				Namespace: namespace.Name,
-			}
-			subCreated := &sourcev1.GitRepository{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      subKey.Name,
-					Namespace: subKey.Namespace,
-				},
-				Spec: sourcev1.GitRepositorySpec{
-					URL:       subRepoURL.String(),
-					Interval:  metav1.Duration{Duration: indexInterval},
-					Reference: &sourcev1.GitRepositoryRef{Branch: "master"},
-				},
-			}
-			Expect(k8sClient.Create(context.Background(), subCreated)).Should(Succeed())
-			defer k8sClient.Delete(context.Background(), subCreated)
-
-			mainKey := types.NamespacedName{
-				Name:      fmt.Sprintf("git-ref-test-%s", randStringRunes(5)),
-				Namespace: namespace.Name,
-			}
-			mainCreated := &sourcev1.GitRepository{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      mainKey.Name,
-					Namespace: mainKey.Namespace,
-				},
-				Spec: sourcev1.GitRepositorySpec{
-					URL:       mainRepoURL.String(),
-					Interval:  metav1.Duration{Duration: indexInterval},
-					Reference: &sourcev1.GitRepositoryRef{Branch: "master"},
-					Include: []sourcev1.GitRepositoryInclude{
-						{
-							GitRepositoryRef: meta.LocalObjectReference{
-								Name: subKey.Name,
-							},
-							FromPath: t.fromPath,
-							ToPath:   t.toPath,
-						},
-					},
-				},
-			}
-			Expect(k8sClient.Create(context.Background(), mainCreated)).Should(Succeed())
-			defer k8sClient.Delete(context.Background(), mainCreated)
-
-			got := &sourcev1.GitRepository{}
-			Eventually(func() bool {
-				_ = k8sClient.Get(context.Background(), mainKey, got)
-				for _, c := range got.Status.Conditions {
-					if c.Reason == sourcev1.GitOperationSucceedReason {
-						return true
-					}
-				}
-				return false
-			}, timeout, interval).Should(BeTrue())
-
-			// check the contents of the repository
-			res, err := http.Get(got.Status.URL)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(res.StatusCode).To(Equal(http.StatusOK))
-			tmp, err := ioutil.TempDir("", "flux-test")
-			Expect(err).NotTo(HaveOccurred())
-			defer os.RemoveAll(tmp)
-			_, err = untar.Untar(res.Body, filepath.Join(tmp, "tar"))
-			Expect(err).NotTo(HaveOccurred())
-			for _, v := range t.checkFiles {
-				Expect(filepath.Join(tmp, "tar", v)).To(BeAnExistingFile())
-			}
-
-			// add new file to check that the change is reconciled
-			ff, err = subFs.Create(subFs.Join(t.fromPath, "test"))
-			Expect(err).NotTo(HaveOccurred())
-			err = ff.Close()
-			Expect(err).NotTo(HaveOccurred())
-			_, err = subWt.Add(subFs.Join(t.fromPath, "test"))
-			Expect(err).NotTo(HaveOccurred())
-
-			hash, err := subWt.Commit("Sample", &git.CommitOptions{Author: &object.Signature{
-				Name:  "John Doe",
-				Email: "john@example.com",
-				When:  time.Now(),
-			}})
-			Expect(err).NotTo(HaveOccurred())
-
-			err = subRemote.Push(&git.PushOptions{
-				RefSpecs: []config.RefSpec{"refs/heads/*:refs/heads/*", "refs/tags/*:refs/tags/*"},
-			})
-			Expect(err).NotTo(HaveOccurred())
-
-			got = &sourcev1.GitRepository{}
-			Eventually(func() bool {
-				_ = k8sClient.Get(context.Background(), mainKey, got)
-				if got.Status.IncludedArtifacts[0].Revision == fmt.Sprintf("master/%s", hash.String()) {
-					for _, c := range got.Status.Conditions {
-						if c.Reason == sourcev1.GitOperationSucceedReason {
-							return true
-						}
-					}
-				}
-				return false
-			}, timeout, interval).Should(BeTrue())
-
-			// get the main repository artifact
-			res, err = http.Get(got.Status.URL)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(res.StatusCode).To(Equal(http.StatusOK))
-			tmp, err = ioutil.TempDir("", "flux-test")
-			Expect(err).NotTo(HaveOccurred())
-			defer os.RemoveAll(tmp)
-			_, err = untar.Untar(res.Body, filepath.Join(tmp, "tar"))
-			Expect(err).NotTo(HaveOccurred())
-			Expect(filepath.Join(tmp, "tar", t.toPath, "test")).To(BeAnExistingFile())
+	if _, err = working.Commit("Fixtures from "+fixture, &gogit.CommitOptions{
+		Author: &object.Signature{
+			Name:  "Jane Doe",
+			Email: "jane@example.com",
+			When:  time.Now(),
 		},
-			Entry("only to path", includeTestCase{
-				fromPath:    "",
-				toPath:      "sub",
-				createFiles: []string{"dir1", "dir2"},
-				checkFiles:  []string{"sub/dir1", "sub/dir2"},
-			}),
-			Entry("to nested path", includeTestCase{
-				fromPath:    "",
-				toPath:      "sub/nested",
-				createFiles: []string{"dir1", "dir2"},
-				checkFiles:  []string{"sub/nested/dir1", "sub/nested/dir2"},
-			}),
-			Entry("from and to path", includeTestCase{
-				fromPath:    "nested",
-				toPath:      "sub",
-				createFiles: []string{"dir1", "nested/dir2", "nested/dir3", "nested/foo/bar"},
-				checkFiles:  []string{"sub/dir2", "sub/dir3", "sub/foo/bar"},
-			}),
-		)
+	}); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func remoteBranchForHead(repo *gogit.Repository, head *plumbing.Reference, branch string) error {
+	refSpec := fmt.Sprintf("%s:refs/heads/%s", head.Name(), branch)
+	return repo.Push(&gogit.PushOptions{
+		RemoteName: "origin",
+		RefSpecs:   []config.RefSpec{config.RefSpec(refSpec)},
+		Force:      true,
 	})
-})
+}
+
+func remoteTagForHead(repo *gogit.Repository, head *plumbing.Reference, tag string) error {
+	if _, err := repo.CreateTag(tag, head.Hash(), &gogit.CreateTagOptions{
+		Message: tag,
+	}); err != nil {
+		return err
+	}
+	refSpec := fmt.Sprintf("refs/tags/%[1]s:refs/tags/%[1]s", tag)
+	return repo.Push(&gogit.PushOptions{
+		RefSpecs: []config.RefSpec{config.RefSpec(refSpec)},
+	})
+}

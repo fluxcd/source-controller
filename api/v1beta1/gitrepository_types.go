@@ -18,7 +18,6 @@ package v1beta1
 
 import (
 	"github.com/fluxcd/pkg/apis/meta"
-	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -183,55 +182,22 @@ const (
 	GitOperationFailedReason string = "GitOperationFailed"
 )
 
-// GitRepositoryProgressing resets the conditions of the GitRepository to
-// metav1.Condition of type meta.ReadyCondition with status 'Unknown' and
-// meta.ProgressingReason reason and message. It returns the modified
-// GitRepository.
-func GitRepositoryProgressing(repository GitRepository) GitRepository {
-	repository.Status.ObservedGeneration = repository.Generation
-	repository.Status.URL = ""
-	repository.Status.Conditions = []metav1.Condition{}
-	meta.SetResourceCondition(&repository, meta.ReadyCondition, metav1.ConditionUnknown, meta.ProgressingReason, "reconciliation in progress")
-	return repository
-}
-
-// GitRepositoryReady sets the given Artifact and URL on the GitRepository and
-// sets the meta.ReadyCondition to 'True', with the given reason and message. It
-// returns the modified GitRepository.
-func GitRepositoryReady(repository GitRepository, artifact Artifact, includedArtifacts []*Artifact, url, reason, message string) GitRepository {
-	repository.Status.Artifact = &artifact
-	repository.Status.IncludedArtifacts = includedArtifacts
-	repository.Status.URL = url
-	meta.SetResourceCondition(&repository, meta.ReadyCondition, metav1.ConditionTrue, reason, message)
-	return repository
-}
-
-// GitRepositoryNotReady sets the meta.ReadyCondition on the given GitRepository
-// to 'False', with the given reason and message. It returns the modified
-// GitRepository.
-func GitRepositoryNotReady(repository GitRepository, reason, message string) GitRepository {
-	meta.SetResourceCondition(&repository, meta.ReadyCondition, metav1.ConditionFalse, reason, message)
-	return repository
-}
-
-// GitRepositoryReadyMessage returns the message of the metav1.Condition of type
-// meta.ReadyCondition with status 'True' if present, or an empty string.
-func GitRepositoryReadyMessage(repository GitRepository) string {
-	if c := apimeta.FindStatusCondition(repository.Status.Conditions, meta.ReadyCondition); c != nil {
-		if c.Status == metav1.ConditionTrue {
-			return c.Message
-		}
-	}
-	return ""
-}
-
 // GetArtifact returns the latest artifact from the source if present in the
 // status sub-resource.
-func (in *GitRepository) GetArtifact() *Artifact {
+func (in GitRepository) GetArtifact() *Artifact {
 	return in.Status.Artifact
 }
 
-// GetStatusConditions returns a pointer to the Status.Conditions slice
+func (in GitRepository) GetConditions() []metav1.Condition {
+	return in.Status.Conditions
+}
+
+func (in *GitRepository) SetConditions(conditions []metav1.Condition) {
+	in.Status.Conditions = conditions
+}
+
+// GetStatusConditions returns a pointer to the Status.Conditions slice.
+// Deprecated.
 func (in *GitRepository) GetStatusConditions() *[]metav1.Condition {
 	return &in.Status.Conditions
 }

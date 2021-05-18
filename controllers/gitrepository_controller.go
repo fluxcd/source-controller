@@ -21,15 +21,17 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
-	securejoin "github.com/cyphar/filepath-securejoin"
+	"github.com/fluxcd/pkg/runtime/conditions"
+	"github.com/fluxcd/pkg/runtime/patch"
+	"github.com/fluxcd/source-controller/pkg/sourceignore"
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
-	apimeta "k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	kerrors "k8s.io/apimachinery/pkg/util/errors"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -45,7 +47,6 @@ import (
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
 	"github.com/fluxcd/source-controller/pkg/git"
 	"github.com/fluxcd/source-controller/pkg/git/strategy"
-	"github.com/fluxcd/source-controller/pkg/sourceignore"
 )
 
 // +kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=gitrepositories,verbs=get;list;watch;create;update;patch;delete
@@ -84,346 +85,374 @@ func (r *GitRepositoryReconciler) SetupWithManagerAndOptions(mgr ctrl.Manager, o
 		Complete(r)
 }
 
-func (r *GitRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *GitRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, retErr error) {
 	start := time.Now()
 	log := logr.FromContext(ctx)
 
-	var repository sourcev1.GitRepository
-	if err := r.Get(ctx, req.NamespacedName, &repository); err != nil {
+	// Fetch the GitRepository
+	obj := &sourcev1.GitRepository{}
+	if err := r.Get(ctx, req.NamespacedName, obj); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
 	// Record suspended status metric
-	defer r.RecordSuspend(ctx, &repository, repository.Spec.Suspend)
+	r.RecordSuspend(ctx, obj, obj.Spec.Suspend)
 
-	// Add our finalizer if it does not exist
-	if !controllerutil.ContainsFinalizer(&repository, sourcev1.SourceFinalizer) {
-		controllerutil.AddFinalizer(&repository, sourcev1.SourceFinalizer)
-		if err := r.Update(ctx, &repository); err != nil {
-			log.Error(err, "unable to register finalizer")
-			return ctrl.Result{}, err
-		}
-	}
-
-	// Examine if the object is under deletion
-	if !repository.ObjectMeta.DeletionTimestamp.IsZero() {
-		return r.reconcileDelete(ctx, repository)
-	}
-
-	// Return early if the object is suspended.
-	if repository.Spec.Suspend {
+	// Return early if the object is suspended
+	if obj.Spec.Suspend {
 		log.Info("Reconciliation is suspended for this object")
 		return ctrl.Result{}, nil
 	}
 
-	// check dependencies
-	if len(repository.Spec.Include) > 0 {
-		if err := r.checkDependencies(repository); err != nil {
-			repository = sourcev1.GitRepositoryNotReady(repository, meta.DependencyNotReadyReason, err.Error())
-			if err := r.updateStatus(ctx, req, repository.Status); err != nil {
-				log.Error(err, "unable to update status for dependency not ready")
-				return ctrl.Result{Requeue: true}, err
-			}
-			// we can't rely on exponential backoff because it will prolong the execution too much,
-			// instead we requeue on a fix interval.
-			msg := fmt.Sprintf("Dependencies do not meet ready condition, retrying in %s", r.requeueDependency.String())
-			log.Info(msg)
-			r.Events.Event(ctx, &repository, nil, events.EventSeverityInfo, "DependencyNotReady", msg)
-			r.Metrics.RecordReadinessMetric(ctx, &repository)
-			return ctrl.Result{RequeueAfter: r.requeueDependency}, nil
-		}
-		log.Info("All dependencies area ready, proceeding with reconciliation")
-	}
-
-	// record reconciliation duration
-	defer r.Metrics.RecordDuration(ctx, &repository, start)
-
-	// set initial status
-	if resetRepository, ok := r.resetStatus(repository); ok {
-		repository = resetRepository
-		if err := r.updateStatus(ctx, req, repository.Status); err != nil {
-			log.Error(err, "unable to update status")
-			return ctrl.Result{Requeue: true}, err
-		}
-		r.Metrics.RecordReadinessMetric(ctx, &repository)
-	}
-
-	// record the value of the reconciliation request, if any
-	// TODO(hidde): would be better to defer this in combination with
-	//   always patching the status sub-resource after a reconciliation.
-	if v, ok := meta.ReconcileAnnotationValue(repository.GetAnnotations()); ok {
-		repository.Status.SetLastHandledReconcileRequest(v)
-	}
-
-	// purge old artifacts from storage
-	if err := r.gc(repository); err != nil {
-		log.Error(err, "unable to purge old artifacts")
-	}
-
-	// reconcile repository by pulling the latest Git commit
-	reconciledRepository, reconcileErr := r.reconcile(ctx, *repository.DeepCopy())
-
-	// update status with the reconciliation result
-	if err := r.updateStatus(ctx, req, reconciledRepository.Status); err != nil {
-		log.Error(err, "unable to update status")
-		return ctrl.Result{Requeue: true}, err
-	}
-
-	// if reconciliation failed, record the failure and requeue immediately
-	if reconcileErr != nil {
-		r.Events.Event(ctx, &reconciledRepository, nil, events.EventSeverityError, "ReconciliationFailed", reconcileErr.Error())
-		r.Metrics.RecordReadinessMetric(ctx, &reconciledRepository)
-		return ctrl.Result{Requeue: true}, reconcileErr
-	}
-
-	// emit revision change event
-	if repository.GetArtifact() == nil || reconciledRepository.GetArtifact().Revision != repository.GetArtifact().Revision {
-		r.Events.Event(ctx, &reconciledRepository, map[string]string{
-			"revision": reconciledRepository.GetArtifact().Revision,
-		}, events.EventSeverityInfo, "NewRevision", sourcev1.GitRepositoryReadyMessage(reconciledRepository))
-	}
-	r.Metrics.RecordReadinessMetric(ctx, &reconciledRepository)
-
-	log.Info(fmt.Sprintf("Reconciliation finished in %s, next run in %s",
-		time.Now().Sub(start).String(),
-		repository.GetInterval().Duration.String(),
-	))
-
-	return ctrl.Result{RequeueAfter: repository.GetInterval().Duration}, nil
-}
-
-func (r *GitRepositoryReconciler) checkDependencies(repository sourcev1.GitRepository) error {
-	for _, d := range repository.Spec.Include {
-		dName := types.NamespacedName{Name: d.GitRepositoryRef.Name, Namespace: repository.Namespace}
-		var gr sourcev1.GitRepository
-		err := r.Get(context.Background(), dName, &gr)
-		if err != nil {
-			return fmt.Errorf("unable to get '%s' dependency: %w", dName, err)
-		}
-
-		if len(gr.Status.Conditions) == 0 || gr.Generation != gr.Status.ObservedGeneration {
-			return fmt.Errorf("dependency '%s' is not ready", dName)
-		}
-
-		if !apimeta.IsStatusConditionTrue(gr.Status.Conditions, meta.ReadyCondition) {
-			return fmt.Errorf("dependency '%s' is not ready", dName)
-		}
-	}
-
-	return nil
-}
-
-func (r *GitRepositoryReconciler) reconcile(ctx context.Context, repository sourcev1.GitRepository) (sourcev1.GitRepository, error) {
-	// create tmp dir for the Git clone
-	tmpGit, err := ioutil.TempDir("", repository.Name)
+	// Initialize the patch helper
+	patchHelper, err := patch.NewHelper(obj, r.Client)
 	if err != nil {
-		err = fmt.Errorf("tmp dir error: %w", err)
-		return sourcev1.GitRepositoryNotReady(repository, sourcev1.StorageOperationFailedReason, err.Error()), err
+		return ctrl.Result{}, err
 	}
-	defer os.RemoveAll(tmpGit)
 
-	// determine auth method
+	// Always attempt to patch the object and status after each
+	// reconciliation
+	defer func() {
+		// Record the value of the reconciliation request, if any
+		if v, ok := meta.ReconcileAnnotationValue(obj.GetAnnotations()); ok {
+			obj.Status.SetLastHandledReconcileRequest(v)
+		}
+
+		// Summarize Ready condition
+		conditions.SetSummary(obj,
+			meta.ReadyCondition,
+			conditions.WithConditions(
+				sourcev1.ArtifactAvailableCondition,
+				sourcev1.SourceVerifiedCondition,
+				sourcev1.SourceAvailableCondition,
+			),
+		)
+
+		// Patch the object, ignoring conflicts on the conditions owned by
+		// this controller
+		patchOpts := []patch.Option{
+			patch.WithOwnedConditions{
+				Conditions: []string{
+					sourcev1.ArtifactAvailableCondition,
+					sourcev1.SourceVerifiedCondition,
+					sourcev1.SourceAvailableCondition,
+					meta.ReadyCondition,
+					meta.ReconcilingCondition,
+					meta.ProgressingReason,
+				},
+			},
+		}
+
+		// Determine if the resource is still being reconciled, or if
+		// it has stalled, and record this observation
+		if retErr == nil && (result.IsZero() || !result.Requeue) {
+			// We are no longer reconciling
+			conditions.Delete(obj, meta.ReconcilingCondition)
+
+			// We have now observed this generation
+			patchOpts = append(patchOpts, patch.WithStatusObservedGeneration{})
+
+			if readyCondition := conditions.Get(obj, meta.ReadyCondition); readyCondition.Status == metav1.ConditionFalse {
+				// As we are no longer reconciling, and the end-state
+				// is not ready, the reconciliation has stalled
+				conditions.MarkTrue(obj, meta.StalledCondition, readyCondition.Reason, readyCondition.Message)
+			}
+		}
+
+		// Finally, patch the resource
+		if err := patchHelper.Patch(ctx, obj, patchOpts...); err != nil {
+			retErr = kerrors.NewAggregate([]error{retErr, err})
+		}
+
+		// Always record readiness and duration metrics
+		r.Metrics.RecordReadinessMetric(ctx, obj)
+		r.Metrics.RecordDuration(ctx, obj, start)
+	}()
+
+	// Add finalizer first if not exist to avoid the race condition
+	// between init and delete
+	if !controllerutil.ContainsFinalizer(obj, sourcev1.SourceFinalizer) {
+		controllerutil.AddFinalizer(obj, sourcev1.SourceFinalizer)
+		return ctrl.Result{Requeue: true}, nil
+	}
+
+	// Examine if the object is under deletion
+	if !obj.ObjectMeta.DeletionTimestamp.IsZero() {
+		return r.reconcileDelete(ctx, obj)
+	}
+
+	// Purge old artifacts from the storage
+	if err := r.garbageCollect(obj); err != nil {
+		r.Events.Eventf(ctx, obj, nil, events.EventSeverityError, "GarbageCollectionFailed", "Garbage collection failed: %s", err)
+	}
+
+	// Reconcile actual object
+	return r.reconcile(ctx, obj)
+}
+
+func (r *GitRepositoryReconciler) reconcile(ctx context.Context, obj *sourcev1.GitRepository) (ctrl.Result, error) {
+	log := logr.FromContext(ctx)
+
+	// Mark the resource as under reconciliation
+	conditions.MarkTrue(obj, meta.ReconcilingCondition, "Reconciling", "")
+
+	// Determine if we (still) have the artifact, and record this
+	// observation
+	if artifact := obj.GetArtifact(); artifact != nil && !r.Storage.ArtifactExist(*artifact) {
+		obj.Status.Artifact = nil
+		obj.Status.URL = ""
+	}
+	if obj.GetArtifact() == nil {
+		conditions.MarkFalse(obj, sourcev1.ArtifactAvailableCondition, "NoArtifactFound", "No artifact found for resource")
+	}
+
+	// Create temp dir for Git clone
+	tmpDir, err := ioutil.TempDir("", fmt.Sprintf("%s-%s-%s-", obj.Kind, obj.Namespace, obj.Name))
+	if err != nil {
+		conditions.MarkFalse(obj, sourcev1.SourceAvailableCondition, sourcev1.StorageOperationFailedReason, "Failed to create temporary directory: %s", err)
+		return ctrl.Result{}, err
+	}
+	defer os.RemoveAll(tmpDir)
+
+	// Reconcile the source from upstream
+	var artifact sourcev1.Artifact
+	if result, err := r.reconcileSource(ctx, obj, &artifact, tmpDir); err != nil {
+		return result, err
+	}
+
+	// Always update the artifact URLs to ensure correct hostname is advertised
+	defer func() {
+		if obj.GetArtifact() != nil && artifact.URL != obj.GetArtifact().URL {
+			log.Info("Updating artifact URL %s to %s", artifact.URL, obj.GetArtifact().URL)
+			r.Storage.SetArtifactURL(obj.GetArtifact())
+			obj.Status.URL = r.Storage.SetHostname(obj.Status.URL)
+			log.Info("Updated artifact URL % due to mismatch")
+		}
+	}()
+
+	// The artifact is up-to-date
+	if obj.GetArtifact().HasRevision(artifact.Revision) {
+		log.Info("Artifact is up-to-date")
+		return ctrl.Result{RequeueAfter: obj.GetInterval().Duration}, nil
+	}
+
+	// Reconcile the artifact to storage
+	if result, err := r.reconcileArtifact(ctx, obj, artifact, tmpDir); err != nil {
+		return result, err
+	}
+
+	return ctrl.Result{RequeueAfter: obj.Spec.Interval.Duration}, nil
+}
+
+// reconcileSource reconciles the Git repository from upstream to the
+// given directory path while using the information on the object to
+// determine authentication and checkout strategies.
+// On a successful checkout of HEAD the artifact metadata the given
+// pointer is set to a new artifact.
+func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context, obj *sourcev1.GitRepository, artifact *sourcev1.Artifact, dir string) (ctrl.Result, error) {
+	log := logr.FromContext(ctx)
+
+	// Determine the auth strategy
 	auth := &git.Auth{}
-	if repository.Spec.SecretRef != nil {
-		authStrategy, err := strategy.AuthSecretStrategyForURL(
-			repository.Spec.URL,
-			git.CheckoutOptions{
-				GitImplementation: repository.Spec.GitImplementation,
-				RecurseSubmodules: repository.Spec.RecurseSubmodules,
-			})
+	if obj.Spec.SecretRef != nil {
+		// Determine the auth strategy
+		authStrategy, err := strategy.AuthSecretStrategyForURL(obj.Spec.URL, git.CheckoutOptions{
+			GitImplementation: obj.Spec.GitImplementation,
+			RecurseSubmodules: obj.Spec.RecurseSubmodules,
+		})
+
 		if err != nil {
-			return sourcev1.GitRepositoryNotReady(repository, sourcev1.AuthenticationFailedReason, err.Error()), err
+			conditions.MarkFalse(obj, sourcev1.SourceAvailableCondition, sourcev1.AuthenticationFailedReason, "Failed to get auth strategy: %s", err)
+			// Do not return err as recovery without changes is impossible
+			log.Error(err, "failed to get auth strategy")
+			return ctrl.Result{}, nil
 		}
 
+		// Attempt to retrieve secret
 		name := types.NamespacedName{
-			Namespace: repository.GetNamespace(),
-			Name:      repository.Spec.SecretRef.Name,
+			Namespace: obj.GetNamespace(),
+			Name:      obj.Spec.SecretRef.Name,
 		}
-
 		var secret corev1.Secret
-		err = r.Client.Get(ctx, name, &secret)
-		if err != nil {
-			err = fmt.Errorf("auth secret error: %w", err)
-			return sourcev1.GitRepositoryNotReady(repository, sourcev1.AuthenticationFailedReason, err.Error()), err
+		if err = r.Client.Get(ctx, name, &secret); err != nil {
+			conditions.MarkFalse(obj, sourcev1.SourceAvailableCondition, sourcev1.AuthenticationFailedReason, "Failed to get auth secret %s: %s", name.String(), err.Error())
+			r.Events.Event(ctx, obj, nil, events.EventSeverityError, sourcev1.AuthenticationFailedReason, conditions.Get(obj, sourcev1.SourceAvailableCondition).Message)
+			// Return transient errors but wait for next interval on not found
+			return ctrl.Result{RequeueAfter: obj.Spec.Interval.Duration}, client.IgnoreNotFound(err)
 		}
 
+		// Configure strategy with secret
 		auth, err = authStrategy.Method(secret)
 		if err != nil {
-			err = fmt.Errorf("auth error: %w", err)
-			return sourcev1.GitRepositoryNotReady(repository, sourcev1.AuthenticationFailedReason, err.Error()), err
+			conditions.MarkFalse(obj, sourcev1.SourceAvailableCondition, sourcev1.AuthenticationFailedReason, "Failed to configure auth strategy: %s", err)
+			r.Events.Event(ctx, obj, nil, events.EventSeverityError, sourcev1.AuthenticationFailedReason, conditions.Get(obj, sourcev1.SourceAvailableCondition).Message)
+			// Return err as the content of the secret may change
+			return ctrl.Result{}, err
 		}
 	}
 
-	checkoutStrategy, err := strategy.CheckoutStrategyForRef(
-		repository.Spec.Reference,
-		git.CheckoutOptions{
-			GitImplementation: repository.Spec.GitImplementation,
-			RecurseSubmodules: repository.Spec.RecurseSubmodules,
-		},
-	)
+	// Configure checkout strategy
+	checkoutStrategy, err := strategy.CheckoutStrategyForRef(obj.Spec.Reference, git.CheckoutOptions{
+		GitImplementation: obj.Spec.GitImplementation,
+		RecurseSubmodules: obj.Spec.RecurseSubmodules,
+	})
 	if err != nil {
-		return sourcev1.GitRepositoryNotReady(repository, sourcev1.GitOperationFailedReason, err.Error()), err
+		conditions.MarkFalse(obj, sourcev1.SourceAvailableCondition, sourcev1.GitOperationFailedReason, "Failed to configure checkout strategy: %s", err)
+		r.Events.Event(ctx, obj, nil, events.EventSeverityError, sourcev1.AuthenticationFailedReason, conditions.Get(obj, sourcev1.SourceAvailableCondition).Message)
+		// Do not return err as recovery without changes is impossible
+		return ctrl.Result{}, nil
 	}
 
-	gitCtx, cancel := context.WithTimeout(ctx, repository.Spec.Timeout.Duration)
+	// Checkout HEAD of commit referenced in object
+	gitCtx, cancel := context.WithTimeout(ctx, obj.Spec.Timeout.Duration)
 	defer cancel()
-
-	commit, revision, err := checkoutStrategy.Checkout(gitCtx, tmpGit, repository.Spec.URL, auth)
+	commit, revision, err := checkoutStrategy.Checkout(gitCtx, dir, obj.Spec.URL, auth)
 	if err != nil {
-		return sourcev1.GitRepositoryNotReady(repository, sourcev1.GitOperationFailedReason, err.Error()), err
+		conditions.MarkFalse(obj, sourcev1.SourceAvailableCondition, sourcev1.GitOperationFailedReason, "Failed to checkout and determine HEAD revision: %s", err)
+		r.Events.Eventf(ctx, obj, nil, events.EventSeverityError, "GitCheckoutFailed", conditions.Get(obj, sourcev1.SourceAvailableCondition).Message)
+		// Coin flip on transient or persistent error, requeue
+		// TODO(hidde): likely better to detect the err type
+		return ctrl.Result{}, err
 	}
 
-	artifact := r.Storage.NewArtifactFor(repository.Kind, repository.GetObjectMeta(), revision, fmt.Sprintf("%s.tar.gz", commit.Hash()))
+	// Create potential new artifact
+	*artifact = r.Storage.NewArtifactFor(obj.Kind, obj, revision, fmt.Sprintf("%s.tar.gz", commit.Hash()))
+	conditions.MarkTrue(obj, sourcev1.SourceAvailableCondition, "SuccessfulCheckout", "Checked out revision %s from %s", revision, obj.Spec.URL)
 
-	// copy all included repository into the artifact
-	includedArtifacts := []*sourcev1.Artifact{}
-	for _, incl := range repository.Spec.Include {
-		dName := types.NamespacedName{Name: incl.GitRepositoryRef.Name, Namespace: repository.Namespace}
-		var gr sourcev1.GitRepository
-		err := r.Get(context.Background(), dName, &gr)
-		if err != nil {
-			return sourcev1.GitRepositoryNotReady(repository, meta.DependencyNotReadyReason, err.Error()), err
-		}
-		includedArtifacts = append(includedArtifacts, gr.GetArtifact())
+	return ctrl.Result{RequeueAfter: obj.Spec.Interval.Duration}, nil
+}
+
+// reconcileArtifact reconciles the Git checkout in the given directory
+// path to the artifact storage by archiving the directory while taking
+// into account the ignore patterns in the directory and object.
+// On a successful archive, the given artifact is set on the given
+// object, and the symlink is updated.
+func (r *GitRepositoryReconciler) reconcileArtifact(ctx context.Context, obj *sourcev1.GitRepository, artifact sourcev1.Artifact, dir string) (ctrl.Result, error) {
+	// Ensure target path exists and is a directory
+	if f, err := os.Stat(dir); err != nil {
+		conditions.MarkFalse(obj, sourcev1.ArtifactAvailableCondition, sourcev1.StorageOperationFailedReason, "Failed to stat source path: %s", err.Error())
+		return ctrl.Result{}, err
+	} else if !f.IsDir() {
+		err = fmt.Errorf("source path %q is not a directory", dir)
+		conditions.MarkFalse(obj, sourcev1.ArtifactAvailableCondition, sourcev1.StorageOperationFailedReason, "Failed to reconcile artifact: %s", err.Error())
+		return ctrl.Result{}, err
 	}
 
-	// return early on unchanged revision and unchanged included repositories
-	if apimeta.IsStatusConditionTrue(repository.Status.Conditions, meta.ReadyCondition) && repository.GetArtifact().HasRevision(artifact.Revision) && !hasArtifactUpdated(repository.Status.IncludedArtifacts, includedArtifacts) {
-		if artifact.URL != repository.GetArtifact().URL {
-			r.Storage.SetArtifactURL(repository.GetArtifact())
-			repository.Status.URL = r.Storage.SetHostname(repository.Status.URL)
-		}
-		return repository, nil
+	// Ensure artifact directory exists and acquire lock
+	err := r.Storage.MkdirAll(artifact)
+	if err := r.Storage.MkdirAll(artifact); err != nil {
+		conditions.MarkFalse(obj, sourcev1.ArtifactAvailableCondition, sourcev1.StorageOperationFailedReason, "Failed to create directory: %s", err)
+		return ctrl.Result{}, err
 	}
-
-	// verify PGP signature
-	if repository.Spec.Verification != nil {
-		publicKeySecret := types.NamespacedName{
-			Namespace: repository.Namespace,
-			Name:      repository.Spec.Verification.SecretRef.Name,
-		}
-		var secret corev1.Secret
-		if err := r.Client.Get(ctx, publicKeySecret, &secret); err != nil {
-			err = fmt.Errorf("PGP public keys secret error: %w", err)
-			return sourcev1.GitRepositoryNotReady(repository, sourcev1.VerificationFailedReason, err.Error()), err
-		}
-
-		err := commit.Verify(secret)
-		if err != nil {
-			return sourcev1.GitRepositoryNotReady(repository, sourcev1.VerificationFailedReason, err.Error()), err
-		}
-	}
-
-	// create artifact dir
-	err = r.Storage.MkdirAll(artifact)
-	if err != nil {
-		err = fmt.Errorf("mkdir dir error: %w", err)
-		return sourcev1.GitRepositoryNotReady(repository, sourcev1.StorageOperationFailedReason, err.Error()), err
-	}
-
-	for i, incl := range repository.Spec.Include {
-		toPath, err := securejoin.SecureJoin(tmpGit, incl.GetToPath())
-		if err != nil {
-			return sourcev1.GitRepositoryNotReady(repository, meta.DependencyNotReadyReason, err.Error()), err
-		}
-		err = r.Storage.CopyToPath(includedArtifacts[i], incl.GetFromPath(), toPath)
-		if err != nil {
-			return sourcev1.GitRepositoryNotReady(repository, meta.DependencyNotReadyReason, err.Error()), err
-		}
-	}
-
-	// acquire lock
 	unlock, err := r.Storage.Lock(artifact)
 	if err != nil {
-		err = fmt.Errorf("unable to acquire lock: %w", err)
-		return sourcev1.GitRepositoryNotReady(repository, sourcev1.StorageOperationFailedReason, err.Error()), err
+		conditions.MarkFalse(obj, sourcev1.ArtifactAvailableCondition, sourcev1.StorageOperationFailedReason, "Failed to acquire lock: %s", err)
+		return ctrl.Result{}, err
 	}
 	defer unlock()
 
-	// archive artifact and check integrity
-	ignoreDomain := strings.Split(tmpGit, string(filepath.Separator))
-	ps, err := sourceignore.LoadIgnorePatterns(tmpGit, ignoreDomain)
+	// Load ignore rules for archiving
+	ps, err := sourceignore.LoadIgnorePatterns(dir, nil)
 	if err != nil {
-		err = fmt.Errorf(".sourceignore error: %w", err)
-		return sourcev1.GitRepositoryNotReady(repository, sourcev1.StorageOperationFailedReason, err.Error()), err
+		conditions.MarkFalse(obj, sourcev1.ArtifactAvailableCondition, "SourceIgnoreError", "Failed to load source ignore patterns: %s", err)
+		return ctrl.Result{}, err
 	}
-	if repository.Spec.Ignore != nil {
-		ps = append(ps, sourceignore.ReadPatterns(strings.NewReader(*repository.Spec.Ignore), ignoreDomain)...)
-	}
-	if err := r.Storage.Archive(&artifact, tmpGit, SourceIgnoreFilter(ps, ignoreDomain)); err != nil {
-		err = fmt.Errorf("storage archive error: %w", err)
-		return sourcev1.GitRepositoryNotReady(repository, sourcev1.StorageOperationFailedReason, err.Error()), err
+	if obj.Spec.Ignore != nil {
+		ps = append(ps, sourceignore.ReadPatterns(strings.NewReader(*obj.Spec.Ignore), nil)...)
 	}
 
-	// update latest symlink
+	// Archive artifact to storage
+	if err := r.Storage.Archive(&artifact, dir, SourceIgnoreFilter(ps, nil)); err != nil {
+		conditions.MarkFalse(obj, sourcev1.ArtifactAvailableCondition, sourcev1.StorageOperationFailedReason, "Archiving error: %s", err)
+		return ctrl.Result{}, err
+	}
+
+	// Record it on the object
+	obj.Status.Artifact = artifact.DeepCopy()
+	conditions.MarkTrue(obj, sourcev1.ArtifactAvailableCondition, "ArchivedArtifact", "Archived artifact revision %s", artifact.Revision)
+	r.Events.Eventf(ctx, obj, map[string]string{
+		"revision": obj.GetArtifact().Revision,
+	}, events.EventSeverityInfo, sourcev1.GitOperationSucceedReason, conditions.Get(obj, sourcev1.ArtifactAvailableCondition).Message)
+
+	// Update symlink on a "best effort" basis
 	url, err := r.Storage.Symlink(artifact, "latest.tar.gz")
 	if err != nil {
-		err = fmt.Errorf("storage symlink error: %w", err)
-		return sourcev1.GitRepositoryNotReady(repository, sourcev1.StorageOperationFailedReason, err.Error()), err
+		r.Events.Eventf(ctx, obj, nil, events.EventSeverityError, sourcev1.StorageOperationFailedReason, "Failed to update status URL symlink: %s", err)
+		return ctrl.Result{}, err
+	}
+	if url != "" {
+		obj.Status.URL = url
 	}
 
-	message := fmt.Sprintf("Fetched revision: %s", artifact.Revision)
-	return sourcev1.GitRepositoryReady(repository, artifact, includedArtifacts, url, sourcev1.GitOperationSucceedReason, message), nil
+	return ctrl.Result{RequeueAfter: obj.Spec.Interval.Duration}, nil
 }
 
-func (r *GitRepositoryReconciler) reconcileDelete(ctx context.Context, repository sourcev1.GitRepository) (ctrl.Result, error) {
-	if err := r.gc(repository); err != nil {
-		r.Events.Eventf(ctx, &repository, nil, events.EventSeverityError, "GarbageCollectionFailed",
-			"garbage collection for deleted resource failed: %s", err.Error())
+// verifyCommitSignature verifies the signature of the given commit if
+// a verification
+func (r *GitRepositoryReconciler) verifyCommitSignature(ctx context.Context, obj *sourcev1.GitRepository, commit git.Commit) (ctrl.Result, error) {
+	// Check if there is a commit verification is configured,
+	// and remove old observation if there is none
+	if obj.Spec.Verification == nil || obj.Spec.Verification.Mode == "" {
+		conditions.Delete(obj, sourcev1.SourceVerifiedCondition)
+		return ctrl.Result{RequeueAfter: obj.Spec.Interval.Duration}, nil
+	}
+
+	// Get secret with GPG data
+	publicKeySecret := types.NamespacedName{
+		Namespace: obj.Namespace,
+		Name:      obj.Spec.Verification.SecretRef.Name,
+	}
+	var secret corev1.Secret
+	if err := r.Client.Get(ctx, publicKeySecret, &secret); err != nil {
+		conditions.MarkFalse(obj, sourcev1.SourceVerifiedCondition, "FailedToGetSecret", "PGP public keys secret error: %s", err)
+		return ctrl.Result{RequeueAfter: obj.Spec.Interval.Duration}, client.IgnoreNotFound(err)
+	}
+
+	// Verify commit with GPG data from secret
+	if err := commit.Verify(secret); err != nil {
+		conditions.MarkFalse(obj, sourcev1.SourceVerifiedCondition, "InvalidCommitSignature", "Commit signature verification failed: %s", err)
+		// We will not be able to recover from this error but HEAD
+		// may change in the future
+		logr.FromContext(ctx).Error(err, "PGP commit verification failed")
+		return ctrl.Result{RequeueAfter: obj.Spec.Interval.Duration}, nil
+	}
+	conditions.MarkTrue(obj, sourcev1.SourceVerifiedCondition, "ValidCommitSignature", "Verified signature of commit %q", commit.Hash())
+
+	return ctrl.Result{RequeueAfter: obj.Spec.Interval.Duration}, nil
+}
+
+// reconcileDelete reconciles the delete of an object by garbage
+// collecting all artifacts for the object in the artifact storage,
+// if successful, the finalizer is removed from the object.
+func (r *GitRepositoryReconciler) reconcileDelete(ctx context.Context, obj *sourcev1.GitRepository) (ctrl.Result, error) {
+	// Garbage collect the resource's artifacts
+	if err := r.garbageCollect(obj); err != nil {
+		r.Events.Eventf(ctx, obj, nil, events.EventSeverityError, "GarbageCollectionFailed", "Garbage collection for deleted resource failed: %s", err)
 		// Return the error so we retry the failed garbage collection
 		return ctrl.Result{}, err
 	}
 
-	// Record deleted status
-	r.Metrics.RecordReadinessMetric(ctx, &repository)
-
-	// Remove our finalizer from the list and update it
-	controllerutil.RemoveFinalizer(&repository, sourcev1.SourceFinalizer)
-	if err := r.Update(ctx, &repository); err != nil {
-		return ctrl.Result{}, err
-	}
+	// Remove our finalizer from the list
+	controllerutil.RemoveFinalizer(obj, sourcev1.SourceFinalizer)
 
 	// Stop reconciliation as the object is being deleted
 	return ctrl.Result{}, nil
 }
 
-// resetStatus returns a modified v1beta1.GitRepository and a boolean indicating
-// if the status field has been reset.
-func (r *GitRepositoryReconciler) resetStatus(repository sourcev1.GitRepository) (sourcev1.GitRepository, bool) {
-	// We do not have an artifact, or it does no longer exist
-	if repository.GetArtifact() == nil || !r.Storage.ArtifactExist(*repository.GetArtifact()) {
-		repository = sourcev1.GitRepositoryProgressing(repository)
-		repository.Status.Artifact = nil
-		return repository, true
+// garbageCollect performs a garbage collection for the given
+// v1beta1.GitRepository. It removes all but the current artifact
+// except for when the deletion timestamp is set, which will result
+// in the removal of all artifacts for the resource.
+func (r *GitRepositoryReconciler) garbageCollect(obj *sourcev1.GitRepository) error {
+	if !obj.DeletionTimestamp.IsZero() {
+		if err := r.Storage.RemoveAll(r.Storage.NewArtifactFor(obj.Kind, obj.GetObjectMeta(), "", "*")); err != nil {
+			return err
+		}
+		obj.Status.Artifact = nil
+		return nil
 	}
-	if repository.Generation != repository.Status.ObservedGeneration {
-		return sourcev1.GitRepositoryProgressing(repository), true
-	}
-	return repository, false
-}
-
-// gc performs a garbage collection for the given v1beta1.GitRepository.
-// It removes all but the current artifact except for when the
-// deletion timestamp is set, which will result in the removal of
-// all artifacts for the resource.
-func (r *GitRepositoryReconciler) gc(repository sourcev1.GitRepository) error {
-	if !repository.DeletionTimestamp.IsZero() {
-		return r.Storage.RemoveAll(r.Storage.NewArtifactFor(repository.Kind, repository.GetObjectMeta(), "", "*"))
-	}
-	if repository.GetArtifact() != nil {
-		return r.Storage.RemoveAllButCurrent(*repository.GetArtifact())
+	if obj.GetArtifact() != nil {
+		return r.Storage.RemoveAllButCurrent(*obj.GetArtifact())
 	}
 	return nil
-}
-
-func (r *GitRepositoryReconciler) updateStatus(ctx context.Context, req ctrl.Request, newStatus sourcev1.GitRepositoryStatus) error {
-	var repository sourcev1.GitRepository
-	if err := r.Get(ctx, req.NamespacedName, &repository); err != nil {
-		return err
-	}
-
-	patch := client.MergeFrom(repository.DeepCopy())
-	repository.Status = newStatus
-
-	return r.Status().Patch(ctx, &repository, patch)
 }
