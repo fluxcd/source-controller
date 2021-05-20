@@ -652,7 +652,7 @@ func TestGitRepositoryReconciler_reconcileArtifact(t *testing.T) {
 
 			artifact := storage.NewArtifactFor(obj.Kind, obj, "main/revision", "checksum.tar.gz")
 
-			got, err := r.reconcileArtifact(ctx, obj, artifact, tt.dir)
+			got, err := r.reconcileArtifact(ctx, obj, artifact, nil, tt.dir)
 			g.Expect(obj.Status.Conditions).To(conditions.MatchConditions(tt.assertConditions))
 			g.Expect(err != nil).To(Equal(tt.wantErr))
 			g.Expect(got).To(Equal(tt.want))
