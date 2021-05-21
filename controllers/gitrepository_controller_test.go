@@ -48,6 +48,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	fakeclient "sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/fluxcd/pkg/apis/meta"
@@ -593,7 +594,7 @@ func TestGitRepositoryReconciler_reconcileArtifact(t *testing.T) {
 			},
 			want: ctrl.Result{RequeueAfter: mockInterval},
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.ArtifactAvailableCondition, "ArchivedArtifact", "Archived artifact revision main/revision"),
+				*conditions.TrueCondition(sourcev1.ArtifactAvailableCondition, "ArchivedArtifact", "Artifact revision main/revision"),
 			},
 		},
 		{
@@ -662,6 +663,251 @@ func TestGitRepositoryReconciler_reconcileArtifact(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestGitRepositoryReconciler_reconcileInclude(t *testing.T) {
+	g := NewWithT(t)
+
+	storage, err := newTestStorage()
+	g.Expect(err).NotTo(HaveOccurred())
+	defer os.RemoveAll(storage.BasePath)
+
+	dependencyInterval := 5 * time.Second
+
+	type dependency struct {
+		name         string
+		withArtifact bool
+		conditions   []metav1.Condition
+	}
+
+	type include struct {
+		name     string
+		fromPath string
+		toPath   string
+		shouldExist bool
+	}
+
+	tests := []struct {
+		name             string
+		dependencies     []dependency
+		includes         []include
+		want             ctrl.Result
+		wantErr          bool
+		assertConditions []metav1.Condition
+	}{
+		{
+			name: "Includes artifacts",
+			dependencies: []dependency{
+				{
+					name:         "a",
+					withArtifact: true,
+					conditions: []metav1.Condition{
+						*conditions.TrueCondition(meta.ReadyCondition, "Foo", "foo ready"),
+					},
+				},
+				{
+					name:         "b",
+					withArtifact: true,
+					conditions: []metav1.Condition{
+						*conditions.TrueCondition(meta.ReadyCondition, "Bar", "bar ready"),
+					},
+				},
+			},
+			includes: []include{
+				{name: "a", toPath: "a/"},
+				{name: "b", toPath: "b/"},
+			},
+			want: ctrl.Result{RequeueAfter: mockInterval},
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.SourceAvailableCondition, "Foo", "2 of 2 Ready"),
+			},
+		},
+		{
+			name: "Non existing artifact",
+			includes: []include{
+				{name: "a", toPath: "a/"},
+			},
+			want: ctrl.Result{RequeueAfter: mockInterval},
+			wantErr: false,
+			assertConditions: []metav1.Condition{
+				*conditions.FalseCondition(sourcev1.SourceAvailableCondition, "IncludeNotFound", "Could not find resource for include \"a\": gitrepositories.source.toolkit.fluxcd.io \"a\" not found"),
+			},
+		},
+		{
+			name: "Missing artifact",
+			dependencies: []dependency{
+				{
+					name:         "a",
+					withArtifact: false,
+					conditions: []metav1.Condition{
+						*conditions.FalseCondition(sourcev1.SourceAvailableCondition, "Foo", "foo unavailable"),
+					},
+				},
+			},
+			includes: []include{
+				{name: "a", toPath: "a/"},
+			},
+			want: ctrl.Result{RequeueAfter: dependencyInterval},
+			assertConditions: []metav1.Condition{
+				*conditions.FalseCondition(sourcev1.SourceAvailableCondition, "IncludeUnavailable", "No artifact available for include \"a\""),
+			},
+		},
+		{
+			name: "Invalid FromPath",
+			dependencies: []dependency{
+				{
+					name:         "a",
+					withArtifact: true,
+				},
+			},
+			includes: []include{
+				{name: "a", fromPath: "../../../path", shouldExist: false},
+			},
+			wantErr: true,
+			assertConditions: []metav1.Condition{
+				*conditions.FalseCondition(sourcev1.SourceAvailableCondition, "IncludeCopyFailure", "Failed to copy \"a\" include from ../../../path to a"),
+			},
+		},
+		{
+			name: "Stalled include",
+			dependencies: []dependency{
+				{
+					name:         "a",
+					withArtifact: true,
+					conditions: []metav1.Condition{
+						*conditions.TrueCondition(meta.ReadyCondition, "Foo", "foo ready"),
+					},
+				},
+				{
+					name:         "b",
+					withArtifact: true,
+					conditions: []metav1.Condition{
+						*conditions.TrueCondition(meta.StalledCondition, "Bar", "bar stalled"),
+					},
+				},
+			},
+			includes: []include{
+				{name: "a", toPath: "a/"},
+				{name: "b", toPath: "b/"},
+			},
+			want: ctrl.Result{RequeueAfter: mockInterval},
+			assertConditions: []metav1.Condition{
+				*conditions.FalseCondition(sourcev1.SourceAvailableCondition, "Bar @ GitRepository/a", "bar stalled"),
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			var depObjs []client.Object
+			for _, d := range tt.dependencies {
+				obj := &sourcev1.GitRepository{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: d.name,
+					},
+					Status: sourcev1.GitRepositoryStatus{
+						Conditions: d.conditions,
+					},
+				}
+				if d.withArtifact {
+					obj.Status.Artifact = &sourcev1.Artifact{
+						Path:           d.name + ".tar.gz",
+						Revision:       d.name,
+						LastUpdateTime: metav1.Now(),
+					}
+					g.Expect(storage.Archive(obj.GetArtifact(), "testdata/git/repository", nil)).To(Succeed())
+				}
+				depObjs = append(depObjs, obj)
+			}
+
+			s := runtime.NewScheme()
+			utilruntime.Must(sourcev1.AddToScheme(s))
+			builder := fakeclient.NewClientBuilder().WithScheme(s)
+			if len(tt.dependencies) > 0 {
+				builder.WithObjects(depObjs...)
+			}
+
+			r := &GitRepositoryReconciler{
+				Client:  builder.Build(),
+				Storage: storage,
+				requeueDependency: dependencyInterval,
+			}
+
+			obj := &sourcev1.GitRepository{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "reconcile-include",
+				},
+				Spec: sourcev1.GitRepositorySpec{
+					Interval: metav1.Duration{Duration: mockInterval},
+				},
+			}
+
+			for i, incl := range tt.includes {
+				incl := sourcev1.GitRepositoryInclude{
+					GitRepositoryRef: meta.LocalObjectReference{Name: incl.name},
+					FromPath:         incl.fromPath,
+					ToPath:           incl.toPath,
+				}
+				tt.includes[i].fromPath = incl.GetFromPath()
+				tt.includes[i].toPath = incl.GetToPath()
+				obj.Spec.Include = append(obj.Spec.Include, incl)
+			}
+
+			tmpDir, err := ioutil.TempDir("", "include-")
+			g.Expect(err).NotTo(HaveOccurred())
+
+			var artifacts artifactSet
+			got, err := r.reconcileInclude(ctx, obj, artifacts, tmpDir)
+			g.Expect(obj.GetConditions()).To(conditions.MatchConditions(tt.assertConditions))
+			g.Expect(err != nil).To(Equal(tt.wantErr))
+			g.Expect(got).To(Equal(tt.want))
+			for _, i := range tt.includes {
+				if i.toPath != "" {
+					expect := g.Expect(filepath.Join(storage.BasePath, i.toPath))
+					if i.shouldExist {
+						expect.To(BeADirectory())
+					} else {
+						expect.NotTo(BeADirectory())
+					}
+				}
+				if i.shouldExist {
+					g.Expect(filepath.Join(storage.BasePath, i.toPath)).Should(BeADirectory())
+				} else {
+					g.Expect(filepath.Join(storage.BasePath, i.toPath)).ShouldNot(BeADirectory())
+				}
+			}
+		})
+	}
+}
+
+func TestGitRepositoryReconciler_reconcileDelete(t *testing.T) {
+	g := NewWithT(t)
+
+	r := &GitRepositoryReconciler{
+		Storage: storage,
+	}
+
+	obj := &sourcev1.GitRepository{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "reconcile-delete-",
+			DeletionTimestamp: &metav1.Time{Time: time.Now()},
+			Finalizers: []string{
+				sourcev1.SourceFinalizer,
+			},
+		},
+		Status: sourcev1.GitRepositoryStatus{},
+	}
+
+	artifact := storage.NewArtifactFor(sourcev1.GitRepositoryKind, obj.GetObjectMeta(), "revision", "foo.txt")
+	obj.Status.Artifact = &artifact
+
+	got, err := r.reconcileDelete(ctx, obj)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(got).To(Equal(ctrl.Result{}))
+	g.Expect(controllerutil.ContainsFinalizer(obj, sourcev1.SourceFinalizer)).To(BeFalse())
+	g.Expect(obj.Status.Artifact).To(BeNil())
+
 }
 
 func TestGitRepositoryReconciler_verifyCommitSignature(t *testing.T) {

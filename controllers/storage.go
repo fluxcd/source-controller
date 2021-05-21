@@ -30,6 +30,7 @@ import (
 	"strings"
 	"time"
 
+	securejoin "github.com/cyphar/filepath-securejoin"
 	"github.com/go-git/go-git/v5/plumbing/format/gitignore"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -354,10 +355,11 @@ func (s *Storage) CopyFromPath(artifact *sourcev1.Artifact, path string) (err er
 	return s.Copy(artifact, f)
 }
 
-// CopyToPath copies the contents of the given artifact to the path.
+// CopyToPath copies the contents in the (sub)path of the given artifact to the
+// given path.
 func (s *Storage) CopyToPath(artifact *sourcev1.Artifact, subPath, toPath string) error {
 	// create a tmp directory to store artifact
-	tmp, err := ioutil.TempDir("", "flux-include")
+	tmp, err := ioutil.TempDir("", "flux-include-")
 	if err != nil {
 		return err
 	}
@@ -372,7 +374,7 @@ func (s *Storage) CopyToPath(artifact *sourcev1.Artifact, subPath, toPath string
 	defer f.Close()
 
 	// untar the artifact
-	untarPath := filepath.Join(tmp, "tar")
+	untarPath := filepath.Join(tmp, "unpack")
 	if _, err = untar.Untar(f, untarPath); err != nil {
 		return err
 	}
@@ -434,7 +436,11 @@ func (s *Storage) LocalPath(artifact sourcev1.Artifact) string {
 	if artifact.Path == "" {
 		return ""
 	}
-	return filepath.Join(s.BasePath, artifact.Path)
+	path, err := securejoin.SecureJoin(s.BasePath, artifact.Path)
+	if err != nil {
+		return ""
+	}
+	return path
 }
 
 // newHash returns a new SHA1 hash.

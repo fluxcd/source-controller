@@ -30,6 +30,7 @@ import (
 	"github.com/fluxcd/source-controller/pkg/sourceignore"
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	kerrors "k8s.io/apimachinery/pkg/util/errors"
@@ -340,6 +341,7 @@ func (r *GitRepositoryReconciler) reconcileArtifact(ctx context.Context, obj *so
 	// The artifact is up-to-date
 	if obj.GetArtifact().HasRevision(artifact.Revision) && !includes.Diff(obj.Status.IncludedArtifacts) {
 		logr.FromContext(ctx).Info("Artifact is up-to-date")
+		conditions.MarkTrue(obj, sourcev1.ArtifactAvailableCondition, "ArchivedArtifact", "Artifact revision %s", artifact.Revision)
 		return ctrl.Result{RequeueAfter: obj.GetInterval().Duration}, nil
 	}
 
@@ -385,7 +387,7 @@ func (r *GitRepositoryReconciler) reconcileArtifact(ctx context.Context, obj *so
 	// Record it on the object
 	obj.Status.Artifact = artifact.DeepCopy()
 	obj.Status.IncludedArtifacts = includes
-	conditions.MarkTrue(obj, sourcev1.ArtifactAvailableCondition, "ArchivedArtifact", "Archived artifact revision %s", artifact.Revision)
+	conditions.MarkTrue(obj, sourcev1.ArtifactAvailableCondition, "ArchivedArtifact", "Artifact revision %s", artifact.Revision)
 	r.Events.Eventf(ctx, obj, map[string]string{
 		"revision": obj.GetArtifact().Revision,
 	}, events.EventSeverityInfo, sourcev1.GitOperationSucceedReason, conditions.Get(obj, sourcev1.ArtifactAvailableCondition).Message)
@@ -394,7 +396,6 @@ func (r *GitRepositoryReconciler) reconcileArtifact(ctx context.Context, obj *so
 	url, err := r.Storage.Symlink(artifact, "latest.tar.gz")
 	if err != nil {
 		r.Events.Eventf(ctx, obj, nil, events.EventSeverityError, sourcev1.StorageOperationFailedReason, "Failed to update status URL symlink: %s", err)
-		return ctrl.Result{}, err
 	}
 	if url != "" {
 		obj.Status.URL = url
@@ -412,16 +413,20 @@ func (r *GitRepositoryReconciler) reconcileArtifact(ctx context.Context, obj *so
 // statuses is recorded in a condition on the given object.
 func (r *GitRepositoryReconciler) reconcileInclude(ctx context.Context, obj *sourcev1.GitRepository, artifacts artifactSet, dir string) (ctrl.Result, error) {
 	includes := make([]conditions.Getter, len(obj.Spec.Include))
+	artifacts = make(artifactSet, len(obj.Spec.Include))
 
 	for i, incl := range obj.Spec.Include {
 		dep := &sourcev1.GitRepository{}
 		if err := r.Get(ctx, types.NamespacedName{Namespace: obj.Namespace, Name: incl.GitRepositoryRef.Name}, dep); err != nil {
-			return ctrl.Result{RequeueAfter: r.requeueDependency}, client.IgnoreNotFound(err)
+			if apierrors.IsNotFound(err){
+				conditions.MarkFalse(obj, sourcev1.SourceAvailableCondition, "IncludeNotFound", "Could not find resource for include %q: %s", incl.GitRepositoryRef.Name, err.Error())
+			}
+			return ctrl.Result{RequeueAfter: obj.Spec.Interval.Duration}, client.IgnoreNotFound(err)
 		}
 
 		// Confirm include has an artifact
 		if dep.GetArtifact() == nil {
-			conditions.MarkFalse(obj, sourcev1.SourceAvailableCondition, "IncludeFailure", "No artifact available for include %s", incl.GitRepositoryRef)
+			conditions.MarkFalse(obj, sourcev1.SourceAvailableCondition, "IncludeUnavailable", "No artifact available for include %q", incl.GitRepositoryRef.Name)
 			return ctrl.Result{RequeueAfter: r.requeueDependency}, nil
 		}
 
@@ -430,20 +435,25 @@ func (r *GitRepositoryReconciler) reconcileInclude(ctx context.Context, obj *sou
 		// Copy artifact (sub)contents to configured directory
 		toPath, err := securejoin.SecureJoin(dir, incl.GetToPath())
 		if err != nil {
-			conditions.MarkFalse(obj, sourcev1.SourceAvailableCondition, "IncludeFailure", "Failed to calculate path for include %s: %s", incl.GitRepositoryRef, err.Error())
+			conditions.MarkFalse(obj, sourcev1.SourceAvailableCondition, "IncludeFailure", "Failed to calculate path for include %q: %s", incl.GitRepositoryRef.Name, err.Error())
 			return ctrl.Result{}, err
 		}
 		if err = r.Storage.CopyToPath(dep.GetArtifact(), incl.GetFromPath(), toPath); err != nil {
-			conditions.MarkFalse(obj, sourcev1.SourceAvailableCondition, "IncludeCopyFailure", "Failed to copy %s include from %s to %s: %s", incl.GitRepositoryRef, incl.GetFromPath(), toPath, err.Error())
+			conditions.MarkFalse(obj, sourcev1.SourceAvailableCondition, "IncludeCopyFailure", "Failed to copy %q include from %s to %s: %s", incl.GitRepositoryRef.Name, incl.GetFromPath(), incl.GetToPath(), err.Error())
 			return ctrl.Result{}, err
 		}
 
 		artifacts[i] = dep.GetArtifact().DeepCopy()
 	}
 
-	// Record an aggregation of all includes' Ready state to the object
-	// condition
-	conditions.SetAggregate(obj, sourcev1.SourceAvailableCondition, includes)
+	// Record an aggregation of all includes Stalled or Ready state to
+	// the object condition
+	conditions.SetAggregate(obj, sourcev1.SourceAvailableCondition, includes,
+		conditions.WithConditions(meta.StalledCondition, meta.ReadyCondition),
+		conditions.WithNegativePolarityConditions(meta.StalledCondition),
+		conditions.WithSourceRefIf(meta.StalledCondition),
+		conditions.WithCounter(),
+		conditions.WithCounterIfOnly(meta.ReadyCondition))
 
 	return ctrl.Result{RequeueAfter: obj.Spec.Interval.Duration}, nil
 }
