@@ -38,6 +38,7 @@ import (
 	"github.com/go-logr/logr"
 	. "github.com/onsi/gomega"
 	sshtestdata "golang.org/x/crypto/ssh/testdata"
+	"helm.sh/helm/v3/pkg/getter"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -681,9 +682,9 @@ func TestGitRepositoryReconciler_reconcileInclude(t *testing.T) {
 	}
 
 	type include struct {
-		name     string
-		fromPath string
-		toPath   string
+		name        string
+		fromPath    string
+		toPath      string
 		shouldExist bool
 	}
 
@@ -727,7 +728,7 @@ func TestGitRepositoryReconciler_reconcileInclude(t *testing.T) {
 			includes: []include{
 				{name: "a", toPath: "a/"},
 			},
-			want: ctrl.Result{RequeueAfter: mockInterval},
+			want:    ctrl.Result{RequeueAfter: mockInterval},
 			wantErr: false,
 			assertConditions: []metav1.Condition{
 				*conditions.FalseCondition(sourcev1.SourceAvailableCondition, "IncludeNotFound", "Could not find resource for include \"a\": gitrepositories.source.toolkit.fluxcd.io \"a\" not found"),
@@ -829,8 +830,8 @@ func TestGitRepositoryReconciler_reconcileInclude(t *testing.T) {
 			}
 
 			r := &GitRepositoryReconciler{
-				Client:  builder.Build(),
-				Storage: storage,
+				Client:            builder.Build(),
+				Storage:           storage,
 				requeueDependency: dependencyInterval,
 			}
 
@@ -890,7 +891,7 @@ func TestGitRepositoryReconciler_reconcileDelete(t *testing.T) {
 
 	obj := &sourcev1.GitRepository{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "reconcile-delete-",
+			Name:              "reconcile-delete-",
 			DeletionTimestamp: &metav1.Time{Time: time.Now()},
 			Finalizers: []string{
 				sourcev1.SourceFinalizer,
@@ -1063,6 +1064,21 @@ func TestMain(m *testing.M) {
 		Storage: storage,
 	}).SetupWithManager(newTestEnv); err != nil {
 		panic(fmt.Sprintf("Failed to start GitRepositoryReconciler: %v", err))
+	}
+
+	if err := (&HelmRepositoryReconciler{
+		Client:  newTestEnv,
+		Events:  eventsHelper,
+		Metrics: metricsHelper,
+		Getters: getter.Providers{
+			getter.Provider{
+				Schemes: []string{"http", "https"},
+				New:     getter.NewHTTPGetter,
+			},
+		},
+		Storage: storage,
+	}).SetupWithManager(newTestEnv); err != nil {
+		panic(fmt.Sprintf("Failed to start HelmRepositoryReconciler: %v", err))
 	}
 
 	go func() {

@@ -183,11 +183,6 @@ func (r *GitRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return r.reconcileDelete(ctx, obj)
 	}
 
-	// Purge old artifacts from the storage
-	if err := r.garbageCollect(obj); err != nil {
-		r.Events.Eventf(ctx, obj, nil, events.EventSeverityError, "GarbageCollectionFailed", "Garbage collection failed: %s", err)
-	}
-
 	// Reconcile actual object
 	return r.reconcile(ctx, obj)
 }
@@ -195,6 +190,11 @@ func (r *GitRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 func (r *GitRepositoryReconciler) reconcile(ctx context.Context, obj *sourcev1.GitRepository) (ctrl.Result, error) {
 	// Mark the resource as under reconciliation
 	conditions.MarkTrue(obj, meta.ReconcilingCondition, "Reconciling", "")
+
+	// Reconcile the storage data
+	if result, err := r.reconcileStorage(ctx, obj); err != nil {
+		return result, err
+	}
 
 	// Create temp dir for Git clone
 	tmpDir, err := ioutil.TempDir("", fmt.Sprintf("%s-%s-%s-", obj.Kind, obj.Namespace, obj.Name))
@@ -225,17 +225,23 @@ func (r *GitRepositoryReconciler) reconcile(ctx context.Context, obj *sourcev1.G
 }
 
 // reconcileStorage reconciles the storage data for the given object
-// by observing if the artifact in the status still exists, and
+// by garbage collecting previous advertised artifact(s) from storage,
+// observing if the artifact in the status still exists, and
 // ensuring the URLs are up-to-date with the current hostname
 // configuration.
 func (r *GitRepositoryReconciler) reconcileStorage(ctx context.Context, obj *sourcev1.GitRepository) (ctrl.Result, error) {
-	// Determine if the artifact is still in storage
+	// Garbage collect previous advertised artifact(s) from storage
+	if err := r.garbageCollect(obj); err != nil {
+		r.Events.Eventf(ctx, obj, nil, events.EventSeverityError, "GarbageCollectionFailed", "Garbage collection failed: %s", err)
+	}
+
+	// Determine if the advertised artifact is still in storage
 	if artifact := obj.GetArtifact(); artifact != nil && !r.Storage.ArtifactExist(*artifact) {
 		obj.Status.Artifact = nil
 		obj.Status.URL = ""
 	}
 
-	// Record that we have no artifact
+	// Record that we do not have an artifact
 	if obj.GetArtifact() == nil {
 		conditions.MarkFalse(obj, sourcev1.ArtifactAvailableCondition, "NoArtifactFound", "No artifact for resource in storage")
 		return ctrl.Result{Requeue: true}, nil
@@ -265,9 +271,9 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context, obj *sour
 			RecurseSubmodules: obj.Spec.RecurseSubmodules,
 		})
 		if err != nil {
+			log.Error(err, "failed to get auth strategy")
 			conditions.MarkFalse(obj, sourcev1.SourceAvailableCondition, sourcev1.AuthenticationFailedReason, "Failed to get auth strategy: %s", err)
 			// Do not return err as recovery without changes is impossible
-			log.Error(err, "failed to get auth strategy")
 			return ctrl.Result{}, nil
 		}
 
@@ -278,7 +284,7 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context, obj *sour
 		}
 		var secret corev1.Secret
 		if err = r.Client.Get(ctx, name, &secret); err != nil {
-			conditions.MarkFalse(obj, sourcev1.SourceAvailableCondition, sourcev1.AuthenticationFailedReason, "Failed to get auth secret %s: %s", name.String(), err.Error())
+			conditions.MarkFalse(obj, sourcev1.SourceAvailableCondition, sourcev1.AuthenticationFailedReason, "Failed to get secret %s: %s", name.String(), err.Error())
 			r.Events.Event(ctx, obj, nil, events.EventSeverityError, sourcev1.AuthenticationFailedReason, conditions.Get(obj, sourcev1.SourceAvailableCondition).Message)
 			// Return transient errors but wait for next interval on not found
 			return ctrl.Result{RequeueAfter: obj.Spec.Interval.Duration}, client.IgnoreNotFound(err)
@@ -325,7 +331,7 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context, obj *sour
 
 	// Create potential new artifact
 	*artifact = r.Storage.NewArtifactFor(obj.Kind, obj, revision, fmt.Sprintf("%s.tar.gz", commit.Hash()))
-	conditions.MarkTrue(obj, sourcev1.SourceAvailableCondition, "SuccessfulCheckout", "Checked out revision %s from %s", revision, obj.Spec.URL)
+	conditions.MarkTrue(obj, sourcev1.SourceAvailableCondition, sourcev1.GitOperationSucceedReason, "Checked out revision %s from %s", revision, obj.Spec.URL)
 
 	return ctrl.Result{RequeueAfter: obj.Spec.Interval.Duration}, nil
 }
@@ -378,9 +384,9 @@ func (r *GitRepositoryReconciler) reconcileArtifact(ctx context.Context, obj *so
 		ps = append(ps, sourceignore.ReadPatterns(strings.NewReader(*obj.Spec.Ignore), nil)...)
 	}
 
-	// Archive artifact to storage
+	// Archive directory to storage
 	if err := r.Storage.Archive(&artifact, dir, SourceIgnoreFilter(ps, nil)); err != nil {
-		conditions.MarkFalse(obj, sourcev1.ArtifactAvailableCondition, sourcev1.StorageOperationFailedReason, "Archiving error: %s", err)
+		conditions.MarkFalse(obj, sourcev1.ArtifactAvailableCondition, sourcev1.StorageOperationFailedReason, "Unable to archive artifact to storage: %s", err)
 		return ctrl.Result{}, err
 	}
 
@@ -418,7 +424,7 @@ func (r *GitRepositoryReconciler) reconcileInclude(ctx context.Context, obj *sou
 	for i, incl := range obj.Spec.Include {
 		dep := &sourcev1.GitRepository{}
 		if err := r.Get(ctx, types.NamespacedName{Namespace: obj.Namespace, Name: incl.GitRepositoryRef.Name}, dep); err != nil {
-			if apierrors.IsNotFound(err){
+			if apierrors.IsNotFound(err) {
 				conditions.MarkFalse(obj, sourcev1.SourceAvailableCondition, "IncludeNotFound", "Could not find resource for include %q: %s", incl.GitRepositoryRef.Name, err.Error())
 			}
 			return ctrl.Result{RequeueAfter: obj.Spec.Interval.Duration}, client.IgnoreNotFound(err)
