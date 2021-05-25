@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/onsi/ginkgo"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -13,15 +14,25 @@ import (
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"k8s.io/klog/v2"
+	"k8s.io/klog/v2/klogr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
 var (
 	env *envtest.Environment
 )
+
+func init() {
+	klog.InitFlags(nil)
+	logger := klogr.New()
+	log.SetLogger(logger)
+	ctrl.SetLogger(logger)
+	klog.SetOutput(ginkgo.GinkgoWriter)
+}
 
 func init() {
 	utilruntime.Must(apiextensionsv1.AddToScheme(scheme.Scheme))

@@ -1081,6 +1081,15 @@ func TestMain(m *testing.M) {
 		panic(fmt.Sprintf("Failed to start HelmRepositoryReconciler: %v", err))
 	}
 
+	if err := (&BucketReconciler{
+		Client:  newTestEnv,
+		Events:  eventsHelper,
+		Metrics: metricsHelper,
+		Storage: storage,
+	}).SetupWithManager(newTestEnv); err != nil {
+		panic(fmt.Sprintf("Failed to start BucketReconciler: %v", err))
+	}
+
 	go func() {
 		fmt.Println("Starting the test environment manager")
 		if err := newTestEnv.StartManager(ctx); err != nil {
