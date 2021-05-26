@@ -2,6 +2,27 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.13.0
+
+**Release date:** 2021-05-26
+
+This prerelease comes with support for including the contents of a Git repository into another.
+
+The [include feature](https://github.com/fluxcd/source-controller/blob/api/v0.13.0/docs/spec/v1beta1/gitrepositories.md#including-gitrepository)
+has multiple benefits over regular Git submodules:
+
+* Including a `GitRepository` allows you to use different authentication methods for different repositories.
+* A change in the included repository will trigger an update of the including repository.
+* Multiple `GitRepositories` could include the same repository, which decreases the amount of cloning done compared to using submodules.
+
+Features:
+* Add include property to GitRepositories
+  [#348](https://github.com/fluxcd/source-controller/pull/348)
+
+Improvements:
+* Update Git packages
+  [#365](https://github.com/fluxcd/source-controller/pull/365)
+
 ## 0.12.2
 
 **Release date:** 2021-05-10
