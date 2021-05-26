@@ -492,23 +492,23 @@ to a user that has access to the main repository and all its submodules.
 
 ### Including GitRepository
 
-With `spec.include` you can map the contents of a git repository into another.
-This may look identical to git submodules but has multiple benefits over
-regular submodules.
+With `spec.include` you can map the contents of a Git repository into another.
+This may look identical to Git submodules but has multiple benefits over
+regular submodules:
 
-* Including a GitRepository allows you to use different authentication methods for different repositories.
+* Including a `GitRepository` allows you to use different authentication methods for different repositories.
 * A change in the included repository will trigger an update of the including repository.
-* Multiple GitRepositories could include the same repository, which decreases the amount of cloning done compared to using submodules.
+* Multiple `GitRepositories` could include the same repository, which decreases the amount of cloning done compared to using submodules.
 
 ```yaml
 apiVersion: source.toolkit.fluxcd.io/v1beta1
 kind: GitRepository
 metadata:
-  name: repo1
+  name: app-repo
   namespace: default
 spec:
   interval: 1m
-  url: https://github.com/<organization>/repo1
+  url: https://github.com/<org>/app-repo
   secretRef:
     name: https-credentials
   ref:
@@ -517,20 +517,20 @@ spec:
 apiVersion: source.toolkit.fluxcd.io/v1beta1
 kind: GitRepository
 metadata:
-  name: repo2
+  name: config-repo
   namespace: default
 spec:
   interval: 1m
-  url: https://github.com/<organization>/repo2
+  url: https://github.com/<org>/config-repo
   secretRef:
     name: https-credentials
   ref:
     branch: main
   include:
     - repository:
-        name: repo1
-      from: manifests
-      to: manifests
+        name: app-repo
+      from: deploy/kubernetes
+      to: base/app
 ---
 apiVersion: v1
 kind: Secret
