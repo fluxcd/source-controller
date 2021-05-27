@@ -354,27 +354,35 @@ func (s *Storage) CopyFromPath(artifact *sourcev1.Artifact, path string) (err er
 	return s.Copy(artifact, f)
 }
 
-// CopyToPath copies the contents of the given atrifact to the path.
-func (s *Storage) CopyToPath(atrifact *sourcev1.Artifact, subPath, toPath string) error {
+// CopyToPath copies the contents of the given artifact to the path.
+func (s *Storage) CopyToPath(artifact *sourcev1.Artifact, subPath, toPath string) error {
 	// create a tmp directory to store artifact
 	tmp, err := ioutil.TempDir("", "flux-include")
 	if err != nil {
 		return err
 	}
 	defer os.RemoveAll(tmp)
+
 	// read artifact file content
-	localPath := s.LocalPath(*atrifact)
+	localPath := s.LocalPath(*artifact)
 	f, err := os.Open(localPath)
 	if err != nil {
 		return err
 	}
 	defer f.Close()
+
 	// untar the artifact
 	untarPath := filepath.Join(tmp, "tar")
 	if _, err = untar.Untar(f, untarPath); err != nil {
 		return err
 	}
-	// copy the folder to the path
+
+	// create the destination parent dir
+	if err = os.MkdirAll(filepath.Dir(toPath), os.ModePerm); err != nil {
+		return err
+	}
+
+	// copy the artifact content to the destination dir
 	fromPath := filepath.Join(untarPath, subPath)
 	if err := fs.RenameWithFallback(fromPath, toPath); err != nil {
 		return err

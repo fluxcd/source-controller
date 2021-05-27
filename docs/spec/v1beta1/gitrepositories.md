@@ -62,6 +62,9 @@ type GitRepositorySpec struct {
 	// This option is available only when using the 'go-git' GitImplementation.
 	// +optional
 	RecurseSubmodules bool `json:"recurseSubmodules,omitempty"`
+
+	// Extra git repositories to map into the repository
+	Include []GitRepositoryInclude `json:"include,omitempty"`
 }
 ```
 
@@ -529,8 +532,8 @@ spec:
   include:
     - repository:
         name: app-repo
-      from: deploy/kubernetes
-      to: base/app
+      fromPath: deploy/kubernetes
+      toPath: base/app
 ---
 apiVersion: v1
 kind: Secret
@@ -543,9 +546,9 @@ data:
   password: <GitHub Token>
 ```
 
-The `from` and `to` parameters allows you to limit the files included and where they will be
-copied to in the main repository. If you do not specify a value for `from` all files in the
-repository will be included. The `to` value will default to the name of the repository.
+The `fromPath` and `toPath` parameters allows you to limit the files included and where they will be
+copied to in the main repository. If you do not specify a value for `fromPath` all files in the
+repository will be included. The `toPath` value will default to the name of the repository.
 
 ## Status examples
 
