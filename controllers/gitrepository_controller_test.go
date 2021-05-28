@@ -756,6 +756,12 @@ var _ = Describe("GitRepositoryReconciler", func() {
 				createFiles: []string{"dir1", "dir2"},
 				checkFiles:  []string{"sub/dir1", "sub/dir2"},
 			}),
+			Entry("to nested path", includeTestCase{
+				fromPath:    "",
+				toPath:      "sub/nested",
+				createFiles: []string{"dir1", "dir2"},
+				checkFiles:  []string{"sub/nested/dir1", "sub/nested/dir2"},
+			}),
 			Entry("from and to path", includeTestCase{
 				fromPath:    "nested",
 				toPath:      "sub",
