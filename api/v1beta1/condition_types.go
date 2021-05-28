@@ -24,6 +24,8 @@ const (
 	SourceVerifiedCondition string = "SourceVerified"
 
 	ArtifactAvailableCondition string = "ArtifactAvailable"
+
+	SourceRefReadyCondition string = "SourceRefReady"
 )
 
 const (

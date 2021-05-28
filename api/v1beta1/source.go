@@ -18,6 +18,7 @@ package v1beta1
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 )
 
 const (
@@ -29,9 +30,15 @@ const (
 // Source interface must be supported by all API types.
 // +k8s:deepcopy-gen=false
 type Source interface {
+	metav1.Object
+	runtime.Object
+
 	// GetArtifact returns the latest artifact from the source if present in the
 	// status sub-resource.
 	GetArtifact() *Artifact
+	// GetConditions returns the conditions of the source if present in the
+	// status sub-resource.
+	GetConditions() []metav1.Condition
 	// GetInterval returns the interval at which the source is updated.
 	GetInterval() metav1.Duration
 }

@@ -20,7 +20,9 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io/ioutil"
 	"net/url"
+	"os"
 	"time"
 
 	"github.com/fluxcd/pkg/runtime/conditions"
@@ -143,10 +145,16 @@ func (r *HelmRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 			// We have now observed this generation
 			patchOpts = append(patchOpts, patch.WithStatusObservedGeneration{})
 
-			if readyCondition := conditions.Get(obj, meta.ReadyCondition); readyCondition.Status == metav1.ConditionFalse {
-				// As we are no longer reconciling, and the end-state
+			readyCondition := conditions.Get(obj, meta.ReadyCondition)
+			switch readyCondition.Status {
+			case metav1.ConditionFalse:
+				// As we are no longer reconciling and the end-state
 				// is not ready, the reconciliation has stalled
 				conditions.MarkTrue(obj, meta.StalledCondition, readyCondition.Reason, readyCondition.Message)
+			case metav1.ConditionTrue:
+				// As we are no longer reconciling and the end-state
+				// is ready, the reconciliation is no longer stalled
+				conditions.Delete(obj, meta.StalledCondition)
 			}
 		}
 
@@ -247,8 +255,7 @@ func (r *HelmRepositoryReconciler) reconcileSource(ctx context.Context, obj *sou
 			Name:      obj.Spec.SecretRef.Name,
 		}
 		var secret corev1.Secret
-		err := r.Client.Get(ctx, name, &secret)
-		if err != nil {
+		if err := r.Client.Get(ctx, name, &secret); err != nil {
 			conditions.MarkFalse(obj, sourcev1.SourceAvailableCondition, sourcev1.AuthenticationFailedReason, "Failed to get secret %s: %s", name.String(), err.Error())
 			r.Events.Event(ctx, obj, nil, events.EventSeverityError, sourcev1.AuthenticationFailedReason, conditions.Get(obj, sourcev1.SourceAvailableCondition).Message)
 			// Return transient errors but wait for next interval on not found
@@ -256,20 +263,25 @@ func (r *HelmRepositoryReconciler) reconcileSource(ctx context.Context, obj *sou
 		}
 
 		// Get client options from secret
-		opts, cleanup, err := helm.ClientOptionsFromSecret(secret)
+		tmpDir, err := ioutil.TempDir("", fmt.Sprintf("%s-%s-source-", obj.Name, obj.Namespace))
+		if err != nil {
+			conditions.MarkFalse(obj, sourcev1.SourceAvailableCondition, sourcev1.StorageOperationFailedReason, "Could not create temporary directory for credentials: %s", err.Error())
+			r.Events.Event(ctx, obj, nil, events.EventSeverityError, sourcev1.AuthenticationFailedReason, conditions.Get(obj, sourcev1.SourceAvailableCondition).Message)
+			return ctrl.Result{}, err
+		}
+		defer os.RemoveAll(tmpDir)
+		opts, err := helm.ClientOptionsFromSecret(secret, tmpDir)
 		if err != nil {
 			conditions.MarkFalse(obj, sourcev1.SourceAvailableCondition, sourcev1.AuthenticationFailedReason, "Failed to configure Helm client with secret data: %s", err)
 			r.Events.Event(ctx, obj, nil, events.EventSeverityError, sourcev1.AuthenticationFailedReason, conditions.Get(obj, sourcev1.SourceAvailableCondition).Message)
 			// Return err as the content of the secret may change
 			return ctrl.Result{}, err
 		}
-		defer cleanup()
 		clientOpts = append(clientOpts, opts...)
 	}
 
 	// Construct Helm chart repository with options and download index
-	var err error
-	index, err = helm.NewChartRepository(obj.Spec.URL, r.Getters, clientOpts)
+	newIndex, err := helm.NewChartRepository(obj.Spec.URL, r.Getters, clientOpts)
 	if err != nil {
 		switch err.(type) {
 		case *url.Error:
@@ -280,10 +292,12 @@ func (r *HelmRepositoryReconciler) reconcileSource(ctx context.Context, obj *sou
 			return ctrl.Result{}, nil
 		}
 	}
-	if err := index.DownloadIndex(); err != nil {
+	if err := newIndex.DownloadIndex(); err != nil {
 		conditions.MarkFalse(obj, sourcev1.SourceAvailableCondition, sourcev1.URLInvalidReason, "Failed to download Helm repository index: %s", err.Error())
 		return ctrl.Result{}, err
 	}
+
+	*index = *newIndex
 
 	// Create potential new artifact
 	*artifact = r.Storage.NewArtifactFor(obj.Kind,
@@ -304,12 +318,11 @@ func (r *HelmRepositoryReconciler) reconcileArtifact(ctx context.Context, obj *s
 	// The artifact is up-to-date
 	if obj.GetArtifact().HasRevision(artifact.Revision) {
 		logr.FromContext(ctx).Info("Artifact is up-to-date")
-		conditions.MarkTrue(obj, sourcev1.ArtifactAvailableCondition, "ArchivedArtifact", "Artifact revision %s", artifact.Revision)
+		conditions.MarkTrue(obj, sourcev1.ArtifactAvailableCondition, "ArchivedArtifact", "Compressed source to artifact with revision %s", artifact.Revision)
 		return ctrl.Result{RequeueAfter: obj.GetInterval().Duration}, nil
 	}
 
 	// Ensure artifact directory exists and acquire lock
-	err := r.Storage.MkdirAll(artifact)
 	if err := r.Storage.MkdirAll(artifact); err != nil {
 		conditions.MarkFalse(obj, sourcev1.ArtifactAvailableCondition, sourcev1.StorageOperationFailedReason, "Failed to create directory: %s", err)
 		return ctrl.Result{}, err

@@ -66,6 +66,12 @@ var (
 	timeout                = 10 * time.Second
 	mockInterval           = 1 * time.Second
 	testGitImplementations = []string{sourcev1.GoGitImplementation, sourcev1.LibGit2Implementation}
+	testGetters            = getter.Providers{
+		getter.Provider{
+			Schemes: []string{"http", "https"},
+			New:     getter.NewHTTPGetter,
+		},
+	}
 )
 
 var (
@@ -160,7 +166,7 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 			protocol: "http",
 			want:     ctrl.Result{RequeueAfter: mockInterval},
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.SourceAvailableCondition, "SuccessfulCheckout", "Checked out revision master/<commit> from <url>"),
+				*conditions.TrueCondition(sourcev1.SourceAvailableCondition, sourcev1.GitOperationSucceedReason, "Checked out revision master/<commit>"),
 			},
 		},
 		{
@@ -184,7 +190,7 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 			},
 			want: ctrl.Result{RequeueAfter: mockInterval},
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.SourceAvailableCondition, "SuccessfulCheckout", "Checked out revision master/<commit> from <url>"),
+				*conditions.TrueCondition(sourcev1.SourceAvailableCondition, sourcev1.GitOperationSucceedReason, "Checked out revision master/<commit>"),
 			},
 		},
 		{
@@ -208,7 +214,7 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 			},
 			want: ctrl.Result{RequeueAfter: mockInterval},
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.SourceAvailableCondition, "SuccessfulCheckout", "Checked out revision master/<commit> from <url>"),
+				*conditions.TrueCondition(sourcev1.SourceAvailableCondition, sourcev1.GitOperationSucceedReason, "Checked out revision master/<commit>"),
 			},
 		},
 		{
@@ -281,7 +287,7 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 			},
 			want: ctrl.Result{RequeueAfter: mockInterval},
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.SourceAvailableCondition, "SuccessfulCheckout", "Checked out revision master/<commit> from <url>"),
+				*conditions.TrueCondition(sourcev1.SourceAvailableCondition, sourcev1.GitOperationSucceedReason, "Checked out revision master/<commit>"),
 			},
 		},
 		{
@@ -305,7 +311,7 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 			},
 			want: ctrl.Result{RequeueAfter: mockInterval},
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.SourceAvailableCondition, "SuccessfulCheckout", "Checked out revision master/<commit> from <url>"),
+				*conditions.TrueCondition(sourcev1.SourceAvailableCondition, sourcev1.GitOperationSucceedReason, "Checked out revision master/<commit>"),
 			},
 		},
 		{
@@ -319,7 +325,7 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 			},
 			want: ctrl.Result{RequeueAfter: mockInterval},
 			assertConditions: []metav1.Condition{
-				*conditions.FalseCondition(sourcev1.SourceAvailableCondition, "AuthenticationFailed", "Failed to get auth secret /non-existing: secrets \"non-existing\" not found"),
+				*conditions.FalseCondition(sourcev1.SourceAvailableCondition, "AuthenticationFailed", "Failed to get secret /non-existing: secrets \"non-existing\" not found"),
 			},
 		},
 	}
@@ -595,7 +601,7 @@ func TestGitRepositoryReconciler_reconcileArtifact(t *testing.T) {
 			},
 			want: ctrl.Result{RequeueAfter: mockInterval},
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.ArtifactAvailableCondition, "ArchivedArtifact", "Artifact revision main/revision"),
+				*conditions.TrueCondition(sourcev1.ArtifactAvailableCondition, "ArchivedArtifact", "Compressed source to artifact with revision main/revision"),
 			},
 		},
 		{
@@ -627,7 +633,7 @@ func TestGitRepositoryReconciler_reconcileArtifact(t *testing.T) {
 			},
 			want: ctrl.Result{RequeueAfter: mockInterval},
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.ArtifactAvailableCondition, "ArchivedArtifact", "Archived artifact revision main/revision"),
+				*conditions.TrueCondition(sourcev1.ArtifactAvailableCondition, "ArchivedArtifact", "Compressed source to artifact with revision main/revision"),
 			},
 		},
 	}
@@ -1070,12 +1076,7 @@ func TestMain(m *testing.M) {
 		Client:  newTestEnv,
 		Events:  eventsHelper,
 		Metrics: metricsHelper,
-		Getters: getter.Providers{
-			getter.Provider{
-				Schemes: []string{"http", "https"},
-				New:     getter.NewHTTPGetter,
-			},
-		},
+		Getters: testGetters,
 		Storage: storage,
 	}).SetupWithManager(newTestEnv); err != nil {
 		panic(fmt.Sprintf("Failed to start HelmRepositoryReconciler: %v", err))
@@ -1088,6 +1089,16 @@ func TestMain(m *testing.M) {
 		Storage: storage,
 	}).SetupWithManager(newTestEnv); err != nil {
 		panic(fmt.Sprintf("Failed to start BucketReconciler: %v", err))
+	}
+
+	if err := (&HelmChartReconciler{
+		Client:  newTestEnv,
+		Events:  eventsHelper,
+		Metrics: metricsHelper,
+		Getters: testGetters,
+		Storage: storage,
+	}).SetupWithManager(newTestEnv); err != nil {
+		panic(fmt.Sprintf("Failed to start HelmChartReconciler: %v", err))
 	}
 
 	go func() {

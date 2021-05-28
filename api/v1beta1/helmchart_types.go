@@ -18,12 +18,18 @@ package v1beta1
 
 import (
 	"github.com/fluxcd/pkg/apis/meta"
-	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // HelmChartKind is the string representation of a HelmChart.
 const HelmChartKind = "HelmChart"
+
+const (
+	DependenciesBuildCondition string = "DependenciesBuild"
+	ValuesFilesMergedCondition string = "ValuesFilesMerged"
+	ChartPackagedCondition     string = "ChartPackaged"
+	ChartReconciled            string = "ChartReconciled"
+)
 
 // HelmChartSpec defines the desired state of a Helm chart.
 type HelmChartSpec struct {
@@ -122,50 +128,18 @@ const (
 	ChartPackageSucceededReason string = "ChartPackageSucceeded"
 )
 
-// HelmChartProgressing resets the conditions of the HelmChart to meta.Condition
-// of type meta.ReadyCondition with status 'Unknown' and meta.ProgressingReason
-// reason and message. It returns the modified HelmChart.
-func HelmChartProgressing(chart HelmChart) HelmChart {
-	chart.Status.ObservedGeneration = chart.Generation
-	chart.Status.URL = ""
-	chart.Status.Conditions = []metav1.Condition{}
-	meta.SetResourceCondition(&chart, meta.ReadyCondition, metav1.ConditionUnknown, meta.ProgressingReason, "reconciliation in progress")
-	return chart
-}
-
-// HelmChartReady sets the given Artifact and URL on the HelmChart and sets the
-// meta.ReadyCondition to 'True', with the given reason and message. It returns
-// the modified HelmChart.
-func HelmChartReady(chart HelmChart, artifact Artifact, url, reason, message string) HelmChart {
-	chart.Status.Artifact = &artifact
-	chart.Status.URL = url
-	meta.SetResourceCondition(&chart, meta.ReadyCondition, metav1.ConditionTrue, reason, message)
-	return chart
-}
-
-// HelmChartNotReady sets the meta.ReadyCondition on the given HelmChart to
-// 'False', with the given reason and message. It returns the modified
-// HelmChart.
-func HelmChartNotReady(chart HelmChart, reason, message string) HelmChart {
-	meta.SetResourceCondition(&chart, meta.ReadyCondition, metav1.ConditionFalse, reason, message)
-	return chart
-}
-
-// HelmChartReadyMessage returns the message of the meta.ReadyCondition with
-// status 'True', or an empty string.
-func HelmChartReadyMessage(chart HelmChart) string {
-	if c := apimeta.FindStatusCondition(chart.Status.Conditions, meta.ReadyCondition); c != nil {
-		if c.Status == metav1.ConditionTrue {
-			return c.Message
-		}
-	}
-	return ""
-}
-
 // GetArtifact returns the latest artifact from the source if present in the
 // status sub-resource.
 func (in *HelmChart) GetArtifact() *Artifact {
 	return in.Status.Artifact
+}
+
+func (in HelmChart) GetConditions() []metav1.Condition {
+	return in.Status.Conditions
+}
+
+func (in *HelmChart) SetConditions(conditions []metav1.Condition) {
+	in.Status.Conditions = conditions
 }
 
 // GetStatusConditions returns a pointer to the Status.Conditions slice

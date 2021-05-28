@@ -154,10 +154,16 @@ func (r *GitRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 			// We have now observed this generation
 			patchOpts = append(patchOpts, patch.WithStatusObservedGeneration{})
 
-			if readyCondition := conditions.Get(obj, meta.ReadyCondition); readyCondition.Status == metav1.ConditionFalse {
-				// As we are no longer reconciling, and the end-state
+			readyCondition := conditions.Get(obj, meta.ReadyCondition)
+			switch readyCondition.Status {
+			case metav1.ConditionFalse:
+				// As we are no longer reconciling and the end-state
 				// is not ready, the reconciliation has stalled
 				conditions.MarkTrue(obj, meta.StalledCondition, readyCondition.Reason, readyCondition.Message)
+			case metav1.ConditionTrue:
+				// As we are no longer reconciling and the end-state
+				// is ready, the reconciliation is no longer stalled
+				conditions.Delete(obj, meta.StalledCondition)
 			}
 		}
 
@@ -331,7 +337,7 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context, obj *sour
 
 	// Create potential new artifact
 	*artifact = r.Storage.NewArtifactFor(obj.Kind, obj, revision, fmt.Sprintf("%s.tar.gz", commit.Hash()))
-	conditions.MarkTrue(obj, sourcev1.SourceAvailableCondition, sourcev1.GitOperationSucceedReason, "Checked out revision %s from %s", revision, obj.Spec.URL)
+	conditions.MarkTrue(obj, sourcev1.SourceAvailableCondition, sourcev1.GitOperationSucceedReason, "Checked out revision %s", revision)
 
 	return ctrl.Result{RequeueAfter: obj.Spec.Interval.Duration}, nil
 }
@@ -362,7 +368,6 @@ func (r *GitRepositoryReconciler) reconcileArtifact(ctx context.Context, obj *so
 	}
 
 	// Ensure artifact directory exists and acquire lock
-	err := r.Storage.MkdirAll(artifact)
 	if err := r.Storage.MkdirAll(artifact); err != nil {
 		conditions.MarkFalse(obj, sourcev1.ArtifactAvailableCondition, sourcev1.StorageOperationFailedReason, "Failed to create directory: %s", err)
 		return ctrl.Result{}, err
@@ -393,7 +398,7 @@ func (r *GitRepositoryReconciler) reconcileArtifact(ctx context.Context, obj *so
 	// Record it on the object
 	obj.Status.Artifact = artifact.DeepCopy()
 	obj.Status.IncludedArtifacts = includes
-	conditions.MarkTrue(obj, sourcev1.ArtifactAvailableCondition, "ArchivedArtifact", "Artifact revision %s", artifact.Revision)
+	conditions.MarkTrue(obj, sourcev1.ArtifactAvailableCondition, "ArchivedArtifact", "Compressed source to artifact with revision %s", artifact.Revision)
 	r.Events.Eventf(ctx, obj, map[string]string{
 		"revision": obj.GetArtifact().Revision,
 	}, events.EventSeverityInfo, sourcev1.GitOperationSucceedReason, conditions.Get(obj, sourcev1.ArtifactAvailableCondition).Message)
