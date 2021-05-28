@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.13.1
+
+**Release date:** 2021-05-28
+
+This prerelease comes with a bug fix to the `GitRepository` include feature.
+
+Fixes:
+* Fix GitRepository include for nested paths
+  [#367](https://github.com/fluxcd/source-controller/pull/367)
+
 ## 0.13.0
 
 **Release date:** 2021-05-26
