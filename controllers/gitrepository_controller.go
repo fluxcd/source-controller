@@ -272,10 +272,15 @@ func (r *GitRepositoryReconciler) reconcile(ctx context.Context, repository sour
 	if err != nil {
 		return sourcev1.GitRepositoryNotReady(repository, sourcev1.GitOperationFailedReason, err.Error()), err
 	}
-	commit, revision, err := checkoutStrategy.Checkout(ctx, tmpGit, repository.Spec.URL, auth)
+
+	gitCtx, cancel := context.WithTimeout(ctx, repository.Spec.Timeout.Duration)
+	defer cancel()
+
+	commit, revision, err := checkoutStrategy.Checkout(gitCtx, tmpGit, repository.Spec.URL, auth)
 	if err != nil {
 		return sourcev1.GitRepositoryNotReady(repository, sourcev1.GitOperationFailedReason, err.Error()), err
 	}
+
 	artifact := r.Storage.NewArtifactFor(repository.Kind, repository.GetObjectMeta(), revision, fmt.Sprintf("%s.tar.gz", commit.Hash()))
 
 	// copy all included repository into the artifact
