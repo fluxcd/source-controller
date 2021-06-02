@@ -97,6 +97,11 @@ jobs:
           kubectl -n source-system apply -f ./config/testdata/helmchart-from-bucket/source.yaml
           kubectl -n source-system wait bucket/charts --for=condition=ready --timeout=1m
           kubectl -n source-system wait helmchart/helmchart-bucket --for=condition=ready --timeout=1m
+      - name: Run large Git repo tests
+        run: |
+          kubectl -n source-system apply -f ./config/testdata/git/large-repo.yaml
+          kubectl -n source-system wait gitrepository/large-repo-go-git --for=condition=ready --timeout=2m
+          kubectl -n source-system wait gitrepository/large-repo-libgit2 --for=condition=ready --timeout=2m
       - name: Logs
         run: |
           kubectl -n source-system logs deploy/source-controller
