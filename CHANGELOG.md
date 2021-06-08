@@ -2,6 +2,22 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.14.0
+
+**Release date:** 2021-06-08
+
+This prerelease comes with an update to the Kubernetes and controller-runtime
+dependencies to align them with the Kubernetes 1.21 release, including an update
+of Helm to `v3.6.0`.
+
+Improvements:
+* Update K8s, controller-runtime and fluxcd/pkg deps
+  [#374](https://github.com/fluxcd/source-controller/pull/374)
+
+Fixes:
+* Reinstate Git cloning timeout
+  [#372](https://github.com/fluxcd/source-controller/pull/372)
+
 ## 0.13.2
 
 **Release date:** 2021-06-02
