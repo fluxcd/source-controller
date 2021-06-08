@@ -1,8 +1,7 @@
 # Docker buildkit multi-arch build requires golang alpine
 FROM golang:1.16-alpine as builder
 
-RUN apk add gcc pkgconfig libc-dev
-RUN apk add --no-cache musl~=1.2 libgit2-dev~=1.1
+RUN apk add --no-cache gcc pkgconfig libc-dev binutils-gold musl~=1.2 libgit2-dev~=1.1
 
 WORKDIR /workspace
 
