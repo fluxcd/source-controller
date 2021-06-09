@@ -4,19 +4,29 @@ All notable changes to this project are documented in this file.
 
 ## 0.14.0
 
-**Release date:** 2021-06-08
+**Release date:** 2021-06-09
 
 This prerelease comes with an update to the Kubernetes and controller-runtime
 dependencies to align them with the Kubernetes 1.21 release, including an update
 of Helm to `v3.6.0`.
 
+After a failed ARMv7 build during the initial release attempt of this version,
+`binutils-gold` has been introduced to the `builder` image [to allow `gccgo` to
+build using the](https://golang.org/doc/install/gccgo#Gold).
+
 Improvements:
 * Update K8s, controller-runtime and fluxcd/pkg deps
   [#374](https://github.com/fluxcd/source-controller/pull/374)
+* Add nightly builds workflow
+  [#376](https://github.com/fluxcd/source-controller/pull/376)
 
 Fixes:
 * Reinstate Git cloning timeout
   [#372](https://github.com/fluxcd/source-controller/pull/372)
+* Use `binutils-gold` in builder image
+  [#377](https://github.com/fluxcd/source-controller/pull/377)
+* Use `github.repository` property for image name
+  [#378](https://github.com/fluxcd/source-controller/pull/378)
 
 ## 0.13.2
 
