@@ -12,7 +12,7 @@ of Helm to `v3.6.0`.
 
 After a failed ARMv7 build during the initial release attempt of this version,
 `binutils-gold` has been introduced to the `builder` image [to allow `gccgo` to
-build using the](https://golang.org/doc/install/gccgo#Gold).
+build using the Gold linker](https://golang.org/doc/install/gccgo#Gold).
 
 Improvements:
 * Update K8s, controller-runtime and fluxcd/pkg deps
