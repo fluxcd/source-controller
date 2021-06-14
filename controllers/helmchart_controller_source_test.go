@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"reflect"
 	"testing"
-	"time"
 
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/runtime/conditions"
@@ -45,7 +44,7 @@ func TestHelmChartReconciler_reconcileFromHelmRepository(t *testing.T) {
 	}{
 		{
 			name:         "Empty version (latest)",
-			want:         ctrl.Result{RequeueAfter: mockInterval},
+			want:         ctrl.Result{RequeueAfter: interval},
 			wantRevision: "v2.0.0",
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(sourcev1.SourceAvailableCondition, sourcev1.ChartPullSucceededReason, "Pulled chart version v2.0.0"),
@@ -53,7 +52,7 @@ func TestHelmChartReconciler_reconcileFromHelmRepository(t *testing.T) {
 		},
 		{
 			name: "SemVer (any)",
-			want: ctrl.Result{RequeueAfter: mockInterval},
+			want: ctrl.Result{RequeueAfter: interval},
 			beforeFunc: func(obj *sourcev1.HelmChart, _ *sourcev1.HelmRepository) {
 				obj.Spec.Version = "*"
 			},
@@ -64,7 +63,7 @@ func TestHelmChartReconciler_reconcileFromHelmRepository(t *testing.T) {
 		},
 		{
 			name: "SemVer selector",
-			want: ctrl.Result{RequeueAfter: mockInterval},
+			want: ctrl.Result{RequeueAfter: interval},
 			beforeFunc: func(obj *sourcev1.HelmChart, _ *sourcev1.HelmRepository) {
 				obj.Spec.Version = "<v0.3.0"
 			},
@@ -75,7 +74,7 @@ func TestHelmChartReconciler_reconcileFromHelmRepository(t *testing.T) {
 		},
 		{
 			name: "Existing artifact",
-			want: ctrl.Result{RequeueAfter: mockInterval},
+			want: ctrl.Result{RequeueAfter: interval},
 			beforeFunc: func(obj *sourcev1.HelmChart, _ *sourcev1.HelmRepository) {
 				obj.Spec.Version = "<v0.3.0"
 				obj.Status.Artifact = &sourcev1.Artifact{
@@ -114,7 +113,7 @@ func TestHelmChartReconciler_reconcileFromHelmRepository(t *testing.T) {
 			beforeFunc: func(obj *sourcev1.HelmChart, _ *sourcev1.HelmRepository) {
 				obj.Spec.Version = "v3.0.0"
 			},
-			want: ctrl.Result{RequeueAfter: mockInterval},
+			want: ctrl.Result{RequeueAfter: interval},
 			assertConditions: []metav1.Condition{
 				*conditions.FalseCondition(sourcev1.SourceAvailableCondition, sourcev1.ChartPullFailedReason, "Could not find \"helmchart\" chart with version \"v3.0.0\": no chart version found for helmchart-v3.0.0"),
 			},
@@ -124,7 +123,7 @@ func TestHelmChartReconciler_reconcileFromHelmRepository(t *testing.T) {
 			beforeFunc: func(obj *sourcev1.HelmChart, _ *sourcev1.HelmRepository) {
 				obj.Spec.Version = "invalid"
 			},
-			want: ctrl.Result{RequeueAfter: mockInterval},
+			want: ctrl.Result{RequeueAfter: interval},
 			assertConditions: []metav1.Condition{
 				*conditions.FalseCondition(sourcev1.SourceAvailableCondition, sourcev1.ChartPullFailedReason, "Could not find \"helmchart\" chart with version \"invalid\": improper constraint: invalid"),
 			},
@@ -149,7 +148,7 @@ func TestHelmChartReconciler_reconcileFromHelmRepository(t *testing.T) {
 		},
 		Spec: sourcev1.HelmRepositorySpec{
 			URL:     server.URL(),
-			Timeout: &metav1.Duration{Duration: 30 * time.Second},
+			Timeout: &metav1.Duration{Duration: timeout},
 		},
 	}
 
@@ -181,7 +180,7 @@ func TestHelmChartReconciler_reconcileFromHelmRepository(t *testing.T) {
 					Namespace:    "default",
 				},
 				Spec: sourcev1.HelmChartSpec{
-					Interval: metav1.Duration{Duration: mockInterval},
+					Interval: metav1.Duration{Duration: interval},
 					Chart:    "helmchart",
 					Version:  "",
 					SourceRef: sourcev1.LocalHelmChartSourceReference{
@@ -253,7 +252,7 @@ func TestHelmChartReconciler_reconcileFromHelmRepository_secretRef(t *testing.T)
 			beforeFunc: func(obj *sourcev1.HelmRepository) {
 				obj.Spec.SecretRef = &meta.LocalObjectReference{Name: "basic-auth"}
 			},
-			want: ctrl.Result{RequeueAfter: mockInterval},
+			want: ctrl.Result{RequeueAfter: interval},
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(sourcev1.SourceAvailableCondition, sourcev1.ChartPullSucceededReason, "Pulled chart version 0.1.0"),
 			},
@@ -261,24 +260,24 @@ func TestHelmChartReconciler_reconcileFromHelmRepository_secretRef(t *testing.T)
 		{
 			name: "HTTPS with CAFile",
 			server: options{
-				publicKey:  testTLSPublicKey,
-				privateKey: testTLSPrivateKey,
-				ca:         testTLSCA,
+				publicKey:  tlsPublicKey,
+				privateKey: tlsPrivateKey,
+				ca:         tlsCA,
 			},
 			secret: &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "tls",
 				},
 				Data: map[string][]byte{
-					"certFile": testTLSPublicKey,
-					"keyFile":  testTLSPrivateKey,
-					"caFile":   testTLSCA,
+					"certFile": tlsPublicKey,
+					"keyFile":  tlsPrivateKey,
+					"caFile":   tlsCA,
 				},
 			},
 			beforeFunc: func(obj *sourcev1.HelmRepository) {
 				obj.Spec.SecretRef = &meta.LocalObjectReference{Name: "tls"}
 			},
-			want: ctrl.Result{RequeueAfter: mockInterval},
+			want: ctrl.Result{RequeueAfter: interval},
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(sourcev1.SourceAvailableCondition, sourcev1.ChartPullSucceededReason, "Pulled chart version 0.1.0"),
 			},
@@ -286,9 +285,9 @@ func TestHelmChartReconciler_reconcileFromHelmRepository_secretRef(t *testing.T)
 		{
 			name: "HTTPS with invalid configuration",
 			server: options{
-				publicKey:  testTLSPublicKey,
-				privateKey: testTLSPrivateKey,
-				ca:         testTLSCA,
+				publicKey:  tlsPublicKey,
+				privateKey: tlsPrivateKey,
+				ca:         tlsCA,
 			},
 			wantErr: true,
 			assertConditions: []metav1.Condition{
@@ -301,7 +300,7 @@ func TestHelmChartReconciler_reconcileFromHelmRepository_secretRef(t *testing.T)
 			beforeFunc: func(obj *sourcev1.HelmRepository) {
 				obj.Spec.SecretRef = &meta.LocalObjectReference{Name: "non-existing"}
 			},
-			want: ctrl.Result{RequeueAfter: mockInterval},
+			want: ctrl.Result{RequeueAfter: interval},
 			assertConditions: []metav1.Condition{
 				*conditions.FalseCondition(sourcev1.SourceAvailableCondition, sourcev1.AuthenticationFailedReason, "Failed to get secret /non-existing: secrets \"non-existing\" not found"),
 			},
@@ -344,7 +343,7 @@ func TestHelmChartReconciler_reconcileFromHelmRepository_secretRef(t *testing.T)
 					Name: "helmrepository",
 				},
 				Spec: sourcev1.HelmRepositorySpec{
-					Timeout: &metav1.Duration{Duration: mockInterval},
+					Timeout: &metav1.Duration{Duration: timeout},
 					URL:     server.URL(),
 				},
 				Status: sourcev1.HelmRepositoryStatus{
@@ -353,6 +352,7 @@ func TestHelmChartReconciler_reconcileFromHelmRepository_secretRef(t *testing.T)
 					},
 				},
 			}
+
 			g.Expect(storage.MkdirAll(*repository.GetArtifact())).To(Succeed())
 			defer storage.RemoveAll(*repository.GetArtifact())
 			g.Expect(storage.CopyFromPath(repository.GetArtifact(), filepath.Join(server.Root(), "index.yaml"))).To(Succeed())
@@ -362,7 +362,7 @@ func TestHelmChartReconciler_reconcileFromHelmRepository_secretRef(t *testing.T)
 					Name: "helmchart",
 				},
 				Spec: sourcev1.HelmChartSpec{
-					Interval: metav1.Duration{Duration: mockInterval},
+					Interval: metav1.Duration{Duration: interval},
 					Chart:    "helmchart",
 				},
 			}
@@ -423,7 +423,7 @@ func TestHelmChartReconciler_reconcileFromTarballArtifact(t *testing.T) {
 			afterFunc: func(artifact *sourcev1.Artifact) {
 				os.RemoveAll(storage.LocalPath(*artifact))
 			},
-			want:     ctrl.Result{RequeueAfter: mockInterval},
+			want:     ctrl.Result{RequeueAfter: interval},
 			wantPath: true,
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(sourcev1.SourceAvailableCondition, sourcev1.ChartPullSucceededReason, "Decompressed artifact checksum"),
@@ -479,7 +479,7 @@ func TestHelmChartReconciler_reconcileFromTarballArtifact(t *testing.T) {
 					Name: "from-artifact-",
 				},
 				Spec: sourcev1.HelmChartSpec{
-					Interval: metav1.Duration{Duration: mockInterval},
+					Interval: metav1.Duration{Duration: interval},
 					Chart:    "./helmchart",
 				},
 			}

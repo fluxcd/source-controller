@@ -76,8 +76,8 @@ func TestBucketReconciler_Reconcile(t *testing.T) {
 			"secretkey": []byte("secret"),
 		},
 	}
-	g.Expect(newTestEnv.Create(ctx, secret)).To(Succeed())
-	defer newTestEnv.Delete(ctx, secret)
+	g.Expect(env.Create(ctx, secret)).To(Succeed())
+	defer env.Delete(ctx, secret)
 
 	obj := &sourcev1.Bucket{
 		ObjectMeta: metav1.ObjectMeta{
@@ -89,20 +89,20 @@ func TestBucketReconciler_Reconcile(t *testing.T) {
 			BucketName: s3Server.BucketName,
 			Endpoint:   u.Host,
 			Insecure:   true,
-			Interval:   metav1.Duration{Duration: bucketInterval},
-			Timeout:    &metav1.Duration{Duration: bucketTimeout},
+			Interval:   metav1.Duration{Duration: interval},
+			Timeout:    &metav1.Duration{Duration: timeout},
 			SecretRef: &meta.LocalObjectReference{
 				Name: secret.Name,
 			},
 		},
 	}
-	g.Expect(newTestEnv.Create(ctx, obj)).To(Succeed())
+	g.Expect(env.Create(ctx, obj)).To(Succeed())
 
 	key := client.ObjectKey{Name: obj.Name, Namespace: obj.Namespace}
 
 	// Wait for finalizer to be set
 	g.Eventually(func() bool {
-		if err := newTestEnv.Get(ctx, key, obj); err != nil {
+		if err := env.Get(ctx, key, obj); err != nil {
 			return false
 		}
 		return len(obj.Finalizers) > 0
@@ -110,7 +110,7 @@ func TestBucketReconciler_Reconcile(t *testing.T) {
 
 	// Wait for Bucket to be Ready
 	g.Eventually(func() bool {
-		if err := newTestEnv.Get(ctx, key, obj); err != nil {
+		if err := env.Get(ctx, key, obj); err != nil {
 			return false
 		}
 
@@ -127,11 +127,11 @@ func TestBucketReconciler_Reconcile(t *testing.T) {
 			obj.Generation == readyCondition.ObservedGeneration
 	}, timeout).Should(BeTrue())
 
-	g.Expect(newTestEnv.Delete(ctx, obj)).To(Succeed())
+	g.Expect(env.Delete(ctx, obj)).To(Succeed())
 
 	// Wait for Bucket to be deleted
 	g.Eventually(func() bool {
-		if err := newTestEnv.Get(ctx, key, obj); err != nil {
+		if err := env.Get(ctx, key, obj); err != nil {
 			return apierrors.IsNotFound(err)
 		}
 		return false

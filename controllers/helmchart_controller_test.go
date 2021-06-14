@@ -43,7 +43,7 @@ func TestHelmChartReconciler_Reconcile(t *testing.T) {
 			URL: "https://stefanprodan.github.io/podinfo",
 		},
 	}
-	g.Expect(newTestEnv.Create(ctx, sourceObj)).To(Succeed())
+	g.Expect(env.Create(ctx, sourceObj)).To(Succeed())
 
 	obj := &sourcev1.HelmChart{
 		ObjectMeta: metav1.ObjectMeta{
@@ -58,13 +58,13 @@ func TestHelmChartReconciler_Reconcile(t *testing.T) {
 			},
 		},
 	}
-	g.Expect(newTestEnv.Create(ctx, obj)).To(Succeed())
+	g.Expect(env.Create(ctx, obj)).To(Succeed())
 
 	key := client.ObjectKey{Name: obj.Name, Namespace: obj.Namespace}
 
 	// Wait for finalizer to be set
 	g.Eventually(func() bool {
-		if err := newTestEnv.Get(ctx, key, obj); err != nil {
+		if err := env.Get(ctx, key, obj); err != nil {
 			return false
 		}
 		return len(obj.Finalizers) > 0
@@ -72,7 +72,7 @@ func TestHelmChartReconciler_Reconcile(t *testing.T) {
 
 	// Wait for HelmChart to be Ready
 	g.Eventually(func() bool {
-		if err := newTestEnv.Get(ctx, key, obj); err != nil {
+		if err := env.Get(ctx, key, obj); err != nil {
 			return false
 		}
 
@@ -92,11 +92,11 @@ func TestHelmChartReconciler_Reconcile(t *testing.T) {
 			obj.Generation == readyCondition.ObservedGeneration
 	}, timeout, 1*time.Second).Should(BeTrue())
 
-	g.Expect(newTestEnv.Delete(ctx, obj)).To(Succeed())
+	g.Expect(env.Delete(ctx, obj)).To(Succeed())
 
 	// Wait for HelmChart to be deleted
 	g.Eventually(func() bool {
-		if err := newTestEnv.Get(ctx, key, obj); err != nil {
+		if err := env.Get(ctx, key, obj); err != nil {
 			return apierrors.IsNotFound(err)
 		}
 		return false

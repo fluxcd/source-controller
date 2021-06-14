@@ -19,7 +19,6 @@ package controllers
 import (
 	"fmt"
 	"io/ioutil"
-	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -27,8 +26,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/fluxcd/pkg/gittestserver"
-	"github.com/fluxcd/pkg/ssh"
+	"github.com/fluxcd/pkg/testserver"
 	"github.com/go-git/go-billy/v5/memfs"
 	gogit "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
@@ -38,13 +36,11 @@ import (
 	"github.com/go-logr/logr"
 	. "github.com/onsi/gomega"
 	sshtestdata "golang.org/x/crypto/ssh/testdata"
-	"helm.sh/helm/v3/pkg/getter"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
-	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/utils/pointer"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -53,38 +49,17 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/fluxcd/pkg/apis/meta"
+	"github.com/fluxcd/pkg/gittestserver"
 	"github.com/fluxcd/pkg/runtime/conditions"
-	"github.com/fluxcd/pkg/runtime/controller"
+	"github.com/fluxcd/pkg/ssh"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
-	"github.com/fluxcd/source-controller/internal/testenv"
 	"github.com/fluxcd/source-controller/pkg/git"
 	"github.com/fluxcd/source-controller/pkg/git/fake"
 )
 
 var (
-	timeout                = 10 * time.Second
-	mockInterval           = 1 * time.Second
 	testGitImplementations = []string{sourcev1.GoGitImplementation, sourcev1.LibGit2Implementation}
-	testGetters            = getter.Providers{
-		getter.Provider{
-			Schemes: []string{"http", "https"},
-			New:     getter.NewHTTPGetter,
-		},
-	}
-)
-
-var (
-	testTLSPublicKey  []byte
-	testTLSPrivateKey []byte
-	testTLSCA         []byte
-)
-
-var (
-	newTestEnv    *testenv.TestEnvironment
-	eventsHelper  controller.Events
-	metricsHelper controller.Metrics
-	ctx           = ctrl.SetupSignalHandler()
 )
 
 func TestGitRepositoryReconciler_Reconcile(t *testing.T) {
@@ -99,13 +74,13 @@ func TestGitRepositoryReconciler_Reconcile(t *testing.T) {
 			URL: "https://github.com/stefanprodan/podinfo.git",
 		},
 	}
-	g.Expect(newTestEnv.Create(ctx, obj)).To(Succeed())
+	g.Expect(env.Create(ctx, obj)).To(Succeed())
 
 	key := client.ObjectKey{Name: obj.Name, Namespace: obj.Namespace}
 
 	// Wait for finalizer to be set
 	g.Eventually(func() bool {
-		if err := newTestEnv.Get(ctx, key, obj); err != nil {
+		if err := env.Get(ctx, key, obj); err != nil {
 			return false
 		}
 		return len(obj.Finalizers) > 0
@@ -113,7 +88,7 @@ func TestGitRepositoryReconciler_Reconcile(t *testing.T) {
 
 	// Wait for GitRepository to be Ready
 	g.Eventually(func() bool {
-		if err := newTestEnv.Get(ctx, key, obj); err != nil {
+		if err := env.Get(ctx, key, obj); err != nil {
 			return false
 		}
 
@@ -130,11 +105,11 @@ func TestGitRepositoryReconciler_Reconcile(t *testing.T) {
 			obj.Generation == readyCondition.ObservedGeneration
 	}, timeout).Should(BeTrue())
 
-	g.Expect(newTestEnv.Delete(ctx, obj)).To(Succeed())
+	g.Expect(env.Delete(ctx, obj)).To(Succeed())
 
 	// Wait for GitRepository to be deleted
 	g.Eventually(func() bool {
-		if err := newTestEnv.Get(ctx, key, obj); err != nil {
+		if err := env.Get(ctx, key, obj); err != nil {
 			return apierrors.IsNotFound(err)
 		}
 		return false
@@ -164,7 +139,7 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 		{
 			name:     "HTTP",
 			protocol: "http",
-			want:     ctrl.Result{RequeueAfter: mockInterval},
+			want:     ctrl.Result{RequeueAfter: interval},
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(sourcev1.SourceAvailableCondition, sourcev1.GitOperationSucceedReason, "Checked out revision master/<commit>"),
 			},
@@ -188,7 +163,7 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 			beforeFunc: func(obj *sourcev1.GitRepository) {
 				obj.Spec.SecretRef = &meta.LocalObjectReference{Name: "basic-auth"}
 			},
-			want: ctrl.Result{RequeueAfter: mockInterval},
+			want: ctrl.Result{RequeueAfter: interval},
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(sourcev1.SourceAvailableCondition, sourcev1.GitOperationSucceedReason, "Checked out revision master/<commit>"),
 			},
@@ -197,22 +172,22 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 			name:     "HTTPS with CAFile",
 			protocol: "https",
 			server: options{
-				publicKey:  testTLSPublicKey,
-				privateKey: testTLSPrivateKey,
-				ca:         testTLSCA,
+				publicKey:  tlsPublicKey,
+				privateKey: tlsPrivateKey,
+				ca:         tlsCA,
 			},
 			secret: &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "ca-file",
 				},
 				Data: map[string][]byte{
-					"caFile": testTLSCA,
+					"caFile": tlsCA,
 				},
 			},
 			beforeFunc: func(obj *sourcev1.GitRepository) {
 				obj.Spec.SecretRef = &meta.LocalObjectReference{Name: "ca-file"}
 			},
-			want: ctrl.Result{RequeueAfter: mockInterval},
+			want: ctrl.Result{RequeueAfter: interval},
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(sourcev1.SourceAvailableCondition, sourcev1.GitOperationSucceedReason, "Checked out revision master/<commit>"),
 			},
@@ -222,9 +197,9 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 			skipForImplementation: sourcev1.LibGit2Implementation,
 			protocol:              "https",
 			server: options{
-				publicKey:  testTLSPublicKey,
-				privateKey: testTLSPrivateKey,
-				ca:         testTLSCA,
+				publicKey:  tlsPublicKey,
+				privateKey: tlsPrivateKey,
+				ca:         tlsCA,
 			},
 			secret: &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
@@ -247,9 +222,9 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 			skipForImplementation: sourcev1.GoGitImplementation,
 			protocol:              "https",
 			server: options{
-				publicKey:  testTLSPublicKey,
-				privateKey: testTLSPrivateKey,
-				ca:         testTLSCA,
+				publicKey:  tlsPublicKey,
+				privateKey: tlsPrivateKey,
+				ca:         tlsCA,
 			},
 			secret: &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
@@ -285,7 +260,7 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 			beforeFunc: func(obj *sourcev1.GitRepository) {
 				obj.Spec.SecretRef = &meta.LocalObjectReference{Name: "private-key"}
 			},
-			want: ctrl.Result{RequeueAfter: mockInterval},
+			want: ctrl.Result{RequeueAfter: interval},
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(sourcev1.SourceAvailableCondition, sourcev1.GitOperationSucceedReason, "Checked out revision master/<commit>"),
 			},
@@ -309,7 +284,7 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 			beforeFunc: func(obj *sourcev1.GitRepository) {
 				obj.Spec.SecretRef = &meta.LocalObjectReference{Name: "private-key"}
 			},
-			want: ctrl.Result{RequeueAfter: mockInterval},
+			want: ctrl.Result{RequeueAfter: interval},
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(sourcev1.SourceAvailableCondition, sourcev1.GitOperationSucceedReason, "Checked out revision master/<commit>"),
 			},
@@ -323,7 +298,7 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 			beforeFunc: func(obj *sourcev1.GitRepository) {
 				obj.Spec.SecretRef = &meta.LocalObjectReference{Name: "non-existing"}
 			},
-			want: ctrl.Result{RequeueAfter: mockInterval},
+			want: ctrl.Result{RequeueAfter: interval},
 			assertConditions: []metav1.Condition{
 				*conditions.FalseCondition(sourcev1.SourceAvailableCondition, "AuthenticationFailed", "Failed to get secret /non-existing: secrets \"non-existing\" not found"),
 			},
@@ -336,8 +311,8 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 				GenerateName: "auth-strategy-",
 			},
 			Spec: sourcev1.GitRepositorySpec{
-				Interval: metav1.Duration{Duration: mockInterval},
-				Timeout:  &metav1.Duration{Duration: mockInterval},
+				Interval: metav1.Duration{Duration: interval},
+				Timeout:  &metav1.Duration{Duration: interval},
 			},
 		}
 
@@ -455,7 +430,7 @@ func TestGitRepositoryReconciler_reconcileSource_checkoutStrategy(t *testing.T) 
 	}{
 		{
 			name:         "Nil reference (default branch)",
-			want:         ctrl.Result{RequeueAfter: mockInterval},
+			want:         ctrl.Result{RequeueAfter: interval},
 			wantRevision: "master/<commit>",
 		},
 		{
@@ -463,7 +438,7 @@ func TestGitRepositoryReconciler_reconcileSource_checkoutStrategy(t *testing.T) 
 			reference: &sourcev1.GitRepositoryRef{
 				Branch: "staging",
 			},
-			want:         ctrl.Result{RequeueAfter: mockInterval},
+			want:         ctrl.Result{RequeueAfter: interval},
 			wantRevision: "staging/<commit>",
 		},
 		{
@@ -471,7 +446,7 @@ func TestGitRepositoryReconciler_reconcileSource_checkoutStrategy(t *testing.T) 
 			reference: &sourcev1.GitRepositoryRef{
 				Tag: "v0.1.0",
 			},
-			want:         ctrl.Result{RequeueAfter: mockInterval},
+			want:         ctrl.Result{RequeueAfter: interval},
 			wantRevision: "v0.1.0/<commit>",
 		},
 		{
@@ -480,7 +455,7 @@ func TestGitRepositoryReconciler_reconcileSource_checkoutStrategy(t *testing.T) 
 				Branch: "staging",
 				Commit: "<commit>",
 			},
-			want:         ctrl.Result{RequeueAfter: mockInterval},
+			want:         ctrl.Result{RequeueAfter: interval},
 			wantRevision: "staging/<commit>",
 		},
 		{
@@ -488,7 +463,7 @@ func TestGitRepositoryReconciler_reconcileSource_checkoutStrategy(t *testing.T) 
 			reference: &sourcev1.GitRepositoryRef{
 				SemVer: "*",
 			},
-			want:         ctrl.Result{RequeueAfter: mockInterval},
+			want:         ctrl.Result{RequeueAfter: interval},
 			wantRevision: "v2.0.0/<commit>",
 		},
 		{
@@ -496,7 +471,7 @@ func TestGitRepositoryReconciler_reconcileSource_checkoutStrategy(t *testing.T) 
 			reference: &sourcev1.GitRepositoryRef{
 				SemVer: "<v0.2.1",
 			},
-			want:         ctrl.Result{RequeueAfter: mockInterval},
+			want:         ctrl.Result{RequeueAfter: interval},
 			wantRevision: "0.2.0/<commit>",
 		},
 		{
@@ -505,7 +480,7 @@ func TestGitRepositoryReconciler_reconcileSource_checkoutStrategy(t *testing.T) 
 				SemVer: ">=1.0.0-0 <1.1.0-0",
 			},
 			wantRevision: "v1.0.0-alpha/<commit>",
-			want:         ctrl.Result{RequeueAfter: mockInterval},
+			want:         ctrl.Result{RequeueAfter: interval},
 		},
 	}
 
@@ -541,8 +516,8 @@ func TestGitRepositoryReconciler_reconcileSource_checkoutStrategy(t *testing.T) 
 					GenerateName: "checkout-strategy-",
 				},
 				Spec: sourcev1.GitRepositorySpec{
-					Interval:  metav1.Duration{Duration: mockInterval},
-					Timeout:   &metav1.Duration{Duration: mockInterval},
+					Interval:  metav1.Duration{Duration: interval},
+					Timeout:   &metav1.Duration{Duration: interval},
 					URL:       server.HTTPAddress() + repoPath,
 					Reference: tt.reference,
 				},
@@ -593,13 +568,13 @@ func TestGitRepositoryReconciler_reconcileArtifact(t *testing.T) {
 			name: "Archive artifact",
 			dir:  "testdata/git/repository",
 			beforeFunc: func(obj *sourcev1.GitRepository) {
-				obj.Spec.Interval = metav1.Duration{Duration: mockInterval}
+				obj.Spec.Interval = metav1.Duration{Duration: interval}
 			},
 			afterFunc: func(t *WithT, obj *sourcev1.GitRepository, artifact sourcev1.Artifact) {
 				t.Expect(obj.GetArtifact()).ToNot(BeNil())
 				t.Expect(obj.GetArtifact().Checksum).NotTo(BeEmpty())
 			},
-			want: ctrl.Result{RequeueAfter: mockInterval},
+			want: ctrl.Result{RequeueAfter: interval},
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(sourcev1.ArtifactAvailableCondition, "ArchivedArtifact", "Compressed source to artifact with revision main/revision"),
 			},
@@ -624,14 +599,14 @@ func TestGitRepositoryReconciler_reconcileArtifact(t *testing.T) {
 			name: "Spec ignore overwrite",
 			dir:  "testdata/git/repository",
 			beforeFunc: func(obj *sourcev1.GitRepository) {
-				obj.Spec.Interval = metav1.Duration{Duration: mockInterval}
+				obj.Spec.Interval = metav1.Duration{Duration: interval}
 				obj.Spec.Ignore = pointer.StringPtr("!**.txt\n")
 			},
 			afterFunc: func(t *WithT, obj *sourcev1.GitRepository, artifact sourcev1.Artifact) {
 				t.Expect(obj.GetArtifact()).ToNot(BeNil())
 				t.Expect(obj.GetArtifact().Checksum).NotTo(BeEmpty())
 			},
-			want: ctrl.Result{RequeueAfter: mockInterval},
+			want: ctrl.Result{RequeueAfter: interval},
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(sourcev1.ArtifactAvailableCondition, "ArchivedArtifact", "Compressed source to artifact with revision main/revision"),
 			},
@@ -675,7 +650,9 @@ func TestGitRepositoryReconciler_reconcileArtifact(t *testing.T) {
 func TestGitRepositoryReconciler_reconcileInclude(t *testing.T) {
 	g := NewWithT(t)
 
-	storage, err := newTestStorage()
+	server, err := testserver.NewTempArtifactServer()
+	g.Expect(err).NotTo(HaveOccurred())
+	storage, err := newTestStorage(server.HTTPServer)
 	g.Expect(err).NotTo(HaveOccurred())
 	defer os.RemoveAll(storage.BasePath)
 
@@ -724,7 +701,7 @@ func TestGitRepositoryReconciler_reconcileInclude(t *testing.T) {
 				{name: "a", toPath: "a/"},
 				{name: "b", toPath: "b/"},
 			},
-			want: ctrl.Result{RequeueAfter: mockInterval},
+			want: ctrl.Result{RequeueAfter: interval},
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(sourcev1.SourceAvailableCondition, "Foo", "2 of 2 Ready"),
 			},
@@ -734,7 +711,7 @@ func TestGitRepositoryReconciler_reconcileInclude(t *testing.T) {
 			includes: []include{
 				{name: "a", toPath: "a/"},
 			},
-			want:    ctrl.Result{RequeueAfter: mockInterval},
+			want:    ctrl.Result{RequeueAfter: interval},
 			wantErr: false,
 			assertConditions: []metav1.Condition{
 				*conditions.FalseCondition(sourcev1.SourceAvailableCondition, "IncludeNotFound", "Could not find resource for include \"a\": gitrepositories.source.toolkit.fluxcd.io \"a\" not found"),
@@ -797,7 +774,7 @@ func TestGitRepositoryReconciler_reconcileInclude(t *testing.T) {
 				{name: "a", toPath: "a/"},
 				{name: "b", toPath: "b/"},
 			},
-			want: ctrl.Result{RequeueAfter: mockInterval},
+			want: ctrl.Result{RequeueAfter: interval},
 			assertConditions: []metav1.Condition{
 				*conditions.FalseCondition(sourcev1.SourceAvailableCondition, "Bar @ GitRepository/a", "bar stalled"),
 			},
@@ -846,7 +823,7 @@ func TestGitRepositoryReconciler_reconcileInclude(t *testing.T) {
 					Name: "reconcile-include",
 				},
 				Spec: sourcev1.GitRepositorySpec{
-					Interval: metav1.Duration{Duration: mockInterval},
+					Interval: metav1.Duration{Duration: interval},
 				},
 			}
 
@@ -936,7 +913,7 @@ func TestGitRepositoryReconciler_verifyCommitSignature(t *testing.T) {
 			},
 			commit: fake.NewCommit(true, "shasum"),
 			beforeFunc: func(obj *sourcev1.GitRepository) {
-				obj.Spec.Interval = metav1.Duration{Duration: mockInterval}
+				obj.Spec.Interval = metav1.Duration{Duration: interval}
 				obj.Spec.Verification = &sourcev1.GitRepositoryVerification{
 					Mode: "head",
 					SecretRef: meta.LocalObjectReference{
@@ -944,7 +921,7 @@ func TestGitRepositoryReconciler_verifyCommitSignature(t *testing.T) {
 					},
 				}
 			},
-			want: ctrl.Result{RequeueAfter: mockInterval},
+			want: ctrl.Result{RequeueAfter: interval},
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(sourcev1.SourceVerifiedCondition, "ValidCommitSignature", "Verified signature of commit \"shasum\""),
 			},
@@ -958,7 +935,7 @@ func TestGitRepositoryReconciler_verifyCommitSignature(t *testing.T) {
 			},
 			commit: fake.NewCommit(false, "shasum"),
 			beforeFunc: func(obj *sourcev1.GitRepository) {
-				obj.Spec.Interval = metav1.Duration{Duration: mockInterval}
+				obj.Spec.Interval = metav1.Duration{Duration: interval}
 				obj.Spec.Verification = &sourcev1.GitRepositoryVerification{
 					Mode: "head",
 					SecretRef: meta.LocalObjectReference{
@@ -966,7 +943,7 @@ func TestGitRepositoryReconciler_verifyCommitSignature(t *testing.T) {
 					},
 				}
 			},
-			want: ctrl.Result{RequeueAfter: mockInterval},
+			want: ctrl.Result{RequeueAfter: interval},
 			assertConditions: []metav1.Condition{
 				*conditions.FalseCondition(sourcev1.SourceVerifiedCondition, "InvalidCommitSignature", "Commit signature verification failed: invalid signature"),
 			},
@@ -974,7 +951,7 @@ func TestGitRepositoryReconciler_verifyCommitSignature(t *testing.T) {
 		{
 			name: "Non existing secret",
 			beforeFunc: func(obj *sourcev1.GitRepository) {
-				obj.Spec.Interval = metav1.Duration{Duration: mockInterval}
+				obj.Spec.Interval = metav1.Duration{Duration: interval}
 				obj.Spec.Verification = &sourcev1.GitRepositoryVerification{
 					Mode: "head",
 					SecretRef: meta.LocalObjectReference{
@@ -982,7 +959,7 @@ func TestGitRepositoryReconciler_verifyCommitSignature(t *testing.T) {
 					},
 				}
 			},
-			want: ctrl.Result{RequeueAfter: mockInterval},
+			want: ctrl.Result{RequeueAfter: interval},
 			assertConditions: []metav1.Condition{
 				*conditions.FalseCondition(sourcev1.SourceVerifiedCondition, "FailedToGetSecret", "PGP public keys secret error: secrets \"none-existing\" not found"),
 			},
@@ -990,20 +967,20 @@ func TestGitRepositoryReconciler_verifyCommitSignature(t *testing.T) {
 		{
 			name: "Nil verification in spec deletes SourceVerified condition",
 			beforeFunc: func(obj *sourcev1.GitRepository) {
-				obj.Spec.Interval = metav1.Duration{Duration: mockInterval}
+				obj.Spec.Interval = metav1.Duration{Duration: interval}
 				conditions.MarkTrue(obj, sourcev1.SourceVerifiedCondition, "Foo", "")
 			},
-			want:             ctrl.Result{RequeueAfter: mockInterval},
+			want:             ctrl.Result{RequeueAfter: interval},
 			assertConditions: []metav1.Condition{},
 		},
 		{
 			name: "Empty verification mode in spec deletes SourceVerified condition",
 			beforeFunc: func(obj *sourcev1.GitRepository) {
-				obj.Spec.Interval = metav1.Duration{Duration: mockInterval}
+				obj.Spec.Interval = metav1.Duration{Duration: interval}
 				obj.Spec.Verification = &sourcev1.GitRepositoryVerification{}
 				conditions.MarkTrue(obj, sourcev1.SourceVerifiedCondition, "Foo", "")
 			},
-			want:             ctrl.Result{RequeueAfter: mockInterval},
+			want:             ctrl.Result{RequeueAfter: interval},
 			assertConditions: []metav1.Condition{},
 		},
 	}
@@ -1042,117 +1019,6 @@ func TestGitRepositoryReconciler_verifyCommitSignature(t *testing.T) {
 			g.Expect(got).To(Equal(tt.want))
 		})
 	}
-}
-
-// TODO(hidde): move the below when more reconcilers have refactored tests
-
-func TestMain(m *testing.M) {
-	initTestTLS()
-
-	utilruntime.Must(sourcev1.AddToScheme(scheme.Scheme))
-
-	newTestEnv = testenv.NewTestEnvironment([]string{filepath.Join("..", "config", "crd", "bases")})
-
-	storage, err := newTestStorage()
-	if err != nil {
-		panic(fmt.Sprintf("Failed to create a test storage: %v", err))
-	}
-	fmt.Println("Starting the test storage server")
-	go serveTestStorage(storage)
-
-	eventsHelper = controller.MakeEvents(newTestEnv, "test", nil)
-	metricsHelper = controller.MustMakeMetrics(newTestEnv)
-
-	if err := (&GitRepositoryReconciler{
-		Client:  newTestEnv,
-		Events:  eventsHelper,
-		Metrics: metricsHelper,
-		Storage: storage,
-	}).SetupWithManager(newTestEnv); err != nil {
-		panic(fmt.Sprintf("Failed to start GitRepositoryReconciler: %v", err))
-	}
-
-	if err := (&HelmRepositoryReconciler{
-		Client:  newTestEnv,
-		Events:  eventsHelper,
-		Metrics: metricsHelper,
-		Getters: testGetters,
-		Storage: storage,
-	}).SetupWithManager(newTestEnv); err != nil {
-		panic(fmt.Sprintf("Failed to start HelmRepositoryReconciler: %v", err))
-	}
-
-	if err := (&BucketReconciler{
-		Client:  newTestEnv,
-		Events:  eventsHelper,
-		Metrics: metricsHelper,
-		Storage: storage,
-	}).SetupWithManager(newTestEnv); err != nil {
-		panic(fmt.Sprintf("Failed to start BucketReconciler: %v", err))
-	}
-
-	if err := (&HelmChartReconciler{
-		Client:  newTestEnv,
-		Events:  eventsHelper,
-		Metrics: metricsHelper,
-		Getters: testGetters,
-		Storage: storage,
-	}).SetupWithManager(newTestEnv); err != nil {
-		panic(fmt.Sprintf("Failed to start HelmChartReconciler: %v", err))
-	}
-
-	go func() {
-		fmt.Println("Starting the test environment manager")
-		if err := newTestEnv.StartManager(ctx); err != nil {
-			panic(fmt.Sprintf("Failed to start the test environment manager: %v", err))
-		}
-	}()
-	<-newTestEnv.Manager.Elected()
-
-	code := m.Run()
-
-	fmt.Println("Stopping the test environment")
-	if err := newTestEnv.Stop(); err != nil {
-		panic(fmt.Sprintf("Failed to stop the test environment: %v", err))
-	}
-
-	os.Exit(code)
-}
-
-func initTestTLS() {
-	var err error
-	testTLSPublicKey, err = ioutil.ReadFile("testdata/certs/server.pem")
-	if err != nil {
-		panic(err)
-	}
-	testTLSPrivateKey, err = ioutil.ReadFile("testdata/certs/server-key.pem")
-	if err != nil {
-		panic(err)
-	}
-	testTLSCA, err = ioutil.ReadFile("testdata/certs/ca.pem")
-	if err != nil {
-		panic(err)
-	}
-}
-
-func newTestStorage() (*Storage, error) {
-	tmp, err := ioutil.TempDir("", "test-storage-")
-	if err != nil {
-		return nil, err
-	}
-	storage, err = NewStorage(tmp, "localhost:5050", time.Second*30)
-	if err != nil {
-		_ = os.RemoveAll(tmp)
-		return nil, err
-	}
-	return storage, nil
-}
-
-func serveTestStorage(storage *Storage) error {
-	fs := http.FileServer(http.Dir(storage.BasePath))
-	handler := http.NewServeMux()
-	handler.Handle("/", fs)
-	return http.ListenAndServe(":5555", handler)
 }
 
 // helpers

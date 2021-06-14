@@ -21,12 +21,22 @@ import (
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
 	. "github.com/onsi/gomega"
+	"helm.sh/helm/v3/pkg/getter"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/runtime/conditions"
+)
+
+var (
+	testGetters = getter.Providers{
+		getter.Provider{
+			Schemes: []string{"http", "https"},
+			New:     getter.NewHTTPGetter,
+		},
+	}
 )
 
 func TestHelmRepositoryReconciler_Reconcile(t *testing.T) {
@@ -41,13 +51,13 @@ func TestHelmRepositoryReconciler_Reconcile(t *testing.T) {
 			URL: "https://stefanprodan.github.io/podinfo",
 		},
 	}
-	g.Expect(newTestEnv.Create(ctx, obj)).To(Succeed())
+	g.Expect(env.Create(ctx, obj)).To(Succeed())
 
 	key := client.ObjectKey{Name: obj.Name, Namespace: obj.Namespace}
 
 	// Wait for finalizer to be set
 	g.Eventually(func() bool {
-		if err := newTestEnv.Get(ctx, key, obj); err != nil {
+		if err := env.Get(ctx, key, obj); err != nil {
 			return false
 		}
 		return len(obj.Finalizers) > 0
@@ -55,7 +65,7 @@ func TestHelmRepositoryReconciler_Reconcile(t *testing.T) {
 
 	// Wait for HelmRepository to be Ready
 	g.Eventually(func() bool {
-		if err := newTestEnv.Get(ctx, key, obj); err != nil {
+		if err := env.Get(ctx, key, obj); err != nil {
 			return false
 		}
 
@@ -72,11 +82,11 @@ func TestHelmRepositoryReconciler_Reconcile(t *testing.T) {
 			obj.Generation == readyCondition.ObservedGeneration
 	}, timeout).Should(BeTrue())
 
-	g.Expect(newTestEnv.Delete(ctx, obj)).To(Succeed())
+	g.Expect(env.Delete(ctx, obj)).To(Succeed())
 
 	// Wait for HelmRepository to be deleted
 	g.Eventually(func() bool {
-		if err := newTestEnv.Get(ctx, key, obj); err != nil {
+		if err := env.Get(ctx, key, obj); err != nil {
 			return apierrors.IsNotFound(err)
 		}
 		return false

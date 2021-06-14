@@ -17,169 +17,163 @@ limitations under the License.
 package controllers
 
 import (
+	"fmt"
 	"io/ioutil"
 	"math/rand"
-	"net/http"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
-	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/gomega"
-	"helm.sh/helm/v3/pkg/getter"
+	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/kubernetes/scheme"
-	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/envtest"
-	"sigs.k8s.io/controller-runtime/pkg/envtest/printer"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+
+	"github.com/fluxcd/pkg/runtime/controller"
+	"github.com/fluxcd/pkg/testserver"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
 	// +kubebuilder:scaffold:imports
+	"github.com/fluxcd/source-controller/internal/testenv"
 )
 
-// These tests use Ginkgo (BDD-style Go testing framework). Refer to
-// http://onsi.github.io/ginkgo/ to learn more about Ginkgo.
+// These tests make use of plain Go using Gomega for assertions.
+// At the beginning of every (sub)test Gomega can be initialized
+// using gomega.NewWithT.
+// Refer to http://onsi.github.io/gomega/ to learn more about
+// Gomega.
 
-var cfg *rest.Config
-var k8sClient client.Client
-var k8sManager ctrl.Manager
-var testEnv *envtest.Environment
-var storage *Storage
+const (
+	timeout  = 10 * time.Second
+	interval = 1 * time.Second
+)
 
-var examplePublicKey []byte
-var examplePrivateKey []byte
-var exampleCA []byte
+var (
+	env      *testenv.Environment
+	storage  *Storage
+	server   *testserver.ArtifactServer
+	eventsH  controller.Events
+	metricsH controller.Metrics
+	ctx      = ctrl.SetupSignalHandler()
+)
 
-func TestAPIs(t *testing.T) {
-	RegisterFailHandler(Fail)
-
-	RunSpecsWithDefaultAndCustomReporters(t,
-		"Controller Suite",
-		[]Reporter{printer.NewlineReporter{}})
-}
-
-var _ = BeforeSuite(func(done Done) {
-	logf.SetLogger(
-		zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)),
-	)
-
-	By("bootstrapping test environment")
-	t := true
-	if os.Getenv("TEST_USE_EXISTING_CLUSTER") == "true" {
-		testEnv = &envtest.Environment{
-			UseExistingCluster: &t,
-		}
-	} else {
-		testEnv = &envtest.Environment{
-			CRDDirectoryPaths: []string{filepath.Join("..", "config", "crd", "bases")},
-		}
-	}
-
-	var err error
-	cfg, err = testEnv.Start()
-	Expect(err).ToNot(HaveOccurred())
-	Expect(cfg).ToNot(BeNil())
-
-	err = sourcev1.AddToScheme(scheme.Scheme)
-	Expect(err).NotTo(HaveOccurred())
-
-	err = sourcev1.AddToScheme(scheme.Scheme)
-	Expect(err).NotTo(HaveOccurred())
-
-	err = sourcev1.AddToScheme(scheme.Scheme)
-	Expect(err).NotTo(HaveOccurred())
-
-	// +kubebuilder:scaffold:scheme
-
-	Expect(loadExampleKeys()).To(Succeed())
-
-	tmpStoragePath, err := ioutil.TempDir("", "source-controller-storage-")
-	Expect(err).NotTo(HaveOccurred(), "failed to create tmp storage dir")
-
-	storage, err = NewStorage(tmpStoragePath, "localhost:5050", time.Second*30)
-	Expect(err).NotTo(HaveOccurred(), "failed to create tmp storage")
-	// serve artifacts from the filesystem, as done in main.go
-	fs := http.FileServer(http.Dir(tmpStoragePath))
-	http.Handle("/", fs)
-	go http.ListenAndServe(":5050", nil)
-
-	k8sManager, err = ctrl.NewManager(cfg, ctrl.Options{
-		Scheme: scheme.Scheme,
-	})
-	Expect(err).ToNot(HaveOccurred())
-
-	err = (&GitRepositoryReconciler{
-		Client:  k8sManager.GetClient(),
-		Events:  eventsHelper,
-		Metrics: metricsHelper,
-		Storage: storage,
-	}).SetupWithManager(k8sManager)
-	Expect(err).ToNot(HaveOccurred(), "failed to setup GtRepositoryReconciler")
-
-	err = (&HelmRepositoryReconciler{
-		Client:  k8sManager.GetClient(),
-		Events:  eventsHelper,
-		Metrics: metricsHelper,
-		Storage: storage,
-		Getters: getter.Providers{getter.Provider{
-			Schemes: []string{"http", "https"},
-			New:     getter.NewHTTPGetter,
-		}},
-	}).SetupWithManager(k8sManager)
-	Expect(err).ToNot(HaveOccurred(), "failed to setup HelmRepositoryReconciler")
-
-	err = (&HelmChartReconciler{
-		Client:  k8sManager.GetClient(),
-		Events:  eventsHelper,
-		Metrics: metricsHelper,
-		Storage: storage,
-		Getters: getter.Providers{getter.Provider{
-			Schemes: []string{"http", "https"},
-			New:     getter.NewHTTPGetter,
-		}},
-	}).SetupWithManager(k8sManager)
-	Expect(err).ToNot(HaveOccurred(), "failed to setup HelmChartReconciler")
-
-	go func() {
-		err = k8sManager.Start(ctx)
-		Expect(err).ToNot(HaveOccurred())
-	}()
-
-	k8sClient = k8sManager.GetClient()
-	Expect(k8sClient).ToNot(BeNil())
-
-	close(done)
-}, 60)
-
-var _ = AfterSuite(func() {
-	By("tearing down the test environment")
-	if storage != nil {
-		err := os.RemoveAll(storage.BasePath)
-		Expect(err).NotTo(HaveOccurred())
-	}
-	err := testEnv.Stop()
-	Expect(err).ToNot(HaveOccurred())
-})
+var (
+	tlsPublicKey  []byte
+	tlsPrivateKey []byte
+	tlsCA         []byte
+)
 
 func init() {
 	rand.Seed(time.Now().UnixNano())
 }
 
-func loadExampleKeys() (err error) {
-	examplePublicKey, err = ioutil.ReadFile("testdata/certs/server.pem")
+func TestMain(m *testing.M) {
+	initTestTLS()
+
+	utilruntime.Must(sourcev1.AddToScheme(scheme.Scheme))
+
+	env = testenv.New(testenv.WithCRDPath(filepath.Join("..", "config", "crd", "bases")))
+
+	var err error
+	server, err = testserver.NewTempArtifactServer()
 	if err != nil {
-		return err
+		panic(fmt.Sprintf("Failed to create a temporary storage server: %v", err))
 	}
-	examplePrivateKey, err = ioutil.ReadFile("testdata/certs/server-key.pem")
+	fmt.Println("Starting the test storage server")
+	server.Start()
+
+	storage, err = newTestStorage(server.HTTPServer)
 	if err != nil {
-		return err
+		panic(fmt.Sprintf("Failed to create a test storage: %v", err))
 	}
-	exampleCA, err = ioutil.ReadFile("testdata/certs/ca.pem")
-	return err
+
+	eventsH = controller.MakeEvents(env, "test", nil)
+	metricsH = controller.MustMakeMetrics(env)
+
+	if err := (&GitRepositoryReconciler{
+		Client:  env,
+		Events:  eventsH,
+		Metrics: metricsH,
+		Storage: storage,
+	}).SetupWithManager(env); err != nil {
+		panic(fmt.Sprintf("Failed to start GitRepositoryReconciler: %v", err))
+	}
+
+	if err := (&HelmRepositoryReconciler{
+		Client:  env,
+		Events:  eventsH,
+		Metrics: metricsH,
+		Getters: testGetters,
+		Storage: storage,
+	}).SetupWithManager(env); err != nil {
+		panic(fmt.Sprintf("Failed to start HelmRepositoryReconciler: %v", err))
+	}
+
+	if err := (&BucketReconciler{
+		Client:  env,
+		Events:  eventsH,
+		Metrics: metricsH,
+		Storage: storage,
+	}).SetupWithManager(env); err != nil {
+		panic(fmt.Sprintf("Failed to start BucketReconciler: %v", err))
+	}
+
+	if err := (&HelmChartReconciler{
+		Client:  env,
+		Events:  eventsH,
+		Metrics: metricsH,
+		Getters: testGetters,
+		Storage: storage,
+	}).SetupWithManager(env); err != nil {
+		panic(fmt.Sprintf("Failed to start HelmChartReconciler: %v", err))
+	}
+
+	go func() {
+		fmt.Println("Starting the test environment")
+		if err := env.Start(ctx); err != nil {
+			panic(fmt.Sprintf("Failed to start the test environment manager: %v", err))
+		}
+	}()
+	<-env.Manager.Elected()
+
+	code := m.Run()
+
+	fmt.Println("Stopping the test environment")
+	if err := env.Stop(); err != nil {
+		panic(fmt.Sprintf("Failed to stop the test environment: %v", err))
+	}
+
+	fmt.Println("Stopping the storage server")
+	server.Stop()
+	if err := os.RemoveAll(server.Root()); err != nil {
+		panic(fmt.Sprintf("Failed to remove storage server dir: %v", err))
+	}
+
+	os.Exit(code)
+}
+
+func initTestTLS() {
+	var err error
+	tlsPublicKey, err = ioutil.ReadFile("testdata/certs/server.pem")
+	if err != nil {
+		panic(err)
+	}
+	tlsPrivateKey, err = ioutil.ReadFile("testdata/certs/server-key.pem")
+	if err != nil {
+		panic(err)
+	}
+	tlsCA, err = ioutil.ReadFile("testdata/certs/ca.pem")
+	if err != nil {
+		panic(err)
+	}
+}
+
+func newTestStorage(s *testserver.HTTPServer) (*Storage, error) {
+	storage, err := NewStorage(s.Root(), s.URL(), timeout)
+	if err != nil {
+		return nil, err
+	}
+	return storage, nil
 }
 
 var letterRunes = []rune("abcdefghijklmnopqrstuvwxyz1234567890")

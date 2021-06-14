@@ -14,6 +14,7 @@ require (
 	github.com/fluxcd/pkg/lockedfile v0.1.0
 	github.com/fluxcd/pkg/runtime v0.12.1-0.20210614120240-7ab6d8278c28
 	github.com/fluxcd/pkg/ssh v0.1.0
+	github.com/fluxcd/pkg/testserver v0.1.0
 	github.com/fluxcd/pkg/untar v0.1.0
 	github.com/fluxcd/pkg/version v0.1.0
 	github.com/fluxcd/source-controller/api v0.15.3
@@ -22,15 +23,14 @@ require (
 	github.com/go-logr/logr v0.4.0
 	github.com/libgit2/git2go/v31 v31.4.14
 	github.com/minio/minio-go/v7 v7.0.10
-	github.com/onsi/ginkgo v1.16.4
 	github.com/onsi/gomega v1.13.0
+	github.com/pkg/errors v0.9.1
 	github.com/spf13/pflag v1.0.5
 	golang.org/x/crypto v0.0.0-20210421170649-83a5a9bb288b
 	golang.org/x/sync v0.0.0-20201207232520-09787c993a3a
 	gotest.tools v2.2.0+incompatible
 	helm.sh/helm/v3 v3.6.3
 	k8s.io/api v0.21.1
-	k8s.io/apiextensions-apiserver v0.21.1
 	k8s.io/apimachinery v0.21.1
 	k8s.io/client-go v0.21.1
 	k8s.io/klog/v2 v2.8.0
