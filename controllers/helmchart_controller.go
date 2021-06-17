@@ -301,7 +301,11 @@ func (r *HelmChartReconciler) getSource(ctx context.Context, chart sourcev1.Helm
 func (r *HelmChartReconciler) reconcileFromHelmRepository(ctx context.Context,
 	repository sourcev1.HelmRepository, chart sourcev1.HelmChart, force bool) (sourcev1.HelmChart, error) {
 	// Configure ChartRepository getter options
-	var clientOpts []getter.Option
+	clientOpts := []getter.Option{
+		getter.WithURL(repository.Spec.URL),
+		getter.WithTimeout(repository.Spec.Timeout.Duration),
+		getter.WithPassCredentialsAll(repository.Spec.PassCredentials),
+	}
 	if secret, err := r.getHelmRepositorySecret(ctx, &repository); err != nil {
 		return sourcev1.HelmChartNotReady(chart, sourcev1.AuthenticationFailedReason, err.Error()), err
 	} else if secret != nil {
@@ -311,10 +315,8 @@ func (r *HelmChartReconciler) reconcileFromHelmRepository(ctx context.Context,
 			return sourcev1.HelmChartNotReady(chart, sourcev1.AuthenticationFailedReason, err.Error()), err
 		}
 		defer cleanup()
-
-		clientOpts = opts
+		clientOpts = append(clientOpts, opts...)
 	}
-	clientOpts = append(clientOpts, getter.WithTimeout(repository.Spec.Timeout.Duration))
 
 	// Initialize the chart repository and load the index file
 	chartRepo, err := helm.NewChartRepository(repository.Spec.URL, r.Getters, clientOpts)
@@ -619,13 +621,18 @@ func (r *HelmChartReconciler) reconcileFromTarballArtifact(ctx context.Context,
 			if err != nil {
 				repository = &sourcev1.HelmRepository{
 					Spec: sourcev1.HelmRepositorySpec{
-						URL: dep.Repository,
+						URL:     dep.Repository,
+						Timeout: &metav1.Duration{Duration: 60 * time.Second},
 					},
 				}
 			}
 
 			// Configure ChartRepository getter options
-			var clientOpts []getter.Option
+			clientOpts := []getter.Option{
+				getter.WithURL(repository.Spec.URL),
+				getter.WithTimeout(repository.Spec.Timeout.Duration),
+				getter.WithPassCredentialsAll(repository.Spec.PassCredentials),
+			}
 			if secret, err := r.getHelmRepositorySecret(ctx, repository); err != nil {
 				return sourcev1.HelmChartNotReady(chart, sourcev1.AuthenticationFailedReason, err.Error()), err
 			} else if secret != nil {
@@ -635,8 +642,7 @@ func (r *HelmChartReconciler) reconcileFromTarballArtifact(ctx context.Context,
 					return sourcev1.HelmChartNotReady(chart, sourcev1.AuthenticationFailedReason, err.Error()), err
 				}
 				defer cleanup()
-
-				clientOpts = opts
+				clientOpts = append(clientOpts, opts...)
 			}
 
 			// Initialize the chart repository and load the index file

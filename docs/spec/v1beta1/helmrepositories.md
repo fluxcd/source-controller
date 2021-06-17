@@ -21,8 +21,17 @@ type HelmRepositorySpec struct {
 	// password fields.
 	// For TLS the secret must contain a certFile and keyFile, and/or
 	// caCert fields.
-    // +optional
+	// +optional
 	SecretRef *corev1.LocalObjectReference `json:"secretRef,omitempty"`
+
+	// PassCredentials allows the credentials from the SecretRef to be passed on to
+	// a host that does not match the host as defined in URL.
+	// This may be required if the host of the advertised chart URLs in the index
+	// differ from the defined URL.
+	// Enabling this should be done with caution, as it can potentially result in
+	// credentials getting stolen in a MITM-attack.
+	// +optional
+	PassCredentials bool `json:"passCredentials,omitempty"`
 
 	// The interval at which to check the upstream for updates.
 	// +required
