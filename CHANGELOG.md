@@ -2,6 +2,20 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.15.0
+
+**Release date:** 2021-06-17
+
+This prerelease comes with changes to the base image used to build
+the controller, replacing Alpine with Debian slim. This change
+allows the controller to run on ARM64, previously broken in v0.14.0.
+
+Improvements:
+* Use Debian instead of Alpine for multi-arch builds
+  [#386](https://github.com/fluxcd/source-controller/pull/386)
+* Panic on non-nil AddToScheme errors in main init
+  [#387](https://github.com/fluxcd/source-controller/pull/387)
+
 ## 0.14.0
 
 **Release date:** 2021-06-09
