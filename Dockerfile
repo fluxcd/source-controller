@@ -1,7 +1,15 @@
-# Docker buildkit multi-arch build requires golang alpine
-FROM golang:1.16-alpine as builder
+FROM golang:1.16-buster as builder
 
-RUN apk add --no-cache gcc pkgconfig libc-dev binutils-gold musl~=1.2 libgit2-dev~=1.1
+# Up-to-date libgit2 dependencies are only available in
+# >=bullseye (testing).
+RUN echo "deb http://deb.debian.org/debian testing main" >> /etc/apt/sources.list \
+    && echo "deb-src http://deb.debian.org/debian testing main" >> /etc/apt/sources.list
+RUN set -eux; \
+    apt-get update \
+    && apt-get install -y libgit2-dev/testing zlib1g-dev/testing libssh2-1-dev/testing libpcre3-dev/testing \
+    && apt-get clean \
+    && apt-get autoremove --purge -y \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /workspace
 
@@ -24,21 +32,26 @@ COPY internal/ internal/
 # build without specifing the arch
 RUN CGO_ENABLED=1 go build -o source-controller main.go
 
-FROM alpine:3.13
+FROM debian:buster-slim as controller
 
 # link repo to the GitHub Container Registry image
 LABEL org.opencontainers.image.source="https://github.com/fluxcd/source-controller"
 
-RUN apk add --no-cache ca-certificates tini libgit2~=1.1 musl~=1.2
+# Up-to-date libgit2 dependencies are only available in
+# >=bullseye (testing).
+RUN echo "deb http://deb.debian.org/debian testing main" >> /etc/apt/sources.list \
+    && echo "deb-src http://deb.debian.org/debian testing main" >> /etc/apt/sources.list
+RUN set -eux; \
+    apt-get update \
+    && apt-get install -y ca-certificates libgit2-1.1 \
+    && apt-get clean \
+    && apt-get autoremove --purge -y \
+    && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /workspace/source-controller /usr/local/bin/
 
-# Create minimal nsswitch.conf file to prioritize the usage of /etc/hosts over DNS queries.
-# https://github.com/gliderlabs/docker-alpine/issues/367#issuecomment-354316460
-RUN [ ! -e /etc/nsswitch.conf ] && echo 'hosts: files dns' > /etc/nsswitch.conf
-
-RUN addgroup -S controller && adduser -S controller -G controller
+RUN groupadd controller && \
+    useradd --gid controller --shell /bin/sh --create-home controller
 
 USER controller
-
-ENTRYPOINT [ "/sbin/tini", "--", "source-controller" ]
+ENTRYPOINT ["source-controller"]
