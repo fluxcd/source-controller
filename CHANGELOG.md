@@ -2,6 +2,27 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.15.1
+
+**Release date:** 2021-06-18
+
+This prerelease updates the Helm dependency to `v3.6.1`, this update
+is a security update and ensures credentials are only passed to the
+defined URL in a `HelmRelease`.
+
+**Note:** there have been reports from the Helm user community that
+this new behavior may cause issues with Helm repository providers
+like Artifactory. If this happens to be a problem for you, the
+behavior can be disabled by setting `PassCredentials` in the
+`HelmRepositorySpec`.
+
+For more details, see:
+https://github.com/helm/helm/security/advisories/GHSA-56hp-xqp3-w2jf
+
+Improvements:
+* Update Helm to v3.6.1
+  [#388](https://github.com/fluxcd/source-controller/pull/388)
+
 ## 0.15.0
 
 **Release date:** 2021-06-17
