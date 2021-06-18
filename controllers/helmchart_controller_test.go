@@ -1015,9 +1015,9 @@ var _ = Describe("HelmChartReconciler", func() {
 					Name:      secretKey.Name,
 					Namespace: secretKey.Namespace,
 				},
-				Data: map[string][]byte{
-					"username": []byte(username),
-					"password": []byte(password),
+				StringData: map[string]string{
+					"username": username,
+					"password": password,
 				},
 			}
 			Expect(k8sClient.Create(context.Background(), secret)).Should(Succeed())

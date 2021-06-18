@@ -703,6 +703,23 @@ caCert fields.</p>
 </tr>
 <tr>
 <td>
+<code>passCredentials</code><br>
+<em>
+bool
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>PassCredentials allows the credentials from the SecretRef to be passed on to
+a host that does not match the host as defined in URL.
+This may be required if the host of the advertised chart URLs in the index
+differ from the defined URL.
+Enabling this should be done with caution, as it can potentially result in
+credentials getting stolen in a MITM-attack.</p>
+</td>
+</tr>
+<tr>
+<td>
 <code>interval</code><br>
 <em>
 <a href="https://godoc.org/k8s.io/apimachinery/pkg/apis/meta/v1#Duration">
@@ -1773,6 +1790,23 @@ For HTTP/S basic auth the secret must contain username and
 password fields.
 For TLS the secret must contain a certFile and keyFile, and/or
 caCert fields.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>passCredentials</code><br>
+<em>
+bool
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>PassCredentials allows the credentials from the SecretRef to be passed on to
+a host that does not match the host as defined in URL.
+This may be required if the host of the advertised chart URLs in the index
+differ from the defined URL.
+Enabling this should be done with caution, as it can potentially result in
+credentials getting stolen in a MITM-attack.</p>
 </td>
 </tr>
 <tr>

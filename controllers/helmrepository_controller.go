@@ -171,7 +171,11 @@ func (r *HelmRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 }
 
 func (r *HelmRepositoryReconciler) reconcile(ctx context.Context, repository sourcev1.HelmRepository) (sourcev1.HelmRepository, error) {
-	var clientOpts []getter.Option
+	clientOpts := []getter.Option{
+		getter.WithURL(repository.Spec.URL),
+		getter.WithTimeout(repository.Spec.Timeout.Duration),
+		getter.WithPassCredentialsAll(repository.Spec.PassCredentials),
+	}
 	if repository.Spec.SecretRef != nil {
 		name := types.NamespacedName{
 			Namespace: repository.GetNamespace(),
@@ -191,9 +195,8 @@ func (r *HelmRepositoryReconciler) reconcile(ctx context.Context, repository sou
 			return sourcev1.HelmRepositoryNotReady(repository, sourcev1.AuthenticationFailedReason, err.Error()), err
 		}
 		defer cleanup()
-		clientOpts = opts
+		clientOpts = append(clientOpts, opts...)
 	}
-	clientOpts = append(clientOpts, getter.WithTimeout(repository.Spec.Timeout.Duration))
 
 	chartRepo, err := helm.NewChartRepository(repository.Spec.URL, r.Getters, clientOpts)
 	if err != nil {
