@@ -7,7 +7,7 @@ spec:
   interval: 10m
   url: https://github.com/hashgraph/hedera-mirror-node.git
   ref:
-    branch: master
+    branch: main
   ignore: |
     /*
     !/charts
@@ -21,7 +21,7 @@ spec:
   interval: 10m
   url: https://github.com/hashgraph/hedera-mirror-node.git
   ref:
-    branch: master
+    branch: main
   ignore: |
     /*
     !/charts

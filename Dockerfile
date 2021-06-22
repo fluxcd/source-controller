@@ -1,12 +1,20 @@
 FROM golang:1.16-buster as builder
 
 # Up-to-date libgit2 dependencies are only available in
-# >=bullseye (testing).
-RUN echo "deb http://deb.debian.org/debian testing main" >> /etc/apt/sources.list \
-    && echo "deb-src http://deb.debian.org/debian testing main" >> /etc/apt/sources.list
+# unstable, as libssh2 in testing/bullseye has been linked
+# against gcrypt which causes issues with PKCS* formats.
+# Explicitly listing all build dependencies is required because
+# they can only be automagically found for AMD64 builds.
+# Ref: https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=668271
+RUN echo "deb http://deb.debian.org/debian unstable main" >> /etc/apt/sources.list \
+    && echo "deb-src http://deb.debian.org/debian unstable main" >> /etc/apt/sources.list
 RUN set -eux; \
     apt-get update \
-    && apt-get install -y libgit2-dev/testing zlib1g-dev/testing libssh2-1-dev/testing libpcre3-dev/testing \
+    && apt-get install -y \
+        libgit2-dev/unstable \
+        zlib1g-dev/unstable \
+        libssh2-1-dev/unstable \
+        libpcre3-dev/unstable \
     && apt-get clean \
     && apt-get autoremove --purge -y \
     && rm -rf /var/lib/apt/lists/*
@@ -38,12 +46,16 @@ FROM debian:buster-slim as controller
 LABEL org.opencontainers.image.source="https://github.com/fluxcd/source-controller"
 
 # Up-to-date libgit2 dependencies are only available in
-# >=bullseye (testing).
-RUN echo "deb http://deb.debian.org/debian testing main" >> /etc/apt/sources.list \
-    && echo "deb-src http://deb.debian.org/debian testing main" >> /etc/apt/sources.list
+# unstable, as libssh2 in testing/bullseye has been linked
+# against gcrypt which causes issues with PKCS* formats.
+# Ref: https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=668271
+RUN echo "deb http://deb.debian.org/debian unstable main" >> /etc/apt/sources.list \
+    && echo "deb-src http://deb.debian.org/debian unstable main" >> /etc/apt/sources.list
 RUN set -eux; \
     apt-get update \
-    && apt-get install -y ca-certificates libgit2-1.1 \
+    && apt-get install -y \
+        ca-certificates \
+        libgit2-1.1 \
     && apt-get clean \
     && apt-get autoremove --purge -y \
     && rm -rf /var/lib/apt/lists/*
@@ -54,4 +66,4 @@ RUN groupadd controller && \
     useradd --gid controller --shell /bin/sh --create-home controller
 
 USER controller
-ENTRYPOINT ["source-controller"]
+ENTRYPOINT [ "source-controller" ]
