@@ -2,6 +2,19 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.15.2
+
+**Release date:** 2021-06-22
+
+This prerelease updates the build constraints for `libgit2`, ensuring
+the underlying `libssh2-1-dev` dependency is linked against
+`libssl-dev` instead of `libgcrypt` so that PKCS* private keys can
+be used without any issues.
+
+Fixes:
+* Use libgit2 from "unstable" / "sid"
+  [#391](https://github.com/fluxcd/source-controller/pull/391)
+
 ## 0.15.1
 
 **Release date:** 2021-06-18
