@@ -18,8 +18,12 @@ package libgit2
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"io"
 	"io/ioutil"
 	"os"
+	"path"
 	"testing"
 
 	git2go "github.com/libgit2/git2go/v31"
@@ -42,6 +46,21 @@ func TestCheckoutTagSemVer_Checkout(t *testing.T) {
 	cTag, _, err := tag.Checkout(context.TODO(), tmpDir, "https://github.com/projectcontour/contour", auth)
 	if err != nil {
 		t.Error(err)
+	}
+
+	// Ensure the correct files are checked out on disk
+	f, err := os.Open(path.Join(tmpDir, "README.md"))
+	if err != nil {
+		t.Error(err)
+	}
+	defer f.Close()
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		t.Error(err)
+	}
+	fileHash := hex.EncodeToString(h.Sum(nil))
+	if fileHash != "2bd1707542a11f987ee24698dcc095a9f57639f401133ef6a29da97bf8f3f302" {
+		t.Errorf("expected files not checked out. Expected hash %s, got %s", "2bd1707542a11f987ee24698dcc095a9f57639f401133ef6a29da97bf8f3f302", fileHash)
 	}
 
 	semVer := CheckoutSemVer{

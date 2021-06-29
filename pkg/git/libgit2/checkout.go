@@ -112,7 +112,14 @@ func (c *CheckoutTag) Checkout(ctx context.Context, path, url string, auth *git.
 	if err != nil {
 		return nil, "", fmt.Errorf("git commit '%s' not found: %w", head.Target(), err)
 	}
-	return &Commit{commit}, fmt.Sprintf("%s/%s", c.tag, head.Target().String()), nil
+	err = repo.CheckoutHead(&git2go.CheckoutOpts{
+		Strategy: git2go.CheckoutForce,
+	})
+	if err != nil {
+		return nil, "", fmt.Errorf("git checkout error: %w", err)
+	}
+
+	return &Commit{commit}, fmt.Sprintf("%s/%s", c.tag, commit.Id().String()), nil
 }
 
 type CheckoutCommit struct {
@@ -218,6 +225,12 @@ func (c *CheckoutSemVer) Checkout(ctx context.Context, path, url string, auth *g
 	if err != nil {
 		return nil, "", fmt.Errorf("git commit '%s' not found: %w", head.Target().String(), err)
 	}
+	err = repo.CheckoutHead(&git2go.CheckoutOpts{
+		Strategy: git2go.CheckoutForce,
+	})
+	if err != nil {
+		return nil, "", fmt.Errorf("git checkout error: %w", err)
+	}
 
-	return &Commit{commit}, fmt.Sprintf("%s/%s", t, head.Target().String()), nil
+	return &Commit{commit}, fmt.Sprintf("%s/%s", t, commit.Id().String()), nil
 }
