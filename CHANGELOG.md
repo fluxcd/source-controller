@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.15.3
+
+**Release date:** 2021-06-29
+
+This prerelease comes with a bug fix to the Git tag checkout when using `libgit2`.
+
+Fixes:
+* Fix tag checkout with libgit2
+  [#394](https://github.com/fluxcd/source-controller/pull/394)
+
 ## 0.15.2
 
 **Release date:** 2021-06-22
