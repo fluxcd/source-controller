@@ -164,7 +164,7 @@ func (r *HelmRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		}
 
 		// Always record readiness and duration metrics
-		r.Metrics.RecordReadinessMetric(ctx, obj)
+		r.Metrics.RecordReadiness(ctx, obj)
 		r.Metrics.RecordDuration(ctx, obj, start)
 	}()
 
@@ -215,7 +215,7 @@ func (r *HelmRepositoryReconciler) reconcile(ctx context.Context, obj *sourcev1.
 func (r *HelmRepositoryReconciler) reconcileStorage(ctx context.Context, obj *sourcev1.HelmRepository) (ctrl.Result, error) {
 	// Purge old artifacts from the storage
 	if err := r.garbageCollect(obj); err != nil {
-		r.Events.Eventf(ctx, obj, nil, events.EventSeverityError, "GarbageCollectionFailed", "Garbage collection failed: %s", err)
+		r.Events.Eventf(ctx, obj, events.EventSeverityError, "GarbageCollectionFailed", "Garbage collection failed: %s", err)
 	}
 
 	// Determine if the artifact is still in storage
@@ -257,7 +257,7 @@ func (r *HelmRepositoryReconciler) reconcileSource(ctx context.Context, obj *sou
 		var secret corev1.Secret
 		if err := r.Client.Get(ctx, name, &secret); err != nil {
 			conditions.MarkFalse(obj, sourcev1.SourceAvailableCondition, sourcev1.AuthenticationFailedReason, "Failed to get secret %s: %s", name.String(), err.Error())
-			r.Events.Event(ctx, obj, nil, events.EventSeverityError, sourcev1.AuthenticationFailedReason, conditions.Get(obj, sourcev1.SourceAvailableCondition).Message)
+			r.Events.Event(ctx, obj, events.EventSeverityError, sourcev1.AuthenticationFailedReason, conditions.Get(obj, sourcev1.SourceAvailableCondition).Message)
 			// Return transient errors but wait for next interval on not found
 			return ctrl.Result{RequeueAfter: obj.Spec.Interval.Duration}, client.IgnoreNotFound(err)
 		}
@@ -266,14 +266,14 @@ func (r *HelmRepositoryReconciler) reconcileSource(ctx context.Context, obj *sou
 		tmpDir, err := ioutil.TempDir("", fmt.Sprintf("%s-%s-source-", obj.Name, obj.Namespace))
 		if err != nil {
 			conditions.MarkFalse(obj, sourcev1.SourceAvailableCondition, sourcev1.StorageOperationFailedReason, "Could not create temporary directory for credentials: %s", err.Error())
-			r.Events.Event(ctx, obj, nil, events.EventSeverityError, sourcev1.AuthenticationFailedReason, conditions.Get(obj, sourcev1.SourceAvailableCondition).Message)
+			r.Events.Event(ctx, obj, events.EventSeverityError, sourcev1.AuthenticationFailedReason, conditions.Get(obj, sourcev1.SourceAvailableCondition).Message)
 			return ctrl.Result{}, err
 		}
 		defer os.RemoveAll(tmpDir)
 		opts, err := helm.ClientOptionsFromSecret(secret, tmpDir)
 		if err != nil {
 			conditions.MarkFalse(obj, sourcev1.SourceAvailableCondition, sourcev1.AuthenticationFailedReason, "Failed to configure Helm client with secret data: %s", err)
-			r.Events.Event(ctx, obj, nil, events.EventSeverityError, sourcev1.AuthenticationFailedReason, conditions.Get(obj, sourcev1.SourceAvailableCondition).Message)
+			r.Events.Event(ctx, obj, events.EventSeverityError, sourcev1.AuthenticationFailedReason, conditions.Get(obj, sourcev1.SourceAvailableCondition).Message)
 			// Return err as the content of the secret may change
 			return ctrl.Result{}, err
 		}
@@ -347,14 +347,14 @@ func (r *HelmRepositoryReconciler) reconcileArtifact(ctx context.Context, obj *s
 	// Record it on the object
 	obj.Status.Artifact = artifact.DeepCopy()
 	conditions.MarkTrue(obj, sourcev1.ArtifactAvailableCondition, sourcev1.IndexationSucceededReason, "Artifact revision %s", artifact.Revision)
-	r.Events.Eventf(ctx, obj, map[string]string{
+	r.Events.EventWithMetaf(ctx, obj, map[string]string{
 		"revision": obj.GetArtifact().Revision,
 	}, events.EventSeverityInfo, sourcev1.GitOperationSucceedReason, conditions.Get(obj, sourcev1.ArtifactAvailableCondition).Message)
 
 	// Update symlink on a "best effort" basis
 	url, err := r.Storage.Symlink(artifact, "index.yaml")
 	if err != nil {
-		r.Events.Eventf(ctx, obj, nil, events.EventSeverityError, sourcev1.StorageOperationFailedReason, "Failed to update status URL symlink: %s", err)
+		r.Events.Eventf(ctx, obj, events.EventSeverityError, sourcev1.StorageOperationFailedReason, "Failed to update status URL symlink: %s", err)
 	}
 	if url != "" {
 		obj.Status.URL = url
@@ -369,7 +369,7 @@ func (r *HelmRepositoryReconciler) reconcileArtifact(ctx context.Context, obj *s
 func (r *HelmRepositoryReconciler) reconcileDelete(ctx context.Context, obj *sourcev1.HelmRepository) (ctrl.Result, error) {
 	// Garbage collect the resource's artifacts
 	if err := r.garbageCollect(obj); err != nil {
-		r.Events.Eventf(ctx, obj, nil, events.EventSeverityError, "GarbageCollectionFailed", "Garbage collection for deleted resource failed: %s", err)
+		r.Events.Eventf(ctx, obj, events.EventSeverityError, "GarbageCollectionFailed", "Garbage collection for deleted resource failed: %s", err)
 		// Return the error so we retry the failed garbage collection
 		return ctrl.Result{}, err
 	}

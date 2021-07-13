@@ -134,15 +134,18 @@ func (in *HelmChart) GetArtifact() *Artifact {
 	return in.Status.Artifact
 }
 
+// GetConditions returns the status conditions.
 func (in HelmChart) GetConditions() []metav1.Condition {
 	return in.Status.Conditions
 }
 
+// SetConditions sets the status conditions.
 func (in *HelmChart) SetConditions(conditions []metav1.Condition) {
 	in.Status.Conditions = conditions
 }
 
-// GetStatusConditions returns a pointer to the Status.Conditions slice
+// GetStatusConditions returns a pointer to the Status.Conditions slice.
+// Deprecated: use GetConditions instead.
 func (in *HelmChart) GetStatusConditions() *[]metav1.Condition {
 	return &in.Status.Conditions
 }

@@ -201,7 +201,7 @@ func (r *HelmChartReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		}
 
 		// Always record readiness and duration metrics
-		r.Metrics.RecordReadinessMetric(ctx, obj)
+		r.Metrics.RecordReadiness(ctx, obj)
 		r.Metrics.RecordDuration(ctx, obj, start)
 	}()
 
@@ -265,7 +265,7 @@ func (r *HelmChartReconciler) reconcile(ctx context.Context, obj *sourcev1.HelmC
 func (r *HelmChartReconciler) reconcileStorage(ctx context.Context, obj *sourcev1.HelmChart) (ctrl.Result, error) {
 	// Garbage collect previous advertised artifact(s) from storage
 	if err := r.garbageCollect(obj); err != nil {
-		r.Events.Eventf(ctx, obj, nil, events.EventSeverityError, "GarbageCollectionFailed", "Garbage collection failed: %s", err)
+		r.Events.Eventf(ctx, obj, events.EventSeverityError, "GarbageCollectionFailed", "Garbage collection failed: %s", err)
 	}
 
 	// Determine if the advertised artifact is still in storage
@@ -309,14 +309,14 @@ func (r *HelmChartReconciler) reconcileArtifact(ctx context.Context, obj *source
 	// Record it on the object
 	obj.Status.Artifact = artifact.DeepCopy()
 	conditions.MarkTrue(obj, sourcev1.ArtifactAvailableCondition, sourcev1.ChartPackageSucceededReason, "Artifact revision %s", artifact.Revision)
-	r.Events.Eventf(ctx, obj, map[string]string{
+	r.Events.EventWithMetaf(ctx, obj, map[string]string{
 		"revision": obj.GetArtifact().Revision,
 	}, events.EventSeverityInfo, sourcev1.ChartPackageSucceededReason, conditions.Get(obj, sourcev1.ArtifactAvailableCondition).Message)
 
 	// Update symlink on a "best effort" basis
 	u, err := r.Storage.Symlink(artifact, "latest.tar.gz")
 	if err != nil {
-		r.Events.Eventf(ctx, obj, nil, events.EventSeverityError, sourcev1.StorageOperationFailedReason, "Failed to update status URL symlink: %s", err)
+		r.Events.Eventf(ctx, obj, events.EventSeverityError, sourcev1.StorageOperationFailedReason, "Failed to update status URL symlink: %s", err)
 	}
 	if u != "" {
 		obj.Status.URL = u
@@ -328,7 +328,7 @@ func (r *HelmChartReconciler) reconcileArtifact(ctx context.Context, obj *source
 func (r *HelmChartReconciler) reconcileDelete(ctx context.Context, obj *sourcev1.HelmChart) (ctrl.Result, error) {
 	// Garbage collect the resource's artifacts
 	if err := r.garbageCollect(obj); err != nil {
-		r.Events.Eventf(ctx, obj, nil, events.EventSeverityError, "GarbageCollectionFailed", "Garbage collection for deleted resource failed: %s", err)
+		r.Events.Eventf(ctx, obj, events.EventSeverityError, "GarbageCollectionFailed", "Garbage collection for deleted resource failed: %s", err)
 		// Return the error so we retry the failed garbage collection
 		return ctrl.Result{}, err
 	}

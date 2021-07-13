@@ -34,7 +34,7 @@ import (
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
 	// +kubebuilder:scaffold:imports
-	"github.com/fluxcd/source-controller/internal/testenv"
+	"github.com/fluxcd/pkg/runtime/testenv"
 )
 
 // These tests make use of plain Go using Gomega for assertions.

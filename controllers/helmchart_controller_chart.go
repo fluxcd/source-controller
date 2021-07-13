@@ -286,7 +286,7 @@ func (r *HelmChartReconciler) mergeChartValuesFiles(ctx context.Context, obj *so
 	}
 
 	conditions.MarkTrue(obj, sourcev1.ValuesFilesMergedCondition, "ModifiedValues", "Replaced chart values with merged values from: %v", valuesFiles)
-	r.Events.Eventf(ctx, obj, nil, events.EventSeverityInfo, "ModifiedValues", "Replaced chart values with merged values from: %v", valuesFiles)
+	r.Events.Eventf(ctx, obj, events.EventSeverityInfo, "ModifiedValues", "Replaced chart values with merged values from: %v", valuesFiles)
 	return ctrl.Result{RequeueAfter: obj.Spec.Interval.Duration}, nil
 }
 

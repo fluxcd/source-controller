@@ -7,12 +7,12 @@ replace github.com/fluxcd/source-controller/api => ./api
 require (
 	github.com/Masterminds/semver/v3 v3.1.1
 	github.com/cyphar/filepath-securejoin v0.2.2
-	github.com/fluxcd/pkg/apis/meta v0.10.0
+	github.com/fluxcd/pkg/apis/meta v0.11.0-rc.1
 	github.com/fluxcd/pkg/gittestserver v0.3.0
 	github.com/fluxcd/pkg/gitutil v0.1.0
 	github.com/fluxcd/pkg/helmtestserver v0.2.0
 	github.com/fluxcd/pkg/lockedfile v0.1.0
-	github.com/fluxcd/pkg/runtime v0.12.1-0.20210614120240-7ab6d8278c28
+	github.com/fluxcd/pkg/runtime v0.13.0-rc.1
 	github.com/fluxcd/pkg/ssh v0.1.0
 	github.com/fluxcd/pkg/testserver v0.1.0
 	github.com/fluxcd/pkg/untar v0.1.0
@@ -24,18 +24,16 @@ require (
 	github.com/libgit2/git2go/v31 v31.4.14
 	github.com/minio/minio-go/v7 v7.0.10
 	github.com/onsi/gomega v1.13.0
-	github.com/pkg/errors v0.9.1
 	github.com/spf13/pflag v1.0.5
 	golang.org/x/crypto v0.0.0-20210421170649-83a5a9bb288b
-	golang.org/x/sync v0.0.0-20201207232520-09787c993a3a
+	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
 	gotest.tools v2.2.0+incompatible
 	helm.sh/helm/v3 v3.6.3
-	k8s.io/api v0.21.1
-	k8s.io/apimachinery v0.21.1
-	k8s.io/client-go v0.21.1
-	k8s.io/klog/v2 v2.8.0
+	k8s.io/api v0.21.2
+	k8s.io/apimachinery v0.21.2
+	k8s.io/client-go v0.21.2
 	k8s.io/utils v0.0.0-20210527160623-6fdb442a123b
-	sigs.k8s.io/controller-runtime v0.9.0
+	sigs.k8s.io/controller-runtime v0.9.2
 	sigs.k8s.io/yaml v1.2.0
 )
 

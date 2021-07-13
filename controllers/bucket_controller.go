@@ -165,7 +165,7 @@ func (r *BucketReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 		}
 
 		// Always record readiness and duration metrics
-		r.Metrics.RecordReadinessMetric(ctx, obj)
+		r.Metrics.RecordReadiness(ctx, obj)
 		r.Metrics.RecordDuration(ctx, obj, start)
 	}()
 
@@ -225,7 +225,7 @@ func (r *BucketReconciler) reconcile(ctx context.Context, obj *sourcev1.Bucket) 
 func (r *BucketReconciler) reconcileStorage(ctx context.Context, obj *sourcev1.Bucket) (ctrl.Result, error) {
 	// Garbage collect previous advertised artifact(s) from storage
 	if err := r.garbageCollect(obj); err != nil {
-		r.Events.Eventf(ctx, obj, nil, events.EventSeverityError, "GarbageCollectionFailed", "Garbage collection failed: %s", err)
+		r.Events.Eventf(ctx, obj, events.EventSeverityError, "GarbageCollectionFailed", "Garbage collection failed: %s", err)
 	}
 
 	// Determine if the advertised artifact is still in storage
@@ -262,7 +262,7 @@ func (r *BucketReconciler) reconcileSource(ctx context.Context, obj *sourcev1.Bu
 		}
 		if err := r.Client.Get(ctx, name, secret); err != nil {
 			conditions.MarkFalse(obj, sourcev1.SourceAvailableCondition, sourcev1.AuthenticationFailedReason, "Failed to get secret %s: %s", name.String(), err.Error())
-			r.Events.Event(ctx, obj, nil, events.EventSeverityError, sourcev1.AuthenticationFailedReason, conditions.Get(obj, sourcev1.SourceAvailableCondition).Message)
+			r.Events.Event(ctx, obj, events.EventSeverityError, sourcev1.AuthenticationFailedReason, conditions.Get(obj, sourcev1.SourceAvailableCondition).Message)
 			// Return transient errors but wait for next interval on not found
 			return ctrl.Result{RequeueAfter: obj.Spec.Interval.Duration}, client.IgnoreNotFound(err)
 		}
@@ -397,14 +397,14 @@ func (r *BucketReconciler) reconcileArtifact(ctx context.Context, obj *sourcev1.
 	// Record it on the object
 	obj.Status.Artifact = artifact.DeepCopy()
 	conditions.MarkTrue(obj, sourcev1.ArtifactAvailableCondition, "ArchivedArtifact", "Compressed source to artifact with revision %s", artifact.Revision)
-	r.Events.Eventf(ctx, obj, map[string]string{
+	r.Events.EventWithMetaf(ctx, obj, map[string]string{
 		"revision": obj.GetArtifact().Revision,
 	}, events.EventSeverityInfo, sourcev1.GitOperationSucceedReason, conditions.Get(obj, sourcev1.ArtifactAvailableCondition).Message)
 
 	// Update symlink on a "best effort" basis
 	url, err := r.Storage.Symlink(artifact, "latest.tar.gz")
 	if err != nil {
-		r.Events.Eventf(ctx, obj, nil, events.EventSeverityError, sourcev1.StorageOperationFailedReason, "Failed to update status URL symlink: %s", err)
+		r.Events.Eventf(ctx, obj, events.EventSeverityError, sourcev1.StorageOperationFailedReason, "Failed to update status URL symlink: %s", err)
 	}
 	if url != "" {
 		obj.Status.URL = url
@@ -419,7 +419,7 @@ func (r *BucketReconciler) reconcileArtifact(ctx context.Context, obj *sourcev1.
 func (r *BucketReconciler) reconcileDelete(ctx context.Context, obj *sourcev1.Bucket) (ctrl.Result, error) {
 	// Garbage collect the resource's artifacts
 	if err := r.garbageCollect(obj); err != nil {
-		r.Events.Eventf(ctx, obj, nil, events.EventSeverityError, "GarbageCollectionFailed", "Garbage collection for deleted resource failed: %s", err)
+		r.Events.Eventf(ctx, obj, events.EventSeverityError, "GarbageCollectionFailed", "Garbage collection for deleted resource failed: %s", err)
 		// Return the error so we retry the failed garbage collection
 		return ctrl.Result{}, err
 	}

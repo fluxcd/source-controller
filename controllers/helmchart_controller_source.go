@@ -176,7 +176,7 @@ func (r *HelmChartReconciler) reconcileFromTarballArtifact(ctx context.Context, 
 	f, err := os.Open(r.Storage.LocalPath(artifact))
 	if err != nil {
 		conditions.MarkFalse(obj, sourcev1.SourceAvailableCondition, sourcev1.StorageOperationFailedReason, "Could not open artifact: %s", err.Error())
-		r.Events.Event(ctx, obj, nil, events.EventSeverityError, sourcev1.StorageOperationFailedReason, conditions.Get(obj, sourcev1.SourceAvailableCondition).Message)
+		r.Events.Event(ctx, obj, events.EventSeverityError, sourcev1.StorageOperationFailedReason, conditions.Get(obj, sourcev1.SourceAvailableCondition).Message)
 		return ctrl.Result{}, err
 	}
 
@@ -190,7 +190,7 @@ func (r *HelmChartReconciler) reconcileFromTarballArtifact(ctx context.Context, 
 	if _, err = untar.Untar(f, dir); err != nil {
 		f.Close()
 		conditions.MarkFalse(obj, sourcev1.SourceAvailableCondition, sourcev1.StorageOperationFailedReason, "Decompression of artifact failed: %s", err.Error())
-		r.Events.Event(ctx, obj, nil, events.EventSeverityError, sourcev1.StorageOperationFailedReason, conditions.Get(obj, sourcev1.SourceAvailableCondition).Message)
+		r.Events.Event(ctx, obj, events.EventSeverityError, sourcev1.StorageOperationFailedReason, conditions.Get(obj, sourcev1.SourceAvailableCondition).Message)
 		return ctrl.Result{}, err
 	}
 	f.Close()
