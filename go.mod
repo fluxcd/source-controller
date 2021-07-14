@@ -29,7 +29,7 @@ require (
 	golang.org/x/crypto v0.0.0-20210421170649-83a5a9bb288b
 	golang.org/x/sync v0.0.0-20201207232520-09787c993a3a
 	gotest.tools v2.2.0+incompatible
-	helm.sh/helm/v3 v3.6.1
+	helm.sh/helm/v3 v3.6.3
 	k8s.io/api v0.21.1
 	k8s.io/apimachinery v0.21.1
 	k8s.io/client-go v0.21.1
