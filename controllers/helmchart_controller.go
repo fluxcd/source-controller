@@ -233,9 +233,7 @@ func (r *HelmChartReconciler) reconcile(ctx context.Context, obj *sourcev1.HelmC
 	// Reconcile the source
 	var sourcePath string
 	defer func() {
-		if sourcePath != "" {
-			os.RemoveAll(sourcePath)
-		}
+		os.RemoveAll(sourcePath)
 	}()
 	if result, err := r.reconcileSource(ctx, obj, &sourcePath); err != nil || conditions.IsFalse(obj, sourcev1.SourceAvailableCondition) {
 		return result, err
@@ -245,9 +243,7 @@ func (r *HelmChartReconciler) reconcile(ctx context.Context, obj *sourcev1.HelmC
 	var artifact sourcev1.Artifact
 	var resultPath string
 	defer func() {
-		if resultPath != "" {
-			os.RemoveAll(resultPath)
-		}
+		os.RemoveAll(resultPath)
 	}()
 	if result, err := r.reconcileChart(ctx, obj, sourcePath, &artifact, &resultPath); err != nil {
 		return result, err

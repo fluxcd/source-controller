@@ -254,14 +254,15 @@ func (r *BucketReconciler) reconcileStorage(ctx context.Context, obj *sourcev1.B
 // set to a new artifact.
 func (r *BucketReconciler) reconcileSource(ctx context.Context, obj *sourcev1.Bucket, artifact *sourcev1.Artifact, dir string) (ctrl.Result, error) {
 	// Attempt to retrieve secret if one is configured
-	secret := &corev1.Secret{}
+	var secret *corev1.Secret
 	if obj.Spec.SecretRef != nil {
+		secret = &corev1.Secret{}
 		name := types.NamespacedName{
 			Namespace: obj.GetNamespace(),
 			Name:      obj.Spec.SecretRef.Name,
 		}
 		if err := r.Client.Get(ctx, name, secret); err != nil {
-			conditions.MarkFalse(obj, sourcev1.SourceAvailableCondition, sourcev1.AuthenticationFailedReason, "Failed to get secret %s: %s", name.String(), err.Error())
+			conditions.MarkFalse(obj, sourcev1.SourceAvailableCondition, sourcev1.AuthenticationFailedReason, "Failed to get secret '%s': %s", name.String(), err.Error())
 			r.Events.Event(ctx, obj, events.EventSeverityError, sourcev1.AuthenticationFailedReason, conditions.Get(obj, sourcev1.SourceAvailableCondition).Message)
 			// Return transient errors but wait for next interval on not found
 			return ctrl.Result{RequeueAfter: obj.Spec.Interval.Duration}, client.IgnoreNotFound(err)
@@ -271,7 +272,7 @@ func (r *BucketReconciler) reconcileSource(ctx context.Context, obj *sourcev1.Bu
 	// Build the client with the configuration from the object and secret
 	s3Client, err := r.buildClient(obj, secret)
 	if err != nil {
-		conditions.MarkFalse(obj, sourcev1.SourceAvailableCondition, sourcev1.BucketOperationFailedReason, "Client construction failed: %s", err.Error())
+		conditions.MarkFalse(obj, sourcev1.SourceAvailableCondition, sourcev1.BucketOperationFailedReason, "Failed to construct S3 client: %s", err.Error())
 		// Recovering from this without a change to the secret or object
 		// is impossible
 		return ctrl.Result{RequeueAfter: obj.Spec.Interval.Duration}, nil
@@ -282,7 +283,8 @@ func (r *BucketReconciler) reconcileSource(ctx context.Context, obj *sourcev1.Bu
 	// Confirm bucket exists
 	exists, err := s3Client.BucketExists(ctxTimeout, obj.Spec.BucketName)
 	if err != nil {
-		conditions.MarkFalse(obj, sourcev1.SourceAvailableCondition, sourcev1.BucketOperationFailedReason, "Verification of bucket %q existence failed: %s", obj.Spec.BucketName, err.Error())
+		// Error may be transient
+		conditions.MarkFalse(obj, sourcev1.SourceAvailableCondition, sourcev1.BucketOperationFailedReason, "Failed to verify existence of bucket %q: %s", obj.Spec.BucketName, err.Error())
 		return ctrl.Result{}, err
 	}
 	if !exists {
@@ -296,13 +298,13 @@ func (r *BucketReconciler) reconcileSource(ctx context.Context, obj *sourcev1.Bu
 	path := filepath.Join(dir, sourceignore.IgnoreFile)
 	if err := s3Client.FGetObject(ctxTimeout, obj.Spec.BucketName, sourceignore.IgnoreFile, path, minio.GetObjectOptions{}); err != nil {
 		if resp, ok := err.(minio.ErrorResponse); ok && resp.Code != "NoSuchKey" {
-			conditions.MarkFalse(obj, sourcev1.SourceAvailableCondition, sourcev1.BucketOperationFailedReason, "Downloading %s file failed: %s", sourceignore.IgnoreFile, err.Error())
+			conditions.MarkFalse(obj, sourcev1.SourceAvailableCondition, sourcev1.BucketOperationFailedReason, "Failed to download '%s' file: %s", sourceignore.IgnoreFile, err.Error())
 			return ctrl.Result{}, err
 		}
 	}
 	ps, err := sourceignore.ReadIgnoreFile(path, nil)
 	if err != nil {
-		conditions.MarkFalse(obj, sourcev1.SourceAvailableCondition, sourcev1.BucketOperationFailedReason, "Reading %s file failed: %s", sourceignore.IgnoreFile, err.Error())
+		conditions.MarkFalse(obj, sourcev1.SourceAvailableCondition, sourcev1.BucketOperationFailedReason, "Failed to read '%s' file: %s", sourceignore.IgnoreFile, err.Error())
 		return ctrl.Result{}, err
 	}
 	// In-spec patterns take precedence
@@ -318,7 +320,7 @@ func (r *BucketReconciler) reconcileSource(ctx context.Context, obj *sourcev1.Bu
 		UseV1:     s3utils.IsGoogleEndpoint(*s3Client.EndpointURL()),
 	}) {
 		if err = object.Err; err != nil {
-			conditions.MarkFalse(obj, sourcev1.SourceAvailableCondition, sourcev1.BucketOperationFailedReason, "Listing objects from bucket %q failed: %s", obj.Spec.BucketName, err.Error())
+			conditions.MarkFalse(obj, sourcev1.SourceAvailableCondition, sourcev1.BucketOperationFailedReason, "Failed to list objects from bucket %q: %s", obj.Spec.BucketName, err.Error())
 			return ctrl.Result{}, err
 		}
 
@@ -332,23 +334,23 @@ func (r *BucketReconciler) reconcileSource(ctx context.Context, obj *sourcev1.Bu
 
 		localPath := filepath.Join(dir, object.Key)
 		if err = s3Client.FGetObject(ctx, obj.Spec.BucketName, object.Key, localPath, minio.GetObjectOptions{}); err != nil {
-			conditions.MarkFalse(obj, sourcev1.SourceAvailableCondition, sourcev1.BucketOperationFailedReason, "Downloading object %q from bucket %q failed: %s", object.Key, obj.Spec.BucketName, err.Error())
+			conditions.MarkFalse(obj, sourcev1.SourceAvailableCondition, sourcev1.BucketOperationFailedReason, "Failed to download object %q from bucket %q: %s", object.Key, obj.Spec.BucketName, err.Error())
 			return ctrl.Result{}, err
 		}
 
 		objCount++
 	}
 
-	// Compute the checksum
-	revision, err := r.checksum(dir)
+	// Compute the checksum of the downloaded file contents, which is used as the revision
+	checksum, err := r.checksum(dir)
 	if err != nil {
-		conditions.MarkFalse(obj, sourcev1.SourceAvailableCondition, sourcev1.BucketOperationFailedReason, "Failed to compute revision: %s", err.Error())
+		conditions.MarkFalse(obj, sourcev1.SourceAvailableCondition, sourcev1.BucketOperationFailedReason, "Failed to compute checksum for downloaded objects: %s", err.Error())
 		return ctrl.Result{}, err
 	}
 
 	// Create potential new artifact
-	*artifact = r.Storage.NewArtifactFor(obj.Kind, obj, revision, fmt.Sprintf("%s.tar.gz", revision))
-	conditions.MarkTrue(obj, sourcev1.SourceAvailableCondition, sourcev1.BucketOperationSucceedReason, "Downloaded %d bucket objects from %q", objCount, obj.Spec.BucketName)
+	*artifact = r.Storage.NewArtifactFor(obj.Kind, obj, checksum, fmt.Sprintf("%s.tar.gz", checksum))
+	conditions.MarkTrue(obj, sourcev1.SourceAvailableCondition, sourcev1.BucketOperationSucceedReason, "Downloaded %d objects from bucket %q", objCount, obj.Spec.BucketName)
 
 	return ctrl.Result{RequeueAfter: obj.Spec.Interval.Duration}, nil
 }
@@ -362,7 +364,7 @@ func (r *BucketReconciler) reconcileArtifact(ctx context.Context, obj *sourcev1.
 	// The artifact is up-to-date
 	if obj.GetArtifact().HasRevision(artifact.Revision) {
 		logr.FromContext(ctx).Info("Artifact is up-to-date")
-		conditions.MarkTrue(obj, sourcev1.ArtifactAvailableCondition, "ArchivedArtifact", "Compressed source to artifact with revision %s", artifact.Revision)
+		conditions.MarkTrue(obj, sourcev1.ArtifactAvailableCondition, meta.SucceededReason, "Compressed source to artifact with revision '%s'", artifact.Revision)
 		return ctrl.Result{RequeueAfter: obj.GetInterval().Duration}, nil
 	}
 
@@ -389,17 +391,17 @@ func (r *BucketReconciler) reconcileArtifact(ctx context.Context, obj *sourcev1.
 	defer unlock()
 
 	// Archive directory to storage
-	if err := r.Storage.Archive(&artifact, dir, nil); err != nil {
+	if err = r.Storage.Archive(&artifact, dir, nil); err != nil {
 		conditions.MarkFalse(obj, sourcev1.ArtifactAvailableCondition, sourcev1.StorageOperationFailedReason, "Unable to archive artifact to storage: %s", err)
 		return ctrl.Result{}, err
 	}
 
 	// Record it on the object
 	obj.Status.Artifact = artifact.DeepCopy()
-	conditions.MarkTrue(obj, sourcev1.ArtifactAvailableCondition, "ArchivedArtifact", "Compressed source to artifact with revision %s", artifact.Revision)
+	conditions.MarkTrue(obj, sourcev1.ArtifactAvailableCondition, meta.SucceededReason, "Compressed source to artifact with revision '%s'", artifact.Revision)
 	r.Events.EventWithMetaf(ctx, obj, map[string]string{
 		"revision": obj.GetArtifact().Revision,
-	}, events.EventSeverityInfo, sourcev1.GitOperationSucceedReason, conditions.Get(obj, sourcev1.ArtifactAvailableCondition).Message)
+	}, events.EventSeverityInfo, meta.SucceededReason, conditions.Get(obj, sourcev1.ArtifactAvailableCondition).Message)
 
 	// Update symlink on a "best effort" basis
 	url, err := r.Storage.Symlink(artifact, "latest.tar.gz")
@@ -455,10 +457,6 @@ func (r *BucketReconciler) buildClient(obj *sourcev1.Bucket, secret *corev1.Secr
 		opts.Creds = credentials.NewStaticV4(accessKey, secretKey, "")
 	} else if obj.Spec.Provider == sourcev1.AmazonBucketProvider {
 		opts.Creds = credentials.NewIAM("")
-	}
-
-	if opts.Creds == nil {
-		return nil, fmt.Errorf("no bucket credentials configured")
 	}
 
 	return minio.New(obj.Spec.Endpoint, &opts)

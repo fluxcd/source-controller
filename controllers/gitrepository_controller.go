@@ -194,9 +194,6 @@ func (r *GitRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 }
 
 func (r *GitRepositoryReconciler) reconcile(ctx context.Context, obj *sourcev1.GitRepository) (ctrl.Result, error) {
-	// Mark the resource as under reconciliation
-	conditions.MarkTrue(obj, meta.ReconcilingCondition, "Reconciling", "")
-
 	// Reconcile the storage data
 	if result, err := r.reconcileStorage(ctx, obj); err != nil {
 		return result, err

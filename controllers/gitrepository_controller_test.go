@@ -891,7 +891,6 @@ func TestGitRepositoryReconciler_reconcileDelete(t *testing.T) {
 	g.Expect(got).To(Equal(ctrl.Result{}))
 	g.Expect(controllerutil.ContainsFinalizer(obj, sourcev1.SourceFinalizer)).To(BeFalse())
 	g.Expect(obj.Status.Artifact).To(BeNil())
-
 }
 
 func TestGitRepositoryReconciler_verifyCommitSignature(t *testing.T) {
@@ -1137,6 +1136,17 @@ func remoteBranchForHead(repo *gogit.Repository, head *plumbing.Reference, branc
 
 func remoteTagForHead(repo *gogit.Repository, head *plumbing.Reference, tag string) error {
 	if _, err := repo.CreateTag(tag, head.Hash(), &gogit.CreateTagOptions{
+		// Not setting this seems to make things flaky
+		//		Expected success, but got an error:
+		//			<*errors.errorString | 0xc0000f6350>: {
+		//				s: "tagger field is required",
+		//			}
+		//			tagger field is required
+		Tagger: &object.Signature{
+			Name:  "Jane Doe",
+			Email: "jane@example.com",
+			When:  time.Now(),
+		},
 		Message: tag,
 	}); err != nil {
 		return err

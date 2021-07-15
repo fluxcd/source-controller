@@ -82,7 +82,11 @@ func (s Storage) SetArtifactURL(artifact *sourcev1.Artifact) {
 	if artifact.Path == "" {
 		return
 	}
-	artifact.URL = fmt.Sprintf("http://%s/%s", s.Hostname, artifact.Path)
+	format := "http://%s/%s"
+	if strings.HasPrefix(s.Hostname, "http://") || strings.HasPrefix(s.Hostname, "https://") {
+		format = "%s/%s"
+	}
+	artifact.URL = fmt.Sprintf(format, s.Hostname, strings.TrimLeft(artifact.Path, "/"))
 }
 
 // SetHostname sets the hostname of the given URL string to the current Storage.Hostname
