@@ -19,6 +19,16 @@ package v1beta1
 const SourceFinalizer = "finalizers.fluxcd.io"
 
 const (
+	SourceAvailableCondition string = "SourceAvailable"
+
+	SourceVerifiedCondition string = "SourceVerified"
+
+	ArtifactAvailableCondition string = "ArtifactAvailable"
+
+	SourceRefReadyCondition string = "SourceRefReady"
+)
+
+const (
 	// URLInvalidReason represents the fact that a given source has an invalid URL.
 	URLInvalidReason string = "URLInvalid"
 

@@ -18,7 +18,6 @@ package v1beta1
 
 import (
 	"github.com/fluxcd/pkg/apis/meta"
-	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -99,51 +98,18 @@ const (
 	IndexationSucceededReason string = "IndexationSucceed"
 )
 
-// HelmRepositoryProgressing resets the conditions of the HelmRepository to
-// metav1.Condition of type meta.ReadyCondition with status 'Unknown' and
-// meta.ProgressingReason reason and message. It returns the modified
-// HelmRepository.
-func HelmRepositoryProgressing(repository HelmRepository) HelmRepository {
-	repository.Status.ObservedGeneration = repository.Generation
-	repository.Status.URL = ""
-	repository.Status.Conditions = []metav1.Condition{}
-	meta.SetResourceCondition(&repository, meta.ReadyCondition, metav1.ConditionUnknown, meta.ProgressingReason, "reconciliation in progress")
-	return repository
-}
-
-// HelmRepositoryReady sets the given Artifact and URL on the HelmRepository and
-// sets the meta.ReadyCondition to 'True', with the given reason and message. It
-// returns the modified HelmRepository.
-func HelmRepositoryReady(repository HelmRepository, artifact Artifact, url, reason, message string) HelmRepository {
-	repository.Status.Artifact = &artifact
-	repository.Status.URL = url
-	meta.SetResourceCondition(&repository, meta.ReadyCondition, metav1.ConditionTrue, reason, message)
-	return repository
-}
-
-// HelmRepositoryNotReady sets the meta.ReadyCondition on the given
-// HelmRepository to 'False', with the given reason and message. It returns the
-// modified HelmRepository.
-func HelmRepositoryNotReady(repository HelmRepository, reason, message string) HelmRepository {
-	meta.SetResourceCondition(&repository, meta.ReadyCondition, metav1.ConditionFalse, reason, message)
-	return repository
-}
-
-// HelmRepositoryReadyMessage returns the message of the metav1.Condition of type
-// meta.ReadyCondition with status 'True' if present, or an empty string.
-func HelmRepositoryReadyMessage(repository HelmRepository) string {
-	if c := apimeta.FindStatusCondition(repository.Status.Conditions, meta.ReadyCondition); c != nil {
-		if c.Status == metav1.ConditionTrue {
-			return c.Message
-		}
-	}
-	return ""
-}
-
 // GetArtifact returns the latest artifact from the source if present in the
 // status sub-resource.
 func (in *HelmRepository) GetArtifact() *Artifact {
 	return in.Status.Artifact
+}
+
+func (in HelmRepository) GetConditions() []metav1.Condition {
+	return in.Status.Conditions
+}
+
+func (in *HelmRepository) SetConditions(conditions []metav1.Condition) {
+	in.Status.Conditions = conditions
 }
 
 // GetStatusConditions returns a pointer to the Status.Conditions slice

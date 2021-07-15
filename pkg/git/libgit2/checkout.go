@@ -19,8 +19,11 @@ package libgit2
 import (
 	"context"
 	"fmt"
+	"sort"
+	"time"
 
-	"github.com/blang/semver/v4"
+	"github.com/Masterminds/semver/v3"
+	"github.com/fluxcd/pkg/version"
 	git2go "github.com/libgit2/git2go/v31"
 
 	"github.com/fluxcd/pkg/gitutil"
@@ -168,7 +171,7 @@ type CheckoutSemVer struct {
 }
 
 func (c *CheckoutSemVer) Checkout(ctx context.Context, path, url string, auth *git.Auth) (git.Commit, string, error) {
-	rng, err := semver.ParseRange(c.semVer)
+	verConstraint, err := semver.NewConstraint(c.semVer)
 	if err != nil {
 		return nil, "", fmt.Errorf("semver parse range error: %w", err)
 	}
@@ -186,28 +189,61 @@ func (c *CheckoutSemVer) Checkout(ctx context.Context, path, url string, auth *g
 		return nil, "", fmt.Errorf("unable to clone '%s', error: %w", url, err)
 	}
 
-	repoTags, err := repo.Tags.List()
-	if err != nil {
-		return nil, "", fmt.Errorf("git list tags error: %w", err)
-	}
-
-	svTags := make(map[string]string)
-	var svers []semver.Version
-	for _, tag := range repoTags {
-		v, _ := semver.ParseTolerant(tag)
-		if rng(v) {
-			svers = append(svers, v)
-			svTags[v.String()] = tag
+	tags := make(map[string]string)
+	tagTimestamps := make(map[string]time.Time)
+	if err := repo.Tags.Foreach(func(name string, id *git2go.Oid) error {
+		tag, err := repo.LookupTag(id)
+		if err != nil {
+			return nil
 		}
+
+		commit, err := tag.Peel(git2go.ObjectCommit)
+		if err != nil {
+			return fmt.Errorf("can't get commit for tag %s: %w", name, err)
+		}
+		c, err := commit.AsCommit()
+		if err != nil {
+			return err
+		}
+		tagTimestamps[tag.Name()] = c.Committer().When
+		tags[tag.Name()] = name
+		return nil
+	}); err != nil {
+		return nil, "", err
 	}
 
-	if len(svers) == 0 {
+	var matchedVersions semver.Collection
+	for tag, _ := range tags {
+		v, err := version.ParseVersion(tag)
+		if err != nil {
+			continue
+		}
+		if !verConstraint.Check(v) {
+			continue
+		}
+		matchedVersions = append(matchedVersions, v)
+	}
+	if len(matchedVersions) == 0 {
 		return nil, "", fmt.Errorf("no match found for semver: %s", c.semVer)
 	}
 
-	semver.Sort(svers)
-	v := svers[len(svers)-1]
-	t := svTags[v.String()]
+	// Sort versions
+	sort.SliceStable(matchedVersions, func(i, j int) bool {
+		left := matchedVersions[i]
+		right := matchedVersions[j]
+
+		if !left.Equal(right) {
+			return left.LessThan(right)
+		}
+
+		// Having tag target timestamps at our disposal, we further try to sort
+		// versions into a chronological order. This is especially important for
+		// versions that differ only by build metadata, because it is not considered
+		// a part of the comparable version in Semver
+		return tagTimestamps[left.String()].Before(tagTimestamps[right.String()])
+	})
+	v := matchedVersions[len(matchedVersions)-1]
+	t := v.Original()
 
 	ref, err := repo.References.Dwim(t)
 	if err != nil {

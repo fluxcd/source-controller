@@ -18,6 +18,7 @@ package helm
 
 import (
 	"bytes"
+	"crypto/sha1"
 	"fmt"
 	"io/ioutil"
 	"net/url"
@@ -36,10 +37,11 @@ import (
 // ChartRepository represents a Helm chart repository, and the configuration
 // required to download the chart index, and charts from the repository.
 type ChartRepository struct {
-	URL     string
-	Index   *repo.IndexFile
-	Client  getter.Getter
-	Options []getter.Option
+	URL      string
+	Index    *repo.IndexFile
+	Checksum string
+	Client   getter.Getter
+	Options  []getter.Option
 }
 
 // NewChartRepository constructs and returns a new ChartRepository with
@@ -175,6 +177,15 @@ func (r *ChartRepository) DownloadChart(chart *repo.ChartVersion) (*bytes.Buffer
 	return r.Client.Get(u.String(), r.Options...)
 }
 
+// LoadIndexFile takes a file at the given path and loads it using LoadIndex.
+func (r *ChartRepository) LoadIndexFile(path string) error {
+	b, err := ioutil.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	return r.LoadIndex(b)
+}
+
 // LoadIndex loads the given bytes into the Index while performing
 // minimal validity checks. It fails if the API version is not set
 // (repo.ErrNoAPIVersion), or if the unmarshal fails.
@@ -191,6 +202,7 @@ func (r *ChartRepository) LoadIndex(b []byte) error {
 	}
 	i.SortEntries()
 	r.Index = i
+	r.Checksum = fmt.Sprintf("%x", sha1.Sum(b))
 	return nil
 }
 

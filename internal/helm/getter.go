@@ -17,34 +17,35 @@ limitations under the License.
 package helm
 
 import (
+	"bytes"
 	"fmt"
+	"io"
 	"io/ioutil"
-	"os"
-	"path/filepath"
 
 	"helm.sh/helm/v3/pkg/getter"
 	corev1 "k8s.io/api/core/v1"
 )
 
-// ClientOptionsFromSecret constructs a getter.Option slice for the given secret.
+// ClientOptionsFromSecret constructs a getter.Option slice for the given secret,
+// storing any temporary credentials .
 // It returns the slice, and a callback to remove temporary files.
-func ClientOptionsFromSecret(secret corev1.Secret) ([]getter.Option, func(), error) {
+func ClientOptionsFromSecret(secret corev1.Secret, dir string) ([]getter.Option, error) {
 	var opts []getter.Option
 	basicAuth, err := BasicAuthFromSecret(secret)
 	if err != nil {
-		return opts, nil, err
+		return opts, err
 	}
 	if basicAuth != nil {
 		opts = append(opts, basicAuth)
 	}
-	tlsClientConfig, cleanup, err := TLSClientConfigFromSecret(secret)
+	tlsClientConfig, err := TLSClientConfigFromSecret(secret, dir)
 	if err != nil {
-		return opts, nil, err
+		return opts, err
 	}
 	if tlsClientConfig != nil {
 		opts = append(opts, tlsClientConfig)
 	}
-	return opts, cleanup, nil
+	return opts, nil
 }
 
 // BasicAuthFromSecret attempts to construct a basic auth getter.Option for the
@@ -69,45 +70,54 @@ func BasicAuthFromSecret(secret corev1.Secret) (getter.Option, error) {
 //
 // Secrets with no certFile, keyFile, AND caFile are ignored, if only a
 // certBytes OR keyBytes is defined it returns an error.
-func TLSClientConfigFromSecret(secret corev1.Secret) (getter.Option, func(), error) {
+func TLSClientConfigFromSecret(secret corev1.Secret, dir string) (getter.Option, error) {
 	certBytes, keyBytes, caBytes := secret.Data["certFile"], secret.Data["keyFile"], secret.Data["caFile"]
 	switch {
 	case len(certBytes)+len(keyBytes)+len(caBytes) == 0:
-		return nil, func() {}, nil
+		return nil, nil
 	case (len(certBytes) > 0 && len(keyBytes) == 0) || (len(keyBytes) > 0 && len(certBytes) == 0):
-		return nil, nil, fmt.Errorf("invalid '%s' secret data: fields 'certFile' and 'keyFile' require each other's presence",
+		return nil, fmt.Errorf("invalid '%s' secret data: fields 'certFile' and 'keyFile' require each other's presence",
 			secret.Name)
 	}
 
-	// create tmp dir for TLS files
-	tmp, err := ioutil.TempDir("", "helm-tls-"+secret.Name)
-	if err != nil {
-		return nil, nil, err
-	}
-	cleanup := func() { os.RemoveAll(tmp) }
-
 	var certFile, keyFile, caFile string
-
 	if len(certBytes) > 0 && len(keyBytes) > 0 {
-		certFile = filepath.Join(tmp, "cert.crt")
-		if err := ioutil.WriteFile(certFile, certBytes, 0644); err != nil {
-			cleanup()
-			return nil, nil, err
+		f, err := ioutil.TempFile(dir, "cert-")
+		if err != nil {
+
 		}
-		keyFile = filepath.Join(tmp, "key.crt")
-		if err := ioutil.WriteFile(keyFile, keyBytes, 0644); err != nil {
-			cleanup()
-			return nil, nil, err
+		if _, err = io.Copy(f, bytes.NewReader(certBytes)); err != nil {
+			f.Close()
+			return nil, err
 		}
+		f.Close()
+		certFile = f.Name()
+
+		f, err = ioutil.TempFile(dir, "key-")
+		if err != nil {
+			f.Close()
+			return nil, err
+		}
+		if _, err = io.Copy(f, bytes.NewReader(keyBytes)); err != nil {
+			f.Close()
+			return nil, err
+		}
+		f.Close()
+		keyFile = f.Name()
 	}
 
 	if len(caBytes) > 0 {
-		caFile = filepath.Join(tmp, "ca.pem")
-		if err := ioutil.WriteFile(caFile, caBytes, 0644); err != nil {
-			cleanup()
-			return nil, nil, err
+		f, err := ioutil.TempFile(dir, "ca-")
+		if err != nil {
+			f.Close()
+			return nil, err
 		}
+		if _, err = io.Copy(f, bytes.NewReader(caBytes)); err != nil {
+			f.Close()
+		}
+		f.Close()
+		caFile = f.Name()
 	}
 
-	return getter.WithTLSClientConfig(certFile, keyFile, caFile), cleanup, nil
+	return getter.WithTLSClientConfig(certFile, keyFile, caFile), nil
 }

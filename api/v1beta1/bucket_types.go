@@ -18,7 +18,6 @@ package v1beta1
 
 import (
 	"github.com/fluxcd/pkg/apis/meta"
-	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -112,49 +111,18 @@ const (
 	BucketOperationFailedReason string = "BucketOperationFailed"
 )
 
-// BucketProgressing resets the conditions of the Bucket to metav1.Condition of
-// type meta.ReadyCondition with status 'Unknown' and meta.ProgressingReason
-// reason and message. It returns the modified Bucket.
-func BucketProgressing(bucket Bucket) Bucket {
-	bucket.Status.ObservedGeneration = bucket.Generation
-	bucket.Status.URL = ""
-	bucket.Status.Conditions = []metav1.Condition{}
-	meta.SetResourceCondition(&bucket, meta.ReadyCondition, metav1.ConditionUnknown, meta.ProgressingReason, "reconciliation in progress")
-	return bucket
-}
-
-// BucketReady sets the given Artifact and URL on the Bucket and sets the
-// meta.ReadyCondition to 'True', with the given reason and message. It returns
-// the modified Bucket.
-func BucketReady(bucket Bucket, artifact Artifact, url, reason, message string) Bucket {
-	bucket.Status.Artifact = &artifact
-	bucket.Status.URL = url
-	meta.SetResourceCondition(&bucket, meta.ReadyCondition, metav1.ConditionTrue, reason, message)
-	return bucket
-}
-
-// BucketNotReady sets the meta.ReadyCondition on the Bucket to 'False', with
-// the given reason and message. It returns the modified Bucket.
-func BucketNotReady(bucket Bucket, reason, message string) Bucket {
-	meta.SetResourceCondition(&bucket, meta.ReadyCondition, metav1.ConditionFalse, reason, message)
-	return bucket
-}
-
-// BucketReadyMessage returns the message of the metav1.Condition of type
-// meta.ReadyCondition with status 'True' if present, or an empty string.
-func BucketReadyMessage(bucket Bucket) string {
-	if c := apimeta.FindStatusCondition(bucket.Status.Conditions, meta.ReadyCondition); c != nil {
-		if c.Status == metav1.ConditionTrue {
-			return c.Message
-		}
-	}
-	return ""
-}
-
 // GetArtifact returns the latest artifact from the source if present in the
 // status sub-resource.
 func (in *Bucket) GetArtifact() *Artifact {
 	return in.Status.Artifact
+}
+
+func (in Bucket) GetConditions() []metav1.Condition {
+	return in.Status.Conditions
+}
+
+func (in *Bucket) SetConditions(conditions []metav1.Condition) {
+	in.Status.Conditions = conditions
 }
 
 // GetStatusConditions returns a pointer to the Status.Conditions slice
