@@ -26,7 +26,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/fluxcd/pkg/testserver"
 	"github.com/go-git/go-billy/v5/memfs"
 	gogit "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
@@ -40,7 +39,6 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/utils/pointer"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -52,6 +50,7 @@ import (
 	"github.com/fluxcd/pkg/gittestserver"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	"github.com/fluxcd/pkg/ssh"
+	"github.com/fluxcd/pkg/testserver"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
 	"github.com/fluxcd/source-controller/pkg/git"
@@ -316,9 +315,6 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 			},
 		}
 
-		s := runtime.NewScheme()
-		utilruntime.Must(corev1.AddToScheme(s))
-
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
 
@@ -371,7 +367,7 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 				tt.beforeFunc(obj)
 			}
 
-			builder := fakeclient.NewClientBuilder().WithScheme(s)
+			builder := fakeclient.NewClientBuilder().WithScheme(env.GetScheme())
 			if secret != nil {
 				builder.WithObjects(secret.DeepCopy())
 			}
@@ -805,9 +801,7 @@ func TestGitRepositoryReconciler_reconcileInclude(t *testing.T) {
 				depObjs = append(depObjs, obj)
 			}
 
-			s := runtime.NewScheme()
-			utilruntime.Must(sourcev1.AddToScheme(s))
-			builder := fakeclient.NewClientBuilder().WithScheme(s)
+			builder := fakeclient.NewClientBuilder().WithScheme(env.GetScheme())
 			if len(tt.dependencies) > 0 {
 				builder.WithObjects(depObjs...)
 			}
@@ -988,10 +982,7 @@ func TestGitRepositoryReconciler_verifyCommitSignature(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
 
-			s := runtime.NewScheme()
-			utilruntime.Must(corev1.AddToScheme(s))
-
-			builder := fakeclient.NewClientBuilder().WithScheme(s)
+			builder := fakeclient.NewClientBuilder().WithScheme(env.GetScheme())
 			if tt.secret != nil {
 				builder.WithObjects(tt.secret)
 			}

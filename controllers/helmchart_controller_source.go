@@ -88,6 +88,8 @@ func (r *HelmChartReconciler) reconcileFromHelmRepository(ctx context.Context, o
 	// Configure Helm client to access repository
 	clientOpts := []getter.Option{
 		getter.WithTimeout(repository.Spec.Timeout.Duration),
+		getter.WithURL(repository.Spec.URL),
+		getter.WithPassCredentialsAll(repository.Spec.PassCredentials),
 	}
 	if repository.Spec.SecretRef != nil {
 		// Attempt to retrieve secret

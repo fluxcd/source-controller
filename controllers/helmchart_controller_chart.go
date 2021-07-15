@@ -211,6 +211,8 @@ func (r *HelmChartReconciler) getRepositoryIndex(ctx context.Context, obj *sourc
 	// Configure Helm client getter options
 	clientOpts := []getter.Option{
 		getter.WithTimeout(obj.Spec.Interval.Duration),
+		getter.WithURL(repository.Spec.URL),
+		getter.WithPassCredentialsAll(repository.Spec.PassCredentials),
 	}
 	if repository.Spec.SecretRef != nil {
 		name := types.NamespacedName{

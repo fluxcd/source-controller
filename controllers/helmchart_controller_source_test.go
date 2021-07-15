@@ -15,8 +15,6 @@ import (
 	"helm.sh/helm/v3/pkg/chart/loader"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
-	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	fakeclient "sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -152,10 +150,7 @@ func TestHelmChartReconciler_reconcileFromHelmRepository(t *testing.T) {
 		},
 	}
 
-	s := runtime.NewScheme()
-	utilruntime.Must(sourcev1.AddToScheme(s))
-
-	builder := fakeclient.NewClientBuilder().WithScheme(s)
+	builder := fakeclient.NewClientBuilder().WithScheme(env.GetScheme())
 	builder.WithObjects(sourceObj)
 
 	r := &HelmChartReconciler{
@@ -371,10 +366,7 @@ func TestHelmChartReconciler_reconcileFromHelmRepository_secretRef(t *testing.T)
 				tt.beforeFunc(repository)
 			}
 
-			s := runtime.NewScheme()
-			utilruntime.Must(corev1.AddToScheme(s))
-
-			builder := fakeclient.NewClientBuilder().WithScheme(s)
+			builder := fakeclient.NewClientBuilder().WithScheme(env.GetScheme())
 			secret := tt.secret.DeepCopy()
 			if secret != nil {
 				builder.WithObjects(secret.DeepCopy())
@@ -460,10 +452,7 @@ func TestHelmChartReconciler_reconcileFromTarballArtifact(t *testing.T) {
 		},
 	}
 
-	s := runtime.NewScheme()
-	utilruntime.Must(sourcev1.AddToScheme(s))
-
-	builder := fakeclient.NewClientBuilder().WithScheme(s)
+	builder := fakeclient.NewClientBuilder().WithScheme(env.GetScheme())
 
 	r := &HelmChartReconciler{
 		Client:  builder.Build(),
@@ -576,10 +565,7 @@ func TestHelmChartReconciler_getSource(t *testing.T) {
 		},
 	}
 
-	s := runtime.NewScheme()
-	utilruntime.Must(sourcev1.AddToScheme(s))
-
-	builder := fakeclient.NewClientBuilder().WithScheme(s)
+	builder := fakeclient.NewClientBuilder().WithScheme(env.GetScheme())
 	builder.WithObjects(helmRepo, gitRepo, bucket)
 
 	r := &HelmChartReconciler{

@@ -247,6 +247,8 @@ func (r *HelmRepositoryReconciler) reconcileSource(ctx context.Context, obj *sou
 	// Configure Helm client to access repository
 	clientOpts := []getter.Option{
 		getter.WithTimeout(obj.Spec.Timeout.Duration),
+		getter.WithURL(obj.Spec.URL),
+		getter.WithPassCredentialsAll(obj.Spec.PassCredentials),
 	}
 	if obj.Spec.SecretRef != nil {
 		// Attempt to retrieve secret
