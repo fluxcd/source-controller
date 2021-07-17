@@ -60,6 +60,13 @@ type HelmChartSpec struct {
 	// +deprecated
 	ValuesFile string `json:"valuesFile,omitempty"`
 
+	// Ignore the version of the chart, allowing reconciliation if the source has
+	// changed. Only applies to GitRepository and Bucket sources. Defaults to false
+	// when omitted.
+	// +kubebuilder:default:=false
+	// +optional
+	IgnoreVersion bool `json:"ignoreVersion,omitempty"`
+
 	// This flag tells the controller to suspend the reconciliation of this source.
 	// +optional
 	Suspend bool `json:"suspend,omitempty"`
