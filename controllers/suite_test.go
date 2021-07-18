@@ -17,6 +17,7 @@ limitations under the License.
 package controllers
 
 import (
+	"context"
 	"io/ioutil"
 	"math/rand"
 	"net/http"
@@ -53,6 +54,8 @@ var storage *Storage
 var examplePublicKey []byte
 var examplePrivateKey []byte
 var exampleCA []byte
+
+var ctx context.Context = context.Background()
 
 func TestAPIs(t *testing.T) {
 	RegisterFailHandler(Fail)
@@ -111,6 +114,14 @@ var _ = BeforeSuite(func(done Done) {
 		Scheme: scheme.Scheme,
 	})
 	Expect(err).ToNot(HaveOccurred())
+
+	err = (&BucketReconciler{
+		Client:  k8sManager.GetClient(),
+		Log:     ctrl.Log.WithName("controllers").WithName(sourcev1.BucketKind),
+		Scheme:  scheme.Scheme,
+		Storage: storage,
+	}).SetupWithManager(k8sManager)
+	Expect(err).ToNot(HaveOccurred(), "failed to setup BucketReconciler")
 
 	err = (&GitRepositoryReconciler{
 		Client:  k8sManager.GetClient(),
