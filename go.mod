@@ -4,6 +4,9 @@ go 1.16
 
 replace github.com/fluxcd/source-controller/api => ./api
 
+// Patch from: https://github.com/go-git/go-git/pull/330
+replace github.com/go-git/go-git/v5 => github.com/zeripath/go-git/v5 v5.3.1-0.20210602203300-a1fc3fc4c688
+
 require (
 	github.com/Masterminds/semver/v3 v3.1.1
 	github.com/blang/semver/v4 v4.0.0
