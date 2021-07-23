@@ -131,7 +131,7 @@ func (r *HelmRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 					sourcev1.SourceAvailableCondition,
 					meta.ReadyCondition,
 					meta.ReconcilingCondition,
-					meta.ProgressingReason,
+					meta.StalledCondition,
 				},
 			},
 		}
