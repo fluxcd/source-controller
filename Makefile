@@ -3,6 +3,9 @@ IMG ?= fluxcd/source-controller:latest
 # Produce CRDs that work back to Kubernetes 1.16
 CRD_OPTIONS ?= crd:crdVersions=v1
 
+ENVTEST_BIN_VERSION?=1.19.2
+KUBEBUILDER_ASSETS?=$(shell $(SETUP_ENVTEST) use -i $(ENVTEST_BIN_VERSION) -p path)
+
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
 GOBIN=$(shell go env GOPATH)/bin
@@ -13,8 +16,8 @@ endif
 all: manager
 
 # Run tests
-test: generate fmt vet manifests api-docs
-	go test ./... -coverprofile cover.out
+test: generate fmt vet manifests api-docs setup-envtest
+	KUBEBUILDER_ASSETS=$(KUBEBUILDER_ASSETS) go test ./... -coverprofile cover.out
 	cd api; go test ./... -coverprofile cover.out
 
 # Build manager binary
@@ -111,4 +114,20 @@ ifeq (, $(shell which gen-crd-api-reference-docs))
 API_REF_GEN=$(GOBIN)/gen-crd-api-reference-docs
 else
 API_REF_GEN=$(shell which gen-crd-api-reference-docs)
+endif
+
+# Find or download setup-envtest
+setup-envtest:
+ifeq (, $(shell which setup-envtest))
+	@{ \
+	set -e ;\
+	SETUP_ENVTEST_TMP_DIR=$$(mktemp -d) ;\
+	cd $$SETUP_ENVTEST_TMP_DIR ;\
+	go mod init tmp ;\
+	go get sigs.k8s.io/controller-runtime/tools/setup-envtest@latest ;\
+	rm -rf $$SETUP_ENVTEST_TMP_DIR ;\
+	}
+SETUP_ENVTEST=$(GOBIN)/setup-envtest
+else
+SETUP_ENVTEST=$(shell which setup-envtest)
 endif
