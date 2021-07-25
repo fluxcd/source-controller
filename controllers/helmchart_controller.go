@@ -61,7 +61,6 @@ import (
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
 	"github.com/fluxcd/source-controller/internal/helm"
-	"github.com/fluxcd/source-controller/internal/util"
 )
 
 // +kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=helmcharts,verbs=get;list;watch;create;update;patch;delete
@@ -926,7 +925,7 @@ func (r *HelmChartReconciler) requestsForHelmRepositoryChange(o client.Object) [
 	//  enqueued twice.
 	var reqs []reconcile.Request
 	for _, i := range list.Items {
-		reqs = append(reqs, reconcile.Request{NamespacedName: util.ObjectKey(&i)})
+		reqs = append(reqs, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(&i)})
 	}
 	return reqs
 }
@@ -955,7 +954,7 @@ func (r *HelmChartReconciler) requestsForGitRepositoryChange(o client.Object) []
 	//  enqueued twice.
 	var reqs []reconcile.Request
 	for _, i := range list.Items {
-		reqs = append(reqs, reconcile.Request{NamespacedName: util.ObjectKey(&i)})
+		reqs = append(reqs, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(&i)})
 	}
 	return reqs
 }
@@ -984,7 +983,7 @@ func (r *HelmChartReconciler) requestsForBucketChange(o client.Object) []reconci
 	//  enqueued twice.
 	var reqs []reconcile.Request
 	for _, i := range list.Items {
-		reqs = append(reqs, reconcile.Request{NamespacedName: util.ObjectKey(&i)})
+		reqs = append(reqs, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(&i)})
 	}
 	return reqs
 }
