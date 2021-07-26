@@ -151,7 +151,7 @@ func (r *BucketReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 			case metav1.ConditionFalse:
 				// As we are no longer reconciling and the end-state
 				// is not ready, the reconciliation has stalled
-				conditions.MarkTrue(obj, meta.StalledCondition, readyCondition.Reason, readyCondition.Message)
+				conditions.MarkStalled(obj, readyCondition.Reason, readyCondition.Message)
 			case metav1.ConditionTrue:
 				// As we are no longer reconciling and the end-state
 				// is ready, the reconciliation is no longer stalled
@@ -187,7 +187,7 @@ func (r *BucketReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 
 func (r *BucketReconciler) reconcile(ctx context.Context, obj *sourcev1.Bucket) (ctrl.Result, error) {
 	// Mark the resource as under reconciliation
-	conditions.MarkTrue(obj, meta.ReconcilingCondition, "Reconciling", "")
+	conditions.MarkReconciling(obj, "Reconciling", "")
 	logr.FromContext(ctx).Info("Starting reconciliation")
 
 	// Reconcile the storage data

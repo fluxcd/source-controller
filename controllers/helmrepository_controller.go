@@ -150,7 +150,7 @@ func (r *HelmRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 			case metav1.ConditionFalse:
 				// As we are no longer reconciling and the end-state
 				// is not ready, the reconciliation has stalled
-				conditions.MarkTrue(obj, meta.StalledCondition, readyCondition.Reason, readyCondition.Message)
+				conditions.MarkStalled(obj, readyCondition.Reason, readyCondition.Message)
 			case metav1.ConditionTrue:
 				// As we are no longer reconciling and the end-state
 				// is ready, the reconciliation is no longer stalled
@@ -186,7 +186,7 @@ func (r *HelmRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 
 func (r *HelmRepositoryReconciler) reconcile(ctx context.Context, obj *sourcev1.HelmRepository) (ctrl.Result, error) {
 	// Mark the resource as under reconciliation
-	conditions.MarkTrue(obj, meta.ReconcilingCondition, "Reconciling", "")
+	conditions.MarkReconciling(obj, "Reconciling", "")
 
 	// Reconcile the storage data
 	if result, err := r.reconcileStorage(ctx, obj); err != nil {

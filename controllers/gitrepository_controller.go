@@ -120,6 +120,9 @@ func (r *GitRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 			obj.Status.SetLastHandledReconcileRequest(v)
 		}
 
+		// We are no longer reconciling
+		conditions.Delete(obj, meta.ReconcilingCondition)
+
 		// Summarize Ready condition
 		conditions.SetSummary(obj,
 			meta.ReadyCondition,
@@ -159,7 +162,7 @@ func (r *GitRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 			case metav1.ConditionFalse:
 				// As we are no longer reconciling and the end-state
 				// is not ready, the reconciliation has stalled
-				conditions.MarkTrue(obj, meta.StalledCondition, readyCondition.Reason, readyCondition.Message)
+				conditions.MarkStalled(obj, readyCondition.Reason, readyCondition.Message)
 			case metav1.ConditionTrue:
 				// As we are no longer reconciling and the end-state
 				// is ready, the reconciliation is no longer stalled
@@ -194,6 +197,9 @@ func (r *GitRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 }
 
 func (r *GitRepositoryReconciler) reconcile(ctx context.Context, obj *sourcev1.GitRepository) (ctrl.Result, error) {
+	// Mark the resource as under reconciliation
+	conditions.MarkReconciling(obj, "Reconciling", "")
+
 	// Reconcile the storage data
 	if result, err := r.reconcileStorage(ctx, obj); err != nil {
 		return result, err

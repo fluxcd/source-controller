@@ -187,7 +187,7 @@ func (r *HelmChartReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			case metav1.ConditionFalse:
 				// As we are no longer reconciling and the end-state
 				// is not ready, the reconciliation has stalled
-				conditions.MarkTrue(obj, meta.StalledCondition, readyCondition.Reason, readyCondition.Message)
+				conditions.MarkStalled(obj, readyCondition.Reason, readyCondition.Message)
 			case metav1.ConditionTrue:
 				// As we are no longer reconciling and the end-state
 				// is ready, the reconciliation is no longer stalled
@@ -223,7 +223,7 @@ func (r *HelmChartReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 func (r *HelmChartReconciler) reconcile(ctx context.Context, obj *sourcev1.HelmChart) (ctrl.Result, error) {
 	// Mark the resource as under reconciliation
-	conditions.MarkTrue(obj, meta.ReconcilingCondition, "Reconciling", "")
+	conditions.MarkReconciling(obj, "Reconciling", "")
 
 	// Reconcile the storage data
 	if result, err := r.reconcileStorage(ctx, obj); err != nil {
@@ -232,9 +232,7 @@ func (r *HelmChartReconciler) reconcile(ctx context.Context, obj *sourcev1.HelmC
 
 	// Reconcile the source
 	var sourcePath string
-	defer func() {
-		os.RemoveAll(sourcePath)
-	}()
+	defer os.RemoveAll(sourcePath)
 	if result, err := r.reconcileSource(ctx, obj, &sourcePath); err != nil || conditions.IsFalse(obj, sourcev1.SourceAvailableCondition) {
 		return result, err
 	}
@@ -242,9 +240,7 @@ func (r *HelmChartReconciler) reconcile(ctx context.Context, obj *sourcev1.HelmC
 	// Reconcile the chart using the source data
 	var artifact sourcev1.Artifact
 	var resultPath string
-	defer func() {
-		os.RemoveAll(resultPath)
-	}()
+	defer os.RemoveAll(resultPath)
 	if result, err := r.reconcileChart(ctx, obj, sourcePath, &artifact, &resultPath); err != nil {
 		return result, err
 	}
