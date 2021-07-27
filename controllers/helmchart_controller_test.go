@@ -407,6 +407,60 @@ var _ = Describe("HelmChartReconciler", func() {
 			Expect(chart.Status.Artifact.Revision).Should(Equal("0.1.1"))
 		})
 
+		It("Cross namespace", func() {
+			Expect(helmServer.PackageChart(path.Join("testdata/charts/helmchart"))).Should(Succeed())
+			Expect(helmServer.GenerateIndex()).Should(Succeed())
+
+			repositoryKey := types.NamespacedName{
+				Name:      "helmrepository-sample-" + randStringRunes(5),
+				Namespace: namespace.Name,
+			}
+			Expect(k8sClient.Create(context.Background(), &sourcev1.HelmRepository{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      repositoryKey.Name,
+					Namespace: repositoryKey.Namespace,
+				},
+				Spec: sourcev1.HelmRepositorySpec{
+					URL:      helmServer.URL(),
+					Interval: metav1.Duration{Duration: indexInterval},
+				},
+			})).Should(Succeed())
+
+			key := types.NamespacedName{
+				Name:      "helmchart-sample-" + randStringRunes(5),
+				Namespace: "default",
+			}
+			created := &sourcev1.HelmChart{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      key.Name,
+					Namespace: key.Namespace,
+				},
+				Spec: sourcev1.HelmChartSpec{
+					Chart:   "helmchart",
+					Version: "",
+					SourceRef: sourcev1.LocalHelmChartSourceReference{
+						Kind: sourcev1.HelmRepositoryKind,
+						Name: repositoryKey.Name,
+					},
+					Interval: metav1.Duration{Duration: pullInterval},
+				},
+			}
+			Expect(k8sClient.Create(context.Background(), created)).Should(Succeed())
+
+			got := &sourcev1.HelmChart{}
+			Eventually(func() bool {
+				_ = k8sClient.Get(context.Background(), key, got)
+				for _, c := range got.Status.Conditions {
+					if strings.Contains(c.Message, "failed to retrieve source") {
+						return true
+					}
+				}
+				return false
+			}, timeout, interval).Should(BeTrue())
+
+			Expect(k8sClient.Delete(context.Background(), created)).Should(Succeed())
+		})
+
 		It("Authenticates when credentials are provided", func() {
 			helmServer.Stop()
 			var username, password = "john", "doe"
