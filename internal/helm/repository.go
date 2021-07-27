@@ -20,8 +20,9 @@ import (
 	"bytes"
 	"crypto/sha1"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/url"
+	"os"
 	"path"
 	"sort"
 	"strings"
@@ -179,7 +180,7 @@ func (r *ChartRepository) DownloadChart(chart *repo.ChartVersion) (*bytes.Buffer
 
 // LoadIndexFile takes a file at the given path and loads it using LoadIndex.
 func (r *ChartRepository) LoadIndexFile(path string) error {
-	b, err := ioutil.ReadFile(path)
+	b, err := os.ReadFile(path)
 	if err != nil {
 		return err
 	}
@@ -221,7 +222,7 @@ func (r *ChartRepository) DownloadIndex() error {
 	if err != nil {
 		return err
 	}
-	b, err := ioutil.ReadAll(res)
+	b, err := io.ReadAll(res)
 	if err != nil {
 		return err
 	}

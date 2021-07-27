@@ -17,7 +17,6 @@ limitations under the License.
 package helm
 
 import (
-	"io/ioutil"
 	"os"
 	"testing"
 
@@ -58,7 +57,7 @@ func TestClientOptionsFromSecret(t *testing.T) {
 					secret.Data[k] = v
 				}
 			}
-			tmpDir, err := ioutil.TempDir("", "")
+			tmpDir, err := os.MkdirTemp("", "")
 			if err != nil {
 				t.Fatalf("Failed to create temporary directory: %v", err)
 			}
@@ -127,7 +126,7 @@ func TestTLSClientConfigFromSecret(t *testing.T) {
 			if tt.modify != nil {
 				tt.modify(secret)
 			}
-			tmpDir, err := ioutil.TempDir("", "")
+			tmpDir, err := os.MkdirTemp("", "")
 			if err != nil {
 				t.Fatalf("Failed to create temporary directory: %v", err)
 			}

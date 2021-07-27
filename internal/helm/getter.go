@@ -20,7 +20,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"io/ioutil"
+	"os"
 
 	"helm.sh/helm/v3/pkg/getter"
 	corev1 "k8s.io/api/core/v1"
@@ -82,7 +82,7 @@ func TLSClientConfigFromSecret(secret corev1.Secret, dir string) (getter.Option,
 
 	var certFile, keyFile, caFile string
 	if len(certBytes) > 0 && len(keyBytes) > 0 {
-		f, err := ioutil.TempFile(dir, "cert-")
+		f, err := os.CreateTemp(dir, "cert-")
 		if err != nil {
 
 		}
@@ -93,7 +93,7 @@ func TLSClientConfigFromSecret(secret corev1.Secret, dir string) (getter.Option,
 		f.Close()
 		certFile = f.Name()
 
-		f, err = ioutil.TempFile(dir, "key-")
+		f, err = os.CreateTemp(dir, "key-")
 		if err != nil {
 			f.Close()
 			return nil, err
@@ -107,7 +107,7 @@ func TLSClientConfigFromSecret(secret corev1.Secret, dir string) (getter.Option,
 	}
 
 	if len(caBytes) > 0 {
-		f, err := ioutil.TempFile(dir, "ca-")
+		f, err := os.CreateTemp(dir, "ca-")
 		if err != nil {
 			f.Close()
 			return nil, err

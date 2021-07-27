@@ -21,7 +21,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/url"
 	"os"
 
@@ -105,7 +104,7 @@ func (r *HelmChartReconciler) reconcileFromHelmRepository(ctx context.Context, o
 		}
 
 		// Get client options from secret
-		tmpDir, err := ioutil.TempDir("", "helm-client-")
+		tmpDir, err := os.MkdirTemp("", "helm-client-")
 		if err != nil {
 			conditions.MarkFalse(obj, sourcev1.SourceAvailableCondition, sourcev1.AuthenticationFailedReason, "Could not create temporary directory for : %s", err.Error())
 			return ctrl.Result{}, err
@@ -151,7 +150,7 @@ func (r *HelmChartReconciler) reconcileFromHelmRepository(ctx context.Context, o
 	}
 
 	// Create a new temporary file for the chart and download it
-	f, err := ioutil.TempFile("", fmt.Sprintf("%s-%s-", obj.Name, obj.Namespace))
+	f, err := os.CreateTemp("", fmt.Sprintf("%s-%s-", obj.Name, obj.Namespace))
 	if err != nil {
 		conditions.MarkFalse(obj, sourcev1.SourceAvailableCondition, sourcev1.ChartPullFailedReason, "Chart download for %q version %q failed: %s", obj.Spec.Chart, chartVer.Version, err.Error())
 		return ctrl.Result{}, err
@@ -182,7 +181,7 @@ func (r *HelmChartReconciler) reconcileFromTarballArtifact(ctx context.Context, 
 		return ctrl.Result{}, err
 	}
 
-	dir, err := ioutil.TempDir("", fmt.Sprintf("%s-%s-", obj.Name, obj.Namespace))
+	dir, err := os.MkdirTemp("", fmt.Sprintf("%s-%s-", obj.Name, obj.Namespace))
 	if err != nil {
 		conditions.MarkFalse(obj, sourcev1.SourceAvailableCondition, sourcev1.StorageOperationFailedReason, "Could not create temporary working directory: %s", err.Error())
 		return ctrl.Result{}, err

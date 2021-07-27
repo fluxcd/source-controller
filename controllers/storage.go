@@ -23,7 +23,6 @@ import (
 	"fmt"
 	"hash"
 	"io"
-	"io/ioutil"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -179,7 +178,7 @@ func (s *Storage) Archive(artifact *sourcev1.Artifact, dir string, filter Archiv
 	}
 
 	localPath := s.LocalPath(*artifact)
-	tf, err := ioutil.TempFile(filepath.Split(localPath))
+	tf, err := os.CreateTemp(filepath.Split(localPath))
 	if err != nil {
 		return err
 	}
@@ -277,7 +276,7 @@ func (s *Storage) Archive(artifact *sourcev1.Artifact, dir string, filter Archiv
 // If successful, it sets the checksum and last update time on the artifact.
 func (s *Storage) AtomicWriteFile(artifact *sourcev1.Artifact, reader io.Reader, mode os.FileMode) (err error) {
 	localPath := s.LocalPath(*artifact)
-	tf, err := ioutil.TempFile(filepath.Split(localPath))
+	tf, err := os.CreateTemp(filepath.Split(localPath))
 	if err != nil {
 		return err
 	}
@@ -316,7 +315,7 @@ func (s *Storage) AtomicWriteFile(artifact *sourcev1.Artifact, reader io.Reader,
 // If successful, it sets the checksum and last update time on the artifact.
 func (s *Storage) Copy(artifact *sourcev1.Artifact, reader io.Reader) (err error) {
 	localPath := s.LocalPath(*artifact)
-	tf, err := ioutil.TempFile(filepath.Split(localPath))
+	tf, err := os.CreateTemp(filepath.Split(localPath))
 	if err != nil {
 		return err
 	}
@@ -363,7 +362,7 @@ func (s *Storage) CopyFromPath(artifact *sourcev1.Artifact, path string) (err er
 // given path.
 func (s *Storage) CopyToPath(artifact *sourcev1.Artifact, subPath, toPath string) error {
 	// create a tmp directory to store artifact
-	tmp, err := ioutil.TempDir("", "flux-include-")
+	tmp, err := os.MkdirTemp("", "flux-include-")
 	if err != nil {
 		return err
 	}

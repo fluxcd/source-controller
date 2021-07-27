@@ -18,7 +18,6 @@ package controllers
 
 import (
 	"fmt"
-	"io/ioutil"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -385,7 +384,7 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 						t.Skipf("Skipped for Git implementation %q", i)
 					}
 
-					tmpDir, err := ioutil.TempDir("", "auth-strategy-")
+					tmpDir, err := os.MkdirTemp("", "auth-strategy-")
 					g.Expect(err).To(BeNil())
 					defer os.RemoveAll(tmpDir)
 
@@ -527,7 +526,7 @@ func TestGitRepositoryReconciler_reconcileSource_checkoutStrategy(t *testing.T) 
 				t.Run(i, func(t *testing.T) {
 					g := NewWithT(t)
 
-					tmpDir, err := ioutil.TempDir("", "checkout-strategy-")
+					tmpDir, err := os.MkdirTemp("", "checkout-strategy-")
 					g.Expect(err).NotTo(HaveOccurred())
 
 					obj := obj.DeepCopy()
@@ -832,7 +831,7 @@ func TestGitRepositoryReconciler_reconcileInclude(t *testing.T) {
 				obj.Spec.Include = append(obj.Spec.Include, incl)
 			}
 
-			tmpDir, err := ioutil.TempDir("", "include-")
+			tmpDir, err := os.MkdirTemp("", "include-")
 			g.Expect(err).NotTo(HaveOccurred())
 
 			var artifacts artifactSet
@@ -1081,7 +1080,7 @@ func commitFromFixture(repo *gogit.Repository, fixture string) error {
 			return fs.MkdirAll(fs.Join(path[len(fixture):]), info.Mode())
 		}
 
-		fileBytes, err := ioutil.ReadFile(path)
+		fileBytes, err := os.ReadFile(path)
 		if err != nil {
 			return err
 		}

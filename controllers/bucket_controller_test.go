@@ -20,7 +20,6 @@ import (
 	"context"
 	"crypto/md5"
 	"fmt"
-	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -397,7 +396,7 @@ func TestBucketReconciler_reconcileSource(t *testing.T) {
 				Client:  builder.Build(),
 				Storage: storage,
 			}
-			tmpDir, err := ioutil.TempDir("", "reconcile-bucket-source-")
+			tmpDir, err := os.MkdirTemp("", "reconcile-bucket-source-")
 			g.Expect(err).ToNot(HaveOccurred())
 			defer os.RemoveAll(tmpDir)
 
@@ -499,7 +498,7 @@ func TestBucketReconciler_reconcileArtifact(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
 
-			tmpDir, err := ioutil.TempDir("", "reconcile-bucket-artifact-")
+			tmpDir, err := os.MkdirTemp("", "reconcile-bucket-artifact-")
 			g.Expect(err).ToNot(HaveOccurred())
 			defer os.RemoveAll(tmpDir)
 
@@ -561,7 +560,7 @@ func TestBucketReconciler_checksum(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			root, err := ioutil.TempDir("", "bucket-checksum-")
+			root, err := os.MkdirTemp("", "bucket-checksum-")
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -588,7 +587,7 @@ func mockFile(root, path, content string) error {
 	if err := os.MkdirAll(filepath.Dir(filePath), os.ModePerm); err != nil {
 		panic(err)
 	}
-	if err := ioutil.WriteFile(filePath, []byte(content), 0644); err != nil {
+	if err := os.WriteFile(filePath, []byte(content), 0644); err != nil {
 		panic(err)
 	}
 	return nil

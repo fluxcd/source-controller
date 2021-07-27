@@ -20,7 +20,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io/ioutil"
 	"net/url"
 	"os"
 	"time"
@@ -265,7 +264,7 @@ func (r *HelmRepositoryReconciler) reconcileSource(ctx context.Context, obj *sou
 		}
 
 		// Get client options from secret
-		tmpDir, err := ioutil.TempDir("", fmt.Sprintf("%s-%s-source-", obj.Name, obj.Namespace))
+		tmpDir, err := os.MkdirTemp("", fmt.Sprintf("%s-%s-source-", obj.Name, obj.Namespace))
 		if err != nil {
 			conditions.MarkFalse(obj, sourcev1.SourceAvailableCondition, sourcev1.StorageOperationFailedReason, "Could not create temporary directory for credentials: %s", err.Error())
 			r.Events.Event(ctx, obj, events.EventSeverityError, sourcev1.AuthenticationFailedReason, conditions.Get(obj, sourcev1.SourceAvailableCondition).Message)

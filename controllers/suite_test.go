@@ -18,7 +18,6 @@ package controllers
 
 import (
 	"fmt"
-	"io/ioutil"
 	"math/rand"
 	"os"
 	"path/filepath"
@@ -154,15 +153,15 @@ func TestMain(m *testing.M) {
 
 func initTestTLS() {
 	var err error
-	tlsPublicKey, err = ioutil.ReadFile("testdata/certs/server.pem")
+	tlsPublicKey, err = os.ReadFile("testdata/certs/server.pem")
 	if err != nil {
 		panic(err)
 	}
-	tlsPrivateKey, err = ioutil.ReadFile("testdata/certs/server-key.pem")
+	tlsPrivateKey, err = os.ReadFile("testdata/certs/server-key.pem")
 	if err != nil {
 		panic(err)
 	}
-	tlsCA, err = ioutil.ReadFile("testdata/certs/ca.pem")
+	tlsCA, err = os.ReadFile("testdata/certs/ca.pem")
 	if err != nil {
 		panic(err)
 	}

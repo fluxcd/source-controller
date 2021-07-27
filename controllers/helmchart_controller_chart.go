@@ -19,7 +19,6 @@ package controllers
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -84,7 +83,7 @@ func (r *HelmChartReconciler) reconcileChart(ctx context.Context, obj *sourcev1.
 
 	// We need to (re)package the chart
 	if conditions.IsTrue(obj, sourcev1.DependenciesBuildCondition) || conditions.IsTrue(obj, sourcev1.ValuesFilesMergedCondition) {
-		tmpDir, err := ioutil.TempDir("", "helm-chart-pkg-")
+		tmpDir, err := os.MkdirTemp("", "helm-chart-pkg-")
 		if err != nil {
 			conditions.MarkFalse(obj, sourcev1.ChartPackagedCondition, sourcev1.StorageOperationFailedReason, "Could not create temporary directory for packaging operation: %s", err.Error())
 			return ctrl.Result{}, err
@@ -146,7 +145,7 @@ func (r *HelmChartReconciler) buildChartDependencies(ctx context.Context, obj *s
 		Chart:      chart,
 	}
 
-	tmpDir, err := ioutil.TempDir("", "build-chart-deps-")
+	tmpDir, err := os.MkdirTemp("", "build-chart-deps-")
 	if err != nil {
 		conditions.MarkFalse(obj, sourcev1.ChartReconciled, sourcev1.StorageOperationFailedReason, "Could not create temporary directory for dependency credentials: %s", err.Error())
 		return ctrl.Result{}, err
@@ -347,7 +346,7 @@ func mergeFileValues(dir string, valuesFiles []string) (map[string]interface{}, 
 			return nil, fmt.Errorf("invalid values file path %q", p)
 		}
 
-		b, err := ioutil.ReadFile(secureP)
+		b, err := os.ReadFile(secureP)
 		if err != nil {
 			return nil, fmt.Errorf("could not read values from file %q: %w", p, err)
 		}
