@@ -19,7 +19,7 @@ package helm
 import (
 	"bytes"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/url"
 	"path"
 	"sort"
@@ -209,7 +209,7 @@ func (r *ChartRepository) DownloadIndex() error {
 	if err != nil {
 		return err
 	}
-	b, err := ioutil.ReadAll(res)
+	b, err := io.ReadAll(res)
 	if err != nil {
 		return err
 	}

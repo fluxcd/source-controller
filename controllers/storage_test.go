@@ -21,7 +21,6 @@ import (
 	"compress/gzip"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"path"
 	"path/filepath"
@@ -34,7 +33,7 @@ import (
 )
 
 func createStoragePath() (string, error) {
-	return ioutil.TempDir("", "")
+	return os.MkdirTemp("", "")
 }
 
 func cleanupStoragePath(dir string) func() {
@@ -52,7 +51,7 @@ func TestStorageConstructor(t *testing.T) {
 		t.Fatal("nonexistent path was allowable in storage constructor")
 	}
 
-	f, err := ioutil.TempFile(dir, "")
+	f, err := os.CreateTemp(dir, "")
 	if err != nil {
 		t.Fatalf("while creating temporary file: %v", err)
 	}
@@ -124,7 +123,7 @@ func TestStorage_Archive(t *testing.T) {
 				os.RemoveAll(dir)
 			}
 		}()
-		dir, err = ioutil.TempDir("", "archive-test-files-")
+		dir, err = os.MkdirTemp("", "archive-test-files-")
 		if err != nil {
 			return
 		}
@@ -244,7 +243,7 @@ func TestStorage_Archive(t *testing.T) {
 
 func TestStorageRemoveAllButCurrent(t *testing.T) {
 	t.Run("bad directory in archive", func(t *testing.T) {
-		dir, err := ioutil.TempDir("", "")
+		dir, err := os.MkdirTemp("", "")
 		if err != nil {
 			t.Fatal(err)
 		}

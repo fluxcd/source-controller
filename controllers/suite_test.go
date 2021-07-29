@@ -17,7 +17,6 @@ limitations under the License.
 package controllers
 
 import (
-	"io/ioutil"
 	"math/rand"
 	"net/http"
 	"os"
@@ -97,7 +96,7 @@ var _ = BeforeSuite(func(done Done) {
 
 	Expect(loadExampleKeys()).To(Succeed())
 
-	tmpStoragePath, err := ioutil.TempDir("", "source-controller-storage-")
+	tmpStoragePath, err := os.MkdirTemp("", "source-controller-storage-")
 	Expect(err).NotTo(HaveOccurred(), "failed to create tmp storage dir")
 
 	storage, err = NewStorage(tmpStoragePath, "localhost:5050", time.Second*30)
@@ -167,15 +166,15 @@ func init() {
 }
 
 func loadExampleKeys() (err error) {
-	examplePublicKey, err = ioutil.ReadFile("testdata/certs/server.pem")
+	examplePublicKey, err = os.ReadFile("testdata/certs/server.pem")
 	if err != nil {
 		return err
 	}
-	examplePrivateKey, err = ioutil.ReadFile("testdata/certs/server-key.pem")
+	examplePrivateKey, err = os.ReadFile("testdata/certs/server-key.pem")
 	if err != nil {
 		return err
 	}
-	exampleCA, err = ioutil.ReadFile("testdata/certs/ca.pem")
+	exampleCA, err = os.ReadFile("testdata/certs/ca.pem")
 	return err
 }
 

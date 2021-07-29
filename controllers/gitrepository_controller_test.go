@@ -20,7 +20,6 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
-	"io/ioutil"
 	"net/http"
 	"net/url"
 	"os"
@@ -459,7 +458,7 @@ var _ = Describe("GitRepositoryReconciler", func() {
 
 				// this one is linked to a real directory, so that I can
 				// exec `git submodule add` later
-				tmp, err := ioutil.TempDir("", "flux-test")
+				tmp, err := os.MkdirTemp("", "flux-test")
 				Expect(err).NotTo(HaveOccurred())
 				defer os.RemoveAll(tmp)
 
@@ -697,7 +696,7 @@ var _ = Describe("GitRepositoryReconciler", func() {
 			res, err := http.Get(got.Status.URL)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(res.StatusCode).To(Equal(http.StatusOK))
-			tmp, err := ioutil.TempDir("", "flux-test")
+			tmp, err := os.MkdirTemp("", "flux-test")
 			Expect(err).NotTo(HaveOccurred())
 			defer os.RemoveAll(tmp)
 			_, err = untar.Untar(res.Body, filepath.Join(tmp, "tar"))
@@ -743,7 +742,7 @@ var _ = Describe("GitRepositoryReconciler", func() {
 			res, err = http.Get(got.Status.URL)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(res.StatusCode).To(Equal(http.StatusOK))
-			tmp, err = ioutil.TempDir("", "flux-test")
+			tmp, err = os.MkdirTemp("", "flux-test")
 			Expect(err).NotTo(HaveOccurred())
 			defer os.RemoveAll(tmp)
 			_, err = untar.Untar(res.Body, filepath.Join(tmp, "tar"))

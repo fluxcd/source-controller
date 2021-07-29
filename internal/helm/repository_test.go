@@ -18,8 +18,8 @@ package helm
 
 import (
 	"bytes"
-	"io/ioutil"
 	"net/url"
+	"os"
 	"reflect"
 	"strings"
 	"testing"
@@ -231,7 +231,7 @@ func TestChartRepository_DownloadChart(t *testing.T) {
 }
 
 func TestChartRepository_DownloadIndex(t *testing.T) {
-	b, err := ioutil.ReadFile(chartmuseumtestfile)
+	b, err := os.ReadFile(chartmuseumtestfile)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -270,7 +270,7 @@ func TestChartRepository_LoadIndex(t *testing.T) {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			b, err := ioutil.ReadFile(tt.filename)
+			b, err := os.ReadFile(tt.filename)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -292,7 +292,7 @@ func TestChartRepository_LoadIndex_Duplicates(t *testing.T) {
 }
 
 func TestChartRepository_LoadIndex_Unordered(t *testing.T) {
-	b, err := ioutil.ReadFile(unorderedtestfile)
+	b, err := os.ReadFile(unorderedtestfile)
 	if err != nil {
 		t.Fatal(err)
 	}

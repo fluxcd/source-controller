@@ -20,7 +20,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -331,7 +330,7 @@ func (r *HelmChartReconciler) reconcileFromHelmRepository(ctx context.Context,
 	if err != nil {
 		return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
 	}
-	b, err := ioutil.ReadAll(indexFile)
+	b, err := io.ReadAll(indexFile)
 	if err != nil {
 		return sourcev1.HelmChartNotReady(chart, sourcev1.ChartPullFailedReason, err.Error()), err
 	}
@@ -376,7 +375,7 @@ func (r *HelmChartReconciler) reconcileFromHelmRepository(ctx context.Context,
 	if err != nil {
 		return sourcev1.HelmChartNotReady(chart, sourcev1.ChartPullFailedReason, err.Error()), err
 	}
-	tmpFile, err := ioutil.TempFile("", fmt.Sprintf("%s-%s-", chart.Namespace, chart.Name))
+	tmpFile, err := os.CreateTemp("", fmt.Sprintf("%s-%s-", chart.Namespace, chart.Name))
 	if err != nil {
 		return sourcev1.HelmChartNotReady(chart, sourcev1.ChartPullFailedReason, err.Error()), err
 	}
@@ -448,7 +447,7 @@ func (r *HelmChartReconciler) reconcileFromHelmRepository(ctx context.Context,
 		}
 
 		// Create temporary working directory
-		tmpDir, err := ioutil.TempDir("", fmt.Sprintf("%s-%s-", chart.Namespace, chart.Name))
+		tmpDir, err := os.MkdirTemp("", fmt.Sprintf("%s-%s-", chart.Namespace, chart.Name))
 		if err != nil {
 			err = fmt.Errorf("tmp dir error: %w", err)
 			return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
@@ -491,7 +490,7 @@ func (r *HelmChartReconciler) reconcileFromHelmRepository(ctx context.Context,
 func (r *HelmChartReconciler) reconcileFromTarballArtifact(ctx context.Context,
 	artifact sourcev1.Artifact, chart sourcev1.HelmChart, force bool) (sourcev1.HelmChart, error) {
 	// Create temporary working directory
-	tmpDir, err := ioutil.TempDir("", fmt.Sprintf("%s-%s-", chart.Namespace, chart.Name))
+	tmpDir, err := os.MkdirTemp("", fmt.Sprintf("%s-%s-", chart.Namespace, chart.Name))
 	if err != nil {
 		err = fmt.Errorf("tmp dir error: %w", err)
 		return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
@@ -554,7 +553,7 @@ func (r *HelmChartReconciler) reconcileFromTarballArtifact(ctx context.Context,
 				return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
 			}
 
-			valuesData, err := ioutil.ReadFile(srcPath)
+			valuesData, err := os.ReadFile(srcPath)
 			if err != nil {
 				err = fmt.Errorf("failed to read from values file '%s': %w", v, err)
 				return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
@@ -659,7 +658,7 @@ func (r *HelmChartReconciler) reconcileFromTarballArtifact(ctx context.Context,
 				if err != nil {
 					return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
 				}
-				b, err := ioutil.ReadAll(indexFile)
+				b, err := io.ReadAll(indexFile)
 				if err != nil {
 					return sourcev1.HelmChartNotReady(chart, sourcev1.ChartPullFailedReason, err.Error()), err
 				}
