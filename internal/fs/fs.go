@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -92,7 +91,7 @@ func CopyDir(src, dst string) error {
 		return fmt.Errorf("cannot mkdir %s: %w", dst, err)
 	}
 
-	entries, err := ioutil.ReadDir(src)
+	entries, err := os.ReadDir(src)
 	if err != nil {
 		return fmt.Errorf("cannot read directory %s: %w", dst, err)
 	}

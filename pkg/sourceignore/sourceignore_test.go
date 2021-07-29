@@ -17,7 +17,6 @@ limitations under the License.
 package sourceignore
 
 import (
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -74,7 +73,7 @@ func TestReadPatterns(t *testing.T) {
 }
 
 func TestReadIgnoreFile(t *testing.T) {
-	f, err := ioutil.TempFile("", IgnoreFile)
+	f, err := os.CreateTemp("", IgnoreFile)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -198,7 +197,7 @@ func TestDefaultPatterns(t *testing.T) {
 }
 
 func TestLoadExcludePatterns(t *testing.T) {
-	tmpDir, err := ioutil.TempDir("", "sourceignore-load-")
+	tmpDir, err := os.MkdirTemp("", "sourceignore-load-")
 	if err != nil {
 		t.Fatal(err)
 	}

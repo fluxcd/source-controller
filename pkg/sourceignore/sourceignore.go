@@ -19,7 +19,6 @@ package sourceignore
 import (
 	"bufio"
 	"io"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -108,7 +107,7 @@ func LoadIgnorePatterns(dir string, domain []string) ([]gitignore.Pattern, error
 	if err != nil {
 		return nil, err
 	}
-	fis, err := ioutil.ReadDir(dir)
+	fis, err := os.ReadDir(dir)
 	if err != nil {
 		return nil, err
 	}

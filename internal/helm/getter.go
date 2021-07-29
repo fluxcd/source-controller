@@ -18,7 +18,6 @@ package helm
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 
@@ -80,7 +79,7 @@ func TLSClientConfigFromSecret(secret corev1.Secret) (getter.Option, func(), err
 	}
 
 	// create tmp dir for TLS files
-	tmp, err := ioutil.TempDir("", "helm-tls-"+secret.Name)
+	tmp, err := os.MkdirTemp("", "helm-tls-"+secret.Name)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -90,12 +89,12 @@ func TLSClientConfigFromSecret(secret corev1.Secret) (getter.Option, func(), err
 
 	if len(certBytes) > 0 && len(keyBytes) > 0 {
 		certFile = filepath.Join(tmp, "cert.crt")
-		if err := ioutil.WriteFile(certFile, certBytes, 0644); err != nil {
+		if err := os.WriteFile(certFile, certBytes, 0644); err != nil {
 			cleanup()
 			return nil, nil, err
 		}
 		keyFile = filepath.Join(tmp, "key.crt")
-		if err := ioutil.WriteFile(keyFile, keyBytes, 0644); err != nil {
+		if err := os.WriteFile(keyFile, keyBytes, 0644); err != nil {
 			cleanup()
 			return nil, nil, err
 		}
@@ -103,7 +102,7 @@ func TLSClientConfigFromSecret(secret corev1.Secret) (getter.Option, func(), err
 
 	if len(caBytes) > 0 {
 		caFile = filepath.Join(tmp, "ca.pem")
-		if err := ioutil.WriteFile(caFile, caBytes, 0644); err != nil {
+		if err := os.WriteFile(caFile, caBytes, 0644); err != nil {
 			cleanup()
 			return nil, nil, err
 		}

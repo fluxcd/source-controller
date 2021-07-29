@@ -19,7 +19,7 @@ package helm
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
+	"os"
 	"strings"
 	"testing"
 
@@ -170,7 +170,7 @@ func TestBuild_WithLocalChart(t *testing.T) {
 
 func TestBuild_WithRemoteChart(t *testing.T) {
 	chart := chartFixture
-	b, err := ioutil.ReadFile(helmPackageFile)
+	b, err := os.ReadFile(helmPackageFile)
 	if err != nil {
 		t.Fatal(err)
 	}

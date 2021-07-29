@@ -17,7 +17,6 @@ limitations under the License.
 package controllers
 
 import (
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"testing"
@@ -51,7 +50,7 @@ func TestBucketReconciler_checksum(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			root, err := ioutil.TempDir("", "bucket-checksum-")
+			root, err := os.MkdirTemp("", "bucket-checksum-")
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -76,7 +75,7 @@ func mockFile(root, path, content string) error {
 	if err := os.MkdirAll(filepath.Dir(filePath), os.ModePerm); err != nil {
 		panic(err)
 	}
-	if err := ioutil.WriteFile(filePath, []byte(content), 0644); err != nil {
+	if err := os.WriteFile(filePath, []byte(content), 0644); err != nil {
 		panic(err)
 	}
 	return nil

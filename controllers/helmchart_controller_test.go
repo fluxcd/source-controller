@@ -19,7 +19,6 @@ package controllers
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"net/http"
 	"net/url"
 	"os"
@@ -612,7 +611,7 @@ var _ = Describe("HelmChartReconciler", func() {
 					return nil
 				}
 
-				b, err := ioutil.ReadFile(p)
+				b, err := os.ReadFile(p)
 				if err != nil {
 					return err
 				}
@@ -872,14 +871,14 @@ var _ = Describe("HelmChartReconciler", func() {
 			helmChart, err := loader.LoadDir(chartDir)
 			Expect(err).NotTo(HaveOccurred())
 
-			chartPackagePath, err := ioutil.TempDir("", fmt.Sprintf("chartpackage-%s-%s", helmChart.Name(), randStringRunes(5)))
+			chartPackagePath, err := os.MkdirTemp("", fmt.Sprintf("chartpackage-%s-%s", helmChart.Name(), randStringRunes(5)))
 			Expect(err).NotTo(HaveOccurred())
 			defer os.RemoveAll(chartPackagePath)
 
 			pkg, err := chartutil.Save(helmChart, chartPackagePath)
 			Expect(err).NotTo(HaveOccurred())
 
-			b, err := ioutil.ReadFile(pkg)
+			b, err := os.ReadFile(pkg)
 			Expect(err).NotTo(HaveOccurred())
 
 			tgz := filepath.Base(pkg)
@@ -1078,7 +1077,7 @@ var _ = Describe("HelmChartReconciler", func() {
 					return nil
 				}
 
-				b, err := ioutil.ReadFile(p)
+				b, err := os.ReadFile(p)
 				if err != nil {
 					return err
 				}

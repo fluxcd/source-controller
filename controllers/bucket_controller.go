@@ -20,7 +20,6 @@ import (
 	"context"
 	"crypto/sha1"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -184,7 +183,7 @@ func (r *BucketReconciler) reconcile(ctx context.Context, bucket sourcev1.Bucket
 	}
 
 	// create tmp dir
-	tempDir, err := ioutil.TempDir("", bucket.Name)
+	tempDir, err := os.MkdirTemp("", bucket.Name)
 	if err != nil {
 		err = fmt.Errorf("tmp dir error: %w", err)
 		return sourcev1.BucketNotReady(bucket, sourcev1.StorageOperationFailedReason, err.Error()), err
@@ -368,7 +367,7 @@ func (r *BucketReconciler) checksum(root string) (string, error) {
 		if !info.Mode().IsRegular() {
 			return nil
 		}
-		data, err := ioutil.ReadFile(path)
+		data, err := os.ReadFile(path)
 		if err != nil {
 			return err
 		}
