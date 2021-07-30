@@ -165,11 +165,10 @@ func main() {
 	storage := mustInitStorage(storagePath, storageAdvAddr, setupLog)
 
 	if err = (&controllers.GitRepositoryReconciler{
-		Client:          mgr.GetClient(),
-		Scheme:          mgr.GetScheme(),
-		Storage:         storage,
-		EventRecorder:   eventRecorder,
-		MetricsRecorder: metricsH.MetricsRecorder,
+		Client:        mgr.GetClient(),
+		EventRecorder: eventRecorder,
+		Metrics:       metricsH,
+		Storage:       storage,
 	}).SetupWithManagerAndOptions(mgr, controllers.GitRepositoryReconcilerOptions{
 		MaxConcurrentReconciles:   concurrent,
 		DependencyRequeueInterval: requeueDependency,
