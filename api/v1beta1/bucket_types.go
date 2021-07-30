@@ -18,6 +18,7 @@ package v1beta1
 
 import (
 	"github.com/fluxcd/pkg/apis/meta"
+	"github.com/fluxcd/pkg/runtime/conditions"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -119,7 +120,7 @@ func BucketProgressing(bucket Bucket) Bucket {
 	bucket.Status.ObservedGeneration = bucket.Generation
 	bucket.Status.URL = ""
 	bucket.Status.Conditions = []metav1.Condition{}
-	meta.SetResourceCondition(&bucket, meta.ReadyCondition, metav1.ConditionUnknown, meta.ProgressingReason, "reconciliation in progress")
+	conditions.MarkUnknown(&bucket, meta.ReadyCondition, meta.ProgressingReason, "reconciliation in progress")
 	return bucket
 }
 
@@ -129,14 +130,14 @@ func BucketProgressing(bucket Bucket) Bucket {
 func BucketReady(bucket Bucket, artifact Artifact, url, reason, message string) Bucket {
 	bucket.Status.Artifact = &artifact
 	bucket.Status.URL = url
-	meta.SetResourceCondition(&bucket, meta.ReadyCondition, metav1.ConditionTrue, reason, message)
+	conditions.MarkTrue(&bucket, meta.ReadyCondition, reason, message)
 	return bucket
 }
 
 // BucketNotReady sets the meta.ReadyCondition on the Bucket to 'False', with
 // the given reason and message. It returns the modified Bucket.
 func BucketNotReady(bucket Bucket, reason, message string) Bucket {
-	meta.SetResourceCondition(&bucket, meta.ReadyCondition, metav1.ConditionFalse, reason, message)
+	conditions.MarkFalse(&bucket, meta.ReadyCondition, reason, message)
 	return bucket
 }
 
@@ -151,20 +152,30 @@ func BucketReadyMessage(bucket Bucket) string {
 	return ""
 }
 
-// GetArtifact returns the latest artifact from the source if present in the
-// status sub-resource.
+// GetConditions returns the status conditions of the object.
+func (in Bucket) GetConditions() []metav1.Condition {
+	return in.Status.Conditions
+}
+
+// SetConditions sets the status conditions on the object.
+func (in *Bucket) SetConditions(conditions []metav1.Condition) {
+	in.Status.Conditions = conditions
+}
+
+// GetInterval returns the interval at which the source is reconciled.
+func (in Bucket) GetInterval() metav1.Duration {
+	return in.Spec.Interval
+}
+
+// GetArtifact returns the latest artifact from the source if present in the status sub-resource.
 func (in *Bucket) GetArtifact() *Artifact {
 	return in.Status.Artifact
 }
 
-// GetStatusConditions returns a pointer to the Status.Conditions slice
+// GetStatusConditions returns a pointer to the Status.Conditions slice.
+// Deprecated: use GetConditions instead.
 func (in *Bucket) GetStatusConditions() *[]metav1.Condition {
 	return &in.Status.Conditions
-}
-
-// GetInterval returns the interval at which the source is updated.
-func (in *Bucket) GetInterval() metav1.Duration {
-	return in.Spec.Interval
 }
 
 // +genclient

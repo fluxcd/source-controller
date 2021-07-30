@@ -130,9 +130,9 @@ var _ = Describe("HelmChartReconciler", func() {
 			got := &sourcev1.HelmChart{}
 			Eventually(func() bool {
 				_ = k8sClient.Get(context.Background(), key, got)
-				return got.Status.Artifact != nil && storage.ArtifactExist(*got.Status.Artifact)
+				return got.Status.Artifact != nil && ginkgoTestStorage.ArtifactExist(*got.Status.Artifact)
 			}, timeout, interval).Should(BeTrue())
-			helmChart, err := loader.Load(storage.LocalPath(*got.Status.Artifact))
+			helmChart, err := loader.Load(ginkgoTestStorage.LocalPath(*got.Status.Artifact))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(helmChart.Values["testDefault"]).To(BeTrue())
 			Expect(helmChart.Values["testOverride"]).To(BeFalse())
@@ -147,7 +147,7 @@ var _ = Describe("HelmChartReconciler", func() {
 				_ = k8sClient.Get(context.Background(), key, now)
 				// Test revision change and garbage collection
 				return now.Status.Artifact.Revision != got.Status.Artifact.Revision &&
-					!storage.ArtifactExist(*got.Status.Artifact)
+					!ginkgoTestStorage.ArtifactExist(*got.Status.Artifact)
 			}, timeout, interval).Should(BeTrue())
 
 			When("Setting valid valuesFiles attribute", func() {
@@ -162,12 +162,12 @@ var _ = Describe("HelmChartReconciler", func() {
 				Eventually(func() bool {
 					_ = k8sClient.Get(context.Background(), key, got)
 					return got.Status.Artifact.Checksum != updated.Status.Artifact.Checksum &&
-						storage.ArtifactExist(*got.Status.Artifact)
+						ginkgoTestStorage.ArtifactExist(*got.Status.Artifact)
 				}, timeout, interval).Should(BeTrue())
-				f, err := os.Stat(storage.LocalPath(*got.Status.Artifact))
+				f, err := os.Stat(ginkgoTestStorage.LocalPath(*got.Status.Artifact))
 				Expect(err).NotTo(HaveOccurred())
 				Expect(f.Size()).To(BeNumerically(">", 0))
-				helmChart, err := loader.Load(storage.LocalPath(*got.Status.Artifact))
+				helmChart, err := loader.Load(ginkgoTestStorage.LocalPath(*got.Status.Artifact))
 				Expect(err).NotTo(HaveOccurred())
 				Expect(helmChart.Values["testDefault"]).To(BeTrue())
 				Expect(helmChart.Values["testOverride"]).To(BeTrue())
@@ -185,12 +185,12 @@ var _ = Describe("HelmChartReconciler", func() {
 				Eventually(func() bool {
 					_ = k8sClient.Get(context.Background(), key, got)
 					return got.Status.ObservedGeneration > updated.Status.ObservedGeneration &&
-						storage.ArtifactExist(*got.Status.Artifact)
+						ginkgoTestStorage.ArtifactExist(*got.Status.Artifact)
 				}, timeout, interval).Should(BeTrue())
-				f, err := os.Stat(storage.LocalPath(*got.Status.Artifact))
+				f, err := os.Stat(ginkgoTestStorage.LocalPath(*got.Status.Artifact))
 				Expect(err).NotTo(HaveOccurred())
 				Expect(f.Size()).To(BeNumerically(">", 0))
-				helmChart, err := loader.Load(storage.LocalPath(*got.Status.Artifact))
+				helmChart, err := loader.Load(ginkgoTestStorage.LocalPath(*got.Status.Artifact))
 				Expect(err).NotTo(HaveOccurred())
 				Expect(helmChart.Values["testDefault"]).To(BeTrue())
 				Expect(helmChart.Values["testOverride"]).To(BeTrue())
@@ -208,12 +208,12 @@ var _ = Describe("HelmChartReconciler", func() {
 				Eventually(func() bool {
 					_ = k8sClient.Get(context.Background(), key, got)
 					return got.Status.Artifact.Checksum != updated.Status.Artifact.Checksum &&
-						storage.ArtifactExist(*got.Status.Artifact)
+						ginkgoTestStorage.ArtifactExist(*got.Status.Artifact)
 				}, timeout, interval).Should(BeTrue())
-				f, err := os.Stat(storage.LocalPath(*got.Status.Artifact))
+				f, err := os.Stat(ginkgoTestStorage.LocalPath(*got.Status.Artifact))
 				Expect(err).NotTo(HaveOccurred())
 				Expect(f.Size()).To(BeNumerically(">", 0))
-				helmChart, err := loader.Load(storage.LocalPath(*got.Status.Artifact))
+				helmChart, err := loader.Load(ginkgoTestStorage.LocalPath(*got.Status.Artifact))
 				Expect(err).NotTo(HaveOccurred())
 				Expect(helmChart.Values["testDefault"]).To(BeTrue())
 				Expect(helmChart.Values["testOverride"]).To(BeTrue())
@@ -229,12 +229,12 @@ var _ = Describe("HelmChartReconciler", func() {
 				Eventually(func() bool {
 					_ = k8sClient.Get(context.Background(), key, got)
 					return got.Status.Artifact.Checksum != updated.Status.Artifact.Checksum &&
-						storage.ArtifactExist(*got.Status.Artifact)
+						ginkgoTestStorage.ArtifactExist(*got.Status.Artifact)
 				}, timeout, interval).Should(BeTrue())
-				f, err := os.Stat(storage.LocalPath(*got.Status.Artifact))
+				f, err := os.Stat(ginkgoTestStorage.LocalPath(*got.Status.Artifact))
 				Expect(err).NotTo(HaveOccurred())
 				Expect(f.Size()).To(BeNumerically(">", 0))
-				helmChart, err := loader.Load(storage.LocalPath(*got.Status.Artifact))
+				helmChart, err := loader.Load(ginkgoTestStorage.LocalPath(*got.Status.Artifact))
 				Expect(err).NotTo(HaveOccurred())
 				_, exists := helmChart.Values["testDefault"]
 				Expect(exists).To(BeFalse())
@@ -251,12 +251,12 @@ var _ = Describe("HelmChartReconciler", func() {
 				Eventually(func() bool {
 					_ = k8sClient.Get(context.Background(), key, got)
 					return got.Status.Artifact.Checksum != updated.Status.Artifact.Checksum &&
-						storage.ArtifactExist(*got.Status.Artifact)
+						ginkgoTestStorage.ArtifactExist(*got.Status.Artifact)
 				}, timeout, interval).Should(BeTrue())
-				f, err := os.Stat(storage.LocalPath(*got.Status.Artifact))
+				f, err := os.Stat(ginkgoTestStorage.LocalPath(*got.Status.Artifact))
 				Expect(err).NotTo(HaveOccurred())
 				Expect(f.Size()).To(BeNumerically(">", 0))
-				helmChart, err := loader.Load(storage.LocalPath(*got.Status.Artifact))
+				helmChart, err := loader.Load(ginkgoTestStorage.LocalPath(*got.Status.Artifact))
 				Expect(err).NotTo(HaveOccurred())
 				Expect(helmChart.Values["testDefault"]).To(BeTrue())
 				Expect(helmChart.Values["testOverride"]).To(BeFalse())
@@ -272,12 +272,12 @@ var _ = Describe("HelmChartReconciler", func() {
 				Eventually(func() bool {
 					_ = k8sClient.Get(context.Background(), key, got)
 					return got.Status.ObservedGeneration > updated.Status.ObservedGeneration &&
-						storage.ArtifactExist(*got.Status.Artifact)
+						ginkgoTestStorage.ArtifactExist(*got.Status.Artifact)
 				}, timeout, interval).Should(BeTrue())
-				f, err := os.Stat(storage.LocalPath(*got.Status.Artifact))
+				f, err := os.Stat(ginkgoTestStorage.LocalPath(*got.Status.Artifact))
 				Expect(err).NotTo(HaveOccurred())
 				Expect(f.Size()).To(BeNumerically(">", 0))
-				helmChart, err := loader.Load(storage.LocalPath(*got.Status.Artifact))
+				helmChart, err := loader.Load(ginkgoTestStorage.LocalPath(*got.Status.Artifact))
 				Expect(err).NotTo(HaveOccurred())
 				Expect(helmChart.Values["testDefault"]).To(BeTrue())
 				Expect(helmChart.Values["testOverride"]).To(BeFalse())
@@ -683,7 +683,7 @@ var _ = Describe("HelmChartReconciler", func() {
 			Eventually(func() bool {
 				_ = k8sClient.Get(context.Background(), key, got)
 				return got.Status.Artifact != nil &&
-					storage.ArtifactExist(*got.Status.Artifact)
+					ginkgoTestStorage.ArtifactExist(*got.Status.Artifact)
 			}, timeout, interval).Should(BeTrue())
 
 			By("Committing a new version in the chart metadata")
@@ -728,9 +728,9 @@ var _ = Describe("HelmChartReconciler", func() {
 				_ = k8sClient.Get(context.Background(), key, now)
 				// Test revision change and garbage collection
 				return now.Status.Artifact.Revision != got.Status.Artifact.Revision &&
-					!storage.ArtifactExist(*got.Status.Artifact)
+					!ginkgoTestStorage.ArtifactExist(*got.Status.Artifact)
 			}, timeout, interval).Should(BeTrue())
-			helmChart, err := loader.Load(storage.LocalPath(*now.Status.Artifact))
+			helmChart, err := loader.Load(ginkgoTestStorage.LocalPath(*now.Status.Artifact))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(helmChart.Values["testDefault"]).To(BeTrue())
 			Expect(helmChart.Values["testOverride"]).To(BeFalse())
@@ -747,12 +747,12 @@ var _ = Describe("HelmChartReconciler", func() {
 				Eventually(func() bool {
 					_ = k8sClient.Get(context.Background(), key, got)
 					return got.Status.Artifact.Checksum != updated.Status.Artifact.Checksum &&
-						storage.ArtifactExist(*got.Status.Artifact)
+						ginkgoTestStorage.ArtifactExist(*got.Status.Artifact)
 				}, timeout, interval).Should(BeTrue())
-				f, err := os.Stat(storage.LocalPath(*got.Status.Artifact))
+				f, err := os.Stat(ginkgoTestStorage.LocalPath(*got.Status.Artifact))
 				Expect(err).NotTo(HaveOccurred())
 				Expect(f.Size()).To(BeNumerically(">", 0))
-				helmChart, err := loader.Load(storage.LocalPath(*got.Status.Artifact))
+				helmChart, err := loader.Load(ginkgoTestStorage.LocalPath(*got.Status.Artifact))
 				Expect(err).NotTo(HaveOccurred())
 				Expect(helmChart.Values["testDefault"]).To(BeTrue())
 				Expect(helmChart.Values["testOverride"]).To(BeTrue())
@@ -770,12 +770,12 @@ var _ = Describe("HelmChartReconciler", func() {
 				Eventually(func() bool {
 					_ = k8sClient.Get(context.Background(), key, got)
 					return got.Status.ObservedGeneration > updated.Status.ObservedGeneration &&
-						storage.ArtifactExist(*got.Status.Artifact)
+						ginkgoTestStorage.ArtifactExist(*got.Status.Artifact)
 				}, timeout, interval).Should(BeTrue())
-				f, err := os.Stat(storage.LocalPath(*got.Status.Artifact))
+				f, err := os.Stat(ginkgoTestStorage.LocalPath(*got.Status.Artifact))
 				Expect(err).NotTo(HaveOccurred())
 				Expect(f.Size()).To(BeNumerically(">", 0))
-				helmChart, err := loader.Load(storage.LocalPath(*got.Status.Artifact))
+				helmChart, err := loader.Load(ginkgoTestStorage.LocalPath(*got.Status.Artifact))
 				Expect(err).NotTo(HaveOccurred())
 				Expect(helmChart.Values["testDefault"]).To(BeTrue())
 				Expect(helmChart.Values["testOverride"]).To(BeTrue())
@@ -793,12 +793,12 @@ var _ = Describe("HelmChartReconciler", func() {
 				Eventually(func() bool {
 					_ = k8sClient.Get(context.Background(), key, got)
 					return got.Status.Artifact.Checksum != updated.Status.Artifact.Checksum &&
-						storage.ArtifactExist(*got.Status.Artifact)
+						ginkgoTestStorage.ArtifactExist(*got.Status.Artifact)
 				}, timeout, interval).Should(BeTrue())
-				f, err := os.Stat(storage.LocalPath(*got.Status.Artifact))
+				f, err := os.Stat(ginkgoTestStorage.LocalPath(*got.Status.Artifact))
 				Expect(err).NotTo(HaveOccurred())
 				Expect(f.Size()).To(BeNumerically(">", 0))
-				helmChart, err := loader.Load(storage.LocalPath(*got.Status.Artifact))
+				helmChart, err := loader.Load(ginkgoTestStorage.LocalPath(*got.Status.Artifact))
 				Expect(err).NotTo(HaveOccurred())
 				Expect(helmChart.Values["testDefault"]).To(BeTrue())
 				Expect(helmChart.Values["testOverride"]).To(BeTrue())
@@ -814,12 +814,12 @@ var _ = Describe("HelmChartReconciler", func() {
 				Eventually(func() bool {
 					_ = k8sClient.Get(context.Background(), key, got)
 					return got.Status.Artifact.Checksum != updated.Status.Artifact.Checksum &&
-						storage.ArtifactExist(*got.Status.Artifact)
+						ginkgoTestStorage.ArtifactExist(*got.Status.Artifact)
 				}, timeout, interval).Should(BeTrue())
-				f, err := os.Stat(storage.LocalPath(*got.Status.Artifact))
+				f, err := os.Stat(ginkgoTestStorage.LocalPath(*got.Status.Artifact))
 				Expect(err).NotTo(HaveOccurred())
 				Expect(f.Size()).To(BeNumerically(">", 0))
-				helmChart, err := loader.Load(storage.LocalPath(*got.Status.Artifact))
+				helmChart, err := loader.Load(ginkgoTestStorage.LocalPath(*got.Status.Artifact))
 				Expect(err).NotTo(HaveOccurred())
 				_, exists := helmChart.Values["testDefault"]
 				Expect(exists).To(BeFalse())
@@ -836,12 +836,12 @@ var _ = Describe("HelmChartReconciler", func() {
 				Eventually(func() bool {
 					_ = k8sClient.Get(context.Background(), key, got)
 					return got.Status.ObservedGeneration > updated.Status.ObservedGeneration &&
-						storage.ArtifactExist(*got.Status.Artifact)
+						ginkgoTestStorage.ArtifactExist(*got.Status.Artifact)
 				}, timeout, interval).Should(BeTrue())
-				f, err := os.Stat(storage.LocalPath(*got.Status.Artifact))
+				f, err := os.Stat(ginkgoTestStorage.LocalPath(*got.Status.Artifact))
 				Expect(err).NotTo(HaveOccurred())
 				Expect(f.Size()).To(BeNumerically(">", 0))
-				helmChart, err := loader.Load(storage.LocalPath(*got.Status.Artifact))
+				helmChart, err := loader.Load(ginkgoTestStorage.LocalPath(*got.Status.Artifact))
 				Expect(err).NotTo(HaveOccurred())
 				_, exists := helmChart.Values["testDefault"]
 				Expect(exists).To(BeFalse())
@@ -946,7 +946,7 @@ var _ = Describe("HelmChartReconciler", func() {
 			Eventually(func() bool {
 				_ = k8sClient.Get(context.Background(), key, got)
 				return got.Status.Artifact != nil &&
-					storage.ArtifactExist(*got.Status.Artifact)
+					ginkgoTestStorage.ArtifactExist(*got.Status.Artifact)
 			}, timeout, interval).Should(BeTrue())
 		})
 	})
@@ -1189,9 +1189,9 @@ var _ = Describe("HelmChartReconciler", func() {
 			Eventually(func() bool {
 				_ = k8sClient.Get(context.Background(), key, got)
 				return got.Status.Artifact != nil &&
-					storage.ArtifactExist(*got.Status.Artifact)
+					ginkgoTestStorage.ArtifactExist(*got.Status.Artifact)
 			}, timeout, interval).Should(BeTrue())
-			helmChart, err := loader.Load(storage.LocalPath(*got.Status.Artifact))
+			helmChart, err := loader.Load(ginkgoTestStorage.LocalPath(*got.Status.Artifact))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(helmChart.Values["testDefault"]).To(BeTrue())
 			Expect(helmChart.Values["testOverride"]).To(BeFalse())
@@ -1208,12 +1208,12 @@ var _ = Describe("HelmChartReconciler", func() {
 				Eventually(func() bool {
 					_ = k8sClient.Get(context.Background(), key, got)
 					return got.Status.Artifact.Checksum != updated.Status.Artifact.Checksum &&
-						storage.ArtifactExist(*got.Status.Artifact)
+						ginkgoTestStorage.ArtifactExist(*got.Status.Artifact)
 				}, timeout, interval).Should(BeTrue())
-				f, err := os.Stat(storage.LocalPath(*got.Status.Artifact))
+				f, err := os.Stat(ginkgoTestStorage.LocalPath(*got.Status.Artifact))
 				Expect(err).NotTo(HaveOccurred())
 				Expect(f.Size()).To(BeNumerically(">", 0))
-				helmChart, err := loader.Load(storage.LocalPath(*got.Status.Artifact))
+				helmChart, err := loader.Load(ginkgoTestStorage.LocalPath(*got.Status.Artifact))
 				Expect(err).NotTo(HaveOccurred())
 				Expect(helmChart.Values["testDefault"]).To(BeTrue())
 				Expect(helmChart.Values["testOverride"]).To(BeTrue())
@@ -1231,12 +1231,12 @@ var _ = Describe("HelmChartReconciler", func() {
 				Eventually(func() bool {
 					_ = k8sClient.Get(context.Background(), key, got)
 					return got.Status.ObservedGeneration > updated.Status.ObservedGeneration &&
-						storage.ArtifactExist(*got.Status.Artifact)
+						ginkgoTestStorage.ArtifactExist(*got.Status.Artifact)
 				}, timeout, interval).Should(BeTrue())
-				f, err := os.Stat(storage.LocalPath(*got.Status.Artifact))
+				f, err := os.Stat(ginkgoTestStorage.LocalPath(*got.Status.Artifact))
 				Expect(err).NotTo(HaveOccurred())
 				Expect(f.Size()).To(BeNumerically(">", 0))
-				helmChart, err := loader.Load(storage.LocalPath(*got.Status.Artifact))
+				helmChart, err := loader.Load(ginkgoTestStorage.LocalPath(*got.Status.Artifact))
 				Expect(err).NotTo(HaveOccurred())
 				Expect(helmChart.Values["testDefault"]).To(BeTrue())
 				Expect(helmChart.Values["testOverride"]).To(BeTrue())
@@ -1254,12 +1254,12 @@ var _ = Describe("HelmChartReconciler", func() {
 				Eventually(func() bool {
 					_ = k8sClient.Get(context.Background(), key, got)
 					return got.Status.Artifact.Checksum != updated.Status.Artifact.Checksum &&
-						storage.ArtifactExist(*got.Status.Artifact)
+						ginkgoTestStorage.ArtifactExist(*got.Status.Artifact)
 				}, timeout, interval).Should(BeTrue())
-				f, err := os.Stat(storage.LocalPath(*got.Status.Artifact))
+				f, err := os.Stat(ginkgoTestStorage.LocalPath(*got.Status.Artifact))
 				Expect(err).NotTo(HaveOccurred())
 				Expect(f.Size()).To(BeNumerically(">", 0))
-				helmChart, err := loader.Load(storage.LocalPath(*got.Status.Artifact))
+				helmChart, err := loader.Load(ginkgoTestStorage.LocalPath(*got.Status.Artifact))
 				Expect(err).NotTo(HaveOccurred())
 				Expect(helmChart.Values["testDefault"]).To(BeTrue())
 				Expect(helmChart.Values["testOverride"]).To(BeTrue())
@@ -1275,12 +1275,12 @@ var _ = Describe("HelmChartReconciler", func() {
 				Eventually(func() bool {
 					_ = k8sClient.Get(context.Background(), key, got)
 					return got.Status.Artifact.Checksum != updated.Status.Artifact.Checksum &&
-						storage.ArtifactExist(*got.Status.Artifact)
+						ginkgoTestStorage.ArtifactExist(*got.Status.Artifact)
 				}, timeout, interval).Should(BeTrue())
-				f, err := os.Stat(storage.LocalPath(*got.Status.Artifact))
+				f, err := os.Stat(ginkgoTestStorage.LocalPath(*got.Status.Artifact))
 				Expect(err).NotTo(HaveOccurred())
 				Expect(f.Size()).To(BeNumerically(">", 0))
-				helmChart, err := loader.Load(storage.LocalPath(*got.Status.Artifact))
+				helmChart, err := loader.Load(ginkgoTestStorage.LocalPath(*got.Status.Artifact))
 				Expect(err).NotTo(HaveOccurred())
 				_, exists := helmChart.Values["testDefault"]
 				Expect(exists).To(BeFalse())
@@ -1297,12 +1297,12 @@ var _ = Describe("HelmChartReconciler", func() {
 				Eventually(func() bool {
 					_ = k8sClient.Get(context.Background(), key, got)
 					return got.Status.ObservedGeneration > updated.Status.ObservedGeneration &&
-						storage.ArtifactExist(*got.Status.Artifact)
+						ginkgoTestStorage.ArtifactExist(*got.Status.Artifact)
 				}, timeout, interval).Should(BeTrue())
-				f, err := os.Stat(storage.LocalPath(*got.Status.Artifact))
+				f, err := os.Stat(ginkgoTestStorage.LocalPath(*got.Status.Artifact))
 				Expect(err).NotTo(HaveOccurred())
 				Expect(f.Size()).To(BeNumerically(">", 0))
-				helmChart, err := loader.Load(storage.LocalPath(*got.Status.Artifact))
+				helmChart, err := loader.Load(ginkgoTestStorage.LocalPath(*got.Status.Artifact))
 				Expect(err).NotTo(HaveOccurred())
 				_, exists := helmChart.Values["testDefault"]
 				Expect(exists).To(BeFalse())

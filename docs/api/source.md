@@ -299,10 +299,8 @@ github.com/fluxcd/pkg/apis/meta.LocalObjectReference
 <td>
 <em>(Optional)</em>
 <p>The secret name containing the Git credentials.
-For HTTPS repositories the secret must contain username and password
-fields.
-For SSH repositories the secret must contain identity, identity.pub and
-known_hosts fields.</p>
+For HTTPS repositories the secret must contain username and password fields.
+For SSH repositories the secret must contain &lsquo;identity&rsquo;, &lsquo;identity.pub&rsquo; and &lsquo;known_hosts&rsquo; fields.</p>
 </td>
 </tr>
 <tr>
@@ -358,7 +356,7 @@ GitRepositoryVerification
 </td>
 <td>
 <em>(Optional)</em>
-<p>Verify OpenPGP signature for the Git commit HEAD points to.</p>
+<p>Verification defines the configuration to verify the OpenPGP signature for the Git commit HEAD points to.</p>
 </td>
 </tr>
 <tr>
@@ -370,9 +368,8 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>Ignore overrides the set of excluded patterns in the .sourceignore format
-(which is the same as .gitignore). If not provided, a default will be used,
-consult the documentation for your version to find out what those are.</p>
+<p>Ignore overrides the set of excluded patterns in the .sourceignore format (which is the same as .gitignore).
+If not provided, a default will be used, consult the documentation for your version to find out what those are.</p>
 </td>
 </tr>
 <tr>
@@ -384,7 +381,8 @@ bool
 </td>
 <td>
 <em>(Optional)</em>
-<p>This flag tells the controller to suspend the reconciliation of this source.</p>
+<p>Suspend tells the controller to suspend the reconciliation of this source.
+This flag tells the controller to suspend the reconciliation of this source.</p>
 </td>
 </tr>
 <tr>
@@ -409,8 +407,7 @@ bool
 </td>
 <td>
 <em>(Optional)</em>
-<p>When enabled, after the clone is created, initializes all submodules within,
-using their default settings.
+<p>When enabled, after the clone is created, initializes all submodules within, using their default settings.
 This option is available only when using the &lsquo;go-git&rsquo; GitImplementation.</p>
 </td>
 </tr>
@@ -424,7 +421,8 @@ This option is available only when using the &lsquo;go-git&rsquo; GitImplementat
 </em>
 </td>
 <td>
-<p>Extra git repositories to map into the repository</p>
+<p>Include defines a list of GitRepository resources which artifacts should be included in the artifact produced for
+this resource.</p>
 </td>
 </tr>
 </table>
@@ -1264,10 +1262,8 @@ github.com/fluxcd/pkg/apis/meta.LocalObjectReference
 <td>
 <em>(Optional)</em>
 <p>The secret name containing the Git credentials.
-For HTTPS repositories the secret must contain username and password
-fields.
-For SSH repositories the secret must contain identity, identity.pub and
-known_hosts fields.</p>
+For HTTPS repositories the secret must contain username and password fields.
+For SSH repositories the secret must contain &lsquo;identity&rsquo;, &lsquo;identity.pub&rsquo; and &lsquo;known_hosts&rsquo; fields.</p>
 </td>
 </tr>
 <tr>
@@ -1323,7 +1319,7 @@ GitRepositoryVerification
 </td>
 <td>
 <em>(Optional)</em>
-<p>Verify OpenPGP signature for the Git commit HEAD points to.</p>
+<p>Verification defines the configuration to verify the OpenPGP signature for the Git commit HEAD points to.</p>
 </td>
 </tr>
 <tr>
@@ -1335,9 +1331,8 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>Ignore overrides the set of excluded patterns in the .sourceignore format
-(which is the same as .gitignore). If not provided, a default will be used,
-consult the documentation for your version to find out what those are.</p>
+<p>Ignore overrides the set of excluded patterns in the .sourceignore format (which is the same as .gitignore).
+If not provided, a default will be used, consult the documentation for your version to find out what those are.</p>
 </td>
 </tr>
 <tr>
@@ -1349,7 +1344,8 @@ bool
 </td>
 <td>
 <em>(Optional)</em>
-<p>This flag tells the controller to suspend the reconciliation of this source.</p>
+<p>Suspend tells the controller to suspend the reconciliation of this source.
+This flag tells the controller to suspend the reconciliation of this source.</p>
 </td>
 </tr>
 <tr>
@@ -1374,8 +1370,7 @@ bool
 </td>
 <td>
 <em>(Optional)</em>
-<p>When enabled, after the clone is created, initializes all submodules within,
-using their default settings.
+<p>When enabled, after the clone is created, initializes all submodules within, using their default settings.
 This option is available only when using the &lsquo;go-git&rsquo; GitImplementation.</p>
 </td>
 </tr>
@@ -1389,7 +1384,8 @@ This option is available only when using the &lsquo;go-git&rsquo; GitImplementat
 </em>
 </td>
 <td>
-<p>Extra git repositories to map into the repository</p>
+<p>Include defines a list of GitRepository resources which artifacts should be included in the artifact produced for
+this resource.</p>
 </td>
 </tr>
 </tbody>
@@ -1448,8 +1444,7 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>URL is the download link for the artifact output of the last repository
-sync.</p>
+<p>URL is the download link for the artifact output of the last repository sync.</p>
 </td>
 </tr>
 <tr>
@@ -1524,7 +1519,7 @@ string
 </em>
 </td>
 <td>
-<p>Mode describes what git object should be verified, currently (&lsquo;head&rsquo;).</p>
+<p>Mode describes what Git object should be verified, currently (&lsquo;head&rsquo;).</p>
 </td>
 </tr>
 <tr>
@@ -1537,7 +1532,7 @@ github.com/fluxcd/pkg/apis/meta.LocalObjectReference
 </em>
 </td>
 <td>
-<p>The secret name containing the public keys of all trusted Git authors.</p>
+<p>SecretRef containing the public keys of all trusted Git authors.</p>
 </td>
 </tr>
 </tbody>
