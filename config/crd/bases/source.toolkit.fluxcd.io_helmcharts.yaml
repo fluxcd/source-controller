@@ -198,7 +198,7 @@ spec:
                   type: object
                 type: array
               lastHandledReconcileAt:
-                description: LastHandledReconcileAt holds the value of the most recent reconcile request value, so a change can be detected.
+                description: LastHandledReconcileAt holds the value of the most recent reconcile request value, so a change of the annotation value can be detected.
                 type: string
               observedGeneration:
                 description: ObservedGeneration is the last observed generation.

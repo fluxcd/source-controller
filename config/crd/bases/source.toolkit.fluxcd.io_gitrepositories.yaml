@@ -87,7 +87,7 @@ spec:
                       description: Reference to a GitRepository to include.
                       properties:
                         name:
-                          description: Name of the referent
+                          description: Name of the referent.
                           type: string
                       required:
                       - name
@@ -125,7 +125,7 @@ spec:
                 description: The secret name containing the Git credentials. For HTTPS repositories the secret must contain username and password fields. For SSH repositories the secret must contain 'identity', 'identity.pub' and 'known_hosts' fields.
                 properties:
                   name:
-                    description: Name of the referent
+                    description: Name of the referent.
                     type: string
                 required:
                 - name
@@ -153,7 +153,7 @@ spec:
                     description: SecretRef containing the public keys of all trusted Git authors.
                     properties:
                       name:
-                        description: Name of the referent
+                        description: Name of the referent.
                         type: string
                     required:
                     - name
@@ -262,7 +262,7 @@ spec:
                   type: object
                 type: array
               lastHandledReconcileAt:
-                description: LastHandledReconcileAt holds the value of the most recent reconcile request value, so a change can be detected.
+                description: LastHandledReconcileAt holds the value of the most recent reconcile request value, so a change of the annotation value can be detected.
                 type: string
               observedGeneration:
                 description: ObservedGeneration is the last observed generation.
