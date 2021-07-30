@@ -122,7 +122,7 @@ func (r *GitRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	// check dependencies
 	if len(repository.Spec.Include) > 0 {
 		if err := r.checkDependencies(repository); err != nil {
-			repository = sourcev1.GitRepositoryNotReady(repository, meta.DependencyNotReadyReason, err.Error())
+			repository = sourcev1.GitRepositoryNotReady(repository, "DependencyNotReady", err.Error())
 			if err := r.updateStatus(ctx, req, repository.Status); err != nil {
 				log.Error(err, "unable to update status for dependency not ready")
 				return ctrl.Result{Requeue: true}, err
@@ -284,7 +284,7 @@ func (r *GitRepositoryReconciler) reconcile(ctx context.Context, repository sour
 		var gr sourcev1.GitRepository
 		err := r.Get(context.Background(), dName, &gr)
 		if err != nil {
-			return sourcev1.GitRepositoryNotReady(repository, meta.DependencyNotReadyReason, err.Error()), err
+			return sourcev1.GitRepositoryNotReady(repository, "DependencyNotReady", err.Error()), err
 		}
 		includedArtifacts = append(includedArtifacts, gr.GetArtifact())
 	}
@@ -329,11 +329,11 @@ func (r *GitRepositoryReconciler) reconcile(ctx context.Context, repository sour
 	for i, incl := range repository.Spec.Include {
 		toPath, err := securejoin.SecureJoin(tmpGit, incl.GetToPath())
 		if err != nil {
-			return sourcev1.GitRepositoryNotReady(repository, meta.DependencyNotReadyReason, err.Error()), err
+			return sourcev1.GitRepositoryNotReady(repository, "DependencyNotReady", err.Error()), err
 		}
 		err = r.Storage.CopyToPath(includedArtifacts[i], incl.GetFromPath(), toPath)
 		if err != nil {
-			return sourcev1.GitRepositoryNotReady(repository, meta.DependencyNotReadyReason, err.Error()), err
+			return sourcev1.GitRepositoryNotReady(repository, "DependencyNotReady", err.Error()), err
 		}
 	}
 
@@ -423,22 +423,11 @@ func (r *GitRepositoryReconciler) gc(repository sourcev1.GitRepository) error {
 
 // event emits a Kubernetes event and forwards the event to notification controller if configured
 func (r *GitRepositoryReconciler) event(ctx context.Context, repository sourcev1.GitRepository, severity, msg string) {
-	log := ctrl.LoggerFrom(ctx)
-
 	if r.EventRecorder != nil {
-		r.EventRecorder.Eventf(&repository, "Normal", severity, msg)
+		r.EventRecorder.Eventf(&repository, corev1.EventTypeNormal, severity, msg)
 	}
 	if r.ExternalEventRecorder != nil {
-		objRef, err := reference.GetReference(r.Scheme, &repository)
-		if err != nil {
-			log.Error(err, "unable to send event")
-			return
-		}
-
-		if err := r.ExternalEventRecorder.Eventf(*objRef, nil, severity, severity, msg); err != nil {
-			log.Error(err, "unable to send event")
-			return
-		}
+		r.ExternalEventRecorder.Eventf(&repository, corev1.EventTypeNormal, severity, msg)
 	}
 }
 
