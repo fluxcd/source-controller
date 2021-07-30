@@ -634,21 +634,11 @@ func (r *HelmChartReconciler) gc(chart sourcev1.HelmChart) error {
 // event emits a Kubernetes event and forwards the event to notification
 // controller if configured.
 func (r *HelmChartReconciler) event(ctx context.Context, chart sourcev1.HelmChart, severity, msg string) {
-	log := ctrl.LoggerFrom(ctx)
 	if r.EventRecorder != nil {
-		r.EventRecorder.Eventf(&chart, "Normal", severity, msg)
+		r.EventRecorder.Eventf(&chart, corev1.EventTypeNormal, severity, msg)
 	}
 	if r.ExternalEventRecorder != nil {
-		objRef, err := reference.GetReference(r.Scheme, &chart)
-		if err != nil {
-			log.Error(err, "unable to send event")
-			return
-		}
-
-		if err := r.ExternalEventRecorder.Eventf(*objRef, nil, severity, severity, msg); err != nil {
-			log.Error(err, "unable to send event")
-			return
-		}
+		r.ExternalEventRecorder.Eventf(&chart, corev1.EventTypeNormal, severity, msg)
 	}
 }
 

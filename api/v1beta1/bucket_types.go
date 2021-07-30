@@ -126,7 +126,13 @@ func BucketProgressing(bucket Bucket) Bucket {
 	bucket.Status.ObservedGeneration = bucket.Generation
 	bucket.Status.URL = ""
 	bucket.Status.Conditions = []metav1.Condition{}
-	meta.SetResourceCondition(&bucket, meta.ReadyCondition, metav1.ConditionUnknown, meta.ProgressingReason, "reconciliation in progress")
+	newCondition := metav1.Condition{
+		Type:    meta.ReadyCondition,
+		Status:  metav1.ConditionUnknown,
+		Reason:  meta.ProgressingReason,
+		Message: "reconciliation in progress",
+	}
+	apimeta.SetStatusCondition(bucket.GetStatusConditions(), newCondition)
 	return bucket
 }
 
@@ -136,14 +142,26 @@ func BucketProgressing(bucket Bucket) Bucket {
 func BucketReady(bucket Bucket, artifact Artifact, url, reason, message string) Bucket {
 	bucket.Status.Artifact = &artifact
 	bucket.Status.URL = url
-	meta.SetResourceCondition(&bucket, meta.ReadyCondition, metav1.ConditionTrue, reason, message)
+	newCondition := metav1.Condition{
+		Type:    meta.ReadyCondition,
+		Status:  metav1.ConditionTrue,
+		Reason:  reason,
+		Message: message,
+	}
+	apimeta.SetStatusCondition(bucket.GetStatusConditions(), newCondition)
 	return bucket
 }
 
 // BucketNotReady sets the meta.ReadyCondition on the Bucket to 'False', with
 // the given reason and message. It returns the modified Bucket.
 func BucketNotReady(bucket Bucket, reason, message string) Bucket {
-	meta.SetResourceCondition(&bucket, meta.ReadyCondition, metav1.ConditionFalse, reason, message)
+	newCondition := metav1.Condition{
+		Type:    meta.ReadyCondition,
+		Status:  metav1.ConditionFalse,
+		Reason:  reason,
+		Message: message,
+	}
+	apimeta.SetStatusCondition(bucket.GetStatusConditions(), newCondition)
 	return bucket
 }
 
