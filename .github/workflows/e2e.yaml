@@ -26,15 +26,16 @@ jobs:
           image: kindest/node:v1.21.1@sha256:69860bda5563ac81e3c0057d654b5253219618a22ec3a346306239bba8cfa1a6
       - name: Setup Kustomize
         uses: fluxcd/pkg/actions/kustomize@main
-      - name: Setup Kubebuilder
-        uses: fluxcd/pkg/actions/kubebuilder@main
+      - name: Setup envtest
+        uses: fluxcd/pkg/actions/envtest@main
+        with:
+          version: "1.19.2"
       - name: Setup Helm
         uses: fluxcd/pkg/actions/helm@main
       - name: Run tests
         uses: ./.github/actions/run-tests
         env:
           GOPATH: /github/home/go
-          KUBEBUILDER_ASSETS: ${{ github.workspace }}/kubebuilder/bin
       - name: Check if working tree is dirty
         run: |
           if [[ $(git diff --stat) != '' ]]; then
@@ -44,14 +45,10 @@ jobs:
           fi
       - name: Build container image
         run: make docker-build IMG=test/source-controller:latest
-        env:
-          KUBEBUILDER_ASSETS: ${{ github.workspace }}/kubebuilder/bin
       - name: Load test image
         run: kind load docker-image test/source-controller:latest
       - name: Deploy controller
         run: make dev-deploy IMG=test/source-controller:latest
-        env:
-          KUBEBUILDER_ASSETS: ${{ github.workspace }}/kubebuilder/bin
       - name: Run smoke tests
         run: |
           kubectl -n source-system apply -f ./config/samples
