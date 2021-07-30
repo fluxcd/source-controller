@@ -193,7 +193,7 @@ func (c *CheckoutSemVer) Checkout(ctx context.Context, path, url string, auth *g
 
 	tags := make(map[string]string)
 	tagTimestamps := make(map[string]time.Time)
-	_ = repoTags.ForEach(func(t *plumbing.Reference) error {
+	if err = repoTags.ForEach(func(t *plumbing.Reference) error {
 		revision := plumbing.Revision(t.Name().String())
 		hash, err := repo.ResolveRevision(revision)
 		if err != nil {
@@ -207,7 +207,9 @@ func (c *CheckoutSemVer) Checkout(ctx context.Context, path, url string, auth *g
 
 		tags[t.Name().Short()] = t.Strings()[1]
 		return nil
-	})
+	}); err != nil {
+		return nil, "", err
+	}
 
 	var matchedVersions semver.Collection
 	for tag, _ := range tags {
