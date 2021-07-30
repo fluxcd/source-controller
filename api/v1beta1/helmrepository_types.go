@@ -113,7 +113,13 @@ func HelmRepositoryProgressing(repository HelmRepository) HelmRepository {
 	repository.Status.ObservedGeneration = repository.Generation
 	repository.Status.URL = ""
 	repository.Status.Conditions = []metav1.Condition{}
-	meta.SetResourceCondition(&repository, meta.ReadyCondition, metav1.ConditionUnknown, meta.ProgressingReason, "reconciliation in progress")
+	newCondition := metav1.Condition{
+		Type:    meta.ReadyCondition,
+		Status:  metav1.ConditionUnknown,
+		Reason:  meta.ProgressingReason,
+		Message: "reconciliation in progress",
+	}
+	apimeta.SetStatusCondition(repository.GetStatusConditions(), newCondition)
 	return repository
 }
 
@@ -123,7 +129,13 @@ func HelmRepositoryProgressing(repository HelmRepository) HelmRepository {
 func HelmRepositoryReady(repository HelmRepository, artifact Artifact, url, reason, message string) HelmRepository {
 	repository.Status.Artifact = &artifact
 	repository.Status.URL = url
-	meta.SetResourceCondition(&repository, meta.ReadyCondition, metav1.ConditionTrue, reason, message)
+	newCondition := metav1.Condition{
+		Type:    meta.ReadyCondition,
+		Status:  metav1.ConditionTrue,
+		Reason:  reason,
+		Message: message,
+	}
+	apimeta.SetStatusCondition(repository.GetStatusConditions(), newCondition)
 	return repository
 }
 
@@ -131,7 +143,13 @@ func HelmRepositoryReady(repository HelmRepository, artifact Artifact, url, reas
 // HelmRepository to 'False', with the given reason and message. It returns the
 // modified HelmRepository.
 func HelmRepositoryNotReady(repository HelmRepository, reason, message string) HelmRepository {
-	meta.SetResourceCondition(&repository, meta.ReadyCondition, metav1.ConditionFalse, reason, message)
+	newCondition := metav1.Condition{
+		Type:    meta.ReadyCondition,
+		Status:  metav1.ConditionFalse,
+		Reason:  reason,
+		Message: message,
+	}
+	apimeta.SetStatusCondition(repository.GetStatusConditions(), newCondition)
 	return repository
 }
 
