@@ -76,7 +76,7 @@ spec:
                 description: Ignore overrides the set of excluded patterns in the .sourceignore format (which is the same as .gitignore). If not provided, a default will be used, consult the documentation for your version to find out what those are.
                 type: string
               include:
-                description: Extra git repositories to map into the repository
+                description: Include defines a list of GitRepository resources which artifacts should be included in the artifact produced for this resource.
                 items:
                   description: GitRepositoryInclude defines a source with a from and to path.
                   properties:
@@ -122,7 +122,7 @@ spec:
                     type: string
                 type: object
               secretRef:
-                description: The secret name containing the Git credentials. For HTTPS repositories the secret must contain username and password fields. For SSH repositories the secret must contain identity, identity.pub and known_hosts fields.
+                description: The secret name containing the Git credentials. For HTTPS repositories the secret must contain username and password fields. For SSH repositories the secret must contain 'identity', 'identity.pub' and 'known_hosts' fields.
                 properties:
                   name:
                     description: Name of the referent
@@ -131,7 +131,7 @@ spec:
                 - name
                 type: object
               suspend:
-                description: This flag tells the controller to suspend the reconciliation of this source.
+                description: Suspend tells the controller to suspend the reconciliation of this source. This flag tells the controller to suspend the reconciliation of this source.
                 type: boolean
               timeout:
                 default: 20s
@@ -142,15 +142,15 @@ spec:
                 pattern: ^(http|https|ssh)://
                 type: string
               verify:
-                description: Verify OpenPGP signature for the Git commit HEAD points to.
+                description: Verification defines the configuration to verify the OpenPGP signature for the Git commit HEAD points to.
                 properties:
                   mode:
-                    description: Mode describes what git object should be verified, currently ('head').
+                    description: Mode describes what Git object should be verified, currently ('head').
                     enum:
                     - head
                     type: string
                   secretRef:
-                    description: The secret name containing the public keys of all trusted Git authors.
+                    description: SecretRef containing the public keys of all trusted Git authors.
                     properties:
                       name:
                         description: Name of the referent
