@@ -577,7 +577,7 @@ func TestGitRepositoryReconciler_reconcileArtifact(t *testing.T) {
 			},
 			afterFunc: func(t *WithT, obj *sourcev1.GitRepository, artifact sourcev1.Artifact) {
 				t.Expect(obj.GetArtifact()).ToNot(BeNil())
-				t.Expect(obj.GetArtifact().Checksum).To(Equal("f9955588f6aeed7be9b1ef15cd2ddac47bb53291"))
+				t.Expect(obj.GetArtifact().Checksum).To(Equal("b1fab897a1a0fb8094ce3ae0e9743a4b72bd7268"))
 			},
 			want: ctrl.Result{RequeueAfter: interval},
 			assertConditions: []metav1.Condition{
@@ -593,7 +593,7 @@ func TestGitRepositoryReconciler_reconcileArtifact(t *testing.T) {
 			},
 			afterFunc: func(t *WithT, obj *sourcev1.GitRepository, artifact sourcev1.Artifact) {
 				t.Expect(obj.GetArtifact()).ToNot(BeNil())
-				t.Expect(obj.GetArtifact().Checksum).To(Equal("542a8ad0171118a3249e8c531c598b898defd742"))
+				t.Expect(obj.GetArtifact().Checksum).To(Equal("a71f8c076db814bc21c16cecc960c4fcaf970ac5"))
 			},
 			want: ctrl.Result{RequeueAfter: interval},
 			assertConditions: []metav1.Condition{

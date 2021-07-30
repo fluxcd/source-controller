@@ -165,7 +165,8 @@ func SourceIgnoreFilter(ps []gitignore.Pattern, domain []string) ArchiveFileFilt
 }
 
 // Archive atomically archives the given directory as a tarball to the given v1beta1.Artifact path, excluding
-// directories and any ArchiveFileFilter matches.
+// directories and any ArchiveFileFilter matches. While archiving, any environment specific data (for example,
+// the user and group name) is stripped from file headers.
 // If successful, it sets the checksum and last update time on the artifact.
 func (s *Storage) Archive(artifact *sourcev1.Artifact, dir string, filter ArchiveFileFilter) (err error) {
 	if f, err := os.Stat(dir); os.IsNotExist(err) || !f.IsDir() {
@@ -219,6 +220,16 @@ func (s *Storage) Archive(artifact *sourcev1.Artifact, dir string, filter Archiv
 			}
 		}
 		header.Name = relFilePath
+
+		// We want to remove any environment specific data as well, this
+		// ensures the checksum is purely content based.
+		header.Gid = 0
+		header.Uid = 0
+		header.Uname = ""
+		header.Gname = ""
+		header.ModTime = time.Time{}
+		header.AccessTime = time.Time{}
+		header.ChangeTime = time.Time{}
 
 		if err := tw.WriteHeader(header); err != nil {
 			return err
