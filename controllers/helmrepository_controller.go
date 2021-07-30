@@ -335,21 +335,11 @@ func (r *HelmRepositoryReconciler) gc(repository sourcev1.HelmRepository) error 
 
 // event emits a Kubernetes event and forwards the event to notification controller if configured
 func (r *HelmRepositoryReconciler) event(ctx context.Context, repository sourcev1.HelmRepository, severity, msg string) {
-	log := ctrl.LoggerFrom(ctx)
 	if r.EventRecorder != nil {
-		r.EventRecorder.Eventf(&repository, "Normal", severity, msg)
+		r.EventRecorder.Eventf(&repository, corev1.EventTypeNormal, severity, msg)
 	}
 	if r.ExternalEventRecorder != nil {
-		objRef, err := reference.GetReference(r.Scheme, &repository)
-		if err != nil {
-			log.Error(err, "unable to send event")
-			return
-		}
-
-		if err := r.ExternalEventRecorder.Eventf(*objRef, nil, severity, severity, msg); err != nil {
-			log.Error(err, "unable to send event")
-			return
-		}
+		r.ExternalEventRecorder.Eventf(&repository, corev1.EventTypeNormal, severity, msg)
 	}
 }
 

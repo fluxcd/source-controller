@@ -53,7 +53,7 @@ type Storage struct {
 	Timeout time.Duration `json:"timeout"`
 }
 
-// NewStorage creates the storage helper for a given path and hostname
+// NewStorage creates the storage helper for a given path and hostname.
 func NewStorage(basePath string, hostname string, timeout time.Duration) (*Storage, error) {
 	if f, err := os.Stat(basePath); os.IsNotExist(err) || !f.IsDir() {
 		return nil, fmt.Errorf("invalid dir path: %s", basePath)
@@ -81,7 +81,11 @@ func (s Storage) SetArtifactURL(artifact *sourcev1.Artifact) {
 	if artifact.Path == "" {
 		return
 	}
-	artifact.URL = fmt.Sprintf("http://%s/%s", s.Hostname, artifact.Path)
+	format := "http://%s/%s"
+	if strings.HasPrefix(s.Hostname, "http://") || strings.HasPrefix(s.Hostname, "https://") {
+		format = "%s/%s"
+	}
+	artifact.URL = fmt.Sprintf(format, s.Hostname, strings.TrimLeft(artifact.Path, "/"))
 }
 
 // SetHostname sets the hostname of the given URL string to the current Storage.Hostname and returns the result.
