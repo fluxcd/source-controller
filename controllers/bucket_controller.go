@@ -541,21 +541,11 @@ func (r *BucketReconciler) gc(bucket sourcev1.Bucket) error {
 
 // event emits a Kubernetes event and forwards the event to notification controller if configured
 func (r *BucketReconciler) event(ctx context.Context, bucket sourcev1.Bucket, severity, msg string) {
-	log := ctrl.LoggerFrom(ctx)
 	if r.EventRecorder != nil {
-		r.EventRecorder.Eventf(&bucket, "Normal", severity, msg)
+		r.EventRecorder.Eventf(&bucket, corev1.EventTypeNormal, severity, msg)
 	}
 	if r.ExternalEventRecorder != nil {
-		objRef, err := reference.GetReference(r.Scheme, &bucket)
-		if err != nil {
-			log.Error(err, "unable to send event")
-			return
-		}
-
-		if err := r.ExternalEventRecorder.Eventf(*objRef, nil, severity, severity, msg); err != nil {
-			log.Error(err, "unable to send event")
-			return
-		}
+		r.ExternalEventRecorder.Eventf(&bucket, corev1.EventTypeNormal, severity, msg)
 	}
 }
 

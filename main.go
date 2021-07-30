@@ -123,18 +123,6 @@ func main() {
 	helm.MaxChartSize = helmChartLimit
 	helm.MaxChartFileSize = helmChartFileLimit
 
-	var eventRecorder *events.Recorder
-	if eventsAddr != "" {
-		var err error
-		if eventRecorder, err = events.NewRecorder(eventsAddr, controllerName); err != nil {
-			setupLog.Error(err, "unable to create event recorder")
-			os.Exit(1)
-		}
-	}
-
-	metricsRecorder := metrics.NewRecorder()
-	crtlmetrics.Registry.MustRegister(metricsRecorder.Collectors()...)
-
 	watchNamespace := ""
 	if !watchAllNamespaces {
 		watchNamespace = os.Getenv("RUNTIME_NAMESPACE")
@@ -162,6 +150,18 @@ func main() {
 
 	probes.SetupChecks(mgr, setupLog)
 	pprof.SetupHandlers(mgr, setupLog)
+
+	var eventRecorder *events.Recorder
+	if eventsAddr != "" {
+		var err error
+		if eventRecorder, err = events.NewRecorder(mgr, ctrl.Log, eventsAddr, controllerName); err != nil {
+			setupLog.Error(err, "unable to create event recorder")
+			os.Exit(1)
+		}
+	}
+
+	metricsRecorder := metrics.NewRecorder()
+	crtlmetrics.Registry.MustRegister(metricsRecorder.Collectors()...)
 
 	if storageAdvAddr == "" {
 		storageAdvAddr = determineAdvStorageAddr(storageAddr, setupLog)
