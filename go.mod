@@ -9,7 +9,7 @@ require (
 	github.com/blang/semver/v4 v4.0.0
 	github.com/cyphar/filepath-securejoin v0.2.2
 	github.com/fluxcd/pkg/apis/meta v0.11.0-rc.1
-	github.com/fluxcd/pkg/gittestserver v0.3.0
+	github.com/fluxcd/pkg/gittestserver v0.3.2
 	github.com/fluxcd/pkg/gitutil v0.1.0
 	github.com/fluxcd/pkg/helmtestserver v0.2.0
 	github.com/fluxcd/pkg/lockedfile v0.1.0
@@ -34,6 +34,7 @@ require (
 	k8s.io/api v0.21.2
 	k8s.io/apimachinery v0.21.3
 	k8s.io/client-go v0.21.2
+	k8s.io/utils v0.0.0-20210527160623-6fdb442a123b
 	sigs.k8s.io/controller-runtime v0.9.3
 	sigs.k8s.io/yaml v1.2.0
 )

@@ -24,6 +24,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/fluxcd/pkg/runtime/controller"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"helm.sh/helm/v3/pkg/getter"
@@ -112,12 +113,14 @@ var _ = BeforeSuite(func(done Done) {
 	})
 	Expect(err).ToNot(HaveOccurred())
 
+	testEventsH = controller.MakeEvents(k8sManager, "source-controller-test", nil)
+
 	err = (&GitRepositoryReconciler{
 		Client:  k8sManager.GetClient(),
-		Scheme:  scheme.Scheme,
+		Events:  testEventsH,
 		Storage: ginkgoTestStorage,
 	}).SetupWithManager(k8sManager)
-	Expect(err).ToNot(HaveOccurred(), "failed to setup GtRepositoryReconciler")
+	Expect(err).ToNot(HaveOccurred(), "failed to setup GitRepositoryReconciler")
 
 	err = (&HelmRepositoryReconciler{
 		Client:  k8sManager.GetClient(),

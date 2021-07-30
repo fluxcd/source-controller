@@ -89,14 +89,14 @@ func TestMain(m *testing.M) {
 	testEventsH = controller.MakeEvents(testEnv, "source-controller-test", nil)
 	testMetricsH = controller.MustMakeMetrics(testEnv)
 
-	//if err := (&GitRepositoryReconciler{
-	//	Client:  testEnv,
-	//	Events:  testEventsH,
-	//	Metrics: testMetricsH,
-	//	Storage: testStorage,
-	//}).SetupWithManager(testEnv); err != nil {
-	//	panic(fmt.Sprintf("Failed to start GitRepositoryReconciler: %v", err))
-	//}
+	if err := (&GitRepositoryReconciler{
+		Client:  testEnv,
+		Events:  testEventsH,
+		Metrics: testMetricsH,
+		Storage: testStorage,
+	}).SetupWithManager(testEnv); err != nil {
+		panic(fmt.Sprintf("Failed to start GitRepositoryReconciler: %v", err))
+	}
 
 	go func() {
 		fmt.Println("Starting the test environment")
