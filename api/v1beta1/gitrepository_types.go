@@ -34,6 +34,30 @@ const (
 	LibGit2Implementation = "libgit2"
 )
 
+const (
+	// ArtifactUnavailableCondition indicates there is no Artifact available for the Source.
+	// This is a "negative polarity" or "abnormal-true" type, and is only present on the resource if it is True.
+	ArtifactUnavailableCondition string = "ArtifactUnavailable"
+
+	// CheckoutFailedCondition indicates a transient or persistent checkout failure. If True, observations on the
+	// upstream Source revision are not possible, and the Artifact available for the Source may be outdated.
+	// This is a "negative polarity" or "abnormal-true" type, and is only present on the resource if it is True.
+	CheckoutFailedCondition string = "CheckoutFailed"
+
+	// SourceVerifiedCondition indicates the integrity of the Source has been verified. If True, the integrity check
+	// succeeded. If False, it failed. The Condition is only present on the resource if the integrity has been verified.
+	SourceVerifiedCondition string = "SourceVerified"
+
+	// IncludeUnavailableCondition indicates one of the includes is not available. For example, because it does not
+	// exist, or does not have an Artifact.
+	// This is a "negative polarity" or "abnormal-true" type, and is only present on the resource if it is True.
+	IncludeUnavailableCondition string = "IncludeUnavailable"
+
+	// ArtifactOutdatedCondition indicates the current Artifact of the Source is outdated.
+	// This is a "negative polarity" or "abnormal-true" type, and is only present on the resource if it is True.
+	ArtifactOutdatedCondition string = "ArtifactOutdated"
+)
+
 // GitRepositorySpec defines the desired state of a Git repository.
 type GitRepositorySpec struct {
 	// The repository URL, can be a HTTP/S or SSH address.
@@ -42,10 +66,8 @@ type GitRepositorySpec struct {
 	URL string `json:"url"`
 
 	// The secret name containing the Git credentials.
-	// For HTTPS repositories the secret must contain username and password
-	// fields.
-	// For SSH repositories the secret must contain identity, identity.pub and
-	// known_hosts fields.
+	// For HTTPS repositories the secret must contain username and password fields.
+	// For SSH repositories the secret must contain 'identity', 'identity.pub' and 'known_hosts' fields.
 	// +optional
 	SecretRef *meta.LocalObjectReference `json:"secretRef,omitempty"`
 
@@ -63,16 +85,16 @@ type GitRepositorySpec struct {
 	// +optional
 	Reference *GitRepositoryRef `json:"ref,omitempty"`
 
-	// Verify OpenPGP signature for the Git commit HEAD points to.
+	// Verification defines the configuration to verify the OpenPGP signature for the Git commit HEAD points to.
 	// +optional
 	Verification *GitRepositoryVerification `json:"verify,omitempty"`
 
-	// Ignore overrides the set of excluded patterns in the .sourceignore format
-	// (which is the same as .gitignore). If not provided, a default will be used,
-	// consult the documentation for your version to find out what those are.
+	// Ignore overrides the set of excluded patterns in the .sourceignore format (which is the same as .gitignore).
+	// If not provided, a default will be used, consult the documentation for your version to find out what those are.
 	// +optional
 	Ignore *string `json:"ignore,omitempty"`
 
+	// Suspend tells the controller to suspend the reconciliation of this source.
 	// This flag tells the controller to suspend the reconciliation of this source.
 	// +optional
 	Suspend bool `json:"suspend,omitempty"`
@@ -84,13 +106,13 @@ type GitRepositorySpec struct {
 	// +optional
 	GitImplementation string `json:"gitImplementation,omitempty"`
 
-	// When enabled, after the clone is created, initializes all submodules within,
-	// using their default settings.
+	// When enabled, after the clone is created, initializes all submodules within, using their default settings.
 	// This option is available only when using the 'go-git' GitImplementation.
 	// +optional
 	RecurseSubmodules bool `json:"recurseSubmodules,omitempty"`
 
-	// Extra git repositories to map into the repository
+	// Include defines a list of GitRepository resources which artifacts should be included in the artifact produced for
+	// this resource.
 	Include []GitRepositoryInclude `json:"include,omitempty"`
 
 	// AccessFrom defines an Access Control List for allowing cross-namespace references to this object.
@@ -144,11 +166,11 @@ type GitRepositoryRef struct {
 
 // GitRepositoryVerification defines the OpenPGP signature verification process.
 type GitRepositoryVerification struct {
-	// Mode describes what git object should be verified, currently ('head').
+	// Mode describes what Git object should be verified, currently ('head').
 	// +kubebuilder:validation:Enum=head
 	Mode string `json:"mode"`
 
-	// The secret name containing the public keys of all trusted Git authors.
+	// SecretRef containing the public keys of all trusted Git authors.
 	SecretRef meta.LocalObjectReference `json:"secretRef,omitempty"`
 }
 
@@ -162,8 +184,7 @@ type GitRepositoryStatus struct {
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 
-	// URL is the download link for the artifact output of the last repository
-	// sync.
+	// URL is the download link for the artifact output of the last repository sync.
 	// +optional
 	URL string `json:"url,omitempty"`
 
@@ -179,12 +200,10 @@ type GitRepositoryStatus struct {
 }
 
 const (
-	// GitOperationSucceedReason represents the fact that the git clone, pull
-	// and checkout operations succeeded.
+	// GitOperationSucceedReason represents the fact that the git clone, pull and checkout operations succeeded.
 	GitOperationSucceedReason string = "GitOperationSucceed"
 
-	// GitOperationFailedReason represents the fact that the git clone, pull or
-	// checkout operations failed.
+	// GitOperationFailedReason represents the fact that the git clone, pull or checkout operations failed.
 	GitOperationFailedReason string = "GitOperationFailed"
 )
 
