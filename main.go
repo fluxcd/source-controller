@@ -214,12 +214,10 @@ func main() {
 		os.Exit(1)
 	}
 	if err = (&controllers.BucketReconciler{
-		Client:                mgr.GetClient(),
-		Scheme:                mgr.GetScheme(),
-		Storage:               storage,
-		EventRecorder:         mgr.GetEventRecorderFor(controllerName),
-		ExternalEventRecorder: eventRecorder,
-		MetricsRecorder:       metricsH.MetricsRecorder,
+		Client:  mgr.GetClient(),
+		Events:  eventsH,
+		Metrics: metricsH,
+		Storage: storage,
 	}).SetupWithManagerAndOptions(mgr, controllers.BucketReconcilerOptions{
 		MaxConcurrentReconciles: concurrent,
 	}); err != nil {
