@@ -98,6 +98,15 @@ func TestMain(m *testing.M) {
 	//	panic(fmt.Sprintf("Failed to start GitRepositoryReconciler: %v", err))
 	//}
 
+	if err := (&BucketReconciler{
+		Client:  testEnv,
+		Events:  testEventsH,
+		Metrics: testMetricsH,
+		Storage: testStorage,
+	}).SetupWithManager(testEnv); err != nil {
+		panic(fmt.Sprintf("Failed to start BucketReconciler: %v", err))
+	}
+
 	go func() {
 		fmt.Println("Starting the test environment")
 		if err := testEnv.Start(ctx); err != nil {
