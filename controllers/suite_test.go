@@ -29,11 +29,11 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 
 	"github.com/fluxcd/pkg/runtime/controller"
+	"github.com/fluxcd/pkg/runtime/testenv"
 	"github.com/fluxcd/pkg/testserver"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
 	// +kubebuilder:scaffold:imports
-	"github.com/fluxcd/pkg/runtime/testenv"
 )
 
 // These tests make use of plain Go using Gomega for assertions.
@@ -96,6 +96,15 @@ func TestMain(m *testing.M) {
 		Storage: testStorage,
 	}).SetupWithManager(testEnv); err != nil {
 		panic(fmt.Sprintf("Failed to start GitRepositoryReconciler: %v", err))
+	}
+
+	if err := (&BucketReconciler{
+		Client:  testEnv,
+		Events:  testEventsH,
+		Metrics: testMetricsH,
+		Storage: testStorage,
+	}).SetupWithManager(testEnv); err != nil {
+		panic(fmt.Sprintf("Failed to start BucketReconciler: %v", err))
 	}
 
 	go func() {
