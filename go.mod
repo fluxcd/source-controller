@@ -30,9 +30,9 @@ require (
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
 	gotest.tools v2.2.0+incompatible
 	helm.sh/helm/v3 v3.6.3
-	k8s.io/api v0.21.2
+	k8s.io/api v0.21.3
 	k8s.io/apimachinery v0.21.3
-	k8s.io/client-go v0.21.2
+	k8s.io/client-go v0.21.3
 	k8s.io/utils v0.0.0-20210527160623-6fdb442a123b
 	sigs.k8s.io/controller-runtime v0.9.3
 	sigs.k8s.io/yaml v1.2.0

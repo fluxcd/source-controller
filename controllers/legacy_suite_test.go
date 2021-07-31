@@ -87,12 +87,6 @@ var _ = BeforeSuite(func(done Done) {
 	err = sourcev1.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
-	err = sourcev1.AddToScheme(scheme.Scheme)
-	Expect(err).NotTo(HaveOccurred())
-
-	err = sourcev1.AddToScheme(scheme.Scheme)
-	Expect(err).NotTo(HaveOccurred())
-
 	// +kubebuilder:scaffold:scheme
 
 	Expect(loadExampleKeys()).To(Succeed())
@@ -124,7 +118,7 @@ var _ = BeforeSuite(func(done Done) {
 
 	err = (&HelmRepositoryReconciler{
 		Client:  k8sManager.GetClient(),
-		Scheme:  scheme.Scheme,
+		Events:  testEventsH,
 		Storage: ginkgoTestStorage,
 		Getters: getter.Providers{getter.Provider{
 			Schemes: []string{"http", "https"},

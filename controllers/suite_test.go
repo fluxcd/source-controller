@@ -98,6 +98,16 @@ func TestMain(m *testing.M) {
 		panic(fmt.Sprintf("Failed to start GitRepositoryReconciler: %v", err))
 	}
 
+	if err := (&HelmRepositoryReconciler{
+		Client:  testEnv,
+		Events:  testEventsH,
+		Metrics: testMetricsH,
+		Getters: testGetters,
+		Storage: testStorage,
+	}).SetupWithManager(testEnv); err != nil {
+		panic(fmt.Sprintf("Failed to start HelmRepositoryReconciler: %v", err))
+	}
+
 	if err := (&BucketReconciler{
 		Client:  testEnv,
 		Events:  testEventsH,

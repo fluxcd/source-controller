@@ -307,12 +307,17 @@ func (r *HelmChartReconciler) reconcileFromHelmRepository(ctx context.Context,
 	if secret, err := r.getHelmRepositorySecret(ctx, &repository); err != nil {
 		return sourcev1.HelmChartNotReady(chart, sourcev1.AuthenticationFailedReason, err.Error()), err
 	} else if secret != nil {
-		opts, cleanup, err := helm.ClientOptionsFromSecret(*secret)
+		tmpDir, err := os.MkdirTemp("", fmt.Sprintf("%s-%s-source-", chart.Name, chart.Namespace))
+		if err != nil {
+			err = fmt.Errorf("failed to create temporary directory for auth: %w", err)
+			return sourcev1.HelmChartNotReady(chart, sourcev1.AuthenticationFailedReason, err.Error()), err
+		}
+		defer os.RemoveAll(tmpDir)
+		opts, err := helm.ClientOptionsFromSecret(*secret, tmpDir)
 		if err != nil {
 			err = fmt.Errorf("auth options error: %w", err)
 			return sourcev1.HelmChartNotReady(chart, sourcev1.AuthenticationFailedReason, err.Error()), err
 		}
-		defer cleanup()
 		clientOpts = append(clientOpts, opts...)
 	}
 
@@ -634,12 +639,17 @@ func (r *HelmChartReconciler) reconcileFromTarballArtifact(ctx context.Context,
 			if secret, err := r.getHelmRepositorySecret(ctx, repository); err != nil {
 				return sourcev1.HelmChartNotReady(chart, sourcev1.AuthenticationFailedReason, err.Error()), err
 			} else if secret != nil {
-				opts, cleanup, err := helm.ClientOptionsFromSecret(*secret)
+				tmpDir, err := os.MkdirTemp("", fmt.Sprintf("%s-%s-source-", chart.Name, chart.Namespace))
+				if err != nil {
+					err = fmt.Errorf("failed to create temporary directory for auth: %w", err)
+					return sourcev1.HelmChartNotReady(chart, sourcev1.AuthenticationFailedReason, err.Error()), err
+				}
+				defer os.RemoveAll(tmpDir)
+				opts, err := helm.ClientOptionsFromSecret(*secret, tmpDir)
 				if err != nil {
 					err = fmt.Errorf("auth options error: %w", err)
 					return sourcev1.HelmChartNotReady(chart, sourcev1.AuthenticationFailedReason, err.Error()), err
 				}
-				defer cleanup()
 				clientOpts = append(clientOpts, opts...)
 			}
 
