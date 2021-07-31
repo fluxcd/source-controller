@@ -25,13 +25,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/fluxcd/pkg/runtime/client"
-	helper "github.com/fluxcd/pkg/runtime/controller"
-	"github.com/fluxcd/pkg/runtime/events"
-	"github.com/fluxcd/pkg/runtime/leaderelection"
-	"github.com/fluxcd/pkg/runtime/logger"
-	"github.com/fluxcd/pkg/runtime/pprof"
-	"github.com/fluxcd/pkg/runtime/probes"
 	"github.com/go-logr/logr"
 	flag "github.com/spf13/pflag"
 	"helm.sh/helm/v3/pkg/getter"
@@ -40,6 +33,14 @@ import (
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	ctrl "sigs.k8s.io/controller-runtime"
+
+	"github.com/fluxcd/pkg/runtime/client"
+	helper "github.com/fluxcd/pkg/runtime/controller"
+	"github.com/fluxcd/pkg/runtime/events"
+	"github.com/fluxcd/pkg/runtime/leaderelection"
+	"github.com/fluxcd/pkg/runtime/logger"
+	"github.com/fluxcd/pkg/runtime/pprof"
+	"github.com/fluxcd/pkg/runtime/probes"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
 	"github.com/fluxcd/source-controller/controllers"
@@ -144,13 +145,13 @@ func main() {
 	probes.SetupChecks(mgr, setupLog)
 	pprof.SetupHandlers(mgr, setupLog)
 
-	eventsH := helper.MakeEvents(mgr, controllerName, eventRecorder)
-	metricsH := helper.MustMakeMetrics(mgr)
-
 	if storageAdvAddr == "" {
 		storageAdvAddr = determineAdvStorageAddr(storageAddr, setupLog)
 	}
 	storage := mustInitStorage(storagePath, storageAdvAddr, setupLog)
+
+	eventsH := helper.MakeEvents(mgr, controllerName, eventRecorder)
+	metricsH := helper.MustMakeMetrics(mgr)
 
 	if err = (&controllers.GitRepositoryReconciler{
 		Client:  mgr.GetClient(),
@@ -193,12 +194,10 @@ func main() {
 		os.Exit(1)
 	}
 	if err = (&controllers.BucketReconciler{
-		Client:                mgr.GetClient(),
-		Scheme:                mgr.GetScheme(),
-		Storage:               storage,
-		EventRecorder:         mgr.GetEventRecorderFor(controllerName),
-		ExternalEventRecorder: eventRecorder,
-		MetricsRecorder:       metricsH.MetricsRecorder,
+		Client:  mgr.GetClient(),
+		Events:  eventsH,
+		Metrics: metricsH,
+		Storage: storage,
 	}).SetupWithManagerAndOptions(mgr, controllers.BucketReconcilerOptions{
 		MaxConcurrentReconciles: concurrent,
 	}); err != nil {
