@@ -26,6 +26,7 @@ import (
 
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 
 	"github.com/fluxcd/pkg/runtime/controller"
@@ -94,6 +95,15 @@ func TestMain(m *testing.M) {
 	//}).SetupWithManager(testEnv); err != nil {
 	//	panic(fmt.Sprintf("Failed to start GitRepositoryReconciler: %v", err))
 	//}
+
+	if err := (&BucketReconciler{
+		Client:        testEnv,
+		EventRecorder: record.NewFakeRecorder(32),
+		Metrics:       testMetricsH,
+		Storage:       testStorage,
+	}).SetupWithManager(testEnv); err != nil {
+		panic(fmt.Sprintf("Failed to start BucketReconciler: %v", err))
+	}
 
 	go func() {
 		fmt.Println("Starting the test environment")
