@@ -661,6 +661,7 @@ func TestGitRepositoryReconciler_reconcileArtifact(t *testing.T) {
 	tests := []struct {
 		name             string
 		dir              string
+		includes         artifactSet
 		beforeFunc       func(obj *sourcev1.GitRepository)
 		afterFunc        func(t *WithT, obj *sourcev1.GitRepository, artifact sourcev1.Artifact)
 		want             ctrl.Result
@@ -675,7 +676,42 @@ func TestGitRepositoryReconciler_reconcileArtifact(t *testing.T) {
 			},
 			afterFunc: func(t *WithT, obj *sourcev1.GitRepository, artifact sourcev1.Artifact) {
 				t.Expect(obj.GetArtifact()).ToNot(BeNil())
+				t.Expect(obj.Status.URL).ToNot(BeEmpty())
+			},
+			want: ctrl.Result{RequeueAfter: interval},
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReadyCondition, meta.SucceededReason, "Stored artifact for revision 'main/revision'"),
+			},
+		},
+		{
+			name:     "Archiving artifact to storage with includes makes Ready=True",
+			dir:      "testdata/git/repository",
+			includes: artifactSet{&sourcev1.Artifact{Revision: "main/revision"}},
+			beforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Spec.Interval = metav1.Duration{Duration: interval}
+			},
+			afterFunc: func(t *WithT, obj *sourcev1.GitRepository, artifact sourcev1.Artifact) {
+				t.Expect(obj.GetArtifact()).ToNot(BeNil())
 				t.Expect(obj.GetArtifact().Checksum).To(Equal("ef9c34eab0584035ac8b8a4070876954ea46f270250d60648672feef3e943426"))
+				t.Expect(obj.Status.IncludedArtifacts).ToNot(BeEmpty())
+				t.Expect(obj.Status.URL).ToNot(BeEmpty())
+			},
+			want: ctrl.Result{RequeueAfter: interval},
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReadyCondition, meta.SucceededReason, "Stored artifact for revision 'main/revision'"),
+			},
+		},
+		{
+			name:     "Up-to-date artifact should not update status",
+			dir:      "testdata/git/repository",
+			includes: artifactSet{&sourcev1.Artifact{Revision: "main/revision"}},
+			beforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Spec.Interval = metav1.Duration{Duration: interval}
+				obj.Status.Artifact = &sourcev1.Artifact{Revision: "main/revision"}
+				obj.Status.IncludedArtifacts = []*sourcev1.Artifact{{Revision: "main/revision"}}
+			},
+			afterFunc: func(t *WithT, obj *sourcev1.GitRepository, artifact sourcev1.Artifact) {
+				t.Expect(obj.Status.URL).To(BeEmpty())
 			},
 			want: ctrl.Result{RequeueAfter: interval},
 			assertConditions: []metav1.Condition{
@@ -697,6 +733,16 @@ func TestGitRepositoryReconciler_reconcileArtifact(t *testing.T) {
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(meta.ReadyCondition, meta.SucceededReason, "Stored artifact for revision 'main/revision'"),
 			},
+		},
+		{
+			name:    "Target path does not exists",
+			dir:     "testdata/git/foo",
+			wantErr: true,
+		},
+		{
+			name:    "Target path is not a directory",
+			dir:     "testdata/git/repository/foo.txt",
+			wantErr: true,
 		},
 	}
 
@@ -723,7 +769,7 @@ func TestGitRepositoryReconciler_reconcileArtifact(t *testing.T) {
 
 			artifact := testStorage.NewArtifactFor(obj.Kind, obj, "main/revision", "checksum.tar.gz")
 
-			got, err := r.reconcileArtifact(ctx, obj, artifact, nil, tt.dir)
+			got, err := r.reconcileArtifact(ctx, obj, artifact, tt.includes, tt.dir)
 			g.Expect(obj.Status.Conditions).To(conditions.MatchConditions(tt.assertConditions))
 			g.Expect(err != nil).To(Equal(tt.wantErr))
 			g.Expect(got).To(Equal(tt.want))

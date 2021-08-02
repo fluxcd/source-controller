@@ -400,7 +400,8 @@ func (r *GitRepositoryReconciler) reconcileArtifact(ctx context.Context, obj *so
 		ctrl.LoggerFrom(ctx).Error(err, "failed to stat source path")
 		return ctrl.Result{}, err
 	} else if !f.IsDir() {
-		ctrl.LoggerFrom(ctx).Error(err, fmt.Sprintf("source path '%s' is not a directory", dir))
+		err := fmt.Errorf("source path '%s' is not a directory", dir)
+		ctrl.LoggerFrom(ctx).Error(err, "invalid target path")
 		return ctrl.Result{}, err
 	}
 
