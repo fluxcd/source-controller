@@ -17,6 +17,8 @@ limitations under the License.
 package v1beta1
 
 import (
+	"time"
+
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
@@ -173,7 +175,13 @@ func (in *HelmChart) SetConditions(conditions []metav1.Condition) {
 	in.Status.Conditions = conditions
 }
 
+// GetRequeueAfter returns the duration after which the source must be reconciled again.
+func (in HelmChart) GetRequeueAfter() time.Duration {
+	return in.Spec.Interval.Duration
+}
+
 // GetInterval returns the interval at which the source is reconciled.
+// Deprecated: use GetRequeueAfter instead.
 func (in HelmChart) GetInterval() metav1.Duration {
 	return in.Spec.Interval
 }
