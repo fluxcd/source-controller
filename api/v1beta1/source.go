@@ -17,6 +17,8 @@ limitations under the License.
 package v1beta1
 
 import (
+	"time"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -29,9 +31,12 @@ const (
 // Source interface must be supported by all API types.
 // +k8s:deepcopy-gen=false
 type Source interface {
+	// GetRequeueAfter returns the duration after which the source must be reconciled again.
+	GetRequeueAfter() time.Duration
 	// GetArtifact returns the latest artifact from the source if present in the
 	// status sub-resource.
 	GetArtifact() *Artifact
 	// GetInterval returns the interval at which the source is updated.
+	// Deprecated: use GetRequeueAfter instead.
 	GetInterval() metav1.Duration
 }

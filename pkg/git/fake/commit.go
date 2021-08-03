@@ -14,26 +14,33 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package controllers
+package fake
 
-import sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
+import (
+	"errors"
 
-type artifactSet []*sourcev1.Artifact
+	corev1 "k8s.io/api/core/v1"
+)
 
-// Diff returns true if any of the revisions in the artifactSet does not match any of the given artifacts.
-func (s artifactSet) Diff(set artifactSet) bool {
-	if len(s) != len(set) {
-		return true
+type Commit struct {
+	valid bool
+	hash  string
+}
+
+func NewCommit(valid bool, hash string) Commit {
+	return Commit{
+		valid: valid,
+		hash:  hash,
 	}
+}
 
-outer:
-	for _, j := range s {
-		for _, k := range set {
-			if k.HasRevision(j.Revision) {
-				continue outer
-			}
-		}
-		return true
+func (c Commit) Verify(secret corev1.Secret) error {
+	if !c.valid {
+		return errors.New("invalid signature")
 	}
-	return false
+	return nil
+}
+
+func (c Commit) Hash() string {
+	return c.hash
 }

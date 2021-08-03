@@ -29,6 +29,7 @@ import (
 	"strings"
 	"time"
 
+	securejoin "github.com/cyphar/filepath-securejoin"
 	"github.com/go-git/go-git/v5/plumbing/format/gitignore"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -52,7 +53,7 @@ type Storage struct {
 	Timeout time.Duration `json:"timeout"`
 }
 
-// NewStorage creates the storage helper for a given path and hostname
+// NewStorage creates the storage helper for a given path and hostname.
 func NewStorage(basePath string, hostname string, timeout time.Duration) (*Storage, error) {
 	if f, err := os.Stat(basePath); os.IsNotExist(err) || !f.IsDir() {
 		return nil, fmt.Errorf("invalid dir path: %s", basePath)
@@ -80,11 +81,14 @@ func (s Storage) SetArtifactURL(artifact *sourcev1.Artifact) {
 	if artifact.Path == "" {
 		return
 	}
-	artifact.URL = fmt.Sprintf("http://%s/%s", s.Hostname, artifact.Path)
+	format := "http://%s/%s"
+	if strings.HasPrefix(s.Hostname, "http://") || strings.HasPrefix(s.Hostname, "https://") {
+		format = "%s/%s"
+	}
+	artifact.URL = fmt.Sprintf(format, s.Hostname, strings.TrimLeft(artifact.Path, "/"))
 }
 
-// SetHostname sets the hostname of the given URL string to the current Storage.Hostname
-// and returns the result.
+// SetHostname sets the hostname of the given URL string to the current Storage.Hostname and returns the result.
 func (s Storage) SetHostname(URL string) string {
 	u, err := url.Parse(URL)
 	if err != nil {
@@ -106,8 +110,7 @@ func (s *Storage) RemoveAll(artifact sourcev1.Artifact) error {
 	return os.RemoveAll(dir)
 }
 
-// RemoveAllButCurrent removes all files for the given v1beta1.Artifact base dir,
-// excluding the current one.
+// RemoveAllButCurrent removes all files for the given v1beta1.Artifact base dir, excluding the current one.
 func (s *Storage) RemoveAllButCurrent(artifact sourcev1.Artifact) error {
 	localPath := s.LocalPath(artifact)
 	dir := filepath.Dir(localPath)
@@ -132,8 +135,7 @@ func (s *Storage) RemoveAllButCurrent(artifact sourcev1.Artifact) error {
 	return nil
 }
 
-// ArtifactExist returns a boolean indicating whether the v1beta1.Artifact exists in storage
-// and is a regular file.
+// ArtifactExist returns a boolean indicating whether the v1beta1.Artifact exists in storage and is a regular file.
 func (s *Storage) ArtifactExist(artifact sourcev1.Artifact) bool {
 	fi, err := os.Lstat(s.LocalPath(artifact))
 	if err != nil {
@@ -142,14 +144,13 @@ func (s *Storage) ArtifactExist(artifact sourcev1.Artifact) bool {
 	return fi.Mode().IsRegular()
 }
 
-// ArchiveFileFilter must return true if a file should not be included
-// in the archive after inspecting the given path and/or os.FileInfo.
+// ArchiveFileFilter must return true if a file should not be included in the archive after inspecting the given path
+// and/or os.FileInfo.
 type ArchiveFileFilter func(p string, fi os.FileInfo) bool
 
-// SourceIgnoreFilter returns an ArchiveFileFilter that filters out
-// files matching sourceignore.VCSPatterns and any of the provided
-// patterns. If an empty gitignore.Pattern slice is given, the matcher
-// is set to sourceignore.NewDefaultMatcher.
+// SourceIgnoreFilter returns an ArchiveFileFilter that filters out files matching sourceignore.VCSPatterns and any of
+// the provided patterns.
+// If an empty gitignore.Pattern slice is given, the matcher is set to sourceignore.NewDefaultMatcher.
 func SourceIgnoreFilter(ps []gitignore.Pattern, domain []string) ArchiveFileFilter {
 	matcher := sourceignore.NewDefaultMatcher(ps, domain)
 	if len(ps) > 0 {
@@ -163,10 +164,10 @@ func SourceIgnoreFilter(ps []gitignore.Pattern, domain []string) ArchiveFileFilt
 	}
 }
 
-// Archive atomically archives the given directory as a tarball to the
-// given v1beta1.Artifact path, excluding directories and any
-// ArchiveFileFilter matches. If successful, it sets the checksum and
-// last update time on the artifact.
+// Archive atomically archives the given directory as a tarball to the given v1beta1.Artifact path, excluding
+// directories and any ArchiveFileFilter matches. While archiving, any environment specific data (for example,
+// the user and group name) is stripped from file headers.
+// If successful, it sets the checksum and last update time on the artifact.
 func (s *Storage) Archive(artifact *sourcev1.Artifact, dir string, filter ArchiveFileFilter) (err error) {
 	if f, err := os.Stat(dir); os.IsNotExist(err) || !f.IsDir() {
 		return fmt.Errorf("invalid dir path: %s", dir)
@@ -219,6 +220,16 @@ func (s *Storage) Archive(artifact *sourcev1.Artifact, dir string, filter Archiv
 			}
 		}
 		header.Name = relFilePath
+
+		// We want to remove any environment specific data as well, this
+		// ensures the checksum is purely content based.
+		header.Gid = 0
+		header.Uid = 0
+		header.Uname = ""
+		header.Gname = ""
+		header.ModTime = time.Time{}
+		header.AccessTime = time.Time{}
+		header.ChangeTime = time.Time{}
 
 		if err := tw.WriteHeader(header); err != nil {
 			return err
@@ -341,9 +352,8 @@ func (s *Storage) Copy(artifact *sourcev1.Artifact, reader io.Reader) (err error
 	return nil
 }
 
-// CopyFromPath atomically copies the contents of the given path to the path of
-// the v1beta1.Artifact. If successful, the checksum and last update time on the
-// artifact is set.
+// CopyFromPath atomically copies the contents of the given path to the path of the v1beta1.Artifact.
+// If successful, the checksum and last update time on the artifact is set.
 func (s *Storage) CopyFromPath(artifact *sourcev1.Artifact, path string) (err error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -353,10 +363,10 @@ func (s *Storage) CopyFromPath(artifact *sourcev1.Artifact, path string) (err er
 	return s.Copy(artifact, f)
 }
 
-// CopyToPath copies the contents of the given artifact to the path.
+// CopyToPath copies the contents in the (sub)path of the given artifact to the given path.
 func (s *Storage) CopyToPath(artifact *sourcev1.Artifact, subPath, toPath string) error {
 	// create a tmp directory to store artifact
-	tmp, err := os.MkdirTemp("", "flux-include")
+	tmp, err := os.MkdirTemp("", "flux-include-")
 	if err != nil {
 		return err
 	}
@@ -371,7 +381,7 @@ func (s *Storage) CopyToPath(artifact *sourcev1.Artifact, subPath, toPath string
 	defer f.Close()
 
 	// untar the artifact
-	untarPath := filepath.Join(tmp, "tar")
+	untarPath := filepath.Join(tmp, "unpack")
 	if _, err = untar.Untar(f, untarPath); err != nil {
 		return err
 	}
@@ -382,15 +392,17 @@ func (s *Storage) CopyToPath(artifact *sourcev1.Artifact, subPath, toPath string
 	}
 
 	// copy the artifact content to the destination dir
-	fromPath := filepath.Join(untarPath, subPath)
+	fromPath, err := securejoin.SecureJoin(untarPath, subPath)
+	if err != nil {
+		return err
+	}
 	if err := fs.RenameWithFallback(fromPath, toPath); err != nil {
 		return err
 	}
 	return nil
 }
 
-// Symlink creates or updates a symbolic link for the given v1beta1.Artifact
-// and returns the URL for the symlink.
+// Symlink creates or updates a symbolic link for the given v1beta1.Artifact and returns the URL for the symlink.
 func (s *Storage) Symlink(artifact sourcev1.Artifact, linkName string) (string, error) {
 	localPath := s.LocalPath(artifact)
 	dir := filepath.Dir(localPath)
@@ -427,13 +439,16 @@ func (s *Storage) Lock(artifact sourcev1.Artifact) (unlock func(), err error) {
 	return mutex.Lock()
 }
 
-// LocalPath returns the local path of the given artifact (that is: relative to
-// the Storage.BasePath).
+// LocalPath returns the secure local path of the given artifact (that is: relative to the Storage.BasePath).
 func (s *Storage) LocalPath(artifact sourcev1.Artifact) string {
 	if artifact.Path == "" {
 		return ""
 	}
-	return filepath.Join(s.BasePath, artifact.Path)
+	path, err := securejoin.SecureJoin(s.BasePath, artifact.Path)
+	if err != nil {
+		return ""
+	}
+	return path
 }
 
 // newHash returns a new SHA1 hash.

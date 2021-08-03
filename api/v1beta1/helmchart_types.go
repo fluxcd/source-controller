@@ -17,7 +17,10 @@ limitations under the License.
 package v1beta1
 
 import (
+	"time"
+
 	"github.com/fluxcd/pkg/apis/meta"
+	"github.com/fluxcd/pkg/runtime/conditions"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -129,7 +132,7 @@ func HelmChartProgressing(chart HelmChart) HelmChart {
 	chart.Status.ObservedGeneration = chart.Generation
 	chart.Status.URL = ""
 	chart.Status.Conditions = []metav1.Condition{}
-	meta.SetResourceCondition(&chart, meta.ReadyCondition, metav1.ConditionUnknown, meta.ProgressingReason, "reconciliation in progress")
+	conditions.MarkUnknown(&chart, meta.ReadyCondition, meta.ProgressingReason, "reconciliation in progress")
 	return chart
 }
 
@@ -139,7 +142,7 @@ func HelmChartProgressing(chart HelmChart) HelmChart {
 func HelmChartReady(chart HelmChart, artifact Artifact, url, reason, message string) HelmChart {
 	chart.Status.Artifact = &artifact
 	chart.Status.URL = url
-	meta.SetResourceCondition(&chart, meta.ReadyCondition, metav1.ConditionTrue, reason, message)
+	conditions.MarkTrue(&chart, meta.ReadyCondition, reason, message)
 	return chart
 }
 
@@ -147,7 +150,7 @@ func HelmChartReady(chart HelmChart, artifact Artifact, url, reason, message str
 // 'False', with the given reason and message. It returns the modified
 // HelmChart.
 func HelmChartNotReady(chart HelmChart, reason, message string) HelmChart {
-	meta.SetResourceCondition(&chart, meta.ReadyCondition, metav1.ConditionFalse, reason, message)
+	conditions.MarkFalse(&chart, meta.ReadyCondition, reason, message)
 	return chart
 }
 
@@ -162,20 +165,30 @@ func HelmChartReadyMessage(chart HelmChart) string {
 	return ""
 }
 
-// GetArtifact returns the latest artifact from the source if present in the
-// status sub-resource.
+// GetConditions returns the status conditions of the object.
+func (in HelmChart) GetConditions() []metav1.Condition {
+	return in.Status.Conditions
+}
+
+// SetConditions sets the status conditions on the object.
+func (in *HelmChart) SetConditions(conditions []metav1.Condition) {
+	in.Status.Conditions = conditions
+}
+
+// GetRequeueAfter returns the duration after which the source must be reconciled again.
+func (in HelmChart) GetRequeueAfter() time.Duration {
+	return in.Spec.Interval.Duration
+}
+
+// GetInterval returns the interval at which the source is reconciled.
+// Deprecated: use GetRequeueAfter instead.
+func (in HelmChart) GetInterval() metav1.Duration {
+	return in.Spec.Interval
+}
+
+// GetArtifact returns the latest artifact from the source if present in the status sub-resource.
 func (in *HelmChart) GetArtifact() *Artifact {
 	return in.Status.Artifact
-}
-
-// GetStatusConditions returns a pointer to the Status.Conditions slice
-func (in *HelmChart) GetStatusConditions() *[]metav1.Condition {
-	return &in.Status.Conditions
-}
-
-// GetInterval returns the interval at which the source is updated.
-func (in *HelmChart) GetInterval() metav1.Duration {
-	return in.Spec.Interval
 }
 
 // GetValuesFiles returns a merged list of ValuesFiles.
@@ -187,6 +200,12 @@ func (in *HelmChart) GetValuesFiles() []string {
 		valuesFiles = append([]string{in.Spec.ValuesFile}, valuesFiles...)
 	}
 	return valuesFiles
+}
+
+// GetStatusConditions returns a pointer to the Status.Conditions slice.
+// Deprecated: use GetConditions instead.
+func (in *HelmChart) GetStatusConditions() *[]metav1.Condition {
+	return &in.Status.Conditions
 }
 
 // +genclient
