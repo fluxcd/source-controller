@@ -328,6 +328,7 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context,
 	checkoutStrategy, err := strategy.CheckoutStrategyForImplementation(ctx,
 		git.Implementation(obj.Spec.GitImplementation), checkoutOpts)
 	if err != nil {
+		ctrl.LoggerFrom(ctx).Error(err, fmt.Sprintf("Failed to configure checkout strategy for Git implementation '%s'", obj.Spec.GitImplementation))
 		conditions.MarkTrue(obj, sourcev1.CheckoutFailedCondition, sourcev1.GitOperationFailedReason,
 			"Failed to configure checkout strategy for Git implementation '%s': %s", obj.Spec.GitImplementation, err)
 		// Do not return err as recovery without changes is impossible
@@ -391,7 +392,7 @@ func (r *GitRepositoryReconciler) reconcileArtifact(ctx context.Context, obj *so
 
 	// The artifact is up-to-date
 	if obj.GetArtifact().HasRevision(artifact.Revision) && !includes.Diff(obj.Status.IncludedArtifacts) {
-		ctrl.LoggerFrom(ctx).Info("Artifact is up-to-date")
+		ctrl.LoggerFrom(ctx).Info(fmt.Sprintf("Already up to date, current revision '%s'", artifact.Revision))
 		return ctrl.Result{RequeueAfter: obj.GetRequeueAfter()}, nil
 	}
 
@@ -484,6 +485,7 @@ func (r *GitRepositoryReconciler) reconcileInclude(ctx context.Context, obj *sou
 
 		// Confirm include has an artifact
 		if dep.GetArtifact() == nil {
+			ctrl.LoggerFrom(ctx).Error(nil, fmt.Sprintf("No artifact available for include '%s'", incl.GitRepositoryRef.Name))
 			conditions.MarkTrue(obj, sourcev1.IncludeUnavailableCondition, "NoArtifact",
 				"No artifact available for include '%s'", incl.GitRepositoryRef.Name)
 			return ctrl.Result{}, nil
