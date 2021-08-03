@@ -310,9 +310,9 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context,
 	}
 	if err != nil {
 		conditions.MarkTrue(obj, sourcev1.CheckoutFailedCondition, sourcev1.AuthenticationFailedReason,
-			"Failed to configure auth strategy for Git implementation %q: %s", obj.Spec.GitImplementation, err)
+			"Failed to configure auth strategy for Git implementation '%s': %s", obj.Spec.GitImplementation, err)
 		r.Eventf(obj, events.EventSeverityError, sourcev1.AuthenticationFailedReason,
-			"Failed to configure auth strategy for Git implementation %q: %s", obj.Spec.GitImplementation, err)
+			"Failed to configure auth strategy for Git implementation '%s': %s", obj.Spec.GitImplementation, err)
 		// Return error as the contents of the secret may change
 		return ctrl.Result{}, err
 	}
@@ -329,7 +329,7 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context,
 		git.Implementation(obj.Spec.GitImplementation), checkoutOpts)
 	if err != nil {
 		conditions.MarkTrue(obj, sourcev1.CheckoutFailedCondition, sourcev1.GitOperationFailedReason,
-			"Failed to configure checkout strategy for Git implementation %q: %s", obj.Spec.GitImplementation, err)
+			"Failed to configure checkout strategy for Git implementation '%s': %s", obj.Spec.GitImplementation, err)
 		// Do not return err as recovery without changes is impossible
 		return ctrl.Result{}, nil
 	}
@@ -470,7 +470,7 @@ func (r *GitRepositoryReconciler) reconcileInclude(ctx context.Context, obj *sou
 		toPath, err := securejoin.SecureJoin(dir, incl.GetToPath())
 		if err != nil {
 			conditions.MarkTrue(obj, sourcev1.IncludeUnavailableCondition, "IllegalPath",
-				"Path calculation for include %q failed: %s", incl.GitRepositoryRef.Name, err.Error())
+				"Path calculation for include '%s' failed: %s", incl.GitRepositoryRef.Name, err.Error())
 			return ctrl.Result{}, err
 		}
 
@@ -478,23 +478,23 @@ func (r *GitRepositoryReconciler) reconcileInclude(ctx context.Context, obj *sou
 		dep := &sourcev1.GitRepository{}
 		if err := r.Get(ctx, types.NamespacedName{Namespace: obj.Namespace, Name: incl.GitRepositoryRef.Name}, dep); err != nil {
 			conditions.MarkTrue(obj, sourcev1.IncludeUnavailableCondition, "NotFound",
-				"Could not get resource for include %q: %s", incl.GitRepositoryRef.Name, err.Error())
+				"Could not get resource for include '%s': %s", incl.GitRepositoryRef.Name, err.Error())
 			return ctrl.Result{}, err
 		}
 
 		// Confirm include has an artifact
 		if dep.GetArtifact() == nil {
 			conditions.MarkTrue(obj, sourcev1.IncludeUnavailableCondition, "NoArtifact",
-				"No artifact available for include %q", incl.GitRepositoryRef.Name)
+				"No artifact available for include '%s'", incl.GitRepositoryRef.Name)
 			return ctrl.Result{}, nil
 		}
 
 		// Copy artifact (sub)contents to configured directory
 		if err := r.Storage.CopyToPath(dep.GetArtifact(), incl.GetFromPath(), toPath); err != nil {
 			conditions.MarkTrue(obj, sourcev1.IncludeUnavailableCondition, "CopyFailure",
-				"Failed to copy %q include from %s to %s: %s", incl.GitRepositoryRef.Name, incl.GetFromPath(), incl.GetToPath(), err.Error())
+				"Failed to copy '%s' include from %s to %s: %s", incl.GitRepositoryRef.Name, incl.GetFromPath(), incl.GetToPath(), err.Error())
 			r.Eventf(obj, events.EventSeverityError, sourcev1.IncludeUnavailableCondition,
-				"Failed to copy %q include from %s to %s: %s", incl.GitRepositoryRef.Name, incl.GetFromPath(), incl.GetToPath(), err.Error())
+				"Failed to copy '%s' include from %s to %s: %s", incl.GitRepositoryRef.Name, incl.GetFromPath(), incl.GetToPath(), err.Error())
 			return ctrl.Result{}, err
 		}
 		artifacts[i] = dep.GetArtifact().DeepCopy()
@@ -552,14 +552,14 @@ func (r *GitRepositoryReconciler) verifyCommitSignature(ctx context.Context, obj
 	}
 	// Verify commit with GPG data from secret
 	if _, err := commit.Verify(keyRings...); err != nil {
-		conditions.MarkFalse(obj, sourcev1.SourceVerifiedCondition, meta.FailedReason, "Signature verification of commit %q failed: %s", commit.Hash.String(), err)
-		r.Eventf(obj, events.EventSeverityError, "InvalidCommitSignature", "Signature verification of commit %q failed: %s", commit.Hash.String(), err)
+		conditions.MarkFalse(obj, sourcev1.SourceVerifiedCondition, meta.FailedReason, "Signature verification of commit '%s' failed: %s", commit.Hash.String(), err)
+		r.Eventf(obj, events.EventSeverityError, "InvalidCommitSignature", "Signature verification of commit '%s' failed: %s", commit.Hash.String(), err)
 		// Return error in the hope the secret changes
 		return ctrl.Result{}, err
 	}
 
-	conditions.MarkTrue(obj, sourcev1.SourceVerifiedCondition, meta.SucceededReason, "Verified signature of commit %q", commit.Hash.String())
-	r.Eventf(obj, events.EventSeverityInfo, "VerifiedCommit", "Verified signature of commit %q", commit.Hash.String())
+	conditions.MarkTrue(obj, sourcev1.SourceVerifiedCondition, meta.SucceededReason, "Verified signature of commit '%s'", commit.Hash.String())
+	r.Eventf(obj, events.EventSeverityInfo, "VerifiedCommit", "Verified signature of commit '%s'", commit.Hash.String())
 	return ctrl.Result{RequeueAfter: obj.Spec.Interval.Duration}, nil
 }
 
