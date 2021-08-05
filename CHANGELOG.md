@@ -2,6 +2,39 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.15.4
+
+**Release date:** 2021-08-05
+
+This prerelease comes with a series of bug fixes, and updates the Kubernetes
+dependencies to `v1.21.3` and Helm to `v3.6.3`.
+
+Fixes:
+* Fix tag checkout with libgit2
+  [#394](https://github.com/fluxcd/source-controller/pull/394)
+* Take relative paths in account for Bucket revision
+  [#403](https://github.com/fluxcd/source-controller/pull/403)
+* Ensure rel path never traverses outside Storage
+  [#417](https://github.com/fluxcd/source-controller/pull/417)
+* Use same SemVer logic in both Git implementations
+  [#417](https://github.com/fluxcd/source-controller/pull/417)
+* storage: strip env specific data during archive
+  [#417](https://github.com/fluxcd/source-controller/pull/417)
+
+Improvements:
+* e2e: Update Kubernetes to v1.21
+  [#396](https://github.com/fluxcd/source-controller/pull/396)
+* Update Helm to v3.6.3
+  [#400](https://github.com/fluxcd/source-controller/pull/400)
+* Add setup-envtest in Makefile
+  [#404](https://github.com/fluxcd/source-controller/pull/404)
+* Use ObjectKeyFromObject instead of ObjectKey
+  [#405](https://github.com/fluxcd/source-controller/pull/405)
+* Drop deprecated `io/ioutil`
+  [#409](https://github.com/fluxcd/source-controller/pull/409)
+* Update dependencies
+  [#416](https://github.com/fluxcd/source-controller/pull/416)
+
 ## 0.15.3
 
 **Release date:** 2021-06-29
