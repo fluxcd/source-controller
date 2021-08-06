@@ -788,7 +788,7 @@ func TestGitRepositoryReconciler_reconcileInclude(t *testing.T) {
 	g.Expect(err).NotTo(HaveOccurred())
 	storage, err := newTestStorage(server.HTTPServer)
 	g.Expect(err).NotTo(HaveOccurred())
-	defer os.RemoveAll(testStorage.BasePath)
+	defer os.RemoveAll(storage.BasePath)
 
 	dependencyInterval := 5 * time.Second
 
@@ -833,8 +833,8 @@ func TestGitRepositoryReconciler_reconcileInclude(t *testing.T) {
 				},
 			},
 			includes: []include{
-				{name: "a", toPath: "a/"},
-				{name: "b", toPath: "b/"},
+				{name: "a", toPath: "a/", shouldExist: true},
+				{name: "b", toPath: "b/", shouldExist: true},
 			},
 			want: ctrl.Result{RequeueAfter: interval},
 			assertConditions: []metav1.Condition{
@@ -970,7 +970,7 @@ func TestGitRepositoryReconciler_reconcileInclude(t *testing.T) {
 			g.Expect(got).To(Equal(tt.want))
 			for _, i := range tt.includes {
 				if i.toPath != "" {
-					expect := g.Expect(filepath.Join(testStorage.BasePath, i.toPath))
+					expect := g.Expect(filepath.Join(tmpDir, i.toPath))
 					if i.shouldExist {
 						expect.To(BeADirectory())
 					} else {
@@ -978,9 +978,9 @@ func TestGitRepositoryReconciler_reconcileInclude(t *testing.T) {
 					}
 				}
 				if i.shouldExist {
-					g.Expect(filepath.Join(testStorage.BasePath, i.toPath)).Should(BeADirectory())
+					g.Expect(filepath.Join(tmpDir, i.toPath)).Should(BeADirectory())
 				} else {
-					g.Expect(filepath.Join(testStorage.BasePath, i.toPath)).ShouldNot(BeADirectory())
+					g.Expect(filepath.Join(tmpDir, i.toPath)).ShouldNot(BeADirectory())
 				}
 			}
 		})
