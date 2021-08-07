@@ -1154,6 +1154,134 @@ func TestGitRepositoryReconciler_verifyCommitSignature(t *testing.T) {
 	}
 }
 
+func TestGitRepositoryReconciler_ConditionsUpdate(t *testing.T) {
+	g := NewWithT(t)
+
+	server, err := gittestserver.NewTempGitServer()
+	g.Expect(err).NotTo(HaveOccurred())
+	defer os.RemoveAll(server.Root())
+	server.AutoCreate()
+	g.Expect(server.StartHTTP()).To(Succeed())
+	defer server.StopHTTP()
+
+	repoPath := "/test.git"
+	_, err = initGitRepo(server, "testdata/git/repository", git.DefaultBranch, repoPath)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	tests := []struct {
+		name             string
+		beforeFunc       func(obj *sourcev1.GitRepository)
+		want             ctrl.Result
+		wantErr          bool
+		assertConditions []metav1.Condition
+	}{
+		{
+			name: "no condition",
+			want: ctrl.Result{RequeueAfter: interval},
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReadyCondition, "Succeeded", "Stored artifact for revision"),
+			},
+		},
+		{
+			name: "reconciling condition",
+			beforeFunc: func(obj *sourcev1.GitRepository) {
+				conditions.MarkTrue(obj, meta.ReconcilingCondition, "Foo", "")
+			},
+			want: ctrl.Result{RequeueAfter: interval},
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReadyCondition, "Succeeded", "Stored artifact for revision"),
+			},
+		},
+		{
+			name: "stalled condition",
+			beforeFunc: func(obj *sourcev1.GitRepository) {
+				conditions.MarkTrue(obj, meta.StalledCondition, "Foo", "")
+			},
+			want: ctrl.Result{RequeueAfter: interval},
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReadyCondition, "Succeeded", "Stored artifact for revision"),
+			},
+		},
+		{
+			name: "mixed failed conditions",
+			beforeFunc: func(obj *sourcev1.GitRepository) {
+				conditions.MarkTrue(obj, sourcev1.CheckoutFailedCondition, "Foo", "")
+				conditions.MarkTrue(obj, sourcev1.IncludeUnavailableCondition, "Foo", "")
+				conditions.MarkTrue(obj, sourcev1.SourceVerifiedCondition, "Foo", "")
+				conditions.MarkTrue(obj, sourcev1.ArtifactOutdatedCondition, "Foo", "")
+				conditions.MarkTrue(obj, sourcev1.ArtifactUnavailableCondition, "Foo", "")
+			},
+			want: ctrl.Result{RequeueAfter: interval},
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReadyCondition, "Succeeded", "Stored artifact for revision"),
+			},
+		},
+		{
+			name: "reconciling and failed conditions",
+			beforeFunc: func(obj *sourcev1.GitRepository) {
+				conditions.MarkTrue(obj, meta.ReconcilingCondition, "Foo", "")
+				conditions.MarkTrue(obj, sourcev1.CheckoutFailedCondition, "Foo", "")
+			},
+			want: ctrl.Result{RequeueAfter: interval},
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReadyCondition, "Succeeded", "Stored artifact for revision"),
+			},
+		},
+		{
+			name: "stalled and failed conditions",
+			beforeFunc: func(obj *sourcev1.GitRepository) {
+				conditions.MarkTrue(obj, meta.StalledCondition, "Foo", "")
+				conditions.MarkTrue(obj, sourcev1.CheckoutFailedCondition, "Foo", "")
+			},
+			want: ctrl.Result{RequeueAfter: interval},
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReadyCondition, "Succeeded", "Stored artifact for revision"),
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			obj := &sourcev1.GitRepository{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       "condition-update",
+					Namespace:  "default",
+					Finalizers: []string{sourcev1.SourceFinalizer},
+				},
+				Spec: sourcev1.GitRepositorySpec{
+					URL:               server.HTTPAddress() + repoPath,
+					GitImplementation: sourcev1.GoGitImplementation,
+					Interval:          metav1.Duration{Duration: interval},
+					Timeout:           &metav1.Duration{Duration: interval},
+				},
+			}
+
+			if tt.beforeFunc != nil {
+				tt.beforeFunc(obj)
+			}
+
+			builder := fakeclient.NewClientBuilder().WithScheme(testEnv.GetScheme()).WithObjects(obj)
+
+			r := &GitRepositoryReconciler{
+				Client:  builder.Build(),
+				Storage: testStorage,
+			}
+
+			key := client.ObjectKeyFromObject(obj)
+			res, err := r.Reconcile(logr.NewContext(ctx, log.NullLogger{}), ctrl.Request{NamespacedName: key})
+			g.Expect(err != nil).To(Equal(tt.wantErr))
+			g.Expect(res).To(Equal(tt.want))
+
+			updatedObj := &sourcev1.GitRepository{}
+			err = r.Get(ctx, key, updatedObj)
+			g.Expect(err).NotTo(HaveOccurred())
+			g.Expect(updatedObj.GetConditions()).To(conditions.MatchConditions(tt.assertConditions))
+		})
+	}
+}
+
 // helpers
 
 func initGitRepo(server *gittestserver.GitServer, fixture, branch, repositoryPath string) (*gogit.Repository, error) {
