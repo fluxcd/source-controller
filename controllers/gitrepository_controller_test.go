@@ -735,6 +735,60 @@ func TestGitRepositoryReconciler_reconcileArtifact(t *testing.T) {
 			},
 		},
 		{
+			name: "Removes ArtifactUnavailableCondition after creating artifact",
+			dir:  "testdata/git/repository",
+			beforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Spec.Interval = metav1.Duration{Duration: interval}
+				conditions.MarkTrue(obj, sourcev1.ArtifactUnavailableCondition, "Foo", "")
+			},
+			afterFunc: func(t *WithT, obj *sourcev1.GitRepository, artifact sourcev1.Artifact) {
+				t.Expect(obj.GetArtifact()).ToNot(BeNil())
+				t.Expect(obj.GetArtifact().Checksum).To(Equal("ef9c34eab0584035ac8b8a4070876954ea46f270250d60648672feef3e943426"))
+				t.Expect(obj.Status.URL).ToNot(BeEmpty())
+			},
+			want: ctrl.Result{RequeueAfter: interval},
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReadyCondition, meta.SucceededReason, "Stored artifact for revision 'main/revision'"),
+			},
+		},
+		{
+			name: "Removes ArtifactOutdatedCondition after creating new artifact",
+			dir:  "testdata/git/repository",
+			beforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Spec.Interval = metav1.Duration{Duration: interval}
+				conditions.MarkTrue(obj, sourcev1.ArtifactOutdatedCondition, "Foo", "")
+			},
+			afterFunc: func(t *WithT, obj *sourcev1.GitRepository, artifact sourcev1.Artifact) {
+				t.Expect(obj.GetArtifact()).ToNot(BeNil())
+				t.Expect(obj.GetArtifact().Checksum).To(Equal("ef9c34eab0584035ac8b8a4070876954ea46f270250d60648672feef3e943426"))
+				t.Expect(obj.Status.URL).ToNot(BeEmpty())
+			},
+			want: ctrl.Result{RequeueAfter: interval},
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReadyCondition, meta.SucceededReason, "Stored artifact for revision 'main/revision'"),
+			},
+		},
+		{
+			name: "Creates latest symlink to the created artifact",
+			dir:  "testdata/git/repository",
+			beforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Spec.Interval = metav1.Duration{Duration: interval}
+			},
+			afterFunc: func(t *WithT, obj *sourcev1.GitRepository, artifact sourcev1.Artifact) {
+				t.Expect(obj.GetArtifact()).ToNot(BeNil())
+
+				localPath := testStorage.LocalPath(*obj.GetArtifact())
+				symlinkPath := filepath.Join(filepath.Dir(localPath), "latest.tar.gz")
+				targetFile, err := os.Readlink(symlinkPath)
+				t.Expect(err).NotTo(HaveOccurred())
+				t.Expect(localPath).To(Equal(targetFile))
+			},
+			want: ctrl.Result{RequeueAfter: interval},
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReadyCondition, meta.SucceededReason, "Stored artifact for revision 'main/revision'"),
+			},
+		},
+		{
 			name:    "Target path does not exists",
 			dir:     "testdata/git/foo",
 			wantErr: true,
