@@ -123,13 +123,13 @@ func (r *GitRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 			conditions.WithConditions(
 				sourcev1.IncludeUnavailableCondition,
 				sourcev1.SourceVerifiedCondition,
-				sourcev1.CheckoutFailedCondition,
+				sourcev1.FetchFailedCondition,
 				sourcev1.ArtifactOutdatedCondition,
 				sourcev1.ArtifactUnavailableCondition,
 			),
 			conditions.WithNegativePolarityConditions(
 				sourcev1.ArtifactUnavailableCondition,
-				sourcev1.CheckoutFailedCondition,
+				sourcev1.FetchFailedCondition,
 				sourcev1.SourceVerifiedCondition,
 				sourcev1.IncludeUnavailableCondition,
 				sourcev1.ArtifactOutdatedCondition,
@@ -141,7 +141,7 @@ func (r *GitRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 			patch.WithOwnedConditions{
 				Conditions: []string{
 					sourcev1.ArtifactUnavailableCondition,
-					sourcev1.CheckoutFailedCondition,
+					sourcev1.FetchFailedCondition,
 					sourcev1.IncludeUnavailableCondition,
 					sourcev1.ArtifactOutdatedCondition,
 					meta.ReadyCondition,
@@ -272,8 +272,8 @@ func (r *GitRepositoryReconciler) reconcileStorage(ctx context.Context, obj *sou
 // and observes its state.
 //
 // The repository is checked out to the given dir using the defined configuration, and in case of an error during the
-// checkout process (including transient errors), it records v1beta1.CheckoutFailedCondition=True and returns early.
-// On a successful checkout it removes v1beta1.CheckoutFailedCondition, and compares the current revision of HEAD to the
+// checkout process (including transient errors), it records v1beta1.FetchFailedCondition=True and returns early.
+// On a successful checkout it removes v1beta1.FetchFailedCondition, and compares the current revision of HEAD to the
 // artifact on the object, and records v1beta1.ArtifactOutdatedCondition if they differ.
 // If instructed, the signature of the commit is verified if and recorded as v1beta1.SourceVerifiedCondition. If the
 // signature can not be verified or the verification fails, the Condition=False and it returns early.
@@ -294,7 +294,7 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context,
 		}
 		var secret corev1.Secret
 		if err := r.Client.Get(ctx, name, &secret); err != nil {
-			conditions.MarkTrue(obj, sourcev1.CheckoutFailedCondition, sourcev1.AuthenticationFailedReason,
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason,
 				"Failed to get secret '%s': %s", name.String(), err.Error())
 			r.Eventf(obj, events.EventSeverityError, sourcev1.AuthenticationFailedReason,
 				"Failed to get secret '%s': %s", name.String(), err.Error())
@@ -309,7 +309,7 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context,
 		authOpts, err = git.AuthOptionsWithoutSecret(obj.Spec.URL)
 	}
 	if err != nil {
-		conditions.MarkTrue(obj, sourcev1.CheckoutFailedCondition, sourcev1.AuthenticationFailedReason,
+		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason,
 			"Failed to configure auth strategy for Git implementation '%s': %s", obj.Spec.GitImplementation, err)
 		r.Eventf(obj, events.EventSeverityError, sourcev1.AuthenticationFailedReason,
 			"Failed to configure auth strategy for Git implementation '%s': %s", obj.Spec.GitImplementation, err)
@@ -329,7 +329,7 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context,
 		git.Implementation(obj.Spec.GitImplementation), checkoutOpts)
 	if err != nil {
 		ctrl.LoggerFrom(ctx).Error(err, fmt.Sprintf("Failed to configure checkout strategy for Git implementation '%s'", obj.Spec.GitImplementation))
-		conditions.MarkTrue(obj, sourcev1.CheckoutFailedCondition, sourcev1.GitOperationFailedReason,
+		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.GitOperationFailedReason,
 			"Failed to configure checkout strategy for Git implementation '%s': %s", obj.Spec.GitImplementation, err)
 		// Do not return err as recovery without changes is impossible
 		return ctrl.Result{}, nil
@@ -340,7 +340,7 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context,
 	defer cancel()
 	commit, err := checkoutStrategy.Checkout(gitCtx, dir, obj.Spec.URL, authOpts)
 	if err != nil {
-		conditions.MarkTrue(obj, sourcev1.CheckoutFailedCondition, sourcev1.GitOperationFailedReason,
+		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.GitOperationFailedReason,
 			"Failed to checkout and determine revision: %s", err)
 		r.Eventf(obj, events.EventSeverityError, sourcev1.GitOperationFailedReason,
 			"Failed to checkout and determine revision: %s", err)
@@ -349,7 +349,7 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context,
 	}
 	r.Eventf(obj, events.EventSeverityInfo, sourcev1.GitOperationSucceedReason,
 		"Cloned repository '%s' and checked out revision '%s'", obj.Spec.URL, commit.String())
-	conditions.Delete(obj, sourcev1.CheckoutFailedCondition)
+	conditions.Delete(obj, sourcev1.FetchFailedCondition)
 
 	// Verify commit signature
 	if result, err := r.verifyCommitSignature(ctx, obj, *commit); err != nil || result.IsZero() {
