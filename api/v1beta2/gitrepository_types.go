@@ -36,11 +36,6 @@ const (
 )
 
 const (
-	// CheckoutFailedCondition indicates a transient or persistent checkout failure. If True, observations on the
-	// upstream Source revision are not possible, and the Artifact available for the Source may be outdated.
-	// This is a "negative polarity" or "abnormal-true" type, and is only present on the resource if it is True.
-	CheckoutFailedCondition string = "CheckoutFailed"
-
 	// SourceVerifiedCondition indicates the integrity of the Source has been verified. If True, the integrity check
 	// succeeded. If False, it failed. The Condition is only present on the resource if the integrity has been verified.
 	SourceVerifiedCondition string = "SourceVerified"
