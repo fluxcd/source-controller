@@ -164,7 +164,7 @@ func TestBucketReconciler_reconcileStorage(t *testing.T) {
 			assertArtifact: &sourcev1.Artifact{
 				Path:     "/reconcile-storage/c.txt",
 				Revision: "c",
-				Checksum: "84a516841ba77a5b4648de2cd0dfcb30ea46dbb4",
+				Checksum: "2e7d2c03a9507ae265ecf5b5356885a53393a2029d241394997265a1a25aefc6",
 				URL:      testStorage.Hostname + "/reconcile-storage/c.txt",
 			},
 			assertPaths: []string{
@@ -197,7 +197,7 @@ func TestBucketReconciler_reconcileStorage(t *testing.T) {
 				obj.Status.Artifact = &sourcev1.Artifact{
 					Path:     fmt.Sprintf("/reconcile-storage/hostname.txt"),
 					Revision: "f",
-					Checksum: "971c419dd609331343dee105fffd0f4608dc0bf2",
+					Checksum: "3b9c358f36f0a31b6ad3e14f309c7cf198ac9246e8316f9ce543d5b19ac02b80",
 					URL:      "http://outdated.com/reconcile-storage/hostname.txt",
 				}
 				if err := testStorage.MkdirAll(*obj.Status.Artifact); err != nil {
@@ -214,7 +214,7 @@ func TestBucketReconciler_reconcileStorage(t *testing.T) {
 			assertArtifact: &sourcev1.Artifact{
 				Path:     "/reconcile-storage/hostname.txt",
 				Revision: "f",
-				Checksum: "971c419dd609331343dee105fffd0f4608dc0bf2",
+				Checksum: "3b9c358f36f0a31b6ad3e14f309c7cf198ac9246e8316f9ce543d5b19ac02b80",
 				URL:      testStorage.Hostname + "/reconcile-storage/hostname.txt",
 			},
 		},
@@ -441,56 +441,112 @@ func TestBucketReconciler_reconcileMinioSource(t *testing.T) {
 }
 
 func TestBucketReconciler_reconcileArtifact(t *testing.T) {
+	// testChecksum is the checksum value of the artifacts created in this
+	// test.
+	const testChecksum = "4f4fb700ef54461cfa02571ae0db9a0dc1e0cdb5577484a6d75e68dc38e8acc1"
+
 	tests := []struct {
 		name             string
-		artifact         sourcev1.Artifact
-		beforeFunc       func(obj *sourcev1.Bucket, artifact sourcev1.Artifact, dir string)
+		beforeFunc       func(t *WithT, obj *sourcev1.Bucket, artifact sourcev1.Artifact, dir string)
+		afterFunc        func(t *WithT, obj *sourcev1.Bucket, dir string)
 		want             ctrl.Result
 		wantErr          bool
 		assertConditions []metav1.Condition
 	}{
 		{
-			name: "artifact revision up-to-date",
-			artifact: sourcev1.Artifact{
-				Revision: "existing",
+			name: "Archiving artifact to storage makes Ready=True",
+			beforeFunc: func(t *WithT, obj *sourcev1.Bucket, artifact sourcev1.Artifact, dir string) {
+				obj.Spec.Interval = metav1.Duration{Duration: interval}
 			},
-			beforeFunc: func(obj *sourcev1.Bucket, artifact sourcev1.Artifact, dir string) {
-				obj.Status.Artifact = &artifact
-			},
+			want: ctrl.Result{RequeueAfter: interval},
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(meta.ReadyCondition, meta.SucceededReason, "Stored artifact for revision 'existing'"),
 			},
 		},
 		{
-			name: "dir path deleted",
-			beforeFunc: func(obj *sourcev1.Bucket, artifact sourcev1.Artifact, dir string) {
-				_ = os.RemoveAll(dir)
+			name: "Up-to-date artifact should not update status",
+			beforeFunc: func(t *WithT, obj *sourcev1.Bucket, artifact sourcev1.Artifact, dir string) {
+				obj.Spec.Interval = metav1.Duration{Duration: interval}
+				obj.Status.Artifact = artifact.DeepCopy()
+			},
+			afterFunc: func(t *WithT, obj *sourcev1.Bucket, dir string) {
+				t.Expect(obj.Status.URL).To(BeEmpty())
+			},
+			want: ctrl.Result{RequeueAfter: interval},
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReadyCondition, meta.SucceededReason, "Stored artifact for revision 'existing'"),
+			},
+		},
+		{
+			name: "Removes ArtifactUnavailableCondition after creating artifact",
+			beforeFunc: func(t *WithT, obj *sourcev1.Bucket, artifact sourcev1.Artifact, dir string) {
+				obj.Spec.Interval = metav1.Duration{Duration: interval}
+				conditions.MarkTrue(obj, sourcev1.ArtifactUnavailableCondition, "Foo", "")
+			},
+			want: ctrl.Result{RequeueAfter: interval},
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReadyCondition, meta.SucceededReason, "Stored artifact for revision 'existing'"),
+			},
+		},
+		{
+			name: "Removes ArtifactOutdatedCondition after creating a new artifact",
+			beforeFunc: func(t *WithT, obj *sourcev1.Bucket, artifact sourcev1.Artifact, dir string) {
+				obj.Spec.Interval = metav1.Duration{Duration: interval}
+				conditions.MarkTrue(obj, sourcev1.ArtifactOutdatedCondition, "Foo", "")
+			},
+			want: ctrl.Result{RequeueAfter: interval},
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReadyCondition, meta.SucceededReason, "Stored artifact for revision 'existing'"),
+			},
+		},
+		{
+			name: "Creates latest symlink to the created artifact",
+			beforeFunc: func(t *WithT, obj *sourcev1.Bucket, artifact sourcev1.Artifact, dir string) {
+				obj.Spec.Interval = metav1.Duration{Duration: interval}
+			},
+			afterFunc: func(t *WithT, obj *sourcev1.Bucket, dir string) {
+				localPath := testStorage.LocalPath(*obj.GetArtifact())
+				symlinkPath := filepath.Join(filepath.Dir(localPath), "latest.tar.gz")
+				targetFile, err := os.Readlink(symlinkPath)
+				t.Expect(err).NotTo(HaveOccurred())
+				t.Expect(localPath).To(Equal(targetFile))
+			},
+			want: ctrl.Result{RequeueAfter: interval},
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReadyCondition, meta.SucceededReason, "Stored artifact for revision 'existing'"),
+			},
+		},
+		{
+			name: "Dir path deleted",
+			beforeFunc: func(t *WithT, obj *sourcev1.Bucket, artifact sourcev1.Artifact, dir string) {
+				t.Expect(os.RemoveAll(dir)).ToNot(HaveOccurred())
 			},
 			wantErr: true,
 		},
-		//{
-		//	name: "dir path empty",
-		//},
-		//{
-		//	name: "success",
-		//	artifact: sourcev1.Artifact{
-		//		Revision: "existing",
-		//	},
-		//	beforeFunc: func(obj *sourcev1.Bucket, artifact sourcev1.Artifact, dir string) {
-		//		obj.Status.Artifact = &artifact
-		//	},
-		//	assertConditions: []metav1.Condition{
-		//		*conditions.TrueCondition(sourcev1.ArtifactAvailableCondition, meta.SucceededReason, "Compressed source to artifact with revision 'existing'"),
-		//	},
-		//},
-		//{
-		//	name: "symlink",
-		//},
+		{
+			name: "Dir path is not a directory",
+			beforeFunc: func(t *WithT, obj *sourcev1.Bucket, artifact sourcev1.Artifact, dir string) {
+				// Remove the given directory and create a file for the same
+				// path.
+				t.Expect(os.RemoveAll(dir)).ToNot(HaveOccurred())
+				f, err := os.Create(dir)
+				defer f.Close()
+				t.Expect(err).ToNot(HaveOccurred())
+			},
+			afterFunc: func(t *WithT, obj *sourcev1.Bucket, dir string) {
+				t.Expect(os.RemoveAll(dir)).ToNot(HaveOccurred())
+			},
+			wantErr: true,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
+
+			r := &BucketReconciler{
+				Storage: testStorage,
+			}
 
 			tmpDir, err := os.MkdirTemp("", "reconcile-bucket-artifact-")
 			g.Expect(err).ToNot(HaveOccurred())
@@ -501,27 +557,36 @@ func TestBucketReconciler_reconcileArtifact(t *testing.T) {
 					Kind: sourcev1.BucketKind,
 				},
 				ObjectMeta: metav1.ObjectMeta{
-					Name: "test-bucket",
+					GenerateName: "test-bucket-",
+					Generation:   1,
+					Namespace:    "default",
 				},
 				Spec: sourcev1.BucketSpec{
 					Timeout: &metav1.Duration{Duration: timeout},
 				},
 			}
 
+			artifact := testStorage.NewArtifactFor(obj.Kind, obj, "existing", "foo.tar.gz")
+			artifact.Checksum = testChecksum
+
 			if tt.beforeFunc != nil {
-				tt.beforeFunc(obj, tt.artifact, tmpDir)
+				tt.beforeFunc(g, obj, artifact, tmpDir)
 			}
 
-			r := &BucketReconciler{
-				Storage: testStorage,
-			}
-
-			got, err := r.reconcileArtifact(logr.NewContext(ctx, log.NullLogger{}), obj, tt.artifact, tmpDir)
+			got, err := r.reconcileArtifact(logr.NewContext(ctx, log.NullLogger{}), obj, artifact, tmpDir)
 			g.Expect(err != nil).To(Equal(tt.wantErr))
 			g.Expect(got).To(Equal(tt.want))
 
-			//g.Expect(artifact).To(MatchArtifact(tt.assertArtifact.DeepCopy()))
+			// On error, artifact is empty. Check artifacts only on successful
+			// reconcile.
+			if !tt.wantErr {
+				g.Expect(obj.Status.Artifact).To(MatchArtifact(artifact.DeepCopy()))
+			}
 			g.Expect(obj.Status.Conditions).To(conditions.MatchConditions(tt.assertConditions))
+
+			if tt.afterFunc != nil {
+				tt.afterFunc(g, obj, tmpDir)
+			}
 		})
 	}
 }
