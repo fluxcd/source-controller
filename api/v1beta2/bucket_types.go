@@ -36,13 +36,6 @@ const (
 	GoogleBucketProvider  string = "gcp"
 )
 
-const (
-	// DownloadFailedCondition indicates a transient or persistent download failure. If True, observations on the
-	// upstream Source revision are not possible, and the Artifact available for the Source may be outdated.
-	// This is a "negative polarity" or "abnormal-true" type, and is only present on the resource if it is True.
-	DownloadFailedCondition string = "DownloadFailed"
-)
-
 // BucketSpec defines the desired state of an S3 compatible bucket
 type BucketSpec struct {
 	// The S3 compatible storage provider name, default ('generic').
