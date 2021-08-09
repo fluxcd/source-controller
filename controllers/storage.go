@@ -19,7 +19,7 @@ package controllers
 import (
 	"archive/tar"
 	"compress/gzip"
-	"crypto/sha1"
+	"crypto/sha256"
 	"fmt"
 	"hash"
 	"io"
@@ -425,7 +425,7 @@ func (s *Storage) Symlink(artifact sourcev1.Artifact, linkName string) (string, 
 	return url, nil
 }
 
-// Checksum returns the SHA1 checksum for the data of the given io.Reader as a string.
+// Checksum returns the SHA256 checksum for the data of the given io.Reader as a string.
 func (s *Storage) Checksum(reader io.Reader) string {
 	h := newHash()
 	_, _ = io.Copy(h, reader)
@@ -451,7 +451,7 @@ func (s *Storage) LocalPath(artifact sourcev1.Artifact) string {
 	return path
 }
 
-// newHash returns a new SHA1 hash.
+// newHash returns a new SHA256 hash.
 func newHash() hash.Hash {
-	return sha1.New()
+	return sha256.New()
 }

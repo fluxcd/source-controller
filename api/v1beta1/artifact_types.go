@@ -39,7 +39,7 @@ type Artifact struct {
 	// +optional
 	Revision string `json:"revision"`
 
-	// Checksum is the SHA1 checksum of the artifact.
+	// Checksum is the SHA256 checksum of the artifact.
 	// +optional
 	Checksum string `json:"checksum"`
 
