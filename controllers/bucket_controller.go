@@ -122,12 +122,12 @@ func (r *BucketReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 			meta.ReadyCondition,
 			conditions.WithConditions(
 				sourcev1.ArtifactOutdatedCondition,
-				sourcev1.DownloadFailedCondition,
+				sourcev1.FetchFailedCondition,
 				sourcev1.ArtifactUnavailableCondition,
 			),
 			conditions.WithNegativePolarityConditions(
 				sourcev1.ArtifactOutdatedCondition,
-				sourcev1.DownloadFailedCondition,
+				sourcev1.FetchFailedCondition,
 				sourcev1.ArtifactUnavailableCondition,
 			),
 		)
@@ -137,7 +137,7 @@ func (r *BucketReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 			patch.WithOwnedConditions{
 				Conditions: []string{
 					sourcev1.ArtifactOutdatedCondition,
-					sourcev1.DownloadFailedCondition,
+					sourcev1.FetchFailedCondition,
 					sourcev1.ArtifactUnavailableCondition,
 					meta.ReadyCondition,
 					meta.ReconcilingCondition,
@@ -259,7 +259,7 @@ func (r *BucketReconciler) reconcileStorage(ctx context.Context, obj *sourcev1.B
 // reconcileSource reconciles the upstream bucket with the client for the given object's Provider, and returns the
 // result.
 // If a SecretRef is defined, it attempts to fetch the Secret before calling the provider. If the fetch of the Secret
-// fails, it records v1beta1.DownloadFailedCondition=True and returns early.
+// fails, it records v1beta1.FetchFailedCondition=True and returns early.
 //
 // The caller should assume a failure if an error is returned, or the Result is zero.
 func (r *BucketReconciler) reconcileSource(ctx context.Context, obj *sourcev1.Bucket, artifact *sourcev1.Artifact, dir string) (ctrl.Result, error) {
@@ -270,7 +270,7 @@ func (r *BucketReconciler) reconcileSource(ctx context.Context, obj *sourcev1.Bu
 			Name:      obj.Spec.SecretRef.Name,
 		}
 		if err := r.Get(ctx, secretName, &secret); err != nil {
-			conditions.MarkTrue(obj, sourcev1.DownloadFailedCondition, sourcev1.AuthenticationFailedReason,
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason,
 				"Failed to get secret '%s': %s", secretName.String(), err.Error())
 			r.Eventf(ctx, obj, events.EventSeverityError, sourcev1.AuthenticationFailedReason,
 				"Failed to get secret '%s': %s", secretName.String(), err.Error())
@@ -292,8 +292,8 @@ func (r *BucketReconciler) reconcileSource(ctx context.Context, obj *sourcev1.Bu
 //
 // The bucket contents are downloaded to the given dir using the defined configuration, while taking ignore rules into
 // account. In case of an error during the download process (including transient errors), it records
-// v1beta1.DownloadFailedCondition=True and returns early.
-// On a successful download, it removes v1beta1.DownloadFailedCondition, and compares the current revision of HEAD to
+// v1beta1.FetchFailedCondition=True and returns early.
+// On a successful download, it removes v1beta1.FetchFailedCondition, and compares the current revision of HEAD to
 // the artifact on the object, and records v1beta1.ArtifactOutdatedCondition if they differ.
 // If the download was successful, the given artifact pointer is set to a new artifact with the available metadata.
 //
@@ -303,7 +303,7 @@ func (r *BucketReconciler) reconcileMinioSource(ctx context.Context, obj *source
 	// Build the client with the configuration from the object and secret
 	s3Client, err := r.buildMinioClient(obj, secret)
 	if err != nil {
-		conditions.MarkTrue(obj, sourcev1.DownloadFailedCondition, sourcev1.BucketOperationFailedReason,
+		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason,
 			"Failed to construct S3 client: %s", err.Error())
 		r.Eventf(ctx, obj, events.EventSeverityError, sourcev1.BucketOperationFailedReason,
 			"Failed to construct S3 client: %s", err.Error())
@@ -316,12 +316,12 @@ func (r *BucketReconciler) reconcileMinioSource(ctx context.Context, obj *source
 	defer cancel()
 	exists, err := s3Client.BucketExists(ctxTimeout, obj.Spec.BucketName)
 	if err != nil {
-		conditions.MarkTrue(obj, sourcev1.DownloadFailedCondition, sourcev1.BucketOperationFailedReason,
+		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason,
 			"Failed to verify existence of bucket '%s': %s", obj.Spec.BucketName, err.Error())
 		return ctrl.Result{}, err
 	}
 	if !exists {
-		conditions.MarkTrue(obj, sourcev1.DownloadFailedCondition, sourcev1.BucketOperationFailedReason,
+		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason,
 			"Bucket '%s' does not exist", obj.Spec.BucketName)
 		r.Eventf(ctx, obj, events.EventSeverityError, sourcev1.BucketOperationFailedReason,
 			"Bucket '%s' does not exist", obj.Spec.BucketName)
@@ -332,7 +332,7 @@ func (r *BucketReconciler) reconcileMinioSource(ctx context.Context, obj *source
 	path := filepath.Join(dir, sourceignore.IgnoreFile)
 	if err := s3Client.FGetObject(ctxTimeout, obj.Spec.BucketName, sourceignore.IgnoreFile, path, minio.GetObjectOptions{}); err != nil {
 		if resp, ok := err.(minio.ErrorResponse); ok && resp.Code != "NoSuchKey" {
-			conditions.MarkTrue(obj, sourcev1.DownloadFailedCondition, sourcev1.BucketOperationFailedReason,
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason,
 				"Failed to get '%s' file: %s", sourceignore.IgnoreFile, err.Error())
 			r.Eventf(ctx, obj, events.EventSeverityError, sourcev1.BucketOperationFailedReason,
 				"Failed to get '%s' file: %s", sourceignore.IgnoreFile, err.Error())
@@ -341,7 +341,7 @@ func (r *BucketReconciler) reconcileMinioSource(ctx context.Context, obj *source
 	}
 	ps, err := sourceignore.ReadIgnoreFile(path, nil)
 	if err != nil {
-		conditions.MarkTrue(obj, sourcev1.DownloadFailedCondition, sourcev1.BucketOperationFailedReason,
+		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason,
 			"Failed to read '%s' file: %s", sourceignore.IgnoreFile, err.Error())
 		r.Eventf(ctx, obj, events.EventSeverityError, sourcev1.BucketOperationFailedReason,
 			"Failed to read '%s' file: %s", sourceignore.IgnoreFile, err.Error())
@@ -362,7 +362,7 @@ func (r *BucketReconciler) reconcileMinioSource(ctx context.Context, obj *source
 		UseV1:     s3utils.IsGoogleEndpoint(*s3Client.EndpointURL()),
 	}) {
 		if err = object.Err; err != nil {
-			conditions.MarkTrue(obj, sourcev1.DownloadFailedCondition, sourcev1.BucketOperationFailedReason,
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason,
 				"Failed to list objects from bucket '%s': %s", obj.Spec.BucketName, err.Error())
 			r.Eventf(ctx, obj, events.EventSeverityError, sourcev1.BucketOperationFailedReason,
 				"Failed to list objects from bucket '%s': %s", obj.Spec.BucketName, err.Error())
@@ -415,7 +415,7 @@ func (r *BucketReconciler) reconcileMinioSource(ctx context.Context, obj *source
 			return nil
 		})
 		if err = group.Wait(); err != nil {
-			conditions.MarkTrue(obj, sourcev1.DownloadFailedCondition, sourcev1.BucketOperationFailedReason,
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason,
 				"Download from bucket '%s' failed: %s", obj.Spec.BucketName, err)
 			r.Eventf(ctx, obj, events.EventSeverityError, sourcev1.BucketOperationFailedReason,
 				"Download from bucket '%s' failed: %s", obj.Spec.BucketName, err)
@@ -424,7 +424,7 @@ func (r *BucketReconciler) reconcileMinioSource(ctx context.Context, obj *source
 		r.Eventf(ctx, obj, events.EventSeverityInfo, sourcev1.BucketOperationSucceedReason,
 			"Downloaded %d files from bucket '%s' revision '%s'", len(index), obj.Spec.BucketName, revision)
 	}
-	conditions.Delete(obj, sourcev1.DownloadFailedCondition)
+	conditions.Delete(obj, sourcev1.FetchFailedCondition)
 
 	// Create potential new artifact
 	*artifact = r.Storage.NewArtifactFor(obj.Kind, obj, revision, fmt.Sprintf("%s.tar.gz", revision))
@@ -446,7 +446,7 @@ func (r *BucketReconciler) reconcileGCPSource(ctx context.Context, obj *sourcev1
 	secret *corev1.Secret, dir string) (ctrl.Result, error) {
 	gcpClient, err := r.buildGCPClient(ctx, secret)
 	if err != nil {
-		conditions.MarkTrue(obj, sourcev1.DownloadFailedCondition, sourcev1.BucketOperationFailedReason,
+		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason,
 			"Failed to construct GCP client: %s", err.Error())
 		r.Eventf(ctx, obj, events.EventSeverityError, sourcev1.BucketOperationFailedReason,
 			"Failed to construct GCP client: %s", err.Error())
@@ -460,12 +460,12 @@ func (r *BucketReconciler) reconcileGCPSource(ctx context.Context, obj *sourcev1
 	defer cancel()
 	exists, err := gcpClient.BucketExists(ctxTimeout, obj.Spec.BucketName)
 	if err != nil {
-		conditions.MarkTrue(obj, sourcev1.DownloadFailedCondition, sourcev1.BucketOperationFailedReason,
+		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason,
 			"Failed to verify existence of bucket '%s': %s", obj.Spec.BucketName, err.Error())
 		return ctrl.Result{}, err
 	}
 	if !exists {
-		conditions.MarkTrue(obj, sourcev1.DownloadFailedCondition, sourcev1.BucketOperationFailedReason,
+		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason,
 			"Bucket '%s' does not exist", obj.Spec.BucketName)
 		r.Eventf(ctx, obj, events.EventSeverityError, sourcev1.BucketOperationFailedReason,
 			"Bucket '%s' does not exist", obj.Spec.BucketName)
@@ -476,7 +476,7 @@ func (r *BucketReconciler) reconcileGCPSource(ctx context.Context, obj *sourcev1
 	path := filepath.Join(dir, sourceignore.IgnoreFile)
 	if err := gcpClient.FGetObject(ctxTimeout, obj.Spec.BucketName, sourceignore.IgnoreFile, path); err != nil {
 		if err != gcpstorage.ErrObjectNotExist {
-			conditions.MarkTrue(obj, sourcev1.DownloadFailedCondition, sourcev1.BucketOperationFailedReason,
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason,
 				"Failed to get '%s' file: %s", sourceignore.IgnoreFile, err.Error())
 			r.Eventf(ctx, obj, events.EventSeverityError, sourcev1.BucketOperationFailedReason,
 				"Failed to get '%s' file: %s", sourceignore.IgnoreFile, err.Error())
@@ -485,7 +485,7 @@ func (r *BucketReconciler) reconcileGCPSource(ctx context.Context, obj *sourcev1
 	}
 	ps, err := sourceignore.ReadIgnoreFile(path, nil)
 	if err != nil {
-		conditions.MarkTrue(obj, sourcev1.DownloadFailedCondition, sourcev1.BucketOperationFailedReason,
+		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason,
 			"Failed to read '%s' file: %s", sourceignore.IgnoreFile, err.Error())
 		r.Eventf(ctx, obj, events.EventSeverityError, sourcev1.BucketOperationFailedReason,
 			"Failed to read '%s' file: %s", sourceignore.IgnoreFile, err.Error())
@@ -508,7 +508,7 @@ func (r *BucketReconciler) reconcileGCPSource(ctx context.Context, obj *sourcev1
 			if err == gcp.IteratorDone {
 				break
 			}
-			conditions.MarkTrue(obj, sourcev1.DownloadFailedCondition, sourcev1.BucketOperationFailedReason,
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason,
 				"Failed to list objects from bucket '%s': %s", obj.Spec.BucketName, err.Error())
 			r.Eventf(ctx, obj, events.EventSeverityError, sourcev1.BucketOperationFailedReason,
 				"Failed to list objects from bucket '%s': %s", obj.Spec.BucketName, err.Error())
@@ -560,7 +560,7 @@ func (r *BucketReconciler) reconcileGCPSource(ctx context.Context, obj *sourcev1
 			return nil
 		})
 		if err = group.Wait(); err != nil {
-			conditions.MarkTrue(obj, sourcev1.DownloadFailedCondition, sourcev1.BucketOperationFailedReason,
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason,
 				"Download from bucket '%s' failed: %s", obj.Spec.BucketName, err)
 			r.Eventf(ctx, obj, events.EventSeverityError, sourcev1.BucketOperationFailedReason,
 				"Download from bucket '%s' failed: %s", obj.Spec.BucketName, err)
@@ -569,7 +569,7 @@ func (r *BucketReconciler) reconcileGCPSource(ctx context.Context, obj *sourcev1
 		r.Eventf(ctx, obj, events.EventSeverityInfo, sourcev1.BucketOperationSucceedReason,
 			"Downloaded %d files from bucket '%s' revision '%s'", len(index), obj.Spec.BucketName, revision)
 	}
-	conditions.Delete(obj, sourcev1.DownloadFailedCondition)
+	conditions.Delete(obj, sourcev1.FetchFailedCondition)
 
 	// Create potential new artifact
 	*artifact = r.Storage.NewArtifactFor(obj.Kind, obj, revision, fmt.Sprintf("%s.tar.gz", revision))
