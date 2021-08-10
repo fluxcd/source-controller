@@ -22,6 +22,10 @@
     {
       "typeMatchPrefix": "^github.com/fluxcd/pkg/apis/meta",
       "docsURLTemplate": "https://godoc.org/github.com/fluxcd/pkg/apis/meta#{{ .TypeIdentifier }}"
+    },
+    {
+      "typeMatchPrefix": "^github.com/fluxcd/pkg/apis/acl",
+      "docsURLTemplate": "https://godoc.org/github.com/fluxcd/pkg/apis/acl#{{ .TypeIdentifier }}"
     }
   ],
   "typeDisplayNamePrefixOverrides": {

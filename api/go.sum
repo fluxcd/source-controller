@@ -91,6 +91,8 @@ github.com/evanphx/json-patch v0.5.2/go.mod h1:ZWS5hhDbVDyob71nXKNL0+PWn6ToqBHMi
 github.com/evanphx/json-patch v4.9.0+incompatible/go.mod h1:50XU6AFN0ol/bzJsmQLiYLvXMP4fmwYFNcr97nuDLSk=
 github.com/evanphx/json-patch v4.11.0+incompatible/go.mod h1:50XU6AFN0ol/bzJsmQLiYLvXMP4fmwYFNcr97nuDLSk=
 github.com/fatih/color v1.7.0/go.mod h1:Zm6kSWBoL9eyXnKyktHP6abPY2pDugNf5KwzbycvMj4=
+github.com/fluxcd/pkg/apis/acl v0.0.1 h1:biCgZMjpDSv3Q4mZPikUJILx3t2MuNXR4Oa5jRQxaNQ=
+github.com/fluxcd/pkg/apis/acl v0.0.1/go.mod h1:y3qOXUFObVWk7jzOjubMnr/u18j1kCeSi6olycnxr/E=
 github.com/fluxcd/pkg/apis/meta v0.10.0 h1:N7wVGHC1cyPdT87hrDC7UwCwRwnZdQM46PBSLjG2rlE=
 github.com/fluxcd/pkg/apis/meta v0.10.0/go.mod h1:CW9X9ijMTpNe7BwnokiUOrLl/h13miwVr/3abEQLbKE=
 github.com/form3tech-oss/jwt-go v3.2.2+incompatible/go.mod h1:pbq4aXjuKjdthFRnoDwaVPLA+WlJuPGy+QneDUgJi2k=
