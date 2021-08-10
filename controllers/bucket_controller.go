@@ -365,7 +365,7 @@ func (r *BucketReconciler) reconcileSource(ctx context.Context, obj *sourcev1.Bu
 	// Calculate revision checksum from the collected index values
 	revision, err := r.revision(index)
 	if err != nil {
-		ctrl.LoggerFrom(ctx).Error(err, "failed to calculate revision")
+		err = fmt.Errorf("failed to calculate revision for index: %w", err)
 		return ctrl.Result{}, err
 	}
 
@@ -443,22 +443,21 @@ func (r *BucketReconciler) reconcileArtifact(ctx context.Context, obj *sourcev1.
 
 	// Ensure target path exists and is a directory
 	if f, err := os.Stat(dir); err != nil {
-		ctrl.LoggerFrom(ctx).Error(err, "failed to stat source path")
+		err = fmt.Errorf("failed to stat target path: %w", err)
 		return ctrl.Result{}, err
 	} else if !f.IsDir() {
-		err := fmt.Errorf("source path '%s' is not a directory", dir)
-		ctrl.LoggerFrom(ctx).Error(err, "invalid target path")
+		err = fmt.Errorf("invalid target path: '%s' is not a directory", dir)
 		return ctrl.Result{}, err
 	}
 
 	// Ensure artifact directory exists and acquire lock
 	if err := r.Storage.MkdirAll(artifact); err != nil {
-		ctrl.LoggerFrom(ctx).Error(err, "failed to create artifact directory")
+		err = fmt.Errorf("failed to create artifact directory: %w", err)
 		return ctrl.Result{}, err
 	}
 	unlock, err := r.Storage.Lock(artifact)
 	if err != nil {
-		ctrl.LoggerFrom(ctx).Error(err, "failed to acquire lock for artifact")
+		err = fmt.Errorf("failed to acquire lock for artifact: %w", err)
 		return ctrl.Result{}, err
 	}
 	defer unlock()
