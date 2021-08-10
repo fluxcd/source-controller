@@ -578,7 +578,7 @@ func TestGitRepositoryReconciler_reconcileArtifact(t *testing.T) {
 			},
 			afterFunc: func(t *WithT, obj *sourcev1.GitRepository, artifact sourcev1.Artifact) {
 				t.Expect(obj.GetArtifact()).ToNot(BeNil())
-				t.Expect(obj.GetArtifact().Checksum).To(Equal("b1fab897a1a0fb8094ce3ae0e9743a4b72bd7268"))
+				t.Expect(obj.GetArtifact().Checksum).To(Equal("ef9c34eab0584035ac8b8a4070876954ea46f270250d60648672feef3e943426"))
 				t.Expect(obj.Status.URL).ToNot(BeEmpty())
 			},
 			want: ctrl.Result{RequeueAfter: interval},
@@ -595,7 +595,7 @@ func TestGitRepositoryReconciler_reconcileArtifact(t *testing.T) {
 			},
 			afterFunc: func(t *WithT, obj *sourcev1.GitRepository, artifact sourcev1.Artifact) {
 				t.Expect(obj.GetArtifact()).ToNot(BeNil())
-				t.Expect(obj.GetArtifact().Checksum).To(Equal("b1fab897a1a0fb8094ce3ae0e9743a4b72bd7268"))
+				t.Expect(obj.GetArtifact().Checksum).To(Equal("ef9c34eab0584035ac8b8a4070876954ea46f270250d60648672feef3e943426"))
 				t.Expect(obj.Status.IncludedArtifacts).ToNot(BeEmpty())
 				t.Expect(obj.Status.URL).ToNot(BeEmpty())
 			},
@@ -630,7 +630,7 @@ func TestGitRepositoryReconciler_reconcileArtifact(t *testing.T) {
 			},
 			afterFunc: func(t *WithT, obj *sourcev1.GitRepository, artifact sourcev1.Artifact) {
 				t.Expect(obj.GetArtifact()).ToNot(BeNil())
-				t.Expect(obj.GetArtifact().Checksum).To(Equal("a71f8c076db814bc21c16cecc960c4fcaf970ac5"))
+				t.Expect(obj.GetArtifact().Checksum).To(Equal("dc95ae14c19d335b693bbba58ae2a562242b0cf33893baffd1b7605ba578e0d6"))
 			},
 			want: ctrl.Result{RequeueAfter: interval},
 			assertConditions: []metav1.Condition{
@@ -646,7 +646,7 @@ func TestGitRepositoryReconciler_reconcileArtifact(t *testing.T) {
 			},
 			afterFunc: func(t *WithT, obj *sourcev1.GitRepository, artifact sourcev1.Artifact) {
 				t.Expect(obj.GetArtifact()).ToNot(BeNil())
-				t.Expect(obj.GetArtifact().Checksum).To(Equal("b1fab897a1a0fb8094ce3ae0e9743a4b72bd7268"))
+				t.Expect(obj.GetArtifact().Checksum).To(Equal("ef9c34eab0584035ac8b8a4070876954ea46f270250d60648672feef3e943426"))
 				t.Expect(obj.Status.URL).ToNot(BeEmpty())
 			},
 			want: ctrl.Result{RequeueAfter: interval},
@@ -663,7 +663,7 @@ func TestGitRepositoryReconciler_reconcileArtifact(t *testing.T) {
 			},
 			afterFunc: func(t *WithT, obj *sourcev1.GitRepository, artifact sourcev1.Artifact) {
 				t.Expect(obj.GetArtifact()).ToNot(BeNil())
-				t.Expect(obj.GetArtifact().Checksum).To(Equal("b1fab897a1a0fb8094ce3ae0e9743a4b72bd7268"))
+				t.Expect(obj.GetArtifact().Checksum).To(Equal("ef9c34eab0584035ac8b8a4070876954ea46f270250d60648672feef3e943426"))
 				t.Expect(obj.Status.URL).ToNot(BeEmpty())
 			},
 			want: ctrl.Result{RequeueAfter: interval},
