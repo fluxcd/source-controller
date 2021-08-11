@@ -582,6 +582,7 @@ func TestGitRepositoryReconciler_reconcileSource_checkoutStrategy(t *testing.T) 
 
 	server, err := gittestserver.NewTempGitServer()
 	g.Expect(err).To(BeNil())
+	defer os.RemoveAll(server.Root())
 	server.AutoCreate()
 	g.Expect(server.StartHTTP()).To(Succeed())
 	defer server.StopHTTP()
