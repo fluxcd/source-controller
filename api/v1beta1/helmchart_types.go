@@ -19,6 +19,7 @@ package v1beta1
 import (
 	"time"
 
+	"github.com/fluxcd/pkg/apis/acl"
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
@@ -66,6 +67,10 @@ type HelmChartSpec struct {
 	// This flag tells the controller to suspend the reconciliation of this source.
 	// +optional
 	Suspend bool `json:"suspend,omitempty"`
+
+	// AccessFrom defines an Access Control List for allowing cross-namespace references to this object.
+	// +optional
+	AccessFrom *acl.AccessFrom `json:"accessFrom,omitempty"`
 }
 
 // LocalHelmChartSourceReference contains enough information to let you locate

@@ -19,6 +19,7 @@ package v1beta1
 import (
 	"time"
 
+	"github.com/fluxcd/pkg/apis/acl"
 	"github.com/fluxcd/pkg/apis/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -100,6 +101,10 @@ type GitRepositorySpec struct {
 	// Include defines a list of GitRepository resources which artifacts should be included in the artifact produced for
 	// this resource.
 	Include []GitRepositoryInclude `json:"include,omitempty"`
+
+	// AccessFrom defines an Access Control List for allowing cross-namespace references to this object.
+	// +optional
+	AccessFrom *acl.AccessFrom `json:"accessFrom,omitempty"`
 }
 
 func (in *GitRepositoryInclude) GetFromPath() string {
