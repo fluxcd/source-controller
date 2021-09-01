@@ -79,6 +79,7 @@ type BucketSpec struct {
 const (
 	GenericBucketProvider string = "generic"
 	AmazonBucketProvider  string = "aws"
+	GoogleBucketProvider  string = "gcp"
 )
 
 // BucketStatus defines the observed state of a bucket
