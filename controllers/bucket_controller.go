@@ -432,9 +432,7 @@ func (r *BucketReconciler) authGCP(ctx context.Context, bucket sourcev1.Bucket) 
 
 }
 
-// authMinio creates a new Minio client to interact with S3
-// compatible storage services.
-func (r *BucketReconciler) authMinio(ctx context.Context, bucket sourcev1.Bucket) (*minio.Client, error) {
+func (r *BucketReconciler) auth(ctx context.Context, bucket sourcev1.Bucket) (*minio.Client, error) {
 	opt := minio.Options{
 		Region: bucket.Spec.Region,
 		Secure: !bucket.Spec.Insecure,
