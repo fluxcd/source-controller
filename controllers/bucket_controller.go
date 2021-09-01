@@ -186,7 +186,7 @@ func (r *BucketReconciler) reconcile(ctx context.Context, bucket sourcev1.Bucket
 			return sourceBucket, err
 		}
 	} else {
-		sourceBucket, tempDir, err = r.reconcileWithAWS(ctx, bucket)
+		sourceBucket, tempDir, err = r.reconcileWithMinio(ctx, bucket)
 		if err != nil {
 			return sourceBucket, err
 		}
@@ -259,6 +259,8 @@ func (r *BucketReconciler) reconcileDelete(ctx context.Context, bucket sourcev1.
 	return ctrl.Result{}, nil
 }
 
+// reconcileWithGCP handles getting objects from a Google Cloud Platform bucket
+// using a gcp client
 func (r *BucketReconciler) reconcileWithGCP(ctx context.Context, bucket sourcev1.Bucket) (sourcev1.Bucket, string, error) {
 	gcpClient, err := r.authGCP(ctx, bucket)
 	if err != nil {
@@ -330,8 +332,10 @@ func (r *BucketReconciler) reconcileWithGCP(ctx context.Context, bucket sourcev1
 	return sourcev1.Bucket{}, tempDir, nil
 }
 
-func (r *BucketReconciler) reconcileWithAWS(ctx context.Context, bucket sourcev1.Bucket) (sourcev1.Bucket, string, error) {
-	s3Client, err := r.auth(ctx, bucket)
+// reconcileWithMinio handles getting objects from an S3 compatible bucket
+// using a minio client
+func (r *BucketReconciler) reconcileWithMinio(ctx context.Context, bucket sourcev1.Bucket) (sourcev1.Bucket, string, error) {
+	s3Client, err := r.authMinio(ctx, bucket)
 	if err != nil {
 		err = fmt.Errorf("auth error: %w", err)
 		return sourcev1.BucketNotReady(bucket, sourcev1.AuthenticationFailedReason, err.Error()), "", err
@@ -404,6 +408,8 @@ func (r *BucketReconciler) reconcileWithAWS(ctx context.Context, bucket sourcev1
 	return sourcev1.Bucket{}, tempDir, nil
 }
 
+// authGCP creates a new Google Cloud Platform storage client
+// to interact with the Storage service.
 func (r *BucketReconciler) authGCP(ctx context.Context, bucket sourcev1.Bucket) (*gcp.GCPClient, error) {
 	client, err := gcp.NewClient(ctx)
 	if err != nil {
@@ -412,7 +418,9 @@ func (r *BucketReconciler) authGCP(ctx context.Context, bucket sourcev1.Bucket) 
 	return client, nil
 }
 
-func (r *BucketReconciler) auth(ctx context.Context, bucket sourcev1.Bucket) (*minio.Client, error) {
+// authMinio creates a new Minio client to interact with S3
+// compatible storage services.
+func (r *BucketReconciler) authMinio(ctx context.Context, bucket sourcev1.Bucket) (*minio.Client, error) {
 	opt := minio.Options{
 		Region: bucket.Spec.Region,
 		Secure: !bucket.Spec.Insecure,
