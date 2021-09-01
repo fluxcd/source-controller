@@ -57,6 +57,7 @@ Supported providers:
 const (
 	GenericBucketProvider string = "generic"
 	AmazonBucketProvider  string = "aws"
+  GoogleBucketProvider  string = "gcp"
 )
 ```
 
