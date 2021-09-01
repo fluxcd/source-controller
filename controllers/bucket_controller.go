@@ -46,6 +46,7 @@ import (
 	"github.com/fluxcd/pkg/runtime/events"
 	"github.com/fluxcd/pkg/runtime/metrics"
 	"github.com/fluxcd/pkg/runtime/predicates"
+	"github.com/fluxcd/source-controller/pkg/gcp"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
 	"github.com/fluxcd/source-controller/pkg/sourceignore"
@@ -176,77 +177,20 @@ func (r *BucketReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 }
 
 func (r *BucketReconciler) reconcile(ctx context.Context, bucket sourcev1.Bucket) (sourcev1.Bucket, error) {
-	s3Client, err := r.auth(ctx, bucket)
-	if err != nil {
-		err = fmt.Errorf("auth error: %w", err)
-		return sourcev1.BucketNotReady(bucket, sourcev1.AuthenticationFailedReason, err.Error()), err
-	}
-
-	// create tmp dir
-	tempDir, err := os.MkdirTemp("", bucket.Name)
-	if err != nil {
-		err = fmt.Errorf("tmp dir error: %w", err)
-		return sourcev1.BucketNotReady(bucket, sourcev1.StorageOperationFailedReason, err.Error()), err
-	}
-	defer os.RemoveAll(tempDir)
-
-	ctxTimeout, cancel := context.WithTimeout(ctx, bucket.Spec.Timeout.Duration)
-	defer cancel()
-
-	exists, err := s3Client.BucketExists(ctxTimeout, bucket.Spec.BucketName)
-	if err != nil {
-		return sourcev1.BucketNotReady(bucket, sourcev1.BucketOperationFailedReason, err.Error()), err
-	}
-	if !exists {
-		err = fmt.Errorf("bucket '%s' not found", bucket.Spec.BucketName)
-		return sourcev1.BucketNotReady(bucket, sourcev1.BucketOperationFailedReason, err.Error()), err
-	}
-
-	// Look for file with ignore rules first
-	// NB: S3 has flat filepath keys making it impossible to look
-	// for files in "subdirectories" without building up a tree first.
-	path := filepath.Join(tempDir, sourceignore.IgnoreFile)
-	if err := s3Client.FGetObject(ctxTimeout, bucket.Spec.BucketName, sourceignore.IgnoreFile, path, minio.GetObjectOptions{}); err != nil {
-		if resp, ok := err.(minio.ErrorResponse); ok && resp.Code != "NoSuchKey" {
-			return sourcev1.BucketNotReady(bucket, sourcev1.BucketOperationFailedReason, err.Error()), err
-		}
-	}
-	ps, err := sourceignore.ReadIgnoreFile(path, nil)
-	if err != nil {
-		return sourcev1.BucketNotReady(bucket, sourcev1.BucketOperationFailedReason, err.Error()), err
-	}
-	// In-spec patterns take precedence
-	if bucket.Spec.Ignore != nil {
-		ps = append(ps, sourceignore.ReadPatterns(strings.NewReader(*bucket.Spec.Ignore), nil)...)
-	}
-	matcher := sourceignore.NewMatcher(ps)
-
-	// download bucket content
-	for object := range s3Client.ListObjects(ctxTimeout, bucket.Spec.BucketName, minio.ListObjectsOptions{
-		Recursive: true,
-		UseV1:     s3utils.IsGoogleEndpoint(*s3Client.EndpointURL()),
-	}) {
-		if object.Err != nil {
-			err = fmt.Errorf("listing objects from bucket '%s' failed: %w", bucket.Spec.BucketName, object.Err)
-			return sourcev1.BucketNotReady(bucket, sourcev1.BucketOperationFailedReason, err.Error()), err
-		}
-
-		if strings.HasSuffix(object.Key, "/") || object.Key == sourceignore.IgnoreFile {
-			continue
-		}
-
-		if matcher.Match(strings.Split(object.Key, "/"), false) {
-			continue
-		}
-
-		localPath := filepath.Join(tempDir, object.Key)
-		err := s3Client.FGetObject(ctxTimeout, bucket.Spec.BucketName, object.Key, localPath, minio.GetObjectOptions{})
+	var tempDir string
+	var err error
+	var sourceBucket sourcev1.Bucket
+	if bucket.Spec.Provider == sourcev1.GoogleBucketProvider {
+		sourceBucket, tempDir, err = r.reconcileWithGCP(ctx, bucket)
 		if err != nil {
-			err = fmt.Errorf("downloading object from bucket '%s' failed: %w", bucket.Spec.BucketName, err)
-			return sourcev1.BucketNotReady(bucket, sourcev1.BucketOperationFailedReason, err.Error()), err
+			return sourceBucket, err
+		}
+	} else {
+		sourceBucket, tempDir, err = r.reconcileWithAWS(ctx, bucket)
+		if err != nil {
+			return sourceBucket, err
 		}
 	}
-
 	revision, err := r.checksum(tempDir)
 	if err != nil {
 		return sourcev1.BucketNotReady(bucket, sourcev1.StorageOperationFailedReason, err.Error()), err
@@ -313,6 +257,159 @@ func (r *BucketReconciler) reconcileDelete(ctx context.Context, bucket sourcev1.
 
 	// Stop reconciliation as the object is being deleted
 	return ctrl.Result{}, nil
+}
+
+func (r *BucketReconciler) reconcileWithGCP(ctx context.Context, bucket sourcev1.Bucket) (sourcev1.Bucket, string, error) {
+	gcpClient, err := r.authGCP(ctx, bucket)
+	if err != nil {
+		err = fmt.Errorf("auth error: %w", err)
+		return sourcev1.BucketNotReady(bucket, sourcev1.AuthenticationFailedReason, err.Error()), "", err
+	}
+	defer gcpClient.Client.Close()
+	// create tmp dir
+	tempDir, err := os.MkdirTemp("", bucket.Name)
+	if err != nil {
+		err = fmt.Errorf("tmp dir error: %w", err)
+		return sourcev1.BucketNotReady(bucket, sourcev1.StorageOperationFailedReason, err.Error()), "", err
+	}
+	defer os.RemoveAll(tempDir)
+
+	ctxTimeout, cancel := context.WithTimeout(ctx, bucket.Spec.Timeout.Duration)
+	defer cancel()
+
+	exists, err := gcpClient.BucketExists(ctxTimeout, bucket.Spec.BucketName)
+	if err != nil {
+		return sourcev1.BucketNotReady(bucket, sourcev1.BucketOperationFailedReason, err.Error()), "", err
+	}
+	if !exists {
+		err = fmt.Errorf("bucket '%s' not found", bucket.Spec.BucketName)
+		return sourcev1.BucketNotReady(bucket, sourcev1.BucketOperationFailedReason, err.Error()), "", err
+	}
+
+	// Look for file with ignore rules first.
+	path := filepath.Join(tempDir, sourceignore.IgnoreFile)
+	if err := gcpClient.FGetObject(ctxTimeout, bucket.Spec.BucketName, sourceignore.IgnoreFile, path); err != nil {
+		return sourcev1.BucketNotReady(bucket, sourcev1.BucketOperationFailedReason, err.Error()), "", err
+	}
+	ps, err := sourceignore.ReadIgnoreFile(path, nil)
+	if err != nil {
+		return sourcev1.BucketNotReady(bucket, sourcev1.BucketOperationFailedReason, err.Error()), "", err
+	}
+	// In-spec patterns take precedence
+	if bucket.Spec.Ignore != nil {
+		ps = append(ps, sourceignore.ReadPatterns(strings.NewReader(*bucket.Spec.Ignore), nil)...)
+	}
+	matcher := sourceignore.NewMatcher(ps)
+	objects := gcpClient.ListObjects(ctxTimeout, bucket.Spec.BucketName, nil)
+	// download bucket content
+	for {
+		object, err := objects.Next()
+		if err == gcp.IteratorDone {
+			break
+		}
+		if err != nil {
+			err = fmt.Errorf("listing objects from bucket '%s' failed: %w", bucket.Spec.BucketName, err)
+			return sourcev1.BucketNotReady(bucket, sourcev1.BucketOperationFailedReason, err.Error()), "", err
+		}
+
+		if strings.HasSuffix(object.Name, "/") || object.Name == sourceignore.IgnoreFile {
+			continue
+		}
+
+		if matcher.Match(strings.Split(object.Name, "/"), false) {
+			continue
+		}
+
+		localPath := filepath.Join(tempDir, object.Name)
+		// FGetObject - get and download bucket object
+		if err = gcpClient.FGetObject(ctxTimeout, bucket.Spec.BucketName, object.Name, localPath); err != nil {
+			err = fmt.Errorf("downloading object from bucket '%s' failed: %w", bucket.Spec.BucketName, err)
+			return sourcev1.BucketNotReady(bucket, sourcev1.BucketOperationFailedReason, err.Error()), "", err
+		}
+	}
+	return sourcev1.Bucket{}, tempDir, nil
+}
+
+func (r *BucketReconciler) reconcileWithAWS(ctx context.Context, bucket sourcev1.Bucket) (sourcev1.Bucket, string, error) {
+	s3Client, err := r.auth(ctx, bucket)
+	if err != nil {
+		err = fmt.Errorf("auth error: %w", err)
+		return sourcev1.BucketNotReady(bucket, sourcev1.AuthenticationFailedReason, err.Error()), "", err
+	}
+
+	// create tmp dir
+	tempDir, err := os.MkdirTemp("", bucket.Name)
+	if err != nil {
+		err = fmt.Errorf("tmp dir error: %w", err)
+		return sourcev1.BucketNotReady(bucket, sourcev1.StorageOperationFailedReason, err.Error()), "", err
+	}
+	defer os.RemoveAll(tempDir)
+
+	ctxTimeout, cancel := context.WithTimeout(ctx, bucket.Spec.Timeout.Duration)
+	defer cancel()
+
+	exists, err := s3Client.BucketExists(ctxTimeout, bucket.Spec.BucketName)
+	if err != nil {
+		return sourcev1.BucketNotReady(bucket, sourcev1.BucketOperationFailedReason, err.Error()), "", err
+	}
+	if !exists {
+		err = fmt.Errorf("bucket '%s' not found", bucket.Spec.BucketName)
+		return sourcev1.BucketNotReady(bucket, sourcev1.BucketOperationFailedReason, err.Error()), "", err
+	}
+
+	// Look for file with ignore rules first
+	// NB: S3 has flat filepath keys making it impossible to look
+	// for files in "subdirectories" without building up a tree first.
+	path := filepath.Join(tempDir, sourceignore.IgnoreFile)
+	if err := s3Client.FGetObject(ctxTimeout, bucket.Spec.BucketName, sourceignore.IgnoreFile, path, minio.GetObjectOptions{}); err != nil {
+		if resp, ok := err.(minio.ErrorResponse); ok && resp.Code != "NoSuchKey" {
+			return sourcev1.BucketNotReady(bucket, sourcev1.BucketOperationFailedReason, err.Error()), "", err
+		}
+	}
+	ps, err := sourceignore.ReadIgnoreFile(path, nil)
+	if err != nil {
+		return sourcev1.BucketNotReady(bucket, sourcev1.BucketOperationFailedReason, err.Error()), "", err
+	}
+	// In-spec patterns take precedence
+	if bucket.Spec.Ignore != nil {
+		ps = append(ps, sourceignore.ReadPatterns(strings.NewReader(*bucket.Spec.Ignore), nil)...)
+	}
+	matcher := sourceignore.NewMatcher(ps)
+
+	// download bucket content
+	for object := range s3Client.ListObjects(ctxTimeout, bucket.Spec.BucketName, minio.ListObjectsOptions{
+		Recursive: true,
+		UseV1:     s3utils.IsGoogleEndpoint(*s3Client.EndpointURL()),
+	}) {
+		if object.Err != nil {
+			err = fmt.Errorf("listing objects from bucket '%s' failed: %w", bucket.Spec.BucketName, object.Err)
+			return sourcev1.BucketNotReady(bucket, sourcev1.BucketOperationFailedReason, err.Error()), "", err
+		}
+
+		if strings.HasSuffix(object.Key, "/") || object.Key == sourceignore.IgnoreFile {
+			continue
+		}
+
+		if matcher.Match(strings.Split(object.Key, "/"), false) {
+			continue
+		}
+
+		localPath := filepath.Join(tempDir, object.Key)
+		err := s3Client.FGetObject(ctxTimeout, bucket.Spec.BucketName, object.Key, localPath, minio.GetObjectOptions{})
+		if err != nil {
+			err = fmt.Errorf("downloading object from bucket '%s' failed: %w", bucket.Spec.BucketName, err)
+			return sourcev1.BucketNotReady(bucket, sourcev1.BucketOperationFailedReason, err.Error()), "", err
+		}
+	}
+	return sourcev1.Bucket{}, tempDir, nil
+}
+
+func (r *BucketReconciler) authGCP(ctx context.Context, bucket sourcev1.Bucket) (*gcp.GCPClient, error) {
+	client, err := gcp.NewClient(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return client, nil
 }
 
 func (r *BucketReconciler) auth(ctx context.Context, bucket sourcev1.Bucket) (*minio.Client, error) {
