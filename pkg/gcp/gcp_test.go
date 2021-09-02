@@ -18,12 +18,24 @@ package gcp
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"gotest.tools/assert"
 )
 
+func TestNewClient(t *testing.T) {
+	// TODO: Setup GCP mock here
+	t.Skip()
+	client, err := NewClient(context.Background())
+	assert.NilError(t, err)
+	assert.Assert(t, client.Client != nil)
+}
+
 func TestSetRange(t *testing.T) {
+	// TODO: Setup GCP mock here
+	t.Skip()
 	client, err := NewClient(context.Background())
 	assert.NilError(t, err)
 	testCases := []struct {
@@ -59,4 +71,71 @@ func TestSetRange(t *testing.T) {
 			assert.Equal(t, tt.end, client.endRange)
 		})
 	}
+}
+
+func TestBucketExists(t *testing.T) {
+	// TODO: Setup GCP mock here
+	t.Skip()
+	ctx := context.Background()
+	bucketName := ""
+	client, err := NewClient(ctx)
+	assert.NilError(t, err)
+	exists, err := client.BucketExists(ctx, bucketName)
+	assert.NilError(t, err)
+	assert.Assert(t, exists)
+}
+
+func TestObjectExists(t *testing.T) {
+	// TODO: Setup GCP mock here
+	t.Skip()
+	ctx := context.Background()
+	// bucketName is the name of the bucket which contains the object
+	bucketName := ""
+	// objectName is the path to the object within the bucket
+	objectName := ""
+	client, err := NewClient(ctx)
+	assert.NilError(t, err)
+	exists, attrs, err := client.ObjectExists(ctx, bucketName, objectName)
+	assert.NilError(t, err)
+	assert.Assert(t, exists)
+	assert.Assert(t, attrs != nil)
+}
+
+func TestListObjects(t *testing.T) {
+	// TODO: Setup GCP mock here
+	t.Skip()
+	ctx := context.Background()
+	// bucketName is the name of the bucket which contains the object
+	bucketName := ""
+	client, err := NewClient(ctx)
+	assert.NilError(t, err)
+	objects := client.ListObjects(ctx, bucketName, nil)
+	assert.NilError(t, err)
+	assert.Assert(t, objects != nil)
+	for {
+		object, err := objects.Next()
+		if err == IteratorDone {
+			break
+		}
+		assert.Assert(t, object != nil)
+	}
+}
+
+func TestFGetObject(t *testing.T) {
+	// TODO: Setup GCP mock here
+	t.Skip()
+	ctx := context.Background()
+	// bucketName is the name of the bucket which contains the object
+	bucketName := ""
+	// objectName is the path to the object within the bucket
+	objectName := ""
+	tempDir, err := os.MkdirTemp("", bucketName)
+	if err != nil {
+		assert.NilError(t, err)
+	}
+	localPath := filepath.Join(tempDir, objectName)
+	client, err := NewClient(ctx)
+	assert.NilError(t, err)
+	objErr := client.FGetObject(ctx, bucketName, objectName, localPath)
+	assert.NilError(t, objErr)
 }
