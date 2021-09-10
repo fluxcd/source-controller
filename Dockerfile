@@ -1,69 +1,57 @@
-FROM golang:1.16-buster as builder
+ARG BASE_IMG=ghcr.io/hiddeco/golang-with-libgit2
+ARG BASE_TAG=dev
+FROM ${BASE_IMG}:${BASE_TAG} AS build
 
-# Up-to-date libgit2 dependencies are only available in
-# unstable, as libssh2 in testing/bullseye has been linked
-# against gcrypt which causes issues with PKCS* formats.
-# Explicitly listing all build dependencies is required because
-# they can only be automagically found for AMD64 builds.
-# Ref: https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=668271
-RUN echo "deb http://deb.debian.org/debian unstable main" >> /etc/apt/sources.list \
-    && echo "deb-src http://deb.debian.org/debian unstable main" >> /etc/apt/sources.list
-RUN set -eux; \
-    apt-get update \
-    && apt-get install -y \
-        libgit2-dev/unstable \
-        zlib1g-dev/unstable \
-        libssh2-1-dev/unstable \
-        libpcre3-dev/unstable \
-    && apt-get clean \
-    && apt-get autoremove --purge -y \
-    && rm -rf /var/lib/apt/lists/*
-
+# Configure workspace
 WORKDIR /workspace
 
-# copy api submodule
+# Copy api submodule
 COPY api/ api/
 
-# copy modules manifests
+# Copy modules manifests
 COPY go.mod go.mod
 COPY go.sum go.sum
 
-# cache modules
+# Cache modules
 RUN go mod download
 
-# copy source code
+# Copy source code
 COPY main.go main.go
 COPY controllers/ controllers/
 COPY pkg/ pkg/
 COPY internal/ internal/
 
-# build without specifing the arch
-RUN CGO_ENABLED=1 go build -o source-controller main.go
+# Build the binary
+ENV CGO_ENABLED=1
+ARG TARGETPLATFORM
+RUN xx-go build -o source-controller -trimpath \
+    main.go
 
-FROM debian:buster-slim as controller
+FROM debian:bullseye-slim as controller
 
-# link repo to the GitHub Container Registry image
+# Link repo to the GitHub Container Registry image
 LABEL org.opencontainers.image.source="https://github.com/fluxcd/source-controller"
 
-# Up-to-date libgit2 dependencies are only available in
-# unstable, as libssh2 in testing/bullseye has been linked
-# against gcrypt which causes issues with PKCS* formats.
-# Ref: https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=668271
-RUN echo "deb http://deb.debian.org/debian unstable main" >> /etc/apt/sources.list \
-    && echo "deb-src http://deb.debian.org/debian unstable main" >> /etc/apt/sources.list
-RUN set -eux; \
-    apt-get update \
-    && apt-get install -y \
-        ca-certificates \
-        libgit2-1.1 \
-    && apt-get clean \
-    && apt-get autoremove --purge -y \
-    && rm -rf /var/lib/apt/lists/*
-
-COPY --from=builder /workspace/source-controller /usr/local/bin/
-
+# Configure user
 RUN groupadd controller && \
     useradd --gid controller --shell /bin/sh --create-home controller
+
+# Copy libgit2
+COPY --from=build /libgit2/lib/* /usr/local/lib/
+RUN ldconfig
+
+# Upgrade packages and install runtime dependencies
+RUN echo "deb http://deb.debian.org/debian sid main" >> /etc/apt/sources.list \
+    && echo "deb-src http://deb.debian.org/debian sid main" >> /etc/apt/sources.list \
+    && apt update \
+    && apt install --no-install-recommends -y zlib1g/sid libssl1.1/sid libssh2-1/sid \
+    && apt install --no-install-recommends -y ca-certificates \
+    && apt clean \
+    && apt autoremove --purge -y \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy over binary from build
+COPY --from=build /workspace/source-controller /usr/local/bin/
 
 USER controller
 ENTRYPOINT [ "source-controller" ]
