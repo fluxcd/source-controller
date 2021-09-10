@@ -30,7 +30,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
 	gcpstorage "cloud.google.com/go/storage"
 	"github.com/fluxcd/source-controller/pkg/gcp"

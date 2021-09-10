@@ -127,7 +127,7 @@ func (c *GCPClient) FGetObject(ctx context.Context, bucketName, objectName, loca
 		return err
 	}
 	if !exists {
-		return ErrorObjectDoesNotExist
+		return ObjectDoesNotExist
 	}
 
 	objectFile, err := os.OpenFile(localPath, os.O_CREATE|os.O_WRONLY, 0600)
