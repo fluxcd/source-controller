@@ -15,3 +15,6 @@
 # vendor/
 bin/
 config/release/
+
+# Exclude all libgit2 related files
+hack/libgit2/

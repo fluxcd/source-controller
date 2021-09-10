@@ -156,7 +156,7 @@ func (c *CheckoutCommit) Checkout(ctx context.Context, path, url string, auth *g
 	if err != nil {
 		return nil, "", fmt.Errorf("git worktree error: %w", err)
 	}
-	err = repo.CheckoutTree(tree, &git2go.CheckoutOpts{
+	err = repo.CheckoutTree(tree, &git2go.CheckoutOptions{
 		Strategy: git2go.CheckoutForce,
 	})
 	if err != nil {
