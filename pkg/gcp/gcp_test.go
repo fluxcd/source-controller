@@ -14,128 +14,119 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package gcp
+package gcp_test
 
 import (
 	"context"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
-	"gotest.tools/assert"
+	gcpStorage "cloud.google.com/go/storage"
+	"github.com/fluxcd/source-controller/pkg/gcp"
+	"github.com/fluxcd/source-controller/pkg/gcp/mocks"
+	"github.com/golang/mock/gomock"
+	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/gomega"
 )
 
-func TestNewClient(t *testing.T) {
-	// TODO: Setup GCP mock here
-	t.Skip()
-	client, err := NewClient(context.Background())
-	assert.NilError(t, err)
-	assert.Assert(t, client.Client != nil)
+var (
+	MockCtrl         *gomock.Controller
+	MockClient       *mocks.MockClient
+	MockBucketHandle *mocks.MockBucketHandle
+	MockObjectHandle *mocks.MockObjectHandle
+	bucketName       string = "test-bucket"
+	objectName       string = "test.yaml"
+	localPath        string
+)
+
+// mockgen -destination=mocks/mock_gcp_storage.go -package=mocks -source=gcp.go GCPStorageService
+func TestGCPProvider(t *testing.T) {
+	MockCtrl = gomock.NewController(GinkgoT())
+	RegisterFailHandler(Fail)
+	RunSpecs(t, "Test GCP Storage Provider Suite")
 }
 
-func TestSetRange(t *testing.T) {
-	// TODO: Setup GCP mock here
-	t.Skip()
-	client, err := NewClient(context.Background())
-	assert.NilError(t, err)
-	testCases := []struct {
-		title string
-		start int64
-		end   int64
-	}{
-		{
-			title: "Test Case 1",
-			start: 1,
-			end:   5,
-		},
-		{
-			title: "Test Case 2",
-			start: 3,
-			end:   6,
-		},
-		{
-			title: "Test Case 3",
-			start: 4,
-			end:   5,
-		},
-		{
-			title: "Test Case 4",
-			start: 2,
-			end:   7,
-		},
-	}
-	for _, tt := range testCases {
-		t.Run(tt.title, func(t *testing.T) {
-			client.SetRange(tt.start, tt.end)
-			assert.Equal(t, tt.start, client.startRange)
-			assert.Equal(t, tt.end, client.endRange)
-		})
-	}
-}
-
-func TestBucketExists(t *testing.T) {
-	// TODO: Setup GCP mock here
-	t.Skip()
-	ctx := context.Background()
-	bucketName := ""
-	client, err := NewClient(ctx)
-	assert.NilError(t, err)
-	exists, err := client.BucketExists(ctx, bucketName)
-	assert.NilError(t, err)
-	assert.Assert(t, exists)
-}
-
-func TestObjectExists(t *testing.T) {
-	// TODO: Setup GCP mock here
-	t.Skip()
-	ctx := context.Background()
-	// bucketName is the name of the bucket which contains the object
-	bucketName := ""
-	// objectName is the path to the object within the bucket
-	objectName := ""
-	client, err := NewClient(ctx)
-	assert.NilError(t, err)
-	exists, attrs, err := client.ObjectExists(ctx, bucketName, objectName)
-	assert.NilError(t, err)
-	assert.Assert(t, exists)
-	assert.Assert(t, attrs != nil)
-}
-
-func TestListObjects(t *testing.T) {
-	// TODO: Setup GCP mock here
-	t.Skip()
-	ctx := context.Background()
-	// bucketName is the name of the bucket which contains the object
-	bucketName := ""
-	client, err := NewClient(ctx)
-	assert.NilError(t, err)
-	objects := client.ListObjects(ctx, bucketName, nil)
-	assert.NilError(t, err)
-	assert.Assert(t, objects != nil)
-	for {
-		object, err := objects.Next()
-		if err == IteratorDone {
-			break
-		}
-		assert.Assert(t, object != nil)
-	}
-}
-
-func TestFGetObject(t *testing.T) {
-	// TODO: Setup GCP mock here
-	t.Skip()
-	ctx := context.Background()
-	// bucketName is the name of the bucket which contains the object
-	bucketName := ""
-	// objectName is the path to the object within the bucket
-	objectName := ""
+var _ = BeforeSuite(func() {
+	MockClient = mocks.NewMockClient(MockCtrl)
+	MockBucketHandle = mocks.NewMockBucketHandle(MockCtrl)
+	MockObjectHandle = mocks.NewMockObjectHandle(MockCtrl)
 	tempDir, err := os.MkdirTemp("", bucketName)
 	if err != nil {
-		assert.NilError(t, err)
+		Expect(err).ToNot(HaveOccurred())
 	}
-	localPath := filepath.Join(tempDir, objectName)
-	client, err := NewClient(ctx)
-	assert.NilError(t, err)
-	objErr := client.FGetObject(ctx, bucketName, objectName, localPath)
-	assert.NilError(t, objErr)
-}
+	localPath = filepath.Join(tempDir, objectName)
+	MockClient.EXPECT().Bucket(bucketName).Return(MockBucketHandle).AnyTimes()
+	MockBucketHandle.EXPECT().Object(objectName).Return(&gcpStorage.ObjectHandle{}).AnyTimes()
+	MockBucketHandle.EXPECT().Attrs(context.Background()).Return(&gcpStorage.BucketAttrs{
+		Name:    bucketName,
+		Created: time.Now(),
+		Etag:    "test-etag",
+	}, nil).AnyTimes()
+	MockBucketHandle.EXPECT().Objects(gomock.Any(), nil).Return(&gcpStorage.ObjectIterator{}).AnyTimes()
+	MockObjectHandle.EXPECT().Attrs(gomock.Any()).Return(&gcpStorage.ObjectAttrs{
+		Bucket:      bucketName,
+		Name:        objectName,
+		ContentType: "text/x-yaml",
+		Etag:        "test-etag",
+		Size:        125,
+		Created:     time.Now(),
+	}, nil).AnyTimes()
+	MockObjectHandle.EXPECT().NewRangeReader(gomock.Any(), 10, 125).Return(&gcpStorage.Reader{}, nil).AnyTimes()
+})
+
+var _ = Describe("GCP Storage Provider", func() {
+	Describe("Get GCP Storage Provider client from gcp", func() {
+
+		Context("Gcp storage Bucket - BucketExists", func() {
+			It("should not return an error when fetching gcp storage bucket", func() {
+				gcpClient := &gcp.GCPClient{
+					Client:     MockClient,
+					StartRange: 0,
+					EndRange:   -1,
+				}
+				exists, err := gcpClient.BucketExists(context.Background(), bucketName)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(exists).To(BeTrue())
+			})
+		})
+		Context("Gcp storage Bucket - FGetObject", func() {
+			It("should get the object from the bucket and download the object locally", func() {
+				gcpClient := &gcp.GCPClient{
+					Client:     MockClient,
+					StartRange: 0,
+					EndRange:   -1,
+				}
+				err := gcpClient.FGetObject(context.Background(), bucketName, objectName, localPath)
+				Expect(err).ToNot(HaveOccurred())
+			})
+		})
+		Context("Gcp storage Bucket - ObjectAttributes", func() {
+			It("should get the object attributes", func() {
+				gcpClient := &gcp.GCPClient{
+					Client:     MockClient,
+					StartRange: 0,
+					EndRange:   -1,
+				}
+				exists, attrs, err := gcpClient.ObjectAttributes(context.Background(), bucketName, objectName)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(exists).To(BeTrue())
+				Expect(attrs).ToNot(BeNil())
+			})
+
+			Context("Gcp storage Bucket - SetRange", func() {
+				It("should set the range of the io reader seeker for the file download", func() {
+					gcpClient := &gcp.GCPClient{
+						Client:     MockClient,
+						StartRange: 0,
+						EndRange:   -1,
+					}
+					gcpClient.SetRange(2, 5)
+					Expect(gcpClient.StartRange).To(Equal(int64(2)))
+					Expect(gcpClient.EndRange).To(Equal(int64(5)))
+				})
+			})
+		})
+	})
+})
