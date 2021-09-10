@@ -177,16 +177,21 @@ func (r *BucketReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 }
 
 func (r *BucketReconciler) reconcile(ctx context.Context, bucket sourcev1.Bucket) (sourcev1.Bucket, error) {
-	var tempDir string
 	var err error
 	var sourceBucket sourcev1.Bucket
+	tempDir, err := os.MkdirTemp("", bucket.Name)
+	if err != nil {
+		err = fmt.Errorf("tmp dir error: %w", err)
+		return sourcev1.BucketNotReady(bucket, sourcev1.StorageOperationFailedReason, err.Error()), err
+	}
+	defer os.RemoveAll(tempDir)
 	if bucket.Spec.Provider == sourcev1.GoogleBucketProvider {
-		sourceBucket, tempDir, err = r.reconcileWithGCP(ctx, bucket)
+		sourceBucket, err = r.reconcileWithGCP(ctx, bucket, tempDir)
 		if err != nil {
 			return sourceBucket, err
 		}
 	} else {
-		sourceBucket, tempDir, err = r.reconcileWithMinio(ctx, bucket)
+		sourceBucket, err = r.reconcileWithMinio(ctx, bucket, tempDir)
 		if err != nil {
 			return sourceBucket, err
 		}
@@ -261,41 +266,36 @@ func (r *BucketReconciler) reconcileDelete(ctx context.Context, bucket sourcev1.
 
 // reconcileWithGCP handles getting objects from a Google Cloud Platform bucket
 // using a gcp client
-func (r *BucketReconciler) reconcileWithGCP(ctx context.Context, bucket sourcev1.Bucket) (sourcev1.Bucket, string, error) {
+func (r *BucketReconciler) reconcileWithGCP(ctx context.Context, bucket sourcev1.Bucket, tempDir string) (sourcev1.Bucket, error) {
 	gcpClient, err := r.authGCP(ctx, bucket)
 	if err != nil {
 		err = fmt.Errorf("auth error: %w", err)
-		return sourcev1.BucketNotReady(bucket, sourcev1.AuthenticationFailedReason, err.Error()), "", err
+		return sourcev1.BucketNotReady(bucket, sourcev1.AuthenticationFailedReason, err.Error()), err
 	}
 	defer gcpClient.Client.Close()
-	// create tmp dir
-	tempDir, err := os.MkdirTemp("", bucket.Name)
-	if err != nil {
-		err = fmt.Errorf("tmp dir error: %w", err)
-		return sourcev1.BucketNotReady(bucket, sourcev1.StorageOperationFailedReason, err.Error()), "", err
-	}
-	defer os.RemoveAll(tempDir)
 
 	ctxTimeout, cancel := context.WithTimeout(ctx, bucket.Spec.Timeout.Duration)
 	defer cancel()
 
 	exists, err := gcpClient.BucketExists(ctxTimeout, bucket.Spec.BucketName)
 	if err != nil {
-		return sourcev1.BucketNotReady(bucket, sourcev1.BucketOperationFailedReason, err.Error()), "", err
+		return sourcev1.BucketNotReady(bucket, sourcev1.BucketOperationFailedReason, err.Error()), err
 	}
 	if !exists {
 		err = fmt.Errorf("bucket '%s' not found", bucket.Spec.BucketName)
-		return sourcev1.BucketNotReady(bucket, sourcev1.BucketOperationFailedReason, err.Error()), "", err
+		return sourcev1.BucketNotReady(bucket, sourcev1.BucketOperationFailedReason, err.Error()), err
 	}
 
 	// Look for file with ignore rules first.
 	path := filepath.Join(tempDir, sourceignore.IgnoreFile)
 	if err := gcpClient.FGetObject(ctxTimeout, bucket.Spec.BucketName, sourceignore.IgnoreFile, path); err != nil {
-		return sourcev1.BucketNotReady(bucket, sourcev1.BucketOperationFailedReason, err.Error()), "", err
+		if err == gcp.ErrorObjectDoesNotExist && sourceignore.IgnoreFile != ".sourceignore" {
+			return sourcev1.BucketNotReady(bucket, sourcev1.BucketOperationFailedReason, err.Error()), err
+		}
 	}
 	ps, err := sourceignore.ReadIgnoreFile(path, nil)
 	if err != nil {
-		return sourcev1.BucketNotReady(bucket, sourcev1.BucketOperationFailedReason, err.Error()), "", err
+		return sourcev1.BucketNotReady(bucket, sourcev1.BucketOperationFailedReason, err.Error()), err
 	}
 	// In-spec patterns take precedence
 	if bucket.Spec.Ignore != nil {
@@ -311,7 +311,7 @@ func (r *BucketReconciler) reconcileWithGCP(ctx context.Context, bucket sourcev1
 		}
 		if err != nil {
 			err = fmt.Errorf("listing objects from bucket '%s' failed: %w", bucket.Spec.BucketName, err)
-			return sourcev1.BucketNotReady(bucket, sourcev1.BucketOperationFailedReason, err.Error()), "", err
+			return sourcev1.BucketNotReady(bucket, sourcev1.BucketOperationFailedReason, err.Error()), err
 		}
 
 		if strings.HasSuffix(object.Name, "/") || object.Name == sourceignore.IgnoreFile {
@@ -323,42 +323,33 @@ func (r *BucketReconciler) reconcileWithGCP(ctx context.Context, bucket sourcev1
 		}
 
 		localPath := filepath.Join(tempDir, object.Name)
-		// FGetObject - get and download bucket object
 		if err = gcpClient.FGetObject(ctxTimeout, bucket.Spec.BucketName, object.Name, localPath); err != nil {
 			err = fmt.Errorf("downloading object from bucket '%s' failed: %w", bucket.Spec.BucketName, err)
-			return sourcev1.BucketNotReady(bucket, sourcev1.BucketOperationFailedReason, err.Error()), "", err
+			return sourcev1.BucketNotReady(bucket, sourcev1.BucketOperationFailedReason, err.Error()), err
 		}
 	}
-	return sourcev1.Bucket{}, tempDir, nil
+	return sourcev1.Bucket{}, nil
 }
 
 // reconcileWithMinio handles getting objects from an S3 compatible bucket
 // using a minio client
-func (r *BucketReconciler) reconcileWithMinio(ctx context.Context, bucket sourcev1.Bucket) (sourcev1.Bucket, string, error) {
+func (r *BucketReconciler) reconcileWithMinio(ctx context.Context, bucket sourcev1.Bucket, tempDir string) (sourcev1.Bucket, error) {
 	s3Client, err := r.authMinio(ctx, bucket)
 	if err != nil {
 		err = fmt.Errorf("auth error: %w", err)
-		return sourcev1.BucketNotReady(bucket, sourcev1.AuthenticationFailedReason, err.Error()), "", err
+		return sourcev1.BucketNotReady(bucket, sourcev1.AuthenticationFailedReason, err.Error()), err
 	}
-
-	// create tmp dir
-	tempDir, err := os.MkdirTemp("", bucket.Name)
-	if err != nil {
-		err = fmt.Errorf("tmp dir error: %w", err)
-		return sourcev1.BucketNotReady(bucket, sourcev1.StorageOperationFailedReason, err.Error()), "", err
-	}
-	defer os.RemoveAll(tempDir)
 
 	ctxTimeout, cancel := context.WithTimeout(ctx, bucket.Spec.Timeout.Duration)
 	defer cancel()
 
 	exists, err := s3Client.BucketExists(ctxTimeout, bucket.Spec.BucketName)
 	if err != nil {
-		return sourcev1.BucketNotReady(bucket, sourcev1.BucketOperationFailedReason, err.Error()), "", err
+		return sourcev1.BucketNotReady(bucket, sourcev1.BucketOperationFailedReason, err.Error()), err
 	}
 	if !exists {
 		err = fmt.Errorf("bucket '%s' not found", bucket.Spec.BucketName)
-		return sourcev1.BucketNotReady(bucket, sourcev1.BucketOperationFailedReason, err.Error()), "", err
+		return sourcev1.BucketNotReady(bucket, sourcev1.BucketOperationFailedReason, err.Error()), err
 	}
 
 	// Look for file with ignore rules first
@@ -367,12 +358,12 @@ func (r *BucketReconciler) reconcileWithMinio(ctx context.Context, bucket source
 	path := filepath.Join(tempDir, sourceignore.IgnoreFile)
 	if err := s3Client.FGetObject(ctxTimeout, bucket.Spec.BucketName, sourceignore.IgnoreFile, path, minio.GetObjectOptions{}); err != nil {
 		if resp, ok := err.(minio.ErrorResponse); ok && resp.Code != "NoSuchKey" {
-			return sourcev1.BucketNotReady(bucket, sourcev1.BucketOperationFailedReason, err.Error()), "", err
+			return sourcev1.BucketNotReady(bucket, sourcev1.BucketOperationFailedReason, err.Error()), err
 		}
 	}
 	ps, err := sourceignore.ReadIgnoreFile(path, nil)
 	if err != nil {
-		return sourcev1.BucketNotReady(bucket, sourcev1.BucketOperationFailedReason, err.Error()), "", err
+		return sourcev1.BucketNotReady(bucket, sourcev1.BucketOperationFailedReason, err.Error()), err
 	}
 	// In-spec patterns take precedence
 	if bucket.Spec.Ignore != nil {
@@ -387,7 +378,7 @@ func (r *BucketReconciler) reconcileWithMinio(ctx context.Context, bucket source
 	}) {
 		if object.Err != nil {
 			err = fmt.Errorf("listing objects from bucket '%s' failed: %w", bucket.Spec.BucketName, object.Err)
-			return sourcev1.BucketNotReady(bucket, sourcev1.BucketOperationFailedReason, err.Error()), "", err
+			return sourcev1.BucketNotReady(bucket, sourcev1.BucketOperationFailedReason, err.Error()), err
 		}
 
 		if strings.HasSuffix(object.Key, "/") || object.Key == sourceignore.IgnoreFile {
@@ -402,20 +393,43 @@ func (r *BucketReconciler) reconcileWithMinio(ctx context.Context, bucket source
 		err := s3Client.FGetObject(ctxTimeout, bucket.Spec.BucketName, object.Key, localPath, minio.GetObjectOptions{})
 		if err != nil {
 			err = fmt.Errorf("downloading object from bucket '%s' failed: %w", bucket.Spec.BucketName, err)
-			return sourcev1.BucketNotReady(bucket, sourcev1.BucketOperationFailedReason, err.Error()), "", err
+			return sourcev1.BucketNotReady(bucket, sourcev1.BucketOperationFailedReason, err.Error()), err
 		}
 	}
-	return sourcev1.Bucket{}, tempDir, nil
+	return sourcev1.Bucket{}, nil
 }
 
 // authGCP creates a new Google Cloud Platform storage client
-// to interact with the Storage service.
+// to interact with the storage service.
 func (r *BucketReconciler) authGCP(ctx context.Context, bucket sourcev1.Bucket) (*gcp.GCPClient, error) {
-	client, err := gcp.NewClient(ctx)
-	if err != nil {
-		return nil, err
+	var client *gcp.GCPClient
+	var err error
+	if bucket.Spec.SecretRef != nil {
+		secretName := types.NamespacedName{
+			Namespace: bucket.GetNamespace(),
+			Name:      bucket.Spec.SecretRef.Name,
+		}
+
+		var secret corev1.Secret
+		if err := r.Get(ctx, secretName, &secret); err != nil {
+			return nil, fmt.Errorf("credentials secret error: %w", err)
+		}
+		if err := gcp.ValidateSecret(secret.Data, secret.Name); err != nil {
+			return nil, err
+		}
+		serviceAccount := gcp.InitCredentialsWithSecret(secret.Data)
+		client, err = gcp.NewClientWithSAKey(ctx, serviceAccount)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		client, err = gcp.NewClient(ctx)
+		if err != nil {
+			return nil, err
+		}
 	}
 	return client, nil
+
 }
 
 // authMinio creates a new Minio client to interact with S3

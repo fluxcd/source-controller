@@ -18,56 +18,171 @@ package gcp
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 
 	gcpStorage "cloud.google.com/go/storage"
 	interator "google.golang.org/api/iterator"
+	"google.golang.org/api/option"
+)
+
+const (
+	ServiceAccount          = "service_account"
+	AuthUri                 = "https://accounts.google.com/o/oauth2/auth"
+	TokenUri                = "https://oauth2.googleapis.com/token"
+	AuthProviderX509CertUrl = "https://www.googleapis.com/oauth2/v1/certs"
 )
 
 var (
 	// IteratorDone is returned when the looping of objects/content
 	// has reached the end of the iteration.
 	IteratorDone = interator.Done
-	// DirectoryExists is an error returned when the filename provided
+	// ErrorDirectoryExists is an error returned when the filename provided
 	// is a directory.
-	DirectoryExists = errors.New("filename is a directory")
-	// ObjectDoesNotExist is an error returned when the object whose name
+	ErrorDirectoryExists = errors.New("filename is a directory")
+	// ErrorObjectDoesNotExist is an error returned when the object whose name
 	// is provided does not exist.
-	ObjectDoesNotExist = errors.New("object does not exist")
+	ErrorObjectDoesNotExist = errors.New("object does not exist")
 )
 
+type Client interface {
+	Bucket(string) *gcpStorage.BucketHandle
+	Close() error
+}
+
+type BucketHandle interface {
+	Create(context.Context, string, *gcpStorage.BucketAttrs) error
+	Delete(context.Context) error
+	Attrs(context.Context) (*gcpStorage.BucketAttrs, error)
+	Object(string) *gcpStorage.ObjectHandle
+	Objects(context.Context, *gcpStorage.Query) *gcpStorage.ObjectIterator
+}
+
+type ObjectHandle interface {
+	Attrs(context.Context) (*gcpStorage.ObjectAttrs, error)
+	NewRangeReader(context.Context, int64, int64) (*gcpStorage.Reader, error)
+}
 type GCPClient struct {
 	// client for interacting with the Google Cloud
 	// Storage APIs.
-	Client *gcpStorage.Client
+	Client Client
 	// startRange is the starting read value for
 	// reading the object from bucket.
-	startRange int64
+	StartRange int64
 	// endRange is the ending read value for
 	// reading the object from bucket.
-	endRange int64
+	EndRange int64
+}
+
+// CredentialsFile struct representing the GCP Service Account
+// JSON file.
+type CredentialsFile struct {
+	Type                    string `json:"type"`
+	ProjectID               string `json:"project_id"`
+	PrivateKeyID            string `json:"private_key_id"`
+	PrivateKey              string `json:"private_key"`
+	ClientEmail             string `json:"client_email"`
+	ClientID                string `json:"client_id"`
+	AuthUri                 string `json:"auth_uri"`
+	TokenUri                string `json:"token_uri"`
+	AuthProviderX509CertUrl string `json:"auth_provider_x509_cert_url"`
+	ClientX509CertUrl       string `json:"client_x509_cert_url"`
 }
 
 // NewClient creates a new GCP storage client
 // The Google Storage Client will automatically
 // look for the Google Application Credential environment variable
-// or look for the Google Application Credential file
+// or look for the Google Application Credential file.
 func NewClient(ctx context.Context) (*GCPClient, error) {
 	client, err := gcpStorage.NewClient(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return &GCPClient{Client: client, startRange: 0, endRange: -1}, nil
+
+	return &GCPClient{Client: client, StartRange: 0, EndRange: -1}, nil
+}
+
+// NewClientWithSAKey creates a new GCP storage client
+// It uses the provided JSON file with service account details
+// To authenticate.
+func NewClientWithSAKey(ctx context.Context, credentials *CredentialsFile) (*GCPClient, error) {
+	saAccount, err := credentials.credentailsToJSON()
+	if err != nil {
+		return nil, err
+	}
+
+	client, err := gcpStorage.NewClient(ctx, option.WithCredentialsJSON(saAccount))
+	if err != nil {
+		return nil, err
+	}
+
+	return &GCPClient{Client: client, StartRange: 0, EndRange: -1}, nil
+}
+
+// credentailsToJSON converts GCP service account credentials struct to JSON.
+func (credentials *CredentialsFile) credentailsToJSON() ([]byte, error) {
+	credentialsJSON, err := json.Marshal(credentials)
+	if err != nil {
+		return nil, err
+	}
+
+	return credentialsJSON, nil
+}
+
+// InitCredentialsWithSecret creates a new credential
+// by initializing a new CredentialsFile struct
+func InitCredentialsWithSecret(secret map[string][]byte) *CredentialsFile {
+	return &CredentialsFile{
+		Type:                    ServiceAccount,
+		ProjectID:               string(secret["projectid"]),
+		PrivateKeyID:            string(secret["privatekeyid"]),
+		PrivateKey:              string(secret["privatekey"]),
+		ClientEmail:             string(secret["clientemail"]),
+		ClientID:                string(secret["clientid"]),
+		AuthUri:                 AuthUri,
+		TokenUri:                TokenUri,
+		AuthProviderX509CertUrl: AuthProviderX509CertUrl,
+		ClientX509CertUrl:       string(secret["certurl"]),
+	}
+}
+
+// ValidateSecret validates the credential secrets
+// It ensures that needed secret fields are not missing.
+func ValidateSecret(secret map[string][]byte, name string) error {
+	if _, exists := secret["projectid"]; !exists {
+		return fmt.Errorf("invalid '%s' secret data: required fields 'projectid'", name)
+	}
+	if _, exists := secret["privatekeyid"]; !exists {
+		return fmt.Errorf("invalid '%s' secret data: required fields 'privatekeyid'", name)
+	}
+	if _, exists := secret["privatekey"]; !exists {
+		return fmt.Errorf("invalid '%s' secret data: required fields 'privatekey'", name)
+	}
+	if _, exists := secret["clientemail"]; !exists {
+		return fmt.Errorf("invalid '%s' secret data: required fields 'clientemail'", name)
+	}
+	if _, exists := secret["clientemail"]; !exists {
+		return fmt.Errorf("invalid '%s' secret data: required fields 'clientemail'", name)
+	}
+	if _, exists := secret["clientid"]; !exists {
+		return fmt.Errorf("invalid '%s' secret data: required fields 'clientid'", name)
+	}
+	if _, exists := secret["certurl"]; !exists {
+		return fmt.Errorf("invalid '%s' secret data: required fields 'certurl'", name)
+	}
+
+	return nil
 }
 
 // SetRange sets the startRange and endRange used to read the Object from
 // the bucket. It is a helper method for resumable downloads.
 func (c *GCPClient) SetRange(start, end int64) {
-	c.startRange = start
-	c.endRange = end
+	c.StartRange = start
+	c.EndRange = end
 }
 
 // BucketExists checks if the bucket with the provided name exists.
@@ -82,15 +197,18 @@ func (c *GCPClient) BucketExists(ctx context.Context, bucketName string) (bool, 
 	return true, nil
 }
 
-// ObjectExists checks if the object with the provided name exists.
+// ObjectAttributes checks if the object with the provided name exists.
 // If it exists the Object attributes are returned.
-func (c *GCPClient) ObjectExists(ctx context.Context, bucketName, objectName string) (bool, *gcpStorage.ObjectAttrs, error) {
+func (c *GCPClient) ObjectAttributes(ctx context.Context, bucketName, objectName string) (bool, *gcpStorage.ObjectAttrs, error) {
 	attrs, err := c.Client.Bucket(bucketName).Object(objectName).Attrs(ctx)
 	// ErrObjectNotExist is returned if the object does not exist
+	if err == gcpStorage.ErrObjectNotExist {
+		return false, nil, err
+	}
 	if err != nil {
 		return false, nil, err
 	}
-	return true, attrs, err
+	return true, attrs, nil
 }
 
 // FGetObject gets the object from the bucket and downloads the object locally
@@ -101,7 +219,7 @@ func (c *GCPClient) FGetObject(ctx context.Context, bucketName, objectName, loca
 	if err == nil {
 		// If the destination exists and is a directory.
 		if dirStatus.IsDir() {
-			return DirectoryExists
+			return ErrorDirectoryExists
 		}
 	}
 
@@ -124,17 +242,16 @@ func (c *GCPClient) FGetObject(ctx context.Context, bucketName, objectName, loca
 	// ObjectExists verifies if object exists and you have permission to access.
 	// Check if the object exists and if you have permission to access it
 	// The Object attributes are returned if the Object exists.
-	exists, attrs, err := c.ObjectExists(ctx, bucketName, objectName)
+	exists, attrs, err := c.ObjectAttributes(ctx, bucketName, objectName)
 	if err != nil {
 		return err
 	}
 	if !exists {
-		return ObjectDoesNotExist
+		return ErrorObjectDoesNotExist
 	}
 
 	// Write to a temporary file "filename.part.gcp" before saving.
-	filePartPath := localPath + attrs.Etag + ".part.gcp"
-
+	filePartPath := localPath + ".part.gcp"
 	// If exists, open in append mode. If not create it as a part file.
 	filePart, err := os.OpenFile(filePartPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)
 	if err != nil {
@@ -165,25 +282,25 @@ func (c *GCPClient) FGetObject(ctx context.Context, bucketName, objectName, loca
 	}
 
 	// Get Object from GCP Bucket
-	objectReader, err := c.Client.Bucket(bucketName).Object(objectName).NewRangeReader(ctx, c.startRange, c.endRange)
+	objectReader, err := c.Client.Bucket(bucketName).Object(objectName).NewRangeReader(ctx, c.StartRange, c.EndRange)
 	if err != nil {
 		return err
 	}
 	defer objectReader.Close()
 
 	// Write to the part file.
-	if _, err = io.CopyN(filePart, objectReader, attrs.Size); err != nil {
+	if _, err := io.CopyN(filePart, objectReader, attrs.Size); err != nil {
 		return err
 	}
 
 	// Close the file before rename, this is specifically needed for Windows users.
 	closeAndRemove = false
-	if err = filePart.Close(); err != nil {
+	if err := filePart.Close(); err != nil {
 		return err
 	}
 
 	// Safely completed. Now commit by renaming to actual filename.
-	if err = os.Rename(filePartPath, localPath); err != nil {
+	if err := os.Rename(filePartPath, localPath); err != nil {
 		return err
 	}
 
