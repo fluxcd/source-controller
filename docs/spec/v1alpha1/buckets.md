@@ -11,7 +11,7 @@ Bucket:
 // BucketSpec defines the desired state of an S3 compatible bucket
 type BucketSpec struct {
 	// The S3 compatible storage provider name, default ('generic').
-	// +kubebuilder:validation:Enum=generic;aws
+	// +kubebuilder:validation:Enum=generic;aws;gcp
 	// +optional
 	Provider string `json:"provider,omitempty"`
 
