@@ -55,8 +55,6 @@ type Client interface {
 }
 
 type BucketHandle interface {
-	Create(context.Context, string, *gcpStorage.BucketAttrs) error
-	Delete(context.Context) error
 	Attrs(context.Context) (*gcpStorage.BucketAttrs, error)
 	Object(string) *gcpStorage.ObjectHandle
 	Objects(context.Context, *gcpStorage.Query) *gcpStorage.ObjectIterator
@@ -66,10 +64,11 @@ type ObjectHandle interface {
 	Attrs(context.Context) (*gcpStorage.ObjectAttrs, error)
 	NewRangeReader(context.Context, int64, int64) (*gcpStorage.Reader, error)
 }
+
 type GCPClient struct {
 	// client for interacting with the Google Cloud
 	// Storage APIs.
-	Client Client
+	Client
 	// startRange is the starting read value for
 	// reading the object from bucket.
 	StartRange int64
@@ -161,9 +160,6 @@ func ValidateSecret(secret map[string][]byte, name string) error {
 	}
 	if _, exists := secret["privatekey"]; !exists {
 		return fmt.Errorf("invalid '%s' secret data: required fields 'privatekey'", name)
-	}
-	if _, exists := secret["clientemail"]; !exists {
-		return fmt.Errorf("invalid '%s' secret data: required fields 'clientemail'", name)
 	}
 	if _, exists := secret["clientemail"]; !exists {
 		return fmt.Errorf("invalid '%s' secret data: required fields 'clientemail'", name)

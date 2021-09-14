@@ -101,34 +101,6 @@ func (mr *MockBucketHandleMockRecorder) Attrs(arg0 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Attrs", reflect.TypeOf((*MockBucketHandle)(nil).Attrs), arg0)
 }
 
-// Create mocks base method.
-func (m *MockBucketHandle) Create(arg0 context.Context, arg1 string, arg2 *storage.BucketAttrs) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Create", arg0, arg1, arg2)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// Create indicates an expected call of Create.
-func (mr *MockBucketHandleMockRecorder) Create(arg0, arg1, arg2 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Create", reflect.TypeOf((*MockBucketHandle)(nil).Create), arg0, arg1, arg2)
-}
-
-// Delete mocks base method.
-func (m *MockBucketHandle) Delete(arg0 context.Context) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Delete", arg0)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// Delete indicates an expected call of Delete.
-func (mr *MockBucketHandleMockRecorder) Delete(arg0 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Delete", reflect.TypeOf((*MockBucketHandle)(nil).Delete), arg0)
-}
-
 // Object mocks base method.
 func (m *MockBucketHandle) Object(arg0 string) *storage.ObjectHandle {
 	m.ctrl.T.Helper()

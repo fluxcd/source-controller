@@ -57,7 +57,7 @@ var _ = BeforeSuite(func() {
 		Expect(err).ToNot(HaveOccurred())
 	}
 	localPath = filepath.Join(tempDir, objectName)
-	MockClient.EXPECT().Bucket(bucketName).Return(MockBucketHandle).AnyTimes()
+	MockClient.EXPECT().Bucket(bucketName).Return(&gcpStorage.BucketHandle{}).AnyTimes()
 	MockBucketHandle.EXPECT().Object(objectName).Return(&gcpStorage.ObjectHandle{}).AnyTimes()
 	MockBucketHandle.EXPECT().Attrs(context.Background()).Return(&gcpStorage.BucketAttrs{
 		Name:    bucketName,
