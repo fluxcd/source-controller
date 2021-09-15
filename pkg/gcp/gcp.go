@@ -49,26 +49,10 @@ var (
 	ErrorObjectDoesNotExist = errors.New("object does not exist")
 )
 
-type Client interface {
-	Bucket(string) *gcpStorage.BucketHandle
-	Close() error
-}
-
-type BucketHandle interface {
-	Attrs(context.Context) (*gcpStorage.BucketAttrs, error)
-	Object(string) *gcpStorage.ObjectHandle
-	Objects(context.Context, *gcpStorage.Query) *gcpStorage.ObjectIterator
-}
-
-type ObjectHandle interface {
-	Attrs(context.Context) (*gcpStorage.ObjectAttrs, error)
-	NewRangeReader(context.Context, int64, int64) (*gcpStorage.Reader, error)
-}
-
 type GCPClient struct {
 	// client for interacting with the Google Cloud
 	// Storage APIs.
-	Client
+	*gcpStorage.Client
 	// startRange is the starting read value for
 	// reading the object from bucket.
 	StartRange int64

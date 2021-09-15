@@ -18,6 +18,15 @@ package gcp_test
 
 import (
 	"context"
+	"crypto/tls"
+	"encoding/json"
+	"fmt"
+	"io"
+	"io/ioutil"
+	"log"
+	"net"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
@@ -25,108 +34,253 @@ import (
 
 	gcpStorage "cloud.google.com/go/storage"
 	"github.com/fluxcd/source-controller/pkg/gcp"
-	"github.com/fluxcd/source-controller/pkg/gcp/mocks"
-	"github.com/golang/mock/gomock"
-	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/gomega"
+	"google.golang.org/api/googleapi"
+	raw "google.golang.org/api/storage/v1"
+	"gotest.tools/assert"
+
+	"google.golang.org/api/option"
+)
+
+const (
+	bucketName string = "test-bucket"
+	objectName string = "test.yaml"
 )
 
 var (
-	MockCtrl         *gomock.Controller
-	MockClient       *mocks.MockClient
-	MockBucketHandle *mocks.MockBucketHandle
-	MockObjectHandle *mocks.MockObjectHandle
-	bucketName       string = "test-bucket"
-	objectName       string = "test.yaml"
-	localPath        string
+	Client *gcpStorage.Client
+	err    error
 )
 
-// mockgen -destination=mocks/mock_gcp_storage.go -package=mocks -source=gcp.go GCPStorageService
-func TestGCPProvider(t *testing.T) {
-	MockCtrl = gomock.NewController(GinkgoT())
-	RegisterFailHandler(Fail)
-	RunSpecs(t, "Test GCP Storage Provider Suite")
+func TestMain(m *testing.M) {
+	hc, close := newTestServer(func(w http.ResponseWriter, r *http.Request) {
+		io.Copy(ioutil.Discard, r.Body)
+		w.WriteHeader(200)
+		if r.RequestURI == fmt.Sprintf("/storage/v1/b/%s?alt=json&prettyPrint=false&projection=full", bucketName) {
+			response := getBucket()
+			jsonedResp, err := json.Marshal(response)
+			if err != nil {
+				log.Fatalf("error marshalling resp %v\n", err)
+			}
+			_, err = w.Write(jsonedResp)
+			if err != nil {
+				log.Fatalf("error writing jsonedResp %v\n", err)
+			}
+		} else if r.RequestURI == fmt.Sprintf("/storage/v1/b/%s/o/%s?alt=json&prettyPrint=false&projection=full", bucketName, objectName) {
+			response := getObject()
+			jsonedResp, err := json.Marshal(response)
+			if err != nil {
+				log.Fatalf("error marshalling resp %v\n", err)
+			}
+			_, err = w.Write(jsonedResp)
+			if err != nil {
+				log.Fatalf("error writing jsonedResp %v\n", err)
+			}
+		} else if r.RequestURI == fmt.Sprintf("/storage/v1/b/%s/o?alt=json&delimiter=&endOffset=&pageToken=&prefix=&prettyPrint=false&projection=full&startOffset=&versions=false", bucketName) {
+			response := getObject()
+			jsonedResp, err := json.Marshal(response)
+			if err != nil {
+				log.Fatalf("error marshalling resp %v\n", err)
+			}
+			_, err = w.Write(jsonedResp)
+			if err != nil {
+				log.Fatalf("error writing jsonedResp %v\n", err)
+			}
+		} else if r.RequestURI == fmt.Sprintf("/%s/test.yaml", bucketName) || r.RequestURI == fmt.Sprintf("/storage/v1/b/%s/o/%s?alt=json&prettyPrint=false&projection=full", bucketName, objectName) {
+			response := getObjectFile()
+			_, err = w.Write([]byte(response))
+			if err != nil {
+				log.Fatalf("error writing jsonedResp %v\n", err)
+			}
+		}
+	})
+	ctx := context.Background()
+	Client, err = gcpStorage.NewClient(ctx, option.WithHTTPClient(hc))
+	if err != nil {
+		log.Fatal(err)
+	}
+	run := m.Run()
+	close()
+	os.Exit(run)
 }
 
-var _ = BeforeSuite(func() {
-	MockClient = mocks.NewMockClient(MockCtrl)
-	MockBucketHandle = mocks.NewMockBucketHandle(MockCtrl)
-	MockObjectHandle = mocks.NewMockObjectHandle(MockCtrl)
-	tempDir, err := os.MkdirTemp("", bucketName)
-	if err != nil {
-		Expect(err).ToNot(HaveOccurred())
+func TestBucketExists(t *testing.T) {
+	gcpClient := &gcp.GCPClient{
+		Client:     Client,
+		StartRange: 0,
+		EndRange:   -1,
 	}
-	localPath = filepath.Join(tempDir, objectName)
-	MockClient.EXPECT().Bucket(bucketName).Return(&gcpStorage.BucketHandle{}).AnyTimes()
-	MockBucketHandle.EXPECT().Object(objectName).Return(&gcpStorage.ObjectHandle{}).AnyTimes()
-	MockBucketHandle.EXPECT().Attrs(context.Background()).Return(&gcpStorage.BucketAttrs{
-		Name:    bucketName,
-		Created: time.Now(),
-		Etag:    "test-etag",
-	}, nil).AnyTimes()
-	MockBucketHandle.EXPECT().Objects(gomock.Any(), nil).Return(&gcpStorage.ObjectIterator{}).AnyTimes()
-	MockObjectHandle.EXPECT().Attrs(gomock.Any()).Return(&gcpStorage.ObjectAttrs{
-		Bucket:      bucketName,
-		Name:        objectName,
-		ContentType: "text/x-yaml",
-		Etag:        "test-etag",
-		Size:        125,
-		Created:     time.Now(),
-	}, nil).AnyTimes()
-	MockObjectHandle.EXPECT().NewRangeReader(gomock.Any(), 10, 125).Return(&gcpStorage.Reader{}, nil).AnyTimes()
-})
+	exists, err := gcpClient.BucketExists(context.Background(), bucketName)
+	assert.NilError(t, err)
+	assert.Assert(t, exists)
+}
 
-var _ = Describe("GCP Storage Provider", func() {
-	Describe("Get GCP Storage Provider client from gcp", func() {
+func TestObjectAttributes(t *testing.T) {
+	gcpClient := &gcp.GCPClient{
+		Client:     Client,
+		StartRange: 0,
+		EndRange:   -1,
+	}
+	exists, objectAttrs, err := gcpClient.ObjectAttributes(context.Background(), bucketName, objectName)
+	if err == gcpStorage.ErrObjectNotExist {
+		assert.NilError(t, err)
+	}
+	assert.NilError(t, err)
+	assert.Assert(t, exists)
+	assert.Assert(t, objectAttrs != nil)
+}
 
-		Context("Gcp storage Bucket - BucketExists", func() {
-			It("should not return an error when fetching gcp storage bucket", func() {
-				gcpClient := &gcp.GCPClient{
-					Client:     MockClient,
-					StartRange: 0,
-					EndRange:   -1,
-				}
-				exists, err := gcpClient.BucketExists(context.Background(), bucketName)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(exists).To(BeTrue())
-			})
-		})
-		Context("Gcp storage Bucket - FGetObject", func() {
-			It("should get the object from the bucket and download the object locally", func() {
-				gcpClient := &gcp.GCPClient{
-					Client:     MockClient,
-					StartRange: 0,
-					EndRange:   -1,
-				}
-				err := gcpClient.FGetObject(context.Background(), bucketName, objectName, localPath)
-				Expect(err).ToNot(HaveOccurred())
-			})
-		})
-		Context("Gcp storage Bucket - ObjectAttributes", func() {
-			It("should get the object attributes", func() {
-				gcpClient := &gcp.GCPClient{
-					Client:     MockClient,
-					StartRange: 0,
-					EndRange:   -1,
-				}
-				exists, attrs, err := gcpClient.ObjectAttributes(context.Background(), bucketName, objectName)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(exists).To(BeTrue())
-				Expect(attrs).ToNot(BeNil())
-			})
+func TestListObjects(t *testing.T) {
+	gcpClient := &gcp.GCPClient{
+		Client:     Client,
+		StartRange: 0,
+		EndRange:   -1,
+	}
+	objectInterator := gcpClient.ListObjects(context.Background(), bucketName, nil)
+	for {
+		_, err := objectInterator.Next()
+		if err == gcp.IteratorDone {
+			break
+		}
+		assert.NilError(t, err)
+	}
+	assert.Assert(t, objectInterator != nil)
+}
 
-			Context("Gcp storage Bucket - SetRange", func() {
-				It("should set the range of the io reader seeker for the file download", func() {
-					gcpClient := &gcp.GCPClient{
-						Client:     MockClient,
-						StartRange: 0,
-						EndRange:   -1,
-					}
-					gcpClient.SetRange(2, 5)
-					Expect(gcpClient.StartRange).To(Equal(int64(2)))
-					Expect(gcpClient.EndRange).To(Equal(int64(5)))
-				})
-			})
-		})
-	})
-})
+func TestFGetObject(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", bucketName)
+	assert.NilError(t, err)
+	defer os.RemoveAll(tempDir)
+	gcpClient := &gcp.GCPClient{
+		Client:     Client,
+		StartRange: 0,
+		EndRange:   -1,
+	}
+	localPath := filepath.Join(tempDir, objectName)
+	err = gcpClient.FGetObject(context.Background(), bucketName, objectName, localPath)
+	if err != io.EOF {
+		assert.NilError(t, err)
+	}
+}
+
+func TestSetRange(t *testing.T) {
+	gcpClient := &gcp.GCPClient{
+		Client:     Client,
+		StartRange: 0,
+		EndRange:   -1,
+	}
+	gcpClient.SetRange(2, 5)
+	assert.Equal(t, gcpClient.StartRange, int64(2))
+	assert.Equal(t, gcpClient.EndRange, int64(5))
+}
+
+func newTestServer(handler func(w http.ResponseWriter, r *http.Request)) (*http.Client, func()) {
+	ts := httptest.NewTLSServer(http.HandlerFunc(handler))
+	tlsConf := &tls.Config{InsecureSkipVerify: true}
+	tr := &http.Transport{
+		TLSClientConfig: tlsConf,
+		DialTLS: func(netw, addr string) (net.Conn, error) {
+			return tls.Dial("tcp", ts.Listener.Addr().String(), tlsConf)
+		},
+	}
+	return &http.Client{Transport: tr}, func() {
+		tr.CloseIdleConnections()
+		ts.Close()
+	}
+}
+
+func getObject() *raw.Object {
+	customTime := time.Now()
+	retTime := customTime.Add(3 * time.Hour)
+	return &raw.Object{
+		Bucket:                  bucketName,
+		Name:                    objectName,
+		EventBasedHold:          false,
+		TemporaryHold:           false,
+		RetentionExpirationTime: retTime.Format(time.RFC3339),
+		ContentType:             "text/x-yaml",
+		ContentLanguage:         "en-us",
+		Size:                    1 << 20,
+		CustomTime:              customTime.Format(time.RFC3339),
+		Md5Hash:                 "bFbHCDvedeecefdgmfmhfuRxBdcedGe96S82XJOAXxjJpk=",
+	}
+}
+
+func getBucket() *raw.Bucket {
+	labels := map[string]string{"a": "b"}
+	matchClasses := []string{"STANDARD"}
+	aTime := time.Date(2021, 1, 2, 0, 0, 0, 0, time.UTC)
+	rb := &raw.Bucket{
+		Name:                  bucketName,
+		Location:              "loc",
+		DefaultEventBasedHold: true,
+		Metageneration:        3,
+		StorageClass:          "sc",
+		TimeCreated:           "2021-5-23T04:05:06Z",
+		Versioning:            &raw.BucketVersioning{Enabled: true},
+		Labels:                labels,
+		Billing:               &raw.BucketBilling{RequesterPays: true},
+		Etag:                  "BNaB2y5Xr3&5MHDca4SoTNL79lyhahr7MV87ubwjgdtg6ghs",
+		Lifecycle: &raw.BucketLifecycle{
+			Rule: []*raw.BucketLifecycleRule{{
+				Action: &raw.BucketLifecycleRuleAction{
+					Type:         "SetStorageClass",
+					StorageClass: "NEARLINE",
+				},
+				Condition: &raw.BucketLifecycleRuleCondition{
+					Age:                 10,
+					IsLive:              googleapi.Bool(true),
+					CreatedBefore:       "2021-01-02",
+					MatchesStorageClass: matchClasses,
+					NumNewerVersions:    3,
+				},
+			}},
+		},
+		RetentionPolicy: &raw.BucketRetentionPolicy{
+			RetentionPeriod: 3,
+			EffectiveTime:   aTime.Format(time.RFC3339),
+		},
+		IamConfiguration: &raw.BucketIamConfiguration{
+			BucketPolicyOnly: &raw.BucketIamConfigurationBucketPolicyOnly{
+				Enabled:    true,
+				LockedTime: aTime.Format(time.RFC3339),
+			},
+			UniformBucketLevelAccess: &raw.BucketIamConfigurationUniformBucketLevelAccess{
+				Enabled:    true,
+				LockedTime: aTime.Format(time.RFC3339),
+			},
+		},
+		Cors: []*raw.BucketCors{
+			{
+				MaxAgeSeconds:  3600,
+				Method:         []string{"GET", "POST"},
+				Origin:         []string{"*"},
+				ResponseHeader: []string{"FOO"},
+			},
+		},
+		Acl: []*raw.BucketAccessControl{
+			{Bucket: bucketName, Role: "READER", Email: "test@example.com", Entity: "allUsers"},
+		},
+		LocationType: "dual-region",
+		Encryption:   &raw.BucketEncryption{DefaultKmsKeyName: "key"},
+		Logging:      &raw.BucketLogging{LogBucket: "lb", LogObjectPrefix: "p"},
+		Website:      &raw.BucketWebsite{MainPageSuffix: "mps", NotFoundPage: "404"},
+	}
+	return rb
+}
+
+func getObjectFile() string {
+	return `
+	apiVersion: source.toolkit.fluxcd.io/v1beta1
+	kind: Bucket
+	metadata:
+	  name: podinfo
+	  namespace: default
+	spec:
+	  interval: 5m
+	  provider: aws
+	  bucketName: podinfo
+	  endpoint: s3.amazonaws.com
+	  region: us-east-1
+	  timeout: 30s
+	`
+}
