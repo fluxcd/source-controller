@@ -18,7 +18,6 @@ package gcp
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -28,13 +27,6 @@ import (
 	gcpStorage "cloud.google.com/go/storage"
 	interator "google.golang.org/api/iterator"
 	"google.golang.org/api/option"
-)
-
-const (
-	ServiceAccount          = "service_account"
-	AuthUri                 = "https://accounts.google.com/o/oauth2/auth"
-	TokenUri                = "https://oauth2.googleapis.com/token"
-	AuthProviderX509CertUrl = "https://www.googleapis.com/oauth2/v1/certs"
 )
 
 var (
@@ -61,98 +53,24 @@ type GCPClient struct {
 	EndRange int64
 }
 
-// CredentialsFile struct representing the GCP Service Account
-// JSON file.
-type CredentialsFile struct {
-	Type                    string `json:"type"`
-	ProjectID               string `json:"project_id"`
-	PrivateKeyID            string `json:"private_key_id"`
-	PrivateKey              string `json:"private_key"`
-	ClientEmail             string `json:"client_email"`
-	ClientID                string `json:"client_id"`
-	AuthUri                 string `json:"auth_uri"`
-	TokenUri                string `json:"token_uri"`
-	AuthProviderX509CertUrl string `json:"auth_provider_x509_cert_url"`
-	ClientX509CertUrl       string `json:"client_x509_cert_url"`
-}
-
 // NewClient creates a new GCP storage client
 // The Google Storage Client will automatically
 // look for the Google Application Credential environment variable
 // or look for the Google Application Credential file.
-func NewClient(ctx context.Context) (*GCPClient, error) {
-	client, err := gcpStorage.NewClient(ctx)
+func NewClient(ctx context.Context, opts ...option.ClientOption) (*GCPClient, error) {
+	client, err := gcpStorage.NewClient(ctx, opts...)
 	if err != nil {
 		return nil, err
 	}
 
 	return &GCPClient{Client: client, StartRange: 0, EndRange: -1}, nil
-}
-
-// NewClientWithSAKey creates a new GCP storage client
-// It uses the provided JSON file with service account details
-// To authenticate.
-func NewClientWithSAKey(ctx context.Context, credentials *CredentialsFile) (*GCPClient, error) {
-	saAccount, err := credentials.credentailsToJSON()
-	if err != nil {
-		return nil, err
-	}
-
-	client, err := gcpStorage.NewClient(ctx, option.WithCredentialsJSON(saAccount))
-	if err != nil {
-		return nil, err
-	}
-
-	return &GCPClient{Client: client, StartRange: 0, EndRange: -1}, nil
-}
-
-// credentailsToJSON converts GCP service account credentials struct to JSON.
-func (credentials *CredentialsFile) credentailsToJSON() ([]byte, error) {
-	credentialsJSON, err := json.Marshal(credentials)
-	if err != nil {
-		return nil, err
-	}
-
-	return credentialsJSON, nil
-}
-
-// InitCredentialsWithSecret creates a new credential
-// by initializing a new CredentialsFile struct
-func InitCredentialsWithSecret(secret map[string][]byte) *CredentialsFile {
-	return &CredentialsFile{
-		Type:                    ServiceAccount,
-		ProjectID:               string(secret["projectid"]),
-		PrivateKeyID:            string(secret["privatekeyid"]),
-		PrivateKey:              string(secret["privatekey"]),
-		ClientEmail:             string(secret["clientemail"]),
-		ClientID:                string(secret["clientid"]),
-		AuthUri:                 AuthUri,
-		TokenUri:                TokenUri,
-		AuthProviderX509CertUrl: AuthProviderX509CertUrl,
-		ClientX509CertUrl:       string(secret["certurl"]),
-	}
 }
 
 // ValidateSecret validates the credential secrets
 // It ensures that needed secret fields are not missing.
 func ValidateSecret(secret map[string][]byte, name string) error {
-	if _, exists := secret["projectid"]; !exists {
-		return fmt.Errorf("invalid '%s' secret data: required fields 'projectid'", name)
-	}
-	if _, exists := secret["privatekeyid"]; !exists {
-		return fmt.Errorf("invalid '%s' secret data: required fields 'privatekeyid'", name)
-	}
-	if _, exists := secret["privatekey"]; !exists {
-		return fmt.Errorf("invalid '%s' secret data: required fields 'privatekey'", name)
-	}
-	if _, exists := secret["clientemail"]; !exists {
-		return fmt.Errorf("invalid '%s' secret data: required fields 'clientemail'", name)
-	}
-	if _, exists := secret["clientid"]; !exists {
-		return fmt.Errorf("invalid '%s' secret data: required fields 'clientid'", name)
-	}
-	if _, exists := secret["certurl"]; !exists {
-		return fmt.Errorf("invalid '%s' secret data: required fields 'certurl'", name)
+	if _, exists := secret["serviceaccount"]; !exists {
+		return fmt.Errorf("invalid '%s' secret data: required fields 'serviceaccount'", name)
 	}
 
 	return nil

@@ -47,54 +47,61 @@ const (
 )
 
 var (
-	Client *gcpStorage.Client
+	hc     *http.Client
+	client *gcpStorage.Client
+	close  func()
 	err    error
 )
 
 func TestMain(m *testing.M) {
-	hc, close := newTestServer(func(w http.ResponseWriter, r *http.Request) {
+	hc, close = newTestServer(func(w http.ResponseWriter, r *http.Request) {
 		io.Copy(ioutil.Discard, r.Body)
-		w.WriteHeader(200)
 		if r.RequestURI == fmt.Sprintf("/storage/v1/b/%s?alt=json&prettyPrint=false&projection=full", bucketName) {
+			w.WriteHeader(200)
 			response := getBucket()
-			jsonedResp, err := json.Marshal(response)
+			jsonResponse, err := json.Marshal(response)
 			if err != nil {
-				log.Fatalf("error marshalling resp %v\n", err)
+				log.Fatalf("error marshalling response %v\n", err)
 			}
-			_, err = w.Write(jsonedResp)
+			_, err = w.Write(jsonResponse)
 			if err != nil {
-				log.Fatalf("error writing jsonedResp %v\n", err)
+				log.Fatalf("error writing jsonResponse %v\n", err)
 			}
 		} else if r.RequestURI == fmt.Sprintf("/storage/v1/b/%s/o/%s?alt=json&prettyPrint=false&projection=full", bucketName, objectName) {
+			w.WriteHeader(200)
 			response := getObject()
-			jsonedResp, err := json.Marshal(response)
+			jsonResponse, err := json.Marshal(response)
 			if err != nil {
-				log.Fatalf("error marshalling resp %v\n", err)
+				log.Fatalf("error marshalling response %v\n", err)
 			}
-			_, err = w.Write(jsonedResp)
+			_, err = w.Write(jsonResponse)
 			if err != nil {
-				log.Fatalf("error writing jsonedResp %v\n", err)
+				log.Fatalf("error writing jsonResponse %v\n", err)
 			}
 		} else if r.RequestURI == fmt.Sprintf("/storage/v1/b/%s/o?alt=json&delimiter=&endOffset=&pageToken=&prefix=&prettyPrint=false&projection=full&startOffset=&versions=false", bucketName) {
+			w.WriteHeader(200)
 			response := getObject()
-			jsonedResp, err := json.Marshal(response)
+			jsonResponse, err := json.Marshal(response)
 			if err != nil {
-				log.Fatalf("error marshalling resp %v\n", err)
+				log.Fatalf("error marshalling response %v\n", err)
 			}
-			_, err = w.Write(jsonedResp)
+			_, err = w.Write(jsonResponse)
 			if err != nil {
-				log.Fatalf("error writing jsonedResp %v\n", err)
+				log.Fatalf("error writing jsonResponse %v\n", err)
 			}
 		} else if r.RequestURI == fmt.Sprintf("/%s/test.yaml", bucketName) || r.RequestURI == fmt.Sprintf("/storage/v1/b/%s/o/%s?alt=json&prettyPrint=false&projection=full", bucketName, objectName) {
+			w.WriteHeader(200)
 			response := getObjectFile()
 			_, err = w.Write([]byte(response))
 			if err != nil {
-				log.Fatalf("error writing jsonedResp %v\n", err)
+				log.Fatalf("error writing response %v\n", err)
 			}
+		} else {
+			w.WriteHeader(404)
 		}
 	})
 	ctx := context.Background()
-	Client, err = gcpStorage.NewClient(ctx, option.WithHTTPClient(hc))
+	client, err = gcpStorage.NewClient(ctx, option.WithHTTPClient(hc))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -103,9 +110,15 @@ func TestMain(m *testing.M) {
 	os.Exit(run)
 }
 
+func TestNewClient(t *testing.T) {
+	gcpClient, err := gcp.NewClient(context.Background(), option.WithHTTPClient(hc))
+	assert.NilError(t, err)
+	assert.Assert(t, gcpClient != nil)
+}
+
 func TestBucketExists(t *testing.T) {
 	gcpClient := &gcp.GCPClient{
-		Client:     Client,
+		Client:     client,
 		StartRange: 0,
 		EndRange:   -1,
 	}
@@ -114,9 +127,21 @@ func TestBucketExists(t *testing.T) {
 	assert.Assert(t, exists)
 }
 
+func TestBucketNotExists(t *testing.T) {
+	bucket := "notexistsbucket"
+	gcpClient := &gcp.GCPClient{
+		Client:     client,
+		StartRange: 0,
+		EndRange:   -1,
+	}
+	exists, err := gcpClient.BucketExists(context.Background(), bucket)
+	assert.NilError(t, err)
+	assert.Assert(t, !exists)
+}
+
 func TestObjectAttributes(t *testing.T) {
 	gcpClient := &gcp.GCPClient{
-		Client:     Client,
+		Client:     client,
 		StartRange: 0,
 		EndRange:   -1,
 	}
@@ -131,7 +156,7 @@ func TestObjectAttributes(t *testing.T) {
 
 func TestListObjects(t *testing.T) {
 	gcpClient := &gcp.GCPClient{
-		Client:     Client,
+		Client:     client,
 		StartRange: 0,
 		EndRange:   -1,
 	}
@@ -151,7 +176,7 @@ func TestFGetObject(t *testing.T) {
 	assert.NilError(t, err)
 	defer os.RemoveAll(tempDir)
 	gcpClient := &gcp.GCPClient{
-		Client:     Client,
+		Client:     client,
 		StartRange: 0,
 		EndRange:   -1,
 	}
@@ -162,15 +187,86 @@ func TestFGetObject(t *testing.T) {
 	}
 }
 
+func TestFGetObjectNotExists(t *testing.T) {
+	object := "notexists.txt"
+	tempDir, err := os.MkdirTemp("", bucketName)
+	assert.NilError(t, err)
+	defer os.RemoveAll(tempDir)
+	gcpClient := &gcp.GCPClient{
+		Client:     client,
+		StartRange: 0,
+		EndRange:   -1,
+	}
+	localPath := filepath.Join(tempDir, object)
+	err = gcpClient.FGetObject(context.Background(), bucketName, object, localPath)
+	if err != io.EOF {
+		assert.Error(t, err, "storage: object doesn't exist")
+	}
+}
+
+func TestFGetObjectDirectoryIsFileName(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", bucketName)
+	defer os.RemoveAll(tempDir)
+	assert.NilError(t, err)
+	gcpClient := &gcp.GCPClient{
+		Client:     client,
+		StartRange: 0,
+		EndRange:   -1,
+	}
+	err = gcpClient.FGetObject(context.Background(), bucketName, objectName, tempDir)
+	if err != io.EOF {
+		assert.Error(t, err, "filename is a directory")
+	}
+}
+
 func TestSetRange(t *testing.T) {
 	gcpClient := &gcp.GCPClient{
-		Client:     Client,
+		Client:     client,
 		StartRange: 0,
 		EndRange:   -1,
 	}
 	gcpClient.SetRange(2, 5)
 	assert.Equal(t, gcpClient.StartRange, int64(2))
 	assert.Equal(t, gcpClient.EndRange, int64(5))
+}
+
+func TestValidateSecret(t *testing.T) {
+	t.Parallel()
+	testCases := []struct {
+		title  string
+		secret map[string][]byte
+		name   string
+		error  bool
+	}{
+		{
+			"Test Case 1",
+			map[string][]byte{
+				"serviceaccount": []byte("serviceaccount"),
+			},
+			"Service Account",
+			false,
+		},
+		{
+			"Test Case 2",
+			map[string][]byte{
+				"data": []byte("data"),
+			},
+			"Service Account",
+			true,
+		},
+	}
+	for _, testCase := range testCases {
+		testCase := testCase
+		t.Run(testCase.title, func(t *testing.T) {
+			t.Parallel()
+			err := gcp.ValidateSecret(testCase.secret, testCase.name)
+			if testCase.error {
+				assert.Error(t, err, fmt.Sprintf("invalid '%v' secret data: required fields 'serviceaccount'", testCase.name))
+			} else {
+				assert.NilError(t, err)
+			}
+		})
+	}
 }
 
 func newTestServer(handler func(w http.ResponseWriter, r *http.Request)) (*http.Client, func()) {

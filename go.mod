@@ -23,7 +23,6 @@ require (
 	github.com/go-git/go-git/v5 v5.4.2
 	github.com/go-logr/logr v0.4.0
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
-	github.com/golang/mock v1.6.0 // indirect
 	github.com/googleapis/gax-go/v2 v2.1.0 // indirect
 	github.com/libgit2/git2go/v31 v31.4.14
 	github.com/minio/minio-go/v7 v7.0.10
@@ -36,7 +35,7 @@ require (
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
 	golang.org/x/sys v0.0.0-20210823070655-63515b42dcdf // indirect
 	golang.org/x/text v0.3.7 // indirect
-	google.golang.org/api v0.54.0 // indirect
+	google.golang.org/api v0.54.0
 	google.golang.org/genproto v0.0.0-20210830153122-0bac4d21c8ea // indirect
 	gotest.tools v2.2.0+incompatible
 	helm.sh/helm/v3 v3.6.3
