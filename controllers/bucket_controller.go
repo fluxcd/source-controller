@@ -423,7 +423,7 @@ func (r *BucketReconciler) authGCP(ctx context.Context, bucket sourcev1.Bucket) 
 			return nil, err
 		}
 	} else {
-		client, err = gcp.NewClient(ctx, nil)
+		client, err = gcp.NewClient(ctx)
 		if err != nil {
 			return nil, err
 		}
