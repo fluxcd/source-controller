@@ -29,6 +29,7 @@ import (
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 	"github.com/minio/minio-go/v7/pkg/s3utils"
+	"google.golang.org/api/option"
 	corev1 "k8s.io/api/core/v1"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -417,8 +418,7 @@ func (r *BucketReconciler) authGCP(ctx context.Context, bucket sourcev1.Bucket) 
 		if err := gcp.ValidateSecret(secret.Data, secret.Name); err != nil {
 			return nil, err
 		}
-		serviceAccount := gcp.InitCredentialsWithSecret(secret.Data)
-		client, err = gcp.NewClientWithSAKey(ctx, serviceAccount)
+		client, err = gcp.NewClient(ctx, option.WithCredentialsJSON(secret.Data["serviceaccount"]))
 		if err != nil {
 			return nil, err
 		}
