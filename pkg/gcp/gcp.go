@@ -97,7 +97,6 @@ func (c *GCPClient) ObjectAttributes(ctx context.Context, bucketName, objectName
 }
 
 // FGetObject gets the object from the bucket and downloads the object locally
-// A part file is created so the download can be resumable.
 func (c *GCPClient) FGetObject(ctx context.Context, bucketName, objectName, localPath string) error {
 	// Verify if destination already exists.
 	dirStatus, err := os.Stat(localPath)
