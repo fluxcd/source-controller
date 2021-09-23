@@ -131,20 +131,30 @@ func TestBucketNotExists(t *testing.T) {
 		Client: client,
 	}
 	exists, err := gcpClient.BucketExists(context.Background(), bucket)
-	assert.Error(t, err, "storage: bucket doesn't exist")
+	assert.Error(t, err, gcpStorage.ErrBucketNotExist.Error())
 	assert.Assert(t, !exists)
 }
 
-func TestObjectAttributes(t *testing.T) {
+func TestObjectExists(t *testing.T) {
 	gcpClient := &gcp.GCPClient{
 		Client: client,
 	}
-	exists, err := gcpClient.ObjectAttributes(context.Background(), bucketName, objectName)
+	exists, err := gcpClient.ObjectExists(context.Background(), bucketName, objectName)
 	if err == gcpStorage.ErrObjectNotExist {
 		assert.NilError(t, err)
 	}
 	assert.NilError(t, err)
 	assert.Assert(t, exists)
+}
+
+func TestObjectNotExists(t *testing.T) {
+	object := "doesnotexists.yaml"
+	gcpClient := &gcp.GCPClient{
+		Client: client,
+	}
+	exists, err := gcpClient.ObjectExists(context.Background(), bucketName, object)
+	assert.Error(t, err, gcpStorage.ErrObjectNotExist.Error())
+	assert.Assert(t, !exists)
 }
 
 func TestListObjects(t *testing.T) {
