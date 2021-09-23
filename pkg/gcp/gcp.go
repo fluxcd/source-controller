@@ -82,9 +82,8 @@ func (c *GCPClient) BucketExists(ctx context.Context, bucketName string) (bool, 
 	return true, nil
 }
 
-// ObjectAttributes checks if the object with the provided name exists.
-// If it exists the Object attributes are returned.
-func (c *GCPClient) ObjectAttributes(ctx context.Context, bucketName, objectName string) (bool, error) {
+// ObjectExists checks if the object with the provided name exists.
+func (c *GCPClient) ObjectExists(ctx context.Context, bucketName, objectName string) (bool, error) {
 	_, err := c.Client.Bucket(bucketName).Object(objectName).Attrs(ctx)
 	// ErrObjectNotExist is returned if the object does not exist
 	if err == gcpStorage.ErrObjectNotExist {
@@ -124,9 +123,8 @@ func (c *GCPClient) FGetObject(ctx context.Context, bucketName, objectName, loca
 	}
 
 	// ObjectExists verifies if object exists and you have permission to access.
-	// Check if the object exists and if you have permission to access it
-	// The Object attributes are returned if the Object exists.
-	exists, err := c.ObjectAttributes(ctx, bucketName, objectName)
+	// Check if the object exists and if you have permission to access it.
+	exists, err := c.ObjectExists(ctx, bucketName, objectName)
 	if err != nil {
 		return err
 	}
