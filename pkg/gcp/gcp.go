@@ -45,12 +45,6 @@ type GCPClient struct {
 	// client for interacting with the Google Cloud
 	// Storage APIs.
 	*gcpStorage.Client
-	// startRange is the starting read value for
-	// reading the object from bucket.
-	StartRange int64
-	// endRange is the ending read value for
-	// reading the object from bucket.
-	EndRange int64
 }
 
 // NewClient creates a new GCP storage client
@@ -63,7 +57,7 @@ func NewClient(ctx context.Context, opts ...option.ClientOption) (*GCPClient, er
 		return nil, err
 	}
 
-	return &GCPClient{Client: client, StartRange: 0, EndRange: -1}, nil
+	return &GCPClient{Client: client}, nil
 }
 
 // ValidateSecret validates the credential secrets
@@ -76,18 +70,11 @@ func ValidateSecret(secret map[string][]byte, name string) error {
 	return nil
 }
 
-// SetRange sets the startRange and endRange used to read the Object from
-// the bucket. It is a helper method for resumable downloads.
-func (c *GCPClient) SetRange(start, end int64) {
-	c.StartRange = start
-	c.EndRange = end
-}
-
 // BucketExists checks if the bucket with the provided name exists.
 func (c *GCPClient) BucketExists(ctx context.Context, bucketName string) (bool, error) {
 	_, err := c.Client.Bucket(bucketName).Attrs(ctx)
 	if err == gcpStorage.ErrBucketNotExist {
-		return false, nil
+		return false, err
 	}
 	if err != nil {
 		return false, err
@@ -97,20 +84,19 @@ func (c *GCPClient) BucketExists(ctx context.Context, bucketName string) (bool, 
 
 // ObjectAttributes checks if the object with the provided name exists.
 // If it exists the Object attributes are returned.
-func (c *GCPClient) ObjectAttributes(ctx context.Context, bucketName, objectName string) (bool, *gcpStorage.ObjectAttrs, error) {
-	attrs, err := c.Client.Bucket(bucketName).Object(objectName).Attrs(ctx)
+func (c *GCPClient) ObjectAttributes(ctx context.Context, bucketName, objectName string) (bool, error) {
+	_, err := c.Client.Bucket(bucketName).Object(objectName).Attrs(ctx)
 	// ErrObjectNotExist is returned if the object does not exist
 	if err == gcpStorage.ErrObjectNotExist {
-		return false, nil, err
+		return false, err
 	}
 	if err != nil {
-		return false, nil, err
+		return false, err
 	}
-	return true, attrs, nil
+	return true, nil
 }
 
 // FGetObject gets the object from the bucket and downloads the object locally
-// A part file is created so the download can be resumable.
 func (c *GCPClient) FGetObject(ctx context.Context, bucketName, objectName, localPath string) error {
 	// Verify if destination already exists.
 	dirStatus, err := os.Stat(localPath)
@@ -140,7 +126,7 @@ func (c *GCPClient) FGetObject(ctx context.Context, bucketName, objectName, loca
 	// ObjectExists verifies if object exists and you have permission to access.
 	// Check if the object exists and if you have permission to access it
 	// The Object attributes are returned if the Object exists.
-	exists, attrs, err := c.ObjectAttributes(ctx, bucketName, objectName)
+	exists, err := c.ObjectAttributes(ctx, bucketName, objectName)
 	if err != nil {
 		return err
 	}
@@ -148,57 +134,25 @@ func (c *GCPClient) FGetObject(ctx context.Context, bucketName, objectName, loca
 		return ErrorObjectDoesNotExist
 	}
 
-	// Write to a temporary file "filename.part.gcp" before saving.
-	filePartPath := localPath + ".part.gcp"
-	// If exists, open in append mode. If not create it as a part file.
-	filePart, err := os.OpenFile(filePartPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)
+	objectFile, err := os.OpenFile(localPath, os.O_CREATE|os.O_WRONLY, 0600)
 	if err != nil {
 		return err
-	}
-
-	// If we return early with an error, be sure to close and delete
-	// filePart.  If we have an error along the way there is a chance
-	// that filePart is somehow damaged, and we should discard it.
-	closeAndRemove := true
-	defer func() {
-		if closeAndRemove {
-			_ = filePart.Close()
-			_ = os.Remove(filePartPath)
-		}
-	}()
-
-	// Issue Stat to get the current offset.
-	partFileStat, err := filePart.Stat()
-	if err != nil {
-		return err
-	}
-
-	// Set the File size request range
-	// If the part file exists
-	if partFileStat.Size() > 0 {
-		c.SetRange(partFileStat.Size(), 0)
 	}
 
 	// Get Object from GCP Bucket
-	objectReader, err := c.Client.Bucket(bucketName).Object(objectName).NewRangeReader(ctx, c.StartRange, c.EndRange)
+	objectReader, err := c.Client.Bucket(bucketName).Object(objectName).NewReader(ctx)
 	if err != nil {
 		return err
 	}
 	defer objectReader.Close()
 
-	// Write to the part file.
-	if _, err := io.CopyN(filePart, objectReader, attrs.Size); err != nil {
+	// Write Object to file.
+	if _, err := io.Copy(objectFile, objectReader); err != nil {
 		return err
 	}
 
-	// Close the file before rename, this is specifically needed for Windows users.
-	closeAndRemove = false
-	if err := filePart.Close(); err != nil {
-		return err
-	}
-
-	// Safely completed. Now commit by renaming to actual filename.
-	if err := os.Rename(filePartPath, localPath); err != nil {
+	// Close the file.
+	if err := objectFile.Close(); err != nil {
 		return err
 	}
 
