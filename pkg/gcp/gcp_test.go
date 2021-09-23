@@ -118,9 +118,7 @@ func TestNewClient(t *testing.T) {
 
 func TestBucketExists(t *testing.T) {
 	gcpClient := &gcp.GCPClient{
-		Client:     client,
-		StartRange: 0,
-		EndRange:   -1,
+		Client: client,
 	}
 	exists, err := gcpClient.BucketExists(context.Background(), bucketName)
 	assert.NilError(t, err)
@@ -130,35 +128,28 @@ func TestBucketExists(t *testing.T) {
 func TestBucketNotExists(t *testing.T) {
 	bucket := "notexistsbucket"
 	gcpClient := &gcp.GCPClient{
-		Client:     client,
-		StartRange: 0,
-		EndRange:   -1,
+		Client: client,
 	}
 	exists, err := gcpClient.BucketExists(context.Background(), bucket)
-	assert.NilError(t, err)
+	assert.Error(t, err, "storage: bucket doesn't exist")
 	assert.Assert(t, !exists)
 }
 
 func TestObjectAttributes(t *testing.T) {
 	gcpClient := &gcp.GCPClient{
-		Client:     client,
-		StartRange: 0,
-		EndRange:   -1,
+		Client: client,
 	}
-	exists, objectAttrs, err := gcpClient.ObjectAttributes(context.Background(), bucketName, objectName)
+	exists, err := gcpClient.ObjectAttributes(context.Background(), bucketName, objectName)
 	if err == gcpStorage.ErrObjectNotExist {
 		assert.NilError(t, err)
 	}
 	assert.NilError(t, err)
 	assert.Assert(t, exists)
-	assert.Assert(t, objectAttrs != nil)
 }
 
 func TestListObjects(t *testing.T) {
 	gcpClient := &gcp.GCPClient{
-		Client:     client,
-		StartRange: 0,
-		EndRange:   -1,
+		Client: client,
 	}
 	objectInterator := gcpClient.ListObjects(context.Background(), bucketName, nil)
 	for {
@@ -176,9 +167,7 @@ func TestFGetObject(t *testing.T) {
 	assert.NilError(t, err)
 	defer os.RemoveAll(tempDir)
 	gcpClient := &gcp.GCPClient{
-		Client:     client,
-		StartRange: 0,
-		EndRange:   -1,
+		Client: client,
 	}
 	localPath := filepath.Join(tempDir, objectName)
 	err = gcpClient.FGetObject(context.Background(), bucketName, objectName, localPath)
@@ -193,9 +182,7 @@ func TestFGetObjectNotExists(t *testing.T) {
 	assert.NilError(t, err)
 	defer os.RemoveAll(tempDir)
 	gcpClient := &gcp.GCPClient{
-		Client:     client,
-		StartRange: 0,
-		EndRange:   -1,
+		Client: client,
 	}
 	localPath := filepath.Join(tempDir, object)
 	err = gcpClient.FGetObject(context.Background(), bucketName, object, localPath)
@@ -209,25 +196,12 @@ func TestFGetObjectDirectoryIsFileName(t *testing.T) {
 	defer os.RemoveAll(tempDir)
 	assert.NilError(t, err)
 	gcpClient := &gcp.GCPClient{
-		Client:     client,
-		StartRange: 0,
-		EndRange:   -1,
+		Client: client,
 	}
 	err = gcpClient.FGetObject(context.Background(), bucketName, objectName, tempDir)
 	if err != io.EOF {
 		assert.Error(t, err, "filename is a directory")
 	}
-}
-
-func TestSetRange(t *testing.T) {
-	gcpClient := &gcp.GCPClient{
-		Client:     client,
-		StartRange: 0,
-		EndRange:   -1,
-	}
-	gcpClient.SetRange(2, 5)
-	assert.Equal(t, gcpClient.StartRange, int64(2))
-	assert.Equal(t, gcpClient.EndRange, int64(5))
 }
 
 func TestValidateSecret(t *testing.T) {
