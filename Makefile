@@ -1,9 +1,16 @@
 # Image URL to use all building/pushing image targets
-IMG ?= fluxcd/source-controller:latest
+IMG ?= fluxcd/source-controller
+TAG ?= latest
 
 # Base image used to build the Go binary
 BASE_IMG ?= ghcr.io/hiddeco/golang-with-libgit2
 BASE_TAG ?= dev
+
+# Allows for defining additional Docker buildx arguments,
+# e.g. '--push'.
+BUILDX_ARGS ?=
+# Architectures to build images for
+BUILDX_PLATFORMS ?= linux/amd64,linux/arm64,linux/arm/v7
 
 # Produce CRDs that work back to Kubernetes 1.16
 CRD_OPTIONS ?= crd:crdVersions=v1
@@ -60,12 +67,12 @@ uninstall: manifests  ## Uninstall CRDs from a cluster
 	kustomize build config/crd | kubectl delete -f -
 
 deploy: manifests  ## Deploy controller in the configured Kubernetes cluster in ~/.kube/config
-	cd config/manager && kustomize edit set image fluxcd/source-controller=${IMG}
+	cd config/manager && kustomize edit set image fluxcd/source-controller=$(IMG):$(TAG)
 	kustomize build config/default | kubectl apply -f -
 
 dev-deploy:  ## Deploy controller dev image in the configured Kubernetes cluster in ~/.kube/config
 	mkdir -p config/dev && cp config/default/* config/dev
-	cd config/dev && kustomize edit set image fluxcd/source-controller=${IMG}
+	cd config/dev && kustomize edit set image fluxcd/source-controller=$(IMG):$(TAG)
 	kustomize build config/dev | kubectl apply -f -
 	rm -rf config/dev
 
@@ -84,7 +91,7 @@ fmt:  ## Run go fmt against code
 	go fmt ./...
 	cd api; go fmt ./...
 
-vet: ## Run go vet against code
+vet: $(LIBGIT2)	## Run go vet against code
 	PKG_CONFIG_PATH=$(LIBGIT2_LIB_PATH)/pkgconfig \
 	go vet ./...
 	cd api; go vet ./...
@@ -92,14 +99,22 @@ vet: ## Run go vet against code
 generate: controller-gen  ## Generate API code
 	cd api; $(CONTROLLER_GEN) object:headerFile="../hack/boilerplate.go.txt" paths="./..."
 
-docker-build:  ## Build the docker image
+docker-build:  ## Build the Docker image
 	docker build \
 		--build-arg BASE_IMG=$(BASE_IMG) \
 		--build-arg BASE_TAG=$(BASE_TAG) \
-		-t ${IMG} .
+		-t $(IMG):$(TAG) .
+		
+docker-buildx:  ## Build the cross-platform Docker image
+	docker buildx build \
+		--build-arg BASE_IMG=$(BASE_IMG) \
+		--build-arg BASE_TAG=$(BASE_TAG) \
+		--platform=$(BUILDX_PLATFORMS) \
+		-t $(IMG):$(TAG) \
+		$(BUILDX_ARGS) .
 
-docker-push:  ## Push docker image
-	docker push ${IMG}
+docker-push:  ## Push Docker image
+	docker push $(IMG):$(TAG)
 
 controller-gen: ## Find or download controller-gen
 ifeq (, $(shell which controller-gen))

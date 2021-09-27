@@ -37,7 +37,7 @@ RUN groupadd controller && \
     useradd --gid controller --shell /bin/sh --create-home controller
 
 # Copy libgit2
-COPY --from=build /libgit2/lib/* /usr/local/lib/
+COPY --from=build /libgit2/lib/ /usr/local/lib/
 RUN ldconfig
 
 # Upgrade packages and install runtime dependencies
