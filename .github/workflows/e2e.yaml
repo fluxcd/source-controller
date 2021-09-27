@@ -44,11 +44,11 @@ jobs:
             exit 1
           fi
       - name: Build container image
-        run: make docker-build IMG=test/source-controller:latest
+        run: make docker-build IMG=test/source-controller TAG=latest
       - name: Load test image
         run: kind load docker-image test/source-controller:latest
       - name: Deploy controller
-        run: make dev-deploy IMG=test/source-controller:latest
+        run: make dev-deploy IMG=test/source-controller TAG=latest
       - name: Run smoke tests
         run: |
           kubectl -n source-system apply -f ./config/samples

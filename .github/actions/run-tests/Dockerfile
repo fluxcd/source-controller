@@ -1,4 +1,4 @@
-FROM ghcr.io/hiddeco/golang-with-libgit2:dev as builder
+FROM ghcr.io/hiddeco/golang-with-libgit2:dev as build
 
 # Use the GitHub Actions uid:gid combination for proper fs permissions
 RUN groupadd -g 116 test && \
