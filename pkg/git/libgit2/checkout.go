@@ -23,10 +23,10 @@ import (
 	"time"
 
 	"github.com/Masterminds/semver/v3"
-	"github.com/fluxcd/pkg/version"
 	git2go "github.com/libgit2/git2go/v31"
 
 	"github.com/fluxcd/pkg/gitutil"
+	"github.com/fluxcd/pkg/version"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
 	"github.com/fluxcd/source-controller/pkg/git"
