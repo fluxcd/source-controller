@@ -53,12 +53,34 @@ func CheckoutStrategyForRef(ref *sourcev1.GitRepositoryRef, opt git.CheckoutOpti
 	}
 }
 
+// clone is a wrapper around git2go.Clone that respects the provided context.
+func clone(ctx context.Context, path, url string, auth *git.Auth, opts *git2go.CloneOptions) (*git2go.Repository, error) {
+	var repo *git2go.Repository
+	errCh := make(chan error, 1)
+	go func() {
+		var err error
+		repo, err = git2go.Clone(url, path, opts)
+		errCh <- err
+	}()
+
+	select {
+	case err := <-errCh:
+		if err != nil {
+			return nil, fmt.Errorf("unable to clone '%s': %w", url, gitutil.LibGit2Error(err))
+		}
+	case <-ctx.Done():
+		return nil, fmt.Errorf("clone context cancelled: %w", ctx.Err())
+	}
+
+	return repo, nil
+}
+
 type CheckoutBranch struct {
 	branch string
 }
 
 func (c *CheckoutBranch) Checkout(ctx context.Context, path, url string, auth *git.Auth) (git.Commit, string, error) {
-	repo, err := git2go.Clone(url, path, &git2go.CloneOptions{
+	cloneOpts := &git2go.CloneOptions{
 		FetchOptions: &git2go.FetchOptions{
 			DownloadTags: git2go.DownloadTagsNone,
 			RemoteCallbacks: git2go.RemoteCallbacks{
@@ -67,9 +89,10 @@ func (c *CheckoutBranch) Checkout(ctx context.Context, path, url string, auth *g
 			},
 		},
 		CheckoutBranch: c.branch,
-	})
+	}
+	repo, err := clone(ctx, path, url, auth, cloneOpts)
 	if err != nil {
-		return nil, "", fmt.Errorf("unable to clone '%s', error: %w", url, gitutil.LibGit2Error(err))
+		return nil, "", err
 	}
 	head, err := repo.Head()
 	if err != nil {
@@ -87,7 +110,7 @@ type CheckoutTag struct {
 }
 
 func (c *CheckoutTag) Checkout(ctx context.Context, path, url string, auth *git.Auth) (git.Commit, string, error) {
-	repo, err := git2go.Clone(url, path, &git2go.CloneOptions{
+	cloneOpts := &git2go.CloneOptions{
 		FetchOptions: &git2go.FetchOptions{
 			DownloadTags: git2go.DownloadTagsAll,
 			RemoteCallbacks: git2go.RemoteCallbacks{
@@ -95,9 +118,10 @@ func (c *CheckoutTag) Checkout(ctx context.Context, path, url string, auth *git.
 				CertificateCheckCallback: auth.CertCallback,
 			},
 		},
-	})
+	}
+	repo, err := clone(ctx, path, url, auth, cloneOpts)
 	if err != nil {
-		return nil, "", fmt.Errorf("unable to clone '%s', error: %w", url, err)
+		return nil, "", err
 	}
 	ref, err := repo.References.Dwim(c.tag)
 	if err != nil {
@@ -131,7 +155,7 @@ type CheckoutCommit struct {
 }
 
 func (c *CheckoutCommit) Checkout(ctx context.Context, path, url string, auth *git.Auth) (git.Commit, string, error) {
-	repo, err := git2go.Clone(url, path, &git2go.CloneOptions{
+	cloneOpts := &git2go.CloneOptions{
 		FetchOptions: &git2go.FetchOptions{
 			DownloadTags: git2go.DownloadTagsNone,
 			RemoteCallbacks: git2go.RemoteCallbacks{
@@ -140,9 +164,10 @@ func (c *CheckoutCommit) Checkout(ctx context.Context, path, url string, auth *g
 			},
 		},
 		CheckoutBranch: c.branch,
-	})
+	}
+	repo, err := clone(ctx, path, url, auth, cloneOpts)
 	if err != nil {
-		return nil, "", fmt.Errorf("unable to clone '%s', error: %w", url, err)
+		return nil, "", err
 	}
 	oid, err := git2go.NewOid(c.commit)
 	if err != nil {
@@ -176,7 +201,7 @@ func (c *CheckoutSemVer) Checkout(ctx context.Context, path, url string, auth *g
 		return nil, "", fmt.Errorf("semver parse range error: %w", err)
 	}
 
-	repo, err := git2go.Clone(url, path, &git2go.CloneOptions{
+	cloneOpts := &git2go.CloneOptions{
 		FetchOptions: &git2go.FetchOptions{
 			DownloadTags: git2go.DownloadTagsAll,
 			RemoteCallbacks: git2go.RemoteCallbacks{
@@ -184,9 +209,10 @@ func (c *CheckoutSemVer) Checkout(ctx context.Context, path, url string, auth *g
 				CertificateCheckCallback: auth.CertCallback,
 			},
 		},
-	})
+	}
+	repo, err := clone(ctx, path, url, auth, cloneOpts)
 	if err != nil {
-		return nil, "", fmt.Errorf("unable to clone '%s', error: %w", url, err)
+		return nil, "", err
 	}
 
 	tags := make(map[string]string)

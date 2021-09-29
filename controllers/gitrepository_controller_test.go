@@ -245,7 +245,7 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 			},
 			wantErr: true,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.GitOperationFailedReason, "Failed to checkout and determine revision: unable to clone '<url>', error: Certificate"),
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.GitOperationFailedReason, "Failed to checkout and determine revision: unable to clone '<url>': Certificate"),
 			},
 		},
 		{
