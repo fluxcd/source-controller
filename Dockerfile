@@ -1,5 +1,5 @@
 ARG BASE_IMG=ghcr.io/fluxcd/golang-with-libgit2
-ARG BASE_TAG=1.16.8-bullseye-libgit2-1.1.1
+ARG BASE_TAG=1.16.8-bullseye-libgit2-1.1.1-1
 FROM ${BASE_IMG}:${BASE_TAG} AS build
 
 # Configure workspace
