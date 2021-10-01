@@ -1,4 +1,4 @@
-FROM ghcr.io/fluxcd/golang-with-libgit2:1.16.8-bullseye-libgit2-1.1.1 as build
+FROM ghcr.io/fluxcd/golang-with-libgit2:1.16.8-bullseye-libgit2-1.1.1-1 as build
 
 # Use the GitHub Actions uid:gid combination for proper fs permissions
 RUN groupadd -g 116 test && \

@@ -4,7 +4,7 @@ TAG ?= latest
 
 # Base image used to build the Go binary
 BASE_IMG ?= ghcr.io/fluxcd/golang-with-libgit2
-BASE_TAG ?= 1.16.8-bullseye-libgit2-1.1.1
+BASE_TAG ?= 1.16.8-bullseye-libgit2-1.1.1-1
 
 # Allows for defining additional Docker buildx arguments,
 # e.g. '--push'.
