@@ -18,8 +18,10 @@ CRD_OPTIONS ?= crd:crdVersions=v1
 # Repository root based on Git metadata
 REPOSITORY_ROOT := $(shell git rev-parse --show-toplevel)
 
-# Dependency versions
+# Libgit2 version
 LIBGIT2_VERSION ?= 1.1.1
+
+# Other dependency versions
 ENVTEST_BIN_VERSION ?= 1.19.2
 KUBEBUILDER_ASSETS ?= $(shell $(SETUP_ENVTEST) use -i $(ENVTEST_BIN_VERSION) -p path)
 
@@ -30,6 +32,10 @@ SYSTEM_LIBGIT2_VERSION := $(shell pkg-config --modversion libgit2 2>/dev/null)
 LIBGIT2_PATH := $(REPOSITORY_ROOT)/hack/libgit2
 LIBGIT2_LIB_PATH := $(LIBGIT2_PATH)/lib
 LIBGIT2 := $(LIBGIT2_LIB_PATH)/libgit2.so.$(LIBGIT2_VERSION)
+
+ifneq ($(LIBGIT2_VERSION),$(SYSTEM_LIBGIT2_VERSION))
+	LIBGIT2_FORCE ?= 1
+endif
 
 # API (doc) generation utilities
 CONTROLLER_GEN_VERSION ?= v0.5.0
@@ -164,8 +170,7 @@ endif
 libgit2: $(LIBGIT2)  ## Detect or download libgit2 library
 
 $(LIBGIT2):
-ifeq ($(LIBGIT2_VERSION),$(SYSTEM_LIBGIT2_VERSION))
-else
+ifeq (1, $(LIBGIT2_FORCE))
 	@{ \
 	set -e; \
 	mkdir -p $(LIBGIT2_PATH); \
