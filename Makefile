@@ -37,6 +37,10 @@ ifneq ($(LIBGIT2_VERSION),$(SYSTEM_LIBGIT2_VERSION))
 	LIBGIT2_FORCE ?= 1
 endif
 
+ifeq ($(shell uname -s),Darwin)
+	LIBGIT2 := $(LIBGIT2_LIB_PATH)/libgit2.$(LIBGIT2_VERSION).dylib
+endif
+
 # API (doc) generation utilities
 CONTROLLER_GEN_VERSION ?= v0.5.0
 GEN_API_REF_DOCS_VERSION ?= 0.3.0
