@@ -21,6 +21,7 @@ import (
 	"compress/gzip"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path"
 	"path/filepath"
@@ -117,57 +118,6 @@ func TestStorage_Archive(t *testing.T) {
 		t.Fatalf("error while bootstrapping storage: %v", err)
 	}
 
-	createFiles := func(files map[string][]byte) (dir string, err error) {
-		defer func() {
-			if err != nil && dir != "" {
-				os.RemoveAll(dir)
-			}
-		}()
-		dir, err = os.MkdirTemp("", "archive-test-files-")
-		if err != nil {
-			return
-		}
-		for name, b := range files {
-			absPath := filepath.Join(dir, name)
-			if err = os.MkdirAll(filepath.Dir(absPath), 0755); err != nil {
-				return
-			}
-			f, err := os.Create(absPath)
-			if err != nil {
-				return "", fmt.Errorf("could not create file %q: %w", absPath, err)
-			}
-			if n, err := f.Write(b); err != nil {
-				f.Close()
-				return "", fmt.Errorf("could not write %d bytes to file %q: %w", n, f.Name(), err)
-			}
-			f.Close()
-		}
-		return
-	}
-
-	matchFiles := func(t *testing.T, storage *Storage, artifact sourcev1.Artifact, files map[string][]byte) {
-		for name, b := range files {
-			mustExist := !(name[0:1] == "!")
-			if !mustExist {
-				name = name[1:]
-			}
-			s, exist, err := walkTar(storage.LocalPath(artifact), name)
-			if err != nil {
-				t.Fatalf("failed reading tarball: %v", err)
-			}
-			if bs := int64(len(b)); s != bs {
-				t.Fatalf("%q size %v != %v", name, s, bs)
-			}
-			if exist != mustExist {
-				if mustExist {
-					t.Errorf("could not find file %q in tarball", name)
-				} else {
-					t.Errorf("tarball contained excluded file %q", name)
-				}
-			}
-		}
-	}
-
 	tests := []struct {
 		name    string
 		files   map[string][]byte
@@ -238,6 +188,194 @@ func TestStorage_Archive(t *testing.T) {
 			}
 			matchFiles(t, storage, artifact, tt.want)
 		})
+	}
+}
+
+func TestStorage_ArchiveTar(t *testing.T) {
+	dir, err := createStoragePath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(cleanupStoragePath(dir))
+
+	storage, err := NewStorage(dir, "hostname", time.Minute)
+	if err != nil {
+		t.Fatalf("error while bootstrapping storage: %v", err)
+	}
+
+	tests := []struct {
+		name    string
+		files   map[string][]byte
+		filter  ArchiveFileFilter
+		want    map[string][]byte
+		wantErr bool
+	}{
+		{
+			name: "no filter",
+			files: map[string][]byte{
+				".git/config":   nil,
+				"file.jpg":      []byte(`contents`),
+				"manifest.yaml": nil,
+			},
+			filter: nil,
+			want: map[string][]byte{
+				".git/config":   nil,
+				"file.jpg":      []byte(`contents`),
+				"manifest.yaml": nil,
+			},
+		},
+		{
+			name: "exclude VCS",
+			files: map[string][]byte{
+				".git/config":   nil,
+				"manifest.yaml": nil,
+			},
+			filter: SourceIgnoreFilter(nil, nil),
+			want: map[string][]byte{
+				"!.git/config":  nil,
+				"manifest.yaml": nil,
+			},
+		},
+		{
+			name: "custom",
+			files: map[string][]byte{
+				".git/config": nil,
+				"custom":      nil,
+				"horse.jpg":   nil,
+			},
+			filter: SourceIgnoreFilter([]gitignore.Pattern{
+				gitignore.ParsePattern("custom", nil),
+			}, nil),
+			want: map[string][]byte{
+				"!git/config": nil,
+				"!custom":     nil,
+				"horse.jpg":   nil,
+			},
+			wantErr: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir, err := createFiles(tt.files)
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			defer os.RemoveAll(dir)
+
+			in, out := io.Pipe()
+			defer in.Close()
+
+			go func() {
+				tw := tar.NewWriter(out)
+				defer tw.Close()
+
+				if err := filepath.Walk(dir, func(p string, fi fs.FileInfo, err error) error {
+					if err != nil {
+						return err
+					}
+
+					header, err := tar.FileInfoHeader(fi, p)
+					if err != nil {
+						return err
+					}
+					relFilePath := p
+					if filepath.IsAbs(dir) {
+						relFilePath, err = filepath.Rel(dir, p)
+						if err != nil {
+							return err
+						}
+					}
+					header.Name = relFilePath
+
+					if err := tw.WriteHeader(header); err != nil {
+						return err
+					}
+
+					if fi.Mode().IsRegular() {
+						f, err := os.Open(p)
+						if err != nil {
+							f.Close()
+							return err
+						}
+						if _, err := io.Copy(tw, f); err != nil {
+							f.Close()
+							return err
+						}
+						return f.Close()
+					}
+
+					return nil
+				}); err != nil {
+					out.Close()
+					return
+				}
+
+				out.Close()
+			}()
+
+			artifact := sourcev1.Artifact{
+				Path: filepath.Join(randStringRunes(10), randStringRunes(10), randStringRunes(10)+".tar.gz"),
+			}
+			if err := storage.MkdirAll(artifact); err != nil {
+				t.Fatalf("artifact directory creation failed: %v", err)
+			}
+			if err := storage.ArchiveTar(&artifact, tar.NewReader(in), tt.filter); (err != nil) != tt.wantErr {
+				t.Errorf("Archive() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			matchFiles(t, storage, artifact, tt.want)
+		})
+	}
+}
+
+func createFiles(files map[string][]byte) (dir string, err error) {
+	defer func() {
+		if err != nil && dir != "" {
+			os.RemoveAll(dir)
+		}
+	}()
+	dir, err = os.MkdirTemp("", "archive-test-files-")
+	if err != nil {
+		return
+	}
+	for name, b := range files {
+		absPath := filepath.Join(dir, name)
+		if err = os.MkdirAll(filepath.Dir(absPath), 0755); err != nil {
+			return
+		}
+		f, err := os.Create(absPath)
+		if err != nil {
+			return "", fmt.Errorf("could not create file %q: %w", absPath, err)
+		}
+		if n, err := f.Write(b); err != nil {
+			f.Close()
+			return "", fmt.Errorf("could not write %d bytes to file %q: %w", n, f.Name(), err)
+		}
+		f.Close()
+	}
+	return
+}
+
+func matchFiles(t *testing.T, storage *Storage, artifact sourcev1.Artifact, files map[string][]byte) {
+	for name, b := range files {
+		mustExist := !(name[0:1] == "!")
+		if !mustExist {
+			name = name[1:]
+		}
+		s, exist, err := walkTar(storage.LocalPath(artifact), name)
+		if err != nil {
+			t.Fatalf("failed reading tarball: %v", err)
+		}
+		if bs := int64(len(b)); s != bs {
+			t.Fatalf("%q size %v != %v", name, s, bs)
+		}
+		if exist != mustExist {
+			if mustExist {
+				t.Errorf("could not find file %q in tarball", name)
+			} else {
+				t.Errorf("tarball contained excluded file %q", name)
+			}
+		}
 	}
 }
 

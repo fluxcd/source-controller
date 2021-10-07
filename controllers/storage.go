@@ -169,6 +169,96 @@ func (s *Storage) Archive(artifact *sourcev1.Artifact, dir string, filter Archiv
 		return fmt.Errorf("invalid dir path: %s", dir)
 	}
 
+	return s.archive(artifact, func(tw *tar.Writer) error {
+		return filepath.Walk(dir, func(p string, fi os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+
+			// Ignore anything that is not a file (directories, symlinks)
+			if !fi.Mode().IsRegular() {
+				return nil
+			}
+
+			// Skip filtered files
+			if filter != nil && filter(p, fi) {
+				return nil
+			}
+
+			header, err := tar.FileInfoHeader(fi, p)
+			if err != nil {
+				return err
+			}
+			// The name needs to be modified to maintain directory structure
+			// as tar.FileInfoHeader only has access to the base name of the file.
+			// Ref: https://golang.org/src/archive/tar/common.go?#L626
+			relFilePath := p
+			if filepath.IsAbs(dir) {
+				relFilePath, err = filepath.Rel(dir, p)
+				if err != nil {
+					return err
+				}
+			}
+			header.Name = relFilePath
+
+			// We want to remove any environment specific data as well, this
+			// ensures the checksum is purely content based.
+			header = hashSafe(header)
+
+			if err := tw.WriteHeader(header); err != nil {
+				return err
+			}
+
+			f, err := os.Open(p)
+			if err != nil {
+				f.Close()
+				return err
+			}
+			if _, err := io.Copy(tw, f); err != nil {
+				f.Close()
+				return err
+			}
+			return f.Close()
+		})
+	})
+}
+
+func (s *Storage) ArchiveTar(artifact *sourcev1.Artifact, tr *tar.Reader, filter ArchiveFileFilter) (err error) {
+	return s.archive(artifact, func(tw *tar.Writer) error {
+		for {
+			header, err := tr.Next()
+			if err == io.EOF {
+				break // End of archive
+			}
+
+			// Ignore anything that is not a file (directories, symlinks)
+			if !header.FileInfo().Mode().IsRegular() {
+				continue
+			}
+
+			// Skip filtered files
+			if filter != nil && filter(header.Name, header.FileInfo()) {
+				continue
+			}
+
+			// We want to remove any environment specific data as well, this
+			// ensures the checksum is purely content based.
+			header = hashSafe(header)
+
+			if err := tw.WriteHeader(header); err != nil {
+				return err
+			}
+
+			if _, err := io.Copy(tw, tr); err != nil {
+				return err
+			}
+		}
+
+		return nil
+	})
+}
+
+func (s *Storage) archive(artifact *sourcev1.Artifact, fn func(tw *tar.Writer) error) (err error) {
 	localPath := s.LocalPath(*artifact)
 	tf, err := os.CreateTemp(filepath.Split(localPath))
 	if err != nil {
@@ -186,62 +276,7 @@ func (s *Storage) Archive(artifact *sourcev1.Artifact, dir string, filter Archiv
 
 	gw := gzip.NewWriter(mw)
 	tw := tar.NewWriter(gw)
-	if err := filepath.Walk(dir, func(p string, fi os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-
-		// Ignore anything that is not a file (directories, symlinks)
-		if !fi.Mode().IsRegular() {
-			return nil
-		}
-
-		// Skip filtered files
-		if filter != nil && filter(p, fi) {
-			return nil
-		}
-
-		header, err := tar.FileInfoHeader(fi, p)
-		if err != nil {
-			return err
-		}
-		// The name needs to be modified to maintain directory structure
-		// as tar.FileInfoHeader only has access to the base name of the file.
-		// Ref: https://golang.org/src/archive/tar/common.go?#L626
-		relFilePath := p
-		if filepath.IsAbs(dir) {
-			relFilePath, err = filepath.Rel(dir, p)
-			if err != nil {
-				return err
-			}
-		}
-		header.Name = relFilePath
-
-		// We want to remove any environment specific data as well, this
-		// ensures the checksum is purely content based.
-		header.Gid = 0
-		header.Uid = 0
-		header.Uname = ""
-		header.Gname = ""
-		header.ModTime = time.Time{}
-		header.AccessTime = time.Time{}
-		header.ChangeTime = time.Time{}
-
-		if err := tw.WriteHeader(header); err != nil {
-			return err
-		}
-
-		f, err := os.Open(p)
-		if err != nil {
-			f.Close()
-			return err
-		}
-		if _, err := io.Copy(tw, f); err != nil {
-			f.Close()
-			return err
-		}
-		return f.Close()
-	}); err != nil {
+	if err := fn(tw); err != nil {
 		tw.Close()
 		gw.Close()
 		tf.Close()
@@ -272,6 +307,20 @@ func (s *Storage) Archive(artifact *sourcev1.Artifact, dir string, filter Archiv
 	artifact.Checksum = fmt.Sprintf("%x", h.Sum(nil))
 	artifact.LastUpdateTime = metav1.Now()
 	return nil
+}
+
+func hashSafe(header *tar.Header) *tar.Header {
+	return &tar.Header{
+		Typeflag:   header.Typeflag,
+		Name:       header.Name,
+		Linkname:   header.Linkname,
+		Size:       header.Size,
+		Mode:       header.Mode,
+		Devmajor:   header.Devmajor,
+		Devminor:   header.Devminor,
+		PAXRecords: header.PAXRecords,
+		Format:     header.Format,
+	}
 }
 
 // AtomicWriteFile atomically writes the io.Reader contents to the v1beta1.Artifact path.
