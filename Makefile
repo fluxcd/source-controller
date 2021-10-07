@@ -3,14 +3,14 @@ IMG ?= fluxcd/source-controller
 TAG ?= latest
 
 # Base image used to build the Go binary
-BASE_IMG ?= ghcr.io/fluxcd/golang-with-libgit2
-BASE_TAG ?= 1.16.8-bullseye-libgit2-1.1.1-1
+LIBGIT2_IMG ?= ghcr.io/fluxcd/golang-with-libgit2
+LIBGIT2_TAG ?= libgit2-1.1.1
 
 # Allows for defining additional Docker buildx arguments,
 # e.g. '--push'.
-BUILDX_ARGS ?=
+BUILD_ARGS ?=
 # Architectures to build images for
-BUILDX_PLATFORMS ?= linux/amd64,linux/arm64,linux/arm/v7
+BUILD_PLATFORMS ?= linux/amd64,linux/arm64,linux/arm/v7
 
 # Produce CRDs that work back to Kubernetes 1.16
 CRD_OPTIONS ?= crd:crdVersions=v1
@@ -110,18 +110,12 @@ generate: controller-gen  ## Generate API code
 	cd api; $(CONTROLLER_GEN) object:headerFile="../hack/boilerplate.go.txt" paths="./..."
 
 docker-build:  ## Build the Docker image
-	docker build \
-		--build-arg BASE_IMG=$(BASE_IMG) \
-		--build-arg BASE_TAG=$(BASE_TAG) \
-		-t $(IMG):$(TAG) .
-		
-docker-buildx:  ## Build the cross-platform Docker image
 	docker buildx build \
-		--build-arg BASE_IMG=$(BASE_IMG) \
-		--build-arg BASE_TAG=$(BASE_TAG) \
-		--platform=$(BUILDX_PLATFORMS) \
+		--build-arg LIBGIT2_IMG=$(LIBGIT2_IMG) \
+		--build-arg LIBGIT2_TAG=$(LIBGIT2_TAG) \
+		--platform=$(BUILD_PLATFORMS) \
 		-t $(IMG):$(TAG) \
-		$(BUILDX_ARGS) .
+		$(BUILD_ARGS) .
 
 docker-push:  ## Push Docker image
 	docker push $(IMG):$(TAG)
@@ -178,8 +172,8 @@ ifeq (1, $(LIBGIT2_FORCE))
 	@{ \
 	set -e; \
 	mkdir -p $(LIBGIT2_PATH); \
-	docker cp $(shell docker create --rm $(BASE_IMG):$(BASE_TAG)):/libgit2/Makefile $(LIBGIT2_PATH); \
-	INSTALL_PREFIX=$(LIBGIT2_PATH) make -C $(LIBGIT2_PATH); \
+	curl -sL https://raw.githubusercontent.com/fluxcd/golang-with-libgit2/$(LIBGIT2_TAG)/hack/Makefile -o $(LIBGIT2_PATH)/Makefile; \
+	INSTALL_PREFIX=$(LIBGIT2_PATH) make -C $(LIBGIT2_PATH) libgit2; \
 	}
 endif
 
