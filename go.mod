@@ -18,13 +18,13 @@ require (
 	github.com/fluxcd/pkg/ssh v0.1.0
 	github.com/fluxcd/pkg/untar v0.1.0
 	github.com/fluxcd/pkg/version v0.1.0
-	github.com/fluxcd/source-controller/api v0.15.4
+	github.com/fluxcd/source-controller/api v0.16.0
 	github.com/go-git/go-billy/v5 v5.3.1
 	github.com/go-git/go-git/v5 v5.4.2
 	github.com/go-logr/logr v0.4.0
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
 	github.com/googleapis/gax-go/v2 v2.1.0 // indirect
-	github.com/libgit2/git2go/v31 v31.4.14
+	github.com/libgit2/git2go/v31 v31.6.1
 	github.com/minio/minio-go/v7 v7.0.10
 	github.com/onsi/ginkgo v1.16.4
 	github.com/onsi/gomega v1.14.0
@@ -48,3 +48,9 @@ require (
 
 // required by https://github.com/helm/helm/blob/v3.6.0/go.mod
 replace github.com/docker/distribution => github.com/docker/distribution v0.0.0-20191216044856-a8371794149d
+
+// fix CVE-2021-41103
+replace github.com/containerd/containerd => github.com/containerd/containerd v1.4.11
+
+// fix CVE-2021-30465
+replace github.com/opencontainers/runc => github.com/opencontainers/runc v1.0.0-rc95

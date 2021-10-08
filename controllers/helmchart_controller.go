@@ -27,6 +27,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Masterminds/semver/v3"
 	securejoin "github.com/cyphar/filepath-securejoin"
 	"github.com/go-logr/logr"
 	helmchart "helm.sh/helm/v3/pkg/chart"
@@ -526,9 +527,29 @@ func (r *HelmChartReconciler) reconcileFromTarballArtifact(ctx context.Context,
 		return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
 	}
 
+	v, err := semver.NewVersion(helmChart.Metadata.Version)
+	if err != nil {
+		err = fmt.Errorf("semver error: %w", err)
+		return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
+	}
+
+	version := v.String()
+	if chart.Spec.ReconcileStrategy == sourcev1.ReconcileStrategyRevision {
+		// Isolate the commit SHA from GitRepository type artifacts by removing the branch/ prefix.
+		splitRev := strings.Split(artifact.Revision, "/")
+		v, err := v.SetMetadata(splitRev[len(splitRev)-1])
+		if err != nil {
+			err = fmt.Errorf("semver error: %w", err)
+			return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
+		}
+
+		version = v.String()
+		helmChart.Metadata.Version = v.String()
+	}
+
 	// Return early if the revision is still the same as the current chart artifact
-	newArtifact := r.Storage.NewArtifactFor(chart.Kind, chart.ObjectMeta.GetObjectMeta(), helmChart.Metadata.Version,
-		fmt.Sprintf("%s-%s.tgz", helmChart.Metadata.Name, helmChart.Metadata.Version))
+	newArtifact := r.Storage.NewArtifactFor(chart.Kind, chart.ObjectMeta.GetObjectMeta(), version,
+		fmt.Sprintf("%s-%s.tgz", helmChart.Metadata.Name, version))
 	if !force && apimeta.IsStatusConditionTrue(chart.Status.Conditions, meta.ReadyCondition) && chart.GetArtifact().HasRevision(newArtifact.Revision) {
 		if newArtifact.URL != artifact.URL {
 			r.Storage.SetArtifactURL(chart.GetArtifact())

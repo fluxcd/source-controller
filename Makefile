@@ -1,10 +1,49 @@
 # Image URL to use all building/pushing image targets
-IMG ?= fluxcd/source-controller:latest
+IMG ?= fluxcd/source-controller
+TAG ?= latest
+
+# Base image used to build the Go binary
+LIBGIT2_IMG ?= ghcr.io/fluxcd/golang-with-libgit2
+LIBGIT2_TAG ?= libgit2-1.1.1-1
+
+# Allows for defining additional Docker buildx arguments,
+# e.g. '--push'.
+BUILD_ARGS ?=
+# Architectures to build images for
+BUILD_PLATFORMS ?= linux/amd64,linux/arm64,linux/arm/v7
+
 # Produce CRDs that work back to Kubernetes 1.16
 CRD_OPTIONS ?= crd:crdVersions=v1
 
-ENVTEST_BIN_VERSION?=1.19.2
-KUBEBUILDER_ASSETS?=$(shell $(SETUP_ENVTEST) use -i $(ENVTEST_BIN_VERSION) -p path)
+# Repository root based on Git metadata
+REPOSITORY_ROOT := $(shell git rev-parse --show-toplevel)
+
+# Libgit2 version
+LIBGIT2_VERSION ?= 1.1.1
+
+# Other dependency versions
+ENVTEST_BIN_VERSION ?= 1.19.2
+KUBEBUILDER_ASSETS ?= $(shell $(SETUP_ENVTEST) use -i $(ENVTEST_BIN_VERSION) -p path)
+
+# libgit2 related magical paths
+# These are used to determine if the target libgit2 version is already available on
+# the system, or where they should be installed to
+SYSTEM_LIBGIT2_VERSION := $(shell pkg-config --modversion libgit2 2>/dev/null)
+LIBGIT2_PATH := $(REPOSITORY_ROOT)/hack/libgit2
+LIBGIT2_LIB_PATH := $(LIBGIT2_PATH)/lib
+LIBGIT2 := $(LIBGIT2_LIB_PATH)/libgit2.so.$(LIBGIT2_VERSION)
+
+ifneq ($(LIBGIT2_VERSION),$(SYSTEM_LIBGIT2_VERSION))
+	LIBGIT2_FORCE ?= 1
+endif
+
+ifeq ($(shell uname -s),Darwin)
+	LIBGIT2 := $(LIBGIT2_LIB_PATH)/libgit2.$(LIBGIT2_VERSION).dylib
+endif
+
+# API (doc) generation utilities
+CONTROLLER_GEN_VERSION ?= v0.5.0
+GEN_API_REF_DOCS_VERSION ?= v0.3.0
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
@@ -13,121 +52,131 @@ else
 GOBIN=$(shell go env GOBIN)
 endif
 
-all: manager
+all: build
 
-# Run tests
-test: generate fmt vet manifests api-docs setup-envtest
-	KUBEBUILDER_ASSETS=$(KUBEBUILDER_ASSETS) go test ./... -coverprofile cover.out
-	cd api; go test ./... -coverprofile cover.out
-
-# Build manager binary
-manager: generate fmt vet
+build: $(LIBGIT2) ## Build manager binary
+	PKG_CONFIG_PATH=$(LIBGIT2_LIB_PATH)/pkgconfig/ \
 	go build -o bin/manager main.go
 
-# Run against the configured Kubernetes cluster in ~/.kube/config
-run: generate fmt vet manifests
+test: $(LIBGIT2) test-api  ## Run tests
+	LD_LIBRARY_PATH=$(LIBGIT2_LIB_PATH) \
+	PKG_CONFIG_PATH=$(LIBGIT2_LIB_PATH)/pkgconfig/ \
+	go test ./... -coverprofile cover.out
+
+test-api: ## Run api tests
+	cd api; go test ./... -coverprofile cover.out
+
+run: $(LIBGIT2) generate fmt vet manifests  ## Run against the configured Kubernetes cluster in ~/.kube/config
+	LD_LIBRARY_PATH=$(LIBGIT2_LIB_PATH) \
 	go run ./main.go
 
-# Install CRDs into a cluster
-install: manifests
+install: manifests  ## Install CRDs into a cluster
 	kustomize build config/crd | kubectl apply -f -
 
-# Uninstall CRDs from a cluster
-uninstall: manifests
+uninstall: manifests  ## Uninstall CRDs from a cluster
 	kustomize build config/crd | kubectl delete -f -
 
-# Deploy controller in the configured Kubernetes cluster in ~/.kube/config
-deploy: manifests
-	cd config/manager && kustomize edit set image fluxcd/source-controller=${IMG}
+deploy: manifests  ## Deploy controller in the configured Kubernetes cluster in ~/.kube/config
+	cd config/manager && kustomize edit set image fluxcd/source-controller=$(IMG):$(TAG)
 	kustomize build config/default | kubectl apply -f -
 
-# Deploy controller dev image in the configured Kubernetes cluster in ~/.kube/config
-dev-deploy:
+dev-deploy:  ## Deploy controller dev image in the configured Kubernetes cluster in ~/.kube/config
 	mkdir -p config/dev && cp config/default/* config/dev
-	cd config/dev && kustomize edit set image fluxcd/source-controller=${IMG}
+	cd config/dev && kustomize edit set image fluxcd/source-controller=$(IMG):$(TAG)
 	kustomize build config/dev | kubectl apply -f -
 	rm -rf config/dev
 
-# Generate manifests e.g. CRD, RBAC etc.
-manifests: controller-gen
+manifests: controller-gen  ## Generate manifests, e.g. CRD, RBAC, etc.
 	$(CONTROLLER_GEN) $(CRD_OPTIONS) rbac:roleName=manager-role paths="./..." output:crd:artifacts:config="config/crd/bases"
 	cd api; $(CONTROLLER_GEN) $(CRD_OPTIONS) rbac:roleName=manager-role paths="./..." output:crd:artifacts:config="../config/crd/bases"
 
-# Generate API reference documentation
-api-docs: gen-crd-api-reference-docs
+api-docs: gen-crd-api-reference-docs  ## Generate API reference documentation
 	$(API_REF_GEN) -api-dir=./api/v1beta1 -config=./hack/api-docs/config.json -template-dir=./hack/api-docs/template -out-file=./docs/api/source.md
 
-# Run go mod tidy
-tidy:
+tidy:  ## Run go mod tidy
 	go mod tidy
 	cd api; go mod tidy
 
-# Run go fmt against code
-fmt:
+fmt:  ## Run go fmt against code
 	go fmt ./...
 	cd api; go fmt ./...
 
-# Run go vet against code
-vet:
+vet: $(LIBGIT2)	## Run go vet against code
+	PKG_CONFIG_PATH=$(LIBGIT2_LIB_PATH)/pkgconfig \
 	go vet ./...
 	cd api; go vet ./...
 
-# Generate code
-generate: controller-gen
+generate: controller-gen  ## Generate API code
 	cd api; $(CONTROLLER_GEN) object:headerFile="../hack/boilerplate.go.txt" paths="./..."
 
-# Build the docker image
-docker-build:
-	docker build . -t ${IMG}
+docker-build:  ## Build the Docker image
+	docker buildx build \
+		--build-arg LIBGIT2_IMG=$(LIBGIT2_IMG) \
+		--build-arg LIBGIT2_TAG=$(LIBGIT2_TAG) \
+		--platform=$(BUILD_PLATFORMS) \
+		-t $(IMG):$(TAG) \
+		$(BUILD_ARGS) .
 
-# Push the docker image
-docker-push:
-	docker push ${IMG}
+docker-push:  ## Push Docker image
+	docker push $(IMG):$(TAG)
 
-# Find or download controller-gen
-controller-gen:
+controller-gen: ## Find or download controller-gen
 ifeq (, $(shell which controller-gen))
 	@{ \
-	set -e ;\
-	CONTROLLER_GEN_TMP_DIR=$$(mktemp -d) ;\
-	cd $$CONTROLLER_GEN_TMP_DIR ;\
-	go mod init tmp ;\
-	go get sigs.k8s.io/controller-tools/cmd/controller-gen@v0.5.0 ;\
-	rm -rf $$CONTROLLER_GEN_TMP_DIR ;\
+	set -e; \
+	CONTROLLER_GEN_TMP_DIR=$$(mktemp -d); \
+	cd $$CONTROLLER_GEN_TMP_DIR; \
+	go mod init tmp; \
+	go get sigs.k8s.io/controller-tools/cmd/controller-gen@$(CONTROLLER_GEN_VERSION); \
+	rm -rf $$CONTROLLER_GEN_TMP_DIR; \
 	}
 CONTROLLER_GEN=$(GOBIN)/controller-gen
 else
 CONTROLLER_GEN=$(shell which controller-gen)
 endif
 
-# Find or download gen-crd-api-reference-docs
-gen-crd-api-reference-docs:
+gen-crd-api-reference-docs:  ## Find or download gen-crd-api-reference-docs
 ifeq (, $(shell which gen-crd-api-reference-docs))
 	@{ \
-	set -e ;\
-	API_REF_GEN_TMP_DIR=$$(mktemp -d) ;\
-	cd $$API_REF_GEN_TMP_DIR ;\
-	go mod init tmp ;\
-	go get github.com/ahmetb/gen-crd-api-reference-docs@v0.3.0 ;\
-	rm -rf $$API_REF_GEN_TMP_DIR ;\
+	set -e; \
+	API_REF_GEN_TMP_DIR=$$(mktemp -d); \
+	cd $$API_REF_GEN_TMP_DIR; \
+	go mod init tmp; \
+	go get github.com/ahmetb/gen-crd-api-reference-docs@$(GEN_API_REF_DOCS_VERSION); \
+	rm -rf $$API_REF_GEN_TMP_DIR; \
 	}
 API_REF_GEN=$(GOBIN)/gen-crd-api-reference-docs
 else
 API_REF_GEN=$(shell which gen-crd-api-reference-docs)
 endif
 
-# Find or download setup-envtest
-setup-envtest:
+setup-envtest:  ## Find or download setup-envtest
 ifeq (, $(shell which setup-envtest))
 	@{ \
-	set -e ;\
-	SETUP_ENVTEST_TMP_DIR=$$(mktemp -d) ;\
-	cd $$SETUP_ENVTEST_TMP_DIR ;\
-	go mod init tmp ;\
-	go get sigs.k8s.io/controller-runtime/tools/setup-envtest@latest ;\
-	rm -rf $$SETUP_ENVTEST_TMP_DIR ;\
+	set -e; \
+	SETUP_ENVTEST_TMP_DIR=$$(mktemp -d); \
+	cd $$SETUP_ENVTEST_TMP_DIR; \
+	go mod init tmp; \
+	go get sigs.k8s.io/controller-runtime/tools/setup-envtest@latest; \
+	rm -rf $$SETUP_ENVTEST_TMP_DIR; \
 	}
 SETUP_ENVTEST=$(GOBIN)/setup-envtest
 else
 SETUP_ENVTEST=$(shell which setup-envtest)
 endif
+
+libgit2: $(LIBGIT2)  ## Detect or download libgit2 library
+
+$(LIBGIT2):
+ifeq (1, $(LIBGIT2_FORCE))
+	@{ \
+	set -e; \
+	mkdir -p $(LIBGIT2_PATH); \
+	curl -sL https://raw.githubusercontent.com/fluxcd/golang-with-libgit2/$(LIBGIT2_TAG)/hack/Makefile -o $(LIBGIT2_PATH)/Makefile; \
+	INSTALL_PREFIX=$(LIBGIT2_PATH) make -C $(LIBGIT2_PATH) libgit2; \
+	}
+endif
+
+.PHONY: help
+help:  ## Display this help menu
+	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make \033[36m<target>\033[0m\n"} /^[a-zA-Z_0-9-]+:.*?##/ { printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2 } /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) } ' $(MAKEFILE_LIST)
