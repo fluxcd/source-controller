@@ -48,3 +48,9 @@ require (
 
 // required by https://github.com/helm/helm/blob/v3.6.0/go.mod
 replace github.com/docker/distribution => github.com/docker/distribution v0.0.0-20191216044856-a8371794149d
+
+// fix CVE-2021-41103
+replace github.com/containerd/containerd => github.com/containerd/containerd v1.4.11
+
+// fix CVE-2021-30465
+replace github.com/opencontainers/runc => github.com/opencontainers/runc v1.0.0-rc95
