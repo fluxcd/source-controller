@@ -2,6 +2,30 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.16.0
+
+**Release date:** 2021-10-08
+
+This prerelease improves the configuration of the `libgit2` C library, solving
+most issues around private key formats (e.g. PKCS#8 and ED25519) by ensuring
+it is linked against OpenSSL and LibSSH2.
+
+In addition, the `HelmChart` resource does now allow setting a `ReconcileStrategy`
+to define when a new artifact for a chart should be created for charts from
+`Bucket` and `GitRepository` sources. By setting this to `Revision`, you no
+longer have to bump the version in the `Chart.yaml` file, but a new chart will
+automatically be made available when the revision of the Source changes.
+
+Fixes:
+* Update containerd and runc to fix CVEs
+  [#446](https://github.com/fluxcd/source-controller/pull/446)
+
+Improvements:
+* Add reconcile strategy for HelmCharts
+  [#308](https://github.com/fluxcd/source-controller/pull/308)
+* Update github.com/libgit2/git2go to v31.6.1
+  [#437](https://github.com/fluxcd/source-controller/pull/437)
+
 ## 0.15.4
 
 **Release date:** 2021-08-05
