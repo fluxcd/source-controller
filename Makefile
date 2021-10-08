@@ -43,7 +43,7 @@ endif
 
 # API (doc) generation utilities
 CONTROLLER_GEN_VERSION ?= v0.5.0
-GEN_API_REF_DOCS_VERSION ?= 0.3.0
+GEN_API_REF_DOCS_VERSION ?= v0.3.0
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))

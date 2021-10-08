@@ -562,9 +562,9 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>Determines what enables reconciliation. Valid values are (&lsquo;ChartVersion&rsquo;,
-&lsquo;Revision&rsquo;). See the documentation of the values for an explanation on their
-behavior.
+<p>Determines what enables the creation of a new artifact. Valid values are
+(&lsquo;ChartVersion&rsquo;, &lsquo;Revision&rsquo;).
+See the documentation of the values for an explanation on their behavior.
 Defaults to ChartVersion when omitted.</p>
 </td>
 </tr>
@@ -1635,9 +1635,9 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>Determines what enables reconciliation. Valid values are (&lsquo;ChartVersion&rsquo;,
-&lsquo;Revision&rsquo;). See the documentation of the values for an explanation on their
-behavior.
+<p>Determines what enables the creation of a new artifact. Valid values are
+(&lsquo;ChartVersion&rsquo;, &lsquo;Revision&rsquo;).
+See the documentation of the values for an explanation on their behavior.
 Defaults to ChartVersion when omitted.</p>
 </td>
 </tr>
