@@ -66,8 +66,8 @@ func (s *BasicAuth) Method(secret corev1.Secret) (*git.Auth, error) {
 		password = string(d)
 	}
 	if username != "" && password != "" {
-		credCallback = func(url string, usernameFromURL string, allowedTypes git2go.CredType) (*git2go.Cred, error) {
-			cred, err := git2go.NewCredUserpassPlaintext(username, password)
+		credCallback = func(url string, usernameFromURL string, allowedTypes git2go.CredentialType) (*git2go.Credential, error) {
+			cred, err := git2go.NewCredentialUserpassPlaintext(username, password)
 			if err != nil {
 				return nil, err
 			}
@@ -81,7 +81,7 @@ func (s *BasicAuth) Method(secret corev1.Secret) (*git.Auth, error) {
 			roots := x509.NewCertPool()
 			ok := roots.AppendCertsFromPEM(caFile)
 			if !ok {
-				return git2go.ErrCertificate
+				return git2go.ErrorCodeCertificate
 			}
 
 			opts := x509.VerifyOptions{
@@ -90,9 +90,9 @@ func (s *BasicAuth) Method(secret corev1.Secret) (*git.Auth, error) {
 			}
 			_, err := cert.X509.Verify(opts)
 			if err != nil {
-				return git2go.ErrCertificate
+				return git2go.ErrorCodeCertificate
 			}
-			return git2go.ErrOk
+			return git2go.ErrorCodeOK
 		}
 	}
 
@@ -137,8 +137,8 @@ func (s *PublicKeyAuth) Method(secret corev1.Secret) (*git.Auth, error) {
 		user = git.DefaultPublicKeyAuthUser
 	}
 
-	credCallback := func(url string, usernameFromURL string, allowedTypes git2go.CredType) (*git2go.Cred, error) {
-		cred, err := git2go.NewCredSshKeyFromMemory(user, "", string(identity), string(password))
+	credCallback := func(url string, usernameFromURL string, allowedTypes git2go.CredentialType) (*git2go.Credential, error) {
+		cred, err := git2go.NewCredentialSSHKeyFromMemory(user, "", string(identity), string(password))
 		if err != nil {
 			return nil, err
 		}
@@ -157,20 +157,20 @@ func (s *PublicKeyAuth) Method(secret corev1.Secret) (*git.Auth, error) {
 		// Check if the configured host matches the hostname given to
 		// the callback.
 		if host != hostname {
-			return git2go.ErrUser
+			return git2go.ErrorCodeUser
 		}
 
 		// We are now certain that the configured host and the hostname
 		// given to the callback match. Use the configured host (that
-		// includes the port), and normalize it so we can check if there
+		// includes the port), and normalize it, so we can check if there
 		// is an entry for the hostname _and_ port.
 		host = knownhosts.Normalize(s.host)
 		for _, k := range kk {
 			if k.matches(host, cert.Hostkey) {
-				return git2go.ErrOk
+				return git2go.ErrorCodeOK
 			}
 		}
-		return git2go.ErrCertificate
+		return git2go.ErrorCodeCertificate
 	}
 
 	return &git.Auth{CredCallback: credCallback, CertCallback: certCallback}, nil

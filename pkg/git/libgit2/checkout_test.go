@@ -32,7 +32,7 @@ import (
 
 func TestCheckoutTagSemVer_Checkout(t *testing.T) {
 	certCallback := func(cert *git2go.Certificate, valid bool, hostname string) git2go.ErrorCode {
-		return 0
+		return git2go.ErrorCodeOK
 	}
 	auth := &git.Auth{CertCallback: certCallback}
 
@@ -57,9 +57,10 @@ func TestCheckoutTagSemVer_Checkout(t *testing.T) {
 	if _, err := io.Copy(h, f); err != nil {
 		t.Error(err)
 	}
+	const expectedHash = "2bd1707542a11f987ee24698dcc095a9f57639f401133ef6a29da97bf8f3f302"
 	fileHash := hex.EncodeToString(h.Sum(nil))
-	if fileHash != "2bd1707542a11f987ee24698dcc095a9f57639f401133ef6a29da97bf8f3f302" {
-		t.Errorf("expected files not checked out. Expected hash %s, got %s", "2bd1707542a11f987ee24698dcc095a9f57639f401133ef6a29da97bf8f3f302", fileHash)
+	if fileHash != expectedHash {
+		t.Errorf("expected files not checked out. Expected hash %s, got %s", expectedHash, fileHash)
 	}
 
 	semVer := CheckoutSemVer{

@@ -30,37 +30,37 @@ meeting](https://docs.google.com/document/d/1l_M0om0qUEN_NNiGgpqJ2tvsF2iioHkaARD
 
 ### Installing required dependencies
 
-The dependency [libgit2](https://libgit2.org/) needs to be installed to be able to run
-Source Controller or its test-suite locally (not in a container).
+The dependency [libgit2](https://libgit2.org/) needs to be installed to be able
+to run source-controller or its test-suite locally (not in a container).
 
-**macOS**
+In case this dependency is not present on your system (at the expected
+version), the first invocation of a `make` target that requires the
+dependency will attempt to compile it locally to `hack/libgit2`. For this build
+to succeed; CMake, Docker, OpenSSL 1.1 and LibSSH2 must be present on the system.
+
+Triggering a manual build of the dependency is possible as well by running
+`make libgit2`. To enforce the build, for example if your system dependencies
+match but are not linked in a compatible way, append `LIBGIT2_FORCE=1` to the
+`make` command.
+
+#### macOS
+
+```console
+$ # Ensure libgit2 dependencies are available
+$ brew install cmake openssl@1.1 libssh2 pkg-config
+$ LIBGIT2_FORCE=1 make libgit2
 ```
-brew install libgit2
+
+#### Linux
+
+```console
+$ # Ensure libgit2 dependencies are available
+$ pacman -S cmake openssl libssh2
+$ LIBGIT2_FORCE=1 make libgit2
 ```
 
-**Arch Linux**
-```
-pacman -S libgit2
-```
-
-**Building from source**
-
-1. Ensure [`cmake`](https://cmake.org) is available on your system.
-1. Download and unarchive [the right `libgit2` version](https://github.com/libgit2/git2go#which-go-version-to-use)
-   for our current `git2go` dependency:
-
-   ```console
-   $ LIBGIT2_VER=1.1.0
-   $ curl -L https://github.com/libgit2/libgit2/releases/download/v$LIBGIT2_VER/libgit2-$LIBGIT2_VER.tar.gz -o /tmp/libgit2.tar.gz
-   $ tar -xvf /tmp/libgit2.tar.gz -C /tmp/libgit2-$LIBGIT2_VER
-   ```
-1. Build and install the library on your system:
-
-   ```console
-   $ mkdir /tmp/libgit2-$LIBGIT2_VER/build && cd /tmp/libgit2-$LIBGIT2_VER/build
-   $ cmake .. -DCMAKE_INSTALL_PREFIX=/usr
-   $ sudo cmake --build . --target install
-   ```
+**Note:** Example shown is for Arch Linux, but likewise procedure can be
+followed using any other package manager, e.g. `apt`.
 
 ### How to run the test suite
 
