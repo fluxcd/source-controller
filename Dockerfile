@@ -3,7 +3,7 @@ ARG GO_VERSION=1.16.8
 ARG XX_VERSION=1.0.0-rc.2
 
 ARG LIBGIT2_IMG=ghcr.io/fluxcd/golang-with-libgit2
-ARG LIBGIT2_TAG=libgit2-1.1.1
+ARG LIBGIT2_TAG=libgit2-1.1.1-1
 
 FROM --platform=$BUILDPLATFORM tonistiigi/xx:${XX_VERSION} AS xx
 FROM ${LIBGIT2_IMG}:${LIBGIT2_TAG} as libgit2
