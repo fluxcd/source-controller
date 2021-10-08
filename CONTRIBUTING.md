@@ -47,7 +47,7 @@ match but are not linked in a compatible way, append `LIBGIT2_FORCE=1` to the
 
 ```console
 $ # Ensure libgit2 dependencies are available
-$ brew install cmake openssl@1.1 libssh2
+$ brew install cmake openssl@1.1 libssh2 pkg-config
 $ LIBGIT2_FORCE=1 make libgit2
 ```
 
