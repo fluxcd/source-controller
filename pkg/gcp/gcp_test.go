@@ -32,7 +32,7 @@ import (
 	"testing"
 	"time"
 
-	gcpStorage "cloud.google.com/go/storage"
+	gcpstorage "cloud.google.com/go/storage"
 	"github.com/fluxcd/source-controller/pkg/gcp"
 	"google.golang.org/api/googleapi"
 	raw "google.golang.org/api/storage/v1"
@@ -48,7 +48,7 @@ const (
 
 var (
 	hc     *http.Client
-	client *gcpStorage.Client
+	client *gcpstorage.Client
 	close  func()
 	err    error
 )
@@ -101,7 +101,7 @@ func TestMain(m *testing.M) {
 		}
 	})
 	ctx := context.Background()
-	client, err = gcpStorage.NewClient(ctx, option.WithHTTPClient(hc))
+	client, err = gcpstorage.NewClient(ctx, option.WithHTTPClient(hc))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -131,7 +131,7 @@ func TestBucketNotExists(t *testing.T) {
 		Client: client,
 	}
 	exists, err := gcpClient.BucketExists(context.Background(), bucket)
-	assert.Error(t, err, gcpStorage.ErrBucketNotExist.Error())
+	assert.Error(t, err, gcpstorage.ErrBucketNotExist.Error())
 	assert.Assert(t, !exists)
 }
 
@@ -140,7 +140,7 @@ func TestObjectExists(t *testing.T) {
 		Client: client,
 	}
 	exists, err := gcpClient.ObjectExists(context.Background(), bucketName, objectName)
-	if err == gcpStorage.ErrObjectNotExist {
+	if err == gcpstorage.ErrObjectNotExist {
 		assert.NilError(t, err)
 	}
 	assert.NilError(t, err)
@@ -153,7 +153,7 @@ func TestObjectNotExists(t *testing.T) {
 		Client: client,
 	}
 	exists, err := gcpClient.ObjectExists(context.Background(), bucketName, object)
-	assert.Error(t, err, gcpStorage.ErrObjectNotExist.Error())
+	assert.Error(t, err, gcpstorage.ErrObjectNotExist.Error())
 	assert.Assert(t, !exists)
 }
 
@@ -161,15 +161,15 @@ func TestListObjects(t *testing.T) {
 	gcpClient := &gcp.GCPClient{
 		Client: client,
 	}
-	objectInterator := gcpClient.ListObjects(context.Background(), bucketName, nil)
+	objectIterator := gcpClient.ListObjects(context.Background(), bucketName, nil)
 	for {
-		_, err := objectInterator.Next()
+		_, err := objectIterator.Next()
 		if err == gcp.IteratorDone {
 			break
 		}
 		assert.NilError(t, err)
 	}
-	assert.Assert(t, objectInterator != nil)
+	assert.Assert(t, objectIterator != nil)
 }
 
 func TestFGetObject(t *testing.T) {

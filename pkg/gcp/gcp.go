@@ -24,15 +24,15 @@ import (
 	"os"
 	"path/filepath"
 
-	gcpStorage "cloud.google.com/go/storage"
-	interator "google.golang.org/api/iterator"
+	gcpstorage "cloud.google.com/go/storage"
+	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
 )
 
 var (
 	// IteratorDone is returned when the looping of objects/content
 	// has reached the end of the iteration.
-	IteratorDone = interator.Done
+	IteratorDone = iterator.Done
 	// ErrorDirectoryExists is an error returned when the filename provided
 	// is a directory.
 	ErrorDirectoryExists = errors.New("filename is a directory")
@@ -44,15 +44,13 @@ var (
 type GCPClient struct {
 	// client for interacting with the Google Cloud
 	// Storage APIs.
-	*gcpStorage.Client
+	*gcpstorage.Client
 }
 
-// NewClient creates a new GCP storage client
-// The Google Storage Client will automatically
-// look for the Google Application Credential environment variable
-// or look for the Google Application Credential file.
+// NewClient creates a new GCP storage client. The Client will automatically look for  the Google Application
+// Credential environment variable or look for the Google Application Credential file.
 func NewClient(ctx context.Context, opts ...option.ClientOption) (*GCPClient, error) {
-	client, err := gcpStorage.NewClient(ctx, opts...)
+	client, err := gcpstorage.NewClient(ctx, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -73,7 +71,7 @@ func ValidateSecret(secret map[string][]byte, name string) error {
 // BucketExists checks if the bucket with the provided name exists.
 func (c *GCPClient) BucketExists(ctx context.Context, bucketName string) (bool, error) {
 	_, err := c.Client.Bucket(bucketName).Attrs(ctx)
-	if err == gcpStorage.ErrBucketNotExist {
+	if err == gcpstorage.ErrBucketNotExist {
 		return false, err
 	}
 	if err != nil {
@@ -86,7 +84,7 @@ func (c *GCPClient) BucketExists(ctx context.Context, bucketName string) (bool, 
 func (c *GCPClient) ObjectExists(ctx context.Context, bucketName, objectName string) (bool, error) {
 	_, err := c.Client.Bucket(bucketName).Object(objectName).Attrs(ctx)
 	// ErrObjectNotExist is returned if the object does not exist
-	if err == gcpStorage.ErrObjectNotExist {
+	if err == gcpstorage.ErrObjectNotExist {
 		return false, err
 	}
 	if err != nil {
@@ -160,7 +158,7 @@ func (c *GCPClient) FGetObject(ctx context.Context, bucketName, objectName, loca
 // ListObjects lists the objects/contents of the bucket whose bucket name is provided.
 // the objects are returned as an Objectiterator and .Next() has to be called on them
 // to loop through the Objects.
-func (c *GCPClient) ListObjects(ctx context.Context, bucketName string, query *gcpStorage.Query) *gcpStorage.ObjectIterator {
+func (c *GCPClient) ListObjects(ctx context.Context, bucketName string, query *gcpstorage.Query) *gcpstorage.ObjectIterator {
 	items := c.Client.Bucket(bucketName).Objects(ctx, query)
 	return items
 }
