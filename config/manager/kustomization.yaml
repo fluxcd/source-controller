@@ -5,5 +5,10 @@ resources:
 - deployment.yaml
 images:
 - name: fluxcd/source-controller
+<<<<<<< HEAD
   newName: fluxcd/source-controller
   newTag: v0.19.2
+=======
+  newName: docker.io/guilhem/source-controller
+  newTag: omaha
+>>>>>>> c11d601 (feat: Add an omaha source)

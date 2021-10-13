@@ -163,19 +163,8 @@ docker-push:  ## Push Docker image
 	docker push $(IMG):$(TAG)
 
 controller-gen: ## Find or download controller-gen
-ifeq (, $(shell which controller-gen))
-	@{ \
-	set -e; \
-	CONTROLLER_GEN_TMP_DIR=$$(mktemp -d); \
-	cd $$CONTROLLER_GEN_TMP_DIR; \
-	go mod init tmp; \
-	go get sigs.k8s.io/controller-tools/cmd/controller-gen@$(CONTROLLER_GEN_VERSION); \
-	rm -rf $$CONTROLLER_GEN_TMP_DIR; \
-	}
+	go install sigs.k8s.io/controller-tools/cmd/controller-gen@$(CONTROLLER_GEN_VERSION)
 CONTROLLER_GEN=$(GOBIN)/controller-gen
-else
-CONTROLLER_GEN=$(shell which controller-gen)
-endif
 
 gen-crd-api-reference-docs:  ## Find or download gen-crd-api-reference-docs
 ifeq (, $(shell which gen-crd-api-reference-docs))

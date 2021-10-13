@@ -223,6 +223,19 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "Bucket")
 		os.Exit(1)
 	}
+	if err = (&controllers.OmahaReconciler{
+		Client:                mgr.GetClient(),
+		Scheme:                mgr.GetScheme(),
+		Storage:               storage,
+		EventRecorder:         mgr.GetEventRecorderFor(controllerName),
+		ExternalEventRecorder: eventRecorder,
+		MetricsRecorder:       metricsRecorder,
+	}).SetupWithManagerAndOptions(mgr, controllers.OmahaReconcilerOptions{
+		MaxConcurrentReconciles: concurrent,
+	}); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "Omaha")
+		os.Exit(1)
+	}
 	// +kubebuilder:scaffold:builder
 
 	go func() {

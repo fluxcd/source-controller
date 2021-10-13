@@ -141,3 +141,23 @@ rules:
   - get
   - patch
   - update
+- apiGroups:
+  - source.toolkit.fluxcd.io
+  resources:
+  - omahas
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - source.toolkit.fluxcd.io
+  resources:
+  - omahas/status
+  verbs:
+  - get
+  - patch
+  - update

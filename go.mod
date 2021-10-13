@@ -33,6 +33,7 @@ require (
 	github.com/googleapis/gax-go/v2 v2.1.0 // indirect
 	github.com/gorilla/handlers v1.5.1 // indirect
 	github.com/kardianos/osext v0.0.0-20190222173326-2bc1f35cddc0 // indirect
+	github.com/kinvolk/go-omaha v0.0.1
 	github.com/libgit2/git2go/v31 v31.6.1
 	github.com/minio/minio-go/v7 v7.0.15
 	github.com/onsi/ginkgo v1.16.4
@@ -78,3 +79,5 @@ replace github.com/opencontainers/runc => github.com/opencontainers/runc v1.0.3
 
 // Fix CVE-2021-41190
 replace github.com/opencontainers/image-spec => github.com/opencontainers/image-spec v1.0.2
+
+replace github.com/kinvolk/go-omaha => github.com/guilhem/go-omaha v0.0.2-0.20211019232651-3b6535cd26d0
