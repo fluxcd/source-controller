@@ -1,0 +1,11 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+- bucket_editor_role.yaml
+- bucket_viewer_role.yaml
+- gitrepository_editor_role.yaml
+- gitrepository_viewer_role.yaml
+- helmchart_editor_role.yaml
+- helmchart_viewer_role.yaml
+- helmrepository_editor_role.yaml
+- helmrepository_viewer_role.yaml
