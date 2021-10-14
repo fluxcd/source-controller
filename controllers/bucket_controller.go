@@ -272,10 +272,9 @@ func (r *BucketReconciler) reconcileWithGCP(ctx context.Context, bucket sourcev1
 	gcpClient, err := r.authGCP(ctx, bucket)
 	if err != nil {
 		err = fmt.Errorf("auth error: %w", err)
-		log.Error(err, "GCP Provider")
 		return sourcev1.BucketNotReady(bucket, sourcev1.AuthenticationFailedReason, err.Error()), err
 	}
-	defer gcpClient.Client.Close()
+	defer gcpClient.Close(log)
 
 	ctxTimeout, cancel := context.WithTimeout(ctx, bucket.Spec.Timeout.Duration)
 	defer cancel()
