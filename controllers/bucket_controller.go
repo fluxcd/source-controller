@@ -268,9 +268,11 @@ func (r *BucketReconciler) reconcileDelete(ctx context.Context, bucket sourcev1.
 // reconcileWithGCP handles getting objects from a Google Cloud Platform bucket
 // using a gcp client
 func (r *BucketReconciler) reconcileWithGCP(ctx context.Context, bucket sourcev1.Bucket, tempDir string) (sourcev1.Bucket, error) {
+	log := logr.FromContext(ctx)
 	gcpClient, err := r.authGCP(ctx, bucket)
 	if err != nil {
 		err = fmt.Errorf("auth error: %w", err)
+		log.Error(err, "GCP Provider")
 		return sourcev1.BucketNotReady(bucket, sourcev1.AuthenticationFailedReason, err.Error()), err
 	}
 	defer gcpClient.Client.Close()
