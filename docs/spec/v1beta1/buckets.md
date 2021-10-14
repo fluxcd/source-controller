@@ -11,7 +11,7 @@ Bucket:
 // BucketSpec defines the desired state of an S3 compatible bucket
 type BucketSpec struct {
 	// The S3 compatible storage provider name, default ('generic').
-	// +kubebuilder:validation:Enum=generic;aws
+	// +kubebuilder:validation:Enum=generic;aws;gcp
 	// +optional
 	Provider string `json:"provider,omitempty"`
 
@@ -62,6 +62,7 @@ Supported providers:
 const (
 	GenericBucketProvider string = "generic"
 	AmazonBucketProvider  string = "aws"
+	GoogleBucketProvider  string = "gcp"
 )
 ```
 
@@ -182,7 +183,8 @@ data:
   secretkey: <BASE64> 
 ```
 
-> **Note:** that for Google Cloud Storage you have to enable
+> **Note:** that when using the generic provider
+> for Google Cloud Storage you have to enable
 > S3 compatible access in your GCP project.
 
 ### AWS IAM authentication
@@ -229,6 +231,82 @@ spec:
     ]
 }
 ```
+
+### GCP Provider
+
+When the provider is `gcp` and the `secretRef` is not specified,
+the GCP client authenticates using workload identity.
+The GCP client automatically handles authentication in two ways. 
+The first way being that the GCP client library will automatically 
+check for the presence of the GOOGLE_APPLICATION_CREDENTIAL 
+environment variable. If this is not found, the GCP client library 
+will search for the Google Application Credential file in the config directory:
+
+```yaml
+apiVersion: source.toolkit.fluccd.io/v1beta1
+kind: Bucket
+metadata:
+  name: podinfo
+  namespace: gitops-system
+spec:
+  interval: 5m
+  provider: gcp
+  bucketName: podinfo
+  endpoint: storage.googleapis.com
+  region: us-east-1
+  timeout: 30s
+```
+
+When the provider is `gcp` and the `secretRef` is specified,
+the GCP client authenticates using a Kubernetes secret named serviceaccount
+which is a base 64 encoded string of the GCP service account JSON file:
+
+```yaml
+apiVersion: source.toolkit.fluccd.io/v1beta1
+kind: Bucket
+metadata:
+  name: podinfo
+  namespace: gitops-system
+spec:
+  interval: 5m
+  provider: gcp
+  bucketName: podinfo
+  endpoint: storage.googleapis.com
+  region: us-east-1
+  timeout: 30s
+  secretRef:
+    name: gcp-service-account
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: gcp-service-account
+  namespace: gitops-system
+type: Opaque
+data:
+  serviceaccount: "ewogICAgInR5cGUiOiAic2VydmljZV9hY2NvdW50IiwKICAgICJwcm9qZWN0X2lkIjogInBvZGluZm8iLAogICAgInByaXZhdGVfa2V5X2lkIjogIjI4cXdnaDNnZGY1aGozZ2I1ZmozZ3N1NXlmZ2gzNGY0NTMyNDU2OGh5MiIsCiAgICAicHJpdmF0ZV9rZXkiOiAiLS0tLS1CRUdJTiBQUklWQVRFIEtFWS0tLS0tXG5Id2V0aGd5MTIzaHVnZ2hoaGJkY3U2MzU2ZGd5amhzdmd2R0ZESFlnY2RqYnZjZGhic3g2M2Ncbjc2dGd5Y2ZlaHVoVkdURllmdzZ0N3lkZ3lWZ3lkaGV5aHVnZ3ljdWhland5NnQzNWZ0aHl1aGVndmNldGZcblRGVUhHVHlnZ2h1Ymh4ZTY1eWd0NnRneWVkZ3kzMjZodWN5dnN1aGJoY3Zjc2poY3NqaGNzdmdkdEhGQ0dpXG5IY3llNnR5eWczZ2Z5dWhjaGNzYmh5Z2NpamRiaHl5VEY2NnR1aGNldnVoZGNiaHVoaHZmdGN1aGJoM3VoN3Q2eVxuZ2d2ZnRVSGJoNnQ1cmZ0aGh1R1ZSdGZqaGJmY3JkNXI2N3l1aHV2Z0ZUWWpndnRmeWdoYmZjZHJoeWpoYmZjdGZkZnlodmZnXG50Z3ZnZ3RmeWdodmZ0NnR1Z3ZURjVyNjZ0dWpoZ3ZmcnR5aGhnZmN0Nnk3eXRmcjVjdHZnaGJoaHZ0Z2hoanZjdHRmeWNmXG5mZnhmZ2hqYnZnY2d5dDY3dWpiZ3ZjdGZ5aFZDN3VodmdjeWp2aGhqdnl1amNcbmNnZ2hndmdjZmhnZzc2NTQ1NHRjZnRoaGdmdHloaHZ2eXZ2ZmZnZnJ5eXU3N3JlcmVkc3dmdGhoZ2ZjZnR5Y2ZkcnR0ZmhmL1xuLS0tLS1FTkQgUFJJVkFURSBLRVktLS0tLVxuIiwKICAgICJjbGllbnRfZW1haWwiOiAidGVzdEBwb2RpbmZvLmlhbS5nc2VydmljZWFjY291bnQuY29tIiwKICAgICJjbGllbnRfaWQiOiAiMzI2NTc2MzQ2Nzg3NjI1MzY3NDYiLAogICAgImF1dGhfdXJpIjogImh0dHBzOi8vYWNjb3VudHMuZ29vZ2xlLmNvbS9vL29hdXRoMi9hdXRoIiwKICAgICJ0b2tlbl91cmkiOiAiaHR0cHM6Ly9vYXV0aDIuZ29vZ2xlYXBpcy5jb20vdG9rZW4iLAogICAgImF1dGhfcHJvdmlkZXJfeDUwOV9jZXJ0X3VybCI6ICJodHRwczovL3d3dy5nb29nbGVhcGlzLmNvbS9vYXV0aDIvdjEvY2VydHMiLAogICAgImNsaWVudF94NTA5X2NlcnRfdXJsIjogImh0dHBzOi8vd3d3Lmdvb2dsZWFwaXMuY29tL3JvYm90L3YxL21ldGFkYXRhL3g1MDkvdGVzdCU0MHBvZGluZm8uaWFtLmdzZXJ2aWNlYWNjb3VudC5jb20iCn0="
+```
+
+> **Note:** the serviceaccount secret is a base 64 encoded form of
+> the GCP service account json file like so
+
+```json
+  {
+    "type": "service_account",
+    "project_id": "podinfo",
+    "private_key_id": "28qwgh3gdf5hj3gb5fj3gsu5yfgh34f45324568hy2",
+    "private_key": "-----BEGIN PRIVATE KEY-----\nHwethgy123hugghhhbdcu6356dgyjhsvgvGFDHYgcdjbvcdhbsx63c\n76tgycfehuhVGTFYfw6t7ydgyVgydheyhuggycuhejwy6t35fthyuhegvcetf\nTFUHGTygghubhxe65ygt6tgyedgy326hucyvsuhbhcvcsjhcsjhcsvgdtHFCGi\nHcye6tyyg3gfyuhchcsbhygcijdbhyyTF66tuhcevuhdcbhuhhvftcuhbh3uh7t6y\nggvftUHbh6t5rfthhuGVRtfjhbfcrd5r67yuhuvgFTYjgvtfyghbfcdrhyjhbfctfdfyhvfg\ntgvggtfyghvft6tugvTF5r66tujhgvfrtyhhgfct6y7ytfr5ctvghbhhvtghhjvcttfycf\nffxfghjbvgcgyt67ujbgvctfyhVC7uhvgcyjvhhjvyujc\ncgghgvgcfhgg765454tcfthhgftyhhvvyvvffgfryyu77reredswfthhgfcftycfdrttfhf/\n-----END PRIVATE KEY-----\n",
+    "client_email": "test@podinfo.iam.gserviceaccount.com",
+    "client_id": "32657634678762536746",
+    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+    "token_uri": "https://oauth2.googleapis.com/token",
+    "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+    "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/test%40podinfo.iam.gserviceaccount.com"
+  }
+```
+> **Note:** that when using the gcp provider for
+> Google Cloud Storage you do not have to enable
+> S3 compatible access in your GCP project.
 
 ## Status examples
 
