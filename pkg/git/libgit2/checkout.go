@@ -99,10 +99,12 @@ func (c *CheckoutTag) Checkout(ctx context.Context, path, url string, auth *git.
 	if err != nil {
 		return nil, "", fmt.Errorf("unable to clone '%s', error: %w", url, err)
 	}
+	defer repo.Free()
 	ref, err := repo.References.Dwim(c.tag)
 	if err != nil {
 		return nil, "", fmt.Errorf("unable to find tag '%s': %w", c.tag, err)
 	}
+	defer ref.Free()
 	err = repo.SetHeadDetached(ref.Target())
 	if err != nil {
 		return nil, "", fmt.Errorf("git checkout error: %w", err)
@@ -111,11 +113,12 @@ func (c *CheckoutTag) Checkout(ctx context.Context, path, url string, auth *git.
 	if err != nil {
 		return nil, "", fmt.Errorf("git resolve HEAD error: %w", err)
 	}
+	defer head.Free()
 	commit, err := repo.LookupCommit(head.Target())
 	if err != nil {
 		return nil, "", fmt.Errorf("git commit '%s' not found: %w", head.Target(), err)
 	}
-	err = repo.CheckoutHead(&git2go.CheckoutOpts{
+	err = repo.CheckoutHead(&git2go.CheckoutOptions{
 		Strategy: git2go.CheckoutForce,
 	})
 	if err != nil {
@@ -144,6 +147,7 @@ func (c *CheckoutCommit) Checkout(ctx context.Context, path, url string, auth *g
 	if err != nil {
 		return nil, "", fmt.Errorf("unable to clone '%s', error: %w", url, err)
 	}
+	defer repo.Free()
 	oid, err := git2go.NewOid(c.commit)
 	if err != nil {
 		return nil, "", fmt.Errorf("git commit '%s' could not be parsed", c.commit)
@@ -153,6 +157,7 @@ func (c *CheckoutCommit) Checkout(ctx context.Context, path, url string, auth *g
 		return nil, "", fmt.Errorf("git commit '%s' not found: %w", c.commit, err)
 	}
 	tree, err := repo.LookupTree(commit.TreeId())
+	defer tree.Free()
 	if err != nil {
 		return nil, "", fmt.Errorf("git worktree error: %w", err)
 	}
@@ -188,6 +193,7 @@ func (c *CheckoutSemVer) Checkout(ctx context.Context, path, url string, auth *g
 	if err != nil {
 		return nil, "", fmt.Errorf("unable to clone '%s', error: %w", url, err)
 	}
+	defer repo.Free()
 
 	tags := make(map[string]string)
 	tagTimestamps := make(map[string]time.Time)
@@ -196,15 +202,17 @@ func (c *CheckoutSemVer) Checkout(ctx context.Context, path, url string, auth *g
 		if err != nil {
 			return nil
 		}
-
+		defer tag.Free()
 		commit, err := tag.Peel(git2go.ObjectCommit)
 		if err != nil {
 			return fmt.Errorf("can't get commit for tag %s: %w", name, err)
 		}
+		defer commit.Free()
 		c, err := commit.AsCommit()
 		if err != nil {
 			return err
 		}
+		defer c.Free()
 		tagTimestamps[tag.Name()] = c.Committer().When
 		tags[tag.Name()] = name
 		return nil
@@ -213,7 +221,7 @@ func (c *CheckoutSemVer) Checkout(ctx context.Context, path, url string, auth *g
 	}
 
 	var matchedVersions semver.Collection
-	for tag, _ := range tags {
+	for tag := range tags {
 		v, err := version.ParseVersion(tag)
 		if err != nil {
 			continue
@@ -249,6 +257,7 @@ func (c *CheckoutSemVer) Checkout(ctx context.Context, path, url string, auth *g
 	if err != nil {
 		return nil, "", fmt.Errorf("unable to find tag '%s': %w", t, err)
 	}
+	defer ref.Free()
 	err = repo.SetHeadDetached(ref.Target())
 	if err != nil {
 		return nil, "", fmt.Errorf("git checkout error: %w", err)
@@ -257,6 +266,7 @@ func (c *CheckoutSemVer) Checkout(ctx context.Context, path, url string, auth *g
 	if err != nil {
 		return nil, "", fmt.Errorf("git resolve HEAD error: %w", err)
 	}
+	defer head.Free()
 	commit, err := repo.LookupCommit(head.Target())
 	if err != nil {
 		return nil, "", fmt.Errorf("git commit '%s' not found: %w", head.Target().String(), err)
