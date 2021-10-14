@@ -79,6 +79,7 @@ jobs:
           mkdir -p config/release
           kustomize build ./config/crd > ./config/release/${{ env.CONTROLLER }}.crds.yaml
           kustomize build ./config/manager > ./config/release/${{ env.CONTROLLER }}.deployment.yaml
+          kustomize build ./config/rbac/aggregate > ./config/release/${{ env.CONTROLLER }}.rbac.yaml
       - name: Create release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: ncipollo/release-action@v1
