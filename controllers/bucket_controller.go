@@ -268,12 +268,13 @@ func (r *BucketReconciler) reconcileDelete(ctx context.Context, bucket sourcev1.
 // reconcileWithGCP handles getting objects from a Google Cloud Platform bucket
 // using a gcp client
 func (r *BucketReconciler) reconcileWithGCP(ctx context.Context, bucket sourcev1.Bucket, tempDir string) (sourcev1.Bucket, error) {
+	log := logr.FromContext(ctx)
 	gcpClient, err := r.authGCP(ctx, bucket)
 	if err != nil {
 		err = fmt.Errorf("auth error: %w", err)
 		return sourcev1.BucketNotReady(bucket, sourcev1.AuthenticationFailedReason, err.Error()), err
 	}
-	defer gcpClient.Client.Close()
+	defer gcpClient.Close(log)
 
 	ctxTimeout, cancel := context.WithTimeout(ctx, bucket.Spec.Timeout.Duration)
 	defer cancel()
@@ -432,7 +433,9 @@ func (r *BucketReconciler) authGCP(ctx context.Context, bucket sourcev1.Bucket) 
 
 }
 
-func (r *BucketReconciler) auth(ctx context.Context, bucket sourcev1.Bucket) (*minio.Client, error) {
+// authMinio creates a new Minio client to interact with S3
+// compatible storage services.
+func (r *BucketReconciler) authMinio(ctx context.Context, bucket sourcev1.Bucket) (*minio.Client, error) {
 	opt := minio.Options{
 		Region: bucket.Spec.Region,
 		Secure: !bucket.Spec.Insecure,

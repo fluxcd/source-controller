@@ -25,6 +25,7 @@ import (
 	"path/filepath"
 
 	gcpstorage "cloud.google.com/go/storage"
+	"github.com/go-logr/logr"
 	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
 )
@@ -127,7 +128,7 @@ func (c *GCPClient) FGetObject(ctx context.Context, bucketName, objectName, loca
 		return err
 	}
 	if !exists {
-		return ObjectDoesNotExist
+		return ErrorObjectDoesNotExist
 	}
 
 	objectFile, err := os.OpenFile(localPath, os.O_CREATE|os.O_WRONLY, 0600)
@@ -161,4 +162,11 @@ func (c *GCPClient) FGetObject(ctx context.Context, bucketName, objectName, loca
 func (c *GCPClient) ListObjects(ctx context.Context, bucketName string, query *gcpstorage.Query) *gcpstorage.ObjectIterator {
 	items := c.Client.Bucket(bucketName).Objects(ctx, query)
 	return items
+}
+
+// Close closes the GCP Client and logs any useful errors
+func (c *GCPClient) Close(log logr.Logger) {
+	if err := c.Client.Close(); err != nil {
+		log.Error(err, "GCP Provider")
+	}
 }
