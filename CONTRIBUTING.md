@@ -28,7 +28,7 @@ to join the conversation (this will also add an invitation to your
 Google calendar for our [Flux
 meeting](https://docs.google.com/document/d/1l_M0om0qUEN_NNiGgpqJ2tvsF2iioHkaARDeh6b70B0/edit#)).
 
-### Installing required dependencies
+## Installing required dependencies
 
 The dependency [libgit2](https://libgit2.org/) needs to be installed to be able
 to run source-controller or its test-suite locally (not in a container).
@@ -43,7 +43,7 @@ Triggering a manual build of the dependency is possible as well by running
 match but are not linked in a compatible way, append `LIBGIT2_FORCE=1` to the
 `make` command.
 
-#### macOS
+### macOS
 
 ```console
 $ # Ensure libgit2 dependencies are available
@@ -51,7 +51,7 @@ $ brew install cmake openssl@1.1 libssh2 pkg-config
 $ LIBGIT2_FORCE=1 make libgit2
 ```
 
-#### Linux
+### Linux
 
 ```console
 $ # Ensure libgit2 dependencies are available
@@ -62,7 +62,7 @@ $ LIBGIT2_FORCE=1 make libgit2
 **Note:** Example shown is for Arch Linux, but likewise procedure can be
 followed using any other package manager, e.g. `apt`.
 
-### How to run the test suite
+## How to run the test suite
 
 You can run the unit tests by simply doing
 
