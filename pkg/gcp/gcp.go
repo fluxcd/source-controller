@@ -23,11 +23,17 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
+	"sync"
 
 	gcpstorage "cloud.google.com/go/storage"
+	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
+	"github.com/fluxcd/source-controller/pkg/sourceignore"
+	"github.com/go-git/go-git/v5/plumbing/format/gitignore"
 	"github.com/go-logr/logr"
 	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
+	corev1 "k8s.io/api/core/v1"
 )
 
 var (
@@ -50,13 +56,26 @@ type GCPClient struct {
 
 // NewClient creates a new GCP storage client. The Client will automatically look for  the Google Application
 // Credential environment variable or look for the Google Application Credential file.
-func NewClient(ctx context.Context, opts ...option.ClientOption) (*GCPClient, error) {
-	client, err := gcpstorage.NewClient(ctx, opts...)
-	if err != nil {
-		return nil, err
+func NewClient(ctx context.Context, secret corev1.Secret, bucket sourcev1.Bucket) (*GCPClient, error) {
+	gcpclient := &GCPClient{}
+	if bucket.Spec.SecretRef != nil {
+		if err := ValidateSecret(secret.Data, secret.Name); err != nil {
+			return nil, err
+		}
+		client, err := gcpstorage.NewClient(ctx, option.WithCredentialsJSON(secret.Data["serviceaccount"]))
+		if err != nil {
+			return nil, err
+		}
+		gcpclient.Client = client
+	} else {
+		client, err := gcpstorage.NewClient(ctx)
+		if err != nil {
+			return nil, err
+		}
+		gcpclient.Client = client
 	}
 
-	return &GCPClient{Client: client}, nil
+	return gcpclient, nil
 }
 
 // ValidateSecret validates the credential secrets
@@ -158,15 +177,48 @@ func (c *GCPClient) FGetObject(ctx context.Context, bucketName, objectName, loca
 
 // ListObjects lists the objects/contents of the bucket whose bucket name is provided.
 // the objects are returned as an Objectiterator and .Next() has to be called on them
-// to loop through the Objects.
-func (c *GCPClient) ListObjects(ctx context.Context, bucketName string, query *gcpstorage.Query) *gcpstorage.ObjectIterator {
-	items := c.Client.Bucket(bucketName).Objects(ctx, query)
-	return items
+// to loop through the Objects. The Object are downloaded using a goroutine.
+func (c *GCPClient) ListObjects(ctx context.Context, matcher gitignore.Matcher, bucketName, tempDir string) error {
+	log := logr.FromContext(ctx)
+	items := c.Client.Bucket(bucketName).Objects(ctx, nil)
+	var wg sync.WaitGroup
+	for {
+		object, err := items.Next()
+		if err == IteratorDone {
+			break
+		}
+		if err != nil {
+			err = fmt.Errorf("listing objects from bucket '%s' failed: %w", bucketName, err)
+			return err
+		}
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := DownloadObject(ctx, c, object, matcher, bucketName, tempDir); err != nil {
+				log.Error(err, fmt.Sprintf("Error downloading %s from bucket %s: ", object.Name, bucketName))
+			}
+		}()
+	}
+	wg.Wait()
+	return nil
 }
 
 // Close closes the GCP Client and logs any useful errors
-func (c *GCPClient) Close(log logr.Logger) {
+func (c *GCPClient) Close(ctx context.Context) {
+	log := logr.FromContext(ctx)
 	if err := c.Client.Close(); err != nil {
 		log.Error(err, "GCP Provider")
 	}
+}
+
+// DownloadObject gets an object and downloads the object locally.
+func DownloadObject(ctx context.Context, cl *GCPClient, obj *gcpstorage.ObjectAttrs, matcher gitignore.Matcher, bucketName, tempDir string) error {
+	if strings.HasSuffix(obj.Name, "/") || obj.Name == sourceignore.IgnoreFile || matcher.Match(strings.Split(obj.Name, "/"), false) {
+		return nil
+	}
+	localPath := filepath.Join(tempDir, obj.Name)
+	if err := cl.FGetObject(ctx, bucketName, obj.Name, localPath); err != nil {
+		return err
+	}
+	return nil
 }
