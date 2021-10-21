@@ -20,13 +20,14 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/Masterminds/semver/v3"
-	"github.com/fluxcd/pkg/version"
 	git2go "github.com/libgit2/git2go/v31"
 
 	"github.com/fluxcd/pkg/gitutil"
+	"github.com/fluxcd/pkg/version"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
 	"github.com/fluxcd/source-controller/pkg/git"
@@ -115,7 +116,7 @@ func (c *CheckoutTag) Checkout(ctx context.Context, path, url string, auth *git.
 	if err != nil {
 		return nil, "", fmt.Errorf("git commit '%s' not found: %w", head.Target(), err)
 	}
-	err = repo.CheckoutHead(&git2go.CheckoutOpts{
+	err = repo.CheckoutHead(&git2go.CheckoutOptions{
 		Strategy: git2go.CheckoutForce,
 	})
 	if err != nil {
@@ -192,28 +193,37 @@ func (c *CheckoutSemVer) Checkout(ctx context.Context, path, url string, auth *g
 	tags := make(map[string]string)
 	tagTimestamps := make(map[string]time.Time)
 	if err := repo.Tags.Foreach(func(name string, id *git2go.Oid) error {
-		tag, err := repo.LookupTag(id)
-		if err != nil {
+		cleanName := strings.TrimPrefix(name, "refs/tags/")
+		// The given ID can refer to both a commit and a tag, as annotated tags contain additional metadata.
+		// Due to this, first attempt to resolve it as a simple tag (commit), but fallback to attempting to
+		// resolve it as an annotated tag in case this results in an error.
+		if c, err := repo.LookupCommit(id); err == nil {
+			// Use the commit metadata as the decisive timestamp.
+			tagTimestamps[cleanName] = c.Committer().When
+			tags[cleanName] = name
 			return nil
 		}
-
-		commit, err := tag.Peel(git2go.ObjectCommit)
+		t, err := repo.LookupTag(id)
 		if err != nil {
-			return fmt.Errorf("can't get commit for tag %s: %w", name, err)
+			return fmt.Errorf("could not lookup '%s' as simple or annotated tag: %w", cleanName, err)
+		}
+		commit, err := t.Peel(git2go.ObjectCommit)
+		if err != nil {
+			return fmt.Errorf("could not get commit for tag '%s': %w", t.Name(), err)
 		}
 		c, err := commit.AsCommit()
 		if err != nil {
-			return err
+			return fmt.Errorf("could not get commit object for tag '%s': %w", t.Name(), err)
 		}
-		tagTimestamps[tag.Name()] = c.Committer().When
-		tags[tag.Name()] = name
+		tagTimestamps[t.Name()] = c.Committer().When
+		tags[t.Name()] = name
 		return nil
 	}); err != nil {
 		return nil, "", err
 	}
 
 	var matchedVersions semver.Collection
-	for tag, _ := range tags {
+	for tag := range tags {
 		v, err := version.ParseVersion(tag)
 		if err != nil {
 			continue
@@ -261,7 +271,7 @@ func (c *CheckoutSemVer) Checkout(ctx context.Context, path, url string, auth *g
 	if err != nil {
 		return nil, "", fmt.Errorf("git commit '%s' not found: %w", head.Target().String(), err)
 	}
-	err = repo.CheckoutHead(&git2go.CheckoutOpts{
+	err = repo.CheckoutHead(&git2go.CheckoutOptions{
 		Strategy: git2go.CheckoutForce,
 	})
 	if err != nil {
