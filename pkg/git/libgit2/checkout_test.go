@@ -229,13 +229,19 @@ func TestCheckoutTagSemVer_Checkout(t *testing.T) {
 		{
 			tag:        "v0.1.0+build-1",
 			annotated:  true,
-			commitTime: now.Add(1 * time.Minute),
-			tagTime:    now.Add(1 * time.Hour), // This should be ignored during TS comparisons
+			commitTime: now.Add(10 * time.Minute),
+			tagTime:    now.Add(2 * time.Hour), // This should be ignored during TS comparisons
 		},
 		{
 			tag:        "v0.1.0+build-2",
 			annotated:  false,
-			commitTime: now.Add(2 * time.Minute),
+			commitTime: now.Add(30 * time.Minute),
+		},
+		{
+			tag:        "v0.1.0+build-3",
+			annotated:  true,
+			commitTime: now.Add(1 * time.Hour),
+			tagTime:    now.Add(1 * time.Hour), // This should be ignored during TS comparisons
 		},
 		{
 			tag:        "0.2.0",
@@ -258,7 +264,7 @@ func TestCheckoutTagSemVer_Checkout(t *testing.T) {
 		{
 			name:       "Orders by SemVer and timestamp",
 			constraint: "<0.2.0",
-			expectTag:  "v0.1.0+build-2",
+			expectTag:  "v0.1.0+build-3",
 		},
 		{
 			name:       "Errors without match",
