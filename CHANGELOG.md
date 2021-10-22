@@ -2,6 +2,35 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.16.1
+
+**Release date:** 2021-10-22
+
+This prerelease adds support for GCP storage authentication using the
+`GOOGLE_APPLICATION_CREDENTIALS` environment variable available in the container,
+or by defining a `secretRef` with a `serviceaccount` JSON data blob. See
+[#434](https://github.com/fluxcd/source-controller/pull/434) for more information.
+
+In addition, several bug fixes and improvements have been made to the `libgit2`
+Git implementation, ensuring the checkout logic is more rigorously tested.
+
+During this work, it was discovered that both Git implementation had a minor bug
+resulting in `v` prefixed tags with metadata added to it (e.g. `v0.1.0+build-1`
+and `v0.1.0+build-2`) were not properly sorted by their commit timestamp, which
+has been addressed as well.
+
+Improvements:
+* Add GCP storage authentication
+  [#434](https://github.com/fluxcd/source-controller/pull/434)
+
+Fixes:
+* libgit2: correctly resolve (annotated) tags
+  [#457](https://github.com/fluxcd/source-controller/pull/457)
+* libgit2: add remaining checkout strategy tests
+  [#458](https://github.com/fluxcd/source-controller/pull/458)
+* git: ensure original tag is used for TS lookup
+  [#459](https://github.com/fluxcd/source-controller/pull/459)
+
 ## 0.16.0
 
 **Release date:** 2021-10-08
