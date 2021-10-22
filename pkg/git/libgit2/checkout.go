@@ -76,6 +76,7 @@ func (c *CheckoutBranch) Checkout(ctx context.Context, path, url string, auth *g
 	if err != nil {
 		return nil, "", fmt.Errorf("git resolve HEAD error: %w", err)
 	}
+	defer head.Free()
 	commit, err := repo.LookupCommit(head.Target())
 	if err != nil {
 		return nil, "", fmt.Errorf("git commit '%s' not found: %w", head.Target(), err)
@@ -168,6 +169,7 @@ func (c *CheckoutSemVer) Checkout(ctx context.Context, path, url string, auth *g
 		// Due to this, first attempt to resolve it as a simple tag (commit), but fallback to attempting to
 		// resolve it as an annotated tag in case this results in an error.
 		if c, err := repo.LookupCommit(id); err == nil {
+			defer c.Free()
 			// Use the commit metadata as the decisive timestamp.
 			tagTimestamps[cleanName] = c.Committer().When
 			tags[cleanName] = name
@@ -177,14 +179,17 @@ func (c *CheckoutSemVer) Checkout(ctx context.Context, path, url string, auth *g
 		if err != nil {
 			return fmt.Errorf("could not lookup '%s' as simple or annotated tag: %w", cleanName, err)
 		}
+		defer t.Free()
 		commit, err := t.Peel(git2go.ObjectCommit)
 		if err != nil {
 			return fmt.Errorf("could not get commit for tag '%s': %w", t.Name(), err)
 		}
+		defer commit.Free()
 		c, err := commit.AsCommit()
 		if err != nil {
 			return fmt.Errorf("could not get commit object for tag '%s': %w", t.Name(), err)
 		}
+		defer c.Free()
 		tagTimestamps[t.Name()] = c.Committer().When
 		tags[t.Name()] = name
 		return nil
