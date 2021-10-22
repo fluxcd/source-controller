@@ -76,6 +76,7 @@ func (c *CheckoutBranch) Checkout(ctx context.Context, path, url string, auth *g
 	if err != nil {
 		return nil, "", fmt.Errorf("git resolve HEAD error: %w", err)
 	}
+	defer head.Free()
 	commit, err := repo.LookupCommit(head.Target())
 	if err != nil {
 		return nil, "", fmt.Errorf("git commit '%s' not found: %w", head.Target(), err)
@@ -98,31 +99,12 @@ func (c *CheckoutTag) Checkout(ctx context.Context, path, url string, auth *git.
 		},
 	})
 	if err != nil {
-		return nil, "", fmt.Errorf("unable to clone '%s', error: %w", url, err)
+		return nil, "", fmt.Errorf("unable to clone '%s', error: %w", url, gitutil.LibGit2Error(err))
 	}
-	ref, err := repo.References.Dwim(c.tag)
+	commit, err := checkoutDetachedDwim(repo, c.tag)
 	if err != nil {
-		return nil, "", fmt.Errorf("unable to find tag '%s': %w", c.tag, err)
+		return nil, "", err
 	}
-	err = repo.SetHeadDetached(ref.Target())
-	if err != nil {
-		return nil, "", fmt.Errorf("git checkout error: %w", err)
-	}
-	head, err := repo.Head()
-	if err != nil {
-		return nil, "", fmt.Errorf("git resolve HEAD error: %w", err)
-	}
-	commit, err := repo.LookupCommit(head.Target())
-	if err != nil {
-		return nil, "", fmt.Errorf("git commit '%s' not found: %w", head.Target(), err)
-	}
-	err = repo.CheckoutHead(&git2go.CheckoutOptions{
-		Strategy: git2go.CheckoutForce,
-	})
-	if err != nil {
-		return nil, "", fmt.Errorf("git checkout error: %w", err)
-	}
-
 	return &Commit{commit}, fmt.Sprintf("%s/%s", c.tag, commit.Id().String()), nil
 }
 
@@ -140,30 +122,19 @@ func (c *CheckoutCommit) Checkout(ctx context.Context, path, url string, auth *g
 				CertificateCheckCallback: auth.CertCallback,
 			},
 		},
-		CheckoutBranch: c.branch,
 	})
 	if err != nil {
-		return nil, "", fmt.Errorf("unable to clone '%s', error: %w", url, err)
+		return nil, "", fmt.Errorf("unable to clone '%s', error: %w", url, gitutil.LibGit2Error(err))
 	}
+
 	oid, err := git2go.NewOid(c.commit)
 	if err != nil {
-		return nil, "", fmt.Errorf("git commit '%s' could not be parsed", c.commit)
+		return nil, "", fmt.Errorf("could not create oid for '%s': %w", c.commit, err)
 	}
-	commit, err := repo.LookupCommit(oid)
-	if err != nil {
-		return nil, "", fmt.Errorf("git commit '%s' not found: %w", c.commit, err)
-	}
-	tree, err := repo.LookupTree(commit.TreeId())
-	if err != nil {
-		return nil, "", fmt.Errorf("git worktree error: %w", err)
-	}
-	err = repo.CheckoutTree(tree, &git2go.CheckoutOptions{
-		Strategy: git2go.CheckoutForce,
-	})
+	commit, err := checkoutDetachedHEAD(repo, oid)
 	if err != nil {
 		return nil, "", fmt.Errorf("git checkout error: %w", err)
 	}
-
 	return &Commit{commit}, fmt.Sprintf("%s/%s", c.branch, commit.Id().String()), nil
 }
 
@@ -187,7 +158,7 @@ func (c *CheckoutSemVer) Checkout(ctx context.Context, path, url string, auth *g
 		},
 	})
 	if err != nil {
-		return nil, "", fmt.Errorf("unable to clone '%s', error: %w", url, err)
+		return nil, "", fmt.Errorf("unable to clone '%s', error: %w", url, gitutil.LibGit2Error(err))
 	}
 
 	tags := make(map[string]string)
@@ -198,6 +169,7 @@ func (c *CheckoutSemVer) Checkout(ctx context.Context, path, url string, auth *g
 		// Due to this, first attempt to resolve it as a simple tag (commit), but fallback to attempting to
 		// resolve it as an annotated tag in case this results in an error.
 		if c, err := repo.LookupCommit(id); err == nil {
+			defer c.Free()
 			// Use the commit metadata as the decisive timestamp.
 			tagTimestamps[cleanName] = c.Committer().When
 			tags[cleanName] = name
@@ -207,14 +179,17 @@ func (c *CheckoutSemVer) Checkout(ctx context.Context, path, url string, auth *g
 		if err != nil {
 			return fmt.Errorf("could not lookup '%s' as simple or annotated tag: %w", cleanName, err)
 		}
+		defer t.Free()
 		commit, err := t.Peel(git2go.ObjectCommit)
 		if err != nil {
 			return fmt.Errorf("could not get commit for tag '%s': %w", t.Name(), err)
 		}
+		defer commit.Free()
 		c, err := commit.AsCommit()
 		if err != nil {
 			return fmt.Errorf("could not get commit object for tag '%s': %w", t.Name(), err)
 		}
+		defer c.Free()
 		tagTimestamps[t.Name()] = c.Committer().When
 		tags[t.Name()] = name
 		return nil
@@ -250,33 +225,67 @@ func (c *CheckoutSemVer) Checkout(ctx context.Context, path, url string, auth *g
 		// versions into a chronological order. This is especially important for
 		// versions that differ only by build metadata, because it is not considered
 		// a part of the comparable version in Semver
-		return tagTimestamps[left.String()].Before(tagTimestamps[right.String()])
+		return tagTimestamps[left.Original()].Before(tagTimestamps[right.Original()])
 	})
 	v := matchedVersions[len(matchedVersions)-1]
 	t := v.Original()
 
-	ref, err := repo.References.Dwim(t)
+	commit, err := checkoutDetachedDwim(repo, t)
+	return &Commit{commit}, fmt.Sprintf("%s/%s", t, commit.Id().String()), nil
+}
+
+// checkoutDetachedDwim attempts to perform a detached HEAD checkout by first DWIMing the short name
+// to get a concrete reference, and then calling checkoutDetachedHEAD.
+func checkoutDetachedDwim(repo *git2go.Repository, name string) (*git2go.Commit, error) {
+	ref, err := repo.References.Dwim(name)
 	if err != nil {
-		return nil, "", fmt.Errorf("unable to find tag '%s': %w", t, err)
+		return nil, fmt.Errorf("unable to find '%s': %w", name, err)
 	}
-	err = repo.SetHeadDetached(ref.Target())
+	defer ref.Free()
+	c, err := ref.Peel(git2go.ObjectCommit)
 	if err != nil {
-		return nil, "", fmt.Errorf("git checkout error: %w", err)
+		return nil, fmt.Errorf("could not get commit for ref '%s': %w", ref.Name(), err)
 	}
+	defer c.Free()
+	commit, err := c.AsCommit()
+	if err != nil {
+		return nil, fmt.Errorf("could not get commit object for ref '%s': %w", ref.Name(), err)
+	}
+	defer commit.Free()
+	return checkoutDetachedHEAD(repo, commit.Id())
+}
+
+// checkoutDetachedHEAD attempts to perform a detached HEAD checkout for the given commit.
+func checkoutDetachedHEAD(repo *git2go.Repository, oid *git2go.Oid) (*git2go.Commit, error) {
+	commit, err := repo.LookupCommit(oid)
+	if err != nil {
+		return nil, fmt.Errorf("git commit '%s' not found: %w", oid.String(), err)
+	}
+	if err = repo.SetHeadDetached(commit.Id()); err != nil {
+		commit.Free()
+		return nil, fmt.Errorf("could not detach HEAD at '%s': %w", oid.String(), err)
+	}
+	if err = repo.CheckoutHead(&git2go.CheckoutOptions{
+		Strategy: git2go.CheckoutForce,
+	}); err != nil {
+		commit.Free()
+		return nil, fmt.Errorf("git checkout error: %w", err)
+	}
+	return commit, nil
+}
+
+// headCommit returns the current HEAD of the repository, or an error.
+func headCommit(repo *git2go.Repository) (*git2go.Commit, error) {
 	head, err := repo.Head()
 	if err != nil {
-		return nil, "", fmt.Errorf("git resolve HEAD error: %w", err)
+		return nil, err
 	}
+	defer head.Free()
+
 	commit, err := repo.LookupCommit(head.Target())
 	if err != nil {
-		return nil, "", fmt.Errorf("git commit '%s' not found: %w", head.Target().String(), err)
-	}
-	err = repo.CheckoutHead(&git2go.CheckoutOptions{
-		Strategy: git2go.CheckoutForce,
-	})
-	if err != nil {
-		return nil, "", fmt.Errorf("git checkout error: %w", err)
+		return nil, err
 	}
 
-	return &Commit{commit}, fmt.Sprintf("%s/%s", t, commit.Id().String()), nil
+	return commit, nil
 }
