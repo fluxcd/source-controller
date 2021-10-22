@@ -225,7 +225,7 @@ func (c *CheckoutSemVer) Checkout(ctx context.Context, path, url string, auth *g
 		// versions into a chronological order. This is especially important for
 		// versions that differ only by build metadata, because it is not considered
 		// a part of the comparable version in Semver
-		return tagTimestamps[left.String()].Before(tagTimestamps[right.String()])
+		return tagTimestamps[left.Original()].Before(tagTimestamps[right.Original()])
 	})
 	v := matchedVersions[len(matchedVersions)-1]
 	t := v.Original()
