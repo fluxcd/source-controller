@@ -25,7 +25,7 @@ import (
 )
 
 func TestCheckoutTagSemVer_Checkout(t *testing.T) {
-	auth := &git.Auth{}
+	auth := &git.AuthOptions{}
 	tag := CheckoutTag{
 		tag: "v1.7.0",
 	}

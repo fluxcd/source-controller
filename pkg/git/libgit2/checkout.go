@@ -58,14 +58,11 @@ type CheckoutBranch struct {
 	branch string
 }
 
-func (c *CheckoutBranch) Checkout(ctx context.Context, path, url string, auth *git.Auth) (git.Commit, string, error) {
+func (c *CheckoutBranch) Checkout(ctx context.Context, path, url string, opts *git.AuthOptions) (git.Commit, string, error) {
 	repo, err := git2go.Clone(url, path, &git2go.CloneOptions{
 		FetchOptions: &git2go.FetchOptions{
-			DownloadTags: git2go.DownloadTagsNone,
-			RemoteCallbacks: git2go.RemoteCallbacks{
-				CredentialsCallback:      auth.CredCallback,
-				CertificateCheckCallback: auth.CertCallback,
-			},
+			DownloadTags:    git2go.DownloadTagsNone,
+			RemoteCallbacks: remoteCallbacks(opts),
 		},
 		CheckoutBranch: c.branch,
 	})
@@ -88,14 +85,11 @@ type CheckoutTag struct {
 	tag string
 }
 
-func (c *CheckoutTag) Checkout(ctx context.Context, path, url string, auth *git.Auth) (git.Commit, string, error) {
+func (c *CheckoutTag) Checkout(ctx context.Context, path, url string, opts *git.AuthOptions) (git.Commit, string, error) {
 	repo, err := git2go.Clone(url, path, &git2go.CloneOptions{
 		FetchOptions: &git2go.FetchOptions{
-			DownloadTags: git2go.DownloadTagsAll,
-			RemoteCallbacks: git2go.RemoteCallbacks{
-				CredentialsCallback:      auth.CredCallback,
-				CertificateCheckCallback: auth.CertCallback,
-			},
+			DownloadTags:    git2go.DownloadTagsAll,
+			RemoteCallbacks: remoteCallbacks(opts),
 		},
 	})
 	if err != nil {
@@ -113,14 +107,11 @@ type CheckoutCommit struct {
 	commit string
 }
 
-func (c *CheckoutCommit) Checkout(ctx context.Context, path, url string, auth *git.Auth) (git.Commit, string, error) {
+func (c *CheckoutCommit) Checkout(ctx context.Context, path, url string, opts *git.AuthOptions) (git.Commit, string, error) {
 	repo, err := git2go.Clone(url, path, &git2go.CloneOptions{
 		FetchOptions: &git2go.FetchOptions{
-			DownloadTags: git2go.DownloadTagsNone,
-			RemoteCallbacks: git2go.RemoteCallbacks{
-				CredentialsCallback:      auth.CredCallback,
-				CertificateCheckCallback: auth.CertCallback,
-			},
+			DownloadTags:    git2go.DownloadTagsNone,
+			RemoteCallbacks: remoteCallbacks(opts),
 		},
 	})
 	if err != nil {
@@ -142,7 +133,7 @@ type CheckoutSemVer struct {
 	semVer string
 }
 
-func (c *CheckoutSemVer) Checkout(ctx context.Context, path, url string, auth *git.Auth) (git.Commit, string, error) {
+func (c *CheckoutSemVer) Checkout(ctx context.Context, path, url string, opts *git.AuthOptions) (git.Commit, string, error) {
 	verConstraint, err := semver.NewConstraint(c.semVer)
 	if err != nil {
 		return nil, "", fmt.Errorf("semver parse range error: %w", err)
@@ -150,11 +141,8 @@ func (c *CheckoutSemVer) Checkout(ctx context.Context, path, url string, auth *g
 
 	repo, err := git2go.Clone(url, path, &git2go.CloneOptions{
 		FetchOptions: &git2go.FetchOptions{
-			DownloadTags: git2go.DownloadTagsAll,
-			RemoteCallbacks: git2go.RemoteCallbacks{
-				CredentialsCallback:      auth.CredCallback,
-				CertificateCheckCallback: auth.CertCallback,
-			},
+			DownloadTags:    git2go.DownloadTagsAll,
+			RemoteCallbacks: remoteCallbacks(opts),
 		},
 	})
 	if err != nil {
