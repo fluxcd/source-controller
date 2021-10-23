@@ -264,12 +264,11 @@ func (r *GitRepositoryReconciler) reconcile(ctx context.Context, repository sour
 	gitCtx, cancel := context.WithTimeout(ctx, repository.Spec.Timeout.Duration)
 	defer cancel()
 
-	commit, revision, err := checkoutStrategy.Checkout(gitCtx, tmpGit, repository.Spec.URL, authOpts)
+	commit, err := checkoutStrategy.Checkout(gitCtx, tmpGit, repository.Spec.URL, authOpts)
 	if err != nil {
 		return sourcev1.GitRepositoryNotReady(repository, sourcev1.GitOperationFailedReason, err.Error()), err
 	}
-
-	artifact := r.Storage.NewArtifactFor(repository.Kind, repository.GetObjectMeta(), revision, fmt.Sprintf("%s.tar.gz", commit.Hash()))
+	artifact := r.Storage.NewArtifactFor(repository.Kind, repository.GetObjectMeta(), commit.String(), fmt.Sprintf("%s.tar.gz", commit.Hash.String()))
 
 	// copy all included repository into the artifact
 	includedArtifacts := []*sourcev1.Artifact{}
@@ -298,14 +297,17 @@ func (r *GitRepositoryReconciler) reconcile(ctx context.Context, repository sour
 			Namespace: repository.Namespace,
 			Name:      repository.Spec.Verification.SecretRef.Name,
 		}
-		var secret corev1.Secret
-		if err := r.Client.Get(ctx, publicKeySecret, &secret); err != nil {
+		var secret *corev1.Secret
+		if err := r.Client.Get(ctx, publicKeySecret, secret); err != nil {
 			err = fmt.Errorf("PGP public keys secret error: %w", err)
 			return sourcev1.GitRepositoryNotReady(repository, sourcev1.VerificationFailedReason, err.Error()), err
 		}
 
-		err := commit.Verify(secret)
-		if err != nil {
+		var keyRings []string
+		for _, v := range secret.Data {
+			keyRings = append(keyRings, string(v))
+		}
+		if _, err = commit.Verify(keyRings...); err != nil {
 			return sourcev1.GitRepositoryNotReady(repository, sourcev1.VerificationFailedReason, err.Error()), err
 		}
 	}

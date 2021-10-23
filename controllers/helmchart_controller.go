@@ -529,7 +529,7 @@ func (r *HelmChartReconciler) reconcileFromTarballArtifact(ctx context.Context,
 
 	v, err := semver.NewVersion(helmChart.Metadata.Version)
 	if err != nil {
-		err = fmt.Errorf("semver error: %w", err)
+		err = fmt.Errorf("semver parse error: %w", err)
 		return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
 	}
 
@@ -539,7 +539,7 @@ func (r *HelmChartReconciler) reconcileFromTarballArtifact(ctx context.Context,
 		splitRev := strings.Split(artifact.Revision, "/")
 		v, err := v.SetMetadata(splitRev[len(splitRev)-1])
 		if err != nil {
-			err = fmt.Errorf("semver error: %w", err)
+			err = fmt.Errorf("semver parse error: %w", err)
 			return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
 		}
 

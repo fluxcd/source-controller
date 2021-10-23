@@ -82,15 +82,15 @@ func TestCheckoutBranch_Checkout(t *testing.T) {
 			tmpDir, _ := os.MkdirTemp("", "test")
 			defer os.RemoveAll(tmpDir)
 
-			_, ref, err := branch.Checkout(context.TODO(), tmpDir, repo.Path(), nil)
+			cc, err := branch.Checkout(context.TODO(), tmpDir, repo.Path(), nil)
 			if tt.expectedErr != "" {
 				g.Expect(err).To(HaveOccurred())
 				g.Expect(err.Error()).To(ContainSubstring(tt.expectedErr))
-				g.Expect(ref).To(BeEmpty())
+				g.Expect(cc).To(BeNil())
 				return
 			}
-			g.Expect(ref).To(Equal(tt.branch + "/" + tt.expectedCommit))
-			g.Expect(err).To(BeNil())
+			g.Expect(err).ToNot(HaveOccurred())
+			g.Expect(cc.String()).To(Equal(tt.branch + "/" + tt.expectedCommit))
 		})
 	}
 }
@@ -153,18 +153,18 @@ func TestCheckoutTag_Checkout(t *testing.T) {
 			tmpDir, _ := os.MkdirTemp("", "test")
 			defer os.RemoveAll(tmpDir)
 
-			_, ref, err := tag.Checkout(context.TODO(), tmpDir, repo.Path(), nil)
+			cc, err := tag.Checkout(context.TODO(), tmpDir, repo.Path(), nil)
 			if tt.expectErr != "" {
 				g.Expect(err).To(HaveOccurred())
 				g.Expect(err.Error()).To(ContainSubstring(tt.expectErr))
-				g.Expect(ref).To(BeEmpty())
+				g.Expect(cc).To(BeNil())
 				return
 			}
-			if tt.expectTag != "" {
-				g.Expect(ref).To(Equal(tt.expectTag + "/" + commit.Id().String()))
-				g.Expect(filepath.Join(tmpDir, "tag")).To(BeARegularFile())
-				g.Expect(os.ReadFile(filepath.Join(tmpDir, "tag"))).To(BeEquivalentTo(tt.tag))
-			}
+
+			g.Expect(err).ToNot(HaveOccurred())
+			g.Expect(cc.String()).To(Equal(tt.expectTag + "/" + commit.Id().String()))
+			g.Expect(filepath.Join(tmpDir, "tag")).To(BeARegularFile())
+			g.Expect(os.ReadFile(filepath.Join(tmpDir, "tag"))).To(BeEquivalentTo(tt.tag))
 		})
 	}
 }
@@ -194,9 +194,10 @@ func TestCheckoutCommit_Checkout(t *testing.T) {
 	tmpDir, _ := os.MkdirTemp("", "git2go")
 	defer os.RemoveAll(tmpDir)
 
-	_, ref, err := commit.Checkout(context.TODO(), tmpDir, repo.Path(), nil)
+	cc, err := commit.Checkout(context.TODO(), tmpDir, repo.Path(), nil)
 	g.Expect(err).ToNot(HaveOccurred())
-	g.Expect(ref).To(Equal("main/" + c.String()))
+	g.Expect(cc).ToNot(BeNil())
+	g.Expect(cc.String()).To(Equal("HEAD/" + c.String()))
 	g.Expect(filepath.Join(tmpDir, "commit")).To(BeARegularFile())
 	g.Expect(os.ReadFile(filepath.Join(tmpDir, "commit"))).To(BeEquivalentTo("init"))
 
@@ -206,10 +207,10 @@ func TestCheckoutCommit_Checkout(t *testing.T) {
 	tmpDir2, _ := os.MkdirTemp("", "git2go")
 	defer os.RemoveAll(tmpDir)
 
-	_, ref, err = commit.Checkout(context.TODO(), tmpDir2, repo.Path(), nil)
+	cc, err = commit.Checkout(context.TODO(), tmpDir2, repo.Path(), nil)
 	g.Expect(err).To(HaveOccurred())
 	g.Expect(err.Error()).To(HavePrefix("git checkout error: git commit '4dc3185c5fc94eb75048376edeb44571cece25f4' not found:"))
-	g.Expect(ref).To(BeEmpty())
+	g.Expect(cc).To(BeNil())
 }
 
 func TestCheckoutTagSemVer_Checkout(t *testing.T) {
@@ -313,15 +314,15 @@ func TestCheckoutTagSemVer_Checkout(t *testing.T) {
 			tmpDir, _ := os.MkdirTemp("", "test")
 			defer os.RemoveAll(tmpDir)
 
-			_, ref, err := semVer.Checkout(context.TODO(), tmpDir, repo.Path(), nil)
+			cc, err := semVer.Checkout(context.TODO(), tmpDir, repo.Path(), nil)
 			if tt.expectErr != nil {
 				g.Expect(err).To(Equal(tt.expectErr))
-				g.Expect(ref).To(BeEmpty())
+				g.Expect(cc).To(BeNil())
 				return
 			}
 
 			g.Expect(err).ToNot(HaveOccurred())
-			g.Expect(ref).To(Equal(tt.expectTag + "/" + refs[tt.expectTag]))
+			g.Expect(cc.String()).To(Equal(tt.expectTag + "/" + refs[tt.expectTag]))
 			g.Expect(filepath.Join(tmpDir, "tag")).To(BeARegularFile())
 			g.Expect(os.ReadFile(filepath.Join(tmpDir, "tag"))).To(BeEquivalentTo(tt.expectTag))
 		})
@@ -397,11 +398,11 @@ func commitFile(repo *git2go.Repository, path, content string, time time.Time) (
 	}
 	defer tree.Free()
 
-	commit, err := repo.CreateCommit("HEAD", signature(time), signature(time), "Committing "+path, tree, parentC...)
+	c, err := repo.CreateCommit("HEAD", mockSignature(time), mockSignature(time), "Committing "+path, tree, parentC...)
 	if err != nil {
 		return nil, err
 	}
-	return commit, nil
+	return c, nil
 }
 
 func tag(repo *git2go.Repository, cId *git2go.Oid, annotated bool, tag string, time time.Time) (*git2go.Oid, error) {
@@ -410,12 +411,12 @@ func tag(repo *git2go.Repository, cId *git2go.Oid, annotated bool, tag string, t
 		return nil, err
 	}
 	if annotated {
-		return repo.Tags.Create(tag, commit, signature(time), fmt.Sprintf("Annotated tag for %s", tag))
+		return repo.Tags.Create(tag, commit, mockSignature(time), fmt.Sprintf("Annotated tag for %s", tag))
 	}
 	return repo.Tags.CreateLightweight(tag, commit, false)
 }
 
-func signature(time time.Time) *git2go.Signature {
+func mockSignature(time time.Time) *git2go.Signature {
 	return &git2go.Signature{
 		Name:  "Jane Doe",
 		Email: "author@example.com",

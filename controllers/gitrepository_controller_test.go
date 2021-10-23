@@ -23,11 +23,9 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-
 	"os/exec"
 	"path"
 	"path/filepath"
-
 	"strings"
 	"time"
 
@@ -251,7 +249,7 @@ var _ = Describe("GitRepositoryReconciler", func() {
 				reference:     &sourcev1.GitRepositoryRef{SemVer: "1.2.3.4"},
 				waitForReason: sourcev1.GitOperationFailedReason,
 				expectStatus:  metav1.ConditionFalse,
-				expectMessage: "semver parse range error: improper constraint: 1.2.3.4",
+				expectMessage: "semver parse error: improper constraint: 1.2.3.4",
 			}),
 			Entry("semver no match", refTestCase{
 				reference:     &sourcev1.GitRepositoryRef{SemVer: "1.0.0"},
@@ -284,7 +282,7 @@ var _ = Describe("GitRepositoryReconciler", func() {
 				},
 				waitForReason: sourcev1.GitOperationFailedReason,
 				expectStatus:  metav1.ConditionFalse,
-				expectMessage: "git commit 'invalid' not found: object not found",
+				expectMessage: "failed to resolve commit object for 'invalid': object not found",
 			}),
 		)
 
