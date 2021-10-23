@@ -88,14 +88,14 @@ func TestCheckoutBranch_Checkout(t *testing.T) {
 			tmpDir, _ := os.MkdirTemp("", "test")
 			defer os.RemoveAll(tmpDir)
 
-			_, ref, err := branch.Checkout(context.TODO(), tmpDir, path, nil)
+			cc, err := branch.Checkout(context.TODO(), tmpDir, path, nil)
 			if tt.expectedErr != "" {
 				g.Expect(err.Error()).To(ContainSubstring(tt.expectedErr))
-				g.Expect(ref).To(BeEmpty())
+				g.Expect(cc).To(BeNil())
 				return
 			}
 			g.Expect(err).To(BeNil())
-			g.Expect(ref).To(Equal(tt.branch + "/" + tt.expectedCommit))
+			g.Expect(cc.String()).To(Equal(tt.branch + "/" + tt.expectedCommit))
 		})
 	}
 }
@@ -157,17 +157,17 @@ func TestCheckoutTag_Checkout(t *testing.T) {
 			tmpDir, _ := os.MkdirTemp("", "test")
 			defer os.RemoveAll(tmpDir)
 
-			_, ref, err := tag.Checkout(context.TODO(), tmpDir, path, nil)
+			cc, err := tag.Checkout(context.TODO(), tmpDir, path, nil)
 			if tt.expectErr != "" {
 				g.Expect(err.Error()).To(ContainSubstring(tt.expectErr))
-				g.Expect(ref).To(BeEmpty())
+				g.Expect(cc).To(BeNil())
 				return
 			}
-			if tt.expectTag != "" {
-				g.Expect(ref).To(Equal(tt.expectTag + "/" + h.String()))
-				g.Expect(filepath.Join(tmpDir, "tag")).To(BeARegularFile())
-				g.Expect(os.ReadFile(filepath.Join(tmpDir, "tag"))).To(BeEquivalentTo(tt.tag))
-			}
+
+			g.Expect(err).To(BeNil())
+			g.Expect(cc.String()).To(Equal(tt.expectTag + "/" + h.String()))
+			g.Expect(filepath.Join(tmpDir, "tag")).To(BeARegularFile())
+			g.Expect(os.ReadFile(filepath.Join(tmpDir, "tag"))).To(BeEquivalentTo(tt.tag))
 		})
 	}
 }
@@ -196,9 +196,9 @@ func TestCheckoutCommit_Checkout(t *testing.T) {
 	tmpDir, _ := os.MkdirTemp("", "git2go")
 	defer os.RemoveAll(tmpDir)
 
-	_, ref, err := commit.Checkout(context.TODO(), tmpDir, path, nil)
+	cc, err := commit.Checkout(context.TODO(), tmpDir, path, nil)
 	g.Expect(err).ToNot(HaveOccurred())
-	g.Expect(ref).To(Equal("master/" + c.String()))
+	g.Expect(cc.String()).To(Equal("master" + "/" + c.String()))
 	g.Expect(filepath.Join(tmpDir, "commit")).To(BeARegularFile())
 	g.Expect(os.ReadFile(filepath.Join(tmpDir, "commit"))).To(BeEquivalentTo("init"))
 
@@ -209,10 +209,10 @@ func TestCheckoutCommit_Checkout(t *testing.T) {
 	tmpDir2, _ := os.MkdirTemp("", "git2go")
 	defer os.RemoveAll(tmpDir)
 
-	_, ref, err = commit.Checkout(context.TODO(), tmpDir2, path, nil)
+	cc, err = commit.Checkout(context.TODO(), tmpDir2, path, nil)
 	g.Expect(err).To(HaveOccurred())
-	g.Expect(err.Error()).To(HavePrefix("git commit '4dc3185c5fc94eb75048376edeb44571cece25f4' not found:"))
-	g.Expect(ref).To(BeEmpty())
+	g.Expect(err.Error()).To(ContainSubstring("object not found"))
+	g.Expect(cc).To(BeNil())
 }
 
 func TestCheckoutTagSemVer_Checkout(t *testing.T) {
@@ -305,15 +305,15 @@ func TestCheckoutTagSemVer_Checkout(t *testing.T) {
 			tmpDir, _ := os.MkdirTemp("", "test")
 			defer os.RemoveAll(tmpDir)
 
-			_, ref, err := semVer.Checkout(context.TODO(), tmpDir, path, nil)
+			cc, err := semVer.Checkout(context.TODO(), tmpDir, path, nil)
 			if tt.expectErr != nil {
 				g.Expect(err).To(Equal(tt.expectErr))
-				g.Expect(ref).To(BeEmpty())
+				g.Expect(cc).To(BeNil())
 				return
 			}
 
 			g.Expect(err).ToNot(HaveOccurred())
-			g.Expect(ref).To(Equal(tt.expectTag + "/" + refs[tt.expectTag]))
+			g.Expect(cc.String()).To(Equal(tt.expectTag + "/" + refs[tt.expectTag]))
 			g.Expect(filepath.Join(tmpDir, "tag")).To(BeARegularFile())
 			g.Expect(os.ReadFile(filepath.Join(tmpDir, "tag"))).To(BeEquivalentTo(tt.expectTag))
 		})
@@ -371,8 +371,8 @@ func commitFile(repo *extgogit.Repository, path, content string, time time.Time)
 		return plumbing.Hash{}, err
 	}
 	return wt.Commit("Adding: "+path, &extgogit.CommitOptions{
-		Author:    signature(time),
-		Committer: signature(time),
+		Author:    mockSignature(time),
+		Committer: mockSignature(time),
 	})
 }
 
@@ -380,14 +380,14 @@ func tag(repo *extgogit.Repository, commit plumbing.Hash, annotated bool, tag st
 	var opts *extgogit.CreateTagOptions
 	if annotated {
 		opts = &extgogit.CreateTagOptions{
-			Tagger:  signature(time),
+			Tagger:  mockSignature(time),
 			Message: "Annotated tag for: " + tag,
 		}
 	}
 	return repo.CreateTag(tag, commit, opts)
 }
 
-func signature(time time.Time) *object.Signature {
+func mockSignature(time time.Time) *object.Signature {
 	return &object.Signature{
 		Name:  "Jane Doe",
 		Email: "jane@example.com",

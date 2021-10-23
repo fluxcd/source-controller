@@ -18,7 +18,9 @@ package gogit
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io/ioutil"
 	"sort"
 	"time"
 
@@ -27,6 +29,7 @@ import (
 	"github.com/fluxcd/pkg/version"
 	extgogit "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/plumbing/object"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
 	"github.com/fluxcd/source-controller/pkg/git"
@@ -58,11 +61,12 @@ type CheckoutBranch struct {
 	recurseSubmodules bool
 }
 
-func (c *CheckoutBranch) Checkout(ctx context.Context, path, url string, opts *git.AuthOptions) (git.Commit, string, error) {
+func (c *CheckoutBranch) Checkout(ctx context.Context, path, url string, opts *git.AuthOptions) (*git.Commit, error) {
 	authMethod, err := transportAuth(opts)
 	if err != nil {
-		return nil, "", fmt.Errorf("could not construct auth method: %w", err)
+		return nil, fmt.Errorf("failed to construct auth method with options: %w", err)
 	}
+	ref := plumbing.NewBranchReferenceName(c.branch)
 	repo, err := extgogit.PlainCloneContext(ctx, path, false, &extgogit.CloneOptions{
 		URL:               url,
 		Auth:              authMethod,
@@ -77,17 +81,17 @@ func (c *CheckoutBranch) Checkout(ctx context.Context, path, url string, opts *g
 		CABundle:          caBundle(opts),
 	})
 	if err != nil {
-		return nil, "", fmt.Errorf("unable to clone '%s', error: %w", url, gitutil.GoGitError(err))
+		return nil, fmt.Errorf("unable to clone '%s', error: %w", url, gitutil.GoGitError(err))
 	}
 	head, err := repo.Head()
 	if err != nil {
-		return nil, "", fmt.Errorf("git resolve HEAD error: %w", err)
+		return nil, fmt.Errorf("failed to resolve HEAD of branch '%s': %w", c.branch, err)
 	}
-	commit, err := repo.CommitObject(head.Hash())
+	cc, err := repo.CommitObject(head.Hash())
 	if err != nil {
-		return nil, "", fmt.Errorf("git commit '%s' not found: %w", head.Hash(), err)
+		return nil, fmt.Errorf("failed to resolve commit object for HEAD '%s': %w", head.Hash(), err)
 	}
-	return &Commit{commit}, fmt.Sprintf("%s/%s", c.branch, head.Hash().String()), nil
+	return commitWithRef(cc, ref)
 }
 
 type CheckoutTag struct {
@@ -95,11 +99,12 @@ type CheckoutTag struct {
 	recurseSubmodules bool
 }
 
-func (c *CheckoutTag) Checkout(ctx context.Context, path, url string, opts *git.AuthOptions) (git.Commit, string, error) {
+func (c *CheckoutTag) Checkout(ctx context.Context, path, url string, opts *git.AuthOptions) (*git.Commit, error) {
 	authMethod, err := transportAuth(opts)
 	if err != nil {
-		return nil, "", fmt.Errorf("could not construct auth method: %w", err)
+		return nil, fmt.Errorf("failed to construct auth method with options: %w", err)
 	}
+	ref := plumbing.NewTagReferenceName(c.tag)
 	repo, err := extgogit.PlainCloneContext(ctx, path, false, &extgogit.CloneOptions{
 		URL:               url,
 		Auth:              authMethod,
@@ -114,17 +119,17 @@ func (c *CheckoutTag) Checkout(ctx context.Context, path, url string, opts *git.
 		CABundle:          caBundle(opts),
 	})
 	if err != nil {
-		return nil, "", fmt.Errorf("unable to clone '%s', error: %w", url, err)
+		return nil, fmt.Errorf("unable to clone '%s', error: %w", url, gitutil.GoGitError(err))
 	}
 	head, err := repo.Head()
 	if err != nil {
-		return nil, "", fmt.Errorf("git resolve HEAD error: %w", err)
+		return nil, fmt.Errorf("failed to resolve HEAD of tag '%s': %w", c.tag, err)
 	}
-	commit, err := repo.CommitObject(head.Hash())
+	cc, err := repo.CommitObject(head.Hash())
 	if err != nil {
-		return nil, "", fmt.Errorf("git commit '%s' not found: %w", head.Hash(), err)
+		return nil, fmt.Errorf("failed to resolve commit object for HEAD '%s': %w", head.Hash(), err)
 	}
-	return &Commit{commit}, fmt.Sprintf("%s/%s", c.tag, head.Hash().String()), nil
+	return commitWithRef(cc, ref)
 }
 
 type CheckoutCommit struct {
@@ -133,16 +138,17 @@ type CheckoutCommit struct {
 	recurseSubmodules bool
 }
 
-func (c *CheckoutCommit) Checkout(ctx context.Context, path, url string, opts *git.AuthOptions) (git.Commit, string, error) {
+func (c *CheckoutCommit) Checkout(ctx context.Context, path, url string, opts *git.AuthOptions) (*git.Commit, error) {
 	authMethod, err := transportAuth(opts)
 	if err != nil {
-		return nil, "", fmt.Errorf("could not construct transportAuth method: %w", err)
+		return nil, fmt.Errorf("failed to construct auth method with options: %w", err)
 	}
+	ref := plumbing.NewBranchReferenceName(c.branch)
 	repo, err := extgogit.PlainCloneContext(ctx, path, false, &extgogit.CloneOptions{
 		URL:               url,
 		Auth:              authMethod,
 		RemoteName:        git.DefaultOrigin,
-		ReferenceName:     plumbing.NewBranchReferenceName(c.branch),
+		ReferenceName:     ref,
 		SingleBranch:      true,
 		NoCheckout:        false,
 		RecurseSubmodules: recurseSubmodules(c.recurseSubmodules),
@@ -151,24 +157,26 @@ func (c *CheckoutCommit) Checkout(ctx context.Context, path, url string, opts *g
 		CABundle:          caBundle(opts),
 	})
 	if err != nil {
-		return nil, "", fmt.Errorf("unable to clone '%s', error: %w", url, err)
+		return nil, fmt.Errorf("unable to clone '%s', error: %w", url, gitutil.GoGitError(err))
 	}
 	w, err := repo.Worktree()
 	if err != nil {
-		return nil, "", fmt.Errorf("git worktree error: %w", err)
+		return nil, fmt.Errorf("failed to open Git worktree: %w", err)
 	}
-	commit, err := repo.CommitObject(plumbing.NewHash(c.commit))
+	f, _ := repo.Head()
+	f.String()
+	cc, err := repo.CommitObject(plumbing.NewHash(c.commit))
 	if err != nil {
-		return nil, "", fmt.Errorf("git commit '%s' not found: %w", c.commit, err)
+		return nil, fmt.Errorf("failed to resolve commit object for '%s': %w", c.commit, err)
 	}
 	err = w.Checkout(&extgogit.CheckoutOptions{
-		Hash:  commit.Hash,
+		Hash:  cc.Hash,
 		Force: true,
 	})
 	if err != nil {
-		return nil, "", fmt.Errorf("git checkout error: %w", err)
+		return nil, fmt.Errorf("failed to checkout commit '%s': %w", c.commit, err)
 	}
-	return &Commit{commit}, fmt.Sprintf("%s/%s", c.branch, commit.Hash.String()), nil
+	return commitWithRef(cc, ref)
 }
 
 type CheckoutSemVer struct {
@@ -176,15 +184,17 @@ type CheckoutSemVer struct {
 	recurseSubmodules bool
 }
 
-func (c *CheckoutSemVer) Checkout(ctx context.Context, path, url string, opts *git.AuthOptions) (git.Commit, string, error) {
+func (c *CheckoutSemVer) Checkout(ctx context.Context, path, url string, opts *git.AuthOptions) (*git.Commit, error) {
 	verConstraint, err := semver.NewConstraint(c.semVer)
 	if err != nil {
-		return nil, "", fmt.Errorf("semver parse range error: %w", err)
+		return nil, fmt.Errorf("semver parse error: %w", err)
 	}
+
 	authMethod, err := transportAuth(opts)
 	if err != nil {
-		return nil, "", fmt.Errorf("could not construct transportAuth method: %w", err)
+		return nil, fmt.Errorf("failed to construct auth method with options: %w", err)
 	}
+
 	repo, err := extgogit.PlainCloneContext(ctx, path, false, &extgogit.CloneOptions{
 		URL:               url,
 		Auth:              authMethod,
@@ -197,12 +207,12 @@ func (c *CheckoutSemVer) Checkout(ctx context.Context, path, url string, opts *g
 		CABundle:          caBundle(opts),
 	})
 	if err != nil {
-		return nil, "", fmt.Errorf("unable to clone '%s', error: %w", url, err)
+		return nil, fmt.Errorf("unable to clone '%s', error: %w", url, err)
 	}
 
 	repoTags, err := repo.Tags()
 	if err != nil {
-		return nil, "", fmt.Errorf("git list tags error: %w", err)
+		return nil, fmt.Errorf("failed to list tags: %w", err)
 	}
 
 	tags := make(map[string]string)
@@ -222,7 +232,7 @@ func (c *CheckoutSemVer) Checkout(ctx context.Context, path, url string, opts *g
 		tags[t.Name().Short()] = t.Strings()[1]
 		return nil
 	}); err != nil {
-		return nil, "", err
+		return nil, err
 	}
 
 	var matchedVersions semver.Collection
@@ -237,7 +247,7 @@ func (c *CheckoutSemVer) Checkout(ctx context.Context, path, url string, opts *g
 		matchedVersions = append(matchedVersions, v)
 	}
 	if len(matchedVersions) == 0 {
-		return nil, "", fmt.Errorf("no match found for semver: %s", c.semVer)
+		return nil, fmt.Errorf("no match found for semver: %s", c.semVer)
 	}
 
 	// Sort versions
@@ -260,27 +270,61 @@ func (c *CheckoutSemVer) Checkout(ctx context.Context, path, url string, opts *g
 
 	w, err := repo.Worktree()
 	if err != nil {
-		return nil, "", fmt.Errorf("git worktree error: %w", err)
+		return nil, fmt.Errorf("failed to open Git worktree: %w", err)
 	}
 
+	ref := plumbing.NewTagReferenceName(t)
 	err = w.Checkout(&extgogit.CheckoutOptions{
-		Branch: plumbing.NewTagReferenceName(t),
+		Branch: ref,
 	})
 	if err != nil {
-		return nil, "", fmt.Errorf("git checkout error: %w", err)
+		return nil, fmt.Errorf("failed to checkout tag '%s': %w", t, err)
 	}
-
 	head, err := repo.Head()
 	if err != nil {
-		return nil, "", fmt.Errorf("git resolve HEAD error: %w", err)
+		return nil, fmt.Errorf("failed to resolve HEAD of tag '%s': %w", t, err)
 	}
-
-	commit, err := repo.CommitObject(head.Hash())
+	cc, err := repo.CommitObject(head.Hash())
 	if err != nil {
-		return nil, "", fmt.Errorf("git commit '%s' not found: %w", head.Hash(), err)
+		return nil, fmt.Errorf("failed to resolve commit object for HEAD '%s': %w", head.Hash(), err)
+	}
+	return commitWithRef(cc, ref)
+}
+
+func commitWithRef(c *object.Commit, ref plumbing.ReferenceName) (*git.Commit, error) {
+	if c == nil {
+		return nil, errors.New("failed to construct commit: no object")
 	}
 
-	return &Commit{commit}, fmt.Sprintf("%s/%s", t, head.Hash().String()), nil
+	// Encode commit components, excluding signature into SignedData..
+	encoded := &plumbing.MemoryObject{}
+	if err := c.EncodeWithoutSignature(encoded); err != nil {
+		return nil, fmt.Errorf("failed to encode commit '%s': %w", c.Hash, err)
+	}
+	reader, err := encoded.Reader()
+	if err != nil {
+		return nil, fmt.Errorf("failed to encode commit '%s': %w", c.Hash, err)
+	}
+	b, err := ioutil.ReadAll(reader)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read encoded commit '%s': %w", c.Hash, err)
+	}
+	return &git.Commit{
+		Hash:      []byte(c.Hash.String()),
+		Reference: ref.String(),
+		Author:    signature(c.Author),
+		Committer: signature(c.Committer),
+		Signature: c.PGPSignature,
+		Encoded:   b,
+	}, nil
+}
+
+func signature(s object.Signature) git.Signature {
+	return git.Signature{
+		Name:  s.Name,
+		Email: s.Email,
+		When:  s.When,
+	}
 }
 
 func recurseSubmodules(recurse bool) extgogit.SubmoduleRescursivity {
