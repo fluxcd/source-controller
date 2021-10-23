@@ -193,3 +193,10 @@ func Test_transportAuth(t *testing.T) {
 		})
 	}
 }
+
+func Test_caBundle(t *testing.T) {
+	g := NewWithT(t)
+
+	g.Expect(caBundle(&git.AuthOptions{CAFile: []byte("foo")})).To(BeEquivalentTo("foo"))
+	g.Expect(caBundle(nil)).To(BeNil())
+}
