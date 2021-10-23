@@ -29,6 +29,9 @@ import (
 // transportAuth constructs the transport.AuthMethod for the git.Transport of
 // the given git.AuthOptions. It returns the result, or an error.
 func transportAuth(opts *git.AuthOptions) (transport.AuthMethod, error) {
+	if opts == nil {
+		return nil, nil
+	}
 	switch opts.Transport {
 	case git.HTTPS, git.HTTP:
 		return &http.BasicAuth{
@@ -52,4 +55,12 @@ func transportAuth(opts *git.AuthOptions) (transport.AuthMethod, error) {
 		}
 	}
 	return nil, nil
+}
+
+// caBundle returns the CA bundle from the given git.AuthOptions.
+func caBundle(opts *git.AuthOptions) []byte {
+	if opts == nil {
+		return nil
+	}
+	return opts.CAFile
 }

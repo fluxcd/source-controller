@@ -84,6 +84,7 @@ func TestCheckoutBranch_Checkout(t *testing.T) {
 
 			_, ref, err := branch.Checkout(context.TODO(), tmpDir, repo.Path(), nil)
 			if tt.expectedErr != "" {
+				g.Expect(err).To(HaveOccurred())
 				g.Expect(err.Error()).To(ContainSubstring(tt.expectedErr))
 				g.Expect(ref).To(BeEmpty())
 				return
@@ -154,7 +155,8 @@ func TestCheckoutTag_Checkout(t *testing.T) {
 
 			_, ref, err := tag.Checkout(context.TODO(), tmpDir, repo.Path(), nil)
 			if tt.expectErr != "" {
-				g.Expect(err.Error()).To(Equal(tt.expectErr))
+				g.Expect(err).To(HaveOccurred())
+				g.Expect(err.Error()).To(ContainSubstring(tt.expectErr))
 				g.Expect(ref).To(BeEmpty())
 				return
 			}
@@ -193,7 +195,7 @@ func TestCheckoutCommit_Checkout(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 
 	_, ref, err := commit.Checkout(context.TODO(), tmpDir, repo.Path(), nil)
-	g.Expect(err).To(BeNil())
+	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(ref).To(Equal("main/" + c.String()))
 	g.Expect(filepath.Join(tmpDir, "commit")).To(BeARegularFile())
 	g.Expect(os.ReadFile(filepath.Join(tmpDir, "commit"))).To(BeEquivalentTo("init"))
@@ -205,6 +207,7 @@ func TestCheckoutCommit_Checkout(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 
 	_, ref, err = commit.Checkout(context.TODO(), tmpDir2, repo.Path(), nil)
+	g.Expect(err).To(HaveOccurred())
 	g.Expect(err.Error()).To(HavePrefix("git checkout error: git commit '4dc3185c5fc94eb75048376edeb44571cece25f4' not found:"))
 	g.Expect(ref).To(BeEmpty())
 }
@@ -316,6 +319,7 @@ func TestCheckoutTagSemVer_Checkout(t *testing.T) {
 				g.Expect(ref).To(BeEmpty())
 				return
 			}
+
 			g.Expect(err).ToNot(HaveOccurred())
 			g.Expect(ref).To(Equal(tt.expectTag + "/" + refs[tt.expectTag]))
 			g.Expect(filepath.Join(tmpDir, "tag")).To(BeARegularFile())
