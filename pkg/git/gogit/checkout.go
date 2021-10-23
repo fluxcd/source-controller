@@ -23,11 +23,10 @@ import (
 	"time"
 
 	"github.com/Masterminds/semver/v3"
-	extgogit "github.com/go-git/go-git/v5"
-	"github.com/go-git/go-git/v5/plumbing"
-
 	"github.com/fluxcd/pkg/gitutil"
 	"github.com/fluxcd/pkg/version"
+	extgogit "github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
 	"github.com/fluxcd/source-controller/pkg/git"
@@ -59,10 +58,14 @@ type CheckoutBranch struct {
 	recurseSubmodules bool
 }
 
-func (c *CheckoutBranch) Checkout(ctx context.Context, path, url string, auth *git.Auth) (git.Commit, string, error) {
+func (c *CheckoutBranch) Checkout(ctx context.Context, path, url string, opts *git.AuthOptions) (git.Commit, string, error) {
+	authMethod, err := transportAuth(opts)
+	if err != nil {
+		return nil, "", fmt.Errorf("could not construct auth method: %w", err)
+	}
 	repo, err := extgogit.PlainCloneContext(ctx, path, false, &extgogit.CloneOptions{
 		URL:               url,
-		Auth:              auth.AuthMethod,
+		Auth:              authMethod,
 		RemoteName:        git.DefaultOrigin,
 		ReferenceName:     plumbing.NewBranchReferenceName(c.branch),
 		SingleBranch:      true,
@@ -71,7 +74,7 @@ func (c *CheckoutBranch) Checkout(ctx context.Context, path, url string, auth *g
 		RecurseSubmodules: recurseSubmodules(c.recurseSubmodules),
 		Progress:          nil,
 		Tags:              extgogit.NoTags,
-		CABundle:          auth.CABundle,
+		CABundle:          opts.CAFile,
 	})
 	if err != nil {
 		return nil, "", fmt.Errorf("unable to clone '%s', error: %w", url, gitutil.GoGitError(err))
@@ -92,10 +95,14 @@ type CheckoutTag struct {
 	recurseSubmodules bool
 }
 
-func (c *CheckoutTag) Checkout(ctx context.Context, path, url string, auth *git.Auth) (git.Commit, string, error) {
+func (c *CheckoutTag) Checkout(ctx context.Context, path, url string, opts *git.AuthOptions) (git.Commit, string, error) {
+	authMethod, err := transportAuth(opts)
+	if err != nil {
+		return nil, "", fmt.Errorf("could not construct auth method: %w", err)
+	}
 	repo, err := extgogit.PlainCloneContext(ctx, path, false, &extgogit.CloneOptions{
 		URL:               url,
-		Auth:              auth.AuthMethod,
+		Auth:              authMethod,
 		RemoteName:        git.DefaultOrigin,
 		ReferenceName:     plumbing.NewTagReferenceName(c.tag),
 		SingleBranch:      true,
@@ -104,7 +111,7 @@ func (c *CheckoutTag) Checkout(ctx context.Context, path, url string, auth *git.
 		RecurseSubmodules: recurseSubmodules(c.recurseSubmodules),
 		Progress:          nil,
 		Tags:              extgogit.NoTags,
-		CABundle:          auth.CABundle,
+		CABundle:          opts.CAFile,
 	})
 	if err != nil {
 		return nil, "", fmt.Errorf("unable to clone '%s', error: %w", url, err)
@@ -126,10 +133,14 @@ type CheckoutCommit struct {
 	recurseSubmodules bool
 }
 
-func (c *CheckoutCommit) Checkout(ctx context.Context, path, url string, auth *git.Auth) (git.Commit, string, error) {
+func (c *CheckoutCommit) Checkout(ctx context.Context, path, url string, opts *git.AuthOptions) (git.Commit, string, error) {
+	authMethod, err := transportAuth(opts)
+	if err != nil {
+		return nil, "", fmt.Errorf("could not construct transportAuth method: %w", err)
+	}
 	repo, err := extgogit.PlainCloneContext(ctx, path, false, &extgogit.CloneOptions{
 		URL:               url,
-		Auth:              auth.AuthMethod,
+		Auth:              authMethod,
 		RemoteName:        git.DefaultOrigin,
 		ReferenceName:     plumbing.NewBranchReferenceName(c.branch),
 		SingleBranch:      true,
@@ -137,7 +148,7 @@ func (c *CheckoutCommit) Checkout(ctx context.Context, path, url string, auth *g
 		RecurseSubmodules: recurseSubmodules(c.recurseSubmodules),
 		Progress:          nil,
 		Tags:              extgogit.NoTags,
-		CABundle:          auth.CABundle,
+		CABundle:          opts.CAFile,
 	})
 	if err != nil {
 		return nil, "", fmt.Errorf("unable to clone '%s', error: %w", url, err)
@@ -165,22 +176,25 @@ type CheckoutSemVer struct {
 	recurseSubmodules bool
 }
 
-func (c *CheckoutSemVer) Checkout(ctx context.Context, path, url string, auth *git.Auth) (git.Commit, string, error) {
+func (c *CheckoutSemVer) Checkout(ctx context.Context, path, url string, opts *git.AuthOptions) (git.Commit, string, error) {
 	verConstraint, err := semver.NewConstraint(c.semVer)
 	if err != nil {
 		return nil, "", fmt.Errorf("semver parse range error: %w", err)
 	}
-
+	authMethod, err := transportAuth(opts)
+	if err != nil {
+		return nil, "", fmt.Errorf("could not construct transportAuth method: %w", err)
+	}
 	repo, err := extgogit.PlainCloneContext(ctx, path, false, &extgogit.CloneOptions{
 		URL:               url,
-		Auth:              auth.AuthMethod,
+		Auth:              authMethod,
 		RemoteName:        git.DefaultOrigin,
 		NoCheckout:        false,
 		Depth:             1,
 		RecurseSubmodules: recurseSubmodules(c.recurseSubmodules),
 		Progress:          nil,
 		Tags:              extgogit.AllTags,
-		CABundle:          auth.CABundle,
+		CABundle:          opts.CAFile,
 	})
 	if err != nil {
 		return nil, "", fmt.Errorf("unable to clone '%s', error: %w", url, err)

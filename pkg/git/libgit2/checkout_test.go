@@ -27,8 +27,6 @@ import (
 
 	git2go "github.com/libgit2/git2go/v31"
 	. "github.com/onsi/gomega"
-
-	"github.com/fluxcd/source-controller/pkg/git"
 )
 
 func TestCheckoutBranch_Checkout(t *testing.T) {
@@ -84,7 +82,7 @@ func TestCheckoutBranch_Checkout(t *testing.T) {
 			tmpDir, _ := os.MkdirTemp("", "test")
 			defer os.RemoveAll(tmpDir)
 
-			_, ref, err := branch.Checkout(context.TODO(), tmpDir, repo.Path(), &git.Auth{})
+			_, ref, err := branch.Checkout(context.TODO(), tmpDir, repo.Path(), nil)
 			if tt.expectedErr != "" {
 				g.Expect(err.Error()).To(ContainSubstring(tt.expectedErr))
 				g.Expect(ref).To(BeEmpty())
@@ -154,7 +152,7 @@ func TestCheckoutTag_Checkout(t *testing.T) {
 			tmpDir, _ := os.MkdirTemp("", "test")
 			defer os.RemoveAll(tmpDir)
 
-			_, ref, err := tag.Checkout(context.TODO(), tmpDir, repo.Path(), &git.Auth{})
+			_, ref, err := tag.Checkout(context.TODO(), tmpDir, repo.Path(), nil)
 			if tt.expectErr != "" {
 				g.Expect(err.Error()).To(Equal(tt.expectErr))
 				g.Expect(ref).To(BeEmpty())
@@ -194,7 +192,7 @@ func TestCheckoutCommit_Checkout(t *testing.T) {
 	tmpDir, _ := os.MkdirTemp("", "git2go")
 	defer os.RemoveAll(tmpDir)
 
-	_, ref, err := commit.Checkout(context.TODO(), tmpDir, repo.Path(), &git.Auth{})
+	_, ref, err := commit.Checkout(context.TODO(), tmpDir, repo.Path(), nil)
 	g.Expect(err).To(BeNil())
 	g.Expect(ref).To(Equal("main/" + c.String()))
 	g.Expect(filepath.Join(tmpDir, "commit")).To(BeARegularFile())
@@ -206,7 +204,7 @@ func TestCheckoutCommit_Checkout(t *testing.T) {
 	tmpDir2, _ := os.MkdirTemp("", "git2go")
 	defer os.RemoveAll(tmpDir)
 
-	_, ref, err = commit.Checkout(context.TODO(), tmpDir2, repo.Path(), &git.Auth{})
+	_, ref, err = commit.Checkout(context.TODO(), tmpDir2, repo.Path(), nil)
 	g.Expect(err.Error()).To(HavePrefix("git checkout error: git commit '4dc3185c5fc94eb75048376edeb44571cece25f4' not found:"))
 	g.Expect(ref).To(BeEmpty())
 }
@@ -312,7 +310,7 @@ func TestCheckoutTagSemVer_Checkout(t *testing.T) {
 			tmpDir, _ := os.MkdirTemp("", "test")
 			defer os.RemoveAll(tmpDir)
 
-			_, ref, err := semVer.Checkout(context.TODO(), tmpDir, repo.Path(), &git.Auth{})
+			_, ref, err := semVer.Checkout(context.TODO(), tmpDir, repo.Path(), nil)
 			if tt.expectErr != nil {
 				g.Expect(err).To(Equal(tt.expectErr))
 				g.Expect(ref).To(BeEmpty())

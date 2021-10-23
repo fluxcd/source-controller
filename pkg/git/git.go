@@ -19,16 +19,7 @@ package git
 import (
 	"context"
 
-	"github.com/go-git/go-git/v5/plumbing/transport"
-	git2go "github.com/libgit2/git2go/v31"
 	corev1 "k8s.io/api/core/v1"
-)
-
-const (
-	DefaultOrigin            = "origin"
-	DefaultBranch            = "master"
-	DefaultPublicKeyAuthUser = "git"
-	CAFile                   = "caFile"
 )
 
 type Commit interface {
@@ -37,23 +28,5 @@ type Commit interface {
 }
 
 type CheckoutStrategy interface {
-	Checkout(ctx context.Context, path, url string, auth *Auth) (Commit, string, error)
-}
-
-type CheckoutOptions struct {
-	GitImplementation string
-	RecurseSubmodules bool
-}
-
-// TODO(hidde): candidate for refactoring, so that we do not directly
-//  depend on implementation specifics here.
-type Auth struct {
-	AuthMethod   transport.AuthMethod
-	CABundle     []byte
-	CredCallback git2go.CredentialsCallback
-	CertCallback git2go.CertificateCheckCallback
-}
-
-type AuthSecretStrategy interface {
-	Method(secret corev1.Secret) (*Auth, error)
+	Checkout(ctx context.Context, path, url string, config *AuthOptions) (Commit, string, error)
 }

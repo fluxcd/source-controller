@@ -229,34 +229,23 @@ func (r *GitRepositoryReconciler) reconcile(ctx context.Context, repository sour
 	}
 	defer os.RemoveAll(tmpGit)
 
-	// determine auth method
-	auth := &git.Auth{}
+	// Configure auth options using secret
+	authOpts := &git.AuthOptions{}
 	if repository.Spec.SecretRef != nil {
-		authStrategy, err := strategy.AuthSecretStrategyForURL(
-			repository.Spec.URL,
-			git.CheckoutOptions{
-				GitImplementation: repository.Spec.GitImplementation,
-				RecurseSubmodules: repository.Spec.RecurseSubmodules,
-			})
-		if err != nil {
-			return sourcev1.GitRepositoryNotReady(repository, sourcev1.AuthenticationFailedReason, err.Error()), err
-		}
-
 		name := types.NamespacedName{
 			Namespace: repository.GetNamespace(),
 			Name:      repository.Spec.SecretRef.Name,
 		}
 
-		var secret corev1.Secret
-		err = r.Client.Get(ctx, name, &secret)
+		secret := &corev1.Secret{}
+		err = r.Client.Get(ctx, name, secret)
 		if err != nil {
 			err = fmt.Errorf("auth secret error: %w", err)
 			return sourcev1.GitRepositoryNotReady(repository, sourcev1.AuthenticationFailedReason, err.Error()), err
 		}
 
-		auth, err = authStrategy.Method(secret)
+		authOpts, err = git.AuthOptionsFromSecret(repository.Spec.URL, secret)
 		if err != nil {
-			err = fmt.Errorf("auth error: %w", err)
 			return sourcev1.GitRepositoryNotReady(repository, sourcev1.AuthenticationFailedReason, err.Error()), err
 		}
 	}
@@ -275,7 +264,7 @@ func (r *GitRepositoryReconciler) reconcile(ctx context.Context, repository sour
 	gitCtx, cancel := context.WithTimeout(ctx, repository.Spec.Timeout.Duration)
 	defer cancel()
 
-	commit, revision, err := checkoutStrategy.Checkout(gitCtx, tmpGit, repository.Spec.URL, auth)
+	commit, revision, err := checkoutStrategy.Checkout(gitCtx, tmpGit, repository.Spec.URL, authOpts)
 	if err != nil {
 		return sourcev1.GitRepositoryNotReady(repository, sourcev1.GitOperationFailedReason, err.Error()), err
 	}

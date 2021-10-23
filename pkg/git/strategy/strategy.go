@@ -32,17 +32,6 @@ func CheckoutStrategyForRef(ref *sourcev1.GitRepositoryRef, opt git.CheckoutOpti
 	case sourcev1.LibGit2Implementation:
 		return libgit2.CheckoutStrategyForRef(ref, opt), nil
 	default:
-		return nil, fmt.Errorf("invalid Git implementation %s", opt.GitImplementation)
-	}
-}
-
-func AuthSecretStrategyForURL(url string, opt git.CheckoutOptions) (git.AuthSecretStrategy, error) {
-	switch opt.GitImplementation {
-	case sourcev1.GoGitImplementation:
-		return gogit.AuthSecretStrategyForURL(url)
-	case sourcev1.LibGit2Implementation:
-		return libgit2.AuthSecretStrategyForURL(url)
-	default:
-		return nil, fmt.Errorf("invalid Git implementation %s", opt.GitImplementation)
+		return nil, fmt.Errorf("unsupported Git implementation %s", opt.GitImplementation)
 	}
 }
