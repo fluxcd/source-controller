@@ -96,6 +96,8 @@ func (o AuthOptions) Validate() error {
 		}
 	case "":
 		return fmt.Errorf("no transport type set")
+	default:
+		return fmt.Errorf("unknown transport '%s'", o.Transport)
 	}
 	return nil
 }
