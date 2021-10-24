@@ -263,7 +263,7 @@ var _ = Describe("GitRepositoryReconciler", func() {
 				},
 				waitForReason:  sourcev1.GitOperationSucceedReason,
 				expectStatus:   metav1.ConditionTrue,
-				expectRevision: "master",
+				expectRevision: "HEAD",
 			}),
 			Entry("commit in branch", refTestCase{
 				reference: &sourcev1.GitRepositoryRef{

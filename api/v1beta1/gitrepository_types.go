@@ -120,7 +120,6 @@ type GitRepositoryInclude struct {
 // GitRepositoryRef defines the Git ref used for pull and checkout operations.
 type GitRepositoryRef struct {
 	// The Git branch to checkout, defaults to master.
-	// +kubebuilder:default:=master
 	// +optional
 	Branch string `json:"branch,omitempty"`
 

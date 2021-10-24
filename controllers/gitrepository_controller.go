@@ -249,14 +249,15 @@ func (r *GitRepositoryReconciler) reconcile(ctx context.Context, repository sour
 			return sourcev1.GitRepositoryNotReady(repository, sourcev1.AuthenticationFailedReason, err.Error()), err
 		}
 	}
-
-	checkoutStrategy, err := strategy.CheckoutStrategyForRef(
-		repository.Spec.Reference,
-		git.CheckoutOptions{
-			GitImplementation: repository.Spec.GitImplementation,
-			RecurseSubmodules: repository.Spec.RecurseSubmodules,
-		},
-	)
+	checkoutOpts := git.CheckoutOptions{RecurseSubmodules: repository.Spec.RecurseSubmodules}
+	if ref := repository.Spec.Reference; ref != nil {
+		checkoutOpts.Branch = ref.Branch
+		checkoutOpts.Commit = ref.Commit
+		checkoutOpts.Tag = ref.Tag
+		checkoutOpts.SemVer = ref.SemVer
+	}
+	checkoutStrategy, err := strategy.CheckoutStrategyForImplementation(ctx,
+		git.Implementation(repository.Spec.GitImplementation), checkoutOpts)
 	if err != nil {
 		return sourcev1.GitRepositoryNotReady(repository, sourcev1.GitOperationFailedReason, err.Error()), err
 	}

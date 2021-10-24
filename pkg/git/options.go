@@ -32,7 +32,22 @@ const (
 
 // CheckoutOptions are the options used for a Git checkout.
 type CheckoutOptions struct {
-	GitImplementation string
+	// Branch to checkout, can be combined with Branch with some
+	// Implementations.
+	Branch string
+
+	// Tag to checkout, takes precedence over Branch.
+	Tag string
+
+	// SemVer tag expression to checkout, takes precedence over Tag.
+	SemVer string `json:"semver,omitempty"`
+
+	// Commit SHA1 to checkout, takes precedence over Tag and SemVer,
+	// can be combined with Branch with some Implementations.
+	Commit string
+
+	// RecurseSubmodules defines if submodules should be checked out,
+	// not supported by all Implementations.
 	RecurseSubmodules bool
 }
 
