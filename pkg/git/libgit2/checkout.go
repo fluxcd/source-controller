@@ -63,7 +63,7 @@ func (c *CheckoutBranch) Checkout(ctx context.Context, path, url string, opts *g
 	repo, err := git2go.Clone(url, path, &git2go.CloneOptions{
 		FetchOptions: &git2go.FetchOptions{
 			DownloadTags:    git2go.DownloadTagsNone,
-			RemoteCallbacks: remoteCallbacks(opts),
+			RemoteCallbacks: RemoteCallbacks(opts),
 		},
 		CheckoutBranch: c.Branch,
 	})
@@ -92,7 +92,7 @@ func (c *CheckoutTag) Checkout(ctx context.Context, path, url string, opts *git.
 	repo, err := git2go.Clone(url, path, &git2go.CloneOptions{
 		FetchOptions: &git2go.FetchOptions{
 			DownloadTags:    git2go.DownloadTagsAll,
-			RemoteCallbacks: remoteCallbacks(opts),
+			RemoteCallbacks: RemoteCallbacks(opts),
 		},
 	})
 	if err != nil {
@@ -115,7 +115,7 @@ func (c *CheckoutCommit) Checkout(ctx context.Context, path, url string, opts *g
 	repo, err := git2go.Clone(url, path, &git2go.CloneOptions{
 		FetchOptions: &git2go.FetchOptions{
 			DownloadTags:    git2go.DownloadTagsNone,
-			RemoteCallbacks: remoteCallbacks(opts),
+			RemoteCallbacks: RemoteCallbacks(opts),
 		},
 	})
 	if err != nil {
@@ -146,7 +146,7 @@ func (c *CheckoutSemVer) Checkout(ctx context.Context, path, url string, opts *g
 	repo, err := git2go.Clone(url, path, &git2go.CloneOptions{
 		FetchOptions: &git2go.FetchOptions{
 			DownloadTags:    git2go.DownloadTagsAll,
-			RemoteCallbacks: remoteCallbacks(opts),
+			RemoteCallbacks: RemoteCallbacks(opts),
 		},
 	})
 	if err != nil {

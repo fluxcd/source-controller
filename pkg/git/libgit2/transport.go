@@ -39,9 +39,9 @@ var (
 	now = time.Now
 )
 
-// remoteCallbacks constructs RemoteCallbacks with credentialsCallback and
+// RemoteCallbacks constructs RemoteCallbacks with credentialsCallback and
 // certificateCallback, and the given options if the given opts is not nil.
-func remoteCallbacks(opts *git.AuthOptions) git2go.RemoteCallbacks {
+func RemoteCallbacks(opts *git.AuthOptions) git2go.RemoteCallbacks {
 	if opts != nil {
 		return git2go.RemoteCallbacks{
 			CredentialsCallback:      credentialsCallback(opts),
