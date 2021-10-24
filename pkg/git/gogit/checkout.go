@@ -25,40 +25,38 @@ import (
 	"time"
 
 	"github.com/Masterminds/semver/v3"
-	"github.com/fluxcd/pkg/gitutil"
-	"github.com/fluxcd/pkg/version"
 	extgogit "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
 
-	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
+	"github.com/fluxcd/pkg/gitutil"
+	"github.com/fluxcd/pkg/version"
+
 	"github.com/fluxcd/source-controller/pkg/git"
 )
 
-func CheckoutStrategyForRef(ref *sourcev1.GitRepositoryRef, opt git.CheckoutOptions) git.CheckoutStrategy {
+// CheckoutStrategyForOptions returns the git.CheckoutStrategy for the given
+// git.CheckoutOptions.
+func CheckoutStrategyForOptions(_ context.Context, opts git.CheckoutOptions) git.CheckoutStrategy {
 	switch {
-	case ref == nil:
-		return &CheckoutBranch{branch: git.DefaultBranch}
-	case ref.SemVer != "":
-		return &CheckoutSemVer{semVer: ref.SemVer, recurseSubmodules: opt.RecurseSubmodules}
-	case ref.Tag != "":
-		return &CheckoutTag{tag: ref.Tag, recurseSubmodules: opt.RecurseSubmodules}
-	case ref.Commit != "":
-		strategy := &CheckoutCommit{branch: ref.Branch, commit: ref.Commit, recurseSubmodules: opt.RecurseSubmodules}
-		if strategy.branch == "" {
-			strategy.branch = git.DefaultBranch
-		}
-		return strategy
-	case ref.Branch != "":
-		return &CheckoutBranch{branch: ref.Branch, recurseSubmodules: opt.RecurseSubmodules}
+	case opts.Commit != "":
+		return &CheckoutCommit{Branch: opts.Branch, Commit: opts.Commit, RecurseSubmodules: opts.RecurseSubmodules}
+	case opts.SemVer != "":
+		return &CheckoutSemVer{SemVer: opts.SemVer, RecurseSubmodules: opts.RecurseSubmodules}
+	case opts.Tag != "":
+		return &CheckoutTag{Tag: opts.Tag, RecurseSubmodules: opts.RecurseSubmodules}
 	default:
-		return &CheckoutBranch{branch: git.DefaultBranch}
+		branch := opts.Branch
+		if branch == "" {
+			branch = git.DefaultBranch
+		}
+		return &CheckoutBranch{Branch: branch, RecurseSubmodules: opts.RecurseSubmodules}
 	}
 }
 
 type CheckoutBranch struct {
-	branch            string
-	recurseSubmodules bool
+	Branch            string
+	RecurseSubmodules bool
 }
 
 func (c *CheckoutBranch) Checkout(ctx context.Context, path, url string, opts *git.AuthOptions) (*git.Commit, error) {
@@ -66,16 +64,16 @@ func (c *CheckoutBranch) Checkout(ctx context.Context, path, url string, opts *g
 	if err != nil {
 		return nil, fmt.Errorf("failed to construct auth method with options: %w", err)
 	}
-	ref := plumbing.NewBranchReferenceName(c.branch)
+	ref := plumbing.NewBranchReferenceName(c.Branch)
 	repo, err := extgogit.PlainCloneContext(ctx, path, false, &extgogit.CloneOptions{
 		URL:               url,
 		Auth:              authMethod,
 		RemoteName:        git.DefaultOrigin,
-		ReferenceName:     plumbing.NewBranchReferenceName(c.branch),
+		ReferenceName:     plumbing.NewBranchReferenceName(c.Branch),
 		SingleBranch:      true,
 		NoCheckout:        false,
 		Depth:             1,
-		RecurseSubmodules: recurseSubmodules(c.recurseSubmodules),
+		RecurseSubmodules: recurseSubmodules(c.RecurseSubmodules),
 		Progress:          nil,
 		Tags:              extgogit.NoTags,
 		CABundle:          caBundle(opts),
@@ -85,7 +83,7 @@ func (c *CheckoutBranch) Checkout(ctx context.Context, path, url string, opts *g
 	}
 	head, err := repo.Head()
 	if err != nil {
-		return nil, fmt.Errorf("failed to resolve HEAD of branch '%s': %w", c.branch, err)
+		return nil, fmt.Errorf("failed to resolve HEAD of branch '%s': %w", c.Branch, err)
 	}
 	cc, err := repo.CommitObject(head.Hash())
 	if err != nil {
@@ -95,8 +93,8 @@ func (c *CheckoutBranch) Checkout(ctx context.Context, path, url string, opts *g
 }
 
 type CheckoutTag struct {
-	tag               string
-	recurseSubmodules bool
+	Tag               string
+	RecurseSubmodules bool
 }
 
 func (c *CheckoutTag) Checkout(ctx context.Context, path, url string, opts *git.AuthOptions) (*git.Commit, error) {
@@ -104,16 +102,16 @@ func (c *CheckoutTag) Checkout(ctx context.Context, path, url string, opts *git.
 	if err != nil {
 		return nil, fmt.Errorf("failed to construct auth method with options: %w", err)
 	}
-	ref := plumbing.NewTagReferenceName(c.tag)
+	ref := plumbing.NewTagReferenceName(c.Tag)
 	repo, err := extgogit.PlainCloneContext(ctx, path, false, &extgogit.CloneOptions{
 		URL:               url,
 		Auth:              authMethod,
 		RemoteName:        git.DefaultOrigin,
-		ReferenceName:     plumbing.NewTagReferenceName(c.tag),
+		ReferenceName:     plumbing.NewTagReferenceName(c.Tag),
 		SingleBranch:      true,
 		NoCheckout:        false,
 		Depth:             1,
-		RecurseSubmodules: recurseSubmodules(c.recurseSubmodules),
+		RecurseSubmodules: recurseSubmodules(c.RecurseSubmodules),
 		Progress:          nil,
 		Tags:              extgogit.NoTags,
 		CABundle:          caBundle(opts),
@@ -123,7 +121,7 @@ func (c *CheckoutTag) Checkout(ctx context.Context, path, url string, opts *git.
 	}
 	head, err := repo.Head()
 	if err != nil {
-		return nil, fmt.Errorf("failed to resolve HEAD of tag '%s': %w", c.tag, err)
+		return nil, fmt.Errorf("failed to resolve HEAD of tag '%s': %w", c.Tag, err)
 	}
 	cc, err := repo.CommitObject(head.Hash())
 	if err != nil {
@@ -133,9 +131,9 @@ func (c *CheckoutTag) Checkout(ctx context.Context, path, url string, opts *git.
 }
 
 type CheckoutCommit struct {
-	branch            string
-	commit            string
-	recurseSubmodules bool
+	Branch            string
+	Commit            string
+	RecurseSubmodules bool
 }
 
 func (c *CheckoutCommit) Checkout(ctx context.Context, path, url string, opts *git.AuthOptions) (*git.Commit, error) {
@@ -143,19 +141,22 @@ func (c *CheckoutCommit) Checkout(ctx context.Context, path, url string, opts *g
 	if err != nil {
 		return nil, fmt.Errorf("failed to construct auth method with options: %w", err)
 	}
-	ref := plumbing.NewBranchReferenceName(c.branch)
-	repo, err := extgogit.PlainCloneContext(ctx, path, false, &extgogit.CloneOptions{
+	cloneOpts := &extgogit.CloneOptions{
 		URL:               url,
 		Auth:              authMethod,
 		RemoteName:        git.DefaultOrigin,
-		ReferenceName:     ref,
-		SingleBranch:      true,
-		NoCheckout:        false,
-		RecurseSubmodules: recurseSubmodules(c.recurseSubmodules),
+		SingleBranch:      false,
+		NoCheckout:        true,
+		RecurseSubmodules: recurseSubmodules(c.RecurseSubmodules),
 		Progress:          nil,
 		Tags:              extgogit.NoTags,
 		CABundle:          caBundle(opts),
-	})
+	}
+	if c.Branch != "" {
+		cloneOpts.SingleBranch = true
+		cloneOpts.ReferenceName = plumbing.NewBranchReferenceName(c.Branch)
+	}
+	repo, err := extgogit.PlainCloneContext(ctx, path, false, cloneOpts)
 	if err != nil {
 		return nil, fmt.Errorf("unable to clone '%s', error: %w", url, gitutil.GoGitError(err))
 	}
@@ -163,29 +164,27 @@ func (c *CheckoutCommit) Checkout(ctx context.Context, path, url string, opts *g
 	if err != nil {
 		return nil, fmt.Errorf("failed to open Git worktree: %w", err)
 	}
-	f, _ := repo.Head()
-	f.String()
-	cc, err := repo.CommitObject(plumbing.NewHash(c.commit))
+	cc, err := repo.CommitObject(plumbing.NewHash(c.Commit))
 	if err != nil {
-		return nil, fmt.Errorf("failed to resolve commit object for '%s': %w", c.commit, err)
+		return nil, fmt.Errorf("failed to resolve commit object for '%s': %w", c.Commit, err)
 	}
 	err = w.Checkout(&extgogit.CheckoutOptions{
 		Hash:  cc.Hash,
 		Force: true,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to checkout commit '%s': %w", c.commit, err)
+		return nil, fmt.Errorf("failed to checkout commit '%s': %w", c.Commit, err)
 	}
-	return commitWithRef(cc, ref)
+	return commitWithRef(cc, cloneOpts.ReferenceName)
 }
 
 type CheckoutSemVer struct {
-	semVer            string
-	recurseSubmodules bool
+	SemVer            string
+	RecurseSubmodules bool
 }
 
 func (c *CheckoutSemVer) Checkout(ctx context.Context, path, url string, opts *git.AuthOptions) (*git.Commit, error) {
-	verConstraint, err := semver.NewConstraint(c.semVer)
+	verConstraint, err := semver.NewConstraint(c.SemVer)
 	if err != nil {
 		return nil, fmt.Errorf("semver parse error: %w", err)
 	}
@@ -201,7 +200,7 @@ func (c *CheckoutSemVer) Checkout(ctx context.Context, path, url string, opts *g
 		RemoteName:        git.DefaultOrigin,
 		NoCheckout:        false,
 		Depth:             1,
-		RecurseSubmodules: recurseSubmodules(c.recurseSubmodules),
+		RecurseSubmodules: recurseSubmodules(c.RecurseSubmodules),
 		Progress:          nil,
 		Tags:              extgogit.AllTags,
 		CABundle:          caBundle(opts),
@@ -247,7 +246,7 @@ func (c *CheckoutSemVer) Checkout(ctx context.Context, path, url string, opts *g
 		matchedVersions = append(matchedVersions, v)
 	}
 	if len(matchedVersions) == 0 {
-		return nil, fmt.Errorf("no match found for semver: %s", c.semVer)
+		return nil, fmt.Errorf("no match found for semver: %s", c.SemVer)
 	}
 
 	// Sort versions

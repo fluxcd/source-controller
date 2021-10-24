@@ -83,7 +83,7 @@ func TestCheckoutBranch_Checkout(t *testing.T) {
 			g := NewWithT(t)
 
 			branch := CheckoutBranch{
-				branch: tt.branch,
+				Branch: tt.branch,
 			}
 			tmpDir, _ := os.MkdirTemp("", "test")
 			defer os.RemoveAll(tmpDir)
@@ -152,7 +152,7 @@ func TestCheckoutTag_Checkout(t *testing.T) {
 			}
 
 			tag := CheckoutTag{
-				tag: tt.checkoutTag,
+				Tag: tt.checkoutTag,
 			}
 			tmpDir, _ := os.MkdirTemp("", "test")
 			defer os.RemoveAll(tmpDir)
@@ -173,46 +173,87 @@ func TestCheckoutTag_Checkout(t *testing.T) {
 }
 
 func TestCheckoutCommit_Checkout(t *testing.T) {
-	g := NewWithT(t)
-
 	repo, path, err := initRepo()
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer os.RemoveAll(path)
 
-	c, err := commitFile(repo, "commit", "init", time.Now())
+	firstCommit, err := commitFile(repo, "commit", "init", time.Now())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = commitFile(repo, "commit", "second", time.Now()); err != nil {
+	if err = createBranch(repo, "other-branch"); err != nil {
+		t.Fatal(err)
+	}
+	secondCommit, err := commitFile(repo, "commit", "second", time.Now())
+	if err != nil {
 		t.Fatal(err)
 	}
 
-	commit := CheckoutCommit{
-		commit: c.String(),
-		branch: "master",
+	tests := []struct {
+		name         string
+		commit       string
+		branch       string
+		expectCommit string
+		expectFile   string
+		expectError  string
+	}{
+		{
+			name:         "Commit",
+			commit:       firstCommit.String(),
+			expectCommit: "HEAD/" + firstCommit.String(),
+			expectFile:   "init",
+		},
+		{
+			name:         "Commit in specific branch",
+			commit:       secondCommit.String(),
+			branch:       "other-branch",
+			expectCommit: "other-branch/" + secondCommit.String(),
+			expectFile:   "second",
+		},
+		{
+			name:        "Non existing commit",
+			commit:      "a-random-invalid-commit",
+			expectError: "failed to resolve commit object for 'a-random-invalid-commit': object not found",
+		},
+		{
+			name:        "Non existing commit in specific branch",
+			commit:      secondCommit.String(),
+			branch:      "master",
+			expectError: "object not found",
+		},
 	}
-	tmpDir, _ := os.MkdirTemp("", "git2go")
-	defer os.RemoveAll(tmpDir)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
 
-	cc, err := commit.Checkout(context.TODO(), tmpDir, path, nil)
-	g.Expect(err).ToNot(HaveOccurred())
-	g.Expect(cc.String()).To(Equal("master" + "/" + c.String()))
-	g.Expect(filepath.Join(tmpDir, "commit")).To(BeARegularFile())
-	g.Expect(os.ReadFile(filepath.Join(tmpDir, "commit"))).To(BeEquivalentTo("init"))
+			commit := CheckoutCommit{
+				Commit: tt.commit,
+				Branch: tt.branch,
+			}
 
-	commit = CheckoutCommit{
-		commit: "4dc3185c5fc94eb75048376edeb44571cece25f4",
-		branch: "master",
+			tmpDir, err := os.MkdirTemp("", "git2go")
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer os.RemoveAll(tmpDir)
+
+			cc, err := commit.Checkout(context.TODO(), tmpDir, path, nil)
+			if tt.expectError != "" {
+				g.Expect(err).To(HaveOccurred())
+				g.Expect(err.Error()).To(ContainSubstring(tt.expectError))
+				g.Expect(cc).To(BeNil())
+				return
+			}
+
+			g.Expect(err).ToNot(HaveOccurred())
+			g.Expect(cc).ToNot(BeNil())
+			g.Expect(cc.String()).To(Equal(tt.expectCommit))
+			g.Expect(filepath.Join(tmpDir, "commit")).To(BeARegularFile())
+			g.Expect(os.ReadFile(filepath.Join(tmpDir, "commit"))).To(BeEquivalentTo(tt.expectFile))
+		})
 	}
-	tmpDir2, _ := os.MkdirTemp("", "git2go")
-	defer os.RemoveAll(tmpDir)
-
-	cc, err = commit.Checkout(context.TODO(), tmpDir2, path, nil)
-	g.Expect(err).To(HaveOccurred())
-	g.Expect(err.Error()).To(ContainSubstring("object not found"))
-	g.Expect(cc).To(BeNil())
 }
 
 func TestCheckoutTagSemVer_Checkout(t *testing.T) {
@@ -300,7 +341,7 @@ func TestCheckoutTagSemVer_Checkout(t *testing.T) {
 			g := NewWithT(t)
 
 			semVer := CheckoutSemVer{
-				semVer: tt.constraint,
+				SemVer: tt.constraint,
 			}
 			tmpDir, _ := os.MkdirTemp("", "test")
 			defer os.RemoveAll(tmpDir)

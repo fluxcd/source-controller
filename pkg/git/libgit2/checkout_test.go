@@ -77,7 +77,7 @@ func TestCheckoutBranch_Checkout(t *testing.T) {
 			g := NewWithT(t)
 
 			branch := CheckoutBranch{
-				branch: tt.branch,
+				Branch: tt.branch,
 			}
 			tmpDir, _ := os.MkdirTemp("", "test")
 			defer os.RemoveAll(tmpDir)
@@ -148,7 +148,7 @@ func TestCheckoutTag_Checkout(t *testing.T) {
 			}
 
 			tag := CheckoutTag{
-				tag: tt.checkoutTag,
+				Tag: tt.checkoutTag,
 			}
 			tmpDir, _ := os.MkdirTemp("", "test")
 			defer os.RemoveAll(tmpDir)
@@ -188,8 +188,7 @@ func TestCheckoutCommit_Checkout(t *testing.T) {
 	}
 
 	commit := CheckoutCommit{
-		commit: c.String(),
-		branch: "main",
+		Commit: c.String(),
 	}
 	tmpDir, _ := os.MkdirTemp("", "git2go")
 	defer os.RemoveAll(tmpDir)
@@ -202,7 +201,7 @@ func TestCheckoutCommit_Checkout(t *testing.T) {
 	g.Expect(os.ReadFile(filepath.Join(tmpDir, "commit"))).To(BeEquivalentTo("init"))
 
 	commit = CheckoutCommit{
-		commit: "4dc3185c5fc94eb75048376edeb44571cece25f4",
+		Commit: "4dc3185c5fc94eb75048376edeb44571cece25f4",
 	}
 	tmpDir2, _ := os.MkdirTemp("", "git2go")
 	defer os.RemoveAll(tmpDir)
@@ -309,7 +308,7 @@ func TestCheckoutTagSemVer_Checkout(t *testing.T) {
 			g := NewWithT(t)
 
 			semVer := CheckoutSemVer{
-				semVer: tt.constraint,
+				SemVer: tt.constraint,
 			}
 			tmpDir, _ := os.MkdirTemp("", "test")
 			defer os.RemoveAll(tmpDir)

@@ -26,6 +26,8 @@ import (
 	"github.com/ProtonMail/go-crypto/openpgp"
 )
 
+type Implementation string
+
 type Hash []byte
 
 // String returns the SHA1 Hash as a string.

@@ -24,38 +24,39 @@ import (
 	"time"
 
 	"github.com/Masterminds/semver/v3"
+	"github.com/go-logr/logr"
 	git2go "github.com/libgit2/git2go/v31"
 
 	"github.com/fluxcd/pkg/gitutil"
 	"github.com/fluxcd/pkg/version"
 
-	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
 	"github.com/fluxcd/source-controller/pkg/git"
 )
 
-func CheckoutStrategyForRef(ref *sourcev1.GitRepositoryRef, opt git.CheckoutOptions) git.CheckoutStrategy {
+// CheckoutStrategyForOptions returns the git.CheckoutStrategy for the given
+// git.CheckoutOptions.
+func CheckoutStrategyForOptions(ctx context.Context, opt git.CheckoutOptions) git.CheckoutStrategy {
+	if opt.RecurseSubmodules {
+		logr.FromContextOrDiscard(ctx).Info("git submodule recursion not supported by '%s'", Implementation)
+	}
 	switch {
-	case ref == nil:
-		return &CheckoutBranch{branch: git.DefaultBranch}
-	case ref.SemVer != "":
-		return &CheckoutSemVer{semVer: ref.SemVer}
-	case ref.Tag != "":
-		return &CheckoutTag{tag: ref.Tag}
-	case ref.Commit != "":
-		strategy := &CheckoutCommit{branch: ref.Branch, commit: ref.Commit}
-		if strategy.branch == "" {
-			strategy.branch = git.DefaultBranch
-		}
-		return strategy
-	case ref.Branch != "":
-		return &CheckoutBranch{branch: ref.Branch}
+	case opt.Commit != "":
+		return &CheckoutCommit{Commit: opt.Commit}
+	case opt.SemVer != "":
+		return &CheckoutSemVer{SemVer: opt.SemVer}
+	case opt.Tag != "":
+		return &CheckoutTag{Tag: opt.Tag}
 	default:
-		return &CheckoutBranch{branch: git.DefaultBranch}
+		branch := opt.Branch
+		if branch == "" {
+			branch = git.DefaultBranch
+		}
+		return &CheckoutBranch{Branch: branch}
 	}
 }
 
 type CheckoutBranch struct {
-	branch string
+	Branch string
 }
 
 func (c *CheckoutBranch) Checkout(ctx context.Context, path, url string, opts *git.AuthOptions) (*git.Commit, error) {
@@ -64,7 +65,7 @@ func (c *CheckoutBranch) Checkout(ctx context.Context, path, url string, opts *g
 			DownloadTags:    git2go.DownloadTagsNone,
 			RemoteCallbacks: remoteCallbacks(opts),
 		},
-		CheckoutBranch: c.branch,
+		CheckoutBranch: c.Branch,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("unable to clone '%s', error: %w", url, gitutil.LibGit2Error(err))
@@ -77,14 +78,14 @@ func (c *CheckoutBranch) Checkout(ctx context.Context, path, url string, opts *g
 	defer head.Free()
 	cc, err := repo.LookupCommit(head.Target())
 	if err != nil {
-		return nil, fmt.Errorf("could not find commit '%s' in branch '%s': %w", head.Target(), c.branch, err)
+		return nil, fmt.Errorf("could not find commit '%s' in branch '%s': %w", head.Target(), c.Branch, err)
 	}
 	defer cc.Free()
-	return commit(cc, "refs/heads/"+c.branch), nil
+	return commit(cc, "refs/heads/"+c.Branch), nil
 }
 
 type CheckoutTag struct {
-	tag string
+	Tag string
 }
 
 func (c *CheckoutTag) Checkout(ctx context.Context, path, url string, opts *git.AuthOptions) (*git.Commit, error) {
@@ -98,17 +99,16 @@ func (c *CheckoutTag) Checkout(ctx context.Context, path, url string, opts *git.
 		return nil, fmt.Errorf("unable to clone '%s', error: %w", url, gitutil.LibGit2Error(err))
 	}
 	defer repo.Free()
-	cc, err := checkoutDetachedDwim(repo, c.tag)
+	cc, err := checkoutDetachedDwim(repo, c.Tag)
 	if err != nil {
 		return nil, err
 	}
 	defer cc.Free()
-	return commit(cc, "refs/tags/"+c.tag), nil
+	return commit(cc, "refs/tags/"+c.Tag), nil
 }
 
 type CheckoutCommit struct {
-	branch string
-	commit string
+	Commit string
 }
 
 func (c *CheckoutCommit) Checkout(ctx context.Context, path, url string, opts *git.AuthOptions) (*git.Commit, error) {
@@ -122,9 +122,9 @@ func (c *CheckoutCommit) Checkout(ctx context.Context, path, url string, opts *g
 		return nil, fmt.Errorf("unable to clone '%s', error: %w", url, gitutil.LibGit2Error(err))
 	}
 	defer repo.Free()
-	oid, err := git2go.NewOid(c.commit)
+	oid, err := git2go.NewOid(c.Commit)
 	if err != nil {
-		return nil, fmt.Errorf("could not create oid for '%s': %w", c.commit, err)
+		return nil, fmt.Errorf("could not create oid for '%s': %w", c.Commit, err)
 	}
 	cc, err := checkoutDetachedHEAD(repo, oid)
 	if err != nil {
@@ -134,11 +134,11 @@ func (c *CheckoutCommit) Checkout(ctx context.Context, path, url string, opts *g
 }
 
 type CheckoutSemVer struct {
-	semVer string
+	SemVer string
 }
 
 func (c *CheckoutSemVer) Checkout(ctx context.Context, path, url string, opts *git.AuthOptions) (*git.Commit, error) {
-	verConstraint, err := semver.NewConstraint(c.semVer)
+	verConstraint, err := semver.NewConstraint(c.SemVer)
 	if err != nil {
 		return nil, fmt.Errorf("semver parse error: %w", err)
 	}
@@ -202,7 +202,7 @@ func (c *CheckoutSemVer) Checkout(ctx context.Context, path, url string, opts *g
 		matchedVersions = append(matchedVersions, v)
 	}
 	if len(matchedVersions) == 0 {
-		return nil, fmt.Errorf("no match found for semver: %s", c.semVer)
+		return nil, fmt.Errorf("no match found for semver: %s", c.SemVer)
 	}
 
 	// Sort versions
