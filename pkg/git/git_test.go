@@ -106,7 +106,7 @@ Oomb3gD/TRf/nAdVED+k81GdLzciYdUGtI71/qI47G0nMBluLRE=
 
 	keyRingFingerprintFixture = "3299AEB0E4085BAF"
 
-	malformedKeyRing = `
+	malformedKeyRingFixture = `
 -----BEGIN PGP PUBLIC KEY BLOCK-----
 
 mQSuBF9+HgMRDADKT8UBcSzpTi4JXt/ohhVW3x81AGFPrQvs6MYrcnNJfIkPTJD8
@@ -189,7 +189,7 @@ func TestCommit_Verify(t *testing.T) {
 				Encoded:   []byte(encodedCommitFixture),
 				Signature: signatureCommitFixture,
 			},
-			keyRings: []string{malformedKeyRing},
+			keyRings: []string{malformedKeyRingFixture},
 			wantErr:  "failed to read armored key ring: unexpected EOF",
 		},
 		{

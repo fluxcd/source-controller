@@ -77,12 +77,34 @@ func TestAuthOptions_Validate(t *testing.T) {
 			wantErr: "invalid 'http' auth option: 'password' requires 'username' to be set",
 		},
 		{
+			name: "Valid HTTP transport",
+			opts: AuthOptions{
+				Transport: HTTP,
+				Username:  "example",
+				Password:  "foo",
+			},
+		},
+		{
 			name: "HTTPS transport with password requires user",
 			opts: AuthOptions{
 				Transport: HTTPS,
 				Password:  "foo",
 			},
 			wantErr: "invalid 'https' auth option: 'password' requires 'username' to be set",
+		},
+		{
+			name: "Valid HTTPS transport",
+			opts: AuthOptions{
+				Transport: HTTPS,
+				Username:  "example",
+				Password:  "foo",
+			},
+		},
+		{
+			name: "Valid HTTPS without any config",
+			opts: AuthOptions{
+				Transport: HTTPS,
+			},
 		},
 		{
 			name: "SSH transport requires identity",
@@ -120,6 +142,27 @@ func TestAuthOptions_Validate(t *testing.T) {
 			name:    "Requires transport",
 			opts:    AuthOptions{},
 			wantErr: "no transport type set",
+		},
+		{
+			name: "Valid SSH transport",
+			opts: AuthOptions{
+				Transport:  SSH,
+				Identity:   []byte(privateKeyPassphraseFixture),
+				Password:   "foobar",
+				KnownHosts: []byte(knownHostsFixture),
+			},
+		},
+		{
+			name:    "No transport",
+			opts:    AuthOptions{},
+			wantErr: "no transport type set",
+		},
+		{
+			name: "Unknown transport",
+			opts: AuthOptions{
+				Transport: "foo",
+			},
+			wantErr: "unknown transport 'foo'",
 		},
 	}
 	for _, tt := range tests {
