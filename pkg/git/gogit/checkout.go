@@ -20,7 +20,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"sort"
 	"time"
 
@@ -89,7 +89,7 @@ func (c *CheckoutBranch) Checkout(ctx context.Context, path, url string, opts *g
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve commit object for HEAD '%s': %w", head.Hash(), err)
 	}
-	return commitWithRef(cc, ref)
+	return buildCommitWithRef(cc, ref)
 }
 
 type CheckoutTag struct {
@@ -127,7 +127,7 @@ func (c *CheckoutTag) Checkout(ctx context.Context, path, url string, opts *git.
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve commit object for HEAD '%s': %w", head.Hash(), err)
 	}
-	return commitWithRef(cc, ref)
+	return buildCommitWithRef(cc, ref)
 }
 
 type CheckoutCommit struct {
@@ -175,7 +175,7 @@ func (c *CheckoutCommit) Checkout(ctx context.Context, path, url string, opts *g
 	if err != nil {
 		return nil, fmt.Errorf("failed to checkout commit '%s': %w", c.Commit, err)
 	}
-	return commitWithRef(cc, cloneOpts.ReferenceName)
+	return buildCommitWithRef(cc, cloneOpts.ReferenceName)
 }
 
 type CheckoutSemVer struct {
@@ -287,15 +287,15 @@ func (c *CheckoutSemVer) Checkout(ctx context.Context, path, url string, opts *g
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve commit object for HEAD '%s': %w", head.Hash(), err)
 	}
-	return commitWithRef(cc, ref)
+	return buildCommitWithRef(cc, ref)
 }
 
-func commitWithRef(c *object.Commit, ref plumbing.ReferenceName) (*git.Commit, error) {
+func buildCommitWithRef(c *object.Commit, ref plumbing.ReferenceName) (*git.Commit, error) {
 	if c == nil {
 		return nil, errors.New("failed to construct commit: no object")
 	}
 
-	// Encode commit components, excluding signature into SignedData..
+	// Encode commit components excluding signature into SignedData.
 	encoded := &plumbing.MemoryObject{}
 	if err := c.EncodeWithoutSignature(encoded); err != nil {
 		return nil, fmt.Errorf("failed to encode commit '%s': %w", c.Hash, err)
@@ -304,21 +304,21 @@ func commitWithRef(c *object.Commit, ref plumbing.ReferenceName) (*git.Commit, e
 	if err != nil {
 		return nil, fmt.Errorf("failed to encode commit '%s': %w", c.Hash, err)
 	}
-	b, err := ioutil.ReadAll(reader)
+	b, err := io.ReadAll(reader)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read encoded commit '%s': %w", c.Hash, err)
 	}
 	return &git.Commit{
 		Hash:      []byte(c.Hash.String()),
 		Reference: ref.String(),
-		Author:    signature(c.Author),
-		Committer: signature(c.Committer),
+		Author:    buildSignature(c.Author),
+		Committer: buildSignature(c.Committer),
 		Signature: c.PGPSignature,
 		Encoded:   b,
 	}, nil
 }
 
-func signature(s object.Signature) git.Signature {
+func buildSignature(s object.Signature) git.Signature {
 	return git.Signature{
 		Name:  s.Name,
 		Email: s.Email,

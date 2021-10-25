@@ -37,21 +37,21 @@ func TestCheckoutStrategyForImplementation_Auth(t *testing.T) {
 	gitImpls := []git.Implementation{gogit.Implementation, libgit2.Implementation}
 
 	type testCase struct {
-		name        string
-		transport   git.TransportType
-		getRepoURL  func(g *WithT, srv *gittestserver.GitServer, repoPath string) string
-		getAuthOpts func(g *WithT, u *url.URL, user string, pswd string, ca []byte) *git.AuthOptions
-		wantFunc    func(g *WithT, cs git.CheckoutStrategy, dir string, repoURL string, authOpts *git.AuthOptions)
+		name         string
+		transport    git.TransportType
+		repoURLFunc  func(g *WithT, srv *gittestserver.GitServer, repoPath string) string
+		authOptsFunc func(g *WithT, u *url.URL, user string, pswd string, ca []byte) *git.AuthOptions
+		wantFunc     func(g *WithT, cs git.CheckoutStrategy, dir string, repoURL string, authOpts *git.AuthOptions)
 	}
 
 	cases := []testCase{
 		{
-			name:      "http cloning",
+			name:      "HTTP clone",
 			transport: git.HTTP,
-			getRepoURL: func(g *WithT, srv *gittestserver.GitServer, repoPath string) string {
+			repoURLFunc: func(g *WithT, srv *gittestserver.GitServer, repoPath string) string {
 				return srv.HTTPAddressWithCredentials() + "/" + repoPath
 			},
-			getAuthOpts: func(g *WithT, u *url.URL, user string, pswd string, ca []byte) *git.AuthOptions {
+			authOptsFunc: func(g *WithT, u *url.URL, user string, pswd string, ca []byte) *git.AuthOptions {
 				return &git.AuthOptions{
 					Transport: git.HTTP,
 					Username:  user,
@@ -64,12 +64,12 @@ func TestCheckoutStrategyForImplementation_Auth(t *testing.T) {
 			},
 		},
 		{
-			name:      "https cloning",
+			name:      "HTTPS clone",
 			transport: git.HTTPS,
-			getRepoURL: func(g *WithT, srv *gittestserver.GitServer, repoPath string) string {
+			repoURLFunc: func(g *WithT, srv *gittestserver.GitServer, repoPath string) string {
 				return srv.HTTPAddress() + "/" + repoPath
 			},
-			getAuthOpts: func(g *WithT, u *url.URL, user, pswd string, ca []byte) *git.AuthOptions {
+			authOptsFunc: func(g *WithT, u *url.URL, user, pswd string, ca []byte) *git.AuthOptions {
 				return &git.AuthOptions{
 					Transport: git.HTTPS,
 					Username:  user,
@@ -83,12 +83,12 @@ func TestCheckoutStrategyForImplementation_Auth(t *testing.T) {
 			},
 		},
 		{
-			name:      "ssh cloning",
+			name:      "SSH clone",
 			transport: git.SSH,
-			getRepoURL: func(g *WithT, srv *gittestserver.GitServer, repoPath string) string {
+			repoURLFunc: func(g *WithT, srv *gittestserver.GitServer, repoPath string) string {
 				return getSSHRepoURL(srv.SSHAddress(), repoPath)
 			},
-			getAuthOpts: func(g *WithT, u *url.URL, user, pswd string, ca []byte) *git.AuthOptions {
+			authOptsFunc: func(g *WithT, u *url.URL, user, pswd string, ca []byte) *git.AuthOptions {
 				knownhosts, err := ssh.ScanHostKey(u.Host, 5*time.Second)
 				g.Expect(err).ToNot(HaveOccurred())
 
@@ -163,10 +163,10 @@ func TestCheckoutStrategyForImplementation_Auth(t *testing.T) {
 			err = gitServer.InitRepo("testdata/repo1", branch, repoPath)
 			g.Expect(err).ToNot(HaveOccurred())
 
-			repoURL := tt.getRepoURL(g, gitServer, repoPath)
+			repoURL := tt.repoURLFunc(g, gitServer, repoPath)
 			u, err := url.Parse(repoURL)
 			g.Expect(err).ToNot(HaveOccurred())
-			authOpts := tt.getAuthOpts(g, u, username, password, exampleCA)
+			authOpts := tt.authOptsFunc(g, u, username, password, exampleCA)
 
 			// Get the checkout strategy.
 			checkoutOpts := git.CheckoutOptions{
