@@ -114,23 +114,6 @@ func TestAuthOptions_Validate(t *testing.T) {
 			wantErr: "invalid 'ssh' auth option: 'identity' is required",
 		},
 		{
-			name: "SSH transport requires valid identity",
-			opts: AuthOptions{
-				Transport: SSH,
-				Identity:  []byte("malformed"),
-			},
-			wantErr: "invalid 'ssh' auth option 'identity': ssh: no key found",
-		},
-		{
-			name: "SSH transport requires valid identity password",
-			opts: AuthOptions{
-				Transport: SSH,
-				Identity:  []byte(privateKeyPassphraseFixture),
-				Password:  "invalid",
-			},
-			wantErr: "invalid 'ssh' auth option 'identity': x509: decryption password incorrect",
-		},
-		{
 			name: "SSH transport requires known_hosts",
 			opts: AuthOptions{
 				Transport: SSH,
