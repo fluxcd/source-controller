@@ -221,7 +221,7 @@ func Test_knownHostsCallback(t *testing.T) {
 		},
 		{
 			name:         "Match with port",
-			host:         "github.com",
+			host:         "github.com:22",
 			knownHosts:   []byte(knownHostsFixture),
 			hostkey:      git2go.HostkeyCertificate{Kind: git2go.HostkeySHA1 | git2go.HostkeyMD5, HashSHA1: sha1Fingerprint("v2toJdKXfFEaR1u++4iq1UqSrHM")},
 			expectedHost: "github.com:22",

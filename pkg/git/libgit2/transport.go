@@ -25,7 +25,6 @@ import (
 	"crypto/x509"
 	"fmt"
 	"hash"
-	"net"
 	"strings"
 	"time"
 
@@ -128,26 +127,17 @@ func knownHostsCallback(host string, knownHosts []byte) git2go.CertificateCheckC
 			return fmt.Errorf("failed to parse known_hosts: %w", err)
 		}
 
-		// First, attempt to split the configured host and port to validate
-		// the port-less hostname given to the callback.
-		h, _, err := net.SplitHostPort(host)
-		if err != nil {
-			// SplitHostPort returns an error if the host is missing
-			// a port, assume the host has no port.
-			h = host
-		}
-
 		// Check if the configured host matches the hostname given to
 		// the callback.
-		if h != hostname {
-			return fmt.Errorf("hostname from server '%s' does not match '%s'", hostname, h)
+		if host != hostname {
+			return fmt.Errorf("hostname from server '%s' does not match '%s'", hostname, host)
 		}
 
 		// We are now certain that the configured host and the hostname
 		// given to the callback match. Use the configured host (that
 		// includes the port), and normalize it, so we can check if there
 		// is an entry for the hostname _and_ port.
-		h = knownhosts.Normalize(host)
+		h := knownhosts.Normalize(hostname)
 		for _, k := range kh {
 			if k.matches(h, cert.Hostkey) {
 				return nil
