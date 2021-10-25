@@ -143,42 +143,41 @@ func Test_x509Callback(t *testing.T) {
 		certificate string
 		host        string
 		caBundle    []byte
-		want        git2go.ErrorCode
+		wantErr     string
 	}{
 		{
 			name:        "Valid certificate authority bundle",
 			certificate: googleLeafFixture,
 			host:        "www.google.com",
 			caBundle:    []byte(giag2IntermediateFixture + "\n" + geoTrustRootFixture),
-			want:        git2go.ErrorCodeOK,
 		},
 		{
 			name:        "Invalid certificate",
 			certificate: googleLeafWithInvalidHashFixture,
 			host:        "www.google.com",
 			caBundle:    []byte(giag2IntermediateFixture + "\n" + geoTrustRootFixture),
-			want:        git2go.ErrorCodeCertificate,
+			wantErr:     "possibly because of \"x509: cannot verify signature: algorithm unimplemented\"",
 		},
 		{
 			name:        "Invalid certificate authority bundle",
 			certificate: googleLeafFixture,
 			host:        "www.google.com",
 			caBundle:    bytes.Trim([]byte(giag2IntermediateFixture+"\n"+geoTrustRootFixture), "-"),
-			want:        git2go.ErrorCodeCertificate,
+			wantErr:     "failed to create cert pool with given CA bundle",
 		},
 		{
 			name:        "Missing intermediate in bundle",
 			certificate: googleLeafFixture,
 			host:        "www.google.com",
 			caBundle:    []byte(geoTrustRootFixture),
-			want:        git2go.ErrorCodeCertificate,
+			wantErr:     "failed to verify certfificate: x509: certificate signed by unknown authority",
 		},
 		{
 			name:        "Invalid host",
 			certificate: googleLeafFixture,
 			host:        "www.google.co",
 			caBundle:    []byte(giag2IntermediateFixture + "\n" + geoTrustRootFixture),
-			want:        git2go.ErrorCodeCertificate,
+			wantErr:     "certificate is valid for www.google.com, not www.google.co",
 		},
 	}
 	for _, tt := range tests {
@@ -193,7 +192,13 @@ func Test_x509Callback(t *testing.T) {
 			}
 
 			callback := x509Callback(tt.caBundle)
-			g.Expect(callback(cert, false, tt.host)).To(Equal(tt.want))
+			got := callback(cert, false, tt.host)
+			if tt.wantErr != "" {
+				g.Expect(got).To(HaveOccurred())
+				g.Expect(got.Error()).To(ContainSubstring(tt.wantErr))
+				return
+			}
+			g.Expect(got).ToNot(HaveOccurred())
 		})
 	}
 }
@@ -205,7 +210,7 @@ func Test_knownHostsCallback(t *testing.T) {
 		expectedHost string
 		knownHosts   []byte
 		hostkey      git2go.HostkeyCertificate
-		want         git2go.ErrorCode
+		wantErr      string
 	}{
 		{
 			name:         "Match",
@@ -213,7 +218,6 @@ func Test_knownHostsCallback(t *testing.T) {
 			knownHosts:   []byte(knownHostsFixture),
 			hostkey:      git2go.HostkeyCertificate{Kind: git2go.HostkeySHA1 | git2go.HostkeyMD5, HashSHA1: sha1Fingerprint("v2toJdKXfFEaR1u++4iq1UqSrHM")},
 			expectedHost: "github.com",
-			want:         git2go.ErrorCodeOK,
 		},
 		{
 			name:         "Match with port",
@@ -221,7 +225,6 @@ func Test_knownHostsCallback(t *testing.T) {
 			knownHosts:   []byte(knownHostsFixture),
 			hostkey:      git2go.HostkeyCertificate{Kind: git2go.HostkeySHA1 | git2go.HostkeyMD5, HashSHA1: sha1Fingerprint("v2toJdKXfFEaR1u++4iq1UqSrHM")},
 			expectedHost: "github.com:22",
-			want:         git2go.ErrorCodeOK,
 		},
 		{
 			name:         "Hostname mismatch",
@@ -229,7 +232,7 @@ func Test_knownHostsCallback(t *testing.T) {
 			knownHosts:   []byte(knownHostsFixture),
 			hostkey:      git2go.HostkeyCertificate{Kind: git2go.HostkeySHA1 | git2go.HostkeyMD5, HashSHA1: sha1Fingerprint("v2toJdKXfFEaR1u++4iq1UqSrHM")},
 			expectedHost: "example.com",
-			want:         git2go.ErrorCodeUser,
+			wantErr:       "hostname from server 'github.com' does not match 'example.com'",
 		},
 		{
 			name:         "Hostkey mismatch",
@@ -237,7 +240,7 @@ func Test_knownHostsCallback(t *testing.T) {
 			knownHosts:   []byte(knownHostsFixture),
 			hostkey:      git2go.HostkeyCertificate{Kind: git2go.HostkeyMD5, HashMD5: md5Fingerprint("\xb6\x03\x0e\x39\x97\x9e\xd0\xe7\x24\xce\xa3\x77\x3e\x01\x42\x09")},
 			expectedHost: "github.com",
-			want:         git2go.ErrorCodeCertificate,
+			wantErr:       "failed to lookup known_hosts entry for 'github.com'",
 		},
 	}
 	for _, tt := range tests {
@@ -246,7 +249,13 @@ func Test_knownHostsCallback(t *testing.T) {
 
 			cert := &git2go.Certificate{Hostkey: tt.hostkey}
 			callback := knownHostsCallback(tt.expectedHost, tt.knownHosts)
-			g.Expect(callback(cert, false, tt.host)).To(Equal(tt.want))
+			got := callback(cert, false, tt.host)
+			if tt.wantErr != "" {
+				g.Expect(got).To(HaveOccurred())
+				g.Expect(got.Error()).To(ContainSubstring(tt.wantErr))
+				return
+			}
+			g.Expect(got).ToNot(HaveOccurred())
 		})
 	}
 }
