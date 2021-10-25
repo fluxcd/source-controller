@@ -23,6 +23,7 @@ import (
 	"crypto/sha1"
 	"crypto/sha256"
 	"crypto/x509"
+	"fmt"
 	"hash"
 	"net"
 	"strings"
@@ -52,29 +53,32 @@ func RemoteCallbacks(opts *git.AuthOptions) git2go.RemoteCallbacks {
 }
 
 // credentialsCallback constructs CredentialsCallbacks with the given options
-// for git.Transport if the given opts is not nil, and returns the result.
+// for git.Transport, and returns the result.
 func credentialsCallback(opts *git.AuthOptions) git2go.CredentialsCallback {
-	switch opts.Transport {
-	case git.HTTP:
-		if opts.Username != "" {
-			return func(u string, user string, allowedTypes git2go.CredentialType) (*git2go.Credential, error) {
-				return git2go.NewCredentialUsername(opts.Username)
+	return func(url string, username string, allowedTypes git2go.CredentialType) (*git2go.Credential, error) {
+		if allowedTypes&(git2go.CredentialTypeSSHKey|git2go.CredentialTypeSSHCustom|git2go.CredentialTypeSSHMemory) != 0 {
+			var (
+				signer ssh.Signer
+				err    error
+			)
+			if opts.Password != "" {
+				signer, err = ssh.ParsePrivateKeyWithPassphrase(opts.Identity, []byte(opts.Password))
+			} else {
+				signer, err = ssh.ParsePrivateKey(opts.Identity)
 			}
-		}
-	case git.HTTPS:
-		if opts.Username != "" && opts.Password != "" {
-			return func(u string, user string, allowedTypes git2go.CredentialType) (*git2go.Credential, error) {
-				return git2go.NewCredentialUserpassPlaintext(opts.Username, opts.Password)
+			if err != nil {
+				return nil, err
 			}
+			return git2go.NewCredentialSSHKeyFromSigner(opts.Username, signer)
 		}
-	case git.SSH:
-		if len(opts.Identity) > 0 {
-			return func(u string, user string, allowedTypes git2go.CredentialType) (*git2go.Credential, error) {
-				return git2go.NewCredentialSSHKeyFromMemory(opts.Username, "", string(opts.Identity), opts.Password)
-			}
+		if (allowedTypes & git2go.CredentialTypeUserpassPlaintext) != 0 {
+			return git2go.NewCredentialUserpassPlaintext(opts.Username, opts.Password)
 		}
+		if (allowedTypes & git2go.CredentialTypeUsername) != 0 {
+			return git2go.NewCredentialUsername(opts.Username)
+		}
+		return nil, fmt.Errorf("unknown credential type %+v", allowedTypes)
 	}
-	return nil
 }
 
 // certificateCallback constructs CertificateCallback with the given options

@@ -20,7 +20,6 @@ import (
 	"fmt"
 	"net/url"
 
-	"golang.org/x/crypto/ssh"
 	v1 "k8s.io/api/core/v1"
 )
 
@@ -81,15 +80,6 @@ func (o AuthOptions) Validate() error {
 	case SSH:
 		if len(o.Identity) == 0 {
 			return fmt.Errorf("invalid '%s' auth option: 'identity' is required", o.Transport)
-		}
-		var err error
-		if o.Password != "" {
-			_, err = ssh.ParsePrivateKeyWithPassphrase(o.Identity, []byte(o.Password))
-		} else {
-			_, err = ssh.ParsePrivateKey(o.Identity)
-		}
-		if err != nil {
-			return fmt.Errorf("invalid '%s' auth option 'identity': %w", o.Transport, err)
 		}
 		if len(o.KnownHosts) == 0 {
 			return fmt.Errorf("invalid '%s' auth option: 'known_hosts' is required", o.Transport)
