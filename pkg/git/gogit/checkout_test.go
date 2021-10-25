@@ -126,7 +126,7 @@ func TestCheckoutTag_Checkout(t *testing.T) {
 			name:        "Non existing tag",
 			tag:         "tag-1",
 			checkoutTag: "invalid",
-			expectErr:   "error: couldn't find remote ref \"refs/tags/invalid\"",
+			expectErr:   "couldn't find remote ref \"refs/tags/invalid\"",
 		},
 	}
 	for _, tt := range tests {
