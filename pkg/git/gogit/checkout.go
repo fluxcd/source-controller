@@ -79,7 +79,7 @@ func (c *CheckoutBranch) Checkout(ctx context.Context, path, url string, opts *g
 		CABundle:          caBundle(opts),
 	})
 	if err != nil {
-		return nil, fmt.Errorf("unable to clone '%s', error: %w", url, gitutil.GoGitError(err))
+		return nil, fmt.Errorf("unable to clone '%s': %w", url, gitutil.GoGitError(err))
 	}
 	head, err := repo.Head()
 	if err != nil {
@@ -117,7 +117,7 @@ func (c *CheckoutTag) Checkout(ctx context.Context, path, url string, opts *git.
 		CABundle:          caBundle(opts),
 	})
 	if err != nil {
-		return nil, fmt.Errorf("unable to clone '%s', error: %w", url, gitutil.GoGitError(err))
+		return nil, fmt.Errorf("unable to clone '%s': %w", url, gitutil.GoGitError(err))
 	}
 	head, err := repo.Head()
 	if err != nil {
@@ -158,7 +158,7 @@ func (c *CheckoutCommit) Checkout(ctx context.Context, path, url string, opts *g
 	}
 	repo, err := extgogit.PlainCloneContext(ctx, path, false, cloneOpts)
 	if err != nil {
-		return nil, fmt.Errorf("unable to clone '%s', error: %w", url, gitutil.GoGitError(err))
+		return nil, fmt.Errorf("unable to clone '%s': %w", url, gitutil.GoGitError(err))
 	}
 	w, err := repo.Worktree()
 	if err != nil {
@@ -206,7 +206,7 @@ func (c *CheckoutSemVer) Checkout(ctx context.Context, path, url string, opts *g
 		CABundle:          caBundle(opts),
 	})
 	if err != nil {
-		return nil, fmt.Errorf("unable to clone '%s', error: %w", url, err)
+		return nil, fmt.Errorf("unable to clone '%s': %w", url, gitutil.GoGitError(err))
 	}
 
 	repoTags, err := repo.Tags()
