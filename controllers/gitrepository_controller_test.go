@@ -383,7 +383,7 @@ var _ = Describe("GitRepositoryReconciler", func() {
 				reference:         &sourcev1.GitRepositoryRef{Branch: "main"},
 				waitForReason:     sourcev1.GitOperationFailedReason,
 				expectStatus:      metav1.ConditionFalse,
-				expectMessage:     "unable to clone: user rejected certificate",
+				expectMessage:     "x509: certificate signed by unknown authority",
 				gitImplementation: sourcev1.LibGit2Implementation,
 			}),
 			Entry("self signed libgit2 with CA", refTestCase{
