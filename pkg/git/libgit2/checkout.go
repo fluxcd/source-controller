@@ -25,7 +25,7 @@ import (
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/go-logr/logr"
-	git2go "github.com/libgit2/git2go/v31"
+	git2go "github.com/libgit2/git2go/v33"
 
 	"github.com/fluxcd/pkg/gitutil"
 	"github.com/fluxcd/pkg/version"
@@ -61,7 +61,7 @@ type CheckoutBranch struct {
 
 func (c *CheckoutBranch) Checkout(ctx context.Context, path, url string, opts *git.AuthOptions) (*git.Commit, error) {
 	repo, err := git2go.Clone(url, path, &git2go.CloneOptions{
-		FetchOptions: &git2go.FetchOptions{
+		FetchOptions: git2go.FetchOptions{
 			DownloadTags:    git2go.DownloadTagsNone,
 			RemoteCallbacks: RemoteCallbacks(opts),
 		},
@@ -90,7 +90,7 @@ type CheckoutTag struct {
 
 func (c *CheckoutTag) Checkout(ctx context.Context, path, url string, opts *git.AuthOptions) (*git.Commit, error) {
 	repo, err := git2go.Clone(url, path, &git2go.CloneOptions{
-		FetchOptions: &git2go.FetchOptions{
+		FetchOptions: git2go.FetchOptions{
 			DownloadTags:    git2go.DownloadTagsAll,
 			RemoteCallbacks: RemoteCallbacks(opts),
 		},
@@ -113,7 +113,7 @@ type CheckoutCommit struct {
 
 func (c *CheckoutCommit) Checkout(ctx context.Context, path, url string, opts *git.AuthOptions) (*git.Commit, error) {
 	repo, err := git2go.Clone(url, path, &git2go.CloneOptions{
-		FetchOptions: &git2go.FetchOptions{
+		FetchOptions: git2go.FetchOptions{
 			DownloadTags:    git2go.DownloadTagsNone,
 			RemoteCallbacks: RemoteCallbacks(opts),
 		},
@@ -144,7 +144,7 @@ func (c *CheckoutSemVer) Checkout(ctx context.Context, path, url string, opts *g
 	}
 
 	repo, err := git2go.Clone(url, path, &git2go.CloneOptions{
-		FetchOptions: &git2go.FetchOptions{
+		FetchOptions: git2go.FetchOptions{
 			DownloadTags:    git2go.DownloadTagsAll,
 			RemoteCallbacks: RemoteCallbacks(opts),
 		},

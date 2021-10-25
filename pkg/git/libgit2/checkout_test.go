@@ -25,7 +25,7 @@ import (
 	"testing"
 	"time"
 
-	git2go "github.com/libgit2/git2go/v31"
+	git2go "github.com/libgit2/git2go/v33"
 	. "github.com/onsi/gomega"
 )
 

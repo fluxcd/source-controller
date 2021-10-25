@@ -4,7 +4,7 @@ TAG ?= latest
 
 # Base image used to build the Go binary
 LIBGIT2_IMG ?= ghcr.io/fluxcd/golang-with-libgit2
-LIBGIT2_TAG ?= libgit2-1.1.1-1
+LIBGIT2_TAG ?= main
 
 # Allows for defining additional Docker buildx arguments,
 # e.g. '--push'.
@@ -19,7 +19,7 @@ CRD_OPTIONS ?= crd:crdVersions=v1
 REPOSITORY_ROOT := $(shell git rev-parse --show-toplevel)
 
 # Libgit2 version
-LIBGIT2_VERSION ?= 1.1.1
+LIBGIT2_VERSION ?= 1.3.0
 
 # Other dependency versions
 ENVTEST_BIN_VERSION ?= 1.19.2

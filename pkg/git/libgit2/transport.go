@@ -29,7 +29,7 @@ import (
 	"strings"
 	"time"
 
-	git2go "github.com/libgit2/git2go/v31"
+	git2go "github.com/libgit2/git2go/v33"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/knownhosts"
 
@@ -100,10 +100,10 @@ func certificateCallback(opts *git.AuthOptions) git2go.CertificateCheckCallback 
 // x509Callback returns a CertificateCheckCallback that verifies the
 // certificate against the given caBundle for git.HTTPS Transports.
 func x509Callback(caBundle []byte) git2go.CertificateCheckCallback {
-	return func(cert *git2go.Certificate, valid bool, hostname string) git2go.ErrorCode {
+	return func(cert *git2go.Certificate, valid bool, hostname string) error {
 		roots := x509.NewCertPool()
 		if ok := roots.AppendCertsFromPEM(caBundle); !ok {
-			return git2go.ErrorCodeCertificate
+			return fmt.Errorf("failed to create cert pool with given CA bundle")
 		}
 
 		opts := x509.VerifyOptions{
@@ -112,9 +112,9 @@ func x509Callback(caBundle []byte) git2go.CertificateCheckCallback {
 			CurrentTime: now(),
 		}
 		if _, err := cert.X509.Verify(opts); err != nil {
-			return git2go.ErrorCodeCertificate
+			return fmt.Errorf("failed to verify certfificate: %w", err)
 		}
-		return git2go.ErrorCodeOK
+		return nil
 	}
 }
 
@@ -122,10 +122,10 @@ func x509Callback(caBundle []byte) git2go.CertificateCheckCallback {
 // the key of Git server against the given host and known_hosts for
 // git.SSH Transports.
 func knownHostsCallback(host string, knownHosts []byte) git2go.CertificateCheckCallback {
-	return func(cert *git2go.Certificate, valid bool, hostname string) git2go.ErrorCode {
+	return func(cert *git2go.Certificate, valid bool, hostname string) error {
 		kh, err := parseKnownHosts(string(knownHosts))
 		if err != nil {
-			return git2go.ErrorCodeCertificate
+			return fmt.Errorf("failed to parse known_hosts: %w", err)
 		}
 
 		// First, attempt to split the configured host and port to validate
@@ -140,7 +140,7 @@ func knownHostsCallback(host string, knownHosts []byte) git2go.CertificateCheckC
 		// Check if the configured host matches the hostname given to
 		// the callback.
 		if h != hostname {
-			return git2go.ErrorCodeUser
+			return fmt.Errorf("hostname from server '%s' does not match '%s'", hostname, h)
 		}
 
 		// We are now certain that the configured host and the hostname
@@ -150,10 +150,10 @@ func knownHostsCallback(host string, knownHosts []byte) git2go.CertificateCheckC
 		h = knownhosts.Normalize(host)
 		for _, k := range kh {
 			if k.matches(h, cert.Hostkey) {
-				return git2go.ErrorCodeOK
+				return nil
 			}
 		}
-		return git2go.ErrorCodeCertificate
+		return fmt.Errorf("failed to lookup known_hosts entry for '%s'", hostname)
 	}
 }
 
