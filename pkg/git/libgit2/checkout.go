@@ -81,7 +81,7 @@ func (c *CheckoutBranch) Checkout(ctx context.Context, path, url string, opts *g
 		return nil, fmt.Errorf("could not find commit '%s' in branch '%s': %w", head.Target(), c.Branch, err)
 	}
 	defer cc.Free()
-	return commit(cc, "refs/heads/"+c.Branch), nil
+	return buildCommit(cc, "refs/heads/"+c.Branch), nil
 }
 
 type CheckoutTag struct {
@@ -104,7 +104,7 @@ func (c *CheckoutTag) Checkout(ctx context.Context, path, url string, opts *git.
 		return nil, err
 	}
 	defer cc.Free()
-	return commit(cc, "refs/tags/"+c.Tag), nil
+	return buildCommit(cc, "refs/tags/"+c.Tag), nil
 }
 
 type CheckoutCommit struct {
@@ -130,7 +130,7 @@ func (c *CheckoutCommit) Checkout(ctx context.Context, path, url string, opts *g
 	if err != nil {
 		return nil, fmt.Errorf("git checkout error: %w", err)
 	}
-	return commit(cc, ""), nil
+	return buildCommit(cc, ""), nil
 }
 
 type CheckoutSemVer struct {
@@ -228,7 +228,7 @@ func (c *CheckoutSemVer) Checkout(ctx context.Context, path, url string, opts *g
 		return nil, err
 	}
 	defer cc.Free()
-	return commit(cc, "refs/tags/"+t), nil
+	return buildCommit(cc, "refs/tags/"+t), nil
 }
 
 // checkoutDetachedDwim attempts to perform a detached HEAD checkout by first DWIMing the short name
@@ -285,20 +285,20 @@ func headCommit(repo *git2go.Repository) (*git2go.Commit, error) {
 	return c, nil
 }
 
-func commit(c *git2go.Commit, ref string) *git.Commit {
+func buildCommit(c *git2go.Commit, ref string) *git.Commit {
 	sig, msg, _ := c.ExtractSignature()
 	return &git.Commit{
 		Hash:      []byte(c.Id().String()),
 		Reference: ref,
-		Author:    signature(c.Author()),
-		Committer: signature(c.Committer()),
+		Author:    buildSignature(c.Author()),
+		Committer: buildSignature(c.Committer()),
 		Signature: sig,
 		Encoded:   []byte(msg),
 		Message:   c.Message(),
 	}
 }
 
-func signature(s *git2go.Signature) git.Signature {
+func buildSignature(s *git2go.Signature) git.Signature {
 	return git.Signature{
 		Name:  s.Name,
 		Email: s.Email,
