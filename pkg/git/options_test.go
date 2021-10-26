@@ -107,9 +107,17 @@ func TestAuthOptions_Validate(t *testing.T) {
 			},
 		},
 		{
+			name: "SSH transport requires host",
+			opts: AuthOptions{
+				Transport: SSH,
+			},
+			wantErr: "invalid 'ssh' auth option: 'host' is required",
+		},
+		{
 			name: "SSH transport requires identity",
 			opts: AuthOptions{
 				Transport: SSH,
+				Host:      "github.com:22",
 			},
 			wantErr: "invalid 'ssh' auth option: 'identity' is required",
 		},
@@ -117,6 +125,7 @@ func TestAuthOptions_Validate(t *testing.T) {
 			name: "SSH transport requires known_hosts",
 			opts: AuthOptions{
 				Transport: SSH,
+				Host:      "github.com:22",
 				Identity:  []byte(privateKeyFixture),
 			},
 			wantErr: "invalid 'ssh' auth option: 'known_hosts' is required",
@@ -129,6 +138,7 @@ func TestAuthOptions_Validate(t *testing.T) {
 		{
 			name: "Valid SSH transport",
 			opts: AuthOptions{
+				Host:       "github.com:22",
 				Transport:  SSH,
 				Identity:   []byte(privateKeyPassphraseFixture),
 				Password:   "foobar",
