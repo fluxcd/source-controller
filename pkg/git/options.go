@@ -78,6 +78,9 @@ func (o AuthOptions) Validate() error {
 			return fmt.Errorf("invalid '%s' auth option: 'password' requires 'username' to be set", o.Transport)
 		}
 	case SSH:
+		if o.Host == "" {
+			return fmt.Errorf("invalid '%s' auth option: 'host' is required", o.Transport)
+		}
 		if len(o.Identity) == 0 {
 			return fmt.Errorf("invalid '%s' auth option: 'identity' is required", o.Transport)
 		}
