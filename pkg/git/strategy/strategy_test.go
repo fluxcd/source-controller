@@ -161,10 +161,7 @@ func TestCheckoutStrategyForImplementation_Auth(t *testing.T) {
 			}
 
 			// Initialize a git repo.
-			// TODO: Fix pkg/gittestserver InitRepo() bug to enable creating
-			// custom branch.
-			// branch := "main"
-			branch := "master"
+			branch := "main"
 			repoPath := "bar/test-reponame"
 			err = gitServer.InitRepo("testdata/repo1", branch, repoPath)
 			g.Expect(err).ToNot(HaveOccurred())
@@ -222,7 +219,7 @@ func TestCheckoutStrategyForImplementation_SemVerCheckout(t *testing.T) {
 	defer gitServer.StopHTTP()
 
 	repoPath := "bar/test-reponame"
-	err = gitServer.InitRepo("testdata/repo1", "master", repoPath)
+	err = gitServer.InitRepo("testdata/repo1", "main", repoPath)
 	g.Expect(err).ToNot(HaveOccurred())
 
 	repoURL := gitServer.HTTPAddressWithCredentials() + "/" + repoPath
