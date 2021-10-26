@@ -17,6 +17,8 @@ limitations under the License.
 package gogit
 
 import (
+	"fmt"
+
 	"github.com/go-git/go-git/v5/plumbing/transport"
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
 	"github.com/go-git/go-git/v5/plumbing/transport/ssh"
@@ -53,6 +55,10 @@ func transportAuth(opts *git.AuthOptions) (transport.AuthMethod, error) {
 			}
 			return pk, nil
 		}
+	case "":
+		return nil, fmt.Errorf("no transport type set")
+	default:
+		return nil, fmt.Errorf("unknown transport '%s'", opts.Transport)
 	}
 	return nil, nil
 }

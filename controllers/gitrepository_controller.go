@@ -230,7 +230,7 @@ func (r *GitRepositoryReconciler) reconcile(ctx context.Context, repository sour
 	defer os.RemoveAll(tmpGit)
 
 	// Configure auth options using secret
-	authOpts := &git.AuthOptions{}
+	var authOpts *git.AuthOptions
 	if repository.Spec.SecretRef != nil {
 		name := types.NamespacedName{
 			Namespace: repository.GetNamespace(),

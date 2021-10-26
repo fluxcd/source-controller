@@ -168,12 +168,16 @@ func Test_transportAuth(t *testing.T) {
 			wantErr: errors.New("knownhosts: knownhosts: missing host pattern"),
 		},
 		{
-			name: "Empty",
-			opts: &git.AuthOptions{},
-			wantFunc: func(g *WithT, t transport.AuthMethod, opts *git.AuthOptions) {
-				g.Expect(t).To(BeNil())
+			name:    "Empty",
+			opts:    &git.AuthOptions{},
+			wantErr: errors.New("no transport type set"),
+		},
+		{
+			name: "Unknown transport",
+			opts: &git.AuthOptions{
+				Transport: "foo",
 			},
-			wantErr: nil,
+			wantErr: errors.New("unknown transport 'foo'"),
 		},
 	}
 	for _, tt := range tests {
