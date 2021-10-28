@@ -2,6 +2,28 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.17.0
+
+**Release date:** 2021-10-28
+
+For this prerelease we focused on further improving the Git implementations, partly
+to increase stability and test coverage, partly to ensure they are prepared to be
+moved out into a separate module. With this work, it is now possible to define just
+a Git commit as a reference, which will result in an `Artifact` with a `Revision`
+format of `HEAD/<commit SHA>`.
+
+For the `go-git` implementation, defining the branch and a commit reference will
+result in a more efficient shallow clone, and using this information when it is
+available to you is therefore encouraged.
+
+Improvements:
+* git: refactor authentication, checkout and verification
+  [#462](https://github.com/fluxcd/source-controller/pull/462)
+
+Fixes:
+* libgit2: handle EOF in parseKnownHosts()
+  [#475](https://github.com/fluxcd/source-controller/pull/475)
+
 ## 0.16.1
 
 **Release date:** 2021-10-22
