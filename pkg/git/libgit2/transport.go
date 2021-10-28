@@ -25,6 +25,7 @@ import (
 	"crypto/x509"
 	"fmt"
 	"hash"
+	"io"
 	"net"
 	"strings"
 	"time"
@@ -168,6 +169,11 @@ func parseKnownHosts(s string) ([]knownKey, error) {
 	for scanner.Scan() {
 		_, hosts, pubKey, _, _, err := ssh.ParseKnownHosts(scanner.Bytes())
 		if err != nil {
+			// Lines that aren't host public key result in EOF, like a comment
+			// line. Continue parsing the other lines.
+			if err == io.EOF {
+				continue
+			}
 			return []knownKey{}, err
 		}
 

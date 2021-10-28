@@ -251,7 +251,7 @@ func Test_knownHostsCallback(t *testing.T) {
 	}
 }
 
-func Test_parseKnownHosts(t *testing.T) {
+func Test_parseKnownHosts_matches(t *testing.T) {
 	tests := []struct {
 		name        string
 		hostkey     git2go.HostkeyCertificate
@@ -276,6 +276,72 @@ func Test_parseKnownHosts(t *testing.T) {
 			}
 			matches := knownKeys[0].matches("github.com", tt.hostkey)
 			g.Expect(matches).To(Equal(tt.wantMatches))
+		})
+	}
+}
+
+func Test_parseKnownHosts(t *testing.T) {
+	tests := []struct {
+		name    string
+		fixture string
+		wantErr bool
+	}{
+		{
+			name:    "empty file",
+			fixture: "",
+			wantErr: false,
+		},
+		{
+			name:    "single host",
+			fixture: `github.com ssh-rsa AAAAB3NzaC1yc2EAAAABIwAAAQEAq2A7hRGmdnm9tUDbO9IDSwBK6TbQa+PXYPCPy6rbTrTtw7PHkccKrpp0yVhp5HdEIcKr6pLlVDBfOLX9QUsyCOV0wzfjIJNlGEYsdlLJizHhbn2mUjvSAHQqZETYP81eFzLQNnPHt4EVVUh7VfDESU84KezmD5QlWpXLmvU31/yMf+Se8xhHTvKSCZIFImWwoG6mbUoWf9nzpIoaSjB+weqqUUmpaaasXVal72J+UX2B+2RPW3RcT0eOzQgqlJL3RKrTJvdsjE3JEAvGq3lGHSZXy28G3skua2SmVi/w4yCE6gbODqnTWlg7+wC604ydGXA8VJiS5ap43JXiUFFAaQ==`,
+			wantErr: false,
+		},
+		{
+			name: "single host with comment",
+			fixture: `# github.com
+github.com ssh-rsa AAAAB3NzaC1yc2EAAAABIwAAAQEAq2A7hRGmdnm9tUDbO9IDSwBK6TbQa+PXYPCPy6rbTrTtw7PHkccKrpp0yVhp5HdEIcKr6pLlVDBfOLX9QUsyCOV0wzfjIJNlGEYsdlLJizHhbn2mUjvSAHQqZETYP81eFzLQNnPHt4EVVUh7VfDESU84KezmD5QlWpXLmvU31/yMf+Se8xhHTvKSCZIFImWwoG6mbUoWf9nzpIoaSjB+weqqUUmpaaasXVal72J+UX2B+2RPW3RcT0eOzQgqlJL3RKrTJvdsjE3JEAvGq3lGHSZXy28G3skua2SmVi/w4yCE6gbODqnTWlg7+wC604ydGXA8VJiS5ap43JXiUFFAaQ==`,
+			wantErr: false,
+		},
+		{
+			name: "multiple hosts with comments",
+			fixture: `# github.com
+github.com ssh-rsa AAAAB3NzaC1yc2EAAAABIwAAAQEAq2A7hRGmdnm9tUDbO9IDSwBK6TbQa+PXYPCPy6rbTrTtw7PHkccKrpp0yVhp5HdEIcKr6pLlVDBfOLX9QUsyCOV0wzfjIJNlGEYsdlLJizHhbn2mUjvSAHQqZETYP81eFzLQNnPHt4EVVUh7VfDESU84KezmD5QlWpXLmvU31/yMf+Se8xhHTvKSCZIFImWwoG6mbUoWf9nzpIoaSjB+weqqUUmpaaasXVal72J+UX2B+2RPW3RcT0eOzQgqlJL3RKrTJvdsjE3JEAvGq3lGHSZXy28G3skua2SmVi/w4yCE6gbODqnTWlg7+wC604ydGXA8VJiS5ap43JXiUFFAaQ==
+# gitlab.com
+gitlab.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAfuCHKVTjquxvt6CM6tdG4SLp1Btn/nOeHHE5UOzRdf`,
+		},
+		{
+			name: "no host key, only comments",
+			fixture: `# example.com
+#github.com
+# gitlab.com`,
+			wantErr: false,
+		},
+		{
+			name:    "invalid host entry",
+			fixture: `github.com ssh-rsa`,
+			wantErr: true,
+		},
+		{
+			name:    "invalid content",
+			fixture: `some random text`,
+			wantErr: true,
+		},
+		{
+			name: "invalid line with valid host key",
+			fixture: `some random text
+gitlab.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAfuCHKVTjquxvt6CM6tdG4SLp1Btn/nOeHHE5UOzRdf`,
+			wantErr: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+			_, err := parseKnownHosts(tt.fixture)
+			if tt.wantErr {
+				g.Expect(err).To(HaveOccurred())
+			} else {
+				g.Expect(err).ToNot(HaveOccurred())
+			}
 		})
 	}
 }
