@@ -26,137 +26,120 @@ import (
 	"fmt"
 	"hash"
 	"net"
-	"net/url"
 	"strings"
+	"time"
 
 	git2go "github.com/libgit2/git2go/v31"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/knownhosts"
-	corev1 "k8s.io/api/core/v1"
 
 	"github.com/fluxcd/source-controller/pkg/git"
 )
 
-func AuthSecretStrategyForURL(URL string) (git.AuthSecretStrategy, error) {
-	u, err := url.Parse(URL)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse URL to determine auth strategy: %w", err)
-	}
+var (
+	now = time.Now
+)
 
-	switch {
-	case u.Scheme == "http", u.Scheme == "https":
-		return &BasicAuth{}, nil
-	case u.Scheme == "ssh":
-		return &PublicKeyAuth{user: u.User.Username(), host: u.Host}, nil
-	default:
-		return nil, fmt.Errorf("no auth secret strategy for scheme %s", u.Scheme)
+// RemoteCallbacks constructs RemoteCallbacks with credentialsCallback and
+// certificateCallback, and the given options if the given opts is not nil.
+func RemoteCallbacks(opts *git.AuthOptions) git2go.RemoteCallbacks {
+	if opts != nil {
+		return git2go.RemoteCallbacks{
+			CredentialsCallback:      credentialsCallback(opts),
+			CertificateCheckCallback: certificateCallback(opts),
+		}
 	}
+	return git2go.RemoteCallbacks{}
 }
 
-type BasicAuth struct{}
-
-func (s *BasicAuth) Method(secret corev1.Secret) (*git.Auth, error) {
-	var credCallback git2go.CredentialsCallback
-	var username string
-	if d, ok := secret.Data["username"]; ok {
-		username = string(d)
-	}
-	var password string
-	if d, ok := secret.Data["password"]; ok {
-		password = string(d)
-	}
-	if username != "" && password != "" {
-		credCallback = func(url string, usernameFromURL string, allowedTypes git2go.CredentialType) (*git2go.Credential, error) {
-			cred, err := git2go.NewCredentialUserpassPlaintext(username, password)
+// credentialsCallback constructs CredentialsCallbacks with the given options
+// for git.Transport, and returns the result.
+func credentialsCallback(opts *git.AuthOptions) git2go.CredentialsCallback {
+	return func(url string, username string, allowedTypes git2go.CredentialType) (*git2go.Credential, error) {
+		if allowedTypes&(git2go.CredentialTypeSSHKey|git2go.CredentialTypeSSHCustom|git2go.CredentialTypeSSHMemory) != 0 {
+			var (
+				signer ssh.Signer
+				err    error
+			)
+			if opts.Password != "" {
+				signer, err = ssh.ParsePrivateKeyWithPassphrase(opts.Identity, []byte(opts.Password))
+			} else {
+				signer, err = ssh.ParsePrivateKey(opts.Identity)
+			}
 			if err != nil {
 				return nil, err
 			}
-			return cred, nil
+			return git2go.NewCredentialSSHKeyFromSigner(opts.Username, signer)
 		}
-	}
-
-	var certCallback git2go.CertificateCheckCallback
-	if caFile, ok := secret.Data[git.CAFile]; ok {
-		certCallback = func(cert *git2go.Certificate, valid bool, hostname string) git2go.ErrorCode {
-			roots := x509.NewCertPool()
-			ok := roots.AppendCertsFromPEM(caFile)
-			if !ok {
-				return git2go.ErrorCodeCertificate
-			}
-
-			opts := x509.VerifyOptions{
-				Roots:   roots,
-				DNSName: hostname,
-			}
-			_, err := cert.X509.Verify(opts)
-			if err != nil {
-				return git2go.ErrorCodeCertificate
-			}
-			return git2go.ErrorCodeOK
+		if (allowedTypes & git2go.CredentialTypeUserpassPlaintext) != 0 {
+			return git2go.NewCredentialUserpassPlaintext(opts.Username, opts.Password)
 		}
+		if (allowedTypes & git2go.CredentialTypeUsername) != 0 {
+			return git2go.NewCredentialUsername(opts.Username)
+		}
+		return nil, fmt.Errorf("unknown credential type %+v", allowedTypes)
 	}
-
-	return &git.Auth{CredCallback: credCallback, CertCallback: certCallback}, nil
 }
 
-type PublicKeyAuth struct {
-	user string
-	host string
+// certificateCallback constructs CertificateCallback with the given options
+// for git.Transport if the given opts is not nil, and returns the result.
+func certificateCallback(opts *git.AuthOptions) git2go.CertificateCheckCallback {
+	switch opts.Transport {
+	case git.HTTPS:
+		if len(opts.CAFile) > 0 {
+			return x509Callback(opts.CAFile)
+		}
+	case git.SSH:
+		if len(opts.KnownHosts) > 0 && opts.Host != "" {
+			return knownHostsCallback(opts.Host, opts.KnownHosts)
+		}
+	}
+	return nil
 }
 
-func (s *PublicKeyAuth) Method(secret corev1.Secret) (*git.Auth, error) {
-	if _, ok := secret.Data[git.CAFile]; ok {
-		return nil, fmt.Errorf("found %s key in secret '%s' but libgit2 SSH transport does not support custom certificates", git.CAFile, secret.Name)
-	}
-	identity := secret.Data["identity"]
-	knownHosts := secret.Data["known_hosts"]
-	if len(identity) == 0 || len(knownHosts) == 0 {
-		return nil, fmt.Errorf("invalid '%s' secret data: required fields 'identity' and 'known_hosts'", secret.Name)
-	}
+// x509Callback returns a CertificateCheckCallback that verifies the
+// certificate against the given caBundle for git.HTTPS Transports.
+func x509Callback(caBundle []byte) git2go.CertificateCheckCallback {
+	return func(cert *git2go.Certificate, valid bool, hostname string) git2go.ErrorCode {
+		roots := x509.NewCertPool()
+		if ok := roots.AppendCertsFromPEM(caBundle); !ok {
+			return git2go.ErrorCodeCertificate
+		}
 
-	kk, err := parseKnownHosts(string(knownHosts))
-	if err != nil {
-		return nil, err
+		opts := x509.VerifyOptions{
+			Roots:       roots,
+			DNSName:     hostname,
+			CurrentTime: now(),
+		}
+		if _, err := cert.X509.Verify(opts); err != nil {
+			return git2go.ErrorCodeCertificate
+		}
+		return git2go.ErrorCodeOK
 	}
+}
 
-	// Need to validate private key as it is not
-	// done by git2go when loading the key
-	password, ok := secret.Data["password"]
-	if ok {
-		_, err = ssh.ParsePrivateKeyWithPassphrase(identity, password)
-	} else {
-		_, err = ssh.ParsePrivateKey(identity)
-	}
-
-	if err != nil {
-		return nil, err
-	}
-
-	user := s.user
-	if user == "" {
-		user = git.DefaultPublicKeyAuthUser
-	}
-
-	credCallback := func(url string, usernameFromURL string, allowedTypes git2go.CredentialType) (*git2go.Credential, error) {
-		cred, err := git2go.NewCredentialSSHKeyFromMemory(user, "", string(identity), string(password))
+// knownHostCallback returns a CertificateCheckCallback that verifies
+// the key of Git server against the given host and known_hosts for
+// git.SSH Transports.
+func knownHostsCallback(host string, knownHosts []byte) git2go.CertificateCheckCallback {
+	return func(cert *git2go.Certificate, valid bool, hostname string) git2go.ErrorCode {
+		kh, err := parseKnownHosts(string(knownHosts))
 		if err != nil {
-			return nil, err
+			return git2go.ErrorCodeCertificate
 		}
-		return cred, nil
-	}
-	certCallback := func(cert *git2go.Certificate, valid bool, hostname string) git2go.ErrorCode {
+
 		// First, attempt to split the configured host and port to validate
 		// the port-less hostname given to the callback.
-		host, _, err := net.SplitHostPort(s.host)
+		h, _, err := net.SplitHostPort(host)
 		if err != nil {
 			// SplitHostPort returns an error if the host is missing
 			// a port, assume the host has no port.
-			host = s.host
+			h = host
 		}
 
 		// Check if the configured host matches the hostname given to
 		// the callback.
-		if host != hostname {
+		if h != hostname {
 			return git2go.ErrorCodeUser
 		}
 
@@ -164,16 +147,14 @@ func (s *PublicKeyAuth) Method(secret corev1.Secret) (*git.Auth, error) {
 		// given to the callback match. Use the configured host (that
 		// includes the port), and normalize it, so we can check if there
 		// is an entry for the hostname _and_ port.
-		host = knownhosts.Normalize(s.host)
-		for _, k := range kk {
-			if k.matches(host, cert.Hostkey) {
+		h = knownhosts.Normalize(host)
+		for _, k := range kh {
+			if k.matches(h, cert.Hostkey) {
 				return git2go.ErrorCodeOK
 			}
 		}
 		return git2go.ErrorCodeCertificate
 	}
-
-	return &git.Auth{CredCallback: credCallback, CertCallback: certCallback}, nil
 }
 
 type knownKey struct {
@@ -234,6 +215,5 @@ func containsHost(hosts []string, host string) bool {
 			return true
 		}
 	}
-
 	return false
 }

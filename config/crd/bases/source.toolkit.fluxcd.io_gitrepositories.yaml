@@ -91,7 +91,6 @@ spec:
                 description: The Git reference to checkout and monitor for changes, defaults to master branch.
                 properties:
                   branch:
-                    default: master
                     description: The Git branch to checkout, defaults to master.
                     type: string
                   commit:

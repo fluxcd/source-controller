@@ -24,142 +24,135 @@ import (
 	"time"
 
 	"github.com/Masterminds/semver/v3"
+	"github.com/go-logr/logr"
 	git2go "github.com/libgit2/git2go/v31"
 
 	"github.com/fluxcd/pkg/gitutil"
 	"github.com/fluxcd/pkg/version"
 
-	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
 	"github.com/fluxcd/source-controller/pkg/git"
 )
 
-func CheckoutStrategyForRef(ref *sourcev1.GitRepositoryRef, opt git.CheckoutOptions) git.CheckoutStrategy {
+// CheckoutStrategyForOptions returns the git.CheckoutStrategy for the given
+// git.CheckoutOptions.
+func CheckoutStrategyForOptions(ctx context.Context, opt git.CheckoutOptions) git.CheckoutStrategy {
+	if opt.RecurseSubmodules {
+		logr.FromContextOrDiscard(ctx).Info("git submodule recursion not supported by '%s'", Implementation)
+	}
 	switch {
-	case ref == nil:
-		return &CheckoutBranch{branch: git.DefaultBranch}
-	case ref.SemVer != "":
-		return &CheckoutSemVer{semVer: ref.SemVer}
-	case ref.Tag != "":
-		return &CheckoutTag{tag: ref.Tag}
-	case ref.Commit != "":
-		strategy := &CheckoutCommit{branch: ref.Branch, commit: ref.Commit}
-		if strategy.branch == "" {
-			strategy.branch = git.DefaultBranch
-		}
-		return strategy
-	case ref.Branch != "":
-		return &CheckoutBranch{branch: ref.Branch}
+	case opt.Commit != "":
+		return &CheckoutCommit{Commit: opt.Commit}
+	case opt.SemVer != "":
+		return &CheckoutSemVer{SemVer: opt.SemVer}
+	case opt.Tag != "":
+		return &CheckoutTag{Tag: opt.Tag}
 	default:
-		return &CheckoutBranch{branch: git.DefaultBranch}
+		branch := opt.Branch
+		if branch == "" {
+			branch = git.DefaultBranch
+		}
+		return &CheckoutBranch{Branch: branch}
 	}
 }
 
 type CheckoutBranch struct {
-	branch string
+	Branch string
 }
 
-func (c *CheckoutBranch) Checkout(ctx context.Context, path, url string, auth *git.Auth) (git.Commit, string, error) {
+func (c *CheckoutBranch) Checkout(ctx context.Context, path, url string, opts *git.AuthOptions) (*git.Commit, error) {
 	repo, err := git2go.Clone(url, path, &git2go.CloneOptions{
 		FetchOptions: &git2go.FetchOptions{
-			DownloadTags: git2go.DownloadTagsNone,
-			RemoteCallbacks: git2go.RemoteCallbacks{
-				CredentialsCallback:      auth.CredCallback,
-				CertificateCheckCallback: auth.CertCallback,
-			},
+			DownloadTags:    git2go.DownloadTagsNone,
+			RemoteCallbacks: RemoteCallbacks(opts),
 		},
-		CheckoutBranch: c.branch,
+		CheckoutBranch: c.Branch,
 	})
 	if err != nil {
-		return nil, "", fmt.Errorf("unable to clone '%s', error: %w", url, gitutil.LibGit2Error(err))
+		return nil, fmt.Errorf("unable to clone: %w", gitutil.LibGit2Error(err))
 	}
+	defer repo.Free()
 	head, err := repo.Head()
 	if err != nil {
-		return nil, "", fmt.Errorf("git resolve HEAD error: %w", err)
+		return nil, fmt.Errorf("git resolve HEAD error: %w", err)
 	}
 	defer head.Free()
-	commit, err := repo.LookupCommit(head.Target())
+	cc, err := repo.LookupCommit(head.Target())
 	if err != nil {
-		return nil, "", fmt.Errorf("git commit '%s' not found: %w", head.Target(), err)
+		return nil, fmt.Errorf("could not find commit '%s' in branch '%s': %w", head.Target(), c.Branch, err)
 	}
-	return &Commit{commit}, fmt.Sprintf("%s/%s", c.branch, head.Target().String()), nil
+	defer cc.Free()
+	return buildCommit(cc, "refs/heads/"+c.Branch), nil
 }
 
 type CheckoutTag struct {
-	tag string
+	Tag string
 }
 
-func (c *CheckoutTag) Checkout(ctx context.Context, path, url string, auth *git.Auth) (git.Commit, string, error) {
+func (c *CheckoutTag) Checkout(ctx context.Context, path, url string, opts *git.AuthOptions) (*git.Commit, error) {
 	repo, err := git2go.Clone(url, path, &git2go.CloneOptions{
 		FetchOptions: &git2go.FetchOptions{
-			DownloadTags: git2go.DownloadTagsAll,
-			RemoteCallbacks: git2go.RemoteCallbacks{
-				CredentialsCallback:      auth.CredCallback,
-				CertificateCheckCallback: auth.CertCallback,
-			},
+			DownloadTags:    git2go.DownloadTagsAll,
+			RemoteCallbacks: RemoteCallbacks(opts),
 		},
 	})
 	if err != nil {
-		return nil, "", fmt.Errorf("unable to clone '%s', error: %w", url, gitutil.LibGit2Error(err))
+		return nil, fmt.Errorf("unable to clone '%s': %w", url, gitutil.LibGit2Error(err))
 	}
-	commit, err := checkoutDetachedDwim(repo, c.tag)
+	defer repo.Free()
+	cc, err := checkoutDetachedDwim(repo, c.Tag)
 	if err != nil {
-		return nil, "", err
+		return nil, err
 	}
-	return &Commit{commit}, fmt.Sprintf("%s/%s", c.tag, commit.Id().String()), nil
+	defer cc.Free()
+	return buildCommit(cc, "refs/tags/"+c.Tag), nil
 }
 
 type CheckoutCommit struct {
-	branch string
-	commit string
+	Commit string
 }
 
-func (c *CheckoutCommit) Checkout(ctx context.Context, path, url string, auth *git.Auth) (git.Commit, string, error) {
+func (c *CheckoutCommit) Checkout(ctx context.Context, path, url string, opts *git.AuthOptions) (*git.Commit, error) {
 	repo, err := git2go.Clone(url, path, &git2go.CloneOptions{
 		FetchOptions: &git2go.FetchOptions{
-			DownloadTags: git2go.DownloadTagsNone,
-			RemoteCallbacks: git2go.RemoteCallbacks{
-				CredentialsCallback:      auth.CredCallback,
-				CertificateCheckCallback: auth.CertCallback,
-			},
+			DownloadTags:    git2go.DownloadTagsNone,
+			RemoteCallbacks: RemoteCallbacks(opts),
 		},
 	})
 	if err != nil {
-		return nil, "", fmt.Errorf("unable to clone '%s', error: %w", url, gitutil.LibGit2Error(err))
+		return nil, fmt.Errorf("unable to clone '%s': %w", url, gitutil.LibGit2Error(err))
 	}
-
-	oid, err := git2go.NewOid(c.commit)
+	defer repo.Free()
+	oid, err := git2go.NewOid(c.Commit)
 	if err != nil {
-		return nil, "", fmt.Errorf("could not create oid for '%s': %w", c.commit, err)
+		return nil, fmt.Errorf("could not create oid for '%s': %w", c.Commit, err)
 	}
-	commit, err := checkoutDetachedHEAD(repo, oid)
+	cc, err := checkoutDetachedHEAD(repo, oid)
 	if err != nil {
-		return nil, "", fmt.Errorf("git checkout error: %w", err)
+		return nil, fmt.Errorf("git checkout error: %w", err)
 	}
-	return &Commit{commit}, fmt.Sprintf("%s/%s", c.branch, commit.Id().String()), nil
+	return buildCommit(cc, ""), nil
 }
 
 type CheckoutSemVer struct {
-	semVer string
+	SemVer string
 }
 
-func (c *CheckoutSemVer) Checkout(ctx context.Context, path, url string, auth *git.Auth) (git.Commit, string, error) {
-	verConstraint, err := semver.NewConstraint(c.semVer)
+func (c *CheckoutSemVer) Checkout(ctx context.Context, path, url string, opts *git.AuthOptions) (*git.Commit, error) {
+	verConstraint, err := semver.NewConstraint(c.SemVer)
 	if err != nil {
-		return nil, "", fmt.Errorf("semver parse range error: %w", err)
+		return nil, fmt.Errorf("semver parse error: %w", err)
 	}
 
 	repo, err := git2go.Clone(url, path, &git2go.CloneOptions{
 		FetchOptions: &git2go.FetchOptions{
-			DownloadTags: git2go.DownloadTagsAll,
-			RemoteCallbacks: git2go.RemoteCallbacks{
-				CredentialsCallback:      auth.CredCallback,
-				CertificateCheckCallback: auth.CertCallback,
-			},
+			DownloadTags:    git2go.DownloadTagsAll,
+			RemoteCallbacks: RemoteCallbacks(opts),
 		},
 	})
 	if err != nil {
-		return nil, "", fmt.Errorf("unable to clone '%s', error: %w", url, gitutil.LibGit2Error(err))
+		return nil, fmt.Errorf("unable to clone '%s': %w", url, gitutil.LibGit2Error(err))
 	}
+	defer repo.Free()
 
 	tags := make(map[string]string)
 	tagTimestamps := make(map[string]time.Time)
@@ -194,7 +187,7 @@ func (c *CheckoutSemVer) Checkout(ctx context.Context, path, url string, auth *g
 		tags[t.Name()] = name
 		return nil
 	}); err != nil {
-		return nil, "", err
+		return nil, err
 	}
 
 	var matchedVersions semver.Collection
@@ -209,7 +202,7 @@ func (c *CheckoutSemVer) Checkout(ctx context.Context, path, url string, auth *g
 		matchedVersions = append(matchedVersions, v)
 	}
 	if len(matchedVersions) == 0 {
-		return nil, "", fmt.Errorf("no match found for semver: %s", c.semVer)
+		return nil, fmt.Errorf("no match found for semver: %s", c.SemVer)
 	}
 
 	// Sort versions
@@ -230,8 +223,12 @@ func (c *CheckoutSemVer) Checkout(ctx context.Context, path, url string, auth *g
 	v := matchedVersions[len(matchedVersions)-1]
 	t := v.Original()
 
-	commit, err := checkoutDetachedDwim(repo, t)
-	return &Commit{commit}, fmt.Sprintf("%s/%s", t, commit.Id().String()), nil
+	cc, err := checkoutDetachedDwim(repo, t)
+	if err != nil {
+		return nil, err
+	}
+	defer cc.Free()
+	return buildCommit(cc, "refs/tags/"+t), nil
 }
 
 // checkoutDetachedDwim attempts to perform a detached HEAD checkout by first DWIMing the short name
@@ -247,31 +244,31 @@ func checkoutDetachedDwim(repo *git2go.Repository, name string) (*git2go.Commit,
 		return nil, fmt.Errorf("could not get commit for ref '%s': %w", ref.Name(), err)
 	}
 	defer c.Free()
-	commit, err := c.AsCommit()
+	cc, err := c.AsCommit()
 	if err != nil {
 		return nil, fmt.Errorf("could not get commit object for ref '%s': %w", ref.Name(), err)
 	}
-	defer commit.Free()
-	return checkoutDetachedHEAD(repo, commit.Id())
+	defer cc.Free()
+	return checkoutDetachedHEAD(repo, cc.Id())
 }
 
 // checkoutDetachedHEAD attempts to perform a detached HEAD checkout for the given commit.
 func checkoutDetachedHEAD(repo *git2go.Repository, oid *git2go.Oid) (*git2go.Commit, error) {
-	commit, err := repo.LookupCommit(oid)
+	cc, err := repo.LookupCommit(oid)
 	if err != nil {
 		return nil, fmt.Errorf("git commit '%s' not found: %w", oid.String(), err)
 	}
-	if err = repo.SetHeadDetached(commit.Id()); err != nil {
-		commit.Free()
+	if err = repo.SetHeadDetached(cc.Id()); err != nil {
+		cc.Free()
 		return nil, fmt.Errorf("could not detach HEAD at '%s': %w", oid.String(), err)
 	}
 	if err = repo.CheckoutHead(&git2go.CheckoutOptions{
 		Strategy: git2go.CheckoutForce,
 	}); err != nil {
-		commit.Free()
+		cc.Free()
 		return nil, fmt.Errorf("git checkout error: %w", err)
 	}
-	return commit, nil
+	return cc, nil
 }
 
 // headCommit returns the current HEAD of the repository, or an error.
@@ -281,11 +278,30 @@ func headCommit(repo *git2go.Repository) (*git2go.Commit, error) {
 		return nil, err
 	}
 	defer head.Free()
-
-	commit, err := repo.LookupCommit(head.Target())
+	c, err := repo.LookupCommit(head.Target())
 	if err != nil {
 		return nil, err
 	}
+	return c, nil
+}
 
-	return commit, nil
+func buildCommit(c *git2go.Commit, ref string) *git.Commit {
+	sig, msg, _ := c.ExtractSignature()
+	return &git.Commit{
+		Hash:      []byte(c.Id().String()),
+		Reference: ref,
+		Author:    buildSignature(c.Author()),
+		Committer: buildSignature(c.Committer()),
+		Signature: sig,
+		Encoded:   []byte(msg),
+		Message:   c.Message(),
+	}
+}
+
+func buildSignature(s *git2go.Signature) git.Signature {
+	return git.Signature{
+		Name:  s.Name,
+		Email: s.Email,
+		When:  s.When,
+	}
 }

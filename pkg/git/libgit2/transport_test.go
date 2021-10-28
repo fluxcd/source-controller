@@ -17,163 +17,241 @@ limitations under the License.
 package libgit2
 
 import (
+	"bytes"
+	"crypto/x509"
 	"encoding/base64"
-	"reflect"
+	"encoding/pem"
+	"errors"
 	"testing"
+	"time"
 
 	git2go "github.com/libgit2/git2go/v31"
-	corev1 "k8s.io/api/core/v1"
-
-	"github.com/fluxcd/source-controller/pkg/git"
+	. "github.com/onsi/gomega"
 )
 
 const (
-	// secretKeyFixture is a randomly generated password less
-	// 512bit RSA private key.
-	secretKeyFixture string = `-----BEGIN RSA PRIVATE KEY-----
-MIICXAIBAAKBgQCrakELAKxozvwJijQEggYlTvS1QTZx1DaBwOhW/4kRSuR21plu
-xuQeyuUiztoWeb9jgW7wjzG4j1PIJjdbsgjPIcIZ4PBY7JeEW+QRopfwuN8MHXNp
-uTLgIHbkmhoOg5qBEcjzO/lEOOPpV0EmbObgqv3+wRmLJrgfzWl/cTtRewIDAQAB
-AoGAawKFImpEN5Xn78iwWpQVZBsbV0AjzgHuGSiloxIZrorzf2DPHkHZzYNaclVx
-/o/4tBTsfg7WumH3qr541qyZJDgU7iRMABwmx0v1vm2wQiX7NJzLzH2E9vlMC3mw
-d8S99g9EqRuNH98XX8su34B9WGRPqiKvEm0RW8Hideo2/KkCQQDbs6rHcriKQyPB
-paidHZAfguu0eVbyHT2EgLgRboWE+tEAqFEW2ycqNL3VPz9fRvwexbB6rpOcPpQJ
-DEL4XB2XAkEAx7xJz8YlCQ2H38xggK8R8EUXF9Zhb0fqMJHMNmao1HCHVMtbsa8I
-jR2EGyQ4CaIqNG5tdWukXQSJrPYDRWNvvQJAZX3rP7XUYDLB2twvN12HzbbKMhX3
-v2MYnxRjc9INpi/Dyzz2MMvOnOW+aDuOh/If2AtVCmeJUx1pf4CFk3viQwJBAKyC
-t824+evjv+NQBlme3AOF6PgxtV4D4wWoJ5Uk/dTejER0j/Hbl6sqPxuiILRRV9qJ
-Ngkgu4mLjc3RfenEhJECQAx8zjWUE6kHHPGAd9DfiAIQ4bChqnyS0Nwb9+Gd4hSE
-P0Ah10mHiK/M0o3T8Eanwum0gbQHPnOwqZgsPkwXRqQ=
------END RSA PRIVATE KEY-----`
+	geoTrustRootFixture = `-----BEGIN CERTIFICATE-----
+MIIDVDCCAjygAwIBAgIDAjRWMA0GCSqGSIb3DQEBBQUAMEIxCzAJBgNVBAYTAlVT
+MRYwFAYDVQQKEw1HZW9UcnVzdCBJbmMuMRswGQYDVQQDExJHZW9UcnVzdCBHbG9i
+YWwgQ0EwHhcNMDIwNTIxMDQwMDAwWhcNMjIwNTIxMDQwMDAwWjBCMQswCQYDVQQG
+EwJVUzEWMBQGA1UEChMNR2VvVHJ1c3QgSW5jLjEbMBkGA1UEAxMSR2VvVHJ1c3Qg
+R2xvYmFsIENBMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA2swYYzD9
+9BcjGlZ+W988bDjkcbd4kdS8odhM+KhDtgPpTSEHCIjaWC9mOSm9BXiLnTjoBbdq
+fnGk5sRgprDvgOSJKA+eJdbtg/OtppHHmMlCGDUUna2YRpIuT8rxh0PBFpVXLVDv
+iS2Aelet8u5fa9IAjbkU+BQVNdnARqN7csiRv8lVK83Qlz6cJmTM386DGXHKTubU
+1XupGc1V3sjs0l44U+VcT4wt/lAjNvxm5suOpDkZALeVAjmRCw7+OC7RHQWa9k0+
+bw8HHa8sHo9gOeL6NlMTOdReJivbPagUvTLrGAMoUgRx5aszPeE4uwc2hGKceeoW
+MPRfwCvocWvk+QIDAQABo1MwUTAPBgNVHRMBAf8EBTADAQH/MB0GA1UdDgQWBBTA
+ephojYn7qwVkDBF9qn1luMrMTjAfBgNVHSMEGDAWgBTAephojYn7qwVkDBF9qn1l
+uMrMTjANBgkqhkiG9w0BAQUFAAOCAQEANeMpauUvXVSOKVCUn5kaFOSPeCpilKIn
+Z57QzxpeR+nBsqTP3UEaBU6bS+5Kb1VSsyShNwrrZHYqLizz/Tt1kL/6cdjHPTfS
+tQWVYrmm3ok9Nns4d0iXrKYgjy6myQzCsplFAMfOEVEiIuCl6rYVSAlk6l5PdPcF
+PseKUgzbFbS9bZvlxrFUaKnjaZC2mqUPuLk/IH2uSrW4nOQdtqvmlKXBx4Ot2/Un
+hw4EbNX/3aBd7YdStysVAq45pmp06drE57xNNB6pXE0zX5IJL4hmXXeXxx12E6nV
+5fEWCRE11azbJHFwLJhWC9kXtNHjUStedejV0NxPNO3CBWaAocvmMw==
+-----END CERTIFICATE-----`
 
-	// secretKeyFixture is a randomly generated
-	// 512bit RSA private key with password foobar.
-	secretPassphraseFixture = `-----BEGIN RSA PRIVATE KEY-----
-Proc-Type: 4,ENCRYPTED
-DEK-Info: AES-256-CBC,0B016973B2A761D31E6B388D0F327C35
+	giag2IntermediateFixture = `-----BEGIN CERTIFICATE-----
+MIIEBDCCAuygAwIBAgIDAjppMA0GCSqGSIb3DQEBBQUAMEIxCzAJBgNVBAYTAlVT
+MRYwFAYDVQQKEw1HZW9UcnVzdCBJbmMuMRswGQYDVQQDExJHZW9UcnVzdCBHbG9i
+YWwgQ0EwHhcNMTMwNDA1MTUxNTU1WhcNMTUwNDA0MTUxNTU1WjBJMQswCQYDVQQG
+EwJVUzETMBEGA1UEChMKR29vZ2xlIEluYzElMCMGA1UEAxMcR29vZ2xlIEludGVy
+bmV0IEF1dGhvcml0eSBHMjCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEB
+AJwqBHdc2FCROgajguDYUEi8iT/xGXAaiEZ+4I/F8YnOIe5a/mENtzJEiaB0C1NP
+VaTOgmKV7utZX8bhBYASxF6UP7xbSDj0U/ck5vuR6RXEz/RTDfRK/J9U3n2+oGtv
+h8DQUB8oMANA2ghzUWx//zo8pzcGjr1LEQTrfSTe5vn8MXH7lNVg8y5Kr0LSy+rE
+ahqyzFPdFUuLH8gZYR/Nnag+YyuENWllhMgZxUYi+FOVvuOAShDGKuy6lyARxzmZ
+EASg8GF6lSWMTlJ14rbtCMoU/M4iarNOz0YDl5cDfsCx3nuvRTPPuj5xt970JSXC
+DTWJnZ37DhF5iR43xa+OcmkCAwEAAaOB+zCB+DAfBgNVHSMEGDAWgBTAephojYn7
+qwVkDBF9qn1luMrMTjAdBgNVHQ4EFgQUSt0GFhu89mi1dvWBtrtiGrpagS8wEgYD
+VR0TAQH/BAgwBgEB/wIBADAOBgNVHQ8BAf8EBAMCAQYwOgYDVR0fBDMwMTAvoC2g
+K4YpaHR0cDovL2NybC5nZW90cnVzdC5jb20vY3Jscy9ndGdsb2JhbC5jcmwwPQYI
+KwYBBQUHAQEEMTAvMC0GCCsGAQUFBzABhiFodHRwOi8vZ3RnbG9iYWwtb2NzcC5n
+ZW90cnVzdC5jb20wFwYDVR0gBBAwDjAMBgorBgEEAdZ5AgUBMA0GCSqGSIb3DQEB
+BQUAA4IBAQA21waAESetKhSbOHezI6B1WLuxfoNCunLaHtiONgaX4PCVOzf9G0JY
+/iLIa704XtE7JW4S615ndkZAkNoUyHgN7ZVm2o6Gb4ChulYylYbc3GrKBIxbf/a/
+zG+FA1jDaFETzf3I93k9mTXwVqO94FntT0QJo544evZG0R0SnU++0ED8Vf4GXjza
+HFa9llF7b1cq26KqltyMdMKVvvBulRP/F/A8rLIQjcxz++iPAsbw+zOzlTvjwsto
+WHPbqCRiOwY1nQ2pM714A5AuTHhdUDqB1O6gyHA43LL5Z/qHQF1hwFGPa4NrzQU6
+yuGnBXj8ytqU0CwIPX4WecigUCAkVDNx
+-----END CERTIFICATE-----`
 
-X9GET/qAyZkAJBl/RK+1XX75NxONgdUfZDw7PIYi/g+Efh3Z5zH5kh/dx9lxH5ZG
-HGCqPAeMO/ofGDGtDULWW6iqDUFRu5gPgEVSCnnbqoHNU325WHhXdhejVAItwObC
-IpL/zYfs2+gDHXct/n9FJ/9D/EGXZihwPqYaK8GQSfZAxz0QjLuh0wU1qpbm3y3N
-q+o9FLv3b2Ys/tCJOUsYVQOYLSrZEI77y1ii3nWgQ8lXiTJbBUKzuq4f1YWeO8Ah
-RZbdhTa57AF5lUaRtL7Nrm3HJUrK1alBbU7HHyjeW4Q4n/D3fiRDC1Mh2Bi4EOOn
-wGctSx4kHsZGhJv5qwKqqPEFPhUzph8D2tm2TABk8HJa5KJFDbGrcfvk2uODAoZr
-MbcpIxCfl8oB09bWfY6tDQjyvwSYYo2Phdwm7kT92xc=
------END RSA PRIVATE KEY-----`
+	googleLeafFixture = `-----BEGIN CERTIFICATE-----
+MIIEdjCCA16gAwIBAgIIcR5k4dkoe04wDQYJKoZIhvcNAQEFBQAwSTELMAkGA1UE
+BhMCVVMxEzARBgNVBAoTCkdvb2dsZSBJbmMxJTAjBgNVBAMTHEdvb2dsZSBJbnRl
+cm5ldCBBdXRob3JpdHkgRzIwHhcNMTQwMzEyMDkzODMwWhcNMTQwNjEwMDAwMDAw
+WjBoMQswCQYDVQQGEwJVUzETMBEGA1UECAwKQ2FsaWZvcm5pYTEWMBQGA1UEBwwN
+TW91bnRhaW4gVmlldzETMBEGA1UECgwKR29vZ2xlIEluYzEXMBUGA1UEAwwOd3d3
+Lmdvb2dsZS5jb20wggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQC4zYCe
+m0oUBhwE0EwBr65eBOcgcQO2PaSIAB2dEP/c1EMX2tOy0ov8rk83ePhJ+MWdT1z6
+jge9X4zQQI8ZyA9qIiwrKBZOi8DNUvrqNZC7fJAVRrb9aX/99uYOJCypIbpmWG1q
+fhbHjJewhwf8xYPj71eU4rLG80a+DapWmphtfq3h52lDQIBzLVf1yYbyrTaELaz4
+NXF7HXb5YkId/gxIsSzM0aFUVu2o8sJcLYAsJqwfFKBKOMxUcn545nlspf0mTcWZ
+0APlbwsKznNs4/xCDwIxxWjjqgHrYAFl6y07i1gzbAOqdNEyR24p+3JWI8WZBlBI
+dk2KGj0W1fIfsvyxAgMBAAGjggFBMIIBPTAdBgNVHSUEFjAUBggrBgEFBQcDAQYI
+KwYBBQUHAwIwGQYDVR0RBBIwEIIOd3d3Lmdvb2dsZS5jb20waAYIKwYBBQUHAQEE
+XDBaMCsGCCsGAQUFBzAChh9odHRwOi8vcGtpLmdvb2dsZS5jb20vR0lBRzIuY3J0
+MCsGCCsGAQUFBzABhh9odHRwOi8vY2xpZW50czEuZ29vZ2xlLmNvbS9vY3NwMB0G
+A1UdDgQWBBTXD5Bx6iqT+dmEhbFL4OUoHyZn8zAMBgNVHRMBAf8EAjAAMB8GA1Ud
+IwQYMBaAFErdBhYbvPZotXb1gba7Yhq6WoEvMBcGA1UdIAQQMA4wDAYKKwYBBAHW
+eQIFATAwBgNVHR8EKTAnMCWgI6Ahhh9odHRwOi8vcGtpLmdvb2dsZS5jb20vR0lB
+RzIuY3JsMA0GCSqGSIb3DQEBBQUAA4IBAQCR3RJtHzgDh33b/MI1ugiki+nl8Ikj
+5larbJRE/rcA5oite+QJyAr6SU1gJJ/rRrK3ItVEHr9L621BCM7GSdoNMjB9MMcf
+tJAW0kYGJ+wqKm53wG/JaOADTnnq2Mt/j6F2uvjgN/ouns1nRHufIvd370N0LeH+
+orKqTuAPzXK7imQk6+OycYABbqCtC/9qmwRd8wwn7sF97DtYfK8WuNHtFalCAwyi
+8LxJJYJCLWoMhZ+V8GZm+FOex5qkQAjnZrtNlbQJ8ro4r+rpKXtmMFFhfa+7L+PA
+Kom08eUK8skxAzfDDijZPh10VtJ66uBoiDPdT+uCBehcBIcmSTrKjFGX
+-----END CERTIFICATE-----`
 
-	// knownHostsFixture is known_hosts fixture in the expected
-	// format.
+	// googleLeafWithInvalidHashFixture is the same as googleLeafFixture, but the signature
+	// algorithm in the certificate contains a nonsense OID.
+	googleLeafWithInvalidHashFixture = `-----BEGIN CERTIFICATE-----
+MIIEdjCCA16gAwIBAgIIcR5k4dkoe04wDQYJKoZIhvcNAWAFBQAwSTELMAkGA1UE
+BhMCVVMxEzARBgNVBAoTCkdvb2dsZSBJbmMxJTAjBgNVBAMTHEdvb2dsZSBJbnRl
+cm5ldCBBdXRob3JpdHkgRzIwHhcNMTQwMzEyMDkzODMwWhcNMTQwNjEwMDAwMDAw
+WjBoMQswCQYDVQQGEwJVUzETMBEGA1UECAwKQ2FsaWZvcm5pYTEWMBQGA1UEBwwN
+TW91bnRhaW4gVmlldzETMBEGA1UECgwKR29vZ2xlIEluYzEXMBUGA1UEAwwOd3d3
+Lmdvb2dsZS5jb20wggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQC4zYCe
+m0oUBhwE0EwBr65eBOcgcQO2PaSIAB2dEP/c1EMX2tOy0ov8rk83ePhJ+MWdT1z6
+jge9X4zQQI8ZyA9qIiwrKBZOi8DNUvrqNZC7fJAVRrb9aX/99uYOJCypIbpmWG1q
+fhbHjJewhwf8xYPj71eU4rLG80a+DapWmphtfq3h52lDQIBzLVf1yYbyrTaELaz4
+NXF7HXb5YkId/gxIsSzM0aFUVu2o8sJcLYAsJqwfFKBKOMxUcn545nlspf0mTcWZ
+0APlbwsKznNs4/xCDwIxxWjjqgHrYAFl6y07i1gzbAOqdNEyR24p+3JWI8WZBlBI
+dk2KGj0W1fIfsvyxAgMBAAGjggFBMIIBPTAdBgNVHSUEFjAUBggrBgEFBQcDAQYI
+KwYBBQUHAwIwGQYDVR0RBBIwEIIOd3d3Lmdvb2dsZS5jb20waAYIKwYBBQUHAQEE
+XDBaMCsGCCsGAQUFBzAChh9odHRwOi8vcGtpLmdvb2dsZS5jb20vR0lBRzIuY3J0
+MCsGCCsGAQUFBzABhh9odHRwOi8vY2xpZW50czEuZ29vZ2xlLmNvbS9vY3NwMB0G
+A1UdDgQWBBTXD5Bx6iqT+dmEhbFL4OUoHyZn8zAMBgNVHRMBAf8EAjAAMB8GA1Ud
+IwQYMBaAFErdBhYbvPZotXb1gba7Yhq6WoEvMBcGA1UdIAQQMA4wDAYKKwYBBAHW
+eQIFATAwBgNVHR8EKTAnMCWgI6Ahhh9odHRwOi8vcGtpLmdvb2dsZS5jb20vR0lB
+RzIuY3JsMA0GCSqGSIb3DQFgBQUAA4IBAQCR3RJtHzgDh33b/MI1ugiki+nl8Ikj
+5larbJRE/rcA5oite+QJyAr6SU1gJJ/rRrK3ItVEHr9L621BCM7GSdoNMjB9MMcf
+tJAW0kYGJ+wqKm53wG/JaOADTnnq2Mt/j6F2uvjgN/ouns1nRHufIvd370N0LeH+
+orKqTuAPzXK7imQk6+OycYABbqCtC/9qmwRd8wwn7sF97DtYfK8WuNHtFalCAwyi
+8LxJJYJCLWoMhZ+V8GZm+FOex5qkQAjnZrtNlbQJ8ro4r+rpKXtmMFFhfa+7L+PA
+Kom08eUK8skxAzfDDijZPh10VtJ66uBoiDPdT+uCBehcBIcmSTrKjFGX
+-----END CERTIFICATE-----`
+
 	knownHostsFixture string = `github.com ssh-rsa AAAAB3NzaC1yc2EAAAABIwAAAQEAq2A7hRGmdnm9tUDbO9IDSwBK6TbQa+PXYPCPy6rbTrTtw7PHkccKrpp0yVhp5HdEIcKr6pLlVDBfOLX9QUsyCOV0wzfjIJNlGEYsdlLJizHhbn2mUjvSAHQqZETYP81eFzLQNnPHt4EVVUh7VfDESU84KezmD5QlWpXLmvU31/yMf+Se8xhHTvKSCZIFImWwoG6mbUoWf9nzpIoaSjB+weqqUUmpaaasXVal72J+UX2B+2RPW3RcT0eOzQgqlJL3RKrTJvdsjE3JEAvGq3lGHSZXy28G3skua2SmVi/w4yCE6gbODqnTWlg7+wC604ydGXA8VJiS5ap43JXiUFFAaQ==`
 )
 
-var (
-	basicAuthSecretFixture = corev1.Secret{
-		Data: map[string][]byte{
-			"username": []byte("git"),
-			"password": []byte("password"),
-		},
-	}
-	privateKeySecretFixture = corev1.Secret{
-		Data: map[string][]byte{
-			"identity":    []byte(secretKeyFixture),
-			"known_hosts": []byte(knownHostsFixture),
-		},
-	}
-	privateKeySecretWithPassphraseFixture = corev1.Secret{
-		Data: map[string][]byte{
-			"identity":    []byte(secretPassphraseFixture),
-			"known_hosts": []byte(knownHostsFixture),
-			"password":    []byte("foobar"),
-		},
-	}
-)
+func Test_x509Callback(t *testing.T) {
+	now = func() time.Time { return time.Unix(1395785200, 0) }
 
-func TestAuthSecretStrategyForURL(t *testing.T) {
 	tests := []struct {
-		name    string
-		url     string
-		want    git.AuthSecretStrategy
-		wantErr bool
+		name        string
+		certificate string
+		host        string
+		caBundle    []byte
+		want        git2go.ErrorCode
 	}{
-		{"HTTP", "http://git.example.com/org/repo.git", &BasicAuth{}, false},
-		{"HTTPS", "https://git.example.com/org/repo.git", &BasicAuth{}, false},
-		{"SSH", "ssh://git.example.com:2222/org/repo.git", &PublicKeyAuth{host: "git.example.com:2222"}, false},
-		{"SSH with username", "ssh://example@git.example.com:2222/org/repo.git", &PublicKeyAuth{user: "example", host: "git.example.com:2222"}, false},
-		{"unsupported", "protocol://example.com", nil, true},
+		{
+			name:        "Valid certificate authority bundle",
+			certificate: googleLeafFixture,
+			host:        "www.google.com",
+			caBundle:    []byte(giag2IntermediateFixture + "\n" + geoTrustRootFixture),
+			want:        git2go.ErrorCodeOK,
+		},
+		{
+			name:        "Invalid certificate",
+			certificate: googleLeafWithInvalidHashFixture,
+			host:        "www.google.com",
+			caBundle:    []byte(giag2IntermediateFixture + "\n" + geoTrustRootFixture),
+			want:        git2go.ErrorCodeCertificate,
+		},
+		{
+			name:        "Invalid certificate authority bundle",
+			certificate: googleLeafFixture,
+			host:        "www.google.com",
+			caBundle:    bytes.Trim([]byte(giag2IntermediateFixture+"\n"+geoTrustRootFixture), "-"),
+			want:        git2go.ErrorCodeCertificate,
+		},
+		{
+			name:        "Missing intermediate in bundle",
+			certificate: googleLeafFixture,
+			host:        "www.google.com",
+			caBundle:    []byte(geoTrustRootFixture),
+			want:        git2go.ErrorCodeCertificate,
+		},
+		{
+			name:        "Invalid host",
+			certificate: googleLeafFixture,
+			host:        "www.google.co",
+			caBundle:    []byte(giag2IntermediateFixture + "\n" + geoTrustRootFixture),
+			want:        git2go.ErrorCodeCertificate,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := AuthSecretStrategyForURL(tt.url)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("AuthSecretStrategyForURL() error = %v, wantErr %v", err, tt.wantErr)
-				return
+			g := NewWithT(t)
+
+			cert := &git2go.Certificate{}
+			if tt.certificate != "" {
+				x509Cert, err := certificateFromPEM(tt.certificate)
+				g.Expect(err).ToNot(HaveOccurred())
+				cert.X509 = x509Cert
 			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("AuthSecretStrategyForURL() got = %v, want %v", got, tt.want)
-			}
+
+			callback := x509Callback(tt.caBundle)
+			g.Expect(callback(cert, false, tt.host)).To(Equal(tt.want))
 		})
 	}
 }
 
-func TestBasicAuthStrategy_Method(t *testing.T) {
+func Test_knownHostsCallback(t *testing.T) {
 	tests := []struct {
-		name    string
-		secret  corev1.Secret
-		modify  func(secret *corev1.Secret)
-		wantErr bool
+		name         string
+		host         string
+		expectedHost string
+		knownHosts   []byte
+		hostkey      git2go.HostkeyCertificate
+		want         git2go.ErrorCode
 	}{
-		{"with username and password", basicAuthSecretFixture, nil, false},
+		{
+			name:         "Match",
+			host:         "github.com",
+			knownHosts:   []byte(knownHostsFixture),
+			hostkey:      git2go.HostkeyCertificate{Kind: git2go.HostkeySHA1 | git2go.HostkeyMD5, HashSHA1: sha1Fingerprint("v2toJdKXfFEaR1u++4iq1UqSrHM")},
+			expectedHost: "github.com",
+			want:         git2go.ErrorCodeOK,
+		},
+		{
+			name:         "Match with port",
+			host:         "github.com",
+			knownHosts:   []byte(knownHostsFixture),
+			hostkey:      git2go.HostkeyCertificate{Kind: git2go.HostkeySHA1 | git2go.HostkeyMD5, HashSHA1: sha1Fingerprint("v2toJdKXfFEaR1u++4iq1UqSrHM")},
+			expectedHost: "github.com:22",
+			want:         git2go.ErrorCodeOK,
+		},
+		{
+			name:         "Hostname mismatch",
+			host:         "github.com",
+			knownHosts:   []byte(knownHostsFixture),
+			hostkey:      git2go.HostkeyCertificate{Kind: git2go.HostkeySHA1 | git2go.HostkeyMD5, HashSHA1: sha1Fingerprint("v2toJdKXfFEaR1u++4iq1UqSrHM")},
+			expectedHost: "example.com",
+			want:         git2go.ErrorCodeUser,
+		},
+		{
+			name:         "Hostkey mismatch",
+			host:         "github.com",
+			knownHosts:   []byte(knownHostsFixture),
+			hostkey:      git2go.HostkeyCertificate{Kind: git2go.HostkeyMD5, HashMD5: md5Fingerprint("\xb6\x03\x0e\x39\x97\x9e\xd0\xe7\x24\xce\xa3\x77\x3e\x01\x42\x09")},
+			expectedHost: "github.com",
+			want:         git2go.ErrorCodeCertificate,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			secret := tt.secret.DeepCopy()
-			if tt.modify != nil {
-				tt.modify(secret)
-			}
-			s := &BasicAuth{}
-			_, err := s.Method(*secret)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("Method() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
+			g := NewWithT(t)
+
+			cert := &git2go.Certificate{Hostkey: tt.hostkey}
+			callback := knownHostsCallback(tt.expectedHost, tt.knownHosts)
+			g.Expect(callback(cert, false, tt.host)).To(Equal(tt.want))
 		})
 	}
 }
 
-func TestPublicKeyStrategy_Method(t *testing.T) {
-	tests := []struct {
-		name    string
-		secret  corev1.Secret
-		modify  func(secret *corev1.Secret)
-		wantErr bool
-	}{
-		{"private key and known_hosts", privateKeySecretFixture, nil, false},
-		{"private key with passphrase and known_hosts", privateKeySecretWithPassphraseFixture, nil, false},
-		{"missing private key", privateKeySecretFixture, func(s *corev1.Secret) { delete(s.Data, "identity") }, true},
-		{"invalid private key", privateKeySecretFixture, func(s *corev1.Secret) { s.Data["identity"] = []byte(`-----BEGIN RSA PRIVATE KEY-----`) }, true},
-		{"missing known_hosts", privateKeySecretFixture, func(s *corev1.Secret) { delete(s.Data, "known_hosts") }, true},
-		{"invalid known_hosts", privateKeySecretFixture, func(s *corev1.Secret) { s.Data["known_hosts"] = []byte(`invalid`) }, true},
-		{"missing password", privateKeySecretWithPassphraseFixture, func(s *corev1.Secret) { delete(s.Data, "password") }, true},
-		{"invalid password", privateKeySecretWithPassphraseFixture, func(s *corev1.Secret) { s.Data["password"] = []byte("foo") }, true},
-		{"empty", corev1.Secret{}, nil, true},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			secret := tt.secret.DeepCopy()
-			if tt.modify != nil {
-				tt.modify(secret)
-			}
-			s := &PublicKeyAuth{}
-			_, err := s.Method(*secret)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("Method() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-		})
-	}
-}
-
-func TestKnownKeyHash(t *testing.T) {
+func Test_parseKnownHosts(t *testing.T) {
 	tests := []struct {
 		name        string
 		hostkey     git2go.HostkeyCertificate
@@ -189,24 +267,22 @@ func TestKnownKeyHash(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
 			knownKeys, err := parseKnownHosts(knownHostsFixture)
 			if err != nil {
 				t.Error(err)
 				return
 			}
-
 			matches := knownKeys[0].matches("github.com", tt.hostkey)
-			if matches != tt.wantMatches {
-				t.Errorf("Method() matches = %v, wantMatches %v", matches, tt.wantMatches)
-				return
-			}
+			g.Expect(matches).To(Equal(tt.wantMatches))
 		})
 	}
 }
 
 func md5Fingerprint(in string) [16]byte {
 	var out [16]byte
-	copy(out[:], []byte(in))
+	copy(out[:], in)
 	return out
 }
 
@@ -228,4 +304,12 @@ func sha256Fingerprint(in string) [32]byte {
 	var out [32]byte
 	copy(out[:], d)
 	return out
+}
+
+func certificateFromPEM(pemBytes string) (*x509.Certificate, error) {
+	block, _ := pem.Decode([]byte(pemBytes))
+	if block == nil {
+		return nil, errors.New("failed to decode PEM")
+	}
+	return x509.ParseCertificate(block.Bytes)
 }
