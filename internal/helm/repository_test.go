@@ -18,44 +18,37 @@ package helm
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"fmt"
 	"net/url"
 	"os"
-	"reflect"
-	"strings"
 	"testing"
 	"time"
 
+	. "github.com/onsi/gomega"
 	"helm.sh/helm/v3/pkg/chart"
 	"helm.sh/helm/v3/pkg/getter"
 	"helm.sh/helm/v3/pkg/repo"
 )
 
+var now = time.Now()
+
 const (
-	testfile            = "testdata/local-index.yaml"
-	chartmuseumtestfile = "testdata/chartmuseum-index.yaml"
-	unorderedtestfile   = "testdata/local-index-unordered.yaml"
-	indexWithDuplicates = `
-apiVersion: v1
-entries:
-  nginx:
-    - urls:
-        - https://kubernetes-charts.storage.googleapis.com/nginx-0.2.0.tgz
-      name: nginx
-      description: string
-      version: 0.2.0
-      home: https://github.com/something/else
-      digest: "sha256:1234567890abcdef"
-  nginx:
-    - urls:
-        - https://kubernetes-charts.storage.googleapis.com/alpine-1.0.0.tgz
-        - http://storage2.googleapis.com/kubernetes-charts/alpine-1.0.0.tgz
-      name: alpine
-      description: string
-      version: 1.0.0
-      home: https://github.com/something
-      digest: "sha256:1234567890abcdef"
-`
+	testFile            = "testdata/local-index.yaml"
+	chartmuseumTestFile = "testdata/chartmuseum-index.yaml"
+	unorderedTestFile   = "testdata/local-index-unordered.yaml"
 )
+
+// mockGetter can be used as a simple mocking getter.Getter implementation.
+type mockGetter struct {
+	requestedURL string
+	response     []byte
+}
+
+func (g *mockGetter) Get(url string, _ ...getter.Option) (*bytes.Buffer, error) {
+	g.requestedURL = url
+	return bytes.NewBuffer(g.response), nil
+}
 
 func TestNewChartRepository(t *testing.T) {
 	repositoryURL := "https://example.com"
@@ -68,60 +61,74 @@ func TestNewChartRepository(t *testing.T) {
 	options := []getter.Option{getter.WithBasicAuth("username", "password")}
 
 	t.Run("should construct chart repository", func(t *testing.T) {
-		r, err := NewChartRepository(repositoryURL, providers, options)
-		if err != nil {
-			t.Error(err)
-		}
-		if got := r.URL; got != repositoryURL {
-			t.Fatalf("Expecting %q repository URL, got: %q", repositoryURL, got)
-		}
-		if r.Client == nil {
-			t.Fatalf("Expecting client, got nil")
-		}
-		if !reflect.DeepEqual(r.Options, options) {
-			t.Fatalf("Client options mismatth")
-		}
+		g := NewWithT(t)
+
+		r, err := NewChartRepository(repositoryURL, "", providers, options)
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(r).ToNot(BeNil())
+		g.Expect(r.URL).To(Equal(repositoryURL))
+		g.Expect(r.Client).ToNot(BeNil())
+		g.Expect(r.Options).To(Equal(options))
 	})
 
 	t.Run("should error on URL parsing failure", func(t *testing.T) {
-		_, err := NewChartRepository("https://ex ample.com", nil, nil)
-		switch err.(type) {
-		case *url.Error:
-		default:
-			t.Fatalf("Expecting URL error, got: %v", err)
-		}
+		g := NewWithT(t)
+		r, err := NewChartRepository("https://ex ample.com", "", nil, nil)
+		g.Expect(err).To(HaveOccurred())
+		g.Expect(err).To(BeAssignableToTypeOf(&url.Error{}))
+		g.Expect(r).To(BeNil())
+
 	})
 
 	t.Run("should error on unsupported scheme", func(t *testing.T) {
-		_, err := NewChartRepository("http://example.com", providers, nil)
-		if err == nil {
-			t.Fatalf("Expecting unsupported scheme error")
-		}
+		g := NewWithT(t)
+
+		r, err := NewChartRepository("http://example.com", "", providers, nil)
+		g.Expect(err).To(HaveOccurred())
+		g.Expect(err.Error()).To(Equal("scheme \"http\" not supported"))
+		g.Expect(r).To(BeNil())
 	})
 }
 
 func TestChartRepository_Get(t *testing.T) {
-	i := repo.NewIndexFile()
-	i.Add(&chart.Metadata{Name: "chart", Version: "0.0.1"}, "chart-0.0.1.tgz", "http://example.com/charts", "sha256:1234567890")
-	i.Add(&chart.Metadata{Name: "chart", Version: "0.1.0"}, "chart-0.1.0.tgz", "http://example.com/charts", "sha256:1234567890abc")
-	i.Add(&chart.Metadata{Name: "chart", Version: "0.1.1"}, "chart-0.1.1.tgz", "http://example.com/charts", "sha256:1234567890abc")
-	i.Add(&chart.Metadata{Name: "chart", Version: "0.1.5+b.min.minute"}, "chart-0.1.5+b.min.minute.tgz", "http://example.com/charts", "sha256:1234567890abc")
-	i.Entries["chart"][len(i.Entries["chart"])-1].Created = time.Now().Add(-time.Minute)
-	i.Add(&chart.Metadata{Name: "chart", Version: "0.1.5+a.min.hour"}, "chart-0.1.5+a.min.hour.tgz", "http://example.com/charts", "sha256:1234567890abc")
-	i.Entries["chart"][len(i.Entries["chart"])-1].Created = time.Now().Add(-time.Hour)
-	i.Add(&chart.Metadata{Name: "chart", Version: "0.1.5+c.now"}, "chart-0.1.5+c.now.tgz", "http://example.com/charts", "sha256:1234567890abc")
-	i.Add(&chart.Metadata{Name: "chart", Version: "0.2.0"}, "chart-0.2.0.tgz", "http://example.com/charts", "sha256:1234567890abc")
-	i.Add(&chart.Metadata{Name: "chart", Version: "1.0.0"}, "chart-1.0.0.tgz", "http://example.com/charts", "sha256:1234567890abc")
-	i.Add(&chart.Metadata{Name: "chart", Version: "1.1.0-rc.1"}, "chart-1.1.0-rc.1.tgz", "http://example.com/charts", "sha256:1234567890abc")
-	i.SortEntries()
-	r := &ChartRepository{Index: i}
+	g := NewWithT(t)
+
+	r := newChartRepository()
+	r.Index = repo.NewIndexFile()
+	charts := []struct {
+		name    string
+		version string
+		url     string
+		digest  string
+		created time.Time
+	}{
+		{name: "chart", version: "0.0.1", url: "http://example.com/charts", digest: "sha256:1234567890"},
+		{name: "chart", version: "0.1.0", url: "http://example.com/charts", digest: "sha256:1234567890abc"},
+		{name: "chart", version: "0.1.1", url: "http://example.com/charts", digest: "sha256:1234567890abc"},
+		{name: "chart", version: "0.1.5+b.min.minute", url: "http://example.com/charts", digest: "sha256:1234567890abc", created: now.Add(-time.Minute)},
+		{name: "chart", version: "0.1.5+a.min.hour", url: "http://example.com/charts", digest: "sha256:1234567890abc", created: now.Add(-time.Hour)},
+		{name: "chart", version: "0.1.5+c.now", url: "http://example.com/charts", digest: "sha256:1234567890abc", created: now},
+		{name: "chart", version: "0.2.0", url: "http://example.com/charts", digest: "sha256:1234567890abc"},
+		{name: "chart", version: "1.0.0", url: "http://example.com/charts", digest: "sha256:1234567890abc"},
+		{name: "chart", version: "1.1.0-rc.1", url: "http://example.com/charts", digest: "sha256:1234567890abc"},
+	}
+	for _, c := range charts {
+		g.Expect(r.Index.MustAdd(
+			&chart.Metadata{Name: c.name, Version: c.version},
+			fmt.Sprintf("%s-%s.tgz", c.name, c.version), c.url, c.digest),
+		).To(Succeed())
+		if !c.created.IsZero() {
+			r.Index.Entries["chart"][len(r.Index.Entries["chart"])-1].Created = c.created
+		}
+	}
+	r.Index.SortEntries()
 
 	tests := []struct {
 		name         string
 		chartName    string
 		chartVersion string
 		wantVersion  string
-		wantErr      bool
+		wantErr      string
 	}{
 		{
 			name:         "exact match",
@@ -151,12 +158,12 @@ func TestChartRepository_Get(t *testing.T) {
 			name:         "unfulfilled range",
 			chartName:    "chart",
 			chartVersion: ">2.0.0",
-			wantErr:      true,
+			wantErr:      "no 'chart' chart with version matching '>2.0.0' found",
 		},
 		{
 			name:      "invalid chart",
 			chartName: "non-existing",
-			wantErr:   true,
+			wantErr:   repo.ErrNoChartName.Error(),
 		},
 		{
 			name:         "match newest if ambiguous",
@@ -168,14 +175,19 @@ func TestChartRepository_Get(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
 			cv, err := r.Get(tt.chartName, tt.chartVersion)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("Get() error = %v, wantErr %v", err, tt.wantErr)
+			if tt.wantErr != "" {
+				g.Expect(err).To(HaveOccurred())
+				g.Expect(err.Error()).To(ContainSubstring(tt.wantErr))
+				g.Expect(cv).To(BeNil())
 				return
 			}
-			if err == nil && !strings.Contains(cv.Metadata.Version, tt.wantVersion) {
-				t.Errorf("Get() unexpected version = %s, want = %s", cv.Metadata.Version, tt.wantVersion)
-			}
+			g.Expect(cv).ToNot(BeNil())
+			g.Expect(cv.Metadata.Name).To(Equal(tt.chartName))
+			g.Expect(cv.Metadata.Version).To(Equal(tt.wantVersion))
+			g.Expect(err).ToNot(HaveOccurred())
 		})
 	}
 }
@@ -212,117 +224,257 @@ func TestChartRepository_DownloadChart(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+			t.Parallel()
+
 			mg := mockGetter{}
 			r := &ChartRepository{
 				URL:    tt.url,
 				Client: &mg,
 			}
-			_, err := r.DownloadChart(tt.chartVersion)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("DownloadChart() error = %v, wantErr %v", err, tt.wantErr)
+			res, err := r.DownloadChart(tt.chartVersion)
+			if tt.wantErr {
+				g.Expect(err).To(HaveOccurred())
+				g.Expect(res).To(BeNil())
 				return
 			}
-			if err == nil && mg.requestedURL != tt.wantURL {
-				t.Errorf("DownloadChart() requested URL = %s, wantURL %s", mg.requestedURL, tt.wantURL)
-			}
+			g.Expect(mg.requestedURL).To(Equal(tt.wantURL))
+			g.Expect(res).ToNot(BeNil())
+			g.Expect(err).ToNot(HaveOccurred())
 		})
 	}
 }
 
 func TestChartRepository_DownloadIndex(t *testing.T) {
-	b, err := os.ReadFile(chartmuseumtestfile)
-	if err != nil {
-		t.Fatal(err)
-	}
+	g := NewWithT(t)
+
+	b, err := os.ReadFile(chartmuseumTestFile)
+	g.Expect(err).ToNot(HaveOccurred())
+
 	mg := mockGetter{response: b}
 	r := &ChartRepository{
 		URL:    "https://example.com",
 		Client: &mg,
 	}
-	if err := r.DownloadIndex(); err != nil {
+
+	buf := bytes.NewBuffer([]byte{})
+	g.Expect(r.DownloadIndex(buf)).To(Succeed())
+	g.Expect(buf.Bytes()).To(Equal(b))
+	g.Expect(mg.requestedURL).To(Equal(r.URL + "/index.yaml"))
+	g.Expect(err).To(BeNil())
+}
+
+func TestChartRepository_LoadIndexFromBytes(t *testing.T) {
+	tests := []struct {
+		name        string
+		b           []byte
+		wantName    string
+		wantVersion string
+		wantDigest  string
+		wantErr     string
+	}{
+		{
+			name: "index",
+			b: []byte(`
+apiVersion: v1
+entries:
+  nginx:
+    - urls:
+        - https://kubernetes-charts.storage.googleapis.com/nginx-0.2.0.tgz
+      name: nginx
+      description: string
+      version: 0.2.0
+      home: https://github.com/something/else
+      digest: "sha256:1234567890abcdef"
+`),
+			wantName:    "nginx",
+			wantVersion: "0.2.0",
+			wantDigest:  "sha256:1234567890abcdef",
+		},
+		{
+			name: "index without API version",
+			b: []byte(`entries:
+  nginx:
+    - name: nginx`),
+			wantErr: "no API version specified",
+		},
+		{
+			name: "index with duplicate entry",
+			b: []byte(`apiVersion: v1
+entries:
+  nginx:
+    - name: nginx"
+  nginx:
+    - name: nginx`),
+			wantErr: "key \"nginx\" already set in map",
+		},
+	}
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+			t.Parallel()
+
+			r := newChartRepository()
+			err := r.LoadIndexFromBytes(tt.b)
+			if tt.wantErr != "" {
+				g.Expect(err).To(HaveOccurred())
+				g.Expect(err.Error()).To(ContainSubstring(tt.wantErr))
+				g.Expect(r.Index).To(BeNil())
+				return
+			}
+
+			g.Expect(err).ToNot(HaveOccurred())
+			g.Expect(r.Index).ToNot(BeNil())
+			got, err := r.Index.Get(tt.wantName, tt.wantVersion)
+			g.Expect(err).ToNot(HaveOccurred())
+			g.Expect(got.Digest).To(Equal(tt.wantDigest))
+		})
+	}
+}
+
+func TestChartRepository_LoadIndexFromBytes_Unordered(t *testing.T) {
+	b, err := os.ReadFile(unorderedTestFile)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if expected := r.URL + "/index.yaml"; mg.requestedURL != expected {
-		t.Errorf("DownloadIndex() requested URL = %s, wantURL %s", mg.requestedURL, expected)
+	r := newChartRepository()
+	err = r.LoadIndexFromBytes(b)
+	if err != nil {
+		t.Fatal(err)
 	}
 	verifyLocalIndex(t, r.Index)
 }
 
 // Index load tests are derived from https://github.com/helm/helm/blob/v3.3.4/pkg/repo/index_test.go#L108
 // to ensure parity with Helm behaviour.
-func TestChartRepository_LoadIndex(t *testing.T) {
+func TestChartRepository_LoadIndexFromFile(t *testing.T) {
 	tests := []struct {
 		name     string
 		filename string
 	}{
 		{
 			name:     "regular index file",
-			filename: testfile,
+			filename: testFile,
 		},
 		{
 			name:     "chartmuseum index file",
-			filename: chartmuseumtestfile,
+			filename: chartmuseumTestFile,
 		},
 	}
 
 	for _, tt := range tests {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
 			t.Parallel()
-			b, err := os.ReadFile(tt.filename)
-			if err != nil {
-				t.Fatal(err)
-			}
-			r := &ChartRepository{}
-			err = r.LoadIndex(b)
-			if err != nil {
-				t.Fatal(err)
-			}
+
+			r := newChartRepository()
+			err := r.LoadFromFile(testFile)
+			g.Expect(err).ToNot(HaveOccurred())
+
 			verifyLocalIndex(t, r.Index)
 		})
 	}
 }
 
-func TestChartRepository_LoadIndex_Duplicates(t *testing.T) {
-	r := &ChartRepository{}
-	if err := r.LoadIndex([]byte(indexWithDuplicates)); err == nil {
-		t.Errorf("Expected an error when duplicate entries are present")
+func TestChartRepository_CacheIndex(t *testing.T) {
+	g := NewWithT(t)
+
+	mg := mockGetter{response: []byte("foo")}
+	expectSum := fmt.Sprintf("%x", sha256.Sum256(mg.response))
+
+	r := newChartRepository()
+	r.URL = "https://example.com"
+	r.Client = &mg
+
+	sum, err := r.CacheIndex()
+	g.Expect(err).To(Not(HaveOccurred()))
+
+	g.Expect(r.CachePath).ToNot(BeEmpty())
+	defer os.RemoveAll(r.CachePath)
+	g.Expect(r.CachePath).To(BeARegularFile())
+	b, _ := os.ReadFile(r.CachePath)
+
+	g.Expect(b).To(Equal(mg.response))
+	g.Expect(sum).To(BeEquivalentTo(expectSum))
+}
+
+func TestChartRepository_LoadIndexFromCache(t *testing.T) {
+	tests := []struct {
+		name      string
+		cachePath string
+		wantErr   string
+	}{
+		{
+			name:      "cache path",
+			cachePath: chartmuseumTestFile,
+		},
+		{
+			name:      "invalid cache path",
+			cachePath: "invalid",
+			wantErr:   "open invalid: no such file",
+		},
+		{
+			name:      "no cache path",
+			cachePath: "",
+			wantErr:   "no cache path set",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			r := newChartRepository()
+			r.CachePath = tt.cachePath
+			err := r.LoadFromCache()
+			if tt.wantErr != "" {
+				g.Expect(err).To(HaveOccurred())
+				g.Expect(err.Error()).To(ContainSubstring(tt.wantErr))
+				g.Expect(r.Index).To(BeNil())
+				return
+			}
+
+			g.Expect(err).ToNot(HaveOccurred())
+			verifyLocalIndex(t, r.Index)
+		})
 	}
 }
 
-func TestChartRepository_LoadIndex_Unordered(t *testing.T) {
-	b, err := os.ReadFile(unorderedtestfile)
-	if err != nil {
-		t.Fatal(err)
-	}
-	r := &ChartRepository{}
-	err = r.LoadIndex(b)
-	if err != nil {
-		t.Fatal(err)
-	}
-	verifyLocalIndex(t, r.Index)
+func TestChartRepository_HasIndex(t *testing.T) {
+	g := NewWithT(t)
+
+	r := newChartRepository()
+	g.Expect(r.HasIndex()).To(BeFalse())
+	r.Index = repo.NewIndexFile()
+	g.Expect(r.HasIndex()).To(BeTrue())
+}
+
+func TestChartRepository_UnloadIndex(t *testing.T) {
+	g := NewWithT(t)
+
+	r := newChartRepository()
+	g.Expect(r.HasIndex()).To(BeFalse())
+	r.Index = repo.NewIndexFile()
+	r.UnloadIndex()
+	g.Expect(r.Index).To(BeNil())
 }
 
 func verifyLocalIndex(t *testing.T, i *repo.IndexFile) {
-	numEntries := len(i.Entries)
-	if numEntries != 3 {
-		t.Errorf("Expected 3 entries in index file but got %d", numEntries)
-	}
+	g := NewWithT(t)
+
+	g.Expect(i.Entries).ToNot(BeNil())
+	g.Expect(i.Entries).To(HaveLen(3), "expected 3 entries in index file")
 
 	alpine, ok := i.Entries["alpine"]
-	if !ok {
-		t.Fatalf("'alpine' section not found.")
-	}
-
-	if l := len(alpine); l != 1 {
-		t.Fatalf("'alpine' should have 1 chart, got %d", l)
-	}
+	g.Expect(ok).To(BeTrue(), "expected 'alpine' entry to exist")
+	g.Expect(alpine).To(HaveLen(1), "'alpine' should have 1 entry")
 
 	nginx, ok := i.Entries["nginx"]
-	if !ok || len(nginx) != 2 {
-		t.Fatalf("Expected 2 nginx entries")
-	}
+	g.Expect(ok).To(BeTrue(), "expected 'nginx' entry to exist")
+	g.Expect(nginx).To(HaveLen(2), "'nginx' should have 2 entries")
 
 	expects := []*repo.ChartVersion{
 		{
@@ -370,41 +522,12 @@ func verifyLocalIndex(t *testing.T, i *repo.IndexFile) {
 
 	for i, tt := range tests {
 		expect := expects[i]
-		if tt.Name != expect.Name {
-			t.Errorf("Expected name %q, got %q", expect.Name, tt.Name)
-		}
-		if tt.Description != expect.Description {
-			t.Errorf("Expected description %q, got %q", expect.Description, tt.Description)
-		}
-		if tt.Version != expect.Version {
-			t.Errorf("Expected version %q, got %q", expect.Version, tt.Version)
-		}
-		if tt.Digest != expect.Digest {
-			t.Errorf("Expected digest %q, got %q", expect.Digest, tt.Digest)
-		}
-		if tt.Home != expect.Home {
-			t.Errorf("Expected home %q, got %q", expect.Home, tt.Home)
-		}
-
-		for i, url := range tt.URLs {
-			if url != expect.URLs[i] {
-				t.Errorf("Expected URL %q, got %q", expect.URLs[i], url)
-			}
-		}
-		for i, kw := range tt.Keywords {
-			if kw != expect.Keywords[i] {
-				t.Errorf("Expected keywords %q, got %q", expect.Keywords[i], kw)
-			}
-		}
+		g.Expect(tt.Name).To(Equal(expect.Name))
+		g.Expect(tt.Description).To(Equal(expect.Description))
+		g.Expect(tt.Version).To(Equal(expect.Version))
+		g.Expect(tt.Digest).To(Equal(expect.Digest))
+		g.Expect(tt.Home).To(Equal(expect.Home))
+		g.Expect(tt.URLs).To(ContainElements(expect.URLs))
+		g.Expect(tt.Keywords).To(ContainElements(expect.Keywords))
 	}
-}
-
-type mockGetter struct {
-	requestedURL string
-	response     []byte
-}
-
-func (g *mockGetter) Get(url string, options ...getter.Option) (*bytes.Buffer, error) {
-	g.requestedURL = url
-	return bytes.NewBuffer(g.response), nil
 }
