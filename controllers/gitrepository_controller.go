@@ -298,7 +298,7 @@ func (r *GitRepositoryReconciler) reconcile(ctx context.Context, repository sour
 			Namespace: repository.Namespace,
 			Name:      repository.Spec.Verification.SecretRef.Name,
 		}
-		var secret *corev1.Secret
+		secret := &corev1.Secret{}
 		if err := r.Client.Get(ctx, publicKeySecret, secret); err != nil {
 			err = fmt.Errorf("PGP public keys secret error: %w", err)
 			return sourcev1.GitRepositoryNotReady(repository, sourcev1.VerificationFailedReason, err.Error()), err
