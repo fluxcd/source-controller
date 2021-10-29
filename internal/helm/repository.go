@@ -18,12 +18,17 @@ package helm
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"net/url"
+	"os"
 	"path"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/Masterminds/semver/v3"
 	"helm.sh/helm/v3/pkg/getter"
@@ -33,20 +38,37 @@ import (
 	"github.com/fluxcd/pkg/version"
 )
 
+var ErrNoChartIndex = errors.New("no chart index")
+
 // ChartRepository represents a Helm chart repository, and the configuration
-// required to download the chart index, and charts from the repository.
+// required to download the chart index and charts from the repository.
+// All methods are thread safe unless defined otherwise.
 type ChartRepository struct {
-	URL     string
-	Index   *repo.IndexFile
-	Client  getter.Getter
+	// URL the ChartRepository's index.yaml can be found at,
+	// without the index.yaml suffix.
+	URL string
+	// Client to use while downloading the Index or a chart from the URL.
+	Client getter.Getter
+	// Options to configure the Client with while downloading the Index
+	// or a chart from the URL.
 	Options []getter.Option
+	// CachePath is the path of a cached index.yaml for read-only operations.
+	CachePath string
+	// Index contains a loaded chart repository index if not nil.
+	Index *repo.IndexFile
+	// Checksum contains the SHA256 checksum of the loaded chart repository
+	// index bytes.
+	Checksum string
+
+	*sync.RWMutex
 }
 
 // NewChartRepository constructs and returns a new ChartRepository with
 // the ChartRepository.Client configured to the getter.Getter for the
 // repository URL scheme. It returns an error on URL parsing failures,
 // or if there is no getter available for the scheme.
-func NewChartRepository(repositoryURL string, providers getter.Providers, opts []getter.Option) (*ChartRepository, error) {
+func NewChartRepository(repositoryURL, cachePath string, providers getter.Providers, opts []getter.Option) (*ChartRepository, error) {
+	r := newChartRepository()
 	u, err := url.Parse(repositoryURL)
 	if err != nil {
 		return nil, err
@@ -55,17 +77,29 @@ func NewChartRepository(repositoryURL string, providers getter.Providers, opts [
 	if err != nil {
 		return nil, err
 	}
+	r.URL = repositoryURL
+	r.CachePath = cachePath
+	r.Client = c
+	r.Options = opts
+	return r, nil
+}
+
+func newChartRepository() *ChartRepository {
 	return &ChartRepository{
-		URL:     repositoryURL,
-		Client:  c,
-		Options: opts,
-	}, nil
+		RWMutex: &sync.RWMutex{},
+	}
 }
 
 // Get returns the repo.ChartVersion for the given name, the version is expected
 // to be a semver.Constraints compatible string. If version is empty, the latest
 // stable version will be returned and prerelease versions will be ignored.
 func (r *ChartRepository) Get(name, ver string) (*repo.ChartVersion, error) {
+	r.RLock()
+	defer r.RUnlock()
+
+	if r.Index == nil {
+		return nil, ErrNoChartIndex
+	}
 	cvs, ok := r.Index.Entries[name]
 	if !ok {
 		return nil, repo.ErrNoChartName
@@ -114,7 +148,7 @@ func (r *ChartRepository) Get(name, ver string) (*repo.ChartVersion, error) {
 		lookup[v] = cv
 	}
 	if len(matchedVersions) == 0 {
-		return nil, fmt.Errorf("no chart version found for %s-%s", name, ver)
+		return nil, fmt.Errorf("no '%s' chart with version matching '%s' found", name, ver)
 	}
 
 	// Sort versions
@@ -145,7 +179,7 @@ func (r *ChartRepository) Get(name, ver string) (*repo.ChartVersion, error) {
 // ChartRepository. It returns a bytes.Buffer containing the chart data.
 func (r *ChartRepository) DownloadChart(chart *repo.ChartVersion) (*bytes.Buffer, error) {
 	if len(chart.URLs) == 0 {
-		return nil, fmt.Errorf("chart %q has no downloadable URLs", chart.Name)
+		return nil, fmt.Errorf("chart '%s' has no downloadable URLs", chart.Name)
 	}
 
 	// TODO(hidde): according to the Helm source the first item is not
@@ -175,13 +209,9 @@ func (r *ChartRepository) DownloadChart(chart *repo.ChartVersion) (*bytes.Buffer
 	return r.Client.Get(u.String(), r.Options...)
 }
 
-// LoadIndex loads the given bytes into the Index while performing
-// minimal validity checks. It fails if the API version is not set
-// (repo.ErrNoAPIVersion), or if the unmarshal fails.
-//
-// The logic is derived from and on par with:
-// https://github.com/helm/helm/blob/v3.3.4/pkg/repo/index.go#L301
-func (r *ChartRepository) LoadIndex(b []byte) error {
+// LoadIndexFromBytes loads Index from the given bytes.
+// It returns a repo.ErrNoAPIVersion error if the API version is not set
+func (r *ChartRepository) LoadIndexFromBytes(b []byte) error {
 	i := &repo.IndexFile{}
 	if err := yaml.UnmarshalStrict(b, i); err != nil {
 		return err
@@ -190,14 +220,68 @@ func (r *ChartRepository) LoadIndex(b []byte) error {
 		return repo.ErrNoAPIVersion
 	}
 	i.SortEntries()
+
+	r.Lock()
 	r.Index = i
+	r.Checksum = fmt.Sprintf("%x", sha256.Sum256(b))
+	r.Unlock()
 	return nil
 }
 
+// LoadFromFile reads the file at the given path and loads it into Index.
+func (r *ChartRepository) LoadFromFile(path string) error {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	return r.LoadIndexFromBytes(b)
+}
+
+// CacheIndex attempts to write the index from the remote into a new temporary file
+// using DownloadIndex, and sets CachePath.
+// It returns the SHA256 checksum of the downloaded index bytes, or an error.
+// The caller is expected to handle the garbage collection of CachePath, and to
+// load the Index separately using LoadFromCache if required.
+func (r *ChartRepository) CacheIndex() (string, error) {
+	f, err := os.CreateTemp("", "chart-index-*.yaml")
+	if err != nil {
+		return "", fmt.Errorf("failed to create temp file to cache index to: %w", err)
+	}
+
+	h := sha256.New()
+	mw := io.MultiWriter(f, h)
+	if err = r.DownloadIndex(mw); err != nil {
+		f.Close()
+		os.RemoveAll(f.Name())
+		return "", fmt.Errorf("failed to cache index to '%s': %w", f.Name(), err)
+	}
+	if err = f.Close(); err != nil {
+		os.RemoveAll(f.Name())
+		return "", fmt.Errorf("failed to close cached index file '%s': %w", f.Name(), err)
+	}
+
+	r.Lock()
+	r.CachePath = f.Name()
+	r.Unlock()
+	return hex.EncodeToString(h.Sum(nil)), nil
+}
+
+// LoadFromCache attempts to load the Index from the configured CachePath.
+// It returns an error if no CachePath is set, or if the load failed.
+func (r *ChartRepository) LoadFromCache() error {
+	r.RLock()
+	if cachePath := r.CachePath; cachePath != "" {
+		r.RUnlock()
+		return r.LoadFromFile(cachePath)
+	}
+	r.RUnlock()
+	return fmt.Errorf("no cache path set")
+}
+
 // DownloadIndex attempts to download the chart repository index using
-// the Client and set Options, and loads the index file into the Index.
-// It returns an error on URL parsing and Client failures.
-func (r *ChartRepository) DownloadIndex() error {
+// the Client and set Options, and writes the index to the given io.Writer.
+// It returns an url.Error if the URL failed to parse.
+func (r *ChartRepository) DownloadIndex(w io.Writer) (err error) {
 	u, err := url.Parse(r.URL)
 	if err != nil {
 		return err
@@ -205,14 +289,36 @@ func (r *ChartRepository) DownloadIndex() error {
 	u.RawPath = path.Join(u.RawPath, "index.yaml")
 	u.Path = path.Join(u.Path, "index.yaml")
 
-	res, err := r.Client.Get(u.String(), r.Options...)
+	var res *bytes.Buffer
+	res, err = r.Client.Get(u.String(), r.Options...)
 	if err != nil {
 		return err
 	}
-	b, err := io.ReadAll(res)
-	if err != nil {
+	if _, err = io.Copy(w, res); err != nil {
 		return err
 	}
+	return nil
+}
 
-	return r.LoadIndex(b)
+// HasIndex returns true if the Index is not nil.
+func (r *ChartRepository) HasIndex() bool {
+	r.RLock()
+	defer r.RUnlock()
+	return r.Index != nil
+}
+
+// HasCacheFile returns true if CachePath is not empty.
+func (r *ChartRepository) HasCacheFile() bool {
+	r.RLock()
+	defer r.RUnlock()
+	return r.CachePath != ""
+}
+
+// UnloadIndex sets the Index to nil.
+func (r *ChartRepository) UnloadIndex() {
+	if r != nil {
+		r.Lock()
+		r.Index = nil
+		r.Unlock()
+	}
 }
