@@ -20,19 +20,20 @@ import (
 	"reflect"
 	"testing"
 
+	. "github.com/onsi/gomega"
 	helmchart "helm.sh/helm/v3/pkg/chart"
 	"helm.sh/helm/v3/pkg/chartutil"
 )
 
 var (
-	originalValuesFixture []byte            = []byte("override: original")
-	chartFilesFixture     []*helmchart.File = []*helmchart.File{
+	originalValuesFixture = []byte("override: original")
+	chartFilesFixture     = []*helmchart.File{
 		{
 			Name: "values.yaml",
 			Data: originalValuesFixture,
 		},
 	}
-	chartFixture helmchart.Chart = helmchart.Chart{
+	chartFixture = helmchart.Chart{
 		Metadata: &helmchart.Metadata{
 			Name:    "test",
 			Version: "0.1.0",
@@ -108,6 +109,111 @@ func TestOverwriteChartDefaultValues(t *testing.T) {
 					t.Error("should override values.yaml in Files field")
 				}
 			}
+		})
+	}
+}
+
+func Test_LoadChartMetadataFromDir(t *testing.T) {
+	tests := []struct {
+		name                string
+		dir                 string
+		wantName            string
+		wantVersion         string
+		wantDependencyCount int
+		wantErr             string
+	}{
+		{
+			name:        "Loads from dir",
+			dir:         "testdata/charts/helmchart",
+			wantName:    "helmchart",
+			wantVersion: "0.1.0",
+		},
+		{
+			name:                "Loads from v1 dir including requirements.yaml",
+			dir:                 "testdata/charts/helmchartwithdeps-v1",
+			wantName:            chartNameV1,
+			wantVersion:         chartVersionV1,
+			wantDependencyCount: 1,
+		},
+		{
+			name:    "Error if no Chart.yaml",
+			dir:     "testdata/charts/",
+			wantErr: "testdata/charts/Chart.yaml: no such file or directory",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			got, err := LoadChartMetadataFromDir(tt.dir)
+			if tt.wantErr != "" {
+				g.Expect(err).To(HaveOccurred())
+				g.Expect(err.Error()).To(ContainSubstring(tt.wantErr))
+				g.Expect(got).To(BeNil())
+				return
+			}
+
+			g.Expect(err).ToNot(HaveOccurred())
+			g.Expect(got).ToNot(BeNil())
+			g.Expect(got.Validate()).To(Succeed())
+			g.Expect(got.Name).To(Equal(tt.wantName))
+			g.Expect(got.Version).To(Equal(tt.wantVersion))
+			g.Expect(got.Dependencies).To(HaveLen(tt.wantDependencyCount))
+		})
+	}
+}
+
+func TestLoadChartMetadataFromArchive(t *testing.T) {
+	tests := []struct {
+		name                string
+		archive             string
+		wantName            string
+		wantVersion         string
+		wantDependencyCount int
+		wantErr             string
+	}{
+		{
+			name:        "Loads from archive",
+			archive:     helmPackageFile,
+			wantName:    chartName,
+			wantVersion: chartVersion,
+		},
+		{
+			name:                "Loads from v1 archive including requirements.yaml",
+			archive:             helmPackageV1File,
+			wantName:            chartNameV1,
+			wantVersion:         chartVersionV1,
+			wantDependencyCount: 1,
+		},
+		{
+			name:    "Error on not found",
+			archive: "testdata/invalid.tgz",
+			wantErr: "no such file or directory",
+		},
+		{
+			name:    "Error if no Chart.yaml",
+			archive: "testdata/charts/empty.tgz",
+			wantErr: "no 'Chart.yaml' found",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			got, err := LoadChartMetadataFromArchive(tt.archive)
+			if tt.wantErr != "" {
+				g.Expect(err).To(HaveOccurred())
+				g.Expect(err.Error()).To(ContainSubstring(tt.wantErr))
+				g.Expect(got).To(BeNil())
+				return
+			}
+
+			g.Expect(err).ToNot(HaveOccurred())
+			g.Expect(got).ToNot(BeNil())
+			g.Expect(got.Validate()).To(Succeed())
+			g.Expect(got.Name).To(Equal(tt.wantName))
+			g.Expect(got.Version).To(Equal(tt.wantVersion))
+			g.Expect(got.Dependencies).To(HaveLen(tt.wantDependencyCount))
 		})
 	}
 }

@@ -28,8 +28,9 @@ import (
 )
 
 var (
-	helmPackageFile = "testdata/charts/helmchart-0.1.0.tgz"
-
+	// helmPackageFile contains the path to a Helm package in the v2 format
+	// without any dependencies
+	helmPackageFile      = "testdata/charts/helmchart-0.1.0.tgz"
 	chartName            = "helmchart"
 	chartVersion         = "0.1.0"
 	chartLocalRepository = "file://../helmchart"
@@ -38,6 +39,12 @@ var (
 		Version:    chartVersion,
 		Repository: "https://example.com/charts",
 	}
+	// helmPackageV1File contains the path to a Helm package in the v1 format,
+	// including dependencies in a requirements.yaml file which should be
+	// loaded
+	helmPackageV1File = "testdata/charts/helmchartwithdeps-v1-0.3.0.tgz"
+	chartNameV1       = "helmchartwithdeps-v1"
+	chartVersionV1    = "0.3.0"
 )
 
 func TestBuild_WithEmptyDependencies(t *testing.T) {
