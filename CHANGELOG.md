@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.17.1
+
+**Release date:** 2021-10-30
+
+Fixes:
+* Fix pointer error during public key import
+  [#479](https://github.com/fluxcd/source-controller/pull/479)
+
 ## 0.17.0
 
 **Release date:** 2021-10-28
