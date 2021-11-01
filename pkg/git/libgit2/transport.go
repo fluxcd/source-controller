@@ -47,9 +47,11 @@ var (
 func RemoteCallbacks(ctx context.Context, opts *git.AuthOptions) git2go.RemoteCallbacks {
 	if opts != nil {
 		return git2go.RemoteCallbacks{
-			TransferProgressCallback: transferProgressCallback(ctx),
-			CredentialsCallback:      credentialsCallback(opts),
-			CertificateCheckCallback: certificateCallback(opts),
+			SidebandProgressCallback:     transportMessageCallback(ctx),
+			TransferProgressCallback:     transferProgressCallback(ctx),
+			PushTransferProgressCallback: pushTransferProgressCallback(ctx),
+			CredentialsCallback:          credentialsCallback(opts),
+			CertificateCheckCallback:     certificateCallback(opts),
 		}
 	}
 	return git2go.RemoteCallbacks{}
@@ -62,6 +64,38 @@ func transferProgressCallback(ctx context.Context) git2go.TransferProgressCallba
 	return func(p git2go.TransferProgress) git2go.ErrorCode {
 		// Early return if all the objects have been received.
 		if p.ReceivedObjects == p.TotalObjects {
+			return git2go.ErrorCodeOK
+		}
+		select {
+		case <-ctx.Done():
+			return git2go.ErrorCodeUser
+		default:
+			return git2go.ErrorCodeOK
+		}
+	}
+}
+
+// transportMessageCallback constructs TransportMessageCallback which signals
+// libgit2 it should cancel the network operation when the given context is
+// closed.
+func transportMessageCallback(ctx context.Context) git2go.TransportMessageCallback {
+	return func(_ string) git2go.ErrorCode {
+		select {
+		case <-ctx.Done():
+			return git2go.ErrorCodeUser
+		default:
+			return git2go.ErrorCodeOK
+		}
+	}
+}
+
+// pushTransferProgressCallback constructs PushTransferProgressCallback which
+// signals libgit2 it should stop the push transfer when the given context is
+// closed (due to e.g. a timeout).
+func pushTransferProgressCallback(ctx context.Context) git2go.PushTransferProgressCallback {
+	return func(current, total uint32, _ uint) git2go.ErrorCode {
+		// Early return if current equals total.
+		if current == total {
 			return git2go.ErrorCodeOK
 		}
 		select {
