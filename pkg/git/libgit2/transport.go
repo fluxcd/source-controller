@@ -59,7 +59,11 @@ func RemoteCallbacks(ctx context.Context, opts *git.AuthOptions) git2go.RemoteCa
 // libgit2 it should stop the transfer when the given context is closed (due to
 // e.g. a timeout).
 func transferProgressCallback(ctx context.Context) git2go.TransferProgressCallback {
-	return func(_ git2go.TransferProgress) git2go.ErrorCode {
+	return func(p git2go.TransferProgress) git2go.ErrorCode {
+		// Early return if all the objects have been received.
+		if p.ReceivedObjects == p.TotalObjects {
+			return git2go.ErrorCodeOK
+		}
 		select {
 		case <-ctx.Done():
 			return git2go.ErrorCodeUser
