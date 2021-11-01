@@ -28,6 +28,7 @@ import (
 	"github.com/Masterminds/semver/v3"
 	securejoin "github.com/cyphar/filepath-securejoin"
 	"golang.org/x/sync/errgroup"
+	"golang.org/x/sync/semaphore"
 	helmchart "helm.sh/helm/v3/pkg/chart"
 	"helm.sh/helm/v3/pkg/chart/loader"
 )
@@ -58,38 +59,51 @@ type DependencyManager struct {
 	// Dependencies contains a list of dependencies, and the respective
 	// repository the dependency can be found at.
 	Dependencies []*DependencyWithRepository
+	// Workers is the number of concurrent chart-add operations during
+	// Build. Defaults to 1 (non-concurrent).
+	Workers int64
 
 	mu sync.Mutex
 }
 
-// Build compiles and builds the dependencies of the Chart.
+// Build compiles and builds the dependencies of the Chart with the
+// configured number of Workers.
 func (dm *DependencyManager) Build(ctx context.Context) error {
 	if len(dm.Dependencies) == 0 {
 		return nil
 	}
 
-	errs, ctx := errgroup.WithContext(ctx)
-	for _, i := range dm.Dependencies {
-		item := i
-		errs.Go(func() error {
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			default:
-			}
-
-			var err error
-			switch item.Repository {
-			case nil:
-				err = dm.addLocalDependency(item)
-			default:
-				err = dm.addRemoteDependency(item)
-			}
-			return err
-		})
+	workers := dm.Workers
+	if workers <= 0 {
+		workers = 1
 	}
 
-	return errs.Wait()
+	defer func() {
+		for _, dep := range dm.Dependencies {
+			dep.Repository.UnloadIndex()
+		}
+	}()
+
+	group, groupCtx := errgroup.WithContext(ctx)
+	group.Go(func() error {
+		sem := semaphore.NewWeighted(workers)
+		for _, dep := range dm.Dependencies {
+			dep := dep
+			if err := sem.Acquire(groupCtx, 1); err != nil {
+				return err
+			}
+			group.Go(func() error {
+				defer sem.Release(1)
+				if dep.Repository == nil {
+					return dm.addLocalDependency(dep)
+				}
+				return dm.addRemoteDependency(dep)
+			})
+		}
+		return nil
+	})
+
+	return group.Wait()
 }
 
 func (dm *DependencyManager) addLocalDependency(dpr *DependencyWithRepository) error {
@@ -136,7 +150,18 @@ func (dm *DependencyManager) addLocalDependency(dpr *DependencyWithRepository) e
 
 func (dm *DependencyManager) addRemoteDependency(dpr *DependencyWithRepository) error {
 	if dpr.Repository == nil {
-		return fmt.Errorf("no ChartRepository given for '%s' dependency", dpr.Dependency.Name)
+		return fmt.Errorf("no HelmRepository for '%s' dependency", dpr.Dependency.Name)
+	}
+
+	if !dpr.Repository.HasIndex() {
+		if !dpr.Repository.HasCacheFile() {
+			if _, err := dpr.Repository.CacheIndex(); err != nil {
+				return err
+			}
+		}
+		if err := dpr.Repository.LoadFromCache(); err != nil {
+			return err
+		}
 	}
 
 	chartVer, err := dpr.Repository.Get(dpr.Dependency.Name, dpr.Dependency.Version)
@@ -157,7 +182,6 @@ func (dm *DependencyManager) addRemoteDependency(dpr *DependencyWithRepository) 
 	dm.mu.Lock()
 	dm.Chart.AddDependency(ch)
 	dm.mu.Unlock()
-
 	return nil
 }
 

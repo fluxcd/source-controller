@@ -182,13 +182,12 @@ func TestBuild_WithRemoteChart(t *testing.T) {
 		t.Fatal(err)
 	}
 	i := repo.NewIndexFile()
-	i.Add(&helmchart.Metadata{Name: chartName, Version: chartVersion}, fmt.Sprintf("%s-%s.tgz", chartName, chartVersion), "http://example.com/charts", "sha256:1234567890")
+	i.MustAdd(&helmchart.Metadata{Name: chartName, Version: chartVersion}, fmt.Sprintf("%s-%s.tgz", chartName, chartVersion), "http://example.com/charts", "sha256:1234567890")
 	mg := mockGetter{response: b}
-	cr := &ChartRepository{
-		URL:    remoteDepFixture.Repository,
-		Index:  i,
-		Client: &mg,
-	}
+	cr := newChartRepository()
+	cr.URL = remoteDepFixture.Repository
+	cr.Index = i
+	cr.Client = &mg
 	dm := DependencyManager{
 		Chart: &chart,
 		Dependencies: []*DependencyWithRepository{
