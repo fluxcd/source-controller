@@ -48,7 +48,6 @@ import (
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
 	"github.com/fluxcd/source-controller/pkg/sourceignore"
-	"github.com/go-git/go-git/v5/plumbing/format/gitignore"
 )
 
 // +kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=buckets,verbs=get;list;watch;create;update;patch;delete
@@ -74,8 +73,8 @@ type BucketProvider interface {
 	BucketExists(context.Context, string) (bool, error)
 	ObjectExists(context.Context, string, string) (bool, error)
 	FGetObject(context.Context, string, string, string) error
-	ListObjects(context.Context, gitignore.Matcher, string, string) error
 	ObjectIsNotFound(error) bool
+	VisitObjects(context.Context, string, func(string) error) error
 	Close(context.Context)
 }
 
@@ -303,13 +302,13 @@ func fetchFiles(ctx context.Context, client BucketProvider, bucket sourcev1.Buck
 	}
 
 	// Look for file with ignore rules first.
-	path := filepath.Join(tempDir, sourceignore.IgnoreFile)
-	if err := client.FGetObject(ctxTimeout, bucket.Spec.BucketName, sourceignore.IgnoreFile, path); err != nil {
-		if client.ObjectIsNotFound(err) && sourceignore.IgnoreFile != ".sourceignore" {
+	ignorefile := filepath.Join(tempDir, sourceignore.IgnoreFile)
+	if err := client.FGetObject(ctxTimeout, bucket.Spec.BucketName, sourceignore.IgnoreFile, ignorefile); err != nil {
+		if client.ObjectIsNotFound(err) && sourceignore.IgnoreFile != ".sourceignore" { // FIXME?
 			return sourcev1.BucketNotReady(bucket, sourcev1.BucketOperationFailedReason, err.Error()), err
 		}
 	}
-	ps, err := sourceignore.ReadIgnoreFile(path, nil)
+	ps, err := sourceignore.ReadIgnoreFile(ignorefile, nil)
 	if err != nil {
 		return sourcev1.BucketNotReady(bucket, sourcev1.BucketOperationFailedReason, err.Error()), err
 	}
@@ -318,12 +317,29 @@ func fetchFiles(ctx context.Context, client BucketProvider, bucket sourcev1.Buck
 		ps = append(ps, sourceignore.ReadPatterns(strings.NewReader(*bucket.Spec.Ignore), nil)...)
 	}
 	matcher := sourceignore.NewMatcher(ps)
-	err = client.ListObjects(ctxTimeout, matcher, bucket.Spec.BucketName, tempDir)
+
+	err = client.VisitObjects(ctxTimeout, bucket.Spec.BucketName, func(path string) error {
+		if strings.HasSuffix(path, "/") || path == sourceignore.IgnoreFile {
+			return nil
+		}
+
+		if matcher.Match(strings.Split(path, "/"), false) {
+			return nil
+		}
+
+		localPath := filepath.Join(tempDir, path)
+		err := client.FGetObject(ctx, bucket.Spec.BucketName, path, localPath)
+		if err != nil {
+			err = fmt.Errorf("downloading object from bucket '%s' failed: %w", bucket.Spec.BucketName, err)
+			return err
+		}
+		return nil
+	})
 	if err != nil {
-		err = fmt.Errorf("listing objects from bucket '%s' failed: %w", bucket.Spec.BucketName, err)
+		err = fmt.Errorf("fetching objects from bucket '%s' failed: %w", bucket.Spec.BucketName, err)
 		return sourcev1.BucketNotReady(bucket, sourcev1.BucketOperationFailedReason, err.Error()), err
 	}
-	return sourcev1.Bucket{}, nil
+	return bucket, nil
 }
 
 func (r *BucketReconciler) reconcileDelete(ctx context.Context, bucket sourcev1.Bucket) (ctrl.Result, error) {
