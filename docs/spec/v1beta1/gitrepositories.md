@@ -273,6 +273,21 @@ spec:
     commit: 363a6a8fe6a7f13e05d34c163b0ef02a777da20a
 ```
 
+Checkout a specific commit:
+
+```yaml
+apiVersion: source.toolkit.fluxcd.io/v1beta1
+kind: GitRepository
+metadata:
+  name: podinfo
+  namespace: default
+spec:
+  interval: 1m
+  url: https://github.com/stefanprodan/podinfo
+  ref:
+    commit: 363a6a8fe6a7f13e05d34c163b0ef02a777da20a
+```
+
 Pull a specific tag:
 
 ```yaml

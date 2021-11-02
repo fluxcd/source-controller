@@ -229,45 +229,35 @@ func (r *GitRepositoryReconciler) reconcile(ctx context.Context, repository sour
 	}
 	defer os.RemoveAll(tmpGit)
 
-	// determine auth method
-	auth := &git.Auth{}
+	// Configure auth options using secret
+	var authOpts *git.AuthOptions
 	if repository.Spec.SecretRef != nil {
-		authStrategy, err := strategy.AuthSecretStrategyForURL(
-			repository.Spec.URL,
-			git.CheckoutOptions{
-				GitImplementation: repository.Spec.GitImplementation,
-				RecurseSubmodules: repository.Spec.RecurseSubmodules,
-			})
-		if err != nil {
-			return sourcev1.GitRepositoryNotReady(repository, sourcev1.AuthenticationFailedReason, err.Error()), err
-		}
-
 		name := types.NamespacedName{
 			Namespace: repository.GetNamespace(),
 			Name:      repository.Spec.SecretRef.Name,
 		}
 
-		var secret corev1.Secret
-		err = r.Client.Get(ctx, name, &secret)
+		secret := &corev1.Secret{}
+		err = r.Client.Get(ctx, name, secret)
 		if err != nil {
 			err = fmt.Errorf("auth secret error: %w", err)
 			return sourcev1.GitRepositoryNotReady(repository, sourcev1.AuthenticationFailedReason, err.Error()), err
 		}
 
-		auth, err = authStrategy.Method(secret)
+		authOpts, err = git.AuthOptionsFromSecret(repository.Spec.URL, secret)
 		if err != nil {
-			err = fmt.Errorf("auth error: %w", err)
 			return sourcev1.GitRepositoryNotReady(repository, sourcev1.AuthenticationFailedReason, err.Error()), err
 		}
 	}
-
-	checkoutStrategy, err := strategy.CheckoutStrategyForRef(
-		repository.Spec.Reference,
-		git.CheckoutOptions{
-			GitImplementation: repository.Spec.GitImplementation,
-			RecurseSubmodules: repository.Spec.RecurseSubmodules,
-		},
-	)
+	checkoutOpts := git.CheckoutOptions{RecurseSubmodules: repository.Spec.RecurseSubmodules}
+	if ref := repository.Spec.Reference; ref != nil {
+		checkoutOpts.Branch = ref.Branch
+		checkoutOpts.Commit = ref.Commit
+		checkoutOpts.Tag = ref.Tag
+		checkoutOpts.SemVer = ref.SemVer
+	}
+	checkoutStrategy, err := strategy.CheckoutStrategyForImplementation(ctx,
+		git.Implementation(repository.Spec.GitImplementation), checkoutOpts)
 	if err != nil {
 		return sourcev1.GitRepositoryNotReady(repository, sourcev1.GitOperationFailedReason, err.Error()), err
 	}
@@ -275,12 +265,11 @@ func (r *GitRepositoryReconciler) reconcile(ctx context.Context, repository sour
 	gitCtx, cancel := context.WithTimeout(ctx, repository.Spec.Timeout.Duration)
 	defer cancel()
 
-	commit, revision, err := checkoutStrategy.Checkout(gitCtx, tmpGit, repository.Spec.URL, auth)
+	commit, err := checkoutStrategy.Checkout(gitCtx, tmpGit, repository.Spec.URL, authOpts)
 	if err != nil {
 		return sourcev1.GitRepositoryNotReady(repository, sourcev1.GitOperationFailedReason, err.Error()), err
 	}
-
-	artifact := r.Storage.NewArtifactFor(repository.Kind, repository.GetObjectMeta(), revision, fmt.Sprintf("%s.tar.gz", commit.Hash()))
+	artifact := r.Storage.NewArtifactFor(repository.Kind, repository.GetObjectMeta(), commit.String(), fmt.Sprintf("%s.tar.gz", commit.Hash.String()))
 
 	// copy all included repository into the artifact
 	includedArtifacts := []*sourcev1.Artifact{}
@@ -309,14 +298,17 @@ func (r *GitRepositoryReconciler) reconcile(ctx context.Context, repository sour
 			Namespace: repository.Namespace,
 			Name:      repository.Spec.Verification.SecretRef.Name,
 		}
-		var secret corev1.Secret
-		if err := r.Client.Get(ctx, publicKeySecret, &secret); err != nil {
+		secret := &corev1.Secret{}
+		if err := r.Client.Get(ctx, publicKeySecret, secret); err != nil {
 			err = fmt.Errorf("PGP public keys secret error: %w", err)
 			return sourcev1.GitRepositoryNotReady(repository, sourcev1.VerificationFailedReason, err.Error()), err
 		}
 
-		err := commit.Verify(secret)
-		if err != nil {
+		var keyRings []string
+		for _, v := range secret.Data {
+			keyRings = append(keyRings, string(v))
+		}
+		if _, err = commit.Verify(keyRings...); err != nil {
 			return sourcev1.GitRepositoryNotReady(repository, sourcev1.VerificationFailedReason, err.Error()), err
 		}
 	}

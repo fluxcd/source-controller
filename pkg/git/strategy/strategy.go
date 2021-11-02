@@ -17,32 +17,23 @@ limitations under the License.
 package strategy
 
 import (
+	"context"
 	"fmt"
 
-	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
 	"github.com/fluxcd/source-controller/pkg/git"
 	"github.com/fluxcd/source-controller/pkg/git/gogit"
 	"github.com/fluxcd/source-controller/pkg/git/libgit2"
 )
 
-func CheckoutStrategyForRef(ref *sourcev1.GitRepositoryRef, opt git.CheckoutOptions) (git.CheckoutStrategy, error) {
-	switch opt.GitImplementation {
-	case sourcev1.GoGitImplementation:
-		return gogit.CheckoutStrategyForRef(ref, opt), nil
-	case sourcev1.LibGit2Implementation:
-		return libgit2.CheckoutStrategyForRef(ref, opt), nil
+// CheckoutStrategyForImplementation returns the CheckoutStrategy for the given
+// git.Implementation and git.CheckoutOptions.
+func CheckoutStrategyForImplementation(ctx context.Context, impl git.Implementation, opts git.CheckoutOptions) (git.CheckoutStrategy, error) {
+	switch impl {
+	case gogit.Implementation:
+		return gogit.CheckoutStrategyForOptions(ctx, opts), nil
+	case libgit2.Implementation:
+		return libgit2.CheckoutStrategyForOptions(ctx, opts), nil
 	default:
-		return nil, fmt.Errorf("invalid Git implementation %s", opt.GitImplementation)
-	}
-}
-
-func AuthSecretStrategyForURL(url string, opt git.CheckoutOptions) (git.AuthSecretStrategy, error) {
-	switch opt.GitImplementation {
-	case sourcev1.GoGitImplementation:
-		return gogit.AuthSecretStrategyForURL(url)
-	case sourcev1.LibGit2Implementation:
-		return libgit2.AuthSecretStrategyForURL(url)
-	default:
-		return nil, fmt.Errorf("invalid Git implementation %s", opt.GitImplementation)
+		return nil, fmt.Errorf("unsupported Git implementation '%s'", impl)
 	}
 }
