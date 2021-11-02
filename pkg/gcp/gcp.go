@@ -22,14 +22,10 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"strings"
 
 	gcpstorage "cloud.google.com/go/storage"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
-	"github.com/fluxcd/source-controller/pkg/sourceignore"
-	"github.com/go-git/go-git/v5/plumbing/format/gitignore"
 	"github.com/go-logr/logr"
-	"golang.org/x/sync/errgroup"
 	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
 	corev1 "k8s.io/api/core/v1"
@@ -177,10 +173,8 @@ func (c *GCPClient) FGetObject(ctx context.Context, bucketName, objectName, loca
 // ListObjects lists the objects/contents of the bucket whose bucket name is provided.
 // the objects are returned as an Objectiterator and .Next() has to be called on them
 // to loop through the Objects. The Object are downloaded using a goroutine.
-func (c *GCPClient) ListObjects(ctx context.Context, matcher gitignore.Matcher, bucketName, tempDir string) error {
-	log := logr.FromContext(ctx)
+func (c *GCPClient) VisitObjects(ctx context.Context, bucketName string, visit func(string) error) error {
 	items := c.Client.Bucket(bucketName).Objects(ctx, nil)
-	g, ctx := errgroup.WithContext(ctx)
 	for {
 		object, err := items.Next()
 		if err == IteratorDone {
@@ -190,18 +184,9 @@ func (c *GCPClient) ListObjects(ctx context.Context, matcher gitignore.Matcher, 
 			err = fmt.Errorf("listing objects from bucket '%s' failed: %w", bucketName, err)
 			return err
 		}
-		if !(strings.HasSuffix(object.Name, "/") || object.Name == sourceignore.IgnoreFile || matcher.Match(strings.Split(object.Name, "/"), false)) {
-			g.Go(func() error {
-				if err := DownloadObject(ctx, c, object, matcher, bucketName, tempDir); err != nil {
-					log.Error(err, fmt.Sprintf("Error downloading %s from bucket %s: ", object.Name, bucketName))
-					return err
-				}
-				return nil
-			})
+		if err = visit(object.Name); err != nil {
+			return err
 		}
-	}
-	if err := g.Wait(); err != nil {
-		return err
 	}
 	return nil
 }
@@ -217,13 +202,4 @@ func (c *GCPClient) Close(ctx context.Context) {
 // ObjectIsNotFound checks if the error provided is ErrorObjectDoesNotExist(object does not exist)
 func (c *GCPClient) ObjectIsNotFound(err error) bool {
 	return errors.Is(err, ErrorObjectDoesNotExist)
-}
-
-// DownloadObject gets an object and downloads the object locally.
-func DownloadObject(ctx context.Context, cl *GCPClient, obj *gcpstorage.ObjectAttrs, matcher gitignore.Matcher, bucketName, tempDir string) error {
-	localPath := filepath.Join(tempDir, obj.Name)
-	if err := cl.FGetObject(ctx, bucketName, obj.Name, localPath); err != nil {
-		return err
-	}
-	return nil
 }

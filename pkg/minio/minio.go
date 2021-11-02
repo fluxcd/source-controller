@@ -19,12 +19,8 @@ package minio
 import (
 	"context"
 	"fmt"
-	"path/filepath"
-	"strings"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
-	"github.com/fluxcd/source-controller/pkg/sourceignore"
-	"github.com/go-git/go-git/v5/plumbing/format/gitignore"
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 	"github.com/minio/minio-go/v7/pkg/s3utils"
@@ -88,7 +84,7 @@ func (c *MinioClient) FGetObject(ctx context.Context, bucketName, objectName, lo
 }
 
 // ListObjects lists all the objects in a bucket and downloads the objects.
-func (c *MinioClient) ListObjects(ctx context.Context, matcher gitignore.Matcher, bucketName, tempDir string) error {
+func (c *MinioClient) VisitObjects(ctx context.Context, bucketName string, visit func(string) error) error {
 	for object := range c.Client.ListObjects(ctx, bucketName, minio.ListObjectsOptions{
 		Recursive: true,
 		UseV1:     s3utils.IsGoogleEndpoint(*c.Client.EndpointURL()),
@@ -98,18 +94,7 @@ func (c *MinioClient) ListObjects(ctx context.Context, matcher gitignore.Matcher
 			return err
 		}
 
-		if strings.HasSuffix(object.Key, "/") || object.Key == sourceignore.IgnoreFile {
-			continue
-		}
-
-		if matcher.Match(strings.Split(object.Key, "/"), false) {
-			continue
-		}
-
-		localPath := filepath.Join(tempDir, object.Key)
-		err := c.FGetObject(ctx, bucketName, object.Key, localPath)
-		if err != nil {
-			err = fmt.Errorf("downloading object from bucket '%s' failed: %w", bucketName, err)
+		if err := visit(object.Key); err != nil {
 			return err
 		}
 	}
