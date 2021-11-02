@@ -13,7 +13,6 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
-
 package gcp
 
 import (
@@ -24,13 +23,14 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 
 	gcpstorage "cloud.google.com/go/storage"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
 	"github.com/fluxcd/source-controller/pkg/sourceignore"
 	"github.com/go-git/go-git/v5/plumbing/format/gitignore"
 	"github.com/go-logr/logr"
+
+	"golang.org/x/sync/errgroup"
 	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
 	corev1 "k8s.io/api/core/v1"
@@ -181,7 +181,7 @@ func (c *GCPClient) FGetObject(ctx context.Context, bucketName, objectName, loca
 func (c *GCPClient) ListObjects(ctx context.Context, matcher gitignore.Matcher, bucketName, tempDir string) error {
 	log := logr.FromContext(ctx)
 	items := c.Client.Bucket(bucketName).Objects(ctx, nil)
-	var wg sync.WaitGroup
+	g, ctxx := errgroup.WithContext(ctx)
 	for {
 		object, err := items.Next()
 		if err == IteratorDone {
@@ -191,15 +191,19 @@ func (c *GCPClient) ListObjects(ctx context.Context, matcher gitignore.Matcher, 
 			err = fmt.Errorf("listing objects from bucket '%s' failed: %w", bucketName, err)
 			return err
 		}
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			if err := DownloadObject(ctx, c, object, matcher, bucketName, tempDir); err != nil {
-				log.Error(err, fmt.Sprintf("Error downloading %s from bucket %s: ", object.Name, bucketName))
-			}
-		}()
+		if !(strings.HasSuffix(object.Name, "/") || object.Name == sourceignore.IgnoreFile || matcher.Match(strings.Split(object.Name, "/"), false)) {
+			g.Go(func() error {
+				if err := DownloadObject(ctxx, c, object, matcher, bucketName, tempDir); err != nil {
+					log.Error(err, fmt.Sprintf("Error downloading %s from bucket %s: ", object.Name, bucketName))
+					return err
+				}
+				return nil
+			})
+		}
 	}
-	wg.Wait()
+	if err := g.Wait(); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -207,15 +211,17 @@ func (c *GCPClient) ListObjects(ctx context.Context, matcher gitignore.Matcher, 
 func (c *GCPClient) Close(ctx context.Context) {
 	log := logr.FromContext(ctx)
 	if err := c.Client.Close(); err != nil {
-		log.Error(err, "GCP Provider")
+		log.Error(err, "closing GCP client")
 	}
+}
+
+// ObjectIsNotFound checks if the error provided is ErrorObjectDoesNotExist(object does not exist)
+func (c *GCPClient) ObjectIsNotFound(err error) bool {
+	return errors.Is(err, ErrorObjectDoesNotExist)
 }
 
 // DownloadObject gets an object and downloads the object locally.
 func DownloadObject(ctx context.Context, cl *GCPClient, obj *gcpstorage.ObjectAttrs, matcher gitignore.Matcher, bucketName, tempDir string) error {
-	if strings.HasSuffix(obj.Name, "/") || obj.Name == sourceignore.IgnoreFile || matcher.Match(strings.Split(obj.Name, "/"), false) {
-		return nil
-	}
 	localPath := filepath.Join(tempDir, obj.Name)
 	if err := cl.FGetObject(ctx, bucketName, obj.Name, localPath); err != nil {
 		return err

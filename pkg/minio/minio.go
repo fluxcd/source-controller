@@ -73,11 +73,6 @@ func NewClient(ctx context.Context, secret corev1.Secret, bucket sourcev1.Bucket
 	return &MinioClient{Client: client}, nil
 }
 
-// BucketExists checks if the bucket with the provided name exists.
-func (c *MinioClient) BucketExists(ctx context.Context, bucketName string) (bool, error) {
-	return c.Client.BucketExists(ctx, bucketName)
-}
-
 // ObjectExists checks if the object with the provided name exists.
 func (c *MinioClient) ObjectExists(ctx context.Context, bucketName, objectName string) (bool, error) {
 	_, err := c.Client.StatObject(ctx, bucketName, objectName, minio.StatObjectOptions{})
@@ -124,4 +119,10 @@ func (c *MinioClient) ListObjects(ctx context.Context, matcher gitignore.Matcher
 // Close closes the Minio Client and logs any useful errors
 func (c *MinioClient) Close(ctx context.Context) {
 	//minio client does not provide a close method
+}
+
+// ObjectIsNotFound checks if the error provided is NoSuchKey(object does not exist)
+func (c *MinioClient) ObjectIsNotFound(err error) bool {
+	resp, ok := err.(minio.ErrorResponse)
+	return ok && resp.Code != "NoSuchKey"
 }

@@ -335,26 +335,6 @@ func TestDownloadObjectErr(t *testing.T) {
 	assert.Error(t, err, "storage: object doesn't exist")
 }
 
-func TestDownloadObjectSuffix(t *testing.T) {
-	gcpClient := &gcp.GCPClient{
-		Client: client,
-	}
-	tempDir, err := os.MkdirTemp("", bucketName)
-	assert.NilError(t, err)
-	defer os.RemoveAll(tempDir)
-	path := filepath.Join(tempDir, sourceignore.IgnoreFile)
-	ps, err := sourceignore.ReadIgnoreFile(path, nil)
-	assert.NilError(t, err)
-	matcher := sourceignore.NewMatcher(ps)
-	err = gcp.DownloadObject(context.Background(), gcpClient, &gcpstorage.ObjectAttrs{
-		Bucket:      bucketName,
-		Name:        "test1/",
-		ContentType: "text/x-yaml",
-		Size:        1 << 20,
-	}, matcher, bucketName, tempDir)
-	assert.NilError(t, err)
-}
-
 func TestValidateSecret(t *testing.T) {
 	t.Parallel()
 	testCases := []struct {
