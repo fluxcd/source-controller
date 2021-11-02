@@ -188,30 +188,23 @@ func TestFGetObject(t *testing.T) {
 	assert.NilError(t, err)
 }
 
-func TestListObjects(t *testing.T) {
+func TestVisitObjects(t *testing.T) {
 	ctx := context.Background()
-	tempDir, err := os.MkdirTemp("", bucketName)
+	objs := []string{}
+	err := minioclient.VisitObjects(ctx, bucketName, func(path string) error {
+		objs = append(objs, path)
+		return nil
+	})
 	assert.NilError(t, err)
-	defer os.RemoveAll(tempDir)
-	path := filepath.Join(tempDir, sourceignore.IgnoreFile)
-	ps, err := sourceignore.ReadIgnoreFile(path, nil)
-	assert.NilError(t, err)
-	matcher := sourceignore.NewMatcher(ps)
-	err = minioclient.ListObjects(ctx, matcher, bucketName, tempDir)
-	assert.NilError(t, err)
+	assert.DeepEqual(t, objs, []string{objectName})
 }
 
-func TestListObjectsErr(t *testing.T) {
+func TestVisitObjectsErr(t *testing.T) {
 	ctx := context.Background()
 	badBucketName := "bad-bucket"
-	tempDir, err := os.MkdirTemp("", bucketName)
-	assert.NilError(t, err)
-	defer os.RemoveAll(tempDir)
-	path := filepath.Join(tempDir, sourceignore.IgnoreFile)
-	ps, err := sourceignore.ReadIgnoreFile(path, nil)
-	assert.NilError(t, err)
-	matcher := sourceignore.NewMatcher(ps)
-	err = minioclient.ListObjects(ctx, matcher, badBucketName, tempDir)
+	err := minioclient.VisitObjects(ctx, badBucketName, func(string) error {
+		return nil
+	})
 	assert.Error(t, err, fmt.Sprintf("listing objects from bucket '%s' failed: The specified bucket does not exist", badBucketName))
 }
 

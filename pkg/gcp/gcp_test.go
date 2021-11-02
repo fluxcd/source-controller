@@ -35,7 +35,6 @@ import (
 	"github.com/fluxcd/pkg/apis/meta"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
 	"github.com/fluxcd/source-controller/pkg/gcp"
-	"github.com/fluxcd/source-controller/pkg/sourceignore"
 	"google.golang.org/api/googleapi"
 	raw "google.golang.org/api/storage/v1"
 	"gotest.tools/assert"
@@ -212,36 +211,28 @@ func TestObjectNotExists(t *testing.T) {
 	assert.Assert(t, !exists)
 }
 
-func TestListObjects(t *testing.T) {
+func TestVisitObjects(t *testing.T) {
 	gcpClient := &gcp.GCPClient{
 		Client: client,
 	}
-	tempDir, err := os.MkdirTemp("", bucketName)
-	defer os.RemoveAll(tempDir)
-	assert.NilError(t, err)
-	path := filepath.Join(tempDir, sourceignore.IgnoreFile)
-	ps, err := sourceignore.ReadIgnoreFile(path, nil)
-	assert.NilError(t, err)
-	matcher := sourceignore.NewMatcher(ps)
 
-	err = gcpClient.ListObjects(context.Background(), matcher, bucketName, tempDir)
+	objs := []string{}
+	err := gcpClient.VisitObjects(context.Background(), bucketName, func(path string) error {
+		objs = append(objs, path)
+		return nil
+	})
 	assert.NilError(t, err)
+	assert.DeepEqual(t, objs, []string{})
 }
 
-func TestListObjectsErr(t *testing.T) {
+func TestVisitObjectsErr(t *testing.T) {
 	gcpClient := &gcp.GCPClient{
 		Client: client,
 	}
 	badBucketName := "bad-bucket"
-	tempDir, err := os.MkdirTemp("", badBucketName)
-	defer os.RemoveAll(tempDir)
-	assert.NilError(t, err)
-	path := filepath.Join(tempDir, sourceignore.IgnoreFile)
-	ps, err := sourceignore.ReadIgnoreFile(path, nil)
-	assert.NilError(t, err)
-	matcher := sourceignore.NewMatcher(ps)
-
-	err = gcpClient.ListObjects(context.Background(), matcher, badBucketName, tempDir)
+	err := gcpClient.VisitObjects(context.Background(), badBucketName, func(path string) error {
+		return nil
+	})
 	assert.Error(t, err, fmt.Sprintf("listing objects from bucket '%s' failed: storage: bucket doesn't exist", badBucketName))
 }
 
@@ -285,46 +276,6 @@ func TestFGetObjectDirectoryIsFileName(t *testing.T) {
 	if err != io.EOF {
 		assert.Error(t, err, "filename is a directory")
 	}
-}
-
-func TestDownloadObject(t *testing.T) {
-	gcpClient := &gcp.GCPClient{
-		Client: client,
-	}
-	tempDir, err := os.MkdirTemp("", bucketName)
-	assert.NilError(t, err)
-	defer os.RemoveAll(tempDir)
-	path := filepath.Join(tempDir, sourceignore.IgnoreFile)
-	ps, err := sourceignore.ReadIgnoreFile(path, nil)
-	assert.NilError(t, err)
-	matcher := sourceignore.NewMatcher(ps)
-	err = gcp.DownloadObject(context.Background(), gcpClient, &gcpstorage.ObjectAttrs{
-		Bucket:      bucketName,
-		Name:        objectName,
-		ContentType: "text/x-yaml",
-		Size:        1 << 20,
-	}, matcher, bucketName, tempDir)
-	assert.NilError(t, err)
-}
-
-func TestDownloadObjectErr(t *testing.T) {
-	gcpClient := &gcp.GCPClient{
-		Client: client,
-	}
-	tempDir, err := os.MkdirTemp("", bucketName)
-	assert.NilError(t, err)
-	defer os.RemoveAll(tempDir)
-	path := filepath.Join(tempDir, sourceignore.IgnoreFile)
-	ps, err := sourceignore.ReadIgnoreFile(path, nil)
-	assert.NilError(t, err)
-	matcher := sourceignore.NewMatcher(ps)
-	err = gcp.DownloadObject(context.Background(), gcpClient, &gcpstorage.ObjectAttrs{
-		Bucket:      bucketName,
-		Name:        "test1.yaml",
-		ContentType: "text/x-yaml",
-		Size:        1 << 20,
-	}, matcher, bucketName, tempDir)
-	assert.Error(t, err, "storage: object doesn't exist")
 }
 
 func TestValidateSecret(t *testing.T) {
