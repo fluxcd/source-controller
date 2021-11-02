@@ -75,6 +75,7 @@ type BucketProvider interface {
 	ObjectExists(context.Context, string, string) (bool, error)
 	FGetObject(context.Context, string, string, string) error
 	ListObjects(context.Context, gitignore.Matcher, string, string) error
+	ObjectIsNotFound(error) bool
 	Close(context.Context)
 }
 
@@ -189,6 +190,7 @@ func (r *BucketReconciler) reconcile(ctx context.Context, bucket sourcev1.Bucket
 		err = fmt.Errorf("tmp dir error: %w", err)
 		return sourcev1.BucketNotReady(bucket, sourcev1.StorageOperationFailedReason, err.Error()), err
 	}
+	defer os.RemoveAll(tempDir)
 	secretName := types.NamespacedName{
 		Namespace: bucket.GetNamespace(),
 		Name:      bucket.Spec.SecretRef.Name,
@@ -199,7 +201,7 @@ func (r *BucketReconciler) reconcile(ctx context.Context, bucket sourcev1.Bucket
 		return sourcev1.BucketNotReady(bucket, sourcev1.AuthenticationFailedReason, err.Error()), fmt.Errorf("credentials secret error: %w", err)
 	}
 
-	if bucketResponse, err := registerBucketProviders(ctx, bucket, secret, tempDir); err != nil {
+	if bucketResponse, err := fetchBucketContents(ctx, bucket, secret, tempDir); err != nil {
 		return bucketResponse, err
 	}
 
@@ -247,13 +249,12 @@ func (r *BucketReconciler) reconcile(ctx context.Context, bucket sourcev1.Bucket
 	}
 
 	message := fmt.Sprintf("Fetched revision: %s", artifact.Revision)
-	os.RemoveAll(tempDir)
 	return sourcev1.BucketReady(bucket, artifact, url, sourcev1.BucketOperationSucceedReason, message), nil
 }
 
-// registerBucketProviders selects a bucket provider that implement the bucket provider interface based on
+// fetchBucketContents selects a bucket provider that implement the bucket provider interface based on
 // on the specified provider in the bucket spec.
-func registerBucketProviders(ctx context.Context, bucket sourcev1.Bucket, secret corev1.Secret, tempDir string) (sourcev1.Bucket, error) {
+func fetchBucketContents(ctx context.Context, bucket sourcev1.Bucket, secret corev1.Secret, tempDir string) (sourcev1.Bucket, error) {
 	switch bucket.Spec.Provider {
 	case sourcev1.GoogleBucketProvider:
 		gcpClient, err := gcp.NewClient(ctx, secret, bucket)
@@ -261,7 +262,8 @@ func registerBucketProviders(ctx context.Context, bucket sourcev1.Bucket, secret
 			err = fmt.Errorf("auth error: %w", err)
 			return sourcev1.Bucket{}, err
 		}
-		if bucketResponse, err := reconcileAll(ctx, gcpClient, bucket, tempDir); err != nil {
+		defer gcpClient.Close(ctx)
+		if bucketResponse, err := fetchFiles(ctx, gcpClient, bucket, tempDir); err != nil {
 			return bucketResponse, err
 		}
 	default:
@@ -270,17 +272,16 @@ func registerBucketProviders(ctx context.Context, bucket sourcev1.Bucket, secret
 			err = fmt.Errorf("auth error: %w", err)
 			return sourcev1.Bucket{}, err
 		}
-		if bucketResponse, err := reconcileAll(ctx, minioClient, bucket, tempDir); err != nil {
+		if bucketResponse, err := fetchFiles(ctx, minioClient, bucket, tempDir); err != nil {
 			return bucketResponse, err
 		}
 	}
 	return sourcev1.Bucket{}, nil
 }
 
-func reconcileAll(ctx context.Context, client BucketProvider, bucket sourcev1.Bucket, tempDir string) (sourcev1.Bucket, error) {
+func fetchFiles(ctx context.Context, client BucketProvider, bucket sourcev1.Bucket, tempDir string) (sourcev1.Bucket, error) {
 	ctxTimeout, cancel := context.WithTimeout(ctx, bucket.Spec.Timeout.Duration)
 	defer cancel()
-	defer client.Close(ctx)
 	exists, err := client.BucketExists(ctxTimeout, bucket.Spec.BucketName)
 	if err != nil {
 		return sourcev1.BucketNotReady(bucket, sourcev1.BucketOperationFailedReason, err.Error()), err
@@ -293,7 +294,7 @@ func reconcileAll(ctx context.Context, client BucketProvider, bucket sourcev1.Bu
 	// Look for file with ignore rules first.
 	path := filepath.Join(tempDir, sourceignore.IgnoreFile)
 	if err := client.FGetObject(ctxTimeout, bucket.Spec.BucketName, sourceignore.IgnoreFile, path); err != nil {
-		if err == gcp.ErrorObjectDoesNotExist && sourceignore.IgnoreFile != ".sourceignore" {
+		if client.ObjectIsNotFound(err) && sourceignore.IgnoreFile != ".sourceignore" {
 			return sourcev1.BucketNotReady(bucket, sourcev1.BucketOperationFailedReason, err.Error()), err
 		}
 	}

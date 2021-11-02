@@ -119,7 +119,6 @@ func TestMain(m *testing.M) {
 	run := m.Run()
 	removeObjectFromBucket(ctx)
 	deleteBucket(ctx)
-	//minioclient.Client.Close
 	os.Exit(run)
 }
 
