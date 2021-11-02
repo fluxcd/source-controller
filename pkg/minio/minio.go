@@ -121,6 +121,7 @@ func (c *MinioClient) Close(ctx context.Context) {
 	//minio client does not provide a close method
 }
 
+// ObjectIsNotFound checks if the error provided is NoSuchKey(object does not exist)
 func (c *MinioClient) ObjectIsNotFound(err error) bool {
 	resp, ok := err.(minio.ErrorResponse)
 	return ok && resp.Code != "NoSuchKey"

@@ -23,7 +23,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 
 	gcpstorage "cloud.google.com/go/storage"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
@@ -181,7 +180,6 @@ func (c *GCPClient) FGetObject(ctx context.Context, bucketName, objectName, loca
 func (c *GCPClient) ListObjects(ctx context.Context, matcher gitignore.Matcher, bucketName, tempDir string) error {
 	log := logr.FromContext(ctx)
 	items := c.Client.Bucket(bucketName).Objects(ctx, nil)
-	var wg sync.WaitGroup
 	g, ctx := errgroup.WithContext(ctx)
 	for {
 		object, err := items.Next()
@@ -193,9 +191,7 @@ func (c *GCPClient) ListObjects(ctx context.Context, matcher gitignore.Matcher, 
 			return err
 		}
 		if !(strings.HasSuffix(object.Name, "/") || object.Name == sourceignore.IgnoreFile || matcher.Match(strings.Split(object.Name, "/"), false)) {
-			wg.Add(1)
 			g.Go(func() error {
-				defer wg.Done()
 				if err := DownloadObject(ctx, c, object, matcher, bucketName, tempDir); err != nil {
 					log.Error(err, fmt.Sprintf("Error downloading %s from bucket %s: ", object.Name, bucketName))
 					return err
@@ -207,7 +203,6 @@ func (c *GCPClient) ListObjects(ctx context.Context, matcher gitignore.Matcher, 
 	if err := g.Wait(); err != nil {
 		return err
 	}
-	wg.Wait()
 	return nil
 }
 
@@ -219,6 +214,7 @@ func (c *GCPClient) Close(ctx context.Context) {
 	}
 }
 
+// ObjectIsNotFound checks if the error provided is ErrorObjectDoesNotExist(object does not exist)
 func (c *GCPClient) ObjectIsNotFound(err error) bool {
 	return errors.Is(err, ErrorObjectDoesNotExist)
 }
