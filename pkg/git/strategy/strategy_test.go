@@ -19,6 +19,8 @@ package strategy
 import (
 	"context"
 	"errors"
+	"fmt"
+	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -189,7 +191,7 @@ func TestCheckoutStrategyForImplementation_Auth(t *testing.T) {
 	// Run the test cases against the git implementations.
 	for _, gitImpl := range gitImpls {
 		for _, tt := range cases {
-			t.Run(string(gitImpl)+"_"+tt.name, testFunc(tt, gitImpl))
+			t.Run(fmt.Sprintf("%s_%s", gitImpl, tt.name), testFunc(tt, gitImpl))
 		}
 	}
 }
@@ -351,7 +353,98 @@ func TestCheckoutStrategyForImplementation_SemVerCheckout(t *testing.T) {
 	// Run the test cases against the git implementations.
 	for _, gitImpl := range gitImpls {
 		for _, tt := range tests {
-			t.Run(string(gitImpl)+"_"+tt.name, testFunc(tt, gitImpl))
+			t.Run(fmt.Sprintf("%s_%s", gitImpl, tt.name), testFunc(tt, gitImpl))
+		}
+	}
+}
+
+func TestCheckoutStrategyForImplementation_WithCtxTimeout(t *testing.T) {
+	gitImpls := []git.Implementation{gogit.Implementation, libgit2.Implementation}
+
+	type testCase struct {
+		name    string
+		timeout time.Duration
+		wantErr bool
+	}
+
+	cases := []testCase{
+		{
+			name:    "fails with short timeout",
+			timeout: 100 * time.Millisecond,
+			wantErr: true,
+		},
+		{
+			name:    "succeeds with sufficient timeout",
+			timeout: 5 * time.Second,
+			wantErr: false,
+		},
+	}
+
+	// Keeping it low to keep the test run time low.
+	serverDelay := 500 * time.Millisecond
+
+	testFunc := func(tt testCase, impl git.Implementation) func(t *testing.T) {
+		return func(*testing.T) {
+			g := NewWithT(t)
+
+			gitServer, err := gittestserver.NewTempGitServer()
+			g.Expect(err).ToNot(HaveOccurred())
+			defer os.RemoveAll(gitServer.Root())
+			username := "test-user"
+			password := "test-password"
+			gitServer.Auth(username, password)
+			gitServer.KeyDir(gitServer.Root())
+
+			middleware := func(next http.Handler) http.Handler {
+				return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					time.Sleep(serverDelay)
+					next.ServeHTTP(w, r)
+				})
+			}
+			gitServer.AddHTTPMiddlewares(middleware)
+
+			g.Expect(gitServer.StartHTTP()).ToNot(HaveOccurred())
+			defer gitServer.StopHTTP()
+
+			branch := "main"
+			repoPath := "bar/test-reponame"
+			err = gitServer.InitRepo("testdata/repo1", branch, repoPath)
+			g.Expect(err).ToNot(HaveOccurred())
+
+			repoURL := gitServer.HTTPAddressWithCredentials() + "/" + repoPath
+
+			authOpts := &git.AuthOptions{
+				Transport: git.HTTP,
+				Username:  username,
+				Password:  password,
+			}
+
+			checkoutOpts := git.CheckoutOptions{
+				Branch: branch,
+			}
+			checkoutStrategy, err := CheckoutStrategyForImplementation(context.TODO(), impl, checkoutOpts)
+			g.Expect(err).ToNot(HaveOccurred())
+
+			tmpDir, err := os.MkdirTemp("", "test-checkout")
+			g.Expect(err).ToNot(HaveOccurred())
+			defer os.RemoveAll(tmpDir)
+
+			checkoutCtx, cancel := context.WithTimeout(context.TODO(), tt.timeout)
+			defer cancel()
+
+			_, gotErr := checkoutStrategy.Checkout(checkoutCtx, tmpDir, repoURL, authOpts)
+			if tt.wantErr {
+				g.Expect(gotErr).To(HaveOccurred())
+			} else {
+				g.Expect(gotErr).ToNot(HaveOccurred())
+			}
+		}
+	}
+
+	// Run the test cases against the git implementations.
+	for _, gitImpl := range gitImpls {
+		for _, tt := range cases {
+			t.Run(fmt.Sprintf("%s_%s", gitImpl, tt.name), testFunc(tt, gitImpl))
 		}
 	}
 }
