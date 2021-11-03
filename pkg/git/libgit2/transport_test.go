@@ -18,6 +18,7 @@ package libgit2
 
 import (
 	"bytes"
+	"context"
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/pem"
@@ -342,6 +343,155 @@ gitlab.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAfuCHKVTjquxvt6CM6tdG4SLp1Btn/nO
 			} else {
 				g.Expect(err).ToNot(HaveOccurred())
 			}
+		})
+	}
+}
+
+func Test_transferProgressCallback(t *testing.T) {
+	tests := []struct {
+		name       string
+		progress   git2go.TransferProgress
+		cancelFunc func(context.CancelFunc)
+		wantErr    git2go.ErrorCode
+	}{
+		{
+			name: "ok - in progress",
+			progress: git2go.TransferProgress{
+				TotalObjects:    30,
+				ReceivedObjects: 21,
+			},
+			cancelFunc: func(cf context.CancelFunc) {},
+			wantErr:    git2go.ErrorCodeOK,
+		},
+		{
+			name: "ok - transfer complete",
+			progress: git2go.TransferProgress{
+				TotalObjects:    30,
+				ReceivedObjects: 30,
+			},
+			cancelFunc: func(cf context.CancelFunc) {},
+			wantErr:    git2go.ErrorCodeOK,
+		},
+		{
+			name: "ok - transfer complete, context cancelled",
+			progress: git2go.TransferProgress{
+				TotalObjects:    30,
+				ReceivedObjects: 30,
+			},
+			cancelFunc: func(cf context.CancelFunc) { cf() },
+			wantErr:    git2go.ErrorCodeOK,
+		},
+		{
+			name: "error - context cancelled",
+			progress: git2go.TransferProgress{
+				TotalObjects:    30,
+				ReceivedObjects: 21,
+			},
+			cancelFunc: func(cf context.CancelFunc) { cf() },
+			wantErr:    git2go.ErrorCodeUser,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			ctx, cancel := context.WithCancel(context.TODO())
+			defer cancel()
+
+			tpcb := transferProgressCallback(ctx)
+
+			tt.cancelFunc(cancel)
+
+			g.Expect(tpcb(tt.progress)).To(Equal(tt.wantErr))
+		})
+	}
+}
+
+func Test_transportMessageCallback(t *testing.T) {
+	tests := []struct {
+		name       string
+		cancelFunc func(context.CancelFunc)
+		wantErr    git2go.ErrorCode
+	}{
+		{
+			name:       "ok - transport open",
+			cancelFunc: func(cf context.CancelFunc) {},
+			wantErr:    git2go.ErrorCodeOK,
+		},
+		{
+			name:       "error - transport closed",
+			cancelFunc: func(cf context.CancelFunc) { cf() },
+			wantErr:    git2go.ErrorCodeUser,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			ctx, cancel := context.WithCancel(context.TODO())
+			defer cancel()
+
+			tmcb := transportMessageCallback(ctx)
+
+			tt.cancelFunc(cancel)
+
+			g.Expect(tmcb("")).To(Equal(tt.wantErr))
+		})
+	}
+}
+
+func Test_pushTransferProgressCallback(t *testing.T) {
+	type pushProgress struct {
+		current uint32
+		total   uint32
+		bytes   uint
+	}
+	tests := []struct {
+		name       string
+		progress   pushProgress
+		cancelFunc func(context.CancelFunc)
+		wantErr    git2go.ErrorCode
+	}{
+		{
+			name:       "ok - in progress",
+			progress:   pushProgress{current: 20, total: 25},
+			cancelFunc: func(cf context.CancelFunc) {},
+			wantErr:    git2go.ErrorCodeOK,
+		},
+		{
+			name:       "ok - transfer complete",
+			progress:   pushProgress{current: 25, total: 25},
+			cancelFunc: func(cf context.CancelFunc) {},
+			wantErr:    git2go.ErrorCodeOK,
+		},
+		{
+			name:       "ok - transfer complete, context cancelled",
+			progress:   pushProgress{current: 25, total: 25},
+			cancelFunc: func(cf context.CancelFunc) { cf() },
+			wantErr:    git2go.ErrorCodeOK,
+		},
+		{
+			name:       "error - context cancelled",
+			progress:   pushProgress{current: 20, total: 25},
+			cancelFunc: func(cf context.CancelFunc) { cf() },
+			wantErr:    git2go.ErrorCodeUser,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			ctx, cancel := context.WithCancel(context.TODO())
+			defer cancel()
+
+			ptpcb := pushTransferProgressCallback(ctx)
+
+			tt.cancelFunc(cancel)
+
+			g.Expect(ptpcb(tt.progress.current, tt.progress.total, tt.progress.bytes)).To(Equal(tt.wantErr))
 		})
 	}
 }
