@@ -1,0 +1,12 @@
+dependencies:
+- name: helmchart
+  repository: file://../helmchart
+  version: 0.1.0
+- name: helmchart
+  repository: file://../helmchart
+  version: 0.1.0
+- name: grafana
+  repository: https://grafana.github.io/helm-charts
+  version: 6.17.4
+digest: sha256:1e41c97e27347f433ff0212bf52c344bc82dd435f70129d15e96cd2c8fcc32bb
+generated: "2021-11-02T01:25:59.624290788+01:00"

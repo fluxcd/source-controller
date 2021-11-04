@@ -17,7 +17,6 @@ limitations under the License.
 package helm
 
 import (
-	"reflect"
 	"testing"
 
 	. "github.com/onsi/gomega"
@@ -87,33 +86,35 @@ func TestOverwriteChartDefaultValues(t *testing.T) {
 	}
 	for _, tt := range testCases {
 		t.Run(tt.desc, func(t *testing.T) {
+			g := NewWithT(t)
+
 			fixture := tt.chart
 			ok, err := OverwriteChartDefaultValues(&fixture, tt.data)
-			if ok != tt.ok {
-				t.Fatalf("should return %v, returned %v", tt.ok, ok)
-			}
-			if err != nil && !tt.expectErr {
-				t.Fatalf("returned unexpected error: %v", err)
-			}
-			if err == nil && tt.expectErr {
-				t.Fatal("expected error")
+			g.Expect(ok).To(Equal(tt.ok))
+
+			if tt.expectErr {
+				g.Expect(err).To(HaveOccurred())
+				g.Expect(ok).To(Equal(tt.ok))
+				return
 			}
 
-			for _, f := range fixture.Raw {
-				if f.Name == chartutil.ValuesfileName && reflect.DeepEqual(f.Data, originalValuesFixture) && tt.ok {
-					t.Error("should override values.yaml in Raw field")
+			if tt.ok {
+				for _, f := range fixture.Raw {
+					if f.Name == chartutil.ValuesfileName {
+						g.Expect(f.Data).To(Equal(tt.data))
+					}
 				}
-			}
-			for _, f := range fixture.Files {
-				if f.Name == chartutil.ValuesfileName && reflect.DeepEqual(f.Data, originalValuesFixture) && tt.ok {
-					t.Error("should override values.yaml in Files field")
+				for _, f := range fixture.Files {
+					if f.Name == chartutil.ValuesfileName {
+						g.Expect(f.Data).To(Equal(tt.data))
+					}
 				}
 			}
 		})
 	}
 }
 
-func Test_LoadChartMetadataFromDir(t *testing.T) {
+func TestLoadChartMetadataFromDir(t *testing.T) {
 	tests := []struct {
 		name                string
 		dir                 string

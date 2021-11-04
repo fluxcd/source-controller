@@ -70,17 +70,17 @@ func OverwriteChartDefaultValues(chart *helmchart.Chart, data []byte) (bool, err
 // LoadChartMetadata attempts to load the chart.Metadata from the "Chart.yaml" file in the directory or archive at the
 // given chartPath. It takes "requirements.yaml" files into account, and is therefore compatible with the
 // chart.APIVersionV1 format.
-func LoadChartMetadata(chartPath string) (*helmchart.Metadata, error) {
+func LoadChartMetadata(chartPath string) (meta *helmchart.Metadata, err error) {
 	i, err := os.Stat(chartPath)
 	if err != nil {
 		return nil, err
 	}
-	switch {
-	case i.IsDir():
-		return LoadChartMetadataFromDir(chartPath)
-	default:
-		return LoadChartMetadataFromArchive(chartPath)
+	if i.IsDir() {
+		meta, err = LoadChartMetadataFromDir(chartPath)
+		return
 	}
+	meta, err = LoadChartMetadataFromArchive(chartPath)
+	return
 }
 
 // LoadChartMetadataFromDir loads the chart.Metadata from the "Chart.yaml" file in the directory at the given path.
