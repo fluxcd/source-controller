@@ -47,7 +47,8 @@ type mockGetter struct {
 
 func (g *mockGetter) Get(url string, _ ...getter.Option) (*bytes.Buffer, error) {
 	g.requestedURL = url
-	return bytes.NewBuffer(g.response), nil
+	r := g.response
+	return bytes.NewBuffer(r), nil
 }
 
 func TestNewChartRepository(t *testing.T) {
@@ -402,7 +403,7 @@ func TestChartRepository_CacheIndex(t *testing.T) {
 	g.Expect(sum).To(BeEquivalentTo(expectSum))
 }
 
-func TestChartRepository_LoadIndexFromCache(t *testing.T) {
+func TestChartRepository_LoadFromCache(t *testing.T) {
 	tests := []struct {
 		name      string
 		cachePath string
@@ -458,7 +459,7 @@ func TestChartRepository_UnloadIndex(t *testing.T) {
 	r := newChartRepository()
 	g.Expect(r.HasIndex()).To(BeFalse())
 	r.Index = repo.NewIndexFile()
-	r.UnloadIndex()
+	r.Unload()
 	g.Expect(r.Index).To(BeNil())
 }
 

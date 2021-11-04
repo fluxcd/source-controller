@@ -54,6 +54,9 @@ type ChartRepository struct {
 	Options []getter.Option
 	// CachePath is the path of a cached index.yaml for read-only operations.
 	CachePath string
+	// Cached indicates if the ChartRepository index.yaml has been cached
+	// to CachePath.
+	Cached bool
 	// Index contains a loaded chart repository index if not nil.
 	Index *repo.IndexFile
 	// Checksum contains the SHA256 checksum of the loaded chart repository
@@ -68,7 +71,6 @@ type ChartRepository struct {
 // repository URL scheme. It returns an error on URL parsing failures,
 // or if there is no getter available for the scheme.
 func NewChartRepository(repositoryURL, cachePath string, providers getter.Providers, opts []getter.Option) (*ChartRepository, error) {
-	r := newChartRepository()
 	u, err := url.Parse(repositoryURL)
 	if err != nil {
 		return nil, err
@@ -77,6 +79,8 @@ func NewChartRepository(repositoryURL, cachePath string, providers getter.Provid
 	if err != nil {
 		return nil, err
 	}
+
+	r := newChartRepository()
 	r.URL = repositoryURL
 	r.CachePath = cachePath
 	r.Client = c
@@ -238,7 +242,7 @@ func (r *ChartRepository) LoadFromFile(path string) error {
 }
 
 // CacheIndex attempts to write the index from the remote into a new temporary file
-// using DownloadIndex, and sets CachePath.
+// using DownloadIndex, and sets CachePath and Cached.
 // It returns the SHA256 checksum of the downloaded index bytes, or an error.
 // The caller is expected to handle the garbage collection of CachePath, and to
 // load the Index separately using LoadFromCache if required.
@@ -262,19 +266,40 @@ func (r *ChartRepository) CacheIndex() (string, error) {
 
 	r.Lock()
 	r.CachePath = f.Name()
+	r.Cached = true
 	r.Unlock()
 	return hex.EncodeToString(h.Sum(nil)), nil
+}
+
+// StrategicallyLoadIndex lazy-loads the Index from CachePath using
+// LoadFromCache if it does not HasIndex.
+// If it not HasCacheFile, a cache attempt is made using CacheIndex
+// before continuing to load.
+// It returns a boolean indicating if it cached the index before
+// loading, or an error.
+func (r *ChartRepository) StrategicallyLoadIndex() (err error) {
+	if r.HasIndex() {
+		return
+	}
+	if !r.HasCacheFile() {
+		if _, err = r.CacheIndex(); err != nil {
+			err = fmt.Errorf("failed to strategically load index: %w", err)
+			return
+		}
+	}
+	if err = r.LoadFromCache(); err != nil {
+		err = fmt.Errorf("failed to strategically load index: %w", err)
+		return
+	}
+	return
 }
 
 // LoadFromCache attempts to load the Index from the configured CachePath.
 // It returns an error if no CachePath is set, or if the load failed.
 func (r *ChartRepository) LoadFromCache() error {
-	r.RLock()
 	if cachePath := r.CachePath; cachePath != "" {
-		r.RUnlock()
 		return r.LoadFromFile(cachePath)
 	}
-	r.RUnlock()
 	return fmt.Errorf("no cache path set")
 }
 
@@ -314,11 +339,34 @@ func (r *ChartRepository) HasCacheFile() bool {
 	return r.CachePath != ""
 }
 
-// UnloadIndex sets the Index to nil.
-func (r *ChartRepository) UnloadIndex() {
-	if r != nil {
-		r.Lock()
-		r.Index = nil
-		r.Unlock()
+// Unload can be used to signal the Go garbage collector the Index can
+// be freed from memory if the ChartRepository object is expected to
+// continue to exist in the stack for some time.
+func (r *ChartRepository) Unload()  {
+	if r == nil {
+		return
 	}
+
+	r.Lock()
+	defer r.Unlock()
+	r.Index = nil
+}
+
+// RemoveCache removes the CachePath if Cached.
+func (r *ChartRepository) RemoveCache() error {
+	if r == nil {
+		return nil
+	}
+
+	r.Lock()
+	defer r.Unlock()
+
+	if r.Cached {
+		if err := os.Remove(r.CachePath); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+		r.CachePath = ""
+		r.Cached = false
+	}
+	return nil
 }
