@@ -17,12 +17,15 @@ limitations under the License.
 package controllers
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"net/url"
 	"time"
 
+	"github.com/fluxcd/pkg/apis/meta"
+	"github.com/fluxcd/pkg/runtime/events"
+	"github.com/fluxcd/pkg/runtime/metrics"
+	"github.com/fluxcd/pkg/runtime/predicates"
 	"github.com/go-logr/logr"
 	"helm.sh/helm/v3/pkg/getter"
 	corev1 "k8s.io/api/core/v1"
@@ -37,12 +40,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
-	"sigs.k8s.io/yaml"
-
-	"github.com/fluxcd/pkg/apis/meta"
-	"github.com/fluxcd/pkg/runtime/events"
-	"github.com/fluxcd/pkg/runtime/metrics"
-	"github.com/fluxcd/pkg/runtime/predicates"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
 	"github.com/fluxcd/source-controller/internal/helm"
@@ -198,7 +195,7 @@ func (r *HelmRepositoryReconciler) reconcile(ctx context.Context, repository sou
 		clientOpts = append(clientOpts, opts...)
 	}
 
-	chartRepo, err := helm.NewChartRepository(repository.Spec.URL, r.Getters, clientOpts)
+	chartRepo, err := helm.NewChartRepository(repository.Spec.URL, "", r.Getters, clientOpts)
 	if err != nil {
 		switch err.(type) {
 		case *url.Error:
@@ -207,22 +204,21 @@ func (r *HelmRepositoryReconciler) reconcile(ctx context.Context, repository sou
 			return sourcev1.HelmRepositoryNotReady(repository, sourcev1.IndexationFailedReason, err.Error()), err
 		}
 	}
-	if err := chartRepo.DownloadIndex(); err != nil {
+	revision, err := chartRepo.CacheIndex()
+	if err != nil {
 		err = fmt.Errorf("failed to download repository index: %w", err)
 		return sourcev1.HelmRepositoryNotReady(repository, sourcev1.IndexationFailedReason, err.Error()), err
 	}
+	defer chartRepo.RemoveCache()
 
-	indexBytes, err := yaml.Marshal(&chartRepo.Index)
-	if err != nil {
-		return sourcev1.HelmRepositoryNotReady(repository, sourcev1.StorageOperationFailedReason, err.Error()), err
-	}
-	hash := r.Storage.Checksum(bytes.NewReader(indexBytes))
 	artifact := r.Storage.NewArtifactFor(repository.Kind,
 		repository.ObjectMeta.GetObjectMeta(),
-		hash,
-		fmt.Sprintf("index-%s.yaml", hash))
-	// return early on unchanged index
-	if apimeta.IsStatusConditionTrue(repository.Status.Conditions, meta.ReadyCondition) && repository.GetArtifact().HasRevision(artifact.Revision) {
+		revision,
+		fmt.Sprintf("index-%s.yaml", revision))
+
+	// Return early on unchanged index
+	if apimeta.IsStatusConditionTrue(repository.Status.Conditions, meta.ReadyCondition) &&
+		repository.GetArtifact().HasRevision(artifact.Revision) {
 		if artifact.URL != repository.GetArtifact().URL {
 			r.Storage.SetArtifactURL(repository.GetArtifact())
 			repository.Status.URL = r.Storage.SetHostname(repository.Status.URL)
@@ -230,14 +226,20 @@ func (r *HelmRepositoryReconciler) reconcile(ctx context.Context, repository sou
 		return repository, nil
 	}
 
-	// create artifact dir
+	// Load the cached repository index to ensure it passes validation
+	if err := chartRepo.LoadFromCache(); err != nil {
+		return sourcev1.HelmRepositoryNotReady(repository, sourcev1.IndexationFailedReason, err.Error()), err
+	}
+	defer chartRepo.Unload()
+
+	// Create artifact dir
 	err = r.Storage.MkdirAll(artifact)
 	if err != nil {
 		err = fmt.Errorf("unable to create repository index directory: %w", err)
 		return sourcev1.HelmRepositoryNotReady(repository, sourcev1.StorageOperationFailedReason, err.Error()), err
 	}
 
-	// acquire lock
+	// Acquire lock
 	unlock, err := r.Storage.Lock(artifact)
 	if err != nil {
 		err = fmt.Errorf("unable to acquire lock: %w", err)
@@ -245,13 +247,20 @@ func (r *HelmRepositoryReconciler) reconcile(ctx context.Context, repository sou
 	}
 	defer unlock()
 
-	// save artifact to storage
-	if err := r.Storage.AtomicWriteFile(&artifact, bytes.NewReader(indexBytes), 0644); err != nil {
-		err = fmt.Errorf("unable to write repository index file: %w", err)
+	// Save artifact to storage
+	storageTarget := r.Storage.LocalPath(artifact)
+	if storageTarget == "" {
+		err := fmt.Errorf("failed to calcalute local storage path to store artifact to")
 		return sourcev1.HelmRepositoryNotReady(repository, sourcev1.StorageOperationFailedReason, err.Error()), err
 	}
+	if err = chartRepo.Index.WriteFile(storageTarget, 0644); err != nil {
+		return sourcev1.HelmRepositoryNotReady(repository, sourcev1.StorageOperationFailedReason, err.Error()), err
+	}
+	// TODO(hidde): it would be better to make the Storage deal with this
+	artifact.Checksum = chartRepo.Checksum
+	artifact.LastUpdateTime = metav1.Now()
 
-	// update index symlink
+	// Update index symlink
 	indexURL, err := r.Storage.Symlink(artifact, "index.yaml")
 	if err != nil {
 		err = fmt.Errorf("storage error: %w", err)
