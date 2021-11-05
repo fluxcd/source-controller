@@ -732,6 +732,7 @@ var _ = Describe("HelmChartReconciler", func() {
 			}, timeout, interval).Should(BeTrue())
 			helmChart, err := loader.Load(storage.LocalPath(*now.Status.Artifact))
 			Expect(err).NotTo(HaveOccurred())
+			Expect(helmChart.Values).ToNot(BeNil())
 			Expect(helmChart.Values["testDefault"]).To(BeTrue())
 			Expect(helmChart.Values["testOverride"]).To(BeFalse())
 
