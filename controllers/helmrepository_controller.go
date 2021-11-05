@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"os"
 	"time"
 
 	"github.com/fluxcd/pkg/apis/meta"
@@ -186,12 +187,18 @@ func (r *HelmRepositoryReconciler) reconcile(ctx context.Context, repository sou
 			return sourcev1.HelmRepositoryNotReady(repository, sourcev1.AuthenticationFailedReason, err.Error()), err
 		}
 
-		opts, cleanup, err := helm.ClientOptionsFromSecret(secret)
+		authDir, err := os.MkdirTemp("", "helm-repository-")
+		if err != nil {
+			err = fmt.Errorf("failed to create temporary working directory for credentials: %w", err)
+			return sourcev1.HelmRepositoryNotReady(repository, sourcev1.AuthenticationFailedReason, err.Error()), err
+		}
+		defer os.RemoveAll(authDir)
+
+		opts, err := helm.ClientOptionsFromSecret(authDir, secret)
 		if err != nil {
 			err = fmt.Errorf("auth options error: %w", err)
 			return sourcev1.HelmRepositoryNotReady(repository, sourcev1.AuthenticationFailedReason, err.Error()), err
 		}
-		defer cleanup()
 		clientOpts = append(clientOpts, opts...)
 	}
 
