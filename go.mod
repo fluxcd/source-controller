@@ -11,7 +11,7 @@ require (
 	github.com/ProtonMail/go-crypto v0.0.0-20210428141323-04723f9f07d7
 	github.com/cyphar/filepath-securejoin v0.2.2
 	github.com/fluxcd/pkg/apis/meta v0.10.0
-	github.com/fluxcd/pkg/gittestserver v0.4.1
+	github.com/fluxcd/pkg/gittestserver v0.4.2
 	github.com/fluxcd/pkg/gitutil v0.1.0
 	github.com/fluxcd/pkg/helmtestserver v0.2.0
 	github.com/fluxcd/pkg/lockedfile v0.1.0
@@ -19,7 +19,7 @@ require (
 	github.com/fluxcd/pkg/ssh v0.1.0
 	github.com/fluxcd/pkg/untar v0.1.0
 	github.com/fluxcd/pkg/version v0.1.0
-	github.com/fluxcd/source-controller/api v0.17.1
+	github.com/fluxcd/source-controller/api v0.17.2
 	github.com/go-git/go-billy/v5 v5.3.1
 	github.com/go-git/go-git/v5 v5.4.2
 	github.com/go-logr/logr v0.4.0

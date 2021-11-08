@@ -2,9 +2,23 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.17.2
+
+**Release date:** 2021-11-04
+
+This prerelease comes with a bug fix to ensure the `libgit2` Git implementation
+respects the operation `timeout` specified in `GitRepositorySpec`.
+
+Fixes:
+* libgit2: ensure context timeout cancels transfer
+  [#477](https://github.com/fluxcd/source-controller/pull/477)
+
 ## 0.17.1
 
 **Release date:** 2021-10-30
+
+This prerelease fixes a pointer error that was returned in v0.17.0 during
+the import of public keys to verify a commit.
 
 Fixes:
 * Fix pointer error during public key import
