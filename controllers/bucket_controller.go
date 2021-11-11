@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
+	"golang.org/x/sync/errgroup"
 	corev1 "k8s.io/api/core/v1"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -49,6 +50,18 @@ import (
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
 	"github.com/fluxcd/source-controller/pkg/sourceignore"
 )
+
+// maxConcurrentFetches is the upper bound on the goroutines used to
+// fetch bucket objects. It's important to have a bound, to avoid
+// using arbitrary amounts of memory; the actual number is chosen
+// according to the queueing rule of thumb with some conservative
+// parameters:
+// s > Nr / T
+// N (number of requestors, i.e., objects to fetch) = 10000
+// r (service time -- fetch duration) = 0.01s (~ a megabyte file over 1Gb/s)
+// T (total time available) = 1s
+// -> s > 100
+const maxConcurrentFetches = 100
 
 // +kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=buckets,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=buckets/status,verbs=get;update;patch
@@ -318,6 +331,14 @@ func fetchFiles(ctx context.Context, client BucketProvider, bucket sourcev1.Buck
 	}
 	matcher := sourceignore.NewMatcher(ps)
 
+	// Download in parallel, but bound the concurrency. According to
+	// AWS and GCP docs, rate limits are either soft or don't exist:
+	//  - https://cloud.google.com/storage/quotas
+	//  - https://docs.aws.amazon.com/general/latest/gr/s3.html
+	// .. so, the limiting factor is this process keeping a small footprint.
+	semaphore := make(chan struct{}, maxConcurrentFetches)
+	group, ctx := errgroup.WithContext(ctx)
+
 	err = client.VisitObjects(ctxTimeout, bucket.Spec.BucketName, func(path string) error {
 		if strings.HasSuffix(path, "/") || path == sourceignore.IgnoreFile {
 			return nil
@@ -327,15 +348,23 @@ func fetchFiles(ctx context.Context, client BucketProvider, bucket sourcev1.Buck
 			return nil
 		}
 
-		localPath := filepath.Join(tempDir, path)
-		err := client.FGetObject(ctx, bucket.Spec.BucketName, path, localPath)
-		if err != nil {
-			err = fmt.Errorf("downloading object from bucket '%s' failed: %w", bucket.Spec.BucketName, err)
-			return err
-		}
+		// block until there's capacity
+		semaphore <- struct{}{}
+		group.Go(func() error {
+			defer func() { <-semaphore }()
+			localPath := filepath.Join(tempDir, path)
+			err := client.FGetObject(ctx, bucket.Spec.BucketName, path, localPath)
+			if err != nil {
+				err = fmt.Errorf("downloading object from bucket '%s' failed: %w", bucket.Spec.BucketName, err)
+				return err
+			}
+			return nil
+		})
 		return nil
 	})
-	if err != nil {
+
+	// VisitObjects won't return an error, but the errgroup might.
+	if err = group.Wait(); err != nil {
 		err = fmt.Errorf("fetching objects from bucket '%s' failed: %w", bucket.Spec.BucketName, err)
 		return sourcev1.BucketNotReady(bucket, sourcev1.BucketOperationFailedReason, err.Error()), err
 	}
