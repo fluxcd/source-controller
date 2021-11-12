@@ -416,7 +416,7 @@ func TestChartRepository_LoadFromCache(t *testing.T) {
 		{
 			name:      "invalid cache path",
 			cachePath: "invalid",
-			wantErr:   "open invalid: no such file",
+			wantErr:   "stat invalid: no such file",
 		},
 		{
 			name:      "no cache path",

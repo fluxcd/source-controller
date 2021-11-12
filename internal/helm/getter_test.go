@@ -17,6 +17,7 @@ limitations under the License.
 package helm
 
 import (
+	"os"
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
@@ -56,10 +57,14 @@ func TestClientOptionsFromSecret(t *testing.T) {
 					secret.Data[k] = v
 				}
 			}
-			got, cleanup, err := ClientOptionsFromSecret(secret)
-			if cleanup != nil {
-				defer cleanup()
+
+			tmpDir, err := os.MkdirTemp("", "client-opts-secret-")
+			if err != nil {
+				t.Fatal(err)
 			}
+			defer os.RemoveAll(tmpDir)
+
+			got, err := ClientOptionsFromSecret(tmpDir, secret)
 			if err != nil {
 				t.Errorf("ClientOptionsFromSecret() error = %v", err)
 				return
@@ -123,10 +128,14 @@ func TestTLSClientConfigFromSecret(t *testing.T) {
 			if tt.modify != nil {
 				tt.modify(secret)
 			}
-			got, cleanup, err := TLSClientConfigFromSecret(*secret)
-			if cleanup != nil {
-				defer cleanup()
+
+			tmpDir, err := os.MkdirTemp("", "client-opts-secret-")
+			if err != nil {
+				t.Fatal(err)
 			}
+			defer os.RemoveAll(tmpDir)
+
+			got, err := TLSClientConfigFromSecret(tmpDir, *secret)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("TLSClientConfigFromSecret() error = %v, wantErr %v", err, tt.wantErr)
 				return
