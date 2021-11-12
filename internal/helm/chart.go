@@ -19,6 +19,7 @@ package helm
 import (
 	"archive/tar"
 	"bufio"
+	"bytes"
 	"compress/gzip"
 	"errors"
 	"fmt"
@@ -35,30 +36,35 @@ import (
 )
 
 // OverwriteChartDefaultValues overwrites the chart default values file with the given data.
-func OverwriteChartDefaultValues(chart *helmchart.Chart, data []byte) (bool, error) {
-	// Read override values file data
-	values, err := chartutil.ReadValues(data)
-	if err != nil {
-		return false, fmt.Errorf("failed to parse provided override values file data")
+func OverwriteChartDefaultValues(chart *helmchart.Chart, vals chartutil.Values) (bool, error) {
+	if vals == nil {
+		return false, nil
+	}
+
+	var bVals bytes.Buffer
+	if len(vals) > 0 {
+		if err := vals.Encode(&bVals); err != nil {
+			return false, err
+		}
 	}
 
 	// Replace current values file in Raw field
 	for _, f := range chart.Raw {
 		if f.Name == chartutil.ValuesfileName {
 			// Do nothing if contents are equal
-			if reflect.DeepEqual(f.Data, data) {
+			if reflect.DeepEqual(f.Data, bVals.Bytes()) {
 				return false, nil
 			}
 
 			// Replace in Files field
 			for _, f := range chart.Files {
 				if f.Name == chartutil.ValuesfileName {
-					f.Data = data
+					f.Data = bVals.Bytes()
 				}
 			}
 
-			f.Data = data
-			chart.Values = values
+			f.Data = bVals.Bytes()
+			chart.Values = vals.AsMap()
 			return true, nil
 		}
 	}
@@ -100,7 +106,21 @@ func LoadChartMetadataFromDir(dir string) (*helmchart.Metadata, error) {
 		m.APIVersion = helmchart.APIVersionV1
 	}
 
-	b, err = os.ReadFile(filepath.Join(dir, "requirements.yaml"))
+	fp := filepath.Join(dir, "requirements.yaml")
+	stat, err := os.Stat(fp)
+	if (err != nil && !errors.Is(err, os.ErrNotExist)) || stat != nil {
+		if err != nil {
+			return nil, err
+		}
+		if stat.IsDir() {
+			return nil, fmt.Errorf("'%s' is a directory", stat.Name())
+		}
+		if stat.Size() > MaxChartFileSize {
+			return nil, fmt.Errorf("size of '%s' exceeds '%d' limit", stat.Name(), MaxChartFileSize)
+		}
+	}
+
+	b, err = os.ReadFile(fp)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return nil, err
 	}
@@ -115,6 +135,17 @@ func LoadChartMetadataFromDir(dir string) (*helmchart.Metadata, error) {
 // LoadChartMetadataFromArchive loads the chart.Metadata from the "Chart.yaml" file in the archive at the given path.
 // It takes "requirements.yaml" files into account, and is therefore compatible with the chart.APIVersionV1 format.
 func LoadChartMetadataFromArchive(archive string) (*helmchart.Metadata, error) {
+	stat, err := os.Stat(archive)
+	if err != nil || stat.IsDir() {
+		if err == nil {
+			err = fmt.Errorf("'%s' is a directory", stat.Name())
+		}
+		return nil, err
+	}
+	if stat.Size() > MaxChartSize {
+		return nil, fmt.Errorf("size of chart '%s' exceeds '%d' limit", stat.Name(), MaxChartSize)
+	}
+
 	f, err := os.Open(archive)
 	if err != nil {
 		return nil, err

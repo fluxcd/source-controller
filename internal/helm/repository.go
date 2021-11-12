@@ -234,6 +234,16 @@ func (r *ChartRepository) LoadIndexFromBytes(b []byte) error {
 
 // LoadFromFile reads the file at the given path and loads it into Index.
 func (r *ChartRepository) LoadFromFile(path string) error {
+	stat, err := os.Stat(path)
+	if err != nil || stat.IsDir() {
+		if err == nil {
+			err = fmt.Errorf("'%s' is a directory", path)
+		}
+		return err
+	}
+	if stat.Size() > MaxIndexSize {
+		return fmt.Errorf("size of index '%s' exceeds '%d' limit", stat.Name(), MaxIndexSize)
+	}
 	b, err := os.ReadFile(path)
 	if err != nil {
 		return err
@@ -342,7 +352,7 @@ func (r *ChartRepository) HasCacheFile() bool {
 // Unload can be used to signal the Go garbage collector the Index can
 // be freed from memory if the ChartRepository object is expected to
 // continue to exist in the stack for some time.
-func (r *ChartRepository) Unload()  {
+func (r *ChartRepository) Unload() {
 	if r == nil {
 		return
 	}

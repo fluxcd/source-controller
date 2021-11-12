@@ -25,8 +25,9 @@ import (
 )
 
 var (
-	originalValuesFixture = []byte("override: original")
-	chartFilesFixture     = []*helmchart.File{
+	originalValuesFixture = []byte(`override: original
+`)
+	chartFilesFixture = []*helmchart.File{
 		{
 			Name: "values.yaml",
 			Data: originalValuesFixture,
@@ -69,19 +70,14 @@ func TestOverwriteChartDefaultValues(t *testing.T) {
 			desc:  "valid override",
 			chart: chartFixture,
 			ok:    true,
-			data:  []byte("override: test"),
+			data: []byte(`override: test
+`),
 		},
 		{
 			desc:  "empty override",
 			chart: chartFixture,
 			ok:    true,
-			data:  []byte(""),
-		},
-		{
-			desc:      "invalid",
-			chart:     chartFixture,
-			data:      []byte("!fail:"),
-			expectErr: true,
+			data:  []byte(``),
 		},
 	}
 	for _, tt := range testCases {
@@ -89,7 +85,9 @@ func TestOverwriteChartDefaultValues(t *testing.T) {
 			g := NewWithT(t)
 
 			fixture := tt.chart
-			ok, err := OverwriteChartDefaultValues(&fixture, tt.data)
+			vals, err := chartutil.ReadValues(tt.data)
+			g.Expect(err).ToNot(HaveOccurred())
+			ok, err := OverwriteChartDefaultValues(&fixture, vals)
 			g.Expect(ok).To(Equal(tt.ok))
 
 			if tt.expectErr {

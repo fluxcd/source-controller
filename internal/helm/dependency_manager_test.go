@@ -88,10 +88,10 @@ func TestDependencyManager_Build(t *testing.T) {
 			chart, err := loader.Load(filepath.Join(tt.baseDir, tt.path))
 			g.Expect(err).ToNot(HaveOccurred())
 
-			got, err := NewDependencyManager(chart, tt.baseDir, tt.path).
-				WithRepositories(tt.repositories).
-				WithChartRepositoryCallback(tt.getChartRepositoryCallback).
-				Build(context.TODO())
+			got, err := NewDependencyManager(
+				WithRepositories(tt.repositories),
+				WithRepositoryCallback(tt.getChartRepositoryCallback),
+			).Build(context.TODO(), LocalChartReference{BaseDir: tt.baseDir, Path: tt.path}, chart)
 
 			if tt.wantErr != "" {
 				g.Expect(err).To(HaveOccurred())
@@ -134,10 +134,8 @@ func TestDependencyManager_build(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
 
-			dm := &DependencyManager{
-				baseDir: "testdata/charts",
-			}
-			err := dm.build(context.TODO(), tt.deps)
+			dm := NewDependencyManager()
+			err := dm.build(context.TODO(), LocalChartReference{}, &helmchart.Chart{}, tt.deps)
 			if tt.wantErr != "" {
 				g.Expect(err).To(HaveOccurred())
 				return
@@ -182,7 +180,7 @@ func TestDependencyManager_addLocalDependency(t *testing.T) {
 				Version:    chartVersion,
 				Repository: "file://../../../absolutely/invalid",
 			},
-			wantErr: "no chart found at 'absolutely/invalid'",
+			wantErr: "no chart found at 'testdata/charts/absolutely/invalid'",
 		},
 		{
 			name: "invalid chart archive",
@@ -191,7 +189,7 @@ func TestDependencyManager_addLocalDependency(t *testing.T) {
 				Version:    chartVersion,
 				Repository: "file://../empty.tgz",
 			},
-			wantErr: "failed to load chart from 'empty.tgz'",
+			wantErr: "failed to load chart from '/empty.tgz'",
 		},
 		{
 			name: "invalid constraint",
@@ -207,13 +205,10 @@ func TestDependencyManager_addLocalDependency(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
 
-			dm := &DependencyManager{
-				chart:   &helmchart.Chart{},
-				baseDir: "testdata/charts/",
-				path:    "helmchartwithdeps",
-			}
-
-			err := dm.addLocalDependency(tt.dep)
+			dm := NewDependencyManager()
+			chart := &helmchart.Chart{}
+			err := dm.addLocalDependency(LocalChartReference{BaseDir: "testdata/charts", Path: "helmchartwithdeps"},
+				&chartWithLock{Chart: chart}, tt.dep)
 			if tt.wantErr != "" {
 				g.Expect(err).To(HaveOccurred())
 				g.Expect(err.Error()).To(ContainSubstring(tt.wantErr))
@@ -389,10 +384,10 @@ func TestDependencyManager_addRemoteDependency(t *testing.T) {
 			g := NewWithT(t)
 
 			dm := &DependencyManager{
-				chart:        &helmchart.Chart{},
 				repositories: tt.repositories,
 			}
-			err := dm.addRemoteDependency(tt.dep)
+			chart := &helmchart.Chart{}
+			err := dm.addRemoteDependency(&chartWithLock{Chart: chart}, tt.dep)
 			if tt.wantErr != "" {
 				g.Expect(err).To(HaveOccurred())
 				g.Expect(err.Error()).To(ContainSubstring(tt.wantErr))
@@ -400,7 +395,7 @@ func TestDependencyManager_addRemoteDependency(t *testing.T) {
 			}
 			g.Expect(err).ToNot(HaveOccurred())
 			if tt.wantFunc != nil {
-				tt.wantFunc(g, dm.chart)
+				tt.wantFunc(g, chart)
 			}
 		})
 	}
@@ -455,8 +450,8 @@ func TestDependencyManager_resolveRepository(t *testing.T) {
 			g := NewWithT(t)
 
 			dm := &DependencyManager{
-				repositories:               tt.repositories,
-				getChartRepositoryCallback: tt.getChartRepositoryCallback,
+				repositories:          tt.repositories,
+				getRepositoryCallback: tt.getChartRepositoryCallback,
 			}
 
 			got, err := dm.resolveRepository(tt.url)
@@ -522,11 +517,8 @@ func TestDependencyManager_secureLocalChartPath(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
 
-			dm := &DependencyManager{
-				baseDir: tt.baseDir,
-				path:    tt.path,
-			}
-			got, err := dm.secureLocalChartPath(tt.dep)
+			dm := NewDependencyManager()
+			got, err := dm.secureLocalChartPath(LocalChartReference{BaseDir: tt.baseDir, Path: tt.path}, tt.dep)
 			if tt.wantErr != "" {
 				g.Expect(err).To(HaveOccurred())
 				g.Expect(err.Error()).To(ContainSubstring(tt.wantErr))
