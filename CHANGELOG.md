@@ -2,6 +2,17 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.18.0
+
+**Release date:** 2021-11-12
+
+This prerelease changes the format of the artifact checksum from `SHA1` to `SHA256`
+to mitigate chosen-prefix and length extension attacks.
+
+Improvements:
+* storage: change Artifact checksum to SHA256
+  [#487](https://github.com/fluxcd/source-controller/pull/487)
+
 ## 0.17.2
 
 **Release date:** 2021-11-04
