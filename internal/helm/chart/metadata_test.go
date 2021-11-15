@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package helm
+package chart
 
 import (
 	"testing"
@@ -25,6 +25,19 @@ import (
 )
 
 var (
+	// helmPackageFile contains the path to a Helm package in the v2 format
+	// without any dependencies
+	helmPackageFile = "../testdata/charts/helmchart-0.1.0.tgz"
+	chartName       = "helmchart"
+	chartVersion    = "0.1.0"
+
+	// helmPackageV1File contains the path to a Helm package in the v1 format,
+	// including dependencies in a requirements.yaml file which should be
+	// loaded
+	helmPackageV1File = "../testdata/charts/helmchartwithdeps-v1-0.3.0.tgz"
+	chartNameV1       = "helmchartwithdeps-v1"
+	chartVersionV1    = "0.3.0"
+
 	originalValuesFixture = []byte(`override: original
 `)
 	chartFilesFixture = []*helmchart.File{
@@ -123,21 +136,21 @@ func TestLoadChartMetadataFromDir(t *testing.T) {
 	}{
 		{
 			name:        "Loads from dir",
-			dir:         "testdata/charts/helmchart",
+			dir:         "../testdata/charts/helmchart",
 			wantName:    "helmchart",
 			wantVersion: "0.1.0",
 		},
 		{
 			name:                "Loads from v1 dir including requirements.yaml",
-			dir:                 "testdata/charts/helmchartwithdeps-v1",
+			dir:                 "../testdata/charts/helmchartwithdeps-v1",
 			wantName:            chartNameV1,
 			wantVersion:         chartVersionV1,
 			wantDependencyCount: 1,
 		},
 		{
 			name:    "Error if no Chart.yaml",
-			dir:     "testdata/charts/",
-			wantErr: "testdata/charts/Chart.yaml: no such file or directory",
+			dir:     "../testdata/charts/",
+			wantErr: "../testdata/charts/Chart.yaml: no such file or directory",
 		},
 	}
 	for _, tt := range tests {
@@ -186,12 +199,12 @@ func TestLoadChartMetadataFromArchive(t *testing.T) {
 		},
 		{
 			name:    "Error on not found",
-			archive: "testdata/invalid.tgz",
+			archive: "../testdata/invalid.tgz",
 			wantErr: "no such file or directory",
 		},
 		{
 			name:    "Error if no Chart.yaml",
-			archive: "testdata/charts/empty.tgz",
+			archive: "../testdata/charts/empty.tgz",
 			wantErr: "no 'Chart.yaml' found",
 		},
 	}

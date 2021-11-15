@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package helm
+package chart
 
 import (
 	"context"
@@ -29,26 +29,9 @@ import (
 	helmchart "helm.sh/helm/v3/pkg/chart"
 	"helm.sh/helm/v3/pkg/chart/loader"
 	"helm.sh/helm/v3/pkg/repo"
-)
 
-var (
-	// helmPackageFile contains the path to a Helm package in the v2 format
-	// without any dependencies
-	helmPackageFile      = "testdata/charts/helmchart-0.1.0.tgz"
-	chartName            = "helmchart"
-	chartVersion         = "0.1.0"
-	chartLocalRepository = "file://../helmchart"
-	remoteDepFixture     = helmchart.Dependency{
-		Name:       chartName,
-		Version:    chartVersion,
-		Repository: "https://example.com/charts",
-	}
-	// helmPackageV1File contains the path to a Helm package in the v1 format,
-	// including dependencies in a requirements.yaml file which should be
-	// loaded
-	helmPackageV1File = "testdata/charts/helmchartwithdeps-v1-0.3.0.tgz"
-	chartNameV1       = "helmchartwithdeps-v1"
-	chartVersionV1    = "0.3.0"
+	"github.com/fluxcd/source-controller/internal/helm/getter"
+	"github.com/fluxcd/source-controller/internal/helm/repository"
 )
 
 func TestDependencyManager_Build(t *testing.T) {
@@ -56,7 +39,7 @@ func TestDependencyManager_Build(t *testing.T) {
 		name                       string
 		baseDir                    string
 		path                       string
-		repositories               map[string]*ChartRepository
+		repositories               map[string]*repository.ChartRepository
 		getChartRepositoryCallback GetChartRepositoryCallback
 		want                       int
 		wantChartFunc              func(g *WithT, c *helmchart.Chart)
@@ -70,13 +53,13 @@ func TestDependencyManager_Build(t *testing.T) {
 		//},
 		{
 			name:    "build failure returns error",
-			baseDir: "testdata/charts",
+			baseDir: "./../testdata/charts",
 			path:    "helmchartwithdeps",
 			wantErr: "failed to add remote dependency 'grafana': no chart repository for URL",
 		},
 		{
 			name:    "no dependencies returns zero",
-			baseDir: "testdata/charts",
+			baseDir: "./../testdata/charts",
 			path:    "helmchart",
 			want:    0,
 		},
@@ -91,7 +74,7 @@ func TestDependencyManager_Build(t *testing.T) {
 			got, err := NewDependencyManager(
 				WithRepositories(tt.repositories),
 				WithRepositoryCallback(tt.getChartRepositoryCallback),
-			).Build(context.TODO(), LocalChartReference{BaseDir: tt.baseDir, Path: tt.path}, chart)
+			).Build(context.TODO(), LocalReference{WorkDir: tt.baseDir, Path: tt.path}, chart)
 
 			if tt.wantErr != "" {
 				g.Expect(err).To(HaveOccurred())
@@ -135,7 +118,7 @@ func TestDependencyManager_build(t *testing.T) {
 			g := NewWithT(t)
 
 			dm := NewDependencyManager()
-			err := dm.build(context.TODO(), LocalChartReference{}, &helmchart.Chart{}, tt.deps)
+			err := dm.build(context.TODO(), LocalReference{}, &helmchart.Chart{}, tt.deps)
 			if tt.wantErr != "" {
 				g.Expect(err).To(HaveOccurred())
 				return
@@ -180,7 +163,7 @@ func TestDependencyManager_addLocalDependency(t *testing.T) {
 				Version:    chartVersion,
 				Repository: "file://../../../absolutely/invalid",
 			},
-			wantErr: "no chart found at 'testdata/charts/absolutely/invalid'",
+			wantErr: "no chart found at '../testdata/charts/absolutely/invalid'",
 		},
 		{
 			name: "invalid chart archive",
@@ -207,7 +190,7 @@ func TestDependencyManager_addLocalDependency(t *testing.T) {
 
 			dm := NewDependencyManager()
 			chart := &helmchart.Chart{}
-			err := dm.addLocalDependency(LocalChartReference{BaseDir: "testdata/charts", Path: "helmchartwithdeps"},
+			err := dm.addLocalDependency(LocalReference{WorkDir: "../testdata/charts", Path: "helmchartwithdeps"},
 				&chartWithLock{Chart: chart}, tt.dep)
 			if tt.wantErr != "" {
 				g.Expect(err).To(HaveOccurred())
@@ -222,23 +205,23 @@ func TestDependencyManager_addLocalDependency(t *testing.T) {
 func TestDependencyManager_addRemoteDependency(t *testing.T) {
 	g := NewWithT(t)
 
-	chartB, err := os.ReadFile("testdata/charts/helmchart-0.1.0.tgz")
+	chartB, err := os.ReadFile("../testdata/charts/helmchart-0.1.0.tgz")
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(chartB).ToNot(BeEmpty())
 
 	tests := []struct {
 		name         string
-		repositories map[string]*ChartRepository
+		repositories map[string]*repository.ChartRepository
 		dep          *helmchart.Dependency
 		wantFunc     func(g *WithT, c *helmchart.Chart)
 		wantErr      string
 	}{
 		{
 			name: "adds remote dependency",
-			repositories: map[string]*ChartRepository{
+			repositories: map[string]*repository.ChartRepository{
 				"https://example.com/": {
-					Client: &mockGetter{
-						response: chartB,
+					Client: &getter.MockGetter{
+						Response: chartB,
 					},
 					Index: &repo.IndexFile{
 						Entries: map[string]repo.ChartVersions{
@@ -266,7 +249,7 @@ func TestDependencyManager_addRemoteDependency(t *testing.T) {
 		},
 		{
 			name:         "resolve repository error",
-			repositories: map[string]*ChartRepository{},
+			repositories: map[string]*repository.ChartRepository{},
 			dep: &helmchart.Dependency{
 				Repository: "https://example.com",
 			},
@@ -274,7 +257,7 @@ func TestDependencyManager_addRemoteDependency(t *testing.T) {
 		},
 		{
 			name: "strategic load error",
-			repositories: map[string]*ChartRepository{
+			repositories: map[string]*repository.ChartRepository{
 				"https://example.com/": {
 					CachePath: "/invalid/cache/path/foo",
 					RWMutex:   &sync.RWMutex{},
@@ -287,7 +270,7 @@ func TestDependencyManager_addRemoteDependency(t *testing.T) {
 		},
 		{
 			name: "repository get error",
-			repositories: map[string]*ChartRepository{
+			repositories: map[string]*repository.ChartRepository{
 				"https://example.com/": {
 					Index:   &repo.IndexFile{},
 					RWMutex: &sync.RWMutex{},
@@ -300,7 +283,7 @@ func TestDependencyManager_addRemoteDependency(t *testing.T) {
 		},
 		{
 			name: "repository version constraint error",
-			repositories: map[string]*ChartRepository{
+			repositories: map[string]*repository.ChartRepository{
 				"https://example.com/": {
 					Index: &repo.IndexFile{
 						Entries: map[string]repo.ChartVersions{
@@ -326,7 +309,7 @@ func TestDependencyManager_addRemoteDependency(t *testing.T) {
 		},
 		{
 			name: "repository chart download error",
-			repositories: map[string]*ChartRepository{
+			repositories: map[string]*repository.ChartRepository{
 				"https://example.com/": {
 					Index: &repo.IndexFile{
 						Entries: map[string]repo.ChartVersions{
@@ -352,9 +335,9 @@ func TestDependencyManager_addRemoteDependency(t *testing.T) {
 		},
 		{
 			name: "chart load error",
-			repositories: map[string]*ChartRepository{
+			repositories: map[string]*repository.ChartRepository{
 				"https://example.com/": {
-					Client: &mockGetter{},
+					Client: &getter.MockGetter{},
 					Index: &repo.IndexFile{
 						Entries: map[string]repo.ChartVersions{
 							chartName: {
@@ -404,40 +387,40 @@ func TestDependencyManager_addRemoteDependency(t *testing.T) {
 func TestDependencyManager_resolveRepository(t *testing.T) {
 	tests := []struct {
 		name                       string
-		repositories               map[string]*ChartRepository
+		repositories               map[string]*repository.ChartRepository
 		getChartRepositoryCallback GetChartRepositoryCallback
 		url                        string
-		want                       *ChartRepository
-		wantRepositories           map[string]*ChartRepository
+		want                       *repository.ChartRepository
+		wantRepositories           map[string]*repository.ChartRepository
 		wantErr                    string
 	}{
 		{
 			name: "resolves from repositories index",
 			url:  "https://example.com",
-			repositories: map[string]*ChartRepository{
+			repositories: map[string]*repository.ChartRepository{
 				"https://example.com/": {URL: "https://example.com"},
 			},
-			want: &ChartRepository{URL: "https://example.com"},
+			want: &repository.ChartRepository{URL: "https://example.com"},
 		},
 		{
 			name: "resolves from callback",
 			url:  "https://example.com",
-			getChartRepositoryCallback: func(url string) (*ChartRepository, error) {
-				return &ChartRepository{URL: "https://example.com"}, nil
+			getChartRepositoryCallback: func(url string) (*repository.ChartRepository, error) {
+				return &repository.ChartRepository{URL: "https://example.com"}, nil
 			},
-			want: &ChartRepository{URL: "https://example.com"},
-			wantRepositories: map[string]*ChartRepository{
+			want: &repository.ChartRepository{URL: "https://example.com"},
+			wantRepositories: map[string]*repository.ChartRepository{
 				"https://example.com/": {URL: "https://example.com"},
 			},
 		},
 		{
 			name: "error from callback",
 			url:  "https://example.com",
-			getChartRepositoryCallback: func(url string) (*ChartRepository, error) {
+			getChartRepositoryCallback: func(url string) (*repository.ChartRepository, error) {
 				return nil, errors.New("a very unique error")
 			},
 			wantErr:          "a very unique error",
-			wantRepositories: map[string]*ChartRepository{},
+			wantRepositories: map[string]*repository.ChartRepository{},
 		},
 		{
 			name:    "error on not found",
@@ -518,7 +501,7 @@ func TestDependencyManager_secureLocalChartPath(t *testing.T) {
 			g := NewWithT(t)
 
 			dm := NewDependencyManager()
-			got, err := dm.secureLocalChartPath(LocalChartReference{BaseDir: tt.baseDir, Path: tt.path}, tt.dep)
+			got, err := dm.secureLocalChartPath(LocalReference{WorkDir: tt.baseDir, Path: tt.path}, tt.dep)
 			if tt.wantErr != "" {
 				g.Expect(err).To(HaveOccurred())
 				g.Expect(err.Error()).To(ContainSubstring(tt.wantErr))

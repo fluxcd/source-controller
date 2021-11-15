@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package helm
+package chart
 
 import (
 	"archive/tar"
@@ -33,6 +33,8 @@ import (
 	helmchart "helm.sh/helm/v3/pkg/chart"
 	"helm.sh/helm/v3/pkg/chartutil"
 	"sigs.k8s.io/yaml"
+
+	"github.com/fluxcd/source-controller/internal/helm"
 )
 
 // OverwriteChartDefaultValues overwrites the chart default values file with the given data.
@@ -115,8 +117,8 @@ func LoadChartMetadataFromDir(dir string) (*helmchart.Metadata, error) {
 		if stat.IsDir() {
 			return nil, fmt.Errorf("'%s' is a directory", stat.Name())
 		}
-		if stat.Size() > MaxChartFileSize {
-			return nil, fmt.Errorf("size of '%s' exceeds '%d' limit", stat.Name(), MaxChartFileSize)
+		if stat.Size() > helm.MaxChartFileSize {
+			return nil, fmt.Errorf("size of '%s' exceeds '%d' limit", stat.Name(), helm.MaxChartFileSize)
 		}
 	}
 
@@ -142,8 +144,8 @@ func LoadChartMetadataFromArchive(archive string) (*helmchart.Metadata, error) {
 		}
 		return nil, err
 	}
-	if stat.Size() > MaxChartSize {
-		return nil, fmt.Errorf("size of chart '%s' exceeds '%d' limit", stat.Name(), MaxChartSize)
+	if stat.Size() > helm.MaxChartSize {
+		return nil, fmt.Errorf("size of chart '%s' exceeds '%d' limit", stat.Name(), helm.MaxChartSize)
 	}
 
 	f, err := os.Open(archive)

@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package helm
+package chart
 
 import (
 	"context"
@@ -24,27 +24,28 @@ import (
 
 	"github.com/Masterminds/semver/v3"
 	securejoin "github.com/cyphar/filepath-securejoin"
-	"github.com/fluxcd/pkg/runtime/transform"
 	"helm.sh/helm/v3/pkg/chart/loader"
 	"sigs.k8s.io/yaml"
+
+	"github.com/fluxcd/pkg/runtime/transform"
 )
 
 type localChartBuilder struct {
 	dm *DependencyManager
 }
 
-// NewLocalChartBuilder returns a ChartBuilder capable of building a Helm
-// chart with a LocalChartReference. For chart references pointing to a
+// NewLocalBuilder returns a Builder capable of building a Helm
+// chart with a LocalReference. For chart references pointing to a
 // directory, the DependencyManager is used to resolve missing local and
 // remote dependencies.
-func NewLocalChartBuilder(dm *DependencyManager) ChartBuilder {
+func NewLocalBuilder(dm *DependencyManager) Builder {
 	return &localChartBuilder{
 		dm: dm,
 	}
 }
 
-func (b *localChartBuilder) Build(ctx context.Context, ref ChartReference, p string, opts BuildOptions) (*ChartBuild, error) {
-	localRef, ok := ref.(LocalChartReference)
+func (b *localChartBuilder) Build(ctx context.Context, ref Reference, p string, opts BuildOptions) (*Build, error) {
+	localRef, ok := ref.(LocalReference)
 	if !ok {
 		return nil, fmt.Errorf("expected local chart reference")
 	}
@@ -53,14 +54,14 @@ func (b *localChartBuilder) Build(ctx context.Context, ref ChartReference, p str
 		return nil, err
 	}
 
-	// Load the chart metadata from the LocalChartReference to ensure it points
+	// Load the chart metadata from the LocalReference to ensure it points
 	// to a chart
 	curMeta, err := LoadChartMetadata(localRef.Path)
 	if err != nil {
 		return nil, err
 	}
 
-	result := &ChartBuild{}
+	result := &Build{}
 	result.Name = curMeta.Name
 
 	// Set build specific metadata if instructed
@@ -101,7 +102,7 @@ func (b *localChartBuilder) Build(ctx context.Context, ref ChartReference, p str
 	// Merge chart values, if instructed
 	var mergedValues map[string]interface{}
 	if len(opts.GetValueFiles()) > 0 {
-		if mergedValues, err = mergeFileValues(localRef.BaseDir, opts.ValueFiles); err != nil {
+		if mergedValues, err = mergeFileValues(localRef.WorkDir, opts.ValueFiles); err != nil {
 			return nil, fmt.Errorf("failed to merge value files: %w", err)
 		}
 	}

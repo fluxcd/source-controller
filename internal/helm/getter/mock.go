@@ -1,5 +1,5 @@
 /*
-Copyright 2020 The Flux authors
+Copyright 2021 The Flux authors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -14,14 +14,28 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package helm
+package getter
 
-import "strings"
+import (
+	"bytes"
 
-// NormalizeChartRepositoryURL ensures repository urls are normalized
-func NormalizeChartRepositoryURL(url string) string {
-	if url != "" {
-		return strings.TrimRight(url, "/") + "/"
-	}
-	return url
+	"helm.sh/helm/v3/pkg/getter"
+)
+
+// MockGetter can be used as a simple mocking getter.Getter implementation.
+type MockGetter struct {
+	Response []byte
+
+	requestedURL string
+}
+
+func (g *MockGetter) Get(u string, _ ...getter.Option) (*bytes.Buffer, error) {
+	g.requestedURL = u
+	r := g.Response
+	return bytes.NewBuffer(r), nil
+}
+
+// LastGet returns the last requested URL for Get.
+func (g *MockGetter) LastGet() string {
+	return g.requestedURL
 }
