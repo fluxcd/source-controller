@@ -28,7 +28,7 @@ import (
 
 	securejoin "github.com/cyphar/filepath-securejoin"
 	"github.com/go-logr/logr"
-	"helm.sh/helm/v3/pkg/getter"
+	extgetter "helm.sh/helm/v3/pkg/getter"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
@@ -54,7 +54,9 @@ import (
 	"github.com/fluxcd/pkg/untar"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
-	"github.com/fluxcd/source-controller/internal/helm"
+	"github.com/fluxcd/source-controller/internal/helm/chart"
+	"github.com/fluxcd/source-controller/internal/helm/getter"
+	"github.com/fluxcd/source-controller/internal/helm/repository"
 )
 
 // +kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=helmcharts,verbs=get;list;watch;create;update;patch;delete
@@ -67,7 +69,7 @@ type HelmChartReconciler struct {
 	client.Client
 	Scheme                *runtime.Scheme
 	Storage               *Storage
-	Getters               getter.Providers
+	Getters               extgetter.Providers
 	EventRecorder         kuberecorder.EventRecorder
 	ExternalEventRecorder *events.Recorder
 	MetricsRecorder       *metrics.Recorder
@@ -304,218 +306,218 @@ func (r *HelmChartReconciler) getSource(ctx context.Context, chart sourcev1.Helm
 	return source, nil
 }
 
-func (r *HelmChartReconciler) fromHelmRepository(ctx context.Context, repository sourcev1.HelmRepository,
-	chart sourcev1.HelmChart, workDir string, force bool) (sourcev1.HelmChart, error) {
-	// Configure ChartRepository getter options
-	clientOpts := []getter.Option{
-		getter.WithURL(repository.Spec.URL),
-		getter.WithTimeout(repository.Spec.Timeout.Duration),
-		getter.WithPassCredentialsAll(repository.Spec.PassCredentials),
+func (r *HelmChartReconciler) fromHelmRepository(ctx context.Context, repo sourcev1.HelmRepository, c sourcev1.HelmChart,
+	workDir string, force bool) (sourcev1.HelmChart, error) {
+	// Configure Index getter options
+	clientOpts := []extgetter.Option{
+		extgetter.WithURL(repo.Spec.URL),
+		extgetter.WithTimeout(repo.Spec.Timeout.Duration),
+		extgetter.WithPassCredentialsAll(repo.Spec.PassCredentials),
 	}
-	if secret, err := r.getHelmRepositorySecret(ctx, &repository); err != nil {
-		return sourcev1.HelmChartNotReady(chart, sourcev1.AuthenticationFailedReason, err.Error()), err
+	if secret, err := r.getHelmRepositorySecret(ctx, &repo); err != nil {
+		return sourcev1.HelmChartNotReady(c, sourcev1.AuthenticationFailedReason, err.Error()), err
 	} else if secret != nil {
 		// Create temporary working directory for credentials
 		authDir := filepath.Join(workDir, "creds")
 		if err := os.Mkdir(authDir, 0700); err != nil {
 			err = fmt.Errorf("failed to create temporary directory for repository credentials: %w", err)
 		}
-		opts, err := helm.ClientOptionsFromSecret(authDir, *secret)
+		opts, err := getter.ClientOptionsFromSecret(authDir, *secret)
 		if err != nil {
-			err = fmt.Errorf("failed to create client options for HelmRepository '%s': %w", repository.Name, err)
-			return sourcev1.HelmChartNotReady(chart, sourcev1.AuthenticationFailedReason, err.Error()), err
+			err = fmt.Errorf("failed to create client options for HelmRepository '%s': %w", repo.Name, err)
+			return sourcev1.HelmChartNotReady(c, sourcev1.AuthenticationFailedReason, err.Error()), err
 		}
 		clientOpts = append(clientOpts, opts...)
 	}
 
 	// Initialize the chart repository
-	chartRepo, err := helm.NewChartRepository(repository.Spec.URL, r.Storage.LocalPath(*repository.GetArtifact()), r.Getters, clientOpts)
+	chartRepo, err := repository.NewChartRepository(repo.Spec.URL, r.Storage.LocalPath(*repo.GetArtifact()), r.Getters, clientOpts)
 	if err != nil {
 		switch err.(type) {
 		case *url.Error:
-			return sourcev1.HelmChartNotReady(chart, sourcev1.URLInvalidReason, err.Error()), err
+			return sourcev1.HelmChartNotReady(c, sourcev1.URLInvalidReason, err.Error()), err
 		default:
-			return sourcev1.HelmChartNotReady(chart, sourcev1.ChartPullFailedReason, err.Error()), err
+			return sourcev1.HelmChartNotReady(c, sourcev1.ChartPullFailedReason, err.Error()), err
 		}
 	}
 
 	var cachedChart string
-	if artifact := chart.GetArtifact(); artifact != nil {
+	if artifact := c.GetArtifact(); artifact != nil {
 		cachedChart = artifact.Path
 	}
 
 	// Build the chart
-	cBuilder := helm.NewRemoteChartBuilder(chartRepo)
-	ref := helm.RemoteChartReference{Name: chart.Spec.Chart, Version: chart.Spec.Version}
-	opts := helm.BuildOptions{
-		ValueFiles:  chart.GetValuesFiles(),
+	cBuilder := chart.NewRemoteBuilder(chartRepo)
+	ref := chart.RemoteReference{Name: c.Spec.Chart, Version: c.Spec.Version}
+	opts := chart.BuildOptions{
+		ValueFiles:  c.GetValuesFiles(),
 		CachedChart: cachedChart,
 		Force:       force,
 	}
 	build, err := cBuilder.Build(ctx, ref, filepath.Join(workDir, "chart.tgz"), opts)
 	if err != nil {
-		return sourcev1.HelmChartNotReady(chart, sourcev1.ChartPullFailedReason, err.Error()), err
+		return sourcev1.HelmChartNotReady(c, sourcev1.ChartPullFailedReason, err.Error()), err
 	}
 
-	newArtifact := r.Storage.NewArtifactFor(chart.Kind, chart.GetObjectMeta(), build.Version,
+	newArtifact := r.Storage.NewArtifactFor(c.Kind, c.GetObjectMeta(), build.Version,
 		fmt.Sprintf("%s-%s.tgz", build.Name, build.Version))
 
 	// If the path of the returned build equals the cache path,
 	// there are no changes to the chart
 	if build.Path == cachedChart {
 		// Ensure hostname is updated
-		if chart.GetArtifact().URL != newArtifact.URL {
-			r.Storage.SetArtifactURL(chart.GetArtifact())
-			chart.Status.URL = r.Storage.SetHostname(chart.Status.URL)
+		if c.GetArtifact().URL != newArtifact.URL {
+			r.Storage.SetArtifactURL(c.GetArtifact())
+			c.Status.URL = r.Storage.SetHostname(c.Status.URL)
 		}
-		return chart, nil
+		return c, nil
 	}
 
 	// Ensure artifact directory exists
 	err = r.Storage.MkdirAll(newArtifact)
 	if err != nil {
 		err = fmt.Errorf("unable to create chart directory: %w", err)
-		return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
+		return sourcev1.HelmChartNotReady(c, sourcev1.StorageOperationFailedReason, err.Error()), err
 	}
 
 	// Acquire a lock for the artifact
 	unlock, err := r.Storage.Lock(newArtifact)
 	if err != nil {
 		err = fmt.Errorf("unable to acquire lock: %w", err)
-		return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
+		return sourcev1.HelmChartNotReady(c, sourcev1.StorageOperationFailedReason, err.Error()), err
 	}
 	defer unlock()
 
 	// Copy the packaged chart to the artifact path
 	if err = r.Storage.CopyFromPath(&newArtifact, build.Path); err != nil {
 		err = fmt.Errorf("failed to write chart package to storage: %w", err)
-		return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
+		return sourcev1.HelmChartNotReady(c, sourcev1.StorageOperationFailedReason, err.Error()), err
 	}
 
 	// Update symlink
 	cUrl, err := r.Storage.Symlink(newArtifact, fmt.Sprintf("%s-latest.tgz", build.Name))
 	if err != nil {
 		err = fmt.Errorf("storage error: %w", err)
-		return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
+		return sourcev1.HelmChartNotReady(c, sourcev1.StorageOperationFailedReason, err.Error()), err
 	}
-	return sourcev1.HelmChartReady(chart, newArtifact, cUrl, sourcev1.ChartPullSucceededReason, build.Summary()), nil
+	return sourcev1.HelmChartReady(c, newArtifact, cUrl, sourcev1.ChartPullSucceededReason, build.Summary()), nil
 }
 
-func (r *HelmChartReconciler) fromTarballArtifact(ctx context.Context, source sourcev1.Artifact,
-	chart sourcev1.HelmChart, workDir string, force bool) (sourcev1.HelmChart, error) {
+func (r *HelmChartReconciler) fromTarballArtifact(ctx context.Context, source sourcev1.Artifact, c sourcev1.HelmChart,
+	workDir string, force bool) (sourcev1.HelmChart, error) {
 	// Create temporary working directory to untar into
 	sourceDir := filepath.Join(workDir, "source")
 	if err := os.Mkdir(sourceDir, 0700); err != nil {
 		err = fmt.Errorf("failed to create temporary directory to untar source into: %w", err)
-		return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
+		return sourcev1.HelmChartNotReady(c, sourcev1.StorageOperationFailedReason, err.Error()), err
 	}
 
 	// Open the tarball artifact file and untar files into working directory
 	f, err := os.Open(r.Storage.LocalPath(source))
 	if err != nil {
 		err = fmt.Errorf("artifact open error: %w", err)
-		return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
+		return sourcev1.HelmChartNotReady(c, sourcev1.StorageOperationFailedReason, err.Error()), err
 	}
 	if _, err = untar.Untar(f, sourceDir); err != nil {
 		_ = f.Close()
 		err = fmt.Errorf("artifact untar error: %w", err)
-		return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
+		return sourcev1.HelmChartNotReady(c, sourcev1.StorageOperationFailedReason, err.Error()), err
 	}
 	if err =f.Close(); err != nil {
 		err = fmt.Errorf("artifact close error: %w", err)
-		return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
+		return sourcev1.HelmChartNotReady(c, sourcev1.StorageOperationFailedReason, err.Error()), err
 	}
 
-	chartPath, err := securejoin.SecureJoin(sourceDir, chart.Spec.Chart)
+	chartPath, err := securejoin.SecureJoin(sourceDir, c.Spec.Chart)
 	if err != nil {
-		return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
+		return sourcev1.HelmChartNotReady(c, sourcev1.StorageOperationFailedReason, err.Error()), err
 	}
 
 	// Setup dependency manager
 	authDir := filepath.Join(workDir, "creds")
 	if err = os.Mkdir(authDir, 0700); err != nil {
 		err = fmt.Errorf("failed to create temporaRy directory for dependency credentials: %w", err)
-		return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
+		return sourcev1.HelmChartNotReady(c, sourcev1.StorageOperationFailedReason, err.Error()), err
 	}
-	dm := helm.NewDependencyManager(
-		helm.WithRepositoryCallback(r.getNamespacedChartRepositoryCallback(ctx, authDir, chart.GetNamespace())),
+	dm := chart.NewDependencyManager(
+		chart.WithRepositoryCallback(r.getNamespacedChartRepositoryCallback(ctx, authDir, c.GetNamespace())),
 	)
 	defer dm.Clear()
 
 	// Get any cached chart
 	var cachedChart string
-	if artifact := chart.Status.Artifact; artifact != nil {
+	if artifact := c.Status.Artifact; artifact != nil {
 		cachedChart = artifact.Path
 	}
 
-	buildsOpts := helm.BuildOptions{
-		ValueFiles:  chart.GetValuesFiles(),
+	buildsOpts := chart.BuildOptions{
+		ValueFiles:  c.GetValuesFiles(),
 		CachedChart: cachedChart,
 		Force:       force,
 	}
 
 	// Add revision metadata to chart build
-	if chart.Spec.ReconcileStrategy == sourcev1.ReconcileStrategyRevision {
+	if c.Spec.ReconcileStrategy == sourcev1.ReconcileStrategyRevision {
 		// Isolate the commit SHA from GitRepository type artifacts by removing the branch/ prefix.
 		splitRev := strings.Split(source.Revision, "/")
 		buildsOpts.VersionMetadata = splitRev[len(splitRev)-1]
 	}
 
 	// Build chart
-	chartB := helm.NewLocalChartBuilder(dm)
-	build, err := chartB.Build(ctx, helm.LocalChartReference{BaseDir: sourceDir, Path: chartPath}, filepath.Join(workDir, "chart.tgz"), buildsOpts)
+	chartB := chart.NewLocalBuilder(dm)
+	build, err := chartB.Build(ctx, chart.LocalReference{BaseDir: sourceDir, Path: chartPath}, filepath.Join(workDir, "chart.tgz"), buildsOpts)
 	if err != nil {
-		return sourcev1.HelmChartNotReady(chart, sourcev1.ChartPackageFailedReason, err.Error()), err
+		return sourcev1.HelmChartNotReady(c, sourcev1.ChartPackageFailedReason, err.Error()), err
 	}
 
-	newArtifact := r.Storage.NewArtifactFor(chart.Kind, chart.GetObjectMeta(), build.Version,
+	newArtifact := r.Storage.NewArtifactFor(c.Kind, c.GetObjectMeta(), build.Version,
 		fmt.Sprintf("%s-%s.tgz", build.Name, build.Version))
 
 	// If the path of the returned build equals the cache path,
 	// there are no changes to the chart
 	if build.Path == cachedChart {
 		// Ensure hostname is updated
-		if chart.GetArtifact().URL != newArtifact.URL {
-			r.Storage.SetArtifactURL(chart.GetArtifact())
-			chart.Status.URL = r.Storage.SetHostname(chart.Status.URL)
+		if c.GetArtifact().URL != newArtifact.URL {
+			r.Storage.SetArtifactURL(c.GetArtifact())
+			c.Status.URL = r.Storage.SetHostname(c.Status.URL)
 		}
-		return chart, nil
+		return c, nil
 	}
 
 	// Ensure artifact directory exists
 	err = r.Storage.MkdirAll(newArtifact)
 	if err != nil {
 		err = fmt.Errorf("unable to create chart directory: %w", err)
-		return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
+		return sourcev1.HelmChartNotReady(c, sourcev1.StorageOperationFailedReason, err.Error()), err
 	}
 
 	// Acquire a lock for the artifact
 	unlock, err := r.Storage.Lock(newArtifact)
 	if err != nil {
 		err = fmt.Errorf("unable to acquire lock: %w", err)
-		return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
+		return sourcev1.HelmChartNotReady(c, sourcev1.StorageOperationFailedReason, err.Error()), err
 	}
 	defer unlock()
 
 	// Copy the packaged chart to the artifact path
 	if err = r.Storage.CopyFromPath(&newArtifact, build.Path); err != nil {
 		err = fmt.Errorf("failed to write chart package to storage: %w", err)
-		return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
+		return sourcev1.HelmChartNotReady(c, sourcev1.StorageOperationFailedReason, err.Error()), err
 	}
 
 	// Update symlink
-	cUrl, err := r.Storage.Symlink(newArtifact, fmt.Sprintf("%s-latest.tgz", chart.Name))
+	cUrl, err := r.Storage.Symlink(newArtifact, fmt.Sprintf("%s-latest.tgz", build.Name))
 	if err != nil {
 		err = fmt.Errorf("storage error: %w", err)
-		return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
+		return sourcev1.HelmChartNotReady(c, sourcev1.StorageOperationFailedReason, err.Error()), err
 	}
 
-	return sourcev1.HelmChartReady(chart, newArtifact, cUrl, sourcev1.ChartPackageSucceededReason, build.Summary()), nil
+	return sourcev1.HelmChartReady(c, newArtifact, cUrl, sourcev1.ChartPackageSucceededReason, build.Summary()), nil
 }
 
 // TODO(hidde): factor out to helper?
-func (r *HelmChartReconciler) getNamespacedChartRepositoryCallback(ctx context.Context, dir, namespace string) helm.GetChartRepositoryCallback {
-	return func(url string) (*helm.ChartRepository, error) {
+func (r *HelmChartReconciler) getNamespacedChartRepositoryCallback(ctx context.Context, dir, namespace string) chart.GetChartRepositoryCallback {
+	return func(url string) (*repository.ChartRepository, error) {
 		repo, err := r.resolveDependencyRepository(ctx, url, namespace)
 		if err != nil {
 			if errors.ReasonForError(err) != metav1.StatusReasonUnknown {
@@ -528,21 +530,21 @@ func (r *HelmChartReconciler) getNamespacedChartRepositoryCallback(ctx context.C
 				},
 			}
 		}
-		clientOpts := []getter.Option{
-			getter.WithURL(repo.Spec.URL),
-			getter.WithTimeout(repo.Spec.Timeout.Duration),
-			getter.WithPassCredentialsAll(repo.Spec.PassCredentials),
+		clientOpts := []extgetter.Option{
+			extgetter.WithURL(repo.Spec.URL),
+			extgetter.WithTimeout(repo.Spec.Timeout.Duration),
+			extgetter.WithPassCredentialsAll(repo.Spec.PassCredentials),
 		}
 		if secret, err := r.getHelmRepositorySecret(ctx, repo); err != nil {
 			return nil, err
 		} else if secret != nil {
-			opts, err := helm.ClientOptionsFromSecret(dir, *secret)
+			opts, err := getter.ClientOptionsFromSecret(dir, *secret)
 			if err != nil {
 				return nil, err
 			}
 			clientOpts = append(clientOpts, opts...)
 		}
-		chartRepo, err := helm.NewChartRepository(repo.Spec.URL, "", r.Getters, clientOpts)
+		chartRepo, err := repository.NewChartRepository(repo.Spec.URL, "", r.Getters, clientOpts)
 		if err != nil {
 			return nil, err
 		}
@@ -663,7 +665,7 @@ func (r *HelmChartReconciler) indexHelmRepositoryByURL(o client.Object) []string
 	if !ok {
 		panic(fmt.Sprintf("Expected a HelmRepository, got %T", o))
 	}
-	u := helm.NormalizeChartRepositoryURL(repo.Spec.URL)
+	u := repository.NormalizeURL(repo.Spec.URL)
 	if u != "" {
 		return []string{u}
 	}

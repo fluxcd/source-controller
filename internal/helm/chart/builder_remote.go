@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package helm
+package chart
 
 import (
 	"context"
@@ -24,28 +24,31 @@ import (
 	"path/filepath"
 
 	"github.com/Masterminds/semver/v3"
-	"github.com/fluxcd/pkg/runtime/transform"
-	"github.com/fluxcd/source-controller/internal/fs"
 	helmchart "helm.sh/helm/v3/pkg/chart"
 	"helm.sh/helm/v3/pkg/chart/loader"
 	"helm.sh/helm/v3/pkg/chartutil"
 	"sigs.k8s.io/yaml"
+
+	"github.com/fluxcd/pkg/runtime/transform"
+
+	"github.com/fluxcd/source-controller/internal/fs"
+	"github.com/fluxcd/source-controller/internal/helm/repository"
 )
 
 type remoteChartBuilder struct {
-	remote *ChartRepository
+	remote *repository.ChartRepository
 }
 
-// NewRemoteChartBuilder returns a ChartBuilder capable of building a Helm
-// chart with a RemoteChartReference from the given ChartRepository.
-func NewRemoteChartBuilder(repository *ChartRepository) ChartBuilder {
+// NewRemoteBuilder returns a Builder capable of building a Helm
+// chart with a RemoteReference from the given Index.
+func NewRemoteBuilder(repository *repository.ChartRepository) Builder {
 	return &remoteChartBuilder{
 		remote: repository,
 	}
 }
 
-func (b *remoteChartBuilder) Build(_ context.Context, ref ChartReference, p string, opts BuildOptions) (*ChartBuild, error) {
-	remoteRef, ok := ref.(RemoteChartReference)
+func (b *remoteChartBuilder) Build(_ context.Context, ref Reference, p string, opts BuildOptions) (*Build, error) {
+	remoteRef, ok := ref.(RemoteReference)
 	if !ok {
 		return nil, fmt.Errorf("expected remote chart reference")
 	}
@@ -59,13 +62,13 @@ func (b *remoteChartBuilder) Build(_ context.Context, ref ChartReference, p stri
 	}
 	defer b.remote.Unload()
 
-	// Get the current version for the RemoteChartReference
+	// Get the current version for the RemoteReference
 	cv, err := b.remote.Get(remoteRef.Name, remoteRef.Version)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get chart version for remote reference: %w", err)
 	}
 
-	result := &ChartBuild{}
+	result := &Build{}
 	result.Name = cv.Name
 	result.Version = cv.Version
 	// Set build specific metadata if instructed

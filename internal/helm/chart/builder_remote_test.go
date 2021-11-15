@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package helm
+package chart
 
 import (
 	"testing"
@@ -104,9 +104,9 @@ func Test_pathIsDir(t *testing.T) {
 		p    string
 		want bool
 	}{
-		{name: "directory", p: "testdata/", want: true},
-		{name: "file", p: "testdata/local-index.yaml", want: false},
-		{name: "not found error", p: "testdata/does-not-exist.yaml", want: false},
+		{name: "directory", p: "../testdata/", want: true},
+		{name: "file", p: "../testdata/local-index.yaml", want: false},
+		{name: "not found error", p: "../testdata/does-not-exist.yaml", want: false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

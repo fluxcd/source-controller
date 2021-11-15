@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package helm
+package chart
 
 import (
 	"encoding/hex"
@@ -30,18 +30,18 @@ import (
 func TestChartBuildResult_String(t *testing.T) {
 	g := NewWithT(t)
 
-	var result *ChartBuild
+	var result *Build
 	g.Expect(result.String()).To(Equal(""))
-	result = &ChartBuild{}
+	result = &Build{}
 	g.Expect(result.String()).To(Equal(""))
-	result = &ChartBuild{Path: "/foo/"}
+	result = &Build{Path: "/foo/"}
 	g.Expect(result.String()).To(Equal("/foo/"))
 }
 
 func Test_packageToPath(t *testing.T) {
 	g := NewWithT(t)
 
-	chart, err := loader.Load("testdata/charts/helmchart-0.1.0.tgz")
+	chart, err := loader.Load("../testdata/charts/helmchart-0.1.0.tgz")
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(chart).ToNot(BeNil())
 

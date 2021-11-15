@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package helm
+package repository
 
 import (
 	"bytes"
@@ -36,6 +36,8 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"github.com/fluxcd/pkg/version"
+
+	"github.com/fluxcd/source-controller/internal/helm"
 )
 
 var ErrNoChartIndex = errors.New("no chart index")
@@ -241,8 +243,8 @@ func (r *ChartRepository) LoadFromFile(path string) error {
 		}
 		return err
 	}
-	if stat.Size() > MaxIndexSize {
-		return fmt.Errorf("size of index '%s' exceeds '%d' limit", stat.Name(), MaxIndexSize)
+	if stat.Size() > helm.MaxIndexSize {
+		return fmt.Errorf("size of index '%s' exceeds '%d' limit", stat.Name(), helm.MaxIndexSize)
 	}
 	b, err := os.ReadFile(path)
 	if err != nil {
@@ -350,7 +352,7 @@ func (r *ChartRepository) HasCacheFile() bool {
 }
 
 // Unload can be used to signal the Go garbage collector the Index can
-// be freed from memory if the ChartRepository object is expected to
+// be freed from memory if the Index object is expected to
 // continue to exist in the stack for some time.
 func (r *ChartRepository) Unload() {
 	if r == nil {

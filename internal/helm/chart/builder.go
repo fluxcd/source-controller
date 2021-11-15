@@ -14,49 +14,51 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package helm
+package chart
 
 import (
 	"context"
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
-	"github.com/fluxcd/source-controller/internal/fs"
 	helmchart "helm.sh/helm/v3/pkg/chart"
 	"helm.sh/helm/v3/pkg/chartutil"
+
+	"github.com/fluxcd/source-controller/internal/fs"
 )
 
-// ChartReference holds information to locate a chart.
-type ChartReference interface {
-	// Validate returns an error if the ChartReference is not valid according
+// Reference holds information to locate a chart.
+type Reference interface {
+	// Validate returns an error if the Reference is not valid according
 	// to the spec of the interface implementation.
 	Validate() error
 }
 
-// LocalChartReference contains sufficient information to locate a chart on the
+// LocalReference contains sufficient information to locate a chart on the
 // local filesystem.
-type LocalChartReference struct {
-	// BaseDir used as chroot during build operations.
+type LocalReference struct {
+	// WorkDir used as chroot during build operations.
 	// File references are not allowed to traverse outside it.
-	BaseDir string
+	WorkDir string
 	// Path of the chart on the local filesystem.
 	Path string
 }
 
-// Validate returns an error if the LocalChartReference does not have
+// Validate returns an error if the LocalReference does not have
 // a Path set.
-func (r LocalChartReference) Validate() error {
+func (r LocalReference) Validate() error {
 	if r.Path == "" {
 		return fmt.Errorf("no path set for local chart reference")
 	}
 	return nil
 }
 
-// RemoteChartReference contains sufficient information to look up a chart in
+// RemoteReference contains sufficient information to look up a chart in
 // a ChartRepository.
-type RemoteChartReference struct {
+type RemoteReference struct {
 	// Name of the chart.
 	Name string
 	// Version of the chart.
@@ -64,25 +66,29 @@ type RemoteChartReference struct {
 	Version string
 }
 
-// Validate returns an error if the RemoteChartReference does not have
+// Validate returns an error if the RemoteReference does not have
 // a Name set.
-func (r RemoteChartReference) Validate() error {
+func (r RemoteReference) Validate() error {
 	if r.Name == "" {
 		return fmt.Errorf("no name set for remote chart reference")
+	}
+	name := regexp.MustCompile("^([-a-z0-9]*)$")
+	if !name.MatchString(r.Name) {
+		return fmt.Errorf("invalid chart name '%s': a valid name must be lower case letters and numbers and MAY be separated with dashes (-)", r.Name)
 	}
 	return nil
 }
 
-// ChartBuilder is capable of building a (specific) ChartReference.
-type ChartBuilder interface {
-	// Build builds and packages a Helm chart with the given ChartReference
-	// and BuildOptions and writes it to p. It returns the ChartBuild result,
-	// or an error. It may return an error for unsupported ChartReference
+// Builder is capable of building a (specific) chart Reference.
+type Builder interface {
+	// Build builds and packages a Helm chart with the given Reference
+	// and BuildOptions and writes it to p. It returns the Build result,
+	// or an error. It may return an error for unsupported Reference
 	// implementations.
-	Build(ctx context.Context, ref ChartReference, p string, opts BuildOptions) (*ChartBuild, error)
+	Build(ctx context.Context, ref Reference, p string, opts BuildOptions) (*Build, error)
 }
 
-// BuildOptions provides a list of options for ChartBuilder.Build.
+// BuildOptions provides a list of options for Builder.Build.
 type BuildOptions struct {
 	// VersionMetadata can be set to SemVer build metadata as defined in
 	// the spec, and is included during packaging.
@@ -109,9 +115,9 @@ func (o BuildOptions) GetValueFiles() []string {
 	return o.ValueFiles
 }
 
-// ChartBuild contains the ChartBuilder.Build result, including specific
+// Build contains the Builder.Build result, including specific
 // information about the built chart like ResolvedDependencies.
-type ChartBuild struct {
+type Build struct {
 	// Path is the absolute path to the packaged chart.
 	Path string
 	// Name of the packaged chart.
@@ -124,14 +130,14 @@ type ChartBuild struct {
 	// ResolvedDependencies is the number of local and remote dependencies
 	// collected by the DependencyManager before building the chart.
 	ResolvedDependencies int
-	// Packaged indicates if the ChartBuilder has packaged the chart.
+	// Packaged indicates if the Builder has packaged the chart.
 	// This can for example be false if ValueFiles is empty and the chart
 	// source was already packaged.
 	Packaged bool
 }
 
-// Summary returns a human-readable summary of the ChartBuild.
-func (b *ChartBuild) Summary() string {
+// Summary returns a human-readable summary of the Build.
+func (b *Build) Summary() string {
 	if b == nil {
 		return "no chart build"
 	}
@@ -155,15 +161,15 @@ func (b *ChartBuild) Summary() string {
 	return s.String()
 }
 
-// String returns the Path of the ChartBuild.
-func (b *ChartBuild) String() string {
+// String returns the Path of the Build.
+func (b *Build) String() string {
 	if b != nil {
 		return b.Path
 	}
 	return ""
 }
 
-// packageToPath attempts to package the given chart.Chart to the out filepath.
+// packageToPath attempts to package the given chart to the out filepath.
 func packageToPath(chart *helmchart.Chart, out string) error {
 	o, err := os.MkdirTemp("", "chart-build-*")
 	if err != nil {

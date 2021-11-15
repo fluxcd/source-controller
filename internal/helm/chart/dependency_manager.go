@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package helm
+package chart
 
 import (
 	"context"
@@ -31,18 +31,20 @@ import (
 	"golang.org/x/sync/semaphore"
 	helmchart "helm.sh/helm/v3/pkg/chart"
 	"helm.sh/helm/v3/pkg/chart/loader"
+
+	"github.com/fluxcd/source-controller/internal/helm/repository"
 )
 
-// GetChartRepositoryCallback must return a ChartRepository for the URL,
-// or an error describing why it could not be returned.
-type GetChartRepositoryCallback func(url string) (*ChartRepository, error)
+// GetChartRepositoryCallback must return a repository.ChartRepository for the
+// URL, or an error describing why it could not be returned.
+type GetChartRepositoryCallback func(url string) (*repository.ChartRepository, error)
 
 // DependencyManager manages dependencies for a Helm chart.
 type DependencyManager struct {
-	// repositories contains a map of ChartRepository indexed by their
+	// repositories contains a map of Index indexed by their
 	// normalized URL. It is used as a lookup table for missing
 	// dependencies.
-	repositories map[string]*ChartRepository
+	repositories map[string]*repository.ChartRepository
 
 	// getRepositoryCallback can be set to an on-demand GetChartRepositoryCallback
 	// which returned result is cached to repositories.
@@ -56,11 +58,12 @@ type DependencyManager struct {
 	mu sync.Mutex
 }
 
+// DependencyManagerOption configures an option on a DependencyManager.
 type DependencyManagerOption interface {
 	applyToDependencyManager(dm *DependencyManager)
 }
 
-type WithRepositories map[string]*ChartRepository
+type WithRepositories map[string]*repository.ChartRepository
 
 func (o WithRepositories) applyToDependencyManager(dm *DependencyManager) {
 	dm.repositories = o
@@ -98,9 +101,9 @@ func (dm *DependencyManager) Clear() []error {
 }
 
 // Build compiles a set of missing dependencies from chart.Chart, and attempts to
-// resolve and build them using the information from ChartReference.
+// resolve and build them using the information from Reference.
 // It returns the number of resolved local and remote dependencies, or an error.
-func (dm *DependencyManager) Build(ctx context.Context, ref ChartReference, chart *helmchart.Chart) (int, error) {
+func (dm *DependencyManager) Build(ctx context.Context, ref Reference, chart *helmchart.Chart) (int, error) {
 	// Collect dependency metadata
 	var (
 		deps = chart.Dependencies()
@@ -132,9 +135,9 @@ type chartWithLock struct {
 
 // build adds the given list of deps to the chart with the configured number of
 // concurrent workers. If the chart.Chart references a local dependency but no
-// LocalChartReference is given, or any dependency could not be added, an error
+// LocalReference is given, or any dependency could not be added, an error
 // is returned. The first error it encounters cancels all other workers.
-func (dm *DependencyManager) build(ctx context.Context, ref ChartReference, chart *helmchart.Chart, deps map[string]*helmchart.Dependency) error {
+func (dm *DependencyManager) build(ctx context.Context, ref Reference, c *helmchart.Chart, deps map[string]*helmchart.Dependency) error {
 	current := dm.concurrent
 	if current <= 0 {
 		current = 1
@@ -143,7 +146,7 @@ func (dm *DependencyManager) build(ctx context.Context, ref ChartReference, char
 	group, groupCtx := errgroup.WithContext(ctx)
 	group.Go(func() error {
 		sem := semaphore.NewWeighted(current)
-		chart := &chartWithLock{Chart: chart}
+		c := &chartWithLock{Chart: c}
 		for name, dep := range deps {
 			name, dep := name, dep
 			if err := sem.Acquire(groupCtx, 1); err != nil {
@@ -152,17 +155,17 @@ func (dm *DependencyManager) build(ctx context.Context, ref ChartReference, char
 			group.Go(func() (err error) {
 				defer sem.Release(1)
 				if isLocalDep(dep) {
-					localRef, ok := ref.(LocalChartReference)
+					localRef, ok := ref.(LocalReference)
 					if !ok {
 						err = fmt.Errorf("failed to add local dependency '%s': no local chart reference", name)
 						return
 					}
-					if err = dm.addLocalDependency(localRef, chart, dep); err != nil {
+					if err = dm.addLocalDependency(localRef, c, dep); err != nil {
 						err = fmt.Errorf("failed to add local dependency '%s': %w", name, err)
 					}
 					return
 				}
-				if err = dm.addRemoteDependency(chart, dep); err != nil {
+				if err = dm.addRemoteDependency(c, dep); err != nil {
 					err = fmt.Errorf("failed to add remote dependency '%s': %w", name, err)
 				}
 				return
@@ -175,7 +178,7 @@ func (dm *DependencyManager) build(ctx context.Context, ref ChartReference, char
 
 // addLocalDependency attempts to resolve and add the given local chart.Dependency
 // to the chart.
-func (dm *DependencyManager) addLocalDependency(ref LocalChartReference, chart *chartWithLock, dep *helmchart.Dependency) error {
+func (dm *DependencyManager) addLocalDependency(ref LocalReference, c *chartWithLock, dep *helmchart.Dependency) error {
 	sLocalChartPath, err := dm.secureLocalChartPath(ref, dep)
 	if err != nil {
 		return err
@@ -197,7 +200,7 @@ func (dm *DependencyManager) addLocalDependency(ref LocalChartReference, chart *
 	ch, err := loader.Load(sLocalChartPath)
 	if err != nil {
 		return fmt.Errorf("failed to load chart from '%s' (reference '%s'): %w",
-			strings.TrimPrefix(sLocalChartPath, ref.BaseDir), dep.Repository, err)
+			strings.TrimPrefix(sLocalChartPath, ref.WorkDir), dep.Repository, err)
 	}
 
 	ver, err := semver.NewVersion(ch.Metadata.Version)
@@ -210,9 +213,9 @@ func (dm *DependencyManager) addLocalDependency(ref LocalChartReference, chart *
 		return err
 	}
 
-	chart.mu.Lock()
-	chart.AddDependency(ch)
-	chart.mu.Unlock()
+	c.mu.Lock()
+	c.AddDependency(ch)
+	c.mu.Unlock()
 	return nil
 }
 
@@ -249,19 +252,19 @@ func (dm *DependencyManager) addRemoteDependency(chart *chartWithLock, dep *helm
 }
 
 // resolveRepository first attempts to resolve the url from the repositories, falling back
-// to getRepositoryCallback if set. It returns the resolved ChartRepository, or an error.
-func (dm *DependencyManager) resolveRepository(url string) (_ *ChartRepository, err error) {
+// to getRepositoryCallback if set. It returns the resolved Index, or an error.
+func (dm *DependencyManager) resolveRepository(url string) (_ *repository.ChartRepository, err error) {
 	dm.mu.Lock()
 	defer dm.mu.Unlock()
 
-	nUrl := NormalizeChartRepositoryURL(url)
+	nUrl := repository.NormalizeURL(url)
 	if _, ok := dm.repositories[nUrl]; !ok {
 		if dm.getRepositoryCallback == nil {
 			err = fmt.Errorf("no chart repository for URL '%s'", nUrl)
 			return
 		}
 		if dm.repositories == nil {
-			dm.repositories = map[string]*ChartRepository{}
+			dm.repositories = map[string]*repository.ChartRepository{}
 		}
 		if dm.repositories[nUrl], err = dm.getRepositoryCallback(nUrl); err != nil {
 			err = fmt.Errorf("failed to get chart repository for URL '%s': %w", nUrl, err)
@@ -273,8 +276,8 @@ func (dm *DependencyManager) resolveRepository(url string) (_ *ChartRepository, 
 
 // secureLocalChartPath returns the secure absolute path of a local dependency.
 // It does not allow the dependency's path to be outside the scope of
-// LocalChartReference.BaseDir.
-func (dm *DependencyManager) secureLocalChartPath(ref LocalChartReference, dep *helmchart.Dependency) (string, error) {
+// LocalReference.WorkDir.
+func (dm *DependencyManager) secureLocalChartPath(ref LocalReference, dep *helmchart.Dependency) (string, error) {
 	localUrl, err := url.Parse(dep.Repository)
 	if err != nil {
 		return "", fmt.Errorf("failed to parse alleged local chart reference: %w", err)
@@ -282,11 +285,11 @@ func (dm *DependencyManager) secureLocalChartPath(ref LocalChartReference, dep *
 	if localUrl.Scheme != "" && localUrl.Scheme != "file" {
 		return "", fmt.Errorf("'%s' is not a local chart reference", dep.Repository)
 	}
-	relPath, err := filepath.Rel(ref.BaseDir, ref.Path)
+	relPath, err := filepath.Rel(ref.WorkDir, ref.Path)
 	if err != nil {
-		return "", err
+		relPath = ref.Path
 	}
-	return securejoin.SecureJoin(ref.BaseDir, filepath.Join(relPath, localUrl.Host, localUrl.Path))
+	return securejoin.SecureJoin(ref.WorkDir, filepath.Join(relPath, localUrl.Host, localUrl.Path))
 }
 
 // collectMissing returns a map with reqs that are missing from current,

@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package helm
+package chart
 
 import (
 	"os"
@@ -99,16 +99,16 @@ func Test_copyFileToPath(t *testing.T) {
 	}{
 		{
 			name: "copies input file",
-			in:   "testdata/local-index.yaml",
+			in:   "../testdata/local-index.yaml",
 		},
 		{
 			name:    "invalid input file",
-			in:      "testdata/invalid.tgz",
+			in:      "../testdata/invalid.tgz",
 			wantErr: "failed to open file to copy from",
 		},
 		{
 			name:    "invalid input directory",
-			in:      "testdata/charts",
+			in:      "../testdata/charts",
 			wantErr: "failed to read from source during copy",
 		},
 	}

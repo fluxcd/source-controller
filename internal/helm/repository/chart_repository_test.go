@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package helm
+package repository
 
 import (
 	"bytes"
@@ -27,39 +27,29 @@ import (
 
 	. "github.com/onsi/gomega"
 	"helm.sh/helm/v3/pkg/chart"
-	"helm.sh/helm/v3/pkg/getter"
+	helmgetter "helm.sh/helm/v3/pkg/getter"
 	"helm.sh/helm/v3/pkg/repo"
+
+	"github.com/fluxcd/source-controller/internal/helm/getter"
 )
 
 var now = time.Now()
 
 const (
-	testFile            = "testdata/local-index.yaml"
-	chartmuseumTestFile = "testdata/chartmuseum-index.yaml"
-	unorderedTestFile   = "testdata/local-index-unordered.yaml"
+	testFile            = "../testdata/local-index.yaml"
+	chartmuseumTestFile = "../testdata/chartmuseum-index.yaml"
+	unorderedTestFile   = "../testdata/local-index-unordered.yaml"
 )
-
-// mockGetter can be used as a simple mocking getter.Getter implementation.
-type mockGetter struct {
-	requestedURL string
-	response     []byte
-}
-
-func (g *mockGetter) Get(url string, _ ...getter.Option) (*bytes.Buffer, error) {
-	g.requestedURL = url
-	r := g.response
-	return bytes.NewBuffer(r), nil
-}
 
 func TestNewChartRepository(t *testing.T) {
 	repositoryURL := "https://example.com"
-	providers := getter.Providers{
-		getter.Provider{
+	providers := helmgetter.Providers{
+		helmgetter.Provider{
 			Schemes: []string{"https"},
-			New:     getter.NewHTTPGetter,
+			New:     helmgetter.NewHTTPGetter,
 		},
 	}
-	options := []getter.Option{getter.WithBasicAuth("username", "password")}
+	options := []helmgetter.Option{helmgetter.WithBasicAuth("username", "password")}
 
 	t.Run("should construct chart repository", func(t *testing.T) {
 		g := NewWithT(t)
@@ -230,7 +220,7 @@ func TestChartRepository_DownloadChart(t *testing.T) {
 			g := NewWithT(t)
 			t.Parallel()
 
-			mg := mockGetter{}
+			mg := getter.MockGetter{}
 			r := &ChartRepository{
 				URL:    tt.url,
 				Client: &mg,
@@ -241,7 +231,7 @@ func TestChartRepository_DownloadChart(t *testing.T) {
 				g.Expect(res).To(BeNil())
 				return
 			}
-			g.Expect(mg.requestedURL).To(Equal(tt.wantURL))
+			g.Expect(mg.LastGet()).To(Equal(tt.wantURL))
 			g.Expect(res).ToNot(BeNil())
 			g.Expect(err).ToNot(HaveOccurred())
 		})
@@ -254,7 +244,7 @@ func TestChartRepository_DownloadIndex(t *testing.T) {
 	b, err := os.ReadFile(chartmuseumTestFile)
 	g.Expect(err).ToNot(HaveOccurred())
 
-	mg := mockGetter{response: b}
+	mg := getter.MockGetter{Response: b}
 	r := &ChartRepository{
 		URL:    "https://example.com",
 		Client: &mg,
@@ -263,7 +253,7 @@ func TestChartRepository_DownloadIndex(t *testing.T) {
 	buf := bytes.NewBuffer([]byte{})
 	g.Expect(r.DownloadIndex(buf)).To(Succeed())
 	g.Expect(buf.Bytes()).To(Equal(b))
-	g.Expect(mg.requestedURL).To(Equal(r.URL + "/index.yaml"))
+	g.Expect(mg.LastGet()).To(Equal(r.URL + "/index.yaml"))
 	g.Expect(err).To(BeNil())
 }
 
@@ -384,8 +374,8 @@ func TestChartRepository_LoadIndexFromFile(t *testing.T) {
 func TestChartRepository_CacheIndex(t *testing.T) {
 	g := NewWithT(t)
 
-	mg := mockGetter{response: []byte("foo")}
-	expectSum := fmt.Sprintf("%x", sha256.Sum256(mg.response))
+	mg := getter.MockGetter{Response: []byte("foo")}
+	expectSum := fmt.Sprintf("%x", sha256.Sum256(mg.Response))
 
 	r := newChartRepository()
 	r.URL = "https://example.com"
@@ -399,7 +389,7 @@ func TestChartRepository_CacheIndex(t *testing.T) {
 	g.Expect(r.CachePath).To(BeARegularFile())
 	b, _ := os.ReadFile(r.CachePath)
 
-	g.Expect(b).To(Equal(mg.response))
+	g.Expect(b).To(Equal(mg.Response))
 	g.Expect(sum).To(BeEquivalentTo(expectSum))
 }
 
