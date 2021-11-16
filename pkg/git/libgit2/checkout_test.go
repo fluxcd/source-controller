@@ -34,6 +34,8 @@ func TestCheckoutBranch_Checkout(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer repo.Free()
+	defer os.RemoveAll(filepath.Join(repo.Path(), ".."))
 
 	firstCommit, err := commitFile(repo, "branch", "init", time.Now())
 	if err != nil {
@@ -131,6 +133,8 @@ func TestCheckoutTag_Checkout(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			defer repo.Free()
+			defer os.RemoveAll(filepath.Join(repo.Path(), ".."))
 
 			var commit *git2go.Commit
 			if tt.tag != "" {
@@ -177,7 +181,7 @@ func TestCheckoutCommit_Checkout(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer repo.Free()
-	defer os.RemoveAll(repo.Path())
+	defer os.RemoveAll(filepath.Join(repo.Path(), ".."))
 
 	c, err := commitFile(repo, "commit", "init", time.Now())
 	if err != nil {
@@ -190,7 +194,10 @@ func TestCheckoutCommit_Checkout(t *testing.T) {
 	commit := CheckoutCommit{
 		Commit: c.String(),
 	}
-	tmpDir, _ := os.MkdirTemp("", "git2go")
+	tmpDir, err := os.MkdirTemp("", "git2go")
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer os.RemoveAll(tmpDir)
 
 	cc, err := commit.Checkout(context.TODO(), tmpDir, repo.Path(), nil)
@@ -203,8 +210,11 @@ func TestCheckoutCommit_Checkout(t *testing.T) {
 	commit = CheckoutCommit{
 		Commit: "4dc3185c5fc94eb75048376edeb44571cece25f4",
 	}
-	tmpDir2, _ := os.MkdirTemp("", "git2go")
-	defer os.RemoveAll(tmpDir)
+	tmpDir2, err := os.MkdirTemp("", "git2go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tmpDir2)
 
 	cc, err = commit.Checkout(context.TODO(), tmpDir2, repo.Path(), nil)
 	g.Expect(err).To(HaveOccurred())
@@ -279,7 +289,7 @@ func TestCheckoutTagSemVer_Checkout(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer repo.Free()
-	defer os.RemoveAll(repo.Path())
+	defer os.RemoveAll(filepath.Join(repo.Path(), ".."))
 
 	refs := make(map[string]string, len(tags))
 	for _, tt := range tags {

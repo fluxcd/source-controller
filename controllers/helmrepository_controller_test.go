@@ -64,8 +64,8 @@ var _ = Describe("HelmRepositoryReconciler", func() {
 		})
 
 		AfterEach(func() {
-			os.RemoveAll(helmServer.Root())
 			helmServer.Stop()
+			os.RemoveAll(helmServer.Root())
 
 			Eventually(func() error {
 				return k8sClient.Delete(context.Background(), namespace)
@@ -207,9 +207,6 @@ var _ = Describe("HelmRepositoryReconciler", func() {
 		})
 
 		It("Authenticates when basic auth credentials are provided", func() {
-			helmServer, err = helmtestserver.NewTempHelmServer()
-			Expect(err).NotTo(HaveOccurred())
-
 			var username, password = "john", "doe"
 			helmServer.WithMiddleware(func(handler http.Handler) http.Handler {
 				return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -221,8 +218,6 @@ var _ = Describe("HelmRepositoryReconciler", func() {
 					handler.ServeHTTP(w, r)
 				})
 			})
-			defer os.RemoveAll(helmServer.Root())
-			defer helmServer.Stop()
 			helmServer.Start()
 
 			Expect(helmServer.PackageChart(path.Join("testdata/charts/helmchart"))).Should(Succeed())
