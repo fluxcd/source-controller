@@ -29,6 +29,7 @@ require (
 	github.com/minio/minio-go/v7 v7.0.10
 	github.com/onsi/ginkgo v1.16.4
 	github.com/onsi/gomega v1.14.0
+	github.com/otiai10/copy v1.7.0
 	github.com/spf13/pflag v1.0.5
 	golang.org/x/crypto v0.0.0-20210421170649-83a5a9bb288b
 	golang.org/x/net v0.0.0-20210825183410-e898025ed96a // indirect
