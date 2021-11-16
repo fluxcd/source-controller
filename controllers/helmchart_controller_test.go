@@ -79,8 +79,8 @@ var _ = Describe("HelmChartReconciler", func() {
 		})
 
 		AfterEach(func() {
-			os.RemoveAll(helmServer.Root())
 			helmServer.Stop()
+			os.RemoveAll(helmServer.Root())
 
 			err = k8sClient.Delete(context.Background(), namespace)
 			Expect(err).NotTo(HaveOccurred(), "failed to delete test namespace")
@@ -995,8 +995,8 @@ var _ = Describe("HelmChartReconciler", func() {
 			gitServer.StopHTTP()
 			os.RemoveAll(gitServer.Root())
 
-			os.RemoveAll(helmServer.Root())
 			helmServer.Stop()
+			os.RemoveAll(helmServer.Root())
 
 			err = k8sClient.Delete(context.Background(), namespace)
 			Expect(err).NotTo(HaveOccurred(), "failed to delete test namespace")
