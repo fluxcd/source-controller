@@ -25,7 +25,89 @@ import (
 
 	. "github.com/onsi/gomega"
 	"helm.sh/helm/v3/pkg/chart/loader"
+	"helm.sh/helm/v3/pkg/chartutil"
 )
+
+func TestBuildOptions_GetValueFiles(t *testing.T) {
+	tests := []struct {
+		name       string
+		valueFiles []string
+		want       []string
+	}{
+		{
+			name:       "Default values.yaml",
+			valueFiles: []string{chartutil.ValuesfileName},
+			want:       nil,
+		},
+		{
+			name:       "Value files",
+			valueFiles: []string{chartutil.ValuesfileName, "foo.yaml"},
+			want:       []string{chartutil.ValuesfileName, "foo.yaml"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			o := BuildOptions{ValueFiles: tt.valueFiles}
+			g.Expect(o.GetValueFiles()).To(Equal(tt.want))
+		})
+	}
+}
+
+func TestChartBuildResult_Summary(t *testing.T) {
+	tests := []struct {
+		name  string
+		build *Build
+		want  string
+	}{
+		{
+			name: "Simple",
+			build: &Build{
+				Name:    "chart",
+				Version: "1.2.3-rc.1+bd6bf40",
+			},
+			want: "Fetched 'chart' chart with version '1.2.3-rc.1+bd6bf40'.",
+		},
+		{
+			name: "With value files",
+			build: &Build{
+				Name:       "chart",
+				Version:    "arbitrary-version",
+				Packaged:   true,
+				ValueFiles: []string{"a.yaml", "b.yaml"},
+			},
+			want: "Packaged 'chart' chart with version 'arbitrary-version', with merged value files [a.yaml b.yaml].",
+		},
+		{
+			name: "With dependencies",
+			build: &Build{
+				Name:                 "chart",
+				Version:              "arbitrary-version",
+				Packaged:             true,
+				ResolvedDependencies: 5,
+			},
+			want: "Packaged 'chart' chart with version 'arbitrary-version', resolving 5 dependencies before packaging.",
+		},
+		{
+			name:  "Empty build",
+			build: &Build{},
+			want:  "No chart build.",
+		},
+		{
+			name:  "Nil build",
+			build: nil,
+			want:  "No chart build.",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			g.Expect(tt.build.Summary()).To(Equal(tt.want))
+		})
+	}
+}
 
 func TestChartBuildResult_String(t *testing.T) {
 	g := NewWithT(t)
