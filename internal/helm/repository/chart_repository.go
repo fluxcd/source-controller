@@ -287,8 +287,6 @@ func (r *ChartRepository) CacheIndex() (string, error) {
 // LoadFromCache if it does not HasIndex.
 // If it not HasCacheFile, a cache attempt is made using CacheIndex
 // before continuing to load.
-// It returns a boolean indicating if it cached the index before
-// loading, or an error.
 func (r *ChartRepository) StrategicallyLoadIndex() (err error) {
 	if r.HasIndex() {
 		return

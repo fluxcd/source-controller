@@ -138,8 +138,8 @@ type Build struct {
 
 // Summary returns a human-readable summary of the Build.
 func (b *Build) Summary() string {
-	if b == nil {
-		return "no chart build"
+	if b == nil || b.Name == "" || b.Version == "" {
+		return "No chart build."
 	}
 
 	var s strings.Builder
@@ -148,25 +148,26 @@ func (b *Build) Summary() string {
 	if b.Packaged {
 		action = "Packaged"
 	}
-	s.WriteString(fmt.Sprintf("%s '%s' chart with version '%s'.", action, b.Name, b.Version))
+	s.WriteString(fmt.Sprintf("%s '%s' chart with version '%s'", action, b.Name, b.Version))
+
+	if b.Packaged && len(b.ValueFiles) > 0 {
+		s.WriteString(fmt.Sprintf(", with merged value files %v", b.ValueFiles))
+	}
 
 	if b.Packaged && b.ResolvedDependencies > 0 {
-		s.WriteString(fmt.Sprintf(" Resolved %d dependencies before packaging.", b.ResolvedDependencies))
+		s.WriteString(fmt.Sprintf(", resolving %d dependencies before packaging", b.ResolvedDependencies))
 	}
 
-	if len(b.ValueFiles) > 0 {
-		s.WriteString(fmt.Sprintf(" Merged %v value files into default chart values.", b.ValueFiles))
-	}
-
+	s.WriteString(".")
 	return s.String()
 }
 
 // String returns the Path of the Build.
 func (b *Build) String() string {
-	if b != nil {
-		return b.Path
+	if b == nil {
+		return ""
 	}
-	return ""
+	return b.Path
 }
 
 // packageToPath attempts to package the given chart to the out filepath.
