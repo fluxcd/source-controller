@@ -19,12 +19,10 @@ package chart
 import (
 	"bytes"
 	"context"
-	"math/rand"
 	"os"
 	"strings"
 	"sync"
 	"testing"
-	"time"
 
 	. "github.com/onsi/gomega"
 	helmchart "helm.sh/helm/v3/pkg/chart"
@@ -34,20 +32,6 @@ import (
 
 	"github.com/fluxcd/source-controller/internal/helm/repository"
 )
-
-var letterRunes = []rune("abcdefghijklmnopqrstuvwxyz1234567890")
-
-func randStringRunes(n int) string {
-	b := make([]rune, n)
-	for i := range b {
-		b[i] = letterRunes[rand.Intn(len(letterRunes))]
-	}
-	return string(b)
-}
-
-func init() {
-	rand.Seed(time.Now().UnixNano())
-}
 
 // mockIndexChartGetter returns specific response for index and chart queries.
 type mockIndexChartGetter struct {
@@ -146,7 +130,6 @@ entries:
 			wantVersion:  "6.17.4+foo",
 			wantPackaged: true,
 		},
-		// TODO: Test setting BuildOptions CachedChart and Force.
 		{
 			name:        "default values",
 			reference:   RemoteReference{Name: "grafana"},
@@ -175,8 +158,10 @@ entries:
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
 
-			targetPath := "/tmp/remote-chart-builder-" + randStringRunes(5) + ".tgz"
-			defer os.RemoveAll(targetPath)
+			tmpDir, err := os.MkdirTemp("", "remote-chart-builder-")
+			g.Expect(err).ToNot(HaveOccurred())
+			defer os.RemoveAll(tmpDir)
+			targetPath := filepath.Join(tmpDir, "chart.tgz")
 
 			if tt.repository != nil {
 				_, err := tt.repository.CacheIndex()
@@ -209,6 +194,73 @@ entries:
 			}
 		})
 	}
+}
+
+func TestRemoteBuilder_Build_CachedChart(t *testing.T) {
+	g := NewWithT(t)
+
+	chartGrafana, err := os.ReadFile("./../testdata/charts/helmchart-0.1.0.tgz")
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(chartGrafana).ToNot(BeEmpty())
+
+	index := []byte(`
+apiVersion: v1
+entries:
+  grafana:
+    - urls:
+        - https://example.com/grafana.tgz
+      description: string
+      version: 0.1.0
+`)
+
+	mockGetter := &mockIndexChartGetter{
+		IndexResponse: index,
+		ChartResponse: chartGrafana,
+	}
+	mockRepo := func() *repository.ChartRepository {
+		return &repository.ChartRepository{
+			URL:     "https://grafana.github.io/helm-charts/",
+			Client:  mockGetter,
+			RWMutex: &sync.RWMutex{},
+		}
+	}
+
+	reference := RemoteReference{Name: "grafana"}
+	repository := mockRepo()
+
+	_, err = repository.CacheIndex()
+	g.Expect(err).ToNot(HaveOccurred())
+	// Cleanup the cache index path.
+	defer os.Remove(repository.CachePath)
+
+	b := NewRemoteBuilder(repository)
+
+	tmpDir, err := os.MkdirTemp("", "remote-chart-")
+	g.Expect(err).ToNot(HaveOccurred())
+	defer os.RemoveAll(tmpDir)
+
+	// Build first time.
+	targetPath := filepath.Join(tmpDir, "chart1.tgz")
+	defer os.RemoveAll(targetPath)
+	buildOpts := BuildOptions{}
+	cb, err := b.Build(context.TODO(), reference, targetPath, buildOpts)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Set the result as the CachedChart for second build.
+	buildOpts.CachedChart = cb.Path
+
+	// Rebuild with a new path.
+	targetPath2 := filepath.Join(tmpDir, "chart2.tgz")
+	defer os.RemoveAll(targetPath2)
+	cb, err = b.Build(context.TODO(), reference, targetPath2, buildOpts)
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(cb.Path).To(Equal(targetPath))
+
+	// Rebuild with build option Force.
+	buildOpts.Force = true
+	cb, err = b.Build(context.TODO(), reference, targetPath2, buildOpts)
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(cb.Path).To(Equal(targetPath2))
 }
 
 func Test_mergeChartValues(t *testing.T) {
