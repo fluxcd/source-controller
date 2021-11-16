@@ -35,6 +35,36 @@ import (
 )
 
 func TestDependencyManager_Build(t *testing.T) {
+	g := NewWithT(t)
+
+	// Mock chart used as grafana chart in the test below. The cached repository
+	// takes care of the actual grafana related details in the chart index.
+	chartGrafana, err := os.ReadFile("./../testdata/charts/helmchart-0.1.0.tgz")
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(chartGrafana).ToNot(BeEmpty())
+
+	mockRepo := func() *repository.ChartRepository {
+		return &repository.ChartRepository{
+			Client: &getter.MockGetter{
+				Response: chartGrafana,
+			},
+			Index: &repo.IndexFile{
+				Entries: map[string]repo.ChartVersions{
+					"grafana": {
+						&repo.ChartVersion{
+							Metadata: &helmchart.Metadata{
+								Name:    "grafana",
+								Version: "6.17.4",
+							},
+							URLs: []string{"https://example.com/grafana.tgz"},
+						},
+					},
+				},
+			},
+			RWMutex: &sync.RWMutex{},
+		}
+	}
+
 	tests := []struct {
 		name                       string
 		baseDir                    string
@@ -45,12 +75,6 @@ func TestDependencyManager_Build(t *testing.T) {
 		wantChartFunc              func(g *WithT, c *helmchart.Chart)
 		wantErr                    string
 	}{
-		//{
-		//	// TODO(hidde): add various happy paths
-		//},
-		//{
-		//	// TODO(hidde): test Chart.lock
-		//},
 		{
 			name:    "build failure returns error",
 			baseDir: "./../testdata/charts",
@@ -61,7 +85,44 @@ func TestDependencyManager_Build(t *testing.T) {
 			name:    "no dependencies returns zero",
 			baseDir: "./../testdata/charts",
 			path:    "helmchart",
-			want:    0,
+			wantChartFunc: func(g *WithT, c *helmchart.Chart) {
+				g.Expect(c.Dependencies()).To(HaveLen(0))
+			},
+			want: 0,
+		},
+		{
+			name:    "no dependency returns zero - v1",
+			baseDir: "./../testdata/charts",
+			path:    "helmchart-v1",
+			wantChartFunc: func(g *WithT, c *helmchart.Chart) {
+				g.Expect(c.Dependencies()).To(HaveLen(0))
+			},
+			want: 0,
+		},
+		{
+			name:    "build with dependencies using lock file",
+			baseDir: "./../testdata/charts",
+			path:    "helmchartwithdeps",
+			repositories: map[string]*repository.ChartRepository{
+				"https://grafana.github.io/helm-charts/": mockRepo(),
+			},
+			getChartRepositoryCallback: func(url string) (*repository.ChartRepository, error) {
+				return &repository.ChartRepository{URL: "https://grafana.github.io/helm-charts/"}, nil
+			},
+			wantChartFunc: func(g *WithT, c *helmchart.Chart) {
+				g.Expect(c.Dependencies()).To(HaveLen(2))
+				g.Expect(c.Lock.Dependencies).To(HaveLen(3))
+			},
+			want: 2,
+		},
+		{
+			name:    "build with dependencies - v1",
+			baseDir: "./../testdata/charts",
+			path:    "helmchartwithdeps-v1",
+			wantChartFunc: func(g *WithT, c *helmchart.Chart) {
+				g.Expect(c.Dependencies()).To(HaveLen(1))
+			},
+			want: 1,
 		},
 	}
 	for _, tt := range tests {
@@ -71,10 +132,11 @@ func TestDependencyManager_Build(t *testing.T) {
 			chart, err := loader.Load(filepath.Join(tt.baseDir, tt.path))
 			g.Expect(err).ToNot(HaveOccurred())
 
-			got, err := NewDependencyManager(
+			dm := NewDependencyManager(
 				WithRepositories(tt.repositories),
 				WithRepositoryCallback(tt.getChartRepositoryCallback),
-			).Build(context.TODO(), LocalReference{WorkDir: tt.baseDir, Path: tt.path}, chart)
+			)
+			got, err := dm.Build(context.TODO(), LocalReference{WorkDir: tt.baseDir, Path: tt.path}, chart)
 
 			if tt.wantErr != "" {
 				g.Expect(err).To(HaveOccurred())
@@ -198,6 +260,10 @@ func TestDependencyManager_addLocalDependency(t *testing.T) {
 				return
 			}
 			g.Expect(err).ToNot(HaveOccurred())
+
+			if tt.wantFunc != nil {
+				tt.wantFunc(g, chart)
+			}
 		})
 	}
 }

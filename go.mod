@@ -38,6 +38,7 @@ require (
 	github.com/minio/minio-go/v7 v7.0.10
 	github.com/onsi/ginkgo v1.16.4
 	github.com/onsi/gomega v1.14.0
+	github.com/otiai10/copy v1.7.0
 	github.com/spf13/pflag v1.0.5
 	github.com/yvasiyarov/go-metrics v0.0.0-20150112132944-c25f46c4b940 // indirect
 	github.com/yvasiyarov/gorelic v0.0.7 // indirect
