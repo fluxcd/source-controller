@@ -25,7 +25,6 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
-	"testing"
 	"time"
 
 	"github.com/fluxcd/pkg/apis/meta"
@@ -1327,26 +1326,3 @@ var _ = Describe("HelmChartReconciler", func() {
 		})
 	})
 })
-
-func Test_validHelmChartName(t *testing.T) {
-	tests := []struct {
-		name      string
-		chart     string
-		expectErr bool
-	}{
-		{"valid", "drupal", false},
-		{"valid dash", "nginx-lego", false},
-		{"valid dashes", "aws-cluster-autoscaler", false},
-		{"valid alphanum", "ng1nx-leg0", false},
-		{"invalid slash", "artifactory/invalid", true},
-		{"invalid dot", "in.valid", true},
-		{"invalid uppercase", "inValid", true},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if err := validHelmChartName(tt.chart); (err != nil) != tt.expectErr {
-				t.Errorf("validHelmChartName() error = %v, expectErr %v", err, tt.expectErr)
-			}
-		})
-	}
-}

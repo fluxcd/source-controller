@@ -22,13 +22,12 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"time"
 
 	securejoin "github.com/cyphar/filepath-securejoin"
 	"github.com/go-logr/logr"
-	extgetter "helm.sh/helm/v3/pkg/getter"
+	helmgetter "helm.sh/helm/v3/pkg/getter"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
@@ -69,7 +68,7 @@ type HelmChartReconciler struct {
 	client.Client
 	Scheme                *runtime.Scheme
 	Storage               *Storage
-	Getters               extgetter.Providers
+	Getters               helmgetter.Providers
 	EventRecorder         kuberecorder.EventRecorder
 	ExternalEventRecorder *events.Recorder
 	MetricsRecorder       *metrics.Recorder
@@ -199,7 +198,7 @@ func (r *HelmChartReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 
 	// Create working directory
-	workDir, err := os.MkdirTemp("", chart.Kind + "-" + chart.Namespace + "-" + chart.Name + "-")
+	workDir, err := os.MkdirTemp("", chart.Kind+"-"+chart.Namespace+"-"+chart.Name+"-")
 	if err != nil {
 		err = fmt.Errorf("failed to create temporary working directory: %w", err)
 		chart = sourcev1.HelmChartNotReady(*chart.DeepCopy(), sourcev1.ChartPullFailedReason, err.Error())
@@ -216,21 +215,6 @@ func (r *HelmChartReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	var reconcileErr error
 	switch typedSource := source.(type) {
 	case *sourcev1.HelmRepository:
-		// TODO: move this to a validation webhook once the discussion around
-		//  certificates has settled: https://github.com/fluxcd/image-reflector-controller/issues/69
-		if err := validHelmChartName(chart.Spec.Chart); err != nil {
-			reconciledChart = sourcev1.HelmChartNotReady(chart, sourcev1.ChartPullFailedReason, err.Error())
-			log.Error(err, "validation failed")
-			if err := r.updateStatus(ctx, req, reconciledChart.Status); err != nil {
-				log.Info(fmt.Sprintf("%v", reconciledChart.Status))
-				log.Error(err, "unable to update status")
-				return ctrl.Result{Requeue: true}, err
-			}
-			r.event(ctx, reconciledChart, events.EventSeverityError, err.Error())
-			r.recordReadiness(ctx, reconciledChart)
-			// Do not requeue as there is no chance on recovery.
-			return ctrl.Result{Requeue: false}, nil
-		}
 		reconciledChart, reconcileErr = r.fromHelmRepository(ctx, *typedSource, *chart.DeepCopy(), workDir, changed)
 	case *sourcev1.GitRepository, *sourcev1.Bucket:
 		reconciledChart, reconcileErr = r.fromTarballArtifact(ctx, *typedSource.GetArtifact(), *chart.DeepCopy(),
@@ -309,10 +293,10 @@ func (r *HelmChartReconciler) getSource(ctx context.Context, chart sourcev1.Helm
 func (r *HelmChartReconciler) fromHelmRepository(ctx context.Context, repo sourcev1.HelmRepository, c sourcev1.HelmChart,
 	workDir string, force bool) (sourcev1.HelmChart, error) {
 	// Configure Index getter options
-	clientOpts := []extgetter.Option{
-		extgetter.WithURL(repo.Spec.URL),
-		extgetter.WithTimeout(repo.Spec.Timeout.Duration),
-		extgetter.WithPassCredentialsAll(repo.Spec.PassCredentials),
+	clientOpts := []helmgetter.Option{
+		helmgetter.WithURL(repo.Spec.URL),
+		helmgetter.WithTimeout(repo.Spec.Timeout.Duration),
+		helmgetter.WithPassCredentialsAll(repo.Spec.PassCredentials),
 	}
 	if secret, err := r.getHelmRepositorySecret(ctx, &repo); err != nil {
 		return sourcev1.HelmChartNotReady(c, sourcev1.AuthenticationFailedReason, err.Error()), err
@@ -423,7 +407,7 @@ func (r *HelmChartReconciler) fromTarballArtifact(ctx context.Context, source so
 		err = fmt.Errorf("artifact untar error: %w", err)
 		return sourcev1.HelmChartNotReady(c, sourcev1.StorageOperationFailedReason, err.Error()), err
 	}
-	if err =f.Close(); err != nil {
+	if err = f.Close(); err != nil {
 		err = fmt.Errorf("artifact close error: %w", err)
 		return sourcev1.HelmChartNotReady(c, sourcev1.StorageOperationFailedReason, err.Error()), err
 	}
@@ -440,20 +424,17 @@ func (r *HelmChartReconciler) fromTarballArtifact(ctx context.Context, source so
 		return sourcev1.HelmChartNotReady(c, sourcev1.StorageOperationFailedReason, err.Error()), err
 	}
 	dm := chart.NewDependencyManager(
-		chart.WithRepositoryCallback(r.getNamespacedChartRepositoryCallback(ctx, authDir, c.GetNamespace())),
+		chart.WithRepositoryCallback(r.namespacedChartRepositoryCallback(ctx, authDir, c.GetNamespace())),
 	)
 	defer dm.Clear()
 
-	// Get any cached chart
-	var cachedChart string
-	if artifact := c.Status.Artifact; artifact != nil {
-		cachedChart = artifact.Path
-	}
-
+	// Configure builder options, including any previously cached chart
 	buildsOpts := chart.BuildOptions{
-		ValueFiles:  c.GetValuesFiles(),
-		CachedChart: cachedChart,
-		Force:       force,
+		ValueFiles: c.GetValuesFiles(),
+		Force:      force,
+	}
+	if artifact := c.Status.Artifact; artifact != nil {
+		buildsOpts.CachedChart = artifact.Path
 	}
 
 	// Add revision metadata to chart build
@@ -465,7 +446,7 @@ func (r *HelmChartReconciler) fromTarballArtifact(ctx context.Context, source so
 
 	// Build chart
 	chartB := chart.NewLocalBuilder(dm)
-	build, err := chartB.Build(ctx, chart.LocalReference{BaseDir: sourceDir, Path: chartPath}, filepath.Join(workDir, "chart.tgz"), buildsOpts)
+	build, err := chartB.Build(ctx, chart.LocalReference{WorkDir: sourceDir, Path: chartPath}, filepath.Join(workDir, "chart.tgz"), buildsOpts)
 	if err != nil {
 		return sourcev1.HelmChartNotReady(c, sourcev1.ChartPackageFailedReason, err.Error()), err
 	}
@@ -475,7 +456,8 @@ func (r *HelmChartReconciler) fromTarballArtifact(ctx context.Context, source so
 
 	// If the path of the returned build equals the cache path,
 	// there are no changes to the chart
-	if build.Path == cachedChart {
+	if apimeta.IsStatusConditionTrue(c.Status.Conditions, meta.ReadyCondition) &&
+		build.Path == buildsOpts.CachedChart {
 		// Ensure hostname is updated
 		if c.GetArtifact().URL != newArtifact.URL {
 			r.Storage.SetArtifactURL(c.GetArtifact())
@@ -515,11 +497,17 @@ func (r *HelmChartReconciler) fromTarballArtifact(ctx context.Context, source so
 	return sourcev1.HelmChartReady(c, newArtifact, cUrl, sourcev1.ChartPackageSucceededReason, build.Summary()), nil
 }
 
-// TODO(hidde): factor out to helper?
-func (r *HelmChartReconciler) getNamespacedChartRepositoryCallback(ctx context.Context, dir, namespace string) chart.GetChartRepositoryCallback {
+// namespacedChartRepositoryCallback returns a chart.GetChartRepositoryCallback
+// scoped to the given namespace. Credentials for retrieved v1beta1.HelmRepository
+// objects are stored in the given directory.
+// The returned callback returns a repository.ChartRepository configured with the
+// retrieved v1beta1.HelmRepository, or a shim with defaults if no object could
+// be found.
+func (r *HelmChartReconciler) namespacedChartRepositoryCallback(ctx context.Context, dir, namespace string) chart.GetChartRepositoryCallback {
 	return func(url string) (*repository.ChartRepository, error) {
 		repo, err := r.resolveDependencyRepository(ctx, url, namespace)
 		if err != nil {
+			// Return Kubernetes client errors, but ignore others
 			if errors.ReasonForError(err) != metav1.StatusReasonUnknown {
 				return nil, err
 			}
@@ -530,10 +518,10 @@ func (r *HelmChartReconciler) getNamespacedChartRepositoryCallback(ctx context.C
 				},
 			}
 		}
-		clientOpts := []extgetter.Option{
-			extgetter.WithURL(repo.Spec.URL),
-			extgetter.WithTimeout(repo.Spec.Timeout.Duration),
-			extgetter.WithPassCredentialsAll(repo.Spec.PassCredentials),
+		clientOpts := []helmgetter.Option{
+			helmgetter.WithURL(repo.Spec.URL),
+			helmgetter.WithTimeout(repo.Spec.Timeout.Duration),
+			helmgetter.WithPassCredentialsAll(repo.Spec.PassCredentials),
 		}
 		if secret, err := r.getHelmRepositorySecret(ctx, repo); err != nil {
 			return nil, err
@@ -799,18 +787,6 @@ func (r *HelmChartReconciler) requestsForBucketChange(o client.Object) []reconci
 		reqs = append(reqs, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(&i)})
 	}
 	return reqs
-}
-
-// validHelmChartName returns an error if the given string is not a
-// valid Helm chart name; a valid name must be lower case letters
-// and numbers, words may be separated with dashes (-).
-// Ref: https://helm.sh/docs/chart_best_practices/conventions/#chart-names
-func validHelmChartName(s string) error {
-	chartFmt := regexp.MustCompile("^([-a-z0-9]*)$")
-	if !chartFmt.MatchString(s) {
-		return fmt.Errorf("invalid chart name %q, a valid name must be lower case letters and numbers and MAY be separated with dashes (-)", s)
-	}
-	return nil
 }
 
 func (r *HelmChartReconciler) recordSuspension(ctx context.Context, chart sourcev1.HelmChart) {
