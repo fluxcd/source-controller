@@ -100,8 +100,9 @@ func (b *remoteChartBuilder) Build(_ context.Context, ref Reference, p string, o
 		return nil, fmt.Errorf("failed to download chart for remote reference: %w", err)
 	}
 
-	// Use literal chart copy from remote if no custom value files options are set
-	if len(opts.GetValueFiles()) == 0 {
+	// Use literal chart copy from remote if no custom value files options are
+	// set or build option version metadata isn't set.
+	if len(opts.GetValueFiles()) == 0 && opts.VersionMetadata == "" {
 		if err = validatePackageAndWriteToPath(res, p); err != nil {
 			return nil, err
 		}
@@ -126,6 +127,8 @@ func (b *remoteChartBuilder) Build(_ context.Context, ref Reference, p string, o
 		}
 		result.ValueFiles = opts.GetValueFiles()
 	}
+
+	chart.Metadata.Version = result.Version
 
 	// Package the chart with the custom values
 	if err = packageToPath(chart, p); err != nil {
