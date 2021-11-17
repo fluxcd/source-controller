@@ -95,7 +95,9 @@ func (dm *DependencyManager) Clear() []error {
 	var errs []error
 	for _, v := range dm.repositories {
 		v.Unload()
-		errs = append(errs, v.RemoveCache())
+		if err := v.RemoveCache(); err != nil {
+			errs = append(errs, err)
+		}
 	}
 	return errs
 }

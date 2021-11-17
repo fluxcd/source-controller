@@ -30,7 +30,6 @@ import (
 	"helm.sh/helm/v3/pkg/chartutil"
 	"helm.sh/helm/v3/pkg/repo"
 
-	"github.com/fluxcd/source-controller/internal/helm/getter"
 	"github.com/fluxcd/source-controller/internal/helm/repository"
 )
 
@@ -43,7 +42,7 @@ func TestLocalBuilder_Build(t *testing.T) {
 	g.Expect(chartB).ToNot(BeEmpty())
 	mockRepo := func() *repository.ChartRepository {
 		return &repository.ChartRepository{
-			Client: &getter.MockGetter{
+			Client: &mockGetter{
 				Response: chartB,
 			},
 			Index: &repo.IndexFile{

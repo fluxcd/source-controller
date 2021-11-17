@@ -29,8 +29,6 @@ import (
 	"helm.sh/helm/v3/pkg/chart"
 	helmgetter "helm.sh/helm/v3/pkg/getter"
 	"helm.sh/helm/v3/pkg/repo"
-
-	"github.com/fluxcd/source-controller/internal/helm/getter"
 )
 
 var now = time.Now()
@@ -40,6 +38,19 @@ const (
 	chartmuseumTestFile = "../testdata/chartmuseum-index.yaml"
 	unorderedTestFile   = "../testdata/local-index-unordered.yaml"
 )
+
+// mockGetter is a simple mocking getter.Getter implementation, returning
+// a byte response to any provided URL.
+type mockGetter struct {
+	Response      []byte
+	LastCalledURL string
+}
+
+func (g *mockGetter) Get(u string, _ ...helmgetter.Option) (*bytes.Buffer, error) {
+	r := g.Response
+	g.LastCalledURL = u
+	return bytes.NewBuffer(r), nil
+}
 
 func TestNewChartRepository(t *testing.T) {
 	repositoryURL := "https://example.com"
@@ -220,7 +231,7 @@ func TestChartRepository_DownloadChart(t *testing.T) {
 			g := NewWithT(t)
 			t.Parallel()
 
-			mg := getter.MockGetter{}
+			mg := mockGetter{}
 			r := &ChartRepository{
 				URL:    tt.url,
 				Client: &mg,
@@ -231,7 +242,7 @@ func TestChartRepository_DownloadChart(t *testing.T) {
 				g.Expect(res).To(BeNil())
 				return
 			}
-			g.Expect(mg.LastGet()).To(Equal(tt.wantURL))
+			g.Expect(mg.LastCalledURL).To(Equal(tt.wantURL))
 			g.Expect(res).ToNot(BeNil())
 			g.Expect(err).ToNot(HaveOccurred())
 		})
@@ -244,7 +255,7 @@ func TestChartRepository_DownloadIndex(t *testing.T) {
 	b, err := os.ReadFile(chartmuseumTestFile)
 	g.Expect(err).ToNot(HaveOccurred())
 
-	mg := getter.MockGetter{Response: b}
+	mg := mockGetter{Response: b}
 	r := &ChartRepository{
 		URL:    "https://example.com",
 		Client: &mg,
@@ -253,7 +264,7 @@ func TestChartRepository_DownloadIndex(t *testing.T) {
 	buf := bytes.NewBuffer([]byte{})
 	g.Expect(r.DownloadIndex(buf)).To(Succeed())
 	g.Expect(buf.Bytes()).To(Equal(b))
-	g.Expect(mg.LastGet()).To(Equal(r.URL + "/index.yaml"))
+	g.Expect(mg.LastCalledURL).To(Equal(r.URL + "/index.yaml"))
 	g.Expect(err).To(BeNil())
 }
 
@@ -374,7 +385,7 @@ func TestChartRepository_LoadIndexFromFile(t *testing.T) {
 func TestChartRepository_CacheIndex(t *testing.T) {
 	g := NewWithT(t)
 
-	mg := getter.MockGetter{Response: []byte("foo")}
+	mg := mockGetter{Response: []byte("foo")}
 	expectSum := fmt.Sprintf("%x", sha256.Sum256(mg.Response))
 
 	r := newChartRepository()
@@ -391,6 +402,31 @@ func TestChartRepository_CacheIndex(t *testing.T) {
 
 	g.Expect(b).To(Equal(mg.Response))
 	g.Expect(sum).To(BeEquivalentTo(expectSum))
+}
+
+func TestChartRepository_StrategicallyLoadIndex(t *testing.T) {
+	g := NewWithT(t)
+
+	r := newChartRepository()
+	r.Index = repo.NewIndexFile()
+	g.Expect(r.StrategicallyLoadIndex()).To(Succeed())
+	g.Expect(r.CachePath).To(BeEmpty())
+	g.Expect(r.Cached).To(BeFalse())
+
+	r.Index = nil
+	r.CachePath = "/invalid/cache/index/path.yaml"
+	err := r.StrategicallyLoadIndex()
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(err.Error()).To(ContainSubstring("/invalid/cache/index/path.yaml: no such file or directory"))
+	g.Expect(r.Cached).To(BeFalse())
+
+	r.CachePath = ""
+	r.Client = &mockGetter{}
+	err = r.StrategicallyLoadIndex()
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(err.Error()).To(ContainSubstring("no API version specified"))
+	g.Expect(r.Cached).To(BeTrue())
+	g.Expect(r.RemoveCache()).To(Succeed())
 }
 
 func TestChartRepository_LoadFromCache(t *testing.T) {
@@ -441,6 +477,15 @@ func TestChartRepository_HasIndex(t *testing.T) {
 	g.Expect(r.HasIndex()).To(BeFalse())
 	r.Index = repo.NewIndexFile()
 	g.Expect(r.HasIndex()).To(BeTrue())
+}
+
+func TestChartRepository_HasCacheFile(t *testing.T) {
+	g := NewWithT(t)
+
+	r := newChartRepository()
+	g.Expect(r.HasCacheFile()).To(BeFalse())
+	r.CachePath = "foo"
+	g.Expect(r.HasCacheFile()).To(BeTrue())
 }
 
 func TestChartRepository_UnloadIndex(t *testing.T) {
@@ -521,4 +566,28 @@ func verifyLocalIndex(t *testing.T, i *repo.IndexFile) {
 		g.Expect(tt.URLs).To(ContainElements(expect.URLs))
 		g.Expect(tt.Keywords).To(ContainElements(expect.Keywords))
 	}
+}
+
+func TestChartRepository_RemoveCache(t *testing.T) {
+	g := NewWithT(t)
+
+	tmpFile, err := os.CreateTemp("", "remove-cache-")
+	g.Expect(err).ToNot(HaveOccurred())
+	defer os.Remove(tmpFile.Name())
+
+	r := newChartRepository()
+	r.CachePath = tmpFile.Name()
+	r.Cached = true
+
+	g.Expect(r.RemoveCache()).To(Succeed())
+	g.Expect(r.CachePath).To(BeEmpty())
+	g.Expect(r.Cached).To(BeFalse())
+	g.Expect(tmpFile.Name()).ToNot(BeAnExistingFile())
+
+	r.CachePath = tmpFile.Name()
+	r.Cached = true
+
+	g.Expect(r.RemoveCache()).To(Succeed())
+	g.Expect(r.CachePath).To(BeEmpty())
+	g.Expect(r.Cached).To(BeFalse())
 }
