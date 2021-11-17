@@ -17,11 +17,16 @@ limitations under the License.
 package chart
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	. "github.com/onsi/gomega"
+	"github.com/otiai10/copy"
 	helmchart "helm.sh/helm/v3/pkg/chart"
 	"helm.sh/helm/v3/pkg/chartutil"
+
+	"github.com/fluxcd/source-controller/internal/helm"
 )
 
 var (
@@ -126,6 +131,17 @@ func TestOverwriteChartDefaultValues(t *testing.T) {
 }
 
 func TestLoadChartMetadataFromDir(t *testing.T) {
+	g := NewWithT(t)
+
+	// Create a chart file that exceeds the max chart file size.
+	tmpDir, err := os.MkdirTemp("", "load-chart-")
+	g.Expect(err).ToNot(HaveOccurred())
+	defer os.RemoveAll(tmpDir)
+	copy.Copy("../testdata/charts/helmchart", tmpDir)
+	bigRequirementsFile := filepath.Join(tmpDir, "requirements.yaml")
+	data := make([]byte, helm.MaxChartFileSize+10)
+	g.Expect(os.WriteFile(bigRequirementsFile, data, 0644)).ToNot(HaveOccurred())
+
 	tests := []struct {
 		name                string
 		dir                 string
@@ -152,6 +168,11 @@ func TestLoadChartMetadataFromDir(t *testing.T) {
 			dir:     "../testdata/charts/",
 			wantErr: "../testdata/charts/Chart.yaml: no such file or directory",
 		},
+		{
+			name:    "Error if file size exceeds max size",
+			dir:     tmpDir,
+			wantErr: "size of 'requirements.yaml' exceeds",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -176,6 +197,16 @@ func TestLoadChartMetadataFromDir(t *testing.T) {
 }
 
 func TestLoadChartMetadataFromArchive(t *testing.T) {
+	g := NewWithT(t)
+
+	// Create a chart archive that exceeds the max chart size.
+	tmpDir, err := os.MkdirTemp("", "load-chart-")
+	g.Expect(err).ToNot(HaveOccurred())
+	defer os.RemoveAll(tmpDir)
+	bigArchiveFile := filepath.Join(tmpDir, "chart.tgz")
+	data := make([]byte, helm.MaxChartSize+10)
+	g.Expect(os.WriteFile(bigArchiveFile, data, 0644)).ToNot(HaveOccurred())
+
 	tests := []struct {
 		name                string
 		archive             string
@@ -206,6 +237,11 @@ func TestLoadChartMetadataFromArchive(t *testing.T) {
 			name:    "Error if no Chart.yaml",
 			archive: "../testdata/charts/empty.tgz",
 			wantErr: "no 'Chart.yaml' found",
+		},
+		{
+			name:    "Error if archive size exceeds max size",
+			archive: bigArchiveFile,
+			wantErr: "size of chart 'chart.tgz' exceeds",
 		},
 	}
 	for _, tt := range tests {

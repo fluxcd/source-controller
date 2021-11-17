@@ -22,9 +22,11 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/fluxcd/source-controller/internal/helm"
 	. "github.com/onsi/gomega"
 	"helm.sh/helm/v3/pkg/chart"
 	helmgetter "helm.sh/helm/v3/pkg/getter"
@@ -353,9 +355,20 @@ func TestChartRepository_LoadIndexFromBytes_Unordered(t *testing.T) {
 // Index load tests are derived from https://github.com/helm/helm/blob/v3.3.4/pkg/repo/index_test.go#L108
 // to ensure parity with Helm behaviour.
 func TestChartRepository_LoadIndexFromFile(t *testing.T) {
+	g := NewWithT(t)
+
+	// Create an index file that exceeds the max index size.
+	tmpDir, err := os.MkdirTemp("", "load-index-")
+	g.Expect(err).ToNot(HaveOccurred())
+	defer os.RemoveAll(tmpDir)
+	bigIndexFile := filepath.Join(tmpDir, "index.yaml")
+	data := make([]byte, helm.MaxIndexSize+10)
+	g.Expect(os.WriteFile(bigIndexFile, data, 0644)).ToNot(HaveOccurred())
+
 	tests := []struct {
 		name     string
 		filename string
+		wantErr  string
 	}{
 		{
 			name:     "regular index file",
@@ -365,16 +378,26 @@ func TestChartRepository_LoadIndexFromFile(t *testing.T) {
 			name:     "chartmuseum index file",
 			filename: chartmuseumTestFile,
 		},
+		{
+			name:     "error if index size exceeds max size",
+			filename: bigIndexFile,
+			wantErr:  "size of index 'index.yaml' exceeds",
+		},
 	}
 
 	for _, tt := range tests {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
-			t.Parallel()
 
 			r := newChartRepository()
-			err := r.LoadFromFile(testFile)
+			err := r.LoadFromFile(tt.filename)
+			if tt.wantErr != "" {
+				g.Expect(err).To(HaveOccurred())
+				g.Expect(err.Error()).To(ContainSubstring(tt.wantErr))
+				return
+			}
+
 			g.Expect(err).ToNot(HaveOccurred())
 
 			verifyLocalIndex(t, r.Index)
