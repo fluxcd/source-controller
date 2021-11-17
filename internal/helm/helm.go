@@ -22,8 +22,8 @@ var (
 	// MaxIndexSize is the max allowed file size in bytes of a ChartRepository.
 	MaxIndexSize int64 = 50 << 20
 	// MaxChartSize is the max allowed file size in bytes of a Helm Chart.
-	MaxChartSize int64 = 2 << 20
+	MaxChartSize int64 = 10 << 20
 	// MaxChartFileSize is the max allowed file size in bytes of any arbitrary
 	// file originating from a chart.
-	MaxChartFileSize int64 = 2 << 10
+	MaxChartFileSize int64 = 5 << 20
 )
