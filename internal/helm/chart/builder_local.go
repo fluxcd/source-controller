@@ -51,14 +51,14 @@ func (b *localChartBuilder) Build(ctx context.Context, ref Reference, p string, 
 	}
 
 	if err := ref.Validate(); err != nil {
-		return nil, err
+		return nil, &BuildError{Reason: ErrChartPull, Err: err}
 	}
 
 	// Load the chart metadata from the LocalReference to ensure it points
 	// to a chart
 	curMeta, err := LoadChartMetadata(localRef.Path)
 	if err != nil {
-		return nil, err
+		return nil, &BuildError{Reason: ErrChartPull, Err: err}
 	}
 
 	result := &Build{}
@@ -69,10 +69,12 @@ func (b *localChartBuilder) Build(ctx context.Context, ref Reference, p string, 
 	if opts.VersionMetadata != "" {
 		ver, err := semver.NewVersion(curMeta.Version)
 		if err != nil {
-			return nil, fmt.Errorf("failed to parse chart version from metadata as SemVer: %w", err)
+			err = fmt.Errorf("failed to parse version from chart metadata as SemVer: %w", err)
+			return nil, &BuildError{Reason: ErrChartMetadataPatch, Err: err}
 		}
 		if *ver, err = ver.SetMetadata(opts.VersionMetadata); err != nil {
-			return nil, fmt.Errorf("failed to set metadata on chart version: %w", err)
+			err = fmt.Errorf("failed to set SemVer metadata on chart version: %w", err)
+			return nil, &BuildError{Reason: ErrChartMetadataPatch, Err: err}
 		}
 		result.Version = ver.String()
 	}
@@ -92,8 +94,8 @@ func (b *localChartBuilder) Build(ctx context.Context, ref Reference, p string, 
 	// options are set, we can copy the chart without making modifications
 	isChartDir := pathIsDir(localRef.Path)
 	if !isChartDir && len(opts.GetValueFiles()) == 0 {
-		if err := copyFileToPath(localRef.Path, p); err != nil {
-			return nil, err
+		if err = copyFileToPath(localRef.Path, p); err != nil {
+			return nil, &BuildError{Reason: ErrChartPull, Err: err}
 		}
 		result.Path = p
 		return result, nil
@@ -103,7 +105,7 @@ func (b *localChartBuilder) Build(ctx context.Context, ref Reference, p string, 
 	var mergedValues map[string]interface{}
 	if len(opts.GetValueFiles()) > 0 {
 		if mergedValues, err = mergeFileValues(localRef.WorkDir, opts.ValueFiles); err != nil {
-			return nil, fmt.Errorf("failed to merge value files: %w", err)
+			return nil, &BuildError{Reason: ErrValueFilesMerge, Err: err}
 		}
 	}
 
@@ -112,7 +114,7 @@ func (b *localChartBuilder) Build(ctx context.Context, ref Reference, p string, 
 	// or because we have merged values and need to repackage
 	chart, err := loader.Load(localRef.Path)
 	if err != nil {
-		return nil, err
+		return nil, &BuildError{Reason: ErrChartPackage, Err: err}
 	}
 	// Set earlier resolved version (with metadata)
 	chart.Metadata.Version = result.Version
@@ -120,7 +122,7 @@ func (b *localChartBuilder) Build(ctx context.Context, ref Reference, p string, 
 	// Overwrite default values with merged values, if any
 	if ok, err = OverwriteChartDefaultValues(chart, mergedValues); ok || err != nil {
 		if err != nil {
-			return nil, err
+			return nil, &BuildError{Reason: ErrValueFilesMerge, Err: err}
 		}
 		result.ValueFiles = opts.GetValueFiles()
 	}
@@ -128,16 +130,17 @@ func (b *localChartBuilder) Build(ctx context.Context, ref Reference, p string, 
 	// Ensure dependencies are fetched if building from a directory
 	if isChartDir {
 		if b.dm == nil {
-			return nil, fmt.Errorf("local chart builder requires dependency manager for unpackaged charts")
+			err = fmt.Errorf("local chart builder requires dependency manager for unpackaged charts")
+			return nil, &BuildError{Reason: ErrDependencyBuild, Err: err}
 		}
 		if result.ResolvedDependencies, err = b.dm.Build(ctx, ref, chart); err != nil {
-			return nil, err
+			return nil, &BuildError{Reason: ErrDependencyBuild, Err: err}
 		}
 	}
 
 	// Package the chart
 	if err = packageToPath(chart, p); err != nil {
-		return nil, err
+		return nil, &BuildError{Reason: ErrChartPackage, Err: err}
 	}
 	result.Path = p
 	result.Packaged = true

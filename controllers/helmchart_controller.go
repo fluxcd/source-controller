@@ -18,6 +18,7 @@ package controllers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -29,7 +30,7 @@ import (
 	"github.com/go-logr/logr"
 	helmgetter "helm.sh/helm/v3/pkg/getter"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
+	apierrs "k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -445,19 +446,19 @@ func (r *HelmChartReconciler) fromTarballArtifact(ctx context.Context, source so
 	}
 
 	// Build chart
-	chartB := chart.NewLocalBuilder(dm)
-	build, err := chartB.Build(ctx, chart.LocalReference{WorkDir: sourceDir, Path: chartPath}, filepath.Join(workDir, "chart.tgz"), buildsOpts)
+	chartBuilder := chart.NewLocalBuilder(dm)
+	result, err := chartBuilder.Build(ctx, chart.LocalReference{WorkDir: sourceDir, Path: chartPath}, filepath.Join(workDir, "chart.tgz"), buildsOpts)
 	if err != nil {
-		return sourcev1.HelmChartNotReady(c, sourcev1.ChartPackageFailedReason, err.Error()), err
+		return sourcev1.HelmChartNotReady(c, reasonForBuildError(err), err.Error()), err
 	}
 
-	newArtifact := r.Storage.NewArtifactFor(c.Kind, c.GetObjectMeta(), build.Version,
-		fmt.Sprintf("%s-%s.tgz", build.Name, build.Version))
+	newArtifact := r.Storage.NewArtifactFor(c.Kind, c.GetObjectMeta(), result.Version,
+		fmt.Sprintf("%s-%s.tgz", result.Name, result.Version))
 
 	// If the path of the returned build equals the cache path,
 	// there are no changes to the chart
 	if apimeta.IsStatusConditionTrue(c.Status.Conditions, meta.ReadyCondition) &&
-		build.Path == buildsOpts.CachedChart {
+		result.Path == buildsOpts.CachedChart {
 		// Ensure hostname is updated
 		if c.GetArtifact().URL != newArtifact.URL {
 			r.Storage.SetArtifactURL(c.GetArtifact())
@@ -482,19 +483,19 @@ func (r *HelmChartReconciler) fromTarballArtifact(ctx context.Context, source so
 	defer unlock()
 
 	// Copy the packaged chart to the artifact path
-	if err = r.Storage.CopyFromPath(&newArtifact, build.Path); err != nil {
+	if err = r.Storage.CopyFromPath(&newArtifact, result.Path); err != nil {
 		err = fmt.Errorf("failed to write chart package to storage: %w", err)
 		return sourcev1.HelmChartNotReady(c, sourcev1.StorageOperationFailedReason, err.Error()), err
 	}
 
 	// Update symlink
-	cUrl, err := r.Storage.Symlink(newArtifact, fmt.Sprintf("%s-latest.tgz", build.Name))
+	cUrl, err := r.Storage.Symlink(newArtifact, fmt.Sprintf("%s-latest.tgz", result.Name))
 	if err != nil {
 		err = fmt.Errorf("storage error: %w", err)
 		return sourcev1.HelmChartNotReady(c, sourcev1.StorageOperationFailedReason, err.Error()), err
 	}
 
-	return sourcev1.HelmChartReady(c, newArtifact, cUrl, sourcev1.ChartPackageSucceededReason, build.Summary()), nil
+	return sourcev1.HelmChartReady(c, newArtifact, cUrl, reasonForBuildSuccess(result), result.Summary()), nil
 }
 
 // namespacedChartRepositoryCallback returns a chart.GetChartRepositoryCallback
@@ -508,7 +509,7 @@ func (r *HelmChartReconciler) namespacedChartRepositoryCallback(ctx context.Cont
 		repo, err := r.resolveDependencyRepository(ctx, url, namespace)
 		if err != nil {
 			// Return Kubernetes client errors, but ignore others
-			if errors.ReasonForError(err) != metav1.StatusReasonUnknown {
+			if apierrs.ReasonForError(err) != metav1.StatusReasonUnknown {
 				return nil, err
 			}
 			repo = &sourcev1.HelmRepository{
@@ -806,4 +807,24 @@ func (r *HelmChartReconciler) recordSuspension(ctx context.Context, chart source
 	} else {
 		r.MetricsRecorder.RecordSuspend(*objRef, chart.Spec.Suspend)
 	}
+}
+
+func reasonForBuildError(err error) string {
+	var buildErr *chart.BuildError
+	if ok := errors.As(err, &buildErr); !ok {
+		return sourcev1.ChartPullFailedReason
+	}
+	switch buildErr.Reason {
+	case chart.ErrChartMetadataPatch, chart.ErrValueFilesMerge, chart.ErrDependencyBuild, chart.ErrChartPackage:
+		return sourcev1.ChartPackageFailedReason
+	default:
+		return sourcev1.ChartPullFailedReason
+	}
+}
+
+func reasonForBuildSuccess(result *chart.Build) string {
+	if result.Packaged {
+		return sourcev1.ChartPackageSucceededReason
+	}
+	return sourcev1.ChartPullSucceededReason
 }

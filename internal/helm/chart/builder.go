@@ -144,7 +144,7 @@ func (b *Build) Summary() string {
 
 	var s strings.Builder
 
-	action := "Fetched"
+	var action = "Pulled"
 	if b.Packaged {
 		action = "Packaged"
 	}

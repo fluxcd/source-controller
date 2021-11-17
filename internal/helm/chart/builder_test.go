@@ -143,7 +143,7 @@ func TestChartBuildResult_Summary(t *testing.T) {
 				Name:    "chart",
 				Version: "1.2.3-rc.1+bd6bf40",
 			},
-			want: "Fetched 'chart' chart with version '1.2.3-rc.1+bd6bf40'.",
+			want: "Pulled 'chart' chart with version '1.2.3-rc.1+bd6bf40'.",
 		},
 		{
 			name: "With value files",
