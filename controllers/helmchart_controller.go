@@ -17,6 +17,7 @@ limitations under the License.
 package controllers
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -329,13 +330,19 @@ func (r *HelmChartReconciler) reconcileFromHelmRepository(ctx context.Context,
 	}
 	indexFile, err := os.Open(r.Storage.LocalPath(*repository.GetArtifact()))
 	if err != nil {
+		indexFile.Close()
 		return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
 	}
-	b, err := io.ReadAll(indexFile)
+
+	defer indexFile.Close()
+
+	var b bytes.Buffer
+
+	_, err = io.Copy(&b, indexFile)
 	if err != nil {
 		return sourcev1.HelmChartNotReady(chart, sourcev1.ChartPullFailedReason, err.Error()), err
 	}
-	if err = chartRepo.LoadIndex(b); err != nil {
+	if err = chartRepo.LoadIndex(b.Bytes()); err != nil {
 		return sourcev1.HelmChartNotReady(chart, sourcev1.ChartPullFailedReason, err.Error()), err
 	}
 
@@ -677,13 +684,18 @@ func (r *HelmChartReconciler) reconcileFromTarballArtifact(ctx context.Context,
 			if repository.Status.Artifact != nil {
 				indexFile, err := os.Open(r.Storage.LocalPath(*repository.GetArtifact()))
 				if err != nil {
+					indexFile.Close()
 					return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
 				}
-				b, err := io.ReadAll(indexFile)
+				defer indexFile.Close()
+
+				var b bytes.Buffer
+
+				_, err = io.Copy(&b, indexFile)
 				if err != nil {
 					return sourcev1.HelmChartNotReady(chart, sourcev1.ChartPullFailedReason, err.Error()), err
 				}
-				if err = chartRepo.LoadIndex(b); err != nil {
+				if err = chartRepo.LoadIndex(b.Bytes()); err != nil {
 					return sourcev1.HelmChartNotReady(chart, sourcev1.ChartPullFailedReason, err.Error()), err
 				}
 			} else {
