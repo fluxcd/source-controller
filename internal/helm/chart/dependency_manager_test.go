@@ -17,6 +17,7 @@ limitations under the License.
 package chart
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -28,11 +29,47 @@ import (
 	. "github.com/onsi/gomega"
 	helmchart "helm.sh/helm/v3/pkg/chart"
 	"helm.sh/helm/v3/pkg/chart/loader"
+	helmgetter "helm.sh/helm/v3/pkg/getter"
 	"helm.sh/helm/v3/pkg/repo"
 
-	"github.com/fluxcd/source-controller/internal/helm/getter"
 	"github.com/fluxcd/source-controller/internal/helm/repository"
 )
+
+// mockGetter is a simple mocking getter.Getter implementation, returning
+// a byte response to any provided URL.
+type mockGetter struct {
+	Response []byte
+}
+
+func (g *mockGetter) Get(_ string, _ ...helmgetter.Option) (*bytes.Buffer, error) {
+	r := g.Response
+	return bytes.NewBuffer(r), nil
+}
+
+func TestDependencyManager_Clear(t *testing.T) {
+	g := NewWithT(t)
+
+	repos := map[string]*repository.ChartRepository{
+		"with index": {
+			Index:   repo.NewIndexFile(),
+			RWMutex: &sync.RWMutex{},
+		},
+		"cached cache path": {
+			CachePath: "/invalid/path/resets",
+			Cached:    true,
+			RWMutex:   &sync.RWMutex{},
+		},
+	}
+
+	dm := NewDependencyManager(WithRepositories(repos))
+	g.Expect(dm.Clear()).To(BeNil())
+	g.Expect(dm.repositories).To(HaveLen(len(repos)))
+	for _, v := range repos {
+		g.Expect(v.Index).To(BeNil())
+		g.Expect(v.CachePath).To(BeEmpty())
+		g.Expect(v.Cached).To(BeFalse())
+	}
+}
 
 func TestDependencyManager_Build(t *testing.T) {
 	g := NewWithT(t)
@@ -45,7 +82,7 @@ func TestDependencyManager_Build(t *testing.T) {
 
 	mockRepo := func() *repository.ChartRepository {
 		return &repository.ChartRepository{
-			Client: &getter.MockGetter{
+			Client: &mockGetter{
 				Response: chartGrafana,
 			},
 			Index: &repo.IndexFile{
@@ -286,7 +323,7 @@ func TestDependencyManager_addRemoteDependency(t *testing.T) {
 			name: "adds remote dependency",
 			repositories: map[string]*repository.ChartRepository{
 				"https://example.com/": {
-					Client: &getter.MockGetter{
+					Client: &mockGetter{
 						Response: chartB,
 					},
 					Index: &repo.IndexFile{
@@ -403,7 +440,7 @@ func TestDependencyManager_addRemoteDependency(t *testing.T) {
 			name: "chart load error",
 			repositories: map[string]*repository.ChartRepository{
 				"https://example.com/": {
-					Client: &getter.MockGetter{},
+					Client: &mockGetter{},
 					Index: &repo.IndexFile{
 						Entries: map[string]repo.ChartVersions{
 							chartName: {

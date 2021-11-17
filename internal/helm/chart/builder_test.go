@@ -28,6 +28,82 @@ import (
 	"helm.sh/helm/v3/pkg/chartutil"
 )
 
+func TestLocalReference_Validate(t *testing.T) {
+	tests := []struct {
+		name    string
+		ref     LocalReference
+		wantErr string
+	}{
+		{
+			name: "ref with path",
+			ref:  LocalReference{Path: "/a/path"},
+		},
+		{
+			name: "ref with path and work dir",
+			ref:  LocalReference{Path: "/a/path", WorkDir: "/with/a/workdir"},
+		},
+		{
+			name:    "ref without path",
+			ref:     LocalReference{WorkDir: "/just/a/workdir"},
+			wantErr: "no path set for local chart reference",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			err := tt.ref.Validate()
+			if tt.wantErr != "" {
+				g.Expect(err).To(HaveOccurred())
+				g.Expect(err.Error()).To(ContainSubstring(tt.wantErr))
+				return
+			}
+			g.Expect(err).ToNot(HaveOccurred())
+		})
+	}
+}
+
+func TestRemoteReference_Validate(t *testing.T) {
+	tests := []struct {
+		name    string
+		ref     RemoteReference
+		wantErr string
+	}{
+		{
+			name: "ref with name",
+			ref:  RemoteReference{Name: "valid-chart-name"},
+		},
+		{
+			name:    "ref with invalid name",
+			ref:     RemoteReference{Name: "iNvAlID-ChArT-NAmE!"},
+			wantErr: "invalid chart name 'iNvAlID-ChArT-NAmE!'",
+		},
+		{
+			name:    "ref with Artifactory specific invalid format",
+			ref:     RemoteReference{Name: "i-shall/not"},
+			wantErr: "invalid chart name 'i-shall/not'",
+		},
+		{
+			name:    "ref without name",
+			ref:     RemoteReference{},
+			wantErr: "no name set for remote chart reference",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			err := tt.ref.Validate()
+			if tt.wantErr != "" {
+				g.Expect(err).To(HaveOccurred())
+				g.Expect(err.Error()).To(ContainSubstring(tt.wantErr))
+				return
+			}
+			g.Expect(err).ToNot(HaveOccurred())
+		})
+	}
+}
+
 func TestBuildOptions_GetValueFiles(t *testing.T) {
 	tests := []struct {
 		name       string
