@@ -35,7 +35,7 @@ type BuildError struct {
 	Err    error
 }
 
-// Error returns Err as a string, prefixed with the Reason, if any.
+// Error returns Err as a string, prefixed with the Reason to provide context.
 func (e *BuildError) Error() string {
 	if e.Reason == nil {
 		return e.Err.Error()
@@ -43,7 +43,11 @@ func (e *BuildError) Error() string {
 	return fmt.Sprintf("%s: %s", e.Reason.Error(), e.Err.Error())
 }
 
-// Is returns true of the Reason or Err equals target.
+// Is returns true if the Reason or Err equals target.
+// It can be used to programmatically place an arbitrary Err in the
+// context of the Builder:
+//  err := &BuildError{Reason: ErrChartPull, Err: errors.New("arbitrary transport error")}
+//  errors.Is(err, ErrChartPull)
 func (e *BuildError) Is(target error) bool {
 	if e.Reason != nil && e.Reason == target {
 		return true

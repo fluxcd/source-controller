@@ -118,7 +118,7 @@ func LoadChartMetadataFromDir(dir string) (*helmchart.Metadata, error) {
 			return nil, fmt.Errorf("'%s' is a directory", stat.Name())
 		}
 		if stat.Size() > helm.MaxChartFileSize {
-			return nil, fmt.Errorf("size of '%s' exceeds '%d' limit", stat.Name(), helm.MaxChartFileSize)
+			return nil, fmt.Errorf("size of '%s' exceeds '%d' bytes limit", stat.Name(), helm.MaxChartFileSize)
 		}
 	}
 
@@ -145,7 +145,7 @@ func LoadChartMetadataFromArchive(archive string) (*helmchart.Metadata, error) {
 		return nil, err
 	}
 	if stat.Size() > helm.MaxChartSize {
-		return nil, fmt.Errorf("size of chart '%s' exceeds '%d' limit", stat.Name(), helm.MaxChartSize)
+		return nil, fmt.Errorf("size of chart '%s' exceeds '%d' bytes limit", stat.Name(), helm.MaxChartSize)
 	}
 
 	f, err := os.Open(archive)

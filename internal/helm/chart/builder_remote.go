@@ -40,13 +40,27 @@ type remoteChartBuilder struct {
 }
 
 // NewRemoteBuilder returns a Builder capable of building a Helm
-// chart with a RemoteReference from the given Index.
+// chart with a RemoteReference in the given repository.ChartRepository.
 func NewRemoteBuilder(repository *repository.ChartRepository) Builder {
 	return &remoteChartBuilder{
 		remote: repository,
 	}
 }
 
+// Build attempts to build a Helm chart with the given RemoteReference and
+// BuildOptions, writing it to p.
+// It returns a Build describing the produced (or from cache observed) chart
+// written to p, or a BuildError.
+//
+// The latest version for the RemoteReference.Version is determined in the
+// repository.ChartRepository, only downloading it if the version (including
+// BuildOptions.VersionMetadata) differs from the current BuildOptions.CachedChart.
+// BuildOptions.ValuesFiles changes are in this case not taken into account,
+// and BuildOptions.Force should be used to enforce a rebuild.
+//
+// After downloading the chart, it is only packaged if required due to BuildOptions
+// modifying the chart, otherwise the exact data as retrieved from the repository
+// is written to p, after validating it to be a chart.
 func (b *remoteChartBuilder) Build(_ context.Context, ref Reference, p string, opts BuildOptions) (*Build, error) {
 	remoteRef, ok := ref.(RemoteReference)
 	if !ok {
@@ -88,8 +102,8 @@ func (b *remoteChartBuilder) Build(_ context.Context, ref Reference, p string, o
 	}
 
 	// If all the following is true, we do not need to download and/or build the chart:
-	//	Chart version from metadata matches chart version for ref
-	//  BuildOptions.Force is False
+	// - Chart version from current metadata matches calculated version
+	// - BuildOptions.Force is False
 	if opts.CachedChart != "" && !opts.Force {
 		if curMeta, err := LoadChartMetadataFromArchive(opts.CachedChart); err == nil && result.Version == curMeta.Version {
 			result.Path = opts.CachedChart

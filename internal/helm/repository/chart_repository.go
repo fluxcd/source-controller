@@ -244,7 +244,7 @@ func (r *ChartRepository) LoadFromFile(path string) error {
 		return err
 	}
 	if stat.Size() > helm.MaxIndexSize {
-		return fmt.Errorf("size of index '%s' exceeds '%d' limit", stat.Name(), helm.MaxIndexSize)
+		return fmt.Errorf("size of index '%s' exceeds '%d' bytes limit", stat.Name(), helm.MaxIndexSize)
 	}
 	b, err := os.ReadFile(path)
 	if err != nil {
