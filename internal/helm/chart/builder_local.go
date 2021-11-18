@@ -34,16 +34,34 @@ type localChartBuilder struct {
 	dm *DependencyManager
 }
 
-// NewLocalBuilder returns a Builder capable of building a Helm
-// chart with a LocalReference. For chart references pointing to a
-// directory, the DependencyManager is used to resolve missing local and
-// remote dependencies.
+// NewLocalBuilder returns a Builder capable of building a Helm chart with a
+// LocalReference. For chart references pointing to a directory, the
+// DependencyManager is used to resolve missing local and remote dependencies.
 func NewLocalBuilder(dm *DependencyManager) Builder {
 	return &localChartBuilder{
 		dm: dm,
 	}
 }
 
+// Build attempts to build a Helm chart with the given LocalReference and
+// BuildOptions, writing it to p.
+// It returns a Build describing the produced (or from cache observed) chart
+// written to p, or a BuildError.
+//
+// The chart is loaded from the LocalReference.Path, and only packaged if the
+// version (including BuildOptions.VersionMetadata modifications) differs from
+// the current BuildOptions.CachedChart.
+//
+// BuildOptions.ValuesFiles changes are in this case not taken into account,
+// and BuildOptions.Force should be used to enforce a rebuild.
+//
+// If the LocalReference.Path refers to an already packaged chart, and no
+// packaging is required due to BuildOptions modifying the chart,
+// LocalReference.Path is copied to p.
+//
+// If the LocalReference.Path refers to a chart directory, dependencies are
+// confirmed to be present using the DependencyManager, while attempting to
+// resolve any missing.
 func (b *localChartBuilder) Build(ctx context.Context, ref Reference, p string, opts BuildOptions) (*Build, error) {
 	localRef, ok := ref.(LocalReference)
 	if !ok {
@@ -80,8 +98,8 @@ func (b *localChartBuilder) Build(ctx context.Context, ref Reference, p string, 
 	}
 
 	// If all the following is true, we do not need to package the chart:
-	//	Chart version from metadata matches chart version for ref
-	//	BuildOptions.Force is False
+	// - Chart version from current metadata matches calculated version
+	// - BuildOptions.Force is False
 	if opts.CachedChart != "" && !opts.Force {
 		if curMeta, err = LoadChartMetadataFromArchive(opts.CachedChart); err == nil && result.Version == curMeta.Version {
 			result.Path = opts.CachedChart
