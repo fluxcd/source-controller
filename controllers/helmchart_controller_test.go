@@ -828,8 +828,17 @@ var _ = Describe("HelmChartReconciler", func() {
 				got := &sourcev1.HelmChart{}
 				Eventually(func() bool {
 					_ = k8sClient.Get(context.Background(), key, got)
-					return got.Status.Artifact.Checksum != updated.Status.Artifact.Checksum &&
-						storage.ArtifactExist(*got.Status.Artifact)
+					// Since a lot of chart updates took place above, checking
+					// artifact checksum isn't the most reliable way to find out
+					// if the artifact was changed due to the current update.
+					// Use status condition to be sure.
+					for _, condn := range got.Status.Conditions {
+						if strings.Contains(condn.Message, "with merged values files [./testdata/charts/helmchart/override.yaml]") &&
+							storage.ArtifactExist(*got.Status.Artifact) {
+							return true
+						}
+					}
+					return false
 				}, timeout, interval).Should(BeTrue())
 				f, err := os.Stat(storage.LocalPath(*got.Status.Artifact))
 				Expect(err).NotTo(HaveOccurred())
