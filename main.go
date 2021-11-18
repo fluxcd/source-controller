@@ -45,6 +45,7 @@ import (
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
 	"github.com/fluxcd/source-controller/controllers"
+	"github.com/fluxcd/source-controller/internal/helm"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -79,6 +80,9 @@ func main() {
 		concurrent            int
 		requeueDependency     time.Duration
 		watchAllNamespaces    bool
+		helmIndexLimit        int64
+		helmChartLimit        int64
+		helmChartFileLimit    int64
 		clientOptions         client.Options
 		logOptions            logger.Options
 		leaderElectionOptions leaderelection.Options
@@ -98,6 +102,9 @@ func main() {
 	flag.IntVar(&concurrent, "concurrent", 2, "The number of concurrent reconciles per controller.")
 	flag.BoolVar(&watchAllNamespaces, "watch-all-namespaces", true,
 		"Watch for custom resources in all namespaces, if set to false it will only watch the runtime namespace.")
+	flag.Int64Var(&helmIndexLimit, "helm-index-limit", helm.MaxIndexSize, "The max allowed size in bytes of a Helm repository index file.")
+	flag.Int64Var(&helmChartLimit, "helm-chart-limit", helm.MaxChartSize, "The max allowed size in bytes of a Helm chart file.")
+	flag.Int64Var(&helmChartFileLimit, "helm-chart-file-limit", helm.MaxChartFileSize, "The max allowed size in bytes of a file in a Helm chart.")
 	flag.DurationVar(&requeueDependency, "requeue-dependency", 30*time.Second, "The interval at which failing dependencies are reevaluated.")
 	clientOptions.BindFlags(flag.CommandLine)
 	logOptions.BindFlags(flag.CommandLine)
@@ -105,6 +112,11 @@ func main() {
 	flag.Parse()
 
 	ctrl.SetLogger(logger.NewLogger(logOptions))
+
+	// Set upper bound file size limits Helm
+	helm.MaxIndexSize = helmIndexLimit
+	helm.MaxChartSize = helmChartLimit
+	helm.MaxChartFileSize = helmChartFileLimit
 
 	var eventRecorder *events.Recorder
 	if eventsAddr != "" {
