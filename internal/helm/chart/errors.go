@@ -61,6 +61,7 @@ func (e *BuildError) Unwrap() error {
 }
 
 var (
+	ErrChartReference     = BuildErrorReason("chart reference error")
 	ErrChartPull          = BuildErrorReason("chart pull error")
 	ErrChartMetadataPatch = BuildErrorReason("chart metadata patch error")
 	ErrValuesFilesMerge   = BuildErrorReason("values files merge error")

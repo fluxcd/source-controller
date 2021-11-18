@@ -64,11 +64,12 @@ func NewRemoteBuilder(repository *repository.ChartRepository) Builder {
 func (b *remoteChartBuilder) Build(_ context.Context, ref Reference, p string, opts BuildOptions) (*Build, error) {
 	remoteRef, ok := ref.(RemoteReference)
 	if !ok {
-		return nil, fmt.Errorf("expected remote chart reference")
+		err := fmt.Errorf("expected remote chart reference")
+		return nil, &BuildError{Reason: ErrChartReference, Err: err}
 	}
 
 	if err := ref.Validate(); err != nil {
-		return nil, &BuildError{Reason: ErrChartPull, Err: err}
+		return nil, &BuildError{Reason: ErrChartReference, Err: err}
 	}
 
 	if err := b.remote.LoadFromCache(); err != nil {

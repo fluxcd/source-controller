@@ -65,11 +65,12 @@ func NewLocalBuilder(dm *DependencyManager) Builder {
 func (b *localChartBuilder) Build(ctx context.Context, ref Reference, p string, opts BuildOptions) (*Build, error) {
 	localRef, ok := ref.(LocalReference)
 	if !ok {
-		return nil, fmt.Errorf("expected local chart reference")
+		err := fmt.Errorf("expected local chart reference")
+		return nil, &BuildError{Reason: ErrChartReference, Err: err}
 	}
 
 	if err := ref.Validate(); err != nil {
-		return nil, &BuildError{Reason: ErrChartPull, Err: err}
+		return nil, &BuildError{Reason: ErrChartReference, Err: err}
 	}
 
 	// Load the chart metadata from the LocalReference to ensure it points
