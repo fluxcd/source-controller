@@ -104,29 +104,29 @@ func TestRemoteReference_Validate(t *testing.T) {
 	}
 }
 
-func TestBuildOptions_GetValueFiles(t *testing.T) {
+func TestBuildOptions_GetValuesFiles(t *testing.T) {
 	tests := []struct {
-		name       string
-		valueFiles []string
-		want       []string
+		name        string
+		valuesFiles []string
+		want        []string
 	}{
 		{
-			name:       "Default values.yaml",
-			valueFiles: []string{chartutil.ValuesfileName},
-			want:       nil,
+			name:        "Default values.yaml",
+			valuesFiles: []string{chartutil.ValuesfileName},
+			want:        nil,
 		},
 		{
-			name:       "Value files",
-			valueFiles: []string{chartutil.ValuesfileName, "foo.yaml"},
-			want:       []string{chartutil.ValuesfileName, "foo.yaml"},
+			name:        "Values files",
+			valuesFiles: []string{chartutil.ValuesfileName, "foo.yaml"},
+			want:        []string{chartutil.ValuesfileName, "foo.yaml"},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
 
-			o := BuildOptions{ValueFiles: tt.valueFiles}
-			g.Expect(o.GetValueFiles()).To(Equal(tt.want))
+			o := BuildOptions{ValuesFiles: tt.valuesFiles}
+			g.Expect(o.GetValuesFiles()).To(Equal(tt.want))
 		})
 	}
 }
@@ -146,14 +146,14 @@ func TestChartBuildResult_Summary(t *testing.T) {
 			want: "Pulled 'chart' chart with version '1.2.3-rc.1+bd6bf40'.",
 		},
 		{
-			name: "With value files",
+			name: "With values files",
 			build: &Build{
-				Name:       "chart",
-				Version:    "arbitrary-version",
-				Packaged:   true,
-				ValueFiles: []string{"a.yaml", "b.yaml"},
+				Name:        "chart",
+				Version:     "arbitrary-version",
+				Packaged:    true,
+				ValuesFiles: []string{"a.yaml", "b.yaml"},
 			},
-			want: "Packaged 'chart' chart with version 'arbitrary-version', with merged value files [a.yaml b.yaml].",
+			want: "Packaged 'chart' chart with version 'arbitrary-version', with merged values files [a.yaml b.yaml].",
 		},
 		{
 			name: "With dependencies",

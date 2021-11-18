@@ -85,15 +85,15 @@ func (b *localChartBuilder) Build(ctx context.Context, ref Reference, p string, 
 	if opts.CachedChart != "" && !opts.Force {
 		if curMeta, err = LoadChartMetadataFromArchive(opts.CachedChart); err == nil && result.Version == curMeta.Version {
 			result.Path = opts.CachedChart
-			result.ValueFiles = opts.ValueFiles
+			result.ValuesFiles = opts.ValuesFiles
 			return result, nil
 		}
 	}
 
-	// If the chart at the path is already packaged and no custom value files
+	// If the chart at the path is already packaged and no custom values files
 	// options are set, we can copy the chart without making modifications
 	isChartDir := pathIsDir(localRef.Path)
-	if !isChartDir && len(opts.GetValueFiles()) == 0 {
+	if !isChartDir && len(opts.GetValuesFiles()) == 0 {
 		if err = copyFileToPath(localRef.Path, p); err != nil {
 			return nil, &BuildError{Reason: ErrChartPull, Err: err}
 		}
@@ -103,9 +103,9 @@ func (b *localChartBuilder) Build(ctx context.Context, ref Reference, p string, 
 
 	// Merge chart values, if instructed
 	var mergedValues map[string]interface{}
-	if len(opts.GetValueFiles()) > 0 {
-		if mergedValues, err = mergeFileValues(localRef.WorkDir, opts.ValueFiles); err != nil {
-			return nil, &BuildError{Reason: ErrValueFilesMerge, Err: err}
+	if len(opts.GetValuesFiles()) > 0 {
+		if mergedValues, err = mergeFileValues(localRef.WorkDir, opts.ValuesFiles); err != nil {
+			return nil, &BuildError{Reason: ErrValuesFilesMerge, Err: err}
 		}
 	}
 
@@ -122,9 +122,9 @@ func (b *localChartBuilder) Build(ctx context.Context, ref Reference, p string, 
 	// Overwrite default values with merged values, if any
 	if ok, err = OverwriteChartDefaultValues(chart, mergedValues); ok || err != nil {
 		if err != nil {
-			return nil, &BuildError{Reason: ErrValueFilesMerge, Err: err}
+			return nil, &BuildError{Reason: ErrValuesFilesMerge, Err: err}
 		}
-		result.ValueFiles = opts.GetValueFiles()
+		result.ValuesFiles = opts.GetValuesFiles()
 	}
 
 	// Ensure dependencies are fetched if building from a directory

@@ -32,15 +32,15 @@ func TestBuildErrorReason_Error(t *testing.T) {
 
 func TestBuildError_Error(t *testing.T) {
 	tests := []struct {
-		name   string
-		err    *BuildError
-		want   string
+		name string
+		err  *BuildError
+		want string
 	}{
 		{
 			name: "with reason",
 			err: &BuildError{
 				Reason: BuildErrorReason("reason"),
-				Err: errors.New("error"),
+				Err:    errors.New("error"),
 			},
 			want: "reason: error",
 		},
@@ -67,7 +67,7 @@ func TestBuildError_Is(t *testing.T) {
 	wrappedErr := errors.New("wrapped")
 	err := &BuildError{
 		Reason: ErrChartPackage,
-		Err: wrappedErr,
+		Err:    wrappedErr,
 	}
 
 	g.Expect(err.Is(ErrChartPackage)).To(BeTrue())

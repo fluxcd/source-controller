@@ -144,7 +144,7 @@ entries:
 			name:      "merge values",
 			reference: RemoteReference{Name: "grafana"},
 			buildOpts: BuildOptions{
-				ValueFiles: []string{"a.yaml", "b.yaml", "c.yaml"},
+				ValuesFiles: []string{"a.yaml", "b.yaml", "c.yaml"},
 			},
 			repository:  mockRepo(),
 			wantVersion: "6.17.4",

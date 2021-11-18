@@ -296,7 +296,7 @@ func (dm *DependencyManager) secureLocalChartPath(ref LocalReference, dep *helmc
 
 // collectMissing returns a map with reqs that are missing from current,
 // indexed by their alias or name. All dependencies of a chart are present
-// if len of returned value == 0.
+// if len of returned map == 0.
 func collectMissing(current []*helmchart.Chart, reqs []*helmchart.Dependency) map[string]*helmchart.Dependency {
 	// If the number of dependencies equals the number of requested
 	// dependencies, there are no missing dependencies
