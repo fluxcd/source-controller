@@ -81,10 +81,10 @@ func (r RemoteReference) Validate() error {
 
 // Builder is capable of building a (specific) chart Reference.
 type Builder interface {
-	// Build builds and packages a Helm chart with the given Reference
-	// and BuildOptions and writes it to p. It returns the Build result,
-	// or an error. It may return an error for unsupported Reference
-	// implementations.
+	// Build pulls and (optionally) packages a Helm chart with the given
+	// Reference and BuildOptions, and writes it to p.
+	// It returns the Build result, or an error.
+	// It may return an error for unsupported Reference implementations.
 	Build(ctx context.Context, ref Reference, p string, opts BuildOptions) (*Build, error)
 }
 
@@ -94,25 +94,25 @@ type BuildOptions struct {
 	// the spec, and is included during packaging.
 	// Ref: https://semver.org/#spec-item-10
 	VersionMetadata string
-	// ValueFiles can be set to a list of relative paths, used to compose
+	// ValuesFiles can be set to a list of relative paths, used to compose
 	// and overwrite an alternative default "values.yaml" for the chart.
-	ValueFiles []string
+	ValuesFiles []string
 	// CachedChart can be set to the absolute path of a chart stored on
 	// the local filesystem, and is used for simple validation by metadata
 	// comparisons.
 	CachedChart string
 	// Force can be set to force the build of the chart, for example
-	// because the list of ValueFiles has changed.
+	// because the list of ValuesFiles has changed.
 	Force bool
 }
 
-// GetValueFiles returns BuildOptions.ValueFiles, except if it equals
+// GetValuesFiles returns BuildOptions.ValuesFiles, except if it equals
 // "values.yaml", which returns nil.
-func (o BuildOptions) GetValueFiles() []string {
-	if len(o.ValueFiles) == 1 && filepath.Clean(o.ValueFiles[0]) == filepath.Clean(chartutil.ValuesfileName) {
+func (o BuildOptions) GetValuesFiles() []string {
+	if len(o.ValuesFiles) == 1 && filepath.Clean(o.ValuesFiles[0]) == filepath.Clean(chartutil.ValuesfileName) {
 		return nil
 	}
-	return o.ValueFiles
+	return o.ValuesFiles
 }
 
 // Build contains the Builder.Build result, including specific
@@ -124,14 +124,14 @@ type Build struct {
 	Name string
 	// Version of the packaged chart.
 	Version string
-	// ValueFiles is the list of files used to compose the chart's
+	// ValuesFiles is the list of files used to compose the chart's
 	// default "values.yaml".
-	ValueFiles []string
+	ValuesFiles []string
 	// ResolvedDependencies is the number of local and remote dependencies
 	// collected by the DependencyManager before building the chart.
 	ResolvedDependencies int
 	// Packaged indicates if the Builder has packaged the chart.
-	// This can for example be false if ValueFiles is empty and the chart
+	// This can for example be false if ValuesFiles is empty and the chart
 	// source was already packaged.
 	Packaged bool
 }
@@ -150,8 +150,8 @@ func (b *Build) Summary() string {
 	}
 	s.WriteString(fmt.Sprintf("%s '%s' chart with version '%s'", action, b.Name, b.Version))
 
-	if b.Packaged && len(b.ValueFiles) > 0 {
-		s.WriteString(fmt.Sprintf(", with merged value files %v", b.ValueFiles))
+	if b.Packaged && len(b.ValuesFiles) > 0 {
+		s.WriteString(fmt.Sprintf(", with merged values files %v", b.ValuesFiles))
 	}
 
 	if b.Packaged && b.ResolvedDependencies > 0 {

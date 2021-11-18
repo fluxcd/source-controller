@@ -66,7 +66,7 @@ func TestLocalBuilder_Build(t *testing.T) {
 		name                string
 		reference           Reference
 		buildOpts           BuildOptions
-		valueFiles          []helmchart.File
+		valuesFiles         []helmchart.File
 		repositories        map[string]*repository.ChartRepository
 		dependentChartPaths []string
 		wantValues          chartutil.Values
@@ -118,12 +118,12 @@ func TestLocalBuilder_Build(t *testing.T) {
 			wantPackaged: true,
 		},
 		{
-			name:      "with value files",
+			name:      "with values files",
 			reference: LocalReference{Path: "./../testdata/charts/helmchart"},
 			buildOpts: BuildOptions{
-				ValueFiles: []string{"custom-values1.yaml", "custom-values2.yaml"},
+				ValuesFiles: []string{"custom-values1.yaml", "custom-values2.yaml"},
 			},
-			valueFiles: []helmchart.File{
+			valuesFiles: []helmchart.File{
 				{
 					Name: "custom-values1.yaml",
 					Data: []byte(`replicaCount: 11
@@ -189,7 +189,7 @@ fullnameOverride: "full-foo-name-override"`),
 			}
 
 			// Write value file in the base dir.
-			for _, f := range tt.valueFiles {
+			for _, f := range tt.valuesFiles {
 				vPath := filepath.Join(workDir, f.Name)
 				g.Expect(os.WriteFile(vPath, f.Data, 0644)).ToNot(HaveOccurred())
 			}

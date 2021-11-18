@@ -93,7 +93,7 @@ func (b *remoteChartBuilder) Build(_ context.Context, ref Reference, p string, o
 	if opts.CachedChart != "" && !opts.Force {
 		if curMeta, err := LoadChartMetadataFromArchive(opts.CachedChart); err == nil && result.Version == curMeta.Version {
 			result.Path = opts.CachedChart
-			result.ValueFiles = opts.GetValueFiles()
+			result.ValuesFiles = opts.GetValuesFiles()
 			return result, nil
 		}
 	}
@@ -105,9 +105,9 @@ func (b *remoteChartBuilder) Build(_ context.Context, ref Reference, p string, o
 		return nil, &BuildError{Reason: ErrChartPull, Err: err}
 	}
 
-	// Use literal chart copy from remote if no custom value files options are
+	// Use literal chart copy from remote if no custom values files options are
 	// set or build option version metadata isn't set.
-	if len(opts.GetValueFiles()) == 0 && opts.VersionMetadata == "" {
+	if len(opts.GetValuesFiles()) == 0 && opts.VersionMetadata == "" {
 		if err = validatePackageAndWriteToPath(res, p); err != nil {
 			return nil, &BuildError{Reason: ErrChartPull, Err: err}
 		}
@@ -123,17 +123,17 @@ func (b *remoteChartBuilder) Build(_ context.Context, ref Reference, p string, o
 	}
 	chart.Metadata.Version = result.Version
 
-	mergedValues, err := mergeChartValues(chart, opts.ValueFiles)
+	mergedValues, err := mergeChartValues(chart, opts.ValuesFiles)
 	if err != nil {
 		err = fmt.Errorf("failed to merge chart values: %w", err)
-		return nil, &BuildError{Reason: ErrValueFilesMerge, Err: err}
+		return nil, &BuildError{Reason: ErrValuesFilesMerge, Err: err}
 	}
 	// Overwrite default values with merged values, if any
 	if ok, err = OverwriteChartDefaultValues(chart, mergedValues); ok || err != nil {
 		if err != nil {
-			return nil, &BuildError{Reason: ErrValueFilesMerge, Err: err}
+			return nil, &BuildError{Reason: ErrValuesFilesMerge, Err: err}
 		}
-		result.ValueFiles = opts.GetValueFiles()
+		result.ValuesFiles = opts.GetValuesFiles()
 	}
 
 	// Package the chart with the custom values

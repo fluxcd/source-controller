@@ -335,7 +335,7 @@ func (r *HelmChartReconciler) fromHelmRepository(ctx context.Context, repo sourc
 	cBuilder := chart.NewRemoteBuilder(chartRepo)
 	ref := chart.RemoteReference{Name: c.Spec.Chart, Version: c.Spec.Version}
 	opts := chart.BuildOptions{
-		ValueFiles:  c.GetValuesFiles(),
+		ValuesFiles: c.GetValuesFiles(),
 		CachedChart: cachedChart,
 		Force:       force,
 	}
@@ -431,8 +431,8 @@ func (r *HelmChartReconciler) fromTarballArtifact(ctx context.Context, source so
 
 	// Configure builder options, including any previously cached chart
 	buildsOpts := chart.BuildOptions{
-		ValueFiles: c.GetValuesFiles(),
-		Force:      force,
+		ValuesFiles: c.GetValuesFiles(),
+		Force:       force,
 	}
 	if artifact := c.Status.Artifact; artifact != nil {
 		buildsOpts.CachedChart = artifact.Path
@@ -815,7 +815,7 @@ func reasonForBuildError(err error) string {
 		return sourcev1.ChartPullFailedReason
 	}
 	switch buildErr.Reason {
-	case chart.ErrChartMetadataPatch, chart.ErrValueFilesMerge, chart.ErrDependencyBuild, chart.ErrChartPackage:
+	case chart.ErrChartMetadataPatch, chart.ErrValuesFilesMerge, chart.ErrDependencyBuild, chart.ErrChartPackage:
 		return sourcev1.ChartPackageFailedReason
 	default:
 		return sourcev1.ChartPullFailedReason
