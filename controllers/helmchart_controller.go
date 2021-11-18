@@ -23,6 +23,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -332,24 +333,29 @@ func (r *HelmChartReconciler) fromHelmRepository(ctx context.Context, repo sourc
 	}
 
 	// Build the chart
-	cBuilder := chart.NewRemoteBuilder(chartRepo)
+	cb := chart.NewRemoteBuilder(chartRepo)
 	ref := chart.RemoteReference{Name: c.Spec.Chart, Version: c.Spec.Version}
 	opts := chart.BuildOptions{
 		ValuesFiles: c.GetValuesFiles(),
 		CachedChart: cachedChart,
 		Force:       force,
 	}
-	build, err := cBuilder.Build(ctx, ref, filepath.Join(workDir, "chart.tgz"), opts)
+	// Set the VersionMetadata to the object's Generation if ValuesFiles is defined
+	// This ensures changes can be noticed by the Artifact consumer
+	if len(opts.GetValuesFiles()) > 0 {
+		opts.VersionMetadata = strconv.FormatInt(c.Generation, 10)
+	}
+	b, err := cb.Build(ctx, ref, filepath.Join(workDir, "chart.tgz"), opts)
 	if err != nil {
 		return sourcev1.HelmChartNotReady(c, sourcev1.ChartPullFailedReason, err.Error()), err
 	}
 
-	newArtifact := r.Storage.NewArtifactFor(c.Kind, c.GetObjectMeta(), build.Version,
-		fmt.Sprintf("%s-%s.tgz", build.Name, build.Version))
+	newArtifact := r.Storage.NewArtifactFor(c.Kind, c.GetObjectMeta(), b.Version,
+		fmt.Sprintf("%s-%s.tgz", b.Name, b.Version))
 
 	// If the path of the returned build equals the cache path,
 	// there are no changes to the chart
-	if build.Path == cachedChart {
+	if b.Path == cachedChart {
 		// Ensure hostname is updated
 		if c.GetArtifact().URL != newArtifact.URL {
 			r.Storage.SetArtifactURL(c.GetArtifact())
@@ -374,18 +380,18 @@ func (r *HelmChartReconciler) fromHelmRepository(ctx context.Context, repo sourc
 	defer unlock()
 
 	// Copy the packaged chart to the artifact path
-	if err = r.Storage.CopyFromPath(&newArtifact, build.Path); err != nil {
+	if err = r.Storage.CopyFromPath(&newArtifact, b.Path); err != nil {
 		err = fmt.Errorf("failed to write chart package to storage: %w", err)
 		return sourcev1.HelmChartNotReady(c, sourcev1.StorageOperationFailedReason, err.Error()), err
 	}
 
 	// Update symlink
-	cUrl, err := r.Storage.Symlink(newArtifact, fmt.Sprintf("%s-latest.tgz", build.Name))
+	cUrl, err := r.Storage.Symlink(newArtifact, fmt.Sprintf("%s-latest.tgz", b.Name))
 	if err != nil {
 		err = fmt.Errorf("storage error: %w", err)
 		return sourcev1.HelmChartNotReady(c, sourcev1.StorageOperationFailedReason, err.Error()), err
 	}
-	return sourcev1.HelmChartReady(c, newArtifact, cUrl, sourcev1.ChartPullSucceededReason, build.Summary()), nil
+	return sourcev1.HelmChartReady(c, newArtifact, cUrl, sourcev1.ChartPullSucceededReason, b.Summary()), nil
 }
 
 func (r *HelmChartReconciler) fromTarballArtifact(ctx context.Context, source sourcev1.Artifact, c sourcev1.HelmChart,
@@ -430,35 +436,43 @@ func (r *HelmChartReconciler) fromTarballArtifact(ctx context.Context, source so
 	defer dm.Clear()
 
 	// Configure builder options, including any previously cached chart
-	buildsOpts := chart.BuildOptions{
+	opts := chart.BuildOptions{
 		ValuesFiles: c.GetValuesFiles(),
 		Force:       force,
 	}
 	if artifact := c.Status.Artifact; artifact != nil {
-		buildsOpts.CachedChart = artifact.Path
+		opts.CachedChart = artifact.Path
 	}
 
 	// Add revision metadata to chart build
 	if c.Spec.ReconcileStrategy == sourcev1.ReconcileStrategyRevision {
 		// Isolate the commit SHA from GitRepository type artifacts by removing the branch/ prefix.
 		splitRev := strings.Split(source.Revision, "/")
-		buildsOpts.VersionMetadata = splitRev[len(splitRev)-1]
+		opts.VersionMetadata = splitRev[len(splitRev)-1]
+	}
+	// Set the VersionMetadata to the object's Generation if ValuesFiles is defined
+	// This ensures changes can be noticed by the Artifact consumer
+	if len(opts.GetValuesFiles()) > 0 {
+		if opts.VersionMetadata != "" {
+			opts.VersionMetadata += "."
+		}
+		opts.VersionMetadata += strconv.FormatInt(c.Generation, 10)
 	}
 
 	// Build chart
-	chartBuilder := chart.NewLocalBuilder(dm)
-	result, err := chartBuilder.Build(ctx, chart.LocalReference{WorkDir: sourceDir, Path: chartPath}, filepath.Join(workDir, "chart.tgz"), buildsOpts)
+	cb := chart.NewLocalBuilder(dm)
+	b, err := cb.Build(ctx, chart.LocalReference{WorkDir: sourceDir, Path: chartPath}, filepath.Join(workDir, "chart.tgz"), opts)
 	if err != nil {
 		return sourcev1.HelmChartNotReady(c, reasonForBuildError(err), err.Error()), err
 	}
 
-	newArtifact := r.Storage.NewArtifactFor(c.Kind, c.GetObjectMeta(), result.Version,
-		fmt.Sprintf("%s-%s.tgz", result.Name, result.Version))
+	newArtifact := r.Storage.NewArtifactFor(c.Kind, c.GetObjectMeta(), b.Version,
+		fmt.Sprintf("%s-%s.tgz", b.Name, b.Version))
 
 	// If the path of the returned build equals the cache path,
 	// there are no changes to the chart
 	if apimeta.IsStatusConditionTrue(c.Status.Conditions, meta.ReadyCondition) &&
-		result.Path == buildsOpts.CachedChart {
+		b.Path == opts.CachedChart {
 		// Ensure hostname is updated
 		if c.GetArtifact().URL != newArtifact.URL {
 			r.Storage.SetArtifactURL(c.GetArtifact())
@@ -483,19 +497,19 @@ func (r *HelmChartReconciler) fromTarballArtifact(ctx context.Context, source so
 	defer unlock()
 
 	// Copy the packaged chart to the artifact path
-	if err = r.Storage.CopyFromPath(&newArtifact, result.Path); err != nil {
+	if err = r.Storage.CopyFromPath(&newArtifact, b.Path); err != nil {
 		err = fmt.Errorf("failed to write chart package to storage: %w", err)
 		return sourcev1.HelmChartNotReady(c, sourcev1.StorageOperationFailedReason, err.Error()), err
 	}
 
 	// Update symlink
-	cUrl, err := r.Storage.Symlink(newArtifact, fmt.Sprintf("%s-latest.tgz", result.Name))
+	cUrl, err := r.Storage.Symlink(newArtifact, fmt.Sprintf("%s-latest.tgz", b.Name))
 	if err != nil {
 		err = fmt.Errorf("storage error: %w", err)
 		return sourcev1.HelmChartNotReady(c, sourcev1.StorageOperationFailedReason, err.Error()), err
 	}
 
-	return sourcev1.HelmChartReady(c, newArtifact, cUrl, reasonForBuildSuccess(result), result.Summary()), nil
+	return sourcev1.HelmChartReady(c, newArtifact, cUrl, reasonForBuildSuccess(b), b.Summary()), nil
 }
 
 // namespacedChartRepositoryCallback returns a chart.GetChartRepositoryCallback
