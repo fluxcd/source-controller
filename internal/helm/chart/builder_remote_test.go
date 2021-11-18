@@ -207,11 +207,12 @@ func TestRemoteBuilder_Build_CachedChart(t *testing.T) {
 	index := []byte(`
 apiVersion: v1
 entries:
-  grafana:
+  helmchart:
     - urls:
-        - https://example.com/grafana.tgz
+        - https://example.com/helmchart-0.1.0.tgz
       description: string
       version: 0.1.0
+      name: helmchart
 `)
 
 	mockGetter := &mockIndexChartGetter{
@@ -226,7 +227,7 @@ entries:
 		}
 	}
 
-	reference := RemoteReference{Name: "grafana"}
+	reference := RemoteReference{Name: "helmchart"}
 	repository := mockRepo()
 
 	_, err = repository.CacheIndex()

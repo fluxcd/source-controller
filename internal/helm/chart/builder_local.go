@@ -99,13 +99,16 @@ func (b *localChartBuilder) Build(ctx context.Context, ref Reference, p string, 
 	}
 
 	// If all the following is true, we do not need to package the chart:
-	// - Chart version from current metadata matches calculated version
+	// - Chart name from cached chart matches resolved name
+	// - Chart version from cached chart matches calculated version
 	// - BuildOptions.Force is False
 	if opts.CachedChart != "" && !opts.Force {
-		if curMeta, err = LoadChartMetadataFromArchive(opts.CachedChart); err == nil && result.Version == curMeta.Version {
-			result.Path = opts.CachedChart
-			result.ValuesFiles = opts.ValuesFiles
-			return result, nil
+		if curMeta, err = LoadChartMetadataFromArchive(opts.CachedChart); err == nil {
+			if result.Name == curMeta.Name && result.Version == curMeta.Version {
+				result.Path = opts.CachedChart
+				result.ValuesFiles = opts.ValuesFiles
+				return result, nil
+			}
 		}
 	}
 
