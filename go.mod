@@ -63,10 +63,13 @@ require (
 // but overwritten with a newer version due to CVE-2017-11468.
 replace github.com/docker/distribution => github.com/docker/distribution v2.7.0-rc.0+incompatible
 
-// fix CVE-2021-41103
-// fix CVE-2021-41190
+// Fix CVE-2021-41092
+replace github.com/docker/cli => github.com/docker/cli v20.10.9+incompatible
+
+// Fix CVE-2021-41103
+// Fix CVE-2021-41190
 replace github.com/containerd/containerd => github.com/containerd/containerd v1.4.12
 
-// fix CVE-2021-30465
-// fix CVE-2021-41190
+// Fix CVE-2021-30465
+// Fix CVE-2021-41190
 replace github.com/opencontainers/runc => github.com/opencontainers/runc v1.0.2
