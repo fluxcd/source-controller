@@ -71,5 +71,7 @@ replace github.com/docker/cli => github.com/docker/cli v20.10.9+incompatible
 replace github.com/containerd/containerd => github.com/containerd/containerd v1.4.12
 
 // Fix CVE-2021-30465
-// Fix CVE-2021-41190
 replace github.com/opencontainers/runc => github.com/opencontainers/runc v1.0.2
+
+// Fix CVE-2021-41190
+replace github.com/opencontainers/image-spec => github.com/opencontainers/image-spec v1.0.2
