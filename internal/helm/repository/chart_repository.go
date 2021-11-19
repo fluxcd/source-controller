@@ -285,7 +285,7 @@ func (r *ChartRepository) CacheIndex() (string, error) {
 
 // StrategicallyLoadIndex lazy-loads the Index from CachePath using
 // LoadFromCache if it does not HasIndex.
-// If it not HasCacheFile, a cache attempt is made using CacheIndex
+// If not HasCacheFile, a cache attempt is made using CacheIndex
 // before continuing to load.
 func (r *ChartRepository) StrategicallyLoadIndex() (err error) {
 	if r.HasIndex() {
@@ -350,7 +350,7 @@ func (r *ChartRepository) HasCacheFile() bool {
 }
 
 // Unload can be used to signal the Go garbage collector the Index can
-// be freed from memory if the Index object is expected to
+// be freed from memory if the ChartRepository object is expected to
 // continue to exist in the stack for some time.
 func (r *ChartRepository) Unload() {
 	if r == nil {

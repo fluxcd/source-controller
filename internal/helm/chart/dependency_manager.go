@@ -41,13 +41,14 @@ type GetChartRepositoryCallback func(url string) (*repository.ChartRepository, e
 
 // DependencyManager manages dependencies for a Helm chart.
 type DependencyManager struct {
-	// repositories contains a map of Index indexed by their
-	// normalized URL. It is used as a lookup table for missing
-	// dependencies.
+	// repositories contains a map of repository.ChartRepository objects
+	// indexed by their repository.NormalizeURL.
+	// It is consulted as a lookup table for missing dependencies, based on
+	// the (repository) URL the dependency refers to.
 	repositories map[string]*repository.ChartRepository
 
 	// getRepositoryCallback can be set to an on-demand GetChartRepositoryCallback
-	// which returned result is cached to repositories.
+	// whose returned result is cached to repositories.
 	getRepositoryCallback GetChartRepositoryCallback
 
 	// concurrent is the number of concurrent chart-add operations during
@@ -91,6 +92,8 @@ func NewDependencyManager(opts ...DependencyManagerOption) *DependencyManager {
 	return dm
 }
 
+// Clear iterates over the repositories, calling Unload and RemoveCache on all
+// items. It returns a collection of (cache removal) errors.
 func (dm *DependencyManager) Clear() []error {
 	var errs []error
 	for _, v := range dm.repositories {
@@ -294,9 +297,9 @@ func (dm *DependencyManager) secureLocalChartPath(ref LocalReference, dep *helmc
 	return securejoin.SecureJoin(ref.WorkDir, filepath.Join(relPath, localUrl.Host, localUrl.Path))
 }
 
-// collectMissing returns a map with reqs that are missing from current,
-// indexed by their alias or name. All dependencies of a chart are present
-// if len of returned map == 0.
+// collectMissing returns a map with dependencies from reqs that are missing
+// from current, indexed by their alias or name. All dependencies of a chart
+// are present if len of returned map == 0.
 func collectMissing(current []*helmchart.Chart, reqs []*helmchart.Dependency) map[string]*helmchart.Dependency {
 	// If the number of dependencies equals the number of requested
 	// dependencies, there are no missing dependencies
