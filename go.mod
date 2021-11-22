@@ -15,7 +15,7 @@ require (
 	github.com/cyphar/filepath-securejoin v0.2.2
 	github.com/docker/go-metrics v0.0.1 // indirect
 	github.com/docker/libtrust v0.0.0-20160708172513-aabc10ec26b7 // indirect
-	github.com/fluxcd/pkg/apis/meta v0.10.0
+	github.com/fluxcd/pkg/apis/meta v0.10.1
 	github.com/fluxcd/pkg/gittestserver v0.4.2
 	github.com/fluxcd/pkg/gitutil v0.1.0
 	github.com/fluxcd/pkg/helmtestserver v0.2.0
@@ -30,14 +30,13 @@ require (
 	github.com/go-git/go-git/v5 v5.4.2
 	github.com/go-logr/logr v0.4.0
 	github.com/gofrs/uuid v4.1.0+incompatible // indirect
-	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
 	github.com/googleapis/gax-go/v2 v2.1.0 // indirect
 	github.com/gorilla/handlers v1.5.1 // indirect
 	github.com/kardianos/osext v0.0.0-20190222173326-2bc1f35cddc0 // indirect
 	github.com/libgit2/git2go/v31 v31.6.1
 	github.com/minio/minio-go/v7 v7.0.10
 	github.com/onsi/ginkgo v1.16.4
-	github.com/onsi/gomega v1.14.0
+	github.com/onsi/gomega v1.15.0
 	github.com/otiai10/copy v1.7.0
 	github.com/spf13/pflag v1.0.5
 	github.com/yvasiyarov/go-metrics v0.0.0-20150112132944-c25f46c4b940 // indirect
@@ -53,10 +52,10 @@ require (
 	google.golang.org/genproto v0.0.0-20210830153122-0bac4d21c8ea // indirect
 	gotest.tools v2.2.0+incompatible
 	helm.sh/helm/v3 v3.6.3
-	k8s.io/api v0.21.3
-	k8s.io/apimachinery v0.21.3
-	k8s.io/client-go v0.21.3
-	sigs.k8s.io/controller-runtime v0.9.5
+	k8s.io/api v0.22.2
+	k8s.io/apimachinery v0.22.2
+	k8s.io/client-go v0.22.2
+	sigs.k8s.io/controller-runtime v0.10.2
 	sigs.k8s.io/yaml v1.2.0
 )
 
