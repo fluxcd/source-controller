@@ -200,6 +200,20 @@ bool
 <p>This flag tells the controller to suspend the reconciliation of this source.</p>
 </td>
 </tr>
+<tr>
+<td>
+<code>accessFrom</code><br>
+<em>
+<a href="https://godoc.org/github.com/fluxcd/pkg/apis/acl#AccessFrom">
+github.com/fluxcd/pkg/apis/acl.AccessFrom
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>AccessFrom defines an Access Control List for allowing cross-namespace references to this object.</p>
+</td>
+</tr>
 </table>
 </td>
 </tr>
@@ -427,6 +441,20 @@ This option is available only when using the &lsquo;go-git&rsquo; GitImplementat
 <p>Extra git repositories to map into the repository</p>
 </td>
 </tr>
+<tr>
+<td>
+<code>accessFrom</code><br>
+<em>
+<a href="https://godoc.org/github.com/fluxcd/pkg/apis/acl#AccessFrom">
+github.com/fluxcd/pkg/apis/acl.AccessFrom
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>AccessFrom defines an Access Control List for allowing cross-namespace references to this object.</p>
+</td>
+</tr>
 </table>
 </td>
 </tr>
@@ -610,6 +638,20 @@ bool
 <p>This flag tells the controller to suspend the reconciliation of this source.</p>
 </td>
 </tr>
+<tr>
+<td>
+<code>accessFrom</code><br>
+<em>
+<a href="https://godoc.org/github.com/fluxcd/pkg/apis/acl#AccessFrom">
+github.com/fluxcd/pkg/apis/acl.AccessFrom
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>AccessFrom defines an Access Control List for allowing cross-namespace references to this object.</p>
+</td>
+</tr>
 </table>
 </td>
 </tr>
@@ -770,6 +812,20 @@ bool
 <td>
 <em>(Optional)</em>
 <p>This flag tells the controller to suspend the reconciliation of this source.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>accessFrom</code><br>
+<em>
+<a href="https://godoc.org/github.com/fluxcd/pkg/apis/acl#AccessFrom">
+github.com/fluxcd/pkg/apis/acl.AccessFrom
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>AccessFrom defines an Access Control List for allowing cross-namespace references to this object.</p>
 </td>
 </tr>
 </table>
@@ -1018,6 +1074,20 @@ bool
 <td>
 <em>(Optional)</em>
 <p>This flag tells the controller to suspend the reconciliation of this source.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>accessFrom</code><br>
+<em>
+<a href="https://godoc.org/github.com/fluxcd/pkg/apis/acl#AccessFrom">
+github.com/fluxcd/pkg/apis/acl.AccessFrom
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>AccessFrom defines an Access Control List for allowing cross-namespace references to this object.</p>
 </td>
 </tr>
 </tbody>
@@ -1407,6 +1477,20 @@ This option is available only when using the &lsquo;go-git&rsquo; GitImplementat
 <p>Extra git repositories to map into the repository</p>
 </td>
 </tr>
+<tr>
+<td>
+<code>accessFrom</code><br>
+<em>
+<a href="https://godoc.org/github.com/fluxcd/pkg/apis/acl#AccessFrom">
+github.com/fluxcd/pkg/apis/acl.AccessFrom
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>AccessFrom defines an Access Control List for allowing cross-namespace references to this object.</p>
+</td>
+</tr>
 </tbody>
 </table>
 </div>
@@ -1683,6 +1767,20 @@ bool
 <p>This flag tells the controller to suspend the reconciliation of this source.</p>
 </td>
 </tr>
+<tr>
+<td>
+<code>accessFrom</code><br>
+<em>
+<a href="https://godoc.org/github.com/fluxcd/pkg/apis/acl#AccessFrom">
+github.com/fluxcd/pkg/apis/acl.AccessFrom
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>AccessFrom defines an Access Control List for allowing cross-namespace references to this object.</p>
+</td>
+</tr>
 </tbody>
 </table>
 </div>
@@ -1876,6 +1974,20 @@ bool
 <td>
 <em>(Optional)</em>
 <p>This flag tells the controller to suspend the reconciliation of this source.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>accessFrom</code><br>
+<em>
+<a href="https://godoc.org/github.com/fluxcd/pkg/apis/acl#AccessFrom">
+github.com/fluxcd/pkg/apis/acl.AccessFrom
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>AccessFrom defines an Access Control List for allowing cross-namespace references to this object.</p>
 </td>
 </tr>
 </tbody>

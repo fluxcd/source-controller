@@ -17,9 +17,11 @@ limitations under the License.
 package v1beta1
 
 import (
-	"github.com/fluxcd/pkg/apis/meta"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/fluxcd/pkg/apis/acl"
+	"github.com/fluxcd/pkg/apis/meta"
 )
 
 const (
@@ -66,6 +68,10 @@ type HelmRepositorySpec struct {
 	// This flag tells the controller to suspend the reconciliation of this source.
 	// +optional
 	Suspend bool `json:"suspend,omitempty"`
+
+	// AccessFrom defines an Access Control List for allowing cross-namespace references to this object.
+	// +optional
+	AccessFrom *acl.AccessFrom `json:"accessFrom,omitempty"`
 }
 
 // HelmRepositoryStatus defines the observed state of the HelmRepository.
