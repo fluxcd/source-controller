@@ -1,5 +1,5 @@
 /*
-Copyright 2020 The Flux authors
+Copyright 2021 The Flux authors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -14,12 +14,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package helm
+package repository
 
 import "strings"
 
-// NormalizeChartRepositoryURL ensures repository urls are normalized
-func NormalizeChartRepositoryURL(url string) string {
+// NormalizeURL normalizes a ChartRepository URL by ensuring it ends with a
+// single "/".
+func NormalizeURL(url string) string {
 	if url != "" {
 		return strings.TrimRight(url, "/") + "/"
 	}

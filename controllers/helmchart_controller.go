@@ -18,23 +18,20 @@ package controllers
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"io"
 	"net/url"
 	"os"
 	"path/filepath"
-	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
-	"github.com/Masterminds/semver/v3"
 	securejoin "github.com/cyphar/filepath-securejoin"
 	"github.com/go-logr/logr"
-	helmchart "helm.sh/helm/v3/pkg/chart"
-	"helm.sh/helm/v3/pkg/chart/loader"
-	"helm.sh/helm/v3/pkg/chartutil"
-	"helm.sh/helm/v3/pkg/getter"
+	helmgetter "helm.sh/helm/v3/pkg/getter"
 	corev1 "k8s.io/api/core/v1"
+	apierrs "k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -50,17 +47,17 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
-	"sigs.k8s.io/yaml"
 
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/runtime/events"
 	"github.com/fluxcd/pkg/runtime/metrics"
 	"github.com/fluxcd/pkg/runtime/predicates"
-	"github.com/fluxcd/pkg/runtime/transform"
 	"github.com/fluxcd/pkg/untar"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
-	"github.com/fluxcd/source-controller/internal/helm"
+	"github.com/fluxcd/source-controller/internal/helm/chart"
+	"github.com/fluxcd/source-controller/internal/helm/getter"
+	"github.com/fluxcd/source-controller/internal/helm/repository"
 )
 
 // +kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=helmcharts,verbs=get;list;watch;create;update;patch;delete
@@ -73,7 +70,7 @@ type HelmChartReconciler struct {
 	client.Client
 	Scheme                *runtime.Scheme
 	Storage               *Storage
-	Getters               getter.Providers
+	Getters               helmgetter.Providers
 	EventRecorder         kuberecorder.EventRecorder
 	ExternalEventRecorder *events.Recorder
 	MetricsRecorder       *metrics.Recorder
@@ -202,30 +199,28 @@ func (r *HelmChartReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{Requeue: true}, err
 	}
 
+	// Create working directory
+	workDir, err := os.MkdirTemp("", chart.Kind+"-"+chart.Namespace+"-"+chart.Name+"-")
+	if err != nil {
+		err = fmt.Errorf("failed to create temporary working directory: %w", err)
+		chart = sourcev1.HelmChartNotReady(*chart.DeepCopy(), sourcev1.ChartPullFailedReason, err.Error())
+		if err := r.updateStatus(ctx, req, chart.Status); err != nil {
+			log.Error(err, "unable to update status")
+		}
+		r.recordReadiness(ctx, chart)
+		return ctrl.Result{Requeue: true}, err
+	}
+	defer os.RemoveAll(workDir)
+
 	// Perform the reconciliation for the chart source type
 	var reconciledChart sourcev1.HelmChart
 	var reconcileErr error
 	switch typedSource := source.(type) {
 	case *sourcev1.HelmRepository:
-		// TODO: move this to a validation webhook once the discussion around
-		//  certificates has settled: https://github.com/fluxcd/image-reflector-controller/issues/69
-		if err := validHelmChartName(chart.Spec.Chart); err != nil {
-			reconciledChart = sourcev1.HelmChartNotReady(chart, sourcev1.ChartPullFailedReason, err.Error())
-			log.Error(err, "validation failed")
-			if err := r.updateStatus(ctx, req, reconciledChart.Status); err != nil {
-				log.Info(fmt.Sprintf("%v", reconciledChart.Status))
-				log.Error(err, "unable to update status")
-				return ctrl.Result{Requeue: true}, err
-			}
-			r.event(ctx, reconciledChart, events.EventSeverityError, err.Error())
-			r.recordReadiness(ctx, reconciledChart)
-			// Do not requeue as there is no chance on recovery.
-			return ctrl.Result{Requeue: false}, nil
-		}
-		reconciledChart, reconcileErr = r.reconcileFromHelmRepository(ctx, *typedSource, *chart.DeepCopy(), changed)
+		reconciledChart, reconcileErr = r.fromHelmRepository(ctx, *typedSource, *chart.DeepCopy(), workDir, changed)
 	case *sourcev1.GitRepository, *sourcev1.Bucket:
-		reconciledChart, reconcileErr = r.reconcileFromTarballArtifact(ctx, *typedSource.GetArtifact(),
-			*chart.DeepCopy(), changed)
+		reconciledChart, reconcileErr = r.fromTarballArtifact(ctx, *typedSource.GetArtifact(), *chart.DeepCopy(),
+			workDir, changed)
 	default:
 		err := fmt.Errorf("unable to reconcile unsupported source reference kind '%s'", chart.Spec.SourceRef.Kind)
 		return ctrl.Result{Requeue: false}, err
@@ -297,462 +292,270 @@ func (r *HelmChartReconciler) getSource(ctx context.Context, chart sourcev1.Helm
 	return source, nil
 }
 
-func (r *HelmChartReconciler) reconcileFromHelmRepository(ctx context.Context,
-	repository sourcev1.HelmRepository, chart sourcev1.HelmChart, force bool) (sourcev1.HelmChart, error) {
-	// Configure ChartRepository getter options
-	clientOpts := []getter.Option{
-		getter.WithURL(repository.Spec.URL),
-		getter.WithTimeout(repository.Spec.Timeout.Duration),
-		getter.WithPassCredentialsAll(repository.Spec.PassCredentials),
+func (r *HelmChartReconciler) fromHelmRepository(ctx context.Context, repo sourcev1.HelmRepository, c sourcev1.HelmChart,
+	workDir string, force bool) (sourcev1.HelmChart, error) {
+	// Configure Index getter options
+	clientOpts := []helmgetter.Option{
+		helmgetter.WithURL(repo.Spec.URL),
+		helmgetter.WithTimeout(repo.Spec.Timeout.Duration),
+		helmgetter.WithPassCredentialsAll(repo.Spec.PassCredentials),
 	}
-	if secret, err := r.getHelmRepositorySecret(ctx, &repository); err != nil {
-		return sourcev1.HelmChartNotReady(chart, sourcev1.AuthenticationFailedReason, err.Error()), err
+	if secret, err := r.getHelmRepositorySecret(ctx, &repo); err != nil {
+		return sourcev1.HelmChartNotReady(c, sourcev1.AuthenticationFailedReason, err.Error()), err
 	} else if secret != nil {
-		opts, cleanup, err := helm.ClientOptionsFromSecret(*secret)
-		if err != nil {
-			err = fmt.Errorf("auth options error: %w", err)
-			return sourcev1.HelmChartNotReady(chart, sourcev1.AuthenticationFailedReason, err.Error()), err
+		// Create temporary working directory for credentials
+		authDir := filepath.Join(workDir, "creds")
+		if err := os.Mkdir(authDir, 0700); err != nil {
+			err = fmt.Errorf("failed to create temporary directory for repository credentials: %w", err)
 		}
-		defer cleanup()
+		opts, err := getter.ClientOptionsFromSecret(authDir, *secret)
+		if err != nil {
+			err = fmt.Errorf("failed to create client options for HelmRepository '%s': %w", repo.Name, err)
+			return sourcev1.HelmChartNotReady(c, sourcev1.AuthenticationFailedReason, err.Error()), err
+		}
 		clientOpts = append(clientOpts, opts...)
 	}
 
-	// Initialize the chart repository and load the index file
-	chartRepo, err := helm.NewChartRepository(repository.Spec.URL, r.Getters, clientOpts)
+	// Initialize the chart repository
+	chartRepo, err := repository.NewChartRepository(repo.Spec.URL, r.Storage.LocalPath(*repo.GetArtifact()), r.Getters, clientOpts)
 	if err != nil {
 		switch err.(type) {
 		case *url.Error:
-			return sourcev1.HelmChartNotReady(chart, sourcev1.URLInvalidReason, err.Error()), err
+			return sourcev1.HelmChartNotReady(c, sourcev1.URLInvalidReason, err.Error()), err
 		default:
-			return sourcev1.HelmChartNotReady(chart, sourcev1.ChartPullFailedReason, err.Error()), err
+			return sourcev1.HelmChartNotReady(c, sourcev1.ChartPullFailedReason, err.Error()), err
 		}
 	}
-	indexFile, err := os.Open(r.Storage.LocalPath(*repository.GetArtifact()))
-	if err != nil {
-		return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
-	}
-	b, err := io.ReadAll(indexFile)
-	if err != nil {
-		return sourcev1.HelmChartNotReady(chart, sourcev1.ChartPullFailedReason, err.Error()), err
-	}
-	if err = chartRepo.LoadIndex(b); err != nil {
-		return sourcev1.HelmChartNotReady(chart, sourcev1.ChartPullFailedReason, err.Error()), err
+
+	var cachedChart string
+	if artifact := c.GetArtifact(); artifact != nil {
+		cachedChart = artifact.Path
 	}
 
-	// Lookup the chart version in the chart repository index
-	chartVer, err := chartRepo.Get(chart.Spec.Chart, chart.Spec.Version)
+	// Build the chart
+	cb := chart.NewRemoteBuilder(chartRepo)
+	ref := chart.RemoteReference{Name: c.Spec.Chart, Version: c.Spec.Version}
+	opts := chart.BuildOptions{
+		ValuesFiles: c.GetValuesFiles(),
+		CachedChart: cachedChart,
+		Force:       force,
+	}
+	// Set the VersionMetadata to the object's Generation if ValuesFiles is defined
+	// This ensures changes can be noticed by the Artifact consumer
+	if len(opts.GetValuesFiles()) > 0 {
+		opts.VersionMetadata = strconv.FormatInt(c.Generation, 10)
+	}
+	b, err := cb.Build(ctx, ref, filepath.Join(workDir, "chart.tgz"), opts)
 	if err != nil {
-		return sourcev1.HelmChartNotReady(chart, sourcev1.ChartPullFailedReason, err.Error()), err
+		return sourcev1.HelmChartNotReady(c, sourcev1.ChartPullFailedReason, err.Error()), err
 	}
 
-	// Return early if the revision is still the same as the current artifact
-	newArtifact := r.Storage.NewArtifactFor(chart.Kind, chart.GetObjectMeta(), chartVer.Version,
-		fmt.Sprintf("%s-%s.tgz", chartVer.Name, chartVer.Version))
-	if !force && repository.GetArtifact().HasRevision(newArtifact.Revision) {
-		if newArtifact.URL != chart.GetArtifact().URL {
-			r.Storage.SetArtifactURL(chart.GetArtifact())
-			chart.Status.URL = r.Storage.SetHostname(chart.Status.URL)
+	newArtifact := r.Storage.NewArtifactFor(c.Kind, c.GetObjectMeta(), b.Version,
+		fmt.Sprintf("%s-%s.tgz", b.Name, b.Version))
+
+	// If the path of the returned build equals the cache path,
+	// there are no changes to the chart
+	if b.Path == cachedChart {
+		// Ensure hostname is updated
+		if c.GetArtifact().URL != newArtifact.URL {
+			r.Storage.SetArtifactURL(c.GetArtifact())
+			c.Status.URL = r.Storage.SetHostname(c.Status.URL)
 		}
-		return chart, nil
+		return c, nil
 	}
 
 	// Ensure artifact directory exists
 	err = r.Storage.MkdirAll(newArtifact)
 	if err != nil {
 		err = fmt.Errorf("unable to create chart directory: %w", err)
-		return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
+		return sourcev1.HelmChartNotReady(c, sourcev1.StorageOperationFailedReason, err.Error()), err
 	}
 
 	// Acquire a lock for the artifact
 	unlock, err := r.Storage.Lock(newArtifact)
 	if err != nil {
 		err = fmt.Errorf("unable to acquire lock: %w", err)
-		return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
+		return sourcev1.HelmChartNotReady(c, sourcev1.StorageOperationFailedReason, err.Error()), err
 	}
 	defer unlock()
 
-	// Attempt to download the chart
-	res, err := chartRepo.DownloadChart(chartVer)
-	if err != nil {
-		return sourcev1.HelmChartNotReady(chart, sourcev1.ChartPullFailedReason, err.Error()), err
-	}
-	tmpFile, err := os.CreateTemp("", fmt.Sprintf("%s-%s-", chart.Namespace, chart.Name))
-	if err != nil {
-		return sourcev1.HelmChartNotReady(chart, sourcev1.ChartPullFailedReason, err.Error()), err
-	}
-	defer os.RemoveAll(tmpFile.Name())
-	if _, err = io.Copy(tmpFile, res); err != nil {
-		tmpFile.Close()
-		return sourcev1.HelmChartNotReady(chart, sourcev1.ChartPullFailedReason, err.Error()), err
-	}
-	tmpFile.Close()
-
-	// Check if we need to repackage the chart with the declared defaults files.
-	var (
-		pkgPath      = tmpFile.Name()
-		readyReason  = sourcev1.ChartPullSucceededReason
-		readyMessage = fmt.Sprintf("Fetched revision: %s", newArtifact.Revision)
-	)
-
-	switch {
-	case len(chart.GetValuesFiles()) > 0:
-		valuesMap := make(map[string]interface{})
-
-		// Load the chart
-		helmChart, err := loader.LoadFile(pkgPath)
-		if err != nil {
-			err = fmt.Errorf("load chart error: %w", err)
-			return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
-		}
-
-		for _, v := range chart.GetValuesFiles() {
-			if v == "values.yaml" {
-				valuesMap = transform.MergeMaps(valuesMap, helmChart.Values)
-				continue
-			}
-
-			var valuesData []byte
-			cfn := filepath.Clean(v)
-			for _, f := range helmChart.Files {
-				if f.Name == cfn {
-					valuesData = f.Data
-					break
-				}
-			}
-			if valuesData == nil {
-				err = fmt.Errorf("invalid values file path: %s", v)
-				return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
-			}
-
-			yamlMap := make(map[string]interface{})
-			err = yaml.Unmarshal(valuesData, &yamlMap)
-			if err != nil {
-				err = fmt.Errorf("unmarshaling values from %s failed: %w", v, err)
-				return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
-			}
-
-			valuesMap = transform.MergeMaps(valuesMap, yamlMap)
-		}
-
-		yamlBytes, err := yaml.Marshal(valuesMap)
-		if err != nil {
-			err = fmt.Errorf("marshaling values failed: %w", err)
-			return sourcev1.HelmChartNotReady(chart, sourcev1.ChartPackageFailedReason, err.Error()), err
-		}
-
-		// Overwrite values file
-		if changed, err := helm.OverwriteChartDefaultValues(helmChart, yamlBytes); err != nil {
-			return sourcev1.HelmChartNotReady(chart, sourcev1.ChartPackageFailedReason, err.Error()), err
-		} else if !changed {
-			break
-		}
-
-		// Create temporary working directory
-		tmpDir, err := os.MkdirTemp("", fmt.Sprintf("%s-%s-", chart.Namespace, chart.Name))
-		if err != nil {
-			err = fmt.Errorf("tmp dir error: %w", err)
-			return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
-		}
-		defer os.RemoveAll(tmpDir)
-
-		// Package the chart with the new default values
-		pkgPath, err = chartutil.Save(helmChart, tmpDir)
-		if err != nil {
-			err = fmt.Errorf("chart package error: %w", err)
-			return sourcev1.HelmChartNotReady(chart, sourcev1.ChartPackageFailedReason, err.Error()), err
-		}
-
-		// Copy the packaged chart to the artifact path
-		if err := r.Storage.CopyFromPath(&newArtifact, pkgPath); err != nil {
-			err = fmt.Errorf("failed to write chart package to storage: %w", err)
-			return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
-		}
-
-		readyMessage = fmt.Sprintf("Fetched and packaged revision: %s", newArtifact.Revision)
-		readyReason = sourcev1.ChartPackageSucceededReason
-	}
-
-	// Write artifact to storage
-	if err := r.Storage.CopyFromPath(&newArtifact, pkgPath); err != nil {
-		err = fmt.Errorf("unable to write chart file: %w", err)
-		return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
+	// Copy the packaged chart to the artifact path
+	if err = r.Storage.CopyFromPath(&newArtifact, b.Path); err != nil {
+		err = fmt.Errorf("failed to write chart package to storage: %w", err)
+		return sourcev1.HelmChartNotReady(c, sourcev1.StorageOperationFailedReason, err.Error()), err
 	}
 
 	// Update symlink
-	chartUrl, err := r.Storage.Symlink(newArtifact, fmt.Sprintf("%s-latest.tgz", chartVer.Name))
+	cUrl, err := r.Storage.Symlink(newArtifact, fmt.Sprintf("%s-latest.tgz", b.Name))
 	if err != nil {
 		err = fmt.Errorf("storage error: %w", err)
-		return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
+		return sourcev1.HelmChartNotReady(c, sourcev1.StorageOperationFailedReason, err.Error()), err
 	}
-
-	return sourcev1.HelmChartReady(chart, newArtifact, chartUrl, readyReason, readyMessage), nil
+	return sourcev1.HelmChartReady(c, newArtifact, cUrl, sourcev1.ChartPullSucceededReason, b.Summary()), nil
 }
 
-func (r *HelmChartReconciler) reconcileFromTarballArtifact(ctx context.Context,
-	artifact sourcev1.Artifact, chart sourcev1.HelmChart, force bool) (sourcev1.HelmChart, error) {
-	// Create temporary working directory
-	tmpDir, err := os.MkdirTemp("", fmt.Sprintf("%s-%s-", chart.Namespace, chart.Name))
-	if err != nil {
-		err = fmt.Errorf("tmp dir error: %w", err)
-		return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
+func (r *HelmChartReconciler) fromTarballArtifact(ctx context.Context, source sourcev1.Artifact, c sourcev1.HelmChart,
+	workDir string, force bool) (sourcev1.HelmChart, error) {
+	// Create temporary working directory to untar into
+	sourceDir := filepath.Join(workDir, "source")
+	if err := os.Mkdir(sourceDir, 0700); err != nil {
+		err = fmt.Errorf("failed to create temporary directory to untar source into: %w", err)
+		return sourcev1.HelmChartNotReady(c, sourcev1.StorageOperationFailedReason, err.Error()), err
 	}
-	defer os.RemoveAll(tmpDir)
 
 	// Open the tarball artifact file and untar files into working directory
-	f, err := os.Open(r.Storage.LocalPath(artifact))
+	f, err := os.Open(r.Storage.LocalPath(source))
 	if err != nil {
 		err = fmt.Errorf("artifact open error: %w", err)
-		return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
+		return sourcev1.HelmChartNotReady(c, sourcev1.StorageOperationFailedReason, err.Error()), err
 	}
-	if _, err = untar.Untar(f, tmpDir); err != nil {
-		f.Close()
+	if _, err = untar.Untar(f, sourceDir); err != nil {
+		_ = f.Close()
 		err = fmt.Errorf("artifact untar error: %w", err)
-		return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
+		return sourcev1.HelmChartNotReady(c, sourcev1.StorageOperationFailedReason, err.Error()), err
 	}
-	f.Close()
-
-	// Load the chart
-	chartPath, err := securejoin.SecureJoin(tmpDir, chart.Spec.Chart)
-	if err != nil {
-		return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
-	}
-	chartFileInfo, err := os.Stat(chartPath)
-	if err != nil {
-		err = fmt.Errorf("chart location read error: %w", err)
-		return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
-	}
-	helmChart, err := loader.Load(chartPath)
-	if err != nil {
-		err = fmt.Errorf("load chart error: %w", err)
-		return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
+	if err = f.Close(); err != nil {
+		err = fmt.Errorf("artifact close error: %w", err)
+		return sourcev1.HelmChartNotReady(c, sourcev1.StorageOperationFailedReason, err.Error()), err
 	}
 
-	v, err := semver.NewVersion(helmChart.Metadata.Version)
+	chartPath, err := securejoin.SecureJoin(sourceDir, c.Spec.Chart)
 	if err != nil {
-		err = fmt.Errorf("semver parse error: %w", err)
-		return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
+		return sourcev1.HelmChartNotReady(c, sourcev1.StorageOperationFailedReason, err.Error()), err
 	}
 
-	version := v.String()
-	if chart.Spec.ReconcileStrategy == sourcev1.ReconcileStrategyRevision {
+	// Setup dependency manager
+	authDir := filepath.Join(workDir, "creds")
+	if err = os.Mkdir(authDir, 0700); err != nil {
+		err = fmt.Errorf("failed to create temporaRy directory for dependency credentials: %w", err)
+		return sourcev1.HelmChartNotReady(c, sourcev1.StorageOperationFailedReason, err.Error()), err
+	}
+	dm := chart.NewDependencyManager(
+		chart.WithRepositoryCallback(r.namespacedChartRepositoryCallback(ctx, authDir, c.GetNamespace())),
+	)
+	defer dm.Clear()
+
+	// Configure builder options, including any previously cached chart
+	opts := chart.BuildOptions{
+		ValuesFiles: c.GetValuesFiles(),
+		Force:       force,
+	}
+	if artifact := c.Status.Artifact; artifact != nil {
+		opts.CachedChart = artifact.Path
+	}
+
+	// Add revision metadata to chart build
+	if c.Spec.ReconcileStrategy == sourcev1.ReconcileStrategyRevision {
 		// Isolate the commit SHA from GitRepository type artifacts by removing the branch/ prefix.
-		splitRev := strings.Split(artifact.Revision, "/")
-		v, err := v.SetMetadata(splitRev[len(splitRev)-1])
-		if err != nil {
-			err = fmt.Errorf("semver parse error: %w", err)
-			return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
+		splitRev := strings.Split(source.Revision, "/")
+		opts.VersionMetadata = splitRev[len(splitRev)-1]
+	}
+	// Set the VersionMetadata to the object's Generation if ValuesFiles is defined
+	// This ensures changes can be noticed by the Artifact consumer
+	if len(opts.GetValuesFiles()) > 0 {
+		if opts.VersionMetadata != "" {
+			opts.VersionMetadata += "."
 		}
-
-		version = v.String()
-		helmChart.Metadata.Version = v.String()
+		opts.VersionMetadata += strconv.FormatInt(c.Generation, 10)
 	}
 
-	// Return early if the revision is still the same as the current chart artifact
-	newArtifact := r.Storage.NewArtifactFor(chart.Kind, chart.ObjectMeta.GetObjectMeta(), version,
-		fmt.Sprintf("%s-%s.tgz", helmChart.Metadata.Name, version))
-	if !force && apimeta.IsStatusConditionTrue(chart.Status.Conditions, meta.ReadyCondition) && chart.GetArtifact().HasRevision(newArtifact.Revision) {
-		if newArtifact.URL != artifact.URL {
-			r.Storage.SetArtifactURL(chart.GetArtifact())
-			chart.Status.URL = r.Storage.SetHostname(chart.Status.URL)
-		}
-		return chart, nil
+	// Build chart
+	cb := chart.NewLocalBuilder(dm)
+	b, err := cb.Build(ctx, chart.LocalReference{WorkDir: sourceDir, Path: chartPath}, filepath.Join(workDir, "chart.tgz"), opts)
+	if err != nil {
+		return sourcev1.HelmChartNotReady(c, reasonForBuildError(err), err.Error()), err
 	}
 
-	// Either (re)package the chart with the declared default values file,
-	// or write the chart directly to storage.
-	pkgPath := chartPath
-	isValuesFileOverriden := false
-	if len(chart.GetValuesFiles()) > 0 {
-		valuesMap := make(map[string]interface{})
-		for _, v := range chart.GetValuesFiles() {
-			srcPath, err := securejoin.SecureJoin(tmpDir, v)
-			if err != nil {
-				return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
-			}
-			if f, err := os.Stat(srcPath); os.IsNotExist(err) || !f.Mode().IsRegular() {
-				err = fmt.Errorf("invalid values file path: %s", v)
-				return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
-			}
+	newArtifact := r.Storage.NewArtifactFor(c.Kind, c.GetObjectMeta(), b.Version,
+		fmt.Sprintf("%s-%s.tgz", b.Name, b.Version))
 
-			valuesData, err := os.ReadFile(srcPath)
-			if err != nil {
-				err = fmt.Errorf("failed to read from values file '%s': %w", v, err)
-				return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
-			}
-
-			yamlMap := make(map[string]interface{})
-			err = yaml.Unmarshal(valuesData, &yamlMap)
-			if err != nil {
-				err = fmt.Errorf("unmarshaling values from %s failed: %w", v, err)
-				return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
-			}
-
-			valuesMap = transform.MergeMaps(valuesMap, yamlMap)
+	// If the path of the returned build equals the cache path,
+	// there are no changes to the chart
+	if apimeta.IsStatusConditionTrue(c.Status.Conditions, meta.ReadyCondition) &&
+		b.Path == opts.CachedChart {
+		// Ensure hostname is updated
+		if c.GetArtifact().URL != newArtifact.URL {
+			r.Storage.SetArtifactURL(c.GetArtifact())
+			c.Status.URL = r.Storage.SetHostname(c.Status.URL)
 		}
-
-		yamlBytes, err := yaml.Marshal(valuesMap)
-		if err != nil {
-			err = fmt.Errorf("marshaling values failed: %w", err)
-			return sourcev1.HelmChartNotReady(chart, sourcev1.ChartPackageFailedReason, err.Error()), err
-		}
-
-		isValuesFileOverriden, err = helm.OverwriteChartDefaultValues(helmChart, yamlBytes)
-		if err != nil {
-			return sourcev1.HelmChartNotReady(chart, sourcev1.ChartPackageFailedReason, err.Error()), err
-		}
-	}
-
-	isDir := chartFileInfo.IsDir()
-	switch {
-	case isDir:
-		// Determine chart dependencies
-		deps := helmChart.Dependencies()
-		reqs := helmChart.Metadata.Dependencies
-		lock := helmChart.Lock
-		if lock != nil {
-			// Load from lockfile if exists
-			reqs = lock.Dependencies
-		}
-		var dwr []*helm.DependencyWithRepository
-		for _, dep := range reqs {
-			// Exclude existing dependencies
-			found := false
-			for _, existing := range deps {
-				if existing.Name() == dep.Name {
-					found = true
-				}
-			}
-			if found {
-				continue
-			}
-
-			// Continue loop if file scheme detected
-			if dep.Repository == "" || strings.HasPrefix(dep.Repository, "file://") {
-				dwr = append(dwr, &helm.DependencyWithRepository{
-					Dependency: dep,
-					Repository: nil,
-				})
-				continue
-			}
-
-			// Discover existing HelmRepository by URL
-			repository, err := r.resolveDependencyRepository(ctx, dep, chart.Namespace)
-			if err != nil {
-				repository = &sourcev1.HelmRepository{
-					Spec: sourcev1.HelmRepositorySpec{
-						URL:     dep.Repository,
-						Timeout: &metav1.Duration{Duration: 60 * time.Second},
-					},
-				}
-			}
-
-			// Configure ChartRepository getter options
-			clientOpts := []getter.Option{
-				getter.WithURL(repository.Spec.URL),
-				getter.WithTimeout(repository.Spec.Timeout.Duration),
-				getter.WithPassCredentialsAll(repository.Spec.PassCredentials),
-			}
-			if secret, err := r.getHelmRepositorySecret(ctx, repository); err != nil {
-				return sourcev1.HelmChartNotReady(chart, sourcev1.AuthenticationFailedReason, err.Error()), err
-			} else if secret != nil {
-				opts, cleanup, err := helm.ClientOptionsFromSecret(*secret)
-				if err != nil {
-					err = fmt.Errorf("auth options error: %w", err)
-					return sourcev1.HelmChartNotReady(chart, sourcev1.AuthenticationFailedReason, err.Error()), err
-				}
-				defer cleanup()
-				clientOpts = append(clientOpts, opts...)
-			}
-
-			// Initialize the chart repository and load the index file
-			chartRepo, err := helm.NewChartRepository(repository.Spec.URL, r.Getters, clientOpts)
-			if err != nil {
-				switch err.(type) {
-				case *url.Error:
-					return sourcev1.HelmChartNotReady(chart, sourcev1.URLInvalidReason, err.Error()), err
-				default:
-					return sourcev1.HelmChartNotReady(chart, sourcev1.ChartPullFailedReason, err.Error()), err
-				}
-			}
-			if repository.Status.Artifact != nil {
-				indexFile, err := os.Open(r.Storage.LocalPath(*repository.GetArtifact()))
-				if err != nil {
-					return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
-				}
-				b, err := io.ReadAll(indexFile)
-				if err != nil {
-					return sourcev1.HelmChartNotReady(chart, sourcev1.ChartPullFailedReason, err.Error()), err
-				}
-				if err = chartRepo.LoadIndex(b); err != nil {
-					return sourcev1.HelmChartNotReady(chart, sourcev1.ChartPullFailedReason, err.Error()), err
-				}
-			} else {
-				// Download index
-				err = chartRepo.DownloadIndex()
-				if err != nil {
-					return sourcev1.HelmChartNotReady(chart, sourcev1.ChartPullFailedReason, err.Error()), err
-				}
-			}
-
-			dwr = append(dwr, &helm.DependencyWithRepository{
-				Dependency: dep,
-				Repository: chartRepo,
-			})
-		}
-
-		// Construct dependencies for chart if any
-		if len(dwr) > 0 {
-			dm := &helm.DependencyManager{
-				WorkingDir:   tmpDir,
-				ChartPath:    chart.Spec.Chart,
-				Chart:        helmChart,
-				Dependencies: dwr,
-			}
-			err = dm.Build(ctx)
-			if err != nil {
-				return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
-			}
-		}
-
-		fallthrough
-	case isValuesFileOverriden:
-		pkgPath, err = chartutil.Save(helmChart, tmpDir)
-		if err != nil {
-			err = fmt.Errorf("chart package error: %w", err)
-			return sourcev1.HelmChartNotReady(chart, sourcev1.ChartPackageFailedReason, err.Error()), err
-		}
+		return c, nil
 	}
 
 	// Ensure artifact directory exists
 	err = r.Storage.MkdirAll(newArtifact)
 	if err != nil {
-		err = fmt.Errorf("unable to create artifact directory: %w", err)
-		return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
+		err = fmt.Errorf("unable to create chart directory: %w", err)
+		return sourcev1.HelmChartNotReady(c, sourcev1.StorageOperationFailedReason, err.Error()), err
 	}
 
 	// Acquire a lock for the artifact
 	unlock, err := r.Storage.Lock(newArtifact)
 	if err != nil {
 		err = fmt.Errorf("unable to acquire lock: %w", err)
-		return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
+		return sourcev1.HelmChartNotReady(c, sourcev1.StorageOperationFailedReason, err.Error()), err
 	}
 	defer unlock()
 
 	// Copy the packaged chart to the artifact path
-	if err := r.Storage.CopyFromPath(&newArtifact, pkgPath); err != nil {
+	if err = r.Storage.CopyFromPath(&newArtifact, b.Path); err != nil {
 		err = fmt.Errorf("failed to write chart package to storage: %w", err)
-		return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
+		return sourcev1.HelmChartNotReady(c, sourcev1.StorageOperationFailedReason, err.Error()), err
 	}
 
 	// Update symlink
-	cUrl, err := r.Storage.Symlink(newArtifact, fmt.Sprintf("%s-latest.tgz", helmChart.Metadata.Name))
+	cUrl, err := r.Storage.Symlink(newArtifact, fmt.Sprintf("%s-latest.tgz", b.Name))
 	if err != nil {
 		err = fmt.Errorf("storage error: %w", err)
-		return sourcev1.HelmChartNotReady(chart, sourcev1.StorageOperationFailedReason, err.Error()), err
+		return sourcev1.HelmChartNotReady(c, sourcev1.StorageOperationFailedReason, err.Error()), err
 	}
 
-	message := fmt.Sprintf("Fetched and packaged revision: %s", newArtifact.Revision)
-	return sourcev1.HelmChartReady(chart, newArtifact, cUrl, sourcev1.ChartPackageSucceededReason, message), nil
+	return sourcev1.HelmChartReady(c, newArtifact, cUrl, reasonForBuildSuccess(b), b.Summary()), nil
+}
+
+// namespacedChartRepositoryCallback returns a chart.GetChartRepositoryCallback
+// scoped to the given namespace. Credentials for retrieved v1beta1.HelmRepository
+// objects are stored in the given directory.
+// The returned callback returns a repository.ChartRepository configured with the
+// retrieved v1beta1.HelmRepository, or a shim with defaults if no object could
+// be found.
+func (r *HelmChartReconciler) namespacedChartRepositoryCallback(ctx context.Context, dir, namespace string) chart.GetChartRepositoryCallback {
+	return func(url string) (*repository.ChartRepository, error) {
+		repo, err := r.resolveDependencyRepository(ctx, url, namespace)
+		if err != nil {
+			// Return Kubernetes client errors, but ignore others
+			if apierrs.ReasonForError(err) != metav1.StatusReasonUnknown {
+				return nil, err
+			}
+			repo = &sourcev1.HelmRepository{
+				Spec: sourcev1.HelmRepositorySpec{
+					URL:     url,
+					Timeout: &metav1.Duration{Duration: 60 * time.Second},
+				},
+			}
+		}
+		clientOpts := []helmgetter.Option{
+			helmgetter.WithURL(repo.Spec.URL),
+			helmgetter.WithTimeout(repo.Spec.Timeout.Duration),
+			helmgetter.WithPassCredentialsAll(repo.Spec.PassCredentials),
+		}
+		if secret, err := r.getHelmRepositorySecret(ctx, repo); err != nil {
+			return nil, err
+		} else if secret != nil {
+			opts, err := getter.ClientOptionsFromSecret(dir, *secret)
+			if err != nil {
+				return nil, err
+			}
+			clientOpts = append(clientOpts, opts...)
+		}
+		chartRepo, err := repository.NewChartRepository(repo.Spec.URL, "", r.Getters, clientOpts)
+		if err != nil {
+			return nil, err
+		}
+		if repo.Status.Artifact != nil {
+			chartRepo.CachePath = r.Storage.LocalPath(*repo.GetArtifact())
+		}
+		return chartRepo, nil
+	}
 }
 
 func (r *HelmChartReconciler) reconcileDelete(ctx context.Context, chart sourcev1.HelmChart) (ctrl.Result, error) {
@@ -865,7 +668,7 @@ func (r *HelmChartReconciler) indexHelmRepositoryByURL(o client.Object) []string
 	if !ok {
 		panic(fmt.Sprintf("Expected a HelmRepository, got %T", o))
 	}
-	u := helm.NormalizeChartRepositoryURL(repo.Spec.URL)
+	u := repository.NormalizeURL(repo.Spec.URL)
 	if u != "" {
 		return []string{u}
 	}
@@ -880,15 +683,10 @@ func (r *HelmChartReconciler) indexHelmChartBySource(o client.Object) []string {
 	return []string{fmt.Sprintf("%s/%s", hc.Spec.SourceRef.Kind, hc.Spec.SourceRef.Name)}
 }
 
-func (r *HelmChartReconciler) resolveDependencyRepository(ctx context.Context, dep *helmchart.Dependency, namespace string) (*sourcev1.HelmRepository, error) {
-	u := helm.NormalizeChartRepositoryURL(dep.Repository)
-	if u == "" {
-		return nil, fmt.Errorf("invalid repository URL")
-	}
-
+func (r *HelmChartReconciler) resolveDependencyRepository(ctx context.Context, url string, namespace string) (*sourcev1.HelmRepository, error) {
 	listOpts := []client.ListOption{
 		client.InNamespace(namespace),
-		client.MatchingFields{sourcev1.HelmRepositoryURLIndexKey: u},
+		client.MatchingFields{sourcev1.HelmRepositoryURLIndexKey: url},
 	}
 	var list sourcev1.HelmRepositoryList
 	err := r.Client.List(ctx, &list, listOpts...)
@@ -898,8 +696,7 @@ func (r *HelmChartReconciler) resolveDependencyRepository(ctx context.Context, d
 	if len(list.Items) > 0 {
 		return &list.Items[0], nil
 	}
-
-	return nil, fmt.Errorf("no HelmRepository found")
+	return nil, fmt.Errorf("no HelmRepository found for '%s' in '%s' namespace", url, namespace)
 }
 
 func (r *HelmChartReconciler) getHelmRepositorySecret(ctx context.Context, repository *sourcev1.HelmRepository) (*corev1.Secret, error) {
@@ -917,7 +714,6 @@ func (r *HelmChartReconciler) getHelmRepositorySecret(ctx context.Context, repos
 		}
 		return &secret, nil
 	}
-
 	return nil, nil
 }
 
@@ -1008,18 +804,6 @@ func (r *HelmChartReconciler) requestsForBucketChange(o client.Object) []reconci
 	return reqs
 }
 
-// validHelmChartName returns an error if the given string is not a
-// valid Helm chart name; a valid name must be lower case letters
-// and numbers, words may be separated with dashes (-).
-// Ref: https://helm.sh/docs/chart_best_practices/conventions/#chart-names
-func validHelmChartName(s string) error {
-	chartFmt := regexp.MustCompile("^([-a-z0-9]*)$")
-	if !chartFmt.MatchString(s) {
-		return fmt.Errorf("invalid chart name %q, a valid name must be lower case letters and numbers and MAY be separated with dashes (-)", s)
-	}
-	return nil
-}
-
 func (r *HelmChartReconciler) recordSuspension(ctx context.Context, chart sourcev1.HelmChart) {
 	if r.MetricsRecorder == nil {
 		return
@@ -1037,4 +821,24 @@ func (r *HelmChartReconciler) recordSuspension(ctx context.Context, chart source
 	} else {
 		r.MetricsRecorder.RecordSuspend(*objRef, chart.Spec.Suspend)
 	}
+}
+
+func reasonForBuildError(err error) string {
+	var buildErr *chart.BuildError
+	if ok := errors.As(err, &buildErr); !ok {
+		return sourcev1.ChartPullFailedReason
+	}
+	switch buildErr.Reason {
+	case chart.ErrChartMetadataPatch, chart.ErrValuesFilesMerge, chart.ErrDependencyBuild, chart.ErrChartPackage:
+		return sourcev1.ChartPackageFailedReason
+	default:
+		return sourcev1.ChartPullFailedReason
+	}
+}
+
+func reasonForBuildSuccess(result *chart.Build) string {
+	if result.Packaged {
+		return sourcev1.ChartPackageSucceededReason
+	}
+	return sourcev1.ChartPullSucceededReason
 }

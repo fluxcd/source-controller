@@ -17,14 +17,14 @@ limitations under the License.
 package controllers
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"net/url"
+	"os"
 	"time"
 
 	"github.com/go-logr/logr"
-	"helm.sh/helm/v3/pkg/getter"
+	helmgetter "helm.sh/helm/v3/pkg/getter"
 	corev1 "k8s.io/api/core/v1"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -37,7 +37,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
-	"sigs.k8s.io/yaml"
 
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/runtime/events"
@@ -45,7 +44,8 @@ import (
 	"github.com/fluxcd/pkg/runtime/predicates"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
-	"github.com/fluxcd/source-controller/internal/helm"
+	"github.com/fluxcd/source-controller/internal/helm/getter"
+	"github.com/fluxcd/source-controller/internal/helm/repository"
 )
 
 // +kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=helmrepositories,verbs=get;list;watch;create;update;patch;delete
@@ -58,7 +58,7 @@ type HelmRepositoryReconciler struct {
 	client.Client
 	Scheme                *runtime.Scheme
 	Storage               *Storage
-	Getters               getter.Providers
+	Getters               helmgetter.Providers
 	EventRecorder         kuberecorder.EventRecorder
 	ExternalEventRecorder *events.Recorder
 	MetricsRecorder       *metrics.Recorder
@@ -170,96 +170,108 @@ func (r *HelmRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	return ctrl.Result{RequeueAfter: repository.GetInterval().Duration}, nil
 }
 
-func (r *HelmRepositoryReconciler) reconcile(ctx context.Context, repository sourcev1.HelmRepository) (sourcev1.HelmRepository, error) {
-	clientOpts := []getter.Option{
-		getter.WithURL(repository.Spec.URL),
-		getter.WithTimeout(repository.Spec.Timeout.Duration),
-		getter.WithPassCredentialsAll(repository.Spec.PassCredentials),
+func (r *HelmRepositoryReconciler) reconcile(ctx context.Context, repo sourcev1.HelmRepository) (sourcev1.HelmRepository, error) {
+	clientOpts := []helmgetter.Option{
+		helmgetter.WithURL(repo.Spec.URL),
+		helmgetter.WithTimeout(repo.Spec.Timeout.Duration),
+		helmgetter.WithPassCredentialsAll(repo.Spec.PassCredentials),
 	}
-	if repository.Spec.SecretRef != nil {
+	if repo.Spec.SecretRef != nil {
 		name := types.NamespacedName{
-			Namespace: repository.GetNamespace(),
-			Name:      repository.Spec.SecretRef.Name,
+			Namespace: repo.GetNamespace(),
+			Name:      repo.Spec.SecretRef.Name,
 		}
 
 		var secret corev1.Secret
 		err := r.Client.Get(ctx, name, &secret)
 		if err != nil {
 			err = fmt.Errorf("auth secret error: %w", err)
-			return sourcev1.HelmRepositoryNotReady(repository, sourcev1.AuthenticationFailedReason, err.Error()), err
+			return sourcev1.HelmRepositoryNotReady(repo, sourcev1.AuthenticationFailedReason, err.Error()), err
 		}
 
-		opts, cleanup, err := helm.ClientOptionsFromSecret(secret)
+		authDir, err := os.MkdirTemp("", repo.Kind+"-"+repo.Namespace+"-"+repo.Name+"-")
+		if err != nil {
+			err = fmt.Errorf("failed to create temporary working directory for credentials: %w", err)
+			return sourcev1.HelmRepositoryNotReady(repo, sourcev1.AuthenticationFailedReason, err.Error()), err
+		}
+		defer os.RemoveAll(authDir)
+
+		opts, err := getter.ClientOptionsFromSecret(authDir, secret)
 		if err != nil {
 			err = fmt.Errorf("auth options error: %w", err)
-			return sourcev1.HelmRepositoryNotReady(repository, sourcev1.AuthenticationFailedReason, err.Error()), err
+			return sourcev1.HelmRepositoryNotReady(repo, sourcev1.AuthenticationFailedReason, err.Error()), err
 		}
-		defer cleanup()
 		clientOpts = append(clientOpts, opts...)
 	}
 
-	chartRepo, err := helm.NewChartRepository(repository.Spec.URL, r.Getters, clientOpts)
+	chartRepo, err := repository.NewChartRepository(repo.Spec.URL, "", r.Getters, clientOpts)
 	if err != nil {
 		switch err.(type) {
 		case *url.Error:
-			return sourcev1.HelmRepositoryNotReady(repository, sourcev1.URLInvalidReason, err.Error()), err
+			return sourcev1.HelmRepositoryNotReady(repo, sourcev1.URLInvalidReason, err.Error()), err
 		default:
-			return sourcev1.HelmRepositoryNotReady(repository, sourcev1.IndexationFailedReason, err.Error()), err
+			return sourcev1.HelmRepositoryNotReady(repo, sourcev1.IndexationFailedReason, err.Error()), err
 		}
 	}
-	if err := chartRepo.DownloadIndex(); err != nil {
-		err = fmt.Errorf("failed to download repository index: %w", err)
-		return sourcev1.HelmRepositoryNotReady(repository, sourcev1.IndexationFailedReason, err.Error()), err
-	}
-
-	indexBytes, err := yaml.Marshal(&chartRepo.Index)
+	checksum, err := chartRepo.CacheIndex()
 	if err != nil {
-		return sourcev1.HelmRepositoryNotReady(repository, sourcev1.StorageOperationFailedReason, err.Error()), err
+		err = fmt.Errorf("failed to download repository index: %w", err)
+		return sourcev1.HelmRepositoryNotReady(repo, sourcev1.IndexationFailedReason, err.Error()), err
 	}
-	hash := r.Storage.Checksum(bytes.NewReader(indexBytes))
-	artifact := r.Storage.NewArtifactFor(repository.Kind,
-		repository.ObjectMeta.GetObjectMeta(),
-		hash,
-		fmt.Sprintf("index-%s.yaml", hash))
-	// return early on unchanged index
-	if apimeta.IsStatusConditionTrue(repository.Status.Conditions, meta.ReadyCondition) && repository.GetArtifact().HasRevision(artifact.Revision) {
-		if artifact.URL != repository.GetArtifact().URL {
-			r.Storage.SetArtifactURL(repository.GetArtifact())
-			repository.Status.URL = r.Storage.SetHostname(repository.Status.URL)
+	defer chartRepo.RemoveCache()
+
+	artifact := r.Storage.NewArtifactFor(repo.Kind,
+		repo.ObjectMeta.GetObjectMeta(),
+		"",
+		fmt.Sprintf("index-%s.yaml", checksum))
+
+	// Return early on unchanged index
+	if apimeta.IsStatusConditionTrue(repo.Status.Conditions, meta.ReadyCondition) &&
+		(repo.GetArtifact() != nil && repo.GetArtifact().Checksum == checksum) {
+		if artifact.URL != repo.GetArtifact().URL {
+			r.Storage.SetArtifactURL(repo.GetArtifact())
+			repo.Status.URL = r.Storage.SetHostname(repo.Status.URL)
 		}
-		return repository, nil
+		return repo, nil
 	}
 
-	// create artifact dir
+	// Load the cached repository index to ensure it passes validation
+	if err := chartRepo.LoadFromCache(); err != nil {
+		return sourcev1.HelmRepositoryNotReady(repo, sourcev1.IndexationFailedReason, err.Error()), err
+	}
+	// The repository checksum is the SHA256 of the loaded bytes, after sorting
+	artifact.Revision = chartRepo.Checksum
+	chartRepo.Unload()
+
+	// Create artifact dir
 	err = r.Storage.MkdirAll(artifact)
 	if err != nil {
 		err = fmt.Errorf("unable to create repository index directory: %w", err)
-		return sourcev1.HelmRepositoryNotReady(repository, sourcev1.StorageOperationFailedReason, err.Error()), err
+		return sourcev1.HelmRepositoryNotReady(repo, sourcev1.StorageOperationFailedReason, err.Error()), err
 	}
 
-	// acquire lock
+	// Acquire lock
 	unlock, err := r.Storage.Lock(artifact)
 	if err != nil {
 		err = fmt.Errorf("unable to acquire lock: %w", err)
-		return sourcev1.HelmRepositoryNotReady(repository, sourcev1.StorageOperationFailedReason, err.Error()), err
+		return sourcev1.HelmRepositoryNotReady(repo, sourcev1.StorageOperationFailedReason, err.Error()), err
 	}
 	defer unlock()
 
-	// save artifact to storage
-	if err := r.Storage.AtomicWriteFile(&artifact, bytes.NewReader(indexBytes), 0644); err != nil {
-		err = fmt.Errorf("unable to write repository index file: %w", err)
-		return sourcev1.HelmRepositoryNotReady(repository, sourcev1.StorageOperationFailedReason, err.Error()), err
+	// Save artifact to storage
+	if err = r.Storage.CopyFromPath(&artifact, chartRepo.CachePath); err != nil {
+		return sourcev1.HelmRepositoryNotReady(repo, sourcev1.StorageOperationFailedReason, err.Error()), err
 	}
 
-	// update index symlink
+	// Update index symlink
 	indexURL, err := r.Storage.Symlink(artifact, "index.yaml")
 	if err != nil {
 		err = fmt.Errorf("storage error: %w", err)
-		return sourcev1.HelmRepositoryNotReady(repository, sourcev1.StorageOperationFailedReason, err.Error()), err
+		return sourcev1.HelmRepositoryNotReady(repo, sourcev1.StorageOperationFailedReason, err.Error()), err
 	}
 
 	message := fmt.Sprintf("Fetched revision: %s", artifact.Revision)
-	return sourcev1.HelmRepositoryReady(repository, artifact, indexURL, sourcev1.IndexationSucceededReason, message), nil
+	return sourcev1.HelmRepositoryReady(repo, artifact, indexURL, sourcev1.IndexationSucceededReason, message), nil
 }
 
 func (r *HelmRepositoryReconciler) reconcileDelete(ctx context.Context, repository sourcev1.HelmRepository) (ctrl.Result, error) {
