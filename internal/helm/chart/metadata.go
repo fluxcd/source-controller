@@ -228,6 +228,9 @@ func LoadChartMetadataFromArchive(archive string) (*helmchart.Metadata, error) {
 
 		switch parts[1] {
 		case chartutil.ChartfileName, "requirements.yaml":
+			if hd.Size > helm.MaxChartFileSize {
+				return nil, fmt.Errorf("size of '%s' exceeds '%d' bytes limit", hd.Name, helm.MaxChartFileSize)
+			}
 			b, err := io.ReadAll(tr)
 			if err != nil {
 				return nil, err
