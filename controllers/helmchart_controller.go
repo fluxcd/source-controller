@@ -247,7 +247,7 @@ func (r *HelmChartReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	r.recordReadiness(ctx, reconciledChart)
 
 	log.Info(fmt.Sprintf("Reconciliation finished in %s, next run in %s",
-		time.Now().Sub(start).String(),
+		time.Since(start).String(),
 		chart.GetInterval().Duration.String(),
 	))
 	return ctrl.Result{RequeueAfter: chart.GetInterval().Duration}, nil

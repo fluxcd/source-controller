@@ -163,7 +163,7 @@ func (r *HelmRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	r.recordReadiness(ctx, reconciledRepository)
 
 	log.Info(fmt.Sprintf("Reconciliation finished in %s, next run in %s",
-		time.Now().Sub(start).String(),
+		time.Since(start).String(),
 		repository.GetInterval().Duration.String(),
 	))
 
