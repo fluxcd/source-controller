@@ -2,6 +2,63 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.19.0
+
+**Release date:** 2021-11-23
+
+For this prerelease we focused on improving the logic around Helm resources,
+with as goal to be more efficient, and increase code and testing quality.
+
+It contains **breaking behavioral changes** to `HelmRepository` and
+`HelmChart` resources:
+
+- Helm repository index files and/or charts **must** not exceed the new declared 
+  runtime default limits to [avoid out-of-memory crashes](https://github.com/fluxcd/source-controller/issues/470),
+  overwriting the default configuration is possible.
+
+  | Type | Default max size **(in MiB)** | Option flag to overwrite |
+  |---|---|---|
+  | Helm repository index | 50MiB | `--helm-index-max-size=<bytes>` |
+  | Helm chart | 10MiB | `--helm-chart-max-size=<bytes>` |
+  | Singe file from Helm chart | 5MiB | `--helm-chart-file-max-size=<bytes>` |
+
+- Using `ValuesFiles` in a `HelmChart` will now append a `.<Generation>` to the SemVer
+  metadata of the packaged chart and the revision of the Artifact. For example,
+  `v1.2.3+.5` for a `HelmChart` resource with generation `5`. This ensures consumers
+  of the chart are able to notice changes to the merged values without the underlying
+  chart source (revision) changing.
+
+While an optional ACL field has been added to the API resources, there is no
+implementation at time of release.
+
+Improvements:
+- helm: factor out logic from controller into package
+  [#485](https://github.com/fluxcd/source-controller/pull/485)
+- Add ACL option field to Source API
+  [#495](https://github.com/fluxcd/source-controller/pull/495)
+- Update various dependencies to mitigate CVE warning
+  [#493](https://github.com/fluxcd/source-controller/pull/493)
+- Update controller-runtime to v0.10.2
+  [#497](https://github.com/fluxcd/source-controller/pull/497)
+- Update github.com/minio/minio-go to `v7.0.15`
+  [#498](https://github.com/fluxcd/source-controller/pull/498)
+- internal/helm: LoadChartMetadataFromArchive improvements
+  [#502](https://github.com/fluxcd/source-controller/pull/502)
+- internal/helm: validate loaded chart metadata obj
+  [#503](https://github.com/fluxcd/source-controller/pull/503)
+
+Fixes:
+- tests: ensure proper garbage collection
+  [#489](https://github.com/fluxcd/source-controller/pull/489)
+- controllers: Fix helmchart values file merge test
+  [#494](https://github.com/fluxcd/source-controller/pull/494)
+- Update test shield link
+  [#496](https://github.com/fluxcd/source-controller/pull/496)
+- controllers: absolute local path for cached chart
+  [#500](https://github.com/fluxcd/source-controller/pull/500)
+- Various small fixes across the code base
+  [#501](https://github.com/fluxcd/source-controller/pull/501)
+
 ## 0.18.0
 
 **Release date:** 2021-11-12
