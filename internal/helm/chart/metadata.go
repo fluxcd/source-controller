@@ -28,6 +28,7 @@ import (
 	"path"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"strings"
 
 	helmchart "helm.sh/helm/v3/pkg/chart"
@@ -36,6 +37,8 @@ import (
 
 	"github.com/fluxcd/source-controller/internal/helm"
 )
+
+var drivePathPattern = regexp.MustCompile(`^[a-zA-Z]:/`)
 
 // OverwriteChartDefaultValues overwrites the chart default values file with the given data.
 func OverwriteChartDefaultValues(chart *helmchart.Chart, vals chartutil.Values) (bool, error) {
@@ -161,6 +164,9 @@ func LoadChartMetadataFromArchive(archive string) (*helmchart.Metadata, error) {
 	}
 	tr := tar.NewReader(zr)
 
+	// The following logic is on par with how Helm validates the package while
+	// unpackaging it, except that we only read the Metadata related files.
+	// Ref: https://github.com/helm/helm/blob/a499b4b179307c267bdf3ec49b880e3dbd2a5591/pkg/chart/loader/archive.go#L104
 	var m *helmchart.Metadata
 	for {
 		hd, err := tr.Next()
@@ -189,19 +195,42 @@ func LoadChartMetadataFromArchive(archive string) (*helmchart.Metadata, error) {
 			delimiter = "\\"
 		}
 		parts := strings.Split(hd.Name, delimiter)
+		n := strings.Join(parts[1:], delimiter)
 
-		// We are only interested in files in the base directory
+		// Normalize the path to the / delimiter
+		n = strings.ReplaceAll(n, delimiter, "/")
+
+		if path.IsAbs(n) {
+			return nil, errors.New("chart illegally contains absolute paths")
+		}
+
+		n = path.Clean(n)
+		if n == "." {
+			// In this case, the original path was relative when it should have been absolute.
+			return nil, fmt.Errorf("chart illegally contains content outside the base directory: %s", hd.Name)
+		}
+		if strings.HasPrefix(n, "..") {
+			return nil, fmt.Errorf("chart illegally references parent directory")
+		}
+
+		// In some particularly arcane acts of path creativity, it is possible to intermix
+		// UNIX and Windows style paths in such a way that you produce a result of the form
+		// c:/foo even after all the built-in absolute path checks. So we explicitly check
+		// for this condition.
+		if drivePathPattern.MatchString(n) {
+			return nil, errors.New("chart contains illegally named files")
+		}
+
+		// We are only interested in files in the base directory from here on
 		if len(parts) != 2 {
 			continue
 		}
 
-		// Normalize the path to the / delimiter
-		n := strings.Join(parts[1:], delimiter)
-		n = strings.ReplaceAll(n, delimiter, "/")
-		n = path.Clean(n)
-
 		switch parts[1] {
 		case chartutil.ChartfileName, "requirements.yaml":
+			if hd.Size > helm.MaxChartFileSize {
+				return nil, fmt.Errorf("size of '%s' exceeds '%d' bytes limit", hd.Name, helm.MaxChartFileSize)
+			}
 			b, err := io.ReadAll(tr)
 			if err != nil {
 				return nil, err
