@@ -108,10 +108,14 @@ func (b *remoteChartBuilder) Build(_ context.Context, ref Reference, p string, o
 	// - BuildOptions.Force is False
 	if opts.CachedChart != "" && !opts.Force {
 		if curMeta, err := LoadChartMetadataFromArchive(opts.CachedChart); err == nil {
-			if result.Name == curMeta.Name && result.Version == curMeta.Version {
-				result.Path = opts.CachedChart
-				result.ValuesFiles = opts.GetValuesFiles()
-				return result, nil
+			// If the cached metadata is corrupt, we ignore its existence
+			// and continue the build
+			if err = curMeta.Validate(); err == nil {
+				if result.Name == curMeta.Name && result.Version == curMeta.Version {
+					result.Path = opts.CachedChart
+					result.ValuesFiles = opts.GetValuesFiles()
+					return result, nil
+				}
 			}
 		}
 	}
@@ -207,8 +211,12 @@ func validatePackageAndWriteToPath(reader io.Reader, out string) error {
 	if err = tmpFile.Close(); err != nil {
 		return err
 	}
-	if _, err = LoadChartMetadataFromArchive(tmpFile.Name()); err != nil {
+	meta, err := LoadChartMetadataFromArchive(tmpFile.Name())
+	if err != nil {
 		return fmt.Errorf("failed to load chart metadata from written chart: %w", err)
+	}
+	if err = meta.Validate(); err != nil {
+		return fmt.Errorf("failed to validate metadata of written chart: %w", err)
 	}
 	if err = fs.RenameWithFallback(tmpFile.Name(), out); err != nil {
 		return fmt.Errorf("failed to write chart to file: %w", err)

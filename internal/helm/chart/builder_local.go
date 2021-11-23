@@ -79,6 +79,9 @@ func (b *localChartBuilder) Build(ctx context.Context, ref Reference, p string, 
 	if err != nil {
 		return nil, &BuildError{Reason: ErrChartPull, Err: err}
 	}
+	if err = curMeta.Validate(); err != nil {
+		return nil, &BuildError{Reason: ErrChartPull, Err: err}
+	}
 
 	result := &Build{}
 	result.Name = curMeta.Name
@@ -104,10 +107,14 @@ func (b *localChartBuilder) Build(ctx context.Context, ref Reference, p string, 
 	// - BuildOptions.Force is False
 	if opts.CachedChart != "" && !opts.Force {
 		if curMeta, err = LoadChartMetadataFromArchive(opts.CachedChart); err == nil {
-			if result.Name == curMeta.Name && result.Version == curMeta.Version {
-				result.Path = opts.CachedChart
-				result.ValuesFiles = opts.ValuesFiles
-				return result, nil
+			// If the cached metadata is corrupt, we ignore its existence
+			// and continue the build
+			if err = curMeta.Validate(); err == nil {
+				if result.Name == curMeta.Name && result.Version == curMeta.Version {
+					result.Path = opts.CachedChart
+					result.ValuesFiles = opts.ValuesFiles
+					return result, nil
+				}
 			}
 		}
 	}
