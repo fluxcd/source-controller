@@ -327,19 +327,17 @@ func (r *HelmChartReconciler) fromHelmRepository(ctx context.Context, repo sourc
 		}
 	}
 
-	var cachedChart string
-	if artifact := c.GetArtifact(); artifact != nil {
-		cachedChart = artifact.Path
-	}
-
 	// Build the chart
 	cb := chart.NewRemoteBuilder(chartRepo)
 	ref := chart.RemoteReference{Name: c.Spec.Chart, Version: c.Spec.Version}
 	opts := chart.BuildOptions{
 		ValuesFiles: c.GetValuesFiles(),
-		CachedChart: cachedChart,
 		Force:       force,
 	}
+	if artifact := c.GetArtifact(); artifact != nil {
+		opts.CachedChart = r.Storage.LocalPath(*artifact)
+	}
+
 	// Set the VersionMetadata to the object's Generation if ValuesFiles is defined
 	// This ensures changes can be noticed by the Artifact consumer
 	if len(opts.GetValuesFiles()) > 0 {
@@ -355,7 +353,7 @@ func (r *HelmChartReconciler) fromHelmRepository(ctx context.Context, repo sourc
 
 	// If the path of the returned build equals the cache path,
 	// there are no changes to the chart
-	if b.Path == cachedChart {
+	if b.Path == opts.CachedChart {
 		// Ensure hostname is updated
 		if c.GetArtifact().URL != newArtifact.URL {
 			r.Storage.SetArtifactURL(c.GetArtifact())
