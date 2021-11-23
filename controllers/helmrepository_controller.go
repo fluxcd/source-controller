@@ -89,6 +89,9 @@ func (r *HelmRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
+	// Record suspended status metric
+	defer r.recordSuspension(ctx, repository)
+
 	// Add our finalizer if it does not exist
 	if !controllerutil.ContainsFinalizer(&repository, sourcev1.SourceFinalizer) {
 		controllerutil.AddFinalizer(&repository, sourcev1.SourceFinalizer)
@@ -163,7 +166,7 @@ func (r *HelmRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	r.recordReadiness(ctx, reconciledRepository)
 
 	log.Info(fmt.Sprintf("Reconciliation finished in %s, next run in %s",
-		time.Now().Sub(start).String(),
+		time.Since(start).String(),
 		repository.GetInterval().Duration.String(),
 	))
 

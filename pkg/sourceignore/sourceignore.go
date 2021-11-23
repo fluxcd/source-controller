@@ -100,7 +100,7 @@ func ReadIgnoreFile(path string, domain []string) ([]gitignore.Pattern, error) {
 	return ps, nil
 }
 
-// LoadIgnorePatterns recursively loads the the IgnoreFile patterns found
+// LoadIgnorePatterns recursively loads the IgnoreFile patterns found
 // in the directory.
 func LoadIgnorePatterns(dir string, domain []string) ([]gitignore.Pattern, error) {
 	ps, err := ReadIgnoreFile(filepath.Join(dir, IgnoreFile), domain)
@@ -114,7 +114,9 @@ func LoadIgnorePatterns(dir string, domain []string) ([]gitignore.Pattern, error
 	for _, fi := range fis {
 		if fi.IsDir() && fi.Name() != ".git" {
 			var subps []gitignore.Pattern
-			subps, err = LoadIgnorePatterns(filepath.Join(dir, fi.Name()), append(domain, fi.Name()))
+			if subps, err = LoadIgnorePatterns(filepath.Join(dir, fi.Name()), append(domain, fi.Name())); err != nil {
+				return nil, err
+			}
 			if len(subps) > 0 {
 				ps = append(ps, subps...)
 			}

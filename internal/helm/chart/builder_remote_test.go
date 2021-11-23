@@ -357,8 +357,8 @@ func Test_validatePackageAndWriteToPath(t *testing.T) {
 	g.Expect(chartPath).To(BeARegularFile())
 
 	emptyF, err := os.Open("./../testdata/charts/empty.tgz")
-	defer emptyF.Close()
 	g.Expect(err).ToNot(HaveOccurred())
+	defer emptyF.Close()
 	err = validatePackageAndWriteToPath(emptyF, filepath.Join(tmpDir, "out.tgz"))
 	g.Expect(err).To(HaveOccurred())
 }

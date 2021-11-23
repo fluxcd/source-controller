@@ -125,11 +125,10 @@ func main() {
 
 	var eventRecorder *events.Recorder
 	if eventsAddr != "" {
-		if er, err := events.NewRecorder(eventsAddr, controllerName); err != nil {
+		var err error
+		if eventRecorder, err = events.NewRecorder(eventsAddr, controllerName); err != nil {
 			setupLog.Error(err, "unable to create event recorder")
 			os.Exit(1)
-		} else {
-			eventRecorder = er
 		}
 	}
 

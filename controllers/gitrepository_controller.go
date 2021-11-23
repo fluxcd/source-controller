@@ -192,7 +192,7 @@ func (r *GitRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	r.recordReadiness(ctx, reconciledRepository)
 
 	log.Info(fmt.Sprintf("Reconciliation finished in %s, next run in %s",
-		time.Now().Sub(start).String(),
+		time.Since(start).String(),
 		repository.GetInterval().Duration.String(),
 	))
 

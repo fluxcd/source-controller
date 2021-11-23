@@ -170,7 +170,7 @@ func (r *BucketReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	r.recordReadiness(ctx, reconciledBucket)
 
 	log.Info(fmt.Sprintf("Reconciliation finished in %s, next run in %s",
-		time.Now().Sub(start).String(),
+		time.Since(start).String(),
 		bucket.GetInterval().Duration.String(),
 	))
 
