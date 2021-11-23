@@ -307,6 +307,7 @@ func (r *HelmChartReconciler) fromHelmRepository(ctx context.Context, repo sourc
 		authDir := filepath.Join(workDir, "creds")
 		if err := os.Mkdir(authDir, 0700); err != nil {
 			err = fmt.Errorf("failed to create temporary directory for repository credentials: %w", err)
+			return sourcev1.HelmChartNotReady(c, sourcev1.StorageOperationFailedReason, err.Error()), err
 		}
 		opts, err := getter.ClientOptionsFromSecret(authDir, *secret)
 		if err != nil {
