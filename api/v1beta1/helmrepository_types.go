@@ -17,6 +17,8 @@ limitations under the License.
 package v1beta1
 
 import (
+	"time"
+
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -157,7 +159,13 @@ func (in *HelmRepository) SetConditions(conditions []metav1.Condition) {
 	in.Status.Conditions = conditions
 }
 
+// GetRequeueAfter returns the duration after which the source must be reconciled again.
+func (in HelmRepository) GetRequeueAfter() time.Duration {
+	return in.Spec.Interval.Duration
+}
+
 // GetInterval returns the interval at which the source is reconciled.
+// Deprecated: use GetRequeueAfter instead.
 func (in HelmRepository) GetInterval() metav1.Duration {
 	return in.Spec.Interval
 }
