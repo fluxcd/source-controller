@@ -167,10 +167,10 @@ func (r *HelmRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 
 	log.Info(fmt.Sprintf("Reconciliation finished in %s, next run in %s",
 		time.Since(start).String(),
-		repository.GetInterval().Duration.String(),
+		repository.GetRequeueAfter().String(),
 	))
 
-	return ctrl.Result{RequeueAfter: repository.GetInterval().Duration}, nil
+	return ctrl.Result{RequeueAfter: repository.GetRequeueAfter()}, nil
 }
 
 func (r *HelmRepositoryReconciler) reconcile(ctx context.Context, repo sourcev1.HelmRepository) (sourcev1.HelmRepository, error) {
