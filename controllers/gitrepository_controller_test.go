@@ -56,6 +56,86 @@ import (
 	"github.com/fluxcd/source-controller/pkg/git"
 )
 
+const (
+	encodedCommitFixture = `tree f0c522d8cc4c90b73e2bc719305a896e7e3c108a
+parent eb167bc68d0a11530923b1f24b4978535d10b879
+author Stefan Prodan <stefan.prodan@gmail.com> 1633681364 +0300
+committer Stefan Prodan <stefan.prodan@gmail.com> 1633681364 +0300
+
+Update containerd and runc to fix CVEs
+
+Signed-off-by: Stefan Prodan <stefan.prodan@gmail.com>
+`
+	malformedEncodedCommitFixture = `parent eb167bc68d0a11530923b1f24b4978535d10b879
+author Stefan Prodan <stefan.prodan@gmail.com> 1633681364 +0300
+committer Stefan Prodan <stefan.prodan@gmail.com> 1633681364 +0300
+
+Update containerd and runc to fix CVEs
+
+Signed-off-by: Stefan Prodan <stefan.prodan@gmail.com>
+`
+	signatureCommitFixture = `-----BEGIN PGP SIGNATURE-----
+
+iHUEABEIAB0WIQQHgExUr4FrLdKzpNYyma6w5AhbrwUCYV//1AAKCRAyma6w5Ahb
+r7nJAQCQU4zEJu04/Q0ac/UaL6htjhq/wTDNMeUM+aWG/LcBogEAqFUea1oR2BJQ
+JCJmEtERFh39zNWSazQmxPAFhEE0kbc=
+=+Wlj
+-----END PGP SIGNATURE-----`
+	armoredKeyRingFixture = `-----BEGIN PGP PUBLIC KEY BLOCK-----
+
+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
+=/4e+
+-----END PGP PUBLIC KEY BLOCK-----
+`
+)
+
 var (
 	testGitImplementations = []string{sourcev1.GoGitImplementation, sourcev1.LibGit2Implementation}
 )
@@ -243,7 +323,7 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 			},
 			wantErr: true,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.CheckoutFailedCondition, sourcev1.GitOperationFailedReason, "Failed to checkout and determine revision: unable to clone '<url>', error: Certificate"),
+				*conditions.TrueCondition(sourcev1.CheckoutFailedCondition, sourcev1.GitOperationFailedReason, "Failed to checkout and determine revision: unable to clone: Certificate"),
 			},
 		},
 		{
@@ -378,8 +458,9 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 			}
 
 			r := &GitRepositoryReconciler{
-				Client:  builder.Build(),
-				Storage: testStorage,
+				Client:        builder.Build(),
+				EventRecorder: record.NewFakeRecorder(32),
+				Storage:       testStorage,
 			}
 
 			for _, i := range testGitImplementations {
@@ -425,11 +506,12 @@ func TestGitRepositoryReconciler_reconcileSource_checkoutStrategy(t *testing.T) 
 	tags := []string{"non-semver-tag", "v0.1.0", "0.2.0", "v0.2.1", "v1.0.0-alpha", "v1.1.0", "v2.0.0"}
 
 	tests := []struct {
-		name         string
-		reference    *sourcev1.GitRepositoryRef
-		want         ctrl.Result
-		wantErr      bool
-		wantRevision string
+		name                  string
+		skipForImplementation string
+		reference             *sourcev1.GitRepositoryRef
+		want                  ctrl.Result
+		wantErr               bool
+		wantRevision          string
 	}{
 		{
 			name:         "Nil reference (default branch)",
@@ -453,13 +535,24 @@ func TestGitRepositoryReconciler_reconcileSource_checkoutStrategy(t *testing.T) 
 			wantRevision: "v0.1.0/<commit>",
 		},
 		{
-			name: "Branch commit",
+			name:                  "Branch commit",
+			skipForImplementation: sourcev1.LibGit2Implementation,
 			reference: &sourcev1.GitRepositoryRef{
 				Branch: "staging",
 				Commit: "<commit>",
 			},
 			want:         ctrl.Result{RequeueAfter: interval},
 			wantRevision: "staging/<commit>",
+		},
+		{
+			name:                  "Branch commit",
+			skipForImplementation: sourcev1.GoGitImplementation,
+			reference: &sourcev1.GitRepositoryRef{
+				Branch: "staging",
+				Commit: "<commit>",
+			},
+			want:         ctrl.Result{RequeueAfter: interval},
+			wantRevision: "HEAD/<commit>",
 		},
 		{
 			name: "SemVer",
@@ -508,8 +601,9 @@ func TestGitRepositoryReconciler_reconcileSource_checkoutStrategy(t *testing.T) 
 	}
 
 	r := &GitRepositoryReconciler{
-		Client:  fakeclient.NewClientBuilder().WithScheme(runtime.NewScheme()).Build(),
-		Storage: testStorage,
+		Client:        fakeclient.NewClientBuilder().WithScheme(runtime.NewScheme()).Build(),
+		EventRecorder: record.NewFakeRecorder(32),
+		Storage:       testStorage,
 	}
 
 	for _, tt := range tests {
@@ -533,6 +627,10 @@ func TestGitRepositoryReconciler_reconcileSource_checkoutStrategy(t *testing.T) 
 			for _, i := range testGitImplementations {
 				t.Run(i, func(t *testing.T) {
 					g := NewWithT(t)
+
+					if tt.skipForImplementation == i {
+						t.Skipf("Skipped for Git implementation %q", i)
+					}
 
 					tmpDir, err := os.MkdirTemp("", "checkout-strategy-")
 					g.Expect(err).NotTo(HaveOccurred())
@@ -577,7 +675,7 @@ func TestGitRepositoryReconciler_reconcileArtifact(t *testing.T) {
 			},
 			afterFunc: func(t *WithT, obj *sourcev1.GitRepository, artifact sourcev1.Artifact) {
 				t.Expect(obj.GetArtifact()).ToNot(BeNil())
-				t.Expect(obj.GetArtifact().Checksum).To(Equal("f9955588f6aeed7be9b1ef15cd2ddac47bb53291"))
+				t.Expect(obj.GetArtifact().Checksum).To(Equal("ef9c34eab0584035ac8b8a4070876954ea46f270250d60648672feef3e943426"))
 			},
 			want: ctrl.Result{RequeueAfter: interval},
 			assertConditions: []metav1.Condition{
@@ -593,7 +691,7 @@ func TestGitRepositoryReconciler_reconcileArtifact(t *testing.T) {
 			},
 			afterFunc: func(t *WithT, obj *sourcev1.GitRepository, artifact sourcev1.Artifact) {
 				t.Expect(obj.GetArtifact()).ToNot(BeNil())
-				t.Expect(obj.GetArtifact().Checksum).To(Equal("542a8ad0171118a3249e8c531c598b898defd742"))
+				t.Expect(obj.GetArtifact().Checksum).To(Equal("dc95ae14c19d335b693bbba58ae2a562242b0cf33893baffd1b7605ba578e0d6"))
 			},
 			want: ctrl.Result{RequeueAfter: interval},
 			assertConditions: []metav1.Condition{
@@ -607,7 +705,8 @@ func TestGitRepositoryReconciler_reconcileArtifact(t *testing.T) {
 			g := NewWithT(t)
 
 			r := &GitRepositoryReconciler{
-				Storage: testStorage,
+				EventRecorder: record.NewFakeRecorder(32),
+				Storage:       testStorage,
 			}
 
 			obj := &sourcev1.GitRepository{
@@ -846,7 +945,8 @@ func TestGitRepositoryReconciler_reconcileDelete(t *testing.T) {
 	g := NewWithT(t)
 
 	r := &GitRepositoryReconciler{
-		Storage: testStorage,
+		EventRecorder: record.NewFakeRecorder(32),
+		Storage:       testStorage,
 	}
 
 	obj := &sourcev1.GitRepository{
@@ -870,129 +970,143 @@ func TestGitRepositoryReconciler_reconcileDelete(t *testing.T) {
 	g.Expect(obj.Status.Artifact).To(BeNil())
 }
 
-// func TestGitRepositoryReconciler_verifyCommitSignature(t *testing.T) {
-// 	tests := []struct {
-// 		name             string
-// 		secret           *corev1.Secret
-// 		commit           git.Commit
-// 		beforeFunc       func(obj *sourcev1.GitRepository)
-// 		want             ctrl.Result
-// 		wantErr          bool
-// 		assertConditions []metav1.Condition
-// 	}{
-// 		{
-// 			name: "Valid commit makes SourceVerifiedCondition=True",
-// 			secret: &corev1.Secret{
-// 				ObjectMeta: metav1.ObjectMeta{
-// 					Name: "existing",
-// 				},
-// 			},
-// 			commit: fake.NewCommit(true, "shasum"),
-// 			beforeFunc: func(obj *sourcev1.GitRepository) {
-// 				obj.Spec.Interval = metav1.Duration{Duration: interval}
-// 				obj.Spec.Verification = &sourcev1.GitRepositoryVerification{
-// 					Mode: "head",
-// 					SecretRef: meta.LocalObjectReference{
-// 						Name: "existing",
-// 					},
-// 				}
-// 			},
-// 			want: ctrl.Result{RequeueAfter: interval},
-// 			assertConditions: []metav1.Condition{
-// 				*conditions.TrueCondition(sourcev1.SourceVerifiedCondition, meta.SucceededReason, "Verified signature of commit \"shasum\""),
-// 			},
-// 		},
-// 		{
-// 			name: "Invalid commit makes SourceVerifiedCondition=False and returns error",
-// 			secret: &corev1.Secret{
-// 				ObjectMeta: metav1.ObjectMeta{
-// 					Name: "existing",
-// 				},
-// 			},
-// 			commit: fake.NewCommit(false, "shasum"),
-// 			beforeFunc: func(obj *sourcev1.GitRepository) {
-// 				obj.Spec.Interval = metav1.Duration{Duration: interval}
-// 				obj.Spec.Verification = &sourcev1.GitRepositoryVerification{
-// 					Mode: "head",
-// 					SecretRef: meta.LocalObjectReference{
-// 						Name: "existing",
-// 					},
-// 				}
-// 			},
-// 			wantErr: true,
-// 			assertConditions: []metav1.Condition{
-// 				*conditions.FalseCondition(sourcev1.SourceVerifiedCondition, meta.FailedReason, "Signature verification of commit \"shasum\" failed: invalid signature"),
-// 			},
-// 		},
-// 		{
-// 			name: "Secret get failure makes SourceVerified=False and returns error",
-// 			beforeFunc: func(obj *sourcev1.GitRepository) {
-// 				obj.Spec.Interval = metav1.Duration{Duration: interval}
-// 				obj.Spec.Verification = &sourcev1.GitRepositoryVerification{
-// 					Mode: "head",
-// 					SecretRef: meta.LocalObjectReference{
-// 						Name: "none-existing",
-// 					},
-// 				}
-// 			},
-// 			wantErr: true,
-// 			assertConditions: []metav1.Condition{
-// 				*conditions.FalseCondition(sourcev1.SourceVerifiedCondition, meta.FailedReason, "PGP public keys secret error: secrets \"none-existing\" not found"),
-// 			},
-// 		},
-// 		{
-// 			name: "Nil verification in spec deletes SourceVerified condition",
-// 			beforeFunc: func(obj *sourcev1.GitRepository) {
-// 				obj.Spec.Interval = metav1.Duration{Duration: interval}
-// 				conditions.MarkTrue(obj, sourcev1.SourceVerifiedCondition, "Foo", "")
-// 			},
-// 			want:             ctrl.Result{RequeueAfter: interval},
-// 			assertConditions: []metav1.Condition{},
-// 		},
-// 		{
-// 			name: "Empty verification mode in spec deletes SourceVerified condition",
-// 			beforeFunc: func(obj *sourcev1.GitRepository) {
-// 				obj.Spec.Interval = metav1.Duration{Duration: interval}
-// 				obj.Spec.Verification = &sourcev1.GitRepositoryVerification{}
-// 				conditions.MarkTrue(obj, sourcev1.SourceVerifiedCondition, "Foo", "")
-// 			},
-// 			want:             ctrl.Result{RequeueAfter: interval},
-// 			assertConditions: []metav1.Condition{},
-// 		},
-// 	}
+func TestGitRepositoryReconciler_verifyCommitSignature(t *testing.T) {
+	tests := []struct {
+		name             string
+		secret           *corev1.Secret
+		commit           git.Commit
+		beforeFunc       func(obj *sourcev1.GitRepository)
+		want             ctrl.Result
+		wantErr          bool
+		assertConditions []metav1.Condition
+	}{
+		{
+			name: "Valid commit makes SourceVerifiedCondition=True",
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "existing",
+				},
+				Data: map[string][]byte{
+					"foo": []byte(armoredKeyRingFixture),
+				},
+			},
+			commit: git.Commit{
+				Hash:      []byte("shasum"),
+				Encoded:   []byte(encodedCommitFixture),
+				Signature: signatureCommitFixture,
+			},
+			beforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Spec.Interval = metav1.Duration{Duration: interval}
+				obj.Spec.Verification = &sourcev1.GitRepositoryVerification{
+					Mode: "head",
+					SecretRef: meta.LocalObjectReference{
+						Name: "existing",
+					},
+				}
+			},
+			want: ctrl.Result{RequeueAfter: interval},
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.SourceVerifiedCondition, meta.SucceededReason, "Verified signature of commit \"shasum\""),
+			},
+		},
+		{
+			name: "Invalid commit makes SourceVerifiedCondition=False and returns error",
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "existing",
+				},
+			},
+			commit: git.Commit{
+				Hash:      []byte("shasum"),
+				Encoded:   []byte(malformedEncodedCommitFixture),
+				Signature: signatureCommitFixture,
+			},
+			beforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Spec.Interval = metav1.Duration{Duration: interval}
+				obj.Spec.Verification = &sourcev1.GitRepositoryVerification{
+					Mode: "head",
+					SecretRef: meta.LocalObjectReference{
+						Name: "existing",
+					},
+				}
+			},
+			wantErr: true,
+			assertConditions: []metav1.Condition{
+				*conditions.FalseCondition(sourcev1.SourceVerifiedCondition, meta.FailedReason, "Signature verification of commit \"shasum\" failed: failed to verify commit with any of the given key rings"),
+			},
+		},
+		{
+			name: "Secret get failure makes SourceVerified=False and returns error",
+			beforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Spec.Interval = metav1.Duration{Duration: interval}
+				obj.Spec.Verification = &sourcev1.GitRepositoryVerification{
+					Mode: "head",
+					SecretRef: meta.LocalObjectReference{
+						Name: "none-existing",
+					},
+				}
+			},
+			wantErr: true,
+			assertConditions: []metav1.Condition{
+				*conditions.FalseCondition(sourcev1.SourceVerifiedCondition, meta.FailedReason, "PGP public keys secret error: secrets \"none-existing\" not found"),
+			},
+		},
+		{
+			name: "Nil verification in spec deletes SourceVerified condition",
+			beforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Spec.Interval = metav1.Duration{Duration: interval}
+				conditions.MarkTrue(obj, sourcev1.SourceVerifiedCondition, "Foo", "")
+			},
+			want:             ctrl.Result{RequeueAfter: interval},
+			assertConditions: []metav1.Condition{},
+		},
+		{
+			name: "Empty verification mode in spec deletes SourceVerified condition",
+			beforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Spec.Interval = metav1.Duration{Duration: interval}
+				obj.Spec.Verification = &sourcev1.GitRepositoryVerification{}
+				conditions.MarkTrue(obj, sourcev1.SourceVerifiedCondition, "Foo", "")
+			},
+			want:             ctrl.Result{RequeueAfter: interval},
+			assertConditions: []metav1.Condition{},
+		},
+	}
 
-// 	for _, tt := range tests {
-// 		t.Run(tt.name, func(t *testing.T) {
-// 			g := NewWithT(t)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
 
-// 			builder := fakeclient.NewClientBuilder().WithScheme(testEnv.GetScheme())
-// 			if tt.secret != nil {
-// 				builder.WithObjects(tt.secret)
-// 			}
+			builder := fakeclient.NewClientBuilder().WithScheme(testEnv.GetScheme())
+			if tt.secret != nil {
+				builder.WithObjects(tt.secret)
+			}
 
-// 			r := &GitRepositoryReconciler{
-// 				Client: builder.Build(),
-// 			}
+			r := &GitRepositoryReconciler{
+				EventRecorder: record.NewFakeRecorder(32),
+				Client:        builder.Build(),
+			}
 
-// 			obj := &sourcev1.GitRepository{
-// 				ObjectMeta: metav1.ObjectMeta{
-// 					GenerateName: "verify-commit-",
-// 					Generation:   1,
-// 				},
-// 				Status: sourcev1.GitRepositoryStatus{},
-// 			}
+			obj := &sourcev1.GitRepository{
+				ObjectMeta: metav1.ObjectMeta{
+					GenerateName: "verify-commit-",
+					Generation:   1,
+				},
+				Status: sourcev1.GitRepositoryStatus{},
+			}
 
-// 			if tt.beforeFunc != nil {
-// 				tt.beforeFunc(obj)
-// 			}
+			if tt.beforeFunc != nil {
+				tt.beforeFunc(obj)
+			}
 
-// 			got, err := r.verifyCommitSignature(logr.NewContext(ctx, log.NullLogger{}), obj, tt.commit)
-// 			g.Expect(obj.Status.Conditions).To(conditions.MatchConditions(tt.assertConditions))
-// 			g.Expect(err != nil).To(Equal(tt.wantErr))
-// 			g.Expect(got).To(Equal(tt.want))
-// 		})
-// 	}
-// }
+			dlog := log.NewDelegatingLogSink(log.NullLogSink{})
+			nullLogger := logr.New(dlog)
+			got, err := r.verifyCommitSignature(logr.NewContext(ctx, nullLogger), obj, tt.commit)
+			g.Expect(obj.Status.Conditions).To(conditions.MatchConditions(tt.assertConditions))
+			g.Expect(err != nil).To(Equal(tt.wantErr))
+			g.Expect(got).To(Equal(tt.want))
+		})
+	}
+}
 
 // helpers
 
