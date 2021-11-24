@@ -252,9 +252,9 @@ func (r *HelmChartReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 	log.Info(fmt.Sprintf("Reconciliation finished in %s, next run in %s",
 		time.Since(start).String(),
-		chart.GetInterval().Duration.String(),
+		chart.GetRequeueAfter().String(),
 	))
-	return ctrl.Result{RequeueAfter: chart.GetInterval().Duration}, nil
+	return ctrl.Result{RequeueAfter: chart.GetRequeueAfter()}, nil
 }
 
 type HelmChartReconcilerOptions struct {
