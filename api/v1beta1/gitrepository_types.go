@@ -38,10 +38,6 @@ const (
 )
 
 const (
-	// ArtifactUnavailableCondition indicates there is no Artifact available for the Source.
-	// This is a "negative polarity" or "abnormal-true" type, and is only present on the resource if it is True.
-	ArtifactUnavailableCondition string = "ArtifactUnavailable"
-
 	// CheckoutFailedCondition indicates a transient or persistent checkout failure. If True, observations on the
 	// upstream Source revision are not possible, and the Artifact available for the Source may be outdated.
 	// This is a "negative polarity" or "abnormal-true" type, and is only present on the resource if it is True.
@@ -55,10 +51,6 @@ const (
 	// exist, or does not have an Artifact.
 	// This is a "negative polarity" or "abnormal-true" type, and is only present on the resource if it is True.
 	IncludeUnavailableCondition string = "IncludeUnavailable"
-
-	// ArtifactOutdatedCondition indicates the current Artifact of the Source is outdated.
-	// This is a "negative polarity" or "abnormal-true" type, and is only present on the resource if it is True.
-	ArtifactOutdatedCondition string = "ArtifactOutdated"
 )
 
 // GitRepositorySpec defines the desired state of a Git repository.
