@@ -33,13 +33,12 @@ import (
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	ctrl "sigs.k8s.io/controller-runtime"
-	crtlmetrics "sigs.k8s.io/controller-runtime/pkg/metrics"
 
 	"github.com/fluxcd/pkg/runtime/client"
+	helper "github.com/fluxcd/pkg/runtime/controller"
 	"github.com/fluxcd/pkg/runtime/events"
 	"github.com/fluxcd/pkg/runtime/leaderelection"
 	"github.com/fluxcd/pkg/runtime/logger"
-	"github.com/fluxcd/pkg/runtime/metrics"
 	"github.com/fluxcd/pkg/runtime/pprof"
 	"github.com/fluxcd/pkg/runtime/probes"
 
@@ -114,6 +113,7 @@ func main() {
 	clientOptions.BindFlags(flag.CommandLine)
 	logOptions.BindFlags(flag.CommandLine)
 	leaderElectionOptions.BindFlags(flag.CommandLine)
+
 	flag.Parse()
 
 	ctrl.SetLogger(logger.NewLogger(logOptions))
@@ -131,9 +131,6 @@ func main() {
 			os.Exit(1)
 		}
 	}
-
-	metricsRecorder := metrics.NewRecorder()
-	crtlmetrics.Registry.MustRegister(metricsRecorder.Collectors()...)
 
 	watchNamespace := ""
 	if !watchAllNamespaces {
@@ -163,6 +160,12 @@ func main() {
 	probes.SetupChecks(mgr, setupLog)
 	pprof.SetupHandlers(mgr, setupLog)
 
+	eventsH := helper.MakeEvents(mgr, controllerName, eventRecorder)
+	metricsH := helper.MustMakeMetrics(mgr)
+
+	// NOTE: Temporarily, to be able to keep reconcilers-dev branches in sync.
+	_ = eventsH
+
 	if storageAdvAddr == "" {
 		storageAdvAddr = determineAdvStorageAddr(storageAddr, setupLog)
 	}
@@ -174,7 +177,7 @@ func main() {
 		Storage:               storage,
 		EventRecorder:         mgr.GetEventRecorderFor(controllerName),
 		ExternalEventRecorder: eventRecorder,
-		MetricsRecorder:       metricsRecorder,
+		MetricsRecorder:       metricsH.MetricsRecorder,
 	}).SetupWithManagerAndOptions(mgr, controllers.GitRepositoryReconcilerOptions{
 		MaxConcurrentReconciles:   concurrent,
 		DependencyRequeueInterval: requeueDependency,
@@ -189,7 +192,7 @@ func main() {
 		Getters:               getters,
 		EventRecorder:         mgr.GetEventRecorderFor(controllerName),
 		ExternalEventRecorder: eventRecorder,
-		MetricsRecorder:       metricsRecorder,
+		MetricsRecorder:       metricsH.MetricsRecorder,
 	}).SetupWithManagerAndOptions(mgr, controllers.HelmRepositoryReconcilerOptions{
 		MaxConcurrentReconciles: concurrent,
 	}); err != nil {
@@ -203,7 +206,7 @@ func main() {
 		Getters:               getters,
 		EventRecorder:         mgr.GetEventRecorderFor(controllerName),
 		ExternalEventRecorder: eventRecorder,
-		MetricsRecorder:       metricsRecorder,
+		MetricsRecorder:       metricsH.MetricsRecorder,
 	}).SetupWithManagerAndOptions(mgr, controllers.HelmChartReconcilerOptions{
 		MaxConcurrentReconciles: concurrent,
 	}); err != nil {
@@ -216,7 +219,7 @@ func main() {
 		Storage:               storage,
 		EventRecorder:         mgr.GetEventRecorderFor(controllerName),
 		ExternalEventRecorder: eventRecorder,
-		MetricsRecorder:       metricsRecorder,
+		MetricsRecorder:       metricsH.MetricsRecorder,
 	}).SetupWithManagerAndOptions(mgr, controllers.BucketReconcilerOptions{
 		MaxConcurrentReconciles: concurrent,
 	}); err != nil {
