@@ -284,7 +284,8 @@ func (r *GitRepositoryReconciler) reconcileStorage(ctx context.Context, obj *sou
 func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context,
 	obj *sourcev1.GitRepository, artifact *sourcev1.Artifact, dir string) (ctrl.Result, error) {
 	// Configure authentication strategy to access the source
-	authOpts := &git.AuthOptions{}
+	var authOpts *git.AuthOptions
+	var err error
 	if obj.Spec.SecretRef != nil {
 		// Attempt to retrieve secret
 		name := types.NamespacedName{
@@ -302,16 +303,18 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context,
 		}
 
 		// Configure strategy with secret
-		var err error
 		authOpts, err = git.AuthOptionsFromSecret(obj.Spec.URL, &secret)
-		if err != nil {
-			conditions.MarkTrue(obj, sourcev1.CheckoutFailedCondition, sourcev1.AuthenticationFailedReason,
-				"Failed to configure auth strategy for Git implementation %q: %s", obj.Spec.GitImplementation, err)
-			r.Eventf(obj, events.EventSeverityError, sourcev1.AuthenticationFailedReason,
-				"Failed to configure auth strategy for Git implementation %q: %s", obj.Spec.GitImplementation, err)
-			// Return error as the contents of the secret may change
-			return ctrl.Result{}, err
-		}
+	} else {
+		// Set the minimal auth options for valid transport.
+		authOpts, err = git.AuthOptionsWithoutSecret(obj.Spec.URL)
+	}
+	if err != nil {
+		conditions.MarkTrue(obj, sourcev1.CheckoutFailedCondition, sourcev1.AuthenticationFailedReason,
+			"Failed to configure auth strategy for Git implementation %q: %s", obj.Spec.GitImplementation, err)
+		r.Eventf(obj, events.EventSeverityError, sourcev1.AuthenticationFailedReason,
+			"Failed to configure auth strategy for Git implementation %q: %s", obj.Spec.GitImplementation, err)
+		// Return error as the contents of the secret may change
+		return ctrl.Result{}, err
 	}
 
 	// Configure checkout strategy

@@ -129,3 +129,24 @@ func AuthOptionsFromSecret(URL string, secret *v1.Secret) (*AuthOptions, error) 
 
 	return opts, nil
 }
+
+// AuthOptionsWithoutSecret constructs a minimal AuthOptions object from the
+// given URL and then validates the result. It returns the AuthOptions, or an
+// error.
+func AuthOptionsWithoutSecret(URL string) (*AuthOptions, error) {
+	u, err := url.Parse(URL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse URL to determine auth strategy: %w", err)
+	}
+
+	opts := &AuthOptions{
+		Transport: TransportType(u.Scheme),
+		Host:      u.Host,
+	}
+
+	if err = opts.Validate(); err != nil {
+		return nil, err
+	}
+
+	return opts, nil
+}
