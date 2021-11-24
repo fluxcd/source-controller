@@ -171,10 +171,10 @@ func (r *BucketReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 
 	log.Info(fmt.Sprintf("Reconciliation finished in %s, next run in %s",
 		time.Since(start).String(),
-		bucket.GetInterval().Duration.String(),
+		bucket.GetRequeueAfter().String(),
 	))
 
-	return ctrl.Result{RequeueAfter: bucket.GetInterval().Duration}, nil
+	return ctrl.Result{RequeueAfter: bucket.GetRequeueAfter()}, nil
 }
 
 func (r *BucketReconciler) reconcile(ctx context.Context, bucket sourcev1.Bucket) (sourcev1.Bucket, error) {
