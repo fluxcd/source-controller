@@ -380,6 +380,85 @@ func TestBucketReconciler_reconcileMinioSource(t *testing.T) {
 				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "New upstream revision '94992ae8fb8300723e970e304ea3414266cb414e364ba3f570bb09069f883100'"),
 			},
 		},
+		{
+			name:       "spec.ignore overrides .sourceignore",
+			bucketName: "dummy",
+			beforeFunc: func(obj *sourcev1.Bucket) {
+				ignore := "included/file.txt"
+				obj.Spec.Ignore = &ignore
+			},
+			bucketObjects: []*s3MockObject{
+				{
+					Key:          ".sourceignore",
+					Content:      []byte("ignored/file.txt"),
+					ContentType:  "text/plain",
+					LastModified: time.Now(),
+				},
+				{
+					Key:          "ignored/file.txt",
+					Content:      []byte("ignored/file.txt"),
+					ContentType:  "text/plain",
+					LastModified: time.Now(),
+				},
+				{
+					Key:          "included/file.txt",
+					Content:      []byte("included/file.txt"),
+					ContentType:  "text/plain",
+					LastModified: time.Now(),
+				},
+			},
+			assertArtifact: sourcev1.Artifact{
+				Path:     "bucket/test-bucket/e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855.tar.gz",
+				Revision: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+			},
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "New upstream revision 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'"),
+			},
+		},
+		{
+			name:       "up-to-date artifact",
+			bucketName: "dummy",
+			beforeFunc: func(obj *sourcev1.Bucket) {
+				obj.Status.Artifact = &sourcev1.Artifact{
+					Revision: "f0467900d3cede8323f3e61a1467f7cd370d1c0d942ff990a1a7be1eb1a231e8",
+				}
+			},
+			bucketObjects: []*s3MockObject{
+				{
+					Key:          "test.txt",
+					Content:      []byte("test"),
+					ContentType:  "text/plain",
+					LastModified: time.Now(),
+				},
+			},
+			assertArtifact: sourcev1.Artifact{
+				Path:     "bucket/test-bucket/f0467900d3cede8323f3e61a1467f7cd370d1c0d942ff990a1a7be1eb1a231e8.tar.gz",
+				Revision: "f0467900d3cede8323f3e61a1467f7cd370d1c0d942ff990a1a7be1eb1a231e8",
+			},
+			assertConditions: []metav1.Condition{},
+		},
+		{
+			name:       "Removes FetchFailedCondition after reconciling source",
+			bucketName: "dummy",
+			beforeFunc: func(obj *sourcev1.Bucket) {
+				conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason, "Failed to read test file")
+			},
+			bucketObjects: []*s3MockObject{
+				{
+					Key:          "test.txt",
+					Content:      []byte("test"),
+					ContentType:  "text/plain",
+					LastModified: time.Now(),
+				},
+			},
+			assertArtifact: sourcev1.Artifact{
+				Path:     "bucket/test-bucket/f0467900d3cede8323f3e61a1467f7cd370d1c0d942ff990a1a7be1eb1a231e8.tar.gz",
+				Revision: "f0467900d3cede8323f3e61a1467f7cd370d1c0d942ff990a1a7be1eb1a231e8",
+			},
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "New upstream revision 'f0467900d3cede8323f3e61a1467f7cd370d1c0d942ff990a1a7be1eb1a231e8'"),
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

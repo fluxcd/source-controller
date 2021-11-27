@@ -263,13 +263,14 @@ func (r *BucketReconciler) reconcileStorage(ctx context.Context, obj *sourcev1.B
 //
 // The caller should assume a failure if an error is returned, or the Result is zero.
 func (r *BucketReconciler) reconcileSource(ctx context.Context, obj *sourcev1.Bucket, artifact *sourcev1.Artifact, dir string) (ctrl.Result, error) {
-	var secret corev1.Secret
+	var secret *corev1.Secret
 	if obj.Spec.SecretRef != nil {
 		secretName := types.NamespacedName{
 			Namespace: obj.GetNamespace(),
 			Name:      obj.Spec.SecretRef.Name,
 		}
-		if err := r.Get(ctx, secretName, &secret); err != nil {
+		secret = &corev1.Secret{}
+		if err := r.Get(ctx, secretName, secret); err != nil {
 			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason,
 				"Failed to get secret '%s': %s", secretName.String(), err.Error())
 			r.Eventf(ctx, obj, events.EventSeverityError, sourcev1.AuthenticationFailedReason,
@@ -281,9 +282,9 @@ func (r *BucketReconciler) reconcileSource(ctx context.Context, obj *sourcev1.Bu
 
 	switch obj.Spec.Provider {
 	case sourcev1.GoogleBucketProvider:
-		return r.reconcileGCPSource(ctx, obj, artifact, &secret, dir)
+		return r.reconcileGCPSource(ctx, obj, artifact, secret, dir)
 	default:
-		return r.reconcileMinioSource(ctx, obj, artifact, &secret, dir)
+		return r.reconcileMinioSource(ctx, obj, artifact, secret, dir)
 	}
 }
 
