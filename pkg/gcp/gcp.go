@@ -73,7 +73,8 @@ func ValidateSecret(secret map[string][]byte, name string) error {
 func (c *GCPClient) BucketExists(ctx context.Context, bucketName string) (bool, error) {
 	_, err := c.Client.Bucket(bucketName).Attrs(ctx)
 	if err == gcpstorage.ErrBucketNotExist {
-		return false, err
+		// Not returning error to be compatible with minio's API.
+		return false, nil
 	}
 	if err != nil {
 		return false, err
