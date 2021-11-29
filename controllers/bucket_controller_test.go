@@ -19,6 +19,7 @@ package controllers
 import (
 	"context"
 	"crypto/md5"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -32,6 +33,7 @@ import (
 
 	"github.com/go-logr/logr"
 	. "github.com/onsi/gomega"
+	raw "google.golang.org/api/storage/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -45,6 +47,9 @@ import (
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
 )
+
+// Environment variable to set the GCP Storage host for the GCP client.
+const ENV_GCP_STORAGE_HOST = "STORAGE_EMULATOR_HOST"
 
 func TestBucketReconciler_Reconcile(t *testing.T) {
 	g := NewWithT(t)
@@ -519,6 +524,271 @@ func TestBucketReconciler_reconcileMinioSource(t *testing.T) {
 	}
 }
 
+func TestBucketReconciler_reconcileGCPSource(t *testing.T) {
+	tests := []struct {
+		name             string
+		bucketName       string
+		bucketObjects    []*gcpMockObject
+		secret           *corev1.Secret
+		beforeFunc       func(obj *sourcev1.Bucket)
+		want             ctrl.Result
+		wantErr          bool
+		assertArtifact   sourcev1.Artifact
+		assertConditions []metav1.Condition
+	}{
+		{
+			name:       "reconciles source",
+			bucketName: "dummy",
+			bucketObjects: []*gcpMockObject{
+				{
+					Key:         "test.txt",
+					ContentType: "text/plain",
+					Content:     []byte("test"),
+				},
+			},
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "dummy",
+				},
+				Data: map[string][]byte{
+					"accesskey":      []byte("key"),
+					"secretkey":      []byte("secret"),
+					"serviceaccount": []byte("testsa"),
+				},
+			},
+			beforeFunc: func(obj *sourcev1.Bucket) {
+				obj.Spec.SecretRef = &meta.LocalObjectReference{
+					Name: "dummy",
+				}
+			},
+			assertArtifact: sourcev1.Artifact{
+				Path:     "bucket/test-bucket/23d97ef9557996c9d911df4359d6086eda7bec5af76e43651581d80f5bcad4b8.tar.gz",
+				Revision: "23d97ef9557996c9d911df4359d6086eda7bec5af76e43651581d80f5bcad4b8",
+			},
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "New upstream revision '23d97ef9557996c9d911df4359d6086eda7bec5af76e43651581d80f5bcad4b8'"),
+			},
+		},
+		{
+			name:       "observes non-existing secretRef",
+			bucketName: "dummy",
+			beforeFunc: func(obj *sourcev1.Bucket) {
+				obj.Spec.SecretRef = &meta.LocalObjectReference{
+					Name: "dummy",
+				}
+			},
+			wantErr: true,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "Failed to get secret '/dummy': secrets \"dummy\" not found"),
+			},
+		},
+		{
+			name:       "observes invalid secretRef",
+			bucketName: "dummy",
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "dummy",
+				},
+			},
+			beforeFunc: func(obj *sourcev1.Bucket) {
+				obj.Spec.SecretRef = &meta.LocalObjectReference{
+					Name: "dummy",
+				}
+			},
+			wantErr: true,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason, "Failed to construct GCP client: invalid 'dummy' secret data: required fields"),
+			},
+		},
+		{
+			name:       "observes non-existing bucket name",
+			bucketName: "dummy",
+			beforeFunc: func(obj *sourcev1.Bucket) {
+				obj.Spec.BucketName = "invalid"
+			},
+			wantErr: true,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason, "Bucket 'invalid' does not exist"),
+			},
+		},
+		{
+			name: "transient bucket name API failure",
+			beforeFunc: func(obj *sourcev1.Bucket) {
+				obj.Spec.Endpoint = "transient.example.com"
+				obj.Spec.BucketName = "unavailable"
+			},
+			wantErr: true,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason, "Failed to verify existence of bucket 'unavailable'"),
+			},
+		},
+		{
+			name:       ".sourceignore",
+			bucketName: "dummy",
+			bucketObjects: []*gcpMockObject{
+				{
+					Key:         ".sourceignore",
+					Content:     []byte("ignored/file.txt"),
+					ContentType: "text/plain",
+				},
+				{
+					Key:         "ignored/file.txt",
+					Content:     []byte("ignored/file.txt"),
+					ContentType: "text/plain",
+				},
+				{
+					Key:         "included/file.txt",
+					Content:     []byte("included/file.txt"),
+					ContentType: "text/plain",
+				},
+			},
+			assertArtifact: sourcev1.Artifact{
+				Path:     "bucket/test-bucket/7556d9ebaa9bcf1b24f363a6d5543af84403acb340fe1eaaf31dcdb0a6e6b4d4.tar.gz",
+				Revision: "7556d9ebaa9bcf1b24f363a6d5543af84403acb340fe1eaaf31dcdb0a6e6b4d4",
+			},
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "New upstream revision '7556d9ebaa9bcf1b24f363a6d5543af84403acb340fe1eaaf31dcdb0a6e6b4d4'"),
+			},
+		},
+		{
+			name:       "spec.ignore overrides .sourceignore",
+			bucketName: "dummy",
+			beforeFunc: func(obj *sourcev1.Bucket) {
+				ignore := "included/file.txt"
+				obj.Spec.Ignore = &ignore
+			},
+			bucketObjects: []*gcpMockObject{
+				{
+					Key:         ".sourceignore",
+					Content:     []byte("ignored/file.txt"),
+					ContentType: "text/plain",
+				},
+				{
+					Key:         "ignored/file.txt",
+					Content:     []byte("ignored/file.txt"),
+					ContentType: "text/plain",
+				},
+				{
+					Key:         "included/file.txt",
+					Content:     []byte("included/file.txt"),
+					ContentType: "text/plain",
+				},
+			},
+			assertArtifact: sourcev1.Artifact{
+				Path:     "bucket/test-bucket/e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855.tar.gz",
+				Revision: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+			},
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "New upstream revision 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'"),
+			},
+		},
+		{
+			name:       "up-to-date artifact",
+			bucketName: "dummy",
+			beforeFunc: func(obj *sourcev1.Bucket) {
+				obj.Status.Artifact = &sourcev1.Artifact{
+					Revision: "23d97ef9557996c9d911df4359d6086eda7bec5af76e43651581d80f5bcad4b8",
+				}
+			},
+			bucketObjects: []*gcpMockObject{
+				{
+					Key:         "test.txt",
+					Content:     []byte("test"),
+					ContentType: "text/plain",
+				},
+			},
+			assertArtifact: sourcev1.Artifact{
+				Path:     "bucket/test-bucket/23d97ef9557996c9d911df4359d6086eda7bec5af76e43651581d80f5bcad4b8.tar.gz",
+				Revision: "23d97ef9557996c9d911df4359d6086eda7bec5af76e43651581d80f5bcad4b8",
+			},
+			assertConditions: []metav1.Condition{},
+		},
+		{
+			name:       "Removes FetchFailedCondition after reconciling source",
+			bucketName: "dummy",
+			beforeFunc: func(obj *sourcev1.Bucket) {
+				conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason, "Failed to read test file")
+			},
+			bucketObjects: []*gcpMockObject{
+				{
+					Key:         "test.txt",
+					Content:     []byte("test"),
+					ContentType: "text/plain",
+				},
+			},
+			assertArtifact: sourcev1.Artifact{
+				Path:     "bucket/test-bucket/23d97ef9557996c9d911df4359d6086eda7bec5af76e43651581d80f5bcad4b8.tar.gz",
+				Revision: "23d97ef9557996c9d911df4359d6086eda7bec5af76e43651581d80f5bcad4b8",
+			},
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "New upstream revision '23d97ef9557996c9d911df4359d6086eda7bec5af76e43651581d80f5bcad4b8'"),
+			},
+		},
+		// TODO: Middleware for mock server to test authentication using secret.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			builder := fakeclient.NewClientBuilder().WithScheme(testEnv.Scheme())
+			if tt.secret != nil {
+				builder.WithObjects(tt.secret)
+			}
+			r := &BucketReconciler{
+				Client:  builder.Build(),
+				Storage: testStorage,
+			}
+			tmpDir, err := os.MkdirTemp("", "reconcile-bucket-source-")
+			g.Expect(err).ToNot(HaveOccurred())
+			defer os.RemoveAll(tmpDir)
+
+			// Test bucket object.
+			obj := &sourcev1.Bucket{
+				TypeMeta: metav1.TypeMeta{
+					Kind: sourcev1.BucketKind,
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-bucket",
+				},
+				Spec: sourcev1.BucketSpec{
+					BucketName: tt.bucketName,
+					Timeout:    &metav1.Duration{Duration: timeout},
+					Provider:   sourcev1.GoogleBucketProvider,
+				},
+			}
+
+			// Set up the mock GCP bucket server.
+			server := newGCPServer(tt.bucketName)
+			server.Objects = tt.bucketObjects
+			server.Start()
+			defer server.Stop()
+
+			g.Expect(server.HTTPAddress()).ToNot(BeEmpty())
+
+			obj.Spec.Endpoint = server.HTTPAddress()
+			obj.Spec.Insecure = true
+
+			if tt.beforeFunc != nil {
+				tt.beforeFunc(obj)
+			}
+
+			// Set the GCP storage host to be used by the GCP client.
+			g.Expect(os.Setenv(ENV_GCP_STORAGE_HOST, obj.Spec.Endpoint)).ToNot(HaveOccurred())
+			defer func() {
+				g.Expect(os.Unsetenv(ENV_GCP_STORAGE_HOST)).ToNot(HaveOccurred())
+			}()
+
+			artifact := &sourcev1.Artifact{}
+			got, err := r.reconcileSource(context.TODO(), obj, artifact, tmpDir)
+			g.Expect(err != nil).To(Equal(tt.wantErr))
+			g.Expect(got).To(Equal(tt.want))
+
+			g.Expect(artifact).To(MatchArtifact(tt.assertArtifact.DeepCopy()))
+			g.Expect(obj.Status.Conditions).To(conditions.MatchConditions(tt.assertConditions))
+		})
+	}
+}
+
 func TestBucketReconciler_reconcileArtifact(t *testing.T) {
 	// testChecksum is the checksum value of the artifacts created in this
 	// test.
@@ -847,5 +1117,149 @@ func (s *s3MockServer) handler(w http.ResponseWriter, r *http.Request) {
 		}
 
 		w.Write(found.Content)
+	}
+}
+
+type gcpMockObject struct {
+	Key         string
+	ContentType string
+	Content     []byte
+}
+
+type gcpMockServer struct {
+	srv *httptest.Server
+	mux *http.ServeMux
+
+	BucketName string
+	Etag       string
+	Objects    []*gcpMockObject
+	Close      func()
+}
+
+func newGCPServer(bucketName string) *gcpMockServer {
+	s := &gcpMockServer{BucketName: bucketName}
+	s.mux = http.NewServeMux()
+	s.mux.Handle("/", http.HandlerFunc(s.handler))
+
+	s.srv = httptest.NewUnstartedServer(s.mux)
+
+	return s
+}
+
+func (gs *gcpMockServer) Start() {
+	gs.srv.Start()
+}
+
+func (gs *gcpMockServer) Stop() {
+	gs.srv.Close()
+}
+
+func (gs *gcpMockServer) HTTPAddress() string {
+	return gs.srv.URL
+}
+
+func (gs *gcpMockServer) GetAllObjects() *raw.Objects {
+	objs := &raw.Objects{}
+	for _, o := range gs.Objects {
+		objs.Items = append(objs.Items, getGCPObject(gs.BucketName, *o))
+	}
+	return objs
+}
+
+func (gs *gcpMockServer) GetObjectFile(key string) ([]byte, error) {
+	for _, o := range gs.Objects {
+		if o.Key == key {
+			return o.Content, nil
+		}
+	}
+	return nil, fmt.Errorf("not found")
+}
+
+func (gs *gcpMockServer) handler(w http.ResponseWriter, r *http.Request) {
+	if strings.HasPrefix(r.RequestURI, "/b/") {
+		// Handle the bucket info related queries.
+		if r.RequestURI == fmt.Sprintf("/b/%s?alt=json&prettyPrint=false&projection=full", gs.BucketName) {
+			// Return info about the bucket.
+			response := getGCPBucket(gs.BucketName, gs.Etag)
+			jsonResponse, err := json.Marshal(response)
+			if err != nil {
+				w.WriteHeader(500)
+				return
+			}
+			w.WriteHeader(200)
+			w.Write(jsonResponse)
+			return
+		} else if strings.Contains(r.RequestURI, "/o/") {
+			// Return info about object in the bucket.
+			var obj *gcpMockObject
+			for _, o := range gs.Objects {
+				// The object key in the URI is escaped.
+				// e.g.: /b/dummy/o/included%2Ffile.txt?alt=json&prettyPrint=false&projection=full
+				if r.RequestURI == fmt.Sprintf("/b/%s/o/%s?alt=json&prettyPrint=false&projection=full", gs.BucketName, url.QueryEscape(o.Key)) {
+					obj = o
+				}
+			}
+			if obj != nil {
+				response := getGCPObject(gs.BucketName, *obj)
+				jsonResponse, err := json.Marshal(response)
+				if err != nil {
+					w.WriteHeader(500)
+					return
+				}
+				w.WriteHeader(200)
+				w.Write(jsonResponse)
+				return
+			}
+			w.WriteHeader(404)
+			return
+		} else if strings.Contains(r.RequestURI, "/o?") {
+			// Return info about all the objects in the bucket.
+			response := gs.GetAllObjects()
+			jsonResponse, err := json.Marshal(response)
+			if err != nil {
+				w.WriteHeader(500)
+				return
+			}
+			w.WriteHeader(200)
+			w.Write(jsonResponse)
+			return
+		}
+		w.WriteHeader(404)
+		return
+	} else {
+		// Handle object file query.
+		bucketPrefix := fmt.Sprintf("/%s/", gs.BucketName)
+		if strings.HasPrefix(r.RequestURI, bucketPrefix) {
+			// The URL path is of the format /<bucket>/included/file.txt.
+			// Extract the object key by discarding the bucket prefix.
+			key := strings.TrimPrefix(r.URL.Path, bucketPrefix)
+			// Handle returning object file in a bucket.
+			response, err := gs.GetObjectFile(key)
+			if err != nil {
+				w.WriteHeader(404)
+				return
+			}
+			w.WriteHeader(200)
+			w.Write(response)
+			return
+		}
+		w.WriteHeader(404)
+		return
+	}
+}
+
+func getGCPObject(bucket string, obj gcpMockObject) *raw.Object {
+	return &raw.Object{
+		Bucket:      bucket,
+		Name:        obj.Key,
+		ContentType: obj.ContentType,
+	}
+}
+
+func getGCPBucket(name, eTag string) *raw.Bucket {
+	return &raw.Bucket{
+		Name:     name,
+		Location: "loc",
+		Etag:     eTag,
 	}
 }
