@@ -130,7 +130,7 @@ func TestBucketNotExists(t *testing.T) {
 		Client: client,
 	}
 	exists, err := gcpClient.BucketExists(context.Background(), bucket)
-	assert.Error(t, err, gcpstorage.ErrBucketNotExist.Error())
+	assert.NilError(t, err)
 	assert.Assert(t, !exists)
 }
 
