@@ -443,14 +443,32 @@ func (r *HelmChartReconciler) fromTarballArtifact(ctx context.Context, source so
 		opts.CachedChart = artifact.Path
 	}
 
-	// Add revision metadata to chart build
+	// Configure revision metadata for chart build if we should react to revision changes
 	if c.Spec.ReconcileStrategy == sourcev1.ReconcileStrategyRevision {
-		// Isolate the commit SHA from GitRepository type artifacts by removing the branch/ prefix.
-		splitRev := strings.Split(source.Revision, "/")
-		opts.VersionMetadata = splitRev[len(splitRev)-1]
+		rev := source.Revision
+		if c.Spec.SourceRef.Kind == sourcev1.GitRepositoryKind {
+			// Split the reference by the `/` delimiter which may be present,
+			// and take the last entry which contains the SHA.
+			split := strings.Split(source.Revision, "/")
+			rev = split[len(split)-1]
+		}
+		if kind := c.Spec.SourceRef.Kind; kind == sourcev1.GitRepositoryKind || kind == sourcev1.BucketKind {
+			// The SemVer from the metadata is at times used in e.g. the label metadata for a resource
+			// in a chart, which has a limited length of 63 characters.
+			// To not fill most of this space with a full length SHA hex (40 characters for SHA-1, and
+			// even more for SHA-2 for a chart from a Bucket), we shorten this to the first 12
+			// characters taken from the hex.
+			// For SHA-1, this has proven to be unique in the Linux kernel with over 875.000 commits
+			// (http://git-scm.com/book/en/v2/Git-Tools-Revision-Selection#Short-SHA-1).
+			// Note that for a collision to be problematic, it would need to happen right after the
+			// previous SHA for the artifact, which is highly unlikely, if not virtually impossible.
+			// Ref: https://en.wikipedia.org/wiki/Birthday_attack
+			rev = rev[0:12]
+		}
+		opts.VersionMetadata = rev
 	}
-	// Set the VersionMetadata to the object's Generation if ValuesFiles is defined
-	// This ensures changes can be noticed by the Artifact consumer
+	// Set the VersionMetadata to the object's Generation if ValuesFiles is defined,
+	// this ensures changes can be noticed by the Artifact consumer
 	if len(opts.GetValuesFiles()) > 0 {
 		if opts.VersionMetadata != "" {
 			opts.VersionMetadata += "."

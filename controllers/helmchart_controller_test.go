@@ -747,7 +747,7 @@ var _ = Describe("HelmChartReconciler", func() {
 						storage.ArtifactExist(*got.Status.Artifact)
 				}, timeout, interval).Should(BeTrue())
 				Expect(got.Status.Artifact.Revision).To(ContainSubstring(updated.Status.Artifact.Revision))
-				Expect(got.Status.Artifact.Revision).To(ContainSubstring(commit.String()))
+				Expect(got.Status.Artifact.Revision).To(ContainSubstring(commit.String()[0:12]))
 			})
 
 			When("Setting valid valuesFiles attribute", func() {
