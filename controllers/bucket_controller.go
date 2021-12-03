@@ -20,15 +20,22 @@ import (
 	"context"
 	"crypto/sha1"
 	"fmt"
+	"io/ioutil"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/Azure/azure-pipeline-go/pipeline"
+	storagemgmt "github.com/Azure/azure-sdk-for-go/services/storage/mgmt/2021-04-01/storage"
+	"github.com/Azure/azure-storage-blob-go/azblob"
+	"github.com/Azure/go-autorest/autorest/to"
 	"github.com/go-logr/logr"
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 	"github.com/minio/minio-go/v7/pkg/s3utils"
+	"golang.org/x/sync/errgroup"
 	"google.golang.org/api/option"
 	corev1 "k8s.io/api/core/v1"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
@@ -47,9 +54,10 @@ import (
 	"github.com/fluxcd/pkg/runtime/events"
 	"github.com/fluxcd/pkg/runtime/metrics"
 	"github.com/fluxcd/pkg/runtime/predicates"
-	"github.com/fluxcd/source-controller/pkg/gcp"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
+	"github.com/fluxcd/source-controller/pkg/azure/cloudprovider"
+	"github.com/fluxcd/source-controller/pkg/gcp"
 	"github.com/fluxcd/source-controller/pkg/sourceignore"
 )
 
@@ -66,6 +74,7 @@ type BucketReconciler struct {
 	EventRecorder         kuberecorder.EventRecorder
 	ExternalEventRecorder *events.Recorder
 	MetricsRecorder       *metrics.Recorder
+	AzureCloudConfig      string
 }
 
 type BucketReconcilerOptions struct {
@@ -188,6 +197,11 @@ func (r *BucketReconciler) reconcile(ctx context.Context, bucket sourcev1.Bucket
 	defer os.RemoveAll(tempDir)
 	if bucket.Spec.Provider == sourcev1.GoogleBucketProvider {
 		sourceBucket, err = r.reconcileWithGCP(ctx, bucket, tempDir)
+		if err != nil {
+			return sourceBucket, err
+		}
+	} else if bucket.Spec.Provider == sourcev1.AzureBlobProvider {
+		sourceBucket, err = r.reconcileWithAzureBlob(ctx, bucket, tempDir)
 		if err != nil {
 			return sourceBucket, err
 		}
@@ -401,6 +415,123 @@ func (r *BucketReconciler) reconcileWithMinio(ctx context.Context, bucket source
 	return sourcev1.Bucket{}, nil
 }
 
+func (r *BucketReconciler) reconcileWithAzureBlob(ctx context.Context, bucket sourcev1.Bucket, tempDir string) (sourcev1.Bucket, error) {
+	azBlobPipeline, err := r.authAzure(ctx, bucket)
+	if err != nil {
+		err = fmt.Errorf("auth error: %w", err)
+		return sourcev1.BucketNotReady(bucket, sourcev1.AuthenticationFailedReason, err.Error()), err
+	}
+
+	ctxTimeout, cancel := context.WithTimeout(ctx, bucket.Spec.Timeout.Duration)
+	defer cancel()
+
+	ep := strings.TrimRight(bucket.Spec.Endpoint, "/")
+	blobContainerURLString := strings.Join([]string{ep, bucket.Spec.BucketName}, "/")
+	blobContainerURL, err := url.Parse(blobContainerURLString)
+	if err != nil {
+		return sourcev1.Bucket{}, fmt.Errorf("invalid blob container endpoint '%s': %w", blobContainerURLString, err)
+	}
+
+	blobContainer := azblob.NewContainerURL(*blobContainerURL, *azBlobPipeline)
+	if err != nil {
+		return sourcev1.BucketNotReady(bucket, sourcev1.BucketOperationFailedReason, err.Error()), err
+	}
+
+	downloadBlobToLocalFile := func(ctx context.Context, blobPipeline pipeline.Pipeline, url url.URL, blobName, localPath string) error {
+		containerURL := azblob.NewContainerURL(url, blobPipeline)
+		blobURL := containerURL.NewBlobURL(blobName)
+
+		blobProps, err := blobURL.GetProperties(ctx, azblob.BlobAccessConditions{}, azblob.ClientProvidedKeyOptions{})
+		if err != nil {
+			return err
+		}
+
+		content := make([]byte, blobProps.ContentLength())
+		err = azblob.DownloadBlobToBuffer(ctx, blobURL, 0, 0, content, azblob.DownloadFromBlobOptions{})
+		if err != nil {
+			return err
+		}
+
+		dir := filepath.Dir(localPath)
+		err = os.MkdirAll(dir, os.ModePerm)
+		if err != nil {
+			return fmt.Errorf("failed to create local directory '%s': %w", blobURL, err)
+		}
+
+		err = ioutil.WriteFile(localPath, content, 0600)
+		return err
+	}
+
+	// Look for file with ignore rules first
+	path := filepath.Join(tempDir, sourceignore.IgnoreFile)
+
+	if err := downloadBlobToLocalFile(ctxTimeout, *azBlobPipeline, blobContainer.URL(), sourceignore.IgnoreFile, path); err != nil {
+		if resp, ok := err.(azblob.StorageError); ok && resp.ServiceCode() != "BlobNotFound" {
+			return sourcev1.BucketNotReady(bucket, sourcev1.BucketOperationFailedReason, err.Error()), err
+		}
+	}
+
+	ps, err := sourceignore.ReadIgnoreFile(path, nil)
+	if err != nil {
+		return sourcev1.BucketNotReady(bucket, sourcev1.BucketOperationFailedReason, err.Error()), err
+	}
+	// In-spec patterns take precedence
+	if bucket.Spec.Ignore != nil {
+		ps = append(ps, sourceignore.ReadPatterns(strings.NewReader(*bucket.Spec.Ignore), nil)...)
+	}
+
+	matcher := sourceignore.NewMatcher(ps)
+
+	// download blob content
+	marker := azblob.Marker{Val: nil}
+	for true {
+		resp, err := blobContainer.ListBlobsFlatSegment(ctx, marker, azblob.ListBlobsSegmentOptions{
+			Prefix: "",
+		})
+		if err != nil {
+			return sourcev1.Bucket{}, fmt.Errorf("failed to list blob in blob container '%s': %w", blobContainerURLString, err)
+		}
+
+		if len(resp.Segment.BlobItems) == 0 {
+			break
+		}
+
+		var eg errgroup.Group
+		for i := range resp.Segment.BlobItems {
+			object := resp.Segment.BlobItems[i]
+			eg.Go(func() error {
+				if strings.HasSuffix(object.Name, "/") || object.Name == sourceignore.IgnoreFile {
+					return nil
+				}
+
+				if matcher.Match(strings.Split(object.Name, "/"), false) {
+					return nil
+				}
+
+				localPath := filepath.Join(tempDir, object.Name)
+				if err := downloadBlobToLocalFile(ctxTimeout, *azBlobPipeline, blobContainer.URL(), object.Name, localPath); err != nil {
+					return fmt.Errorf("failed to download blob items from blob container '%s': %w", blobContainerURLString, err)
+				}
+
+				return nil
+			})
+		}
+
+		err = eg.Wait()
+		if err != nil {
+			return sourcev1.Bucket{}, fmt.Errorf("failed to download blob items from blob container '%s': %w", blobContainerURLString, err)
+		}
+
+		if resp.Marker == nil {
+			break
+		}
+
+		marker.Val = resp.Marker
+	}
+
+	return sourcev1.Bucket{}, nil
+}
+
 // authGCP creates a new Google Cloud Platform storage client
 // to interact with the storage service.
 func (r *BucketReconciler) authGCP(ctx context.Context, bucket sourcev1.Bucket) (*gcp.GCPClient, error) {
@@ -473,6 +604,69 @@ func (r *BucketReconciler) authMinio(ctx context.Context, bucket sourcev1.Bucket
 	}
 
 	return minio.New(bucket.Spec.Endpoint, &opt)
+}
+
+// authAzure creates a new Azure blob client to interact with Azure Storage Account.
+func (r *BucketReconciler) authAzure(ctx context.Context, bucket sourcev1.Bucket) (*pipeline.Pipeline, error) {
+	endpointURL, err := url.Parse(bucket.Spec.Endpoint)
+	if err != nil {
+		return nil, fmt.Errorf("invalid endpoint: '%s': %w", bucket.Spec.Endpoint, err)
+	}
+
+	var key string
+	var resourceId string
+	if bucket.Spec.SecretRef != nil {
+		secretName := types.NamespacedName{
+			Namespace: bucket.GetNamespace(),
+			Name:      bucket.Spec.SecretRef.Name,
+		}
+
+		var secret corev1.Secret
+		if err := r.Get(ctx, secretName, &secret); err != nil {
+			return nil, fmt.Errorf("credentials secret error: %w", err)
+		}
+
+		if k, ok := secret.Data["accesskey"]; ok {
+			resourceId = string(k)
+		}
+		if k, ok := secret.Data["secretkey"]; ok {
+			key = string(k)
+		}
+	}
+
+	if key == "" && resourceId != "" {
+		cloudProvider, err := cloudprovider.NewCloudProvider(r.AzureCloudConfig)
+		if err != nil {
+			return nil, fmt.Errorf("unable to load azure cloud config '%s': %w", r.AzureCloudConfig, err)
+		}
+
+		tokens := strings.Split(resourceId, "/")
+		subscriptionId := tokens[2]
+		rg := tokens[4]
+		client := storagemgmt.NewAccountsClient(subscriptionId)
+		client.Authorizer = cloudProvider.Authorizer
+		accountName := strings.Split(endpointURL.Hostname(), ".")[0]
+
+		keys, err := client.ListKeys(ctx, rg, accountName, "")
+		if err != nil {
+			return nil, fmt.Errorf("unable to list keys for storage account '%s': %w", resourceId, err)
+		}
+
+		key = to.String((*keys.Keys)[0].Value)
+	}
+
+	if key == "" {
+		return nil, fmt.Errorf("no blob credentials found")
+	}
+
+	accountName := strings.Split(endpointURL.Host, ".")[0]
+	credential, err := azblob.NewSharedKeyCredential(accountName, key)
+	if err != nil {
+		return nil, fmt.Errorf("invalid credentials: %w", err)
+	}
+
+	blobPipeline := azblob.NewPipeline(credential, azblob.PipelineOptions{})
+	return &blobPipeline, nil
 }
 
 // checksum calculates the SHA1 checksum of the given root directory.

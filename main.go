@@ -77,6 +77,7 @@ func main() {
 		storagePath           string
 		storageAddr           string
 		storageAdvAddr        string
+		azureCloudConfig      string
 		concurrent            int
 		requeueDependency     time.Duration
 		watchAllNamespaces    bool
@@ -110,6 +111,9 @@ func main() {
 		"The max allowed size in bytes of a file in a Helm chart.")
 	flag.DurationVar(&requeueDependency, "requeue-dependency", 30*time.Second,
 		"The interval at which failing dependencies are reevaluated.")
+	flag.StringVar(&azureCloudConfig, "azure-cloud-config",
+		envOrDefault("AZURE_CLOUD_CONFIG", "/etc/kubernetes/azure.json"),
+		"Azure cloud config file.")
 
 	clientOptions.BindFlags(flag.CommandLine)
 	logOptions.BindFlags(flag.CommandLine)
@@ -217,6 +221,7 @@ func main() {
 		EventRecorder:         mgr.GetEventRecorderFor(controllerName),
 		ExternalEventRecorder: eventRecorder,
 		MetricsRecorder:       metricsRecorder,
+		AzureCloudConfig:      azureCloudConfig,
 	}).SetupWithManagerAndOptions(mgr, controllers.BucketReconcilerOptions{
 		MaxConcurrentReconciles: concurrent,
 	}); err != nil {

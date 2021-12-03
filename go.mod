@@ -7,6 +7,14 @@ replace github.com/fluxcd/source-controller/api => ./api
 require (
 	cloud.google.com/go v0.93.3 // indirect
 	cloud.google.com/go/storage v1.16.0
+	github.com/Azure/aad-pod-identity v1.8.5
+	github.com/Azure/azure-pipeline-go v0.2.3
+	github.com/Azure/azure-sdk-for-go v60.0.0+incompatible
+	github.com/Azure/azure-storage-blob-go v0.14.0
+	github.com/Azure/go-autorest/autorest v0.11.18
+	github.com/Azure/go-autorest/autorest/adal v0.9.13
+	github.com/Azure/go-autorest/autorest/to v0.4.0
+	github.com/Azure/go-autorest/autorest/validation v0.3.1 // indirect
 	github.com/Masterminds/semver/v3 v3.1.1
 	github.com/ProtonMail/go-crypto v0.0.0-20210428141323-04723f9f07d7
 	github.com/bshuster-repo/logrus-logstash-hook v1.0.2 // indirect
@@ -50,11 +58,13 @@ require (
 	golang.org/x/text v0.3.7 // indirect
 	google.golang.org/api v0.54.0
 	google.golang.org/genproto v0.0.0-20210830153122-0bac4d21c8ea // indirect
+	gopkg.in/yaml.v2 v2.4.0
 	gotest.tools v2.2.0+incompatible
 	helm.sh/helm/v3 v3.6.3
 	k8s.io/api v0.22.2
 	k8s.io/apimachinery v0.22.2
 	k8s.io/client-go v0.22.2
+	k8s.io/klog/v2 v2.9.0
 	sigs.k8s.io/controller-runtime v0.10.2
 	sigs.k8s.io/yaml v1.2.0
 )
