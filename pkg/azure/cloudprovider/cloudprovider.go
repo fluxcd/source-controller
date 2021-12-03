@@ -100,24 +100,12 @@ func (c *Client) Init() error {
 
 	var spt *adal.ServicePrincipalToken
 	if c.Config.UseManagedIdentityExtension {
-		// MSI endpoint is required for both types of MSI - system assigned and user assigned.
-		msiEndpoint, err := adal.GetMSIVMEndpoint()
+		klog.Infof("using user assigned identity: %s for authentication.", utils.RedactClientID(c.Config.UserAssignedIdentityID))
+		spt, err = adal.NewServicePrincipalTokenFromManagedIdentity(azureEnv.ResourceManagerEndpoint, &adal.ManagedIdentityOptions{
+			ClientID: c.Config.UserAssignedIdentityID,
+		})
 		if err != nil {
-			return fmt.Errorf("failed to get MSI endpoint, error: %+v", err)
-		}
-		// UserAssignedIdentityID is empty, so we are going to use system assigned MSI
-		if c.Config.UserAssignedIdentityID == "" {
-			klog.Infof("MIC using system assigned identity for authentication.")
-			spt, err = adal.NewServicePrincipalTokenFromMSI(msiEndpoint, azureEnv.ResourceManagerEndpoint)
-			if err != nil {
-				return fmt.Errorf("failed to get token from system-assigned identity, error: %+v", err)
-			}
-		} else { // User assigned identity usage.
-			klog.Infof("MIC using user assigned identity: %s for authentication.", utils.RedactClientID(c.Config.UserAssignedIdentityID))
-			spt, err = adal.NewServicePrincipalTokenFromMSIWithUserAssignedID(msiEndpoint, azureEnv.ResourceManagerEndpoint, c.Config.UserAssignedIdentityID)
-			if err != nil {
-				return fmt.Errorf("failed to get token from user-assigned identity, error: %+v", err)
-			}
+			return fmt.Errorf("failed to get token from user-assigned identity, error: %+v", err)
 		}
 	} else { // This is the default scenario - use service principal to get the token.
 		spt, err = adal.NewServicePrincipalToken(
