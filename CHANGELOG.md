@@ -2,6 +2,39 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.19.1
+
+**Release date:** 2021-12-03
+
+This prerelease changes the length of the SHA hex added to the SemVer metadata
+of a `HelmChart`, when `ReconcileStrategy` is set to `Revision`, to a short SHA
+hex of the first 12 characters. This is to prevent situations in which the
+SemVer would exceed the length limit of 63 characters when utilized in a Helm
+chart as a label value.
+
+Concrete example: `1.2.3+a4303ff0f6fb560ea032f9981c6bd7c7f146d083.1` becomes
+`1.2.3+a4303ff0f6fb.1`
+
+:warning: There have been additional user reports about charts complaining
+about a `+` character in the label:
+
+```
+metadata.labels: Invalid value: "1.2.3+a4303ff0f6fb560ea032f9981c6bd7c7f146d083.1": a valid label must be an empty string or consist of alphanumeric characters, '-', '_' or '.', and must start and end with an alphanumeric character (e.g. 'MyValue', or 'my_value', or '12345', regex used for validation is '(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])?')
+```
+
+Given the [Helm chart best practices mention to replace this character with a
+`_`](https://helm.sh/docs/chart_best_practices/conventions/#version-numbers),
+we encourage you to patch this in your (upstream) chart.
+Pseudo example using [template functions](https://helm.sh/docs/chart_template_guide/function_list/):
+
+```yaml
+{{- replace "+" "_" .Chart.Version | trunc 63 }}
+```
+
+Fixes:
+- controllers: use short SHA in chart SemVer meta
+  [#507](https://github.com/fluxcd/source-controller/pull/507)
+
 ## 0.19.0
 
 **Release date:** 2021-11-23
