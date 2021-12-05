@@ -17,8 +17,8 @@ spec:
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - jsonPath: .spec.url
-      name: URL
+    - jsonPath: .spec.endpoint
+      name: Endpoint
       type: string
     - jsonPath: .status.conditions[?(@.type=="Ready")].status
       name: Ready
