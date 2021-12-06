@@ -130,7 +130,6 @@ func (r *GitRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 			conditions.WithNegativePolarityConditions(
 				sourcev1.ArtifactUnavailableCondition,
 				sourcev1.FetchFailedCondition,
-				sourcev1.SourceVerifiedCondition,
 				sourcev1.IncludeUnavailableCondition,
 				sourcev1.ArtifactOutdatedCondition,
 			),
@@ -141,6 +140,7 @@ func (r *GitRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 			patch.WithOwnedConditions{
 				Conditions: []string{
 					sourcev1.ArtifactUnavailableCondition,
+					sourcev1.SourceVerifiedCondition,
 					sourcev1.FetchFailedCondition,
 					sourcev1.IncludeUnavailableCondition,
 					sourcev1.ArtifactOutdatedCondition,
@@ -223,7 +223,7 @@ func (r *GitRepositoryReconciler) reconcile(ctx context.Context, obj *sourcev1.G
 
 	// Reconcile includes from the storage
 	var includes artifactSet
-	if result, err := r.reconcileInclude(ctx, obj, includes, tmpDir); err != nil || result.IsZero() {
+	if result, err := r.reconcileInclude(ctx, obj, tmpDir); err != nil || result.IsZero() {
 		return ctrl.Result{RequeueAfter: r.requeueDependency}, err
 	}
 
@@ -463,8 +463,8 @@ func (r *GitRepositoryReconciler) reconcileArtifact(ctx context.Context, obj *so
 // If the artifactSet differs from the current set, it marks the object with v1beta1.ArtifactOutdatedCondition.
 //
 // The caller should assume a failure if an error is returned, or the Result is zero.
-func (r *GitRepositoryReconciler) reconcileInclude(ctx context.Context, obj *sourcev1.GitRepository, artifacts artifactSet, dir string) (ctrl.Result, error) {
-	artifacts = make(artifactSet, len(obj.Spec.Include))
+func (r *GitRepositoryReconciler) reconcileInclude(ctx context.Context, obj *sourcev1.GitRepository, dir string) (ctrl.Result, error) {
+	artifacts := make(artifactSet, len(obj.Spec.Include))
 	for i, incl := range obj.Spec.Include {
 		// Do this first as it is much cheaper than copy operations
 		toPath, err := securejoin.SecureJoin(dir, incl.GetToPath())
