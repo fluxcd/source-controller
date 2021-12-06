@@ -1018,8 +1018,7 @@ func TestGitRepositoryReconciler_reconcileInclude(t *testing.T) {
 			g.Expect(err).NotTo(HaveOccurred())
 			defer os.RemoveAll(tmpDir)
 
-			var artifacts artifactSet
-			got, err := r.reconcileInclude(ctx, obj, artifacts, tmpDir)
+			got, err := r.reconcileInclude(ctx, obj, tmpDir)
 			g.Expect(obj.GetConditions()).To(conditions.MatchConditions(tt.assertConditions))
 			g.Expect(err != nil).To(Equal(tt.wantErr))
 			g.Expect(got).To(Equal(tt.want))
