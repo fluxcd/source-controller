@@ -39,7 +39,12 @@ endif
 
 ifeq ($(shell uname -s),Darwin)
 	LIBGIT2 := $(LIBGIT2_LIB_PATH)/libgit2.$(LIBGIT2_VERSION).dylib
+	HAS_BREW := $(shell brew --version 2>/dev/null)
+ifdef HAS_BREW
+	HAS_OPENSSL := $(shell brew --prefix openssl@1.1)
 endif
+endif
+
 
 # API (doc) generation utilities
 CONTROLLER_GEN_VERSION ?= v0.5.0
@@ -52,23 +57,53 @@ else
 GOBIN=$(shell go env GOBIN)
 endif
 
+ifeq ($(strip ${PKG_CONFIG_PATH}),)
+	MAKE_PKG_CONFIG_PATH = $(LIBGIT2_LIB_PATH)/pkgconfig
+else
+	MAKE_PKG_CONFIG_PATH = ${PKG_CONFIG_PATH}:$(LIBGIT2_LIB_PATH)/pkgconfig
+endif
+
+ifdef HAS_OPENSSL
+	MAKE_PKG_CONFIG_PATH := $(MAKE_PKG_CONFIG_PATH):$(HAS_OPENSSL)/lib/pkgconfig
+endif
+
 all: build
 
 build: $(LIBGIT2) ## Build manager binary
-	PKG_CONFIG_PATH=$(LIBGIT2_LIB_PATH)/pkgconfig/ \
+ifeq ($(shell uname -s),Darwin)
+	PKG_CONFIG_PATH=$(MAKE_PKG_CONFIG_PATH) \
+	CGO_LDFLAGS="-Wl,-rpath,$(LIBGIT2_LIB_PATH)" \
 	go build -o bin/manager main.go
+else
+	PKG_CONFIG_PATH=$(MAKE_PKG_CONFIG_PATH) \
+	go build -o bin/manager main.go
+endif
 
 test: $(LIBGIT2) test-api  ## Run tests
+ifeq ($(shell uname -s),Darwin)
 	LD_LIBRARY_PATH=$(LIBGIT2_LIB_PATH) \
-	PKG_CONFIG_PATH=$(LIBGIT2_LIB_PATH)/pkgconfig/ \
+	PKG_CONFIG_PATH=$(MAKE_PKG_CONFIG_PATH) \
+	CGO_LDFLAGS="-Wl,-rpath,$(LIBGIT2_LIB_PATH)" \
 	go test ./... -coverprofile cover.out
+else
+	LD_LIBRARY_PATH=$(LIBGIT2_LIB_PATH) \
+	PKG_CONFIG_PATH=$(MAKE_PKG_CONFIG_PATH) \
+	go test ./... -coverprofile cover.out
+endif
 
 test-api: ## Run api tests
 	cd api; go test ./... -coverprofile cover.out
 
 run: $(LIBGIT2) generate fmt vet manifests  ## Run against the configured Kubernetes cluster in ~/.kube/config
+ifeq ($(shell uname -s),Darwin)
+	LD_LIBRARY_PATH=$(LIBGIT2_LIB_PATH) \
+	CGO_LDFLAGS="-Wl,-rpath,$(LIBGIT2_LIB_PATH)" \
+	go run ./main.go
+else
 	LD_LIBRARY_PATH=$(LIBGIT2_LIB_PATH) \
 	go run ./main.go
+endif
+
 
 install: manifests  ## Install CRDs into a cluster
 	kustomize build config/crd | kubectl apply -f -
@@ -102,9 +137,16 @@ fmt:  ## Run go fmt against code
 	cd api; go fmt ./...
 
 vet: $(LIBGIT2)	## Run go vet against code
-	PKG_CONFIG_PATH=$(LIBGIT2_LIB_PATH)/pkgconfig \
+ifeq ($(shell uname -s),Darwin)
+	PKG_CONFIG_PATH=$(MAKE_PKG_CONFIG_PATH) \
+	CGO_LDFLAGS="-Wl,-rpath,$(LIBGIT2_LIB_PATH)" \
 	go vet ./...
 	cd api; go vet ./...
+else
+	PKG_CONFIG_PATH=$(MAKE_PKG_CONFIG_PATH) \
+	go vet ./...
+	cd api; go vet ./...
+endif
 
 generate: controller-gen  ## Generate API code
 	cd api; $(CONTROLLER_GEN) object:headerFile="../hack/boilerplate.go.txt" paths="./..."
