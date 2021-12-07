@@ -20,7 +20,6 @@ import (
 	"context"
 	"crypto/sha1"
 	"fmt"
-	"io/ioutil"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -458,7 +457,7 @@ func (r *BucketReconciler) reconcileWithAzureBlob(ctx context.Context, bucket so
 			return fmt.Errorf("failed to create local directory '%s': %w", blobURL, err)
 		}
 
-		err = ioutil.WriteFile(localPath, content, 0600)
+		err = os.WriteFile(localPath, content, 0600)
 		return err
 	}
 
@@ -483,9 +482,9 @@ func (r *BucketReconciler) reconcileWithAzureBlob(ctx context.Context, bucket so
 	matcher := sourceignore.NewMatcher(ps)
 
 	// download blob content
-	marker := azblob.Marker{Val: nil}
-	for true {
-		resp, err := blobContainer.ListBlobsFlatSegment(ctx, marker, azblob.ListBlobsSegmentOptions{
+	marker := azblob.Marker{}
+	for {
+		resp, err := blobContainer.ListBlobsFlatSegment(ctxTimeout, marker, azblob.ListBlobsSegmentOptions{
 			Prefix: "",
 		})
 		if err != nil {
@@ -496,7 +495,7 @@ func (r *BucketReconciler) reconcileWithAzureBlob(ctx context.Context, bucket so
 			break
 		}
 
-		var eg errgroup.Group
+		eg, ctxErr := errgroup.WithContext(ctxTimeout)
 		for i := range resp.Segment.BlobItems {
 			object := resp.Segment.BlobItems[i]
 			eg.Go(func() error {
@@ -509,7 +508,7 @@ func (r *BucketReconciler) reconcileWithAzureBlob(ctx context.Context, bucket so
 				}
 
 				localPath := filepath.Join(tempDir, object.Name)
-				if err := downloadBlobToLocalFile(ctxTimeout, *azBlobPipeline, blobContainer.URL(), object.Name, localPath); err != nil {
+				if err := downloadBlobToLocalFile(ctxErr, *azBlobPipeline, blobContainer.URL(), object.Name, localPath); err != nil {
 					return fmt.Errorf("failed to download blob items from blob container '%s': %w", blobContainerURLString, err)
 				}
 
