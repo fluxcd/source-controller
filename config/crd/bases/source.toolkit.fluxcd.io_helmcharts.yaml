@@ -128,6 +128,8 @@ spec:
             - sourceRef
             type: object
           status:
+            default:
+              observedGeneration: -1
             description: HelmChartStatus defines the observed state of the HelmChart.
             properties:
               artifact:
