@@ -101,6 +101,9 @@ func (b *localChartBuilder) Build(ctx context.Context, ref Reference, p string, 
 		result.Version = ver.String()
 	}
 
+	isChartDir := pathIsDir(localRef.Path)
+	requiresPackaging := isChartDir || opts.VersionMetadata != "" || len(opts.GetValuesFiles()) != 0
+
 	// If all the following is true, we do not need to package the chart:
 	// - Chart name from cached chart matches resolved name
 	// - Chart version from cached chart matches calculated version
@@ -112,7 +115,9 @@ func (b *localChartBuilder) Build(ctx context.Context, ref Reference, p string, 
 			if err = curMeta.Validate(); err == nil {
 				if result.Name == curMeta.Name && result.Version == curMeta.Version {
 					result.Path = opts.CachedChart
-					result.ValuesFiles = opts.ValuesFiles
+					result.ValuesFiles = opts.GetValuesFiles()
+					result.Packaged = requiresPackaging
+
 					return result, nil
 				}
 			}
@@ -121,10 +126,9 @@ func (b *localChartBuilder) Build(ctx context.Context, ref Reference, p string, 
 
 	// If the chart at the path is already packaged and no custom values files
 	// options are set, we can copy the chart without making modifications
-	isChartDir := pathIsDir(localRef.Path)
-	if !isChartDir && len(opts.GetValuesFiles()) == 0 {
+	if !requiresPackaging {
 		if err = copyFileToPath(localRef.Path, p); err != nil {
-			return nil, &BuildError{Reason: ErrChartPull, Err: err}
+			return result, &BuildError{Reason: ErrChartPull, Err: err}
 		}
 		result.Path = p
 		return result, nil
@@ -134,7 +138,7 @@ func (b *localChartBuilder) Build(ctx context.Context, ref Reference, p string, 
 	var mergedValues map[string]interface{}
 	if len(opts.GetValuesFiles()) > 0 {
 		if mergedValues, err = mergeFileValues(localRef.WorkDir, opts.ValuesFiles); err != nil {
-			return nil, &BuildError{Reason: ErrValuesFilesMerge, Err: err}
+			return result, &BuildError{Reason: ErrValuesFilesMerge, Err: err}
 		}
 	}
 
@@ -143,7 +147,7 @@ func (b *localChartBuilder) Build(ctx context.Context, ref Reference, p string, 
 	// or because we have merged values and need to repackage
 	chart, err := loader.Load(localRef.Path)
 	if err != nil {
-		return nil, &BuildError{Reason: ErrChartPackage, Err: err}
+		return result, &BuildError{Reason: ErrChartPackage, Err: err}
 	}
 	// Set earlier resolved version (with metadata)
 	chart.Metadata.Version = result.Version
@@ -151,7 +155,7 @@ func (b *localChartBuilder) Build(ctx context.Context, ref Reference, p string, 
 	// Overwrite default values with merged values, if any
 	if ok, err = OverwriteChartDefaultValues(chart, mergedValues); ok || err != nil {
 		if err != nil {
-			return nil, &BuildError{Reason: ErrValuesFilesMerge, Err: err}
+			return result, &BuildError{Reason: ErrValuesFilesMerge, Err: err}
 		}
 		result.ValuesFiles = opts.GetValuesFiles()
 	}
@@ -160,19 +164,19 @@ func (b *localChartBuilder) Build(ctx context.Context, ref Reference, p string, 
 	if isChartDir {
 		if b.dm == nil {
 			err = fmt.Errorf("local chart builder requires dependency manager for unpackaged charts")
-			return nil, &BuildError{Reason: ErrDependencyBuild, Err: err}
+			return result, &BuildError{Reason: ErrDependencyBuild, Err: err}
 		}
 		if result.ResolvedDependencies, err = b.dm.Build(ctx, ref, chart); err != nil {
-			return nil, &BuildError{Reason: ErrDependencyBuild, Err: err}
+			return result, &BuildError{Reason: ErrDependencyBuild, Err: err}
 		}
 	}
 
 	// Package the chart
 	if err = packageToPath(chart, p); err != nil {
-		return nil, &BuildError{Reason: ErrChartPackage, Err: err}
+		return result, &BuildError{Reason: ErrChartPackage, Err: err}
 	}
 	result.Path = p
-	result.Packaged = true
+	result.Packaged = requiresPackaging
 	return result, nil
 }
 

@@ -115,15 +115,16 @@ func (o BuildOptions) GetValuesFiles() []string {
 	return o.ValuesFiles
 }
 
-// Build contains the Builder.Build result, including specific
+// Build contains the (partial) Builder.Build result, including specific
 // information about the built chart like ResolvedDependencies.
 type Build struct {
-	// Path is the absolute path to the packaged chart.
-	Path string
-	// Name of the packaged chart.
+	// Name of the chart.
 	Name string
-	// Version of the packaged chart.
+	// Version of the chart.
 	Version string
+	// Path is the absolute path to the packaged chart.
+	// Can be empty, in which case a failure should be assumed.
+	Path string
 	// ValuesFiles is the list of files used to compose the chart's
 	// default "values.yaml".
 	ValuesFiles []string
@@ -138,28 +139,43 @@ type Build struct {
 
 // Summary returns a human-readable summary of the Build.
 func (b *Build) Summary() string {
-	if b == nil || b.Name == "" || b.Version == "" {
-		return "No chart build."
+	if !b.HasMetadata() {
+		return "No chart build"
 	}
 
 	var s strings.Builder
 
-	var action = "Pulled"
-	if b.Packaged {
-		action = "Packaged"
+	var action = "New"
+	if b.Path != "" {
+		action = "Pulled"
+		if b.Packaged {
+			action = "Packaged"
+		}
 	}
 	s.WriteString(fmt.Sprintf("%s '%s' chart with version '%s'", action, b.Name, b.Version))
 
-	if b.Packaged && len(b.ValuesFiles) > 0 {
-		s.WriteString(fmt.Sprintf(", with merged values files %v", b.ValuesFiles))
+	if len(b.ValuesFiles) > 0 {
+		s.WriteString(fmt.Sprintf(" and merged values files %v", b.ValuesFiles))
 	}
 
-	if b.Packaged && b.ResolvedDependencies > 0 {
-		s.WriteString(fmt.Sprintf(", resolving %d dependencies before packaging", b.ResolvedDependencies))
-	}
-
-	s.WriteString(".")
 	return s.String()
+}
+
+// HasMetadata returns if the Build contains chart metadata.
+//
+// NOTE: This may return True while the build did not Complete successfully.
+// Which means it was able to successfully collect the metadata from the chart,
+// but failed further into the process.
+func (b *Build) HasMetadata() bool {
+	if b == nil {
+		return false
+	}
+	return b.Name != "" && b.Version != ""
+}
+
+// Complete returns if the Build completed successfully.
+func (b *Build) Complete() bool {
+	return b.HasMetadata() && b.Path != ""
 }
 
 // String returns the Path of the Build.
