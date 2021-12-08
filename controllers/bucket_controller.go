@@ -35,6 +35,7 @@ import (
 	"golang.org/x/sync/semaphore"
 	"google.golang.org/api/option"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	kerrors "k8s.io/apimachinery/pkg/util/errors"
@@ -167,6 +168,10 @@ func (r *BucketReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 
 		// Finally, patch the resource
 		if err := patchHelper.Patch(ctx, obj, patchOpts...); err != nil {
+			// Ignore patch error "not found" when the object is being deleted.
+			if !obj.ObjectMeta.DeletionTimestamp.IsZero() {
+				err = kerrors.FilterOut(err, func(e error) bool { return apierrors.IsNotFound(e) })
+			}
 			retErr = kerrors.NewAggregate([]error{retErr, err})
 		}
 
