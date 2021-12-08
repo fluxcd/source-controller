@@ -138,12 +138,32 @@ func TestChartBuildResult_Summary(t *testing.T) {
 		want  string
 	}{
 		{
-			name: "Simple",
+			name: "Build with metadata",
 			build: &Build{
 				Name:    "chart",
 				Version: "1.2.3-rc.1+bd6bf40",
 			},
-			want: "Pulled 'chart' chart with version '1.2.3-rc.1+bd6bf40'.",
+			want: "New 'chart' chart with version '1.2.3-rc.1+bd6bf40'",
+		},
+		{
+			name: "Pulled chart",
+			build: &Build{
+				Name:    "chart",
+				Version: "1.2.3-rc.1+bd6bf40",
+				Path:    "chart.tgz",
+			},
+			want: "Pulled 'chart' chart with version '1.2.3-rc.1+bd6bf40'",
+		},
+		{
+			name: "Packaged chart",
+			build: &Build{
+				Name:        "chart",
+				Version:     "arbitrary-version",
+				Packaged:    true,
+				ValuesFiles: []string{"a.yaml", "b.yaml"},
+				Path:        "chart.tgz",
+			},
+			want: "Packaged 'chart' chart with version 'arbitrary-version' and merged values files [a.yaml b.yaml]",
 		},
 		{
 			name: "With values files",
@@ -152,28 +172,19 @@ func TestChartBuildResult_Summary(t *testing.T) {
 				Version:     "arbitrary-version",
 				Packaged:    true,
 				ValuesFiles: []string{"a.yaml", "b.yaml"},
+				Path:        "chart.tgz",
 			},
-			want: "Packaged 'chart' chart with version 'arbitrary-version', with merged values files [a.yaml b.yaml].",
-		},
-		{
-			name: "With dependencies",
-			build: &Build{
-				Name:                 "chart",
-				Version:              "arbitrary-version",
-				Packaged:             true,
-				ResolvedDependencies: 5,
-			},
-			want: "Packaged 'chart' chart with version 'arbitrary-version', resolving 5 dependencies before packaging.",
+			want: "Packaged 'chart' chart with version 'arbitrary-version' and merged values files [a.yaml b.yaml]",
 		},
 		{
 			name:  "Empty build",
 			build: &Build{},
-			want:  "No chart build.",
+			want:  "No chart build",
 		},
 		{
 			name:  "Nil build",
 			build: nil,
-			want:  "No chart build.",
+			want:  "No chart build",
 		},
 	}
 	for _, tt := range tests {

@@ -30,6 +30,7 @@ import (
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/gittestserver"
 	"github.com/fluxcd/pkg/helmtestserver"
+	"github.com/fluxcd/pkg/runtime/conditions"
 	"github.com/go-git/go-billy/v5/memfs"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
@@ -49,7 +50,7 @@ import (
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
 )
 
-var _ = Describe("HelmChartReconciler", func() {
+var _ = FDescribe("HelmChartReconciler", func() {
 
 	const (
 		timeout       = time.Second * 30
@@ -270,7 +271,7 @@ var _ = Describe("HelmChartReconciler", func() {
 				got := &sourcev1.HelmChart{}
 				Eventually(func() bool {
 					_ = k8sClient.Get(context.Background(), key, got)
-					return got.Status.ObservedGeneration > updated.Status.ObservedGeneration &&
+					return got.Status.ObservedGeneration > updated.Status.ObservedGeneration && got.GetArtifact() != nil &&
 						ginkgoTestStorage.ArtifactExist(*got.Status.Artifact)
 				}, timeout, interval).Should(BeTrue())
 				f, err := os.Stat(ginkgoTestStorage.LocalPath(*got.Status.Artifact))
@@ -292,6 +293,9 @@ var _ = Describe("HelmChartReconciler", func() {
 			Eventually(func() bool {
 				_ = k8sClient.Get(context.Background(), key, updated)
 				for _, c := range updated.Status.Conditions {
+					fmt.Fprintf(GinkgoWriter, "condition type: %s\n", c.Type)
+					fmt.Fprintf(GinkgoWriter, "condition reason: %s\n", c.Reason)
+					fmt.Fprintf(GinkgoWriter, "condition message: %s\n", c.Message)
 					if c.Reason == sourcev1.ChartPullFailedReason &&
 						strings.Contains(c.Message, "failed to retrieve source") {
 						return true
@@ -394,12 +398,8 @@ var _ = Describe("HelmChartReconciler", func() {
 			Expect(k8sClient.Update(context.Background(), chart)).Should(Succeed())
 			Eventually(func() bool {
 				_ = k8sClient.Get(context.Background(), key, chart)
-				for _, c := range chart.Status.Conditions {
-					if c.Reason == sourcev1.ChartPullFailedReason {
-						return true
-					}
-				}
-				return false
+				return conditions.GetReason(chart, sourcev1.FetchFailedCondition) == "InvalidChartReference" &&
+					conditions.IsStalled(chart)
 			}, timeout, interval).Should(BeTrue())
 			Expect(chart.GetArtifact()).NotTo(BeNil())
 			Expect(chart.Status.Artifact.Revision).Should(Equal("0.1.1"))
@@ -495,13 +495,7 @@ var _ = Describe("HelmChartReconciler", func() {
 			got := &sourcev1.HelmChart{}
 			Eventually(func() bool {
 				_ = k8sClient.Get(context.Background(), key, got)
-				for _, c := range got.Status.Conditions {
-					if c.Reason == sourcev1.AuthenticationFailedReason &&
-						strings.Contains(c.Message, "auth secret error") {
-						return true
-					}
-				}
-				return false
+				return conditions.GetReason(got, sourcev1.FetchFailedCondition) == sourcev1.AuthenticationFailedReason
 			}, timeout, interval).Should(BeTrue())
 
 			By("Applying secret with missing keys")
@@ -515,7 +509,7 @@ var _ = Describe("HelmChartReconciler", func() {
 				got := &sourcev1.HelmChart{}
 				_ = k8sClient.Get(context.Background(), key, got)
 				for _, c := range got.Status.Conditions {
-					if c.Reason == sourcev1.ChartPullFailedReason &&
+					if c.Reason == "ChartPullError" &&
 						strings.Contains(c.Message, "401 Unauthorized") {
 						return true
 					}
@@ -833,7 +827,7 @@ var _ = Describe("HelmChartReconciler", func() {
 					// if the artifact was changed due to the current update.
 					// Use status condition to be sure.
 					for _, condn := range got.Status.Conditions {
-						if strings.Contains(condn.Message, "with merged values files [./testdata/charts/helmchart/override.yaml]") &&
+						if strings.Contains(condn.Message, "merged values files [./testdata/charts/helmchart/override.yaml]") &&
 							ginkgoTestStorage.ArtifactExist(*got.Status.Artifact) {
 							return true
 						}

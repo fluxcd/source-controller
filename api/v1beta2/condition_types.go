@@ -32,6 +32,10 @@ const (
 	// Source may be outdated.
 	// This is a "negative polarity" or "abnormal-true" type, and is only present on the resource if it is True.
 	FetchFailedCondition string = "FetchFailed"
+
+	// BuildFailedCondition indicates a transient or persistent build failure of a Source's Artifact.
+	// If True, the Source can be in an ArtifactOutdatedCondition
+	BuildFailedCondition string = "BuildFailed"
 )
 
 const (

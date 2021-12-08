@@ -82,12 +82,13 @@ func (b *remoteChartBuilder) Build(_ context.Context, ref Reference, p string, o
 	cv, err := b.remote.Get(remoteRef.Name, remoteRef.Version)
 	if err != nil {
 		err = fmt.Errorf("failed to get chart version for remote reference: %w", err)
-		return nil, &BuildError{Reason: ErrChartPull, Err: err}
+		return nil, &BuildError{Reason: ErrChartReference, Err: err}
 	}
 
 	result := &Build{}
 	result.Name = cv.Name
 	result.Version = cv.Version
+
 	// Set build specific metadata if instructed
 	if opts.VersionMetadata != "" {
 		ver, err := semver.NewVersion(result.Version)
@@ -102,6 +103,8 @@ func (b *remoteChartBuilder) Build(_ context.Context, ref Reference, p string, o
 		result.Version = ver.String()
 	}
 
+	requiresPackaging := len(opts.GetValuesFiles()) != 0 || opts.VersionMetadata != ""
+
 	// If all the following is true, we do not need to download and/or build the chart:
 	// - Chart name from cached chart matches resolved name
 	// - Chart version from cached chart matches calculated version
@@ -114,6 +117,7 @@ func (b *remoteChartBuilder) Build(_ context.Context, ref Reference, p string, o
 				if result.Name == curMeta.Name && result.Version == curMeta.Version {
 					result.Path = opts.CachedChart
 					result.ValuesFiles = opts.GetValuesFiles()
+					result.Packaged = requiresPackaging
 					return result, nil
 				}
 			}
@@ -124,12 +128,12 @@ func (b *remoteChartBuilder) Build(_ context.Context, ref Reference, p string, o
 	res, err := b.remote.DownloadChart(cv)
 	if err != nil {
 		err = fmt.Errorf("failed to download chart for remote reference: %w", err)
-		return nil, &BuildError{Reason: ErrChartPull, Err: err}
+		return result, &BuildError{Reason: ErrChartPull, Err: err}
 	}
 
 	// Use literal chart copy from remote if no custom values files options are
-	// set or build option version metadata isn't set.
-	if len(opts.GetValuesFiles()) == 0 && opts.VersionMetadata == "" {
+	// set or version metadata isn't set.
+	if !requiresPackaging {
 		if err = validatePackageAndWriteToPath(res, p); err != nil {
 			return nil, &BuildError{Reason: ErrChartPull, Err: err}
 		}
@@ -141,14 +145,14 @@ func (b *remoteChartBuilder) Build(_ context.Context, ref Reference, p string, o
 	var chart *helmchart.Chart
 	if chart, err = loader.LoadArchive(res); err != nil {
 		err = fmt.Errorf("failed to load downloaded chart: %w", err)
-		return nil, &BuildError{Reason: ErrChartPackage, Err: err}
+		return result, &BuildError{Reason: ErrChartPackage, Err: err}
 	}
 	chart.Metadata.Version = result.Version
 
 	mergedValues, err := mergeChartValues(chart, opts.ValuesFiles)
 	if err != nil {
 		err = fmt.Errorf("failed to merge chart values: %w", err)
-		return nil, &BuildError{Reason: ErrValuesFilesMerge, Err: err}
+		return result, &BuildError{Reason: ErrValuesFilesMerge, Err: err}
 	}
 	// Overwrite default values with merged values, if any
 	if ok, err = OverwriteChartDefaultValues(chart, mergedValues); ok || err != nil {

@@ -137,9 +137,9 @@ var _ = BeforeSuite(func() {
 	Expect(err).ToNot(HaveOccurred(), "failed to setup HelmRepositoryReconciler")
 
 	err = (&HelmChartReconciler{
-		Client:  k8sManager.GetClient(),
-		Scheme:  scheme.Scheme,
-		Storage: ginkgoTestStorage,
+		Client:        k8sManager.GetClient(),
+		Storage:       ginkgoTestStorage,
+		EventRecorder: record.NewFakeRecorder(32),
 		Getters: getter.Providers{getter.Provider{
 			Schemes: []string{"http", "https"},
 			New:     getter.NewHTTPGetter,
