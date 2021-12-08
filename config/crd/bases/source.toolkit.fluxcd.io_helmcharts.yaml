@@ -517,10 +517,18 @@ spec:
                   reconcile request value, so a change of the annotation value can
                   be detected.
                 type: string
+              observedChartName:
+                description: ObservedChartName is the last observed chart name as
+                  defined by the resolved chart reference.
+                type: string
               observedGeneration:
                 description: ObservedGeneration is the last observed generation.
                 format: int64
                 type: integer
+              observedSourceArtifactRevision:
+                description: ObservedSourceArtifactRevision is the last observed Artifact.Revision
+                  of the Source reference.
+                type: string
               url:
                 description: URL is the download link for the last chart pulled.
                 type: string

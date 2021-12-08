@@ -189,12 +189,11 @@ func main() {
 		os.Exit(1)
 	}
 	if err = (&controllers.HelmChartReconciler{
-		Client:          mgr.GetClient(),
-		Scheme:          mgr.GetScheme(),
-		Storage:         storage,
-		Getters:         getters,
-		EventRecorder:   eventRecorder,
-		MetricsRecorder: metricsH.MetricsRecorder,
+		Client:        mgr.GetClient(),
+		Storage:       storage,
+		Getters:       getters,
+		EventRecorder: eventRecorder,
+		Metrics:       metricsH,
 	}).SetupWithManagerAndOptions(mgr, controllers.HelmChartReconcilerOptions{
 		MaxConcurrentReconciles: concurrent,
 	}); err != nil {
