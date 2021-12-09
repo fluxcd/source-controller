@@ -166,6 +166,8 @@ spec:
             - url
             type: object
           status:
+            default:
+              observedGeneration: -1
             description: GitRepositoryStatus defines the observed state of a Git repository.
             properties:
               artifact:
