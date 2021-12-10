@@ -1,5 +1,6 @@
 ARG BASE_VARIANT=bullseye
-ARG GO_VERSION=1.16.8
+ARG GO_VERSION=1.16.12
+ARG GO_LATEST=1.17.5
 ARG XX_VERSION=1.0.0-rc.2
 
 ARG LIBGIT2_IMG=ghcr.io/fluxcd/golang-with-libgit2
@@ -9,7 +10,7 @@ FROM --platform=$BUILDPLATFORM tonistiigi/xx:${XX_VERSION} AS xx
 FROM ${LIBGIT2_IMG}:${LIBGIT2_TAG} as libgit2
 
 FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-${BASE_VARIANT} as gostable
-FROM --platform=$BUILDPLATFORM golang:1.17rc1-${BASE_VARIANT} AS golatest
+FROM --platform=$BUILDPLATFORM golang:${GO_LATEST}-${BASE_VARIANT} AS golatest
 
 FROM gostable AS go-linux
 
