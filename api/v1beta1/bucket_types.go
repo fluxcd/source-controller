@@ -17,7 +17,8 @@ limitations under the License.
 package v1beta1
 
 import (
-	apimeta "k8s.io/apimachinery/pkg/api/meta"
+	"time"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fluxcd/pkg/apis/acl"
@@ -27,6 +28,13 @@ import (
 const (
 	// BucketKind is the string representation of a Bucket.
 	BucketKind = "Bucket"
+)
+
+const (
+	GenericBucketProvider string = "generic"
+	AmazonBucketProvider  string = "aws"
+	GoogleBucketProvider  string = "gcp"
+	AzureBlobProvider     string = "azure"
 )
 
 // BucketSpec defines the desired state of an S3 compatible bucket
@@ -82,13 +90,6 @@ type BucketSpec struct {
 	AccessFrom *acl.AccessFrom `json:"accessFrom,omitempty"`
 }
 
-const (
-	GenericBucketProvider string = "generic"
-	AmazonBucketProvider  string = "aws"
-	GoogleBucketProvider  string = "gcp"
-	AzureBlobProvider     string = "azure"
-)
-
 // BucketStatus defines the observed state of a bucket
 type BucketStatus struct {
 	// ObservedGeneration is the last observed generation.
@@ -120,66 +121,43 @@ const (
 	BucketOperationFailedReason string = "BucketOperationFailed"
 )
 
-// BucketProgressing resets the conditions of the Bucket to metav1.Condition of
-// type meta.ReadyCondition with status 'Unknown' and meta.ProgressingReason
-// reason and message. It returns the modified Bucket.
-func BucketProgressing(bucket Bucket) Bucket {
-	bucket.Status.ObservedGeneration = bucket.Generation
-	bucket.Status.URL = ""
-	bucket.Status.Conditions = []metav1.Condition{}
-	meta.SetResourceCondition(&bucket, meta.ReadyCondition, metav1.ConditionUnknown, meta.ProgressingReason, "reconciliation in progress")
-	return bucket
+// GetConditions returns the status conditions of the object.
+func (in Bucket) GetConditions() []metav1.Condition {
+	return in.Status.Conditions
 }
 
-// BucketReady sets the given Artifact and URL on the Bucket and sets the
-// meta.ReadyCondition to 'True', with the given reason and message. It returns
-// the modified Bucket.
-func BucketReady(bucket Bucket, artifact Artifact, url, reason, message string) Bucket {
-	bucket.Status.Artifact = &artifact
-	bucket.Status.URL = url
-	meta.SetResourceCondition(&bucket, meta.ReadyCondition, metav1.ConditionTrue, reason, message)
-	return bucket
+// SetConditions sets the status conditions on the object.
+func (in *Bucket) SetConditions(conditions []metav1.Condition) {
+	in.Status.Conditions = conditions
 }
 
-// BucketNotReady sets the meta.ReadyCondition on the Bucket to 'False', with
-// the given reason and message. It returns the modified Bucket.
-func BucketNotReady(bucket Bucket, reason, message string) Bucket {
-	meta.SetResourceCondition(&bucket, meta.ReadyCondition, metav1.ConditionFalse, reason, message)
-	return bucket
+// GetRequeueAfter returns the duration after which the source must be reconciled again.
+func (in Bucket) GetRequeueAfter() time.Duration {
+	return in.Spec.Interval.Duration
 }
 
-// BucketReadyMessage returns the message of the metav1.Condition of type
-// meta.ReadyCondition with status 'True' if present, or an empty string.
-func BucketReadyMessage(bucket Bucket) string {
-	if c := apimeta.FindStatusCondition(bucket.Status.Conditions, meta.ReadyCondition); c != nil {
-		if c.Status == metav1.ConditionTrue {
-			return c.Message
-		}
-	}
-	return ""
+// GetInterval returns the interval at which the source is reconciled.
+// Deprecated: use GetRequeueAfter instead.
+func (in Bucket) GetInterval() metav1.Duration {
+	return in.Spec.Interval
 }
 
-// GetArtifact returns the latest artifact from the source if present in the
-// status sub-resource.
+// GetArtifact returns the latest artifact from the source if present in the status sub-resource.
 func (in *Bucket) GetArtifact() *Artifact {
 	return in.Status.Artifact
 }
 
-// GetStatusConditions returns a pointer to the Status.Conditions slice
+// GetStatusConditions returns a pointer to the Status.Conditions slice.
+// Deprecated: use GetConditions instead.
 func (in *Bucket) GetStatusConditions() *[]metav1.Condition {
 	return &in.Status.Conditions
-}
-
-// GetInterval returns the interval at which the source is updated.
-func (in *Bucket) GetInterval() metav1.Duration {
-	return in.Spec.Interval
 }
 
 // +genclient
 // +genclient:Namespaced
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-// +kubebuilder:printcolumn:name="URL",type=string,JSONPath=`.spec.url`
+// +kubebuilder:printcolumn:name="Endpoint",type=string,JSONPath=`.spec.endpoint`
 // +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type==\"Ready\")].status",description=""
 // +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.conditions[?(@.type==\"Ready\")].message",description=""
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description=""

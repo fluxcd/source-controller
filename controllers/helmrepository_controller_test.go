@@ -99,7 +99,7 @@ var _ = Describe("HelmRepositoryReconciler", func() {
 			got := &sourcev1.HelmRepository{}
 			Eventually(func() bool {
 				_ = k8sClient.Get(context.Background(), key, got)
-				return got.Status.Artifact != nil && storage.ArtifactExist(*got.Status.Artifact)
+				return got.Status.Artifact != nil && ginkgoTestStorage.ArtifactExist(*got.Status.Artifact)
 			}, timeout, interval).Should(BeTrue())
 
 			By("Updating the chart index")
@@ -112,7 +112,7 @@ var _ = Describe("HelmRepositoryReconciler", func() {
 				_ = k8sClient.Get(context.Background(), key, now)
 				// Test revision change and garbage collection
 				return now.Status.Artifact.Revision != got.Status.Artifact.Revision &&
-					!storage.ArtifactExist(*got.Status.Artifact)
+					!ginkgoTestStorage.ArtifactExist(*got.Status.Artifact)
 			}, timeout, interval).Should(BeTrue())
 
 			updated := &sourcev1.HelmRepository{}
@@ -291,7 +291,7 @@ var _ = Describe("HelmRepositoryReconciler", func() {
 				got := &sourcev1.HelmRepository{}
 				_ = k8sClient.Get(context.Background(), key, got)
 				return got.Status.Artifact != nil &&
-					storage.ArtifactExist(*got.Status.Artifact)
+					ginkgoTestStorage.ArtifactExist(*got.Status.Artifact)
 			}, timeout, interval).Should(BeTrue())
 
 			By("Expecting missing secret error")
@@ -385,7 +385,7 @@ var _ = Describe("HelmRepositoryReconciler", func() {
 				got := &sourcev1.HelmRepository{}
 				_ = k8sClient.Get(context.Background(), key, got)
 				return got.Status.Artifact != nil &&
-					storage.ArtifactExist(*got.Status.Artifact)
+					ginkgoTestStorage.ArtifactExist(*got.Status.Artifact)
 			}, timeout, interval).Should(BeTrue())
 
 			By("Expecting missing secret error")

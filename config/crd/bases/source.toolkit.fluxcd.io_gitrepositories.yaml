@@ -93,7 +93,8 @@ spec:
                   to find out what those are.
                 type: string
               include:
-                description: Extra git repositories to map into the repository
+                description: Include defines a list of GitRepository resources which
+                  artifacts should be included in the artifact produced for this resource.
                 items:
                   description: GitRepositoryInclude defines a source with a from and
                     to path.
@@ -106,7 +107,7 @@ spec:
                       description: Reference to a GitRepository to include.
                       properties:
                         name:
-                          description: Name of the referent
+                          description: Name of the referent.
                           type: string
                       required:
                       - name
@@ -149,17 +150,18 @@ spec:
               secretRef:
                 description: The secret name containing the Git credentials. For HTTPS
                   repositories the secret must contain username and password fields.
-                  For SSH repositories the secret must contain identity, identity.pub
-                  and known_hosts fields.
+                  For SSH repositories the secret must contain 'identity', 'identity.pub'
+                  and 'known_hosts' fields.
                 properties:
                   name:
-                    description: Name of the referent
+                    description: Name of the referent.
                     type: string
                 required:
                 - name
                 type: object
               suspend:
-                description: This flag tells the controller to suspend the reconciliation
+                description: Suspend tells the controller to suspend the reconciliation
+                  of this source. This flag tells the controller to suspend the reconciliation
                   of this source.
                 type: boolean
               timeout:
@@ -172,21 +174,21 @@ spec:
                 pattern: ^(http|https|ssh)://
                 type: string
               verify:
-                description: Verify OpenPGP signature for the Git commit HEAD points
-                  to.
+                description: Verification defines the configuration to verify the
+                  OpenPGP signature for the Git commit HEAD points to.
                 properties:
                   mode:
-                    description: Mode describes what git object should be verified,
+                    description: Mode describes what Git object should be verified,
                       currently ('head').
                     enum:
                     - head
                     type: string
                   secretRef:
-                    description: The secret name containing the public keys of all
-                      trusted Git authors.
+                    description: SecretRef containing the public keys of all trusted
+                      Git authors.
                     properties:
                       name:
-                        description: Name of the referent
+                        description: Name of the referent.
                         type: string
                     required:
                     - name
@@ -330,7 +332,8 @@ spec:
                 type: array
               lastHandledReconcileAt:
                 description: LastHandledReconcileAt holds the value of the most recent
-                  reconcile request value, so a change can be detected.
+                  reconcile request value, so a change of the annotation value can
+                  be detected.
                 type: string
               observedGeneration:
                 description: ObservedGeneration is the last observed generation.

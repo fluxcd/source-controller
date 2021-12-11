@@ -17,11 +17,14 @@ limitations under the License.
 package v1beta1
 
 import (
+	"time"
+
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fluxcd/pkg/apis/acl"
 	"github.com/fluxcd/pkg/apis/meta"
+	"github.com/fluxcd/pkg/runtime/conditions"
 )
 
 const (
@@ -34,6 +37,22 @@ const (
 	LibGit2Implementation = "libgit2"
 )
 
+const (
+	// CheckoutFailedCondition indicates a transient or persistent checkout failure. If True, observations on the
+	// upstream Source revision are not possible, and the Artifact available for the Source may be outdated.
+	// This is a "negative polarity" or "abnormal-true" type, and is only present on the resource if it is True.
+	CheckoutFailedCondition string = "CheckoutFailed"
+
+	// SourceVerifiedCondition indicates the integrity of the Source has been verified. If True, the integrity check
+	// succeeded. If False, it failed. The Condition is only present on the resource if the integrity has been verified.
+	SourceVerifiedCondition string = "SourceVerified"
+
+	// IncludeUnavailableCondition indicates one of the includes is not available. For example, because it does not
+	// exist, or does not have an Artifact.
+	// This is a "negative polarity" or "abnormal-true" type, and is only present on the resource if it is True.
+	IncludeUnavailableCondition string = "IncludeUnavailable"
+)
+
 // GitRepositorySpec defines the desired state of a Git repository.
 type GitRepositorySpec struct {
 	// The repository URL, can be a HTTP/S or SSH address.
@@ -42,10 +61,8 @@ type GitRepositorySpec struct {
 	URL string `json:"url"`
 
 	// The secret name containing the Git credentials.
-	// For HTTPS repositories the secret must contain username and password
-	// fields.
-	// For SSH repositories the secret must contain identity, identity.pub and
-	// known_hosts fields.
+	// For HTTPS repositories the secret must contain username and password fields.
+	// For SSH repositories the secret must contain 'identity', 'identity.pub' and 'known_hosts' fields.
 	// +optional
 	SecretRef *meta.LocalObjectReference `json:"secretRef,omitempty"`
 
@@ -63,16 +80,16 @@ type GitRepositorySpec struct {
 	// +optional
 	Reference *GitRepositoryRef `json:"ref,omitempty"`
 
-	// Verify OpenPGP signature for the Git commit HEAD points to.
+	// Verification defines the configuration to verify the OpenPGP signature for the Git commit HEAD points to.
 	// +optional
 	Verification *GitRepositoryVerification `json:"verify,omitempty"`
 
-	// Ignore overrides the set of excluded patterns in the .sourceignore format
-	// (which is the same as .gitignore). If not provided, a default will be used,
-	// consult the documentation for your version to find out what those are.
+	// Ignore overrides the set of excluded patterns in the .sourceignore format (which is the same as .gitignore).
+	// If not provided, a default will be used, consult the documentation for your version to find out what those are.
 	// +optional
 	Ignore *string `json:"ignore,omitempty"`
 
+	// Suspend tells the controller to suspend the reconciliation of this source.
 	// This flag tells the controller to suspend the reconciliation of this source.
 	// +optional
 	Suspend bool `json:"suspend,omitempty"`
@@ -84,13 +101,13 @@ type GitRepositorySpec struct {
 	// +optional
 	GitImplementation string `json:"gitImplementation,omitempty"`
 
-	// When enabled, after the clone is created, initializes all submodules within,
-	// using their default settings.
+	// When enabled, after the clone is created, initializes all submodules within, using their default settings.
 	// This option is available only when using the 'go-git' GitImplementation.
 	// +optional
 	RecurseSubmodules bool `json:"recurseSubmodules,omitempty"`
 
-	// Extra git repositories to map into the repository
+	// Include defines a list of GitRepository resources which artifacts should be included in the artifact produced for
+	// this resource.
 	Include []GitRepositoryInclude `json:"include,omitempty"`
 
 	// AccessFrom defines an Access Control List for allowing cross-namespace references to this object.
@@ -144,11 +161,11 @@ type GitRepositoryRef struct {
 
 // GitRepositoryVerification defines the OpenPGP signature verification process.
 type GitRepositoryVerification struct {
-	// Mode describes what git object should be verified, currently ('head').
+	// Mode describes what Git object should be verified, currently ('head').
 	// +kubebuilder:validation:Enum=head
 	Mode string `json:"mode"`
 
-	// The secret name containing the public keys of all trusted Git authors.
+	// SecretRef containing the public keys of all trusted Git authors.
 	SecretRef meta.LocalObjectReference `json:"secretRef,omitempty"`
 }
 
@@ -162,8 +179,7 @@ type GitRepositoryStatus struct {
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 
-	// URL is the download link for the artifact output of the last repository
-	// sync.
+	// URL is the download link for the artifact output of the last repository sync.
 	// +optional
 	URL string `json:"url,omitempty"`
 
@@ -179,12 +195,10 @@ type GitRepositoryStatus struct {
 }
 
 const (
-	// GitOperationSucceedReason represents the fact that the git clone, pull
-	// and checkout operations succeeded.
+	// GitOperationSucceedReason represents the fact that the git clone, pull and checkout operations succeeded.
 	GitOperationSucceedReason string = "GitOperationSucceed"
 
-	// GitOperationFailedReason represents the fact that the git clone, pull or
-	// checkout operations failed.
+	// GitOperationFailedReason represents the fact that the git clone, pull or checkout operations failed.
 	GitOperationFailedReason string = "GitOperationFailed"
 )
 
@@ -196,7 +210,7 @@ func GitRepositoryProgressing(repository GitRepository) GitRepository {
 	repository.Status.ObservedGeneration = repository.Generation
 	repository.Status.URL = ""
 	repository.Status.Conditions = []metav1.Condition{}
-	meta.SetResourceCondition(&repository, meta.ReadyCondition, metav1.ConditionUnknown, meta.ProgressingReason, "reconciliation in progress")
+	conditions.MarkUnknown(&repository, meta.ReadyCondition, meta.ProgressingReason, "reconciliation in progress")
 	return repository
 }
 
@@ -207,7 +221,7 @@ func GitRepositoryReady(repository GitRepository, artifact Artifact, includedArt
 	repository.Status.Artifact = &artifact
 	repository.Status.IncludedArtifacts = includedArtifacts
 	repository.Status.URL = url
-	meta.SetResourceCondition(&repository, meta.ReadyCondition, metav1.ConditionTrue, reason, message)
+	conditions.MarkTrue(&repository, meta.ReadyCondition, reason, message)
 	return repository
 }
 
@@ -215,7 +229,7 @@ func GitRepositoryReady(repository GitRepository, artifact Artifact, includedArt
 // to 'False', with the given reason and message. It returns the modified
 // GitRepository.
 func GitRepositoryNotReady(repository GitRepository, reason, message string) GitRepository {
-	meta.SetResourceCondition(&repository, meta.ReadyCondition, metav1.ConditionFalse, reason, message)
+	conditions.MarkFalse(&repository, meta.ReadyCondition, reason, message)
 	return repository
 }
 
@@ -230,20 +244,36 @@ func GitRepositoryReadyMessage(repository GitRepository) string {
 	return ""
 }
 
-// GetArtifact returns the latest artifact from the source if present in the
-// status sub-resource.
+// GetConditions returns the status conditions of the object.
+func (in GitRepository) GetConditions() []metav1.Condition {
+	return in.Status.Conditions
+}
+
+// SetConditions sets the status conditions on the object.
+func (in *GitRepository) SetConditions(conditions []metav1.Condition) {
+	in.Status.Conditions = conditions
+}
+
+// GetRequeueAfter returns the duration after which the source must be reconciled again.
+func (in GitRepository) GetRequeueAfter() time.Duration {
+	return in.Spec.Interval.Duration
+}
+
+// GetInterval returns the interval at which the source is reconciled.
+// Deprecated: use GetRequeueAfter instead.
+func (in GitRepository) GetInterval() metav1.Duration {
+	return in.Spec.Interval
+}
+
+// GetArtifact returns the latest artifact from the source if present in the status sub-resource.
 func (in *GitRepository) GetArtifact() *Artifact {
 	return in.Status.Artifact
 }
 
-// GetStatusConditions returns a pointer to the Status.Conditions slice
+// GetStatusConditions returns a pointer to the Status.Conditions slice.
+// Deprecated: use GetConditions instead.
 func (in *GitRepository) GetStatusConditions() *[]metav1.Condition {
 	return &in.Status.Conditions
-}
-
-// GetInterval returns the interval at which the source is updated.
-func (in *GitRepository) GetInterval() metav1.Duration {
-	return in.Spec.Interval
 }
 
 // +genclient
