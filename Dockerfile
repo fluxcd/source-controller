@@ -14,7 +14,7 @@ FROM gostable AS go-linux
 
 FROM go-${TARGETOS} AS build-base-bullseye
 
-# Copy the build utiltiies
+# Copy the build utilities
 COPY --from=xx / /
 COPY --from=libgit2 /Makefile /libgit2/
 
@@ -26,11 +26,25 @@ RUN make -C /libgit2 dependencies
 
 FROM build-base-${BASE_VARIANT} as libgit2-bullseye
 
-# Compile and install libgit2
 ARG TARGETPLATFORM
+
+# build libgit2 in release mode
+ARG BUILD_TYPE=Release
+
+# USE_BUNDLED_ZLIB ON uses the internal ZLIB library
+ARG USE_BUNDLED_ZLIB=ON
+
+# First build libgit2 statically, this ensures that all its dependencies
+# will be statically available as well.
+ARG BUILD_SHARED_LIBS=OFF
 RUN FLAGS=$(xx-clang --print-cmake-defines) make -C /libgit2 libgit2
 
-FROM libgit2-${BASE_VARIANT} as build-bullseye
+# Rebuild libgit2 this time to generate the shared libraries.
+ARG BUILD_SHARED_LIBS=ON
+RUN FLAGS=$(xx-clang --print-cmake-defines) make -C /libgit2 libgit2
+
+
+FROM libgit2-${BASE_VARIANT} as build
 
 # Configure workspace
 WORKDIR /workspace
@@ -54,40 +68,27 @@ COPY internal/ internal/
 # Build the binary
 ENV CGO_ENABLED=1
 ARG TARGETPLATFORM
-RUN xx-go build -o source-controller -trimpath \
-    main.go
 
-FROM build-${BASE_VARIANT} as prepare-bullseye
+# ARCH armv7 requires additional linking to build correctly.
+# Note that the order in which the libraries appear in -extldflags are relevant, changing them will cause the build to break.
+RUN if [ "$(xx-info march)" = "armv7l" ]; then export ADDITIONAL_LINKING="/lib/ld-linux-armhf.so.3"; else export ADDITIONAL_LINKING=""; fi && \
+        xx-go build \
+            -ldflags "-s -w -extldflags \"/usr/lib/$(xx-info triple)/libssh2.a /usr/lib/$(xx-info triple)/libssl.a /usr/lib/$(xx-info triple)/libcrypto.a /usr/lib/$(xx-info triple)/libdl.a /usr/lib/$(xx-info triple)/libc.a ${ADDITIONAL_LINKING} -static\"" \
+            -tags 'netgo osusergo static_build' -o source-controller -trimpath main.go;
 
-# Move libgit2 lib to generic and predictable location
-ARG TARGETPLATFORM
-RUN mkdir -p /libgit2/lib/ \
-    && cp -d /usr/lib/$(xx-info triple)/libgit2.so* /libgit2/lib/
+# User creation must happen at a different layer, as such binaries
+# are not available at distroless/static-debian11.
+RUN groupadd controller && \
+    useradd --gid controller --shell /bin/sh --create-home controller
 
-FROM prepare-${BASE_VARIANT} as build
 
-FROM debian:${BASE_VARIANT}-slim as controller
+FROM gcr.io/distroless/static-debian11 as controller
 
 # Link repo to the GitHub Container Registry image
 LABEL org.opencontainers.image.source="https://github.com/fluxcd/source-controller"
 
-# Configure user
-RUN groupadd controller && \
-    useradd --gid controller --shell /bin/sh --create-home controller
-
-# Copy libgit2
-COPY --from=build /libgit2/lib/ /usr/local/lib/
-RUN ldconfig
-
-# Upgrade packages and install runtime dependencies
-RUN echo "deb http://deb.debian.org/debian sid main" >> /etc/apt/sources.list \
-    && echo "deb-src http://deb.debian.org/debian sid main" >> /etc/apt/sources.list \
-    && apt update \
-    && apt install --no-install-recommends -y zlib1g/sid libssl1.1/sid libssh2-1/sid \
-    && apt install --no-install-recommends -y ca-certificates \
-    && apt clean \
-    && apt autoremove --purge -y \
-    && rm -rf /var/lib/apt/lists/*
+# Copy users from different layer
+COPY --from=build /etc/passwd /etc/passwd
 
 # Copy over binary from build
 COPY --from=build /workspace/source-controller /usr/local/bin/

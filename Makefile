@@ -4,7 +4,7 @@ TAG ?= latest
 
 # Base image used to build the Go binary
 LIBGIT2_IMG ?= ghcr.io/fluxcd/golang-with-libgit2
-LIBGIT2_TAG ?= libgit2-1.1.1-1
+LIBGIT2_TAG ?= sha-a926b575d640a7f99876f0d1768179f6b586d816
 
 # Allows for defining additional Docker buildx arguments,
 # e.g. '--push'.
