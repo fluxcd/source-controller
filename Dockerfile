@@ -93,5 +93,7 @@ COPY --from=build /etc/passwd /etc/passwd
 # Copy over binary from build
 COPY --from=build /workspace/source-controller /usr/local/bin/
 
+COPY ATTRIBUTIONS.md /
+
 USER controller
 ENTRYPOINT [ "source-controller" ]
