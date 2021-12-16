@@ -43,76 +43,8 @@ jobs:
             echo 'run make test and commit changes'
             exit 1
           fi
-      - name: Build container image
-        run: make docker-build IMG=test/source-controller TAG=latest BUILD_PLATFORMS=linux/amd64 BUILD_ARGS=--load
-      - name: Load test image
-        run: kind load docker-image test/source-controller:latest
-      - name: Deploy controller
-        run: make dev-deploy IMG=test/source-controller TAG=latest
-      - name: Run smoke tests
-        run: |
-          kubectl -n source-system apply -f ./config/samples
-          kubectl -n source-system rollout status deploy/source-controller --timeout=1m
-          kubectl -n source-system wait gitrepository/gitrepository-sample --for=condition=ready --timeout=1m
-          kubectl -n source-system wait helmrepository/helmrepository-sample --for=condition=ready --timeout=1m
-          kubectl -n source-system wait helmchart/helmchart-sample --for=condition=ready --timeout=1m
-          kubectl -n source-system delete -f ./config/samples
-      - name: Run HelmChart values file tests
-        run: |
-          kubectl -n source-system apply -f ./config/testdata/helmchart-valuesfile
-          kubectl -n source-system wait helmchart/podinfo --for=condition=ready --timeout=5m
-          kubectl -n source-system wait helmchart/podinfo-git --for=condition=ready --timeout=5m
-          kubectl -n source-system delete -f ./config/testdata/helmchart-valuesfile
-      - name: Setup Minio
+      - name: Run E2E tests
         env:
           MINIO_VER: ${{ 'v6.3.1' }}
-        run: |
-          kubectl create ns minio
-          helm repo add minio https://helm.min.io/
-          helm upgrade --wait -i minio minio/minio \
-          --version $MINIO_VER \
-          --namespace minio \
-          --set accessKey=myaccesskey \
-          --set secretKey=mysecretkey \
-          --set resources.requests.memory=128Mi \
-          --set persistence.enable=false
-          kubectl -n minio port-forward svc/minio 9000:9000 &>/dev/null &
-          sleep 2
-          wget -q https://dl.min.io/client/mc/release/linux-amd64/mc
-          chmod +x mc
-          ./mc alias set minio http://localhost:9000 myaccesskey mysecretkey --api S3v4
-          kubectl -n source-system apply -f ./config/testdata/minio/secret.yaml
-      - name: Run Bucket tests
-        run: |
-          ./mc mb minio/podinfo
-          ./mc mirror ./config/testdata/minio/manifests/ minio/podinfo
-
-          kubectl -n source-system apply -f ./config/testdata/bucket/source.yaml
-          kubectl -n source-system wait bucket/podinfo --for=condition=ready --timeout=1m
-      - name: Run HelmChart from Bucket tests
-        run: |
-          ./mc mb minio/charts
-          ./mc mirror ./controllers/testdata/charts/helmchart/ minio/charts/helmchart
-
-          kubectl -n source-system apply -f ./config/testdata/helmchart-from-bucket/source.yaml
-          kubectl -n source-system wait bucket/charts --for=condition=ready --timeout=1m
-          kubectl -n source-system wait helmchart/helmchart-bucket --for=condition=ready --timeout=1m
-      - name: Run large Git repo tests
-        run: |
-          kubectl -n source-system apply -f ./config/testdata/git/large-repo.yaml
-          kubectl -n source-system wait gitrepository/large-repo-go-git --for=condition=ready --timeout=2m
-          kubectl -n source-system wait gitrepository/large-repo-libgit2 --for=condition=ready --timeout=2m
-      - name: Logs
-        run: |
-          kubectl -n source-system logs deploy/source-controller
-      - name: Debug failure
-        if: failure()
-        run: |
-          kubectl -n kube-system describe pods
-          kubectl -n source-system describe pods
-          kubectl -n source-system get gitrepositories -oyaml
-          kubectl -n source-system get helmrepositories -oyaml
-          kubectl -n source-system get helmcharts -oyaml
-          kubectl -n source-system get all
-          kubectl -n source-system logs deploy/source-controller
-          kubectl -n minio get all
+          CREATE_CLUSTER: false
+        run: make e2e

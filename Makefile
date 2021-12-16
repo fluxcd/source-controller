@@ -225,3 +225,6 @@ help:  ## Display this help menu
 
 update-attributions:
 	./hack/update-attributions.sh
+
+e2e:
+	./hack/ci/e2e.sh
