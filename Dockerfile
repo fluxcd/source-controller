@@ -31,9 +31,6 @@ ARG TARGETPLATFORM
 # build libgit2 in release mode
 ARG BUILD_TYPE=Release
 
-# USE_BUNDLED_ZLIB ON uses the internal ZLIB library
-ARG USE_BUNDLED_ZLIB=ON
-
 # First build libgit2 statically, this ensures that all its dependencies
 # will be statically available as well.
 ARG BUILD_SHARED_LIBS=OFF
@@ -73,27 +70,19 @@ ARG TARGETPLATFORM
 # Note that the order in which the libraries appear in -extldflags are relevant, changing them will cause the build to break.
 RUN if [ "$(xx-info march)" = "armv7l" ]; then export ADDITIONAL_LINKING="/lib/ld-linux-armhf.so.3"; else export ADDITIONAL_LINKING=""; fi && \
         xx-go build \
-            -ldflags "-s -w -extldflags \"/usr/lib/$(xx-info triple)/libssh2.a /usr/lib/$(xx-info triple)/libssl.a /usr/lib/$(xx-info triple)/libcrypto.a /usr/lib/$(xx-info triple)/libdl.a /usr/lib/$(xx-info triple)/libc.a ${ADDITIONAL_LINKING} -static\"" \
+            -ldflags "-s -w -extldflags \"/usr/lib/$(xx-info triple)/libssh2.a /usr/lib/$(xx-info triple)/libssl.a /usr/lib/$(xx-info triple)/libcrypto.a /usr/lib/$(xx-info triple)/libz.a /usr/lib/$(xx-info triple)/libdl.a /usr/lib/$(xx-info triple)/libc.a ${ADDITIONAL_LINKING} -static\"" \
             -tags 'netgo osusergo static_build' -o source-controller -trimpath main.go;
 
-# User creation must happen at a different layer, as such binaries
-# are not available at distroless/static-debian11.
-RUN groupadd controller && \
-    useradd --gid controller --shell /bin/sh --create-home controller
-
-
-FROM gcr.io/distroless/static-debian11 as controller
+# Cannot use distroless/static due to lingering dependencies on libnss.
+FROM gcr.io/distroless/base-debian11 as controller
 
 # Link repo to the GitHub Container Registry image
 LABEL org.opencontainers.image.source="https://github.com/fluxcd/source-controller"
 
-# Copy users from different layer
-COPY --from=build /etc/passwd /etc/passwd
-
 # Copy over binary from build
 COPY --from=build /workspace/source-controller /usr/local/bin/
-
 COPY ATTRIBUTIONS.md /
 
-USER controller
+# leverages nonroot available in gcr.io/distroless/base-debian11
+USER nonroot
 ENTRYPOINT [ "source-controller" ]
