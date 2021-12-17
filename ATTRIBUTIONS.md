@@ -1,11 +1,11 @@
-ATTRIBUTIONS
+# Attributions
 
 This application uses Open Source components. You can find the source
 code of their open source projects along with license information below.
 We acknowledge and are grateful to these developers for their contributions
 to open source.
 
-libssh2:
+## libssh2
 
 Libssh2 was obtained in source-code form from its github repository: 
 https://github.com/libssh2/libssh2/
@@ -58,9 +58,9 @@ Copyright notice (https://raw.githubusercontent.com/libssh2/libssh2/main/COPYING
  * OF SUCH DAMAGE.
  */
 
-----------------------------------------------------------------------
+**********************************************************************
 
-libgit2:
+## libgit2
 
 Libgit2 was obtained in source-code form from its github repository: 
 https://github.com/libgit2/libgit2/
@@ -1198,9 +1198,9 @@ STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
 ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED
 OF THE POSSIBILITY OF SUCH DAMAGE.
 
-----------------------------------------------------------------------
+**********************************************************************
 
-zlib:
+## zlib
 
 Zlib was obtained in binary form via official distribution channels.
 No changes were made to its original source code. 

@@ -2,17 +2,17 @@
 
 set -eoux pipefail
 
-SPLIT="----------------------------------------------------------------------"
+SPLIT="**********************************************************************"
 
 cat <<EOF > ATTRIBUTIONS.md
-ATTRIBUTIONS
+# Attributions
 
 This application uses Open Source components. You can find the source
 code of their open source projects along with license information below.
 We acknowledge and are grateful to these developers for their contributions
 to open source.
 
-libssh2:
+## libssh2
 
 Libssh2 was obtained in source-code form from its github repository: 
 https://github.com/libssh2/libssh2/
@@ -25,7 +25,7 @@ $(curl -L https://raw.githubusercontent.com/libssh2/libssh2/master/COPYING)
 
 ${SPLIT}
 
-libgit2:
+## libgit2
 
 Libgit2 was obtained in source-code form from its github repository: 
 https://github.com/libgit2/libgit2/
@@ -38,7 +38,7 @@ $(curl -L https://raw.githubusercontent.com/libgit2/libgit2/main/COPYING)
 
 ${SPLIT}
 
-zlib:
+## zlib
 
 Zlib was obtained in binary form via official distribution channels.
 No changes were made to its original source code. 
