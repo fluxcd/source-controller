@@ -5,11 +5,14 @@ set -eoux pipefail
 MINIO_VER="${MINIO_VER:-v6.3.1}"
 CREATE_CLUSTER="${CREATE_CLUSTER:-true}"
 KIND_CLUSTER_NAME="${KIND_CLUSTER_NAME:-kind}"
+LOAD_IMG_INTO_KIND="${LOAD_IMG_INTO_KIND:-true}"
+BUILD_PLATFORM="${BUILD_PLATFORM:-linux/amd64}"
 
 IMG=test/source-controller
 TAG=latest
-MC_RELEASE=mc.RELEASE.2021-12-10T00-14-28Z
-MC_SHA256=01ec33b51ad208634deb8d701d52ac8f6be088e72563a92475ba6e6470653b73
+MC_RELEASE=mc.RELEASE.2021-12-16T23-38-39Z
+MC_AMD64_SHA256=d14302bbdaa180a073c1627ff9fbf55243221e33d47e32df61a950f635810978
+MC_ARM64_SHA256=00791995bf8d102e3159e23b3af2f5e6f4c784fafd88c60161dcf3f0169aa217
 
 ROOT_DIR="$(git rev-parse --show-toplevel)"
 BUILD_DIR="${ROOT_DIR}/build"
@@ -35,6 +38,7 @@ function cleanup(){
         kubectl -n source-system get all
         kubectl -n source-system logs deploy/source-controller
         kubectl -n minio get all
+        kubectl -n minio logs -l app=minio
     else
         echo "All E2E tests passed!"
     fi
@@ -50,8 +54,12 @@ trap cleanup EXIT
 kubectl wait node "${KIND_CLUSTER_NAME}-control-plane" --for=condition=ready --timeout=2m
 
 echo "Build, load image into kind and deploy controller"
-make docker-build IMG="${IMG}" TAG="${TAG}" BUILD_PLATFORMS=linux/amd64 BUILD_ARGS=--load
-kind load docker-image --name "${KIND_CLUSTER_NAME}" "${IMG}":"${TAG}"
+make docker-build IMG="${IMG}" TAG="${TAG}" BUILD_PLATFORMS="${BUILD_PLATFORM}" BUILD_ARGS=--load
+
+if "${LOAD_IMG_INTO_KIND}"; then
+    kind load docker-image --name "${KIND_CLUSTER_NAME}" "${IMG}":"${TAG}"
+fi
+
 make dev-deploy IMG="${IMG}" TAG="${TAG}"
 
 echo "Run smoke tests"
@@ -71,20 +79,30 @@ kubectl -n source-system delete -f "${ROOT_DIR}/config/testdata/helmchart-values
 echo "Setup Minio"
 kubectl create ns minio
 helm repo add minio https://helm.min.io/
+
+# minio seems to hang on arm64 with 128Mi
+# hence the increase to 192Mi
 helm upgrade --wait -i minio minio/minio \
     --version "${MINIO_VER}" \
     --namespace minio \
     --set accessKey=myaccesskey \
     --set secretKey=mysecretkey \
-    --set resources.requests.memory=128Mi \
+    --set resources.requests.memory=192Mi \
     --set persistence.enable=false
 kubectl -n minio port-forward svc/minio 9000:9000 &>/dev/null &
 
 sleep 2
 
 if [ ! -f "${BUILD_DIR}/mc" ]; then
+    MC_SHA256="${MC_AMD64_SHA256}"
+    ARCH="amd64"
+    if [ "${BUILD_PLATFORM}" = "linux/arm64" ]; then
+        MC_SHA256="${MC_ARM64_SHA256}"
+        ARCH="arm64"
+    fi
+
     mkdir -p "${BUILD_DIR}"
-    curl -o "${BUILD_DIR}/mc" -LO "https://dl.min.io/client/mc/release/linux-amd64/archive/${MC_RELEASE}"
+    curl -o "${BUILD_DIR}/mc" -LO "https://dl.min.io/client/mc/release/linux-${ARCH}/archive/${MC_RELEASE}"
     if ! echo "${MC_SHA256}  ${BUILD_DIR}/mc" | sha256sum --check; then
         echo "Checksum failed for mc."
         rm "${BUILD_DIR}/mc"
