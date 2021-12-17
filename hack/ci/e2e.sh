@@ -2,14 +2,17 @@
 
 set -eoux pipefail
 
-MINIO_VER="${MINIO_VER:-v6.3.1}"
 CREATE_CLUSTER="${CREATE_CLUSTER:-true}"
 KIND_CLUSTER_NAME="${KIND_CLUSTER_NAME:-kind}"
 LOAD_IMG_INTO_KIND="${LOAD_IMG_INTO_KIND:-true}"
 BUILD_PLATFORM="${BUILD_PLATFORM:-linux/amd64}"
+MINIO_HELM_VER="${MINIO_HELM_VER:-v6.3.1}"
+# Older tags do not bundle multiple architectures. Newer tags are 5-6 times larger.
+MINIO_TAG="${MINIO_TAG:-RELEASE.2020-09-17T04-49-20Z}"
 
 IMG=test/source-controller
 TAG=latest
+
 MC_RELEASE=mc.RELEASE.2021-12-16T23-38-39Z
 MC_AMD64_SHA256=d14302bbdaa180a073c1627ff9fbf55243221e33d47e32df61a950f635810978
 MC_ARM64_SHA256=00791995bf8d102e3159e23b3af2f5e6f4c784fafd88c60161dcf3f0169aa217
@@ -38,7 +41,7 @@ function cleanup(){
         kubectl -n source-system get all
         kubectl -n source-system logs deploy/source-controller
         kubectl -n minio get all
-        kubectl -n minio logs -l app=minio
+        kubectl -n minio describe pods
     else
         echo "All E2E tests passed!"
     fi
@@ -79,16 +82,14 @@ kubectl -n source-system delete -f "${ROOT_DIR}/config/testdata/helmchart-values
 echo "Setup Minio"
 kubectl create ns minio
 helm repo add minio https://helm.min.io/
-
-# minio seems to hang on arm64 with 128Mi
-# hence the increase to 192Mi
-helm upgrade --wait -i minio minio/minio \
-    --version "${MINIO_VER}" \
+helm upgrade minio minio/minio --wait -i \
+    --version "${MINIO_HELM_VER}" \
     --namespace minio \
     --set accessKey=myaccesskey \
     --set secretKey=mysecretkey \
-    --set resources.requests.memory=192Mi \
-    --set persistence.enable=false
+    --set resources.requests.memory=128Mi \
+    --set persistence.enable=false \
+    --set image.tag="${MINIO_TAG}"
 kubectl -n minio port-forward svc/minio 9000:9000 &>/dev/null &
 
 sleep 2

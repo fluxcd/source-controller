@@ -46,7 +46,6 @@ jobs:
           fi
       - name: Run E2E tests
         env:
-          MINIO_VER: ${{ 'v6.3.1' }}
           CREATE_CLUSTER: false
         run: make e2e
 
@@ -75,6 +74,7 @@ jobs:
           KUBECONFIG: /tmp/${{ steps.prep.outputs.CLUSTER }}
           CREATE_CLUSTER: false
           BUILD_PLATFORM: linux/arm64
+          MINIO_TAG: RELEASE.2020-09-17T04-49-20Z-arm64
         run: make e2e
       - name: Cleanup
         if: always()
