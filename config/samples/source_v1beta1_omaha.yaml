@@ -1,0 +1,10 @@
+apiVersion: source.toolkit.fluxcd.io/v1beta1
+kind: Omaha
+metadata:
+  name: omaha-sample
+spec:
+  url: http://10.152.183.78
+  appid: 4246ed1e-5137-412b-8e0f-28964bd70ab8
+  track: stable
+  arch: all
+  interval: 30m

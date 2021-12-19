@@ -86,12 +86,6 @@ var _ = BeforeSuite(func(done Done) {
 	err = sourcev1.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
-	err = sourcev1.AddToScheme(scheme.Scheme)
-	Expect(err).NotTo(HaveOccurred())
-
-	err = sourcev1.AddToScheme(scheme.Scheme)
-	Expect(err).NotTo(HaveOccurred())
-
 	// +kubebuilder:scaffold:scheme
 
 	Expect(loadExampleKeys()).To(Succeed())
@@ -139,6 +133,13 @@ var _ = BeforeSuite(func(done Done) {
 		}},
 	}).SetupWithManager(k8sManager)
 	Expect(err).ToNot(HaveOccurred(), "failed to setup HelmChartReconciler")
+
+	err = (&OmahaReconciler{
+		Client:  k8sManager.GetClient(),
+		Scheme:  scheme.Scheme,
+		Storage: storage,
+	}).SetupWithManager(k8sManager)
+	Expect(err).ToNot(HaveOccurred(), "failed to setup OmahaReconciler")
 
 	go func() {
 		err = k8sManager.Start(ctrl.SetupSignalHandler())

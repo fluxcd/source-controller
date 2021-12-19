@@ -1,0 +1,20 @@
+# permissions for end users to view omahas.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: omaha-viewer-role
+rules:
+- apiGroups:
+  - source.toolkit.fluxcd.io
+  resources:
+  - omahas
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - source.toolkit.fluxcd.io
+  resources:
+  - omahas/status
+  verbs:
+  - get
