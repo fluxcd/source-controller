@@ -13,6 +13,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v2
+      - name: Setup Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: 1.16.x
       - name: Restore Go cache
         uses: actions/cache@v1
         with:
@@ -36,6 +40,7 @@ jobs:
       - name: Run tests
         uses: ./.github/actions/run-tests
         env:
+          GOROOT:
           GOPATH: /github/home/go
       - name: Verify
         run: make verify
