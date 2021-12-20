@@ -25,6 +25,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/darkowlzz/controller-check/status"
 	"github.com/go-git/go-billy/v5/memfs"
 	gogit "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
@@ -53,6 +54,7 @@ import (
 	"github.com/fluxcd/pkg/testserver"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
+	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
 	"github.com/fluxcd/source-controller/pkg/git"
 )
 
@@ -189,6 +191,11 @@ func TestGitRepositoryReconciler_Reconcile(t *testing.T) {
 			obj.Generation == obj.Status.ObservedGeneration
 	}, timeout).Should(BeTrue())
 
+	// Check if the object status is valid.
+	condns := &status.Conditions{NegativePolarity: gitRepoReadyDepsNegative}
+	checker := status.NewChecker(testEnv.Client, testEnv.GetScheme(), condns)
+	checker.CheckErr(ctx, obj)
+
 	g.Expect(testEnv.Delete(ctx, obj)).To(Succeed())
 
 	// Wait for GitRepository to be deleted
@@ -216,16 +223,17 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 		server                options
 		secret                *corev1.Secret
 		beforeFunc            func(obj *sourcev1.GitRepository)
-		want                  ctrl.Result
+		want                  sreconcile.Result
 		wantErr               bool
 		assertConditions      []metav1.Condition
 	}{
 		{
 			name:     "HTTP without secretRef makes ArtifactOutdated=True",
 			protocol: "http",
-			want:     ctrl.Result{RequeueAfter: interval},
+			want:     sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "New upstream revision 'master/<commit>'"),
+				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new upstream revision 'master/<commit>'"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new upstream revision 'master/<commit>'"),
 			},
 		},
 		{
@@ -247,9 +255,10 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 			beforeFunc: func(obj *sourcev1.GitRepository) {
 				obj.Spec.SecretRef = &meta.LocalObjectReference{Name: "basic-auth"}
 			},
-			want: ctrl.Result{RequeueAfter: interval},
+			want: sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "New upstream revision 'master/<commit>'"),
+				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new upstream revision 'master/<commit>'"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new upstream revision 'master/<commit>'"),
 			},
 		},
 		{
@@ -271,9 +280,10 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 			beforeFunc: func(obj *sourcev1.GitRepository) {
 				obj.Spec.SecretRef = &meta.LocalObjectReference{Name: "ca-file"}
 			},
-			want: ctrl.Result{RequeueAfter: interval},
+			want: sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "New upstream revision 'master/<commit>'"),
+				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new upstream revision 'master/<commit>'"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new upstream revision 'master/<commit>'"),
 			},
 		},
 		{
@@ -323,7 +333,7 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 			},
 			wantErr: true,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.GitOperationFailedReason, "Failed to checkout and determine revision: unable to clone: Certificate"),
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.GitOperationFailedReason, "failed to checkout and determine revision: unable to clone '<url>': PEM CA bundle could not be appended to x509 certificate pool"),
 			},
 		},
 		{
@@ -344,9 +354,10 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 			beforeFunc: func(obj *sourcev1.GitRepository) {
 				obj.Spec.SecretRef = &meta.LocalObjectReference{Name: "private-key"}
 			},
-			want: ctrl.Result{RequeueAfter: interval},
+			want: sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "New upstream revision 'master/<commit>'"),
+				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new upstream revision 'master/<commit>'"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new upstream revision 'master/<commit>'"),
 			},
 		},
 		{
@@ -368,9 +379,10 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 			beforeFunc: func(obj *sourcev1.GitRepository) {
 				obj.Spec.SecretRef = &meta.LocalObjectReference{Name: "private-key"}
 			},
-			want: ctrl.Result{RequeueAfter: interval},
+			want: sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "New upstream revision 'master/<commit>'"),
+				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new upstream revision 'master/<commit>'"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new upstream revision 'master/<commit>'"),
 			},
 		},
 		{
@@ -384,7 +396,7 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 			},
 			wantErr: true,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "Failed to get secret '/non-existing': secrets \"non-existing\" not found"),
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "failed to get secret '/non-existing': secrets \"non-existing\" not found"),
 			},
 		},
 	}
@@ -486,9 +498,10 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 					}
 
 					var artifact sourcev1.Artifact
+					var includes artifactSet
 					dlog := log.NewDelegatingLogSink(log.NullLogSink{})
 					nullLogger := logr.New(dlog)
-					got, err := r.reconcileSource(logr.NewContext(ctx, nullLogger), obj, &artifact, tmpDir)
+					got, err := r.reconcileSource(logr.NewContext(ctx, nullLogger), obj, &artifact, &includes, tmpDir)
 					g.Expect(obj.Status.Conditions).To(conditions.MatchConditions(tt.assertConditions))
 					g.Expect(err != nil).To(Equal(tt.wantErr))
 					g.Expect(got).To(Equal(tt.want))
@@ -509,13 +522,13 @@ func TestGitRepositoryReconciler_reconcileSource_checkoutStrategy(t *testing.T) 
 		name                  string
 		skipForImplementation string
 		reference             *sourcev1.GitRepositoryRef
-		want                  ctrl.Result
+		want                  sreconcile.Result
 		wantErr               bool
 		wantRevision          string
 	}{
 		{
 			name:         "Nil reference (default branch)",
-			want:         ctrl.Result{RequeueAfter: interval},
+			want:         sreconcile.ResultSuccess,
 			wantRevision: "master/<commit>",
 		},
 		{
@@ -523,7 +536,7 @@ func TestGitRepositoryReconciler_reconcileSource_checkoutStrategy(t *testing.T) 
 			reference: &sourcev1.GitRepositoryRef{
 				Branch: "staging",
 			},
-			want:         ctrl.Result{RequeueAfter: interval},
+			want:         sreconcile.ResultSuccess,
 			wantRevision: "staging/<commit>",
 		},
 		{
@@ -531,7 +544,7 @@ func TestGitRepositoryReconciler_reconcileSource_checkoutStrategy(t *testing.T) 
 			reference: &sourcev1.GitRepositoryRef{
 				Tag: "v0.1.0",
 			},
-			want:         ctrl.Result{RequeueAfter: interval},
+			want:         sreconcile.ResultSuccess,
 			wantRevision: "v0.1.0/<commit>",
 		},
 		{
@@ -541,7 +554,7 @@ func TestGitRepositoryReconciler_reconcileSource_checkoutStrategy(t *testing.T) 
 				Branch: "staging",
 				Commit: "<commit>",
 			},
-			want:         ctrl.Result{RequeueAfter: interval},
+			want:         sreconcile.ResultSuccess,
 			wantRevision: "staging/<commit>",
 		},
 		{
@@ -551,7 +564,7 @@ func TestGitRepositoryReconciler_reconcileSource_checkoutStrategy(t *testing.T) 
 				Branch: "staging",
 				Commit: "<commit>",
 			},
-			want:         ctrl.Result{RequeueAfter: interval},
+			want:         sreconcile.ResultSuccess,
 			wantRevision: "HEAD/<commit>",
 		},
 		{
@@ -559,7 +572,7 @@ func TestGitRepositoryReconciler_reconcileSource_checkoutStrategy(t *testing.T) 
 			reference: &sourcev1.GitRepositoryRef{
 				SemVer: "*",
 			},
-			want:         ctrl.Result{RequeueAfter: interval},
+			want:         sreconcile.ResultSuccess,
 			wantRevision: "v2.0.0/<commit>",
 		},
 		{
@@ -567,7 +580,7 @@ func TestGitRepositoryReconciler_reconcileSource_checkoutStrategy(t *testing.T) 
 			reference: &sourcev1.GitRepositoryRef{
 				SemVer: "<v0.2.1",
 			},
-			want:         ctrl.Result{RequeueAfter: interval},
+			want:         sreconcile.ResultSuccess,
 			wantRevision: "0.2.0/<commit>",
 		},
 		{
@@ -576,7 +589,7 @@ func TestGitRepositoryReconciler_reconcileSource_checkoutStrategy(t *testing.T) 
 				SemVer: ">=1.0.0-0 <1.1.0-0",
 			},
 			wantRevision: "v1.0.0-alpha/<commit>",
-			want:         ctrl.Result{RequeueAfter: interval},
+			want:         sreconcile.ResultSuccess,
 		},
 	}
 
@@ -641,7 +654,8 @@ func TestGitRepositoryReconciler_reconcileSource_checkoutStrategy(t *testing.T) 
 					obj.Spec.GitImplementation = i
 
 					var artifact sourcev1.Artifact
-					got, err := r.reconcileSource(ctx, obj, &artifact, tmpDir)
+					var includes artifactSet
+					got, err := r.reconcileSource(ctx, obj, &artifact, &includes, tmpDir)
 					if err != nil {
 						println(err.Error())
 					}
@@ -665,7 +679,7 @@ func TestGitRepositoryReconciler_reconcileArtifact(t *testing.T) {
 		includes         artifactSet
 		beforeFunc       func(obj *sourcev1.GitRepository)
 		afterFunc        func(t *WithT, obj *sourcev1.GitRepository, artifact sourcev1.Artifact)
-		want             ctrl.Result
+		want             sreconcile.Result
 		wantErr          bool
 		assertConditions []metav1.Condition
 	}{
@@ -679,9 +693,10 @@ func TestGitRepositoryReconciler_reconcileArtifact(t *testing.T) {
 				t.Expect(obj.GetArtifact()).ToNot(BeNil())
 				t.Expect(obj.Status.URL).ToNot(BeEmpty())
 			},
-			want: ctrl.Result{RequeueAfter: interval},
+			want: sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(meta.ReadyCondition, meta.SucceededReason, "Stored artifact for revision 'main/revision'"),
+				*conditions.TrueCondition(meta.ReadyCondition, meta.SucceededReason, "stored artifact for revision 'main/revision'"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new upstream revision 'main/revision'"),
 			},
 		},
 		{
@@ -697,9 +712,10 @@ func TestGitRepositoryReconciler_reconcileArtifact(t *testing.T) {
 				t.Expect(obj.Status.IncludedArtifacts).ToNot(BeEmpty())
 				t.Expect(obj.Status.URL).ToNot(BeEmpty())
 			},
-			want: ctrl.Result{RequeueAfter: interval},
+			want: sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(meta.ReadyCondition, meta.SucceededReason, "Stored artifact for revision 'main/revision'"),
+				*conditions.TrueCondition(meta.ReadyCondition, meta.SucceededReason, "stored artifact for revision 'main/revision'"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new upstream revision 'main/revision'"),
 			},
 		},
 		{
@@ -714,9 +730,9 @@ func TestGitRepositoryReconciler_reconcileArtifact(t *testing.T) {
 			afterFunc: func(t *WithT, obj *sourcev1.GitRepository, artifact sourcev1.Artifact) {
 				t.Expect(obj.Status.URL).To(BeEmpty())
 			},
-			want: ctrl.Result{RequeueAfter: interval},
+			want: sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(meta.ReadyCondition, meta.SucceededReason, "Stored artifact for revision 'main/revision'"),
+				*conditions.TrueCondition(meta.ReadyCondition, meta.SucceededReason, "stored artifact for revision 'main/revision'"),
 			},
 		},
 		{
@@ -730,26 +746,10 @@ func TestGitRepositoryReconciler_reconcileArtifact(t *testing.T) {
 				t.Expect(obj.GetArtifact()).ToNot(BeNil())
 				t.Expect(obj.GetArtifact().Checksum).To(Equal("dc95ae14c19d335b693bbba58ae2a562242b0cf33893baffd1b7605ba578e0d6"))
 			},
-			want: ctrl.Result{RequeueAfter: interval},
+			want: sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(meta.ReadyCondition, meta.SucceededReason, "Stored artifact for revision 'main/revision'"),
-			},
-		},
-		{
-			name: "Removes ArtifactUnavailableCondition after creating artifact",
-			dir:  "testdata/git/repository",
-			beforeFunc: func(obj *sourcev1.GitRepository) {
-				obj.Spec.Interval = metav1.Duration{Duration: interval}
-				conditions.MarkTrue(obj, sourcev1.ArtifactUnavailableCondition, "Foo", "")
-			},
-			afterFunc: func(t *WithT, obj *sourcev1.GitRepository, artifact sourcev1.Artifact) {
-				t.Expect(obj.GetArtifact()).ToNot(BeNil())
-				t.Expect(obj.GetArtifact().Checksum).To(Equal("ef9c34eab0584035ac8b8a4070876954ea46f270250d60648672feef3e943426"))
-				t.Expect(obj.Status.URL).ToNot(BeEmpty())
-			},
-			want: ctrl.Result{RequeueAfter: interval},
-			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(meta.ReadyCondition, meta.SucceededReason, "Stored artifact for revision 'main/revision'"),
+				*conditions.TrueCondition(meta.ReadyCondition, meta.SucceededReason, "stored artifact for revision 'main/revision'"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new upstream revision 'main/revision'"),
 			},
 		},
 		{
@@ -764,9 +764,10 @@ func TestGitRepositoryReconciler_reconcileArtifact(t *testing.T) {
 				t.Expect(obj.GetArtifact().Checksum).To(Equal("ef9c34eab0584035ac8b8a4070876954ea46f270250d60648672feef3e943426"))
 				t.Expect(obj.Status.URL).ToNot(BeEmpty())
 			},
-			want: ctrl.Result{RequeueAfter: interval},
+			want: sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(meta.ReadyCondition, meta.SucceededReason, "Stored artifact for revision 'main/revision'"),
+				*conditions.TrueCondition(meta.ReadyCondition, meta.SucceededReason, "stored artifact for revision 'main/revision'"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new upstream revision 'main/revision'"),
 			},
 		},
 		{
@@ -784,20 +785,27 @@ func TestGitRepositoryReconciler_reconcileArtifact(t *testing.T) {
 				t.Expect(err).NotTo(HaveOccurred())
 				t.Expect(localPath).To(Equal(targetFile))
 			},
-			want: ctrl.Result{RequeueAfter: interval},
+			want: sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(meta.ReadyCondition, meta.SucceededReason, "Stored artifact for revision 'main/revision'"),
+				*conditions.TrueCondition(meta.ReadyCondition, meta.SucceededReason, "stored artifact for revision 'main/revision'"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new upstream revision 'main/revision'"),
 			},
 		},
 		{
 			name:    "Target path does not exists",
 			dir:     "testdata/git/foo",
 			wantErr: true,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new upstream revision 'main/revision'"),
+			},
 		},
 		{
 			name:    "Target path is not a directory",
 			dir:     "testdata/git/repository/foo.txt",
 			wantErr: true,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new upstream revision 'main/revision'"),
+			},
 		},
 	}
 
@@ -824,7 +832,7 @@ func TestGitRepositoryReconciler_reconcileArtifact(t *testing.T) {
 
 			artifact := testStorage.NewArtifactFor(obj.Kind, obj, "main/revision", "checksum.tar.gz")
 
-			got, err := r.reconcileArtifact(ctx, obj, artifact, tt.includes, tt.dir)
+			got, err := r.reconcileArtifact(ctx, obj, &artifact, &tt.includes, tt.dir)
 			g.Expect(obj.Status.Conditions).To(conditions.MatchConditions(tt.assertConditions))
 			g.Expect(err != nil).To(Equal(tt.wantErr))
 			g.Expect(got).To(Equal(tt.want))
@@ -865,7 +873,7 @@ func TestGitRepositoryReconciler_reconcileInclude(t *testing.T) {
 		dependencies     []dependency
 		includes         []include
 		beforeFunc       func(obj *sourcev1.GitRepository)
-		want             ctrl.Result
+		want             sreconcile.Result
 		wantErr          bool
 		assertConditions []metav1.Condition
 	}{
@@ -891,9 +899,9 @@ func TestGitRepositoryReconciler_reconcileInclude(t *testing.T) {
 				{name: "a", toPath: "a/", shouldExist: true},
 				{name: "b", toPath: "b/", shouldExist: true},
 			},
-			want: ctrl.Result{RequeueAfter: interval},
+			want: sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "IncludeChange", "Included artifacts differ from last observed includes"),
+				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "IncludeChange", "included artifacts differ from last observed includes"),
 			},
 		},
 		{
@@ -903,7 +911,7 @@ func TestGitRepositoryReconciler_reconcileInclude(t *testing.T) {
 			},
 			wantErr: true,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.IncludeUnavailableCondition, "NotFound", "Could not get resource for include 'a': gitrepositories.source.toolkit.fluxcd.io \"a\" not found"),
+				*conditions.TrueCondition(sourcev1.IncludeUnavailableCondition, "NotFound", "could not get resource for include 'a': gitrepositories.source.toolkit.fluxcd.io \"a\" not found"),
 			},
 		},
 		{
@@ -920,8 +928,9 @@ func TestGitRepositoryReconciler_reconcileInclude(t *testing.T) {
 			includes: []include{
 				{name: "a", toPath: "a/"},
 			},
+			wantErr: true,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.IncludeUnavailableCondition, "NoArtifact", "No artifact available for include 'a'"),
+				*conditions.TrueCondition(sourcev1.IncludeUnavailableCondition, "NoArtifact", "no artifact available for include 'a'"),
 			},
 		},
 		{
@@ -945,7 +954,7 @@ func TestGitRepositoryReconciler_reconcileInclude(t *testing.T) {
 			beforeFunc: func(obj *sourcev1.GitRepository) {
 				conditions.MarkTrue(obj, sourcev1.IncludeUnavailableCondition, "NoArtifact", "")
 			},
-			want:             ctrl.Result{RequeueAfter: interval},
+			want:             sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{},
 		},
 	}
@@ -980,12 +989,8 @@ func TestGitRepositoryReconciler_reconcileInclude(t *testing.T) {
 			}
 
 			r := &GitRepositoryReconciler{
-				Client:        builder.Build(),
-				EventRecorder: record.NewFakeRecorder(32),
-				// Events: helper.Events{
-				// 	Scheme:        testEnv.GetScheme(),
-				// 	EventRecorder: record.NewFakeRecorder(32),
-				// },
+				Client:            builder.Build(),
+				EventRecorder:     record.NewFakeRecorder(32),
 				Storage:           storage,
 				requeueDependency: dependencyInterval,
 			}
@@ -1018,7 +1023,10 @@ func TestGitRepositoryReconciler_reconcileInclude(t *testing.T) {
 			g.Expect(err).NotTo(HaveOccurred())
 			defer os.RemoveAll(tmpDir)
 
-			got, err := r.reconcileInclude(ctx, obj, tmpDir)
+			var artifact sourcev1.Artifact
+			var includes artifactSet
+
+			got, err := r.reconcileInclude(ctx, obj, &artifact, &includes, tmpDir)
 			g.Expect(obj.GetConditions()).To(conditions.MatchConditions(tt.assertConditions))
 			g.Expect(err != nil).To(Equal(tt.wantErr))
 			g.Expect(got).To(Equal(tt.want))
@@ -1065,7 +1073,7 @@ func TestGitRepositoryReconciler_reconcileDelete(t *testing.T) {
 
 	got, err := r.reconcileDelete(ctx, obj)
 	g.Expect(err).NotTo(HaveOccurred())
-	g.Expect(got).To(Equal(ctrl.Result{}))
+	g.Expect(got).To(Equal(sreconcile.ResultEmpty))
 	g.Expect(controllerutil.ContainsFinalizer(obj, sourcev1.SourceFinalizer)).To(BeFalse())
 	g.Expect(obj.Status.Artifact).To(BeNil())
 }
@@ -1076,7 +1084,7 @@ func TestGitRepositoryReconciler_verifyCommitSignature(t *testing.T) {
 		secret           *corev1.Secret
 		commit           git.Commit
 		beforeFunc       func(obj *sourcev1.GitRepository)
-		want             ctrl.Result
+		want             sreconcile.Result
 		wantErr          bool
 		assertConditions []metav1.Condition
 	}{
@@ -1104,9 +1112,9 @@ func TestGitRepositoryReconciler_verifyCommitSignature(t *testing.T) {
 					},
 				}
 			},
-			want: ctrl.Result{RequeueAfter: interval},
+			want: sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.SourceVerifiedCondition, meta.SucceededReason, "Verified signature of commit 'shasum'"),
+				*conditions.TrueCondition(sourcev1.SourceVerifiedCondition, meta.SucceededReason, "verified signature of commit 'shasum'"),
 			},
 		},
 		{
@@ -1132,7 +1140,7 @@ func TestGitRepositoryReconciler_verifyCommitSignature(t *testing.T) {
 			},
 			wantErr: true,
 			assertConditions: []metav1.Condition{
-				*conditions.FalseCondition(sourcev1.SourceVerifiedCondition, meta.FailedReason, "Signature verification of commit 'shasum' failed: failed to verify commit with any of the given key rings"),
+				*conditions.FalseCondition(sourcev1.SourceVerifiedCondition, meta.FailedReason, "signature verification of commit 'shasum' failed: failed to verify commit with any of the given key rings"),
 			},
 		},
 		{
@@ -1157,7 +1165,7 @@ func TestGitRepositoryReconciler_verifyCommitSignature(t *testing.T) {
 				obj.Spec.Interval = metav1.Duration{Duration: interval}
 				conditions.MarkTrue(obj, sourcev1.SourceVerifiedCondition, "Foo", "")
 			},
-			want:             ctrl.Result{RequeueAfter: interval},
+			want:             sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{},
 		},
 		{
@@ -1167,7 +1175,7 @@ func TestGitRepositoryReconciler_verifyCommitSignature(t *testing.T) {
 				obj.Spec.Verification = &sourcev1.GitRepositoryVerification{}
 				conditions.MarkTrue(obj, sourcev1.SourceVerifiedCondition, "Foo", "")
 			},
-			want:             ctrl.Result{RequeueAfter: interval},
+			want:             sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{},
 		},
 	}
@@ -1233,7 +1241,7 @@ func TestGitRepositoryReconciler_ConditionsUpdate(t *testing.T) {
 			name: "no condition",
 			want: ctrl.Result{RequeueAfter: interval},
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(meta.ReadyCondition, "Succeeded", "Stored artifact for revision"),
+				*conditions.TrueCondition(meta.ReadyCondition, "Succeeded", "stored artifact for revision"),
 			},
 		},
 		{
@@ -1243,7 +1251,7 @@ func TestGitRepositoryReconciler_ConditionsUpdate(t *testing.T) {
 			},
 			want: ctrl.Result{RequeueAfter: interval},
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(meta.ReadyCondition, "Succeeded", "Stored artifact for revision"),
+				*conditions.TrueCondition(meta.ReadyCondition, "Succeeded", "stored artifact for revision"),
 			},
 		},
 		{
@@ -1253,7 +1261,7 @@ func TestGitRepositoryReconciler_ConditionsUpdate(t *testing.T) {
 			},
 			want: ctrl.Result{RequeueAfter: interval},
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(meta.ReadyCondition, "Succeeded", "Stored artifact for revision"),
+				*conditions.TrueCondition(meta.ReadyCondition, "Succeeded", "stored artifact for revision"),
 			},
 		},
 		{
@@ -1263,11 +1271,10 @@ func TestGitRepositoryReconciler_ConditionsUpdate(t *testing.T) {
 				conditions.MarkTrue(obj, sourcev1.IncludeUnavailableCondition, "Foo", "")
 				conditions.MarkTrue(obj, sourcev1.SourceVerifiedCondition, "Foo", "")
 				conditions.MarkTrue(obj, sourcev1.ArtifactOutdatedCondition, "Foo", "")
-				conditions.MarkTrue(obj, sourcev1.ArtifactUnavailableCondition, "Foo", "")
 			},
 			want: ctrl.Result{RequeueAfter: interval},
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(meta.ReadyCondition, "Succeeded", "Stored artifact for revision"),
+				*conditions.TrueCondition(meta.ReadyCondition, "Succeeded", "stored artifact for revision"),
 			},
 		},
 		{
@@ -1278,7 +1285,7 @@ func TestGitRepositoryReconciler_ConditionsUpdate(t *testing.T) {
 			},
 			want: ctrl.Result{RequeueAfter: interval},
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(meta.ReadyCondition, "Succeeded", "Stored artifact for revision"),
+				*conditions.TrueCondition(meta.ReadyCondition, "Succeeded", "stored artifact for revision"),
 			},
 		},
 		{
@@ -1289,7 +1296,7 @@ func TestGitRepositoryReconciler_ConditionsUpdate(t *testing.T) {
 			},
 			want: ctrl.Result{RequeueAfter: interval},
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(meta.ReadyCondition, "Succeeded", "Stored artifact for revision"),
+				*conditions.TrueCondition(meta.ReadyCondition, "Succeeded", "stored artifact for revision"),
 			},
 		},
 	}
