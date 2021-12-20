@@ -228,3 +228,12 @@ update-attributions:
 
 e2e:
 	./hack/ci/e2e.sh
+
+verify: update-attributions fmt vet
+ifneq (, $(shell git status --porcelain --untracked-files=no))
+	@{ \
+	echo "working directory is dirty:"; \
+	git --no-pager diff; \
+	exit 1; \
+	}
+endif

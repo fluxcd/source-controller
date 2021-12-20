@@ -37,13 +37,8 @@ jobs:
         uses: ./.github/actions/run-tests
         env:
           GOPATH: /github/home/go
-      - name: Check if working tree is dirty
-        run: |
-          if [[ $(git diff --stat) != '' ]]; then
-            git --no-pager diff
-            echo 'run make test and commit changes'
-            exit 1
-          fi
+      - name: Verify
+        run: make verify
       - name: Run E2E tests
         env:
           CREATE_CLUSTER: false

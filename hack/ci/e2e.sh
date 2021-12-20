@@ -81,7 +81,7 @@ kubectl -n source-system delete -f "${ROOT_DIR}/config/testdata/helmchart-values
 
 echo "Setup Minio"
 kubectl create ns minio
-helm repo add minio https://helm.min.io/
+helm repo add minio https://helm.min.io/ --force-update
 helm upgrade minio minio/minio --wait -i \
     --version "${MINIO_HELM_VER}" \
     --namespace minio \
