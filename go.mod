@@ -9,6 +9,7 @@ require (
 	github.com/Masterminds/semver/v3 v3.1.1
 	github.com/ProtonMail/go-crypto v0.0.0-20210428141323-04723f9f07d7
 	github.com/cyphar/filepath-securejoin v0.2.2
+	github.com/darkowlzz/controller-check v0.0.0-20220119215126-648356cef22c
 	github.com/elazarl/goproxy v0.0.0-20211114080932-d06c3be7c11b
 	github.com/fluxcd/pkg/apis/meta v0.11.0-rc.3
 	github.com/fluxcd/pkg/gittestserver v0.5.0
@@ -114,6 +115,7 @@ require (
 	github.com/kevinburke/ssh_config v0.0.0-20201106050909-4977a11b4351 // indirect
 	github.com/klauspost/compress v1.13.5 // indirect
 	github.com/klauspost/cpuid v1.3.1 // indirect
+	github.com/kylelemons/godebug v1.1.0 // indirect
 	github.com/lann/builder v0.0.0-20180802200727-47ae307949d0 // indirect
 	github.com/lann/ps v0.0.0-20150810152359-62de8c46ede0 // indirect
 	github.com/lib/pq v1.10.0 // indirect
