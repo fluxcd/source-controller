@@ -66,12 +66,13 @@ COPY internal/ internal/
 ENV CGO_ENABLED=1
 ARG TARGETPLATFORM
 
-# ARCH armv7 requires additional linking to build correctly.
-# Note that the order in which the libraries appear in -extldflags are relevant, changing them will cause the build to break.
-RUN if [ "$(xx-info march)" = "armv7l" ]; then export ADDITIONAL_LINKING="/lib/ld-linux-armhf.so.3"; else export ADDITIONAL_LINKING=""; fi && \
-        xx-go build \
-            -ldflags "-s -w -extldflags \"/usr/lib/$(xx-info triple)/libssh2.a /usr/lib/$(xx-info triple)/libssl.a /usr/lib/$(xx-info triple)/libcrypto.a /usr/lib/$(xx-info triple)/libz.a /usr/lib/$(xx-info triple)/libdl.a /usr/lib/$(xx-info triple)/libc.a ${ADDITIONAL_LINKING} -static\"" \
-            -tags 'netgo osusergo static_build' -o source-controller -trimpath main.go;
+# The dependencies being statically built are: libgit2, libssh2, libssl, libcrypto and libz.
+# Others (such as libc, librt, libdl and libpthread) are resolved at run-time.
+# To decrease the likelihood of such dependencies being out of sync, the base build image
+# should be aligned with the target (i.e. same debian variant).
+RUN xx-go build \
+        -ldflags "-s -w -extldflags \"/usr/lib/$(xx-info triple)/libssh2.a /usr/lib/$(xx-info triple)/libssl.a /usr/lib/$(xx-info triple)/libcrypto.a /usr/lib/$(xx-info triple)/libz.a -Wl,--unresolved-symbols=ignore-in-object-files -Wl,-allow-shlib-undefined -static\"" \
+        -tags 'netgo,osusergo,static_build' -o source-controller -trimpath main.go;
 
 # Cannot use distroless/static due to lingering dependencies on libnss.
 FROM gcr.io/distroless/base-debian11 as controller
