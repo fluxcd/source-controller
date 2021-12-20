@@ -2,7 +2,7 @@
 
 set -eoux pipefail
 
-SPLIT="**********************************************************************"
+SPLIT="***"
 
 cat <<EOF > ATTRIBUTIONS.md
 # Attributions
@@ -21,7 +21,7 @@ No changes were made to its original source code.
 
 Copyright notice (https://raw.githubusercontent.com/libssh2/libssh2/main/COPYING):
 
-$(curl -L https://raw.githubusercontent.com/libssh2/libssh2/master/COPYING)
+$(curl --max-time 5 -L https://raw.githubusercontent.com/libssh2/libssh2/master/COPYING)
 
 ${SPLIT}
 
@@ -34,7 +34,7 @@ No changes were made to its original source code.
 
 Copyright notice (https://raw.githubusercontent.com/libgit2/libgit2/main/COPYING):
 
-$(curl -L https://raw.githubusercontent.com/libgit2/libgit2/main/COPYING)
+$(curl --max-time 5 -L https://raw.githubusercontent.com/libgit2/libgit2/main/COPYING)
 
 ${SPLIT}
 
