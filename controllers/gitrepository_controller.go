@@ -25,7 +25,6 @@ import (
 	"time"
 
 	securejoin "github.com/cyphar/filepath-securejoin"
-	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -89,7 +88,7 @@ func (r *GitRepositoryReconciler) SetupWithManagerAndOptions(mgr ctrl.Manager, o
 
 func (r *GitRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	start := time.Now()
-	log := logr.FromContext(ctx)
+	log := ctrl.LoggerFrom(ctx)
 
 	var repository sourcev1.GitRepository
 	if err := r.Get(ctx, req.NamespacedName, &repository); err != nil {
@@ -417,7 +416,7 @@ func (r *GitRepositoryReconciler) gc(repository sourcev1.GitRepository) error {
 
 // event emits a Kubernetes event and forwards the event to notification controller if configured
 func (r *GitRepositoryReconciler) event(ctx context.Context, repository sourcev1.GitRepository, severity, msg string) {
-	log := logr.FromContext(ctx)
+	log := ctrl.LoggerFrom(ctx)
 
 	if r.EventRecorder != nil {
 		r.EventRecorder.Eventf(&repository, "Normal", severity, msg)
@@ -437,7 +436,7 @@ func (r *GitRepositoryReconciler) event(ctx context.Context, repository sourcev1
 }
 
 func (r *GitRepositoryReconciler) recordReadiness(ctx context.Context, repository sourcev1.GitRepository) {
-	log := logr.FromContext(ctx)
+	log := ctrl.LoggerFrom(ctx)
 	if r.MetricsRecorder == nil {
 		return
 	}
@@ -460,7 +459,7 @@ func (r *GitRepositoryReconciler) recordSuspension(ctx context.Context, gitrepos
 	if r.MetricsRecorder == nil {
 		return
 	}
-	log := logr.FromContext(ctx)
+	log := ctrl.LoggerFrom(ctx)
 
 	objRef, err := reference.GetReference(r.Scheme, &gitrepository)
 	if err != nil {

@@ -23,7 +23,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/go-logr/logr"
 	helmgetter "helm.sh/helm/v3/pkg/getter"
 	corev1 "k8s.io/api/core/v1"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
@@ -82,7 +81,7 @@ func (r *HelmRepositoryReconciler) SetupWithManagerAndOptions(mgr ctrl.Manager, 
 
 func (r *HelmRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	start := time.Now()
-	log := logr.FromContext(ctx)
+	log := ctrl.LoggerFrom(ctx)
 
 	var repository sourcev1.HelmRepository
 	if err := r.Get(ctx, req.NamespacedName, &repository); err != nil {
@@ -330,7 +329,7 @@ func (r *HelmRepositoryReconciler) gc(repository sourcev1.HelmRepository) error 
 
 // event emits a Kubernetes event and forwards the event to notification controller if configured
 func (r *HelmRepositoryReconciler) event(ctx context.Context, repository sourcev1.HelmRepository, severity, msg string) {
-	log := logr.FromContext(ctx)
+	log := ctrl.LoggerFrom(ctx)
 	if r.EventRecorder != nil {
 		r.EventRecorder.Eventf(&repository, "Normal", severity, msg)
 	}
@@ -349,7 +348,7 @@ func (r *HelmRepositoryReconciler) event(ctx context.Context, repository sourcev
 }
 
 func (r *HelmRepositoryReconciler) recordReadiness(ctx context.Context, repository sourcev1.HelmRepository) {
-	log := logr.FromContext(ctx)
+	log := ctrl.LoggerFrom(ctx)
 	if r.MetricsRecorder == nil {
 		return
 	}
@@ -384,7 +383,7 @@ func (r *HelmRepositoryReconciler) recordSuspension(ctx context.Context, hr sour
 	if r.MetricsRecorder == nil {
 		return
 	}
-	log := logr.FromContext(ctx)
+	log := ctrl.LoggerFrom(ctx)
 
 	objRef, err := reference.GetReference(r.Scheme, &hr)
 	if err != nil {

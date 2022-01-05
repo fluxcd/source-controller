@@ -25,7 +25,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-logr/logr"
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 	"github.com/minio/minio-go/v7/pkg/s3utils"
@@ -268,7 +267,7 @@ func (r *BucketReconciler) reconcileDelete(ctx context.Context, bucket sourcev1.
 // reconcileWithGCP handles getting objects from a Google Cloud Platform bucket
 // using a gcp client
 func (r *BucketReconciler) reconcileWithGCP(ctx context.Context, bucket sourcev1.Bucket, tempDir string) (sourcev1.Bucket, error) {
-	log := logr.FromContext(ctx)
+	log := ctrl.LoggerFrom(ctx)
 	gcpClient, err := r.authGCP(ctx, bucket)
 	if err != nil {
 		err = fmt.Errorf("auth error: %w", err)
@@ -534,7 +533,7 @@ func (r *BucketReconciler) gc(bucket sourcev1.Bucket) error {
 
 // event emits a Kubernetes event and forwards the event to notification controller if configured
 func (r *BucketReconciler) event(ctx context.Context, bucket sourcev1.Bucket, severity, msg string) {
-	log := logr.FromContext(ctx)
+	log := ctrl.LoggerFrom(ctx)
 	if r.EventRecorder != nil {
 		r.EventRecorder.Eventf(&bucket, "Normal", severity, msg)
 	}
@@ -553,7 +552,7 @@ func (r *BucketReconciler) event(ctx context.Context, bucket sourcev1.Bucket, se
 }
 
 func (r *BucketReconciler) recordReadiness(ctx context.Context, bucket sourcev1.Bucket) {
-	log := logr.FromContext(ctx)
+	log := ctrl.LoggerFrom(ctx)
 	if r.MetricsRecorder == nil {
 		return
 	}
@@ -576,7 +575,7 @@ func (r *BucketReconciler) recordSuspension(ctx context.Context, bucket sourcev1
 	if r.MetricsRecorder == nil {
 		return
 	}
-	log := logr.FromContext(ctx)
+	log := ctrl.LoggerFrom(ctx)
 
 	objRef, err := reference.GetReference(r.Scheme, &bucket)
 	if err != nil {

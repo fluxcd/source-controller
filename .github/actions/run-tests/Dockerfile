@@ -1,5 +1,5 @@
 ARG BASE_VARIANT=bullseye
-ARG GO_VERSION=1.16.12
+ARG GO_VERSION=1.17.5
 ARG XX_VERSION=1.1.0
 
 ARG LIBGIT2_IMG=ghcr.io/fluxcd/golang-with-libgit2
