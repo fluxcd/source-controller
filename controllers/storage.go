@@ -154,9 +154,7 @@ func SourceIgnoreFilter(ps []gitignore.Pattern, domain []string) ArchiveFileFilt
 		matcher = sourceignore.NewMatcher(ps)
 	}
 	return func(p string, fi os.FileInfo) bool {
-		// The directory is always false as the archiver does already skip
-		// directories.
-		return matcher.Match(strings.Split(p, string(filepath.Separator)), false)
+		return matcher.Match(strings.Split(p, string(filepath.Separator)), fi.IsDir())
 	}
 }
 
@@ -191,8 +189,8 @@ func (s *Storage) Archive(artifact *sourcev1.Artifact, dir string, filter Archiv
 			return err
 		}
 
-		// Ignore anything that is not a file (directories, symlinks)
-		if !fi.Mode().IsRegular() {
+		// Ignore anything that is not a file or directories e.g. symlinks
+		if m := fi.Mode(); !(m.IsRegular() || m.IsDir()) {
 			return nil
 		}
 
@@ -231,6 +229,9 @@ func (s *Storage) Archive(artifact *sourcev1.Artifact, dir string, filter Archiv
 			return err
 		}
 
+		if !fi.Mode().IsRegular() {
+			return nil
+		}
 		f, err := os.Open(p)
 		if err != nil {
 			f.Close()
