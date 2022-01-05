@@ -2,6 +2,25 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.20.0
+
+**Release date:** 2022-01-05
+
+This prerelease comes with an update to the Kubernetes and controller-runtime dependencies
+to align them with the Kubernetes 1.23 release, including an update of Helm to `v3.7.2`.
+
+In addition, the controller is now built with Go 1.17, and 
+`github.com/containerd/containerd` was updated to `v1.5.8` to please
+static security analysers and fix any warnings for GHSA-5j5w-g665-5m35.
+
+Improvements:
+- Update Go to v1.17
+  [#473](https://github.com/fluxcd/source-controller/pull/473)
+- Update build dependencies
+  [#520](https://github.com/fluxcd/source-controller/pull/520)
+- Update containerd to v1.5.8 (fix GHSA-5j5w-g665-5m35)
+  [#529](https://github.com/fluxcd/source-controller/pull/529)
+
 ## 0.19.2
 
 **Release date:** 2021-12-09
