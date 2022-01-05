@@ -218,3 +218,6 @@ replace github.com/opencontainers/runc => github.com/opencontainers/runc v1.0.3
 
 // Fix CVE-2021-41190
 replace github.com/opencontainers/image-spec => github.com/opencontainers/image-spec v1.0.2
+
+// Fix GHSA-5j5w-g665-5m35
+replace github.com/containerd/containerd => github.com/containerd/containerd v1.5.8
