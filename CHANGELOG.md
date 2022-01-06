@@ -2,6 +2,29 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.19.2
+
+**Release date:** 2021-12-09
+
+This prerelease ensures the API resources are not prematurely marked as `Ready`
+by tools like `kstatus`, while the controller has not observed a newly created
+resource yet, by defaulting the `ObservedGeneration` in the status of the
+resource to `-1`.
+
+In addition, it changes the faulty `URL` column for `Bucket` resources to
+`Endpoint`, and updates `github.com/opencontainers/runc` to `v1.0.3` to please
+static security analysers and fix any warnings for CVE-2021-43784.
+
+Improvements:
+- crds: set default observedGeneration to -1
+  [#517](https://github.com/fluxcd/source-controller/pull/517)
+- Update github.com/opencontainers/runc to v1.0.3 (fix CVE-2021-43784)
+  [#518](https://github.com/fluxcd/source-controller/pull/518)
+
+Fixes:
+- Change bucket JSONPath from URL to endpoint
+  [#514](https://github.com/fluxcd/source-controller/pull/514)
+
 ## 0.19.1
 
 **Release date:** 2021-12-03

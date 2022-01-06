@@ -118,6 +118,8 @@ spec:
             - url
             type: object
           status:
+            default:
+              observedGeneration: -1
             description: HelmRepositoryStatus defines the observed state of the HelmRepository.
             properties:
               artifact:

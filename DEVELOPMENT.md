@@ -36,12 +36,90 @@ $ LIBGIT2_FORCE=1 make libgit2
 ```
 
 **Note:** Example shown is for Arch Linux, but likewise procedure can be
-followed using any other package manager, e.g. `apt`.
+followed using any other package manager. Some distributions may have slight 
+variation of package names (e.g. `apt install -y cmake openssl libssh2-1-dev`).
 
 ## How to run the test suite
 
-You can run the unit tests by simply doing
+The test suite depends on [envtest] being installed. For minimum required 
+version refer to the variable `ENVTEST_BIN_VERSION` in the [Makefile](./Makefile).
+
+You can run the unit tests by simply doing:
 
 ```bash
 make test
+```
+
+[envtest]: https://book.kubebuilder.io/reference/envtest.html#installation
+
+
+## How to run the controller locally
+
+Install flux on your test cluster:
+
+```sh
+flux install
+```
+
+Scale the in-cluster controller to zero:
+
+```sh
+kubectl -n flux-system scale deployment/source-controller --replicas=0
+```
+
+Run the controller locally:
+
+```sh
+make run
+```
+
+## How to install the controller
+
+### Building the container image
+
+Set the name of the container image to be created from the source code. This will be used 
+when building, pushing and referring to the image on YAML files:
+
+```sh
+export IMG=registry-path/source-controller
+export TAG=latest # optional
+```
+
+Build the container image, tagging it as `$(IMG):$(TAG)`:
+
+```sh
+make docker-build
+```
+
+Push the image into the repository:
+
+```sh
+make docker-push
+```
+
+Alternatively, the three steps above can be done in a single line:
+  
+```sh
+IMG=registry-path/source-controller TAG=latest BUILD_ARGS=--push \
+    make docker-build
+```
+For an extensive list of `BUILD_ARGS`, refer to the docker [buildx build options] documentation.
+
+**Note:** `make docker-build` will build images for all supported architecture by default.
+Limit this to a specific architecture for faster builds:
+
+```sh
+IMG=registry-path/source-controller TAG=latest BUILD_ARGS=--push BUILD_PLATFORMS=amd64 \
+    make docker-build
+```
+
+[buildx build options]: https://docs.docker.com/engine/reference/commandline/buildx_build/#options
+
+
+### Deploying into a cluster
+
+Deploy `source-controller` into the cluster that is configured in the local kubeconfig file (i.e. `~/.kube/config`):
+
+```sh
+make dev-deploy
 ```

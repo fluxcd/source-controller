@@ -196,7 +196,8 @@ type HelmRepository struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   HelmRepositorySpec   `json:"spec,omitempty"`
+	Spec HelmRepositorySpec `json:"spec,omitempty"`
+	// +kubebuilder:default={"observedGeneration":-1}
 	Status HelmRepositoryStatus `json:"status,omitempty"`
 }
 

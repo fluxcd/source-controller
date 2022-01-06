@@ -249,7 +249,8 @@ type HelmChart struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   HelmChartSpec   `json:"spec,omitempty"`
+	Spec HelmChartSpec `json:"spec,omitempty"`
+	// +kubebuilder:default={"observedGeneration":-1}
 	Status HelmChartStatus `json:"status,omitempty"`
 }
 

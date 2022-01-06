@@ -8,7 +8,6 @@ require (
 	cloud.google.com/go v0.93.3 // indirect
 	cloud.google.com/go/storage v1.16.0
 	github.com/Azure/aad-pod-identity v1.8.5
-	github.com/Azure/azure-pipeline-go v0.2.3
 	github.com/Azure/azure-sdk-for-go v60.0.0+incompatible
 	github.com/Azure/azure-storage-blob-go v0.14.0
 	github.com/Azure/go-autorest/autorest v0.11.18
@@ -33,7 +32,7 @@ require (
 	github.com/fluxcd/pkg/testserver v0.1.0
 	github.com/fluxcd/pkg/untar v0.1.0
 	github.com/fluxcd/pkg/version v0.1.0
-	github.com/fluxcd/source-controller/api v0.19.1
+	github.com/fluxcd/source-controller/api v0.19.2
 	github.com/garyburd/redigo v1.6.3 // indirect
 	github.com/go-git/go-billy/v5 v5.3.1
 	github.com/go-git/go-git/v5 v5.4.2
@@ -82,7 +81,10 @@ replace github.com/docker/cli => github.com/docker/cli v20.10.9+incompatible
 replace github.com/containerd/containerd => github.com/containerd/containerd v1.4.12
 
 // Fix CVE-2021-30465
-replace github.com/opencontainers/runc => github.com/opencontainers/runc v1.0.2
+// Fix CVE-2021-43784
+// Fix GO-2021-0085
+// Fix GO-2021-0087
+replace github.com/opencontainers/runc => github.com/opencontainers/runc v1.0.3
 
 // Fix CVE-2021-41190
 replace github.com/opencontainers/image-spec => github.com/opencontainers/image-spec v1.0.2
