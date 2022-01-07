@@ -137,7 +137,7 @@ require (
 	github.com/morikuni/aec v1.0.0 // indirect
 	github.com/nxadm/tail v1.4.8 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
-	github.com/opencontainers/image-spec v1.0.1 // indirect
+	github.com/opencontainers/image-spec v1.0.2 // indirect
 	github.com/opencontainers/runc v1.0.2 // indirect
 	github.com/peterbourgon/diskv v2.0.1+incompatible // indirect
 	github.com/pkg/errors v0.9.1 // indirect
@@ -219,5 +219,5 @@ replace github.com/opencontainers/runc => github.com/opencontainers/runc v1.0.3
 // Fix CVE-2021-41190
 replace github.com/opencontainers/image-spec => github.com/opencontainers/image-spec v1.0.2
 
-// Fix GHSA-5j5w-g665-5m35
-replace github.com/containerd/containerd => github.com/containerd/containerd v1.5.8
+// Fix CVE-2021-43816
+replace github.com/containerd/containerd => github.com/containerd/containerd v1.5.9
