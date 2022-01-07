@@ -177,14 +177,21 @@ func (r *BucketReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 }
 
 func (r *BucketReconciler) reconcile(ctx context.Context, bucket sourcev1.Bucket) (sourcev1.Bucket, error) {
+	log := ctrl.LoggerFrom(ctx)
 	var err error
 	var sourceBucket sourcev1.Bucket
+
 	tempDir, err := os.MkdirTemp("", bucket.Name)
 	if err != nil {
 		err = fmt.Errorf("tmp dir error: %w", err)
 		return sourcev1.BucketNotReady(bucket, sourcev1.StorageOperationFailedReason, err.Error()), err
 	}
-	defer os.RemoveAll(tempDir)
+	defer func() {
+		if err := os.RemoveAll(tempDir); err != nil {
+			log.Error(err, "failed to remove working directory", "path", tempDir)
+		}
+	}()
+
 	if bucket.Spec.Provider == sourcev1.GoogleBucketProvider {
 		sourceBucket, err = r.reconcileWithGCP(ctx, bucket, tempDir)
 		if err != nil {

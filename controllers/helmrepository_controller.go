@@ -173,6 +173,7 @@ func (r *HelmRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 }
 
 func (r *HelmRepositoryReconciler) reconcile(ctx context.Context, repo sourcev1.HelmRepository) (sourcev1.HelmRepository, error) {
+	log := ctrl.LoggerFrom(ctx)
 	clientOpts := []helmgetter.Option{
 		helmgetter.WithURL(repo.Spec.URL),
 		helmgetter.WithTimeout(repo.Spec.Timeout.Duration),
@@ -196,7 +197,11 @@ func (r *HelmRepositoryReconciler) reconcile(ctx context.Context, repo sourcev1.
 			err = fmt.Errorf("failed to create temporary working directory for credentials: %w", err)
 			return sourcev1.HelmRepositoryNotReady(repo, sourcev1.AuthenticationFailedReason, err.Error()), err
 		}
-		defer os.RemoveAll(authDir)
+		defer func() {
+			if err := os.RemoveAll(authDir); err != nil {
+				log.Error(err, "failed to remove working directory", "path", authDir)
+			}
+		}()
 
 		opts, err := getter.ClientOptionsFromSecret(authDir, secret)
 		if err != nil {

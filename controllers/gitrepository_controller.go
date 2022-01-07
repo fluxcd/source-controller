@@ -220,13 +220,19 @@ func (r *GitRepositoryReconciler) checkDependencies(repository sourcev1.GitRepos
 }
 
 func (r *GitRepositoryReconciler) reconcile(ctx context.Context, repository sourcev1.GitRepository) (sourcev1.GitRepository, error) {
+	log := ctrl.LoggerFrom(ctx)
+
 	// create tmp dir for the Git clone
 	tmpGit, err := os.MkdirTemp("", repository.Name)
 	if err != nil {
 		err = fmt.Errorf("tmp dir error: %w", err)
 		return sourcev1.GitRepositoryNotReady(repository, sourcev1.StorageOperationFailedReason, err.Error()), err
 	}
-	defer os.RemoveAll(tmpGit)
+	defer func() {
+		if err := os.RemoveAll(tmpGit); err != nil {
+			log.Error(err, "failed to remove working directory", "path", tmpGit)
+		}
+	}()
 
 	// Configure auth options using secret
 	var authOpts *git.AuthOptions

@@ -209,7 +209,11 @@ func (r *HelmChartReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		r.recordReadiness(ctx, chart)
 		return ctrl.Result{Requeue: true}, err
 	}
-	defer os.RemoveAll(workDir)
+	defer func() {
+		if err := os.RemoveAll(workDir); err != nil {
+			log.Error(err, "failed to remove working directory", "path", workDir)
+		}
+	}()
 
 	// Perform the reconciliation for the chart source type
 	var reconciledChart sourcev1.HelmChart
