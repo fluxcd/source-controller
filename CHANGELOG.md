@@ -2,6 +2,19 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.20.1
+
+**Release date:** 2022-01-07
+
+This prerelease comes with an update for `github.com/containerd/containerd` to `v1.5.9`
+to please static security analysers and fix any warnings for CVE-2021-43816.
+
+Improvements:
+- Log the error when tmp cleanup fails
+  [#533](https://github.com/fluxcd/source-controller/pull/533)
+- Update containerd to v1.5.9 (fix CVE-2021-43816)
+  [#532](https://github.com/fluxcd/source-controller/pull/532)
+
 ## 0.20.0
 
 **Release date:** 2022-01-05
