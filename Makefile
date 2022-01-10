@@ -229,7 +229,7 @@ update-attributions:
 e2e:
 	./hack/ci/e2e.sh
 
-verify: update-attributions fmt vet
+verify: update-attributions fmt vet manifests api-docs
 ifneq (, $(shell git status --porcelain --untracked-files=no))
 	@{ \
 	echo "working directory is dirty:"; \
