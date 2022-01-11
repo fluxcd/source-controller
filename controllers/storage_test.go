@@ -303,21 +303,21 @@ func TestStorageCopyFromPath(t *testing.T) {
 		return
 	}
 
-	matchFile := func(t *testing.T, storage *Storage, artifact sourcev1.Artifact, file *File, wantErr bool) {
+	matchFile := func(t *testing.T, storage *Storage, artifact sourcev1.Artifact, file *File, expectMismatch bool) {
 		c, err := os.ReadFile(storage.LocalPath(artifact))
 		if err != nil {
 			t.Fatalf("failed reading file: %v", err)
 		}
-		if (string(c) != string(file.Content)) != wantErr {
-			t.Errorf("artifact content does not match, got: %q, want: %q", string(c), string(file.Content))
+		if (string(c) != string(file.Content)) != expectMismatch {
+			t.Errorf("artifact content does not match and not expecting mismatch, got: %q, want: %q", string(c), string(file.Content))
 		}
 	}
 
 	tests := []struct {
-		name    string
-		file    *File
-		want    *File
-		wantErr bool
+		name           string
+		file           *File
+		want           *File
+		expectMismatch bool
 	}{
 		{
 			name: "content match",
@@ -338,9 +338,9 @@ func TestStorageCopyFromPath(t *testing.T) {
 			},
 			want: &File{
 				Name:    "manifest.yaml",
-				Content: []byte(`bad contents`),
+				Content: []byte(`mismatch contents`),
 			},
-			wantErr: true,
+			expectMismatch: true,
 		},
 	}
 	for _, tt := range tests {
@@ -360,7 +360,7 @@ func TestStorageCopyFromPath(t *testing.T) {
 			if err := storage.CopyFromPath(&artifact, absPath); err != nil {
 				t.Errorf("CopyFromPath() error = %v", err)
 			}
-			matchFile(t, storage, artifact, tt.want, tt.wantErr)
+			matchFile(t, storage, artifact, tt.want, tt.expectMismatch)
 		})
 	}
 }

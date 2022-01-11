@@ -355,10 +355,13 @@ func (s *Storage) CopyFromPath(artifact *sourcev1.Artifact, path string) (err er
 	if err != nil {
 		return err
 	}
-	if err = s.Copy(artifact, f); err != nil {
-		return err
-	}
-	return f.Close()
+	defer func() {
+		if cerr := f.Close(); cerr != nil && err == nil {
+			err = cerr
+		}
+	}()
+	err = s.Copy(artifact, f)
+	return err
 }
 
 // CopyToPath copies the contents in the (sub)path of the given artifact to the given path.
