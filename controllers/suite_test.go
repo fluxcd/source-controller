@@ -17,6 +17,7 @@ limitations under the License.
 package controllers
 
 import (
+	"context"
 	"math/rand"
 	"net/http"
 	"os"
@@ -52,6 +53,8 @@ var storage *Storage
 var examplePublicKey []byte
 var examplePrivateKey []byte
 var exampleCA []byte
+var ctx context.Context
+var cancel context.CancelFunc
 
 func TestAPIs(t *testing.T) {
 	RegisterFailHandler(Fail)
@@ -65,6 +68,7 @@ var _ = BeforeSuite(func(done Done) {
 	logf.SetLogger(
 		zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)),
 	)
+	ctx, cancel = context.WithCancel(context.TODO())
 
 	By("bootstrapping test environment")
 	t := true
@@ -141,7 +145,8 @@ var _ = BeforeSuite(func(done Done) {
 	Expect(err).ToNot(HaveOccurred(), "failed to setup HelmChartReconciler")
 
 	go func() {
-		err = k8sManager.Start(ctrl.SetupSignalHandler())
+		defer GinkgoRecover()
+		err = k8sManager.Start(ctx)
 		Expect(err).ToNot(HaveOccurred())
 	}()
 
@@ -152,6 +157,7 @@ var _ = BeforeSuite(func(done Done) {
 }, 60)
 
 var _ = AfterSuite(func() {
+	cancel()
 	By("tearing down the test environment")
 	if storage != nil {
 		err := os.RemoveAll(storage.BasePath)
