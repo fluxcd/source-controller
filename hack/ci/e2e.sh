@@ -54,7 +54,10 @@ function cleanup(){
 }
 trap cleanup EXIT
 
+# Wait for nodes to be ready and pods to be running
 kubectl wait node "${KIND_CLUSTER_NAME}-control-plane" --for=condition=ready --timeout=2m
+kubectl wait --for=condition=ready -n kube-system -l k8s-app=kube-dns pod
+kubectl wait --for=condition=ready -n local-path-storage -l app=local-path-provisioner pod
 
 echo "Build, load image into kind and deploy controller"
 make docker-build IMG="${IMG}" TAG="${TAG}" BUILD_PLATFORMS="${BUILD_PLATFORM}" BUILD_ARGS=--load
