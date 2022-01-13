@@ -269,7 +269,7 @@ func (r *ChartRepository) CacheIndex() (string, error) {
 	if err = r.DownloadIndex(mw); err != nil {
 		f.Close()
 		os.RemoveAll(f.Name())
-		return "", fmt.Errorf("failed to cache index to '%s': %w", f.Name(), err)
+		return "", fmt.Errorf("failed to cache index to temporary file: %w", err)
 	}
 	if err = f.Close(); err != nil {
 		os.RemoveAll(f.Name())
