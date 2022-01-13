@@ -97,8 +97,9 @@ func (r *BucketReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 
 	// Add our finalizer if it does not exist
 	if !controllerutil.ContainsFinalizer(&bucket, sourcev1.SourceFinalizer) {
+		patch := client.MergeFrom(bucket.DeepCopy())
 		controllerutil.AddFinalizer(&bucket, sourcev1.SourceFinalizer)
-		if err := r.Update(ctx, &bucket); err != nil {
+		if err := r.Patch(ctx, &bucket, patch); err != nil {
 			log.Error(err, "unable to register finalizer")
 			return ctrl.Result{}, err
 		}
