@@ -1569,8 +1569,8 @@ Artifact
 <td>
 <code>includedArtifacts</code><br>
 <em>
-<a href="#source.toolkit.fluxcd.io/v1beta1.*./api/v1beta1.Artifact">
-[]*./api/v1beta1.Artifact
+<a href="#source.toolkit.fluxcd.io/v1beta1.*github.com/fluxcd/source-controller/api/v1beta1.Artifact">
+[]*github.com/fluxcd/source-controller/api/v1beta1.Artifact
 </a>
 </em>
 </td>
