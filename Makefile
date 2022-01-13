@@ -23,7 +23,6 @@ LIBGIT2_VERSION ?= 1.1.1
 
 # Other dependency versions
 ENVTEST_BIN_VERSION ?= 1.19.2
-KUBEBUILDER_ASSETS ?= $(shell $(SETUP_ENVTEST) use -i $(ENVTEST_BIN_VERSION) -p path)
 
 # libgit2 related magical paths
 # These are used to determine if the target libgit2 version is already available on
@@ -67,6 +66,9 @@ ifdef HAS_OPENSSL
 	MAKE_PKG_CONFIG_PATH := $(MAKE_PKG_CONFIG_PATH):$(HAS_OPENSSL)/lib/pkgconfig
 endif
 
+# Architecture to use envtest with
+ENVTEST_ARCH ?= amd64
+
 all: build
 
 build: $(LIBGIT2) ## Build manager binary
@@ -79,15 +81,18 @@ else
 	go build -o bin/manager main.go
 endif
 
-test: $(LIBGIT2) test-api  ## Run tests
+KUBEBUILDER_ASSETS?="$(shell $(ENVTEST) --arch=$(ENVTEST_ARCH) use -i $(ENVTEST_KUBERNETES_VERSION) --bin-dir=$(ENVTEST_ASSETS_DIR) -p path)"
+test: $(LIBGIT2) install-envtest test-api  ## Run tests
 ifeq ($(shell uname -s),Darwin)
 	LD_LIBRARY_PATH=$(LIBGIT2_LIB_PATH) \
 	PKG_CONFIG_PATH=$(MAKE_PKG_CONFIG_PATH) \
 	CGO_LDFLAGS="-Wl,-rpath,$(LIBGIT2_LIB_PATH)" \
+	KUBEBUILDER_ASSETS=$(KUBEBUILDER_ASSETS) \
 	go test ./... -coverprofile cover.out
 else
 	LD_LIBRARY_PATH=$(LIBGIT2_LIB_PATH) \
 	PKG_CONFIG_PATH=$(MAKE_PKG_CONFIG_PATH) \
+	KUBEBUILDER_ASSETS=$(KUBEBUILDER_ASSETS) \
 	go test ./... -coverprofile cover.out
 endif
 
@@ -126,7 +131,7 @@ manifests: controller-gen  ## Generate manifests, e.g. CRD, RBAC, etc.
 	cd api; $(CONTROLLER_GEN) $(CRD_OPTIONS) rbac:roleName=manager-role paths="./..." output:crd:artifacts:config="../config/crd/bases"
 
 api-docs: gen-crd-api-reference-docs  ## Generate API reference documentation
-	$(API_REF_GEN) -api-dir=./api/v1beta1 -config=./hack/api-docs/config.json -template-dir=./hack/api-docs/template -out-file=./docs/api/source.md
+	$(GEN_CRD_API_REFERENCE_DOCS) -api-dir=./api/v1beta1 -config=./hack/api-docs/config.json -template-dir=./hack/api-docs/template -out-file=./docs/api/source.md
 
 tidy:  ## Run go mod tidy
 	go mod tidy
@@ -162,50 +167,28 @@ docker-build:  ## Build the Docker image
 docker-push:  ## Push Docker image
 	docker push $(IMG):$(TAG)
 
-controller-gen: ## Find or download controller-gen
-ifeq (, $(shell which controller-gen))
-	@{ \
-	set -e; \
-	CONTROLLER_GEN_TMP_DIR=$$(mktemp -d); \
-	cd $$CONTROLLER_GEN_TMP_DIR; \
-	go mod init tmp; \
-	go get sigs.k8s.io/controller-tools/cmd/controller-gen@$(CONTROLLER_GEN_VERSION); \
-	rm -rf $$CONTROLLER_GEN_TMP_DIR; \
-	}
-CONTROLLER_GEN=$(GOBIN)/controller-gen
-else
-CONTROLLER_GEN=$(shell which controller-gen)
-endif
+# Find or download controller-gen
+CONTROLLER_GEN = $(shell pwd)/bin/controller-gen
+.PHONY: controller-gen
+controller-gen: ## Download controller-gen locally if necessary.
+	$(call go-install-tool,$(CONTROLLER_GEN),sigs.k8s.io/controller-tools/cmd/controller-gen@v0.7.0)
 
-gen-crd-api-reference-docs:  ## Find or download gen-crd-api-reference-docs
-ifeq (, $(shell which gen-crd-api-reference-docs))
-	@{ \
-	set -e; \
-	API_REF_GEN_TMP_DIR=$$(mktemp -d); \
-	cd $$API_REF_GEN_TMP_DIR; \
-	go mod init tmp; \
-	go get github.com/ahmetb/gen-crd-api-reference-docs@$(GEN_API_REF_DOCS_VERSION); \
-	rm -rf $$API_REF_GEN_TMP_DIR; \
-	}
-API_REF_GEN=$(GOBIN)/gen-crd-api-reference-docs
-else
-API_REF_GEN=$(shell which gen-crd-api-reference-docs)
-endif
+# Find or download gen-crd-api-reference-docs
+GEN_CRD_API_REFERENCE_DOCS = $(shell pwd)/bin/gen-crd-api-reference-docs
+.PHONY: gen-crd-api-reference-docs
+gen-crd-api-reference-docs: ## Download gen-crd-api-reference-docs locally if necessary
+	$(call go-install-tool,$(GEN_CRD_API_REFERENCE_DOCS),github.com/ahmetb/gen-crd-api-reference-docs@v0.3.0)
 
-setup-envtest:  ## Find or download setup-envtest
-ifeq (, $(shell which setup-envtest))
-	@{ \
-	set -e; \
-	SETUP_ENVTEST_TMP_DIR=$$(mktemp -d); \
-	cd $$SETUP_ENVTEST_TMP_DIR; \
-	go mod init tmp; \
-	go get sigs.k8s.io/controller-runtime/tools/setup-envtest@latest; \
-	rm -rf $$SETUP_ENVTEST_TMP_DIR; \
-	}
-SETUP_ENVTEST=$(GOBIN)/setup-envtest
-else
-SETUP_ENVTEST=$(shell which setup-envtest)
-endif
+ENVTEST = $(shell pwd)/bin/setup-envtest
+.PHONY: envtest
+setup-envtest: ## Download setup-envtest locally if necessary.
+	$(call go-install-tool,$(ENVTEST),sigs.k8s.io/controller-runtime/tools/setup-envtest@latest)
+
+ENVTEST_ASSETS_DIR=$(shell pwd)/testbin
+ENVTEST_KUBERNETES_VERSION?=latest
+install-envtest: setup-envtest ## Download envtest binaries locally.
+	mkdir -p ${ENVTEST_ASSETS_DIR}
+	$(ENVTEST) use $(ENVTEST_KUBERNETES_VERSION) --arch=$(ENVTEST_ARCH) --bin-dir=$(ENVTEST_ASSETS_DIR)
 
 libgit2: $(LIBGIT2)  ## Detect or download libgit2 library
 
@@ -237,3 +220,17 @@ ifneq (, $(shell git status --porcelain --untracked-files=no))
 	exit 1; \
 	}
 endif
+
+# go-install-tool will 'go install' any package $2 and install it to $1.
+PROJECT_DIR := $(shell dirname $(abspath $(lastword $(MAKEFILE_LIST))))
+define go-install-tool
+@[ -f $(1) ] || { \
+set -e ;\
+TMP_DIR=$$(mktemp -d) ;\
+cd $$TMP_DIR ;\
+go mod init tmp ;\
+echo "Downloading $(2)" ;\
+GOBIN=$(PROJECT_DIR)/bin go install $(2) ;\
+rm -rf $$TMP_DIR ;\
+}
+endef
