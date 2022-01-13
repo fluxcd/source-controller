@@ -93,8 +93,9 @@ func (r *HelmRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 
 	// Add our finalizer if it does not exist
 	if !controllerutil.ContainsFinalizer(&repository, sourcev1.SourceFinalizer) {
+		patch := client.MergeFrom(repository.DeepCopy())
 		controllerutil.AddFinalizer(&repository, sourcev1.SourceFinalizer)
-		if err := r.Update(ctx, &repository); err != nil {
+		if err := r.Patch(ctx, &repository, patch); err != nil {
 			log.Error(err, "unable to register finalizer")
 			return ctrl.Result{}, err
 		}

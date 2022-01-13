@@ -126,8 +126,9 @@ func (r *HelmChartReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 	// Add our finalizer if it does not exist
 	if !controllerutil.ContainsFinalizer(&chart, sourcev1.SourceFinalizer) {
+		patch := client.MergeFrom(chart.DeepCopy())
 		controllerutil.AddFinalizer(&chart, sourcev1.SourceFinalizer)
-		if err := r.Update(ctx, &chart); err != nil {
+		if err := r.Patch(ctx, &chart, patch); err != nil {
 			log.Error(err, "unable to register finalizer")
 			return ctrl.Result{}, err
 		}
