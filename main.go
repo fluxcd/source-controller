@@ -152,12 +152,9 @@ func main() {
 	pprof.SetupHandlers(mgr, setupLog)
 
 	var eventRecorder *events.Recorder
-	if eventsAddr != "" {
-		var err error
-		if eventRecorder, err = events.NewRecorder(mgr, ctrl.Log, eventsAddr, controllerName); err != nil {
-			setupLog.Error(err, "unable to create event recorder")
-			os.Exit(1)
-		}
+	if eventRecorder, err = events.NewRecorder(mgr, ctrl.Log, eventsAddr, controllerName); err != nil {
+		setupLog.Error(err, "unable to create event recorder")
+		os.Exit(1)
 	}
 
 	metricsH := helper.MustMakeMetrics(mgr)
