@@ -37,6 +37,18 @@ func TestCheckoutBranch_Checkout(t *testing.T) {
 	defer repo.Free()
 	defer os.RemoveAll(filepath.Join(repo.Path(), ".."))
 
+	cfg, err := git2go.OpenDefault()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// ignores the error here because it can be defaulted
+	// https://github.blog/2020-07-27-highlights-from-git-2-28/#introducing-init-defaultbranch
+	defaultBranch := "main"
+	if v, err := cfg.LookupString("init.defaultBranch"); err != nil {
+		defaultBranch = v
+	}
+
 	firstCommit, err := commitFile(repo, "branch", "init", time.Now())
 	if err != nil {
 		t.Fatal(err)
@@ -59,7 +71,7 @@ func TestCheckoutBranch_Checkout(t *testing.T) {
 	}{
 		{
 			name:           "Default branch",
-			branch:         "master",
+			branch:         defaultBranch,
 			expectedCommit: secondCommit.String(),
 		},
 		{
