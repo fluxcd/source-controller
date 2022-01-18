@@ -91,8 +91,8 @@ FROM debian:bookworm-slim as controller
 LABEL org.opencontainers.image.source="https://github.com/fluxcd/source-controller"
 
 # Configure user
-RUN groupadd controller && \
-    useradd --gid controller --shell /bin/sh --create-home controller
+RUN addgroup --gid 65532 controller && \
+	useradd -u 65532 -s /sbin/nologin -g controller controller
 
 ARG TARGETPLATFORM
 RUN apt update && apt install -y ca-certificates
