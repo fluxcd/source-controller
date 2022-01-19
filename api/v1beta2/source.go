@@ -20,6 +20,7 @@ import (
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 )
 
 const (
@@ -31,6 +32,7 @@ const (
 // Source interface must be supported by all API types.
 // +k8s:deepcopy-gen=false
 type Source interface {
+	runtime.Object
 	// GetRequeueAfter returns the duration after which the source must be reconciled again.
 	GetRequeueAfter() time.Duration
 	// GetArtifact returns the latest artifact from the source if present in the
