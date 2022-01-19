@@ -9,6 +9,7 @@ require (
 	github.com/Masterminds/semver/v3 v3.1.1
 	github.com/ProtonMail/go-crypto v0.0.0-20210428141323-04723f9f07d7
 	github.com/cyphar/filepath-securejoin v0.2.2
+	github.com/elazarl/goproxy v0.0.0-20211114080932-d06c3be7c11b
 	github.com/fluxcd/pkg/apis/meta v0.10.2
 	github.com/fluxcd/pkg/gittestserver v0.5.0
 	github.com/fluxcd/pkg/gitutil v0.1.0
