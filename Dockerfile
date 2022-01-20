@@ -87,9 +87,6 @@ RUN FLAGS=$(pkg-config --static --libs --cflags libssh2 libgit2 libssl libcrypto
 # The target image must aligned with apt sources used for libgit2.
 FROM debian:bookworm-slim as controller
 
-# Link repo to the GitHub Container Registry image
-LABEL org.opencontainers.image.source="https://github.com/fluxcd/source-controller"
-
 ARG TARGETPLATFORM
 RUN apt update && apt install -y ca-certificates
 
