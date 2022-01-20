@@ -70,7 +70,7 @@ func TestStorageConstructor(t *testing.T) {
 
 // walks a tar.gz and looks for paths with the basename. It does not match
 // symlinks properly at this time because that's painful.
-func walkTar(tarFile string, match string) (int64, bool, error) {
+func walkTar(tarFile string, match string, dir bool) (int64, bool, error) {
 	f, err := os.Open(tarFile)
 	if err != nil {
 		return 0, false, fmt.Errorf("could not open file: %w", err)
@@ -93,7 +93,11 @@ func walkTar(tarFile string, match string) (int64, bool, error) {
 		}
 
 		switch header.Typeflag {
-		case tar.TypeDir, tar.TypeReg:
+		case tar.TypeDir:
+			if header.Name == match && dir {
+				return 0, true, nil
+			}
+		case tar.TypeReg:
 			if header.Name == match {
 				return header.Size, true, nil
 			}
@@ -145,13 +149,14 @@ func TestStorage_Archive(t *testing.T) {
 		return
 	}
 
-	matchFiles := func(t *testing.T, storage *Storage, artifact sourcev1.Artifact, files map[string][]byte) {
+	matchFiles := func(t *testing.T, storage *Storage, artifact sourcev1.Artifact, files map[string][]byte, dirs []string) {
+		t.Helper()
 		for name, b := range files {
 			mustExist := !(name[0:1] == "!")
 			if !mustExist {
 				name = name[1:]
 			}
-			s, exist, err := walkTar(storage.LocalPath(artifact), name)
+			s, exist, err := walkTar(storage.LocalPath(artifact), name, false)
 			if err != nil {
 				t.Fatalf("failed reading tarball: %v", err)
 			}
@@ -166,14 +171,32 @@ func TestStorage_Archive(t *testing.T) {
 				}
 			}
 		}
+		for _, name := range dirs {
+			mustExist := !(name[0:1] == "!")
+			if !mustExist {
+				name = name[1:]
+			}
+			_, exist, err := walkTar(storage.LocalPath(artifact), name, true)
+			if err != nil {
+				t.Fatalf("failed reading tarball: %v", err)
+			}
+			if exist != mustExist {
+				if mustExist {
+					t.Errorf("could not find dir %q in tarball", name)
+				} else {
+					t.Errorf("tarball contained excluded file %q", name)
+				}
+			}
+		}
 	}
 
 	tests := []struct {
-		name    string
-		files   map[string][]byte
-		filter  ArchiveFileFilter
-		want    map[string][]byte
-		wantErr bool
+		name     string
+		files    map[string][]byte
+		filter   ArchiveFileFilter
+		want     map[string][]byte
+		wantDirs []string
+		wantErr  bool
 	}{
 		{
 			name: "no filter",
@@ -194,6 +217,9 @@ func TestStorage_Archive(t *testing.T) {
 			files: map[string][]byte{
 				".git/config":   nil,
 				"manifest.yaml": nil,
+			},
+			wantDirs: []string{
+				"!.git",
 			},
 			filter: SourceIgnoreFilter(nil, nil),
 			want: map[string][]byte{
@@ -218,6 +244,19 @@ func TestStorage_Archive(t *testing.T) {
 			},
 			wantErr: false,
 		},
+		{
+			name: "including directories",
+			files: map[string][]byte{
+				"test/.gitkeep": nil,
+			},
+			filter: SourceIgnoreFilter([]gitignore.Pattern{
+				gitignore.ParsePattern("custom", nil),
+			}, nil),
+			wantDirs: []string{
+				"test",
+			},
+			wantErr: false,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -236,7 +275,7 @@ func TestStorage_Archive(t *testing.T) {
 			if err := storage.Archive(&artifact, dir, tt.filter); (err != nil) != tt.wantErr {
 				t.Errorf("Archive() error = %v, wantErr %v", err, tt.wantErr)
 			}
-			matchFiles(t, storage, artifact, tt.want)
+			matchFiles(t, storage, artifact, tt.want, tt.wantDirs)
 		})
 	}
 }
