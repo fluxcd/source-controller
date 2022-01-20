@@ -90,10 +90,6 @@ FROM debian:bookworm-slim as controller
 # Link repo to the GitHub Container Registry image
 LABEL org.opencontainers.image.source="https://github.com/fluxcd/source-controller"
 
-# Configure user
-RUN groupadd controller && \
-    useradd --gid controller --shell /bin/sh --create-home controller
-
 ARG TARGETPLATFORM
 RUN apt update && apt install -y ca-certificates
 
@@ -102,5 +98,5 @@ COPY --from=build /workspace/source-controller /usr/local/bin/
 COPY --from=libgit2-bullseye /libgit2/built-on-glibc-version /
 COPY ATTRIBUTIONS.md /
 
-USER controller
+USER 65534:65534
 ENTRYPOINT [ "source-controller" ]
