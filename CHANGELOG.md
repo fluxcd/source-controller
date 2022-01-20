@@ -2,6 +2,67 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.21.0
+
+**Release date:** 2022-01-26
+
+This prerelease comes with changes to the base image used to build and
+run the controller, replacing Debian Unstable (Sid) with Alpine 3.15.
+The controller is now statically built and includes libgit2 along with
+its main dependencies.
+
+The controller container images are signed with
+[Cosign and GitHub OIDC](https://github.com/sigstore/cosign/blob/22007e56aee419ae361c9f021869a30e9ae7be03/KEYLESS.md),
+and a Software Bill of Materials in [SPDX format](https://spdx.dev) has been published on the release page.
+
+Starting with this version, the controller deployment conforms to the
+Kubernetes [restricted pod security standard](https://kubernetes.io/docs/concepts/security/pod-security-standards/#restricted):
+- all Linux capabilities were dropped
+- the root filesystem was set to read-only
+- the seccomp profile was set to the runtime default
+- run as non-root was enabled
+- the filesystem group was set to 1337
+- the user and group ID was set to 65534
+
+**Breaking changes**:
+- The use of new seccomp API requires Kubernetes 1.19.
+- The controller container is now executed under 65534:65534 (userid:groupid).
+  This change may break deployments that hard-coded the user ID of 'controller' in their PodSecurityPolicy.
+
+Improvements:
+- Statically build using musl toolchain and target alpine
+  [#558](https://github.com/fluxcd/source-controller/pull/558)
+- Publish SBOM and sign release artifacts
+  [#550](https://github.com/fluxcd/source-controller/pull/550)
+- security: Drop capabilities, set userid and enable seccomp
+  [#521](https://github.com/fluxcd/source-controller/pull/521)
+- docs: Add git proxy support docs
+  [#547](https://github.com/fluxcd/source-controller/pull/547)
+- libgit2: Configured libgit2 clone ProxyOptions
+  [#524](https://github.com/fluxcd/source-controller/pull/524)
+- storage: include directories in artifact tarball
+  [#543](https://github.com/fluxcd/source-controller/pull/543)
+- Add Permissions to GitHub Workflows
+  [#551](https://github.com/fluxcd/source-controller/pull/551)
+- Update git2go to v31.7.6
+  [#554](https://github.com/fluxcd/source-controller/pull/554)
+- Update dev docs
+  [#555](https://github.com/fluxcd/source-controller/pull/555)
+
+Fixes:
+- e2e: Set timeout to fix intermittent errors
+  [#549](https://github.com/fluxcd/source-controller/pull/549)
+- git/libgit2: Fix failing tests when the default branch is not "master"
+  [#545](https://github.com/fluxcd/source-controller/pull/545)
+- Remove temp file name from Helm index cache err
+  [#540](https://github.com/fluxcd/source-controller/pull/540)
+- Fix makefile envtest and controller-gen usage
+  [#539](https://github.com/fluxcd/source-controller/pull/539)
+- Update file close operation to not use defer and add test case for CopyFromPath
+  [#538](https://github.com/fluxcd/source-controller/pull/538)
+- Fix the missing protocol for the first port in manager config
+  [#556](https://github.com/fluxcd/source-controller/pull/556)
+
 ## 0.20.1
 
 **Release date:** 2022-01-07
