@@ -137,5 +137,5 @@ kubectl -n source-system wait helmchart/helmchart-bucket --for=condition=ready -
 
 echo "Run large Git repo tests"
 kubectl -n source-system apply -f "${ROOT_DIR}/config/testdata/git/large-repo.yaml"
-kubectl -n source-system wait gitrepository/large-repo-go-git --for=condition=ready --timeout=2m
-kubectl -n source-system wait gitrepository/large-repo-libgit2 --for=condition=ready --timeout=2m
+kubectl -n source-system wait gitrepository/large-repo-go-git --for=condition=ready --timeout=2m15s
+kubectl -n source-system wait gitrepository/large-repo-libgit2 --for=condition=ready --timeout=2m15s
