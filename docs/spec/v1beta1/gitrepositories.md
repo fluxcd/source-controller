@@ -207,9 +207,9 @@ To be able to support Azure DevOps a compromise solution was built, giving the u
 option to select the git library while accepting the drawbacks.
 
 | Git Implementation | Shallow Clones | Git Submodules | V2 Protocol Support |
-|---|---|---|---|
-| 'go-git' | true | true | false |
-| 'libgit2' | false | false | true |
+| ---                | ---            | ---            | ---                 |
+| 'go-git'           | true           | true           | false               |
+| 'libgit2'          | false          | false          | true                |
 
 Pull the master branch from a repository in Azure DevOps.
 
@@ -224,6 +224,21 @@ spec:
   url: https://dev.azure.com/org/proj/_git/repo
   gitImplementation: libgit2
 ```
+
+## Git Proxy
+
+A Git proxy can be configured by setting the appropriate environment variables
+for proxy configurations, for example `HTTPS_PROXY`, `NO_PROXY`, etc., in the
+source-controller pod. There may be some limitations in the proxy support based
+on the Git implementations.
+
+| Git Implementation | HTTP_PROXY | HTTPS_PROXY | NO_PROXY | Self-signed Certs |
+| ---                | ---        | ---         | ---      | ---               |
+| 'go-git'           | true       | true        | true     | false             |
+| 'libgit2'          | false      | true        | false    | true              |
+
+**NOTE:** libgit2 v1.2.0 supports `NO_PROXY`, but source-controller uses
+libgit2 v1.1.1 at the moment.
 
 ## Spec examples
 

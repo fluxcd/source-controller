@@ -26,6 +26,7 @@ import (
 
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 
 	"github.com/fluxcd/pkg/runtime/controller"
@@ -51,7 +52,6 @@ var (
 	testEnv      *testenv.Environment
 	testStorage  *Storage
 	testServer   *testserver.ArtifactServer
-	testEventsH  controller.Events
 	testMetricsH controller.Metrics
 	ctx          = ctrl.SetupSignalHandler()
 )
@@ -86,12 +86,10 @@ func TestMain(m *testing.M) {
 		panic(fmt.Sprintf("Failed to create a test storage: %v", err))
 	}
 
-	testEventsH = controller.MakeEvents(testEnv, "source-controller-test", nil)
 	testMetricsH = controller.MustMakeMetrics(testEnv)
 
 	//if err := (&GitRepositoryReconciler{
 	//	Client:  testEnv,
-	//	Events:  testEventsH,
 	//	Metrics: testMetricsH,
 	//	Storage: testStorage,
 	//}).SetupWithManager(testEnv); err != nil {
@@ -99,10 +97,10 @@ func TestMain(m *testing.M) {
 	//}
 
 	if err := (&BucketReconciler{
-		Client:  testEnv,
-		Events:  testEventsH,
-		Metrics: testMetricsH,
-		Storage: testStorage,
+		Client:        testEnv,
+		EventRecorder: record.NewFakeRecorder(32),
+		Metrics:       testMetricsH,
+		Storage:       testStorage,
 	}).SetupWithManager(testEnv); err != nil {
 		panic(fmt.Sprintf("Failed to start BucketReconciler: %v", err))
 	}

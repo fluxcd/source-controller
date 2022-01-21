@@ -28,7 +28,6 @@ import (
 	"time"
 
 	securejoin "github.com/cyphar/filepath-securejoin"
-	"github.com/go-logr/logr"
 	helmgetter "helm.sh/helm/v3/pkg/getter"
 	corev1 "k8s.io/api/core/v1"
 	apierrs "k8s.io/apimachinery/pkg/api/errors"
@@ -115,7 +114,7 @@ func (r *HelmChartReconciler) SetupWithManagerAndOptions(mgr ctrl.Manager, opts 
 
 func (r *HelmChartReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	start := time.Now()
-	log := logr.FromContext(ctx)
+	log := ctrl.LoggerFrom(ctx)
 
 	var chart sourcev1.HelmChart
 	if err := r.Get(ctx, req.NamespacedName, &chart); err != nil {
@@ -127,8 +126,9 @@ func (r *HelmChartReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 	// Add our finalizer if it does not exist
 	if !controllerutil.ContainsFinalizer(&chart, sourcev1.SourceFinalizer) {
+		patch := client.MergeFrom(chart.DeepCopy())
 		controllerutil.AddFinalizer(&chart, sourcev1.SourceFinalizer)
-		if err := r.Update(ctx, &chart); err != nil {
+		if err := r.Patch(ctx, &chart, patch); err != nil {
 			log.Error(err, "unable to register finalizer")
 			return ctrl.Result{}, err
 		}
@@ -210,7 +210,11 @@ func (r *HelmChartReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		r.recordReadiness(ctx, chart)
 		return ctrl.Result{Requeue: true}, err
 	}
-	defer os.RemoveAll(workDir)
+	defer func() {
+		if err := os.RemoveAll(workDir); err != nil {
+			log.Error(err, "failed to remove working directory", "path", workDir)
+		}
+	}()
 
 	// Perform the reconciliation for the chart source type
 	var reconciledChart sourcev1.HelmChart
@@ -630,26 +634,16 @@ func (r *HelmChartReconciler) gc(chart sourcev1.HelmChart) error {
 // event emits a Kubernetes event and forwards the event to notification
 // controller if configured.
 func (r *HelmChartReconciler) event(ctx context.Context, chart sourcev1.HelmChart, severity, msg string) {
-	log := logr.FromContext(ctx)
 	if r.EventRecorder != nil {
-		r.EventRecorder.Eventf(&chart, "Normal", severity, msg)
+		r.EventRecorder.Eventf(&chart, corev1.EventTypeNormal, severity, msg)
 	}
 	if r.ExternalEventRecorder != nil {
-		objRef, err := reference.GetReference(r.Scheme, &chart)
-		if err != nil {
-			log.Error(err, "unable to send event")
-			return
-		}
-
-		if err := r.ExternalEventRecorder.Eventf(*objRef, nil, severity, severity, msg); err != nil {
-			log.Error(err, "unable to send event")
-			return
-		}
+		r.ExternalEventRecorder.Eventf(&chart, corev1.EventTypeNormal, severity, msg)
 	}
 }
 
 func (r *HelmChartReconciler) recordReadiness(ctx context.Context, chart sourcev1.HelmChart) {
-	log := logr.FromContext(ctx)
+	log := ctrl.LoggerFrom(ctx)
 	if r.MetricsRecorder == nil {
 		return
 	}
@@ -825,7 +819,7 @@ func (r *HelmChartReconciler) recordSuspension(ctx context.Context, chart source
 	if r.MetricsRecorder == nil {
 		return
 	}
-	log := logr.FromContext(ctx)
+	log := ctrl.LoggerFrom(ctx)
 
 	objRef, err := reference.GetReference(r.Scheme, &chart)
 	if err != nil {

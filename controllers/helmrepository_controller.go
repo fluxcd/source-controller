@@ -23,7 +23,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/go-logr/logr"
 	helmgetter "helm.sh/helm/v3/pkg/getter"
 	corev1 "k8s.io/api/core/v1"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
@@ -82,7 +81,7 @@ func (r *HelmRepositoryReconciler) SetupWithManagerAndOptions(mgr ctrl.Manager, 
 
 func (r *HelmRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	start := time.Now()
-	log := logr.FromContext(ctx)
+	log := ctrl.LoggerFrom(ctx)
 
 	var repository sourcev1.HelmRepository
 	if err := r.Get(ctx, req.NamespacedName, &repository); err != nil {
@@ -94,8 +93,9 @@ func (r *HelmRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 
 	// Add our finalizer if it does not exist
 	if !controllerutil.ContainsFinalizer(&repository, sourcev1.SourceFinalizer) {
+		patch := client.MergeFrom(repository.DeepCopy())
 		controllerutil.AddFinalizer(&repository, sourcev1.SourceFinalizer)
-		if err := r.Update(ctx, &repository); err != nil {
+		if err := r.Patch(ctx, &repository, patch); err != nil {
 			log.Error(err, "unable to register finalizer")
 			return ctrl.Result{}, err
 		}
@@ -174,6 +174,7 @@ func (r *HelmRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 }
 
 func (r *HelmRepositoryReconciler) reconcile(ctx context.Context, repo sourcev1.HelmRepository) (sourcev1.HelmRepository, error) {
+	log := ctrl.LoggerFrom(ctx)
 	clientOpts := []helmgetter.Option{
 		helmgetter.WithURL(repo.Spec.URL),
 		helmgetter.WithTimeout(repo.Spec.Timeout.Duration),
@@ -197,7 +198,11 @@ func (r *HelmRepositoryReconciler) reconcile(ctx context.Context, repo sourcev1.
 			err = fmt.Errorf("failed to create temporary working directory for credentials: %w", err)
 			return sourcev1.HelmRepositoryNotReady(repo, sourcev1.AuthenticationFailedReason, err.Error()), err
 		}
-		defer os.RemoveAll(authDir)
+		defer func() {
+			if err := os.RemoveAll(authDir); err != nil {
+				log.Error(err, "failed to remove working directory", "path", authDir)
+			}
+		}()
 
 		opts, err := getter.ClientOptionsFromSecret(authDir, secret)
 		if err != nil {
@@ -330,26 +335,16 @@ func (r *HelmRepositoryReconciler) gc(repository sourcev1.HelmRepository) error 
 
 // event emits a Kubernetes event and forwards the event to notification controller if configured
 func (r *HelmRepositoryReconciler) event(ctx context.Context, repository sourcev1.HelmRepository, severity, msg string) {
-	log := logr.FromContext(ctx)
 	if r.EventRecorder != nil {
-		r.EventRecorder.Eventf(&repository, "Normal", severity, msg)
+		r.EventRecorder.Eventf(&repository, corev1.EventTypeNormal, severity, msg)
 	}
 	if r.ExternalEventRecorder != nil {
-		objRef, err := reference.GetReference(r.Scheme, &repository)
-		if err != nil {
-			log.Error(err, "unable to send event")
-			return
-		}
-
-		if err := r.ExternalEventRecorder.Eventf(*objRef, nil, severity, severity, msg); err != nil {
-			log.Error(err, "unable to send event")
-			return
-		}
+		r.ExternalEventRecorder.Eventf(&repository, corev1.EventTypeNormal, severity, msg)
 	}
 }
 
 func (r *HelmRepositoryReconciler) recordReadiness(ctx context.Context, repository sourcev1.HelmRepository) {
-	log := logr.FromContext(ctx)
+	log := ctrl.LoggerFrom(ctx)
 	if r.MetricsRecorder == nil {
 		return
 	}
@@ -384,7 +379,7 @@ func (r *HelmRepositoryReconciler) recordSuspension(ctx context.Context, hr sour
 	if r.MetricsRecorder == nil {
 		return
 	}
-	log := logr.FromContext(ctx)
+	log := ctrl.LoggerFrom(ctx)
 
 	objRef, err := reference.GetReference(r.Scheme, &hr)
 	if err != nil {

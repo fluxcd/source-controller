@@ -259,3 +259,108 @@ func TestStorageRemoveAllButCurrent(t *testing.T) {
 		}
 	})
 }
+
+func TestStorageCopyFromPath(t *testing.T) {
+	type File struct {
+		Name    string
+		Content []byte
+	}
+
+	dir, err := createStoragePath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(cleanupStoragePath(dir))
+
+	storage, err := NewStorage(dir, "hostname", time.Minute)
+	if err != nil {
+		t.Fatalf("error while bootstrapping storage: %v", err)
+	}
+
+	createFile := func(file *File) (absPath string, err error) {
+		defer func() {
+			if err != nil && dir != "" {
+				os.RemoveAll(dir)
+			}
+		}()
+		dir, err = os.MkdirTemp("", "test-files-")
+		if err != nil {
+			return
+		}
+		absPath = filepath.Join(dir, file.Name)
+		if err = os.MkdirAll(filepath.Dir(absPath), 0755); err != nil {
+			return
+		}
+		f, err := os.Create(absPath)
+		if err != nil {
+			return "", fmt.Errorf("could not create file %q: %w", absPath, err)
+		}
+		if n, err := f.Write(file.Content); err != nil {
+			f.Close()
+			return "", fmt.Errorf("could not write %d bytes to file %q: %w", n, f.Name(), err)
+		}
+		f.Close()
+		return
+	}
+
+	matchFile := func(t *testing.T, storage *Storage, artifact sourcev1.Artifact, file *File, expectMismatch bool) {
+		c, err := os.ReadFile(storage.LocalPath(artifact))
+		if err != nil {
+			t.Fatalf("failed reading file: %v", err)
+		}
+		if (string(c) != string(file.Content)) != expectMismatch {
+			t.Errorf("artifact content does not match and not expecting mismatch, got: %q, want: %q", string(c), string(file.Content))
+		}
+	}
+
+	tests := []struct {
+		name           string
+		file           *File
+		want           *File
+		expectMismatch bool
+	}{
+		{
+			name: "content match",
+			file: &File{
+				Name:    "manifest.yaml",
+				Content: []byte(`contents`),
+			},
+			want: &File{
+				Name:    "manifest.yaml",
+				Content: []byte(`contents`),
+			},
+		},
+		{
+			name: "content not match",
+			file: &File{
+				Name:    "manifest.yaml",
+				Content: []byte(`contents`),
+			},
+			want: &File{
+				Name:    "manifest.yaml",
+				Content: []byte(`mismatch contents`),
+			},
+			expectMismatch: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			absPath, err := createFile(tt.file)
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			defer os.RemoveAll(absPath)
+			artifact := sourcev1.Artifact{
+				Path: filepath.Join(randStringRunes(10), randStringRunes(10), randStringRunes(10)),
+			}
+			if err := storage.MkdirAll(artifact); err != nil {
+				t.Fatalf("artifact directory creation failed: %v", err)
+			}
+			if err := storage.CopyFromPath(&artifact, absPath); err != nil {
+				t.Errorf("CopyFromPath() error = %v", err)
+			}
+			matchFile(t, storage, artifact, tt.want, tt.expectMismatch)
+		})
+	}
+}

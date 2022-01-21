@@ -19,6 +19,7 @@ package controllers
 import (
 	"context"
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -39,8 +40,10 @@ import (
 	"google.golang.org/api/option"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	kerrors "k8s.io/apimachinery/pkg/util/errors"
+	kuberecorder "k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -53,7 +56,6 @@ import (
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	helper "github.com/fluxcd/pkg/runtime/controller"
-	"github.com/fluxcd/pkg/runtime/events"
 	"github.com/fluxcd/pkg/runtime/patch"
 	"github.com/fluxcd/pkg/runtime/predicates"
 
@@ -63,6 +65,32 @@ import (
 	"github.com/fluxcd/source-controller/pkg/sourceignore"
 )
 
+// Status conditions owned by Bucket reconciler.
+var bucketOwnedConditions = []string{
+	sourcev1.ArtifactOutdatedCondition,
+	sourcev1.FetchFailedCondition,
+	meta.ReadyCondition,
+	meta.ReconcilingCondition,
+	meta.StalledCondition,
+}
+
+// Conditions that Ready condition is influenced by in descending order of their
+// priority.
+var bucketReadyDeps = []string{
+	sourcev1.ArtifactOutdatedCondition,
+	sourcev1.FetchFailedCondition,
+	meta.StalledCondition,
+	meta.ReconcilingCondition,
+}
+
+// Negative conditions that Ready condition is influenced by.
+var bucketReadyDepsNegative = []string{
+	sourcev1.ArtifactOutdatedCondition,
+	sourcev1.FetchFailedCondition,
+	meta.StalledCondition,
+	meta.ReconcilingCondition,
+}
+
 // +kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=buckets,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=buckets/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=buckets/finalizers,verbs=get;create;update;patch;delete
@@ -71,7 +99,7 @@ import (
 // BucketReconciler reconciles a Bucket object
 type BucketReconciler struct {
 	client.Client
-	helper.Events
+	kuberecorder.EventRecorder
 	helper.Metrics
 
 	Storage          *Storage
@@ -147,7 +175,7 @@ func (r *BucketReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 	// Examine if the object is under deletion
 	if !obj.ObjectMeta.DeletionTimestamp.IsZero() {
 		res, err := r.reconcileDelete(ctx, obj)
-		return sreconcile.BuildRuntimeResult(obj, res, err)
+		return sreconcile.BuildRuntimeResult(ctx, r.EventRecorder, obj, res, err)
 	}
 
 	// Reconcile actual object
@@ -157,78 +185,33 @@ func (r *BucketReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 		r.reconcileArtifact,
 	}
 	recResult, err = r.reconcile(ctx, obj, reconcilers)
-	return sreconcile.BuildRuntimeResult(obj, recResult, err)
+	return sreconcile.BuildRuntimeResult(ctx, r.EventRecorder, obj, recResult, err)
 }
 
 // summarizeAndPatch analyzes the object conditions to create a summary of the
 // status conditions and patches the object with the calculated summary.
 func (r *BucketReconciler) summarizeAndPatch(ctx context.Context, obj *sourcev1.Bucket, patchHelper *patch.Helper, res sreconcile.Result, recErr error) error {
-	// Remove reconciling condition on successful reconciliation.
-	if recErr == nil && res == sreconcile.ResultSuccess {
-		conditions.Delete(obj, meta.ReconcilingCondition)
-	}
-
 	// Record the value of the reconciliation request if any.
 	if v, ok := meta.ReconcileAnnotationValue(obj.GetAnnotations()); ok {
 		obj.Status.SetLastHandledReconcileRequest(v)
 	}
 
+	// Compute the reconcile results, obtain patch options and reconcile error.
+	var patchOpts []patch.Option
+	patchOpts, recErr = sreconcile.ComputeReconcileResult(obj, res, recErr, bucketOwnedConditions)
+
 	// Summarize the Ready condition based on abnormalities that may have been observed.
 	conditions.SetSummary(obj,
 		meta.ReadyCondition,
 		conditions.WithConditions(
-			sourcev1.ArtifactOutdatedCondition,
-			sourcev1.FetchFailedCondition,
-			meta.ReconcilingCondition,
+			bucketReadyDeps...,
 		),
 		conditions.WithNegativePolarityConditions(
-			sourcev1.ArtifactOutdatedCondition,
-			sourcev1.FetchFailedCondition,
-			meta.ReconcilingCondition,
+			bucketReadyDepsNegative...,
 		),
 	)
 
-	// Patch the object, ignoring conflicts on the conditions owned by this controller
-	patchOpts := []patch.Option{
-		patch.WithOwnedConditions{
-			Conditions: []string{
-				sourcev1.ArtifactOutdatedCondition,
-				sourcev1.FetchFailedCondition,
-				meta.ReadyCondition,
-				meta.ReconcilingCondition,
-				meta.StalledCondition,
-			},
-		},
-	}
-
-	// Analyze the reconcile error.
-	switch t := recErr.(type) {
-	case *serror.StallingError:
-		if res == sreconcile.ResultEmpty {
-			// The current generation has been reconciled successfully and it has
-			// resulted in a stalled state. Return no error to stop further
-			// requeuing.
-			patchOpts = append(patchOpts, patch.WithStatusObservedGeneration{})
-			conditions.MarkFalse(obj, meta.ReadyCondition, t.Reason, t.Error())
-			conditions.MarkStalled(obj, t.Reason, t.Error())
-			recErr = nil
-		}
-		// ?: Log when there's a stalling error and non-empty result? This
-		// indicates incorrect returned values.
-	case nil:
-		// The reconciliation didn't result in any error, we are not in stalled
-		// state. If a requeue is requested, the current generation has not been
-		// reconciled successfully.
-		if res != sreconcile.ResultRequeue {
-			patchOpts = append(patchOpts, patch.WithStatusObservedGeneration{})
-		}
-		conditions.Delete(obj, meta.StalledCondition)
-	default:
-		// The reconcile resulted in some error, but we are not in stalled
-		// state.
-		conditions.Delete(obj, meta.StalledCondition)
-	}
-
+	// Finally, patch the resource.
 	if err := patchHelper.Patch(ctx, obj, patchOpts...); err != nil {
 		// Ignore patch error "not found" when the object is being deleted.
 		if !obj.ObjectMeta.DeletionTimestamp.IsZero() {
@@ -253,9 +236,10 @@ func (r *BucketReconciler) reconcile(ctx context.Context, obj *sourcev1.Bucket, 
 	// Create temp working dir
 	tmpDir, err := os.MkdirTemp("", fmt.Sprintf("%s-%s-%s-", obj.Kind, obj.Namespace, obj.Name))
 	if err != nil {
-		ctrl.LoggerFrom(ctx).Error(err, "failed to create temporary directory")
-		r.Eventf(ctx, obj, events.EventSeverityError, sourcev1.StorageOperationFailedReason, "Failed to create temporary directory: %s", err)
-		return sreconcile.ResultEmpty, err
+		return sreconcile.ResultEmpty, &serror.Event{
+			Err:    fmt.Errorf("failed to create temporary directory: %w", err),
+			Reason: sourcev1.StorageOperationFailedReason,
+		}
 	}
 	defer os.RemoveAll(tmpDir)
 
@@ -268,12 +252,15 @@ func (r *BucketReconciler) reconcile(ctx context.Context, obj *sourcev1.Bucket, 
 		if recResult == sreconcile.ResultRequeue {
 			return sreconcile.ResultRequeue, nil
 		}
-		// Prioritize requeue request in the result.
-		res = sreconcile.LowestRequeuingResult(res, recResult)
+		// If an error is received, prioritize the returned results because an
+		// error also means immediate requeue.
 		if err != nil {
 			resErr = err
+			res = recResult
 			break
 		}
+		// Prioritize requeue request in the result.
+		res = sreconcile.LowestRequeuingResult(res, recResult)
 	}
 	return res, resErr
 }
@@ -320,12 +307,13 @@ func (r *BucketReconciler) reconcileSource(ctx context.Context, obj *sourcev1.Bu
 		}
 		secret = &corev1.Secret{}
 		if err := r.Get(ctx, secretName, secret); err != nil {
-			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason,
-				"Failed to get secret '%s': %s", secretName.String(), err.Error())
-			r.Eventf(ctx, obj, events.EventSeverityError, sourcev1.AuthenticationFailedReason,
-				"Failed to get secret '%s': %s", secretName.String(), err.Error())
+			e := &serror.Event{
+				Err:    fmt.Errorf("failed to get secret '%s': %w", secretName.String(), err),
+				Reason: sourcev1.AuthenticationFailedReason,
+			}
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, e.Err.Error())
 			// Return error as the world as observed may change
-			return sreconcile.ResultEmpty, err
+			return sreconcile.ResultEmpty, e
 		}
 	}
 
@@ -353,12 +341,13 @@ func (r *BucketReconciler) reconcileMinioSource(ctx context.Context, obj *source
 	// Build the client with the configuration from the object and secret
 	s3Client, err := r.buildMinioClient(obj, secret)
 	if err != nil {
-		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason,
-			"Failed to construct S3 client: %s", err.Error())
-		r.Eventf(ctx, obj, events.EventSeverityError, sourcev1.BucketOperationFailedReason,
-			"Failed to construct S3 client: %s", err.Error())
+		e := &serror.Event{
+			Err:    fmt.Errorf("failed to construct S3 client: %w", err),
+			Reason: sourcev1.BucketOperationFailedReason,
+		}
+		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason, e.Err.Error())
 		// Return error as the contents of the secret may change
-		return sreconcile.ResultEmpty, err
+		return sreconcile.ResultEmpty, e
 	}
 
 	// Confirm bucket exists
@@ -366,36 +355,42 @@ func (r *BucketReconciler) reconcileMinioSource(ctx context.Context, obj *source
 	defer cancel()
 	exists, err := s3Client.BucketExists(ctxTimeout, obj.Spec.BucketName)
 	if err != nil {
-		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason,
-			"Failed to verify existence of bucket '%s': %s", obj.Spec.BucketName, err.Error())
-		return sreconcile.ResultEmpty, err
+		e := &serror.Event{
+			Err:    fmt.Errorf("failed to verify existence of bucket '%s': %w", obj.Spec.BucketName, err),
+			Reason: sourcev1.BucketOperationFailedReason,
+		}
+		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason, e.Err.Error())
+		return sreconcile.ResultEmpty, e
 	}
 	if !exists {
-		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason,
-			"Bucket '%s' does not exist", obj.Spec.BucketName)
-		r.Eventf(ctx, obj, events.EventSeverityError, sourcev1.BucketOperationFailedReason,
-			"Bucket '%s' does not exist", obj.Spec.BucketName)
-		return sreconcile.ResultEmpty, fmt.Errorf("bucket '%s' does not exist", obj.Spec.BucketName)
+		e := &serror.Event{
+			Err:    fmt.Errorf("bucket '%s' does not exist", obj.Spec.BucketName),
+			Reason: sourcev1.BucketOperationFailedReason,
+		}
+		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason, e.Err.Error())
+		return sreconcile.ResultEmpty, e
 	}
 
 	// Look for file with ignore rules first
 	path := filepath.Join(dir, sourceignore.IgnoreFile)
 	if err := s3Client.FGetObject(ctxTimeout, obj.Spec.BucketName, sourceignore.IgnoreFile, path, minio.GetObjectOptions{}); err != nil {
 		if resp, ok := err.(minio.ErrorResponse); ok && resp.Code != "NoSuchKey" {
-			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason,
-				"Failed to get '%s' file: %s", sourceignore.IgnoreFile, err.Error())
-			r.Eventf(ctx, obj, events.EventSeverityError, sourcev1.BucketOperationFailedReason,
-				"Failed to get '%s' file: %s", sourceignore.IgnoreFile, err.Error())
-			return sreconcile.ResultEmpty, err
+			e := &serror.Event{
+				Err:    fmt.Errorf("failed to get '%s' file: %w", sourceignore.IgnoreFile, err),
+				Reason: sourcev1.BucketOperationFailedReason,
+			}
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason, e.Err.Error())
+			return sreconcile.ResultEmpty, e
 		}
 	}
 	ps, err := sourceignore.ReadIgnoreFile(path, nil)
 	if err != nil {
-		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason,
-			"Failed to read '%s' file: %s", sourceignore.IgnoreFile, err.Error())
-		r.Eventf(ctx, obj, events.EventSeverityError, sourcev1.BucketOperationFailedReason,
-			"Failed to read '%s' file: %s", sourceignore.IgnoreFile, err.Error())
-		return sreconcile.ResultEmpty, err
+		e := &serror.Event{
+			Err:    fmt.Errorf("failed to read '%s' file: %w", sourceignore.IgnoreFile, err),
+			Reason: sourcev1.BucketOperationFailedReason,
+		}
+		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason, e.Err.Error())
+		return sreconcile.ResultEmpty, e
 	}
 	// In-spec patterns take precedence
 	if obj.Spec.Ignore != nil {
@@ -412,11 +407,12 @@ func (r *BucketReconciler) reconcileMinioSource(ctx context.Context, obj *source
 		UseV1:     s3utils.IsGoogleEndpoint(*s3Client.EndpointURL()),
 	}) {
 		if err = object.Err; err != nil {
-			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason,
-				"Failed to list objects from bucket '%s': %s", obj.Spec.BucketName, err.Error())
-			r.Eventf(ctx, obj, events.EventSeverityError, sourcev1.BucketOperationFailedReason,
-				"Failed to list objects from bucket '%s': %s", obj.Spec.BucketName, err.Error())
-			return sreconcile.ResultEmpty, err
+			e := &serror.Event{
+				Err:    fmt.Errorf("failed to list objects from bucket '%s': %w", obj.Spec.BucketName, err),
+				Reason: sourcev1.BucketOperationFailedReason,
+			}
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason, e.Err.Error())
+			return sreconcile.ResultEmpty, e
 		}
 
 		// Ignore directories and the .sourceignore file
@@ -435,12 +431,15 @@ func (r *BucketReconciler) reconcileMinioSource(ctx context.Context, obj *source
 	revision, err := index.Revision()
 	if err != nil {
 		ctrl.LoggerFrom(ctx).Error(err, "failed to calculate revision")
-		return sreconcile.ResultEmpty, err
+		return sreconcile.ResultEmpty, &serror.Event{
+			Err:    fmt.Errorf("failed to calculate revision: %w", err),
+			Reason: meta.FailedReason,
+		}
 	}
 
 	if !obj.GetArtifact().HasRevision(revision) {
 		// Mark observations about the revision on the object
-		message := fmt.Sprintf("New upstream revision '%s'", revision)
+		message := fmt.Sprintf("new upstream revision '%s'", revision)
 		conditions.MarkTrue(obj, sourcev1.ArtifactOutdatedCondition, "NewRevision", message)
 		conditions.MarkReconciling(obj, "NewRevision", message)
 
@@ -466,14 +465,15 @@ func (r *BucketReconciler) reconcileMinioSource(ctx context.Context, obj *source
 			return nil
 		})
 		if err = group.Wait(); err != nil {
-			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason,
-				"Download from bucket '%s' failed: %s", obj.Spec.BucketName, err)
-			r.Eventf(ctx, obj, events.EventSeverityError, sourcev1.BucketOperationFailedReason,
-				"Download from bucket '%s' failed: %s", obj.Spec.BucketName, err)
-			return sreconcile.ResultEmpty, err
+			e := &serror.Event{
+				Err:    fmt.Errorf("download from bucket '%s' failed: %w", obj.Spec.BucketName, err),
+				Reason: sourcev1.BucketOperationFailedReason,
+			}
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason, e.Err.Error())
+			return sreconcile.ResultEmpty, e
 		}
-		r.Eventf(ctx, obj, events.EventSeverityInfo, sourcev1.BucketOperationSucceedReason,
-			"Downloaded %d files from bucket '%s' revision '%s'", len(index), obj.Spec.BucketName, revision)
+		r.eventLogf(ctx, obj, corev1.EventTypeNormal, sourcev1.BucketOperationSucceedReason,
+			"downloaded %d files from bucket '%s' revision '%s'", len(index), obj.Spec.BucketName, revision)
 	}
 	conditions.Delete(obj, sourcev1.FetchFailedCondition)
 
@@ -498,12 +498,13 @@ func (r *BucketReconciler) reconcileWithAzureBlob(ctx context.Context, obj *sour
 	// Build the client with the configuration from the object and secret
 	blobContainer, err := r.buildAzureClient(ctx, obj, secret)
 	if err != nil {
-		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason,
-			"Failed to construct Azure Blob client: %s", err.Error())
-		r.Eventf(ctx, obj, events.EventSeverityError, sourcev1.BucketOperationFailedReason,
-			"Failed to construct Azure Blob client: %s", err.Error())
+		e := &serror.Event{
+			Err:    fmt.Errorf("failed to construct Azure Blob client: %w", err),
+			Reason: sourcev1.BucketOperationFailedReason,
+		}
+		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason, e.Err.Error())
 		// Return error as the contents of the secret may change
-		return sreconcile.ResultEmpty, err
+		return sreconcile.ResultEmpty, e
 	}
 
 	ctxTimeout, cancel := context.WithTimeout(ctx, obj.Spec.Timeout.Duration)
@@ -513,16 +514,20 @@ func (r *BucketReconciler) reconcileWithAzureBlob(ctx context.Context, obj *sour
 	_, err = blobContainer.GetProperties(ctxTimeout, azblob.LeaseAccessConditions{})
 	if err != nil {
 		if resp, ok := err.(azblob.StorageError); ok && resp.ServiceCode() == "ContainerNotFound" {
-			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason,
-				"Bucket '%s' does not exist", obj.Spec.BucketName)
-			r.Eventf(ctx, obj, events.EventSeverityError, sourcev1.BucketOperationFailedReason,
-				"Bucket '%s' does not exist", obj.Spec.BucketName)
-			return sreconcile.ResultEmpty, fmt.Errorf("bucket '%s' does not exist", obj.Spec.BucketName)
+			e := &serror.Event{
+				Err:    fmt.Errorf("bucket '%s' does not exist", obj.Spec.BucketName),
+				Reason: sourcev1.BucketOperationFailedReason,
+			}
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason, e.Err.Error())
+			return sreconcile.ResultEmpty, e
 		}
 
-		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason,
-			"Failed to verify existence of bucket '%s': %s", obj.Spec.BucketName, err.Error())
-		return sreconcile.ResultEmpty, err
+		e := &serror.Event{
+			Err:    fmt.Errorf("failed to verify existence of bucket '%s': %w", obj.Spec.BucketName, err),
+			Reason: sourcev1.BucketOperationFailedReason,
+		}
+		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason, e.Err.Error())
+		return sreconcile.ResultEmpty, e
 	}
 
 	downloadBlobToLocalFile := func(ctx context.Context, containerURL azblob.ContainerURL, blobName, localPath string) error {
@@ -553,20 +558,22 @@ func (r *BucketReconciler) reconcileWithAzureBlob(ctx context.Context, obj *sour
 	path := filepath.Join(dir, sourceignore.IgnoreFile)
 	if err := downloadBlobToLocalFile(ctxTimeout, *blobContainer, sourceignore.IgnoreFile, path); err != nil {
 		if resp, ok := err.(azblob.StorageError); ok && resp.ServiceCode() != "BlobNotFound" {
-			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason,
-				"Failed to get '%s' file: %s", sourceignore.IgnoreFile, err.Error())
-			r.Eventf(ctx, obj, events.EventSeverityError, sourcev1.BucketOperationFailedReason,
-				"Failed to get '%s' file: %s", sourceignore.IgnoreFile, err.Error())
-			return sreconcile.ResultEmpty, err
+			e := &serror.Event{
+				Err:    fmt.Errorf("failed to get '%s' file: %w", sourceignore.IgnoreFile, err),
+				Reason: sourcev1.BucketOperationFailedReason,
+			}
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason, e.Err.Error())
+			return sreconcile.ResultEmpty, e
 		}
 	}
 	ps, err := sourceignore.ReadIgnoreFile(path, nil)
 	if err != nil {
-		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason,
-			"Failed to read '%s' file: %s", sourceignore.IgnoreFile, err.Error())
-		r.Eventf(ctx, obj, events.EventSeverityError, sourcev1.BucketOperationFailedReason,
-			"Failed to read '%s' file: %s", sourceignore.IgnoreFile, err.Error())
-		return sreconcile.ResultEmpty, err
+		e := &serror.Event{
+			Err:    fmt.Errorf("failed to read '%s' file: %w", sourceignore.IgnoreFile, err),
+			Reason: sourcev1.BucketOperationFailedReason,
+		}
+		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason, e.Err.Error())
+		return sreconcile.ResultEmpty, e
 	}
 	// In-spec patterns take precedence
 	if obj.Spec.Ignore != nil {
@@ -585,11 +592,12 @@ func (r *BucketReconciler) reconcileWithAzureBlob(ctx context.Context, obj *sour
 			Prefix: "",
 		})
 		if err != nil {
-			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason,
-				"Failed to list objects from bucket '%s': %s", obj.Spec.BucketName, err.Error())
-			r.Eventf(ctx, obj, events.EventSeverityError, sourcev1.BucketOperationFailedReason,
-				"Failed to list objects from bucket '%s': %s", obj.Spec.BucketName, err.Error())
-			return sreconcile.ResultEmpty, err
+			e := &serror.Event{
+				Err:    fmt.Errorf("failed to list objects from bucket '%s': %w", obj.Spec.BucketName, err),
+				Reason: sourcev1.BucketOperationFailedReason,
+			}
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason, e.Err.Error())
+			return sreconcile.ResultEmpty, e
 		}
 
 		if len(resp.Segment.BlobItems) == 0 {
@@ -621,13 +629,17 @@ func (r *BucketReconciler) reconcileWithAzureBlob(ctx context.Context, obj *sour
 	revision, err := index.Revision()
 	if err != nil {
 		ctrl.LoggerFrom(ctx).Error(err, "failed to calculate revision")
-		return sreconcile.ResultEmpty, err
+		return sreconcile.ResultEmpty, &serror.Event{
+			Err:    fmt.Errorf("failed to calculate revision: %w", err),
+			Reason: meta.FailedReason,
+		}
 	}
 
 	if !obj.GetArtifact().HasRevision(revision) {
 		// Mark observations about the revision on the object
-		conditions.MarkTrue(obj, sourcev1.ArtifactOutdatedCondition, "NewRevision",
-			"New upstream revision '%s'", revision)
+		message := fmt.Sprintf("new upstream revision '%s'", revision)
+		conditions.MarkTrue(obj, sourcev1.ArtifactOutdatedCondition, "NewRevision", message)
+		conditions.MarkReconciling(obj, "NewRevision", message)
 
 		// Download the files in parallel, but with a limited number of workers
 		group, groupCtx := errgroup.WithContext(ctxTimeout)
@@ -644,7 +656,7 @@ func (r *BucketReconciler) reconcileWithAzureBlob(ctx context.Context, obj *sour
 					localPath := filepath.Join(dir, k)
 					if err := downloadBlobToLocalFile(ctxTimeout, *blobContainer, k, localPath); err != nil {
 						blobURL := blobContainer.URL()
-						return fmt.Errorf("failed to download blob items from blob container '%s': %w", blobURL.String(), err)
+						return fmt.Errorf("failed to get '%s' file from blob container '%s': %w", k, blobURL.String(), err)
 					}
 					return nil
 				})
@@ -652,14 +664,15 @@ func (r *BucketReconciler) reconcileWithAzureBlob(ctx context.Context, obj *sour
 			return nil
 		})
 		if err = group.Wait(); err != nil {
-			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason,
-				"Download from bucket '%s' failed: %s", obj.Spec.BucketName, err)
-			r.Eventf(ctx, obj, events.EventSeverityError, sourcev1.BucketOperationFailedReason,
-				"Download from bucket '%s' failed: %s", obj.Spec.BucketName, err)
-			return sreconcile.ResultEmpty, err
+			e := &serror.Event{
+				Err:    fmt.Errorf("download from bucket '%s' failed: %w", obj.Spec.BucketName, err),
+				Reason: sourcev1.BucketOperationFailedReason,
+			}
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason, e.Err.Error())
+			return sreconcile.ResultEmpty, e
 		}
-		r.Eventf(ctx, obj, events.EventSeverityInfo, sourcev1.BucketOperationSucceedReason,
-			"Downloaded %d files from bucket '%s' revision '%s'", len(index), obj.Spec.BucketName, revision)
+		r.eventLogf(ctx, obj, corev1.EventTypeNormal, sourcev1.BucketOperationSucceedReason,
+			"downloaded %d files from bucket '%s' revision '%s'", len(index), obj.Spec.BucketName, revision)
 	}
 	conditions.Delete(obj, sourcev1.FetchFailedCondition)
 
@@ -681,12 +694,13 @@ func (r *BucketReconciler) reconcileGCPSource(ctx context.Context, obj *sourcev1
 	secret *corev1.Secret, dir string) (sreconcile.Result, error) {
 	gcpClient, err := r.buildGCPClient(ctx, secret)
 	if err != nil {
-		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason,
-			"Failed to construct GCP client: %s", err.Error())
-		r.Eventf(ctx, obj, events.EventSeverityError, sourcev1.BucketOperationFailedReason,
-			"Failed to construct GCP client: %s", err.Error())
+		e := &serror.Event{
+			Err:    fmt.Errorf("failed to construct GCP client: %w", err),
+			Reason: sourcev1.BucketOperationFailedReason,
+		}
+		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason, e.Err.Error())
 		// Return error as the contents of the secret may change
-		return sreconcile.ResultEmpty, err
+		return sreconcile.ResultEmpty, e
 	}
 	defer gcpClient.Close(ctrl.LoggerFrom(ctx))
 
@@ -695,36 +709,42 @@ func (r *BucketReconciler) reconcileGCPSource(ctx context.Context, obj *sourcev1
 	defer cancel()
 	exists, err := gcpClient.BucketExists(ctxTimeout, obj.Spec.BucketName)
 	if err != nil {
-		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason,
-			"Failed to verify existence of bucket '%s': %s", obj.Spec.BucketName, err.Error())
-		return sreconcile.ResultEmpty, err
+		e := &serror.Event{
+			Err:    fmt.Errorf("failed to verify existence of bucket '%s': %w", obj.Spec.BucketName, err),
+			Reason: sourcev1.BucketOperationFailedReason,
+		}
+		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason, e.Err.Error())
+		return sreconcile.ResultEmpty, e
 	}
 	if !exists {
-		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason,
-			"Bucket '%s' does not exist", obj.Spec.BucketName)
-		r.Eventf(ctx, obj, events.EventSeverityError, sourcev1.BucketOperationFailedReason,
-			"Bucket '%s' does not exist", obj.Spec.BucketName)
-		return sreconcile.ResultEmpty, fmt.Errorf("bucket '%s' does not exist", obj.Spec.BucketName)
+		e := &serror.Event{
+			Err:    fmt.Errorf("bucket '%s' does not exist", obj.Spec.BucketName),
+			Reason: sourcev1.BucketOperationFailedReason,
+		}
+		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason, e.Err.Error())
+		return sreconcile.ResultEmpty, e
 	}
 
 	// Look for file with ignore rules first
 	path := filepath.Join(dir, sourceignore.IgnoreFile)
 	if err := gcpClient.FGetObject(ctxTimeout, obj.Spec.BucketName, sourceignore.IgnoreFile, path); err != nil {
 		if err != gcpstorage.ErrObjectNotExist {
-			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason,
-				"Failed to get '%s' file: %s", sourceignore.IgnoreFile, err.Error())
-			r.Eventf(ctx, obj, events.EventSeverityError, sourcev1.BucketOperationFailedReason,
-				"Failed to get '%s' file: %s", sourceignore.IgnoreFile, err.Error())
-			return sreconcile.ResultEmpty, err
+			e := &serror.Event{
+				Err:    fmt.Errorf("failed to get '%s' file: %w", sourceignore.IgnoreFile, err),
+				Reason: sourcev1.BucketOperationFailedReason,
+			}
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason, e.Err.Error())
+			return sreconcile.ResultEmpty, e
 		}
 	}
 	ps, err := sourceignore.ReadIgnoreFile(path, nil)
 	if err != nil {
-		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason,
-			"Failed to read '%s' file: %s", sourceignore.IgnoreFile, err.Error())
-		r.Eventf(ctx, obj, events.EventSeverityError, sourcev1.BucketOperationFailedReason,
-			"Failed to read '%s' file: %s", sourceignore.IgnoreFile, err.Error())
-		return sreconcile.ResultEmpty, err
+		e := &serror.Event{
+			Err:    fmt.Errorf("failed to read '%s' file: %w", sourceignore.IgnoreFile, err),
+			Reason: sourcev1.BucketOperationFailedReason,
+		}
+		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason, e.Err.Error())
+		return sreconcile.ResultEmpty, e
 	}
 	// In-spec patterns take precedence
 	if obj.Spec.Ignore != nil {
@@ -743,11 +763,12 @@ func (r *BucketReconciler) reconcileGCPSource(ctx context.Context, obj *sourcev1
 			if err == gcp.IteratorDone {
 				break
 			}
-			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason,
-				"Failed to list objects from bucket '%s': %s", obj.Spec.BucketName, err.Error())
-			r.Eventf(ctx, obj, events.EventSeverityError, sourcev1.BucketOperationFailedReason,
-				"Failed to list objects from bucket '%s': %s", obj.Spec.BucketName, err.Error())
-			return sreconcile.ResultEmpty, err
+			e := &serror.Event{
+				Err:    fmt.Errorf("failed to list objects from bucket '%s': %w", obj.Spec.BucketName, err),
+				Reason: sourcev1.BucketOperationFailedReason,
+			}
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason, e.Err.Error())
+			return sreconcile.ResultEmpty, e
 		}
 
 		if strings.HasSuffix(object.Name, "/") || object.Name == sourceignore.IgnoreFile {
@@ -764,13 +785,15 @@ func (r *BucketReconciler) reconcileGCPSource(ctx context.Context, obj *sourcev1
 	// Calculate revision checksum from the collected index values
 	revision, err := index.Revision()
 	if err != nil {
-		ctrl.LoggerFrom(ctx).Error(err, "failed to calculate revision")
-		return sreconcile.ResultEmpty, err
+		return sreconcile.ResultEmpty, &serror.Event{
+			Err:    fmt.Errorf("failed to calculate revision: %w", err),
+			Reason: meta.FailedReason,
+		}
 	}
 
 	if !obj.GetArtifact().HasRevision(revision) {
 		// Mark observations about the revision on the object
-		message := fmt.Sprintf("New upstream revision '%s'", revision)
+		message := fmt.Sprintf("new upstream revision '%s'", revision)
 		conditions.MarkTrue(obj, sourcev1.ArtifactOutdatedCondition, "NewRevision", message)
 		conditions.MarkReconciling(obj, "NewRevision", message)
 
@@ -796,14 +819,15 @@ func (r *BucketReconciler) reconcileGCPSource(ctx context.Context, obj *sourcev1
 			return nil
 		})
 		if err = group.Wait(); err != nil {
-			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason,
-				"Download from bucket '%s' failed: %s", obj.Spec.BucketName, err)
-			r.Eventf(ctx, obj, events.EventSeverityError, sourcev1.BucketOperationFailedReason,
-				"Download from bucket '%s' failed: %s", obj.Spec.BucketName, err)
-			return sreconcile.ResultEmpty, err
+			e := &serror.Event{
+				Err:    fmt.Errorf("download from bucket '%s' failed: %w", obj.Spec.BucketName, err),
+				Reason: sourcev1.BucketOperationFailedReason,
+			}
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason, e.Err.Error())
+			return sreconcile.ResultEmpty, e
 		}
-		r.Eventf(ctx, obj, events.EventSeverityInfo, sourcev1.BucketOperationSucceedReason,
-			"Downloaded %d files from bucket '%s' revision '%s'", len(index), obj.Spec.BucketName, revision)
+		r.eventLogf(ctx, obj, corev1.EventTypeNormal, sourcev1.BucketOperationSucceedReason,
+			"downloaded %d files from bucket '%s' revision '%s'", len(index), obj.Spec.BucketName, revision)
 	}
 	conditions.Delete(obj, sourcev1.FetchFailedCondition)
 
@@ -825,53 +849,60 @@ func (r *BucketReconciler) reconcileArtifact(ctx context.Context, obj *sourcev1.
 		if obj.GetArtifact().HasRevision(artifact.Revision) {
 			conditions.Delete(obj, sourcev1.ArtifactOutdatedCondition)
 			conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason,
-				"Stored artifact for revision '%s'", artifact.Revision)
+				"stored artifact for revision '%s'", artifact.Revision)
 		}
 	}()
 
 	// The artifact is up-to-date
 	if obj.GetArtifact().HasRevision(artifact.Revision) {
-		ctrl.LoggerFrom(ctx).Info(fmt.Sprintf("Already up to date, current revision '%s'", artifact.Revision))
+		r.eventLogf(ctx, obj, corev1.EventTypeNormal, meta.SucceededReason, "already up to date, current revision '%s'", artifact.Revision)
 		return sreconcile.ResultSuccess, nil
 	}
 
 	// Mark reconciling because the artifact and remote source are different.
 	// and they have to be reconciled.
-	conditions.MarkReconciling(obj, "NewRevision", "New upstream revision '%s'", artifact.Revision)
+	conditions.MarkReconciling(obj, "NewRevision", "new upstream revision '%s'", artifact.Revision)
 
 	// Ensure target path exists and is a directory
 	if f, err := os.Stat(dir); err != nil {
-		ctrl.LoggerFrom(ctx).Error(err, "failed to stat source path")
-		return sreconcile.ResultEmpty, err
+		return sreconcile.ResultEmpty, &serror.Event{
+			Err:    fmt.Errorf("failed to stat source path: %w", err),
+			Reason: sourcev1.StorageOperationFailedReason,
+		}
 	} else if !f.IsDir() {
-		err := fmt.Errorf("source path '%s' is not a directory", dir)
-		ctrl.LoggerFrom(ctx).Error(err, "invalid target path")
-		return sreconcile.ResultEmpty, err
+		return sreconcile.ResultEmpty, &serror.Event{
+			Err:    fmt.Errorf("source path '%s' is not a directory", dir),
+			Reason: sourcev1.StorageOperationFailedReason,
+		}
 	}
 
 	// Ensure artifact directory exists and acquire lock
 	if err := r.Storage.MkdirAll(*artifact); err != nil {
-		ctrl.LoggerFrom(ctx).Error(err, "failed to create artifact directory")
-		r.Eventf(ctx, obj, events.EventSeverityError, sourcev1.StorageOperationFailedReason, "Failed to create artifact directory: %s", err)
-		return sreconcile.ResultEmpty, err
+		return sreconcile.ResultEmpty, &serror.Event{
+			Err:    fmt.Errorf("failed to create artifact directory: %w", err),
+			Reason: sourcev1.StorageOperationFailedReason,
+		}
 	}
 	unlock, err := r.Storage.Lock(*artifact)
 	if err != nil {
-		ctrl.LoggerFrom(ctx).Error(err, "failed to acquire lock for artifact")
-		return sreconcile.ResultEmpty, err
+		return sreconcile.ResultEmpty, &serror.Event{
+			Err:    fmt.Errorf("failed to acquire lock for artifact: %w", err),
+			Reason: meta.FailedReason,
+		}
 	}
 	defer unlock()
 
 	// Archive directory to storage
 	if err := r.Storage.Archive(artifact, dir, nil); err != nil {
-		r.Eventf(ctx, obj, events.EventSeverityError, sourcev1.StorageOperationFailedReason,
-			"Unable to archive artifact to storage: %s", err)
-		return sreconcile.ResultEmpty, err
+		return sreconcile.ResultEmpty, &serror.Event{
+			Err:    fmt.Errorf("unable to archive artifact to storage: %s", err),
+			Reason: sourcev1.StorageOperationFailedReason,
+		}
 	}
-	r.Events.EventWithMetaf(ctx, obj, map[string]string{
+	r.AnnotatedEventf(obj, map[string]string{
 		"revision": artifact.Revision,
 		"checksum": artifact.Checksum,
-	}, events.EventSeverityInfo, "NewArtifact", "Stored artifact for revision '%s'", artifact.Revision)
+	}, corev1.EventTypeNormal, "NewArtifact", "stored artifact for revision '%s'", artifact.Revision)
 
 	// Record it on the object
 	obj.Status.Artifact = artifact.DeepCopy()
@@ -879,8 +910,8 @@ func (r *BucketReconciler) reconcileArtifact(ctx context.Context, obj *sourcev1.
 	// Update symlink on a "best effort" basis
 	url, err := r.Storage.Symlink(*artifact, "latest.tar.gz")
 	if err != nil {
-		r.Events.Eventf(ctx, obj, events.EventSeverityError, sourcev1.StorageOperationFailedReason,
-			"Failed to update status URL symlink: %s", err)
+		r.eventLogf(ctx, obj, corev1.EventTypeWarning, sourcev1.StorageOperationFailedReason,
+			"failed to update status URL symlink: %s", err)
 	}
 	if url != "" {
 		obj.Status.URL = url
@@ -911,23 +942,26 @@ func (r *BucketReconciler) reconcileDelete(ctx context.Context, obj *sourcev1.Bu
 func (r *BucketReconciler) garbageCollect(ctx context.Context, obj *sourcev1.Bucket) error {
 	if !obj.DeletionTimestamp.IsZero() {
 		if err := r.Storage.RemoveAll(r.Storage.NewArtifactFor(obj.Kind, obj.GetObjectMeta(), "", "*")); err != nil {
-			r.Eventf(ctx, obj, events.EventSeverityError, "GarbageCollectionFailed",
-				"Garbage collection for deleted resource failed: %s", err)
-			return err
+			return &serror.Event{
+				Err:    fmt.Errorf("garbage collection for deleted resource failed: %s", err),
+				Reason: "GarbageCollectionFailed",
+			}
 		}
 		obj.Status.Artifact = nil
 		// TODO(hidde): we should only push this event if we actually garbage collected something
-		r.Eventf(ctx, obj, events.EventSeverityInfo, "GarbageCollectionSucceeded",
-			"Garbage collected artifacts for deleted resource")
+		r.eventLogf(ctx, obj, corev1.EventTypeNormal, "GarbageCollectionSucceeded",
+			"garbage collected artifacts for deleted resource")
 		return nil
 	}
 	if obj.GetArtifact() != nil {
 		if err := r.Storage.RemoveAllButCurrent(*obj.GetArtifact()); err != nil {
-			r.Eventf(ctx, obj, events.EventSeverityError, "GarbageCollectionFailed", "Garbage collection of old artifacts failed: %s", err)
-			return err
+			return &serror.Event{
+				Err:    fmt.Errorf("garbage collection of old artifacts failed: %s", err),
+				Reason: "GarbageCollectionFailed",
+			}
 		}
 		// TODO(hidde): we should only push this event if we actually garbage collected something
-		r.Eventf(ctx, obj, events.EventSeverityInfo, "GarbageCollectionSucceeded", "Garbage collected old artifacts")
+		r.eventLogf(ctx, obj, corev1.EventTypeNormal, "GarbageCollectionSucceeded", "garbage collected old artifacts")
 	}
 	return nil
 }
@@ -1057,4 +1091,18 @@ func (i etagIndex) Revision() (string, error) {
 		}
 	}
 	return fmt.Sprintf("%x", sum.Sum(nil)), nil
+}
+
+// eventLog records event and logs at the same time. This log is different from
+// the debug log in the event recorder in the sense that this is a simple log,
+// the event recorder debug log contains complete details about the event.
+func (r *BucketReconciler) eventLogf(ctx context.Context, obj runtime.Object, eventType string, reason string, messageFmt string, args ...interface{}) {
+	msg := fmt.Sprintf(messageFmt, args...)
+	// Log and emit event.
+	if eventType == corev1.EventTypeWarning {
+		ctrl.LoggerFrom(ctx).Error(errors.New(reason), msg)
+	} else {
+		ctrl.LoggerFrom(ctx).Info(msg)
+	}
+	r.Eventf(obj, eventType, reason, msg)
 }

@@ -127,15 +127,6 @@ func main() {
 	helm.MaxChartSize = helmChartLimit
 	helm.MaxChartFileSize = helmChartFileLimit
 
-	var eventRecorder *events.Recorder
-	if eventsAddr != "" {
-		var err error
-		if eventRecorder, err = events.NewRecorder(eventsAddr, controllerName); err != nil {
-			setupLog.Error(err, "unable to create event recorder")
-			os.Exit(1)
-		}
-	}
-
 	watchNamespace := ""
 	if !watchAllNamespaces {
 		watchNamespace = os.Getenv("RUNTIME_NAMESPACE")
@@ -164,11 +155,13 @@ func main() {
 	probes.SetupChecks(mgr, setupLog)
 	pprof.SetupHandlers(mgr, setupLog)
 
-	eventsH := helper.MakeEvents(mgr, controllerName, eventRecorder)
-	metricsH := helper.MustMakeMetrics(mgr)
+	var eventRecorder *events.Recorder
+	if eventRecorder, err = events.NewRecorder(mgr, ctrl.Log, eventsAddr, controllerName); err != nil {
+		setupLog.Error(err, "unable to create event recorder")
+		os.Exit(1)
+	}
 
-	// NOTE: Temporarily, to be able to keep reconcilers-dev branches in sync.
-	_ = eventsH
+	metricsH := helper.MustMakeMetrics(mgr)
 
 	if storageAdvAddr == "" {
 		storageAdvAddr = determineAdvStorageAddr(storageAddr, setupLog)
@@ -176,12 +169,11 @@ func main() {
 	storage := mustInitStorage(storagePath, storageAdvAddr, setupLog)
 
 	if err = (&controllers.GitRepositoryReconciler{
-		Client:                mgr.GetClient(),
-		Scheme:                mgr.GetScheme(),
-		Storage:               storage,
-		EventRecorder:         mgr.GetEventRecorderFor(controllerName),
-		ExternalEventRecorder: eventRecorder,
-		MetricsRecorder:       metricsH.MetricsRecorder,
+		Client:          mgr.GetClient(),
+		Scheme:          mgr.GetScheme(),
+		Storage:         storage,
+		EventRecorder:   eventRecorder,
+		MetricsRecorder: metricsH.MetricsRecorder,
 	}).SetupWithManagerAndOptions(mgr, controllers.GitRepositoryReconcilerOptions{
 		MaxConcurrentReconciles:   concurrent,
 		DependencyRequeueInterval: requeueDependency,
@@ -190,13 +182,12 @@ func main() {
 		os.Exit(1)
 	}
 	if err = (&controllers.HelmRepositoryReconciler{
-		Client:                mgr.GetClient(),
-		Scheme:                mgr.GetScheme(),
-		Storage:               storage,
-		Getters:               getters,
-		EventRecorder:         mgr.GetEventRecorderFor(controllerName),
-		ExternalEventRecorder: eventRecorder,
-		MetricsRecorder:       metricsH.MetricsRecorder,
+		Client:          mgr.GetClient(),
+		Scheme:          mgr.GetScheme(),
+		Storage:         storage,
+		Getters:         getters,
+		EventRecorder:   eventRecorder,
+		MetricsRecorder: metricsH.MetricsRecorder,
 	}).SetupWithManagerAndOptions(mgr, controllers.HelmRepositoryReconcilerOptions{
 		MaxConcurrentReconciles: concurrent,
 	}); err != nil {
@@ -204,13 +195,12 @@ func main() {
 		os.Exit(1)
 	}
 	if err = (&controllers.HelmChartReconciler{
-		Client:                mgr.GetClient(),
-		Scheme:                mgr.GetScheme(),
-		Storage:               storage,
-		Getters:               getters,
-		EventRecorder:         mgr.GetEventRecorderFor(controllerName),
-		ExternalEventRecorder: eventRecorder,
-		MetricsRecorder:       metricsH.MetricsRecorder,
+		Client:          mgr.GetClient(),
+		Scheme:          mgr.GetScheme(),
+		Storage:         storage,
+		Getters:         getters,
+		EventRecorder:   eventRecorder,
+		MetricsRecorder: metricsH.MetricsRecorder,
 	}).SetupWithManagerAndOptions(mgr, controllers.HelmChartReconcilerOptions{
 		MaxConcurrentReconciles: concurrent,
 	}); err != nil {
@@ -219,7 +209,7 @@ func main() {
 	}
 	if err = (&controllers.BucketReconciler{
 		Client:           mgr.GetClient(),
-		Events:           eventsH,
+		EventRecorder:    eventRecorder,
 		Metrics:          metricsH,
 		Storage:          storage,
 		AzureCloudConfig: azureCloudConfig,

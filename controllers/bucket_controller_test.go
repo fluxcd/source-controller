@@ -31,12 +31,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/darkowlzz/controller-check/status"
 	"github.com/go-logr/logr"
 	. "github.com/onsi/gomega"
 	raw "google.golang.org/api/storage/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	fakeclient "sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -124,6 +126,11 @@ func TestBucketReconciler_Reconcile(t *testing.T) {
 		return obj.Generation == readyCondition.ObservedGeneration &&
 			obj.Generation == obj.Status.ObservedGeneration
 	}, timeout).Should(BeTrue())
+
+	// Check if the object status is valid.
+	condns := &status.Conditions{NegativePolarity: bucketReadyDepsNegative}
+	checker := status.NewChecker(testEnv.Client, testEnv.GetScheme(), condns)
+	checker.CheckErr(ctx, obj)
 
 	g.Expect(testEnv.Delete(ctx, obj)).To(Succeed())
 
@@ -231,7 +238,8 @@ func TestBucketReconciler_reconcileStorage(t *testing.T) {
 			g := NewWithT(t)
 
 			r := &BucketReconciler{
-				Storage: testStorage,
+				EventRecorder: record.NewFakeRecorder(32),
+				Storage:       testStorage,
 			}
 
 			obj := &sourcev1.Bucket{
@@ -297,8 +305,8 @@ func TestBucketReconciler_reconcileMinioSource(t *testing.T) {
 				Revision: "f0467900d3cede8323f3e61a1467f7cd370d1c0d942ff990a1a7be1eb1a231e8",
 			},
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "New upstream revision 'f0467900d3cede8323f3e61a1467f7cd370d1c0d942ff990a1a7be1eb1a231e8'"),
-				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "New upstream revision 'f0467900d3cede8323f3e61a1467f7cd370d1c0d942ff990a1a7be1eb1a231e8'"),
+				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new upstream revision 'f0467900d3cede8323f3e61a1467f7cd370d1c0d942ff990a1a7be1eb1a231e8'"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new upstream revision 'f0467900d3cede8323f3e61a1467f7cd370d1c0d942ff990a1a7be1eb1a231e8'"),
 			},
 		},
 		// TODO(hidde): middleware for mock server
@@ -316,7 +324,7 @@ func TestBucketReconciler_reconcileMinioSource(t *testing.T) {
 			},
 			wantErr: true,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "Failed to get secret '/dummy': secrets \"dummy\" not found"),
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "failed to get secret '/dummy': secrets \"dummy\" not found"),
 			},
 		},
 		{
@@ -334,7 +342,7 @@ func TestBucketReconciler_reconcileMinioSource(t *testing.T) {
 			},
 			wantErr: true,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason, "Failed to construct S3 client: invalid 'dummy' secret data: required fields"),
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason, "failed to construct S3 client: invalid 'dummy' secret data: required fields"),
 			},
 		},
 		{
@@ -345,7 +353,7 @@ func TestBucketReconciler_reconcileMinioSource(t *testing.T) {
 			},
 			wantErr: true,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason, "Bucket 'invalid' does not exist"),
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason, "bucket 'invalid' does not exist"),
 			},
 		},
 		{
@@ -356,7 +364,7 @@ func TestBucketReconciler_reconcileMinioSource(t *testing.T) {
 			},
 			wantErr: true,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason, "Failed to verify existence of bucket 'unavailable'"),
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason, "failed to verify existence of bucket 'unavailable'"),
 			},
 		},
 		{
@@ -389,8 +397,8 @@ func TestBucketReconciler_reconcileMinioSource(t *testing.T) {
 				Revision: "94992ae8fb8300723e970e304ea3414266cb414e364ba3f570bb09069f883100",
 			},
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "New upstream revision '94992ae8fb8300723e970e304ea3414266cb414e364ba3f570bb09069f883100'"),
-				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "New upstream revision '94992ae8fb8300723e970e304ea3414266cb414e364ba3f570bb09069f883100'"),
+				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new upstream revision '94992ae8fb8300723e970e304ea3414266cb414e364ba3f570bb09069f883100'"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new upstream revision '94992ae8fb8300723e970e304ea3414266cb414e364ba3f570bb09069f883100'"),
 			},
 		},
 		{
@@ -426,8 +434,8 @@ func TestBucketReconciler_reconcileMinioSource(t *testing.T) {
 				Revision: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
 			},
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "New upstream revision 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'"),
-				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "New upstream revision 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'"),
+				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new upstream revision 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new upstream revision 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'"),
 			},
 		},
 		{
@@ -457,7 +465,7 @@ func TestBucketReconciler_reconcileMinioSource(t *testing.T) {
 			name:       "Removes FetchFailedCondition after reconciling source",
 			bucketName: "dummy",
 			beforeFunc: func(obj *sourcev1.Bucket) {
-				conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason, "Failed to read test file")
+				conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason, "failed to read test file")
 			},
 			bucketObjects: []*s3MockObject{
 				{
@@ -473,8 +481,8 @@ func TestBucketReconciler_reconcileMinioSource(t *testing.T) {
 				Revision: "f0467900d3cede8323f3e61a1467f7cd370d1c0d942ff990a1a7be1eb1a231e8",
 			},
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "New upstream revision 'f0467900d3cede8323f3e61a1467f7cd370d1c0d942ff990a1a7be1eb1a231e8'"),
-				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "New upstream revision 'f0467900d3cede8323f3e61a1467f7cd370d1c0d942ff990a1a7be1eb1a231e8'"),
+				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new upstream revision 'f0467900d3cede8323f3e61a1467f7cd370d1c0d942ff990a1a7be1eb1a231e8'"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new upstream revision 'f0467900d3cede8323f3e61a1467f7cd370d1c0d942ff990a1a7be1eb1a231e8'"),
 			},
 		},
 	}
@@ -487,8 +495,9 @@ func TestBucketReconciler_reconcileMinioSource(t *testing.T) {
 				builder.WithObjects(tt.secret)
 			}
 			r := &BucketReconciler{
-				Client:  builder.Build(),
-				Storage: testStorage,
+				EventRecorder: record.NewFakeRecorder(32),
+				Client:        builder.Build(),
+				Storage:       testStorage,
 			}
 			tmpDir, err := os.MkdirTemp("", "reconcile-bucket-source-")
 			g.Expect(err).ToNot(HaveOccurred())
@@ -580,8 +589,8 @@ func TestBucketReconciler_reconcileGCPSource(t *testing.T) {
 				Revision: "23d97ef9557996c9d911df4359d6086eda7bec5af76e43651581d80f5bcad4b8",
 			},
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "New upstream revision '23d97ef9557996c9d911df4359d6086eda7bec5af76e43651581d80f5bcad4b8'"),
-				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "New upstream revision '23d97ef9557996c9d911df4359d6086eda7bec5af76e43651581d80f5bcad4b8'"),
+				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new upstream revision '23d97ef9557996c9d911df4359d6086eda7bec5af76e43651581d80f5bcad4b8'"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new upstream revision '23d97ef9557996c9d911df4359d6086eda7bec5af76e43651581d80f5bcad4b8'"),
 			},
 		},
 		{
@@ -595,7 +604,7 @@ func TestBucketReconciler_reconcileGCPSource(t *testing.T) {
 			want:    sreconcile.ResultEmpty,
 			wantErr: true,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "Failed to get secret '/dummy': secrets \"dummy\" not found"),
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "failed to get secret '/dummy': secrets \"dummy\" not found"),
 			},
 		},
 		{
@@ -614,7 +623,7 @@ func TestBucketReconciler_reconcileGCPSource(t *testing.T) {
 			want:    sreconcile.ResultEmpty,
 			wantErr: true,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason, "Failed to construct GCP client: invalid 'dummy' secret data: required fields"),
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason, "failed to construct GCP client: invalid 'dummy' secret data: required fields"),
 			},
 		},
 		{
@@ -626,7 +635,7 @@ func TestBucketReconciler_reconcileGCPSource(t *testing.T) {
 			want:    sreconcile.ResultEmpty,
 			wantErr: true,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason, "Bucket 'invalid' does not exist"),
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason, "bucket 'invalid' does not exist"),
 			},
 		},
 		{
@@ -638,7 +647,7 @@ func TestBucketReconciler_reconcileGCPSource(t *testing.T) {
 			want:    sreconcile.ResultEmpty,
 			wantErr: true,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason, "Failed to verify existence of bucket 'unavailable'"),
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason, "failed to verify existence of bucket 'unavailable'"),
 			},
 		},
 		{
@@ -667,8 +676,8 @@ func TestBucketReconciler_reconcileGCPSource(t *testing.T) {
 				Revision: "7556d9ebaa9bcf1b24f363a6d5543af84403acb340fe1eaaf31dcdb0a6e6b4d4",
 			},
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "New upstream revision '7556d9ebaa9bcf1b24f363a6d5543af84403acb340fe1eaaf31dcdb0a6e6b4d4'"),
-				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "New upstream revision '7556d9ebaa9bcf1b24f363a6d5543af84403acb340fe1eaaf31dcdb0a6e6b4d4'"),
+				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new upstream revision '7556d9ebaa9bcf1b24f363a6d5543af84403acb340fe1eaaf31dcdb0a6e6b4d4'"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new upstream revision '7556d9ebaa9bcf1b24f363a6d5543af84403acb340fe1eaaf31dcdb0a6e6b4d4'"),
 			},
 		},
 		{
@@ -701,8 +710,8 @@ func TestBucketReconciler_reconcileGCPSource(t *testing.T) {
 				Revision: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
 			},
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "New upstream revision 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'"),
-				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "New upstream revision 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'"),
+				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new upstream revision 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new upstream revision 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'"),
 			},
 		},
 		{
@@ -731,7 +740,7 @@ func TestBucketReconciler_reconcileGCPSource(t *testing.T) {
 			name:       "Removes FetchFailedCondition after reconciling source",
 			bucketName: "dummy",
 			beforeFunc: func(obj *sourcev1.Bucket) {
-				conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason, "Failed to read test file")
+				conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason, "failed to read test file")
 			},
 			bucketObjects: []*gcpMockObject{
 				{
@@ -746,8 +755,8 @@ func TestBucketReconciler_reconcileGCPSource(t *testing.T) {
 				Revision: "23d97ef9557996c9d911df4359d6086eda7bec5af76e43651581d80f5bcad4b8",
 			},
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "New upstream revision '23d97ef9557996c9d911df4359d6086eda7bec5af76e43651581d80f5bcad4b8'"),
-				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "New upstream revision '23d97ef9557996c9d911df4359d6086eda7bec5af76e43651581d80f5bcad4b8'"),
+				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new upstream revision '23d97ef9557996c9d911df4359d6086eda7bec5af76e43651581d80f5bcad4b8'"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new upstream revision '23d97ef9557996c9d911df4359d6086eda7bec5af76e43651581d80f5bcad4b8'"),
 			},
 		},
 		// TODO: Middleware for mock server to test authentication using secret.
@@ -761,8 +770,9 @@ func TestBucketReconciler_reconcileGCPSource(t *testing.T) {
 				builder.WithObjects(tt.secret)
 			}
 			r := &BucketReconciler{
-				Client:  builder.Build(),
-				Storage: testStorage,
+				EventRecorder: record.NewFakeRecorder(32),
+				Client:        builder.Build(),
+				Storage:       testStorage,
 			}
 			tmpDir, err := os.MkdirTemp("", "reconcile-bucket-source-")
 			g.Expect(err).ToNot(HaveOccurred())
@@ -835,8 +845,8 @@ func TestBucketReconciler_reconcileArtifact(t *testing.T) {
 			},
 			want: sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(meta.ReadyCondition, meta.SucceededReason, "Stored artifact for revision 'existing'"),
-				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "New upstream revision 'existing'"),
+				*conditions.TrueCondition(meta.ReadyCondition, meta.SucceededReason, "stored artifact for revision 'existing'"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new upstream revision 'existing'"),
 			},
 		},
 		{
@@ -850,7 +860,7 @@ func TestBucketReconciler_reconcileArtifact(t *testing.T) {
 			},
 			want: sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(meta.ReadyCondition, meta.SucceededReason, "Stored artifact for revision 'existing'"),
+				*conditions.TrueCondition(meta.ReadyCondition, meta.SucceededReason, "stored artifact for revision 'existing'"),
 			},
 		},
 		{
@@ -861,8 +871,8 @@ func TestBucketReconciler_reconcileArtifact(t *testing.T) {
 			},
 			want: sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(meta.ReadyCondition, meta.SucceededReason, "Stored artifact for revision 'existing'"),
-				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "New upstream revision 'existing'"),
+				*conditions.TrueCondition(meta.ReadyCondition, meta.SucceededReason, "stored artifact for revision 'existing'"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new upstream revision 'existing'"),
 			},
 		},
 		{
@@ -879,8 +889,8 @@ func TestBucketReconciler_reconcileArtifact(t *testing.T) {
 			},
 			want: sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(meta.ReadyCondition, meta.SucceededReason, "Stored artifact for revision 'existing'"),
-				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "New upstream revision 'existing'"),
+				*conditions.TrueCondition(meta.ReadyCondition, meta.SucceededReason, "stored artifact for revision 'existing'"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new upstream revision 'existing'"),
 			},
 		},
 		{
@@ -891,7 +901,7 @@ func TestBucketReconciler_reconcileArtifact(t *testing.T) {
 			want:    sreconcile.ResultEmpty,
 			wantErr: true,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "New upstream revision 'existing'"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new upstream revision 'existing'"),
 			},
 		},
 		{
@@ -910,7 +920,7 @@ func TestBucketReconciler_reconcileArtifact(t *testing.T) {
 			want:    sreconcile.ResultEmpty,
 			wantErr: true,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "New upstream revision 'existing'"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new upstream revision 'existing'"),
 			},
 		},
 	}
@@ -920,7 +930,8 @@ func TestBucketReconciler_reconcileArtifact(t *testing.T) {
 			g := NewWithT(t)
 
 			r := &BucketReconciler{
-				Storage: testStorage,
+				EventRecorder: record.NewFakeRecorder(32),
+				Storage:       testStorage,
 			}
 
 			tmpDir, err := os.MkdirTemp("", "reconcile-bucket-artifact-")
@@ -948,7 +959,9 @@ func TestBucketReconciler_reconcileArtifact(t *testing.T) {
 				tt.beforeFunc(g, obj, artifact, tmpDir)
 			}
 
-			got, err := r.reconcileArtifact(logr.NewContext(ctx, log.NullLogger{}), obj, &artifact, tmpDir)
+			dlog := log.NewDelegatingLogSink(log.NullLogSink{})
+			nullLogger := logr.New(dlog)
+			got, err := r.reconcileArtifact(logr.NewContext(ctx, nullLogger), obj, &artifact, tmpDir)
 			g.Expect(err != nil).To(Equal(tt.wantErr))
 			g.Expect(got).To(Equal(tt.want))
 

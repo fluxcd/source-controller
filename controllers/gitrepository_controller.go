@@ -25,7 +25,6 @@ import (
 	"time"
 
 	securejoin "github.com/cyphar/filepath-securejoin"
-	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -89,7 +88,7 @@ func (r *GitRepositoryReconciler) SetupWithManagerAndOptions(mgr ctrl.Manager, o
 
 func (r *GitRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	start := time.Now()
-	log := logr.FromContext(ctx)
+	log := ctrl.LoggerFrom(ctx)
 
 	var repository sourcev1.GitRepository
 	if err := r.Get(ctx, req.NamespacedName, &repository); err != nil {
@@ -101,8 +100,9 @@ func (r *GitRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 
 	// Add our finalizer if it does not exist
 	if !controllerutil.ContainsFinalizer(&repository, sourcev1.SourceFinalizer) {
+		patch := client.MergeFrom(repository.DeepCopy())
 		controllerutil.AddFinalizer(&repository, sourcev1.SourceFinalizer)
-		if err := r.Update(ctx, &repository); err != nil {
+		if err := r.Patch(ctx, &repository, patch); err != nil {
 			log.Error(err, "unable to register finalizer")
 			return ctrl.Result{}, err
 		}
@@ -221,13 +221,19 @@ func (r *GitRepositoryReconciler) checkDependencies(repository sourcev1.GitRepos
 }
 
 func (r *GitRepositoryReconciler) reconcile(ctx context.Context, repository sourcev1.GitRepository) (sourcev1.GitRepository, error) {
+	log := ctrl.LoggerFrom(ctx)
+
 	// create tmp dir for the Git clone
 	tmpGit, err := os.MkdirTemp("", repository.Name)
 	if err != nil {
 		err = fmt.Errorf("tmp dir error: %w", err)
 		return sourcev1.GitRepositoryNotReady(repository, sourcev1.StorageOperationFailedReason, err.Error()), err
 	}
-	defer os.RemoveAll(tmpGit)
+	defer func() {
+		if err := os.RemoveAll(tmpGit); err != nil {
+			log.Error(err, "failed to remove working directory", "path", tmpGit)
+		}
+	}()
 
 	// Configure auth options using secret
 	var authOpts *git.AuthOptions
@@ -417,27 +423,16 @@ func (r *GitRepositoryReconciler) gc(repository sourcev1.GitRepository) error {
 
 // event emits a Kubernetes event and forwards the event to notification controller if configured
 func (r *GitRepositoryReconciler) event(ctx context.Context, repository sourcev1.GitRepository, severity, msg string) {
-	log := logr.FromContext(ctx)
-
 	if r.EventRecorder != nil {
-		r.EventRecorder.Eventf(&repository, "Normal", severity, msg)
+		r.EventRecorder.Eventf(&repository, corev1.EventTypeNormal, severity, msg)
 	}
 	if r.ExternalEventRecorder != nil {
-		objRef, err := reference.GetReference(r.Scheme, &repository)
-		if err != nil {
-			log.Error(err, "unable to send event")
-			return
-		}
-
-		if err := r.ExternalEventRecorder.Eventf(*objRef, nil, severity, severity, msg); err != nil {
-			log.Error(err, "unable to send event")
-			return
-		}
+		r.ExternalEventRecorder.Eventf(&repository, corev1.EventTypeNormal, severity, msg)
 	}
 }
 
 func (r *GitRepositoryReconciler) recordReadiness(ctx context.Context, repository sourcev1.GitRepository) {
-	log := logr.FromContext(ctx)
+	log := ctrl.LoggerFrom(ctx)
 	if r.MetricsRecorder == nil {
 		return
 	}
@@ -460,7 +455,7 @@ func (r *GitRepositoryReconciler) recordSuspension(ctx context.Context, gitrepos
 	if r.MetricsRecorder == nil {
 		return
 	}
-	log := logr.FromContext(ctx)
+	log := ctrl.LoggerFrom(ctx)
 
 	objRef, err := reference.GetReference(r.Scheme, &gitrepository)
 	if err != nil {

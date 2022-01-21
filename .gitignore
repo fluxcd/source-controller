@@ -14,7 +14,11 @@
 # Dependency directories (remove the comment below to include it)
 # vendor/
 bin/
+testbin/
 config/release/
 
 # Exclude all libgit2 related files
 hack/libgit2/
+
+# Exclude temporary build files
+build/

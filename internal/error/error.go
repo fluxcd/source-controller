@@ -16,9 +16,9 @@ limitations under the License.
 
 package error
 
-// StallingError is the reconciliation stalled state error. It contains an error
+// Stalling is the reconciliation stalled state error. It contains an error
 // and a reason for the stalled condition.
-type StallingError struct {
+type Stalling struct {
 	// Reason is the stalled condition reason string.
 	Reason string
 	// Err is the error that caused stalling. This can be used as the message in
@@ -27,11 +27,28 @@ type StallingError struct {
 }
 
 // Error implements error interface.
-func (se *StallingError) Error() string {
+func (se *Stalling) Error() string {
 	return se.Err.Error()
 }
 
 // Unwrap returns the underlying error.
-func (se *StallingError) Unwrap() error {
+func (se *Stalling) Unwrap() error {
 	return se.Err
+}
+
+// Event is an error event. It can be used to construct an event to be
+// recorded.
+type Event struct {
+	Reason string
+	Err    error
+}
+
+// Error implements error interface.
+func (ee *Event) Error() string {
+	return ee.Err.Error()
+}
+
+// Unwrap returns the underlying error.
+func (ee *Event) Unwrap() error {
+	return ee.Err
 }
