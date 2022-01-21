@@ -313,13 +313,7 @@ func (r *HelmChartReconciler) reconcileStorage(ctx context.Context, obj *sourcev
 	return sreconcile.ResultSuccess, nil
 }
 
-// reconcileSource reconciles the upstream bucket with the client for the given object's Provider, and returns the
-// result.
-// If a SecretRef is defined, it attempts to fetch the Secret before calling the provider. If the fetch of the Secret
-// fails, it records v1beta1.FetchFailedCondition=True and returns early.
-//
-// The caller should assume a failure if an error is returned, or the BuildResult is zero.
-func (r *HelmChartReconciler) reconcileSource(ctx context.Context, obj *sourcev1.HelmChart, build *chart.Build) (sreconcile.Result, error) {
+func (r *HelmChartReconciler) reconcileSource(ctx context.Context, obj *sourcev1.HelmChart, build *chart.Build) (_ sreconcile.Result, retErr error) {
 	// Retrieve the source
 	s, err := r.getSource(ctx, obj)
 	if err != nil {
@@ -331,7 +325,7 @@ func (r *HelmChartReconciler) reconcileSource(ctx context.Context, obj *sourcev1
 
 		// Return Kubernetes client errors, but ignore others which can only be
 		// solved by a change in generation
-		if apierrs.ReasonForError(err) != metav1.StatusReasonUnknown {
+		if apierrs.ReasonForError(err) == metav1.StatusReasonUnknown {
 			return sreconcile.ResultEmpty, &serror.Stalling{
 				Err:    fmt.Errorf("failed to get source: %w", err),
 				Reason: "UnsupportedSourceKind",
@@ -352,12 +346,44 @@ func (r *HelmChartReconciler) reconcileSource(ctx context.Context, obj *sourcev1
 	// Record current artifact revision as last observed
 	obj.Status.ObservedSourceArtifactRevision = s.GetArtifact().Revision
 
-	// Perform the reconciliation for the chart source type
+	// Defer observation of build result
+	defer func() {
+		// Record both success and error observations on the object
+		observeChartBuild(obj, build, retErr)
+
+		// If we actually build a chart, take a historical note of any dependencies we resolved.
+		// The reason this is a done conditionally, is because if we have a cached one in storage,
+		// we can not recover this information (and put it in a condition). Which would result in
+		// a sudden (partial) disappearance of observed state.
+		// TODO(hidde): include specific name/version information?
+		if depNum := build.ResolvedDependencies; build.Complete() && depNum > 0 {
+			r.Eventf(obj, corev1.EventTypeNormal, "ResolvedDependencies", "Resolved %d chart dependencies", depNum)
+		}
+
+		// Handle any build error
+		if retErr != nil {
+			e := fmt.Errorf("failed to build chart from source artifact: %w", retErr)
+			retErr = &serror.Event{
+				Err:    e,
+				Reason: meta.FailedReason,
+			}
+			if buildErr := new(chart.BuildError); errors.As(e, &buildErr) {
+				if chart.IsPersistentBuildErrorReason(buildErr.Reason) {
+					retErr = &serror.Stalling{
+						Err:    e,
+						Reason: buildErr.Reason.Reason,
+					}
+				}
+			}
+		}
+	}()
+
+	// Perform the build for the chart source type
 	switch typedSource := s.(type) {
 	case *sourcev1.HelmRepository:
-		return r.reconcileFromHelmRepository(ctx, obj, typedSource, build)
+		return r.buildFromHelmRepository(ctx, obj, typedSource, build)
 	case *sourcev1.GitRepository, *sourcev1.Bucket:
-		return r.reconcileFromTarballArtifact(ctx, obj, *typedSource.GetArtifact(), build)
+		return r.buildFromTarballArtifact(ctx, obj, *typedSource.GetArtifact(), build)
 	default:
 		// Ending up here should generally not be possible
 		// as getSource already validates
@@ -365,7 +391,7 @@ func (r *HelmChartReconciler) reconcileSource(ctx context.Context, obj *sourcev1
 	}
 }
 
-func (r *HelmChartReconciler) reconcileFromHelmRepository(ctx context.Context, obj *sourcev1.HelmChart,
+func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *sourcev1.HelmChart,
 	repo *sourcev1.HelmRepository, b *chart.Build) (sreconcile.Result, error) {
 
 	// Construct the Getter options from the HelmRepository data
@@ -453,34 +479,15 @@ func (r *HelmChartReconciler) reconcileFromHelmRepository(ctx context.Context, o
 	// Build the chart
 	ref := chart.RemoteReference{Name: obj.Spec.Chart, Version: obj.Spec.Version}
 	build, err := cb.Build(ctx, ref, util.TempPathForObj("", ".tgz", obj), opts)
-
-	// Record both success _and_ error observations on the object
-	processChartBuild(obj, build, err)
-
-	// Handle any build error
 	if err != nil {
-		e := fmt.Errorf("failed to build chart from remote source: %w", err)
-		reason := meta.FailedReason
-		if buildErr := new(chart.BuildError); errors.As(err, &buildErr) {
-			reason = buildErr.Reason.Reason
-			if chart.IsPersistentBuildErrorReason(buildErr.Reason) {
-				return sreconcile.ResultEmpty, &serror.Stalling{
-					Err:    e,
-					Reason: reason,
-				}
-			}
-		}
-		return sreconcile.ResultEmpty, &serror.Event{
-			Err:    e,
-			Reason: reason,
-		}
+		return sreconcile.ResultEmpty, err
 	}
 
 	*b = *build
 	return sreconcile.ResultSuccess, nil
 }
 
-func (r *HelmChartReconciler) reconcileFromTarballArtifact(ctx context.Context, obj *sourcev1.HelmChart, source sourcev1.Artifact, b *chart.Build) (sreconcile.Result, error) {
+func (r *HelmChartReconciler) buildFromTarballArtifact(ctx context.Context, obj *sourcev1.HelmChart, source sourcev1.Artifact, b *chart.Build) (sreconcile.Result, error) {
 	// Create temporary working directory
 	tmpDir, err := util.TempDirForObj("", obj)
 	if err != nil {
@@ -532,7 +539,7 @@ func (r *HelmChartReconciler) reconcileFromTarballArtifact(ctx context.Context, 
 	chartPath, err := securejoin.SecureJoin(sourceDir, obj.Spec.Chart)
 	if err != nil {
 		e := &serror.Stalling{
-			Err:    fmt.Errorf("Path calculation for chart '%s' failed: %w", obj.Spec.Chart, err),
+			Err:    fmt.Errorf("path calculation for chart '%s' failed: %w", obj.Spec.Chart, err),
 			Reason: "IllegalPath",
 		}
 		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, "IllegalPath", e.Err.Error())
@@ -562,12 +569,6 @@ func (r *HelmChartReconciler) reconcileFromTarballArtifact(ctx context.Context, 
 		opts.CachedChart = r.Storage.LocalPath(*artifact)
 	}
 
-	// Add revision metadata to chart build
-	if obj.Spec.ReconcileStrategy == sourcev1.ReconcileStrategyRevision {
-		// Isolate the commit SHA from GitRepository type artifacts by removing the branch/ prefix.
-		splitRev := strings.Split(source.Revision, "/")
-		opts.VersionMetadata = splitRev[len(splitRev)-1]
-	}
 	// Configure revision metadata for chart build if we should react to revision changes
 	if obj.Spec.ReconcileStrategy == sourcev1.ReconcileStrategyRevision {
 		rev := source.Revision
@@ -592,6 +593,14 @@ func (r *HelmChartReconciler) reconcileFromTarballArtifact(ctx context.Context, 
 		}
 		opts.VersionMetadata = rev
 	}
+	// Set the VersionMetadata to the object's Generation if ValuesFiles is defined,
+	// this ensures changes can be noticed by the Artifact consumer
+	if len(opts.GetValuesFiles()) > 0 {
+		if opts.VersionMetadata != "" {
+			opts.VersionMetadata += "."
+		}
+		opts.VersionMetadata += strconv.FormatInt(obj.Generation, 10)
+	}
 
 	// Build chart
 	cb := chart.NewLocalBuilder(dm)
@@ -599,36 +608,8 @@ func (r *HelmChartReconciler) reconcileFromTarballArtifact(ctx context.Context, 
 		WorkDir: sourceDir,
 		Path:    chartPath,
 	}, util.TempPathForObj("", ".tgz", obj), opts)
-
-	// Record both success _and_ error observations on the object
-	processChartBuild(obj, build, err)
-
-	// Handle any build error
 	if err != nil {
-		e := fmt.Errorf("failed to build chart from source artifact: %w", err)
-		reason := meta.FailedReason
-		if buildErr := new(chart.BuildError); errors.As(err, &buildErr) {
-			reason = buildErr.Reason.Reason
-			if chart.IsPersistentBuildErrorReason(buildErr.Reason) {
-				return sreconcile.ResultEmpty, &serror.Stalling{
-					Err:    e,
-					Reason: reason,
-				}
-			}
-		}
-		return sreconcile.ResultEmpty, &serror.Event{
-			Err:    e,
-			Reason: reason,
-		}
-	}
-
-	// If we actually build a chart, take a historical note of any dependencies we resolved.
-	// The reason this is a done conditionally, is because if we have a cached one in storage,
-	// we can not recover this information (and put it in a condition). Which would result in
-	// a sudden (partial) disappearance of observed state.
-	// TODO(hidde): include specific name/version information?
-	if depNum := build.ResolvedDependencies; depNum > 0 {
-		r.eventLogf(ctx, obj, corev1.EventTypeNormal, "ResolvedDependencies", "resolved %d chart dependencies", depNum)
+		return sreconcile.ResultEmpty, err
 	}
 
 	*b = *build
@@ -760,7 +741,7 @@ func (r *HelmChartReconciler) reconcileDelete(ctx context.Context, obj *sourcev1
 }
 
 // garbageCollect performs a garbage collection for the given v1beta1.HelmChart. It removes all but the current
-// artifact except for when the deletion timestamp is set, which will result in the removal of all artifacts for the
+// artifact, unless the deletion timestamp is set. Which will result in the removal of all artifacts for the
 // resource.
 func (r *HelmChartReconciler) garbageCollect(ctx context.Context, obj *sourcev1.HelmChart) error {
 	if !obj.DeletionTimestamp.IsZero() {
@@ -838,6 +819,7 @@ func (r *HelmChartReconciler) resolveDependencyRepository(ctx context.Context, u
 	listOpts := []client.ListOption{
 		client.InNamespace(namespace),
 		client.MatchingFields{sourcev1.HelmRepositoryURLIndexKey: url},
+		client.Limit(1),
 	}
 	var list sourcev1.HelmRepositoryList
 	err := r.Client.List(ctx, &list, listOpts...)
@@ -967,45 +949,7 @@ func (r *HelmChartReconciler) requestsForBucketChange(o client.Object) []reconci
 	return reqs
 }
 
-func processChartBuild(obj *sourcev1.HelmChart, build *chart.Build, err error) {
-	if build.HasMetadata() {
-		if build.Name != obj.Status.ObservedChartName || !obj.GetArtifact().HasRevision(build.Version) {
-			conditions.MarkTrue(obj, sourcev1.ArtifactOutdatedCondition, "NewChart", build.Summary())
-		}
-	}
-
-	if err == nil {
-		conditions.Delete(obj, sourcev1.FetchFailedCondition)
-		conditions.Delete(obj, sourcev1.BuildFailedCondition)
-		return
-	}
-
-	var buildErr *chart.BuildError
-	if ok := errors.As(err, &buildErr); !ok {
-		buildErr = &chart.BuildError{
-			Reason: chart.ErrUnknown,
-			Err:    err,
-		}
-	}
-
-	switch buildErr.Reason {
-	case chart.ErrChartMetadataPatch, chart.ErrValuesFilesMerge, chart.ErrDependencyBuild, chart.ErrChartPackage:
-		conditions.Delete(obj, sourcev1.FetchFailedCondition)
-		conditions.MarkTrue(obj, sourcev1.BuildFailedCondition, buildErr.Reason.Reason, buildErr.Error())
-	default:
-		conditions.Delete(obj, sourcev1.BuildFailedCondition)
-		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, buildErr.Reason.Reason, buildErr.Error())
-	}
-}
-
-func reasonForBuild(build *chart.Build) string {
-	if build.Packaged {
-		return sourcev1.ChartPackageSucceededReason
-	}
-	return sourcev1.ChartPullSucceededReason
-}
-
-// eventLog records event and logs at the same time. This log is different from
+// eventLogf records event and logs at the same time. This log is different from
 // the debug log in the event recorder in the sense that this is a simple log,
 // the event recorder debug log contains complete details about the event.
 func (r *HelmChartReconciler) eventLogf(ctx context.Context, obj runtime.Object, eventType string, reason string, messageFmt string, args ...interface{}) {
@@ -1017,4 +961,48 @@ func (r *HelmChartReconciler) eventLogf(ctx context.Context, obj runtime.Object,
 		ctrl.LoggerFrom(ctx).Info(msg)
 	}
 	r.Eventf(obj, eventType, reason, msg)
+}
+
+// observeChartBuild records the observation on the given given build and error on the object.
+func observeChartBuild(obj *sourcev1.HelmChart, build *chart.Build, err error) {
+	if build.HasMetadata() {
+		if build.Name != obj.Status.ObservedChartName || !obj.GetArtifact().HasRevision(build.Version) {
+			conditions.MarkTrue(obj, sourcev1.ArtifactOutdatedCondition, "NewChart", build.Summary())
+		}
+	}
+
+	if build.Complete() {
+		conditions.Delete(obj, sourcev1.FetchFailedCondition)
+		conditions.Delete(obj, sourcev1.BuildFailedCondition)
+	}
+
+	if err != nil {
+		var buildErr *chart.BuildError
+		if ok := errors.As(err, &buildErr); !ok {
+			buildErr = &chart.BuildError{
+				Reason: chart.ErrUnknown,
+				Err:    err,
+			}
+		}
+
+		switch buildErr.Reason {
+		case chart.ErrChartMetadataPatch, chart.ErrValuesFilesMerge, chart.ErrDependencyBuild, chart.ErrChartPackage:
+			conditions.Delete(obj, sourcev1.FetchFailedCondition)
+			conditions.MarkTrue(obj, sourcev1.BuildFailedCondition, buildErr.Reason.Reason, buildErr.Error())
+		default:
+			conditions.Delete(obj, sourcev1.BuildFailedCondition)
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, buildErr.Reason.Reason, buildErr.Error())
+		}
+		return
+	}
+}
+
+func reasonForBuild(build *chart.Build) string {
+	if !build.Complete() {
+		return ""
+	}
+	if build.Packaged {
+		return sourcev1.ChartPackageSucceededReason
+	}
+	return sourcev1.ChartPullSucceededReason
 }
