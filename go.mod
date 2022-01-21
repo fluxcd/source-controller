@@ -23,7 +23,7 @@ require (
 	github.com/go-git/go-billy/v5 v5.3.1
 	github.com/go-git/go-git/v5 v5.4.2
 	github.com/go-logr/logr v1.2.2
-	github.com/libgit2/git2go/v31 v31.6.1
+	github.com/libgit2/git2go/v31 v31.7.6
 	github.com/minio/minio-go/v7 v7.0.15
 	github.com/onsi/ginkgo v1.16.5
 	github.com/onsi/gomega v1.17.0
