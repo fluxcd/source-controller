@@ -18,1314 +18,1527 @@ package controllers
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
-	"net/url"
 	"os"
-	"path"
 	"path/filepath"
+	"reflect"
 	"strings"
+	"testing"
 	"time"
 
+	"github.com/darkowlzz/controller-check/status"
+	. "github.com/onsi/gomega"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/tools/record"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+
 	"github.com/fluxcd/pkg/apis/meta"
-	"github.com/fluxcd/pkg/gittestserver"
 	"github.com/fluxcd/pkg/helmtestserver"
 	"github.com/fluxcd/pkg/runtime/conditions"
-	"github.com/go-git/go-billy/v5/memfs"
-	"github.com/go-git/go-git/v5"
-	"github.com/go-git/go-git/v5/config"
-	"github.com/go-git/go-git/v5/plumbing/object"
-	"github.com/go-git/go-git/v5/storage/memory"
-	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/gomega"
-	helmchart "helm.sh/helm/v3/pkg/chart"
-	"helm.sh/helm/v3/pkg/chart/loader"
-	"helm.sh/helm/v3/pkg/chartutil"
-	corev1 "k8s.io/api/core/v1"
-	apimeta "k8s.io/apimachinery/pkg/api/meta"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/yaml"
+	"github.com/fluxcd/pkg/runtime/patch"
+	"github.com/fluxcd/pkg/testserver"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
+	serror "github.com/fluxcd/source-controller/internal/error"
+	"github.com/fluxcd/source-controller/internal/helm/chart"
+	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
 )
 
-var _ = FDescribe("HelmChartReconciler", func() {
+func TestHelmChartReconciler_reconcileStorage(t *testing.T) {
+	tests := []struct {
+		name             string
+		beforeFunc       func(obj *sourcev1.HelmChart, storage *Storage) error
+		want             sreconcile.Result
+		wantErr          bool
+		assertArtifact   *sourcev1.Artifact
+		assertConditions []metav1.Condition
+		assertPaths      []string
+	}{
+		{
+			name: "garbage collects",
+			beforeFunc: func(obj *sourcev1.HelmChart, storage *Storage) error {
+				revisions := []string{"a", "b", "c"}
+				for n := range revisions {
+					v := revisions[n]
+					obj.Status.Artifact = &sourcev1.Artifact{
+						Path:     fmt.Sprintf("/reconcile-storage/%s.txt", v),
+						Revision: v,
+					}
+					if err := testStorage.MkdirAll(*obj.Status.Artifact); err != nil {
+						return err
+					}
+					if err := testStorage.AtomicWriteFile(obj.Status.Artifact, strings.NewReader(v), 0644); err != nil {
+						return err
+					}
+				}
+				testStorage.SetArtifactURL(obj.Status.Artifact)
+				return nil
+			},
+			assertArtifact: &sourcev1.Artifact{
+				Path:     "/reconcile-storage/c.txt",
+				Revision: "c",
+				Checksum: "2e7d2c03a9507ae265ecf5b5356885a53393a2029d241394997265a1a25aefc6",
+				URL:      testStorage.Hostname + "/reconcile-storage/c.txt",
+			},
+			assertPaths: []string{
+				"/reconcile-storage/c.txt",
+				"!/reconcile-storage/b.txt",
+				"!/reconcile-storage/a.txt",
+			},
+			want: sreconcile.ResultSuccess,
+		},
+		{
+			name: "notices missing artifact in storage",
+			beforeFunc: func(obj *sourcev1.HelmChart, storage *Storage) error {
+				obj.Status.Artifact = &sourcev1.Artifact{
+					Path:     "/reconcile-storage/invalid.txt",
+					Revision: "d",
+				}
+				testStorage.SetArtifactURL(obj.Status.Artifact)
+				return nil
+			},
+			want: sreconcile.ResultSuccess,
+			assertPaths: []string{
+				"!/reconcile-storage/invalid.txt",
+			},
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReconcilingCondition, "NoArtifact", "no artifact for resource in storage"),
+			},
+		},
+		{
+			name: "updates hostname on diff from current",
+			beforeFunc: func(obj *sourcev1.HelmChart, storage *Storage) error {
+				obj.Status.Artifact = &sourcev1.Artifact{
+					Path:     "/reconcile-storage/hostname.txt",
+					Revision: "f",
+					Checksum: "3b9c358f36f0a31b6ad3e14f309c7cf198ac9246e8316f9ce543d5b19ac02b80",
+					URL:      "http://outdated.com/reconcile-storage/hostname.txt",
+				}
+				if err := testStorage.MkdirAll(*obj.Status.Artifact); err != nil {
+					return err
+				}
+				if err := testStorage.AtomicWriteFile(obj.Status.Artifact, strings.NewReader("file"), 0644); err != nil {
+					return err
+				}
+				return nil
+			},
+			want: sreconcile.ResultSuccess,
+			assertPaths: []string{
+				"/reconcile-storage/hostname.txt",
+			},
+			assertArtifact: &sourcev1.Artifact{
+				Path:     "/reconcile-storage/hostname.txt",
+				Revision: "f",
+				Checksum: "3b9c358f36f0a31b6ad3e14f309c7cf198ac9246e8316f9ce543d5b19ac02b80",
+				URL:      testStorage.Hostname + "/reconcile-storage/hostname.txt",
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			r := &HelmChartReconciler{
+				EventRecorder: record.NewFakeRecorder(32),
+				Storage:       testStorage,
+			}
+
+			obj := &sourcev1.HelmChart{
+				ObjectMeta: metav1.ObjectMeta{
+					GenerateName: "test-",
+				},
+			}
+			if tt.beforeFunc != nil {
+				g.Expect(tt.beforeFunc(obj, testStorage)).To(Succeed())
+			}
+
+			got, err := r.reconcileStorage(context.TODO(), obj, nil)
+			g.Expect(err != nil).To(Equal(tt.wantErr))
+			g.Expect(got).To(Equal(tt.want))
+
+			g.Expect(obj.Status.Artifact).To(MatchArtifact(tt.assertArtifact))
+			if tt.assertArtifact != nil && tt.assertArtifact.URL != "" {
+				g.Expect(obj.Status.Artifact.URL).To(Equal(tt.assertArtifact.URL))
+			}
+			g.Expect(obj.Status.Conditions).To(conditions.MatchConditions(tt.assertConditions))
+
+			for _, p := range tt.assertPaths {
+				absoluteP := filepath.Join(testStorage.BasePath, p)
+				if !strings.HasPrefix(p, "!") {
+					g.Expect(absoluteP).To(BeAnExistingFile())
+					continue
+				}
+				g.Expect(absoluteP).NotTo(BeAnExistingFile())
+			}
+		})
+	}
+}
+
+func TestHelmChartReconciler_reconcileSource(t *testing.T) {
+	g := NewWithT(t)
+
+	tmpDir, err := os.MkdirTemp("", "reconcile-tarball-")
+	g.Expect(err).ToNot(HaveOccurred())
+	defer os.RemoveAll(tmpDir)
+
+	storage, err := NewStorage(tmpDir, "example.com", timeout)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	gitArtifact := &sourcev1.Artifact{
+		Revision: "mock-ref/abcdefg12345678",
+		Path:     "mock.tgz",
+	}
+	g.Expect(storage.Archive(gitArtifact, "testdata/charts", nil)).To(Succeed())
+
+	tests := []struct {
+		name       string
+		source     sourcev1.Source
+		beforeFunc func(obj *sourcev1.HelmChart)
+		want       sreconcile.Result
+		wantErr    error
+		assertFunc func(g *WithT, build chart.Build, obj sourcev1.HelmChart)
+		cleanFunc  func(g *WithT, build *chart.Build)
+	}{
+		{
+			name: "Observes Artifact revision and build result",
+			source: &sourcev1.GitRepository{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "gitrepository",
+					Namespace: "default",
+				},
+				Status: sourcev1.GitRepositoryStatus{
+					Artifact: gitArtifact,
+				},
+			},
+			beforeFunc: func(obj *sourcev1.HelmChart) {
+				obj.Spec.Chart = "testdata/charts/helmchart-0.1.0.tgz"
+				obj.Spec.SourceRef = sourcev1.LocalHelmChartSourceReference{
+					Name: "gitrepository",
+					Kind: sourcev1.GitRepositoryKind,
+				}
+			},
+			want: sreconcile.ResultSuccess,
+			assertFunc: func(g *WithT, build chart.Build, obj sourcev1.HelmChart) {
+				g.Expect(build.Complete()).To(BeTrue())
+				g.Expect(build.Name).To(Equal("helmchart"))
+				g.Expect(build.Version).To(Equal("0.1.0"))
+				g.Expect(build.Path).To(BeARegularFile())
+
+				g.Expect(obj.Status.ObservedSourceArtifactRevision).To(Equal(gitArtifact.Revision))
+				g.Expect(obj.Status.Conditions).To(conditions.MatchConditions([]metav1.Condition{
+					*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewChart", "Pulled 'helmchart' chart with version '0.1.0'"),
+				}))
+			},
+			cleanFunc: func(g *WithT, build *chart.Build) {
+				g.Expect(os.Remove(build.Path)).To(Succeed())
+			},
+		},
+		{
+			name: "Error on unavailable source",
+			beforeFunc: func(obj *sourcev1.HelmChart) {
+				obj.Spec.SourceRef = sourcev1.LocalHelmChartSourceReference{
+					Name: "unavailable",
+					Kind: sourcev1.GitRepositoryKind,
+				}
+			},
+			want:    sreconcile.ResultEmpty,
+			wantErr: &serror.Event{Err: errors.New("gitrepositories.source.toolkit.fluxcd.io \"unavailable\" not found")},
+			assertFunc: func(g *WithT, build chart.Build, obj sourcev1.HelmChart) {
+				g.Expect(build.Complete()).To(BeFalse())
+
+				g.Expect(obj.Status.Conditions).To(conditions.MatchConditions([]metav1.Condition{
+					*conditions.TrueCondition(sourcev1.FetchFailedCondition, "SourceUnavailable", "failed to get source: gitrepositories.source.toolkit.fluxcd.io \"unavailable\" not found"),
+				}))
+			},
+		},
+		{
+			name: "Stalling on unsupported source kind",
+			beforeFunc: func(obj *sourcev1.HelmChart) {
+				obj.Spec.SourceRef = sourcev1.LocalHelmChartSourceReference{
+					Name: "unavailable",
+					Kind: "Unsupported",
+				}
+			},
+			want:    sreconcile.ResultEmpty,
+			wantErr: &serror.Stalling{Err: errors.New("unsupported source kind 'Unsupported'")},
+			assertFunc: func(g *WithT, build chart.Build, obj sourcev1.HelmChart) {
+				g.Expect(build.Complete()).To(BeFalse())
+
+				g.Expect(obj.Status.Conditions).To(conditions.MatchConditions([]metav1.Condition{
+					*conditions.TrueCondition(sourcev1.FetchFailedCondition, "SourceUnavailable", "failed to get source: unsupported source kind"),
+				}))
+			},
+		},
+		//{
+		//	name: "Error on transient build error",
+		//},
+		{
+			name: "Stalling on persistent build error",
+			source: &sourcev1.GitRepository{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "gitrepository",
+					Namespace: "default",
+				},
+				Status: sourcev1.GitRepositoryStatus{
+					Artifact: gitArtifact,
+				},
+			},
+			beforeFunc: func(obj *sourcev1.HelmChart) {
+				obj.Spec.Chart = "testdata/charts/helmchart-0.1.0.tgz"
+				obj.Spec.SourceRef = sourcev1.LocalHelmChartSourceReference{
+					Name: "gitrepository",
+					Kind: sourcev1.GitRepositoryKind,
+				}
+				obj.Spec.ValuesFiles = []string{"invalid.yaml"}
+			},
+			want:    sreconcile.ResultEmpty,
+			wantErr: &serror.Stalling{Err: errors.New("values files merge error: no values file found at path")},
+			assertFunc: func(g *WithT, build chart.Build, obj sourcev1.HelmChart) {
+				g.Expect(build.Complete()).To(BeFalse())
+
+				g.Expect(obj.Status.Conditions).To(conditions.MatchConditions([]metav1.Condition{
+					*conditions.TrueCondition(sourcev1.BuildFailedCondition, "ValuesFilesError", "values files merge error: no values file found at path"),
+				}))
+			},
+		},
+		{
+			name: "ResultRequeue when source artifact is unavailable",
+			source: &sourcev1.GitRepository{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "gitrepository",
+					Namespace: "default",
+				},
+				Status: sourcev1.GitRepositoryStatus{},
+			},
+			beforeFunc: func(obj *sourcev1.HelmChart) {
+				obj.Spec.Chart = "testdata/charts/helmchart-0.1.0.tgz"
+				obj.Spec.SourceRef = sourcev1.LocalHelmChartSourceReference{
+					Name: "gitrepository",
+					Kind: sourcev1.GitRepositoryKind,
+				}
+				obj.Status.ObservedSourceArtifactRevision = "foo"
+			},
+			want: sreconcile.ResultRequeue,
+			assertFunc: func(g *WithT, build chart.Build, obj sourcev1.HelmChart) {
+				g.Expect(build.Complete()).To(BeFalse())
+
+				g.Expect(obj.Status.ObservedSourceArtifactRevision).To(Equal("foo"))
+				g.Expect(obj.Status.Conditions).To(conditions.MatchConditions([]metav1.Condition{
+					*conditions.TrueCondition(sourcev1.FetchFailedCondition, "NoSourceArtifact", "no artifact available"),
+				}))
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			clientBuilder := fake.NewClientBuilder()
+			if tt.source != nil {
+				clientBuilder.WithRuntimeObjects(tt.source)
+			}
+
+			r := &HelmChartReconciler{
+				Client:        clientBuilder.Build(),
+				EventRecorder: record.NewFakeRecorder(32),
+				Storage:       storage,
+			}
+
+			obj := sourcev1.HelmChart{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "chart",
+					Namespace: "default",
+				},
+				Spec: sourcev1.HelmChartSpec{},
+			}
+			if tt.beforeFunc != nil {
+				tt.beforeFunc(&obj)
+			}
+
+			var b chart.Build
+			if tt.cleanFunc != nil {
+				defer tt.cleanFunc(g, &b)
+			}
+
+			got, err := r.reconcileSource(context.TODO(), &obj, &b)
+
+			g.Expect(err != nil).To(Equal(tt.wantErr != nil))
+			if tt.wantErr != nil {
+				g.Expect(reflect.TypeOf(err).String()).To(Equal(reflect.TypeOf(tt.wantErr).String()))
+				g.Expect(err.Error()).To(ContainSubstring(tt.wantErr.Error()))
+			}
+			g.Expect(got).To(Equal(tt.want))
+
+			if tt.assertFunc != nil {
+				tt.assertFunc(g, b, obj)
+			}
+		})
+	}
+}
+
+func TestHelmChartReconciler_buildFromHelmRepository(t *testing.T) {
+	g := NewWithT(t)
 
 	const (
-		timeout       = time.Second * 30
-		interval      = time.Second * 1
-		indexInterval = time.Second * 2
-		pullInterval  = time.Second * 3
+		chartName          = "helmchart"
+		chartVersion       = "0.2.0"
+		higherChartVersion = "0.3.0"
+		chartPath          = "testdata/charts/helmchart"
 	)
 
-	Context("HelmChart from HelmRepository", func() {
-		var (
-			namespace  *corev1.Namespace
-			helmServer *helmtestserver.HelmServer
-			err        error
-		)
+	serverFactory, err := helmtestserver.NewTempHelmServer()
+	g.Expect(err).NotTo(HaveOccurred())
+	defer os.RemoveAll(serverFactory.Root())
 
-		BeforeEach(func() {
-			namespace = &corev1.Namespace{
-				ObjectMeta: metav1.ObjectMeta{Name: "helm-chart-test-" + randStringRunes(5)},
-			}
-			err = k8sClient.Create(context.Background(), namespace)
-			Expect(err).NotTo(HaveOccurred(), "failed to create test namespace")
+	for _, ver := range []string{chartVersion, higherChartVersion} {
+		g.Expect(serverFactory.PackageChartWithVersion(chartPath, ver)).To(Succeed())
+	}
+	g.Expect(serverFactory.GenerateIndex()).To(Succeed())
 
-			helmServer, err = helmtestserver.NewTempHelmServer()
-			Expect(err).To(Succeed())
-			helmServer.Start()
-		})
+	type options struct {
+		username string
+		password string
+	}
 
-		AfterEach(func() {
-			helmServer.Stop()
-			os.RemoveAll(helmServer.Root())
-
-			err = k8sClient.Delete(context.Background(), namespace)
-			Expect(err).NotTo(HaveOccurred(), "failed to delete test namespace")
-		})
-
-		It("Creates artifacts for", func() {
-			Expect(helmServer.PackageChart(path.Join("testdata/charts/helmchart"))).Should(Succeed())
-			Expect(helmServer.GenerateIndex()).Should(Succeed())
-
-			repositoryKey := types.NamespacedName{
-				Name:      "helmrepository-sample-" + randStringRunes(5),
-				Namespace: namespace.Name,
-			}
-			Expect(k8sClient.Create(context.Background(), &sourcev1.HelmRepository{
+	tests := []struct {
+		name       string
+		server     options
+		secret     *corev1.Secret
+		beforeFunc func(obj *sourcev1.HelmChart, repository *sourcev1.HelmRepository)
+		want       sreconcile.Result
+		wantErr    error
+		assertFunc func(g *WithT, obj *sourcev1.HelmChart, build chart.Build)
+		cleanFunc  func(g *WithT, build *chart.Build)
+	}{
+		{
+			name: "Reconciles chart build",
+			beforeFunc: func(obj *sourcev1.HelmChart, repository *sourcev1.HelmRepository) {
+				obj.Spec.Chart = "helmchart"
+			},
+			want: sreconcile.ResultSuccess,
+			assertFunc: func(g *WithT, _ *sourcev1.HelmChart, build chart.Build) {
+				g.Expect(build.Name).To(Equal(chartName))
+				g.Expect(build.Version).To(Equal(higherChartVersion))
+				g.Expect(build.Path).ToNot(BeEmpty())
+				g.Expect(build.Path).To(BeARegularFile())
+			},
+			cleanFunc: func(g *WithT, build *chart.Build) {
+				g.Expect(os.Remove(build.Path)).To(Succeed())
+			},
+		},
+		{
+			name: "Reconciles chart build with repository credentials",
+			server: options{
+				username: "foo",
+				password: "bar",
+			},
+			secret: &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      repositoryKey.Name,
-					Namespace: repositoryKey.Namespace,
-				},
-				Spec: sourcev1.HelmRepositorySpec{
-					URL:      helmServer.URL(),
-					Interval: metav1.Duration{Duration: indexInterval},
-				},
-			})).Should(Succeed())
-
-			key := types.NamespacedName{
-				Name:      "helmchart-sample-" + randStringRunes(5),
-				Namespace: namespace.Name,
-			}
-			created := &sourcev1.HelmChart{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      key.Name,
-					Namespace: key.Namespace,
-				},
-				Spec: sourcev1.HelmChartSpec{
-					Chart:   "helmchart",
-					Version: "",
-					SourceRef: sourcev1.LocalHelmChartSourceReference{
-						Kind: sourcev1.HelmRepositoryKind,
-						Name: repositoryKey.Name,
-					},
-					Interval: metav1.Duration{Duration: pullInterval},
-				},
-			}
-			Expect(k8sClient.Create(context.Background(), created)).Should(Succeed())
-
-			By("Expecting artifact")
-			got := &sourcev1.HelmChart{}
-			Eventually(func() bool {
-				_ = k8sClient.Get(context.Background(), key, got)
-				return got.Status.Artifact != nil && ginkgoTestStorage.ArtifactExist(*got.Status.Artifact)
-			}, timeout, interval).Should(BeTrue())
-			helmChart, err := loader.Load(ginkgoTestStorage.LocalPath(*got.Status.Artifact))
-			Expect(err).NotTo(HaveOccurred())
-			Expect(helmChart.Values["testDefault"]).To(BeTrue())
-			Expect(helmChart.Values["testOverride"]).To(BeFalse())
-
-			By("Packaging a new chart version and regenerating the index")
-			Expect(helmServer.PackageChartWithVersion(path.Join("testdata/charts/helmchart"), "0.2.0")).Should(Succeed())
-			Expect(helmServer.GenerateIndex()).Should(Succeed())
-
-			By("Expecting new artifact revision and GC")
-			Eventually(func() bool {
-				now := &sourcev1.HelmChart{}
-				_ = k8sClient.Get(context.Background(), key, now)
-				// Test revision change and garbage collection
-				return now.Status.Artifact.Revision != got.Status.Artifact.Revision &&
-					!ginkgoTestStorage.ArtifactExist(*got.Status.Artifact)
-			}, timeout, interval).Should(BeTrue())
-
-			When("Setting valid valuesFiles attribute", func() {
-				updated := &sourcev1.HelmChart{}
-				Expect(k8sClient.Get(context.Background(), key, updated)).To(Succeed())
-				updated.Spec.ValuesFiles = []string{
-					"values.yaml",
-					"override.yaml",
-				}
-				Expect(k8sClient.Update(context.Background(), updated)).To(Succeed())
-				got := &sourcev1.HelmChart{}
-				Eventually(func() bool {
-					_ = k8sClient.Get(context.Background(), key, got)
-					return got.Status.Artifact.Checksum != updated.Status.Artifact.Checksum &&
-						ginkgoTestStorage.ArtifactExist(*got.Status.Artifact)
-				}, timeout, interval).Should(BeTrue())
-				f, err := os.Stat(ginkgoTestStorage.LocalPath(*got.Status.Artifact))
-				Expect(err).NotTo(HaveOccurred())
-				Expect(f.Size()).To(BeNumerically(">", 0))
-				helmChart, err := loader.Load(ginkgoTestStorage.LocalPath(*got.Status.Artifact))
-				Expect(err).NotTo(HaveOccurred())
-				Expect(helmChart.Values["testDefault"]).To(BeTrue())
-				Expect(helmChart.Values["testOverride"]).To(BeTrue())
-			})
-
-			When("Setting invalid valuesFiles attribute", func() {
-				updated := &sourcev1.HelmChart{}
-				Expect(k8sClient.Get(context.Background(), key, updated)).To(Succeed())
-				updated.Spec.ValuesFiles = []string{
-					"values.yaml",
-					"invalid.yaml",
-				}
-				Expect(k8sClient.Update(context.Background(), updated)).To(Succeed())
-				got := &sourcev1.HelmChart{}
-				Eventually(func() bool {
-					_ = k8sClient.Get(context.Background(), key, got)
-					return got.Status.ObservedGeneration > updated.Status.ObservedGeneration &&
-						ginkgoTestStorage.ArtifactExist(*got.Status.Artifact)
-				}, timeout, interval).Should(BeTrue())
-				f, err := os.Stat(ginkgoTestStorage.LocalPath(*got.Status.Artifact))
-				Expect(err).NotTo(HaveOccurred())
-				Expect(f.Size()).To(BeNumerically(">", 0))
-				helmChart, err := loader.Load(ginkgoTestStorage.LocalPath(*got.Status.Artifact))
-				Expect(err).NotTo(HaveOccurred())
-				Expect(helmChart.Values["testDefault"]).To(BeTrue())
-				Expect(helmChart.Values["testOverride"]).To(BeTrue())
-			})
-
-			When("Setting valid valuesFiles and valuesFile attribute", func() {
-				updated := &sourcev1.HelmChart{}
-				Expect(k8sClient.Get(context.Background(), key, updated)).To(Succeed())
-				updated.Spec.ValuesFile = "values.yaml"
-				updated.Spec.ValuesFiles = []string{
-					"override.yaml",
-				}
-				Expect(k8sClient.Update(context.Background(), updated)).To(Succeed())
-				got := &sourcev1.HelmChart{}
-				Eventually(func() bool {
-					_ = k8sClient.Get(context.Background(), key, got)
-					return got.Status.Artifact.Checksum != updated.Status.Artifact.Checksum &&
-						ginkgoTestStorage.ArtifactExist(*got.Status.Artifact)
-				}, timeout, interval).Should(BeTrue())
-				f, err := os.Stat(ginkgoTestStorage.LocalPath(*got.Status.Artifact))
-				Expect(err).NotTo(HaveOccurred())
-				Expect(f.Size()).To(BeNumerically(">", 0))
-				helmChart, err := loader.Load(ginkgoTestStorage.LocalPath(*got.Status.Artifact))
-				Expect(err).NotTo(HaveOccurred())
-				Expect(helmChart.Values["testDefault"]).To(BeTrue())
-				Expect(helmChart.Values["testOverride"]).To(BeTrue())
-			})
-
-			When("Setting valid valuesFile attribute", func() {
-				updated := &sourcev1.HelmChart{}
-				Expect(k8sClient.Get(context.Background(), key, updated)).To(Succeed())
-				updated.Spec.ValuesFile = "override.yaml"
-				updated.Spec.ValuesFiles = []string{}
-				Expect(k8sClient.Update(context.Background(), updated)).To(Succeed())
-				got := &sourcev1.HelmChart{}
-				Eventually(func() bool {
-					_ = k8sClient.Get(context.Background(), key, got)
-					return got.Status.Artifact.Checksum != updated.Status.Artifact.Checksum &&
-						ginkgoTestStorage.ArtifactExist(*got.Status.Artifact)
-				}, timeout, interval).Should(BeTrue())
-				f, err := os.Stat(ginkgoTestStorage.LocalPath(*got.Status.Artifact))
-				Expect(err).NotTo(HaveOccurred())
-				Expect(f.Size()).To(BeNumerically(">", 0))
-				helmChart, err := loader.Load(ginkgoTestStorage.LocalPath(*got.Status.Artifact))
-				Expect(err).NotTo(HaveOccurred())
-				_, exists := helmChart.Values["testDefault"]
-				Expect(exists).To(BeFalse())
-				Expect(helmChart.Values["testOverride"]).To(BeTrue())
-			})
-
-			When("Setting identical valuesFile attribute", func() {
-				updated := &sourcev1.HelmChart{}
-				Expect(k8sClient.Get(context.Background(), key, updated)).To(Succeed())
-				updated.Spec.ValuesFile = "duplicate.yaml"
-				updated.Spec.ValuesFiles = []string{}
-				Expect(k8sClient.Update(context.Background(), updated)).To(Succeed())
-				got := &sourcev1.HelmChart{}
-				Eventually(func() bool {
-					_ = k8sClient.Get(context.Background(), key, got)
-					return got.Status.Artifact.Checksum != updated.Status.Artifact.Checksum &&
-						ginkgoTestStorage.ArtifactExist(*got.Status.Artifact)
-				}, timeout, interval).Should(BeTrue())
-				f, err := os.Stat(ginkgoTestStorage.LocalPath(*got.Status.Artifact))
-				Expect(err).NotTo(HaveOccurred())
-				Expect(f.Size()).To(BeNumerically(">", 0))
-				helmChart, err := loader.Load(ginkgoTestStorage.LocalPath(*got.Status.Artifact))
-				Expect(err).NotTo(HaveOccurred())
-				Expect(helmChart.Values["testDefault"]).To(BeTrue())
-				Expect(helmChart.Values["testOverride"]).To(BeFalse())
-			})
-
-			When("Setting invalid valuesFile attribute", func() {
-				updated := &sourcev1.HelmChart{}
-				Expect(k8sClient.Get(context.Background(), key, updated)).To(Succeed())
-				updated.Spec.ValuesFile = "invalid.yaml"
-				updated.Spec.ValuesFiles = []string{}
-				Expect(k8sClient.Update(context.Background(), updated)).To(Succeed())
-				got := &sourcev1.HelmChart{}
-				Eventually(func() bool {
-					_ = k8sClient.Get(context.Background(), key, got)
-					return got.Status.ObservedGeneration > updated.Status.ObservedGeneration && got.GetArtifact() != nil &&
-						ginkgoTestStorage.ArtifactExist(*got.Status.Artifact)
-				}, timeout, interval).Should(BeTrue())
-				f, err := os.Stat(ginkgoTestStorage.LocalPath(*got.Status.Artifact))
-				Expect(err).NotTo(HaveOccurred())
-				Expect(f.Size()).To(BeNumerically(">", 0))
-				helmChart, err := loader.Load(ginkgoTestStorage.LocalPath(*got.Status.Artifact))
-				Expect(err).NotTo(HaveOccurred())
-				Expect(helmChart.Values["testDefault"]).To(BeTrue())
-				Expect(helmChart.Values["testOverride"]).To(BeFalse())
-			})
-
-			By("Expecting missing HelmRepository error")
-			updated := &sourcev1.HelmChart{}
-			Expect(k8sClient.Get(context.Background(), key, updated)).Should(Succeed())
-			updated.Spec.SourceRef.Name = "invalid"
-			updated.Spec.ValuesFile = ""
-			updated.Spec.ValuesFiles = []string{}
-			Expect(k8sClient.Update(context.Background(), updated)).Should(Succeed())
-			Eventually(func() bool {
-				_ = k8sClient.Get(context.Background(), key, updated)
-				for _, c := range updated.Status.Conditions {
-					fmt.Fprintf(GinkgoWriter, "condition type: %s\n", c.Type)
-					fmt.Fprintf(GinkgoWriter, "condition reason: %s\n", c.Reason)
-					fmt.Fprintf(GinkgoWriter, "condition message: %s\n", c.Message)
-					if c.Reason == sourcev1.ChartPullFailedReason &&
-						strings.Contains(c.Message, "failed to retrieve source") {
-						return true
-					}
-				}
-				return false
-			}, timeout, interval).Should(BeTrue())
-			Expect(updated.Status.Artifact).ToNot(BeNil())
-
-			By("Expecting to delete successfully")
-			got = &sourcev1.HelmChart{}
-			Eventually(func() error {
-				_ = k8sClient.Get(context.Background(), key, got)
-				return k8sClient.Delete(context.Background(), got)
-			}, timeout, interval).Should(Succeed())
-
-			By("Expecting delete to finish")
-			Eventually(func() error {
-				c := &sourcev1.HelmChart{}
-				return k8sClient.Get(context.Background(), key, c)
-			}, timeout, interval).ShouldNot(Succeed())
-
-			exists := func(path string) bool {
-				// wait for tmp sync on macOS
-				time.Sleep(time.Second)
-				_, err := os.Stat(path)
-				return err == nil
-			}
-
-			By("Expecting GC on delete")
-			Eventually(exists(got.Status.Artifact.Path), timeout, interval).ShouldNot(BeTrue())
-		})
-
-		It("Filters versions", func() {
-			versions := []string{"0.1.0", "0.1.1", "0.2.0", "0.3.0-rc.1", "1.0.0-alpha.1", "1.0.0"}
-			for k := range versions {
-				Expect(helmServer.PackageChartWithVersion(path.Join("testdata/charts/helmchart"), versions[k])).Should(Succeed())
-			}
-
-			Expect(helmServer.GenerateIndex()).Should(Succeed())
-
-			repositoryKey := types.NamespacedName{
-				Name:      "helmrepository-sample-" + randStringRunes(5),
-				Namespace: namespace.Name,
-			}
-			repository := &sourcev1.HelmRepository{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      repositoryKey.Name,
-					Namespace: repositoryKey.Namespace,
-				},
-				Spec: sourcev1.HelmRepositorySpec{
-					URL:      helmServer.URL(),
-					Interval: metav1.Duration{Duration: 1 * time.Hour},
-				},
-			}
-			Expect(k8sClient.Create(context.Background(), repository)).Should(Succeed())
-			defer k8sClient.Delete(context.Background(), repository)
-
-			key := types.NamespacedName{
-				Name:      "helmchart-sample-" + randStringRunes(5),
-				Namespace: namespace.Name,
-			}
-			chart := &sourcev1.HelmChart{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      key.Name,
-					Namespace: key.Namespace,
-				},
-				Spec: sourcev1.HelmChartSpec{
-					Chart:   "helmchart",
-					Version: "*",
-					SourceRef: sourcev1.LocalHelmChartSourceReference{
-						Kind: sourcev1.HelmRepositoryKind,
-						Name: repositoryKey.Name,
-					},
-					Interval: metav1.Duration{Duration: 1 * time.Hour},
-				},
-			}
-			Expect(k8sClient.Create(context.Background(), chart)).Should(Succeed())
-			defer k8sClient.Delete(context.Background(), chart)
-
-			Eventually(func() string {
-				_ = k8sClient.Get(context.Background(), key, chart)
-				if chart.Status.Artifact != nil {
-					return chart.Status.Artifact.Revision
-				}
-				return ""
-			}, timeout, interval).Should(Equal("1.0.0"))
-
-			chart.Spec.Version = "<0.2.0"
-			Expect(k8sClient.Update(context.Background(), chart)).Should(Succeed())
-			Eventually(func() string {
-				_ = k8sClient.Get(context.Background(), key, chart)
-				if chart.Status.Artifact != nil {
-					return chart.Status.Artifact.Revision
-				}
-				return ""
-			}, timeout, interval).Should(Equal("0.1.1"))
-
-			chart.Spec.Version = "invalid"
-			Expect(k8sClient.Update(context.Background(), chart)).Should(Succeed())
-			Eventually(func() bool {
-				_ = k8sClient.Get(context.Background(), key, chart)
-				return conditions.GetReason(chart, sourcev1.FetchFailedCondition) == "InvalidChartReference" &&
-					conditions.IsStalled(chart)
-			}, timeout, interval).Should(BeTrue())
-			Expect(chart.GetArtifact()).NotTo(BeNil())
-			Expect(chart.Status.Artifact.Revision).Should(Equal("0.1.1"))
-		})
-
-		It("Authenticates when credentials are provided", func() {
-			helmServer.Stop()
-			var username, password = "john", "doe"
-			helmServer.WithMiddleware(func(handler http.Handler) http.Handler {
-				return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-					u, p, ok := r.BasicAuth()
-					if !ok || username != u || password != p {
-						w.WriteHeader(401)
-						return
-					}
-					handler.ServeHTTP(w, r)
-				})
-			})
-			helmServer.Start()
-
-			Expect(helmServer.PackageChartWithVersion(path.Join("testdata/charts/helmchart"), "0.1.0")).Should(Succeed())
-			Expect(helmServer.GenerateIndex()).Should(Succeed())
-
-			secretKey := types.NamespacedName{
-				Name:      "helmrepository-auth-" + randStringRunes(5),
-				Namespace: namespace.Name,
-			}
-			secret := &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      secretKey.Name,
-					Namespace: secretKey.Namespace,
+					Name: "auth",
 				},
 				Data: map[string][]byte{
-					"username": []byte(username),
-					"password": []byte(password),
+					"username": []byte("foo"),
+					"password": []byte("bar"),
 				},
-			}
-			Expect(k8sClient.Create(context.Background(), secret)).Should(Succeed())
+			},
+			beforeFunc: func(obj *sourcev1.HelmChart, repository *sourcev1.HelmRepository) {
+				obj.Spec.Chart = chartName
+				obj.Spec.Version = chartVersion
+				repository.Spec.SecretRef = &meta.LocalObjectReference{Name: "auth"}
+			},
+			want: sreconcile.ResultSuccess,
+			assertFunc: func(g *WithT, _ *sourcev1.HelmChart, build chart.Build) {
+				g.Expect(build.Name).To(Equal(chartName))
+				g.Expect(build.Version).To(Equal(chartVersion))
+				g.Expect(build.Path).ToNot(BeEmpty())
+				g.Expect(build.Path).To(BeARegularFile())
+			},
+			cleanFunc: func(g *WithT, build *chart.Build) {
+				g.Expect(os.Remove(build.Path)).To(Succeed())
+			},
+		},
+		{
+			name: "Uses artifact as build cache",
+			beforeFunc: func(obj *sourcev1.HelmChart, repository *sourcev1.HelmRepository) {
+				obj.Spec.Chart = chartName
+				obj.Spec.Version = chartVersion
+				obj.Status.Artifact = &sourcev1.Artifact{Path: chartName + "-" + chartVersion + ".tgz"}
+			},
+			want: sreconcile.ResultSuccess,
+			assertFunc: func(g *WithT, obj *sourcev1.HelmChart, build chart.Build) {
+				g.Expect(build.Name).To(Equal(chartName))
+				g.Expect(build.Version).To(Equal(chartVersion))
+				g.Expect(build.Path).To(Equal(filepath.Join(serverFactory.Root(), obj.Status.Artifact.Path)))
+				g.Expect(build.Path).To(BeARegularFile())
+			},
+		},
+		{
+			name: "Sets Generation as VersionMetadata with values files",
+			beforeFunc: func(obj *sourcev1.HelmChart, repository *sourcev1.HelmRepository) {
+				obj.Spec.Chart = chartName
+				obj.Generation = 3
+				obj.Spec.ValuesFiles = []string{"values.yaml", "override.yaml"}
+			},
+			want: sreconcile.ResultSuccess,
+			assertFunc: func(g *WithT, _ *sourcev1.HelmChart, build chart.Build) {
+				g.Expect(build.Name).To(Equal(chartName))
+				g.Expect(build.Version).To(Equal(higherChartVersion + "+3"))
+				g.Expect(build.Path).ToNot(BeEmpty())
+				g.Expect(build.Path).To(BeARegularFile())
+			},
+			cleanFunc: func(g *WithT, build *chart.Build) {
+				g.Expect(os.Remove(build.Path)).To(Succeed())
+			},
+		},
+		{
+			name: "Forces build on generation change",
+			beforeFunc: func(obj *sourcev1.HelmChart, repository *sourcev1.HelmRepository) {
+				obj.Generation = 3
+				obj.Spec.Chart = chartName
+				obj.Spec.Version = chartVersion
 
-			By("Creating repository and waiting for artifact")
-			repositoryKey := types.NamespacedName{
-				Name:      "helmrepository-sample-" + randStringRunes(5),
-				Namespace: namespace.Name,
+				obj.Status.ObservedGeneration = 2
+				obj.Status.Artifact = &sourcev1.Artifact{Path: chartName + "-" + chartVersion + ".tgz"}
+			},
+			want: sreconcile.ResultSuccess,
+			assertFunc: func(g *WithT, obj *sourcev1.HelmChart, build chart.Build) {
+				g.Expect(build.Name).To(Equal(chartName))
+				g.Expect(build.Version).To(Equal(chartVersion))
+				g.Expect(build.Path).ToNot(Equal(filepath.Join(serverFactory.Root(), obj.Status.Artifact.Path)))
+				g.Expect(build.Path).To(BeARegularFile())
+			},
+			cleanFunc: func(g *WithT, build *chart.Build) {
+				g.Expect(os.Remove(build.Path)).To(Succeed())
+			},
+		},
+		{
+			name: "Event on unsuccessful secret retrieval",
+			beforeFunc: func(_ *sourcev1.HelmChart, repository *sourcev1.HelmRepository) {
+				repository.Spec.SecretRef = &meta.LocalObjectReference{
+					Name: "invalid",
+				}
+			},
+			want:    sreconcile.ResultEmpty,
+			wantErr: &serror.Event{Err: errors.New("failed to get secret 'invalid'")},
+			assertFunc: func(g *WithT, obj *sourcev1.HelmChart, build chart.Build) {
+				g.Expect(build.Complete()).To(BeFalse())
+
+				g.Expect(obj.Status.Conditions).To(conditions.MatchConditions([]metav1.Condition{
+					*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "failed to get secret 'invalid'"),
+				}))
+			},
+		},
+		{
+			name: "Stalling on invalid client options",
+			beforeFunc: func(obj *sourcev1.HelmChart, repository *sourcev1.HelmRepository) {
+				repository.Spec.URL = "file://unsupported" // Unsupported protocol
+			},
+			want:    sreconcile.ResultEmpty,
+			wantErr: &serror.Stalling{Err: errors.New("scheme \"file\" not supported")},
+			assertFunc: func(g *WithT, obj *sourcev1.HelmChart, build chart.Build) {
+				g.Expect(build.Complete()).To(BeFalse())
+
+				g.Expect(obj.Status.Conditions).To(conditions.MatchConditions([]metav1.Condition{
+					*conditions.TrueCondition(sourcev1.FetchFailedCondition, meta.FailedReason, "failed to construct Helm client"),
+				}))
+			},
+		},
+		{
+			name: "Stalling on invalid repository URL",
+			beforeFunc: func(obj *sourcev1.HelmChart, repository *sourcev1.HelmRepository) {
+				repository.Spec.URL = "://unsupported" // Invalid URL
+			},
+			want:    sreconcile.ResultEmpty,
+			wantErr: &serror.Stalling{Err: errors.New("missing protocol scheme")},
+			assertFunc: func(g *WithT, obj *sourcev1.HelmChart, build chart.Build) {
+				g.Expect(build.Complete()).To(BeFalse())
+
+				g.Expect(obj.Status.Conditions).To(conditions.MatchConditions([]metav1.Condition{
+					*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.URLInvalidReason, "invalid Helm repository URL"),
+				}))
+			},
+		},
+		{
+			name: "BuildError on temporary build error",
+			beforeFunc: func(obj *sourcev1.HelmChart, _ *sourcev1.HelmRepository) {
+				obj.Spec.Chart = "invalid"
+			},
+			want:    sreconcile.ResultEmpty,
+			wantErr: &chart.BuildError{Err: errors.New("failed to get chart version for remote reference")},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			server := testserver.NewHTTPServer(serverFactory.Root())
+			server.Start()
+			defer server.Stop()
+
+			if len(tt.server.username+tt.server.password) > 0 {
+				server.WithMiddleware(func(handler http.Handler) http.Handler {
+					return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+						u, p, ok := r.BasicAuth()
+						if !ok || u != tt.server.username || p != tt.server.password {
+							w.WriteHeader(401)
+							return
+						}
+						handler.ServeHTTP(w, r)
+					})
+				})
 			}
+
+			clientBuilder := fake.NewClientBuilder()
+			if tt.secret != nil {
+				clientBuilder.WithObjects(tt.secret.DeepCopy())
+			}
+
+			storage, err := newTestStorage(server)
+			g.Expect(err).ToNot(HaveOccurred())
+
+			r := &HelmChartReconciler{
+				Client:        clientBuilder.Build(),
+				EventRecorder: record.NewFakeRecorder(32),
+				Getters:       testGetters,
+				Storage:       storage,
+			}
+
 			repository := &sourcev1.HelmRepository{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      repositoryKey.Name,
-					Namespace: repositoryKey.Namespace,
+					GenerateName: "helmrepository-",
 				},
 				Spec: sourcev1.HelmRepositorySpec{
-					URL: helmServer.URL(),
-					SecretRef: &meta.LocalObjectReference{
-						Name: secretKey.Name,
+					URL:     server.URL(),
+					Timeout: &metav1.Duration{Duration: timeout},
+				},
+				Status: sourcev1.HelmRepositoryStatus{
+					Artifact: &sourcev1.Artifact{
+						Path: "index.yaml",
 					},
-					Interval: metav1.Duration{Duration: pullInterval},
 				},
 			}
-			Expect(k8sClient.Create(context.Background(), repository)).Should(Succeed())
-			defer k8sClient.Delete(context.Background(), repository)
-
-			Eventually(func() bool {
-				_ = k8sClient.Get(context.Background(), repositoryKey, repository)
-				return repository.Status.Artifact != nil
-			}, timeout, interval).Should(BeTrue())
-
-			By("Deleting secret before applying HelmChart")
-			Expect(k8sClient.Delete(context.Background(), secret)).Should(Succeed())
-
-			By("Applying HelmChart")
-			key := types.NamespacedName{
-				Name:      "helmchart-sample-" + randStringRunes(5),
-				Namespace: namespace.Name,
-			}
-			chart := &sourcev1.HelmChart{
+			obj := &sourcev1.HelmChart{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      key.Name,
-					Namespace: key.Namespace,
+					GenerateName: "helmrepository-",
 				},
-				Spec: sourcev1.HelmChartSpec{
-					Chart:   "helmchart",
-					Version: "*",
-					SourceRef: sourcev1.LocalHelmChartSourceReference{
-						Kind: sourcev1.HelmRepositoryKind,
-						Name: repositoryKey.Name,
-					},
-					Interval: metav1.Duration{Duration: pullInterval},
-				},
+				Spec: sourcev1.HelmChartSpec{},
 			}
-			Expect(k8sClient.Create(context.Background(), chart)).Should(Succeed())
-			defer k8sClient.Delete(context.Background(), chart)
 
-			By("Expecting missing secret error")
-			got := &sourcev1.HelmChart{}
-			Eventually(func() bool {
-				_ = k8sClient.Get(context.Background(), key, got)
-				return conditions.GetReason(got, sourcev1.FetchFailedCondition) == sourcev1.AuthenticationFailedReason
-			}, timeout, interval).Should(BeTrue())
-
-			By("Applying secret with missing keys")
-			secret.ResourceVersion = ""
-			secret.Data["username"] = []byte{}
-			secret.Data["password"] = []byte{}
-			Expect(k8sClient.Create(context.Background(), secret)).Should(Succeed())
-
-			By("Expecting 401")
-			Eventually(func() bool {
-				got := &sourcev1.HelmChart{}
-				_ = k8sClient.Get(context.Background(), key, got)
-				for _, c := range got.Status.Conditions {
-					if c.Reason == "ChartPullError" &&
-						strings.Contains(c.Message, "401 Unauthorized") {
-						return true
-					}
-				}
-				return false
-			}, timeout, interval).Should(BeTrue())
-
-			By("Adding username key")
-			secret.Data["username"] = []byte(username)
-			Expect(k8sClient.Update(context.Background(), secret)).Should(Succeed())
-
-			By("Expecting missing field error")
-			Eventually(func() bool {
-				_ = k8sClient.Get(context.Background(), key, got)
-				for _, c := range got.Status.Conditions {
-					if c.Reason == sourcev1.AuthenticationFailedReason {
-						return true
-					}
-				}
-				return false
-			}, timeout, interval).Should(BeTrue())
-
-			By("Adding password key")
-			secret.Data["password"] = []byte(password)
-			Expect(k8sClient.Update(context.Background(), secret)).Should(Succeed())
-
-			By("Expecting artifact")
-			Eventually(func() bool {
-				_ = k8sClient.Get(context.Background(), key, got)
-				return apimeta.IsStatusConditionTrue(got.Status.Conditions, meta.ReadyCondition)
-			}, timeout, interval).Should(BeTrue())
-			Expect(got.Status.Artifact).ToNot(BeNil())
-		})
-	})
-
-	Context("HelmChart from GitRepository", func() {
-		var (
-			namespace *corev1.Namespace
-			gitServer *gittestserver.GitServer
-			err       error
-		)
-
-		BeforeEach(func() {
-			namespace = &corev1.Namespace{
-				ObjectMeta: metav1.ObjectMeta{Name: "test-git-repository-" + randStringRunes(5)},
+			if tt.beforeFunc != nil {
+				tt.beforeFunc(obj, repository)
 			}
-			err = k8sClient.Create(context.Background(), namespace)
-			Expect(err).NotTo(HaveOccurred(), "failed to create test namespace")
 
-			gitServer, err = gittestserver.NewTempGitServer()
-			Expect(err).NotTo(HaveOccurred())
-			gitServer.AutoCreate()
-			Expect(gitServer.StartHTTP()).To(Succeed())
-		})
-
-		AfterEach(func() {
-			gitServer.StopHTTP()
-			os.RemoveAll(gitServer.Root())
-
-			err = k8sClient.Delete(context.Background(), namespace)
-			Expect(err).NotTo(HaveOccurred(), "failed to delete test namespace")
-		})
-
-		It("Creates artifacts for", func() {
-			fs := memfs.New()
-			gitrepo, err := git.Init(memory.NewStorage(), fs)
-			Expect(err).NotTo(HaveOccurred())
-
-			wt, err := gitrepo.Worktree()
-			Expect(err).NotTo(HaveOccurred())
-
-			u, err := url.Parse(gitServer.HTTPAddress())
-			Expect(err).NotTo(HaveOccurred())
-			u.Path = path.Join(u.Path, fmt.Sprintf("repository-%s.git", randStringRunes(5)))
-
-			_, err = gitrepo.CreateRemote(&config.RemoteConfig{
-				Name: "origin",
-				URLs: []string{u.String()},
-			})
-			Expect(err).NotTo(HaveOccurred())
-
-			chartDir := "testdata/charts"
-			Expect(filepath.Walk(chartDir, func(p string, fi os.FileInfo, err error) error {
-				if err != nil {
-					return err
-				}
-
-				switch {
-				case fi.Mode().IsDir():
-					return fs.MkdirAll(p, os.ModeDir)
-				case !fi.Mode().IsRegular():
-					return nil
-				}
-
-				b, err := os.ReadFile(p)
-				if err != nil {
-					return err
-				}
-
-				ff, err := fs.Create(p)
-				if err != nil {
-					return err
-				}
-				if _, err := ff.Write(b); err != nil {
-					return err
-				}
-				_ = ff.Close()
-				_, err = wt.Add(p)
-
-				return err
-			})).To(Succeed())
-
-			_, err = wt.Commit("Helm charts", &git.CommitOptions{Author: &object.Signature{
-				Name:  "John Doe",
-				Email: "john@example.com",
-				When:  time.Now(),
-			}})
-			Expect(err).NotTo(HaveOccurred())
-
-			err = gitrepo.Push(&git.PushOptions{})
-			Expect(err).NotTo(HaveOccurred())
-
-			repositoryKey := types.NamespacedName{
-				Name:      fmt.Sprintf("git-repository-sample-%s", randStringRunes(5)),
-				Namespace: namespace.Name,
+			var b chart.Build
+			if tt.cleanFunc != nil {
+				defer tt.cleanFunc(g, &b)
 			}
-			repository := &sourcev1.GitRepository{
+			got, err := r.buildFromHelmRepository(context.TODO(), obj, repository, &b)
+
+			g.Expect(err != nil).To(Equal(tt.wantErr != nil))
+			if tt.wantErr != nil {
+				g.Expect(reflect.TypeOf(err).String()).To(Equal(reflect.TypeOf(tt.wantErr).String()))
+				g.Expect(err.Error()).To(ContainSubstring(tt.wantErr.Error()))
+			}
+			g.Expect(got).To(Equal(tt.want))
+
+			if tt.assertFunc != nil {
+				tt.assertFunc(g, obj, b)
+			}
+		})
+	}
+}
+
+func TestHelmChartReconciler_buildFromTarballArtifact(t *testing.T) {
+	g := NewWithT(t)
+
+	tmpDir, err := os.MkdirTemp("", "reconcile-tarball-")
+	g.Expect(err).ToNot(HaveOccurred())
+	defer os.RemoveAll(tmpDir)
+
+	storage, err := NewStorage(tmpDir, "example.com", timeout)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	chartsArtifact := &sourcev1.Artifact{
+		Revision: "mock-ref/abcdefg12345678",
+		Path:     "mock.tgz",
+	}
+	g.Expect(storage.Archive(chartsArtifact, "testdata/charts", nil)).To(Succeed())
+	yamlArtifact := &sourcev1.Artifact{
+		Revision: "9876abcd",
+		Path:     "values.yaml",
+	}
+	g.Expect(storage.CopyFromPath(yamlArtifact, "testdata/charts/helmchart/values.yaml")).To(Succeed())
+	cachedArtifact := &sourcev1.Artifact{
+		Revision: "0.1.0",
+		Path:     "cached.tgz",
+	}
+	g.Expect(storage.CopyFromPath(cachedArtifact, "testdata/charts/helmchart-0.1.0.tgz")).To(Succeed())
+
+	tests := []struct {
+		name       string
+		source     sourcev1.Artifact
+		beforeFunc func(obj *sourcev1.HelmChart)
+		want       sreconcile.Result
+		wantErr    error
+		assertFunc func(g *WithT, build chart.Build)
+		cleanFunc  func(g *WithT, build *chart.Build)
+	}{
+		{
+			name:   "Resolves chart dependencies and builds",
+			source: *chartsArtifact.DeepCopy(),
+			beforeFunc: func(obj *sourcev1.HelmChart) {
+				obj.Spec.Chart = "testdata/charts/helmchartwithdeps"
+			},
+			want: sreconcile.ResultSuccess,
+			assertFunc: func(g *WithT, build chart.Build) {
+				g.Expect(build.Name).To(Equal("helmchartwithdeps"))
+				g.Expect(build.Version).To(Equal("0.1.0"))
+				g.Expect(build.ResolvedDependencies).To(Equal(3))
+				g.Expect(build.Path).To(BeARegularFile())
+			},
+			cleanFunc: func(g *WithT, build *chart.Build) {
+				g.Expect(os.Remove(build.Path)).To(Succeed())
+			},
+		},
+		{
+			name:   "ReconcileStrategyRevision sets VersionMetadata",
+			source: *chartsArtifact.DeepCopy(),
+			beforeFunc: func(obj *sourcev1.HelmChart) {
+				obj.Spec.Chart = "testdata/charts/helmchart"
+				obj.Spec.SourceRef.Kind = sourcev1.GitRepositoryKind
+				obj.Spec.ReconcileStrategy = sourcev1.ReconcileStrategyRevision
+			},
+			want: sreconcile.ResultSuccess,
+			assertFunc: func(g *WithT, build chart.Build) {
+				g.Expect(build.Name).To(Equal("helmchart"))
+				g.Expect(build.Version).To(Equal("0.1.0+abcdefg12345"))
+				g.Expect(build.ResolvedDependencies).To(Equal(0))
+				g.Expect(build.Path).To(BeARegularFile())
+			},
+			cleanFunc: func(g *WithT, build *chart.Build) {
+				g.Expect(os.Remove(build.Path)).To(Succeed())
+			},
+		},
+		{
+			name:   "ValuesFiles sets Generation as VersionMetadata",
+			source: *chartsArtifact.DeepCopy(),
+			beforeFunc: func(obj *sourcev1.HelmChart) {
+				obj.Generation = 3
+				obj.Spec.Chart = "testdata/charts/helmchart"
+				obj.Spec.SourceRef.Kind = sourcev1.GitRepositoryKind
+				obj.Spec.ValuesFiles = []string{
+					filepath.Join(obj.Spec.Chart, "values.yaml"),
+					filepath.Join(obj.Spec.Chart, "override.yaml"),
+				}
+			},
+			want: sreconcile.ResultSuccess,
+			assertFunc: func(g *WithT, build chart.Build) {
+				g.Expect(build.Name).To(Equal("helmchart"))
+				g.Expect(build.Version).To(Equal("0.1.0+3"))
+				g.Expect(build.ResolvedDependencies).To(Equal(0))
+				g.Expect(build.Path).To(BeARegularFile())
+			},
+			cleanFunc: func(g *WithT, build *chart.Build) {
+				g.Expect(os.Remove(build.Path)).To(Succeed())
+			},
+		},
+		{
+			name:   "Chart from storage cache",
+			source: *chartsArtifact.DeepCopy(),
+			beforeFunc: func(obj *sourcev1.HelmChart) {
+				obj.Spec.Chart = "testdata/charts/helmchart-0.1.0.tgz"
+				obj.Status.Artifact = cachedArtifact.DeepCopy()
+			},
+			want: sreconcile.ResultSuccess,
+			assertFunc: func(g *WithT, build chart.Build) {
+				g.Expect(build.Name).To(Equal("helmchart"))
+				g.Expect(build.Version).To(Equal("0.1.0"))
+				g.Expect(build.Path).To(Equal(storage.LocalPath(*cachedArtifact.DeepCopy())))
+				g.Expect(build.Path).To(BeARegularFile())
+			},
+		},
+		{
+			name:   "Generation change forces rebuild",
+			source: *chartsArtifact.DeepCopy(),
+			beforeFunc: func(obj *sourcev1.HelmChart) {
+				obj.Generation = 2
+				obj.Spec.Chart = "testdata/charts/helmchart-0.1.0.tgz"
+				obj.Status.Artifact = cachedArtifact.DeepCopy()
+				obj.Status.ObservedGeneration = 1
+			},
+			want: sreconcile.ResultSuccess,
+			assertFunc: func(g *WithT, build chart.Build) {
+				g.Expect(build.Name).To(Equal("helmchart"))
+				g.Expect(build.Version).To(Equal("0.1.0"))
+				g.Expect(build.Path).ToNot(Equal(storage.LocalPath(*cachedArtifact.DeepCopy())))
+				g.Expect(build.Path).To(BeARegularFile())
+			},
+			cleanFunc: func(g *WithT, build *chart.Build) {
+				g.Expect(os.Remove(build.Path)).To(Succeed())
+			},
+		},
+		{
+			name:    "Empty source artifact",
+			source:  sourcev1.Artifact{},
+			want:    sreconcile.ResultEmpty,
+			wantErr: &serror.Event{Err: errors.New("no such file or directory")},
+			assertFunc: func(g *WithT, build chart.Build) {
+				g.Expect(build.Complete()).To(BeFalse())
+			},
+		},
+		{
+			name:    "Invalid artifact type",
+			source:  *yamlArtifact,
+			want:    sreconcile.ResultEmpty,
+			wantErr: &serror.Event{Err: errors.New("artifact untar error: requires gzip-compressed body")},
+			assertFunc: func(g *WithT, build chart.Build) {
+				g.Expect(build.Complete()).To(BeFalse())
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			r := &HelmChartReconciler{
+				Client:        fake.NewClientBuilder().Build(),
+				EventRecorder: record.NewFakeRecorder(32),
+				Storage:       storage,
+				Getters:       testGetters,
+			}
+
+			obj := &sourcev1.HelmChart{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      repositoryKey.Name,
-					Namespace: repositoryKey.Namespace,
+					Name:      "artifact",
+					Namespace: "default",
 				},
-				Spec: sourcev1.GitRepositorySpec{
-					URL:      u.String(),
-					Interval: metav1.Duration{Duration: indexInterval},
-				},
+				Spec: sourcev1.HelmChartSpec{},
 			}
-			Expect(k8sClient.Create(context.Background(), repository)).Should(Succeed())
-			defer k8sClient.Delete(context.Background(), repository)
-
-			key := types.NamespacedName{
-				Name:      "helmchart-sample-" + randStringRunes(5),
-				Namespace: namespace.Name,
+			if tt.beforeFunc != nil {
+				tt.beforeFunc(obj)
 			}
-			chart := &sourcev1.HelmChart{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      key.Name,
-					Namespace: key.Namespace,
-				},
-				Spec: sourcev1.HelmChartSpec{
-					Chart:   "testdata/charts/helmchartwithdeps",
-					Version: "*",
-					SourceRef: sourcev1.LocalHelmChartSourceReference{
-						Kind: sourcev1.GitRepositoryKind,
-						Name: repositoryKey.Name,
-					},
-					Interval: metav1.Duration{Duration: pullInterval},
-				},
+
+			var b chart.Build
+			if tt.cleanFunc != nil {
+				defer tt.cleanFunc(g, &b)
 			}
-			Expect(k8sClient.Create(context.Background(), chart)).Should(Succeed())
-			defer k8sClient.Delete(context.Background(), chart)
 
-			By("Expecting artifact")
-			got := &sourcev1.HelmChart{}
-			Eventually(func() bool {
-				_ = k8sClient.Get(context.Background(), key, got)
-				return got.Status.Artifact != nil &&
-					ginkgoTestStorage.ArtifactExist(*got.Status.Artifact)
-			}, timeout, interval).Should(BeTrue())
+			got, err := r.buildFromTarballArtifact(context.TODO(), obj, tt.source, &b)
+			g.Expect(err != nil).To(Equal(tt.wantErr != nil))
+			if tt.wantErr != nil {
+				g.Expect(reflect.TypeOf(err).String()).To(Equal(reflect.TypeOf(tt.wantErr).String()))
+				g.Expect(err.Error()).To(ContainSubstring(tt.wantErr.Error()))
+			}
+			g.Expect(got).To(Equal(tt.want))
 
-			By("Committing a new version in the chart metadata")
-			f, err := fs.OpenFile(fs.Join(chartDir, "helmchartwithdeps", chartutil.ChartfileName), os.O_RDWR, os.FileMode(0600))
-			Expect(err).NotTo(HaveOccurred())
+			if tt.assertFunc != nil {
+				tt.assertFunc(g, b)
+			}
+		})
+	}
+}
 
-			b := make([]byte, 2048)
-			n, err := f.Read(b)
-			Expect(err).NotTo(HaveOccurred())
-			b = b[0:n]
-
-			y := new(helmchart.Metadata)
-			err = yaml.Unmarshal(b, y)
-			Expect(err).NotTo(HaveOccurred())
-
-			y.Version = "0.2.0"
-			b, err = yaml.Marshal(y)
-			Expect(err).NotTo(HaveOccurred())
-
-			_, err = f.Write(b)
-			Expect(err).NotTo(HaveOccurred())
-
-			err = f.Close()
-			Expect(err).NotTo(HaveOccurred())
-
-			commit, err := wt.Commit("Chart version bump", &git.CommitOptions{
-				Author: &object.Signature{
-					Name:  "John Doe",
-					Email: "john@example.com",
-					When:  time.Now(),
-				},
-				All: true,
-			})
-			Expect(err).NotTo(HaveOccurred())
-
-			err = gitrepo.Push(&git.PushOptions{})
-			Expect(err).NotTo(HaveOccurred())
-
-			By("Expecting new artifact revision and GC")
-			now := &sourcev1.HelmChart{}
-			Eventually(func() bool {
-				_ = k8sClient.Get(context.Background(), key, now)
-				// Test revision change and garbage collection
-				return now.Status.Artifact.Revision != got.Status.Artifact.Revision &&
-					!ginkgoTestStorage.ArtifactExist(*got.Status.Artifact)
-			}, timeout, interval).Should(BeTrue())
-			helmChart, err := loader.Load(ginkgoTestStorage.LocalPath(*now.Status.Artifact))
-			Expect(err).NotTo(HaveOccurred())
-			Expect(helmChart.Values).ToNot(BeNil())
-			Expect(helmChart.Values["testDefault"]).To(BeTrue())
-			Expect(helmChart.Values["testOverride"]).To(BeFalse())
-
-			When("Setting reconcileStrategy to Revision", func() {
-				updated := &sourcev1.HelmChart{}
-				Expect(k8sClient.Get(context.Background(), key, updated)).To(Succeed())
-				updated.Spec.ReconcileStrategy = sourcev1.ReconcileStrategyRevision
-				Expect(k8sClient.Update(context.Background(), updated)).To(Succeed())
-				got := &sourcev1.HelmChart{}
-				Eventually(func() bool {
-					_ = k8sClient.Get(context.Background(), key, got)
-					return got.Status.Artifact.Revision != updated.Status.Artifact.Revision &&
-						ginkgoTestStorage.ArtifactExist(*got.Status.Artifact)
-				}, timeout, interval).Should(BeTrue())
-				Expect(got.Status.Artifact.Revision).To(ContainSubstring(updated.Status.Artifact.Revision))
-				Expect(got.Status.Artifact.Revision).To(ContainSubstring(commit.String()[0:12]))
-			})
-
-			When("Setting valid valuesFiles attribute", func() {
-				updated := &sourcev1.HelmChart{}
-				Expect(k8sClient.Get(context.Background(), key, updated)).To(Succeed())
-				updated.Spec.ValuesFiles = []string{
-					"./testdata/charts/helmchart/values.yaml",
-					"./testdata/charts/helmchart/override.yaml",
+func TestHelmChartReconciler_reconcileArtifact(t *testing.T) {
+	tests := []struct {
+		name             string
+		build            *chart.Build
+		beforeFunc       func(obj *sourcev1.HelmChart)
+		want             sreconcile.Result
+		wantErr          bool
+		assertConditions []metav1.Condition
+		afterFunc        func(t *WithT, obj *sourcev1.HelmChart)
+	}{
+		{
+			name:  "Incomplete build requeues and does not update status",
+			build: &chart.Build{},
+			beforeFunc: func(obj *sourcev1.HelmChart) {
+				conditions.MarkTrue(obj, sourcev1.ArtifactOutdatedCondition, "Foo", "")
+			},
+			want: sreconcile.ResultRequeue,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "Foo", ""),
+			},
+		},
+		{
+			name:  "Copying artifact to storage from build makes Ready=True",
+			build: mockChartBuild("helmchart", "0.1.0", "testdata/charts/helmchart-0.1.0.tgz"),
+			beforeFunc: func(obj *sourcev1.HelmChart) {
+				conditions.MarkTrue(obj, sourcev1.ArtifactOutdatedCondition, "Foo", "")
+			},
+			afterFunc: func(t *WithT, obj *sourcev1.HelmChart) {
+				t.Expect(obj.GetArtifact()).ToNot(BeNil())
+				t.Expect(obj.GetArtifact().Checksum).To(Equal("bbdf96023c912c393b49d5238e227576ed0d20d1bb145d7476d817b80e20c11a"))
+				t.Expect(obj.GetArtifact().Revision).To(Equal("0.1.0"))
+				t.Expect(obj.Status.URL).ToNot(BeEmpty())
+				t.Expect(obj.Status.ObservedChartName).To(Equal("helmchart"))
+			},
+			want: sreconcile.ResultSuccess,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReadyCondition, sourcev1.ChartPullSucceededReason, "Pulled 'helmchart' chart with version '0.1.0'"),
+			},
+		},
+		{
+			name: "Up-to-date chart build does not persist artifact to storage",
+			build: &chart.Build{
+				Name:    "helmchart",
+				Version: "0.1.0",
+				Path:    filepath.Join(testStorage.BasePath, "testdata/charts/helmchart-0.1.0.tgz"),
+			},
+			beforeFunc: func(obj *sourcev1.HelmChart) {
+				obj.Status.Artifact = &sourcev1.Artifact{
+					Path: "testdata/charts/helmchart-0.1.0.tgz",
 				}
-				Expect(k8sClient.Update(context.Background(), updated)).To(Succeed())
-				got := &sourcev1.HelmChart{}
-				Eventually(func() bool {
-					_ = k8sClient.Get(context.Background(), key, got)
-					return got.Status.Artifact.Checksum != updated.Status.Artifact.Checksum &&
-						ginkgoTestStorage.ArtifactExist(*got.Status.Artifact)
-				}, timeout, interval).Should(BeTrue())
-				f, err := os.Stat(ginkgoTestStorage.LocalPath(*got.Status.Artifact))
-				Expect(err).NotTo(HaveOccurred())
-				Expect(f.Size()).To(BeNumerically(">", 0))
-				helmChart, err := loader.Load(ginkgoTestStorage.LocalPath(*got.Status.Artifact))
-				Expect(err).NotTo(HaveOccurred())
-				Expect(helmChart.Values["testDefault"]).To(BeTrue())
-				Expect(helmChart.Values["testOverride"]).To(BeTrue())
-			})
-
-			When("Setting invalid valuesFiles attribute", func() {
-				updated := &sourcev1.HelmChart{}
-				Expect(k8sClient.Get(context.Background(), key, updated)).To(Succeed())
-				updated.Spec.ValuesFiles = []string{
-					"./testdata/charts/helmchart/values.yaml",
-					"./testdata/charts/helmchart/invalid.yaml",
+			},
+			want: sreconcile.ResultSuccess,
+			afterFunc: func(t *WithT, obj *sourcev1.HelmChart) {
+				t.Expect(obj.Status.Artifact.Path).To(Equal("testdata/charts/helmchart-0.1.0.tgz"))
+				t.Expect(obj.Status.ObservedChartName).To(BeEmpty())
+				t.Expect(obj.Status.URL).To(BeEmpty())
+			},
+		},
+		{
+			name: "Restores conditions in case artifact matches current chart build",
+			build: &chart.Build{
+				Name:     "helmchart",
+				Version:  "0.1.0",
+				Path:     filepath.Join(testStorage.BasePath, "testdata/charts/helmchart-0.1.0.tgz"),
+				Packaged: true,
+			},
+			beforeFunc: func(obj *sourcev1.HelmChart) {
+				obj.Status.ObservedChartName = "helmchart"
+				obj.Status.Artifact = &sourcev1.Artifact{
+					Revision: "0.1.0",
+					Path:     "testdata/charts/helmchart-0.1.0.tgz",
 				}
-				Expect(k8sClient.Update(context.Background(), updated)).To(Succeed())
-				got := &sourcev1.HelmChart{}
-				Eventually(func() bool {
-					_ = k8sClient.Get(context.Background(), key, got)
-					return got.Status.ObservedGeneration > updated.Status.ObservedGeneration &&
-						ginkgoTestStorage.ArtifactExist(*got.Status.Artifact)
-				}, timeout, interval).Should(BeTrue())
-				f, err := os.Stat(ginkgoTestStorage.LocalPath(*got.Status.Artifact))
-				Expect(err).NotTo(HaveOccurred())
-				Expect(f.Size()).To(BeNumerically(">", 0))
-				helmChart, err := loader.Load(ginkgoTestStorage.LocalPath(*got.Status.Artifact))
-				Expect(err).NotTo(HaveOccurred())
-				Expect(helmChart.Values["testDefault"]).To(BeTrue())
-				Expect(helmChart.Values["testOverride"]).To(BeTrue())
-			})
+			},
+			want: sreconcile.ResultSuccess,
+			afterFunc: func(t *WithT, obj *sourcev1.HelmChart) {
+				t.Expect(obj.Status.Artifact.Path).To(Equal("testdata/charts/helmchart-0.1.0.tgz"))
+				t.Expect(obj.Status.URL).To(BeEmpty())
+			},
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReadyCondition, sourcev1.ChartPackageSucceededReason, "Packaged 'helmchart' chart with version '0.1.0'"),
+			},
+		},
+		{
+			name:  "Removes ArtifactOutdatedCondition after creating new artifact",
+			build: mockChartBuild("helmchart", "0.1.0", "testdata/charts/helmchart-0.1.0.tgz"),
+			beforeFunc: func(obj *sourcev1.HelmChart) {
+				conditions.MarkTrue(obj, sourcev1.ArtifactOutdatedCondition, "Foo", "")
+			},
+			afterFunc: func(t *WithT, obj *sourcev1.HelmChart) {
+				t.Expect(obj.GetArtifact()).ToNot(BeNil())
+				t.Expect(obj.GetArtifact().Checksum).To(Equal("bbdf96023c912c393b49d5238e227576ed0d20d1bb145d7476d817b80e20c11a"))
+				t.Expect(obj.GetArtifact().Revision).To(Equal("0.1.0"))
+				t.Expect(obj.Status.URL).ToNot(BeEmpty())
+				t.Expect(obj.Status.ObservedChartName).To(Equal("helmchart"))
+			},
+			want: sreconcile.ResultSuccess,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReadyCondition, sourcev1.ChartPullSucceededReason, "Pulled 'helmchart' chart with version '0.1.0'"),
+			},
+		},
+		{
+			name:  "Creates latest symlink to the created artifact",
+			build: mockChartBuild("helmchart", "0.1.0", "testdata/charts/helmchart-0.1.0.tgz"),
+			afterFunc: func(t *WithT, obj *sourcev1.HelmChart) {
+				t.Expect(obj.GetArtifact()).ToNot(BeNil())
 
-			When("Setting valid valuesFiles and valuesFile attribute", func() {
-				updated := &sourcev1.HelmChart{}
-				Expect(k8sClient.Get(context.Background(), key, updated)).To(Succeed())
-				updated.Spec.ValuesFile = "./testdata/charts/helmchart/values.yaml"
-				updated.Spec.ValuesFiles = []string{
-					"./testdata/charts/helmchart/override.yaml",
-				}
-				Expect(k8sClient.Update(context.Background(), updated)).To(Succeed())
-				got := &sourcev1.HelmChart{}
-				Eventually(func() bool {
-					_ = k8sClient.Get(context.Background(), key, got)
-					return got.Status.Artifact.Checksum != updated.Status.Artifact.Checksum &&
-						ginkgoTestStorage.ArtifactExist(*got.Status.Artifact)
-				}, timeout, interval).Should(BeTrue())
-				f, err := os.Stat(ginkgoTestStorage.LocalPath(*got.Status.Artifact))
-				Expect(err).NotTo(HaveOccurred())
-				Expect(f.Size()).To(BeNumerically(">", 0))
-				helmChart, err := loader.Load(ginkgoTestStorage.LocalPath(*got.Status.Artifact))
-				Expect(err).NotTo(HaveOccurred())
-				Expect(helmChart.Values["testDefault"]).To(BeTrue())
-				Expect(helmChart.Values["testOverride"]).To(BeTrue())
-			})
+				localPath := testStorage.LocalPath(*obj.GetArtifact())
+				symlinkPath := filepath.Join(filepath.Dir(localPath), "latest.tar.gz")
+				targetFile, err := os.Readlink(symlinkPath)
+				t.Expect(err).NotTo(HaveOccurred())
+				t.Expect(localPath).To(Equal(targetFile))
+			},
+			want: sreconcile.ResultSuccess,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReadyCondition, sourcev1.ChartPullSucceededReason, "Pulled 'helmchart' chart with version '0.1.0'"),
+			},
+		},
+	}
 
-			When("Setting valid valuesFile attribute", func() {
-				updated := &sourcev1.HelmChart{}
-				Expect(k8sClient.Get(context.Background(), key, updated)).To(Succeed())
-				updated.Spec.ValuesFile = "./testdata/charts/helmchart/override.yaml"
-				updated.Spec.ValuesFiles = []string{}
-				Expect(k8sClient.Update(context.Background(), updated)).To(Succeed())
-				got := &sourcev1.HelmChart{}
-				Eventually(func() bool {
-					_ = k8sClient.Get(context.Background(), key, got)
-					// Since a lot of chart updates took place above, checking
-					// artifact checksum isn't the most reliable way to find out
-					// if the artifact was changed due to the current update.
-					// Use status condition to be sure.
-					for _, condn := range got.Status.Conditions {
-						if strings.Contains(condn.Message, "merged values files [./testdata/charts/helmchart/override.yaml]") &&
-							ginkgoTestStorage.ArtifactExist(*got.Status.Artifact) {
-							return true
-						}
-					}
-					return false
-				}, timeout, interval).Should(BeTrue())
-				f, err := os.Stat(ginkgoTestStorage.LocalPath(*got.Status.Artifact))
-				Expect(err).NotTo(HaveOccurred())
-				Expect(f.Size()).To(BeNumerically(">", 0))
-				helmChart, err := loader.Load(ginkgoTestStorage.LocalPath(*got.Status.Artifact))
-				Expect(err).NotTo(HaveOccurred())
-				_, exists := helmChart.Values["testDefault"]
-				Expect(exists).To(BeFalse())
-				Expect(helmChart.Values["testOverride"]).To(BeTrue())
-			})
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
 
-			When("Setting invalid valuesFile attribute", func() {
-				updated := &sourcev1.HelmChart{}
-				Expect(k8sClient.Get(context.Background(), key, updated)).To(Succeed())
-				updated.Spec.ValuesFile = "./testdata/charts/helmchart/invalid.yaml"
-				updated.Spec.ValuesFiles = []string{}
-				Expect(k8sClient.Update(context.Background(), updated)).To(Succeed())
-				got := &sourcev1.HelmChart{}
-				Eventually(func() bool {
-					_ = k8sClient.Get(context.Background(), key, got)
-					return got.Status.ObservedGeneration > updated.Status.ObservedGeneration &&
-						ginkgoTestStorage.ArtifactExist(*got.Status.Artifact)
-				}, timeout, interval).Should(BeTrue())
-				f, err := os.Stat(ginkgoTestStorage.LocalPath(*got.Status.Artifact))
-				Expect(err).NotTo(HaveOccurred())
-				Expect(f.Size()).To(BeNumerically(">", 0))
-				helmChart, err := loader.Load(ginkgoTestStorage.LocalPath(*got.Status.Artifact))
-				Expect(err).NotTo(HaveOccurred())
-				_, exists := helmChart.Values["testDefault"]
-				Expect(exists).To(BeFalse())
-				Expect(helmChart.Values["testOverride"]).To(BeTrue())
-			})
-		})
-
-		It("Creates artifacts with .tgz file", func() {
-			fs := memfs.New()
-			gitrepo, err := git.Init(memory.NewStorage(), fs)
-			Expect(err).NotTo(HaveOccurred())
-
-			wt, err := gitrepo.Worktree()
-			Expect(err).NotTo(HaveOccurred())
-
-			u, err := url.Parse(gitServer.HTTPAddress())
-			Expect(err).NotTo(HaveOccurred())
-			u.Path = path.Join(u.Path, fmt.Sprintf("repository-%s.git", randStringRunes(5)))
-
-			_, err = gitrepo.CreateRemote(&config.RemoteConfig{
-				Name: "origin",
-				URLs: []string{u.String()},
-			})
-			Expect(err).NotTo(HaveOccurred())
-
-			chartDir := "testdata/charts/helmchart"
-			helmChart, err := loader.LoadDir(chartDir)
-			Expect(err).NotTo(HaveOccurred())
-
-			chartPackagePath, err := os.MkdirTemp("", fmt.Sprintf("chartpackage-%s-%s", helmChart.Name(), randStringRunes(5)))
-			Expect(err).NotTo(HaveOccurred())
-			defer os.RemoveAll(chartPackagePath)
-
-			pkg, err := chartutil.Save(helmChart, chartPackagePath)
-			Expect(err).NotTo(HaveOccurred())
-
-			b, err := os.ReadFile(pkg)
-			Expect(err).NotTo(HaveOccurred())
-
-			tgz := filepath.Base(pkg)
-			ff, err := fs.Create(tgz)
-			Expect(err).NotTo(HaveOccurred())
-
-			_, err = ff.Write(b)
-			Expect(err).NotTo(HaveOccurred())
-
-			ff.Close()
-			_, err = wt.Add(tgz)
-			Expect(err).NotTo(HaveOccurred())
-
-			_, err = wt.Commit("Helm chart", &git.CommitOptions{Author: &object.Signature{
-				Name:  "John Doe",
-				Email: "john@example.com",
-				When:  time.Now(),
-			}})
-			Expect(err).NotTo(HaveOccurred())
-
-			err = gitrepo.Push(&git.PushOptions{})
-			Expect(err).NotTo(HaveOccurred())
-
-			repositoryKey := types.NamespacedName{
-				Name:      fmt.Sprintf("git-repository-sample-%s", randStringRunes(5)),
-				Namespace: namespace.Name,
+			r := &HelmChartReconciler{
+				EventRecorder: record.NewFakeRecorder(32),
+				Storage:       testStorage,
 			}
-			repository := &sourcev1.GitRepository{
+
+			obj := &sourcev1.HelmChart{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      repositoryKey.Name,
-					Namespace: repositoryKey.Namespace,
+					GenerateName: "reconcile-artifact-",
+					Generation:   1,
 				},
-				Spec: sourcev1.GitRepositorySpec{
-					URL:      u.String(),
-					Interval: metav1.Duration{Duration: indexInterval},
-				},
+				Status: sourcev1.HelmChartStatus{},
 			}
-			Expect(k8sClient.Create(context.Background(), repository)).Should(Succeed())
-			defer k8sClient.Delete(context.Background(), repository)
+			if tt.beforeFunc != nil {
+				tt.beforeFunc(obj)
+			}
 
-			key := types.NamespacedName{
-				Name:      "helmchart-sample-" + randStringRunes(5),
-				Namespace: namespace.Name,
+			got, err := r.reconcileArtifact(ctx, obj, tt.build)
+			g.Expect(err != nil).To(Equal(tt.wantErr))
+			g.Expect(got).To(Equal(tt.want))
+			g.Expect(obj.Status.Conditions).To(conditions.MatchConditions(tt.assertConditions))
+			if tt.afterFunc != nil {
+				tt.afterFunc(g, obj)
 			}
-			chart := &sourcev1.HelmChart{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      key.Name,
-					Namespace: key.Namespace,
-				},
-				Spec: sourcev1.HelmChartSpec{
-					Chart:   tgz,
-					Version: "*",
-					SourceRef: sourcev1.LocalHelmChartSourceReference{
-						Kind: sourcev1.GitRepositoryKind,
-						Name: repositoryKey.Name,
-					},
-					Interval: metav1.Duration{Duration: pullInterval},
-				},
-			}
-			Expect(k8sClient.Create(context.Background(), chart)).Should(Succeed())
-			defer k8sClient.Delete(context.Background(), chart)
-
-			By("Expecting artifact")
-			got := &sourcev1.HelmChart{}
-			Eventually(func() bool {
-				_ = k8sClient.Get(context.Background(), key, got)
-				return got.Status.Artifact != nil &&
-					ginkgoTestStorage.ArtifactExist(*got.Status.Artifact)
-			}, timeout, interval).Should(BeTrue())
 		})
-	})
+	}
+}
 
-	Context("HelmChart from GitRepository with HelmRepository dependency", func() {
-		var (
-			namespace  *corev1.Namespace
-			gitServer  *gittestserver.GitServer
-			helmServer *helmtestserver.HelmServer
-			err        error
-		)
+func TestHelmChartReconciler_getHelmRepositorySecret(t *testing.T) {
+	mock := &corev1.Secret{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Secret",
+			APIVersion: "v1",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "secret",
+			Namespace: "foo",
+		},
+		Data: map[string][]byte{
+			"key": []byte("bar"),
+		},
+	}
+	clientBuilder := fake.NewClientBuilder()
+	clientBuilder.WithObjects(mock)
 
-		BeforeEach(func() {
-			namespace = &corev1.Namespace{
-				ObjectMeta: metav1.ObjectMeta{Name: "test-git-repository-" + randStringRunes(5)},
-			}
-			err = k8sClient.Create(context.Background(), namespace)
-			Expect(err).NotTo(HaveOccurred(), "failed to create test namespace")
+	r := &HelmChartReconciler{
+		Client: clientBuilder.Build(),
+	}
 
-			gitServer, err = gittestserver.NewTempGitServer()
-			Expect(err).NotTo(HaveOccurred())
-			gitServer.AutoCreate()
-			Expect(gitServer.StartHTTP()).To(Succeed())
-
-			helmServer, err = helmtestserver.NewTempHelmServer()
-			Expect(err).To(Succeed())
-			helmServer.Start()
-		})
-
-		AfterEach(func() {
-			gitServer.StopHTTP()
-			os.RemoveAll(gitServer.Root())
-
-			helmServer.Stop()
-			os.RemoveAll(helmServer.Root())
-
-			err = k8sClient.Delete(context.Background(), namespace)
-			Expect(err).NotTo(HaveOccurred(), "failed to delete test namespace")
-		})
-
-		It("Creates artifacts for", func() {
-			helmServer.Stop()
-			var username, password = "john", "doe"
-			helmServer.WithMiddleware(func(handler http.Handler) http.Handler {
-				return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-					u, p, ok := r.BasicAuth()
-					if !ok || username != u || password != p {
-						w.WriteHeader(401)
-						return
-					}
-					handler.ServeHTTP(w, r)
-				})
-			})
-			helmServer.Start()
-
-			Expect(helmServer.PackageChart(path.Join("testdata/charts/helmchart"))).Should(Succeed())
-			Expect(helmServer.GenerateIndex()).Should(Succeed())
-
-			secretKey := types.NamespacedName{
-				Name:      "helmrepository-auth-" + randStringRunes(5),
-				Namespace: namespace.Name,
-			}
-			secret := &corev1.Secret{
+	tests := []struct {
+		name       string
+		repository *sourcev1.HelmRepository
+		want       *corev1.Secret
+		wantErr    bool
+	}{
+		{
+			name: "Existing secret reference",
+			repository: &sourcev1.HelmRepository{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      secretKey.Name,
-					Namespace: secretKey.Namespace,
-				},
-				StringData: map[string]string{
-					"username": username,
-					"password": password,
-				},
-			}
-			Expect(k8sClient.Create(context.Background(), secret)).Should(Succeed())
-
-			By("Creating repository and waiting for artifact")
-			helmRepositoryKey := types.NamespacedName{
-				Name:      "helmrepository-sample-" + randStringRunes(5),
-				Namespace: namespace.Name,
-			}
-			helmRepository := &sourcev1.HelmRepository{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      helmRepositoryKey.Name,
-					Namespace: helmRepositoryKey.Namespace,
+					Namespace: mock.Namespace,
 				},
 				Spec: sourcev1.HelmRepositorySpec{
-					URL: helmServer.URL(),
 					SecretRef: &meta.LocalObjectReference{
-						Name: secretKey.Name,
+						Name: mock.Name,
 					},
-					Interval: metav1.Duration{Duration: pullInterval},
 				},
-			}
-			Expect(k8sClient.Create(context.Background(), helmRepository)).Should(Succeed())
-			defer k8sClient.Delete(context.Background(), helmRepository)
-
-			Eventually(func() bool {
-				_ = k8sClient.Get(context.Background(), helmRepositoryKey, helmRepository)
-				return helmRepository.Status.Artifact != nil
-			}, timeout, interval).Should(BeTrue())
-
-			fs := memfs.New()
-			gitrepo, err := git.Init(memory.NewStorage(), fs)
-			Expect(err).NotTo(HaveOccurred())
-
-			wt, err := gitrepo.Worktree()
-			Expect(err).NotTo(HaveOccurred())
-
-			u, err := url.Parse(gitServer.HTTPAddress())
-			Expect(err).NotTo(HaveOccurred())
-			u.Path = path.Join(u.Path, fmt.Sprintf("repository-%s.git", randStringRunes(5)))
-
-			_, err = gitrepo.CreateRemote(&config.RemoteConfig{
-				Name: "origin",
-				URLs: []string{u.String()},
-			})
-			Expect(err).NotTo(HaveOccurred())
-
-			chartDir := "testdata/charts/helmchartwithdeps"
-			Expect(filepath.Walk(chartDir, func(p string, fi os.FileInfo, err error) error {
-				if err != nil {
-					return err
-				}
-
-				switch {
-				case fi.Mode().IsDir():
-					return fs.MkdirAll(p, os.ModeDir)
-				case !fi.Mode().IsRegular():
-					return nil
-				}
-
-				b, err := os.ReadFile(p)
-				if err != nil {
-					return err
-				}
-
-				ff, err := fs.Create(p)
-				if err != nil {
-					return err
-				}
-				if _, err := ff.Write(b); err != nil {
-					return err
-				}
-				_ = ff.Close()
-				_, err = wt.Add(p)
-
-				return err
-			})).To(Succeed())
-
-			By("Configuring the chart dependency")
-			filePath := fs.Join(chartDir, chartutil.ChartfileName)
-			f, err := fs.OpenFile(filePath, os.O_RDWR, os.FileMode(0600))
-			Expect(err).NotTo(HaveOccurred())
-
-			b := make([]byte, 2048)
-			n, err := f.Read(b)
-			Expect(err).NotTo(HaveOccurred())
-			b = b[0:n]
-
-			err = f.Close()
-			Expect(err).NotTo(HaveOccurred())
-
-			y := new(helmchart.Metadata)
-			err = yaml.Unmarshal(b, y)
-			Expect(err).NotTo(HaveOccurred())
-
-			y.Dependencies = []*helmchart.Dependency{
-				{
-					Name:       "helmchart",
-					Version:    ">=0.1.0",
-					Repository: helmRepository.Spec.URL,
+			},
+			want: mock,
+		},
+		{
+			name: "Empty secret reference",
+			repository: &sourcev1.HelmRepository{
+				Spec: sourcev1.HelmRepositorySpec{
+					SecretRef: nil,
 				},
-			}
-
-			b, err = yaml.Marshal(y)
-			Expect(err).NotTo(HaveOccurred())
-
-			ff, err := fs.Create(filePath)
-			Expect(err).NotTo(HaveOccurred())
-
-			_, err = ff.Write(b)
-			Expect(err).NotTo(HaveOccurred())
-
-			err = ff.Close()
-			Expect(err).NotTo(HaveOccurred())
-
-			_, err = wt.Commit("Helm charts", &git.CommitOptions{
-				Author: &object.Signature{
-					Name:  "John Doe",
-					Email: "john@example.com",
-					When:  time.Now(),
-				},
-				All: true,
-			})
-			Expect(err).NotTo(HaveOccurred())
-
-			err = gitrepo.Push(&git.PushOptions{})
-			Expect(err).NotTo(HaveOccurred())
-
-			repositoryKey := types.NamespacedName{
-				Name:      fmt.Sprintf("git-repository-sample-%s", randStringRunes(5)),
-				Namespace: namespace.Name,
-			}
-			repository := &sourcev1.GitRepository{
+			},
+			want: nil,
+		},
+		{
+			name: "Error on client error",
+			repository: &sourcev1.HelmRepository{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      repositoryKey.Name,
-					Namespace: repositoryKey.Namespace,
+					Namespace: "different",
 				},
-				Spec: sourcev1.GitRepositorySpec{
-					URL:      u.String(),
-					Interval: metav1.Duration{Duration: indexInterval},
+				Spec: sourcev1.HelmRepositorySpec{
+					SecretRef: &meta.LocalObjectReference{
+						Name: mock.Name,
+					},
 				},
-			}
-			Expect(k8sClient.Create(context.Background(), repository)).Should(Succeed())
-			defer k8sClient.Delete(context.Background(), repository)
+			},
+			wantErr: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
 
-			key := types.NamespacedName{
-				Name:      "helmchart-sample-" + randStringRunes(5),
-				Namespace: namespace.Name,
-			}
-			chart := &sourcev1.HelmChart{
+			got, err := r.getHelmRepositorySecret(context.TODO(), tt.repository)
+			g.Expect(err != nil).To(Equal(tt.wantErr))
+			g.Expect(got).To(Equal(tt.want))
+		})
+	}
+}
+
+func TestHelmChartReconciler_getSource(t *testing.T) {
+	mocks := []client.Object{
+		&sourcev1.HelmRepository{
+			TypeMeta: metav1.TypeMeta{
+				Kind:       sourcev1.HelmRepositoryKind,
+				APIVersion: "source.toolkit.fluxcd.io/v1beta2",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "helmrepository",
+				Namespace: "foo",
+			},
+		},
+		&sourcev1.GitRepository{
+			TypeMeta: metav1.TypeMeta{
+				Kind:       sourcev1.GitRepositoryKind,
+				APIVersion: "source.toolkit.fluxcd.io/v1beta2",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "gitrepository",
+				Namespace: "foo",
+			},
+		},
+		&sourcev1.Bucket{
+			TypeMeta: metav1.TypeMeta{
+				Kind:       sourcev1.BucketKind,
+				APIVersion: "source.toolkit.fluxcd.io/v1beta2",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "bucket",
+				Namespace: "foo",
+			},
+		},
+	}
+	clientBuilder := fake.NewClientBuilder()
+	clientBuilder.WithObjects(mocks...)
+
+	r := &HelmChartReconciler{
+		Client: clientBuilder.Build(),
+	}
+
+	tests := []struct {
+		name    string
+		obj     *sourcev1.HelmChart
+		want    sourcev1.Source
+		wantErr bool
+	}{
+		{
+			name: "Get HelmRepository source for reference",
+			obj: &sourcev1.HelmChart{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      key.Name,
-					Namespace: key.Namespace,
+					Namespace: mocks[0].GetNamespace(),
 				},
 				Spec: sourcev1.HelmChartSpec{
-					Chart:   "testdata/charts/helmchartwithdeps",
-					Version: "*",
 					SourceRef: sourcev1.LocalHelmChartSourceReference{
-						Kind: sourcev1.GitRepositoryKind,
-						Name: repositoryKey.Name,
+						Name: mocks[0].GetName(),
+						Kind: mocks[0].GetObjectKind().GroupVersionKind().Kind,
 					},
-					Interval: metav1.Duration{Duration: pullInterval},
+				},
+			},
+			want: mocks[0].(sourcev1.Source),
+		},
+		{
+			name: "Get GitRepository source for reference",
+			obj: &sourcev1.HelmChart{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: mocks[1].GetNamespace(),
+				},
+				Spec: sourcev1.HelmChartSpec{
+					SourceRef: sourcev1.LocalHelmChartSourceReference{
+						Name: mocks[1].GetName(),
+						Kind: mocks[1].GetObjectKind().GroupVersionKind().Kind,
+					},
+				},
+			},
+			want: mocks[1].(sourcev1.Source),
+		},
+		{
+			name: "Get Bucket source for reference",
+			obj: &sourcev1.HelmChart{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: mocks[2].GetNamespace(),
+				},
+				Spec: sourcev1.HelmChartSpec{
+					SourceRef: sourcev1.LocalHelmChartSourceReference{
+						Name: mocks[2].GetName(),
+						Kind: mocks[2].GetObjectKind().GroupVersionKind().Kind,
+					},
+				},
+			},
+			want: mocks[2].(sourcev1.Source),
+		},
+		{
+			name: "Error on client error",
+			obj: &sourcev1.HelmChart{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: mocks[2].GetNamespace(),
+				},
+				Spec: sourcev1.HelmChartSpec{
+					SourceRef: sourcev1.LocalHelmChartSourceReference{
+						Name: mocks[1].GetName(),
+						Kind: mocks[2].GetObjectKind().GroupVersionKind().Kind,
+					},
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "Error on unsupported source kind",
+			obj: &sourcev1.HelmChart{
+				Spec: sourcev1.HelmChartSpec{
+					SourceRef: sourcev1.LocalHelmChartSourceReference{
+						Name: "unsupported",
+						Kind: "Unsupported",
+					},
+				},
+			},
+			wantErr: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			got, err := r.getSource(context.TODO(), tt.obj)
+
+			if tt.wantErr {
+				g.Expect(err).To(HaveOccurred())
+				g.Expect(got).To(BeNil())
+				return
+			}
+
+			g.Expect(got).To(Equal(tt.want))
+			g.Expect(err).ToNot(HaveOccurred())
+		})
+	}
+}
+
+func TestHelmChartReconciler_reconcileDelete(t *testing.T) {
+	g := NewWithT(t)
+
+	r := &HelmChartReconciler{
+		EventRecorder: record.NewFakeRecorder(32),
+		Storage:       testStorage,
+	}
+
+	obj := &sourcev1.HelmChart{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              "reconcile-delete-",
+			DeletionTimestamp: &metav1.Time{Time: time.Now()},
+			Finalizers: []string{
+				sourcev1.SourceFinalizer,
+			},
+		},
+		Status: sourcev1.HelmChartStatus{},
+	}
+
+	artifact := testStorage.NewArtifactFor(sourcev1.HelmChartKind, obj.GetObjectMeta(), "revision", "foo.txt")
+	obj.Status.Artifact = &artifact
+
+	got, err := r.reconcileDelete(ctx, obj)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(got).To(Equal(sreconcile.ResultEmpty))
+	g.Expect(controllerutil.ContainsFinalizer(obj, sourcev1.SourceFinalizer)).To(BeFalse())
+	g.Expect(obj.Status.Artifact).To(BeNil())
+}
+
+func TestHelmChartReconciler_summarizeAndPatch(t *testing.T) {
+	tests := []struct {
+		name             string
+		generation       int64
+		beforeFunc       func(obj *sourcev1.HelmChart)
+		result           sreconcile.Result
+		reconcileErr     error
+		wantErr          bool
+		afterFunc        func(t *WithT, obj *sourcev1.HelmChart)
+		assertConditions []metav1.Condition
+	}{
+		// Success/Fail indicates if a reconciliation succeeded or failed. On
+		// a successful reconciliation, the object generation is expected to
+		// match the observed generation in the object status.
+		// All the cases have some Ready condition set, even if a test case is
+		// unrelated to the conditions, because it's necessary for a valid
+		// status.
+		{
+			name:       "Success, no extra conditions",
+			generation: 4,
+			beforeFunc: func(obj *sourcev1.HelmChart) {
+				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "test-msg")
+			},
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReadyCondition, meta.SucceededReason, "test-msg"),
+			},
+			afterFunc: func(t *WithT, obj *sourcev1.HelmChart) {
+				t.Expect(obj.Status.ObservedGeneration).To(Equal(int64(4)))
+			},
+		},
+		{
+			name:       "Success, Ready=True",
+			generation: 5,
+			beforeFunc: func(obj *sourcev1.HelmChart) {
+				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "created")
+			},
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReadyCondition, meta.SucceededReason, "created"),
+			},
+			afterFunc: func(t *WithT, obj *sourcev1.HelmChart) {
+				t.Expect(obj.Status.ObservedGeneration).To(Equal(int64(5)))
+			},
+		},
+		{
+			name:       "Success, removes reconciling for successful result",
+			generation: 2,
+			beforeFunc: func(obj *sourcev1.HelmChart) {
+				conditions.MarkReconciling(obj, "NewRevision", "new index version")
+				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "stored artifact")
+			},
+			result:  sreconcile.ResultSuccess,
+			wantErr: false,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReadyCondition, meta.SucceededReason, "stored artifact"),
+			},
+			afterFunc: func(t *WithT, obj *sourcev1.HelmChart) {
+				t.Expect(obj.Status.ObservedGeneration).To(Equal(int64(2)))
+			},
+		},
+		{
+			name: "Success, record reconciliation request",
+			beforeFunc: func(obj *sourcev1.HelmChart) {
+				annotations := map[string]string{
+					meta.ReconcileRequestAnnotation: "now",
+				}
+				obj.SetAnnotations(annotations)
+				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "test-msg")
+			},
+			generation: 3,
+			result:     sreconcile.ResultSuccess,
+			wantErr:    false,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReadyCondition, meta.SucceededReason, "test-msg"),
+			},
+			afterFunc: func(t *WithT, obj *sourcev1.HelmChart) {
+				t.Expect(obj.Status.LastHandledReconcileAt).To(Equal("now"))
+				t.Expect(obj.Status.ObservedGeneration).To(Equal(int64(3)))
+			},
+		},
+		{
+			name:       "Fail, with multiple conditions ArtifactOutdated=True,Reconciling=True",
+			generation: 7,
+			beforeFunc: func(obj *sourcev1.HelmChart) {
+				conditions.MarkTrue(obj, sourcev1.ArtifactOutdatedCondition, "NewRevision", "new index revision")
+				conditions.MarkReconciling(obj, "NewRevision", "new index revision")
+			},
+			reconcileErr: fmt.Errorf("failed to create dir"),
+			wantErr:      true,
+			assertConditions: []metav1.Condition{
+				*conditions.FalseCondition(meta.ReadyCondition, "NewRevision", "new index revision"),
+				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new index revision"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new index revision"),
+			},
+			afterFunc: func(t *WithT, obj *sourcev1.HelmChart) {
+				t.Expect(obj.Status.ObservedGeneration).ToNot(Equal(int64(7)))
+			},
+		},
+		{
+			name:       "Success, with subreconciler stalled error",
+			generation: 9,
+			beforeFunc: func(obj *sourcev1.HelmChart) {
+				conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.FetchFailedCondition, "failed to construct helm client")
+			},
+			reconcileErr: &serror.Stalling{Err: fmt.Errorf("some error"), Reason: "some reason"},
+			wantErr:      false,
+			assertConditions: []metav1.Condition{
+				*conditions.FalseCondition(meta.ReadyCondition, sourcev1.FetchFailedCondition, "failed to construct helm client"),
+				*conditions.TrueCondition(meta.StalledCondition, "some reason", "some error"),
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.FetchFailedCondition, "failed to construct helm client"),
+			},
+			afterFunc: func(t *WithT, obj *sourcev1.HelmChart) {
+				t.Expect(obj.Status.ObservedGeneration).To(Equal(int64(9)))
+			},
+		},
+		{
+			name:       "Fail, no error but requeue requested",
+			generation: 3,
+			beforeFunc: func(obj *sourcev1.HelmChart) {
+				conditions.MarkFalse(obj, meta.ReadyCondition, meta.FailedReason, "test-msg")
+			},
+			result: sreconcile.ResultRequeue,
+			assertConditions: []metav1.Condition{
+				*conditions.FalseCondition(meta.ReadyCondition, meta.FailedReason, "test-msg"),
+			},
+			afterFunc: func(t *WithT, obj *sourcev1.HelmChart) {
+				t.Expect(obj.Status.ObservedGeneration).ToNot(Equal(int64(3)))
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			builder := fake.NewClientBuilder().WithScheme(testEnv.GetScheme())
+			r := &HelmChartReconciler{
+				Client: builder.Build(),
+			}
+			obj := &sourcev1.HelmChart{
+				ObjectMeta: metav1.ObjectMeta{
+					GenerateName: "test-",
+					Generation:   tt.generation,
+				},
+				Spec: sourcev1.HelmChartSpec{
+					Interval: metav1.Duration{Duration: 5 * time.Second},
 				},
 			}
-			Expect(k8sClient.Create(context.Background(), chart)).Should(Succeed())
-			defer k8sClient.Delete(context.Background(), chart)
 
-			By("Expecting artifact")
-			got := &sourcev1.HelmChart{}
-			Eventually(func() bool {
-				_ = k8sClient.Get(context.Background(), key, got)
-				return got.Status.Artifact != nil &&
-					ginkgoTestStorage.ArtifactExist(*got.Status.Artifact)
-			}, timeout, interval).Should(BeTrue())
-			helmChart, err := loader.Load(ginkgoTestStorage.LocalPath(*got.Status.Artifact))
-			Expect(err).NotTo(HaveOccurred())
-			Expect(helmChart.Values["testDefault"]).To(BeTrue())
-			Expect(helmChart.Values["testOverride"]).To(BeFalse())
+			if tt.beforeFunc != nil {
+				tt.beforeFunc(obj)
+			}
 
-			When("Setting valid valuesFiles attribute", func() {
-				updated := &sourcev1.HelmChart{}
-				Expect(k8sClient.Get(context.Background(), key, updated)).To(Succeed())
-				updated.Spec.ValuesFiles = []string{
-					"./testdata/charts/helmchartwithdeps/values.yaml",
-					"./testdata/charts/helmchartwithdeps/override.yaml",
-				}
-				Expect(k8sClient.Update(context.Background(), updated)).To(Succeed())
-				got := &sourcev1.HelmChart{}
-				Eventually(func() bool {
-					_ = k8sClient.Get(context.Background(), key, got)
-					return got.Status.Artifact.Checksum != updated.Status.Artifact.Checksum &&
-						ginkgoTestStorage.ArtifactExist(*got.Status.Artifact)
-				}, timeout, interval).Should(BeTrue())
-				f, err := os.Stat(ginkgoTestStorage.LocalPath(*got.Status.Artifact))
-				Expect(err).NotTo(HaveOccurred())
-				Expect(f.Size()).To(BeNumerically(">", 0))
-				helmChart, err := loader.Load(ginkgoTestStorage.LocalPath(*got.Status.Artifact))
-				Expect(err).NotTo(HaveOccurred())
-				Expect(helmChart.Values["testDefault"]).To(BeTrue())
-				Expect(helmChart.Values["testOverride"]).To(BeTrue())
-			})
+			ctx := context.TODO()
+			g.Expect(r.Create(ctx, obj)).To(Succeed())
+			patchHelper, err := patch.NewHelper(obj, r.Client)
+			g.Expect(err).ToNot(HaveOccurred())
 
-			When("Setting invalid valuesFiles attribute", func() {
-				updated := &sourcev1.HelmChart{}
-				Expect(k8sClient.Get(context.Background(), key, updated)).To(Succeed())
-				updated.Spec.ValuesFiles = []string{
-					"./testdata/charts/helmchartwithdeps/values.yaml",
-					"./testdata/charts/helmchartwithdeps/invalid.yaml",
-				}
-				Expect(k8sClient.Update(context.Background(), updated)).To(Succeed())
-				got := &sourcev1.HelmChart{}
-				Eventually(func() bool {
-					_ = k8sClient.Get(context.Background(), key, got)
-					return got.Status.ObservedGeneration > updated.Status.ObservedGeneration &&
-						ginkgoTestStorage.ArtifactExist(*got.Status.Artifact)
-				}, timeout, interval).Should(BeTrue())
-				f, err := os.Stat(ginkgoTestStorage.LocalPath(*got.Status.Artifact))
-				Expect(err).NotTo(HaveOccurred())
-				Expect(f.Size()).To(BeNumerically(">", 0))
-				helmChart, err := loader.Load(ginkgoTestStorage.LocalPath(*got.Status.Artifact))
-				Expect(err).NotTo(HaveOccurred())
-				Expect(helmChart.Values["testDefault"]).To(BeTrue())
-				Expect(helmChart.Values["testOverride"]).To(BeTrue())
-			})
+			gotErr := r.summarizeAndPatch(ctx, obj, patchHelper, tt.result, tt.reconcileErr)
+			g.Expect(gotErr != nil).To(Equal(tt.wantErr))
 
-			When("Setting valid valuesFiles and valuesFile attribute", func() {
-				updated := &sourcev1.HelmChart{}
-				Expect(k8sClient.Get(context.Background(), key, updated)).To(Succeed())
-				updated.Spec.ValuesFile = "./testdata/charts/helmchartwithdeps/values.yaml"
-				updated.Spec.ValuesFiles = []string{
-					"./testdata/charts/helmchartwithdeps/override.yaml",
-				}
-				Expect(k8sClient.Update(context.Background(), updated)).To(Succeed())
-				got := &sourcev1.HelmChart{}
-				Eventually(func() bool {
-					_ = k8sClient.Get(context.Background(), key, got)
-					return got.Status.Artifact.Checksum != updated.Status.Artifact.Checksum &&
-						ginkgoTestStorage.ArtifactExist(*got.Status.Artifact)
-				}, timeout, interval).Should(BeTrue())
-				f, err := os.Stat(ginkgoTestStorage.LocalPath(*got.Status.Artifact))
-				Expect(err).NotTo(HaveOccurred())
-				Expect(f.Size()).To(BeNumerically(">", 0))
-				helmChart, err := loader.Load(ginkgoTestStorage.LocalPath(*got.Status.Artifact))
-				Expect(err).NotTo(HaveOccurred())
-				Expect(helmChart.Values["testDefault"]).To(BeTrue())
-				Expect(helmChart.Values["testOverride"]).To(BeTrue())
-			})
+			g.Expect(obj.Status.Conditions).To(conditions.MatchConditions(tt.assertConditions))
 
-			When("Setting valid valuesFile attribute", func() {
-				updated := &sourcev1.HelmChart{}
-				Expect(k8sClient.Get(context.Background(), key, updated)).To(Succeed())
-				updated.Spec.ValuesFile = "./testdata/charts/helmchartwithdeps/override.yaml"
-				updated.Spec.ValuesFiles = []string{}
-				Expect(k8sClient.Update(context.Background(), updated)).To(Succeed())
-				got := &sourcev1.HelmChart{}
-				Eventually(func() bool {
-					_ = k8sClient.Get(context.Background(), key, got)
-					return got.Status.Artifact.Checksum != updated.Status.Artifact.Checksum &&
-						ginkgoTestStorage.ArtifactExist(*got.Status.Artifact)
-				}, timeout, interval).Should(BeTrue())
-				f, err := os.Stat(ginkgoTestStorage.LocalPath(*got.Status.Artifact))
-				Expect(err).NotTo(HaveOccurred())
-				Expect(f.Size()).To(BeNumerically(">", 0))
-				helmChart, err := loader.Load(ginkgoTestStorage.LocalPath(*got.Status.Artifact))
-				Expect(err).NotTo(HaveOccurred())
-				_, exists := helmChart.Values["testDefault"]
-				Expect(exists).To(BeFalse())
-				Expect(helmChart.Values["testOverride"]).To(BeTrue())
-			})
+			if tt.afterFunc != nil {
+				tt.afterFunc(g, obj)
+			}
 
-			When("Setting invalid valuesFile attribute", func() {
-				updated := &sourcev1.HelmChart{}
-				Expect(k8sClient.Get(context.Background(), key, updated)).To(Succeed())
-				updated.Spec.ValuesFile = "./testdata/charts/helmchartwithdeps/invalid.yaml"
-				updated.Spec.ValuesFiles = []string{}
-				Expect(k8sClient.Update(context.Background(), updated)).To(Succeed())
-				got := &sourcev1.HelmChart{}
-				Eventually(func() bool {
-					_ = k8sClient.Get(context.Background(), key, got)
-					return got.Status.ObservedGeneration > updated.Status.ObservedGeneration &&
-						ginkgoTestStorage.ArtifactExist(*got.Status.Artifact)
-				}, timeout, interval).Should(BeTrue())
-				f, err := os.Stat(ginkgoTestStorage.LocalPath(*got.Status.Artifact))
-				Expect(err).NotTo(HaveOccurred())
-				Expect(f.Size()).To(BeNumerically(">", 0))
-				helmChart, err := loader.Load(ginkgoTestStorage.LocalPath(*got.Status.Artifact))
-				Expect(err).NotTo(HaveOccurred())
-				_, exists := helmChart.Values["testDefault"]
-				Expect(exists).To(BeFalse())
-				Expect(helmChart.Values["testOverride"]).To(BeTrue())
-			})
+			// Check if the object status is valid.
+			condns := &status.Conditions{NegativePolarity: helmChartReadyDepsNegative}
+			checker := status.NewChecker(r.Client, testEnv.GetScheme(), condns)
+			checker.CheckErr(ctx, obj)
 		})
-	})
-})
+	}
+}
+
+func TestHelmChartReconciler_reconcileSubRecs(t *testing.T) {
+	// Helper to build simple helmChartReconcilerFunc with result and error.
+	buildReconcileFuncs := func(r sreconcile.Result, e error) helmChartReconcilerFunc {
+		return func(_ context.Context, _ *sourcev1.HelmChart, _ *chart.Build) (sreconcile.Result, error) {
+			return r, e
+		}
+	}
+
+	tests := []struct {
+		name               string
+		generation         int64
+		observedGeneration int64
+		reconcileFuncs     []helmChartReconcilerFunc
+		wantResult         sreconcile.Result
+		wantErr            bool
+		assertConditions   []metav1.Condition
+	}{
+		{
+			name: "successful reconciliations",
+			reconcileFuncs: []helmChartReconcilerFunc{
+				buildReconcileFuncs(sreconcile.ResultSuccess, nil),
+			},
+			wantResult: sreconcile.ResultSuccess,
+			wantErr:    false,
+		},
+		{
+			name:               "successful reconciliation with generation difference",
+			generation:         3,
+			observedGeneration: 2,
+			reconcileFuncs: []helmChartReconcilerFunc{
+				buildReconcileFuncs(sreconcile.ResultSuccess, nil),
+			},
+			wantResult: sreconcile.ResultSuccess,
+			wantErr:    false,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReconcilingCondition, "NewGeneration", "reconciling new generation 3"),
+			},
+		},
+		{
+			name: "failed reconciliation",
+			reconcileFuncs: []helmChartReconcilerFunc{
+				buildReconcileFuncs(sreconcile.ResultEmpty, fmt.Errorf("some error")),
+			},
+			wantResult: sreconcile.ResultEmpty,
+			wantErr:    true,
+		},
+		{
+			name: "multiple object status conditions mutations",
+			reconcileFuncs: []helmChartReconcilerFunc{
+				func(_ context.Context, obj *sourcev1.HelmChart, _ *chart.Build) (sreconcile.Result, error) {
+					conditions.MarkTrue(obj, sourcev1.ArtifactOutdatedCondition, "NewRevision", "new index revision")
+					return sreconcile.ResultSuccess, nil
+				},
+				func(_ context.Context, obj *sourcev1.HelmChart, _ *chart.Build) (sreconcile.Result, error) {
+					conditions.MarkTrue(obj, meta.ReconcilingCondition, "Progressing", "creating artifact")
+					return sreconcile.ResultSuccess, nil
+				},
+			},
+			wantResult: sreconcile.ResultSuccess,
+			wantErr:    false,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new index revision"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, "Progressing", "creating artifact"),
+			},
+		},
+		{
+			name: "subrecs with one result=Requeue, no error",
+			reconcileFuncs: []helmChartReconcilerFunc{
+				buildReconcileFuncs(sreconcile.ResultSuccess, nil),
+				buildReconcileFuncs(sreconcile.ResultRequeue, nil),
+				buildReconcileFuncs(sreconcile.ResultSuccess, nil),
+			},
+			wantResult: sreconcile.ResultRequeue,
+			wantErr:    false,
+		},
+		{
+			name: "subrecs with error before result=Requeue",
+			reconcileFuncs: []helmChartReconcilerFunc{
+				buildReconcileFuncs(sreconcile.ResultSuccess, nil),
+				buildReconcileFuncs(sreconcile.ResultEmpty, fmt.Errorf("some error")),
+				buildReconcileFuncs(sreconcile.ResultRequeue, nil),
+			},
+			wantResult: sreconcile.ResultEmpty,
+			wantErr:    true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			r := &HelmChartReconciler{}
+			obj := &sourcev1.HelmChart{
+				ObjectMeta: metav1.ObjectMeta{
+					GenerateName: "test-",
+					Generation:   tt.generation,
+				},
+				Status: sourcev1.HelmChartStatus{
+					ObservedGeneration: tt.observedGeneration,
+				},
+			}
+
+			got, err := r.reconcile(context.TODO(), obj, tt.reconcileFuncs)
+			g.Expect(err != nil).To(Equal(tt.wantErr))
+			g.Expect(got).To(Equal(tt.wantResult))
+
+			g.Expect(obj.Status.Conditions).To(conditions.MatchConditions(tt.assertConditions))
+		})
+	}
+}
+
+func mockChartBuild(name, version, path string) *chart.Build {
+	var copyP string
+	if path != "" {
+		f, err := os.Open(path)
+		if err == nil {
+			defer f.Close()
+			ff, err := os.CreateTemp("", "chart-mock-*.tgz")
+			if err == nil {
+				defer ff.Close()
+				if _, err = io.Copy(ff, f); err == nil {
+					copyP = ff.Name()
+				}
+			}
+		}
+	}
+	return &chart.Build{
+		Name:    name,
+		Version: version,
+		Path:    copyP,
+	}
+}

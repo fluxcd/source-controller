@@ -190,7 +190,7 @@ func mergeFileValues(baseDir string, paths []string) (map[string]interface{}, er
 		if err != nil {
 			return nil, err
 		}
-		if f, err := os.Stat(secureP); os.IsNotExist(err) || !f.Mode().IsRegular() {
+		if f, err := os.Stat(secureP); err != nil || !f.Mode().IsRegular() {
 			return nil, fmt.Errorf("no values file found at path '%s' (reference '%s')",
 				strings.TrimPrefix(secureP, baseDir), p)
 		}
