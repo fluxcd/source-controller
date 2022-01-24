@@ -48,6 +48,7 @@ import (
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
 	serror "github.com/fluxcd/source-controller/internal/error"
 	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
+	"github.com/fluxcd/source-controller/internal/util"
 	"github.com/fluxcd/source-controller/pkg/git"
 	"github.com/fluxcd/source-controller/pkg/git/strategy"
 )
@@ -234,7 +235,7 @@ func (r *GitRepositoryReconciler) reconcile(ctx context.Context, obj *sourcev1.G
 	var includes artifactSet
 
 	// Create temp dir for Git clone
-	tmpDir, err := os.MkdirTemp("", fmt.Sprintf("%s-%s-%s-", obj.Kind, obj.Namespace, obj.Name))
+	tmpDir, err := util.TempDirForObj("", obj)
 	if err != nil {
 		return sreconcile.ResultEmpty, &serror.Event{
 			Err:    fmt.Errorf("failed to create temporary directory: %w", err),
