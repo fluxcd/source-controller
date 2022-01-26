@@ -41,9 +41,9 @@ import (
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	helper "github.com/fluxcd/pkg/runtime/controller"
+	"github.com/fluxcd/pkg/runtime/events"
 	"github.com/fluxcd/pkg/runtime/patch"
 	"github.com/fluxcd/pkg/runtime/predicates"
-	"github.com/fluxcd/source-controller/pkg/sourceignore"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
 	serror "github.com/fluxcd/source-controller/internal/error"
@@ -51,6 +51,7 @@ import (
 	"github.com/fluxcd/source-controller/internal/util"
 	"github.com/fluxcd/source-controller/pkg/git"
 	"github.com/fluxcd/source-controller/pkg/git/strategy"
+	"github.com/fluxcd/source-controller/pkg/sourceignore"
 )
 
 // Status conditions owned by the GitRepository reconciler.
@@ -139,7 +140,7 @@ func (r *GitRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 
 	// Return early if the object is suspended
 	if obj.Spec.Suspend {
-		log.Info("Reconciliation is suspended for this object")
+		log.Info("reconciliation is suspended for this object")
 		return ctrl.Result{}, nil
 	}
 
@@ -308,7 +309,7 @@ func (r *GitRepositoryReconciler) reconcileStorage(ctx context.Context, obj *sou
 // If both the checkout and signature verification are successful, the given artifact pointer is set to a new artifact
 // with the available metadata.
 func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context,
-	obj *sourcev1.GitRepository, artifact *sourcev1.Artifact, includes *artifactSet, dir string) (sreconcile.Result, error) {
+	obj *sourcev1.GitRepository, artifact *sourcev1.Artifact, _ *artifactSet, dir string) (sreconcile.Result, error) {
 	// Configure authentication strategy to access the source
 	var authOpts *git.AuthOptions
 	var err error
@@ -378,8 +379,8 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context,
 		// Coin flip on transient or persistent error, return error and hope for the best
 		return sreconcile.ResultEmpty, e
 	}
-	r.eventLogf(ctx, obj, corev1.EventTypeNormal, sourcev1.GitOperationSucceedReason,
-		"cloned repository '%s' and checked out revision '%s'", obj.Spec.URL, commit.String())
+	r.eventLogf(ctx, obj, events.EventTypeTrace, sourcev1.GitOperationSucceedReason,
+		"cloned '%s' and checked out revision '%s'", obj.Spec.URL, commit.String())
 	conditions.Delete(obj, sourcev1.FetchFailedCondition)
 
 	// Verify commit signature
@@ -420,7 +421,7 @@ func (r *GitRepositoryReconciler) reconcileArtifact(ctx context.Context, obj *so
 
 	// The artifact is up-to-date
 	if obj.GetArtifact().HasRevision(artifact.Revision) && !includes.Diff(obj.Status.IncludedArtifacts) {
-		r.eventLogf(ctx, obj, corev1.EventTypeNormal, meta.SucceededReason, "already up to date, current revision '%s'", artifact.Revision)
+		ctrl.LoggerFrom(ctx).Info("artifact up-to-date", "revision", artifact.Revision)
 		return sreconcile.ResultSuccess, nil
 	}
 
@@ -492,7 +493,7 @@ func (r *GitRepositoryReconciler) reconcileArtifact(ctx context.Context, obj *so
 	url, err := r.Storage.Symlink(*artifact, "latest.tar.gz")
 	if err != nil {
 		r.eventLogf(ctx, obj, corev1.EventTypeWarning, sourcev1.StorageOperationFailedReason,
-			"Failed to update status URL symlink: %s", err)
+			"failed to update status URL symlink: %s", err)
 	}
 	if url != "" {
 		obj.Status.URL = url
@@ -506,7 +507,7 @@ func (r *GitRepositoryReconciler) reconcileArtifact(ctx context.Context, obj *so
 // If an include is unavailable, it marks the object with v1beta1.IncludeUnavailableCondition and returns early.
 // If the copy operations are successful, it deletes the v1beta1.IncludeUnavailableCondition from the object.
 // If the artifactSet differs from the current set, it marks the object with v1beta1.ArtifactOutdatedCondition.
-func (r *GitRepositoryReconciler) reconcileInclude(ctx context.Context, obj *sourcev1.GitRepository, artifact *sourcev1.Artifact, includes *artifactSet, dir string) (sreconcile.Result, error) {
+func (r *GitRepositoryReconciler) reconcileInclude(ctx context.Context, obj *sourcev1.GitRepository, _ *sourcev1.Artifact, includes *artifactSet, dir string) (sreconcile.Result, error) {
 	artifacts := make(artifactSet, len(obj.Spec.Include))
 	for i, incl := range obj.Spec.Include {
 		// Do this first as it is much cheaper than copy operations
@@ -544,7 +545,7 @@ func (r *GitRepositoryReconciler) reconcileInclude(ctx context.Context, obj *sou
 		// Copy artifact (sub)contents to configured directory
 		if err := r.Storage.CopyToPath(dep.GetArtifact(), incl.GetFromPath(), toPath); err != nil {
 			e := &serror.Event{
-				Err:    fmt.Errorf("Failed to copy '%s' include from %s to %s: %w", incl.GitRepositoryRef.Name, incl.GetFromPath(), incl.GetToPath(), err),
+				Err:    fmt.Errorf("failed to copy '%s' include from %s to %s: %w", incl.GitRepositoryRef.Name, incl.GetFromPath(), incl.GetToPath(), err),
 				Reason: "CopyFailure",
 			}
 			conditions.MarkTrue(obj, sourcev1.IncludeUnavailableCondition, "CopyFailure", e.Err.Error())
@@ -623,7 +624,7 @@ func (r *GitRepositoryReconciler) verifyCommitSignature(ctx context.Context, obj
 
 	conditions.MarkTrue(obj, sourcev1.SourceVerifiedCondition, meta.SucceededReason,
 		"verified signature of commit '%s'", commit.Hash.String())
-	r.eventLogf(ctx, obj, corev1.EventTypeNormal, "VerifiedCommit",
+	r.eventLogf(ctx, obj, events.EventTypeTrace, "VerifiedCommit",
 		"verified signature of commit '%s'", commit.Hash.String())
 	return sreconcile.ResultSuccess, nil
 }
@@ -641,7 +642,7 @@ func (r *GitRepositoryReconciler) garbageCollect(ctx context.Context, obj *sourc
 		}
 		obj.Status.Artifact = nil
 		// TODO(hidde): we should only push this event if we actually garbage collected something
-		r.eventLogf(ctx, obj, corev1.EventTypeNormal, "GarbageCollectionSucceeded",
+		r.eventLogf(ctx, obj, events.EventTypeTrace, "GarbageCollectionSucceeded",
 			"garbage collected artifacts for deleted resource")
 		return nil
 	}
@@ -652,7 +653,7 @@ func (r *GitRepositoryReconciler) garbageCollect(ctx context.Context, obj *sourc
 			}
 		}
 		// TODO(hidde): we should only push this event if we actually garbage collected something
-		r.eventLogf(ctx, obj, corev1.EventTypeNormal, "GarbageCollectionSucceeded",
+		r.eventLogf(ctx, obj, events.EventTypeTrace, "GarbageCollectionSucceeded",
 			"garbage collected old artifacts")
 	}
 	return nil

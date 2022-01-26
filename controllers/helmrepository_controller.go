@@ -40,6 +40,7 @@ import (
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	helper "github.com/fluxcd/pkg/runtime/controller"
+	"github.com/fluxcd/pkg/runtime/events"
 	"github.com/fluxcd/pkg/runtime/patch"
 	"github.com/fluxcd/pkg/runtime/predicates"
 
@@ -127,7 +128,7 @@ func (r *HelmRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 
 	// Return early if the object is suspended
 	if obj.Spec.Suspend {
-		log.Info("Reconciliation is suspended for this object")
+		log.Info("reconciliation is suspended for this object")
 		return ctrl.Result{}, nil
 	}
 
@@ -252,7 +253,7 @@ func (r *HelmRepositoryReconciler) reconcile(ctx context.Context, obj *sourcev1.
 //
 // All artifacts for the resource except for the current one are garbage collected from the storage.
 // If the artifact in the Status object of the resource disappeared from storage, it is removed from the object.
-// If the hostname of any of the URLs on the object do not match the current storage server hostname, they are updated.
+// If the hostname of the URLs on the object do not match the current storage server hostname, they are updated.
 func (r *HelmRepositoryReconciler) reconcileStorage(ctx context.Context, obj *sourcev1.HelmRepository, artifact *sourcev1.Artifact, chartRepo *repository.ChartRepository) (sreconcile.Result, error) {
 	// Garbage collect previous advertised artifact(s) from storage
 	_ = r.garbageCollect(ctx, obj)
@@ -413,7 +414,7 @@ func (r *HelmRepositoryReconciler) reconcileArtifact(ctx context.Context, obj *s
 	}()
 
 	if obj.GetArtifact().HasRevision(artifact.Revision) {
-		r.eventLogf(ctx, obj, corev1.EventTypeNormal, meta.SucceededReason, "already up to date, current revision '%s'", artifact.Revision)
+		ctrl.LoggerFrom(ctx).Info("artifact up-to-date", "revision", artifact.Revision)
 		return sreconcile.ResultSuccess, nil
 	}
 
@@ -449,6 +450,11 @@ func (r *HelmRepositoryReconciler) reconcileArtifact(ctx context.Context, obj *s
 			Reason: sourcev1.StorageOperationFailedReason,
 		}
 	}
+
+	r.AnnotatedEventf(obj, map[string]string{
+		"revision": artifact.Revision,
+		"checksum": artifact.Checksum,
+	}, corev1.EventTypeNormal, "NewArtifact", "stored artifact for revision '%s'", artifact.Revision)
 
 	// Record it on the object.
 	obj.Status.Artifact = artifact.DeepCopy()
@@ -495,7 +501,7 @@ func (r *HelmRepositoryReconciler) garbageCollect(ctx context.Context, obj *sour
 		}
 		obj.Status.Artifact = nil
 		// TODO(hidde): we should only push this event if we actually garbage collected something
-		r.eventLogf(ctx, obj, corev1.EventTypeNormal, "GarbageCollectionSucceeded",
+		r.eventLogf(ctx, obj, events.EventTypeTrace, "GarbageCollectionSucceeded",
 			"garbage collected artifacts for deleted resource")
 		return nil
 	}
@@ -507,7 +513,7 @@ func (r *HelmRepositoryReconciler) garbageCollect(ctx context.Context, obj *sour
 			}
 		}
 		// TODO(hidde): we should only push this event if we actually garbage collected something
-		r.eventLogf(ctx, obj, corev1.EventTypeNormal, "GarbageCollectionSucceeded",
+		r.eventLogf(ctx, obj, events.EventTypeTrace, "GarbageCollectionSucceeded",
 			"garbage collected old artifacts")
 	}
 	return nil

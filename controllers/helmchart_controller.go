@@ -49,6 +49,7 @@ import (
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	helper "github.com/fluxcd/pkg/runtime/controller"
+	"github.com/fluxcd/pkg/runtime/events"
 	"github.com/fluxcd/pkg/runtime/patch"
 	"github.com/fluxcd/pkg/runtime/predicates"
 	"github.com/fluxcd/pkg/untar"
@@ -357,7 +358,7 @@ func (r *HelmChartReconciler) reconcileSource(ctx context.Context, obj *sourcev1
 		// a sudden (partial) disappearance of observed state.
 		// TODO(hidde): include specific name/version information?
 		if depNum := build.ResolvedDependencies; build.Complete() && depNum > 0 {
-			r.Eventf(obj, corev1.EventTypeNormal, "ResolvedDependencies", "Resolved %d chart dependencies", depNum)
+			r.Eventf(obj, events.EventTypeTrace, "ResolvedDependencies", "resolved %d chart dependencies", depNum)
 		}
 
 		// Handle any build error
@@ -637,7 +638,7 @@ func (r *HelmChartReconciler) reconcileArtifact(ctx context.Context, obj *source
 
 	// Return early if the build path equals the current artifact path
 	if curArtifact := obj.GetArtifact(); curArtifact != nil && r.Storage.LocalPath(*curArtifact) == b.Path {
-		r.eventLogf(ctx, obj, corev1.EventTypeNormal, meta.SucceededReason, "already up to date, current revision '%s'", curArtifact.Revision)
+		ctrl.LoggerFrom(ctx).Info("artifact up-to-date", "revision", artifact.Revision)
 		return sreconcile.ResultSuccess, nil
 	}
 
@@ -753,7 +754,7 @@ func (r *HelmChartReconciler) garbageCollect(ctx context.Context, obj *sourcev1.
 		}
 		obj.Status.Artifact = nil
 		// TODO(hidde): we should only push this event if we actually garbage collected something
-		r.eventLogf(ctx, obj, corev1.EventTypeNormal, "GarbageCollectionSucceeded",
+		r.eventLogf(ctx, obj, events.EventTypeTrace, "GarbageCollectionSucceeded",
 			"garbage collected artifacts for deleted resource")
 		return nil
 	}
@@ -765,7 +766,7 @@ func (r *HelmChartReconciler) garbageCollect(ctx context.Context, obj *sourcev1.
 			}
 		}
 		// TODO(hidde): we should only push this event if we actually garbage collected something
-		r.eventLogf(ctx, obj, corev1.EventTypeNormal, "GarbageCollectionSucceeded", "garbage collected old artifacts")
+		r.eventLogf(ctx, obj, events.EventTypeTrace, "GarbageCollectionSucceeded", "garbage collected old artifacts")
 	}
 	return nil
 }
