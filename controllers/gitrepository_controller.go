@@ -561,6 +561,9 @@ func (r *GitRepositoryReconciler) reconcileInclude(ctx context.Context, obj *sou
 		conditions.MarkTrue(obj, sourcev1.ArtifactOutdatedCondition, "IncludeChange",
 			"included artifacts differ from last observed includes")
 	}
+
+	// Persist the artifactSet.
+	*includes = artifacts
 	return sreconcile.ResultSuccess, nil
 }
 
