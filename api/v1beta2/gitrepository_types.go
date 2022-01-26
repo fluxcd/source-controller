@@ -36,10 +36,6 @@ const (
 )
 
 const (
-	// SourceVerifiedCondition indicates the integrity of the Source has been verified. If True, the integrity check
-	// succeeded. If False, it failed. The Condition is only present on the resource if the integrity has been verified.
-	SourceVerifiedCondition string = "SourceVerified"
-
 	// IncludeUnavailableCondition indicates one of the includes is not available. For example, because it does not
 	// exist, or does not have an Artifact.
 	// This is a "negative polarity" or "abnormal-true" type, and is only present on the resource if it is True.
