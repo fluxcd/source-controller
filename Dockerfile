@@ -52,7 +52,7 @@ RUN --mount=target=. \
 RUN xx-verify --static /source-controller
 
 
-FROM alpine
+FROM alpine:3.15
 
 ARG TARGETPLATFORM
 RUN apk --no-cache add ca-certificates \
