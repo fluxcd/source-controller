@@ -24,6 +24,7 @@ import (
 	"testing"
 	"time"
 
+	"helm.sh/helm/v3/pkg/getter"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/record"
@@ -54,6 +55,15 @@ var (
 	testServer   *testserver.ArtifactServer
 	testMetricsH controller.Metrics
 	ctx          = ctrl.SetupSignalHandler()
+)
+
+var (
+	testGetters = getter.Providers{
+		getter.Provider{
+			Schemes: []string{"http", "https"},
+			New:     getter.NewHTTPGetter,
+		},
+	}
 )
 
 var (
@@ -162,4 +172,14 @@ func newTestStorage(s *testserver.HTTPServer) (*Storage, error) {
 		return nil, err
 	}
 	return storage, nil
+}
+
+var letterRunes = []rune("abcdefghijklmnopqrstuvwxyz1234567890")
+
+func randStringRunes(n int) string {
+	b := make([]rune, n)
+	for i := range b {
+		b[i] = letterRunes[rand.Intn(len(letterRunes))]
+	}
+	return string(b)
 }
