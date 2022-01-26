@@ -185,16 +185,21 @@ func knownHostsCallback(host string, knownHosts []byte) git2go.CertificateCheckC
 
 		// First, attempt to split the configured host and port to validate
 		// the port-less hostname given to the callback.
-		h, _, err := net.SplitHostPort(host)
+		hostWithoutPort, _, err := net.SplitHostPort(host)
 		if err != nil {
 			// SplitHostPort returns an error if the host is missing
 			// a port, assume the host has no port.
-			h = host
+			hostWithoutPort = host
 		}
 
-		// Check if the configured host matches the hostname given to
-		// the callback.
-		if h != hostname {
+		// Different versions of libgit handle this differently.
+		// This fixes the case in which ports may be sent back.
+		hostnameWithoutPort, _, err := net.SplitHostPort(hostname)
+		if err != nil {
+			hostnameWithoutPort = hostname
+		}
+
+		if hostnameWithoutPort != hostWithoutPort {
 			return git2go.ErrorCodeUser
 		}
 
@@ -202,7 +207,7 @@ func knownHostsCallback(host string, knownHosts []byte) git2go.CertificateCheckC
 		// given to the callback match. Use the configured host (that
 		// includes the port), and normalize it, so we can check if there
 		// is an entry for the hostname _and_ port.
-		h = knownhosts.Normalize(host)
+		h := knownhosts.Normalize(host)
 		for _, k := range kh {
 			if k.matches(h, cert.Hostkey) {
 				return git2go.ErrorCodeOK
