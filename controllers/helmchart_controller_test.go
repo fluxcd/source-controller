@@ -232,7 +232,7 @@ func TestHelmChartReconciler_reconcileSource(t *testing.T) {
 
 				g.Expect(obj.Status.ObservedSourceArtifactRevision).To(Equal(gitArtifact.Revision))
 				g.Expect(obj.Status.Conditions).To(conditions.MatchConditions([]metav1.Condition{
-					*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewChart", "Pulled 'helmchart' chart with version '0.1.0'"),
+					*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewChart", "pulled 'helmchart' chart with version '0.1.0'"),
 				}))
 			},
 			cleanFunc: func(g *WithT, build *chart.Build) {
@@ -880,7 +880,7 @@ func TestHelmChartReconciler_reconcileArtifact(t *testing.T) {
 			},
 			want: sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(meta.ReadyCondition, sourcev1.ChartPullSucceededReason, "Pulled 'helmchart' chart with version '0.1.0'"),
+				*conditions.TrueCondition(meta.ReadyCondition, sourcev1.ChartPullSucceededReason, "pulled 'helmchart' chart with version '0.1.0'"),
 			},
 		},
 		{
@@ -923,7 +923,7 @@ func TestHelmChartReconciler_reconcileArtifact(t *testing.T) {
 				t.Expect(obj.Status.URL).To(BeEmpty())
 			},
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(meta.ReadyCondition, sourcev1.ChartPackageSucceededReason, "Packaged 'helmchart' chart with version '0.1.0'"),
+				*conditions.TrueCondition(meta.ReadyCondition, sourcev1.ChartPackageSucceededReason, "packaged 'helmchart' chart with version '0.1.0'"),
 			},
 		},
 		{
@@ -941,7 +941,7 @@ func TestHelmChartReconciler_reconcileArtifact(t *testing.T) {
 			},
 			want: sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(meta.ReadyCondition, sourcev1.ChartPullSucceededReason, "Pulled 'helmchart' chart with version '0.1.0'"),
+				*conditions.TrueCondition(meta.ReadyCondition, sourcev1.ChartPullSucceededReason, "pulled 'helmchart' chart with version '0.1.0'"),
 			},
 		},
 		{
@@ -958,7 +958,7 @@ func TestHelmChartReconciler_reconcileArtifact(t *testing.T) {
 			},
 			want: sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(meta.ReadyCondition, sourcev1.ChartPullSucceededReason, "Pulled 'helmchart' chart with version '0.1.0'"),
+				*conditions.TrueCondition(meta.ReadyCondition, sourcev1.ChartPullSucceededReason, "pulled 'helmchart' chart with version '0.1.0'"),
 			},
 		},
 	}
