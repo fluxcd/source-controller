@@ -1029,6 +1029,9 @@ func TestGitRepositoryReconciler_reconcileInclude(t *testing.T) {
 			got, err := r.reconcileInclude(ctx, obj, &artifact, &includes, tmpDir)
 			g.Expect(obj.GetConditions()).To(conditions.MatchConditions(tt.assertConditions))
 			g.Expect(err != nil).To(Equal(tt.wantErr))
+			if err == nil {
+				g.Expect(len(includes)).To(Equal(len(tt.includes)))
+			}
 			g.Expect(got).To(Equal(tt.want))
 			for _, i := range tt.includes {
 				if i.toPath != "" {
