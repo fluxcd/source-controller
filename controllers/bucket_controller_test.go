@@ -201,7 +201,7 @@ func TestBucketReconciler_reconcileStorage(t *testing.T) {
 				"!/reconcile-storage/invalid.txt",
 			},
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(meta.ReconcilingCondition, "NoArtifact", "No artifact for resource in storage"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, "NoArtifact", "no artifact for resource in storage"),
 			},
 		},
 		{

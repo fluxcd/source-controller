@@ -143,7 +143,7 @@ func TestChartBuildResult_Summary(t *testing.T) {
 				Name:    "chart",
 				Version: "1.2.3-rc.1+bd6bf40",
 			},
-			want: "New 'chart' chart with version '1.2.3-rc.1+bd6bf40'",
+			want: "new 'chart' chart with version '1.2.3-rc.1+bd6bf40'",
 		},
 		{
 			name: "Pulled chart",
@@ -152,7 +152,7 @@ func TestChartBuildResult_Summary(t *testing.T) {
 				Version: "1.2.3-rc.1+bd6bf40",
 				Path:    "chart.tgz",
 			},
-			want: "Pulled 'chart' chart with version '1.2.3-rc.1+bd6bf40'",
+			want: "pulled 'chart' chart with version '1.2.3-rc.1+bd6bf40'",
 		},
 		{
 			name: "Packaged chart",
@@ -163,7 +163,7 @@ func TestChartBuildResult_Summary(t *testing.T) {
 				ValuesFiles: []string{"a.yaml", "b.yaml"},
 				Path:        "chart.tgz",
 			},
-			want: "Packaged 'chart' chart with version 'arbitrary-version' and merged values files [a.yaml b.yaml]",
+			want: "packaged 'chart' chart with version 'arbitrary-version' and merged values files [a.yaml b.yaml]",
 		},
 		{
 			name: "With values files",
@@ -174,17 +174,17 @@ func TestChartBuildResult_Summary(t *testing.T) {
 				ValuesFiles: []string{"a.yaml", "b.yaml"},
 				Path:        "chart.tgz",
 			},
-			want: "Packaged 'chart' chart with version 'arbitrary-version' and merged values files [a.yaml b.yaml]",
+			want: "packaged 'chart' chart with version 'arbitrary-version' and merged values files [a.yaml b.yaml]",
 		},
 		{
 			name:  "Empty build",
 			build: &Build{},
-			want:  "No chart build",
+			want:  "no chart build",
 		},
 		{
 			name:  "Nil build",
 			build: nil,
-			want:  "No chart build",
+			want:  "no chart build",
 		},
 	}
 	for _, tt := range tests {

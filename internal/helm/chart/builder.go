@@ -140,16 +140,16 @@ type Build struct {
 // Summary returns a human-readable summary of the Build.
 func (b *Build) Summary() string {
 	if !b.HasMetadata() {
-		return "No chart build"
+		return "no chart build"
 	}
 
 	var s strings.Builder
 
-	var action = "New"
+	var action = "new"
 	if b.Path != "" {
-		action = "Pulled"
+		action = "pulled"
 		if b.Packaged {
-			action = "Packaged"
+			action = "packaged"
 		}
 	}
 	s.WriteString(fmt.Sprintf("%s '%s' chart with version '%s'", action, b.Name, b.Version))

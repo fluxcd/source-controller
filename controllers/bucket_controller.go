@@ -28,6 +28,7 @@ import (
 	"time"
 
 	gcpstorage "cloud.google.com/go/storage"
+	"github.com/fluxcd/pkg/runtime/events"
 	"github.com/fluxcd/source-controller/pkg/gcp"
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
@@ -134,7 +135,7 @@ func (r *BucketReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 
 	// Return early if the object is suspended
 	if obj.Spec.Suspend {
-		log.Info("Reconciliation is suspended for this object")
+		log.Info("reconciliation is suspended for this object")
 		return ctrl.Result{}, nil
 	}
 
@@ -221,7 +222,7 @@ func (r *BucketReconciler) summarizeAndPatch(ctx context.Context, obj *sourcev1.
 // error.
 func (r *BucketReconciler) reconcile(ctx context.Context, obj *sourcev1.Bucket, reconcilers []bucketReconcilerFunc) (sreconcile.Result, error) {
 	if obj.Generation != obj.Status.ObservedGeneration {
-		conditions.MarkReconciling(obj, "NewGeneration", "Reconciling new generation %d", obj.Generation)
+		conditions.MarkReconciling(obj, "NewGeneration", "reconciling new generation %d", obj.Generation)
 	}
 
 	var artifact sourcev1.Artifact
@@ -275,7 +276,7 @@ func (r *BucketReconciler) reconcileStorage(ctx context.Context, obj *sourcev1.B
 
 	// Record that we do not have an artifact
 	if obj.GetArtifact() == nil {
-		conditions.MarkReconciling(obj, "NoArtifact", "No artifact for resource in storage")
+		conditions.MarkReconciling(obj, "NoArtifact", "no artifact for resource in storage")
 		return sreconcile.ResultSuccess, nil
 	}
 
@@ -463,8 +464,8 @@ func (r *BucketReconciler) reconcileMinioSource(ctx context.Context, obj *source
 			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason, e.Err.Error())
 			return sreconcile.ResultEmpty, e
 		}
-		r.eventLogf(ctx, obj, corev1.EventTypeNormal, sourcev1.BucketOperationSucceedReason,
-			"downloaded %d files from bucket '%s' revision '%s'", len(index), obj.Spec.BucketName, revision)
+		r.eventLogf(ctx, obj, events.EventTypeTrace, sourcev1.BucketOperationSucceedReason,
+			"downloaded %d files with revision '%s' from '%s'", len(index), revision, obj.Spec.BucketName)
 	}
 	conditions.Delete(obj, sourcev1.FetchFailedCondition)
 
@@ -618,8 +619,8 @@ func (r *BucketReconciler) reconcileGCPSource(ctx context.Context, obj *sourcev1
 			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason, e.Err.Error())
 			return sreconcile.ResultEmpty, e
 		}
-		r.eventLogf(ctx, obj, corev1.EventTypeNormal, sourcev1.BucketOperationSucceedReason,
-			"downloaded %d files from bucket '%s' revision '%s'", len(index), obj.Spec.BucketName, revision)
+		r.eventLogf(ctx, obj, events.EventTypeTrace, sourcev1.BucketOperationSucceedReason,
+			"downloaded %d files from bucket '%s'", len(index), obj.Spec.BucketName)
 	}
 	conditions.Delete(obj, sourcev1.FetchFailedCondition)
 
@@ -647,7 +648,7 @@ func (r *BucketReconciler) reconcileArtifact(ctx context.Context, obj *sourcev1.
 
 	// The artifact is up-to-date
 	if obj.GetArtifact().HasRevision(artifact.Revision) {
-		r.eventLogf(ctx, obj, corev1.EventTypeNormal, meta.SucceededReason, "already up to date, current revision '%s'", artifact.Revision)
+		ctrl.LoggerFrom(ctx).Info("artifact up-to-date", "revision", artifact.Revision)
 		return sreconcile.ResultSuccess, nil
 	}
 
@@ -713,7 +714,6 @@ func (r *BucketReconciler) reconcileArtifact(ctx context.Context, obj *sourcev1.
 
 // reconcileDelete handles the deletion of an object. It first garbage collects all artifacts for the object from the
 // artifact storage, if successful, the finalizer is removed from the object.
-// func (r *BucketReconciler) reconcileDelete(ctx context.Context, obj *sourcev1.Bucket) (ctrl.Result, error) {
 func (r *BucketReconciler) reconcileDelete(ctx context.Context, obj *sourcev1.Bucket) (sreconcile.Result, error) {
 	// Garbage collect the resource's artifacts
 	if err := r.garbageCollect(ctx, obj); err != nil {
@@ -741,7 +741,7 @@ func (r *BucketReconciler) garbageCollect(ctx context.Context, obj *sourcev1.Buc
 		}
 		obj.Status.Artifact = nil
 		// TODO(hidde): we should only push this event if we actually garbage collected something
-		r.eventLogf(ctx, obj, corev1.EventTypeNormal, "GarbageCollectionSucceeded",
+		r.eventLogf(ctx, obj, events.EventTypeTrace, "GarbageCollectionSucceeded",
 			"garbage collected artifacts for deleted resource")
 		return nil
 	}
@@ -753,7 +753,7 @@ func (r *BucketReconciler) garbageCollect(ctx context.Context, obj *sourcev1.Buc
 			}
 		}
 		// TODO(hidde): we should only push this event if we actually garbage collected something
-		r.eventLogf(ctx, obj, corev1.EventTypeNormal, "GarbageCollectionSucceeded", "garbage collected old artifacts")
+		r.eventLogf(ctx, obj, events.EventTypeTrace, "GarbageCollectionSucceeded", "garbage collected old artifacts")
 	}
 	return nil
 }
