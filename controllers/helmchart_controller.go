@@ -368,15 +368,14 @@ func (r *HelmChartReconciler) reconcileSource(ctx context.Context, obj *sourcev1
 
 		// Handle any build error
 		if retErr != nil {
-			e := fmt.Errorf("failed to build chart from source artifact: %w", retErr)
-			retErr = &serror.Event{
-				Err:    e,
-				Reason: meta.FailedReason,
-			}
-			if buildErr := new(chart.BuildError); errors.As(e, &buildErr) {
+			if buildErr := new(chart.BuildError); errors.As(retErr, &buildErr) {
+				retErr = &serror.Event{
+					Err:    buildErr,
+					Reason: buildErr.Reason.Reason,
+				}
 				if chart.IsPersistentBuildErrorReason(buildErr.Reason) {
 					retErr = &serror.Stalling{
-						Err:    e,
+						Err:    buildErr,
 						Reason: buildErr.Reason.Reason,
 					}
 				}
