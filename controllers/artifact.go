@@ -1,6 +1,6 @@
 package controllers
 
-import sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
+import sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
 
 // hasArtifactUpdated returns true if any of the revisions in the current artifacts
 // does not match any of the artifacts in the updated artifacts
