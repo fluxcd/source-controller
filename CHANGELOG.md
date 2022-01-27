@@ -2,6 +2,17 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.21.1
+
+**Release date:** 2022-01-27
+
+This prerelease comes with a bug fix to ensure the `libgit2` Git implementation
+respects hostnames with and without port while matching against `known_hosts`.
+
+Fixes:
+- Fix host mismatch in libgit2
+  [#561](https://github.com/fluxcd/source-controller/pull/561)
+
 ## 0.21.0
 
 **Release date:** 2022-01-26
