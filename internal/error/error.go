@@ -16,6 +16,8 @@ limitations under the License.
 
 package error
 
+import "time"
+
 // Stalling is the reconciliation stalled state error. It contains an error
 // and a reason for the stalled condition.
 type Stalling struct {
@@ -53,4 +55,25 @@ func (ee *Event) Error() string {
 // Unwrap returns the underlying error.
 func (ee *Event) Unwrap() error {
 	return ee.Err
+}
+
+// Waiting is the reconciliation wait state error. It contains an error, wait
+// duration and a reason for the wait.
+type Waiting struct {
+	// RequeueAfter is the wait duration after which to requeue.
+	RequeueAfter time.Duration
+	// Reason is the reason for the wait.
+	Reason string
+	// Err is the error that caused the wait.
+	Err error
+}
+
+// Error implement error interface.
+func (we *Waiting) Error() string {
+	return we.Err.Error()
+}
+
+// Unwrap returns the underlying error.
+func (we *Waiting) Unwrap() error {
+	return we.Err
 }

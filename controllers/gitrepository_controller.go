@@ -144,20 +144,19 @@ func (r *GitRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return ctrl.Result{}, nil
 	}
 
-	// Initialize the patch helper
+	// Initialize the patch helper with the current version of the object.
 	patchHelper, err := patch.NewHelper(obj, r.Client)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
 
+	// recResult stores the abstracted reconcile result.
 	var recResult sreconcile.Result
 
 	// Always attempt to patch the object and status after each reconciliation
-	// NOTE: This deferred block only modifies the named return error. The
-	// result from the reconciliation remains the same. Any requeue attributes
-	// set in the result will continue to be effective.
+	// NOTE: The final runtime result and error are set in this block.
 	defer func() {
-		retErr = r.summarizeAndPatch(ctx, obj, patchHelper, recResult, retErr)
+		result, retErr = r.summarizeAndPatch(ctx, obj, patchHelper, recResult, retErr)
 
 		// Always record readiness and duration metrics
 		r.Metrics.RecordReadiness(ctx, obj)
@@ -169,13 +168,13 @@ func (r *GitRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	if !controllerutil.ContainsFinalizer(obj, sourcev1.SourceFinalizer) {
 		controllerutil.AddFinalizer(obj, sourcev1.SourceFinalizer)
 		recResult = sreconcile.ResultRequeue
-		return ctrl.Result{Requeue: true}, nil
+		return
 	}
 
 	// Examine if the object is under deletion
 	if !obj.ObjectMeta.DeletionTimestamp.IsZero() {
-		res, err := r.reconcileDelete(ctx, obj)
-		return sreconcile.BuildRuntimeResult(ctx, r.EventRecorder, obj, res, err)
+		recResult, retErr = r.reconcileDelete(ctx, obj)
+		return
 	}
 
 	// Reconcile actual object
@@ -185,13 +184,21 @@ func (r *GitRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		r.reconcileInclude,
 		r.reconcileArtifact,
 	}
-	recResult, err = r.reconcile(ctx, obj, reconcilers)
-	return sreconcile.BuildRuntimeResult(ctx, r.EventRecorder, obj, recResult, err)
+	recResult, retErr = r.reconcile(ctx, obj, reconcilers)
+	return
 }
 
 // summarizeAndPatch analyzes the object conditions to create a summary of the
-// status conditions and patches the object with the calculated summary.
-func (r *GitRepositoryReconciler) summarizeAndPatch(ctx context.Context, obj *sourcev1.GitRepository, patchHelper *patch.Helper, res sreconcile.Result, recErr error) error {
+// status conditions, computes runtime results and patches the object in the K8s
+// API server.
+func (r *GitRepositoryReconciler) summarizeAndPatch(
+	ctx context.Context,
+	obj *sourcev1.GitRepository,
+	patchHelper *patch.Helper,
+	res sreconcile.Result,
+	recErr error) (ctrl.Result, error) {
+	sreconcile.RecordContextualError(ctx, r.EventRecorder, obj, recErr)
+
 	// Record the value of the reconciliation request if any.
 	if v, ok := meta.ReconcileAnnotationValue(obj.GetAnnotations()); ok {
 		obj.Status.SetLastHandledReconcileRequest(v)
@@ -199,7 +206,8 @@ func (r *GitRepositoryReconciler) summarizeAndPatch(ctx context.Context, obj *so
 
 	// Compute the reconcile results, obtain patch options and reconcile error.
 	var patchOpts []patch.Option
-	patchOpts, recErr = sreconcile.ComputeReconcileResult(obj, res, recErr, gitRepoOwnedConditions)
+	var result ctrl.Result
+	patchOpts, result, recErr = sreconcile.ComputeReconcileResult(obj, obj.GetRequeueAfter(), res, recErr, gitRepoOwnedConditions)
 
 	// Summarize the Ready condition based on abnormalities that may have been observed.
 	conditions.SetSummary(obj,
@@ -221,7 +229,7 @@ func (r *GitRepositoryReconciler) summarizeAndPatch(ctx context.Context, obj *so
 		recErr = kerrors.NewAggregate([]error{recErr, err})
 	}
 
-	return recErr
+	return result, recErr
 }
 
 // reconcile steps iterates through the actual reconciliation tasks for objec,

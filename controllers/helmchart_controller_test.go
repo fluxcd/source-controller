@@ -1372,7 +1372,8 @@ func TestHelmChartReconciler_summarizeAndPatch(t *testing.T) {
 
 			builder := fake.NewClientBuilder().WithScheme(testEnv.GetScheme())
 			r := &HelmChartReconciler{
-				Client: builder.Build(),
+				Client:        builder.Build(),
+				EventRecorder: record.NewFakeRecorder(32),
 			}
 			obj := &sourcev1.HelmChart{
 				ObjectMeta: metav1.ObjectMeta{
@@ -1393,7 +1394,7 @@ func TestHelmChartReconciler_summarizeAndPatch(t *testing.T) {
 			patchHelper, err := patch.NewHelper(obj, r.Client)
 			g.Expect(err).ToNot(HaveOccurred())
 
-			gotErr := r.summarizeAndPatch(ctx, obj, patchHelper, tt.result, tt.reconcileErr)
+			_, gotErr := r.summarizeAndPatch(ctx, obj, patchHelper, tt.result, tt.reconcileErr)
 			g.Expect(gotErr != nil).To(Equal(tt.wantErr))
 
 			g.Expect(obj.Status.Conditions).To(conditions.MatchConditions(tt.assertConditions))
