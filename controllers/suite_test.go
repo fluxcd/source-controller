@@ -126,6 +126,16 @@ func TestMain(m *testing.M) {
 		panic(fmt.Sprintf("Failed to start HelmRepositoryReconciler: %v", err))
 	}
 
+	if err := (&HelmChartReconciler{
+		Client:        testEnv,
+		EventRecorder: record.NewFakeRecorder(32),
+		Metrics:       testMetricsH,
+		Getters:       testGetters,
+		Storage:       testStorage,
+	}).SetupWithManager(testEnv); err != nil {
+		panic(fmt.Sprintf("Failed to start HelmRepositoryReconciler: %v", err))
+	}
+
 	go func() {
 		fmt.Println("Starting the test environment")
 		if err := testEnv.Start(ctx); err != nil {

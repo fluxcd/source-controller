@@ -32,6 +32,7 @@ import (
 	"github.com/darkowlzz/controller-check/status"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -49,6 +50,95 @@ import (
 	"github.com/fluxcd/source-controller/internal/helm/chart"
 	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
 )
+
+func TestHelmChartReconciler_Reconcile(t *testing.T) {
+	g := NewWithT(t)
+
+	const (
+		chartName    = "helmchart"
+		chartVersion = "0.2.0"
+		chartPath    = "testdata/charts/helmchart"
+	)
+
+	server, err := helmtestserver.NewTempHelmServer()
+	g.Expect(err).NotTo(HaveOccurred())
+	defer os.RemoveAll(server.Root())
+
+	g.Expect(server.PackageChartWithVersion(chartPath, chartVersion)).To(Succeed())
+	g.Expect(server.GenerateIndex()).To(Succeed())
+
+	server.Start()
+	defer server.Stop()
+
+	ns, err := testEnv.CreateNamespace(ctx, "helmchart")
+	g.Expect(err).ToNot(HaveOccurred())
+	defer func() { g.Expect(testEnv.Delete(ctx, ns)).To(Succeed()) }()
+
+	repository := &sourcev1.HelmRepository{
+		ObjectMeta: metav1.ObjectMeta{
+			GenerateName: "helmrepository-",
+			Namespace:    ns.Name,
+		},
+		Spec: sourcev1.HelmRepositorySpec{
+			URL: server.URL(),
+		},
+	}
+	g.Expect(testEnv.CreateAndWait(ctx, repository)).To(Succeed())
+
+	obj := &sourcev1.HelmChart{
+		ObjectMeta: metav1.ObjectMeta{
+			GenerateName: "helmrepository-reconcile-",
+			Namespace:    ns.Name,
+		},
+		Spec: sourcev1.HelmChartSpec{
+			Chart:   chartName,
+			Version: chartVersion,
+			SourceRef: sourcev1.LocalHelmChartSourceReference{
+				Kind: sourcev1.HelmRepositoryKind,
+				Name: repository.Name,
+			},
+		},
+	}
+	g.Expect(testEnv.Create(ctx, obj)).To(Succeed())
+
+	key := client.ObjectKey{Name: obj.Name, Namespace: obj.Namespace}
+
+	// Wait for finalizer to be set
+	g.Eventually(func() bool {
+		if err := testEnv.Get(ctx, key, obj); err != nil {
+			return false
+		}
+		return len(obj.Finalizers) > 0
+	}, timeout).Should(BeTrue())
+
+	// Wait for HelmChart to be Ready
+	g.Eventually(func() bool {
+		if err := testEnv.Get(ctx, key, obj); err != nil {
+			return false
+		}
+		if !conditions.IsReady(obj) || obj.Status.Artifact == nil {
+			return false
+		}
+		readyCondition := conditions.Get(obj, meta.ReadyCondition)
+		return obj.Generation == readyCondition.ObservedGeneration &&
+			obj.Generation == obj.Status.ObservedGeneration
+	}, timeout).Should(BeTrue())
+
+	// Check if the object status is valid.
+	condns := &status.Conditions{NegativePolarity: helmChartReadyDepsNegative}
+	checker := status.NewChecker(testEnv.Client, testEnv.GetScheme(), condns)
+	checker.CheckErr(ctx, obj)
+
+	g.Expect(testEnv.Delete(ctx, obj)).To(Succeed())
+
+	// Wait for HelmChart to be deleted
+	g.Eventually(func() bool {
+		if err := testEnv.Get(ctx, key, obj); err != nil {
+			return apierrors.IsNotFound(err)
+		}
+		return false
+	}, timeout).Should(BeTrue())
+}
 
 func TestHelmChartReconciler_reconcileStorage(t *testing.T) {
 	tests := []struct {
