@@ -18,8 +18,10 @@ package reconcile
 
 import (
 	"context"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	kuberecorder "k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 
@@ -27,7 +29,6 @@ import (
 	"github.com/fluxcd/pkg/runtime/conditions"
 	"github.com/fluxcd/pkg/runtime/patch"
 
-	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
 	serror "github.com/fluxcd/source-controller/internal/error"
 )
 
@@ -48,42 +49,51 @@ const (
 
 // BuildRuntimeResult converts a given Result and error into the
 // return values of a controller's Reconcile function.
-func BuildRuntimeResult(ctx context.Context, recorder kuberecorder.EventRecorder, obj sourcev1.Source, rr Result, err error) (ctrl.Result, error) {
-	// NOTE: The return values can be modified based on the error type.
-	// For example, if an error signifies a short requeue period that's
-	// not equal to the requeue period of the object, the error can be checked
-	// and an appropriate result with the period can be returned.
-	//
-	// Example:
-	//  if e, ok := err.(*waitError); ok {
-	//	  return ctrl.Result{RequeueAfter: e.RequeueAfter}, err
-	//  }
+// func BuildRuntimeResult(ctx context.Context, recorder kuberecorder.EventRecorder, obj sourcev1.Source, rr Result, err error) (ctrl.Result, error) {
+func BuildRuntimeResult(successInterval time.Duration, rr Result, err error) ctrl.Result {
+	// Handle special errors that contribute to expressing the result.
+	if e, ok := err.(*serror.Waiting); ok {
+		return ctrl.Result{RequeueAfter: e.RequeueAfter}
+	}
 
-	// Log and record event based on the error.
+	switch rr {
+	case ResultRequeue:
+		return ctrl.Result{Requeue: true}
+	case ResultSuccess:
+		return ctrl.Result{RequeueAfter: successInterval}
+	default:
+		return ctrl.Result{}
+	}
+}
+
+// RecordContextualError records the contextual errors based on their types.
+// An event is recorded for the errors that are returned to the runtime. The
+// runtime handles the logging of the error.
+// An event is recorded and an error is logged for errors that are known to be
+// swallowed, not returned to the runtime.
+func RecordContextualError(ctx context.Context, recorder kuberecorder.EventRecorder, obj runtime.Object, err error) {
 	switch e := err.(type) {
 	case *serror.Event:
 		recorder.Eventf(obj, corev1.EventTypeWarning, e.Reason, e.Error())
+	case *serror.Waiting:
+		// Waiting errors are not returned to the runtime. Log it explicitly.
+		ctrl.LoggerFrom(ctx).Info("reconciliation waiting", "reason", e.Err, "duration", e.RequeueAfter)
+		recorder.Event(obj, corev1.EventTypeNormal, e.Reason, e.Error())
 	case *serror.Stalling:
 		// Stalling errors are not returned to the runtime. Log it explicitly.
 		ctrl.LoggerFrom(ctx).Error(e, "reconciliation stalled")
 		recorder.Eventf(obj, corev1.EventTypeWarning, e.Reason, e.Error())
 	}
-
-	switch rr {
-	case ResultRequeue:
-		return ctrl.Result{Requeue: true}, err
-	case ResultSuccess:
-		return ctrl.Result{RequeueAfter: obj.GetRequeueAfter()}, err
-	default:
-		return ctrl.Result{}, err
-	}
 }
 
 // ComputeReconcileResult analyzes the reconcile results (result + error),
 // updates the status conditions of the object with any corrections and returns
-// result patch configuration and any error to the caller. The caller is
-// responsible for using the patch option to patch the object in the API server.
-func ComputeReconcileResult(obj conditions.Setter, res Result, recErr error, ownedConditions []string) ([]patch.Option, error) {
+// object patch configuration, runtime result and runtime error. The caller is
+// responsible for using the patch configuration to patch the object in the API
+// server.
+func ComputeReconcileResult(obj conditions.Setter, successInterval time.Duration, res Result, recErr error, ownedConditions []string) ([]patch.Option, ctrl.Result, error) {
+	result := BuildRuntimeResult(successInterval, res, recErr)
+
 	// Remove reconciling condition on successful reconciliation.
 	if recErr == nil && res == ResultSuccess {
 		conditions.Delete(obj, meta.ReconcilingCondition)
@@ -105,10 +115,16 @@ func ComputeReconcileResult(obj conditions.Setter, res Result, recErr error, own
 			// requeuing.
 			pOpts = append(pOpts, patch.WithStatusObservedGeneration{})
 			conditions.MarkStalled(obj, t.Reason, t.Error())
-			return pOpts, nil
+			return pOpts, result, nil
 		}
 		// NOTE: Non-empty result with stalling error indicates that the
 		// returned result is incorrect.
+	case *serror.Waiting:
+		// The reconcile resulted in waiting error, remove stalled condition if
+		// present.
+		conditions.Delete(obj, meta.StalledCondition)
+		// The reconciler needs to wait and retry. Return no error.
+		return pOpts, result, nil
 	case nil:
 		// The reconcile didn't result in any error, we are not in stalled
 		// state. If a requeue is requested, the current generation has not been
@@ -123,7 +139,7 @@ func ComputeReconcileResult(obj conditions.Setter, res Result, recErr error, own
 		conditions.Delete(obj, meta.StalledCondition)
 	}
 
-	return pOpts, recErr
+	return pOpts, result, recErr
 }
 
 // LowestRequeuingResult returns the ReconcileResult with the lowest requeue

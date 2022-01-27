@@ -132,21 +132,19 @@ func (r *HelmRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		return ctrl.Result{}, nil
 	}
 
-	// Initialize the patch helper
+	// Initialize the patch helper with the current version of the object.
 	patchHelper, err := patch.NewHelper(obj, r.Client)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
 
-	// Result of the sub-reconciliation.
+	// recResult stores the abstracted reconcile result.
 	var recResult sreconcile.Result
 
 	// Always attempt to patch the object after each reconciliation.
-	// NOTE: This deferred block only modifies the named return error. The
-	// result from the reconciliation remains the same. Any requeue attributes
-	// set in the result will continue to be effective.
+	// NOTE: The final runtime result and error are set in this block.
 	defer func() {
-		retErr = r.summarizeAndPatch(ctx, obj, patchHelper, recResult, retErr)
+		result, retErr = r.summarizeAndPatch(ctx, obj, patchHelper, recResult, retErr)
 
 		// Always record readiness and duration metrics
 		r.Metrics.RecordReadiness(ctx, obj)
@@ -158,13 +156,13 @@ func (r *HelmRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	if !controllerutil.ContainsFinalizer(obj, sourcev1.SourceFinalizer) {
 		controllerutil.AddFinalizer(obj, sourcev1.SourceFinalizer)
 		recResult = sreconcile.ResultRequeue
-		return ctrl.Result{Requeue: true}, nil
+		return
 	}
 
 	// Examine if the object is under deletion
 	if !obj.ObjectMeta.DeletionTimestamp.IsZero() {
-		res, err := r.reconcileDelete(ctx, obj)
-		return sreconcile.BuildRuntimeResult(ctx, r.EventRecorder, obj, res, err)
+		recResult, retErr = r.reconcileDelete(ctx, obj)
+		return
 	}
 
 	// Reconcile actual object
@@ -173,15 +171,21 @@ func (r *HelmRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		r.reconcileSource,
 		r.reconcileArtifact,
 	}
-	recResult, err = r.reconcile(ctx, obj, reconcilers)
-	return sreconcile.BuildRuntimeResult(ctx, r.EventRecorder, obj, recResult, err)
+	recResult, retErr = r.reconcile(ctx, obj, reconcilers)
+	return
 }
 
 // summarizeAndPatch analyzes the object conditions to create a summary of the
-// status conditions and patches the object with the calculated summary. The
-// reconciler error type is also used to determine the conditions and the
-// returned error.
-func (r *HelmRepositoryReconciler) summarizeAndPatch(ctx context.Context, obj *sourcev1.HelmRepository, patchHelper *patch.Helper, res sreconcile.Result, recErr error) error {
+// status conditions, computes runtime results and patches the object in the K8s
+// API server.
+func (r *HelmRepositoryReconciler) summarizeAndPatch(
+	ctx context.Context,
+	obj *sourcev1.HelmRepository,
+	patchHelper *patch.Helper,
+	res sreconcile.Result,
+	recErr error) (ctrl.Result, error) {
+	sreconcile.RecordContextualError(ctx, r.EventRecorder, obj, recErr)
+
 	// Record the value of the reconciliation request, if any.
 	if v, ok := meta.ReconcileAnnotationValue(obj.GetAnnotations()); ok {
 		obj.Status.SetLastHandledReconcileRequest(v)
@@ -189,7 +193,8 @@ func (r *HelmRepositoryReconciler) summarizeAndPatch(ctx context.Context, obj *s
 
 	// Compute the reconcile results, obtain patch options and reconcile error.
 	var patchOpts []patch.Option
-	patchOpts, recErr = sreconcile.ComputeReconcileResult(obj, res, recErr, helmRepoOwnedConditions)
+	var result ctrl.Result
+	patchOpts, result, recErr = sreconcile.ComputeReconcileResult(obj, obj.GetRequeueAfter(), res, recErr, helmRepoOwnedConditions)
 
 	// Summarize Ready condition.
 	conditions.SetSummary(obj,
@@ -211,7 +216,7 @@ func (r *HelmRepositoryReconciler) summarizeAndPatch(ctx context.Context, obj *s
 		recErr = kerrors.NewAggregate([]error{recErr, err})
 	}
 
-	return recErr
+	return result, recErr
 }
 
 // reconcile iterates through the sub-reconcilers and processes the source
