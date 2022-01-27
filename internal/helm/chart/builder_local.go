@@ -77,10 +77,10 @@ func (b *localChartBuilder) Build(ctx context.Context, ref Reference, p string, 
 	// to a chart
 	curMeta, err := LoadChartMetadata(localRef.Path)
 	if err != nil {
-		return nil, &BuildError{Reason: ErrChartPull, Err: err}
+		return nil, &BuildError{Reason: ErrChartReference, Err: err}
 	}
 	if err = curMeta.Validate(); err != nil {
-		return nil, &BuildError{Reason: ErrChartPull, Err: err}
+		return nil, &BuildError{Reason: ErrChartReference, Err: err}
 	}
 
 	result := &Build{}
