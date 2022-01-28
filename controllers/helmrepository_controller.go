@@ -416,6 +416,10 @@ func (r *HelmRepositoryReconciler) reconcileArtifact(ctx context.Context, obj *s
 			conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason,
 				"stored artifact for revision '%s'", artifact.Revision)
 		}
+
+		if err := chartRepo.RemoveCache(); err != nil {
+			ctrl.LoggerFrom(ctx).Error(err, "failed to remove temporary cached index file")
+		}
 	}()
 
 	if obj.GetArtifact().HasRevision(artifact.Revision) {
@@ -427,10 +431,7 @@ func (r *HelmRepositoryReconciler) reconcileArtifact(ctx context.Context, obj *s
 	// and they have to be reconciled.
 	conditions.MarkReconciling(obj, "NewRevision", "new index revision '%s'", artifact.Revision)
 
-	// Clear cache at the very end.
-	defer chartRepo.RemoveCache()
-
-	// Create artifact dir.
+	// Create artifact dir
 	if err := r.Storage.MkdirAll(*artifact); err != nil {
 		return sreconcile.ResultEmpty, &serror.Event{
 			Err:    fmt.Errorf("failed to create artifact directory: %w", err),
