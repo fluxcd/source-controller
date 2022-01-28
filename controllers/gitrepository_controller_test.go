@@ -17,6 +17,7 @@ limitations under the License.
 package controllers
 
 import (
+	"context"
 	"fmt"
 	"net/url"
 	"os"
@@ -26,13 +27,17 @@ import (
 	"time"
 
 	"github.com/darkowlzz/controller-check/status"
+	"github.com/fluxcd/pkg/apis/meta"
+	"github.com/fluxcd/pkg/gittestserver"
+	"github.com/fluxcd/pkg/runtime/conditions"
+	"github.com/fluxcd/pkg/ssh"
+	"github.com/fluxcd/pkg/testserver"
 	"github.com/go-git/go-billy/v5/memfs"
 	gogit "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/go-git/go-git/v5/storage/memory"
-	"github.com/go-logr/logr"
 	. "github.com/onsi/gomega"
 	sshtestdata "golang.org/x/crypto/ssh/testdata"
 	corev1 "k8s.io/api/core/v1"
@@ -45,13 +50,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	fakeclient "sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"sigs.k8s.io/controller-runtime/pkg/log"
-
-	"github.com/fluxcd/pkg/apis/meta"
-	"github.com/fluxcd/pkg/gittestserver"
-	"github.com/fluxcd/pkg/runtime/conditions"
-	"github.com/fluxcd/pkg/ssh"
-	"github.com/fluxcd/pkg/testserver"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
 	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
@@ -499,9 +497,8 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 
 					var artifact sourcev1.Artifact
 					var includes artifactSet
-					dlog := log.NewDelegatingLogSink(log.NullLogSink{})
-					nullLogger := logr.New(dlog)
-					got, err := r.reconcileSource(logr.NewContext(ctx, nullLogger), obj, &artifact, &includes, tmpDir)
+
+					got, err := r.reconcileSource(context.TODO(), obj, &artifact, &includes, tmpDir)
 					g.Expect(obj.Status.Conditions).To(conditions.MatchConditions(tt.assertConditions))
 					g.Expect(err != nil).To(Equal(tt.wantErr))
 					g.Expect(got).To(Equal(tt.want))
@@ -1209,9 +1206,7 @@ func TestGitRepositoryReconciler_verifyCommitSignature(t *testing.T) {
 				tt.beforeFunc(obj)
 			}
 
-			dlog := log.NewDelegatingLogSink(log.NullLogSink{})
-			nullLogger := logr.New(dlog)
-			got, err := r.verifyCommitSignature(logr.NewContext(ctx, nullLogger), obj, tt.commit)
+			got, err := r.verifyCommitSignature(context.TODO(), obj, tt.commit)
 			g.Expect(obj.Status.Conditions).To(conditions.MatchConditions(tt.assertConditions))
 			g.Expect(err != nil).To(Equal(tt.wantErr))
 			g.Expect(got).To(Equal(tt.want))
@@ -1335,9 +1330,7 @@ func TestGitRepositoryReconciler_ConditionsUpdate(t *testing.T) {
 			}
 
 			key := client.ObjectKeyFromObject(obj)
-			dlog := log.NewDelegatingLogSink(log.NullLogSink{})
-			nullLogger := logr.New(dlog)
-			res, err := r.Reconcile(logr.NewContext(ctx, nullLogger), ctrl.Request{NamespacedName: key})
+			res, err := r.Reconcile(context.TODO(), ctrl.Request{NamespacedName: key})
 			g.Expect(err != nil).To(Equal(tt.wantErr))
 			g.Expect(res).To(Equal(tt.want))
 

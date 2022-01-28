@@ -27,7 +27,10 @@ import (
 	"time"
 
 	"github.com/darkowlzz/controller-check/status"
-	"github.com/go-logr/logr"
+	"github.com/fluxcd/pkg/apis/meta"
+	"github.com/fluxcd/pkg/helmtestserver"
+	"github.com/fluxcd/pkg/runtime/conditions"
+	"github.com/fluxcd/pkg/runtime/patch"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -35,12 +38,6 @@ import (
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	fakeclient "sigs.k8s.io/controller-runtime/pkg/client/fake"
-	"sigs.k8s.io/controller-runtime/pkg/log"
-
-	"github.com/fluxcd/pkg/apis/meta"
-	"github.com/fluxcd/pkg/helmtestserver"
-	"github.com/fluxcd/pkg/runtime/conditions"
-	"github.com/fluxcd/pkg/runtime/patch"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
 	serror "github.com/fluxcd/source-controller/internal/error"
@@ -596,9 +593,8 @@ func TestHelmRepositoryReconciler_reconcileArtifact(t *testing.T) {
 			if tt.beforeFunc != nil {
 				tt.beforeFunc(g, obj, artifact, chartRepo)
 			}
-			dlog := log.NewDelegatingLogSink(log.NullLogSink{})
-			nullLogger := logr.New(dlog)
-			got, err := r.reconcileArtifact(logr.NewContext(ctx, nullLogger), obj, &artifact, chartRepo)
+
+			got, err := r.reconcileArtifact(context.TODO(), obj, &artifact, chartRepo)
 			g.Expect(err != nil).To(Equal(tt.wantErr))
 			g.Expect(got).To(Equal(tt.want))
 

@@ -32,7 +32,8 @@ import (
 	"time"
 
 	"github.com/darkowlzz/controller-check/status"
-	"github.com/go-logr/logr"
+	"github.com/fluxcd/pkg/apis/meta"
+	"github.com/fluxcd/pkg/runtime/conditions"
 	. "github.com/onsi/gomega"
 	raw "google.golang.org/api/storage/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -41,10 +42,6 @@ import (
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	fakeclient "sigs.k8s.io/controller-runtime/pkg/client/fake"
-	"sigs.k8s.io/controller-runtime/pkg/log"
-
-	"github.com/fluxcd/pkg/apis/meta"
-	"github.com/fluxcd/pkg/runtime/conditions"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
 	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
@@ -959,9 +956,7 @@ func TestBucketReconciler_reconcileArtifact(t *testing.T) {
 				tt.beforeFunc(g, obj, artifact, tmpDir)
 			}
 
-			dlog := log.NewDelegatingLogSink(log.NullLogSink{})
-			nullLogger := logr.New(dlog)
-			got, err := r.reconcileArtifact(logr.NewContext(ctx, nullLogger), obj, &artifact, tmpDir)
+			got, err := r.reconcileArtifact(context.TODO(), obj, &artifact, tmpDir)
 			g.Expect(err != nil).To(Equal(tt.wantErr))
 			g.Expect(got).To(Equal(tt.want))
 
