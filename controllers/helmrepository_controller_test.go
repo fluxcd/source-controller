@@ -471,9 +471,9 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 
 			var chartRepo repository.ChartRepository
 			var artifact sourcev1.Artifact
-			dlog := log.NewDelegatingLogSink(log.NullLogSink{})
-			nullLogger := logr.New(dlog)
-			got, err := r.reconcileSource(logr.NewContext(ctx, nullLogger), obj, &artifact, &chartRepo)
+			got, err := r.reconcileSource(context.TODO(), obj, &artifact, &chartRepo)
+			defer os.Remove(chartRepo.CachePath)
+
 			g.Expect(obj.Status.Conditions).To(conditions.MatchConditions(tt.assertConditions))
 			g.Expect(err != nil).To(Equal(tt.wantErr))
 			g.Expect(got).To(Equal(tt.want))
