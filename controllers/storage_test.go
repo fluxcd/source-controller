@@ -317,15 +317,11 @@ func TestStorageCopyFromPath(t *testing.T) {
 	}
 
 	createFile := func(file *File) (absPath string, err error) {
-		defer func() {
-			if err != nil && dir != "" {
-				os.RemoveAll(dir)
-			}
-		}()
 		dir, err = os.MkdirTemp("", "test-files-")
 		if err != nil {
 			return
 		}
+		t.Cleanup(cleanupStoragePath(dir))
 		absPath = filepath.Join(dir, file.Name)
 		if err = os.MkdirAll(filepath.Dir(absPath), 0755); err != nil {
 			return
