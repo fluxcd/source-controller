@@ -2,14 +2,27 @@ ARG BASE_VARIANT=alpine
 ARG GO_VERSION=1.17
 ARG XX_VERSION=1.1.0
 
-ARG LIBGIT2_IMG=ghcr.io/fluxcd/golang-with-libgit2
-ARG LIBGIT2_TAG=libgit2-1.1.1-4
+ARG LIBGIT2_IMG
+ARG LIBGIT2_TAG
 
-FROM --platform=linux/amd64 ${LIBGIT2_IMG}:${LIBGIT2_TAG} as build-amd64
-FROM --platform=linux/arm64 ${LIBGIT2_IMG}:${LIBGIT2_TAG} as build-arm64
-FROM --platform=linux/arm/v7 ${LIBGIT2_IMG}:${LIBGIT2_TAG} as build-armv7
+FROM ${LIBGIT2_IMG}:${LIBGIT2_TAG} AS libgit2-libs
 
-FROM --platform=$BUILDPLATFORM build-$TARGETARCH$TARGETVARIANT AS build
+FROM --platform=$BUILDPLATFORM tonistiigi/xx:${XX_VERSION} AS xx
+
+FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-${BASE_VARIANT} as gostable
+
+FROM gostable AS go-linux
+
+# Build-base consists of build platform dependencies and xx.
+# These will be used at current arch to yield execute the cross compilations.
+FROM go-${TARGETOS} AS build-base
+
+RUN apk add --no-cache clang lld pkgconfig
+
+COPY --from=xx / /
+
+# build-go-mod can still be cached at build platform architecture.
+FROM build-base as build-go-mod
 
 # Configure workspace
 WORKDIR /workspace
@@ -24,26 +37,35 @@ COPY go.sum go.sum
 # Cache modules
 RUN go mod download
 
-RUN apk add clang lld pkgconfig ca-certificates
+# Build stage install per target platform
+# dependency and effectively cross compile the application.
+FROM build-go-mod as build
 
-# Build the binary
-ENV CGO_ENABLED=1
 ARG TARGETPLATFORM
 
+COPY --from=libgit2-libs /usr/local/ /usr/local/
+
+# Some dependencies have to installed 
+# for the target platform: https://github.com/tonistiigi/xx#go--cgo
 RUN xx-apk add --no-cache \
         musl-dev gcc lld binutils-gold
 
-# Performance related changes:
-# - Use read-only bind instead of copying go source files.
-# - Cache go packages.
-RUN --mount=target=. \
-    --mount=type=cache,target=/root/.cache/go-build \
-    --mount=type=cache,target=/go/pkg \
-    export LIBRARY_PATH="/usr/local/$(xx-info triple)/lib:/usr/local/$(xx-info triple)/lib64:${LIBRARY_PATH}" && \
+RUN xx-apk add --no-cache musl-utils
+
+WORKDIR /workspace
+
+# Copy source code
+COPY main.go main.go
+COPY controllers/ controllers/
+COPY pkg/ pkg/
+COPY internal/ internal/
+
+ENV CGO_ENABLED=1
+RUN export LIBRARY_PATH="/usr/local/$(xx-info triple):/usr/local/$(xx-info triple)/lib64" && \
     export PKG_CONFIG_PATH="/usr/local/$(xx-info triple)/lib/pkgconfig:/usr/local/$(xx-info triple)/lib64/pkgconfig" && \
-	export FLAGS="$(pkg-config --static --libs --cflags libssh2 openssl libgit2)" && \
-    CGO_LDFLAGS="${FLAGS} -static" \
-	xx-go build \
+    export FLAGS="$(pkg-config --static --libs --cflags libssh2 openssl libgit2)" && \
+    export CGO_LDFLAGS="${FLAGS} -static" && \
+    xx-go build  \
         -ldflags "-s -w" \
         -tags 'netgo,osusergo,static_build' \
         -o /source-controller -trimpath main.go;

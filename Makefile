@@ -18,32 +18,35 @@ CRD_OPTIONS ?= crd:crdVersions=v1
 # Repository root based on Git metadata
 REPOSITORY_ROOT := $(shell git rev-parse --show-toplevel)
 
-# Libgit2 version
-LIBGIT2_VERSION ?= 1.1.1
-
 # Other dependency versions
 ENVTEST_BIN_VERSION ?= 1.19.2
 
-# libgit2 related magical paths
-# These are used to determine if the target libgit2 version is already available on
-# the system, or where they should be installed to
-SYSTEM_LIBGIT2_VERSION := $(shell pkg-config --modversion libgit2 2>/dev/null)
-LIBGIT2_PATH := $(REPOSITORY_ROOT)/hack/libgit2
+# Caches libgit2 versions per tag, "forcing" rebuild only when needed.
+LIBGIT2_PATH := $(REPOSITORY_ROOT)/build/libgit2/$(LIBGIT2_TAG)
 LIBGIT2_LIB_PATH := $(LIBGIT2_PATH)/lib
-LIBGIT2 := $(LIBGIT2_LIB_PATH)/libgit2.so.$(LIBGIT2_VERSION)
+LIBGIT2_LIB64_PATH := $(LIBGIT2_PATH)/lib64
+LIBGIT2 := $(LIBGIT2_LIB_PATH)/libgit2.a
+MUSL-CC =
 
-ifneq ($(LIBGIT2_VERSION),$(SYSTEM_LIBGIT2_VERSION))
-	LIBGIT2_FORCE ?= 1
-endif
+export CGO_ENABLED=1
+export PKG_CONFIG_PATH=$(LIBGIT2_LIB_PATH)/pkgconfig:$(LIBGIT2_LIB64_PATH)/pkgconfig
+export LD_LIBRARY_PATH=$(LIBGIT2_LIB_PATH):$(LIBGIT2_LIB64_PATH)
+export CGO_CFLAGS=-I$(LIBGIT2_PATH)/include -I$(LIBGIT2_PATH)/include/openssl
 
 ifeq ($(shell uname -s),Darwin)
-	LIBGIT2 := $(LIBGIT2_LIB_PATH)/libgit2.$(LIBGIT2_VERSION).dylib
-	HAS_BREW := $(shell brew --version 2>/dev/null)
-ifdef HAS_BREW
-	HAS_OPENSSL := $(shell brew --prefix openssl@1.1)
-endif
+	export CGO_LDFLAGS=-L$(LIBGIT2_LIB_PATH) -lssh2 -lssl -lcrypto -lgit2
+else
+	export CGO_LDFLAGS=$(shell PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) pkg-config --libs --static --cflags libssh2 openssl libgit2)
 endif
 
+
+ifeq ($(shell uname -s),Linux)
+	MUSL-PREFIX=$(REPOSITORY_ROOT)/build/musl/$(shell uname -m)-linux-musl-native/bin/$(shell uname -m)-linux-musl
+	MUSL-CC=$(MUSL-PREFIX)-gcc
+	export CC=$(MUSL-PREFIX)-gcc
+	export CXX=$(MUSL-PREFIX)-g++
+	export AR=$(MUSL-PREFIX)-ar
+endif
 
 # API (doc) generation utilities
 CONTROLLER_GEN_VERSION ?= v0.7.0
@@ -56,59 +59,32 @@ else
 GOBIN=$(shell go env GOBIN)
 endif
 
-ifeq ($(strip ${PKG_CONFIG_PATH}),)
-	MAKE_PKG_CONFIG_PATH = $(LIBGIT2_LIB_PATH)/pkgconfig
-else
-	MAKE_PKG_CONFIG_PATH = ${PKG_CONFIG_PATH}:$(LIBGIT2_LIB_PATH)/pkgconfig
-endif
-
-ifdef HAS_OPENSSL
-	MAKE_PKG_CONFIG_PATH := $(MAKE_PKG_CONFIG_PATH):$(HAS_OPENSSL)/lib/pkgconfig
-endif
 
 # Architecture to use envtest with
+ifeq ($(shell uname -m),x86_64)
 ENVTEST_ARCH ?= amd64
+else
+ENVTEST_ARCH ?= arm64
+endif
 
 all: build
 
 build: $(LIBGIT2) ## Build manager binary
-ifeq ($(shell uname -s),Darwin)
-	PKG_CONFIG_PATH=$(MAKE_PKG_CONFIG_PATH) \
-	CGO_LDFLAGS="-Wl,-rpath,$(LIBGIT2_LIB_PATH)" \
 	go build -o bin/manager main.go
-else
-	PKG_CONFIG_PATH=$(MAKE_PKG_CONFIG_PATH) \
-	go build -o bin/manager main.go
-endif
 
 KUBEBUILDER_ASSETS?="$(shell $(ENVTEST) --arch=$(ENVTEST_ARCH) use -i $(ENVTEST_KUBERNETES_VERSION) --bin-dir=$(ENVTEST_ASSETS_DIR) -p path)"
 test: $(LIBGIT2) install-envtest test-api  ## Run tests
-ifeq ($(shell uname -s),Darwin)
-	LD_LIBRARY_PATH=$(LIBGIT2_LIB_PATH) \
-	PKG_CONFIG_PATH=$(MAKE_PKG_CONFIG_PATH) \
-	CGO_LDFLAGS="-Wl,-rpath,$(LIBGIT2_LIB_PATH)" \
 	KUBEBUILDER_ASSETS=$(KUBEBUILDER_ASSETS) \
-	go test ./... -coverprofile cover.out
-else
-	LD_LIBRARY_PATH=$(LIBGIT2_LIB_PATH) \
-	PKG_CONFIG_PATH=$(MAKE_PKG_CONFIG_PATH) \
-	KUBEBUILDER_ASSETS=$(KUBEBUILDER_ASSETS) \
-	go test ./... -coverprofile cover.out
-endif
+	go test ./... \
+		-ldflags "-s -w" \
+		-coverprofile cover.out \
+	 	-tags 'netgo,osusergo,static_build'
 
 test-api: ## Run api tests
 	cd api; go test ./... -coverprofile cover.out
 
 run: $(LIBGIT2) generate fmt vet manifests  ## Run against the configured Kubernetes cluster in ~/.kube/config
-ifeq ($(shell uname -s),Darwin)
-	LD_LIBRARY_PATH=$(LIBGIT2_LIB_PATH) \
-	CGO_LDFLAGS="-Wl,-rpath,$(LIBGIT2_LIB_PATH)" \
 	go run ./main.go
-else
-	LD_LIBRARY_PATH=$(LIBGIT2_LIB_PATH) \
-	go run ./main.go
-endif
-
 
 install: manifests  ## Install CRDs into a cluster
 	kustomize build config/crd | kubectl apply -f -
@@ -142,16 +118,8 @@ fmt:  ## Run go fmt against code
 	cd api; go fmt ./...
 
 vet: $(LIBGIT2)	## Run go vet against code
-ifeq ($(shell uname -s),Darwin)
-	PKG_CONFIG_PATH=$(MAKE_PKG_CONFIG_PATH) \
-	CGO_LDFLAGS="-Wl,-rpath,$(LIBGIT2_LIB_PATH)" \
 	go vet ./...
 	cd api; go vet ./...
-else
-	PKG_CONFIG_PATH=$(MAKE_PKG_CONFIG_PATH) \
-	go vet ./...
-	cd api; go vet ./...
-endif
 
 generate: controller-gen  ## Generate API code
 	cd api; $(CONTROLLER_GEN) object:headerFile="../hack/boilerplate.go.txt" paths="./..."
@@ -192,14 +160,12 @@ install-envtest: setup-envtest ## Download envtest binaries locally.
 
 libgit2: $(LIBGIT2)  ## Detect or download libgit2 library
 
-$(LIBGIT2):
-ifeq (1, $(LIBGIT2_FORCE))
-	@{ \
-	set -e; \
-	mkdir -p $(LIBGIT2_PATH); \
-	curl -sL https://raw.githubusercontent.com/fluxcd/golang-with-libgit2/$(LIBGIT2_TAG)/hack/Makefile -o $(LIBGIT2_PATH)/Makefile; \
-	INSTALL_PREFIX=$(LIBGIT2_PATH) make -C $(LIBGIT2_PATH) libgit2; \
-	}
+$(LIBGIT2): $(MUSL-CC)
+	IMG=$(LIBGIT2_IMG) TAG=$(LIBGIT2_TAG) ./hack/install-libraries.sh
+
+$(MUSL-CC):
+ifneq ($(shell uname -s),Darwin)
+	./hack/download-musl.sh
 endif
 
 .PHONY: help
