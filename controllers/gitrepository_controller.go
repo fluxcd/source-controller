@@ -642,27 +642,27 @@ func (r *GitRepositoryReconciler) verifyCommitSignature(ctx context.Context, obj
 // resource.
 func (r *GitRepositoryReconciler) garbageCollect(ctx context.Context, obj *sourcev1.GitRepository) error {
 	if !obj.DeletionTimestamp.IsZero() {
-		if err := r.Storage.RemoveAll(r.Storage.NewArtifactFor(obj.Kind, obj.GetObjectMeta(), "", "*")); err != nil {
+		if deleted, err := r.Storage.RemoveAll(r.Storage.NewArtifactFor(obj.Kind, obj.GetObjectMeta(), "", "*")); err != nil {
 			return &serror.Event{
 				Err:    fmt.Errorf("garbage collection for deleted resource failed: %w", err),
 				Reason: "GarbageCollectionFailed",
 			}
+		} else if deleted != "" {
+			r.eventLogf(ctx, obj, events.EventTypeTrace, "GarbageCollectionSucceeded",
+				"garbage collected artifacts for deleted resource")
 		}
 		obj.Status.Artifact = nil
-		// TODO(hidde): we should only push this event if we actually garbage collected something
-		r.eventLogf(ctx, obj, events.EventTypeTrace, "GarbageCollectionSucceeded",
-			"garbage collected artifacts for deleted resource")
 		return nil
 	}
 	if obj.GetArtifact() != nil {
-		if err := r.Storage.RemoveAllButCurrent(*obj.GetArtifact()); err != nil {
+		if deleted, err := r.Storage.RemoveAllButCurrent(*obj.GetArtifact()); err != nil {
 			return &serror.Event{
 				Err: fmt.Errorf("garbage collection of old artifacts failed: %w", err),
 			}
+		} else if len(deleted) > 0 {
+			r.eventLogf(ctx, obj, events.EventTypeTrace, "GarbageCollectionSucceeded",
+				"garbage collected old artifacts")
 		}
-		// TODO(hidde): we should only push this event if we actually garbage collected something
-		r.eventLogf(ctx, obj, events.EventTypeTrace, "GarbageCollectionSucceeded",
-			"garbage collected old artifacts")
 	}
 	return nil
 }
