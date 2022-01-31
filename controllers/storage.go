@@ -105,13 +105,20 @@ func (s *Storage) MkdirAll(artifact sourcev1.Artifact) error {
 }
 
 // RemoveAll calls os.RemoveAll for the given v1beta1.Artifact base dir.
-func (s *Storage) RemoveAll(artifact sourcev1.Artifact) error {
+func (s *Storage) RemoveAll(artifact sourcev1.Artifact) (string, error) {
+	var deletedDir string
 	dir := filepath.Dir(s.LocalPath(artifact))
-	return os.RemoveAll(dir)
+	// Check if the dir exists.
+	_, err := os.Stat(dir)
+	if err == nil {
+		deletedDir = dir
+	}
+	return deletedDir, os.RemoveAll(dir)
 }
 
 // RemoveAllButCurrent removes all files for the given v1beta1.Artifact base dir, excluding the current one.
-func (s *Storage) RemoveAllButCurrent(artifact sourcev1.Artifact) error {
+func (s *Storage) RemoveAllButCurrent(artifact sourcev1.Artifact) ([]string, error) {
+	deletedFiles := []string{}
 	localPath := s.LocalPath(artifact)
 	dir := filepath.Dir(localPath)
 	var errors []string
@@ -124,15 +131,18 @@ func (s *Storage) RemoveAllButCurrent(artifact sourcev1.Artifact) error {
 		if path != localPath && !info.IsDir() && info.Mode()&os.ModeSymlink != os.ModeSymlink {
 			if err := os.Remove(path); err != nil {
 				errors = append(errors, info.Name())
+			} else {
+				// Collect the successfully deleted file paths.
+				deletedFiles = append(deletedFiles, path)
 			}
 		}
 		return nil
 	})
 
 	if len(errors) > 0 {
-		return fmt.Errorf("failed to remove files: %s", strings.Join(errors, " "))
+		return deletedFiles, fmt.Errorf("failed to remove files: %s", strings.Join(errors, " "))
 	}
-	return nil
+	return deletedFiles, nil
 }
 
 // ArtifactExist returns a boolean indicating whether the v1beta1.Artifact exists in storage and is a regular file.
