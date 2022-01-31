@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"github.com/go-git/go-git/v5/plumbing/format/gitignore"
+	. "github.com/onsi/gomega"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
 )
@@ -293,10 +294,96 @@ func TestStorageRemoveAllButCurrent(t *testing.T) {
 			t.Fatalf("Valid path did not successfully return: %v", err)
 		}
 
-		if err := s.RemoveAllButCurrent(sourcev1.Artifact{Path: path.Join(dir, "really", "nonexistent")}); err == nil {
+		if _, err := s.RemoveAllButCurrent(sourcev1.Artifact{Path: path.Join(dir, "really", "nonexistent")}); err == nil {
 			t.Fatal("Did not error while pruning non-existent path")
 		}
 	})
+
+	t.Run("collect names of deleted items", func(t *testing.T) {
+		g := NewWithT(t)
+		dir, err := os.MkdirTemp("", "")
+		g.Expect(err).ToNot(HaveOccurred())
+		t.Cleanup(func() { os.RemoveAll(dir) })
+
+		s, err := NewStorage(dir, "hostname", time.Minute)
+		g.Expect(err).ToNot(HaveOccurred(), "failed to create new storage")
+
+		artifact := sourcev1.Artifact{
+			Path: path.Join("foo", "bar", "artifact1.tar.gz"),
+		}
+
+		// Create artifact dir and artifacts.
+		artifactDir := path.Join(dir, "foo", "bar")
+		g.Expect(os.MkdirAll(artifactDir, 0755)).NotTo(HaveOccurred())
+		current := []string{
+			path.Join(artifactDir, "artifact1.tar.gz"),
+		}
+		wantDeleted := []string{
+			path.Join(artifactDir, "file1.txt"),
+			path.Join(artifactDir, "file2.txt"),
+		}
+		createFile := func(files []string) {
+			for _, c := range files {
+				f, err := os.Create(c)
+				g.Expect(err).ToNot(HaveOccurred())
+				g.Expect(f.Close()).ToNot(HaveOccurred())
+			}
+		}
+		createFile(current)
+		createFile(wantDeleted)
+		_, err = s.Symlink(artifact, "latest.tar.gz")
+		g.Expect(err).ToNot(HaveOccurred(), "failed to create symlink")
+
+		deleted, err := s.RemoveAllButCurrent(artifact)
+		g.Expect(err).ToNot(HaveOccurred(), "failed to remove all but current")
+		g.Expect(deleted).To(Equal(wantDeleted))
+	})
+}
+
+func TestStorageRemoveAll(t *testing.T) {
+	tests := []struct {
+		name               string
+		artifactPath       string
+		createArtifactPath bool
+		wantDeleted        string
+	}{
+		{
+			name:               "delete non-existent path",
+			artifactPath:       path.Join("foo", "bar", "artifact1.tar.gz"),
+			createArtifactPath: false,
+			wantDeleted:        "",
+		},
+		{
+			name:               "delete existing path",
+			artifactPath:       path.Join("foo", "bar", "artifact1.tar.gz"),
+			createArtifactPath: true,
+			wantDeleted:        path.Join("foo", "bar"),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+			dir, err := os.MkdirTemp("", "")
+			g.Expect(err).ToNot(HaveOccurred())
+			t.Cleanup(func() { os.RemoveAll(dir) })
+
+			s, err := NewStorage(dir, "hostname", time.Minute)
+			g.Expect(err).ToNot(HaveOccurred(), "failed to create new storage")
+
+			artifact := sourcev1.Artifact{
+				Path: tt.artifactPath,
+			}
+
+			if tt.createArtifactPath {
+				g.Expect(os.MkdirAll(path.Join(dir, tt.artifactPath), 0755)).ToNot(HaveOccurred())
+			}
+
+			deleted, err := s.RemoveAll(artifact)
+			g.Expect(err).ToNot(HaveOccurred())
+			g.Expect(deleted).To(ContainSubstring(tt.wantDeleted), "unexpected deleted path")
+		})
+	}
 }
 
 func TestStorageCopyFromPath(t *testing.T) {
