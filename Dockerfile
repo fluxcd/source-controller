@@ -37,6 +37,23 @@ COPY go.sum go.sum
 # Cache modules
 RUN go mod download
 
+# The musl-tool-chain layer is an adhoc solution
+# for the problem in which xx gets confused during compilation
+# and a) looks for gold linker and then b) cannot find musl's dynamic linker.
+FROM --platform=$BUILDPLATFORM alpine as musl-tool-chain
+
+COPY --from=xx / /
+
+RUN apk add bash curl tar
+
+WORKDIR /workspace
+COPY hack/download-musl.sh .
+
+ARG TARGETPLATFORM
+ARG TARGETARCH
+RUN ROOT_DIR="$(pwd)" TARGET_ARCH="$(xx-info alpine-arch)" ENV_FILE=true \
+        ./download-musl.sh
+
 # Build stage install per target platform
 # dependency and effectively cross compile the application.
 FROM build-go-mod as build
@@ -47,10 +64,7 @@ COPY --from=libgit2-libs /usr/local/ /usr/local/
 
 # Some dependencies have to installed 
 # for the target platform: https://github.com/tonistiigi/xx#go--cgo
-RUN xx-apk add --no-cache \
-        musl-dev gcc lld binutils-gold
-
-RUN xx-apk add --no-cache musl-utils
+RUN xx-apk add musl-dev gcc lld
 
 WORKDIR /workspace
 
@@ -60,12 +74,19 @@ COPY controllers/ controllers/
 COPY pkg/ pkg/
 COPY internal/ internal/
 
+COPY --from=musl-tool-chain /workspace/build /workspace/build
+
+ARG TARGETPLATFORM
+ARG TARGETARCH
 ENV CGO_ENABLED=1
-RUN export LIBRARY_PATH="/usr/local/$(xx-info triple):/usr/local/$(xx-info triple)/lib64" && \
+
+# Instead of using xx-go, (cross) compile with vanilla go leveraging musl tool chain.
+RUN export $(cat build/musl/$(xx-info alpine-arch).env | xargs) && \
+    export LIBRARY_PATH="/usr/local/$(xx-info triple):/usr/local/$(xx-info triple)/lib64" && \
     export PKG_CONFIG_PATH="/usr/local/$(xx-info triple)/lib/pkgconfig:/usr/local/$(xx-info triple)/lib64/pkgconfig" && \
     export FLAGS="$(pkg-config --static --libs --cflags libssh2 openssl libgit2)" && \
     export CGO_LDFLAGS="${FLAGS} -static" && \
-    xx-go build  \
+    GOARCH=$TARGETARCH go build  \
         -ldflags "-s -w" \
         -tags 'netgo,osusergo,static_build' \
         -o /source-controller -trimpath main.go;
