@@ -31,46 +31,57 @@ const (
 )
 
 const (
+	// GenericBucketProvider for any S3 API compatible storage Bucket.
 	GenericBucketProvider string = "generic"
-	AmazonBucketProvider  string = "aws"
-	GoogleBucketProvider  string = "gcp"
-	AzureBucketProvider   string = "azure"
+	// AmazonBucketProvider for an AWS S3 object storage Bucket.
+	// Provides support for retrieving credentials from the AWS EC2 service.
+	AmazonBucketProvider string = "aws"
+	// GoogleBucketProvider for a Google Cloud Storage Bucket.
+	// Provides support for authentication using a workload identity.
+	GoogleBucketProvider string = "gcp"
+	// AzureBucketProvider for an Azure Blob Storage Bucket.
+	// Provides support for authentication using a Service Principal,
+	// Managed Identity or Shared Key.
+	AzureBucketProvider string = "azure"
 )
 
-// BucketSpec defines the desired state of an S3 compatible bucket
+// BucketSpec specifies the required configuration to produce an Artifact for
+// an object storage bucket.
 type BucketSpec struct {
-	// The S3 compatible storage provider name, default ('generic').
+	// Provider of the object storage bucket.
+	// Defaults to 'generic', which expects an S3 (API) compatible object
+	// storage.
 	// +kubebuilder:validation:Enum=generic;aws;gcp;azure
 	// +kubebuilder:default:=generic
 	// +optional
 	Provider string `json:"provider,omitempty"`
 
-	// The bucket name.
+	// BucketName is the name of the object storage bucket.
 	// +required
 	BucketName string `json:"bucketName"`
 
-	// The bucket endpoint address.
+	// Endpoint is the object storage address the BucketName is located at.
 	// +required
 	Endpoint string `json:"endpoint"`
 
-	// Insecure allows connecting to a non-TLS S3 HTTP endpoint.
+	// Insecure allows connecting to a non-TLS HTTP Endpoint.
 	// +optional
 	Insecure bool `json:"insecure,omitempty"`
 
-	// The bucket region.
+	// Region of the Endpoint where the BucketName is located in.
 	// +optional
 	Region string `json:"region,omitempty"`
 
-	// The name of the secret containing authentication credentials
+	// SecretRef specifies the Secret containing authentication credentials
 	// for the Bucket.
 	// +optional
 	SecretRef *meta.LocalObjectReference `json:"secretRef,omitempty"`
 
-	// The interval at which to check for bucket updates.
+	// Interval at which to check the Endpoint for updates.
 	// +required
 	Interval metav1.Duration `json:"interval"`
 
-	// The timeout for fetch operations, defaults to 60s.
+	// Timeout for fetch operations, defaults to 60s.
 	// +kubebuilder:default="60s"
 	// +optional
 	Timeout *metav1.Duration `json:"timeout,omitempty"`
@@ -81,18 +92,21 @@ type BucketSpec struct {
 	// +optional
 	Ignore *string `json:"ignore,omitempty"`
 
-	// This flag tells the controller to suspend the reconciliation of this source.
+	// Suspend tells the controller to suspend the reconciliation of this
+	// Bucket.
 	// +optional
 	Suspend bool `json:"suspend,omitempty"`
 
-	// AccessFrom defines an Access Control List for allowing cross-namespace references to this object.
+	// AccessFrom specifies an Access Control List for allowing cross-namespace
+	// references to this object.
+	// NOTE: Not implemented, provisional as of https://github.com/fluxcd/flux2/pull/2092
 	// +optional
 	AccessFrom *acl.AccessFrom `json:"accessFrom,omitempty"`
 }
 
-// BucketStatus defines the observed state of a bucket
+// BucketStatus records the observed state of a Bucket.
 type BucketStatus struct {
-	// ObservedGeneration is the last observed generation.
+	// ObservedGeneration is the last observed generation of the Bucket object.
 	// +optional
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 
@@ -100,11 +114,13 @@ type BucketStatus struct {
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 
-	// URL is the fetch link for the artifact output of the last Bucket sync.
+	// URL is the dynamic fetch link for the latest Artifact.
+	// It is provided on a "best effort" basis, and using the precise
+	// BucketStatus.Artifact data is recommended.
 	// +optional
 	URL string `json:"url,omitempty"`
 
-	// Artifact represents the output of the last successful Bucket sync.
+	// Artifact represents the last successful Bucket reconciliation.
 	// +optional
 	Artifact *Artifact `json:"artifact,omitempty"`
 
@@ -112,12 +128,12 @@ type BucketStatus struct {
 }
 
 const (
-	// BucketOperationSucceededReason represents the fact that the bucket listing and
-	// fetch operations succeeded.
+	// BucketOperationSucceededReason signals that the Bucket listing and fetch
+	// operations succeeded.
 	BucketOperationSucceededReason string = "BucketOperationSucceeded"
 
-	// BucketOperationFailedReason represents the fact that the bucket listing or
-	// fetch operations failed.
+	// BucketOperationFailedReason signals that the Bucket listing or fetch
+	// operations failed.
 	BucketOperationFailedReason string = "BucketOperationFailed"
 )
 
@@ -136,21 +152,9 @@ func (in Bucket) GetRequeueAfter() time.Duration {
 	return in.Spec.Interval.Duration
 }
 
-// GetInterval returns the interval at which the source is reconciled.
-// Deprecated: use GetRequeueAfter instead.
-func (in Bucket) GetInterval() metav1.Duration {
-	return in.Spec.Interval
-}
-
 // GetArtifact returns the latest artifact from the source if present in the status sub-resource.
 func (in *Bucket) GetArtifact() *Artifact {
 	return in.Status.Artifact
-}
-
-// GetStatusConditions returns a pointer to the Status.Conditions slice.
-// Deprecated: use GetConditions instead.
-func (in *Bucket) GetStatusConditions() *[]metav1.Condition {
-	return &in.Status.Conditions
 }
 
 // +genclient
@@ -163,7 +167,7 @@ func (in *Bucket) GetStatusConditions() *[]metav1.Condition {
 // +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type==\"Ready\")].status",description=""
 // +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.conditions[?(@.type==\"Ready\")].message",description=""
 
-// Bucket is the Schema for the buckets API
+// Bucket is the Schema for the buckets API.
 type Bucket struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -173,9 +177,8 @@ type Bucket struct {
 	Status BucketStatus `json:"status,omitempty"`
 }
 
+// BucketList contains a list of Bucket objects.
 // +kubebuilder:object:root=true
-
-// BucketList contains a list of Bucket
 type BucketList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`

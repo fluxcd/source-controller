@@ -124,7 +124,7 @@ func TestBucketReconciler_Reconcile(t *testing.T) {
 	}, timeout).Should(BeTrue())
 
 	// Check if the object status is valid.
-	condns := &status.Conditions{NegativePolarity: bucketReadyConditions.NegativePolarity}
+	condns := &status.Conditions{NegativePolarity: bucketReadyCondition.NegativePolarity}
 	checker := status.NewChecker(testEnv.Client, testEnv.GetScheme(), condns)
 	checker.CheckErr(ctx, obj)
 
