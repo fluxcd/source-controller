@@ -19,7 +19,7 @@ Resource Types:
 </li></ul>
 <h3 id="source.toolkit.fluxcd.io/v1beta2.Bucket">Bucket
 </h3>
-<p>Bucket is the Schema for the buckets API</p>
+<p>Bucket is the Schema for the buckets API.</p>
 <div class="md-typeset__scrollwrap">
 <div class="md-typeset__table">
 <table>
@@ -83,7 +83,9 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>The S3 compatible storage provider name, default (&lsquo;generic&rsquo;).</p>
+<p>Provider of the object storage bucket.
+Defaults to &lsquo;generic&rsquo;, which expects an S3 (API) compatible object
+storage.</p>
 </td>
 </tr>
 <tr>
@@ -94,7 +96,7 @@ string
 </em>
 </td>
 <td>
-<p>The bucket name.</p>
+<p>BucketName is the name of the object storage bucket.</p>
 </td>
 </tr>
 <tr>
@@ -105,7 +107,7 @@ string
 </em>
 </td>
 <td>
-<p>The bucket endpoint address.</p>
+<p>Endpoint is the object storage address the BucketName is located at.</p>
 </td>
 </tr>
 <tr>
@@ -117,7 +119,7 @@ bool
 </td>
 <td>
 <em>(Optional)</em>
-<p>Insecure allows connecting to a non-TLS S3 HTTP endpoint.</p>
+<p>Insecure allows connecting to a non-TLS HTTP Endpoint.</p>
 </td>
 </tr>
 <tr>
@@ -129,7 +131,7 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>The bucket region.</p>
+<p>Region on the Endpoint the BucketName is located in.</p>
 </td>
 </tr>
 <tr>
@@ -143,7 +145,7 @@ github.com/fluxcd/pkg/apis/meta.LocalObjectReference
 </td>
 <td>
 <em>(Optional)</em>
-<p>The name of the secret containing authentication credentials
+<p>SecretRef specifies the Secret containing authentication credentials
 for the Bucket.</p>
 </td>
 </tr>
@@ -157,7 +159,7 @@ Kubernetes meta/v1.Duration
 </em>
 </td>
 <td>
-<p>The interval at which to check for bucket updates.</p>
+<p>Interval at which to check the Endpoint for updates.</p>
 </td>
 </tr>
 <tr>
@@ -171,7 +173,7 @@ Kubernetes meta/v1.Duration
 </td>
 <td>
 <em>(Optional)</em>
-<p>The timeout for fetch operations, defaults to 60s.</p>
+<p>Timeout for fetch operations, defaults to 60s.</p>
 </td>
 </tr>
 <tr>
@@ -197,7 +199,8 @@ bool
 </td>
 <td>
 <em>(Optional)</em>
-<p>This flag tells the controller to suspend the reconciliation of this source.</p>
+<p>Suspend tells the controller to suspend the reconciliation of this
+Bucket.</p>
 </td>
 </tr>
 <tr>
@@ -211,7 +214,9 @@ github.com/fluxcd/pkg/apis/acl.AccessFrom
 </td>
 <td>
 <em>(Optional)</em>
-<p>AccessFrom defines an Access Control List for allowing cross-namespace references to this object.</p>
+<p>AccessFrom specifies an Access Control List for allowing cross-namespace
+references to this object.
+NOTE: Not implemented, provisional as of <a href="https://github.com/fluxcd/flux2/pull/2092">https://github.com/fluxcd/flux2/pull/2092</a></p>
 </td>
 </tr>
 </table>
@@ -854,7 +859,7 @@ HelmRepositoryStatus
 <a href="#source.toolkit.fluxcd.io/v1beta2.HelmChartStatus">HelmChartStatus</a>, 
 <a href="#source.toolkit.fluxcd.io/v1beta2.HelmRepositoryStatus">HelmRepositoryStatus</a>)
 </p>
-<p>Artifact represents the output of a Source synchronisation.</p>
+<p>Artifact represents the output of a Source reconciliation.</p>
 <div class="md-typeset__scrollwrap">
 <div class="md-typeset__table">
 <table>
@@ -873,9 +878,9 @@ string
 </em>
 </td>
 <td>
-<p>Path is the relative file path of this Artifact.
-It can be used to locate the Artifact file in the root of the Artifact
-storage on the local file system of the controller managing the Source.</p>
+<p>Path is the relative file path of the Artifact. It can be used to locate
+the file in the root of the Artifact storage on the local file system of
+the controller managing the Source.</p>
 </td>
 </tr>
 <tr>
@@ -886,9 +891,9 @@ string
 </em>
 </td>
 <td>
-<p>URL is the HTTP address of this artifact.
-It is used by the consumers of the artifacts to fetch and use the
-artifacts. It is expected to be resolvable from within the cluster.</p>
+<p>URL is the HTTP address of the Artifact as exposed by the controller
+managing the Source. It can be used to retrieve the Artifact for
+consumption, e.g. by another controller applying the Artifact contents.</p>
 </td>
 </tr>
 <tr>
@@ -900,9 +905,8 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>Revision is a human readable identifier traceable in the origin source
-system. It can be a Git commit SHA, Git tag, a Helm index timestamp, a Helm
-chart version, etc.</p>
+<p>Revision is a human-readable identifier traceable in the origin source
+system. It can be a Git commit SHA, Git tag, a Helm chart version, etc.</p>
 </td>
 </tr>
 <tr>
@@ -914,7 +918,7 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>Checksum is the SHA256 checksum of the artifact.</p>
+<p>Checksum is the SHA256 checksum of the Artifact file.</p>
 </td>
 </tr>
 <tr>
@@ -927,8 +931,8 @@ Kubernetes meta/v1.Time
 </em>
 </td>
 <td>
-<p>LastUpdateTime is the timestamp corresponding to the last update of this
-artifact.</p>
+<p>LastUpdateTime is the timestamp corresponding to the last update of the
+Artifact.</p>
 </td>
 </tr>
 </tbody>
@@ -941,7 +945,8 @@ artifact.</p>
 (<em>Appears on:</em>
 <a href="#source.toolkit.fluxcd.io/v1beta2.Bucket">Bucket</a>)
 </p>
-<p>BucketSpec defines the desired state of an S3 compatible bucket</p>
+<p>BucketSpec specifies the required configuration to produce an Artifact for
+an object storage bucket.</p>
 <div class="md-typeset__scrollwrap">
 <div class="md-typeset__table">
 <table>
@@ -961,7 +966,9 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>The S3 compatible storage provider name, default (&lsquo;generic&rsquo;).</p>
+<p>Provider of the object storage bucket.
+Defaults to &lsquo;generic&rsquo;, which expects an S3 (API) compatible object
+storage.</p>
 </td>
 </tr>
 <tr>
@@ -972,7 +979,7 @@ string
 </em>
 </td>
 <td>
-<p>The bucket name.</p>
+<p>BucketName is the name of the object storage bucket.</p>
 </td>
 </tr>
 <tr>
@@ -983,7 +990,7 @@ string
 </em>
 </td>
 <td>
-<p>The bucket endpoint address.</p>
+<p>Endpoint is the object storage address the BucketName is located at.</p>
 </td>
 </tr>
 <tr>
@@ -995,7 +1002,7 @@ bool
 </td>
 <td>
 <em>(Optional)</em>
-<p>Insecure allows connecting to a non-TLS S3 HTTP endpoint.</p>
+<p>Insecure allows connecting to a non-TLS HTTP Endpoint.</p>
 </td>
 </tr>
 <tr>
@@ -1007,7 +1014,7 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>The bucket region.</p>
+<p>Region on the Endpoint the BucketName is located in.</p>
 </td>
 </tr>
 <tr>
@@ -1021,7 +1028,7 @@ github.com/fluxcd/pkg/apis/meta.LocalObjectReference
 </td>
 <td>
 <em>(Optional)</em>
-<p>The name of the secret containing authentication credentials
+<p>SecretRef specifies the Secret containing authentication credentials
 for the Bucket.</p>
 </td>
 </tr>
@@ -1035,7 +1042,7 @@ Kubernetes meta/v1.Duration
 </em>
 </td>
 <td>
-<p>The interval at which to check for bucket updates.</p>
+<p>Interval at which to check the Endpoint for updates.</p>
 </td>
 </tr>
 <tr>
@@ -1049,7 +1056,7 @@ Kubernetes meta/v1.Duration
 </td>
 <td>
 <em>(Optional)</em>
-<p>The timeout for fetch operations, defaults to 60s.</p>
+<p>Timeout for fetch operations, defaults to 60s.</p>
 </td>
 </tr>
 <tr>
@@ -1075,7 +1082,8 @@ bool
 </td>
 <td>
 <em>(Optional)</em>
-<p>This flag tells the controller to suspend the reconciliation of this source.</p>
+<p>Suspend tells the controller to suspend the reconciliation of this
+Bucket.</p>
 </td>
 </tr>
 <tr>
@@ -1089,7 +1097,9 @@ github.com/fluxcd/pkg/apis/acl.AccessFrom
 </td>
 <td>
 <em>(Optional)</em>
-<p>AccessFrom defines an Access Control List for allowing cross-namespace references to this object.</p>
+<p>AccessFrom specifies an Access Control List for allowing cross-namespace
+references to this object.
+NOTE: Not implemented, provisional as of <a href="https://github.com/fluxcd/flux2/pull/2092">https://github.com/fluxcd/flux2/pull/2092</a></p>
 </td>
 </tr>
 </tbody>
@@ -1102,7 +1112,7 @@ github.com/fluxcd/pkg/apis/acl.AccessFrom
 (<em>Appears on:</em>
 <a href="#source.toolkit.fluxcd.io/v1beta2.Bucket">Bucket</a>)
 </p>
-<p>BucketStatus defines the observed state of a bucket</p>
+<p>BucketStatus records the observed state of a Bucket.</p>
 <div class="md-typeset__scrollwrap">
 <div class="md-typeset__table">
 <table>
@@ -1122,7 +1132,7 @@ int64
 </td>
 <td>
 <em>(Optional)</em>
-<p>ObservedGeneration is the last observed generation.</p>
+<p>ObservedGeneration is the last observed generation of the Bucket object.</p>
 </td>
 </tr>
 <tr>
@@ -1148,7 +1158,9 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>URL is the fetch link for the artifact output of the last Bucket sync.</p>
+<p>URL is the dynamic fetch link for the latest Artifact.
+It is provided on a &ldquo;best effort&rdquo; basis, and using the precise
+BucketStatus.Artifact data is recommended.</p>
 </td>
 </tr>
 <tr>
@@ -1162,7 +1174,7 @@ Artifact
 </td>
 <td>
 <em>(Optional)</em>
-<p>Artifact represents the output of the last successful Bucket sync.</p>
+<p>Artifact represents the last successful Bucket reconciliation.</p>
 </td>
 </tr>
 <tr>
@@ -1568,8 +1580,8 @@ Artifact
 <td>
 <code>includedArtifacts</code><br>
 <em>
-<a href="#source.toolkit.fluxcd.io/v1beta2.*github.com/fluxcd/source-controller/api/v1beta2.Artifact">
-[]*github.com/fluxcd/source-controller/api/v1beta2.Artifact
+<a href="#source.toolkit.fluxcd.io/v1beta2.*./api/v1beta2.Artifact">
+[]*./api/v1beta2.Artifact
 </a>
 </em>
 </td>
@@ -2166,7 +2178,10 @@ string
 </div>
 <h3 id="source.toolkit.fluxcd.io/v1beta2.Source">Source
 </h3>
-<p>Source interface must be supported by all API types.</p>
+<p>Source interface must be supported by all API types.
+Source is the interface that provides generic access to the Artifact and
+interval. It must be supported by all kinds of the source.toolkit.fluxcd.io
+API group.</p>
 <div class="admonition note">
 <p class="last">This page was automatically generated with <code>gen-crd-api-reference-docs</code></p>
 </div>

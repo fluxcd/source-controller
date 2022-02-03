@@ -23,32 +23,31 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// Artifact represents the output of a Source synchronisation.
+// Artifact represents the output of a Source reconciliation.
 type Artifact struct {
-	// Path is the relative file path of this Artifact.
-	// It can be used to locate the Artifact file in the root of the Artifact
-	// storage on the local file system of the controller managing the Source.
+	// Path is the relative file path of the Artifact. It can be used to locate
+	// the file in the root of the Artifact storage on the local file system of
+	// the controller managing the Source.
 	// +required
 	Path string `json:"path"`
 
-	// URL is the HTTP address of this artifact.
-	// It is used by the consumers of the artifacts to fetch and use the
-	// artifacts. It is expected to be resolvable from within the cluster.
+	// URL is the HTTP address of the Artifact as exposed by the controller
+	// managing the Source. It can be used to retrieve the Artifact for
+	// consumption, e.g. by another controller applying the Artifact contents.
 	// +required
 	URL string `json:"url"`
 
-	// Revision is a human readable identifier traceable in the origin source
-	// system. It can be a Git commit SHA, Git tag, a Helm index timestamp, a Helm
-	// chart version, etc.
+	// Revision is a human-readable identifier traceable in the origin source
+	// system. It can be a Git commit SHA, Git tag, a Helm chart version, etc.
 	// +optional
 	Revision string `json:"revision"`
 
-	// Checksum is the SHA256 checksum of the artifact.
+	// Checksum is the SHA256 checksum of the Artifact file.
 	// +optional
 	Checksum string `json:"checksum"`
 
-	// LastUpdateTime is the timestamp corresponding to the last update of this
-	// artifact.
+	// LastUpdateTime is the timestamp corresponding to the last update of the
+	// Artifact.
 	// +required
 	LastUpdateTime metav1.Time `json:"lastUpdateTime,omitempty"`
 }
@@ -63,14 +62,14 @@ func (in *Artifact) HasRevision(revision string) bool {
 }
 
 // ArtifactDir returns the artifact dir path in the form of
-// <source-kind>/<source-namespace>/<source-name>.
+// '<kind>/<namespace>/<name>'.
 func ArtifactDir(kind, namespace, name string) string {
 	kind = strings.ToLower(kind)
 	return path.Join(kind, namespace, name)
 }
 
 // ArtifactPath returns the artifact path in the form of
-// <source-kind>/<source-namespace>/<source-name>/<artifact-filename>.
+// '<kind>/<namespace>/name>/<filename>'.
 func ArtifactPath(kind, namespace, name, filename string) string {
 	return path.Join(ArtifactDir(kind, namespace, name), filename)
 }

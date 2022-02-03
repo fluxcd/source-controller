@@ -541,28 +541,28 @@ spec:
                   repository sync.
                 properties:
                   checksum:
-                    description: Checksum is the SHA256 checksum of the artifact.
+                    description: Checksum is the SHA256 checksum of the Artifact file.
                     type: string
                   lastUpdateTime:
                     description: LastUpdateTime is the timestamp corresponding to
-                      the last update of this artifact.
+                      the last update of the Artifact.
                     format: date-time
                     type: string
                   path:
-                    description: Path is the relative file path of this Artifact.
-                      It can be used to locate the Artifact file in the root of the
-                      Artifact storage on the local file system of the controller
-                      managing the Source.
+                    description: Path is the relative file path of the Artifact. It
+                      can be used to locate the file in the root of the Artifact storage
+                      on the local file system of the controller managing the Source.
                     type: string
                   revision:
-                    description: Revision is a human readable identifier traceable
+                    description: Revision is a human-readable identifier traceable
                       in the origin source system. It can be a Git commit SHA, Git
-                      tag, a Helm index timestamp, a Helm chart version, etc.
+                      tag, a Helm chart version, etc.
                     type: string
                   url:
-                    description: URL is the HTTP address of this artifact. It is used
-                      by the consumers of the artifacts to fetch and use the artifacts.
-                      It is expected to be resolvable from within the cluster.
+                    description: URL is the HTTP address of the Artifact as exposed
+                      by the controller managing the Source. It can be used to retrieve
+                      the Artifact for consumption, e.g. by another controller applying
+                      the Artifact contents.
                     type: string
                 required:
                 - path
@@ -642,32 +642,33 @@ spec:
                 description: IncludedArtifacts represents the included artifacts from
                   the last successful repository sync.
                 items:
-                  description: Artifact represents the output of a Source synchronisation.
+                  description: Artifact represents the output of a Source reconciliation.
                   properties:
                     checksum:
-                      description: Checksum is the SHA256 checksum of the artifact.
+                      description: Checksum is the SHA256 checksum of the Artifact
+                        file.
                       type: string
                     lastUpdateTime:
                       description: LastUpdateTime is the timestamp corresponding to
-                        the last update of this artifact.
+                        the last update of the Artifact.
                       format: date-time
                       type: string
                     path:
-                      description: Path is the relative file path of this Artifact.
-                        It can be used to locate the Artifact file in the root of
-                        the Artifact storage on the local file system of the controller
-                        managing the Source.
+                      description: Path is the relative file path of the Artifact.
+                        It can be used to locate the file in the root of the Artifact
+                        storage on the local file system of the controller managing
+                        the Source.
                       type: string
                     revision:
-                      description: Revision is a human readable identifier traceable
+                      description: Revision is a human-readable identifier traceable
                         in the origin source system. It can be a Git commit SHA, Git
-                        tag, a Helm index timestamp, a Helm chart version, etc.
+                        tag, a Helm chart version, etc.
                       type: string
                     url:
-                      description: URL is the HTTP address of this artifact. It is
-                        used by the consumers of the artifacts to fetch and use the
-                        artifacts. It is expected to be resolvable from within the
-                        cluster.
+                      description: URL is the HTTP address of the Artifact as exposed
+                        by the controller managing the Source. It can be used to retrieve
+                        the Artifact for consumption, e.g. by another controller applying
+                        the Artifact contents.
                       type: string
                   required:
                   - path

@@ -59,9 +59,9 @@ import (
 	"github.com/fluxcd/source-controller/pkg/sourceignore"
 )
 
-// bucketReadyConditions contains all the conditions information needed
-// for Bucket Ready status conditions summary calculation.
-var bucketReadyConditions = summarize.Conditions{
+// bucketReadyCondition contains the information required to summarize a
+// v1beta2.Bucket Ready Condition.
+var bucketReadyCondition = summarize.Conditions{
 	Target: meta.ReadyCondition,
 	Owned: []string{
 		sourcev1.ArtifactOutdatedCondition,
@@ -89,7 +89,7 @@ var bucketReadyConditions = summarize.Conditions{
 // +kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=buckets/finalizers,verbs=get;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch
 
-// BucketReconciler reconciles a Bucket object
+// BucketReconciler reconciles a v1beta2.Bucket object.
 type BucketReconciler struct {
 	client.Client
 	kuberecorder.EventRecorder
@@ -102,9 +102,10 @@ type BucketReconcilerOptions struct {
 	MaxConcurrentReconciles int
 }
 
-// bucketReconcilerFunc is the function type for all the bucket reconciler
-// functions.
-type bucketReconcilerFunc func(ctx context.Context, obj *sourcev1.Bucket, artifact *sourcev1.Artifact, dir string) (sreconcile.Result, error)
+// bucketReconcileFunc is the function type for all the v1beta2.Bucket
+// (sub)reconcile functions. The type implementations are grouped and
+// executed serially to perform the complete reconcile of the object.
+type bucketReconcileFunc func(ctx context.Context, obj *sourcev1.Bucket, artifact *sourcev1.Artifact, dir string) (sreconcile.Result, error)
 
 func (r *BucketReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return r.SetupWithManagerAndOptions(mgr, BucketReconcilerOptions{})
@@ -151,7 +152,7 @@ func (r *BucketReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 	defer func() {
 		summarizeHelper := summarize.NewHelper(r.EventRecorder, patchHelper)
 		summarizeOpts := []summarize.Option{
-			summarize.WithConditions(bucketReadyConditions),
+			summarize.WithConditions(bucketReadyCondition),
 			summarize.WithReconcileResult(recResult),
 			summarize.WithReconcileError(retErr),
 			summarize.WithIgnoreNotFound(),
@@ -159,7 +160,7 @@ func (r *BucketReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 				summarize.RecordContextualError,
 				summarize.RecordReconcileReq,
 			),
-			summarize.WithResultBuilder(sreconcile.AlwaysRequeueResultBuilder{RequeueAfter: obj.GetInterval().Duration}),
+			summarize.WithResultBuilder(sreconcile.AlwaysRequeueResultBuilder{RequeueAfter: obj.GetRequeueAfter()}),
 		}
 		result, retErr = summarizeHelper.SummarizeAndPatch(ctx, obj, summarizeOpts...)
 
@@ -182,7 +183,7 @@ func (r *BucketReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 	}
 
 	// Reconcile actual object
-	reconcilers := []bucketReconcilerFunc{
+	reconcilers := []bucketReconcileFunc{
 		r.reconcileStorage,
 		r.reconcileSource,
 		r.reconcileArtifact,
@@ -191,15 +192,13 @@ func (r *BucketReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 	return
 }
 
-// reconcile steps iterates through the actual reconciliation tasks for objec,
-// it returns early on the first step that returns ResultRequeue or produces an
-// error.
-func (r *BucketReconciler) reconcile(ctx context.Context, obj *sourcev1.Bucket, reconcilers []bucketReconcilerFunc) (sreconcile.Result, error) {
+// reconcile iterates through the gitRepositoryReconcileFunc tasks for the
+// object. It returns early on the first call that returns
+// reconcile.ResultRequeue, or produces an error.
+func (r *BucketReconciler) reconcile(ctx context.Context, obj *sourcev1.Bucket, reconcilers []bucketReconcileFunc) (sreconcile.Result, error) {
 	if obj.Generation != obj.Status.ObservedGeneration {
 		conditions.MarkReconciling(obj, "NewGeneration", "reconciling new object generation (%d)", obj.Generation)
 	}
-
-	var artifact sourcev1.Artifact
 
 	// Create temp working dir
 	tmpDir, err := os.MkdirTemp("", fmt.Sprintf("%s-%s-%s-", obj.Kind, obj.Namespace, obj.Name))
@@ -209,11 +208,19 @@ func (r *BucketReconciler) reconcile(ctx context.Context, obj *sourcev1.Bucket, 
 			Reason: sourcev1.StorageOperationFailedReason,
 		}
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() {
+		if err = os.RemoveAll(tmpDir); err != nil {
+			ctrl.LoggerFrom(ctx).Error(err, "failed to remove temporary working directory")
+		}
+	}()
 
 	// Run the sub-reconcilers and build the result of reconciliation.
-	var res sreconcile.Result
-	var resErr error
+	var (
+		artifact sourcev1.Artifact
+
+		res    sreconcile.Result
+		resErr error
+	)
 	for _, rec := range reconcilers {
 		recResult, err := rec(ctx, obj, &artifact, tmpDir)
 		// Exit immediately on ResultRequeue.
@@ -233,12 +240,18 @@ func (r *BucketReconciler) reconcile(ctx context.Context, obj *sourcev1.Bucket, 
 	return res, resErr
 }
 
-// reconcileStorage ensures the current state of the storage matches the desired and previously observed state.
+// reconcileStorage ensures the current state of the storage matches the
+// desired and previously observed state.
 //
-// All artifacts for the resource except for the current one are garbage collected from the storage.
-// If the artifact in the Status object of the resource disappeared from storage, it is removed from the object.
-// If the hostname of the URLs on the object do not match the current storage server hostname, they are updated.
-func (r *BucketReconciler) reconcileStorage(ctx context.Context, obj *sourcev1.Bucket, artifact *sourcev1.Artifact, dir string) (sreconcile.Result, error) {
+// All Artifacts for the object except for the current one in the Status are
+// garbage collected from the Storage.
+// If the Artifact in the Status of the object disappeared from the Storage,
+// it is removed from the object.
+// If the object does not have an Artifact in its Status, a Reconciling
+// condition is added.
+// The hostname of any URL in the Status of the object are updated, to ensure
+// they match the Storage server hostname of current runtime.
+func (r *BucketReconciler) reconcileStorage(ctx context.Context, obj *sourcev1.Bucket, _ *sourcev1.Artifact, _ string) (sreconcile.Result, error) {
 	// Garbage collect previous advertised artifact(s) from storage
 	_ = r.garbageCollect(ctx, obj)
 
@@ -262,10 +275,11 @@ func (r *BucketReconciler) reconcileStorage(ctx context.Context, obj *sourcev1.B
 	return sreconcile.ResultSuccess, nil
 }
 
-// reconcileSource reconciles the upstream bucket with the client for the given object's Provider, and returns the
-// result.
-// If a SecretRef is defined, it attempts to fetch the Secret before calling the provider. If the fetch of the Secret
-// fails, it records v1beta1.FetchFailedCondition=True and returns early.
+// reconcileSource fetches the upstream bucket contents with the client for the
+// given object's Provider, and returns the result.
+// When a SecretRef is defined, it attempts to fetch the Secret before calling
+// the provider. If this fails, it records v1beta2.FetchFailedCondition=True on
+// the object and returns early.
 func (r *BucketReconciler) reconcileSource(ctx context.Context, obj *sourcev1.Bucket, artifact *sourcev1.Artifact, dir string) (sreconcile.Result, error) {
 	var secret *corev1.Secret
 	if obj.Spec.SecretRef != nil {
@@ -293,15 +307,18 @@ func (r *BucketReconciler) reconcileSource(ctx context.Context, obj *sourcev1.Bu
 	}
 }
 
-// reconcileMinioSource ensures the upstream Minio client compatible bucket can be reached and downloaded from using the
-// declared configuration, and observes its state.
+// reconcileMinioSource fetches the object storage bucket contents using a
+// Minio client constructed with the specified configuration from the
+// v1beta2.Bucket.
 //
-// The bucket contents are downloaded to the given dir using the defined configuration, while taking ignore rules into
-// account. In case of an error during the download process (including transient errors), it records
-// v1beta1.FetchFailedCondition=True and returns early.
-// On a successful download, it removes v1beta1.FetchFailedCondition, and compares the current revision of HEAD to
-// the artifact on the object, and records v1beta1.ArtifactOutdatedCondition if they differ.
-// If the download was successful, the given artifact pointer is set to a new artifact with the available metadata.
+// The contents are fetched to the given dir while taking ignore rules into
+// account. In case of an error during the fetch process (including transient
+// ones), it records v1beta2.FetchFailedCondition=True and returns early.
+// When successful, it removes v1beta2.FetchFailedCondition, and compares the
+// current calculated revision to the current Artifact on the object. Recording
+// v1beta2.ArtifactOutdatedCondition if they differ.
+// Lastly, the given Artifact pointer is set to a new Artifact object with the
+// available metadata.
 func (r *BucketReconciler) reconcileMinioSource(ctx context.Context, obj *sourcev1.Bucket, artifact *sourcev1.Artifact,
 	secret *corev1.Secret, dir string) (sreconcile.Result, error) {
 	// Build the client with the configuration from the object and secret
@@ -448,15 +465,18 @@ func (r *BucketReconciler) reconcileMinioSource(ctx context.Context, obj *source
 	return sreconcile.ResultSuccess, nil
 }
 
-// reconcileGCPSource ensures the upstream Google Cloud Storage bucket can be reached and downloaded from using the
-// declared configuration, and observes its state.
+// reconcileGCPSource fetches the object storage bucket contents using a
+// Google Cloud client constructed with the specified configuration from the
+// v1beta2.Bucket.
 //
-// The bucket contents are downloaded to the given dir using the defined configuration, while taking ignore rules into
-// account. In case of an error during the download process (including transient errors), it records
-// v1beta1.DownloadFailedCondition=True and returns early.
-// On a successful download, it removes v1beta1.DownloadFailedCondition, and compares the current revision of HEAD to
-// the artifact on the object, and records v1beta1.ArtifactOutdatedCondition if they differ.
-// If the download was successful, the given artifact pointer is set to a new artifact with the available metadata.
+// The contents are fetched to the given dir while taking ignore rules into
+// account. In case of an error during the fetch process (including transient
+// ones), it records v1beta2.FetchFailedCondition=True and returns early.
+// When successful, it removes v1beta2.FetchFailedCondition, and compares the
+// current calculated revision to the current Artifact on the object. Recording
+// v1beta2.ArtifactOutdatedCondition if they differ.
+// Lastly, the given Artifact pointer is set to a new Artifact object with the
+// available metadata.
 func (r *BucketReconciler) reconcileGCPSource(ctx context.Context, obj *sourcev1.Bucket, artifact *sourcev1.Artifact,
 	secret *corev1.Secret, dir string) (sreconcile.Result, error) {
 	gcpClient, err := r.buildGCPClient(ctx, secret)
@@ -603,13 +623,15 @@ func (r *BucketReconciler) reconcileGCPSource(ctx context.Context, obj *sourcev1
 	return sreconcile.ResultSuccess, nil
 }
 
-// reconcileArtifact archives a new artifact to the storage, if the current observation on the object does not match the
-// given data.
+// reconcileArtifact archives a new Artifact to the Storage, if the current
+// (Status) data on the object does not match the given.
 //
-// The inspection of the given data to the object is differed, ensuring any stale observations as
-// If the given artifact does not differ from the object's current, it returns early.
-// On a successful archive, the artifact in the status of the given object is set, and the symlink in the storage is
-// updated to its path.
+// The inspection of the given data to the object is differed, ensuring any
+// stale observations like v1beta2.ArtifactOutdatedCondition are removed.
+// If the given Artifact does not differ from the object's current, it returns
+// early.
+// On a successful archive, the Artifact in the Status of the object is set,
+// and the symlink in the Storage is updated to its path.
 func (r *BucketReconciler) reconcileArtifact(ctx context.Context, obj *sourcev1.Bucket, artifact *sourcev1.Artifact, dir string) (sreconcile.Result, error) {
 	// Always restore the Ready condition in case it got removed due to a transient error
 	defer func() {
@@ -686,8 +708,9 @@ func (r *BucketReconciler) reconcileArtifact(ctx context.Context, obj *sourcev1.
 	return sreconcile.ResultSuccess, nil
 }
 
-// reconcileDelete handles the deletion of an object. It first garbage collects all artifacts for the object from the
-// artifact storage, if successful, the finalizer is removed from the object.
+// reconcileDelete handles the deletion of the object.
+// It first garbage collects all Artifacts for the object from the Storage.
+// Removing the finalizer from the object if successful.
 func (r *BucketReconciler) reconcileDelete(ctx context.Context, obj *sourcev1.Bucket) (sreconcile.Result, error) {
 	// Garbage collect the resource's artifacts
 	if err := r.garbageCollect(ctx, obj); err != nil {
@@ -702,9 +725,11 @@ func (r *BucketReconciler) reconcileDelete(ctx context.Context, obj *sourcev1.Bu
 	return sreconcile.ResultEmpty, nil
 }
 
-// garbageCollect performs a garbage collection for the given v1beta1.Bucket. It removes all but the current
-// artifact except for when the deletion timestamp is set, which will result in the removal of all artifacts for the
-// resource.
+// garbageCollect performs a garbage collection for the given object.
+//
+// It removes all but the current Artifact from the Storage, unless the
+// deletion timestamp on the object is set. Which will result in the
+// removal of all Artifacts for the objects.
 func (r *BucketReconciler) garbageCollect(ctx context.Context, obj *sourcev1.Bucket) error {
 	if !obj.DeletionTimestamp.IsZero() {
 		if deleted, err := r.Storage.RemoveAll(r.Storage.NewArtifactFor(obj.Kind, obj.GetObjectMeta(), "", "*")); err != nil {
@@ -733,9 +758,9 @@ func (r *BucketReconciler) garbageCollect(ctx context.Context, obj *sourcev1.Buc
 	return nil
 }
 
-// buildMinioClient constructs a minio.Client with the data from the given object and Secret.
-// It returns an error if the Secret does not have the required fields, or if there is no credential handler
-// configured.
+// buildMinioClient constructs a minio.Client with the data from the given
+// object and Secret. It returns an error if the Secret does not have the
+// required fields, or if there is no credential handler configured.
 func (r *BucketReconciler) buildMinioClient(obj *sourcev1.Bucket, secret *corev1.Secret) (*minio.Client, error) {
 	opts := minio.Options{
 		Region: obj.Spec.Region,
@@ -759,26 +784,27 @@ func (r *BucketReconciler) buildMinioClient(obj *sourcev1.Bucket, secret *corev1
 	return minio.New(obj.Spec.Endpoint, &opts)
 }
 
-// buildGCPClient constructs a gcp.GCPClient with the data from the given Secret.
-// It returns an error if the Secret does not have the required field, or if the client construction fails.
+// buildGCPClient constructs a gcp.GCPClient with the data from the given
+// Secret. It returns an error if the Secret does not pass validation, or if
+// the client construction fails.
 func (r *BucketReconciler) buildGCPClient(ctx context.Context, secret *corev1.Secret) (*gcp.GCPClient, error) {
-	var client *gcp.GCPClient
+	var gClient *gcp.GCPClient
 	var err error
 	if secret != nil {
 		if err := gcp.ValidateSecret(secret.Data, secret.Name); err != nil {
 			return nil, err
 		}
-		client, err = gcp.NewClient(ctx, option.WithCredentialsJSON(secret.Data["serviceaccount"]))
+		gClient, err = gcp.NewClient(ctx, option.WithCredentialsJSON(secret.Data["serviceaccount"]))
 		if err != nil {
 			return nil, err
 		}
 	} else {
-		client, err = gcp.NewClient(ctx)
+		gClient, err = gcp.NewClient(ctx)
 		if err != nil {
 			return nil, err
 		}
 	}
-	return client, nil
+	return gClient, nil
 }
 
 // etagIndex is an index of bucket keys and their Etag values.
@@ -803,9 +829,11 @@ func (i etagIndex) Revision() (string, error) {
 	return fmt.Sprintf("%x", sum.Sum(nil)), nil
 }
 
-// eventLog records event and logs at the same time. This log is different from
-// the debug log in the event recorder in the sense that this is a simple log,
-// the event recorder debug log contains complete details about the event.
+// eventLogf records event and logs at the same time.
+//
+// This log is different from the debug log in the EventRecorder, in the sense
+// that this is a simple log. While the debug log contains complete details
+// about the event.
 func (r *BucketReconciler) eventLogf(ctx context.Context, obj runtime.Object, eventType string, reason string, messageFmt string, args ...interface{}) {
 	msg := fmt.Sprintf(messageFmt, args...)
 	// Log and emit event.
