@@ -26,7 +26,7 @@ MUSL_DIR="${ROOT_DIR}/build/musl"
 if [ "${TARGET_ARCH}" = "$(uname -m)" ]; then
     MUSL_FILENAME="${MUSL_X86_64_FILENAME}"
     MUSL_SHA512="${MUSL_X86_64_SHA512}"
-    MUSL_PREFIX=$(xx-info alpine-arch)-linux-musl-native/bin/$(xx-info alpine-arch)-linux-musl
+    MUSL_PREFIX="${TARGET_ARCH}-linux-musl-native/bin/${TARGET_ARCH}-linux-musl"
     if [ "${TARGET_ARCH}" = "arm64" ] || [ "${TARGET_ARCH}" = "aarch64" ]; then
         MUSL_FILENAME="${MUSL_AARCH64_FILENAME}"
         MUSL_SHA512="${MUSL_AARCH64_SHA512}"
@@ -34,7 +34,7 @@ if [ "${TARGET_ARCH}" = "$(uname -m)" ]; then
 else
     MUSL_FILENAME="${MUSL_XX86_64_FILENAME}"
     MUSL_SHA512="${MUSL_XX86_64_SHA512}"
-    MUSL_PREFIX=$(xx-info alpine-arch)-linux-musl-cross/bin/$(xx-info alpine-arch)-linux-musl
+    MUSL_PREFIX="${TARGET_ARCH}-linux-musl-cross/bin/${TARGET_ARCH}-linux-musl"
     if [ "${TARGET_ARCH}" = "arm64" ] || [ "${TARGET_ARCH}" = "aarch64" ]; then
         MUSL_FILENAME="${MUSL_XAARCH64_FILENAME}"
         MUSL_SHA512="${MUSL_XAARCH64_SHA512}"

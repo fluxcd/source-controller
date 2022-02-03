@@ -17,48 +17,60 @@ CRD_OPTIONS ?= crd:crdVersions=v1
 
 # Repository root based on Git metadata
 REPOSITORY_ROOT := $(shell git rev-parse --show-toplevel)
+BUILD_DIR := $(REPOSITORY_ROOT)/build
 
 # Other dependency versions
 ENVTEST_BIN_VERSION ?= 1.19.2
 
 # Caches libgit2 versions per tag, "forcing" rebuild only when needed.
-LIBGIT2_PATH := $(REPOSITORY_ROOT)/build/libgit2/$(LIBGIT2_TAG)
+LIBGIT2_PATH := $(BUILD_DIR)/libgit2/$(LIBGIT2_TAG)
 LIBGIT2_LIB_PATH := $(LIBGIT2_PATH)/lib
 LIBGIT2_LIB64_PATH := $(LIBGIT2_PATH)/lib64
 LIBGIT2 := $(LIBGIT2_LIB_PATH)/libgit2.a
 MUSL-CC =
 
 export CGO_ENABLED=1
-export PKG_CONFIG_PATH=$(LIBGIT2_LIB_PATH)/pkgconfig:$(LIBGIT2_LIB64_PATH)/pkgconfig
-export LD_LIBRARY_PATH=$(LIBGIT2_LIB_PATH):$(LIBGIT2_LIB64_PATH)
+export PKG_CONFIG_PATH=$(LIBGIT2_LIB_PATH)/pkgconfig
+export LIBRARY_PATH=$(LIBGIT2_LIB_PATH)
 export CGO_CFLAGS=-I$(LIBGIT2_PATH)/include -I$(LIBGIT2_PATH)/include/openssl
 
+
 ifeq ($(shell uname -s),Darwin)
-	export CGO_LDFLAGS=-L$(LIBGIT2_LIB_PATH) -lssh2 -lssl -lcrypto -lgit2
+export CGO_LDFLAGS=$(shell PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) pkg-config --libs --static --cflags libssh2 openssl libgit2)
+GO_STATIC_FLAGS=-ldflags "-s -w" -tags 'netgo,osusergo,static_build'
 else
-	export CGO_LDFLAGS=$(shell PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) pkg-config --libs --static --cflags libssh2 openssl libgit2)
+export PKG_CONFIG_PATH:=$(PKG_CONFIG_PATH):$(LIBGIT2_LIB64_PATH)/pkgconfig
+export LIBRARY_PATH:=$(LIBRARY_PATH):$(LIBGIT2_LIB64_PATH)
+export CGO_LDFLAGS=$(shell PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) pkg-config --libs --static --cflags libssh2 openssl libgit2)
 endif
 
 
 ifeq ($(shell uname -s),Linux)
-	MUSL-PREFIX=$(REPOSITORY_ROOT)/build/musl/$(shell uname -m)-linux-musl-native/bin/$(shell uname -m)-linux-musl
+ifeq ($(shell uname -m),x86_64)
+# Linux x86_64 seem to be able to cope with the static libraries 
+# by having only musl-dev installed, without the need of using musl toolchain.
+	GO_STATIC_FLAGS=-ldflags "-s -w" -tags 'netgo,osusergo,static_build'
+else
+	MUSL-PREFIX=$(BUILD_DIR)/musl/$(shell uname -m)-linux-musl-native/bin/$(shell uname -m)-linux-musl
 	MUSL-CC=$(MUSL-PREFIX)-gcc
 	export CC=$(MUSL-PREFIX)-gcc
 	export CXX=$(MUSL-PREFIX)-g++
 	export AR=$(MUSL-PREFIX)-ar
+	GO_STATIC_FLAGS=-ldflags "-s -w -extldflags \"-static\"" -tags 'netgo,osusergo,static_build'
+endif
 endif
 
 # API (doc) generation utilities
 CONTROLLER_GEN_VERSION ?= v0.7.0
 GEN_API_REF_DOCS_VERSION ?= v0.3.0
 
-# Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
+# If gobin not set, create one on ./build and add to path.
 ifeq (,$(shell go env GOBIN))
-GOBIN=$(shell go env GOPATH)/bin
+export GOBIN=$(BUILD_DIR)/gobin
 else
-GOBIN=$(shell go env GOBIN)
+export GOBIN=$(shell go env GOBIN)
 endif
-
+export PATH:=${GOBIN}:${PATH}
 
 # Architecture to use envtest with
 ifeq ($(shell uname -m),x86_64)
@@ -67,24 +79,31 @@ else
 ENVTEST_ARCH ?= arm64
 endif
 
+ifeq ($(shell uname -s),Darwin)
+# Envtest only supports darwin-amd64
+ENVTEST_ARCH=amd64
+endif
+
 all: build
 
-build: $(LIBGIT2) ## Build manager binary
-	go build -o bin/manager main.go
+build: check-deps $(LIBGIT2) ## Build manager binary
+	go build $(GO_STATIC_FLAGS) -o $(BUILD_DIR)/bin/manager main.go
 
 KUBEBUILDER_ASSETS?="$(shell $(ENVTEST) --arch=$(ENVTEST_ARCH) use -i $(ENVTEST_KUBERNETES_VERSION) --bin-dir=$(ENVTEST_ASSETS_DIR) -p path)"
-test: $(LIBGIT2) install-envtest test-api  ## Run tests
+test: $(LIBGIT2) install-envtest test-api check-deps ## Run tests
 	KUBEBUILDER_ASSETS=$(KUBEBUILDER_ASSETS) \
-	go test ./... \
-		-ldflags "-s -w" \
-		-coverprofile cover.out \
-	 	-tags 'netgo,osusergo,static_build'
+	go test $(GO_STATIC_FLAGS) ./... -coverprofile cover.out
+
+check-deps:
+ifeq ($(shell uname -s),Darwin)
+	if ! command -v pkg-config &> /dev/null; then echo "pkg-config is required"; exit 1; fi
+endif
 
 test-api: ## Run api tests
 	cd api; go test ./... -coverprofile cover.out
 
 run: $(LIBGIT2) generate fmt vet manifests  ## Run against the configured Kubernetes cluster in ~/.kube/config
-	go run ./main.go
+	go run $(GO_STATIC_FLAGS) ./main.go
 
 install: manifests  ## Install CRDs into a cluster
 	kustomize build config/crd | kubectl apply -f -
@@ -136,23 +155,23 @@ docker-push:  ## Push Docker image
 	docker push $(IMG):$(TAG)
 
 # Find or download controller-gen
-CONTROLLER_GEN = $(shell pwd)/bin/controller-gen
+CONTROLLER_GEN = $(GOBIN)/controller-gen
 .PHONY: controller-gen
 controller-gen: ## Download controller-gen locally if necessary.
 	$(call go-install-tool,$(CONTROLLER_GEN),sigs.k8s.io/controller-tools/cmd/controller-gen@v0.7.0)
 
 # Find or download gen-crd-api-reference-docs
-GEN_CRD_API_REFERENCE_DOCS = $(shell pwd)/bin/gen-crd-api-reference-docs
+GEN_CRD_API_REFERENCE_DOCS = $(GOBIN)/gen-crd-api-reference-docs
 .PHONY: gen-crd-api-reference-docs
 gen-crd-api-reference-docs: ## Download gen-crd-api-reference-docs locally if necessary
 	$(call go-install-tool,$(GEN_CRD_API_REFERENCE_DOCS),github.com/ahmetb/gen-crd-api-reference-docs@v0.3.0)
 
-ENVTEST = $(shell pwd)/bin/setup-envtest
+ENVTEST = $(GOBIN)/setup-envtest
 .PHONY: envtest
 setup-envtest: ## Download setup-envtest locally if necessary.
 	$(call go-install-tool,$(ENVTEST),sigs.k8s.io/controller-runtime/tools/setup-envtest@latest)
 
-ENVTEST_ASSETS_DIR=$(shell pwd)/testbin
+ENVTEST_ASSETS_DIR=$(BUILD_DIR)/testbin
 ENVTEST_KUBERNETES_VERSION?=latest
 install-envtest: setup-envtest ## Download envtest binaries locally.
 	mkdir -p ${ENVTEST_ASSETS_DIR}
@@ -188,7 +207,6 @@ ifneq (, $(shell git status --porcelain --untracked-files=no))
 endif
 
 # go-install-tool will 'go install' any package $2 and install it to $1.
-PROJECT_DIR := $(shell dirname $(abspath $(lastword $(MAKEFILE_LIST))))
 define go-install-tool
 @[ -f $(1) ] || { \
 set -e ;\
@@ -196,7 +214,7 @@ TMP_DIR=$$(mktemp -d) ;\
 cd $$TMP_DIR ;\
 go mod init tmp ;\
 echo "Downloading $(2)" ;\
-GOBIN=$(PROJECT_DIR)/bin go install $(2) ;\
+go install $(2) ;\
 rm -rf $$TMP_DIR ;\
 }
 endef

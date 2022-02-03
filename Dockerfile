@@ -84,8 +84,7 @@ ENV CGO_ENABLED=1
 RUN export $(cat build/musl/$(xx-info alpine-arch).env | xargs) && \
     export LIBRARY_PATH="/usr/local/$(xx-info triple):/usr/local/$(xx-info triple)/lib64" && \
     export PKG_CONFIG_PATH="/usr/local/$(xx-info triple)/lib/pkgconfig:/usr/local/$(xx-info triple)/lib64/pkgconfig" && \
-    export FLAGS="$(pkg-config --static --libs --cflags libssh2 openssl libgit2)" && \
-    export CGO_LDFLAGS="${FLAGS} -static" && \
+    export CGO_LDFLAGS="$(pkg-config --static --libs --cflags libssh2 openssl libgit2) -static" && \
     GOARCH=$TARGETARCH go build  \
         -ldflags "-s -w" \
         -tags 'netgo,osusergo,static_build' \
