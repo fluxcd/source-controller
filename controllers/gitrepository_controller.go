@@ -26,10 +26,8 @@ import (
 
 	securejoin "github.com/cyphar/filepath-securejoin"
 	corev1 "k8s.io/api/core/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	kerrors "k8s.io/apimachinery/pkg/util/errors"
 	kuberecorder "k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -48,41 +46,41 @@ import (
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
 	serror "github.com/fluxcd/source-controller/internal/error"
 	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
+	"github.com/fluxcd/source-controller/internal/reconcile/summarize"
 	"github.com/fluxcd/source-controller/internal/util"
 	"github.com/fluxcd/source-controller/pkg/git"
 	"github.com/fluxcd/source-controller/pkg/git/strategy"
 	"github.com/fluxcd/source-controller/pkg/sourceignore"
 )
 
-// Status conditions owned by the GitRepository reconciler.
-var gitRepoOwnedConditions = []string{
-	sourcev1.SourceVerifiedCondition,
-	sourcev1.FetchFailedCondition,
-	sourcev1.IncludeUnavailableCondition,
-	sourcev1.ArtifactOutdatedCondition,
-	meta.ReadyCondition,
-	meta.ReconcilingCondition,
-	meta.StalledCondition,
-}
-
-// Conditions that Ready condition is influenced by in descending order of their
-// priority.
-var gitRepoReadyDeps = []string{
-	sourcev1.IncludeUnavailableCondition,
-	sourcev1.SourceVerifiedCondition,
-	sourcev1.FetchFailedCondition,
-	sourcev1.ArtifactOutdatedCondition,
-	meta.StalledCondition,
-	meta.ReconcilingCondition,
-}
-
-// Negative conditions that Ready condition is influenced by.
-var gitRepoReadyDepsNegative = []string{
-	sourcev1.FetchFailedCondition,
-	sourcev1.IncludeUnavailableCondition,
-	sourcev1.ArtifactOutdatedCondition,
-	meta.StalledCondition,
-	meta.ReconcilingCondition,
+// gitRepoReadyConditions contains all the conditions information needed
+// for GitRepository Ready status conditions summary calculation.
+var gitRepoReadyConditions = summarize.Conditions{
+	Target: meta.ReadyCondition,
+	Owned: []string{
+		sourcev1.SourceVerifiedCondition,
+		sourcev1.FetchFailedCondition,
+		sourcev1.IncludeUnavailableCondition,
+		sourcev1.ArtifactOutdatedCondition,
+		meta.ReadyCondition,
+		meta.ReconcilingCondition,
+		meta.StalledCondition,
+	},
+	Summarize: []string{
+		sourcev1.IncludeUnavailableCondition,
+		sourcev1.SourceVerifiedCondition,
+		sourcev1.FetchFailedCondition,
+		sourcev1.ArtifactOutdatedCondition,
+		meta.StalledCondition,
+		meta.ReconcilingCondition,
+	},
+	NegativePolarity: []string{
+		sourcev1.FetchFailedCondition,
+		sourcev1.IncludeUnavailableCondition,
+		sourcev1.ArtifactOutdatedCondition,
+		meta.StalledCondition,
+		meta.ReconcilingCondition,
+	},
 }
 
 // +kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=gitrepositories,verbs=get;list;watch;create;update;patch;delete
@@ -156,7 +154,19 @@ func (r *GitRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	// Always attempt to patch the object and status after each reconciliation
 	// NOTE: The final runtime result and error are set in this block.
 	defer func() {
-		result, retErr = r.summarizeAndPatch(ctx, obj, patchHelper, recResult, retErr)
+		summarizeHelper := summarize.NewHelper(r.EventRecorder, patchHelper)
+		summarizeOpts := []summarize.Option{
+			summarize.WithConditions(gitRepoReadyConditions),
+			summarize.WithReconcileResult(recResult),
+			summarize.WithReconcileError(retErr),
+			summarize.WithIgnoreNotFound(),
+			summarize.WithProcessors(
+				summarize.RecordContextualError,
+				summarize.RecordReconcileReq,
+			),
+			summarize.WithResultBuilder(sreconcile.AlwaysRequeueResultBuilder{RequeueAfter: obj.GetInterval().Duration}),
+		}
+		result, retErr = summarizeHelper.SummarizeAndPatch(ctx, obj, summarizeOpts...)
 
 		// Always record readiness and duration metrics
 		r.Metrics.RecordReadiness(ctx, obj)
@@ -186,50 +196,6 @@ func (r *GitRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	}
 	recResult, retErr = r.reconcile(ctx, obj, reconcilers)
 	return
-}
-
-// summarizeAndPatch analyzes the object conditions to create a summary of the
-// status conditions, computes runtime results and patches the object in the K8s
-// API server.
-func (r *GitRepositoryReconciler) summarizeAndPatch(
-	ctx context.Context,
-	obj *sourcev1.GitRepository,
-	patchHelper *patch.Helper,
-	res sreconcile.Result,
-	recErr error) (ctrl.Result, error) {
-	sreconcile.RecordContextualError(ctx, r.EventRecorder, obj, recErr)
-
-	// Record the value of the reconciliation request if any.
-	if v, ok := meta.ReconcileAnnotationValue(obj.GetAnnotations()); ok {
-		obj.Status.SetLastHandledReconcileRequest(v)
-	}
-
-	// Compute the reconcile results, obtain patch options and reconcile error.
-	var patchOpts []patch.Option
-	var result ctrl.Result
-	patchOpts, result, recErr = sreconcile.ComputeReconcileResult(obj, obj.GetRequeueAfter(), res, recErr, gitRepoOwnedConditions)
-
-	// Summarize the Ready condition based on abnormalities that may have been observed.
-	conditions.SetSummary(obj,
-		meta.ReadyCondition,
-		conditions.WithConditions(
-			gitRepoReadyDeps...,
-		),
-		conditions.WithNegativePolarityConditions(
-			gitRepoReadyDepsNegative...,
-		),
-	)
-
-	// Finally, patch the resource.
-	if err := patchHelper.Patch(ctx, obj, patchOpts...); err != nil {
-		// Ignore patch error "not found" when the object is being deleted.
-		if !obj.ObjectMeta.DeletionTimestamp.IsZero() {
-			err = kerrors.FilterOut(err, func(e error) bool { return apierrors.IsNotFound(e) })
-		}
-		recErr = kerrors.NewAggregate([]error{recErr, err})
-	}
-
-	return result, recErr
 }
 
 // reconcile steps iterates through the actual reconciliation tasks for objec,

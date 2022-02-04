@@ -37,10 +37,8 @@ import (
 	"golang.org/x/sync/semaphore"
 	"google.golang.org/api/option"
 	corev1 "k8s.io/api/core/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	kerrors "k8s.io/apimachinery/pkg/util/errors"
 	kuberecorder "k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -57,33 +55,33 @@ import (
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
 	serror "github.com/fluxcd/source-controller/internal/error"
 	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
+	"github.com/fluxcd/source-controller/internal/reconcile/summarize"
 	"github.com/fluxcd/source-controller/pkg/sourceignore"
 )
 
-// Status conditions owned by Bucket reconciler.
-var bucketOwnedConditions = []string{
-	sourcev1.ArtifactOutdatedCondition,
-	sourcev1.FetchFailedCondition,
-	meta.ReadyCondition,
-	meta.ReconcilingCondition,
-	meta.StalledCondition,
-}
-
-// Conditions that Ready condition is influenced by in descending order of their
-// priority.
-var bucketReadyDeps = []string{
-	sourcev1.ArtifactOutdatedCondition,
-	sourcev1.FetchFailedCondition,
-	meta.StalledCondition,
-	meta.ReconcilingCondition,
-}
-
-// Negative conditions that Ready condition is influenced by.
-var bucketReadyDepsNegative = []string{
-	sourcev1.ArtifactOutdatedCondition,
-	sourcev1.FetchFailedCondition,
-	meta.StalledCondition,
-	meta.ReconcilingCondition,
+// bucketReadyConditions contains all the conditions information needed
+// for Bucket Ready status conditions summary calculation.
+var bucketReadyConditions = summarize.Conditions{
+	Target: meta.ReadyCondition,
+	Owned: []string{
+		sourcev1.ArtifactOutdatedCondition,
+		sourcev1.FetchFailedCondition,
+		meta.ReadyCondition,
+		meta.ReconcilingCondition,
+		meta.StalledCondition,
+	},
+	Summarize: []string{
+		sourcev1.ArtifactOutdatedCondition,
+		sourcev1.FetchFailedCondition,
+		meta.StalledCondition,
+		meta.ReconcilingCondition,
+	},
+	NegativePolarity: []string{
+		sourcev1.ArtifactOutdatedCondition,
+		sourcev1.FetchFailedCondition,
+		meta.StalledCondition,
+		meta.ReconcilingCondition,
+	},
 }
 
 // +kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=buckets,verbs=get;list;watch;create;update;patch;delete
@@ -151,7 +149,19 @@ func (r *BucketReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 	// Always attempt to patch the object and status after each reconciliation
 	// NOTE: The final runtime result and error are set in this block.
 	defer func() {
-		result, retErr = r.summarizeAndPatch(ctx, obj, patchHelper, recResult, retErr)
+		summarizeHelper := summarize.NewHelper(r.EventRecorder, patchHelper)
+		summarizeOpts := []summarize.Option{
+			summarize.WithConditions(bucketReadyConditions),
+			summarize.WithReconcileResult(recResult),
+			summarize.WithReconcileError(retErr),
+			summarize.WithIgnoreNotFound(),
+			summarize.WithProcessors(
+				summarize.RecordContextualError,
+				summarize.RecordReconcileReq,
+			),
+			summarize.WithResultBuilder(sreconcile.AlwaysRequeueResultBuilder{RequeueAfter: obj.GetInterval().Duration}),
+		}
+		result, retErr = summarizeHelper.SummarizeAndPatch(ctx, obj, summarizeOpts...)
 
 		// Always record readiness and duration metrics
 		r.Metrics.RecordReadiness(ctx, obj)
@@ -179,50 +189,6 @@ func (r *BucketReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 	}
 	recResult, retErr = r.reconcile(ctx, obj, reconcilers)
 	return
-}
-
-// summarizeAndPatch analyzes the object conditions to create a summary of the
-// status conditions, computes runtime results and patches the object in the K8s
-// API server.
-func (r *BucketReconciler) summarizeAndPatch(
-	ctx context.Context,
-	obj *sourcev1.Bucket,
-	patchHelper *patch.Helper,
-	res sreconcile.Result,
-	recErr error) (ctrl.Result, error) {
-	sreconcile.RecordContextualError(ctx, r.EventRecorder, obj, recErr)
-
-	// Record the value of the reconciliation request if any.
-	if v, ok := meta.ReconcileAnnotationValue(obj.GetAnnotations()); ok {
-		obj.Status.SetLastHandledReconcileRequest(v)
-	}
-
-	// Compute the reconcile results, obtain patch options and reconcile error.
-	var patchOpts []patch.Option
-	var result ctrl.Result
-	patchOpts, result, recErr = sreconcile.ComputeReconcileResult(obj, obj.GetRequeueAfter(), res, recErr, bucketOwnedConditions)
-
-	// Summarize the Ready condition based on abnormalities that may have been observed.
-	conditions.SetSummary(obj,
-		meta.ReadyCondition,
-		conditions.WithConditions(
-			bucketReadyDeps...,
-		),
-		conditions.WithNegativePolarityConditions(
-			bucketReadyDepsNegative...,
-		),
-	)
-
-	// Finally, patch the resource.
-	if err := patchHelper.Patch(ctx, obj, patchOpts...); err != nil {
-		// Ignore patch error "not found" when the object is being deleted.
-		if !obj.ObjectMeta.DeletionTimestamp.IsZero() {
-			err = kerrors.FilterOut(err, func(e error) bool { return apierrors.IsNotFound(e) })
-		}
-		recErr = kerrors.NewAggregate([]error{recErr, err})
-	}
-
-	return result, recErr
 }
 
 // reconcile steps iterates through the actual reconciliation tasks for objec,

@@ -125,9 +125,24 @@ func TestHelmChartReconciler_Reconcile(t *testing.T) {
 	}, timeout).Should(BeTrue())
 
 	// Check if the object status is valid.
-	condns := &status.Conditions{NegativePolarity: helmChartReadyDepsNegative}
+	condns := &status.Conditions{NegativePolarity: helmChartReadyConditions.NegativePolarity}
 	checker := status.NewChecker(testEnv.Client, testEnv.GetScheme(), condns)
 	checker.CheckErr(ctx, obj)
+
+	// Patch the object with reconcile request annotation.
+	patchHelper, err := patch.NewHelper(obj, testEnv.Client)
+	g.Expect(err).ToNot(HaveOccurred())
+	annotations := map[string]string{
+		meta.ReconcileRequestAnnotation: "now",
+	}
+	obj.SetAnnotations(annotations)
+	g.Expect(patchHelper.Patch(ctx, obj)).ToNot(HaveOccurred())
+	g.Eventually(func() bool {
+		if err := testEnv.Get(ctx, key, obj); err != nil {
+			return false
+		}
+		return obj.Status.LastHandledReconcileAt == "now"
+	}, timeout).Should(BeTrue())
 
 	g.Expect(testEnv.Delete(ctx, obj)).To(Succeed())
 
@@ -1324,181 +1339,6 @@ func TestHelmChartReconciler_reconcileDelete(t *testing.T) {
 	g.Expect(got).To(Equal(sreconcile.ResultEmpty))
 	g.Expect(controllerutil.ContainsFinalizer(obj, sourcev1.SourceFinalizer)).To(BeFalse())
 	g.Expect(obj.Status.Artifact).To(BeNil())
-}
-
-func TestHelmChartReconciler_summarizeAndPatch(t *testing.T) {
-	tests := []struct {
-		name             string
-		generation       int64
-		beforeFunc       func(obj *sourcev1.HelmChart)
-		result           sreconcile.Result
-		reconcileErr     error
-		wantErr          bool
-		afterFunc        func(t *WithT, obj *sourcev1.HelmChart)
-		assertConditions []metav1.Condition
-	}{
-		// Success/Fail indicates if a reconciliation succeeded or failed. On
-		// a successful reconciliation, the object generation is expected to
-		// match the observed generation in the object status.
-		// All the cases have some Ready condition set, even if a test case is
-		// unrelated to the conditions, because it's necessary for a valid
-		// status.
-		{
-			name:       "Success, no extra conditions",
-			generation: 4,
-			beforeFunc: func(obj *sourcev1.HelmChart) {
-				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "test-msg")
-			},
-			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(meta.ReadyCondition, meta.SucceededReason, "test-msg"),
-			},
-			afterFunc: func(t *WithT, obj *sourcev1.HelmChart) {
-				t.Expect(obj.Status.ObservedGeneration).To(Equal(int64(4)))
-			},
-		},
-		{
-			name:       "Success, Ready=True",
-			generation: 5,
-			beforeFunc: func(obj *sourcev1.HelmChart) {
-				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "created")
-			},
-			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(meta.ReadyCondition, meta.SucceededReason, "created"),
-			},
-			afterFunc: func(t *WithT, obj *sourcev1.HelmChart) {
-				t.Expect(obj.Status.ObservedGeneration).To(Equal(int64(5)))
-			},
-		},
-		{
-			name:       "Success, removes reconciling for successful result",
-			generation: 2,
-			beforeFunc: func(obj *sourcev1.HelmChart) {
-				conditions.MarkReconciling(obj, "NewRevision", "new index version")
-				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "stored artifact")
-			},
-			result:  sreconcile.ResultSuccess,
-			wantErr: false,
-			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(meta.ReadyCondition, meta.SucceededReason, "stored artifact"),
-			},
-			afterFunc: func(t *WithT, obj *sourcev1.HelmChart) {
-				t.Expect(obj.Status.ObservedGeneration).To(Equal(int64(2)))
-			},
-		},
-		{
-			name: "Success, record reconciliation request",
-			beforeFunc: func(obj *sourcev1.HelmChart) {
-				annotations := map[string]string{
-					meta.ReconcileRequestAnnotation: "now",
-				}
-				obj.SetAnnotations(annotations)
-				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "test-msg")
-			},
-			generation: 3,
-			result:     sreconcile.ResultSuccess,
-			wantErr:    false,
-			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(meta.ReadyCondition, meta.SucceededReason, "test-msg"),
-			},
-			afterFunc: func(t *WithT, obj *sourcev1.HelmChart) {
-				t.Expect(obj.Status.LastHandledReconcileAt).To(Equal("now"))
-				t.Expect(obj.Status.ObservedGeneration).To(Equal(int64(3)))
-			},
-		},
-		{
-			name:       "Fail, with multiple conditions ArtifactOutdated=True,Reconciling=True",
-			generation: 7,
-			beforeFunc: func(obj *sourcev1.HelmChart) {
-				conditions.MarkTrue(obj, sourcev1.ArtifactOutdatedCondition, "NewRevision", "new index revision")
-				conditions.MarkReconciling(obj, "NewRevision", "new index revision")
-			},
-			reconcileErr: fmt.Errorf("failed to create dir"),
-			wantErr:      true,
-			assertConditions: []metav1.Condition{
-				*conditions.FalseCondition(meta.ReadyCondition, "NewRevision", "new index revision"),
-				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new index revision"),
-				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new index revision"),
-			},
-			afterFunc: func(t *WithT, obj *sourcev1.HelmChart) {
-				t.Expect(obj.Status.ObservedGeneration).ToNot(Equal(int64(7)))
-			},
-		},
-		{
-			name:       "Success, with subreconciler stalled error",
-			generation: 9,
-			beforeFunc: func(obj *sourcev1.HelmChart) {
-				conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.FetchFailedCondition, "failed to construct helm client")
-			},
-			reconcileErr: &serror.Stalling{Err: fmt.Errorf("some error"), Reason: "some reason"},
-			wantErr:      false,
-			assertConditions: []metav1.Condition{
-				*conditions.FalseCondition(meta.ReadyCondition, sourcev1.FetchFailedCondition, "failed to construct helm client"),
-				*conditions.TrueCondition(meta.StalledCondition, "some reason", "some error"),
-				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.FetchFailedCondition, "failed to construct helm client"),
-			},
-			afterFunc: func(t *WithT, obj *sourcev1.HelmChart) {
-				t.Expect(obj.Status.ObservedGeneration).To(Equal(int64(9)))
-			},
-		},
-		{
-			name:       "Fail, no error but requeue requested",
-			generation: 3,
-			beforeFunc: func(obj *sourcev1.HelmChart) {
-				conditions.MarkFalse(obj, meta.ReadyCondition, meta.FailedReason, "test-msg")
-			},
-			result: sreconcile.ResultRequeue,
-			assertConditions: []metav1.Condition{
-				*conditions.FalseCondition(meta.ReadyCondition, meta.FailedReason, "test-msg"),
-			},
-			afterFunc: func(t *WithT, obj *sourcev1.HelmChart) {
-				t.Expect(obj.Status.ObservedGeneration).ToNot(Equal(int64(3)))
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			g := NewWithT(t)
-
-			builder := fake.NewClientBuilder().WithScheme(testEnv.GetScheme())
-			r := &HelmChartReconciler{
-				Client:        builder.Build(),
-				EventRecorder: record.NewFakeRecorder(32),
-			}
-			obj := &sourcev1.HelmChart{
-				ObjectMeta: metav1.ObjectMeta{
-					GenerateName: "test-",
-					Generation:   tt.generation,
-				},
-				Spec: sourcev1.HelmChartSpec{
-					Interval: metav1.Duration{Duration: 5 * time.Second},
-				},
-			}
-
-			if tt.beforeFunc != nil {
-				tt.beforeFunc(obj)
-			}
-
-			ctx := context.TODO()
-			g.Expect(r.Create(ctx, obj)).To(Succeed())
-			patchHelper, err := patch.NewHelper(obj, r.Client)
-			g.Expect(err).ToNot(HaveOccurred())
-
-			_, gotErr := r.summarizeAndPatch(ctx, obj, patchHelper, tt.result, tt.reconcileErr)
-			g.Expect(gotErr != nil).To(Equal(tt.wantErr))
-
-			g.Expect(obj.Status.Conditions).To(conditions.MatchConditions(tt.assertConditions))
-
-			if tt.afterFunc != nil {
-				tt.afterFunc(g, obj)
-			}
-
-			// Check if the object status is valid.
-			condns := &status.Conditions{NegativePolarity: helmChartReadyDepsNegative}
-			checker := status.NewChecker(r.Client, testEnv.GetScheme(), condns)
-			checker.CheckErr(ctx, obj)
-		})
-	}
 }
 
 func TestHelmChartReconciler_reconcileSubRecs(t *testing.T) {
