@@ -34,7 +34,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	kerrors "k8s.io/apimachinery/pkg/util/errors"
 	kuberecorder "k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -60,36 +59,36 @@ import (
 	"github.com/fluxcd/source-controller/internal/helm/getter"
 	"github.com/fluxcd/source-controller/internal/helm/repository"
 	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
+	"github.com/fluxcd/source-controller/internal/reconcile/summarize"
 	"github.com/fluxcd/source-controller/internal/util"
 )
 
-// Status conditions owned by the HelmChart reconciler.
-var helmChartOwnedConditions = []string{
-	sourcev1.BuildFailedCondition,
-	sourcev1.FetchFailedCondition,
-	sourcev1.ArtifactOutdatedCondition,
-	meta.ReadyCondition,
-	meta.ReconcilingCondition,
-	meta.StalledCondition,
-}
-
-// Conditions that Ready condition is influenced by in descending order of their
-// priority.
-var helmChartReadyDeps = []string{
-	sourcev1.BuildFailedCondition,
-	sourcev1.FetchFailedCondition,
-	sourcev1.ArtifactOutdatedCondition,
-	meta.StalledCondition,
-	meta.ReconcilingCondition,
-}
-
-// Negative conditions that Ready condition is influenced by.
-var helmChartReadyDepsNegative = []string{
-	sourcev1.BuildFailedCondition,
-	sourcev1.FetchFailedCondition,
-	sourcev1.ArtifactOutdatedCondition,
-	meta.StalledCondition,
-	meta.ReconcilingCondition,
+// helmChartReadyConditions contains all the conditions information
+// needed for HelmChart Ready status conditions summary calculation.
+var helmChartReadyConditions = summarize.Conditions{
+	Target: meta.ReadyCondition,
+	Owned: []string{
+		sourcev1.BuildFailedCondition,
+		sourcev1.FetchFailedCondition,
+		sourcev1.ArtifactOutdatedCondition,
+		meta.ReadyCondition,
+		meta.ReconcilingCondition,
+		meta.StalledCondition,
+	},
+	Summarize: []string{
+		sourcev1.BuildFailedCondition,
+		sourcev1.FetchFailedCondition,
+		sourcev1.ArtifactOutdatedCondition,
+		meta.StalledCondition,
+		meta.ReconcilingCondition,
+	},
+	NegativePolarity: []string{
+		sourcev1.BuildFailedCondition,
+		sourcev1.FetchFailedCondition,
+		sourcev1.ArtifactOutdatedCondition,
+		meta.StalledCondition,
+		meta.ReconcilingCondition,
+	},
 }
 
 // +kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=helmcharts,verbs=get;list;watch;create;update;patch;delete
@@ -181,7 +180,19 @@ func (r *HelmChartReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	// Always attempt to patch the object after each reconciliation.
 	// NOTE: The final runtime result and error are set in this block.
 	defer func() {
-		result, retErr = r.summarizeAndPatch(ctx, obj, patchHelper, recResult, retErr)
+		summarizeHelper := summarize.NewHelper(r.EventRecorder, patchHelper)
+		summarizeOpts := []summarize.Option{
+			summarize.WithConditions(helmChartReadyConditions),
+			summarize.WithReconcileResult(recResult),
+			summarize.WithReconcileError(retErr),
+			summarize.WithIgnoreNotFound(),
+			summarize.WithProcessors(
+				summarize.RecordContextualError,
+				summarize.RecordReconcileReq,
+			),
+			summarize.WithResultBuilder(sreconcile.AlwaysRequeueResultBuilder{RequeueAfter: obj.GetInterval().Duration}),
+		}
+		result, retErr = summarizeHelper.SummarizeAndPatch(ctx, obj, summarizeOpts...)
 
 		// Always record readiness and duration metrics
 		r.Metrics.RecordReadiness(ctx, obj)
@@ -210,49 +221,6 @@ func (r *HelmChartReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 	recResult, retErr = r.reconcile(ctx, obj, reconcilers)
 	return
-}
-
-// summarizeAndPatch analyzes the object conditions to create a summary of the
-// status conditions, computes runtime results and patches the object in the K8s
-// API server.
-func (r *HelmChartReconciler) summarizeAndPatch(
-	ctx context.Context,
-	obj *sourcev1.HelmChart,
-	patchHelper *patch.Helper,
-	res sreconcile.Result,
-	recErr error) (ctrl.Result, error) {
-	sreconcile.RecordContextualError(ctx, r.EventRecorder, obj, recErr)
-
-	// Record the value of the reconciliation request, if any
-	if v, ok := meta.ReconcileAnnotationValue(obj.GetAnnotations()); ok {
-		obj.Status.SetLastHandledReconcileRequest(v)
-	}
-
-	// Compute the reconcile results, obtain patch options and reconcile error.
-	var patchOpts []patch.Option
-	var result ctrl.Result
-	patchOpts, result, recErr = sreconcile.ComputeReconcileResult(obj, obj.GetRequeueAfter(), res, recErr, helmChartOwnedConditions)
-
-	// Summarize Ready condition
-	conditions.SetSummary(obj,
-		meta.ReadyCondition,
-		conditions.WithConditions(
-			helmChartReadyDeps...,
-		),
-		conditions.WithNegativePolarityConditions(
-			helmChartReadyDepsNegative...,
-		),
-	)
-
-	// Finally, patch the resource
-	if err := patchHelper.Patch(ctx, obj, patchOpts...); err != nil {
-		// Ignore patch error "not found" when the object is being deleted.
-		if !obj.ObjectMeta.DeletionTimestamp.IsZero() {
-			err = kerrors.FilterOut(err, func(e error) bool { return apierrs.IsNotFound(err) })
-		}
-		recErr = kerrors.NewAggregate([]error{recErr, err})
-	}
-	return result, recErr
 }
 
 // reconcile steps through the actual reconciliation tasks for the object, it returns early on the first step that

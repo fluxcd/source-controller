@@ -17,12 +17,8 @@ limitations under the License.
 package reconcile
 
 import (
-	"context"
 	"time"
 
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/runtime"
-	kuberecorder "k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 
 	"github.com/fluxcd/pkg/apis/meta"
@@ -37,20 +33,40 @@ import (
 type Result int
 
 const (
-	// ResultEmpty indicates a reconcile result which does not requeue.
+	// ResultEmpty indicates a reconcile result which does not requeue. It is
+	// also used when returning an error, since the error overshadows result.
 	ResultEmpty Result = iota
 	// ResultRequeue indicates a reconcile result which should immediately
 	// requeue.
 	ResultRequeue
-	// ResultSuccess indicates a reconcile result which should be
-	// requeued on the interval as defined on the reconciled object.
+	// ResultSuccess indicates a reconcile success result.
+	// For a reconciler that requeues regularly at a fixed interval, runtime
+	// result with a fixed RequeueAfter is success result.
+	// For a reconciler that doesn't requeue on successful reconciliation,
+	// an empty runtime result is success result.
+	// It is usually returned at the end of a reconciler/sub-reconciler.
 	ResultSuccess
 )
 
+// RuntimeResultBuilder defines an interface for runtime result builders. This
+// can be implemented to build custom results based on the context of the
+// reconciler.
+type RuntimeResultBuilder interface {
+	BuildRuntimeResult(rr Result, err error) ctrl.Result
+}
+
+// AlwaysRequeueResultBuilder implements a RuntimeResultBuilder for always
+// requeuing reconcilers. A successful reconciliation result for such
+// reconcilers contains a fixed RequeueAfter value.
+type AlwaysRequeueResultBuilder struct {
+	// RequeueAfter is the fixed period at which the reconciler requeues on
+	// successful execution.
+	RequeueAfter time.Duration
+}
+
 // BuildRuntimeResult converts a given Result and error into the
 // return values of a controller's Reconcile function.
-// func BuildRuntimeResult(ctx context.Context, recorder kuberecorder.EventRecorder, obj sourcev1.Source, rr Result, err error) (ctrl.Result, error) {
-func BuildRuntimeResult(successInterval time.Duration, rr Result, err error) ctrl.Result {
+func (r AlwaysRequeueResultBuilder) BuildRuntimeResult(rr Result, err error) ctrl.Result {
 	// Handle special errors that contribute to expressing the result.
 	if e, ok := err.(*serror.Waiting); ok {
 		return ctrl.Result{RequeueAfter: e.RequeueAfter}
@@ -60,50 +76,30 @@ func BuildRuntimeResult(successInterval time.Duration, rr Result, err error) ctr
 	case ResultRequeue:
 		return ctrl.Result{Requeue: true}
 	case ResultSuccess:
-		return ctrl.Result{RequeueAfter: successInterval}
+		return ctrl.Result{RequeueAfter: r.RequeueAfter}
 	default:
 		return ctrl.Result{}
-	}
-}
-
-// RecordContextualError records the contextual errors based on their types.
-// An event is recorded for the errors that are returned to the runtime. The
-// runtime handles the logging of the error.
-// An event is recorded and an error is logged for errors that are known to be
-// swallowed, not returned to the runtime.
-func RecordContextualError(ctx context.Context, recorder kuberecorder.EventRecorder, obj runtime.Object, err error) {
-	switch e := err.(type) {
-	case *serror.Event:
-		recorder.Eventf(obj, corev1.EventTypeWarning, e.Reason, e.Error())
-	case *serror.Waiting:
-		// Waiting errors are not returned to the runtime. Log it explicitly.
-		ctrl.LoggerFrom(ctx).Info("reconciliation waiting", "reason", e.Err, "duration", e.RequeueAfter)
-		recorder.Event(obj, corev1.EventTypeNormal, e.Reason, e.Error())
-	case *serror.Stalling:
-		// Stalling errors are not returned to the runtime. Log it explicitly.
-		ctrl.LoggerFrom(ctx).Error(e, "reconciliation stalled")
-		recorder.Eventf(obj, corev1.EventTypeWarning, e.Reason, e.Error())
 	}
 }
 
 // ComputeReconcileResult analyzes the reconcile results (result + error),
 // updates the status conditions of the object with any corrections and returns
 // object patch configuration, runtime result and runtime error. The caller is
-// responsible for using the patch configuration to patch the object in the API
-// server.
-func ComputeReconcileResult(obj conditions.Setter, successInterval time.Duration, res Result, recErr error, ownedConditions []string) ([]patch.Option, ctrl.Result, error) {
-	result := BuildRuntimeResult(successInterval, res, recErr)
+// responsible for using the patch configuration while patching the object in
+// the API server.
+// The RuntimeResultBuilder is used to define how the ctrl.Result is computed.
+func ComputeReconcileResult(obj conditions.Setter, res Result, recErr error, rb RuntimeResultBuilder) ([]patch.Option, ctrl.Result, error) {
+	var pOpts []patch.Option
+
+	// Compute the runtime result.
+	var result ctrl.Result
+	if rb != nil {
+		result = rb.BuildRuntimeResult(res, recErr)
+	}
 
 	// Remove reconciling condition on successful reconciliation.
 	if recErr == nil && res == ResultSuccess {
 		conditions.Delete(obj, meta.ReconcilingCondition)
-	}
-
-	// Patch the object, ignoring conflicts on the conditions owned by this controller.
-	pOpts := []patch.Option{
-		patch.WithOwnedConditions{
-			Conditions: ownedConditions,
-		},
 	}
 
 	// Analyze the reconcile error.
