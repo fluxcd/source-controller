@@ -30,6 +30,7 @@ import (
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/gittestserver"
 	"github.com/fluxcd/pkg/runtime/conditions"
+	"github.com/fluxcd/pkg/runtime/patch"
 	"github.com/fluxcd/pkg/ssh"
 	"github.com/fluxcd/pkg/testserver"
 	"github.com/go-git/go-billy/v5/memfs"
@@ -190,9 +191,24 @@ func TestGitRepositoryReconciler_Reconcile(t *testing.T) {
 	}, timeout).Should(BeTrue())
 
 	// Check if the object status is valid.
-	condns := &status.Conditions{NegativePolarity: gitRepoReadyDepsNegative}
+	condns := &status.Conditions{NegativePolarity: gitRepoReadyConditions.NegativePolarity}
 	checker := status.NewChecker(testEnv.Client, testEnv.GetScheme(), condns)
 	checker.CheckErr(ctx, obj)
+
+	// Patch the object with reconcile request annotation.
+	patchHelper, err := patch.NewHelper(obj, testEnv.Client)
+	g.Expect(err).ToNot(HaveOccurred())
+	annotations := map[string]string{
+		meta.ReconcileRequestAnnotation: "now",
+	}
+	obj.SetAnnotations(annotations)
+	g.Expect(patchHelper.Patch(ctx, obj)).ToNot(HaveOccurred())
+	g.Eventually(func() bool {
+		if err := testEnv.Get(ctx, key, obj); err != nil {
+			return false
+		}
+		return obj.Status.LastHandledReconcileAt == "now"
+	}, timeout).Should(BeTrue())
 
 	g.Expect(testEnv.Delete(ctx, obj)).To(Succeed())
 
