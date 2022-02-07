@@ -94,7 +94,7 @@ func TestHelmRepositoryReconciler_Reconcile(t *testing.T) {
 	}, timeout).Should(BeTrue())
 
 	// Check if the object status is valid.
-	condns := &status.Conditions{NegativePolarity: helmRepoReadyConditions.NegativePolarity}
+	condns := &status.Conditions{NegativePolarity: helmRepositoryReadyCondition.NegativePolarity}
 	checker := status.NewChecker(testEnv.Client, testEnv.GetScheme(), condns)
 	checker.CheckErr(ctx, obj)
 
@@ -633,8 +633,8 @@ func TestHelmRepositoryReconciler_reconcileArtifact(t *testing.T) {
 }
 
 func TestHelmRepositoryReconciler_reconcileSubRecs(t *testing.T) {
-	// Helper to build simple helmRepoReconcilerFunc with result and error.
-	buildReconcileFuncs := func(r sreconcile.Result, e error) helmRepoReconcilerFunc {
+	// Helper to build simple helmRepositoryReconcileFunc with result and error.
+	buildReconcileFuncs := func(r sreconcile.Result, e error) helmRepositoryReconcileFunc {
 		return func(ctx context.Context, obj *sourcev1.HelmRepository, artifact *sourcev1.Artifact, repo *repository.ChartRepository) (sreconcile.Result, error) {
 			return r, e
 		}
@@ -644,14 +644,14 @@ func TestHelmRepositoryReconciler_reconcileSubRecs(t *testing.T) {
 		name               string
 		generation         int64
 		observedGeneration int64
-		reconcileFuncs     []helmRepoReconcilerFunc
+		reconcileFuncs     []helmRepositoryReconcileFunc
 		wantResult         sreconcile.Result
 		wantErr            bool
 		assertConditions   []metav1.Condition
 	}{
 		{
 			name: "successful reconciliations",
-			reconcileFuncs: []helmRepoReconcilerFunc{
+			reconcileFuncs: []helmRepositoryReconcileFunc{
 				buildReconcileFuncs(sreconcile.ResultSuccess, nil),
 			},
 			wantResult: sreconcile.ResultSuccess,
@@ -661,7 +661,7 @@ func TestHelmRepositoryReconciler_reconcileSubRecs(t *testing.T) {
 			name:               "successful reconciliation with generation difference",
 			generation:         3,
 			observedGeneration: 2,
-			reconcileFuncs: []helmRepoReconcilerFunc{
+			reconcileFuncs: []helmRepositoryReconcileFunc{
 				buildReconcileFuncs(sreconcile.ResultSuccess, nil),
 			},
 			wantResult: sreconcile.ResultSuccess,
@@ -672,7 +672,7 @@ func TestHelmRepositoryReconciler_reconcileSubRecs(t *testing.T) {
 		},
 		{
 			name: "failed reconciliation",
-			reconcileFuncs: []helmRepoReconcilerFunc{
+			reconcileFuncs: []helmRepositoryReconcileFunc{
 				buildReconcileFuncs(sreconcile.ResultEmpty, fmt.Errorf("some error")),
 			},
 			wantResult: sreconcile.ResultEmpty,
@@ -680,7 +680,7 @@ func TestHelmRepositoryReconciler_reconcileSubRecs(t *testing.T) {
 		},
 		{
 			name: "multiple object status conditions mutations",
-			reconcileFuncs: []helmRepoReconcilerFunc{
+			reconcileFuncs: []helmRepositoryReconcileFunc{
 				func(ctx context.Context, obj *sourcev1.HelmRepository, artifact *sourcev1.Artifact, repo *repository.ChartRepository) (sreconcile.Result, error) {
 					conditions.MarkTrue(obj, sourcev1.ArtifactOutdatedCondition, "NewRevision", "new index revision")
 					return sreconcile.ResultSuccess, nil
@@ -699,7 +699,7 @@ func TestHelmRepositoryReconciler_reconcileSubRecs(t *testing.T) {
 		},
 		{
 			name: "subrecs with one result=Requeue, no error",
-			reconcileFuncs: []helmRepoReconcilerFunc{
+			reconcileFuncs: []helmRepositoryReconcileFunc{
 				buildReconcileFuncs(sreconcile.ResultSuccess, nil),
 				buildReconcileFuncs(sreconcile.ResultRequeue, nil),
 				buildReconcileFuncs(sreconcile.ResultSuccess, nil),
@@ -709,7 +709,7 @@ func TestHelmRepositoryReconciler_reconcileSubRecs(t *testing.T) {
 		},
 		{
 			name: "subrecs with error before result=Requeue",
-			reconcileFuncs: []helmRepoReconcilerFunc{
+			reconcileFuncs: []helmRepositoryReconcileFunc{
 				buildReconcileFuncs(sreconcile.ResultSuccess, nil),
 				buildReconcileFuncs(sreconcile.ResultEmpty, fmt.Errorf("some error")),
 				buildReconcileFuncs(sreconcile.ResultRequeue, nil),
