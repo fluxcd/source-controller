@@ -253,7 +253,7 @@ spec:
     name: v1beta2
     schema:
       openAPIV3Schema:
-        description: HelmRepository is the Schema for the helmrepositories API
+        description: HelmRepository is the Schema for the helmrepositories API.
         properties:
           apiVersion:
             description: 'APIVersion defines the versioned schema of this representation
@@ -268,11 +268,13 @@ spec:
           metadata:
             type: object
           spec:
-            description: HelmRepositorySpec defines the reference to a Helm repository.
+            description: HelmRepositorySpec specifies the required configuration to
+              produce an Artifact for a Helm repository index YAML.
             properties:
               accessFrom:
-                description: AccessFrom defines an Access Control List for allowing
-                  cross-namespace references to this object.
+                description: 'AccessFrom specifies an Access Control List for allowing
+                  cross-namespace references to this object. NOTE: Not implemented,
+                  provisional as of https://github.com/fluxcd/flux2/pull/2092'
                 properties:
                   namespaceSelectors:
                     description: NamespaceSelectors is the list of namespace selectors
@@ -298,7 +300,7 @@ spec:
                 - namespaceSelectors
                 type: object
               interval:
-                description: The interval at which to check the upstream for updates.
+                description: Interval at which to check the URL for updates.
                 type: string
               passCredentials:
                 description: PassCredentials allows the credentials from the SecretRef
@@ -309,10 +311,10 @@ spec:
                   getting stolen in a MITM-attack.
                 type: boolean
               secretRef:
-                description: The name of the secret containing authentication credentials
-                  for the Helm repository. For HTTP/S basic auth the secret must contain
-                  username and password fields. For TLS the secret must contain a
-                  certFile and keyFile, and/or caCert fields.
+                description: SecretRef specifies the Secret containing authentication
+                  credentials for the HelmRepository. For HTTP/S basic auth the secret
+                  must contain 'username' and 'password' fields. For TLS the secret
+                  must contain a 'certFile' and 'keyFile', and/or 'caCert' fields.
                 properties:
                   name:
                     description: Name of the referent.
@@ -321,15 +323,15 @@ spec:
                 - name
                 type: object
               suspend:
-                description: This flag tells the controller to suspend the reconciliation
-                  of this source.
+                description: Suspend tells the controller to suspend the reconciliation
+                  of this HelmRepository.
                 type: boolean
               timeout:
                 default: 60s
-                description: The timeout of index fetching, defaults to 60s.
+                description: Timeout of the index fetch operation, defaults to 60s.
                 type: string
               url:
-                description: The Helm repository URL, a valid URL contains at least
+                description: URL of the Helm repository, a valid URL contains at least
                   a protocol and host.
                 type: string
             required:
@@ -339,11 +341,11 @@ spec:
           status:
             default:
               observedGeneration: -1
-            description: HelmRepositoryStatus defines the observed state of the HelmRepository.
+            description: HelmRepositoryStatus records the observed state of the HelmRepository.
             properties:
               artifact:
-                description: Artifact represents the output of the last successful
-                  repository sync.
+                description: Artifact represents the last successful HelmRepository
+                  reconciliation.
                 properties:
                   checksum:
                     description: Checksum is the SHA256 checksum of the Artifact file.
@@ -449,11 +451,14 @@ spec:
                   be detected.
                 type: string
               observedGeneration:
-                description: ObservedGeneration is the last observed generation.
+                description: ObservedGeneration is the last observed generation of
+                  the HelmRepository object.
                 format: int64
                 type: integer
               url:
-                description: URL is the fetch link for the last index fetched.
+                description: URL is the dynamic fetch link for the latest Artifact.
+                  It is provided on a "best effort" basis, and using the precise HelmRepositoryStatus.Artifact
+                  data is recommended.
                 type: string
             type: object
         type: object

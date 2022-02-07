@@ -676,7 +676,7 @@ HelmChartStatus
 </div>
 <h3 id="source.toolkit.fluxcd.io/v1beta2.HelmRepository">HelmRepository
 </h3>
-<p>HelmRepository is the Schema for the helmrepositories API</p>
+<p>HelmRepository is the Schema for the helmrepositories API.</p>
 <div class="md-typeset__scrollwrap">
 <div class="md-typeset__table">
 <table>
@@ -739,7 +739,8 @@ string
 </em>
 </td>
 <td>
-<p>The Helm repository URL, a valid URL contains at least a protocol and host.</p>
+<p>URL of the Helm repository, a valid URL contains at least a protocol and
+host.</p>
 </td>
 </tr>
 <tr>
@@ -753,12 +754,12 @@ github.com/fluxcd/pkg/apis/meta.LocalObjectReference
 </td>
 <td>
 <em>(Optional)</em>
-<p>The name of the secret containing authentication credentials for the Helm
-repository.
-For HTTP/S basic auth the secret must contain username and
-password fields.
-For TLS the secret must contain a certFile and keyFile, and/or
-caCert fields.</p>
+<p>SecretRef specifies the Secret containing authentication credentials
+for the HelmRepository.
+For HTTP/S basic auth the secret must contain &lsquo;username&rsquo; and &lsquo;password&rsquo;
+fields.
+For TLS the secret must contain a &lsquo;certFile&rsquo; and &lsquo;keyFile&rsquo;, and/or
+&lsquo;caCert&rsquo; fields.</p>
 </td>
 </tr>
 <tr>
@@ -770,12 +771,12 @@ bool
 </td>
 <td>
 <em>(Optional)</em>
-<p>PassCredentials allows the credentials from the SecretRef to be passed on to
-a host that does not match the host as defined in URL.
-This may be required if the host of the advertised chart URLs in the index
-differ from the defined URL.
-Enabling this should be done with caution, as it can potentially result in
-credentials getting stolen in a MITM-attack.</p>
+<p>PassCredentials allows the credentials from the SecretRef to be passed
+on to a host that does not match the host as defined in URL.
+This may be required if the host of the advertised chart URLs in the
+index differ from the defined URL.
+Enabling this should be done with caution, as it can potentially result
+in credentials getting stolen in a MITM-attack.</p>
 </td>
 </tr>
 <tr>
@@ -788,7 +789,7 @@ Kubernetes meta/v1.Duration
 </em>
 </td>
 <td>
-<p>The interval at which to check the upstream for updates.</p>
+<p>Interval at which to check the URL for updates.</p>
 </td>
 </tr>
 <tr>
@@ -802,7 +803,7 @@ Kubernetes meta/v1.Duration
 </td>
 <td>
 <em>(Optional)</em>
-<p>The timeout of index fetching, defaults to 60s.</p>
+<p>Timeout of the index fetch operation, defaults to 60s.</p>
 </td>
 </tr>
 <tr>
@@ -814,7 +815,8 @@ bool
 </td>
 <td>
 <em>(Optional)</em>
-<p>This flag tells the controller to suspend the reconciliation of this source.</p>
+<p>Suspend tells the controller to suspend the reconciliation of this
+HelmRepository.</p>
 </td>
 </tr>
 <tr>
@@ -828,7 +830,9 @@ github.com/fluxcd/pkg/apis/acl.AccessFrom
 </td>
 <td>
 <em>(Optional)</em>
-<p>AccessFrom defines an Access Control List for allowing cross-namespace references to this object.</p>
+<p>AccessFrom specifies an Access Control List for allowing cross-namespace
+references to this object.
+NOTE: Not implemented, provisional as of <a href="https://github.com/fluxcd/flux2/pull/2092">https://github.com/fluxcd/flux2/pull/2092</a></p>
 </td>
 </tr>
 </table>
@@ -1916,7 +1920,8 @@ github.com/fluxcd/pkg/apis/meta.ReconcileRequestStatus
 (<em>Appears on:</em>
 <a href="#source.toolkit.fluxcd.io/v1beta2.HelmRepository">HelmRepository</a>)
 </p>
-<p>HelmRepositorySpec defines the reference to a Helm repository.</p>
+<p>HelmRepositorySpec specifies the required configuration to produce an
+Artifact for a Helm repository index YAML.</p>
 <div class="md-typeset__scrollwrap">
 <div class="md-typeset__table">
 <table>
@@ -1935,7 +1940,8 @@ string
 </em>
 </td>
 <td>
-<p>The Helm repository URL, a valid URL contains at least a protocol and host.</p>
+<p>URL of the Helm repository, a valid URL contains at least a protocol and
+host.</p>
 </td>
 </tr>
 <tr>
@@ -1949,12 +1955,12 @@ github.com/fluxcd/pkg/apis/meta.LocalObjectReference
 </td>
 <td>
 <em>(Optional)</em>
-<p>The name of the secret containing authentication credentials for the Helm
-repository.
-For HTTP/S basic auth the secret must contain username and
-password fields.
-For TLS the secret must contain a certFile and keyFile, and/or
-caCert fields.</p>
+<p>SecretRef specifies the Secret containing authentication credentials
+for the HelmRepository.
+For HTTP/S basic auth the secret must contain &lsquo;username&rsquo; and &lsquo;password&rsquo;
+fields.
+For TLS the secret must contain a &lsquo;certFile&rsquo; and &lsquo;keyFile&rsquo;, and/or
+&lsquo;caCert&rsquo; fields.</p>
 </td>
 </tr>
 <tr>
@@ -1966,12 +1972,12 @@ bool
 </td>
 <td>
 <em>(Optional)</em>
-<p>PassCredentials allows the credentials from the SecretRef to be passed on to
-a host that does not match the host as defined in URL.
-This may be required if the host of the advertised chart URLs in the index
-differ from the defined URL.
-Enabling this should be done with caution, as it can potentially result in
-credentials getting stolen in a MITM-attack.</p>
+<p>PassCredentials allows the credentials from the SecretRef to be passed
+on to a host that does not match the host as defined in URL.
+This may be required if the host of the advertised chart URLs in the
+index differ from the defined URL.
+Enabling this should be done with caution, as it can potentially result
+in credentials getting stolen in a MITM-attack.</p>
 </td>
 </tr>
 <tr>
@@ -1984,7 +1990,7 @@ Kubernetes meta/v1.Duration
 </em>
 </td>
 <td>
-<p>The interval at which to check the upstream for updates.</p>
+<p>Interval at which to check the URL for updates.</p>
 </td>
 </tr>
 <tr>
@@ -1998,7 +2004,7 @@ Kubernetes meta/v1.Duration
 </td>
 <td>
 <em>(Optional)</em>
-<p>The timeout of index fetching, defaults to 60s.</p>
+<p>Timeout of the index fetch operation, defaults to 60s.</p>
 </td>
 </tr>
 <tr>
@@ -2010,7 +2016,8 @@ bool
 </td>
 <td>
 <em>(Optional)</em>
-<p>This flag tells the controller to suspend the reconciliation of this source.</p>
+<p>Suspend tells the controller to suspend the reconciliation of this
+HelmRepository.</p>
 </td>
 </tr>
 <tr>
@@ -2024,7 +2031,9 @@ github.com/fluxcd/pkg/apis/acl.AccessFrom
 </td>
 <td>
 <em>(Optional)</em>
-<p>AccessFrom defines an Access Control List for allowing cross-namespace references to this object.</p>
+<p>AccessFrom specifies an Access Control List for allowing cross-namespace
+references to this object.
+NOTE: Not implemented, provisional as of <a href="https://github.com/fluxcd/flux2/pull/2092">https://github.com/fluxcd/flux2/pull/2092</a></p>
 </td>
 </tr>
 </tbody>
@@ -2037,7 +2046,7 @@ github.com/fluxcd/pkg/apis/acl.AccessFrom
 (<em>Appears on:</em>
 <a href="#source.toolkit.fluxcd.io/v1beta2.HelmRepository">HelmRepository</a>)
 </p>
-<p>HelmRepositoryStatus defines the observed state of the HelmRepository.</p>
+<p>HelmRepositoryStatus records the observed state of the HelmRepository.</p>
 <div class="md-typeset__scrollwrap">
 <div class="md-typeset__table">
 <table>
@@ -2057,7 +2066,8 @@ int64
 </td>
 <td>
 <em>(Optional)</em>
-<p>ObservedGeneration is the last observed generation.</p>
+<p>ObservedGeneration is the last observed generation of the HelmRepository
+object.</p>
 </td>
 </tr>
 <tr>
@@ -2083,7 +2093,9 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>URL is the fetch link for the last index fetched.</p>
+<p>URL is the dynamic fetch link for the latest Artifact.
+It is provided on a &ldquo;best effort&rdquo; basis, and using the precise
+HelmRepositoryStatus.Artifact data is recommended.</p>
 </td>
 </tr>
 <tr>
@@ -2097,7 +2109,7 @@ Artifact
 </td>
 <td>
 <em>(Optional)</em>
-<p>Artifact represents the output of the last successful repository sync.</p>
+<p>Artifact represents the last successful HelmRepository reconciliation.</p>
 </td>
 </tr>
 <tr>
