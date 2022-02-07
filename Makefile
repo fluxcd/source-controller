@@ -176,6 +176,8 @@ ENVTEST_KUBERNETES_VERSION?=latest
 install-envtest: setup-envtest ## Download envtest binaries locally.
 	mkdir -p ${ENVTEST_ASSETS_DIR}
 	$(ENVTEST) use $(ENVTEST_KUBERNETES_VERSION) --arch=$(ENVTEST_ARCH) --bin-dir=$(ENVTEST_ASSETS_DIR)
+# setup-envtest sets anything below k8s to 0555
+	chmod -R u+w $(BUILD_DIR)
 
 libgit2: $(LIBGIT2)  ## Detect or download libgit2 library
 
