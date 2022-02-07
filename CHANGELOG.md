@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.21.2
+
+**Release date:** 2022-02-07
+
+This prerelease changes the default timeout of `GitRepositories` and `Buckets` from `20s` to `60s`.
+When using the `libgit2` Git implementation, increasing the timeout helps avoid
+`Error waiting on socket` intermittent SSH cloning failures.
+
+Improvements:
+- Increase default timeout to 60s
+  [#570](https://github.com/fluxcd/source-controller/pull/570)
+
 ## 0.21.1
 
 **Release date:** 2022-01-27
