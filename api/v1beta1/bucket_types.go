@@ -62,8 +62,8 @@ type BucketSpec struct {
 	// +required
 	Interval metav1.Duration `json:"interval"`
 
-	// The timeout for download operations, defaults to 20s.
-	// +kubebuilder:default="20s"
+	// The timeout for download operations, defaults to 60s.
+	// +kubebuilder:default="60s"
 	// +optional
 	Timeout *metav1.Duration `json:"timeout,omitempty"`
 
