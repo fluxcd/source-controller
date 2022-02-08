@@ -365,7 +365,7 @@ spec:
     name: v1beta2
     schema:
       openAPIV3Schema:
-        description: GitRepository is the Schema for the gitrepositories API
+        description: GitRepository is the Schema for the gitrepositories API.
         properties:
           apiVersion:
             description: 'APIVersion defines the versioned schema of this representation
@@ -380,11 +380,13 @@ spec:
           metadata:
             type: object
           spec:
-            description: GitRepositorySpec defines the desired state of a Git repository.
+            description: GitRepositorySpec specifies the required configuration to
+              produce an Artifact for a Git repository.
             properties:
               accessFrom:
-                description: AccessFrom defines an Access Control List for allowing
-                  cross-namespace references to this object.
+                description: 'AccessFrom specifies an Access Control List for allowing
+                  cross-namespace references to this object. NOTE: Not implemented,
+                  provisional as of https://github.com/fluxcd/flux2/pull/2092'
                 properties:
                   namespaceSelectors:
                     description: NamespaceSelectors is the list of namespace selectors
@@ -411,8 +413,9 @@ spec:
                 type: object
               gitImplementation:
                 default: go-git
-                description: Determines which git client library to use. Defaults
-                  to go-git, valid values are ('go-git', 'libgit2').
+                description: GitImplementation specifies which Git client library
+                  implementation to use. Defaults to 'go-git', valid values are ('go-git',
+                  'libgit2').
                 enum:
                 - go-git
                 - libgit2
@@ -424,18 +427,20 @@ spec:
                   to find out what those are.
                 type: string
               include:
-                description: Include defines a list of GitRepository resources which
-                  artifacts should be included in the artifact produced for this resource.
+                description: Include specifies a list of GitRepository resources which
+                  Artifacts should be included in the Artifact produced for this GitRepository.
                 items:
-                  description: GitRepositoryInclude defines a source with a from and
-                    to path.
+                  description: GitRepositoryInclude specifies a local reference to
+                    a GitRepository which Artifact (sub-)contents must be included,
+                    and where they should be placed.
                   properties:
                     fromPath:
-                      description: The path to copy contents from, defaults to the
-                        root directory.
+                      description: FromPath specifies the path to copy contents from,
+                        defaults to the root of the Artifact.
                       type: string
                     repository:
-                      description: Reference to a GitRepository to include.
+                      description: GitRepositoryRef specifies the GitRepository which
+                        Artifact contents must be included.
                       properties:
                         name:
                           description: Name of the referent.
@@ -444,45 +449,52 @@ spec:
                       - name
                       type: object
                     toPath:
-                      description: The path to copy contents to, defaults to the name
-                        of the source ref.
+                      description: ToPath specifies the path to copy contents to,
+                        defaults to the name of the GitRepositoryRef.
                       type: string
                   required:
                   - repository
                   type: object
                 type: array
               interval:
-                description: The interval at which to check for repository updates.
+                description: Interval at which to check the GitRepository for updates.
                 type: string
               recurseSubmodules:
-                description: When enabled, after the clone is created, initializes
-                  all submodules within, using their default settings. This option
-                  is available only when using the 'go-git' GitImplementation.
+                description: RecurseSubmodules enables the initialization of all submodules
+                  within the GitRepository as cloned from the URL, using their default
+                  settings. This option is available only when using the 'go-git'
+                  GitImplementation.
                 type: boolean
               ref:
-                description: The Git reference to checkout and monitor for changes,
-                  defaults to master branch.
+                description: Reference specifies the Git reference to resolve and
+                  monitor for changes, defaults to the 'master' branch.
                 properties:
                   branch:
-                    description: The Git branch to checkout, defaults to master.
+                    description: "Branch to check out, defaults to 'master' if no
+                      other field is defined. \n When GitRepositorySpec.GitImplementation
+                      is set to 'go-git', a shallow clone of the specified branch
+                      is performed."
                     type: string
                   commit:
-                    description: The Git commit SHA to checkout, if specified Tag
-                      filters will be ignored.
+                    description: "Commit SHA to check out, takes precedence over all
+                      reference fields. \n When GitRepositorySpec.GitImplementation
+                      is set to 'go-git', this can be combined with Branch to shallow
+                      clone the branch, in which the commit is expected to exist."
                     type: string
                   semver:
-                    description: The Git tag semver expression, takes precedence over
-                      Tag.
+                    description: SemVer tag expression to check out, takes precedence
+                      over Tag.
                     type: string
                   tag:
-                    description: The Git tag to checkout, takes precedence over Branch.
+                    description: Tag to check out, takes precedence over Branch.
                     type: string
                 type: object
               secretRef:
-                description: The secret name containing the Git credentials. For HTTPS
-                  repositories the secret must contain username and password fields.
-                  For SSH repositories the secret must contain 'identity', 'identity.pub'
-                  and 'known_hosts' fields.
+                description: SecretRef specifies the Secret containing authentication
+                  credentials for the GitRepository. For HTTPS repositories the Secret
+                  must contain 'username' and 'password' fields. For SSH repositories
+                  the Secret must contain 'identity', 'identity.pub' and 'known_hosts'
+                  fields.
                 properties:
                   name:
                     description: Name of the referent.
@@ -492,31 +504,31 @@ spec:
                 type: object
               suspend:
                 description: Suspend tells the controller to suspend the reconciliation
-                  of this source. This flag tells the controller to suspend the reconciliation
-                  of this source.
+                  of this GitRepository.
                 type: boolean
               timeout:
                 default: 60s
-                description: The timeout for remote Git operations like cloning, defaults
-                  to 60s.
+                description: Timeout for Git operations like cloning, defaults to
+                  60s.
                 type: string
               url:
-                description: The repository URL, can be a HTTP/S or SSH address.
+                description: URL specifies the Git repository URL, it can be an HTTP/S
+                  or SSH address.
                 pattern: ^(http|https|ssh)://
                 type: string
               verify:
-                description: Verification defines the configuration to verify the
-                  OpenPGP signature for the Git commit HEAD points to.
+                description: Verification specifies the configuration to verify the
+                  Git commit signature(s).
                 properties:
                   mode:
-                    description: Mode describes what Git object should be verified,
+                    description: Mode specifies what Git object should be verified,
                       currently ('head').
                     enum:
                     - head
                     type: string
                   secretRef:
-                    description: SecretRef containing the public keys of all trusted
-                      Git authors.
+                    description: SecretRef specifies the Secret containing the public
+                      keys of trusted Git authors.
                     properties:
                       name:
                         description: Name of the referent.
@@ -534,11 +546,11 @@ spec:
           status:
             default:
               observedGeneration: -1
-            description: GitRepositoryStatus defines the observed state of a Git repository.
+            description: GitRepositoryStatus records the observed state of a Git repository.
             properties:
               artifact:
-                description: Artifact represents the output of the last successful
-                  repository sync.
+                description: Artifact represents the last successful GitRepository
+                  reconciliation.
                 properties:
                   checksum:
                     description: Checksum is the SHA256 checksum of the Artifact file.
@@ -643,8 +655,8 @@ spec:
                   type: object
                 type: array
               includedArtifacts:
-                description: IncludedArtifacts represents the included artifacts from
-                  the last successful repository sync.
+                description: IncludedArtifacts contains a list of the last successfully
+                  included Artifacts as instructed by GitRepositorySpec.Include.
                 items:
                   description: Artifact represents the output of a Source reconciliation.
                   properties:
@@ -689,12 +701,14 @@ spec:
                   be detected.
                 type: string
               observedGeneration:
-                description: ObservedGeneration is the last observed generation.
+                description: ObservedGeneration is the last observed generation of
+                  the GitRepository object.
                 format: int64
                 type: integer
               url:
-                description: URL is the fetch link for the artifact output of the
-                  last repository sync.
+                description: URL is the dynamic fetch link for the latest Artifact.
+                  It is provided on a "best effort" basis, and using the precise GitRepositoryStatus.Artifact
+                  data is recommended.
                 type: string
             type: object
         type: object
