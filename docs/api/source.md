@@ -240,7 +240,7 @@ BucketStatus
 </div>
 <h3 id="source.toolkit.fluxcd.io/v1beta2.GitRepository">GitRepository
 </h3>
-<p>GitRepository is the Schema for the gitrepositories API</p>
+<p>GitRepository is the Schema for the gitrepositories API.</p>
 <div class="md-typeset__scrollwrap">
 <div class="md-typeset__table">
 <table>
@@ -303,7 +303,7 @@ string
 </em>
 </td>
 <td>
-<p>The repository URL, can be a HTTP/S or SSH address.</p>
+<p>URL specifies the Git repository URL, can be an HTTP/S or SSH address.</p>
 </td>
 </tr>
 <tr>
@@ -317,9 +317,12 @@ github.com/fluxcd/pkg/apis/meta.LocalObjectReference
 </td>
 <td>
 <em>(Optional)</em>
-<p>The secret name containing the Git credentials.
-For HTTPS repositories the secret must contain username and password fields.
-For SSH repositories the secret must contain &lsquo;identity&rsquo;, &lsquo;identity.pub&rsquo; and &lsquo;known_hosts&rsquo; fields.</p>
+<p>SecretRef specifies the Secret containing authentication credentials for
+the GitRepository.
+For HTTPS repositories the Secret must contain &lsquo;username&rsquo; and &lsquo;password&rsquo;
+fields.
+For SSH repositories the Secret must contain &lsquo;identity&rsquo;, &lsquo;identity.pub&rsquo;
+and &lsquo;known_hosts&rsquo; fields.</p>
 </td>
 </tr>
 <tr>
@@ -332,7 +335,7 @@ Kubernetes meta/v1.Duration
 </em>
 </td>
 <td>
-<p>The interval at which to check for repository updates.</p>
+<p>Interval at which to check the GitRepository for updates.</p>
 </td>
 </tr>
 <tr>
@@ -346,7 +349,7 @@ Kubernetes meta/v1.Duration
 </td>
 <td>
 <em>(Optional)</em>
-<p>The timeout for remote Git operations like cloning, defaults to 60s.</p>
+<p>Timeout for Git operations like cloning, defaults to 60s.</p>
 </td>
 </tr>
 <tr>
@@ -360,8 +363,8 @@ GitRepositoryRef
 </td>
 <td>
 <em>(Optional)</em>
-<p>The Git reference to checkout and monitor for changes, defaults to
-master branch.</p>
+<p>Reference specifies the Git reference to resolve and monitor for
+changes, defaults to the &lsquo;master&rsquo; branch.</p>
 </td>
 </tr>
 <tr>
@@ -375,7 +378,8 @@ GitRepositoryVerification
 </td>
 <td>
 <em>(Optional)</em>
-<p>Verification defines the configuration to verify the OpenPGP signature for the Git commit HEAD points to.</p>
+<p>Verification specifies the configuration to verify the Git commit
+signature(s).</p>
 </td>
 </tr>
 <tr>
@@ -387,8 +391,9 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>Ignore overrides the set of excluded patterns in the .sourceignore format (which is the same as .gitignore).
-If not provided, a default will be used, consult the documentation for your version to find out what those are.</p>
+<p>Ignore overrides the set of excluded patterns in the .sourceignore format
+(which is the same as .gitignore). If not provided, a default will be used,
+consult the documentation for your version to find out what those are.</p>
 </td>
 </tr>
 <tr>
@@ -400,8 +405,8 @@ bool
 </td>
 <td>
 <em>(Optional)</em>
-<p>Suspend tells the controller to suspend the reconciliation of this source.
-This flag tells the controller to suspend the reconciliation of this source.</p>
+<p>Suspend tells the controller to suspend the reconciliation of this
+GitRepository.</p>
 </td>
 </tr>
 <tr>
@@ -413,8 +418,8 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>Determines which git client library to use.
-Defaults to go-git, valid values are (&lsquo;go-git&rsquo;, &lsquo;libgit2&rsquo;).</p>
+<p>GitImplementation specifies which Git client library implementation to
+use. Defaults to &lsquo;go-git&rsquo;, valid values are (&lsquo;go-git&rsquo;, &lsquo;libgit2&rsquo;).</p>
 </td>
 </tr>
 <tr>
@@ -426,7 +431,8 @@ bool
 </td>
 <td>
 <em>(Optional)</em>
-<p>When enabled, after the clone is created, initializes all submodules within, using their default settings.
+<p>RecurseSubmodules enables the initialization of all submodules within
+the GitRepository as cloned from the URL, using their default settings.
 This option is available only when using the &lsquo;go-git&rsquo; GitImplementation.</p>
 </td>
 </tr>
@@ -440,8 +446,8 @@ This option is available only when using the &lsquo;go-git&rsquo; GitImplementat
 </em>
 </td>
 <td>
-<p>Include defines a list of GitRepository resources which artifacts should be included in the artifact produced for
-this resource.</p>
+<p>Include specifies a list of GitRepository resources which Artifacts
+should be included in the Artifact produced for this GitRepository.</p>
 </td>
 </tr>
 <tr>
@@ -455,7 +461,8 @@ github.com/fluxcd/pkg/apis/acl.AccessFrom
 </td>
 <td>
 <em>(Optional)</em>
-<p>AccessFrom defines an Access Control List for allowing cross-namespace references to this object.</p>
+<p>AccessFrom specifies an Access Control List for allowing cross-namespace
+references to this object.</p>
 </td>
 </tr>
 </table>
@@ -1206,7 +1213,8 @@ github.com/fluxcd/pkg/apis/meta.ReconcileRequestStatus
 (<em>Appears on:</em>
 <a href="#source.toolkit.fluxcd.io/v1beta2.GitRepositorySpec">GitRepositorySpec</a>)
 </p>
-<p>GitRepositoryInclude defines a source with a from and to path.</p>
+<p>GitRepositoryInclude specifies a reference to a GitRepository which Artifact
+(sub-)contents must be included, and where they should be placed.</p>
 <div class="md-typeset__scrollwrap">
 <div class="md-typeset__table">
 <table>
@@ -1227,7 +1235,8 @@ github.com/fluxcd/pkg/apis/meta.LocalObjectReference
 </em>
 </td>
 <td>
-<p>Reference to a GitRepository to include.</p>
+<p>GitRepositoryRef specifies the GitRepository which Artifact contents
+must be included.</p>
 </td>
 </tr>
 <tr>
@@ -1239,7 +1248,8 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>The path to copy contents from, defaults to the root directory.</p>
+<p>FromPath specifies the path to copy contents from, defaults to the root
+of the Artifact.</p>
 </td>
 </tr>
 <tr>
@@ -1251,7 +1261,8 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>The path to copy contents to, defaults to the name of the source ref.</p>
+<p>ToPath specifies the path to copy contents to, defaults to the name of
+the GitRepositoryRef.</p>
 </td>
 </tr>
 </tbody>
@@ -1264,7 +1275,7 @@ string
 (<em>Appears on:</em>
 <a href="#source.toolkit.fluxcd.io/v1beta2.GitRepositorySpec">GitRepositorySpec</a>)
 </p>
-<p>GitRepositoryRef defines the Git ref used for pull and checkout operations.</p>
+<p>GitRepositoryRef specifies the Git reference to resolve and checkout.</p>
 <div class="md-typeset__scrollwrap">
 <div class="md-typeset__table">
 <table>
@@ -1284,7 +1295,9 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>The Git branch to checkout, defaults to master.</p>
+<p>Branch to checkout, defaults to &lsquo;master&rsquo; if no other field is defined.</p>
+<p>When GitRepositorySpec.GitImplementation is set to &lsquo;go-git&rsquo;, a shallow
+clone of the specified branch is performed.</p>
 </td>
 </tr>
 <tr>
@@ -1296,7 +1309,7 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>The Git tag to checkout, takes precedence over Branch.</p>
+<p>Tag to checkout, takes precedence over Branch.</p>
 </td>
 </tr>
 <tr>
@@ -1308,7 +1321,7 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>The Git tag semver expression, takes precedence over Tag.</p>
+<p>SemVer tag expression to checkout, takes precedence over Tag.</p>
 </td>
 </tr>
 <tr>
@@ -1320,7 +1333,10 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>The Git commit SHA to checkout, if specified Tag filters will be ignored.</p>
+<p>Commit SHA to checkout, takes precedence over all reference fields.</p>
+<p>When GitRepositorySpec.GitImplementation is set to &lsquo;go-git&rsquo;, this can be
+combined with Branch to shallow clone the branch, in which the commit is
+expected to exist.</p>
 </td>
 </tr>
 </tbody>
@@ -1333,7 +1349,8 @@ string
 (<em>Appears on:</em>
 <a href="#source.toolkit.fluxcd.io/v1beta2.GitRepository">GitRepository</a>)
 </p>
-<p>GitRepositorySpec defines the desired state of a Git repository.</p>
+<p>GitRepositorySpec specifies the required configuration to produce an
+Artifact for a Git repository.</p>
 <div class="md-typeset__scrollwrap">
 <div class="md-typeset__table">
 <table>
@@ -1352,7 +1369,7 @@ string
 </em>
 </td>
 <td>
-<p>The repository URL, can be a HTTP/S or SSH address.</p>
+<p>URL specifies the Git repository URL, can be an HTTP/S or SSH address.</p>
 </td>
 </tr>
 <tr>
@@ -1366,9 +1383,12 @@ github.com/fluxcd/pkg/apis/meta.LocalObjectReference
 </td>
 <td>
 <em>(Optional)</em>
-<p>The secret name containing the Git credentials.
-For HTTPS repositories the secret must contain username and password fields.
-For SSH repositories the secret must contain &lsquo;identity&rsquo;, &lsquo;identity.pub&rsquo; and &lsquo;known_hosts&rsquo; fields.</p>
+<p>SecretRef specifies the Secret containing authentication credentials for
+the GitRepository.
+For HTTPS repositories the Secret must contain &lsquo;username&rsquo; and &lsquo;password&rsquo;
+fields.
+For SSH repositories the Secret must contain &lsquo;identity&rsquo;, &lsquo;identity.pub&rsquo;
+and &lsquo;known_hosts&rsquo; fields.</p>
 </td>
 </tr>
 <tr>
@@ -1381,7 +1401,7 @@ Kubernetes meta/v1.Duration
 </em>
 </td>
 <td>
-<p>The interval at which to check for repository updates.</p>
+<p>Interval at which to check the GitRepository for updates.</p>
 </td>
 </tr>
 <tr>
@@ -1395,7 +1415,7 @@ Kubernetes meta/v1.Duration
 </td>
 <td>
 <em>(Optional)</em>
-<p>The timeout for remote Git operations like cloning, defaults to 60s.</p>
+<p>Timeout for Git operations like cloning, defaults to 60s.</p>
 </td>
 </tr>
 <tr>
@@ -1409,8 +1429,8 @@ GitRepositoryRef
 </td>
 <td>
 <em>(Optional)</em>
-<p>The Git reference to checkout and monitor for changes, defaults to
-master branch.</p>
+<p>Reference specifies the Git reference to resolve and monitor for
+changes, defaults to the &lsquo;master&rsquo; branch.</p>
 </td>
 </tr>
 <tr>
@@ -1424,7 +1444,8 @@ GitRepositoryVerification
 </td>
 <td>
 <em>(Optional)</em>
-<p>Verification defines the configuration to verify the OpenPGP signature for the Git commit HEAD points to.</p>
+<p>Verification specifies the configuration to verify the Git commit
+signature(s).</p>
 </td>
 </tr>
 <tr>
@@ -1436,8 +1457,9 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>Ignore overrides the set of excluded patterns in the .sourceignore format (which is the same as .gitignore).
-If not provided, a default will be used, consult the documentation for your version to find out what those are.</p>
+<p>Ignore overrides the set of excluded patterns in the .sourceignore format
+(which is the same as .gitignore). If not provided, a default will be used,
+consult the documentation for your version to find out what those are.</p>
 </td>
 </tr>
 <tr>
@@ -1449,8 +1471,8 @@ bool
 </td>
 <td>
 <em>(Optional)</em>
-<p>Suspend tells the controller to suspend the reconciliation of this source.
-This flag tells the controller to suspend the reconciliation of this source.</p>
+<p>Suspend tells the controller to suspend the reconciliation of this
+GitRepository.</p>
 </td>
 </tr>
 <tr>
@@ -1462,8 +1484,8 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>Determines which git client library to use.
-Defaults to go-git, valid values are (&lsquo;go-git&rsquo;, &lsquo;libgit2&rsquo;).</p>
+<p>GitImplementation specifies which Git client library implementation to
+use. Defaults to &lsquo;go-git&rsquo;, valid values are (&lsquo;go-git&rsquo;, &lsquo;libgit2&rsquo;).</p>
 </td>
 </tr>
 <tr>
@@ -1475,7 +1497,8 @@ bool
 </td>
 <td>
 <em>(Optional)</em>
-<p>When enabled, after the clone is created, initializes all submodules within, using their default settings.
+<p>RecurseSubmodules enables the initialization of all submodules within
+the GitRepository as cloned from the URL, using their default settings.
 This option is available only when using the &lsquo;go-git&rsquo; GitImplementation.</p>
 </td>
 </tr>
@@ -1489,8 +1512,8 @@ This option is available only when using the &lsquo;go-git&rsquo; GitImplementat
 </em>
 </td>
 <td>
-<p>Include defines a list of GitRepository resources which artifacts should be included in the artifact produced for
-this resource.</p>
+<p>Include specifies a list of GitRepository resources which Artifacts
+should be included in the Artifact produced for this GitRepository.</p>
 </td>
 </tr>
 <tr>
@@ -1504,7 +1527,8 @@ github.com/fluxcd/pkg/apis/acl.AccessFrom
 </td>
 <td>
 <em>(Optional)</em>
-<p>AccessFrom defines an Access Control List for allowing cross-namespace references to this object.</p>
+<p>AccessFrom specifies an Access Control List for allowing cross-namespace
+references to this object.</p>
 </td>
 </tr>
 </tbody>
@@ -1517,7 +1541,7 @@ github.com/fluxcd/pkg/apis/acl.AccessFrom
 (<em>Appears on:</em>
 <a href="#source.toolkit.fluxcd.io/v1beta2.GitRepository">GitRepository</a>)
 </p>
-<p>GitRepositoryStatus defines the observed state of a Git repository.</p>
+<p>GitRepositoryStatus records the observed state of a Git repository.</p>
 <div class="md-typeset__scrollwrap">
 <div class="md-typeset__table">
 <table>
@@ -1537,7 +1561,8 @@ int64
 </td>
 <td>
 <em>(Optional)</em>
-<p>ObservedGeneration is the last observed generation.</p>
+<p>ObservedGeneration is the last observed generation of the GitRepository
+object.</p>
 </td>
 </tr>
 <tr>
@@ -1563,7 +1588,9 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>URL is the fetch link for the artifact output of the last repository sync.</p>
+<p>URL is the dynamic fetch link for the latest Artifact.
+It is provided on a &ldquo;best effort&rdquo; basis, and using the precise
+GitRepositoryStatus.Artifact data is recommended.</p>
 </td>
 </tr>
 <tr>
@@ -1577,7 +1604,7 @@ Artifact
 </td>
 <td>
 <em>(Optional)</em>
-<p>Artifact represents the output of the last successful repository sync.</p>
+<p>Artifact represents the last successful GitRepository reconciliation.</p>
 </td>
 </tr>
 <tr>
@@ -1591,7 +1618,8 @@ Artifact
 </td>
 <td>
 <em>(Optional)</em>
-<p>IncludedArtifacts represents the included artifacts from the last successful repository sync.</p>
+<p>IncludedArtifacts contains a list of the last successfully included
+Artifacts as instructed by GitRepositorySpec.Include.</p>
 </td>
 </tr>
 <tr>
@@ -1619,7 +1647,8 @@ github.com/fluxcd/pkg/apis/meta.ReconcileRequestStatus
 (<em>Appears on:</em>
 <a href="#source.toolkit.fluxcd.io/v1beta2.GitRepositorySpec">GitRepositorySpec</a>)
 </p>
-<p>GitRepositoryVerification defines the OpenPGP signature verification process.</p>
+<p>GitRepositoryVerification specifies the Git commit signature verification
+strategy.</p>
 <div class="md-typeset__scrollwrap">
 <div class="md-typeset__table">
 <table>
@@ -1638,7 +1667,7 @@ string
 </em>
 </td>
 <td>
-<p>Mode describes what Git object should be verified, currently (&lsquo;head&rsquo;).</p>
+<p>Mode specifies what Git object should be verified, currently (&lsquo;head&rsquo;).</p>
 </td>
 </tr>
 <tr>
@@ -1651,7 +1680,8 @@ github.com/fluxcd/pkg/apis/meta.LocalObjectReference
 </em>
 </td>
 <td>
-<p>SecretRef containing the public keys of all trusted Git authors.</p>
+<p>SecretRef specifies the Secret containing the public keys of trusted Git
+authors.</p>
 </td>
 </tr>
 </tbody>

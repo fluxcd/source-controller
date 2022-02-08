@@ -5,7 +5,7 @@ This is the v1beta2 API specification for defining the desired state sources of 
 ## Specification
 
 * Source kinds:
-  + GitRepository
+  + [GitRepository](gitrepositories.md)
   + [HelmRepository](helmrepositories.md)
   + HelmChart
   + [Bucket](buckets.md)
