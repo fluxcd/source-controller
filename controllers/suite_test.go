@@ -56,6 +56,8 @@ var exampleCA []byte
 var ctx context.Context
 var cancel context.CancelFunc
 
+const timeout = time.Second * 30
+
 func TestAPIs(t *testing.T) {
 	RegisterFailHandler(Fail)
 
@@ -64,7 +66,12 @@ func TestAPIs(t *testing.T) {
 		[]Reporter{printer.NewlineReporter{}})
 }
 
-var _ = BeforeSuite(func(done Done) {
+var _ = BeforeSuite(func() {
+	done := make(chan interface{})
+	go func() {
+		close(done)
+	}()
+
 	logf.SetLogger(
 		zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)),
 	)
@@ -153,7 +160,7 @@ var _ = BeforeSuite(func(done Done) {
 	k8sClient = k8sManager.GetClient()
 	Expect(k8sClient).ToNot(BeNil())
 
-	close(done)
+	Eventually(done, timeout).Should(BeClosed())
 }, 60)
 
 var _ = AfterSuite(func() {
