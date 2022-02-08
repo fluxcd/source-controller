@@ -31,7 +31,7 @@ import (
 	"strings"
 	"time"
 
-	git2go "github.com/libgit2/git2go/v31"
+	git2go "github.com/libgit2/git2go/v33"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/knownhosts"
 
@@ -61,16 +61,16 @@ func RemoteCallbacks(ctx context.Context, opts *git.AuthOptions) git2go.RemoteCa
 // libgit2 it should stop the transfer when the given context is closed (due to
 // e.g. a timeout).
 func transferProgressCallback(ctx context.Context) git2go.TransferProgressCallback {
-	return func(p git2go.TransferProgress) git2go.ErrorCode {
+	return func(p git2go.TransferProgress) error {
 		// Early return if all the objects have been received.
 		if p.ReceivedObjects == p.TotalObjects {
-			return git2go.ErrorCodeOK
+			return nil
 		}
 		select {
 		case <-ctx.Done():
-			return git2go.ErrorCodeUser
+			return fmt.Errorf("transport close - potentially due to a timeout")
 		default:
-			return git2go.ErrorCodeOK
+			return nil
 		}
 	}
 }
@@ -79,12 +79,12 @@ func transferProgressCallback(ctx context.Context) git2go.TransferProgressCallba
 // libgit2 it should cancel the network operation when the given context is
 // closed.
 func transportMessageCallback(ctx context.Context) git2go.TransportMessageCallback {
-	return func(_ string) git2go.ErrorCode {
+	return func(_ string) error {
 		select {
 		case <-ctx.Done():
-			return git2go.ErrorCodeUser
+			return fmt.Errorf("transport closed")
 		default:
-			return git2go.ErrorCodeOK
+			return nil
 		}
 	}
 }
@@ -93,16 +93,16 @@ func transportMessageCallback(ctx context.Context) git2go.TransportMessageCallba
 // signals libgit2 it should stop the push transfer when the given context is
 // closed (due to e.g. a timeout).
 func pushTransferProgressCallback(ctx context.Context) git2go.PushTransferProgressCallback {
-	return func(current, total uint32, _ uint) git2go.ErrorCode {
+	return func(current, total uint32, _ uint) error {
 		// Early return if current equals total.
 		if current == total {
-			return git2go.ErrorCodeOK
+			return nil
 		}
 		select {
 		case <-ctx.Done():
-			return git2go.ErrorCodeUser
+			return fmt.Errorf("transport close - potentially due to a timeout")
 		default:
-			return git2go.ErrorCodeOK
+			return nil
 		}
 	}
 }
@@ -155,10 +155,10 @@ func certificateCallback(opts *git.AuthOptions) git2go.CertificateCheckCallback 
 // x509Callback returns a CertificateCheckCallback that verifies the
 // certificate against the given caBundle for git.HTTPS Transports.
 func x509Callback(caBundle []byte) git2go.CertificateCheckCallback {
-	return func(cert *git2go.Certificate, valid bool, hostname string) git2go.ErrorCode {
+	return func(cert *git2go.Certificate, valid bool, hostname string) error {
 		roots := x509.NewCertPool()
 		if ok := roots.AppendCertsFromPEM(caBundle); !ok {
-			return git2go.ErrorCodeCertificate
+			return fmt.Errorf("x509 cert could not be appended")
 		}
 
 		opts := x509.VerifyOptions{
@@ -167,9 +167,9 @@ func x509Callback(caBundle []byte) git2go.CertificateCheckCallback {
 			CurrentTime: now(),
 		}
 		if _, err := cert.X509.Verify(opts); err != nil {
-			return git2go.ErrorCodeCertificate
+			return fmt.Errorf("x509 cert could not be verified")
 		}
-		return git2go.ErrorCodeOK
+		return nil
 	}
 }
 
@@ -177,10 +177,10 @@ func x509Callback(caBundle []byte) git2go.CertificateCheckCallback {
 // the key of Git server against the given host and known_hosts for
 // git.SSH Transports.
 func knownHostsCallback(host string, knownHosts []byte) git2go.CertificateCheckCallback {
-	return func(cert *git2go.Certificate, valid bool, hostname string) git2go.ErrorCode {
+	return func(cert *git2go.Certificate, valid bool, hostname string) error {
 		kh, err := parseKnownHosts(string(knownHosts))
 		if err != nil {
-			return git2go.ErrorCodeCertificate
+			return fmt.Errorf("failed to parse known_hosts: %w", err)
 		}
 
 		// First, attempt to split the configured host and port to validate
@@ -200,7 +200,7 @@ func knownHostsCallback(host string, knownHosts []byte) git2go.CertificateCheckC
 		}
 
 		if hostnameWithoutPort != hostWithoutPort {
-			return git2go.ErrorCodeUser
+			return fmt.Errorf("host mismatch: %q %q\n", hostWithoutPort, hostnameWithoutPort)
 		}
 
 		// We are now certain that the configured host and the hostname
@@ -210,10 +210,10 @@ func knownHostsCallback(host string, knownHosts []byte) git2go.CertificateCheckC
 		h := knownhosts.Normalize(host)
 		for _, k := range kh {
 			if k.matches(h, cert.Hostkey) {
-				return git2go.ErrorCodeOK
+				return nil
 			}
 		}
-		return git2go.ErrorCodeCertificate
+		return fmt.Errorf("hostkey could not be verified")
 	}
 }
 

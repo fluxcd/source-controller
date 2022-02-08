@@ -23,10 +23,11 @@ import (
 	"encoding/base64"
 	"encoding/pem"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
-	git2go "github.com/libgit2/git2go/v31"
+	git2go "github.com/libgit2/git2go/v33"
 	. "github.com/onsi/gomega"
 )
 
@@ -144,42 +145,42 @@ func Test_x509Callback(t *testing.T) {
 		certificate string
 		host        string
 		caBundle    []byte
-		want        git2go.ErrorCode
+		want        error
 	}{
 		{
 			name:        "Valid certificate authority bundle",
 			certificate: googleLeafFixture,
 			host:        "www.google.com",
 			caBundle:    []byte(giag2IntermediateFixture + "\n" + geoTrustRootFixture),
-			want:        git2go.ErrorCodeOK,
+			want:        nil,
 		},
 		{
 			name:        "Invalid certificate",
 			certificate: googleLeafWithInvalidHashFixture,
 			host:        "www.google.com",
 			caBundle:    []byte(giag2IntermediateFixture + "\n" + geoTrustRootFixture),
-			want:        git2go.ErrorCodeCertificate,
+			want:        fmt.Errorf("x509 cert could not be verified"),
 		},
 		{
 			name:        "Invalid certificate authority bundle",
 			certificate: googleLeafFixture,
 			host:        "www.google.com",
 			caBundle:    bytes.Trim([]byte(giag2IntermediateFixture+"\n"+geoTrustRootFixture), "-"),
-			want:        git2go.ErrorCodeCertificate,
+			want:        fmt.Errorf("x509 cert could not be appended"),
 		},
 		{
 			name:        "Missing intermediate in bundle",
 			certificate: googleLeafFixture,
 			host:        "www.google.com",
 			caBundle:    []byte(geoTrustRootFixture),
-			want:        git2go.ErrorCodeCertificate,
+			want:        fmt.Errorf("x509 cert could not be verified"),
 		},
 		{
 			name:        "Invalid host",
 			certificate: googleLeafFixture,
 			host:        "www.google.co",
 			caBundle:    []byte(giag2IntermediateFixture + "\n" + geoTrustRootFixture),
-			want:        git2go.ErrorCodeCertificate,
+			want:        fmt.Errorf("x509 cert could not be verified"),
 		},
 	}
 	for _, tt := range tests {
@@ -194,7 +195,12 @@ func Test_x509Callback(t *testing.T) {
 			}
 
 			callback := x509Callback(tt.caBundle)
-			g.Expect(callback(cert, false, tt.host)).To(Equal(tt.want))
+			result := g.Expect(callback(cert, false, tt.host))
+			if tt.want == nil {
+				result.To(BeNil())
+			} else {
+				result.To(Equal(tt.want))
+			}
 		})
 	}
 }
@@ -206,7 +212,7 @@ func Test_knownHostsCallback(t *testing.T) {
 		expectedHost string
 		knownHosts   []byte
 		hostkey      git2go.HostkeyCertificate
-		want         git2go.ErrorCode
+		want         error
 	}{
 		{
 			name:         "Match",
@@ -214,7 +220,7 @@ func Test_knownHostsCallback(t *testing.T) {
 			knownHosts:   []byte(knownHostsFixture),
 			hostkey:      git2go.HostkeyCertificate{Kind: git2go.HostkeySHA1 | git2go.HostkeyMD5, HashSHA1: sha1Fingerprint("v2toJdKXfFEaR1u++4iq1UqSrHM")},
 			expectedHost: "github.com",
-			want:         git2go.ErrorCodeOK,
+			want:         nil,
 		},
 		{
 			name:         "Match with port",
@@ -222,7 +228,7 @@ func Test_knownHostsCallback(t *testing.T) {
 			knownHosts:   []byte(knownHostsFixture),
 			hostkey:      git2go.HostkeyCertificate{Kind: git2go.HostkeySHA1 | git2go.HostkeyMD5, HashSHA1: sha1Fingerprint("v2toJdKXfFEaR1u++4iq1UqSrHM")},
 			expectedHost: "github.com:22",
-			want:         git2go.ErrorCodeOK,
+			want:         nil,
 		},
 		{
 			name:         "Hostname mismatch",
@@ -230,7 +236,7 @@ func Test_knownHostsCallback(t *testing.T) {
 			knownHosts:   []byte(knownHostsFixture),
 			hostkey:      git2go.HostkeyCertificate{Kind: git2go.HostkeySHA1 | git2go.HostkeyMD5, HashSHA1: sha1Fingerprint("v2toJdKXfFEaR1u++4iq1UqSrHM")},
 			expectedHost: "example.com",
-			want:         git2go.ErrorCodeUser,
+			want:         fmt.Errorf("host mismatch: %q %q\n", "example.com", "github.com"),
 		},
 		{
 			name:         "Hostkey mismatch",
@@ -238,7 +244,7 @@ func Test_knownHostsCallback(t *testing.T) {
 			knownHosts:   []byte(knownHostsFixture),
 			hostkey:      git2go.HostkeyCertificate{Kind: git2go.HostkeyMD5, HashMD5: md5Fingerprint("\xb6\x03\x0e\x39\x97\x9e\xd0\xe7\x24\xce\xa3\x77\x3e\x01\x42\x09")},
 			expectedHost: "github.com",
-			want:         git2go.ErrorCodeCertificate,
+			want:         fmt.Errorf("hostkey could not be verified"),
 		},
 	}
 	for _, tt := range tests {
@@ -247,7 +253,12 @@ func Test_knownHostsCallback(t *testing.T) {
 
 			cert := &git2go.Certificate{Hostkey: tt.hostkey}
 			callback := knownHostsCallback(tt.expectedHost, tt.knownHosts)
-			g.Expect(callback(cert, false, tt.host)).To(Equal(tt.want))
+			result := g.Expect(callback(cert, false, tt.host))
+			if tt.want == nil {
+				result.To(BeNil())
+			} else {
+				result.To(Equal(tt.want))
+			}
 		})
 	}
 }
@@ -352,7 +363,7 @@ func Test_transferProgressCallback(t *testing.T) {
 		name       string
 		progress   git2go.TransferProgress
 		cancelFunc func(context.CancelFunc)
-		wantErr    git2go.ErrorCode
+		wantErr    error
 	}{
 		{
 			name: "ok - in progress",
@@ -361,7 +372,7 @@ func Test_transferProgressCallback(t *testing.T) {
 				ReceivedObjects: 21,
 			},
 			cancelFunc: func(cf context.CancelFunc) {},
-			wantErr:    git2go.ErrorCodeOK,
+			wantErr:    nil,
 		},
 		{
 			name: "ok - transfer complete",
@@ -370,7 +381,7 @@ func Test_transferProgressCallback(t *testing.T) {
 				ReceivedObjects: 30,
 			},
 			cancelFunc: func(cf context.CancelFunc) {},
-			wantErr:    git2go.ErrorCodeOK,
+			wantErr:    nil,
 		},
 		{
 			name: "ok - transfer complete, context cancelled",
@@ -379,7 +390,7 @@ func Test_transferProgressCallback(t *testing.T) {
 				ReceivedObjects: 30,
 			},
 			cancelFunc: func(cf context.CancelFunc) { cf() },
-			wantErr:    git2go.ErrorCodeOK,
+			wantErr:    nil,
 		},
 		{
 			name: "error - context cancelled",
@@ -388,7 +399,7 @@ func Test_transferProgressCallback(t *testing.T) {
 				ReceivedObjects: 21,
 			},
 			cancelFunc: func(cf context.CancelFunc) { cf() },
-			wantErr:    git2go.ErrorCodeUser,
+			wantErr:    fmt.Errorf("transport close - potentially due to a timeout"),
 		},
 	}
 
@@ -403,7 +414,12 @@ func Test_transferProgressCallback(t *testing.T) {
 
 			tt.cancelFunc(cancel)
 
-			g.Expect(tpcb(tt.progress)).To(Equal(tt.wantErr))
+			result := g.Expect(tpcb(tt.progress))
+			if tt.wantErr == nil {
+				result.To(BeNil())
+			} else {
+				result.To(Equal(tt.wantErr))
+			}
 		})
 	}
 }
@@ -412,17 +428,17 @@ func Test_transportMessageCallback(t *testing.T) {
 	tests := []struct {
 		name       string
 		cancelFunc func(context.CancelFunc)
-		wantErr    git2go.ErrorCode
+		wantErr    error
 	}{
 		{
 			name:       "ok - transport open",
 			cancelFunc: func(cf context.CancelFunc) {},
-			wantErr:    git2go.ErrorCodeOK,
+			wantErr:    nil,
 		},
 		{
 			name:       "error - transport closed",
 			cancelFunc: func(cf context.CancelFunc) { cf() },
-			wantErr:    git2go.ErrorCodeUser,
+			wantErr:    fmt.Errorf("transport closed"),
 		},
 	}
 
@@ -437,7 +453,12 @@ func Test_transportMessageCallback(t *testing.T) {
 
 			tt.cancelFunc(cancel)
 
-			g.Expect(tmcb("")).To(Equal(tt.wantErr))
+			result := g.Expect(tmcb(""))
+			if tt.wantErr == nil {
+				result.To(BeNil())
+			} else {
+				result.To(Equal(tt.wantErr))
+			}
 		})
 	}
 }
@@ -452,31 +473,31 @@ func Test_pushTransferProgressCallback(t *testing.T) {
 		name       string
 		progress   pushProgress
 		cancelFunc func(context.CancelFunc)
-		wantErr    git2go.ErrorCode
+		wantErr    error
 	}{
 		{
 			name:       "ok - in progress",
 			progress:   pushProgress{current: 20, total: 25},
 			cancelFunc: func(cf context.CancelFunc) {},
-			wantErr:    git2go.ErrorCodeOK,
+			wantErr:    nil,
 		},
 		{
 			name:       "ok - transfer complete",
 			progress:   pushProgress{current: 25, total: 25},
 			cancelFunc: func(cf context.CancelFunc) {},
-			wantErr:    git2go.ErrorCodeOK,
+			wantErr:    nil,
 		},
 		{
 			name:       "ok - transfer complete, context cancelled",
 			progress:   pushProgress{current: 25, total: 25},
 			cancelFunc: func(cf context.CancelFunc) { cf() },
-			wantErr:    git2go.ErrorCodeOK,
+			wantErr:    nil,
 		},
 		{
 			name:       "error - context cancelled",
 			progress:   pushProgress{current: 20, total: 25},
 			cancelFunc: func(cf context.CancelFunc) { cf() },
-			wantErr:    git2go.ErrorCodeUser,
+			wantErr:    fmt.Errorf("transport close - potentially due to a timeout"),
 		},
 	}
 
@@ -491,7 +512,12 @@ func Test_pushTransferProgressCallback(t *testing.T) {
 
 			tt.cancelFunc(cancel)
 
-			g.Expect(ptpcb(tt.progress.current, tt.progress.total, tt.progress.bytes)).To(Equal(tt.wantErr))
+			result := g.Expect(ptpcb(tt.progress.current, tt.progress.total, tt.progress.bytes))
+			if tt.wantErr == nil {
+				result.To(BeNil())
+			} else {
+				result.To(Equal(tt.wantErr))
+			}
 		})
 	}
 }
