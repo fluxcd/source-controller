@@ -47,22 +47,37 @@ function setup_current() {
         # For MacOS development environments, download the amd64 static libraries released from from golang-with-libgit2.
 
         #TODO: update URL with official URL + TAG:
-        curl -o output.tar.gz -LO "https://github.com/pjbgf/golang-with-libgit2/releases/download/1.1.1-6/darwin-libs.tar.gz"
+        curl -o output.tar.gz -LO "https://github.com/fluxcd/golang-with-libgit2/releases/download/${TAG}/darwin-libs.tar.gz"
        
         DIR=libgit2-darwin
         NEW_DIR="$(/bin/pwd)/build/libgit2/${TAG}"
         INSTALLED_DIR="/Users/runner/work/golang-with-libgit2/golang-with-libgit2/build/${DIR}-amd64"
 
         tar -xf output.tar.gz
+        rm output.tar.gz
         mv "${DIR}" "${TAG}"
         mv "${TAG}/" "./build/libgit2"
 
-        sed -i "" "s;-L/Applications/Xcode_12.4.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX11.1.sdk/usr/lib ;;g" "$(/bin/pwd)/build/libgit2/${TAG}/lib/pkgconfig/libgit2.pc"
+        LIBGIT2_SED="s;-L/Applications/Xcode_.* ;;g"
+        LIBGIT2PC="$(/bin/pwd)/build/libgit2/${TAG}/lib/pkgconfig/libgit2.pc"
+        # Some macOS users may override their sed with gsed. If gsed is the PATH, use that instead.
+        if command -v gsed &> /dev/null; then 
+            # Removes abs path from build machine, and let iconv be resolved automatically by default search paths.
+            gsed -i "${LIBGIT2_SED}" "${LIBGIT2PC}"
 
-        # Update the prefix paths included in the .pc files.
-        # This will make it easier to update to the location in which they will be used.
-        # sed has a sight different behaviour in MacOS
-        find "${NEW_DIR}" -type f -name "*.pc" | xargs -I {} sed -i "" "s;${INSTALLED_DIR};${NEW_DIR};g" {}
+            # Update the prefix paths included in the .pc files.
+            # This will make it easier to update to the location in which they will be used.
+            # sed has a sight different behaviour in MacOS
+            find "${NEW_DIR}" -type f -name "*.pc" | xargs -I {} gsed -i "s;${INSTALLED_DIR};${NEW_DIR};g" {}
+        else
+            # Removes abs path from build machine, and let iconv be resolved automatically by default search paths.
+            sed -i "" "${LIBGIT2_SED}" "${LIBGIT2PC}"
+
+            # Update the prefix paths included in the .pc files.
+            # This will make it easier to update to the location in which they will be used.
+            # sed has a sight different behaviour in MacOS
+            find "${NEW_DIR}" -type f -name "*.pc" | xargs -I {} sed -i "" "s;${INSTALLED_DIR};${NEW_DIR};g" {}
+        fi
     else
         # for linux development environments, use the static libraries from the official container images.
         DIR="x86_64-alpine-linux-musl"

@@ -4,7 +4,7 @@ TAG ?= latest
 
 # Base image used to build the Go binary
 LIBGIT2_IMG ?= ghcr.io/fluxcd/golang-with-libgit2
-LIBGIT2_TAG ?= libgit2-1.1.1-4
+LIBGIT2_TAG ?= libgit2-1.1.1-6
 
 # Allows for defining additional Docker buildx arguments,
 # e.g. '--push'.
@@ -35,13 +35,14 @@ export LIBRARY_PATH=$(LIBGIT2_LIB_PATH)
 export CGO_CFLAGS=-I$(LIBGIT2_PATH)/include -I$(LIBGIT2_PATH)/include/openssl
 
 
+# The pkg-config command will yield warning messages until libgit2 is downloaded.
 ifeq ($(shell uname -s),Darwin)
-export CGO_LDFLAGS=$(shell PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) pkg-config --libs --static --cflags libssh2 openssl libgit2)
+export CGO_LDFLAGS=$(shell PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) pkg-config --libs --static --cflags libssh2 openssl libgit2 2>/dev/null)
 GO_STATIC_FLAGS=-ldflags "-s -w" -tags 'netgo,osusergo,static_build'
 else
 export PKG_CONFIG_PATH:=$(PKG_CONFIG_PATH):$(LIBGIT2_LIB64_PATH)/pkgconfig
 export LIBRARY_PATH:=$(LIBRARY_PATH):$(LIBGIT2_LIB64_PATH)
-export CGO_LDFLAGS=$(shell PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) pkg-config --libs --static --cflags libssh2 openssl libgit2)
+export CGO_LDFLAGS=$(shell PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) pkg-config --libs --static --cflags libssh2 openssl libgit2 2>/dev/null)
 endif
 
 
