@@ -56,7 +56,7 @@ var exampleCA []byte
 var ctx context.Context
 var cancel context.CancelFunc
 
-const timeout = time.Second * 30
+const timeout = time.Second * 60
 
 func TestAPIs(t *testing.T) {
 	RegisterFailHandler(Fail)
@@ -161,7 +161,7 @@ var _ = BeforeSuite(func() {
 	Expect(k8sClient).ToNot(BeNil())
 
 	Eventually(done, timeout).Should(BeClosed())
-}, 60)
+}, timeout.Seconds())
 
 var _ = AfterSuite(func() {
 	cancel()
