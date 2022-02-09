@@ -61,7 +61,7 @@ type HelmRepositorySpec struct {
 	// +required
 	Interval metav1.Duration `json:"interval"`
 
-	// The timeout of index downloading, defaults to 60s.
+	// The timeout of index fetching, defaults to 60s.
 	// +kubebuilder:default:="60s"
 	// +optional
 	Timeout *metav1.Duration `json:"timeout,omitempty"`
@@ -85,7 +85,7 @@ type HelmRepositoryStatus struct {
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 
-	// URL is the download link for the last index fetched.
+	// URL is the fetch link for the last index fetched.
 	// +optional
 	URL string `json:"url,omitempty"`
 

@@ -227,7 +227,7 @@ func (r *HelmChartReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 // produces an error.
 func (r *HelmChartReconciler) reconcile(ctx context.Context, obj *sourcev1.HelmChart, reconcilers []helmChartReconcilerFunc) (sreconcile.Result, error) {
 	if obj.Generation != obj.Status.ObservedGeneration {
-		conditions.MarkReconciling(obj, "NewGeneration", "reconciling new generation %d", obj.Generation)
+		conditions.MarkReconciling(obj, "NewGeneration", "reconciling new object generation (%d)", obj.Generation)
 	}
 
 	// Run the sub-reconcilers and build the result of reconciliation.

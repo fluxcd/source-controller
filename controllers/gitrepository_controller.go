@@ -203,7 +203,7 @@ func (r *GitRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 // error.
 func (r *GitRepositoryReconciler) reconcile(ctx context.Context, obj *sourcev1.GitRepository, reconcilers []gitRepoReconcilerFunc) (sreconcile.Result, error) {
 	if obj.Generation != obj.Status.ObservedGeneration {
-		conditions.MarkReconciling(obj, "NewGeneration", "reconciling new generation %d", obj.Generation)
+		conditions.MarkReconciling(obj, "NewGeneration", "reconciling new object generation (%d)", obj.Generation)
 	}
 
 	var artifact sourcev1.Artifact

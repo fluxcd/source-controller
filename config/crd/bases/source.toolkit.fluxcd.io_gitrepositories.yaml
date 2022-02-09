@@ -549,7 +549,10 @@ spec:
                     format: date-time
                     type: string
                   path:
-                    description: Path is the relative file path of this artifact.
+                    description: Path is the relative file path of this Artifact.
+                      It can be used to locate the Artifact file in the root of the
+                      Artifact storage on the local file system of the controller
+                      managing the Source.
                     type: string
                   revision:
                     description: Revision is a human readable identifier traceable
@@ -557,7 +560,9 @@ spec:
                       tag, a Helm index timestamp, a Helm chart version, etc.
                     type: string
                   url:
-                    description: URL is the HTTP address of this artifact.
+                    description: URL is the HTTP address of this artifact. It is used
+                      by the consumers of the artifacts to fetch and use the artifacts.
+                      It is expected to be resolvable from within the cluster.
                     type: string
                 required:
                 - path
@@ -637,7 +642,7 @@ spec:
                 description: IncludedArtifacts represents the included artifacts from
                   the last successful repository sync.
                 items:
-                  description: Artifact represents the output of a source synchronisation.
+                  description: Artifact represents the output of a Source synchronisation.
                   properties:
                     checksum:
                       description: Checksum is the SHA256 checksum of the artifact.
@@ -648,7 +653,10 @@ spec:
                       format: date-time
                       type: string
                     path:
-                      description: Path is the relative file path of this artifact.
+                      description: Path is the relative file path of this Artifact.
+                        It can be used to locate the Artifact file in the root of
+                        the Artifact storage on the local file system of the controller
+                        managing the Source.
                       type: string
                     revision:
                       description: Revision is a human readable identifier traceable
@@ -656,7 +664,10 @@ spec:
                         tag, a Helm index timestamp, a Helm chart version, etc.
                       type: string
                     url:
-                      description: URL is the HTTP address of this artifact.
+                      description: URL is the HTTP address of this artifact. It is
+                        used by the consumers of the artifacts to fetch and use the
+                        artifacts. It is expected to be resolvable from within the
+                        cluster.
                       type: string
                   required:
                   - path
@@ -673,7 +684,7 @@ spec:
                 format: int64
                 type: integer
               url:
-                description: URL is the download link for the artifact output of the
+                description: URL is the fetch link for the artifact output of the
                   last repository sync.
                 type: string
             type: object

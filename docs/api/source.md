@@ -171,7 +171,7 @@ Kubernetes meta/v1.Duration
 </td>
 <td>
 <em>(Optional)</em>
-<p>The timeout for download operations, defaults to 60s.</p>
+<p>The timeout for fetch operations, defaults to 60s.</p>
 </td>
 </tr>
 <tr>
@@ -797,7 +797,7 @@ Kubernetes meta/v1.Duration
 </td>
 <td>
 <em>(Optional)</em>
-<p>The timeout of index downloading, defaults to 60s.</p>
+<p>The timeout of index fetching, defaults to 60s.</p>
 </td>
 </tr>
 <tr>
@@ -854,7 +854,7 @@ HelmRepositoryStatus
 <a href="#source.toolkit.fluxcd.io/v1beta2.HelmChartStatus">HelmChartStatus</a>, 
 <a href="#source.toolkit.fluxcd.io/v1beta2.HelmRepositoryStatus">HelmRepositoryStatus</a>)
 </p>
-<p>Artifact represents the output of a source synchronisation.</p>
+<p>Artifact represents the output of a Source synchronisation.</p>
 <div class="md-typeset__scrollwrap">
 <div class="md-typeset__table">
 <table>
@@ -873,7 +873,9 @@ string
 </em>
 </td>
 <td>
-<p>Path is the relative file path of this artifact.</p>
+<p>Path is the relative file path of this Artifact.
+It can be used to locate the Artifact file in the root of the Artifact
+storage on the local file system of the controller managing the Source.</p>
 </td>
 </tr>
 <tr>
@@ -884,7 +886,9 @@ string
 </em>
 </td>
 <td>
-<p>URL is the HTTP address of this artifact.</p>
+<p>URL is the HTTP address of this artifact.
+It is used by the consumers of the artifacts to fetch and use the
+artifacts. It is expected to be resolvable from within the cluster.</p>
 </td>
 </tr>
 <tr>
@@ -1045,7 +1049,7 @@ Kubernetes meta/v1.Duration
 </td>
 <td>
 <em>(Optional)</em>
-<p>The timeout for download operations, defaults to 60s.</p>
+<p>The timeout for fetch operations, defaults to 60s.</p>
 </td>
 </tr>
 <tr>
@@ -1144,7 +1148,7 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>URL is the download link for the artifact output of the last Bucket sync.</p>
+<p>URL is the fetch link for the artifact output of the last Bucket sync.</p>
 </td>
 </tr>
 <tr>
@@ -1543,7 +1547,7 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>URL is the download link for the artifact output of the last repository sync.</p>
+<p>URL is the fetch link for the artifact output of the last repository sync.</p>
 </td>
 </tr>
 <tr>
@@ -1811,6 +1815,32 @@ int64
 </tr>
 <tr>
 <td>
+<code>observedSourceArtifactRevision</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>ObservedSourceArtifactRevision is the last observed Artifact.Revision
+of the Source reference.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>observedChartName</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>ObservedChartName is the last observed chart name as defined by the
+resolved chart reference.</p>
+</td>
+</tr>
+<tr>
+<td>
 <code>conditions</code><br>
 <em>
 <a href="https://godoc.org/k8s.io/apimachinery/pkg/apis/meta/v1#Condition">
@@ -1832,7 +1862,7 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>URL is the download link for the last chart pulled.</p>
+<p>URL is the fetch link for the last chart pulled.</p>
 </td>
 </tr>
 <tr>
@@ -1956,7 +1986,7 @@ Kubernetes meta/v1.Duration
 </td>
 <td>
 <em>(Optional)</em>
-<p>The timeout of index downloading, defaults to 60s.</p>
+<p>The timeout of index fetching, defaults to 60s.</p>
 </td>
 </tr>
 <tr>
@@ -2041,7 +2071,7 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>URL is the download link for the last index fetched.</p>
+<p>URL is the fetch link for the last index fetched.</p>
 </td>
 </tr>
 <tr>

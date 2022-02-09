@@ -127,7 +127,7 @@ type HelmChartStatus struct {
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 
-	// URL is the download link for the last chart pulled.
+	// URL is the fetch link for the last chart pulled.
 	// +optional
 	URL string `json:"url,omitempty"`
 
