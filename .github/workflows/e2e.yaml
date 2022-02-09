@@ -27,6 +27,8 @@ jobs:
           key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
           restore-keys: |
             ${{ runner.os }}-go-
+      - name: Verify
+        run: make verify
       - name: Run tests
         run: make test
       - name: Setup Kubernetes
@@ -38,8 +40,6 @@ jobs:
         uses: fluxcd/pkg/actions/kustomize@main
       - name: Setup Helm
         uses: fluxcd/pkg/actions/helm@main
-      - name: Verify
-        run: make verify
       - name: Run E2E tests
         env:
           CREATE_CLUSTER: false
