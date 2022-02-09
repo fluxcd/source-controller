@@ -171,7 +171,7 @@ Kubernetes meta/v1.Duration
 </td>
 <td>
 <em>(Optional)</em>
-<p>The timeout for download operations, defaults to 20s.</p>
+<p>The timeout for download operations, defaults to 60s.</p>
 </td>
 </tr>
 <tr>
@@ -343,7 +343,7 @@ Kubernetes meta/v1.Duration
 </td>
 <td>
 <em>(Optional)</em>
-<p>The timeout for remote Git operations like cloning, defaults to 20s.</p>
+<p>The timeout for remote Git operations like cloning, defaults to 60s.</p>
 </td>
 </tr>
 <tr>
@@ -1047,7 +1047,7 @@ Kubernetes meta/v1.Duration
 </td>
 <td>
 <em>(Optional)</em>
-<p>The timeout for download operations, defaults to 20s.</p>
+<p>The timeout for download operations, defaults to 60s.</p>
 </td>
 </tr>
 <tr>
@@ -1379,7 +1379,7 @@ Kubernetes meta/v1.Duration
 </td>
 <td>
 <em>(Optional)</em>
-<p>The timeout for remote Git operations like cloning, defaults to 20s.</p>
+<p>The timeout for remote Git operations like cloning, defaults to 60s.</p>
 </td>
 </tr>
 <tr>
