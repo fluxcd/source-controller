@@ -168,7 +168,7 @@ type GitRepositoryStatus struct {
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 
-	// URL is the download link for the artifact output of the last repository sync.
+	// URL is the fetch link for the artifact output of the last repository sync.
 	// +optional
 	URL string `json:"url,omitempty"`
 

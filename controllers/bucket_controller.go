@@ -196,7 +196,7 @@ func (r *BucketReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 // error.
 func (r *BucketReconciler) reconcile(ctx context.Context, obj *sourcev1.Bucket, reconcilers []bucketReconcilerFunc) (sreconcile.Result, error) {
 	if obj.Generation != obj.Status.ObservedGeneration {
-		conditions.MarkReconciling(obj, "NewGeneration", "reconciling new generation %d", obj.Generation)
+		conditions.MarkReconciling(obj, "NewGeneration", "reconciling new object generation (%d)", obj.Generation)
 	}
 
 	var artifact sourcev1.Artifact
@@ -432,14 +432,14 @@ func (r *BucketReconciler) reconcileMinioSource(ctx context.Context, obj *source
 		})
 		if err = group.Wait(); err != nil {
 			e := &serror.Event{
-				Err:    fmt.Errorf("download from bucket '%s' failed: %w", obj.Spec.BucketName, err),
+				Err:    fmt.Errorf("fetch from bucket '%s' failed: %w", obj.Spec.BucketName, err),
 				Reason: sourcev1.BucketOperationFailedReason,
 			}
 			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason, e.Err.Error())
 			return sreconcile.ResultEmpty, e
 		}
-		r.eventLogf(ctx, obj, events.EventTypeTrace, sourcev1.BucketOperationSucceedReason,
-			"downloaded %d files with revision '%s' from '%s'", len(index), revision, obj.Spec.BucketName)
+		r.eventLogf(ctx, obj, events.EventTypeTrace, sourcev1.BucketOperationSucceededReason,
+			"fetched %d files with revision '%s' from '%s'", len(index), revision, obj.Spec.BucketName)
 	}
 	conditions.Delete(obj, sourcev1.FetchFailedCondition)
 
@@ -587,14 +587,14 @@ func (r *BucketReconciler) reconcileGCPSource(ctx context.Context, obj *sourcev1
 		})
 		if err = group.Wait(); err != nil {
 			e := &serror.Event{
-				Err:    fmt.Errorf("download from bucket '%s' failed: %w", obj.Spec.BucketName, err),
+				Err:    fmt.Errorf("fetch from bucket '%s' failed: %w", obj.Spec.BucketName, err),
 				Reason: sourcev1.BucketOperationFailedReason,
 			}
 			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason, e.Err.Error())
 			return sreconcile.ResultEmpty, e
 		}
-		r.eventLogf(ctx, obj, events.EventTypeTrace, sourcev1.BucketOperationSucceedReason,
-			"downloaded %d files from bucket '%s'", len(index), obj.Spec.BucketName)
+		r.eventLogf(ctx, obj, events.EventTypeTrace, sourcev1.BucketOperationSucceededReason,
+			"fetched %d files from bucket '%s'", len(index), obj.Spec.BucketName)
 	}
 	conditions.Delete(obj, sourcev1.FetchFailedCondition)
 

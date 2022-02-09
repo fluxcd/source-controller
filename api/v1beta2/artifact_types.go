@@ -23,13 +23,17 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// Artifact represents the output of a source synchronisation.
+// Artifact represents the output of a Source synchronisation.
 type Artifact struct {
-	// Path is the relative file path of this artifact.
+	// Path is the relative file path of this Artifact.
+	// It can be used to locate the Artifact file in the root of the Artifact
+	// storage on the local file system of the controller managing the Source.
 	// +required
 	Path string `json:"path"`
 
 	// URL is the HTTP address of this artifact.
+	// It is used by the consumers of the artifacts to fetch and use the
+	// artifacts. It is expected to be resolvable from within the cluster.
 	// +required
 	URL string `json:"url"`
 
