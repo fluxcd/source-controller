@@ -69,7 +69,7 @@ type BucketSpec struct {
 	// +required
 	Interval metav1.Duration `json:"interval"`
 
-	// The timeout for download operations, defaults to 60s.
+	// The timeout for fetch operations, defaults to 60s.
 	// +kubebuilder:default="60s"
 	// +optional
 	Timeout *metav1.Duration `json:"timeout,omitempty"`
@@ -99,7 +99,7 @@ type BucketStatus struct {
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 
-	// URL is the download link for the artifact output of the last Bucket sync.
+	// URL is the fetch link for the artifact output of the last Bucket sync.
 	// +optional
 	URL string `json:"url,omitempty"`
 
@@ -111,12 +111,12 @@ type BucketStatus struct {
 }
 
 const (
-	// BucketOperationSucceedReason represents the fact that the bucket listing and
-	// download operations succeeded.
-	BucketOperationSucceedReason string = "BucketOperationSucceed"
+	// BucketOperationSucceededReason represents the fact that the bucket listing and
+	// fetch operations succeeded.
+	BucketOperationSucceededReason string = "BucketOperationSucceeded"
 
 	// BucketOperationFailedReason represents the fact that the bucket listing or
-	// download operations failed.
+	// fetch operations failed.
 	BucketOperationFailedReason string = "BucketOperationFailed"
 )
 

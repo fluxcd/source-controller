@@ -660,7 +660,7 @@ func TestHelmRepositoryReconciler_reconcileSubRecs(t *testing.T) {
 			wantResult: sreconcile.ResultSuccess,
 			wantErr:    false,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(meta.ReconcilingCondition, "NewGeneration", "reconciling new generation 3"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, "NewGeneration", "reconciling new object generation (3)"),
 			},
 		},
 		{

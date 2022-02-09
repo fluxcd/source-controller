@@ -192,7 +192,7 @@ func (r *HelmRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 // result with the shortest requeue period.
 func (r *HelmRepositoryReconciler) reconcile(ctx context.Context, obj *sourcev1.HelmRepository, reconcilers []helmRepoReconcilerFunc) (sreconcile.Result, error) {
 	if obj.Generation != obj.Status.ObservedGeneration {
-		conditions.MarkReconciling(obj, "NewGeneration", "reconciling new generation %d", obj.Generation)
+		conditions.MarkReconciling(obj, "NewGeneration", "reconciling new object generation (%d)", obj.Generation)
 	}
 
 	var chartRepo repository.ChartRepository
@@ -328,7 +328,7 @@ func (r *HelmRepositoryReconciler) reconcileSource(ctx context.Context, obj *sou
 	checksum, err := newChartRepo.CacheIndex()
 	if err != nil {
 		e := &serror.Event{
-			Err:    fmt.Errorf("failed to download Helm repository index: %w", err),
+			Err:    fmt.Errorf("failed to fetch Helm repository index: %w", err),
 			Reason: meta.FailedReason,
 		}
 		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, meta.FailedReason, e.Err.Error())
