@@ -178,7 +178,7 @@ install-envtest: setup-envtest ## Download envtest binaries locally.
 	mkdir -p ${ENVTEST_ASSETS_DIR}
 	$(ENVTEST) use $(ENVTEST_KUBERNETES_VERSION) --arch=$(ENVTEST_ARCH) --bin-dir=$(ENVTEST_ASSETS_DIR)
 # setup-envtest sets anything below k8s to 0555
-	chmod -R u+w $(BUILD_DIR)
+	chmod -R u+w $(BUILD_DIR)/testbin
 
 libgit2: $(LIBGIT2)  ## Detect or download libgit2 library
 
@@ -221,3 +221,24 @@ go install $(2) ;\
 rm -rf $$TMP_DIR ;\
 }
 endef
+
+# Build fuzzers
+fuzz-build: $(LIBGIT2)
+	rm -rf $(shell pwd)/build/fuzz/
+	mkdir -p $(shell pwd)/build/fuzz/out/
+
+# TODO: remove mapping of current libgit2 dir and pull binaries from release or build dependency chain on demand.
+	docker build . --tag local-fuzzing:latest -f tests/fuzz/Dockerfile.builder
+	docker run --rm \
+		-e FUZZING_LANGUAGE=go -e SANITIZER=address \
+		-e CIFUZZ_DEBUG='True' -e OSS_FUZZ_PROJECT_NAME=fluxcd \
+		-v "$(shell pwd)/build/fuzz/out":/out \
+		-v "$(shell pwd)/build/libgit2":"/root/go/src/github.com/fluxcd/source-controller/build/libgit2" \
+		local-fuzzing:latest
+
+fuzz-smoketest: fuzz-build
+	docker run --rm \
+		-v "$(shell pwd)/build/fuzz/out":/out \
+		-v "$(shell pwd)/tests/fuzz/oss_fuzz_run.sh":/runner.sh \
+		local-fuzzing:latest \
+		bash -c "/runner.sh"
