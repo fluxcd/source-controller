@@ -31,7 +31,7 @@ const (
 	ExcludeVCS   = ".git/,.gitignore,.gitmodules,.gitattributes"
 	ExcludeExt   = "*.jpg,*.jpeg,*.gif,*.png,*.wmv,*.flv,*.tar.gz,*.zip"
 	ExcludeCI    = ".github/,.circleci/,.travis.yml,.gitlab-ci.yml,appveyor.yml,.drone.yml,cloudbuild.yaml,codeship-services.yml,codeship-steps.yml"
-	ExcludeExtra = "**/.goreleaser.yml,**/.sops.yaml,**/.flux.yaml"
+	ExcludeExtra = "**/.goreleaser.yml,**/.sops.yaml,**/.flux.yaml,**/.pre-commit-config.yaml"
 )
 
 // NewMatcher returns a gitignore.Matcher for the given gitignore.Pattern
