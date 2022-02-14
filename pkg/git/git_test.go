@@ -218,3 +218,48 @@ func TestCommit_Verify(t *testing.T) {
 		})
 	}
 }
+
+func TestCommit_ShortMessage(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "short message",
+			input: "a short commit message",
+			want:  "a short commit message",
+		},
+		{
+			name:  "long message",
+			input: "hello world - a long commit message for testing long messages",
+			want:  "hello world - a long commit message for testing lo...",
+		},
+		{
+			name: "multi line commit message",
+			input: `title of the commit
+
+detailed description
+of the commit`,
+			want: "title of the commit",
+		},
+		{
+			name:  "message with unicodes",
+			input: "a message with unicode characters 你好世界 🏞️ 🏕️ ⛩️ 🌌",
+			want:  "a message with unicode characters 你好世界 🏞️ 🏕️ ⛩️ 🌌",
+		},
+		{
+			name:  "empty commit message",
+			input: "",
+			want:  "",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			c := Commit{Message: tt.input}
+			g.Expect(c.ShortMessage()).To(Equal(tt.want))
+		})
+	}
+}

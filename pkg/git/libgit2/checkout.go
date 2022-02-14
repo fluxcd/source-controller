@@ -69,7 +69,7 @@ func (c *CheckoutBranch) Checkout(ctx context.Context, path, url string, opts *g
 		CheckoutBranch: c.Branch,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("unable to clone: %w", gitutil.LibGit2Error(err))
+		return nil, fmt.Errorf("unable to clone '%s': %w", url, gitutil.LibGit2Error(err))
 	}
 	defer repo.Free()
 	head, err := repo.Head()
