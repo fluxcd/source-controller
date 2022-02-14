@@ -125,7 +125,7 @@ func TestHelmChartReconciler_Reconcile(t *testing.T) {
 	}, timeout).Should(BeTrue())
 
 	// Check if the object status is valid.
-	condns := &status.Conditions{NegativePolarity: helmChartReadyConditions.NegativePolarity}
+	condns := &status.Conditions{NegativePolarity: helmChartReadyCondition.NegativePolarity}
 	checker := status.NewChecker(testEnv.Client, testEnv.GetScheme(), condns)
 	checker.CheckErr(ctx, obj)
 
@@ -1342,8 +1342,8 @@ func TestHelmChartReconciler_reconcileDelete(t *testing.T) {
 }
 
 func TestHelmChartReconciler_reconcileSubRecs(t *testing.T) {
-	// Helper to build simple helmChartReconcilerFunc with result and error.
-	buildReconcileFuncs := func(r sreconcile.Result, e error) helmChartReconcilerFunc {
+	// Helper to build simple helmChartReconcileFunc with result and error.
+	buildReconcileFuncs := func(r sreconcile.Result, e error) helmChartReconcileFunc {
 		return func(_ context.Context, _ *sourcev1.HelmChart, _ *chart.Build) (sreconcile.Result, error) {
 			return r, e
 		}
@@ -1353,14 +1353,14 @@ func TestHelmChartReconciler_reconcileSubRecs(t *testing.T) {
 		name               string
 		generation         int64
 		observedGeneration int64
-		reconcileFuncs     []helmChartReconcilerFunc
+		reconcileFuncs     []helmChartReconcileFunc
 		wantResult         sreconcile.Result
 		wantErr            bool
 		assertConditions   []metav1.Condition
 	}{
 		{
 			name: "successful reconciliations",
-			reconcileFuncs: []helmChartReconcilerFunc{
+			reconcileFuncs: []helmChartReconcileFunc{
 				buildReconcileFuncs(sreconcile.ResultSuccess, nil),
 			},
 			wantResult: sreconcile.ResultSuccess,
@@ -1370,7 +1370,7 @@ func TestHelmChartReconciler_reconcileSubRecs(t *testing.T) {
 			name:               "successful reconciliation with generation difference",
 			generation:         3,
 			observedGeneration: 2,
-			reconcileFuncs: []helmChartReconcilerFunc{
+			reconcileFuncs: []helmChartReconcileFunc{
 				buildReconcileFuncs(sreconcile.ResultSuccess, nil),
 			},
 			wantResult: sreconcile.ResultSuccess,
@@ -1381,7 +1381,7 @@ func TestHelmChartReconciler_reconcileSubRecs(t *testing.T) {
 		},
 		{
 			name: "failed reconciliation",
-			reconcileFuncs: []helmChartReconcilerFunc{
+			reconcileFuncs: []helmChartReconcileFunc{
 				buildReconcileFuncs(sreconcile.ResultEmpty, fmt.Errorf("some error")),
 			},
 			wantResult: sreconcile.ResultEmpty,
@@ -1389,7 +1389,7 @@ func TestHelmChartReconciler_reconcileSubRecs(t *testing.T) {
 		},
 		{
 			name: "multiple object status conditions mutations",
-			reconcileFuncs: []helmChartReconcilerFunc{
+			reconcileFuncs: []helmChartReconcileFunc{
 				func(_ context.Context, obj *sourcev1.HelmChart, _ *chart.Build) (sreconcile.Result, error) {
 					conditions.MarkTrue(obj, sourcev1.ArtifactOutdatedCondition, "NewRevision", "new index revision")
 					return sreconcile.ResultSuccess, nil
@@ -1408,7 +1408,7 @@ func TestHelmChartReconciler_reconcileSubRecs(t *testing.T) {
 		},
 		{
 			name: "subrecs with one result=Requeue, no error",
-			reconcileFuncs: []helmChartReconcilerFunc{
+			reconcileFuncs: []helmChartReconcileFunc{
 				buildReconcileFuncs(sreconcile.ResultSuccess, nil),
 				buildReconcileFuncs(sreconcile.ResultRequeue, nil),
 				buildReconcileFuncs(sreconcile.ResultSuccess, nil),
@@ -1418,7 +1418,7 @@ func TestHelmChartReconciler_reconcileSubRecs(t *testing.T) {
 		},
 		{
 			name: "subrecs with error before result=Requeue",
-			reconcileFuncs: []helmChartReconcilerFunc{
+			reconcileFuncs: []helmChartReconcileFunc{
 				buildReconcileFuncs(sreconcile.ResultSuccess, nil),
 				buildReconcileFuncs(sreconcile.ResultEmpty, fmt.Errorf("some error")),
 				buildReconcileFuncs(sreconcile.ResultRequeue, nil),

@@ -486,7 +486,7 @@ GitRepositoryStatus
 </div>
 <h3 id="source.toolkit.fluxcd.io/v1beta2.HelmChart">HelmChart
 </h3>
-<p>HelmChart is the Schema for the helmcharts API</p>
+<p>HelmChart is the Schema for the helmcharts API.</p>
 <div class="md-typeset__scrollwrap">
 <div class="md-typeset__table">
 <table>
@@ -549,7 +549,8 @@ string
 </em>
 </td>
 <td>
-<p>The name or path the Helm chart is available at in the SourceRef.</p>
+<p>Chart is the name or path the Helm chart is available at in the
+SourceRef.</p>
 </td>
 </tr>
 <tr>
@@ -561,8 +562,8 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>The chart version semver expression, ignored for charts from GitRepository
-and Bucket sources. Defaults to latest when omitted.</p>
+<p>Version is the chart version semver expression, ignored for charts from
+GitRepository and Bucket sources. Defaults to latest when omitted.</p>
 </td>
 </tr>
 <tr>
@@ -575,7 +576,7 @@ LocalHelmChartSourceReference
 </em>
 </td>
 <td>
-<p>The reference to the Source the chart is available at.</p>
+<p>SourceRef is the reference to the Source the chart is available at.</p>
 </td>
 </tr>
 <tr>
@@ -588,7 +589,7 @@ Kubernetes meta/v1.Duration
 </em>
 </td>
 <td>
-<p>The interval at which to check the Source for updates.</p>
+<p>Interval is the interval at which to check the Source for updates.</p>
 </td>
 </tr>
 <tr>
@@ -600,8 +601,8 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>Determines what enables the creation of a new artifact. Valid values are
-(&lsquo;ChartVersion&rsquo;, &lsquo;Revision&rsquo;).
+<p>ReconcileStrategy determines what enables the creation of a new artifact.
+Valid values are (&lsquo;ChartVersion&rsquo;, &lsquo;Revision&rsquo;).
 See the documentation of the values for an explanation on their behavior.
 Defaults to ChartVersion when omitted.</p>
 </td>
@@ -615,10 +616,11 @@ Defaults to ChartVersion when omitted.</p>
 </td>
 <td>
 <em>(Optional)</em>
-<p>Alternative list of values files to use as the chart values (values.yaml
-is not included by default), expected to be a relative path in the SourceRef.
-Values files are merged in the order of this list with the last file overriding
-the first. Ignored when omitted.</p>
+<p>ValuesFiles is an alternative list of values files to use as the chart
+values (values.yaml is not included by default), expected to be a
+relative path in the SourceRef.
+Values files are merged in the order of this list with the last file
+overriding the first. Ignored when omitted.</p>
 </td>
 </tr>
 <tr>
@@ -630,10 +632,10 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>Alternative values file to use as the default chart values, expected to
-be a relative path in the SourceRef. Deprecated in favor of ValuesFiles,
-for backwards compatibility the file defined here is merged before the
-ValuesFiles items. Ignored when omitted.</p>
+<p>ValuesFile is an alternative values file to use as the default chart
+values, expected to be a relative path in the SourceRef. Deprecated in
+favor of ValuesFiles, for backwards compatibility the file specified here
+is merged before the ValuesFiles items. Ignored when omitted.</p>
 </td>
 </tr>
 <tr>
@@ -645,7 +647,8 @@ bool
 </td>
 <td>
 <em>(Optional)</em>
-<p>This flag tells the controller to suspend the reconciliation of this source.</p>
+<p>Suspend tells the controller to suspend the reconciliation of this
+source.</p>
 </td>
 </tr>
 <tr>
@@ -659,7 +662,9 @@ github.com/fluxcd/pkg/apis/acl.AccessFrom
 </td>
 <td>
 <em>(Optional)</em>
-<p>AccessFrom defines an Access Control List for allowing cross-namespace references to this object.</p>
+<p>AccessFrom specifies an Access Control List for allowing cross-namespace
+references to this object.
+NOTE: Not implemented, provisional as of <a href="https://github.com/fluxcd/flux2/pull/2092">https://github.com/fluxcd/flux2/pull/2092</a></p>
 </td>
 </tr>
 </table>
@@ -1295,7 +1300,7 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>Branch to checkout, defaults to &lsquo;master&rsquo; if no other field is defined.</p>
+<p>Branch to check out, defaults to &lsquo;master&rsquo; if no other field is defined.</p>
 <p>When GitRepositorySpec.GitImplementation is set to &lsquo;go-git&rsquo;, a shallow
 clone of the specified branch is performed.</p>
 </td>
@@ -1309,7 +1314,7 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>Tag to checkout, takes precedence over Branch.</p>
+<p>Tag to check out, takes precedence over Branch.</p>
 </td>
 </tr>
 <tr>
@@ -1321,7 +1326,7 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>SemVer tag expression to checkout, takes precedence over Tag.</p>
+<p>SemVer tag expression to check out, takes precedence over Tag.</p>
 </td>
 </tr>
 <tr>
@@ -1333,7 +1338,7 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>Commit SHA to checkout, takes precedence over all reference fields.</p>
+<p>Commit SHA to check out, takes precedence over all reference fields.</p>
 <p>When GitRepositorySpec.GitImplementation is set to &lsquo;go-git&rsquo;, this can be
 combined with Branch to shallow clone the branch, in which the commit is
 expected to exist.</p>
@@ -1694,7 +1699,7 @@ authors.</p>
 (<em>Appears on:</em>
 <a href="#source.toolkit.fluxcd.io/v1beta2.HelmChart">HelmChart</a>)
 </p>
-<p>HelmChartSpec defines the desired state of a Helm chart.</p>
+<p>HelmChartSpec specifies the desired state of a Helm chart.</p>
 <div class="md-typeset__scrollwrap">
 <div class="md-typeset__table">
 <table>
@@ -1713,7 +1718,8 @@ string
 </em>
 </td>
 <td>
-<p>The name or path the Helm chart is available at in the SourceRef.</p>
+<p>Chart is the name or path the Helm chart is available at in the
+SourceRef.</p>
 </td>
 </tr>
 <tr>
@@ -1725,8 +1731,8 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>The chart version semver expression, ignored for charts from GitRepository
-and Bucket sources. Defaults to latest when omitted.</p>
+<p>Version is the chart version semver expression, ignored for charts from
+GitRepository and Bucket sources. Defaults to latest when omitted.</p>
 </td>
 </tr>
 <tr>
@@ -1739,7 +1745,7 @@ LocalHelmChartSourceReference
 </em>
 </td>
 <td>
-<p>The reference to the Source the chart is available at.</p>
+<p>SourceRef is the reference to the Source the chart is available at.</p>
 </td>
 </tr>
 <tr>
@@ -1752,7 +1758,7 @@ Kubernetes meta/v1.Duration
 </em>
 </td>
 <td>
-<p>The interval at which to check the Source for updates.</p>
+<p>Interval is the interval at which to check the Source for updates.</p>
 </td>
 </tr>
 <tr>
@@ -1764,8 +1770,8 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>Determines what enables the creation of a new artifact. Valid values are
-(&lsquo;ChartVersion&rsquo;, &lsquo;Revision&rsquo;).
+<p>ReconcileStrategy determines what enables the creation of a new artifact.
+Valid values are (&lsquo;ChartVersion&rsquo;, &lsquo;Revision&rsquo;).
 See the documentation of the values for an explanation on their behavior.
 Defaults to ChartVersion when omitted.</p>
 </td>
@@ -1779,10 +1785,11 @@ Defaults to ChartVersion when omitted.</p>
 </td>
 <td>
 <em>(Optional)</em>
-<p>Alternative list of values files to use as the chart values (values.yaml
-is not included by default), expected to be a relative path in the SourceRef.
-Values files are merged in the order of this list with the last file overriding
-the first. Ignored when omitted.</p>
+<p>ValuesFiles is an alternative list of values files to use as the chart
+values (values.yaml is not included by default), expected to be a
+relative path in the SourceRef.
+Values files are merged in the order of this list with the last file
+overriding the first. Ignored when omitted.</p>
 </td>
 </tr>
 <tr>
@@ -1794,10 +1801,10 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>Alternative values file to use as the default chart values, expected to
-be a relative path in the SourceRef. Deprecated in favor of ValuesFiles,
-for backwards compatibility the file defined here is merged before the
-ValuesFiles items. Ignored when omitted.</p>
+<p>ValuesFile is an alternative values file to use as the default chart
+values, expected to be a relative path in the SourceRef. Deprecated in
+favor of ValuesFiles, for backwards compatibility the file specified here
+is merged before the ValuesFiles items. Ignored when omitted.</p>
 </td>
 </tr>
 <tr>
@@ -1809,7 +1816,8 @@ bool
 </td>
 <td>
 <em>(Optional)</em>
-<p>This flag tells the controller to suspend the reconciliation of this source.</p>
+<p>Suspend tells the controller to suspend the reconciliation of this
+source.</p>
 </td>
 </tr>
 <tr>
@@ -1823,7 +1831,9 @@ github.com/fluxcd/pkg/apis/acl.AccessFrom
 </td>
 <td>
 <em>(Optional)</em>
-<p>AccessFrom defines an Access Control List for allowing cross-namespace references to this object.</p>
+<p>AccessFrom specifies an Access Control List for allowing cross-namespace
+references to this object.
+NOTE: Not implemented, provisional as of <a href="https://github.com/fluxcd/flux2/pull/2092">https://github.com/fluxcd/flux2/pull/2092</a></p>
 </td>
 </tr>
 </tbody>
@@ -1836,7 +1846,7 @@ github.com/fluxcd/pkg/apis/acl.AccessFrom
 (<em>Appears on:</em>
 <a href="#source.toolkit.fluxcd.io/v1beta2.HelmChart">HelmChart</a>)
 </p>
-<p>HelmChartStatus defines the observed state of the HelmChart.</p>
+<p>HelmChartStatus records the observed state of the HelmChart.</p>
 <div class="md-typeset__scrollwrap">
 <div class="md-typeset__table">
 <table>
@@ -1856,7 +1866,8 @@ int64
 </td>
 <td>
 <em>(Optional)</em>
-<p>ObservedGeneration is the last observed generation.</p>
+<p>ObservedGeneration is the last observed generation of the HelmChart
+object.</p>
 </td>
 </tr>
 <tr>
@@ -1869,7 +1880,7 @@ string
 <td>
 <em>(Optional)</em>
 <p>ObservedSourceArtifactRevision is the last observed Artifact.Revision
-of the Source reference.</p>
+of the HelmChartSpec.SourceRef.</p>
 </td>
 </tr>
 <tr>
@@ -1881,7 +1892,7 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>ObservedChartName is the last observed chart name as defined by the
+<p>ObservedChartName is the last observed chart name as specified by the
 resolved chart reference.</p>
 </td>
 </tr>
@@ -1908,7 +1919,9 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>URL is the fetch link for the last chart pulled.</p>
+<p>URL is the dynamic fetch link for the latest Artifact.
+It is provided on a &ldquo;best effort&rdquo; basis, and using the precise
+BucketStatus.Artifact data is recommended.</p>
 </td>
 </tr>
 <tr>
@@ -1922,7 +1935,7 @@ Artifact
 </td>
 <td>
 <em>(Optional)</em>
-<p>Artifact represents the output of the last successful chart sync.</p>
+<p>Artifact represents the output of the last successful reconciliation.</p>
 </td>
 </tr>
 <tr>
