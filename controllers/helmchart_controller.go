@@ -64,9 +64,9 @@ import (
 	"github.com/fluxcd/source-controller/internal/util"
 )
 
-// helmChartReadyConditions contains all the conditions information
+// helmChartReadyCondition contains all the conditions information
 // needed for HelmChart Ready status conditions summary calculation.
-var helmChartReadyConditions = summarize.Conditions{
+var helmChartReadyCondition = summarize.Conditions{
 	Target: meta.ReadyCondition,
 	Owned: []string{
 		sourcev1.BuildFailedCondition,
@@ -116,7 +116,10 @@ type HelmChartReconcilerOptions struct {
 	MaxConcurrentReconciles int
 }
 
-type helmChartReconcilerFunc func(ctx context.Context, obj *sourcev1.HelmChart, build *chart.Build) (sreconcile.Result, error)
+// helmChartReconcileFunc is the function type for all the v1beta2.HelmChart
+// (sub)reconcile functions. The type implementations are grouped and
+// executed serially to perform the complete reconcile of the object.
+type helmChartReconcileFunc func(ctx context.Context, obj *sourcev1.HelmChart, build *chart.Build) (sreconcile.Result, error)
 
 func (r *HelmChartReconciler) SetupWithManagerAndOptions(mgr ctrl.Manager, opts HelmChartReconcilerOptions) error {
 	if err := mgr.GetCache().IndexField(context.TODO(), &sourcev1.HelmRepository{}, sourcev1.HelmRepositoryURLIndexKey,
@@ -184,7 +187,7 @@ func (r *HelmChartReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	defer func() {
 		summarizeHelper := summarize.NewHelper(r.EventRecorder, patchHelper)
 		summarizeOpts := []summarize.Option{
-			summarize.WithConditions(helmChartReadyConditions),
+			summarize.WithConditions(helmChartReadyCondition),
 			summarize.WithReconcileResult(recResult),
 			summarize.WithReconcileError(retErr),
 			summarize.WithIgnoreNotFound(),
@@ -192,7 +195,7 @@ func (r *HelmChartReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 				summarize.RecordContextualError,
 				summarize.RecordReconcileReq,
 			),
-			summarize.WithResultBuilder(sreconcile.AlwaysRequeueResultBuilder{RequeueAfter: obj.GetInterval().Duration}),
+			summarize.WithResultBuilder(sreconcile.AlwaysRequeueResultBuilder{RequeueAfter: obj.GetRequeueAfter()}),
 			summarize.WithPatchFieldOwner(r.ControllerName),
 		}
 		result, retErr = summarizeHelper.SummarizeAndPatch(ctx, obj, summarizeOpts...)
@@ -217,7 +220,7 @@ func (r *HelmChartReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 
 	// Reconcile actual object
-	reconcilers := []helmChartReconcilerFunc{
+	reconcilers := []helmChartReconcileFunc{
 		r.reconcileStorage,
 		r.reconcileSource,
 		r.reconcileArtifact,
@@ -226,9 +229,10 @@ func (r *HelmChartReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	return
 }
 
-// reconcile steps through the actual reconciliation tasks for the object, it returns early on the first step that
-// produces an error.
-func (r *HelmChartReconciler) reconcile(ctx context.Context, obj *sourcev1.HelmChart, reconcilers []helmChartReconcilerFunc) (sreconcile.Result, error) {
+// reconcile iterates through the gitRepositoryReconcileFunc tasks for the
+// object. It returns early on the first call that returns
+// reconcile.ResultRequeue, or produces an error.
+func (r *HelmChartReconciler) reconcile(ctx context.Context, obj *sourcev1.HelmChart, reconcilers []helmChartReconcileFunc) (sreconcile.Result, error) {
 	if obj.Generation != obj.Status.ObservedGeneration {
 		conditions.MarkReconciling(obj, "NewGeneration", "reconciling new object generation (%d)", obj.Generation)
 	}
@@ -258,14 +262,17 @@ func (r *HelmChartReconciler) reconcile(ctx context.Context, obj *sourcev1.HelmC
 	return res, resErr
 }
 
-// reconcileStorage ensures the current state of the storage matches the desired and previously observed state.
+// reconcileStorage ensures the current state of the storage matches the
+// desired and previously observed state.
 //
-// All artifacts for the resource except for the current one are garbage collected from the storage.
-// If the artifact in the Status object of the resource disappeared from storage, it is removed from the object.
-// If the object does not have an artifact in its Status object, a v1beta1.ArtifactUnavailableCondition is set.
-// If the hostname of the URLs on the object do not match the current storage server hostname, they are updated.
-//
-// The caller should assume a failure if an error is returned, or the BuildResult is zero.
+// All Artifacts for the object except for the current one in the Status are
+// garbage collected from the Storage.
+// If the Artifact in the Status of the object disappeared from the Storage,
+// it is removed from the object.
+// If the object does not have an Artifact in its Status, a Reconciling
+// condition is added.
+// The hostname of any URL in the Status of the object are updated, to ensure
+// they match the Storage server hostname of current runtime.
 func (r *HelmChartReconciler) reconcileStorage(ctx context.Context, obj *sourcev1.HelmChart, build *chart.Build) (sreconcile.Result, error) {
 	// Garbage collect previous advertised artifact(s) from storage
 	_ = r.garbageCollect(ctx, obj)
@@ -367,6 +374,11 @@ func (r *HelmChartReconciler) reconcileSource(ctx context.Context, obj *sourcev1
 	}
 }
 
+// buildFromHelmRepository attempts to pull and/or package a Helm chart with
+// the specified data from the v1beta2.HelmRepository and v1beta2.HelmChart
+// objects.
+// In case of a failure it records v1beta2.FetchFailedCondition on the chart
+// object, and returns early.
 func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *sourcev1.HelmChart,
 	repo *sourcev1.HelmRepository, b *chart.Build) (sreconcile.Result, error) {
 	var tlsConfig *tls.Config
@@ -463,6 +475,10 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 	return sreconcile.ResultSuccess, nil
 }
 
+// buildFromHelmRepository attempts to pull and/or package a Helm chart with
+// the specified data v1beta2.HelmChart object and the given v1beta2.Artifact.
+// In case of a failure it records v1beta2.FetchFailedCondition on the chart
+// object, and returns early.
 func (r *HelmChartReconciler) buildFromTarballArtifact(ctx context.Context, obj *sourcev1.HelmChart, source sourcev1.Artifact, b *chart.Build) (sreconcile.Result, error) {
 	// Create temporary working directory
 	tmpDir, err := util.TempDirForObj("", obj)
@@ -585,8 +601,15 @@ func (r *HelmChartReconciler) buildFromTarballArtifact(ctx context.Context, obj 
 	return sreconcile.ResultSuccess, nil
 }
 
-// reconcileArtifact reconciles the given chart.Build to an v1beta1.Artifact in the Storage, and records it
-// on the object.
+// reconcileArtifact archives a new Artifact to the Storage, if the current
+// (Status) data on the object does not match the given.
+//
+// The inspection of the given data to the object is differed, ensuring any
+// stale observations like v1beta2.ArtifactOutdatedCondition are removed.
+// If the given Artifact does not differ from the object's current, it returns
+// early.
+// On a successful archive, the Artifact in the Status of the object is set,
+// and the symlink in the Storage is updated to its path.
 func (r *HelmChartReconciler) reconcileArtifact(ctx context.Context, obj *sourcev1.HelmChart, b *chart.Build) (sreconcile.Result, error) {
 	// Without a complete chart build, there is little to reconcile
 	if !b.Complete() {
@@ -693,8 +716,9 @@ func (r *HelmChartReconciler) getSource(ctx context.Context, obj *sourcev1.HelmC
 	return s, nil
 }
 
-// reconcileDelete handles the delete of an object. It first garbage collects all artifacts for the object from the
-// artifact storage, if successful, the finalizer is removed from the object.
+// reconcileDelete handles the deletion of the object.
+// It first garbage collects all Artifacts for the object from the Storage.
+// Removing the finalizer from the object if successful.
 func (r *HelmChartReconciler) reconcileDelete(ctx context.Context, obj *sourcev1.HelmChart) (sreconcile.Result, error) {
 	// Garbage collect the resource's artifacts
 	if err := r.garbageCollect(ctx, obj); err != nil {
@@ -709,9 +733,11 @@ func (r *HelmChartReconciler) reconcileDelete(ctx context.Context, obj *sourcev1
 	return sreconcile.ResultEmpty, nil
 }
 
-// garbageCollect performs a garbage collection for the given v1beta1.HelmChart. It removes all but the current
-// artifact, unless the deletion timestamp is set. Which will result in the removal of all artifacts for the
-// resource.
+// garbageCollect performs a garbage collection for the given object.
+//
+// It removes all but the current Artifact from the Storage, unless the
+// deletion timestamp on the object is set. Which will result in the
+// removal of all Artifacts for the objects.
 func (r *HelmChartReconciler) garbageCollect(ctx context.Context, obj *sourcev1.HelmChart) error {
 	if !obj.DeletionTimestamp.IsZero() {
 		if deleted, err := r.Storage.RemoveAll(r.Storage.NewArtifactFor(obj.Kind, obj.GetObjectMeta(), "", "*")); err != nil {
@@ -925,9 +951,11 @@ func (r *HelmChartReconciler) requestsForBucketChange(o client.Object) []reconci
 	return reqs
 }
 
-// eventLogf records event and logs at the same time. This log is different from
-// the debug log in the event recorder in the sense that this is a simple log,
-// the event recorder debug log contains complete details about the event.
+// eventLogf records event and logs at the same time.
+//
+// This log is different from the debug log in the EventRecorder, in the sense
+// that this is a simple log. While the debug log contains complete details
+// about the event.
 func (r *HelmChartReconciler) eventLogf(ctx context.Context, obj runtime.Object, eventType string, reason string, messageFmt string, args ...interface{}) {
 	msg := fmt.Sprintf(messageFmt, args...)
 	// Log and emit event.
