@@ -4,7 +4,7 @@ TAG ?= latest
 
 # Base image used to build the Go binary
 LIBGIT2_IMG ?= ghcr.io/fluxcd/golang-with-libgit2
-LIBGIT2_TAG ?= libgit2-1.1.1-6
+LIBGIT2_TAG ?= libgit2-1.1.1-7
 
 # Allows for defining additional Docker buildx arguments,
 # e.g. '--push'.
@@ -234,13 +234,11 @@ fuzz-build: $(LIBGIT2)
 	rm -rf $(shell pwd)/build/fuzz/
 	mkdir -p $(shell pwd)/build/fuzz/out/
 
-# TODO: remove mapping of current libgit2 dir and pull binaries from release or build dependency chain on demand.
 	docker build . --tag local-fuzzing:latest -f tests/fuzz/Dockerfile.builder
 	docker run --rm \
 		-e FUZZING_LANGUAGE=go -e SANITIZER=address \
 		-e CIFUZZ_DEBUG='True' -e OSS_FUZZ_PROJECT_NAME=fluxcd \
 		-v "$(shell pwd)/build/fuzz/out":/out \
-		-v "$(shell pwd)/build/libgit2":"/root/go/src/github.com/fluxcd/source-controller/build/libgit2" \
 		local-fuzzing:latest
 
 fuzz-smoketest: fuzz-build

@@ -16,7 +16,7 @@
 
 set -euxo pipefail
 
-LIBGIT2_TAG="${LIBGIT2_TAG:-libgit2-1.1.1-6}"
+LIBGIT2_TAG="${LIBGIT2_TAG:-libgit2-1.1.1-7}"
 GOPATH="${GOPATH:-/root/go}"
 GO_SRC="${GOPATH}/src"
 PROJECT_PATH="github.com/fluxcd/source-controller"
@@ -25,9 +25,31 @@ cd "${GO_SRC}"
 
 pushd "${PROJECT_PATH}"
 
+export TARGET_DIR="$(/bin/pwd)/build/libgit2/${LIBGIT2_TAG}"
+
+# For most cases, libgit2 will already be present. 
+# The exception being at the oss-fuzz integration.
+if [ ! -d "${TARGET_DIR}" ]; then
+    curl -o output.tar.gz -LO "https://github.com/fluxcd/golang-with-libgit2/releases/download/${LIBGIT2_TAG}/linux-$(uname -m)-libs.tar.gz"
+    
+    DIR=libgit2-linux
+    NEW_DIR="$(/bin/pwd)/build/libgit2/${LIBGIT2_TAG}"
+    INSTALLED_DIR="/home/runner/work/golang-with-libgit2/golang-with-libgit2/build/${DIR}"
+
+    mkdir -p ./build/libgit2
+
+    tar -xf output.tar.gz
+    rm output.tar.gz
+    mv "${DIR}" "${LIBGIT2_TAG}"
+    mv "${LIBGIT2_TAG}/" "./build/libgit2"
+
+    # Update the prefix paths included in the .pc files.
+    # This will make it easier to update to the location in which they will be used.
+    find "${NEW_DIR}" -type f -name "*.pc" | xargs -I {} sed -i "s;${INSTALLED_DIR};${NEW_DIR};g" {}
+fi
+
 apt-get update && apt-get install -y pkg-config
 
-export TARGET_DIR="$(/bin/pwd)/build/libgit2/${LIBGIT2_TAG}"
 export CGO_ENABLED=1
 export LIBRARY_PATH="${TARGET_DIR}/lib:${TARGET_DIR}/lib64"
 export PKG_CONFIG_PATH="${TARGET_DIR}/lib/pkgconfig:${TARGET_DIR}/lib64/pkgconfig"

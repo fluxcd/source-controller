@@ -3,7 +3,7 @@ ARG GO_VERSION=1.17
 ARG XX_VERSION=1.1.0
 
 ARG LIBGIT2_IMG=ghcr.io/fluxcd/golang-with-libgit2
-ARG LIBGIT2_TAG=libgit2-1.1.1-6
+ARG LIBGIT2_TAG=libgit2-1.1.1-7
 
 FROM ${LIBGIT2_IMG}:${LIBGIT2_TAG} AS libgit2-libs
 
