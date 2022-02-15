@@ -511,14 +511,14 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 						assertConditions[k].Message = strings.ReplaceAll(assertConditions[k].Message, "<url>", obj.Spec.URL)
 					}
 
-					var artifact sourcev1.Artifact
+					var commit git.Commit
 					var includes artifactSet
 
-					got, err := r.reconcileSource(context.TODO(), obj, &artifact, &includes, tmpDir)
+					got, err := r.reconcileSource(context.TODO(), obj, &commit, &includes, tmpDir)
 					g.Expect(obj.Status.Conditions).To(conditions.MatchConditions(tt.assertConditions))
 					g.Expect(err != nil).To(Equal(tt.wantErr))
 					g.Expect(got).To(Equal(tt.want))
-					g.Expect(artifact).ToNot(BeNil())
+					g.Expect(commit).ToNot(BeNil())
 				})
 			}
 		})
@@ -666,9 +666,9 @@ func TestGitRepositoryReconciler_reconcileSource_checkoutStrategy(t *testing.T) 
 					obj := obj.DeepCopy()
 					obj.Spec.GitImplementation = i
 
-					var artifact sourcev1.Artifact
+					var commit git.Commit
 					var includes artifactSet
-					got, err := r.reconcileSource(ctx, obj, &artifact, &includes, tmpDir)
+					got, err := r.reconcileSource(ctx, obj, &commit, &includes, tmpDir)
 					if err != nil {
 						println(err.Error())
 					}
@@ -676,7 +676,7 @@ func TestGitRepositoryReconciler_reconcileSource_checkoutStrategy(t *testing.T) 
 					g.Expect(got).To(Equal(tt.want))
 					if tt.wantRevision != "" {
 						revision := strings.ReplaceAll(tt.wantRevision, "<commit>", headRef.Hash().String())
-						g.Expect(artifact.Revision).To(Equal(revision))
+						g.Expect(commit.String()).To(Equal(revision))
 						g.Expect(conditions.IsTrue(obj, sourcev1.ArtifactOutdatedCondition)).To(BeTrue())
 					}
 				})
@@ -691,7 +691,7 @@ func TestGitRepositoryReconciler_reconcileArtifact(t *testing.T) {
 		dir              string
 		includes         artifactSet
 		beforeFunc       func(obj *sourcev1.GitRepository)
-		afterFunc        func(t *WithT, obj *sourcev1.GitRepository, artifact sourcev1.Artifact)
+		afterFunc        func(t *WithT, obj *sourcev1.GitRepository)
 		want             sreconcile.Result
 		wantErr          bool
 		assertConditions []metav1.Condition
@@ -702,7 +702,7 @@ func TestGitRepositoryReconciler_reconcileArtifact(t *testing.T) {
 			beforeFunc: func(obj *sourcev1.GitRepository) {
 				obj.Spec.Interval = metav1.Duration{Duration: interval}
 			},
-			afterFunc: func(t *WithT, obj *sourcev1.GitRepository, artifact sourcev1.Artifact) {
+			afterFunc: func(t *WithT, obj *sourcev1.GitRepository) {
 				t.Expect(obj.GetArtifact()).ToNot(BeNil())
 				t.Expect(obj.Status.URL).ToNot(BeEmpty())
 			},
@@ -719,7 +719,7 @@ func TestGitRepositoryReconciler_reconcileArtifact(t *testing.T) {
 			beforeFunc: func(obj *sourcev1.GitRepository) {
 				obj.Spec.Interval = metav1.Duration{Duration: interval}
 			},
-			afterFunc: func(t *WithT, obj *sourcev1.GitRepository, artifact sourcev1.Artifact) {
+			afterFunc: func(t *WithT, obj *sourcev1.GitRepository) {
 				t.Expect(obj.GetArtifact()).ToNot(BeNil())
 				t.Expect(obj.GetArtifact().Checksum).To(Equal("60a3bf69f337cb5ec9ebd00abefbb6e7f2a2cf27158ecf438d52b2035b184172"))
 				t.Expect(obj.Status.IncludedArtifacts).ToNot(BeEmpty())
@@ -740,7 +740,7 @@ func TestGitRepositoryReconciler_reconcileArtifact(t *testing.T) {
 				obj.Status.Artifact = &sourcev1.Artifact{Revision: "main/revision"}
 				obj.Status.IncludedArtifacts = []*sourcev1.Artifact{{Revision: "main/revision"}}
 			},
-			afterFunc: func(t *WithT, obj *sourcev1.GitRepository, artifact sourcev1.Artifact) {
+			afterFunc: func(t *WithT, obj *sourcev1.GitRepository) {
 				t.Expect(obj.Status.URL).To(BeEmpty())
 			},
 			want: sreconcile.ResultSuccess,
@@ -755,7 +755,7 @@ func TestGitRepositoryReconciler_reconcileArtifact(t *testing.T) {
 				obj.Spec.Interval = metav1.Duration{Duration: interval}
 				obj.Spec.Ignore = pointer.StringPtr("!**.txt\n")
 			},
-			afterFunc: func(t *WithT, obj *sourcev1.GitRepository, artifact sourcev1.Artifact) {
+			afterFunc: func(t *WithT, obj *sourcev1.GitRepository) {
 				t.Expect(obj.GetArtifact()).ToNot(BeNil())
 				t.Expect(obj.GetArtifact().Checksum).To(Equal("11f7f007dce5619bd79e6c57688261058d09f5271e802463ac39f2b9ead7cabd"))
 			},
@@ -772,7 +772,7 @@ func TestGitRepositoryReconciler_reconcileArtifact(t *testing.T) {
 				obj.Spec.Interval = metav1.Duration{Duration: interval}
 				conditions.MarkTrue(obj, sourcev1.ArtifactOutdatedCondition, "Foo", "")
 			},
-			afterFunc: func(t *WithT, obj *sourcev1.GitRepository, artifact sourcev1.Artifact) {
+			afterFunc: func(t *WithT, obj *sourcev1.GitRepository) {
 				t.Expect(obj.GetArtifact()).ToNot(BeNil())
 				t.Expect(obj.GetArtifact().Checksum).To(Equal("60a3bf69f337cb5ec9ebd00abefbb6e7f2a2cf27158ecf438d52b2035b184172"))
 				t.Expect(obj.Status.URL).ToNot(BeEmpty())
@@ -789,7 +789,7 @@ func TestGitRepositoryReconciler_reconcileArtifact(t *testing.T) {
 			beforeFunc: func(obj *sourcev1.GitRepository) {
 				obj.Spec.Interval = metav1.Duration{Duration: interval}
 			},
-			afterFunc: func(t *WithT, obj *sourcev1.GitRepository, artifact sourcev1.Artifact) {
+			afterFunc: func(t *WithT, obj *sourcev1.GitRepository) {
 				t.Expect(obj.GetArtifact()).ToNot(BeNil())
 
 				localPath := testStorage.LocalPath(*obj.GetArtifact())
@@ -843,15 +843,18 @@ func TestGitRepositoryReconciler_reconcileArtifact(t *testing.T) {
 				tt.beforeFunc(obj)
 			}
 
-			artifact := testStorage.NewArtifactFor(obj.Kind, obj, "main/revision", "checksum.tar.gz")
+			commit := git.Commit{
+				Hash:      []byte("revision"),
+				Reference: "refs/heads/main",
+			}
 
-			got, err := r.reconcileArtifact(ctx, obj, &artifact, &tt.includes, tt.dir)
+			got, err := r.reconcileArtifact(ctx, obj, &commit, &tt.includes, tt.dir)
 			g.Expect(obj.Status.Conditions).To(conditions.MatchConditions(tt.assertConditions))
 			g.Expect(err != nil).To(Equal(tt.wantErr))
 			g.Expect(got).To(Equal(tt.want))
 
 			if tt.afterFunc != nil {
-				tt.afterFunc(g, obj, artifact)
+				tt.afterFunc(g, obj)
 			}
 		})
 	}
@@ -1036,10 +1039,10 @@ func TestGitRepositoryReconciler_reconcileInclude(t *testing.T) {
 			g.Expect(err).NotTo(HaveOccurred())
 			defer os.RemoveAll(tmpDir)
 
-			var artifact sourcev1.Artifact
+			var commit git.Commit
 			var includes artifactSet
 
-			got, err := r.reconcileInclude(ctx, obj, &artifact, &includes, tmpDir)
+			got, err := r.reconcileInclude(ctx, obj, &commit, &includes, tmpDir)
 			g.Expect(obj.GetConditions()).To(conditions.MatchConditions(tt.assertConditions))
 			g.Expect(err != nil).To(Equal(tt.wantErr))
 			if err == nil {

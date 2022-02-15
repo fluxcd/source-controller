@@ -107,7 +107,7 @@ type GitRepositoryReconcilerOptions struct {
 
 // gitRepoReconcilerFunc is the function type for all the Git repository
 // reconciler functions.
-type gitRepoReconcilerFunc func(ctx context.Context, obj *sourcev1.GitRepository, artifact *sourcev1.Artifact, includes *artifactSet, dir string) (sreconcile.Result, error)
+type gitRepoReconcilerFunc func(ctx context.Context, obj *sourcev1.GitRepository, commit *git.Commit, includes *artifactSet, dir string) (sreconcile.Result, error)
 
 func (r *GitRepositoryReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return r.SetupWithManagerAndOptions(mgr, GitRepositoryReconcilerOptions{})
@@ -207,7 +207,7 @@ func (r *GitRepositoryReconciler) reconcile(ctx context.Context, obj *sourcev1.G
 		conditions.MarkReconciling(obj, "NewGeneration", "reconciling new object generation (%d)", obj.Generation)
 	}
 
-	var artifact sourcev1.Artifact
+	var commit git.Commit
 	var includes artifactSet
 
 	// Create temp dir for Git clone
@@ -224,7 +224,7 @@ func (r *GitRepositoryReconciler) reconcile(ctx context.Context, obj *sourcev1.G
 	var res sreconcile.Result
 	var resErr error
 	for _, rec := range reconcilers {
-		recResult, err := rec(ctx, obj, &artifact, &includes, tmpDir)
+		recResult, err := rec(ctx, obj, &commit, &includes, tmpDir)
 		// Exit immediately on ResultRequeue.
 		if recResult == sreconcile.ResultRequeue {
 			return sreconcile.ResultRequeue, nil
@@ -248,7 +248,8 @@ func (r *GitRepositoryReconciler) reconcile(ctx context.Context, obj *sourcev1.G
 // If the artifact in the Status object of the resource disappeared from storage, it is removed from the object.
 // If the object does not have an artifact in its Status object, a v1beta1.ArtifactUnavailableCondition is set.
 // If the hostname of any of the URLs on the object do not match the current storage server hostname, they are updated.
-func (r *GitRepositoryReconciler) reconcileStorage(ctx context.Context, obj *sourcev1.GitRepository, artifact *sourcev1.Artifact, includes *artifactSet, dir string) (sreconcile.Result, error) {
+func (r *GitRepositoryReconciler) reconcileStorage(ctx context.Context,
+	obj *sourcev1.GitRepository, _ *git.Commit, includes *artifactSet, dir string) (sreconcile.Result, error) {
 	// Garbage collect previous advertised artifact(s) from storage
 	_ = r.garbageCollect(ctx, obj)
 
@@ -284,7 +285,7 @@ func (r *GitRepositoryReconciler) reconcileStorage(ctx context.Context, obj *sou
 // If both the checkout and signature verification are successful, the given artifact pointer is set to a new artifact
 // with the available metadata.
 func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context,
-	obj *sourcev1.GitRepository, artifact *sourcev1.Artifact, _ *artifactSet, dir string) (sreconcile.Result, error) {
+	obj *sourcev1.GitRepository, commit *git.Commit, _ *artifactSet, dir string) (sreconcile.Result, error) {
 	// Configure authentication strategy to access the source
 	var authOpts *git.AuthOptions
 	var err error
@@ -344,7 +345,7 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context,
 	// Checkout HEAD of reference in object
 	gitCtx, cancel := context.WithTimeout(ctx, obj.Spec.Timeout.Duration)
 	defer cancel()
-	commit, err := checkoutStrategy.Checkout(gitCtx, dir, obj.Spec.URL, authOpts)
+	c, err := checkoutStrategy.Checkout(gitCtx, dir, obj.Spec.URL, authOpts)
 	if err != nil {
 		e := &serror.Event{
 			Err:    fmt.Errorf("failed to checkout and determine revision: %w", err),
@@ -354,6 +355,8 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context,
 		// Coin flip on transient or persistent error, return error and hope for the best
 		return sreconcile.ResultEmpty, e
 	}
+	// Assign the commit to the shared commit reference.
+	*commit = *c
 	ctrl.LoggerFrom(ctx).V(logger.DebugLevel).Info("git repository checked out", "url", obj.Spec.URL, "revision", commit.String())
 	conditions.Delete(obj, sourcev1.FetchFailedCondition)
 
@@ -361,9 +364,6 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context,
 	if result, err := r.verifyCommitSignature(ctx, obj, *commit); err != nil || result == sreconcile.ResultEmpty {
 		return result, err
 	}
-
-	// Create potential new artifact with current available metadata
-	*artifact = r.Storage.NewArtifactFor(obj.Kind, obj.GetObjectMeta(), commit.String(), fmt.Sprintf("%s.tar.gz", commit.Hash.String()))
 
 	// Mark observations about the revision on the object
 	if !obj.GetArtifact().HasRevision(commit.String()) {
@@ -383,7 +383,11 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context,
 // Source ignore patterns are loaded, and the given directory is archived.
 // On a successful archive, the artifact and includes in the status of the given object are set, and the symlink in the
 // storage is updated to its path.
-func (r *GitRepositoryReconciler) reconcileArtifact(ctx context.Context, obj *sourcev1.GitRepository, artifact *sourcev1.Artifact, includes *artifactSet, dir string) (sreconcile.Result, error) {
+func (r *GitRepositoryReconciler) reconcileArtifact(ctx context.Context,
+	obj *sourcev1.GitRepository, commit *git.Commit, includes *artifactSet, dir string) (sreconcile.Result, error) {
+	// Create potential new artifact with current available metadata
+	artifact := r.Storage.NewArtifactFor(obj.Kind, obj.GetObjectMeta(), commit.String(), fmt.Sprintf("%s.tar.gz", commit.Hash.String()))
+
 	// Always restore the Ready condition in case it got removed due to a transient error
 	defer func() {
 		if obj.GetArtifact().HasRevision(artifact.Revision) && !includes.Diff(obj.Status.IncludedArtifacts) {
@@ -419,14 +423,14 @@ func (r *GitRepositoryReconciler) reconcileArtifact(ctx context.Context, obj *so
 	}
 
 	// Ensure artifact directory exists and acquire lock
-	if err := r.Storage.MkdirAll(*artifact); err != nil {
+	if err := r.Storage.MkdirAll(artifact); err != nil {
 		e := &serror.Event{
 			Err:    fmt.Errorf("failed to create artifact directory: %w", err),
 			Reason: sourcev1.StorageOperationFailedReason,
 		}
 		return sreconcile.ResultEmpty, e
 	}
-	unlock, err := r.Storage.Lock(*artifact)
+	unlock, err := r.Storage.Lock(artifact)
 	if err != nil {
 		return sreconcile.ResultEmpty, &serror.Event{
 			Err:    fmt.Errorf("failed to acquire lock for artifact: %w", err),
@@ -448,7 +452,7 @@ func (r *GitRepositoryReconciler) reconcileArtifact(ctx context.Context, obj *so
 	}
 
 	// Archive directory to storage
-	if err := r.Storage.Archive(artifact, dir, SourceIgnoreFilter(ps, nil)); err != nil {
+	if err := r.Storage.Archive(&artifact, dir, SourceIgnoreFilter(ps, nil)); err != nil {
 		return sreconcile.ResultEmpty, &serror.Event{
 			Err:    fmt.Errorf("unable to archive artifact to storage: %w", err),
 			Reason: sourcev1.StorageOperationFailedReason,
@@ -457,14 +461,14 @@ func (r *GitRepositoryReconciler) reconcileArtifact(ctx context.Context, obj *so
 	r.AnnotatedEventf(obj, map[string]string{
 		"revision": artifact.Revision,
 		"checksum": artifact.Checksum,
-	}, corev1.EventTypeNormal, "NewArtifact", "stored artifact for revision '%s'", artifact.Revision)
+	}, corev1.EventTypeNormal, "NewArtifact", "stored artifact for commit '%s'", commit.ShortMessage())
 
 	// Record it on the object
 	obj.Status.Artifact = artifact.DeepCopy()
 	obj.Status.IncludedArtifacts = *includes
 
 	// Update symlink on a "best effort" basis
-	url, err := r.Storage.Symlink(*artifact, "latest.tar.gz")
+	url, err := r.Storage.Symlink(artifact, "latest.tar.gz")
 	if err != nil {
 		r.eventLogf(ctx, obj, corev1.EventTypeWarning, sourcev1.StorageOperationFailedReason,
 			"failed to update status URL symlink: %s", err)
@@ -481,7 +485,8 @@ func (r *GitRepositoryReconciler) reconcileArtifact(ctx context.Context, obj *so
 // If an include is unavailable, it marks the object with v1beta1.IncludeUnavailableCondition and returns early.
 // If the copy operations are successful, it deletes the v1beta1.IncludeUnavailableCondition from the object.
 // If the artifactSet differs from the current set, it marks the object with v1beta1.ArtifactOutdatedCondition.
-func (r *GitRepositoryReconciler) reconcileInclude(ctx context.Context, obj *sourcev1.GitRepository, _ *sourcev1.Artifact, includes *artifactSet, dir string) (sreconcile.Result, error) {
+func (r *GitRepositoryReconciler) reconcileInclude(ctx context.Context,
+	obj *sourcev1.GitRepository, _ *git.Commit, includes *artifactSet, dir string) (sreconcile.Result, error) {
 	artifacts := make(artifactSet, len(obj.Spec.Include))
 	for i, incl := range obj.Spec.Include {
 		// Do this first as it is much cheaper than copy operations
