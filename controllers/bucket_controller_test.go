@@ -264,9 +264,10 @@ func TestBucketReconciler_reconcileStorage(t *testing.T) {
 				g.Expect(tt.beforeFunc(obj, testStorage)).To(Succeed())
 			}
 
+			index := make(etagIndex)
 			var artifact sourcev1.Artifact
 
-			got, err := r.reconcileStorage(context.TODO(), obj, &artifact, "")
+			got, err := r.reconcileStorage(context.TODO(), obj, index, &artifact, "")
 			g.Expect(err != nil).To(Equal(tt.wantErr))
 			g.Expect(got).To(Equal(tt.want))
 
@@ -549,7 +550,8 @@ func TestBucketReconciler_reconcileMinioSource(t *testing.T) {
 			}
 
 			artifact := &sourcev1.Artifact{}
-			got, err := r.reconcileSource(context.TODO(), obj, artifact, tmpDir)
+			index := make(etagIndex)
+			got, err := r.reconcileSource(context.TODO(), obj, index, artifact, tmpDir)
 			g.Expect(err != nil).To(Equal(tt.wantErr))
 			g.Expect(got).To(Equal(tt.want))
 
@@ -828,7 +830,8 @@ func TestBucketReconciler_reconcileGCPSource(t *testing.T) {
 			}()
 
 			artifact := &sourcev1.Artifact{}
-			got, err := r.reconcileSource(context.TODO(), obj, artifact, tmpDir)
+			index := make(etagIndex)
+			got, err := r.reconcileSource(context.TODO(), obj, index, artifact, tmpDir)
 			g.Expect(err != nil).To(Equal(tt.wantErr))
 			g.Expect(got).To(Equal(tt.want))
 
@@ -965,6 +968,7 @@ func TestBucketReconciler_reconcileArtifact(t *testing.T) {
 				},
 			}
 
+			index := make(etagIndex)
 			artifact := testStorage.NewArtifactFor(obj.Kind, obj, "existing", "foo.tar.gz")
 			artifact.Checksum = testChecksum
 
@@ -972,7 +976,7 @@ func TestBucketReconciler_reconcileArtifact(t *testing.T) {
 				tt.beforeFunc(g, obj, artifact, tmpDir)
 			}
 
-			got, err := r.reconcileArtifact(context.TODO(), obj, &artifact, tmpDir)
+			got, err := r.reconcileArtifact(context.TODO(), obj, index, &artifact, tmpDir)
 			g.Expect(err != nil).To(Equal(tt.wantErr))
 			g.Expect(got).To(Equal(tt.want))
 
