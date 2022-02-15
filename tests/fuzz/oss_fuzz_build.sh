@@ -21,9 +21,7 @@ GOPATH="${GOPATH:-/root/go}"
 GO_SRC="${GOPATH}/src"
 PROJECT_PATH="github.com/fluxcd/source-controller"
 
-cd "${GO_SRC}"
-
-pushd "${PROJECT_PATH}"
+pushd "${GO_SRC}/${PROJECT_PATH}"
 
 export TARGET_DIR="$(/bin/pwd)/build/libgit2/${LIBGIT2_TAG}"
 
@@ -58,9 +56,7 @@ export CGO_LDFLAGS="$(pkg-config --libs --static --cflags libssh2 openssl libgit
 
 go mod tidy -compat=1.17
 
-popd
-
-pushd "${PROJECT_PATH}/tests/fuzz"
+pushd "tests/fuzz"
 
 # Setup files to be embedded into controllers_fuzzer.go's testFiles variable.
 mkdir -p testdata/crd
@@ -69,28 +65,31 @@ cp -r ../../controllers/testdata/certs testdata/
 
 go mod tidy -compat=1.17
 
-# ref: https://github.com/google/oss-fuzz/blob/master/infra/base-images/base-builder/compile_go_fuzzer
-go-fuzz -tags gofuzz -func=FuzzRandomGitFiles -o gitrepository_fuzzer.a .
-clang -o /out/fuzz_random_git_files \
-    gitrepository_fuzzer.a \
-    "${TARGET_DIR}/lib/libgit2.a" \
-    "${TARGET_DIR}/lib/libssh2.a" \
-    "${TARGET_DIR}/lib/libz.a" \
-    "${TARGET_DIR}/lib64/libssl.a" \
-    "${TARGET_DIR}/lib64/libcrypto.a" \
-    -fsanitize=fuzzer
+# Using compile_go_fuzzer to compile fails when statically linking libgit2 dependencies
+# via CFLAGS/CXXFLAGS.
+function go_compile(){
+    function=$1
+    fuzzer=$2
 
-go-fuzz -tags gofuzz -func=FuzzGitResourceObject -o fuzz_git_resource_object.a .
-clang -o /out/fuzz_git_resource_object \
-    fuzz_git_resource_object.a \
-    "${TARGET_DIR}/lib/libgit2.a" \
-    "${TARGET_DIR}/lib/libssh2.a" \
-    "${TARGET_DIR}/lib/libz.a" \
-    "${TARGET_DIR}/lib64/libssl.a" \
-    "${TARGET_DIR}/lib64/libcrypto.a" \
-    -fsanitize=fuzzer
+    if [[ $SANITIZER = *coverage* ]]; then
+        # ref: https://github.com/google/oss-fuzz/blob/master/infra/base-images/base-builder/compile_go_fuzzer
+        compile_go_fuzzer "${PROJECT_PATH}/tests/fuzz" "${function}" "${fuzzer}"
+    else
+        go-fuzz -tags gofuzz -func="${function}" -o "${fuzzer}.a" .
+        ${CXX} ${CXXFLAGS} ${LIB_FUZZING_ENGINE} -o "${OUT}/${fuzzer}" \
+            "${fuzzer}.a" \
+            "${TARGET_DIR}/lib/libgit2.a" "${TARGET_DIR}/lib/libssh2.a" \
+            "${TARGET_DIR}/lib/libz.a" "${TARGET_DIR}/lib64/libssl.a" \
+            "${TARGET_DIR}/lib64/libcrypto.a" \
+            -fsanitize="${SANITIZER}"
+    fi
+}
+
+go_compile FuzzRandomGitFiles fuzz_gitrepository_fuzzer
+go_compile FuzzGitResourceObject fuzz_git_resource_object
 
 # By now testdata is embedded in the binaries and no longer needed.
 rm -rf testdata/
 
+popd
 popd
