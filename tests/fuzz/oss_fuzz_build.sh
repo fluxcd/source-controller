@@ -16,7 +16,7 @@
 
 set -euxo pipefail
 
-LIBGIT2_TAG="${LIBGIT2_TAG:-libgit2-1.1.1-7}"
+LIBGIT2_TAG="${LIBGIT2_TAG:-libgit2-1.3.0-2}"
 GOPATH="${GOPATH:-/root/go}"
 GO_SRC="${GOPATH}/src"
 PROJECT_PATH="github.com/fluxcd/source-controller"
@@ -54,9 +54,24 @@ export PKG_CONFIG_PATH="${TARGET_DIR}/lib/pkgconfig:${TARGET_DIR}/lib64/pkgconfi
 export CGO_CFLAGS="-I${TARGET_DIR}/include -I${TARGET_DIR}/include/openssl"
 export CGO_LDFLAGS="$(pkg-config --libs --static --cflags libssh2 openssl libgit2)"
 
-go mod tidy -compat=1.17
+go mod tidy
+
+# The implementation of libgit2 is sensitive to the versions of git2go.
+# Leaving it to its own devices, the minimum version of git2go used may not
+# be compatible with the currently implemented version. Hence the modifications
+# of the existing go.mod. 
+sed "s;\./api;$(/bin/pwd)/api;g" go.mod > tests/fuzz/go.mod
+sed -i 's;module github.com/fluxcd/source-controller;module github.com/fluxcd/source-controller/tests/fuzz;g' tests/fuzz/go.mod
+echo "replace github.com/fluxcd/source-controller => $(/bin/pwd)/" >> tests/fuzz/go.mod
+
+cp go.sum tests/fuzz/go.sum
 
 pushd "tests/fuzz"
+
+go mod download
+
+go get -d github.com/AdaLogics/go-fuzz-headers
+go get -d github.com/fluxcd/source-controller
 
 # Setup files to be embedded into controllers_fuzzer.go's testFiles variable.
 mkdir -p testdata/crd
@@ -89,6 +104,7 @@ go_compile FuzzRandomGitFiles fuzz_gitrepository_fuzzer
 go_compile FuzzGitResourceObject fuzz_git_resource_object
 
 # By now testdata is embedded in the binaries and no longer needed.
+# Remove the dir given that it will be owned by root otherwise.
 rm -rf testdata/
 
 popd

@@ -26,11 +26,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/fluxcd/pkg/gittestserver"
-	"github.com/fluxcd/pkg/ssh"
 	git2go "github.com/libgit2/git2go/v33"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
+
+	"github.com/fluxcd/pkg/gittestserver"
+	"github.com/fluxcd/pkg/ssh"
 
 	"github.com/fluxcd/source-controller/pkg/git"
 )

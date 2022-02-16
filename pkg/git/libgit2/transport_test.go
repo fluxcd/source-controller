@@ -159,28 +159,28 @@ func Test_x509Callback(t *testing.T) {
 			certificate: googleLeafWithInvalidHashFixture,
 			host:        "www.google.com",
 			caBundle:    []byte(giag2IntermediateFixture + "\n" + geoTrustRootFixture),
-			want:        fmt.Errorf("x509 cert could not be verified"),
+			want:        fmt.Errorf(`verification failed: x509: certificate signed by unknown authority (possibly because of "x509: cannot verify signature: algorithm unimplemented" while trying to verify candidate authority certificate "Google Internet Authority G2")`),
 		},
 		{
 			name:        "Invalid certificate authority bundle",
 			certificate: googleLeafFixture,
 			host:        "www.google.com",
 			caBundle:    bytes.Trim([]byte(giag2IntermediateFixture+"\n"+geoTrustRootFixture), "-"),
-			want:        fmt.Errorf("x509 cert could not be appended"),
+			want:        fmt.Errorf("PEM CA bundle could not be appended to x509 certificate pool"),
 		},
 		{
 			name:        "Missing intermediate in bundle",
 			certificate: googleLeafFixture,
 			host:        "www.google.com",
 			caBundle:    []byte(geoTrustRootFixture),
-			want:        fmt.Errorf("x509 cert could not be verified"),
+			want:        fmt.Errorf("verification failed: x509: certificate signed by unknown authority"),
 		},
 		{
 			name:        "Invalid host",
 			certificate: googleLeafFixture,
 			host:        "www.google.co",
 			caBundle:    []byte(giag2IntermediateFixture + "\n" + geoTrustRootFixture),
-			want:        fmt.Errorf("x509 cert could not be verified"),
+			want:        fmt.Errorf("verification failed: x509: certificate is valid for www.google.com, not www.google.co"),
 		},
 	}
 	for _, tt := range tests {
@@ -195,11 +195,11 @@ func Test_x509Callback(t *testing.T) {
 			}
 
 			callback := x509Callback(tt.caBundle)
-			result := g.Expect(callback(cert, false, tt.host))
+			result := callback(cert, false, tt.host)
 			if tt.want == nil {
-				result.To(BeNil())
+				g.Expect(result).To(BeNil())
 			} else {
-				result.To(Equal(tt.want))
+				g.Expect(result.Error()).To(Equal(tt.want.Error()))
 			}
 		})
 	}
@@ -236,7 +236,7 @@ func Test_knownHostsCallback(t *testing.T) {
 			knownHosts:   []byte(knownHostsFixture),
 			hostkey:      git2go.HostkeyCertificate{Kind: git2go.HostkeySHA1 | git2go.HostkeyMD5, HashSHA1: sha1Fingerprint("v2toJdKXfFEaR1u++4iq1UqSrHM")},
 			expectedHost: "example.com",
-			want:         fmt.Errorf("host mismatch: %q %q\n", "example.com", "github.com"),
+			want:         fmt.Errorf("host mismatch: %q %q", "example.com", "github.com"),
 		},
 		{
 			name:         "Hostkey mismatch",
@@ -399,7 +399,7 @@ func Test_transferProgressCallback(t *testing.T) {
 				ReceivedObjects: 21,
 			},
 			cancelFunc: func(cf context.CancelFunc) { cf() },
-			wantErr:    fmt.Errorf("transport close - potentially due to a timeout"),
+			wantErr:    fmt.Errorf("transport close (potentially due to a timeout)"),
 		},
 	}
 
@@ -497,7 +497,7 @@ func Test_pushTransferProgressCallback(t *testing.T) {
 			name:       "error - context cancelled",
 			progress:   pushProgress{current: 20, total: 25},
 			cancelFunc: func(cf context.CancelFunc) { cf() },
-			wantErr:    fmt.Errorf("transport close - potentially due to a timeout"),
+			wantErr:    fmt.Errorf("transport close (potentially due to a timeout)"),
 		},
 	}
 

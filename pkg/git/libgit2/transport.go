@@ -68,7 +68,7 @@ func transferProgressCallback(ctx context.Context) git2go.TransferProgressCallba
 		}
 		select {
 		case <-ctx.Done():
-			return fmt.Errorf("transport close - potentially due to a timeout")
+			return fmt.Errorf("transport close (potentially due to a timeout)")
 		default:
 			return nil
 		}
@@ -100,7 +100,7 @@ func pushTransferProgressCallback(ctx context.Context) git2go.PushTransferProgre
 		}
 		select {
 		case <-ctx.Done():
-			return fmt.Errorf("transport close - potentially due to a timeout")
+			return fmt.Errorf("transport close (potentially due to a timeout)")
 		default:
 			return nil
 		}
@@ -158,7 +158,7 @@ func x509Callback(caBundle []byte) git2go.CertificateCheckCallback {
 	return func(cert *git2go.Certificate, valid bool, hostname string) error {
 		roots := x509.NewCertPool()
 		if ok := roots.AppendCertsFromPEM(caBundle); !ok {
-			return fmt.Errorf("x509 cert could not be appended")
+			return fmt.Errorf("PEM CA bundle could not be appended to x509 certificate pool")
 		}
 
 		opts := x509.VerifyOptions{
@@ -167,7 +167,7 @@ func x509Callback(caBundle []byte) git2go.CertificateCheckCallback {
 			CurrentTime: now(),
 		}
 		if _, err := cert.X509.Verify(opts); err != nil {
-			return fmt.Errorf("x509 cert could not be verified")
+			return fmt.Errorf("verification failed: %w", err)
 		}
 		return nil
 	}
@@ -200,7 +200,7 @@ func knownHostsCallback(host string, knownHosts []byte) git2go.CertificateCheckC
 		}
 
 		if hostnameWithoutPort != hostWithoutPort {
-			return fmt.Errorf("host mismatch: %q %q\n", hostWithoutPort, hostnameWithoutPort)
+			return fmt.Errorf("host mismatch: %q %q", hostWithoutPort, hostnameWithoutPort)
 		}
 
 		// We are now certain that the configured host and the hostname
