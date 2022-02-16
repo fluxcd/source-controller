@@ -4,7 +4,7 @@ TAG ?= latest
 
 # Base image used to build the Go binary
 LIBGIT2_IMG ?= ghcr.io/fluxcd/golang-with-libgit2
-LIBGIT2_TAG ?= libgit2-1.1.1-7
+LIBGIT2_TAG ?= libgit2-1.3.0-2
 
 # Allows for defining additional Docker buildx arguments,
 # e.g. '--push'.
@@ -136,6 +136,7 @@ tidy:  ## Run go mod tidy
 fmt:  ## Run go fmt against code
 	go fmt ./...
 	cd api; go fmt ./...
+	cd tests/fuzz; go fmt .
 
 vet: $(LIBGIT2)	## Run go vet against code
 	go vet ./...
@@ -208,6 +209,12 @@ ifneq ($(shell grep -o 'LIBGIT2_IMG ?= \w.*' Makefile | cut -d ' ' -f 3):$(shell
 	exit 1; \
 	}
 endif
+ifneq ($(shell grep -o 'LIBGIT2_TAG ?= \w.*' Makefile | cut -d ' ' -f 3), $(shell grep -o "LIBGIT2_TAG=.*" tests/fuzz/oss_fuzz_build.sh | sed 's;LIBGIT2_TAG="$${LIBGIT2_TAG:-;;g' | sed 's;}";;g'))
+	@{ \
+	echo "LIBGIT2_TAG must match in both Makefile and tests/fuzz/oss_fuzz_build.sh"; \
+	exit 1; \
+	}
+endif
 ifneq (, $(shell git status --porcelain --untracked-files=no))
 	@{ \
 	echo "working directory is dirty:"; \
@@ -224,7 +231,7 @@ TMP_DIR=$$(mktemp -d) ;\
 cd $$TMP_DIR ;\
 go mod init tmp ;\
 echo "Downloading $(2)" ;\
-go install $(2) ;\
+env -i bash -c "GOBIN=$(GOBIN) PATH=$(PATH) GOPATH=$(shell go env GOPATH) GOCACHE=$(shell go env GOCACHE) go install $(2)" ;\
 rm -rf $$TMP_DIR ;\
 }
 endef

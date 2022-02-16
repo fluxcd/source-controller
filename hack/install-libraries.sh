@@ -45,8 +45,6 @@ function setup_current() {
     mkdir -p "./build/libgit2"
     if [[ $OSTYPE == 'darwin'* ]]; then
         # For MacOS development environments, download the amd64 static libraries released from from golang-with-libgit2.
-
-        #TODO: update URL with official URL + TAG:
         curl -o output.tar.gz -LO "https://github.com/fluxcd/golang-with-libgit2/releases/download/${TAG}/darwin-libs.tar.gz"
        
         DIR=libgit2-darwin
