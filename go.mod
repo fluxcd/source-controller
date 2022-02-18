@@ -11,12 +11,12 @@ require (
 	github.com/cyphar/filepath-securejoin v0.2.2
 	github.com/darkowlzz/controller-check v0.0.0-20220119215126-648356cef22c
 	github.com/elazarl/goproxy v0.0.0-20211114080932-d06c3be7c11b
-	github.com/fluxcd/pkg/apis/meta v0.11.0-rc.3
+	github.com/fluxcd/pkg/apis/meta v0.12.0
 	github.com/fluxcd/pkg/gittestserver v0.5.0
 	github.com/fluxcd/pkg/gitutil v0.1.0
 	github.com/fluxcd/pkg/helmtestserver v0.4.0
 	github.com/fluxcd/pkg/lockedfile v0.1.0
-	github.com/fluxcd/pkg/runtime v0.13.0-rc.7
+	github.com/fluxcd/pkg/runtime v0.13.0
 	github.com/fluxcd/pkg/ssh v0.2.0
 	github.com/fluxcd/pkg/testserver v0.2.0
 	github.com/fluxcd/pkg/untar v0.1.0
