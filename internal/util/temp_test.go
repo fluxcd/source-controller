@@ -18,6 +18,7 @@ package util
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 
 	. "github.com/onsi/gomega"
@@ -50,7 +51,7 @@ func TestTempPathForObj(t *testing.T) {
 	}{
 		{
 			name: "default",
-			want: os.TempDir() + "/secret-default-foo-",
+			want: filepath.Join(os.TempDir(), "secret-default-foo-"),
 		},
 		{
 			name: "with directory",
