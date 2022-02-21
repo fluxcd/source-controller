@@ -10,6 +10,7 @@ require (
 	github.com/ProtonMail/go-crypto v0.0.0-20210428141323-04723f9f07d7
 	github.com/cyphar/filepath-securejoin v0.2.2
 	github.com/darkowlzz/controller-check v0.0.0-20220119215126-648356cef22c
+	github.com/docker/go-units v0.4.0
 	github.com/elazarl/goproxy v0.0.0-20211114080932-d06c3be7c11b
 	github.com/fluxcd/pkg/apis/meta v0.12.0
 	github.com/fluxcd/pkg/gittestserver v0.5.0
@@ -73,7 +74,6 @@ require (
 	github.com/docker/docker-credential-helpers v0.6.3 // indirect
 	github.com/docker/go-connections v0.4.0 // indirect
 	github.com/docker/go-metrics v0.0.1 // indirect
-	github.com/docker/go-units v0.4.0 // indirect
 	github.com/docker/libtrust v0.0.0-20160708172513-aabc10ec26b7 // indirect
 	github.com/dustin/go-humanize v1.0.0 // indirect
 	github.com/emirpasic/gods v1.12.0 // indirect
