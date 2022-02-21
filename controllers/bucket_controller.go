@@ -95,7 +95,8 @@ type BucketReconciler struct {
 	kuberecorder.EventRecorder
 	helper.Metrics
 
-	Storage *Storage
+	Storage        *Storage
+	ControllerName string
 }
 
 type BucketReconcilerOptions struct {
@@ -160,6 +161,7 @@ func (r *BucketReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 				summarize.RecordReconcileReq,
 			),
 			summarize.WithResultBuilder(sreconcile.AlwaysRequeueResultBuilder{RequeueAfter: obj.GetInterval().Duration}),
+			summarize.WithPatchFieldOwner(r.ControllerName),
 		}
 		result, retErr = summarizeHelper.SummarizeAndPatch(ctx, obj, summarizeOpts...)
 

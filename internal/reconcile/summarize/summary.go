@@ -85,6 +85,9 @@ type HelperOptions struct {
 	ReconcileError error
 	// ResultBuilder defines how the reconciliation result is computed.
 	ResultBuilder reconcile.RuntimeResultBuilder
+	// PatchFieldOwner defines the field owner configuration for the Kubernetes
+	// patch operation.
+	PatchFieldOwner string
 }
 
 // Option is configuration that modifies SummarizeAndPatch.
@@ -137,6 +140,13 @@ func WithReconcileError(re error) Option {
 	}
 }
 
+// WithPatchFieldOwner sets the FieldOwner in the patch helper.
+func WithPatchFieldOwner(fieldOwner string) Option {
+	return func(s *HelperOptions) {
+		s.PatchFieldOwner = fieldOwner
+	}
+}
+
 // SummarizeAndPatch summarizes and patches the result to the target object.
 // When used at the very end of a reconciliation, the result builder must be
 // specified using the Option WithResultBuilder(). The returned result and error
@@ -160,6 +170,9 @@ func (h *Helper) SummarizeAndPatch(ctx context.Context, obj conditions.Setter, o
 		patch.WithOwnedConditions{
 			Conditions: ownedConditions,
 		},
+	}
+	if opts.PatchFieldOwner != "" {
+		patchOpts = append(patchOpts, patch.WithFieldOwner(opts.PatchFieldOwner))
 	}
 
 	// Process the results of reconciliation.

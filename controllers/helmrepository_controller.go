@@ -86,8 +86,9 @@ type HelmRepositoryReconciler struct {
 	kuberecorder.EventRecorder
 	helper.Metrics
 
-	Getters helmgetter.Providers
-	Storage *Storage
+	Getters        helmgetter.Providers
+	Storage        *Storage
+	ControllerName string
 }
 
 type HelmRepositoryReconcilerOptions struct {
@@ -153,6 +154,7 @@ func (r *HelmRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 				summarize.RecordReconcileReq,
 			),
 			summarize.WithResultBuilder(sreconcile.AlwaysRequeueResultBuilder{RequeueAfter: obj.GetInterval().Duration}),
+			summarize.WithPatchFieldOwner(r.ControllerName),
 		}
 		result, retErr = summarizeHelper.SummarizeAndPatch(ctx, obj, summarizeOpts...)
 
