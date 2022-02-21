@@ -24,6 +24,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/docker/go-units"
 	helmgetter "helm.sh/helm/v3/pkg/getter"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -425,10 +426,20 @@ func (r *HelmRepositoryReconciler) reconcileArtifact(ctx context.Context, obj *s
 		}
 	}
 
+	// Calculate the artifact size to be included in the NewArtifact event.
+	fi, err := os.Stat(chartRepo.CachePath)
+	if err != nil {
+		return sreconcile.ResultEmpty, &serror.Event{
+			Err:    fmt.Errorf("unable to read the artifact: %w", err),
+			Reason: sourcev1.StorageOperationFailedReason,
+		}
+	}
+	size := units.HumanSize(float64(fi.Size()))
+
 	r.AnnotatedEventf(obj, map[string]string{
 		"revision": artifact.Revision,
 		"checksum": artifact.Checksum,
-	}, corev1.EventTypeNormal, "NewArtifact", "stored artifact for revision '%s'", artifact.Revision)
+	}, corev1.EventTypeNormal, "NewArtifact", "fetched index of size %s from '%s'", size, chartRepo.URL)
 
 	// Record it on the object.
 	obj.Status.Artifact = artifact.DeepCopy()
