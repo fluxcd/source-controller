@@ -41,6 +41,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/record"
+	kstatus "sigs.k8s.io/cli-utils/pkg/kstatus/status"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	fakeclient "sigs.k8s.io/controller-runtime/pkg/client/fake"
 
@@ -129,6 +130,13 @@ func TestBucketReconciler_Reconcile(t *testing.T) {
 	condns := &status.Conditions{NegativePolarity: bucketReadyConditions.NegativePolarity}
 	checker := status.NewChecker(testEnv.Client, testEnv.GetScheme(), condns)
 	checker.CheckErr(ctx, obj)
+
+	// kstatus client conformance check.
+	uo, err := patch.ToUnstructured(obj)
+	g.Expect(err).ToNot(HaveOccurred())
+	res, err := kstatus.Compute(uo)
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(res.Status).To(Equal(kstatus.CurrentStatus))
 
 	// Patch the object with reconcile request annotation.
 	patchHelper, err := patch.NewHelper(obj, testEnv.Client)

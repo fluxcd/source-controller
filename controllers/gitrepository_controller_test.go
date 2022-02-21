@@ -47,6 +47,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/utils/pointer"
+	kstatus "sigs.k8s.io/cli-utils/pkg/kstatus/status"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	fakeclient "sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -194,6 +195,13 @@ func TestGitRepositoryReconciler_Reconcile(t *testing.T) {
 	condns := &status.Conditions{NegativePolarity: gitRepoReadyConditions.NegativePolarity}
 	checker := status.NewChecker(testEnv.Client, testEnv.GetScheme(), condns)
 	checker.CheckErr(ctx, obj)
+
+	// kstatus client conformance check.
+	u, err := patch.ToUnstructured(obj)
+	g.Expect(err).ToNot(HaveOccurred())
+	res, err := kstatus.Compute(u)
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(res.Status).To(Equal(kstatus.CurrentStatus))
 
 	// Patch the object with reconcile request annotation.
 	patchHelper, err := patch.NewHelper(obj, testEnv.Client)

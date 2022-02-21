@@ -16,7 +16,7 @@ require (
 	github.com/fluxcd/pkg/gitutil v0.1.0
 	github.com/fluxcd/pkg/helmtestserver v0.4.0
 	github.com/fluxcd/pkg/lockedfile v0.1.0
-	github.com/fluxcd/pkg/runtime v0.13.0
+	github.com/fluxcd/pkg/runtime v0.13.1
 	github.com/fluxcd/pkg/ssh v0.2.0
 	github.com/fluxcd/pkg/testserver v0.2.0
 	github.com/fluxcd/pkg/untar v0.1.0
@@ -39,6 +39,7 @@ require (
 	k8s.io/apimachinery v0.23.3
 	k8s.io/client-go v0.23.3
 	k8s.io/utils v0.0.0-20220210201930-3a6ce19ff2f9
+	sigs.k8s.io/cli-utils v0.27.0
 	sigs.k8s.io/controller-runtime v0.11.1
 	sigs.k8s.io/yaml v1.3.0
 )
