@@ -165,10 +165,11 @@ func main() {
 	storage := mustInitStorage(storagePath, storageAdvAddr, setupLog)
 
 	if err = (&controllers.GitRepositoryReconciler{
-		Client:        mgr.GetClient(),
-		EventRecorder: eventRecorder,
-		Metrics:       metricsH,
-		Storage:       storage,
+		Client:         mgr.GetClient(),
+		EventRecorder:  eventRecorder,
+		Metrics:        metricsH,
+		Storage:        storage,
+		ControllerName: controllerName,
 	}).SetupWithManagerAndOptions(mgr, controllers.GitRepositoryReconcilerOptions{
 		MaxConcurrentReconciles:   concurrent,
 		DependencyRequeueInterval: requeueDependency,
@@ -177,11 +178,12 @@ func main() {
 		os.Exit(1)
 	}
 	if err = (&controllers.HelmRepositoryReconciler{
-		Client:        mgr.GetClient(),
-		EventRecorder: eventRecorder,
-		Metrics:       metricsH,
-		Storage:       storage,
-		Getters:       getters,
+		Client:         mgr.GetClient(),
+		EventRecorder:  eventRecorder,
+		Metrics:        metricsH,
+		Storage:        storage,
+		Getters:        getters,
+		ControllerName: controllerName,
 	}).SetupWithManagerAndOptions(mgr, controllers.HelmRepositoryReconcilerOptions{
 		MaxConcurrentReconciles: concurrent,
 	}); err != nil {
@@ -189,11 +191,12 @@ func main() {
 		os.Exit(1)
 	}
 	if err = (&controllers.HelmChartReconciler{
-		Client:        mgr.GetClient(),
-		Storage:       storage,
-		Getters:       getters,
-		EventRecorder: eventRecorder,
-		Metrics:       metricsH,
+		Client:         mgr.GetClient(),
+		Storage:        storage,
+		Getters:        getters,
+		EventRecorder:  eventRecorder,
+		Metrics:        metricsH,
+		ControllerName: controllerName,
 	}).SetupWithManagerAndOptions(mgr, controllers.HelmChartReconcilerOptions{
 		MaxConcurrentReconciles: concurrent,
 	}); err != nil {
@@ -201,10 +204,11 @@ func main() {
 		os.Exit(1)
 	}
 	if err = (&controllers.BucketReconciler{
-		Client:        mgr.GetClient(),
-		EventRecorder: eventRecorder,
-		Metrics:       metricsH,
-		Storage:       storage,
+		Client:         mgr.GetClient(),
+		EventRecorder:  eventRecorder,
+		Metrics:        metricsH,
+		Storage:        storage,
+		ControllerName: controllerName,
 	}).SetupWithManagerAndOptions(mgr, controllers.BucketReconcilerOptions{
 		MaxConcurrentReconciles: concurrent,
 	}); err != nil {

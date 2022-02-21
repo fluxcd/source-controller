@@ -102,8 +102,9 @@ type HelmChartReconciler struct {
 	kuberecorder.EventRecorder
 	helper.Metrics
 
-	Storage *Storage
-	Getters helmgetter.Providers
+	Storage        *Storage
+	Getters        helmgetter.Providers
+	ControllerName string
 }
 
 func (r *HelmChartReconciler) SetupWithManager(mgr ctrl.Manager) error {
@@ -191,6 +192,7 @@ func (r *HelmChartReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 				summarize.RecordReconcileReq,
 			),
 			summarize.WithResultBuilder(sreconcile.AlwaysRequeueResultBuilder{RequeueAfter: obj.GetInterval().Duration}),
+			summarize.WithPatchFieldOwner(r.ControllerName),
 		}
 		result, retErr = summarizeHelper.SummarizeAndPatch(ctx, obj, summarizeOpts...)
 

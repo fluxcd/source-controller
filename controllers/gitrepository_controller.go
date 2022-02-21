@@ -95,7 +95,8 @@ type GitRepositoryReconciler struct {
 	kuberecorder.EventRecorder
 	helper.Metrics
 
-	Storage *Storage
+	Storage        *Storage
+	ControllerName string
 
 	requeueDependency time.Duration
 }
@@ -166,6 +167,7 @@ func (r *GitRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 				summarize.RecordReconcileReq,
 			),
 			summarize.WithResultBuilder(sreconcile.AlwaysRequeueResultBuilder{RequeueAfter: obj.GetInterval().Duration}),
+			summarize.WithPatchFieldOwner(r.ControllerName),
 		}
 		result, retErr = summarizeHelper.SummarizeAndPatch(ctx, obj, summarizeOpts...)
 
