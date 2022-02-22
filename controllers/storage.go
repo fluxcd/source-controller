@@ -194,7 +194,8 @@ func (s *Storage) Archive(artifact *sourcev1.Artifact, dir string, filter Archiv
 	}()
 
 	h := newHash()
-	mw := io.MultiWriter(h, tf)
+	sz := &writeCounter{}
+	mw := io.MultiWriter(h, tf, sz)
 
 	gw := gzip.NewWriter(mw)
 	tw := tar.NewWriter(gw)
@@ -286,6 +287,8 @@ func (s *Storage) Archive(artifact *sourcev1.Artifact, dir string, filter Archiv
 
 	artifact.Checksum = fmt.Sprintf("%x", h.Sum(nil))
 	artifact.LastUpdateTime = metav1.Now()
+	artifact.Size = &sz.written
+
 	return nil
 }
 
@@ -305,7 +308,8 @@ func (s *Storage) AtomicWriteFile(artifact *sourcev1.Artifact, reader io.Reader,
 	}()
 
 	h := newHash()
-	mw := io.MultiWriter(h, tf)
+	sz := &writeCounter{}
+	mw := io.MultiWriter(h, tf, sz)
 
 	if _, err := io.Copy(mw, reader); err != nil {
 		tf.Close()
@@ -325,6 +329,8 @@ func (s *Storage) AtomicWriteFile(artifact *sourcev1.Artifact, reader io.Reader,
 
 	artifact.Checksum = fmt.Sprintf("%x", h.Sum(nil))
 	artifact.LastUpdateTime = metav1.Now()
+	artifact.Size = &sz.written
+
 	return nil
 }
 
@@ -344,7 +350,8 @@ func (s *Storage) Copy(artifact *sourcev1.Artifact, reader io.Reader) (err error
 	}()
 
 	h := newHash()
-	mw := io.MultiWriter(h, tf)
+	sz := &writeCounter{}
+	mw := io.MultiWriter(h, tf, sz)
 
 	if _, err := io.Copy(mw, reader); err != nil {
 		tf.Close()
@@ -360,6 +367,8 @@ func (s *Storage) Copy(artifact *sourcev1.Artifact, reader io.Reader) (err error
 
 	artifact.Checksum = fmt.Sprintf("%x", h.Sum(nil))
 	artifact.LastUpdateTime = metav1.Now()
+	artifact.Size = &sz.written
+
 	return nil
 }
 
@@ -470,4 +479,16 @@ func (s *Storage) LocalPath(artifact sourcev1.Artifact) string {
 // newHash returns a new SHA256 hash.
 func newHash() hash.Hash {
 	return sha256.New()
+}
+
+// writecounter is an implementation of io.Writer that only records the number
+// of bytes written.
+type writeCounter struct {
+	written int64
+}
+
+func (wc *writeCounter) Write(p []byte) (int, error) {
+	n := len(p)
+	wc.written += int64(n)
+	return n, nil
 }
