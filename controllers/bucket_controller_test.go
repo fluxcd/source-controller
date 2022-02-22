@@ -200,6 +200,7 @@ func TestBucketReconciler_reconcileStorage(t *testing.T) {
 				Revision: "c",
 				Checksum: "2e7d2c03a9507ae265ecf5b5356885a53393a2029d241394997265a1a25aefc6",
 				URL:      testStorage.Hostname + "/reconcile-storage/c.txt",
+				Size:     int64p(int64(len("c"))),
 			},
 			assertPaths: []string{
 				"/reconcile-storage/c.txt",
@@ -251,6 +252,7 @@ func TestBucketReconciler_reconcileStorage(t *testing.T) {
 				Revision: "f",
 				Checksum: "3b9c358f36f0a31b6ad3e14f309c7cf198ac9246e8316f9ce543d5b19ac02b80",
 				URL:      testStorage.Hostname + "/reconcile-storage/hostname.txt",
+				Size:     int64p(int64(len("file"))),
 			},
 		},
 	}

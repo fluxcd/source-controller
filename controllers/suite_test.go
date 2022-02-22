@@ -193,3 +193,7 @@ func randStringRunes(n int) string {
 	}
 	return string(b)
 }
+
+func int64p(i int64) *int64 {
+	return &i
+}
