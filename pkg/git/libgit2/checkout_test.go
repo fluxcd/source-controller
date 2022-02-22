@@ -51,8 +51,8 @@ func TestCheckoutBranch_Checkout(t *testing.T) {
 
 	// ignores the error here because it can be defaulted
 	// https://github.blog/2020-07-27-highlights-from-git-2-28/#introducing-init-defaultbranch
-	defaultBranch := "main"
-	if v, err := cfg.LookupString("init.defaultBranch"); err != nil {
+	defaultBranch := "master"
+	if v, err := cfg.LookupString("init.defaultBranch"); err != nil && v != "" {
 		defaultBranch = v
 	}
 
@@ -61,10 +61,12 @@ func TestCheckoutBranch_Checkout(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// Branch off on first commit
 	if err = createBranch(repo, "test", nil); err != nil {
 		t.Fatal(err)
 	}
 
+	// Create second commit on default branch
 	secondCommit, err := commitFile(repo, "branch", "second", time.Now())
 	if err != nil {
 		t.Fatal(err)
@@ -73,17 +75,20 @@ func TestCheckoutBranch_Checkout(t *testing.T) {
 	tests := []struct {
 		name           string
 		branch         string
+		filesCreated   map[string]string
 		expectedCommit string
 		expectedErr    string
 	}{
 		{
 			name:           "Default branch",
 			branch:         defaultBranch,
+			filesCreated:   map[string]string{"branch": "second"},
 			expectedCommit: secondCommit.String(),
 		},
 		{
 			name:           "Other branch",
 			branch:         "test",
+			filesCreated:   map[string]string{"branch": "init"},
 			expectedCommit: firstCommit.String(),
 		},
 		{
@@ -112,6 +117,11 @@ func TestCheckoutBranch_Checkout(t *testing.T) {
 			}
 			g.Expect(err).ToNot(HaveOccurred())
 			g.Expect(cc.String()).To(Equal(tt.branch + "/" + tt.expectedCommit))
+
+			for k, v := range tt.filesCreated {
+				g.Expect(filepath.Join(tmpDir, k)).To(BeARegularFile())
+				g.Expect(os.ReadFile(filepath.Join(tmpDir, k))).To(BeEquivalentTo(v))
+			}
 		})
 	}
 }

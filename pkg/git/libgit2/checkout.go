@@ -66,6 +66,9 @@ func (c *CheckoutBranch) Checkout(ctx context.Context, path, url string, opts *g
 			RemoteCallbacks: RemoteCallbacks(ctx, opts),
 			ProxyOptions:    git2go.ProxyOptions{Type: git2go.ProxyTypeAuto},
 		},
+		CheckoutOptions: git2go.CheckoutOptions{
+			Strategy: git2go.CheckoutForce,
+		},
 		CheckoutBranch: c.Branch,
 	})
 	if err != nil {
@@ -79,7 +82,7 @@ func (c *CheckoutBranch) Checkout(ctx context.Context, path, url string, opts *g
 	defer head.Free()
 	cc, err := repo.LookupCommit(head.Target())
 	if err != nil {
-		return nil, fmt.Errorf("could not find commit '%s' in branch '%s': %w", head.Target(), c.Branch, err)
+		return nil, fmt.Errorf("failed to lookup HEAD commit '%s' for branch '%s': %w", head.Target(), c.Branch, err)
 	}
 	defer cc.Free()
 	return buildCommit(cc, "refs/heads/"+c.Branch), nil
