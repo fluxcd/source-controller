@@ -2,22 +2,22 @@
 <p>Packages:</p>
 <ul class="simple">
 <li>
-<a href="#source.toolkit.fluxcd.io%2fv1beta1">source.toolkit.fluxcd.io/v1beta1</a>
+<a href="#source.toolkit.fluxcd.io%2fv1beta2">source.toolkit.fluxcd.io/v1beta2</a>
 </li>
 </ul>
-<h2 id="source.toolkit.fluxcd.io/v1beta1">source.toolkit.fluxcd.io/v1beta1</h2>
-<p>Package v1beta1 contains API Schema definitions for the source v1beta1 API group</p>
+<h2 id="source.toolkit.fluxcd.io/v1beta2">source.toolkit.fluxcd.io/v1beta2</h2>
+<p>Package v1beta2 contains API Schema definitions for the source v1beta2 API group</p>
 Resource Types:
 <ul class="simple"><li>
-<a href="#source.toolkit.fluxcd.io/v1beta1.Bucket">Bucket</a>
+<a href="#source.toolkit.fluxcd.io/v1beta2.Bucket">Bucket</a>
 </li><li>
-<a href="#source.toolkit.fluxcd.io/v1beta1.GitRepository">GitRepository</a>
+<a href="#source.toolkit.fluxcd.io/v1beta2.GitRepository">GitRepository</a>
 </li><li>
-<a href="#source.toolkit.fluxcd.io/v1beta1.HelmChart">HelmChart</a>
+<a href="#source.toolkit.fluxcd.io/v1beta2.HelmChart">HelmChart</a>
 </li><li>
-<a href="#source.toolkit.fluxcd.io/v1beta1.HelmRepository">HelmRepository</a>
+<a href="#source.toolkit.fluxcd.io/v1beta2.HelmRepository">HelmRepository</a>
 </li></ul>
-<h3 id="source.toolkit.fluxcd.io/v1beta1.Bucket">Bucket
+<h3 id="source.toolkit.fluxcd.io/v1beta2.Bucket">Bucket
 </h3>
 <p>Bucket is the Schema for the buckets API</p>
 <div class="md-typeset__scrollwrap">
@@ -35,7 +35,7 @@ Resource Types:
 <code>apiVersion</code><br>
 string</td>
 <td>
-<code>source.toolkit.fluxcd.io/v1beta1</code>
+<code>source.toolkit.fluxcd.io/v1beta2</code>
 </td>
 </tr>
 <tr>
@@ -65,7 +65,7 @@ Refer to the Kubernetes API documentation for the fields of the
 <td>
 <code>spec</code><br>
 <em>
-<a href="#source.toolkit.fluxcd.io/v1beta1.BucketSpec">
+<a href="#source.toolkit.fluxcd.io/v1beta2.BucketSpec">
 BucketSpec
 </a>
 </em>
@@ -171,7 +171,7 @@ Kubernetes meta/v1.Duration
 </td>
 <td>
 <em>(Optional)</em>
-<p>The timeout for download operations, defaults to 60s.</p>
+<p>The timeout for fetch operations, defaults to 60s.</p>
 </td>
 </tr>
 <tr>
@@ -221,7 +221,7 @@ github.com/fluxcd/pkg/apis/acl.AccessFrom
 <td>
 <code>status</code><br>
 <em>
-<a href="#source.toolkit.fluxcd.io/v1beta1.BucketStatus">
+<a href="#source.toolkit.fluxcd.io/v1beta2.BucketStatus">
 BucketStatus
 </a>
 </em>
@@ -233,7 +233,7 @@ BucketStatus
 </table>
 </div>
 </div>
-<h3 id="source.toolkit.fluxcd.io/v1beta1.GitRepository">GitRepository
+<h3 id="source.toolkit.fluxcd.io/v1beta2.GitRepository">GitRepository
 </h3>
 <p>GitRepository is the Schema for the gitrepositories API</p>
 <div class="md-typeset__scrollwrap">
@@ -251,7 +251,7 @@ BucketStatus
 <code>apiVersion</code><br>
 string</td>
 <td>
-<code>source.toolkit.fluxcd.io/v1beta1</code>
+<code>source.toolkit.fluxcd.io/v1beta2</code>
 </td>
 </tr>
 <tr>
@@ -281,7 +281,7 @@ Refer to the Kubernetes API documentation for the fields of the
 <td>
 <code>spec</code><br>
 <em>
-<a href="#source.toolkit.fluxcd.io/v1beta1.GitRepositorySpec">
+<a href="#source.toolkit.fluxcd.io/v1beta2.GitRepositorySpec">
 GitRepositorySpec
 </a>
 </em>
@@ -313,10 +313,8 @@ github.com/fluxcd/pkg/apis/meta.LocalObjectReference
 <td>
 <em>(Optional)</em>
 <p>The secret name containing the Git credentials.
-For HTTPS repositories the secret must contain username and password
-fields.
-For SSH repositories the secret must contain identity, identity.pub and
-known_hosts fields.</p>
+For HTTPS repositories the secret must contain username and password fields.
+For SSH repositories the secret must contain &lsquo;identity&rsquo;, &lsquo;identity.pub&rsquo; and &lsquo;known_hosts&rsquo; fields.</p>
 </td>
 </tr>
 <tr>
@@ -350,7 +348,7 @@ Kubernetes meta/v1.Duration
 <td>
 <code>ref</code><br>
 <em>
-<a href="#source.toolkit.fluxcd.io/v1beta1.GitRepositoryRef">
+<a href="#source.toolkit.fluxcd.io/v1beta2.GitRepositoryRef">
 GitRepositoryRef
 </a>
 </em>
@@ -365,14 +363,14 @@ master branch.</p>
 <td>
 <code>verify</code><br>
 <em>
-<a href="#source.toolkit.fluxcd.io/v1beta1.GitRepositoryVerification">
+<a href="#source.toolkit.fluxcd.io/v1beta2.GitRepositoryVerification">
 GitRepositoryVerification
 </a>
 </em>
 </td>
 <td>
 <em>(Optional)</em>
-<p>Verify OpenPGP signature for the Git commit HEAD points to.</p>
+<p>Verification defines the configuration to verify the OpenPGP signature for the Git commit HEAD points to.</p>
 </td>
 </tr>
 <tr>
@@ -384,9 +382,8 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>Ignore overrides the set of excluded patterns in the .sourceignore format
-(which is the same as .gitignore). If not provided, a default will be used,
-consult the documentation for your version to find out what those are.</p>
+<p>Ignore overrides the set of excluded patterns in the .sourceignore format (which is the same as .gitignore).
+If not provided, a default will be used, consult the documentation for your version to find out what those are.</p>
 </td>
 </tr>
 <tr>
@@ -398,7 +395,8 @@ bool
 </td>
 <td>
 <em>(Optional)</em>
-<p>This flag tells the controller to suspend the reconciliation of this source.</p>
+<p>Suspend tells the controller to suspend the reconciliation of this source.
+This flag tells the controller to suspend the reconciliation of this source.</p>
 </td>
 </tr>
 <tr>
@@ -423,8 +421,7 @@ bool
 </td>
 <td>
 <em>(Optional)</em>
-<p>When enabled, after the clone is created, initializes all submodules within,
-using their default settings.
+<p>When enabled, after the clone is created, initializes all submodules within, using their default settings.
 This option is available only when using the &lsquo;go-git&rsquo; GitImplementation.</p>
 </td>
 </tr>
@@ -432,13 +429,14 @@ This option is available only when using the &lsquo;go-git&rsquo; GitImplementat
 <td>
 <code>include</code><br>
 <em>
-<a href="#source.toolkit.fluxcd.io/v1beta1.GitRepositoryInclude">
+<a href="#source.toolkit.fluxcd.io/v1beta2.GitRepositoryInclude">
 []GitRepositoryInclude
 </a>
 </em>
 </td>
 <td>
-<p>Extra git repositories to map into the repository</p>
+<p>Include defines a list of GitRepository resources which artifacts should be included in the artifact produced for
+this resource.</p>
 </td>
 </tr>
 <tr>
@@ -462,7 +460,7 @@ github.com/fluxcd/pkg/apis/acl.AccessFrom
 <td>
 <code>status</code><br>
 <em>
-<a href="#source.toolkit.fluxcd.io/v1beta1.GitRepositoryStatus">
+<a href="#source.toolkit.fluxcd.io/v1beta2.GitRepositoryStatus">
 GitRepositoryStatus
 </a>
 </em>
@@ -474,7 +472,7 @@ GitRepositoryStatus
 </table>
 </div>
 </div>
-<h3 id="source.toolkit.fluxcd.io/v1beta1.HelmChart">HelmChart
+<h3 id="source.toolkit.fluxcd.io/v1beta2.HelmChart">HelmChart
 </h3>
 <p>HelmChart is the Schema for the helmcharts API</p>
 <div class="md-typeset__scrollwrap">
@@ -492,7 +490,7 @@ GitRepositoryStatus
 <code>apiVersion</code><br>
 string</td>
 <td>
-<code>source.toolkit.fluxcd.io/v1beta1</code>
+<code>source.toolkit.fluxcd.io/v1beta2</code>
 </td>
 </tr>
 <tr>
@@ -522,7 +520,7 @@ Refer to the Kubernetes API documentation for the fields of the
 <td>
 <code>spec</code><br>
 <em>
-<a href="#source.toolkit.fluxcd.io/v1beta1.HelmChartSpec">
+<a href="#source.toolkit.fluxcd.io/v1beta2.HelmChartSpec">
 HelmChartSpec
 </a>
 </em>
@@ -559,7 +557,7 @@ and Bucket sources. Defaults to latest when omitted.</p>
 <td>
 <code>sourceRef</code><br>
 <em>
-<a href="#source.toolkit.fluxcd.io/v1beta1.LocalHelmChartSourceReference">
+<a href="#source.toolkit.fluxcd.io/v1beta2.LocalHelmChartSourceReference">
 LocalHelmChartSourceReference
 </a>
 </em>
@@ -659,7 +657,7 @@ github.com/fluxcd/pkg/apis/acl.AccessFrom
 <td>
 <code>status</code><br>
 <em>
-<a href="#source.toolkit.fluxcd.io/v1beta1.HelmChartStatus">
+<a href="#source.toolkit.fluxcd.io/v1beta2.HelmChartStatus">
 HelmChartStatus
 </a>
 </em>
@@ -671,7 +669,7 @@ HelmChartStatus
 </table>
 </div>
 </div>
-<h3 id="source.toolkit.fluxcd.io/v1beta1.HelmRepository">HelmRepository
+<h3 id="source.toolkit.fluxcd.io/v1beta2.HelmRepository">HelmRepository
 </h3>
 <p>HelmRepository is the Schema for the helmrepositories API</p>
 <div class="md-typeset__scrollwrap">
@@ -689,7 +687,7 @@ HelmChartStatus
 <code>apiVersion</code><br>
 string</td>
 <td>
-<code>source.toolkit.fluxcd.io/v1beta1</code>
+<code>source.toolkit.fluxcd.io/v1beta2</code>
 </td>
 </tr>
 <tr>
@@ -719,7 +717,7 @@ Refer to the Kubernetes API documentation for the fields of the
 <td>
 <code>spec</code><br>
 <em>
-<a href="#source.toolkit.fluxcd.io/v1beta1.HelmRepositorySpec">
+<a href="#source.toolkit.fluxcd.io/v1beta2.HelmRepositorySpec">
 HelmRepositorySpec
 </a>
 </em>
@@ -799,7 +797,7 @@ Kubernetes meta/v1.Duration
 </td>
 <td>
 <em>(Optional)</em>
-<p>The timeout of index downloading, defaults to 60s.</p>
+<p>The timeout of index fetching, defaults to 60s.</p>
 </td>
 </tr>
 <tr>
@@ -835,7 +833,7 @@ github.com/fluxcd/pkg/apis/acl.AccessFrom
 <td>
 <code>status</code><br>
 <em>
-<a href="#source.toolkit.fluxcd.io/v1beta1.HelmRepositoryStatus">
+<a href="#source.toolkit.fluxcd.io/v1beta2.HelmRepositoryStatus">
 HelmRepositoryStatus
 </a>
 </em>
@@ -847,16 +845,16 @@ HelmRepositoryStatus
 </table>
 </div>
 </div>
-<h3 id="source.toolkit.fluxcd.io/v1beta1.Artifact">Artifact
+<h3 id="source.toolkit.fluxcd.io/v1beta2.Artifact">Artifact
 </h3>
 <p>
 (<em>Appears on:</em>
-<a href="#source.toolkit.fluxcd.io/v1beta1.BucketStatus">BucketStatus</a>, 
-<a href="#source.toolkit.fluxcd.io/v1beta1.GitRepositoryStatus">GitRepositoryStatus</a>, 
-<a href="#source.toolkit.fluxcd.io/v1beta1.HelmChartStatus">HelmChartStatus</a>, 
-<a href="#source.toolkit.fluxcd.io/v1beta1.HelmRepositoryStatus">HelmRepositoryStatus</a>)
+<a href="#source.toolkit.fluxcd.io/v1beta2.BucketStatus">BucketStatus</a>, 
+<a href="#source.toolkit.fluxcd.io/v1beta2.GitRepositoryStatus">GitRepositoryStatus</a>, 
+<a href="#source.toolkit.fluxcd.io/v1beta2.HelmChartStatus">HelmChartStatus</a>, 
+<a href="#source.toolkit.fluxcd.io/v1beta2.HelmRepositoryStatus">HelmRepositoryStatus</a>)
 </p>
-<p>Artifact represents the output of a source synchronisation.</p>
+<p>Artifact represents the output of a Source synchronisation.</p>
 <div class="md-typeset__scrollwrap">
 <div class="md-typeset__table">
 <table>
@@ -875,7 +873,9 @@ string
 </em>
 </td>
 <td>
-<p>Path is the relative file path of this artifact.</p>
+<p>Path is the relative file path of this Artifact.
+It can be used to locate the Artifact file in the root of the Artifact
+storage on the local file system of the controller managing the Source.</p>
 </td>
 </tr>
 <tr>
@@ -886,7 +886,9 @@ string
 </em>
 </td>
 <td>
-<p>URL is the HTTP address of this artifact.</p>
+<p>URL is the HTTP address of this artifact.
+It is used by the consumers of the artifacts to fetch and use the
+artifacts. It is expected to be resolvable from within the cluster.</p>
 </td>
 </tr>
 <tr>
@@ -933,11 +935,11 @@ artifact.</p>
 </table>
 </div>
 </div>
-<h3 id="source.toolkit.fluxcd.io/v1beta1.BucketSpec">BucketSpec
+<h3 id="source.toolkit.fluxcd.io/v1beta2.BucketSpec">BucketSpec
 </h3>
 <p>
 (<em>Appears on:</em>
-<a href="#source.toolkit.fluxcd.io/v1beta1.Bucket">Bucket</a>)
+<a href="#source.toolkit.fluxcd.io/v1beta2.Bucket">Bucket</a>)
 </p>
 <p>BucketSpec defines the desired state of an S3 compatible bucket</p>
 <div class="md-typeset__scrollwrap">
@@ -1047,7 +1049,7 @@ Kubernetes meta/v1.Duration
 </td>
 <td>
 <em>(Optional)</em>
-<p>The timeout for download operations, defaults to 60s.</p>
+<p>The timeout for fetch operations, defaults to 60s.</p>
 </td>
 </tr>
 <tr>
@@ -1094,11 +1096,11 @@ github.com/fluxcd/pkg/apis/acl.AccessFrom
 </table>
 </div>
 </div>
-<h3 id="source.toolkit.fluxcd.io/v1beta1.BucketStatus">BucketStatus
+<h3 id="source.toolkit.fluxcd.io/v1beta2.BucketStatus">BucketStatus
 </h3>
 <p>
 (<em>Appears on:</em>
-<a href="#source.toolkit.fluxcd.io/v1beta1.Bucket">Bucket</a>)
+<a href="#source.toolkit.fluxcd.io/v1beta2.Bucket">Bucket</a>)
 </p>
 <p>BucketStatus defines the observed state of a bucket</p>
 <div class="md-typeset__scrollwrap">
@@ -1146,14 +1148,14 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>URL is the download link for the artifact output of the last Bucket sync.</p>
+<p>URL is the fetch link for the artifact output of the last Bucket sync.</p>
 </td>
 </tr>
 <tr>
 <td>
 <code>artifact</code><br>
 <em>
-<a href="#source.toolkit.fluxcd.io/v1beta1.Artifact">
+<a href="#source.toolkit.fluxcd.io/v1beta2.Artifact">
 Artifact
 </a>
 </em>
@@ -1182,11 +1184,11 @@ github.com/fluxcd/pkg/apis/meta.ReconcileRequestStatus
 </table>
 </div>
 </div>
-<h3 id="source.toolkit.fluxcd.io/v1beta1.GitRepositoryInclude">GitRepositoryInclude
+<h3 id="source.toolkit.fluxcd.io/v1beta2.GitRepositoryInclude">GitRepositoryInclude
 </h3>
 <p>
 (<em>Appears on:</em>
-<a href="#source.toolkit.fluxcd.io/v1beta1.GitRepositorySpec">GitRepositorySpec</a>)
+<a href="#source.toolkit.fluxcd.io/v1beta2.GitRepositorySpec">GitRepositorySpec</a>)
 </p>
 <p>GitRepositoryInclude defines a source with a from and to path.</p>
 <div class="md-typeset__scrollwrap">
@@ -1240,11 +1242,11 @@ string
 </table>
 </div>
 </div>
-<h3 id="source.toolkit.fluxcd.io/v1beta1.GitRepositoryRef">GitRepositoryRef
+<h3 id="source.toolkit.fluxcd.io/v1beta2.GitRepositoryRef">GitRepositoryRef
 </h3>
 <p>
 (<em>Appears on:</em>
-<a href="#source.toolkit.fluxcd.io/v1beta1.GitRepositorySpec">GitRepositorySpec</a>)
+<a href="#source.toolkit.fluxcd.io/v1beta2.GitRepositorySpec">GitRepositorySpec</a>)
 </p>
 <p>GitRepositoryRef defines the Git ref used for pull and checkout operations.</p>
 <div class="md-typeset__scrollwrap">
@@ -1309,11 +1311,11 @@ string
 </table>
 </div>
 </div>
-<h3 id="source.toolkit.fluxcd.io/v1beta1.GitRepositorySpec">GitRepositorySpec
+<h3 id="source.toolkit.fluxcd.io/v1beta2.GitRepositorySpec">GitRepositorySpec
 </h3>
 <p>
 (<em>Appears on:</em>
-<a href="#source.toolkit.fluxcd.io/v1beta1.GitRepository">GitRepository</a>)
+<a href="#source.toolkit.fluxcd.io/v1beta2.GitRepository">GitRepository</a>)
 </p>
 <p>GitRepositorySpec defines the desired state of a Git repository.</p>
 <div class="md-typeset__scrollwrap">
@@ -1349,10 +1351,8 @@ github.com/fluxcd/pkg/apis/meta.LocalObjectReference
 <td>
 <em>(Optional)</em>
 <p>The secret name containing the Git credentials.
-For HTTPS repositories the secret must contain username and password
-fields.
-For SSH repositories the secret must contain identity, identity.pub and
-known_hosts fields.</p>
+For HTTPS repositories the secret must contain username and password fields.
+For SSH repositories the secret must contain &lsquo;identity&rsquo;, &lsquo;identity.pub&rsquo; and &lsquo;known_hosts&rsquo; fields.</p>
 </td>
 </tr>
 <tr>
@@ -1386,7 +1386,7 @@ Kubernetes meta/v1.Duration
 <td>
 <code>ref</code><br>
 <em>
-<a href="#source.toolkit.fluxcd.io/v1beta1.GitRepositoryRef">
+<a href="#source.toolkit.fluxcd.io/v1beta2.GitRepositoryRef">
 GitRepositoryRef
 </a>
 </em>
@@ -1401,14 +1401,14 @@ master branch.</p>
 <td>
 <code>verify</code><br>
 <em>
-<a href="#source.toolkit.fluxcd.io/v1beta1.GitRepositoryVerification">
+<a href="#source.toolkit.fluxcd.io/v1beta2.GitRepositoryVerification">
 GitRepositoryVerification
 </a>
 </em>
 </td>
 <td>
 <em>(Optional)</em>
-<p>Verify OpenPGP signature for the Git commit HEAD points to.</p>
+<p>Verification defines the configuration to verify the OpenPGP signature for the Git commit HEAD points to.</p>
 </td>
 </tr>
 <tr>
@@ -1420,9 +1420,8 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>Ignore overrides the set of excluded patterns in the .sourceignore format
-(which is the same as .gitignore). If not provided, a default will be used,
-consult the documentation for your version to find out what those are.</p>
+<p>Ignore overrides the set of excluded patterns in the .sourceignore format (which is the same as .gitignore).
+If not provided, a default will be used, consult the documentation for your version to find out what those are.</p>
 </td>
 </tr>
 <tr>
@@ -1434,7 +1433,8 @@ bool
 </td>
 <td>
 <em>(Optional)</em>
-<p>This flag tells the controller to suspend the reconciliation of this source.</p>
+<p>Suspend tells the controller to suspend the reconciliation of this source.
+This flag tells the controller to suspend the reconciliation of this source.</p>
 </td>
 </tr>
 <tr>
@@ -1459,8 +1459,7 @@ bool
 </td>
 <td>
 <em>(Optional)</em>
-<p>When enabled, after the clone is created, initializes all submodules within,
-using their default settings.
+<p>When enabled, after the clone is created, initializes all submodules within, using their default settings.
 This option is available only when using the &lsquo;go-git&rsquo; GitImplementation.</p>
 </td>
 </tr>
@@ -1468,13 +1467,14 @@ This option is available only when using the &lsquo;go-git&rsquo; GitImplementat
 <td>
 <code>include</code><br>
 <em>
-<a href="#source.toolkit.fluxcd.io/v1beta1.GitRepositoryInclude">
+<a href="#source.toolkit.fluxcd.io/v1beta2.GitRepositoryInclude">
 []GitRepositoryInclude
 </a>
 </em>
 </td>
 <td>
-<p>Extra git repositories to map into the repository</p>
+<p>Include defines a list of GitRepository resources which artifacts should be included in the artifact produced for
+this resource.</p>
 </td>
 </tr>
 <tr>
@@ -1495,11 +1495,11 @@ github.com/fluxcd/pkg/apis/acl.AccessFrom
 </table>
 </div>
 </div>
-<h3 id="source.toolkit.fluxcd.io/v1beta1.GitRepositoryStatus">GitRepositoryStatus
+<h3 id="source.toolkit.fluxcd.io/v1beta2.GitRepositoryStatus">GitRepositoryStatus
 </h3>
 <p>
 (<em>Appears on:</em>
-<a href="#source.toolkit.fluxcd.io/v1beta1.GitRepository">GitRepository</a>)
+<a href="#source.toolkit.fluxcd.io/v1beta2.GitRepository">GitRepository</a>)
 </p>
 <p>GitRepositoryStatus defines the observed state of a Git repository.</p>
 <div class="md-typeset__scrollwrap">
@@ -1547,15 +1547,14 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>URL is the download link for the artifact output of the last repository
-sync.</p>
+<p>URL is the fetch link for the artifact output of the last repository sync.</p>
 </td>
 </tr>
 <tr>
 <td>
 <code>artifact</code><br>
 <em>
-<a href="#source.toolkit.fluxcd.io/v1beta1.Artifact">
+<a href="#source.toolkit.fluxcd.io/v1beta2.Artifact">
 Artifact
 </a>
 </em>
@@ -1569,8 +1568,8 @@ Artifact
 <td>
 <code>includedArtifacts</code><br>
 <em>
-<a href="#source.toolkit.fluxcd.io/v1beta1.*github.com/fluxcd/source-controller/api/v1beta1.Artifact">
-[]*github.com/fluxcd/source-controller/api/v1beta1.Artifact
+<a href="#source.toolkit.fluxcd.io/v1beta2.*github.com/fluxcd/source-controller/api/v1beta2.Artifact">
+[]*github.com/fluxcd/source-controller/api/v1beta2.Artifact
 </a>
 </em>
 </td>
@@ -1598,11 +1597,11 @@ github.com/fluxcd/pkg/apis/meta.ReconcileRequestStatus
 </table>
 </div>
 </div>
-<h3 id="source.toolkit.fluxcd.io/v1beta1.GitRepositoryVerification">GitRepositoryVerification
+<h3 id="source.toolkit.fluxcd.io/v1beta2.GitRepositoryVerification">GitRepositoryVerification
 </h3>
 <p>
 (<em>Appears on:</em>
-<a href="#source.toolkit.fluxcd.io/v1beta1.GitRepositorySpec">GitRepositorySpec</a>)
+<a href="#source.toolkit.fluxcd.io/v1beta2.GitRepositorySpec">GitRepositorySpec</a>)
 </p>
 <p>GitRepositoryVerification defines the OpenPGP signature verification process.</p>
 <div class="md-typeset__scrollwrap">
@@ -1623,7 +1622,7 @@ string
 </em>
 </td>
 <td>
-<p>Mode describes what git object should be verified, currently (&lsquo;head&rsquo;).</p>
+<p>Mode describes what Git object should be verified, currently (&lsquo;head&rsquo;).</p>
 </td>
 </tr>
 <tr>
@@ -1636,18 +1635,18 @@ github.com/fluxcd/pkg/apis/meta.LocalObjectReference
 </em>
 </td>
 <td>
-<p>The secret name containing the public keys of all trusted Git authors.</p>
+<p>SecretRef containing the public keys of all trusted Git authors.</p>
 </td>
 </tr>
 </tbody>
 </table>
 </div>
 </div>
-<h3 id="source.toolkit.fluxcd.io/v1beta1.HelmChartSpec">HelmChartSpec
+<h3 id="source.toolkit.fluxcd.io/v1beta2.HelmChartSpec">HelmChartSpec
 </h3>
 <p>
 (<em>Appears on:</em>
-<a href="#source.toolkit.fluxcd.io/v1beta1.HelmChart">HelmChart</a>)
+<a href="#source.toolkit.fluxcd.io/v1beta2.HelmChart">HelmChart</a>)
 </p>
 <p>HelmChartSpec defines the desired state of a Helm chart.</p>
 <div class="md-typeset__scrollwrap">
@@ -1688,7 +1687,7 @@ and Bucket sources. Defaults to latest when omitted.</p>
 <td>
 <code>sourceRef</code><br>
 <em>
-<a href="#source.toolkit.fluxcd.io/v1beta1.LocalHelmChartSourceReference">
+<a href="#source.toolkit.fluxcd.io/v1beta2.LocalHelmChartSourceReference">
 LocalHelmChartSourceReference
 </a>
 </em>
@@ -1785,11 +1784,11 @@ github.com/fluxcd/pkg/apis/acl.AccessFrom
 </table>
 </div>
 </div>
-<h3 id="source.toolkit.fluxcd.io/v1beta1.HelmChartStatus">HelmChartStatus
+<h3 id="source.toolkit.fluxcd.io/v1beta2.HelmChartStatus">HelmChartStatus
 </h3>
 <p>
 (<em>Appears on:</em>
-<a href="#source.toolkit.fluxcd.io/v1beta1.HelmChart">HelmChart</a>)
+<a href="#source.toolkit.fluxcd.io/v1beta2.HelmChart">HelmChart</a>)
 </p>
 <p>HelmChartStatus defines the observed state of the HelmChart.</p>
 <div class="md-typeset__scrollwrap">
@@ -1816,6 +1815,32 @@ int64
 </tr>
 <tr>
 <td>
+<code>observedSourceArtifactRevision</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>ObservedSourceArtifactRevision is the last observed Artifact.Revision
+of the Source reference.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>observedChartName</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>ObservedChartName is the last observed chart name as defined by the
+resolved chart reference.</p>
+</td>
+</tr>
+<tr>
+<td>
 <code>conditions</code><br>
 <em>
 <a href="https://godoc.org/k8s.io/apimachinery/pkg/apis/meta/v1#Condition">
@@ -1837,14 +1862,14 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>URL is the download link for the last chart pulled.</p>
+<p>URL is the fetch link for the last chart pulled.</p>
 </td>
 </tr>
 <tr>
 <td>
 <code>artifact</code><br>
 <em>
-<a href="#source.toolkit.fluxcd.io/v1beta1.Artifact">
+<a href="#source.toolkit.fluxcd.io/v1beta2.Artifact">
 Artifact
 </a>
 </em>
@@ -1873,11 +1898,11 @@ github.com/fluxcd/pkg/apis/meta.ReconcileRequestStatus
 </table>
 </div>
 </div>
-<h3 id="source.toolkit.fluxcd.io/v1beta1.HelmRepositorySpec">HelmRepositorySpec
+<h3 id="source.toolkit.fluxcd.io/v1beta2.HelmRepositorySpec">HelmRepositorySpec
 </h3>
 <p>
 (<em>Appears on:</em>
-<a href="#source.toolkit.fluxcd.io/v1beta1.HelmRepository">HelmRepository</a>)
+<a href="#source.toolkit.fluxcd.io/v1beta2.HelmRepository">HelmRepository</a>)
 </p>
 <p>HelmRepositorySpec defines the reference to a Helm repository.</p>
 <div class="md-typeset__scrollwrap">
@@ -1961,7 +1986,7 @@ Kubernetes meta/v1.Duration
 </td>
 <td>
 <em>(Optional)</em>
-<p>The timeout of index downloading, defaults to 60s.</p>
+<p>The timeout of index fetching, defaults to 60s.</p>
 </td>
 </tr>
 <tr>
@@ -1994,11 +2019,11 @@ github.com/fluxcd/pkg/apis/acl.AccessFrom
 </table>
 </div>
 </div>
-<h3 id="source.toolkit.fluxcd.io/v1beta1.HelmRepositoryStatus">HelmRepositoryStatus
+<h3 id="source.toolkit.fluxcd.io/v1beta2.HelmRepositoryStatus">HelmRepositoryStatus
 </h3>
 <p>
 (<em>Appears on:</em>
-<a href="#source.toolkit.fluxcd.io/v1beta1.HelmRepository">HelmRepository</a>)
+<a href="#source.toolkit.fluxcd.io/v1beta2.HelmRepository">HelmRepository</a>)
 </p>
 <p>HelmRepositoryStatus defines the observed state of the HelmRepository.</p>
 <div class="md-typeset__scrollwrap">
@@ -2046,14 +2071,14 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>URL is the download link for the last index fetched.</p>
+<p>URL is the fetch link for the last index fetched.</p>
 </td>
 </tr>
 <tr>
 <td>
 <code>artifact</code><br>
 <em>
-<a href="#source.toolkit.fluxcd.io/v1beta1.Artifact">
+<a href="#source.toolkit.fluxcd.io/v1beta2.Artifact">
 Artifact
 </a>
 </em>
@@ -2082,11 +2107,11 @@ github.com/fluxcd/pkg/apis/meta.ReconcileRequestStatus
 </table>
 </div>
 </div>
-<h3 id="source.toolkit.fluxcd.io/v1beta1.LocalHelmChartSourceReference">LocalHelmChartSourceReference
+<h3 id="source.toolkit.fluxcd.io/v1beta2.LocalHelmChartSourceReference">LocalHelmChartSourceReference
 </h3>
 <p>
 (<em>Appears on:</em>
-<a href="#source.toolkit.fluxcd.io/v1beta1.HelmChartSpec">HelmChartSpec</a>)
+<a href="#source.toolkit.fluxcd.io/v1beta2.HelmChartSpec">HelmChartSpec</a>)
 </p>
 <p>LocalHelmChartSourceReference contains enough information to let you locate
 the typed referenced object at namespace level.</p>
@@ -2139,7 +2164,7 @@ string
 </table>
 </div>
 </div>
-<h3 id="source.toolkit.fluxcd.io/v1beta1.Source">Source
+<h3 id="source.toolkit.fluxcd.io/v1beta2.Source">Source
 </h3>
 <p>Source interface must be supported by all API types.</p>
 <div class="admonition note">

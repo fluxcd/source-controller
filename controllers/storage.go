@@ -36,7 +36,7 @@ import (
 	"github.com/fluxcd/pkg/lockedfile"
 
 	"github.com/fluxcd/pkg/untar"
-	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
+	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
 	"github.com/fluxcd/source-controller/internal/fs"
 	"github.com/fluxcd/source-controller/pkg/sourceignore"
 )
@@ -53,7 +53,7 @@ type Storage struct {
 	Timeout time.Duration `json:"timeout"`
 }
 
-// NewStorage creates the storage helper for a given path and hostname
+// NewStorage creates the storage helper for a given path and hostname.
 func NewStorage(basePath string, hostname string, timeout time.Duration) (*Storage, error) {
 	if f, err := os.Stat(basePath); os.IsNotExist(err) || !f.IsDir() {
 		return nil, fmt.Errorf("invalid dir path: %s", basePath)
@@ -81,7 +81,11 @@ func (s Storage) SetArtifactURL(artifact *sourcev1.Artifact) {
 	if artifact.Path == "" {
 		return
 	}
-	artifact.URL = fmt.Sprintf("http://%s/%s", s.Hostname, artifact.Path)
+	format := "http://%s/%s"
+	if strings.HasPrefix(s.Hostname, "http://") || strings.HasPrefix(s.Hostname, "https://") {
+		format = "%s/%s"
+	}
+	artifact.URL = fmt.Sprintf(format, s.Hostname, strings.TrimLeft(artifact.Path, "/"))
 }
 
 // SetHostname sets the hostname of the given URL string to the current Storage.Hostname and returns the result.
@@ -101,13 +105,20 @@ func (s *Storage) MkdirAll(artifact sourcev1.Artifact) error {
 }
 
 // RemoveAll calls os.RemoveAll for the given v1beta1.Artifact base dir.
-func (s *Storage) RemoveAll(artifact sourcev1.Artifact) error {
+func (s *Storage) RemoveAll(artifact sourcev1.Artifact) (string, error) {
+	var deletedDir string
 	dir := filepath.Dir(s.LocalPath(artifact))
-	return os.RemoveAll(dir)
+	// Check if the dir exists.
+	_, err := os.Stat(dir)
+	if err == nil {
+		deletedDir = dir
+	}
+	return deletedDir, os.RemoveAll(dir)
 }
 
 // RemoveAllButCurrent removes all files for the given v1beta1.Artifact base dir, excluding the current one.
-func (s *Storage) RemoveAllButCurrent(artifact sourcev1.Artifact) error {
+func (s *Storage) RemoveAllButCurrent(artifact sourcev1.Artifact) ([]string, error) {
+	deletedFiles := []string{}
 	localPath := s.LocalPath(artifact)
 	dir := filepath.Dir(localPath)
 	var errors []string
@@ -120,15 +131,18 @@ func (s *Storage) RemoveAllButCurrent(artifact sourcev1.Artifact) error {
 		if path != localPath && !info.IsDir() && info.Mode()&os.ModeSymlink != os.ModeSymlink {
 			if err := os.Remove(path); err != nil {
 				errors = append(errors, info.Name())
+			} else {
+				// Collect the successfully deleted file paths.
+				deletedFiles = append(deletedFiles, path)
 			}
 		}
 		return nil
 	})
 
 	if len(errors) > 0 {
-		return fmt.Errorf("failed to remove files: %s", strings.Join(errors, " "))
+		return deletedFiles, fmt.Errorf("failed to remove files: %s", strings.Join(errors, " "))
 	}
-	return nil
+	return deletedFiles, nil
 }
 
 // ArtifactExist returns a boolean indicating whether the v1beta1.Artifact exists in storage and is a regular file.
