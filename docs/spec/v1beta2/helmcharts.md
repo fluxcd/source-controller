@@ -97,6 +97,120 @@ As with all other Kubernetes config, a HelmChart needs `apiVersion`, `kind`, and
 A HelmChart also needs a
 [`.spec` section](https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md#spec-and-status).
 
+### Source reference
+
+`.spec.sourceRef` is a required field that specifies a reference to the Source
+the chart is available at.
+
+Supported references are:
+- [`HelmRepository`](helmrepositories.md)
+- [`GitRepository`](gitrepositories.md)
+- [`Bucket`](buckets.md)
+
+Although there are three kinds of source references, there are only two
+underlying implementations. The artifact building process for `GitRepository`
+and `Bucket` are the same as they are already built source artifacts. In case
+of `HelmRepository`, a chart is fetched and/or packaged based on the
+configuration of the Helm chart.
+
+For a `HelmChart` to be reconciled, the associated artifact in the source
+reference must be ready. If the source artifact is not ready, the `HelmChart`
+reconciliation is retried.
+
+When the `metadata.generation` of the `HelmChart` don't match with the
+`status.observedGeneration`, the chart is fetched from source and/or packaged.
+If there's no `.spec.valuesFiles` specified, the chart is only fetched from the
+source, and not packaged. If `.spec.valuesFiles` are specified, the chart is
+fetched and packaged with the values files. When the `metadata.generation`
+matches the `status.observedGeneration`, the chart is only fetched from source
+or from the cache if available, and not packaged.
+
+When using a `HelmRepository` source reference, the secret reference defined in
+the Helm repository is used to fetch the chart.
+
+The HelmChart reconciliation behavior varies depending on the source reference
+kind, see [reconcile strategy](#reconcile-strategy).
+
+The attributes of the generated artifact also varies depending on the source
+reference kind, see [artifact](#artifact).
+
+### Chart
+
+`.spec.chart` is a required field that specifies the name or path the Helm chart
+is available at in the [Source reference](#source-reference).
+
+For `HelmRepository` Source reference, it'll be just the name of the chart.
+
+```yaml
+spec:
+  chart: podinfo
+  sourceRef:
+    name: podinfo
+    kind: HelmRepository
+```
+
+For `GitRepository` and `Bucket` Source reference, it'll be the path to the
+Helm chart directory.
+
+```yaml
+spec:
+  chart: ./charts/podinfo
+  sourceRef:
+    name: podinfo
+    kind: <GitRepository|Bucket>
+```
+
+### Version
+
+`.spec.version` is an optional field to specify the version of the chart in
+semver. It is applicable only when the Source reference is a `HelmRepository`.
+It is ignored for `GitRepository` and `Bucket` Source reference. It defaults to
+the latest version of the chart with value `*`.
+
+Version can be a fixed semver, minor or patch semver range of a specific
+version (i.e. `4.0.x`) or any semver range (i.e. `>=4.0.0 <5.0.0`).
+
+### Values files
+
+`.spec.valuesFiles` is an optional field to specify an alternative list of
+values files to use as the chart values (values.yaml). The file paths are
+expected to be relative to the Source reference. Values files are merged in the
+order of the list with the last file overriding the first. It is ignored when
+omitted. When values files are specified, the chart is fetched and packaged
+with the provided values.
+
+```yaml
+spec:
+  chart:
+    spec:
+      chart: podinfo
+      ...
+      valuesFiles:
+        - values.yaml
+        - values-production.yaml
+```
+
+Values files also affect the generated artifact revision, see
+[artifact](#artifact).
+
+### Reconcile strategy
+
+`.spec.reconcileStrategy` is an optional field to specify what enables the
+creation of a new Artifact. Valid values are `ChartVersion` and `Revision`.
+`ChartVersion` is used for creating a new artifact when the chart version
+changes in a `HelmRepository`. `Revision` is used for creating a new artifact
+when the source revision changes in a `GitRepository` or a `Bucket` Source. It
+defaults to `ChartVersion`.
+
+**NOTE:** If the reconcile strategy is `ChartVersion` and the source reference
+is a `GitRepository` or a `Bucket`, no new chart artifact is produced on updates
+to the source unless the `version` in `Chart.yaml` is incremented. To produce
+new chart artifact on change in source revision, set the reconcile strategy to
+`Revision`.
+
+Reconcile strategy also affects the artifact version, see [artifact](#artifact)
+for more details.
+
 ### Interval
 
 `.spec.interval` is a required field that specifies the interval at which the
@@ -109,44 +223,6 @@ e.g. `10m0s` to look at the source for updates every 10 minutes.
 
 If the `.metadata.generation` of a resource changes (due to e.g. applying a
 change to the spec), this is handled instantly outside the interval window.
-
-### Source reference
-
-`.spec.sourceRef` is a required field that specifies a reference to the Source
-the chart is available at. `.spec.sourceRef.kind` must be one of
-`HelmRepository`, `GitRepository` or `Bucket`. `.spec.sourceRef.name` is the
-name of the referred kind.
-
-### Chart
-
-`.spec.chart` is a required field that specifies the name or path the Helm chart
-is available at in the [Source reference](#source-reference). For HelmRepository
-Source reference, it'll be just the name of the chart. For GitRepository and
-Bucket Source reference, it'll be the path to the Helm chart directory.
-
-### Version
-
-`.spec.version` is an optional field to specify the version of the chart in
-semver. It is applicable only when the Source reference is a HelmRepository. It
-is ignored for GitRepository and Bucket Source reference. It defaults to the
-latest version of the chart with value `*`.
-
-### Values files
-
-`.spec.valuesFiles` is an optional field to specify an alternative list of
-values files to use as the chart values (values.yaml). The file paths are
-expected to be relative to the Source reference. Values files are merged in the
-order of the list with the last file overriding the first. It is ignored when
-omitted.
-
-### Reconcile strategy
-
-`.spec.reconcileStrategy` is an optional field to specify what enables the
-creation of a new Artifact. Valid values are `ChartVersion` and `Revision`.
-`ChartVersion` is used for creating a new artifact when the chart version
-changes in the HelmRepository. `Revision` is used for creating a new artifact
-when the source revision changes in GitRepository or Bucket Source references.
-It defaults to `ChartVersion`.
 
 ### Suspend
 
@@ -317,7 +393,7 @@ The HelmChart reports the last built chart as an Artifact object in the
 The Artifact file is a gzip compressed TAR archive (`<chart-name>-<chart-version>.tgz`),
 and can be retrieved in-cluster from the `.status.artifact.url` HTTP address.
 
-### Artifact example
+#### Artifact example
 
 ```yaml
 ---
@@ -332,6 +408,51 @@ status:
     path: helmchart/<source-namespace>/<chart-name>/<chart-name>-<chart-version>.tgz
     revision: 6.0.3
     url: http://source-controller.flux-system.svc.cluster.local./helmchart/<source-namespace>/<chart-name>/<chart-name>-<chart-version>.tgz
+```
+
+When using a `HelmRepository` as the source reference and values files are
+provided, the value of `status.artifact.revision` is the chart version combined
+with the `HelmChart` object generation. For example, if the chart version is
+`6.0.3` and the `HelmChart` object generation is `1`, the
+`status.artifact.revision` value will be `6.0.3+1`.
+
+```yaml
+---
+apiVersion: source.toolkit.fluxcd.io/v1beta2
+kind: HelmChart
+metadata:
+  name: <chart-name>
+status:
+  artifact:
+    checksum: ee68224ded207ebb18a8e9730cf3313fa6bc1f31e6d8d3943ab541113559bb52
+    lastUpdateTime: "2022-02-28T08:07:12Z"
+    path: helmchart/<source-namespace>/<chart-name>/<chart-name>-6.0.3+1.tgz
+    revision: 6.0.3+1
+    url: http://source-controller.flux-system.svc.cluster.local./helmchart/<source-namespace>/<chart-name>/<chart-name>-6.0.3+1.tgz
+  observedGeneration: 1
+  ...
+```
+
+When using a `GitRepository` or a `Bucket` as the source reference and
+`Revision` as the reconcile strategy, the value of `status.artifact.revision` is
+the chart version combined with the first 12 characters of the revision of the
+`GitRepository` or `Bucket`. For example if the chart version is `6.0.3` and the
+revision of the `Bucket` is `4e5cbb7b97d00a8039b8810b90b922f4256fd3bd8f78b934b4892dae13f7ca87`,
+the `status.artifact.revision` value will be `6.0.3+4e5cbb7b97d0`.
+
+```yaml
+---
+apiVersion: source.toolkit.fluxcd.io/v1beta2
+kind: HelmChart
+metadata:
+  name: <chart-name>
+status:
+  artifact:
+    checksum: 8d1f0ac3f4b0e8759a32180086f17ac87ca04e5d46c356e67f97e97616ef4718
+    lastUpdateTime: "2022-02-28T08:07:12Z"
+    path: helmchart/<source-namespace>/<chart-name>/<chart-name>-6.0.3+4e5cbb7b97d0.tgz
+    revision: 6.0.3+4e5cbb7b97d0
+    url: http://source-controller.flux-system.svc.cluster.local./helmchart/<source-namespace>/<chart-name>/<chart-name>-6.0.3+4e5cbb7b97d0.tgz
 ```
 
 ### Conditions
@@ -451,15 +572,18 @@ the spec is made.
 
 ### Observed Source Artifact Revision
 
-The source-controller reports the revision of the
+The source-controller reports the revision of the last
 [Source reference's](#source-reference) Artifact the current chart was fetched
-from in the HelmChart's `.status.observedSourceArtifactRevision`.
+from in the HelmChart's `.status.observedSourceArtifactRevision`. It is used to
+keep track of the source artifact revision and detect when a new source
+artifact is available.
 
 ### Observed Chart Name
 
-The source-controller reports the resolved chart name of the current Artifact
+The source-controller reports the last resolved chart name of the Artifact
 for the [`.spec.chart` field](#chart) in the HelmChart's
-`.status.observedChartName`.
+`.status.observedChartName`. It is used to keep track of the chart and detect
+when a new chart is found.
 
 ### Observed Generation
 

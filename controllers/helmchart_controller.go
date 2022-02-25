@@ -475,8 +475,9 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 	return sreconcile.ResultSuccess, nil
 }
 
-// buildFromHelmRepository attempts to pull and/or package a Helm chart with
-// the specified data v1beta2.HelmChart object and the given v1beta2.Artifact.
+// buildFromTarballArtifact attempts to pull and/or package a Helm chart with
+// the specified data from the v1beta2.HelmChart object and the given
+// v1beta2.Artifact.
 // In case of a failure it records v1beta2.FetchFailedCondition on the chart
 // object, and returns early.
 func (r *HelmChartReconciler) buildFromTarballArtifact(ctx context.Context, obj *sourcev1.HelmChart, source sourcev1.Artifact, b *chart.Build) (sreconcile.Result, error) {
