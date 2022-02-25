@@ -520,7 +520,6 @@ func TestHelmRepositoryReconciler_reconcileArtifact(t *testing.T) {
 			want: sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(meta.ReadyCondition, meta.SucceededReason, "stored artifact for revision 'existing'"),
-				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new index revision 'existing'"),
 			},
 		},
 		{
@@ -546,7 +545,6 @@ func TestHelmRepositoryReconciler_reconcileArtifact(t *testing.T) {
 			want: sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(meta.ReadyCondition, meta.SucceededReason, "stored artifact for revision 'existing'"),
-				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new index revision 'existing'"),
 			},
 		},
 		{
@@ -564,7 +562,6 @@ func TestHelmRepositoryReconciler_reconcileArtifact(t *testing.T) {
 			want: sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(meta.ReadyCondition, meta.SucceededReason, "stored artifact for revision 'existing'"),
-				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new index revision 'existing'"),
 			},
 		},
 	}

@@ -870,7 +870,6 @@ func TestBucketReconciler_reconcileArtifact(t *testing.T) {
 			want: sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(meta.ReadyCondition, meta.SucceededReason, "stored artifact for revision 'existing'"),
-				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new upstream revision 'existing'"),
 			},
 		},
 		{
@@ -896,7 +895,6 @@ func TestBucketReconciler_reconcileArtifact(t *testing.T) {
 			want: sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(meta.ReadyCondition, meta.SucceededReason, "stored artifact for revision 'existing'"),
-				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new upstream revision 'existing'"),
 			},
 		},
 		{
@@ -914,7 +912,6 @@ func TestBucketReconciler_reconcileArtifact(t *testing.T) {
 			want: sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(meta.ReadyCondition, meta.SucceededReason, "stored artifact for revision 'existing'"),
-				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new upstream revision 'existing'"),
 			},
 		},
 		{
@@ -924,9 +921,6 @@ func TestBucketReconciler_reconcileArtifact(t *testing.T) {
 			},
 			want:    sreconcile.ResultEmpty,
 			wantErr: true,
-			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new upstream revision 'existing'"),
-			},
 		},
 		{
 			name: "Dir path is not a directory",
@@ -943,9 +937,6 @@ func TestBucketReconciler_reconcileArtifact(t *testing.T) {
 			},
 			want:    sreconcile.ResultEmpty,
 			wantErr: true,
-			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new upstream revision 'existing'"),
-			},
 		},
 	}
 

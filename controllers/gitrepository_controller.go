@@ -405,10 +405,6 @@ func (r *GitRepositoryReconciler) reconcileArtifact(ctx context.Context,
 		return sreconcile.ResultSuccess, nil
 	}
 
-	// Mark reconciling because the artifact and remote source are different.
-	// and they have to be reconciled.
-	conditions.MarkReconciling(obj, "NewRevision", "new upstream revision '%s'", artifact.Revision)
-
 	// Ensure target path exists and is a directory
 	if f, err := os.Stat(dir); err != nil {
 		e := &serror.Event{
@@ -540,8 +536,9 @@ func (r *GitRepositoryReconciler) reconcileInclude(ctx context.Context,
 
 	// Observe if the artifacts still match the previous included ones
 	if artifacts.Diff(obj.Status.IncludedArtifacts) {
-		conditions.MarkTrue(obj, sourcev1.ArtifactOutdatedCondition, "IncludeChange",
-			"included artifacts differ from last observed includes")
+		message := fmt.Sprintf("included artifacts differ from last observed includes")
+		conditions.MarkTrue(obj, sourcev1.ArtifactOutdatedCondition, "IncludeChange", message)
+		conditions.MarkReconciling(obj, "IncludeChange", message)
 	}
 
 	// Persist the artifactSet.
