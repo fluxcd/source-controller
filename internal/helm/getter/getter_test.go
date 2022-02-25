@@ -17,7 +17,11 @@ limitations under the License.
 package getter
 
 import (
-	"os"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"encoding/pem"
+	"math/big"
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
@@ -30,13 +34,6 @@ var (
 			"password": []byte("password"),
 		},
 	}
-	tlsSecretFixture = corev1.Secret{
-		Data: map[string][]byte{
-			"certFile": []byte(`fixture`),
-			"keyFile":  []byte(`fixture`),
-			"caFile":   []byte(`fixture`),
-		},
-	}
 )
 
 func TestClientOptionsFromSecret(t *testing.T) {
@@ -45,8 +42,6 @@ func TestClientOptionsFromSecret(t *testing.T) {
 		secrets []corev1.Secret
 	}{
 		{"basic auth", []corev1.Secret{basicAuthSecretFixture}},
-		{"TLS", []corev1.Secret{tlsSecretFixture}},
-		{"basic auth and TLS", []corev1.Secret{basicAuthSecretFixture, tlsSecretFixture}},
 		{"empty", []corev1.Secret{}},
 	}
 	for _, tt := range tests {
@@ -58,13 +53,7 @@ func TestClientOptionsFromSecret(t *testing.T) {
 				}
 			}
 
-			tmpDir, err := os.MkdirTemp("", "client-opts-secret-")
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer os.RemoveAll(tmpDir)
-
-			got, err := ClientOptionsFromSecret(tmpDir, secret)
+			got, err := ClientOptionsFromSecret(secret)
 			if err != nil {
 				t.Errorf("ClientOptionsFromSecret() error = %v", err)
 				return
@@ -109,6 +98,8 @@ func TestBasicAuthFromSecret(t *testing.T) {
 }
 
 func TestTLSClientConfigFromSecret(t *testing.T) {
+	tlsSecretFixture := validTlsSecret(t)
+
 	tests := []struct {
 		name    string
 		secret  corev1.Secret
@@ -129,13 +120,7 @@ func TestTLSClientConfigFromSecret(t *testing.T) {
 				tt.modify(secret)
 			}
 
-			tmpDir, err := os.MkdirTemp("", "client-opts-secret-")
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer os.RemoveAll(tmpDir)
-
-			got, err := TLSClientConfigFromSecret(tmpDir, *secret)
+			got, err := TLSClientConfigFromSecret(*secret, "")
 			if (err != nil) != tt.wantErr {
 				t.Errorf("TLSClientConfigFromSecret() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -145,5 +130,62 @@ func TestTLSClientConfigFromSecret(t *testing.T) {
 				return
 			}
 		})
+	}
+}
+
+// validTlsSecret creates a secret containing key pair and CA certificate that are
+// valid from a syntax (minimum requirements) perspective.
+func validTlsSecret(t *testing.T) corev1.Secret {
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatal("Private key cannot be created.", err.Error())
+	}
+
+	certTemplate := x509.Certificate{
+		SerialNumber: big.NewInt(1337),
+	}
+	cert, err := x509.CreateCertificate(rand.Reader, &certTemplate, &certTemplate, &key.PublicKey, key)
+	if err != nil {
+		t.Fatal("Certificate cannot be created.", err.Error())
+	}
+
+	ca := &x509.Certificate{
+		SerialNumber: big.NewInt(7331),
+		IsCA:         true,
+		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth},
+		KeyUsage:     x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign,
+	}
+
+	caPrivKey, err := rsa.GenerateKey(rand.Reader, 4096)
+	if err != nil {
+		t.Fatal("CA private key cannot be created.", err.Error())
+	}
+
+	caBytes, err := x509.CreateCertificate(rand.Reader, ca, ca, &caPrivKey.PublicKey, caPrivKey)
+	if err != nil {
+		t.Fatal("CA certificate cannot be created.", err.Error())
+	}
+
+	keyPem := pem.EncodeToMemory(&pem.Block{
+		Type:  "RSA PRIVATE KEY",
+		Bytes: x509.MarshalPKCS1PrivateKey(key),
+	})
+
+	certPem := pem.EncodeToMemory(&pem.Block{
+		Type:  "CERTIFICATE",
+		Bytes: cert,
+	})
+
+	caPem := pem.EncodeToMemory(&pem.Block{
+		Type:  "CERTIFICATE",
+		Bytes: caBytes,
+	})
+
+	return corev1.Secret{
+		Data: map[string][]byte{
+			"certFile": []byte(certPem),
+			"keyFile":  []byte(keyPem),
+			"caFile":   []byte(caPem),
+		},
 	}
 }

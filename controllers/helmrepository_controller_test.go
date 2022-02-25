@@ -366,7 +366,7 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 			},
 			wantErr: true,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.FetchFailedCondition, meta.FailedReason, "can't create TLS config for client: failed to append certificates from file"),
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "failed to create tls client config with secret data: cannot append certificate into certificate pool: invalid caFile"),
 			},
 		},
 		{
@@ -602,7 +602,7 @@ func TestHelmRepositoryReconciler_reconcileArtifact(t *testing.T) {
 			g.Expect(err).ToNot(HaveOccurred())
 			g.Expect(cacheFile.Close()).ToNot(HaveOccurred())
 
-			chartRepo, err := repository.NewChartRepository(obj.Spec.URL, "", testGetters, nil)
+			chartRepo, err := repository.NewChartRepository(obj.Spec.URL, "", testGetters, nil, nil)
 			g.Expect(err).ToNot(HaveOccurred())
 			chartRepo.CachePath = cachePath
 

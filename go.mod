@@ -40,6 +40,7 @@ require (
 	k8s.io/api v0.23.3
 	k8s.io/apimachinery v0.23.3
 	k8s.io/client-go v0.23.3
+	k8s.io/helm v2.17.0+incompatible
 	k8s.io/utils v0.0.0-20220210201930-3a6ce19ff2f9
 	sigs.k8s.io/cli-utils v0.28.0
 	sigs.k8s.io/controller-runtime v0.11.1

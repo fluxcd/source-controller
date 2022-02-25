@@ -17,16 +17,18 @@ limitations under the License.
 package getter
 
 import (
+	"crypto/tls"
+	"crypto/x509"
 	"fmt"
-	"os"
 
 	"helm.sh/helm/v3/pkg/getter"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/helm/pkg/urlutil"
 )
 
 // ClientOptionsFromSecret constructs a getter.Option slice for the given secret.
 // It returns the slice, or an error.
-func ClientOptionsFromSecret(dir string, secret corev1.Secret) ([]getter.Option, error) {
+func ClientOptionsFromSecret(secret corev1.Secret) ([]getter.Option, error) {
 	var opts []getter.Option
 	basicAuth, err := BasicAuthFromSecret(secret)
 	if err != nil {
@@ -34,13 +36,6 @@ func ClientOptionsFromSecret(dir string, secret corev1.Secret) ([]getter.Option,
 	}
 	if basicAuth != nil {
 		opts = append(opts, basicAuth)
-	}
-	tlsClientConfig, err := TLSClientConfigFromSecret(dir, secret)
-	if err != nil {
-		return opts, err
-	}
-	if tlsClientConfig != nil {
-		opts = append(opts, tlsClientConfig)
 	}
 	return opts, nil
 }
@@ -62,13 +57,11 @@ func BasicAuthFromSecret(secret corev1.Secret) (getter.Option, error) {
 }
 
 // TLSClientConfigFromSecret attempts to construct a TLS client config
-// getter.Option for the given v1.Secret, placing the required TLS config
-// related files in the given directory. It returns the getter.Option, or
-// an error.
+// for the given v1.Secret. It returns the TLS client config or an error.
 //
 // Secrets with no certFile, keyFile, AND caFile are ignored, if only a
 // certBytes OR keyBytes is defined it returns an error.
-func TLSClientConfigFromSecret(dir string, secret corev1.Secret) (getter.Option, error) {
+func TLSClientConfigFromSecret(secret corev1.Secret, url string) (*tls.Config, error) {
 	certBytes, keyBytes, caBytes := secret.Data["certFile"], secret.Data["keyFile"], secret.Data["caFile"]
 	switch {
 	case len(certBytes)+len(keyBytes)+len(caBytes) == 0:
@@ -78,49 +71,31 @@ func TLSClientConfigFromSecret(dir string, secret corev1.Secret) (getter.Option,
 			secret.Name)
 	}
 
-	var certPath, keyPath, caPath string
+	tlsConf := &tls.Config{}
 	if len(certBytes) > 0 && len(keyBytes) > 0 {
-		certFile, err := os.CreateTemp(dir, "cert-*.crt")
+		cert, err := tls.X509KeyPair(certBytes, keyBytes)
 		if err != nil {
 			return nil, err
 		}
-		if _, err = certFile.Write(certBytes); err != nil {
-			_ = certFile.Close()
-			return nil, err
-		}
-		if err = certFile.Close(); err != nil {
-			return nil, err
-		}
-		certPath = certFile.Name()
-
-		keyFile, err := os.CreateTemp(dir, "key-*.crt")
-		if err != nil {
-			return nil, err
-		}
-		if _, err = keyFile.Write(keyBytes); err != nil {
-			_ = keyFile.Close()
-			return nil, err
-		}
-		if err = keyFile.Close(); err != nil {
-			return nil, err
-		}
-		keyPath = keyFile.Name()
+		tlsConf.Certificates = append(tlsConf.Certificates, cert)
 	}
 
 	if len(caBytes) > 0 {
-		caFile, err := os.CreateTemp(dir, "ca-*.pem")
-		if err != nil {
-			return nil, err
+		cp := x509.NewCertPool()
+		if !cp.AppendCertsFromPEM(caBytes) {
+			return nil, fmt.Errorf("cannot append certificate into certificate pool: invalid caFile")
 		}
-		if _, err = caFile.Write(caBytes); err != nil {
-			_ = caFile.Close()
-			return nil, err
-		}
-		if err = caFile.Close(); err != nil {
-			return nil, err
-		}
-		caPath = caFile.Name()
+
+		tlsConf.RootCAs = cp
 	}
 
-	return getter.WithTLSClientConfig(certPath, keyPath, caPath), nil
+	tlsConf.BuildNameToCertificate()
+
+	sni, err := urlutil.ExtractHostname(url)
+	if err != nil {
+		return nil, err
+	}
+	tlsConf.ServerName = sni
+
+	return tlsConf, nil
 }
