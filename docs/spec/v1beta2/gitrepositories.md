@@ -48,8 +48,8 @@ You can run this example by saving the manifest into `gitrepository.yaml`.
 2. Run `kubectl get gitrepository` to see the GitRepository:
 
    ```console
-   NAME                   URL                                       READY   STATUS                                                                           AGE
-   podinfo                https://github.com/stefanprodan/podinfo   True    stored artifact for revision 'master/132f4e719209eb10b9485302f8593fc0e680f4fc'   5s
+   NAME      URL                                       AGE   READY   STATUS                                                                        
+   podinfo   https://github.com/stefanprodan/podinfo   5s    True    stored artifact for revision 'master/132f4e719209eb10b9485302f8593fc0e680f4fc'
    ```
 
 3. Run `kubectl describe gitrepository podinfo` to see the [Artifact](#artifact)
@@ -76,8 +76,7 @@ You can run this example by saving the manifest into `gitrepository.yaml`.
    Events:
      Type    Reason               Age   From               Message
      ----    ------               ----  ----               -------
-     Normal  GitOperationSucceed  62s   source-controller  cloned 'https://github.com/stefanprodan/podinfo' and checked out revision 'master/132f4e719209eb10b9485302f8593fc0e680f4fc'
-     Normal  NewArtifact          62s   source-controller  stored artifact for revision 'master/132f4e719209eb10b9485302f8593fc0e680f4fc'
+     Normal  NewArtifact          62s   source-controller  stored artifact for commit 'Merge pull request #160 from stefanprodan/release-6.0.3'
    ```
 
 ## Writing a GitRepository spec
@@ -597,7 +596,7 @@ Status:
 ...
   Conditions:
     Last Transition Time:  2022-02-14T09:40:27Z
-    Message:               reconciling new generation 2
+    Message:               reconciling new object generation (2)
     Observed Generation:   2
     Reason:                NewGeneration
     Status:                True
@@ -636,9 +635,8 @@ lists
 
 ```console
 LAST SEEN   TYPE     REASON                OBJECT                               MESSAGE
-2m14s       Normal   GitOperationSucceed   gitrepository/<repository-name>      cloned 'https://github.com/stefanprodan/podinfo' and checked out revision 'master/132f4e719209eb10b9485302f8593fc0e680f4fc'
-2m14s       Normal   NewArtifact           gitrepository/<repository-name>      stored artifact for revision 'master/132f4e719209eb10b9485302f8593fc0e680f4fc'
-94s         Warning  GitOperationFailed    gitrepository/gitrepository-sample   failed to checkout and determine revision: unable to clone 'https://github.com/stefanprodan/podinfo': couldn't find remote ref "refs/heads/invalid"
+2m14s       Normal   NewArtifact           gitrepository/<repository-name>      stored artifact for commit 'Merge pull request #160 from stefanprodan/release-6.0.3'
+94s         Warning  GitOperationFailed    gitrepository/<repository-name>      failed to checkout and determine revision: unable to clone 'https://github.com/stefanprodan/podinfo': couldn't find remote ref "refs/heads/invalid"
 ```
 
 Besides being reported in Events, the reconciliation errors are also logged by

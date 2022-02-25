@@ -56,8 +56,8 @@ helm-controller.
 2. Run `kubectl get helmchart` to see the HelmChart:
 
    ```console
-   NAME      CHART     VERSION   SOURCE KIND      SOURCE NAME   READY   STATUS                                        AGE
-   podinfo   podinfo   5.*       HelmRepository   podinfo       True    pulled 'podinfo' chart with version '5.2.1'   53s
+   NAME      CHART     VERSION   SOURCE KIND      SOURCE NAME   AGE   READY   STATUS                                     
+   podinfo   podinfo   5.*       HelmRepository   podinfo       53s   True    pulled 'podinfo' chart with version '5.2.1'
    ```
 
 3. Run `kubectl describe helmchart podinfo` to see the [Artifact](#artifact) and

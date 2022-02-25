@@ -70,8 +70,8 @@ control over.
 2. Run `kubectl get buckets` to see the Bucket:
 
    ```console
-   NAME           ENDPOINT            READY   STATUS                                                                                            AGE
-   minio-bucket   minio.example.com   True    stored artifact for revision 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'   34s
+   NAME           ENDPOINT            AGE   READY   STATUS                                                                                         
+   minio-bucket   minio.example.com   34s   True    stored artifact for revision 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'
    ```
 
 3. Run `kubectl describe bucket minio-bucket` to see the [Artifact](#artifact)
@@ -98,8 +98,7 @@ control over.
    Events:
      Type    Reason                  Age   From               Message
      ----    ------                  ----  ----               -------
-     Normal  BucketOperationSucceed  43s   source-controller  downloaded 16 files with revision 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855' from 'my-minio-bucket'
-     Normal  NewArtifact             43s   source-controller  stored artifact for revision 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'
+     Normal  NewArtifact             82s   source-controller  fetched 16 files from 'example'
    ```
 
 ## Writing a Bucket spec
@@ -575,7 +574,7 @@ Status:
 ...
   Conditions:
     Last Transition Time:  2022-02-02T13:26:55Z
-    Message:               reconciling new generation 2
+    Message:               reconciling new object generation (2)
     Observed Generation:   2
     Reason:                NewGeneration
     Status:                True
@@ -614,8 +613,7 @@ lists
 
 ```console
 LAST SEEN   TYPE      REASON                       OBJECT                 MESSAGE
-2m30s       Normal    BucketOperationSucceed       bucket/<bucket-name>   downloaded 16 files with revision 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855' from 'my-minio-bucket'
-2m30s       Normal    NewArtifact                  bucket/<bucket-name>   stored artifact for revision 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'
+2m30s       Normal    NewArtifact                  bucket/<bucket-name>   fetched 16 files with revision from 'my-new-bucket'
 18s         Warning   BucketOperationFailed        bucket/<bucket-name>   bucket 'my-new-bucket' does not exist
 ```
 
