@@ -717,7 +717,6 @@ func TestGitRepositoryReconciler_reconcileArtifact(t *testing.T) {
 			want: sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(meta.ReadyCondition, meta.SucceededReason, "stored artifact for revision 'main/revision'"),
-				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new upstream revision 'main/revision'"),
 			},
 		},
 		{
@@ -736,7 +735,6 @@ func TestGitRepositoryReconciler_reconcileArtifact(t *testing.T) {
 			want: sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(meta.ReadyCondition, meta.SucceededReason, "stored artifact for revision 'main/revision'"),
-				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new upstream revision 'main/revision'"),
 			},
 		},
 		{
@@ -770,7 +768,6 @@ func TestGitRepositoryReconciler_reconcileArtifact(t *testing.T) {
 			want: sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(meta.ReadyCondition, meta.SucceededReason, "stored artifact for revision 'main/revision'"),
-				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new upstream revision 'main/revision'"),
 			},
 		},
 		{
@@ -788,7 +785,6 @@ func TestGitRepositoryReconciler_reconcileArtifact(t *testing.T) {
 			want: sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(meta.ReadyCondition, meta.SucceededReason, "stored artifact for revision 'main/revision'"),
-				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new upstream revision 'main/revision'"),
 			},
 		},
 		{
@@ -809,24 +805,17 @@ func TestGitRepositoryReconciler_reconcileArtifact(t *testing.T) {
 			want: sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(meta.ReadyCondition, meta.SucceededReason, "stored artifact for revision 'main/revision'"),
-				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new upstream revision 'main/revision'"),
 			},
 		},
 		{
 			name:    "Target path does not exists",
 			dir:     "testdata/git/foo",
 			wantErr: true,
-			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new upstream revision 'main/revision'"),
-			},
 		},
 		{
 			name:    "Target path is not a directory",
 			dir:     "testdata/git/repository/foo.txt",
 			wantErr: true,
-			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new upstream revision 'main/revision'"),
-			},
 		},
 	}
 
@@ -926,6 +915,7 @@ func TestGitRepositoryReconciler_reconcileInclude(t *testing.T) {
 			want: sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "IncludeChange", "included artifacts differ from last observed includes"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, "IncludeChange", "included artifacts differ from last observed includes"),
 			},
 		},
 		{

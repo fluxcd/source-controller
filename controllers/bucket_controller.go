@@ -626,10 +626,6 @@ func (r *BucketReconciler) reconcileArtifact(ctx context.Context,
 		return sreconcile.ResultSuccess, nil
 	}
 
-	// Mark reconciling because the artifact and remote source are different.
-	// and they have to be reconciled.
-	conditions.MarkReconciling(obj, "NewRevision", "new upstream revision '%s'", artifact.Revision)
-
 	// Ensure target path exists and is a directory
 	if f, err := os.Stat(dir); err != nil {
 		return sreconcile.ResultEmpty, &serror.Event{

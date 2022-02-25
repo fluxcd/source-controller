@@ -396,10 +396,6 @@ func (r *HelmRepositoryReconciler) reconcileArtifact(ctx context.Context, obj *s
 		return sreconcile.ResultSuccess, nil
 	}
 
-	// Mark reconciling because the artifact and remote source are different.
-	// and they have to be reconciled.
-	conditions.MarkReconciling(obj, "NewRevision", "new index revision '%s'", artifact.Revision)
-
 	// Create artifact dir
 	if err := r.Storage.MkdirAll(*artifact); err != nil {
 		return sreconcile.ResultEmpty, &serror.Event{
