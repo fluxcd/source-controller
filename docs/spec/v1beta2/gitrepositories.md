@@ -48,8 +48,8 @@ You can run this example by saving the manifest into `gitrepository.yaml`.
 2. Run `kubectl get gitrepository` to see the GitRepository:
 
    ```console
-   NAME                   URL                                       READY   STATUS                                                                           AGE
-   podinfo                https://github.com/stefanprodan/podinfo   True    stored artifact for revision 'master/132f4e719209eb10b9485302f8593fc0e680f4fc'   5s
+   NAME      URL                                       AGE   READY   STATUS                                                                        
+   podinfo   https://github.com/stefanprodan/podinfo   5s    True    stored artifact for revision 'master/132f4e719209eb10b9485302f8593fc0e680f4fc'
    ```
 
 3. Run `kubectl describe gitrepository podinfo` to see the [Artifact](#artifact)

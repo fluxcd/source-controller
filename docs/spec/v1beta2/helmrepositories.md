@@ -46,8 +46,8 @@ You can run this example by saving the manifest into `helmrepository.yaml`.
 2. Run `kubectl get helmrepository` to see the HelmRepository:
 
    ```console
-   NAME      URL                                      READY   STATUS                                                                                            AGE
-   podinfo   https://stefanprodan.github.io/podinfo   True    stored artifact for revision '83a3c595163a6ff0333e0154c790383b5be441b9db632cb36da11db1c4ece111'   4s
+   NAME      URL                                      AGE   READY   STATUS                                                                                         
+   podinfo   https://stefanprodan.github.io/podinfo   4s    True    stored artifact for revision '83a3c595163a6ff0333e0154c790383b5be441b9db632cb36da11db1c4ece111'
    ```
 
 3. Run `kubectl describe helmrepository podinfo` to see the [Artifact](#artifact)

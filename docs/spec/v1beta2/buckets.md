@@ -70,8 +70,8 @@ control over.
 2. Run `kubectl get buckets` to see the Bucket:
 
    ```console
-   NAME           ENDPOINT            READY   STATUS                                                                                            AGE
-   minio-bucket   minio.example.com   True    stored artifact for revision 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'   34s
+   NAME           ENDPOINT            AGE   READY   STATUS                                                                                         
+   minio-bucket   minio.example.com   34s   True    stored artifact for revision 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'
    ```
 
 3. Run `kubectl describe bucket minio-bucket` to see the [Artifact](#artifact)
