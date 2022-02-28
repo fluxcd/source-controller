@@ -303,7 +303,7 @@ func (r *HelmRepositoryReconciler) reconcileSource(ctx context.Context, obj *sou
 		tlsConfig, err = getter.TLSClientConfigFromSecret(secret, obj.Spec.URL)
 		if err != nil {
 			e := &serror.Event{
-				Err:    fmt.Errorf("failed to create tls client config with secret data: %w", err),
+				Err:    fmt.Errorf("failed to create TLS client config with secret data: %w", err),
 				Reason: sourcev1.AuthenticationFailedReason,
 			}
 			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, e.Err.Error())

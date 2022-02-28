@@ -404,7 +404,7 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 		tlsConfig, err = getter.TLSClientConfigFromSecret(*secret, repo.Spec.URL)
 		if err != nil {
 			e := &serror.Event{
-				Err:    fmt.Errorf("failed to create tls client config with secret data: %w", err),
+				Err:    fmt.Errorf("failed to create TLS client config with secret data: %w", err),
 				Reason: sourcev1.AuthenticationFailedReason,
 			}
 			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, e.Err.Error())
@@ -776,7 +776,7 @@ func (r *HelmChartReconciler) namespacedChartRepositoryCallback(ctx context.Cont
 
 			tlsConfig, err = getter.TLSClientConfigFromSecret(*secret, repo.Spec.URL)
 			if err != nil {
-				return nil, fmt.Errorf("failed to create tls client config for HelmRepository '%s': %w", repo.Name, err)
+				return nil, fmt.Errorf("failed to create TLS client config for HelmRepository '%s': %w", repo.Name, err)
 			}
 		}
 
