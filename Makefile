@@ -12,6 +12,9 @@ BUILD_ARGS ?=
 # Architectures to build images for
 BUILD_PLATFORMS ?= linux/amd64,linux/arm64,linux/arm/v7
 
+# Go test arguments, e.g. '-tags=integration'
+GO_TEST_ARGS ?=
+
 # Produce CRDs that work back to Kubernetes 1.16
 CRD_OPTIONS ?= crd:crdVersions=v1
 
@@ -93,7 +96,7 @@ build: check-deps $(LIBGIT2) ## Build manager binary
 KUBEBUILDER_ASSETS?="$(shell $(ENVTEST) --arch=$(ENVTEST_ARCH) use -i $(ENVTEST_KUBERNETES_VERSION) --bin-dir=$(ENVTEST_ASSETS_DIR) -p path)"
 test: $(LIBGIT2) install-envtest test-api check-deps ## Run tests
 	KUBEBUILDER_ASSETS=$(KUBEBUILDER_ASSETS) \
-	go test $(GO_STATIC_FLAGS) ./... -coverprofile cover.out
+	go test $(GO_STATIC_FLAGS) $(GO_TEST_ARGS) ./... -coverprofile cover.out
 
 check-deps:
 ifeq ($(shell uname -s),Darwin)

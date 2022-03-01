@@ -6,6 +6,9 @@ replace github.com/fluxcd/source-controller/api => ./api
 
 require (
 	cloud.google.com/go/storage v1.16.0
+	github.com/Azure/azure-sdk-for-go/sdk/azcore v0.21.1
+	github.com/Azure/azure-sdk-for-go/sdk/azidentity v0.13.1
+	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v0.3.0
 	github.com/Masterminds/semver/v3 v3.1.1
 	github.com/ProtonMail/go-crypto v0.0.0-20220113124808-70ae35bab23f
 	github.com/cyphar/filepath-securejoin v0.2.3
@@ -54,7 +57,9 @@ replace helm.sh/helm/v3 v3.8.0 => github.com/hiddeco/helm/v3 v3.8.1-0.2022022311
 
 require (
 	cloud.google.com/go v0.99.0 // indirect
+	github.com/Azure/azure-sdk-for-go/sdk/internal v0.9.1 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20210617225240-d185dfc1b5a1 // indirect
+	github.com/AzureAD/microsoft-authentication-library-for-go v0.4.0 // indirect
 	github.com/BurntSushi/toml v0.4.1 // indirect
 	github.com/MakeNowJust/heredoc v0.0.0-20170808103936-bb23615498cd // indirect
 	github.com/Masterminds/goutils v1.1.1 // indirect
@@ -96,6 +101,7 @@ require (
 	github.com/gobwas/glob v0.2.3 // indirect
 	github.com/gofrs/uuid v4.2.0+incompatible // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
+	github.com/golang-jwt/jwt v3.2.1+incompatible // indirect
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
 	github.com/golang/protobuf v1.5.2 // indirect
 	github.com/google/btree v1.0.1 // indirect
@@ -146,6 +152,7 @@ require (
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.0.2 // indirect
 	github.com/peterbourgon/diskv v2.0.1+incompatible // indirect
+	github.com/pkg/browser v0.0.0-20210115035449-ce105d075bb4 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/prometheus/client_golang v1.12.1 // indirect
