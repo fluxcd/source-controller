@@ -51,6 +51,10 @@ type Artifact struct {
 	// artifact.
 	// +required
 	LastUpdateTime metav1.Time `json:"lastUpdateTime,omitempty"`
+
+	// Size is the number of bytes in the file.
+	// +optional
+	Size *int64 `json:"size,omitempty"`
 }
 
 // HasRevision returns true if the given revision matches the current Revision

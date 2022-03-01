@@ -391,6 +391,10 @@ spec:
                       in the origin source system. It can be a Git commit SHA, Git
                       tag, a Helm index timestamp, a Helm chart version, etc.
                     type: string
+                  size:
+                    description: Size is the number of bytes in the file.
+                    format: int64
+                    type: integer
                   url:
                     description: URL is the HTTP address of this artifact. It is used
                       by the consumers of the artifacts to fetch and use the artifacts.

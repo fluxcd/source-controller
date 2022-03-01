@@ -19,6 +19,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -818,6 +819,16 @@ func TestGitRepositoryReconciler_reconcileArtifact(t *testing.T) {
 			wantErr: true,
 		},
 	}
+	artifactSize := func(g *WithT, artifactURL string) *int64 {
+		if artifactURL == "" {
+			return nil
+		}
+		res, err := http.Get(artifactURL)
+		g.Expect(err).NotTo(HaveOccurred())
+		g.Expect(res.StatusCode).To(Equal(http.StatusOK))
+		defer res.Body.Close()
+		return &res.ContentLength
+	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -849,6 +860,10 @@ func TestGitRepositoryReconciler_reconcileArtifact(t *testing.T) {
 			g.Expect(obj.Status.Conditions).To(conditions.MatchConditions(tt.assertConditions))
 			g.Expect(err != nil).To(Equal(tt.wantErr))
 			g.Expect(got).To(Equal(tt.want))
+
+			if obj.Status.Artifact != nil {
+				g.Expect(obj.Status.Artifact.Size).To(Equal(artifactSize(g, obj.Status.Artifact.URL)))
+			}
 
 			if tt.afterFunc != nil {
 				tt.afterFunc(g, obj)
