@@ -336,6 +336,7 @@ spec:
                 - generic
                 - aws
                 - gcp
+                - azure
                 type: string
               region:
                 description: The bucket region.
