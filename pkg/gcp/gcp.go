@@ -28,6 +28,8 @@ import (
 	"github.com/go-logr/logr"
 	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
+	corev1 "k8s.io/api/core/v1"
+	ctrl "sigs.k8s.io/controller-runtime"
 )
 
 var (
@@ -37,12 +39,10 @@ var (
 	// ErrorDirectoryExists is an error returned when the filename provided
 	// is a directory.
 	ErrorDirectoryExists = errors.New("filename is a directory")
-	// ErrorObjectDoesNotExist is an error returned when the object whose name
-	// is provided does not exist.
-	ErrorObjectDoesNotExist = errors.New("object does not exist")
 )
 
-type GCPClient struct {
+// GCSClient is a minimal Google Cloud Storage client for fetching objects.
+type GCSClient struct {
 	// client for interacting with the Google Cloud
 	// Storage APIs.
 	*gcpstorage.Client
@@ -50,27 +50,39 @@ type GCPClient struct {
 
 // NewClient creates a new GCP storage client. The Client will automatically look for  the Google Application
 // Credential environment variable or look for the Google Application Credential file.
-func NewClient(ctx context.Context, opts ...option.ClientOption) (*GCPClient, error) {
-	client, err := gcpstorage.NewClient(ctx, opts...)
-	if err != nil {
-		return nil, err
+func NewClient(ctx context.Context, secret *corev1.Secret) (*GCSClient, error) {
+	c := &GCSClient{}
+	if secret != nil {
+		client, err := gcpstorage.NewClient(ctx, option.WithCredentialsJSON(secret.Data["serviceaccount"]))
+		if err != nil {
+			return nil, err
+		}
+		c.Client = client
+	} else {
+		client, err := gcpstorage.NewClient(ctx)
+		if err != nil {
+			return nil, err
+		}
+		c.Client = client
 	}
-
-	return &GCPClient{Client: client}, nil
+	return c, nil
 }
 
-// ValidateSecret validates the credential secrets
-// It ensures that needed secret fields are not missing.
-func ValidateSecret(secret map[string][]byte, name string) error {
-	if _, exists := secret["serviceaccount"]; !exists {
-		return fmt.Errorf("invalid '%s' secret data: required fields 'serviceaccount'", name)
+// ValidateSecret validates the credential secret. The provided Secret may
+// be nil.
+func ValidateSecret(secret *corev1.Secret) error {
+	if secret == nil {
+		return nil
 	}
-
+	if _, exists := secret.Data["serviceaccount"]; !exists {
+		return fmt.Errorf("invalid '%s' secret data: required fields 'serviceaccount'", secret.Name)
+	}
 	return nil
 }
 
-// BucketExists checks if the bucket with the provided name exists.
-func (c *GCPClient) BucketExists(ctx context.Context, bucketName string) (bool, error) {
+// BucketExists returns if an object storage bucket with the provided name
+// exists, or returns a (client) error.
+func (c *GCSClient) BucketExists(ctx context.Context, bucketName string) (bool, error) {
 	_, err := c.Client.Bucket(bucketName).Attrs(ctx)
 	if err == gcpstorage.ErrBucketNotExist {
 		// Not returning error to be compatible with minio's API.
@@ -82,34 +94,23 @@ func (c *GCPClient) BucketExists(ctx context.Context, bucketName string) (bool, 
 	return true, nil
 }
 
-// ObjectExists checks if the object with the provided name exists.
-func (c *GCPClient) ObjectExists(ctx context.Context, bucketName, objectName string) (bool, error) {
-	_, err := c.Client.Bucket(bucketName).Object(objectName).Attrs(ctx)
-	// ErrObjectNotExist is returned if the object does not exist
-	if err == gcpstorage.ErrObjectNotExist {
-		return false, err
-	}
-	if err != nil {
-		return false, err
-	}
-	return true, nil
-}
-
-// FGetObject gets the object from the bucket and downloads the object locally
-func (c *GCPClient) FGetObject(ctx context.Context, bucketName, objectName, localPath string) error {
+// FGetObject gets the object from the provided object storage bucket, and
+// writes it to targetPath.
+// It returns the etag of the successfully fetched file, or any error.
+func (c *GCSClient) FGetObject(ctx context.Context, bucketName, objectName, localPath string) (string, error) {
 	// Verify if destination already exists.
 	dirStatus, err := os.Stat(localPath)
 	if err == nil {
 		// If the destination exists and is a directory.
 		if dirStatus.IsDir() {
-			return ErrorDirectoryExists
+			return "", ErrorDirectoryExists
 		}
 	}
 
 	// Proceed if file does not exist. return for all other errors.
 	if err != nil {
 		if !os.IsNotExist(err) {
-			return err
+			return "", err
 		}
 	}
 
@@ -118,56 +119,79 @@ func (c *GCPClient) FGetObject(ctx context.Context, bucketName, objectName, loca
 	if objectDir != "" {
 		// Create any missing top level directories.
 		if err := os.MkdirAll(objectDir, 0700); err != nil {
-			return err
+			return "", err
 		}
 	}
 
-	// ObjectExists verifies if object exists and you have permission to access.
-	// Check if the object exists and if you have permission to access it.
-	exists, err := c.ObjectExists(ctx, bucketName, objectName)
+	// Get Object attributes.
+	objAttr, err := c.Client.Bucket(bucketName).Object(objectName).Attrs(ctx)
 	if err != nil {
-		return err
-	}
-	if !exists {
-		return ErrorObjectDoesNotExist
+		return "", err
 	}
 
+	// Prepare target file.
 	objectFile, err := os.OpenFile(localPath, os.O_CREATE|os.O_WRONLY, 0600)
 	if err != nil {
-		return err
+		return "", err
 	}
 
-	// Get Object from GCP Bucket
-	objectReader, err := c.Client.Bucket(bucketName).Object(objectName).NewReader(ctx)
+	// Get Object data.
+	objectReader, err := c.Client.Bucket(bucketName).Object(objectName).If(gcpstorage.Conditions{
+		GenerationMatch: objAttr.Generation,
+	}).NewReader(ctx)
 	if err != nil {
-		return err
+		return "", err
 	}
-	defer objectReader.Close()
+	defer func() {
+		if err = objectReader.Close(); err != nil {
+			ctrl.LoggerFrom(ctx).Error(err, "failed to close object reader")
+		}
+	}()
 
 	// Write Object to file.
 	if _, err := io.Copy(objectFile, objectReader); err != nil {
-		return err
+		return "", err
 	}
 
 	// Close the file.
 	if err := objectFile.Close(); err != nil {
-		return err
+		return "", err
 	}
 
+	return objAttr.Etag, nil
+}
+
+// VisitObjects iterates over the items in the provided object storage
+// bucket, calling visit for every item.
+// If the underlying client or the visit callback returns an error,
+// it returns early.
+func (c *GCSClient) VisitObjects(ctx context.Context, bucketName string, visit func(path, etag string) error) error {
+	items := c.Client.Bucket(bucketName).Objects(ctx, nil)
+	for {
+		object, err := items.Next()
+		if err == IteratorDone {
+			break
+		}
+		if err != nil {
+			err = fmt.Errorf("listing objects from bucket '%s' failed: %w", bucketName, err)
+			return err
+		}
+		if err = visit(object.Name, object.Etag); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
-// ListObjects lists the objects/contents of the bucket whose bucket name is provided.
-// the objects are returned as an Objectiterator and .Next() has to be called on them
-// to loop through the Objects.
-func (c *GCPClient) ListObjects(ctx context.Context, bucketName string, query *gcpstorage.Query) *gcpstorage.ObjectIterator {
-	items := c.Client.Bucket(bucketName).Objects(ctx, query)
-	return items
+// Close closes the GCP Client and logs any useful errors.
+func (c *GCSClient) Close(ctx context.Context) {
+	log := logr.FromContextOrDiscard(ctx)
+	if err := c.Client.Close(); err != nil {
+		log.Error(err, "closing GCP client")
+	}
 }
 
-// Close closes the GCP Client and logs any useful errors
-func (c *GCPClient) Close(log logr.Logger) {
-	if err := c.Client.Close(); err != nil {
-		log.Error(err, "GCP Provider")
-	}
+// ObjectIsNotFound checks if the error provided is storage.ErrObjectNotExist.
+func (c *GCSClient) ObjectIsNotFound(err error) bool {
+	return errors.Is(err, gcpstorage.ErrObjectNotExist)
 }

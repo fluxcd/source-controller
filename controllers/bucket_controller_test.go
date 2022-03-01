@@ -18,14 +18,10 @@ package controllers
 
 import (
 	"context"
-	"crypto/md5"
-	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/http/httptest"
 	"net/url"
 	"os"
-	"path"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -36,7 +32,6 @@ import (
 	"github.com/fluxcd/pkg/runtime/conditions"
 	"github.com/fluxcd/pkg/runtime/patch"
 	. "github.com/onsi/gomega"
-	raw "google.golang.org/api/storage/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -46,17 +41,19 @@ import (
 	fakeclient "sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
+	gcsmock "github.com/fluxcd/source-controller/internal/mock/gcs"
+	s3mock "github.com/fluxcd/source-controller/internal/mock/s3"
 	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
 )
 
 // Environment variable to set the GCP Storage host for the GCP client.
-const ENV_GCP_STORAGE_HOST = "STORAGE_EMULATOR_HOST"
+const EnvGcpStorageHost = "STORAGE_EMULATOR_HOST"
 
 func TestBucketReconciler_Reconcile(t *testing.T) {
 	g := NewWithT(t)
 
-	s3Server := newS3Server("test-bucket")
-	s3Server.Objects = []*s3MockObject{
+	s3Server := s3mock.NewServer("test-bucket")
+	s3Server.Objects = []*s3mock.Object{
 		{
 			Key:          "test.yaml",
 			Content:      []byte("test"),
@@ -274,10 +271,9 @@ func TestBucketReconciler_reconcileStorage(t *testing.T) {
 				g.Expect(tt.beforeFunc(obj, testStorage)).To(Succeed())
 			}
 
-			index := make(etagIndex)
-			var artifact sourcev1.Artifact
+			index := newEtagIndex()
 
-			got, err := r.reconcileStorage(context.TODO(), obj, index, &artifact, "")
+			got, err := r.reconcileStorage(context.TODO(), obj, index, "")
 			g.Expect(err != nil).To(Equal(tt.wantErr))
 			g.Expect(got).To(Equal(tt.want))
 
@@ -299,23 +295,23 @@ func TestBucketReconciler_reconcileStorage(t *testing.T) {
 	}
 }
 
-func TestBucketReconciler_reconcileMinioSource(t *testing.T) {
+func TestBucketReconciler_reconcileSource_generic(t *testing.T) {
 	tests := []struct {
 		name             string
 		bucketName       string
-		bucketObjects    []*s3MockObject
+		bucketObjects    []*s3mock.Object
 		middleware       http.Handler
 		secret           *corev1.Secret
 		beforeFunc       func(obj *sourcev1.Bucket)
 		want             sreconcile.Result
 		wantErr          bool
-		assertArtifact   sourcev1.Artifact
+		assertIndex      *etagIndex
 		assertConditions []metav1.Condition
 	}{
 		{
-			name:       "reconciles source",
+			name:       "Reconciles GCS source",
 			bucketName: "dummy",
-			bucketObjects: []*s3MockObject{
+			bucketObjects: []*s3mock.Object{
 				{
 					Key:          "test.txt",
 					Content:      []byte("test"),
@@ -324,13 +320,14 @@ func TestBucketReconciler_reconcileMinioSource(t *testing.T) {
 				},
 			},
 			want: sreconcile.ResultSuccess,
-			assertArtifact: sourcev1.Artifact{
-				Path:     "bucket/test-bucket/f0467900d3cede8323f3e61a1467f7cd370d1c0d942ff990a1a7be1eb1a231e8.tar.gz",
-				Revision: "f0467900d3cede8323f3e61a1467f7cd370d1c0d942ff990a1a7be1eb1a231e8",
+			assertIndex: &etagIndex{
+				index: map[string]string{
+					"test.txt": "098f6bcd4621d373cade4e832627b4f6",
+				},
 			},
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new upstream revision 'f0467900d3cede8323f3e61a1467f7cd370d1c0d942ff990a1a7be1eb1a231e8'"),
-				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new upstream revision 'f0467900d3cede8323f3e61a1467f7cd370d1c0d942ff990a1a7be1eb1a231e8'"),
+				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new upstream revision 'b4c2a60ce44b67f5b659a95ce4e4cc9e2a86baf13afb72bd397c5384cbc0e479'"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new upstream revision 'b4c2a60ce44b67f5b659a95ce4e4cc9e2a86baf13afb72bd397c5384cbc0e479'"),
 			},
 		},
 		// TODO(hidde): middleware for mock server
@@ -339,20 +336,21 @@ func TestBucketReconciler_reconcileMinioSource(t *testing.T) {
 		//	bucketName: "dummy",
 		//},
 		{
-			name:       "observes non-existing secretRef",
+			name:       "Observes non-existing secretRef",
 			bucketName: "dummy",
 			beforeFunc: func(obj *sourcev1.Bucket) {
 				obj.Spec.SecretRef = &meta.LocalObjectReference{
 					Name: "dummy",
 				}
 			},
-			wantErr: true,
+			wantErr:     true,
+			assertIndex: newEtagIndex(),
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "failed to get secret '/dummy': secrets \"dummy\" not found"),
 			},
 		},
 		{
-			name:       "observes invalid secretRef",
+			name:       "Observes invalid secretRef",
 			bucketName: "dummy",
 			secret: &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
@@ -364,38 +362,40 @@ func TestBucketReconciler_reconcileMinioSource(t *testing.T) {
 					Name: "dummy",
 				}
 			},
-			wantErr: true,
+			wantErr:     true,
+			assertIndex: newEtagIndex(),
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason, "failed to construct S3 client: invalid 'dummy' secret data: required fields"),
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "invalid 'dummy' secret data: required fields 'accesskey' and 'secretkey'"),
 			},
 		},
 		{
-			name:       "observes non-existing bucket name",
+			name:       "Observes non-existing bucket name",
 			bucketName: "dummy",
 			beforeFunc: func(obj *sourcev1.Bucket) {
 				obj.Spec.BucketName = "invalid"
 			},
-			wantErr: true,
+			wantErr:     true,
+			assertIndex: newEtagIndex(),
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason, "bucket 'invalid' does not exist"),
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason, "bucket 'invalid' not found"),
 			},
 		},
 		{
-			name: "transient bucket name API failure",
+			name: "Transient bucket name API failure",
 			beforeFunc: func(obj *sourcev1.Bucket) {
 				obj.Spec.Endpoint = "transient.example.com"
 				obj.Spec.BucketName = "unavailable"
 			},
-			wantErr: true,
+			wantErr:     true,
+			assertIndex: newEtagIndex(),
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason, "failed to verify existence of bucket 'unavailable'"),
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason, "failed to confirm existence of 'unavailable' bucket"),
 			},
 		},
 		{
-			// TODO(hidde): test the lesser happy paths
 			name:       ".sourceignore",
 			bucketName: "dummy",
-			bucketObjects: []*s3MockObject{
+			bucketObjects: []*s3mock.Object{
 				{
 					Key:          ".sourceignore",
 					Content:      []byte("ignored/file.txt"),
@@ -416,23 +416,24 @@ func TestBucketReconciler_reconcileMinioSource(t *testing.T) {
 				},
 			},
 			want: sreconcile.ResultSuccess,
-			assertArtifact: sourcev1.Artifact{
-				Path:     "bucket/test-bucket/94992ae8fb8300723e970e304ea3414266cb414e364ba3f570bb09069f883100.tar.gz",
-				Revision: "94992ae8fb8300723e970e304ea3414266cb414e364ba3f570bb09069f883100",
+			assertIndex: &etagIndex{
+				index: map[string]string{
+					"included/file.txt": "5a4bc7048b3301f677fe15b8678be2f8",
+				},
 			},
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new upstream revision '94992ae8fb8300723e970e304ea3414266cb414e364ba3f570bb09069f883100'"),
-				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new upstream revision '94992ae8fb8300723e970e304ea3414266cb414e364ba3f570bb09069f883100'"),
+				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new upstream revision '9fc2ddfc4a6f44e6c3efee40af36578b9e76d4d930eaf384b8435a0aa0bf7a0f'"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new upstream revision '9fc2ddfc4a6f44e6c3efee40af36578b9e76d4d930eaf384b8435a0aa0bf7a0f'"),
 			},
 		},
 		{
 			name:       "spec.ignore overrides .sourceignore",
 			bucketName: "dummy",
 			beforeFunc: func(obj *sourcev1.Bucket) {
-				ignore := "included/file.txt"
+				ignore := "!ignored/file.txt"
 				obj.Spec.Ignore = &ignore
 			},
-			bucketObjects: []*s3MockObject{
+			bucketObjects: []*s3mock.Object{
 				{
 					Key:          ".sourceignore",
 					Content:      []byte("ignored/file.txt"),
@@ -453,24 +454,26 @@ func TestBucketReconciler_reconcileMinioSource(t *testing.T) {
 				},
 			},
 			want: sreconcile.ResultSuccess,
-			assertArtifact: sourcev1.Artifact{
-				Path:     "bucket/test-bucket/e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855.tar.gz",
-				Revision: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+			assertIndex: &etagIndex{
+				index: map[string]string{
+					"ignored/file.txt":  "f08907038338288420ae7dc2d30c0497",
+					"included/file.txt": "5a4bc7048b3301f677fe15b8678be2f8",
+				},
 			},
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new upstream revision 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'"),
-				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new upstream revision 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'"),
+				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new upstream revision '117f586dc64cfc559329e21d286edcbb94cb6b1581517eaddc0ab5292b470cd5'"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new upstream revision '117f586dc64cfc559329e21d286edcbb94cb6b1581517eaddc0ab5292b470cd5'"),
 			},
 		},
 		{
-			name:       "up-to-date artifact",
+			name:       "Up-to-date artifact",
 			bucketName: "dummy",
 			beforeFunc: func(obj *sourcev1.Bucket) {
 				obj.Status.Artifact = &sourcev1.Artifact{
-					Revision: "f0467900d3cede8323f3e61a1467f7cd370d1c0d942ff990a1a7be1eb1a231e8",
+					Revision: "b4c2a60ce44b67f5b659a95ce4e4cc9e2a86baf13afb72bd397c5384cbc0e479",
 				}
 			},
-			bucketObjects: []*s3MockObject{
+			bucketObjects: []*s3mock.Object{
 				{
 					Key:          "test.txt",
 					Content:      []byte("test"),
@@ -479,9 +482,10 @@ func TestBucketReconciler_reconcileMinioSource(t *testing.T) {
 				},
 			},
 			want: sreconcile.ResultSuccess,
-			assertArtifact: sourcev1.Artifact{
-				Path:     "bucket/test-bucket/f0467900d3cede8323f3e61a1467f7cd370d1c0d942ff990a1a7be1eb1a231e8.tar.gz",
-				Revision: "f0467900d3cede8323f3e61a1467f7cd370d1c0d942ff990a1a7be1eb1a231e8",
+			assertIndex: &etagIndex{
+				index: map[string]string{
+					"test.txt": "098f6bcd4621d373cade4e832627b4f6",
+				},
 			},
 			assertConditions: []metav1.Condition{},
 		},
@@ -491,7 +495,7 @@ func TestBucketReconciler_reconcileMinioSource(t *testing.T) {
 			beforeFunc: func(obj *sourcev1.Bucket) {
 				conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason, "failed to read test file")
 			},
-			bucketObjects: []*s3MockObject{
+			bucketObjects: []*s3mock.Object{
 				{
 					Key:          "test.txt",
 					Content:      []byte("test"),
@@ -500,13 +504,14 @@ func TestBucketReconciler_reconcileMinioSource(t *testing.T) {
 				},
 			},
 			want: sreconcile.ResultSuccess,
-			assertArtifact: sourcev1.Artifact{
-				Path:     "bucket/test-bucket/f0467900d3cede8323f3e61a1467f7cd370d1c0d942ff990a1a7be1eb1a231e8.tar.gz",
-				Revision: "f0467900d3cede8323f3e61a1467f7cd370d1c0d942ff990a1a7be1eb1a231e8",
+			assertIndex: &etagIndex{
+				index: map[string]string{
+					"test.txt": "098f6bcd4621d373cade4e832627b4f6",
+				},
 			},
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new upstream revision 'f0467900d3cede8323f3e61a1467f7cd370d1c0d942ff990a1a7be1eb1a231e8'"),
-				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new upstream revision 'f0467900d3cede8323f3e61a1467f7cd370d1c0d942ff990a1a7be1eb1a231e8'"),
+				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new upstream revision 'b4c2a60ce44b67f5b659a95ce4e4cc9e2a86baf13afb72bd397c5384cbc0e479'"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new upstream revision 'b4c2a60ce44b67f5b659a95ce4e4cc9e2a86baf13afb72bd397c5384cbc0e479'"),
 			},
 		},
 	}
@@ -539,9 +544,9 @@ func TestBucketReconciler_reconcileMinioSource(t *testing.T) {
 				},
 			}
 
-			var server *s3MockServer
+			var server *s3mock.Server
 			if tt.bucketName != "" {
-				server = newS3Server(tt.bucketName)
+				server = s3mock.NewServer(tt.bucketName)
 				server.Objects = tt.bucketObjects
 				server.Start()
 				defer server.Stop()
@@ -559,38 +564,39 @@ func TestBucketReconciler_reconcileMinioSource(t *testing.T) {
 				tt.beforeFunc(obj)
 			}
 
-			artifact := &sourcev1.Artifact{}
-			index := make(etagIndex)
-			got, err := r.reconcileSource(context.TODO(), obj, index, artifact, tmpDir)
+			index := newEtagIndex()
+
+			got, err := r.reconcileSource(context.TODO(), obj, index, tmpDir)
 			g.Expect(err != nil).To(Equal(tt.wantErr))
 			g.Expect(got).To(Equal(tt.want))
 
-			g.Expect(artifact).To(MatchArtifact(tt.assertArtifact.DeepCopy()))
+			g.Expect(index.Index()).To(Equal(tt.assertIndex.Index()))
 			g.Expect(obj.Status.Conditions).To(conditions.MatchConditions(tt.assertConditions))
 		})
 	}
 }
 
-func TestBucketReconciler_reconcileGCPSource(t *testing.T) {
+func TestBucketReconciler_reconcileSource_gcs(t *testing.T) {
 	tests := []struct {
 		name             string
 		bucketName       string
-		bucketObjects    []*gcpMockObject
+		bucketObjects    []*gcsmock.Object
 		secret           *corev1.Secret
 		beforeFunc       func(obj *sourcev1.Bucket)
 		want             sreconcile.Result
 		wantErr          bool
-		assertArtifact   sourcev1.Artifact
+		assertIndex      *etagIndex
 		assertConditions []metav1.Condition
 	}{
 		{
-			name:       "reconciles source",
+			name:       "Reconciles GCS source",
 			bucketName: "dummy",
-			bucketObjects: []*gcpMockObject{
+			bucketObjects: []*gcsmock.Object{
 				{
 					Key:         "test.txt",
 					ContentType: "text/plain",
 					Content:     []byte("test"),
+					Generation:  3,
 				},
 			},
 			secret: &corev1.Secret{
@@ -609,31 +615,33 @@ func TestBucketReconciler_reconcileGCPSource(t *testing.T) {
 				}
 			},
 			want: sreconcile.ResultSuccess,
-			assertArtifact: sourcev1.Artifact{
-				Path:     "bucket/test-bucket/23d97ef9557996c9d911df4359d6086eda7bec5af76e43651581d80f5bcad4b8.tar.gz",
-				Revision: "23d97ef9557996c9d911df4359d6086eda7bec5af76e43651581d80f5bcad4b8",
+			assertIndex: &etagIndex{
+				index: map[string]string{
+					"test.txt": "098f6bcd4621d373cade4e832627b4f6",
+				},
 			},
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new upstream revision '23d97ef9557996c9d911df4359d6086eda7bec5af76e43651581d80f5bcad4b8'"),
-				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new upstream revision '23d97ef9557996c9d911df4359d6086eda7bec5af76e43651581d80f5bcad4b8'"),
+				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new upstream revision 'b4c2a60ce44b67f5b659a95ce4e4cc9e2a86baf13afb72bd397c5384cbc0e479'"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new upstream revision 'b4c2a60ce44b67f5b659a95ce4e4cc9e2a86baf13afb72bd397c5384cbc0e479'"),
 			},
 		},
 		{
-			name:       "observes non-existing secretRef",
+			name:       "Observes non-existing secretRef",
 			bucketName: "dummy",
 			beforeFunc: func(obj *sourcev1.Bucket) {
 				obj.Spec.SecretRef = &meta.LocalObjectReference{
 					Name: "dummy",
 				}
 			},
-			want:    sreconcile.ResultEmpty,
-			wantErr: true,
+			want:        sreconcile.ResultEmpty,
+			wantErr:     true,
+			assertIndex: newEtagIndex(),
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "failed to get secret '/dummy': secrets \"dummy\" not found"),
 			},
 		},
 		{
-			name:       "observes invalid secretRef",
+			name:       "Observes invalid secretRef",
 			bucketName: "dummy",
 			secret: &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
@@ -645,119 +653,133 @@ func TestBucketReconciler_reconcileGCPSource(t *testing.T) {
 					Name: "dummy",
 				}
 			},
-			want:    sreconcile.ResultEmpty,
-			wantErr: true,
+			want:        sreconcile.ResultEmpty,
+			wantErr:     true,
+			assertIndex: newEtagIndex(),
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason, "failed to construct GCP client: invalid 'dummy' secret data: required fields"),
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "invalid 'dummy' secret data: required fields"),
 			},
 		},
 		{
-			name:       "observes non-existing bucket name",
+			name:       "Observes non-existing bucket name",
 			bucketName: "dummy",
 			beforeFunc: func(obj *sourcev1.Bucket) {
 				obj.Spec.BucketName = "invalid"
 			},
-			want:    sreconcile.ResultEmpty,
-			wantErr: true,
+			want:        sreconcile.ResultEmpty,
+			wantErr:     true,
+			assertIndex: newEtagIndex(),
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason, "bucket 'invalid' does not exist"),
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason, "bucket 'invalid' not found"),
 			},
 		},
 		{
-			name: "transient bucket name API failure",
+			name: "Transient bucket name API failure",
 			beforeFunc: func(obj *sourcev1.Bucket) {
 				obj.Spec.Endpoint = "transient.example.com"
 				obj.Spec.BucketName = "unavailable"
 			},
-			want:    sreconcile.ResultEmpty,
-			wantErr: true,
+			want:        sreconcile.ResultEmpty,
+			wantErr:     true,
+			assertIndex: newEtagIndex(),
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason, "failed to verify existence of bucket 'unavailable'"),
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason, "failed to confirm existence of 'unavailable' bucket"),
 			},
 		},
 		{
 			name:       ".sourceignore",
 			bucketName: "dummy",
-			bucketObjects: []*gcpMockObject{
+			bucketObjects: []*gcsmock.Object{
 				{
 					Key:         ".sourceignore",
 					Content:     []byte("ignored/file.txt"),
 					ContentType: "text/plain",
+					Generation:  1,
 				},
 				{
 					Key:         "ignored/file.txt",
 					Content:     []byte("ignored/file.txt"),
 					ContentType: "text/plain",
+					Generation:  4,
 				},
 				{
 					Key:         "included/file.txt",
 					Content:     []byte("included/file.txt"),
 					ContentType: "text/plain",
+					Generation:  3,
 				},
 			},
 			want: sreconcile.ResultSuccess,
-			assertArtifact: sourcev1.Artifact{
-				Path:     "bucket/test-bucket/7556d9ebaa9bcf1b24f363a6d5543af84403acb340fe1eaaf31dcdb0a6e6b4d4.tar.gz",
-				Revision: "7556d9ebaa9bcf1b24f363a6d5543af84403acb340fe1eaaf31dcdb0a6e6b4d4",
+			assertIndex: &etagIndex{
+				index: map[string]string{
+					"included/file.txt": "5a4bc7048b3301f677fe15b8678be2f8",
+				},
 			},
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new upstream revision '7556d9ebaa9bcf1b24f363a6d5543af84403acb340fe1eaaf31dcdb0a6e6b4d4'"),
-				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new upstream revision '7556d9ebaa9bcf1b24f363a6d5543af84403acb340fe1eaaf31dcdb0a6e6b4d4'"),
+				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new upstream revision '9fc2ddfc4a6f44e6c3efee40af36578b9e76d4d930eaf384b8435a0aa0bf7a0f'"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new upstream revision '9fc2ddfc4a6f44e6c3efee40af36578b9e76d4d930eaf384b8435a0aa0bf7a0f'"),
 			},
 		},
 		{
 			name:       "spec.ignore overrides .sourceignore",
 			bucketName: "dummy",
 			beforeFunc: func(obj *sourcev1.Bucket) {
-				ignore := "included/file.txt"
+				ignore := "!ignored/file.txt"
 				obj.Spec.Ignore = &ignore
 			},
-			bucketObjects: []*gcpMockObject{
+			bucketObjects: []*gcsmock.Object{
 				{
 					Key:         ".sourceignore",
 					Content:     []byte("ignored/file.txt"),
 					ContentType: "text/plain",
+					Generation:  1,
 				},
 				{
 					Key:         "ignored/file.txt",
 					Content:     []byte("ignored/file.txt"),
 					ContentType: "text/plain",
+					Generation:  2,
 				},
 				{
 					Key:         "included/file.txt",
 					Content:     []byte("included/file.txt"),
 					ContentType: "text/plain",
+					Generation:  4,
 				},
 			},
 			want: sreconcile.ResultSuccess,
-			assertArtifact: sourcev1.Artifact{
-				Path:     "bucket/test-bucket/e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855.tar.gz",
-				Revision: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+			assertIndex: &etagIndex{
+				index: map[string]string{
+					"ignored/file.txt":  "f08907038338288420ae7dc2d30c0497",
+					"included/file.txt": "5a4bc7048b3301f677fe15b8678be2f8",
+				},
 			},
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new upstream revision 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'"),
-				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new upstream revision 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'"),
+				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new upstream revision '117f586dc64cfc559329e21d286edcbb94cb6b1581517eaddc0ab5292b470cd5'"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new upstream revision '117f586dc64cfc559329e21d286edcbb94cb6b1581517eaddc0ab5292b470cd5'"),
 			},
 		},
 		{
-			name:       "up-to-date artifact",
+			name:       "Up-to-date artifact",
 			bucketName: "dummy",
 			beforeFunc: func(obj *sourcev1.Bucket) {
 				obj.Status.Artifact = &sourcev1.Artifact{
-					Revision: "23d97ef9557996c9d911df4359d6086eda7bec5af76e43651581d80f5bcad4b8",
+					Revision: "b4c2a60ce44b67f5b659a95ce4e4cc9e2a86baf13afb72bd397c5384cbc0e479",
 				}
 			},
-			bucketObjects: []*gcpMockObject{
+			bucketObjects: []*gcsmock.Object{
 				{
 					Key:         "test.txt",
 					Content:     []byte("test"),
 					ContentType: "text/plain",
+					Generation:  2,
 				},
 			},
 			want: sreconcile.ResultSuccess,
-			assertArtifact: sourcev1.Artifact{
-				Path:     "bucket/test-bucket/23d97ef9557996c9d911df4359d6086eda7bec5af76e43651581d80f5bcad4b8.tar.gz",
-				Revision: "23d97ef9557996c9d911df4359d6086eda7bec5af76e43651581d80f5bcad4b8",
+			assertIndex: &etagIndex{
+				index: map[string]string{
+					"test.txt": "098f6bcd4621d373cade4e832627b4f6",
+				},
 			},
 			assertConditions: []metav1.Condition{},
 		},
@@ -767,21 +789,23 @@ func TestBucketReconciler_reconcileGCPSource(t *testing.T) {
 			beforeFunc: func(obj *sourcev1.Bucket) {
 				conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason, "failed to read test file")
 			},
-			bucketObjects: []*gcpMockObject{
+			bucketObjects: []*gcsmock.Object{
 				{
 					Key:         "test.txt",
 					Content:     []byte("test"),
 					ContentType: "text/plain",
+					Generation:  2,
 				},
 			},
 			want: sreconcile.ResultSuccess,
-			assertArtifact: sourcev1.Artifact{
-				Path:     "bucket/test-bucket/23d97ef9557996c9d911df4359d6086eda7bec5af76e43651581d80f5bcad4b8.tar.gz",
-				Revision: "23d97ef9557996c9d911df4359d6086eda7bec5af76e43651581d80f5bcad4b8",
+			assertIndex: &etagIndex{
+				index: map[string]string{
+					"test.txt": "098f6bcd4621d373cade4e832627b4f6",
+				},
 			},
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new upstream revision '23d97ef9557996c9d911df4359d6086eda7bec5af76e43651581d80f5bcad4b8'"),
-				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new upstream revision '23d97ef9557996c9d911df4359d6086eda7bec5af76e43651581d80f5bcad4b8'"),
+				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new upstream revision 'b4c2a60ce44b67f5b659a95ce4e4cc9e2a86baf13afb72bd397c5384cbc0e479'"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new upstream revision 'b4c2a60ce44b67f5b659a95ce4e4cc9e2a86baf13afb72bd397c5384cbc0e479'"),
 			},
 		},
 		// TODO: Middleware for mock server to test authentication using secret.
@@ -819,7 +843,7 @@ func TestBucketReconciler_reconcileGCPSource(t *testing.T) {
 			}
 
 			// Set up the mock GCP bucket server.
-			server := newGCPServer(tt.bucketName)
+			server := gcsmock.NewServer(tt.bucketName)
 			server.Objects = tt.bucketObjects
 			server.Start()
 			defer server.Stop()
@@ -834,31 +858,28 @@ func TestBucketReconciler_reconcileGCPSource(t *testing.T) {
 			}
 
 			// Set the GCP storage host to be used by the GCP client.
-			g.Expect(os.Setenv(ENV_GCP_STORAGE_HOST, obj.Spec.Endpoint)).ToNot(HaveOccurred())
+			g.Expect(os.Setenv(EnvGcpStorageHost, obj.Spec.Endpoint)).ToNot(HaveOccurred())
 			defer func() {
-				g.Expect(os.Unsetenv(ENV_GCP_STORAGE_HOST)).ToNot(HaveOccurred())
+				g.Expect(os.Unsetenv(EnvGcpStorageHost)).ToNot(HaveOccurred())
 			}()
 
-			artifact := &sourcev1.Artifact{}
-			index := make(etagIndex)
-			got, err := r.reconcileSource(context.TODO(), obj, index, artifact, tmpDir)
+			index := newEtagIndex()
+
+			got, err := r.reconcileSource(context.TODO(), obj, index, tmpDir)
+			t.Log(err)
 			g.Expect(err != nil).To(Equal(tt.wantErr))
 			g.Expect(got).To(Equal(tt.want))
 
-			g.Expect(artifact).To(MatchArtifact(tt.assertArtifact.DeepCopy()))
+			g.Expect(index.Index()).To(Equal(tt.assertIndex.Index()))
 			g.Expect(obj.Status.Conditions).To(conditions.MatchConditions(tt.assertConditions))
 		})
 	}
 }
 
 func TestBucketReconciler_reconcileArtifact(t *testing.T) {
-	// testChecksum is the checksum value of the artifacts created in this
-	// test.
-	const testChecksum = "4f4fb700ef54461cfa02571ae0db9a0dc1e0cdb5577484a6d75e68dc38e8acc1"
-
 	tests := []struct {
 		name             string
-		beforeFunc       func(t *WithT, obj *sourcev1.Bucket, artifact sourcev1.Artifact, dir string)
+		beforeFunc       func(t *WithT, obj *sourcev1.Bucket, index *etagIndex, dir string)
 		afterFunc        func(t *WithT, obj *sourcev1.Bucket, dir string)
 		want             sreconcile.Result
 		wantErr          bool
@@ -866,42 +887,45 @@ func TestBucketReconciler_reconcileArtifact(t *testing.T) {
 	}{
 		{
 			name: "Archiving artifact to storage makes Ready=True",
-			beforeFunc: func(t *WithT, obj *sourcev1.Bucket, artifact sourcev1.Artifact, dir string) {
+			beforeFunc: func(t *WithT, obj *sourcev1.Bucket, index *etagIndex, dir string) {
 				obj.Spec.Interval = metav1.Duration{Duration: interval}
 			},
 			want: sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(meta.ReadyCondition, meta.SucceededReason, "stored artifact for revision 'existing'"),
+				*conditions.TrueCondition(meta.ReadyCondition, meta.SucceededReason, "stored artifact for revision 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'"),
 			},
 		},
 		{
-			name: "Up-to-date artifact should not update status",
-			beforeFunc: func(t *WithT, obj *sourcev1.Bucket, artifact sourcev1.Artifact, dir string) {
+			name: "Up-to-date artifact should not persist and update status",
+			beforeFunc: func(t *WithT, obj *sourcev1.Bucket, index *etagIndex, dir string) {
+				revision, _ := index.Revision()
 				obj.Spec.Interval = metav1.Duration{Duration: interval}
-				obj.Status.Artifact = artifact.DeepCopy()
+				// Incomplete artifact
+				obj.Status.Artifact = &sourcev1.Artifact{Revision: revision}
 			},
 			afterFunc: func(t *WithT, obj *sourcev1.Bucket, dir string) {
+				// Still incomplete
 				t.Expect(obj.Status.URL).To(BeEmpty())
 			},
 			want: sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(meta.ReadyCondition, meta.SucceededReason, "stored artifact for revision 'existing'"),
+				*conditions.TrueCondition(meta.ReadyCondition, meta.SucceededReason, "stored artifact for revision 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'"),
 			},
 		},
 		{
 			name: "Removes ArtifactOutdatedCondition after creating a new artifact",
-			beforeFunc: func(t *WithT, obj *sourcev1.Bucket, artifact sourcev1.Artifact, dir string) {
+			beforeFunc: func(t *WithT, obj *sourcev1.Bucket, index *etagIndex, dir string) {
 				obj.Spec.Interval = metav1.Duration{Duration: interval}
 				conditions.MarkTrue(obj, sourcev1.ArtifactOutdatedCondition, "Foo", "")
 			},
 			want: sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(meta.ReadyCondition, meta.SucceededReason, "stored artifact for revision 'existing'"),
+				*conditions.TrueCondition(meta.ReadyCondition, meta.SucceededReason, "stored artifact for revision 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'"),
 			},
 		},
 		{
 			name: "Creates latest symlink to the created artifact",
-			beforeFunc: func(t *WithT, obj *sourcev1.Bucket, artifact sourcev1.Artifact, dir string) {
+			beforeFunc: func(t *WithT, obj *sourcev1.Bucket, index *etagIndex, dir string) {
 				obj.Spec.Interval = metav1.Duration{Duration: interval}
 			},
 			afterFunc: func(t *WithT, obj *sourcev1.Bucket, dir string) {
@@ -913,12 +937,12 @@ func TestBucketReconciler_reconcileArtifact(t *testing.T) {
 			},
 			want: sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(meta.ReadyCondition, meta.SucceededReason, "stored artifact for revision 'existing'"),
+				*conditions.TrueCondition(meta.ReadyCondition, meta.SucceededReason, "stored artifact for revision 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'"),
 			},
 		},
 		{
 			name: "Dir path deleted",
-			beforeFunc: func(t *WithT, obj *sourcev1.Bucket, artifact sourcev1.Artifact, dir string) {
+			beforeFunc: func(t *WithT, obj *sourcev1.Bucket, index *etagIndex, dir string) {
 				t.Expect(os.RemoveAll(dir)).ToNot(HaveOccurred())
 			},
 			want:    sreconcile.ResultEmpty,
@@ -926,7 +950,7 @@ func TestBucketReconciler_reconcileArtifact(t *testing.T) {
 		},
 		{
 			name: "Dir path is not a directory",
-			beforeFunc: func(t *WithT, obj *sourcev1.Bucket, artifact sourcev1.Artifact, dir string) {
+			beforeFunc: func(t *WithT, obj *sourcev1.Bucket, index *etagIndex, dir string) {
 				// Remove the given directory and create a file for the same
 				// path.
 				t.Expect(os.RemoveAll(dir)).ToNot(HaveOccurred())
@@ -969,23 +993,18 @@ func TestBucketReconciler_reconcileArtifact(t *testing.T) {
 				},
 			}
 
-			index := make(etagIndex)
-			artifact := testStorage.NewArtifactFor(obj.Kind, obj, "existing", "foo.tar.gz")
-			artifact.Checksum = testChecksum
+			index := newEtagIndex()
 
 			if tt.beforeFunc != nil {
-				tt.beforeFunc(g, obj, artifact, tmpDir)
+				tt.beforeFunc(g, obj, index, tmpDir)
 			}
 
-			got, err := r.reconcileArtifact(context.TODO(), obj, index, &artifact, tmpDir)
+			got, err := r.reconcileArtifact(context.TODO(), obj, index, tmpDir)
 			g.Expect(err != nil).To(Equal(tt.wantErr))
 			g.Expect(got).To(Equal(tt.want))
 
 			// On error, artifact is empty. Check artifacts only on successful
 			// reconcile.
-			if !tt.wantErr {
-				g.Expect(obj.Status.Artifact).To(MatchArtifact(artifact.DeepCopy()))
-			}
 			g.Expect(obj.Status.Conditions).To(conditions.MatchConditions(tt.assertConditions))
 
 			if tt.afterFunc != nil {
@@ -998,7 +1017,7 @@ func TestBucketReconciler_reconcileArtifact(t *testing.T) {
 func Test_etagIndex_Revision(t *testing.T) {
 	tests := []struct {
 		name    string
-		list    etagIndex
+		list    map[string]string
 		want    string
 		wantErr bool
 	}{
@@ -1009,7 +1028,7 @@ func Test_etagIndex_Revision(t *testing.T) {
 				"two":   "two",
 				"three": "three",
 			},
-			want: "8afaa9c32d7c187e8acaeffe899226011001f67c095519cdd8b4c03487c5b8bc",
+			want: "c0837b3f32bb67c5275858fdb96595f87801cf3c2f622c049918a051d29b2c7f",
 		},
 		{
 			name: "index with items in different order",
@@ -1018,7 +1037,7 @@ func Test_etagIndex_Revision(t *testing.T) {
 				"one":   "one",
 				"two":   "two",
 			},
-			want: "8afaa9c32d7c187e8acaeffe899226011001f67c095519cdd8b4c03487c5b8bc",
+			want: "c0837b3f32bb67c5275858fdb96595f87801cf3c2f622c049918a051d29b2c7f",
 		},
 		{
 			name: "empty index",
@@ -1033,7 +1052,8 @@ func Test_etagIndex_Revision(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := tt.list.Revision()
+			index := &etagIndex{index: tt.list}
+			got, err := index.Revision()
 			if (err != nil) != tt.wantErr {
 				t.Errorf("revision() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -1042,279 +1062,5 @@ func Test_etagIndex_Revision(t *testing.T) {
 				t.Errorf("revision() got = %v, want %v", got, tt.want)
 			}
 		})
-	}
-}
-
-// helpers
-
-func mockFile(root, path, content string) error {
-	filePath := filepath.Join(root, path)
-	if err := os.MkdirAll(filepath.Dir(filePath), os.ModePerm); err != nil {
-		panic(err)
-	}
-	if err := os.WriteFile(filePath, []byte(content), 0644); err != nil {
-		panic(err)
-	}
-	return nil
-}
-
-type s3MockObject struct {
-	Key          string
-	LastModified time.Time
-	ContentType  string
-	Content      []byte
-}
-
-type s3MockServer struct {
-	srv *httptest.Server
-	mux *http.ServeMux
-
-	BucketName string
-	Objects    []*s3MockObject
-}
-
-func newS3Server(bucketName string) *s3MockServer {
-	s := &s3MockServer{BucketName: bucketName}
-	s.mux = http.NewServeMux()
-	s.mux.Handle(fmt.Sprintf("/%s/", s.BucketName), http.HandlerFunc(s.handler))
-
-	s.srv = httptest.NewUnstartedServer(s.mux)
-
-	return s
-}
-
-func (s *s3MockServer) Start() {
-	s.srv.Start()
-}
-
-func (s *s3MockServer) Stop() {
-	s.srv.Close()
-}
-
-func (s *s3MockServer) HTTPAddress() string {
-	return s.srv.URL
-}
-
-func (s *s3MockServer) handler(w http.ResponseWriter, r *http.Request) {
-	key := path.Base(r.URL.Path)
-
-	switch key {
-	case s.BucketName:
-		w.Header().Add("Content-Type", "application/xml")
-
-		if r.Method == http.MethodHead {
-			return
-		}
-
-		q := r.URL.Query()
-
-		if q["location"] != nil {
-			fmt.Fprint(w, `
-<?xml version="1.0" encoding="UTF-8"?>
-<LocationConstraint xmlns="http://s3.amazonaws.com/doc/2006-03-01/">Europe</LocationConstraint>
-			`)
-			return
-		}
-
-		contents := ""
-		for _, o := range s.Objects {
-			etag := md5.Sum(o.Content)
-			contents += fmt.Sprintf(`
-		<Contents>
-			<Key>%s</Key>
-			<LastModified>%s</LastModified>
-			<Size>%d</Size>
-			<ETag>&quot;%b&quot;</ETag>
-			<StorageClass>STANDARD</StorageClass>
-		</Contents>`, o.Key, o.LastModified.UTC().Format(time.RFC3339), len(o.Content), etag)
-		}
-
-		fmt.Fprintf(w, `
-<?xml version="1.0" encoding="UTF-8"?>
-<ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
-	<Name>%s</Name>
-	<Prefix/>
-	<Marker/>
-	<KeyCount>%d</KeyCount>
-	<MaxKeys>1000</MaxKeys>
-	<IsTruncated>false</IsTruncated>
-	%s
-</ListBucketResult>
-		`, s.BucketName, len(s.Objects), contents)
-	default:
-		key, err := filepath.Rel("/"+s.BucketName, r.URL.Path)
-		if err != nil {
-			w.WriteHeader(500)
-			return
-		}
-
-		var found *s3MockObject
-		for _, o := range s.Objects {
-			if key == o.Key {
-				found = o
-			}
-		}
-		if found == nil {
-			w.WriteHeader(404)
-			return
-		}
-
-		etag := md5.Sum(found.Content)
-		lastModified := strings.Replace(found.LastModified.UTC().Format(time.RFC1123), "UTC", "GMT", 1)
-
-		w.Header().Add("Content-Type", found.ContentType)
-		w.Header().Add("Last-Modified", lastModified)
-		w.Header().Add("ETag", fmt.Sprintf("\"%b\"", etag))
-		w.Header().Add("Content-Length", fmt.Sprintf("%d", len(found.Content)))
-
-		if r.Method == http.MethodHead {
-			return
-		}
-
-		w.Write(found.Content)
-	}
-}
-
-type gcpMockObject struct {
-	Key         string
-	ContentType string
-	Content     []byte
-}
-
-type gcpMockServer struct {
-	srv *httptest.Server
-	mux *http.ServeMux
-
-	BucketName string
-	Etag       string
-	Objects    []*gcpMockObject
-	Close      func()
-}
-
-func newGCPServer(bucketName string) *gcpMockServer {
-	s := &gcpMockServer{BucketName: bucketName}
-	s.mux = http.NewServeMux()
-	s.mux.Handle("/", http.HandlerFunc(s.handler))
-
-	s.srv = httptest.NewUnstartedServer(s.mux)
-
-	return s
-}
-
-func (gs *gcpMockServer) Start() {
-	gs.srv.Start()
-}
-
-func (gs *gcpMockServer) Stop() {
-	gs.srv.Close()
-}
-
-func (gs *gcpMockServer) HTTPAddress() string {
-	return gs.srv.URL
-}
-
-func (gs *gcpMockServer) GetAllObjects() *raw.Objects {
-	objs := &raw.Objects{}
-	for _, o := range gs.Objects {
-		objs.Items = append(objs.Items, getGCPObject(gs.BucketName, *o))
-	}
-	return objs
-}
-
-func (gs *gcpMockServer) GetObjectFile(key string) ([]byte, error) {
-	for _, o := range gs.Objects {
-		if o.Key == key {
-			return o.Content, nil
-		}
-	}
-	return nil, fmt.Errorf("not found")
-}
-
-func (gs *gcpMockServer) handler(w http.ResponseWriter, r *http.Request) {
-	if strings.HasPrefix(r.RequestURI, "/b/") {
-		// Handle the bucket info related queries.
-		if r.RequestURI == fmt.Sprintf("/b/%s?alt=json&prettyPrint=false&projection=full", gs.BucketName) {
-			// Return info about the bucket.
-			response := getGCPBucket(gs.BucketName, gs.Etag)
-			jsonResponse, err := json.Marshal(response)
-			if err != nil {
-				w.WriteHeader(500)
-				return
-			}
-			w.WriteHeader(200)
-			w.Write(jsonResponse)
-			return
-		} else if strings.Contains(r.RequestURI, "/o/") {
-			// Return info about object in the bucket.
-			var obj *gcpMockObject
-			for _, o := range gs.Objects {
-				// The object key in the URI is escaped.
-				// e.g.: /b/dummy/o/included%2Ffile.txt?alt=json&prettyPrint=false&projection=full
-				if r.RequestURI == fmt.Sprintf("/b/%s/o/%s?alt=json&prettyPrint=false&projection=full", gs.BucketName, url.QueryEscape(o.Key)) {
-					obj = o
-				}
-			}
-			if obj != nil {
-				response := getGCPObject(gs.BucketName, *obj)
-				jsonResponse, err := json.Marshal(response)
-				if err != nil {
-					w.WriteHeader(500)
-					return
-				}
-				w.WriteHeader(200)
-				w.Write(jsonResponse)
-				return
-			}
-			w.WriteHeader(404)
-			return
-		} else if strings.Contains(r.RequestURI, "/o?") {
-			// Return info about all the objects in the bucket.
-			response := gs.GetAllObjects()
-			jsonResponse, err := json.Marshal(response)
-			if err != nil {
-				w.WriteHeader(500)
-				return
-			}
-			w.WriteHeader(200)
-			w.Write(jsonResponse)
-			return
-		}
-		w.WriteHeader(404)
-		return
-	} else {
-		// Handle object file query.
-		bucketPrefix := fmt.Sprintf("/%s/", gs.BucketName)
-		if strings.HasPrefix(r.RequestURI, bucketPrefix) {
-			// The URL path is of the format /<bucket>/included/file.txt.
-			// Extract the object key by discarding the bucket prefix.
-			key := strings.TrimPrefix(r.URL.Path, bucketPrefix)
-			// Handle returning object file in a bucket.
-			response, err := gs.GetObjectFile(key)
-			if err != nil {
-				w.WriteHeader(404)
-				return
-			}
-			w.WriteHeader(200)
-			w.Write(response)
-			return
-		}
-		w.WriteHeader(404)
-		return
-	}
-}
-
-func getGCPObject(bucket string, obj gcpMockObject) *raw.Object {
-	return &raw.Object{
-		Bucket:      bucket,
-		Name:        obj.Key,
-		ContentType: obj.ContentType,
-	}
-}
-
-func getGCPBucket(name, eTag string) *raw.Bucket {
-	return &raw.Bucket{
-		Name:     name,
-		Location: "loc",
-		Etag:     eTag,
 	}
 }
