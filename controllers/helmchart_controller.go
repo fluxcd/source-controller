@@ -18,6 +18,7 @@ package controllers
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"net/url"
@@ -368,6 +369,7 @@ func (r *HelmChartReconciler) reconcileSource(ctx context.Context, obj *sourcev1
 
 func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *sourcev1.HelmChart,
 	repo *sourcev1.HelmRepository, b *chart.Build) (sreconcile.Result, error) {
+	var tlsConfig *tls.Config
 
 	// Construct the Getter options from the HelmRepository data
 	clientOpts := []helmgetter.Option{
@@ -386,20 +388,8 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 			return sreconcile.ResultEmpty, e
 		}
 
-		// Create temporary working directory for credentials
-		authDir, err := util.TempDirForObj("", obj)
-		if err != nil {
-			e := &serror.Event{
-				Err:    fmt.Errorf("failed to create temporary working directory: %w", err),
-				Reason: sourcev1.StorageOperationFailedReason,
-			}
-			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.StorageOperationFailedReason, e.Err.Error())
-			return sreconcile.ResultEmpty, e
-		}
-		defer os.RemoveAll(authDir)
-
 		// Build client options from secret
-		opts, err := getter.ClientOptionsFromSecret(authDir, *secret)
+		opts, err := getter.ClientOptionsFromSecret(*secret)
 		if err != nil {
 			e := &serror.Event{
 				Err:    fmt.Errorf("failed to configure Helm client with secret data: %w", err),
@@ -410,10 +400,21 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 			return sreconcile.ResultEmpty, e
 		}
 		clientOpts = append(clientOpts, opts...)
+
+		tlsConfig, err = getter.TLSClientConfigFromSecret(*secret, repo.Spec.URL)
+		if err != nil {
+			e := &serror.Event{
+				Err:    fmt.Errorf("failed to create TLS client config with secret data: %w", err),
+				Reason: sourcev1.AuthenticationFailedReason,
+			}
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, e.Err.Error())
+			// Requeue as content of secret might change
+			return sreconcile.ResultEmpty, e
+		}
 	}
 
 	// Initialize the chart repository
-	chartRepo, err := repository.NewChartRepository(repo.Spec.URL, r.Storage.LocalPath(*repo.GetArtifact()), r.Getters, clientOpts)
+	chartRepo, err := repository.NewChartRepository(repo.Spec.URL, r.Storage.LocalPath(*repo.GetArtifact()), r.Getters, tlsConfig, clientOpts)
 	if err != nil {
 		// Any error requires a change in generation,
 		// which we should be informed about by the watcher
@@ -523,15 +524,8 @@ func (r *HelmChartReconciler) buildFromTarballArtifact(ctx context.Context, obj 
 	}
 
 	// Setup dependency manager
-	authDir := filepath.Join(tmpDir, "creds")
-	if err = os.Mkdir(authDir, 0700); err != nil {
-		return sreconcile.ResultEmpty, &serror.Event{
-			Err:    fmt.Errorf("failed to create temporary directory for dependency credentials: %w", err),
-			Reason: meta.FailedReason,
-		}
-	}
 	dm := chart.NewDependencyManager(
-		chart.WithRepositoryCallback(r.namespacedChartRepositoryCallback(ctx, authDir, obj.GetNamespace())),
+		chart.WithRepositoryCallback(r.namespacedChartRepositoryCallback(ctx, obj.GetNamespace())),
 	)
 	defer dm.Clear()
 
@@ -747,11 +741,11 @@ func (r *HelmChartReconciler) garbageCollect(ctx context.Context, obj *sourcev1.
 }
 
 // namespacedChartRepositoryCallback returns a chart.GetChartRepositoryCallback scoped to the given namespace.
-// Credentials for retrieved v1beta1.HelmRepository objects are stored in the given directory.
 // The returned callback returns a repository.ChartRepository configured with the retrieved v1beta1.HelmRepository,
 // or a shim with defaults if no object could be found.
-func (r *HelmChartReconciler) namespacedChartRepositoryCallback(ctx context.Context, dir, namespace string) chart.GetChartRepositoryCallback {
+func (r *HelmChartReconciler) namespacedChartRepositoryCallback(ctx context.Context, namespace string) chart.GetChartRepositoryCallback {
 	return func(url string) (*repository.ChartRepository, error) {
+		var tlsConfig *tls.Config
 		repo, err := r.resolveDependencyRepository(ctx, url, namespace)
 		if err != nil {
 			// Return Kubernetes client errors, but ignore others
@@ -774,13 +768,19 @@ func (r *HelmChartReconciler) namespacedChartRepositoryCallback(ctx context.Cont
 			if err != nil {
 				return nil, err
 			}
-			opts, err := getter.ClientOptionsFromSecret(dir, *secret)
+			opts, err := getter.ClientOptionsFromSecret(*secret)
 			if err != nil {
 				return nil, err
 			}
 			clientOpts = append(clientOpts, opts...)
+
+			tlsConfig, err = getter.TLSClientConfigFromSecret(*secret, repo.Spec.URL)
+			if err != nil {
+				return nil, fmt.Errorf("failed to create TLS client config for HelmRepository '%s': %w", repo.Name, err)
+			}
 		}
-		chartRepo, err := repository.NewChartRepository(repo.Spec.URL, "", r.Getters, clientOpts)
+
+		chartRepo, err := repository.NewChartRepository(repo.Spec.URL, "", r.Getters, tlsConfig, clientOpts)
 		if err != nil {
 			return nil, err
 		}

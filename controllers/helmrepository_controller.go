@@ -18,6 +18,7 @@ package controllers
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"net/url"
@@ -260,6 +261,8 @@ func (r *HelmRepositoryReconciler) reconcileStorage(ctx context.Context, obj *so
 // If the download is successful, the given artifact pointer is set to a new artifact with the available metadata, and
 // the index pointer is set to the newly downloaded index.
 func (r *HelmRepositoryReconciler) reconcileSource(ctx context.Context, obj *sourcev1.HelmRepository, artifact *sourcev1.Artifact, chartRepo *repository.ChartRepository) (sreconcile.Result, error) {
+	var tlsConfig *tls.Config
+
 	// Configure Helm client to access repository
 	clientOpts := []helmgetter.Option{
 		helmgetter.WithTimeout(obj.Spec.Timeout.Duration),
@@ -284,18 +287,8 @@ func (r *HelmRepositoryReconciler) reconcileSource(ctx context.Context, obj *sou
 			return sreconcile.ResultEmpty, e
 		}
 
-		// Get client options from secret
-		tmpDir, err := os.MkdirTemp("", fmt.Sprintf("%s-%s-auth-", obj.Name, obj.Namespace))
-		if err != nil {
-			return sreconcile.ResultEmpty, &serror.Event{
-				Err:    fmt.Errorf("failed to create temporary directory for credentials: %w", err),
-				Reason: sourcev1.StorageOperationFailedReason,
-			}
-		}
-		defer os.RemoveAll(tmpDir)
-
 		// Construct actual options
-		opts, err := getter.ClientOptionsFromSecret(tmpDir, secret)
+		opts, err := getter.ClientOptionsFromSecret(secret)
 		if err != nil {
 			e := &serror.Event{
 				Err:    fmt.Errorf("failed to configure Helm client with secret data: %w", err),
@@ -306,10 +299,21 @@ func (r *HelmRepositoryReconciler) reconcileSource(ctx context.Context, obj *sou
 			return sreconcile.ResultEmpty, e
 		}
 		clientOpts = append(clientOpts, opts...)
+
+		tlsConfig, err = getter.TLSClientConfigFromSecret(secret, obj.Spec.URL)
+		if err != nil {
+			e := &serror.Event{
+				Err:    fmt.Errorf("failed to create TLS client config with secret data: %w", err),
+				Reason: sourcev1.AuthenticationFailedReason,
+			}
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, e.Err.Error())
+			// Requeue as content of secret might change
+			return sreconcile.ResultEmpty, e
+		}
 	}
 
 	// Construct Helm chart repository with options and download index
-	newChartRepo, err := repository.NewChartRepository(obj.Spec.URL, "", r.Getters, clientOpts)
+	newChartRepo, err := repository.NewChartRepository(obj.Spec.URL, "", r.Getters, tlsConfig, clientOpts)
 	if err != nil {
 		switch err.(type) {
 		case *url.Error:
