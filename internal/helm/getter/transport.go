@@ -25,6 +25,29 @@ import (
 	"time"
 )
 
+// TransportPool is a progressive and non-blocking pool
+// for http.Transport objects, optimised for Gargabe Collection
+// and without a hard limit on number of objects created.
+//
+// Its main purpose is to enable for transport objects to be
+// used across helm chart download requests and helm/pkg/getter
+// instances by leveraging the getter.WithTransport(t) construct.
+//
+// The use of this pool improves the default behaviour of helm getter
+// which creates a new connection per request, or per getter instance,
+// resulting on unnecessary TCP connections with the target.
+//
+// http.Transport objects may contain sensitive material and also have
+// settings that may impact the security of HTTP operations using
+// them (i.e. InsecureSkipVerify). Therefore, ensure that they are
+// used in a thread-safe way, and also by reseting TLS specific state
+// after each use.
+//
+// Calling the Release(t) function will reset TLS specific state whilst
+// also releasing the transport back to the pool to be reused.
+//
+// xref: https://github.com/helm/helm/pull/10568
+// xref2: https://github.com/fluxcd/source-controller/issues/578
 type TransportPool struct {
 }
 
@@ -34,6 +57,14 @@ var pool = &sync.Pool{
 			DisableCompression: true,
 			Proxy:              http.ProxyFromEnvironment,
 
+			// Due to the non blocking nature of this approach,
+			// at peak usage a higher number of transport objects
+			// may be created. sync.Pool will ensure they are
+			// gargage collected when/if needed.
+			//
+			// By setting a low value to IdleConnTimeout the connections
+			// will be closed after that period of inactivity, allowing the
+			// transport to be garbage collected.
 			IdleConnTimeout: 60 * time.Second,
 
 			// use safe defaults based off http.DefaultTransport
@@ -50,7 +81,7 @@ var pool = &sync.Pool{
 // NewOrIdle tries to return an existing transport that is not currently being used.
 // If none is found, creates a new Transport instead.
 //
-// tlsConfig sets the TLSClientConfig for the transport and can be nil.
+// tlsConfig can optionally set the TLSClientConfig for the transport.
 func NewOrIdle(tlsConfig *tls.Config) *http.Transport {
 	t := pool.Get().(*http.Transport)
 	t.TLSClientConfig = tlsConfig
