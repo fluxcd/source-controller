@@ -20,10 +20,10 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
+	"net/url"
 
 	"helm.sh/helm/v3/pkg/getter"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/helm/pkg/urlutil"
 )
 
 // ClientOptionsFromSecret constructs a getter.Option slice for the given secret.
@@ -61,7 +61,7 @@ func BasicAuthFromSecret(secret corev1.Secret) (getter.Option, error) {
 //
 // Secrets with no certFile, keyFile, AND caFile are ignored, if only a
 // certBytes OR keyBytes is defined it returns an error.
-func TLSClientConfigFromSecret(secret corev1.Secret, url string) (*tls.Config, error) {
+func TLSClientConfigFromSecret(secret corev1.Secret, repositoryUrl string) (*tls.Config, error) {
 	certBytes, keyBytes, caBytes := secret.Data["certFile"], secret.Data["keyFile"], secret.Data["caFile"]
 	switch {
 	case len(certBytes)+len(keyBytes)+len(caBytes) == 0:
@@ -91,11 +91,12 @@ func TLSClientConfigFromSecret(secret corev1.Secret, url string) (*tls.Config, e
 
 	tlsConf.BuildNameToCertificate()
 
-	sni, err := urlutil.ExtractHostname(url)
+	u, err := url.Parse(repositoryUrl)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("cannot parse repository URL: %w", err)
 	}
-	tlsConf.ServerName = sni
+
+	tlsConf.ServerName = u.Hostname()
 
 	return tlsConf, nil
 }
