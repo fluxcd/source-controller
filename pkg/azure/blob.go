@@ -63,15 +63,15 @@ type BlobClient struct {
 // Bucket and Secret. It detects credentials in the Secret in the following
 // order:
 //
-//  - azidentity.ManagedIdentityCredential for a Resource ID, when a
-//   `resourceId` field is found.
-//  - azidentity.ManagedIdentityCredential for a User ID, when a `clientId`
-//    field but no `tenantId` is found.
+//  - azidentity.ClientSecretCredential when `tenantId`, `clientId` and
+//    `clientSecret` fields are found.
 //  - azidentity.ClientCertificateCredential when `tenantId`,
 //    `clientCertificate` (and optionally `clientCertificatePassword`) fields
 //    are found.
-//  - azidentity.ClientSecretCredential when `tenantId`, `clientId` and
-//    `clientSecret` fields are found.
+//  - azidentity.ManagedIdentityCredential for a User ID, when a `clientId`
+//    field but no `tenantId` is found.
+//  - azidentity.ManagedIdentityCredential for a Resource ID, when a
+//   `resourceId` field is found.
 //	- azblob.SharedKeyCredential when an `accountKey` field is found.
 //    The account name is extracted from the endpoint specified on the Bucket
 //    object.
@@ -271,31 +271,30 @@ func (c *BlobClient) ObjectIsNotFound(err error) bool {
 }
 
 func tokenCredentialFromSecret(secret *corev1.Secret) (azcore.TokenCredential, error) {
-	var token azcore.TokenCredential
-	if resourceID, ok := secret.Data[resourceIDField]; ok {
-		return azidentity.NewManagedIdentityCredential(&azidentity.ManagedIdentityCredentialOptions{
-			ID: azidentity.ResourceID(resourceID),
-		})
-	}
-	if clientID, hasClientID := secret.Data[clientIDField]; hasClientID {
-		tenantID, hasTenantID := secret.Data[tenantIDField]
-		if !hasTenantID {
-			return azidentity.NewManagedIdentityCredential(&azidentity.ManagedIdentityCredentialOptions{
-				ID: azidentity.ClientID(clientID),
-			})
+	clientID, hasClientID := secret.Data[clientIDField]
+	if tenantID, hasTenantID := secret.Data[tenantIDField]; hasTenantID && hasClientID {
+		if clientSecret, hasClientSecret := secret.Data[clientSecretField]; hasClientSecret && len(clientSecret) > 0 {
+			return azidentity.NewClientSecretCredential(string(tenantID), string(clientID), string(clientSecret), nil)
 		}
-		if clientCertificate, hasClientCertificate := secret.Data[clientCertificateField]; hasClientCertificate {
+		if clientCertificate, hasClientCertificate := secret.Data[clientCertificateField]; hasClientCertificate && len(clientCertificate) > 0 {
 			certs, key, err := azidentity.ParseCertificates(clientCertificate, secret.Data[clientCertificatePasswordField])
 			if err != nil {
 				return nil, fmt.Errorf("failed to parse client certificates: %w", err)
 			}
 			return azidentity.NewClientCertificateCredential(string(tenantID), string(clientID), certs, key, nil)
 		}
-		if clientSecret, hasClientSecret := secret.Data[clientSecretField]; hasClientSecret {
-			return azidentity.NewClientSecretCredential(string(tenantID), string(clientID), string(clientSecret), nil)
-		}
 	}
-	return token, nil
+	if hasClientID {
+		return azidentity.NewManagedIdentityCredential(&azidentity.ManagedIdentityCredentialOptions{
+			ID: azidentity.ClientID(clientID),
+		})
+	}
+	if resourceID, hasResourceID := secret.Data[resourceIDField]; hasResourceID {
+		return azidentity.NewManagedIdentityCredential(&azidentity.ManagedIdentityCredentialOptions{
+			ID: azidentity.ResourceID(resourceID),
+		})
+	}
+	return nil, nil
 }
 
 func sharedCredentialFromSecret(endpoint string, secret *corev1.Secret) (*azblob.SharedKeyCredential, error) {
