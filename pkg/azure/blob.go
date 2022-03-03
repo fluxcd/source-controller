@@ -51,6 +51,11 @@ const (
 	clientCertificateField         = "clientCertificate"
 	clientCertificatePasswordField = "clientCertificatePassword"
 	accountKeyField                = "accountKey"
+
+	// Ref: https://docs.microsoft.com/en-us/azure/aks/kubernetes-service-principal?tabs=azure-cli#manually-create-a-service-principal
+	tenantField   = "tenant"
+	appIDField    = "appId"
+	passwordField = "password"
 )
 
 // BlobClient is a minimal Azure Blob client for fetching objects.
@@ -65,6 +70,9 @@ type BlobClient struct {
 //
 //  - azidentity.ClientSecretCredential when `tenantId`, `clientId` and
 //    `clientSecret` fields are found.
+//  - azidentity.ClientSecretCredential when `tenant`, `appId` and `password`
+//    fields are found. To match with the JSON from:
+//    https://docs.microsoft.com/en-us/azure/aks/kubernetes-service-principal?tabs=azure-cli#manually-create-a-service-principal
 //  - azidentity.ClientCertificateCredential when `tenantId`,
 //    `clientCertificate` (and optionally `clientCertificatePassword`) fields
 //    are found.
@@ -126,6 +134,13 @@ func ValidateSecret(secret *corev1.Secret) error {
 				valid = true
 			}
 			if _, hasClientCertificate := secret.Data[clientCertificateField]; hasClientCertificate {
+				valid = true
+			}
+		}
+	}
+	if _, hasTenant := secret.Data[tenantField]; hasTenant {
+		if _, hasAppID := secret.Data[appIDField]; hasAppID {
+			if _, hasPassword := secret.Data[passwordField]; hasPassword {
 				valid = true
 			}
 		}
@@ -282,6 +297,13 @@ func tokenCredentialFromSecret(secret *corev1.Secret) (azcore.TokenCredential, e
 				return nil, fmt.Errorf("failed to parse client certificates: %w", err)
 			}
 			return azidentity.NewClientCertificateCredential(string(tenantID), string(clientID), certs, key, nil)
+		}
+	}
+	if tenant, hasTenant := secret.Data[tenantField]; hasTenant {
+		if appId, hasAppID := secret.Data[appIDField]; hasAppID {
+			if password, hasPassword := secret.Data[passwordField]; hasPassword {
+				return azidentity.NewClientSecretCredential(string(tenant), string(appId), string(password), nil)
+			}
 		}
 	}
 	if hasClientID {

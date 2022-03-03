@@ -77,6 +77,16 @@ func TestValidateSecret(t *testing.T) {
 			},
 		},
 		{
+			name: "valid ServicePrincipal Secret",
+			secret: &corev1.Secret{
+				Data: map[string][]byte{
+					tenantField:   []byte("some-tenant-id-"),
+					appIDField:    []byte("some-client-id-"),
+					passwordField: []byte("some-client-secret-"),
+				},
+			},
+		},
+		{
 			name: "valid SharedKey Secret",
 			secret: &corev1.Secret{
 				Data: map[string][]byte{
@@ -226,6 +236,17 @@ func Test_tokenCredentialFromSecret(t *testing.T) {
 					clientIDField:     []byte("client-id"),
 					tenantIDField:     []byte("tenant-id"),
 					clientSecretField: []byte("client-secret"),
+				},
+			},
+			want: &azidentity.ClientSecretCredential{},
+		},
+		{
+			name: "with Tenant, AppID and Password fields",
+			secret: &corev1.Secret{
+				Data: map[string][]byte{
+					appIDField:    []byte("client-id"),
+					tenantField:   []byte("tenant-id"),
+					passwordField: []byte("client-secret"),
 				},
 			},
 			want: &azidentity.ClientSecretCredential{},
