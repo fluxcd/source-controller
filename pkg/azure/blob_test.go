@@ -49,7 +49,7 @@ func TestValidateSecret(t *testing.T) {
 			},
 		},
 		{
-			name: "valid UserManagerIdentity Secret",
+			name: "valid UserManagedIdentity Secret",
 			secret: &corev1.Secret{
 				Data: map[string][]byte{
 					clientIDField: []byte("some-client-id-"),

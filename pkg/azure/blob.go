@@ -192,7 +192,7 @@ func (c *BlobClient) FGetObject(ctx context.Context, bucketName, objectName, loc
 	objectDir, _ := filepath.Split(localPath)
 	if objectDir != "" {
 		// Create any missing top level directories.
-		if err := os.MkdirAll(objectDir, 0700); err != nil {
+		if err := os.MkdirAll(objectDir, 0o700); err != nil {
 			return "", err
 		}
 	}
@@ -204,7 +204,7 @@ func (c *BlobClient) FGetObject(ctx context.Context, bucketName, objectName, loc
 	}
 
 	// Prepare target file.
-	f, err := os.OpenFile(localPath, os.O_CREATE|os.O_WRONLY, 0600)
+	f, err := os.OpenFile(localPath, os.O_CREATE|os.O_WRONLY, 0o600)
 	if err != nil {
 		return "", err
 	}
