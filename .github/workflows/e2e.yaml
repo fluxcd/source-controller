@@ -29,6 +29,11 @@ jobs:
             ${{ runner.os }}-go-
       - name: Verify
         run: make verify
+      - name: Enable integration tests
+        # Only run integration tests for main branch
+        if: github.ref == 'refs/heads/main'
+        run: |
+          echo 'GO_TEST_ARGS="-tags integration"' >> $GITHUB_ENV
       - name: Run tests
         run: make test
       - name: Setup Kubernetes
@@ -56,6 +61,11 @@ jobs:
         uses: actions/setup-go@v2
         with:
           go-version: 1.17.x
+      - name: Enable integration tests
+        # Only run integration tests for main branch
+        if: github.ref == 'refs/heads/main'
+        run: |
+          echo 'GO_TEST_ARGS="-tags integration"' >> $GITHUB_ENV
       - name: Run tests
         run: make test
       - name: Prepare
