@@ -15,7 +15,7 @@ require (
 	github.com/fluxcd/pkg/apis/meta v0.12.0
 	github.com/fluxcd/pkg/gittestserver v0.5.0
 	github.com/fluxcd/pkg/gitutil v0.1.0
-	github.com/fluxcd/pkg/helmtestserver v0.4.0
+	github.com/fluxcd/pkg/helmtestserver v0.6.0
 	github.com/fluxcd/pkg/lockedfile v0.1.0
 	github.com/fluxcd/pkg/runtime v0.13.1
 	github.com/fluxcd/pkg/ssh v0.2.0
@@ -212,12 +212,14 @@ replace github.com/docker/cli => github.com/docker/cli v20.10.9+incompatible
 
 // Fix CVE-2021-30465
 // Fix CVE-2021-43784
+// Fix CVE-2019-16884
 // Fix GO-2021-0085
 // Fix GO-2021-0087
-replace github.com/opencontainers/runc => github.com/opencontainers/runc v1.0.3
+replace github.com/opencontainers/runc => github.com/opencontainers/runc v1.1.0
 
 // Fix CVE-2021-41190
 replace github.com/opencontainers/image-spec => github.com/opencontainers/image-spec v1.0.2
 
+// Fix CVE-2022-23648
 // Fix CVE-2021-43816
-replace github.com/containerd/containerd => github.com/containerd/containerd v1.5.9
+replace github.com/containerd/containerd => github.com/containerd/containerd v1.6.1
