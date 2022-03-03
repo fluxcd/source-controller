@@ -17,8 +17,14 @@ limitations under the License.
 package azure
 
 import (
+	"bytes"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"encoding/pem"
 	"errors"
 	"fmt"
+	"math/big"
 	"testing"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
@@ -47,6 +53,16 @@ func TestValidateSecret(t *testing.T) {
 			secret: &corev1.Secret{
 				Data: map[string][]byte{
 					clientIDField: []byte("some-client-id-"),
+				},
+			},
+		},
+		{
+			name: "valid ServicePrincipal Certificate Secret",
+			secret: &corev1.Secret{
+				Data: map[string][]byte{
+					tenantIDField:          []byte("some-tenant-id-"),
+					clientIDField:          []byte("some-client-id-"),
+					clientCertificateField: []byte("some-certificate"),
 				},
 			},
 		},
@@ -193,6 +209,17 @@ func Test_tokenCredentialFromSecret(t *testing.T) {
 			want: &azidentity.ManagedIdentityCredential{},
 		},
 		{
+			name: "with TenantID, ClientID and ClientCertificate fields",
+			secret: &corev1.Secret{
+				Data: map[string][]byte{
+					clientIDField:          []byte("client-id"),
+					tenantIDField:          []byte("tenant-id"),
+					clientCertificateField: validTls(t),
+				},
+			},
+			want: &azidentity.ClientCertificateCredential{},
+		},
+		{
 			name: "with TenantID, ClientID and ClientSecret fields",
 			secret: &corev1.Secret{
 				Data: map[string][]byte{
@@ -315,4 +342,38 @@ func Test_extractAccountNameFromEndpoint1(t *testing.T) {
 
 func endpointURL(accountName string) string {
 	return fmt.Sprintf("https://%s.blob.core.windows.net", accountName)
+}
+
+func validTls(t *testing.T) []byte {
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatal("Private key cannot be created.", err.Error())
+	}
+
+	out := bytes.NewBuffer(nil)
+
+	var privateKey = &pem.Block{
+		Type:  "PRIVATE KEY",
+		Bytes: x509.MarshalPKCS1PrivateKey(key),
+	}
+	if err = pem.Encode(out, privateKey); err != nil {
+		t.Fatal("Private key cannot be PEM encoded.", err.Error())
+	}
+
+	certTemplate := x509.Certificate{
+		SerialNumber: big.NewInt(1337),
+	}
+	cert, err := x509.CreateCertificate(rand.Reader, &certTemplate, &certTemplate, &key.PublicKey, key)
+	if err != nil {
+		t.Fatal("Certificate cannot be created.", err.Error())
+	}
+	var certificate = &pem.Block{
+		Type:  "CERTIFICATE",
+		Bytes: cert,
+	}
+	if err = pem.Encode(out, certificate); err != nil {
+		t.Fatal("Certificate cannot be PEM encoded.", err.Error())
+	}
+
+	return out.Bytes()
 }

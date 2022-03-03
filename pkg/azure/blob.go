@@ -44,11 +44,13 @@ var (
 )
 
 const (
-	resourceIDField   = "resourceId"
-	clientIDField     = "clientId"
-	tenantIDField     = "tenantId"
-	clientSecretField = "clientSecret"
-	accountKeyField   = "accountKey"
+	resourceIDField                = "resourceId"
+	clientIDField                  = "clientId"
+	tenantIDField                  = "tenantId"
+	clientSecretField              = "clientSecret"
+	clientCertificateField         = "clientCertificate"
+	clientCertificatePasswordField = "clientCertificatePassword"
+	accountKeyField                = "accountKey"
 )
 
 // BlobClient is a minimal Azure Blob client for fetching objects.
@@ -62,13 +64,17 @@ type BlobClient struct {
 // order:
 //
 //  - azidentity.ManagedIdentityCredential for a Resource ID, when a
-//   resourceIDField is found.
-//  - azidentity.ManagedIdentityCredential for a User ID, when a clientIDField
-//   but no tenantIDField found.
-//  - azidentity.ClientSecretCredential when a tenantIDField, clientIDField and
-//   clientSecretField are found.
-//	- azblob.SharedKeyCredential when an accountKeyField is found. The Account
-//    Name is extracted from the endpoint specified on the Bucket object.
+//   `resourceId` field is found.
+//  - azidentity.ManagedIdentityCredential for a User ID, when a `clientId`
+//    field but no `tenantId` is found.
+//  - azidentity.ClientCertificateCredential when `tenantId`,
+//    `clientCertificate` (and optionally `clientCertificatePassword`) fields
+//    are found.
+//  - azidentity.ClientSecretCredential when `tenantId`, `clientId` and
+//    `clientSecret` fields are found.
+//	- azblob.SharedKeyCredential when an `accountKey` field is found.
+//    The account name is extracted from the endpoint specified on the Bucket
+//    object.
 //
 // If no credentials are found, a simple client without credentials is
 // returned.
@@ -119,6 +125,9 @@ func ValidateSecret(secret *corev1.Secret) error {
 			if _, hasClientSecret := secret.Data[clientSecretField]; hasClientSecret {
 				valid = true
 			}
+			if _, hasClientCertificate := secret.Data[clientCertificateField]; hasClientCertificate {
+				valid = true
+			}
 		}
 	}
 	if _, hasResourceID := secret.Data[resourceIDField]; hasResourceID {
@@ -132,8 +141,8 @@ func ValidateSecret(secret *corev1.Secret) error {
 	}
 
 	if !valid {
-		return fmt.Errorf("invalid '%s' secret data: requires a '%s', '%s', or '%s' field, or a combination of '%s', '%s' and '%s'",
-			secret.Name, resourceIDField, clientIDField, accountKeyField, tenantIDField, clientIDField, clientSecretField)
+		return fmt.Errorf("invalid '%s' secret data: requires a '%s', '%s', or '%s' field, a combination of '%s', '%s' and '%s', or '%s', '%s' and '%s'",
+			secret.Name, resourceIDField, clientIDField, accountKeyField, tenantIDField, clientIDField, clientSecretField, tenantIDField, clientIDField, clientCertificateField)
 	}
 	return nil
 }
@@ -274,6 +283,13 @@ func tokenCredentialFromSecret(secret *corev1.Secret) (azcore.TokenCredential, e
 			return azidentity.NewManagedIdentityCredential(&azidentity.ManagedIdentityCredentialOptions{
 				ID: azidentity.ClientID(clientID),
 			})
+		}
+		if clientCertificate, hasClientCertificate := secret.Data[clientCertificateField]; hasClientCertificate {
+			certs, key, err := azidentity.ParseCertificates(clientCertificate, secret.Data[clientCertificatePasswordField])
+			if err != nil {
+				return nil, fmt.Errorf("failed to parse client certificates: %w", err)
+			}
+			return azidentity.NewClientCertificateCredential(string(tenantID), string(clientID), certs, key, nil)
 		}
 		if clientSecret, hasClientSecret := secret.Data[clientSecretField]; hasClientSecret {
 			return azidentity.NewClientSecretCredential(string(tenantID), string(clientID), string(clientSecret), nil)
