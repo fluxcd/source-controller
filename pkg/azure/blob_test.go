@@ -41,14 +41,6 @@ func TestValidateSecret(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name: "valid SystemManagedIdentity Secret",
-			secret: &corev1.Secret{
-				Data: map[string][]byte{
-					resourceIDField: []byte("/some/resource/id"),
-				},
-			},
-		},
-		{
 			name: "valid UserManagedIdentity Secret",
 			secret: &corev1.Secret{
 				Data: map[string][]byte{
@@ -77,20 +69,18 @@ func TestValidateSecret(t *testing.T) {
 			},
 		},
 		{
-			name: "valid ServicePrincipal Secret",
-			secret: &corev1.Secret{
-				Data: map[string][]byte{
-					tenantField:   []byte("some-tenant-id-"),
-					appIDField:    []byte("some-client-id-"),
-					passwordField: []byte("some-client-secret-"),
-				},
-			},
-		},
-		{
 			name: "valid SharedKey Secret",
 			secret: &corev1.Secret{
 				Data: map[string][]byte{
 					accountKeyField: []byte("some-account-key"),
+				},
+			},
+		},
+		{
+			name: "valid AuthorityHost Secret",
+			secret: &corev1.Secret{
+				Data: map[string][]byte{
+					authorityHostField: []byte("some.host.com"),
 				},
 			},
 		},
@@ -201,15 +191,6 @@ func Test_tokenCredentialFromSecret(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name: "with ResourceID field",
-			secret: &corev1.Secret{
-				Data: map[string][]byte{
-					resourceIDField: []byte("resource-id"),
-				},
-			},
-			want: &azidentity.ManagedIdentityCredential{},
-		},
-		{
 			name: "with ClientID field",
 			secret: &corev1.Secret{
 				Data: map[string][]byte{
@@ -236,17 +217,6 @@ func Test_tokenCredentialFromSecret(t *testing.T) {
 					clientIDField:     []byte("client-id"),
 					tenantIDField:     []byte("tenant-id"),
 					clientSecretField: []byte("client-secret"),
-				},
-			},
-			want: &azidentity.ClientSecretCredential{},
-		},
-		{
-			name: "with Tenant, AppID and Password fields",
-			secret: &corev1.Secret{
-				Data: map[string][]byte{
-					appIDField:    []byte("client-id"),
-					tenantField:   []byte("tenant-id"),
-					passwordField: []byte("client-secret"),
 				},
 			},
 			want: &azidentity.ClientSecretCredential{},
@@ -320,6 +290,14 @@ func Test_sharedCredentialFromSecret(t *testing.T) {
 			g.Expect(got).To(BeNil())
 		})
 	}
+}
+
+func Test_chainCredentialWithSecret(t *testing.T) {
+	g := NewWithT(t)
+
+	got, err := chainCredentialWithSecret(nil)
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(got).To(BeAssignableToTypeOf(&azidentity.ChainedTokenCredential{}))
 }
 
 func Test_extractAccountNameFromEndpoint1(t *testing.T) {
