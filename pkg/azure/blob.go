@@ -66,22 +66,16 @@ type BlobClient struct {
 //
 //  - azidentity.ClientSecretCredential when `tenantId`, `clientId` and
 //    `clientSecret` fields are found.
-//  - azidentity.ClientSecretCredential when `tenant`, `appId` and `password`
-//    fields are found. To match with the JSON from:
-//    https://docs.microsoft.com/en-us/azure/aks/kubernetes-service-principal?tabs=azure-cli#manually-create-a-service-principal
 //  - azidentity.ClientCertificateCredential when `tenantId`,
 //    `clientCertificate` (and optionally `clientCertificatePassword`) fields
 //    are found.
 //  - azidentity.ManagedIdentityCredential for a User ID, when a `clientId`
 //    field but no `tenantId` is found.
-//  - azidentity.ManagedIdentityCredential for a Resource ID, when a
-//   `resourceId` field is found.
-//	- azblob.SharedKeyCredential when an `accountKey` field is found.
+//  - azblob.SharedKeyCredential when an `accountKey` field is found.
 //    The account name is extracted from the endpoint specified on the Bucket
 //    object.
 //  - azidentity.ChainedTokenCredential with azidentity.EnvironmentCredential
-//    and azidentity.ManagedIdentityCredential with defaults if no Secret is
-//    given.
+//    and azidentity.ManagedIdentityCredential.
 //
 // If no credentials are found, and the azidentity.ChainedTokenCredential can
 // not be established. A simple client without credentials is returned.
@@ -292,16 +286,11 @@ func (c *BlobClient) ObjectIsNotFound(err error) bool {
 // based on the data fields of the given Secret. It returns, in order:
 // - azidentity.ClientSecretCredential when `tenantId`, `clientId` and
 //   `clientSecret` fields are found.
-// - azidentity.ClientSecretCredential when `tenant`, `appId` and `password`
-//   fields are found. To match with the JSON from:
-//   https://docs.microsoft.com/en-us/azure/aks/kubernetes-service-principal?tabs=azure-cli#manually-create-a-service-principal
 // - azidentity.ClientCertificateCredential when `tenantId`,
 //   `clientCertificate` (and optionally `clientCertificatePassword`) fields
 //   are found.
 // - azidentity.ManagedIdentityCredential for a User ID, when a `clientId`
 //   field but no `tenantId` is found.
-// - azidentity.ManagedIdentityCredential for a Resource ID, when a
-//   `resourceId` field is found.
 // - Nil, if no valid set of credential fields was found.
 func tokenCredentialFromSecret(secret *corev1.Secret) (azcore.TokenCredential, error) {
 	if secret == nil {
@@ -357,10 +346,14 @@ func sharedCredentialFromSecret(endpoint string, secret *corev1.Secret) (*azblob
 // chainCredentialWithSecret tries to create a set of tokens, and returns an
 // azidentity.ChainedTokenCredential if at least one of the following tokens was
 // successfully created:
-// - azidentity.EnvironmentCredential
-// - azidentity.ManagedIdentityCredential
-// If a Secret with an `authorityHost` is provided, this is set on the
-// azidentity.EnvironmentCredentialOptions. It may return nil.
+//
+// - azidentity.EnvironmentCredential with `authorityHost` from Secret, if
+//   provided.
+// - azidentity.ManagedIdentityCredential with Client ID from AZURE_CLIENT_ID
+//   environment variable, if found.
+// - azidentity.ManagedIdentityCredential with defaults.
+//
+// If no valid token is created, it returns nil.
 func chainCredentialWithSecret(secret *corev1.Secret) (azcore.TokenCredential, error) {
 	var creds []azcore.TokenCredential
 
@@ -373,6 +366,13 @@ func chainCredentialWithSecret(secret *corev1.Secret) (azcore.TokenCredential, e
 
 	if token, _ := azidentity.NewEnvironmentCredential(credOpts); token != nil {
 		creds = append(creds, token)
+	}
+	if clientID := os.Getenv("AZURE_CLIENT_ID"); clientID != "" {
+		if token, _ := azidentity.NewManagedIdentityCredential(&azidentity.ManagedIdentityCredentialOptions{
+			ID: azidentity.ClientID(clientID),
+		}); token != nil {
+			creds = append(creds, token)
+		}
 	}
 	if token, _ := azidentity.NewManagedIdentityCredential(nil); token != nil {
 		creds = append(creds, token)
