@@ -812,11 +812,17 @@ func TestGitRepositoryReconciler_reconcileArtifact(t *testing.T) {
 			name:    "Target path does not exists",
 			dir:     "testdata/git/foo",
 			wantErr: true,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.StorageOperationFailedCondition, sourcev1.StorageOperationFailedReason, "failed to stat target path"),
+			},
 		},
 		{
 			name:    "Target path is not a directory",
 			dir:     "testdata/git/repository/foo.txt",
 			wantErr: true,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.StorageOperationFailedCondition, sourcev1.StorageOperationFailedReason, "invalid target path"),
+			},
 		},
 	}
 	artifactSize := func(g *WithT, artifactURL string) *int64 {

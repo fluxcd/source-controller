@@ -18,6 +18,7 @@ package summarize
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	. "github.com/onsi/gomega"
@@ -26,6 +27,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/fluxcd/pkg/apis/meta"
+	"github.com/fluxcd/pkg/runtime/conditions"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
 	"github.com/fluxcd/source-controller/internal/object"
 	"github.com/fluxcd/source-controller/internal/reconcile"
@@ -85,6 +87,150 @@ func TestRecordReconcileReq(t *testing.T) {
 
 			if tt.afterFunc != nil {
 				tt.afterFunc(g, obj)
+			}
+		})
+	}
+}
+
+func TestNotifySuccess(t *testing.T) {
+	tests := []struct {
+		name             string
+		oldObjBeforeFunc func(obj conditions.Setter)
+		newObjBeforeFunc func(obj conditions.Setter)
+		notification     Notification
+		failConditions   []string
+		result           reconcile.Result
+		resultErr        error
+		wantEvent        string
+	}{
+		{
+			name: "fetch failed recovery",
+			oldObjBeforeFunc: func(obj conditions.Setter) {
+				conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.GitOperationFailedReason, "fail msg foo")
+				conditions.MarkFalse(obj, meta.ReadyCondition, meta.FailedReason, "something failed")
+			},
+			newObjBeforeFunc: func(obj conditions.Setter) {
+				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "artifact ready")
+			},
+			failConditions: []string{sourcev1.FetchFailedCondition, sourcev1.IncludeUnavailableCondition},
+			result:         reconcile.ResultSuccess,
+			wantEvent:      "resolved 'GitOperationFailed'",
+		},
+		{
+			name: "fetch failed recovery with notification",
+			oldObjBeforeFunc: func(obj conditions.Setter) {
+				conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.GitOperationFailedReason, "fail msg foo")
+				conditions.MarkFalse(obj, meta.ReadyCondition, meta.FailedReason, "something failed")
+			},
+			newObjBeforeFunc: func(obj conditions.Setter) {
+				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "artifact ready")
+			},
+			notification: Notification{
+				Reason:  "NewArtifact",
+				Message: "stored artifact for commit 'Foo'",
+				Annotations: map[string]string{
+					"revision": "some-rev",
+					"checksum": "some-checksum",
+				},
+			},
+			failConditions: []string{sourcev1.FetchFailedCondition, sourcev1.IncludeUnavailableCondition},
+			result:         reconcile.ResultSuccess,
+			wantEvent:      "stored artifact for commit 'Foo'",
+		},
+		{
+			name: "fetch failed, no recovery",
+			oldObjBeforeFunc: func(obj conditions.Setter) {
+				conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.GitOperationFailedReason, "fail msg foo")
+				conditions.MarkFalse(obj, meta.ReadyCondition, meta.FailedReason, "something failed")
+			},
+			newObjBeforeFunc: func(obj conditions.Setter) {
+				conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.GitOperationFailedReason, "fail msg foo")
+				conditions.MarkFalse(obj, meta.ReadyCondition, meta.FailedReason, "something failed")
+			},
+			failConditions: []string{sourcev1.FetchFailedCondition, sourcev1.IncludeUnavailableCondition},
+			result:         reconcile.ResultSuccess,
+		},
+		{
+			name: "notification without failure",
+			oldObjBeforeFunc: func(obj conditions.Setter) {
+				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "artifact ready")
+			},
+			newObjBeforeFunc: func(obj conditions.Setter) {
+				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "artifact ready")
+			},
+			notification: Notification{
+				Reason:  "NewArtifact",
+				Message: "stored artifact for commit 'Foo'",
+				Annotations: map[string]string{
+					"revision": "some-rev",
+					"checksum": "some-checksum",
+				},
+			},
+			failConditions: []string{sourcev1.FetchFailedCondition, sourcev1.IncludeUnavailableCondition},
+			wantEvent:      "stored artifact for commit 'Foo'",
+			result:         reconcile.ResultSuccess,
+		},
+		{
+			name:           "no notification, no failure",
+			failConditions: []string{sourcev1.FetchFailedCondition, sourcev1.IncludeUnavailableCondition},
+			result:         reconcile.ResultSuccess,
+		},
+		{
+			name: "empty result",
+			oldObjBeforeFunc: func(obj conditions.Setter) {
+				conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.GitOperationFailedReason, "fail msg foo")
+				conditions.MarkFalse(obj, meta.ReadyCondition, meta.FailedReason, "something failed")
+			},
+			newObjBeforeFunc: func(obj conditions.Setter) {
+				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "artifact ready")
+			},
+			failConditions: []string{sourcev1.FetchFailedCondition, sourcev1.IncludeUnavailableCondition},
+			result:         reconcile.ResultEmpty,
+		},
+		{
+			name: "error result",
+			oldObjBeforeFunc: func(obj conditions.Setter) {
+				conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.GitOperationFailedReason, "fail msg foo")
+				conditions.MarkFalse(obj, meta.ReadyCondition, meta.FailedReason, "something failed")
+			},
+			newObjBeforeFunc: func(obj conditions.Setter) {
+				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "artifact ready")
+			},
+			failConditions: []string{sourcev1.FetchFailedCondition, sourcev1.IncludeUnavailableCondition},
+			result:         reconcile.ResultSuccess,
+			resultErr:      fmt.Errorf("some error"),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+			recorder := record.NewFakeRecorder(32)
+
+			oldObj := &sourcev1.GitRepository{}
+			newObj := oldObj.DeepCopy()
+
+			if tt.oldObjBeforeFunc != nil {
+				tt.oldObjBeforeFunc(oldObj)
+			}
+			if tt.newObjBeforeFunc != nil {
+				tt.newObjBeforeFunc(newObj)
+			}
+
+			resultProcessor := NotifySuccess(oldObj, tt.notification, tt.failConditions)
+
+			resultProcessor(context.TODO(), recorder, newObj, tt.result, tt.resultErr)
+
+			select {
+			case x, ok := <-recorder.Events:
+				g.Expect(ok).To(Equal(tt.wantEvent != ""), "unexpected event received")
+				if tt.wantEvent != "" {
+					g.Expect(x).To(ContainSubstring(tt.wantEvent))
+				}
+			default:
+				if tt.wantEvent != "" {
+					t.Errorf("expected some event to be emitted")
+				}
 			}
 		})
 	}

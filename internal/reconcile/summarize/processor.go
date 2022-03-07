@@ -18,13 +18,15 @@ package summarize
 
 import (
 	"context"
+	"fmt"
+	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 	kuberecorder "k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/fluxcd/pkg/apis/meta"
+	"github.com/fluxcd/pkg/runtime/conditions"
 	serror "github.com/fluxcd/source-controller/internal/error"
 	"github.com/fluxcd/source-controller/internal/object"
 	"github.com/fluxcd/source-controller/internal/reconcile"
@@ -33,7 +35,7 @@ import (
 // ResultProcessor processes the results of reconciliation (the object, result
 // and error). Any errors during processing need not result in the
 // reconciliation failure. The errors can be recorded as logs and events.
-type ResultProcessor func(context.Context, kuberecorder.EventRecorder, client.Object, reconcile.Result, error)
+type ResultProcessor func(context.Context, kuberecorder.EventRecorder, conditions.Setter, reconcile.Result, error)
 
 // RecordContextualError is a ResultProcessor that records the contextual errors
 // based on their types.
@@ -41,7 +43,7 @@ type ResultProcessor func(context.Context, kuberecorder.EventRecorder, client.Ob
 // runtime handles the logging of the error.
 // An event is recorded and an error is logged for errors that are known to be
 // swallowed, not returned to the runtime.
-func RecordContextualError(ctx context.Context, recorder kuberecorder.EventRecorder, obj client.Object, _ reconcile.Result, err error) {
+func RecordContextualError(ctx context.Context, recorder kuberecorder.EventRecorder, obj conditions.Setter, _ reconcile.Result, err error) {
 	switch e := err.(type) {
 	case *serror.Event:
 		recorder.Eventf(obj, corev1.EventTypeWarning, e.Reason, e.Error())
@@ -59,8 +61,49 @@ func RecordContextualError(ctx context.Context, recorder kuberecorder.EventRecor
 // RecordReconcileReq is a ResultProcessor that checks the reconcile
 // annotation value and sets it in the object status as
 // status.lastHandledReconcileAt.
-func RecordReconcileReq(ctx context.Context, recorder kuberecorder.EventRecorder, obj client.Object, _ reconcile.Result, _ error) {
+func RecordReconcileReq(ctx context.Context, recorder kuberecorder.EventRecorder, obj conditions.Setter, _ reconcile.Result, _ error) {
 	if v, ok := meta.ReconcileAnnotationValue(obj.GetAnnotations()); ok {
 		object.SetStatusLastHandledReconcileAt(obj, v)
+	}
+}
+
+// NotifySuccess returns a ResultProcessor that emits success event based on the
+// reconciliation results. It takes an old version of the target object, a
+// Notification and fail conditions to analyze the result of reconciliation and
+// create an event. In order to emit unique events, it suppresses recovery event
+// if the success notification is not empty. If there's no success notification,
+// but a recovery from a failure, only the recovery message is emitted as an
+// event. This helps create events that are informational to the notification
+// service and useful as Kubernetes native events with event counter for similar
+// events.
+func NotifySuccess(oldObj conditions.Setter, n Notification, failConditions []string) ResultProcessor {
+	return func(ctx context.Context, recorder kuberecorder.EventRecorder, obj conditions.Setter, result reconcile.Result, err error) {
+		if err == nil && result == reconcile.ResultSuccess {
+			var annotations map[string]string
+			reason := meta.SucceededReason
+			messages := []string{}
+
+			// Check the old object status conditions to determine if there was
+			// a recovery from some failure.
+			for _, failCondition := range failConditions {
+				oldFailedCondition := conditions.Get(oldObj, failCondition)
+				if oldFailedCondition != nil && conditions.Get(obj, failCondition) == nil {
+					messages = append(messages, fmt.Sprintf("resolved '%s'", oldFailedCondition.Reason))
+				}
+			}
+
+			// Populate event metadata from the new artifact notification,
+			// suppressing previous information.
+			if !n.IsZero() {
+				annotations = n.Annotations
+				reason = n.Reason
+				messages = []string{n.Message}
+			}
+
+			// No event if there's no message.
+			if len(messages) > 0 {
+				recorder.AnnotatedEventf(obj, annotations, corev1.EventTypeNormal, reason, strings.Join(messages, ", "))
+			}
+		}
 	}
 }

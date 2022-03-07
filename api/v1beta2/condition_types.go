@@ -43,6 +43,10 @@ const (
 	// of a Source's Artifact.
 	// If True, the Source can be in an ArtifactOutdatedCondition.
 	BuildFailedCondition string = "BuildFailed"
+
+	// StorageOperationFailedCondition indicates a transient or persistent failure related to storage. If True, the
+	// reconciliation failed while performing some filesystem operation.
+	StorageOperationFailedCondition string = "StorageOperationFailed"
 )
 
 const (

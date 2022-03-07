@@ -46,6 +46,26 @@ type Conditions struct {
 	NegativePolarity []string
 }
 
+// Notification contains information for constructing an event to be emitted. It
+// is used to define notifications from the SummarizeAndPatch helper.
+// Notification in itself doesn't have any type, like warning or normal, based
+// on the context, a notification can be used to construct different types of
+// events.
+type Notification struct {
+	Reason      string
+	Message     string
+	Annotations map[string]string
+}
+
+// IsZero evaluates if the Notification is empty based on the Reason and Message
+// values.
+func (n Notification) IsZero() bool {
+	if n.Reason == "" && n.Message == "" {
+		return true
+	}
+	return false
+}
+
 // Helper is SummarizeAndPatch helper.
 type Helper struct {
 	recorder    kuberecorder.EventRecorder
