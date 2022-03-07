@@ -85,7 +85,7 @@ type Builder interface {
 	// Reference and BuildOptions, and writes it to p.
 	// It returns the Build result, or an error.
 	// It may return an error for unsupported Reference implementations.
-	Build(ctx context.Context, ref Reference, p string, opts BuildOptions) (*Build, error)
+	Build(ctx context.Context, ref Reference, p string, opts BuildOptions, keyring []byte) (*Build, error)
 }
 
 // BuildOptions provides a list of options for Builder.Build.
@@ -125,6 +125,10 @@ type Build struct {
 	// Path is the absolute path to the packaged chart.
 	// Can be empty, in which case a failure should be assumed.
 	Path string
+	// ProvFilePath is the absolute path to a provenance file.
+	// Can be empty, in which case it should be assumed that the packaged
+	// chart is not verified.
+	ProvFilePath string
 	// ValuesFiles is the list of files used to compose the chart's
 	// default "values.yaml".
 	ValuesFiles []string

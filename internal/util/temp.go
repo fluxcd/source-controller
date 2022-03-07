@@ -50,3 +50,29 @@ func pattern(obj client.Object) (p string) {
 	kind := strings.ToLower(obj.GetObjectKind().GroupVersionKind().Kind)
 	return fmt.Sprintf("%s-%s-%s-", kind, obj.GetNamespace(), obj.GetName())
 }
+
+// TODO: think of a better name?
+func WriteBytesToFile(bytes []byte, out string, temp bool) (*os.File, error) {
+	var file *os.File
+	var err error
+
+	if temp {
+		file, err = os.CreateTemp("", filepath.Base(out))
+		if err != nil {
+			return nil, fmt.Errorf("failed to create temporary file %s: %w", filepath.Base(out), err)
+		}
+	} else {
+		file, err = os.Create(out)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create temporary file for chart %s: %w", out, err)
+		}
+	}
+	if _, err := file.Write(bytes); err != nil {
+		_ = file.Close()
+		return nil, fmt.Errorf("failed to write to file %s: %w", file.Name(), err)
+	}
+	if err := file.Close(); err != nil {
+		return nil, err
+	}
+	return file, nil
+}

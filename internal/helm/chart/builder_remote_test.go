@@ -36,9 +36,10 @@ import (
 
 // mockIndexChartGetter returns specific response for index and chart queries.
 type mockIndexChartGetter struct {
-	IndexResponse []byte
-	ChartResponse []byte
-	requestedURL  string
+	IndexResponse          []byte
+	ChartResponse          []byte
+	ProvenanceFileResponse []byte
+	requestedURL           string
 }
 
 func (g *mockIndexChartGetter) Get(u string, _ ...helmgetter.Option) (*bytes.Buffer, error) {
@@ -46,6 +47,9 @@ func (g *mockIndexChartGetter) Get(u string, _ ...helmgetter.Option) (*bytes.Buf
 	r := g.ChartResponse
 	if strings.HasSuffix(u, "index.yaml") {
 		r = g.IndexResponse
+	}
+	if strings.HasSuffix(u, ".prov") {
+		r = g.ProvenanceFileResponse
 	}
 	return bytes.NewBuffer(r), nil
 }
@@ -68,12 +72,18 @@ entries:
     - urls:
         - https://example.com/grafana.tgz
       description: string
-      version: 6.17.4
+      version: 0.1.0
+      name: helmchart
 `)
 
+	provFile, err := os.ReadFile("./../testdata/charts/helmchart-0.1.0.tgz.prov")
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(provFile).ToNot(BeEmpty())
+
 	mockGetter := &mockIndexChartGetter{
-		IndexResponse: index,
-		ChartResponse: chartGrafana,
+		IndexResponse:          index,
+		ChartResponse:          chartGrafana,
+		ProvenanceFileResponse: provFile,
 	}
 
 	mockRepo := func() *repository.ChartRepository {
@@ -83,6 +93,10 @@ entries:
 			RWMutex: &sync.RWMutex{},
 		}
 	}
+
+	keyring, err := os.ReadFile("./../testdata/charts/pub.gpg")
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(keyring).ToNot(BeEmpty())
 
 	tests := []struct {
 		name         string
@@ -128,7 +142,7 @@ entries:
 			reference:    RemoteReference{Name: "grafana"},
 			repository:   mockRepo(),
 			buildOpts:    BuildOptions{VersionMetadata: "foo"},
-			wantVersion:  "6.17.4+foo",
+			wantVersion:  "0.1.0+foo",
 			wantPackaged: true,
 		},
 		{
@@ -147,7 +161,7 @@ entries:
 				ValuesFiles: []string{"a.yaml", "b.yaml", "c.yaml"},
 			},
 			repository:  mockRepo(),
-			wantVersion: "6.17.4",
+			wantVersion: "0.1.0",
 			wantValues: chartutil.Values{
 				"a": "b",
 				"b": "d",
@@ -173,7 +187,10 @@ entries:
 
 			b := NewRemoteBuilder(tt.repository)
 
-			cb, err := b.Build(context.TODO(), tt.reference, targetPath, tt.buildOpts)
+			if tt.buildOpts.VersionMetadata != "" {
+				keyring = nil
+			}
+			cb, err := b.Build(context.TODO(), tt.reference, targetPath, tt.buildOpts, keyring)
 
 			if tt.wantErr != "" {
 				g.Expect(err).To(HaveOccurred())
@@ -204,6 +221,14 @@ func TestRemoteBuilder_Build_CachedChart(t *testing.T) {
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(chartGrafana).ToNot(BeEmpty())
 
+	provFile, err := os.ReadFile("./../testdata/charts/helmchart-0.1.0.tgz.prov")
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(provFile).ToNot(BeEmpty())
+
+	keyring, err := os.ReadFile("./../testdata/charts/pub.gpg")
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(keyring).ToNot(BeEmpty())
+
 	index := []byte(`
 apiVersion: v1
 entries:
@@ -216,8 +241,9 @@ entries:
 `)
 
 	mockGetter := &mockIndexChartGetter{
-		IndexResponse: index,
-		ChartResponse: chartGrafana,
+		IndexResponse:          index,
+		ChartResponse:          chartGrafana,
+		ProvenanceFileResponse: provFile,
 	}
 	mockRepo := func() *repository.ChartRepository {
 		return &repository.ChartRepository{
@@ -242,10 +268,12 @@ entries:
 	defer os.RemoveAll(tmpDir)
 
 	// Build first time.
-	targetPath := filepath.Join(tmpDir, "chart1.tgz")
+	// The file name should be the same as the actual chart in testdata, so that
+	// we can verify it's signature using the provenance file.
+	targetPath := filepath.Join(tmpDir, "helmchart-0.1.0.tgz")
 	defer os.RemoveAll(targetPath)
 	buildOpts := BuildOptions{}
-	cb, err := b.Build(context.TODO(), reference, targetPath, buildOpts)
+	cb, err := b.Build(context.TODO(), reference, targetPath, buildOpts, keyring)
 	g.Expect(err).ToNot(HaveOccurred())
 
 	// Set the result as the CachedChart for second build.
@@ -254,13 +282,13 @@ entries:
 	// Rebuild with a new path.
 	targetPath2 := filepath.Join(tmpDir, "chart2.tgz")
 	defer os.RemoveAll(targetPath2)
-	cb, err = b.Build(context.TODO(), reference, targetPath2, buildOpts)
+	cb, err = b.Build(context.TODO(), reference, targetPath2, buildOpts, keyring)
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(cb.Path).To(Equal(targetPath))
 
 	// Rebuild with build option Force.
 	buildOpts.Force = true
-	cb, err = b.Build(context.TODO(), reference, targetPath2, buildOpts)
+	cb, err = b.Build(context.TODO(), reference, targetPath2, buildOpts, keyring)
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(cb.Path).To(Equal(targetPath2))
 }
@@ -346,9 +374,8 @@ func Test_validatePackageAndWriteToPath(t *testing.T) {
 	g.Expect(err).ToNot(HaveOccurred())
 	defer os.RemoveAll(tmpDir)
 
-	validF, err := os.Open("./../testdata/charts/helmchart-0.1.0.tgz")
+	validF, err := os.ReadFile("./../testdata/charts/helmchart-0.1.0.tgz")
 	g.Expect(err).ToNot(HaveOccurred())
-	defer validF.Close()
 
 	chartPath := filepath.Join(tmpDir, "chart.tgz")
 	defer os.Remove(chartPath)
@@ -356,9 +383,8 @@ func Test_validatePackageAndWriteToPath(t *testing.T) {
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(chartPath).To(BeARegularFile())
 
-	emptyF, err := os.Open("./../testdata/charts/empty.tgz")
+	emptyF, err := os.ReadFile("./../testdata/charts/empty.tgz")
 	g.Expect(err).ToNot(HaveOccurred())
-	defer emptyF.Close()
 	err = validatePackageAndWriteToPath(emptyF, filepath.Join(tmpDir, "out.tgz"))
 	g.Expect(err).To(HaveOccurred())
 }

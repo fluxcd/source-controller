@@ -77,11 +77,12 @@ func IsPersistentBuildErrorReason(err error) bool {
 }
 
 var (
-	ErrChartReference     = BuildErrorReason{Reason: "InvalidChartReference", Summary: "invalid chart reference"}
-	ErrChartPull          = BuildErrorReason{Reason: "ChartPullError", Summary: "chart pull error"}
-	ErrChartMetadataPatch = BuildErrorReason{Reason: "MetadataPatchError", Summary: "chart metadata patch error"}
-	ErrValuesFilesMerge   = BuildErrorReason{Reason: "ValuesFilesError", Summary: "values files merge error"}
-	ErrDependencyBuild    = BuildErrorReason{Reason: "DependencyBuildError", Summary: "dependency build error"}
-	ErrChartPackage       = BuildErrorReason{Reason: "ChartPackageError", Summary: "chart package error"}
-	ErrUnknown            = BuildErrorReason{Reason: "Unknown", Summary: "unknown build error"}
+	ErrChartReference         = BuildErrorReason{Reason: "InvalidChartReference", Summary: "invalid chart reference"}
+	ErrChartPull              = BuildErrorReason{Reason: "ChartPullError", Summary: "chart pull error"}
+	ErrProvenanceVerification = BuildErrorReason{Reason: "ProvenanceVerificationError", Summary: "provenance file verification error"}
+	ErrChartMetadataPatch     = BuildErrorReason{Reason: "MetadataPatchError", Summary: "chart metadata patch error"}
+	ErrValuesFilesMerge       = BuildErrorReason{Reason: "ValuesFilesError", Summary: "values files merge error"}
+	ErrDependencyBuild        = BuildErrorReason{Reason: "DependencyBuildError", Summary: "dependency build error"}
+	ErrChartPackage           = BuildErrorReason{Reason: "ChartPackageError", Summary: "chart package error"}
+	ErrUnknown                = BuildErrorReason{Reason: "Unknown", Summary: "unknown build error"}
 )

@@ -17,6 +17,7 @@ limitations under the License.
 package chart
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -62,7 +63,7 @@ func NewLocalBuilder(dm *DependencyManager) Builder {
 // If the LocalReference.Path refers to a chart directory, dependencies are
 // confirmed to be present using the DependencyManager, while attempting to
 // resolve any missing.
-func (b *localChartBuilder) Build(ctx context.Context, ref Reference, p string, opts BuildOptions) (*Build, error) {
+func (b *localChartBuilder) Build(ctx context.Context, ref Reference, p string, opts BuildOptions, keyring []byte) (*Build, error) {
 	localRef, ok := ref.(LocalReference)
 	if !ok {
 		err := fmt.Errorf("expected local chart reference")
@@ -108,16 +109,37 @@ func (b *localChartBuilder) Build(ctx context.Context, ref Reference, p string, 
 	// - Chart name from cached chart matches resolved name
 	// - Chart version from cached chart matches calculated version
 	// - BuildOptions.Force is False
+	var provFilePath string
+	verifyProvFile := func(chart, provFile string) error {
+		if keyring != nil {
+			if _, err := os.Stat(provFile); err != nil {
+				err = fmt.Errorf("could not load provenance file %s: %w", provFile, err)
+				return &BuildError{Reason: ErrProvenanceVerification, Err: err}
+			}
+			err := VerifyProvenanceFile(bytes.NewReader(keyring), chart, provFile)
+			if err != nil {
+				err = fmt.Errorf("failed to verify helm chart using provenance file: %w", err)
+				return &BuildError{Reason: ErrProvenanceVerification, Err: err}
+			}
+		}
+		return nil
+	}
 	if opts.CachedChart != "" && !opts.Force {
 		if curMeta, err = LoadChartMetadataFromArchive(opts.CachedChart); err == nil {
 			// If the cached metadata is corrupt, we ignore its existence
 			// and continue the build
 			if err = curMeta.Validate(); err == nil {
 				if result.Name == curMeta.Name && result.Version == curMeta.Version {
+					if !requiresPackaging {
+						provFilePath = provenanceFilePath(opts.CachedChart)
+						if err = verifyProvFile(opts.CachedChart, provFilePath); err != nil {
+							return nil, err
+						}
+						result.ProvFilePath = provFilePath
+					}
 					result.Path = opts.CachedChart
 					result.ValuesFiles = opts.GetValuesFiles()
 					result.Packaged = requiresPackaging
-
 					return result, nil
 				}
 			}
@@ -126,9 +148,13 @@ func (b *localChartBuilder) Build(ctx context.Context, ref Reference, p string, 
 
 	// If the chart at the path is already packaged and no custom values files
 	// options are set, we can copy the chart without making modifications
+	provFilePath = provenanceFilePath(localRef.Path)
 	if !requiresPackaging {
 		if err = copyFileToPath(localRef.Path, p); err != nil {
 			return result, &BuildError{Reason: ErrChartPull, Err: err}
+		}
+		if err = verifyProvFile(localRef.Path, provFilePath); err != nil {
+			return result, err
 		}
 		result.Path = p
 		return result, nil

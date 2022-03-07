@@ -40,6 +40,11 @@ func TestLocalBuilder_Build(t *testing.T) {
 	chartB, err := os.ReadFile("./../testdata/charts/helmchart-0.1.0.tgz")
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(chartB).ToNot(BeEmpty())
+
+	keyring, err := os.ReadFile("./../testdata/charts/pub.gpg")
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(keyring).ToNot(BeEmpty())
+
 	mockRepo := func() *repository.ChartRepository {
 		return &repository.ChartRepository{
 			Client: &mockGetter{
@@ -210,7 +215,7 @@ fullnameOverride: "full-foo-name-override"`),
 			)
 
 			b := NewLocalBuilder(dm)
-			cb, err := b.Build(context.TODO(), tt.reference, targetPath, tt.buildOpts)
+			cb, err := b.Build(context.TODO(), tt.reference, targetPath, tt.buildOpts, keyring)
 
 			if tt.wantErr != "" {
 				g.Expect(err).To(HaveOccurred())
@@ -243,6 +248,10 @@ func TestLocalBuilder_Build_CachedChart(t *testing.T) {
 
 	reference := LocalReference{Path: "./../testdata/charts/helmchart"}
 
+	keyring, err := os.ReadFile("./../testdata/charts/pub.gpg")
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(keyring).ToNot(BeEmpty())
+
 	dm := NewDependencyManager()
 	b := NewLocalBuilder(dm)
 
@@ -253,7 +262,7 @@ func TestLocalBuilder_Build_CachedChart(t *testing.T) {
 	// Build first time.
 	targetPath := filepath.Join(tmpDir, "chart1.tgz")
 	buildOpts := BuildOptions{}
-	cb, err := b.Build(context.TODO(), reference, targetPath, buildOpts)
+	cb, err := b.Build(context.TODO(), reference, targetPath, buildOpts, keyring)
 	g.Expect(err).ToNot(HaveOccurred())
 
 	// Set the result as the CachedChart for second build.
@@ -261,13 +270,13 @@ func TestLocalBuilder_Build_CachedChart(t *testing.T) {
 
 	targetPath2 := filepath.Join(tmpDir, "chart2.tgz")
 	defer os.RemoveAll(targetPath2)
-	cb, err = b.Build(context.TODO(), reference, targetPath2, buildOpts)
+	cb, err = b.Build(context.TODO(), reference, targetPath2, buildOpts, keyring)
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(cb.Path).To(Equal(targetPath))
 
 	// Rebuild with build option Force.
 	buildOpts.Force = true
-	cb, err = b.Build(context.TODO(), reference, targetPath2, buildOpts)
+	cb, err = b.Build(context.TODO(), reference, targetPath2, buildOpts, keyring)
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(cb.Path).To(Equal(targetPath2))
 }
