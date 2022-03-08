@@ -121,6 +121,7 @@ Supported options are:
 
 - [Generic](#generic)
 - [AWS](#aws)
+- [Azure](#azure)
 - [GCP](#gcp)
 
 If you do not specify `.spec.provider`, it defaults to `generic`.
@@ -261,6 +262,167 @@ data:
   secretkey: <BASE64>
 ```
 
+#### Azure
+
+When a Bucket's `.spec.provider` is set to `azure`, the source-controller will
+attempt to communicate with the specified [Endpoint](#endpoint) using the
+[Azure Blob Storage SDK for Go](https://github.com/Azure/azure-sdk-for-go/tree/main/sdk/storage/azblob).
+
+Without a [Secret reference](#secret-reference), authorization using a chain
+with [environment credentials](https://pkg.go.dev/github.com/Azure/azure-sdk-for-go/sdk/azidentity#EnvironmentCredential),
+a [Managed Identity](https://pkg.go.dev/github.com/Azure/azure-sdk-for-go/sdk/azidentity#ManagedIdentityCredential)
+with the `AZURE_CLIENT_ID`, and a Managed Identity with a system-assigned
+identity is attempted by default. If no chain can be established, the endpoint
+is assumed to be publicly reachable.
+
+When a reference is specified, it expects a Secret with one of the following
+sets of `.data` fields:
+
+- `tenantId`, `clientId` and `clientSecret` for authenticating a Service 
+   Principal with a secret.
+- `tenantId`, `clientId` and `clientCertificate` (plus optionally
+  `clientCertificatePassword` and/or `clientCertificateSendChain`) for 
+   authenticating a Service Principal with a certificate.
+- `clientId` for authenticating using a Managed Identity.
+- `accountKey` for authenticating using a
+  [Shared Key](https://pkg.go.dev/github.com/Azure/azure-sdk-for-go/sdk/storage/azblob#SharedKeyCredential).
+
+For any Managed Identity and/or Azure Active Directory authentication method,
+the base URL can be configured using `.data.authorityHost`. If not supplied,
+[`AzurePublicCloud` is assumed](https://pkg.go.dev/github.com/Azure/azure-sdk-for-go/sdk/azidentity#AuthorityHost).
+
+##### Azure example
+
+```yaml
+---
+apiVersion: source.toolkit.fluxcd.io/v1beta2
+kind: Bucket
+metadata:
+  name: azure-public
+  namespace: default
+spec:
+  interval: 5m0s
+  provider: azure
+  bucketName: podinfo
+  endpoint: https://podinfoaccount.blob.core.windows.net
+  timeout: 30s
+```
+
+##### Azure Service Principal Secret example
+
+```yaml
+---
+apiVersion: source.toolkit.fluxcd.io/v1beta2
+kind: Bucket
+metadata:
+  name: azure-service-principal-secret
+  namespace: default
+spec:
+  interval: 5m0s
+  provider: gcp
+  bucketName: <bucket-name>
+  endpoint: https://<account-name>.blob.core.windows.net
+  secretRef:
+    name: azure-sp-auth
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: azure-sp-auth
+  namespace: default
+type: Opaque
+data:
+  tenantId: <BASE64>
+  clientId: <BASE64>
+  clientSecret: <BASE64>
+```
+
+##### Azure Service Principal Certificate example
+
+```yaml
+---
+apiVersion: source.toolkit.fluxcd.io/v1beta2
+kind: Bucket
+metadata:
+  name: azure-service-principal-cert
+  namespace: default
+spec:
+  interval: 5m0s
+  provider: azure
+  bucketName: <bucket-name>
+  endpoint: https://<account-name>.blob.core.windows.net
+  secretRef:
+    name: azure-sp-auth
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: azure-sp-auth
+  namespace: default
+type: Opaque
+data:
+  tenantId: <BASE64>
+  clientId: <BASE64>
+  clientCertificate: <BASE64>
+  # Plus optionally
+  clientCertificatePassword: <BASE64>
+  clientCertificateSendChain: <BASE64> # either "1" or "true"
+```
+
+##### Azure Managed Identity with Client ID example
+
+```yaml
+---
+apiVersion: source.toolkit.fluxcd.io/v1beta2
+kind: Bucket
+metadata:
+  name: azure-managed-identity
+  namespace: default
+spec:
+  interval: 5m0s
+  provider: azure
+  bucketName: <bucket-name>
+  endpoint: https://<account-name>.blob.core.windows.net
+  secretRef:
+    name: azure-smi-auth
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: azure-smi-auth
+  namespace: default
+type: Opaque
+data:
+  clientId: <BASE64>
+```
+
+##### Azure Blob Shared Key example
+
+```yaml
+---
+apiVersion: source.toolkit.fluxcd.io/v1beta2
+kind: Bucket
+metadata:
+  name: azure-shared-key
+  namespace: default
+spec:
+  interval: 5m0s
+  provider: azure
+  bucketName: <bucket-name>
+  endpoint: https://<account-name>.blob.core.windows.net
+  secretRef:
+    name: azure-key
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: azure-key
+  namespace: default
+type: Opaque
+data:
+  accountKey: <BASE64>
+```
+
 #### GCP
 
 When a Bucket's `.spec.provider` is set to `gcp`, the source-controller will
@@ -282,7 +444,7 @@ The Provider allows for specifying the
 
 ```yaml
 ---
-apiVersion: source.toolkit.fluccd.io/v1beta2
+apiVersion: source.toolkit.fluxcd.io/v1beta2
 kind: Bucket
 metadata:
   name: gcp-workload-identity
@@ -300,7 +462,7 @@ spec:
 
 ```yaml
 ---
-apiVersion: source.toolkit.fluccd.io/v1beta1
+apiVersion: source.toolkit.fluxcd.io/v1beta2
 kind: Bucket
 metadata:
   name: gcp-secret
