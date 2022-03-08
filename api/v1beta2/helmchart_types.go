@@ -84,6 +84,20 @@ type HelmChartSpec struct {
 	// NOTE: Not implemented, provisional as of https://github.com/fluxcd/flux2/pull/2092
 	// +optional
 	AccessFrom *acl.AccessFrom `json:"accessFrom,omitempty"`
+
+	// Keyring information for verifying the packaged chart's signature using a provenance file.
+	// +optional
+	VerificationKeyring *VerificationKeyring `json:"verificationKeyring,omitempty"`
+}
+
+type VerificationKeyring struct {
+	// +required
+	SecretRef meta.LocalObjectReference `json:"secretRef,omitempty"`
+
+	// The key that corresponds to the keyring value.
+	// +kubebuilder:default:=pubring.gpg
+	// +optional
+	Key string `json:"key,omitempty"`
 }
 
 const (

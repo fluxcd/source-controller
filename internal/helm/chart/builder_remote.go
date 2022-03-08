@@ -166,7 +166,7 @@ func (b *remoteChartBuilder) Build(_ context.Context, ref Reference, p string, o
 		// This is needed, since the verification will work only if the .tgz file is untampered.
 		// But we write the packaged chart to disk under a different name, so the provenance file
 		// will not be valid for this _new_ packaged chart.
-		chart, err := util.WriteBytesToFile(chartBuf, fmt.Sprintf("%s-%s.tgz", result.Name, result.Version), false)
+		chart, err := util.WriteBytesToFile(chartBuf, fmt.Sprintf("%s-%s.tgz", cv.Name, cv.Version), false)
 		defer os.Remove(chart.Name())
 		if err != nil {
 			return nil, err

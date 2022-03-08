@@ -404,6 +404,25 @@ spec:
                 items:
                   type: string
                 type: array
+              verificationKeyring:
+                description: Keyring information for verifying the packaged chart's
+                  signature using a provenance file.
+                properties:
+                  key:
+                    default: pubring.gpg
+                    description: The key that corresponds to the keyring value.
+                    type: string
+                  secretRef:
+                    description: LocalObjectReference contains enough information
+                      to locate the referenced Kubernetes resource object.
+                    properties:
+                      name:
+                        description: Name of the referent.
+                        type: string
+                    required:
+                    - name
+                    type: object
+                type: object
               version:
                 default: '*'
                 description: Version is the chart version semver expression, ignored

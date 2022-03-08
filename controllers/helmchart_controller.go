@@ -95,6 +95,8 @@ var helmChartReadyCondition = summarize.Conditions{
 	},
 }
 
+const KeyringFileName = "pubring.gpg"
+
 // +kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=helmcharts,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=helmcharts/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=helmcharts/finalizers,verbs=get;create;update;patch;delete
@@ -467,13 +469,20 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 		opts.VersionMetadata = strconv.FormatInt(obj.Generation, 10)
 	}
 
-	// Build the chart
-	ref := chart.RemoteReference{Name: obj.Spec.Chart, Version: obj.Spec.Version}
-	build, err := cb.Build(ctx, ref, util.TempPathForObj("", ".tgz", obj), opts)
+	var keyring []byte
+	keyring, err = r.getProvenanceKeyring(ctx, obj)
 	if err != nil {
+		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, err.Error())
 		return sreconcile.ResultEmpty, err
 	}
 
+	// Build the chart
+	ref := chart.RemoteReference{Name: obj.Spec.Chart, Version: obj.Spec.Version}
+	build, err := cb.Build(ctx, ref, util.TempPathForObj("", ".tgz", obj), opts, keyring)
+
+	if err != nil {
+		return sreconcile.ResultEmpty, err
+	}
 	*b = *build
 	return sreconcile.ResultSuccess, nil
 }
@@ -590,13 +599,19 @@ func (r *HelmChartReconciler) buildFromTarballArtifact(ctx context.Context, obj 
 		}
 		opts.VersionMetadata += strconv.FormatInt(obj.Generation, 10)
 	}
+	var keyring []byte
+	keyring, err = r.getProvenanceKeyring(ctx, obj)
+	if err != nil {
+		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, err.Error())
+		return sreconcile.ResultEmpty, err
+	}
 
 	// Build chart
 	cb := chart.NewLocalBuilder(dm)
 	build, err := cb.Build(ctx, chart.LocalReference{
 		WorkDir: sourceDir,
 		Path:    chartPath,
-	}, util.TempPathForObj("", ".tgz", obj), opts)
+	}, util.TempPathForObj("", ".tgz", obj), opts, keyring)
 	if err != nil {
 		return sreconcile.ResultEmpty, err
 	}
@@ -668,6 +683,18 @@ func (r *HelmChartReconciler) reconcileArtifact(ctx context.Context, obj *source
 		}
 		conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition, e.Reason, e.Err.Error())
 		return sreconcile.ResultEmpty, e
+	}
+
+	// the provenance file artifact is not recorded, but it shadows the HelmChart artifact
+	// under the assumption that the file is always available at "chart.tgz.prov"
+	if b.ProvFilePath != "" {
+		provArtifact := r.Storage.NewArtifactFor(obj.Kind, obj.GetObjectMeta(), b.Version, fmt.Sprintf("%s-%s.tgz.prov", b.Name, b.Version))
+		if err = r.Storage.CopyFromPath(&provArtifact, b.ProvFilePath); err != nil {
+			return sreconcile.ResultEmpty, &serror.Event{
+				Err:    fmt.Errorf("unable to copy Helm chart provenance file to storage: %w", err),
+				Reason: sourcev1.StorageOperationFailedReason,
+			}
+		}
 	}
 
 	// Record it on the object
@@ -861,6 +888,22 @@ func (r *HelmChartReconciler) getHelmRepositorySecret(ctx context.Context, repos
 	return &secret, nil
 }
 
+func (r *HelmChartReconciler) getVerificationKeyringSecret(ctx context.Context, chart *sourcev1.HelmChart) (*corev1.Secret, error) {
+	if chart.Spec.VerificationKeyring == nil {
+		return nil, nil
+	}
+	name := types.NamespacedName{
+		Namespace: chart.GetNamespace(),
+		Name:      chart.Spec.VerificationKeyring.SecretRef.Name,
+	}
+	var secret corev1.Secret
+	err := r.Client.Get(ctx, name, &secret)
+	if err != nil {
+		return nil, err
+	}
+	return &secret, nil
+}
+
 func (r *HelmChartReconciler) indexHelmRepositoryByURL(o client.Object) []string {
 	repo, ok := o.(*sourcev1.HelmRepository)
 	if !ok {
@@ -1020,4 +1063,34 @@ func reasonForBuild(build *chart.Build) string {
 		return sourcev1.ChartPackageSucceededReason
 	}
 	return sourcev1.ChartPullSucceededReason
+}
+
+func (r *HelmChartReconciler) getProvenanceKeyring(ctx context.Context, chart *sourcev1.HelmChart) ([]byte, error) {
+	if chart.Spec.VerificationKeyring == nil {
+		return nil, nil
+	}
+	name := types.NamespacedName{
+		Namespace: chart.GetNamespace(),
+		Name:      chart.Spec.VerificationKeyring.SecretRef.Name,
+	}
+	var secret corev1.Secret
+	err := r.Client.Get(ctx, name, &secret)
+	if err != nil {
+		e := &serror.Event{
+			Err:    fmt.Errorf("failed to get secret '%s': %w", chart.Spec.VerificationKeyring.SecretRef.Name, err),
+			Reason: sourcev1.AuthenticationFailedReason,
+		}
+		return nil, e
+	}
+	key := chart.Spec.VerificationKeyring.Key
+	if val, ok := secret.Data[key]; !ok {
+		err = fmt.Errorf("secret doesn't contain the advertised verification keyring name %s", key)
+		e := &serror.Event{
+			Err:    fmt.Errorf("invalid secret '%s': %w", secret.GetName(), err),
+			Reason: sourcev1.AuthenticationFailedReason,
+		}
+		return nil, e
+	} else {
+		return val, nil
+	}
 }

@@ -11,6 +11,9 @@ import (
 	"helm.sh/helm/v3/pkg/provenance"
 )
 
+// Ref: https://github.com/helm/helm/blob/v3.8.0/pkg/downloader/chart_downloader.go#L328
+// modified to accept a custom provenance file path and an actual keyring instead of a
+// path to the file containing the keyring.
 func VerifyProvenanceFile(keyring io.Reader, chartPath, provFilePath string) error {
 	switch fi, err := os.Stat(chartPath); {
 	case err != nil:
@@ -43,15 +46,12 @@ func VerifyProvenanceFile(keyring io.Reader, chartPath, provFilePath string) err
 }
 
 // isTar tests whether the given file is a tar file.
-//
-// Currently, this simply checks extension, since a subsequent function will
-// untar the file and validate its binary format.
 func isTar(filename string) bool {
 	return strings.EqualFold(filepath.Ext(filename), ".tgz")
 }
 
-// Returns the path of a provenance file related to a packaged chart
-// Adds ".prov" at the end, as per the Helm convention.
+// Returns the path of a provenance file related to a packaged chart by
+// adding ".prov" at the end, as per the Helm convention.
 func provenanceFilePath(path string) string {
 	return path + ".prov"
 }

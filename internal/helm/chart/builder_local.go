@@ -148,15 +148,19 @@ func (b *localChartBuilder) Build(ctx context.Context, ref Reference, p string, 
 
 	// If the chart at the path is already packaged and no custom values files
 	// options are set, we can copy the chart without making modifications
-	provFilePath = provenanceFilePath(localRef.Path)
 	if !requiresPackaging {
+		provFilePath = provenanceFilePath(p)
 		if err = copyFileToPath(localRef.Path, p); err != nil {
+			return result, &BuildError{Reason: ErrChartPull, Err: err}
+		}
+		if err = copyFileToPath(provenanceFilePath(localRef.Path), provFilePath); err != nil {
 			return result, &BuildError{Reason: ErrChartPull, Err: err}
 		}
 		if err = verifyProvFile(localRef.Path, provFilePath); err != nil {
 			return result, err
 		}
 		result.Path = p
+		result.ProvFilePath = provFilePath
 		return result, nil
 	}
 

@@ -120,6 +120,7 @@ func (s *Storage) RemoveAll(artifact sourcev1.Artifact) (string, error) {
 func (s *Storage) RemoveAllButCurrent(artifact sourcev1.Artifact) ([]string, error) {
 	deletedFiles := []string{}
 	localPath := s.LocalPath(artifact)
+	localProvPath := localPath + ".prov"
 	dir := filepath.Dir(localPath)
 	var errors []string
 	_ = filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
@@ -128,7 +129,7 @@ func (s *Storage) RemoveAllButCurrent(artifact sourcev1.Artifact) ([]string, err
 			return nil
 		}
 
-		if path != localPath && !info.IsDir() && info.Mode()&os.ModeSymlink != os.ModeSymlink {
+		if path != localPath && path != localProvPath && !info.IsDir() && info.Mode()&os.ModeSymlink != os.ModeSymlink {
 			if err := os.Remove(path); err != nil {
 				errors = append(errors, info.Name())
 			} else {
