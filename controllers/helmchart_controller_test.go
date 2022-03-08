@@ -52,6 +52,8 @@ import (
 	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
 )
 
+const publicKeyFileName = "pub.pgp"
+
 func TestHelmChartReconciler_Reconcile(t *testing.T) {
 	g := NewWithT(t)
 
@@ -65,7 +67,8 @@ func TestHelmChartReconciler_Reconcile(t *testing.T) {
 	g.Expect(err).NotTo(HaveOccurred())
 	defer os.RemoveAll(server.Root())
 
-	g.Expect(server.PackageChartWithVersion(chartPath, chartVersion)).To(Succeed())
+	publicKeyPath := fmt.Sprintf("%s/%s", server.Root(), publicKeyFileName)
+	g.Expect(server.PackageSignedChartWithVersion(chartPath, chartVersion, publicKeyPath)).To(Succeed())
 	g.Expect(server.GenerateIndex()).To(Succeed())
 
 	server.Start()
@@ -86,6 +89,21 @@ func TestHelmChartReconciler_Reconcile(t *testing.T) {
 	}
 	g.Expect(testEnv.CreateAndWait(ctx, repository)).To(Succeed())
 
+	keyring, err := os.ReadFile(publicKeyPath)
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(keyring).ToNot(BeEmpty())
+
+	keyringSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "keyring-secret",
+			Namespace: ns.Name,
+		},
+		Data: map[string][]byte{
+			publicKeyFileName: keyring,
+		},
+	}
+	g.Expect(testEnv.CreateAndWait(ctx, keyringSecret)).To(Succeed())
+
 	obj := &sourcev1.HelmChart{
 		ObjectMeta: metav1.ObjectMeta{
 			GenerateName: "helmrepository-reconcile-",
@@ -97,6 +115,12 @@ func TestHelmChartReconciler_Reconcile(t *testing.T) {
 			SourceRef: sourcev1.LocalHelmChartSourceReference{
 				Kind: sourcev1.HelmRepositoryKind,
 				Name: repository.Name,
+			},
+			VerificationKeyring: &sourcev1.VerificationKeyring{
+				SecretRef: meta.LocalObjectReference{
+					Name: keyringSecret.Name,
+				},
+				Key: publicKeyFileName,
 			},
 		},
 	}
@@ -183,10 +207,19 @@ func TestHelmChartReconciler_reconcileStorage(t *testing.T) {
 						Path:     fmt.Sprintf("/reconcile-storage/%s.txt", v),
 						Revision: v,
 					}
+					provArtifact := &sourcev1.Artifact{
+						Path:     fmt.Sprintf("/reconcile-storage/%s.txt.prov", v),
+						Revision: v,
+					}
+
 					if err := testStorage.MkdirAll(*obj.Status.Artifact); err != nil {
 						return err
 					}
+
 					if err := testStorage.AtomicWriteFile(obj.Status.Artifact, strings.NewReader(v), 0644); err != nil {
+						return err
+					}
+					if err := testStorage.AtomicWriteFile(provArtifact, strings.NewReader(v), 0644); err != nil {
 						return err
 					}
 				}
@@ -204,6 +237,9 @@ func TestHelmChartReconciler_reconcileStorage(t *testing.T) {
 				"/reconcile-storage/c.txt",
 				"!/reconcile-storage/b.txt",
 				"!/reconcile-storage/a.txt",
+				"/reconcile-storage/c.txt.prov",
+				"!/reconcile-storage/b.txt.prov",
+				"!/reconcile-storage/a.txt.prov",
 			},
 			want: sreconcile.ResultSuccess,
 		},
@@ -311,9 +347,13 @@ func TestHelmChartReconciler_reconcileSource(t *testing.T) {
 	}
 	g.Expect(storage.Archive(gitArtifact, "testdata/charts", nil)).To(Succeed())
 
+	keyring, err := os.ReadFile("testdata/charts/pub.gpg")
+	g.Expect(err).ToNot(HaveOccurred())
+
 	tests := []struct {
 		name       string
 		source     sourcev1.Source
+		secret     *corev1.Secret
 		beforeFunc func(obj *sourcev1.HelmChart)
 		want       sreconcile.Result
 		wantErr    error
@@ -331,11 +371,26 @@ func TestHelmChartReconciler_reconcileSource(t *testing.T) {
 					Artifact: gitArtifact,
 				},
 			},
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "keyring-secret",
+					Namespace: "default",
+				},
+				Data: map[string][]byte{
+					publicKeyFileName: keyring,
+				},
+			},
 			beforeFunc: func(obj *sourcev1.HelmChart) {
 				obj.Spec.Chart = "testdata/charts/helmchart-0.1.0.tgz"
 				obj.Spec.SourceRef = sourcev1.LocalHelmChartSourceReference{
 					Name: "gitrepository",
 					Kind: sourcev1.GitRepositoryKind,
+				}
+				obj.Spec.VerificationKeyring = &sourcev1.VerificationKeyring{
+					SecretRef: meta.LocalObjectReference{
+						Name: "keyring-secret",
+					},
+					Key: publicKeyFileName,
 				}
 			},
 			want: sreconcile.ResultSuccess,
@@ -344,6 +399,7 @@ func TestHelmChartReconciler_reconcileSource(t *testing.T) {
 				g.Expect(build.Name).To(Equal("helmchart"))
 				g.Expect(build.Version).To(Equal("0.1.0"))
 				g.Expect(build.Path).To(BeARegularFile())
+				g.Expect(build.ProvFilePath).To(BeARegularFile())
 
 				g.Expect(obj.Status.ObservedSourceArtifactRevision).To(Equal(gitArtifact.Revision))
 				g.Expect(obj.Status.Conditions).To(conditions.MatchConditions([]metav1.Condition{
@@ -352,6 +408,7 @@ func TestHelmChartReconciler_reconcileSource(t *testing.T) {
 			},
 			cleanFunc: func(g *WithT, build *chart.Build) {
 				g.Expect(os.Remove(build.Path)).To(Succeed())
+				g.Expect(os.Remove(build.ProvFilePath)).To(Succeed())
 			},
 		},
 		{
@@ -458,6 +515,9 @@ func TestHelmChartReconciler_reconcileSource(t *testing.T) {
 			if tt.source != nil {
 				clientBuilder.WithRuntimeObjects(tt.source)
 			}
+			if tt.secret != nil {
+				clientBuilder.WithRuntimeObjects(tt.secret)
+			}
 
 			r := &HelmChartReconciler{
 				Client:        clientBuilder.Build(),
@@ -508,13 +568,23 @@ func TestHelmChartReconciler_buildFromHelmRepository(t *testing.T) {
 	)
 
 	serverFactory, err := helmtestserver.NewTempHelmServer()
+	publicKeyPath := fmt.Sprintf("%s/%s", serverFactory.Root(), publicKeyFileName)
+
 	g.Expect(err).NotTo(HaveOccurred())
 	defer os.RemoveAll(serverFactory.Root())
 
 	for _, ver := range []string{chartVersion, higherChartVersion} {
-		g.Expect(serverFactory.PackageChartWithVersion(chartPath, ver)).To(Succeed())
+		g.Expect(serverFactory.PackageSignedChartWithVersion(chartPath, ver, publicKeyPath+ver)).To(Succeed())
 	}
 	g.Expect(serverFactory.GenerateIndex()).To(Succeed())
+
+	keyring1, err := os.ReadFile(publicKeyPath + chartVersion)
+	g.Expect(err).ToNot(HaveOccurred())
+	defer os.Remove(publicKeyPath + chartVersion)
+
+	keyring2, err := os.ReadFile(publicKeyPath + higherChartVersion)
+	g.Expect(err).ToNot(HaveOccurred())
+	defer os.Remove(publicKeyPath + higherChartVersion)
 
 	type options struct {
 		username string
@@ -522,19 +592,34 @@ func TestHelmChartReconciler_buildFromHelmRepository(t *testing.T) {
 	}
 
 	tests := []struct {
-		name       string
-		server     options
-		secret     *corev1.Secret
-		beforeFunc func(obj *sourcev1.HelmChart, repository *sourcev1.HelmRepository)
-		want       sreconcile.Result
-		wantErr    error
-		assertFunc func(g *WithT, obj *sourcev1.HelmChart, build chart.Build)
-		cleanFunc  func(g *WithT, build *chart.Build)
+		name          string
+		server        options
+		secret        *corev1.Secret
+		keyringSecret *corev1.Secret
+		beforeFunc    func(obj *sourcev1.HelmChart, repository *sourcev1.HelmRepository)
+		want          sreconcile.Result
+		wantErr       error
+		assertFunc    func(g *WithT, obj *sourcev1.HelmChart, build chart.Build)
+		cleanFunc     func(g *WithT, build *chart.Build)
 	}{
 		{
 			name: "Reconciles chart build",
 			beforeFunc: func(obj *sourcev1.HelmChart, repository *sourcev1.HelmRepository) {
 				obj.Spec.Chart = "helmchart"
+				obj.Spec.VerificationKeyring = &sourcev1.VerificationKeyring{
+					SecretRef: meta.LocalObjectReference{
+						Name: "keyring-secret-0.3.0",
+					},
+					Key: publicKeyFileName,
+				}
+			},
+			keyringSecret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "keyring-secret-0.3.0",
+				},
+				Data: map[string][]byte{
+					publicKeyFileName: keyring2,
+				},
 			},
 			want: sreconcile.ResultSuccess,
 			assertFunc: func(g *WithT, _ *sourcev1.HelmChart, build chart.Build) {
@@ -542,9 +627,12 @@ func TestHelmChartReconciler_buildFromHelmRepository(t *testing.T) {
 				g.Expect(build.Version).To(Equal(higherChartVersion))
 				g.Expect(build.Path).ToNot(BeEmpty())
 				g.Expect(build.Path).To(BeARegularFile())
+				g.Expect(build.ProvFilePath).ToNot(BeEmpty())
+				g.Expect(build.ProvFilePath).To(BeARegularFile())
 			},
 			cleanFunc: func(g *WithT, build *chart.Build) {
 				g.Expect(os.Remove(build.Path)).To(Succeed())
+				g.Expect(os.Remove(build.ProvFilePath)).To(Succeed())
 			},
 		},
 		{
@@ -552,6 +640,14 @@ func TestHelmChartReconciler_buildFromHelmRepository(t *testing.T) {
 			server: options{
 				username: "foo",
 				password: "bar",
+			},
+			keyringSecret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "keyring-secret-0.2.0",
+				},
+				Data: map[string][]byte{
+					publicKeyFileName: keyring1,
+				},
 			},
 			secret: &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
@@ -566,6 +662,12 @@ func TestHelmChartReconciler_buildFromHelmRepository(t *testing.T) {
 				obj.Spec.Chart = chartName
 				obj.Spec.Version = chartVersion
 				repository.Spec.SecretRef = &meta.LocalObjectReference{Name: "auth"}
+				obj.Spec.VerificationKeyring = &sourcev1.VerificationKeyring{
+					SecretRef: meta.LocalObjectReference{
+						Name: "keyring-secret-0.2.0",
+					},
+					Key: publicKeyFileName,
+				}
 			},
 			want: sreconcile.ResultSuccess,
 			assertFunc: func(g *WithT, _ *sourcev1.HelmChart, build chart.Build) {
@@ -573,17 +675,34 @@ func TestHelmChartReconciler_buildFromHelmRepository(t *testing.T) {
 				g.Expect(build.Version).To(Equal(chartVersion))
 				g.Expect(build.Path).ToNot(BeEmpty())
 				g.Expect(build.Path).To(BeARegularFile())
+				g.Expect(build.ProvFilePath).ToNot(BeEmpty())
+				g.Expect(build.ProvFilePath).To(BeARegularFile())
 			},
 			cleanFunc: func(g *WithT, build *chart.Build) {
 				g.Expect(os.Remove(build.Path)).To(Succeed())
+				g.Expect(os.Remove(build.ProvFilePath)).To(Succeed())
 			},
 		},
 		{
 			name: "Uses artifact as build cache",
+			keyringSecret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "keyring-secret-0.2.0",
+				},
+				Data: map[string][]byte{
+					publicKeyFileName: keyring1,
+				},
+			},
 			beforeFunc: func(obj *sourcev1.HelmChart, repository *sourcev1.HelmRepository) {
 				obj.Spec.Chart = chartName
 				obj.Spec.Version = chartVersion
 				obj.Status.Artifact = &sourcev1.Artifact{Path: chartName + "-" + chartVersion + ".tgz"}
+				obj.Spec.VerificationKeyring = &sourcev1.VerificationKeyring{
+					SecretRef: meta.LocalObjectReference{
+						Name: "keyring-secret-0.2.0",
+					},
+					Key: publicKeyFileName,
+				}
 			},
 			want: sreconcile.ResultSuccess,
 			assertFunc: func(g *WithT, obj *sourcev1.HelmChart, build chart.Build) {
@@ -591,14 +710,30 @@ func TestHelmChartReconciler_buildFromHelmRepository(t *testing.T) {
 				g.Expect(build.Version).To(Equal(chartVersion))
 				g.Expect(build.Path).To(Equal(filepath.Join(serverFactory.Root(), obj.Status.Artifact.Path)))
 				g.Expect(build.Path).To(BeARegularFile())
+				g.Expect(build.ProvFilePath).To(Equal(filepath.Join(serverFactory.Root(), obj.Status.Artifact.Path+".prov")))
+				g.Expect(build.ProvFilePath).To(BeARegularFile())
 			},
 		},
 		{
 			name: "Sets Generation as VersionMetadata with values files",
+			keyringSecret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "keyring-secret-0.3.0",
+				},
+				Data: map[string][]byte{
+					publicKeyFileName: keyring2,
+				},
+			},
 			beforeFunc: func(obj *sourcev1.HelmChart, repository *sourcev1.HelmRepository) {
 				obj.Spec.Chart = chartName
 				obj.Generation = 3
 				obj.Spec.ValuesFiles = []string{"values.yaml", "override.yaml"}
+				obj.Spec.VerificationKeyring = &sourcev1.VerificationKeyring{
+					SecretRef: meta.LocalObjectReference{
+						Name: "keyring-secret-0.3.0",
+					},
+					Key: publicKeyFileName,
+				}
 			},
 			want: sreconcile.ResultSuccess,
 			assertFunc: func(g *WithT, _ *sourcev1.HelmChart, build chart.Build) {
@@ -606,13 +741,24 @@ func TestHelmChartReconciler_buildFromHelmRepository(t *testing.T) {
 				g.Expect(build.Version).To(Equal(higherChartVersion + "+3"))
 				g.Expect(build.Path).ToNot(BeEmpty())
 				g.Expect(build.Path).To(BeARegularFile())
+				g.Expect(build.ProvFilePath).ToNot(BeEmpty())
+				g.Expect(build.ProvFilePath).To(BeARegularFile())
 			},
 			cleanFunc: func(g *WithT, build *chart.Build) {
 				g.Expect(os.Remove(build.Path)).To(Succeed())
+				g.Expect(os.Remove(build.ProvFilePath)).To(Succeed())
 			},
 		},
 		{
 			name: "Forces build on generation change",
+			keyringSecret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "keyring-secret-0.2.0",
+				},
+				Data: map[string][]byte{
+					publicKeyFileName: keyring1,
+				},
+			},
 			beforeFunc: func(obj *sourcev1.HelmChart, repository *sourcev1.HelmRepository) {
 				obj.Generation = 3
 				obj.Spec.Chart = chartName
@@ -620,6 +766,12 @@ func TestHelmChartReconciler_buildFromHelmRepository(t *testing.T) {
 
 				obj.Status.ObservedGeneration = 2
 				obj.Status.Artifact = &sourcev1.Artifact{Path: chartName + "-" + chartVersion + ".tgz"}
+				obj.Spec.VerificationKeyring = &sourcev1.VerificationKeyring{
+					SecretRef: meta.LocalObjectReference{
+						Name: "keyring-secret-0.2.0",
+					},
+					Key: publicKeyFileName,
+				}
 			},
 			want: sreconcile.ResultSuccess,
 			assertFunc: func(g *WithT, obj *sourcev1.HelmChart, build chart.Build) {
@@ -627,9 +779,12 @@ func TestHelmChartReconciler_buildFromHelmRepository(t *testing.T) {
 				g.Expect(build.Version).To(Equal(chartVersion))
 				g.Expect(build.Path).ToNot(Equal(filepath.Join(serverFactory.Root(), obj.Status.Artifact.Path)))
 				g.Expect(build.Path).To(BeARegularFile())
+				g.Expect(build.ProvFilePath).ToNot(Equal(filepath.Join(serverFactory.Root(), obj.Status.Artifact.Path+".prov")))
+				g.Expect(build.ProvFilePath).To(BeARegularFile())
 			},
 			cleanFunc: func(g *WithT, build *chart.Build) {
 				g.Expect(os.Remove(build.Path)).To(Succeed())
+				g.Expect(os.Remove(build.ProvFilePath)).To(Succeed())
 			},
 		},
 		{
@@ -713,6 +868,9 @@ func TestHelmChartReconciler_buildFromHelmRepository(t *testing.T) {
 			if tt.secret != nil {
 				clientBuilder.WithObjects(tt.secret.DeepCopy())
 			}
+			if tt.keyringSecret != nil {
+				clientBuilder.WithObjects(tt.keyringSecret.DeepCopy())
+			}
 
 			storage, err := newTestStorage(server)
 			g.Expect(err).ToNot(HaveOccurred())
@@ -754,6 +912,9 @@ func TestHelmChartReconciler_buildFromHelmRepository(t *testing.T) {
 				defer tt.cleanFunc(g, &b)
 			}
 			got, err := r.buildFromHelmRepository(context.TODO(), obj, repository, &b)
+			if err != nil {
+				t.Logf("error: %s", err)
+			}
 
 			g.Expect(err != nil).To(Equal(tt.wantErr != nil))
 			if tt.wantErr != nil {
@@ -791,18 +952,28 @@ func TestHelmChartReconciler_buildFromTarballArtifact(t *testing.T) {
 	g.Expect(storage.CopyFromPath(yamlArtifact, "testdata/charts/helmchart/values.yaml")).To(Succeed())
 	cachedArtifact := &sourcev1.Artifact{
 		Revision: "0.1.0",
-		Path:     "cached.tgz",
+		Path:     "helmchart-0.1.0.tgz",
 	}
 	g.Expect(storage.CopyFromPath(cachedArtifact, "testdata/charts/helmchart-0.1.0.tgz")).To(Succeed())
 
+	provArtifact := &sourcev1.Artifact{
+		Revision: "1234smth",
+		Path:     "helmchart-0.1.0.tgz.prov",
+	}
+	g.Expect(storage.CopyFromPath(provArtifact, "testdata/charts/helmchart-0.1.0.tgz.prov")).To(Succeed())
+
+	keyring, err := os.ReadFile("testdata/charts/pub.gpg")
+	g.Expect(err).ToNot(HaveOccurred())
+
 	tests := []struct {
-		name       string
-		source     sourcev1.Artifact
-		beforeFunc func(obj *sourcev1.HelmChart)
-		want       sreconcile.Result
-		wantErr    error
-		assertFunc func(g *WithT, build chart.Build)
-		cleanFunc  func(g *WithT, build *chart.Build)
+		name          string
+		source        sourcev1.Artifact
+		keyringSecret *corev1.Secret
+		beforeFunc    func(obj *sourcev1.HelmChart)
+		want          sreconcile.Result
+		wantErr       error
+		assertFunc    func(g *WithT, build chart.Build)
+		cleanFunc     func(g *WithT, build *chart.Build)
 	}{
 		{
 			name:   "Resolves chart dependencies and builds",
@@ -866,9 +1037,24 @@ func TestHelmChartReconciler_buildFromTarballArtifact(t *testing.T) {
 		{
 			name:   "Chart from storage cache",
 			source: *chartsArtifact.DeepCopy(),
+			keyringSecret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "keyring-secret",
+					Namespace: "default",
+				},
+				Data: map[string][]byte{
+					publicKeyFileName: keyring,
+				},
+			},
 			beforeFunc: func(obj *sourcev1.HelmChart) {
 				obj.Spec.Chart = "testdata/charts/helmchart-0.1.0.tgz"
 				obj.Status.Artifact = cachedArtifact.DeepCopy()
+				obj.Spec.VerificationKeyring = &sourcev1.VerificationKeyring{
+					SecretRef: meta.LocalObjectReference{
+						Name: "keyring-secret",
+					},
+					Key: publicKeyFileName,
+				}
 			},
 			want: sreconcile.ResultSuccess,
 			assertFunc: func(g *WithT, build chart.Build) {
@@ -876,11 +1062,21 @@ func TestHelmChartReconciler_buildFromTarballArtifact(t *testing.T) {
 				g.Expect(build.Version).To(Equal("0.1.0"))
 				g.Expect(build.Path).To(Equal(storage.LocalPath(*cachedArtifact.DeepCopy())))
 				g.Expect(build.Path).To(BeARegularFile())
+				g.Expect(build.ProvFilePath).To(Equal(storage.LocalPath(*provArtifact.DeepCopy())))
+				g.Expect(build.ProvFilePath).To(BeARegularFile())
 			},
 		},
 		{
 			name:   "Generation change forces rebuild",
 			source: *chartsArtifact.DeepCopy(),
+			keyringSecret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "keyring-secret",
+				},
+				Data: map[string][]byte{
+					publicKeyFileName: keyring,
+				},
+			},
 			beforeFunc: func(obj *sourcev1.HelmChart) {
 				obj.Generation = 2
 				obj.Spec.Chart = "testdata/charts/helmchart-0.1.0.tgz"
@@ -921,8 +1117,13 @@ func TestHelmChartReconciler_buildFromTarballArtifact(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
 
+			clientBuilder := fake.NewClientBuilder()
+			if tt.keyringSecret != nil {
+				clientBuilder.WithObjects(tt.keyringSecret.DeepCopy())
+			}
+
 			r := &HelmChartReconciler{
-				Client:        fake.NewClientBuilder().Build(),
+				Client:        clientBuilder.Build(),
 				EventRecorder: record.NewFakeRecorder(32),
 				Storage:       storage,
 				Getters:       testGetters,
@@ -982,13 +1183,34 @@ func TestHelmChartReconciler_reconcileArtifact(t *testing.T) {
 		},
 		{
 			name:  "Copying artifact to storage from build makes Ready=True",
-			build: mockChartBuild("helmchart", "0.1.0", "testdata/charts/helmchart-0.1.0.tgz"),
+			build: mockChartBuild("helmchart", "0.1.0", "testdata/charts/helmchart-0.1.0.tgz", ""),
 			beforeFunc: func(obj *sourcev1.HelmChart) {
 				conditions.MarkTrue(obj, sourcev1.ArtifactOutdatedCondition, "Foo", "")
 			},
 			afterFunc: func(t *WithT, obj *sourcev1.HelmChart) {
 				t.Expect(obj.GetArtifact()).ToNot(BeNil())
-				t.Expect(obj.GetArtifact().Checksum).To(Equal("bbdf96023c912c393b49d5238e227576ed0d20d1bb145d7476d817b80e20c11a"))
+				t.Expect(obj.GetArtifact().Checksum).To(Equal("5fabb8b212945e7187a24a5e893d06fe98c83f3c49ed0f7b6df6de633d95a8f3"))
+				t.Expect(obj.GetArtifact().Revision).To(Equal("0.1.0"))
+				t.Expect(obj.Status.URL).ToNot(BeEmpty())
+				t.Expect(obj.Status.ObservedChartName).To(Equal("helmchart"))
+			},
+			want: sreconcile.ResultSuccess,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReadyCondition, sourcev1.ChartPullSucceededReason, "pulled 'helmchart' chart with version '0.1.0'"),
+			},
+		},
+		{
+			name:  "A build with a non-nil ProvFilePath persists prov file to storage",
+			build: mockChartBuild("helmchart", "0.1.0", "testdata/charts/helmchart-0.1.0.tgz", "testdata/charts/helmchart-0.1.0.tgz"),
+			beforeFunc: func(obj *sourcev1.HelmChart) {
+				conditions.MarkTrue(obj, sourcev1.ArtifactOutdatedCondition, "Foo", "")
+			},
+			afterFunc: func(t *WithT, obj *sourcev1.HelmChart) {
+				provArtifact := testStorage.NewArtifactFor(obj.Kind, obj.GetObjectMeta(), "0.1.0", fmt.Sprintf("%s-%s.tgz.prov", "helmchart", "0.1.0"))
+				t.Expect(provArtifact.Path).ToNot(BeEmpty())
+				t.Expect(obj.GetArtifact()).ToNot(BeNil())
+				fmt.Printf("checksum: %s", obj.GetArtifact().Checksum)
+				t.Expect(obj.GetArtifact().Checksum).To(Equal("5fabb8b212945e7187a24a5e893d06fe98c83f3c49ed0f7b6df6de633d95a8f3"))
 				t.Expect(obj.GetArtifact().Revision).To(Equal("0.1.0"))
 				t.Expect(obj.Status.URL).ToNot(BeEmpty())
 				t.Expect(obj.Status.ObservedChartName).To(Equal("helmchart"))
@@ -1043,13 +1265,13 @@ func TestHelmChartReconciler_reconcileArtifact(t *testing.T) {
 		},
 		{
 			name:  "Removes ArtifactOutdatedCondition after creating new artifact",
-			build: mockChartBuild("helmchart", "0.1.0", "testdata/charts/helmchart-0.1.0.tgz"),
+			build: mockChartBuild("helmchart", "0.1.0", "testdata/charts/helmchart-0.1.0.tgz", ""),
 			beforeFunc: func(obj *sourcev1.HelmChart) {
 				conditions.MarkTrue(obj, sourcev1.ArtifactOutdatedCondition, "Foo", "")
 			},
 			afterFunc: func(t *WithT, obj *sourcev1.HelmChart) {
 				t.Expect(obj.GetArtifact()).ToNot(BeNil())
-				t.Expect(obj.GetArtifact().Checksum).To(Equal("bbdf96023c912c393b49d5238e227576ed0d20d1bb145d7476d817b80e20c11a"))
+				t.Expect(obj.GetArtifact().Checksum).To(Equal("5fabb8b212945e7187a24a5e893d06fe98c83f3c49ed0f7b6df6de633d95a8f3"))
 				t.Expect(obj.GetArtifact().Revision).To(Equal("0.1.0"))
 				t.Expect(obj.Status.URL).ToNot(BeEmpty())
 				t.Expect(obj.Status.ObservedChartName).To(Equal("helmchart"))
@@ -1061,7 +1283,7 @@ func TestHelmChartReconciler_reconcileArtifact(t *testing.T) {
 		},
 		{
 			name:  "Creates latest symlink to the created artifact",
-			build: mockChartBuild("helmchart", "0.1.0", "testdata/charts/helmchart-0.1.0.tgz"),
+			build: mockChartBuild("helmchart", "0.1.0", "testdata/charts/helmchart-0.1.0.tgz", ""),
 			afterFunc: func(t *WithT, obj *sourcev1.HelmChart) {
 				t.Expect(obj.GetArtifact()).ToNot(BeNil())
 
@@ -1179,6 +1401,105 @@ func TestHelmChartReconciler_getHelmRepositorySecret(t *testing.T) {
 			g := NewWithT(t)
 
 			got, err := r.getHelmRepositorySecret(context.TODO(), tt.repository)
+			g.Expect(err != nil).To(Equal(tt.wantErr))
+			g.Expect(got).To(Equal(tt.want))
+		})
+	}
+}
+
+func TestHelmChartReconciler_getVerificationKeyring(t *testing.T) {
+	secret := &corev1.Secret{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Secret",
+			APIVersion: "v1",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "keyring-secret",
+			Namespace: "foo",
+		},
+		Data: map[string][]byte{
+			publicKeyFileName: []byte("bar"),
+		},
+	}
+	clientBuilder := fake.NewClientBuilder()
+	clientBuilder.WithObjects(secret)
+
+	r := &HelmChartReconciler{
+		Client: clientBuilder.Build(),
+	}
+
+	tests := []struct {
+		name    string
+		chart   *sourcev1.HelmChart
+		want    []byte
+		wantErr bool
+	}{
+		{
+			name: "Existing secret reference",
+			chart: &sourcev1.HelmChart{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: secret.Namespace,
+				},
+				Spec: sourcev1.HelmChartSpec{
+					VerificationKeyring: &sourcev1.VerificationKeyring{
+						SecretRef: meta.LocalObjectReference{
+							Name: "keyring-secret",
+						},
+						Key: publicKeyFileName,
+					},
+				},
+			},
+			want: []byte("bar"),
+		},
+		{
+			name: "Empty secret reference",
+			chart: &sourcev1.HelmChart{
+				Spec: sourcev1.HelmChartSpec{
+					VerificationKeyring: nil,
+				},
+			},
+			want: nil,
+		},
+		{
+			name: "Error on client error",
+			chart: &sourcev1.HelmChart{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: "different",
+				},
+				Spec: sourcev1.HelmChartSpec{
+					VerificationKeyring: &sourcev1.VerificationKeyring{
+						SecretRef: meta.LocalObjectReference{
+							Name: "keyring-secret",
+						},
+						Key: publicKeyFileName,
+					},
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "Error on invalid key",
+			chart: &sourcev1.HelmChart{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: "foo",
+				},
+				Spec: sourcev1.HelmChartSpec{
+					VerificationKeyring: &sourcev1.VerificationKeyring{
+						SecretRef: meta.LocalObjectReference{
+							Name: "keyring-secret",
+						},
+						Key: "invalid-key",
+					},
+				},
+			},
+			wantErr: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			got, err := r.getProvenanceKeyring(context.TODO(), tt.chart)
 			g.Expect(err != nil).To(Equal(tt.wantErr))
 			g.Expect(got).To(Equal(tt.want))
 		})
@@ -1462,8 +1783,9 @@ func TestHelmChartReconciler_reconcileSubRecs(t *testing.T) {
 	}
 }
 
-func mockChartBuild(name, version, path string) *chart.Build {
+func mockChartBuild(name, version, path, provFilePath string) *chart.Build {
 	var copyP string
+	var copyPP string
 	if path != "" {
 		f, err := os.Open(path)
 		if err == nil {
@@ -1477,9 +1799,23 @@ func mockChartBuild(name, version, path string) *chart.Build {
 			}
 		}
 	}
+	if provFilePath != "" {
+		f, err := os.Open(provFilePath)
+		if err == nil {
+			defer f.Close()
+			ff, err := os.CreateTemp("", "chart-mock-*.tgz.prov")
+			if err == nil {
+				defer ff.Close()
+				if _, err = io.Copy(ff, f); err == nil {
+					copyPP = ff.Name()
+				}
+			}
+		}
+	}
 	return &chart.Build{
-		Name:    name,
-		Version: version,
-		Path:    copyP,
+		Name:         name,
+		Version:      version,
+		Path:         copyP,
+		ProvFilePath: copyPP,
 	}
 }
