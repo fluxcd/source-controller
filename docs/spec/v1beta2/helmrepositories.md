@@ -218,7 +218,7 @@ the last value the controller acted on, as reported in
 Using `kubectl`:
 
 ```sh
-kubectl annotate --overwrite helmrepository/<repository-name> reconcile.fluxcd.io/requestedAt="$(date +%s)"
+kubectl annotate --field-manager=flux-client-side-apply --overwrite helmrepository/<repository-name> reconcile.fluxcd.io/requestedAt="$(date +%s)"
 ```
 
 Using `flux`:
@@ -259,7 +259,7 @@ spec:
 Using `kubectl`:
 
 ```sh
-kubectl patch helmrepository <repository-name> -p '{\"spec\": {\"suspend\" : true }}'
+kubectl patch helmrepository <repository-name> --field-manager=flux-client-side-apply -p '{\"spec\": {\"suspend\" : true }}'
 ```
 
 Using `flux`:
@@ -295,7 +295,7 @@ state in Git.
 Using `kubectl`:
 
 ```sh
-kubectl patch helmrepository <repository-name> -p '{\"spec\" : {\"suspend\" : false }}'
+kubectl patch helmrepository <repository-name> --field-manager=flux-client-side-apply -p '{\"spec\" : {\"suspend\" : false }}'
 ```
 
 Using `flux`:

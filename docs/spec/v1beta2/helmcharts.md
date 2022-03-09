@@ -248,7 +248,7 @@ the last value the controller acted on, as reported in
 Using `kubectl`:
 
 ```sh
-kubectl annotate --overwrite helmchart/<chart-name> reconcile.fluxcd.io/requestedAt="$(date +%s)"
+kubectl annotate --field-manager=flux-client-side-apply --overwrite helmchart/<chart-name> reconcile.fluxcd.io/requestedAt="$(date +%s)"
 ```
 
 ### Waiting for `Ready`
@@ -283,7 +283,7 @@ spec:
 Using `kubectl`:
 
 ```sh
-kubectl patch helmchart <chart-name> -p '{\"spec\": {\"suspend\" : true }}'
+kubectl patch helmchart <chart-name> --field-manager=flux-client-side-apply -p '{\"spec\": {\"suspend\" : true }}'
 ```
 
 **Note:** When a HelmChart has an Artifact and is suspended, and this
@@ -313,7 +313,7 @@ state in Git.
 Using `kubectl`:
 
 ```sh
-kubectl patch helmchart <chart-name> -p '{\"spec\" : {\"suspend\" : false }}'
+kubectl patch helmchart <chart-name> --field-manager=flux-client-side-apply -p '{\"spec\" : {\"suspend\" : false }}'
 ```
 
 ### Debugging a HelmChart
