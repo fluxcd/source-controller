@@ -33,8 +33,11 @@ jobs:
         # Only run integration tests for main branch
         if: github.ref == 'refs/heads/main'
         run: |
-          echo 'GO_TEST_ARGS="-tags integration"' >> $GITHUB_ENV
+          echo 'GO_TAGS=integration' >> $GITHUB_ENV
       - name: Run tests
+        env:
+          TEST_AZURE_ACCOUNT_NAME: ${{ secrets.TEST_AZURE_ACCOUNT_NAME }}
+          TEST_AZURE_ACCOUNT_KEY: ${{ secrets.TEST_AZURE_ACCOUNT_KEY }}
         run: make test
       - name: Setup Kubernetes
         uses: engineerd/setup-kind@v0.5.0
@@ -65,8 +68,11 @@ jobs:
         # Only run integration tests for main branch
         if: github.ref == 'refs/heads/main'
         run: |
-          echo 'GO_TEST_ARGS="-tags integration"' >> $GITHUB_ENV
+          echo 'GO_TAGS=integration' >> $GITHUB_ENV
       - name: Run tests
+        env:
+          TEST_AZURE_ACCOUNT_NAME: ${{ secrets.TEST_AZURE_ACCOUNT_NAME }}
+          TEST_AZURE_ACCOUNT_KEY: ${{ secrets.TEST_AZURE_ACCOUNT_KEY }}
         run: make test
       - name: Prepare
         id: prep

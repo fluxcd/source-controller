@@ -12,8 +12,8 @@ BUILD_ARGS ?=
 # Architectures to build images for
 BUILD_PLATFORMS ?= linux/amd64,linux/arm64,linux/arm/v7
 
-# Go test arguments, e.g. '-tags=integration'
-GO_TEST_ARGS ?=
+# Go additional tag arguments, e.g. 'integration'
+GO_TAGS ?=
 
 # Produce CRDs that work back to Kubernetes 1.16
 CRD_OPTIONS ?= crd:crdVersions=v1
@@ -41,7 +41,7 @@ export CGO_CFLAGS=-I$(LIBGIT2_PATH)/include -I$(LIBGIT2_PATH)/include/openssl
 # The pkg-config command will yield warning messages until libgit2 is downloaded.
 ifeq ($(shell uname -s),Darwin)
 export CGO_LDFLAGS=$(shell PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) pkg-config --libs --static --cflags libssh2 openssl libgit2 2>/dev/null)
-GO_STATIC_FLAGS=-ldflags "-s -w" -tags 'netgo,osusergo,static_build'
+GO_STATIC_FLAGS=-ldflags "-s -w" -tags 'netgo,osusergo,static_build$(addprefix ,,$(GO_TAGS))'
 else
 export PKG_CONFIG_PATH:=$(PKG_CONFIG_PATH):$(LIBGIT2_LIB64_PATH)/pkgconfig
 export LIBRARY_PATH:=$(LIBRARY_PATH):$(LIBGIT2_LIB64_PATH)
@@ -53,14 +53,14 @@ ifeq ($(shell uname -s),Linux)
 ifeq ($(shell uname -m),x86_64)
 # Linux x86_64 seem to be able to cope with the static libraries 
 # by having only musl-dev installed, without the need of using musl toolchain.
-	GO_STATIC_FLAGS=-ldflags "-s -w" -tags 'netgo,osusergo,static_build'
+	GO_STATIC_FLAGS=-ldflags "-s -w" -tags 'netgo,osusergo,static_build$(addprefix ,,$(GO_TAGS))'
 else
 	MUSL-PREFIX=$(BUILD_DIR)/musl/$(shell uname -m)-linux-musl-native/bin/$(shell uname -m)-linux-musl
 	MUSL-CC=$(MUSL-PREFIX)-gcc
 	export CC=$(MUSL-PREFIX)-gcc
 	export CXX=$(MUSL-PREFIX)-g++
 	export AR=$(MUSL-PREFIX)-ar
-	GO_STATIC_FLAGS=-ldflags "-s -w -extldflags \"-static\"" -tags 'netgo,osusergo,static_build'
+	GO_STATIC_FLAGS=-ldflags "-s -w -extldflags \"-static\"" -tags 'netgo,osusergo,static_build$(addprefix ,,$(GO_TAGS))'
 endif
 endif
 
@@ -96,7 +96,7 @@ build: check-deps $(LIBGIT2) ## Build manager binary
 KUBEBUILDER_ASSETS?="$(shell $(ENVTEST) --arch=$(ENVTEST_ARCH) use -i $(ENVTEST_KUBERNETES_VERSION) --bin-dir=$(ENVTEST_ASSETS_DIR) -p path)"
 test: $(LIBGIT2) install-envtest test-api check-deps ## Run tests
 	KUBEBUILDER_ASSETS=$(KUBEBUILDER_ASSETS) \
-	go test $(GO_STATIC_FLAGS) $(GO_TEST_ARGS) ./... -coverprofile cover.out
+	go test $(GO_STATIC_FLAGS) ./... -coverprofile cover.out
 
 check-deps:
 ifeq ($(shell uname -s),Darwin)

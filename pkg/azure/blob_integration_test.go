@@ -40,7 +40,7 @@ import (
 )
 
 var (
-	testTimeout = time.Second * 5
+	testTimeout = time.Second * 10
 )
 
 var (
