@@ -642,7 +642,7 @@ func (r *BucketReconciler) getBucketSecret(ctx context.Context, obj *sourcev1.Bu
 	return secret, nil
 }
 
-// eventLogf records event and logs at the same time.
+// eventLogf records events, and logs at the same time.
 //
 // This log is different from the debug log in the EventRecorder, in the sense
 // that this is a simple log. While the debug log contains complete details
@@ -651,9 +651,10 @@ func (r *BucketReconciler) eventLogf(ctx context.Context, obj runtime.Object, ev
 	r.annotatedEventLogf(ctx, obj, nil, eventType, reason, messageFmt, args...)
 }
 
-// annotatedEventLogf records annotated event and logs at the same time. This
-// log is different from the debug log in the event recorder in the sense that
-// this is a simple log, the event recorder debug log contains complete details
+// annotatedEventLogf records annotated events, and logs at the same time.
+//
+// This log is different from the debug log in the EventRecorder, in the sense
+// that this is a simple log. While the debug log contains complete details
 // about the event.
 func (r *BucketReconciler) annotatedEventLogf(ctx context.Context,
 	obj runtime.Object, annotations map[string]string, eventType string, reason string, messageFmt string, args ...interface{}) {

@@ -673,7 +673,7 @@ func (r *GitRepositoryReconciler) garbageCollect(ctx context.Context, obj *sourc
 	return nil
 }
 
-// eventLogf records event and logs at the same time.
+// eventLogf records events, and logs at the same time.
 //
 // This log is different from the debug log in the EventRecorder, in the sense
 // that this is a simple log. While the debug log contains complete details
