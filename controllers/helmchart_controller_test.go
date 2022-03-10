@@ -1453,7 +1453,7 @@ func TestHelmChartReconciler_reconcileSubRecs(t *testing.T) {
 				},
 			}
 
-			got, err := r.reconcile(context.TODO(), obj, tt.reconcileFuncs)
+			_, got, err := r.reconcile(context.TODO(), obj, tt.reconcileFuncs)
 			g.Expect(err != nil).To(Equal(tt.wantErr))
 			g.Expect(got).To(Equal(tt.wantResult))
 

@@ -59,6 +59,7 @@ var helmRepositoryReadyCondition = summarize.Conditions{
 	Owned: []string{
 		sourcev1.FetchFailedCondition,
 		sourcev1.ArtifactOutdatedCondition,
+		sourcev1.StorageOperationFailedCondition,
 		meta.ReadyCondition,
 		meta.ReconcilingCondition,
 		meta.StalledCondition,
@@ -66,12 +67,14 @@ var helmRepositoryReadyCondition = summarize.Conditions{
 	Summarize: []string{
 		sourcev1.FetchFailedCondition,
 		sourcev1.ArtifactOutdatedCondition,
+		sourcev1.StorageOperationFailedCondition,
 		meta.StalledCondition,
 		meta.ReconcilingCondition,
 	},
 	NegativePolarity: []string{
 		sourcev1.FetchFailedCondition,
 		sourcev1.ArtifactOutdatedCondition,
+		sourcev1.StorageOperationFailedCondition,
 		meta.StalledCondition,
 		meta.ReconcilingCondition,
 	},
@@ -134,6 +137,8 @@ func (r *HelmRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		return ctrl.Result{}, nil
 	}
 
+	oldObj := obj.DeepCopy()
+
 	// Initialize the patch helper with the current version of the object.
 	patchHelper, err := patch.NewHelper(obj, r.Client)
 	if err != nil {
@@ -142,6 +147,8 @@ func (r *HelmRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 
 	// recResult stores the abstracted reconcile result.
 	var recResult sreconcile.Result
+	// successEvent stores the notification event to be emitted on success.
+	var successEvent summarize.Notification
 
 	// Always attempt to patch the object after each reconciliation.
 	// NOTE: The final runtime result and error are set in this block.
@@ -155,6 +162,10 @@ func (r *HelmRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 			summarize.WithProcessors(
 				summarize.RecordContextualError,
 				summarize.RecordReconcileReq,
+				summarize.NotifySuccess(oldObj, successEvent, []string{
+					sourcev1.FetchFailedCondition,
+					sourcev1.StorageOperationFailedCondition,
+				}),
 			),
 			summarize.WithResultBuilder(sreconcile.AlwaysRequeueResultBuilder{RequeueAfter: obj.GetRequeueAfter()}),
 			summarize.WithPatchFieldOwner(r.ControllerName),
@@ -186,16 +197,23 @@ func (r *HelmRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		r.reconcileSource,
 		r.reconcileArtifact,
 	}
-	recResult, retErr = r.reconcile(ctx, obj, reconcilers)
+	successEvent, recResult, retErr = r.reconcile(ctx, obj, reconcilers)
 	return
 }
 
 // reconcile iterates through the gitRepositoryReconcileFunc tasks for the
 // object. It returns early on the first call that returns
 // reconcile.ResultRequeue, or produces an error.
-func (r *HelmRepositoryReconciler) reconcile(ctx context.Context, obj *sourcev1.HelmRepository, reconcilers []helmRepositoryReconcileFunc) (sreconcile.Result, error) {
+func (r *HelmRepositoryReconciler) reconcile(ctx context.Context, obj *sourcev1.HelmRepository, reconcilers []helmRepositoryReconcileFunc) (summarize.Notification, sreconcile.Result, error) {
 	if obj.Generation != obj.Status.ObservedGeneration {
 		conditions.MarkReconciling(obj, "NewGeneration", "reconciling new object generation (%d)", obj.Generation)
+	}
+
+	var successEvent summarize.Notification
+	// Record old checksum to help determine a change after reconciling.
+	var oldChecksum string
+	if obj.GetArtifact() != nil {
+		oldChecksum = obj.GetArtifact().Checksum
 	}
 
 	var chartRepo repository.ChartRepository
@@ -208,7 +226,7 @@ func (r *HelmRepositoryReconciler) reconcile(ctx context.Context, obj *sourcev1.
 		recResult, err := rec(ctx, obj, &artifact, &chartRepo)
 		// Exit immediately on ResultRequeue.
 		if recResult == sreconcile.ResultRequeue {
-			return sreconcile.ResultRequeue, nil
+			return successEvent, sreconcile.ResultRequeue, nil
 		}
 		// If an error is received, prioritize the returned results because an
 		// error also means immediate requeue.
@@ -220,7 +238,32 @@ func (r *HelmRepositoryReconciler) reconcile(ctx context.Context, obj *sourcev1.
 		// Prioritize requeue request in the result for successful results.
 		res = sreconcile.LowestRequeuingResult(res, recResult)
 	}
-	return res, resErr
+
+	// Construct success event on successful reconciliation with new artifact.
+	if resErr == nil && res == sreconcile.ResultSuccess &&
+		obj.Status.Artifact != nil && oldChecksum != obj.GetArtifact().Checksum {
+		// Calculate the artifact size to be included in the NewArtifact event.
+		fi, err := os.Stat(r.Storage.LocalPath(artifact))
+		if err != nil {
+			e := &serror.Event{
+				Err:    fmt.Errorf("unable to read the artifact: %w", err),
+				Reason: sourcev1.StorageOperationFailedReason,
+			}
+			conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition,
+				sourcev1.StorageOperationFailedReason, e.Err.Error())
+			return successEvent, sreconcile.ResultEmpty, e
+		}
+		size := units.HumanSize(float64(fi.Size()))
+
+		successEvent.Reason = "NewArtifact"
+		successEvent.Message = fmt.Sprintf("fetched index of size %s from '%s'", size, chartRepo.URL)
+		successEvent.Annotations = map[string]string{
+			"revision": obj.Status.Artifact.Revision,
+			"checksum": obj.Status.Artifact.Checksum,
+		}
+	}
+	conditions.Delete(obj, sourcev1.StorageOperationFailedCondition)
+	return successEvent, res, resErr
 }
 
 // reconcileStorage ensures the current state of the storage matches the
@@ -409,10 +452,13 @@ func (r *HelmRepositoryReconciler) reconcileArtifact(ctx context.Context, obj *s
 
 	// Create artifact dir
 	if err := r.Storage.MkdirAll(*artifact); err != nil {
-		return sreconcile.ResultEmpty, &serror.Event{
+		e := &serror.Event{
 			Err:    fmt.Errorf("failed to create artifact directory: %w", err),
 			Reason: sourcev1.StorageOperationFailedReason,
 		}
+		conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition,
+			sourcev1.StorageOperationFailedReason, e.Err.Error())
+		return sreconcile.ResultEmpty, e
 	}
 
 	// Acquire lock.
@@ -427,26 +473,14 @@ func (r *HelmRepositoryReconciler) reconcileArtifact(ctx context.Context, obj *s
 
 	// Save artifact to storage.
 	if err = r.Storage.CopyFromPath(artifact, chartRepo.CachePath); err != nil {
-		return sreconcile.ResultEmpty, &serror.Event{
+		e := &serror.Event{
 			Err:    fmt.Errorf("unable to save artifact to storage: %w", err),
 			Reason: sourcev1.StorageOperationFailedReason,
 		}
+		conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition,
+			sourcev1.StorageOperationFailedReason, e.Err.Error())
+		return sreconcile.ResultEmpty, e
 	}
-
-	// Calculate the artifact size to be included in the NewArtifact event.
-	fi, err := os.Stat(chartRepo.CachePath)
-	if err != nil {
-		return sreconcile.ResultEmpty, &serror.Event{
-			Err:    fmt.Errorf("unable to read the artifact: %w", err),
-			Reason: sourcev1.StorageOperationFailedReason,
-		}
-	}
-	size := units.HumanSize(float64(fi.Size()))
-
-	r.AnnotatedEventf(obj, map[string]string{
-		"revision": artifact.Revision,
-		"checksum": artifact.Checksum,
-	}, corev1.EventTypeNormal, "NewArtifact", "fetched index of size %s from '%s'", size, chartRepo.URL)
 
 	// Record it on the object.
 	obj.Status.Artifact = artifact.DeepCopy()
@@ -454,13 +488,18 @@ func (r *HelmRepositoryReconciler) reconcileArtifact(ctx context.Context, obj *s
 	// Update index symlink.
 	indexURL, err := r.Storage.Symlink(*artifact, "index.yaml")
 	if err != nil {
-		r.eventLogf(ctx, obj, corev1.EventTypeWarning, sourcev1.StorageOperationFailedReason,
-			"failed to update status URL symlink: %s", err)
+		e := &serror.Event{
+			Err:    fmt.Errorf("failed to update status URL symlink: %s", err),
+			Reason: sourcev1.StorageOperationFailedReason,
+		}
+		r.eventLogf(ctx, obj, corev1.EventTypeWarning, sourcev1.StorageOperationFailedReason, e.Err.Error())
+		conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition,
+			sourcev1.StorageOperationFailedReason, e.Err.Error())
 	}
 	if indexURL != "" {
 		obj.Status.URL = indexURL
 	}
-
+	conditions.Delete(obj, sourcev1.StorageOperationFailedCondition)
 	return sreconcile.ResultSuccess, nil
 }
 

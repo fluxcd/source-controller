@@ -736,7 +736,7 @@ func TestHelmRepositoryReconciler_reconcileSubRecs(t *testing.T) {
 
 			ctx := context.TODO()
 
-			gotRes, gotErr := r.reconcile(ctx, obj, tt.reconcileFuncs)
+			_, gotRes, gotErr := r.reconcile(ctx, obj, tt.reconcileFuncs)
 			g.Expect(gotErr != nil).To(Equal(tt.wantErr))
 			g.Expect(gotRes).To(Equal(tt.wantResult))
 
