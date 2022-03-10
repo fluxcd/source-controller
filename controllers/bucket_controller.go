@@ -28,6 +28,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/fluxcd/source-controller/pkg/azure"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/sync/semaphore"
 	corev1 "k8s.io/api/core/v1"
@@ -396,6 +397,17 @@ func (r *BucketReconciler) reconcileSource(ctx context.Context, obj *sourcev1.Bu
 			return sreconcile.ResultEmpty, e
 		}
 		if provider, err = gcp.NewClient(ctx, secret); err != nil {
+			e := &serror.Event{Err: err, Reason: "ClientError"}
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Error())
+			return sreconcile.ResultEmpty, e
+		}
+	case sourcev1.AzureBucketProvider:
+		if err = azure.ValidateSecret(secret); err != nil {
+			e := &serror.Event{Err: err, Reason: sourcev1.AuthenticationFailedReason}
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Error())
+			return sreconcile.ResultEmpty, e
+		}
+		if provider, err = azure.NewClient(obj, secret); err != nil {
 			e := &serror.Event{Err: err, Reason: "ClientError"}
 			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Error())
 			return sreconcile.ResultEmpty, e
