@@ -507,9 +507,9 @@ func (r *HelmChartReconciler) buildFromTarballArtifact(ctx context.Context, obj 
 	if err != nil {
 		e := &serror.Event{
 			Err:    fmt.Errorf("failed to create temporary working directory: %w", err),
-			Reason: sourcev1.StorageOperationFailedReason,
+			Reason: sourcev1.DirCreationFailedReason,
 		}
-		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.StorageOperationFailedReason, e.Err.Error())
+		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.DirCreationFailedReason, e.Err.Error())
 		return sreconcile.ResultEmpty, e
 	}
 	defer os.RemoveAll(tmpDir)
@@ -519,9 +519,9 @@ func (r *HelmChartReconciler) buildFromTarballArtifact(ctx context.Context, obj 
 	if err := os.Mkdir(sourceDir, 0700); err != nil {
 		e := &serror.Event{
 			Err:    fmt.Errorf("failed to create directory to untar source into: %w", err),
-			Reason: sourcev1.StorageOperationFailedReason,
+			Reason: sourcev1.DirCreationFailedReason,
 		}
-		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.StorageOperationFailedReason, e.Err.Error())
+		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.DirCreationFailedReason, e.Err.Error())
 		return sreconcile.ResultEmpty, e
 	}
 
@@ -530,9 +530,9 @@ func (r *HelmChartReconciler) buildFromTarballArtifact(ctx context.Context, obj 
 	if err != nil {
 		e := &serror.Event{
 			Err:    fmt.Errorf("failed to open source artifact: %w", err),
-			Reason: sourcev1.StorageOperationFailedReason,
+			Reason: sourcev1.ReadOperationFailedReason,
 		}
-		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.StorageOperationFailedReason, e.Err.Error())
+		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.ReadOperationFailedReason, e.Err.Error())
 		return sreconcile.ResultEmpty, e
 	}
 	if _, err = untar.Untar(f, sourceDir); err != nil {
@@ -662,20 +662,20 @@ func (r *HelmChartReconciler) reconcileArtifact(ctx context.Context, obj *source
 	if err := r.Storage.MkdirAll(artifact); err != nil {
 		e := &serror.Event{
 			Err:    fmt.Errorf("failed to create artifact directory: %w", err),
-			Reason: sourcev1.StorageOperationFailedReason,
+			Reason: sourcev1.DirCreationFailedReason,
 		}
 		conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition,
-			sourcev1.StorageOperationFailedReason, e.Err.Error())
+			sourcev1.DirCreationFailedReason, e.Err.Error())
 		return sreconcile.ResultEmpty, e
 	}
 	unlock, err := r.Storage.Lock(artifact)
 	if err != nil {
 		e := &serror.Event{
 			Err:    fmt.Errorf("failed to acquire lock for artifact: %w", err),
-			Reason: sourcev1.StorageOperationFailedReason,
+			Reason: sourcev1.AcquireLockFailedReason,
 		}
 		conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition,
-			sourcev1.StorageOperationFailedReason, e.Err.Error())
+			sourcev1.AcquireLockFailedReason, e.Err.Error())
 		return sreconcile.ResultEmpty, e
 	}
 	defer unlock()
@@ -684,10 +684,10 @@ func (r *HelmChartReconciler) reconcileArtifact(ctx context.Context, obj *source
 	if err = r.Storage.CopyFromPath(&artifact, b.Path); err != nil {
 		e := &serror.Event{
 			Err:    fmt.Errorf("unable to copy Helm chart to storage: %w", err),
-			Reason: sourcev1.StorageOperationFailedReason,
+			Reason: sourcev1.ArchiveOperationFailedReason,
 		}
 		conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition,
-			sourcev1.StorageOperationFailedReason, e.Err.Error())
+			sourcev1.ArchiveOperationFailedReason, e.Err.Error())
 		return sreconcile.ResultEmpty, e
 	}
 
@@ -698,7 +698,7 @@ func (r *HelmChartReconciler) reconcileArtifact(ctx context.Context, obj *source
 	// Update symlink on a "best effort" basis
 	symURL, err := r.Storage.Symlink(artifact, "latest.tar.gz")
 	if err != nil {
-		r.eventLogf(ctx, obj, corev1.EventTypeWarning, sourcev1.StorageOperationFailedReason,
+		r.eventLogf(ctx, obj, events.EventTypeTrace, sourcev1.SymlinkUpdateFailedReason,
 			"failed to update status URL symlink: %s", err)
 	}
 	if symURL != "" {

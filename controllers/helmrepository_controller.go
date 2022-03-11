@@ -240,10 +240,10 @@ func (r *HelmRepositoryReconciler) reconcile(ctx context.Context, obj *sourcev1.
 		if err != nil {
 			e := &serror.Event{
 				Err:    fmt.Errorf("unable to read the artifact: %w", err),
-				Reason: sourcev1.StorageOperationFailedReason,
+				Reason: sourcev1.ReadOperationFailedReason,
 			}
 			conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition,
-				sourcev1.StorageOperationFailedReason, e.Err.Error())
+				sourcev1.ReadOperationFailedReason, e.Err.Error())
 			return successEvent, sreconcile.ResultEmpty, e
 		}
 		size := units.HumanSize(float64(fi.Size()))
@@ -447,10 +447,10 @@ func (r *HelmRepositoryReconciler) reconcileArtifact(ctx context.Context, obj *s
 	if err := r.Storage.MkdirAll(*artifact); err != nil {
 		e := &serror.Event{
 			Err:    fmt.Errorf("failed to create artifact directory: %w", err),
-			Reason: sourcev1.StorageOperationFailedReason,
+			Reason: sourcev1.DirCreationFailedReason,
 		}
 		conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition,
-			sourcev1.StorageOperationFailedReason, e.Err.Error())
+			sourcev1.DirCreationFailedReason, e.Err.Error())
 		return sreconcile.ResultEmpty, e
 	}
 
@@ -468,10 +468,10 @@ func (r *HelmRepositoryReconciler) reconcileArtifact(ctx context.Context, obj *s
 	if err = r.Storage.CopyFromPath(artifact, chartRepo.CachePath); err != nil {
 		e := &serror.Event{
 			Err:    fmt.Errorf("unable to save artifact to storage: %w", err),
-			Reason: sourcev1.StorageOperationFailedReason,
+			Reason: sourcev1.ArchiveOperationFailedReason,
 		}
 		conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition,
-			sourcev1.StorageOperationFailedReason, e.Err.Error())
+			sourcev1.ArchiveOperationFailedReason, e.Err.Error())
 		return sreconcile.ResultEmpty, e
 	}
 
@@ -481,13 +481,8 @@ func (r *HelmRepositoryReconciler) reconcileArtifact(ctx context.Context, obj *s
 	// Update index symlink.
 	indexURL, err := r.Storage.Symlink(*artifact, "index.yaml")
 	if err != nil {
-		e := &serror.Event{
-			Err:    fmt.Errorf("failed to update status URL symlink: %s", err),
-			Reason: sourcev1.StorageOperationFailedReason,
-		}
-		r.eventLogf(ctx, obj, corev1.EventTypeWarning, sourcev1.StorageOperationFailedReason, e.Err.Error())
-		conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition,
-			sourcev1.StorageOperationFailedReason, e.Err.Error())
+		r.eventLogf(ctx, obj, events.EventTypeTrace, sourcev1.SymlinkUpdateFailedReason,
+			"failed to update status URL symlink: %s", err)
 	}
 	if indexURL != "" {
 		obj.Status.URL = indexURL

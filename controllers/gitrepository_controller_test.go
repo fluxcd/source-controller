@@ -813,7 +813,7 @@ func TestGitRepositoryReconciler_reconcileArtifact(t *testing.T) {
 			dir:     "testdata/git/foo",
 			wantErr: true,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.StorageOperationFailedCondition, sourcev1.StorageOperationFailedReason, "failed to stat target path"),
+				*conditions.TrueCondition(sourcev1.StorageOperationFailedCondition, sourcev1.StatOperationFailedReason, "failed to stat target artifact path"),
 			},
 		},
 		{
@@ -821,7 +821,7 @@ func TestGitRepositoryReconciler_reconcileArtifact(t *testing.T) {
 			dir:     "testdata/git/repository/foo.txt",
 			wantErr: true,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.StorageOperationFailedCondition, sourcev1.StorageOperationFailedReason, "invalid target path"),
+				*conditions.TrueCondition(sourcev1.StorageOperationFailedCondition, sourcev1.InvalidPathReason, "invalid target path"),
 			},
 		},
 	}

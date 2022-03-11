@@ -44,8 +44,9 @@ const (
 	// If True, the Source can be in an ArtifactOutdatedCondition.
 	BuildFailedCondition string = "BuildFailed"
 
-	// StorageOperationFailedCondition indicates a transient or persistent failure related to storage. If True, the
-	// reconciliation failed while performing some filesystem operation.
+	// StorageOperationFailedCondition indicates a transient or persistent
+	// failure related to storage. If True, the reconciliation failed while
+	// performing some filesystem operation.
 	StorageOperationFailedCondition string = "StorageOperationFailed"
 )
 
@@ -53,11 +54,34 @@ const (
 	// URLInvalidReason signals that a given Source has an invalid URL.
 	URLInvalidReason string = "URLInvalid"
 
-	// StorageOperationFailedReason signals a failure caused by a storage
-	// operation.
-	StorageOperationFailedReason string = "StorageOperationFailed"
-
 	// AuthenticationFailedReason signals that a Secret does not have the
 	// required fields, or the provided credentials do not match.
 	AuthenticationFailedReason string = "AuthenticationFailed"
+
+	// FileCreationFailedReason signals a failure caused by a file creation
+	// operation.
+	FileCreationFailedReason string = "FileCreationFailed"
+
+	// DirCreationFailedReason signals a failure caused by a directory creation
+	// operation.
+	DirCreationFailedReason string = "DirectoryCreationFailed"
+
+	// StatOperationFailedReason signals a failure caused by a stat operation on
+	// a path.
+	StatOperationFailedReason string = "StatOperationFailed"
+
+	// ReadOperationFailedReason signals a failure caused by a read operation.
+	ReadOperationFailedReason string = "ReadOperationFailed"
+
+	// AcquireLockFailedReason signals a failure in acquiring lock.
+	AcquireLockFailedReason string = "AcquireLockFailed"
+
+	// InvalidPathReason signals a failure caused by an invalid path.
+	InvalidPathReason string = "InvalidPath"
+
+	// ArchiveOperationFailedReason signals a failure in archive operation.
+	ArchiveOperationFailedReason string = "ArchiveOperationFailed"
+
+	// SymlinkUpdateFailedReason signals a failure in updating a symlink.
+	SymlinkUpdateFailedReason string = "SymlinkUpdateFailed"
 )

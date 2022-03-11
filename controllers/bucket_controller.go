@@ -326,10 +326,10 @@ func (r *BucketReconciler) reconcile(ctx context.Context, obj *sourcev1.Bucket, 
 	if err != nil {
 		e := &serror.Event{
 			Err:    fmt.Errorf("failed to create temporary working directory: %w", err),
-			Reason: sourcev1.StorageOperationFailedReason,
+			Reason: sourcev1.DirCreationFailedReason,
 		}
 		conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition,
-			sourcev1.StorageOperationFailedReason, e.Err.Error())
+			sourcev1.DirCreationFailedReason, e.Err.Error())
 		return successEvent, sreconcile.ResultEmpty, e
 	}
 	defer func() {
@@ -548,18 +548,18 @@ func (r *BucketReconciler) reconcileArtifact(ctx context.Context, obj *sourcev1.
 	if f, err := os.Stat(dir); err != nil {
 		e := &serror.Event{
 			Err:    fmt.Errorf("failed to stat source path: %w", err),
-			Reason: sourcev1.StorageOperationFailedReason,
+			Reason: sourcev1.StatOperationFailedReason,
 		}
 		conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition,
-			sourcev1.StorageOperationFailedReason, e.Err.Error())
+			sourcev1.StatOperationFailedReason, e.Err.Error())
 		return sreconcile.ResultEmpty, e
 	} else if !f.IsDir() {
 		e := &serror.Event{
 			Err:    fmt.Errorf("source path '%s' is not a directory", dir),
-			Reason: sourcev1.StorageOperationFailedReason,
+			Reason: sourcev1.InvalidPathReason,
 		}
 		conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition,
-			sourcev1.StorageOperationFailedReason, e.Err.Error())
+			sourcev1.InvalidPathReason, e.Err.Error())
 		return sreconcile.ResultEmpty, e
 	}
 
@@ -567,10 +567,10 @@ func (r *BucketReconciler) reconcileArtifact(ctx context.Context, obj *sourcev1.
 	if err := r.Storage.MkdirAll(artifact); err != nil {
 		e := &serror.Event{
 			Err:    fmt.Errorf("failed to create artifact directory: %w", err),
-			Reason: sourcev1.StorageOperationFailedReason,
+			Reason: sourcev1.DirCreationFailedReason,
 		}
 		conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition,
-			sourcev1.StorageOperationFailedReason, e.Err.Error())
+			sourcev1.DirCreationFailedReason, e.Err.Error())
 		return sreconcile.ResultEmpty, e
 	}
 	unlock, err := r.Storage.Lock(artifact)
@@ -586,10 +586,10 @@ func (r *BucketReconciler) reconcileArtifact(ctx context.Context, obj *sourcev1.
 	if err := r.Storage.Archive(&artifact, dir, nil); err != nil {
 		e := &serror.Event{
 			Err:    fmt.Errorf("unable to archive artifact to storage: %s", err),
-			Reason: sourcev1.StorageOperationFailedReason,
+			Reason: sourcev1.ArchiveOperationFailedReason,
 		}
 		conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition,
-			sourcev1.StorageOperationFailedReason, e.Err.Error())
+			sourcev1.ArchiveOperationFailedReason, e.Err.Error())
 		return sreconcile.ResultEmpty, e
 	}
 
@@ -599,13 +599,8 @@ func (r *BucketReconciler) reconcileArtifact(ctx context.Context, obj *sourcev1.
 	// Update symlink on a "best effort" basis
 	url, err := r.Storage.Symlink(artifact, "latest.tar.gz")
 	if err != nil {
-		e := &serror.Event{
-			Err:    fmt.Errorf("failed to update status URL symlink: %s", err),
-			Reason: sourcev1.StorageOperationFailedReason,
-		}
-		r.eventLogf(ctx, obj, corev1.EventTypeWarning, sourcev1.StorageOperationFailedReason, e.Err.Error())
-		conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition,
-			sourcev1.StorageOperationFailedReason, e.Err.Error())
+		r.eventLogf(ctx, obj, events.EventTypeTrace, sourcev1.SymlinkUpdateFailedReason,
+			"failed to update status URL symlink: %s", err)
 	}
 	if url != "" {
 		obj.Status.URL = url

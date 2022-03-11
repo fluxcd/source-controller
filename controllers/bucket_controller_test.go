@@ -948,7 +948,7 @@ func TestBucketReconciler_reconcileArtifact(t *testing.T) {
 			want:    sreconcile.ResultEmpty,
 			wantErr: true,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.StorageOperationFailedCondition, sourcev1.StorageOperationFailedReason, "failed to stat source path"),
+				*conditions.TrueCondition(sourcev1.StorageOperationFailedCondition, sourcev1.StatOperationFailedReason, "failed to stat source path"),
 			},
 		},
 		{
@@ -967,7 +967,7 @@ func TestBucketReconciler_reconcileArtifact(t *testing.T) {
 			want:    sreconcile.ResultEmpty,
 			wantErr: true,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.StorageOperationFailedCondition, sourcev1.StorageOperationFailedReason, "is not a directory"),
+				*conditions.TrueCondition(sourcev1.StorageOperationFailedCondition, sourcev1.InvalidPathReason, "is not a directory"),
 			},
 		},
 	}
