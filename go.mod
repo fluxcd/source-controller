@@ -39,21 +39,21 @@ require (
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
 	google.golang.org/api v0.62.0
 	gotest.tools v2.2.0+incompatible
-	helm.sh/helm/v3 v3.8.0
-	k8s.io/api v0.23.3
-	k8s.io/apimachinery v0.23.3
-	k8s.io/client-go v0.23.3
+	helm.sh/helm/v3 v3.8.1
+	k8s.io/api v0.23.4
+	k8s.io/apimachinery v0.23.4
+	k8s.io/client-go v0.23.4
 	k8s.io/utils v0.0.0-20220210201930-3a6ce19ff2f9
 	sigs.k8s.io/cli-utils v0.28.0
 	sigs.k8s.io/controller-runtime v0.11.1
 	sigs.k8s.io/yaml v1.3.0
 )
 
-// Temporary fork of Helm v3.8.0 with patch applied from
+// Temporary fork of Helm v3.8.1 with patch applied from
 // https://github.com/helm/helm/pull/10568 to solve
 // https://github.com/fluxcd/source-controller/issues/578.
 // TODO: Remove once Helm version with patch is released.
-replace helm.sh/helm/v3 v3.8.0 => github.com/hiddeco/helm/v3 v3.8.1-0.20220223115530-53489c50c9e7
+replace helm.sh/helm/v3 v3.8.1 => github.com/hiddeco/helm/v3 v3.8.2-0.20220311115129-ae3ec836f6eb
 
 require (
 	cloud.google.com/go v0.99.0 // indirect
@@ -200,13 +200,13 @@ require (
 	gopkg.in/warnings.v0 v0.1.2 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b // indirect
-	k8s.io/apiextensions-apiserver v0.23.3 // indirect
-	k8s.io/apiserver v0.23.3 // indirect
-	k8s.io/cli-runtime v0.23.2 // indirect
-	k8s.io/component-base v0.23.3 // indirect
+	k8s.io/apiextensions-apiserver v0.23.4 // indirect
+	k8s.io/apiserver v0.23.4 // indirect
+	k8s.io/cli-runtime v0.23.4 // indirect
+	k8s.io/component-base v0.23.4 // indirect
 	k8s.io/klog/v2 v2.40.1 // indirect
 	k8s.io/kube-openapi v0.0.0-20220124234850-424119656bbf // indirect
-	k8s.io/kubectl v0.23.2 // indirect
+	k8s.io/kubectl v0.23.4 // indirect
 	oras.land/oras-go v1.1.0 // indirect
 	sigs.k8s.io/json v0.0.0-20211208200746-9f7c6b3444d2 // indirect
 	sigs.k8s.io/kustomize/api v0.10.1 // indirect
