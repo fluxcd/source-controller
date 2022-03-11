@@ -54,9 +54,9 @@ import (
 	"github.com/fluxcd/source-controller/pkg/sourceignore"
 )
 
-// gitRepoReadyConditions contains all the conditions information needed
-// for GitRepository Ready status conditions summary calculation.
-var gitRepoReadyConditions = summarize.Conditions{
+// gitRepositoryReadyCondition contains the information required to summarize a
+// v1beta2.GitRepository Ready Condition.
+var gitRepositoryReadyCondition = summarize.Conditions{
 	Target: meta.ReadyCondition,
 	Owned: []string{
 		sourcev1.SourceVerifiedCondition,
@@ -89,7 +89,7 @@ var gitRepoReadyConditions = summarize.Conditions{
 // +kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=gitrepositories/finalizers,verbs=get;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 
-// GitRepositoryReconciler reconciles a GitRepository object
+// GitRepositoryReconciler reconciles a v1beta2.GitRepository object.
 type GitRepositoryReconciler struct {
 	client.Client
 	kuberecorder.EventRecorder
@@ -106,9 +106,9 @@ type GitRepositoryReconcilerOptions struct {
 	DependencyRequeueInterval time.Duration
 }
 
-// gitRepoReconcilerFunc is the function type for all the Git repository
-// reconciler functions.
-type gitRepoReconcilerFunc func(ctx context.Context, obj *sourcev1.GitRepository, commit *git.Commit, includes *artifactSet, dir string) (sreconcile.Result, error)
+// gitRepositoryReconcileFunc is the function type for all the
+// v1beta2.GitRepository (sub)reconcile functions.
+type gitRepositoryReconcileFunc func(ctx context.Context, obj *sourcev1.GitRepository, commit *git.Commit, includes *artifactSet, dir string) (sreconcile.Result, error)
 
 func (r *GitRepositoryReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return r.SetupWithManagerAndOptions(mgr, GitRepositoryReconcilerOptions{})
@@ -158,7 +158,7 @@ func (r *GitRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	defer func() {
 		summarizeHelper := summarize.NewHelper(r.EventRecorder, patchHelper)
 		summarizeOpts := []summarize.Option{
-			summarize.WithConditions(gitRepoReadyConditions),
+			summarize.WithConditions(gitRepositoryReadyCondition),
 			summarize.WithReconcileResult(recResult),
 			summarize.WithReconcileError(retErr),
 			summarize.WithIgnoreNotFound(),
@@ -166,7 +166,7 @@ func (r *GitRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 				summarize.RecordContextualError,
 				summarize.RecordReconcileReq,
 			),
-			summarize.WithResultBuilder(sreconcile.AlwaysRequeueResultBuilder{RequeueAfter: obj.GetInterval().Duration}),
+			summarize.WithResultBuilder(sreconcile.AlwaysRequeueResultBuilder{RequeueAfter: obj.GetRequeueAfter()}),
 			summarize.WithPatchFieldOwner(r.ControllerName),
 		}
 		result, retErr = summarizeHelper.SummarizeAndPatch(ctx, obj, summarizeOpts...)
@@ -191,7 +191,7 @@ func (r *GitRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	}
 
 	// Reconcile actual object
-	reconcilers := []gitRepoReconcilerFunc{
+	reconcilers := []gitRepositoryReconcileFunc{
 		r.reconcileStorage,
 		r.reconcileSource,
 		r.reconcileInclude,
@@ -201,16 +201,14 @@ func (r *GitRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	return
 }
 
-// reconcile steps iterates through the actual reconciliation tasks for objec,
-// it returns early on the first step that returns ResultRequeue or produces an
-// error.
-func (r *GitRepositoryReconciler) reconcile(ctx context.Context, obj *sourcev1.GitRepository, reconcilers []gitRepoReconcilerFunc) (sreconcile.Result, error) {
+// reconcile iterates through the gitRepositoryReconcileFunc tasks for the
+// object. It returns early on the first call that returns
+// reconcile.ResultRequeue, or produces an error.
+func (r *GitRepositoryReconciler) reconcile(ctx context.Context, obj *sourcev1.GitRepository, reconcilers []gitRepositoryReconcileFunc) (sreconcile.Result, error) {
+	// Mark as reconciling if generation differs
 	if obj.Generation != obj.Status.ObservedGeneration {
 		conditions.MarkReconciling(obj, "NewGeneration", "reconciling new object generation (%d)", obj.Generation)
 	}
-
-	var commit git.Commit
-	var includes artifactSet
 
 	// Create temp dir for Git clone
 	tmpDir, err := util.TempDirForObj("", obj)
@@ -220,11 +218,20 @@ func (r *GitRepositoryReconciler) reconcile(ctx context.Context, obj *sourcev1.G
 			Reason: sourcev1.StorageOperationFailedReason,
 		}
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() {
+		if err = os.RemoveAll(tmpDir); err != nil {
+			ctrl.LoggerFrom(ctx).Error(err, "failed to remove temporary working directory")
+		}
+	}()
 
 	// Run the sub-reconcilers and build the result of reconciliation.
-	var res sreconcile.Result
-	var resErr error
+	var (
+		commit   git.Commit
+		includes artifactSet
+
+		res    sreconcile.Result
+		resErr error
+	)
 	for _, rec := range reconcilers {
 		recResult, err := rec(ctx, obj, &commit, &includes, tmpDir)
 		// Exit immediately on ResultRequeue.
@@ -244,14 +251,19 @@ func (r *GitRepositoryReconciler) reconcile(ctx context.Context, obj *sourcev1.G
 	return res, resErr
 }
 
-// reconcileStorage ensures the current state of the storage matches the desired and previously observed state.
+// reconcileStorage ensures the current state of the storage matches the
+// desired and previously observed state.
 //
-// All artifacts for the resource except for the current one are garbage collected from the storage.
-// If the artifact in the Status object of the resource disappeared from storage, it is removed from the object.
-// If the object does not have an artifact in its Status object, a v1beta1.ArtifactUnavailableCondition is set.
-// If the hostname of any of the URLs on the object do not match the current storage server hostname, they are updated.
+// All Artifacts for the object except for the current one in the Status are
+// garbage collected from the Storage.
+// If the Artifact in the Status of the object disappeared from the Storage,
+// it is removed from the object.
+// If the object does not have an Artifact in its Status, a Reconciling
+// condition is added.
+// The hostname of any URL in the Status of the object are updated, to ensure
+// they match the Storage server hostname of current runtime.
 func (r *GitRepositoryReconciler) reconcileStorage(ctx context.Context,
-	obj *sourcev1.GitRepository, _ *git.Commit, includes *artifactSet, dir string) (sreconcile.Result, error) {
+	obj *sourcev1.GitRepository, _ *git.Commit, _ *artifactSet, _ string) (sreconcile.Result, error) {
 	// Garbage collect previous advertised artifact(s) from storage
 	_ = r.garbageCollect(ctx, obj)
 
@@ -275,17 +287,24 @@ func (r *GitRepositoryReconciler) reconcileStorage(ctx context.Context,
 	return sreconcile.ResultSuccess, nil
 }
 
-// reconcileSource ensures the upstream Git repository can be reached and checked out using the declared configuration,
-// and observes its state.
+// reconcileSource ensures the upstream Git repository and reference can be
+// cloned and checked out using the specified configuration, and observes its
+// state.
 //
-// The repository is checked out to the given dir using the defined configuration, and in case of an error during the
-// checkout process (including transient errors), it records v1beta1.FetchFailedCondition=True and returns early.
-// On a successful checkout it removes v1beta1.FetchFailedCondition, and compares the current revision of HEAD to the
-// artifact on the object, and records v1beta1.ArtifactOutdatedCondition if they differ.
-// If instructed, the signature of the commit is verified if and recorded as v1beta1.SourceVerifiedCondition. If the
-// signature can not be verified or the verification fails, the Condition=False and it returns early.
-// If both the checkout and signature verification are successful, the given artifact pointer is set to a new artifact
-// with the available metadata.
+// The repository is cloned to the given dir, using the specified configuration
+// to check out the reference. In case of an error during this process
+// (including transient errors), it records v1beta2.FetchFailedCondition=True
+// and returns early.
+// On a successful checkout, it removes v1beta2.FetchFailedCondition and
+// compares the current revision of HEAD to the revision of the Artifact in the
+// Status of the object. It records v1beta2.ArtifactOutdatedCondition=True when
+// they differ.
+// If specified, the signature of the Git commit is verified. If the signature
+// can not be verified or the verification fails, it records
+// v1beta2.SourceVerifiedCondition=False and returns early. When successful,
+// it records v1beta2.SourceVerifiedCondition=True.
+// When all the above is successful, the given Commit pointer is set to the
+// commit of the checked out Git repository.
 func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context,
 	obj *sourcev1.GitRepository, commit *git.Commit, _ *artifactSet, dir string) (sreconcile.Result, error) {
 	// Configure authentication strategy to access the source
@@ -376,15 +395,17 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context,
 	return sreconcile.ResultSuccess, nil
 }
 
-// reconcileArtifact archives a new artifact to the storage, if the current observation on the object does not match the
-// given data.
+// reconcileArtifact archives a new Artifact to the Storage, if the current
+// (Status) data on the object does not match the given.
 //
-// The inspection of the given data to the object is differed, ensuring any stale observations as
-// v1beta1.ArtifactUnavailableCondition and v1beta1.ArtifactOutdatedCondition are always deleted.
-// If the given artifact and/or includes do not differ from the object's current, it returns early.
-// Source ignore patterns are loaded, and the given directory is archived.
-// On a successful archive, the artifact and includes in the status of the given object are set, and the symlink in the
-// storage is updated to its path.
+// The inspection of the given data to the object is differed, ensuring any
+// stale observations like v1beta2.ArtifactOutdatedCondition are removed.
+// If the given Artifact and/or artifactSet (includes) do not differ from the
+// object's current, it returns early.
+// Source ignore patterns are loaded, and the given directory is archived while
+// taking these patterns into account.
+// On a successful archive, the Artifact and Includes in the Status of the
+// object are set, and the symlink in the Storage is updated to its path.
 func (r *GitRepositoryReconciler) reconcileArtifact(ctx context.Context,
 	obj *sourcev1.GitRepository, commit *git.Commit, includes *artifactSet, dir string) (sreconcile.Result, error) {
 	// Create potential new artifact with current available metadata
@@ -477,14 +498,19 @@ func (r *GitRepositoryReconciler) reconcileArtifact(ctx context.Context,
 	return sreconcile.ResultSuccess, nil
 }
 
-// reconcileInclude reconciles the declared includes from the object by copying their artifact (sub)contents to the
-// declared paths in the given directory.
+// reconcileInclude reconciles the on the object specified
+// v1beta2.GitRepositoryInclude list by copying their Artifact (sub)contents to
+// the specified paths in the given directory.
 //
-// If an include is unavailable, it marks the object with v1beta1.IncludeUnavailableCondition and returns early.
-// If the copy operations are successful, it deletes the v1beta1.IncludeUnavailableCondition from the object.
-// If the artifactSet differs from the current set, it marks the object with v1beta1.ArtifactOutdatedCondition.
+// When one of the includes is unavailable, it marks the object with
+// v1beta2.IncludeUnavailableCondition=True and returns early.
+// When the copy operations are successful, it removes the
+// v1beta2.IncludeUnavailableCondition from the object.
+// When the composed artifactSet differs from the current set in the Status of
+// the object, it marks the object with v1beta2.ArtifactOutdatedCondition=True.
 func (r *GitRepositoryReconciler) reconcileInclude(ctx context.Context,
 	obj *sourcev1.GitRepository, _ *git.Commit, includes *artifactSet, dir string) (sreconcile.Result, error) {
+
 	artifacts := make(artifactSet, len(obj.Spec.Include))
 	for i, incl := range obj.Spec.Include {
 		// Do this first as it is much cheaper than copy operations
@@ -546,25 +572,16 @@ func (r *GitRepositoryReconciler) reconcileInclude(ctx context.Context,
 	return sreconcile.ResultSuccess, nil
 }
 
-// reconcileDelete handles the delete of an object. It first garbage collects all artifacts for the object from the
-// artifact storage, if successful, the finalizer is removed from the object.
-func (r *GitRepositoryReconciler) reconcileDelete(ctx context.Context, obj *sourcev1.GitRepository) (sreconcile.Result, error) {
-	// Garbage collect the resource's artifacts
-	if err := r.garbageCollect(ctx, obj); err != nil {
-		// Return the error so we retry the failed garbage collection
-		return sreconcile.ResultEmpty, err
-	}
-
-	// Remove our finalizer from the list
-	controllerutil.RemoveFinalizer(obj, sourcev1.SourceFinalizer)
-
-	// Stop reconciliation as the object is being deleted
-	return sreconcile.ResultEmpty, nil
-}
-
-// verifyCommitSignature verifies the signature of the given commit if a verification mode is configured on the object.
+// verifyCommitSignature verifies the signature of the given Git commit, if a
+// verification mode is specified on the object.
+// If the signature can not be verified or the verification fails, it records
+// v1beta2.SourceVerifiedCondition=False and returns.
+// When successful, it records v1beta2.SourceVerifiedCondition=True.
+// If no verification mode is specified on the object, the
+// v1beta2.SourceVerifiedCondition Condition is removed.
 func (r *GitRepositoryReconciler) verifyCommitSignature(ctx context.Context, obj *sourcev1.GitRepository, commit git.Commit) (sreconcile.Result, error) {
-	// Check if there is a commit verification is configured and remove any old observations if there is none
+	// Check if there is a commit verification is configured and remove any old
+	// observations if there is none
 	if obj.Spec.Verification == nil || obj.Spec.Verification.Mode == "" {
 		conditions.Delete(obj, sourcev1.SourceVerifiedCondition)
 		return sreconcile.ResultSuccess, nil
@@ -607,9 +624,28 @@ func (r *GitRepositoryReconciler) verifyCommitSignature(ctx context.Context, obj
 	return sreconcile.ResultSuccess, nil
 }
 
-// garbageCollect performs a garbage collection for the given v1beta1.GitRepository. It removes all but the current
-// artifact except for when the deletion timestamp is set, which will result in the removal of all artifacts for the
-// resource.
+// reconcileDelete handles the deletion of the object.
+// It first garbage collects all Artifacts for the object from the Storage.
+// Removing the finalizer from the object if successful.
+func (r *GitRepositoryReconciler) reconcileDelete(ctx context.Context, obj *sourcev1.GitRepository) (sreconcile.Result, error) {
+	// Garbage collect the resource's artifacts
+	if err := r.garbageCollect(ctx, obj); err != nil {
+		// Return the error so we retry the failed garbage collection
+		return sreconcile.ResultEmpty, err
+	}
+
+	// Remove our finalizer from the list
+	controllerutil.RemoveFinalizer(obj, sourcev1.SourceFinalizer)
+
+	// Stop reconciliation as the object is being deleted
+	return sreconcile.ResultEmpty, nil
+}
+
+// garbageCollect performs a garbage collection for the given object.
+//
+// It removes all but the current Artifact from the Storage, unless the
+// deletion timestamp on the object is set. Which will result in the
+// removal of all Artifacts for the objects.
 func (r *GitRepositoryReconciler) garbageCollect(ctx context.Context, obj *sourcev1.GitRepository) error {
 	if !obj.DeletionTimestamp.IsZero() {
 		if deleted, err := r.Storage.RemoveAll(r.Storage.NewArtifactFor(obj.Kind, obj.GetObjectMeta(), "", "*")); err != nil {
@@ -637,9 +673,11 @@ func (r *GitRepositoryReconciler) garbageCollect(ctx context.Context, obj *sourc
 	return nil
 }
 
-// eventLog records event and logs at the same time. This log is different from
-// the debug log in the event recorder in the sense that this is a simple log,
-// the event recorder debug log contains complete details about the event.
+// eventLogf records events, and logs at the same time.
+//
+// This log is different from the debug log in the EventRecorder, in the sense
+// that this is a simple log. While the debug log contains complete details
+// about the event.
 func (r *GitRepositoryReconciler) eventLogf(ctx context.Context, obj runtime.Object, eventType string, reason string, messageFmt string, args ...interface{}) {
 	msg := fmt.Sprintf(messageFmt, args...)
 	// Log and emit event.

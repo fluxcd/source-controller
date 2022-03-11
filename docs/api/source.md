@@ -19,7 +19,7 @@ Resource Types:
 </li></ul>
 <h3 id="source.toolkit.fluxcd.io/v1beta2.Bucket">Bucket
 </h3>
-<p>Bucket is the Schema for the buckets API</p>
+<p>Bucket is the Schema for the buckets API.</p>
 <div class="md-typeset__scrollwrap">
 <div class="md-typeset__table">
 <table>
@@ -83,7 +83,9 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>The S3 compatible storage provider name, default (&lsquo;generic&rsquo;).</p>
+<p>Provider of the object storage bucket.
+Defaults to &lsquo;generic&rsquo;, which expects an S3 (API) compatible object
+storage.</p>
 </td>
 </tr>
 <tr>
@@ -94,7 +96,7 @@ string
 </em>
 </td>
 <td>
-<p>The bucket name.</p>
+<p>BucketName is the name of the object storage bucket.</p>
 </td>
 </tr>
 <tr>
@@ -105,7 +107,7 @@ string
 </em>
 </td>
 <td>
-<p>The bucket endpoint address.</p>
+<p>Endpoint is the object storage address the BucketName is located at.</p>
 </td>
 </tr>
 <tr>
@@ -117,7 +119,7 @@ bool
 </td>
 <td>
 <em>(Optional)</em>
-<p>Insecure allows connecting to a non-TLS S3 HTTP endpoint.</p>
+<p>Insecure allows connecting to a non-TLS HTTP Endpoint.</p>
 </td>
 </tr>
 <tr>
@@ -129,7 +131,7 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>The bucket region.</p>
+<p>Region of the Endpoint where the BucketName is located in.</p>
 </td>
 </tr>
 <tr>
@@ -143,7 +145,7 @@ github.com/fluxcd/pkg/apis/meta.LocalObjectReference
 </td>
 <td>
 <em>(Optional)</em>
-<p>The name of the secret containing authentication credentials
+<p>SecretRef specifies the Secret containing authentication credentials
 for the Bucket.</p>
 </td>
 </tr>
@@ -157,7 +159,7 @@ Kubernetes meta/v1.Duration
 </em>
 </td>
 <td>
-<p>The interval at which to check for bucket updates.</p>
+<p>Interval at which to check the Endpoint for updates.</p>
 </td>
 </tr>
 <tr>
@@ -171,7 +173,7 @@ Kubernetes meta/v1.Duration
 </td>
 <td>
 <em>(Optional)</em>
-<p>The timeout for fetch operations, defaults to 60s.</p>
+<p>Timeout for fetch operations, defaults to 60s.</p>
 </td>
 </tr>
 <tr>
@@ -197,7 +199,8 @@ bool
 </td>
 <td>
 <em>(Optional)</em>
-<p>This flag tells the controller to suspend the reconciliation of this source.</p>
+<p>Suspend tells the controller to suspend the reconciliation of this
+Bucket.</p>
 </td>
 </tr>
 <tr>
@@ -211,7 +214,9 @@ github.com/fluxcd/pkg/apis/acl.AccessFrom
 </td>
 <td>
 <em>(Optional)</em>
-<p>AccessFrom defines an Access Control List for allowing cross-namespace references to this object.</p>
+<p>AccessFrom specifies an Access Control List for allowing cross-namespace
+references to this object.
+NOTE: Not implemented, provisional as of <a href="https://github.com/fluxcd/flux2/pull/2092">https://github.com/fluxcd/flux2/pull/2092</a></p>
 </td>
 </tr>
 </table>
@@ -235,7 +240,7 @@ BucketStatus
 </div>
 <h3 id="source.toolkit.fluxcd.io/v1beta2.GitRepository">GitRepository
 </h3>
-<p>GitRepository is the Schema for the gitrepositories API</p>
+<p>GitRepository is the Schema for the gitrepositories API.</p>
 <div class="md-typeset__scrollwrap">
 <div class="md-typeset__table">
 <table>
@@ -298,7 +303,7 @@ string
 </em>
 </td>
 <td>
-<p>The repository URL, can be a HTTP/S or SSH address.</p>
+<p>URL specifies the Git repository URL, it can be an HTTP/S or SSH address.</p>
 </td>
 </tr>
 <tr>
@@ -312,9 +317,12 @@ github.com/fluxcd/pkg/apis/meta.LocalObjectReference
 </td>
 <td>
 <em>(Optional)</em>
-<p>The secret name containing the Git credentials.
-For HTTPS repositories the secret must contain username and password fields.
-For SSH repositories the secret must contain &lsquo;identity&rsquo;, &lsquo;identity.pub&rsquo; and &lsquo;known_hosts&rsquo; fields.</p>
+<p>SecretRef specifies the Secret containing authentication credentials for
+the GitRepository.
+For HTTPS repositories the Secret must contain &lsquo;username&rsquo; and &lsquo;password&rsquo;
+fields.
+For SSH repositories the Secret must contain &lsquo;identity&rsquo;, &lsquo;identity.pub&rsquo;
+and &lsquo;known_hosts&rsquo; fields.</p>
 </td>
 </tr>
 <tr>
@@ -327,7 +335,7 @@ Kubernetes meta/v1.Duration
 </em>
 </td>
 <td>
-<p>The interval at which to check for repository updates.</p>
+<p>Interval at which to check the GitRepository for updates.</p>
 </td>
 </tr>
 <tr>
@@ -341,7 +349,7 @@ Kubernetes meta/v1.Duration
 </td>
 <td>
 <em>(Optional)</em>
-<p>The timeout for remote Git operations like cloning, defaults to 60s.</p>
+<p>Timeout for Git operations like cloning, defaults to 60s.</p>
 </td>
 </tr>
 <tr>
@@ -355,8 +363,8 @@ GitRepositoryRef
 </td>
 <td>
 <em>(Optional)</em>
-<p>The Git reference to checkout and monitor for changes, defaults to
-master branch.</p>
+<p>Reference specifies the Git reference to resolve and monitor for
+changes, defaults to the &lsquo;master&rsquo; branch.</p>
 </td>
 </tr>
 <tr>
@@ -370,7 +378,8 @@ GitRepositoryVerification
 </td>
 <td>
 <em>(Optional)</em>
-<p>Verification defines the configuration to verify the OpenPGP signature for the Git commit HEAD points to.</p>
+<p>Verification specifies the configuration to verify the Git commit
+signature(s).</p>
 </td>
 </tr>
 <tr>
@@ -382,8 +391,9 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>Ignore overrides the set of excluded patterns in the .sourceignore format (which is the same as .gitignore).
-If not provided, a default will be used, consult the documentation for your version to find out what those are.</p>
+<p>Ignore overrides the set of excluded patterns in the .sourceignore format
+(which is the same as .gitignore). If not provided, a default will be used,
+consult the documentation for your version to find out what those are.</p>
 </td>
 </tr>
 <tr>
@@ -395,8 +405,8 @@ bool
 </td>
 <td>
 <em>(Optional)</em>
-<p>Suspend tells the controller to suspend the reconciliation of this source.
-This flag tells the controller to suspend the reconciliation of this source.</p>
+<p>Suspend tells the controller to suspend the reconciliation of this
+GitRepository.</p>
 </td>
 </tr>
 <tr>
@@ -408,8 +418,8 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>Determines which git client library to use.
-Defaults to go-git, valid values are (&lsquo;go-git&rsquo;, &lsquo;libgit2&rsquo;).</p>
+<p>GitImplementation specifies which Git client library implementation to
+use. Defaults to &lsquo;go-git&rsquo;, valid values are (&lsquo;go-git&rsquo;, &lsquo;libgit2&rsquo;).</p>
 </td>
 </tr>
 <tr>
@@ -421,7 +431,8 @@ bool
 </td>
 <td>
 <em>(Optional)</em>
-<p>When enabled, after the clone is created, initializes all submodules within, using their default settings.
+<p>RecurseSubmodules enables the initialization of all submodules within
+the GitRepository as cloned from the URL, using their default settings.
 This option is available only when using the &lsquo;go-git&rsquo; GitImplementation.</p>
 </td>
 </tr>
@@ -435,8 +446,8 @@ This option is available only when using the &lsquo;go-git&rsquo; GitImplementat
 </em>
 </td>
 <td>
-<p>Include defines a list of GitRepository resources which artifacts should be included in the artifact produced for
-this resource.</p>
+<p>Include specifies a list of GitRepository resources which Artifacts
+should be included in the Artifact produced for this GitRepository.</p>
 </td>
 </tr>
 <tr>
@@ -450,7 +461,9 @@ github.com/fluxcd/pkg/apis/acl.AccessFrom
 </td>
 <td>
 <em>(Optional)</em>
-<p>AccessFrom defines an Access Control List for allowing cross-namespace references to this object.</p>
+<p>AccessFrom specifies an Access Control List for allowing cross-namespace
+references to this object.
+NOTE: Not implemented, provisional as of <a href="https://github.com/fluxcd/flux2/pull/2092">https://github.com/fluxcd/flux2/pull/2092</a></p>
 </td>
 </tr>
 </table>
@@ -474,7 +487,7 @@ GitRepositoryStatus
 </div>
 <h3 id="source.toolkit.fluxcd.io/v1beta2.HelmChart">HelmChart
 </h3>
-<p>HelmChart is the Schema for the helmcharts API</p>
+<p>HelmChart is the Schema for the helmcharts API.</p>
 <div class="md-typeset__scrollwrap">
 <div class="md-typeset__table">
 <table>
@@ -537,7 +550,8 @@ string
 </em>
 </td>
 <td>
-<p>The name or path the Helm chart is available at in the SourceRef.</p>
+<p>Chart is the name or path the Helm chart is available at in the
+SourceRef.</p>
 </td>
 </tr>
 <tr>
@@ -549,8 +563,8 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>The chart version semver expression, ignored for charts from GitRepository
-and Bucket sources. Defaults to latest when omitted.</p>
+<p>Version is the chart version semver expression, ignored for charts from
+GitRepository and Bucket sources. Defaults to latest when omitted.</p>
 </td>
 </tr>
 <tr>
@@ -563,7 +577,7 @@ LocalHelmChartSourceReference
 </em>
 </td>
 <td>
-<p>The reference to the Source the chart is available at.</p>
+<p>SourceRef is the reference to the Source the chart is available at.</p>
 </td>
 </tr>
 <tr>
@@ -576,7 +590,7 @@ Kubernetes meta/v1.Duration
 </em>
 </td>
 <td>
-<p>The interval at which to check the Source for updates.</p>
+<p>Interval is the interval at which to check the Source for updates.</p>
 </td>
 </tr>
 <tr>
@@ -588,8 +602,8 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>Determines what enables the creation of a new artifact. Valid values are
-(&lsquo;ChartVersion&rsquo;, &lsquo;Revision&rsquo;).
+<p>ReconcileStrategy determines what enables the creation of a new artifact.
+Valid values are (&lsquo;ChartVersion&rsquo;, &lsquo;Revision&rsquo;).
 See the documentation of the values for an explanation on their behavior.
 Defaults to ChartVersion when omitted.</p>
 </td>
@@ -603,10 +617,11 @@ Defaults to ChartVersion when omitted.</p>
 </td>
 <td>
 <em>(Optional)</em>
-<p>Alternative list of values files to use as the chart values (values.yaml
-is not included by default), expected to be a relative path in the SourceRef.
-Values files are merged in the order of this list with the last file overriding
-the first. Ignored when omitted.</p>
+<p>ValuesFiles is an alternative list of values files to use as the chart
+values (values.yaml is not included by default), expected to be a
+relative path in the SourceRef.
+Values files are merged in the order of this list with the last file
+overriding the first. Ignored when omitted.</p>
 </td>
 </tr>
 <tr>
@@ -618,10 +633,10 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>Alternative values file to use as the default chart values, expected to
-be a relative path in the SourceRef. Deprecated in favor of ValuesFiles,
-for backwards compatibility the file defined here is merged before the
-ValuesFiles items. Ignored when omitted.</p>
+<p>ValuesFile is an alternative values file to use as the default chart
+values, expected to be a relative path in the SourceRef. Deprecated in
+favor of ValuesFiles, for backwards compatibility the file specified here
+is merged before the ValuesFiles items. Ignored when omitted.</p>
 </td>
 </tr>
 <tr>
@@ -633,7 +648,8 @@ bool
 </td>
 <td>
 <em>(Optional)</em>
-<p>This flag tells the controller to suspend the reconciliation of this source.</p>
+<p>Suspend tells the controller to suspend the reconciliation of this
+source.</p>
 </td>
 </tr>
 <tr>
@@ -647,7 +663,9 @@ github.com/fluxcd/pkg/apis/acl.AccessFrom
 </td>
 <td>
 <em>(Optional)</em>
-<p>AccessFrom defines an Access Control List for allowing cross-namespace references to this object.</p>
+<p>AccessFrom specifies an Access Control List for allowing cross-namespace
+references to this object.
+NOTE: Not implemented, provisional as of <a href="https://github.com/fluxcd/flux2/pull/2092">https://github.com/fluxcd/flux2/pull/2092</a></p>
 </td>
 </tr>
 </table>
@@ -671,7 +689,7 @@ HelmChartStatus
 </div>
 <h3 id="source.toolkit.fluxcd.io/v1beta2.HelmRepository">HelmRepository
 </h3>
-<p>HelmRepository is the Schema for the helmrepositories API</p>
+<p>HelmRepository is the Schema for the helmrepositories API.</p>
 <div class="md-typeset__scrollwrap">
 <div class="md-typeset__table">
 <table>
@@ -734,7 +752,8 @@ string
 </em>
 </td>
 <td>
-<p>The Helm repository URL, a valid URL contains at least a protocol and host.</p>
+<p>URL of the Helm repository, a valid URL contains at least a protocol and
+host.</p>
 </td>
 </tr>
 <tr>
@@ -748,12 +767,12 @@ github.com/fluxcd/pkg/apis/meta.LocalObjectReference
 </td>
 <td>
 <em>(Optional)</em>
-<p>The name of the secret containing authentication credentials for the Helm
-repository.
-For HTTP/S basic auth the secret must contain username and
-password fields.
-For TLS the secret must contain a certFile and keyFile, and/or
-caCert fields.</p>
+<p>SecretRef specifies the Secret containing authentication credentials
+for the HelmRepository.
+For HTTP/S basic auth the secret must contain &lsquo;username&rsquo; and &lsquo;password&rsquo;
+fields.
+For TLS the secret must contain a &lsquo;certFile&rsquo; and &lsquo;keyFile&rsquo;, and/or
+&lsquo;caCert&rsquo; fields.</p>
 </td>
 </tr>
 <tr>
@@ -765,12 +784,12 @@ bool
 </td>
 <td>
 <em>(Optional)</em>
-<p>PassCredentials allows the credentials from the SecretRef to be passed on to
-a host that does not match the host as defined in URL.
-This may be required if the host of the advertised chart URLs in the index
-differ from the defined URL.
-Enabling this should be done with caution, as it can potentially result in
-credentials getting stolen in a MITM-attack.</p>
+<p>PassCredentials allows the credentials from the SecretRef to be passed
+on to a host that does not match the host as defined in URL.
+This may be required if the host of the advertised chart URLs in the
+index differ from the defined URL.
+Enabling this should be done with caution, as it can potentially result
+in credentials getting stolen in a MITM-attack.</p>
 </td>
 </tr>
 <tr>
@@ -783,7 +802,7 @@ Kubernetes meta/v1.Duration
 </em>
 </td>
 <td>
-<p>The interval at which to check the upstream for updates.</p>
+<p>Interval at which to check the URL for updates.</p>
 </td>
 </tr>
 <tr>
@@ -797,7 +816,7 @@ Kubernetes meta/v1.Duration
 </td>
 <td>
 <em>(Optional)</em>
-<p>The timeout of index fetching, defaults to 60s.</p>
+<p>Timeout of the index fetch operation, defaults to 60s.</p>
 </td>
 </tr>
 <tr>
@@ -809,7 +828,8 @@ bool
 </td>
 <td>
 <em>(Optional)</em>
-<p>This flag tells the controller to suspend the reconciliation of this source.</p>
+<p>Suspend tells the controller to suspend the reconciliation of this
+HelmRepository.</p>
 </td>
 </tr>
 <tr>
@@ -823,7 +843,9 @@ github.com/fluxcd/pkg/apis/acl.AccessFrom
 </td>
 <td>
 <em>(Optional)</em>
-<p>AccessFrom defines an Access Control List for allowing cross-namespace references to this object.</p>
+<p>AccessFrom specifies an Access Control List for allowing cross-namespace
+references to this object.
+NOTE: Not implemented, provisional as of <a href="https://github.com/fluxcd/flux2/pull/2092">https://github.com/fluxcd/flux2/pull/2092</a></p>
 </td>
 </tr>
 </table>
@@ -854,7 +876,7 @@ HelmRepositoryStatus
 <a href="#source.toolkit.fluxcd.io/v1beta2.HelmChartStatus">HelmChartStatus</a>, 
 <a href="#source.toolkit.fluxcd.io/v1beta2.HelmRepositoryStatus">HelmRepositoryStatus</a>)
 </p>
-<p>Artifact represents the output of a Source synchronisation.</p>
+<p>Artifact represents the output of a Source reconciliation.</p>
 <div class="md-typeset__scrollwrap">
 <div class="md-typeset__table">
 <table>
@@ -873,9 +895,9 @@ string
 </em>
 </td>
 <td>
-<p>Path is the relative file path of this Artifact.
-It can be used to locate the Artifact file in the root of the Artifact
-storage on the local file system of the controller managing the Source.</p>
+<p>Path is the relative file path of the Artifact. It can be used to locate
+the file in the root of the Artifact storage on the local file system of
+the controller managing the Source.</p>
 </td>
 </tr>
 <tr>
@@ -886,9 +908,9 @@ string
 </em>
 </td>
 <td>
-<p>URL is the HTTP address of this artifact.
-It is used by the consumers of the artifacts to fetch and use the
-artifacts. It is expected to be resolvable from within the cluster.</p>
+<p>URL is the HTTP address of the Artifact as exposed by the controller
+managing the Source. It can be used to retrieve the Artifact for
+consumption, e.g. by another controller applying the Artifact contents.</p>
 </td>
 </tr>
 <tr>
@@ -900,9 +922,8 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>Revision is a human readable identifier traceable in the origin source
-system. It can be a Git commit SHA, Git tag, a Helm index timestamp, a Helm
-chart version, etc.</p>
+<p>Revision is a human-readable identifier traceable in the origin source
+system. It can be a Git commit SHA, Git tag, a Helm chart version, etc.</p>
 </td>
 </tr>
 <tr>
@@ -914,7 +935,7 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>Checksum is the SHA256 checksum of the artifact.</p>
+<p>Checksum is the SHA256 checksum of the Artifact file.</p>
 </td>
 </tr>
 <tr>
@@ -927,8 +948,8 @@ Kubernetes meta/v1.Time
 </em>
 </td>
 <td>
-<p>LastUpdateTime is the timestamp corresponding to the last update of this
-artifact.</p>
+<p>LastUpdateTime is the timestamp corresponding to the last update of the
+Artifact.</p>
 </td>
 </tr>
 <tr>
@@ -953,7 +974,8 @@ int64
 (<em>Appears on:</em>
 <a href="#source.toolkit.fluxcd.io/v1beta2.Bucket">Bucket</a>)
 </p>
-<p>BucketSpec defines the desired state of an S3 compatible bucket</p>
+<p>BucketSpec specifies the required configuration to produce an Artifact for
+an object storage bucket.</p>
 <div class="md-typeset__scrollwrap">
 <div class="md-typeset__table">
 <table>
@@ -973,7 +995,9 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>The S3 compatible storage provider name, default (&lsquo;generic&rsquo;).</p>
+<p>Provider of the object storage bucket.
+Defaults to &lsquo;generic&rsquo;, which expects an S3 (API) compatible object
+storage.</p>
 </td>
 </tr>
 <tr>
@@ -984,7 +1008,7 @@ string
 </em>
 </td>
 <td>
-<p>The bucket name.</p>
+<p>BucketName is the name of the object storage bucket.</p>
 </td>
 </tr>
 <tr>
@@ -995,7 +1019,7 @@ string
 </em>
 </td>
 <td>
-<p>The bucket endpoint address.</p>
+<p>Endpoint is the object storage address the BucketName is located at.</p>
 </td>
 </tr>
 <tr>
@@ -1007,7 +1031,7 @@ bool
 </td>
 <td>
 <em>(Optional)</em>
-<p>Insecure allows connecting to a non-TLS S3 HTTP endpoint.</p>
+<p>Insecure allows connecting to a non-TLS HTTP Endpoint.</p>
 </td>
 </tr>
 <tr>
@@ -1019,7 +1043,7 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>The bucket region.</p>
+<p>Region of the Endpoint where the BucketName is located in.</p>
 </td>
 </tr>
 <tr>
@@ -1033,7 +1057,7 @@ github.com/fluxcd/pkg/apis/meta.LocalObjectReference
 </td>
 <td>
 <em>(Optional)</em>
-<p>The name of the secret containing authentication credentials
+<p>SecretRef specifies the Secret containing authentication credentials
 for the Bucket.</p>
 </td>
 </tr>
@@ -1047,7 +1071,7 @@ Kubernetes meta/v1.Duration
 </em>
 </td>
 <td>
-<p>The interval at which to check for bucket updates.</p>
+<p>Interval at which to check the Endpoint for updates.</p>
 </td>
 </tr>
 <tr>
@@ -1061,7 +1085,7 @@ Kubernetes meta/v1.Duration
 </td>
 <td>
 <em>(Optional)</em>
-<p>The timeout for fetch operations, defaults to 60s.</p>
+<p>Timeout for fetch operations, defaults to 60s.</p>
 </td>
 </tr>
 <tr>
@@ -1087,7 +1111,8 @@ bool
 </td>
 <td>
 <em>(Optional)</em>
-<p>This flag tells the controller to suspend the reconciliation of this source.</p>
+<p>Suspend tells the controller to suspend the reconciliation of this
+Bucket.</p>
 </td>
 </tr>
 <tr>
@@ -1101,7 +1126,9 @@ github.com/fluxcd/pkg/apis/acl.AccessFrom
 </td>
 <td>
 <em>(Optional)</em>
-<p>AccessFrom defines an Access Control List for allowing cross-namespace references to this object.</p>
+<p>AccessFrom specifies an Access Control List for allowing cross-namespace
+references to this object.
+NOTE: Not implemented, provisional as of <a href="https://github.com/fluxcd/flux2/pull/2092">https://github.com/fluxcd/flux2/pull/2092</a></p>
 </td>
 </tr>
 </tbody>
@@ -1114,7 +1141,7 @@ github.com/fluxcd/pkg/apis/acl.AccessFrom
 (<em>Appears on:</em>
 <a href="#source.toolkit.fluxcd.io/v1beta2.Bucket">Bucket</a>)
 </p>
-<p>BucketStatus defines the observed state of a bucket</p>
+<p>BucketStatus records the observed state of a Bucket.</p>
 <div class="md-typeset__scrollwrap">
 <div class="md-typeset__table">
 <table>
@@ -1134,7 +1161,7 @@ int64
 </td>
 <td>
 <em>(Optional)</em>
-<p>ObservedGeneration is the last observed generation.</p>
+<p>ObservedGeneration is the last observed generation of the Bucket object.</p>
 </td>
 </tr>
 <tr>
@@ -1160,7 +1187,9 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>URL is the fetch link for the artifact output of the last Bucket sync.</p>
+<p>URL is the dynamic fetch link for the latest Artifact.
+It is provided on a &ldquo;best effort&rdquo; basis, and using the precise
+BucketStatus.Artifact data is recommended.</p>
 </td>
 </tr>
 <tr>
@@ -1174,7 +1203,7 @@ Artifact
 </td>
 <td>
 <em>(Optional)</em>
-<p>Artifact represents the output of the last successful Bucket sync.</p>
+<p>Artifact represents the last successful Bucket reconciliation.</p>
 </td>
 </tr>
 <tr>
@@ -1202,7 +1231,8 @@ github.com/fluxcd/pkg/apis/meta.ReconcileRequestStatus
 (<em>Appears on:</em>
 <a href="#source.toolkit.fluxcd.io/v1beta2.GitRepositorySpec">GitRepositorySpec</a>)
 </p>
-<p>GitRepositoryInclude defines a source with a from and to path.</p>
+<p>GitRepositoryInclude specifies a local reference to a GitRepository which
+Artifact (sub-)contents must be included, and where they should be placed.</p>
 <div class="md-typeset__scrollwrap">
 <div class="md-typeset__table">
 <table>
@@ -1223,7 +1253,8 @@ github.com/fluxcd/pkg/apis/meta.LocalObjectReference
 </em>
 </td>
 <td>
-<p>Reference to a GitRepository to include.</p>
+<p>GitRepositoryRef specifies the GitRepository which Artifact contents
+must be included.</p>
 </td>
 </tr>
 <tr>
@@ -1235,7 +1266,8 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>The path to copy contents from, defaults to the root directory.</p>
+<p>FromPath specifies the path to copy contents from, defaults to the root
+of the Artifact.</p>
 </td>
 </tr>
 <tr>
@@ -1247,7 +1279,8 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>The path to copy contents to, defaults to the name of the source ref.</p>
+<p>ToPath specifies the path to copy contents to, defaults to the name of
+the GitRepositoryRef.</p>
 </td>
 </tr>
 </tbody>
@@ -1260,7 +1293,7 @@ string
 (<em>Appears on:</em>
 <a href="#source.toolkit.fluxcd.io/v1beta2.GitRepositorySpec">GitRepositorySpec</a>)
 </p>
-<p>GitRepositoryRef defines the Git ref used for pull and checkout operations.</p>
+<p>GitRepositoryRef specifies the Git reference to resolve and checkout.</p>
 <div class="md-typeset__scrollwrap">
 <div class="md-typeset__table">
 <table>
@@ -1280,7 +1313,9 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>The Git branch to checkout, defaults to master.</p>
+<p>Branch to check out, defaults to &lsquo;master&rsquo; if no other field is defined.</p>
+<p>When GitRepositorySpec.GitImplementation is set to &lsquo;go-git&rsquo;, a shallow
+clone of the specified branch is performed.</p>
 </td>
 </tr>
 <tr>
@@ -1292,7 +1327,7 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>The Git tag to checkout, takes precedence over Branch.</p>
+<p>Tag to check out, takes precedence over Branch.</p>
 </td>
 </tr>
 <tr>
@@ -1304,7 +1339,7 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>The Git tag semver expression, takes precedence over Tag.</p>
+<p>SemVer tag expression to check out, takes precedence over Tag.</p>
 </td>
 </tr>
 <tr>
@@ -1316,7 +1351,10 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>The Git commit SHA to checkout, if specified Tag filters will be ignored.</p>
+<p>Commit SHA to check out, takes precedence over all reference fields.</p>
+<p>When GitRepositorySpec.GitImplementation is set to &lsquo;go-git&rsquo;, this can be
+combined with Branch to shallow clone the branch, in which the commit is
+expected to exist.</p>
 </td>
 </tr>
 </tbody>
@@ -1329,7 +1367,8 @@ string
 (<em>Appears on:</em>
 <a href="#source.toolkit.fluxcd.io/v1beta2.GitRepository">GitRepository</a>)
 </p>
-<p>GitRepositorySpec defines the desired state of a Git repository.</p>
+<p>GitRepositorySpec specifies the required configuration to produce an
+Artifact for a Git repository.</p>
 <div class="md-typeset__scrollwrap">
 <div class="md-typeset__table">
 <table>
@@ -1348,7 +1387,7 @@ string
 </em>
 </td>
 <td>
-<p>The repository URL, can be a HTTP/S or SSH address.</p>
+<p>URL specifies the Git repository URL, it can be an HTTP/S or SSH address.</p>
 </td>
 </tr>
 <tr>
@@ -1362,9 +1401,12 @@ github.com/fluxcd/pkg/apis/meta.LocalObjectReference
 </td>
 <td>
 <em>(Optional)</em>
-<p>The secret name containing the Git credentials.
-For HTTPS repositories the secret must contain username and password fields.
-For SSH repositories the secret must contain &lsquo;identity&rsquo;, &lsquo;identity.pub&rsquo; and &lsquo;known_hosts&rsquo; fields.</p>
+<p>SecretRef specifies the Secret containing authentication credentials for
+the GitRepository.
+For HTTPS repositories the Secret must contain &lsquo;username&rsquo; and &lsquo;password&rsquo;
+fields.
+For SSH repositories the Secret must contain &lsquo;identity&rsquo;, &lsquo;identity.pub&rsquo;
+and &lsquo;known_hosts&rsquo; fields.</p>
 </td>
 </tr>
 <tr>
@@ -1377,7 +1419,7 @@ Kubernetes meta/v1.Duration
 </em>
 </td>
 <td>
-<p>The interval at which to check for repository updates.</p>
+<p>Interval at which to check the GitRepository for updates.</p>
 </td>
 </tr>
 <tr>
@@ -1391,7 +1433,7 @@ Kubernetes meta/v1.Duration
 </td>
 <td>
 <em>(Optional)</em>
-<p>The timeout for remote Git operations like cloning, defaults to 60s.</p>
+<p>Timeout for Git operations like cloning, defaults to 60s.</p>
 </td>
 </tr>
 <tr>
@@ -1405,8 +1447,8 @@ GitRepositoryRef
 </td>
 <td>
 <em>(Optional)</em>
-<p>The Git reference to checkout and monitor for changes, defaults to
-master branch.</p>
+<p>Reference specifies the Git reference to resolve and monitor for
+changes, defaults to the &lsquo;master&rsquo; branch.</p>
 </td>
 </tr>
 <tr>
@@ -1420,7 +1462,8 @@ GitRepositoryVerification
 </td>
 <td>
 <em>(Optional)</em>
-<p>Verification defines the configuration to verify the OpenPGP signature for the Git commit HEAD points to.</p>
+<p>Verification specifies the configuration to verify the Git commit
+signature(s).</p>
 </td>
 </tr>
 <tr>
@@ -1432,8 +1475,9 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>Ignore overrides the set of excluded patterns in the .sourceignore format (which is the same as .gitignore).
-If not provided, a default will be used, consult the documentation for your version to find out what those are.</p>
+<p>Ignore overrides the set of excluded patterns in the .sourceignore format
+(which is the same as .gitignore). If not provided, a default will be used,
+consult the documentation for your version to find out what those are.</p>
 </td>
 </tr>
 <tr>
@@ -1445,8 +1489,8 @@ bool
 </td>
 <td>
 <em>(Optional)</em>
-<p>Suspend tells the controller to suspend the reconciliation of this source.
-This flag tells the controller to suspend the reconciliation of this source.</p>
+<p>Suspend tells the controller to suspend the reconciliation of this
+GitRepository.</p>
 </td>
 </tr>
 <tr>
@@ -1458,8 +1502,8 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>Determines which git client library to use.
-Defaults to go-git, valid values are (&lsquo;go-git&rsquo;, &lsquo;libgit2&rsquo;).</p>
+<p>GitImplementation specifies which Git client library implementation to
+use. Defaults to &lsquo;go-git&rsquo;, valid values are (&lsquo;go-git&rsquo;, &lsquo;libgit2&rsquo;).</p>
 </td>
 </tr>
 <tr>
@@ -1471,7 +1515,8 @@ bool
 </td>
 <td>
 <em>(Optional)</em>
-<p>When enabled, after the clone is created, initializes all submodules within, using their default settings.
+<p>RecurseSubmodules enables the initialization of all submodules within
+the GitRepository as cloned from the URL, using their default settings.
 This option is available only when using the &lsquo;go-git&rsquo; GitImplementation.</p>
 </td>
 </tr>
@@ -1485,8 +1530,8 @@ This option is available only when using the &lsquo;go-git&rsquo; GitImplementat
 </em>
 </td>
 <td>
-<p>Include defines a list of GitRepository resources which artifacts should be included in the artifact produced for
-this resource.</p>
+<p>Include specifies a list of GitRepository resources which Artifacts
+should be included in the Artifact produced for this GitRepository.</p>
 </td>
 </tr>
 <tr>
@@ -1500,7 +1545,9 @@ github.com/fluxcd/pkg/apis/acl.AccessFrom
 </td>
 <td>
 <em>(Optional)</em>
-<p>AccessFrom defines an Access Control List for allowing cross-namespace references to this object.</p>
+<p>AccessFrom specifies an Access Control List for allowing cross-namespace
+references to this object.
+NOTE: Not implemented, provisional as of <a href="https://github.com/fluxcd/flux2/pull/2092">https://github.com/fluxcd/flux2/pull/2092</a></p>
 </td>
 </tr>
 </tbody>
@@ -1513,7 +1560,7 @@ github.com/fluxcd/pkg/apis/acl.AccessFrom
 (<em>Appears on:</em>
 <a href="#source.toolkit.fluxcd.io/v1beta2.GitRepository">GitRepository</a>)
 </p>
-<p>GitRepositoryStatus defines the observed state of a Git repository.</p>
+<p>GitRepositoryStatus records the observed state of a Git repository.</p>
 <div class="md-typeset__scrollwrap">
 <div class="md-typeset__table">
 <table>
@@ -1533,7 +1580,8 @@ int64
 </td>
 <td>
 <em>(Optional)</em>
-<p>ObservedGeneration is the last observed generation.</p>
+<p>ObservedGeneration is the last observed generation of the GitRepository
+object.</p>
 </td>
 </tr>
 <tr>
@@ -1559,7 +1607,9 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>URL is the fetch link for the artifact output of the last repository sync.</p>
+<p>URL is the dynamic fetch link for the latest Artifact.
+It is provided on a &ldquo;best effort&rdquo; basis, and using the precise
+GitRepositoryStatus.Artifact data is recommended.</p>
 </td>
 </tr>
 <tr>
@@ -1573,7 +1623,7 @@ Artifact
 </td>
 <td>
 <em>(Optional)</em>
-<p>Artifact represents the output of the last successful repository sync.</p>
+<p>Artifact represents the last successful GitRepository reconciliation.</p>
 </td>
 </tr>
 <tr>
@@ -1587,7 +1637,8 @@ Artifact
 </td>
 <td>
 <em>(Optional)</em>
-<p>IncludedArtifacts represents the included artifacts from the last successful repository sync.</p>
+<p>IncludedArtifacts contains a list of the last successfully included
+Artifacts as instructed by GitRepositorySpec.Include.</p>
 </td>
 </tr>
 <tr>
@@ -1615,7 +1666,8 @@ github.com/fluxcd/pkg/apis/meta.ReconcileRequestStatus
 (<em>Appears on:</em>
 <a href="#source.toolkit.fluxcd.io/v1beta2.GitRepositorySpec">GitRepositorySpec</a>)
 </p>
-<p>GitRepositoryVerification defines the OpenPGP signature verification process.</p>
+<p>GitRepositoryVerification specifies the Git commit signature verification
+strategy.</p>
 <div class="md-typeset__scrollwrap">
 <div class="md-typeset__table">
 <table>
@@ -1634,7 +1686,7 @@ string
 </em>
 </td>
 <td>
-<p>Mode describes what Git object should be verified, currently (&lsquo;head&rsquo;).</p>
+<p>Mode specifies what Git object should be verified, currently (&lsquo;head&rsquo;).</p>
 </td>
 </tr>
 <tr>
@@ -1647,7 +1699,8 @@ github.com/fluxcd/pkg/apis/meta.LocalObjectReference
 </em>
 </td>
 <td>
-<p>SecretRef containing the public keys of all trusted Git authors.</p>
+<p>SecretRef specifies the Secret containing the public keys of trusted Git
+authors.</p>
 </td>
 </tr>
 </tbody>
@@ -1660,7 +1713,7 @@ github.com/fluxcd/pkg/apis/meta.LocalObjectReference
 (<em>Appears on:</em>
 <a href="#source.toolkit.fluxcd.io/v1beta2.HelmChart">HelmChart</a>)
 </p>
-<p>HelmChartSpec defines the desired state of a Helm chart.</p>
+<p>HelmChartSpec specifies the desired state of a Helm chart.</p>
 <div class="md-typeset__scrollwrap">
 <div class="md-typeset__table">
 <table>
@@ -1679,7 +1732,8 @@ string
 </em>
 </td>
 <td>
-<p>The name or path the Helm chart is available at in the SourceRef.</p>
+<p>Chart is the name or path the Helm chart is available at in the
+SourceRef.</p>
 </td>
 </tr>
 <tr>
@@ -1691,8 +1745,8 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>The chart version semver expression, ignored for charts from GitRepository
-and Bucket sources. Defaults to latest when omitted.</p>
+<p>Version is the chart version semver expression, ignored for charts from
+GitRepository and Bucket sources. Defaults to latest when omitted.</p>
 </td>
 </tr>
 <tr>
@@ -1705,7 +1759,7 @@ LocalHelmChartSourceReference
 </em>
 </td>
 <td>
-<p>The reference to the Source the chart is available at.</p>
+<p>SourceRef is the reference to the Source the chart is available at.</p>
 </td>
 </tr>
 <tr>
@@ -1718,7 +1772,7 @@ Kubernetes meta/v1.Duration
 </em>
 </td>
 <td>
-<p>The interval at which to check the Source for updates.</p>
+<p>Interval is the interval at which to check the Source for updates.</p>
 </td>
 </tr>
 <tr>
@@ -1730,8 +1784,8 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>Determines what enables the creation of a new artifact. Valid values are
-(&lsquo;ChartVersion&rsquo;, &lsquo;Revision&rsquo;).
+<p>ReconcileStrategy determines what enables the creation of a new artifact.
+Valid values are (&lsquo;ChartVersion&rsquo;, &lsquo;Revision&rsquo;).
 See the documentation of the values for an explanation on their behavior.
 Defaults to ChartVersion when omitted.</p>
 </td>
@@ -1745,10 +1799,11 @@ Defaults to ChartVersion when omitted.</p>
 </td>
 <td>
 <em>(Optional)</em>
-<p>Alternative list of values files to use as the chart values (values.yaml
-is not included by default), expected to be a relative path in the SourceRef.
-Values files are merged in the order of this list with the last file overriding
-the first. Ignored when omitted.</p>
+<p>ValuesFiles is an alternative list of values files to use as the chart
+values (values.yaml is not included by default), expected to be a
+relative path in the SourceRef.
+Values files are merged in the order of this list with the last file
+overriding the first. Ignored when omitted.</p>
 </td>
 </tr>
 <tr>
@@ -1760,10 +1815,10 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>Alternative values file to use as the default chart values, expected to
-be a relative path in the SourceRef. Deprecated in favor of ValuesFiles,
-for backwards compatibility the file defined here is merged before the
-ValuesFiles items. Ignored when omitted.</p>
+<p>ValuesFile is an alternative values file to use as the default chart
+values, expected to be a relative path in the SourceRef. Deprecated in
+favor of ValuesFiles, for backwards compatibility the file specified here
+is merged before the ValuesFiles items. Ignored when omitted.</p>
 </td>
 </tr>
 <tr>
@@ -1775,7 +1830,8 @@ bool
 </td>
 <td>
 <em>(Optional)</em>
-<p>This flag tells the controller to suspend the reconciliation of this source.</p>
+<p>Suspend tells the controller to suspend the reconciliation of this
+source.</p>
 </td>
 </tr>
 <tr>
@@ -1789,7 +1845,9 @@ github.com/fluxcd/pkg/apis/acl.AccessFrom
 </td>
 <td>
 <em>(Optional)</em>
-<p>AccessFrom defines an Access Control List for allowing cross-namespace references to this object.</p>
+<p>AccessFrom specifies an Access Control List for allowing cross-namespace
+references to this object.
+NOTE: Not implemented, provisional as of <a href="https://github.com/fluxcd/flux2/pull/2092">https://github.com/fluxcd/flux2/pull/2092</a></p>
 </td>
 </tr>
 </tbody>
@@ -1802,7 +1860,7 @@ github.com/fluxcd/pkg/apis/acl.AccessFrom
 (<em>Appears on:</em>
 <a href="#source.toolkit.fluxcd.io/v1beta2.HelmChart">HelmChart</a>)
 </p>
-<p>HelmChartStatus defines the observed state of the HelmChart.</p>
+<p>HelmChartStatus records the observed state of the HelmChart.</p>
 <div class="md-typeset__scrollwrap">
 <div class="md-typeset__table">
 <table>
@@ -1822,7 +1880,8 @@ int64
 </td>
 <td>
 <em>(Optional)</em>
-<p>ObservedGeneration is the last observed generation.</p>
+<p>ObservedGeneration is the last observed generation of the HelmChart
+object.</p>
 </td>
 </tr>
 <tr>
@@ -1835,7 +1894,7 @@ string
 <td>
 <em>(Optional)</em>
 <p>ObservedSourceArtifactRevision is the last observed Artifact.Revision
-of the Source reference.</p>
+of the HelmChartSpec.SourceRef.</p>
 </td>
 </tr>
 <tr>
@@ -1847,7 +1906,7 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>ObservedChartName is the last observed chart name as defined by the
+<p>ObservedChartName is the last observed chart name as specified by the
 resolved chart reference.</p>
 </td>
 </tr>
@@ -1874,7 +1933,9 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>URL is the fetch link for the last chart pulled.</p>
+<p>URL is the dynamic fetch link for the latest Artifact.
+It is provided on a &ldquo;best effort&rdquo; basis, and using the precise
+BucketStatus.Artifact data is recommended.</p>
 </td>
 </tr>
 <tr>
@@ -1888,7 +1949,7 @@ Artifact
 </td>
 <td>
 <em>(Optional)</em>
-<p>Artifact represents the output of the last successful chart sync.</p>
+<p>Artifact represents the output of the last successful reconciliation.</p>
 </td>
 </tr>
 <tr>
@@ -1916,7 +1977,8 @@ github.com/fluxcd/pkg/apis/meta.ReconcileRequestStatus
 (<em>Appears on:</em>
 <a href="#source.toolkit.fluxcd.io/v1beta2.HelmRepository">HelmRepository</a>)
 </p>
-<p>HelmRepositorySpec defines the reference to a Helm repository.</p>
+<p>HelmRepositorySpec specifies the required configuration to produce an
+Artifact for a Helm repository index YAML.</p>
 <div class="md-typeset__scrollwrap">
 <div class="md-typeset__table">
 <table>
@@ -1935,7 +1997,8 @@ string
 </em>
 </td>
 <td>
-<p>The Helm repository URL, a valid URL contains at least a protocol and host.</p>
+<p>URL of the Helm repository, a valid URL contains at least a protocol and
+host.</p>
 </td>
 </tr>
 <tr>
@@ -1949,12 +2012,12 @@ github.com/fluxcd/pkg/apis/meta.LocalObjectReference
 </td>
 <td>
 <em>(Optional)</em>
-<p>The name of the secret containing authentication credentials for the Helm
-repository.
-For HTTP/S basic auth the secret must contain username and
-password fields.
-For TLS the secret must contain a certFile and keyFile, and/or
-caCert fields.</p>
+<p>SecretRef specifies the Secret containing authentication credentials
+for the HelmRepository.
+For HTTP/S basic auth the secret must contain &lsquo;username&rsquo; and &lsquo;password&rsquo;
+fields.
+For TLS the secret must contain a &lsquo;certFile&rsquo; and &lsquo;keyFile&rsquo;, and/or
+&lsquo;caCert&rsquo; fields.</p>
 </td>
 </tr>
 <tr>
@@ -1966,12 +2029,12 @@ bool
 </td>
 <td>
 <em>(Optional)</em>
-<p>PassCredentials allows the credentials from the SecretRef to be passed on to
-a host that does not match the host as defined in URL.
-This may be required if the host of the advertised chart URLs in the index
-differ from the defined URL.
-Enabling this should be done with caution, as it can potentially result in
-credentials getting stolen in a MITM-attack.</p>
+<p>PassCredentials allows the credentials from the SecretRef to be passed
+on to a host that does not match the host as defined in URL.
+This may be required if the host of the advertised chart URLs in the
+index differ from the defined URL.
+Enabling this should be done with caution, as it can potentially result
+in credentials getting stolen in a MITM-attack.</p>
 </td>
 </tr>
 <tr>
@@ -1984,7 +2047,7 @@ Kubernetes meta/v1.Duration
 </em>
 </td>
 <td>
-<p>The interval at which to check the upstream for updates.</p>
+<p>Interval at which to check the URL for updates.</p>
 </td>
 </tr>
 <tr>
@@ -1998,7 +2061,7 @@ Kubernetes meta/v1.Duration
 </td>
 <td>
 <em>(Optional)</em>
-<p>The timeout of index fetching, defaults to 60s.</p>
+<p>Timeout of the index fetch operation, defaults to 60s.</p>
 </td>
 </tr>
 <tr>
@@ -2010,7 +2073,8 @@ bool
 </td>
 <td>
 <em>(Optional)</em>
-<p>This flag tells the controller to suspend the reconciliation of this source.</p>
+<p>Suspend tells the controller to suspend the reconciliation of this
+HelmRepository.</p>
 </td>
 </tr>
 <tr>
@@ -2024,7 +2088,9 @@ github.com/fluxcd/pkg/apis/acl.AccessFrom
 </td>
 <td>
 <em>(Optional)</em>
-<p>AccessFrom defines an Access Control List for allowing cross-namespace references to this object.</p>
+<p>AccessFrom specifies an Access Control List for allowing cross-namespace
+references to this object.
+NOTE: Not implemented, provisional as of <a href="https://github.com/fluxcd/flux2/pull/2092">https://github.com/fluxcd/flux2/pull/2092</a></p>
 </td>
 </tr>
 </tbody>
@@ -2037,7 +2103,7 @@ github.com/fluxcd/pkg/apis/acl.AccessFrom
 (<em>Appears on:</em>
 <a href="#source.toolkit.fluxcd.io/v1beta2.HelmRepository">HelmRepository</a>)
 </p>
-<p>HelmRepositoryStatus defines the observed state of the HelmRepository.</p>
+<p>HelmRepositoryStatus records the observed state of the HelmRepository.</p>
 <div class="md-typeset__scrollwrap">
 <div class="md-typeset__table">
 <table>
@@ -2057,7 +2123,8 @@ int64
 </td>
 <td>
 <em>(Optional)</em>
-<p>ObservedGeneration is the last observed generation.</p>
+<p>ObservedGeneration is the last observed generation of the HelmRepository
+object.</p>
 </td>
 </tr>
 <tr>
@@ -2083,7 +2150,9 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>URL is the fetch link for the last index fetched.</p>
+<p>URL is the dynamic fetch link for the latest Artifact.
+It is provided on a &ldquo;best effort&rdquo; basis, and using the precise
+HelmRepositoryStatus.Artifact data is recommended.</p>
 </td>
 </tr>
 <tr>
@@ -2097,7 +2166,7 @@ Artifact
 </td>
 <td>
 <em>(Optional)</em>
-<p>Artifact represents the output of the last successful repository sync.</p>
+<p>Artifact represents the last successful HelmRepository reconciliation.</p>
 </td>
 </tr>
 <tr>
@@ -2178,7 +2247,10 @@ string
 </div>
 <h3 id="source.toolkit.fluxcd.io/v1beta2.Source">Source
 </h3>
-<p>Source interface must be supported by all API types.</p>
+<p>Source interface must be supported by all API types.
+Source is the interface that provides generic access to the Artifact and
+interval. It must be supported by all kinds of the source.toolkit.fluxcd.io
+API group.</p>
 <div class="admonition note">
 <p class="last">This page was automatically generated with <code>gen-crd-api-reference-docs</code></p>
 </div>

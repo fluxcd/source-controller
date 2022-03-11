@@ -52,9 +52,9 @@ import (
 	"github.com/fluxcd/source-controller/internal/reconcile/summarize"
 )
 
-// helmRepoReadyConditions contains all the conditions information needed
-// for HelmRepository Ready status conditions summary calculation.
-var helmRepoReadyConditions = summarize.Conditions{
+// helmRepositoryReadyCondition contains the information required to summarize a
+// v1beta2.HelmRepository Ready Condition.
+var helmRepositoryReadyCondition = summarize.Conditions{
 	Target: meta.ReadyCondition,
 	Owned: []string{
 		sourcev1.FetchFailedCondition,
@@ -82,7 +82,7 @@ var helmRepoReadyConditions = summarize.Conditions{
 // +kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=helmrepositories/finalizers,verbs=get;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 
-// HelmRepositoryReconciler reconciles a HelmRepository object
+// HelmRepositoryReconciler reconciles a v1beta2.HelmRepository object.
 type HelmRepositoryReconciler struct {
 	client.Client
 	kuberecorder.EventRecorder
@@ -97,10 +97,11 @@ type HelmRepositoryReconcilerOptions struct {
 	MaxConcurrentReconciles int
 }
 
-// helmRepoReconcilerFunc is the function type for all the helm repository
-// reconciler functions. The reconciler functions are grouped together and
-// executed serially to perform the main operation of the reconciler.
-type helmRepoReconcilerFunc func(ctx context.Context, obj *sourcev1.HelmRepository, artifact *sourcev1.Artifact, repo *repository.ChartRepository) (sreconcile.Result, error)
+// helmRepositoryReconcileFunc is the function type for all the
+// v1beta2.HelmRepository (sub)reconcile functions. The type implementations
+// are grouped and executed serially to perform the complete reconcile of the
+// object.
+type helmRepositoryReconcileFunc func(ctx context.Context, obj *sourcev1.HelmRepository, artifact *sourcev1.Artifact, repo *repository.ChartRepository) (sreconcile.Result, error)
 
 func (r *HelmRepositoryReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return r.SetupWithManagerAndOptions(mgr, HelmRepositoryReconcilerOptions{})
@@ -147,7 +148,7 @@ func (r *HelmRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	defer func() {
 		summarizeHelper := summarize.NewHelper(r.EventRecorder, patchHelper)
 		summarizeOpts := []summarize.Option{
-			summarize.WithConditions(helmRepoReadyConditions),
+			summarize.WithConditions(helmRepositoryReadyCondition),
 			summarize.WithReconcileResult(recResult),
 			summarize.WithReconcileError(retErr),
 			summarize.WithIgnoreNotFound(),
@@ -155,7 +156,7 @@ func (r *HelmRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 				summarize.RecordContextualError,
 				summarize.RecordReconcileReq,
 			),
-			summarize.WithResultBuilder(sreconcile.AlwaysRequeueResultBuilder{RequeueAfter: obj.GetInterval().Duration}),
+			summarize.WithResultBuilder(sreconcile.AlwaysRequeueResultBuilder{RequeueAfter: obj.GetRequeueAfter()}),
 			summarize.WithPatchFieldOwner(r.ControllerName),
 		}
 		result, retErr = summarizeHelper.SummarizeAndPatch(ctx, obj, summarizeOpts...)
@@ -180,7 +181,7 @@ func (r *HelmRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	}
 
 	// Reconcile actual object
-	reconcilers := []helmRepoReconcilerFunc{
+	reconcilers := []helmRepositoryReconcileFunc{
 		r.reconcileStorage,
 		r.reconcileSource,
 		r.reconcileArtifact,
@@ -189,12 +190,10 @@ func (r *HelmRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	return
 }
 
-// reconcile iterates through the sub-reconcilers and processes the source
-// object. The sub-reconcilers are run sequentially. The result and error  of
-// the sub-reconciliation are collected and returned. For multiple results
-// from different sub-reconcilers, the results are combined to return the
-// result with the shortest requeue period.
-func (r *HelmRepositoryReconciler) reconcile(ctx context.Context, obj *sourcev1.HelmRepository, reconcilers []helmRepoReconcilerFunc) (sreconcile.Result, error) {
+// reconcile iterates through the gitRepositoryReconcileFunc tasks for the
+// object. It returns early on the first call that returns
+// reconcile.ResultRequeue, or produces an error.
+func (r *HelmRepositoryReconciler) reconcile(ctx context.Context, obj *sourcev1.HelmRepository, reconcilers []helmRepositoryReconcileFunc) (sreconcile.Result, error) {
 	if obj.Generation != obj.Status.ObservedGeneration {
 		conditions.MarkReconciling(obj, "NewGeneration", "reconciling new object generation (%d)", obj.Generation)
 	}
@@ -224,12 +223,18 @@ func (r *HelmRepositoryReconciler) reconcile(ctx context.Context, obj *sourcev1.
 	return res, resErr
 }
 
-// reconcileStorage ensures the current state of the storage matches the desired and previously observed state.
+// reconcileStorage ensures the current state of the storage matches the
+// desired and previously observed state.
 //
-// All artifacts for the resource except for the current one are garbage collected from the storage.
-// If the artifact in the Status object of the resource disappeared from storage, it is removed from the object.
-// If the hostname of the URLs on the object do not match the current storage server hostname, they are updated.
-func (r *HelmRepositoryReconciler) reconcileStorage(ctx context.Context, obj *sourcev1.HelmRepository, artifact *sourcev1.Artifact, chartRepo *repository.ChartRepository) (sreconcile.Result, error) {
+// All Artifacts for the object except for the current one in the Status are
+// garbage collected from the Storage.
+// If the Artifact in the Status of the object disappeared from the Storage,
+// it is removed from the object.
+// If the object does not have an Artifact in its Status, a Reconciling
+// condition is added.
+// The hostname of any URL in the Status of the object are updated, to ensure
+// they match the Storage server hostname of current runtime.
+func (r *HelmRepositoryReconciler) reconcileStorage(ctx context.Context, obj *sourcev1.HelmRepository, _ *sourcev1.Artifact, _ *repository.ChartRepository) (sreconcile.Result, error) {
 	// Garbage collect previous advertised artifact(s) from storage
 	_ = r.garbageCollect(ctx, obj)
 
@@ -253,13 +258,14 @@ func (r *HelmRepositoryReconciler) reconcileStorage(ctx context.Context, obj *so
 	return sreconcile.ResultSuccess, nil
 }
 
-// reconcileSource ensures the upstream Helm repository can be reached and downloaded out using the declared
-// configuration, and stores a new artifact in the storage.
+// reconcileSource attempts to fetch the Helm repository index using the
+// specified configuration on the v1beta2.HelmRepository object.
 //
-// The Helm repository index is downloaded using the defined configuration, and in case of an error during this process
-// (including transient errors), it records v1beta1.FetchFailedCondition=True and returns early.
-// If the download is successful, the given artifact pointer is set to a new artifact with the available metadata, and
-// the index pointer is set to the newly downloaded index.
+// When the fetch fails, it records v1beta2.FetchFailedCondition=True and
+// returns early.
+// If successful and the index is valid, any previous
+// v1beta2.FetchFailedCondition is removed, and the repository.ChartRepository
+// pointer is set to the newly fetched index.
 func (r *HelmRepositoryReconciler) reconcileSource(ctx context.Context, obj *sourcev1.HelmRepository, artifact *sourcev1.Artifact, chartRepo *repository.ChartRepository) (sreconcile.Result, error) {
 	var tlsConfig *tls.Config
 
@@ -373,14 +379,15 @@ func (r *HelmRepositoryReconciler) reconcileSource(ctx context.Context, obj *sou
 	return sreconcile.ResultSuccess, nil
 }
 
-// reconcileArtifact stores a new artifact in the storage, if the current observation on the object does not match the
-// given data.
+// reconcileArtifact archives a new Artifact to the Storage, if the current
+// (Status) data on the object does not match the given.
 //
-// The inspection of the given data to the object is differed, ensuring any stale observations as
-// v1beta1.ArtifactUnavailableCondition and v1beta1.ArtifactOutdatedCondition are always deleted.
-// If the given artifact does not differ from the object's current, it returns early.
-// On a successful write of a new artifact, the artifact in the status of the given object is set, and the symlink in
-// the storage is updated to its path.
+// The inspection of the given data to the object is differed, ensuring any
+// stale observations like v1beta2.ArtifactOutdatedCondition are removed.
+// If the given Artifact does not differ from the object's current, it returns
+// early.
+// On a successful archive, the Artifact in the Status of the object is set,
+// and the symlink in the Storage is updated to its path.
 func (r *HelmRepositoryReconciler) reconcileArtifact(ctx context.Context, obj *sourcev1.HelmRepository, artifact *sourcev1.Artifact, chartRepo *repository.ChartRepository) (sreconcile.Result, error) {
 	// Always restore the Ready condition in case it got removed due to a transient error.
 	defer func() {
@@ -450,15 +457,16 @@ func (r *HelmRepositoryReconciler) reconcileArtifact(ctx context.Context, obj *s
 		r.eventLogf(ctx, obj, corev1.EventTypeWarning, sourcev1.StorageOperationFailedReason,
 			"failed to update status URL symlink: %s", err)
 	}
-
 	if indexURL != "" {
 		obj.Status.URL = indexURL
 	}
+
 	return sreconcile.ResultSuccess, nil
 }
 
-// reconcileDelete handles the delete of an object. It first garbage collects all artifacts for the object from the
-// artifact storage, if successful, the finalizer is removed from the object.
+// reconcileDelete handles the deletion of the object.
+// It first garbage collects all Artifacts for the object from the Storage.
+// Removing the finalizer from the object if successful.
 func (r *HelmRepositoryReconciler) reconcileDelete(ctx context.Context, obj *sourcev1.HelmRepository) (sreconcile.Result, error) {
 	// Garbage collect the resource's artifacts
 	if err := r.garbageCollect(ctx, obj); err != nil {
@@ -473,9 +481,11 @@ func (r *HelmRepositoryReconciler) reconcileDelete(ctx context.Context, obj *sou
 	return sreconcile.ResultEmpty, nil
 }
 
-// garbageCollect performs a garbage collection for the given v1beta1.HelmRepository. It removes all but the current
-// artifact except for when the deletion timestamp is set, which will result in the removal of all artifacts for the
-// resource.
+// garbageCollect performs a garbage collection for the given object.
+//
+// It removes all but the current Artifact from the Storage, unless the
+// deletion timestamp on the object is set. Which will result in the
+// removal of all Artifacts for the objects.
 func (r *HelmRepositoryReconciler) garbageCollect(ctx context.Context, obj *sourcev1.HelmRepository) error {
 	if !obj.DeletionTimestamp.IsZero() {
 		if deleted, err := r.Storage.RemoveAll(r.Storage.NewArtifactFor(obj.Kind, obj.GetObjectMeta(), "", "*")); err != nil {
@@ -504,9 +514,11 @@ func (r *HelmRepositoryReconciler) garbageCollect(ctx context.Context, obj *sour
 	return nil
 }
 
-// eventLog records event and logs at the same time. This log is different from
-// the debug log in the event recorder in the sense that this is a simple log,
-// the event recorder debug log contains complete details about the event.
+// eventLogf records events, and logs at the same time.
+//
+// This log is different from the debug log in the EventRecorder, in the sense
+// that this is a simple log. While the debug log contains complete details
+// about the event.
 func (r *HelmRepositoryReconciler) eventLogf(ctx context.Context, obj runtime.Object, eventType string, reason string, messageFmt string, args ...interface{}) {
 	msg := fmt.Sprintf(messageFmt, args...)
 	// Log and emit event.

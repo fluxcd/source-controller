@@ -28,28 +28,29 @@ import (
 // HelmChartKind is the string representation of a HelmChart.
 const HelmChartKind = "HelmChart"
 
-// HelmChartSpec defines the desired state of a Helm chart.
+// HelmChartSpec specifies the desired state of a Helm chart.
 type HelmChartSpec struct {
-	// The name or path the Helm chart is available at in the SourceRef.
+	// Chart is the name or path the Helm chart is available at in the
+	// SourceRef.
 	// +required
 	Chart string `json:"chart"`
 
-	// The chart version semver expression, ignored for charts from GitRepository
-	// and Bucket sources. Defaults to latest when omitted.
+	// Version is the chart version semver expression, ignored for charts from
+	// GitRepository and Bucket sources. Defaults to latest when omitted.
 	// +kubebuilder:default:=*
 	// +optional
 	Version string `json:"version,omitempty"`
 
-	// The reference to the Source the chart is available at.
+	// SourceRef is the reference to the Source the chart is available at.
 	// +required
 	SourceRef LocalHelmChartSourceReference `json:"sourceRef"`
 
-	// The interval at which to check the Source for updates.
+	// Interval is the interval at which to check the Source for updates.
 	// +required
 	Interval metav1.Duration `json:"interval"`
 
-	// Determines what enables the creation of a new artifact. Valid values are
-	// ('ChartVersion', 'Revision').
+	// ReconcileStrategy determines what enables the creation of a new artifact.
+	// Valid values are ('ChartVersion', 'Revision').
 	// See the documentation of the values for an explanation on their behavior.
 	// Defaults to ChartVersion when omitted.
 	// +kubebuilder:validation:Enum=ChartVersion;Revision
@@ -57,26 +58,30 @@ type HelmChartSpec struct {
 	// +optional
 	ReconcileStrategy string `json:"reconcileStrategy,omitempty"`
 
-	// Alternative list of values files to use as the chart values (values.yaml
-	// is not included by default), expected to be a relative path in the SourceRef.
-	// Values files are merged in the order of this list with the last file overriding
-	// the first. Ignored when omitted.
+	// ValuesFiles is an alternative list of values files to use as the chart
+	// values (values.yaml is not included by default), expected to be a
+	// relative path in the SourceRef.
+	// Values files are merged in the order of this list with the last file
+	// overriding the first. Ignored when omitted.
 	// +optional
 	ValuesFiles []string `json:"valuesFiles,omitempty"`
 
-	// Alternative values file to use as the default chart values, expected to
-	// be a relative path in the SourceRef. Deprecated in favor of ValuesFiles,
-	// for backwards compatibility the file defined here is merged before the
-	// ValuesFiles items. Ignored when omitted.
+	// ValuesFile is an alternative values file to use as the default chart
+	// values, expected to be a relative path in the SourceRef. Deprecated in
+	// favor of ValuesFiles, for backwards compatibility the file specified here
+	// is merged before the ValuesFiles items. Ignored when omitted.
 	// +optional
 	// +deprecated
 	ValuesFile string `json:"valuesFile,omitempty"`
 
-	// This flag tells the controller to suspend the reconciliation of this source.
+	// Suspend tells the controller to suspend the reconciliation of this
+	// source.
 	// +optional
 	Suspend bool `json:"suspend,omitempty"`
 
-	// AccessFrom defines an Access Control List for allowing cross-namespace references to this object.
+	// AccessFrom specifies an Access Control List for allowing cross-namespace
+	// references to this object.
+	// NOTE: Not implemented, provisional as of https://github.com/fluxcd/flux2/pull/2092
 	// +optional
 	AccessFrom *acl.AccessFrom `json:"accessFrom,omitempty"`
 }
@@ -107,18 +112,19 @@ type LocalHelmChartSourceReference struct {
 	Name string `json:"name"`
 }
 
-// HelmChartStatus defines the observed state of the HelmChart.
+// HelmChartStatus records the observed state of the HelmChart.
 type HelmChartStatus struct {
-	// ObservedGeneration is the last observed generation.
+	// ObservedGeneration is the last observed generation of the HelmChart
+	// object.
 	// +optional
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 
 	// ObservedSourceArtifactRevision is the last observed Artifact.Revision
-	// of the Source reference.
+	// of the HelmChartSpec.SourceRef.
 	// +optional
 	ObservedSourceArtifactRevision string `json:"observedSourceArtifactRevision,omitempty"`
 
-	// ObservedChartName is the last observed chart name as defined by the
+	// ObservedChartName is the last observed chart name as specified by the
 	// resolved chart reference.
 	// +optional
 	ObservedChartName string `json:"observedChartName,omitempty"`
@@ -127,11 +133,13 @@ type HelmChartStatus struct {
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 
-	// URL is the fetch link for the last chart pulled.
+	// URL is the dynamic fetch link for the latest Artifact.
+	// It is provided on a "best effort" basis, and using the precise
+	// BucketStatus.Artifact data is recommended.
 	// +optional
 	URL string `json:"url,omitempty"`
 
-	// Artifact represents the output of the last successful chart sync.
+	// Artifact represents the output of the last successful reconciliation.
 	// +optional
 	Artifact *Artifact `json:"artifact,omitempty"`
 
@@ -139,19 +147,11 @@ type HelmChartStatus struct {
 }
 
 const (
-	// ChartPullFailedReason represents the fact that the pull of the Helm chart
-	// failed.
-	ChartPullFailedReason string = "ChartPullFailed"
-
-	// ChartPullSucceededReason represents the fact that the pull of the Helm chart
+	// ChartPullSucceededReason signals that the pull of the Helm chart
 	// succeeded.
 	ChartPullSucceededReason string = "ChartPullSucceeded"
 
-	// ChartPackageFailedReason represent the fact that the package of the Helm
-	// chart failed.
-	ChartPackageFailedReason string = "ChartPackageFailed"
-
-	// ChartPackageSucceededReason represents the fact that the package of the Helm
+	// ChartPackageSucceededReason signals that the package of the Helm
 	// chart succeeded.
 	ChartPackageSucceededReason string = "ChartPackageSucceeded"
 )
@@ -166,23 +166,19 @@ func (in *HelmChart) SetConditions(conditions []metav1.Condition) {
 	in.Status.Conditions = conditions
 }
 
-// GetRequeueAfter returns the duration after which the source must be reconciled again.
+// GetRequeueAfter returns the duration after which the source must be
+// reconciled again.
 func (in HelmChart) GetRequeueAfter() time.Duration {
 	return in.Spec.Interval.Duration
 }
 
-// GetInterval returns the interval at which the source is reconciled.
-// Deprecated: use GetRequeueAfter instead.
-func (in HelmChart) GetInterval() metav1.Duration {
-	return in.Spec.Interval
-}
-
-// GetArtifact returns the latest artifact from the source if present in the status sub-resource.
+// GetArtifact returns the latest artifact from the source if present in the
+// status sub-resource.
 func (in *HelmChart) GetArtifact() *Artifact {
 	return in.Status.Artifact
 }
 
-// GetValuesFiles returns a merged list of ValuesFiles.
+// GetValuesFiles returns a merged list of HelmChartSpec.ValuesFiles.
 func (in *HelmChart) GetValuesFiles() []string {
 	valuesFiles := in.Spec.ValuesFiles
 
@@ -191,12 +187,6 @@ func (in *HelmChart) GetValuesFiles() []string {
 		valuesFiles = append([]string{in.Spec.ValuesFile}, valuesFiles...)
 	}
 	return valuesFiles
-}
-
-// GetStatusConditions returns a pointer to the Status.Conditions slice.
-// Deprecated: use GetConditions instead.
-func (in *HelmChart) GetStatusConditions() *[]metav1.Condition {
-	return &in.Status.Conditions
 }
 
 // +genclient
@@ -213,7 +203,7 @@ func (in *HelmChart) GetStatusConditions() *[]metav1.Condition {
 // +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type==\"Ready\")].status",description=""
 // +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.conditions[?(@.type==\"Ready\")].message",description=""
 
-// HelmChart is the Schema for the helmcharts API
+// HelmChart is the Schema for the helmcharts API.
 type HelmChart struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -223,9 +213,8 @@ type HelmChart struct {
 	Status HelmChartStatus `json:"status,omitempty"`
 }
 
+// HelmChartList contains a list of HelmChart objects.
 // +kubebuilder:object:root=true
-
-// HelmChartList contains a list of HelmChart
 type HelmChartList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`

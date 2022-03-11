@@ -193,7 +193,7 @@ func TestGitRepositoryReconciler_Reconcile(t *testing.T) {
 	}, timeout).Should(BeTrue())
 
 	// Check if the object status is valid.
-	condns := &status.Conditions{NegativePolarity: gitRepoReadyConditions.NegativePolarity}
+	condns := &status.Conditions{NegativePolarity: gitRepositoryReadyCondition.NegativePolarity}
 	checker := status.NewChecker(testEnv.Client, testEnv.GetScheme(), condns)
 	checker.CheckErr(ctx, obj)
 

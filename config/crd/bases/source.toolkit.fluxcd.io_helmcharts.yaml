@@ -299,7 +299,7 @@ spec:
     name: v1beta2
     schema:
       openAPIV3Schema:
-        description: HelmChart is the Schema for the helmcharts API
+        description: HelmChart is the Schema for the helmcharts API.
         properties:
           apiVersion:
             description: 'APIVersion defines the versioned schema of this representation
@@ -314,11 +314,12 @@ spec:
           metadata:
             type: object
           spec:
-            description: HelmChartSpec defines the desired state of a Helm chart.
+            description: HelmChartSpec specifies the desired state of a Helm chart.
             properties:
               accessFrom:
-                description: AccessFrom defines an Access Control List for allowing
-                  cross-namespace references to this object.
+                description: 'AccessFrom specifies an Access Control List for allowing
+                  cross-namespace references to this object. NOTE: Not implemented,
+                  provisional as of https://github.com/fluxcd/flux2/pull/2092'
                 properties:
                   namespaceSelectors:
                     description: NamespaceSelectors is the list of namespace selectors
@@ -344,24 +345,26 @@ spec:
                 - namespaceSelectors
                 type: object
               chart:
-                description: The name or path the Helm chart is available at in the
-                  SourceRef.
+                description: Chart is the name or path the Helm chart is available
+                  at in the SourceRef.
                 type: string
               interval:
-                description: The interval at which to check the Source for updates.
+                description: Interval is the interval at which to check the Source
+                  for updates.
                 type: string
               reconcileStrategy:
                 default: ChartVersion
-                description: Determines what enables the creation of a new artifact.
-                  Valid values are ('ChartVersion', 'Revision'). See the documentation
-                  of the values for an explanation on their behavior. Defaults to
-                  ChartVersion when omitted.
+                description: ReconcileStrategy determines what enables the creation
+                  of a new artifact. Valid values are ('ChartVersion', 'Revision').
+                  See the documentation of the values for an explanation on their
+                  behavior. Defaults to ChartVersion when omitted.
                 enum:
                 - ChartVersion
                 - Revision
                 type: string
               sourceRef:
-                description: The reference to the Source the chart is available at.
+                description: SourceRef is the reference to the Source the chart is
+                  available at.
                 properties:
                   apiVersion:
                     description: APIVersion of the referent.
@@ -382,28 +385,30 @@ spec:
                 - name
                 type: object
               suspend:
-                description: This flag tells the controller to suspend the reconciliation
+                description: Suspend tells the controller to suspend the reconciliation
                   of this source.
                 type: boolean
               valuesFile:
-                description: Alternative values file to use as the default chart values,
-                  expected to be a relative path in the SourceRef. Deprecated in favor
-                  of ValuesFiles, for backwards compatibility the file defined here
-                  is merged before the ValuesFiles items. Ignored when omitted.
+                description: ValuesFile is an alternative values file to use as the
+                  default chart values, expected to be a relative path in the SourceRef.
+                  Deprecated in favor of ValuesFiles, for backwards compatibility
+                  the file specified here is merged before the ValuesFiles items.
+                  Ignored when omitted.
                 type: string
               valuesFiles:
-                description: Alternative list of values files to use as the chart
-                  values (values.yaml is not included by default), expected to be
-                  a relative path in the SourceRef. Values files are merged in the
-                  order of this list with the last file overriding the first. Ignored
-                  when omitted.
+                description: ValuesFiles is an alternative list of values files to
+                  use as the chart values (values.yaml is not included by default),
+                  expected to be a relative path in the SourceRef. Values files are
+                  merged in the order of this list with the last file overriding the
+                  first. Ignored when omitted.
                 items:
                   type: string
                 type: array
               version:
                 default: '*'
-                description: The chart version semver expression, ignored for charts
-                  from GitRepository and Bucket sources. Defaults to latest when omitted.
+                description: Version is the chart version semver expression, ignored
+                  for charts from GitRepository and Bucket sources. Defaults to latest
+                  when omitted.
                 type: string
             required:
             - chart
@@ -413,39 +418,39 @@ spec:
           status:
             default:
               observedGeneration: -1
-            description: HelmChartStatus defines the observed state of the HelmChart.
+            description: HelmChartStatus records the observed state of the HelmChart.
             properties:
               artifact:
                 description: Artifact represents the output of the last successful
-                  chart sync.
+                  reconciliation.
                 properties:
                   checksum:
-                    description: Checksum is the SHA256 checksum of the artifact.
+                    description: Checksum is the SHA256 checksum of the Artifact file.
                     type: string
                   lastUpdateTime:
                     description: LastUpdateTime is the timestamp corresponding to
-                      the last update of this artifact.
+                      the last update of the Artifact.
                     format: date-time
                     type: string
                   path:
-                    description: Path is the relative file path of this Artifact.
-                      It can be used to locate the Artifact file in the root of the
-                      Artifact storage on the local file system of the controller
-                      managing the Source.
+                    description: Path is the relative file path of the Artifact. It
+                      can be used to locate the file in the root of the Artifact storage
+                      on the local file system of the controller managing the Source.
                     type: string
                   revision:
-                    description: Revision is a human readable identifier traceable
+                    description: Revision is a human-readable identifier traceable
                       in the origin source system. It can be a Git commit SHA, Git
-                      tag, a Helm index timestamp, a Helm chart version, etc.
+                      tag, a Helm chart version, etc.
                     type: string
                   size:
                     description: Size is the number of bytes in the file.
                     format: int64
                     type: integer
                   url:
-                    description: URL is the HTTP address of this artifact. It is used
-                      by the consumers of the artifacts to fetch and use the artifacts.
-                      It is expected to be resolvable from within the cluster.
+                    description: URL is the HTTP address of the Artifact as exposed
+                      by the controller managing the Source. It can be used to retrieve
+                      the Artifact for consumption, e.g. by another controller applying
+                      the Artifact contents.
                     type: string
                 required:
                 - path
@@ -528,18 +533,21 @@ spec:
                 type: string
               observedChartName:
                 description: ObservedChartName is the last observed chart name as
-                  defined by the resolved chart reference.
+                  specified by the resolved chart reference.
                 type: string
               observedGeneration:
-                description: ObservedGeneration is the last observed generation.
+                description: ObservedGeneration is the last observed generation of
+                  the HelmChart object.
                 format: int64
                 type: integer
               observedSourceArtifactRevision:
                 description: ObservedSourceArtifactRevision is the last observed Artifact.Revision
-                  of the Source reference.
+                  of the HelmChartSpec.SourceRef.
                 type: string
               url:
-                description: URL is the fetch link for the last chart pulled.
+                description: URL is the dynamic fetch link for the latest Artifact.
+                  It is provided on a "best effort" basis, and using the precise BucketStatus.Artifact
+                  data is recommended.
                 type: string
             type: object
         type: object
