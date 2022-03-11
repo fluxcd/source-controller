@@ -50,6 +50,7 @@ import (
 	"github.com/fluxcd/source-controller/internal/reconcile/summarize"
 	"github.com/fluxcd/source-controller/internal/util"
 	"github.com/fluxcd/source-controller/pkg/git"
+	"github.com/fluxcd/source-controller/pkg/git/libgit2/managed"
 	"github.com/fluxcd/source-controller/pkg/git/strategy"
 	"github.com/fluxcd/source-controller/pkg/sourceignore"
 )
@@ -369,10 +370,37 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context,
 		return sreconcile.ResultEmpty, e
 	}
 
+	repositoryURL := obj.Spec.URL
+	// managed GIT transport only affects the libgit2 implementation
+	if managed.Enabled() && obj.Spec.GitImplementation == sourcev1.LibGit2Implementation {
+		// At present only HTTP connections have the ability to define remote options.
+		// Although this can be easily extended by ensuring that the fake URL below uses the
+		// target ssh scheme, and the libgit2/managed/ssh.go pulls that information accordingly.
+		//
+		// This is due to the fact the key libgit2 remote callbacks do not take place for HTTP
+		// whilst most still work for SSH.
+		if strings.HasPrefix(repositoryURL, "http") {
+			// Due to the lack of the callback feature, a fake target URL is created to allow
+			// for the smart sub transport be able to pick the options specific for this
+			// GitRepository object.
+			// The URL should use unique information that do not collide in a multi tenant
+			// deployment.
+			repositoryURL = fmt.Sprintf("http://%s/%s/%d", obj.Name, obj.UID, obj.Generation)
+			managed.AddTransportOptions(repositoryURL,
+				managed.TransportOptions{
+					TargetUrl: obj.Spec.URL,
+					CABundle:  authOpts.CAFile,
+				})
+
+			// We remove the options from memory, to avoid accumulating unused options over time.
+			defer managed.RemoveTransportOptions(repositoryURL)
+		}
+	}
+
 	// Checkout HEAD of reference in object
 	gitCtx, cancel := context.WithTimeout(ctx, obj.Spec.Timeout.Duration)
 	defer cancel()
-	c, err := checkoutStrategy.Checkout(gitCtx, dir, obj.Spec.URL, authOpts)
+	c, err := checkoutStrategy.Checkout(gitCtx, dir, repositoryURL, authOpts)
 	if err != nil {
 		e := &serror.Event{
 			Err:    fmt.Errorf("failed to checkout and determine revision: %w", err),
