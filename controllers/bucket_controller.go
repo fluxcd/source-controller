@@ -328,8 +328,7 @@ func (r *BucketReconciler) reconcile(ctx context.Context, obj *sourcev1.Bucket, 
 			Err:    fmt.Errorf("failed to create temporary working directory: %w", err),
 			Reason: sourcev1.DirCreationFailedReason,
 		}
-		conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition,
-			sourcev1.DirCreationFailedReason, e.Err.Error())
+		conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition, e.Reason, e.Err.Error())
 		return successEvent, sreconcile.ResultEmpty, e
 	}
 	defer func() {

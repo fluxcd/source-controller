@@ -242,8 +242,7 @@ func (r *HelmRepositoryReconciler) reconcile(ctx context.Context, obj *sourcev1.
 				Err:    fmt.Errorf("unable to read the artifact: %w", err),
 				Reason: sourcev1.ReadOperationFailedReason,
 			}
-			conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition,
-				sourcev1.ReadOperationFailedReason, e.Err.Error())
+			conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition, e.Reason, e.Err.Error())
 			return successEvent, sreconcile.ResultEmpty, e
 		}
 		size := units.HumanSize(float64(fi.Size()))
@@ -325,7 +324,7 @@ func (r *HelmRepositoryReconciler) reconcileSource(ctx context.Context, obj *sou
 				Err:    fmt.Errorf("failed to get secret '%s': %w", name.String(), err),
 				Reason: sourcev1.AuthenticationFailedReason,
 			}
-			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, e.Err.Error())
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
 			return sreconcile.ResultEmpty, e
 		}
 
@@ -336,7 +335,7 @@ func (r *HelmRepositoryReconciler) reconcileSource(ctx context.Context, obj *sou
 				Err:    fmt.Errorf("failed to configure Helm client with secret data: %w", err),
 				Reason: sourcev1.AuthenticationFailedReason,
 			}
-			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, e.Err.Error())
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
 			// Return err as the content of the secret may change.
 			return sreconcile.ResultEmpty, e
 		}
@@ -348,7 +347,7 @@ func (r *HelmRepositoryReconciler) reconcileSource(ctx context.Context, obj *sou
 				Err:    fmt.Errorf("failed to create TLS client config with secret data: %w", err),
 				Reason: sourcev1.AuthenticationFailedReason,
 			}
-			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, e.Err.Error())
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
 			// Requeue as content of secret might change
 			return sreconcile.ResultEmpty, e
 		}
@@ -363,14 +362,14 @@ func (r *HelmRepositoryReconciler) reconcileSource(ctx context.Context, obj *sou
 				Err:    fmt.Errorf("invalid Helm repository URL: %w", err),
 				Reason: sourcev1.URLInvalidReason,
 			}
-			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.URLInvalidReason, e.Err.Error())
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
 			return sreconcile.ResultEmpty, e
 		default:
 			e := &serror.Stalling{
 				Err:    fmt.Errorf("failed to construct Helm client: %w", err),
 				Reason: meta.FailedReason,
 			}
-			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, meta.FailedReason, e.Err.Error())
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
 			return sreconcile.ResultEmpty, e
 		}
 	}
@@ -380,7 +379,7 @@ func (r *HelmRepositoryReconciler) reconcileSource(ctx context.Context, obj *sou
 			Err:    fmt.Errorf("failed to fetch Helm repository index: %w", err),
 			Reason: meta.FailedReason,
 		}
-		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, meta.FailedReason, e.Err.Error())
+		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
 		// Coin flip on transient or persistent error, return error and hope for the best
 		return sreconcile.ResultEmpty, e
 	}
@@ -390,9 +389,9 @@ func (r *HelmRepositoryReconciler) reconcileSource(ctx context.Context, obj *sou
 	if err := chartRepo.LoadFromCache(); err != nil {
 		e := &serror.Event{
 			Err:    fmt.Errorf("failed to load Helm repository from cache: %w", err),
-			Reason: sourcev1.FetchFailedCondition,
+			Reason: sourcev1.IndexationFailedReason,
 		}
-		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.IndexationFailedReason, e.Err.Error())
+		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
 		return sreconcile.ResultEmpty, e
 	}
 	defer chartRepo.Unload()
@@ -449,8 +448,7 @@ func (r *HelmRepositoryReconciler) reconcileArtifact(ctx context.Context, obj *s
 			Err:    fmt.Errorf("failed to create artifact directory: %w", err),
 			Reason: sourcev1.DirCreationFailedReason,
 		}
-		conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition,
-			sourcev1.DirCreationFailedReason, e.Err.Error())
+		conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition, e.Reason, e.Err.Error())
 		return sreconcile.ResultEmpty, e
 	}
 
@@ -470,8 +468,7 @@ func (r *HelmRepositoryReconciler) reconcileArtifact(ctx context.Context, obj *s
 			Err:    fmt.Errorf("unable to save artifact to storage: %w", err),
 			Reason: sourcev1.ArchiveOperationFailedReason,
 		}
-		conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition,
-			sourcev1.ArchiveOperationFailedReason, e.Err.Error())
+		conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition, e.Reason, e.Err.Error())
 		return sreconcile.ResultEmpty, e
 	}
 

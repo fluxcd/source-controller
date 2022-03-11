@@ -229,8 +229,7 @@ func (r *GitRepositoryReconciler) reconcile(ctx context.Context, obj *sourcev1.G
 			Err:    fmt.Errorf("failed to create temporary working directory: %w", err),
 			Reason: sourcev1.DirCreationFailedReason,
 		}
-		conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition,
-			sourcev1.DirCreationFailedReason, e.Err.Error())
+		conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition, e.Reason, e.Err.Error())
 		return successEvent, sreconcile.ResultEmpty, e
 	}
 	defer func() {
@@ -348,7 +347,7 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context,
 				Err:    fmt.Errorf("failed to get secret '%s': %w", name.String(), err),
 				Reason: sourcev1.AuthenticationFailedReason,
 			}
-			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, e.Err.Error())
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
 			// Return error as the world as observed may change
 			return sreconcile.ResultEmpty, e
 		}
@@ -364,7 +363,7 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context,
 			Err:    fmt.Errorf("failed to configure auth strategy for Git implementation '%s': %w", obj.Spec.GitImplementation, err),
 			Reason: sourcev1.AuthenticationFailedReason,
 		}
-		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, e.Err.Error())
+		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
 		// Return error as the contents of the secret may change
 		return sreconcile.ResultEmpty, e
 	}
@@ -384,7 +383,7 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context,
 			Err:    fmt.Errorf("failed to configure checkout strategy for Git implementation '%s': %w", obj.Spec.GitImplementation, err),
 			Reason: sourcev1.GitOperationFailedReason,
 		}
-		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.GitOperationFailedReason, e.Err.Error())
+		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
 		// Do not return err as recovery without changes is impossible
 		return sreconcile.ResultEmpty, e
 	}
@@ -398,7 +397,7 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context,
 			Err:    fmt.Errorf("failed to checkout and determine revision: %w", err),
 			Reason: sourcev1.GitOperationFailedReason,
 		}
-		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.GitOperationFailedReason, e.Err.Error())
+		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
 		// Coin flip on transient or persistent error, return error and hope for the best
 		return sreconcile.ResultEmpty, e
 	}
@@ -458,16 +457,14 @@ func (r *GitRepositoryReconciler) reconcileArtifact(ctx context.Context,
 			Err:    fmt.Errorf("failed to stat target artifact path: %w", err),
 			Reason: sourcev1.StatOperationFailedReason,
 		}
-		conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition,
-			sourcev1.StatOperationFailedReason, e.Err.Error())
+		conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition, e.Reason, e.Err.Error())
 		return sreconcile.ResultEmpty, e
 	} else if !f.IsDir() {
 		e := &serror.Event{
 			Err:    fmt.Errorf("invalid target path: '%s' is not a directory", dir),
 			Reason: sourcev1.InvalidPathReason,
 		}
-		conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition,
-			sourcev1.InvalidPathReason, e.Err.Error())
+		conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition, e.Reason, e.Err.Error())
 		return sreconcile.ResultEmpty, e
 	}
 
@@ -477,8 +474,7 @@ func (r *GitRepositoryReconciler) reconcileArtifact(ctx context.Context,
 			Err:    fmt.Errorf("failed to create artifact directory: %w", err),
 			Reason: sourcev1.DirCreationFailedReason,
 		}
-		conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition,
-			sourcev1.DirCreationFailedReason, e.Err.Error())
+		conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition, e.Reason, e.Err.Error())
 		return sreconcile.ResultEmpty, e
 	}
 	unlock, err := r.Storage.Lock(artifact)
@@ -508,8 +504,7 @@ func (r *GitRepositoryReconciler) reconcileArtifact(ctx context.Context,
 			Err:    fmt.Errorf("unable to archive artifact to storage: %w", err),
 			Reason: sourcev1.ArchiveOperationFailedReason,
 		}
-		conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition,
-			sourcev1.ArchiveOperationFailedReason, e.Err.Error())
+		conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition, e.Reason, e.Err.Error())
 		return sreconcile.ResultEmpty, e
 	}
 
