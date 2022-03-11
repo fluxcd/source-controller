@@ -32,7 +32,6 @@ import (
 
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/runtime/conditions"
-	"github.com/fluxcd/pkg/runtime/patch"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
 	serror "github.com/fluxcd/source-controller/internal/error"
@@ -259,10 +258,8 @@ func TestSummarizeAndPatch(t *testing.T) {
 
 			ctx := context.TODO()
 			g.Expect(client.Create(ctx, obj)).To(Succeed())
-			patchHelper, err := patch.NewHelper(obj, client)
-			g.Expect(err).ToNot(HaveOccurred())
 
-			summaryHelper := NewHelper(record.NewFakeRecorder(32), patchHelper)
+			summaryHelper := NewHelper(record.NewFakeRecorder(32), client, obj.DeepCopy())
 			summaryOpts := []Option{
 				WithReconcileResult(tt.result),
 				WithReconcileError(tt.reconcileErr),
@@ -380,14 +377,12 @@ func TestSummarizeAndPatch_Intermediate(t *testing.T) {
 
 			ctx := context.TODO()
 			g.Expect(kclient.Create(ctx, obj)).To(Succeed())
-			patchHelper, err := patch.NewHelper(obj, kclient)
-			g.Expect(err).ToNot(HaveOccurred())
 
-			summaryHelper := NewHelper(record.NewFakeRecorder(32), patchHelper)
+			summaryHelper := NewHelper(record.NewFakeRecorder(32), kclient, obj.DeepCopy())
 			summaryOpts := []Option{
 				WithConditions(tt.conditions...),
 			}
-			_, err = summaryHelper.SummarizeAndPatch(ctx, obj, summaryOpts...)
+			_, err := summaryHelper.SummarizeAndPatch(ctx, obj, summaryOpts...)
 			g.Expect(err).ToNot(HaveOccurred())
 
 			g.Expect(obj.Status.Conditions).To(conditions.MatchConditions(tt.assertConditions))

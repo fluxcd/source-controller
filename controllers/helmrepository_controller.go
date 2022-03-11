@@ -41,7 +41,6 @@ import (
 	"github.com/fluxcd/pkg/runtime/conditions"
 	helper "github.com/fluxcd/pkg/runtime/controller"
 	"github.com/fluxcd/pkg/runtime/events"
-	"github.com/fluxcd/pkg/runtime/patch"
 	"github.com/fluxcd/pkg/runtime/predicates"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
@@ -139,12 +138,6 @@ func (r *HelmRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 
 	oldObj := obj.DeepCopy()
 
-	// Initialize the patch helper with the current version of the object.
-	patchHelper, err := patch.NewHelper(obj, r.Client)
-	if err != nil {
-		return ctrl.Result{}, err
-	}
-
 	// recResult stores the abstracted reconcile result.
 	var recResult sreconcile.Result
 	// successEvent stores the notification event to be emitted on success.
@@ -153,7 +146,7 @@ func (r *HelmRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	// Always attempt to patch the object after each reconciliation.
 	// NOTE: The final runtime result and error are set in this block.
 	defer func() {
-		summarizeHelper := summarize.NewHelper(r.EventRecorder, patchHelper)
+		summarizeHelper := summarize.NewHelper(r.EventRecorder, r.Client, oldObj)
 		summarizeOpts := []summarize.Option{
 			summarize.WithConditions(helmRepositoryReadyCondition),
 			summarize.WithReconcileResult(recResult),

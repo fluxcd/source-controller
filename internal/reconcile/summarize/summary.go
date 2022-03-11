@@ -23,6 +23,7 @@ import (
 	kerrors "k8s.io/apimachinery/pkg/util/errors"
 	kuberecorder "k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/fluxcd/pkg/runtime/conditions"
 	"github.com/fluxcd/pkg/runtime/patch"
@@ -68,15 +69,17 @@ func (n Notification) IsZero() bool {
 
 // Helper is SummarizeAndPatch helper.
 type Helper struct {
-	recorder    kuberecorder.EventRecorder
-	patchHelper *patch.Helper
+	recorder kuberecorder.EventRecorder
+	client.Client
+	oldObj client.Object
 }
 
 // NewHelper returns an initialized Helper.
-func NewHelper(recorder kuberecorder.EventRecorder, patchHelper *patch.Helper) *Helper {
+func NewHelper(recorder kuberecorder.EventRecorder, crClient client.Client, oldObj client.Object) *Helper {
 	return &Helper{
-		recorder:    recorder,
-		patchHelper: patchHelper,
+		recorder: recorder,
+		Client:   crClient,
+		oldObj:   oldObj,
 	}
 }
 
@@ -224,8 +227,15 @@ func (h *Helper) SummarizeAndPatch(ctx context.Context, obj conditions.Setter, o
 		)
 	}
 
+	// Create patch helper with the old version of the object.
+	patchHelper, err := patch.NewHelper(h.oldObj, h.Client)
+	if err != nil {
+		recErr = kerrors.NewAggregate([]error{recErr, err})
+		return result, recErr
+	}
+
 	// Finally, patch the resource.
-	if err := h.patchHelper.Patch(ctx, obj, patchOpts...); err != nil {
+	if err := patchHelper.Patch(ctx, obj, patchOpts...); err != nil {
 		// Ignore patch error "not found" when the object is being deleted.
 		if opts.IgnoreNotFound && !obj.GetDeletionTimestamp().IsZero() {
 			err = kerrors.FilterOut(err, func(e error) bool { return apierrors.IsNotFound(e) })
