@@ -85,9 +85,6 @@ type httpSmartSubtransport struct {
 }
 
 func (t *httpSmartSubtransport) Action(targetUrl string, action git2go.SmartServiceAction) (git2go.SmartSubtransportStream, error) {
-	var req *http.Request
-	var err error
-
 	var proxyFn func(*http.Request) (*url.URL, error)
 	proxyOpts, err := t.transport.SmartProxyOptions()
 	if err != nil {
@@ -125,26 +122,50 @@ func (t *httpSmartSubtransport) Action(targetUrl string, action git2go.SmartServ
 		ExpectContinueTimeout: 1 * time.Second,
 	}
 
+	client, req, err := createClientRequest(targetUrl, action, httpTransport)
+	if err != nil {
+		return nil, err
+	}
+
+	stream := newManagedHttpStream(t, req, client)
+	if req.Method == "POST" {
+		stream.recvReply.Add(1)
+		stream.sendRequestBackground()
+	}
+
+	return stream, nil
+}
+
+func createClientRequest(targetUrl string, action git2go.SmartServiceAction, t *http.Transport) (*http.Client, *http.Request, error) {
+	var req *http.Request
+	var err error
+
+	if t == nil {
+		return nil, nil, fmt.Errorf("failed to create client: transport cannot be nil")
+	}
+
 	finalUrl := targetUrl
 	opts, found := transportOptions(targetUrl)
-	if found && opts.TargetUrl != "" {
-		// override target URL only if options are found and a new targetURL
-		// is provided.
-		finalUrl = opts.TargetUrl
+	if found {
+		if opts.TargetUrl != "" {
+			// override target URL only if options are found and a new targetURL
+			// is provided.
+			finalUrl = opts.TargetUrl
+		}
+
+		// Add any provided certificate to the http transport.
+		if len(opts.CABundle) > 0 {
+			cap := x509.NewCertPool()
+			if ok := cap.AppendCertsFromPEM(opts.CABundle); !ok {
+				return nil, nil, fmt.Errorf("failed to use certificate from PEM")
+			}
+			t.TLSClientConfig = &tls.Config{
+				RootCAs: cap,
+			}
+		}
 	}
 
-	// Add any provided certificate to the http transport.
-	if len(opts.CABundle) > 0 {
-		cap := x509.NewCertPool()
-		if ok := cap.AppendCertsFromPEM(opts.CABundle); !ok {
-			return nil, fmt.Errorf("failed to use certificate from PEM")
-		}
-		httpTransport.TLSClientConfig = &tls.Config{
-			RootCAs: cap,
-		}
-	}
-
-	client := &http.Client{Transport: httpTransport, Timeout: fullHttpClientTimeOut}
+	client := &http.Client{Transport: t, Timeout: fullHttpClientTimeOut}
 
 	switch action {
 	case git2go.SmartServiceActionUploadpackLs:
@@ -172,18 +193,11 @@ func (t *httpSmartSubtransport) Action(targetUrl string, action git2go.SmartServ
 	}
 
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	req.Header.Set("User-Agent", "git/2.0 (git2go)")
-
-	stream := newManagedHttpStream(t, req, client)
-	if req.Method == "POST" {
-		stream.recvReply.Add(1)
-		stream.sendRequestBackground()
-	}
-
-	return stream, nil
+	req.Header.Set("User-Agent", "git/2.0 (flux-libgit2)")
+	return client, req, nil
 }
 
 func (t *httpSmartSubtransport) Close() error {

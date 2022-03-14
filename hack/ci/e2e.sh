@@ -139,3 +139,19 @@ echo "Run large Git repo tests"
 kubectl -n source-system apply -f "${ROOT_DIR}/config/testdata/git/large-repo.yaml"
 kubectl -n source-system wait gitrepository/large-repo-go-git --for=condition=ready --timeout=2m15s
 kubectl -n source-system wait gitrepository/large-repo-libgit2 --for=condition=ready --timeout=2m15s
+
+
+# Test experimental libgit2 transport. Any tests against the default transport must
+# either run before this, or patch the deployment again to disable this, as once enabled
+# only the managed transport will be used.
+kubectl -n source-system patch deployment source-controller \
+    --patch '{"spec": {"template": {"spec": {"containers": [{"name": "manager","env": [{"name": "EXPERIMENTAL_GIT_TRANSPORT", "value": "true"}]}]}}}}'
+
+# wait until the patch took effect and the new source-controller is running
+sleep 20s
+
+kubectl -n source-system wait --for=condition=ready --timeout=1m -l app=source-controller pod
+
+echo "Re-run large libgit2 repo test with managed transport"
+kubectl -n source-system wait gitrepository/large-repo-libgit2 --for=condition=ready --timeout=2m15s
+kubectl -n source-system exec deploy/source-controller -- printenv | grep EXPERIMENTAL_GIT_TRANSPORT=true
