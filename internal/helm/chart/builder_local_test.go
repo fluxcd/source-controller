@@ -110,6 +110,7 @@ func TestLocalBuilder_Build(t *testing.T) {
 		{
 			name:         "already packaged chart",
 			reference:    LocalReference{Path: "./../testdata/charts/helmchart-0.1.0.tgz"},
+			buildOpts:    BuildOptions{Keyring: keyring},
 			wantVersion:  "0.1.0",
 			wantPackaged: false,
 		},
@@ -215,7 +216,7 @@ fullnameOverride: "full-foo-name-override"`),
 			)
 
 			b := NewLocalBuilder(dm)
-			cb, err := b.Build(context.TODO(), tt.reference, targetPath, tt.buildOpts, keyring)
+			cb, err := b.Build(context.TODO(), tt.reference, targetPath, tt.buildOpts)
 
 			if tt.wantErr != "" {
 				g.Expect(err).To(HaveOccurred())
@@ -226,6 +227,10 @@ fullnameOverride: "full-foo-name-override"`),
 			g.Expect(err).ToNot(HaveOccurred())
 			g.Expect(cb.Packaged).To(Equal(tt.wantPackaged), "unexpected Build.Packaged value")
 			g.Expect(cb.Path).ToNot(BeEmpty(), "empty Build.Path")
+			if tt.buildOpts.Keyring != nil {
+				g.Expect(cb.ProvFilePath).ToNot(BeEmpty(), "empty Build.ProvFilePath")
+				g.Expect(cb.VerificationSignature).ToNot(BeNil(), "nil Build.VerificationSignature")
+			}
 
 			// Load the resulting chart and verify the values.
 			resultChart, err := loader.Load(cb.Path)
@@ -262,7 +267,7 @@ func TestLocalBuilder_Build_CachedChart(t *testing.T) {
 	// Build first time.
 	targetPath := filepath.Join(tmpDir, "chart1.tgz")
 	buildOpts := BuildOptions{}
-	cb, err := b.Build(context.TODO(), reference, targetPath, buildOpts, keyring)
+	cb, err := b.Build(context.TODO(), reference, targetPath, buildOpts)
 	g.Expect(err).ToNot(HaveOccurred())
 
 	// Set the result as the CachedChart for second build.
@@ -270,15 +275,44 @@ func TestLocalBuilder_Build_CachedChart(t *testing.T) {
 
 	targetPath2 := filepath.Join(tmpDir, "chart2.tgz")
 	defer os.RemoveAll(targetPath2)
-	cb, err = b.Build(context.TODO(), reference, targetPath2, buildOpts, keyring)
+	cb, err = b.Build(context.TODO(), reference, targetPath2, buildOpts)
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(cb.Path).To(Equal(targetPath))
 
 	// Rebuild with build option Force.
 	buildOpts.Force = true
-	cb, err = b.Build(context.TODO(), reference, targetPath2, buildOpts, keyring)
+	cb, err = b.Build(context.TODO(), reference, targetPath2, buildOpts)
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(cb.Path).To(Equal(targetPath2))
+}
+
+func TestLocalBuilder_VerifyCachedChartSig(t *testing.T) {
+	g := NewWithT(t)
+
+	reference := LocalReference{Path: "./../testdata/charts/helmchart-0.1.0.tgz"}
+
+	keyring, err := os.ReadFile("./../testdata/charts/pub.gpg")
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(keyring).ToNot(BeEmpty())
+
+	dm := NewDependencyManager()
+	b := NewLocalBuilder(dm)
+
+	tmpDir, err := os.MkdirTemp("", "local-chart-")
+	g.Expect(err).ToNot(HaveOccurred())
+	defer os.RemoveAll(tmpDir)
+
+	buildOpts := BuildOptions{}
+	buildOpts.Keyring = keyring
+
+	buildOpts.CachedChart = "./../testdata/charts/helmchart-0.1.0.tgz"
+	targetPath2 := filepath.Join(tmpDir, "chart2.tgz")
+	defer os.RemoveAll(targetPath2)
+
+	cb, err := b.Build(context.TODO(), reference, targetPath2, buildOpts)
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(cb.ProvFilePath).ToNot(BeEmpty(), "empty Build.ProvFilePath")
+	g.Expect(cb.VerificationSignature).ToNot(BeNil(), "nil Build.VerificationSignature")
 }
 
 func Test_mergeFileValues(t *testing.T) {

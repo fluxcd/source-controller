@@ -138,16 +138,22 @@ entries:
 			wantErr:    "Invalid Metadata string",
 		},
 		{
-			name:         "with version metadata",
-			reference:    RemoteReference{Name: "grafana"},
-			repository:   mockRepo(),
-			buildOpts:    BuildOptions{VersionMetadata: "foo"},
+			name:       "with version metadata",
+			reference:  RemoteReference{Name: "grafana"},
+			repository: mockRepo(),
+			buildOpts: BuildOptions{
+				VersionMetadata: "foo",
+				Keyring:         keyring,
+			},
 			wantVersion:  "0.1.0+foo",
 			wantPackaged: true,
 		},
 		{
-			name:        "default values",
-			reference:   RemoteReference{Name: "grafana"},
+			name:      "default values",
+			reference: RemoteReference{Name: "grafana"},
+			buildOpts: BuildOptions{
+				Keyring: keyring,
+			},
 			repository:  mockRepo(),
 			wantVersion: "0.1.0",
 			wantValues: chartutil.Values{
@@ -159,6 +165,7 @@ entries:
 			reference: RemoteReference{Name: "grafana"},
 			buildOpts: BuildOptions{
 				ValuesFiles: []string{"a.yaml", "b.yaml", "c.yaml"},
+				Keyring:     keyring,
 			},
 			repository:  mockRepo(),
 			wantVersion: "0.1.0",
@@ -187,10 +194,7 @@ entries:
 
 			b := NewRemoteBuilder(tt.repository)
 
-			if tt.buildOpts.VersionMetadata != "" {
-				keyring = nil
-			}
-			cb, err := b.Build(context.TODO(), tt.reference, targetPath, tt.buildOpts, keyring)
+			cb, err := b.Build(context.TODO(), tt.reference, targetPath, tt.buildOpts)
 
 			if tt.wantErr != "" {
 				g.Expect(err).To(HaveOccurred())
@@ -201,6 +205,8 @@ entries:
 			g.Expect(err).ToNot(HaveOccurred())
 			g.Expect(cb.Packaged).To(Equal(tt.wantPackaged), "unexpected Build.Packaged value")
 			g.Expect(cb.Path).ToNot(BeEmpty(), "empty Build.Path")
+			g.Expect(cb.ProvFilePath).ToNot(BeEmpty(), "empty Build.ProvFilePath")
+			g.Expect(cb.VerificationSignature).ToNot(BeNil(), "nil Build.VerificationSignature")
 
 			// Load the resulting chart and verify the values.
 			resultChart, err := loader.Load(cb.Path)
@@ -273,8 +279,11 @@ entries:
 	targetPath := filepath.Join(tmpDir, "helmchart-0.1.0.tgz")
 	defer os.RemoveAll(targetPath)
 	buildOpts := BuildOptions{}
-	cb, err := b.Build(context.TODO(), reference, targetPath, buildOpts, keyring)
+	buildOpts.Keyring = keyring
+	cb, err := b.Build(context.TODO(), reference, targetPath, buildOpts)
 	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(cb.ProvFilePath).ToNot(BeEmpty(), "empty Build.ProvFilePath")
+	g.Expect(cb.VerificationSignature).ToNot(BeNil(), "nil Build.VerificationSignature")
 
 	// Set the result as the CachedChart for second build.
 	buildOpts.CachedChart = cb.Path
@@ -282,15 +291,19 @@ entries:
 	// Rebuild with a new path.
 	targetPath2 := filepath.Join(tmpDir, "chart2.tgz")
 	defer os.RemoveAll(targetPath2)
-	cb, err = b.Build(context.TODO(), reference, targetPath2, buildOpts, keyring)
+	cb, err = b.Build(context.TODO(), reference, targetPath2, buildOpts)
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(cb.Path).To(Equal(targetPath))
+	g.Expect(cb.ProvFilePath).ToNot(BeEmpty(), "empty Build.ProvFilePath")
+	g.Expect(cb.VerificationSignature).ToNot(BeNil(), "nil Build.VerificationSignature")
 
 	// Rebuild with build option Force.
 	buildOpts.Force = true
-	cb, err = b.Build(context.TODO(), reference, targetPath2, buildOpts, keyring)
+	cb, err = b.Build(context.TODO(), reference, targetPath2, buildOpts)
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(cb.Path).To(Equal(targetPath2))
+	g.Expect(cb.ProvFilePath).ToNot(BeEmpty(), "empty Build.ProvFilePath")
+	g.Expect(cb.VerificationSignature).ToNot(BeNil(), "nil Build.VerificationSignature")
 }
 
 func Test_mergeChartValues(t *testing.T) {

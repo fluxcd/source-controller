@@ -26,6 +26,7 @@ import (
 	"github.com/Masterminds/semver/v3"
 	securejoin "github.com/cyphar/filepath-securejoin"
 	"helm.sh/helm/v3/pkg/chart/loader"
+	"helm.sh/helm/v3/pkg/provenance"
 	"sigs.k8s.io/yaml"
 
 	"github.com/fluxcd/pkg/runtime/transform"
@@ -63,7 +64,7 @@ func NewLocalBuilder(dm *DependencyManager) Builder {
 // If the LocalReference.Path refers to a chart directory, dependencies are
 // confirmed to be present using the DependencyManager, while attempting to
 // resolve any missing.
-func (b *localChartBuilder) Build(ctx context.Context, ref Reference, p string, opts BuildOptions, keyring []byte) (*Build, error) {
+func (b *localChartBuilder) Build(ctx context.Context, ref Reference, p string, opts BuildOptions) (*Build, error) {
 	localRef, ok := ref.(LocalReference)
 	if !ok {
 		err := fmt.Errorf("expected local chart reference")
@@ -105,37 +106,43 @@ func (b *localChartBuilder) Build(ctx context.Context, ref Reference, p string, 
 	isChartDir := pathIsDir(localRef.Path)
 	requiresPackaging := isChartDir || opts.VersionMetadata != "" || len(opts.GetValuesFiles()) != 0
 
+	var provFilePath string
+	verifyProvFile := func(chart, provFile string) (*provenance.Verification, error) {
+		if opts.Keyring != nil {
+			if _, err := os.Stat(provFile); err != nil {
+				err = fmt.Errorf("could not load provenance file %s: %w", provFile, err)
+				return nil, &BuildError{Reason: ErrProvenanceVerification, Err: err}
+			}
+			ver, err := verifyChartWithProvFile(bytes.NewReader(opts.Keyring), chart, provFile)
+			if err != nil {
+				err = fmt.Errorf("failed to verify helm chart using provenance file: %w", err)
+				return nil, &BuildError{Reason: ErrProvenanceVerification, Err: err}
+			}
+			return ver, nil
+		}
+		return nil, nil
+	}
+
 	// If all the following is true, we do not need to package the chart:
 	// - Chart name from cached chart matches resolved name
 	// - Chart version from cached chart matches calculated version
 	// - BuildOptions.Force is False
-	var provFilePath string
-	verifyProvFile := func(chart, provFile string) error {
-		if keyring != nil {
-			if _, err := os.Stat(provFile); err != nil {
-				err = fmt.Errorf("could not load provenance file %s: %w", provFile, err)
-				return &BuildError{Reason: ErrProvenanceVerification, Err: err}
-			}
-			err := VerifyProvenanceFile(bytes.NewReader(keyring), chart, provFile)
-			if err != nil {
-				err = fmt.Errorf("failed to verify helm chart using provenance file: %w", err)
-				return &BuildError{Reason: ErrProvenanceVerification, Err: err}
-			}
-		}
-		return nil
-	}
 	if opts.CachedChart != "" && !opts.Force {
 		if curMeta, err = LoadChartMetadataFromArchive(opts.CachedChart); err == nil {
 			// If the cached metadata is corrupt, we ignore its existence
 			// and continue the build
 			if err = curMeta.Validate(); err == nil {
 				if result.Name == curMeta.Name && result.Version == curMeta.Version {
+					// We can only verify a cached chart with provenance file if we didn't
+					// package the chart ourselves, and instead stored it as is.
 					if !requiresPackaging {
 						provFilePath = provenanceFilePath(opts.CachedChart)
-						if err = verifyProvFile(opts.CachedChart, provFilePath); err != nil {
+						if ver, err := verifyProvFile(opts.CachedChart, provFilePath); err != nil {
 							return nil, err
+						} else {
+							result.VerificationSignature = buildVerificationSig(ver)
+							result.ProvFilePath = provFilePath
 						}
-						result.ProvFilePath = provFilePath
 					}
 					result.Path = opts.CachedChart
 					result.ValuesFiles = opts.GetValuesFiles()
@@ -156,11 +163,13 @@ func (b *localChartBuilder) Build(ctx context.Context, ref Reference, p string, 
 		if err = copyFileToPath(provenanceFilePath(localRef.Path), provFilePath); err != nil {
 			return result, &BuildError{Reason: ErrChartPull, Err: err}
 		}
-		if err = verifyProvFile(localRef.Path, provFilePath); err != nil {
+		if ver, err := verifyProvFile(localRef.Path, provFilePath); err != nil {
 			return result, err
+		} else {
+			result.ProvFilePath = provFilePath
+			result.VerificationSignature = buildVerificationSig(ver)
 		}
 		result.Path = p
-		result.ProvFilePath = provFilePath
 		return result, nil
 	}
 

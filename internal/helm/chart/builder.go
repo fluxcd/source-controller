@@ -85,7 +85,7 @@ type Builder interface {
 	// Reference and BuildOptions, and writes it to p.
 	// It returns the Build result, or an error.
 	// It may return an error for unsupported Reference implementations.
-	Build(ctx context.Context, ref Reference, p string, opts BuildOptions, keyring []byte) (*Build, error)
+	Build(ctx context.Context, ref Reference, p string, opts BuildOptions) (*Build, error)
 }
 
 // BuildOptions provides a list of options for Builder.Build.
@@ -104,6 +104,10 @@ type BuildOptions struct {
 	// Force can be set to force the build of the chart, for example
 	// because the list of ValuesFiles has changed.
 	Force bool
+
+	// Keyring can be set to the data of the chart VerificationKeyring secret
+	// used for verifying a chart's signature using a provenance file.
+	Keyring []byte
 }
 
 // GetValuesFiles returns BuildOptions.ValuesFiles, except if it equals
@@ -129,6 +133,9 @@ type Build struct {
 	// Can be empty, in which case it should be assumed that the packaged
 	// chart is not verified.
 	ProvFilePath string
+	// VerificationSignature is populated when a chart's signature
+	// is susccessfully verified using it's provenance file.
+	VerificationSignature *VerificationSignature
 	// ValuesFiles is the list of files used to compose the chart's
 	// default "values.yaml".
 	ValuesFiles []string
@@ -161,7 +168,6 @@ func (b *Build) Summary() string {
 	if len(b.ValuesFiles) > 0 {
 		s.WriteString(fmt.Sprintf(" and merged values files %v", b.ValuesFiles))
 	}
-
 	return s.String()
 }
 

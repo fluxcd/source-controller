@@ -120,7 +120,6 @@ func (s *Storage) RemoveAll(artifact sourcev1.Artifact) (string, error) {
 func (s *Storage) RemoveAllButCurrent(artifact sourcev1.Artifact) ([]string, error) {
 	deletedFiles := []string{}
 	localPath := s.LocalPath(artifact)
-	localProvPath := localPath + ".prov"
 	dir := filepath.Dir(localPath)
 	var errors []string
 	_ = filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
@@ -129,12 +128,40 @@ func (s *Storage) RemoveAllButCurrent(artifact sourcev1.Artifact) ([]string, err
 			return nil
 		}
 
-		if path != localPath && path != localProvPath && !info.IsDir() && info.Mode()&os.ModeSymlink != os.ModeSymlink {
+		if path != localPath && !info.IsDir() && info.Mode()&os.ModeSymlink != os.ModeSymlink {
 			if err := os.Remove(path); err != nil {
 				errors = append(errors, info.Name())
 			} else {
 				// Collect the successfully deleted file paths.
 				deletedFiles = append(deletedFiles, path)
+			}
+		}
+		return nil
+	})
+
+	if len(errors) > 0 {
+		return deletedFiles, fmt.Errorf("failed to remove files: %s", strings.Join(errors, " "))
+	}
+	return deletedFiles, nil
+}
+
+func (s *Storage) RemoveConditionally(dir string, callbacks []func(path string, info os.FileInfo) bool) ([]string, error) {
+	deletedFiles := []string{}
+	var errors []string
+	_ = filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			errors = append(errors, err.Error())
+			return nil
+		}
+		for _, callback := range callbacks {
+			if callback(path, info) {
+				if err := os.Remove(path); err != nil {
+					errors = append(errors, info.Name())
+				} else {
+					// Collect the successfully deleted file paths.
+					deletedFiles = append(deletedFiles, path)
+				}
+				break
 			}
 		}
 		return nil
