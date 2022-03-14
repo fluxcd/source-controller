@@ -763,17 +763,20 @@ factors:
 - The verification of the Git commit signature failed.
 - The credentials in the referenced Secret are invalid.
 - The GitRepository spec contains a generic misconfiguration.
+- A storage related failure when storing the artifact.
 
 When this happens, the controller sets the `Ready` Condition status to `False`,
 and adds a Condition with the following attributes to the GitRepository's
 `.status.conditions`:
 
-- `type: FetchFailed` | `type: IncludeUnavailableCondition`
+- `type: FetchFailed` | `type: IncludeUnavailable` | `type: StorageOperationFailed`
 - `status: "True"`
-- `reason: AuthenticationFailed` | `reason: GitOperationFailed` | `reason: StorageOperationFailed`
+- `reason: AuthenticationFailed` | `reason: GitOperationFailed`
 
 This condition has a ["negative polarity"][typical-status-properties],
 and is only present on the GitRepository while the status value is `"True"`.
+There may be more arbitrary values for the `reason` field to provide accurate
+reason for a condition.
 
 In addition to the above Condition types, when the
 [verification of a Git commit signature](#verification) fails. A condition with

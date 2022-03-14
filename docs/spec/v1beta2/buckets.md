@@ -903,17 +903,20 @@ without completing. This can occur due to some of the following factors:
   non-existing Secret.
 - The credentials in the referenced Secret are invalid.
 - The Bucket spec contains a generic misconfiguration.
+- A storage related failure when storing the artifact.
 
 When this happens, the controller sets the `Ready` Condition status to `False`,
 and adds a Condition with the following attributes to the Bucket's
 `.status.conditions`:
 
-- `type: FetchFailed`
+- `type: FetchFailed` | `type: StorageOperationFailed`
 - `status: "True"`
 - `reason: AuthenticationFailed` | `reason: BucketOperationFailed`
 
 This condition has a ["negative polarity"][typical-status-properties],
 and is only present on the Bucket while the status value is `"True"`.
+There may be more arbitrary values for the `reason` field to provide accurate
+reason for a condition.
 
 While the Bucket has this Condition, the controller will continue to attempt
 to produce an Artifact for the resource with an exponential backoff, until
