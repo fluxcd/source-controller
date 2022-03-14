@@ -475,17 +475,20 @@ factors:
   non-existing Secret.
 - The credentials in the referenced Secret are invalid.
 - The HelmRepository spec contains a generic misconfiguration.
+- A storage related failure when storing the artifact.
 
 When this happens, the controller sets the `Ready` Condition status to `False`,
 and adds a Condition with the following attributes to the HelmRepository's
 `.status.conditions`:
 
-- `type: FetchFailed`
+- `type: FetchFailed` | `type: StorageOperationFailed`
 - `status: "True"`
 - `reason: AuthenticationFailed` | `reason: IndexationFailed` | `reason: Failed`
 
 This condition has a ["negative polarity"][typical-status-properties],
 and is only present on the HelmRepository while the status value is `"True"`.
+There may be more arbitrary values for the `reason` field to provide accurate
+reason for a condition.
 
 While the HelmRepository has this Condition, the controller will continue to
 attempt to produce an Artifact for the resource with an exponential backoff,

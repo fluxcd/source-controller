@@ -532,17 +532,20 @@ factors:
 - The credentials in the [Source reference](#source-reference) Secret are
   invalid.
 - The HelmChart spec contains a generic misconfiguration.
+- A storage related failure when storing the artifact.
 
 When this happens, the controller sets the `Ready` Condition status to `False`,
 and adds a Condition with the following attributes to the HelmChart's
 `.status.conditions`:
 
-- `type: FetchFailed`
+- `type: FetchFailed` | `type: StorageOperationFailed`
 - `status: "True"`
 - `reason: AuthenticationFailed` | `reason: StorageOperationFailed` | `reason: URLInvalid` | `reason: IllegalPath` | `reason: Failed`
 
 This condition has a ["negative polarity"][typical-status-properties],
 and is only present on the HelmChart while the status value is `"True"`.
+There may be more arbitrary values for the `reason` field to provide accurate
+reason for a condition.
 
 While the HelmChart has this Condition, the controller will continue to
 attempt to produce an Artifact for the resource with an exponential backoff,

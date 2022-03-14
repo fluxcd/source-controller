@@ -59,6 +59,7 @@ var helmRepositoryReadyCondition = summarize.Conditions{
 	Owned: []string{
 		sourcev1.FetchFailedCondition,
 		sourcev1.ArtifactOutdatedCondition,
+		sourcev1.StorageOperationFailedCondition,
 		meta.ReadyCondition,
 		meta.ReconcilingCondition,
 		meta.StalledCondition,
@@ -66,12 +67,14 @@ var helmRepositoryReadyCondition = summarize.Conditions{
 	Summarize: []string{
 		sourcev1.FetchFailedCondition,
 		sourcev1.ArtifactOutdatedCondition,
+		sourcev1.StorageOperationFailedCondition,
 		meta.StalledCondition,
 		meta.ReconcilingCondition,
 	},
 	NegativePolarity: []string{
 		sourcev1.FetchFailedCondition,
 		sourcev1.ArtifactOutdatedCondition,
+		sourcev1.StorageOperationFailedCondition,
 		meta.StalledCondition,
 		meta.ReconcilingCondition,
 	},
@@ -289,7 +292,7 @@ func (r *HelmRepositoryReconciler) reconcileSource(ctx context.Context, obj *sou
 				Err:    fmt.Errorf("failed to get secret '%s': %w", name.String(), err),
 				Reason: sourcev1.AuthenticationFailedReason,
 			}
-			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, e.Err.Error())
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
 			return sreconcile.ResultEmpty, e
 		}
 
@@ -300,7 +303,7 @@ func (r *HelmRepositoryReconciler) reconcileSource(ctx context.Context, obj *sou
 				Err:    fmt.Errorf("failed to configure Helm client with secret data: %w", err),
 				Reason: sourcev1.AuthenticationFailedReason,
 			}
-			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, e.Err.Error())
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
 			// Return err as the content of the secret may change.
 			return sreconcile.ResultEmpty, e
 		}
@@ -312,7 +315,7 @@ func (r *HelmRepositoryReconciler) reconcileSource(ctx context.Context, obj *sou
 				Err:    fmt.Errorf("failed to create TLS client config with secret data: %w", err),
 				Reason: sourcev1.AuthenticationFailedReason,
 			}
-			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, e.Err.Error())
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
 			// Requeue as content of secret might change
 			return sreconcile.ResultEmpty, e
 		}
@@ -327,14 +330,14 @@ func (r *HelmRepositoryReconciler) reconcileSource(ctx context.Context, obj *sou
 				Err:    fmt.Errorf("invalid Helm repository URL: %w", err),
 				Reason: sourcev1.URLInvalidReason,
 			}
-			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.URLInvalidReason, e.Err.Error())
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
 			return sreconcile.ResultEmpty, e
 		default:
 			e := &serror.Stalling{
 				Err:    fmt.Errorf("failed to construct Helm client: %w", err),
 				Reason: meta.FailedReason,
 			}
-			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, meta.FailedReason, e.Err.Error())
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
 			return sreconcile.ResultEmpty, e
 		}
 	}
@@ -344,7 +347,7 @@ func (r *HelmRepositoryReconciler) reconcileSource(ctx context.Context, obj *sou
 			Err:    fmt.Errorf("failed to fetch Helm repository index: %w", err),
 			Reason: meta.FailedReason,
 		}
-		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, meta.FailedReason, e.Err.Error())
+		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
 		// Coin flip on transient or persistent error, return error and hope for the best
 		return sreconcile.ResultEmpty, e
 	}
@@ -354,9 +357,9 @@ func (r *HelmRepositoryReconciler) reconcileSource(ctx context.Context, obj *sou
 	if err := chartRepo.LoadFromCache(); err != nil {
 		e := &serror.Event{
 			Err:    fmt.Errorf("failed to load Helm repository from cache: %w", err),
-			Reason: sourcev1.FetchFailedCondition,
+			Reason: sourcev1.IndexationFailedReason,
 		}
-		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.IndexationFailedReason, e.Err.Error())
+		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
 		return sreconcile.ResultEmpty, e
 	}
 	defer chartRepo.Unload()
@@ -409,10 +412,12 @@ func (r *HelmRepositoryReconciler) reconcileArtifact(ctx context.Context, obj *s
 
 	// Create artifact dir
 	if err := r.Storage.MkdirAll(*artifact); err != nil {
-		return sreconcile.ResultEmpty, &serror.Event{
+		e := &serror.Event{
 			Err:    fmt.Errorf("failed to create artifact directory: %w", err),
-			Reason: sourcev1.StorageOperationFailedReason,
+			Reason: sourcev1.DirCreationFailedReason,
 		}
+		conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition, e.Reason, e.Err.Error())
+		return sreconcile.ResultEmpty, e
 	}
 
 	// Acquire lock.
@@ -427,19 +432,23 @@ func (r *HelmRepositoryReconciler) reconcileArtifact(ctx context.Context, obj *s
 
 	// Save artifact to storage.
 	if err = r.Storage.CopyFromPath(artifact, chartRepo.CachePath); err != nil {
-		return sreconcile.ResultEmpty, &serror.Event{
+		e := &serror.Event{
 			Err:    fmt.Errorf("unable to save artifact to storage: %w", err),
-			Reason: sourcev1.StorageOperationFailedReason,
+			Reason: sourcev1.ArchiveOperationFailedReason,
 		}
+		conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition, e.Reason, e.Err.Error())
+		return sreconcile.ResultEmpty, e
 	}
 
 	// Calculate the artifact size to be included in the NewArtifact event.
 	fi, err := os.Stat(chartRepo.CachePath)
 	if err != nil {
-		return sreconcile.ResultEmpty, &serror.Event{
+		e := &serror.Event{
 			Err:    fmt.Errorf("unable to read the artifact: %w", err),
-			Reason: sourcev1.StorageOperationFailedReason,
+			Reason: sourcev1.ReadOperationFailedReason,
 		}
+		conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition, e.Reason, e.Err.Error())
+		return sreconcile.ResultEmpty, e
 	}
 	size := units.HumanSize(float64(fi.Size()))
 
@@ -454,13 +463,13 @@ func (r *HelmRepositoryReconciler) reconcileArtifact(ctx context.Context, obj *s
 	// Update index symlink.
 	indexURL, err := r.Storage.Symlink(*artifact, "index.yaml")
 	if err != nil {
-		r.eventLogf(ctx, obj, corev1.EventTypeWarning, sourcev1.StorageOperationFailedReason,
+		r.eventLogf(ctx, obj, events.EventTypeTrace, sourcev1.SymlinkUpdateFailedReason,
 			"failed to update status URL symlink: %s", err)
 	}
 	if indexURL != "" {
 		obj.Status.URL = indexURL
 	}
-
+	conditions.Delete(obj, sourcev1.StorageOperationFailedCondition)
 	return sreconcile.ResultSuccess, nil
 }
 
