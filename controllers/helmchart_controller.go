@@ -72,6 +72,7 @@ var helmChartReadyCondition = summarize.Conditions{
 		sourcev1.BuildFailedCondition,
 		sourcev1.FetchFailedCondition,
 		sourcev1.ArtifactOutdatedCondition,
+		sourcev1.StorageOperationFailedCondition,
 		meta.ReadyCondition,
 		meta.ReconcilingCondition,
 		meta.StalledCondition,
@@ -80,6 +81,7 @@ var helmChartReadyCondition = summarize.Conditions{
 		sourcev1.BuildFailedCondition,
 		sourcev1.FetchFailedCondition,
 		sourcev1.ArtifactOutdatedCondition,
+		sourcev1.StorageOperationFailedCondition,
 		meta.StalledCondition,
 		meta.ReconcilingCondition,
 	},
@@ -87,6 +89,7 @@ var helmChartReadyCondition = summarize.Conditions{
 		sourcev1.BuildFailedCondition,
 		sourcev1.FetchFailedCondition,
 		sourcev1.ArtifactOutdatedCondition,
+		sourcev1.StorageOperationFailedCondition,
 		meta.StalledCondition,
 		meta.ReconcilingCondition,
 	},
@@ -305,7 +308,7 @@ func (r *HelmChartReconciler) reconcileSource(ctx context.Context, obj *sourcev1
 			Err:    fmt.Errorf("failed to get source: %w", err),
 			Reason: "SourceUnavailable",
 		}
-		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, "SourceUnavailable", e.Err.Error())
+		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
 
 		// Return Kubernetes client errors, but ignore others which can only be
 		// solved by a change in generation
@@ -395,7 +398,7 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 				Err:    fmt.Errorf("failed to get secret '%s': %w", repo.Spec.SecretRef.Name, err),
 				Reason: sourcev1.AuthenticationFailedReason,
 			}
-			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, e.Err.Error())
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
 			// Return error as the world as observed may change
 			return sreconcile.ResultEmpty, e
 		}
@@ -407,7 +410,7 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 				Err:    fmt.Errorf("failed to configure Helm client with secret data: %w", err),
 				Reason: sourcev1.AuthenticationFailedReason,
 			}
-			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, e.Err.Error())
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
 			// Requeue as content of secret might change
 			return sreconcile.ResultEmpty, e
 		}
@@ -419,7 +422,7 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 				Err:    fmt.Errorf("failed to create TLS client config with secret data: %w", err),
 				Reason: sourcev1.AuthenticationFailedReason,
 			}
-			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, e.Err.Error())
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
 			// Requeue as content of secret might change
 			return sreconcile.ResultEmpty, e
 		}
@@ -436,14 +439,14 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 				Err:    fmt.Errorf("invalid Helm repository URL: %w", err),
 				Reason: sourcev1.URLInvalidReason,
 			}
-			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.URLInvalidReason, e.Err.Error())
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
 			return sreconcile.ResultEmpty, e
 		default:
 			e := &serror.Stalling{
 				Err:    fmt.Errorf("failed to construct Helm client: %w", err),
 				Reason: meta.FailedReason,
 			}
-			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, meta.FailedReason, e.Err.Error())
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
 			return sreconcile.ResultEmpty, e
 		}
 	}
@@ -486,9 +489,9 @@ func (r *HelmChartReconciler) buildFromTarballArtifact(ctx context.Context, obj 
 	if err != nil {
 		e := &serror.Event{
 			Err:    fmt.Errorf("failed to create temporary working directory: %w", err),
-			Reason: sourcev1.StorageOperationFailedReason,
+			Reason: sourcev1.DirCreationFailedReason,
 		}
-		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.StorageOperationFailedReason, e.Err.Error())
+		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
 		return sreconcile.ResultEmpty, e
 	}
 	defer os.RemoveAll(tmpDir)
@@ -498,9 +501,9 @@ func (r *HelmChartReconciler) buildFromTarballArtifact(ctx context.Context, obj 
 	if err := os.Mkdir(sourceDir, 0700); err != nil {
 		e := &serror.Event{
 			Err:    fmt.Errorf("failed to create directory to untar source into: %w", err),
-			Reason: sourcev1.StorageOperationFailedReason,
+			Reason: sourcev1.DirCreationFailedReason,
 		}
-		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.StorageOperationFailedReason, e.Err.Error())
+		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
 		return sreconcile.ResultEmpty, e
 	}
 
@@ -509,9 +512,9 @@ func (r *HelmChartReconciler) buildFromTarballArtifact(ctx context.Context, obj 
 	if err != nil {
 		e := &serror.Event{
 			Err:    fmt.Errorf("failed to open source artifact: %w", err),
-			Reason: sourcev1.StorageOperationFailedReason,
+			Reason: sourcev1.ReadOperationFailedReason,
 		}
-		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.StorageOperationFailedReason, e.Err.Error())
+		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
 		return sreconcile.ResultEmpty, e
 	}
 	if _, err = untar.Untar(f, sourceDir); err != nil {
@@ -535,7 +538,7 @@ func (r *HelmChartReconciler) buildFromTarballArtifact(ctx context.Context, obj 
 			Err:    fmt.Errorf("path calculation for chart '%s' failed: %w", obj.Spec.Chart, err),
 			Reason: "IllegalPath",
 		}
-		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, "IllegalPath", e.Err.Error())
+		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
 		// We are unable to recover from this change without a change in generation
 		return sreconcile.ResultEmpty, e
 	}
@@ -639,26 +642,32 @@ func (r *HelmChartReconciler) reconcileArtifact(ctx context.Context, obj *source
 
 	// Ensure artifact directory exists and acquire lock
 	if err := r.Storage.MkdirAll(artifact); err != nil {
-		return sreconcile.ResultEmpty, &serror.Event{
+		e := &serror.Event{
 			Err:    fmt.Errorf("failed to create artifact directory: %w", err),
-			Reason: sourcev1.StorageOperationFailedReason,
+			Reason: sourcev1.DirCreationFailedReason,
 		}
+		conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition, e.Reason, e.Err.Error())
+		return sreconcile.ResultEmpty, e
 	}
 	unlock, err := r.Storage.Lock(artifact)
 	if err != nil {
-		return sreconcile.ResultEmpty, &serror.Event{
+		e := &serror.Event{
 			Err:    fmt.Errorf("failed to acquire lock for artifact: %w", err),
-			Reason: sourcev1.StorageOperationFailedReason,
+			Reason: sourcev1.AcquireLockFailedReason,
 		}
+		conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition, e.Reason, e.Err.Error())
+		return sreconcile.ResultEmpty, e
 	}
 	defer unlock()
 
 	// Copy the packaged chart to the artifact path
 	if err = r.Storage.CopyFromPath(&artifact, b.Path); err != nil {
-		return sreconcile.ResultEmpty, &serror.Event{
+		e := &serror.Event{
 			Err:    fmt.Errorf("unable to copy Helm chart to storage: %w", err),
-			Reason: sourcev1.StorageOperationFailedReason,
+			Reason: sourcev1.ArchiveOperationFailedReason,
 		}
+		conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition, e.Reason, e.Err.Error())
+		return sreconcile.ResultEmpty, e
 	}
 
 	// Record it on the object
@@ -674,12 +683,13 @@ func (r *HelmChartReconciler) reconcileArtifact(ctx context.Context, obj *source
 	// Update symlink on a "best effort" basis
 	symURL, err := r.Storage.Symlink(artifact, "latest.tar.gz")
 	if err != nil {
-		r.eventLogf(ctx, obj, corev1.EventTypeWarning, sourcev1.StorageOperationFailedReason,
+		r.eventLogf(ctx, obj, events.EventTypeTrace, sourcev1.SymlinkUpdateFailedReason,
 			"failed to update status URL symlink: %s", err)
 	}
 	if symURL != "" {
 		obj.Status.URL = symURL
 	}
+	conditions.Delete(obj, sourcev1.StorageOperationFailedCondition)
 	return sreconcile.ResultSuccess, nil
 }
 

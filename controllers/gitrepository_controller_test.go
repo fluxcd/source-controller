@@ -812,11 +812,17 @@ func TestGitRepositoryReconciler_reconcileArtifact(t *testing.T) {
 			name:    "Target path does not exists",
 			dir:     "testdata/git/foo",
 			wantErr: true,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.StorageOperationFailedCondition, sourcev1.StatOperationFailedReason, "failed to stat target artifact path"),
+			},
 		},
 		{
 			name:    "Target path is not a directory",
 			dir:     "testdata/git/repository/foo.txt",
 			wantErr: true,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.StorageOperationFailedCondition, sourcev1.InvalidPathReason, "invalid target path"),
+			},
 		},
 	}
 	artifactSize := func(g *WithT, artifactURL string) *int64 {
@@ -1172,7 +1178,7 @@ func TestGitRepositoryReconciler_verifyCommitSignature(t *testing.T) {
 			},
 			wantErr: true,
 			assertConditions: []metav1.Condition{
-				*conditions.FalseCondition(sourcev1.SourceVerifiedCondition, meta.FailedReason, "signature verification of commit 'shasum' failed: failed to verify commit with any of the given key rings"),
+				*conditions.FalseCondition(sourcev1.SourceVerifiedCondition, "InvalidCommitSignature", "signature verification of commit 'shasum' failed: failed to verify commit with any of the given key rings"),
 			},
 		},
 		{
@@ -1188,7 +1194,7 @@ func TestGitRepositoryReconciler_verifyCommitSignature(t *testing.T) {
 			},
 			wantErr: true,
 			assertConditions: []metav1.Condition{
-				*conditions.FalseCondition(sourcev1.SourceVerifiedCondition, meta.FailedReason, "PGP public keys secret error: secrets \"none-existing\" not found"),
+				*conditions.FalseCondition(sourcev1.SourceVerifiedCondition, "VerificationError", "PGP public keys secret error: secrets \"none-existing\" not found"),
 			},
 		},
 		{
