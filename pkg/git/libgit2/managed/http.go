@@ -288,12 +288,15 @@ func (self *httpSmartSubtransportStream) sendRequest() error {
 		if err.Error() != git2go.ErrorCodePassthrough.String() {
 			return err
 		}
-	} else {
+	}
+
+	if cred != nil {
+		defer cred.Free()
+
 		userName, password, err = cred.GetUserpassPlaintext()
 		if err != nil {
 			return err
 		}
-		defer cred.Free()
 	}
 
 	for {
@@ -315,23 +318,6 @@ func (self *httpSmartSubtransportStream) sendRequest() error {
 
 		if resp.StatusCode == http.StatusOK {
 			break
-		}
-
-		if resp.StatusCode == http.StatusUnauthorized {
-			resp.Body.Close()
-
-			cred, err := self.owner.transport.SmartCredentials("", git2go.CredentialTypeUserpassPlaintext)
-			if err != nil {
-				return err
-			}
-			defer cred.Free()
-
-			userName, password, err = cred.GetUserpassPlaintext()
-			if err != nil {
-				return err
-			}
-
-			continue
 		}
 
 		io.Copy(ioutil.Discard, resp.Body)
