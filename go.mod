@@ -10,6 +10,10 @@ require (
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity v0.13.1
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v0.3.0
 	github.com/Masterminds/semver/v3 v3.1.1
+	// github.com/ProtonMail/go-crypto is a fork of golang.org/x/crypto
+	// maintained by the ProtonMail team to continue to support the openpgp
+	// module, after the Go team decided to no longer maintain it.
+	// When in doubt (and not using openpgp), use /x/crypto.
 	github.com/ProtonMail/go-crypto v0.0.0-20220113124808-70ae35bab23f
 	github.com/cyphar/filepath-securejoin v0.2.3
 	github.com/darkowlzz/controller-check v0.0.0-20220119215126-648356cef22c
