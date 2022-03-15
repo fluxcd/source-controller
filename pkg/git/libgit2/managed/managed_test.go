@@ -304,3 +304,24 @@ func TestManagedTransport_E2E(t *testing.T) {
 	g.Expect(err).ToNot(HaveOccurred())
 	repo.Free()
 }
+
+func TestManagedTransport_HandleRedirect(t *testing.T) {
+	g := NewWithT(t)
+
+	tmpDir, _ := os.MkdirTemp("", "test")
+	defer os.RemoveAll(tmpDir)
+
+	// Force managed transport to be enabled
+	InitManagedTransport()
+
+	// GitHub will cause a 301 and redirect to https
+	repo, err := git2go.Clone("http://github.com/stefanprodan/podinfo", tmpDir, &git2go.CloneOptions{
+		FetchOptions: git2go.FetchOptions{},
+		CheckoutOptions: git2go.CheckoutOptions{
+			Strategy: git2go.CheckoutForce,
+		},
+	})
+
+	g.Expect(err).ToNot(HaveOccurred())
+	repo.Free()
+}

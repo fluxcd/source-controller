@@ -44,12 +44,12 @@ THE SOFTWARE.
 package managed
 
 import (
+	"bytes"
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net"
 	"net/http"
 	"net/url"
@@ -133,6 +133,25 @@ func (t *httpSmartSubtransport) Action(targetUrl string, action git2go.SmartServ
 		stream.sendRequestBackground()
 	}
 
+	client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		if len(via) >= 3 {
+			return fmt.Errorf("too many redirects")
+		}
+
+		// golang will change POST to GET in case of redirects.
+		if len(via) >= 0 && req.Method != via[0].Method {
+			if via[0].URL.Scheme == "https" && req.URL.Scheme == "http" {
+				return fmt.Errorf("downgrade from https to http is not allowed: from %q to %q", via[0].URL.String(), req.URL.String())
+			}
+			if via[0].URL.Host != req.URL.Host {
+				return fmt.Errorf("cross hosts redirects are not allowed: from %s to %s", via[0].URL.Host, req.URL.Host)
+			}
+
+			return http.ErrUseLastResponse
+		}
+		return nil
+	}
+
 	return stream, nil
 }
 
@@ -165,7 +184,10 @@ func createClientRequest(targetUrl string, action git2go.SmartServiceAction, t *
 		}
 	}
 
-	client := &http.Client{Transport: t, Timeout: fullHttpClientTimeOut}
+	client := &http.Client{
+		Transport: t,
+		Timeout:   fullHttpClientTimeOut,
+	}
 
 	switch action {
 	case git2go.SmartServiceActionUploadpackLs:
@@ -218,6 +240,7 @@ type httpSmartSubtransportStream struct {
 	recvReply   sync.WaitGroup
 	httpError   error
 	m           sync.RWMutex
+	targetURL   string
 }
 
 func newManagedHttpStream(owner *httpSmartSubtransport, req *http.Request, client *http.Client) *httpSmartSubtransportStream {
@@ -246,18 +269,21 @@ func (self *httpSmartSubtransportStream) Read(buf []byte) (int, error) {
 	self.recvReply.Wait()
 
 	self.m.RLock()
-	defer self.m.RUnlock()
-	if self.httpError != nil {
+	err := self.httpError
+	self.m.RUnlock()
+
+	if err != nil {
 		return 0, self.httpError
 	}
-
 	return self.resp.Body.Read(buf)
 }
 
 func (self *httpSmartSubtransportStream) Write(buf []byte) (int, error) {
 	self.m.RLock()
-	defer self.m.RUnlock()
-	if self.httpError != nil {
+	err := self.httpError
+	self.m.RUnlock()
+
+	if err != nil {
 		return 0, self.httpError
 	}
 	return self.writer.Write(buf)
@@ -308,29 +334,53 @@ func (self *httpSmartSubtransportStream) sendRequest() error {
 		}
 	}
 
-	req := &http.Request{
-		Method: self.req.Method,
-		URL:    self.req.URL,
-		Header: self.req.Header,
-	}
-	if req.Method == "POST" {
-		req.Body = self.reader
-		req.ContentLength = -1
+	var content []byte
+	for {
+		req := &http.Request{
+			Method: self.req.Method,
+			URL:    self.req.URL,
+			Header: self.req.Header,
+		}
+		if req.Method == "POST" {
+			if len(content) == 0 {
+				// a copy of the request body needs to be saved so
+				// it can be reused in case of redirects.
+				if content, err = io.ReadAll(self.reader); err != nil {
+					return err
+				}
+			}
+			req.Body = io.NopCloser(bytes.NewReader(content))
+			req.ContentLength = -1
+		}
+
+		req.SetBasicAuth(userName, password)
+		resp, err = self.client.Do(req)
+		if err != nil {
+			return err
+		}
+
+		// GET requests will be automatically redirected.
+		// POST require the new destination, and also the body content.
+		if req.Method == "POST" && resp.StatusCode >= 301 && resp.StatusCode <= 308 {
+			// The next try will go against the new destination
+			self.req.URL, err = resp.Location()
+			if err != nil {
+				return err
+			}
+
+			continue
+		}
+
+		if resp.StatusCode == http.StatusOK {
+			break
+		}
+
+		io.Copy(io.Discard, resp.Body)
+		defer resp.Body.Close()
+		return fmt.Errorf("Unhandled HTTP error %s", resp.Status)
 	}
 
-	req.SetBasicAuth(userName, password)
-	resp, err = self.client.Do(req)
-	if err != nil {
-		return err
-	}
-
-	if resp.StatusCode == http.StatusOK {
-		self.resp = resp
-		self.sentRequest = true
-		return nil
-	}
-
-	io.Copy(ioutil.Discard, resp.Body)
-	defer resp.Body.Close()
-	return fmt.Errorf("Unhandled HTTP error %s", resp.Status)
+	self.resp = resp
+	self.sentRequest = true
+	return nil
 }
