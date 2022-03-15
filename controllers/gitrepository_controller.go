@@ -388,7 +388,7 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context,
 			repositoryURL = fmt.Sprintf("http://%s/%s/%d", obj.Name, obj.UID, obj.Generation)
 			managed.AddTransportOptions(repositoryURL,
 				managed.TransportOptions{
-					TargetUrl: obj.Spec.URL,
+					TargetURL: obj.Spec.URL,
 					CABundle:  authOpts.CAFile,
 				})
 

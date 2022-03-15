@@ -23,7 +23,7 @@ import (
 // TransportOptions represents options to be applied at transport-level
 // at request time.
 type TransportOptions struct {
-	TargetUrl string
+	TargetURL string
 	CABundle  []byte
 }
 

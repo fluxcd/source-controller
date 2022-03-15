@@ -147,10 +147,10 @@ func createClientRequest(targetUrl string, action git2go.SmartServiceAction, t *
 	finalUrl := targetUrl
 	opts, found := transportOptions(targetUrl)
 	if found {
-		if opts.TargetUrl != "" {
+		if opts.TargetURL != "" {
 			// override target URL only if options are found and a new targetURL
 			// is provided.
-			finalUrl = opts.TargetUrl
+			finalUrl = opts.TargetURL
 		}
 
 		// Add any provided certificate to the http transport.

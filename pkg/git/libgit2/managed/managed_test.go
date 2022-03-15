@@ -92,7 +92,7 @@ func TestHttpAction_CreateClientRequest(t *testing.T) {
 			action:         git2go.SmartServiceActionUploadpack,
 			transport:      &http.Transport{},
 			opts: &TransportOptions{
-				TargetUrl: "https://final-target",
+				TargetURL: "https://final-target",
 			},
 			wantedErr: nil,
 		},
@@ -151,12 +151,12 @@ func TestOptions(t *testing.T) {
 			registerOpts: true,
 			url:          "https://target/?876",
 			opts: TransportOptions{
-				TargetUrl: "https://new-target/321",
+				TargetURL: "https://new-target/321",
 				CABundle:  []byte{123, 213, 132},
 			},
 			expectOpts: true,
 			expectedOpts: &TransportOptions{
-				TargetUrl: "https://new-target/321",
+				TargetURL: "https://new-target/321",
 				CABundle:  []byte{123, 213, 132},
 			},
 		},
@@ -262,7 +262,7 @@ func TestManagedTransport_E2E(t *testing.T) {
 	// This was the way found to ensure that the built-in transport was not used.
 	httpAddress := "http://fake-url"
 	AddTransportOptions(httpAddress, TransportOptions{
-		TargetUrl: server.HTTPAddress() + "/" + repoPath,
+		TargetURL: server.HTTPAddress() + "/" + repoPath,
 	})
 
 	repo, err := git2go.Clone(httpAddress, tmpDir, &git2go.CloneOptions{
