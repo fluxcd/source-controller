@@ -55,6 +55,26 @@ require (
 // TODO: Remove once Helm version with patch is released.
 replace helm.sh/helm/v3 v3.8.1 => github.com/hiddeco/helm/v3 v3.8.2-0.20220311115129-ae3ec836f6eb
 
+// Fix CVE-2021-41092
+replace github.com/docker/cli => github.com/docker/cli v20.10.9+incompatible
+
+// Fix GMS-2022-20
+replace github.com/docker/distribution => github.com/docker/distribution v2.8.0+incompatible
+
+// Fix CVE-2021-30465
+// Fix CVE-2021-43784
+// Fix CVE-2019-16884
+// Fix GO-2021-0085
+// Fix GO-2021-0087
+replace github.com/opencontainers/runc => github.com/opencontainers/runc v1.1.0
+
+// Fix CVE-2021-41190
+replace github.com/opencontainers/image-spec => github.com/opencontainers/image-spec v1.0.2
+
+// Fix CVE-2022-23648
+// Fix CVE-2021-43816
+replace github.com/containerd/containerd => github.com/containerd/containerd v1.6.1
+
 require (
 	cloud.google.com/go v0.99.0 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/internal v0.9.1 // indirect
@@ -213,20 +233,3 @@ require (
 	sigs.k8s.io/kustomize/kyaml v0.13.0 // indirect
 	sigs.k8s.io/structured-merge-diff/v4 v4.2.1 // indirect
 )
-
-// Fix CVE-2021-41092
-replace github.com/docker/cli => github.com/docker/cli v20.10.9+incompatible
-
-// Fix CVE-2021-30465
-// Fix CVE-2021-43784
-// Fix CVE-2019-16884
-// Fix GO-2021-0085
-// Fix GO-2021-0087
-replace github.com/opencontainers/runc => github.com/opencontainers/runc v1.1.0
-
-// Fix CVE-2021-41190
-replace github.com/opencontainers/image-spec => github.com/opencontainers/image-spec v1.0.2
-
-// Fix CVE-2022-23648
-// Fix CVE-2021-43816
-replace github.com/containerd/containerd => github.com/containerd/containerd v1.6.1
