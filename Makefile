@@ -7,7 +7,7 @@ LIBGIT2_IMG ?= ghcr.io/fluxcd/golang-with-libgit2
 LIBGIT2_TAG ?= libgit2-1.3.1
 
 # Allows for defining additional Go test args, e.g. '-tags integration'.
-GO_TEST_ARGS ?=
+GO_TEST_ARGS ?= -race
 
 # Allows for defining additional Docker buildx arguments,
 # e.g. '--push'.
@@ -15,7 +15,8 @@ BUILD_ARGS ?=
 # Architectures to build images for
 BUILD_PLATFORMS ?= linux/amd64,linux/arm64,linux/arm/v7
 
-# Go additional tag arguments, e.g. 'integration'
+# Go additional tag arguments, e.g. 'integration',
+# this is append to the tag arguments required for static builds
 GO_TAGS ?=
 
 # Produce CRDs that work back to Kubernetes 1.16
@@ -112,7 +113,7 @@ ifeq ($(shell uname -s),Darwin)
 endif
 
 test-api: ## Run api tests
-	cd api; go test ./... -coverprofile cover.out
+	cd api; go test $(GO_TEST_ARGS) ./... -coverprofile cover.out
 
 run: $(LIBGIT2) generate fmt vet manifests  ## Run against the configured Kubernetes cluster in ~/.kube/config
 	go run $(GO_STATIC_FLAGS) ./main.go
