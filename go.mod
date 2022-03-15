@@ -55,9 +55,6 @@ require (
 // TODO: Remove once Helm version with patch is released.
 replace helm.sh/helm/v3 v3.8.1 => github.com/hiddeco/helm/v3 v3.8.2-0.20220311115129-ae3ec836f6eb
 
-// Fix CVE-2021-41092
-replace github.com/docker/cli => github.com/docker/cli v20.10.9+incompatible
-
 // Fix GMS-2022-20
 replace github.com/docker/distribution => github.com/docker/distribution v2.8.0+incompatible
 
