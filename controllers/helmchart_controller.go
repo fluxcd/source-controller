@@ -71,8 +71,8 @@ var helmChartReadyCondition = summarize.Conditions{
 	Owned: []string{
 		sourcev1.BuildFailedCondition,
 		sourcev1.FetchFailedCondition,
-		sourcev1.ArtifactOutdatedCondition,
 		sourcev1.StorageOperationFailedCondition,
+		sourcev1.ArtifactOutdatedCondition,
 		meta.ReadyCondition,
 		meta.ReconcilingCondition,
 		meta.StalledCondition,
@@ -80,16 +80,16 @@ var helmChartReadyCondition = summarize.Conditions{
 	Summarize: []string{
 		sourcev1.BuildFailedCondition,
 		sourcev1.FetchFailedCondition,
-		sourcev1.ArtifactOutdatedCondition,
 		sourcev1.StorageOperationFailedCondition,
+		sourcev1.ArtifactOutdatedCondition,
 		meta.StalledCondition,
 		meta.ReconcilingCondition,
 	},
 	NegativePolarity: []string{
 		sourcev1.BuildFailedCondition,
 		sourcev1.FetchFailedCondition,
-		sourcev1.ArtifactOutdatedCondition,
 		sourcev1.StorageOperationFailedCondition,
+		sourcev1.ArtifactOutdatedCondition,
 		meta.StalledCondition,
 		meta.ReconcilingCondition,
 	},
