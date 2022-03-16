@@ -105,12 +105,14 @@ func (s *Server) getObjectFile(key string, generation int64) ([]byte, error) {
 }
 
 func (s *Server) handler(w http.ResponseWriter, r *http.Request) {
+	uri := strings.TrimPrefix(r.RequestURI, "/storage/v1")
+
 	switch {
 	// Handle Bucket metadata related queries
-	case strings.HasPrefix(r.RequestURI, "/b/"):
+	case strings.HasPrefix(uri, "/b/"):
 		switch {
 		// Return metadata about the Bucket
-		case r.RequestURI == fmt.Sprintf("/b/%s?alt=json&prettyPrint=false&projection=full", s.BucketName):
+		case uri == fmt.Sprintf("/b/%s?alt=json&prettyPrint=false&projection=full", s.BucketName):
 			etag := md5.New()
 			for _, v := range s.Objects {
 				etag.Write(v.Content)
@@ -125,12 +127,12 @@ func (s *Server) handler(w http.ResponseWriter, r *http.Request) {
 			w.Write(jsonResponse)
 			return
 		// Return metadata about a Bucket object
-		case strings.Contains(r.RequestURI, "/o/"):
+		case strings.Contains(uri, "/o/"):
 			var obj *Object
 			for _, o := range s.Objects {
 				// The object key in the URI is escaped.
 				// e.g.: /b/dummy/o/included%2Ffile.txt?alt=json&prettyPrint=false&projection=full
-				if r.RequestURI == fmt.Sprintf("/b/%s/o/%s?alt=json&prettyPrint=false&projection=full", s.BucketName, url.QueryEscape(o.Key)) {
+				if uri == fmt.Sprintf("/b/%s/o/%s?alt=json&prettyPrint=false&projection=full", s.BucketName, url.QueryEscape(o.Key)) {
 					obj = o
 					break
 				}
@@ -149,7 +151,7 @@ func (s *Server) handler(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(404)
 			return
 		// Return metadata about all objects in the Bucket
-		case strings.Contains(r.RequestURI, "/o?"):
+		case strings.Contains(uri, "/o?"):
 			response := s.getAllObjects()
 			jsonResponse, err := json.Marshal(response)
 			if err != nil {
@@ -166,7 +168,7 @@ func (s *Server) handler(w http.ResponseWriter, r *http.Request) {
 	// Handle object file query
 	default:
 		bucketPrefix := fmt.Sprintf("/%s/", s.BucketName)
-		if strings.HasPrefix(r.RequestURI, bucketPrefix) {
+		if strings.HasPrefix(uri, bucketPrefix) {
 			// The URL path is of the format /<bucket>/included/file.txt.
 			// Extract the object key by discarding the bucket prefix.
 			key := strings.TrimPrefix(r.URL.Path, bucketPrefix)
