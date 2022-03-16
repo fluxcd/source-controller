@@ -85,7 +85,7 @@ type HelmChartSpec struct {
 	// +optional
 	AccessFrom *acl.AccessFrom `json:"accessFrom,omitempty"`
 
-	// Keyring information for verifying the packaged chart's signature using a provenance file.
+	// VerificationKeyring for verifying the packaged chart's signature using a provenance file.
 	// +optional
 	VerificationKeyring *VerificationKeyring `json:"verificationKeyring,omitempty"`
 }
@@ -94,7 +94,7 @@ type VerificationKeyring struct {
 	// +required
 	SecretRef meta.LocalObjectReference `json:"secretRef,omitempty"`
 
-	// The key that corresponds to the keyring value.
+	// Key in the SecretRef that contains the public keyring in legacy GPG format.
 	// +kubebuilder:default:=pubring.gpg
 	// +optional
 	Key string `json:"key,omitempty"`
@@ -168,6 +168,10 @@ const (
 	// ChartPackageSucceededReason signals that the package of the Helm
 	// chart succeeded.
 	ChartPackageSucceededReason string = "ChartPackageSucceeded"
+
+	// ChartVerifiedSucceededReason signals that the Helm chart's signature
+	// has been verified using it's provenance file.
+	ChartVerifiedSucceededReason string = "ChartVerifiedSucceeded"
 )
 
 // GetConditions returns the status conditions of the object.

@@ -97,8 +97,6 @@ var helmChartReadyCondition = summarize.Conditions{
 	},
 }
 
-const KeyringFileName = "pubring.gpg"
-
 // +kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=helmcharts,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=helmcharts/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=helmcharts/finalizers,verbs=get;create;update;patch;delete
@@ -475,9 +473,9 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 	if err != nil {
 		e := &serror.Event{
 			Err:    fmt.Errorf("failed to get public key for chart signature verification: %w", err),
-			Reason: sourcev1.SourceVerifiedCondition,
+			Reason: sourcev1.AuthenticationFailedReason,
 		}
-		conditions.MarkFalse(obj, sourcev1.FetchFailedCondition, sourcev1.SourceVerifiedCondition, e.Error())
+		conditions.MarkFalse(obj, sourcev1.SourceVerifiedCondition, e.Reason, e.Error())
 		return sreconcile.ResultEmpty, e
 	}
 	opts.Keyring = keyring
@@ -609,9 +607,9 @@ func (r *HelmChartReconciler) buildFromTarballArtifact(ctx context.Context, obj 
 	if err != nil {
 		e := &serror.Event{
 			Err:    fmt.Errorf("failed to get public key for chart signature verification: %w", err),
-			Reason: sourcev1.SourceVerifiedCondition,
+			Reason: sourcev1.AuthenticationFailedReason,
 		}
-		conditions.MarkFalse(obj, sourcev1.FetchFailedCondition, sourcev1.SourceVerifiedCondition, e.Error())
+		conditions.MarkFalse(obj, sourcev1.SourceVerifiedCondition, e.Reason, e.Error())
 		return sreconcile.ResultEmpty, e
 	}
 	opts.Keyring = keyring
@@ -650,14 +648,6 @@ func (r *HelmChartReconciler) reconcileArtifact(ctx context.Context, obj *source
 		if obj.Status.ObservedChartName == b.Name && obj.GetArtifact().HasRevision(b.Version) {
 			conditions.Delete(obj, sourcev1.ArtifactOutdatedCondition)
 			conditions.MarkTrue(obj, meta.ReadyCondition, reasonForBuild(b), b.Summary())
-		}
-		if b.VerificationSignature != nil && b.ProvFilePath != "" && obj.GetArtifact() != nil {
-			var sigVerMsg strings.Builder
-			sigVerMsg.WriteString(fmt.Sprintf("chart signed by: %v", strings.Join(b.VerificationSignature.Identities[:], ",")))
-			sigVerMsg.WriteString(fmt.Sprintf(" using key with fingeprint: %X", b.VerificationSignature.KeyFingerprint))
-			sigVerMsg.WriteString(fmt.Sprintf(" and hash verified: %s", b.VerificationSignature.FileHash))
-
-			conditions.MarkTrue(obj, sourcev1.SourceVerifiedCondition, reasonForBuild(b), sigVerMsg.String())
 		}
 	}()
 
@@ -914,22 +904,6 @@ func (r *HelmChartReconciler) getHelmRepositorySecret(ctx context.Context, repos
 	return &secret, nil
 }
 
-func (r *HelmChartReconciler) getVerificationKeyringSecret(ctx context.Context, chart *sourcev1.HelmChart) (*corev1.Secret, error) {
-	if chart.Spec.VerificationKeyring == nil {
-		return nil, nil
-	}
-	name := types.NamespacedName{
-		Namespace: chart.GetNamespace(),
-		Name:      chart.Spec.VerificationKeyring.SecretRef.Name,
-	}
-	var secret corev1.Secret
-	err := r.Client.Get(ctx, name, &secret)
-	if err != nil {
-		return nil, err
-	}
-	return &secret, nil
-}
-
 func (r *HelmChartReconciler) indexHelmRepositoryByURL(o client.Object) []string {
 	repo, ok := o.(*sourcev1.HelmRepository)
 	if !ok {
@@ -1060,6 +1034,15 @@ func observeChartBuild(obj *sourcev1.HelmChart, build *chart.Build, err error) {
 		conditions.Delete(obj, sourcev1.BuildFailedCondition)
 	}
 
+	if build.VerificationSignature != nil && build.ProvFilePath != "" {
+		var sigVerMsg strings.Builder
+		sigVerMsg.WriteString(fmt.Sprintf("chart signed by: %v", strings.Join(build.VerificationSignature.Identities[:], ",")))
+		sigVerMsg.WriteString(fmt.Sprintf(" using key with fingeprint: %X", build.VerificationSignature.KeyFingerprint))
+		sigVerMsg.WriteString(fmt.Sprintf(" and hash verified: %s", build.VerificationSignature.FileHash))
+
+		conditions.MarkTrue(obj, sourcev1.SourceVerifiedCondition, sourcev1.ChartVerifiedSucceededReason, sigVerMsg.String())
+	}
+
 	if err != nil {
 		var buildErr *chart.BuildError
 		if ok := errors.As(err, &buildErr); !ok {
@@ -1105,10 +1088,10 @@ func (r *HelmChartReconciler) getProvenanceKeyring(ctx context.Context, chart *s
 		return nil, err
 	}
 	key := chart.Spec.VerificationKeyring.Key
-	if val, ok := secret.Data[key]; !ok {
+	val, ok := secret.Data[key]
+	if !ok {
 		err = fmt.Errorf("secret doesn't contain the advertised verification keyring name %s", key)
 		return nil, err
-	} else {
-		return val, nil
 	}
+	return val, nil
 }

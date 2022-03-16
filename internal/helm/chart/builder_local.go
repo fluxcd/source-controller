@@ -137,9 +137,11 @@ func (b *localChartBuilder) Build(ctx context.Context, ref Reference, p string, 
 					// package the chart ourselves, and instead stored it as is.
 					if !requiresPackaging {
 						provFilePath = provenanceFilePath(opts.CachedChart)
-						if ver, err := verifyProvFile(opts.CachedChart, provFilePath); err != nil {
+						ver, err := verifyProvFile(opts.CachedChart, provFilePath)
+						if err != nil {
 							return nil, err
-						} else {
+						}
+						if ver != nil {
 							result.VerificationSignature = buildVerificationSig(ver)
 							result.ProvFilePath = provFilePath
 						}
@@ -163,9 +165,11 @@ func (b *localChartBuilder) Build(ctx context.Context, ref Reference, p string, 
 		if err = copyFileToPath(provenanceFilePath(localRef.Path), provFilePath); err != nil {
 			return result, &BuildError{Reason: ErrChartPull, Err: err}
 		}
-		if ver, err := verifyProvFile(localRef.Path, provFilePath); err != nil {
-			return result, err
-		} else {
+		ver, err := verifyProvFile(localRef.Path, provFilePath)
+		if err != nil {
+			return nil, err
+		}
+		if ver != nil {
 			result.ProvFilePath = provFilePath
 			result.VerificationSignature = buildVerificationSig(ver)
 		}

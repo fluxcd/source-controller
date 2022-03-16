@@ -135,9 +135,11 @@ func (b *remoteChartBuilder) Build(_ context.Context, ref Reference, p string, o
 					// package the chart ourselves, and instead stored it as is.
 					if !requiresPackaging {
 						provFilePath = provenanceFilePath(opts.CachedChart)
-						if ver, err := verifyProvFile(opts.CachedChart, provFilePath); err != nil {
+						ver, err := verifyProvFile(opts.CachedChart, provFilePath)
+						if err != nil {
 							return nil, err
-						} else {
+						}
+						if ver != nil {
 							result.ProvFilePath = provFilePath
 							result.VerificationSignature = buildVerificationSig(ver)
 						}
@@ -153,13 +155,13 @@ func (b *remoteChartBuilder) Build(_ context.Context, ref Reference, p string, o
 
 	// Download the package for the resolved version
 	res, err := b.remote.DownloadChart(cv)
-	// Deal with the underlying byte slice to avoid having to read the buffer multiple times.
-	chartBuf := res.Bytes()
-
 	if err != nil {
 		err = fmt.Errorf("failed to download chart for remote reference: %w", err)
 		return result, &BuildError{Reason: ErrChartPull, Err: err}
 	}
+	// Deal with the underlying byte slice to avoid having to read the buffer multiple times.
+	chartBuf := res.Bytes()
+
 	if opts.Keyring != nil {
 		provFilePath = provenanceFilePath(p)
 		err := b.remote.DownloadProvenanceFile(cv, provFilePath)
@@ -176,9 +178,11 @@ func (b *remoteChartBuilder) Build(_ context.Context, ref Reference, p string, o
 		if err != nil {
 			return nil, err
 		}
-		if ver, err := verifyProvFile(chart.Name(), provFilePath); err != nil {
+		ver, err := verifyProvFile(chart.Name(), provFilePath)
+		if err != nil {
 			return nil, err
-		} else {
+		}
+		if ver != nil {
 			result.ProvFilePath = provFilePath
 			result.VerificationSignature = buildVerificationSig(ver)
 		}
