@@ -31,6 +31,7 @@ import (
 	"github.com/fluxcd/pkg/version"
 
 	"github.com/fluxcd/source-controller/pkg/git"
+	"github.com/fluxcd/source-controller/pkg/git/libgit2/managed"
 )
 
 // CheckoutStrategyForOptions returns the git.CheckoutStrategy for the given
@@ -72,7 +73,7 @@ func (c *CheckoutBranch) Checkout(ctx context.Context, path, url string, opts *g
 		CheckoutBranch: c.Branch,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("unable to clone '%s': %w", url, gitutil.LibGit2Error(err))
+		return nil, fmt.Errorf("unable to clone '%s': %w", managed.EffectiveURL(url), gitutil.LibGit2Error(err))
 	}
 	defer repo.Free()
 	head, err := repo.Head()
@@ -101,7 +102,7 @@ func (c *CheckoutTag) Checkout(ctx context.Context, path, url string, opts *git.
 		},
 	})
 	if err != nil {
-		return nil, fmt.Errorf("unable to clone '%s': %w", url, gitutil.LibGit2Error(err))
+		return nil, fmt.Errorf("unable to clone '%s': %w", managed.EffectiveURL(url), gitutil.LibGit2Error(err))
 	}
 	defer repo.Free()
 	cc, err := checkoutDetachedDwim(repo, c.Tag)
@@ -125,7 +126,7 @@ func (c *CheckoutCommit) Checkout(ctx context.Context, path, url string, opts *g
 		},
 	})
 	if err != nil {
-		return nil, fmt.Errorf("unable to clone '%s': %w", url, gitutil.LibGit2Error(err))
+		return nil, fmt.Errorf("unable to clone '%s': %w", managed.EffectiveURL(url), gitutil.LibGit2Error(err))
 	}
 	defer repo.Free()
 	oid, err := git2go.NewOid(c.Commit)
@@ -157,7 +158,7 @@ func (c *CheckoutSemVer) Checkout(ctx context.Context, path, url string, opts *g
 		},
 	})
 	if err != nil {
-		return nil, fmt.Errorf("unable to clone '%s': %w", url, gitutil.LibGit2Error(err))
+		return nil, fmt.Errorf("unable to clone '%s': %w", managed.EffectiveURL(url), gitutil.LibGit2Error(err))
 	}
 	defer repo.Free()
 
