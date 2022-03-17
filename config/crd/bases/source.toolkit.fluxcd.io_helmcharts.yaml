@@ -405,16 +405,17 @@ spec:
                   type: string
                 type: array
               verificationKeyring:
-                description: Keyring information for verifying the packaged chart's
+                description: VerificationKeyring for verifying the packaged chart's
                   signature using a provenance file.
                 properties:
                   key:
                     default: pubring.gpg
-                    description: The key that corresponds to the keyring value.
+                    description: Key in the SecretRef that contains the public keyring
+                      in legacy GPG format.
                     type: string
                   secretRef:
-                    description: LocalObjectReference contains enough information
-                      to locate the referenced Kubernetes resource object.
+                    description: SecretRef is a reference to the secret that contains
+                      the public GPG key.
                     properties:
                       name:
                         description: Name of the referent.

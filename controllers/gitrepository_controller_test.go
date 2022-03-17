@@ -1209,7 +1209,7 @@ func TestGitRepositoryReconciler_verifyCommitSignature(t *testing.T) {
 			},
 			wantErr: true,
 			assertConditions: []metav1.Condition{
-				*conditions.FalseCondition(sourcev1.SourceVerifiedCondition, "VerificationError", "PGP public keys secret error: secrets \"none-existing\" not found"),
+				*conditions.FalseCondition(sourcev1.SourceVerifiedCondition, sourcev1.VerificationFailedReason, "PGP public keys secret error: secrets \"none-existing\" not found"),
 			},
 		},
 		{

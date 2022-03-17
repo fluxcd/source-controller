@@ -105,7 +105,7 @@ type BuildOptions struct {
 	// because the list of ValuesFiles has changed.
 	Force bool
 
-	// Keyring can be configured with the bytes of a public kering in legacy
+	// Keyring can be set to the bytes of a public kering in legacy
 	// PGP format used for verifying a chart's signature using a provenance file.
 	Keyring []byte
 }
@@ -130,11 +130,11 @@ type Build struct {
 	// Can be empty, in which case a failure should be assumed.
 	Path string
 	// ProvFilePath is the absolute path to a provenance file.
-	// Can be empty, in which case it should be assumed that the packaged
+	// It can be empty, in which case it should be assumed that the packaged
 	// chart is not verified.
 	ProvFilePath string
 	// VerificationSignature is populated when a chart's signature
-	// is successfully verified using it's provenance file.
+	// is successfully verified using its provenance file.
 	VerificationSignature *VerificationSignature
 	// ValuesFiles is the list of files used to compose the chart's
 	// default "values.yaml".

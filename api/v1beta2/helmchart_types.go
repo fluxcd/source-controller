@@ -90,7 +90,10 @@ type HelmChartSpec struct {
 	VerificationKeyring *VerificationKeyring `json:"verificationKeyring,omitempty"`
 }
 
+// VerificationKeyring contains enough info to get the public GPG key to be used for verifying
+// the chart signature using a provenance file.
 type VerificationKeyring struct {
+	// SecretRef is a reference to the secret that contains the public GPG key.
 	// +required
 	SecretRef meta.LocalObjectReference `json:"secretRef,omitempty"`
 

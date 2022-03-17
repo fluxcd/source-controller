@@ -638,7 +638,7 @@ func (r *GitRepositoryReconciler) verifyCommitSignature(ctx context.Context, obj
 	if err := r.Client.Get(ctx, publicKeySecret, secret); err != nil {
 		e := &serror.Event{
 			Err:    fmt.Errorf("PGP public keys secret error: %w", err),
-			Reason: "VerificationError",
+			Reason: sourcev1.VerificationFailedReason,
 		}
 		conditions.MarkFalse(obj, sourcev1.SourceVerifiedCondition, e.Reason, e.Err.Error())
 		return sreconcile.ResultEmpty, e

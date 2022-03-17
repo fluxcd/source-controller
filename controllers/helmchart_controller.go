@@ -473,9 +473,9 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 	if err != nil {
 		e := &serror.Event{
 			Err:    fmt.Errorf("failed to get public key for chart signature verification: %w", err),
-			Reason: sourcev1.AuthenticationFailedReason,
+			Reason: sourcev1.VerificationFailedReason,
 		}
-		conditions.MarkFalse(obj, sourcev1.SourceVerifiedCondition, e.Reason, e.Error())
+		conditions.MarkFalse(obj, sourcev1.SourceVerifiedCondition, e.Reason, e.Err.Error())
 		return sreconcile.ResultEmpty, e
 	}
 	opts.Keyring = keyring
@@ -483,7 +483,6 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 	// Build the chart
 	ref := chart.RemoteReference{Name: obj.Spec.Chart, Version: obj.Spec.Version}
 	build, err := cb.Build(ctx, ref, util.TempPathForObj("", ".tgz", obj), opts)
-
 	if err != nil {
 		return sreconcile.ResultEmpty, err
 	}
@@ -607,9 +606,9 @@ func (r *HelmChartReconciler) buildFromTarballArtifact(ctx context.Context, obj 
 	if err != nil {
 		e := &serror.Event{
 			Err:    fmt.Errorf("failed to get public key for chart signature verification: %w", err),
-			Reason: sourcev1.AuthenticationFailedReason,
+			Reason: sourcev1.VerificationFailedReason,
 		}
-		conditions.MarkFalse(obj, sourcev1.SourceVerifiedCondition, e.Reason, e.Error())
+		conditions.MarkFalse(obj, sourcev1.SourceVerifiedCondition, e.Reason, e.Err.Error())
 		return sreconcile.ResultEmpty, e
 	}
 	opts.Keyring = keyring
@@ -698,10 +697,11 @@ func (r *HelmChartReconciler) reconcileArtifact(ctx context.Context, obj *source
 	if b.ProvFilePath != "" {
 		provArtifact := r.Storage.NewArtifactFor(obj.Kind, obj.GetObjectMeta(), b.Version, fmt.Sprintf("%s-%s.tgz.prov", b.Name, b.Version))
 		if err = r.Storage.CopyFromPath(&provArtifact, b.ProvFilePath); err != nil {
-			return sreconcile.ResultEmpty, &serror.Event{
+			e := &serror.Event{
 				Err:    fmt.Errorf("unable to copy Helm chart provenance file to storage: %w", err),
-				Reason: sourcev1.StorageOperationFailedCondition,
+				Reason: sourcev1.ArchiveOperationFailedReason,
 			}
+			conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition, e.Reason, e.Err.Error())
 		}
 	}
 
@@ -803,14 +803,13 @@ func (r *HelmChartReconciler) garbageCollect(ctx context.Context, obj *sourcev1.
 		localPath := r.Storage.LocalPath(*obj.GetArtifact())
 		provFilePath := localPath + ".prov"
 		dir := filepath.Dir(localPath)
-		callbacks := make([]func(path string, info os.FileInfo) bool, 0)
-		callbacks = append(callbacks, func(path string, info os.FileInfo) bool {
+		callback := func(path string, info os.FileInfo) bool {
 			if path != localPath && path != provFilePath && info.Mode()&os.ModeSymlink != os.ModeSymlink {
 				return true
 			}
 			return false
-		})
-		if _, err := r.Storage.RemoveConditionally(dir, callbacks); err != nil {
+		}
+		if _, err := r.Storage.RemoveConditionally(dir, callback); err != nil {
 			return &serror.Event{
 				Err:    fmt.Errorf("garbage collection of old artifacts failed: %w", err),
 				Reason: "GarbageCollectionFailed",
@@ -1036,11 +1035,13 @@ func observeChartBuild(obj *sourcev1.HelmChart, build *chart.Build, err error) {
 
 	if build.VerificationSignature != nil && build.ProvFilePath != "" {
 		var sigVerMsg strings.Builder
-		sigVerMsg.WriteString(fmt.Sprintf("chart signed by: %v", strings.Join(build.VerificationSignature.Identities[:], ",")))
-		sigVerMsg.WriteString(fmt.Sprintf(" using key with fingeprint: %X", build.VerificationSignature.KeyFingerprint))
-		sigVerMsg.WriteString(fmt.Sprintf(" and hash verified: %s", build.VerificationSignature.FileHash))
+		sigVerMsg.WriteString(fmt.Sprintf("chart signed by: '%v'", strings.Join(build.VerificationSignature.Identities[:], ",")))
+		sigVerMsg.WriteString(fmt.Sprintf(" using key with fingeprint: '%X'", build.VerificationSignature.KeyFingerprint))
+		sigVerMsg.WriteString(fmt.Sprintf(" and hash verified: '%s'", build.VerificationSignature.FileHash))
 
 		conditions.MarkTrue(obj, sourcev1.SourceVerifiedCondition, sourcev1.ChartVerifiedSucceededReason, sigVerMsg.String())
+	} else {
+		conditions.Delete(obj, sourcev1.SourceVerifiedCondition)
 	}
 
 	if err != nil {
