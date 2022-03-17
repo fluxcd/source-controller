@@ -55,6 +55,9 @@ func verifyChartWithProvFile(keyring io.Reader, chartPath, provFilePath string) 
 
 	sig := &provenance.Signatory{KeyRing: ring}
 	verification, err := sig.Verify(chartPath, provFilePath)
+	if err != nil {
+		err = fmt.Errorf("failed to verify helm chart using provenance file: %w", err)
+	}
 	return verification, err
 }
 

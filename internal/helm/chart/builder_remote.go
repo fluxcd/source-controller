@@ -27,7 +27,6 @@ import (
 	helmchart "helm.sh/helm/v3/pkg/chart"
 	"helm.sh/helm/v3/pkg/chart/loader"
 	"helm.sh/helm/v3/pkg/chartutil"
-	"helm.sh/helm/v3/pkg/provenance"
 	"sigs.k8s.io/yaml"
 
 	"github.com/fluxcd/pkg/runtime/transform"
@@ -107,18 +106,6 @@ func (b *remoteChartBuilder) Build(_ context.Context, ref Reference, p string, o
 
 	requiresPackaging := len(opts.GetValuesFiles()) != 0 || opts.VersionMetadata != ""
 
-	verifyProvFile := func(chart, provFile string) (*provenance.Verification, error) {
-		if opts.Keyring != nil {
-			ver, err := verifyChartWithProvFile(bytes.NewReader(opts.Keyring), chart, provFile)
-			if err != nil {
-				err = fmt.Errorf("failed to verify helm chart using provenance file %s: %w", provFile, err)
-				return nil, &BuildError{Reason: ErrProvenanceVerification, Err: err}
-			}
-			return ver, nil
-		}
-		return nil, nil
-	}
-
 	var provFilePath string
 
 	// If all the following is true, we do not need to download and/or build the chart:
@@ -133,16 +120,14 @@ func (b *remoteChartBuilder) Build(_ context.Context, ref Reference, p string, o
 				if result.Name == curMeta.Name && result.Version == curMeta.Version {
 					// We can only verify a cached chart with provenance file if we didn't
 					// package the chart ourselves, and instead stored it as is.
-					if !requiresPackaging {
+					if !requiresPackaging && opts.Keyring != nil {
 						provFilePath = provenanceFilePath(opts.CachedChart)
-						ver, err := verifyProvFile(opts.CachedChart, provFilePath)
+						ver, err := verifyChartWithProvFile(bytes.NewReader(opts.Keyring), opts.CachedChart, provFilePath)
 						if err != nil {
 							return nil, err
 						}
-						if ver != nil {
-							result.ProvFilePath = provFilePath
-							result.VerificationSignature = buildVerificationSig(ver)
-						}
+						result.ProvFilePath = provFilePath
+						result.VerificationSignature = buildVerificationSig(ver)
 					}
 					result.Path = opts.CachedChart
 					result.ValuesFiles = opts.GetValuesFiles()
@@ -178,14 +163,13 @@ func (b *remoteChartBuilder) Build(_ context.Context, ref Reference, p string, o
 		if err != nil {
 			return nil, err
 		}
-		ver, err := verifyProvFile(chart.Name(), provFilePath)
+		ver, err := verifyChartWithProvFile(bytes.NewReader(opts.Keyring), chart.Name(), provFilePath)
+
 		if err != nil {
 			return nil, err
 		}
-		if ver != nil {
-			result.ProvFilePath = provFilePath
-			result.VerificationSignature = buildVerificationSig(ver)
-		}
+		result.ProvFilePath = provFilePath
+		result.VerificationSignature = buildVerificationSig(ver)
 	}
 
 	// Use literal chart copy from remote if no custom values files options are

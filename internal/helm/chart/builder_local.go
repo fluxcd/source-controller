@@ -26,7 +26,6 @@ import (
 	"github.com/Masterminds/semver/v3"
 	securejoin "github.com/cyphar/filepath-securejoin"
 	"helm.sh/helm/v3/pkg/chart/loader"
-	"helm.sh/helm/v3/pkg/provenance"
 	"sigs.k8s.io/yaml"
 
 	"github.com/fluxcd/pkg/runtime/transform"
@@ -107,21 +106,6 @@ func (b *localChartBuilder) Build(ctx context.Context, ref Reference, p string, 
 	requiresPackaging := isChartDir || opts.VersionMetadata != "" || len(opts.GetValuesFiles()) != 0
 
 	var provFilePath string
-	verifyProvFile := func(chart, provFile string) (*provenance.Verification, error) {
-		if opts.Keyring != nil {
-			if _, err := os.Stat(provFile); err != nil {
-				err = fmt.Errorf("could not load provenance file %s: %w", provFile, err)
-				return nil, &BuildError{Reason: ErrProvenanceVerification, Err: err}
-			}
-			ver, err := verifyChartWithProvFile(bytes.NewReader(opts.Keyring), chart, provFile)
-			if err != nil {
-				err = fmt.Errorf("failed to verify helm chart using provenance file: %w", err)
-				return nil, &BuildError{Reason: ErrProvenanceVerification, Err: err}
-			}
-			return ver, nil
-		}
-		return nil, nil
-	}
 
 	// If all the following is true, we do not need to package the chart:
 	// - Chart name from cached chart matches resolved name
@@ -135,16 +119,14 @@ func (b *localChartBuilder) Build(ctx context.Context, ref Reference, p string, 
 				if result.Name == curMeta.Name && result.Version == curMeta.Version {
 					// We can only verify a cached chart with provenance file if we didn't
 					// package the chart ourselves, and instead stored it as is.
-					if !requiresPackaging {
+					if !requiresPackaging && opts.Keyring != nil {
 						provFilePath = provenanceFilePath(opts.CachedChart)
-						ver, err := verifyProvFile(opts.CachedChart, provFilePath)
+						ver, err := verifyChartWithProvFile(bytes.NewReader(opts.Keyring), opts.CachedChart, provFilePath)
 						if err != nil {
-							return nil, err
+							return nil, &BuildError{Reason: ErrProvenanceVerification, Err: err}
 						}
-						if ver != nil {
-							result.VerificationSignature = buildVerificationSig(ver)
-							result.ProvFilePath = provFilePath
-						}
+						result.VerificationSignature = buildVerificationSig(ver)
+						result.ProvFilePath = provFilePath
 					}
 					result.Path = opts.CachedChart
 					result.ValuesFiles = opts.GetValuesFiles()
@@ -158,18 +140,18 @@ func (b *localChartBuilder) Build(ctx context.Context, ref Reference, p string, 
 	// If the chart at the path is already packaged and no custom values files
 	// options are set, we can copy the chart without making modifications
 	if !requiresPackaging {
-		provFilePath = provenanceFilePath(p)
 		if err = copyFileToPath(localRef.Path, p); err != nil {
 			return result, &BuildError{Reason: ErrChartPull, Err: err}
 		}
-		if err = copyFileToPath(provenanceFilePath(localRef.Path), provFilePath); err != nil {
-			return result, &BuildError{Reason: ErrChartPull, Err: err}
-		}
-		ver, err := verifyProvFile(localRef.Path, provFilePath)
-		if err != nil {
-			return nil, err
-		}
-		if ver != nil {
+		if opts.Keyring != nil {
+			provFilePath = provenanceFilePath(p)
+			if err = copyFileToPath(provenanceFilePath(localRef.Path), provFilePath); err != nil {
+				return result, &BuildError{Reason: ErrChartPull, Err: err}
+			}
+			ver, err := verifyChartWithProvFile(bytes.NewReader(opts.Keyring), localRef.Path, provFilePath)
+			if err != nil {
+				return nil, err
+			}
 			result.ProvFilePath = provFilePath
 			result.VerificationSignature = buildVerificationSig(ver)
 		}
