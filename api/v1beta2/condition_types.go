@@ -42,14 +42,19 @@ const (
 	// BuildFailedCondition indicates a transient or persistent build failure
 	// of a Source's Artifact.
 	// If True, the Source can be in an ArtifactOutdatedCondition.
+	// This is a "negative polarity" or "abnormal-true" type, and is only
+	// present on the resource if it is True.
 	BuildFailedCondition string = "BuildFailed"
 
 	// StorageOperationFailedCondition indicates a transient or persistent
 	// failure related to storage. If True, the reconciliation failed while
 	// performing some filesystem operation.
+	// This is a "negative polarity" or "abnormal-true" type, and is only
+	// present on the resource if it is True.
 	StorageOperationFailedCondition string = "StorageOperationFailed"
 )
 
+// Reasons are provided as utility, and not part of the declarative API.
 const (
 	// URLInvalidReason signals that a given Source has an invalid URL.
 	URLInvalidReason string = "URLInvalid"
