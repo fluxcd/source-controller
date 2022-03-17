@@ -2,6 +2,187 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.22.0
+
+**Release date:** 2022-03-17
+
+This prerelease comes with new reconcilers which make use of `fluxcd/pkg`
+utilities for common runtime operations, and graduates the API to `v1beta2`.
+
+:warning: **It is required** to update the source-controller Custom Resource
+Definitions on your cluster and/or in Git.
+
+### Breaking changes
+
+- `Bucket` resources do now take the provided etag for object storage items
+  into account during the calculation of the revision. As a result, items will
+  no longer be downloaded on every reconcile if none of them have changed.
+- `HelmChart` resources do now advertise the observed chart name
+  (`.status.observedChartName`) and Source (reference) Artifact revision
+  (`.status.observedSourceArtifactRevision` in the Status. The information is 
+  used to more efficiently react to source revision and/or chart changes.
+
+### Features and Improvements
+
+#### API specifications in a user-friendly format
+
+[The new specifications for the `v1beta2` API](https://github.com/fluxcd/source-controller/tree/v0.22.0/docs/spec/v1beta2)
+have been written in a new format with the aim to be more valuable to a user.
+Featuring separate sections with examples, and information on how to write
+and work with them.
+
+#### Artifact now advertises size
+
+The size (in bytes) of a tarball Artifact is now advertised in the Size
+(`.size`) field of the Artifact. This can be utilized by users to e.g. quickly
+see  if `.sourceignore` rules have an effect, or be displayed in a UI.
+
+#### Azure Blob Storage support for `Bucket` resources
+
+The `.spec.provider` of a `Bucket` resource can now be set to `azure` to
+instruct the controller to use the
+[Azure Blob Storage SDK](https://github.com/Azure/azure-sdk-for-go/tree/main/sdk/storage/azblob#readme)
+while fetching objects. This allows for authenticating using Service
+Principals, Managed Identities and Shared Keys.
+
+For more information, see the
+[Bucket spec about the Azure provider](https://github.com/fluxcd/source-controller/blob/v0.22.0/docs/spec/v1beta2/buckets.md#azure).
+
+#### Enhanced Kubernetes Conditions
+
+Source API resources will now advertise more explicit Condition types (more
+about the types in "API changes"), provide `Reconciling` and `Stalled`
+Conditions where applicable for
+[better integration with `kstatus`](https://github.com/kubernetes-sigs/cli-utils/blob/master/pkg/kstatus/README.md#conditions),
+and record the Observed Generation on the Condition.
+
+For a detailed overview per Source type, refer to the spec:
+
+- [GitRepository](https://github.com/fluxcd/source-controller/blob/v0.22.0/docs/spec/v1beta2/gitrepositories.md#conditions)
+- [HelmRepository](https://github.com/fluxcd/source-controller/blob/v0.22.0/docs/spec/v1beta2/helmrepositories.md#conditions)
+- [HelmChart](https://github.com/fluxcd/source-controller/blob/v0.22.0/docs/spec/v1beta2/helmcharts.md#conditions)
+- [Bucket](https://github.com/fluxcd/source-controller/blob/v0.22.0/docs/spec/v1beta2/buckets.md#conditions)
+
+#### Enhanced Kubernetes Events (and notifications)
+
+The Kubernetes Events the controller emits have been reworked to provide a
+proper reason, and more informative messages.
+Users making use of the notification-controller will notice this as well, as
+this same information is used to compose notifications.
+
+#### Experimental managed transport for `libgit2` Git implementation
+
+The `libgit2` Git implementation supports a new experimental transport to
+improve reliability, adding timeout enforcement for Git network operations.
+Opt-in  by setting the environment variable `EXPERIMENTAL_GIT_TRANSPORT` to
+`true` in the controller's Deployment. This will result in the low-level
+transport being handled by the controller, instead of `libgit2`. It may result
+in an increased number of timeout messages in the logs, however it will remove
+the ability of Git operations to make the controllers hang indefinitely.
+
+#### Reuse of HTTP/S transport for Helm repository index and chart downloads
+
+The Helm dependency has been updated to `v3.8.1`, with a patch applied from
+https://github.com/helm/helm/pull/10568. Using this patch, the HTTP transports
+are now managed by the controller, to prevent the clogging of thousands of open
+TCP connections on some instances.
+
+#### Update of `libgit2` Git implementation to `v1.3.x`
+
+The `libgit2` Git implementation has been updated to `v1.3.x`, allowing us to
+provide better error signals for authentication, certificate and transport
+failures. Effectively, this means that instead of a `unable to clone: User`
+error string, a descriptive one is now given.
+
+In addition, `NO_PROXY` settings are now properly taken into account.
+
+#### Preparation of support for `rsa-ssh2-256/512`
+
+The dependency on `golang.org/x/crypto` has been updated to
+`v0.0.0-20220315160706-3147a52a75dd`, as preparation of support for
+`rsa-ssh2-256/512`. This should theoretically work out of the box for
+`known_hosts` entries and `go-git` Git provider credentials, but has not been
+widely tested.
+
+### API changes
+
+The `source.toolkit.fluxcd.io/v1beta2` API is backwards compatible with `v1beta1`.
+
+- Introduction of `Reconciling` and `Stalled` Condition types for [better
+  integration with `kstatus`](https://github.com/kubernetes-sigs/cli-utils/blob/master/pkg/kstatus/README.md#conditions).
+- Introduction of new Condition types to provide better signals and failure
+  indications:
+  * `ArtifactOutdated`: indicates the current Artifact of the Source is outdated.
+  * `SourceVerified`: indicates the integrity of the Source has been verified.
+  * `FetchFailed`: indicates a transient or persistent fetch failure of the
+    upstream Source.
+  * `BuildFailed`:  indicates a transient or persistent build failure of a
+    Source's Artifact.
+  * `StorageOperationFailed`: indicates a transient or persistent failure
+    related to storage.
+  * `IncludeUnavailable`: indicates an include is not available. For example,
+    because it does not exist, or does not have an Artifact.
+- Introduction of a Size (in bytes) field (`.status.artifact.size`) in the
+  Artifact object.
+- Introduction of `ObservedChartName` (`.status.observedChartName`) and
+  `ObservedSourceArtifactRevision` (`.status.observedSourceArtifactRevision`)
+  fields in the `HelmChart` Status.
+- Introduction of `azure` provider implementation for `Bucket`.
+
+Updating the manifests in Git to `v1beta2` can be done at any time after the
+source-controller upgrade.
+
+### Full list of changes
+
+- Upgrade to golang-with-libgit2:1.1.1.6 and use static libraries for in
+  development
+  [#562](https://github.com/fluxcd/source-controller/pull/562)
+- Initial fuzzing tests
+  [#572](https://github.com/fluxcd/source-controller/pull/572)
+- Validate libgit2 args are set correctly
+  [#574](https://github.com/fluxcd/source-controller/pull/574)
+- Download libgit2 libraries for fuzzing
+  [#572](https://github.com/fluxcd/source-controller/pull/577)
+- Upgrade libgit2 to 1.3.0 and git2go to v33
+  [#573](https://github.com/fluxcd/source-controller/pull/573)
+- pkg/git: Include commit message and URL in checkout error
+  [#579](https://github.com/fluxcd/source-controller/pull/579)
+- Add support for multiple fuzz sanitizers
+  [#580](https://github.com/fluxcd/source-controller/pull/580)
+- Upgrade controller-runtime to v0.11.1 and docker/distribution to v2.8.0
+  [#583](https://github.com/fluxcd/source-controller/pull/583)
+- Move to `v1beta2` API and rewrite reconcilers
+  [#586](https://github.com/fluxcd/source-controller/pull/586)
+- git/libgit2: set CheckoutForce on branch strategy
+  [#589](https://github.com/fluxcd/source-controller/pull/589)
+- Reuse transport for Helm downloads
+  [#590](https://github.com/fluxcd/source-controller/pull/590)
+- Update object API version in the sample configs
+  [#591](https://github.com/fluxcd/source-controller/pull/591)
+- api: Move Status in CRD printcolumn to the end
+  [#592](https://github.com/fluxcd/source-controller/pull/592)
+- Update github.com/sosedoff/gitkit to v0.3.0 (CVE fix)
+  [#594](https://github.com/fluxcd/source-controller/pull/594)
+- Remove redundant reconciling condition in reconcileArtifact
+  [#595](https://github.com/fluxcd/source-controller/pull/595)
+- Implement Size field on archived artifacts
+  [#597](https://github.com/fluxcd/source-controller/pull/597)
+- Add native Azure Blob support
+  [#598](https://github.com/fluxcd/source-controller/pull/598)
+- Experimental managed transport for libgit2 operations
+  [#606](https://github.com/fluxcd/source-controller/pull/606)
+- Update Helm to patched v3.8.1
+  [#609](https://github.com/fluxcd/source-controller/pull/609)
+- Add new condition StorageOperationFailedCondition
+  [#612](https://github.com/fluxcd/source-controller/pull/612)
+- Prioritize StorageOperationFailedCondition
+  [#613](https://github.com/fluxcd/source-controller/pull/613)
+- Update dependencies
+  [#600](https://github.com/fluxcd/source-controller/pull/600)
+  [#616](https://github.com/fluxcd/source-controller/pull/616)
+- api/v1beta2: add note on Condition polarity
+  [#622](https://github.com/fluxcd/source-controller/pull/622)
+
 ## 0.21.2
 
 **Release date:** 2022-02-07
