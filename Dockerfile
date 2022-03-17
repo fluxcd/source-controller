@@ -97,6 +97,10 @@ RUN xx-verify --static /source-controller
 FROM alpine:3.15
 
 ARG TARGETPLATFORM
+
+# Mitigate CVE-2022-0778
+RUN apk --no-cache add libssl1.1 --repository=http://dl-cdn.alpinelinux.org/alpine/edge/main
+
 RUN apk --no-cache add ca-certificates \
   && update-ca-certificates
 
