@@ -54,7 +54,15 @@ export PKG_CONFIG_PATH="${TARGET_DIR}/lib/pkgconfig:${TARGET_DIR}/lib64/pkgconfi
 export CGO_CFLAGS="-I${TARGET_DIR}/include -I${TARGET_DIR}/include/openssl"
 export CGO_LDFLAGS="$(pkg-config --libs --static --cflags libssh2 openssl libgit2)"
 
-go mod tidy
+# Use main go.mod in order to conserve the same version across all dependencies.
+cp ../../go.mod .
+cp ../../go.sum .
+
+sed -i 's;module .*;module github.com/fluxcd/kustomize-controller/tests/fuzz;g' go.mod
+sed -i 's;api => ./api;api => ../../api;g' go.mod
+echo "replace github.com/fluxcd/kustomize-controller => ../../" >> go.mod
+
+go mod download
 
 # The implementation of libgit2 is sensitive to the versions of git2go.
 # Leaving it to its own devices, the minimum version of git2go used may not

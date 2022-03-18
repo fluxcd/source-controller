@@ -1,7 +1,6 @@
 module github.com/fluxcd/source-controller/tests/fuzz
+// This module is used only to avoid polluting the main module
+// with fuzz dependencies.
+// It is managed by oss_fuzz_build.sh.
 
 go 1.17
-
-replace github.com/fluxcd/kustomize-controller/api => ../../api
-
-replace github.com/fluxcd/kustomize-controller => ../../
