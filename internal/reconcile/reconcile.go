@@ -158,3 +158,19 @@ func LowestRequeuingResult(i, j Result) Result {
 		return j
 	}
 }
+
+// FailureRecovery finds out if a failure recovery occurred by checking the fail
+// conditions in the old object and the new object.
+func FailureRecovery(oldObj, newObj conditions.Getter, failConditions []string) bool {
+	failuresBefore := 0
+	for _, failCondition := range failConditions {
+		if conditions.Get(oldObj, failCondition) != nil {
+			failuresBefore++
+		}
+		if conditions.Get(newObj, failCondition) != nil {
+			// Short-circuit, there is failure now, can't be a recovery.
+			return false
+		}
+	}
+	return failuresBefore > 0
+}
