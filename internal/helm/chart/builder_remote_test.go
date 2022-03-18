@@ -381,3 +381,65 @@ func Test_pathIsDir(t *testing.T) {
 		})
 	}
 }
+
+func runBenchHelmChart(b *testing.B) {
+	g := NewWithT(b)
+
+	chartGrafana, err := os.ReadFile("./../testdata/charts/helmchart-0.1.0.tgz")
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(chartGrafana).ToNot(BeEmpty())
+
+	index := []byte(`
+apiVersion: v1
+entries:
+  helmchart:
+    - urls:
+        - https://example.com/helmchart-0.1.0.tgz
+      description: string
+      version: 0.1.0
+      name: helmchart
+`)
+
+	mockGetter := &mockIndexChartGetter{
+		IndexResponse: index,
+		ChartResponse: chartGrafana,
+	}
+	mockRepo := func() *repository.ChartRepository {
+		return &repository.ChartRepository{
+			URL:     "https://grafana.github.io/helm-charts/",
+			Client:  mockGetter,
+			RWMutex: &sync.RWMutex{},
+		}
+	}
+
+	reference := RemoteReference{Name: "helmchart"}
+	repository := mockRepo()
+
+	_, err = repository.CacheIndex()
+	g.Expect(err).ToNot(HaveOccurred())
+	// Cleanup the cache index path.
+	defer os.Remove(repository.CachePath)
+
+	builder := NewRemoteBuilder(repository)
+
+	tmpDir, err := os.MkdirTemp("", "remote-chart-")
+	g.Expect(err).ToNot(HaveOccurred())
+	defer os.RemoveAll(tmpDir)
+
+	// Build first time.
+	targetPath := filepath.Join(tmpDir, "chart1.tgz")
+	defer os.RemoveAll(targetPath)
+	buildOpts := BuildOptions{}
+
+	g.Expect(err).ToNot(HaveOccurred())
+
+	for i := 0; i < b.N; i++ {
+		_, err := builder.Build(context.TODO(), reference, targetPath, buildOpts)
+		g.Expect(err).ToNot(HaveOccurred())
+	}
+
+}
+
+func BenchmarkHelmChart(b *testing.B) {
+	runBenchHelmChart(b)
+}

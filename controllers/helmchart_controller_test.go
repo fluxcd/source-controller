@@ -1483,3 +1483,28 @@ func mockChartBuild(name, version, path string) *chart.Build {
 		Path:    copyP,
 	}
 }
+
+func runBenchHelmChartReconciler(b *testing.B) {
+	r := &HelmChartReconciler{
+		EventRecorder: record.NewFakeRecorder(32),
+		Storage:       testStorage,
+	}
+
+	obj := &sourcev1.HelmChart{
+		ObjectMeta: metav1.ObjectMeta{
+			GenerateName: "reconcile-artifact-",
+			Generation:   1,
+		},
+		Status: sourcev1.HelmChartStatus{},
+	}
+
+	build := mockChartBuild("helmchart", "0.1.0", "testdata/charts/helmchart-0.1.0.tgz")
+
+	for i := 0; i < b.N; i++ {
+		r.reconcileArtifact(ctx, obj, build)
+	}
+}
+
+func BenchmarkHelmChart(b *testing.B) {
+	runBenchHelmChartReconciler(b)
+}

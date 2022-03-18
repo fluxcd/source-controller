@@ -228,17 +228,24 @@ func (r *ChartRepository) DownloadChart(chart *repo.ChartVersion) (*bytes.Buffer
 // It returns a repo.ErrNoAPIVersion error if the API version is not set
 func (r *ChartRepository) LoadIndexFromBytes(b []byte) error {
 	i := &repo.IndexFile{}
+	sha := fmt.Sprintf("%x", sha256.Sum256(b))
+
+	// dont re-marshal if the index hasnt changed
+	if r.Checksum == sha && r.Index != nil {
+		return nil
+	}
+
 	if err := yaml.UnmarshalStrict(b, i); err != nil {
 		return err
 	}
+
 	if i.APIVersion == "" {
 		return repo.ErrNoAPIVersion
 	}
 	i.SortEntries()
-
 	r.Lock()
 	r.Index = i
-	r.Checksum = fmt.Sprintf("%x", sha256.Sum256(b))
+	r.Checksum = sha
 	r.Unlock()
 	return nil
 }

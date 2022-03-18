@@ -614,3 +614,19 @@ func TestChartRepository_RemoveCache(t *testing.T) {
 	g.Expect(r.CachePath).To(BeEmpty())
 	g.Expect(r.Cached).To(BeFalse())
 }
+
+func runBenchHelmChartIndex(b *testing.B) {
+	g := NewWithT(b)
+	index, err := os.ReadFile(testFile)
+	g.Expect(err).ToNot(HaveOccurred())
+	r := newChartRepository()
+	for i := 0; i < b.N; i++ {
+		err := r.LoadIndexFromBytes(index)
+		g.Expect(err).ToNot(HaveOccurred())
+	}
+
+}
+
+func BenchmarkHelmChartIndex(b *testing.B) {
+	runBenchHelmChartIndex(b)
+}
