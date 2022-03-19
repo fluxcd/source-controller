@@ -97,4 +97,6 @@ const (
 	// ArtifactUpToDateReason signals that an existing Artifact is up-to-date
 	// with the Source.
 	ArtifactUpToDateReason string = "ArtifactUpToDate"
+	// CacheOperationFailedReason signals a failure in cache operation.
+	CacheOperationFailedReason string = "CacheOperationFailed"
 )

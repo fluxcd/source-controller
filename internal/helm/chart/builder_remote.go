@@ -72,11 +72,13 @@ func (b *remoteChartBuilder) Build(_ context.Context, ref Reference, p string, o
 		return nil, &BuildError{Reason: ErrChartReference, Err: err}
 	}
 
-	if err := b.remote.LoadFromCache(); err != nil {
-		err = fmt.Errorf("could not load repository index for remote chart reference: %w", err)
-		return nil, &BuildError{Reason: ErrChartPull, Err: err}
+	// Load the repository index if not already present.
+	if b.remote.Index == nil {
+		if err := b.remote.LoadFromCache(); err != nil {
+			err = fmt.Errorf("could not load repository index for remote chart reference: %w", err)
+			return nil, &BuildError{Reason: ErrChartPull, Err: err}
+		}
 	}
-	defer b.remote.Unload()
 
 	// Get the current version for the RemoteReference
 	cv, err := b.remote.Get(remoteRef.Name, remoteRef.Version)

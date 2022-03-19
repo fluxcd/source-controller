@@ -30,6 +30,7 @@ import (
 
 	securejoin "github.com/cyphar/filepath-securejoin"
 	helmgetter "helm.sh/helm/v3/pkg/getter"
+	helmrepo "helm.sh/helm/v3/pkg/repo"
 	corev1 "k8s.io/api/core/v1"
 	apierrs "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -55,6 +56,7 @@ import (
 	"github.com/fluxcd/pkg/untar"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
+	"github.com/fluxcd/source-controller/internal/cache"
 	serror "github.com/fluxcd/source-controller/internal/error"
 	"github.com/fluxcd/source-controller/internal/helm/chart"
 	"github.com/fluxcd/source-controller/internal/helm/getter"
@@ -111,6 +113,9 @@ type HelmChartReconciler struct {
 	Storage        *Storage
 	Getters        helmgetter.Providers
 	ControllerName string
+
+	Cache *cache.Cache
+	TTL   time.Duration
 }
 
 func (r *HelmChartReconciler) SetupWithManager(mgr ctrl.Manager) error {
@@ -456,6 +461,15 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 		}
 	}
 
+	// Try to retrieve the repository index from the cache
+	if r.Cache != nil {
+		if index, found := r.Cache.Get(r.Storage.LocalPath(*repo.GetArtifact())); err == nil {
+			if found {
+				chartRepo.Index = index.(*helmrepo.IndexFile)
+			}
+		}
+	}
+
 	// Construct the chart builder with scoped configuration
 	cb := chart.NewRemoteBuilder(chartRepo)
 	opts := chart.BuildOptions{
@@ -478,6 +492,26 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 	if err != nil {
 		return sreconcile.ResultEmpty, err
 	}
+
+	defer func() {
+		// Cache the index if it was successfully retrieved
+		// and the chart was successfully built
+		if r.Cache != nil && chartRepo.Index != nil {
+			// The cache key have to be safe in multi-tenancy environments,
+			// as otherwise it could be used as a vector to bypass the helm repository's authentication.
+			// Using r.Storage.LocalPath(*repo.GetArtifact() is safe as the path is in the format /<helm-repository-name>/<chart-name>/<filename>.
+			err := r.Cache.Set(r.Storage.LocalPath(*repo.GetArtifact()), chartRepo.Index, r.TTL)
+			if err != nil {
+				r.eventLogf(ctx, obj, events.EventTypeTrace, sourcev1.CacheOperationFailedReason, "failed to cache index: %v", err)
+			}
+
+		}
+
+		// Delete the index reference
+		if chartRepo.Index != nil {
+			chartRepo.Unload()
+		}
+	}()
 
 	*b = *build
 	return sreconcile.ResultSuccess, nil

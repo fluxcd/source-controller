@@ -44,6 +44,7 @@ import (
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
 	"github.com/fluxcd/source-controller/controllers"
+	"github.com/fluxcd/source-controller/internal/cache"
 	"github.com/fluxcd/source-controller/internal/helm"
 	"github.com/fluxcd/source-controller/pkg/git/libgit2/managed"
 	// +kubebuilder:scaffold:imports
@@ -86,6 +87,9 @@ func main() {
 		clientOptions         client.Options
 		logOptions            logger.Options
 		leaderElectionOptions leaderelection.Options
+		cacheMaxSize          int
+		cacheTTL              string
+		cachePurgeInterval    string
 	)
 
 	flag.StringVar(&metricsAddr, "metrics-addr", envOrDefault("METRICS_ADDR", ":8080"),
@@ -110,6 +114,12 @@ func main() {
 		"The max allowed size in bytes of a file in a Helm chart.")
 	flag.DurationVar(&requeueDependency, "requeue-dependency", 30*time.Second,
 		"The interval at which failing dependencies are reevaluated.")
+	flag.IntVar(&cacheMaxSize, "cache-max-size", 0,
+		"The maximum size of the cache in number of items.")
+	flag.StringVar(&cacheTTL, "cache-ttl", "15m",
+		"The TTL of an item in the cache. Valid time units are ns, us (or µs), ms, s, m, h.")
+	flag.StringVar(&cachePurgeInterval, "cache-purge-interval", "1m",
+		"The interval at which the cache is purged. Valid time units are ns, us (or µs), ms, s, m, h.")
 
 	clientOptions.BindFlags(flag.CommandLine)
 	logOptions.BindFlags(flag.CommandLine)
@@ -191,6 +201,24 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", sourcev1.HelmRepositoryKind)
 		os.Exit(1)
 	}
+
+	var c *cache.Cache
+	var ttl time.Duration
+	if cacheMaxSize > 0 {
+		interval, err := time.ParseDuration(cachePurgeInterval)
+		if err != nil {
+			setupLog.Error(err, "unable to parse cache purge interval")
+			os.Exit(1)
+		}
+
+		ttl, err = time.ParseDuration(cacheTTL)
+		if err != nil {
+			setupLog.Error(err, "unable to parse cache TTL")
+			os.Exit(1)
+		}
+
+		c = cache.New(cacheMaxSize, interval)
+	}
 	if err = (&controllers.HelmChartReconciler{
 		Client:         mgr.GetClient(),
 		Storage:        storage,
@@ -198,6 +226,8 @@ func main() {
 		EventRecorder:  eventRecorder,
 		Metrics:        metricsH,
 		ControllerName: controllerName,
+		Cache:          c,
+		TTL:            ttl,
 	}).SetupWithManagerAndOptions(mgr, controllers.HelmChartReconcilerOptions{
 		MaxConcurrentReconciles: concurrent,
 	}); err != nil {
