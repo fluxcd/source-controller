@@ -13,44 +13,26 @@ There are a number of dependencies required to be able to run the controller and
 - [Install Docker](https://docs.docker.com/engine/install/)
 - (Optional) [Install Kubebuilder](https://book.kubebuilder.io/quick-start.html#installation)
 
-The dependency [libgit2](https://libgit2.org/) also needs to be installed to be able
-to run `source-controller` or its test-suite locally (not in a container).
-
-In case this dependency is not present on your system (at the expected
-version), the first invocation of a `make` target that requires the
-dependency will attempt to compile it locally to `hack/libgit2`. For this build
-to succeed ensure the following dependencies are present on your system:
-- [CMake](https://cmake.org/download/)
-- [OpenSSL 1.1](https://www.openssl.org/source/)
-- [LibSSH2](https://www.libssh2.org/)
-- [pkg-config](https://freedesktop.org/wiki/Software/pkg-config/)
-
-Triggering a manual build of the dependency is possible as well by running
-`make libgit2`. To enforce the build, for example if your system dependencies
-match but are not linked in a compatible way, append `LIBGIT2_FORCE=1` to the
-`make` command.
-
-Follow the instructions below to install these dependencies to your system.
+The [libgit2](https://libgit2.org/) dependency is now automatically managed by the Makefile logic.
+However, it depends on [pkg-config](https://freedesktop.org/wiki/Software/pkg-config/) being installed:
 
 ### macOS
 
 ```console
-$ # Ensure libgit2 dependencies are available
-$ brew install cmake openssl@1.1 libssh2 pkg-config
-$ LIBGIT2_FORCE=1 make libgit2
+$ # Ensure pkg-config is installed
+$ brew install pkg-config
 ```
 
 ### Linux
 
 ```console
-$ # Ensure libgit2 dependencies are available
-$ pacman -S cmake openssl libssh2
-$ LIBGIT2_FORCE=1 make libgit2
+$ # Ensure pkg-config is installed
+$ pacman -S pkgconf
 ```
 
 **Note:** Example shown is for Arch Linux, but likewise procedure can be
 followed using any other package manager. Some distributions may have slight 
-variation of package names (e.g. `apt install -y cmake openssl libssh2-1-dev`).
+variation of package names (e.g. `apt install -y pkg-config`).
 
 In addition to the above, the following dependencies are also used by some of the `make` targets:
 
