@@ -551,7 +551,7 @@ func TestHelmChartReconciler_reconcileSource(t *testing.T) {
 				g.Expect(obj.Status.ObservedSourceArtifactRevision).To(Equal(gitArtifact.Revision))
 				g.Expect(obj.Status.Conditions).To(conditions.MatchConditions([]metav1.Condition{
 					*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewChart", "pulled 'helmchart' chart with version '0.1.0'"),
-					*conditions.TrueCondition(sourcev1.SourceVerifiedCondition, sourcev1.ChartVerifiedSucceededReason, "chart signed by: 'TestUser' using key with fingeprint: '943CB5929ECDA2B5B5EC88BC7035BA97D32A87C1' and hash verified: 'sha256:007c7b7446eebcb18caeffe9898a3356ba1795f54df40ad39cfcc7382874a10a'"),
+					*conditions.TrueCondition(sourcev1.SourceVerifiedCondition, sourcev1.ChartVerificationSucceededReason, "chart signed by: 'TestUser' using key with fingeprint: '943CB5929ECDA2B5B5EC88BC7035BA97D32A87C1' and hash verified: 'sha256:007c7b7446eebcb18caeffe9898a3356ba1795f54df40ad39cfcc7382874a10a'"),
 				}))
 			},
 			cleanFunc: func(g *WithT, build *chart.Build) {

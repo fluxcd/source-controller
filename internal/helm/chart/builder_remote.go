@@ -158,13 +158,12 @@ func (b *remoteChartBuilder) Build(_ context.Context, ref Reference, p string, o
 		// This is needed, since the verification will work only if the .tgz file is untampered.
 		// But we write the packaged chart to disk under a different name, so the provenance file
 		// will not be valid for this _new_ packaged chart.
-		chart, err := util.WriteToFile(chartBuf, fmt.Sprintf("%s-%s.tgz", cv.Name, cv.Version))
-		defer os.Remove(chart.Name())
+		chart, err := util.WriteToTempFile(chartBuf, fmt.Sprintf("%s-%s.tgz", cv.Name, cv.Version), true)
 		if err != nil {
 			return nil, err
 		}
+		defer os.Remove(chart.Name())
 		ver, err := verifyChartWithProvFile(bytes.NewReader(opts.Keyring), chart.Name(), provFilePath)
-
 		if err != nil {
 			return nil, err
 		}
@@ -245,7 +244,7 @@ func mergeChartValues(chart *helmchart.Chart, paths []string) (map[string]interf
 // validatePackageAndWriteToPath atomically writes the packaged chart from reader
 // to out while validating it by loading the chart metadata from the archive.
 func validatePackageAndWriteToPath(b []byte, out string) error {
-	tmpFile, err := util.WriteToTempFile(b, out)
+	tmpFile, err := util.WriteToTempFile(b, out, false)
 	defer os.Remove(tmpFile.Name())
 
 	if err != nil {

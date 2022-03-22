@@ -809,11 +809,14 @@ func (r *HelmChartReconciler) garbageCollect(ctx context.Context, obj *sourcev1.
 			}
 			return false
 		}
-		if _, err := r.Storage.RemoveConditionally(dir, callback); err != nil {
+		if deleted, err := r.Storage.RemoveConditionally(dir, callback); err != nil {
 			return &serror.Event{
 				Err:    fmt.Errorf("garbage collection of old artifacts failed: %w", err),
 				Reason: "GarbageCollectionFailed",
 			}
+		} else if len(deleted) > 0 {
+			r.eventLogf(ctx, obj, events.EventTypeTrace, "GarbageCollectionSucceeded",
+				"garbage collected old artifacts")
 		}
 	}
 	return nil
@@ -1039,7 +1042,7 @@ func observeChartBuild(obj *sourcev1.HelmChart, build *chart.Build, err error) {
 		sigVerMsg.WriteString(fmt.Sprintf(" using key with fingeprint: '%X'", build.VerificationSignature.KeyFingerprint))
 		sigVerMsg.WriteString(fmt.Sprintf(" and hash verified: '%s'", build.VerificationSignature.FileHash))
 
-		conditions.MarkTrue(obj, sourcev1.SourceVerifiedCondition, sourcev1.ChartVerifiedSucceededReason, sigVerMsg.String())
+		conditions.MarkTrue(obj, sourcev1.SourceVerifiedCondition, sourcev1.ChartVerificationSucceededReason, sigVerMsg.String())
 	} else {
 		conditions.Delete(obj, sourcev1.SourceVerifiedCondition)
 	}

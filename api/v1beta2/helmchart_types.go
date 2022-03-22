@@ -172,9 +172,9 @@ const (
 	// chart succeeded.
 	ChartPackageSucceededReason string = "ChartPackageSucceeded"
 
-	// ChartVerifiedSucceededReason signals that the Helm chart's signature
+	// ChartVerificationSucceededReason signals that the Helm chart's signature
 	// has been verified using it's provenance file.
-	ChartVerifiedSucceededReason string = "ChartVerifiedSucceeded"
+	ChartVerificationSucceededReason string = "ChartVerificationSucceeded"
 )
 
 // GetConditions returns the status conditions of the object.

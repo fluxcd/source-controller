@@ -216,7 +216,7 @@ func (r *ChartRepository) DownloadProvenanceFile(chart *repo.ChartVersion, path 
 	if err != nil {
 		return err
 	}
-	tmpFile, err := util.WriteToTempFile(res.Bytes(), path)
+	tmpFile, err := util.WriteToTempFile(res.Bytes(), path, false)
 	defer os.Remove(tmpFile.Name())
 
 	if err != nil {

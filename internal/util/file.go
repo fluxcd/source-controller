@@ -20,6 +20,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/fluxcd/source-controller/internal/fs"
 )
 
 func writeBytesToFile(bytes []byte, file *os.File) error {
@@ -33,21 +35,24 @@ func writeBytesToFile(bytes []byte, file *os.File) error {
 	return nil
 }
 
-// Writes the provided bytes to a file at the given path and returns the file handle.
-func WriteToFile(bytes []byte, path string) (*os.File, error) {
-	file, err := os.Create(path)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create temporary file for chart %s: %w", path, err)
-	}
-	return file, writeBytesToFile(bytes, file)
-}
-
 // Writes the provided bytes to a temp file with the name provided in the path and
-// returns the file handle.
-func WriteToTempFile(bytes []byte, out string) (*os.File, error) {
+// returns the file handle. If renameToOriginal is true, it renames the temp file to
+// the intended file name (since temp file names have random bytes as suffix).
+func WriteToTempFile(bytes []byte, out string, renameToOriginal bool) (*os.File, error) {
 	file, err := os.CreateTemp("", filepath.Base(out))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create temporary file %s: %w", filepath.Base(out), err)
 	}
-	return file, writeBytesToFile(bytes, file)
+	err = writeBytesToFile(bytes, file)
+	if err != nil {
+		return nil, err
+	}
+	if renameToOriginal {
+		err = fs.RenameWithFallback(file.Name(), filepath.Join("/tmp", filepath.Base(out)))
+		file, err = os.Open(filepath.Join("/tmp", filepath.Base(out)))
+		if err != nil {
+			return nil, fmt.Errorf("failed to rename temporary file %s: %w", filepath.Base(out), err)
+		}
+	}
+	return file, nil
 }
