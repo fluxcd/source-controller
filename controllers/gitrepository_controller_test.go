@@ -772,6 +772,21 @@ func TestGitRepositoryReconciler_reconcileArtifact(t *testing.T) {
 			},
 		},
 		{
+			name: "source ignore for subdir ignore patterns",
+			dir:  "testdata/git/repowithsubdirs",
+			beforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Spec.Interval = metav1.Duration{Duration: interval}
+			},
+			afterFunc: func(t *WithT, obj *sourcev1.GitRepository) {
+				t.Expect(obj.GetArtifact()).ToNot(BeNil())
+				t.Expect(obj.GetArtifact().Checksum).To(Equal("29186e024dde5a414cfc990829c6b2e85f6b3bd2d950f50ca9f418f5d2261d79"))
+			},
+			want: sreconcile.ResultSuccess,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReadyCondition, meta.SucceededReason, "stored artifact for revision 'main/revision'"),
+			},
+		},
+		{
 			name: "Removes ArtifactOutdatedCondition after creating new artifact",
 			dir:  "testdata/git/repository",
 			beforeFunc: func(obj *sourcev1.GitRepository) {
