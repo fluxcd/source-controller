@@ -453,8 +453,8 @@ func (r *HelmRepositoryReconciler) reconcileArtifact(ctx context.Context, obj *s
 	size := units.HumanSize(float64(fi.Size()))
 
 	r.AnnotatedEventf(obj, map[string]string{
-		"revision": artifact.Revision,
-		"checksum": artifact.Checksum,
+		sourcev1.GroupVersion.Group + "/revision": artifact.Revision,
+		sourcev1.GroupVersion.Group + "/checksum": artifact.Checksum,
 	}, corev1.EventTypeNormal, "NewArtifact", "fetched index of size %s from '%s'", size, chartRepo.URL)
 
 	// Record it on the object.

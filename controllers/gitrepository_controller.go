@@ -519,8 +519,8 @@ func (r *GitRepositoryReconciler) reconcileArtifact(ctx context.Context,
 		return sreconcile.ResultEmpty, e
 	}
 	r.AnnotatedEventf(obj, map[string]string{
-		"revision": artifact.Revision,
-		"checksum": artifact.Checksum,
+		sourcev1.GroupVersion.Group + "/revision": artifact.Revision,
+		sourcev1.GroupVersion.Group + "/checksum": artifact.Checksum,
 	}, corev1.EventTypeNormal, "NewArtifact", "stored artifact for commit '%s'", commit.ShortMessage())
 
 	// Record it on the object
