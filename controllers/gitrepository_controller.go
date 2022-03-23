@@ -61,28 +61,30 @@ import (
 var gitRepositoryReadyCondition = summarize.Conditions{
 	Target: meta.ReadyCondition,
 	Owned: []string{
-		sourcev1.SourceVerifiedCondition,
-		sourcev1.FetchFailedCondition,
 		sourcev1.StorageOperationFailedCondition,
+		sourcev1.FetchFailedCondition,
 		sourcev1.IncludeUnavailableCondition,
 		sourcev1.ArtifactOutdatedCondition,
+		sourcev1.ArtifactInStorageCondition,
+		sourcev1.SourceVerifiedCondition,
 		meta.ReadyCondition,
 		meta.ReconcilingCondition,
 		meta.StalledCondition,
 	},
 	Summarize: []string{
-		sourcev1.IncludeUnavailableCondition,
-		sourcev1.SourceVerifiedCondition,
-		sourcev1.FetchFailedCondition,
 		sourcev1.StorageOperationFailedCondition,
+		sourcev1.FetchFailedCondition,
+		sourcev1.IncludeUnavailableCondition,
 		sourcev1.ArtifactOutdatedCondition,
+		sourcev1.ArtifactInStorageCondition,
+		sourcev1.SourceVerifiedCondition,
 		meta.StalledCondition,
 		meta.ReconcilingCondition,
 	},
 	NegativePolarity: []string{
+		sourcev1.StorageOperationFailedCondition,
 		sourcev1.FetchFailedCondition,
 		sourcev1.IncludeUnavailableCondition,
-		sourcev1.StorageOperationFailedCondition,
 		sourcev1.ArtifactOutdatedCondition,
 		meta.StalledCondition,
 		meta.ReconcilingCondition,
@@ -279,11 +281,14 @@ func (r *GitRepositoryReconciler) reconcileStorage(ctx context.Context,
 	if artifact := obj.GetArtifact(); artifact != nil && !r.Storage.ArtifactExist(*artifact) {
 		obj.Status.Artifact = nil
 		obj.Status.URL = ""
+		// Remove the condition as the artifact doesn't exist.
+		conditions.Delete(obj, sourcev1.ArtifactInStorageCondition)
 	}
 
 	// Record that we do not have an artifact
 	if obj.GetArtifact() == nil {
 		conditions.MarkReconciling(obj, "NoArtifact", "no artifact for resource in storage")
+		conditions.Delete(obj, sourcev1.ArtifactInStorageCondition)
 		return sreconcile.ResultSuccess, nil
 	}
 
@@ -446,11 +451,11 @@ func (r *GitRepositoryReconciler) reconcileArtifact(ctx context.Context,
 	// Create potential new artifact with current available metadata
 	artifact := r.Storage.NewArtifactFor(obj.Kind, obj.GetObjectMeta(), commit.String(), fmt.Sprintf("%s.tar.gz", commit.Hash.String()))
 
-	// Always restore the Ready condition in case it got removed due to a transient error
+	// Set the ArtifactInStorageCondition if there's no drift.
 	defer func() {
 		if obj.GetArtifact().HasRevision(artifact.Revision) && !includes.Diff(obj.Status.IncludedArtifacts) {
 			conditions.Delete(obj, sourcev1.ArtifactOutdatedCondition)
-			conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason,
+			conditions.MarkTrue(obj, sourcev1.ArtifactInStorageCondition, meta.SucceededReason,
 				"stored artifact for revision '%s'", artifact.Revision)
 		}
 	}()
