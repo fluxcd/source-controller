@@ -52,15 +52,10 @@ RUN --mount=target=. \
 RUN xx-verify --static /source-controller
 
 
-FROM alpine:3.15
+FROM registry.access.redhat.com/ubi8/ubi
 
 ARG TARGETPLATFORM
-RUN apk --no-cache add ca-certificates \
-  && update-ca-certificates
-
-# Create minimal nsswitch.conf file to prioritize the usage of /etc/hosts over DNS queries.
-# https://github.com/gliderlabs/docker-alpine/issues/367#issuecomment-354316460
-RUN [ ! -e /etc/nsswitch.conf ] && echo 'hosts: files dns' > /etc/nsswitch.conf
+RUN yum install -y ca-certificates 
 
 # Copy over binary from build
 COPY --from=build /source-controller /usr/local/bin/

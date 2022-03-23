@@ -10,7 +10,7 @@ LIBGIT2_TAG ?= libgit2-1.1.1-4
 # e.g. '--push'.
 BUILD_ARGS ?=
 # Architectures to build images for
-BUILD_PLATFORMS ?= linux/amd64,linux/arm64,linux/arm/v7
+BUILD_PLATFORMS ?= linux/amd64
 
 # Produce CRDs that work back to Kubernetes 1.16
 CRD_OPTIONS ?= crd:crdVersions=v1
