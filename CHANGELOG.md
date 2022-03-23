@@ -2,6 +2,17 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.22.1
+
+**Release date:** 2022-03-23
+
+This prereleases fixes a regression in which `.sourceignore` rules for a
+`GitRepository` would not be matched correctly.
+
+Fixes:
+- fix: configure domain for .sourceignore rules
+  [#629](https://github.com/fluxcd/source-controller/pull/629)
+
 ## 0.22.0
 
 **Release date:** 2022-03-17
