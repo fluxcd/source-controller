@@ -21,6 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -496,7 +497,8 @@ func (r *GitRepositoryReconciler) reconcileArtifact(ctx context.Context,
 	defer unlock()
 
 	// Load ignore rules for archiving
-	ps, err := sourceignore.LoadIgnorePatterns(dir, nil)
+	ignoreDomain := strings.Split(dir, string(filepath.Separator))
+	ps, err := sourceignore.LoadIgnorePatterns(dir, ignoreDomain)
 	if err != nil {
 		return sreconcile.ResultEmpty, &serror.Event{
 			Err:    fmt.Errorf("failed to load source ignore patterns from repository: %w", err),
@@ -504,11 +506,11 @@ func (r *GitRepositoryReconciler) reconcileArtifact(ctx context.Context,
 		}
 	}
 	if obj.Spec.Ignore != nil {
-		ps = append(ps, sourceignore.ReadPatterns(strings.NewReader(*obj.Spec.Ignore), nil)...)
+		ps = append(ps, sourceignore.ReadPatterns(strings.NewReader(*obj.Spec.Ignore), ignoreDomain)...)
 	}
 
 	// Archive directory to storage
-	if err := r.Storage.Archive(&artifact, dir, SourceIgnoreFilter(ps, nil)); err != nil {
+	if err := r.Storage.Archive(&artifact, dir, SourceIgnoreFilter(ps, ignoreDomain)); err != nil {
 		e := &serror.Event{
 			Err:    fmt.Errorf("unable to archive artifact to storage: %w", err),
 			Reason: sourcev1.ArchiveOperationFailedReason,
