@@ -2,6 +2,22 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.22.2
+
+**Release date:** 2022-03-23
+
+This prerelease ensures (Kubernetes) Event annotations are prefixed with the
+FQDN of the Source API Group. For example, `revision` is now
+`source.toolkit.fluxcd.io/revision`.
+
+This to facilitate improvements to the notification-controller, where
+annotations prefixed with the FQDN of the Group of the Involved Object will be
+transformed into "fields".
+
+Fixes:
+- Prefix event annotations with API Group FQDN
+  [#632](https://github.com/fluxcd/source-controller/pull/632)
+
 ## 0.22.1
 
 **Release date:** 2022-03-23
