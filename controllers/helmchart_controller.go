@@ -676,8 +676,8 @@ func (r *HelmChartReconciler) reconcileArtifact(ctx context.Context, obj *source
 
 	// Publish an event
 	r.AnnotatedEventf(obj, map[string]string{
-		"revision": artifact.Revision,
-		"checksum": artifact.Checksum,
+		sourcev1.GroupVersion.Group + "/revision": artifact.Revision,
+		sourcev1.GroupVersion.Group + "/checksum": artifact.Checksum,
 	}, corev1.EventTypeNormal, reasonForBuild(b), b.Summary())
 
 	// Update symlink on a "best effort" basis

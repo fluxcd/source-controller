@@ -570,8 +570,8 @@ func (r *BucketReconciler) reconcileArtifact(ctx context.Context, obj *sourcev1.
 		return sreconcile.ResultEmpty, e
 	}
 	r.annotatedEventLogf(ctx, obj, map[string]string{
-		"revision": artifact.Revision,
-		"checksum": artifact.Checksum,
+		sourcev1.GroupVersion.Group + "/revision": artifact.Revision,
+		sourcev1.GroupVersion.Group + "/checksum": artifact.Checksum,
 	}, corev1.EventTypeNormal, "NewArtifact", "fetched %d files from '%s'", index.Len(), obj.Spec.BucketName)
 
 	// Record it on the object
