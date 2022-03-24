@@ -163,7 +163,25 @@ func (t *sshSmartSubtransport) Action(urlString string, action git2go.SmartServi
 		addr = fmt.Sprintf("%s:22", u.Hostname())
 	}
 
-	t.client, err = ssh.Dial("tcp", addr, sshConfig)
+	// In some scenarios the ssh handshake can hang indefinitely at
+	// golang.org/x/crypto/ssh.(*handshakeTransport).kexLoop.
+	//
+	// xref: https://github.com/golang/go/issues/51926
+	done := make(chan error, 1)
+	go func() {
+		t.client, err = ssh.Dial("tcp", addr, sshConfig)
+		done <- err
+	}()
+
+	select {
+	case doneErr := <-done:
+		if doneErr != nil {
+			err = fmt.Errorf("ssh.Dial: %w", doneErr)
+		}
+	case <-time.After(sshConfig.Timeout + (5 * time.Second)):
+		err = fmt.Errorf("timed out waiting for ssh.Dial")
+	}
+
 	if err != nil {
 		return nil, err
 	}
