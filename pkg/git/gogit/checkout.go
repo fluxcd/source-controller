@@ -315,6 +315,7 @@ func buildCommitWithRef(c *object.Commit, ref plumbing.ReferenceName) (*git.Comm
 		Committer: buildSignature(c.Committer),
 		Signature: c.PGPSignature,
 		Encoded:   b,
+		Message:   c.Message,
 	}, nil
 }
 

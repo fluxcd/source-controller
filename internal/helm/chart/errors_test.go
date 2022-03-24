@@ -26,7 +26,7 @@ import (
 func TestBuildErrorReason_Error(t *testing.T) {
 	g := NewWithT(t)
 
-	err := BuildErrorReason("reason")
+	err := BuildErrorReason{"Reason", "reason"}
 	g.Expect(err.Error()).To(Equal("reason"))
 }
 
@@ -39,7 +39,7 @@ func TestBuildError_Error(t *testing.T) {
 		{
 			name: "with reason",
 			err: &BuildError{
-				Reason: BuildErrorReason("reason"),
+				Reason: BuildErrorReason{"Reason", "reason"},
 				Err:    errors.New("error"),
 			},
 			want: "reason: error",

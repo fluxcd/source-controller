@@ -58,17 +58,20 @@ func TestCheckoutBranch_Checkout(t *testing.T) {
 	tests := []struct {
 		name           string
 		branch         string
+		filesCreated   map[string]string
 		expectedCommit string
 		expectedErr    string
 	}{
 		{
 			name:           "Default branch",
 			branch:         "master",
+			filesCreated:   map[string]string{"branch": "init"},
 			expectedCommit: firstCommit.String(),
 		},
 		{
 			name:           "Other branch",
 			branch:         "test",
+			filesCreated:   map[string]string{"branch": "second"},
 			expectedCommit: secondCommit.String(),
 		},
 		{
@@ -90,12 +93,18 @@ func TestCheckoutBranch_Checkout(t *testing.T) {
 
 			cc, err := branch.Checkout(context.TODO(), tmpDir, path, nil)
 			if tt.expectedErr != "" {
+				g.Expect(err).To(HaveOccurred())
 				g.Expect(err.Error()).To(ContainSubstring(tt.expectedErr))
 				g.Expect(cc).To(BeNil())
 				return
 			}
-			g.Expect(err).To(BeNil())
+			g.Expect(err).ToNot(HaveOccurred())
 			g.Expect(cc.String()).To(Equal(tt.branch + "/" + tt.expectedCommit))
+
+			for k, v := range tt.filesCreated {
+				g.Expect(filepath.Join(tmpDir, k)).To(BeARegularFile())
+				g.Expect(os.ReadFile(filepath.Join(tmpDir, k))).To(BeEquivalentTo(v))
+			}
 		})
 	}
 }

@@ -152,7 +152,13 @@ func HelmChartProgressing(chart HelmChart) HelmChart {
 	chart.Status.ObservedGeneration = chart.Generation
 	chart.Status.URL = ""
 	chart.Status.Conditions = []metav1.Condition{}
-	meta.SetResourceCondition(&chart, meta.ReadyCondition, metav1.ConditionUnknown, meta.ProgressingReason, "reconciliation in progress")
+	newCondition := metav1.Condition{
+		Type:    meta.ReadyCondition,
+		Status:  metav1.ConditionUnknown,
+		Reason:  meta.ProgressingReason,
+		Message: "reconciliation in progress",
+	}
+	apimeta.SetStatusCondition(chart.GetStatusConditions(), newCondition)
 	return chart
 }
 
@@ -162,7 +168,13 @@ func HelmChartProgressing(chart HelmChart) HelmChart {
 func HelmChartReady(chart HelmChart, artifact Artifact, url, reason, message string) HelmChart {
 	chart.Status.Artifact = &artifact
 	chart.Status.URL = url
-	meta.SetResourceCondition(&chart, meta.ReadyCondition, metav1.ConditionTrue, reason, message)
+	newCondition := metav1.Condition{
+		Type:    meta.ReadyCondition,
+		Status:  metav1.ConditionTrue,
+		Reason:  reason,
+		Message: message,
+	}
+	apimeta.SetStatusCondition(chart.GetStatusConditions(), newCondition)
 	return chart
 }
 
@@ -170,7 +182,13 @@ func HelmChartReady(chart HelmChart, artifact Artifact, url, reason, message str
 // 'False', with the given reason and message. It returns the modified
 // HelmChart.
 func HelmChartNotReady(chart HelmChart, reason, message string) HelmChart {
-	meta.SetResourceCondition(&chart, meta.ReadyCondition, metav1.ConditionFalse, reason, message)
+	newCondition := metav1.Condition{
+		Type:    meta.ReadyCondition,
+		Status:  metav1.ConditionFalse,
+		Reason:  reason,
+		Message: message,
+	}
+	apimeta.SetStatusCondition(chart.GetStatusConditions(), newCondition)
 	return chart
 }
 

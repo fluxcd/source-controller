@@ -27,6 +27,18 @@ jobs:
           key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
           restore-keys: |
             ${{ runner.os }}-go-
+      - name: Verify
+        run: make verify
+      - name: Enable integration tests
+        # Only run integration tests for main branch
+        if: github.ref == 'refs/heads/main'
+        run: |
+          echo 'GO_TAGS=integration' >> $GITHUB_ENV
+      - name: Run tests
+        env:
+          TEST_AZURE_ACCOUNT_NAME: ${{ secrets.TEST_AZURE_ACCOUNT_NAME }}
+          TEST_AZURE_ACCOUNT_KEY: ${{ secrets.TEST_AZURE_ACCOUNT_KEY }}
+        run: make test
       - name: Setup Kubernetes
         uses: engineerd/setup-kind@v0.5.0
         with:
@@ -36,13 +48,6 @@ jobs:
         uses: fluxcd/pkg/actions/kustomize@main
       - name: Setup Helm
         uses: fluxcd/pkg/actions/helm@main
-      - name: Run tests
-        uses: ./.github/actions/run-tests
-        env:
-          GOROOT:
-          GOPATH: /github/home/go
-      - name: Verify
-        run: make verify
       - name: Run E2E tests
         env:
           CREATE_CLUSTER: false
@@ -59,6 +64,16 @@ jobs:
         uses: actions/setup-go@v2
         with:
           go-version: 1.17.x
+      - name: Enable integration tests
+        # Only run integration tests for main branch
+        if: github.ref == 'refs/heads/main'
+        run: |
+          echo 'GO_TAGS=integration' >> $GITHUB_ENV
+      - name: Run tests
+        env:
+          TEST_AZURE_ACCOUNT_NAME: ${{ secrets.TEST_AZURE_ACCOUNT_NAME }}
+          TEST_AZURE_ACCOUNT_KEY: ${{ secrets.TEST_AZURE_ACCOUNT_KEY }}
+        run: make test
       - name: Prepare
         id: prep
         run: |
@@ -80,3 +95,24 @@ jobs:
         run: |
           kind delete cluster --name ${{ steps.prep.outputs.CLUSTER }}
           rm /tmp/${{ steps.prep.outputs.CLUSTER }}
+
+  # Runs 'make test' on macos-10.15 to assure development environment for 
+  # contributors using MacOS.
+  darwin-amd64:
+    runs-on: macos-10.15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Setup Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: 1.17.x
+      - name: Restore Go cache
+        uses: actions/cache@v1
+        with:
+          path: /home/runner/work/_temp/_github_home/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+      - name: Run tests
+        run: make test

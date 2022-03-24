@@ -19,6 +19,7 @@ package repository
 import (
 	"bytes"
 	"crypto/sha256"
+	"crypto/tls"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -38,6 +39,7 @@ import (
 	"github.com/fluxcd/pkg/version"
 
 	"github.com/fluxcd/source-controller/internal/helm"
+	transport "github.com/fluxcd/source-controller/internal/helm/getter"
 )
 
 var ErrNoChartIndex = errors.New("no chart index")
@@ -65,6 +67,8 @@ type ChartRepository struct {
 	// index bytes.
 	Checksum string
 
+	tlsConfig *tls.Config
+
 	*sync.RWMutex
 }
 
@@ -72,7 +76,7 @@ type ChartRepository struct {
 // the ChartRepository.Client configured to the getter.Getter for the
 // repository URL scheme. It returns an error on URL parsing failures,
 // or if there is no getter available for the scheme.
-func NewChartRepository(repositoryURL, cachePath string, providers getter.Providers, opts []getter.Option) (*ChartRepository, error) {
+func NewChartRepository(repositoryURL, cachePath string, providers getter.Providers, tlsConfig *tls.Config, opts []getter.Option) (*ChartRepository, error) {
 	u, err := url.Parse(repositoryURL)
 	if err != nil {
 		return nil, err
@@ -87,6 +91,7 @@ func NewChartRepository(repositoryURL, cachePath string, providers getter.Provid
 	r.CachePath = cachePath
 	r.Client = c
 	r.Options = opts
+	r.tlsConfig = tlsConfig
 	return r, nil
 }
 
@@ -212,7 +217,11 @@ func (r *ChartRepository) DownloadChart(chart *repo.ChartVersion) (*bytes.Buffer
 		u.RawQuery = q.Encode()
 	}
 
-	return r.Client.Get(u.String(), r.Options...)
+	t := transport.NewOrIdle(r.tlsConfig)
+	clientOpts := append(r.Options, getter.WithTransport(t))
+	defer transport.Release(t)
+
+	return r.Client.Get(u.String(), clientOpts...)
 }
 
 // LoadIndexFromBytes loads Index from the given bytes.
@@ -324,8 +333,12 @@ func (r *ChartRepository) DownloadIndex(w io.Writer) (err error) {
 	u.RawPath = path.Join(u.RawPath, "index.yaml")
 	u.Path = path.Join(u.Path, "index.yaml")
 
+	t := transport.NewOrIdle(r.tlsConfig)
+	clientOpts := append(r.Options, getter.WithTransport(t))
+	defer transport.Release(t)
+
 	var res *bytes.Buffer
-	res, err = r.Client.Get(u.String(), r.Options...)
+	res, err = r.Client.Get(u.String(), clientOpts...)
 	if err != nil {
 		return err
 	}

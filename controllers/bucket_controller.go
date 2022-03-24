@@ -18,24 +18,23 @@ package controllers
 
 import (
 	"context"
-	"crypto/sha1"
+	"crypto/sha256"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
+	"sync"
 	"time"
 
-	"github.com/minio/minio-go/v7"
-	"github.com/minio/minio-go/v7/pkg/credentials"
-	"github.com/minio/minio-go/v7/pkg/s3utils"
-	"google.golang.org/api/option"
+	"github.com/fluxcd/source-controller/pkg/azure"
+	"golang.org/x/sync/errgroup"
+	"golang.org/x/sync/semaphore"
 	corev1 "k8s.io/api/core/v1"
-	apimeta "k8s.io/apimachinery/pkg/api/meta"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	kuberecorder "k8s.io/client-go/tools/record"
-	"k8s.io/client-go/tools/reference"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -43,32 +42,181 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	"github.com/fluxcd/pkg/apis/meta"
+	"github.com/fluxcd/pkg/runtime/conditions"
+	helper "github.com/fluxcd/pkg/runtime/controller"
 	"github.com/fluxcd/pkg/runtime/events"
-	"github.com/fluxcd/pkg/runtime/metrics"
+	"github.com/fluxcd/pkg/runtime/patch"
 	"github.com/fluxcd/pkg/runtime/predicates"
-	"github.com/fluxcd/source-controller/pkg/gcp"
 
-	sourcev1 "github.com/fluxcd/source-controller/api/v1beta1"
+	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
+	serror "github.com/fluxcd/source-controller/internal/error"
+	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
+	"github.com/fluxcd/source-controller/internal/reconcile/summarize"
+	"github.com/fluxcd/source-controller/pkg/gcp"
+	"github.com/fluxcd/source-controller/pkg/minio"
 	"github.com/fluxcd/source-controller/pkg/sourceignore"
 )
+
+// maxConcurrentBucketFetches is the upper bound on the goroutines used to
+// fetch bucket objects. It's important to have a bound, to avoid
+// using arbitrary amounts of memory; the actual number is chosen
+// according to the queueing rule of thumb with some conservative
+// parameters:
+// s > Nr / T
+// N (number of requestors, i.e., objects to fetch) = 10000
+// r (service time -- fetch duration) = 0.01s (~ a megabyte file over 1Gb/s)
+// T (total time available) = 1s
+// -> s > 100
+const maxConcurrentBucketFetches = 100
+
+// bucketReadyCondition contains the information required to summarize a
+// v1beta2.Bucket Ready Condition.
+var bucketReadyCondition = summarize.Conditions{
+	Target: meta.ReadyCondition,
+	Owned: []string{
+		sourcev1.FetchFailedCondition,
+		sourcev1.StorageOperationFailedCondition,
+		sourcev1.ArtifactOutdatedCondition,
+		meta.ReadyCondition,
+		meta.ReconcilingCondition,
+		meta.StalledCondition,
+	},
+	Summarize: []string{
+		sourcev1.FetchFailedCondition,
+		sourcev1.StorageOperationFailedCondition,
+		sourcev1.ArtifactOutdatedCondition,
+		meta.StalledCondition,
+		meta.ReconcilingCondition,
+	},
+	NegativePolarity: []string{
+		sourcev1.FetchFailedCondition,
+		sourcev1.StorageOperationFailedCondition,
+		sourcev1.ArtifactOutdatedCondition,
+		meta.StalledCondition,
+		meta.ReconcilingCondition,
+	},
+}
 
 // +kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=buckets,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=buckets/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=buckets/finalizers,verbs=get;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch
 
-// BucketReconciler reconciles a Bucket object
+// BucketReconciler reconciles a v1beta2.Bucket object.
 type BucketReconciler struct {
 	client.Client
-	Scheme                *runtime.Scheme
-	Storage               *Storage
-	EventRecorder         kuberecorder.EventRecorder
-	ExternalEventRecorder *events.Recorder
-	MetricsRecorder       *metrics.Recorder
+	kuberecorder.EventRecorder
+	helper.Metrics
+
+	Storage        *Storage
+	ControllerName string
 }
 
 type BucketReconcilerOptions struct {
 	MaxConcurrentReconciles int
+}
+
+// BucketProvider is an interface for fetching objects from a storage provider
+// bucket.
+type BucketProvider interface {
+	// BucketExists returns if an object storage bucket with the provided name
+	// exists, or returns a (client) error.
+	BucketExists(ctx context.Context, bucketName string) (bool, error)
+	// FGetObject gets the object from the provided object storage bucket, and
+	// writes it to targetPath.
+	// It returns the etag of the successfully fetched file, or any error.
+	FGetObject(ctx context.Context, bucketName, objectKey, targetPath string) (etag string, err error)
+	// VisitObjects iterates over the items in the provided object storage
+	// bucket, calling visit for every item.
+	// If the underlying client or the visit callback returns an error,
+	// it returns early.
+	VisitObjects(ctx context.Context, bucketName string, visit func(key, etag string) error) error
+	// ObjectIsNotFound returns true if the given error indicates an object
+	// could not be found.
+	ObjectIsNotFound(error) bool
+	// Close closes the provider's client, if supported.
+	Close(context.Context)
+}
+
+// bucketReconcileFunc is the function type for all the v1beta2.Bucket
+// (sub)reconcile functions. The type implementations are grouped and
+// executed serially to perform the complete reconcile of the object.
+type bucketReconcileFunc func(ctx context.Context, obj *sourcev1.Bucket, index *etagIndex, dir string) (sreconcile.Result, error)
+
+// etagIndex is an index of storage object keys and their Etag values.
+type etagIndex struct {
+	sync.RWMutex
+	index map[string]string
+}
+
+// newEtagIndex returns a new etagIndex with an empty initialized index.
+func newEtagIndex() *etagIndex {
+	return &etagIndex{
+		index: make(map[string]string),
+	}
+}
+
+func (i *etagIndex) Add(key, etag string) {
+	i.Lock()
+	defer i.Unlock()
+	i.index[key] = etag
+}
+
+func (i *etagIndex) Delete(key string) {
+	i.Lock()
+	defer i.Unlock()
+	delete(i.index, key)
+}
+
+func (i *etagIndex) Get(key string) string {
+	i.RLock()
+	defer i.RUnlock()
+	return i.index[key]
+}
+
+func (i *etagIndex) Has(key string) bool {
+	i.RLock()
+	defer i.RUnlock()
+	_, ok := i.index[key]
+	return ok
+}
+
+func (i *etagIndex) Index() map[string]string {
+	i.RLock()
+	defer i.RUnlock()
+	index := make(map[string]string)
+	for k, v := range i.index {
+		index[k] = v
+	}
+	return index
+}
+
+func (i *etagIndex) Len() int {
+	i.RLock()
+	defer i.RUnlock()
+	return len(i.index)
+}
+
+// Revision calculates the SHA256 checksum of the index.
+// The keys are stable sorted, and the SHA256 sum is then calculated for the
+// string representation of the key/value pairs, each pair written on a newline
+// with a space between them. The sum result is returned as a string.
+func (i *etagIndex) Revision() (string, error) {
+	i.RLock()
+	defer i.RUnlock()
+	keyIndex := make([]string, 0, len(i.index))
+	for k := range i.index {
+		keyIndex = append(keyIndex, k)
+	}
+
+	sort.Strings(keyIndex)
+	sum := sha256.New()
+	for _, k := range keyIndex {
+		if _, err := sum.Write([]byte(fmt.Sprintf("%s %s\n", k, i.index[k]))); err != nil {
+			return "", err
+		}
+	}
+	return fmt.Sprintf("%x", sum.Sum(nil)), nil
 }
 
 func (r *BucketReconciler) SetupWithManager(mgr ctrl.Manager) error {
@@ -83,529 +231,557 @@ func (r *BucketReconciler) SetupWithManagerAndOptions(mgr ctrl.Manager, opts Buc
 		Complete(r)
 }
 
-func (r *BucketReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *BucketReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, retErr error) {
 	start := time.Now()
 	log := ctrl.LoggerFrom(ctx)
 
-	var bucket sourcev1.Bucket
-	if err := r.Get(ctx, req.NamespacedName, &bucket); err != nil {
+	// Fetch the Bucket
+	obj := &sourcev1.Bucket{}
+	if err := r.Get(ctx, req.NamespacedName, obj); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
 	// Record suspended status metric
-	defer r.recordSuspension(ctx, bucket)
+	r.RecordSuspend(ctx, obj, obj.Spec.Suspend)
 
-	// Add our finalizer if it does not exist
-	if !controllerutil.ContainsFinalizer(&bucket, sourcev1.SourceFinalizer) {
-		patch := client.MergeFrom(bucket.DeepCopy())
-		controllerutil.AddFinalizer(&bucket, sourcev1.SourceFinalizer)
-		if err := r.Patch(ctx, &bucket, patch); err != nil {
-			log.Error(err, "unable to register finalizer")
-			return ctrl.Result{}, err
-		}
-	}
-
-	// Examine if the object is under deletion
-	if !bucket.ObjectMeta.DeletionTimestamp.IsZero() {
-		return r.reconcileDelete(ctx, bucket)
-	}
-
-	// Return early if the object is suspended.
-	if bucket.Spec.Suspend {
-		log.Info("Reconciliation is suspended for this object")
+	// Return early if the object is suspended
+	if obj.Spec.Suspend {
+		log.Info("reconciliation is suspended for this object")
 		return ctrl.Result{}, nil
 	}
 
-	// record reconciliation duration
-	if r.MetricsRecorder != nil {
-		objRef, err := reference.GetReference(r.Scheme, &bucket)
-		if err != nil {
-			return ctrl.Result{}, err
+	// Initialize the patch helper with the current version of the object.
+	patchHelper, err := patch.NewHelper(obj, r.Client)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	// recResult stores the abstracted reconcile result.
+	var recResult sreconcile.Result
+
+	// Always attempt to patch the object and status after each reconciliation
+	// NOTE: The final runtime result and error are set in this block.
+	defer func() {
+		summarizeHelper := summarize.NewHelper(r.EventRecorder, patchHelper)
+		summarizeOpts := []summarize.Option{
+			summarize.WithConditions(bucketReadyCondition),
+			summarize.WithReconcileResult(recResult),
+			summarize.WithReconcileError(retErr),
+			summarize.WithIgnoreNotFound(),
+			summarize.WithProcessors(
+				summarize.RecordContextualError,
+				summarize.RecordReconcileReq,
+			),
+			summarize.WithResultBuilder(sreconcile.AlwaysRequeueResultBuilder{RequeueAfter: obj.GetRequeueAfter()}),
+			summarize.WithPatchFieldOwner(r.ControllerName),
 		}
-		defer r.MetricsRecorder.RecordDuration(*objRef, start)
+		result, retErr = summarizeHelper.SummarizeAndPatch(ctx, obj, summarizeOpts...)
+
+		// Always record readiness and duration metrics
+		r.Metrics.RecordReadiness(ctx, obj)
+		r.Metrics.RecordDuration(ctx, obj, start)
+	}()
+
+	// Add finalizer first if not exist to avoid the race condition between init and delete
+	if !controllerutil.ContainsFinalizer(obj, sourcev1.SourceFinalizer) {
+		controllerutil.AddFinalizer(obj, sourcev1.SourceFinalizer)
+		recResult = sreconcile.ResultRequeue
+		return
 	}
 
-	// set initial status
-	if resetBucket, ok := r.resetStatus(bucket); ok {
-		bucket = resetBucket
-		if err := r.updateStatus(ctx, req, bucket.Status); err != nil {
-			log.Error(err, "unable to update status")
-			return ctrl.Result{Requeue: true}, err
-		}
-		r.recordReadiness(ctx, bucket)
+	// Examine if the object is under deletion
+	if !obj.ObjectMeta.DeletionTimestamp.IsZero() {
+		recResult, retErr = r.reconcileDelete(ctx, obj)
+		return
 	}
 
-	// record the value of the reconciliation request, if any
-	// TODO(hidde): would be better to defer this in combination with
-	//   always patching the status sub-resource after a reconciliation.
-	if v, ok := meta.ReconcileAnnotationValue(bucket.GetAnnotations()); ok {
-		bucket.Status.SetLastHandledReconcileRequest(v)
+	// Reconcile actual object
+	reconcilers := []bucketReconcileFunc{
+		r.reconcileStorage,
+		r.reconcileSource,
+		r.reconcileArtifact,
 	}
-
-	// purge old artifacts from storage
-	if err := r.gc(bucket); err != nil {
-		log.Error(err, "unable to purge old artifacts")
-	}
-
-	// reconcile bucket by downloading its content
-	reconciledBucket, reconcileErr := r.reconcile(ctx, *bucket.DeepCopy())
-
-	// update status with the reconciliation result
-	if err := r.updateStatus(ctx, req, reconciledBucket.Status); err != nil {
-		log.Error(err, "unable to update status")
-		return ctrl.Result{Requeue: true}, err
-	}
-
-	// if reconciliation failed, record the failure and requeue immediately
-	if reconcileErr != nil {
-		r.event(ctx, reconciledBucket, events.EventSeverityError, reconcileErr.Error())
-		r.recordReadiness(ctx, reconciledBucket)
-		return ctrl.Result{Requeue: true}, reconcileErr
-	}
-
-	// emit revision change event
-	if bucket.Status.Artifact == nil || reconciledBucket.Status.Artifact.Revision != bucket.Status.Artifact.Revision {
-		r.event(ctx, reconciledBucket, events.EventSeverityInfo, sourcev1.BucketReadyMessage(reconciledBucket))
-	}
-	r.recordReadiness(ctx, reconciledBucket)
-
-	log.Info(fmt.Sprintf("Reconciliation finished in %s, next run in %s",
-		time.Since(start).String(),
-		bucket.GetInterval().Duration.String(),
-	))
-
-	return ctrl.Result{RequeueAfter: bucket.GetInterval().Duration}, nil
+	recResult, retErr = r.reconcile(ctx, obj, reconcilers)
+	return
 }
 
-func (r *BucketReconciler) reconcile(ctx context.Context, bucket sourcev1.Bucket) (sourcev1.Bucket, error) {
-	log := ctrl.LoggerFrom(ctx)
-	var err error
-	var sourceBucket sourcev1.Bucket
+// reconcile iterates through the gitRepositoryReconcileFunc tasks for the
+// object. It returns early on the first call that returns
+// reconcile.ResultRequeue, or produces an error.
+func (r *BucketReconciler) reconcile(ctx context.Context, obj *sourcev1.Bucket, reconcilers []bucketReconcileFunc) (sreconcile.Result, error) {
+	if obj.Generation != obj.Status.ObservedGeneration {
+		conditions.MarkReconciling(obj, "NewGeneration", "reconciling new object generation (%d)", obj.Generation)
+	}
 
-	tempDir, err := os.MkdirTemp("", bucket.Name)
+	// Create temp working dir
+	tmpDir, err := os.MkdirTemp("", fmt.Sprintf("%s-%s-%s-", obj.Kind, obj.Namespace, obj.Name))
 	if err != nil {
-		err = fmt.Errorf("tmp dir error: %w", err)
-		return sourcev1.BucketNotReady(bucket, sourcev1.StorageOperationFailedReason, err.Error()), err
+		e := &serror.Event{
+			Err:    fmt.Errorf("failed to create temporary working directory: %w", err),
+			Reason: sourcev1.DirCreationFailedReason,
+		}
+		conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition, e.Reason, e.Err.Error())
+		return sreconcile.ResultEmpty, e
 	}
 	defer func() {
-		if err := os.RemoveAll(tempDir); err != nil {
-			log.Error(err, "failed to remove working directory", "path", tempDir)
+		if err = os.RemoveAll(tmpDir); err != nil {
+			ctrl.LoggerFrom(ctx).Error(err, "failed to remove temporary working directory")
+		}
+	}()
+	conditions.Delete(obj, sourcev1.StorageOperationFailedCondition)
+
+	// Run the sub-reconcilers and build the result of reconciliation.
+	var (
+		res    sreconcile.Result
+		resErr error
+		index  = newEtagIndex()
+	)
+
+	for _, rec := range reconcilers {
+		recResult, err := rec(ctx, obj, index, tmpDir)
+		// Exit immediately on ResultRequeue.
+		if recResult == sreconcile.ResultRequeue {
+			return sreconcile.ResultRequeue, nil
+		}
+		// If an error is received, prioritize the returned results because an
+		// error also means immediate requeue.
+		if err != nil {
+			resErr = err
+			res = recResult
+			break
+		}
+		// Prioritize requeue request in the result.
+		res = sreconcile.LowestRequeuingResult(res, recResult)
+	}
+	return res, resErr
+}
+
+// reconcileStorage ensures the current state of the storage matches the
+// desired and previously observed state.
+//
+// All Artifacts for the object except for the current one in the Status are
+// garbage collected from the Storage.
+// If the Artifact in the Status of the object disappeared from the Storage,
+// it is removed from the object.
+// If the object does not have an Artifact in its Status, a Reconciling
+// condition is added.
+// The hostname of any URL in the Status of the object are updated, to ensure
+// they match the Storage server hostname of current runtime.
+func (r *BucketReconciler) reconcileStorage(ctx context.Context, obj *sourcev1.Bucket, _ *etagIndex, _ string) (sreconcile.Result, error) {
+	// Garbage collect previous advertised artifact(s) from storage
+	_ = r.garbageCollect(ctx, obj)
+
+	// Determine if the advertised artifact is still in storage
+	if artifact := obj.GetArtifact(); artifact != nil && !r.Storage.ArtifactExist(*artifact) {
+		obj.Status.Artifact = nil
+		obj.Status.URL = ""
+	}
+
+	// Record that we do not have an artifact
+	if obj.GetArtifact() == nil {
+		conditions.MarkReconciling(obj, "NoArtifact", "no artifact for resource in storage")
+		return sreconcile.ResultSuccess, nil
+	}
+
+	// Always update URLs to ensure hostname is up-to-date
+	// TODO(hidde): we may want to send out an event only if we notice the URL has changed
+	r.Storage.SetArtifactURL(obj.GetArtifact())
+	obj.Status.URL = r.Storage.SetHostname(obj.Status.URL)
+
+	return sreconcile.ResultSuccess, nil
+}
+
+// reconcileSource fetches the upstream bucket contents with the client for the
+// given object's Provider, and returns the result.
+// When a SecretRef is defined, it attempts to fetch the Secret before calling
+// the provider. If this fails, it records v1beta2.FetchFailedCondition=True on
+// the object and returns early.
+func (r *BucketReconciler) reconcileSource(ctx context.Context, obj *sourcev1.Bucket, index *etagIndex, dir string) (sreconcile.Result, error) {
+	secret, err := r.getBucketSecret(ctx, obj)
+	if err != nil {
+		e := &serror.Event{Err: err, Reason: sourcev1.AuthenticationFailedReason}
+		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Error())
+		// Return error as the world as observed may change
+		return sreconcile.ResultEmpty, e
+	}
+
+	// Construct provider client
+	var provider BucketProvider
+	switch obj.Spec.Provider {
+	case sourcev1.GoogleBucketProvider:
+		if err = gcp.ValidateSecret(secret); err != nil {
+			e := &serror.Event{Err: err, Reason: sourcev1.AuthenticationFailedReason}
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Error())
+			return sreconcile.ResultEmpty, e
+		}
+		if provider, err = gcp.NewClient(ctx, secret); err != nil {
+			e := &serror.Event{Err: err, Reason: "ClientError"}
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Error())
+			return sreconcile.ResultEmpty, e
+		}
+	case sourcev1.AzureBucketProvider:
+		if err = azure.ValidateSecret(secret); err != nil {
+			e := &serror.Event{Err: err, Reason: sourcev1.AuthenticationFailedReason}
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Error())
+			return sreconcile.ResultEmpty, e
+		}
+		if provider, err = azure.NewClient(obj, secret); err != nil {
+			e := &serror.Event{Err: err, Reason: "ClientError"}
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Error())
+			return sreconcile.ResultEmpty, e
+		}
+	default:
+		if err = minio.ValidateSecret(secret); err != nil {
+			e := &serror.Event{Err: err, Reason: sourcev1.AuthenticationFailedReason}
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Error())
+			return sreconcile.ResultEmpty, e
+		}
+		if provider, err = minio.NewClient(obj, secret); err != nil {
+			e := &serror.Event{Err: err, Reason: "ClientError"}
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Error())
+			return sreconcile.ResultEmpty, e
+		}
+	}
+
+	// Fetch etag index
+	if err = fetchEtagIndex(ctx, provider, obj, index, dir); err != nil {
+		e := &serror.Event{Err: err, Reason: sourcev1.BucketOperationFailedReason}
+		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Error())
+		return sreconcile.ResultEmpty, e
+	}
+
+	// Calculate revision
+	revision, err := index.Revision()
+	if err != nil {
+		return sreconcile.ResultEmpty, &serror.Event{
+			Err:    fmt.Errorf("failed to calculate revision: %w", err),
+			Reason: meta.FailedReason,
+		}
+	}
+
+	// Mark observations about the revision on the object
+	defer func() {
+		// As fetchIndexFiles can make last-minute modifications to the etag
+		// index, we need to re-calculate the revision at the end
+		revision, err := index.Revision()
+		if err != nil {
+			ctrl.LoggerFrom(ctx).Error(err, "failed to calculate revision after fetching etag index")
+			return
+		}
+
+		if !obj.GetArtifact().HasRevision(revision) {
+			message := fmt.Sprintf("new upstream revision '%s'", revision)
+			conditions.MarkTrue(obj, sourcev1.ArtifactOutdatedCondition, "NewRevision", message)
+			conditions.MarkReconciling(obj, "NewRevision", message)
 		}
 	}()
 
-	if bucket.Spec.Provider == sourcev1.GoogleBucketProvider {
-		sourceBucket, err = r.reconcileWithGCP(ctx, bucket, tempDir)
-		if err != nil {
-			return sourceBucket, err
-		}
-	} else {
-		sourceBucket, err = r.reconcileWithMinio(ctx, bucket, tempDir)
-		if err != nil {
-			return sourceBucket, err
+	if !obj.GetArtifact().HasRevision(revision) {
+		if err = fetchIndexFiles(ctx, provider, obj, index, dir); err != nil {
+			e := &serror.Event{Err: err, Reason: sourcev1.BucketOperationFailedReason}
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Error())
+			return sreconcile.ResultEmpty, e
 		}
 	}
-	revision, err := r.checksum(tempDir)
+
+	conditions.Delete(obj, sourcev1.FetchFailedCondition)
+	return sreconcile.ResultSuccess, nil
+}
+
+// reconcileArtifact archives a new Artifact to the Storage, if the current
+// (Status) data on the object does not match the given.
+//
+// The inspection of the given data to the object is differed, ensuring any
+// stale observations like v1beta2.ArtifactOutdatedCondition are removed.
+// If the given Artifact does not differ from the object's current, it returns
+// early.
+// On a successful archive, the Artifact in the Status of the object is set,
+// and the symlink in the Storage is updated to its path.
+func (r *BucketReconciler) reconcileArtifact(ctx context.Context, obj *sourcev1.Bucket, index *etagIndex, dir string) (sreconcile.Result, error) {
+	// Calculate revision
+	revision, err := index.Revision()
 	if err != nil {
-		return sourcev1.BucketNotReady(bucket, sourcev1.StorageOperationFailedReason, err.Error()), err
-	}
-
-	// return early on unchanged revision
-	artifact := r.Storage.NewArtifactFor(bucket.Kind, bucket.GetObjectMeta(), revision, fmt.Sprintf("%s.tar.gz", revision))
-	if apimeta.IsStatusConditionTrue(bucket.Status.Conditions, meta.ReadyCondition) && bucket.GetArtifact().HasRevision(artifact.Revision) {
-		if artifact.URL != bucket.GetArtifact().URL {
-			r.Storage.SetArtifactURL(bucket.GetArtifact())
-			bucket.Status.URL = r.Storage.SetHostname(bucket.Status.URL)
+		return sreconcile.ResultEmpty, &serror.Event{
+			Err:    fmt.Errorf("failed to calculate revision of new artifact: %w", err),
+			Reason: meta.FailedReason,
 		}
-		return bucket, nil
 	}
 
-	// create artifact dir
-	err = r.Storage.MkdirAll(artifact)
-	if err != nil {
-		err = fmt.Errorf("mkdir dir error: %w", err)
-		return sourcev1.BucketNotReady(bucket, sourcev1.StorageOperationFailedReason, err.Error()), err
+	// Create artifact
+	artifact := r.Storage.NewArtifactFor(obj.Kind, obj, revision, fmt.Sprintf("%s.tar.gz", revision))
+
+	// Always restore the Ready condition in case it got removed due to a transient error
+	defer func() {
+		if obj.GetArtifact().HasRevision(artifact.Revision) {
+			conditions.Delete(obj, sourcev1.ArtifactOutdatedCondition)
+			conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason,
+				"stored artifact for revision '%s'", artifact.Revision)
+		}
+	}()
+
+	// The artifact is up-to-date
+	if obj.GetArtifact().HasRevision(artifact.Revision) {
+		ctrl.LoggerFrom(ctx).Info("artifact up-to-date", "revision", artifact.Revision)
+		return sreconcile.ResultSuccess, nil
 	}
 
-	// acquire lock
+	// Ensure target path exists and is a directory
+	if f, err := os.Stat(dir); err != nil {
+		e := &serror.Event{
+			Err:    fmt.Errorf("failed to stat source path: %w", err),
+			Reason: sourcev1.StatOperationFailedReason,
+		}
+		conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition, e.Reason, e.Err.Error())
+		return sreconcile.ResultEmpty, e
+	} else if !f.IsDir() {
+		e := &serror.Event{
+			Err:    fmt.Errorf("source path '%s' is not a directory", dir),
+			Reason: sourcev1.InvalidPathReason,
+		}
+		conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition, e.Reason, e.Err.Error())
+		return sreconcile.ResultEmpty, e
+	}
+
+	// Ensure artifact directory exists and acquire lock
+	if err := r.Storage.MkdirAll(artifact); err != nil {
+		e := &serror.Event{
+			Err:    fmt.Errorf("failed to create artifact directory: %w", err),
+			Reason: sourcev1.DirCreationFailedReason,
+		}
+		conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition, e.Reason, e.Err.Error())
+		return sreconcile.ResultEmpty, e
+	}
 	unlock, err := r.Storage.Lock(artifact)
 	if err != nil {
-		err = fmt.Errorf("unable to acquire lock: %w", err)
-		return sourcev1.BucketNotReady(bucket, sourcev1.StorageOperationFailedReason, err.Error()), err
+		return sreconcile.ResultEmpty, &serror.Event{
+			Err:    fmt.Errorf("failed to acquire lock for artifact: %w", err),
+			Reason: meta.FailedReason,
+		}
 	}
 	defer unlock()
 
-	// archive artifact and check integrity
-	if err := r.Storage.Archive(&artifact, tempDir, nil); err != nil {
-		err = fmt.Errorf("storage archive error: %w", err)
-		return sourcev1.BucketNotReady(bucket, sourcev1.StorageOperationFailedReason, err.Error()), err
+	// Archive directory to storage
+	if err := r.Storage.Archive(&artifact, dir, nil); err != nil {
+		e := &serror.Event{
+			Err:    fmt.Errorf("unable to archive artifact to storage: %s", err),
+			Reason: sourcev1.ArchiveOperationFailedReason,
+		}
+		conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition, e.Reason, e.Err.Error())
+		return sreconcile.ResultEmpty, e
 	}
+	r.annotatedEventLogf(ctx, obj, map[string]string{
+		sourcev1.GroupVersion.Group + "/revision": artifact.Revision,
+		sourcev1.GroupVersion.Group + "/checksum": artifact.Checksum,
+	}, corev1.EventTypeNormal, "NewArtifact", "fetched %d files from '%s'", index.Len(), obj.Spec.BucketName)
 
-	// update latest symlink
+	// Record it on the object
+	obj.Status.Artifact = artifact.DeepCopy()
+
+	// Update symlink on a "best effort" basis
 	url, err := r.Storage.Symlink(artifact, "latest.tar.gz")
 	if err != nil {
-		err = fmt.Errorf("storage symlink error: %w", err)
-		return sourcev1.BucketNotReady(bucket, sourcev1.StorageOperationFailedReason, err.Error()), err
+		r.eventLogf(ctx, obj, events.EventTypeTrace, sourcev1.SymlinkUpdateFailedReason,
+			"failed to update status URL symlink: %s", err)
 	}
-
-	message := fmt.Sprintf("Fetched revision: %s", artifact.Revision)
-	return sourcev1.BucketReady(bucket, artifact, url, sourcev1.BucketOperationSucceedReason, message), nil
+	if url != "" {
+		obj.Status.URL = url
+	}
+	conditions.Delete(obj, sourcev1.StorageOperationFailedCondition)
+	return sreconcile.ResultSuccess, nil
 }
 
-func (r *BucketReconciler) reconcileDelete(ctx context.Context, bucket sourcev1.Bucket) (ctrl.Result, error) {
-	if err := r.gc(bucket); err != nil {
-		r.event(ctx, bucket, events.EventSeverityError,
-			fmt.Sprintf("garbage collection for deleted resource failed: %s", err.Error()))
+// reconcileDelete handles the deletion of the object.
+// It first garbage collects all Artifacts for the object from the Storage.
+// Removing the finalizer from the object if successful.
+func (r *BucketReconciler) reconcileDelete(ctx context.Context, obj *sourcev1.Bucket) (sreconcile.Result, error) {
+	// Garbage collect the resource's artifacts
+	if err := r.garbageCollect(ctx, obj); err != nil {
 		// Return the error so we retry the failed garbage collection
-		return ctrl.Result{}, err
+		return sreconcile.ResultEmpty, err
 	}
 
-	// Record deleted status
-	r.recordReadiness(ctx, bucket)
-
-	// Remove our finalizer from the list and update it
-	controllerutil.RemoveFinalizer(&bucket, sourcev1.SourceFinalizer)
-	if err := r.Update(ctx, &bucket); err != nil {
-		return ctrl.Result{}, err
-	}
+	// Remove our finalizer from the list
+	controllerutil.RemoveFinalizer(obj, sourcev1.SourceFinalizer)
 
 	// Stop reconciliation as the object is being deleted
-	return ctrl.Result{}, nil
+	return sreconcile.ResultEmpty, nil
 }
 
-// reconcileWithGCP handles getting objects from a Google Cloud Platform bucket
-// using a gcp client
-func (r *BucketReconciler) reconcileWithGCP(ctx context.Context, bucket sourcev1.Bucket, tempDir string) (sourcev1.Bucket, error) {
-	log := ctrl.LoggerFrom(ctx)
-	gcpClient, err := r.authGCP(ctx, bucket)
-	if err != nil {
-		err = fmt.Errorf("auth error: %w", err)
-		return sourcev1.BucketNotReady(bucket, sourcev1.AuthenticationFailedReason, err.Error()), err
-	}
-	defer gcpClient.Close(log)
-
-	ctxTimeout, cancel := context.WithTimeout(ctx, bucket.Spec.Timeout.Duration)
-	defer cancel()
-
-	exists, err := gcpClient.BucketExists(ctxTimeout, bucket.Spec.BucketName)
-	if err != nil {
-		return sourcev1.BucketNotReady(bucket, sourcev1.BucketOperationFailedReason, err.Error()), err
-	}
-	if !exists {
-		err = fmt.Errorf("bucket '%s' not found", bucket.Spec.BucketName)
-		return sourcev1.BucketNotReady(bucket, sourcev1.BucketOperationFailedReason, err.Error()), err
-	}
-
-	// Look for file with ignore rules first.
-	path := filepath.Join(tempDir, sourceignore.IgnoreFile)
-	if err := gcpClient.FGetObject(ctxTimeout, bucket.Spec.BucketName, sourceignore.IgnoreFile, path); err != nil {
-		if err == gcp.ErrorObjectDoesNotExist && sourceignore.IgnoreFile != ".sourceignore" {
-			return sourcev1.BucketNotReady(bucket, sourcev1.BucketOperationFailedReason, err.Error()), err
+// garbageCollect performs a garbage collection for the given object.
+//
+// It removes all but the current Artifact from the Storage, unless the
+// deletion timestamp on the object is set. Which will result in the
+// removal of all Artifacts for the objects.
+func (r *BucketReconciler) garbageCollect(ctx context.Context, obj *sourcev1.Bucket) error {
+	if !obj.DeletionTimestamp.IsZero() {
+		if deleted, err := r.Storage.RemoveAll(r.Storage.NewArtifactFor(obj.Kind, obj.GetObjectMeta(), "", "*")); err != nil {
+			return &serror.Event{
+				Err:    fmt.Errorf("garbage collection for deleted resource failed: %s", err),
+				Reason: "GarbageCollectionFailed",
+			}
+		} else if deleted != "" {
+			r.eventLogf(ctx, obj, events.EventTypeTrace, "GarbageCollectionSucceeded",
+				"garbage collected artifacts for deleted resource")
 		}
-	}
-	ps, err := sourceignore.ReadIgnoreFile(path, nil)
-	if err != nil {
-		return sourcev1.BucketNotReady(bucket, sourcev1.BucketOperationFailedReason, err.Error()), err
-	}
-	// In-spec patterns take precedence
-	if bucket.Spec.Ignore != nil {
-		ps = append(ps, sourceignore.ReadPatterns(strings.NewReader(*bucket.Spec.Ignore), nil)...)
-	}
-	matcher := sourceignore.NewMatcher(ps)
-	objects := gcpClient.ListObjects(ctxTimeout, bucket.Spec.BucketName, nil)
-	// download bucket content
-	for {
-		object, err := objects.Next()
-		if err == gcp.IteratorDone {
-			break
-		}
-		if err != nil {
-			err = fmt.Errorf("listing objects from bucket '%s' failed: %w", bucket.Spec.BucketName, err)
-			return sourcev1.BucketNotReady(bucket, sourcev1.BucketOperationFailedReason, err.Error()), err
-		}
-
-		if strings.HasSuffix(object.Name, "/") || object.Name == sourceignore.IgnoreFile {
-			continue
-		}
-
-		if matcher.Match(strings.Split(object.Name, "/"), false) {
-			continue
-		}
-
-		localPath := filepath.Join(tempDir, object.Name)
-		if err = gcpClient.FGetObject(ctxTimeout, bucket.Spec.BucketName, object.Name, localPath); err != nil {
-			err = fmt.Errorf("downloading object from bucket '%s' failed: %w", bucket.Spec.BucketName, err)
-			return sourcev1.BucketNotReady(bucket, sourcev1.BucketOperationFailedReason, err.Error()), err
-		}
-	}
-	return sourcev1.Bucket{}, nil
-}
-
-// reconcileWithMinio handles getting objects from an S3 compatible bucket
-// using a minio client
-func (r *BucketReconciler) reconcileWithMinio(ctx context.Context, bucket sourcev1.Bucket, tempDir string) (sourcev1.Bucket, error) {
-	s3Client, err := r.authMinio(ctx, bucket)
-	if err != nil {
-		err = fmt.Errorf("auth error: %w", err)
-		return sourcev1.BucketNotReady(bucket, sourcev1.AuthenticationFailedReason, err.Error()), err
-	}
-
-	ctxTimeout, cancel := context.WithTimeout(ctx, bucket.Spec.Timeout.Duration)
-	defer cancel()
-
-	exists, err := s3Client.BucketExists(ctxTimeout, bucket.Spec.BucketName)
-	if err != nil {
-		return sourcev1.BucketNotReady(bucket, sourcev1.BucketOperationFailedReason, err.Error()), err
-	}
-	if !exists {
-		err = fmt.Errorf("bucket '%s' not found", bucket.Spec.BucketName)
-		return sourcev1.BucketNotReady(bucket, sourcev1.BucketOperationFailedReason, err.Error()), err
-	}
-
-	// Look for file with ignore rules first
-	// NB: S3 has flat filepath keys making it impossible to look
-	// for files in "subdirectories" without building up a tree first.
-	path := filepath.Join(tempDir, sourceignore.IgnoreFile)
-	if err := s3Client.FGetObject(ctxTimeout, bucket.Spec.BucketName, sourceignore.IgnoreFile, path, minio.GetObjectOptions{}); err != nil {
-		if resp, ok := err.(minio.ErrorResponse); ok && resp.Code != "NoSuchKey" {
-			return sourcev1.BucketNotReady(bucket, sourcev1.BucketOperationFailedReason, err.Error()), err
-		}
-	}
-	ps, err := sourceignore.ReadIgnoreFile(path, nil)
-	if err != nil {
-		return sourcev1.BucketNotReady(bucket, sourcev1.BucketOperationFailedReason, err.Error()), err
-	}
-	// In-spec patterns take precedence
-	if bucket.Spec.Ignore != nil {
-		ps = append(ps, sourceignore.ReadPatterns(strings.NewReader(*bucket.Spec.Ignore), nil)...)
-	}
-	matcher := sourceignore.NewMatcher(ps)
-
-	// download bucket content
-	for object := range s3Client.ListObjects(ctxTimeout, bucket.Spec.BucketName, minio.ListObjectsOptions{
-		Recursive: true,
-		UseV1:     s3utils.IsGoogleEndpoint(*s3Client.EndpointURL()),
-	}) {
-		if object.Err != nil {
-			err = fmt.Errorf("listing objects from bucket '%s' failed: %w", bucket.Spec.BucketName, object.Err)
-			return sourcev1.BucketNotReady(bucket, sourcev1.BucketOperationFailedReason, err.Error()), err
-		}
-
-		if strings.HasSuffix(object.Key, "/") || object.Key == sourceignore.IgnoreFile {
-			continue
-		}
-
-		if matcher.Match(strings.Split(object.Key, "/"), false) {
-			continue
-		}
-
-		localPath := filepath.Join(tempDir, object.Key)
-		err := s3Client.FGetObject(ctxTimeout, bucket.Spec.BucketName, object.Key, localPath, minio.GetObjectOptions{})
-		if err != nil {
-			err = fmt.Errorf("downloading object from bucket '%s' failed: %w", bucket.Spec.BucketName, err)
-			return sourcev1.BucketNotReady(bucket, sourcev1.BucketOperationFailedReason, err.Error()), err
-		}
-	}
-	return sourcev1.Bucket{}, nil
-}
-
-// authGCP creates a new Google Cloud Platform storage client
-// to interact with the storage service.
-func (r *BucketReconciler) authGCP(ctx context.Context, bucket sourcev1.Bucket) (*gcp.GCPClient, error) {
-	var client *gcp.GCPClient
-	var err error
-	if bucket.Spec.SecretRef != nil {
-		secretName := types.NamespacedName{
-			Namespace: bucket.GetNamespace(),
-			Name:      bucket.Spec.SecretRef.Name,
-		}
-
-		var secret corev1.Secret
-		if err := r.Get(ctx, secretName, &secret); err != nil {
-			return nil, fmt.Errorf("credentials secret error: %w", err)
-		}
-		if err := gcp.ValidateSecret(secret.Data, secret.Name); err != nil {
-			return nil, err
-		}
-		client, err = gcp.NewClient(ctx, option.WithCredentialsJSON(secret.Data["serviceaccount"]))
-		if err != nil {
-			return nil, err
-		}
-	} else {
-		client, err = gcp.NewClient(ctx)
-		if err != nil {
-			return nil, err
-		}
-	}
-	return client, nil
-
-}
-
-// authMinio creates a new Minio client to interact with S3
-// compatible storage services.
-func (r *BucketReconciler) authMinio(ctx context.Context, bucket sourcev1.Bucket) (*minio.Client, error) {
-	opt := minio.Options{
-		Region: bucket.Spec.Region,
-		Secure: !bucket.Spec.Insecure,
-	}
-
-	if bucket.Spec.SecretRef != nil {
-		secretName := types.NamespacedName{
-			Namespace: bucket.GetNamespace(),
-			Name:      bucket.Spec.SecretRef.Name,
-		}
-
-		var secret corev1.Secret
-		if err := r.Get(ctx, secretName, &secret); err != nil {
-			return nil, fmt.Errorf("credentials secret error: %w", err)
-		}
-
-		accesskey := ""
-		secretkey := ""
-		if k, ok := secret.Data["accesskey"]; ok {
-			accesskey = string(k)
-		}
-		if k, ok := secret.Data["secretkey"]; ok {
-			secretkey = string(k)
-		}
-		if accesskey == "" || secretkey == "" {
-			return nil, fmt.Errorf("invalid '%s' secret data: required fields 'accesskey' and 'secretkey'", secret.Name)
-		}
-		opt.Creds = credentials.NewStaticV4(accesskey, secretkey, "")
-	} else if bucket.Spec.Provider == sourcev1.AmazonBucketProvider {
-		opt.Creds = credentials.NewIAM("")
-	}
-
-	if opt.Creds == nil {
-		return nil, fmt.Errorf("no bucket credentials found")
-	}
-
-	return minio.New(bucket.Spec.Endpoint, &opt)
-}
-
-// checksum calculates the SHA1 checksum of the given root directory.
-// It traverses the given root directory and calculates the checksum for any found file, and returns the SHA1 sum of the
-// list with relative file paths and their checksums.
-func (r *BucketReconciler) checksum(root string) (string, error) {
-	sum := sha1.New()
-	if err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		if !info.Mode().IsRegular() {
-			return nil
-		}
-		data, err := os.ReadFile(path)
-		if err != nil {
-			return err
-		}
-		relPath, err := filepath.Rel(root, path)
-		if err != nil {
-			return err
-		}
-		sum.Write([]byte(fmt.Sprintf("%x  %s\n", sha1.Sum(data), relPath)))
+		obj.Status.Artifact = nil
 		return nil
-	}); err != nil {
-		return "", err
 	}
-	return fmt.Sprintf("%x", sum.Sum(nil)), nil
-}
-
-// resetStatus returns a modified v1beta1.Bucket and a boolean indicating
-// if the status field has been reset.
-func (r *BucketReconciler) resetStatus(bucket sourcev1.Bucket) (sourcev1.Bucket, bool) {
-	// We do not have an artifact, or it does no longer exist
-	if bucket.GetArtifact() == nil || !r.Storage.ArtifactExist(*bucket.GetArtifact()) {
-		bucket = sourcev1.BucketProgressing(bucket)
-		bucket.Status.Artifact = nil
-		return bucket, true
-	}
-	if bucket.Generation != bucket.Status.ObservedGeneration {
-		return sourcev1.BucketProgressing(bucket), true
-	}
-	return bucket, false
-}
-
-// gc performs a garbage collection for the given v1beta1.Bucket.
-// It removes all but the current artifact except for when the
-// deletion timestamp is set, which will result in the removal of
-// all artifacts for the resource.
-func (r *BucketReconciler) gc(bucket sourcev1.Bucket) error {
-	if !bucket.DeletionTimestamp.IsZero() {
-		return r.Storage.RemoveAll(r.Storage.NewArtifactFor(bucket.Kind, bucket.GetObjectMeta(), "", "*"))
-	}
-	if bucket.GetArtifact() != nil {
-		return r.Storage.RemoveAllButCurrent(*bucket.GetArtifact())
+	if obj.GetArtifact() != nil {
+		if deleted, err := r.Storage.RemoveAllButCurrent(*obj.GetArtifact()); err != nil {
+			return &serror.Event{
+				Err:    fmt.Errorf("garbage collection of old artifacts failed: %s", err),
+				Reason: "GarbageCollectionFailed",
+			}
+		} else if len(deleted) > 0 {
+			r.eventLogf(ctx, obj, events.EventTypeTrace, "GarbageCollectionSucceeded",
+				"garbage collected old artifacts")
+		}
 	}
 	return nil
 }
 
-// event emits a Kubernetes event and forwards the event to notification controller if configured
-func (r *BucketReconciler) event(ctx context.Context, bucket sourcev1.Bucket, severity, msg string) {
-	log := ctrl.LoggerFrom(ctx)
-	if r.EventRecorder != nil {
-		r.EventRecorder.Eventf(&bucket, "Normal", severity, msg)
+// getBucketSecret attempts to fetch the Secret reference if specified on the
+// obj. It returns any client error.
+func (r *BucketReconciler) getBucketSecret(ctx context.Context, obj *sourcev1.Bucket) (*corev1.Secret, error) {
+	if obj.Spec.SecretRef == nil {
+		return nil, nil
 	}
-	if r.ExternalEventRecorder != nil {
-		objRef, err := reference.GetReference(r.Scheme, &bucket)
-		if err != nil {
-			log.Error(err, "unable to send event")
-			return
-		}
-
-		if err := r.ExternalEventRecorder.Eventf(*objRef, nil, severity, severity, msg); err != nil {
-			log.Error(err, "unable to send event")
-			return
-		}
+	secretName := types.NamespacedName{
+		Namespace: obj.GetNamespace(),
+		Name:      obj.Spec.SecretRef.Name,
 	}
+	secret := &corev1.Secret{}
+	if err := r.Get(ctx, secretName, secret); err != nil {
+		return nil, fmt.Errorf("failed to get secret '%s': %w", secretName.String(), err)
+	}
+	return secret, nil
 }
 
-func (r *BucketReconciler) recordReadiness(ctx context.Context, bucket sourcev1.Bucket) {
-	log := ctrl.LoggerFrom(ctx)
-	if r.MetricsRecorder == nil {
-		return
-	}
-	objRef, err := reference.GetReference(r.Scheme, &bucket)
-	if err != nil {
-		log.Error(err, "unable to record readiness metric")
-		return
-	}
-	if rc := apimeta.FindStatusCondition(bucket.Status.Conditions, meta.ReadyCondition); rc != nil {
-		r.MetricsRecorder.RecordCondition(*objRef, *rc, !bucket.DeletionTimestamp.IsZero())
+// eventLogf records events, and logs at the same time.
+//
+// This log is different from the debug log in the EventRecorder, in the sense
+// that this is a simple log. While the debug log contains complete details
+// about the event.
+func (r *BucketReconciler) eventLogf(ctx context.Context, obj runtime.Object, eventType string, reason string, messageFmt string, args ...interface{}) {
+	r.annotatedEventLogf(ctx, obj, nil, eventType, reason, messageFmt, args...)
+}
+
+// annotatedEventLogf records annotated events, and logs at the same time.
+//
+// This log is different from the debug log in the EventRecorder, in the sense
+// that this is a simple log. While the debug log contains complete details
+// about the event.
+func (r *BucketReconciler) annotatedEventLogf(ctx context.Context,
+	obj runtime.Object, annotations map[string]string, eventType string, reason string, messageFmt string, args ...interface{}) {
+	msg := fmt.Sprintf(messageFmt, args...)
+	// Log and emit event.
+	if eventType == corev1.EventTypeWarning {
+		ctrl.LoggerFrom(ctx).Error(errors.New(reason), msg)
 	} else {
-		r.MetricsRecorder.RecordCondition(*objRef, metav1.Condition{
-			Type:   meta.ReadyCondition,
-			Status: metav1.ConditionUnknown,
-		}, !bucket.DeletionTimestamp.IsZero())
+		ctrl.LoggerFrom(ctx).Info(msg)
 	}
+	r.AnnotatedEventf(obj, annotations, eventType, reason, msg)
 }
 
-func (r *BucketReconciler) recordSuspension(ctx context.Context, bucket sourcev1.Bucket) {
-	if r.MetricsRecorder == nil {
-		return
-	}
-	log := ctrl.LoggerFrom(ctx)
+// fetchEtagIndex fetches the current etagIndex for the in the obj specified
+// bucket using the given provider, while filtering them using .sourceignore
+// rules. After fetching an object, the etag value in the index is updated to
+// the current value to ensure accuracy.
+func fetchEtagIndex(ctx context.Context, provider BucketProvider, obj *sourcev1.Bucket, index *etagIndex, tempDir string) error {
+	ctxTimeout, cancel := context.WithTimeout(ctx, obj.Spec.Timeout.Duration)
+	defer cancel()
 
-	objRef, err := reference.GetReference(r.Scheme, &bucket)
+	// Confirm bucket exists
+	exists, err := provider.BucketExists(ctxTimeout, obj.Spec.BucketName)
 	if err != nil {
-		log.Error(err, "unable to record suspended metric")
-		return
+		return fmt.Errorf("failed to confirm existence of '%s' bucket: %w", obj.Spec.BucketName, err)
 	}
-
-	if !bucket.DeletionTimestamp.IsZero() {
-		r.MetricsRecorder.RecordSuspend(*objRef, false)
-	} else {
-		r.MetricsRecorder.RecordSuspend(*objRef, bucket.Spec.Suspend)
-	}
-}
-
-func (r *BucketReconciler) updateStatus(ctx context.Context, req ctrl.Request, newStatus sourcev1.BucketStatus) error {
-	var bucket sourcev1.Bucket
-	if err := r.Get(ctx, req.NamespacedName, &bucket); err != nil {
+	if !exists {
+		err = fmt.Errorf("bucket '%s' not found", obj.Spec.BucketName)
 		return err
 	}
 
-	patch := client.MergeFrom(bucket.DeepCopy())
-	bucket.Status = newStatus
+	// Look for file with ignore rules first
+	path := filepath.Join(tempDir, sourceignore.IgnoreFile)
+	if _, err := provider.FGetObject(ctxTimeout, obj.Spec.BucketName, sourceignore.IgnoreFile, path); err != nil {
+		if !provider.ObjectIsNotFound(err) {
+			return err
+		}
+	}
+	ps, err := sourceignore.ReadIgnoreFile(path, nil)
+	if err != nil {
+		return err
+	}
+	// In-spec patterns take precedence
+	if obj.Spec.Ignore != nil {
+		ps = append(ps, sourceignore.ReadPatterns(strings.NewReader(*obj.Spec.Ignore), nil)...)
+	}
+	matcher := sourceignore.NewMatcher(ps)
 
-	return r.Status().Patch(ctx, &bucket, patch)
+	// Build up index
+	err = provider.VisitObjects(ctxTimeout, obj.Spec.BucketName, func(key, etag string) error {
+		if strings.HasSuffix(key, "/") || key == sourceignore.IgnoreFile {
+			return nil
+		}
+
+		if matcher.Match(strings.Split(key, "/"), false) {
+			return nil
+		}
+
+		index.Add(key, etag)
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("indexation of objects from bucket '%s' failed: %w", obj.Spec.BucketName, err)
+	}
+	return nil
+}
+
+// fetchIndexFiles fetches the object files for the keys from the given etagIndex
+// using the given provider, and stores them into tempDir. It downloads in
+// parallel, but limited to the maxConcurrentBucketFetches.
+// Given an index is provided, the bucket is assumed to exist.
+func fetchIndexFiles(ctx context.Context, provider BucketProvider, obj *sourcev1.Bucket, index *etagIndex, tempDir string) error {
+	ctxTimeout, cancel := context.WithTimeout(ctx, obj.Spec.Timeout.Duration)
+	defer cancel()
+
+	// Download in parallel, but bound the concurrency. According to
+	// AWS and GCP docs, rate limits are either soft or don't exist:
+	//  - https://cloud.google.com/storage/quotas
+	//  - https://docs.aws.amazon.com/general/latest/gr/s3.html
+	// .. so, the limiting factor is this process keeping a small footprint.
+	group, groupCtx := errgroup.WithContext(ctx)
+	group.Go(func() error {
+		sem := semaphore.NewWeighted(maxConcurrentBucketFetches)
+		for key, etag := range index.Index() {
+			k := key
+			t := etag
+			if err := sem.Acquire(groupCtx, 1); err != nil {
+				return err
+			}
+			group.Go(func() error {
+				defer sem.Release(1)
+				localPath := filepath.Join(tempDir, k)
+				etag, err := provider.FGetObject(ctxTimeout, obj.Spec.BucketName, k, localPath)
+				if err != nil {
+					if provider.ObjectIsNotFound(err) {
+						ctrl.LoggerFrom(ctx).Info(fmt.Sprintf("indexed object '%s' disappeared from '%s' bucket", k, obj.Spec.BucketName))
+						index.Delete(k)
+						return nil
+					}
+					return fmt.Errorf("failed to get '%s' object: %w", k, err)
+				}
+				if t != etag {
+					index.Add(k, etag)
+				}
+				return nil
+			})
+		}
+		return nil
+	})
+	if err := group.Wait(); err != nil {
+		return fmt.Errorf("fetch from bucket '%s' failed: %w", obj.Spec.BucketName, err)
+	}
+
+	return nil
 }

@@ -93,6 +93,16 @@ func (c *Commit) Verify(keyRing ...string) (string, error) {
 	return "", fmt.Errorf("failed to verify commit with any of the given key rings")
 }
 
+// ShortMessage returns the first 50 characters of a commit subject.
+func (c *Commit) ShortMessage() string {
+	subject := strings.Split(c.Message, "\n")[0]
+	r := []rune(subject)
+	if len(r) > 50 {
+		return fmt.Sprintf("%s...", string(r[0:50]))
+	}
+	return subject
+}
+
 type CheckoutStrategy interface {
 	Checkout(ctx context.Context, path, url string, config *AuthOptions) (*Commit, error)
 }

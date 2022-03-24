@@ -20,13 +20,20 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
-	git2go "github.com/libgit2/git2go/v31"
+	git2go "github.com/libgit2/git2go/v33"
 	. "github.com/onsi/gomega"
+	corev1 "k8s.io/api/core/v1"
+
+	"github.com/fluxcd/pkg/gittestserver"
+	"github.com/fluxcd/pkg/ssh"
+
+	"github.com/fluxcd/source-controller/pkg/git"
 )
 
 func TestCheckoutBranch_Checkout(t *testing.T) {
@@ -44,8 +51,8 @@ func TestCheckoutBranch_Checkout(t *testing.T) {
 
 	// ignores the error here because it can be defaulted
 	// https://github.blog/2020-07-27-highlights-from-git-2-28/#introducing-init-defaultbranch
-	defaultBranch := "main"
-	if v, err := cfg.LookupString("init.defaultBranch"); err != nil {
+	defaultBranch := "master"
+	if v, err := cfg.LookupString("init.defaultBranch"); err != nil && v != "" {
 		defaultBranch = v
 	}
 
@@ -54,10 +61,12 @@ func TestCheckoutBranch_Checkout(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// Branch off on first commit
 	if err = createBranch(repo, "test", nil); err != nil {
 		t.Fatal(err)
 	}
 
+	// Create second commit on default branch
 	secondCommit, err := commitFile(repo, "branch", "second", time.Now())
 	if err != nil {
 		t.Fatal(err)
@@ -66,17 +75,20 @@ func TestCheckoutBranch_Checkout(t *testing.T) {
 	tests := []struct {
 		name           string
 		branch         string
+		filesCreated   map[string]string
 		expectedCommit string
 		expectedErr    string
 	}{
 		{
 			name:           "Default branch",
 			branch:         defaultBranch,
+			filesCreated:   map[string]string{"branch": "second"},
 			expectedCommit: secondCommit.String(),
 		},
 		{
 			name:           "Other branch",
 			branch:         "test",
+			filesCreated:   map[string]string{"branch": "init"},
 			expectedCommit: firstCommit.String(),
 		},
 		{
@@ -105,6 +117,11 @@ func TestCheckoutBranch_Checkout(t *testing.T) {
 			}
 			g.Expect(err).ToNot(HaveOccurred())
 			g.Expect(cc.String()).To(Equal(tt.branch + "/" + tt.expectedCommit))
+
+			for k, v := range tt.filesCreated {
+				g.Expect(filepath.Join(tmpDir, k)).To(BeARegularFile())
+				g.Expect(os.ReadFile(filepath.Join(tmpDir, k))).To(BeEquivalentTo(v))
+			}
 		})
 	}
 }
@@ -443,4 +460,69 @@ func mockSignature(time time.Time) *git2go.Signature {
 		Email: "author@example.com",
 		When:  time,
 	}
+}
+
+// This test is specifically to detect regression in libgit2's ED25519 key
+// support for client authentication.
+// Refer: https://github.com/fluxcd/source-controller/issues/399
+func TestCheckout_ED25519(t *testing.T) {
+	g := NewWithT(t)
+	timeout := 5 * time.Second
+
+	// Create a git test server.
+	server, err := gittestserver.NewTempGitServer()
+	g.Expect(err).ToNot(HaveOccurred())
+	defer os.RemoveAll(server.Root())
+	server.Auth("test-user", "test-pswd")
+	server.AutoCreate()
+
+	server.KeyDir(filepath.Join(server.Root(), "keys"))
+	g.Expect(server.ListenSSH()).To(Succeed())
+
+	go func() {
+		server.StartSSH()
+	}()
+	defer server.StopSSH()
+
+	repoPath := "test.git"
+
+	err = server.InitRepo("testdata/git/repo", git.DefaultBranch, repoPath)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	sshURL := server.SSHAddress()
+	repoURL := sshURL + "/" + repoPath
+
+	// Fetch host key.
+	u, err := url.Parse(sshURL)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(u.Host).ToNot(BeEmpty())
+	knownHosts, err := ssh.ScanHostKey(u.Host, timeout)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	kp, err := ssh.NewEd25519Generator().Generate()
+	g.Expect(err).ToNot(HaveOccurred())
+
+	secret := corev1.Secret{
+		Data: map[string][]byte{
+			"identity":    kp.PrivateKey,
+			"known_hosts": knownHosts,
+		},
+	}
+
+	authOpts, err := git.AuthOptionsFromSecret(repoURL, &secret)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Prepare for checkout.
+	branchCheckoutStrat := &CheckoutBranch{Branch: git.DefaultBranch}
+	tmpDir, _ := os.MkdirTemp("", "test")
+	defer os.RemoveAll(tmpDir)
+
+	ctx, cancel := context.WithTimeout(context.TODO(), timeout)
+	defer cancel()
+
+	// Checkout the repo.
+	// This should always fail because the generated key above isn't present in
+	// the git server.
+	_, err = branchCheckoutStrat.Checkout(ctx, tmpDir, repoURL, authOpts)
+	g.Expect(err).To(BeNil())
 }

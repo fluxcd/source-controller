@@ -196,7 +196,13 @@ func GitRepositoryProgressing(repository GitRepository) GitRepository {
 	repository.Status.ObservedGeneration = repository.Generation
 	repository.Status.URL = ""
 	repository.Status.Conditions = []metav1.Condition{}
-	meta.SetResourceCondition(&repository, meta.ReadyCondition, metav1.ConditionUnknown, meta.ProgressingReason, "reconciliation in progress")
+	newCondition := metav1.Condition{
+		Type:    meta.ReadyCondition,
+		Status:  metav1.ConditionUnknown,
+		Reason:  meta.ProgressingReason,
+		Message: "reconciliation in progress",
+	}
+	apimeta.SetStatusCondition(repository.GetStatusConditions(), newCondition)
 	return repository
 }
 
@@ -207,7 +213,13 @@ func GitRepositoryReady(repository GitRepository, artifact Artifact, includedArt
 	repository.Status.Artifact = &artifact
 	repository.Status.IncludedArtifacts = includedArtifacts
 	repository.Status.URL = url
-	meta.SetResourceCondition(&repository, meta.ReadyCondition, metav1.ConditionTrue, reason, message)
+	newCondition := metav1.Condition{
+		Type:    meta.ReadyCondition,
+		Status:  metav1.ConditionTrue,
+		Reason:  reason,
+		Message: message,
+	}
+	apimeta.SetStatusCondition(repository.GetStatusConditions(), newCondition)
 	return repository
 }
 
@@ -215,7 +227,13 @@ func GitRepositoryReady(repository GitRepository, artifact Artifact, includedArt
 // to 'False', with the given reason and message. It returns the modified
 // GitRepository.
 func GitRepositoryNotReady(repository GitRepository, reason, message string) GitRepository {
-	meta.SetResourceCondition(&repository, meta.ReadyCondition, metav1.ConditionFalse, reason, message)
+	newCondition := metav1.Condition{
+		Type:    meta.ReadyCondition,
+		Status:  metav1.ConditionFalse,
+		Reason:  reason,
+		Message: message,
+	}
+	apimeta.SetStatusCondition(repository.GetStatusConditions(), newCondition)
 	return repository
 }
 
