@@ -2,6 +2,20 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.22.3
+
+**Release date:** 2022-03-25
+
+This prerelease fixes a regression bug introduced in `v0.22.0`, which would
+cause a `GitRepository` to end up in a `Stalled` state if an include did not
+have an Artifact available.
+
+Fixes:
+- gitrepo: Do not stall when no included artifact
+  [#639](https://github.com/fluxcd/source-controller/pull/639)
+- Fix dpanic issue when logging odd number of args
+  [#641](https://github.com/fluxcd/source-controller/pull/641)
+
 ## 0.22.2
 
 **Release date:** 2022-03-23
@@ -22,7 +36,7 @@ Fixes:
 
 **Release date:** 2022-03-23
 
-This prereleases fixes a regression in which `.sourceignore` rules for a
+This prerelease fixes a regression in which `.sourceignore` rules for a
 `GitRepository` would not be matched correctly.
 
 Fixes:
@@ -46,7 +60,7 @@ Definitions on your cluster and/or in Git.
   no longer be downloaded on every reconcile if none of them have changed.
 - `HelmChart` resources do now advertise the observed chart name
   (`.status.observedChartName`) and Source (reference) Artifact revision
-  (`.status.observedSourceArtifactRevision` in the Status. The information is 
+  (`.status.observedSourceArtifactRevision`) in the Status. The information is 
   used to more efficiently react to source revision and/or chart changes.
 
 ### Features and Improvements
