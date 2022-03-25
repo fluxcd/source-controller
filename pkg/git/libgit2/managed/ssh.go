@@ -186,8 +186,7 @@ func (t *sshSmartSubtransport) Action(urlString string, action git2go.SmartServi
 		return nil, err
 	}
 
-	t.session, err = t.client.NewSession()
-	if err != nil {
+	traceLog.Info("[ssh]: creating new ssh session")
 		return nil, err
 	}
 
@@ -201,6 +200,7 @@ func (t *sshSmartSubtransport) Action(urlString string, action git2go.SmartServi
 		return nil, err
 	}
 
+	traceLog.Info("[ssh]: run on remote", "cmd", cmd)
 	if err := t.session.Start(cmd); err != nil {
 		return nil, err
 	}
@@ -214,6 +214,7 @@ func (t *sshSmartSubtransport) Action(urlString string, action git2go.SmartServi
 }
 
 func (t *sshSmartSubtransport) Close() error {
+	traceLog.Info("[ssh]: sshSmartSubtransport.Close()")
 	t.currentStream = nil
 	if t.client != nil {
 		t.stdin.Close()
@@ -225,6 +226,7 @@ func (t *sshSmartSubtransport) Close() error {
 }
 
 func (t *sshSmartSubtransport) Free() {
+	traceLog.Info("[ssh]: sshSmartSubtransport.Free()")
 }
 
 type sshSmartSubtransportStream struct {
@@ -240,6 +242,7 @@ func (stream *sshSmartSubtransportStream) Write(buf []byte) (int, error) {
 }
 
 func (stream *sshSmartSubtransportStream) Free() {
+	traceLog.Info("[ssh]: sshSmartSubtransportStream.Free()")
 }
 
 func getSSHConfigFromCredential(cred *git2go.Credential) (*ssh.ClientConfig, error) {

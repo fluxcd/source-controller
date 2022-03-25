@@ -27,6 +27,7 @@ import (
 	"github.com/fluxcd/pkg/gittestserver"
 	"github.com/fluxcd/pkg/ssh"
 	"github.com/fluxcd/source-controller/pkg/git"
+	"github.com/go-logr/logr"
 
 	git2go "github.com/libgit2/git2go/v33"
 	. "github.com/onsi/gomega"
@@ -247,7 +248,7 @@ func TestManagedTransport_E2E(t *testing.T) {
 	defer server.StopSSH()
 
 	// Force managed transport to be enabled
-	InitManagedTransport()
+	InitManagedTransport(logr.Discard())
 
 	repoPath := "test.git"
 	err = server.InitRepo("../testdata/git/repo", git.DefaultBranch, repoPath)
@@ -312,7 +313,7 @@ func TestManagedTransport_HandleRedirect(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 
 	// Force managed transport to be enabled
-	InitManagedTransport()
+	InitManagedTransport(logr.Discard())
 
 	// GitHub will cause a 301 and redirect to https
 	repo, err := git2go.Clone("http://github.com/stefanprodan/podinfo", tmpDir, &git2go.CloneOptions{

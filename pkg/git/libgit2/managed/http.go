@@ -54,7 +54,7 @@ import (
 	"net/url"
 	"sync"
 
-	"github.com/fluxcd/source-controller/internal/transport"
+	pool "github.com/fluxcd/source-controller/internal/transport"
 	git2go "github.com/libgit2/git2go/v33"
 )
 
@@ -72,8 +72,10 @@ func registerManagedHTTP() error {
 }
 
 func httpSmartSubtransportFactory(remote *git2go.Remote, transport *git2go.Transport) (git2go.SmartSubtransport, error) {
+	traceLog.Info("[http]: httpSmartSubtransportFactory")
 	sst := &httpSmartSubtransport{
-		transport: transport,
+		transport:     transport,
+		httpTransport: pool.NewOrIdle(nil),
 	}
 
 	return sst, nil
@@ -104,9 +106,8 @@ func (t *httpSmartSubtransport) Action(targetUrl string, action git2go.SmartServ
 		proxyFn = http.ProxyURL(parsedUrl)
 	}
 
-	// reuses the http transport from a pool, or create new one on demand.
-	t.httpTransport = transport.NewOrIdle(nil)
 	t.httpTransport.Proxy = proxyFn
+	t.httpTransport.DisableCompression = false
 
 	client, req, err := createClientRequest(targetUrl, action, t.httpTransport)
 	if err != nil {
@@ -209,10 +210,18 @@ func createClientRequest(targetUrl string, action git2go.SmartServiceAction, t *
 }
 
 func (t *httpSmartSubtransport) Close() error {
+	traceLog.Info("[http]: httpSmartSubtransport.Close()")
 	return nil
 }
 
 func (t *httpSmartSubtransport) Free() {
+	traceLog.Info("[http]: httpSmartSubtransport.Free()")
+
+	if t.httpTransport != nil {
+		traceLog.Info("[http]: release http transport back to pool")
+		pool.Release(t.httpTransport)
+		t.httpTransport = nil
+	}
 }
 
 type httpSmartSubtransportStream struct {
@@ -277,6 +286,8 @@ func (self *httpSmartSubtransportStream) Write(buf []byte) (int, error) {
 
 func (self *httpSmartSubtransportStream) Free() {
 	if self.resp != nil {
+		traceLog.Info("[http]: httpSmartSubtransportStream.Free()")
+
 		// ensure body is fully processed and closed
 		// for increased likelihood of transport reuse in HTTP/1.x.
 		// it should not be a problem to do this more than once.
@@ -344,6 +355,7 @@ func (self *httpSmartSubtransportStream) sendRequest() error {
 		}
 
 		req.SetBasicAuth(userName, password)
+		traceLog.Info("[http]: new request", "method", req.Method, "URL", req.URL)
 		resp, err = self.client.Do(req)
 		if err != nil {
 			return err
@@ -363,6 +375,7 @@ func (self *httpSmartSubtransportStream) sendRequest() error {
 				return err
 			}
 
+			traceLog.Info("[http]: POST redirect", "URL", self.req.URL)
 			continue
 		}
 
@@ -377,11 +390,6 @@ func (self *httpSmartSubtransportStream) sendRequest() error {
 		resp.Body.Close()
 
 		return fmt.Errorf("Unhandled HTTP error %s", resp.Status)
-	}
-
-	if self.owner.httpTransport != nil {
-		transport.Release(self.owner.httpTransport)
-		self.owner.httpTransport = nil
 	}
 
 	self.resp = resp
