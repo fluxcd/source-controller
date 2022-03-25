@@ -574,12 +574,12 @@ func (r *GitRepositoryReconciler) reconcileInclude(ctx context.Context,
 				Reason: "NotFound",
 			}
 			conditions.MarkTrue(obj, sourcev1.IncludeUnavailableCondition, e.Reason, e.Err.Error())
-			return sreconcile.ResultEmpty, err
+			return sreconcile.ResultEmpty, e
 		}
 
 		// Confirm include has an artifact
 		if dep.GetArtifact() == nil {
-			e := &serror.Stalling{
+			e := &serror.Event{
 				Err:    fmt.Errorf("no artifact available for include '%s'", incl.GitRepositoryRef.Name),
 				Reason: "NoArtifact",
 			}
