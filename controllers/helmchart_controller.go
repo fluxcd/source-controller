@@ -1038,13 +1038,11 @@ func observeChartBuild(obj *sourcev1.HelmChart, build *chart.Build, err error) {
 
 	if build.VerificationSignature != nil && build.ProvFilePath != "" {
 		var sigVerMsg strings.Builder
-		sigVerMsg.WriteString(fmt.Sprintf("chart signed by: '%v'", strings.Join(build.VerificationSignature.Identities[:], ",")))
-		sigVerMsg.WriteString(fmt.Sprintf(" using key with fingeprint: '%X'", build.VerificationSignature.KeyFingerprint))
-		sigVerMsg.WriteString(fmt.Sprintf(" and hash verified: '%s'", build.VerificationSignature.FileHash))
+		sigVerMsg.WriteString(fmt.Sprintf("verified chart hash: '%s'", build.VerificationSignature.FileHash))
+		sigVerMsg.WriteString(fmt.Sprintf(" signed by: '%s'", build.VerificationSignature.Identity))
+		sigVerMsg.WriteString(fmt.Sprintf(" with key: '%X'", build.VerificationSignature.KeyFingerprint))
 
 		conditions.MarkTrue(obj, sourcev1.SourceVerifiedCondition, sourcev1.ChartVerificationSucceededReason, sigVerMsg.String())
-	} else {
-		conditions.Delete(obj, sourcev1.SourceVerifiedCondition)
 	}
 
 	if err != nil {
@@ -1080,6 +1078,7 @@ func reasonForBuild(build *chart.Build) string {
 
 func (r *HelmChartReconciler) getProvenanceKeyring(ctx context.Context, chart *sourcev1.HelmChart) ([]byte, error) {
 	if chart.Spec.VerificationKeyring == nil {
+		conditions.Delete(chart, sourcev1.SourceVerifiedCondition)
 		return nil, nil
 	}
 	name := types.NamespacedName{

@@ -74,7 +74,7 @@ func provenanceFilePath(path string) string {
 
 // ref: https://github.com/helm/helm/blob/v3.8.0/pkg/action/verify.go#L47-L51
 type VerificationSignature struct {
-	Identities     []string
+	Identity       string
 	KeyFingerprint [20]byte
 	FileHash       string
 }
@@ -84,7 +84,8 @@ func buildVerificationSig(ver *provenance.Verification) *VerificationSignature {
 	if ver != nil {
 		if ver.SignedBy != nil {
 			for name := range ver.SignedBy.Identities {
-				verSig.Identities = append(verSig.Identities, name)
+				verSig.Identity = name
+				break
 			}
 		}
 		verSig.FileHash = ver.FileHash
