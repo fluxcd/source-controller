@@ -38,7 +38,7 @@ import (
 // git.CheckoutOptions.
 func CheckoutStrategyForOptions(ctx context.Context, opt git.CheckoutOptions) git.CheckoutStrategy {
 	if opt.RecurseSubmodules {
-		logr.FromContextOrDiscard(ctx).Info("git submodule recursion not supported by '%s'", Implementation)
+		logr.FromContextOrDiscard(ctx).Info(fmt.Sprintf("git submodule recursion not supported by implementation '%s'", Implementation))
 	}
 	switch {
 	case opt.Commit != "":
