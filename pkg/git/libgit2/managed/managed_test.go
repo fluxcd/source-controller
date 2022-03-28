@@ -36,7 +36,7 @@ import (
 
 func TestHttpAction_CreateClientRequest(t *testing.T) {
 	tests := []struct {
-		description    string
+		name           string
 		url            string
 		expectedUrl    string
 		expectedMethod string
@@ -46,7 +46,7 @@ func TestHttpAction_CreateClientRequest(t *testing.T) {
 		wantedErr      error
 	}{
 		{
-			description:    "Uploadpack: no changes when no options found",
+			name:           "Uploadpack: no changes when no options found",
 			url:            "https://sometarget/abc",
 			expectedUrl:    "https://sometarget/abc/git-upload-pack",
 			expectedMethod: "POST",
@@ -56,7 +56,7 @@ func TestHttpAction_CreateClientRequest(t *testing.T) {
 			wantedErr:      nil,
 		},
 		{
-			description:    "UploadpackLs: no changes when no options found",
+			name:           "UploadpackLs: no changes when no options found",
 			url:            "https://sometarget/abc",
 			expectedUrl:    "https://sometarget/abc/info/refs?service=git-upload-pack",
 			expectedMethod: "GET",
@@ -66,7 +66,7 @@ func TestHttpAction_CreateClientRequest(t *testing.T) {
 			wantedErr:      nil,
 		},
 		{
-			description:    "Receivepack: no changes when no options found",
+			name:           "Receivepack: no changes when no options found",
 			url:            "https://sometarget/abc",
 			expectedUrl:    "https://sometarget/abc/git-receive-pack",
 			expectedMethod: "POST",
@@ -76,7 +76,7 @@ func TestHttpAction_CreateClientRequest(t *testing.T) {
 			wantedErr:      nil,
 		},
 		{
-			description:    "ReceivepackLs: no changes when no options found",
+			name:           "ReceivepackLs: no changes when no options found",
 			url:            "https://sometarget/abc",
 			expectedUrl:    "https://sometarget/abc/info/refs?service=git-receive-pack",
 			expectedMethod: "GET",
@@ -86,7 +86,7 @@ func TestHttpAction_CreateClientRequest(t *testing.T) {
 			wantedErr:      nil,
 		},
 		{
-			description:    "override URL via options",
+			name:           "override URL via options",
 			url:            "https://initial-target/abc",
 			expectedUrl:    "https://final-target/git-upload-pack",
 			expectedMethod: "POST",
@@ -98,7 +98,7 @@ func TestHttpAction_CreateClientRequest(t *testing.T) {
 			wantedErr: nil,
 		},
 		{
-			description:    "error when no http.transport provided",
+			name:           "error when no http.transport provided",
 			url:            "https://initial-target/abc",
 			expectedUrl:    "",
 			expectedMethod: "",
@@ -110,29 +110,31 @@ func TestHttpAction_CreateClientRequest(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		if tt.opts != nil {
-			AddTransportOptions(tt.url, *tt.opts)
-		}
-
-		_, req, err := createClientRequest(tt.url, tt.action, tt.transport)
-		if tt.wantedErr != nil {
-			if tt.wantedErr.Error() != err.Error() {
-				t.Errorf("%s: wanted: %v got: %v", tt.description, tt.wantedErr, err)
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.opts != nil {
+				AddTransportOptions(tt.url, *tt.opts)
 			}
-		} else {
-			assert.Equal(t, req.URL.String(), tt.expectedUrl)
-			assert.Equal(t, req.Method, tt.expectedMethod)
-		}
 
-		if tt.opts != nil {
-			RemoveTransportOptions(tt.url)
-		}
+			_, req, err := createClientRequest(tt.url, tt.action, tt.transport)
+			if tt.wantedErr != nil {
+				if tt.wantedErr.Error() != err.Error() {
+					t.Errorf("wanted: %v got: %v", tt.wantedErr, err)
+				}
+			} else {
+				assert.Equal(t, req.URL.String(), tt.expectedUrl)
+				assert.Equal(t, req.Method, tt.expectedMethod)
+			}
+
+			if tt.opts != nil {
+				RemoveTransportOptions(tt.url)
+			}
+		})
 	}
 }
 
 func TestOptions(t *testing.T) {
 	tests := []struct {
-		description  string
+		name         string
 		registerOpts bool
 		url          string
 		opts         TransportOptions
@@ -140,7 +142,7 @@ func TestOptions(t *testing.T) {
 		expectedOpts *TransportOptions
 	}{
 		{
-			description:  "return registered option",
+			name:         "return registered option",
 			registerOpts: true,
 			url:          "https://target/?123",
 			opts:         TransportOptions{},
@@ -148,7 +150,7 @@ func TestOptions(t *testing.T) {
 			expectedOpts: &TransportOptions{},
 		},
 		{
-			description:  "match registered options",
+			name:         "match registered options",
 			registerOpts: true,
 			url:          "https://target/?876",
 			opts: TransportOptions{
@@ -162,7 +164,7 @@ func TestOptions(t *testing.T) {
 			},
 		},
 		{
-			description:  "ignore when options not registered",
+			name:         "ignore when options not registered",
 			registerOpts: false,
 			url:          "",
 			opts:         TransportOptions{},
@@ -172,28 +174,30 @@ func TestOptions(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		if tt.registerOpts {
-			AddTransportOptions(tt.url, tt.opts)
-		}
-
-		opts, found := transportOptions(tt.url)
-		if tt.expectOpts != found {
-			t.Errorf("%s: wanted %v got %v", tt.description, tt.expectOpts, found)
-		}
-
-		if tt.expectOpts {
-			if reflect.DeepEqual(opts, *tt.expectedOpts) {
-				t.Errorf("%s: wanted %v got %v", tt.description, *tt.expectedOpts, opts)
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.registerOpts {
+				AddTransportOptions(tt.url, tt.opts)
 			}
-		}
 
-		if tt.registerOpts {
-			RemoveTransportOptions(tt.url)
-		}
+			opts, found := transportOptions(tt.url)
+			if tt.expectOpts != found {
+				t.Errorf("%s: wanted %v got %v", tt.name, tt.expectOpts, found)
+			}
 
-		if _, found = transportOptions(tt.url); found {
-			t.Errorf("%s: option for %s was not removed", tt.description, tt.url)
-		}
+			if tt.expectOpts {
+				if reflect.DeepEqual(opts, *tt.expectedOpts) {
+					t.Errorf("%s: wanted %v got %v", tt.name, *tt.expectedOpts, opts)
+				}
+			}
+
+			if tt.registerOpts {
+				RemoveTransportOptions(tt.url)
+			}
+
+			if _, found = transportOptions(tt.url); found {
+				t.Errorf("%s: option for %s was not removed", tt.name, tt.url)
+			}
+		})
 	}
 }
 

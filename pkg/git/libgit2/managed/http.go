@@ -288,11 +288,13 @@ func (self *httpSmartSubtransportStream) Free() {
 	if self.resp != nil {
 		traceLog.Info("[http]: httpSmartSubtransportStream.Free()")
 
-		// ensure body is fully processed and closed
-		// for increased likelihood of transport reuse in HTTP/1.x.
-		// it should not be a problem to do this more than once.
-		io.Copy(io.Discard, self.resp.Body)
-		self.resp.Body.Close()
+		if self.resp.Body != nil {
+			// ensure body is fully processed and closed
+			// for increased likelihood of transport reuse in HTTP/1.x.
+			// it should not be a problem to do this more than once.
+			_, _ = io.Copy(io.Discard, self.resp.Body) // errors can be safely ignored
+			_ = self.resp.Body.Close()                 // errors can be safely ignored
+		}
 	}
 }
 
@@ -366,8 +368,11 @@ func (self *httpSmartSubtransportStream) sendRequest() error {
 		if req.Method == "POST" && resp.StatusCode >= 301 && resp.StatusCode <= 308 {
 			// ensure body is fully processed and closed
 			// for increased likelihood of transport reuse in HTTP/1.x.
-			io.Copy(io.Discard, resp.Body)
-			resp.Body.Close()
+			_, _ = io.Copy(io.Discard, resp.Body) // errors can be safely ignored
+
+			if err := resp.Body.Close(); err != nil {
+				return err
+			}
 
 			// The next try will go against the new destination
 			self.req.URL, err = resp.Location()
@@ -386,8 +391,10 @@ func (self *httpSmartSubtransportStream) sendRequest() error {
 
 		// ensure body is fully processed and closed
 		// for increased likelihood of transport reuse in HTTP/1.x.
-		io.Copy(io.Discard, resp.Body)
-		resp.Body.Close()
+		_, _ = io.Copy(io.Discard, resp.Body) // errors can be safely ignored
+		if err := resp.Body.Close(); err != nil {
+			return err
+		}
 
 		return fmt.Errorf("Unhandled HTTP error %s", resp.Status)
 	}
