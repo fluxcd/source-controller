@@ -25,11 +25,11 @@ pushd "${GO_SRC}/${PROJECT_PATH}"
 
 export TARGET_DIR="$(/bin/pwd)/build/libgit2/${LIBGIT2_TAG}"
 
-# For most cases, libgit2 will already be present. 
+# For most cases, libgit2 will already be present.
 # The exception being at the oss-fuzz integration.
 if [ ! -d "${TARGET_DIR}" ]; then
     curl -o output.tar.gz -LO "https://github.com/fluxcd/golang-with-libgit2/releases/download/${LIBGIT2_TAG}/linux-$(uname -m)-libs.tar.gz"
-    
+
     DIR=libgit2-linux
     NEW_DIR="$(/bin/pwd)/build/libgit2/${LIBGIT2_TAG}"
     INSTALLED_DIR="/home/runner/work/golang-with-libgit2/golang-with-libgit2/build/${DIR}"
@@ -54,12 +54,12 @@ export PKG_CONFIG_PATH="${TARGET_DIR}/lib/pkgconfig:${TARGET_DIR}/lib64/pkgconfi
 export CGO_CFLAGS="-I${TARGET_DIR}/include -I${TARGET_DIR}/include/openssl"
 export CGO_LDFLAGS="$(pkg-config --libs --static --cflags libssh2 openssl libgit2)"
 
-go mod tidy
+go get -d github.com/AdaLogics/go-fuzz-headers
 
 # The implementation of libgit2 is sensitive to the versions of git2go.
 # Leaving it to its own devices, the minimum version of git2go used may not
 # be compatible with the currently implemented version. Hence the modifications
-# of the existing go.mod. 
+# of the existing go.mod.
 sed "s;\./api;$(/bin/pwd)/api;g" go.mod > tests/fuzz/go.mod
 sed -i 's;module github.com/fluxcd/source-controller;module github.com/fluxcd/source-controller/tests/fuzz;g' tests/fuzz/go.mod
 echo "replace github.com/fluxcd/source-controller => $(/bin/pwd)/" >> tests/fuzz/go.mod
@@ -78,7 +78,7 @@ mkdir -p testdata/crd
 cp ../../config/crd/bases/*.yaml testdata/crd/
 cp -r ../../controllers/testdata/certs testdata/
 
-go mod tidy -compat=1.17
+go get -d github.com/AdaLogics/go-fuzz-headers
 
 # Using compile_go_fuzzer to compile fails when statically linking libgit2 dependencies
 # via CFLAGS/CXXFLAGS.
