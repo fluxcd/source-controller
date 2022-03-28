@@ -73,6 +73,7 @@ var helmChartReadyCondition = summarize.Conditions{
 		sourcev1.FetchFailedCondition,
 		sourcev1.StorageOperationFailedCondition,
 		sourcev1.ArtifactOutdatedCondition,
+		sourcev1.SourceVerifiedCondition,
 		meta.ReadyCondition,
 		meta.ReconcilingCondition,
 		meta.StalledCondition,
@@ -82,6 +83,7 @@ var helmChartReadyCondition = summarize.Conditions{
 		sourcev1.FetchFailedCondition,
 		sourcev1.StorageOperationFailedCondition,
 		sourcev1.ArtifactOutdatedCondition,
+		sourcev1.SourceVerifiedCondition,
 		meta.StalledCondition,
 		meta.ReconcilingCondition,
 	},
@@ -467,13 +469,23 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 		opts.VersionMetadata = strconv.FormatInt(obj.Generation, 10)
 	}
 
+	keyring, err := r.getProvenanceKeyring(ctx, obj)
+	if err != nil {
+		e := &serror.Event{
+			Err:    fmt.Errorf("failed to get public key for chart signature verification: %w", err),
+			Reason: sourcev1.VerificationFailedReason,
+		}
+		conditions.MarkFalse(obj, sourcev1.SourceVerifiedCondition, e.Reason, e.Err.Error())
+		return sreconcile.ResultEmpty, e
+	}
+	opts.Keyring = keyring
+
 	// Build the chart
 	ref := chart.RemoteReference{Name: obj.Spec.Chart, Version: obj.Spec.Version}
 	build, err := cb.Build(ctx, ref, util.TempPathForObj("", ".tgz", obj), opts)
 	if err != nil {
 		return sreconcile.ResultEmpty, err
 	}
-
 	*b = *build
 	return sreconcile.ResultSuccess, nil
 }
@@ -590,6 +602,16 @@ func (r *HelmChartReconciler) buildFromTarballArtifact(ctx context.Context, obj 
 		}
 		opts.VersionMetadata += strconv.FormatInt(obj.Generation, 10)
 	}
+	keyring, err := r.getProvenanceKeyring(ctx, obj)
+	if err != nil {
+		e := &serror.Event{
+			Err:    fmt.Errorf("failed to get public key for chart signature verification: %w", err),
+			Reason: sourcev1.VerificationFailedReason,
+		}
+		conditions.MarkFalse(obj, sourcev1.SourceVerifiedCondition, e.Reason, e.Err.Error())
+		return sreconcile.ResultEmpty, e
+	}
+	opts.Keyring = keyring
 
 	// Build chart
 	cb := chart.NewLocalBuilder(dm)
@@ -668,6 +690,19 @@ func (r *HelmChartReconciler) reconcileArtifact(ctx context.Context, obj *source
 		}
 		conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition, e.Reason, e.Err.Error())
 		return sreconcile.ResultEmpty, e
+	}
+
+	// the provenance file artifact is not recorded, but it shadows the HelmChart artifact
+	// under the assumption that the file is always available at "chart.tgz.prov"
+	if b.ProvFilePath != "" {
+		provArtifact := r.Storage.NewArtifactFor(obj.Kind, obj.GetObjectMeta(), b.Version, fmt.Sprintf("%s-%s.tgz.prov", b.Name, b.Version))
+		if err = r.Storage.CopyFromPath(&provArtifact, b.ProvFilePath); err != nil {
+			e := &serror.Event{
+				Err:    fmt.Errorf("unable to copy Helm chart provenance file to storage: %w", err),
+				Reason: sourcev1.ArchiveOperationFailedReason,
+			}
+			conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition, e.Reason, e.Err.Error())
+		}
 	}
 
 	// Record it on the object
@@ -763,8 +798,18 @@ func (r *HelmChartReconciler) garbageCollect(ctx context.Context, obj *sourcev1.
 		obj.Status.Artifact = nil
 		return nil
 	}
+
 	if obj.GetArtifact() != nil {
-		if deleted, err := r.Storage.RemoveAllButCurrent(*obj.GetArtifact()); err != nil {
+		localPath := r.Storage.LocalPath(*obj.GetArtifact())
+		provFilePath := localPath + ".prov"
+		dir := filepath.Dir(localPath)
+		callback := func(path string, info os.FileInfo) bool {
+			if path != localPath && path != provFilePath && info.Mode()&os.ModeSymlink != os.ModeSymlink {
+				return true
+			}
+			return false
+		}
+		if deleted, err := r.Storage.RemoveConditionally(dir, callback); err != nil {
 			return &serror.Event{
 				Err:    fmt.Errorf("garbage collection of old artifacts failed: %w", err),
 				Reason: "GarbageCollectionFailed",
@@ -991,6 +1036,15 @@ func observeChartBuild(obj *sourcev1.HelmChart, build *chart.Build, err error) {
 		conditions.Delete(obj, sourcev1.BuildFailedCondition)
 	}
 
+	if build.VerificationSignature != nil && build.ProvFilePath != "" {
+		var sigVerMsg strings.Builder
+		sigVerMsg.WriteString(fmt.Sprintf("verified chart hash: '%s'", build.VerificationSignature.FileHash))
+		sigVerMsg.WriteString(fmt.Sprintf(" signed by: '%s'", build.VerificationSignature.Identity))
+		sigVerMsg.WriteString(fmt.Sprintf(" with key: '%X'", build.VerificationSignature.KeyFingerprint))
+
+		conditions.MarkTrue(obj, sourcev1.SourceVerifiedCondition, sourcev1.ChartVerificationSucceededReason, sigVerMsg.String())
+	}
+
 	if err != nil {
 		var buildErr *chart.BuildError
 		if ok := errors.As(err, &buildErr); !ok {
@@ -1020,4 +1074,27 @@ func reasonForBuild(build *chart.Build) string {
 		return sourcev1.ChartPackageSucceededReason
 	}
 	return sourcev1.ChartPullSucceededReason
+}
+
+func (r *HelmChartReconciler) getProvenanceKeyring(ctx context.Context, chart *sourcev1.HelmChart) ([]byte, error) {
+	if chart.Spec.VerificationKeyring == nil {
+		conditions.Delete(chart, sourcev1.SourceVerifiedCondition)
+		return nil, nil
+	}
+	name := types.NamespacedName{
+		Namespace: chart.GetNamespace(),
+		Name:      chart.Spec.VerificationKeyring.SecretRef.Name,
+	}
+	var secret corev1.Secret
+	err := r.Client.Get(ctx, name, &secret)
+	if err != nil {
+		return nil, err
+	}
+	key := chart.Spec.VerificationKeyring.Key
+	val, ok := secret.Data[key]
+	if !ok {
+		err = fmt.Errorf("secret doesn't contain the advertised verification keyring name %s", key)
+		return nil, err
+	}
+	return val, nil
 }

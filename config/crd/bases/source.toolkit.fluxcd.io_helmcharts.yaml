@@ -404,6 +404,26 @@ spec:
                 items:
                   type: string
                 type: array
+              verificationKeyring:
+                description: VerificationKeyring for verifying the packaged chart's
+                  signature using a provenance file.
+                properties:
+                  key:
+                    default: pubring.gpg
+                    description: Key in the SecretRef that contains the public keyring
+                      in legacy GPG format.
+                    type: string
+                  secretRef:
+                    description: SecretRef is a reference to the secret that contains
+                      the public GPG key.
+                    properties:
+                      name:
+                        description: Name of the referent.
+                        type: string
+                    required:
+                    - name
+                    type: object
+                type: object
               version:
                 default: '*'
                 description: Version is the chart version semver expression, ignored

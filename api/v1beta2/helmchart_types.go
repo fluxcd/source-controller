@@ -84,6 +84,23 @@ type HelmChartSpec struct {
 	// NOTE: Not implemented, provisional as of https://github.com/fluxcd/flux2/pull/2092
 	// +optional
 	AccessFrom *acl.AccessFrom `json:"accessFrom,omitempty"`
+
+	// VerificationKeyring for verifying the packaged chart's signature using a provenance file.
+	// +optional
+	VerificationKeyring *VerificationKeyring `json:"verificationKeyring,omitempty"`
+}
+
+// VerificationKeyring contains enough info to get the public GPG key to be used for verifying
+// the chart signature using a provenance file.
+type VerificationKeyring struct {
+	// SecretRef is a reference to the secret that contains the public GPG key.
+	// +required
+	SecretRef meta.LocalObjectReference `json:"secretRef,omitempty"`
+
+	// Key in the SecretRef that contains the public keyring in legacy GPG format.
+	// +kubebuilder:default:=pubring.gpg
+	// +optional
+	Key string `json:"key,omitempty"`
 }
 
 const (
@@ -154,6 +171,10 @@ const (
 	// ChartPackageSucceededReason signals that the package of the Helm
 	// chart succeeded.
 	ChartPackageSucceededReason string = "ChartPackageSucceeded"
+
+	// ChartVerificationSucceededReason signals that the Helm chart's signature
+	// has been verified using it's provenance file.
+	ChartVerificationSucceededReason string = "ChartVerificationSucceeded"
 )
 
 // GetConditions returns the status conditions of the object.

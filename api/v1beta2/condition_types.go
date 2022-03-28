@@ -85,4 +85,8 @@ const (
 
 	// SymlinkUpdateFailedReason signals a failure in updating a symlink.
 	SymlinkUpdateFailedReason string = "SymlinkUpdateFailed"
+
+	// VerificationFailedReason signals a failure in verifying the signature of
+	// an artifact instance, such as a git commit or a helm chart.
+	VerificationFailedReason string = "VerificationFailed"
 )

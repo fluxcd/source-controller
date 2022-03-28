@@ -53,6 +53,10 @@ type Storage struct {
 	Timeout time.Duration `json:"timeout"`
 }
 
+// removeFileCallback is a function which determines whether the
+// provided file should be removed from the filesystem.
+type removeFileCallback func(path string, info os.FileInfo) bool
+
 // NewStorage creates the storage helper for a given path and hostname.
 func NewStorage(basePath string, hostname string, timeout time.Duration) (*Storage, error) {
 	if f, err := os.Stat(basePath); os.IsNotExist(err) || !f.IsDir() {
@@ -134,6 +138,36 @@ func (s *Storage) RemoveAllButCurrent(artifact sourcev1.Artifact) ([]string, err
 			} else {
 				// Collect the successfully deleted file paths.
 				deletedFiles = append(deletedFiles, path)
+			}
+		}
+		return nil
+	})
+
+	if len(errors) > 0 {
+		return deletedFiles, fmt.Errorf("failed to remove files: %s", strings.Join(errors, " "))
+	}
+	return deletedFiles, nil
+}
+
+// RemoveConditionally walks through the provided dir and then deletes all files
+// for which any of the callbacks return true.
+func (s *Storage) RemoveConditionally(dir string, callbacks ...removeFileCallback) ([]string, error) {
+	deletedFiles := []string{}
+	var errors []string
+	_ = filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			errors = append(errors, err.Error())
+			return nil
+		}
+		for _, callback := range callbacks {
+			if callback(path, info) {
+				if err := os.Remove(path); err != nil {
+					errors = append(errors, info.Name())
+				} else {
+					// Collect the successfully deleted file paths.
+					deletedFiles = append(deletedFiles, path)
+				}
+				break
 			}
 		}
 		return nil

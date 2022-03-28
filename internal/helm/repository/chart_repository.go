@@ -38,8 +38,10 @@ import (
 
 	"github.com/fluxcd/pkg/version"
 
+	"github.com/fluxcd/source-controller/internal/fs"
 	"github.com/fluxcd/source-controller/internal/helm"
 	"github.com/fluxcd/source-controller/internal/transport"
+	"github.com/fluxcd/source-controller/internal/util"
 )
 
 var ErrNoChartIndex = errors.New("no chart index")
@@ -189,6 +191,45 @@ func (r *ChartRepository) Get(name, ver string) (*repo.ChartVersion, error) {
 // and then attempts to download the chart using the Client and Options of the
 // ChartRepository. It returns a bytes.Buffer containing the chart data.
 func (r *ChartRepository) DownloadChart(chart *repo.ChartVersion) (*bytes.Buffer, error) {
+	u, err := r.resolveChartURL(chart)
+	if err != nil {
+		return nil, err
+	}
+
+	t := transport.NewOrIdle(r.tlsConfig)
+	clientOpts := append(r.Options, getter.WithTransport(t))
+	defer transport.Release(t)
+
+	return r.Client.Get(u.String(), clientOpts...)
+}
+
+func (r *ChartRepository) DownloadProvenanceFile(chart *repo.ChartVersion, path string) error {
+	u, err := r.resolveChartURL(chart)
+	if err != nil {
+		return err
+	}
+	t := transport.NewOrIdle(r.tlsConfig)
+	clientOpts := append(r.Options, getter.WithTransport(t))
+	defer transport.Release(t)
+
+	res, err := r.Client.Get(fmt.Sprintf("%s.prov", u.String()), clientOpts...)
+	if err != nil {
+		return err
+	}
+	tmpFile, err := util.WriteToTempFile(res.Bytes(), path, false)
+	defer os.Remove(tmpFile.Name())
+
+	if err != nil {
+		return fmt.Errorf("failed to write provenance file to temp file: %w", err)
+	}
+
+	if err = fs.RenameWithFallback(tmpFile.Name(), path); err != nil {
+		return fmt.Errorf("failed to write provenance to file %s: %w", path, err)
+	}
+	return nil
+}
+
+func (r *ChartRepository) resolveChartURL(chart *repo.ChartVersion) (*url.URL, error) {
 	if len(chart.URLs) == 0 {
 		return nil, fmt.Errorf("chart '%s' has no downloadable URLs", chart.Name)
 	}
@@ -217,11 +258,7 @@ func (r *ChartRepository) DownloadChart(chart *repo.ChartVersion) (*bytes.Buffer
 		u.RawQuery = q.Encode()
 	}
 
-	t := transport.NewOrIdle(r.tlsConfig)
-	clientOpts := append(r.Options, getter.WithTransport(t))
-	defer transport.Release(t)
-
-	return r.Client.Get(u.String(), clientOpts...)
+	return u, nil
 }
 
 // LoadIndexFromBytes loads Index from the given bytes.

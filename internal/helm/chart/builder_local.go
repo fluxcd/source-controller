@@ -17,6 +17,7 @@ limitations under the License.
 package chart
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -104,6 +105,8 @@ func (b *localChartBuilder) Build(ctx context.Context, ref Reference, p string, 
 	isChartDir := pathIsDir(localRef.Path)
 	requiresPackaging := isChartDir || opts.VersionMetadata != "" || len(opts.GetValuesFiles()) != 0
 
+	var provFilePath string
+
 	// If all the following is true, we do not need to package the chart:
 	// - Chart name from cached chart matches resolved name
 	// - Chart version from cached chart matches calculated version
@@ -114,10 +117,20 @@ func (b *localChartBuilder) Build(ctx context.Context, ref Reference, p string, 
 			// and continue the build
 			if err = curMeta.Validate(); err == nil {
 				if result.Name == curMeta.Name && result.Version == curMeta.Version {
+					// We can only verify a cached chart with provenance file if we didn't
+					// package the chart ourselves, and instead stored it as is.
+					if !requiresPackaging && opts.Keyring != nil {
+						provFilePath = provenanceFilePath(opts.CachedChart)
+						ver, err := verifyChartWithProvFile(bytes.NewReader(opts.Keyring), opts.CachedChart, provFilePath)
+						if err != nil {
+							return nil, &BuildError{Reason: ErrProvenanceVerification, Err: err}
+						}
+						result.VerificationSignature = buildVerificationSig(ver)
+						result.ProvFilePath = provFilePath
+					}
 					result.Path = opts.CachedChart
 					result.ValuesFiles = opts.GetValuesFiles()
 					result.Packaged = requiresPackaging
-
 					return result, nil
 				}
 			}
@@ -129,6 +142,18 @@ func (b *localChartBuilder) Build(ctx context.Context, ref Reference, p string, 
 	if !requiresPackaging {
 		if err = copyFileToPath(localRef.Path, p); err != nil {
 			return result, &BuildError{Reason: ErrChartPull, Err: err}
+		}
+		if opts.Keyring != nil {
+			provFilePath = provenanceFilePath(p)
+			if err = copyFileToPath(provenanceFilePath(localRef.Path), provFilePath); err != nil {
+				return result, &BuildError{Reason: ErrChartPull, Err: err}
+			}
+			ver, err := verifyChartWithProvFile(bytes.NewReader(opts.Keyring), localRef.Path, provFilePath)
+			if err != nil {
+				return nil, err
+			}
+			result.ProvFilePath = provFilePath
+			result.VerificationSignature = buildVerificationSig(ver)
 		}
 		result.Path = p
 		return result, nil

@@ -17,9 +17,9 @@ limitations under the License.
 package chart
 
 import (
+	"bytes"
 	"context"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 
@@ -33,6 +33,7 @@ import (
 
 	"github.com/fluxcd/source-controller/internal/fs"
 	"github.com/fluxcd/source-controller/internal/helm/repository"
+	"github.com/fluxcd/source-controller/internal/util"
 )
 
 type remoteChartBuilder struct {
@@ -105,6 +106,8 @@ func (b *remoteChartBuilder) Build(_ context.Context, ref Reference, p string, o
 
 	requiresPackaging := len(opts.GetValuesFiles()) != 0 || opts.VersionMetadata != ""
 
+	var provFilePath string
+
 	// If all the following is true, we do not need to download and/or build the chart:
 	// - Chart name from cached chart matches resolved name
 	// - Chart version from cached chart matches calculated version
@@ -115,6 +118,17 @@ func (b *remoteChartBuilder) Build(_ context.Context, ref Reference, p string, o
 			// and continue the build
 			if err = curMeta.Validate(); err == nil {
 				if result.Name == curMeta.Name && result.Version == curMeta.Version {
+					// We can only verify a cached chart with provenance file if we didn't
+					// package the chart ourselves, and instead stored it as is.
+					if !requiresPackaging && opts.Keyring != nil {
+						provFilePath = provenanceFilePath(opts.CachedChart)
+						ver, err := verifyChartWithProvFile(bytes.NewReader(opts.Keyring), opts.CachedChart, provFilePath)
+						if err != nil {
+							return nil, err
+						}
+						result.ProvFilePath = provFilePath
+						result.VerificationSignature = buildVerificationSig(ver)
+					}
 					result.Path = opts.CachedChart
 					result.ValuesFiles = opts.GetValuesFiles()
 					result.Packaged = requiresPackaging
@@ -130,11 +144,37 @@ func (b *remoteChartBuilder) Build(_ context.Context, ref Reference, p string, o
 		err = fmt.Errorf("failed to download chart for remote reference: %w", err)
 		return result, &BuildError{Reason: ErrChartPull, Err: err}
 	}
+	// Deal with the underlying byte slice to avoid having to read the buffer multiple times.
+	chartBuf := res.Bytes()
+
+	if opts.Keyring != nil {
+		provFilePath = provenanceFilePath(p)
+		err := b.remote.DownloadProvenanceFile(cv, provFilePath)
+		if err != nil {
+			err = fmt.Errorf("failed to download provenance file for remote reference: %w", err)
+			return nil, &BuildError{Reason: ErrChartPull, Err: err}
+		}
+		// Write the remote chart temporarily to verify it with provenance file.
+		// This is needed, since the verification will work only if the .tgz file is untampered.
+		// But we write the packaged chart to disk under a different name, so the provenance file
+		// will not be valid for this _new_ packaged chart.
+		chart, err := util.WriteToTempFile(chartBuf, fmt.Sprintf("%s-%s.tgz", cv.Name, cv.Version), true)
+		if err != nil {
+			return nil, err
+		}
+		defer os.Remove(chart.Name())
+		ver, err := verifyChartWithProvFile(bytes.NewReader(opts.Keyring), chart.Name(), provFilePath)
+		if err != nil {
+			return nil, err
+		}
+		result.ProvFilePath = provFilePath
+		result.VerificationSignature = buildVerificationSig(ver)
+	}
 
 	// Use literal chart copy from remote if no custom values files options are
 	// set or version metadata isn't set.
 	if !requiresPackaging {
-		if err = validatePackageAndWriteToPath(res, p); err != nil {
+		if err = validatePackageAndWriteToPath(chartBuf, p); err != nil {
 			return nil, &BuildError{Reason: ErrChartPull, Err: err}
 		}
 		result.Path = p
@@ -143,7 +183,7 @@ func (b *remoteChartBuilder) Build(_ context.Context, ref Reference, p string, o
 
 	// Load the chart and merge chart values
 	var chart *helmchart.Chart
-	if chart, err = loader.LoadArchive(res); err != nil {
+	if chart, err = loader.LoadArchive(bytes.NewBuffer(chartBuf)); err != nil {
 		err = fmt.Errorf("failed to load downloaded chart: %w", err)
 		return result, &BuildError{Reason: ErrChartPackage, Err: err}
 	}
@@ -166,6 +206,7 @@ func (b *remoteChartBuilder) Build(_ context.Context, ref Reference, p string, o
 	if err = packageToPath(chart, p); err != nil {
 		return nil, &BuildError{Reason: ErrChartPackage, Err: err}
 	}
+
 	result.Path = p
 	result.Packaged = true
 	return result, nil
@@ -202,18 +243,12 @@ func mergeChartValues(chart *helmchart.Chart, paths []string) (map[string]interf
 
 // validatePackageAndWriteToPath atomically writes the packaged chart from reader
 // to out while validating it by loading the chart metadata from the archive.
-func validatePackageAndWriteToPath(reader io.Reader, out string) error {
-	tmpFile, err := os.CreateTemp("", filepath.Base(out))
-	if err != nil {
-		return fmt.Errorf("failed to create temporary file for chart: %w", err)
-	}
+func validatePackageAndWriteToPath(b []byte, out string) error {
+	tmpFile, err := util.WriteToTempFile(b, out, false)
 	defer os.Remove(tmpFile.Name())
-	if _, err = tmpFile.ReadFrom(reader); err != nil {
-		_ = tmpFile.Close()
-		return fmt.Errorf("failed to write chart to file: %w", err)
-	}
-	if err = tmpFile.Close(); err != nil {
-		return err
+
+	if err != nil {
+		return fmt.Errorf("failed to write packaged chart to temp file: %w", err)
 	}
 	meta, err := LoadChartMetadataFromArchive(tmpFile.Name())
 	if err != nil {

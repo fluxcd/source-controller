@@ -668,6 +668,20 @@ references to this object.
 NOTE: Not implemented, provisional as of <a href="https://github.com/fluxcd/flux2/pull/2092">https://github.com/fluxcd/flux2/pull/2092</a></p>
 </td>
 </tr>
+<tr>
+<td>
+<code>verificationKeyring</code><br>
+<em>
+<a href="#source.toolkit.fluxcd.io/v1beta2.VerificationKeyring">
+VerificationKeyring
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>VerificationKeyring for verifying the packaged chart&rsquo;s signature using a provenance file.</p>
+</td>
+</tr>
 </table>
 </td>
 </tr>
@@ -1850,6 +1864,20 @@ references to this object.
 NOTE: Not implemented, provisional as of <a href="https://github.com/fluxcd/flux2/pull/2092">https://github.com/fluxcd/flux2/pull/2092</a></p>
 </td>
 </tr>
+<tr>
+<td>
+<code>verificationKeyring</code><br>
+<em>
+<a href="#source.toolkit.fluxcd.io/v1beta2.VerificationKeyring">
+VerificationKeyring
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>VerificationKeyring for verifying the packaged chart&rsquo;s signature using a provenance file.</p>
+</td>
+</tr>
 </tbody>
 </table>
 </div>
@@ -2251,6 +2279,53 @@ string
 Source is the interface that provides generic access to the Artifact and
 interval. It must be supported by all kinds of the source.toolkit.fluxcd.io
 API group.</p>
+<h3 id="source.toolkit.fluxcd.io/v1beta2.VerificationKeyring">VerificationKeyring
+</h3>
+<p>
+(<em>Appears on:</em>
+<a href="#source.toolkit.fluxcd.io/v1beta2.HelmChartSpec">HelmChartSpec</a>)
+</p>
+<p>VerificationKeyring contains enough info to get the public GPG key to be used for verifying
+the chart signature using a provenance file.</p>
+<div class="md-typeset__scrollwrap">
+<div class="md-typeset__table">
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>secretRef</code><br>
+<em>
+<a href="https://godoc.org/github.com/fluxcd/pkg/apis/meta#LocalObjectReference">
+github.com/fluxcd/pkg/apis/meta.LocalObjectReference
+</a>
+</em>
+</td>
+<td>
+<p>SecretRef is a reference to the secret that contains the public GPG key.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>key</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Key in the SecretRef that contains the public keyring in legacy GPG format.</p>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
 <div class="admonition note">
 <p class="last">This page was automatically generated with <code>gen-crd-api-reference-docs</code></p>
 </div>

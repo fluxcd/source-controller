@@ -104,6 +104,10 @@ type BuildOptions struct {
 	// Force can be set to force the build of the chart, for example
 	// because the list of ValuesFiles has changed.
 	Force bool
+
+	// Keyring can be set to the bytes of a public kering in legacy
+	// PGP format used for verifying a chart's signature using a provenance file.
+	Keyring []byte
 }
 
 // GetValuesFiles returns BuildOptions.ValuesFiles, except if it equals
@@ -125,6 +129,13 @@ type Build struct {
 	// Path is the absolute path to the packaged chart.
 	// Can be empty, in which case a failure should be assumed.
 	Path string
+	// ProvFilePath is the absolute path to a provenance file.
+	// It can be empty, in which case it should be assumed that the packaged
+	// chart is not verified.
+	ProvFilePath string
+	// VerificationSignature is populated when a chart's signature
+	// is successfully verified using its provenance file.
+	VerificationSignature *VerificationSignature
 	// ValuesFiles is the list of files used to compose the chart's
 	// default "values.yaml".
 	ValuesFiles []string
@@ -157,7 +168,6 @@ func (b *Build) Summary() string {
 	if len(b.ValuesFiles) > 0 {
 		s.WriteString(fmt.Sprintf(" and merged values files %v", b.ValuesFiles))
 	}
-
 	return s.String()
 }
 
