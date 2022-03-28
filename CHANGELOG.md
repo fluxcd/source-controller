@@ -2,6 +2,20 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.22.4
+
+**Release date:** 2022-03-28
+
+This prerelease improves on the experimental managed transport overall
+stability. Changes of note:
+- SSH connections now being reused across git operations.
+- Leaked HTTP connections are now fixed.
+- The long-standing SSH intermittent errors are addressed by the cached connections.
+
+Fixes:
+- Various fixes for managed transport
+  [#637](https://github.com/fluxcd/source-controller/pull/637)
+
 ## 0.22.3
 
 **Release date:** 2022-03-25
