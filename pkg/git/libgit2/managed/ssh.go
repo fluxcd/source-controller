@@ -53,6 +53,8 @@ import (
 	"net/url"
 	"runtime"
 	"strings"
+	"sync"
+	"time"
 
 	"golang.org/x/crypto/ssh"
 
@@ -62,6 +64,17 @@ import (
 // registerManagedSSH registers a Go-native implementation of
 // SSH transport that doesn't rely on any lower-level libraries
 // such as libssh2.
+//
+// The underlying SSH connections are kept open and are reused
+// across several SSH sessions. This is due to upstream issues in
+// which concurrent/parallel SSH connections may lead to instability.
+//
+// Connections are created on first attempt to use a given remote. The
+// connection is removed from the cache on the first failed session related
+// operation.
+//
+// https://github.com/golang/go/issues/51926
+// https://github.com/golang/go/issues/27140
 func registerManagedSSH() error {
 	for _, protocol := range []string{"ssh", "ssh+git", "git+ssh"} {
 		_, err := git2go.NewRegisteredSmartTransport(protocol, false, sshSmartSubtransportFactory)
@@ -88,6 +101,18 @@ type sshSmartSubtransport struct {
 	stdout        io.Reader
 	currentStream *sshSmartSubtransportStream
 }
+
+// aMux is the read-write mutex to control access to sshClients.
+var aMux sync.RWMutex
+
+// sshClients stores active ssh clients/connections to be reused.
+//
+// Once opened, connections will be kept cached until an error occurs
+// during SSH commands, by which point it will be discarded, leading to
+// a follow-up cache miss.
+//
+// The key must be based on cacheKey, refer to that function's comments.
+var sshClients map[string]*ssh.Client = make(map[string]*ssh.Client)
 
 func (t *sshSmartSubtransport) Action(urlString string, action git2go.SmartServiceAction) (git2go.SmartSubtransportStream, error) {
 	runtime.LockOSThread()
@@ -135,7 +160,14 @@ func (t *sshSmartSubtransport) Action(urlString string, action git2go.SmartServi
 	}
 	defer cred.Free()
 
-	sshConfig, err := getSSHConfigFromCredential(cred)
+	var addr string
+	if u.Port() != "" {
+		addr = fmt.Sprintf("%s:%s", u.Hostname(), u.Port())
+	} else {
+		addr = fmt.Sprintf("%s:22", u.Hostname())
+	}
+
+	ckey, sshConfig, err := cacheKeyAndConfig(addr, cred)
 	if err != nil {
 		return nil, err
 	}
@@ -156,34 +188,66 @@ func (t *sshSmartSubtransport) Action(urlString string, action git2go.SmartServi
 		return t.transport.SmartCertificateCheck(cert, true, hostname)
 	}
 
-	var addr string
-	if u.Port() != "" {
-		addr = fmt.Sprintf("%s:%s", u.Hostname(), u.Port())
-	} else {
-		addr = fmt.Sprintf("%s:22", u.Hostname())
+	aMux.RLock()
+	if c, ok := sshClients[ckey]; ok {
+		traceLog.Info("[ssh]: cache hit", "remoteAddress", addr)
+		t.client = c
+	}
+	aMux.RUnlock()
+
+	if t.client == nil {
+		traceLog.Info("[ssh]: cache miss", "remoteAddress", addr)
+
+		aMux.Lock()
+		defer aMux.Unlock()
+
+		// In some scenarios the ssh handshake can hang indefinitely at
+		// golang.org/x/crypto/ssh.(*handshakeTransport).kexLoop.
+		//
+		// xref: https://github.com/golang/go/issues/51926
+		done := make(chan error, 1)
+		go func() {
+			t.client, err = ssh.Dial("tcp", addr, sshConfig)
+			done <- err
+		}()
+
+		dialTimeout := sshConfig.Timeout + (30 * time.Second)
+
+		select {
+		case doneErr := <-done:
+			if doneErr != nil {
+				err = fmt.Errorf("ssh.Dial: %w", doneErr)
+			}
+		case <-time.After(dialTimeout):
+			err = fmt.Errorf("timed out waiting for ssh.Dial after %s", dialTimeout)
+		}
+
+		if err != nil {
+			return nil, err
+		}
+
+		sshClients[ckey] = t.client
 	}
 
-	t.client, err = ssh.Dial("tcp", addr, sshConfig)
-	if err != nil {
+	traceLog.Info("[ssh]: creating new ssh session")
+	if t.session, err = t.client.NewSession(); err != nil {
+		discardCachedSshClient(ckey)
 		return nil, err
 	}
 
-	t.session, err = t.client.NewSession()
-	if err != nil {
+	if t.stdin, err = t.session.StdinPipe(); err != nil {
+		discardCachedSshClient(ckey)
 		return nil, err
 	}
 
-	t.stdin, err = t.session.StdinPipe()
-	if err != nil {
+	if t.stdout, err = t.session.StdoutPipe(); err != nil {
+		discardCachedSshClient(ckey)
 		return nil, err
 	}
 
-	t.stdout, err = t.session.StdoutPipe()
-	if err != nil {
-		return nil, err
-	}
-
+	traceLog.Info("[ssh]: run on remote", "cmd", cmd)
 	if err := t.session.Start(cmd); err != nil {
+		discardCachedSshClient(ckey)
 		return nil, err
 	}
 
@@ -196,17 +260,29 @@ func (t *sshSmartSubtransport) Action(urlString string, action git2go.SmartServi
 }
 
 func (t *sshSmartSubtransport) Close() error {
+	var returnErr error
+
+	traceLog.Info("[ssh]: sshSmartSubtransport.Close()")
 	t.currentStream = nil
 	if t.client != nil {
-		t.stdin.Close()
-		t.session.Wait()
-		t.session.Close()
+		if err := t.stdin.Close(); err != nil {
+			returnErr = fmt.Errorf("cannot close stdin: %w", err)
+		}
 		t.client = nil
 	}
-	return nil
+	if t.session != nil {
+		traceLog.Info("[ssh]: skipping session.wait")
+		traceLog.Info("[ssh]: session.Close()")
+		if err := t.session.Close(); err != nil {
+			returnErr = fmt.Errorf("cannot close session: %w", err)
+		}
+	}
+
+	return returnErr
 }
 
 func (t *sshSmartSubtransport) Free() {
+	traceLog.Info("[ssh]: sshSmartSubtransport.Free()")
 }
 
 type sshSmartSubtransportStream struct {
@@ -222,20 +298,25 @@ func (stream *sshSmartSubtransportStream) Write(buf []byte) (int, error) {
 }
 
 func (stream *sshSmartSubtransportStream) Free() {
+	traceLog.Info("[ssh]: sshSmartSubtransportStream.Free()")
 }
 
-func getSSHConfigFromCredential(cred *git2go.Credential) (*ssh.ClientConfig, error) {
+func cacheKeyAndConfig(remoteAddress string, cred *git2go.Credential) (string, *ssh.ClientConfig, error) {
 	username, _, privatekey, passphrase, err := cred.GetSSHKey()
 	if err != nil {
-		return nil, err
+		return "", nil, err
 	}
 
 	var pemBytes []byte
 	if cred.Type() == git2go.CredentialTypeSSHMemory {
 		pemBytes = []byte(privatekey)
 	} else {
-		return nil, fmt.Errorf("file based SSH credential is not supported")
+		return "", nil, fmt.Errorf("file based SSH credential is not supported")
 	}
+
+	// must include the passphrase, otherwise a caller that knows the private key, but
+	// not its passphrase would be able to bypass auth.
+	ck := cacheKey(remoteAddress, username, passphrase, pemBytes)
 
 	var key ssh.Signer
 	if passphrase != "" {
@@ -245,12 +326,44 @@ func getSSHConfigFromCredential(cred *git2go.Credential) (*ssh.ClientConfig, err
 	}
 
 	if err != nil {
-		return nil, err
+		return "", nil, err
 	}
 
-	return &ssh.ClientConfig{
+	cfg := &ssh.ClientConfig{
 		User:    username,
 		Auth:    []ssh.AuthMethod{ssh.PublicKeys(key)},
 		Timeout: sshConnectionTimeOut,
-	}, nil
+	}
+
+	return ck, cfg, nil
+}
+
+// cacheKey generates a cache key that is multi-tenancy safe.
+//
+// Stablishing multiple and concurrent ssh connections leads to stability
+// issues documented above. However, the caching/sharing of already stablished
+// connections could represent a vector for users to bypass the ssh authentication
+// mechanism.
+//
+// cacheKey tries to ensure that connections are only shared by users that
+// have the exact same remoteAddress and credentials.
+func cacheKey(remoteAddress, userName, passphrase string, pubKey []byte) string {
+	h := sha256.New()
+
+	v := fmt.Sprintf("%s-%s-%s-%v", remoteAddress, userName, passphrase, pubKey)
+
+	h.Write([]byte(v))
+	return fmt.Sprintf("%x", h.Sum(nil))
+}
+
+// discardCachedSshClient discards the cached ssh client, forcing the next git operation
+// to create a new one via ssh.Dial.
+func discardCachedSshClient(key string) {
+	aMux.Lock()
+	defer aMux.Unlock()
+
+	if _, found := sshClients[key]; found {
+		traceLog.Info("[ssh]: discard cached ssh client")
+		delete(sshClients, key)
+	}
 }

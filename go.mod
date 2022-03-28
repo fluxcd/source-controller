@@ -39,7 +39,7 @@ require (
 	github.com/onsi/gomega v1.18.1
 	github.com/otiai10/copy v1.7.0
 	github.com/spf13/pflag v1.0.5
-	golang.org/x/crypto v0.0.0-20220315160706-3147a52a75dd
+	golang.org/x/crypto v0.0.0-20220321153916-2c7772ba3064
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
 	google.golang.org/api v0.73.0
 	gotest.tools v2.2.0+incompatible

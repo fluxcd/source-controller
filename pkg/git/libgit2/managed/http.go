@@ -50,12 +50,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"net/url"
 	"sync"
-	"time"
 
+	pool "github.com/fluxcd/source-controller/internal/transport"
 	git2go "github.com/libgit2/git2go/v33"
 )
 
@@ -73,15 +72,18 @@ func registerManagedHTTP() error {
 }
 
 func httpSmartSubtransportFactory(remote *git2go.Remote, transport *git2go.Transport) (git2go.SmartSubtransport, error) {
+	traceLog.Info("[http]: httpSmartSubtransportFactory")
 	sst := &httpSmartSubtransport{
-		transport: transport,
+		transport:     transport,
+		httpTransport: pool.NewOrIdle(nil),
 	}
 
 	return sst, nil
 }
 
 type httpSmartSubtransport struct {
-	transport *git2go.Transport
+	transport     *git2go.Transport
+	httpTransport *http.Transport
 }
 
 func (t *httpSmartSubtransport) Action(targetUrl string, action git2go.SmartServiceAction) (git2go.SmartSubtransportStream, error) {
@@ -104,25 +106,10 @@ func (t *httpSmartSubtransport) Action(targetUrl string, action git2go.SmartServ
 		proxyFn = http.ProxyURL(parsedUrl)
 	}
 
-	httpTransport := &http.Transport{
-		// Add the proxy to the http transport.
-		Proxy: proxyFn,
+	t.httpTransport.Proxy = proxyFn
+	t.httpTransport.DisableCompression = false
 
-		// Set reasonable timeouts to ensure connections are not
-		// left open in an idle state, nor they hang indefinitely.
-		//
-		// These are based on the official go http.DefaultTransport:
-		DialContext: (&net.Dialer{
-			Timeout:   30 * time.Second,
-			KeepAlive: 30 * time.Second,
-		}).DialContext,
-		MaxIdleConns:          100,
-		IdleConnTimeout:       90 * time.Second,
-		TLSHandshakeTimeout:   10 * time.Second,
-		ExpectContinueTimeout: 1 * time.Second,
-	}
-
-	client, req, err := createClientRequest(targetUrl, action, httpTransport)
+	client, req, err := createClientRequest(targetUrl, action, t.httpTransport)
 	if err != nil {
 		return nil, err
 	}
@@ -223,10 +210,18 @@ func createClientRequest(targetUrl string, action git2go.SmartServiceAction, t *
 }
 
 func (t *httpSmartSubtransport) Close() error {
+	traceLog.Info("[http]: httpSmartSubtransport.Close()")
 	return nil
 }
 
 func (t *httpSmartSubtransport) Free() {
+	traceLog.Info("[http]: httpSmartSubtransport.Free()")
+
+	if t.httpTransport != nil {
+		traceLog.Info("[http]: release http transport back to pool")
+		pool.Release(t.httpTransport)
+		t.httpTransport = nil
+	}
 }
 
 type httpSmartSubtransportStream struct {
@@ -291,7 +286,15 @@ func (self *httpSmartSubtransportStream) Write(buf []byte) (int, error) {
 
 func (self *httpSmartSubtransportStream) Free() {
 	if self.resp != nil {
-		self.resp.Body.Close()
+		traceLog.Info("[http]: httpSmartSubtransportStream.Free()")
+
+		if self.resp.Body != nil {
+			// ensure body is fully processed and closed
+			// for increased likelihood of transport reuse in HTTP/1.x.
+			// it should not be a problem to do this more than once.
+			_, _ = io.Copy(io.Discard, self.resp.Body) // errors can be safely ignored
+			_ = self.resp.Body.Close()                 // errors can be safely ignored
+		}
 	}
 }
 
@@ -354,6 +357,7 @@ func (self *httpSmartSubtransportStream) sendRequest() error {
 		}
 
 		req.SetBasicAuth(userName, password)
+		traceLog.Info("[http]: new request", "method", req.Method, "URL", req.URL)
 		resp, err = self.client.Do(req)
 		if err != nil {
 			return err
@@ -362,21 +366,36 @@ func (self *httpSmartSubtransportStream) sendRequest() error {
 		// GET requests will be automatically redirected.
 		// POST require the new destination, and also the body content.
 		if req.Method == "POST" && resp.StatusCode >= 301 && resp.StatusCode <= 308 {
+			// ensure body is fully processed and closed
+			// for increased likelihood of transport reuse in HTTP/1.x.
+			_, _ = io.Copy(io.Discard, resp.Body) // errors can be safely ignored
+
+			if err := resp.Body.Close(); err != nil {
+				return err
+			}
+
 			// The next try will go against the new destination
 			self.req.URL, err = resp.Location()
 			if err != nil {
 				return err
 			}
 
+			traceLog.Info("[http]: POST redirect", "URL", self.req.URL)
 			continue
 		}
 
+		// for HTTP 200, the response will be cleared up by Free()
 		if resp.StatusCode == http.StatusOK {
 			break
 		}
 
-		io.Copy(io.Discard, resp.Body)
-		defer resp.Body.Close()
+		// ensure body is fully processed and closed
+		// for increased likelihood of transport reuse in HTTP/1.x.
+		_, _ = io.Copy(io.Discard, resp.Body) // errors can be safely ignored
+		if err := resp.Body.Close(); err != nil {
+			return err
+		}
+
 		return fmt.Errorf("Unhandled HTTP error %s", resp.Status)
 	}
 

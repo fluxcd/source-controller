@@ -19,6 +19,9 @@ package managed
 import (
 	"sync"
 	"time"
+
+	"github.com/fluxcd/pkg/runtime/logger"
+	"github.com/go-logr/logr"
 )
 
 var (
@@ -34,6 +37,9 @@ var (
 	// regardless of the current operation (i.e. connection,
 	// handshake, put/get).
 	fullHttpClientTimeOut time.Duration = 10 * time.Minute
+
+	debugLog logr.Logger
+	traceLog logr.Logger
 )
 
 // InitManagedTransport initialises HTTP(S) and SSH managed transport
@@ -47,9 +53,14 @@ var (
 //
 // This function will only register managed transports once, subsequent calls
 // leads to no-op.
-func InitManagedTransport() error {
+func InitManagedTransport(log logr.Logger) error {
 	var err error
+
 	once.Do(func() {
+		log.Info("Enabling experimental managed transport")
+		debugLog = log.V(logger.DebugLevel)
+		traceLog = log.V(logger.TraceLevel)
+
 		if err = registerManagedHTTP(); err != nil {
 			return
 		}
