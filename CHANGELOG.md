@@ -2,6 +2,28 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.22.5
+
+**Release date:** 2022-03-30
+
+This prerelease improves the Status API of the Source objects to
+reflect more accurate Status Condition information.
+
+In addition, it also fixes a bug in `go-git` implementation due to which cloning
+public Git repository failed without any credentials since version `0.17.0`, and
+some general stability improvements in the libgit2 experimental managed
+transport.
+
+Improvements:
+- Align fuzzing deps
+  [#644](https://github.com/fluxcd/source-controller/pull/644)
+- Separate positive polarity conditions for ArtifactInStorage
+  [#646](https://github.com/fluxcd/source-controller/pull/646)
+- Removes empty credentials from Basic Auth
+  [#648](https://github.com/fluxcd/source-controller/pull/648)
+- libgit2: fix access to nil t.stdin and improve observability
+  [#649](https://github.com/fluxcd/source-controller/pull/649)
+
 ## 0.22.4
 
 **Release date:** 2022-03-28
