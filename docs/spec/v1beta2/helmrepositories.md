@@ -69,6 +69,12 @@ You can run this example by saving the manifest into `helmrepository.yaml`.
        Reason:                Succeeded
        Status:                True
        Type:                  Ready
+       Last Transition Time:  2022-02-04T09:55:58Z
+       Message:               stored artifact for revision '83a3c595163a6ff0333e0154c790383b5be441b9db632cb36da11db1c4ece111'
+       Observed Generation:   1
+       Reason:                Succeeded
+       Status:                True
+       Type:                  ArtifactInStorage
      Observed Generation:     1
      URL:                     http://source-controller.flux-system.svc.cluster.local./helmrepository/default/podinfo/index.yaml
    Events:
@@ -359,9 +365,10 @@ kubectl get events --field-selector involvedObject.kind=HelmRepository,involvedO
 lists
 
 ```console
-LAST SEEN   TYPE      REASON        OBJECT                             MESSAGE
-107s        Warning   Failed        helmrepository/<repository-name>   failed to construct Helm client: scheme "invalid" not supported
-7s          Normal    NewArtifact   helmrepository/<repository-name>   fetched index of size 30.88kB from 'https://stefanprodan.github.io/podinfo'
+LAST SEEN   TYPE      REASON           OBJECT                             MESSAGE
+107s        Warning   Failed           helmrepository/<repository-name>   failed to construct Helm client: scheme "invalid" not supported
+7s          Normal    NewArtifact      helmrepository/<repository-name>   fetched index of size 30.88kB from 'https://stefanprodan.github.io/podinfo'
+3s          Normal    ArtifactUpToDate helmrepository/<repository-name>   artifact up-to-date with remote revision: '83a3c595163a6ff0333e0154c790383b5be441b9db632cb36da11db1c4ece111'
 ```
 
 Besides being reported in Events, the reconciliation errors are also logged by
@@ -463,6 +470,17 @@ This `Ready` Condition will retain a status value of `"True"` until the
 HelmRepository is marked as [reconciling](#reconciling-helmrepository), or e.g.
 a [transient error](#failed-helmrepository) occurs due to a temporary network
 issue.
+
+When the HelmRepository Artifact is archived in the controller's Artifact
+storage, the controller sets a Condition with the following attributes in the
+HelmRepository's `.status.conditions`:
+
+- `type: ArtifactInStorage`
+- `status: "True"`
+- `reason: Succeeded`
+
+This `ArtifactInStorage` Condition will retain a status value of `"True"` until
+the Artifact in the storage no longer exists.
 
 #### Failed HelmRepository
 

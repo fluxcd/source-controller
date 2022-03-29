@@ -79,6 +79,12 @@ helm-controller.
        Reason:                ChartPullSucceeded
        Status:                True
        Type:                  Ready
+       Last Transition Time:  2022-02-13T11:24:10Z
+       Message:               pulled 'podinfo' chart with version '5.2.1'
+       Observed Generation:   1
+       Reason:                ChartPullSucceeded
+       Status:                True
+       Type:                  ArtifactInStorage
      Observed Chart Name:     podinfo
      Observed Generation:     1
      URL:                     http://source-controller.flux-system.svc.cluster.local./helmchart/default/podinfo/latest.tar.gz
@@ -377,6 +383,7 @@ lists
 LAST SEEN   TYPE      REASON                       OBJECT                   MESSAGE
 22s         Warning   InvalidChartReference        helmchart/<chart-name>   invalid chart reference: failed to get chart version for remote reference: no 'podinfo' chart with version matching '9.*' found
 2s          Normal    ChartPullSucceeded           helmchart/<chart-name>   pulled 'podinfo' chart with version '6.0.3'
+2s          Normal    ArtifactUpToDate             helmchart/<chart-name>   artifact up-to-date with remote revision: '6.0.3'
 ```
 
 Besides being reported in Events, the reconciliation errors are also logged by
@@ -521,6 +528,17 @@ following attributes in the HelmChart's `.status.conditions`:
 This `Ready` Condition will retain a status value of `"True"` until the
 HelmChart is marked as [reconciling](#reconciling-helmchart), or e.g.
 a [transient error](#failed-helmchart) occurs due to a temporary network issue.
+
+When the HelmChart Artifact is archived in the controller's Artifact
+storage, the controller sets a Condition with the following attributes in the
+HelmChart's `.status.conditions`:
+
+- `type: ArtifactInStorage`
+- `status: "True"`
+- `reason: Succeeded`
+
+This `ArtifactInStorage` Condition will retain a status value of `"True"` until
+the Artifact in the storage no longer exists.
 
 #### Failed HelmChart
 
