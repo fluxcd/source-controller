@@ -69,26 +69,28 @@ import (
 var helmChartReadyCondition = summarize.Conditions{
 	Target: meta.ReadyCondition,
 	Owned: []string{
-		sourcev1.BuildFailedCondition,
-		sourcev1.FetchFailedCondition,
 		sourcev1.StorageOperationFailedCondition,
+		sourcev1.FetchFailedCondition,
+		sourcev1.BuildFailedCondition,
 		sourcev1.ArtifactOutdatedCondition,
+		sourcev1.ArtifactInStorageCondition,
 		meta.ReadyCondition,
 		meta.ReconcilingCondition,
 		meta.StalledCondition,
 	},
 	Summarize: []string{
-		sourcev1.BuildFailedCondition,
-		sourcev1.FetchFailedCondition,
 		sourcev1.StorageOperationFailedCondition,
+		sourcev1.FetchFailedCondition,
+		sourcev1.BuildFailedCondition,
 		sourcev1.ArtifactOutdatedCondition,
+		sourcev1.ArtifactInStorageCondition,
 		meta.StalledCondition,
 		meta.ReconcilingCondition,
 	},
 	NegativePolarity: []string{
-		sourcev1.BuildFailedCondition,
-		sourcev1.FetchFailedCondition,
 		sourcev1.StorageOperationFailedCondition,
+		sourcev1.FetchFailedCondition,
+		sourcev1.BuildFailedCondition,
 		sourcev1.ArtifactOutdatedCondition,
 		meta.StalledCondition,
 		meta.ReconcilingCondition,
@@ -284,11 +286,14 @@ func (r *HelmChartReconciler) reconcileStorage(ctx context.Context, obj *sourcev
 	if artifact := obj.GetArtifact(); artifact != nil && !r.Storage.ArtifactExist(*artifact) {
 		obj.Status.Artifact = nil
 		obj.Status.URL = ""
+		// Remove the condition as the artifact doesn't exist.
+		conditions.Delete(obj, sourcev1.ArtifactInStorageCondition)
 	}
 
 	// Record that we do not have an artifact
 	if obj.GetArtifact() == nil {
 		conditions.MarkReconciling(obj, "NoArtifact", "no artifact for resource in storage")
+		conditions.Delete(obj, sourcev1.ArtifactInStorageCondition)
 		return sreconcile.ResultSuccess, nil
 	}
 
@@ -620,11 +625,11 @@ func (r *HelmChartReconciler) reconcileArtifact(ctx context.Context, obj *source
 		return sreconcile.ResultRequeue, nil
 	}
 
-	// Always restore the conditions in case they got overwritten by transient errors
+	// Set the ArtifactInStorageCondition if there's no drift.
 	defer func() {
 		if obj.Status.ObservedChartName == b.Name && obj.GetArtifact().HasRevision(b.Version) {
 			conditions.Delete(obj, sourcev1.ArtifactOutdatedCondition)
-			conditions.MarkTrue(obj, meta.ReadyCondition, reasonForBuild(b), b.Summary())
+			conditions.MarkTrue(obj, sourcev1.ArtifactInStorageCondition, reasonForBuild(b), b.Summary())
 		}
 	}()
 

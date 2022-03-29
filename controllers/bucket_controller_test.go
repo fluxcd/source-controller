@@ -38,12 +38,14 @@ import (
 	"k8s.io/client-go/tools/record"
 	kstatus "sigs.k8s.io/cli-utils/pkg/kstatus/status"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	fakeclient "sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
 	gcsmock "github.com/fluxcd/source-controller/internal/mock/gcs"
 	s3mock "github.com/fluxcd/source-controller/internal/mock/s3"
 	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
+	"github.com/fluxcd/source-controller/internal/reconcile/summarize"
 )
 
 // Environment variable to set the GCP Storage host for the GCP client.
@@ -886,13 +888,13 @@ func TestBucketReconciler_reconcileArtifact(t *testing.T) {
 		assertConditions []metav1.Condition
 	}{
 		{
-			name: "Archiving artifact to storage makes Ready=True",
+			name: "Archiving artifact to storage makes ArtifactInStorage=True",
 			beforeFunc: func(t *WithT, obj *sourcev1.Bucket, index *etagIndex, dir string) {
 				obj.Spec.Interval = metav1.Duration{Duration: interval}
 			},
 			want: sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(meta.ReadyCondition, meta.SucceededReason, "stored artifact for revision 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'"),
+				*conditions.TrueCondition(sourcev1.ArtifactInStorageCondition, meta.SucceededReason, "stored artifact for revision 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'"),
 			},
 		},
 		{
@@ -909,7 +911,7 @@ func TestBucketReconciler_reconcileArtifact(t *testing.T) {
 			},
 			want: sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(meta.ReadyCondition, meta.SucceededReason, "stored artifact for revision 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'"),
+				*conditions.TrueCondition(sourcev1.ArtifactInStorageCondition, meta.SucceededReason, "stored artifact for revision 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'"),
 			},
 		},
 		{
@@ -920,7 +922,7 @@ func TestBucketReconciler_reconcileArtifact(t *testing.T) {
 			},
 			want: sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(meta.ReadyCondition, meta.SucceededReason, "stored artifact for revision 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'"),
+				*conditions.TrueCondition(sourcev1.ArtifactInStorageCondition, meta.SucceededReason, "stored artifact for revision 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'"),
 			},
 		},
 		{
@@ -937,7 +939,7 @@ func TestBucketReconciler_reconcileArtifact(t *testing.T) {
 			},
 			want: sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(meta.ReadyCondition, meta.SucceededReason, "stored artifact for revision 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'"),
+				*conditions.TrueCondition(sourcev1.ArtifactInStorageCondition, meta.SucceededReason, "stored artifact for revision 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'"),
 			},
 		},
 		{
@@ -1067,6 +1069,97 @@ func Test_etagIndex_Revision(t *testing.T) {
 			if got != tt.want {
 				t.Errorf("revision() got = %v, want %v", got, tt.want)
 			}
+		})
+	}
+}
+
+func TestBucketReconciler_statusConditions(t *testing.T) {
+	tests := []struct {
+		name             string
+		beforeFunc       func(obj *sourcev1.Bucket)
+		assertConditions []metav1.Condition
+	}{
+		{
+			name: "positive conditions only",
+			beforeFunc: func(obj *sourcev1.Bucket) {
+				conditions.MarkTrue(obj, sourcev1.ArtifactInStorageCondition, meta.SucceededReason, "stored artifact for revision")
+			},
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReadyCondition, meta.SucceededReason, "stored artifact for revision"),
+				*conditions.TrueCondition(sourcev1.ArtifactInStorageCondition, meta.SucceededReason, "stored artifact for revision"),
+			},
+		},
+		{
+			name: "multiple failures",
+			beforeFunc: func(obj *sourcev1.Bucket) {
+				conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "failed to get secret")
+				conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition, sourcev1.DirCreationFailedReason, "failed to create directory")
+				conditions.MarkTrue(obj, sourcev1.ArtifactOutdatedCondition, "NewRevision", "some error")
+			},
+			assertConditions: []metav1.Condition{
+				*conditions.FalseCondition(meta.ReadyCondition, sourcev1.DirCreationFailedReason, "failed to create directory"),
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "failed to get secret"),
+				*conditions.TrueCondition(sourcev1.StorageOperationFailedCondition, sourcev1.DirCreationFailedReason, "failed to create directory"),
+				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "some error"),
+			},
+		},
+		{
+			name: "mixed positive and negative conditions",
+			beforeFunc: func(obj *sourcev1.Bucket) {
+				conditions.MarkTrue(obj, sourcev1.ArtifactInStorageCondition, meta.SucceededReason, "stored artifact for revision")
+				conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "failed to get secret")
+			},
+			assertConditions: []metav1.Condition{
+				*conditions.FalseCondition(meta.ReadyCondition, sourcev1.AuthenticationFailedReason, "failed to get secret"),
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "failed to get secret"),
+				*conditions.TrueCondition(sourcev1.ArtifactInStorageCondition, meta.SucceededReason, "stored artifact for revision"),
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			obj := &sourcev1.Bucket{
+				TypeMeta: metav1.TypeMeta{
+					Kind:       sourcev1.BucketKind,
+					APIVersion: "source.toolkit.fluxcd.io/v1beta2",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "bucket",
+					Namespace: "foo",
+				},
+			}
+			clientBuilder := fake.NewClientBuilder()
+			clientBuilder.WithObjects(obj)
+			c := clientBuilder.Build()
+
+			patchHelper, err := patch.NewHelper(obj, c)
+			g.Expect(err).ToNot(HaveOccurred())
+
+			if tt.beforeFunc != nil {
+				tt.beforeFunc(obj)
+			}
+
+			ctx := context.TODO()
+			recResult := sreconcile.ResultSuccess
+			var retErr error
+
+			summarizeHelper := summarize.NewHelper(record.NewFakeRecorder(32), patchHelper)
+			summarizeOpts := []summarize.Option{
+				summarize.WithConditions(bucketReadyCondition),
+				summarize.WithReconcileResult(recResult),
+				summarize.WithReconcileError(retErr),
+				summarize.WithIgnoreNotFound(),
+				summarize.WithResultBuilder(sreconcile.AlwaysRequeueResultBuilder{RequeueAfter: obj.GetRequeueAfter()}),
+				summarize.WithPatchFieldOwner("source-controller"),
+			}
+			_, retErr = summarizeHelper.SummarizeAndPatch(ctx, obj, summarizeOpts...)
+
+			key := client.ObjectKeyFromObject(obj)
+			g.Expect(c.Get(ctx, key, obj)).ToNot(HaveOccurred())
+			g.Expect(obj.GetConditions()).To(conditions.MatchConditions(tt.assertConditions))
 		})
 	}
 }
