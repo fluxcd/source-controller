@@ -411,7 +411,7 @@ func (r *HelmRepositoryReconciler) reconcileArtifact(ctx context.Context, obj *s
 	}()
 
 	if obj.GetArtifact().HasRevision(artifact.Revision) {
-		ctrl.LoggerFrom(ctx).Info("artifact up-to-date", "revision", artifact.Revision)
+		r.eventLogf(ctx, obj, events.EventTypeTrace, sourcev1.ArtifactUpToDateReason, "artifact up-to-date with remote revision: '%s'", artifact.Revision)
 		return sreconcile.ResultSuccess, nil
 	}
 

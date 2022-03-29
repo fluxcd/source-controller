@@ -462,7 +462,7 @@ func (r *GitRepositoryReconciler) reconcileArtifact(ctx context.Context,
 
 	// The artifact is up-to-date
 	if obj.GetArtifact().HasRevision(artifact.Revision) && !includes.Diff(obj.Status.IncludedArtifacts) {
-		ctrl.LoggerFrom(ctx).Info("artifact up-to-date", "revision", artifact.Revision)
+		r.eventLogf(ctx, obj, events.EventTypeTrace, sourcev1.ArtifactUpToDateReason, "artifact up-to-date with remote revision: '%s'", artifact.Revision)
 		return sreconcile.ResultSuccess, nil
 	}
 

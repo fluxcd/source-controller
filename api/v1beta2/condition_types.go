@@ -93,4 +93,8 @@ const (
 
 	// SymlinkUpdateFailedReason signals a failure in updating a symlink.
 	SymlinkUpdateFailedReason string = "SymlinkUpdateFailed"
+
+	// ArtifactUpToDateReason signals that an existing Artifact is up-to-date
+	// with the Source.
+	ArtifactUpToDateReason string = "ArtifactUpToDate"
 )
