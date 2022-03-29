@@ -36,10 +36,15 @@ func transportAuth(opts *git.AuthOptions) (transport.AuthMethod, error) {
 	}
 	switch opts.Transport {
 	case git.HTTPS, git.HTTP:
-		return &http.BasicAuth{
-			Username: opts.Username,
-			Password: opts.Password,
-		}, nil
+		// Some providers (i.e. GitLab) will reject empty credentials for
+		// public repositories.
+		if opts.Username != "" || opts.Password != "" {
+			return &http.BasicAuth{
+				Username: opts.Username,
+				Password: opts.Password,
+			}, nil
+		}
+		return nil, nil
 	case git.SSH:
 		if len(opts.Identity) > 0 {
 			pk, err := ssh.NewPublicKeys(opts.Username, opts.Identity, opts.Password)

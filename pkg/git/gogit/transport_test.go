@@ -75,6 +75,24 @@ func Test_transportAuth(t *testing.T) {
 		wantErr  error
 	}{
 		{
+			name: "Public HTTP Repositories",
+			opts: &git.AuthOptions{
+				Transport: git.HTTP,
+			},
+			wantFunc: func(g *WithT, t transport.AuthMethod, opts *git.AuthOptions) {
+				g.Expect(t).To(BeNil())
+			},
+		},
+		{
+			name: "Public HTTPS Repositories",
+			opts: &git.AuthOptions{
+				Transport: git.HTTP,
+			},
+			wantFunc: func(g *WithT, t transport.AuthMethod, opts *git.AuthOptions) {
+				g.Expect(t).To(BeNil())
+			},
+		},
+		{
 			name: "HTTP basic auth",
 			opts: &git.AuthOptions{
 				Transport: git.HTTP,
