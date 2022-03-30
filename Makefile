@@ -241,19 +241,30 @@ endef
 
 # Build fuzzers
 fuzz-build: $(LIBGIT2)
-	rm -rf $(shell pwd)/build/fuzz/
-	mkdir -p $(shell pwd)/build/fuzz/out/
+	rm -rf $(BUILD_DIR)/fuzz/
+	mkdir -p $(BUILD_DIR)/fuzz/out/
 
 	docker build . --tag local-fuzzing:latest -f tests/fuzz/Dockerfile.builder
 	docker run --rm \
 		-e FUZZING_LANGUAGE=go -e SANITIZER=address \
 		-e CIFUZZ_DEBUG='True' -e OSS_FUZZ_PROJECT_NAME=fluxcd \
-		-v "$(shell pwd)/build/fuzz/out":/out \
+		-v "$(BUILD_DIR)/fuzz/out":/out \
 		local-fuzzing:latest
 
 fuzz-smoketest: fuzz-build
 	docker run --rm \
-		-v "$(shell pwd)/build/fuzz/out":/out \
+		-v "$(BUILD_DIR)/fuzz/out":/out \
 		-v "$(shell pwd)/tests/fuzz/oss_fuzz_run.sh":/runner.sh \
 		local-fuzzing:latest \
 		bash -c "/runner.sh"
+
+# Creates an env file that can be used to load all source-controller's dependencies
+# this is handy when you want to run adhoc debug sessions on tests or start the 
+# controller in a new debug session.
+env: $(LIBGIT2)
+	echo 'GO_ENABLED="1"' > $(BUILD_DIR)/.env
+	echo 'PKG_CONFIG_PATH="$(PKG_CONFIG_PATH)"' >> $(BUILD_DIR)/.env
+	echo 'LIBRARY_PATH="$(LIBRARY_PATH)"' >> $(BUILD_DIR)/.env
+	echo 'CGO_CFLAGS="$(CGO_CFLAGS)"' >> $(BUILD_DIR)/.env
+	echo 'CGO_LDFLAGS="$(CGO_LDFLAGS)"' >> $(BUILD_DIR)/.env
+	echo 'KUBEBUILDER_ASSETS=$(KUBEBUILDER_ASSETS)' >> $(BUILD_DIR)/.env

@@ -128,3 +128,31 @@ Deploy `source-controller` into the cluster that is configured in the local kube
 ```sh
 make deploy
 ```
+
+### Debugging controller with VSCode
+
+Create a `.vscode/launch.json` file:
+```json
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Launch Package",
+            "type": "go",
+            "request": "launch",
+            "mode": "auto",
+            "envFile": "${workspaceFolder}/build/.env",
+            "program": "${workspaceFolder}/main.go"
+        }
+    ]
+}
+```
+
+Create the environment file containing details on how to load 
+`libgit2` dependencies:
+```bash
+make env
+```
+
+Start debugging by either clicking `Run` > `Start Debugging` or using
+the relevant shortcut.
