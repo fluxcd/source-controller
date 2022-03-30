@@ -629,11 +629,11 @@ func (r *HelmChartReconciler) reconcileArtifact(ctx context.Context, obj *source
 	}()
 
 	// Create artifact from build data
-	artifact := r.Storage.NewArtifactFor(obj.Kind, obj.GetObjectMeta(), b.Version, fmt.Sprintf("%s-%s.tgz", b.Name, b.Version))
+	artifact := r.Storage.NewArtifactFor(obj.Kind, obj.GetObjectMeta(), b.Version, fmt.Sprintf("%s-%s-%d.tgz", b.Name, b.Version, time.Now().Unix()))
 
 	// Return early if the build path equals the current artifact path
 	if curArtifact := obj.GetArtifact(); curArtifact != nil && r.Storage.LocalPath(*curArtifact) == b.Path {
-		ctrl.LoggerFrom(ctx).Info("artifact up-to-date", "revision", artifact.Revision)
+		ctrl.LoggerFrom(ctx).Info("artifact up-to-date", "revision", curArtifact.Revision)
 		return sreconcile.ResultSuccess, nil
 	}
 
