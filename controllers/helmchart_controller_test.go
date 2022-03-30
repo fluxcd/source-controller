@@ -50,6 +50,7 @@ import (
 	serror "github.com/fluxcd/source-controller/internal/error"
 	"github.com/fluxcd/source-controller/internal/helm/chart"
 	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
+	"github.com/fluxcd/source-controller/internal/reconcile/summarize"
 )
 
 func TestHelmChartReconciler_Reconcile(t *testing.T) {
@@ -981,7 +982,7 @@ func TestHelmChartReconciler_reconcileArtifact(t *testing.T) {
 			},
 		},
 		{
-			name:  "Copying artifact to storage from build makes Ready=True",
+			name:  "Copying artifact to storage from build makes ArtifactInStorage=True",
 			build: mockChartBuild("helmchart", "0.1.0", "testdata/charts/helmchart-0.1.0.tgz"),
 			beforeFunc: func(obj *sourcev1.HelmChart) {
 				conditions.MarkTrue(obj, sourcev1.ArtifactOutdatedCondition, "Foo", "")
@@ -995,7 +996,7 @@ func TestHelmChartReconciler_reconcileArtifact(t *testing.T) {
 			},
 			want: sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(meta.ReadyCondition, sourcev1.ChartPullSucceededReason, "pulled 'helmchart' chart with version '0.1.0'"),
+				*conditions.TrueCondition(sourcev1.ArtifactInStorageCondition, sourcev1.ChartPullSucceededReason, "pulled 'helmchart' chart with version '0.1.0'"),
 			},
 		},
 		{
@@ -1038,7 +1039,7 @@ func TestHelmChartReconciler_reconcileArtifact(t *testing.T) {
 				t.Expect(obj.Status.URL).To(BeEmpty())
 			},
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(meta.ReadyCondition, sourcev1.ChartPackageSucceededReason, "packaged 'helmchart' chart with version '0.1.0'"),
+				*conditions.TrueCondition(sourcev1.ArtifactInStorageCondition, sourcev1.ChartPackageSucceededReason, "packaged 'helmchart' chart with version '0.1.0'"),
 			},
 		},
 		{
@@ -1056,7 +1057,7 @@ func TestHelmChartReconciler_reconcileArtifact(t *testing.T) {
 			},
 			want: sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(meta.ReadyCondition, sourcev1.ChartPullSucceededReason, "pulled 'helmchart' chart with version '0.1.0'"),
+				*conditions.TrueCondition(sourcev1.ArtifactInStorageCondition, sourcev1.ChartPullSucceededReason, "pulled 'helmchart' chart with version '0.1.0'"),
 			},
 		},
 		{
@@ -1073,7 +1074,7 @@ func TestHelmChartReconciler_reconcileArtifact(t *testing.T) {
 			},
 			want: sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(meta.ReadyCondition, sourcev1.ChartPullSucceededReason, "pulled 'helmchart' chart with version '0.1.0'"),
+				*conditions.TrueCondition(sourcev1.ArtifactInStorageCondition, sourcev1.ChartPullSucceededReason, "pulled 'helmchart' chart with version '0.1.0'"),
 			},
 		},
 	}
@@ -1481,5 +1482,98 @@ func mockChartBuild(name, version, path string) *chart.Build {
 		Name:    name,
 		Version: version,
 		Path:    copyP,
+	}
+}
+
+func TestHelmChartReconciler_statusConditions(t *testing.T) {
+	tests := []struct {
+		name             string
+		beforeFunc       func(obj *sourcev1.HelmChart)
+		assertConditions []metav1.Condition
+	}{
+		{
+			name: "positive conditions only",
+			beforeFunc: func(obj *sourcev1.HelmChart) {
+				conditions.MarkTrue(obj, sourcev1.ArtifactInStorageCondition, meta.SucceededReason, "stored artifact for revision")
+			},
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReadyCondition, meta.SucceededReason, "stored artifact for revision"),
+				*conditions.TrueCondition(sourcev1.ArtifactInStorageCondition, meta.SucceededReason, "stored artifact for revision"),
+			},
+		},
+		{
+			name: "multiple failures",
+			beforeFunc: func(obj *sourcev1.HelmChart) {
+				conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "failed to get secret")
+				conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition, sourcev1.DirCreationFailedReason, "failed to create directory")
+				conditions.MarkTrue(obj, sourcev1.BuildFailedCondition, "ChartPackageError", "some error")
+				conditions.MarkTrue(obj, sourcev1.ArtifactOutdatedCondition, "NewRevision", "some error")
+			},
+			assertConditions: []metav1.Condition{
+				*conditions.FalseCondition(meta.ReadyCondition, sourcev1.DirCreationFailedReason, "failed to create directory"),
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "failed to get secret"),
+				*conditions.TrueCondition(sourcev1.StorageOperationFailedCondition, sourcev1.DirCreationFailedReason, "failed to create directory"),
+				*conditions.TrueCondition(sourcev1.BuildFailedCondition, "ChartPackageError", "some error"),
+				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "some error"),
+			},
+		},
+		{
+			name: "mixed positive and negative conditions",
+			beforeFunc: func(obj *sourcev1.HelmChart) {
+				conditions.MarkTrue(obj, sourcev1.ArtifactInStorageCondition, meta.SucceededReason, "stored artifact for revision")
+				conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "failed to get secret")
+			},
+			assertConditions: []metav1.Condition{
+				*conditions.FalseCondition(meta.ReadyCondition, sourcev1.AuthenticationFailedReason, "failed to get secret"),
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "failed to get secret"),
+				*conditions.TrueCondition(sourcev1.ArtifactInStorageCondition, meta.SucceededReason, "stored artifact for revision"),
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			obj := &sourcev1.HelmChart{
+				TypeMeta: metav1.TypeMeta{
+					Kind:       sourcev1.HelmChartKind,
+					APIVersion: "source.toolkit.fluxcd.io/v1beta2",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "helmchart",
+					Namespace: "foo",
+				},
+			}
+			clientBuilder := fake.NewClientBuilder()
+			clientBuilder.WithObjects(obj)
+			c := clientBuilder.Build()
+
+			patchHelper, err := patch.NewHelper(obj, c)
+			g.Expect(err).ToNot(HaveOccurred())
+
+			if tt.beforeFunc != nil {
+				tt.beforeFunc(obj)
+			}
+
+			ctx := context.TODO()
+			recResult := sreconcile.ResultSuccess
+			var retErr error
+
+			summarizeHelper := summarize.NewHelper(record.NewFakeRecorder(32), patchHelper)
+			summarizeOpts := []summarize.Option{
+				summarize.WithConditions(helmChartReadyCondition),
+				summarize.WithReconcileResult(recResult),
+				summarize.WithReconcileError(retErr),
+				summarize.WithIgnoreNotFound(),
+				summarize.WithResultBuilder(sreconcile.AlwaysRequeueResultBuilder{RequeueAfter: obj.GetRequeueAfter()}),
+				summarize.WithPatchFieldOwner("source-controller"),
+			}
+			_, retErr = summarizeHelper.SummarizeAndPatch(ctx, obj, summarizeOpts...)
+
+			key := client.ObjectKeyFromObject(obj)
+			g.Expect(c.Get(ctx, key, obj)).ToNot(HaveOccurred())
+			g.Expect(obj.GetConditions()).To(conditions.MatchConditions(tt.assertConditions))
+		})
 	}
 }

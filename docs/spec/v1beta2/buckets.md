@@ -93,6 +93,12 @@ control over.
        Reason:                Succeeded
        Status:                True
        Type:                  Ready
+       Last Transition Time:  2022-02-01T23:43:38Z
+       Message:               stored artifact for revision 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'
+       Observed Generation:   1
+       Reason:                Succeeded
+       Status:                True
+       Type:                  ArtifactInStorage
      Observed Generation:     1
      URL:                     http://source-controller.source-system.svc.cluster.local./bucket/default/minio-bucket/latest.tar.gz
    Events:
@@ -780,6 +786,7 @@ lists
 ```console
 LAST SEEN   TYPE      REASON                       OBJECT                 MESSAGE
 2m30s       Normal    NewArtifact                  bucket/<bucket-name>   fetched 16 files with revision from 'my-new-bucket'
+36s         Normal    ArtifactUpToDate             bucket/<bucket-name>   artifact up-to-date with remote revision: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'
 18s         Warning   BucketOperationFailed        bucket/<bucket-name>   bucket 'my-new-bucket' does not exist
 ```
 
@@ -891,6 +898,17 @@ attributes in the Bucket's `.status.conditions`:
 This `Ready` Condition will retain a status value of `"True"` until the Bucket
 is marked as [reconciling](#reconciling-bucket), or e.g. a
 [transient error](#failed-bucket) occurs due to a temporary network issue.
+
+When the Bucket Artifact is archived in the controller's Artifact
+storage, the controller sets a Condition with the following attributes in the
+Bucket's `.status.conditions`:
+
+- `type: ArtifactInStorage`
+- `status: "True"`
+- `reason: Succeeded`
+
+This `ArtifactInStorage` Condition will retain a status value of `"True"` until
+the Artifact in the storage no longer exists.
 
 #### Failed Bucket
 

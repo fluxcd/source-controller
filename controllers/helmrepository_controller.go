@@ -57,23 +57,25 @@ import (
 var helmRepositoryReadyCondition = summarize.Conditions{
 	Target: meta.ReadyCondition,
 	Owned: []string{
-		sourcev1.FetchFailedCondition,
 		sourcev1.StorageOperationFailedCondition,
+		sourcev1.FetchFailedCondition,
 		sourcev1.ArtifactOutdatedCondition,
+		sourcev1.ArtifactInStorageCondition,
 		meta.ReadyCondition,
 		meta.ReconcilingCondition,
 		meta.StalledCondition,
 	},
 	Summarize: []string{
-		sourcev1.FetchFailedCondition,
 		sourcev1.StorageOperationFailedCondition,
+		sourcev1.FetchFailedCondition,
 		sourcev1.ArtifactOutdatedCondition,
+		sourcev1.ArtifactInStorageCondition,
 		meta.StalledCondition,
 		meta.ReconcilingCondition,
 	},
 	NegativePolarity: []string{
-		sourcev1.FetchFailedCondition,
 		sourcev1.StorageOperationFailedCondition,
+		sourcev1.FetchFailedCondition,
 		sourcev1.ArtifactOutdatedCondition,
 		meta.StalledCondition,
 		meta.ReconcilingCondition,
@@ -245,11 +247,14 @@ func (r *HelmRepositoryReconciler) reconcileStorage(ctx context.Context, obj *so
 	if artifact := obj.GetArtifact(); artifact != nil && !r.Storage.ArtifactExist(*artifact) {
 		obj.Status.Artifact = nil
 		obj.Status.URL = ""
+		// Remove the condition as the artifact doesn't exist.
+		conditions.Delete(obj, sourcev1.ArtifactInStorageCondition)
 	}
 
 	// Record that we do not have an artifact
 	if obj.GetArtifact() == nil {
 		conditions.MarkReconciling(obj, "NoArtifact", "no artifact for resource in storage")
+		conditions.Delete(obj, sourcev1.ArtifactInStorageCondition)
 		return sreconcile.ResultSuccess, nil
 	}
 
@@ -392,11 +397,11 @@ func (r *HelmRepositoryReconciler) reconcileSource(ctx context.Context, obj *sou
 // On a successful archive, the Artifact in the Status of the object is set,
 // and the symlink in the Storage is updated to its path.
 func (r *HelmRepositoryReconciler) reconcileArtifact(ctx context.Context, obj *sourcev1.HelmRepository, artifact *sourcev1.Artifact, chartRepo *repository.ChartRepository) (sreconcile.Result, error) {
-	// Always restore the Ready condition in case it got removed due to a transient error.
+	// Set the ArtifactInStorageCondition if there's no drift.
 	defer func() {
 		if obj.GetArtifact().HasRevision(artifact.Revision) {
 			conditions.Delete(obj, sourcev1.ArtifactOutdatedCondition)
-			conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason,
+			conditions.MarkTrue(obj, sourcev1.ArtifactInStorageCondition, meta.SucceededReason,
 				"stored artifact for revision '%s'", artifact.Revision)
 		}
 
@@ -406,7 +411,7 @@ func (r *HelmRepositoryReconciler) reconcileArtifact(ctx context.Context, obj *s
 	}()
 
 	if obj.GetArtifact().HasRevision(artifact.Revision) {
-		ctrl.LoggerFrom(ctx).Info("artifact up-to-date", "revision", artifact.Revision)
+		r.eventLogf(ctx, obj, events.EventTypeTrace, sourcev1.ArtifactUpToDateReason, "artifact up-to-date with remote revision: '%s'", artifact.Revision)
 		return sreconcile.ResultSuccess, nil
 	}
 

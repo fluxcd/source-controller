@@ -71,6 +71,12 @@ You can run this example by saving the manifest into `gitrepository.yaml`.
        Reason:                Succeeded
        Status:                True
        Type:                  Ready
+       Last Transition Time:  2022-02-14T11:23:36Z
+       Message:               stored artifact for revision 'master/132f4e719209eb10b9485302f8593fc0e680f4fc'
+       Observed Generation:   1
+       Reason:                Succeeded
+       Status:                True
+       Type:                  ArtifactInStorage
      Observed Generation:     1
      URL:                     http://source-controller.source-system.svc.cluster.local./gitrepository/default/podinfo/latest.tar.gz
    Events:
@@ -647,6 +653,7 @@ lists
 ```console
 LAST SEEN   TYPE     REASON                OBJECT                               MESSAGE
 2m14s       Normal   NewArtifact           gitrepository/<repository-name>      stored artifact for commit 'Merge pull request #160 from stefanprodan/release-6.0.3'
+36s         Normal   ArtifactUpToDate      gitrepository/<repository-name>      artifact up-to-date with remote revision: 'master/132f4e719209eb10b9485302f8593fc0e680f4fc'
 94s         Warning  GitOperationFailed    gitrepository/<repository-name>      failed to checkout and determine revision: unable to clone 'https://github.com/stefanprodan/podinfo': couldn't find remote ref "refs/heads/invalid"
 ```
 
@@ -759,6 +766,17 @@ following attributes in the GitRepository's `.status.conditions`:
 This `Ready` Condition will retain a status value of `"True"` until the
 GitRepository is marked as [reconciling](#reconciling-gitrepository), or e.g. a
 [transient error](#failed-gitrepository) occurs due to a temporary network issue.
+
+When the GitRepository Artifact is archived in the controller's Artifact
+storage, the controller sets a Condition with the following attributes in the
+GitRepository's `.status.conditions`:
+
+- `type: ArtifactInStorage`
+- `status: "True"`
+- `reason: Succeeded`
+
+This `ArtifactInStorage` Condition will retain a status value of `"True"` until
+the Artifact in the storage no longer exists.
 
 #### Failed GitRepository
 

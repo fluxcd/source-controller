@@ -19,16 +19,24 @@ package v1beta2
 const SourceFinalizer = "finalizers.fluxcd.io"
 
 const (
+	// ArtifactInStorageCondition indicates the availability of the Artifact in
+	// the storage.
+	// If True, the Artifact is stored successfully.
+	// This Condition is only present on the resource if the Artifact is
+	// successfully stored.
+	ArtifactInStorageCondition string = "ArtifactInStorage"
+
 	// ArtifactOutdatedCondition indicates the current Artifact of the Source
 	// is outdated.
 	// This is a "negative polarity" or "abnormal-true" type, and is only
 	// present on the resource if it is True.
 	ArtifactOutdatedCondition string = "ArtifactOutdated"
 
-	// SourceVerifiedCondition indicates the integrity of the Source has been
-	// verified. If True, the integrity check succeeded. If False, it failed.
-	// The Condition is only present on the resource if the integrity has been
-	// verified.
+	// SourceVerifiedCondition indicates the integrity verification of the
+	// Source.
+	// If True, the integrity check succeeded. If False, it failed.
+	// This Condition is only present on the resource if the integrity check
+	// is enabled.
 	SourceVerifiedCondition string = "SourceVerified"
 
 	// FetchFailedCondition indicates a transient or persistent fetch failure
@@ -85,4 +93,8 @@ const (
 
 	// SymlinkUpdateFailedReason signals a failure in updating a symlink.
 	SymlinkUpdateFailedReason string = "SymlinkUpdateFailed"
+
+	// ArtifactUpToDateReason signals that an existing Artifact is up-to-date
+	// with the Source.
+	ArtifactUpToDateReason string = "ArtifactUpToDate"
 )
