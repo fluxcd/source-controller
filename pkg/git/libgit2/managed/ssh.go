@@ -137,7 +137,9 @@ func (t *sshSmartSubtransport) Action(urlString string, action git2go.SmartServi
 			if t.lastAction == git2go.SmartServiceActionUploadpackLs {
 				return t.currentStream, nil
 			}
-			t.Close()
+			if err := t.Close(); err != nil {
+				traceLog.Error(err, "[ssh]: error cleaning up previous stream")
+			}
 		}
 		cmd = fmt.Sprintf("git-upload-pack '%s'", uPath)
 
@@ -146,7 +148,9 @@ func (t *sshSmartSubtransport) Action(urlString string, action git2go.SmartServi
 			if t.lastAction == git2go.SmartServiceActionReceivepackLs {
 				return t.currentStream, nil
 			}
-			t.Close()
+			if err := t.Close(); err != nil {
+				traceLog.Error(err, "[ssh]: error cleaning up previous stream")
+			}
 		}
 		cmd = fmt.Sprintf("git-receive-pack '%s'", uPath)
 
@@ -161,11 +165,11 @@ func (t *sshSmartSubtransport) Action(urlString string, action git2go.SmartServi
 	defer cred.Free()
 
 	var addr string
+	port := "22"
 	if u.Port() != "" {
-		addr = fmt.Sprintf("%s:%s", u.Hostname(), u.Port())
-	} else {
-		addr = fmt.Sprintf("%s:22", u.Hostname())
+		port = u.Port()
 	}
+	addr = fmt.Sprintf("%s:%s", u.Hostname(), port)
 
 	ckey, sshConfig, err := cacheKeyAndConfig(addr, cred)
 	if err != nil {
@@ -264,12 +268,13 @@ func (t *sshSmartSubtransport) Close() error {
 
 	traceLog.Info("[ssh]: sshSmartSubtransport.Close()")
 	t.currentStream = nil
-	if t.client != nil {
+	if t.client != nil && t.stdin != nil {
 		if err := t.stdin.Close(); err != nil {
 			returnErr = fmt.Errorf("cannot close stdin: %w", err)
 		}
-		t.client = nil
 	}
+	t.client = nil
+
 	if t.session != nil {
 		traceLog.Info("[ssh]: skipping session.wait")
 		traceLog.Info("[ssh]: session.Close()")
@@ -277,6 +282,7 @@ func (t *sshSmartSubtransport) Close() error {
 			returnErr = fmt.Errorf("cannot close session: %w", err)
 		}
 	}
+	t.session = nil
 
 	return returnErr
 }
@@ -302,6 +308,10 @@ func (stream *sshSmartSubtransportStream) Free() {
 }
 
 func cacheKeyAndConfig(remoteAddress string, cred *git2go.Credential) (string, *ssh.ClientConfig, error) {
+	if cred == nil {
+		return "", nil, fmt.Errorf("cannot create cache key from a nil credential")
+	}
+
 	username, _, privatekey, passphrase, err := cred.GetSSHKey()
 	if err != nil {
 		return "", nil, err

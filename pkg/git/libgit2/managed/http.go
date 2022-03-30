@@ -292,8 +292,13 @@ func (self *httpSmartSubtransportStream) Free() {
 			// ensure body is fully processed and closed
 			// for increased likelihood of transport reuse in HTTP/1.x.
 			// it should not be a problem to do this more than once.
-			_, _ = io.Copy(io.Discard, self.resp.Body) // errors can be safely ignored
-			_ = self.resp.Body.Close()                 // errors can be safely ignored
+			if _, err := io.Copy(io.Discard, self.resp.Body); err != nil {
+				traceLog.Error(err, "[http]: cannot discard response body")
+			}
+
+			if err := self.resp.Body.Close(); err != nil {
+				traceLog.Error(err, "[http]: cannot close response body")
+			}
 		}
 	}
 }
