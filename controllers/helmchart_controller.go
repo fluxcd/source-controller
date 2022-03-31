@@ -463,10 +463,8 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 
 	// Try to retrieve the repository index from the cache
 	if r.Cache != nil {
-		if index, found := r.Cache.Get(r.Storage.LocalPath(*repo.GetArtifact())); err == nil {
-			if found {
-				chartRepo.Index = index.(*helmrepo.IndexFile)
-			}
+		if index, found := r.Cache.Get(r.Storage.LocalPath(*repo.GetArtifact())); found {
+			chartRepo.Index = index.(*helmrepo.IndexFile)
 		}
 	}
 
@@ -502,7 +500,7 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 			// Using r.Storage.LocalPath(*repo.GetArtifact() is safe as the path is in the format /<helm-repository-name>/<chart-name>/<filename>.
 			err := r.Cache.Set(r.Storage.LocalPath(*repo.GetArtifact()), chartRepo.Index, r.TTL)
 			if err != nil {
-				r.eventLogf(ctx, obj, events.EventTypeTrace, sourcev1.CacheOperationFailedReason, "failed to cache index: %v", err)
+				r.eventLogf(ctx, obj, events.EventTypeTrace, sourcev1.CacheOperationFailedReason, "failed to cache index: %s", err)
 			}
 
 		}

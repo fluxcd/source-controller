@@ -115,9 +115,9 @@ func main() {
 	flag.DurationVar(&requeueDependency, "requeue-dependency", 30*time.Second,
 		"The interval at which failing dependencies are reevaluated.")
 	flag.IntVar(&helmCacheMaxSize, "helm-cache-max-size", 0,
-		"The maximum size of the cache in number of items.")
+		"The maximum size of the cache in number of indexes.")
 	flag.StringVar(&helmCacheTTL, "helm-cache-ttl", "15m",
-		"The TTL of an item in the cache. Valid time units are ns, us (or µs), ms, s, m, h.")
+		"The TTL of an index in the cache. Valid time units are ns, us (or µs), ms, s, m, h.")
 	flag.StringVar(&helmCachePurgeInterval, "helm-cache-purge-interval", "1m",
 		"The interval at which the cache is purged. Valid time units are ns, us (or µs), ms, s, m, h.")
 

@@ -26,14 +26,16 @@ type Cache struct {
 
 // Item is an item stored in the cache.
 type Item struct {
-	Object     interface{}
+	// Object is the item's value.
+	Object interface{}
+	// Expiration is the item's expiration time.
 	Expiration int64
 }
 
 type cache struct {
 	// Items holds the elements in the cache.
 	Items map[string]Item
-	// Maximum number of items the cache can hold.
+	// MaxItems is the maximum number of items the cache can hold.
 	MaxItems int
 	mu       sync.RWMutex
 	janitor  *janitor
@@ -82,6 +84,9 @@ func (c *cache) Set(key string, value interface{}, expiration time.Duration) err
 	return fmt.Errorf("Cache is full")
 }
 
+// Add an item to the cache, existing items will not be overwritten.
+// To overwrite existing items, use Set.
+// If the cache is full, Add will return an error.
 func (c *cache) Add(key string, value interface{}, expiration time.Duration) error {
 	c.mu.Lock()
 	_, found := c.Items[key]
@@ -100,6 +105,8 @@ func (c *cache) Add(key string, value interface{}, expiration time.Duration) err
 	return fmt.Errorf("Cache is full")
 }
 
+// Get an item from the cache. Returns the item or nil, and a bool indicating
+// whether the key was found.
 func (c *cache) Get(key string) (interface{}, bool) {
 	c.mu.RLock()
 	item, found := c.Items[key]
@@ -117,18 +124,23 @@ func (c *cache) Get(key string) (interface{}, bool) {
 	return item.Object, true
 }
 
+// Delete an item from the cache. Does nothing if the key is not in the cache.
 func (c *cache) Delete(key string) {
 	c.mu.Lock()
 	delete(c.Items, key)
 	c.mu.Unlock()
 }
 
+// Clear all items from the cache.
+// This reallocate the inderlying array holding the items,
+// so that the memory used by the items is reclaimed.
 func (c *cache) Clear() {
 	c.mu.Lock()
 	c.Items = make(map[string]Item)
 	c.mu.Unlock()
 }
 
+// HasExpired returns true if the item has expired.
 func (c *cache) HasExpired(key string) bool {
 	c.mu.RLock()
 	item, ok := c.Items[key]
@@ -146,6 +158,8 @@ func (c *cache) HasExpired(key string) bool {
 	return false
 }
 
+// SetExpiration sets the expiration for the given key.
+// Does nothing if the key is not in the cache.
 func (c *cache) SetExpiration(key string, expiration time.Duration) {
 	c.mu.Lock()
 	item, ok := c.Items[key]
@@ -157,6 +171,9 @@ func (c *cache) SetExpiration(key string, expiration time.Duration) {
 	c.mu.Unlock()
 }
 
+// GetExpiration returns the expiration for the given key.
+// Returns zero if the key is not in the cache or the item
+// has already expired.
 func (c *cache) GetExpiration(key string) time.Duration {
 	c.mu.RLock()
 	item, ok := c.Items[key]
@@ -174,6 +191,7 @@ func (c *cache) GetExpiration(key string) time.Duration {
 	return time.Duration(item.Expiration - time.Now().UnixNano())
 }
 
+// DeleteExpired deletes all expired items from the cache.
 func (c *cache) DeleteExpired() {
 	c.mu.Lock()
 	for k, v := range c.Items {
@@ -185,12 +203,12 @@ func (c *cache) DeleteExpired() {
 }
 
 type janitor struct {
-	Interval time.Duration
+	interval time.Duration
 	stop     chan bool
 }
 
-func (j *janitor) Run(c *cache) {
-	ticker := time.NewTicker(j.Interval)
+func (j *janitor) run(c *cache) {
+	ticker := time.NewTicker(j.interval)
 	for {
 		select {
 		case <-ticker.C:
@@ -206,12 +224,13 @@ func stopJanitor(c *Cache) {
 	c.janitor.stop <- true
 }
 
+// New creates a new cache with the given configuration.
 func New(maxItems int, interval time.Duration) *Cache {
 	c := &cache{
 		Items:    make(map[string]Item),
 		MaxItems: maxItems,
 		janitor: &janitor{
-			Interval: interval,
+			interval: interval,
 			stop:     make(chan bool),
 		},
 	}
@@ -219,7 +238,7 @@ func New(maxItems int, interval time.Duration) *Cache {
 	C := &Cache{c}
 
 	if interval > 0 {
-		go c.janitor.Run(c)
+		go c.janitor.run(c)
 		runtime.SetFinalizer(C, stopJanitor)
 	}
 
