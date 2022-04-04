@@ -70,6 +70,9 @@ type AuthOptions struct {
 	CAFile     []byte
 }
 
+// List of custom key exchange algorithms to be used for ssh connections.
+var KexAlgos []string
+
 // Validate the AuthOptions against the defined Transport.
 func (o AuthOptions) Validate() error {
 	switch o.Transport {
