@@ -390,6 +390,53 @@ Besides being reported in Events, the reconciliation errors are also logged by
 the controller. The Flux CLI offer commands for filtering the logs for a
 specific HelmChart, e.g. `flux logs --level=error --kind=HelmChart --name=<chart-name>`.
 
+### Improving resource consumption by enabling the cache
+
+When using a `HelmRepository` as Source for a `HelmChart`, the controller loads
+the repository index in memory to find the latest version of the chart.
+
+The controller can be configured to cache Helm repository indexes in memory.
+The cache is used to avoid loading repository indexes for every `HelmChart`
+reconciliation.
+
+The following flags are provided to enable and configure the cache:
+- `helm-cache-max-size`: The maximum size of the cache in number of indexes.
+  If `0`, then the cache is disabled.
+- `helm-cache-ttl`: The TTL of an index in the cache.
+- `helm-cache-purge-interval`: The interval at which the cache is purged of
+  expired items. 
+
+The caching strategy is to pull a repository index from the cache if it is 
+available, otherwise to load the index, retrieve and build the chart,
+then cache the index. The cached index TTL is refreshed every time the
+Helm repository index is loaded with the `helm-cache-ttl` value.
+
+The cache is purged of expired items every `helm-cache-purge-interval`.
+
+When the cache is full, no more items can be added to the cache, and the
+source-controller will report a warning event instead.
+
+In order to use the cache, set the related flags in the source-controller
+Deployment config:
+
+```yaml
+    spec:
+      containers:
+      - args:
+        - --watch-all-namespaces
+        - --log-level=info
+        - --log-encoding=json
+        - --enable-leader-election
+        - --storage-path=/data
+        - --storage-adv-addr=source-controller.$(RUNTIME_NAMESPACE).svc.cluster.local.
+        ## Helm cache with up to 10 items, i.e. 10 indexes.
+        - --helm-cache-max-size=10
+        ## TTL of an index is 1 hour.
+        - --helm-cache-ttl=1h
+        ## Purge expired index every 10 minutes.
+        - --helm-cache-purge-interval=10m
+```
+
 ## HelmChart Status
 
 ### Artifact

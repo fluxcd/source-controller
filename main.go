@@ -44,6 +44,7 @@ import (
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
 	"github.com/fluxcd/source-controller/controllers"
+	"github.com/fluxcd/source-controller/internal/cache"
 	"github.com/fluxcd/source-controller/internal/helm"
 	"github.com/fluxcd/source-controller/pkg/git/libgit2/managed"
 	// +kubebuilder:scaffold:imports
@@ -71,21 +72,24 @@ func init() {
 
 func main() {
 	var (
-		metricsAddr           string
-		eventsAddr            string
-		healthAddr            string
-		storagePath           string
-		storageAddr           string
-		storageAdvAddr        string
-		concurrent            int
-		requeueDependency     time.Duration
-		watchAllNamespaces    bool
-		helmIndexLimit        int64
-		helmChartLimit        int64
-		helmChartFileLimit    int64
-		clientOptions         client.Options
-		logOptions            logger.Options
-		leaderElectionOptions leaderelection.Options
+		metricsAddr            string
+		eventsAddr             string
+		healthAddr             string
+		storagePath            string
+		storageAddr            string
+		storageAdvAddr         string
+		concurrent             int
+		requeueDependency      time.Duration
+		watchAllNamespaces     bool
+		helmIndexLimit         int64
+		helmChartLimit         int64
+		helmChartFileLimit     int64
+		clientOptions          client.Options
+		logOptions             logger.Options
+		leaderElectionOptions  leaderelection.Options
+		helmCacheMaxSize       int
+		helmCacheTTL           string
+		helmCachePurgeInterval string
 	)
 
 	flag.StringVar(&metricsAddr, "metrics-addr", envOrDefault("METRICS_ADDR", ":8080"),
@@ -110,6 +114,12 @@ func main() {
 		"The max allowed size in bytes of a file in a Helm chart.")
 	flag.DurationVar(&requeueDependency, "requeue-dependency", 30*time.Second,
 		"The interval at which failing dependencies are reevaluated.")
+	flag.IntVar(&helmCacheMaxSize, "helm-cache-max-size", 0,
+		"The maximum size of the cache in number of indexes.")
+	flag.StringVar(&helmCacheTTL, "helm-cache-ttl", "15m",
+		"The TTL of an index in the cache. Valid time units are ns, us (or µs), ms, s, m, h.")
+	flag.StringVar(&helmCachePurgeInterval, "helm-cache-purge-interval", "1m",
+		"The interval at which the cache is purged. Valid time units are ns, us (or µs), ms, s, m, h.")
 
 	clientOptions.BindFlags(flag.CommandLine)
 	logOptions.BindFlags(flag.CommandLine)
@@ -191,6 +201,24 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", sourcev1.HelmRepositoryKind)
 		os.Exit(1)
 	}
+
+	var c *cache.Cache
+	var ttl time.Duration
+	if helmCacheMaxSize > 0 {
+		interval, err := time.ParseDuration(helmCachePurgeInterval)
+		if err != nil {
+			setupLog.Error(err, "unable to parse cache purge interval")
+			os.Exit(1)
+		}
+
+		ttl, err = time.ParseDuration(helmCacheTTL)
+		if err != nil {
+			setupLog.Error(err, "unable to parse cache TTL")
+			os.Exit(1)
+		}
+
+		c = cache.New(helmCacheMaxSize, interval)
+	}
 	if err = (&controllers.HelmChartReconciler{
 		Client:         mgr.GetClient(),
 		Storage:        storage,
@@ -198,6 +226,8 @@ func main() {
 		EventRecorder:  eventRecorder,
 		Metrics:        metricsH,
 		ControllerName: controllerName,
+		Cache:          c,
+		TTL:            ttl,
 	}).SetupWithManagerAndOptions(mgr, controllers.HelmChartReconcilerOptions{
 		MaxConcurrentReconciles: concurrent,
 	}); err != nil {

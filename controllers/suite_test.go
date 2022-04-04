@@ -35,6 +35,7 @@ import (
 	"github.com/fluxcd/pkg/testserver"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
+	"github.com/fluxcd/source-controller/internal/cache"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -126,12 +127,15 @@ func TestMain(m *testing.M) {
 		panic(fmt.Sprintf("Failed to start HelmRepositoryReconciler: %v", err))
 	}
 
+	cache := cache.New(5, 1*time.Second)
 	if err := (&HelmChartReconciler{
 		Client:        testEnv,
 		EventRecorder: record.NewFakeRecorder(32),
 		Metrics:       testMetricsH,
 		Getters:       testGetters,
 		Storage:       testStorage,
+		Cache:         cache,
+		TTL:           1 * time.Second,
 	}).SetupWithManager(testEnv); err != nil {
 		panic(fmt.Sprintf("Failed to start HelmRepositoryReconciler: %v", err))
 	}
