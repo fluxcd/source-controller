@@ -580,7 +580,7 @@ func (r *HelmChartReconciler) buildFromTarballArtifact(ctx context.Context, obj 
 
 	// Create directory to untar source into
 	sourceDir := filepath.Join(tmpDir, "source")
-	if err := os.Mkdir(sourceDir, 0700); err != nil {
+	if err := os.Mkdir(sourceDir, 0o700); err != nil {
 		e := &serror.Event{
 			Err:    fmt.Errorf("failed to create directory to untar source into: %w", err),
 			Reason: sourcev1.DirCreationFailedReason,

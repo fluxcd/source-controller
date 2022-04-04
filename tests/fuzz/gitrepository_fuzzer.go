@@ -494,7 +494,7 @@ func createRandomFiles(f *fuzz.ConsumeFuzzer, fs billy.Filesystem, wt *git.Workt
 			return errors.New("Dir contains '..'")
 		}
 
-		err = fs.MkdirAll(dirPath, 0777)
+		err = fs.MkdirAll(dirPath, 0o777)
 		if err != nil {
 			return errors.New("Could not create the subDir")
 		}

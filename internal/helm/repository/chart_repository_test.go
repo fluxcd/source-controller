@@ -363,7 +363,7 @@ func TestChartRepository_LoadIndexFromFile(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 	bigIndexFile := filepath.Join(tmpDir, "index.yaml")
 	data := make([]byte, helm.MaxIndexSize+10)
-	g.Expect(os.WriteFile(bigIndexFile, data, 0644)).ToNot(HaveOccurred())
+	g.Expect(os.WriteFile(bigIndexFile, data, 0o644)).ToNot(HaveOccurred())
 
 	tests := []struct {
 		name     string

@@ -140,7 +140,7 @@ func TestLoadChartMetadataFromDir(t *testing.T) {
 	copy.Copy("../testdata/charts/helmchart", tmpDir)
 	bigRequirementsFile := filepath.Join(tmpDir, "requirements.yaml")
 	data := make([]byte, helm.MaxChartFileSize+10)
-	g.Expect(os.WriteFile(bigRequirementsFile, data, 0644)).ToNot(HaveOccurred())
+	g.Expect(os.WriteFile(bigRequirementsFile, data, 0o644)).ToNot(HaveOccurred())
 
 	tests := []struct {
 		name                string
@@ -205,7 +205,7 @@ func TestLoadChartMetadataFromArchive(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 	bigArchiveFile := filepath.Join(tmpDir, "chart.tgz")
 	data := make([]byte, helm.MaxChartSize+10)
-	g.Expect(os.WriteFile(bigArchiveFile, data, 0644)).ToNot(HaveOccurred())
+	g.Expect(os.WriteFile(bigArchiveFile, data, 0o644)).ToNot(HaveOccurred())
 
 	tests := []struct {
 		name                string

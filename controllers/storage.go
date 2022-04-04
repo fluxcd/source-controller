@@ -112,7 +112,7 @@ func (s Storage) SetHostname(URL string) string {
 // MkdirAll calls os.MkdirAll for the given v1beta1.Artifact base dir.
 func (s *Storage) MkdirAll(artifact sourcev1.Artifact) error {
 	dir := filepath.Dir(s.LocalPath(artifact))
-	return os.MkdirAll(dir, 0777)
+	return os.MkdirAll(dir, 0o777)
 }
 
 // RemoveAll calls os.RemoveAll for the given v1beta1.Artifact base dir.
@@ -432,7 +432,7 @@ func (s *Storage) Archive(artifact *sourcev1.Artifact, dir string, filter Archiv
 		return err
 	}
 
-	if err := os.Chmod(tmpName, 0644); err != nil {
+	if err := os.Chmod(tmpName, 0o644); err != nil {
 		return err
 	}
 
