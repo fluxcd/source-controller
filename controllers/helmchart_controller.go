@@ -29,7 +29,6 @@ import (
 	"time"
 
 	helmgetter "helm.sh/helm/v3/pkg/getter"
-	helmrepo "helm.sh/helm/v3/pkg/repo"
 	corev1 "k8s.io/api/core/v1"
 	apierrs "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -123,6 +122,7 @@ type HelmChartReconciler struct {
 
 	Cache *cache.Cache
 	TTL   time.Duration
+	*cache.CacheRecorder
 }
 
 func (r *HelmChartReconciler) SetupWithManager(mgr ctrl.Manager) error {
@@ -484,7 +484,10 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 	}
 
 	// Initialize the chart repository
-	chartRepo, err := repository.NewChartRepository(repo.Spec.URL, r.Storage.LocalPath(*repo.GetArtifact()), r.Getters, tlsConfig, clientOpts)
+	chartRepo, err := repository.NewChartRepository(repo.Spec.URL, r.Storage.LocalPath(*repo.GetArtifact()), r.Getters, tlsConfig, clientOpts,
+		repository.WithMemoryCache(r.Storage.LocalPath(*repo.GetArtifact()), r.Cache, r.TTL, func(event string) {
+			r.IncCacheEvents(event, obj.Name, obj.Namespace)
+		}))
 	if err != nil {
 		// Any error requires a change in generation,
 		// which we should be informed about by the watcher
@@ -503,13 +506,6 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 			}
 			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
 			return sreconcile.ResultEmpty, e
-		}
-	}
-
-	// Try to retrieve the repository index from the cache
-	if r.Cache != nil {
-		if index, found := r.Cache.Get(r.Storage.LocalPath(*repo.GetArtifact())); found {
-			chartRepo.Index = index.(*helmrepo.IndexFile)
 		}
 	}
 
@@ -543,11 +539,10 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 			// The cache key have to be safe in multi-tenancy environments,
 			// as otherwise it could be used as a vector to bypass the helm repository's authentication.
 			// Using r.Storage.LocalPath(*repo.GetArtifact() is safe as the path is in the format /<helm-repository-name>/<chart-name>/<filename>.
-			err := r.Cache.Set(r.Storage.LocalPath(*repo.GetArtifact()), chartRepo.Index, r.TTL)
+			err := chartRepo.CacheIndexInMemory()
 			if err != nil {
 				r.eventLogf(ctx, obj, events.EventTypeTrace, sourcev1.CacheOperationFailedReason, "failed to cache index: %s", err)
 			}
-
 		}
 
 		// Delete the index reference
@@ -615,7 +610,7 @@ func (r *HelmChartReconciler) buildFromTarballArtifact(ctx context.Context, obj 
 
 	// Setup dependency manager
 	dm := chart.NewDependencyManager(
-		chart.WithRepositoryCallback(r.namespacedChartRepositoryCallback(ctx, obj.GetNamespace())),
+		chart.WithRepositoryCallback(r.namespacedChartRepositoryCallback(ctx, obj.GetName(), obj.GetNamespace())),
 	)
 	defer dm.Clear()
 
@@ -847,7 +842,7 @@ func (r *HelmChartReconciler) garbageCollect(ctx context.Context, obj *sourcev1.
 // namespacedChartRepositoryCallback returns a chart.GetChartRepositoryCallback scoped to the given namespace.
 // The returned callback returns a repository.ChartRepository configured with the retrieved v1beta1.HelmRepository,
 // or a shim with defaults if no object could be found.
-func (r *HelmChartReconciler) namespacedChartRepositoryCallback(ctx context.Context, namespace string) chart.GetChartRepositoryCallback {
+func (r *HelmChartReconciler) namespacedChartRepositoryCallback(ctx context.Context, name, namespace string) chart.GetChartRepositoryCallback {
 	return func(url string) (*repository.ChartRepository, error) {
 		var tlsConfig *tls.Config
 		repo, err := r.resolveDependencyRepository(ctx, url, namespace)
@@ -888,8 +883,15 @@ func (r *HelmChartReconciler) namespacedChartRepositoryCallback(ctx context.Cont
 		if err != nil {
 			return nil, err
 		}
+
+		// Ensure that the cache key is the same as the artifact path
+		// otherwise don't enable caching. We don't want to cache indexes
+		// for repositories that are not reconciled by the source controller.
 		if repo.Status.Artifact != nil {
 			chartRepo.CachePath = r.Storage.LocalPath(*repo.GetArtifact())
+			chartRepo.SetMemCache(r.Storage.LocalPath(*repo.GetArtifact()), r.Cache, r.TTL, func(event string) {
+				r.IncCacheEvents(event, name, namespace)
+			})
 		}
 		return chartRepo, nil
 	}

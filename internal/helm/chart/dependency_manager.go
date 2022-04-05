@@ -97,6 +97,9 @@ func NewDependencyManager(opts ...DependencyManagerOption) *DependencyManager {
 func (dm *DependencyManager) Clear() []error {
 	var errs []error
 	for _, v := range dm.repositories {
+		if err := v.CacheIndexInMemory(); err != nil {
+			errs = append(errs, err)
+		}
 		v.Unload()
 		if err := v.RemoveCache(); err != nil {
 			errs = append(errs, err)
