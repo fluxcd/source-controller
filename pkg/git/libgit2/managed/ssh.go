@@ -193,51 +193,46 @@ func (t *sshSmartSubtransport) Action(urlString string, action git2go.SmartServi
 		return t.transport.SmartCertificateCheck(cert, true, hostname)
 	}
 
+	var cacheHit bool
 	aMux.RLock()
 	if c, ok := sshClients[ckey]; ok {
 		traceLog.Info("[ssh]: cache hit", "remoteAddress", addr)
 		t.client = c
+		cacheHit = true
 	}
 	aMux.RUnlock()
 
 	if t.client == nil {
+		cacheHit = false
 		traceLog.Info("[ssh]: cache miss", "remoteAddress", addr)
-
-		aMux.Lock()
-		defer aMux.Unlock()
-
-		// In some scenarios the ssh handshake can hang indefinitely at
-		// golang.org/x/crypto/ssh.(*handshakeTransport).kexLoop.
-		//
-		// xref: https://github.com/golang/go/issues/51926
-		done := make(chan error, 1)
-		go func() {
-			t.client, err = ssh.Dial("tcp", addr, sshConfig)
-			done <- err
-		}()
-
-		dialTimeout := sshConfig.Timeout + (30 * time.Second)
-
-		select {
-		case doneErr := <-done:
-			if doneErr != nil {
-				err = fmt.Errorf("ssh.Dial: %w", doneErr)
-			}
-		case <-time.After(dialTimeout):
-			err = fmt.Errorf("timed out waiting for ssh.Dial after %s", dialTimeout)
-		}
-
+		err := t.createConn(ckey, addr, sshConfig)
 		if err != nil {
 			return nil, err
 		}
-
-		sshClients[ckey] = t.client
 	}
 
 	traceLog.Info("[ssh]: creating new ssh session")
 	if t.session, err = t.client.NewSession(); err != nil {
 		discardCachedSshClient(ckey)
-		return nil, err
+
+		// if the current connection was cached, and the error is EOF,
+		// we can try again as this may be a stale connection.
+		if !(cacheHit && err.Error() == "EOF") {
+			return nil, err
+		}
+
+		traceLog.Info("[ssh]: cached connection was stale, retrying...")
+		err = t.createConn(ckey, addr, sshConfig)
+		if err != nil {
+			return nil, err
+		}
+
+		traceLog.Info("[ssh]: creating new ssh session with new connection")
+		t.session, err = t.client.NewSession()
+		if err != nil {
+			discardCachedSshClient(ckey)
+			return nil, err
+		}
 	}
 
 	if t.stdin, err = t.session.StdinPipe(); err != nil {
@@ -262,6 +257,41 @@ func (t *sshSmartSubtransport) Action(urlString string, action git2go.SmartServi
 	}
 
 	return t.currentStream, nil
+}
+
+func (t *sshSmartSubtransport) createConn(ckey, addr string, sshConfig *ssh.ClientConfig) error {
+	aMux.Lock()
+	defer aMux.Unlock()
+
+	// In some scenarios the ssh handshake can hang indefinitely at
+	// golang.org/x/crypto/ssh.(*handshakeTransport).kexLoop.
+	//
+	// xref: https://github.com/golang/go/issues/51926
+	done := make(chan error, 1)
+	var err error
+
+	go func() {
+		t.client, err = ssh.Dial("tcp", addr, sshConfig)
+		done <- err
+	}()
+
+	dialTimeout := sshConfig.Timeout + (30 * time.Second)
+
+	select {
+	case doneErr := <-done:
+		if doneErr != nil {
+			err = fmt.Errorf("ssh.Dial: %w", doneErr)
+		}
+	case <-time.After(dialTimeout):
+		err = fmt.Errorf("timed out waiting for ssh.Dial after %s", dialTimeout)
+	}
+
+	if err != nil {
+		return err
+	}
+
+	sshClients[ckey] = t.client
+	return nil
 }
 
 func (t *sshSmartSubtransport) Close() error {
