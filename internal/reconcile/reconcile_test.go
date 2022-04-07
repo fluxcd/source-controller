@@ -202,3 +202,99 @@ func TestComputeReconcileResult(t *testing.T) {
 		})
 	}
 }
+
+func TestFailureRecovery(t *testing.T) {
+	failCondns := []string{
+		"FooFailed",
+		"BarFailed",
+		"BazFailed",
+	}
+	tests := []struct {
+		name           string
+		oldObjFunc     func(obj conditions.Setter)
+		newObjFunc     func(obj conditions.Setter)
+		failConditions []string
+		result         bool
+	}{
+		{
+			name: "no failures",
+			oldObjFunc: func(obj conditions.Setter) {
+				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "ready")
+			},
+			newObjFunc: func(obj conditions.Setter) {
+				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "ready")
+			},
+			failConditions: failCondns,
+			result:         false,
+		},
+		{
+			name: "no recovery",
+			oldObjFunc: func(obj conditions.Setter) {
+				conditions.MarkTrue(obj, "FooFailed", "some-reason", "message")
+				conditions.MarkFalse(obj, meta.ReadyCondition, meta.SucceededReason, "ready")
+			},
+			newObjFunc: func(obj conditions.Setter) {
+				conditions.MarkTrue(obj, "FooFailed", "some-reason", "message")
+				conditions.MarkFalse(obj, meta.ReadyCondition, meta.SucceededReason, "ready")
+			},
+			failConditions: failCondns,
+			result:         false,
+		},
+		{
+			name: "different failure",
+			oldObjFunc: func(obj conditions.Setter) {
+				conditions.MarkTrue(obj, "FooFailed", "some-reason", "message")
+				conditions.MarkFalse(obj, meta.ReadyCondition, meta.SucceededReason, "ready")
+			},
+			newObjFunc: func(obj conditions.Setter) {
+				conditions.MarkTrue(obj, "BarFailed", "some-reason", "message")
+				conditions.MarkFalse(obj, meta.ReadyCondition, meta.SucceededReason, "ready")
+			},
+			failConditions: failCondns,
+			result:         false,
+		},
+		{
+			name: "failure recovery",
+			oldObjFunc: func(obj conditions.Setter) {
+				conditions.MarkTrue(obj, "FooFailed", "some-reason", "message")
+				conditions.MarkFalse(obj, meta.ReadyCondition, meta.SucceededReason, "ready")
+			},
+			newObjFunc: func(obj conditions.Setter) {
+				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "ready")
+			},
+			failConditions: failCondns,
+			result:         true,
+		},
+		{
+			name: "ready to fail",
+			oldObjFunc: func(obj conditions.Setter) {
+				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "ready")
+			},
+			newObjFunc: func(obj conditions.Setter) {
+				conditions.MarkTrue(obj, "BazFailed", "some-reason", "message")
+				conditions.MarkFalse(obj, meta.ReadyCondition, meta.SucceededReason, "ready")
+			},
+			failConditions: failCondns,
+			result:         false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			oldObj := &sourcev1.GitRepository{}
+			newObj := oldObj.DeepCopy()
+
+			if tt.oldObjFunc != nil {
+				tt.oldObjFunc(oldObj)
+			}
+
+			if tt.newObjFunc != nil {
+				tt.newObjFunc(newObj)
+			}
+
+			g.Expect(FailureRecovery(oldObj, newObj, tt.failConditions)).To(Equal(tt.result))
+		})
+	}
+}

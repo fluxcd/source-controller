@@ -99,6 +99,13 @@ var helmChartReadyCondition = summarize.Conditions{
 	},
 }
 
+// helmChartFailConditions contains the conditions that represent a failure.
+var helmChartFailConditions = []string{
+	sourcev1.BuildFailedCondition,
+	sourcev1.FetchFailedCondition,
+	sourcev1.StorageOperationFailedCondition,
+}
+
 // +kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=helmcharts,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=helmcharts/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=helmcharts/finalizers,verbs=get;create;update;patch;delete
@@ -239,10 +246,13 @@ func (r *HelmChartReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	return
 }
 
-// reconcile iterates through the gitRepositoryReconcileFunc tasks for the
+// reconcile iterates through the helmChartReconcileFunc tasks for the
 // object. It returns early on the first call that returns
 // reconcile.ResultRequeue, or produces an error.
 func (r *HelmChartReconciler) reconcile(ctx context.Context, obj *sourcev1.HelmChart, reconcilers []helmChartReconcileFunc) (sreconcile.Result, error) {
+	oldObj := obj.DeepCopy()
+
+	// Mark as reconciling if generation differs.
 	if obj.Generation != obj.Status.ObservedGeneration {
 		conditions.MarkReconciling(obj, "NewGeneration", "reconciling new object generation (%d)", obj.Generation)
 	}
@@ -269,7 +279,38 @@ func (r *HelmChartReconciler) reconcile(ctx context.Context, obj *sourcev1.HelmC
 		// Prioritize requeue request in the result.
 		res = sreconcile.LowestRequeuingResult(res, recResult)
 	}
+
+	r.notify(oldObj, obj, &build, res, resErr)
+
 	return res, resErr
+}
+
+// notify emits notification related to the reconciliation.
+func (r *HelmChartReconciler) notify(oldObj, newObj *sourcev1.HelmChart, build *chart.Build, res sreconcile.Result, resErr error) {
+	// Notify successful reconciliation for new artifact and recovery from any
+	// failure.
+	if resErr == nil && res == sreconcile.ResultSuccess && newObj.Status.Artifact != nil {
+		annotations := map[string]string{
+			sourcev1.GroupVersion.Group + "/revision": newObj.Status.Artifact.Revision,
+			sourcev1.GroupVersion.Group + "/checksum": newObj.Status.Artifact.Checksum,
+		}
+
+		var oldChecksum string
+		if oldObj.GetArtifact() != nil {
+			oldChecksum = oldObj.GetArtifact().Checksum
+		}
+
+		// Notify on new artifact and failure recovery.
+		if oldChecksum != newObj.GetArtifact().Checksum {
+			r.AnnotatedEventf(newObj, annotations, corev1.EventTypeNormal,
+				reasonForBuild(build), build.Summary())
+		} else {
+			if sreconcile.FailureRecovery(oldObj, newObj, helmChartFailConditions) {
+				r.AnnotatedEventf(newObj, annotations, corev1.EventTypeNormal,
+					reasonForBuild(build), build.Summary())
+			}
+		}
+	}
 }
 
 // reconcileStorage ensures the current state of the storage matches the
@@ -713,12 +754,6 @@ func (r *HelmChartReconciler) reconcileArtifact(ctx context.Context, obj *source
 	// Record it on the object
 	obj.Status.Artifact = artifact.DeepCopy()
 	obj.Status.ObservedChartName = b.Name
-
-	// Publish an event
-	r.AnnotatedEventf(obj, map[string]string{
-		sourcev1.GroupVersion.Group + "/revision": artifact.Revision,
-		sourcev1.GroupVersion.Group + "/checksum": artifact.Checksum,
-	}, corev1.EventTypeNormal, reasonForBuild(b), b.Summary())
 
 	// Update symlink on a "best effort" basis
 	symURL, err := r.Storage.Symlink(artifact, "latest.tar.gz")

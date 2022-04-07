@@ -18,6 +18,7 @@ package controllers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -1773,6 +1774,112 @@ func TestGitRepositoryReconciler_statusConditions(t *testing.T) {
 			key := client.ObjectKeyFromObject(obj)
 			g.Expect(c.Get(ctx, key, obj)).ToNot(HaveOccurred())
 			g.Expect(obj.GetConditions()).To(conditions.MatchConditions(tt.assertConditions))
+		})
+	}
+}
+
+func TestGitRepositoryReconciler_notify(t *testing.T) {
+	tests := []struct {
+		name             string
+		res              sreconcile.Result
+		resErr           error
+		oldObjBeforeFunc func(obj *sourcev1.GitRepository)
+		newObjBeforeFunc func(obj *sourcev1.GitRepository)
+		wantEvent        string
+	}{
+		{
+			name:   "error - no event",
+			res:    sreconcile.ResultEmpty,
+			resErr: errors.New("some error"),
+		},
+		{
+			name:   "new artifact",
+			res:    sreconcile.ResultSuccess,
+			resErr: nil,
+			newObjBeforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Checksum: "yyy"}
+			},
+			wantEvent: "Normal NewArtifact stored artifact for commit",
+		},
+		{
+			name:   "recovery from failure",
+			res:    sreconcile.ResultSuccess,
+			resErr: nil,
+			oldObjBeforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Checksum: "yyy"}
+				conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.GitOperationFailedReason, "fail")
+				conditions.MarkFalse(obj, meta.ReadyCondition, meta.FailedReason, "foo")
+			},
+			newObjBeforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Checksum: "yyy"}
+				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "ready")
+			},
+			wantEvent: "Normal Succeeded stored artifact for commit",
+		},
+		{
+			name:   "recovery and new artifact",
+			res:    sreconcile.ResultSuccess,
+			resErr: nil,
+			oldObjBeforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Checksum: "yyy"}
+				conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.GitOperationFailedReason, "fail")
+				conditions.MarkFalse(obj, meta.ReadyCondition, meta.FailedReason, "foo")
+			},
+			newObjBeforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Status.Artifact = &sourcev1.Artifact{Revision: "aaa", Checksum: "bbb"}
+				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "ready")
+			},
+			wantEvent: "Normal NewArtifact stored artifact for commit",
+		},
+		{
+			name:   "no updates",
+			res:    sreconcile.ResultSuccess,
+			resErr: nil,
+			oldObjBeforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Checksum: "yyy"}
+				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "ready")
+			},
+			newObjBeforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Checksum: "yyy"}
+				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "ready")
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+			recorder := record.NewFakeRecorder(32)
+
+			oldObj := &sourcev1.GitRepository{}
+			newObj := oldObj.DeepCopy()
+
+			if tt.oldObjBeforeFunc != nil {
+				tt.oldObjBeforeFunc(oldObj)
+			}
+			if tt.newObjBeforeFunc != nil {
+				tt.newObjBeforeFunc(newObj)
+			}
+
+			reconciler := &GitRepositoryReconciler{
+				EventRecorder: recorder,
+			}
+			commit := &git.Commit{
+				Message: "test commit",
+			}
+			reconciler.notify(oldObj, newObj, *commit, tt.res, tt.resErr)
+
+			select {
+			case x, ok := <-recorder.Events:
+				g.Expect(ok).To(Equal(tt.wantEvent != ""), "unexpected event received")
+				if tt.wantEvent != "" {
+					g.Expect(x).To(ContainSubstring(tt.wantEvent))
+				}
+			default:
+				if tt.wantEvent != "" {
+					t.Errorf("expected some event to be emitted")
+				}
+			}
 		})
 	}
 }
