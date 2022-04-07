@@ -125,12 +125,19 @@ func (t *sshSmartSubtransport) Action(urlString string, action git2go.SmartServi
 		return nil, err
 	}
 
-	// Escape \ and '.
-	uPath := strings.Replace(u.Path, `\`, `\\`, -1)
-	uPath = strings.Replace(uPath, `'`, `\'`, -1)
+	if len(u.Path) > 4096 {
+		return nil, fmt.Errorf("path exceeds the max length (4096)")
+	}
 
-	// TODO: Add percentage decode similar to libgit2.
-	// Refer: https://github.com/libgit2/libgit2/blob/358a60e1b46000ea99ef10b4dd709e92f75ff74b/src/str.c#L455-L481
+	// decode URI's path
+	uPath, err := url.PathUnescape(u.Path)
+	if err != nil {
+		return nil, err
+	}
+
+	// Escape \ and '.
+	uPath = strings.Replace(uPath, `\`, `\\`, -1)
+	uPath = strings.Replace(uPath, `'`, `\'`, -1)
 
 	var cmd string
 	switch action {
