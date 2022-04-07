@@ -101,6 +101,7 @@ type sshSmartSubtransport struct {
 	stdin         io.WriteCloser
 	stdout        io.Reader
 	currentStream *sshSmartSubtransportStream
+	ckey          string
 }
 
 // aMux is the read-write mutex to control access to sshClients.
@@ -138,9 +139,8 @@ func (t *sshSmartSubtransport) Action(urlString string, action git2go.SmartServi
 			if t.lastAction == git2go.SmartServiceActionUploadpackLs {
 				return t.currentStream, nil
 			}
-			if err := t.Close(); err != nil {
-				traceLog.Error(err, "[ssh]: error cleaning up previous stream")
-			}
+			// Disregard errors from previous stream, futher details inside Close().
+			_ = t.Close()
 		}
 		cmd = fmt.Sprintf("git-upload-pack '%s'", uPath)
 
@@ -149,9 +149,8 @@ func (t *sshSmartSubtransport) Action(urlString string, action git2go.SmartServi
 			if t.lastAction == git2go.SmartServiceActionReceivepackLs {
 				return t.currentStream, nil
 			}
-			if err := t.Close(); err != nil {
-				traceLog.Error(err, "[ssh]: error cleaning up previous stream")
-			}
+			// Disregard errors from previous stream, futher details inside Close().
+			_ = t.Close()
 		}
 		cmd = fmt.Sprintf("git-receive-pack '%s'", uPath)
 
@@ -176,6 +175,8 @@ func (t *sshSmartSubtransport) Action(urlString string, action git2go.SmartServi
 	if err != nil {
 		return nil, err
 	}
+	t.ckey = ckey
+
 	sshConfig.HostKeyCallback = func(hostname string, remote net.Addr, key ssh.PublicKey) error {
 		marshaledKey := key.Marshal()
 		cert := &git2go.Certificate{
@@ -294,28 +295,34 @@ func (t *sshSmartSubtransport) createConn(ckey, addr string, sshConfig *ssh.Clie
 	return nil
 }
 
+// Close closes the smart subtransport.
+//
+// This is called internally ahead of a new action, and also
+// upstream by the transport handler:
+// https://github.com/libgit2/git2go/blob/0e8009f00a65034d196c67b1cdd82af6f12c34d3/transport.go#L409
+//
+// Avoid returning errors, but focus on releasing anything that
+// may impair the transport to have successful actions on a new
+// SmartSubTransport (i.e. unreleased resources, staled connections).
 func (t *sshSmartSubtransport) Close() error {
-	var returnErr error
-
 	traceLog.Info("[ssh]: sshSmartSubtransport.Close()")
 	t.currentStream = nil
 	if t.client != nil && t.stdin != nil {
-		if err := t.stdin.Close(); err != nil {
-			returnErr = fmt.Errorf("cannot close stdin: %w", err)
-		}
+		_ = t.stdin.Close()
 	}
 	t.client = nil
 
 	if t.session != nil {
-		traceLog.Info("[ssh]: skipping session.wait")
 		traceLog.Info("[ssh]: session.Close()")
-		if err := t.session.Close(); err != nil {
-			returnErr = fmt.Errorf("cannot close session: %w", err)
+		err := t.session.Close()
+		// failure closing a session suggests a stale connection.
+		if err != nil && t.ckey != "" {
+			discardCachedSshClient(t.ckey)
 		}
 	}
 	t.session = nil
 
-	return returnErr
+	return nil
 }
 
 func (t *sshSmartSubtransport) Free() {
