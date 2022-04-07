@@ -130,8 +130,8 @@ func (t *sshSmartSubtransport) Action(urlString string, action git2go.SmartServi
 		return nil, err
 	}
 
-	if len(u.Path) > 4096 {
-		return nil, fmt.Errorf("path exceeds the max length (4096)")
+	if len(u.Path) > PathMaxLength {
+		return nil, fmt.Errorf("path exceeds the max length (%d)", PathMaxLength)
 	}
 
 	// decode URI's path
