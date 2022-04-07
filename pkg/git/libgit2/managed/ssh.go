@@ -102,6 +102,7 @@ type sshSmartSubtransport struct {
 	stdout        io.Reader
 	currentStream *sshSmartSubtransportStream
 	ckey          string
+	addr          string
 }
 
 // aMux is the read-write mutex to control access to sshClients.
@@ -182,6 +183,7 @@ func (t *sshSmartSubtransport) Action(urlString string, action git2go.SmartServi
 		port = u.Port()
 	}
 	addr = fmt.Sprintf("%s:%s", u.Hostname(), port)
+	t.addr = addr
 
 	ckey, sshConfig, err := cacheKeyAndConfig(addr, cred)
 	if err != nil {
@@ -229,9 +231,9 @@ func (t *sshSmartSubtransport) Action(urlString string, action git2go.SmartServi
 	if t.session, err = t.client.NewSession(); err != nil {
 		discardCachedSshClient(ckey)
 
-		// if the current connection was cached, and the error is EOF,
-		// we can try again as this may be a stale connection.
-		if !(cacheHit && err.Error() == "EOF") {
+		// if the current connection was cached, we can try again
+		// as this may be a stale connection.
+		if !cacheHit {
 			return nil, err
 		}
 
@@ -274,9 +276,6 @@ func (t *sshSmartSubtransport) Action(urlString string, action git2go.SmartServi
 }
 
 func (t *sshSmartSubtransport) createConn(ckey, addr string, sshConfig *ssh.ClientConfig) error {
-	aMux.Lock()
-	defer aMux.Unlock()
-
 	// In some scenarios the ssh handshake can hang indefinitely at
 	// golang.org/x/crypto/ssh.(*handshakeTransport).kexLoop.
 	//
@@ -284,8 +283,9 @@ func (t *sshSmartSubtransport) createConn(ckey, addr string, sshConfig *ssh.Clie
 	done := make(chan error, 1)
 	var err error
 
+	var c *ssh.Client
 	go func() {
-		t.client, err = ssh.Dial("tcp", addr, sshConfig)
+		c, err = ssh.Dial("tcp", addr, sshConfig)
 		done <- err
 	}()
 
@@ -304,8 +304,24 @@ func (t *sshSmartSubtransport) createConn(ckey, addr string, sshConfig *ssh.Clie
 		return err
 	}
 
+	t.client = c
+
+	// Mutex is set here to avoid the network latency being
+	// absorbed by all competing goroutines.
+	aMux.Lock()
+	defer aMux.Unlock()
+
+	// A different goroutine won the race, dispose the connection
+	// and carry on.
+	if _, ok := sshClients[ckey]; ok {
+		go func() {
+			_ = c.Close()
+		}()
+		return nil
+	}
+
 	sshClients[ckey] = &cachedClient{
-		Client:         t.client,
+		Client:         c,
 		activeSessions: 1,
 	}
 
@@ -322,7 +338,7 @@ func (t *sshSmartSubtransport) createConn(ckey, addr string, sshConfig *ssh.Clie
 // may impair the transport to have successful actions on a new
 // SmartSubTransport (i.e. unreleased resources, staled connections).
 func (t *sshSmartSubtransport) Close() error {
-	traceLog.Info("[ssh]: sshSmartSubtransport.Close()")
+	traceLog.Info("[ssh]: sshSmartSubtransport.Close()", "server", t.addr)
 	t.currentStream = nil
 	if t.client != nil && t.stdin != nil {
 		_ = t.stdin.Close()
@@ -330,13 +346,8 @@ func (t *sshSmartSubtransport) Close() error {
 	t.client = nil
 
 	if t.session != nil {
-		traceLog.Info("[ssh]: session.Close()")
-		err := t.session.Close()
-		// failure closing a session suggests a stale connection.
-		if err != nil && t.ckey != "" {
-			discardCachedSshClient(t.ckey)
-			t.ckey = ""
-		}
+		traceLog.Info("[ssh]: session.Close()", "server", t.addr)
+		_ = t.session.Close()
 	}
 	t.session = nil
 
@@ -439,16 +450,14 @@ func discardCachedSshClient(key string) {
 	defer aMux.Unlock()
 
 	if v, found := sshClients[key]; found {
-		traceLog.Info("[ssh]: discard cached ssh client")
-
-		v.activeSessions--
+		traceLog.Info("[ssh]: discard cached ssh client", "activeSessions", v.activeSessions)
 		closeConn := func() {
-			if v.Client != nil {
-				// run as async goroutine to minimise mutex time in immediate closures.
-				go func() {
+			// run as async goroutine to minimise mutex time in immediate closures.
+			go func() {
+				if v.Client != nil {
 					_ = v.Client.Close()
-				}()
-			}
+				}
+			}()
 		}
 
 		// if no active sessions for this connection, close it right-away.
