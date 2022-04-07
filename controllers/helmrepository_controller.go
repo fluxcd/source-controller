@@ -285,9 +285,6 @@ func (r *HelmRepositoryReconciler) notify(oldObj, newObj *sourcev1.HelmRepositor
 // they match the Storage server hostname of current runtime.
 func (r *HelmRepositoryReconciler) reconcileStorage(ctx context.Context, obj *sourcev1.HelmRepository, _ *sourcev1.Artifact, _ *repository.ChartRepository) (sreconcile.Result, error) {
 	// Garbage collect previous advertised artifact(s) from storage
-	// Abort if it takes more than 5 seconds.
-	ctx, cancel := context.WithTimeout(ctx, time.Second*5)
-	defer cancel()
 	_ = r.garbageCollect(ctx, obj)
 
 	// Determine if the advertised artifact is still in storage
