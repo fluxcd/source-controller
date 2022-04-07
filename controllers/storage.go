@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"hash"
 	"io"
+	"io/fs"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -32,16 +33,12 @@ import (
 	"time"
 
 	securejoin "github.com/cyphar/filepath-securejoin"
+	"github.com/fluxcd/pkg/lockedfile"
+	"github.com/fluxcd/pkg/untar"
 	"github.com/go-git/go-git/v5/plumbing/format/gitignore"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	kerrors "k8s.io/apimachinery/pkg/util/errors"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
-	"github.com/fluxcd/pkg/lockedfile"
-
-	"io/fs"
-
-	"github.com/fluxcd/pkg/untar"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
 	sourcefs "github.com/fluxcd/source-controller/internal/fs"
 	"github.com/fluxcd/source-controller/pkg/sourceignore"
@@ -181,7 +178,7 @@ func (s *Storage) getGarbageFiles(artifact sourcev1.Artifact, totalCountLimit, m
 			return nil
 		}
 		if totalFiles >= totalCountLimit {
-			return fmt.Errorf("Reached file walking limit, already walked over: %d", totalFiles)
+			return fmt.Errorf("reached file walking limit, already walked over: %d", totalFiles)
 		}
 		info, err := d.Info()
 		if err != nil {
@@ -190,8 +187,8 @@ func (s *Storage) getGarbageFiles(artifact sourcev1.Artifact, totalCountLimit, m
 		}
 		createdAt := info.ModTime().UTC()
 		diff := now.Sub(createdAt)
-		// compare the time difference between now and the time at which the file was created
-		// with the provided ttl. delete if difference is greater than the ttl.
+		// Compare the time difference between now and the time at which the file was created
+		// with the provided TTL. Delete if the difference is greater than the TTL.
 		expired := diff > ttl
 		if !info.IsDir() && info.Mode()&os.ModeSymlink != os.ModeSymlink {
 			if path != localPath && expired {

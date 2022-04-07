@@ -634,12 +634,10 @@ func (r *BucketReconciler) garbageCollect(ctx context.Context, obj *sourcev1.Buc
 	if obj.GetArtifact() != nil {
 		delFiles, err := r.Storage.GarbageCollect(ctx, *obj.GetArtifact(), time.Second*5)
 		if err != nil {
-			e := &serror.Event{
+			return &serror.Event{
 				Err:    fmt.Errorf("garbage collection of artifacts failed: %w", err),
 				Reason: "GarbageCollectionFailed",
 			}
-			r.eventLogf(ctx, obj, corev1.EventTypeWarning, e.Reason, e.Err.Error())
-			return e
 		}
 		if len(delFiles) > 0 {
 			r.eventLogf(ctx, obj, events.EventTypeTrace, "GarbageCollectionSucceeded",
