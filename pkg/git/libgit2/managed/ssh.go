@@ -165,7 +165,7 @@ func (t *sshSmartSubtransport) Action(urlString string, action git2go.SmartServi
 		return nil, fmt.Errorf("unexpected action: %v", action)
 	}
 
-	cred, err := t.transport.SmartCredentials("", git2go.CredentialTypeSSHKey|git2go.CredentialTypeSSHMemory)
+	cred, err := t.transport.SmartCredentials("", git2go.CredentialTypeSSHMemory)
 	if err != nil {
 		return nil, err
 	}
