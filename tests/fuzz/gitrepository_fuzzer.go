@@ -174,7 +174,7 @@ func startEnvServer(setupReconcilers func(manager.Manager)) *envtest.Environment
 		panic(err)
 	}
 	defer os.RemoveAll(tmpStoragePath)
-	storage, err = controllers.NewStorage(tmpStoragePath, "localhost:5050", time.Second*30)
+	storage, err = controllers.NewStorage(tmpStoragePath, "localhost:5050", time.Minute*1, 2)
 	if err != nil {
 		panic(err)
 	}

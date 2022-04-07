@@ -19,6 +19,7 @@ package controllers
 import (
 	"archive/tar"
 	"compress/gzip"
+	"context"
 	"crypto/sha256"
 	"fmt"
 	"hash"
@@ -26,20 +27,27 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
 	securejoin "github.com/cyphar/filepath-securejoin"
 	"github.com/go-git/go-git/v5/plumbing/format/gitignore"
+	kerrors "k8s.io/apimachinery/pkg/util/errors"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fluxcd/pkg/lockedfile"
 
+	"io/fs"
+
 	"github.com/fluxcd/pkg/untar"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
-	"github.com/fluxcd/source-controller/internal/fs"
+	sourcefs "github.com/fluxcd/source-controller/internal/fs"
 	"github.com/fluxcd/source-controller/pkg/sourceignore"
 )
+
+const GarbageCountLimit = 1000
 
 // Storage manages artifacts
 type Storage struct {
@@ -49,19 +57,25 @@ type Storage struct {
 	// Hostname is the file server host name used to compose the artifacts URIs.
 	Hostname string `json:"hostname"`
 
-	// Timeout for artifacts operations
-	Timeout time.Duration `json:"timeout"`
+	// ArtifactRetentionTTL is the maximum number of artifacts to be kept in storage
+	// after a garbage collection.
+	ArtifactRetentionTTL time.Duration `json:"artifactRetentionTTL"`
+
+	// ArtifactRetentionRecords is the duration of time that artifacts will be kept in
+	// storage before being garbage collected.
+	ArtifactRetentionRecords int `json:"artifactRetentionRecords"`
 }
 
 // NewStorage creates the storage helper for a given path and hostname.
-func NewStorage(basePath string, hostname string, timeout time.Duration) (*Storage, error) {
+func NewStorage(basePath string, hostname string, artifactRetentionTTL time.Duration, artifactRetentionRecords int) (*Storage, error) {
 	if f, err := os.Stat(basePath); os.IsNotExist(err) || !f.IsDir() {
 		return nil, fmt.Errorf("invalid dir path: %s", basePath)
 	}
 	return &Storage{
-		BasePath: basePath,
-		Hostname: hostname,
-		Timeout:  timeout,
+		BasePath:                 basePath,
+		Hostname:                 hostname,
+		ArtifactRetentionTTL:     artifactRetentionTTL,
+		ArtifactRetentionRecords: artifactRetentionRecords,
 	}, nil
 }
 
@@ -143,6 +157,150 @@ func (s *Storage) RemoveAllButCurrent(artifact sourcev1.Artifact) ([]string, err
 		return deletedFiles, fmt.Errorf("failed to remove files: %s", strings.Join(errors, " "))
 	}
 	return deletedFiles, nil
+}
+
+// getGarbageFiles returns all files that need to be garbage collected for the given artifact.
+// Garbage files are determined based on the below flow:
+// 1. collect all files with an expired ttl
+// 2. if we satisfy maxItemsToBeRetained, then return
+// 3. else, remove all files till the latest n files remain, where n=maxItemsToBeRetained
+func (s *Storage) getGarbageFiles(artifact sourcev1.Artifact, totalCountLimit, maxItemsToBeRetained int, ttl time.Duration) ([]string, error) {
+	localPath := s.LocalPath(artifact)
+	dir := filepath.Dir(localPath)
+	garbageFiles := []string{}
+	filesWithCreatedTs := make(map[time.Time]string)
+	// sortedPaths contain all files sorted according to their created ts.
+	sortedPaths := []string{}
+	now := time.Now().UTC()
+	totalFiles := 0
+	var errors []string
+	creationTimestamps := []time.Time{}
+	_ = filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			errors = append(errors, err.Error())
+			return nil
+		}
+		if totalFiles >= totalCountLimit {
+			return fmt.Errorf("Reached file walking limit, already walked over: %d", totalFiles)
+		}
+		info, err := d.Info()
+		if err != nil {
+			errors = append(errors, err.Error())
+			return nil
+		}
+		createdAt := info.ModTime().UTC()
+		diff := now.Sub(createdAt)
+		// compare the time difference between now and the time at which the file was created
+		// with the provided ttl. delete if difference is greater than the ttl.
+		expired := diff > ttl
+		if !info.IsDir() && info.Mode()&os.ModeSymlink != os.ModeSymlink {
+			if path != localPath && expired {
+				garbageFiles = append(garbageFiles, path)
+			}
+			totalFiles += 1
+			filesWithCreatedTs[createdAt] = path
+			creationTimestamps = append(creationTimestamps, createdAt)
+		}
+		return nil
+
+	})
+	if len(errors) > 0 {
+		return nil, fmt.Errorf("can't walk over file: %s", strings.Join(errors, ","))
+	}
+
+	// We already collected enough garbage files to satisfy the no. of max
+	// items that are supposed to be retained, so exit early.
+	if totalFiles-len(garbageFiles) < maxItemsToBeRetained {
+		return garbageFiles, nil
+	}
+
+	// sort all timestamps in an ascending order.
+	sort.Slice(creationTimestamps, func(i, j int) bool { return creationTimestamps[i].Before(creationTimestamps[j]) })
+	for _, ts := range creationTimestamps {
+		path, ok := filesWithCreatedTs[ts]
+		if !ok {
+			return garbageFiles, fmt.Errorf("failed to fetch file for created ts: %v", ts)
+		}
+		sortedPaths = append(sortedPaths, path)
+	}
+
+	var collected int
+	noOfGarbageFiles := len(garbageFiles)
+	for _, path := range sortedPaths {
+		if path != localPath && !stringInSlice(path, garbageFiles) {
+			// If we previously collected a few garbage files with an expired ttl, then take that into account
+			// when checking whether we need to remove more files to satisfy the max no. of items allowed
+			// in the filesystem, along with the no. of files already removed in this loop.
+			if noOfGarbageFiles > 0 {
+				if (len(sortedPaths) - collected - len(garbageFiles)) > maxItemsToBeRetained {
+					garbageFiles = append(garbageFiles, path)
+					collected += 1
+				}
+			} else {
+				if len(sortedPaths)-collected > maxItemsToBeRetained {
+					garbageFiles = append(garbageFiles, path)
+					collected += 1
+				}
+			}
+		}
+	}
+
+	return garbageFiles, nil
+}
+
+// GarbageCollect removes all garabge files in the artifact dir according to the provided
+// retention options.
+func (s *Storage) GarbageCollect(ctx context.Context, artifact sourcev1.Artifact, timeout time.Duration) ([]string, error) {
+	delFilesChan := make(chan []string)
+	errChan := make(chan error)
+	// Abort if it takes more than the provided timeout duration.
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	go func() {
+		garbageFiles, err := s.getGarbageFiles(artifact, GarbageCountLimit, s.ArtifactRetentionRecords, s.ArtifactRetentionTTL)
+		if err != nil {
+			errChan <- err
+			return
+		}
+		var errors []error
+		var deleted []string
+		if len(garbageFiles) > 0 {
+			for _, file := range garbageFiles {
+				err := os.Remove(file)
+				if err != nil {
+					errors = append(errors, err)
+				} else {
+					deleted = append(deleted, file)
+				}
+			}
+		}
+		if len(errors) > 0 {
+			errChan <- kerrors.NewAggregate(errors)
+			return
+		}
+		delFilesChan <- deleted
+	}()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case delFiles := <-delFilesChan:
+			return delFiles, nil
+		case err := <-errChan:
+			return nil, err
+		}
+	}
+}
+
+func stringInSlice(a string, list []string) bool {
+	for _, b := range list {
+		if b == a {
+			return true
+		}
+	}
+	return false
 }
 
 // ArtifactExist returns a boolean indicating whether the v1beta1.Artifact exists in storage and is a regular file.
@@ -281,7 +439,7 @@ func (s *Storage) Archive(artifact *sourcev1.Artifact, dir string, filter Archiv
 		return err
 	}
 
-	if err := fs.RenameWithFallback(tmpName, localPath); err != nil {
+	if err := sourcefs.RenameWithFallback(tmpName, localPath); err != nil {
 		return err
 	}
 
@@ -323,7 +481,7 @@ func (s *Storage) AtomicWriteFile(artifact *sourcev1.Artifact, reader io.Reader,
 		return err
 	}
 
-	if err := fs.RenameWithFallback(tfName, localPath); err != nil {
+	if err := sourcefs.RenameWithFallback(tfName, localPath); err != nil {
 		return err
 	}
 
@@ -361,7 +519,7 @@ func (s *Storage) Copy(artifact *sourcev1.Artifact, reader io.Reader) (err error
 		return err
 	}
 
-	if err := fs.RenameWithFallback(tfName, localPath); err != nil {
+	if err := sourcefs.RenameWithFallback(tfName, localPath); err != nil {
 		return err
 	}
 
@@ -421,7 +579,7 @@ func (s *Storage) CopyToPath(artifact *sourcev1.Artifact, subPath, toPath string
 	if err != nil {
 		return err
 	}
-	if err := fs.RenameWithFallback(fromPath, toPath); err != nil {
+	if err := sourcefs.RenameWithFallback(fromPath, toPath); err != nil {
 		return err
 	}
 	return nil

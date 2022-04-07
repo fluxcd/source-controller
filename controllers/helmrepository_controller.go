@@ -241,6 +241,9 @@ func (r *HelmRepositoryReconciler) reconcile(ctx context.Context, obj *sourcev1.
 // they match the Storage server hostname of current runtime.
 func (r *HelmRepositoryReconciler) reconcileStorage(ctx context.Context, obj *sourcev1.HelmRepository, _ *sourcev1.Artifact, _ *repository.ChartRepository) (sreconcile.Result, error) {
 	// Garbage collect previous advertised artifact(s) from storage
+	// Abort if it takes more than 5 seconds.
+	ctx, cancel := context.WithTimeout(ctx, time.Second*5)
+	defer cancel()
 	_ = r.garbageCollect(ctx, obj)
 
 	// Determine if the advertised artifact is still in storage
@@ -515,14 +518,19 @@ func (r *HelmRepositoryReconciler) garbageCollect(ctx context.Context, obj *sour
 		return nil
 	}
 	if obj.GetArtifact() != nil {
-		if deleted, err := r.Storage.RemoveAllButCurrent(*obj.GetArtifact()); err != nil {
-			return &serror.Event{
-				Err:    fmt.Errorf("garbage collection of old artifacts failed: %w", err),
+		delFiles, err := r.Storage.GarbageCollect(ctx, *obj.GetArtifact(), time.Second*5)
+		if err != nil {
+			e := &serror.Event{
+				Err:    fmt.Errorf("garbage collection of artifacts failed: %w", err),
 				Reason: "GarbageCollectionFailed",
 			}
-		} else if len(deleted) > 0 {
+			r.eventLogf(ctx, obj, corev1.EventTypeWarning, e.Reason, e.Err.Error())
+			return e
+		}
+		if len(delFiles) > 0 {
 			r.eventLogf(ctx, obj, events.EventTypeTrace, "GarbageCollectionSucceeded",
-				"garbage collected old artifacts")
+				fmt.Sprintf("garbage collected %d artifacts", len(delFiles)))
+			return nil
 		}
 	}
 	return nil

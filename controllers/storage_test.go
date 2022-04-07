@@ -19,11 +19,13 @@ package controllers
 import (
 	"archive/tar"
 	"compress/gzip"
+	"context"
 	"fmt"
 	"io"
 	"os"
 	"path"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -48,7 +50,7 @@ func TestStorageConstructor(t *testing.T) {
 	}
 	t.Cleanup(cleanupStoragePath(dir))
 
-	if _, err := NewStorage("/nonexistent", "hostname", time.Minute); err == nil {
+	if _, err := NewStorage("/nonexistent", "hostname", time.Minute, 2); err == nil {
 		t.Fatal("nonexistent path was allowable in storage constructor")
 	}
 
@@ -58,13 +60,13 @@ func TestStorageConstructor(t *testing.T) {
 	}
 	f.Close()
 
-	if _, err := NewStorage(f.Name(), "hostname", time.Minute); err == nil {
+	if _, err := NewStorage(f.Name(), "hostname", time.Minute, 2); err == nil {
 		os.Remove(f.Name())
 		t.Fatal("file path was accepted as basedir")
 	}
 	os.Remove(f.Name())
 
-	if _, err := NewStorage(dir, "hostname", time.Minute); err != nil {
+	if _, err := NewStorage(dir, "hostname", time.Minute, 2); err != nil {
 		t.Fatalf("Valid path did not successfully return: %v", err)
 	}
 }
@@ -117,7 +119,7 @@ func TestStorage_Archive(t *testing.T) {
 	}
 	t.Cleanup(cleanupStoragePath(dir))
 
-	storage, err := NewStorage(dir, "hostname", time.Minute)
+	storage, err := NewStorage(dir, "hostname", time.Minute, 2)
 	if err != nil {
 		t.Fatalf("error while bootstrapping storage: %v", err)
 	}
@@ -289,7 +291,7 @@ func TestStorageRemoveAllButCurrent(t *testing.T) {
 		}
 		t.Cleanup(func() { os.RemoveAll(dir) })
 
-		s, err := NewStorage(dir, "hostname", time.Minute)
+		s, err := NewStorage(dir, "hostname", time.Minute, 2)
 		if err != nil {
 			t.Fatalf("Valid path did not successfully return: %v", err)
 		}
@@ -305,7 +307,7 @@ func TestStorageRemoveAllButCurrent(t *testing.T) {
 		g.Expect(err).ToNot(HaveOccurred())
 		t.Cleanup(func() { os.RemoveAll(dir) })
 
-		s, err := NewStorage(dir, "hostname", time.Minute)
+		s, err := NewStorage(dir, "hostname", time.Minute, 2)
 		g.Expect(err).ToNot(HaveOccurred(), "failed to create new storage")
 
 		artifact := sourcev1.Artifact{
@@ -368,7 +370,7 @@ func TestStorageRemoveAll(t *testing.T) {
 			g.Expect(err).ToNot(HaveOccurred())
 			t.Cleanup(func() { os.RemoveAll(dir) })
 
-			s, err := NewStorage(dir, "hostname", time.Minute)
+			s, err := NewStorage(dir, "hostname", time.Minute, 2)
 			g.Expect(err).ToNot(HaveOccurred(), "failed to create new storage")
 
 			artifact := sourcev1.Artifact{
@@ -398,7 +400,7 @@ func TestStorageCopyFromPath(t *testing.T) {
 	}
 	t.Cleanup(cleanupStoragePath(dir))
 
-	storage, err := NewStorage(dir, "hostname", time.Minute)
+	storage, err := NewStorage(dir, "hostname", time.Minute, 2)
 	if err != nil {
 		t.Fatalf("error while bootstrapping storage: %v", err)
 	}
@@ -483,6 +485,221 @@ func TestStorageCopyFromPath(t *testing.T) {
 				t.Errorf("CopyFromPath() error = %v", err)
 			}
 			matchFile(t, storage, artifact, tt.want, tt.expectMismatch)
+		})
+	}
+}
+
+func TestStorage_getGarbageFiles(t *testing.T) {
+	artifactFolder := path.Join("foo", "bar")
+	tests := []struct {
+		name                 string
+		artifactPaths        []string
+		createPause          time.Duration
+		ttl                  time.Duration
+		maxItemsToBeRetained int
+		totalCountLimit      int
+		wantDeleted          []string
+	}{
+		{
+			name: "delete files based on maxItemsToBeRetained",
+			artifactPaths: []string{
+				path.Join(artifactFolder, "artifact1.tar.gz"),
+				path.Join(artifactFolder, "artifact2.tar.gz"),
+				path.Join(artifactFolder, "artifact3.tar.gz"),
+				path.Join(artifactFolder, "artifact4.tar.gz"),
+				path.Join(artifactFolder, "artifact5.tar.gz"),
+			},
+			createPause:          time.Millisecond * 10,
+			ttl:                  time.Minute * 2,
+			totalCountLimit:      10,
+			maxItemsToBeRetained: 2,
+			wantDeleted: []string{
+				path.Join(artifactFolder, "artifact1.tar.gz"),
+				path.Join(artifactFolder, "artifact2.tar.gz"),
+				path.Join(artifactFolder, "artifact3.tar.gz"),
+			},
+		},
+		{
+			name: "delete files based on ttl",
+			artifactPaths: []string{
+				path.Join(artifactFolder, "artifact1.tar.gz"),
+				path.Join(artifactFolder, "artifact2.tar.gz"),
+				path.Join(artifactFolder, "artifact3.tar.gz"),
+				path.Join(artifactFolder, "artifact4.tar.gz"),
+				path.Join(artifactFolder, "artifact5.tar.gz"),
+			},
+			createPause:          time.Second * 1,
+			ttl:                  time.Second*3 + time.Millisecond*500,
+			totalCountLimit:      10,
+			maxItemsToBeRetained: 4,
+			wantDeleted: []string{
+				path.Join(artifactFolder, "artifact1.tar.gz"),
+				path.Join(artifactFolder, "artifact2.tar.gz"),
+			},
+		},
+		{
+			name: "delete files based on ttl and maxItemsToBeRetained",
+			artifactPaths: []string{
+				path.Join(artifactFolder, "artifact1.tar.gz"),
+				path.Join(artifactFolder, "artifact2.tar.gz"),
+				path.Join(artifactFolder, "artifact3.tar.gz"),
+				path.Join(artifactFolder, "artifact4.tar.gz"),
+				path.Join(artifactFolder, "artifact5.tar.gz"),
+				path.Join(artifactFolder, "artifact6.tar.gz"),
+			},
+			createPause:          time.Second * 1,
+			ttl:                  time.Second*5 + time.Millisecond*500,
+			totalCountLimit:      10,
+			maxItemsToBeRetained: 4,
+			wantDeleted: []string{
+				path.Join(artifactFolder, "artifact1.tar.gz"),
+				path.Join(artifactFolder, "artifact2.tar.gz"),
+			},
+		},
+		{
+			name: "delete files based on ttl and maxItemsToBeRetained and totalCountLimit",
+			artifactPaths: []string{
+				path.Join(artifactFolder, "artifact1.tar.gz"),
+				path.Join(artifactFolder, "artifact2.tar.gz"),
+				path.Join(artifactFolder, "artifact3.tar.gz"),
+				path.Join(artifactFolder, "artifact4.tar.gz"),
+				path.Join(artifactFolder, "artifact5.tar.gz"),
+				path.Join(artifactFolder, "artifact6.tar.gz"),
+			},
+			createPause:          time.Millisecond * 500,
+			ttl:                  time.Millisecond * 500,
+			totalCountLimit:      3,
+			maxItemsToBeRetained: 2,
+			wantDeleted: []string{
+				path.Join(artifactFolder, "artifact1.tar.gz"),
+				path.Join(artifactFolder, "artifact2.tar.gz"),
+				path.Join(artifactFolder, "artifact3.tar.gz"),
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+			dir, err := os.MkdirTemp("", "")
+			g.Expect(err).ToNot(HaveOccurred())
+			t.Cleanup(func() { os.RemoveAll(dir) })
+
+			s, err := NewStorage(dir, "hostname", tt.ttl, tt.maxItemsToBeRetained)
+			g.Expect(err).ToNot(HaveOccurred(), "failed to create new storage")
+
+			artifact := sourcev1.Artifact{
+				Path: tt.artifactPaths[len(tt.artifactPaths)-1],
+			}
+			g.Expect(os.MkdirAll(path.Join(dir, artifactFolder), 0o755)).ToNot(HaveOccurred())
+			for _, artifactPath := range tt.artifactPaths {
+				f, err := os.Create(path.Join(dir, artifactPath))
+				g.Expect(err).ToNot(HaveOccurred())
+				g.Expect(f.Close()).ToNot(HaveOccurred())
+				time.Sleep(tt.createPause)
+			}
+
+			deletedPaths, err := s.getGarbageFiles(artifact, tt.totalCountLimit, tt.maxItemsToBeRetained, tt.ttl)
+			g.Expect(err).ToNot(HaveOccurred(), "failed to collect garbage files")
+			g.Expect(len(tt.wantDeleted)).To(Equal(len(deletedPaths)))
+			for _, wantDeletedPath := range tt.wantDeleted {
+				present := false
+				for _, deletedPath := range deletedPaths {
+					if strings.Contains(deletedPath, wantDeletedPath) {
+						present = true
+						break
+					}
+				}
+				if !present {
+					g.Fail(fmt.Sprintf("expected file to be deleted, still exists: %s", wantDeletedPath))
+				}
+			}
+		})
+	}
+}
+
+func TestStorage_GarbageCollect(t *testing.T) {
+	artifactFolder := path.Join("foo", "bar")
+	tests := []struct {
+		name          string
+		artifactPaths []string
+		wantDeleted   []string
+		wantErr       string
+		ctxTimeout    time.Duration
+	}{
+		{
+			name: "garbage collects",
+			artifactPaths: []string{
+				path.Join(artifactFolder, "artifact1.tar.gz"),
+				path.Join(artifactFolder, "artifact2.tar.gz"),
+				path.Join(artifactFolder, "artifact3.tar.gz"),
+				path.Join(artifactFolder, "artifact4.tar.gz"),
+			},
+			wantDeleted: []string{
+				path.Join(artifactFolder, "artifact1.tar.gz"),
+				path.Join(artifactFolder, "artifact2.tar.gz"),
+			},
+			ctxTimeout: time.Second * 1,
+		},
+		{
+			name: "garbage collection fails with context timeout",
+			artifactPaths: []string{
+				path.Join(artifactFolder, "artifact1.tar.gz"),
+				path.Join(artifactFolder, "artifact2.tar.gz"),
+				path.Join(artifactFolder, "artifact3.tar.gz"),
+				path.Join(artifactFolder, "artifact4.tar.gz"),
+			},
+			wantErr:    "context deadline exceeded",
+			ctxTimeout: time.Nanosecond * 1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+			dir, err := os.MkdirTemp("", "")
+			g.Expect(err).ToNot(HaveOccurred())
+			t.Cleanup(func() { os.RemoveAll(dir) })
+
+			s, err := NewStorage(dir, "hostname", time.Second*2, 2)
+			g.Expect(err).ToNot(HaveOccurred(), "failed to create new storage")
+
+			artifact := sourcev1.Artifact{
+				Path: tt.artifactPaths[len(tt.artifactPaths)-1],
+			}
+			g.Expect(os.MkdirAll(path.Join(dir, artifactFolder), 0o755)).ToNot(HaveOccurred())
+			for i, artifactPath := range tt.artifactPaths {
+				f, err := os.Create(path.Join(dir, artifactPath))
+				g.Expect(err).ToNot(HaveOccurred())
+				g.Expect(f.Close()).ToNot(HaveOccurred())
+				if i != len(tt.artifactPaths)-1 {
+					time.Sleep(time.Second * 1)
+				}
+			}
+
+			deletedPaths, err := s.GarbageCollect(context.TODO(), artifact, tt.ctxTimeout)
+			if tt.wantErr == "" {
+				g.Expect(err).ToNot(HaveOccurred(), "failed to collect garbage files")
+			} else {
+				g.Expect(err).To(HaveOccurred())
+				g.Expect(err.Error()).To(ContainSubstring(tt.wantErr))
+			}
+			if len(tt.wantDeleted) > 0 {
+				g.Expect(len(tt.wantDeleted)).To(Equal(len(deletedPaths)))
+				for _, wantDeletedPath := range tt.wantDeleted {
+					present := false
+					for _, deletedPath := range deletedPaths {
+						if strings.Contains(deletedPath, wantDeletedPath) {
+							g.Expect(deletedPath).ToNot(BeAnExistingFile())
+							present = true
+							break
+						}
+					}
+					if present == false {
+						g.Fail(fmt.Sprintf("expected file to be deleted, still exists: %s", wantDeletedPath))
+					}
+				}
+			}
 		})
 	}
 }
