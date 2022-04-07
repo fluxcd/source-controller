@@ -73,25 +73,27 @@ func init() {
 
 func main() {
 	var (
-		metricsAddr            string
-		eventsAddr             string
-		healthAddr             string
-		storagePath            string
-		storageAddr            string
-		storageAdvAddr         string
-		concurrent             int
-		requeueDependency      time.Duration
-		watchAllNamespaces     bool
-		helmIndexLimit         int64
-		helmChartLimit         int64
-		helmChartFileLimit     int64
-		clientOptions          client.Options
-		logOptions             logger.Options
-		leaderElectionOptions  leaderelection.Options
-		helmCacheMaxSize       int
-		helmCacheTTL           string
-		helmCachePurgeInterval string
-		kexAlgos               []string
+		metricsAddr              string
+		eventsAddr               string
+		healthAddr               string
+		storagePath              string
+		storageAddr              string
+		storageAdvAddr           string
+		concurrent               int
+		requeueDependency        time.Duration
+		watchAllNamespaces       bool
+		helmIndexLimit           int64
+		helmChartLimit           int64
+		helmChartFileLimit       int64
+		clientOptions            client.Options
+		logOptions               logger.Options
+		leaderElectionOptions    leaderelection.Options
+		helmCacheMaxSize         int
+		helmCacheTTL             string
+		helmCachePurgeInterval   string
+		kexAlgos                 []string
+		artifactRetentionTTL     time.Duration
+		artifactRetentionRecords int
 	)
 
 	flag.StringVar(&metricsAddr, "metrics-addr", envOrDefault("METRICS_ADDR", ":8080"),
@@ -124,6 +126,10 @@ func main() {
 		"The interval at which the cache is purged. Valid time units are ns, us (or µs), ms, s, m, h.")
 	flag.StringSliceVar(&kexAlgos, "ssh-kex-algos", []string{},
 		"The list of key exchange algorithms to use for ssh connections, arranged from most preferred to the least.")
+	flag.DurationVar(&artifactRetentionTTL, "artifact-retention-ttl", 60*time.Second,
+		"The duration of time that artifacts will be kept in storage before being garbage collected.")
+	flag.IntVar(&artifactRetentionRecords, "artifact-retention-records", 2,
+		"The maximum number of artifacts to be kept in storage after a garbage collection.")
 
 	clientOptions.BindFlags(flag.CommandLine)
 	logOptions.BindFlags(flag.CommandLine)
@@ -177,7 +183,7 @@ func main() {
 	if storageAdvAddr == "" {
 		storageAdvAddr = determineAdvStorageAddr(storageAddr, setupLog)
 	}
-	storage := mustInitStorage(storagePath, storageAdvAddr, setupLog)
+	storage := mustInitStorage(storagePath, storageAdvAddr, artifactRetentionTTL, artifactRetentionRecords, setupLog)
 	setPreferredKexAlgos(kexAlgos)
 
 	if err = (&controllers.GitRepositoryReconciler{
@@ -283,14 +289,14 @@ func startFileServer(path string, address string, l logr.Logger) {
 	}
 }
 
-func mustInitStorage(path string, storageAdvAddr string, l logr.Logger) *controllers.Storage {
+func mustInitStorage(path string, storageAdvAddr string, artifactRetentionTTL time.Duration, artifactRetentionRecords int, l logr.Logger) *controllers.Storage {
 	if path == "" {
 		p, _ := os.Getwd()
 		path = filepath.Join(p, "bin")
 		os.MkdirAll(path, 0777)
 	}
 
-	storage, err := controllers.NewStorage(path, storageAdvAddr, 5*time.Minute)
+	storage, err := controllers.NewStorage(path, storageAdvAddr, artifactRetentionTTL, artifactRetentionRecords)
 	if err != nil {
 		l.Error(err, "unable to initialise storage")
 		os.Exit(1)

@@ -1104,6 +1104,148 @@ func TestGitRepositoryReconciler_reconcileInclude(t *testing.T) {
 	}
 }
 
+func TestGitRepositoryReconciler_reconcileStorage(t *testing.T) {
+	tests := []struct {
+		name             string
+		beforeFunc       func(obj *sourcev1.GitRepository, storage *Storage) error
+		want             sreconcile.Result
+		wantErr          bool
+		assertArtifact   *sourcev1.Artifact
+		assertConditions []metav1.Condition
+		assertPaths      []string
+	}{
+		{
+			name: "garbage collects",
+			beforeFunc: func(obj *sourcev1.GitRepository, storage *Storage) error {
+				revisions := []string{"a", "b", "c", "d"}
+				for n := range revisions {
+					v := revisions[n]
+					obj.Status.Artifact = &sourcev1.Artifact{
+						Path:     fmt.Sprintf("/reconcile-storage/%s.txt", v),
+						Revision: v,
+					}
+					if err := testStorage.MkdirAll(*obj.Status.Artifact); err != nil {
+						return err
+					}
+					if err := testStorage.AtomicWriteFile(obj.Status.Artifact, strings.NewReader(v), 0o644); err != nil {
+						return err
+					}
+					if n != len(revisions)-1 {
+						time.Sleep(time.Second * 1)
+					}
+				}
+				testStorage.SetArtifactURL(obj.Status.Artifact)
+				return nil
+			},
+			assertArtifact: &sourcev1.Artifact{
+				Path:     "/reconcile-storage/d.txt",
+				Revision: "d",
+				Checksum: "18ac3e7343f016890c510e93f935261169d9e3f565436429830faf0934f4f8e4",
+				URL:      testStorage.Hostname + "/reconcile-storage/d.txt",
+				Size:     int64p(int64(len("d"))),
+			},
+			assertPaths: []string{
+				"/reconcile-storage/d.txt",
+				"/reconcile-storage/c.txt",
+				"!/reconcile-storage/b.txt",
+				"!/reconcile-storage/a.txt",
+			},
+			want: sreconcile.ResultSuccess,
+		},
+		{
+			name: "notices missing artifact in storage",
+			beforeFunc: func(obj *sourcev1.GitRepository, storage *Storage) error {
+				obj.Status.Artifact = &sourcev1.Artifact{
+					Path:     "/reconcile-storage/invalid.txt",
+					Revision: "e",
+				}
+				testStorage.SetArtifactURL(obj.Status.Artifact)
+				return nil
+			},
+			want: sreconcile.ResultSuccess,
+			assertPaths: []string{
+				"!/reconcile-storage/invalid.txt",
+			},
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReconcilingCondition, "NoArtifact", "no artifact for resource in storage"),
+			},
+		},
+		{
+			name: "updates hostname on diff from current",
+			beforeFunc: func(obj *sourcev1.GitRepository, storage *Storage) error {
+				obj.Status.Artifact = &sourcev1.Artifact{
+					Path:     "/reconcile-storage/hostname.txt",
+					Revision: "f",
+					Checksum: "3b9c358f36f0a31b6ad3e14f309c7cf198ac9246e8316f9ce543d5b19ac02b80",
+					URL:      "http://outdated.com/reconcile-storage/hostname.txt",
+				}
+				if err := testStorage.MkdirAll(*obj.Status.Artifact); err != nil {
+					return err
+				}
+				if err := testStorage.AtomicWriteFile(obj.Status.Artifact, strings.NewReader("file"), 0o644); err != nil {
+					return err
+				}
+				return nil
+			},
+			want: sreconcile.ResultSuccess,
+			assertPaths: []string{
+				"/reconcile-storage/hostname.txt",
+			},
+			assertArtifact: &sourcev1.Artifact{
+				Path:     "/reconcile-storage/hostname.txt",
+				Revision: "f",
+				Checksum: "3b9c358f36f0a31b6ad3e14f309c7cf198ac9246e8316f9ce543d5b19ac02b80",
+				URL:      testStorage.Hostname + "/reconcile-storage/hostname.txt",
+				Size:     int64p(int64(len("file"))),
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			defer func() {
+				g.Expect(os.RemoveAll(filepath.Join(testStorage.BasePath, "/reconcile-storage"))).To(Succeed())
+			}()
+
+			r := &GitRepositoryReconciler{
+				EventRecorder: record.NewFakeRecorder(32),
+				Storage:       testStorage,
+			}
+
+			obj := &sourcev1.GitRepository{
+				ObjectMeta: metav1.ObjectMeta{
+					GenerateName: "test-",
+				},
+			}
+			if tt.beforeFunc != nil {
+				g.Expect(tt.beforeFunc(obj, testStorage)).To(Succeed())
+			}
+
+			var c *git.Commit
+			var as artifactSet
+			got, err := r.reconcileStorage(context.TODO(), obj, c, &as, "")
+			g.Expect(err != nil).To(Equal(tt.wantErr))
+			g.Expect(got).To(Equal(tt.want))
+
+			g.Expect(obj.Status.Artifact).To(MatchArtifact(tt.assertArtifact))
+			if tt.assertArtifact != nil && tt.assertArtifact.URL != "" {
+				g.Expect(obj.Status.Artifact.URL).To(Equal(tt.assertArtifact.URL))
+			}
+			g.Expect(obj.Status.Conditions).To(conditions.MatchConditions(tt.assertConditions))
+
+			for _, p := range tt.assertPaths {
+				absoluteP := filepath.Join(testStorage.BasePath, p)
+				if !strings.HasPrefix(p, "!") {
+					g.Expect(absoluteP).To(BeAnExistingFile())
+					continue
+				}
+				g.Expect(absoluteP).NotTo(BeAnExistingFile())
+			}
+		})
+	}
+}
+
 func TestGitRepositoryReconciler_reconcileDelete(t *testing.T) {
 	g := NewWithT(t)
 

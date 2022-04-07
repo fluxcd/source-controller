@@ -176,7 +176,7 @@ func TestBucketReconciler_reconcileStorage(t *testing.T) {
 		{
 			name: "garbage collects",
 			beforeFunc: func(obj *sourcev1.Bucket, storage *Storage) error {
-				revisions := []string{"a", "b", "c"}
+				revisions := []string{"a", "b", "c", "d"}
 				for n := range revisions {
 					v := revisions[n]
 					obj.Status.Artifact = &sourcev1.Artifact{
@@ -186,26 +186,30 @@ func TestBucketReconciler_reconcileStorage(t *testing.T) {
 					if err := testStorage.MkdirAll(*obj.Status.Artifact); err != nil {
 						return err
 					}
-					if err := testStorage.AtomicWriteFile(obj.Status.Artifact, strings.NewReader(v), 0644); err != nil {
+					if err := testStorage.AtomicWriteFile(obj.Status.Artifact, strings.NewReader(v), 0o644); err != nil {
 						return err
+					}
+					if n != len(revisions)-1 {
+						time.Sleep(time.Second * 1)
 					}
 				}
 				testStorage.SetArtifactURL(obj.Status.Artifact)
 				return nil
 			},
-			want: sreconcile.ResultSuccess,
 			assertArtifact: &sourcev1.Artifact{
-				Path:     "/reconcile-storage/c.txt",
-				Revision: "c",
-				Checksum: "2e7d2c03a9507ae265ecf5b5356885a53393a2029d241394997265a1a25aefc6",
-				URL:      testStorage.Hostname + "/reconcile-storage/c.txt",
-				Size:     int64p(int64(len("c"))),
+				Path:     "/reconcile-storage/d.txt",
+				Revision: "d",
+				Checksum: "18ac3e7343f016890c510e93f935261169d9e3f565436429830faf0934f4f8e4",
+				URL:      testStorage.Hostname + "/reconcile-storage/d.txt",
+				Size:     int64p(int64(len("d"))),
 			},
 			assertPaths: []string{
+				"/reconcile-storage/d.txt",
 				"/reconcile-storage/c.txt",
 				"!/reconcile-storage/b.txt",
 				"!/reconcile-storage/a.txt",
 			},
+			want: sreconcile.ResultSuccess,
 		},
 		{
 			name: "notices missing artifact in storage",
@@ -237,7 +241,7 @@ func TestBucketReconciler_reconcileStorage(t *testing.T) {
 				if err := testStorage.MkdirAll(*obj.Status.Artifact); err != nil {
 					return err
 				}
-				if err := testStorage.AtomicWriteFile(obj.Status.Artifact, strings.NewReader("file"), 0644); err != nil {
+				if err := testStorage.AtomicWriteFile(obj.Status.Artifact, strings.NewReader("file"), 0o644); err != nil {
 					return err
 				}
 				return nil
@@ -258,6 +262,10 @@ func TestBucketReconciler_reconcileStorage(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
+
+			defer func() {
+				g.Expect(os.RemoveAll(filepath.Join(testStorage.BasePath, "/reconcile-storage"))).To(Succeed())
+			}()
 
 			r := &BucketReconciler{
 				EventRecorder: record.NewFakeRecorder(32),

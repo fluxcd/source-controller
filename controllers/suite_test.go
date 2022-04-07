@@ -46,8 +46,10 @@ import (
 // Gomega.
 
 const (
-	timeout  = 10 * time.Second
-	interval = 1 * time.Second
+	timeout          = 10 * time.Second
+	interval         = 1 * time.Second
+	retentionTTL     = 2 * time.Second
+	retentionRecords = 2
 )
 
 var (
@@ -181,7 +183,7 @@ func initTestTLS() {
 }
 
 func newTestStorage(s *testserver.HTTPServer) (*Storage, error) {
-	storage, err := NewStorage(s.Root(), s.URL(), timeout)
+	storage, err := NewStorage(s.Root(), s.URL(), retentionTTL, retentionRecords)
 	if err != nil {
 		return nil, err
 	}
