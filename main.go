@@ -46,6 +46,7 @@ import (
 	"github.com/fluxcd/source-controller/controllers"
 	"github.com/fluxcd/source-controller/internal/cache"
 	"github.com/fluxcd/source-controller/internal/helm"
+	"github.com/fluxcd/source-controller/pkg/git"
 	"github.com/fluxcd/source-controller/pkg/git/libgit2/managed"
 	// +kubebuilder:scaffold:imports
 )
@@ -90,6 +91,7 @@ func main() {
 		helmCacheMaxSize       int
 		helmCacheTTL           string
 		helmCachePurgeInterval string
+		kexAlgos               []string
 	)
 
 	flag.StringVar(&metricsAddr, "metrics-addr", envOrDefault("METRICS_ADDR", ":8080"),
@@ -120,6 +122,8 @@ func main() {
 		"The TTL of an index in the cache. Valid time units are ns, us (or µs), ms, s, m, h.")
 	flag.StringVar(&helmCachePurgeInterval, "helm-cache-purge-interval", "1m",
 		"The interval at which the cache is purged. Valid time units are ns, us (or µs), ms, s, m, h.")
+	flag.StringSliceVar(&kexAlgos, "ssh-kex-algos", []string{},
+		"The list of key exchange algorithms to use for ssh connections, arranged from most preferred to the least.")
 
 	clientOptions.BindFlags(flag.CommandLine)
 	logOptions.BindFlags(flag.CommandLine)
@@ -174,6 +178,7 @@ func main() {
 		storageAdvAddr = determineAdvStorageAddr(storageAddr, setupLog)
 	}
 	storage := mustInitStorage(storagePath, storageAdvAddr, setupLog)
+	setPreferredKexAlgos(kexAlgos)
 
 	if err = (&controllers.GitRepositoryReconciler{
 		Client:         mgr.GetClient(),
@@ -332,4 +337,8 @@ func envOrDefault(envName, defaultValue string) string {
 	}
 
 	return defaultValue
+}
+
+func setPreferredKexAlgos(algos []string) {
+	git.KexAlgos = algos
 }

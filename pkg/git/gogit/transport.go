@@ -26,6 +26,8 @@ import (
 	"github.com/fluxcd/pkg/ssh/knownhosts"
 
 	"github.com/fluxcd/source-controller/pkg/git"
+
+	gossh "golang.org/x/crypto/ssh"
 )
 
 // transportAuth constructs the transport.AuthMethod for the git.Transport of
@@ -58,7 +60,10 @@ func transportAuth(opts *git.AuthOptions) (transport.AuthMethod, error) {
 				}
 				pk.HostKeyCallback = callback
 			}
-			return pk, nil
+			customPK := &CustomPublicKeys{
+				pk: pk,
+			}
+			return customPK, nil
 		}
 	case "":
 		return nil, fmt.Errorf("no transport type set")
@@ -74,4 +79,29 @@ func caBundle(opts *git.AuthOptions) []byte {
 		return nil
 	}
 	return opts.CAFile
+}
+
+// CustomPublicKeys is a wrapper around ssh.PublicKeys to help us
+// customize the ssh config. It implements ssh.AuthMethod.
+type CustomPublicKeys struct {
+	pk *ssh.PublicKeys
+}
+
+func (a *CustomPublicKeys) Name() string {
+	return a.pk.Name()
+}
+
+func (a *CustomPublicKeys) String() string {
+	return a.pk.String()
+}
+
+func (a *CustomPublicKeys) ClientConfig() (*gossh.ClientConfig, error) {
+	config, err := a.pk.ClientConfig()
+	if err != nil {
+		return nil, err
+	}
+	if len(git.KexAlgos) > 0 {
+		config.Config.KeyExchanges = git.KexAlgos
+	}
+	return config, nil
 }

@@ -22,7 +22,6 @@ import (
 
 	"github.com/go-git/go-git/v5/plumbing/transport"
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
-	"github.com/go-git/go-git/v5/plumbing/transport/ssh"
 	. "github.com/onsi/gomega"
 
 	"github.com/fluxcd/source-controller/pkg/git"
@@ -72,6 +71,7 @@ func Test_transportAuth(t *testing.T) {
 		name     string
 		opts     *git.AuthOptions
 		wantFunc func(g *WithT, t transport.AuthMethod, opts *git.AuthOptions)
+		kexAlgos []string
 		wantErr  error
 	}{
 		{
@@ -128,10 +128,10 @@ func Test_transportAuth(t *testing.T) {
 				Identity:  []byte(privateKeyFixture),
 			},
 			wantFunc: func(g *WithT, t transport.AuthMethod, opts *git.AuthOptions) {
-				tt, ok := t.(*ssh.PublicKeys)
+				tt, ok := t.(*CustomPublicKeys)
 				g.Expect(ok).To(BeTrue())
-				g.Expect(tt.User).To(Equal(opts.Username))
-				g.Expect(tt.Signer.PublicKey().Type()).To(Equal("ssh-rsa"))
+				g.Expect(tt.pk.User).To(Equal(opts.Username))
+				g.Expect(tt.pk.Signer.PublicKey().Type()).To(Equal("ssh-rsa"))
 			},
 		},
 		{
@@ -143,10 +143,31 @@ func Test_transportAuth(t *testing.T) {
 				Identity:  []byte(privateKeyPassphraseFixture),
 			},
 			wantFunc: func(g *WithT, t transport.AuthMethod, opts *git.AuthOptions) {
-				tt, ok := t.(*ssh.PublicKeys)
+				tt, ok := t.(*CustomPublicKeys)
 				g.Expect(ok).To(BeTrue())
-				g.Expect(tt.User).To(Equal(opts.Username))
-				g.Expect(tt.Signer.PublicKey().Type()).To(Equal("ssh-rsa"))
+				g.Expect(tt.pk.User).To(Equal(opts.Username))
+				g.Expect(tt.pk.Signer.PublicKey().Type()).To(Equal("ssh-rsa"))
+			},
+		},
+		{
+			name: "SSH with custom key exchanges",
+			opts: &git.AuthOptions{
+				Transport:  git.SSH,
+				Username:   "example",
+				Identity:   []byte(privateKeyFixture),
+				KnownHosts: []byte(knownHostsFixture),
+			},
+			kexAlgos: []string{"curve25519-sha256", "diffie-hellman-group-exchange-sha256"},
+			wantFunc: func(g *WithT, t transport.AuthMethod, opts *git.AuthOptions) {
+				tt, ok := t.(*CustomPublicKeys)
+				g.Expect(ok).To(BeTrue())
+				g.Expect(tt.pk.User).To(Equal(opts.Username))
+				g.Expect(tt.pk.Signer.PublicKey().Type()).To(Equal("ssh-rsa"))
+				config, err := tt.ClientConfig()
+				g.Expect(err).ToNot(HaveOccurred())
+				g.Expect(config.Config.KeyExchanges).To(Equal(
+					[]string{"curve25519-sha256", "diffie-hellman-group-exchange-sha256"}),
+				)
 			},
 		},
 		{
@@ -168,11 +189,11 @@ func Test_transportAuth(t *testing.T) {
 				KnownHosts: []byte(knownHostsFixture),
 			},
 			wantFunc: func(g *WithT, t transport.AuthMethod, opts *git.AuthOptions) {
-				tt, ok := t.(*ssh.PublicKeys)
+				tt, ok := t.(*CustomPublicKeys)
 				g.Expect(ok).To(BeTrue())
-				g.Expect(tt.User).To(Equal(opts.Username))
-				g.Expect(tt.Signer.PublicKey().Type()).To(Equal("ssh-rsa"))
-				g.Expect(tt.HostKeyCallback).ToNot(BeNil())
+				g.Expect(tt.pk.User).To(Equal(opts.Username))
+				g.Expect(tt.pk.Signer.PublicKey().Type()).To(Equal("ssh-rsa"))
+				g.Expect(tt.pk.HostKeyCallback).ToNot(BeNil())
 			},
 		},
 		{
@@ -201,6 +222,10 @@ func Test_transportAuth(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
+
+			if len(tt.kexAlgos) > 0 {
+				git.KexAlgos = tt.kexAlgos
+			}
 
 			got, err := transportAuth(tt.opts)
 			if tt.wantErr != nil {

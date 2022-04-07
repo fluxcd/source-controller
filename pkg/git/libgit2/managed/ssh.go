@@ -58,6 +58,7 @@ import (
 
 	"golang.org/x/crypto/ssh"
 
+	"github.com/fluxcd/source-controller/pkg/git"
 	git2go "github.com/libgit2/git2go/v33"
 )
 
@@ -343,6 +344,9 @@ func cacheKeyAndConfig(remoteAddress string, cred *git2go.Credential) (string, *
 		User:    username,
 		Auth:    []ssh.AuthMethod{ssh.PublicKeys(key)},
 		Timeout: sshConnectionTimeOut,
+	}
+	if len(git.KexAlgos) > 0 {
+		cfg.Config.KeyExchanges = git.KexAlgos
 	}
 
 	return ck, cfg, nil
