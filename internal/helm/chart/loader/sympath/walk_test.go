@@ -27,45 +27,47 @@ import (
 )
 
 type Node struct {
-	name          string
-	entries       []*Node // nil if the entry is a file
-	marks         int
-	expectedMarks int
-	symLinkedTo   string
+	name            string
+	entries         []*Node // nil if the entry is a file
+	marks           int
+	expectedMarks   int
+	symLinkedTo     string
+	absPath         string
+	expectedAbsPath string
 }
 
 var tree = &Node{
 	"testdata",
 	[]*Node{
-		{"a", nil, 0, 1, ""},
-		{"b", []*Node{}, 0, 1, ""},
-		{"c", nil, 0, 2, ""},
-		{"d", nil, 0, 0, "c"},
+		{"a", nil, 0, 1, "", "", "testdata/a"},
+		{"b", []*Node{}, 0, 1, "", "", "testdata/b"},
+		{"c", nil, 0, 2, "", "", "testdata/c"},
+		{"d", nil, 0, 0, "c", "", "testdata/c"},
 		{
 			"e",
 			[]*Node{
-				{"x", nil, 0, 1, ""},
-				{"y", []*Node{}, 0, 1, ""},
+				{"x", nil, 0, 1, "", "", "testdata/e/x"},
+				{"y", []*Node{}, 0, 1, "", "", "testdata/e/y"},
 				{
 					"z",
 					[]*Node{
-						{"u", nil, 0, 1, ""},
-						{"v", nil, 0, 1, ""},
-						{"w", nil, 0, 1, ""},
+						{"u", nil, 0, 1, "", "", "testdata/e/z/u"},
+						{"v", nil, 0, 1, "", "", "testdata/e/z/v"},
+						{"w", nil, 0, 1, "", "", "testdata/e/z/w"},
 					},
 					0,
 					1,
-					"",
+					"", "", "testdata/e/z",
 				},
 			},
 			0,
 			1,
-			"",
+			"", "", "testdata/e",
 		},
 	},
 	0,
 	1,
-	"",
+	"", "", "testdata",
 }
 
 func walkTree(n *Node, path string, f func(path string, n *Node)) {
@@ -103,6 +105,9 @@ func checkMarks(t *testing.T, report bool) {
 		if n.marks != n.expectedMarks && report {
 			t.Errorf("node %s mark = %d; expected %d", path, n.marks, n.expectedMarks)
 		}
+		if n.absPath != n.expectedAbsPath && report {
+			t.Errorf("node %s absPath = %s; expected %s", path, n.absPath, n.expectedAbsPath)
+		}
 		n.marks = 0
 	})
 }
@@ -110,7 +115,7 @@ func checkMarks(t *testing.T, report bool) {
 // Assumes that each node name is unique. Good enough for a test.
 // If clear is true, any incoming error is cleared before return. The errors
 // are always accumulated, though.
-func mark(info os.FileInfo, err error, errors *[]error, clear bool) error {
+func mark(absPath string, info os.FileInfo, err error, errors *[]error, clear bool) error {
 	if err != nil {
 		*errors = append(*errors, err)
 		if clear {
@@ -120,8 +125,12 @@ func mark(info os.FileInfo, err error, errors *[]error, clear bool) error {
 	}
 	name := info.Name()
 	walkTree(tree, tree.name, func(path string, n *Node) {
+		if n.symLinkedTo == name {
+			n.absPath = absPath
+		}
 		if n.name == name {
 			n.marks++
+			n.absPath = absPath
 		}
 	})
 	return nil
@@ -131,8 +140,8 @@ func TestWalk(t *testing.T) {
 	makeTree(t)
 	errors := make([]error, 0, 10)
 	clear := true
-	markFn := func(path string, info os.FileInfo, err error) error {
-		return mark(info, err, &errors, clear)
+	markFn := func(path, absPath string, info os.FileInfo, err error) error {
+		return mark(absPath, info, err, &errors, clear)
 	}
 	// Expect no errors.
 	err := Walk(tree.name, markFn)

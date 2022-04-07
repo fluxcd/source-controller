@@ -5,6 +5,7 @@ provided under the BSD license.
 https://github.com/golang/go/blob/master/LICENSE
 
 Copyright The Helm Authors.
+Copyright The Flux authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -21,7 +22,7 @@ limitations under the License.
 package sympath
 
 import (
-	"log"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
@@ -29,17 +30,21 @@ import (
 	"github.com/pkg/errors"
 )
 
+// AbsWalkFunc functions like filepath.WalkFunc but provides the absolute path
+// of fs.FileInfo when path is a symlink.
+type AbsWalkFunc func(path, absPath string, info fs.FileInfo, err error) error
+
 // Walk walks the file tree rooted at root, calling walkFn for each file or directory
 // in the tree, including root. All errors that arise visiting files and directories
 // are filtered by walkFn. The files are walked in lexical order, which makes the
 // output deterministic but means that for very large directories Walk can be
 // inefficient. Walk follows symbolic links.
-func Walk(root string, walkFn filepath.WalkFunc) error {
+func Walk(root string, walkFn AbsWalkFunc) error {
 	info, err := os.Lstat(root)
 	if err != nil {
-		err = walkFn(root, nil, err)
+		err = walkFn(root, root, nil, err)
 	} else {
-		err = symwalk(root, info, walkFn)
+		err = symwalk(root, root, info, walkFn)
 	}
 	if err == filepath.SkipDir {
 		return nil
@@ -63,25 +68,25 @@ func readDirNames(dirname string) ([]string, error) {
 	return names, nil
 }
 
-// symwalk recursively descends path, calling walkFn.
-func symwalk(path string, info os.FileInfo, walkFn filepath.WalkFunc) error {
+// symwalk recursively descends path, calling AbsWalkFunc.
+func symwalk(path, absPath string, info os.FileInfo, walkFn AbsWalkFunc) error {
 	// Recursively walk symlinked directories.
 	if IsSymlink(info) {
 		resolved, err := filepath.EvalSymlinks(path)
 		if err != nil {
 			return errors.Wrapf(err, "error evaluating symlink %s", path)
 		}
-		log.Printf("found symbolic link in path: %s resolves to %s", path, resolved)
 		if info, err = os.Lstat(resolved); err != nil {
 			return err
 		}
-		if err := symwalk(path, info, walkFn); err != nil && err != filepath.SkipDir {
+		// NB: pass-on resolved as absolute path
+		if err := symwalk(path, resolved, info, walkFn); err != nil && err != filepath.SkipDir {
 			return err
 		}
 		return nil
 	}
 
-	if err := walkFn(path, info, nil); err != nil {
+	if err := walkFn(path, absPath, info, nil); err != nil {
 		return err
 	}
 
@@ -91,19 +96,20 @@ func symwalk(path string, info os.FileInfo, walkFn filepath.WalkFunc) error {
 
 	names, err := readDirNames(path)
 	if err != nil {
-		return walkFn(path, info, err)
+		return walkFn(path, absPath, info, err)
 	}
 
 	for _, name := range names {
 		filename := filepath.Join(path, name)
+		// NB: possibly absPath != path separately
+		absFilename := filepath.Join(absPath, name)
 		fileInfo, err := os.Lstat(filename)
 		if err != nil {
-			if err := walkFn(filename, fileInfo, err); err != nil && err != filepath.SkipDir {
+			if err := walkFn(filename, absFilename, fileInfo, err); err != nil && err != filepath.SkipDir {
 				return err
 			}
 		} else {
-			err = symwalk(filename, fileInfo, walkFn)
-			if err != nil {
+			if err = symwalk(filename, absFilename, fileInfo, walkFn); err != nil {
 				if (!fileInfo.IsDir() && !IsSymlink(fileInfo)) || err != filepath.SkipDir {
 					return err
 				}
