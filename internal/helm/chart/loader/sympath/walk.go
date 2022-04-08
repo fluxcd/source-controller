@@ -22,12 +22,11 @@ limitations under the License.
 package sympath
 
 import (
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
-
-	"github.com/pkg/errors"
 )
 
 // AbsWalkFunc functions like filepath.WalkFunc but provides the absolute path
@@ -74,7 +73,7 @@ func symwalk(path, absPath string, info os.FileInfo, walkFn AbsWalkFunc) error {
 	if IsSymlink(info) {
 		resolved, err := filepath.EvalSymlinks(path)
 		if err != nil {
-			return errors.Wrapf(err, "error evaluating symlink %s", path)
+			return fmt.Errorf("error evaluating symlink %s: %w", path, err)
 		}
 		if info, err = os.Lstat(resolved); err != nil {
 			return err
