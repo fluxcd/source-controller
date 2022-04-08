@@ -43,15 +43,24 @@ type LocalReference struct {
 	// WorkDir used as chroot during build operations.
 	// File references are not allowed to traverse outside it.
 	WorkDir string
-	// Path of the chart on the local filesystem.
+	// Path of the chart on the local filesystem relative to WorkDir.
 	Path string
 }
 
 // Validate returns an error if the LocalReference does not have
 // a Path set.
 func (r LocalReference) Validate() error {
+	if r.WorkDir == "" {
+		return fmt.Errorf("no work dir set for local chart reference")
+	}
 	if r.Path == "" {
 		return fmt.Errorf("no path set for local chart reference")
+	}
+	if !filepath.IsAbs(r.WorkDir) {
+		return fmt.Errorf("local chart reference work dir is expected to be absolute")
+	}
+	if filepath.IsAbs(r.Path) {
+		return fmt.Errorf("local chart reference path is expected to be relative")
 	}
 	return nil
 }

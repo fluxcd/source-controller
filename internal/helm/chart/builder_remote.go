@@ -25,13 +25,13 @@ import (
 
 	"github.com/Masterminds/semver/v3"
 	helmchart "helm.sh/helm/v3/pkg/chart"
-	"helm.sh/helm/v3/pkg/chart/loader"
 	"helm.sh/helm/v3/pkg/chartutil"
 	"sigs.k8s.io/yaml"
 
 	"github.com/fluxcd/pkg/runtime/transform"
 
 	"github.com/fluxcd/source-controller/internal/fs"
+	"github.com/fluxcd/source-controller/internal/helm/chart/secureloader"
 	"github.com/fluxcd/source-controller/internal/helm/repository"
 )
 
@@ -145,7 +145,7 @@ func (b *remoteChartBuilder) Build(_ context.Context, ref Reference, p string, o
 
 	// Load the chart and merge chart values
 	var chart *helmchart.Chart
-	if chart, err = loader.LoadArchive(res); err != nil {
+	if chart, err = secureloader.LoadArchive(res); err != nil {
 		err = fmt.Errorf("failed to load downloaded chart: %w", err)
 		return result, &BuildError{Reason: ErrChartPackage, Err: err}
 	}

@@ -28,10 +28,10 @@ import (
 
 	. "github.com/onsi/gomega"
 	helmchart "helm.sh/helm/v3/pkg/chart"
-	"helm.sh/helm/v3/pkg/chart/loader"
 	helmgetter "helm.sh/helm/v3/pkg/getter"
 	"helm.sh/helm/v3/pkg/repo"
 
+	"github.com/fluxcd/source-controller/internal/helm/chart/secureloader"
 	"github.com/fluxcd/source-controller/internal/helm/repository"
 )
 
@@ -166,14 +166,16 @@ func TestDependencyManager_Build(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
 
-			chart, err := loader.Load(filepath.Join(tt.baseDir, tt.path))
+			chart, err := secureloader.Load(tt.baseDir, tt.path)
 			g.Expect(err).ToNot(HaveOccurred())
 
 			dm := NewDependencyManager(
 				WithRepositories(tt.repositories),
 				WithRepositoryCallback(tt.getChartRepositoryCallback),
 			)
-			got, err := dm.Build(context.TODO(), LocalReference{WorkDir: tt.baseDir, Path: tt.path}, chart)
+			absBaseDir, err := filepath.Abs(tt.baseDir)
+			g.Expect(err).ToNot(HaveOccurred())
+			got, err := dm.Build(context.TODO(), LocalReference{WorkDir: absBaseDir, Path: tt.path}, chart)
 
 			if tt.wantErr != "" {
 				g.Expect(err).To(HaveOccurred())
@@ -262,7 +264,7 @@ func TestDependencyManager_addLocalDependency(t *testing.T) {
 				Version:    chartVersion,
 				Repository: "file://../../../absolutely/invalid",
 			},
-			wantErr: "no chart found at '../testdata/charts/absolutely/invalid'",
+			wantErr: "no chart found at '/absolutely/invalid'",
 		},
 		{
 			name: "invalid chart archive",
@@ -289,7 +291,11 @@ func TestDependencyManager_addLocalDependency(t *testing.T) {
 
 			dm := NewDependencyManager()
 			chart := &helmchart.Chart{}
-			err := dm.addLocalDependency(LocalReference{WorkDir: "../testdata/charts", Path: "helmchartwithdeps"},
+
+			absWorkDir, err := filepath.Abs("../testdata/charts")
+			g.Expect(err).ToNot(HaveOccurred())
+
+			err = dm.addLocalDependency(LocalReference{WorkDir: absWorkDir, Path: "helmchartwithdeps"},
 				&chartWithLock{Chart: chart}, tt.dep)
 			if tt.wantErr != "" {
 				g.Expect(err).To(HaveOccurred())

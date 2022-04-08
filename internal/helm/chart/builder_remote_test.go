@@ -27,10 +27,10 @@ import (
 
 	. "github.com/onsi/gomega"
 	helmchart "helm.sh/helm/v3/pkg/chart"
-	"helm.sh/helm/v3/pkg/chart/loader"
 	"helm.sh/helm/v3/pkg/chartutil"
 	helmgetter "helm.sh/helm/v3/pkg/getter"
 
+	"github.com/fluxcd/source-controller/internal/helm/chart/secureloader"
 	"github.com/fluxcd/source-controller/internal/helm/repository"
 )
 
@@ -186,7 +186,7 @@ entries:
 			g.Expect(cb.Path).ToNot(BeEmpty(), "empty Build.Path")
 
 			// Load the resulting chart and verify the values.
-			resultChart, err := loader.Load(cb.Path)
+			resultChart, err := secureloader.LoadFile(cb.Path)
 			g.Expect(err).ToNot(HaveOccurred())
 			g.Expect(resultChart.Metadata.Version).To(Equal(tt.wantVersion))
 

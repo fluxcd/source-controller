@@ -24,10 +24,11 @@ import (
 
 	"github.com/Masterminds/semver/v3"
 	securejoin "github.com/cyphar/filepath-securejoin"
-	"helm.sh/helm/v3/pkg/chart/loader"
 	"sigs.k8s.io/yaml"
 
 	"github.com/fluxcd/pkg/runtime/transform"
+
+	"github.com/fluxcd/source-controller/internal/helm/chart/secureloader"
 )
 
 type localChartBuilder struct {
@@ -75,7 +76,11 @@ func (b *localChartBuilder) Build(ctx context.Context, ref Reference, p string, 
 
 	// Load the chart metadata from the LocalReference to ensure it points
 	// to a chart
-	curMeta, err := LoadChartMetadata(localRef.Path)
+	securePath, err := securejoin.SecureJoin(localRef.WorkDir, localRef.Path)
+	if err != nil {
+		return nil, &BuildError{Reason: ErrChartReference, Err: err}
+	}
+	curMeta, err := LoadChartMetadata(securePath)
 	if err != nil {
 		return nil, &BuildError{Reason: ErrChartReference, Err: err}
 	}
@@ -101,7 +106,7 @@ func (b *localChartBuilder) Build(ctx context.Context, ref Reference, p string, 
 		result.Version = ver.String()
 	}
 
-	isChartDir := pathIsDir(localRef.Path)
+	isChartDir := pathIsDir(securePath)
 	requiresPackaging := isChartDir || opts.VersionMetadata != "" || len(opts.GetValuesFiles()) != 0
 
 	// If all the following is true, we do not need to package the chart:
@@ -127,7 +132,7 @@ func (b *localChartBuilder) Build(ctx context.Context, ref Reference, p string, 
 	// If the chart at the path is already packaged and no custom values files
 	// options are set, we can copy the chart without making modifications
 	if !requiresPackaging {
-		if err = copyFileToPath(localRef.Path, p); err != nil {
+		if err = copyFileToPath(securePath, p); err != nil {
 			return result, &BuildError{Reason: ErrChartPull, Err: err}
 		}
 		result.Path = p
@@ -145,15 +150,16 @@ func (b *localChartBuilder) Build(ctx context.Context, ref Reference, p string, 
 	// At this point we are certain we need to load the chart;
 	// either to package it because it originates from a directory,
 	// or because we have merged values and need to repackage
-	chart, err := loader.Load(localRef.Path)
+	loadedChart, err := secureloader.Load(localRef.WorkDir, localRef.Path)
 	if err != nil {
 		return result, &BuildError{Reason: ErrChartPackage, Err: err}
 	}
+
 	// Set earlier resolved version (with metadata)
-	chart.Metadata.Version = result.Version
+	loadedChart.Metadata.Version = result.Version
 
 	// Overwrite default values with merged values, if any
-	if ok, err = OverwriteChartDefaultValues(chart, mergedValues); ok || err != nil {
+	if ok, err = OverwriteChartDefaultValues(loadedChart, mergedValues); ok || err != nil {
 		if err != nil {
 			return result, &BuildError{Reason: ErrValuesFilesMerge, Err: err}
 		}
@@ -166,13 +172,13 @@ func (b *localChartBuilder) Build(ctx context.Context, ref Reference, p string, 
 			err = fmt.Errorf("local chart builder requires dependency manager for unpackaged charts")
 			return result, &BuildError{Reason: ErrDependencyBuild, Err: err}
 		}
-		if result.ResolvedDependencies, err = b.dm.Build(ctx, ref, chart); err != nil {
+		if result.ResolvedDependencies, err = b.dm.Build(ctx, ref, loadedChart); err != nil {
 			return result, &BuildError{Reason: ErrDependencyBuild, Err: err}
 		}
 	}
 
 	// Package the chart
-	if err = packageToPath(chart, p); err != nil {
+	if err = packageToPath(loadedChart, p); err != nil {
 		return result, &BuildError{Reason: ErrChartPackage, Err: err}
 	}
 	result.Path = p
