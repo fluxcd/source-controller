@@ -171,6 +171,10 @@ func createClientRequest(targetUrl string, action git2go.SmartServiceAction, t *
 		}
 	}
 
+	if len(finalUrl) > URLMaxLength {
+		return nil, nil, fmt.Errorf("URL exceeds the max length (%d)", URLMaxLength)
+	}
+
 	client := &http.Client{
 		Transport: t,
 		Timeout:   fullHttpClientTimeOut,
