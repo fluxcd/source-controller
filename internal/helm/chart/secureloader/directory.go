@@ -26,7 +26,9 @@ package secureloader
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -51,158 +53,204 @@ var (
 // symlinks without including files outside root.
 type SecureDirLoader struct {
 	root    string
-	dir     string
+	path    string
 	maxSize int
 }
 
 // NewSecureDirLoader returns a new SecureDirLoader, configured to the scope of the
 // root and provided dir. Max size configures the maximum size a file must not
-// exceed to be loaded. If 0 it defaults to defaultMaxFileSize, it can be
+// exceed to be loaded. If 0 it defaults to DefaultMaxFileSize, it can be
 // disabled using a negative integer.
-func NewSecureDirLoader(root string, dir string, maxSize int) SecureDirLoader {
+func NewSecureDirLoader(root string, path string, maxSize int) SecureDirLoader {
 	if maxSize == 0 {
 		maxSize = DefaultMaxFileSize
 	}
 	return SecureDirLoader{
 		root:    root,
-		dir:     dir,
+		path:    path,
 		maxSize: maxSize,
 	}
 }
 
 // Load loads and returns the chart.Chart, or an error.
 func (l SecureDirLoader) Load() (*chart.Chart, error) {
-	return SecureLoadDir(l.root, l.dir, l.maxSize)
+	return SecureLoadDir(l.root, l.path, l.maxSize)
 }
 
-// SecureLoadDir securely loads from a directory, without going outside root.
-func SecureLoadDir(root, dir string, maxSize int) (*chart.Chart, error) {
+// SecureLoadDir securely loads a chart from the path relative to root, without
+// traversing outside root. When maxSize >= 0, files are not allowed to exceed
+// this size, or an error is returned.
+func SecureLoadDir(root, path string, maxSize int) (*chart.Chart, error) {
 	root, err := filepath.Abs(root)
 	if err != nil {
 		return nil, err
 	}
 
-	topDir, err := filepath.Abs(dir)
+	// Ensure path is relative
+	if filepath.IsAbs(path) {
+		relChartPath, err := filepath.Rel(root, path)
+		if err != nil {
+			return nil, err
+		}
+		path = relChartPath
+	}
+
+	// Resolve secure absolute path
+	absChartName, err := securejoin.SecureJoin(root, path)
 	if err != nil {
 		return nil, err
 	}
 
-	// Confirm topDir is actually relative to root
-	if _, err = isSecureSymlinkPath(root, topDir); err != nil {
-		return nil, fmt.Errorf("cannot load chart from dir: %w", err)
-	}
-
-	// Just used for errors
-	c := &chart.Chart{}
-
-	// Get the absolute location of the .helmignore file
-	relDirPath, err := filepath.Rel(root, topDir)
+	// Load ignore rules
+	rules, err := secureLoadIgnoreRules(root, path)
 	if err != nil {
-		// We are not expected to be returning this error, as the above call to
-		// isSecureSymlinkPath already does the same. However, especially
-		// because we are dealing with security aspects here, we check it
-		// anyway in case this assumption changes.
-		return nil, err
+		return nil, fmt.Errorf("cannot load ignore rules for chart: %w", err)
 	}
-	iFile, err := securejoin.SecureJoin(root, filepath.Join(relDirPath, ignore.HelmIgnore))
 
-	// Load the .helmignore rules
-	rules := ignore.Empty()
-	if _, err = os.Stat(iFile); err == nil {
-		r, err := ignore.ParseFile(iFile)
-		if err != nil {
-			return c, err
-		}
-		rules = r
+	// Lets go for a walk...
+	fileWalker := newSecureFileWalker(root, absChartName, maxSize, rules)
+	if err = sympath.Walk(fileWalker.absChartPath, fileWalker.walk); err != nil {
+		return nil, fmt.Errorf("failed to load files from %s: %w", strings.TrimPrefix(fileWalker.absChartPath, fileWalker.root), err)
 	}
-	rules.AddDefaults()
 
-	var files []*loader.BufferedFile
-	topDir += string(filepath.Separator)
-
-	walk := func(name, absoluteName string, fi os.FileInfo, err error) error {
-		n := strings.TrimPrefix(name, topDir)
-		if n == "" {
-			// No need to process top level. Avoid bug with helmignore .* matching
-			// empty names. See issue 1779.
-			return nil
-		}
-
-		// Normalize to / since it will also work on Windows
-		n = filepath.ToSlash(n)
-
-		if err != nil {
-			return err
-		}
-		if fi.IsDir() {
-			// Directory-based ignore rules should involve skipping the entire
-			// contents of that directory.
-			if rules.Ignore(n, fi) {
-				return filepath.SkipDir
-			}
-			// Check after excluding ignores to provide the user with an option
-			// to opt-out from including certain paths.
-			if _, err := isSecureSymlinkPath(root, absoluteName); err != nil {
-				return fmt.Errorf("cannot load '%s' directory: %w", n, err)
-			}
-			return nil
-		}
-
-		// If a .helmignore file matches, skip this file.
-		if rules.Ignore(n, fi) {
-			return nil
-		}
-
-		// Check after excluding ignores to provide the user with an option
-		// to opt-out from including certain paths.
-		if _, err := isSecureSymlinkPath(root, absoluteName); err != nil {
-			return fmt.Errorf("cannot load '%s' file: %w", n, err)
-		}
-
-		// Irregular files include devices, sockets, and other uses of files that
-		// are not regular files. In Go they have a file mode type bit set.
-		// See https://golang.org/pkg/os/#FileMode for examples.
-		if !fi.Mode().IsRegular() {
-			return fmt.Errorf("cannot load irregular file %s as it has file mode type bits set", n)
-		}
-
-		if fileSize := fi.Size(); maxSize > 0 && fileSize > int64(maxSize) {
-			return fmt.Errorf("cannot load file %s as file size (%d) exceeds limit (%d)", n, fileSize, maxSize)
-		}
-
-		data, err := os.ReadFile(name)
-		if err != nil {
-			return fmt.Errorf("error reading %s: %w", n, err)
-		}
-		data = bytes.TrimPrefix(data, utf8bom)
-
-		files = append(files, &loader.BufferedFile{Name: n, Data: data})
-		return nil
+	loaded, err := loader.LoadFiles(fileWalker.files)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load chart from %s: %w", strings.TrimPrefix(fileWalker.absChartPath, fileWalker.root), err)
 	}
-	if err = sympath.Walk(topDir, walk); err != nil {
-		return c, err
-	}
-	return loader.LoadFiles(files)
+	return loaded, nil
 }
 
-// isSecureSymlinkPath attempts to make the given absolute path relative to
+// secureLoadIgnoreRules attempts to load the ignore.HelmIgnore file from the
+// chart path relative to root. If the file is a symbolic link, it is evaluated
+// with the given root treated as root of the filesystem.
+// If the ignore file does not exist, or points to a location outside of root,
+// default ignore.Rules are returned. Any error other than fs.ErrNotExist is
+// returned.
+func secureLoadIgnoreRules(root, chartPath string) (*ignore.Rules, error) {
+	rules := ignore.Empty()
+
+	iFile, err := securejoin.SecureJoin(root, filepath.Join(chartPath, ignore.HelmIgnore))
+	if err != nil {
+		return nil, err
+	}
+	_, err = os.Stat(iFile)
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return nil, err
+	}
+	if err == nil {
+		if rules, err = ignore.ParseFile(iFile); err != nil {
+			return nil, err
+		}
+	}
+
+	rules.AddDefaults()
+	return rules, nil
+}
+
+// secureFileWalker does the actual walking over the directory, any file loaded
+// by walk is appended to files.
+type secureFileWalker struct {
+	root         string
+	absChartPath string
+	maxSize      int
+	rules        *ignore.Rules
+	files        []*loader.BufferedFile
+}
+
+func newSecureFileWalker(root, absChartPath string, maxSize int, rules *ignore.Rules) *secureFileWalker {
+	absChartPath = filepath.Clean(absChartPath) + string(filepath.Separator)
+	return &secureFileWalker{
+		root:         root,
+		absChartPath: absChartPath,
+		maxSize:      maxSize,
+		rules:        rules,
+		files:        make([]*loader.BufferedFile, 0),
+	}
+}
+
+func (w *secureFileWalker) walk(name, absName string, fi os.FileInfo, err error) error {
+	n := strings.TrimPrefix(name, w.absChartPath)
+	if n == "" {
+		// No need to process top level. Avoid bug with helmignore .* matching
+		// empty names. See issue 1779.
+		return nil
+	}
+
+	if err != nil {
+		return err
+	}
+
+	// Normalize to / since it will also work on Windows
+	n = filepath.ToSlash(n)
+
+	if fi.IsDir() {
+		// Directory-based ignore rules should involve skipping the entire
+		// contents of that directory.
+		if w.rules.Ignore(n, fi) {
+			return filepath.SkipDir
+		}
+		// Check after excluding ignores to provide the user with an option
+		// to opt-out from including certain paths.
+		if _, err := isSecureAbsolutePath(w.root, absName); err != nil {
+			return fmt.Errorf("cannot load '%s' directory: %w", n, err)
+		}
+		return nil
+	}
+
+	// If a .helmignore file matches, skip this file.
+	if w.rules.Ignore(n, fi) {
+		return nil
+	}
+
+	// Check after excluding ignores to provide the user with an option
+	// to opt-out from including certain paths.
+	if _, err := isSecureAbsolutePath(w.root, absName); err != nil {
+		return fmt.Errorf("cannot load '%s' file: %w", n, err)
+	}
+
+	// Irregular files include devices, sockets, and other uses of files that
+	// are not regular files. In Go they have a file mode type bit set.
+	// See https://golang.org/pkg/os/#FileMode for examples.
+	if !fi.Mode().IsRegular() {
+		return fmt.Errorf("cannot load irregular file %s as it has file mode type bits set", n)
+	}
+
+	// Confirm size it not outside boundaries
+	if fileSize := fi.Size(); w.maxSize > 0 && fileSize > int64(w.maxSize) {
+		return fmt.Errorf("cannot load file %s as file size (%d) exceeds limit (%d)", n, fileSize, w.maxSize)
+	}
+
+	data, err := os.ReadFile(absName)
+	if err != nil {
+		if pathErr := new(fs.PathError); errors.As(err, &pathErr) {
+			err = &fs.PathError{Op: pathErr.Op, Path: strings.TrimPrefix(absName, w.root), Err: pathErr.Err}
+		}
+		return fmt.Errorf("error reading %s: %w", n, err)
+	}
+	data = bytes.TrimPrefix(data, utf8bom)
+
+	w.files = append(w.files, &loader.BufferedFile{Name: n, Data: data})
+	return nil
+}
+
+// isSecureAbsolutePath attempts to make the given absolute path relative to
 // root and securely joins this with root. If the result equals absolute path,
 // it is safe to use.
-func isSecureSymlinkPath(root, absPath string) (bool, error) {
+func isSecureAbsolutePath(root, absPath string) (bool, error) {
 	root, absPath = filepath.Clean(root), filepath.Clean(absPath)
 	if root == "/" {
 		return true, nil
 	}
 	unsafePath, err := filepath.Rel(root, absPath)
 	if err != nil {
-		return false, fmt.Errorf("cannot calculate path relative to root for resolved symlink")
+		return false, fmt.Errorf("cannot calculate path relative to root for absolute path")
 	}
 	safePath, err := securejoin.SecureJoin(root, unsafePath)
 	if err != nil {
-		return false, fmt.Errorf("cannot securely join root with resolved relative symlink path")
+		return false, fmt.Errorf("cannot securely join root with resolved relative path")
 	}
 	if safePath != absPath {
-		return false, fmt.Errorf("symlink traverses outside root boundary: relative path to root %s", unsafePath)
+		return false, fmt.Errorf("absolute path traverses outside root boundary: relative path to root %s", unsafePath)
 	}
 	return true, nil
 }

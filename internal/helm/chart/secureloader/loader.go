@@ -22,6 +22,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 
 	securejoin "github.com/cyphar/filepath-securejoin"
 	"helm.sh/helm/v3/pkg/chart"
@@ -34,14 +35,19 @@ import (
 // Name can be an absolute or relative path, but always has to be inside
 // root.
 func Loader(root, name string) (loader.ChartLoader, error) {
-	root, name = filepath.Clean(root), filepath.Clean(name)
-	relName := name
+	root, err := filepath.Abs(root)
+	if err != nil {
+		return nil, err
+	}
+
+	relName := filepath.Clean(name)
 	if filepath.IsAbs(relName) {
 		var err error
 		if relName, err = filepath.Rel(root, name); err != nil {
 			return nil, err
 		}
 	}
+
 	secureName, err := securejoin.SecureJoin(root, relName)
 	if err != nil {
 		return nil, err
@@ -49,12 +55,13 @@ func Loader(root, name string) (loader.ChartLoader, error) {
 	fi, err := os.Lstat(secureName)
 	if err != nil {
 		if pathErr := new(fs.PathError); errors.As(err, &pathErr) {
-			return nil, &fs.PathError{Op: pathErr.Op, Path: name, Err: pathErr.Err}
+			return nil, &fs.PathError{Op: pathErr.Op, Path: strings.TrimPrefix(secureName, root), Err: pathErr.Err}
 		}
 		return nil, err
 	}
+
 	if fi.IsDir() {
-		return NewSecureDirLoader(root, secureName, 0), nil
+		return NewSecureDirLoader(root, relName, DefaultMaxFileSize), nil
 	}
 	return FileLoader(secureName), nil
 }

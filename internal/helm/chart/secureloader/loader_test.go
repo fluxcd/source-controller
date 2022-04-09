@@ -23,7 +23,9 @@ import (
 	"testing"
 
 	. "github.com/onsi/gomega"
+	"helm.sh/helm/v3/pkg/chart"
 	"helm.sh/helm/v3/pkg/chart/loader"
+	"sigs.k8s.io/yaml"
 )
 
 func TestLoader(t *testing.T) {
@@ -33,22 +35,56 @@ func TestLoader(t *testing.T) {
 	fakeChart := filepath.Join(tmpDir, "fake.tgz")
 	g.Expect(os.WriteFile(fakeChart, []byte(""), 0o644)).To(Succeed())
 
-	got, err := Loader(tmpDir, fakeChart)
-	g.Expect(err).ToNot(HaveOccurred())
-	g.Expect(got).To(Equal(loader.FileLoader(fakeChart)))
+	t.Run("file loader", func(t *testing.T) {
+		g := NewWithT(t)
 
-	fakeChartPath := filepath.Join(tmpDir, "fake")
-	g.Expect(os.Mkdir(fakeChartPath, 0o700)).To(Succeed())
-	got, err = Loader(tmpDir, "fake")
-	g.Expect(err).ToNot(HaveOccurred())
-	g.Expect(got).To(Equal(SecureDirLoader{root: tmpDir, dir: fakeChartPath, maxSize: DefaultMaxFileSize}))
+		got, err := Loader(tmpDir, fakeChart)
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(got).To(Equal(loader.FileLoader(fakeChart)))
+	})
 
-	symlinkRoot := filepath.Join(tmpDir, "symlink")
-	g.Expect(os.Mkdir(symlinkRoot, 0o700)).To(Succeed())
-	symlinkPath := filepath.Join(symlinkRoot, "fake.tgz")
-	g.Expect(os.Symlink(fakeChart, symlinkPath))
-	got, err = Loader(symlinkRoot, symlinkPath)
-	g.Expect(err).To(HaveOccurred())
-	g.Expect(err).To(BeAssignableToTypeOf(&fs.PathError{}))
-	g.Expect(got).To(BeNil())
+	t.Run("dir loader", func(t *testing.T) {
+		g := NewWithT(t)
+
+		fakeChartPath := filepath.Join(tmpDir, "fake")
+		g.Expect(os.Mkdir(fakeChartPath, 0o700)).To(Succeed())
+
+		got, err := Loader(tmpDir, "fake")
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(got).To(Equal(SecureDirLoader{root: tmpDir, path: "fake", maxSize: DefaultMaxFileSize}))
+	})
+
+	t.Run("illegal path", func(t *testing.T) {
+		g := NewWithT(t)
+
+		symlinkRoot := filepath.Join(tmpDir, "symlink")
+		g.Expect(os.Mkdir(symlinkRoot, 0o700)).To(Succeed())
+		symlinkPath := filepath.Join(symlinkRoot, "fake.tgz")
+		g.Expect(os.Symlink(fakeChart, symlinkPath))
+
+		got, err := Loader(symlinkRoot, symlinkPath)
+		g.Expect(err).To(HaveOccurred())
+		g.Expect(err).To(BeAssignableToTypeOf(&fs.PathError{}))
+		g.Expect(got).To(BeNil())
+	})
+}
+
+func TestLoad(t *testing.T) {
+	g := NewWithT(t)
+
+	tmpDir := t.TempDir()
+	metadata := chart.Metadata{
+		Name:       "test",
+		APIVersion: "v2",
+		Version:    "1.0",
+		Type:       "application",
+	}
+	b, err := yaml.Marshal(&metadata)
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(os.WriteFile(filepath.Join(tmpDir, "Chart.yaml"), b, 0o644)).To(Succeed())
+
+	got, err := Load(tmpDir, "")
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(got).ToNot(BeNil())
+	g.Expect(got.Name()).To(Equal(metadata.Name))
 }
