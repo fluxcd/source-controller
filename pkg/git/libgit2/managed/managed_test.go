@@ -263,9 +263,8 @@ func TestManagedTransport_E2E(t *testing.T) {
 
 	// Test HTTP transport
 
-	// Use a fake-url and force it to be overriden by the smart transport.
-	// This was the way found to ensure that the built-in transport was not used.
-	httpAddress := "http://fake-url"
+	// Use a fake-url over managed protocol, and force the URL to be overriden by the smart transport.
+	httpAddress := "http+managed://fake-url"
 	AddTransportOptions(httpAddress, TransportOptions{
 		TargetURL: server.HTTPAddress() + "/" + repoPath,
 	})
@@ -293,6 +292,12 @@ func TestManagedTransport_E2E(t *testing.T) {
 
 	// Test SSH transport
 	sshAddress := server.SSHAddress() + "/" + repoPath
+
+	// Force auto upgrade by enabling it and ensuring protocol
+	autoUpgradeEnabled = true
+	sshAddress = EnsureProtocol(sshAddress)
+	g.Expect(sshAddress).To(HavePrefix(SSHManagedProtocol))
+
 	repo, err = git2go.Clone(sshAddress, tmpDir2, &git2go.CloneOptions{
 		FetchOptions: git2go.FetchOptions{
 			RemoteCallbacks: git2go.RemoteCallbacks{

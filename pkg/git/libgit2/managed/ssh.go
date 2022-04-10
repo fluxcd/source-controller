@@ -62,22 +62,22 @@ import (
 	git2go "github.com/libgit2/git2go/v33"
 )
 
-// registerManagedSSH registers a Go-native implementation of
-// SSH transport that doesn't rely on any lower-level libraries
-// such as libssh2.
+// registerManagedSSH registers a new Go-native protocol ssh+managed://.
+// It implementation doesn't rely on any lower-level libraries such as libssh2.
+// The built-in protocols that rely on libssh2 are kept intact,under protocols:
+// "ssh://", "ssh+git://" and "git+ssh://".
 //
-// The underlying SSH connections are kept open and are reused
-// across several SSH sessions. This is due to upstream issues in
+// When using ssh+managed://, the underlying SSH connections are kept open and
+//  are reused across several SSH sessions. This is due to upstream issues in
 // which concurrent/parallel SSH connections may lead to instability.
 //
 // Connections are created on first attempt to use a given remote. The
-// connection is removed from the cache on the first failed session related
-// operation.
+// connection is removed from the cache at the first failed SSH session.
 //
 // https://github.com/golang/go/issues/51926
 // https://github.com/golang/go/issues/27140
 func registerManagedSSH() error {
-	for _, protocol := range []string{"ssh", "ssh+git", "git+ssh"} {
+	for _, protocol := range []string{SSHManagedProtocol} {
 		_, err := git2go.NewRegisteredSmartTransport(protocol, false, sshSmartSubtransportFactory)
 		if err != nil {
 			return fmt.Errorf("failed to register transport for %q: %v", protocol, err)

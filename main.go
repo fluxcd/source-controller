@@ -268,9 +268,8 @@ func main() {
 		startFileServer(storage.BasePath, storageAddr, setupLog)
 	}()
 
-	if managed.Enabled() {
-		managed.InitManagedTransport(ctrl.Log.WithName("managed-transport"))
-	}
+	// registers three new Git protocols: http+managed, https+managed and ssh+managed.
+	managed.InitManagedTransport(ctrl.Log.WithName("managed-transport"))
 
 	setupLog.Info("starting manager")
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {

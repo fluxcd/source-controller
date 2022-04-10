@@ -27,3 +27,11 @@ func Contains(list []string, value string) bool {
 	return false
 }
 
+func HasAnySuffix(suffixList []string, value string) bool {
+	for _, suffix := range suffixList {
+		if strings.HasSuffix(value, suffix) {
+			return true
+		}
+	}
+	return false
+}

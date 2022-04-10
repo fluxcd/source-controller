@@ -62,7 +62,7 @@ import (
 // HTTP(S) transport that doesn't rely on any lower-level libraries
 // such as OpenSSL.
 func registerManagedHTTP() error {
-	for _, protocol := range []string{"http", "https"} {
+	for _, protocol := range []string{HTTPManagedProtocol, HTTPSManagedProtocol} {
 		_, err := git2go.NewRegisteredSmartTransport(protocol, true, httpSmartSubtransportFactory)
 		if err != nil {
 			return fmt.Errorf("failed to register transport for %q: %v", protocol, err)
@@ -127,7 +127,7 @@ func (t *httpSmartSubtransport) Action(targetUrl string, action git2go.SmartServ
 
 		// golang will change POST to GET in case of redirects.
 		if len(via) >= 0 && req.Method != via[0].Method {
-			if via[0].URL.Scheme == "https" && req.URL.Scheme == "http" {
+			if via[0].URL.Scheme == HTTPSProtocol && req.URL.Scheme == HTTPProtocol {
 				return fmt.Errorf("downgrade from https to http is not allowed: from %q to %q", via[0].URL.String(), req.URL.String())
 			}
 			if via[0].URL.Host != req.URL.Host {
