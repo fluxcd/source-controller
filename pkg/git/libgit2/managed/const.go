@@ -69,6 +69,10 @@ var (
 	// denySSHAutoUpgradeDomains is a list of domains that cannot be
 	// supported in managed transport via SSH.
 	denySSHAutoUpgradeDomains = []string{
+		// DevOps requires the Git protocol capabilities (e.g. multi_ack
+		// and multi_ack_detailed) that are not fully supported by libgit2/git2go
+		// in managed transport mode.
+		"dev.azure.com",
 	}
 
 	// denyConcurrentConnections is a list of servers (<DOMAIN>:<PORT>)
