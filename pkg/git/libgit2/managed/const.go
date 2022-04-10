@@ -25,3 +25,16 @@ const (
 	// when cloning Git repositories via SSH.
 	PathMaxLength = 4096
 )
+
+var (
+	// denyConcurrentConnections is a list of servers (<DOMAIN>:<PORT>)
+	// that should use single-use connections.
+	//
+	// Some servers do not support concurrent connections
+	// (e.g. public bitbucket.org accounts) and may struggle with
+	// multiple sessions within the same connection. Avoid such problems
+	// by closing the connection as soon as they are no longer needed.
+	denyConcurrentConnections = []string{
+		"bitbucket.org:22",
+	}
+)

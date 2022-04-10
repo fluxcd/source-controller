@@ -103,6 +103,7 @@ type sshSmartSubtransport struct {
 	currentStream *sshSmartSubtransportStream
 	ckey          string
 	addr          string
+	singleUse     bool
 }
 
 // aMux is the read-write mutex to control access to sshClients.
@@ -305,26 +306,28 @@ func (t *sshSmartSubtransport) createConn(ckey, addr string, sshConfig *ssh.Clie
 	}
 
 	t.client = c
+	t.singleUse = !cacheableConnection(addr)
 
-	// Mutex is set here to avoid the network latency being
-	// absorbed by all competing goroutines.
-	aMux.Lock()
-	defer aMux.Unlock()
+	if !t.singleUse {
+		// Mutex is set here to avoid the network latency being
+		// absorbed by all competing goroutines.
+		aMux.Lock()
+		defer aMux.Unlock()
 
-	// A different goroutine won the race, dispose the connection
-	// and carry on.
-	if _, ok := sshClients[ckey]; ok {
-		go func() {
-			_ = c.Close()
-		}()
-		return nil
+		// A different goroutine won the race, dispose the connection
+		// and carry on.
+		if _, ok := sshClients[ckey]; ok {
+			go func() {
+				_ = c.Close()
+			}()
+			return nil
+		}
+
+		sshClients[ckey] = &cachedClient{
+			Client:         c,
+			activeSessions: 1,
+		}
 	}
-
-	sshClients[ckey] = &cachedClient{
-		Client:         c,
-		activeSessions: 1,
-	}
-
 	return nil
 }
 
@@ -378,6 +381,10 @@ func (stream *sshSmartSubtransportStream) Free() {
 
 	if stream.owner.ckey != "" {
 		decrementActiveSessionIfFound(stream.owner.ckey)
+	}
+
+	if stream.owner.singleUse && stream.owner.client != nil {
+		_ = stream.owner.client.Close()
 	}
 }
 
@@ -486,4 +493,8 @@ func decrementActiveSessionIfFound(key string) {
 	if v, found := sshClients[key]; found {
 		v.activeSessions--
 	}
+}
+
+func cacheableConnection(addr string) bool {
+	return !Contains(denyConcurrentConnections, addr)
 }
