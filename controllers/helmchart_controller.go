@@ -28,7 +28,6 @@ import (
 	"strings"
 	"time"
 
-	securejoin "github.com/cyphar/filepath-securejoin"
 	helmgetter "helm.sh/helm/v3/pkg/getter"
 	helmrepo "helm.sh/helm/v3/pkg/repo"
 	corev1 "k8s.io/api/core/v1"
@@ -609,18 +608,6 @@ func (r *HelmChartReconciler) buildFromTarballArtifact(ctx context.Context, obj 
 		}
 	}
 
-	// Calculate (secure) absolute chart path
-	chartPath, err := securejoin.SecureJoin(sourceDir, obj.Spec.Chart)
-	if err != nil {
-		e := &serror.Stalling{
-			Err:    fmt.Errorf("path calculation for chart '%s' failed: %w", obj.Spec.Chart, err),
-			Reason: "IllegalPath",
-		}
-		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
-		// We are unable to recover from this change without a change in generation
-		return sreconcile.ResultEmpty, e
-	}
-
 	// Setup dependency manager
 	dm := chart.NewDependencyManager(
 		chart.WithRepositoryCallback(r.namespacedChartRepositoryCallback(ctx, obj.GetNamespace())),
@@ -673,7 +660,7 @@ func (r *HelmChartReconciler) buildFromTarballArtifact(ctx context.Context, obj 
 	cb := chart.NewLocalBuilder(dm)
 	build, err := cb.Build(ctx, chart.LocalReference{
 		WorkDir: sourceDir,
-		Path:    chartPath,
+		Path:    obj.Spec.Chart,
 	}, util.TempPathForObj("", ".tgz", obj), opts)
 	if err != nil {
 		return sreconcile.ResultEmpty, err

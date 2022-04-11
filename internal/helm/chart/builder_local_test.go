@@ -26,10 +26,10 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/otiai10/copy"
 	helmchart "helm.sh/helm/v3/pkg/chart"
-	"helm.sh/helm/v3/pkg/chart/loader"
 	"helm.sh/helm/v3/pkg/chartutil"
 	"helm.sh/helm/v3/pkg/repo"
 
+	"github.com/fluxcd/source-controller/internal/helm/chart/secureloader"
 	"github.com/fluxcd/source-controller/internal/helm/repository"
 )
 
@@ -86,31 +86,31 @@ func TestLocalBuilder_Build(t *testing.T) {
 		},
 		{
 			name:      "invalid local reference - no file",
-			reference: LocalReference{Path: "/tmp/non-existent-path.xyz"},
+			reference: LocalReference{WorkDir: "/tmp", Path: "non-existent-path.xyz"},
 			wantErr:   "no such file or directory",
 		},
 		{
 			name:      "invalid version metadata",
-			reference: LocalReference{Path: "./../testdata/charts/helmchart"},
+			reference: LocalReference{Path: "../testdata/charts/helmchart"},
 			buildOpts: BuildOptions{VersionMetadata: "^"},
 			wantErr:   "Invalid Metadata string",
 		},
 		{
 			name:         "with version metadata",
-			reference:    LocalReference{Path: "./../testdata/charts/helmchart"},
+			reference:    LocalReference{Path: "../testdata/charts/helmchart"},
 			buildOpts:    BuildOptions{VersionMetadata: "foo"},
 			wantVersion:  "0.1.0+foo",
 			wantPackaged: true,
 		},
 		{
 			name:         "already packaged chart",
-			reference:    LocalReference{Path: "./../testdata/charts/helmchart-0.1.0.tgz"},
+			reference:    LocalReference{Path: "../testdata/charts/helmchart-0.1.0.tgz"},
 			wantVersion:  "0.1.0",
 			wantPackaged: false,
 		},
 		{
 			name:      "default values",
-			reference: LocalReference{Path: "./../testdata/charts/helmchart"},
+			reference: LocalReference{Path: "../testdata/charts/helmchart"},
 			wantValues: chartutil.Values{
 				"replicaCount": float64(1),
 			},
@@ -119,7 +119,7 @@ func TestLocalBuilder_Build(t *testing.T) {
 		},
 		{
 			name:      "with values files",
-			reference: LocalReference{Path: "./../testdata/charts/helmchart"},
+			reference: LocalReference{Path: "../testdata/charts/helmchart"},
 			buildOpts: BuildOptions{
 				ValuesFiles: []string{"custom-values1.yaml", "custom-values2.yaml"},
 			},
@@ -145,7 +145,7 @@ fullnameOverride: "full-foo-name-override"`),
 		},
 		{
 			name:      "chart with dependencies",
-			reference: LocalReference{Path: "./../testdata/charts/helmchartwithdeps"},
+			reference: LocalReference{Path: "../testdata/charts/helmchartwithdeps"},
 			repositories: map[string]*repository.ChartRepository{
 				"https://grafana.github.io/helm-charts/": mockRepo(),
 			},
@@ -164,11 +164,11 @@ fullnameOverride: "full-foo-name-override"`),
 		},
 		{
 			name:      "v1 chart with dependencies",
-			reference: LocalReference{Path: "./../testdata/charts/helmchartwithdeps-v1"},
+			reference: LocalReference{Path: "../testdata/charts/helmchartwithdeps-v1"},
 			repositories: map[string]*repository.ChartRepository{
 				"https://grafana.github.io/helm-charts/": mockRepo(),
 			},
-			dependentChartPaths: []string{"./../testdata/charts/helmchart-v1"},
+			dependentChartPaths: []string{"../testdata/charts/helmchart-v1"},
 			wantVersion:         "0.3.0",
 			wantPackaged:        true,
 		},
@@ -184,13 +184,23 @@ fullnameOverride: "full-foo-name-override"`),
 			// Only if the reference is a LocalReference, set the WorkDir.
 			localRef, ok := tt.reference.(LocalReference)
 			if ok {
+				// If the source chart path is valid, copy it into the workdir
+				// and update the localRef.Path with the copied local chart
+				// path.
+				if localRef.Path != "" {
+					_, err := os.Lstat(localRef.Path)
+					if err == nil {
+						helmchartDir := filepath.Join(workDir, "testdata", "charts", filepath.Base(localRef.Path))
+						g.Expect(copy.Copy(localRef.Path, helmchartDir)).ToNot(HaveOccurred())
+					}
+				}
 				localRef.WorkDir = workDir
 				tt.reference = localRef
 			}
 
 			// Write value file in the base dir.
 			for _, f := range tt.valuesFiles {
-				vPath := filepath.Join(workDir, f.Name)
+				vPath := filepath.Join(localRef.WorkDir, f.Name)
 				g.Expect(os.WriteFile(vPath, f.Data, 0644)).ToNot(HaveOccurred())
 			}
 
@@ -223,7 +233,7 @@ fullnameOverride: "full-foo-name-override"`),
 			g.Expect(cb.Path).ToNot(BeEmpty(), "empty Build.Path")
 
 			// Load the resulting chart and verify the values.
-			resultChart, err := loader.Load(cb.Path)
+			resultChart, err := secureloader.LoadFile(cb.Path)
 			g.Expect(err).ToNot(HaveOccurred())
 			g.Expect(resultChart.Metadata.Version).To(Equal(tt.wantVersion))
 
@@ -241,7 +251,7 @@ func TestLocalBuilder_Build_CachedChart(t *testing.T) {
 	g.Expect(err).ToNot(HaveOccurred())
 	defer os.RemoveAll(workDir)
 
-	reference := LocalReference{Path: "./../testdata/charts/helmchart"}
+	testChartPath := "./../testdata/charts/helmchart"
 
 	dm := NewDependencyManager()
 	b := NewLocalBuilder(dm)
@@ -249,6 +259,11 @@ func TestLocalBuilder_Build_CachedChart(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "local-chart-")
 	g.Expect(err).ToNot(HaveOccurred())
 	defer os.RemoveAll(tmpDir)
+
+	// Copy the source chart into the workdir.
+	g.Expect(copy.Copy(testChartPath, filepath.Join(workDir, "testdata", "charts", filepath.Base("helmchart")))).ToNot(HaveOccurred())
+
+	reference := LocalReference{WorkDir: workDir, Path: testChartPath}
 
 	// Build first time.
 	targetPath := filepath.Join(tmpDir, "chart1.tgz")

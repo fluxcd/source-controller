@@ -24,8 +24,9 @@ import (
 	"testing"
 
 	. "github.com/onsi/gomega"
-	"helm.sh/helm/v3/pkg/chart/loader"
 	"helm.sh/helm/v3/pkg/chartutil"
+
+	"github.com/fluxcd/source-controller/internal/helm/chart/secureloader"
 )
 
 func TestLocalReference_Validate(t *testing.T) {
@@ -35,17 +36,28 @@ func TestLocalReference_Validate(t *testing.T) {
 		wantErr string
 	}{
 		{
-			name: "ref with path",
-			ref:  LocalReference{Path: "/a/path"},
+			name: "ref with path and work dir",
+			ref:  LocalReference{WorkDir: "/workdir/", Path: "./a/path"},
 		},
 		{
-			name: "ref with path and work dir",
-			ref:  LocalReference{Path: "/a/path", WorkDir: "/with/a/workdir"},
+			name:    "ref without work dir",
+			ref:     LocalReference{Path: "/a/path"},
+			wantErr: "no work dir set for local chart reference",
+		},
+		{
+			name:    "ref with relative work dir",
+			ref:     LocalReference{WorkDir: "../a/path", Path: "foo"},
+			wantErr: "local chart reference work dir is expected to be absolute",
 		},
 		{
 			name:    "ref without path",
 			ref:     LocalReference{WorkDir: "/just/a/workdir"},
 			wantErr: "no path set for local chart reference",
+		},
+		{
+			name:    "ref with an absolute path",
+			ref:     LocalReference{WorkDir: "/a/path", Path: "/foo"},
+			wantErr: "local chart reference path is expected to be relative",
 		},
 	}
 	for _, tt := range tests {
@@ -210,7 +222,7 @@ func TestChartBuildResult_String(t *testing.T) {
 func Test_packageToPath(t *testing.T) {
 	g := NewWithT(t)
 
-	chart, err := loader.Load("../testdata/charts/helmchart-0.1.0.tgz")
+	chart, err := secureloader.LoadFile("../testdata/charts/helmchart-0.1.0.tgz")
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(chart).ToNot(BeNil())
 
@@ -219,7 +231,7 @@ func Test_packageToPath(t *testing.T) {
 	err = packageToPath(chart, out)
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(out).To(BeARegularFile())
-	_, err = loader.Load(out)
+	_, err = secureloader.LoadFile(out)
 	g.Expect(err).ToNot(HaveOccurred())
 }
 

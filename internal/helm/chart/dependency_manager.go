@@ -30,8 +30,8 @@ import (
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/sync/semaphore"
 	helmchart "helm.sh/helm/v3/pkg/chart"
-	"helm.sh/helm/v3/pkg/chart/loader"
 
+	"github.com/fluxcd/source-controller/internal/helm/chart/secureloader"
 	"github.com/fluxcd/source-controller/internal/helm/repository"
 )
 
@@ -191,7 +191,7 @@ func (dm *DependencyManager) addLocalDependency(ref LocalReference, c *chartWith
 
 	if _, err := os.Stat(sLocalChartPath); err != nil {
 		if os.IsNotExist(err) {
-			return fmt.Errorf("no chart found at '%s' (reference '%s')", sLocalChartPath, dep.Repository)
+			return fmt.Errorf("no chart found at '%s' (reference '%s')", strings.TrimPrefix(sLocalChartPath, ref.WorkDir), dep.Repository)
 		}
 		return err
 	}
@@ -202,7 +202,7 @@ func (dm *DependencyManager) addLocalDependency(ref LocalReference, c *chartWith
 		return err
 	}
 
-	ch, err := loader.Load(sLocalChartPath)
+	ch, err := secureloader.Load(ref.WorkDir, sLocalChartPath)
 	if err != nil {
 		return fmt.Errorf("failed to load chart from '%s' (reference '%s'): %w",
 			strings.TrimPrefix(sLocalChartPath, ref.WorkDir), dep.Repository, err)
@@ -245,7 +245,7 @@ func (dm *DependencyManager) addRemoteDependency(chart *chartWithLock, dep *helm
 	if err != nil {
 		return fmt.Errorf("chart download of version '%s' failed: %w", ver.Version, err)
 	}
-	ch, err := loader.LoadArchive(res)
+	ch, err := secureloader.LoadArchive(res)
 	if err != nil {
 		return fmt.Errorf("failed to load downloaded archive of version '%s': %w", ver.Version, err)
 	}
@@ -290,11 +290,7 @@ func (dm *DependencyManager) secureLocalChartPath(ref LocalReference, dep *helmc
 	if localUrl.Scheme != "" && localUrl.Scheme != "file" {
 		return "", fmt.Errorf("'%s' is not a local chart reference", dep.Repository)
 	}
-	relPath, err := filepath.Rel(ref.WorkDir, ref.Path)
-	if err != nil {
-		relPath = ref.Path
-	}
-	return securejoin.SecureJoin(ref.WorkDir, filepath.Join(relPath, localUrl.Host, localUrl.Path))
+	return securejoin.SecureJoin(ref.WorkDir, filepath.Join(ref.Path, localUrl.Host, localUrl.Path))
 }
 
 // collectMissing returns a map with dependencies from reqs that are missing
