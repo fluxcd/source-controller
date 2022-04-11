@@ -37,15 +37,12 @@ import (
 	"helm.sh/helm/v3/pkg/chart"
 	"helm.sh/helm/v3/pkg/chart/loader"
 
+	"github.com/fluxcd/source-controller/internal/helm"
 	"github.com/fluxcd/source-controller/internal/helm/chart/secureloader/ignore"
 	"github.com/fluxcd/source-controller/internal/helm/chart/secureloader/sympath"
 )
 
 var (
-	// DefaultMaxFileSize is the default maximum file size of any chart file
-	// loaded.
-	DefaultMaxFileSize = 16 << 20 // 16MiB
-
 	utf8bom = []byte{0xEF, 0xBB, 0xBF}
 )
 
@@ -54,16 +51,16 @@ var (
 type SecureDirLoader struct {
 	root    string
 	path    string
-	maxSize int
+	maxSize int64
 }
 
 // NewSecureDirLoader returns a new SecureDirLoader, configured to the scope of the
 // root and provided dir. Max size configures the maximum size a file must not
-// exceed to be loaded. If 0 it defaults to DefaultMaxFileSize, it can be
+// exceed to be loaded. If 0 it defaults to helm.MaxChartFileSize, it can be
 // disabled using a negative integer.
-func NewSecureDirLoader(root string, path string, maxSize int) SecureDirLoader {
+func NewSecureDirLoader(root string, path string, maxSize int64) SecureDirLoader {
 	if maxSize == 0 {
-		maxSize = DefaultMaxFileSize
+		maxSize = helm.MaxChartFileSize
 	}
 	return SecureDirLoader{
 		root:    root,
@@ -80,7 +77,7 @@ func (l SecureDirLoader) Load() (*chart.Chart, error) {
 // SecureLoadDir securely loads a chart from the path relative to root, without
 // traversing outside root. When maxSize >= 0, files are not allowed to exceed
 // this size, or an error is returned.
-func SecureLoadDir(root, path string, maxSize int) (*chart.Chart, error) {
+func SecureLoadDir(root, path string, maxSize int64) (*chart.Chart, error) {
 	root, err := filepath.Abs(root)
 	if err != nil {
 		return nil, err
@@ -152,12 +149,12 @@ func secureLoadIgnoreRules(root, chartPath string) (*ignore.Rules, error) {
 type secureFileWalker struct {
 	root         string
 	absChartPath string
-	maxSize      int
+	maxSize      int64
 	rules        *ignore.Rules
 	files        []*loader.BufferedFile
 }
 
-func newSecureFileWalker(root, absChartPath string, maxSize int, rules *ignore.Rules) *secureFileWalker {
+func newSecureFileWalker(root, absChartPath string, maxSize int64, rules *ignore.Rules) *secureFileWalker {
 	absChartPath = filepath.Clean(absChartPath) + string(filepath.Separator)
 	return &secureFileWalker{
 		root:         root,
@@ -216,7 +213,7 @@ func (w *secureFileWalker) walk(name, absName string, fi os.FileInfo, err error)
 	}
 
 	// Confirm size it not outside boundaries
-	if fileSize := fi.Size(); w.maxSize > 0 && fileSize > int64(w.maxSize) {
+	if fileSize := fi.Size(); w.maxSize > 0 && fileSize > w.maxSize {
 		return fmt.Errorf("cannot load file %s as file size (%d) exceeds limit (%d)", n, fileSize, w.maxSize)
 	}
 

@@ -26,6 +26,8 @@ import (
 	"helm.sh/helm/v3/pkg/chart"
 	"helm.sh/helm/v3/pkg/chart/loader"
 	"sigs.k8s.io/yaml"
+
+	"github.com/fluxcd/source-controller/internal/helm"
 )
 
 func TestLoader(t *testing.T) {
@@ -51,7 +53,7 @@ func TestLoader(t *testing.T) {
 
 		got, err := Loader(tmpDir, "fake")
 		g.Expect(err).ToNot(HaveOccurred())
-		g.Expect(got).To(Equal(SecureDirLoader{root: tmpDir, path: "fake", maxSize: DefaultMaxFileSize}))
+		g.Expect(got).To(Equal(SecureDirLoader{root: tmpDir, path: "fake", maxSize: helm.MaxChartFileSize}))
 	})
 
 	t.Run("illegal path", func(t *testing.T) {

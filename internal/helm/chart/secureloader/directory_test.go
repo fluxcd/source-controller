@@ -26,10 +26,12 @@ import (
 	"testing"
 	"testing/fstest"
 
-	"github.com/fluxcd/source-controller/internal/helm/chart/secureloader/ignore"
 	. "github.com/onsi/gomega"
 	"helm.sh/helm/v3/pkg/chart"
 	"sigs.k8s.io/yaml"
+
+	"github.com/fluxcd/source-controller/internal/helm"
+	"github.com/fluxcd/source-controller/internal/helm/chart/secureloader/ignore"
 )
 
 func TestSecureDirLoader_Load(t *testing.T) {
@@ -49,7 +51,7 @@ func TestSecureDirLoader_Load(t *testing.T) {
 		g.Expect(err).ToNot(HaveOccurred())
 		g.Expect(os.WriteFile(filepath.Join(tmpDir, "Chart.yaml"), b, 0o644)).To(Succeed())
 
-		got, err := (NewSecureDirLoader(tmpDir, "", DefaultMaxFileSize)).Load()
+		got, err := (NewSecureDirLoader(tmpDir, "", helm.MaxChartFileSize)).Load()
 		g.Expect(err).ToNot(HaveOccurred())
 		g.Expect(got).ToNot(BeNil())
 		g.Expect(got.Name()).To(Equal(m.Name))
@@ -64,7 +66,7 @@ func TestSecureDirLoader_Load(t *testing.T) {
 		g.Expect(err).ToNot(HaveOccurred())
 		g.Expect(os.WriteFile(filepath.Join(tmpDir, "Chart.yaml"), b, 0o644)).To(Succeed())
 
-		got, err := (NewSecureDirLoader(tmpDir, tmpDir, DefaultMaxFileSize)).Load()
+		got, err := (NewSecureDirLoader(tmpDir, tmpDir, helm.MaxChartFileSize)).Load()
 		g.Expect(err).ToNot(HaveOccurred())
 		g.Expect(got).ToNot(BeNil())
 		g.Expect(got.Name()).To(Equal(m.Name))
@@ -83,12 +85,12 @@ func TestSecureDirLoader_Load(t *testing.T) {
 		root := filepath.Join(tmpDir, "root")
 		g.Expect(os.Mkdir(root, 0o700)).To(Succeed())
 
-		got, err := (NewSecureDirLoader(root, "../", DefaultMaxFileSize)).Load()
+		got, err := (NewSecureDirLoader(root, "../", helm.MaxChartFileSize)).Load()
 		g.Expect(err).To(HaveOccurred())
 		g.Expect(err.Error()).To(ContainSubstring("failed to load chart from /: Chart.yaml file is missing"))
 		g.Expect(got).To(BeNil())
 
-		got, err = (NewSecureDirLoader(root, tmpDir, DefaultMaxFileSize)).Load()
+		got, err = (NewSecureDirLoader(root, tmpDir, helm.MaxChartFileSize)).Load()
 		g.Expect(err).To(HaveOccurred())
 		g.Expect(err.Error()).To(ContainSubstring("failed to load chart from /: Chart.yaml file is missing"))
 		g.Expect(got).To(BeNil())
@@ -105,7 +107,7 @@ func TestSecureDirLoader_Load(t *testing.T) {
 		g.Expect(os.WriteFile(filepath.Join(tmpDir, ignore.HelmIgnore), []byte("file.txt"), 0o644)).To(Succeed())
 		g.Expect(os.WriteFile(filepath.Join(tmpDir, "file.txt"), []byte("not included"), 0o644)).To(Succeed())
 
-		got, err := (NewSecureDirLoader(tmpDir, "", DefaultMaxFileSize)).Load()
+		got, err := (NewSecureDirLoader(tmpDir, "", helm.MaxChartFileSize)).Load()
 		g.Expect(err).ToNot(HaveOccurred())
 		g.Expect(got).ToNot(BeNil())
 		g.Expect(got.Name()).To(Equal(m.Name))
@@ -218,7 +220,7 @@ func Test_secureFileWalker_walk(t *testing.T) {
 	t.Run("given name equals top dir", func(t *testing.T) {
 		g := NewWithT(t)
 
-		w := newSecureFileWalker(root, chartPath, DefaultMaxFileSize, ignore.Empty())
+		w := newSecureFileWalker(root, chartPath, helm.MaxChartFileSize, ignore.Empty())
 		g.Expect(w.walk(chartPath+"/", chartPath, nil, nil)).To(BeNil())
 	})
 
@@ -237,7 +239,7 @@ func Test_secureFileWalker_walk(t *testing.T) {
 		rules, err := ignore.Parse(strings.NewReader(fakeDirName + "/"))
 		g.Expect(err).ToNot(HaveOccurred())
 
-		w := newSecureFileWalker(root, chartPath, DefaultMaxFileSize, rules)
+		w := newSecureFileWalker(root, chartPath, helm.MaxChartFileSize, rules)
 		g.Expect(w.walk(filepath.Join(w.absChartPath, fakeDirName), filepath.Join(w.absChartPath, fakeDirName), fakeDirInfo, nil)).To(Equal(fs.SkipDir))
 	})
 
@@ -247,21 +249,21 @@ func Test_secureFileWalker_walk(t *testing.T) {
 		rules, err := ignore.Parse(strings.NewReader(fakeDirName + "/"))
 		g.Expect(err).ToNot(HaveOccurred())
 
-		w := newSecureFileWalker(root, chartPath, DefaultMaxFileSize, rules)
+		w := newSecureFileWalker(root, chartPath, helm.MaxChartFileSize, rules)
 		g.Expect(w.walk(filepath.Join(w.absChartPath, "symlink"), filepath.Join(w.absChartPath, fakeDirName), fakeDirInfo, nil)).To(BeNil())
 	})
 
 	t.Run("ignore rule not applicable to dir", func(t *testing.T) {
 		g := NewWithT(t)
 
-		w := newSecureFileWalker(root, chartPath, DefaultMaxFileSize, ignore.Empty())
+		w := newSecureFileWalker(root, chartPath, helm.MaxChartFileSize, ignore.Empty())
 		g.Expect(w.walk(filepath.Join(w.absChartPath, fakeDirName), filepath.Join(w.absChartPath, fakeDirName), fakeDirInfo, nil)).To(BeNil())
 	})
 
 	t.Run("absolute path outside root", func(t *testing.T) {
 		g := NewWithT(t)
 
-		w := newSecureFileWalker(root, chartPath, DefaultMaxFileSize, ignore.Empty())
+		w := newSecureFileWalker(root, chartPath, helm.MaxChartFileSize, ignore.Empty())
 		err := w.walk(filepath.Join(w.absChartPath, fakeDirName), filepath.Join("/fake/another/root/", fakeDirName), fakeDirInfo, nil)
 		g.Expect(err).To(HaveOccurred())
 		g.Expect(err.Error()).To(ContainSubstring("cannot load 'fake-dir' directory: absolute path traverses outside root boundary"))
@@ -273,7 +275,7 @@ func Test_secureFileWalker_walk(t *testing.T) {
 		rules, err := ignore.Parse(strings.NewReader(fakeDirName + "/"))
 		g.Expect(err).ToNot(HaveOccurred())
 
-		w := newSecureFileWalker(root, chartPath, DefaultMaxFileSize, rules)
+		w := newSecureFileWalker(root, chartPath, helm.MaxChartFileSize, rules)
 		g.Expect(w.walk(filepath.Join(w.absChartPath, fakeDirName), filepath.Join("/fake/another/root/", fakeDirName), fakeDirInfo, nil)).To(Equal(fs.SkipDir))
 	})
 
@@ -283,21 +285,21 @@ func Test_secureFileWalker_walk(t *testing.T) {
 		rules, err := ignore.Parse(strings.NewReader(fakeFileName))
 		g.Expect(err).ToNot(HaveOccurred())
 
-		w := newSecureFileWalker(root, chartPath, DefaultMaxFileSize, rules)
+		w := newSecureFileWalker(root, chartPath, helm.MaxChartFileSize, rules)
 		g.Expect(w.walk(filepath.Join(w.absChartPath, fakeFileName), filepath.Join(w.absChartPath, fakeFileName), fakeFileInfo, nil)).To(BeNil())
 	})
 
 	t.Run("file path outside root", func(t *testing.T) {
 		g := NewWithT(t)
 
-		w := newSecureFileWalker(root, chartPath, DefaultMaxFileSize, ignore.Empty())
+		w := newSecureFileWalker(root, chartPath, helm.MaxChartFileSize, ignore.Empty())
 		err := w.walk(filepath.Join(w.absChartPath, fakeFileName), filepath.Join("/fake/another/root/", fakeFileName), fakeFileInfo, nil)
 		g.Expect(err).To(HaveOccurred())
 		g.Expect(err.Error()).To(ContainSubstring("cannot load 'fake-file' file: absolute path traverses outside root boundary"))
 	})
 
 	t.Run("irregular file", func(t *testing.T) {
-		w := newSecureFileWalker(root, chartPath, DefaultMaxFileSize, ignore.Empty())
+		w := newSecureFileWalker(root, chartPath, helm.MaxChartFileSize, ignore.Empty())
 		err := w.walk(fakeDeviceFileName, filepath.Join(w.absChartPath), fakeDeviceInfo, nil)
 		g.Expect(err).To(HaveOccurred())
 		g.Expect(err.Error()).To(ContainSubstring("cannot load irregular file fake-device as it has file mode type bits set"))
@@ -321,7 +323,7 @@ func Test_secureFileWalker_walk(t *testing.T) {
 		fileInfo, err := os.Lstat(absFilePath)
 		g.Expect(err).ToNot(HaveOccurred())
 
-		w := newSecureFileWalker(tmpDir, tmpDir, DefaultMaxFileSize, ignore.Empty())
+		w := newSecureFileWalker(tmpDir, tmpDir, helm.MaxChartFileSize, ignore.Empty())
 		g.Expect(w.walk(fileName, absFilePath, fileInfo, nil)).To(Succeed())
 		g.Expect(w.files).To(HaveLen(1))
 		g.Expect(w.files[0].Name).To(Equal(fileName))
@@ -340,7 +342,7 @@ func Test_secureFileWalker_walk(t *testing.T) {
 		fileInfo, err := os.Lstat(absFilePath)
 		g.Expect(err).ToNot(HaveOccurred())
 
-		w := newSecureFileWalker(tmpDir, tmpDir, DefaultMaxFileSize, ignore.Empty())
+		w := newSecureFileWalker(tmpDir, tmpDir, helm.MaxChartFileSize, ignore.Empty())
 		g.Expect(w.walk(fileName, absFilePath, fileInfo, nil)).To(Succeed())
 		g.Expect(w.files).To(HaveLen(1))
 		g.Expect(w.files[0].Name).To(Equal(fileName))
@@ -351,7 +353,7 @@ func Test_secureFileWalker_walk(t *testing.T) {
 		g := NewWithT(t)
 		tmpDir := t.TempDir()
 
-		w := newSecureFileWalker(tmpDir, tmpDir, DefaultMaxFileSize, ignore.Empty())
+		w := newSecureFileWalker(tmpDir, tmpDir, helm.MaxChartFileSize, ignore.Empty())
 		err := w.walk(filepath.Join(w.absChartPath, "invalid"), filepath.Join(w.absChartPath, "invalid"), fakeFileInfo, nil)
 		g.Expect(err).To(HaveOccurred())
 		g.Expect(errors.Is(err, fs.ErrNotExist)).To(BeTrue())

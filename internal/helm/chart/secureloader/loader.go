@@ -27,6 +27,8 @@ import (
 	securejoin "github.com/cyphar/filepath-securejoin"
 	"helm.sh/helm/v3/pkg/chart"
 	"helm.sh/helm/v3/pkg/chart/loader"
+
+	"github.com/fluxcd/source-controller/internal/helm"
 )
 
 // Loader returns a new loader.ChartLoader appropriate for the given chart
@@ -61,7 +63,7 @@ func Loader(root, name string) (loader.ChartLoader, error) {
 	}
 
 	if fi.IsDir() {
-		return NewSecureDirLoader(root, relName, DefaultMaxFileSize), nil
+		return NewSecureDirLoader(root, relName, helm.MaxChartFileSize), nil
 	}
 	return FileLoader(secureName), nil
 }
