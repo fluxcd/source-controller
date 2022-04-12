@@ -40,6 +40,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/ratelimiter"
 
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/runtime/conditions"
@@ -122,6 +123,7 @@ type BucketReconciler struct {
 
 type BucketReconcilerOptions struct {
 	MaxConcurrentReconciles int
+	RateLimiter             ratelimiter.RateLimiter
 }
 
 // BucketProvider is an interface for fetching objects from a storage provider
@@ -235,7 +237,10 @@ func (r *BucketReconciler) SetupWithManagerAndOptions(mgr ctrl.Manager, opts Buc
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&sourcev1.Bucket{}).
 		WithEventFilter(predicate.Or(predicate.GenerationChangedPredicate{}, predicates.ReconcileRequestedPredicate{})).
-		WithOptions(controller.Options{MaxConcurrentReconciles: opts.MaxConcurrentReconciles}).
+		WithOptions(controller.Options{
+			MaxConcurrentReconciles: opts.MaxConcurrentReconciles,
+			RateLimiter:             opts.RateLimiter,
+		}).
 		Complete(r)
 }
 

@@ -88,6 +88,7 @@ func main() {
 		clientOptions            client.Options
 		logOptions               logger.Options
 		leaderElectionOptions    leaderelection.Options
+		rateLimiterOptions       helper.RateLimiterOptions
 		helmCacheMaxSize         int
 		helmCacheTTL             string
 		helmCachePurgeInterval   string
@@ -134,6 +135,7 @@ func main() {
 	clientOptions.BindFlags(flag.CommandLine)
 	logOptions.BindFlags(flag.CommandLine)
 	leaderElectionOptions.BindFlags(flag.CommandLine)
+	rateLimiterOptions.BindFlags(flag.CommandLine)
 
 	flag.Parse()
 
@@ -195,6 +197,7 @@ func main() {
 	}).SetupWithManagerAndOptions(mgr, controllers.GitRepositoryReconcilerOptions{
 		MaxConcurrentReconciles:   concurrent,
 		DependencyRequeueInterval: requeueDependency,
+		RateLimiter:               helper.GetRateLimiter(rateLimiterOptions),
 	}); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", sourcev1.GitRepositoryKind)
 		os.Exit(1)
@@ -208,6 +211,7 @@ func main() {
 		ControllerName: controllerName,
 	}).SetupWithManagerAndOptions(mgr, controllers.HelmRepositoryReconcilerOptions{
 		MaxConcurrentReconciles: concurrent,
+		RateLimiter:             helper.GetRateLimiter(rateLimiterOptions),
 	}); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", sourcev1.HelmRepositoryKind)
 		os.Exit(1)
@@ -241,6 +245,7 @@ func main() {
 		TTL:            ttl,
 	}).SetupWithManagerAndOptions(mgr, controllers.HelmChartReconcilerOptions{
 		MaxConcurrentReconciles: concurrent,
+		RateLimiter:             helper.GetRateLimiter(rateLimiterOptions),
 	}); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", sourcev1.HelmChartKind)
 		os.Exit(1)
@@ -253,6 +258,7 @@ func main() {
 		ControllerName: controllerName,
 	}).SetupWithManagerAndOptions(mgr, controllers.BucketReconcilerOptions{
 		MaxConcurrentReconciles: concurrent,
+		RateLimiter:             helper.GetRateLimiter(rateLimiterOptions),
 	}); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Bucket")
 		os.Exit(1)

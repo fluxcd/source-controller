@@ -37,6 +37,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/ratelimiter"
 
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/runtime/conditions"
@@ -118,6 +119,7 @@ type GitRepositoryReconciler struct {
 type GitRepositoryReconcilerOptions struct {
 	MaxConcurrentReconciles   int
 	DependencyRequeueInterval time.Duration
+	RateLimiter               ratelimiter.RateLimiter
 }
 
 // gitRepositoryReconcileFunc is the function type for all the
@@ -135,7 +137,10 @@ func (r *GitRepositoryReconciler) SetupWithManagerAndOptions(mgr ctrl.Manager, o
 		For(&sourcev1.GitRepository{}, builder.WithPredicates(
 			predicate.Or(predicate.GenerationChangedPredicate{}, predicates.ReconcileRequestedPredicate{}),
 		)).
-		WithOptions(controller.Options{MaxConcurrentReconciles: opts.MaxConcurrentReconciles}).
+		WithOptions(controller.Options{
+			MaxConcurrentReconciles: opts.MaxConcurrentReconciles,
+			RateLimiter:             opts.RateLimiter,
+		}).
 		Complete(r)
 }
 

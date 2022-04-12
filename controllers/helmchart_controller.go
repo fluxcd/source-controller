@@ -43,6 +43,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/ratelimiter"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
@@ -130,6 +131,7 @@ func (r *HelmChartReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 type HelmChartReconcilerOptions struct {
 	MaxConcurrentReconciles int
+	RateLimiter             ratelimiter.RateLimiter
 }
 
 // helmChartReconcileFunc is the function type for all the v1beta2.HelmChart
@@ -166,7 +168,10 @@ func (r *HelmChartReconciler) SetupWithManagerAndOptions(mgr ctrl.Manager, opts 
 			handler.EnqueueRequestsFromMapFunc(r.requestsForBucketChange),
 			builder.WithPredicates(SourceRevisionChangePredicate{}),
 		).
-		WithOptions(controller.Options{MaxConcurrentReconciles: opts.MaxConcurrentReconciles}).
+		WithOptions(controller.Options{
+			MaxConcurrentReconciles: opts.MaxConcurrentReconciles,
+			RateLimiter:             opts.RateLimiter,
+		}).
 		Complete(r)
 }
 
