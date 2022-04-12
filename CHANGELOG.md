@@ -2,6 +2,71 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.23.0
+
+**Release date:** 2022-04-12
+
+This prerelease introduces new retention options for Garbage Collection,
+a new opt-in in-memory cache for `HelmRepository` index files, improves
+notifications following reconciling failures, brings ways to configure 
+Key Exchange Algorithms, plus some extra housekeeping awesomeness.
+
+Garbage Collection is enabled by default, and now its retention options
+are configurable with the flags: `--artifact-retention-ttl` (default: `60s`)
+and `--artifact-retention-records` (default: `2`). They define the minimum
+time to live and the maximum amount of artifacts to survive a collection.
+
+A new notification is now emitted to identify recovery from failures. It 
+is triggered when a failed reconciliation is followed by a successful one, and
+the notification message is the same that's sent in usual successful source
+reconciliation message about the stored artifact.
+
+The opt-in in-memory cache for `HelmRepository` addresses issues where the
+index file is loaded and unmarshalled in concurrent reconciliation resulting
+in a heavy memory footprint. It can be configured using the flags:
+`--helm-cache-max-size`, `--helm-cache-ttl`, `--helm-cache-purge-interval`.
+
+The Key Exchange Algorithms used when establishing SSH connections are
+based on the defaults configured upstream in `go-git` and `golang.org/x/crypto`.
+Now this can be overriden with the flag `--ssh-kex-algos`. Note this applies
+to the `go-git` gitImplementation or the `libgit2` gitImplementation but
+_only_ when Managed Transport is being used.
+
+Managed Transport for `libgit2` now introduces self-healing capabilities,
+to recover from failure when long-running connections become stale. 
+
+The exponental back-off retry can be configured with the new flags:
+`--min-retry-delay` (default: `750ms`) and `--max-retry-delay`
+(default: `15min`). Previously the defaults were set to `5ms` and `1000s`,
+which in some cases impaired the controller's ability to self-heal 
+(e.g. retrying failing SSH connections).
+
+
+Introduction of a secure directory loader which improves the handling
+of Helm charts paths.
+
+Improvements:
+- update toolkit.fluxcd.io docs links
+  [#651](https://github.com/fluxcd/source-controller/pull/651)
+- Add optional in-memory cache of HelmRepository index files
+  [#626](https://github.com/fluxcd/source-controller/pull/626)
+- Add flag to allow configuration of SSH kex algos
+  [#655](https://github.com/fluxcd/source-controller/pull/655)
+- Garbage collect with provided retention options
+  [#638](https://github.com/fluxcd/source-controller/pull/638)
+- Avoid event logging GC failure
+  [#659](https://github.com/fluxcd/source-controller/pull/659)
+- Add notify() in all the reconcilers
+  [#624](https://github.com/fluxcd/source-controller/pull/624)
+- Remove leftover timeout in reconcilers
+  [#660](https://github.com/fluxcd/source-controller/pull/660)
+- libgit2: managed transport improvements
+  [#658](https://github.com/fluxcd/source-controller/pull/658)
+- helm: introduce customized chart loaders
+  [#663](https://github.com/fluxcd/source-controller/pull/663)
+- Add flags to configure exponential back-off retry
+  [#664](https://github.com/fluxcd/source-controller/pull/664)
+
 ## 0.22.5
 
 **Release date:** 2022-03-30
