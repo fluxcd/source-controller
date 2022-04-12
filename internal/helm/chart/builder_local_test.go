@@ -201,7 +201,7 @@ fullnameOverride: "full-foo-name-override"`),
 			// Write value file in the base dir.
 			for _, f := range tt.valuesFiles {
 				vPath := filepath.Join(localRef.WorkDir, f.Name)
-				g.Expect(os.WriteFile(vPath, f.Data, 0o644)).ToNot(HaveOccurred())
+				g.Expect(os.WriteFile(vPath, f.Data, 0o640)).ToNot(HaveOccurred())
 			}
 
 			// Write chart dependencies in the base dir.
@@ -336,7 +336,7 @@ func Test_mergeFileValues(t *testing.T) {
 			defer os.RemoveAll(baseDir)
 
 			for _, f := range tt.files {
-				g.Expect(os.WriteFile(filepath.Join(baseDir, f.Name), f.Data, 0o644)).To(Succeed())
+				g.Expect(os.WriteFile(filepath.Join(baseDir, f.Name), f.Data, 0o640)).To(Succeed())
 			}
 
 			got, err := mergeFileValues(baseDir, tt.paths)

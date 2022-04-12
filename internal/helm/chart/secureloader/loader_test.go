@@ -35,7 +35,7 @@ func TestLoader(t *testing.T) {
 
 	tmpDir := t.TempDir()
 	fakeChart := filepath.Join(tmpDir, "fake.tgz")
-	g.Expect(os.WriteFile(fakeChart, []byte(""), 0o644)).To(Succeed())
+	g.Expect(os.WriteFile(fakeChart, []byte(""), 0o640)).To(Succeed())
 
 	t.Run("file loader", func(t *testing.T) {
 		g := NewWithT(t)
@@ -83,7 +83,7 @@ func TestLoad(t *testing.T) {
 	}
 	b, err := yaml.Marshal(&metadata)
 	g.Expect(err).ToNot(HaveOccurred())
-	g.Expect(os.WriteFile(filepath.Join(tmpDir, "Chart.yaml"), b, 0o644)).To(Succeed())
+	g.Expect(os.WriteFile(filepath.Join(tmpDir, "Chart.yaml"), b, 0o640)).To(Succeed())
 
 	got, err := Load(tmpDir, "")
 	g.Expect(err).ToNot(HaveOccurred())
