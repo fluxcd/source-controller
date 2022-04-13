@@ -158,7 +158,7 @@ func TestHelmRepositoryReconciler_reconcileStorage(t *testing.T) {
 					if err := testStorage.MkdirAll(*obj.Status.Artifact); err != nil {
 						return err
 					}
-					if err := testStorage.AtomicWriteFile(obj.Status.Artifact, strings.NewReader(v), 0o644); err != nil {
+					if err := testStorage.AtomicWriteFile(obj.Status.Artifact, strings.NewReader(v), 0o640); err != nil {
 						return err
 					}
 					if n != len(revisions)-1 {
@@ -213,7 +213,7 @@ func TestHelmRepositoryReconciler_reconcileStorage(t *testing.T) {
 				if err := testStorage.MkdirAll(*obj.Status.Artifact); err != nil {
 					return err
 				}
-				if err := testStorage.AtomicWriteFile(obj.Status.Artifact, strings.NewReader("file"), 0o644); err != nil {
+				if err := testStorage.AtomicWriteFile(obj.Status.Artifact, strings.NewReader("file"), 0o640); err != nil {
 					return err
 				}
 				return nil

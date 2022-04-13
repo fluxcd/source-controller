@@ -49,7 +49,7 @@ func TestSecureDirLoader_Load(t *testing.T) {
 		m := metadata
 		b, err := yaml.Marshal(&m)
 		g.Expect(err).ToNot(HaveOccurred())
-		g.Expect(os.WriteFile(filepath.Join(tmpDir, "Chart.yaml"), b, 0o644)).To(Succeed())
+		g.Expect(os.WriteFile(filepath.Join(tmpDir, "Chart.yaml"), b, 0o640)).To(Succeed())
 
 		got, err := (NewSecureDirLoader(tmpDir, "", helm.MaxChartFileSize)).Load()
 		g.Expect(err).ToNot(HaveOccurred())
@@ -64,7 +64,7 @@ func TestSecureDirLoader_Load(t *testing.T) {
 		m := metadata
 		b, err := yaml.Marshal(&m)
 		g.Expect(err).ToNot(HaveOccurred())
-		g.Expect(os.WriteFile(filepath.Join(tmpDir, "Chart.yaml"), b, 0o644)).To(Succeed())
+		g.Expect(os.WriteFile(filepath.Join(tmpDir, "Chart.yaml"), b, 0o640)).To(Succeed())
 
 		got, err := (NewSecureDirLoader(tmpDir, tmpDir, helm.MaxChartFileSize)).Load()
 		g.Expect(err).ToNot(HaveOccurred())
@@ -80,7 +80,7 @@ func TestSecureDirLoader_Load(t *testing.T) {
 		m := metadata
 		b, err := yaml.Marshal(&m)
 		g.Expect(err).ToNot(HaveOccurred())
-		g.Expect(os.WriteFile(filepath.Join(tmpDir, "Chart.yaml"), b, 0o644)).To(Succeed())
+		g.Expect(os.WriteFile(filepath.Join(tmpDir, "Chart.yaml"), b, 0o640)).To(Succeed())
 
 		root := filepath.Join(tmpDir, "root")
 		g.Expect(os.Mkdir(root, 0o700)).To(Succeed())
@@ -103,9 +103,9 @@ func TestSecureDirLoader_Load(t *testing.T) {
 		m := metadata
 		b, err := yaml.Marshal(&m)
 		g.Expect(err).ToNot(HaveOccurred())
-		g.Expect(os.WriteFile(filepath.Join(tmpDir, "Chart.yaml"), b, 0o644)).To(Succeed())
-		g.Expect(os.WriteFile(filepath.Join(tmpDir, ignore.HelmIgnore), []byte("file.txt"), 0o644)).To(Succeed())
-		g.Expect(os.WriteFile(filepath.Join(tmpDir, "file.txt"), []byte("not included"), 0o644)).To(Succeed())
+		g.Expect(os.WriteFile(filepath.Join(tmpDir, "Chart.yaml"), b, 0o640)).To(Succeed())
+		g.Expect(os.WriteFile(filepath.Join(tmpDir, ignore.HelmIgnore), []byte("file.txt"), 0o640)).To(Succeed())
+		g.Expect(os.WriteFile(filepath.Join(tmpDir, "file.txt"), []byte("not included"), 0o640)).To(Succeed())
 
 		got, err := (NewSecureDirLoader(tmpDir, "", helm.MaxChartFileSize)).Load()
 		g.Expect(err).ToNot(HaveOccurred())
@@ -129,7 +129,7 @@ func Test_secureLoadIgnoreRules(t *testing.T) {
 		g := NewWithT(t)
 
 		tmpDir := t.TempDir()
-		g.Expect(os.WriteFile(filepath.Join(tmpDir, ignore.HelmIgnore), []byte("file.txt"), 0o644)).To(Succeed())
+		g.Expect(os.WriteFile(filepath.Join(tmpDir, ignore.HelmIgnore), []byte("file.txt"), 0o640)).To(Succeed())
 
 		r, err := secureLoadIgnoreRules(tmpDir, "")
 		g.Expect(err).ToNot(HaveOccurred())
@@ -144,7 +144,7 @@ func Test_secureLoadIgnoreRules(t *testing.T) {
 		tmpDir := t.TempDir()
 		chartPath := "./sub/chart"
 		g.Expect(os.MkdirAll(filepath.Join(tmpDir, chartPath), 0o700)).To(Succeed())
-		g.Expect(os.WriteFile(filepath.Join(tmpDir, chartPath, ignore.HelmIgnore), []byte("file.txt"), 0o644)).To(Succeed())
+		g.Expect(os.WriteFile(filepath.Join(tmpDir, chartPath, ignore.HelmIgnore), []byte("file.txt"), 0o640)).To(Succeed())
 
 		r, err := secureLoadIgnoreRules(tmpDir, chartPath)
 		g.Expect(err).ToNot(HaveOccurred())
@@ -157,7 +157,7 @@ func Test_secureLoadIgnoreRules(t *testing.T) {
 		tmpDir := t.TempDir()
 		chartPath := "sub/chart"
 		g.Expect(os.MkdirAll(filepath.Join(tmpDir, chartPath), 0o700)).To(Succeed())
-		g.Expect(os.WriteFile(filepath.Join(tmpDir, "symlink"), []byte("file.txt"), 0o644)).To(Succeed())
+		g.Expect(os.WriteFile(filepath.Join(tmpDir, "symlink"), []byte("file.txt"), 0o640)).To(Succeed())
 		g.Expect(os.Symlink("../../symlink", filepath.Join(tmpDir, chartPath, ignore.HelmIgnore)))
 
 		r, err := secureLoadIgnoreRules(tmpDir, chartPath)
@@ -171,7 +171,7 @@ func Test_secureLoadIgnoreRules(t *testing.T) {
 		tmpDir := t.TempDir()
 		chartPath := "/sub/chart"
 		g.Expect(os.MkdirAll(filepath.Join(tmpDir, chartPath), 0o700)).To(Succeed())
-		g.Expect(os.WriteFile(filepath.Join(tmpDir, "symlink"), []byte("file.txt"), 0o644)).To(Succeed())
+		g.Expect(os.WriteFile(filepath.Join(tmpDir, "symlink"), []byte("file.txt"), 0o640)).To(Succeed())
 		g.Expect(os.Symlink("../../symlink", filepath.Join(tmpDir, chartPath, ignore.HelmIgnore)))
 
 		r, err := secureLoadIgnoreRules(filepath.Join(tmpDir, chartPath), "")
@@ -184,7 +184,7 @@ func Test_secureLoadIgnoreRules(t *testing.T) {
 		g := NewWithT(t)
 
 		tmpDir := t.TempDir()
-		g.Expect(os.WriteFile(filepath.Join(tmpDir, ignore.HelmIgnore), []byte("**"), 0o644)).To(Succeed())
+		g.Expect(os.WriteFile(filepath.Join(tmpDir, ignore.HelmIgnore), []byte("**"), 0o640)).To(Succeed())
 
 		_, err := secureLoadIgnoreRules(tmpDir, "")
 		g.Expect(err).To(HaveOccurred())
@@ -319,7 +319,7 @@ func Test_secureFileWalker_walk(t *testing.T) {
 		fileName := "append-file"
 		fileData := []byte("append-file-data")
 		absFilePath := filepath.Join(tmpDir, fileName)
-		g.Expect(os.WriteFile(absFilePath, fileData, 0o644)).To(Succeed())
+		g.Expect(os.WriteFile(absFilePath, fileData, 0o640)).To(Succeed())
 		fileInfo, err := os.Lstat(absFilePath)
 		g.Expect(err).ToNot(HaveOccurred())
 
@@ -338,7 +338,7 @@ func Test_secureFileWalker_walk(t *testing.T) {
 		fileData := []byte("append-file-data")
 		fileDataWithBom := append(utf8bom, fileData...)
 		absFilePath := filepath.Join(tmpDir, fileName)
-		g.Expect(os.WriteFile(absFilePath, fileDataWithBom, 0o644)).To(Succeed())
+		g.Expect(os.WriteFile(absFilePath, fileDataWithBom, 0o640)).To(Succeed())
 		fileInfo, err := os.Lstat(absFilePath)
 		g.Expect(err).ToNot(HaveOccurred())
 

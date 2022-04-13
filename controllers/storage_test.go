@@ -136,7 +136,7 @@ func TestStorage_Archive(t *testing.T) {
 		}
 		for name, b := range files {
 			absPath := filepath.Join(dir, name)
-			if err = os.MkdirAll(filepath.Dir(absPath), 0755); err != nil {
+			if err = os.MkdirAll(filepath.Dir(absPath), 0o750); err != nil {
 				return
 			}
 			f, err := os.Create(absPath)
@@ -316,7 +316,7 @@ func TestStorageRemoveAllButCurrent(t *testing.T) {
 
 		// Create artifact dir and artifacts.
 		artifactDir := path.Join(dir, "foo", "bar")
-		g.Expect(os.MkdirAll(artifactDir, 0755)).NotTo(HaveOccurred())
+		g.Expect(os.MkdirAll(artifactDir, 0o750)).NotTo(HaveOccurred())
 		current := []string{
 			path.Join(artifactDir, "artifact1.tar.gz"),
 		}
@@ -378,7 +378,7 @@ func TestStorageRemoveAll(t *testing.T) {
 			}
 
 			if tt.createArtifactPath {
-				g.Expect(os.MkdirAll(path.Join(dir, tt.artifactPath), 0755)).ToNot(HaveOccurred())
+				g.Expect(os.MkdirAll(path.Join(dir, tt.artifactPath), 0o750)).ToNot(HaveOccurred())
 			}
 
 			deleted, err := s.RemoveAll(artifact)
@@ -412,7 +412,7 @@ func TestStorageCopyFromPath(t *testing.T) {
 		}
 		t.Cleanup(cleanupStoragePath(dir))
 		absPath = filepath.Join(dir, file.Name)
-		if err = os.MkdirAll(filepath.Dir(absPath), 0755); err != nil {
+		if err = os.MkdirAll(filepath.Dir(absPath), 0o750); err != nil {
 			return
 		}
 		f, err := os.Create(absPath)
@@ -591,7 +591,7 @@ func TestStorage_getGarbageFiles(t *testing.T) {
 			artifact := sourcev1.Artifact{
 				Path: tt.artifactPaths[len(tt.artifactPaths)-1],
 			}
-			g.Expect(os.MkdirAll(path.Join(dir, artifactFolder), 0o755)).ToNot(HaveOccurred())
+			g.Expect(os.MkdirAll(path.Join(dir, artifactFolder), 0o750)).ToNot(HaveOccurred())
 			for _, artifactPath := range tt.artifactPaths {
 				f, err := os.Create(path.Join(dir, artifactPath))
 				g.Expect(err).ToNot(HaveOccurred())
@@ -667,7 +667,7 @@ func TestStorage_GarbageCollect(t *testing.T) {
 			artifact := sourcev1.Artifact{
 				Path: tt.artifactPaths[len(tt.artifactPaths)-1],
 			}
-			g.Expect(os.MkdirAll(path.Join(dir, artifactFolder), 0o755)).ToNot(HaveOccurred())
+			g.Expect(os.MkdirAll(path.Join(dir, artifactFolder), 0o750)).ToNot(HaveOccurred())
 			for i, artifactPath := range tt.artifactPaths {
 				f, err := os.Create(path.Join(dir, artifactPath))
 				g.Expect(err).ToNot(HaveOccurred())

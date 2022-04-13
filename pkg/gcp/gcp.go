@@ -118,7 +118,7 @@ func (c *GCSClient) FGetObject(ctx context.Context, bucketName, objectName, loca
 	objectDir, _ := filepath.Split(localPath)
 	if objectDir != "" {
 		// Create any missing top level directories.
-		if err := os.MkdirAll(objectDir, 0700); err != nil {
+		if err := os.MkdirAll(objectDir, 0o700); err != nil {
 			return "", err
 		}
 	}
@@ -130,7 +130,7 @@ func (c *GCSClient) FGetObject(ctx context.Context, bucketName, objectName, loca
 	}
 
 	// Prepare target file.
-	objectFile, err := os.OpenFile(localPath, os.O_CREATE|os.O_WRONLY, 0600)
+	objectFile, err := os.OpenFile(localPath, os.O_CREATE|os.O_WRONLY, 0o600)
 	if err != nil {
 		return "", err
 	}

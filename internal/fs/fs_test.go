@@ -42,12 +42,12 @@ func TestRenameWithFallback(t *testing.T) {
 	}
 
 	srcpath = filepath.Join(dir, "a")
-	if err = os.MkdirAll(srcpath, 0777); err != nil {
+	if err = os.MkdirAll(srcpath, 0o770); err != nil {
 		t.Fatal(err)
 	}
 
 	dstpath := filepath.Join(dir, "b")
-	if err = os.MkdirAll(dstpath, 0777); err != nil {
+	if err = os.MkdirAll(dstpath, 0o770); err != nil {
 		t.Fatal(err)
 	}
 
@@ -64,7 +64,7 @@ func TestCopyDir(t *testing.T) {
 	defer os.RemoveAll(dir)
 
 	srcdir := filepath.Join(dir, "src")
-	if err := os.MkdirAll(srcdir, 0755); err != nil {
+	if err := os.MkdirAll(srcdir, 0o750); err != nil {
 		t.Fatal(err)
 	}
 
@@ -81,7 +81,7 @@ func TestCopyDir(t *testing.T) {
 	for i, file := range files {
 		fn := filepath.Join(srcdir, file.path)
 		dn := filepath.Dir(fn)
-		if err = os.MkdirAll(dn, 0755); err != nil {
+		if err = os.MkdirAll(dn, 0o750); err != nil {
 			t.Fatal(err)
 		}
 
@@ -151,7 +151,7 @@ func TestCopyDirFail_SrcInaccessible(t *testing.T) {
 
 	cleanup := setupInaccessibleDir(t, func(dir string) error {
 		srcdir = filepath.Join(dir, "src")
-		return os.MkdirAll(srcdir, 0755)
+		return os.MkdirAll(srcdir, 0o750)
 	})
 	defer cleanup()
 
@@ -184,7 +184,7 @@ func TestCopyDirFail_DstInaccessible(t *testing.T) {
 	defer os.RemoveAll(dir)
 
 	srcdir = filepath.Join(dir, "src")
-	if err = os.MkdirAll(srcdir, 0755); err != nil {
+	if err = os.MkdirAll(srcdir, 0o750); err != nil {
 		t.Fatal(err)
 	}
 
@@ -235,12 +235,12 @@ func TestCopyDirFail_DstExists(t *testing.T) {
 	defer os.RemoveAll(dir)
 
 	srcdir = filepath.Join(dir, "src")
-	if err = os.MkdirAll(srcdir, 0755); err != nil {
+	if err = os.MkdirAll(srcdir, 0o750); err != nil {
 		t.Fatal(err)
 	}
 
 	dstdir = filepath.Join(dir, "dst")
-	if err = os.MkdirAll(dstdir, 0755); err != nil {
+	if err = os.MkdirAll(dstdir, 0o750); err != nil {
 		t.Fatal(err)
 	}
 
@@ -256,7 +256,7 @@ func TestCopyDirFail_DstExists(t *testing.T) {
 func TestCopyDirFailOpen(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		// XXX: setting permissions works differently in
-		// Microsoft Windows. os.Chmod(..., 0222) below is not
+		// Microsoft Windows. os.Chmod(..., 0o222) below is not
 		// enough for the file to be readonly, and os.Chmod(...,
 		// 0000) returns an invalid argument error. Skipping
 		// this this until a compatible implementation is
@@ -273,7 +273,7 @@ func TestCopyDirFailOpen(t *testing.T) {
 	defer os.RemoveAll(dir)
 
 	srcdir = filepath.Join(dir, "src")
-	if err = os.MkdirAll(srcdir, 0755); err != nil {
+	if err = os.MkdirAll(srcdir, 0o750); err != nil {
 		t.Fatal(err)
 	}
 
@@ -285,7 +285,7 @@ func TestCopyDirFailOpen(t *testing.T) {
 	srcf.Close()
 
 	// setup source file so that it cannot be read
-	if err = os.Chmod(srcfn, 0222); err != nil {
+	if err = os.Chmod(srcfn, 0o220); err != nil {
 		t.Fatal(err)
 	}
 
@@ -419,11 +419,11 @@ func TestCopyFileLongFilePath(t *testing.T) {
 	}
 
 	fullPath := filepath.Join(dir, dirName, string(os.PathSeparator))
-	if err := os.MkdirAll(fullPath, 0755); err != nil && !os.IsExist(err) {
+	if err := os.MkdirAll(fullPath, 0o750); err != nil && !os.IsExist(err) {
 		t.Fatalf("%+v", fmt.Errorf("unable to create temp directory: %s", fullPath))
 	}
 
-	err = os.WriteFile(fullPath+"src", []byte(nil), 0644)
+	err = os.WriteFile(fullPath+"src", []byte(nil), 0o640)
 	if err != nil {
 		t.Fatalf("%+v", err)
 	}
@@ -460,7 +460,7 @@ func TestCopyFileFail(t *testing.T) {
 
 	cleanup := setupInaccessibleDir(t, func(dir string) error {
 		dstdir = filepath.Join(dir, "dir")
-		return os.Mkdir(dstdir, 0777)
+		return os.Mkdir(dstdir, 0o770)
 	})
 	defer cleanup()
 
@@ -493,7 +493,7 @@ func setupInaccessibleDir(t *testing.T, op func(dir string) error) func() {
 	subdir := filepath.Join(dir, "dir")
 
 	cleanup := func() {
-		if err := os.Chmod(subdir, 0777); err != nil {
+		if err := os.Chmod(subdir, 0o770); err != nil {
 			t.Error(err)
 		}
 		if err := os.RemoveAll(dir); err != nil {
@@ -501,7 +501,7 @@ func setupInaccessibleDir(t *testing.T, op func(dir string) error) func() {
 		}
 	}
 
-	if err := os.Mkdir(subdir, 0777); err != nil {
+	if err := os.Mkdir(subdir, 0o770); err != nil {
 		cleanup()
 		t.Fatal(err)
 		return nil
@@ -513,7 +513,7 @@ func setupInaccessibleDir(t *testing.T, op func(dir string) error) func() {
 		return nil
 	}
 
-	if err := os.Chmod(subdir, 0666); err != nil {
+	if err := os.Chmod(subdir, 0o660); err != nil {
 		cleanup()
 		t.Fatal(err)
 		return nil
@@ -532,7 +532,7 @@ func TestIsDir(t *testing.T) {
 
 	cleanup := setupInaccessibleDir(t, func(dir string) error {
 		dn = filepath.Join(dir, "dir")
-		return os.Mkdir(dn, 0777)
+		return os.Mkdir(dn, 0o770)
 	})
 	defer cleanup()
 
@@ -575,7 +575,7 @@ func TestIsSymlink(t *testing.T) {
 	defer os.RemoveAll(dir)
 
 	dirPath := filepath.Join(dir, "directory")
-	if err = os.MkdirAll(dirPath, 0777); err != nil {
+	if err = os.MkdirAll(dirPath, 0o770); err != nil {
 		t.Fatal(err)
 	}
 
