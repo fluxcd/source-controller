@@ -22,7 +22,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -312,14 +311,6 @@ func mustInitStorage(path string, storageAdvAddr string, artifactRetentionTTL ti
 }
 
 func determineAdvStorageAddr(storageAddr string, l logr.Logger) string {
-	// TODO(hidde): remove next MINOR prerelease as it can be passed in using
-	//  Kubernetes' substitution.
-	if os.Getenv("RUNTIME_NAMESPACE") != "" {
-		svcParts := strings.Split(os.Getenv("HOSTNAME"), "-")
-		return fmt.Sprintf("%s.%s",
-			strings.Join(svcParts[:len(svcParts)-2], "-"), os.Getenv("RUNTIME_NAMESPACE"))
-	}
-
 	host, port, err := net.SplitHostPort(storageAddr)
 	if err != nil {
 		l.Error(err, "unable to parse storage address")
