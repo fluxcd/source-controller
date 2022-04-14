@@ -72,6 +72,12 @@ type HelmRepositorySpec struct {
 	// AccessFrom defines an Access Control List for allowing cross-namespace references to this object.
 	// +optional
 	AccessFrom *acl.AccessFrom `json:"accessFrom,omitempty"`
+
+	// Type of the HelmRepository.
+	// When this field is set to  "OCI", the URL field value must be prefixed with "oci://".
+	// +kubebuilder:default:="Default"
+	// +optional
+	Type string `json:"type,omitempty"`
 }
 
 // HelmRepositoryStatus defines the observed state of the HelmRepository.

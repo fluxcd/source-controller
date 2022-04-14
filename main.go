@@ -62,6 +62,10 @@ var (
 			Schemes: []string{"http", "https"},
 			New:     getter.NewHTTPGetter,
 		},
+		getter.Provider{
+			Schemes: []string{"oci"},
+			New:     getter.NewOCIGetter,
+		},
 	}
 )
 
@@ -218,6 +222,21 @@ func main() {
 		EventRecorder:  eventRecorder,
 		Metrics:        metricsH,
 		Storage:        storage,
+		Getters:        getters,
+		ControllerName: controllerName,
+	}).SetupWithManagerAndOptions(mgr, controllers.HelmRepositoryReconcilerOptions{
+		MaxConcurrentReconciles: concurrent,
+		RateLimiter:             helper.GetRateLimiter(rateLimiterOptions),
+	}); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", sourcev1.HelmRepositoryKind)
+		os.Exit(1)
+	}
+
+	if err = (&controllers.HelmRepositoryOCI{
+		Client:        mgr.GetClient(),
+		EventRecorder: eventRecorder,
+		Metrics:       metricsH,
+		// Storage:        storage,
 		Getters:        getters,
 		ControllerName: controllerName,
 	}).SetupWithManagerAndOptions(mgr, controllers.HelmRepositoryReconcilerOptions{

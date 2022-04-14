@@ -109,6 +109,11 @@ spec:
                 default: 60s
                 description: The timeout of index downloading, defaults to 60s.
                 type: string
+              type:
+                default: Default
+                description: Type of the HelmRepository. When this field is set to  "OCI",
+                  the URL field value must be prefixed with "oci://".
+                type: string
               url:
                 description: The Helm repository URL, a valid URL contains at least
                   a protocol and host.
@@ -329,6 +334,11 @@ spec:
               timeout:
                 default: 60s
                 description: Timeout of the index fetch operation, defaults to 60s.
+                type: string
+              type:
+                default: Default
+                description: Type of the HelmRepository. When this field is set to  "OCI",
+                  the URL field value must be prefixed with "oci://".
                 type: string
               url:
                 description: URL of the Helm repository, a valid URL contains at least
