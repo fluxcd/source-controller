@@ -17,14 +17,20 @@ limitations under the License.
 package controllers
 
 import (
+	"bytes"
+	"context"
 	"fmt"
+	"io"
+	"io/ioutil"
 	"math/rand"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
+	"golang.org/x/crypto/bcrypt"
 	"helm.sh/helm/v3/pkg/getter"
+	"helm.sh/helm/v3/pkg/registry"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/record"
@@ -33,6 +39,12 @@ import (
 	"github.com/fluxcd/pkg/runtime/controller"
 	"github.com/fluxcd/pkg/runtime/testenv"
 	"github.com/fluxcd/pkg/testserver"
+	"github.com/phayes/freeport"
+
+	"github.com/distribution/distribution/v3/configuration"
+	dockerRegistry "github.com/distribution/distribution/v3/registry"
+	_ "github.com/distribution/distribution/v3/registry/auth/htpasswd"
+	_ "github.com/distribution/distribution/v3/registry/storage/driver/inmemory"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
 	"github.com/fluxcd/source-controller/internal/cache"
@@ -75,8 +87,88 @@ var (
 	tlsCA         []byte
 )
 
+var (
+	testRegistryClient *registry.Client
+	testRegistryserver *RegistryClientTestServer
+)
+
+var (
+	testWorkspaceDir         = "registry-test"
+	testHtpasswdFileBasename = "authtest.htpasswd"
+	testUsername             = "myuser"
+	testPassword             = "mypass"
+)
+
 func init() {
 	rand.Seed(time.Now().UnixNano())
+}
+
+type RegistryClientTestServer struct {
+	Out                io.Writer
+	DockerRegistryHost string
+	WorkspaceDir       string
+	RegistryClient     *registry.Client
+}
+
+func SetupServer(server *RegistryClientTestServer) string {
+	// Create a temporary workspace directory for the registry
+	server.WorkspaceDir = testWorkspaceDir
+	os.RemoveAll(server.WorkspaceDir)
+	err := os.Mkdir(server.WorkspaceDir, 0700)
+	if err != nil {
+		panic(fmt.Sprintf("failed to create workspace directory: %s", err))
+	}
+
+	var out bytes.Buffer
+	server.Out = &out
+
+	// init test client
+	server.RegistryClient, err = registry.NewClient(
+		registry.ClientOptDebug(true),
+		registry.ClientOptWriter(server.Out),
+	)
+	if err != nil {
+		panic(fmt.Sprintf("failed to create registry client: %s", err))
+	}
+
+	// create htpasswd file (w BCrypt, which is required)
+	pwBytes, err := bcrypt.GenerateFromPassword([]byte(testPassword), bcrypt.DefaultCost)
+	if err != nil {
+		panic(fmt.Sprintf("failed to generate password: %s", err))
+	}
+
+	htpasswdPath := filepath.Join(testWorkspaceDir, testHtpasswdFileBasename)
+	err = ioutil.WriteFile(htpasswdPath, []byte(fmt.Sprintf("%s:%s\n", testUsername, string(pwBytes))), 0644)
+	if err != nil {
+		panic(fmt.Sprintf("failed to create htpasswd file: %s", err))
+	}
+
+	// Registry config
+	config := &configuration.Configuration{}
+	port, err := freeport.GetFreePort()
+	if err != nil {
+		panic(fmt.Sprintf("failed to get free port: %s", err))
+	}
+
+	server.DockerRegistryHost = fmt.Sprintf("localhost:%d", port)
+	config.HTTP.Addr = fmt.Sprintf("127.0.0.1:%d", port)
+	config.HTTP.DrainTimeout = time.Duration(10) * time.Second
+	config.Storage = map[string]configuration.Parameters{"inmemory": map[string]interface{}{}}
+	config.Auth = configuration.Auth{
+		"htpasswd": configuration.Parameters{
+			"realm": "localhost",
+			"path":  htpasswdPath,
+		},
+	}
+	dockerRegistry, err := dockerRegistry.NewRegistry(context.Background(), config)
+	if err != nil {
+		panic(fmt.Sprintf("failed to create docker registry: %s", err))
+	}
+
+	// Start Docker registry
+	go dockerRegistry.ListenAndServe()
+
+	return server.WorkspaceDir
 }
 
 func TestMain(m *testing.M) {
@@ -100,6 +192,14 @@ func TestMain(m *testing.M) {
 	}
 
 	testMetricsH = controller.MustMakeMetrics(testEnv)
+
+	testRegistryserver = &RegistryClientTestServer{}
+	registryWorskpaceDir := SetupServer(testRegistryserver)
+
+	testRegistryClient, err = registry.NewClient(registry.ClientOptWriter(os.Stdout))
+	if err != nil {
+		panic(fmt.Sprintf("Failed to create OCI registry client"))
+	}
 
 	if err := (&GitRepositoryReconciler{
 		Client:        testEnv,
@@ -163,6 +263,10 @@ func TestMain(m *testing.M) {
 	testServer.Stop()
 	if err := os.RemoveAll(testServer.Root()); err != nil {
 		panic(fmt.Sprintf("Failed to remove storage server dir: %v", err))
+	}
+
+	if err := os.RemoveAll(registryWorskpaceDir); err != nil {
+		panic(fmt.Sprintf("Failed to remove registry workspace dir: %v", err))
 	}
 
 	os.Exit(code)
