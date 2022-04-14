@@ -31,6 +31,9 @@ const (
 	// HelmRepositoryURLIndexKey is the key used for indexing HelmRepository
 	// objects by their HelmRepositorySpec.URL.
 	HelmRepositoryURLIndexKey = ".metadata.helmRepositoryURL"
+
+	HelmRepositoryTypeDefault = "Default"
+	HelmRepositoryTypeOCI     = "OCI"
 )
 
 // HelmRepositorySpec specifies the required configuration to produce an
@@ -78,6 +81,12 @@ type HelmRepositorySpec struct {
 	// NOTE: Not implemented, provisional as of https://github.com/fluxcd/flux2/pull/2092
 	// +optional
 	AccessFrom *acl.AccessFrom `json:"accessFrom,omitempty"`
+
+	// Type of the HelmRepository.
+	// When this field is set to  "OCI", the URL field value must be prefixed with "oci://".
+	// +kubebuilder:default:="Default"
+	// +optional
+	Type string `json:"type,omitempty"`
 }
 
 // HelmRepositoryStatus records the observed state of the HelmRepository.
