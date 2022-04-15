@@ -19,12 +19,12 @@ require (
 	github.com/darkowlzz/controller-check v0.0.0-20220119215126-648356cef22c
 	github.com/docker/go-units v0.4.0
 	github.com/elazarl/goproxy v0.0.0-20220115173737-adb46da277ac
-	github.com/fluxcd/pkg/apis/meta v0.12.1
+	github.com/fluxcd/pkg/apis/meta v0.12.2
 	github.com/fluxcd/pkg/gittestserver v0.5.1
 	github.com/fluxcd/pkg/gitutil v0.1.0
-	github.com/fluxcd/pkg/helmtestserver v0.7.1
+	github.com/fluxcd/pkg/helmtestserver v0.7.2
 	github.com/fluxcd/pkg/lockedfile v0.1.0
-	github.com/fluxcd/pkg/runtime v0.14.0
+	github.com/fluxcd/pkg/runtime v0.14.1
 	github.com/fluxcd/pkg/ssh v0.3.2
 	github.com/fluxcd/pkg/testserver v0.2.0
 	github.com/fluxcd/pkg/untar v0.1.0
@@ -43,21 +43,15 @@ require (
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
 	google.golang.org/api v0.73.0
 	gotest.tools v2.2.0+incompatible
-	helm.sh/helm/v3 v3.8.1
-	k8s.io/api v0.23.4
-	k8s.io/apimachinery v0.23.4
-	k8s.io/client-go v0.23.4
+	helm.sh/helm/v3 v3.8.2
+	k8s.io/api v0.23.5
+	k8s.io/apimachinery v0.23.5
+	k8s.io/client-go v0.23.5
 	k8s.io/utils v0.0.0-20220210201930-3a6ce19ff2f9
 	sigs.k8s.io/cli-utils v0.29.3
-	sigs.k8s.io/controller-runtime v0.11.1
+	sigs.k8s.io/controller-runtime v0.11.2
 	sigs.k8s.io/yaml v1.3.0
 )
-
-// Temporary fork of Helm v3.8.1 with patch applied from
-// https://github.com/helm/helm/pull/10568 to solve
-// https://github.com/fluxcd/source-controller/issues/578.
-// TODO: Remove once Helm version with patch is released.
-replace helm.sh/helm/v3 v3.8.1 => github.com/hiddeco/helm/v3 v3.8.2-0.20220311115129-ae3ec836f6eb
 
 // Fix GMS-2022-20
 replace github.com/docker/distribution => github.com/docker/distribution v2.8.0+incompatible
@@ -99,7 +93,7 @@ require (
 	github.com/bugsnag/panicwrap v1.3.4 // indirect
 	github.com/cespare/xxhash/v2 v2.1.2 // indirect
 	github.com/chai2010/gettext-go v0.0.0-20160711120539-c6fed771bfd5 // indirect
-	github.com/containerd/containerd v1.5.9 // indirect
+	github.com/containerd/containerd v1.6.1 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/docker/cli v20.10.11+incompatible // indirect
 	github.com/docker/distribution v2.8.0+incompatible // indirect
@@ -223,14 +217,14 @@ require (
 	gopkg.in/warnings.v0 v0.1.2 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b // indirect
-	k8s.io/apiextensions-apiserver v0.23.4 // indirect
-	k8s.io/apiserver v0.23.4 // indirect
-	k8s.io/cli-runtime v0.23.4 // indirect
-	k8s.io/component-base v0.23.4 // indirect
+	k8s.io/apiextensions-apiserver v0.23.5 // indirect
+	k8s.io/apiserver v0.23.5 // indirect
+	k8s.io/cli-runtime v0.23.5 // indirect
+	k8s.io/component-base v0.23.5 // indirect
 	k8s.io/klog/v2 v2.50.0 // indirect
 	k8s.io/kube-openapi v0.0.0-20220124234850-424119656bbf // indirect
-	k8s.io/kubectl v0.23.4 // indirect
-	oras.land/oras-go v1.1.0 // indirect
+	k8s.io/kubectl v0.23.5 // indirect
+	oras.land/oras-go v1.1.1 // indirect
 	sigs.k8s.io/json v0.0.0-20211208200746-9f7c6b3444d2 // indirect
 	sigs.k8s.io/kustomize/api v0.10.1 // indirect
 	sigs.k8s.io/kustomize/kyaml v0.13.0 // indirect
