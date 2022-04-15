@@ -205,12 +205,22 @@ func (r *HelmRepositoryOCI) reconcileSource(ctx context.Context, obj *sourcev1.H
 
 	err := r.Validate(obj.Spec.URL, logOpts...)
 	if err != nil {
-		e := &serror.Event{
-			Err:    fmt.Errorf("failed to validate Helm repository: %w", err),
-			Reason: sourcev1.AuthenticationFailedReason,
+		switch err.(type) {
+		case *url.Error:
+			e := &serror.Stalling{
+				Err:    fmt.Errorf("invalid Helm repository URL: %w", err),
+				Reason: sourcev1.URLInvalidReason,
+			}
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
+			return sreconcile.ResultEmpty, e
+		default:
+			e := &serror.Stalling{
+				Err:    fmt.Errorf("failed to validate Helm repository: %w", err),
+				Reason: meta.FailedReason,
+			}
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
+			return sreconcile.ResultEmpty, e
 		}
-		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
-		return sreconcile.ResultEmpty, e
 	}
 
 	return sreconcile.ResultSuccess, nil
