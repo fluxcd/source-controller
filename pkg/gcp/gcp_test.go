@@ -78,7 +78,6 @@ var (
 func TestMain(m *testing.M) {
 	hc, close = newTestServer(func(w http.ResponseWriter, r *http.Request) {
 		io.Copy(io.Discard, r.Body)
-
 		switch r.RequestURI {
 		case fmt.Sprintf("/storage/v1/b/%s?alt=json&prettyPrint=false&projection=full", bucketName):
 			w.WriteHeader(200)
@@ -103,6 +102,7 @@ func TestMain(m *testing.M) {
 				log.Fatalf("error writing jsonResponse %v\n", err)
 			}
 		case fmt.Sprintf("/storage/v1/b/%s/o?alt=json&delimiter=&endOffset=&pageToken=&prefix=&prettyPrint=false&projection=full&startOffset=&versions=false", bucketName):
+		case fmt.Sprintf("/storage/v1/b/%s/o?alt=json&delimiter=&endOffset=&includeTrailingDelimiter=false&pageToken=&prefix=&prettyPrint=false&projection=full&startOffset=&versions=false", bucketName):
 			w.WriteHeader(200)
 			response := &raw.Objects{}
 			response.Items = append(response.Items, getObject())
