@@ -125,8 +125,9 @@ func (r *HelmRepositoryReconciler) SetupWithManagerAndOptions(mgr ctrl.Manager, 
 		For(&sourcev1.HelmRepository{}).
 		WithEventFilter(
 			predicate.And(
-				DefaultHelmRepositoryPredicate{},
-				predicate.Or(predicate.GenerationChangedPredicate{}, predicates.ReconcileRequestedPredicate{})),
+				predicate.NewPredicateFuncs(HelmRepositoryTypeFilter(sourcev1.HelmRepositoryTypeDefault)),
+				predicate.Or(predicate.GenerationChangedPredicate{}, predicates.ReconcileRequestedPredicate{}),
+			),
 		).
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: opts.MaxConcurrentReconciles,

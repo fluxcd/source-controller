@@ -1,42 +1,22 @@
 package controllers
 
 import (
-	"sigs.k8s.io/controller-runtime/pkg/event"
-	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
 )
 
-type OCIHelmRepositoryPredicate struct {
-	predicate.Funcs
-}
+func HelmRepositoryTypeFilter(typ string) func(client.Object) bool {
+	return func(o client.Object) bool {
+		if o == nil {
+			return false
+		}
 
-func (OCIHelmRepositoryPredicate) Update(e event.UpdateEvent) bool {
-	if e.ObjectNew == nil {
-		return false
+		hr, ok := o.(*sourcev1.HelmRepository)
+		if !ok {
+			return false
+		}
+
+		return hr.Spec.Type == typ
 	}
-
-	newHR, ok := e.ObjectNew.(*sourcev1.HelmRepository)
-	if !ok {
-		return false
-	}
-
-	return newHR.Spec.Type == sourcev1.HelmRepositoryTypeOCI
-}
-
-type DefaultHelmRepositoryPredicate struct {
-	predicate.Funcs
-}
-
-func (DefaultHelmRepositoryPredicate) Update(e event.UpdateEvent) bool {
-	if e.ObjectNew == nil {
-		return false
-	}
-
-	newHR, ok := e.ObjectNew.(*sourcev1.HelmRepository)
-	if !ok {
-		return false
-	}
-
-	return newHR.Spec.Type == sourcev1.HelmRepositoryTypeDefault
 }

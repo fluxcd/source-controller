@@ -76,7 +76,7 @@ func (r *HelmRepositoryOCI) SetupWithManagerAndOptions(mgr ctrl.Manager, opts He
 		For(&sourcev1.HelmRepository{}).
 		WithEventFilter(
 			predicate.And(
-				OCIHelmRepositoryPredicate{},
+				predicate.NewPredicateFuncs(HelmRepositoryTypeFilter(sourcev1.HelmRepositoryTypeOCI)),
 				predicate.Or(predicate.GenerationChangedPredicate{}, predicates.ReconcileRequestedPredicate{})),
 		).
 		WithOptions(controller.Options{
