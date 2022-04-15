@@ -197,7 +197,7 @@ func TestGitRepositoryReconciler_Reconcile(t *testing.T) {
 
 	// Check if the object status is valid.
 	condns := &status.Conditions{NegativePolarity: gitRepositoryReadyCondition.NegativePolarity}
-	checker := status.NewChecker(testEnv.Client, testEnv.GetScheme(), condns)
+	checker := status.NewChecker(testEnv.Client, condns)
 	checker.CheckErr(ctx, obj)
 
 	// kstatus client conformance check.

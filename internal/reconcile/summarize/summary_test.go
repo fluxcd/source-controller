@@ -282,7 +282,7 @@ func TestSummarizeAndPatch(t *testing.T) {
 
 			// Check if the object status is valid as per kstatus.
 			condns := &status.Conditions{NegativePolarity: testReadyConditions.NegativePolarity}
-			checker := status.NewChecker(client, scheme, condns)
+			checker := status.NewChecker(client, condns)
 			checker.CheckErr(ctx, obj)
 		})
 	}
