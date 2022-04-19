@@ -38,6 +38,7 @@ require (
 	github.com/minio/minio-go/v7 v7.0.24
 	github.com/onsi/gomega v1.19.0
 	github.com/otiai10/copy v1.7.0
+	github.com/prometheus/client_golang v1.12.1
 	github.com/spf13/pflag v1.0.5
 	golang.org/x/crypto v0.0.0-20220411220226-7b82a4e95df4
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
@@ -173,7 +174,6 @@ require (
 	github.com/pkg/browser v0.0.0-20210115035449-ce105d075bb4 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
-	github.com/prometheus/client_golang v1.12.1 // indirect
 	github.com/prometheus/client_model v0.2.0 // indirect
 	github.com/prometheus/common v0.32.1 // indirect
 	github.com/prometheus/procfs v0.7.3 // indirect

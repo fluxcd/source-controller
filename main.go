@@ -233,6 +233,9 @@ func main() {
 
 		c = cache.New(helmCacheMaxSize, interval)
 	}
+
+	cacheRecorder := cache.MustMakeMetrics()
+
 	if err = (&controllers.HelmChartReconciler{
 		Client:         mgr.GetClient(),
 		Storage:        storage,
@@ -242,6 +245,7 @@ func main() {
 		ControllerName: controllerName,
 		Cache:          c,
 		TTL:            ttl,
+		CacheRecorder: cacheRecorder,
 	}).SetupWithManagerAndOptions(mgr, controllers.HelmChartReconcilerOptions{
 		MaxConcurrentReconciles: concurrent,
 		RateLimiter:             helper.GetRateLimiter(rateLimiterOptions),

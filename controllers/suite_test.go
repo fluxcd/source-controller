@@ -129,15 +129,17 @@ func TestMain(m *testing.M) {
 		panic(fmt.Sprintf("Failed to start HelmRepositoryReconciler: %v", err))
 	}
 
-	cache := cache.New(5, 1*time.Second)
+	c := cache.New(5, 1*time.Second)
+	cacheRecorder := cache.MustMakeMetrics()
 	if err := (&HelmChartReconciler{
 		Client:        testEnv,
 		EventRecorder: record.NewFakeRecorder(32),
 		Metrics:       testMetricsH,
 		Getters:       testGetters,
 		Storage:       testStorage,
-		Cache:         cache,
+		Cache:         c,
 		TTL:           1 * time.Second,
+		CacheRecorder: cacheRecorder,
 	}).SetupWithManager(testEnv); err != nil {
 		panic(fmt.Sprintf("Failed to start HelmRepositoryReconciler: %v", err))
 	}

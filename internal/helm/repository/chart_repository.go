@@ -30,6 +30,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/Masterminds/semver/v3"
 	"helm.sh/helm/v3/pkg/getter"
@@ -38,6 +39,7 @@ import (
 
 	"github.com/fluxcd/pkg/version"
 
+	"github.com/fluxcd/source-controller/internal/cache"
 	"github.com/fluxcd/source-controller/internal/helm"
 	"github.com/fluxcd/source-controller/internal/transport"
 )
@@ -70,13 +72,52 @@ type ChartRepository struct {
 	tlsConfig *tls.Config
 
 	*sync.RWMutex
+
+	cacheInfo
+}
+
+type cacheInfo struct {
+	// In memory cache of the index.yaml file.
+	IndexCache *cache.Cache
+	// IndexKey is the cache key for the index.yaml file.
+	IndexKey string
+	// IndexTTL is the cache TTL for the index.yaml file.
+	IndexTTL time.Duration
+	// RecordIndexCacheMetric records the cache hit/miss metrics for the index.yaml file.
+	RecordIndexCacheMetric RecordMetricsFunc
+}
+
+// ChartRepositoryOptions is a function that can be passed to NewChartRepository
+// to configure a ChartRepository.
+type ChartRepositoryOption func(*ChartRepository) error
+
+// RecordMetricsFunc is a function that records metrics.
+type RecordMetricsFunc func(event string)
+
+// WithMemoryCache returns a ChartRepositoryOptions that will enable the
+// ChartRepository to cache the index.yaml file in memory.
+// The cache key have to be safe in multi-tenancy environments,
+// as otherwise it could be used as a vector to bypass the helm repository's authentication.
+func WithMemoryCache(key string, c *cache.Cache, ttl time.Duration, rec RecordMetricsFunc) ChartRepositoryOption {
+	return func(r *ChartRepository) error {
+		if c != nil {
+			if key == "" {
+				return errors.New("cache key cannot be empty")
+			}
+		}
+		r.IndexCache = c
+		r.IndexKey = key
+		r.IndexTTL = ttl
+		r.RecordIndexCacheMetric = rec
+		return nil
+	}
 }
 
 // NewChartRepository constructs and returns a new ChartRepository with
 // the ChartRepository.Client configured to the getter.Getter for the
 // repository URL scheme. It returns an error on URL parsing failures,
 // or if there is no getter available for the scheme.
-func NewChartRepository(repositoryURL, cachePath string, providers getter.Providers, tlsConfig *tls.Config, opts []getter.Option) (*ChartRepository, error) {
+func NewChartRepository(repositoryURL, cachePath string, providers getter.Providers, tlsConfig *tls.Config, getterOpts []getter.Option, chartRepoOpts ...ChartRepositoryOption) (*ChartRepository, error) {
 	u, err := url.Parse(repositoryURL)
 	if err != nil {
 		return nil, err
@@ -90,8 +131,15 @@ func NewChartRepository(repositoryURL, cachePath string, providers getter.Provid
 	r.URL = repositoryURL
 	r.CachePath = cachePath
 	r.Client = c
-	r.Options = opts
+	r.Options = getterOpts
 	r.tlsConfig = tlsConfig
+
+	for _, opt := range chartRepoOpts {
+		if err := opt(r); err != nil {
+			return nil, err
+		}
+	}
+
 	return r, nil
 }
 
@@ -292,14 +340,39 @@ func (r *ChartRepository) CacheIndex() (string, error) {
 	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
-// StrategicallyLoadIndex lazy-loads the Index from CachePath using
-// LoadFromCache if it does not HasIndex.
+// CacheIndexInMemory attempts to cache the index in memory.
+// It returns an error if it fails.
+// The cache key have to be safe in multi-tenancy environments,
+// as otherwise it could be used as a vector to bypass the helm repository's authentication.
+func (r *ChartRepository) CacheIndexInMemory() error {
+	// Cache the index if it was successfully retrieved
+	// and the chart was successfully built
+	if r.IndexCache != nil && r.Index != nil {
+		err := r.IndexCache.Set(r.IndexKey, r.Index, r.IndexTTL)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// StrategicallyLoadIndex lazy-loads the Index
+// first from Indexcache,
+// then from CachePath using oadFromCache if it does not HasIndex.
 // If not HasCacheFile, a cache attempt is made using CacheIndex
 // before continuing to load.
 func (r *ChartRepository) StrategicallyLoadIndex() (err error) {
 	if r.HasIndex() {
 		return
 	}
+
+	if r.IndexCache != nil {
+		if found := r.LoadFromMemCache(); found {
+			return
+		}
+	}
+
 	if !r.HasCacheFile() {
 		if _, err = r.CacheIndex(); err != nil {
 			err = fmt.Errorf("failed to strategically load index: %w", err)
@@ -311,6 +384,28 @@ func (r *ChartRepository) StrategicallyLoadIndex() (err error) {
 		return
 	}
 	return
+}
+
+// LoadFromMemCache attempts to load the Index from the provided cache.
+// It returns true if the Index was found in the cache, and false otherwise.
+func (r *ChartRepository) LoadFromMemCache() bool {
+	if index, found := r.IndexCache.Get(r.IndexKey); found {
+		r.Lock()
+		r.Index = index.(*repo.IndexFile)
+		r.Unlock()
+
+		// record the cache hit
+		if r.RecordIndexCacheMetric != nil {
+			r.RecordIndexCacheMetric(cache.CacheEventTypeHit)
+		}
+		return true
+	}
+
+	// record the cache miss
+	if r.RecordIndexCacheMetric != nil {
+		r.RecordIndexCacheMetric(cache.CacheEventTypeMiss)
+	}
+	return false
 }
 
 // LoadFromCache attempts to load the Index from the configured CachePath.
@@ -373,6 +468,14 @@ func (r *ChartRepository) Unload() {
 	r.Lock()
 	defer r.Unlock()
 	r.Index = nil
+}
+
+// SetMemCache sets the cache to use for this repository.
+func (r *ChartRepository) SetMemCache(key string, c *cache.Cache, ttl time.Duration, rec RecordMetricsFunc) {
+	r.IndexKey = key
+	r.IndexCache = c
+	r.IndexTTL = ttl
+	r.RecordIndexCacheMetric = rec
 }
 
 // RemoveCache removes the CachePath if Cached.
