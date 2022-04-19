@@ -18,7 +18,7 @@ require (
 	github.com/cyphar/filepath-securejoin v0.2.3
 	github.com/darkowlzz/controller-check v0.0.0-20220325122359-11f5827b7981
 	github.com/docker/go-units v0.4.0
-	github.com/elazarl/goproxy v0.0.0-20220403042543-a53172b9392e
+	github.com/elazarl/goproxy v0.0.0-20220417044921-416226498f94
 	github.com/fluxcd/pkg/apis/meta v0.12.2
 	github.com/fluxcd/pkg/gittestserver v0.5.2
 	github.com/fluxcd/pkg/gitutil v0.1.0
