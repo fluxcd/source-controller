@@ -2,6 +2,34 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.24.0
+
+**Release date:** 2022-04-19
+
+This prerelease enables the Helm chart dependency manager to make use of the
+opt-in memory cache introduced in `v0.23.0`, revises the file permissions set
+by the controller, and updates various dependencies.
+
+:warning: **Breaking change:** From this release on, the `RUNTIME_NAMESPACE`
+environment variable is no longer taken into account to configure the
+advertised HTTP/S address of the storage. Instead, [variable
+substitution](https://kubernetes.io/docs/tasks/inject-data-application/define-interdependent-environment-variables/#define-an-environment-dependent-variable-for-a-container)
+must be used, as described in [the changelog entry for `v0.5.2`](#052).
+
+Improvements:
+- Change all file permissions to octal format
+  [#653](https://github.com/fluxcd/source-controller/pull/653)
+- Enable dependency manager to use in-memory cache
+  [#667](https://github.com/fluxcd/source-controller/pull/667)
+- Update libgit2 image to v1.3.1
+  [#671](https://github.com/fluxcd/source-controller/pull/671)
+- Remove hostname hyphen split block
+  [#672](https://github.com/fluxcd/source-controller/pull/672)
+- Update dependencies
+  [#675](https://github.com/fluxcd/source-controller/pull/675)
+  [#676](https://github.com/fluxcd/source-controller/pull/676)
+  [#677](https://github.com/fluxcd/source-controller/pull/677)
+
 ## 0.23.0
 
 **Release date:** 2022-04-12
