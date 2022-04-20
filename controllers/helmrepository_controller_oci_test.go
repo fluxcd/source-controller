@@ -14,6 +14,7 @@ limitations under the License.
 package controllers
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/darkowlzz/controller-check/status"
@@ -63,7 +64,7 @@ func TestHelmRepositoryOCIReconciler_Reconcile(t *testing.T) {
 		},
 		Spec: sourcev1.HelmRepositorySpec{
 			Interval: metav1.Duration{Duration: interval},
-			URL:      testServer.URL(),
+			URL:      fmt.Sprintf("oci://%s", testRegistryserver.DockerRegistryHost),
 			SecretRef: &meta.LocalObjectReference{
 				Name: secret.Name,
 			},
@@ -124,7 +125,7 @@ func TestHelmRepositoryOCIReconciler_Reconcile(t *testing.T) {
 
 	g.Expect(testEnv.Delete(ctx, obj)).To(Succeed())
 
-	// Wait for OCIArtifact to be deleted
+	// Wait for HelmRepository to be deleted
 	g.Eventually(func() bool {
 		if err := testEnv.Get(ctx, key, obj); err != nil {
 			return apierrors.IsNotFound(err)
