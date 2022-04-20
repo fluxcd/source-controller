@@ -27,6 +27,7 @@ import (
 	"github.com/go-logr/logr"
 	flag "github.com/spf13/pflag"
 	"helm.sh/helm/v3/pkg/getter"
+	"helm.sh/helm/v3/pkg/registry"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -68,6 +69,15 @@ var (
 		},
 	}
 )
+
+type LogWriter struct {
+	log logr.Logger
+}
+
+func (l LogWriter) Write(p []byte) (n int, err error) {
+	l.log.Info(string(p))
+	return len(p), nil
+}
 
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
@@ -232,13 +242,20 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err = (&controllers.HelmRepositoryOCI{
+	rClient, err := registry.NewClient(registry.ClientOptWriter(LogWriter{logger.NewLogger(logger.Options{}).WithName("registry-client")}))
+	if err != nil {
+		setupLog.Error(err, "unable to create OCI registry client")
+		os.Exit(1)
+	}
+
+	if err = (&controllers.HelmRepositoryOCIReconciler{
 		Client:        mgr.GetClient(),
 		EventRecorder: eventRecorder,
 		Metrics:       metricsH,
 		// Storage:        storage,
 		Getters:        getters,
 		ControllerName: controllerName,
+		RegistryClient: rClient,
 	}).SetupWithManagerAndOptions(mgr, controllers.HelmRepositoryReconcilerOptions{
 		MaxConcurrentReconciles: concurrent,
 		RateLimiter:             helper.GetRateLimiter(rateLimiterOptions),
@@ -269,6 +286,7 @@ func main() {
 
 	if err = (&controllers.HelmChartReconciler{
 		Client:         mgr.GetClient(),
+		RegistryClient: rClient,
 		Storage:        storage,
 		Getters:        getters,
 		EventRecorder:  eventRecorder,

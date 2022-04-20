@@ -229,6 +229,16 @@ func TestMain(m *testing.M) {
 		panic(fmt.Sprintf("Failed to start HelmRepositoryReconciler: %v", err))
 	}
 
+	if err = (&HelmRepositoryOCIReconciler{
+		Client:         testEnv,
+		EventRecorder:  record.NewFakeRecorder(32),
+		Metrics:        testMetricsH,
+		Getters:        testGetters,
+		RegistryClient: testRegistryClient,
+	}).SetupWithManager(testEnv); err != nil {
+		panic(fmt.Sprintf("Failed to start HelmRepositoryOCIReconciler: %v", err))
+	}
+
 	c := cache.New(5, 1*time.Second)
 	cacheRecorder := cache.MustMakeMetrics()
 	if err := (&HelmChartReconciler{

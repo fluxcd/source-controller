@@ -14,6 +14,7 @@ limitations under the License.
 package controllers
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/darkowlzz/controller-check/status"
@@ -22,7 +23,6 @@ import (
 	"github.com/fluxcd/pkg/runtime/patch"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
 	. "github.com/onsi/gomega"
-	"helm.sh/helm/v3/pkg/registry"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -34,10 +34,10 @@ func TestHelmRepositoryOCIReconciler_Reconcile(t *testing.T) {
 	g := NewWithT(t)
 
 	// Login to the registry
-	err := testRegistryserver.RegistryClient.Login(testRegistryserver.DockerRegistryHost,
-		registry.LoginOptBasicAuth(testUsername, testPassword),
-		registry.LoginOptInsecure(true))
-	g.Expect(err).NotTo(HaveOccurred())
+	// err := testRegistryserver.RegistryClient.Login(testRegistryserver.DockerRegistryHost,
+	// 	registry.LoginOptBasicAuth(testUsername, testPassword),
+	// 	registry.LoginOptInsecure(true))
+	// g.Expect(err).NotTo(HaveOccurred())
 
 	ns, err := testEnv.CreateNamespace(ctx, "helmrepository-oci-reconcile-test")
 	g.Expect(err).ToNot(HaveOccurred())
@@ -63,7 +63,7 @@ func TestHelmRepositoryOCIReconciler_Reconcile(t *testing.T) {
 		},
 		Spec: sourcev1.HelmRepositorySpec{
 			Interval: metav1.Duration{Duration: interval},
-			URL:      testServer.URL(),
+			URL:      fmt.Sprintf("oci://%s", testRegistryserver.DockerRegistryHost),
 			SecretRef: &meta.LocalObjectReference{
 				Name: secret.Name,
 			},
@@ -124,7 +124,7 @@ func TestHelmRepositoryOCIReconciler_Reconcile(t *testing.T) {
 
 	g.Expect(testEnv.Delete(ctx, obj)).To(Succeed())
 
-	// Wait for OCIArtifact to be deleted
+	// Wait for HelmRepository to be deleted
 	g.Eventually(func() bool {
 		if err := testEnv.Get(ctx, key, obj); err != nil {
 			return apierrors.IsNotFound(err)
