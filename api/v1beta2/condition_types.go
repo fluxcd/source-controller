@@ -39,6 +39,10 @@ const (
 	// is enabled.
 	SourceVerifiedCondition string = "SourceVerified"
 
+	//SourceValidCondition indicates the validity of the Source.
+	// If True, the Source is valid. If False, it is not valid.
+	SourceValidCondition string = "SourceValid"
+
 	// FetchFailedCondition indicates a transient or persistent fetch failure
 	// of an upstream Source.
 	// If True, observations on the upstream Source revision may be impossible,

@@ -31,12 +31,14 @@ var helmRepositoryOCIReadyCondition = summarize.Conditions{
 	Target: meta.ReadyCondition,
 	Owned: []string{
 		sourcev1.FetchFailedCondition,
+		sourcev1.SourceValidCondition,
 		meta.ReadyCondition,
 		meta.ReconcilingCondition,
 		meta.StalledCondition,
 	},
 	Summarize: []string{
 		sourcev1.FetchFailedCondition,
+		sourcev1.SourceValidCondition,
 		meta.StalledCondition,
 		meta.ReconcilingCondition,
 	},
@@ -179,8 +181,7 @@ func (r *HelmRepositoryOCIReconciler) reconcileDelete(ctx context.Context, obj *
 
 // notify emits notification related to the reconciliation.
 func (r *HelmRepositoryOCIReconciler) notify(oldObj, newObj *sourcev1.HelmRepository, res sreconcile.Result, resErr error) {
-	// Notify successful reconciliation for new artifact and recovery from any
-	// failure.
+	// Notify successful recovery from any failure.
 	if resErr == nil && res == sreconcile.ResultSuccess {
 		if sreconcile.FailureRecovery(oldObj, newObj, helmRepositoryOCIFailConditions) {
 			r.Eventf(newObj, corev1.EventTypeNormal,
@@ -216,6 +217,7 @@ func (r *HelmRepositoryOCIReconciler) reconcile(ctx context.Context, obj *source
 		// Prioritize requeue request in the result for successful results.
 		res = sreconcile.LowestRequeuingResult(res, recResult)
 	}
+
 	r.notify(oldObj, obj, res, resErr)
 
 	return res, resErr
@@ -255,46 +257,49 @@ func (r *HelmRepositoryOCIReconciler) reconcileSource(ctx context.Context, obj *
 		logOpts = append(logOpts, logOpt)
 	}
 
-	err := r.Validate(obj.Spec.URL, logOpts...)
-	if err != nil {
-		switch err.(type) {
-		case *url.Error:
-			e := &serror.Stalling{
-				Err:    fmt.Errorf("invalid Helm repository URL: %w", err),
-				Reason: sourcev1.URLInvalidReason,
-			}
-			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
-			return sreconcile.ResultEmpty, e
-		default:
-			e := &serror.Stalling{
-				Err:    fmt.Errorf("failed to validate Helm repository: %w", err),
-				Reason: meta.FailedReason,
-			}
-			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
-			return sreconcile.ResultEmpty, e
-		}
+	if result, err := r.validateSource(ctx, obj, logOpts...); err != nil || result == sreconcile.ResultEmpty {
+		return result, err
 	}
 
 	return sreconcile.ResultSuccess, nil
 }
 
-// Validate the HelmRepository object by checking the url and trying to connect to the repository
-// using the provided credentials.
-func (r *HelmRepositoryOCIReconciler) Validate(u string, loginOpts ...registry.LoginOption) error {
-	target, err := url.Parse(u)
+// validateSource the HelmRepository object by checking the url and connecting to the underlying registry
+// with he provided credentials.
+func (r *HelmRepositoryOCIReconciler) validateSource(ctx context.Context, obj *sourcev1.HelmRepository, loginOpts ...registry.LoginOption) (sreconcile.Result, error) {
+	target, err := url.Parse(obj.Spec.URL)
 	if err != nil {
-		return err
+		e := &serror.Event{
+			Err:    fmt.Errorf("failed to parse URL '%s': %w", obj.Spec.URL, err),
+			Reason: "ValidationError",
+		}
+		conditions.MarkFalse(obj, sourcev1.SourceValidCondition, e.Reason, e.Err.Error())
+		return sreconcile.ResultEmpty, e
 	}
+
+	// Check if the registry is supported
 	if target.Scheme != registry.OCIScheme {
-		return fmt.Errorf("wrong scheme type: %s", target.Scheme)
+		e := &serror.Event{
+			Err:    fmt.Errorf("unsupported registry scheme '%s'", target.Scheme),
+			Reason: "ValidationError",
+		}
+		conditions.MarkFalse(obj, sourcev1.SourceValidCondition, e.Reason, e.Err.Error())
+		return sreconcile.ResultEmpty, e
 	}
 
 	err = r.RegistryClient.Login(target.Host+target.Path, loginOpts...)
 	if err != nil {
-		return fmt.Errorf("failed to login to: %s", target.Host+target.Path)
+		e := &serror.Event{
+			Err:    fmt.Errorf("failed to login to registry '%s': %w", target.String(), err),
+			Reason: "ValidationError",
+		}
+		conditions.MarkFalse(obj, sourcev1.SourceValidCondition, e.Reason, e.Err.Error())
+		return sreconcile.ResultEmpty, e
 	}
 
-	return nil
+	conditions.MarkTrue(obj, sourcev1.SourceValidCondition, meta.SucceededReason, "Helm repository %q is valid", obj.Name)
+
+	return sreconcile.ResultSuccess, nil
 }
 
 func (r *HelmRepositoryOCIReconciler) loginOptionFromSecret(secret corev1.Secret) (registry.LoginOption, error) {
