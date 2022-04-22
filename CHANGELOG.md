@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.24.1
+
+**Release date:** 2022-04-22
+
+This prerelease fixes a regression bug where the controller would panic in
+further to be identified edge-case scenarios in which a `HelmRepository`
+Artifact would not have a size.
+
+Fixes:
+- Fix panic when HelmRepository's artifact size is nil
+  [#683](https://github.com/fluxcd/source-controller/pull/683)
+
 ## 0.24.0
 
 **Release date:** 2022-04-19
