@@ -255,14 +255,17 @@ func (r *HelmRepositoryReconciler) notify(oldObj, newObj *sourcev1.HelmRepositor
 			sourcev1.GroupVersion.Group + "/checksum": newObj.Status.Artifact.Checksum,
 		}
 
-		size := units.HumanSize(float64(*newObj.Status.Artifact.Size))
+		humanReadableSize := "unknown size"
+		if size := newObj.Status.Artifact.Size; size != nil {
+			humanReadableSize = fmt.Sprintf("size %s", units.HumanSize(float64(*size)))
+		}
 
 		var oldChecksum string
 		if oldObj.GetArtifact() != nil {
 			oldChecksum = oldObj.GetArtifact().Checksum
 		}
 
-		message := fmt.Sprintf("stored fetched index of size %s from '%s'", size, chartRepo.URL)
+		message := fmt.Sprintf("stored fetched index of %s from '%s'", humanReadableSize, chartRepo.URL)
 
 		// Notify on new artifact and failure recovery.
 		if oldChecksum != newObj.GetArtifact().Checksum {

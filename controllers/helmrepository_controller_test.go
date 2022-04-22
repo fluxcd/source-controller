@@ -860,6 +860,15 @@ func TestHelmRepositoryReconciler_notify(t *testing.T) {
 			resErr: errors.New("some error"),
 		},
 		{
+			name:   "new artifact with nil size",
+			res:    sreconcile.ResultSuccess,
+			resErr: nil,
+			newObjBeforeFunc: func(obj *sourcev1.HelmRepository) {
+				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Checksum: "yyy", Size: nil}
+			},
+			wantEvent: "Normal NewArtifact stored fetched index of unknown size",
+		},
+		{
 			name:   "new artifact",
 			res:    sreconcile.ResultSuccess,
 			resErr: nil,
