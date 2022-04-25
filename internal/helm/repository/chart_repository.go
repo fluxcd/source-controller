@@ -66,7 +66,8 @@ type ChartRepository struct {
 	// Index contains a loaded chart repository index if not nil.
 	Index *repo.IndexFile
 	// Checksum contains the SHA256 checksum of the loaded chart repository
-	// index bytes.
+	// index bytes. This is different from the checksum of the CachePath, which
+	// may contain unordered entries.
 	Checksum string
 
 	tlsConfig *tls.Config
@@ -87,7 +88,7 @@ type cacheInfo struct {
 	RecordIndexCacheMetric RecordMetricsFunc
 }
 
-// ChartRepositoryOptions is a function that can be passed to NewChartRepository
+// ChartRepositoryOption is a function that can be passed to NewChartRepository
 // to configure a ChartRepository.
 type ChartRepositoryOption func(*ChartRepository) error
 

@@ -56,13 +56,22 @@ type Artifact struct {
 	Size *int64 `json:"size,omitempty"`
 }
 
-// HasRevision returns true if the given revision matches the current Revision
-// of the Artifact.
+// HasRevision returns if the given revision matches the current Revision of
+// the Artifact.
 func (in *Artifact) HasRevision(revision string) bool {
 	if in == nil {
 		return false
 	}
 	return in.Revision == revision
+}
+
+// HasChecksum returns if the given checksum matches the current Checksum of
+// the Artifact.
+func (in *Artifact) HasChecksum(checksum string) bool {
+	if in == nil {
+		return false
+	}
+	return in.Checksum == checksum
 }
 
 // ArtifactDir returns the artifact dir path in the form of
