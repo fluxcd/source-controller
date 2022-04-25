@@ -434,7 +434,7 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 			},
 			Spec: sourcev1.GitRepositorySpec{
 				Interval: metav1.Duration{Duration: interval},
-				Timeout:  &metav1.Duration{Duration: interval},
+				Timeout:  &metav1.Duration{Duration: timeout},
 			},
 		}
 
@@ -653,7 +653,7 @@ func TestGitRepositoryReconciler_reconcileSource_checkoutStrategy(t *testing.T) 
 				},
 				Spec: sourcev1.GitRepositorySpec{
 					Interval:  metav1.Duration{Duration: interval},
-					Timeout:   &metav1.Duration{Duration: interval},
+					Timeout:   &metav1.Duration{Duration: timeout},
 					URL:       server.HTTPAddress() + repoPath,
 					Reference: tt.reference,
 				},
@@ -1517,7 +1517,7 @@ func TestGitRepositoryReconciler_ConditionsUpdate(t *testing.T) {
 					URL:               server.HTTPAddress() + repoPath,
 					GitImplementation: sourcev1.GoGitImplementation,
 					Interval:          metav1.Duration{Duration: interval},
-					Timeout:           &metav1.Duration{Duration: interval},
+					Timeout:           &metav1.Duration{Duration: timeout},
 				},
 			}
 

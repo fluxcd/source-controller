@@ -440,7 +440,7 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 			},
 			Spec: sourcev1.HelmRepositorySpec{
 				Interval: metav1.Duration{Duration: interval},
-				Timeout:  &metav1.Duration{Duration: interval},
+				Timeout:  &metav1.Duration{Duration: timeout},
 			},
 		}
 
