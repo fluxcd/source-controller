@@ -17,7 +17,13 @@ limitations under the License.
 package controllers
 
 import (
+	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
+
+	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
+	"github.com/go-git/go-git/v5/plumbing/format/gitignore"
 )
 
 func Test_artifactSet_Diff(t *testing.T) {
@@ -118,6 +124,113 @@ func Test_artifactSet_Diff(t *testing.T) {
 			result := tt.current.Diff(tt.updated)
 			if result != tt.expected {
 				t.Errorf("Archive() result = %v, wantResult %v", result, tt.expected)
+			}
+		})
+	}
+}
+
+func Test_artifactSet_Filter(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    map[string][]byte
+		want     map[string][]byte
+		patterns []string
+	}{
+		{
+			name: "empty ignore, no diff",
+			input: map[string][]byte{
+				"foo.yaml": nil,
+			},
+			want: map[string][]byte{
+				"foo.yaml": nil,
+			},
+		},
+		{
+			name: "ignore starting with f",
+			input: map[string][]byte{
+				"foo.yaml": nil,
+				"bar.yaml": nil,
+			},
+			want: map[string][]byte{
+				"foo.yaml": nil,
+			},
+			patterns: []string{"f*"},
+		},
+		{
+			name: "ignore all",
+			input: map[string][]byte{
+				"foo.yaml": nil,
+				"bar.yaml": nil,
+			},
+			want: map[string][]byte{},
+			patterns: []string{
+				"*",
+			},
+		},
+		{
+			name: "ignore all except bar.yaml",
+			input: map[string][]byte{
+				"foo.yaml": nil,
+				"bar.yaml": nil,
+			},
+			want: map[string][]byte{
+				"bar.yaml": nil,
+			},
+			patterns: []string{
+				"*",
+				"!bar.yaml",
+			},
+		},
+	}
+
+	createFiles := func(files map[string][]byte) (dir string, err error) {
+		defer func() {
+			if err != nil && dir != "" {
+				os.RemoveAll(dir)
+			}
+		}()
+		dir, err = os.MkdirTemp("", "archive-test-files-")
+		if err != nil {
+			return
+		}
+		for name, b := range files {
+			absPath := filepath.Join(dir, name)
+			if err = os.MkdirAll(filepath.Dir(absPath), 0o750); err != nil {
+				return
+			}
+			f, err := os.Create(absPath)
+			if err != nil {
+				return "", fmt.Errorf("could not create file %q: %w", absPath, err)
+			}
+			if n, err := f.Write(b); err != nil {
+				f.Close()
+				return "", fmt.Errorf("could not write %d bytes to file %q: %w", n, f.Name(), err)
+			}
+			f.Close()
+		}
+		return
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var inputSet, expectedSet artifactSet
+			dir, _ := createFiles(tt.input)
+			for p := range tt.input {
+				inputSet = append(inputSet, &sourcev1.Artifact{Path: filepath.Join(dir, p)})
+			}
+			for p := range tt.want {
+				expectedSet = append(expectedSet, &sourcev1.Artifact{Path: filepath.Join(dir, p)})
+			}
+			var ps []gitignore.Pattern
+			for _, p := range tt.patterns {
+				ps = append(ps, gitignore.ParsePattern(p, nil))
+			}
+			got, err := inputSet.Filter(ps)
+			if err != nil {
+				t.Errorf("Archive() error = %s", err)
+			}
+			if expectedSet.Diff(got) {
+				t.Errorf("Archive() result = %v, wantResult %v", got, tt.want)
 			}
 		})
 	}

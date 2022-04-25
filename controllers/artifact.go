@@ -16,7 +16,12 @@ limitations under the License.
 
 package controllers
 
-import sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
+import (
+	"os"
+
+	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
+	"github.com/go-git/go-git/v5/plumbing/format/gitignore"
+)
 
 type artifactSet []*sourcev1.Artifact
 
@@ -36,6 +41,26 @@ outer:
 		return true
 	}
 	return false
+}
+
+// Filter returns a new artifactSet containing only the artifacts that match the given filter.
+func (s artifactSet) Filter(ps []gitignore.Pattern) (artifactSet, error) {
+	if len(ps) == 0 {
+		return s, nil
+	}
+	matcher := SourceIgnoreFilter(ps, nil)
+	var filtered artifactSet
+	for _, f := range s {
+		fi, err := os.Lstat(f.Path)
+		if err != nil {
+			return artifactSet{}, err
+		}
+		if matcher(f.Path, fi) {
+			continue
+		}
+		filtered = append(filtered, f)
+	}
+	return filtered, nil
 }
 
 // hasArtifactUpdated returns true if any of the revisions in the current artifacts

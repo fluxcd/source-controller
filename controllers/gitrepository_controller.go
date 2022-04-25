@@ -507,8 +507,30 @@ func (r *GitRepositoryReconciler) reconcileArtifact(ctx context.Context,
 		}
 	}()
 
+	// Load ignore rules for archiving
+	ignoreDomain := strings.Split(dir, string(filepath.Separator))
+	ps, err := sourceignore.LoadIgnorePatterns(dir, ignoreDomain)
+	if err != nil {
+		return sreconcile.ResultEmpty, &serror.Event{
+			Err:    fmt.Errorf("failed to load source ignore patterns from repository: %w", err),
+			Reason: "SourceIgnoreError",
+		}
+	}
+	if obj.Spec.Ignore != nil {
+		ps = append(ps, sourceignore.ReadPatterns(strings.NewReader(*obj.Spec.Ignore), ignoreDomain)...)
+	}
+
+	// Filter the stored artifacts using the latest ignore patterns
+	existingArtifacts, err := artifactSet(obj.Status.IncludedArtifacts).Filter(ps)
+	if err != nil {
+		return sreconcile.ResultEmpty, &serror.Event{
+			Err:    fmt.Errorf("failed to filter existing artifact using ignore patterns from repository: %w", err),
+			Reason: "SourceIgnoreError",
+		}
+	}
+
 	// The artifact is up-to-date
-	if obj.GetArtifact().HasRevision(artifact.Revision) && !includes.Diff(obj.Status.IncludedArtifacts) {
+	if obj.GetArtifact().HasRevision(artifact.Revision) && !existingArtifacts.Diff(obj.Status.IncludedArtifacts) {
 		r.eventLogf(ctx, obj, events.EventTypeTrace, sourcev1.ArtifactUpToDateReason, "artifact up-to-date with remote revision: '%s'", artifact.Revision)
 		return sreconcile.ResultSuccess, nil
 	}
@@ -547,19 +569,6 @@ func (r *GitRepositoryReconciler) reconcileArtifact(ctx context.Context,
 		}
 	}
 	defer unlock()
-
-	// Load ignore rules for archiving
-	ignoreDomain := strings.Split(dir, string(filepath.Separator))
-	ps, err := sourceignore.LoadIgnorePatterns(dir, ignoreDomain)
-	if err != nil {
-		return sreconcile.ResultEmpty, &serror.Event{
-			Err:    fmt.Errorf("failed to load source ignore patterns from repository: %w", err),
-			Reason: "SourceIgnoreError",
-		}
-	}
-	if obj.Spec.Ignore != nil {
-		ps = append(ps, sourceignore.ReadPatterns(strings.NewReader(*obj.Spec.Ignore), ignoreDomain)...)
-	}
 
 	// Archive directory to storage
 	if err := r.Storage.Archive(&artifact, dir, SourceIgnoreFilter(ps, ignoreDomain)); err != nil {
