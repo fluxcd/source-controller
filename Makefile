@@ -96,6 +96,7 @@ build: check-deps $(LIBGIT2) ## Build manager binary
 KUBEBUILDER_ASSETS?="$(shell $(ENVTEST) --arch=$(ENVTEST_ARCH) use -i $(ENVTEST_KUBERNETES_VERSION) --bin-dir=$(ENVTEST_ASSETS_DIR) -p path)"
 test: $(LIBGIT2) install-envtest test-api check-deps ## Run tests
 	KUBEBUILDER_ASSETS=$(KUBEBUILDER_ASSETS) \
+	GIT_CONFIG_GLOBAL=/dev/null \
 	go test $(GO_STATIC_FLAGS) ./... -coverprofile cover.out
 
 check-deps:
@@ -268,3 +269,4 @@ env: $(LIBGIT2)
 	echo 'CGO_CFLAGS="$(CGO_CFLAGS)"' >> $(BUILD_DIR)/.env
 	echo 'CGO_LDFLAGS="$(CGO_LDFLAGS)"' >> $(BUILD_DIR)/.env
 	echo 'KUBEBUILDER_ASSETS=$(KUBEBUILDER_ASSETS)' >> $(BUILD_DIR)/.env
+	echo 'GIT_CONFIG_GLOBAL=/dev/null' >> $(BUILD_DIR)/.env
