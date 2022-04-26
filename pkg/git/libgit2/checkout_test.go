@@ -77,6 +77,7 @@ func TestCheckoutBranch_Checkout(t *testing.T) {
 		filesCreated   map[string]string
 		expectedCommit string
 		expectedErr    string
+		lastRevision   string
 	}{
 		{
 			name:           "Default branch",
@@ -95,6 +96,21 @@ func TestCheckoutBranch_Checkout(t *testing.T) {
 			branch:      "invalid",
 			expectedErr: "reference 'refs/remotes/origin/invalid' not found",
 		},
+		{
+			name:           "skip clone - lastRevision hasn't changed",
+			branch:         defaultBranch,
+			filesCreated:   map[string]string{"branch": "second"},
+			expectedCommit: secondCommit.String(),
+			lastRevision:   fmt.Sprintf("%s/%s", defaultBranch, secondCommit.String()),
+			expectedErr:    fmt.Sprintf("no changes since last reconcilation: observed revision '%s/%s'", defaultBranch, secondCommit.String()),
+		},
+		{
+			name:           "lastRevision is different",
+			branch:         defaultBranch,
+			filesCreated:   map[string]string{"branch": "second"},
+			expectedCommit: secondCommit.String(),
+			lastRevision:   fmt.Sprintf("%s/%s", defaultBranch, firstCommit.String()),
+		},
 	}
 
 	for _, tt := range tests {
@@ -102,7 +118,8 @@ func TestCheckoutBranch_Checkout(t *testing.T) {
 			g := NewWithT(t)
 
 			branch := CheckoutBranch{
-				Branch: tt.branch,
+				Branch:       tt.branch,
+				LastRevision: tt.lastRevision,
 			}
 			tmpDir := t.TempDir()
 
