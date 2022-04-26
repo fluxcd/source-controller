@@ -398,6 +398,8 @@ func (r *HelmRepositoryReconciler) reconcileSource(ctx context.Context, obj *sou
 			return sreconcile.ResultEmpty, e
 		}
 	}
+
+	// Fetch the repository index from remote.
 	checksum, err := newChartRepo.CacheIndex()
 	if err != nil {
 		e := &serror.Event{
@@ -410,6 +412,15 @@ func (r *HelmRepositoryReconciler) reconcileSource(ctx context.Context, obj *sou
 	}
 	*chartRepo = *newChartRepo
 
+	// Short-circuit based on the fetched index being an exact match to the
+	// stored Artifact. This prevents having to unmarshal the YAML to calculate
+	// the (stable) revision, which is a memory expensive operation.
+	if obj.GetArtifact().HasChecksum(checksum) {
+		*artifact = *obj.GetArtifact()
+		conditions.Delete(obj, sourcev1.FetchFailedCondition)
+		return sreconcile.ResultSuccess, nil
+	}
+
 	// Load the cached repository index to ensure it passes validation.
 	if err := chartRepo.LoadFromCache(); err != nil {
 		e := &serror.Event{
@@ -419,22 +430,23 @@ func (r *HelmRepositoryReconciler) reconcileSource(ctx context.Context, obj *sou
 		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
 		return sreconcile.ResultEmpty, e
 	}
-	defer chartRepo.Unload()
+	chartRepo.Unload()
 
 	// Mark observations about the revision on the object.
-	if !obj.GetArtifact().HasRevision(checksum) {
+	if !obj.GetArtifact().HasRevision(newChartRepo.Checksum) {
 		message := fmt.Sprintf("new index revision '%s'", checksum)
 		conditions.MarkTrue(obj, sourcev1.ArtifactOutdatedCondition, "NewRevision", message)
 		conditions.MarkReconciling(obj, "NewRevision", message)
 	}
-
-	conditions.Delete(obj, sourcev1.FetchFailedCondition)
 
 	// Create potential new artifact.
 	*artifact = r.Storage.NewArtifactFor(obj.Kind,
 		obj.ObjectMeta.GetObjectMeta(),
 		chartRepo.Checksum,
 		fmt.Sprintf("index-%s.yaml", checksum))
+
+	// Delete any stale failure observation
+	conditions.Delete(obj, sourcev1.FetchFailedCondition)
 
 	return sreconcile.ResultSuccess, nil
 }
@@ -462,7 +474,7 @@ func (r *HelmRepositoryReconciler) reconcileArtifact(ctx context.Context, obj *s
 		}
 	}()
 
-	if obj.GetArtifact().HasRevision(artifact.Revision) {
+	if obj.GetArtifact().HasRevision(artifact.Revision) && obj.GetArtifact().HasChecksum(artifact.Checksum) {
 		r.eventLogf(ctx, obj, events.EventTypeTrace, sourcev1.ArtifactUpToDateReason, "artifact up-to-date with remote revision: '%s'", artifact.Revision)
 		return sreconcile.ResultSuccess, nil
 	}
