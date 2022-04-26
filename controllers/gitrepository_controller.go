@@ -311,8 +311,9 @@ func (r *GitRepositoryReconciler) notify(oldObj, newObj *sourcev1.GitRepository,
 // reconcileStorage ensures the current state of the storage matches the
 // desired and previously observed state.
 //
-// All Artifacts for the object except for the current one in the Status are
-// garbage collected from the Storage.
+// The garbage collection is executed based on the flag based settings and
+// may remove files that are beyond their TTL or the maximum number of files
+// to survive a collection cycle.
 // If the Artifact in the Status of the object disappeared from the Storage,
 // it is removed from the object.
 // If the object does not have an Artifact in its Status, a Reconciling
@@ -411,6 +412,11 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context,
 		checkoutOpts.Tag = ref.Tag
 		checkoutOpts.SemVer = ref.SemVer
 	}
+
+	if artifact := obj.GetArtifact(); artifact != nil {
+		checkoutOpts.LastRevision = artifact.Revision
+	}
+
 	checkoutStrategy, err := strategy.CheckoutStrategyForImplementation(ctx,
 		git.Implementation(obj.Spec.GitImplementation), checkoutOpts)
 	if err != nil {
@@ -455,6 +461,11 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context,
 	defer cancel()
 	c, err := checkoutStrategy.Checkout(gitCtx, dir, repositoryURL, authOpts)
 	if err != nil {
+		var v git.NoChangesError
+		if errors.As(err, &v) {
+			return sreconcile.ResultSuccess, nil
+		}
+
 		e := &serror.Event{
 			Err:    fmt.Errorf("failed to checkout and determine revision: %w", err),
 			Reason: sourcev1.GitOperationFailedReason,
@@ -495,6 +506,13 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context,
 // object are set, and the symlink in the Storage is updated to its path.
 func (r *GitRepositoryReconciler) reconcileArtifact(ctx context.Context,
 	obj *sourcev1.GitRepository, commit *git.Commit, includes *artifactSet, dir string) (sreconcile.Result, error) {
+	// If reconciliation resulted in git.NoChangesError,
+	// avoid reconciling artifact, as this was already done
+	// on a previous reconciliation.
+	if commit == nil || commit.Hash.String() == "" {
+		return sreconcile.ResultSuccess, nil
+	}
+
 	// Create potential new artifact with current available metadata
 	artifact := r.Storage.NewArtifactFor(obj.Kind, obj.GetObjectMeta(), commit.String(), fmt.Sprintf("%s.tar.gz", commit.Hash.String()))
 
