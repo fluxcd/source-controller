@@ -2,6 +2,20 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.24.2
+
+**Release date:** 2022-04-26
+
+This prerelease improves the memory consumption while reconciling a
+`HelmRepository`, by only validating the YAML of a fetched index when the
+checksum of the retrieved file differs from the current Artifact.
+
+Fixes:
+- helm: optimise repository index loading
+  [#685](https://github.com/fluxcd/source-controller/pull/685)
+- tests: Fix flakiness of git related tests
+  [#686](https://github.com/fluxcd/source-controller/pull/686)
+
 ## 0.24.1
 
 **Release date:** 2022-04-22
