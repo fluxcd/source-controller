@@ -23,7 +23,6 @@ import (
 	"github.com/fluxcd/pkg/runtime/patch"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
 	. "github.com/onsi/gomega"
-	"helm.sh/helm/v3/pkg/registry"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -35,10 +34,10 @@ func TestHelmRepositoryOCIReconciler_Reconcile(t *testing.T) {
 	g := NewWithT(t)
 
 	// Login to the registry
-	err := testRegistryserver.RegistryClient.Login(testRegistryserver.DockerRegistryHost,
-		registry.LoginOptBasicAuth(testUsername, testPassword),
-		registry.LoginOptInsecure(true))
-	g.Expect(err).NotTo(HaveOccurred())
+	// err := testRegistryserver.RegistryClient.Login(testRegistryserver.DockerRegistryHost,
+	// 	registry.LoginOptBasicAuth(testUsername, testPassword),
+	// 	registry.LoginOptInsecure(true))
+	// g.Expect(err).NotTo(HaveOccurred())
 
 	ns, err := testEnv.CreateNamespace(ctx, "helmrepository-oci-reconcile-test")
 	g.Expect(err).ToNot(HaveOccurred())

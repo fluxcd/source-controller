@@ -278,7 +278,7 @@ func (r *HelmRepositoryOCIReconciler) validateSource(ctx context.Context, obj *s
 	}
 
 	// Check if the registry is supported
-	if target.Scheme != registry.OCIScheme {
+	if !registry.IsOCI(obj.Spec.URL) {
 		e := &serror.Event{
 			Err:    fmt.Errorf("unsupported registry scheme '%s'", target.Scheme),
 			Reason: "ValidationError",
