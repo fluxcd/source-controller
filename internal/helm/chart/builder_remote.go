@@ -83,9 +83,12 @@ func (b *remoteChartBuilder) Build(_ context.Context, ref Reference, p string, o
 		return nil, &BuildError{Reason: ErrChartReference, Err: err}
 	}
 
+	var (
+		res *bytes.Buffer
+		err error
+	)
+
 	result := &Build{}
-	var res *bytes.Buffer
-	var err error
 	switch b.remote.(type) {
 	case *repository.ChartRepository:
 		res, err = b.downloadFromRepository(b.remote.(*repository.ChartRepository), remoteRef, result, opts)
@@ -96,6 +99,10 @@ func (b *remoteChartBuilder) Build(_ context.Context, ref Reference, p string, o
 			return result, nil
 		}
 	case *repository.OCIChartRepository:
+		res, err = b.downloadFromOCIRepository(b.remote.(*repository.OCIChartRepository), remoteRef, result, opts)
+		if err != nil {
+			return nil, &BuildError{Reason: ErrChartPull, Err: err}
+		}
 	default:
 		return nil, &BuildError{Reason: ErrChartReference, Err: fmt.Errorf("unsupported remote type %T", b.remote)}
 	}
@@ -140,6 +147,61 @@ func (b *remoteChartBuilder) Build(_ context.Context, ref Reference, p string, o
 	result.Path = p
 	result.Packaged = true
 	return result, nil
+}
+
+func (b *remoteChartBuilder) downloadFromOCIRepository(remote *repository.OCIChartRepository, remoteRef RemoteReference, buildResult *Build, opts BuildOptions) (*bytes.Buffer, error) {
+	// TODO: verify if login is required
+	cv, err := remote.Get(remoteRef.Name, remoteRef.Version)
+	if err != nil {
+		err = fmt.Errorf("failed to get chart version for remote reference: %w", err)
+		return nil, &BuildError{Reason: ErrChartPull, Err: err}
+	}
+
+	result := &Build{}
+	result.Version = cv.Version
+	result.Name = cv.Name
+
+	// Set build specific metadata if instructed
+	if opts.VersionMetadata != "" {
+		ver, err := setBuildMetaData(result.Version, opts.VersionMetadata)
+		if err != nil {
+			return nil, &BuildError{Reason: ErrChartMetadataPatch, Err: err}
+		}
+		result.Version = ver.String()
+	}
+
+	requiresPackaging := len(opts.GetValuesFiles()) != 0 || opts.VersionMetadata != ""
+
+	// If all the following is true, we do not need to download and/or build the chart:
+	// - Chart name from cached chart matches resolved name
+	// - Chart version from cached chart matches calculated version
+	// - BuildOptions.Force is False
+	if opts.CachedChart != "" && !opts.Force {
+		if curMeta, err := LoadChartMetadataFromArchive(opts.CachedChart); err == nil {
+			// If the cached metadata is corrupt, we ignore its existence
+			// and continue the build
+			if err = curMeta.Validate(); err == nil {
+				if result.Name == curMeta.Name && result.Version == curMeta.Version {
+					result.Path = opts.CachedChart
+					result.ValuesFiles = opts.GetValuesFiles()
+					result.Packaged = requiresPackaging
+					*buildResult = *result
+					return nil, nil
+				}
+			}
+		}
+	}
+
+	// Download the package for the resolved version
+	res, err := remote.DownloadChart(cv)
+	if err != nil {
+		err = fmt.Errorf("failed to download chart for remote reference: %w", err)
+		return nil, &BuildError{Reason: ErrChartPull, Err: err}
+	}
+
+	*buildResult = *result
+
+	return res, nil
 }
 
 func (b *remoteChartBuilder) downloadFromRepository(remote *repository.ChartRepository, remoteRef RemoteReference, buildResult *Build, opts BuildOptions) (*bytes.Buffer, error) {
