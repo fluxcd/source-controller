@@ -30,8 +30,8 @@ import (
 	"github.com/fluxcd/source-controller/internal/transport"
 )
 
-// ChartRepository represents a Helm chart repository, and the configuration
-// required to download the chart index and charts from the repository.
+// OCIChartRepository represents a Helm chart repository, and the configuration
+// required to download the repository tags and charts from the repository.
 // All methods are thread safe unless defined otherwise.
 type OCIChartRepository struct {
 	// URL the ChartRepository's index.yaml can be found at,
@@ -49,11 +49,51 @@ type OCIChartRepository struct {
 	RegistryClient *registry.Client
 }
 
-// NewChartRepository constructs and returns a new ChartRepository with
+// OCIChartRepositoryOption is a function that can be passed to NewOCIChartRepository
+// to configure an OCIChartRepository.
+type OCIChartRepositoryOption func(*OCIChartRepository) error
+
+// WithOCIRegistryClient returns a ChartRepositoryOption that will set the registry client
+func WithOCIRegistryClient(client *registry.Client) OCIChartRepositoryOption {
+	return func(r *OCIChartRepository) error {
+		r.RegistryClient = client
+		return nil
+	}
+}
+
+// WithOCIGetter returns a ChartRepositoryOption that will set the getter.Getter
+func WithOCIGetter(providers getter.Providers) OCIChartRepositoryOption {
+	return func(r *OCIChartRepository) error {
+		c, err := providers.ByScheme(r.URL)
+		if err != nil {
+			return err
+		}
+		r.Client = c
+		return nil
+	}
+}
+
+// WithOCIGetterOptions returns a ChartRepositoryOption that will set the getter.Options
+func WithOCIGetterOptions(getterOpts []getter.Option) OCIChartRepositoryOption {
+	return func(r *OCIChartRepository) error {
+		r.Options = getterOpts
+		return nil
+	}
+}
+
+// WithOCITlsConfig returns a ChartRepositoryOption that will set the tls.Config
+func WithTlsConfig(tlsConfig *tls.Config) OCIChartRepositoryOption {
+	return func(r *OCIChartRepository) error {
+		r.tlsConfig = tlsConfig
+		return nil
+	}
+}
+
+// NewOCIChartRepository constructs and returns a new ChartRepository with
 // the ChartRepository.Client configured to the getter.Getter for the
 // repository URL scheme. It returns an error on URL parsing failures,
 // or if there is no getter available for the scheme.
-func NewOCIChartRepository(repositoryURL, cachePath string, providers getter.Providers, tlsConfig *tls.Config, getterOpts []getter.Option) (*OCIChartRepository, error) {
+func NewOCIChartRepository(repositoryURL string, chartRepoOpts ...OCIChartRepositoryOption) (*OCIChartRepository, error) {
 	u, err := url.Parse(repositoryURL)
 	if err != nil {
 		return nil, err
@@ -62,16 +102,14 @@ func NewOCIChartRepository(repositoryURL, cachePath string, providers getter.Pro
 	if !registry.IsOCI(repositoryURL) {
 		return nil, fmt.Errorf("the url scheme is not supported: %s", u.Scheme)
 	}
-	c, err := providers.ByScheme(u.Scheme)
-	if err != nil {
-		return nil, err
-	}
 
 	r := newOCIChartRepository()
 	r.URL = repositoryURL
-	r.Client = c
-	r.Options = getterOpts
-	r.tlsConfig = tlsConfig
+	for _, opt := range chartRepoOpts {
+		if err := opt(r); err != nil {
+			return nil, err
+		}
+	}
 
 	return r, nil
 }
@@ -83,17 +121,17 @@ func newOCIChartRepository() *OCIChartRepository {
 // Get returns the repo.ChartVersion for the given name, the version is expected
 // to be a semver.Constraints compatible string. If version is empty, the latest
 // stable version will be returned and prerelease versions will be ignored.
-// copy of https://github.com/helm/helm/blob/49819b4ef782e80b0c7f78c30bd76b51ebb56dc8/pkg/downloader/chart_downloader.go#L162
-func (r *OCIChartRepository) Get(name, ver string) (string, error) {
+// adapted from https://github.com/helm/helm/blob/49819b4ef782e80b0c7f78c30bd76b51ebb56dc8/pkg/downloader/chart_downloader.go#L162
+func (r *OCIChartRepository) Get(name, ver string) (*repo.ChartVersion, error) {
 	// Find chart versions matching the given name.
 	// Either in an index file or from a registry.
 	cvs, err := r.getTags(fmt.Sprintf("%s/%s", r.URL, name))
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	if len(cvs) == 0 {
-		return "", fmt.Errorf("unable to locate any tags in provided repository: %s", name)
+		return nil, fmt.Errorf("unable to locate any tags in provided repository: %s", name)
 	}
 
 	// Determine if version provided
@@ -101,7 +139,7 @@ func (r *OCIChartRepository) Get(name, ver string) (string, error) {
 	// If exact version, try to find it
 	// If semver constraint string, try to find a match
 	tag, err := registry.GetTagMatchingVersionOrConstraint(cvs, ver)
-	return tag, err
+	return &repo.ChartVersion{URLs: []string{fmt.Sprintf("%s/%s:%s", r.URL, name, tag)}}, err
 }
 
 // this function shall be called for OCI registries only

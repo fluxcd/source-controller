@@ -17,6 +17,7 @@ limitations under the License.
 package chart
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -24,24 +25,34 @@ import (
 	"path/filepath"
 
 	"github.com/Masterminds/semver/v3"
+	"github.com/fluxcd/source-controller/internal/helm/repository"
 	helmchart "helm.sh/helm/v3/pkg/chart"
 	"helm.sh/helm/v3/pkg/chartutil"
+	"helm.sh/helm/v3/pkg/repo"
 	"sigs.k8s.io/yaml"
 
 	"github.com/fluxcd/pkg/runtime/transform"
 
 	"github.com/fluxcd/source-controller/internal/fs"
 	"github.com/fluxcd/source-controller/internal/helm/chart/secureloader"
-	"github.com/fluxcd/source-controller/internal/helm/repository"
 )
 
+// Remote is a repository.ChartRepository or a repository.OCIChartRegistry.
+// It is used to download a chart from a remote repository or registry.
+type Remote interface {
+	// GetChart returns a chart.Chart from the remote repository.
+	Get(name, version string) (*repo.ChartVersion, error)
+	// GetChartVersion returns a chart.ChartVersion from the remote repository.
+	DownloadChart(chart *repo.ChartVersion) (*bytes.Buffer, error)
+}
+
 type remoteChartBuilder struct {
-	remote *repository.ChartRepository
+	remote Remote
 }
 
 // NewRemoteBuilder returns a Builder capable of building a Helm
 // chart with a RemoteReference in the given repository.ChartRepository.
-func NewRemoteBuilder(repository *repository.ChartRepository) Builder {
+func NewRemoteBuilder(repository Remote) Builder {
 	return &remoteChartBuilder{
 		remote: repository,
 	}
@@ -72,64 +83,24 @@ func (b *remoteChartBuilder) Build(_ context.Context, ref Reference, p string, o
 		return nil, &BuildError{Reason: ErrChartReference, Err: err}
 	}
 
-	// Load the repository index if not already present.
-	if err := b.remote.StrategicallyLoadIndex(); err != nil {
-		err = fmt.Errorf("could not load repository index for remote chart reference: %w", err)
-		return nil, &BuildError{Reason: ErrChartPull, Err: err}
-	}
-
-	// Get the current version for the RemoteReference
-	cv, err := b.remote.Get(remoteRef.Name, remoteRef.Version)
-	if err != nil {
-		err = fmt.Errorf("failed to get chart version for remote reference: %w", err)
-		return nil, &BuildError{Reason: ErrChartReference, Err: err}
-	}
-
 	result := &Build{}
-	result.Name = cv.Name
-	result.Version = cv.Version
-
-	// Set build specific metadata if instructed
-	if opts.VersionMetadata != "" {
-		ver, err := semver.NewVersion(result.Version)
+	var res *bytes.Buffer
+	var err error
+	switch b.remote.(type) {
+	case *repository.ChartRepository:
+		res, err = b.downloadFromRepository(b.remote.(*repository.ChartRepository), remoteRef, result, opts)
 		if err != nil {
-			err = fmt.Errorf("failed to parse version from chart metadata as SemVer: %w", err)
-			return nil, &BuildError{Reason: ErrChartMetadataPatch, Err: err}
+			return nil, &BuildError{Reason: ErrChartPull, Err: err}
 		}
-		if *ver, err = ver.SetMetadata(opts.VersionMetadata); err != nil {
-			err = fmt.Errorf("failed to set SemVer metadata on chart version: %w", err)
-			return nil, &BuildError{Reason: ErrChartMetadataPatch, Err: err}
+		if res == nil {
+			return result, nil
 		}
-		result.Version = ver.String()
+	case *repository.OCIChartRepository:
+	default:
+		return nil, &BuildError{Reason: ErrChartReference, Err: fmt.Errorf("unsupported remote type %T", b.remote)}
 	}
 
 	requiresPackaging := len(opts.GetValuesFiles()) != 0 || opts.VersionMetadata != ""
-
-	// If all the following is true, we do not need to download and/or build the chart:
-	// - Chart name from cached chart matches resolved name
-	// - Chart version from cached chart matches calculated version
-	// - BuildOptions.Force is False
-	if opts.CachedChart != "" && !opts.Force {
-		if curMeta, err := LoadChartMetadataFromArchive(opts.CachedChart); err == nil {
-			// If the cached metadata is corrupt, we ignore its existence
-			// and continue the build
-			if err = curMeta.Validate(); err == nil {
-				if result.Name == curMeta.Name && result.Version == curMeta.Version {
-					result.Path = opts.CachedChart
-					result.ValuesFiles = opts.GetValuesFiles()
-					result.Packaged = requiresPackaging
-					return result, nil
-				}
-			}
-		}
-	}
-
-	// Download the package for the resolved version
-	res, err := b.remote.DownloadChart(cv)
-	if err != nil {
-		err = fmt.Errorf("failed to download chart for remote reference: %w", err)
-		return result, &BuildError{Reason: ErrChartPull, Err: err}
-	}
 
 	// Use literal chart copy from remote if no custom values files options are
 	// set or version metadata isn't set.
@@ -169,6 +140,79 @@ func (b *remoteChartBuilder) Build(_ context.Context, ref Reference, p string, o
 	result.Path = p
 	result.Packaged = true
 	return result, nil
+}
+
+func (b *remoteChartBuilder) downloadFromRepository(remote *repository.ChartRepository, remoteRef RemoteReference, buildResult *Build, opts BuildOptions) (*bytes.Buffer, error) {
+	if err := remote.StrategicallyLoadIndex(); err != nil {
+		err = fmt.Errorf("could not load repository index for remote chart reference: %w", err)
+		return nil, &BuildError{Reason: ErrChartPull, Err: err}
+	}
+	defer remote.Unload()
+
+	// Get the current version for the RemoteReference
+	cv, err := remote.Get(remoteRef.Name, remoteRef.Version)
+	if err != nil {
+		err = fmt.Errorf("failed to get chart version for remote reference: %w", err)
+		return nil, &BuildError{Reason: ErrChartReference, Err: err}
+	}
+
+	result := &Build{}
+	result.Name = cv.Name
+	result.Version = cv.Version
+
+	// Set build specific metadata if instructed
+	if opts.VersionMetadata != "" {
+		ver, err := setBuildMetaData(result.Version, opts.VersionMetadata)
+		if err != nil {
+			return nil, &BuildError{Reason: ErrChartMetadataPatch, Err: err}
+		}
+		result.Version = ver.String()
+	}
+
+	requiresPackaging := len(opts.GetValuesFiles()) != 0 || opts.VersionMetadata != ""
+
+	// If all the following is true, we do not need to download and/or build the chart:
+	// - Chart name from cached chart matches resolved name
+	// - Chart version from cached chart matches calculated version
+	// - BuildOptions.Force is False
+	if opts.CachedChart != "" && !opts.Force {
+		if curMeta, err := LoadChartMetadataFromArchive(opts.CachedChart); err == nil {
+			// If the cached metadata is corrupt, we ignore its existence
+			// and continue the build
+			if err = curMeta.Validate(); err == nil {
+				if result.Name == curMeta.Name && result.Version == curMeta.Version {
+					result.Path = opts.CachedChart
+					result.ValuesFiles = opts.GetValuesFiles()
+					result.Packaged = requiresPackaging
+					*buildResult = *result
+					return nil, nil
+				}
+			}
+		}
+	}
+
+	// Download the package for the resolved version
+	res, err := remote.DownloadChart(cv)
+	if err != nil {
+		err = fmt.Errorf("failed to download chart for remote reference: %w", err)
+		return nil, &BuildError{Reason: ErrChartPull, Err: err}
+	}
+
+	*buildResult = *result
+
+	return res, nil
+}
+
+func setBuildMetaData(version, versionMetadata string) (*semver.Version, error) {
+	ver, err := semver.NewVersion(version)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse version from chart metadata as SemVer: %w", err)
+	}
+	if *ver, err = ver.SetMetadata(versionMetadata); err != nil {
+		return nil, fmt.Errorf("failed to set SemVer metadata on chart version: %w", err)
+	}
+
+	return ver, nil
 }
 
 // mergeChartValues merges the given chart.Chart Files paths into a single "values.yaml" map.
