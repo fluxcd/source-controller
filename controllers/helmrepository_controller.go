@@ -421,7 +421,8 @@ func (r *HelmRepositoryReconciler) reconcileSource(ctx context.Context, obj *sou
 		return sreconcile.ResultSuccess, nil
 	}
 
-	// Load the cached repository index to ensure it passes validation.
+	// Load the cached repository index to ensure it passes validation. This
+	// also populates chartRepo.Checksum.
 	if err := chartRepo.LoadFromCache(); err != nil {
 		e := &serror.Event{
 			Err:    fmt.Errorf("failed to load Helm repository from cache: %w", err),
@@ -433,13 +434,15 @@ func (r *HelmRepositoryReconciler) reconcileSource(ctx context.Context, obj *sou
 	chartRepo.Unload()
 
 	// Mark observations about the revision on the object.
-	if !obj.GetArtifact().HasRevision(newChartRepo.Checksum) {
+	if !obj.GetArtifact().HasRevision(chartRepo.Checksum) {
 		message := fmt.Sprintf("new index revision '%s'", checksum)
 		conditions.MarkTrue(obj, sourcev1.ArtifactOutdatedCondition, "NewRevision", message)
 		conditions.MarkReconciling(obj, "NewRevision", message)
 	}
 
 	// Create potential new artifact.
+	// Note: Since this is a potential artifact, artifact.Checksum is empty at
+	// this stage. It's populated when the artifact is written in storage.
 	*artifact = r.Storage.NewArtifactFor(obj.Kind,
 		obj.ObjectMeta.GetObjectMeta(),
 		chartRepo.Checksum,

@@ -18,6 +18,7 @@ package controllers
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"net/http"
@@ -33,6 +34,7 @@ import (
 	"github.com/fluxcd/pkg/runtime/conditions"
 	"github.com/fluxcd/pkg/runtime/patch"
 	. "github.com/onsi/gomega"
+	helmgetter "helm.sh/helm/v3/pkg/getter"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -43,6 +45,7 @@ import (
 	fakeclient "sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
+	"github.com/fluxcd/source-controller/internal/helm/getter"
 	"github.com/fluxcd/source-controller/internal/helm/repository"
 	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
 	"github.com/fluxcd/source-controller/internal/reconcile/summarize"
@@ -288,8 +291,8 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 		protocol         string
 		server           options
 		secret           *corev1.Secret
-		beforeFunc       func(t *WithT, obj *sourcev1.HelmRepository)
-		afterFunc        func(t *WithT, obj *sourcev1.HelmRepository)
+		beforeFunc       func(t *WithT, obj *sourcev1.HelmRepository, checksum string)
+		afterFunc        func(t *WithT, obj *sourcev1.HelmRepository, artifact sourcev1.Artifact, chartRepo repository.ChartRepository)
 		want             sreconcile.Result
 		wantErr          bool
 		assertConditions []metav1.Condition
@@ -301,6 +304,12 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new index revision"),
 				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new index revision"),
+			},
+			afterFunc: func(t *WithT, obj *sourcev1.HelmRepository, artifact sourcev1.Artifact, chartRepo repository.ChartRepository) {
+				t.Expect(chartRepo.Checksum).ToNot(BeEmpty())
+				t.Expect(chartRepo.CachePath).ToNot(BeEmpty())
+				t.Expect(artifact.Checksum).To(BeEmpty())
+				t.Expect(artifact.Revision).ToNot(BeEmpty())
 			},
 		},
 		{
@@ -319,13 +328,19 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 					"password": []byte("1234"),
 				},
 			},
-			beforeFunc: func(t *WithT, obj *sourcev1.HelmRepository) {
+			beforeFunc: func(t *WithT, obj *sourcev1.HelmRepository, checksum string) {
 				obj.Spec.SecretRef = &meta.LocalObjectReference{Name: "basic-auth"}
 			},
 			want: sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new index revision"),
 				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new index revision"),
+			},
+			afterFunc: func(t *WithT, obj *sourcev1.HelmRepository, artifact sourcev1.Artifact, chartRepo repository.ChartRepository) {
+				t.Expect(chartRepo.Checksum).ToNot(BeEmpty())
+				t.Expect(chartRepo.CachePath).ToNot(BeEmpty())
+				t.Expect(artifact.Checksum).To(BeEmpty())
+				t.Expect(artifact.Revision).ToNot(BeEmpty())
 			},
 		},
 		{
@@ -344,13 +359,19 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 					"caFile": tlsCA,
 				},
 			},
-			beforeFunc: func(t *WithT, obj *sourcev1.HelmRepository) {
+			beforeFunc: func(t *WithT, obj *sourcev1.HelmRepository, checksum string) {
 				obj.Spec.SecretRef = &meta.LocalObjectReference{Name: "ca-file"}
 			},
 			want: sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new index revision"),
 				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new index revision"),
+			},
+			afterFunc: func(t *WithT, obj *sourcev1.HelmRepository, artifact sourcev1.Artifact, chartRepo repository.ChartRepository) {
+				t.Expect(chartRepo.Checksum).ToNot(BeEmpty())
+				t.Expect(chartRepo.CachePath).ToNot(BeEmpty())
+				t.Expect(artifact.Checksum).To(BeEmpty())
+				t.Expect(artifact.Revision).ToNot(BeEmpty())
 			},
 		},
 		{
@@ -369,18 +390,25 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 					"caFile": []byte("invalid"),
 				},
 			},
-			beforeFunc: func(t *WithT, obj *sourcev1.HelmRepository) {
+			beforeFunc: func(t *WithT, obj *sourcev1.HelmRepository, checksum string) {
 				obj.Spec.SecretRef = &meta.LocalObjectReference{Name: "invalid-ca"}
 			},
 			wantErr: true,
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "failed to create TLS client config with secret data: cannot append certificate into certificate pool: invalid caFile"),
 			},
+			afterFunc: func(t *WithT, obj *sourcev1.HelmRepository, artifact sourcev1.Artifact, chartRepo repository.ChartRepository) {
+				// No repo index due to fetch fail.
+				t.Expect(chartRepo.Checksum).To(BeEmpty())
+				t.Expect(chartRepo.CachePath).To(BeEmpty())
+				t.Expect(artifact.Checksum).To(BeEmpty())
+				t.Expect(artifact.Revision).To(BeEmpty())
+			},
 		},
 		{
 			name:     "Invalid URL makes FetchFailed=True and returns stalling error",
 			protocol: "http",
-			beforeFunc: func(t *WithT, obj *sourcev1.HelmRepository) {
+			beforeFunc: func(t *WithT, obj *sourcev1.HelmRepository, checksum string) {
 				obj.Spec.URL = strings.ReplaceAll(obj.Spec.URL, "http://", "")
 			},
 			want:    sreconcile.ResultEmpty,
@@ -388,11 +416,18 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.URLInvalidReason, "first path segment in URL cannot contain colon"),
 			},
+			afterFunc: func(t *WithT, obj *sourcev1.HelmRepository, artifact sourcev1.Artifact, chartRepo repository.ChartRepository) {
+				// No repo index due to fetch fail.
+				t.Expect(chartRepo.Checksum).To(BeEmpty())
+				t.Expect(chartRepo.CachePath).To(BeEmpty())
+				t.Expect(artifact.Checksum).To(BeEmpty())
+				t.Expect(artifact.Revision).To(BeEmpty())
+			},
 		},
 		{
 			name:     "Unsupported scheme makes FetchFailed=True and returns stalling error",
 			protocol: "http",
-			beforeFunc: func(t *WithT, obj *sourcev1.HelmRepository) {
+			beforeFunc: func(t *WithT, obj *sourcev1.HelmRepository, checksum string) {
 				obj.Spec.URL = strings.ReplaceAll(obj.Spec.URL, "http://", "ftp://")
 			},
 			want:    sreconcile.ResultEmpty,
@@ -400,16 +435,30 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(sourcev1.FetchFailedCondition, meta.FailedReason, "scheme \"ftp\" not supported"),
 			},
+			afterFunc: func(t *WithT, obj *sourcev1.HelmRepository, artifact sourcev1.Artifact, chartRepo repository.ChartRepository) {
+				// No repo index due to fetch fail.
+				t.Expect(chartRepo.Checksum).To(BeEmpty())
+				t.Expect(chartRepo.CachePath).To(BeEmpty())
+				t.Expect(artifact.Checksum).To(BeEmpty())
+				t.Expect(artifact.Revision).To(BeEmpty())
+			},
 		},
 		{
 			name:     "Missing secret returns FetchFailed=True and returns error",
 			protocol: "http",
-			beforeFunc: func(t *WithT, obj *sourcev1.HelmRepository) {
+			beforeFunc: func(t *WithT, obj *sourcev1.HelmRepository, checksum string) {
 				obj.Spec.SecretRef = &meta.LocalObjectReference{Name: "non-existing"}
 			},
 			wantErr: true,
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "secrets \"non-existing\" not found"),
+			},
+			afterFunc: func(t *WithT, obj *sourcev1.HelmRepository, artifact sourcev1.Artifact, chartRepo repository.ChartRepository) {
+				// No repo index due to fetch fail.
+				t.Expect(chartRepo.Checksum).To(BeEmpty())
+				t.Expect(chartRepo.CachePath).To(BeEmpty())
+				t.Expect(artifact.Checksum).To(BeEmpty())
+				t.Expect(artifact.Revision).To(BeEmpty())
 			},
 		},
 		{
@@ -423,13 +472,56 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 					"username": []byte("git"),
 				},
 			},
-			beforeFunc: func(t *WithT, obj *sourcev1.HelmRepository) {
+			beforeFunc: func(t *WithT, obj *sourcev1.HelmRepository, checksum string) {
 				obj.Spec.SecretRef = &meta.LocalObjectReference{Name: "malformed-basic-auth"}
 			},
 			wantErr: true,
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "required fields 'username' and 'password"),
 			},
+			afterFunc: func(t *WithT, obj *sourcev1.HelmRepository, artifact sourcev1.Artifact, chartRepo repository.ChartRepository) {
+				// No repo index due to fetch fail.
+				t.Expect(chartRepo.Checksum).To(BeEmpty())
+				t.Expect(chartRepo.CachePath).To(BeEmpty())
+				t.Expect(artifact.Checksum).To(BeEmpty())
+				t.Expect(artifact.Revision).To(BeEmpty())
+			},
+		},
+		{
+			name:     "cached index with same checksum",
+			protocol: "http",
+			beforeFunc: func(t *WithT, obj *sourcev1.HelmRepository, checksum string) {
+				obj.Status.Artifact = &sourcev1.Artifact{
+					Revision: checksum,
+					Checksum: checksum,
+				}
+			},
+			afterFunc: func(t *WithT, obj *sourcev1.HelmRepository, artifact sourcev1.Artifact, chartRepo repository.ChartRepository) {
+				// chartRepo.Checksum isn't populated, artifact.Checksum is
+				// populated from the cached repo index data.
+				t.Expect(chartRepo.Checksum).To(BeEmpty())
+				t.Expect(chartRepo.CachePath).ToNot(BeEmpty())
+				t.Expect(artifact.Checksum).To(Equal(obj.Status.Artifact.Checksum))
+				t.Expect(artifact.Revision).To(Equal(obj.Status.Artifact.Revision))
+			},
+			want: sreconcile.ResultSuccess,
+		},
+		{
+			name:     "cached index with different checksum",
+			protocol: "http",
+			beforeFunc: func(t *WithT, obj *sourcev1.HelmRepository, checksum string) {
+				obj.Status.Artifact = &sourcev1.Artifact{
+					Revision: checksum,
+					Checksum: "foo",
+				}
+			},
+			afterFunc: func(t *WithT, obj *sourcev1.HelmRepository, artifact sourcev1.Artifact, chartRepo repository.ChartRepository) {
+				t.Expect(chartRepo.Checksum).ToNot(BeEmpty())
+				t.Expect(chartRepo.CachePath).ToNot(BeEmpty())
+				t.Expect(artifact.Checksum).To(BeEmpty())
+				t.Expect(artifact.Revision).To(Equal(obj.Status.Artifact.Revision))
+			},
+			want: sreconcile.ResultSuccess,
 		},
 	}
 
@@ -481,13 +573,49 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 				t.Fatalf("unsupported protocol %q", tt.protocol)
 			}
 
-			if tt.beforeFunc != nil {
-				tt.beforeFunc(g, obj)
-			}
-
 			builder := fakeclient.NewClientBuilder().WithScheme(testEnv.GetScheme())
 			if secret != nil {
 				builder.WithObjects(secret.DeepCopy())
+			}
+
+			// Calculate the artifact checksum for valid repos configurations.
+			clientOpts := []helmgetter.Option{
+				helmgetter.WithURL(server.URL()),
+			}
+			var newChartRepo *repository.ChartRepository
+			var tOpts *tls.Config
+			validSecret := true
+			if secret != nil {
+				// Extract the client options from secret, ignoring any invalid
+				// value. validSecret is used to determine if the indexChecksum
+				// should be calculated below.
+				var cOpts []helmgetter.Option
+				var serr error
+				cOpts, serr = getter.ClientOptionsFromSecret(*secret)
+				if serr != nil {
+					validSecret = false
+				}
+				clientOpts = append(clientOpts, cOpts...)
+				tOpts, serr = getter.TLSClientConfigFromSecret(*secret, server.URL())
+				if serr != nil {
+					validSecret = false
+				}
+				newChartRepo, err = repository.NewChartRepository(obj.Spec.URL, "", testGetters, tOpts, clientOpts)
+			} else {
+				newChartRepo, err = repository.NewChartRepository(obj.Spec.URL, "", testGetters, nil, nil)
+			}
+			g.Expect(err).ToNot(HaveOccurred())
+
+			// NOTE: checksum will be empty in beforeFunc for invalid repo
+			// configurations as the client can't get the repo.
+			var indexChecksum string
+			if validSecret {
+				indexChecksum, err = newChartRepo.CacheIndex()
+				g.Expect(err).ToNot(HaveOccurred())
+			}
+
+			if tt.beforeFunc != nil {
+				tt.beforeFunc(g, obj, indexChecksum)
 			}
 
 			r := &HelmRepositoryReconciler{
@@ -507,7 +635,7 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 			g.Expect(got).To(Equal(tt.want))
 
 			if tt.afterFunc != nil {
-				tt.afterFunc(g, obj)
+				tt.afterFunc(g, obj, artifact, chartRepo)
 			}
 		})
 	}
