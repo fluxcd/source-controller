@@ -6,6 +6,9 @@ TAG ?= latest
 LIBGIT2_IMG ?= ghcr.io/fluxcd/golang-with-libgit2
 LIBGIT2_TAG ?= libgit2-1.3.1
 
+# Allows for defining additional Go test args, e.g. '-tags integration'.
+GO_TEST_ARGS ?=
+
 # Allows for defining additional Docker buildx arguments,
 # e.g. '--push'.
 BUILD_ARGS ?=
@@ -97,7 +100,10 @@ KUBEBUILDER_ASSETS?="$(shell $(ENVTEST) --arch=$(ENVTEST_ARCH) use -i $(ENVTEST_
 test: $(LIBGIT2) install-envtest test-api check-deps ## Run tests
 	KUBEBUILDER_ASSETS=$(KUBEBUILDER_ASSETS) \
 	GIT_CONFIG_GLOBAL=/dev/null \
-	go test $(GO_STATIC_FLAGS) ./... -coverprofile cover.out
+	go test $(GO_STATIC_FLAGS) \
+	  ./... \
+	  $(GO_TEST_ARGS) \
+	  -coverprofile cover.out
 
 check-deps:
 ifeq ($(shell uname -s),Darwin)
