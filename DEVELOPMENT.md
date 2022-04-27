@@ -53,6 +53,14 @@ You can run the test suite by simply doing
 make test
 ```
 
+### Additional test configuration
+
+By setting the `GO_TEST_ARGS` environment variable you can pass additional flags to [`go test`](https://pkg.go.dev/cmd/go#hdr-Test_packages):
+
+```sh
+make test GO_TEST_ARGS="-v -run=TestReadIgnoreFile/with_domain"
+```
+
 ## How to run the controller locally
 
 Install the controller's CRDs on your test cluster:
