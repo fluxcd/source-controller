@@ -492,12 +492,9 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 	// Initialize the chart repository
 	var chartRepo chart.Remote
 	var err error
-	fmt.Printf("CREATING REPO FROM %s\n", repo.Spec.URL)
 	if registry.IsOCI(repo.Spec.URL) {
-		fmt.Printf("CREATING OCI REPO\n")
 		chartRepo, err = repository.NewOCIChartRepository(repo.Spec.URL, repository.WithOCIGetter(r.Getters), repository.WithOCIRegistryClient(r.RegistryClient))
 	} else {
-		fmt.Printf("CREATING HTTP REPO\n")
 		var httpChartRepo *repository.ChartRepository
 		httpChartRepo, err = repository.NewChartRepository(repo.Spec.URL, r.Storage.LocalPath(*repo.GetArtifact()), r.Getters, tlsConfig, clientOpts,
 			repository.WithMemoryCache(r.Storage.LocalPath(*repo.GetArtifact()), r.Cache, r.TTL, func(event string) {
