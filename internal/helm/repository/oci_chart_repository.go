@@ -23,6 +23,7 @@ import (
 	"net/url"
 	"strings"
 
+	"helm.sh/helm/v3/pkg/chart"
 	"helm.sh/helm/v3/pkg/getter"
 	"helm.sh/helm/v3/pkg/registry"
 	"helm.sh/helm/v3/pkg/repo"
@@ -36,7 +37,7 @@ import (
 type OCIChartRepository struct {
 	// URL the ChartRepository's index.yaml can be found at,
 	// without the index.yaml suffix.
-	URL string
+	URL url.URL
 	// Client to use while downloading the Index or a chart from the URL.
 	Client getter.Getter
 	// Options to configure the Client with while downloading the Index
@@ -64,7 +65,7 @@ func WithOCIRegistryClient(client *registry.Client) OCIChartRepositoryOption {
 // WithOCIGetter returns a ChartRepositoryOption that will set the getter.Getter
 func WithOCIGetter(providers getter.Providers) OCIChartRepositoryOption {
 	return func(r *OCIChartRepository) error {
-		c, err := providers.ByScheme(r.URL)
+		c, err := providers.ByScheme(r.URL.Scheme)
 		if err != nil {
 			return err
 		}
@@ -104,7 +105,7 @@ func NewOCIChartRepository(repositoryURL string, chartRepoOpts ...OCIChartReposi
 	}
 
 	r := newOCIChartRepository()
-	r.URL = repositoryURL
+	r.URL = *u
 	for _, opt := range chartRepoOpts {
 		if err := opt(r); err != nil {
 			return nil, err
@@ -125,7 +126,7 @@ func newOCIChartRepository() *OCIChartRepository {
 func (r *OCIChartRepository) Get(name, ver string) (*repo.ChartVersion, error) {
 	// Find chart versions matching the given name.
 	// Either in an index file or from a registry.
-	cvs, err := r.getTags(fmt.Sprintf("%s/%s", r.URL, name))
+	cvs, err := r.getTags(fmt.Sprintf("%s/%s", r.URL.String(), name))
 	if err != nil {
 		return nil, err
 	}
@@ -139,7 +140,13 @@ func (r *OCIChartRepository) Get(name, ver string) (*repo.ChartVersion, error) {
 	// If exact version, try to find it
 	// If semver constraint string, try to find a match
 	tag, err := registry.GetTagMatchingVersionOrConstraint(cvs, ver)
-	return &repo.ChartVersion{URLs: []string{fmt.Sprintf("%s/%s:%s", r.URL, name, tag)}}, err
+	return &repo.ChartVersion{
+		URLs: []string{fmt.Sprintf("%s/%s:%s", r.URL.String(), name, tag)},
+		Metadata: &chart.Metadata{
+			Name:    name,
+			Version: tag,
+		},
+	}, err
 }
 
 // this function shall be called for OCI registries only
@@ -178,5 +185,5 @@ func (r *OCIChartRepository) DownloadChart(chart *repo.ChartVersion) (*bytes.Buf
 	defer transport.Release(t)
 
 	// trim the oci scheme prefix if needed
-	return r.Client.Get(strings.TrimPrefix(u.String(), registry.OCIScheme), clientOpts...)
+	return r.Client.Get(strings.TrimPrefix(u.String(), fmt.Sprintf("%s://", registry.OCIScheme)), clientOpts...)
 }

@@ -103,6 +103,9 @@ func (b *remoteChartBuilder) Build(_ context.Context, ref Reference, p string, o
 		if err != nil {
 			return nil, &BuildError{Reason: ErrChartPull, Err: err}
 		}
+		if res == nil {
+			return result, nil
+		}
 	default:
 		return nil, &BuildError{Reason: ErrChartReference, Err: fmt.Errorf("unsupported remote type %T", b.remote)}
 	}
