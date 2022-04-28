@@ -46,6 +46,7 @@ import (
 	"github.com/fluxcd/pkg/runtime/predicates"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
+	"github.com/fluxcd/source-controller/internal/cache"
 	serror "github.com/fluxcd/source-controller/internal/error"
 	"github.com/fluxcd/source-controller/internal/helm/getter"
 	"github.com/fluxcd/source-controller/internal/helm/repository"
@@ -105,6 +106,10 @@ type HelmRepositoryReconciler struct {
 	Getters        helmgetter.Providers
 	Storage        *Storage
 	ControllerName string
+
+	Cache *cache.Cache
+	TTL   time.Duration
+	*cache.CacheRecorder
 }
 
 type HelmRepositoryReconcilerOptions struct {
@@ -451,7 +456,6 @@ func (r *HelmRepositoryReconciler) reconcileSource(ctx context.Context, obj *sou
 		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
 		return sreconcile.ResultEmpty, e
 	}
-	chartRepo.Unload()
 
 	// Mark observations about the revision on the object.
 	if !obj.GetArtifact().HasRevision(chartRepo.Checksum) {
@@ -491,6 +495,8 @@ func (r *HelmRepositoryReconciler) reconcileArtifact(ctx context.Context, obj *s
 			conditions.MarkTrue(obj, sourcev1.ArtifactInStorageCondition, meta.SucceededReason,
 				"stored artifact for revision '%s'", artifact.Revision)
 		}
+
+		chartRepo.Unload()
 
 		if err := chartRepo.RemoveCache(); err != nil {
 			ctrl.LoggerFrom(ctx).Error(err, "failed to remove temporary cached index file")
@@ -545,6 +551,26 @@ func (r *HelmRepositoryReconciler) reconcileArtifact(ctx context.Context, obj *s
 		obj.Status.URL = indexURL
 	}
 	conditions.Delete(obj, sourcev1.StorageOperationFailedCondition)
+
+	// enable cache if applicable
+	if r.Cache != nil && chartRepo.IndexCache == nil {
+		chartRepo.SetMemCache(r.Storage.LocalPath(*artifact), r.Cache, r.TTL, func(event string) {
+			r.IncCacheEvents(event, obj.GetName(), obj.GetNamespace())
+		})
+	}
+
+	// Cache the index if it was successfully retrieved
+	// and the chart was successfully built
+	if r.Cache != nil && chartRepo.Index != nil {
+		// The cache key have to be safe in multi-tenancy environments,
+		// as otherwise it could be used as a vector to bypass the helm repository's authentication.
+		// Using r.Storage.LocalPath(*repo.GetArtifact() is safe as the path is in the format /<helm-repository-name>/<chart-name>/<filename>.
+		err := chartRepo.CacheIndexInMemory()
+		if err != nil {
+			r.eventLogf(ctx, obj, events.EventTypeTrace, sourcev1.CacheOperationFailedReason, "failed to cache index: %s", err)
+		}
+	}
+
 	return sreconcile.ResultSuccess, nil
 }
 

@@ -224,20 +224,6 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", sourcev1.GitRepositoryKind)
 		os.Exit(1)
 	}
-	if err = (&controllers.HelmRepositoryReconciler{
-		Client:         mgr.GetClient(),
-		EventRecorder:  eventRecorder,
-		Metrics:        metricsH,
-		Storage:        storage,
-		Getters:        getters,
-		ControllerName: controllerName,
-	}).SetupWithManagerAndOptions(mgr, controllers.HelmRepositoryReconcilerOptions{
-		MaxConcurrentReconciles: concurrent,
-		RateLimiter:             helper.GetRateLimiter(rateLimiterOptions),
-	}); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", sourcev1.HelmRepositoryKind, "type", "default")
-		os.Exit(1)
-	}
 
 	if err = (&controllers.HelmRepositoryOCIReconciler{
 		Client:                  mgr.GetClient(),
@@ -273,6 +259,24 @@ func main() {
 	}
 
 	cacheRecorder := cache.MustMakeMetrics()
+
+	if err = (&controllers.HelmRepositoryReconciler{
+		Client:         mgr.GetClient(),
+		EventRecorder:  eventRecorder,
+		Metrics:        metricsH,
+		Storage:        storage,
+		Getters:        getters,
+		ControllerName: controllerName,
+		Cache:          c,
+		TTL:            ttl,
+		CacheRecorder:  cacheRecorder,
+	}).SetupWithManagerAndOptions(mgr, controllers.HelmRepositoryReconcilerOptions{
+		MaxConcurrentReconciles: concurrent,
+		RateLimiter:             helper.GetRateLimiter(rateLimiterOptions),
+	}); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", sourcev1.HelmRepositoryKind)
+		os.Exit(1)
+	}
 
 	if err = (&controllers.HelmChartReconciler{
 		Client:                  mgr.GetClient(),

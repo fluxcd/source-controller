@@ -229,12 +229,18 @@ func TestMain(m *testing.M) {
 		panic(fmt.Sprintf("Failed to start BucketReconciler: %v", err))
 	}
 
+	testCache = cache.New(5, 1*time.Second)
+	cacheRecorder := cache.MustMakeMetrics()
+
 	if err := (&HelmRepositoryReconciler{
 		Client:        testEnv,
 		EventRecorder: record.NewFakeRecorder(32),
 		Metrics:       testMetricsH,
 		Getters:       testGetters,
 		Storage:       testStorage,
+		Cache:         testCache,
+		TTL:           1 * time.Second,
+		CacheRecorder: cacheRecorder,
 	}).SetupWithManager(testEnv); err != nil {
 		panic(fmt.Sprintf("Failed to start HelmRepositoryReconciler: %v", err))
 	}
@@ -249,8 +255,6 @@ func TestMain(m *testing.M) {
 		panic(fmt.Sprintf("Failed to start HelmRepositoryOCIReconciler: %v", err))
 	}
 
-	testCache = cache.New(5, 1*time.Second)
-	cacheRecorder := cache.MustMakeMetrics()
 	if err := (&HelmChartReconciler{
 		Client:        testEnv,
 		EventRecorder: record.NewFakeRecorder(32),

@@ -1299,3 +1299,61 @@ func TestHelmRepositoryReconciler_ReconcileSpecUpdatePredicateFilter(t *testing.
 		return false
 	}, timeout).Should(BeTrue())
 }
+
+func TestHelmRepositoryReconciler_InMemoryCaching(t *testing.T) {
+	g := NewWithT(t)
+	testCache.Clear()
+
+	testServer, err := helmtestserver.NewTempHelmServer()
+	g.Expect(err).NotTo(HaveOccurred())
+	defer os.RemoveAll(testServer.Root())
+
+	g.Expect(testServer.PackageChartWithVersion("testdata/charts/helmchart", "0.1.0")).To(Succeed())
+	g.Expect(testServer.GenerateIndex()).To(Succeed())
+
+	testServer.Start()
+	defer testServer.Stop()
+
+	ns, err := testEnv.CreateNamespace(ctx, "helmrepository")
+	g.Expect(err).ToNot(HaveOccurred())
+	defer func() { g.Expect(testEnv.Delete(ctx, ns)).To(Succeed()) }()
+
+	helmRepo := &sourcev1.HelmRepository{
+		ObjectMeta: metav1.ObjectMeta{
+			GenerateName: "helmrepository-",
+			Namespace:    ns.Name,
+		},
+		Spec: sourcev1.HelmRepositorySpec{
+			URL: testServer.URL(),
+		},
+	}
+	g.Expect(testEnv.CreateAndWait(ctx, helmRepo)).To(Succeed())
+
+	key := client.ObjectKey{Name: helmRepo.Name, Namespace: helmRepo.Namespace}
+	// Wait for finalizer to be set
+	g.Eventually(func() bool {
+		if err := testEnv.Get(ctx, key, helmRepo); err != nil {
+			return false
+		}
+		return len(helmRepo.Finalizers) > 0
+	}, timeout).Should(BeTrue())
+
+	// Wait for HelmRepository to be Ready
+	g.Eventually(func() bool {
+		if err := testEnv.Get(ctx, key, helmRepo); err != nil {
+			return false
+		}
+		if !conditions.IsReady(helmRepo) || helmRepo.Status.Artifact == nil {
+			return false
+		}
+		readyCondition := conditions.Get(helmRepo, meta.ReadyCondition)
+		return helmRepo.Generation == readyCondition.ObservedGeneration &&
+			helmRepo.Generation == helmRepo.Status.ObservedGeneration
+	}, timeout).Should(BeTrue())
+
+	err = testEnv.Get(ctx, key, helmRepo)
+	g.Expect(err).ToNot(HaveOccurred())
+	localPath := testStorage.LocalPath(*helmRepo.GetArtifact())
+	_, cacheHit := testCache.Get(localPath)
+	g.Expect(cacheHit).To(BeTrue())
+}
