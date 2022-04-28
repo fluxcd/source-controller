@@ -21,12 +21,14 @@ import (
 	"crypto/sha256"
 	"crypto/tls"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/url"
 	"os"
 	"path"
+	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -69,6 +71,16 @@ type ChartRepository struct {
 	// index bytes. This is different from the checksum of the CachePath, which
 	// may contain unordered entries.
 	Checksum string
+	// OptimizeIndexLoading enables the use of alternative encoding to serialise
+	// the index for subsequent reconciliations.
+	//
+	// Loading YAML files can be particularly inefficient when compared to other
+	// formats. When enabled, the first LoadFromFile will serialise a "ready-to-use"
+	// index in JSON, which will then be used for subsequent calls instead of the
+	// main YAML file.
+	// In tests using large helm repository index files, the time and resource required
+	// for loading subsequent calls was improved by 10 fold.
+	OptimizeIndexLoading bool
 
 	tlsConfig *tls.Config
 
@@ -129,6 +141,8 @@ func NewChartRepository(repositoryURL, cachePath string, providers getter.Provid
 	}
 
 	r := newChartRepository()
+	//TODO: configurable via flag?
+	r.OptimizeIndexLoading = true
 	r.URL = repositoryURL
 	r.CachePath = cachePath
 	r.Client = c
@@ -273,23 +287,41 @@ func (r *ChartRepository) DownloadChart(chart *repo.ChartVersion) (*bytes.Buffer
 	return r.Client.Get(u.String(), clientOpts...)
 }
 
-// LoadIndexFromBytes loads Index from the given bytes.
+// LoadIndex loads Index from the given bytes.
 // It returns a repo.ErrNoAPIVersion error if the API version is not set
-func (r *ChartRepository) LoadIndexFromBytes(b []byte) error {
-	i := &repo.IndexFile{}
-	if err := yaml.UnmarshalStrict(b, i); err != nil {
+func (r *ChartRepository) LoadIndex(b []byte, checksum string, loader func(b []byte) (*repo.IndexFile, error)) error {
+	i, err := loader(b)
+	if err != nil {
 		return err
 	}
-	if i.APIVersion == "" {
-		return repo.ErrNoAPIVersion
-	}
-	i.SortEntries()
 
 	r.Lock()
 	r.Index = i
-	r.Checksum = fmt.Sprintf("%x", sha256.Sum256(b))
+	r.Checksum = checksum
 	r.Unlock()
 	return nil
+}
+
+func indexFromYAML(b []byte) (*repo.IndexFile, error) {
+	i := &repo.IndexFile{}
+	if err := yaml.UnmarshalStrict(b, i); err != nil {
+		return nil, err
+	}
+	if i.APIVersion == "" {
+		return nil, repo.ErrNoAPIVersion
+	}
+	i.SortEntries()
+	return i, nil
+}
+
+func indexFromJSON(b []byte) (*repo.IndexFile, error) {
+	i := &repo.IndexFile{}
+	err := json.Unmarshal(b, i)
+	if err != nil {
+		return nil, err
+	}
+
+	return i, nil
 }
 
 // LoadFromFile reads the file at the given path and loads it into Index.
@@ -308,7 +340,46 @@ func (r *ChartRepository) LoadFromFile(path string) error {
 	if err != nil {
 		return err
 	}
-	return r.LoadIndexFromBytes(b)
+
+	h := sha256.New()
+	if _, err := io.Copy(h, bytes.NewReader(b)); err != nil {
+		return err
+	}
+
+	checksum := fmt.Sprintf("%x", h.Sum(nil))
+	// If optimization is disabled, use YAML index loader and nothing else.
+	if !r.OptimizeIndexLoading {
+		return r.LoadIndex(b, checksum, indexFromYAML)
+	}
+
+	// First check that an optimized index exists, if so load using JSON index loader.
+	// On top of a more efficient unmarshaling process, it will also avoid a sorting
+	// operation across the entire index.
+	jsonIndex := filepath.Join(filepath.Dir(path), fmt.Sprintf("index-%s.json", checksum))
+	if f, err := os.Lstat(jsonIndex); err == nil && f.Mode()&os.ModeSymlink == 0 {
+		if f.Size() > helm.MaxIndexSize {
+			return fmt.Errorf("size of optimized index '%s' exceeds '%d' bytes limit", stat.Name(), helm.MaxIndexSize)
+		}
+
+		cb, err := os.ReadFile(jsonIndex)
+		if err != nil {
+			return err
+		}
+		return r.LoadIndex(cb, checksum, indexFromJSON)
+	}
+
+	// Fallback to the YAML index loader.
+	if err = r.LoadIndex(b, checksum, indexFromYAML); err != nil {
+		return err
+	}
+
+	// Marshal the loaded index at this point, as it is fully loaded and sorted.
+	jb, err := json.Marshal(r.Index)
+	if err != nil {
+		return err
+	}
+
+	return os.WriteFile(jsonIndex, jb, 0o600)
 }
 
 // CacheIndex attempts to write the index from the remote into a new temporary file
@@ -359,8 +430,8 @@ func (r *ChartRepository) CacheIndexInMemory() error {
 }
 
 // StrategicallyLoadIndex lazy-loads the Index
-// first from Indexcache,
-// then from CachePath using oadFromCache if it does not HasIndex.
+// first from Indexcache, then from CachePath using LoadFromCache
+// if it does not HasIndex.
 // If not HasCacheFile, a cache attempt is made using CacheIndex
 // before continuing to load.
 func (r *ChartRepository) StrategicallyLoadIndex() (err error) {

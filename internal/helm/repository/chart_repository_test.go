@@ -20,6 +20,7 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"fmt"
+	"io"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -322,7 +323,7 @@ entries:
 			t.Parallel()
 
 			r := newChartRepository()
-			err := r.LoadIndexFromBytes(tt.b)
+			err := r.LoadIndex(tt.b, "", indexFromYAML)
 			if tt.wantErr != "" {
 				g.Expect(err).To(HaveOccurred())
 				g.Expect(err.Error()).To(ContainSubstring(tt.wantErr))
@@ -345,7 +346,7 @@ func TestChartRepository_LoadIndexFromBytes_Unordered(t *testing.T) {
 		t.Fatal(err)
 	}
 	r := newChartRepository()
-	err = r.LoadIndexFromBytes(b)
+	err = r.LoadIndex(b, "", indexFromYAML)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -366,13 +367,24 @@ func TestChartRepository_LoadIndexFromFile(t *testing.T) {
 	g.Expect(os.WriteFile(bigIndexFile, data, 0o640)).ToNot(HaveOccurred())
 
 	tests := []struct {
-		name     string
-		filename string
-		wantErr  string
+		name          string
+		filename      string
+		optimizeIndex bool
+		wantErr       string
 	}{
 		{
 			name:     "regular index file",
 			filename: testFile,
+		},
+		{
+			name:          "regular index file with pre-existing optimised index",
+			filename:      testFile,
+			optimizeIndex: true,
+		},
+		{
+			name:          "chartmuseum index file without pre-existing optimised index",
+			filename:      chartmuseumTestFile,
+			optimizeIndex: true,
 		},
 		{
 			name:     "chartmuseum index file",
@@ -391,6 +403,8 @@ func TestChartRepository_LoadIndexFromFile(t *testing.T) {
 			g := NewWithT(t)
 
 			r := newChartRepository()
+			r.OptimizeIndexLoading = tt.optimizeIndex
+
 			err := r.LoadFromFile(tt.filename)
 			if tt.wantErr != "" {
 				g.Expect(err).To(HaveOccurred())
@@ -403,6 +417,18 @@ func TestChartRepository_LoadIndexFromFile(t *testing.T) {
 			verifyLocalIndex(t, r.Index)
 		})
 	}
+
+	// Clean-up the optimised index created for chartmuseum test.
+	b, err := os.ReadFile(chartmuseumTestFile)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	h := sha256.New()
+	_, err = io.Copy(h, bytes.NewReader(b))
+	g.Expect(err).ToNot(HaveOccurred())
+
+	indexToDelete := filepath.Join(filepath.Dir(chartmuseumTestFile), fmt.Sprintf("index-%x.json", h.Sum(nil)))
+	err = os.Remove(indexToDelete)
+	g.Expect(err).ToNot(HaveOccurred())
 }
 
 func TestChartRepository_CacheIndex(t *testing.T) {
