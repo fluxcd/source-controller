@@ -18,6 +18,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -67,15 +68,6 @@ var (
 		},
 	}
 )
-
-type LogWriter struct {
-	log logr.Logger
-}
-
-func (l LogWriter) Write(p []byte) (n int, err error) {
-	l.log.Info(string(p))
-	return len(p), nil
-}
 
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
@@ -230,7 +222,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	rClient, err := registry.NewClient(registry.ClientOptWriter(LogWriter{logger.NewLogger(logger.Options{}).WithName("registry-client")}))
+	rClient, err := registry.NewClient(registry.ClientOptWriter(io.Discard))
 	if err != nil {
 		setupLog.Error(err, "unable to create OCI registry client")
 		os.Exit(1)
