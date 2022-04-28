@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.24.3
+
+**Release date:** 2022-04-28
+
+This prerelease prevents `Reconciling` and `ArtifactOutdated` conditions from
+being set on a `HelmRepository` when the checksum of a cached repository index
+changes.
+
+Fixes:
+- helmrepo: same revision different checksum scenario
+  [#691](https://github.com/fluxcd/source-controller/pull/691)
+
 ## 0.24.2
 
 **Release date:** 2022-04-26
