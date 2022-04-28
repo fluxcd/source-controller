@@ -51,8 +51,19 @@ func TestCheckoutBranch_Checkout(t *testing.T) {
 	// ignores the error here because it can be defaulted
 	// https://github.blog/2020-07-27-highlights-from-git-2-28/#introducing-init-defaultbranch
 	defaultBranch := "master"
-	if v, err := cfg.LookupString("init.defaultBranch"); err != nil && v != "" {
-		defaultBranch = v
+	iter, err := cfg.NewIterator()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for {
+		val, e := iter.Next()
+		if e != nil {
+			break
+		}
+		if val.Name == "init.defaultbranch" {
+			defaultBranch = val.Value
+			break
+		}
 	}
 
 	firstCommit, err := commitFile(repo, "branch", "init", time.Now())
@@ -102,7 +113,7 @@ func TestCheckoutBranch_Checkout(t *testing.T) {
 			filesCreated:   map[string]string{"branch": "second"},
 			expectedCommit: secondCommit.String(),
 			lastRevision:   fmt.Sprintf("%s/%s", defaultBranch, secondCommit.String()),
-			expectedErr:    fmt.Sprintf("no changes since last reconcilation: observed revision '%s/%s'", defaultBranch, secondCommit.String()),
+			expectedErr:    fmt.Sprintf("no changes since last reconciliation: observed revision '%s/%s'", defaultBranch, secondCommit.String()),
 		},
 		{
 			name:           "lastRevision is different",
@@ -143,12 +154,13 @@ func TestCheckoutBranch_Checkout(t *testing.T) {
 
 func TestCheckoutTag_Checkout(t *testing.T) {
 	tests := []struct {
-		name        string
-		tag         string
-		annotated   bool
-		checkoutTag string
-		expectTag   string
-		expectErr   string
+		name         string
+		tag          string
+		annotated    bool
+		checkoutTag  string
+		expectTag    string
+		expectErr    string
+		lastRevision bool
 	}{
 		{
 			name:        "Tag",
@@ -167,6 +179,21 @@ func TestCheckoutTag_Checkout(t *testing.T) {
 			name:        "Non existing tag",
 			checkoutTag: "invalid",
 			expectErr:   "unable to find 'invalid': no reference found for shorthand 'invalid'",
+		},
+		{
+			name:         "skip clone - last revision is unchanged",
+			tag:          "tag-1",
+			checkoutTag:  "tag-1",
+			expectTag:    "tag-1",
+			lastRevision: true,
+			expectErr:    "no changes since last reconciliation",
+		},
+		{
+			name:         "last revision changed",
+			tag:          "tag-1",
+			checkoutTag:  "tag-1",
+			expectTag:    "tag-2",
+			lastRevision: true,
 		},
 	}
 	for _, tt := range tests {
@@ -188,29 +215,60 @@ func TestCheckoutTag_Checkout(t *testing.T) {
 				if commit, err = repo.LookupCommit(c); err != nil {
 					t.Fatal(err)
 				}
-				_, err = tag(repo, c, !tt.annotated, tt.tag, time.Now())
+				_, err = tag(repo, commit.Id(), !tt.annotated, tt.tag, time.Now())
 				if err != nil {
 					t.Fatal(err)
 				}
 			}
 
-			tag := CheckoutTag{
+			checkoutTag := CheckoutTag{
 				Tag: tt.checkoutTag,
 			}
 			tmpDir := t.TempDir()
 
-			cc, err := tag.Checkout(context.TODO(), tmpDir, repo.Path(), nil)
+			cc, err := checkoutTag.Checkout(context.TODO(), tmpDir, repo.Path(), nil)
+
 			if tt.expectErr != "" {
+				if tt.lastRevision {
+					tmpDir, _ = os.MkdirTemp("", "test")
+					defer os.RemoveAll(tmpDir)
+					checkoutTag.LastRevision = cc.String()
+					cc, err = checkoutTag.Checkout(context.TODO(), tmpDir, repo.Path(), nil)
+				}
 				g.Expect(err).To(HaveOccurred())
 				g.Expect(err.Error()).To(ContainSubstring(tt.expectErr))
 				g.Expect(cc).To(BeNil())
 				return
 			}
+			if tt.lastRevision {
+				checkoutTag.LastRevision = fmt.Sprintf("%s/%s", tt.tag, commit.Id().String())
+				checkoutTag.Tag = tt.expectTag
+				if tt.tag != "" {
+					c, err := commitFile(repo, "tag", "changed tag", time.Now())
+					if err != nil {
+						t.Fatal(err)
+					}
+					if commit, err = repo.LookupCommit(c); err != nil {
+						t.Fatal(err)
+					}
+					_, err = tag(repo, commit.Id(), !tt.annotated, tt.expectTag, time.Now())
+					if err != nil {
+						t.Fatal(err)
+					}
+					tmpDir, _ = os.MkdirTemp("", "test")
+					defer os.RemoveAll(tmpDir)
+					cc, err = checkoutTag.Checkout(context.TODO(), tmpDir, repo.Path(), nil)
+				}
+			}
 
 			g.Expect(err).ToNot(HaveOccurred())
 			g.Expect(cc.String()).To(Equal(tt.expectTag + "/" + commit.Id().String()))
 			g.Expect(filepath.Join(tmpDir, "tag")).To(BeARegularFile())
-			g.Expect(os.ReadFile(filepath.Join(tmpDir, "tag"))).To(BeEquivalentTo(tt.tag))
+			if tt.lastRevision {
+				g.Expect(os.ReadFile(filepath.Join(tmpDir, "tag"))).To(BeEquivalentTo("changed tag"))
+			} else {
+				g.Expect(os.ReadFile(filepath.Join(tmpDir, "tag"))).To(BeEquivalentTo(tt.tag))
+			}
 		})
 	}
 }

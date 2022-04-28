@@ -65,23 +65,13 @@ type CheckoutBranch struct {
 }
 
 func (c *CheckoutBranch) Checkout(ctx context.Context, path, url string, opts *git.AuthOptions) (*git.Commit, error) {
-	repo, err := git2go.InitRepository(path, false)
+	repo, remote, err := getBlankRepoAndRemote(ctx, path, url, opts)
+
 	if err != nil {
-		return nil, fmt.Errorf("unable to init repository for '%s': %w", managed.EffectiveURL(url), gitutil.LibGit2Error(err))
+		return nil, err
 	}
 	defer repo.Free()
-
-	remote, err := repo.Remotes.Create("origin", url)
-	if err != nil {
-		return nil, fmt.Errorf("unable to create remote for '%s': %w", managed.EffectiveURL(url), gitutil.LibGit2Error(err))
-	}
 	defer remote.Free()
-
-	callBacks := RemoteCallbacks(ctx, opts)
-	err = remote.ConnectFetch(&callBacks, &git2go.ProxyOptions{Type: git2go.ProxyTypeAuto}, nil)
-	if err != nil {
-		return nil, fmt.Errorf("unable to fetch-connect to remote '%s': %w", managed.EffectiveURL(url), gitutil.LibGit2Error(err))
-	}
 	defer remote.Disconnect()
 
 	// When the last observed revision is set, check whether it is still
@@ -95,7 +85,7 @@ func (c *CheckoutBranch) Checkout(ctx context.Context, path, url string, opts *g
 			currentRevision := fmt.Sprintf("%s/%s", c.Branch, heads[0].Id.String())
 			if currentRevision == c.LastRevision {
 				return nil, git.NoChangesError{
-					Message:          "no changes since last reconcilation",
+					Message:          "no changes since last reconciliation",
 					ObservedRevision: currentRevision,
 				}
 			}
@@ -155,21 +145,59 @@ func (c *CheckoutBranch) Checkout(ctx context.Context, path, url string, opts *g
 }
 
 type CheckoutTag struct {
-	Tag string
+	Tag          string
+	LastRevision string
 }
 
 func (c *CheckoutTag) Checkout(ctx context.Context, path, url string, opts *git.AuthOptions) (*git.Commit, error) {
-	repo, err := safeClone(url, path, &git2go.CloneOptions{
-		FetchOptions: git2go.FetchOptions{
-			DownloadTags:    git2go.DownloadTagsAll,
+	repo, remote, err := getBlankRepoAndRemote(ctx, path, url, opts)
+
+	if err != nil {
+		return nil, err
+	}
+
+	defer repo.Free()
+	defer remote.Free()
+	defer remote.Disconnect()
+
+	if c.LastRevision != "" {
+		heads, err := remote.Ls(c.Tag)
+		if err != nil {
+			return nil, fmt.Errorf("unable to remote ls for '%s': %w", managed.EffectiveURL(url), gitutil.LibGit2Error(err))
+		}
+		if len(heads) > 0 {
+			currentRevision := fmt.Sprintf("%s/%s", c.Tag, heads[0].Id.String())
+			var same bool
+			if currentRevision == c.LastRevision {
+				same = true
+			} else if len(heads) > 1 {
+				currentAnnotatedRevision := fmt.Sprintf("%s/%s", c.Tag, heads[1].Id.String())
+				if currentAnnotatedRevision == c.LastRevision {
+					same = true
+				}
+			}
+			if same {
+				return nil, git.NoChangesError{
+					Message:          "no changes since last reconciliation",
+					ObservedRevision: currentRevision,
+				}
+			}
+		}
+	}
+
+	err = remote.Fetch([]string{c.Tag},
+		&git2go.FetchOptions{
+			DownloadTags:    git2go.DownloadTagsAuto,
 			RemoteCallbacks: RemoteCallbacks(ctx, opts),
 			ProxyOptions:    git2go.ProxyOptions{Type: git2go.ProxyTypeAuto},
 		},
-	})
+		"")
+
 	if err != nil {
-		return nil, fmt.Errorf("unable to clone '%s': %w", managed.EffectiveURL(url), gitutil.LibGit2Error(err))
+		return nil, fmt.Errorf("unable to fetch remote '%s': %w",
+			managed.EffectiveURL(url), gitutil.LibGit2Error(err))
 	}
-	defer repo.Free()
+
 	cc, err := checkoutDetachedDwim(repo, c.Tag)
 	if err != nil {
 		return nil, err
@@ -390,4 +418,28 @@ func buildSignature(s *git2go.Signature) git.Signature {
 		Email: s.Email,
 		When:  s.When,
 	}
+}
+
+// getBlankRepoAndRemote returns a newly initialized repository, and a remote connected to the provided url.
+// Callers must make sure to call the below defer statements:
+//	defer repo.Free()
+//	defer remote.Free()
+//	defer remote.Disconnect()
+func getBlankRepoAndRemote(ctx context.Context, path, url string, opts *git.AuthOptions) (*git2go.Repository, *git2go.Remote, error) {
+	repo, err := git2go.InitRepository(path, false)
+	if err != nil {
+		return nil, nil, fmt.Errorf("unable to init repository for '%s': %w", managed.EffectiveURL(url), gitutil.LibGit2Error(err))
+	}
+
+	remote, err := repo.Remotes.Create("origin", url)
+	if err != nil {
+		return nil, nil, fmt.Errorf("unable to create remote for '%s': %w", managed.EffectiveURL(url), gitutil.LibGit2Error(err))
+	}
+
+	callBacks := RemoteCallbacks(ctx, opts)
+	err = remote.ConnectFetch(&callBacks, &git2go.ProxyOptions{Type: git2go.ProxyTypeAuto}, nil)
+	if err != nil {
+		return nil, nil, fmt.Errorf("unable to fetch-connect to remote '%s': %w", managed.EffectiveURL(url), gitutil.LibGit2Error(err))
+	}
+	return repo, remote, nil
 }
