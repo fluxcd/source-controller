@@ -125,7 +125,11 @@ func (r *HelmRepositoryReconciler) SetupWithManagerAndOptions(mgr ctrl.Manager, 
 		For(&sourcev1.HelmRepository{}).
 		WithEventFilter(
 			predicate.And(
-				predicate.NewPredicateFuncs(HelmRepositoryTypeFilter(sourcev1.HelmRepositoryTypeDefault)),
+				predicate.Or(
+					predicate.NewPredicateFuncs(HelmRepositoryTypeFilter(sourcev1.HelmRepositoryTypeDefault)),
+					// an empty type field defaults to handling the repo as traditional HTTP Helm repo
+					predicate.NewPredicateFuncs(HelmRepositoryTypeFilter("")),
+				),
 				predicate.Or(predicate.GenerationChangedPredicate{}, predicates.ReconcileRequestedPredicate{}),
 			),
 		).

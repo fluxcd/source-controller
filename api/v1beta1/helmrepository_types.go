@@ -75,7 +75,7 @@ type HelmRepositorySpec struct {
 
 	// Type of the HelmRepository.
 	// When this field is set to  "OCI", the URL field value must be prefixed with "oci://".
-	// +kubebuilder:default:="Default"
+	// +kubebuilder:validation:Enum=default;oci
 	// +optional
 	Type string `json:"type,omitempty"`
 }
