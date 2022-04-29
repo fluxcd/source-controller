@@ -149,8 +149,8 @@ spec:
               secretRef:
                 description: The secret name containing the Git credentials. For HTTPS
                   repositories the secret must contain username and password fields.
-                  For SSH repositories the secret must contain identity, identity.pub
-                  and known_hosts fields.
+                  For SSH repositories the secret must contain identity and known_hosts
+                  fields.
                 properties:
                   name:
                     description: Name of the referent.
@@ -493,8 +493,7 @@ spec:
                 description: SecretRef specifies the Secret containing authentication
                   credentials for the GitRepository. For HTTPS repositories the Secret
                   must contain 'username' and 'password' fields. For SSH repositories
-                  the Secret must contain 'identity', 'identity.pub' and 'known_hosts'
-                  fields.
+                  the Secret must contain 'identity' and 'known_hosts' fields.
                 properties:
                   name:
                     description: Name of the referent.

@@ -152,9 +152,8 @@ data:
 #### SSH authentication
 
 To authenticate towards a Git repository over SSH, the referenced Secret is
-expected to contain `.data.identity`, `.data.identity.pub` and `known_hosts`
-fields. With the respective private and public key of the SSH key pair, and the
-host keys of the Git repository.
+expected to contain `.data.identity` and `known_hosts` fields. With the respective
+private key of the SSH key pair, and the host keys of the Git repository.
 
 ```yaml
 ---
@@ -165,7 +164,6 @@ metadata:
 type: Opaque
 data:
   identity: <BASE64>
-  identity.pub: <BASE64>
   known_hosts: <BASE64>
 ```
 

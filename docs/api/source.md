@@ -321,7 +321,7 @@ github.com/fluxcd/pkg/apis/meta.LocalObjectReference
 the GitRepository.
 For HTTPS repositories the Secret must contain &lsquo;username&rsquo; and &lsquo;password&rsquo;
 fields.
-For SSH repositories the Secret must contain &lsquo;identity&rsquo;, &lsquo;identity.pub&rsquo;
+For SSH repositories the Secret must contain &lsquo;identity&rsquo;
 and &lsquo;known_hosts&rsquo; fields.</p>
 </td>
 </tr>
@@ -1405,7 +1405,7 @@ github.com/fluxcd/pkg/apis/meta.LocalObjectReference
 the GitRepository.
 For HTTPS repositories the Secret must contain &lsquo;username&rsquo; and &lsquo;password&rsquo;
 fields.
-For SSH repositories the Secret must contain &lsquo;identity&rsquo;, &lsquo;identity.pub&rsquo;
+For SSH repositories the Secret must contain &lsquo;identity&rsquo;
 and &lsquo;known_hosts&rsquo; fields.</p>
 </td>
 </tr>

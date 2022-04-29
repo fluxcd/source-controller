@@ -56,7 +56,7 @@ type GitRepositorySpec struct {
 	// the GitRepository.
 	// For HTTPS repositories the Secret must contain 'username' and 'password'
 	// fields.
-	// For SSH repositories the Secret must contain 'identity', 'identity.pub'
+	// For SSH repositories the Secret must contain 'identity'
 	// and 'known_hosts' fields.
 	// +optional
 	SecretRef *meta.LocalObjectReference `json:"secretRef,omitempty"`
