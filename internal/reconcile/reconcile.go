@@ -52,7 +52,12 @@ const (
 // can be implemented to build custom results based on the context of the
 // reconciler.
 type RuntimeResultBuilder interface {
+	// BuildRuntimeResult analyzes the result and error to return a runtime
+	// result.
 	BuildRuntimeResult(rr Result, err error) ctrl.Result
+	// IsSuccess returns if a given runtime result is success for a
+	// RuntimeResultBuilder.
+	IsSuccess(ctrl.Result) bool
 }
 
 // AlwaysRequeueResultBuilder implements a RuntimeResultBuilder for always
@@ -80,6 +85,12 @@ func (r AlwaysRequeueResultBuilder) BuildRuntimeResult(rr Result, err error) ctr
 	default:
 		return ctrl.Result{}
 	}
+}
+
+// IsSuccess returns true if the given Result has the same RequeueAfter value
+// as of the AlwaysRequeueResultBuilder.
+func (r AlwaysRequeueResultBuilder) IsSuccess(result ctrl.Result) bool {
+	return result.RequeueAfter == r.RequeueAfter
 }
 
 // ComputeReconcileResult analyzes the reconcile results (result + error),

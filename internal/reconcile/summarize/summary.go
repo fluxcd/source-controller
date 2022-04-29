@@ -18,12 +18,14 @@ package summarize
 
 import (
 	"context"
+	"errors"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	kerrors "k8s.io/apimachinery/pkg/util/errors"
 	kuberecorder "k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 
+	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	"github.com/fluxcd/pkg/runtime/patch"
 
@@ -204,6 +206,18 @@ func (h *Helper) SummarizeAndPatch(ctx context.Context, obj conditions.Setter, o
 		)
 	}
 
+	// If object is not stalled, result is success and runtime error is nil,
+	// ensure that Ready=True. Else, use the Ready failure message as the
+	// runtime error message. This ensures that the reconciliation would be
+	// retried as the object isn't ready.
+	// NOTE: This is applicable to Ready condition only because it is a special
+	// condition in kstatus that reflects the overall state of an object.
+	if isNonStalledSuccess(obj, opts.ResultBuilder, result, recErr) {
+		if !conditions.IsReady(obj) {
+			recErr = errors.New(conditions.GetMessage(obj, meta.ReadyCondition))
+		}
+	}
+
 	// Finally, patch the resource.
 	if err := h.patchHelper.Patch(ctx, obj, patchOpts...); err != nil {
 		// Ignore patch error "not found" when the object is being deleted.
@@ -214,4 +228,17 @@ func (h *Helper) SummarizeAndPatch(ctx context.Context, obj conditions.Setter, o
 	}
 
 	return result, recErr
+}
+
+// isNonStalledSuccess checks if the reconciliation was successful and has not
+// resulted in stalled situation.
+func isNonStalledSuccess(obj conditions.Setter, rb reconcile.RuntimeResultBuilder, result ctrl.Result, recErr error) bool {
+	if !conditions.IsStalled(obj) && recErr == nil {
+		// Without result builder, it can't be determined if the result is
+		// success.
+		if rb != nil {
+			return rb.IsSuccess(result)
+		}
+	}
+	return false
 }

@@ -119,16 +119,6 @@ func TestComputeReconcileResult(t *testing.T) {
 			},
 		},
 		{
-			name:       "requeue result",
-			result:     ResultRequeue,
-			recErr:     nil,
-			wantResult: ctrl.Result{Requeue: true},
-			wantErr:    false,
-			afterFunc: func(t *WithT, obj conditions.Setter, patchOpts *patch.HelperOptions) {
-				t.Expect(patchOpts.IncludeStatusObservedGeneration).To(BeFalse())
-			},
-		},
-		{
 			name:       "stalling error",
 			result:     ResultEmpty,
 			recErr:     &serror.Stalling{Err: fmt.Errorf("some error"), Reason: "some reason"},
@@ -199,6 +189,49 @@ func TestComputeReconcileResult(t *testing.T) {
 				o.ApplyToHelper(opts)
 			}
 			tt.afterFunc(g, obj, opts)
+		})
+	}
+}
+
+func TestAlwaysRequeueResultBuilder_IsSuccess(t *testing.T) {
+	interval := 5 * time.Second
+
+	tests := []struct {
+		name          string
+		resultBuilder AlwaysRequeueResultBuilder
+		runtimeResult ctrl.Result
+		result        bool
+	}{
+		{
+			name:          "success result",
+			resultBuilder: AlwaysRequeueResultBuilder{RequeueAfter: interval},
+			runtimeResult: ctrl.Result{RequeueAfter: interval},
+			result:        true,
+		},
+		{
+			name:          "requeue result",
+			resultBuilder: AlwaysRequeueResultBuilder{RequeueAfter: interval},
+			runtimeResult: ctrl.Result{Requeue: true},
+			result:        false,
+		},
+		{
+			name:          "zero result",
+			resultBuilder: AlwaysRequeueResultBuilder{RequeueAfter: interval},
+			runtimeResult: ctrl.Result{},
+			result:        false,
+		},
+		{
+			name:          "different requeue after",
+			resultBuilder: AlwaysRequeueResultBuilder{RequeueAfter: interval},
+			runtimeResult: ctrl.Result{RequeueAfter: time.Second},
+			result:        false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+			g.Expect(tt.resultBuilder.IsSuccess(tt.runtimeResult)).To(Equal(tt.result))
 		})
 	}
 }
