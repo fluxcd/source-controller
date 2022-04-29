@@ -307,9 +307,7 @@ func TestHelmChartReconciler_reconcileStorage(t *testing.T) {
 func TestHelmChartReconciler_reconcileSource(t *testing.T) {
 	g := NewWithT(t)
 
-	tmpDir, err := os.MkdirTemp("", "reconcile-tarball-")
-	g.Expect(err).ToNot(HaveOccurred())
-	defer os.RemoveAll(tmpDir)
+	tmpDir := t.TempDir()
 
 	storage, err := NewStorage(tmpDir, "example.com", retentionTTL, retentionRecords)
 	g.Expect(err).ToNot(HaveOccurred())
@@ -781,9 +779,7 @@ func TestHelmChartReconciler_buildFromHelmRepository(t *testing.T) {
 func TestHelmChartReconciler_buildFromTarballArtifact(t *testing.T) {
 	g := NewWithT(t)
 
-	tmpDir, err := os.MkdirTemp("", "reconcile-tarball-")
-	g.Expect(err).ToNot(HaveOccurred())
-	defer os.RemoveAll(tmpDir)
+	tmpDir := t.TempDir()
 
 	storage, err := NewStorage(tmpDir, "example.com", retentionTTL, retentionRecords)
 	g.Expect(err).ToNot(HaveOccurred())

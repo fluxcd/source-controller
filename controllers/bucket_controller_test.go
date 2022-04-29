@@ -539,9 +539,7 @@ func TestBucketReconciler_reconcileSource_generic(t *testing.T) {
 				Client:        builder.Build(),
 				Storage:       testStorage,
 			}
-			tmpDir, err := os.MkdirTemp("", "reconcile-bucket-source-")
-			g.Expect(err).ToNot(HaveOccurred())
-			defer os.RemoveAll(tmpDir)
+			tmpDir := t.TempDir()
 
 			obj := &sourcev1.Bucket{
 				TypeMeta: metav1.TypeMeta{
@@ -834,9 +832,7 @@ func TestBucketReconciler_reconcileSource_gcs(t *testing.T) {
 				Client:        builder.Build(),
 				Storage:       testStorage,
 			}
-			tmpDir, err := os.MkdirTemp("", "reconcile-bucket-source-")
-			g.Expect(err).ToNot(HaveOccurred())
-			defer os.RemoveAll(tmpDir)
+			tmpDir := t.TempDir()
 
 			// Test bucket object.
 			obj := &sourcev1.Bucket{
@@ -992,9 +988,7 @@ func TestBucketReconciler_reconcileArtifact(t *testing.T) {
 				Storage:       testStorage,
 			}
 
-			tmpDir, err := os.MkdirTemp("", "reconcile-bucket-artifact-")
-			g.Expect(err).ToNot(HaveOccurred())
-			defer os.RemoveAll(tmpDir)
+			tmpDir := t.TempDir()
 
 			obj := &sourcev1.Bucket{
 				TypeMeta: metav1.TypeMeta{

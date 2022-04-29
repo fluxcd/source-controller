@@ -107,11 +107,7 @@ func Test_fetchEtagIndex(t *testing.T) {
 	}
 
 	t.Run("fetches etag index", func(t *testing.T) {
-		tmp, err := os.MkdirTemp("", "test-bucket")
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer os.RemoveAll(tmp)
+		tmp := t.TempDir()
 
 		client := mockBucketClient{bucketName: bucketName}
 		client.addObject("foo.yaml", mockBucketObject{data: "foo.yaml", etag: "etag1"})
@@ -119,7 +115,7 @@ func Test_fetchEtagIndex(t *testing.T) {
 		client.addObject("baz.yaml", mockBucketObject{data: "baz.yaml", etag: "etag3"})
 
 		index := newEtagIndex()
-		err = fetchEtagIndex(context.TODO(), client, bucket.DeepCopy(), index, tmp)
+		err := fetchEtagIndex(context.TODO(), client, bucket.DeepCopy(), index, tmp)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -128,25 +124,17 @@ func Test_fetchEtagIndex(t *testing.T) {
 	})
 
 	t.Run("an error while bucket does not exist", func(t *testing.T) {
-		tmp, err := os.MkdirTemp("", "test-bucket")
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer os.RemoveAll(tmp)
+		tmp := t.TempDir()
 
 		client := mockBucketClient{bucketName: "other-bucket-name"}
 
 		index := newEtagIndex()
-		err = fetchEtagIndex(context.TODO(), client, bucket.DeepCopy(), index, tmp)
+		err := fetchEtagIndex(context.TODO(), client, bucket.DeepCopy(), index, tmp)
 		assert.ErrorContains(t, err, "not found")
 	})
 
 	t.Run("filters with .sourceignore rules", func(t *testing.T) {
-		tmp, err := os.MkdirTemp("", "test-bucket")
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer os.RemoveAll(tmp)
+		tmp := t.TempDir()
 
 		client := mockBucketClient{bucketName: bucketName}
 		client.addObject(".sourceignore", mockBucketObject{etag: "sourceignore1", data: `*.txt`})
@@ -154,7 +142,7 @@ func Test_fetchEtagIndex(t *testing.T) {
 		client.addObject("foo.txt", mockBucketObject{etag: "etag2", data: "foo.txt"})
 
 		index := newEtagIndex()
-		err = fetchEtagIndex(context.TODO(), client, bucket.DeepCopy(), index, tmp)
+		err := fetchEtagIndex(context.TODO(), client, bucket.DeepCopy(), index, tmp)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -170,11 +158,7 @@ func Test_fetchEtagIndex(t *testing.T) {
 	})
 
 	t.Run("filters with ignore rules from object", func(t *testing.T) {
-		tmp, err := os.MkdirTemp("", "test-bucket")
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer os.RemoveAll(tmp)
+		tmp := t.TempDir()
 
 		client := mockBucketClient{bucketName: bucketName}
 		client.addObject(".sourceignore", mockBucketObject{etag: "sourceignore1", data: `*.txt`})
@@ -185,7 +169,7 @@ func Test_fetchEtagIndex(t *testing.T) {
 		bucket.Spec.Ignore = &ignore
 
 		index := newEtagIndex()
-		err = fetchEtagIndex(context.TODO(), client, bucket.DeepCopy(), index, tmp)
+		err := fetchEtagIndex(context.TODO(), client, bucket.DeepCopy(), index, tmp)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -212,11 +196,7 @@ func Test_fetchFiles(t *testing.T) {
 	}
 
 	t.Run("fetches files", func(t *testing.T) {
-		tmp, err := os.MkdirTemp("", "test-bucket")
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer os.RemoveAll(tmp)
+		tmp := t.TempDir()
 
 		client := mockBucketClient{bucketName: bucketName}
 		client.addObject("foo.yaml", mockBucketObject{data: "foo.yaml", etag: "etag1"})
@@ -225,7 +205,7 @@ func Test_fetchFiles(t *testing.T) {
 
 		index := client.objectsToEtagIndex()
 
-		err = fetchIndexFiles(context.TODO(), client, bucket.DeepCopy(), index, tmp)
+		err := fetchIndexFiles(context.TODO(), client, bucket.DeepCopy(), index, tmp)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -240,34 +220,26 @@ func Test_fetchFiles(t *testing.T) {
 	})
 
 	t.Run("an error while fetching returns an error for the whole procedure", func(t *testing.T) {
-		tmp, err := os.MkdirTemp("", "test-bucket")
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer os.RemoveAll(tmp)
+		tmp := t.TempDir()
 
 		client := mockBucketClient{bucketName: bucketName, objects: map[string]mockBucketObject{}}
 		client.objects["error"] = mockBucketObject{}
 
-		err = fetchIndexFiles(context.TODO(), client, bucket.DeepCopy(), client.objectsToEtagIndex(), tmp)
+		err := fetchIndexFiles(context.TODO(), client, bucket.DeepCopy(), client.objectsToEtagIndex(), tmp)
 		if err == nil {
 			t.Fatal("expected error but got nil")
 		}
 	})
 
 	t.Run("a changed etag updates the index", func(t *testing.T) {
-		tmp, err := os.MkdirTemp("", "test-bucket")
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer os.RemoveAll(tmp)
+		tmp := t.TempDir()
 
 		client := mockBucketClient{bucketName: bucketName}
 		client.addObject("foo.yaml", mockBucketObject{data: "foo.yaml", etag: "etag2"})
 
 		index := newEtagIndex()
 		index.Add("foo.yaml", "etag1")
-		err = fetchIndexFiles(context.TODO(), client, bucket.DeepCopy(), index, tmp)
+		err := fetchIndexFiles(context.TODO(), client, bucket.DeepCopy(), index, tmp)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -276,11 +248,7 @@ func Test_fetchFiles(t *testing.T) {
 	})
 
 	t.Run("a disappeared index entry is removed from the index", func(t *testing.T) {
-		tmp, err := os.MkdirTemp("", "test-bucket")
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer os.RemoveAll(tmp)
+		tmp := t.TempDir()
 
 		client := mockBucketClient{bucketName: bucketName}
 		client.addObject("foo.yaml", mockBucketObject{data: "foo.yaml", etag: "etag1"})
@@ -290,7 +258,7 @@ func Test_fetchFiles(t *testing.T) {
 		// Does not exist on server
 		index.Add("bar.yaml", "etag2")
 
-		err = fetchIndexFiles(context.TODO(), client, bucket.DeepCopy(), index, tmp)
+		err := fetchIndexFiles(context.TODO(), client, bucket.DeepCopy(), index, tmp)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -301,11 +269,7 @@ func Test_fetchFiles(t *testing.T) {
 
 	t.Run("can fetch more than maxConcurrentFetches", func(t *testing.T) {
 		// this will fail if, for example, the semaphore is not used correctly and blocks
-		tmp, err := os.MkdirTemp("", "test-bucket")
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer os.RemoveAll(tmp)
+		tmp := t.TempDir()
 
 		client := mockBucketClient{bucketName: bucketName}
 		for i := 0; i < 2*maxConcurrentBucketFetches; i++ {
@@ -314,7 +278,7 @@ func Test_fetchFiles(t *testing.T) {
 		}
 		index := client.objectsToEtagIndex()
 
-		err = fetchIndexFiles(context.TODO(), client, bucket.DeepCopy(), index, tmp)
+		err := fetchIndexFiles(context.TODO(), client, bucket.DeepCopy(), index, tmp)
 		if err != nil {
 			t.Fatal(err)
 		}

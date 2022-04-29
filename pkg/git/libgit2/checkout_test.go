@@ -37,12 +37,11 @@ import (
 )
 
 func TestCheckoutBranch_Checkout(t *testing.T) {
-	repo, err := initBareRepo()
+	repo, err := initBareRepo(t)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer repo.Free()
-	defer os.RemoveAll(filepath.Join(repo.Path(), ".."))
 
 	cfg, err := git2go.OpenDefault()
 	if err != nil {
@@ -105,8 +104,7 @@ func TestCheckoutBranch_Checkout(t *testing.T) {
 			branch := CheckoutBranch{
 				Branch: tt.branch,
 			}
-			tmpDir, _ := os.MkdirTemp("", "test")
-			defer os.RemoveAll(tmpDir)
+			tmpDir := t.TempDir()
 
 			cc, err := branch.Checkout(context.TODO(), tmpDir, repo.Path(), nil)
 			if tt.expectedErr != "" {
@@ -158,12 +156,11 @@ func TestCheckoutTag_Checkout(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
 
-			repo, err := initBareRepo()
+			repo, err := initBareRepo(t)
 			if err != nil {
 				t.Fatal(err)
 			}
 			defer repo.Free()
-			defer os.RemoveAll(filepath.Join(repo.Path(), ".."))
 
 			var commit *git2go.Commit
 			if tt.tag != "" {
@@ -183,8 +180,7 @@ func TestCheckoutTag_Checkout(t *testing.T) {
 			tag := CheckoutTag{
 				Tag: tt.checkoutTag,
 			}
-			tmpDir, _ := os.MkdirTemp("", "test")
-			defer os.RemoveAll(tmpDir)
+			tmpDir := t.TempDir()
 
 			cc, err := tag.Checkout(context.TODO(), tmpDir, repo.Path(), nil)
 			if tt.expectErr != "" {
@@ -205,12 +201,11 @@ func TestCheckoutTag_Checkout(t *testing.T) {
 func TestCheckoutCommit_Checkout(t *testing.T) {
 	g := NewWithT(t)
 
-	repo, err := initBareRepo()
+	repo, err := initBareRepo(t)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer repo.Free()
-	defer os.RemoveAll(filepath.Join(repo.Path(), ".."))
 
 	c, err := commitFile(repo, "commit", "init", time.Now())
 	if err != nil {
@@ -223,11 +218,7 @@ func TestCheckoutCommit_Checkout(t *testing.T) {
 	commit := CheckoutCommit{
 		Commit: c.String(),
 	}
-	tmpDir, err := os.MkdirTemp("", "git2go")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(tmpDir)
+	tmpDir := t.TempDir()
 
 	cc, err := commit.Checkout(context.TODO(), tmpDir, repo.Path(), nil)
 	g.Expect(err).ToNot(HaveOccurred())
@@ -239,11 +230,7 @@ func TestCheckoutCommit_Checkout(t *testing.T) {
 	commit = CheckoutCommit{
 		Commit: "4dc3185c5fc94eb75048376edeb44571cece25f4",
 	}
-	tmpDir2, err := os.MkdirTemp("", "git2go")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(tmpDir2)
+	tmpDir2 := t.TempDir()
 
 	cc, err = commit.Checkout(context.TODO(), tmpDir2, repo.Path(), nil)
 	g.Expect(err).To(HaveOccurred())
@@ -313,12 +300,11 @@ func TestCheckoutTagSemVer_Checkout(t *testing.T) {
 		},
 	}
 
-	repo, err := initBareRepo()
+	repo, err := initBareRepo(t)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer repo.Free()
-	defer os.RemoveAll(filepath.Join(repo.Path(), ".."))
 
 	refs := make(map[string]string, len(tags))
 	for _, tt := range tags {
@@ -349,8 +335,7 @@ func TestCheckoutTagSemVer_Checkout(t *testing.T) {
 			semVer := CheckoutSemVer{
 				SemVer: tt.constraint,
 			}
-			tmpDir, _ := os.MkdirTemp("", "test")
-			defer os.RemoveAll(tmpDir)
+			tmpDir := t.TempDir()
 
 			cc, err := semVer.Checkout(context.TODO(), tmpDir, repo.Path(), nil)
 			if tt.expectErr != nil {
@@ -367,14 +352,10 @@ func TestCheckoutTagSemVer_Checkout(t *testing.T) {
 	}
 }
 
-func initBareRepo() (*git2go.Repository, error) {
-	tmpDir, err := os.MkdirTemp("", "git2go-")
-	if err != nil {
-		return nil, err
-	}
+func initBareRepo(t *testing.T) (*git2go.Repository, error) {
+	tmpDir := t.TempDir()
 	repo, err := git2go.InitRepository(tmpDir, false)
 	if err != nil {
-		_ = os.RemoveAll(tmpDir)
 		return nil, err
 	}
 	return repo, nil
@@ -514,8 +495,7 @@ func TestCheckout_ED25519(t *testing.T) {
 
 	// Prepare for checkout.
 	branchCheckoutStrat := &CheckoutBranch{Branch: git.DefaultBranch}
-	tmpDir, _ := os.MkdirTemp("", "test")
-	defer os.RemoveAll(tmpDir)
+	tmpDir := t.TempDir()
 
 	ctx, cancel := context.WithTimeout(context.TODO(), timeout)
 	defer cancel()

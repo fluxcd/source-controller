@@ -144,22 +144,18 @@ func TestBucketNotExists(t *testing.T) {
 
 func TestFGetObject(t *testing.T) {
 	ctx := context.Background()
-	tempDir, err := os.MkdirTemp("", bucketName)
-	assert.NilError(t, err)
-	defer os.RemoveAll(tempDir)
+	tempDir := t.TempDir()
 	path := filepath.Join(tempDir, sourceignore.IgnoreFile)
-	_, err = minioClient.FGetObject(ctx, bucketName, objectName, path)
+	_, err := minioClient.FGetObject(ctx, bucketName, objectName, path)
 	assert.NilError(t, err)
 }
 
 func TestFGetObjectNotExists(t *testing.T) {
 	ctx := context.Background()
-	tempDir, err := os.MkdirTemp("", bucketName)
-	assert.NilError(t, err)
-	defer os.RemoveAll(tempDir)
+	tempDir := t.TempDir()
 	badKey := "invalid.txt"
 	path := filepath.Join(tempDir, badKey)
-	_, err = minioClient.FGetObject(ctx, bucketName, badKey, path)
+	_, err := minioClient.FGetObject(ctx, bucketName, badKey, path)
 	assert.Error(t, err, "The specified key does not exist.")
 	assert.Check(t, minioClient.ObjectIsNotFound(err))
 }

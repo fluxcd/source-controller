@@ -35,11 +35,10 @@ import (
 )
 
 func TestCheckoutBranch_Checkout(t *testing.T) {
-	repo, path, err := initRepo()
+	repo, path, err := initRepo(t)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.RemoveAll(path)
 
 	firstCommit, err := commitFile(repo, "branch", "init", time.Now())
 	if err != nil {
@@ -88,8 +87,7 @@ func TestCheckoutBranch_Checkout(t *testing.T) {
 			branch := CheckoutBranch{
 				Branch: tt.branch,
 			}
-			tmpDir, _ := os.MkdirTemp("", "test")
-			defer os.RemoveAll(tmpDir)
+			tmpDir := t.TempDir()
 
 			cc, err := branch.Checkout(context.TODO(), tmpDir, path, nil)
 			if tt.expectedErr != "" {
@@ -142,11 +140,10 @@ func TestCheckoutTag_Checkout(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
 
-			repo, path, err := initRepo()
+			repo, path, err := initRepo(t)
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer os.RemoveAll(path)
 
 			var h plumbing.Hash
 			if tt.tag != "" {
@@ -163,8 +160,7 @@ func TestCheckoutTag_Checkout(t *testing.T) {
 			tag := CheckoutTag{
 				Tag: tt.checkoutTag,
 			}
-			tmpDir, _ := os.MkdirTemp("", "test")
-			defer os.RemoveAll(tmpDir)
+			tmpDir := t.TempDir()
 
 			cc, err := tag.Checkout(context.TODO(), tmpDir, path, nil)
 			if tt.expectErr != "" {
@@ -182,11 +178,10 @@ func TestCheckoutTag_Checkout(t *testing.T) {
 }
 
 func TestCheckoutCommit_Checkout(t *testing.T) {
-	repo, path, err := initRepo()
+	repo, path, err := initRepo(t)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.RemoveAll(path)
 
 	firstCommit, err := commitFile(repo, "commit", "init", time.Now())
 	if err != nil {
@@ -242,11 +237,7 @@ func TestCheckoutCommit_Checkout(t *testing.T) {
 				Branch: tt.branch,
 			}
 
-			tmpDir, err := os.MkdirTemp("", "git2go")
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer os.RemoveAll(tmpDir)
+			tmpDir := t.TempDir()
 
 			cc, err := commit.Checkout(context.TODO(), tmpDir, path, nil)
 			if tt.expectError != "" {
@@ -326,11 +317,10 @@ func TestCheckoutTagSemVer_Checkout(t *testing.T) {
 		},
 	}
 
-	repo, path, err := initRepo()
+	repo, path, err := initRepo(t)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.RemoveAll(path)
 
 	refs := make(map[string]string, len(tags))
 	for _, tt := range tags {
@@ -352,8 +342,7 @@ func TestCheckoutTagSemVer_Checkout(t *testing.T) {
 			semVer := CheckoutSemVer{
 				SemVer: tt.constraint,
 			}
-			tmpDir, _ := os.MkdirTemp("", "test")
-			defer os.RemoveAll(tmpDir)
+			tmpDir := t.TempDir()
 
 			cc, err := semVer.Checkout(context.TODO(), tmpDir, path, nil)
 			if tt.expectErr != nil {
@@ -370,16 +359,11 @@ func TestCheckoutTagSemVer_Checkout(t *testing.T) {
 	}
 }
 
-func initRepo() (*extgogit.Repository, string, error) {
-	tmpDir, err := os.MkdirTemp("", "gogit")
-	if err != nil {
-		os.RemoveAll(tmpDir)
-		return nil, "", err
-	}
+func initRepo(t *testing.T) (*extgogit.Repository, string, error) {
+	tmpDir := t.TempDir()
 	sto := filesystem.NewStorage(osfs.New(tmpDir), cache.NewObjectLRUDefault())
 	repo, err := extgogit.Init(sto, memfs.New())
 	if err != nil {
-		os.RemoveAll(tmpDir)
 		return nil, "", err
 	}
 	return repo, tmpDir, err

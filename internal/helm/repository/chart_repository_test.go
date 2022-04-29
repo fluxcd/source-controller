@@ -358,9 +358,7 @@ func TestChartRepository_LoadIndexFromFile(t *testing.T) {
 	g := NewWithT(t)
 
 	// Create an index file that exceeds the max index size.
-	tmpDir, err := os.MkdirTemp("", "load-index-")
-	g.Expect(err).ToNot(HaveOccurred())
-	defer os.RemoveAll(tmpDir)
+	tmpDir := t.TempDir()
 	bigIndexFile := filepath.Join(tmpDir, "index.yaml")
 	data := make([]byte, helm.MaxIndexSize+10)
 	g.Expect(os.WriteFile(bigIndexFile, data, 0o640)).ToNot(HaveOccurred())

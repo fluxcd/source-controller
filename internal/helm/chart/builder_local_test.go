@@ -177,9 +177,7 @@ fullnameOverride: "full-foo-name-override"`),
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
 
-			workDir, err := os.MkdirTemp("", "local-builder-")
-			g.Expect(err).ToNot(HaveOccurred())
-			defer os.RemoveAll(workDir)
+			workDir := t.TempDir()
 
 			// Only if the reference is a LocalReference, set the WorkDir.
 			localRef, ok := tt.reference.(LocalReference)
@@ -213,7 +211,6 @@ fullnameOverride: "full-foo-name-override"`),
 
 			// Target path with name similar to the workDir.
 			targetPath := workDir + ".tgz"
-			defer os.RemoveAll(targetPath)
 
 			dm := NewDependencyManager(
 				WithRepositories(tt.repositories),
@@ -247,18 +244,14 @@ fullnameOverride: "full-foo-name-override"`),
 func TestLocalBuilder_Build_CachedChart(t *testing.T) {
 	g := NewWithT(t)
 
-	workDir, err := os.MkdirTemp("", "local-builder-")
-	g.Expect(err).ToNot(HaveOccurred())
-	defer os.RemoveAll(workDir)
+	workDir := t.TempDir()
 
 	testChartPath := "./../testdata/charts/helmchart"
 
 	dm := NewDependencyManager()
 	b := NewLocalBuilder(dm)
 
-	tmpDir, err := os.MkdirTemp("", "local-chart-")
-	g.Expect(err).ToNot(HaveOccurred())
-	defer os.RemoveAll(tmpDir)
+	tmpDir := t.TempDir()
 
 	// Copy the source chart into the workdir.
 	g.Expect(copy.Copy(testChartPath, filepath.Join(workDir, "testdata", "charts", filepath.Base("helmchart")))).ToNot(HaveOccurred())
@@ -275,7 +268,6 @@ func TestLocalBuilder_Build_CachedChart(t *testing.T) {
 	buildOpts.CachedChart = cb.Path
 
 	targetPath2 := filepath.Join(tmpDir, "chart2.tgz")
-	defer os.RemoveAll(targetPath2)
 	cb, err = b.Build(context.TODO(), reference, targetPath2, buildOpts)
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(cb.Path).To(Equal(targetPath))
@@ -331,9 +323,7 @@ func Test_mergeFileValues(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
 
-			baseDir, err := os.MkdirTemp("", "merge-file-values-*")
-			g.Expect(err).ToNot(HaveOccurred())
-			defer os.RemoveAll(baseDir)
+			baseDir := t.TempDir()
 
 			for _, f := range tt.files {
 				g.Expect(os.WriteFile(filepath.Join(baseDir, f.Name), f.Data, 0o640)).To(Succeed())

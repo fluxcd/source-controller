@@ -35,20 +35,8 @@ import (
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
 )
 
-func createStoragePath() (string, error) {
-	return os.MkdirTemp("", "")
-}
-
-func cleanupStoragePath(dir string) func() {
-	return func() { os.RemoveAll(dir) }
-}
-
 func TestStorageConstructor(t *testing.T) {
-	dir, err := createStoragePath()
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(cleanupStoragePath(dir))
+	dir := t.TempDir()
 
 	if _, err := NewStorage("/nonexistent", "hostname", time.Minute, 2); err == nil {
 		t.Fatal("nonexistent path was allowable in storage constructor")
@@ -113,11 +101,7 @@ func walkTar(tarFile string, match string, dir bool) (int64, bool, error) {
 }
 
 func TestStorage_Archive(t *testing.T) {
-	dir, err := createStoragePath()
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(cleanupStoragePath(dir))
+	dir := t.TempDir()
 
 	storage, err := NewStorage(dir, "hostname", time.Minute, 2)
 	if err != nil {
@@ -125,15 +109,7 @@ func TestStorage_Archive(t *testing.T) {
 	}
 
 	createFiles := func(files map[string][]byte) (dir string, err error) {
-		defer func() {
-			if err != nil && dir != "" {
-				os.RemoveAll(dir)
-			}
-		}()
-		dir, err = os.MkdirTemp("", "archive-test-files-")
-		if err != nil {
-			return
-		}
+		dir = t.TempDir()
 		for name, b := range files {
 			absPath := filepath.Join(dir, name)
 			if err = os.MkdirAll(filepath.Dir(absPath), 0o750); err != nil {
@@ -285,11 +261,7 @@ func TestStorage_Archive(t *testing.T) {
 
 func TestStorageRemoveAllButCurrent(t *testing.T) {
 	t.Run("bad directory in archive", func(t *testing.T) {
-		dir, err := os.MkdirTemp("", "")
-		if err != nil {
-			t.Fatal(err)
-		}
-		t.Cleanup(func() { os.RemoveAll(dir) })
+		dir := t.TempDir()
 
 		s, err := NewStorage(dir, "hostname", time.Minute, 2)
 		if err != nil {
@@ -303,9 +275,7 @@ func TestStorageRemoveAllButCurrent(t *testing.T) {
 
 	t.Run("collect names of deleted items", func(t *testing.T) {
 		g := NewWithT(t)
-		dir, err := os.MkdirTemp("", "")
-		g.Expect(err).ToNot(HaveOccurred())
-		t.Cleanup(func() { os.RemoveAll(dir) })
+		dir := t.TempDir()
 
 		s, err := NewStorage(dir, "hostname", time.Minute, 2)
 		g.Expect(err).ToNot(HaveOccurred(), "failed to create new storage")
@@ -366,9 +336,7 @@ func TestStorageRemoveAll(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
-			dir, err := os.MkdirTemp("", "")
-			g.Expect(err).ToNot(HaveOccurred())
-			t.Cleanup(func() { os.RemoveAll(dir) })
+			dir := t.TempDir()
 
 			s, err := NewStorage(dir, "hostname", time.Minute, 2)
 			g.Expect(err).ToNot(HaveOccurred(), "failed to create new storage")
@@ -394,11 +362,7 @@ func TestStorageCopyFromPath(t *testing.T) {
 		Content []byte
 	}
 
-	dir, err := createStoragePath()
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(cleanupStoragePath(dir))
+	dir := t.TempDir()
 
 	storage, err := NewStorage(dir, "hostname", time.Minute, 2)
 	if err != nil {
@@ -406,11 +370,7 @@ func TestStorageCopyFromPath(t *testing.T) {
 	}
 
 	createFile := func(file *File) (absPath string, err error) {
-		dir, err = os.MkdirTemp("", "test-files-")
-		if err != nil {
-			return
-		}
-		t.Cleanup(cleanupStoragePath(dir))
+		dir = t.TempDir()
 		absPath = filepath.Join(dir, file.Name)
 		if err = os.MkdirAll(filepath.Dir(absPath), 0o750); err != nil {
 			return
@@ -474,7 +434,6 @@ func TestStorageCopyFromPath(t *testing.T) {
 				t.Error(err)
 				return
 			}
-			defer os.RemoveAll(absPath)
 			artifact := sourcev1.Artifact{
 				Path: filepath.Join(randStringRunes(10), randStringRunes(10), randStringRunes(10)),
 			}
@@ -581,9 +540,7 @@ func TestStorage_getGarbageFiles(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
-			dir, err := os.MkdirTemp("", "")
-			g.Expect(err).ToNot(HaveOccurred())
-			t.Cleanup(func() { os.RemoveAll(dir) })
+			dir := t.TempDir()
 
 			s, err := NewStorage(dir, "hostname", tt.ttl, tt.maxItemsToBeRetained)
 			g.Expect(err).ToNot(HaveOccurred(), "failed to create new storage")
@@ -657,9 +614,7 @@ func TestStorage_GarbageCollect(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
-			dir, err := os.MkdirTemp("", "")
-			g.Expect(err).ToNot(HaveOccurred())
-			t.Cleanup(func() { os.RemoveAll(dir) })
+			dir := t.TempDir()
 
 			s, err := NewStorage(dir, "hostname", time.Second*2, 2)
 			g.Expect(err).ToNot(HaveOccurred(), "failed to create new storage")

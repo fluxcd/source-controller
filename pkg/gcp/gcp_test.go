@@ -202,9 +202,7 @@ func TestVisitObjectsCallbackErr(t *testing.T) {
 }
 
 func TestFGetObject(t *testing.T) {
-	tempDir, err := os.MkdirTemp("", bucketName)
-	assert.NilError(t, err)
-	defer os.RemoveAll(tempDir)
+	tempDir := t.TempDir()
 	gcpClient := &GCSClient{
 		Client: client,
 	}
@@ -218,9 +216,7 @@ func TestFGetObject(t *testing.T) {
 
 func TestFGetObjectNotExists(t *testing.T) {
 	object := "notexists.txt"
-	tempDir, err := os.MkdirTemp("", bucketName)
-	assert.NilError(t, err)
-	defer os.RemoveAll(tempDir)
+	tempDir := t.TempDir()
 	gcsClient := &GCSClient{
 		Client: client,
 	}
@@ -233,9 +229,7 @@ func TestFGetObjectNotExists(t *testing.T) {
 }
 
 func TestFGetObjectDirectoryIsFileName(t *testing.T) {
-	tempDir, err := os.MkdirTemp("", bucketName)
-	assert.NilError(t, err)
-	defer os.RemoveAll(tempDir)
+	tempDir := t.TempDir()
 	gcpClient := &GCSClient{
 		Client: client,
 	}

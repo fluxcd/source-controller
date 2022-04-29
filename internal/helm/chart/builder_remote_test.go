@@ -159,9 +159,7 @@ entries:
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
 
-			tmpDir, err := os.MkdirTemp("", "remote-chart-builder-")
-			g.Expect(err).ToNot(HaveOccurred())
-			defer os.RemoveAll(tmpDir)
+			tmpDir := t.TempDir()
 			targetPath := filepath.Join(tmpDir, "chart.tgz")
 
 			if tt.repository != nil {
@@ -237,13 +235,10 @@ entries:
 
 	b := NewRemoteBuilder(repository)
 
-	tmpDir, err := os.MkdirTemp("", "remote-chart-")
-	g.Expect(err).ToNot(HaveOccurred())
-	defer os.RemoveAll(tmpDir)
+	tmpDir := t.TempDir()
 
 	// Build first time.
 	targetPath := filepath.Join(tmpDir, "chart1.tgz")
-	defer os.RemoveAll(targetPath)
 	buildOpts := BuildOptions{}
 	cb, err := b.Build(context.TODO(), reference, targetPath, buildOpts)
 	g.Expect(err).ToNot(HaveOccurred())
@@ -253,7 +248,6 @@ entries:
 
 	// Rebuild with a new path.
 	targetPath2 := filepath.Join(tmpDir, "chart2.tgz")
-	defer os.RemoveAll(targetPath2)
 	cb, err = b.Build(context.TODO(), reference, targetPath2, buildOpts)
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(cb.Path).To(Equal(targetPath))
@@ -342,16 +336,13 @@ func Test_mergeChartValues(t *testing.T) {
 func Test_validatePackageAndWriteToPath(t *testing.T) {
 	g := NewWithT(t)
 
-	tmpDir, err := os.MkdirTemp("", "validate-pkg-chart-")
-	g.Expect(err).ToNot(HaveOccurred())
-	defer os.RemoveAll(tmpDir)
+	tmpDir := t.TempDir()
 
 	validF, err := os.Open("./../testdata/charts/helmchart-0.1.0.tgz")
 	g.Expect(err).ToNot(HaveOccurred())
 	defer validF.Close()
 
 	chartPath := filepath.Join(tmpDir, "chart.tgz")
-	defer os.Remove(chartPath)
 	err = validatePackageAndWriteToPath(validF, chartPath)
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(chartPath).To(BeARegularFile())
