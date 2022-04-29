@@ -134,9 +134,7 @@ func TestLoadChartMetadataFromDir(t *testing.T) {
 	g := NewWithT(t)
 
 	// Create a chart file that exceeds the max chart file size.
-	tmpDir, err := os.MkdirTemp("", "load-chart-")
-	g.Expect(err).ToNot(HaveOccurred())
-	defer os.RemoveAll(tmpDir)
+	tmpDir := t.TempDir()
 	copy.Copy("../testdata/charts/helmchart", tmpDir)
 	bigRequirementsFile := filepath.Join(tmpDir, "requirements.yaml")
 	data := make([]byte, helm.MaxChartFileSize+10)
@@ -200,9 +198,7 @@ func TestLoadChartMetadataFromArchive(t *testing.T) {
 	g := NewWithT(t)
 
 	// Create a chart archive that exceeds the max chart size.
-	tmpDir, err := os.MkdirTemp("", "load-chart-")
-	g.Expect(err).ToNot(HaveOccurred())
-	defer os.RemoveAll(tmpDir)
+	tmpDir := t.TempDir()
 	bigArchiveFile := filepath.Join(tmpDir, "chart.tgz")
 	data := make([]byte, helm.MaxChartSize+10)
 	g.Expect(os.WriteFile(bigArchiveFile, data, 0o640)).ToNot(HaveOccurred())

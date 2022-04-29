@@ -264,9 +264,7 @@ func TestCheckoutStrategyForImplementation_Proxied(t *testing.T) {
 			})
 			g.Expect(err).ToNot(HaveOccurred())
 
-			tmpDir, err := os.MkdirTemp("", "test-checkout")
-			g.Expect(err).ToNot(HaveOccurred())
-			defer os.RemoveAll(tmpDir)
+			tmpDir := t.TempDir()
 
 			// for the NO_PROXY test we dont want to wait the 30s for it to timeout/fail, so shorten the timeout
 			checkoutCtx := context.TODO()

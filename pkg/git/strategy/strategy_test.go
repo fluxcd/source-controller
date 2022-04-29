@@ -180,9 +180,7 @@ func TestCheckoutStrategyForImplementation_Auth(t *testing.T) {
 			checkoutStrategy, err := CheckoutStrategyForImplementation(context.TODO(), impl, checkoutOpts)
 			g.Expect(err).ToNot(HaveOccurred())
 
-			tmpDir, err := os.MkdirTemp("", "test-checkout")
-			g.Expect(err).ToNot(HaveOccurred())
-			defer os.RemoveAll(tmpDir)
+			tmpDir := t.TempDir()
 
 			tt.wantFunc(g, checkoutStrategy, tmpDir, repoURL, authOpts)
 		}
@@ -271,9 +269,7 @@ func TestCheckoutStrategyForImplementation_SemVerCheckout(t *testing.T) {
 	}
 
 	// Clone the repo locally.
-	cloneDir, err := os.MkdirTemp("", "test-clone")
-	g.Expect(err).ToNot(HaveOccurred())
-	defer os.RemoveAll(cloneDir)
+	cloneDir := t.TempDir()
 	repo, err := extgogit.PlainClone(cloneDir, false, &extgogit.CloneOptions{
 		URL: repoURL,
 	})
@@ -332,9 +328,7 @@ func TestCheckoutStrategyForImplementation_SemVerCheckout(t *testing.T) {
 			g.Expect(err).ToNot(HaveOccurred())
 
 			// Checkout and verify.
-			tmpDir, err := os.MkdirTemp("", "test-checkout")
-			g.Expect(err).ToNot(HaveOccurred())
-			defer os.RemoveAll(tmpDir)
+			tmpDir := t.TempDir()
 
 			cc, err := checkoutStrategy.Checkout(context.TODO(), tmpDir, repoURL, authOpts)
 			if tt.expectErr != nil {
@@ -425,9 +419,7 @@ func TestCheckoutStrategyForImplementation_WithCtxTimeout(t *testing.T) {
 			checkoutStrategy, err := CheckoutStrategyForImplementation(context.TODO(), impl, checkoutOpts)
 			g.Expect(err).ToNot(HaveOccurred())
 
-			tmpDir, err := os.MkdirTemp("", "test-checkout")
-			g.Expect(err).ToNot(HaveOccurred())
-			defer os.RemoveAll(tmpDir)
+			tmpDir := t.TempDir()
 
 			checkoutCtx, cancel := context.WithTimeout(context.TODO(), tt.timeout)
 			defer cancel()

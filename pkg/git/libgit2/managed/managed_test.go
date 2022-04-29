@@ -258,8 +258,7 @@ func TestManagedTransport_E2E(t *testing.T) {
 	err = server.InitRepo("../testdata/git/repo", git.DefaultBranch, repoPath)
 	g.Expect(err).ToNot(HaveOccurred())
 
-	tmpDir, _ := os.MkdirTemp("", "test")
-	defer os.RemoveAll(tmpDir)
+	tmpDir := t.TempDir()
 
 	// Test HTTP transport
 
@@ -285,8 +284,7 @@ func TestManagedTransport_E2E(t *testing.T) {
 	g.Expect(err).ToNot(HaveOccurred())
 	repo.Free()
 
-	tmpDir2, _ := os.MkdirTemp("", "test")
-	defer os.RemoveAll(tmpDir2)
+	tmpDir2 := t.TempDir()
 
 	kp, err := ssh.NewEd25519Generator().Generate()
 	g.Expect(err).ToNot(HaveOccurred())
@@ -313,8 +311,7 @@ func TestManagedTransport_E2E(t *testing.T) {
 func TestManagedTransport_HandleRedirect(t *testing.T) {
 	g := NewWithT(t)
 
-	tmpDir, _ := os.MkdirTemp("", "test")
-	defer os.RemoveAll(tmpDir)
+	tmpDir := t.TempDir()
 
 	// Force managed transport to be enabled
 	InitManagedTransport(logr.Discard())

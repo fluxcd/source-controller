@@ -728,9 +728,7 @@ func TestHelmRepositoryReconciler_reconcileArtifact(t *testing.T) {
 				},
 			}
 
-			tmpDir, err := os.MkdirTemp("", "test-reconcile-artifact-")
-			g.Expect(err).ToNot(HaveOccurred())
-			defer os.RemoveAll(tmpDir)
+			tmpDir := t.TempDir()
 
 			// Create an empty cache file.
 			cachePath := filepath.Join(tmpDir, "index.yaml")

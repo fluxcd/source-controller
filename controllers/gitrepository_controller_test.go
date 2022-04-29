@@ -509,9 +509,7 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 						t.Skipf("Skipped for Git implementation %q", i)
 					}
 
-					tmpDir, err := os.MkdirTemp("", "auth-strategy-")
-					g.Expect(err).To(BeNil())
-					defer os.RemoveAll(tmpDir)
+					tmpDir := t.TempDir()
 
 					obj := obj.DeepCopy()
 					obj.Spec.GitImplementation = i
@@ -671,9 +669,7 @@ func TestGitRepositoryReconciler_reconcileSource_checkoutStrategy(t *testing.T) 
 						t.Skipf("Skipped for Git implementation %q", i)
 					}
 
-					tmpDir, err := os.MkdirTemp("", "checkout-strategy-")
-					g.Expect(err).NotTo(HaveOccurred())
-					defer os.RemoveAll(tmpDir)
+					tmpDir := t.TempDir()
 
 					obj := obj.DeepCopy()
 					obj.Spec.GitImplementation = i
@@ -1072,9 +1068,7 @@ func TestGitRepositoryReconciler_reconcileInclude(t *testing.T) {
 				tt.beforeFunc(obj)
 			}
 
-			tmpDir, err := os.MkdirTemp("", "include-")
-			g.Expect(err).NotTo(HaveOccurred())
-			defer os.RemoveAll(tmpDir)
+			tmpDir := t.TempDir()
 
 			var commit git.Commit
 			var includes artifactSet
