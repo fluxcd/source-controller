@@ -552,7 +552,7 @@ func (r *ChartRepository) SetMemCache(key string, c *cache.Cache, ttl time.Durat
 
 // RemoveCache removes the CachePath if Cached.
 func (r *ChartRepository) RemoveCache() error {
-	if r == nil {
+	if r == nil || r.RWMutex == nil {
 		return nil
 	}
 

@@ -22,6 +22,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/docker/go-units"
@@ -336,6 +337,13 @@ func (r *HelmRepositoryReconciler) reconcileSource(ctx context.Context, obj *sou
 		helmgetter.WithPassCredentialsAll(obj.Spec.PassCredentials),
 	}
 
+	// Enables helmgetter to only download the index if it hasn't been modified since last artifact was reconciled.
+	// If the server supports it and the index hasn't changed, a 304 error will be returned and no data will be
+	// downloaded.
+	if obj.Status.Artifact != nil {
+		clientOpts = append(clientOpts, helmgetter.WithIfModifiedSince(obj.Status.Artifact.LastUpdateTime.Time))
+	}
+
 	// Configure any authentication related options
 	if obj.Spec.SecretRef != nil {
 		// Attempt to retrieve secret
@@ -402,6 +410,15 @@ func (r *HelmRepositoryReconciler) reconcileSource(ctx context.Context, obj *sou
 	// Fetch the repository index from remote.
 	checksum, err := newChartRepo.CacheIndex()
 	if err != nil {
+		// Helm skipped downloading the index file, as it hasn't changed since
+		// last reconciliation. Short-circuit process to prevent expensive
+		// operations ahead.
+		if strings.HasSuffix(err.Error(), "304 Not Modified") {
+			*artifact = *obj.GetArtifact()
+			conditions.Delete(obj, sourcev1.FetchFailedCondition)
+			return sreconcile.ResultSuccess, nil
+		}
+
 		e := &serror.Event{
 			Err:    fmt.Errorf("failed to fetch Helm repository index: %w", err),
 			Reason: meta.FailedReason,
