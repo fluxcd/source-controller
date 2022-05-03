@@ -2,6 +2,28 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.24.4
+
+**Release date:** 2022-05-03
+
+This prerelease comes with dependency updates, and improvements around edge-case
+handling of reconcile result calculations ensuring an object is always requeued
+when its Status Conditions equal `Ready=False` and `Stalled!=True`.
+
+Improvements:
+- summarize: Consider obj status condition in result
+  [#703](https://github.com/fluxcd/source-controller/pull/703)
+- Update dependencies
+  [#705](https://github.com/fluxcd/source-controller/pull/705)
+
+Fixes:
+- docs: Remove all traces of "identity.pub" from docs
+  [#699](https://github.com/fluxcd/source-controller/pull/699)
+- test: use `T.TempDir` to create temporary test directory
+  [#701](https://github.com/fluxcd/source-controller/pull/701)
+- Switch to gen-crd-api-reference-docs from master
+  [#702](https://github.com/fluxcd/source-controller/pull/702)
+
 ## 0.24.3
 
 **Release date:** 2022-04-28
