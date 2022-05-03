@@ -21,6 +21,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"net/url"
+	"sort"
 	"strings"
 
 	"helm.sh/helm/v3/pkg/chart"
@@ -28,26 +29,33 @@ import (
 	"helm.sh/helm/v3/pkg/registry"
 	"helm.sh/helm/v3/pkg/repo"
 
+	"github.com/Masterminds/semver/v3"
+	"github.com/fluxcd/pkg/version"
 	"github.com/fluxcd/source-controller/internal/transport"
 )
+
+type RegistryClient interface {
+	Login(host string, opts ...registry.LoginOption) error
+	Logout(host string, opts ...registry.LogoutOption) error
+	Tags(url string) ([]string, error)
+}
 
 // OCIChartRepository represents a Helm chart repository, and the configuration
 // required to download the repository tags and charts from the repository.
 // All methods are thread safe unless defined otherwise.
 type OCIChartRepository struct {
-	// URL the ChartRepository's index.yaml can be found at,
-	// without the index.yaml suffix.
+	// URL is the location of the repository.
 	URL url.URL
-	// Client to use while downloading the Index or a chart from the URL.
+	// Client to use while accessing the repository's contents.
 	Client getter.Getter
-	// Options to configure the Client with while downloading the Index
+	// Options to configure the Client with while downloading tags
 	// or a chart from the URL.
 	Options []getter.Option
 
 	tlsConfig *tls.Config
 
 	// RegistryClient is a client to use while downloading tags or charts from a registry.
-	RegistryClient *registry.Client
+	RegistryClient RegistryClient
 }
 
 // OCIChartRepositoryOption is a function that can be passed to NewOCIChartRepository
@@ -55,7 +63,7 @@ type OCIChartRepository struct {
 type OCIChartRepositoryOption func(*OCIChartRepository) error
 
 // WithOCIRegistryClient returns a ChartRepositoryOption that will set the registry client
-func WithOCIRegistryClient(client *registry.Client) OCIChartRepositoryOption {
+func WithOCIRegistryClient(client RegistryClient) OCIChartRepositoryOption {
 	return func(r *OCIChartRepository) error {
 		r.RegistryClient = client
 		return nil
@@ -139,7 +147,7 @@ func (r *OCIChartRepository) Get(name, ver string) (*repo.ChartVersion, error) {
 	// If empty, try to get the highest available tag
 	// If exact version, try to find it
 	// If semver constraint string, try to find a match
-	tag, err := registry.GetTagMatchingVersionOrConstraint(cvs, ver)
+	tag, err := getLastMatchingVersionOrConstraint(cvs, ver)
 	return &repo.ChartVersion{
 		URLs: []string{fmt.Sprintf("%s/%s:%s", r.URL.String(), name, tag)},
 		Metadata: &chart.Metadata{
@@ -174,6 +182,10 @@ func (r *OCIChartRepository) DownloadChart(chart *repo.ChartVersion) (*bytes.Buf
 	}
 
 	ref := chart.URLs[0]
+	if !registry.IsOCI(ref) {
+		return nil, fmt.Errorf("chart '%s' is not an OCI chart", chart.Name)
+	}
+
 	u, err := url.Parse(ref)
 	if err != nil {
 		err = fmt.Errorf("invalid chart URL format '%s': %w", ref, err)
@@ -186,4 +198,68 @@ func (r *OCIChartRepository) DownloadChart(chart *repo.ChartVersion) (*bytes.Buf
 
 	// trim the oci scheme prefix if needed
 	return r.Client.Get(strings.TrimPrefix(u.String(), fmt.Sprintf("%s://", registry.OCIScheme)), clientOpts...)
+}
+
+// Login attempts to login to the OCI registry.
+func (r *OCIChartRepository) Login(opts ...registry.LoginOption) error {
+	err := r.RegistryClient.Login(r.URL.Host, opts...)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// Logout attempts to logout from the OCI registry.
+func (r *OCIChartRepository) Logout() error {
+	err := r.RegistryClient.Logout(r.URL.Host)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func getLastMatchingVersionOrConstraint(cvs []string, ver string) (string, error) {
+	// Check for exact matches first
+	if ver != "" {
+		for _, cv := range cvs {
+			if ver == cv {
+				return cv, nil
+			}
+		}
+	}
+
+	// Continue to look for a (semantic) version match
+	verConstraint, err := semver.NewConstraint("*")
+	if err != nil {
+		return "", err
+	}
+	latestStable := ver == "" || ver == "*"
+	if !latestStable {
+		verConstraint, err = semver.NewConstraint(ver)
+		if err != nil {
+			return "", err
+		}
+	}
+
+	matchingVersions := make([]string, 0, len(cvs))
+	for _, cv := range cvs {
+		v, err := version.ParseVersion(cv)
+		if err != nil {
+			continue
+		}
+
+		if !verConstraint.Check(v) {
+			continue
+		}
+
+		matchingVersions = append(matchingVersions, cv)
+	}
+	if len(matchingVersions) == 0 {
+		return "", fmt.Errorf("could not locate a version matching provided version string %s", ver)
+	}
+
+	// Sort versions
+	sort.Sort(sort.Reverse(sort.StringSlice(matchingVersions)))
+
+	return matchingVersions[0], nil
 }

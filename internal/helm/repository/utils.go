@@ -16,7 +16,9 @@ limitations under the License.
 
 package repository
 
-import "strings"
+import (
+	"strings"
+)
 
 // NormalizeURL normalizes a ChartRepository URL by ensuring it ends with a
 // single "/".

@@ -3,7 +3,7 @@ package controllers
 import (
 	"context"
 	"fmt"
-	"net/url"
+	"strings"
 	"time"
 
 	"github.com/fluxcd/pkg/apis/meta"
@@ -13,6 +13,7 @@ import (
 	"github.com/fluxcd/pkg/runtime/predicates"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
 	serror "github.com/fluxcd/source-controller/internal/error"
+	"github.com/fluxcd/source-controller/internal/helm/repository"
 	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
 	"github.com/fluxcd/source-controller/internal/reconcile/summarize"
 	helmgetter "helm.sh/helm/v3/pkg/getter"
@@ -267,30 +268,29 @@ func (r *HelmRepositoryOCIReconciler) reconcileSource(ctx context.Context, obj *
 // validateSource the HelmRepository object by checking the url and connecting to the underlying registry
 // with he provided credentials.
 func (r *HelmRepositoryOCIReconciler) validateSource(ctx context.Context, obj *sourcev1.HelmRepository, loginOpts ...registry.LoginOption) (sreconcile.Result, error) {
-	target, err := url.Parse(obj.Spec.URL)
+	chartRepo, err := repository.NewOCIChartRepository(obj.Spec.URL, repository.WithOCIRegistryClient(r.RegistryClient))
 	if err != nil {
-		e := &serror.Event{
-			Err:    fmt.Errorf("failed to parse URL '%s': %w", obj.Spec.URL, err),
-			Reason: "ValidationError",
+		if strings.Contains(err.Error(), "parse") {
+			e := &serror.Event{
+				Err:    fmt.Errorf("failed to parse URL '%s': %w", obj.Spec.URL, err),
+				Reason: "ValidationError",
+			}
+			conditions.MarkFalse(obj, sourcev1.SourceValidCondition, e.Reason, e.Err.Error())
+			return sreconcile.ResultEmpty, e
+		} else if strings.Contains(err.Error(), "the url scheme is not supported") {
+			e := &serror.Event{
+				Err:    err,
+				Reason: "ValidationError",
+			}
+			conditions.MarkFalse(obj, sourcev1.SourceValidCondition, e.Reason, e.Err.Error())
+			return sreconcile.ResultEmpty, e
 		}
-		conditions.MarkFalse(obj, sourcev1.SourceValidCondition, e.Reason, e.Err.Error())
-		return sreconcile.ResultEmpty, e
 	}
 
-	// Check if the registry is supported
-	if !registry.IsOCI(obj.Spec.URL) {
-		e := &serror.Event{
-			Err:    fmt.Errorf("unsupported registry scheme '%s'", target.Scheme),
-			Reason: "ValidationError",
-		}
-		conditions.MarkFalse(obj, sourcev1.SourceValidCondition, e.Reason, e.Err.Error())
-		return sreconcile.ResultEmpty, e
-	}
-
-	err = r.RegistryClient.Login(target.Host+target.Path, loginOpts...)
+	err = chartRepo.Login(loginOpts...)
 	if err != nil {
 		e := &serror.Event{
-			Err:    fmt.Errorf("failed to login to registry '%s': %w", target.String(), err),
+			Err:    fmt.Errorf("failed to login to registry: %w", err),
 			Reason: "ValidationError",
 		}
 		conditions.MarkFalse(obj, sourcev1.SourceValidCondition, e.Reason, e.Err.Error())
