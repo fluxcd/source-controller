@@ -48,6 +48,7 @@ import (
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
 	"github.com/fluxcd/source-controller/internal/cache"
+	"github.com/fluxcd/source-controller/internal/helm/util"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -77,6 +78,10 @@ var (
 		getter.Provider{
 			Schemes: []string{"http", "https"},
 			New:     getter.NewHTTPGetter,
+		},
+		getter.Provider{
+			Schemes: []string{"oci"},
+			New:     getter.NewOCIGetter,
 		},
 	}
 )
@@ -194,7 +199,7 @@ func TestMain(m *testing.M) {
 	testMetricsH = controller.MustMakeMetrics(testEnv)
 
 	testRegistryserver = &RegistryClientTestServer{}
-	registryWorskpaceDir := SetupServer(testRegistryserver)
+	registryWorkspaceDir := SetupServer(testRegistryserver)
 
 	testRegistryClient, err = registry.NewClient(registry.ClientOptWriter(os.Stdout))
 	if err != nil {
@@ -230,11 +235,11 @@ func TestMain(m *testing.M) {
 	}
 
 	if err = (&HelmRepositoryOCIReconciler{
-		Client:         testEnv,
-		EventRecorder:  record.NewFakeRecorder(32),
-		Metrics:        testMetricsH,
-		Getters:        testGetters,
-		RegistryClient: testRegistryClient,
+		Client:                  testEnv,
+		EventRecorder:           record.NewFakeRecorder(32),
+		Metrics:                 testMetricsH,
+		Getters:                 testGetters,
+		RegistryClientGenerator: util.RegistryClientGenerator,
 	}).SetupWithManager(testEnv); err != nil {
 		panic(fmt.Sprintf("Failed to start HelmRepositoryOCIReconciler: %v", err))
 	}
@@ -275,7 +280,7 @@ func TestMain(m *testing.M) {
 		panic(fmt.Sprintf("Failed to remove storage server dir: %v", err))
 	}
 
-	if err := os.RemoveAll(registryWorskpaceDir); err != nil {
+	if err := os.RemoveAll(registryWorkspaceDir); err != nil {
 		panic(fmt.Sprintf("Failed to remove registry workspace dir: %v", err))
 	}
 

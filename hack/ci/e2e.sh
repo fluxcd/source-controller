@@ -155,3 +155,9 @@ kubectl -n source-system wait --for=condition=ready --timeout=1m -l app=source-c
 echo "Re-run large libgit2 repo test with managed transport"
 kubectl -n source-system wait gitrepository/large-repo-libgit2 --for=condition=ready --timeout=2m15s
 kubectl -n source-system exec deploy/source-controller -- printenv | grep EXPERIMENTAL_GIT_TRANSPORT=true
+
+
+echo "Run HelmChart from OCI registry tests"
+kubectl -n source-system apply -f "${ROOT_DIR}/config/testdata/helmchart-from-oci/source.yaml"
+kubectl -n source-system wait helmrepository/podinfo --for=condition=ready --timeout=1m
+kubectl -n source-system wait helmchart/podinfo --for=condition=ready --timeout=1m

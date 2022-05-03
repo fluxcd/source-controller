@@ -48,6 +48,7 @@ import (
 	serror "github.com/fluxcd/source-controller/internal/error"
 	"github.com/fluxcd/source-controller/internal/helm/getter"
 	"github.com/fluxcd/source-controller/internal/helm/repository"
+	intpredicates "github.com/fluxcd/source-controller/internal/predicates"
 	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
 	"github.com/fluxcd/source-controller/internal/reconcile/summarize"
 )
@@ -126,9 +127,8 @@ func (r *HelmRepositoryReconciler) SetupWithManagerAndOptions(mgr ctrl.Manager, 
 		WithEventFilter(
 			predicate.And(
 				predicate.Or(
-					predicate.NewPredicateFuncs(HelmRepositoryTypeFilter(sourcev1.HelmRepositoryTypeDefault)),
-					// an empty type field defaults to handling the repo as traditional HTTP Helm repo
-					predicate.NewPredicateFuncs(HelmRepositoryTypeFilter("")),
+					intpredicates.HelmRepositoryTypePredicate{RepositoryType: sourcev1.HelmRepositoryTypeDefault},
+					intpredicates.HelmRepositoryTypePredicate{RepositoryType: ""},
 				),
 				predicate.Or(predicate.GenerationChangedPredicate{}, predicates.ReconcileRequestedPredicate{}),
 			),
@@ -200,7 +200,8 @@ func (r *HelmRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	}
 
 	// Examine if the object is under deletion
-	if !obj.ObjectMeta.DeletionTimestamp.IsZero() {
+	// or if a type change has happened
+	if !obj.ObjectMeta.DeletionTimestamp.IsZero() || (obj.Spec.Type != "" && obj.Spec.Type != sourcev1.HelmRepositoryTypeDefault) {
 		recResult, retErr = r.reconcileDelete(ctx, obj)
 		return
 	}
@@ -547,8 +548,10 @@ func (r *HelmRepositoryReconciler) reconcileDelete(ctx context.Context, obj *sou
 		return sreconcile.ResultEmpty, err
 	}
 
-	// Remove our finalizer from the list
-	controllerutil.RemoveFinalizer(obj, sourcev1.SourceFinalizer)
+	// Remove our finalizer from the list if we are deleting the object
+	if !obj.DeletionTimestamp.IsZero() {
+		controllerutil.RemoveFinalizer(obj, sourcev1.SourceFinalizer)
+	}
 
 	// Stop reconciliation as the object is being deleted
 	return sreconcile.ResultEmpty, nil
@@ -556,11 +559,12 @@ func (r *HelmRepositoryReconciler) reconcileDelete(ctx context.Context, obj *sou
 
 // garbageCollect performs a garbage collection for the given object.
 //
-// It removes all but the current Artifact from the Storage, unless the
-// deletion timestamp on the object is set. Which will result in the
-// removal of all Artifacts for the objects.
+// It removes all but the current Artifact from the Storage, unless:
+// - the deletion timestamp on the object is set
+// - the obj.Spec.Type has changed and artifacts are not supported by the new type
+// Which will result in the removal of all Artifacts for the objects.
 func (r *HelmRepositoryReconciler) garbageCollect(ctx context.Context, obj *sourcev1.HelmRepository) error {
-	if !obj.DeletionTimestamp.IsZero() {
+	if !obj.DeletionTimestamp.IsZero() || (obj.Spec.Type != "" && obj.Spec.Type != sourcev1.HelmRepositoryTypeDefault) {
 		if deleted, err := r.Storage.RemoveAll(r.Storage.NewArtifactFor(obj.Kind, obj.GetObjectMeta(), "", "*")); err != nil {
 			return &serror.Event{
 				Err:    fmt.Errorf("garbage collection for deleted resource failed: %w", err),
@@ -570,7 +574,11 @@ func (r *HelmRepositoryReconciler) garbageCollect(ctx context.Context, obj *sour
 			r.eventLogf(ctx, obj, events.EventTypeTrace, "GarbageCollectionSucceeded",
 				"garbage collected artifacts for deleted resource")
 		}
+		// Clean status sub-resource
 		obj.Status.Artifact = nil
+		obj.Status.URL = ""
+		// Remove the condition as the artifact doesn't exist.
+		conditions.Delete(obj, sourcev1.ArtifactInStorageCondition)
 		return nil
 	}
 	if obj.GetArtifact() != nil {
@@ -605,4 +613,3 @@ func (r *HelmRepositoryReconciler) eventLogf(ctx context.Context, obj runtime.Ob
 	}
 	r.Eventf(obj, eventType, reason, msg)
 }
-r

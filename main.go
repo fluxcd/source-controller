@@ -18,7 +18,6 @@ package main
 
 import (
 	"fmt"
-	"io"
 	"net"
 	"net/http"
 	"os"
@@ -28,7 +27,6 @@ import (
 	"github.com/go-logr/logr"
 	flag "github.com/spf13/pflag"
 	"helm.sh/helm/v3/pkg/getter"
-	"helm.sh/helm/v3/pkg/registry"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -44,6 +42,7 @@ import (
 	"github.com/fluxcd/pkg/runtime/pprof"
 	"github.com/fluxcd/pkg/runtime/probes"
 	"github.com/fluxcd/source-controller/internal/features"
+	"github.com/fluxcd/source-controller/internal/helm/util"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
 	"github.com/fluxcd/source-controller/controllers"
@@ -234,20 +233,13 @@ func main() {
 		os.Exit(1)
 	}
 
-	rClient, err := registry.NewClient(registry.ClientOptWriter(io.Discard))
-	if err != nil {
-		setupLog.Error(err, "unable to create OCI registry client")
-		os.Exit(1)
-	}
-
 	if err = (&controllers.HelmRepositoryOCIReconciler{
-		Client:        mgr.GetClient(),
-		EventRecorder: eventRecorder,
-		Metrics:       metricsH,
-		// Storage:        storage,
-		Getters:        getters,
-		ControllerName: controllerName,
-		RegistryClient: rClient,
+		Client:                  mgr.GetClient(),
+		EventRecorder:           eventRecorder,
+		Metrics:                 metricsH,
+		Getters:                 getters,
+		ControllerName:          controllerName,
+		RegistryClientGenerator: util.RegistryClientGenerator,
 	}).SetupWithManagerAndOptions(mgr, controllers.HelmRepositoryReconcilerOptions{
 		MaxConcurrentReconciles: concurrent,
 		RateLimiter:             helper.GetRateLimiter(rateLimiterOptions),
@@ -277,16 +269,16 @@ func main() {
 	cacheRecorder := cache.MustMakeMetrics()
 
 	if err = (&controllers.HelmChartReconciler{
-		Client:         mgr.GetClient(),
-		RegistryClient: rClient,
-		Storage:        storage,
-		Getters:        getters,
-		EventRecorder:  eventRecorder,
-		Metrics:        metricsH,
-		ControllerName: controllerName,
-		Cache:          c,
-		TTL:            ttl,
-		CacheRecorder:  cacheRecorder,
+		Client:                  mgr.GetClient(),
+		RegistryClientGenerator: util.RegistryClientGenerator,
+		Storage:                 storage,
+		Getters:                 getters,
+		EventRecorder:           eventRecorder,
+		Metrics:                 metricsH,
+		ControllerName:          controllerName,
+		Cache:                   c,
+		TTL:                     ttl,
+		CacheRecorder:           cacheRecorder,
 	}).SetupWithManagerAndOptions(mgr, controllers.HelmChartReconcilerOptions{
 		MaxConcurrentReconciles: concurrent,
 		RateLimiter:             helper.GetRateLimiter(rateLimiterOptions),

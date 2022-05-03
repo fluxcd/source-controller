@@ -1,9 +1,26 @@
+/*
+Copyright 2022 The Flux authors
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package controllers
 
 import (
 	"context"
 	"fmt"
-	"net/url"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/fluxcd/pkg/apis/meta"
@@ -13,6 +30,8 @@ import (
 	"github.com/fluxcd/pkg/runtime/predicates"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
 	serror "github.com/fluxcd/source-controller/internal/error"
+	"github.com/fluxcd/source-controller/internal/helm/repository"
+	intpredicates "github.com/fluxcd/source-controller/internal/predicates"
 	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
 	"github.com/fluxcd/source-controller/internal/reconcile/summarize"
 	helmgetter "helm.sh/helm/v3/pkg/getter"
@@ -31,14 +50,12 @@ var helmRepositoryOCIReadyCondition = summarize.Conditions{
 	Target: meta.ReadyCondition,
 	Owned: []string{
 		sourcev1.FetchFailedCondition,
-		sourcev1.SourceValidCondition,
 		meta.ReadyCondition,
 		meta.ReconcilingCondition,
 		meta.StalledCondition,
 	},
 	Summarize: []string{
 		sourcev1.FetchFailedCondition,
-		sourcev1.SourceValidCondition,
 		meta.StalledCondition,
 		meta.ReconcilingCondition,
 	},
@@ -65,11 +82,16 @@ type HelmRepositoryOCIReconciler struct {
 	client.Client
 	kuberecorder.EventRecorder
 	helper.Metrics
-	Getters helmgetter.Providers
-	// Storage        *Storage
-	ControllerName string
-	RegistryClient *registry.Client
+	Getters                 helmgetter.Providers
+	ControllerName          string
+	RegistryClientGenerator RegistryClientGeneratorFunc
 }
+
+// RegistryClientGeneratorFunc is a function that returns a registry client
+// and an optional file name.
+// The file is used to store the registry client credentials.
+// The caller is responsible for deleting the file.
+type RegistryClientGeneratorFunc func(isLogin bool) (*registry.Client, string, error)
 
 // helmRepositoryOCIReconcileFunc is the function type for all the
 // v1beta2.HelmRepository (sub)reconcile functions for OCI type. The type implementations
@@ -86,8 +108,9 @@ func (r *HelmRepositoryOCIReconciler) SetupWithManagerAndOptions(mgr ctrl.Manage
 		For(&sourcev1.HelmRepository{}).
 		WithEventFilter(
 			predicate.And(
-				predicate.NewPredicateFuncs(HelmRepositoryTypeFilter(sourcev1.HelmRepositoryTypeOCI)),
-				predicate.Or(predicate.GenerationChangedPredicate{}, predicates.ReconcileRequestedPredicate{})),
+				intpredicates.HelmRepositoryTypePredicate{RepositoryType: sourcev1.HelmRepositoryTypeOCI},
+				predicate.Or(predicate.GenerationChangedPredicate{}, predicates.ReconcileRequestedPredicate{}),
+			),
 		).
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: opts.MaxConcurrentReconciles,
@@ -158,6 +181,13 @@ func (r *HelmRepositoryOCIReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	// Examine if the object is under deletion
 	if !obj.ObjectMeta.DeletionTimestamp.IsZero() {
 		recResult, retErr = r.reconcileDelete(ctx, obj)
+		return
+	}
+
+	// Examine if a type change has happened and act accordingly
+	if obj.Spec.Type != sourcev1.HelmRepositoryTypeOCI {
+		// just ignore the object if the type has changed
+		recResult, retErr = sreconcile.ResultEmpty, nil
 		return
 	}
 
@@ -243,7 +273,7 @@ func (r *HelmRepositoryOCIReconciler) reconcileSource(ctx context.Context, obj *
 		}
 
 		// Construct actual options
-		logOpt, err := r.loginOptionFromSecret(secret)
+		logOpt, err := loginOptionFromSecret(secret)
 		if err != nil {
 			e := &serror.Event{
 				Err:    fmt.Errorf("failed to configure Helm client with secret data: %w", err),
@@ -266,43 +296,61 @@ func (r *HelmRepositoryOCIReconciler) reconcileSource(ctx context.Context, obj *
 
 // validateSource the HelmRepository object by checking the url and connecting to the underlying registry
 // with he provided credentials.
-func (r *HelmRepositoryOCIReconciler) validateSource(ctx context.Context, obj *sourcev1.HelmRepository, loginOpts ...registry.LoginOption) (sreconcile.Result, error) {
-	target, err := url.Parse(obj.Spec.URL)
+func (r *HelmRepositoryOCIReconciler) validateSource(ctx context.Context, obj *sourcev1.HelmRepository, logOpts ...registry.LoginOption) (sreconcile.Result, error) {
+	registryClient, file, err := r.RegistryClientGenerator(logOpts != nil)
 	if err != nil {
-		e := &serror.Event{
-			Err:    fmt.Errorf("failed to parse URL '%s': %w", obj.Spec.URL, err),
-			Reason: "ValidationError",
+		e := &serror.Stalling{
+			Err:    fmt.Errorf("failed to create registry client:: %w", err),
+			Reason: meta.FailedReason,
 		}
-		conditions.MarkFalse(obj, sourcev1.SourceValidCondition, e.Reason, e.Err.Error())
+		conditions.MarkFalse(obj, meta.ReadyCondition, e.Reason, e.Err.Error())
 		return sreconcile.ResultEmpty, e
 	}
 
-	// Check if the registry is supported
-	if !registry.IsOCI(obj.Spec.URL) {
-		e := &serror.Event{
-			Err:    fmt.Errorf("unsupported registry scheme '%s'", target.Scheme),
-			Reason: "ValidationError",
-		}
-		conditions.MarkFalse(obj, sourcev1.SourceValidCondition, e.Reason, e.Err.Error())
-		return sreconcile.ResultEmpty, e
+	if file != "" {
+		defer func() {
+			os.Remove(file)
+		}()
 	}
 
-	err = r.RegistryClient.Login(target.Host+target.Path, loginOpts...)
+	chartRepo, err := repository.NewOCIChartRepository(obj.Spec.URL, repository.WithOCIRegistryClient(registryClient))
 	if err != nil {
-		e := &serror.Event{
-			Err:    fmt.Errorf("failed to login to registry '%s': %w", target.String(), err),
-			Reason: "ValidationError",
+		if strings.Contains(err.Error(), "parse") {
+			e := &serror.Stalling{
+				Err:    fmt.Errorf("failed to parse URL '%s': %w", obj.Spec.URL, err),
+				Reason: sourcev1.URLInvalidReason,
+			}
+			conditions.MarkFalse(obj, meta.ReadyCondition, e.Reason, e.Err.Error())
+			return sreconcile.ResultEmpty, e
+		} else if strings.Contains(err.Error(), "the url scheme is not supported") {
+			e := &serror.Event{
+				Err:    err,
+				Reason: sourcev1.URLInvalidReason,
+			}
+			conditions.MarkFalse(obj, meta.ReadyCondition, e.Reason, e.Err.Error())
+			return sreconcile.ResultEmpty, e
 		}
-		conditions.MarkFalse(obj, sourcev1.SourceValidCondition, e.Reason, e.Err.Error())
-		return sreconcile.ResultEmpty, e
 	}
 
-	conditions.MarkTrue(obj, sourcev1.SourceValidCondition, meta.SucceededReason, "Helm repository %q is valid", obj.Name)
+	// Attempt to login to the registry if credentials are provided.
+	if logOpts != nil {
+		err = chartRepo.Login(logOpts...)
+		if err != nil {
+			e := &serror.Event{
+				Err:    fmt.Errorf("failed to create temporary file: %w", err),
+				Reason: meta.FailedReason,
+			}
+			conditions.MarkFalse(obj, meta.ReadyCondition, e.Reason, e.Err.Error())
+			return sreconcile.ResultEmpty, e
+		}
+	}
+
+	conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "Helm repository %q is ready", obj.Name)
 
 	return sreconcile.ResultSuccess, nil
 }
 
-func (r *HelmRepositoryOCIReconciler) loginOptionFromSecret(secret corev1.Secret) (registry.LoginOption, error) {
+func loginOptionFromSecret(secret corev1.Secret) (registry.LoginOption, error) {
 	username, password := string(secret.Data["username"]), string(secret.Data["password"])
 	switch {
 	case username == "" && password == "":

@@ -1085,3 +1085,210 @@ func TestHelmRepositoryReconciler_notify(t *testing.T) {
 		})
 	}
 }
+
+func TestHelmRepositoryReconciler_ReconcileTypeUpdatePredicateFilter(t *testing.T) {
+	g := NewWithT(t)
+
+	testServer, err := helmtestserver.NewTempHelmServer()
+	g.Expect(err).NotTo(HaveOccurred())
+	defer os.RemoveAll(testServer.Root())
+
+	g.Expect(testServer.PackageChart("testdata/charts/helmchart")).To(Succeed())
+	g.Expect(testServer.GenerateIndex()).To(Succeed())
+
+	testServer.Start()
+	defer testServer.Stop()
+
+	obj := &sourcev1.HelmRepository{
+		ObjectMeta: metav1.ObjectMeta{
+			GenerateName: "helmrepository-reconcile-",
+			Namespace:    "default",
+		},
+		Spec: sourcev1.HelmRepositorySpec{
+			Interval: metav1.Duration{Duration: interval},
+			URL:      testServer.URL(),
+		},
+	}
+	g.Expect(testEnv.Create(ctx, obj)).To(Succeed())
+
+	key := client.ObjectKey{Name: obj.Name, Namespace: obj.Namespace}
+
+	// Wait for finalizer to be set
+	g.Eventually(func() bool {
+		if err := testEnv.Get(ctx, key, obj); err != nil {
+			return false
+		}
+		return len(obj.Finalizers) > 0
+	}, timeout).Should(BeTrue())
+
+	// Wait for HelmRepository to be Ready
+	g.Eventually(func() bool {
+		if err := testEnv.Get(ctx, key, obj); err != nil {
+			return false
+		}
+		if !conditions.IsReady(obj) && obj.Status.Artifact == nil {
+			return false
+		}
+		readyCondition := conditions.Get(obj, meta.ReadyCondition)
+		return readyCondition.Status == metav1.ConditionTrue &&
+			obj.Generation == readyCondition.ObservedGeneration &&
+			obj.Generation == obj.Status.ObservedGeneration
+	}, timeout).Should(BeTrue())
+
+	// Check if the object status is valid.
+	condns := &status.Conditions{NegativePolarity: helmRepositoryReadyCondition.NegativePolarity}
+	checker := status.NewChecker(testEnv.Client, condns)
+	checker.CheckErr(ctx, obj)
+
+	// kstatus client conformance check.
+	u, err := patch.ToUnstructured(obj)
+	g.Expect(err).ToNot(HaveOccurred())
+	res, err := kstatus.Compute(u)
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(res.Status).To(Equal(kstatus.CurrentStatus))
+
+	// Switch to a OCI helm repository type
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			GenerateName: "helmrepository-reconcile-",
+			Namespace:    "default",
+		},
+		Data: map[string][]byte{
+			"username": []byte(testUsername),
+			"password": []byte(testPassword),
+		},
+	}
+	g.Expect(testEnv.CreateAndWait(ctx, secret)).To(Succeed())
+
+	obj.Spec.Type = sourcev1.HelmRepositoryTypeOCI
+	obj.Spec.URL = fmt.Sprintf("oci://%s", testRegistryserver.DockerRegistryHost)
+	obj.Spec.SecretRef = &meta.LocalObjectReference{
+		Name: secret.Name,
+	}
+
+	g.Expect(testEnv.Update(ctx, obj)).To(Succeed())
+
+	// Wait for HelmRepository to be Ready
+	g.Eventually(func() bool {
+		if err := testEnv.Get(ctx, key, obj); err != nil {
+			return false
+		}
+		if !conditions.IsReady(obj) && obj.Status.Artifact != nil {
+			return false
+		}
+		readyCondition := conditions.Get(obj, meta.ReadyCondition)
+		return readyCondition.Status == metav1.ConditionTrue &&
+			obj.Generation == readyCondition.ObservedGeneration &&
+			obj.Generation == obj.Status.ObservedGeneration
+	}, timeout).Should(BeTrue())
+
+	// Check if the object status is valid.
+	condns = &status.Conditions{NegativePolarity: helmRepositoryOCIReadyCondition.NegativePolarity}
+	checker = status.NewChecker(testEnv.Client, condns)
+	checker.CheckErr(ctx, obj)
+
+	g.Expect(testEnv.Delete(ctx, obj)).To(Succeed())
+
+	// Wait for HelmRepository to be deleted
+	g.Eventually(func() bool {
+		if err := testEnv.Get(ctx, key, obj); err != nil {
+			return apierrors.IsNotFound(err)
+		}
+		return false
+	}, timeout).Should(BeTrue())
+}
+
+func TestHelmRepositoryReconciler_ReconcileSpecUpdatePredicateFilter(t *testing.T) {
+	g := NewWithT(t)
+
+	testServer, err := helmtestserver.NewTempHelmServer()
+	g.Expect(err).NotTo(HaveOccurred())
+	defer os.RemoveAll(testServer.Root())
+
+	g.Expect(testServer.PackageChart("testdata/charts/helmchart")).To(Succeed())
+	g.Expect(testServer.GenerateIndex()).To(Succeed())
+
+	testServer.Start()
+	defer testServer.Stop()
+
+	obj := &sourcev1.HelmRepository{
+		ObjectMeta: metav1.ObjectMeta{
+			GenerateName: "helmrepository-reconcile-",
+			Namespace:    "default",
+		},
+		Spec: sourcev1.HelmRepositorySpec{
+			Interval: metav1.Duration{Duration: interval},
+			URL:      testServer.URL(),
+		},
+	}
+	g.Expect(testEnv.Create(ctx, obj)).To(Succeed())
+
+	key := client.ObjectKey{Name: obj.Name, Namespace: obj.Namespace}
+
+	// Wait for finalizer to be set
+	g.Eventually(func() bool {
+		if err := testEnv.Get(ctx, key, obj); err != nil {
+			return false
+		}
+		return len(obj.Finalizers) > 0
+	}, timeout).Should(BeTrue())
+
+	// Wait for HelmRepository to be Ready
+	g.Eventually(func() bool {
+		if err := testEnv.Get(ctx, key, obj); err != nil {
+			return false
+		}
+		if !conditions.IsReady(obj) && obj.Status.Artifact == nil {
+			return false
+		}
+		readyCondition := conditions.Get(obj, meta.ReadyCondition)
+		return readyCondition.Status == metav1.ConditionTrue &&
+			obj.Generation == readyCondition.ObservedGeneration &&
+			obj.Generation == obj.Status.ObservedGeneration
+	}, timeout).Should(BeTrue())
+
+	// Check if the object status is valid.
+	condns := &status.Conditions{NegativePolarity: helmRepositoryReadyCondition.NegativePolarity}
+	checker := status.NewChecker(testEnv.Client, condns)
+	checker.CheckErr(ctx, obj)
+
+	// kstatus client conformance check.
+	u, err := patch.ToUnstructured(obj)
+	g.Expect(err).ToNot(HaveOccurred())
+	res, err := kstatus.Compute(u)
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(res.Status).To(Equal(kstatus.CurrentStatus))
+
+	// Change spec Interval to validate spec update
+	obj.Spec.Interval = metav1.Duration{Duration: interval + time.Second}
+	g.Expect(testEnv.Update(ctx, obj)).To(Succeed())
+
+	// Wait for HelmRepository to be Ready
+	g.Eventually(func() bool {
+		if err := testEnv.Get(ctx, key, obj); err != nil {
+			return false
+		}
+		if !conditions.IsReady(obj) {
+			return false
+		}
+		readyCondition := conditions.Get(obj, meta.ReadyCondition)
+		return readyCondition.Status == metav1.ConditionTrue &&
+			obj.Generation == readyCondition.ObservedGeneration &&
+			obj.Generation == obj.Status.ObservedGeneration
+	}, timeout).Should(BeTrue())
+
+	// Check if the object status is valid.
+	condns = &status.Conditions{NegativePolarity: helmRepositoryReadyCondition.NegativePolarity}
+	checker = status.NewChecker(testEnv.Client, condns)
+	checker.CheckErr(ctx, obj)
+
+	g.Expect(testEnv.Delete(ctx, obj)).To(Succeed())
+
+	// Wait for HelmRepository to be deleted
+	g.Eventually(func() bool {
+		if err := testEnv.Get(ctx, key, obj); err != nil {
+			return apierrors.IsNotFound(err)
+		}
+		return false
+	}, timeout).Should(BeTrue())
+}
