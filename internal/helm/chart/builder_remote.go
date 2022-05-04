@@ -37,8 +37,8 @@ import (
 	"github.com/fluxcd/source-controller/internal/helm/chart/secureloader"
 )
 
-// Remote is a repository.ChartRepository or a repository.OCIChartRegistry.
-// It is used to download a chart from a remote repository or registry.
+// Remote is a repository.ChartRepository or a repository.OCIChartRepository.
+// It is used to download a chart from a remote Helm repository or OCI registry.
 type Remote interface {
 	// GetChart returns a chart.Chart from the remote repository.
 	Get(name, version string) (*repo.ChartVersion, error)
@@ -160,39 +160,14 @@ func (b *remoteChartBuilder) downloadFromOCIRepository(remote *repository.OCICha
 		return nil, &BuildError{Reason: ErrChartPull, Err: err}
 	}
 
-	result := &Build{}
-	result.Version = cv.Version
-	result.Name = cv.Name
-
-	// Set build specific metadata if instructed
-	if opts.VersionMetadata != "" {
-		ver, err := setBuildMetaData(result.Version, opts.VersionMetadata)
-		if err != nil {
-			return nil, &BuildError{Reason: ErrChartMetadataPatch, Err: err}
-		}
-		result.Version = ver.String()
+	result, shouldReturn, err := generateBuildResult(cv, opts)
+	if err != nil {
+		return nil, err
 	}
 
-	requiresPackaging := len(opts.GetValuesFiles()) != 0 || opts.VersionMetadata != ""
-
-	// If all the following is true, we do not need to download and/or build the chart:
-	// - Chart name from cached chart matches resolved name
-	// - Chart version from cached chart matches calculated version
-	// - BuildOptions.Force is False
-	if opts.CachedChart != "" && !opts.Force {
-		if curMeta, err := LoadChartMetadataFromArchive(opts.CachedChart); err == nil {
-			// If the cached metadata is corrupt, we ignore its existence
-			// and continue the build
-			if err = curMeta.Validate(); err == nil {
-				if result.Name == curMeta.Name && result.Version == curMeta.Version {
-					result.Path = opts.CachedChart
-					result.ValuesFiles = opts.GetValuesFiles()
-					result.Packaged = requiresPackaging
-					*buildResult = *result
-					return nil, nil
-				}
-			}
-		}
+	if shouldReturn {
+		*buildResult = *result
+		return nil, nil
 	}
 
 	// Download the package for the resolved version
@@ -221,15 +196,38 @@ func (b *remoteChartBuilder) downloadFromRepository(remote *repository.ChartRepo
 		return nil, &BuildError{Reason: ErrChartReference, Err: err}
 	}
 
+	result, shouldReturn, err := generateBuildResult(cv, opts)
+	if err != nil {
+		return nil, err
+	}
+
+	if shouldReturn {
+		*buildResult = *result
+		return nil, nil
+	}
+
+	// Download the package for the resolved version
+	res, err := remote.DownloadChart(cv)
+	if err != nil {
+		err = fmt.Errorf("failed to download chart for remote reference: %w", err)
+		return nil, &BuildError{Reason: ErrChartPull, Err: err}
+	}
+
+	*buildResult = *result
+
+	return res, nil
+}
+
+func generateBuildResult(cv *repo.ChartVersion, opts BuildOptions) (*Build, bool, error) {
 	result := &Build{}
-	result.Name = cv.Name
 	result.Version = cv.Version
+	result.Name = cv.Name
 
 	// Set build specific metadata if instructed
 	if opts.VersionMetadata != "" {
 		ver, err := setBuildMetaData(result.Version, opts.VersionMetadata)
 		if err != nil {
-			return nil, &BuildError{Reason: ErrChartMetadataPatch, Err: err}
+			return nil, false, &BuildError{Reason: ErrChartMetadataPatch, Err: err}
 		}
 		result.Version = ver.String()
 	}
@@ -249,23 +247,13 @@ func (b *remoteChartBuilder) downloadFromRepository(remote *repository.ChartRepo
 					result.Path = opts.CachedChart
 					result.ValuesFiles = opts.GetValuesFiles()
 					result.Packaged = requiresPackaging
-					*buildResult = *result
-					return nil, nil
+					return result, true, nil
 				}
 			}
 		}
 	}
 
-	// Download the package for the resolved version
-	res, err := remote.DownloadChart(cv)
-	if err != nil {
-		err = fmt.Errorf("failed to download chart for remote reference: %w", err)
-		return nil, &BuildError{Reason: ErrChartPull, Err: err}
-	}
-
-	*buildResult = *result
-
-	return res, nil
+	return result, false, nil
 }
 
 func setBuildMetaData(version, versionMetadata string) (*semver.Version, error) {

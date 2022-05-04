@@ -3,6 +3,7 @@ package repository
 import (
 	"bytes"
 	"fmt"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -72,12 +73,6 @@ func TestNewOCIChartRepository(t *testing.T) {
 		g.Expect(r).To(BeNil())
 	})
 
-	t.Run("should return error on invalid schemme", func(t *testing.T) {
-		g := NewWithT(t)
-		r, err := NewOCIChartRepository("https://localhost:5000/my_repo", WithOCIGetter(providers), WithOCIGetterOptions(options), WithOCIRegistryClient(registryClient))
-		g.Expect(err).To(HaveOccurred())
-		g.Expect(r).To(BeNil())
-	})
 }
 
 func TestOCIChartRepoisitory_Get(t *testing.T) {
@@ -92,6 +87,13 @@ func TestOCIChartRepoisitory_Get(t *testing.T) {
 			"0.2.0",
 			"1.0.0",
 			"1.1.0-rc.1",
+		},
+	}
+
+	providers := helmgetter.Providers{
+		helmgetter.Provider{
+			Schemes: []string{"oci"},
+			New:     helmgetter.NewOCIGetter,
 		},
 	}
 
@@ -137,7 +139,7 @@ func TestOCIChartRepoisitory_Get(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			g := NewWithT(t)
-			r, err := NewOCIChartRepository(url, WithOCIRegistryClient(registryClient))
+			r, err := NewOCIChartRepository(url, WithOCIRegistryClient(registryClient), WithOCIGetter(providers))
 			g.Expect(err).ToNot(HaveOccurred())
 			g.Expect(r).ToNot(BeNil())
 
@@ -181,15 +183,6 @@ func TestOCIChartRepoisitory_DownloadChart(t *testing.T) {
 			expectedErr:  true,
 		},
 		{
-			name: "invalid chart URL scheme",
-			url:  "oci://localhost:5000/my_repo",
-			chartVersion: &repo.ChartVersion{
-				Metadata: &chart.Metadata{Name: "chart"},
-				URLs:     []string{"https://localhost:5000/my_repo/podinfo:1.0.0"},
-			},
-			expectedErr: true,
-		},
-		{
 			name: "invalid chart URL",
 			url:  "oci://localhost:5000/my_repo",
 			chartVersion: &repo.ChartVersion{
@@ -205,7 +198,12 @@ func TestOCIChartRepoisitory_DownloadChart(t *testing.T) {
 			g := NewWithT(t)
 			t.Parallel()
 			mg := OCIMockGetter{}
-			r, err := NewOCIChartRepository(tc.url)
+			u, err := url.Parse(tc.url)
+			g.Expect(err).ToNot(HaveOccurred())
+			r := OCIChartRepository{
+				Client: &mg,
+				URL:    *u,
+			}
 			r.Client = &mg
 			g.Expect(err).ToNot(HaveOccurred())
 			g.Expect(r).ToNot(BeNil())

@@ -19,6 +19,8 @@ package chart
 import (
 	"bytes"
 	"context"
+	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -29,10 +31,34 @@ import (
 	helmchart "helm.sh/helm/v3/pkg/chart"
 	"helm.sh/helm/v3/pkg/chartutil"
 	helmgetter "helm.sh/helm/v3/pkg/getter"
+	"helm.sh/helm/v3/pkg/registry"
 
 	"github.com/fluxcd/source-controller/internal/helm/chart/secureloader"
 	"github.com/fluxcd/source-controller/internal/helm/repository"
 )
+
+type mockRegistryClient struct {
+	tags         map[string][]string
+	requestedURL string
+}
+
+func (m *mockRegistryClient) Tags(url string) ([]string, error) {
+	m.requestedURL = url
+	if tags, ok := m.tags[url]; ok {
+		return tags, nil
+	}
+	return nil, fmt.Errorf("no tags found for %s", url)
+}
+
+func (m *mockRegistryClient) Login(url string, opts ...registry.LoginOption) error {
+	m.requestedURL = url
+	return nil
+}
+
+func (m *mockRegistryClient) Logout(url string, opts ...registry.LogoutOption) error {
+	m.requestedURL = url
+	return nil
+}
 
 // mockIndexChartGetter returns specific response for index and chart queries.
 type mockIndexChartGetter struct {
@@ -54,7 +80,7 @@ func (g *mockIndexChartGetter) LastGet() string {
 	return g.requestedURL
 }
 
-func TestRemoteBuilder_Build(t *testing.T) {
+func TestRemoteBuilder__BuildFromChartRepository(t *testing.T) {
 	g := NewWithT(t)
 
 	chartGrafana, err := os.ReadFile("./../testdata/charts/helmchart-0.1.0.tgz")
@@ -168,6 +194,140 @@ entries:
 				// Cleanup the cache index path.
 				defer os.Remove(tt.repository.CachePath)
 			}
+
+			b := NewRemoteBuilder(tt.repository)
+
+			cb, err := b.Build(context.TODO(), tt.reference, targetPath, tt.buildOpts)
+
+			if tt.wantErr != "" {
+				g.Expect(err).To(HaveOccurred())
+				g.Expect(err.Error()).To(ContainSubstring(tt.wantErr))
+				g.Expect(cb).To(BeZero())
+				return
+			}
+			g.Expect(err).ToNot(HaveOccurred())
+			g.Expect(cb.Packaged).To(Equal(tt.wantPackaged), "unexpected Build.Packaged value")
+			g.Expect(cb.Path).ToNot(BeEmpty(), "empty Build.Path")
+
+			// Load the resulting chart and verify the values.
+			resultChart, err := secureloader.LoadFile(cb.Path)
+			g.Expect(err).ToNot(HaveOccurred())
+			g.Expect(resultChart.Metadata.Version).To(Equal(tt.wantVersion))
+
+			for k, v := range tt.wantValues {
+				g.Expect(v).To(Equal(resultChart.Values[k]))
+			}
+		})
+	}
+}
+
+func TestRemoteBuilder_BuildFromOCIChatRepository(t *testing.T) {
+	g := NewWithT(t)
+
+	chartGrafana, err := os.ReadFile("./../testdata/charts/helmchart-0.1.0.tgz")
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(chartGrafana).ToNot(BeEmpty())
+
+	registryClient := &mockRegistryClient{
+		tags: map[string][]string{
+			"localhost:5000/my_repo/grafana": {"6.17.4"},
+		},
+	}
+
+	mockGetter := &mockIndexChartGetter{
+		ChartResponse: chartGrafana,
+	}
+
+	u, err := url.Parse("oci://localhost:5000/my_repo")
+	g.Expect(err).ToNot(HaveOccurred())
+
+	mockRepo := func() *repository.OCIChartRepository {
+		return &repository.OCIChartRepository{
+			URL:            *u,
+			Client:         mockGetter,
+			RegistryClient: registryClient,
+		}
+	}
+
+	tests := []struct {
+		name         string
+		reference    Reference
+		buildOpts    BuildOptions
+		repository   *repository.OCIChartRepository
+		wantValues   chartutil.Values
+		wantVersion  string
+		wantPackaged bool
+		wantErr      string
+	}{
+		{
+			name:      "invalid reference",
+			reference: LocalReference{},
+			wantErr:   "expected remote chart reference",
+		},
+		{
+			name:      "invalid reference - no name",
+			reference: RemoteReference{},
+			wantErr:   "no name set for remote chart reference",
+		},
+		{
+			name:       "chart not in repository",
+			reference:  RemoteReference{Name: "foo"},
+			repository: mockRepo(),
+			wantErr:    "failed to get chart version for remote reference",
+		},
+		{
+			name:       "chart version not in repository",
+			reference:  RemoteReference{Name: "grafana", Version: "1.1.1"},
+			repository: mockRepo(),
+			wantErr:    "failed to get chart version for remote reference",
+		},
+		{
+			name:       "invalid version metadata",
+			reference:  RemoteReference{Name: "grafana"},
+			repository: mockRepo(),
+			buildOpts:  BuildOptions{VersionMetadata: "^"},
+			wantErr:    "Invalid Metadata string",
+		},
+		{
+			name:         "with version metadata",
+			reference:    RemoteReference{Name: "grafana"},
+			repository:   mockRepo(),
+			buildOpts:    BuildOptions{VersionMetadata: "foo"},
+			wantVersion:  "6.17.4+foo",
+			wantPackaged: true,
+		},
+		{
+			name:        "default values",
+			reference:   RemoteReference{Name: "grafana"},
+			repository:  mockRepo(),
+			wantVersion: "0.1.0",
+			wantValues: chartutil.Values{
+				"replicaCount": float64(1),
+			},
+		},
+		{
+			name:      "merge values",
+			reference: RemoteReference{Name: "grafana"},
+			buildOpts: BuildOptions{
+				ValuesFiles: []string{"a.yaml", "b.yaml", "c.yaml"},
+			},
+			repository:  mockRepo(),
+			wantVersion: "6.17.4",
+			wantValues: chartutil.Values{
+				"a": "b",
+				"b": "d",
+			},
+			wantPackaged: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			tmpDir, err := os.MkdirTemp("", "remote-chart-builder-")
+			g.Expect(err).ToNot(HaveOccurred())
+			defer os.RemoveAll(tmpDir)
+			targetPath := filepath.Join(tmpDir, "chart.tgz")
 
 			b := NewRemoteBuilder(tt.repository)
 

@@ -100,16 +100,12 @@ func WithTlsConfig(tlsConfig *tls.Config) OCIChartRepositoryOption {
 
 // NewOCIChartRepository constructs and returns a new ChartRepository with
 // the ChartRepository.Client configured to the getter.Getter for the
-// repository URL scheme. It returns an error on URL parsing failures,
-// or if there is no getter available for the scheme.
+// repository URL scheme. It returns an error on URL parsing failures.
+// It assumes that the url scheme has been validated to be an OCI scheme.
 func NewOCIChartRepository(repositoryURL string, chartRepoOpts ...OCIChartRepositoryOption) (*OCIChartRepository, error) {
 	u, err := url.Parse(repositoryURL)
 	if err != nil {
 		return nil, err
-	}
-
-	if !registry.IsOCI(repositoryURL) {
-		return nil, fmt.Errorf("the url scheme is not supported: %s", u.Scheme)
 	}
 
 	r := newOCIChartRepository()
@@ -157,7 +153,7 @@ func (r *OCIChartRepository) Get(name, ver string) (*repo.ChartVersion, error) {
 	}, err
 }
 
-// this function shall be called for OCI registries only
+// This function shall be called for OCI registries only
 // It assumes that the ref has been validated to be an OCI reference.
 func (r *OCIChartRepository) getTags(ref string) ([]string, error) {
 	// Retrieve list of repository tags
@@ -182,10 +178,6 @@ func (r *OCIChartRepository) DownloadChart(chart *repo.ChartVersion) (*bytes.Buf
 	}
 
 	ref := chart.URLs[0]
-	if !registry.IsOCI(ref) {
-		return nil, fmt.Errorf("chart '%s' is not an OCI chart", chart.Name)
-	}
-
 	u, err := url.Parse(ref)
 	if err != nil {
 		err = fmt.Errorf("invalid chart URL format '%s': %w", ref, err)
@@ -201,6 +193,7 @@ func (r *OCIChartRepository) DownloadChart(chart *repo.ChartVersion) (*bytes.Buf
 }
 
 // Login attempts to login to the OCI registry.
+// It returns an error on failure.
 func (r *OCIChartRepository) Login(opts ...registry.LoginOption) error {
 	err := r.RegistryClient.Login(r.URL.Host, opts...)
 	if err != nil {
@@ -210,6 +203,7 @@ func (r *OCIChartRepository) Login(opts ...registry.LoginOption) error {
 }
 
 // Logout attempts to logout from the OCI registry.
+// It returns an error on failure.
 func (r *OCIChartRepository) Logout() error {
 	err := r.RegistryClient.Logout(r.URL.Host)
 	if err != nil {
@@ -218,6 +212,8 @@ func (r *OCIChartRepository) Logout() error {
 	return nil
 }
 
+// getLastMatchingVersionOrConstraint returns the last version that matches the given version string.
+// If the version string is empty, the highest available version is returned.
 func getLastMatchingVersionOrConstraint(cvs []string, ver string) (string, error) {
 	// Check for exact matches first
 	if ver != "" {
