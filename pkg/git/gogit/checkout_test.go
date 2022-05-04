@@ -72,6 +72,7 @@ func TestCheckoutBranch_Checkout(t *testing.T) {
 		filesCreated   map[string]string
 		expectedCommit string
 		expectedErr    string
+		lastRevision   string
 	}{
 		{
 			name:           "Default branch",
@@ -80,10 +81,18 @@ func TestCheckoutBranch_Checkout(t *testing.T) {
 			expectedCommit: firstCommit.String(),
 		},
 		{
-			name:           "Other branch",
+			name:         "skip clone if LastRevision hasn't changed",
+			branch:       "master",
+			filesCreated: map[string]string{"branch": "init"},
+			expectedErr:  fmt.Sprintf("no changes since last reconcilation: observed revision 'master/%s'", firstCommit.String()),
+			lastRevision: fmt.Sprintf("master/%s", firstCommit.String()),
+		},
+		{
+			name:           "Other branch - revision has changed",
 			branch:         "test",
 			filesCreated:   map[string]string{"branch": "second"},
 			expectedCommit: secondCommit.String(),
+			lastRevision:   fmt.Sprintf("master/%s", firstCommit.String()),
 		},
 		{
 			name:        "Non existing branch",
@@ -97,7 +106,8 @@ func TestCheckoutBranch_Checkout(t *testing.T) {
 			g := NewWithT(t)
 
 			branch := CheckoutBranch{
-				Branch: tt.branch,
+				Branch:       tt.branch,
+				LastRevision: tt.lastRevision,
 			}
 			tmpDir := t.TempDir()
 
