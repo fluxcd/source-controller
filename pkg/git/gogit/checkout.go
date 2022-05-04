@@ -26,8 +26,10 @@ import (
 
 	"github.com/Masterminds/semver/v3"
 	extgogit "github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
+	"github.com/go-git/go-git/v5/storage/memory"
 
 	"github.com/fluxcd/pkg/gitutil"
 	"github.com/fluxcd/pkg/version"
@@ -50,13 +52,14 @@ func CheckoutStrategyForOptions(_ context.Context, opts git.CheckoutOptions) git
 		if branch == "" {
 			branch = git.DefaultBranch
 		}
-		return &CheckoutBranch{Branch: branch, RecurseSubmodules: opts.RecurseSubmodules}
+		return &CheckoutBranch{Branch: branch, RecurseSubmodules: opts.RecurseSubmodules, LastRevision: opts.LastRevision}
 	}
 }
 
 type CheckoutBranch struct {
 	Branch            string
 	RecurseSubmodules bool
+	LastRevision      string
 }
 
 func (c *CheckoutBranch) Checkout(ctx context.Context, path, url string, opts *git.AuthOptions) (*git.Commit, error) {
@@ -64,7 +67,31 @@ func (c *CheckoutBranch) Checkout(ctx context.Context, path, url string, opts *g
 	if err != nil {
 		return nil, fmt.Errorf("failed to construct auth method with options: %w", err)
 	}
+
 	ref := plumbing.NewBranchReferenceName(c.Branch)
+	// check if previous revision has changed before attempting to clone
+	if c.LastRevision != "" {
+		config := &config.RemoteConfig{
+			Name: git.DefaultOrigin,
+			URLs: []string{url},
+		}
+		rem := extgogit.NewRemote(memory.NewStorage(), config)
+		refs, err := rem.List(&extgogit.ListOptions{
+			Auth: authMethod,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("unable to list remote for '%s': %w", url, err)
+		}
+
+		currentRevision := filterRefs(refs, ref)
+		if currentRevision != "" && currentRevision == c.LastRevision {
+			return nil, git.NoChangesError{
+				Message:          "no changes since last reconcilation",
+				ObservedRevision: currentRevision,
+			}
+		}
+	}
+
 	repo, err := extgogit.PlainCloneContext(ctx, path, false, &extgogit.CloneOptions{
 		URL:               url,
 		Auth:              authMethod,
@@ -332,4 +359,14 @@ func recurseSubmodules(recurse bool) extgogit.SubmoduleRescursivity {
 		return extgogit.DefaultSubmoduleRecursionDepth
 	}
 	return extgogit.NoRecurseSubmodules
+}
+
+func filterRefs(refs []*plumbing.Reference, currentRef plumbing.ReferenceName) string {
+	for _, ref := range refs {
+		if ref.Name().String() == currentRef.String() {
+			return fmt.Sprintf("%s/%s", currentRef.Short(), ref.Hash().String())
+		}
+	}
+
+	return ""
 }
