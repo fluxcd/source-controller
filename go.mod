@@ -17,6 +17,7 @@ require (
 	github.com/ProtonMail/go-crypto v0.0.0-20220407094043-a94812496cf5
 	github.com/cyphar/filepath-securejoin v0.2.3
 	github.com/darkowlzz/controller-check v0.0.0-20220325122359-11f5827b7981
+	github.com/distribution/distribution/v3 v3.0.0-20211118083504-a29a3c99a684
 	github.com/docker/go-units v0.4.0
 	github.com/elazarl/goproxy v0.0.0-20220417044921-416226498f94
 	github.com/fluxcd/pkg/apis/meta v0.13.0
@@ -38,6 +39,7 @@ require (
 	github.com/minio/minio-go/v7 v7.0.24
 	github.com/onsi/gomega v1.19.0
 	github.com/otiai10/copy v1.7.0
+	github.com/phayes/freeport v0.0.0-20180830031419-95f893ade6f2
 	github.com/prometheus/client_golang v1.12.1
 	github.com/spf13/pflag v1.0.5
 	golang.org/x/crypto v0.0.0-20220427172511-eb4f295cb31f
@@ -70,11 +72,6 @@ replace github.com/opencontainers/image-spec => github.com/opencontainers/image-
 // Fix CVE-2022-23648
 // Fix CVE-2021-43816
 replace github.com/containerd/containerd => github.com/containerd/containerd v1.6.1
-
-require (
-	github.com/distribution/distribution/v3 v3.0.0-20211118083504-a29a3c99a684
-	github.com/phayes/freeport v0.0.0-20180830031419-95f893ade6f2
-)
 
 require (
 	cloud.google.com/go v0.100.2 // indirect

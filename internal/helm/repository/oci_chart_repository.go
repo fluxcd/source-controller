@@ -1,5 +1,5 @@
 /*
-Copyright 2020 The Flux authors
+Copyright 2022 The Flux authors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -34,6 +34,9 @@ import (
 	"github.com/fluxcd/source-controller/internal/transport"
 )
 
+// RegistryClient is an interface for interacting with OCI registries
+// It is used by the OCIChartRepository to retrieve chart versions
+// from OCI registries
 type RegistryClient interface {
 	Login(host string, opts ...registry.LoginOption) error
 	Logout(host string, opts ...registry.LogoutOption) error
