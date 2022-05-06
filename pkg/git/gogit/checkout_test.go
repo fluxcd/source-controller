@@ -137,12 +137,28 @@ func TestCheckoutTag_Checkout(t *testing.T) {
 		checkoutTag string
 		expectTag   string
 		expectErr   string
+		lastRev     string
+		setLastRev  bool
 	}{
 		{
 			name:        "Tag",
 			tag:         "tag-1",
 			checkoutTag: "tag-1",
 			expectTag:   "tag-1",
+		},
+		{
+			name:        "Skip Tag if last revision hasn't changed",
+			tag:         "tag-2",
+			checkoutTag: "tag-2",
+			setLastRev:  true,
+			expectErr:   "no changes since last reconcilation",
+		},
+		{
+			name:        "Last revision changed",
+			tag:         "tag-3",
+			checkoutTag: "tag-3",
+			expectTag:   "tag-3",
+			lastRev:     "tag-3/<fake-hash>",
 		},
 		{
 			name:        "Annotated",
@@ -168,12 +184,13 @@ func TestCheckoutTag_Checkout(t *testing.T) {
 			}
 
 			var h plumbing.Hash
+			var tagHash *plumbing.Reference
 			if tt.tag != "" {
 				h, err = commitFile(repo, "tag", tt.tag, time.Now())
 				if err != nil {
 					t.Fatal(err)
 				}
-				_, err = tag(repo, h, !tt.annotated, tt.tag, time.Now())
+				tagHash, err = tag(repo, h, !tt.annotated, tt.tag, time.Now())
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -182,10 +199,18 @@ func TestCheckoutTag_Checkout(t *testing.T) {
 			tag := CheckoutTag{
 				Tag: tt.checkoutTag,
 			}
+			if tt.setLastRev {
+				tag.LastRevision = fmt.Sprintf("%s/%s", tt.tag, tagHash.Hash().String())
+			}
+
+			if tt.lastRev != "" {
+				tag.LastRevision = tt.lastRev
+			}
 			tmpDir := t.TempDir()
 
 			cc, err := tag.Checkout(context.TODO(), tmpDir, path, nil)
 			if tt.expectErr != "" {
+				g.Expect(err).ToNot(BeNil())
 				g.Expect(err.Error()).To(ContainSubstring(tt.expectErr))
 				g.Expect(cc).To(BeNil())
 				return
