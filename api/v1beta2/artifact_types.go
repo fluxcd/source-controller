@@ -17,6 +17,9 @@ limitations under the License.
 package v1beta2
 
 import (
+	"crypto/sha256"
+	"fmt"
+	"io"
 	"path"
 	"strings"
 
@@ -46,6 +49,11 @@ type Artifact struct {
 	// +optional
 	Checksum string `json:"checksum"`
 
+	// ExcludedPatternsChecksum is a SHA256 checksum of the excluded patterns
+	// applied in the last reconciliation.
+	// +optional
+	ExcludedPatternsChecksum string `json:"excludedPatternsChecksum,omitempty"`
+
 	// LastUpdateTime is the timestamp corresponding to the last update of the
 	// Artifact.
 	// +required
@@ -72,6 +80,30 @@ func (in *Artifact) HasChecksum(checksum string) bool {
 		return false
 	}
 	return in.Checksum == checksum
+}
+
+// EqualExcludedPatterns returns if the given excluded patterns match the
+// current Artifact excluded patterns.
+func (in *Artifact) EqualExcludedPatterns(artifact Artifact) bool {
+	var ignored string
+	if in != nil {
+		ignored = in.ExcludedPatternsChecksum
+	}
+	return ignored == artifact.ExcludedPatternsChecksum
+}
+
+// SetExcludedPatterns sets the SHA256 checksum of the given excluded patterns.
+func (in *Artifact) SetExcludedPatterns(ignore *string) {
+	if in == nil {
+		return
+	}
+	if ignore == nil {
+		in.ExcludedPatternsChecksum = ""
+		return
+	}
+	h := sha256.New()
+	_, _ = io.Copy(h, strings.NewReader(*ignore))
+	in.ExcludedPatternsChecksum = fmt.Sprintf("%x", h.Sum(nil))
 }
 
 // ArtifactDir returns the artifact dir path in the form of

@@ -149,8 +149,8 @@ spec:
               secretRef:
                 description: The secret name containing the Git credentials. For HTTPS
                   repositories the secret must contain username and password fields.
-                  For SSH repositories the secret must contain identity and known_hosts
-                  fields.
+                  For SSH repositories the secret must contain identity, identity.pub
+                  and known_hosts fields.
                 properties:
                   name:
                     description: Name of the referent.
@@ -554,6 +554,10 @@ spec:
                   checksum:
                     description: Checksum is the SHA256 checksum of the Artifact file.
                     type: string
+                  excludedPatternsChecksum:
+                    description: ExcludedPatternsChecksum is a SHA256 checksum of
+                      the excluded patterns applied in the last reconciliation.
+                    type: string
                   lastUpdateTime:
                     description: LastUpdateTime is the timestamp corresponding to
                       the last update of the Artifact.
@@ -662,6 +666,10 @@ spec:
                     checksum:
                       description: Checksum is the SHA256 checksum of the Artifact
                         file.
+                      type: string
+                    excludedPatternsChecksum:
+                      description: ExcludedPatternsChecksum is a SHA256 checksum of
+                        the excluded patterns applied in the last reconciliation.
                       type: string
                     lastUpdateTime:
                       description: LastUpdateTime is the timestamp corresponding to

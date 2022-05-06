@@ -427,6 +427,10 @@ spec:
                   checksum:
                     description: Checksum is the SHA256 checksum of the Artifact file.
                     type: string
+                  excludedPatternsChecksum:
+                    description: ExcludedPatternsChecksum is a SHA256 checksum of
+                      the excluded patterns applied in the last reconciliation.
+                    type: string
                   lastUpdateTime:
                     description: LastUpdateTime is the timestamp corresponding to
                       the last update of the Artifact.
