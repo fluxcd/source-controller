@@ -39,7 +39,7 @@ import (
 const (
 	objectName string = "test.yaml"
 	objectEtag string = "2020beab5f1711919157756379622d1d"
-	region     string = "us-east-1"
+	region     string = "us-west-2"
 )
 
 var (
