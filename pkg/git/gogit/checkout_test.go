@@ -145,7 +145,7 @@ func TestCheckoutTag_Checkout(t *testing.T) {
 			expectErr:   "no changes since last reconcilation",
 		},
 		{
-			name:        "Tag",
+			name:        "Last revision changed",
 			tag:         "tag-3",
 			checkoutTag: "tag-3",
 			expectTag:   "tag-3",
