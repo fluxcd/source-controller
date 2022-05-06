@@ -103,5 +103,9 @@ func (a *CustomPublicKeys) ClientConfig() (*gossh.ClientConfig, error) {
 	if len(git.KexAlgos) > 0 {
 		config.Config.KeyExchanges = git.KexAlgos
 	}
+	if len(git.HostKeyAlgos) > 0 {
+		config.HostKeyAlgorithms = git.HostKeyAlgos
+	}
+
 	return config, nil
 }
