@@ -463,7 +463,8 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context,
 	if err != nil {
 		var v git.NoChangesError
 		if errors.As(err, &v) {
-			return sreconcile.ResultSuccess, nil
+			return sreconcile.ResultSuccess,
+				&serror.Waiting{Err: v, Reason: v.Message}
 		}
 
 		e := &serror.Event{
@@ -506,12 +507,6 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context,
 // object are set, and the symlink in the Storage is updated to its path.
 func (r *GitRepositoryReconciler) reconcileArtifact(ctx context.Context,
 	obj *sourcev1.GitRepository, commit *git.Commit, includes *artifactSet, dir string) (sreconcile.Result, error) {
-	// If reconciliation resulted in git.NoChangesError,
-	// avoid reconciling artifact, as this was already done
-	// on a previous reconciliation.
-	if commit == nil || commit.Hash.String() == "" {
-		return sreconcile.ResultSuccess, nil
-	}
 
 	// Create potential new artifact with current available metadata
 	artifact := r.Storage.NewArtifactFor(obj.Kind, obj.GetObjectMeta(), commit.String(), fmt.Sprintf("%s.tar.gz", commit.Hash.String()))
