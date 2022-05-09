@@ -515,6 +515,20 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 			}
 
 			logOpts := append([]registry.LoginOption{}, logOpt)
+
+			// create a temporary file to store the credentials
+			// this is needed because the registry client because otherwise the credentials are
+			// stored in docker config.json
+			// TODO@souleb: remove this once the registry move to Oras v2
+			// or rework to enable reusing credentials to avoid the unneccessary handshake operations
+			credentialFile, err := os.CreateTemp("", "credentials")
+			if err != nil {
+				return chartRepoErrorReturn(err, obj)
+			}
+			defer os.Remove(credentialFile.Name())
+
+			// set the credentials file to the registry client
+			registry.ClientOptCredentialsFile(credentialFile.Name())(r.RegistryClient)
 			err = ociChartRepo.Login(logOpts...)
 			if err != nil {
 				return chartRepoErrorReturn(err, obj)

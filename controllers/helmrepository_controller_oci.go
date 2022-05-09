@@ -19,6 +19,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -305,6 +306,22 @@ func (r *HelmRepositoryOCIReconciler) validateSource(ctx context.Context, obj *s
 
 	// Attempt to login to the registry if credentials are provided.
 	if loginOpts != nil {
+		// create a temporary file to store the credentials
+		// this is needed because the registry client because otherwise the credentials are
+		// stored in docker config.json
+		credentialFile, err := os.CreateTemp("", "credentials")
+		if err != nil {
+			e := &serror.Event{
+				Err:    fmt.Errorf("failed to create temporary file: %w", err),
+				Reason: "ValidationError",
+			}
+			conditions.MarkFalse(obj, sourcev1.SourceValidCondition, e.Reason, e.Err.Error())
+			return sreconcile.ResultEmpty, e
+		}
+		defer os.Remove(credentialFile.Name())
+
+		// set the credentials file to the registry client
+		registry.ClientOptCredentialsFile(credentialFile.Name())(r.RegistryClient)
 		err = chartRepo.Login(loginOpts...)
 		if err != nil {
 			e := &serror.Event{

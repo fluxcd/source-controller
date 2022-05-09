@@ -848,6 +848,19 @@ references to this object.
 NOTE: Not implemented, provisional as of <a href="https://github.com/fluxcd/flux2/pull/2092">https://github.com/fluxcd/flux2/pull/2092</a></p>
 </td>
 </tr>
+<tr>
+<td>
+<code>type</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Type of the HelmRepository.
+When this field is set to  &ldquo;OCI&rdquo;, the URL field value must be prefixed with &ldquo;oci://&rdquo;.</p>
+</td>
+</tr>
 </table>
 </td>
 </tr>
@@ -2091,6 +2104,19 @@ github.com/fluxcd/pkg/apis/acl.AccessFrom
 <p>AccessFrom specifies an Access Control List for allowing cross-namespace
 references to this object.
 NOTE: Not implemented, provisional as of <a href="https://github.com/fluxcd/flux2/pull/2092">https://github.com/fluxcd/flux2/pull/2092</a></p>
+</td>
+</tr>
+<tr>
+<td>
+<code>type</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Type of the HelmRepository.
+When this field is set to  &ldquo;OCI&rdquo;, the URL field value must be prefixed with &ldquo;oci://&rdquo;.</p>
 </td>
 </tr>
 </tbody>
