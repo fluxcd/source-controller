@@ -64,7 +64,9 @@ type CheckoutBranch struct {
 	LastRevision string
 }
 
-func (c *CheckoutBranch) Checkout(ctx context.Context, path, url string, opts *git.AuthOptions) (*git.Commit, error) {
+func (c *CheckoutBranch) Checkout(ctx context.Context, path, url string, opts *git.AuthOptions) (_ *git.Commit, err error) {
+	defer recoverPanic(&err)
+
 	repo, remote, err := getBlankRepoAndRemote(ctx, path, url, opts)
 
 	if err != nil {
@@ -149,7 +151,9 @@ type CheckoutTag struct {
 	LastRevision string
 }
 
-func (c *CheckoutTag) Checkout(ctx context.Context, path, url string, opts *git.AuthOptions) (*git.Commit, error) {
+func (c *CheckoutTag) Checkout(ctx context.Context, path, url string, opts *git.AuthOptions) (_ *git.Commit, err error) {
+	defer recoverPanic(&err)
+
 	repo, remote, err := getBlankRepoAndRemote(ctx, path, url, opts)
 
 	if err != nil {
@@ -210,8 +214,10 @@ type CheckoutCommit struct {
 	Commit string
 }
 
-func (c *CheckoutCommit) Checkout(ctx context.Context, path, url string, opts *git.AuthOptions) (*git.Commit, error) {
-	repo, err := safeClone(url, path, &git2go.CloneOptions{
+func (c *CheckoutCommit) Checkout(ctx context.Context, path, url string, opts *git.AuthOptions) (_ *git.Commit, err error) {
+	defer recoverPanic(&err)
+
+	repo, err := git2go.Clone(url, path, &git2go.CloneOptions{
 		FetchOptions: git2go.FetchOptions{
 			DownloadTags:    git2go.DownloadTagsNone,
 			RemoteCallbacks: RemoteCallbacks(ctx, opts),
@@ -237,13 +243,15 @@ type CheckoutSemVer struct {
 	SemVer string
 }
 
-func (c *CheckoutSemVer) Checkout(ctx context.Context, path, url string, opts *git.AuthOptions) (*git.Commit, error) {
+func (c *CheckoutSemVer) Checkout(ctx context.Context, path, url string, opts *git.AuthOptions) (_ *git.Commit, err error) {
+	defer recoverPanic(&err)
+
 	verConstraint, err := semver.NewConstraint(c.SemVer)
 	if err != nil {
 		return nil, fmt.Errorf("semver parse error: %w", err)
 	}
 
-	repo, err := safeClone(url, path, &git2go.CloneOptions{
+	repo, err := git2go.Clone(url, path, &git2go.CloneOptions{
 		FetchOptions: git2go.FetchOptions{
 			DownloadTags:    git2go.DownloadTagsAll,
 			RemoteCallbacks: RemoteCallbacks(ctx, opts),
@@ -330,19 +338,6 @@ func (c *CheckoutSemVer) Checkout(ctx context.Context, path, url string, opts *g
 	}
 	defer cc.Free()
 	return buildCommit(cc, "refs/tags/"+t), nil
-}
-
-// safeClone wraps git2go calls with panic recovering logic, ensuring
-// a predictable execution path for callers.
-func safeClone(url, path string, cloneOpts *git2go.CloneOptions) (repo *git2go.Repository, err error) {
-	defer func() {
-		if r := recover(); r != nil {
-			err = fmt.Errorf("recovered from git2go panic: %v", r)
-		}
-	}()
-
-	repo, err = git2go.Clone(url, path, cloneOpts)
-	return
 }
 
 // checkoutDetachedDwim attempts to perform a detached HEAD checkout by first DWIMing the short name
@@ -442,4 +437,10 @@ func getBlankRepoAndRemote(ctx context.Context, path, url string, opts *git.Auth
 		return nil, nil, fmt.Errorf("unable to fetch-connect to remote '%s': %w", managed.EffectiveURL(url), gitutil.LibGit2Error(err))
 	}
 	return repo, remote, nil
+}
+
+func recoverPanic(err *error) {
+	if r := recover(); r != nil {
+		*err = fmt.Errorf("recovered from git2go panic: %v", r)
+	}
 }
