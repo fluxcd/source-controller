@@ -91,7 +91,6 @@ func main() {
 		helmCacheMaxSize         int
 		helmCacheTTL             string
 		helmCachePurgeInterval   string
-		kexAlgos                 []string
 		artifactRetentionTTL     time.Duration
 		artifactRetentionRecords int
 	)
@@ -124,8 +123,10 @@ func main() {
 		"The TTL of an index in the cache. Valid time units are ns, us (or µs), ms, s, m, h.")
 	flag.StringVar(&helmCachePurgeInterval, "helm-cache-purge-interval", "1m",
 		"The interval at which the cache is purged. Valid time units are ns, us (or µs), ms, s, m, h.")
-	flag.StringSliceVar(&kexAlgos, "ssh-kex-algos", []string{},
+	flag.StringSliceVar(&git.KexAlgos, "ssh-kex-algos", []string{},
 		"The list of key exchange algorithms to use for ssh connections, arranged from most preferred to the least.")
+	flag.StringSliceVar(&git.HostKeyAlgos, "ssh-hostkey-algos", []string{},
+		"The list of hostkey algorithms to use for ssh connections, arranged from most preferred to the least.")
 	flag.DurationVar(&artifactRetentionTTL, "artifact-retention-ttl", 60*time.Second,
 		"The duration of time that artifacts will be kept in storage before being garbage collected.")
 	flag.IntVar(&artifactRetentionRecords, "artifact-retention-records", 2,
@@ -185,7 +186,6 @@ func main() {
 		storageAdvAddr = determineAdvStorageAddr(storageAddr, setupLog)
 	}
 	storage := mustInitStorage(storagePath, storageAdvAddr, artifactRetentionTTL, artifactRetentionRecords, setupLog)
-	setPreferredKexAlgos(kexAlgos)
 
 	if err = (&controllers.GitRepositoryReconciler{
 		Client:         mgr.GetClient(),
@@ -344,8 +344,4 @@ func envOrDefault(envName, defaultValue string) string {
 	}
 
 	return defaultValue
-}
-
-func setPreferredKexAlgos(algos []string) {
-	git.KexAlgos = algos
 }
