@@ -467,7 +467,7 @@ func TestCheckout_ED25519(t *testing.T) {
 
 	repoPath := "test.git"
 
-	err = server.InitRepo("testdata/git/repo", git.DefaultBranch, repoPath)
+	err = server.InitRepo(testRepositoryPath, git.DefaultBranch, repoPath)
 	g.Expect(err).NotTo(HaveOccurred())
 
 	sshURL := server.SSHAddress()
@@ -477,7 +477,7 @@ func TestCheckout_ED25519(t *testing.T) {
 	u, err := url.Parse(sshURL)
 	g.Expect(err).NotTo(HaveOccurred())
 	g.Expect(u.Host).ToNot(BeEmpty())
-	knownHosts, err := ssh.ScanHostKey(u.Host, timeout)
+	knownHosts, err := ssh.ScanHostKey(u.Host, timeout, git.HostKeyAlgos)
 	g.Expect(err).ToNot(HaveOccurred())
 
 	kp, err := ssh.NewEd25519Generator().Generate()
@@ -504,7 +504,7 @@ func TestCheckout_ED25519(t *testing.T) {
 	// This should always fail because the generated key above isn't present in
 	// the git server.
 	_, err = branchCheckoutStrat.Checkout(ctx, tmpDir, repoURL, authOpts)
-	g.Expect(err).To(BeNil())
+	g.Expect(err).ToNot(HaveOccurred())
 }
 
 func TestSafeClone(t *testing.T) {

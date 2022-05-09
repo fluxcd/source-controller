@@ -97,7 +97,7 @@ func TestCheckoutStrategyForImplementation_Auth(t *testing.T) {
 				return getSSHRepoURL(srv.SSHAddress(), repoPath)
 			},
 			authOptsFunc: func(g *WithT, u *url.URL, user, pswd string, ca []byte) *git.AuthOptions {
-				knownhosts, err := ssh.ScanHostKey(u.Host, 5*time.Second)
+				knownhosts, err := ssh.ScanHostKey(u.Host, 5*time.Second, git.HostKeyAlgos)
 				g.Expect(err).ToNot(HaveOccurred())
 
 				keygen := ssh.NewRSAGenerator(2048)

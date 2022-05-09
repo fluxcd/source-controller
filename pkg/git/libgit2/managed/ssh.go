@@ -421,6 +421,9 @@ func cacheKeyAndConfig(remoteAddress string, cred *git2go.Credential) (string, *
 	if len(git.KexAlgos) > 0 {
 		cfg.Config.KeyExchanges = git.KexAlgos
 	}
+	if len(git.HostKeyAlgos) > 0 {
+		cfg.HostKeyAlgorithms = git.HostKeyAlgos
+	}
 
 	return ck, cfg, nil
 }

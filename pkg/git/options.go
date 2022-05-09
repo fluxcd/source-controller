@@ -70,8 +70,13 @@ type AuthOptions struct {
 	CAFile     []byte
 }
 
-// List of custom key exchange algorithms to be used for ssh connections.
+// KexAlgos hosts the key exchange algorithms to be used for SSH connections.
+// If empty, Go's default is used instead.
 var KexAlgos []string
+
+// HostKeyAlgos holds the HostKey algorithms that the SSH client will advertise
+// to the server. If empty, Go's default is used instead.
+var HostKeyAlgos []string
 
 // Validate the AuthOptions against the defined Transport.
 func (o AuthOptions) Validate() error {
