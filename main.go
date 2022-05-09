@@ -245,7 +245,7 @@ func main() {
 		ControllerName: controllerName,
 		Cache:          c,
 		TTL:            ttl,
-		CacheRecorder: cacheRecorder,
+		CacheRecorder:  cacheRecorder,
 	}).SetupWithManagerAndOptions(mgr, controllers.HelmChartReconcilerOptions{
 		MaxConcurrentReconciles: concurrent,
 		RateLimiter:             helper.GetRateLimiter(rateLimiterOptions),
