@@ -225,13 +225,12 @@ ifneq ($(shell grep -o 'LIBGIT2_TAG ?= \w.*' Makefile | cut -d ' ' -f 3), $(shel
 	exit 1; \
 	}
 endif
-ifneq (, $(shell git status --porcelain --untracked-files=no))
-	@{ \
-	echo "working directory is dirty:"; \
-	git --no-pager diff; \
-	exit 1; \
-	}
-endif
+
+	@if [ ! "$$(git status --porcelain --untracked-files=no)" = "" ]; then \
+		echo "working directory is dirty:"; \
+		git --no-pager diff; \
+		exit 1; \
+	fi
 
 # go-install-tool will 'go install' any package $2 and install it to $1.
 define go-install-tool
