@@ -255,7 +255,7 @@ func TestManagedTransport_E2E(t *testing.T) {
 	InitManagedTransport(logr.Discard())
 
 	repoPath := "test.git"
-	err = server.InitRepo("../testdata/git/repo", git.DefaultBranch, repoPath)
+	err = server.InitRepo("../../testdata/git/repo", git.DefaultBranch, repoPath)
 	g.Expect(err).ToNot(HaveOccurred())
 
 	tmpDir := t.TempDir()

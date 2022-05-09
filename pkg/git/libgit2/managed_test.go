@@ -1,5 +1,5 @@
 /*
-Copyright 2020 The Flux authors
+Copyright 2022 The Flux authors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -14,11 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package gogit
+package libgit2
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -31,13 +30,9 @@ import (
 	"github.com/fluxcd/pkg/gittestserver"
 	"github.com/fluxcd/pkg/ssh"
 	"github.com/fluxcd/source-controller/pkg/git"
-	"github.com/go-git/go-billy/v5/memfs"
-	"github.com/go-git/go-billy/v5/osfs"
-	extgogit "github.com/go-git/go-git/v5"
-	"github.com/go-git/go-git/v5/plumbing"
-	"github.com/go-git/go-git/v5/plumbing/cache"
-	"github.com/go-git/go-git/v5/plumbing/object"
-	"github.com/go-git/go-git/v5/storage/filesystem"
+	"github.com/fluxcd/source-controller/pkg/git/libgit2/managed"
+
+	"github.com/go-logr/logr"
 	. "github.com/onsi/gomega"
 
 	cryptossh "golang.org/x/crypto/ssh"
@@ -46,334 +41,9 @@ import (
 
 const testRepositoryPath = "../testdata/git/repo"
 
-func TestCheckoutBranch_Checkout(t *testing.T) {
-	repo, path, err := initRepo(t)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	firstCommit, err := commitFile(repo, "branch", "init", time.Now())
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if err = createBranch(repo, "test"); err != nil {
-		t.Fatal(err)
-	}
-
-	secondCommit, err := commitFile(repo, "branch", "second", time.Now())
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	tests := []struct {
-		name           string
-		branch         string
-		filesCreated   map[string]string
-		expectedCommit string
-		expectedErr    string
-	}{
-		{
-			name:           "Default branch",
-			branch:         "master",
-			filesCreated:   map[string]string{"branch": "init"},
-			expectedCommit: firstCommit.String(),
-		},
-		{
-			name:           "Other branch",
-			branch:         "test",
-			filesCreated:   map[string]string{"branch": "second"},
-			expectedCommit: secondCommit.String(),
-		},
-		{
-			name:        "Non existing branch",
-			branch:      "invalid",
-			expectedErr: "couldn't find remote ref \"refs/heads/invalid\"",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			g := NewWithT(t)
-
-			branch := CheckoutBranch{
-				Branch: tt.branch,
-			}
-			tmpDir := t.TempDir()
-
-			cc, err := branch.Checkout(context.TODO(), tmpDir, path, nil)
-			if tt.expectedErr != "" {
-				g.Expect(err).To(HaveOccurred())
-				g.Expect(err.Error()).To(ContainSubstring(tt.expectedErr))
-				g.Expect(cc).To(BeNil())
-				return
-			}
-			g.Expect(err).ToNot(HaveOccurred())
-			g.Expect(cc.String()).To(Equal(tt.branch + "/" + tt.expectedCommit))
-
-			for k, v := range tt.filesCreated {
-				g.Expect(filepath.Join(tmpDir, k)).To(BeARegularFile())
-				g.Expect(os.ReadFile(filepath.Join(tmpDir, k))).To(BeEquivalentTo(v))
-			}
-		})
-	}
-}
-
-func TestCheckoutTag_Checkout(t *testing.T) {
-	tests := []struct {
-		name        string
-		tag         string
-		annotated   bool
-		checkoutTag string
-		expectTag   string
-		expectErr   string
-	}{
-		{
-			name:        "Tag",
-			tag:         "tag-1",
-			checkoutTag: "tag-1",
-			expectTag:   "tag-1",
-		},
-		{
-			name:        "Annotated",
-			tag:         "annotated",
-			annotated:   true,
-			checkoutTag: "annotated",
-			expectTag:   "annotated",
-		},
-		{
-			name:        "Non existing tag",
-			tag:         "tag-1",
-			checkoutTag: "invalid",
-			expectErr:   "couldn't find remote ref \"refs/tags/invalid\"",
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			g := NewWithT(t)
-
-			repo, path, err := initRepo(t)
-			if err != nil {
-				t.Fatal(err)
-			}
-
-			var h plumbing.Hash
-			if tt.tag != "" {
-				h, err = commitFile(repo, "tag", tt.tag, time.Now())
-				if err != nil {
-					t.Fatal(err)
-				}
-				_, err = tag(repo, h, !tt.annotated, tt.tag, time.Now())
-				if err != nil {
-					t.Fatal(err)
-				}
-			}
-
-			tag := CheckoutTag{
-				Tag: tt.checkoutTag,
-			}
-			tmpDir := t.TempDir()
-
-			cc, err := tag.Checkout(context.TODO(), tmpDir, path, nil)
-			if tt.expectErr != "" {
-				g.Expect(err.Error()).To(ContainSubstring(tt.expectErr))
-				g.Expect(cc).To(BeNil())
-				return
-			}
-
-			g.Expect(err).ToNot(HaveOccurred())
-			g.Expect(cc.String()).To(Equal(tt.expectTag + "/" + h.String()))
-			g.Expect(filepath.Join(tmpDir, "tag")).To(BeARegularFile())
-			g.Expect(os.ReadFile(filepath.Join(tmpDir, "tag"))).To(BeEquivalentTo(tt.tag))
-		})
-	}
-}
-
-func TestCheckoutCommit_Checkout(t *testing.T) {
-	repo, path, err := initRepo(t)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	firstCommit, err := commitFile(repo, "commit", "init", time.Now())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err = createBranch(repo, "other-branch"); err != nil {
-		t.Fatal(err)
-	}
-	secondCommit, err := commitFile(repo, "commit", "second", time.Now())
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	tests := []struct {
-		name         string
-		commit       string
-		branch       string
-		expectCommit string
-		expectFile   string
-		expectError  string
-	}{
-		{
-			name:         "Commit",
-			commit:       firstCommit.String(),
-			expectCommit: "HEAD/" + firstCommit.String(),
-			expectFile:   "init",
-		},
-		{
-			name:         "Commit in specific branch",
-			commit:       secondCommit.String(),
-			branch:       "other-branch",
-			expectCommit: "other-branch/" + secondCommit.String(),
-			expectFile:   "second",
-		},
-		{
-			name:        "Non existing commit",
-			commit:      "a-random-invalid-commit",
-			expectError: "failed to resolve commit object for 'a-random-invalid-commit': object not found",
-		},
-		{
-			name:        "Non existing commit in specific branch",
-			commit:      secondCommit.String(),
-			branch:      "master",
-			expectError: "object not found",
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			g := NewWithT(t)
-
-			commit := CheckoutCommit{
-				Commit: tt.commit,
-				Branch: tt.branch,
-			}
-
-			tmpDir := t.TempDir()
-
-			cc, err := commit.Checkout(context.TODO(), tmpDir, path, nil)
-			if tt.expectError != "" {
-				g.Expect(err).To(HaveOccurred())
-				g.Expect(err.Error()).To(ContainSubstring(tt.expectError))
-				g.Expect(cc).To(BeNil())
-				return
-			}
-
-			g.Expect(err).ToNot(HaveOccurred())
-			g.Expect(cc).ToNot(BeNil())
-			g.Expect(cc.String()).To(Equal(tt.expectCommit))
-			g.Expect(filepath.Join(tmpDir, "commit")).To(BeARegularFile())
-			g.Expect(os.ReadFile(filepath.Join(tmpDir, "commit"))).To(BeEquivalentTo(tt.expectFile))
-		})
-	}
-}
-
-func TestCheckoutTagSemVer_Checkout(t *testing.T) {
-	now := time.Now()
-
-	tags := []struct {
-		tag        string
-		annotated  bool
-		commitTime time.Time
-		tagTime    time.Time
-	}{
-		{
-			tag:        "v0.0.1",
-			annotated:  false,
-			commitTime: now,
-		},
-		{
-			tag:        "v0.1.0+build-1",
-			annotated:  true,
-			commitTime: now.Add(10 * time.Minute),
-			tagTime:    now.Add(2 * time.Hour), // This should be ignored during TS comparisons
-		},
-		{
-			tag:        "v0.1.0+build-2",
-			annotated:  false,
-			commitTime: now.Add(30 * time.Minute),
-		},
-		{
-			tag:        "v0.1.0+build-3",
-			annotated:  true,
-			commitTime: now.Add(1 * time.Hour),
-			tagTime:    now.Add(1 * time.Hour), // This should be ignored during TS comparisons
-		},
-		{
-			tag:        "0.2.0",
-			annotated:  true,
-			commitTime: now,
-			tagTime:    now,
-		},
-	}
-	tests := []struct {
-		name       string
-		constraint string
-		expectErr  error
-		expectTag  string
-	}{
-		{
-			name:       "Orders by SemVer",
-			constraint: ">0.1.0",
-			expectTag:  "0.2.0",
-		},
-		{
-			name:       "Orders by SemVer and timestamp",
-			constraint: "<0.2.0",
-			expectTag:  "v0.1.0+build-3",
-		},
-		{
-			name:       "Errors without match",
-			constraint: ">=1.0.0",
-			expectErr:  errors.New("no match found for semver: >=1.0.0"),
-		},
-	}
-
-	repo, path, err := initRepo(t)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	refs := make(map[string]string, len(tags))
-	for _, tt := range tags {
-		ref, err := commitFile(repo, "tag", tt.tag, tt.commitTime)
-		if err != nil {
-			t.Fatal(err)
-		}
-		_, err = tag(repo, ref, tt.annotated, tt.tag, tt.tagTime)
-		if err != nil {
-			t.Fatal(err)
-		}
-		refs[tt.tag] = ref.String()
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			g := NewWithT(t)
-
-			semVer := CheckoutSemVer{
-				SemVer: tt.constraint,
-			}
-			tmpDir := t.TempDir()
-
-			cc, err := semVer.Checkout(context.TODO(), tmpDir, path, nil)
-			if tt.expectErr != nil {
-				g.Expect(err).To(Equal(tt.expectErr))
-				g.Expect(cc).To(BeNil())
-				return
-			}
-
-			g.Expect(err).ToNot(HaveOccurred())
-			g.Expect(cc.String()).To(Equal(tt.expectTag + "/" + refs[tt.expectTag]))
-			g.Expect(filepath.Join(tmpDir, "tag")).To(BeARegularFile())
-			g.Expect(os.ReadFile(filepath.Join(tmpDir, "tag"))).To(BeEquivalentTo(tt.expectTag))
-		})
-	}
-}
-
-// Test_KeyTypes assures support for the different types of keys
-// for SSH Authentication supported by Flux.
-func Test_KeyTypes(t *testing.T) {
+// Test_ManagedSSH_KeyTypes assures support for the different
+// types of keys for SSH Authentication supported by Flux.
+func Test_ManagedSSH_KeyTypes(t *testing.T) {
 	tests := []struct {
 		name       string
 		keyType    ssh.KeyPairType
@@ -385,7 +55,7 @@ func Test_KeyTypes(t *testing.T) {
 		{name: "ECDSA P384", keyType: ssh.ECDSA_P384, authorized: true},
 		{name: "ECDSA P521", keyType: ssh.ECDSA_P521, authorized: true},
 		{name: "ED25519", keyType: ssh.ED25519, authorized: true},
-		{name: "unauthorized key", keyType: ssh.RSA_4096, wantErr: "unable to authenticate, attempted methods [none publickey], no supported methods remain"},
+		{name: "unauthorized key", keyType: ssh.RSA_4096, wantErr: "Failed to retrieve list of SSH authentication methods"},
 	}
 
 	serverRootDir := t.TempDir()
@@ -478,9 +148,9 @@ func Test_KeyTypes(t *testing.T) {
 	}
 }
 
-// Test_KeyExchangeAlgos assures support for the different
+// Test_ManagedSSH_KeyExchangeAlgos assures support for the different
 // types of SSH key exchange algorithms supported by Flux.
-func Test_KeyExchangeAlgos(t *testing.T) {
+func Test_ManagedSSH_KeyExchangeAlgos(t *testing.T) {
 	tests := []struct {
 		name      string
 		ClientKex []string
@@ -553,7 +223,10 @@ func Test_KeyExchangeAlgos(t *testing.T) {
 			}()
 			defer server.StopSSH()
 
+			os.Setenv("EXPERIMENTAL_GIT_TRANSPORT", "true")
+			managed.InitManagedTransport(logr.Discard())
 			repoPath := "test.git"
+
 			err := server.InitRepo(testRepositoryPath, git.DefaultBranch, repoPath)
 			g.Expect(err).NotTo(HaveOccurred())
 
@@ -602,9 +275,9 @@ func Test_KeyExchangeAlgos(t *testing.T) {
 	}
 }
 
-// TestHostKeyAlgos assures support for the different
+// Test_ManagedSSH_HostKeyAlgos assures support for the different
 // types of SSH Host Key algorithms supported by Flux.
-func TestHostKeyAlgos(t *testing.T) {
+func Test_ManagedSSH_HostKeyAlgos(t *testing.T) {
 	tests := []struct {
 		name               string
 		keyType            ssh.KeyPairType
@@ -680,7 +353,10 @@ func TestHostKeyAlgos(t *testing.T) {
 			}()
 			defer server.StopSSH()
 
+			os.Setenv("EXPERIMENTAL_GIT_TRANSPORT", "true")
+			managed.InitManagedTransport(logr.Discard())
 			repoPath := "test.git"
+
 			err = server.InitRepo(testRepositoryPath, git.DefaultBranch, repoPath)
 			g.Expect(err).NotTo(HaveOccurred())
 
@@ -692,7 +368,7 @@ func TestHostKeyAlgos(t *testing.T) {
 			g.Expect(err).NotTo(HaveOccurred())
 			g.Expect(u.Host).ToNot(BeEmpty())
 
-			knownHosts, err := ssh.ScanHostKey(u.Host, timeout, git.HostKeyAlgos)
+			knownHosts, err := ssh.ScanHostKey(u.Host, timeout, tt.ClientHostKeyAlgos)
 			g.Expect(err).ToNot(HaveOccurred())
 
 			// No authentication is required for this test, but it is
@@ -721,75 +397,5 @@ func TestHostKeyAlgos(t *testing.T) {
 			_, err = branchCheckoutStrat.Checkout(ctx, tmpDir, repoURL, authOpts)
 			g.Expect(err).Error().ShouldNot(HaveOccurred())
 		})
-	}
-}
-
-func initRepo(t *testing.T) (*extgogit.Repository, string, error) {
-	tmpDir := t.TempDir()
-	sto := filesystem.NewStorage(osfs.New(tmpDir), cache.NewObjectLRUDefault())
-	repo, err := extgogit.Init(sto, memfs.New())
-	if err != nil {
-		return nil, "", err
-	}
-	return repo, tmpDir, err
-}
-
-func createBranch(repo *extgogit.Repository, branch string) error {
-	wt, err := repo.Worktree()
-	if err != nil {
-		return err
-	}
-	h, err := repo.Head()
-	if err != nil {
-		return err
-	}
-	return wt.Checkout(&extgogit.CheckoutOptions{
-		Hash:   h.Hash(),
-		Branch: plumbing.ReferenceName("refs/heads/" + branch),
-		Create: true,
-	})
-}
-
-func commitFile(repo *extgogit.Repository, path, content string, time time.Time) (plumbing.Hash, error) {
-	wt, err := repo.Worktree()
-	if err != nil {
-		return plumbing.Hash{}, err
-	}
-	f, err := wt.Filesystem.Create(path)
-	if err != nil {
-		return plumbing.Hash{}, err
-	}
-	if _, err = f.Write([]byte(content)); err != nil {
-		f.Close()
-		return plumbing.Hash{}, err
-	}
-	if err = f.Close(); err != nil {
-		return plumbing.Hash{}, err
-	}
-	if _, err = wt.Add(path); err != nil {
-		return plumbing.Hash{}, err
-	}
-	return wt.Commit("Adding: "+path, &extgogit.CommitOptions{
-		Author:    mockSignature(time),
-		Committer: mockSignature(time),
-	})
-}
-
-func tag(repo *extgogit.Repository, commit plumbing.Hash, annotated bool, tag string, time time.Time) (*plumbing.Reference, error) {
-	var opts *extgogit.CreateTagOptions
-	if annotated {
-		opts = &extgogit.CreateTagOptions{
-			Tagger:  mockSignature(time),
-			Message: "Annotated tag for: " + tag,
-		}
-	}
-	return repo.CreateTag(tag, commit, opts)
-}
-
-func mockSignature(time time.Time) *object.Signature {
-	return &object.Signature{
-		Name:  "Jane Doe",
-		Email: "jane@example.com",
-		When:  time,
 	}
 }
