@@ -260,7 +260,7 @@ func (r *HelmRepositoryOCIReconciler) reconcileSource(ctx context.Context, obj *
 		}
 
 		// Construct actual options
-		logOpt, err := r.loginOptionFromSecret(secret)
+		logOpt, err := loginOptionFromSecret(secret)
 		if err != nil {
 			e := &serror.Event{
 				Err:    fmt.Errorf("failed to configure Helm client with secret data: %w", err),
@@ -321,7 +321,7 @@ func (r *HelmRepositoryOCIReconciler) validateSource(ctx context.Context, obj *s
 	return sreconcile.ResultSuccess, nil
 }
 
-func (r *HelmRepositoryOCIReconciler) loginOptionFromSecret(secret corev1.Secret) (registry.LoginOption, error) {
+func loginOptionFromSecret(secret corev1.Secret) (registry.LoginOption, error) {
 	username, password := string(secret.Data["username"]), string(secret.Data["password"])
 	switch {
 	case username == "" && password == "":

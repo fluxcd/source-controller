@@ -33,12 +33,6 @@ import (
 func TestHelmRepositoryOCIReconciler_Reconcile(t *testing.T) {
 	g := NewWithT(t)
 
-	// Login to the registry
-	// err := testRegistryserver.RegistryClient.Login(testRegistryserver.DockerRegistryHost,
-	// 	registry.LoginOptBasicAuth(testUsername, testPassword),
-	// 	registry.LoginOptInsecure(true))
-	// g.Expect(err).NotTo(HaveOccurred())
-
 	ns, err := testEnv.CreateNamespace(ctx, "helmrepository-oci-reconcile-test")
 	g.Expect(err).ToNot(HaveOccurred())
 	defer func() { g.Expect(testEnv.Delete(ctx, ns)).To(Succeed()) }()

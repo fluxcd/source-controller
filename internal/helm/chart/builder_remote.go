@@ -153,7 +153,6 @@ func (b *remoteChartBuilder) Build(_ context.Context, ref Reference, p string, o
 }
 
 func (b *remoteChartBuilder) downloadFromOCIRepository(remote *repository.OCIChartRepository, remoteRef RemoteReference, buildResult *Build, opts BuildOptions) (*bytes.Buffer, error) {
-	// TODO: verify if login is required
 	cv, err := remote.Get(remoteRef.Name, remoteRef.Version)
 	if err != nil {
 		err = fmt.Errorf("failed to get chart version for remote reference: %w", err)

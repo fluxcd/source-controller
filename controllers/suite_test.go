@@ -78,6 +78,10 @@ var (
 			Schemes: []string{"http", "https"},
 			New:     getter.NewHTTPGetter,
 		},
+		getter.Provider{
+			Schemes: []string{"oci"},
+			New:     getter.NewOCIGetter,
+		},
 	}
 )
 

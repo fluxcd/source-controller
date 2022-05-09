@@ -453,7 +453,8 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 		helmgetter.WithTimeout(repo.Spec.Timeout.Duration),
 		helmgetter.WithPassCredentialsAll(repo.Spec.PassCredentials),
 	}
-	if secret, err := r.getHelmRepositorySecret(ctx, repo); secret != nil || err != nil {
+	secret, err := r.getHelmRepositorySecret(ctx, repo)
+	if secret != nil || err != nil {
 		if err != nil {
 			e := &serror.Event{
 				Err:    fmt.Errorf("failed to get secret '%s': %w", repo.Spec.SecretRef.Name, err),
@@ -491,15 +492,43 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 
 	// Initialize the chart repository
 	var chartRepo chart.Remote
-	var err error
-	if registry.IsOCI(repo.Spec.URL) {
-		chartRepo, err = repository.NewOCIChartRepository(repo.Spec.URL, repository.WithOCIGetter(r.Getters), repository.WithOCIRegistryClient(r.RegistryClient))
+	if repo.Spec.Type == sourcev1.HelmRepositoryTypeOCI {
+		if !registry.IsOCI(repo.Spec.URL) {
+			err = fmt.Errorf("invalid OCI registry URL: %s", repo.Spec.URL)
+			return chartRepoErrorReturn(err, obj)
+		}
+		// Tell the chart repository to use the OCI client with the configured getter
+		clientOpts = append(clientOpts, helmgetter.WithRegistryClient(r.RegistryClient))
+		ociChartRepo, err := repository.NewOCIChartRepository(repo.Spec.URL, repository.WithOCIGetter(r.Getters), repository.WithOCIGetterOptions(clientOpts), repository.WithOCIRegistryClient(r.RegistryClient))
+		if err != nil {
+			return chartRepoErrorReturn(err, obj)
+		}
+		chartRepo = ociChartRepo
+
+		// If login options are configured, use them to login to the registry
+		// The OCIGetter will later retrieve the stored credentials to pull the chart
+		if secret != nil {
+			// Construct actual options
+			logOpt, err := loginOptionFromSecret(*secret)
+			if err != nil {
+				return chartRepoErrorReturn(err, obj)
+			}
+
+			logOpts := append([]registry.LoginOption{}, logOpt)
+			err = ociChartRepo.Login(logOpts...)
+			if err != nil {
+				return chartRepoErrorReturn(err, obj)
+			}
+		}
 	} else {
 		var httpChartRepo *repository.ChartRepository
 		httpChartRepo, err = repository.NewChartRepository(repo.Spec.URL, r.Storage.LocalPath(*repo.GetArtifact()), r.Getters, tlsConfig, clientOpts,
 			repository.WithMemoryCache(r.Storage.LocalPath(*repo.GetArtifact()), r.Cache, r.TTL, func(event string) {
 				r.IncCacheEvents(event, obj.Name, obj.Namespace)
 			}))
+		if err != nil {
+			return chartRepoErrorReturn(err, obj)
+		}
 		chartRepo = httpChartRepo
 		defer func() {
 			if httpChartRepo == nil {
@@ -522,26 +551,6 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 				httpChartRepo.Unload()
 			}
 		}()
-	}
-	if err != nil {
-		// Any error requires a change in generation,
-		// which we should be informed about by the watcher
-		switch err.(type) {
-		case *url.Error:
-			e := &serror.Stalling{
-				Err:    fmt.Errorf("invalid Helm repository URL: %w", err),
-				Reason: sourcev1.URLInvalidReason,
-			}
-			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
-			return sreconcile.ResultEmpty, e
-		default:
-			e := &serror.Stalling{
-				Err:    fmt.Errorf("failed to construct Helm client: %w", err),
-				Reason: meta.FailedReason,
-			}
-			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
-			return sreconcile.ResultEmpty, e
-		}
 	}
 
 	// Construct the chart builder with scoped configuration
@@ -1105,4 +1114,23 @@ func reasonForBuild(build *chart.Build) string {
 		return sourcev1.ChartPackageSucceededReason
 	}
 	return sourcev1.ChartPullSucceededReason
+}
+
+func chartRepoErrorReturn(err error, obj *sourcev1.HelmChart) (sreconcile.Result, error) {
+	switch err.(type) {
+	case *url.Error:
+		e := &serror.Stalling{
+			Err:    fmt.Errorf("invalid Helm repository URL: %w", err),
+			Reason: sourcev1.URLInvalidReason,
+		}
+		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
+		return sreconcile.ResultEmpty, e
+	default:
+		e := &serror.Stalling{
+			Err:    fmt.Errorf("failed to construct Helm client: %w", err),
+			Reason: meta.FailedReason,
+		}
+		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
+		return sreconcile.ResultEmpty, e
+	}
 }
