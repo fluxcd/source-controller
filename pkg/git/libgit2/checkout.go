@@ -428,12 +428,15 @@ func getBlankRepoAndRemote(ctx context.Context, path, url string, opts *git.Auth
 
 	remote, err := repo.Remotes.Create("origin", url)
 	if err != nil {
+		repo.Free()
 		return nil, nil, fmt.Errorf("unable to create remote for '%s': %w", managed.EffectiveURL(url), gitutil.LibGit2Error(err))
 	}
 
 	callBacks := RemoteCallbacks(ctx, opts)
 	err = remote.ConnectFetch(&callBacks, &git2go.ProxyOptions{Type: git2go.ProxyTypeAuto}, nil)
 	if err != nil {
+		remote.Free()
+		repo.Free()
 		return nil, nil, fmt.Errorf("unable to fetch-connect to remote '%s': %w", managed.EffectiveURL(url), gitutil.LibGit2Error(err))
 	}
 	return repo, remote, nil
