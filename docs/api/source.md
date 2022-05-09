@@ -1208,6 +1208,20 @@ Artifact
 </tr>
 <tr>
 <td>
+<code>ignoreChecksum</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>IgnoreChecksum is a checksum of .spec.ignore in .status.observedGeneration
+version of the object.
+It is formatted as <code>&lt;algo&gt;:&lt;checksum&gt;</code>. For example: <code>sha256:&lt;checksum&gt;</code>.</p>
+</td>
+</tr>
+<tr>
+<td>
 <code>ReconcileRequestStatus</code><br>
 <em>
 <a href="https://godoc.org/github.com/fluxcd/pkg/apis/meta#ReconcileRequestStatus">
@@ -1639,6 +1653,20 @@ Artifact
 <em>(Optional)</em>
 <p>IncludedArtifacts contains a list of the last successfully included
 Artifacts as instructed by GitRepositorySpec.Include.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>ignoreChecksum</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>IgnoreChecksum is a checksum of .spec.ignore in .status.observedGeneration
+version of the object.
+It is formatted as <code>&lt;algo&gt;:&lt;checksum&gt;</code>. For example: <code>sha256:&lt;checksum&gt;</code>.</p>
 </td>
 </tr>
 <tr>

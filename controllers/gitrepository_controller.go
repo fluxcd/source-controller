@@ -18,6 +18,7 @@ package controllers
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"os"
@@ -514,9 +515,16 @@ func (r *GitRepositoryReconciler) reconcileArtifact(ctx context.Context,
 	// Create potential new artifact with current available metadata
 	artifact := r.Storage.NewArtifactFor(obj.Kind, obj.GetObjectMeta(), commit.String(), fmt.Sprintf("%s.tar.gz", commit.Hash.String()))
 
+	// Calculates checksum of current .spec.ignore
+	var ignoreChecksum string
+	if obj.Spec.Ignore != nil {
+		ignore := []byte(*obj.Spec.Ignore)
+		ignoreChecksum = fmt.Sprintf("sha256:%x", sha256.Sum256(ignore))
+	}
+
 	// Set the ArtifactInStorageCondition if there's no drift.
 	defer func() {
-		if obj.GetArtifact().HasRevision(artifact.Revision) && !includes.Diff(obj.Status.IncludedArtifacts) {
+		if obj.GetArtifact().HasRevision(artifact.Revision) && !includes.Diff(obj.Status.IncludedArtifacts) && obj.Status.IgnoreChecksum == ignoreChecksum {
 			conditions.Delete(obj, sourcev1.ArtifactOutdatedCondition)
 			conditions.MarkTrue(obj, sourcev1.ArtifactInStorageCondition, meta.SucceededReason,
 				"stored artifact for revision '%s'", artifact.Revision)
@@ -524,10 +532,13 @@ func (r *GitRepositoryReconciler) reconcileArtifact(ctx context.Context,
 	}()
 
 	// The artifact is up-to-date
-	if obj.GetArtifact().HasRevision(artifact.Revision) && !includes.Diff(obj.Status.IncludedArtifacts) {
+	if obj.GetArtifact().HasRevision(artifact.Revision) && !includes.Diff(obj.Status.IncludedArtifacts) && obj.Status.IgnoreChecksum == ignoreChecksum {
 		r.eventLogf(ctx, obj, events.EventTypeTrace, sourcev1.ArtifactUpToDateReason, "artifact up-to-date with remote revision: '%s'", artifact.Revision)
 		return sreconcile.ResultSuccess, nil
 	}
+
+	// Ensure .spec.ignore checksum is up-to-date
+	obj.Status.IgnoreChecksum = ignoreChecksum
 
 	// Ensure target path exists and is a directory
 	if f, err := os.Stat(dir); err != nil {

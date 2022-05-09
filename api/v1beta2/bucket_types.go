@@ -124,6 +124,12 @@ type BucketStatus struct {
 	// +optional
 	Artifact *Artifact `json:"artifact,omitempty"`
 
+	// IgnoreChecksum is a checksum of .spec.ignore in .status.observedGeneration
+	// version of the object.
+	// It is formatted as `<algo>:<checksum>`. For example: `sha256:<checksum>`.
+	// +optional
+	IgnoreChecksum string `json:"ignoreChecksum,omitempty"`
+
 	meta.ReconcileRequestStatus `json:",inline"`
 }
 

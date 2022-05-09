@@ -838,6 +838,36 @@ func TestGitRepositoryReconciler_reconcileArtifact(t *testing.T) {
 				*conditions.TrueCondition(sourcev1.StorageOperationFailedCondition, sourcev1.InvalidPathReason, "invalid target path"),
 			},
 		},
+		{
+			name: "Ignore checksum should be set when spec ignore is in use",
+			dir:  "testdata/git/repository",
+			beforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Spec.Interval = metav1.Duration{Duration: interval}
+				obj.Spec.Ignore = pointer.StringPtr("!**.txt\n")
+			},
+			afterFunc: func(t *WithT, obj *sourcev1.GitRepository) {
+				t.Expect(obj.Status.IgnoreChecksum).To(Equal("sha256:539530fbd29c252e357e36ddc065dc7923265e4ea795f09cada03287288f5e7a"))
+			},
+			want: sreconcile.ResultSuccess,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.ArtifactInStorageCondition, meta.SucceededReason, "stored artifact for revision 'main/revision'"),
+			},
+		},
+		{
+			name: "Ignore checksum should be updated when spec ignore changes",
+			dir:  "testdata/git/repository",
+			beforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Spec.Interval = metav1.Duration{Duration: interval}
+				obj.Status.IgnoreChecksum = "sha256:539530fbd29c252e357e36ddc065dc7923265e4ea795f09cada03287288f5e7a"
+			},
+			afterFunc: func(t *WithT, obj *sourcev1.GitRepository) {
+				t.Expect(obj.Status.IgnoreChecksum).To(BeEmpty())
+			},
+			want: sreconcile.ResultSuccess,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.ArtifactInStorageCondition, meta.SucceededReason, "stored artifact for revision 'main/revision'"),
+			},
+		},
 	}
 	artifactSize := func(g *WithT, artifactURL string) *int64 {
 		if artifactURL == "" {

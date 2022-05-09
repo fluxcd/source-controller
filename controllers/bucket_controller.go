@@ -28,7 +28,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/fluxcd/source-controller/pkg/azure"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/sync/semaphore"
 	corev1 "k8s.io/api/core/v1"
@@ -41,6 +40,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/ratelimiter"
+
+	"github.com/fluxcd/source-controller/pkg/azure"
 
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/runtime/conditions"
@@ -562,9 +563,16 @@ func (r *BucketReconciler) reconcileArtifact(ctx context.Context, obj *sourcev1.
 	// Create artifact
 	artifact := r.Storage.NewArtifactFor(obj.Kind, obj, revision, fmt.Sprintf("%s.tar.gz", revision))
 
+	// Calculates checksum of current .spec.ignore
+	var ignoreChecksum string
+	if obj.Spec.Ignore != nil {
+		ignore := []byte(*obj.Spec.Ignore)
+		ignoreChecksum = fmt.Sprintf("sha256:%x", sha256.Sum256(ignore))
+	}
+
 	// Set the ArtifactInStorageCondition if there's no drift.
 	defer func() {
-		if obj.GetArtifact().HasRevision(artifact.Revision) {
+		if obj.GetArtifact().HasRevision(artifact.Revision) && obj.Status.IgnoreChecksum == ignoreChecksum {
 			conditions.Delete(obj, sourcev1.ArtifactOutdatedCondition)
 			conditions.MarkTrue(obj, sourcev1.ArtifactInStorageCondition, meta.SucceededReason,
 				"stored artifact for revision '%s'", artifact.Revision)
@@ -572,10 +580,13 @@ func (r *BucketReconciler) reconcileArtifact(ctx context.Context, obj *sourcev1.
 	}()
 
 	// The artifact is up-to-date
-	if obj.GetArtifact().HasRevision(artifact.Revision) {
+	if obj.GetArtifact().HasRevision(artifact.Revision) && obj.Status.IgnoreChecksum == ignoreChecksum {
 		r.eventLogf(ctx, obj, events.EventTypeTrace, sourcev1.ArtifactUpToDateReason, "artifact up-to-date with remote revision: '%s'", artifact.Revision)
 		return sreconcile.ResultSuccess, nil
 	}
+
+	// Ensure .spec.ignore checksum is up-to-date
+	obj.Status.IgnoreChecksum = ignoreChecksum
 
 	// Ensure target path exists and is a directory
 	if f, err := os.Stat(dir); err != nil {

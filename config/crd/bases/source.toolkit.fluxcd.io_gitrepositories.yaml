@@ -653,6 +653,11 @@ spec:
                   - type
                   type: object
                 type: array
+              ignoreChecksum:
+                description: 'IgnoreChecksum is a checksum of .spec.ignore in .status.observedGeneration
+                  version of the object. It is formatted as `<algo>:<checksum>`. For
+                  example: `sha256:<checksum>`.'
+                type: string
               includedArtifacts:
                 description: IncludedArtifacts contains a list of the last successfully
                   included Artifacts as instructed by GitRepositorySpec.Include.
