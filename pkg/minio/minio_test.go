@@ -39,7 +39,6 @@ import (
 const (
 	objectName string = "test.yaml"
 	objectEtag string = "2020beab5f1711919157756379622d1d"
-	region     string = "us-west-2"
 )
 
 var (
@@ -72,7 +71,6 @@ var (
 		Spec: sourcev1.BucketSpec{
 			BucketName: bucketName,
 			Endpoint:   "play.min.io",
-			Region:     region,
 			Provider:   "generic",
 			Insecure:   true,
 			SecretRef: &meta.LocalObjectReference{
@@ -88,7 +86,6 @@ var (
 		Spec: sourcev1.BucketSpec{
 			BucketName: bucketName,
 			Endpoint:   "play.min.io",
-			Region:     region,
 			Provider:   "aws",
 			Insecure:   true,
 		},
@@ -226,7 +223,7 @@ func TestValidateSecret(t *testing.T) {
 }
 
 func createBucket(ctx context.Context) {
-	if err := minioClient.Client.MakeBucket(ctx, bucketName, miniov7.MakeBucketOptions{Region: region}); err != nil {
+	if err := minioClient.Client.MakeBucket(ctx, bucketName, miniov7.MakeBucketOptions{}); err != nil {
 		exists, errBucketExists := minioClient.BucketExists(ctx, bucketName)
 		if errBucketExists == nil && exists {
 			deleteBucket(ctx)
