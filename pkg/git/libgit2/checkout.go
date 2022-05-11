@@ -67,14 +67,11 @@ type CheckoutBranch struct {
 func (c *CheckoutBranch) Checkout(ctx context.Context, path, url string, opts *git.AuthOptions) (_ *git.Commit, err error) {
 	defer recoverPanic(&err)
 
-	repo, remote, err := getBlankRepoAndRemote(ctx, path, url, opts)
-
+	repo, remote, free, err := getBlankRepoAndRemote(ctx, path, url, opts)
 	if err != nil {
 		return nil, err
 	}
-	defer repo.Free()
-	defer remote.Free()
-	defer remote.Disconnect()
+	defer free()
 
 	// When the last observed revision is set, check whether it is still
 	// the same at the remote branch. If so, short-circuit the clone operation here.
@@ -154,15 +151,11 @@ type CheckoutTag struct {
 func (c *CheckoutTag) Checkout(ctx context.Context, path, url string, opts *git.AuthOptions) (_ *git.Commit, err error) {
 	defer recoverPanic(&err)
 
-	repo, remote, err := getBlankRepoAndRemote(ctx, path, url, opts)
-
+	repo, remote, free, err := getBlankRepoAndRemote(ctx, path, url, opts)
 	if err != nil {
 		return nil, err
 	}
-
-	defer repo.Free()
-	defer remote.Free()
-	defer remote.Disconnect()
+	defer free()
 
 	if c.LastRevision != "" {
 		heads, err := remote.Ls(c.Tag)
@@ -416,20 +409,17 @@ func buildSignature(s *git2go.Signature) git.Signature {
 }
 
 // getBlankRepoAndRemote returns a newly initialized repository, and a remote connected to the provided url.
-// Callers must make sure to call the below defer statements:
-//	defer repo.Free()
-//	defer remote.Free()
-//	defer remote.Disconnect()
-func getBlankRepoAndRemote(ctx context.Context, path, url string, opts *git.AuthOptions) (*git2go.Repository, *git2go.Remote, error) {
+// Callers must call the returning function to free all git2go objects.
+func getBlankRepoAndRemote(ctx context.Context, path, url string, opts *git.AuthOptions) (*git2go.Repository, *git2go.Remote, func(), error) {
 	repo, err := git2go.InitRepository(path, false)
 	if err != nil {
-		return nil, nil, fmt.Errorf("unable to init repository for '%s': %w", managed.EffectiveURL(url), gitutil.LibGit2Error(err))
+		return nil, nil, nil, fmt.Errorf("unable to init repository for '%s': %w", managed.EffectiveURL(url), gitutil.LibGit2Error(err))
 	}
 
 	remote, err := repo.Remotes.Create("origin", url)
 	if err != nil {
 		repo.Free()
-		return nil, nil, fmt.Errorf("unable to create remote for '%s': %w", managed.EffectiveURL(url), gitutil.LibGit2Error(err))
+		return nil, nil, nil, fmt.Errorf("unable to create remote for '%s': %w", managed.EffectiveURL(url), gitutil.LibGit2Error(err))
 	}
 
 	callBacks := RemoteCallbacks(ctx, opts)
@@ -437,9 +427,15 @@ func getBlankRepoAndRemote(ctx context.Context, path, url string, opts *git.Auth
 	if err != nil {
 		remote.Free()
 		repo.Free()
-		return nil, nil, fmt.Errorf("unable to fetch-connect to remote '%s': %w", managed.EffectiveURL(url), gitutil.LibGit2Error(err))
+		return nil, nil, nil, fmt.Errorf("unable to fetch-connect to remote '%s': %w", managed.EffectiveURL(url), gitutil.LibGit2Error(err))
 	}
-	return repo, remote, nil
+
+	free := func() {
+		remote.Disconnect()
+		remote.Free()
+		repo.Free()
+	}
+	return repo, remote, free, nil
 }
 
 func recoverPanic(err *error) {
