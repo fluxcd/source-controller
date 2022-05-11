@@ -399,6 +399,22 @@ transport being handled by the controller, instead of `libgit2`.
 This may lead to an increased number of timeout messages in the logs, however
 it will fix the bug in which Git operations make the controllers hang indefinitely.
 
+#### Optimized Git clones
+
+Optimized Git clones decreases resource utilization for GitRepository
+reconciliations. It supports both `go-git` and `libgit2` implementations
+when cloning repositories using branches or tags.
+
+When enabled, avoids full clone operations by first checking whether
+the last revision is still the same at the target repository,
+and if that is so, skips the reconciliation.
+
+This feature is enabled by default. It can be disabled by starting the
+controller with the argument `--feature-gates=OptimizedGitClones=false`.
+
+NB: GitRepository objects configured for SemVer or Commit clones are
+not affected by this functionality.
+
 #### Proxy support
 
 When a proxy is configured in the source-controller Pod through the appropriate

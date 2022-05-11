@@ -359,7 +359,7 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 			},
 			wantErr: true,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.GitOperationFailedReason, "failed to checkout and determine revision: unable to clone '<url>': PEM CA bundle could not be appended to x509 certificate pool"),
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.GitOperationFailedReason, "failed to checkout and determine revision: unable to fetch-connect to remote '<url>': PEM CA bundle could not be appended to x509 certificate pool"),
 			},
 		},
 		{

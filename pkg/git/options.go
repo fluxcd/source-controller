@@ -48,6 +48,11 @@ type CheckoutOptions struct {
 	// RecurseSubmodules defines if submodules should be checked out,
 	// not supported by all Implementations.
 	RecurseSubmodules bool
+
+	// LastRevision holds the revision observed on the last successful
+	// reconciliation.
+	// It is used to skip clone operations when no changes were detected.
+	LastRevision string
 }
 
 type TransportType string

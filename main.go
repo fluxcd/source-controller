@@ -36,10 +36,12 @@ import (
 	"github.com/fluxcd/pkg/runtime/client"
 	helper "github.com/fluxcd/pkg/runtime/controller"
 	"github.com/fluxcd/pkg/runtime/events"
+	feathelper "github.com/fluxcd/pkg/runtime/features"
 	"github.com/fluxcd/pkg/runtime/leaderelection"
 	"github.com/fluxcd/pkg/runtime/logger"
 	"github.com/fluxcd/pkg/runtime/pprof"
 	"github.com/fluxcd/pkg/runtime/probes"
+	"github.com/fluxcd/source-controller/internal/features"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
 	"github.com/fluxcd/source-controller/controllers"
@@ -88,6 +90,7 @@ func main() {
 		logOptions               logger.Options
 		leaderElectionOptions    leaderelection.Options
 		rateLimiterOptions       helper.RateLimiterOptions
+		featureGates             feathelper.FeatureGates
 		helmCacheMaxSize         int
 		helmCacheTTL             string
 		helmCachePurgeInterval   string
@@ -136,10 +139,19 @@ func main() {
 	logOptions.BindFlags(flag.CommandLine)
 	leaderElectionOptions.BindFlags(flag.CommandLine)
 	rateLimiterOptions.BindFlags(flag.CommandLine)
+	featureGates.BindFlags(flag.CommandLine)
 
 	flag.Parse()
 
 	ctrl.SetLogger(logger.NewLogger(logOptions))
+
+	err := featureGates.WithLogger(setupLog).
+		SupportedFeatures(features.FeatureGates())
+
+	if err != nil {
+		setupLog.Error(err, "unable to load feature gates")
+		os.Exit(1)
+	}
 
 	// Set upper bound file size limits Helm
 	helm.MaxIndexSize = helmIndexLimit

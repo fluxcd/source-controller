@@ -26,8 +26,11 @@ import (
 
 	"github.com/Masterminds/semver/v3"
 	extgogit "github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
+	"github.com/go-git/go-git/v5/plumbing/transport"
+	"github.com/go-git/go-git/v5/storage/memory"
 
 	"github.com/fluxcd/pkg/gitutil"
 	"github.com/fluxcd/pkg/version"
@@ -44,19 +47,20 @@ func CheckoutStrategyForOptions(_ context.Context, opts git.CheckoutOptions) git
 	case opts.SemVer != "":
 		return &CheckoutSemVer{SemVer: opts.SemVer, RecurseSubmodules: opts.RecurseSubmodules}
 	case opts.Tag != "":
-		return &CheckoutTag{Tag: opts.Tag, RecurseSubmodules: opts.RecurseSubmodules}
+		return &CheckoutTag{Tag: opts.Tag, RecurseSubmodules: opts.RecurseSubmodules, LastRevision: opts.LastRevision}
 	default:
 		branch := opts.Branch
 		if branch == "" {
 			branch = git.DefaultBranch
 		}
-		return &CheckoutBranch{Branch: branch, RecurseSubmodules: opts.RecurseSubmodules}
+		return &CheckoutBranch{Branch: branch, RecurseSubmodules: opts.RecurseSubmodules, LastRevision: opts.LastRevision}
 	}
 }
 
 type CheckoutBranch struct {
 	Branch            string
 	RecurseSubmodules bool
+	LastRevision      string
 }
 
 func (c *CheckoutBranch) Checkout(ctx context.Context, path, url string, opts *git.AuthOptions) (*git.Commit, error) {
@@ -64,7 +68,23 @@ func (c *CheckoutBranch) Checkout(ctx context.Context, path, url string, opts *g
 	if err != nil {
 		return nil, fmt.Errorf("failed to construct auth method with options: %w", err)
 	}
+
 	ref := plumbing.NewBranchReferenceName(c.Branch)
+	// check if previous revision has changed before attempting to clone
+	if c.LastRevision != "" {
+		currentRevision, err := getLastRevision(ctx, url, ref, opts, authMethod)
+		if err != nil {
+			return nil, err
+		}
+
+		if currentRevision != "" && currentRevision == c.LastRevision {
+			return nil, git.NoChangesError{
+				Message:          "no changes since last reconcilation",
+				ObservedRevision: currentRevision,
+			}
+		}
+	}
+
 	repo, err := extgogit.PlainCloneContext(ctx, path, false, &extgogit.CloneOptions{
 		URL:               url,
 		Auth:              authMethod,
@@ -92,9 +112,31 @@ func (c *CheckoutBranch) Checkout(ctx context.Context, path, url string, opts *g
 	return buildCommitWithRef(cc, ref)
 }
 
+func getLastRevision(ctx context.Context, url string, ref plumbing.ReferenceName, opts *git.AuthOptions, authMethod transport.AuthMethod) (string, error) {
+	config := &config.RemoteConfig{
+		Name: git.DefaultOrigin,
+		URLs: []string{url},
+	}
+	rem := extgogit.NewRemote(memory.NewStorage(), config)
+	listOpts := &extgogit.ListOptions{
+		Auth: authMethod,
+	}
+	if opts != nil && opts.CAFile != nil {
+		listOpts.CABundle = opts.CAFile
+	}
+	refs, err := rem.ListContext(ctx, listOpts)
+	if err != nil {
+		return "", fmt.Errorf("unable to list remote for '%s': %w", url, err)
+	}
+
+	currentRevision := filterRefs(refs, ref)
+	return currentRevision, nil
+}
+
 type CheckoutTag struct {
 	Tag               string
 	RecurseSubmodules bool
+	LastRevision      string
 }
 
 func (c *CheckoutTag) Checkout(ctx context.Context, path, url string, opts *git.AuthOptions) (*git.Commit, error) {
@@ -103,6 +145,20 @@ func (c *CheckoutTag) Checkout(ctx context.Context, path, url string, opts *git.
 		return nil, fmt.Errorf("failed to construct auth method with options: %w", err)
 	}
 	ref := plumbing.NewTagReferenceName(c.Tag)
+	// check if previous revision has changed before attempting to clone
+	if c.LastRevision != "" {
+		currentRevision, err := getLastRevision(ctx, url, ref, opts, authMethod)
+		if err != nil {
+			return nil, err
+		}
+
+		if currentRevision != "" && currentRevision == c.LastRevision {
+			return nil, git.NoChangesError{
+				Message:          "no changes since last reconcilation",
+				ObservedRevision: currentRevision,
+			}
+		}
+	}
 	repo, err := extgogit.PlainCloneContext(ctx, path, false, &extgogit.CloneOptions{
 		URL:               url,
 		Auth:              authMethod,
@@ -332,4 +388,14 @@ func recurseSubmodules(recurse bool) extgogit.SubmoduleRescursivity {
 		return extgogit.DefaultSubmoduleRecursionDepth
 	}
 	return extgogit.NoRecurseSubmodules
+}
+
+func filterRefs(refs []*plumbing.Reference, currentRef plumbing.ReferenceName) string {
+	for _, ref := range refs {
+		if ref.Name().String() == currentRef.String() {
+			return fmt.Sprintf("%s/%s", currentRef.Short(), ref.Hash().String())
+		}
+	}
+
+	return ""
 }
