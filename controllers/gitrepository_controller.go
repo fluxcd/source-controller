@@ -48,6 +48,7 @@ import (
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
 	serror "github.com/fluxcd/source-controller/internal/error"
+	"github.com/fluxcd/source-controller/internal/features"
 	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
 	"github.com/fluxcd/source-controller/internal/reconcile/summarize"
 	"github.com/fluxcd/source-controller/internal/util"
@@ -413,8 +414,10 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context,
 		checkoutOpts.SemVer = ref.SemVer
 	}
 
-	if artifact := obj.GetArtifact(); artifact != nil {
-		checkoutOpts.LastRevision = artifact.Revision
+	if oc, _ := features.Enabled(features.OptimizedGitClones); oc {
+		if artifact := obj.GetArtifact(); artifact != nil {
+			checkoutOpts.LastRevision = artifact.Revision
+		}
 	}
 
 	checkoutStrategy, err := strategy.CheckoutStrategyForImplementation(ctx,
@@ -464,7 +467,7 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context,
 		var v git.NoChangesError
 		if errors.As(err, &v) {
 			return sreconcile.ResultSuccess,
-				&serror.Waiting{Err: v, Reason: v.Message}
+				&serror.Waiting{Err: v, Reason: v.Message, RequeueAfter: obj.GetRequeueAfter()}
 		}
 
 		e := &serror.Event{
