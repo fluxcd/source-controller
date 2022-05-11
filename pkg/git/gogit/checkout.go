@@ -72,7 +72,7 @@ func (c *CheckoutBranch) Checkout(ctx context.Context, path, url string, opts *g
 	ref := plumbing.NewBranchReferenceName(c.Branch)
 	// check if previous revision has changed before attempting to clone
 	if c.LastRevision != "" {
-		currentRevision, err := getLastRevision(url, ref, opts, authMethod)
+		currentRevision, err := getLastRevision(ctx, url, ref, opts, authMethod)
 		if err != nil {
 			return nil, err
 		}
@@ -112,7 +112,7 @@ func (c *CheckoutBranch) Checkout(ctx context.Context, path, url string, opts *g
 	return buildCommitWithRef(cc, ref)
 }
 
-func getLastRevision(url string, ref plumbing.ReferenceName, opts *git.AuthOptions, authMethod transport.AuthMethod) (string, error) {
+func getLastRevision(ctx context.Context, url string, ref plumbing.ReferenceName, opts *git.AuthOptions, authMethod transport.AuthMethod) (string, error) {
 	config := &config.RemoteConfig{
 		Name: git.DefaultOrigin,
 		URLs: []string{url},
@@ -124,7 +124,7 @@ func getLastRevision(url string, ref plumbing.ReferenceName, opts *git.AuthOptio
 	if opts != nil && opts.CAFile != nil {
 		listOpts.CABundle = opts.CAFile
 	}
-	refs, err := rem.List(listOpts)
+	refs, err := rem.ListContext(ctx, listOpts)
 	if err != nil {
 		return "", fmt.Errorf("unable to list remote for '%s': %w", url, err)
 	}
@@ -147,7 +147,7 @@ func (c *CheckoutTag) Checkout(ctx context.Context, path, url string, opts *git.
 	ref := plumbing.NewTagReferenceName(c.Tag)
 	// check if previous revision has changed before attempting to clone
 	if c.LastRevision != "" {
-		currentRevision, err := getLastRevision(url, ref, opts, authMethod)
+		currentRevision, err := getLastRevision(ctx, url, ref, opts, authMethod)
 		if err != nil {
 			return nil, err
 		}
