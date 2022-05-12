@@ -201,32 +201,6 @@ func TestOptions(t *testing.T) {
 	}
 }
 
-func TestFlagStatus(t *testing.T) {
-	if Enabled() {
-		t.Errorf("experimental transport should not be enabled by default")
-	}
-
-	os.Setenv("EXPERIMENTAL_GIT_TRANSPORT", "true")
-	if !Enabled() {
-		t.Errorf("experimental transport should be enabled when env EXPERIMENTAL_GIT_TRANSPORT=true")
-	}
-
-	os.Setenv("EXPERIMENTAL_GIT_TRANSPORT", "1")
-	if !Enabled() {
-		t.Errorf("experimental transport should be enabled when env EXPERIMENTAL_GIT_TRANSPORT=1")
-	}
-
-	os.Setenv("EXPERIMENTAL_GIT_TRANSPORT", "somethingelse")
-	if Enabled() {
-		t.Errorf("experimental transport should be enabled only when env EXPERIMENTAL_GIT_TRANSPORT is 1 or true but was enabled for 'somethingelse'")
-	}
-
-	os.Unsetenv("EXPERIMENTAL_GIT_TRANSPORT")
-	if Enabled() {
-		t.Errorf("experimental transport should not be enabled when env EXPERIMENTAL_GIT_TRANSPORT is not present")
-	}
-}
-
 func TestManagedTransport_E2E(t *testing.T) {
 	g := NewWithT(t)
 

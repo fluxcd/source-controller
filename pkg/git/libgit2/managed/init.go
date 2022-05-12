@@ -40,7 +40,17 @@ var (
 
 	debugLog logr.Logger
 	traceLog logr.Logger
+	enabled  bool
 )
+
+// Enabled defines whether the use of Managed Transport is enabled which
+// is only true if InitManagedTransport was called successfully at least
+// once.
+//
+// This is only affects git operations that uses libgit2 implementation.
+func Enabled() bool {
+	return enabled
+}
 
 // InitManagedTransport initialises HTTP(S) and SSH managed transport
 // for git2go, and therefore only impact git operations using the
@@ -57,7 +67,7 @@ func InitManagedTransport(log logr.Logger) error {
 	var err error
 
 	once.Do(func() {
-		log.Info("Enabling experimental managed transport")
+		log.Info("Initializing managed transport")
 		debugLog = log.V(logger.DebugLevel)
 		traceLog = log.V(logger.TraceLevel)
 
@@ -66,6 +76,7 @@ func InitManagedTransport(log logr.Logger) error {
 		}
 
 		err = registerManagedSSH()
+		enabled = true
 	})
 
 	return err

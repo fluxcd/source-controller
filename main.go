@@ -310,7 +310,7 @@ func main() {
 		startFileServer(storage.BasePath, storageAddr, setupLog)
 	}()
 
-	if managed.Enabled() {
+	if enabled, _ := features.Enabled(features.GitManagedTransport); enabled {
 		managed.InitManagedTransport(ctrl.Log.WithName("managed-transport"))
 	}
 
