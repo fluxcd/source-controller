@@ -183,7 +183,7 @@ func (r *GitRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 			summarize.WithReconcileError(retErr),
 			summarize.WithIgnoreNotFound(),
 			summarize.WithProcessors(
-				summarize.RecordContextualError,
+				summarize.ErrorActionHandler,
 				summarize.RecordReconcileReq,
 			),
 			summarize.WithResultBuilder(sreconcile.AlwaysRequeueResultBuilder{RequeueAfter: obj.GetRequeueAfter()}),
@@ -380,10 +380,10 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context,
 		}
 		var secret corev1.Secret
 		if err := r.Client.Get(ctx, name, &secret); err != nil {
-			e := &serror.Event{
-				Err:    fmt.Errorf("failed to get secret '%s': %w", name.String(), err),
-				Reason: sourcev1.AuthenticationFailedReason,
-			}
+			e := serror.NewGeneric(
+				fmt.Errorf("failed to get secret '%s': %w", name.String(), err),
+				sourcev1.AuthenticationFailedReason,
+			)
 			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
 			// Return error as the world as observed may change
 			return sreconcile.ResultEmpty, e
@@ -396,10 +396,10 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context,
 		authOpts, err = git.AuthOptionsWithoutSecret(obj.Spec.URL)
 	}
 	if err != nil {
-		e := &serror.Event{
-			Err:    fmt.Errorf("failed to configure auth strategy for Git implementation '%s': %w", obj.Spec.GitImplementation, err),
-			Reason: sourcev1.AuthenticationFailedReason,
-		}
+		e := serror.NewGeneric(
+			fmt.Errorf("failed to configure auth strategy for Git implementation '%s': %w", obj.Spec.GitImplementation, err),
+			sourcev1.AuthenticationFailedReason,
+		)
 		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
 		// Return error as the contents of the secret may change
 		return sreconcile.ResultEmpty, e
@@ -415,8 +415,12 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context,
 	}
 
 	if oc, _ := features.Enabled(features.OptimizedGitClones); oc {
-		if artifact := obj.GetArtifact(); artifact != nil {
-			checkoutOpts.LastRevision = artifact.Revision
+		// Only if the object is ready, use the last revision to attempt
+		// short-circuiting clone operation.
+		if conditions.IsTrue(obj, meta.ReadyCondition) {
+			if artifact := obj.GetArtifact(); artifact != nil {
+				checkoutOpts.LastRevision = artifact.Revision
+			}
 		}
 	}
 
@@ -466,14 +470,19 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context,
 	if err != nil {
 		var v git.NoChangesError
 		if errors.As(err, &v) {
-			return sreconcile.ResultSuccess,
-				&serror.Waiting{Err: v, Reason: v.Message, RequeueAfter: obj.GetRequeueAfter()}
+			// Create generic error without notification. Since it's a no-op
+			// error, ignore (no runtime error), normal event.
+			ge := serror.NewGeneric(v, sourcev1.GitOperationSucceedReason)
+			ge.Notification = false
+			ge.Ignore = true
+			ge.Event = corev1.EventTypeNormal
+			return sreconcile.ResultEmpty, ge
 		}
 
-		e := &serror.Event{
-			Err:    fmt.Errorf("failed to checkout and determine revision: %w", err),
-			Reason: sourcev1.GitOperationFailedReason,
-		}
+		e := serror.NewGeneric(
+			fmt.Errorf("failed to checkout and determine revision: %w", err),
+			sourcev1.GitOperationFailedReason,
+		)
 		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
 		// Coin flip on transient or persistent error, return error and hope for the best
 		return sreconcile.ResultEmpty, e
@@ -531,10 +540,10 @@ func (r *GitRepositoryReconciler) reconcileArtifact(ctx context.Context,
 
 	// Ensure target path exists and is a directory
 	if f, err := os.Stat(dir); err != nil {
-		e := &serror.Event{
-			Err:    fmt.Errorf("failed to stat target artifact path: %w", err),
-			Reason: sourcev1.StatOperationFailedReason,
-		}
+		e := serror.NewGeneric(
+			fmt.Errorf("failed to stat target artifact path: %w", err),
+			sourcev1.StatOperationFailedReason,
+		)
 		conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition, e.Reason, e.Err.Error())
 		return sreconcile.ResultEmpty, e
 	} else if !f.IsDir() {
