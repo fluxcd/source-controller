@@ -944,6 +944,12 @@ Note that a Bucket can be [reconciling](#reconciling-bucket) while failing at
 the same time, for example due to a newly introduced configuration issue in the
 Bucket spec.
 
+### Ignore Checksum
+
+The source-controller calculates the SHA256 checksum of the last Bucket's
+[`.spec.ignore` field](#ignore) and record it in the `.status.ignoreChecksum` field. This field
+is used to detect `.spec.ignore` updates to allow artifact changes.
+
 ### Observed Generation
 
 The source-controller reports an
