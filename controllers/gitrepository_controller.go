@@ -183,7 +183,7 @@ func (r *GitRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 			summarize.WithReconcileError(retErr),
 			summarize.WithIgnoreNotFound(),
 			summarize.WithProcessors(
-				summarize.RecordContextualError,
+				summarize.ErrorActionHandler,
 				summarize.RecordReconcileReq,
 			),
 			summarize.WithResultBuilder(sreconcile.AlwaysRequeueResultBuilder{RequeueAfter: obj.GetRequeueAfter()}),
@@ -235,10 +235,10 @@ func (r *GitRepositoryReconciler) reconcile(ctx context.Context, obj *sourcev1.G
 	// Create temp dir for Git clone
 	tmpDir, err := util.TempDirForObj("", obj)
 	if err != nil {
-		e := &serror.Event{
-			Err:    fmt.Errorf("failed to create temporary working directory: %w", err),
-			Reason: sourcev1.DirCreationFailedReason,
-		}
+		e := serror.NewGeneric(
+			fmt.Errorf("failed to create temporary working directory: %w", err),
+			sourcev1.DirCreationFailedReason,
+		)
 		conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition, e.Reason, e.Err.Error())
 		return sreconcile.ResultEmpty, e
 	}
@@ -380,10 +380,10 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context,
 		}
 		var secret corev1.Secret
 		if err := r.Client.Get(ctx, name, &secret); err != nil {
-			e := &serror.Event{
-				Err:    fmt.Errorf("failed to get secret '%s': %w", name.String(), err),
-				Reason: sourcev1.AuthenticationFailedReason,
-			}
+			e := serror.NewGeneric(
+				fmt.Errorf("failed to get secret '%s': %w", name.String(), err),
+				sourcev1.AuthenticationFailedReason,
+			)
 			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
 			// Return error as the world as observed may change
 			return sreconcile.ResultEmpty, e
@@ -396,10 +396,10 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context,
 		authOpts, err = git.AuthOptionsWithoutSecret(obj.Spec.URL)
 	}
 	if err != nil {
-		e := &serror.Event{
-			Err:    fmt.Errorf("failed to configure auth strategy for Git implementation '%s': %w", obj.Spec.GitImplementation, err),
-			Reason: sourcev1.AuthenticationFailedReason,
-		}
+		e := serror.NewGeneric(
+			fmt.Errorf("failed to configure auth strategy for Git implementation '%s': %w", obj.Spec.GitImplementation, err),
+			sourcev1.AuthenticationFailedReason,
+		)
 		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
 		// Return error as the contents of the secret may change
 		return sreconcile.ResultEmpty, e
@@ -415,8 +415,12 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context,
 	}
 
 	if oc, _ := features.Enabled(features.OptimizedGitClones); oc {
-		if artifact := obj.GetArtifact(); artifact != nil {
-			checkoutOpts.LastRevision = artifact.Revision
+		// Only if the object is ready, use the last revision to attempt
+		// short-circuiting clone operation.
+		if conditions.IsTrue(obj, meta.ReadyCondition) {
+			if artifact := obj.GetArtifact(); artifact != nil {
+				checkoutOpts.LastRevision = artifact.Revision
+			}
 		}
 	}
 
@@ -466,14 +470,19 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context,
 	if err != nil {
 		var v git.NoChangesError
 		if errors.As(err, &v) {
-			return sreconcile.ResultSuccess,
-				&serror.Waiting{Err: v, Reason: v.Message, RequeueAfter: obj.GetRequeueAfter()}
+			// Create generic error without notification. Since it's a no-op
+			// error, ignore (no runtime error), normal event.
+			ge := serror.NewGeneric(v, sourcev1.GitOperationSucceedReason)
+			ge.Notification = false
+			ge.Ignore = true
+			ge.Event = corev1.EventTypeNormal
+			return sreconcile.ResultEmpty, ge
 		}
 
-		e := &serror.Event{
-			Err:    fmt.Errorf("failed to checkout and determine revision: %w", err),
-			Reason: sourcev1.GitOperationFailedReason,
-		}
+		e := serror.NewGeneric(
+			fmt.Errorf("failed to checkout and determine revision: %w", err),
+			sourcev1.GitOperationFailedReason,
+		)
 		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
 		// Coin flip on transient or persistent error, return error and hope for the best
 		return sreconcile.ResultEmpty, e
@@ -531,36 +540,36 @@ func (r *GitRepositoryReconciler) reconcileArtifact(ctx context.Context,
 
 	// Ensure target path exists and is a directory
 	if f, err := os.Stat(dir); err != nil {
-		e := &serror.Event{
-			Err:    fmt.Errorf("failed to stat target artifact path: %w", err),
-			Reason: sourcev1.StatOperationFailedReason,
-		}
+		e := serror.NewGeneric(
+			fmt.Errorf("failed to stat target artifact path: %w", err),
+			sourcev1.StatOperationFailedReason,
+		)
 		conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition, e.Reason, e.Err.Error())
 		return sreconcile.ResultEmpty, e
 	} else if !f.IsDir() {
-		e := &serror.Event{
-			Err:    fmt.Errorf("invalid target path: '%s' is not a directory", dir),
-			Reason: sourcev1.InvalidPathReason,
-		}
+		e := serror.NewGeneric(
+			fmt.Errorf("invalid target path: '%s' is not a directory", dir),
+			sourcev1.InvalidPathReason,
+		)
 		conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition, e.Reason, e.Err.Error())
 		return sreconcile.ResultEmpty, e
 	}
 
 	// Ensure artifact directory exists and acquire lock
 	if err := r.Storage.MkdirAll(artifact); err != nil {
-		e := &serror.Event{
-			Err:    fmt.Errorf("failed to create artifact directory: %w", err),
-			Reason: sourcev1.DirCreationFailedReason,
-		}
+		e := serror.NewGeneric(
+			fmt.Errorf("failed to create artifact directory: %w", err),
+			sourcev1.DirCreationFailedReason,
+		)
 		conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition, e.Reason, e.Err.Error())
 		return sreconcile.ResultEmpty, e
 	}
 	unlock, err := r.Storage.Lock(artifact)
 	if err != nil {
-		return sreconcile.ResultEmpty, &serror.Event{
-			Err:    fmt.Errorf("failed to acquire lock for artifact: %w", err),
-			Reason: meta.FailedReason,
-		}
+		return sreconcile.ResultEmpty, serror.NewGeneric(
+			fmt.Errorf("failed to acquire lock for artifact: %w", err),
+			meta.FailedReason,
+		)
 	}
 	defer unlock()
 
@@ -568,10 +577,10 @@ func (r *GitRepositoryReconciler) reconcileArtifact(ctx context.Context,
 	ignoreDomain := strings.Split(dir, string(filepath.Separator))
 	ps, err := sourceignore.LoadIgnorePatterns(dir, ignoreDomain)
 	if err != nil {
-		return sreconcile.ResultEmpty, &serror.Event{
-			Err:    fmt.Errorf("failed to load source ignore patterns from repository: %w", err),
-			Reason: "SourceIgnoreError",
-		}
+		return sreconcile.ResultEmpty, serror.NewGeneric(
+			fmt.Errorf("failed to load source ignore patterns from repository: %w", err),
+			"SourceIgnoreError",
+		)
 	}
 	if obj.Spec.Ignore != nil {
 		ps = append(ps, sourceignore.ReadPatterns(strings.NewReader(*obj.Spec.Ignore), ignoreDomain)...)
@@ -579,10 +588,10 @@ func (r *GitRepositoryReconciler) reconcileArtifact(ctx context.Context,
 
 	// Archive directory to storage
 	if err := r.Storage.Archive(&artifact, dir, SourceIgnoreFilter(ps, ignoreDomain)); err != nil {
-		e := &serror.Event{
-			Err:    fmt.Errorf("unable to archive artifact to storage: %w", err),
-			Reason: sourcev1.ArchiveOperationFailedReason,
-		}
+		e := serror.NewGeneric(
+			fmt.Errorf("unable to archive artifact to storage: %w", err),
+			sourcev1.ArchiveOperationFailedReason,
+		)
 		conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition, e.Reason, e.Err.Error())
 		return sreconcile.ResultEmpty, e
 	}
@@ -622,10 +631,10 @@ func (r *GitRepositoryReconciler) reconcileInclude(ctx context.Context,
 		// Do this first as it is much cheaper than copy operations
 		toPath, err := securejoin.SecureJoin(dir, incl.GetToPath())
 		if err != nil {
-			e := &serror.Event{
-				Err:    fmt.Errorf("path calculation for include '%s' failed: %w", incl.GitRepositoryRef.Name, err),
-				Reason: "IllegalPath",
-			}
+			e := serror.NewGeneric(
+				fmt.Errorf("path calculation for include '%s' failed: %w", incl.GitRepositoryRef.Name, err),
+				"IllegalPath",
+			)
 			conditions.MarkTrue(obj, sourcev1.IncludeUnavailableCondition, e.Reason, e.Err.Error())
 			return sreconcile.ResultEmpty, e
 		}
@@ -633,30 +642,30 @@ func (r *GitRepositoryReconciler) reconcileInclude(ctx context.Context,
 		// Retrieve the included GitRepository
 		dep := &sourcev1.GitRepository{}
 		if err := r.Get(ctx, types.NamespacedName{Namespace: obj.Namespace, Name: incl.GitRepositoryRef.Name}, dep); err != nil {
-			e := &serror.Event{
-				Err:    fmt.Errorf("could not get resource for include '%s': %w", incl.GitRepositoryRef.Name, err),
-				Reason: "NotFound",
-			}
+			e := serror.NewGeneric(
+				fmt.Errorf("could not get resource for include '%s': %w", incl.GitRepositoryRef.Name, err),
+				"NotFound",
+			)
 			conditions.MarkTrue(obj, sourcev1.IncludeUnavailableCondition, e.Reason, e.Err.Error())
 			return sreconcile.ResultEmpty, e
 		}
 
 		// Confirm include has an artifact
 		if dep.GetArtifact() == nil {
-			e := &serror.Event{
-				Err:    fmt.Errorf("no artifact available for include '%s'", incl.GitRepositoryRef.Name),
-				Reason: "NoArtifact",
-			}
+			e := serror.NewGeneric(
+				fmt.Errorf("no artifact available for include '%s'", incl.GitRepositoryRef.Name),
+				"NoArtifact",
+			)
 			conditions.MarkTrue(obj, sourcev1.IncludeUnavailableCondition, e.Reason, e.Err.Error())
 			return sreconcile.ResultEmpty, e
 		}
 
 		// Copy artifact (sub)contents to configured directory
 		if err := r.Storage.CopyToPath(dep.GetArtifact(), incl.GetFromPath(), toPath); err != nil {
-			e := &serror.Event{
-				Err:    fmt.Errorf("failed to copy '%s' include from %s to %s: %w", incl.GitRepositoryRef.Name, incl.GetFromPath(), incl.GetToPath(), err),
-				Reason: "CopyFailure",
-			}
+			e := serror.NewGeneric(
+				fmt.Errorf("failed to copy '%s' include from %s to %s: %w", incl.GitRepositoryRef.Name, incl.GetFromPath(), incl.GetToPath(), err),
+				"CopyFailure",
+			)
 			conditions.MarkTrue(obj, sourcev1.IncludeUnavailableCondition, e.Reason, e.Err.Error())
 			return sreconcile.ResultEmpty, e
 		}
@@ -700,10 +709,10 @@ func (r *GitRepositoryReconciler) verifyCommitSignature(ctx context.Context, obj
 	}
 	secret := &corev1.Secret{}
 	if err := r.Client.Get(ctx, publicKeySecret, secret); err != nil {
-		e := &serror.Event{
-			Err:    fmt.Errorf("PGP public keys secret error: %w", err),
-			Reason: "VerificationError",
-		}
+		e := serror.NewGeneric(
+			fmt.Errorf("PGP public keys secret error: %w", err),
+			"VerificationError",
+		)
 		conditions.MarkFalse(obj, sourcev1.SourceVerifiedCondition, e.Reason, e.Err.Error())
 		return sreconcile.ResultEmpty, e
 	}
@@ -714,10 +723,10 @@ func (r *GitRepositoryReconciler) verifyCommitSignature(ctx context.Context, obj
 	}
 	// Verify commit with GPG data from secret
 	if _, err := commit.Verify(keyRings...); err != nil {
-		e := &serror.Event{
-			Err:    fmt.Errorf("signature verification of commit '%s' failed: %w", commit.Hash.String(), err),
-			Reason: "InvalidCommitSignature",
-		}
+		e := serror.NewGeneric(
+			fmt.Errorf("signature verification of commit '%s' failed: %w", commit.Hash.String(), err),
+			"InvalidCommitSignature",
+		)
 		conditions.MarkFalse(obj, sourcev1.SourceVerifiedCondition, e.Reason, e.Err.Error())
 		// Return error in the hope the secret changes
 		return sreconcile.ResultEmpty, e
@@ -755,10 +764,10 @@ func (r *GitRepositoryReconciler) reconcileDelete(ctx context.Context, obj *sour
 func (r *GitRepositoryReconciler) garbageCollect(ctx context.Context, obj *sourcev1.GitRepository) error {
 	if !obj.DeletionTimestamp.IsZero() {
 		if deleted, err := r.Storage.RemoveAll(r.Storage.NewArtifactFor(obj.Kind, obj.GetObjectMeta(), "", "*")); err != nil {
-			return &serror.Event{
-				Err:    fmt.Errorf("garbage collection for deleted resource failed: %w", err),
-				Reason: "GarbageCollectionFailed",
-			}
+			return serror.NewGeneric(
+				fmt.Errorf("garbage collection for deleted resource failed: %w", err),
+				"GarbageCollectionFailed",
+			)
 		} else if deleted != "" {
 			r.eventLogf(ctx, obj, events.EventTypeTrace, "GarbageCollectionSucceeded",
 				"garbage collected artifacts for deleted resource")
@@ -769,10 +778,10 @@ func (r *GitRepositoryReconciler) garbageCollect(ctx context.Context, obj *sourc
 	if obj.GetArtifact() != nil {
 		delFiles, err := r.Storage.GarbageCollect(ctx, *obj.GetArtifact(), time.Second*5)
 		if err != nil {
-			return &serror.Event{
-				Err:    fmt.Errorf("garbage collection of artifacts failed: %w", err),
-				Reason: "GarbageCollectionFailed",
-			}
+			return serror.NewGeneric(
+				fmt.Errorf("garbage collection of artifacts failed: %w", err),
+				"GarbageCollectionFailed",
+			)
 		}
 		if len(delFiles) > 0 {
 			r.eventLogf(ctx, obj, events.EventTypeTrace, "GarbageCollectionSucceeded",
