@@ -73,8 +73,19 @@ type AlwaysRequeueResultBuilder struct {
 // return values of a controller's Reconcile function.
 func (r AlwaysRequeueResultBuilder) BuildRuntimeResult(rr Result, err error) ctrl.Result {
 	// Handle special errors that contribute to expressing the result.
-	if e, ok := err.(*serror.Waiting); ok {
+	switch e := err.(type) {
+	case *serror.Waiting:
+		// Safeguard: If no RequeueAfter is set, use the default success
+		// RequeueAfter value to ensure a requeue takes place after some time.
+		if e.RequeueAfter == 0 {
+			return ctrl.Result{RequeueAfter: r.RequeueAfter}
+		}
 		return ctrl.Result{RequeueAfter: e.RequeueAfter}
+	case *serror.Generic:
+		// no-op error, reconcile at success interval.
+		if e.Ignore {
+			return ctrl.Result{RequeueAfter: r.RequeueAfter}
+		}
 	}
 
 	switch rr {
@@ -132,6 +143,17 @@ func ComputeReconcileResult(obj conditions.Setter, res Result, recErr error, rb 
 		conditions.Delete(obj, meta.StalledCondition)
 		// The reconciler needs to wait and retry. Return no error.
 		return pOpts, result, nil
+	case *serror.Generic:
+		conditions.Delete(obj, meta.StalledCondition)
+		// If ignore, it's a no-op error, return no error, remove reconciling
+		// condition.
+		if t.Ignore {
+			// The current generation has been reconciled successfully with
+			// no-op result. Update status observed generation.
+			pOpts = append(pOpts, patch.WithStatusObservedGeneration{})
+			conditions.Delete(obj, meta.ReconcilingCondition)
+			return pOpts, result, nil
+		}
 	case nil:
 		// The reconcile didn't result in any error, we are not in stalled
 		// state. If a requeue is requested, the current generation has not been

@@ -135,11 +135,45 @@ func TestComputeReconcileResult(t *testing.T) {
 			name:       "waiting error",
 			result:     ResultEmpty,
 			recErr:     &serror.Waiting{Err: fmt.Errorf("some error"), Reason: "some reason"},
-			wantResult: ctrl.Result{},
+			wantResult: ctrl.Result{RequeueAfter: testSuccessInterval},
 			wantErr:    false,
 			afterFunc: func(t *WithT, obj conditions.Setter, patchOpts *patch.HelperOptions) {
 				t.Expect(patchOpts.IncludeStatusObservedGeneration).To(BeFalse())
 			},
+		},
+		{
+			name:   "generic error, Stalled=True, remove Stalled",
+			result: ResultEmpty,
+			beforeFunc: func(obj conditions.Setter) {
+				conditions.MarkStalled(obj, "SomeReason", "some message")
+			},
+			recErr: &serror.Generic{
+				Err: fmt.Errorf("some error"), Reason: "some reason",
+			},
+			wantResult: ctrl.Result{},
+			afterFunc: func(t *WithT, obj conditions.Setter, patchOpts *patch.HelperOptions) {
+				t.Expect(conditions.IsUnknown(obj, meta.StalledCondition)).To(BeTrue())
+			},
+			wantErr: true,
+		},
+		{
+			name:   "generic ignore error, Reconciling=True, remove Reconciling",
+			result: ResultEmpty,
+			beforeFunc: func(obj conditions.Setter) {
+				conditions.MarkReconciling(obj, "NewRevision", "new revision")
+			},
+			recErr: &serror.Generic{
+				Err: fmt.Errorf("some error"), Reason: "some reason",
+				Config: serror.Config{
+					Ignore: true,
+				},
+			},
+			wantResult: ctrl.Result{RequeueAfter: testSuccessInterval},
+			afterFunc: func(t *WithT, obj conditions.Setter, patchOpts *patch.HelperOptions) {
+				t.Expect(patchOpts.IncludeStatusObservedGeneration).To(BeTrue())
+				t.Expect(conditions.IsUnknown(obj, meta.ReconcilingCondition)).To(BeTrue())
+			},
+			wantErr: false,
 		},
 		{
 			name:       "random error",
@@ -188,7 +222,9 @@ func TestComputeReconcileResult(t *testing.T) {
 			for _, o := range pOpts {
 				o.ApplyToHelper(opts)
 			}
-			tt.afterFunc(g, obj, opts)
+			if tt.afterFunc != nil {
+				tt.afterFunc(g, obj, opts)
+			}
 		})
 	}
 }
