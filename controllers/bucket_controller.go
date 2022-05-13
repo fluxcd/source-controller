@@ -585,7 +585,7 @@ func (r *BucketReconciler) reconcileArtifact(ctx context.Context, obj *sourcev1.
 		return sreconcile.ResultSuccess, nil
 	}
 
-	// Ensure .spec.ignore checksum is up-to-date
+	// Ensure .status.ignoreChecksum is up-to-date with .spec.ignore.
 	obj.Status.IgnoreChecksum = ignoreChecksum
 
 	// Ensure target path exists and is a directory

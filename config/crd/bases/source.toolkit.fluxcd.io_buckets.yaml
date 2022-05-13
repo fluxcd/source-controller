@@ -480,8 +480,8 @@ spec:
                 type: array
               ignoreChecksum:
                 description: 'IgnoreChecksum is a checksum of .spec.ignore in .status.observedGeneration
-                  version of the object. It is formatted as `<algo>:<checksum>`. For
-                  example: `sha256:<checksum>`.'
+                  version of the object. It has the format of `<algo>:<checksum>`,
+                  for example: `sha256:<checksum>`.'
                 type: string
               lastHandledReconcileAt:
                 description: LastHandledReconcileAt holds the value of the most recent

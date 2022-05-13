@@ -1217,7 +1217,7 @@ string
 <em>(Optional)</em>
 <p>IgnoreChecksum is a checksum of .spec.ignore in .status.observedGeneration
 version of the object.
-It is formatted as <code>&lt;algo&gt;:&lt;checksum&gt;</code>. For example: <code>sha256:&lt;checksum&gt;</code>.</p>
+It has the format of <code>&lt;algo&gt;:&lt;checksum&gt;</code>, for example: <code>sha256:&lt;checksum&gt;</code>.</p>
 </td>
 </tr>
 <tr>
@@ -1666,7 +1666,7 @@ string
 <em>(Optional)</em>
 <p>IgnoreChecksum is a checksum of .spec.ignore in .status.observedGeneration
 version of the object.
-It is formatted as <code>&lt;algo&gt;:&lt;checksum&gt;</code>. For example: <code>sha256:&lt;checksum&gt;</code>.</p>
+It has the format of <code>&lt;algo&gt;:&lt;checksum&gt;</code>, for example: <code>sha256:&lt;checksum&gt;</code>.</p>
 </td>
 </tr>
 <tr>

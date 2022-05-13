@@ -537,7 +537,7 @@ func (r *GitRepositoryReconciler) reconcileArtifact(ctx context.Context,
 		return sreconcile.ResultSuccess, nil
 	}
 
-	// Ensure .spec.ignore checksum is up-to-date
+	// Ensure .status.ignoreChecksum is up-to-date with .spec.ignore.
 	obj.Status.IgnoreChecksum = ignoreChecksum
 
 	// Ensure target path exists and is a directory
