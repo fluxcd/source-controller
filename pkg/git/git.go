@@ -118,3 +118,13 @@ type NoChangesError struct {
 func (e NoChangesError) Error() string {
 	return fmt.Sprintf("%s: observed revision '%s'", e.Message, e.ObservedRevision)
 }
+
+// IsConcreteCommit returns if a given commit is a concrete commit. Concrete
+// commits have most of commit metadata and commit content. In contrast, a
+// partial commit may only have some metadata and no commit content.
+func IsConcreteCommit(c Commit) bool {
+	if c.Hash != nil && c.Encoded != nil {
+		return true
+	}
+	return false
+}

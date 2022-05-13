@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"io"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/Masterminds/semver/v3"
@@ -78,10 +79,21 @@ func (c *CheckoutBranch) Checkout(ctx context.Context, path, url string, opts *g
 		}
 
 		if currentRevision != "" && currentRevision == c.LastRevision {
-			return nil, git.NoChangesError{
-				Message:          "no changes since last reconcilation",
-				ObservedRevision: currentRevision,
+			// Construct a partial commit with the existing information.
+			// Split the revision and take the last part as the hash.
+			// Example revision: main/43d7eb9c49cdd49b2494efd481aea1166fc22b67
+			var hash git.Hash
+			ss := strings.Split(currentRevision, "/")
+			if len(ss) > 1 {
+				hash = git.Hash(ss[len(ss)-1])
+			} else {
+				hash = git.Hash(ss[0])
 			}
+			c := &git.Commit{
+				Hash:      hash,
+				Reference: plumbing.NewBranchReferenceName(c.Branch).String(),
+			}
+			return c, nil
 		}
 	}
 
@@ -153,10 +165,21 @@ func (c *CheckoutTag) Checkout(ctx context.Context, path, url string, opts *git.
 		}
 
 		if currentRevision != "" && currentRevision == c.LastRevision {
-			return nil, git.NoChangesError{
-				Message:          "no changes since last reconcilation",
-				ObservedRevision: currentRevision,
+			// Construct a partial commit with the existing information.
+			// Split the revision and take the last part as the hash.
+			// Example revision: 6.1.4/bf09377bfd5d3bcac1e895fa8ce52dc76695c060
+			var hash git.Hash
+			ss := strings.Split(currentRevision, "/")
+			if len(ss) > 1 {
+				hash = git.Hash(ss[len(ss)-1])
+			} else {
+				hash = git.Hash(ss[0])
 			}
+			c := &git.Commit{
+				Hash:      hash,
+				Reference: ref.String(),
+			}
+			return c, nil
 		}
 	}
 	repo, err := extgogit.PlainCloneContext(ctx, path, false, &extgogit.CloneOptions{
