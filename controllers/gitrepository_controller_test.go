@@ -57,6 +57,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
+	"github.com/fluxcd/source-controller/internal/features"
 	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
 	"github.com/fluxcd/source-controller/internal/reconcile/summarize"
 	"github.com/fluxcd/source-controller/pkg/git"
@@ -499,6 +500,7 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 				Client:        builder.Build(),
 				EventRecorder: record.NewFakeRecorder(32),
 				Storage:       testStorage,
+				features:      features.FeatureGates(),
 			}
 
 			for _, i := range testGitImplementations {
@@ -545,6 +547,7 @@ func TestGitRepositoryReconciler_reconcileSource_checkoutStrategy(t *testing.T) 
 		name                  string
 		skipForImplementation string
 		reference             *sourcev1.GitRepositoryRef
+		beforeFunc            func(obj *sourcev1.GitRepository, latestRev string)
 		want                  sreconcile.Result
 		wantErr               bool
 		wantRevision          string
@@ -614,6 +617,34 @@ func TestGitRepositoryReconciler_reconcileSource_checkoutStrategy(t *testing.T) 
 			wantRevision: "v1.0.0-alpha/<commit>",
 			want:         sreconcile.ResultSuccess,
 		},
+		{
+			name: "Optimized clone, Ready=True",
+			reference: &sourcev1.GitRepositoryRef{
+				Branch: "staging",
+			},
+			beforeFunc: func(obj *sourcev1.GitRepository, latestRev string) {
+				obj.Status = sourcev1.GitRepositoryStatus{
+					Artifact: &sourcev1.Artifact{
+						Revision: "staging/" + latestRev,
+					},
+				}
+				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "ready")
+			},
+			want:         sreconcile.ResultEmpty,
+			wantErr:      true,
+			wantRevision: "staging/<commit>",
+		},
+		{
+			name: "Optimized clone, Ready=False",
+			reference: &sourcev1.GitRepositoryRef{
+				Branch: "staging",
+			},
+			beforeFunc: func(obj *sourcev1.GitRepository, latestRev string) {
+				conditions.MarkFalse(obj, meta.ReadyCondition, meta.FailedReason, "not ready")
+			},
+			want:         sreconcile.ResultSuccess,
+			wantRevision: "staging/<commit>",
+		},
 	}
 
 	server, err := gittestserver.NewTempGitServer()
@@ -641,6 +672,7 @@ func TestGitRepositoryReconciler_reconcileSource_checkoutStrategy(t *testing.T) 
 		Client:        fakeclient.NewClientBuilder().WithScheme(runtime.NewScheme()).Build(),
 		EventRecorder: record.NewFakeRecorder(32),
 		Storage:       testStorage,
+		features:      features.FeatureGates(),
 	}
 
 	for _, tt := range tests {
@@ -674,6 +706,10 @@ func TestGitRepositoryReconciler_reconcileSource_checkoutStrategy(t *testing.T) 
 					obj := obj.DeepCopy()
 					obj.Spec.GitImplementation = i
 
+					if tt.beforeFunc != nil {
+						tt.beforeFunc(obj, headRef.Hash().String())
+					}
+
 					var commit git.Commit
 					var includes artifactSet
 					got, err := r.reconcileSource(ctx, obj, &commit, &includes, tmpDir)
@@ -682,7 +718,7 @@ func TestGitRepositoryReconciler_reconcileSource_checkoutStrategy(t *testing.T) 
 					}
 					g.Expect(err != nil).To(Equal(tt.wantErr))
 					g.Expect(got).To(Equal(tt.want))
-					if tt.wantRevision != "" {
+					if tt.wantRevision != "" && !tt.wantErr {
 						revision := strings.ReplaceAll(tt.wantRevision, "<commit>", headRef.Hash().String())
 						g.Expect(commit.String()).To(Equal(revision))
 						g.Expect(conditions.IsTrue(obj, sourcev1.ArtifactOutdatedCondition)).To(BeTrue())
@@ -857,6 +893,7 @@ func TestGitRepositoryReconciler_reconcileArtifact(t *testing.T) {
 			r := &GitRepositoryReconciler{
 				EventRecorder: record.NewFakeRecorder(32),
 				Storage:       testStorage,
+				features:      features.FeatureGates(),
 			}
 
 			obj := &sourcev1.GitRepository{
@@ -1042,6 +1079,7 @@ func TestGitRepositoryReconciler_reconcileInclude(t *testing.T) {
 				EventRecorder:     record.NewFakeRecorder(32),
 				Storage:           storage,
 				requeueDependency: dependencyInterval,
+				features:          features.FeatureGates(),
 			}
 
 			obj := &sourcev1.GitRepository{
@@ -1206,6 +1244,7 @@ func TestGitRepositoryReconciler_reconcileStorage(t *testing.T) {
 			r := &GitRepositoryReconciler{
 				EventRecorder: record.NewFakeRecorder(32),
 				Storage:       testStorage,
+				features:      features.FeatureGates(),
 			}
 
 			obj := &sourcev1.GitRepository{
@@ -1247,6 +1286,7 @@ func TestGitRepositoryReconciler_reconcileDelete(t *testing.T) {
 	r := &GitRepositoryReconciler{
 		EventRecorder: record.NewFakeRecorder(32),
 		Storage:       testStorage,
+		features:      features.FeatureGates(),
 	}
 
 	obj := &sourcev1.GitRepository{
@@ -1384,6 +1424,7 @@ func TestGitRepositoryReconciler_verifyCommitSignature(t *testing.T) {
 			r := &GitRepositoryReconciler{
 				EventRecorder: record.NewFakeRecorder(32),
 				Client:        builder.Build(),
+				features:      features.FeatureGates(),
 			}
 
 			obj := &sourcev1.GitRepository{
@@ -1525,6 +1566,7 @@ func TestGitRepositoryReconciler_ConditionsUpdate(t *testing.T) {
 				Client:        builder.Build(),
 				EventRecorder: record.NewFakeRecorder(32),
 				Storage:       testStorage,
+				features:      features.FeatureGates(),
 			}
 
 			key := client.ObjectKeyFromObject(obj)
@@ -1857,6 +1899,7 @@ func TestGitRepositoryReconciler_notify(t *testing.T) {
 
 			reconciler := &GitRepositoryReconciler{
 				EventRecorder: recorder,
+				features:      features.FeatureGates(),
 			}
 			commit := &git.Commit{
 				Message: "test commit",
