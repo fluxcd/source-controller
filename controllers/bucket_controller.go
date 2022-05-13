@@ -41,8 +41,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/ratelimiter"
 
-	"github.com/fluxcd/source-controller/pkg/azure"
-
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	helper "github.com/fluxcd/pkg/runtime/controller"
@@ -54,6 +52,7 @@ import (
 	serror "github.com/fluxcd/source-controller/internal/error"
 	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
 	"github.com/fluxcd/source-controller/internal/reconcile/summarize"
+	"github.com/fluxcd/source-controller/pkg/azure"
 	"github.com/fluxcd/source-controller/pkg/gcp"
 	"github.com/fluxcd/source-controller/pkg/minio"
 	"github.com/fluxcd/source-controller/pkg/sourceignore"
