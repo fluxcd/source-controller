@@ -25,6 +25,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/fluxcd/pkg/apis/meta"
+	"github.com/fluxcd/pkg/runtime/events"
+
 	serror "github.com/fluxcd/source-controller/internal/error"
 	"github.com/fluxcd/source-controller/internal/object"
 	"github.com/fluxcd/source-controller/internal/reconcile"
@@ -62,5 +64,62 @@ func RecordContextualError(ctx context.Context, recorder kuberecorder.EventRecor
 func RecordReconcileReq(ctx context.Context, recorder kuberecorder.EventRecorder, obj client.Object, _ reconcile.Result, _ error) {
 	if v, ok := meta.ReconcileAnnotationValue(obj.GetAnnotations()); ok {
 		object.SetStatusLastHandledReconcileAt(obj, v)
+	}
+}
+
+// ErrorActionHandler is a ResultProcessor that handles all the actions
+// configured in the given error. Logging and event recording are the handled
+// actions at present. As more configurations are added to serror.Config, more
+// action handlers can be added here.
+func ErrorActionHandler(ctx context.Context, recorder kuberecorder.EventRecorder, obj client.Object, _ reconcile.Result, err error) {
+	switch e := err.(type) {
+	case *serror.Generic:
+		if e.Log {
+			logError(ctx, e.Config.Event, e, e.Error())
+		}
+		recordEvent(recorder, obj, e.Config.Event, e.Config.Notification, err, e.Reason)
+	case *serror.Waiting:
+		if e.Log {
+			logError(ctx, e.Config.Event, e, "reconciliation waiting", "reason", e.Err, "duration", e.RequeueAfter)
+		}
+		recordEvent(recorder, obj, e.Config.Event, e.Config.Notification, err, e.Reason)
+	case *serror.Stalling:
+		if e.Log {
+			logError(ctx, e.Config.Event, e, "reconciliation stalled")
+		}
+		recordEvent(recorder, obj, e.Config.Event, e.Config.Notification, err, e.Reason)
+	}
+}
+
+// logError logs error based on the passed error configurations.
+func logError(ctx context.Context, eventType string, err error, msg string, keysAndValues ...interface{}) {
+	switch eventType {
+	case corev1.EventTypeNormal, serror.EventTypeNone:
+		ctrl.LoggerFrom(ctx).Info(msg, keysAndValues...)
+	case corev1.EventTypeWarning:
+		ctrl.LoggerFrom(ctx).Error(err, msg, keysAndValues...)
+	}
+}
+
+// recordEvent records events based on the passed error configurations.
+func recordEvent(recorder kuberecorder.EventRecorder, obj client.Object, eventType string, notification bool, err error, reason string) {
+	if eventType == serror.EventTypeNone {
+		return
+	}
+	switch eventType {
+	case corev1.EventTypeNormal:
+		if notification {
+			// K8s native event and notification-controller event.
+			recorder.Eventf(obj, corev1.EventTypeNormal, reason, err.Error())
+		} else {
+			// K8s native event only.
+			recorder.Eventf(obj, events.EventTypeTrace, reason, err.Error())
+		}
+	case corev1.EventTypeWarning:
+		// TODO: Due to the current implementation of the event recorder, all
+		// the K8s warning events are also sent as notification controller
+		// notifications. Once the recorder becomes capable of separating the
+		// two, conditionally record events.
+		recorder.Eventf(obj, corev1.EventTypeWarning, reason, err.Error())
 	}
 }
