@@ -993,13 +993,28 @@ func TestBucketReconciler_reconcileArtifact(t *testing.T) {
 			},
 		},
 		{
-			name: "Ignore checksum should be updated when spec ignore changes",
+			name: "Ignore checksum must be removed when spec ignore is empty",
 			beforeFunc: func(t *WithT, obj *sourcev1.Bucket, index *etagIndex, dir string) {
 				obj.Spec.Interval = metav1.Duration{Duration: interval}
 				obj.Status.IgnoreChecksum = "sha256:539530fbd29c252e357e36ddc065dc7923265e4ea795f09cada03287288f5e7a"
 			},
 			afterFunc: func(t *WithT, obj *sourcev1.Bucket, dir string) {
 				t.Expect(obj.Status.IgnoreChecksum).To(BeEmpty())
+			},
+			want: sreconcile.ResultSuccess,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.ArtifactInStorageCondition, meta.SucceededReason, "stored artifact for revision 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'"),
+			},
+		},
+		{
+			name: "Ignore checksum should be updated when spec ignore changes",
+			beforeFunc: func(t *WithT, obj *sourcev1.Bucket, index *etagIndex, dir string) {
+				obj.Spec.Interval = metav1.Duration{Duration: interval}
+				obj.Spec.Ignore = pointer.StringPtr("**.yaml\n")
+				obj.Status.IgnoreChecksum = "sha256:539530fbd29c252e357e36ddc065dc7923265e4ea795f09cada03287288f5e7a"
+			},
+			afterFunc: func(t *WithT, obj *sourcev1.Bucket, dir string) {
+				t.Expect(obj.Status.IgnoreChecksum).To(Equal("sha256:f4c4021b0b39597f03baee5f45fa6ef3d57c9fae57115ee3a54781b02e3a6cd8"))
 			},
 			want: sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
