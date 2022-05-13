@@ -79,7 +79,7 @@ func (c *CheckoutBranch) Checkout(ctx context.Context, path, url string, opts *g
 
 		if currentRevision != "" && currentRevision == c.LastRevision {
 			return nil, git.NoChangesError{
-				Message:          "no changes since last reconcilation",
+				Message:          "no changes since last reconciliation",
 				ObservedRevision: currentRevision,
 			}
 		}
@@ -154,7 +154,7 @@ func (c *CheckoutTag) Checkout(ctx context.Context, path, url string, opts *git.
 
 		if currentRevision != "" && currentRevision == c.LastRevision {
 			return nil, git.NoChangesError{
-				Message:          "no changes since last reconcilation",
+				Message:          "no changes since last reconciliation",
 				ObservedRevision: currentRevision,
 			}
 		}

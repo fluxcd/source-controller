@@ -84,7 +84,7 @@ func TestCheckoutBranch_Checkout(t *testing.T) {
 			name:         "skip clone if LastRevision hasn't changed",
 			branch:       "master",
 			filesCreated: map[string]string{"branch": "init"},
-			expectedErr:  fmt.Sprintf("no changes since last reconcilation: observed revision 'master/%s'", firstCommit.String()),
+			expectedErr:  fmt.Sprintf("no changes since last reconciliation: observed revision 'master/%s'", firstCommit.String()),
 			lastRevision: fmt.Sprintf("master/%s", firstCommit.String()),
 		},
 		{
@@ -151,7 +151,7 @@ func TestCheckoutTag_Checkout(t *testing.T) {
 			tag:         "tag-2",
 			checkoutTag: "tag-2",
 			setLastRev:  true,
-			expectErr:   "no changes since last reconcilation",
+			expectErr:   "no changes since last reconciliation",
 		},
 		{
 			name:        "Last revision changed",
