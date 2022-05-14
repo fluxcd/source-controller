@@ -551,27 +551,31 @@ func TestGitRepositoryReconciler_reconcileSource_checkoutStrategy(t *testing.T) 
 		want                  sreconcile.Result
 		wantErr               bool
 		wantRevision          string
+		wantArtifactOutdated  bool
 	}{
 		{
-			name:         "Nil reference (default branch)",
-			want:         sreconcile.ResultSuccess,
-			wantRevision: "master/<commit>",
+			name:                 "Nil reference (default branch)",
+			want:                 sreconcile.ResultSuccess,
+			wantRevision:         "master/<commit>",
+			wantArtifactOutdated: true,
 		},
 		{
 			name: "Branch",
 			reference: &sourcev1.GitRepositoryRef{
 				Branch: "staging",
 			},
-			want:         sreconcile.ResultSuccess,
-			wantRevision: "staging/<commit>",
+			want:                 sreconcile.ResultSuccess,
+			wantRevision:         "staging/<commit>",
+			wantArtifactOutdated: true,
 		},
 		{
 			name: "Tag",
 			reference: &sourcev1.GitRepositoryRef{
 				Tag: "v0.1.0",
 			},
-			want:         sreconcile.ResultSuccess,
-			wantRevision: "v0.1.0/<commit>",
+			want:                 sreconcile.ResultSuccess,
+			wantRevision:         "v0.1.0/<commit>",
+			wantArtifactOutdated: true,
 		},
 		{
 			name:                  "Branch commit",
@@ -580,8 +584,9 @@ func TestGitRepositoryReconciler_reconcileSource_checkoutStrategy(t *testing.T) 
 				Branch: "staging",
 				Commit: "<commit>",
 			},
-			want:         sreconcile.ResultSuccess,
-			wantRevision: "staging/<commit>",
+			want:                 sreconcile.ResultSuccess,
+			wantRevision:         "staging/<commit>",
+			wantArtifactOutdated: true,
 		},
 		{
 			name:                  "Branch commit",
@@ -590,60 +595,56 @@ func TestGitRepositoryReconciler_reconcileSource_checkoutStrategy(t *testing.T) 
 				Branch: "staging",
 				Commit: "<commit>",
 			},
-			want:         sreconcile.ResultSuccess,
-			wantRevision: "HEAD/<commit>",
+			want:                 sreconcile.ResultSuccess,
+			wantRevision:         "HEAD/<commit>",
+			wantArtifactOutdated: true,
 		},
 		{
 			name: "SemVer",
 			reference: &sourcev1.GitRepositoryRef{
 				SemVer: "*",
 			},
-			want:         sreconcile.ResultSuccess,
-			wantRevision: "v2.0.0/<commit>",
+			want:                 sreconcile.ResultSuccess,
+			wantRevision:         "v2.0.0/<commit>",
+			wantArtifactOutdated: true,
 		},
 		{
 			name: "SemVer range",
 			reference: &sourcev1.GitRepositoryRef{
 				SemVer: "<v0.2.1",
 			},
-			want:         sreconcile.ResultSuccess,
-			wantRevision: "0.2.0/<commit>",
+			want:                 sreconcile.ResultSuccess,
+			wantRevision:         "0.2.0/<commit>",
+			wantArtifactOutdated: true,
 		},
 		{
 			name: "SemVer prerelease",
 			reference: &sourcev1.GitRepositoryRef{
 				SemVer: ">=1.0.0-0 <1.1.0-0",
 			},
-			wantRevision: "v1.0.0-alpha/<commit>",
-			want:         sreconcile.ResultSuccess,
+			wantRevision:         "v1.0.0-alpha/<commit>",
+			want:                 sreconcile.ResultSuccess,
+			wantArtifactOutdated: true,
 		},
 		{
-			name: "Optimized clone, Ready=True",
+			name: "Optimized clone",
 			reference: &sourcev1.GitRepositoryRef{
 				Branch: "staging",
 			},
 			beforeFunc: func(obj *sourcev1.GitRepository, latestRev string) {
+				// Add existing artifact on the object and storage.
 				obj.Status = sourcev1.GitRepositoryStatus{
 					Artifact: &sourcev1.Artifact{
 						Revision: "staging/" + latestRev,
+						Path:     randStringRunes(10),
 					},
 				}
-				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "ready")
+				testStorage.Archive(obj.GetArtifact(), "testdata/git/repository", nil)
+				conditions.MarkTrue(obj, sourcev1.ArtifactInStorageCondition, meta.SucceededReason, "foo")
 			},
-			want:         sreconcile.ResultEmpty,
-			wantErr:      true,
-			wantRevision: "staging/<commit>",
-		},
-		{
-			name: "Optimized clone, Ready=False",
-			reference: &sourcev1.GitRepositoryRef{
-				Branch: "staging",
-			},
-			beforeFunc: func(obj *sourcev1.GitRepository, latestRev string) {
-				conditions.MarkFalse(obj, meta.ReadyCondition, meta.FailedReason, "not ready")
-			},
-			want:         sreconcile.ResultSuccess,
-			wantRevision: "staging/<commit>",
+			want:                 sreconcile.ResultSuccess,
+			wantRevision:         "staging/<commit>",
+			wantArtifactOutdated: false,
 		},
 	}
 
@@ -721,7 +722,7 @@ func TestGitRepositoryReconciler_reconcileSource_checkoutStrategy(t *testing.T) 
 					if tt.wantRevision != "" && !tt.wantErr {
 						revision := strings.ReplaceAll(tt.wantRevision, "<commit>", headRef.Hash().String())
 						g.Expect(commit.String()).To(Equal(revision))
-						g.Expect(conditions.IsTrue(obj, sourcev1.ArtifactOutdatedCondition)).To(BeTrue())
+						g.Expect(conditions.IsTrue(obj, sourcev1.ArtifactOutdatedCondition)).To(Equal(tt.wantArtifactOutdated))
 					}
 				})
 			}

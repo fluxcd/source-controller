@@ -406,8 +406,8 @@ reconciliations. It supports both `go-git` and `libgit2` implementations
 when cloning repositories using branches or tags.
 
 When enabled, avoids full clone operations by first checking whether
-the last revision is still the same at the target repository,
-and if that is so, skips the reconciliation.
+the revision of the last stored artifact is still the head of the remote
+repository, and if that is so, the local artifact is reused.
 
 This feature is enabled by default. It can be disabled by starting the
 controller with the argument `--feature-gates=OptimizedGitClones=false`.

@@ -18,6 +18,7 @@ package git
 
 import (
 	"testing"
+	"time"
 
 	. "github.com/onsi/gomega"
 )
@@ -260,6 +261,44 @@ of the commit`,
 
 			c := Commit{Message: tt.input}
 			g.Expect(c.ShortMessage()).To(Equal(tt.want))
+		})
+	}
+}
+
+func TestIsConcreteCommit(t *testing.T) {
+	tests := []struct {
+		name   string
+		commit Commit
+		result bool
+	}{
+		{
+			name: "concrete commit",
+			commit: Commit{
+				Hash:      Hash("foo"),
+				Reference: "refs/tags/main",
+				Author: Signature{
+					Name: "user", Email: "user@example.com", When: time.Now(),
+				},
+				Committer: Signature{
+					Name: "user", Email: "user@example.com", When: time.Now(),
+				},
+				Signature: "signature",
+				Encoded:   []byte("commit-content"),
+				Message:   "commit-message",
+			},
+			result: true,
+		},
+		{
+			name:   "partial commit",
+			commit: Commit{Hash: Hash("foo")},
+			result: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+			g.Expect(IsConcreteCommit(tt.commit)).To(Equal(tt.result))
 		})
 	}
 }

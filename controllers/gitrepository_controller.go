@@ -425,9 +425,10 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context,
 	}
 
 	if val, ok := r.features[features.OptimizedGitClones]; ok && val {
-		// Only if the object is ready, use the last revision to attempt
-		// short-circuiting clone operation.
-		if conditions.IsTrue(obj, meta.ReadyCondition) {
+		// Only if the object has an existing artifact in storage, attempt to
+		// short-circuit clone operation. reconcileStorage has already verified
+		// that the artifact exists.
+		if conditions.IsTrue(obj, sourcev1.ArtifactInStorageCondition) {
 			if artifact := obj.GetArtifact(); artifact != nil {
 				checkoutOpts.LastRevision = artifact.Revision
 			}
@@ -478,17 +479,6 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context,
 	defer cancel()
 	c, err := checkoutStrategy.Checkout(gitCtx, dir, repositoryURL, authOpts)
 	if err != nil {
-		var v git.NoChangesError
-		if errors.As(err, &v) {
-			// Create generic error without notification. Since it's a no-op
-			// error, ignore (no runtime error), normal event.
-			ge := serror.NewGeneric(v, sourcev1.GitOperationSucceedReason)
-			ge.Notification = false
-			ge.Ignore = true
-			ge.Event = corev1.EventTypeNormal
-			return sreconcile.ResultEmpty, ge
-		}
-
 		e := serror.NewGeneric(
 			fmt.Errorf("failed to checkout and determine revision: %w", err),
 			sourcev1.GitOperationFailedReason,
@@ -499,8 +489,38 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context,
 	}
 	// Assign the commit to the shared commit reference.
 	*commit = *c
+
+	// If it's a partial commit obtained from an existing artifact, check if the
+	// reconciliation can be skipped if other configurations have not changed.
+	if !git.IsConcreteCommit(*commit) {
+		ctrl.LoggerFrom(ctx).V(logger.DebugLevel).Info(fmt.Sprintf(
+			"no changes since last reconciliation, observed revision '%s'", commit.String()))
+
+		// Remove the target directory, as CopyToPath() renames another
+		// directory to which the artifact is unpacked into the target
+		// directory. At this point, the target directory is empty, safe to
+		// remove.
+		os.RemoveAll(dir)
+		if err := r.Storage.CopyToPath(obj.GetArtifact(), "/", dir); err != nil {
+			e := serror.NewGeneric(
+				fmt.Errorf("failed to copy existing artifact to source dir: %w", err),
+				sourcev1.CopyOperationFailedReason,
+			)
+			conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition, e.Reason, e.Err.Error())
+			return sreconcile.ResultEmpty, e
+		}
+		conditions.Delete(obj, sourcev1.FetchFailedCondition)
+		conditions.Delete(obj, sourcev1.StorageOperationFailedCondition)
+
+		return sreconcile.ResultSuccess, nil
+	}
+
 	ctrl.LoggerFrom(ctx).V(logger.DebugLevel).Info("git repository checked out", "url", obj.Spec.URL, "revision", commit.String())
 	conditions.Delete(obj, sourcev1.FetchFailedCondition)
+	// In case no-op clone resulted in a failure and in the subsequent
+	// reconciliation a new remote revision was observed, delete any stale
+	// StorageOperationFailedCondition.
+	conditions.Delete(obj, sourcev1.StorageOperationFailedCondition)
 
 	// Verify commit signature
 	if result, err := r.verifyCommitSignature(ctx, obj, *commit); err != nil || result == sreconcile.ResultEmpty {
