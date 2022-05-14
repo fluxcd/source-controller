@@ -57,6 +57,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
+	"github.com/fluxcd/source-controller/internal/features"
 	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
 	"github.com/fluxcd/source-controller/internal/reconcile/summarize"
 	"github.com/fluxcd/source-controller/pkg/git"
@@ -499,6 +500,7 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 				Client:        builder.Build(),
 				EventRecorder: record.NewFakeRecorder(32),
 				Storage:       testStorage,
+				features:      features.FeatureGates(),
 			}
 
 			for _, i := range testGitImplementations {
@@ -641,6 +643,7 @@ func TestGitRepositoryReconciler_reconcileSource_checkoutStrategy(t *testing.T) 
 		Client:        fakeclient.NewClientBuilder().WithScheme(runtime.NewScheme()).Build(),
 		EventRecorder: record.NewFakeRecorder(32),
 		Storage:       testStorage,
+		features:      features.FeatureGates(),
 	}
 
 	for _, tt := range tests {
@@ -857,6 +860,7 @@ func TestGitRepositoryReconciler_reconcileArtifact(t *testing.T) {
 			r := &GitRepositoryReconciler{
 				EventRecorder: record.NewFakeRecorder(32),
 				Storage:       testStorage,
+				features:      features.FeatureGates(),
 			}
 
 			obj := &sourcev1.GitRepository{
@@ -1042,6 +1046,7 @@ func TestGitRepositoryReconciler_reconcileInclude(t *testing.T) {
 				EventRecorder:     record.NewFakeRecorder(32),
 				Storage:           storage,
 				requeueDependency: dependencyInterval,
+				features:          features.FeatureGates(),
 			}
 
 			obj := &sourcev1.GitRepository{
@@ -1206,6 +1211,7 @@ func TestGitRepositoryReconciler_reconcileStorage(t *testing.T) {
 			r := &GitRepositoryReconciler{
 				EventRecorder: record.NewFakeRecorder(32),
 				Storage:       testStorage,
+				features:      features.FeatureGates(),
 			}
 
 			obj := &sourcev1.GitRepository{
@@ -1247,6 +1253,7 @@ func TestGitRepositoryReconciler_reconcileDelete(t *testing.T) {
 	r := &GitRepositoryReconciler{
 		EventRecorder: record.NewFakeRecorder(32),
 		Storage:       testStorage,
+		features:      features.FeatureGates(),
 	}
 
 	obj := &sourcev1.GitRepository{
@@ -1384,6 +1391,7 @@ func TestGitRepositoryReconciler_verifyCommitSignature(t *testing.T) {
 			r := &GitRepositoryReconciler{
 				EventRecorder: record.NewFakeRecorder(32),
 				Client:        builder.Build(),
+				features:      features.FeatureGates(),
 			}
 
 			obj := &sourcev1.GitRepository{
@@ -1525,6 +1533,7 @@ func TestGitRepositoryReconciler_ConditionsUpdate(t *testing.T) {
 				Client:        builder.Build(),
 				EventRecorder: record.NewFakeRecorder(32),
 				Storage:       testStorage,
+				features:      features.FeatureGates(),
 			}
 
 			key := client.ObjectKeyFromObject(obj)
@@ -1857,6 +1866,7 @@ func TestGitRepositoryReconciler_notify(t *testing.T) {
 
 			reconciler := &GitRepositoryReconciler{
 				EventRecorder: recorder,
+				features:      features.FeatureGates(),
 			}
 			commit := &git.Commit{
 				Message: "test commit",

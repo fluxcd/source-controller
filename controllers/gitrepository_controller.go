@@ -115,6 +115,7 @@ type GitRepositoryReconciler struct {
 	ControllerName string
 
 	requeueDependency time.Duration
+	features          map[string]bool
 }
 
 type GitRepositoryReconcilerOptions struct {
@@ -133,6 +134,15 @@ func (r *GitRepositoryReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 func (r *GitRepositoryReconciler) SetupWithManagerAndOptions(mgr ctrl.Manager, opts GitRepositoryReconcilerOptions) error {
 	r.requeueDependency = opts.DependencyRequeueInterval
+
+	if r.features == nil {
+		r.features = map[string]bool{}
+	}
+
+	// Check and enable gated features.
+	if oc, _ := features.Enabled(features.OptimizedGitClones); oc {
+		r.features[features.OptimizedGitClones] = true
+	}
 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&sourcev1.GitRepository{}, builder.WithPredicates(
@@ -414,7 +424,7 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context,
 		checkoutOpts.SemVer = ref.SemVer
 	}
 
-	if oc, _ := features.Enabled(features.OptimizedGitClones); oc {
+	if val, ok := r.features[features.OptimizedGitClones]; ok && val {
 		if artifact := obj.GetArtifact(); artifact != nil {
 			checkoutOpts.LastRevision = artifact.Revision
 		}

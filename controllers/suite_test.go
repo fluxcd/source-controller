@@ -36,6 +36,7 @@ import (
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
 	"github.com/fluxcd/source-controller/internal/cache"
+	"github.com/fluxcd/source-controller/internal/features"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -106,6 +107,7 @@ func TestMain(m *testing.M) {
 		EventRecorder: record.NewFakeRecorder(32),
 		Metrics:       testMetricsH,
 		Storage:       testStorage,
+		features:      features.FeatureGates(),
 	}).SetupWithManager(testEnv); err != nil {
 		panic(fmt.Sprintf("Failed to start GitRepositoryReconciler: %v", err))
 	}
