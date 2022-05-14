@@ -547,30 +547,35 @@ func TestGitRepositoryReconciler_reconcileSource_checkoutStrategy(t *testing.T) 
 		name                  string
 		skipForImplementation string
 		reference             *sourcev1.GitRepositoryRef
+		beforeFunc            func(obj *sourcev1.GitRepository, latestRev string)
 		want                  sreconcile.Result
 		wantErr               bool
 		wantRevision          string
+		wantArtifactOutdated  bool
 	}{
 		{
-			name:         "Nil reference (default branch)",
-			want:         sreconcile.ResultSuccess,
-			wantRevision: "master/<commit>",
+			name:                 "Nil reference (default branch)",
+			want:                 sreconcile.ResultSuccess,
+			wantRevision:         "master/<commit>",
+			wantArtifactOutdated: true,
 		},
 		{
 			name: "Branch",
 			reference: &sourcev1.GitRepositoryRef{
 				Branch: "staging",
 			},
-			want:         sreconcile.ResultSuccess,
-			wantRevision: "staging/<commit>",
+			want:                 sreconcile.ResultSuccess,
+			wantRevision:         "staging/<commit>",
+			wantArtifactOutdated: true,
 		},
 		{
 			name: "Tag",
 			reference: &sourcev1.GitRepositoryRef{
 				Tag: "v0.1.0",
 			},
-			want:         sreconcile.ResultSuccess,
-			wantRevision: "v0.1.0/<commit>",
+			want:                 sreconcile.ResultSuccess,
+			wantRevision:         "v0.1.0/<commit>",
+			wantArtifactOutdated: true,
 		},
 		{
 			name:                  "Branch commit",
@@ -579,8 +584,9 @@ func TestGitRepositoryReconciler_reconcileSource_checkoutStrategy(t *testing.T) 
 				Branch: "staging",
 				Commit: "<commit>",
 			},
-			want:         sreconcile.ResultSuccess,
-			wantRevision: "staging/<commit>",
+			want:                 sreconcile.ResultSuccess,
+			wantRevision:         "staging/<commit>",
+			wantArtifactOutdated: true,
 		},
 		{
 			name:                  "Branch commit",
@@ -589,32 +595,56 @@ func TestGitRepositoryReconciler_reconcileSource_checkoutStrategy(t *testing.T) 
 				Branch: "staging",
 				Commit: "<commit>",
 			},
-			want:         sreconcile.ResultSuccess,
-			wantRevision: "HEAD/<commit>",
+			want:                 sreconcile.ResultSuccess,
+			wantRevision:         "HEAD/<commit>",
+			wantArtifactOutdated: true,
 		},
 		{
 			name: "SemVer",
 			reference: &sourcev1.GitRepositoryRef{
 				SemVer: "*",
 			},
-			want:         sreconcile.ResultSuccess,
-			wantRevision: "v2.0.0/<commit>",
+			want:                 sreconcile.ResultSuccess,
+			wantRevision:         "v2.0.0/<commit>",
+			wantArtifactOutdated: true,
 		},
 		{
 			name: "SemVer range",
 			reference: &sourcev1.GitRepositoryRef{
 				SemVer: "<v0.2.1",
 			},
-			want:         sreconcile.ResultSuccess,
-			wantRevision: "0.2.0/<commit>",
+			want:                 sreconcile.ResultSuccess,
+			wantRevision:         "0.2.0/<commit>",
+			wantArtifactOutdated: true,
 		},
 		{
 			name: "SemVer prerelease",
 			reference: &sourcev1.GitRepositoryRef{
 				SemVer: ">=1.0.0-0 <1.1.0-0",
 			},
-			wantRevision: "v1.0.0-alpha/<commit>",
-			want:         sreconcile.ResultSuccess,
+			wantRevision:         "v1.0.0-alpha/<commit>",
+			want:                 sreconcile.ResultSuccess,
+			wantArtifactOutdated: true,
+		},
+		{
+			name: "Optimized clone",
+			reference: &sourcev1.GitRepositoryRef{
+				Branch: "staging",
+			},
+			beforeFunc: func(obj *sourcev1.GitRepository, latestRev string) {
+				// Add existing artifact on the object and storage.
+				obj.Status = sourcev1.GitRepositoryStatus{
+					Artifact: &sourcev1.Artifact{
+						Revision: "staging/" + latestRev,
+						Path:     randStringRunes(10),
+					},
+				}
+				testStorage.Archive(obj.GetArtifact(), "testdata/git/repository", nil)
+				conditions.MarkTrue(obj, sourcev1.ArtifactInStorageCondition, meta.SucceededReason, "foo")
+			},
+			want:                 sreconcile.ResultSuccess,
+			wantRevision:         "staging/<commit>",
+			wantArtifactOutdated: false,
 		},
 	}
 
@@ -677,6 +707,10 @@ func TestGitRepositoryReconciler_reconcileSource_checkoutStrategy(t *testing.T) 
 					obj := obj.DeepCopy()
 					obj.Spec.GitImplementation = i
 
+					if tt.beforeFunc != nil {
+						tt.beforeFunc(obj, headRef.Hash().String())
+					}
+
 					var commit git.Commit
 					var includes artifactSet
 					got, err := r.reconcileSource(ctx, obj, &commit, &includes, tmpDir)
@@ -685,10 +719,10 @@ func TestGitRepositoryReconciler_reconcileSource_checkoutStrategy(t *testing.T) 
 					}
 					g.Expect(err != nil).To(Equal(tt.wantErr))
 					g.Expect(got).To(Equal(tt.want))
-					if tt.wantRevision != "" {
+					if tt.wantRevision != "" && !tt.wantErr {
 						revision := strings.ReplaceAll(tt.wantRevision, "<commit>", headRef.Hash().String())
 						g.Expect(commit.String()).To(Equal(revision))
-						g.Expect(conditions.IsTrue(obj, sourcev1.ArtifactOutdatedCondition)).To(BeTrue())
+						g.Expect(conditions.IsTrue(obj, sourcev1.ArtifactOutdatedCondition)).To(Equal(tt.wantArtifactOutdated))
 					}
 				})
 			}
@@ -1782,10 +1816,22 @@ func TestGitRepositoryReconciler_statusConditions(t *testing.T) {
 }
 
 func TestGitRepositoryReconciler_notify(t *testing.T) {
+	concreteCommit := git.Commit{
+		Hash:      git.Hash("some-hash"),
+		Reference: "refs/heads/main",
+		Message:   "test commit",
+		Encoded:   []byte("commit content"),
+	}
+	partialCommit := git.Commit{
+		Hash:      git.Hash("some-hash"),
+		Reference: "refs/heads/main",
+	}
+
 	tests := []struct {
 		name             string
 		res              sreconcile.Result
 		resErr           error
+		commit           git.Commit
 		oldObjBeforeFunc func(obj *sourcev1.GitRepository)
 		newObjBeforeFunc func(obj *sourcev1.GitRepository)
 		wantEvent        string
@@ -1799,6 +1845,7 @@ func TestGitRepositoryReconciler_notify(t *testing.T) {
 			name:   "new artifact",
 			res:    sreconcile.ResultSuccess,
 			resErr: nil,
+			commit: concreteCommit,
 			newObjBeforeFunc: func(obj *sourcev1.GitRepository) {
 				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Checksum: "yyy"}
 			},
@@ -1808,6 +1855,7 @@ func TestGitRepositoryReconciler_notify(t *testing.T) {
 			name:   "recovery from failure",
 			res:    sreconcile.ResultSuccess,
 			resErr: nil,
+			commit: concreteCommit,
 			oldObjBeforeFunc: func(obj *sourcev1.GitRepository) {
 				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Checksum: "yyy"}
 				conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.GitOperationFailedReason, "fail")
@@ -1823,6 +1871,7 @@ func TestGitRepositoryReconciler_notify(t *testing.T) {
 			name:   "recovery and new artifact",
 			res:    sreconcile.ResultSuccess,
 			resErr: nil,
+			commit: concreteCommit,
 			oldObjBeforeFunc: func(obj *sourcev1.GitRepository) {
 				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Checksum: "yyy"}
 				conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.GitOperationFailedReason, "fail")
@@ -1838,6 +1887,7 @@ func TestGitRepositoryReconciler_notify(t *testing.T) {
 			name:   "no updates",
 			res:    sreconcile.ResultSuccess,
 			resErr: nil,
+			commit: concreteCommit,
 			oldObjBeforeFunc: func(obj *sourcev1.GitRepository) {
 				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Checksum: "yyy"}
 				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "ready")
@@ -1846,6 +1896,22 @@ func TestGitRepositoryReconciler_notify(t *testing.T) {
 				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Checksum: "yyy"}
 				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "ready")
 			},
+		},
+		{
+			name:   "recovery with no-op clone commit",
+			res:    sreconcile.ResultSuccess,
+			resErr: nil,
+			commit: partialCommit,
+			oldObjBeforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Checksum: "yyy"}
+				conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.GitOperationFailedReason, "fail")
+				conditions.MarkFalse(obj, meta.ReadyCondition, meta.FailedReason, "foo")
+			},
+			newObjBeforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Status.Artifact = &sourcev1.Artifact{Revision: "aaa", Checksum: "bbb"}
+				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "ready")
+			},
+			wantEvent: "Normal NewArtifact stored artifact for commit 'main/some-hash'",
 		},
 	}
 
@@ -1868,10 +1934,7 @@ func TestGitRepositoryReconciler_notify(t *testing.T) {
 				EventRecorder: recorder,
 				features:      features.FeatureGates(),
 			}
-			commit := &git.Commit{
-				Message: "test commit",
-			}
-			reconciler.notify(oldObj, newObj, *commit, tt.res, tt.resErr)
+			reconciler.notify(oldObj, newObj, tt.commit, tt.res, tt.resErr)
 
 			select {
 			case x, ok := <-recorder.Events:

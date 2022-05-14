@@ -100,4 +100,7 @@ const (
 
 	// CacheOperationFailedReason signals a failure in cache operation.
 	CacheOperationFailedReason string = "CacheOperationFailed"
+
+	// CopyOperationFailedReason signals a failure in copying files.
+	CopyOperationFailedReason string = "CopyOperationFailed"
 )
