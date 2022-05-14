@@ -49,8 +49,7 @@ type CheckoutOptions struct {
 	// not supported by all Implementations.
 	RecurseSubmodules bool
 
-	// LastRevision holds the revision observed on the last successful
-	// reconciliation.
+	// LastRevision holds the last observed revision of the local repository.
 	// It is used to skip clone operations when no changes were detected.
 	LastRevision string
 }

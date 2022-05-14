@@ -81,12 +81,15 @@ func (c *CheckoutBranch) Checkout(ctx context.Context, path, url string, opts *g
 			return nil, fmt.Errorf("unable to remote ls for '%s': %w", managed.EffectiveURL(url), gitutil.LibGit2Error(err))
 		}
 		if len(heads) > 0 {
-			currentRevision := fmt.Sprintf("%s/%s", c.Branch, heads[0].Id.String())
+			hash := heads[0].Id.String()
+			currentRevision := fmt.Sprintf("%s/%s", c.Branch, hash)
 			if currentRevision == c.LastRevision {
-				return nil, git.NoChangesError{
-					Message:          "no changes since last reconciliation",
-					ObservedRevision: currentRevision,
+				// Construct a partial commit with the existing information.
+				c := &git.Commit{
+					Hash:      git.Hash(hash),
+					Reference: "refs/heads/" + c.Branch,
 				}
+				return c, nil
 			}
 		}
 	}
@@ -163,21 +166,25 @@ func (c *CheckoutTag) Checkout(ctx context.Context, path, url string, opts *git.
 			return nil, fmt.Errorf("unable to remote ls for '%s': %w", managed.EffectiveURL(url), gitutil.LibGit2Error(err))
 		}
 		if len(heads) > 0 {
-			currentRevision := fmt.Sprintf("%s/%s", c.Tag, heads[0].Id.String())
+			hash := heads[0].Id.String()
+			currentRevision := fmt.Sprintf("%s/%s", c.Tag, hash)
 			var same bool
 			if currentRevision == c.LastRevision {
 				same = true
 			} else if len(heads) > 1 {
-				currentAnnotatedRevision := fmt.Sprintf("%s/%s", c.Tag, heads[1].Id.String())
+				hash = heads[1].Id.String()
+				currentAnnotatedRevision := fmt.Sprintf("%s/%s", c.Tag, hash)
 				if currentAnnotatedRevision == c.LastRevision {
 					same = true
 				}
 			}
 			if same {
-				return nil, git.NoChangesError{
-					Message:          "no changes since last reconciliation",
-					ObservedRevision: currentRevision,
+				// Construct a partial commit with the existing information.
+				c := &git.Commit{
+					Hash:      git.Hash(hash),
+					Reference: "refs/tags/" + c.Tag,
 				}
+				return c, nil
 			}
 		}
 	}
