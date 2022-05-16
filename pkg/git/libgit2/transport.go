@@ -20,10 +20,12 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/hmac"
 	"crypto/md5"
 	"crypto/sha1"
 	"crypto/sha256"
 	"crypto/x509"
+	"encoding/base64"
 	"fmt"
 	"hash"
 	"io"
@@ -288,10 +290,54 @@ func (k knownKey) matches(host string, hostkey git2go.HostkeyCertificate) bool {
 }
 
 func containsHost(hosts []string, host string) bool {
-	for _, h := range hosts {
-		if h == host {
+	for _, kh := range hosts {
+		// hashed host must start with a pipe
+		if kh[0] == '|' {
+			match, _ := MatchHashedHost(kh, host)
+			if match {
+				return true
+			}
+
+		} else if kh == host { // unhashed host check
 			return true
 		}
 	}
 	return false
+}
+
+// MatchHashedHost tries to match a hashed known host (kh) to
+// host.
+//
+// Note that host is not hashed, but it is rather hashed during
+// the matching process using the same salt used when hashing
+// the known host.
+func MatchHashedHost(kh, host string) (bool, error) {
+	if kh == "" || kh[0] != '|' {
+		return false, fmt.Errorf("hashed known host must begin with '|': '%s'", kh)
+	}
+
+	components := strings.Split(kh, "|")
+	if len(components) != 4 {
+		return false, fmt.Errorf("invalid format for hashed known host: '%s'", kh)
+	}
+
+	if components[1] != "1" {
+		return false, fmt.Errorf("unsupported hash type '%s'", components[1])
+	}
+
+	hkSalt, err := base64.StdEncoding.DecodeString(components[2])
+	if err != nil {
+		return false, fmt.Errorf("cannot decode hashed known host: '%w'", err)
+	}
+
+	hkHash, err := base64.StdEncoding.DecodeString(components[3])
+	if err != nil {
+		return false, fmt.Errorf("cannot decode hashed known host: '%w'", err)
+	}
+
+	mac := hmac.New(sha1.New, hkSalt)
+	mac.Write([]byte(host))
+	hostHash := mac.Sum(nil)
+
+	return bytes.Equal(hostHash, hkHash), nil
 }

@@ -20,7 +20,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/url"
 	"os"
 	"path/filepath"
 	"testing"
@@ -28,12 +27,6 @@ import (
 
 	git2go "github.com/libgit2/git2go/v33"
 	. "github.com/onsi/gomega"
-	corev1 "k8s.io/api/core/v1"
-
-	"github.com/fluxcd/pkg/gittestserver"
-	"github.com/fluxcd/pkg/ssh"
-
-	"github.com/fluxcd/source-controller/pkg/git"
 )
 
 func TestCheckoutBranch_Checkout(t *testing.T) {
@@ -516,68 +509,4 @@ func mockSignature(time time.Time) *git2go.Signature {
 		Email: "author@example.com",
 		When:  time,
 	}
-}
-
-// This test is specifically to detect regression in libgit2's ED25519 key
-// support for client authentication.
-// Refer: https://github.com/fluxcd/source-controller/issues/399
-func TestCheckout_ED25519(t *testing.T) {
-	g := NewWithT(t)
-	timeout := 5 * time.Second
-
-	// Create a git test server.
-	server, err := gittestserver.NewTempGitServer()
-	g.Expect(err).ToNot(HaveOccurred())
-	defer os.RemoveAll(server.Root())
-	server.Auth("test-user", "test-pswd")
-	server.AutoCreate()
-
-	server.KeyDir(filepath.Join(server.Root(), "keys"))
-	g.Expect(server.ListenSSH()).To(Succeed())
-
-	go func() {
-		server.StartSSH()
-	}()
-	defer server.StopSSH()
-
-	repoPath := "test.git"
-
-	err = server.InitRepo(testRepositoryPath, git.DefaultBranch, repoPath)
-	g.Expect(err).NotTo(HaveOccurred())
-
-	sshURL := server.SSHAddress()
-	repoURL := sshURL + "/" + repoPath
-
-	// Fetch host key.
-	u, err := url.Parse(sshURL)
-	g.Expect(err).NotTo(HaveOccurred())
-	g.Expect(u.Host).ToNot(BeEmpty())
-	knownHosts, err := ssh.ScanHostKey(u.Host, timeout, git.HostKeyAlgos)
-	g.Expect(err).ToNot(HaveOccurred())
-
-	kp, err := ssh.NewEd25519Generator().Generate()
-	g.Expect(err).ToNot(HaveOccurred())
-
-	secret := corev1.Secret{
-		Data: map[string][]byte{
-			"identity":    kp.PrivateKey,
-			"known_hosts": knownHosts,
-		},
-	}
-
-	authOpts, err := git.AuthOptionsFromSecret(repoURL, &secret)
-	g.Expect(err).ToNot(HaveOccurred())
-
-	// Prepare for checkout.
-	branchCheckoutStrat := &CheckoutBranch{Branch: git.DefaultBranch}
-	tmpDir := t.TempDir()
-
-	ctx, cancel := context.WithTimeout(context.TODO(), timeout)
-	defer cancel()
-
-	// Checkout the repo.
-	// This should always fail because the generated key above isn't present in
-	// the git server.
-	_, err = branchCheckoutStrat.Checkout(ctx, tmpDir, repoURL, authOpts)
-	g.Expect(err).ToNot(HaveOccurred())
 }

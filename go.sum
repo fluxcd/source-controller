@@ -366,8 +366,8 @@ github.com/fluxcd/pkg/lockedfile v0.1.0/go.mod h1:EJLan8t9MiOcgTs8+puDjbE6I/KAfH
 github.com/fluxcd/pkg/runtime v0.13.0-rc.6/go.mod h1:4oKUO19TeudXrnCRnxCfMSS7EQTYpYlgfXwlQuDJ/Eg=
 github.com/fluxcd/pkg/runtime v0.15.1 h1:PKooYqlZM+KLhnNz10sQnBH0AHllS40PIDHtiRH/BGU=
 github.com/fluxcd/pkg/runtime v0.15.1/go.mod h1:TPAoOEgUFG60FXBA4ID41uaPldxuXCEI4jt3qfd5i5Q=
-github.com/fluxcd/pkg/ssh v0.3.3 h1:/tc7W7LO1VoVUI5jB+p9ZHCA+iQaXTkaSCDZJsxcZ9k=
-github.com/fluxcd/pkg/ssh v0.3.3/go.mod h1:+bKhuv0/pJy3HZwkK54Shz68sNv1uf5aI6wtPaEHaYk=
+github.com/fluxcd/pkg/ssh v0.3.4 h1:Ko+MUNiiQG3evyoMO19iRk7d4X0VJ6w6+GEeVQ1jLC0=
+github.com/fluxcd/pkg/ssh v0.3.4/go.mod h1:KGgOUOy1uI6RC6+qxIBLvP1AeOOs/nLB25Ca6TZMIXE=
 github.com/fluxcd/pkg/testserver v0.2.0 h1:Mj0TapmKaywI6Fi5wvt1LAZpakUHmtzWQpJNKQ0Krt4=
 github.com/fluxcd/pkg/testserver v0.2.0/go.mod h1:bgjjydkXsZTeFzjz9Cr4heGANr41uTB1Aj1Q5qzuYVk=
 github.com/fluxcd/pkg/untar v0.1.0 h1:k97V/xV5hFrAkIkVPuv5AVhyxh1ZzzAKba/lbDfGo6o=

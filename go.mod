@@ -26,7 +26,7 @@ require (
 	github.com/fluxcd/pkg/helmtestserver v0.7.2
 	github.com/fluxcd/pkg/lockedfile v0.1.0
 	github.com/fluxcd/pkg/runtime v0.15.1
-	github.com/fluxcd/pkg/ssh v0.3.3
+	github.com/fluxcd/pkg/ssh v0.3.4
 	github.com/fluxcd/pkg/testserver v0.2.0
 	github.com/fluxcd/pkg/untar v0.1.0
 	github.com/fluxcd/pkg/version v0.1.0
