@@ -522,6 +522,68 @@ func Test_pushTransferProgressCallback(t *testing.T) {
 	}
 }
 
+func TestMatchHashedHost(t *testing.T) {
+	tests := []struct {
+		name      string
+		knownHost string
+		host      string
+		match     bool
+		wantErr   string
+	}{
+		{
+			name:      "match valid known host",
+			knownHost: "|1|vApZG0Ybr4rHfTb69+cjjFIGIv0=|M5sSXen14encOvQAy0gseRahnJw=",
+			host:      "[127.0.0.1]:44167",
+			match:     true,
+		},
+		{
+			name:    "empty known host errors",
+			wantErr: "hashed known host must begin with '|'",
+		},
+		{
+			name:      "unhashed known host errors",
+			knownHost: "[127.0.0.1]:44167",
+			wantErr:   "hashed known host must begin with '|'",
+		},
+		{
+			name:      "invalid known host format errors",
+			knownHost: "|1M5sSXen14encOvQAy0gseRahnJw=",
+			wantErr:   "invalid format for hashed known host",
+		},
+		{
+			name:      "invalid hash type errors",
+			knownHost: "|2|vApZG0Ybr4rHfTb69+cjjFIGIv0=|M5sSXen14encOvQAy0gseRahnJw=",
+			wantErr:   "unsupported hash type",
+		},
+		{
+			name:      "invalid base64 component[2] errors",
+			knownHost: "|1|azz|M5sSXen14encOvQAy0gseRahnJw=",
+			wantErr:   "cannot decode hashed known host",
+		},
+		{
+			name:      "invalid base64 component[3] errors",
+			knownHost: "|1|M5sSXen14encOvQAy0gseRahnJw=|azz",
+			wantErr:   "cannot decode hashed known host",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			matched, err := MatchHashedHost(tt.knownHost, tt.host)
+
+			if tt.wantErr == "" {
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(matched).To(Equal(tt.match))
+			} else {
+				g.Expect(err).To(HaveOccurred())
+				g.Expect(err.Error()).To(ContainSubstring(tt.wantErr))
+			}
+		})
+	}
+}
+
 func md5Fingerprint(in string) [16]byte {
 	var out [16]byte
 	copy(out[:], in)

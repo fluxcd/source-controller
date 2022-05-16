@@ -478,7 +478,7 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 					u, err := url.Parse(obj.Spec.URL)
 					g.Expect(err).NotTo(HaveOccurred())
 					g.Expect(u.Host).ToNot(BeEmpty())
-					knownHosts, err := ssh.ScanHostKey(u.Host, timeout, git.HostKeyAlgos)
+					knownHosts, err := ssh.ScanHostKey(u.Host, timeout, git.HostKeyAlgos, false)
 					g.Expect(err).NotTo(HaveOccurred())
 					secret.Data["known_hosts"] = knownHosts
 				}
