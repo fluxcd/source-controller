@@ -580,3 +580,37 @@ func TestCheckout_ED25519(t *testing.T) {
 	_, err = branchCheckoutStrat.Checkout(ctx, tmpDir, repoURL, authOpts)
 	g.Expect(err).ToNot(HaveOccurred())
 }
+
+func TestInitializeRepoWithRemote(t *testing.T) {
+	g := NewWithT(t)
+	tmp := t.TempDir()
+	ctx := context.TODO()
+	testRepoURL := "https://example.com/foo/bar"
+	testRepoURL2 := "https://example.com/foo/baz"
+	authOpts, err := git.AuthOptionsWithoutSecret(testRepoURL)
+	g.Expect(err).ToNot(HaveOccurred())
+	authOpts2, err := git.AuthOptionsWithoutSecret(testRepoURL2)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Fresh initialization.
+	repo, remote, err := initializeRepoWithRemote(ctx, tmp, testRepoURL, authOpts)
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(repo.IsBare()).To(BeFalse())
+	g.Expect(remote.Name()).To(Equal(defaultRemoteName))
+	g.Expect(remote.Url()).To(Equal(testRepoURL))
+	remote.Free()
+	repo.Free()
+
+	// Reinitialize to ensure it reuses the existing origin.
+	repo, remote, err = initializeRepoWithRemote(ctx, tmp, testRepoURL, authOpts)
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(repo.IsBare()).To(BeFalse())
+	g.Expect(remote.Name()).To(Equal(defaultRemoteName))
+	g.Expect(remote.Url()).To(Equal(testRepoURL))
+	remote.Free()
+	repo.Free()
+
+	// Reinitialize with a different remote URL for existing origin.
+	_, _, err = initializeRepoWithRemote(ctx, tmp, testRepoURL2, authOpts2)
+	g.Expect(err).To(HaveOccurred())
+}

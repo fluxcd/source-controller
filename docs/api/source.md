@@ -1643,6 +1643,25 @@ Artifacts as instructed by GitRepositorySpec.Include.</p>
 </tr>
 <tr>
 <td>
+<code>contentConfigChecksum</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>ContentConfigChecksum is a checksum of all the configurations related to
+the content of the source artifact:
+- .spec.ignore
+- .spec.recurseSubmodules
+- .spec.included and the checksum of the included artifacts
+observed in .status.observedGeneration version of the object. This can
+be used to determine if the content of the
+It has the format of <code>&lt;algo&gt;:&lt;checksum&gt;</code>, for example: <code>sha256:&lt;checksum&gt;</code>.</p>
+</td>
+</tr>
+<tr>
+<td>
 <code>ReconcileRequestStatus</code><br>
 <em>
 <a href="https://godoc.org/github.com/fluxcd/pkg/apis/meta#ReconcileRequestStatus">

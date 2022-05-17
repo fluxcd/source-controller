@@ -211,6 +211,17 @@ type GitRepositoryStatus struct {
 	// +optional
 	IncludedArtifacts []*Artifact `json:"includedArtifacts,omitempty"`
 
+	// ContentConfigChecksum is a checksum of all the configurations related to
+	// the content of the source artifact:
+	//  - .spec.ignore
+	//  - .spec.recurseSubmodules
+	//  - .spec.included and the checksum of the included artifacts
+	// observed in .status.observedGeneration version of the object. This can
+	// be used to determine if the content of the
+	// It has the format of `<algo>:<checksum>`, for example: `sha256:<checksum>`.
+	// +optional
+	ContentConfigChecksum string `json:"contentConfigChecksum,omitempty"`
+
 	meta.ReconcileRequestStatus `json:",inline"`
 }
 
