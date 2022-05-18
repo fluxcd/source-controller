@@ -57,6 +57,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
+	serror "github.com/fluxcd/source-controller/internal/error"
 	"github.com/fluxcd/source-controller/internal/features"
 	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
 	"github.com/fluxcd/source-controller/internal/reconcile/summarize"
@@ -1809,12 +1810,25 @@ func TestGitRepositoryReconciler_statusConditions(t *testing.T) {
 }
 
 func TestGitRepositoryReconciler_notify(t *testing.T) {
+	concreteCommit := git.Commit{
+		Hash:    git.Hash("some-hash"),
+		Message: "test commit",
+		Encoded: []byte("content"),
+	}
+	partialCommit := git.Commit{
+		Hash: git.Hash("some-hash"),
+	}
+
+	noopErr := serror.NewGeneric(fmt.Errorf("some no-op error"), "NoOpReason")
+	noopErr.Ignore = true
+
 	tests := []struct {
 		name             string
 		res              sreconcile.Result
 		resErr           error
 		oldObjBeforeFunc func(obj *sourcev1.GitRepository)
 		newObjBeforeFunc func(obj *sourcev1.GitRepository)
+		commit           git.Commit
 		wantEvent        string
 	}{
 		{
@@ -1829,7 +1843,8 @@ func TestGitRepositoryReconciler_notify(t *testing.T) {
 			newObjBeforeFunc: func(obj *sourcev1.GitRepository) {
 				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Checksum: "yyy"}
 			},
-			wantEvent: "Normal NewArtifact stored artifact for commit",
+			commit:    concreteCommit,
+			wantEvent: "Normal NewArtifact stored artifact for commit 'test commit'",
 		},
 		{
 			name:   "recovery from failure",
@@ -1844,7 +1859,8 @@ func TestGitRepositoryReconciler_notify(t *testing.T) {
 				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Checksum: "yyy"}
 				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "ready")
 			},
-			wantEvent: "Normal Succeeded stored artifact for commit",
+			commit:    concreteCommit,
+			wantEvent: "Normal Succeeded stored artifact for commit 'test commit'",
 		},
 		{
 			name:   "recovery and new artifact",
@@ -1859,7 +1875,8 @@ func TestGitRepositoryReconciler_notify(t *testing.T) {
 				obj.Status.Artifact = &sourcev1.Artifact{Revision: "aaa", Checksum: "bbb"}
 				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "ready")
 			},
-			wantEvent: "Normal NewArtifact stored artifact for commit",
+			commit:    concreteCommit,
+			wantEvent: "Normal NewArtifact stored artifact for commit 'test commit'",
 		},
 		{
 			name:   "no updates",
@@ -1873,6 +1890,22 @@ func TestGitRepositoryReconciler_notify(t *testing.T) {
 				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Checksum: "yyy"}
 				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "ready")
 			},
+		},
+		{
+			name:   "no-op error result",
+			res:    sreconcile.ResultEmpty,
+			resErr: noopErr,
+			oldObjBeforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Checksum: "yyy"}
+				conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.GitOperationFailedReason, "fail")
+				conditions.MarkFalse(obj, meta.ReadyCondition, meta.FailedReason, "foo")
+			},
+			newObjBeforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Checksum: "yyy"}
+				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "ready")
+			},
+			commit:    partialCommit, // no-op will always result in partial commit.
+			wantEvent: "Normal Succeeded stored artifact for commit 'HEAD/some-hash'",
 		},
 	}
 
@@ -1895,10 +1928,7 @@ func TestGitRepositoryReconciler_notify(t *testing.T) {
 				EventRecorder: recorder,
 				features:      features.FeatureGates(),
 			}
-			commit := &git.Commit{
-				Message: "test commit",
-			}
-			reconciler.notify(oldObj, newObj, *commit, tt.res, tt.resErr)
+			reconciler.notify(oldObj, newObj, tt.commit, tt.res, tt.resErr)
 
 			select {
 			case x, ok := <-recorder.Events:

@@ -291,11 +291,30 @@ func (r *GitRepositoryReconciler) reconcile(ctx context.Context, obj *sourcev1.G
 	return res, resErr
 }
 
-// notify emits notification related to the reconciliation.
-func (r *GitRepositoryReconciler) notify(oldObj, newObj *sourcev1.GitRepository, commit git.Commit, res sreconcile.Result, resErr error) {
-	// Notify successful reconciliation for new artifact and recovery from any
-	// failure.
+// shouldNotify analyzes the result of subreconcilers and determines if a
+// notification should be sent. It decides about the final informational
+// notifications after the reconciliation. Failure notification and in-line
+// notifications are not handled here.
+func (r *GitRepositoryReconciler) shouldNotify(oldObj, newObj *sourcev1.GitRepository, res sreconcile.Result, resErr error) bool {
+	// Notify for successful reconciliation.
 	if resErr == nil && res == sreconcile.ResultSuccess && newObj.Status.Artifact != nil {
+		return true
+	}
+	// Notify for no-op reconciliation with ignore error.
+	if resErr != nil && res == sreconcile.ResultEmpty && newObj.Status.Artifact != nil {
+		// Convert to Generic error and check for ignore.
+		if ge, ok := resErr.(*serror.Generic); ok {
+			return ge.Ignore == true
+		}
+	}
+	return false
+}
+
+// notify emits notification related to the result of reconciliation.
+func (r *GitRepositoryReconciler) notify(oldObj, newObj *sourcev1.GitRepository, commit git.Commit, res sreconcile.Result, resErr error) {
+	// Notify successful reconciliation for new artifact, no-op reconciliation
+	// and recovery from any failure.
+	if r.shouldNotify(oldObj, newObj, res, resErr) {
 		annotations := map[string]string{
 			sourcev1.GroupVersion.Group + "/revision": newObj.Status.Artifact.Revision,
 			sourcev1.GroupVersion.Group + "/checksum": newObj.Status.Artifact.Checksum,
@@ -306,7 +325,14 @@ func (r *GitRepositoryReconciler) notify(oldObj, newObj *sourcev1.GitRepository,
 			oldChecksum = oldObj.GetArtifact().Checksum
 		}
 
-		message := fmt.Sprintf("stored artifact for commit '%s'", commit.ShortMessage())
+		// A partial commit due to no-op clone doesn't contain the commit
+		// message information. Have separate message for it.
+		var message string
+		if git.IsConcreteCommit(commit) {
+			message = fmt.Sprintf("stored artifact for commit '%s'", commit.ShortMessage())
+		} else {
+			message = fmt.Sprintf("stored artifact for commit '%s'", commit.String())
+		}
 
 		// Notify on new artifact and failure recovery.
 		if oldChecksum != newObj.GetArtifact().Checksum {
