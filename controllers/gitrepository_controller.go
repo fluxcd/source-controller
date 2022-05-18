@@ -18,10 +18,12 @@ package controllers
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -289,11 +291,11 @@ func (r *GitRepositoryReconciler) reconcile(ctx context.Context, obj *sourcev1.G
 	return res, resErr
 }
 
-// notify emits notification related to the reconciliation.
+// notify emits notification related to the result of reconciliation.
 func (r *GitRepositoryReconciler) notify(oldObj, newObj *sourcev1.GitRepository, commit git.Commit, res sreconcile.Result, resErr error) {
-	// Notify successful reconciliation for new artifact and recovery from any
-	// failure.
-	if resErr == nil && res == sreconcile.ResultSuccess && newObj.Status.Artifact != nil {
+	// Notify successful reconciliation for new artifact, no-op reconciliation
+	// and recovery from any failure.
+	if r.shouldNotify(oldObj, newObj, res, resErr) {
 		annotations := map[string]string{
 			sourcev1.GroupVersion.Group + "/revision": newObj.Status.Artifact.Revision,
 			sourcev1.GroupVersion.Group + "/checksum": newObj.Status.Artifact.Checksum,
@@ -304,7 +306,14 @@ func (r *GitRepositoryReconciler) notify(oldObj, newObj *sourcev1.GitRepository,
 			oldChecksum = oldObj.GetArtifact().Checksum
 		}
 
-		message := fmt.Sprintf("stored artifact for commit '%s'", commit.ShortMessage())
+		// A partial commit due to no-op clone doesn't contain the commit
+		// message information. Have separate message for it.
+		var message string
+		if git.IsConcreteCommit(commit) {
+			message = fmt.Sprintf("stored artifact for commit '%s'", commit.ShortMessage())
+		} else {
+			message = fmt.Sprintf("stored artifact for commit '%s'", commit.String())
+		}
 
 		// Notify on new artifact and failure recovery.
 		if oldChecksum != newObj.GetArtifact().Checksum {
@@ -317,6 +326,25 @@ func (r *GitRepositoryReconciler) notify(oldObj, newObj *sourcev1.GitRepository,
 			}
 		}
 	}
+}
+
+// shouldNotify analyzes the result of subreconcilers and determines if a
+// notification should be sent. It decides about the final informational
+// notifications after the reconciliation. Failure notification and in-line
+// notifications are not handled here.
+func (r *GitRepositoryReconciler) shouldNotify(oldObj, newObj *sourcev1.GitRepository, res sreconcile.Result, resErr error) bool {
+	// Notify for successful reconciliation.
+	if resErr == nil && res == sreconcile.ResultSuccess && newObj.Status.Artifact != nil {
+		return true
+	}
+	// Notify for no-op reconciliation with ignore error.
+	if resErr != nil && res == sreconcile.ResultEmpty && newObj.Status.Artifact != nil {
+		// Convert to Generic error and check for ignore.
+		if ge, ok := resErr.(*serror.Generic); ok {
+			return ge.Ignore == true
+		}
+	}
+	return false
 }
 
 // reconcileStorage ensures the current state of the storage matches the
@@ -361,8 +389,15 @@ func (r *GitRepositoryReconciler) reconcileStorage(ctx context.Context,
 
 // reconcileSource ensures the upstream Git repository and reference can be
 // cloned and checked out using the specified configuration, and observes its
-// state.
+// state. It also checks if the included repositories are available for use.
 //
+// The included repositories are fetched and their metadata are stored. In case
+// one of the included repositories isn't ready, it records
+// v1beta2.IncludeUnavailableCondition=True and returns early. When all the
+// included repositories are ready, it removes
+// v1beta2.IncludeUnavailableCondition from the object.
+// When the included artifactSet differs from the current set in the Status of
+// the object, it marks the object with v1beta2.ArtifactOutdatedCondition=True.
 // The repository is cloned to the given dir, using the specified configuration
 // to check out the reference. In case of an error during this process
 // (including transient errors), it records v1beta2.FetchFailedCondition=True
@@ -377,8 +412,13 @@ func (r *GitRepositoryReconciler) reconcileStorage(ctx context.Context,
 // it records v1beta2.SourceVerifiedCondition=True.
 // When all the above is successful, the given Commit pointer is set to the
 // commit of the checked out Git repository.
+//
+// If the optimized git clone feature is enabled, it checks if the remote repo
+// and the local artifact are on the same revision, and no other source content
+// related configurations have changed since last reconciliation. If there's a
+// change, it short-circuits the whole reconciliation with an early return.
 func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context,
-	obj *sourcev1.GitRepository, commit *git.Commit, _ *artifactSet, dir string) (sreconcile.Result, error) {
+	obj *sourcev1.GitRepository, commit *git.Commit, includes *artifactSet, dir string) (sreconcile.Result, error) {
 	// Configure authentication strategy to access the source
 	var authOpts *git.AuthOptions
 	var err error
@@ -415,37 +455,6 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context,
 		return sreconcile.ResultEmpty, e
 	}
 
-	// Configure checkout strategy
-	checkoutOpts := git.CheckoutOptions{RecurseSubmodules: obj.Spec.RecurseSubmodules}
-	if ref := obj.Spec.Reference; ref != nil {
-		checkoutOpts.Branch = ref.Branch
-		checkoutOpts.Commit = ref.Commit
-		checkoutOpts.Tag = ref.Tag
-		checkoutOpts.SemVer = ref.SemVer
-	}
-
-	if val, ok := r.features[features.OptimizedGitClones]; ok && val {
-		// Only if the object is ready, use the last revision to attempt
-		// short-circuiting clone operation.
-		if conditions.IsTrue(obj, meta.ReadyCondition) {
-			if artifact := obj.GetArtifact(); artifact != nil {
-				checkoutOpts.LastRevision = artifact.Revision
-			}
-		}
-	}
-
-	checkoutStrategy, err := strategy.CheckoutStrategyForImplementation(ctx,
-		git.Implementation(obj.Spec.GitImplementation), checkoutOpts)
-	if err != nil {
-		e := &serror.Stalling{
-			Err:    fmt.Errorf("failed to configure checkout strategy for Git implementation '%s': %w", obj.Spec.GitImplementation, err),
-			Reason: sourcev1.GitOperationFailedReason,
-		}
-		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
-		// Do not return err as recovery without changes is impossible
-		return sreconcile.ResultEmpty, e
-	}
-
 	repositoryURL := obj.Spec.URL
 	// managed GIT transport only affects the libgit2 implementation
 	if managed.Enabled() && obj.Spec.GitImplementation == sourcev1.LibGit2Implementation {
@@ -473,32 +482,77 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context,
 		}
 	}
 
-	// Checkout HEAD of reference in object
-	gitCtx, cancel := context.WithTimeout(ctx, obj.Spec.Timeout.Duration)
-	defer cancel()
-	c, err := checkoutStrategy.Checkout(gitCtx, dir, repositoryURL, authOpts)
+	// Fetch the included artifact metadata.
+	artifacts, err := r.fetchIncludes(ctx, obj)
 	if err != nil {
-		var v git.NoChangesError
-		if errors.As(err, &v) {
-			// Create generic error without notification. Since it's a no-op
-			// error, ignore (no runtime error), normal event.
-			ge := serror.NewGeneric(v, sourcev1.GitOperationSucceedReason)
-			ge.Notification = false
-			ge.Ignore = true
-			ge.Event = corev1.EventTypeNormal
-			return sreconcile.ResultEmpty, ge
-		}
+		return sreconcile.ResultEmpty, err
+	}
 
+	// Observe if the artifacts still match the previous included ones
+	if artifacts.Diff(obj.Status.IncludedArtifacts) {
+		message := fmt.Sprintf("included artifacts differ from last observed includes")
+		conditions.MarkTrue(obj, sourcev1.ArtifactOutdatedCondition, "IncludeChange", message)
+		conditions.MarkReconciling(obj, "IncludeChange", message)
+	}
+
+	// Persist the ArtifactSet.
+	*includes = *artifacts
+
+	var optimizedClone bool
+	if val, ok := r.features[features.OptimizedGitClones]; ok && val {
+		optimizedClone = true
+	}
+
+	c, err := r.gitCheckout(ctx, obj, repositoryURL, authOpts, dir, optimizedClone)
+	if err != nil {
 		e := serror.NewGeneric(
 			fmt.Errorf("failed to checkout and determine revision: %w", err),
 			sourcev1.GitOperationFailedReason,
 		)
 		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
-		// Coin flip on transient or persistent error, return error and hope for the best
 		return sreconcile.ResultEmpty, e
 	}
 	// Assign the commit to the shared commit reference.
 	*commit = *c
+
+	// If it's a partial commit obtained from an existing artifact, check if the
+	// reconciliation can be skipped if other configurations have not changed.
+	if !git.IsConcreteCommit(*commit) {
+		// Calculate content configuration checksum.
+		if r.calculateContentConfigChecksum(obj, includes) == obj.Status.ContentConfigChecksum {
+			ge := serror.NewGeneric(
+				fmt.Errorf("no changes since last reconcilation: observed revision '%s'",
+					commit.String()), sourcev1.GitOperationSucceedReason,
+			)
+			ge.Notification = false
+			ge.Ignore = true
+			ge.Event = corev1.EventTypeNormal
+			// Remove any stale fetch failed condition.
+			conditions.Delete(obj, sourcev1.FetchFailedCondition)
+			// IMPORTANT: This must be set to ensure that the observed
+			// generation of this condition is updated. In case of full
+			// reconciliation reconcileArtifact() ensures that it's set at the
+			// very end.
+			conditions.MarkTrue(obj, sourcev1.ArtifactInStorageCondition, meta.SucceededReason,
+				"stored artifact for revision '%s'", commit.String())
+			// TODO: Find out if such condition setting is needed when commit
+			// signature verification is enabled.
+			return sreconcile.ResultEmpty, ge
+		}
+
+		// If we can't skip the reconciliation, checkout again without any
+		// optimization.
+		c, err := r.gitCheckout(ctx, obj, repositoryURL, authOpts, dir, false)
+		if err != nil {
+			e := serror.NewGeneric(
+				fmt.Errorf("failed to checkout and determine revision: %w", err),
+				sourcev1.GitOperationFailedReason,
+			)
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
+			return sreconcile.ResultEmpty, e
+		}
+		*commit = *c
+	}
 	ctrl.LoggerFrom(ctx).V(logger.DebugLevel).Info("git repository checked out", "url", obj.Spec.URL, "revision", commit.String())
 	conditions.Delete(obj, sourcev1.FetchFailedCondition)
 
@@ -521,21 +575,27 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context,
 //
 // The inspection of the given data to the object is differed, ensuring any
 // stale observations like v1beta2.ArtifactOutdatedCondition are removed.
-// If the given Artifact and/or artifactSet (includes) do not differ from the
-// object's current, it returns early.
+// If the given Artifact and/or artifactSet (includes) and the content config
+// checksum do not differ from the object's current, it returns early.
 // Source ignore patterns are loaded, and the given directory is archived while
 // taking these patterns into account.
-// On a successful archive, the Artifact and Includes in the Status of the
-// object are set, and the symlink in the Storage is updated to its path.
+// On a successful archive, the Artifact, Includes and new content config
+// checksum in the Status of the object are set, and the symlink in the Storage
+// is updated to its path.
 func (r *GitRepositoryReconciler) reconcileArtifact(ctx context.Context,
 	obj *sourcev1.GitRepository, commit *git.Commit, includes *artifactSet, dir string) (sreconcile.Result, error) {
 
 	// Create potential new artifact with current available metadata
 	artifact := r.Storage.NewArtifactFor(obj.Kind, obj.GetObjectMeta(), commit.String(), fmt.Sprintf("%s.tar.gz", commit.Hash.String()))
 
+	// Calculate the content config checksum.
+	ccc := r.calculateContentConfigChecksum(obj, includes)
+
 	// Set the ArtifactInStorageCondition if there's no drift.
 	defer func() {
-		if obj.GetArtifact().HasRevision(artifact.Revision) && !includes.Diff(obj.Status.IncludedArtifacts) {
+		if obj.GetArtifact().HasRevision(artifact.Revision) &&
+			!includes.Diff(obj.Status.IncludedArtifacts) &&
+			obj.Status.ContentConfigChecksum == ccc {
 			conditions.Delete(obj, sourcev1.ArtifactOutdatedCondition)
 			conditions.MarkTrue(obj, sourcev1.ArtifactInStorageCondition, meta.SucceededReason,
 				"stored artifact for revision '%s'", artifact.Revision)
@@ -543,7 +603,9 @@ func (r *GitRepositoryReconciler) reconcileArtifact(ctx context.Context,
 	}()
 
 	// The artifact is up-to-date
-	if obj.GetArtifact().HasRevision(artifact.Revision) && !includes.Diff(obj.Status.IncludedArtifacts) {
+	if obj.GetArtifact().HasRevision(artifact.Revision) &&
+		!includes.Diff(obj.Status.IncludedArtifacts) &&
+		obj.Status.ContentConfigChecksum == ccc {
 		r.eventLogf(ctx, obj, events.EventTypeTrace, sourcev1.ArtifactUpToDateReason, "artifact up-to-date with remote revision: '%s'", artifact.Revision)
 		return sreconcile.ResultSuccess, nil
 	}
@@ -609,6 +671,7 @@ func (r *GitRepositoryReconciler) reconcileArtifact(ctx context.Context,
 	// Record it on the object
 	obj.Status.Artifact = artifact.DeepCopy()
 	obj.Status.IncludedArtifacts = *includes
+	obj.Status.ContentConfigChecksum = ccc
 
 	// Update symlink on a "best effort" basis
 	url, err := r.Storage.Symlink(artifact, "latest.tar.gz")
@@ -636,7 +699,6 @@ func (r *GitRepositoryReconciler) reconcileArtifact(ctx context.Context,
 func (r *GitRepositoryReconciler) reconcileInclude(ctx context.Context,
 	obj *sourcev1.GitRepository, _ *git.Commit, includes *artifactSet, dir string) (sreconcile.Result, error) {
 
-	artifacts := make(artifactSet, len(obj.Spec.Include))
 	for i, incl := range obj.Spec.Include {
 		// Do this first as it is much cheaper than copy operations
 		toPath, err := securejoin.SecureJoin(dir, incl.GetToPath())
@@ -645,56 +707,142 @@ func (r *GitRepositoryReconciler) reconcileInclude(ctx context.Context,
 				fmt.Errorf("path calculation for include '%s' failed: %w", incl.GitRepositoryRef.Name, err),
 				"IllegalPath",
 			)
-			conditions.MarkTrue(obj, sourcev1.IncludeUnavailableCondition, e.Reason, e.Err.Error())
+			conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition, e.Reason, e.Err.Error())
 			return sreconcile.ResultEmpty, e
 		}
 
-		// Retrieve the included GitRepository
+		// Get artifact at the same include index. The artifactSet is created
+		// such that the index of artifactSet matches with the index of Include.
+		// Hence, index is used here to pick the associated artifact from
+		// includes.
+		var artifact *sourcev1.Artifact
+		for j, art := range *includes {
+			if i == j {
+				artifact = art
+			}
+		}
+
+		// Copy artifact (sub)contents to configured directory.
+		if err := r.Storage.CopyToPath(artifact, incl.GetFromPath(), toPath); err != nil {
+			e := &serror.Event{
+				Err:    fmt.Errorf("failed to copy '%s' include from %s to %s: %w", incl.GitRepositoryRef.Name, incl.GetFromPath(), incl.GetToPath(), err),
+				Reason: "CopyFailure",
+			}
+			conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition, e.Reason, e.Err.Error())
+			return sreconcile.ResultEmpty, e
+		}
+	}
+	conditions.Delete(obj, sourcev1.IncludeUnavailableCondition)
+	return sreconcile.ResultSuccess, nil
+}
+
+// gitCheckout builds checkout options with the given configurations and
+// performs a git checkout.
+func (r *GitRepositoryReconciler) gitCheckout(ctx context.Context,
+	obj *sourcev1.GitRepository, repoURL string, authOpts *git.AuthOptions, dir string, optimized bool) (*git.Commit, error) {
+	// Configure checkout strategy.
+	checkoutOpts := git.CheckoutOptions{RecurseSubmodules: obj.Spec.RecurseSubmodules}
+	if ref := obj.Spec.Reference; ref != nil {
+		checkoutOpts.Branch = ref.Branch
+		checkoutOpts.Commit = ref.Commit
+		checkoutOpts.Tag = ref.Tag
+		checkoutOpts.SemVer = ref.SemVer
+	}
+
+	// Only if the object has an existing artifact in storage, attempt to
+	// short-circuit clone operation. reconcileStorage has already verified
+	// that the artifact exists.
+	if optimized && conditions.IsTrue(obj, sourcev1.ArtifactInStorageCondition) {
+		if artifact := obj.GetArtifact(); artifact != nil {
+			checkoutOpts.LastRevision = artifact.Revision
+		}
+	}
+
+	checkoutStrategy, err := strategy.CheckoutStrategyForImplementation(ctx,
+		git.Implementation(obj.Spec.GitImplementation), checkoutOpts)
+	if err != nil {
+		e := &serror.Stalling{
+			Err:    fmt.Errorf("failed to configure checkout strategy for Git implementation '%s': %w", obj.Spec.GitImplementation, err),
+			Reason: sourcev1.GitOperationFailedReason,
+		}
+		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
+		// Do not return err as recovery without changes is impossible.
+		return nil, e
+	}
+
+	// Checkout HEAD of reference in object
+	gitCtx, cancel := context.WithTimeout(ctx, obj.Spec.Timeout.Duration)
+	defer cancel()
+	return checkoutStrategy.Checkout(gitCtx, dir, repoURL, authOpts)
+}
+
+// fetchIncludes fetches artifact metadata of all the included repos.
+func (r *GitRepositoryReconciler) fetchIncludes(ctx context.Context, obj *sourcev1.GitRepository) (*artifactSet, error) {
+	artifacts := make(artifactSet, len(obj.Spec.Include))
+	for i, incl := range obj.Spec.Include {
+		// Retrieve the included GitRepository.
 		dep := &sourcev1.GitRepository{}
 		if err := r.Get(ctx, types.NamespacedName{Namespace: obj.Namespace, Name: incl.GitRepositoryRef.Name}, dep); err != nil {
-			e := serror.NewGeneric(
+			e := serror.NewWaiting(
 				fmt.Errorf("could not get resource for include '%s': %w", incl.GitRepositoryRef.Name, err),
 				"NotFound",
 			)
+			e.RequeueAfter = r.requeueDependency
 			conditions.MarkTrue(obj, sourcev1.IncludeUnavailableCondition, e.Reason, e.Err.Error())
-			return sreconcile.ResultEmpty, e
+			return nil, e
 		}
 
 		// Confirm include has an artifact
 		if dep.GetArtifact() == nil {
-			e := serror.NewGeneric(
+			e := serror.NewWaiting(
 				fmt.Errorf("no artifact available for include '%s'", incl.GitRepositoryRef.Name),
 				"NoArtifact",
 			)
+			e.RequeueAfter = r.requeueDependency
 			conditions.MarkTrue(obj, sourcev1.IncludeUnavailableCondition, e.Reason, e.Err.Error())
-			return sreconcile.ResultEmpty, e
+			return nil, e
 		}
 
-		// Copy artifact (sub)contents to configured directory
-		if err := r.Storage.CopyToPath(dep.GetArtifact(), incl.GetFromPath(), toPath); err != nil {
-			e := serror.NewGeneric(
-				fmt.Errorf("failed to copy '%s' include from %s to %s: %w", incl.GitRepositoryRef.Name, incl.GetFromPath(), incl.GetToPath(), err),
-				"CopyFailure",
-			)
-			conditions.MarkTrue(obj, sourcev1.IncludeUnavailableCondition, e.Reason, e.Err.Error())
-			return sreconcile.ResultEmpty, e
-		}
 		artifacts[i] = dep.GetArtifact().DeepCopy()
 	}
 
-	// We now know all includes are available
+	// We now know all the includes are available.
 	conditions.Delete(obj, sourcev1.IncludeUnavailableCondition)
 
-	// Observe if the artifacts still match the previous included ones
-	if artifacts.Diff(obj.Status.IncludedArtifacts) {
-		message := fmt.Sprintf("included artifacts differ from last observed includes")
-		conditions.MarkTrue(obj, sourcev1.ArtifactOutdatedCondition, "IncludeChange", message)
-		conditions.MarkReconciling(obj, "IncludeChange", message)
+	return &artifacts, nil
+}
+
+// calculateContentConfigChecksum calculates a checksum of all the
+// configurations that result in a change in the source artifact. It can be used
+// to decide if further reconciliation is needed when an artifact already exists
+// for a set of configurations.
+func (r *GitRepositoryReconciler) calculateContentConfigChecksum(obj *sourcev1.GitRepository, includes *artifactSet) string {
+	c := []byte{}
+	// Consider the ignore rules and recurse submodules.
+	if obj.Spec.Ignore != nil {
+		c = append(c, []byte(*obj.Spec.Ignore)...)
+	}
+	c = append(c, []byte(strconv.FormatBool(obj.Spec.RecurseSubmodules))...)
+
+	// Consider the included repository attributes.
+	for _, incl := range obj.Spec.Include {
+		c = append(c, []byte(incl.GitRepositoryRef.Name+incl.FromPath+incl.ToPath)...)
 	}
 
-	// Persist the artifactSet.
-	*includes = artifacts
-	return sreconcile.ResultSuccess, nil
+	// Consider the checksum and revision of all the included remote artifact.
+	// This ensures that if the included repos get updated, this checksum changes.
+	// NOTE: The content of an artifact may change at the same revision if the
+	// ignore rules change. Hence, consider both checksum and revision to
+	// capture changes in artifact checksum as well.
+	// TODO: Fix artifactSet.Diff() to consider checksum as well.
+	if includes != nil {
+		for _, incl := range *includes {
+			c = append(c, []byte(incl.Checksum)...)
+			c = append(c, []byte(incl.Revision)...)
+		}
+	}
+
+	return fmt.Sprintf("sha256:%x", sha256.Sum256(c))
 }
 
 // verifyCommitSignature verifies the signature of the given Git commit, if a

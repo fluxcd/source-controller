@@ -405,9 +405,12 @@ Optimized Git clones decreases resource utilization for GitRepository
 reconciliations. It supports both `go-git` and `libgit2` implementations
 when cloning repositories using branches or tags.
 
-When enabled, avoids full clone operations by first checking whether
-the last revision is still the same at the target repository,
-and if that is so, skips the reconciliation.
+When enabled, it avoids full Git clone operations by first checking whether
+the revision of the last stored artifact is still the head of the remote
+repository and none of the other factors that contribute to a change in the
+artifact, like ignore rules and included repositories, have changed. If that is
+so, the reconciliation is skipped. Else, a full reconciliation is performed as
+usual.
 
 This feature is enabled by default. It can be disabled by starting the
 controller with the argument `--feature-gates=OptimizedGitClones=false`.
@@ -837,6 +840,13 @@ exponential backoff, until it succeeds and the GitRepository is marked as
 Note that a GitRepository can be [reconciling](#reconciling-gitrepository)
 while failing at the same time, for example due to a newly introduced
 configuration issue in the GitRepository spec.
+
+### Content Configuration Checksum
+
+The source-controller calculates the SHA256 checksum of the various
+configurations of the GitRepository that indicate a change in source and
+records it in `.status.contentConfigChecksum`. This field is used to determine
+if the source artifact needs to be rebuilt.
 
 ### Observed Generation
 
