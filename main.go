@@ -42,6 +42,7 @@ import (
 	"github.com/fluxcd/pkg/runtime/pprof"
 	"github.com/fluxcd/pkg/runtime/probes"
 	"github.com/fluxcd/source-controller/internal/features"
+	"github.com/fluxcd/source-controller/internal/helm/util"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
 	"github.com/fluxcd/source-controller/controllers"
@@ -61,6 +62,10 @@ var (
 		getter.Provider{
 			Schemes: []string{"http", "https"},
 			New:     getter.NewHTTPGetter,
+		},
+		getter.Provider{
+			Schemes: []string{"oci"},
+			New:     getter.NewOCIGetter,
 		},
 	}
 )
@@ -228,6 +233,21 @@ func main() {
 		os.Exit(1)
 	}
 
+	if err = (&controllers.HelmRepositoryOCIReconciler{
+		Client:                  mgr.GetClient(),
+		EventRecorder:           eventRecorder,
+		Metrics:                 metricsH,
+		Getters:                 getters,
+		ControllerName:          controllerName,
+		RegistryClientGenerator: util.RegistryClientGenerator,
+	}).SetupWithManagerAndOptions(mgr, controllers.HelmRepositoryReconcilerOptions{
+		MaxConcurrentReconciles: concurrent,
+		RateLimiter:             helper.GetRateLimiter(rateLimiterOptions),
+	}); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", sourcev1.HelmRepositoryKind)
+		os.Exit(1)
+	}
+
 	var c *cache.Cache
 	var ttl time.Duration
 	if helmCacheMaxSize > 0 {
@@ -249,15 +269,16 @@ func main() {
 	cacheRecorder := cache.MustMakeMetrics()
 
 	if err = (&controllers.HelmChartReconciler{
-		Client:         mgr.GetClient(),
-		Storage:        storage,
-		Getters:        getters,
-		EventRecorder:  eventRecorder,
-		Metrics:        metricsH,
-		ControllerName: controllerName,
-		Cache:          c,
-		TTL:            ttl,
-		CacheRecorder:  cacheRecorder,
+		Client:                  mgr.GetClient(),
+		RegistryClientGenerator: util.RegistryClientGenerator,
+		Storage:                 storage,
+		Getters:                 getters,
+		EventRecorder:           eventRecorder,
+		Metrics:                 metricsH,
+		ControllerName:          controllerName,
+		Cache:                   c,
+		TTL:                     ttl,
+		CacheRecorder:           cacheRecorder,
 	}).SetupWithManagerAndOptions(mgr, controllers.HelmChartReconcilerOptions{
 		MaxConcurrentReconciles: concurrent,
 		RateLimiter:             helper.GetRateLimiter(rateLimiterOptions),

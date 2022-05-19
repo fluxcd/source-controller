@@ -1,9 +1,15 @@
 # Helm Repositories
 
-The `HelmRepository` API defines a Source to produce an Artifact for a Helm
-repository index YAML (`index.yaml`).
+There are 2 [Helm repository types](#type) defined by the `HelmRepository` API:
+- Helm HTTP/S repository, which defines a Source to produce an Artifact for a Helm
+repository index YAML (`index.yaml`). 
+- OCI Helm repository, which defines a source that does not produce an Artifact. 
+Instead a validation of the Helm repository is performed and the outcome is reported in the
+`.status.conditions` field.
 
-## Example
+## Examples
+
+### Helm HTTP/S repository
 
 The following is an example of a HelmRepository. It creates a YAML (`.yaml`)
 Artifact from the fetched Helm repository index (in this example the [podinfo
@@ -83,6 +89,63 @@ You can run this example by saving the manifest into `helmrepository.yaml`.
      Normal  NewArtifact                 1m                 source-controller  fetched index of size 30.88kB from 'https://stefanprodan.github.io/podinfo'
    ```
 
+### Helm OCI repository
+
+The following is an example of an OCI HelmRepository.
+
+```yaml
+---
+apiVersion: source.toolkit.fluxcd.io/v1beta2
+kind: HelmRepository
+metadata:
+  name: podinfo
+  namespace: default
+spec:
+  type: "oci"
+  interval: 5m0s
+  url: oci://ghcr.io/stefanprodan/charts
+```
+
+In the above example:
+
+- A HelmRepository named `podinfo` is created, indicated by the
+  `.metadata.name` field.
+- The source-controller performs the Helm repository url validation i.e. the url 
+is a valid OCI registry url, every five minutes with the information indicated by the
+`.spec.interval` and `.spec.url` fields.
+
+You can run this example by saving the manifest into `helmrepository.yaml`.
+
+1. Apply the resource on the cluster:
+
+   ```sh
+   kubectl apply -f helmrepository.yaml
+   ```
+
+2. Run `kubectl get helmrepository` to see the HelmRepository:
+
+   ```console
+   NAME      URL                                 AGE     READY   STATUS
+   podinfo   oci://ghcr.io/stefanprodan/charts   3m22s   True    Helm repository "podinfo" is ready
+   ```
+
+3. Run `kubectl describe helmrepository podinfo` to see the [Conditions](#conditions) 
+in the HelmRepository's Status:
+
+   ```console
+   ...
+   Status:
+     Conditions:
+       Last Transition Time:  2022-05-12T14:02:12Z
+       Message:               Helm repository "podinfo" is ready
+       Observed Generation:   1
+       Reason:                Succeeded
+       Status:                True
+       Type:                  Ready
+     Observed Generation:     1
+   Events:                    <none>
+   ```
+
 ## Writing a HelmRepository spec
 
 As with all other Kubernetes config, a HelmRepository needs `apiVersion`,
@@ -91,6 +154,13 @@ valid [DNS subdomain name](https://kubernetes.io/docs/concepts/overview/working-
 
 A HelmRepository also needs a
 [`.spec` section](https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md#spec-and-status).
+
+
+### Type
+
+`.spec.type` is an optional field that specifies the Helm repository type. 
+
+Possible values are `default` for a Helm HTTP/S repository, or `oci` for an OCI Helm repository.
 
 ### Interval
 
@@ -107,9 +177,12 @@ change to the spec), this is handled instantly outside the interval window.
 
 ### URL
 
-`.spec.url` is a required field that specifies the HTTP/S address of the Helm
-repository. For Helm repositories which require authentication, see
-[Secret reference](#secret-reference).
+`.spec.url` is a required field that depending on the [type of the HelmRepository object](#type)
+specifies the HTTP/S or OCI address of a Helm repository.
+
+For OCI, the URL is expected to point to a registry repository, e.g. `oci://ghcr.io/fluxcd/source-controller`.
+
+For Helm repositories which require authentication, see [Secret reference](#secret-reference).
 
 ### Timeout
 
@@ -156,7 +229,35 @@ stringData:
   password: 123456
 ```
 
+OCI Helm repository example:
+
+```yaml
+---
+apiVersion: source.toolkit.fluxcd.io/v1beta2
+kind: HelmRepository
+metadata:
+  name: podinfo
+  namespace: default
+spec:
+  interval: 5m0s
+  url: oci://ghcr.io/stefanprodan/charts
+  type: "oci"
+  secretRef:
+    name: oci-creds
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: oci-creds
+  namespace: default
+stringData:
+  username: example
+  password: 123456
+```
+
 #### TLS authentication
+
+**Note:** TLS authentication is not yet supported by OCI Helm repositories.
 
 To provide TLS credentials to use while connecting with the Helm repository,
 the referenced Secret is expected to contain `.data.certFile` and
@@ -197,7 +298,8 @@ match the host as defined in URL. This may for example be required if the host
 advertised chart URLs in the index differ from the specified URL.
 
 Enabling this should be done with caution, as it can potentially result in
-credentials getting stolen in a man-in-the-middle attack.
+credentials getting stolen in a man-in-the-middle attack. This feature only applies
+to HTTP/S Helm repositories.
 
 ### Suspend
 
@@ -379,6 +481,8 @@ specific HelmRepository, e.g. `flux logs --level=error --kind=HelmRepository --n
 
 ### Artifact
 
+**Note:** This section does not apply to [OCI Helm Repositories](#oci-helm-repositories), they do not emit artifacts.
+
 The HelmRepository reports the last fetched repository index as an Artifact
 object in the `.status.artifact` of the resource.
 
@@ -417,6 +521,9 @@ specification][kstatus-spec],
 and reports `Reconciling` and `Stalled` conditions where applicable to
 provide better (timeout) support to solutions polling the HelmRepository to become
 `Ready`.
+
+ OCI Helm repositories use only `Reconciling`, `Ready`, `FetchFailed`, and `Stalled`
+ condition types.
 
 #### Reconciling HelmRepository
 
