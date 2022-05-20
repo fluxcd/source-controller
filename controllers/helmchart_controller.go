@@ -492,7 +492,7 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 		}
 
 		// Build registryClient options from secret
-		logOpt, err := loginOptionFromSecret(*secret)
+		logOpt, err := loginOptionFromSecret(repo.Spec.URL, *secret)
 		if err != nil {
 			e := &serror.Event{
 				Err:    fmt.Errorf("failed to configure Helm client with secret data: %w", err),

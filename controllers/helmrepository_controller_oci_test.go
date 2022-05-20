@@ -17,6 +17,7 @@ limitations under the License.
 package controllers
 
 import (
+	"encoding/base64"
 	"fmt"
 	"testing"
 
@@ -36,6 +37,7 @@ import (
 func TestHelmRepositoryOCIReconciler_Reconcile(t *testing.T) {
 	tests := []struct {
 		name       string
+		secretType corev1.SecretType
 		secretData map[string][]byte
 	}{
 		{
@@ -48,6 +50,15 @@ func TestHelmRepositoryOCIReconciler_Reconcile(t *testing.T) {
 		{
 			name:       "no auth data",
 			secretData: nil,
+		},
+		{
+			name:       "dockerconfigjson Secret",
+			secretType: corev1.SecretTypeDockerConfigJson,
+			secretData: map[string][]byte{
+				".dockerconfigjson": []byte(`{"auths":{"` +
+					testRegistryserver.DockerRegistryHost + `":{"` +
+					`auth":"` + base64.StdEncoding.EncodeToString([]byte(testUsername+":"+testPassword)) + `"}}}`),
+			},
 		},
 	}
 
@@ -65,6 +76,9 @@ func TestHelmRepositoryOCIReconciler_Reconcile(t *testing.T) {
 					Namespace:    ns.Name,
 				},
 				Data: tt.secretData,
+			}
+			if tt.secretType != "" {
+				secret.Type = tt.secretType
 			}
 
 			g.Expect(testEnv.CreateAndWait(ctx, secret)).To(Succeed())

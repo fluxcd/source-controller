@@ -19,6 +19,7 @@ package controllers
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
@@ -825,6 +826,35 @@ func TestHelmChartReconciler_buildFromOCIHelmRepository(t *testing.T) {
 		assertFunc func(g *WithT, obj *sourcev1.HelmChart, build chart.Build)
 		cleanFunc  func(g *WithT, build *chart.Build)
 	}{
+		{
+			name: "Reconciles chart build with docker repository credentials",
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "auth",
+				},
+				Type: corev1.SecretTypeDockerConfigJson,
+				Data: map[string][]byte{
+					".dockerconfigjson": []byte(`{"auths":{"` +
+						testRegistryserver.DockerRegistryHost + `":{"` +
+						`auth":"` + base64.StdEncoding.EncodeToString([]byte(testUsername+":"+testPassword)) + `"}}}`),
+				},
+			},
+			beforeFunc: func(obj *sourcev1.HelmChart, repository *sourcev1.HelmRepository) {
+				obj.Spec.Chart = metadata.Name
+				obj.Spec.Version = metadata.Version
+				repository.Spec.SecretRef = &meta.LocalObjectReference{Name: "auth"}
+			},
+			want: sreconcile.ResultSuccess,
+			assertFunc: func(g *WithT, _ *sourcev1.HelmChart, build chart.Build) {
+				g.Expect(build.Name).To(Equal(metadata.Name))
+				g.Expect(build.Version).To(Equal(metadata.Version))
+				g.Expect(build.Path).ToNot(BeEmpty())
+				g.Expect(build.Path).To(BeARegularFile())
+			},
+			cleanFunc: func(g *WithT, build *chart.Build) {
+				g.Expect(os.Remove(build.Path)).To(Succeed())
+			},
+		},
 		{
 			name: "Reconciles chart build with repository credentials",
 			secret: &corev1.Secret{

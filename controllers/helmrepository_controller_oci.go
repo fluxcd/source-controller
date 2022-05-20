@@ -17,12 +17,15 @@ limitations under the License.
 package controllers
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"net/url"
 	"os"
 	"strings"
 	"time"
 
+	"github.com/docker/cli/cli/config"
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	helper "github.com/fluxcd/pkg/runtime/controller"
@@ -273,7 +276,7 @@ func (r *HelmRepositoryOCIReconciler) reconcileSource(ctx context.Context, obj *
 		}
 
 		// Construct actual options
-		logOpt, err := loginOptionFromSecret(secret)
+		logOpt, err := loginOptionFromSecret(obj.Spec.URL, secret)
 		if err != nil {
 			e := &serror.Event{
 				Err:    fmt.Errorf("failed to configure Helm client with secret data: %w", err),
@@ -352,8 +355,30 @@ func (r *HelmRepositoryOCIReconciler) validateSource(ctx context.Context, obj *s
 	return sreconcile.ResultSuccess, nil
 }
 
-func loginOptionFromSecret(secret corev1.Secret) (registry.LoginOption, error) {
-	username, password := string(secret.Data["username"]), string(secret.Data["password"])
+// loginOptionFromSecret derives authentication data from a Secret to login to an OCI registry. This Secret
+// may either hold "username" and "password" fields or be of the corev1.SecretTypeDockerConfigJson type and hold
+// a corev1.DockerConfigJsonKey field with a complete Docker configuration. If both, "username" and "password" are
+// empty, a nil LoginOption and a nil error will be returned.
+func loginOptionFromSecret(registryURL string, secret corev1.Secret) (registry.LoginOption, error) {
+	var username, password string
+	if secret.Type == corev1.SecretTypeDockerConfigJson {
+		dockerCfg, err := config.LoadFromReader(bytes.NewReader(secret.Data[corev1.DockerConfigJsonKey]))
+		if err != nil {
+			return nil, fmt.Errorf("unable to load Docker config: %w", err)
+		}
+		parsedURL, err := url.Parse(registryURL)
+		if err != nil {
+			return nil, fmt.Errorf("unable to parse registry URL: %w", err)
+		}
+		authConfig, err := dockerCfg.GetAuthConfig(parsedURL.Host)
+		if err != nil {
+			return nil, fmt.Errorf("unable to get authentication data from Secret: %w", err)
+		}
+		username = authConfig.Username
+		password = authConfig.Password
+	} else {
+		username, password = string(secret.Data["username"]), string(secret.Data["password"])
+	}
 	switch {
 	case username == "" && password == "":
 		return nil, nil
