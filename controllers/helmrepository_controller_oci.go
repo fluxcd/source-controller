@@ -284,7 +284,9 @@ func (r *HelmRepositoryOCIReconciler) reconcileSource(ctx context.Context, obj *
 			return sreconcile.ResultEmpty, e
 		}
 
-		logOpts = append(logOpts, logOpt)
+		if logOpt != nil {
+			logOpts = append(logOpts, logOpt)
+		}
 	}
 
 	if result, err := r.validateSource(ctx, obj, logOpts...); err != nil || result == sreconcile.ResultEmpty {

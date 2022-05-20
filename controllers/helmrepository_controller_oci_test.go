@@ -34,99 +34,116 @@ import (
 )
 
 func TestHelmRepositoryOCIReconciler_Reconcile(t *testing.T) {
-	g := NewWithT(t)
-
-	ns, err := testEnv.CreateNamespace(ctx, "helmrepository-oci-reconcile-test")
-	g.Expect(err).ToNot(HaveOccurred())
-	defer func() { g.Expect(testEnv.Delete(ctx, ns)).To(Succeed()) }()
-
-	secret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			GenerateName: "helmrepository-",
-			Namespace:    ns.Name,
-		},
-		Data: map[string][]byte{
-			"username": []byte(testUsername),
-			"password": []byte(testPassword),
-		},
-	}
-
-	g.Expect(testEnv.CreateAndWait(ctx, secret)).To(Succeed())
-
-	obj := &sourcev1.HelmRepository{
-		ObjectMeta: metav1.ObjectMeta{
-			GenerateName: "helmrepository-oci-reconcile-",
-			Namespace:    ns.Name,
-		},
-		Spec: sourcev1.HelmRepositorySpec{
-			Interval: metav1.Duration{Duration: interval},
-			URL:      fmt.Sprintf("oci://%s", testRegistryserver.DockerRegistryHost),
-			SecretRef: &meta.LocalObjectReference{
-				Name: secret.Name,
+	tests := []struct {
+		name       string
+		secretData map[string][]byte
+	}{
+		{
+			name: "valid auth data",
+			secretData: map[string][]byte{
+				"username": []byte(testUsername),
+				"password": []byte(testPassword),
 			},
-			Type: sourcev1.HelmRepositoryTypeOCI,
+		},
+		{
+			name:       "no auth data",
+			secretData: nil,
 		},
 	}
-	g.Expect(testEnv.Create(ctx, obj)).To(Succeed())
 
-	key := client.ObjectKey{Name: obj.Name, Namespace: obj.Namespace}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
 
-	// Wait for finalizer to be set
-	g.Eventually(func() bool {
-		if err := testEnv.Get(ctx, key, obj); err != nil {
-			return false
-		}
-		return len(obj.Finalizers) > 0
-	}, timeout).Should(BeTrue())
+			ns, err := testEnv.CreateNamespace(ctx, "helmrepository-oci-reconcile-test")
+			g.Expect(err).ToNot(HaveOccurred())
+			defer func() { g.Expect(testEnv.Delete(ctx, ns)).To(Succeed()) }()
 
-	// Wait for HelmRepository to be Ready
-	g.Eventually(func() bool {
-		if err := testEnv.Get(ctx, key, obj); err != nil {
-			return false
-		}
-		if !conditions.IsReady(obj) {
-			return false
-		}
-		readyCondition := conditions.Get(obj, meta.ReadyCondition)
-		return obj.Generation == readyCondition.ObservedGeneration &&
-			obj.Generation == obj.Status.ObservedGeneration
-	}, timeout).Should(BeTrue())
+			secret := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					GenerateName: "helmrepository-",
+					Namespace:    ns.Name,
+				},
+				Data: tt.secretData,
+			}
 
-	// Check if the object status is valid.
-	condns := &status.Conditions{NegativePolarity: helmRepositoryReadyCondition.NegativePolarity}
-	checker := status.NewChecker(testEnv.Client, condns)
-	checker.CheckErr(ctx, obj)
+			g.Expect(testEnv.CreateAndWait(ctx, secret)).To(Succeed())
 
-	// kstatus client conformance check.
-	u, err := patch.ToUnstructured(obj)
-	g.Expect(err).ToNot(HaveOccurred())
-	res, err := kstatus.Compute(u)
-	g.Expect(err).ToNot(HaveOccurred())
-	g.Expect(res.Status).To(Equal(kstatus.CurrentStatus))
+			obj := &sourcev1.HelmRepository{
+				ObjectMeta: metav1.ObjectMeta{
+					GenerateName: "helmrepository-oci-reconcile-",
+					Namespace:    ns.Name,
+				},
+				Spec: sourcev1.HelmRepositorySpec{
+					Interval: metav1.Duration{Duration: interval},
+					URL:      fmt.Sprintf("oci://%s", testRegistryserver.DockerRegistryHost),
+					SecretRef: &meta.LocalObjectReference{
+						Name: secret.Name,
+					},
+					Type: sourcev1.HelmRepositoryTypeOCI,
+				},
+			}
+			g.Expect(testEnv.Create(ctx, obj)).To(Succeed())
 
-	// Patch the object with reconcile request annotation.
-	patchHelper, err := patch.NewHelper(obj, testEnv.Client)
-	g.Expect(err).ToNot(HaveOccurred())
-	annotations := map[string]string{
-		meta.ReconcileRequestAnnotation: "now",
+			key := client.ObjectKey{Name: obj.Name, Namespace: obj.Namespace}
+
+			// Wait for finalizer to be set
+			g.Eventually(func() bool {
+				if err := testEnv.Get(ctx, key, obj); err != nil {
+					return false
+				}
+				return len(obj.Finalizers) > 0
+			}, timeout).Should(BeTrue())
+
+			// Wait for HelmRepository to be Ready
+			g.Eventually(func() bool {
+				if err := testEnv.Get(ctx, key, obj); err != nil {
+					return false
+				}
+				if !conditions.IsReady(obj) {
+					return false
+				}
+				readyCondition := conditions.Get(obj, meta.ReadyCondition)
+				return obj.Generation == readyCondition.ObservedGeneration &&
+					obj.Generation == obj.Status.ObservedGeneration
+			}, timeout).Should(BeTrue())
+
+			// Check if the object status is valid.
+			condns := &status.Conditions{NegativePolarity: helmRepositoryReadyCondition.NegativePolarity}
+			checker := status.NewChecker(testEnv.Client, condns)
+			checker.CheckErr(ctx, obj)
+
+			// kstatus client conformance check.
+			u, err := patch.ToUnstructured(obj)
+			g.Expect(err).ToNot(HaveOccurred())
+			res, err := kstatus.Compute(u)
+			g.Expect(err).ToNot(HaveOccurred())
+			g.Expect(res.Status).To(Equal(kstatus.CurrentStatus))
+
+			// Patch the object with reconcile request annotation.
+			patchHelper, err := patch.NewHelper(obj, testEnv.Client)
+			g.Expect(err).ToNot(HaveOccurred())
+			annotations := map[string]string{
+				meta.ReconcileRequestAnnotation: "now",
+			}
+			obj.SetAnnotations(annotations)
+			g.Expect(patchHelper.Patch(ctx, obj)).ToNot(HaveOccurred())
+			g.Eventually(func() bool {
+				if err := testEnv.Get(ctx, key, obj); err != nil {
+					return false
+				}
+				return obj.Status.LastHandledReconcileAt == "now"
+			}, timeout).Should(BeTrue())
+
+			g.Expect(testEnv.Delete(ctx, obj)).To(Succeed())
+
+			// Wait for HelmRepository to be deleted
+			g.Eventually(func() bool {
+				if err := testEnv.Get(ctx, key, obj); err != nil {
+					return apierrors.IsNotFound(err)
+				}
+				return false
+			}, timeout).Should(BeTrue())
+		})
 	}
-	obj.SetAnnotations(annotations)
-	g.Expect(patchHelper.Patch(ctx, obj)).ToNot(HaveOccurred())
-	g.Eventually(func() bool {
-		if err := testEnv.Get(ctx, key, obj); err != nil {
-			return false
-		}
-		return obj.Status.LastHandledReconcileAt == "now"
-	}, timeout).Should(BeTrue())
-
-	g.Expect(testEnv.Delete(ctx, obj)).To(Succeed())
-
-	// Wait for HelmRepository to be deleted
-	g.Eventually(func() bool {
-		if err := testEnv.Get(ctx, key, obj); err != nil {
-			return apierrors.IsNotFound(err)
-		}
-		return false
-	}, timeout).Should(BeTrue())
-
 }
