@@ -527,7 +527,15 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 
 		if file != "" {
 			defer func() {
-				os.Remove(file)
+				if err := os.Remove(file); err != nil {
+					r.eventLogf(
+						ctx,
+						obj,
+						corev1.EventTypeWarning,
+						meta.FailedReason,
+						"failed to delete temporary credentials file: %s",
+						err)
+				}
 			}()
 		}
 
