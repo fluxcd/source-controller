@@ -171,7 +171,7 @@ func (r *HelmRepositoryOCIReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		r.Metrics.RecordDuration(ctx, obj, start)
 	}()
 
-	// Add finalizer first if not exist to avoid the race condition
+	// Add finalizer first if it doesn't exist to avoid the race condition
 	// between init and delete
 	if !controllerutil.ContainsFinalizer(obj, sourcev1.SourceFinalizer) {
 		controllerutil.AddFinalizer(obj, sourcev1.SourceFinalizer)
@@ -303,7 +303,7 @@ func (r *HelmRepositoryOCIReconciler) validateSource(ctx context.Context, obj *s
 	registryClient, file, err := r.RegistryClientGenerator(logOpts != nil)
 	if err != nil {
 		e := &serror.Stalling{
-			Err:    fmt.Errorf("failed to create registry client:: %w", err),
+			Err:    fmt.Errorf("failed to create registry client: %w", err),
 			Reason: meta.FailedReason,
 		}
 		conditions.MarkFalse(obj, meta.ReadyCondition, e.Reason, e.Err.Error())
@@ -312,7 +312,17 @@ func (r *HelmRepositoryOCIReconciler) validateSource(ctx context.Context, obj *s
 
 	if file != "" {
 		defer func() {
-			os.Remove(file)
+			if err := os.Remove(file); err != nil {
+				log := ctrl.LoggerFrom(ctx)
+				log.Error(err, "failed to delete temporary credentials file")
+				r.Eventf(
+					obj,
+					corev1.EventTypeWarning,
+					meta.FailedReason,
+					"failed to delete temporary credentials file: %s",
+					err,
+				)
+			}
 		}()
 	}
 
