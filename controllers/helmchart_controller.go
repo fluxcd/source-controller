@@ -447,7 +447,7 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 	repo *sourcev1.HelmRepository, b *chart.Build) (sreconcile.Result, error) {
 	var (
 		tlsConfig *tls.Config
-		logOpts   []registry.LoginOption
+		loginOpts   []registry.LoginOption
 	)
 
 	// Construct the Getter options from the HelmRepository data
@@ -492,7 +492,7 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 		}
 
 		// Build registryClient options from secret
-		logOpt, err := loginOptionFromSecret(repo.Spec.URL, *secret)
+		loginOpt, err := loginOptionFromSecret(repo.Spec.URL, *secret)
 		if err != nil {
 			e := &serror.Event{
 				Err:    fmt.Errorf("failed to configure Helm client with secret data: %w", err),
@@ -503,7 +503,7 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 			return sreconcile.ResultEmpty, e
 		}
 
-		logOpts = append([]registry.LoginOption{}, logOpt)
+		loginOpts = append([]registry.LoginOption{}, loginOpt)
 	}
 
 	// Initialize the chart repository
@@ -519,7 +519,7 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 		// this is needed because otherwise the credentials are stored in ~/.docker/config.json.
 		// TODO@souleb: remove this once the registry move to Oras v2
 		// or rework to enable reusing credentials to avoid the unneccessary handshake operations
-		registryClient, file, err := r.RegistryClientGenerator(logOpts != nil)
+		registryClient, file, err := r.RegistryClientGenerator(loginOpts != nil)
 		if err != nil {
 			return chartRepoErrorReturn(err, obj)
 		}
@@ -540,14 +540,13 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 
 		// If login options are configured, use them to login to the registry
 		// The OCIGetter will later retrieve the stored credentials to pull the chart
-		if logOpts != nil {
-			err = ociChartRepo.Login(logOpts...)
+		if loginOpts != nil {
+			err = ociChartRepo.Login(loginOpts...)
 			if err != nil {
 				return chartRepoErrorReturn(err, obj)
 			}
 		}
 	default:
-		var httpChartRepo *repository.ChartRepository
 		httpChartRepo, err := repository.NewChartRepository(repo.Spec.URL, r.Storage.LocalPath(*repo.GetArtifact()), r.Getters, tlsConfig, clientOpts,
 			repository.WithMemoryCache(r.Storage.LocalPath(*repo.GetArtifact()), r.Cache, r.TTL, func(event string) {
 				r.IncCacheEvents(event, obj.Name, obj.Namespace)

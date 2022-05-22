@@ -229,7 +229,7 @@ func main() {
 		MaxConcurrentReconciles: concurrent,
 		RateLimiter:             helper.GetRateLimiter(rateLimiterOptions),
 	}); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", sourcev1.HelmRepositoryKind)
+		setupLog.Error(err, "unable to create controller", "controller", sourcev1.HelmRepositoryKind, "type", "default")
 		os.Exit(1)
 	}
 
@@ -244,7 +244,7 @@ func main() {
 		MaxConcurrentReconciles: concurrent,
 		RateLimiter:             helper.GetRateLimiter(rateLimiterOptions),
 	}); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", sourcev1.HelmRepositoryKind)
+		setupLog.Error(err, "unable to create controller", "controller", sourcev1.HelmRepositoryKind, "type", "OCI")
 		os.Exit(1)
 	}
 

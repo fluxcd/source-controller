@@ -257,7 +257,7 @@ func (r *HelmRepositoryOCIReconciler) reconcile(ctx context.Context, obj *source
 }
 
 func (r *HelmRepositoryOCIReconciler) reconcileSource(ctx context.Context, obj *sourcev1.HelmRepository) (sreconcile.Result, error) {
-	var logOpts []registry.LoginOption
+	var loginOpts []registry.LoginOption
 	// Configure any authentication related options
 	if obj.Spec.SecretRef != nil {
 		// Attempt to retrieve secret
@@ -276,7 +276,7 @@ func (r *HelmRepositoryOCIReconciler) reconcileSource(ctx context.Context, obj *
 		}
 
 		// Construct actual options
-		logOpt, err := loginOptionFromSecret(obj.Spec.URL, secret)
+		loginOpt, err := loginOptionFromSecret(obj.Spec.URL, secret)
 		if err != nil {
 			e := &serror.Event{
 				Err:    fmt.Errorf("failed to configure Helm client with secret data: %w", err),
@@ -287,12 +287,12 @@ func (r *HelmRepositoryOCIReconciler) reconcileSource(ctx context.Context, obj *
 			return sreconcile.ResultEmpty, e
 		}
 
-		if logOpt != nil {
-			logOpts = append(logOpts, logOpt)
+		if loginOpt != nil {
+			loginOpts = append(loginOpts, loginOpt)
 		}
 	}
 
-	if result, err := r.validateSource(ctx, obj, logOpts...); err != nil || result == sreconcile.ResultEmpty {
+	if result, err := r.validateSource(ctx, obj, loginOpts...); err != nil || result == sreconcile.ResultEmpty {
 		return result, err
 	}
 
