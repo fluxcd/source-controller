@@ -60,11 +60,11 @@ import (
 	serror "github.com/fluxcd/source-controller/internal/error"
 	"github.com/fluxcd/source-controller/internal/helm/chart"
 	"github.com/fluxcd/source-controller/internal/helm/getter"
+	"github.com/fluxcd/source-controller/internal/helm/registry"
 	"github.com/fluxcd/source-controller/internal/helm/repository"
 	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
 	"github.com/fluxcd/source-controller/internal/reconcile/summarize"
 	"github.com/fluxcd/source-controller/internal/util"
-	"github.com/fluxcd/source-controller/internal/helm/registry"
 )
 
 // helmChartReadyCondition contains all the conditions information
@@ -552,7 +552,7 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 			repository.WithMemoryCache(r.Storage.LocalPath(*repo.GetArtifact()), r.Cache, r.TTL, func(event string) {
 				r.IncCacheEvents(event, obj.Name, obj.Namespace)
 			}))
-			if err != nil {
+		if err != nil {
 			return chartRepoErrorReturn(err, obj)
 		}
 		chartRepo = httpChartRepo
