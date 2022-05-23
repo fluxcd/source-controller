@@ -447,7 +447,7 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 	repo *sourcev1.HelmRepository, b *chart.Build) (sreconcile.Result, error) {
 	var (
 		tlsConfig *tls.Config
-		loginOpts   []registry.LoginOption
+		loginOpts []registry.LoginOption
 	)
 
 	// Construct the Getter options from the HelmRepository data
