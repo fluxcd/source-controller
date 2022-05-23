@@ -199,9 +199,9 @@ func (b *remoteChartBuilder) downloadFromRepository(remote *repository.ChartRepo
 	if err != nil {
 		return nil, err
 	}
+	*buildResult = *result
 
 	if shouldReturn {
-		*buildResult = *result
 		return nil, nil
 	}
 
@@ -212,11 +212,11 @@ func (b *remoteChartBuilder) downloadFromRepository(remote *repository.ChartRepo
 		return nil, &BuildError{Reason: ErrChartPull, Err: err}
 	}
 
-	*buildResult = *result
-
 	return res, nil
 }
 
+// generateBuildResult returns a Build object generated from the given chart version and build options. It also returns
+// true if the given chart can be retrieved from cache and doesn't need to be downloaded again.
 func generateBuildResult(cv *repo.ChartVersion, opts BuildOptions) (*Build, bool, error) {
 	result := &Build{}
 	result.Version = cv.Version
