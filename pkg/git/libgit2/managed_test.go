@@ -19,6 +19,7 @@ package libgit2
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -36,7 +37,6 @@ import (
 	. "github.com/onsi/gomega"
 
 	cryptossh "golang.org/x/crypto/ssh"
-	corev1 "k8s.io/api/core/v1"
 )
 
 const testRepositoryPath = "../testdata/git/repo"
@@ -50,12 +50,36 @@ func Test_ManagedSSH_KeyTypes(t *testing.T) {
 		authorized bool
 		wantErr    string
 	}{
-		{name: "RSA 4096", keyType: ssh.RSA_4096, authorized: true},
-		{name: "ECDSA P256", keyType: ssh.ECDSA_P256, authorized: true},
-		{name: "ECDSA P384", keyType: ssh.ECDSA_P384, authorized: true},
-		{name: "ECDSA P521", keyType: ssh.ECDSA_P521, authorized: true},
-		{name: "ED25519", keyType: ssh.ED25519, authorized: true},
-		{name: "unauthorized key", keyType: ssh.RSA_4096, wantErr: "Failed to retrieve list of SSH authentication methods"},
+		{
+			name:       "RSA 4096",
+			keyType:    ssh.RSA_4096,
+			authorized: true,
+		},
+		{
+			name:       "ECDSA P256",
+			keyType:    ssh.ECDSA_P256,
+			authorized: true,
+		},
+		{
+			name:       "ECDSA P384",
+			keyType:    ssh.ECDSA_P384,
+			authorized: true,
+		},
+		{
+			name:       "ECDSA P521",
+			keyType:    ssh.ECDSA_P521,
+			authorized: true,
+		},
+		{
+			name:       "ED25519",
+			keyType:    ssh.ED25519,
+			authorized: true,
+		},
+		{
+			name:    "unauthorized key",
+			keyType: ssh.RSA_4096,
+			wantErr: "unable to authenticate, attempted methods [none publickey], no supported methods remain",
+		},
 	}
 
 	serverRootDir := t.TempDir()
@@ -99,6 +123,9 @@ func Test_ManagedSSH_KeyTypes(t *testing.T) {
 	knownHosts, err := ssh.ScanHostKey(u.Host, timeout, git.HostKeyAlgos, false)
 	g.Expect(err).ToNot(HaveOccurred())
 
+	os.Setenv("EXPERIMENTAL_GIT_TRANSPORT", "true")
+	managed.InitManagedTransport(logr.Discard())
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
@@ -112,15 +139,21 @@ func Test_ManagedSSH_KeyTypes(t *testing.T) {
 				authorizedPublicKey = string(kp.PublicKey)
 			}
 
-			secret := corev1.Secret{
-				Data: map[string][]byte{
-					"identity":    kp.PrivateKey,
-					"known_hosts": knownHosts,
-				},
-			}
+			// secret := corev1.Secret{
+			// Data: map[string][]byte{
+			// "identity":    kp.PrivateKey,
+			// "known_hosts": knownHosts,
+			// },
+			// }
+			//
+			// authOpts, err := git.AuthOptionsFromSecret(repoURL, &secret)
+			// g.Expect(err).ToNot(HaveOccurred())
 
-			authOpts, err := git.AuthOptionsFromSecret(repoURL, &secret)
-			g.Expect(err).ToNot(HaveOccurred())
+			authOpts := &git.AuthOptions{
+				Identity:   kp.PrivateKey,
+				KnownHosts: knownHosts,
+			}
+			authOpts.TransportAuthID = "ssh://" + getTransportAuthID()
 
 			// Prepare for checkout.
 			branchCheckoutStrat := &CheckoutBranch{Branch: git.DefaultBranch}
@@ -200,6 +233,9 @@ func Test_ManagedSSH_KeyExchangeAlgos(t *testing.T) {
 		},
 	}
 
+	os.Setenv("EXPERIMENTAL_GIT_TRANSPORT", "true")
+	managed.InitManagedTransport(logr.Discard())
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
@@ -223,8 +259,6 @@ func Test_ManagedSSH_KeyExchangeAlgos(t *testing.T) {
 			}()
 			defer server.StopSSH()
 
-			os.Setenv("EXPERIMENTAL_GIT_TRANSPORT", "true")
-			managed.InitManagedTransport(logr.Discard())
 			repoPath := "test.git"
 
 			err := server.InitRepo(testRepositoryPath, git.DefaultBranch, repoPath)
@@ -246,15 +280,20 @@ func Test_ManagedSSH_KeyExchangeAlgos(t *testing.T) {
 			kp, err := ssh.GenerateKeyPair(ssh.ED25519)
 			g.Expect(err).ToNot(HaveOccurred())
 
-			secret := corev1.Secret{
-				Data: map[string][]byte{
-					"identity":    kp.PrivateKey,
-					"known_hosts": knownHosts,
-				},
+			// secret := corev1.Secret{
+			// Data: map[string][]byte{
+			// "identity":    kp.PrivateKey,
+			// "known_hosts": knownHosts,
+			// },
+			// }
+			//
+			// authOpts, err := git.AuthOptionsFromSecret(repoURL, &secret)
+			// g.Expect(err).ToNot(HaveOccurred())
+			authOpts := &git.AuthOptions{
+				Identity:   kp.PrivateKey,
+				KnownHosts: knownHosts,
 			}
-
-			authOpts, err := git.AuthOptionsFromSecret(repoURL, &secret)
-			g.Expect(err).ToNot(HaveOccurred())
+			authOpts.TransportAuthID = "ssh://" + getTransportAuthID()
 
 			// Prepare for checkout.
 			branchCheckoutStrat := &CheckoutBranch{Branch: git.DefaultBranch}
@@ -363,6 +402,9 @@ func Test_ManagedSSH_HostKeyAlgos(t *testing.T) {
 		},
 	}
 
+	os.Setenv("EXPERIMENTAL_GIT_TRANSPORT", "true")
+	managed.InitManagedTransport(logr.Discard())
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
@@ -396,8 +438,6 @@ func Test_ManagedSSH_HostKeyAlgos(t *testing.T) {
 			}()
 			defer server.StopSSH()
 
-			os.Setenv("EXPERIMENTAL_GIT_TRANSPORT", "true")
-			managed.InitManagedTransport(logr.Discard())
 			repoPath := "test.git"
 
 			err = server.InitRepo(testRepositoryPath, git.DefaultBranch, repoPath)
@@ -419,15 +459,20 @@ func Test_ManagedSSH_HostKeyAlgos(t *testing.T) {
 			kp, err := ssh.GenerateKeyPair(ssh.ED25519)
 			g.Expect(err).ToNot(HaveOccurred())
 
-			secret := corev1.Secret{
-				Data: map[string][]byte{
-					"identity":    kp.PrivateKey,
-					"known_hosts": knownHosts,
-				},
+			// secret := corev1.Secret{
+			// Data: map[string][]byte{
+			// "identity":    kp.PrivateKey,
+			// "known_hosts": knownHosts,
+			// },
+			// }
+			//
+			// authOpts, err := git.AuthOptionsFromSecret(repoURL, &secret)
+			// g.Expect(err).ToNot(HaveOccurred())
+			authOpts := &git.AuthOptions{
+				Identity:   kp.PrivateKey,
+				KnownHosts: knownHosts,
 			}
-
-			authOpts, err := git.AuthOptionsFromSecret(repoURL, &secret)
-			g.Expect(err).ToNot(HaveOccurred())
+			authOpts.TransportAuthID = "ssh://" + getTransportAuthID()
 
 			// Prepare for checkout.
 			branchCheckoutStrat := &CheckoutBranch{Branch: git.DefaultBranch}
@@ -441,4 +486,13 @@ func Test_ManagedSSH_HostKeyAlgos(t *testing.T) {
 			g.Expect(err).Error().ShouldNot(HaveOccurred())
 		})
 	}
+}
+
+func getTransportAuthID() string {
+	letterRunes := []rune("abcdefghijklmnopqrstuvwxyz1234567890")
+	b := make([]rune, 10)
+	for i := range b {
+		b[i] = letterRunes[rand.Intn(len(letterRunes))]
+	}
+	return string(b)
 }
