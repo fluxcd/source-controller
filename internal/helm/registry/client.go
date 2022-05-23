@@ -23,7 +23,7 @@ import (
 	"helm.sh/helm/v3/pkg/registry"
 )
 
-// RegistryClientGenerator generates a registry client and a temporary credential file.
+// ClientGenerator generates a registry client and a temporary credential file.
 // The client is meant to be used for a single reconciliation.
 // The file is meant to be used for a single reconciliation and deleted after.
 func ClientGenerator(isLogin bool) (*registry.Client, string, error) {
