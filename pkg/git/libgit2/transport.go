@@ -38,7 +38,6 @@ import (
 	"golang.org/x/crypto/ssh/knownhosts"
 
 	"github.com/fluxcd/source-controller/pkg/git"
-	"github.com/fluxcd/source-controller/pkg/git/libgit2/managed"
 )
 
 var (
@@ -115,18 +114,6 @@ func pushTransferProgressCallback(ctx context.Context) git2go.PushTransferProgre
 func credentialsCallback(opts *git.AuthOptions) git2go.CredentialsCallback {
 	return func(url string, username string, allowedTypes git2go.CredentialType) (*git2go.Credential, error) {
 		if allowedTypes&(git2go.CredentialTypeSSHKey|git2go.CredentialTypeSSHCustom|git2go.CredentialTypeSSHMemory) != 0 {
-			if managed.Enabled() {
-				// CredentialTypeSSHMemory requires libgit2 to be built using libssh2.
-				// When using managed transport (handled in go instead of libgit2),
-				// there may be ways to remove such requirement, thefore decreasing the
-				// need of libz, libssh2 and OpenSSL but further investigation is required
-				// once Managed Transport is no longer experimental.
-				//
-				// CredentialSSHKeyFromMemory is currently required for SSH key access
-				// when managed transport is enabled.
-				return git2go.NewCredentialSSHKeyFromMemory(opts.Username, "", string(opts.Identity), opts.Password)
-			}
-
 			var (
 				signer ssh.Signer
 				err    error

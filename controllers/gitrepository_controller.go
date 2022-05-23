@@ -458,27 +458,15 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context,
 	repositoryURL := obj.Spec.URL
 	// managed GIT transport only affects the libgit2 implementation
 	if managed.Enabled() && obj.Spec.GitImplementation == sourcev1.LibGit2Implementation {
-		// At present only HTTP connections have the ability to define remote options.
-		// Although this can be easily extended by ensuring that the fake URL below uses the
-		// target ssh scheme, and the libgit2/managed/ssh.go pulls that information accordingly.
-		//
-		// This is due to the fact the key libgit2 remote callbacks do not take place for HTTP
-		// whilst most still work for SSH.
+		// We set the TransportAuthID of this set of authentication options here by constructing
+		// a unique ID that won't clash in a multi tenant environment. This unique ID is used by
+		// libgit2 managed transports. This enables us to bypass the inbuilt credentials callback in
+		// libgit2, which is inflexible and unstable.
 		if strings.HasPrefix(repositoryURL, "http") {
-			// Due to the lack of the callback feature, a fake target URL is created to allow
-			// for the smart sub transport be able to pick the options specific for this
-			// GitRepository object.
-			// The URL should use unique information that do not collide in a multi tenant
-			// deployment.
-			repositoryURL = fmt.Sprintf("http://%s/%s/%d", obj.Name, obj.UID, obj.Generation)
-			managed.AddTransportOptions(repositoryURL,
-				managed.TransportOptions{
-					TargetURL: obj.Spec.URL,
-					CABundle:  authOpts.CAFile,
-				})
-
-			// We remove the options from memory, to avoid accumulating unused options over time.
-			defer managed.RemoveTransportOptions(repositoryURL)
+			authOpts.TransportAuthID = fmt.Sprintf("http://%s/%s/%d", obj.Name, obj.UID, obj.Generation)
+		}
+		if strings.HasPrefix(repositoryURL, "ssh") {
+			authOpts.TransportAuthID = fmt.Sprintf("ssh://%s/%s/%d", obj.Name, obj.UID, obj.Generation)
 		}
 	}
 

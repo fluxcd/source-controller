@@ -18,35 +18,38 @@ package managed
 
 import (
 	"sync"
+
+	"github.com/fluxcd/source-controller/pkg/git"
 )
 
 // TransportOptions represents options to be applied at transport-level
 // at request time.
 type TransportOptions struct {
 	TargetURL string
-	CABundle  []byte
+	AuthOpts  *git.AuthOptions
 }
 
 var (
+	// transportOpts maps a unique id to a set of transport options.
 	transportOpts = make(map[string]TransportOptions, 0)
 	m             sync.RWMutex
 )
 
-func AddTransportOptions(targetUrl string, opts TransportOptions) {
+func AddTransportOptions(id string, opts TransportOptions) {
 	m.Lock()
-	transportOpts[targetUrl] = opts
+	transportOpts[id] = opts
 	m.Unlock()
 }
 
-func RemoveTransportOptions(targetUrl string) {
+func RemoveTransportOptions(id string) {
 	m.Lock()
-	delete(transportOpts, targetUrl)
+	delete(transportOpts, id)
 	m.Unlock()
 }
 
-func transportOptions(targetUrl string) (*TransportOptions, bool) {
+func getTransportOptions(id string) (*TransportOptions, bool) {
 	m.RLock()
-	opts, found := transportOpts[targetUrl]
+	opts, found := transportOpts[id]
 	m.RUnlock()
 
 	if found {
@@ -60,16 +63,16 @@ func transportOptions(targetUrl string) (*TransportOptions, bool) {
 // Given that TransportOptions can allow for the target URL to be overriden
 // this returns the same input if Managed Transport is disabled or if no TargetURL
 // is set on TransportOptions.
-func EffectiveURL(targetUrl string) string {
+func EffectiveURL(id string) string {
 	if !Enabled() {
-		return targetUrl
+		return id
 	}
 
-	if opts, found := transportOptions(targetUrl); found {
+	if opts, found := getTransportOptions(id); found {
 		if opts.TargetURL != "" {
 			return opts.TargetURL
 		}
 	}
 
-	return targetUrl
+	return id
 }

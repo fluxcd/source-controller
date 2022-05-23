@@ -96,11 +96,16 @@ type sshSmartSubtransport struct {
 	connected     bool
 }
 
-func (t *sshSmartSubtransport) Action(urlString string, action git2go.SmartServiceAction) (git2go.SmartSubtransportStream, error) {
+func (t *sshSmartSubtransport) Action(credentialsID string, action git2go.SmartServiceAction) (git2go.SmartSubtransportStream, error) {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 
-	u, err := url.Parse(urlString)
+	opts, found := getTransportOptions(credentialsID)
+	if !found {
+		return nil, fmt.Errorf("could not find transport options for object: %s", credentialsID)
+	}
+
+	u, err := url.Parse(opts.TargetURL)
 	if err != nil {
 		return nil, err
 	}
@@ -146,19 +151,13 @@ func (t *sshSmartSubtransport) Action(urlString string, action git2go.SmartServi
 		_ = t.Close()
 	}
 
-	cred, err := t.transport.SmartCredentials("", git2go.CredentialTypeSSHMemory)
-	if err != nil {
-		return nil, err
-	}
-	defer cred.Free()
-
 	port := "22"
 	if u.Port() != "" {
 		port = u.Port()
 	}
 	t.addr = net.JoinHostPort(u.Hostname(), port)
 
-	sshConfig, err := clientConfig(t.addr, cred)
+	sshConfig, err := createClientConfig(opts.AuthOpts)
 	if err != nil {
 		return nil, err
 	}
@@ -307,39 +306,28 @@ func (stream *sshSmartSubtransportStream) Free() {
 	traceLog.Info("[ssh]: sshSmartSubtransportStream.Free()")
 }
 
-func clientConfig(remoteAddress string, cred *git2go.Credential) (*ssh.ClientConfig, error) {
-	if cred == nil {
-		return nil, fmt.Errorf("cannot create ssh client config from a nil credential")
+func createClientConfig(authOpts *git.AuthOptions) (*ssh.ClientConfig, error) {
+	if authOpts == nil {
+		return nil, fmt.Errorf("cannot create ssh client config from nil ssh auth options")
 	}
 
-	username, _, privatekey, passphrase, err := cred.GetSSHKey()
-	if err != nil {
-		return nil, err
-	}
-
-	var pemBytes []byte
-	if cred.Type() == git2go.CredentialTypeSSHMemory {
-		pemBytes = []byte(privatekey)
+	var signer ssh.Signer
+	var err error
+	if authOpts.Password != "" {
+		signer, err = ssh.ParsePrivateKeyWithPassphrase(authOpts.Identity, []byte(authOpts.Password))
 	} else {
-		return nil, fmt.Errorf("file based SSH credential is not supported")
+		signer, err = ssh.ParsePrivateKey(authOpts.Identity)
 	}
-
-	var key ssh.Signer
-	if passphrase != "" {
-		key, err = ssh.ParsePrivateKeyWithPassphrase(pemBytes, []byte(passphrase))
-	} else {
-		key, err = ssh.ParsePrivateKey(pemBytes)
-	}
-
 	if err != nil {
 		return nil, err
 	}
 
 	cfg := &ssh.ClientConfig{
-		User:    username,
-		Auth:    []ssh.AuthMethod{ssh.PublicKeys(key)},
+		User:    authOpts.Username,
+		Auth:    []ssh.AuthMethod{ssh.PublicKeys(signer)},
 		Timeout: sshConnectionTimeOut,
 	}
+
 	if len(git.KexAlgos) > 0 {
 		cfg.Config.KeyExchanges = git.KexAlgos
 	}

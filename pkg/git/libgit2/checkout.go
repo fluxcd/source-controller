@@ -69,6 +69,22 @@ type CheckoutBranch struct {
 func (c *CheckoutBranch) Checkout(ctx context.Context, path, url string, opts *git.AuthOptions) (_ *git.Commit, err error) {
 	defer recoverPanic(&err)
 
+	if managed.Enabled() {
+		// We store the target url and auth options mapped to a unique ID. We overwrite the target url
+		// with the TransportAuthID, because managed transports don't provide a way for any kind of
+		// dependency injection. This lets us have a way of doing interop between application level code
+		// and transport level code.
+		// Performing all fetch operations with the TransportAuthID as the url, lets the managed
+		// transport action use it to fetch the registered transport options which contains the
+		// _actual_ target url and the correct credentials to use.
+		managed.AddTransportOptions(opts.TransportAuthID, managed.TransportOptions{
+			TargetURL: url,
+			AuthOpts:  opts,
+		})
+		url = opts.TransportAuthID
+		defer managed.RemoveTransportOptions(opts.TransportAuthID)
+	}
+
 	remoteCallBacks := RemoteCallbacks(ctx, opts)
 	proxyOpts := &git2go.ProxyOptions{Type: git2go.ProxyTypeAuto}
 
@@ -170,6 +186,15 @@ type CheckoutTag struct {
 func (c *CheckoutTag) Checkout(ctx context.Context, path, url string, opts *git.AuthOptions) (_ *git.Commit, err error) {
 	defer recoverPanic(&err)
 
+	if managed.Enabled() {
+		managed.AddTransportOptions(opts.TransportAuthID, managed.TransportOptions{
+			TargetURL: url,
+			AuthOpts:  opts,
+		})
+		url = opts.TransportAuthID
+		defer managed.RemoveTransportOptions(opts.TransportAuthID)
+	}
+
 	remoteCallBacks := RemoteCallbacks(ctx, opts)
 	proxyOpts := &git2go.ProxyOptions{Type: git2go.ProxyTypeAuto}
 
@@ -249,6 +274,15 @@ type CheckoutCommit struct {
 func (c *CheckoutCommit) Checkout(ctx context.Context, path, url string, opts *git.AuthOptions) (_ *git.Commit, err error) {
 	defer recoverPanic(&err)
 
+	if managed.Enabled() {
+		managed.AddTransportOptions(opts.TransportAuthID, managed.TransportOptions{
+			TargetURL: url,
+			AuthOpts:  opts,
+		})
+		url = opts.TransportAuthID
+		defer managed.RemoveTransportOptions(opts.TransportAuthID)
+	}
+
 	repo, err := git2go.Clone(url, path, &git2go.CloneOptions{
 		FetchOptions: git2go.FetchOptions{
 			DownloadTags:    git2go.DownloadTagsNone,
@@ -277,6 +311,15 @@ type CheckoutSemVer struct {
 
 func (c *CheckoutSemVer) Checkout(ctx context.Context, path, url string, opts *git.AuthOptions) (_ *git.Commit, err error) {
 	defer recoverPanic(&err)
+
+	if managed.Enabled() {
+		managed.AddTransportOptions(opts.TransportAuthID, managed.TransportOptions{
+			TargetURL: url,
+			AuthOpts:  opts,
+		})
+		url = opts.TransportAuthID
+		defer managed.RemoveTransportOptions(opts.TransportAuthID)
+	}
 
 	verConstraint, err := semver.NewConstraint(c.SemVer)
 	if err != nil {
