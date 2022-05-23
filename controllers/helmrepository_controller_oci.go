@@ -18,6 +18,7 @@ package controllers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -38,6 +39,7 @@ import (
 	helmgetter "helm.sh/helm/v3/pkg/getter"
 	helmreg "helm.sh/helm/v3/pkg/registry"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	kuberecorder "k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -313,15 +315,8 @@ func (r *HelmRepositoryOCIReconciler) validateSource(ctx context.Context, obj *s
 	if file != "" {
 		defer func() {
 			if err := os.Remove(file); err != nil {
-				log := ctrl.LoggerFrom(ctx)
-				log.Error(err, "failed to delete temporary credentials file")
-				r.Eventf(
-					obj,
-					corev1.EventTypeWarning,
-					meta.FailedReason,
-					"failed to delete temporary credentials file: %s",
-					err,
-				)
+				r.eventLogf(ctx, obj, corev1.EventTypeWarning, meta.FailedReason,
+					"failed to delete temporary credentials file: %s", err)
 			}
 		}()
 	}
@@ -361,4 +356,20 @@ func (r *HelmRepositoryOCIReconciler) validateSource(ctx context.Context, obj *s
 	conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "Helm repository %q is ready", obj.Name)
 
 	return sreconcile.ResultSuccess, nil
+}
+
+// eventLogf records events, and logs at the same time.
+//
+// This log is different from the debug log in the EventRecorder, in the sense
+// that this is a simple log. While the debug log contains complete details
+// about the event.
+func (r *HelmRepositoryOCIReconciler) eventLogf(ctx context.Context, obj runtime.Object, eventType string, reason string, messageFmt string, args ...interface{}) {
+	msg := fmt.Sprintf(messageFmt, args...)
+	// Log and emit event.
+	if eventType == corev1.EventTypeWarning {
+		ctrl.LoggerFrom(ctx).Error(errors.New(reason), msg)
+	} else {
+		ctrl.LoggerFrom(ctx).Info(msg)
+	}
+	r.Eventf(obj, eventType, reason, msg)
 }
