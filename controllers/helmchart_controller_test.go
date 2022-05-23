@@ -36,7 +36,7 @@ import (
 	. "github.com/onsi/gomega"
 	hchart "helm.sh/helm/v3/pkg/chart"
 	"helm.sh/helm/v3/pkg/chart/loader"
-	"helm.sh/helm/v3/pkg/registry"
+	helmreg "helm.sh/helm/v3/pkg/registry"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -54,7 +54,7 @@ import (
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
 	serror "github.com/fluxcd/source-controller/internal/error"
 	"github.com/fluxcd/source-controller/internal/helm/chart"
-	"github.com/fluxcd/source-controller/internal/helm/util"
+	"github.com/fluxcd/source-controller/internal/helm/registry"
 	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
 	"github.com/fluxcd/source-controller/internal/reconcile/summarize"
 )
@@ -793,8 +793,8 @@ func TestHelmChartReconciler_buildFromOCIHelmRepository(t *testing.T) {
 
 	// Login to the registry
 	err := testRegistryserver.RegistryClient.Login(testRegistryserver.DockerRegistryHost,
-		registry.LoginOptBasicAuth(testUsername, testPassword),
-		registry.LoginOptInsecure(true))
+		helmreg.LoginOptBasicAuth(testUsername, testPassword),
+		helmreg.LoginOptInsecure(true))
 	g.Expect(err).NotTo(HaveOccurred())
 
 	// Load a test chart
@@ -975,7 +975,7 @@ func TestHelmChartReconciler_buildFromOCIHelmRepository(t *testing.T) {
 				EventRecorder:           record.NewFakeRecorder(32),
 				Getters:                 testGetters,
 				Storage:                 storage,
-				RegistryClientGenerator: util.RegistryClientGenerator,
+				RegistryClientGenerator: registry.ClientGenerator,
 			}
 
 			repository := &sourcev1.HelmRepository{

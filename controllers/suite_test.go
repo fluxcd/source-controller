@@ -30,7 +30,7 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 	"helm.sh/helm/v3/pkg/getter"
-	"helm.sh/helm/v3/pkg/registry"
+	helmreg "helm.sh/helm/v3/pkg/registry"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/record"
@@ -49,7 +49,7 @@ import (
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
 	"github.com/fluxcd/source-controller/internal/cache"
 	"github.com/fluxcd/source-controller/internal/features"
-	"github.com/fluxcd/source-controller/internal/helm/util"
+	"github.com/fluxcd/source-controller/internal/helm/registry"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -94,7 +94,7 @@ var (
 )
 
 var (
-	testRegistryClient *registry.Client
+	testRegistryClient *helmreg.Client
 	testRegistryserver *RegistryClientTestServer
 )
 
@@ -113,7 +113,7 @@ type RegistryClientTestServer struct {
 	Out                io.Writer
 	DockerRegistryHost string
 	WorkspaceDir       string
-	RegistryClient     *registry.Client
+	RegistryClient     *helmreg.Client
 }
 
 func SetupServer(server *RegistryClientTestServer) string {
@@ -129,9 +129,9 @@ func SetupServer(server *RegistryClientTestServer) string {
 	server.Out = &out
 
 	// init test client
-	server.RegistryClient, err = registry.NewClient(
-		registry.ClientOptDebug(true),
-		registry.ClientOptWriter(server.Out),
+	server.RegistryClient, err = helmreg.NewClient(
+		helmreg.ClientOptDebug(true),
+		helmreg.ClientOptWriter(server.Out),
 	)
 	if err != nil {
 		panic(fmt.Sprintf("failed to create registry client: %s", err))
@@ -202,7 +202,7 @@ func TestMain(m *testing.M) {
 	testRegistryserver = &RegistryClientTestServer{}
 	registryWorkspaceDir := SetupServer(testRegistryserver)
 
-	testRegistryClient, err = registry.NewClient(registry.ClientOptWriter(os.Stdout))
+	testRegistryClient, err = helmreg.NewClient(helmreg.ClientOptWriter(os.Stdout))
 	if err != nil {
 		panic(fmt.Sprintf("Failed to create OCI registry client"))
 	}
@@ -241,7 +241,7 @@ func TestMain(m *testing.M) {
 		EventRecorder:           record.NewFakeRecorder(32),
 		Metrics:                 testMetricsH,
 		Getters:                 testGetters,
-		RegistryClientGenerator: util.RegistryClientGenerator,
+		RegistryClientGenerator: registry.ClientGenerator,
 	}).SetupWithManager(testEnv); err != nil {
 		panic(fmt.Sprintf("Failed to start HelmRepositoryOCIReconciler: %v", err))
 	}

@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package util
+package registry
 
 import (
 	"io"
@@ -26,7 +26,7 @@ import (
 // RegistryClientGenerator generates a registry client and a temporary credential file.
 // The client is meant to be used for a single reconciliation.
 // The file is meant to be used for a single reconciliation and deleted after.
-func RegistryClientGenerator(isLogin bool) (*registry.Client, string, error) {
+func ClientGenerator(isLogin bool) (*registry.Client, string, error) {
 	if isLogin {
 		// create a temporary file to store the credentials
 		// this is needed because otherwise the credentials are stored in ~/.docker/config.json.

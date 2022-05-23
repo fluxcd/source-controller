@@ -29,7 +29,7 @@ import (
 	"time"
 
 	helmgetter "helm.sh/helm/v3/pkg/getter"
-	"helm.sh/helm/v3/pkg/registry"
+	helmreg "helm.sh/helm/v3/pkg/registry"
 	corev1 "k8s.io/api/core/v1"
 	apierrs "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -64,6 +64,7 @@ import (
 	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
 	"github.com/fluxcd/source-controller/internal/reconcile/summarize"
 	"github.com/fluxcd/source-controller/internal/util"
+	"github.com/fluxcd/source-controller/internal/helm/registry"
 )
 
 // helmChartReadyCondition contains all the conditions information
@@ -380,7 +381,7 @@ func (r *HelmChartReconciler) reconcileSource(ctx context.Context, obj *sourcev1
 
 	// Assert source has an artifact
 	if s.GetArtifact() == nil || !r.Storage.ArtifactExist(*s.GetArtifact()) {
-		if helmRepo, ok := s.(*sourcev1.HelmRepository); !ok || !registry.IsOCI(helmRepo.Spec.URL) {
+		if helmRepo, ok := s.(*sourcev1.HelmRepository); !ok || !helmreg.IsOCI(helmRepo.Spec.URL) {
 			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, "NoSourceArtifact",
 				"no artifact available for %s source '%s'", obj.Spec.SourceRef.Kind, obj.Spec.SourceRef.Name)
 			r.eventLogf(ctx, obj, events.EventTypeTrace, "NoSourceArtifact",
@@ -447,7 +448,7 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 	repo *sourcev1.HelmRepository, b *chart.Build) (sreconcile.Result, error) {
 	var (
 		tlsConfig *tls.Config
-		loginOpts []registry.LoginOption
+		loginOpts []helmreg.LoginOption
 	)
 
 	// Construct the Getter options from the HelmRepository data
@@ -492,7 +493,7 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 		}
 
 		// Build registryClient options from secret
-		loginOpt, err := loginOptionFromSecret(repo.Spec.URL, *secret)
+		loginOpt, err := registry.LoginOptionFromSecret(repo.Spec.URL, *secret)
 		if err != nil {
 			e := &serror.Event{
 				Err:    fmt.Errorf("failed to configure Helm client with secret data: %w", err),
@@ -503,14 +504,14 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 			return sreconcile.ResultEmpty, e
 		}
 
-		loginOpts = append([]registry.LoginOption{}, loginOpt)
+		loginOpts = append([]helmreg.LoginOption{}, loginOpt)
 	}
 
 	// Initialize the chart repository
 	var chartRepo chart.Remote
 	switch repo.Spec.Type {
 	case sourcev1.HelmRepositoryTypeOCI:
-		if !registry.IsOCI(repo.Spec.URL) {
+		if !helmreg.IsOCI(repo.Spec.URL) {
 			err := fmt.Errorf("invalid OCI registry URL: %s", repo.Spec.URL)
 			return chartRepoErrorReturn(err, obj)
 		}
@@ -551,7 +552,7 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 			repository.WithMemoryCache(r.Storage.LocalPath(*repo.GetArtifact()), r.Cache, r.TTL, func(event string) {
 				r.IncCacheEvents(event, obj.Name, obj.Namespace)
 			}))
-		if err != nil {
+			if err != nil {
 			return chartRepoErrorReturn(err, obj)
 		}
 		chartRepo = httpChartRepo

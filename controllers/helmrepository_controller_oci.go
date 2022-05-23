@@ -17,15 +17,12 @@ limitations under the License.
 package controllers
 
 import (
-	"bytes"
 	"context"
 	"fmt"
-	"net/url"
 	"os"
 	"strings"
 	"time"
 
-	"github.com/docker/cli/cli/config"
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	helper "github.com/fluxcd/pkg/runtime/controller"
@@ -33,12 +30,13 @@ import (
 	"github.com/fluxcd/pkg/runtime/predicates"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
 	serror "github.com/fluxcd/source-controller/internal/error"
+	"github.com/fluxcd/source-controller/internal/helm/registry"
 	"github.com/fluxcd/source-controller/internal/helm/repository"
 	intpredicates "github.com/fluxcd/source-controller/internal/predicates"
 	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
 	"github.com/fluxcd/source-controller/internal/reconcile/summarize"
 	helmgetter "helm.sh/helm/v3/pkg/getter"
-	"helm.sh/helm/v3/pkg/registry"
+	helmreg "helm.sh/helm/v3/pkg/registry"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	kuberecorder "k8s.io/client-go/tools/record"
@@ -94,7 +92,7 @@ type HelmRepositoryOCIReconciler struct {
 // and an optional file name.
 // The file is used to store the registry client credentials.
 // The caller is responsible for deleting the file.
-type RegistryClientGeneratorFunc func(isLogin bool) (*registry.Client, string, error)
+type RegistryClientGeneratorFunc func(isLogin bool) (*helmreg.Client, string, error)
 
 // helmRepositoryOCIReconcileFunc is the function type for all the
 // v1beta2.HelmRepository (sub)reconcile functions for OCI type. The type implementations
@@ -257,7 +255,7 @@ func (r *HelmRepositoryOCIReconciler) reconcile(ctx context.Context, obj *source
 }
 
 func (r *HelmRepositoryOCIReconciler) reconcileSource(ctx context.Context, obj *sourcev1.HelmRepository) (sreconcile.Result, error) {
-	var loginOpts []registry.LoginOption
+	var loginOpts []helmreg.LoginOption
 	// Configure any authentication related options
 	if obj.Spec.SecretRef != nil {
 		// Attempt to retrieve secret
@@ -276,7 +274,7 @@ func (r *HelmRepositoryOCIReconciler) reconcileSource(ctx context.Context, obj *
 		}
 
 		// Construct actual options
-		loginOpt, err := loginOptionFromSecret(obj.Spec.URL, secret)
+		loginOpt, err := registry.LoginOptionFromSecret(obj.Spec.URL, secret)
 		if err != nil {
 			e := &serror.Event{
 				Err:    fmt.Errorf("failed to configure Helm client with secret data: %w", err),
@@ -301,7 +299,7 @@ func (r *HelmRepositoryOCIReconciler) reconcileSource(ctx context.Context, obj *
 
 // validateSource the HelmRepository object by checking the url and connecting to the underlying registry
 // with he provided credentials.
-func (r *HelmRepositoryOCIReconciler) validateSource(ctx context.Context, obj *sourcev1.HelmRepository, logOpts ...registry.LoginOption) (sreconcile.Result, error) {
+func (r *HelmRepositoryOCIReconciler) validateSource(ctx context.Context, obj *sourcev1.HelmRepository, logOpts ...helmreg.LoginOption) (sreconcile.Result, error) {
 	registryClient, file, err := r.RegistryClientGenerator(logOpts != nil)
 	if err != nil {
 		e := &serror.Stalling{
@@ -353,37 +351,4 @@ func (r *HelmRepositoryOCIReconciler) validateSource(ctx context.Context, obj *s
 	conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "Helm repository %q is ready", obj.Name)
 
 	return sreconcile.ResultSuccess, nil
-}
-
-// loginOptionFromSecret derives authentication data from a Secret to login to an OCI registry. This Secret
-// may either hold "username" and "password" fields or be of the corev1.SecretTypeDockerConfigJson type and hold
-// a corev1.DockerConfigJsonKey field with a complete Docker configuration. If both, "username" and "password" are
-// empty, a nil LoginOption and a nil error will be returned.
-func loginOptionFromSecret(registryURL string, secret corev1.Secret) (registry.LoginOption, error) {
-	var username, password string
-	if secret.Type == corev1.SecretTypeDockerConfigJson {
-		dockerCfg, err := config.LoadFromReader(bytes.NewReader(secret.Data[corev1.DockerConfigJsonKey]))
-		if err != nil {
-			return nil, fmt.Errorf("unable to load Docker config: %w", err)
-		}
-		parsedURL, err := url.Parse(registryURL)
-		if err != nil {
-			return nil, fmt.Errorf("unable to parse registry URL: %w", err)
-		}
-		authConfig, err := dockerCfg.GetAuthConfig(parsedURL.Host)
-		if err != nil {
-			return nil, fmt.Errorf("unable to get authentication data from Secret: %w", err)
-		}
-		username = authConfig.Username
-		password = authConfig.Password
-	} else {
-		username, password = string(secret.Data["username"]), string(secret.Data["password"])
-	}
-	switch {
-	case username == "" && password == "":
-		return nil, nil
-	case username == "" || password == "":
-		return nil, fmt.Errorf("invalid '%s' secret data: required fields 'username' and 'password'", secret.Name)
-	}
-	return registry.LoginOptBasicAuth(username, password), nil
 }
