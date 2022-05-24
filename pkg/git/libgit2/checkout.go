@@ -34,6 +34,8 @@ import (
 	"github.com/fluxcd/source-controller/pkg/git/libgit2/managed"
 )
 
+const defaultRemoteName = "origin"
+
 // CheckoutStrategyForOptions returns the git.CheckoutStrategy for the given
 // git.CheckoutOptions.
 func CheckoutStrategyForOptions(ctx context.Context, opt git.CheckoutOptions) git.CheckoutStrategy {
@@ -67,26 +69,43 @@ type CheckoutBranch struct {
 func (c *CheckoutBranch) Checkout(ctx context.Context, path, url string, opts *git.AuthOptions) (_ *git.Commit, err error) {
 	defer recoverPanic(&err)
 
-	repo, remote, free, err := getBlankRepoAndRemote(ctx, path, url, opts)
+	remoteCallBacks := RemoteCallbacks(ctx, opts)
+	proxyOpts := &git2go.ProxyOptions{Type: git2go.ProxyTypeAuto}
+
+	repo, remote, err := initializeRepoWithRemote(ctx, path, url, opts)
 	if err != nil {
 		return nil, err
 	}
-	defer free()
+	// Open remote connection.
+	err = remote.ConnectFetch(&remoteCallBacks, proxyOpts, nil)
+	if err != nil {
+		remote.Free()
+		repo.Free()
+		return nil, fmt.Errorf("unable to fetch-connect to remote '%s': %w", managed.EffectiveURL(url), gitutil.LibGit2Error(err))
+	}
+	defer func() {
+		remote.Disconnect()
+		remote.Free()
+		repo.Free()
+	}()
 
-	// When the last observed revision is set, check whether it is still
-	// the same at the remote branch. If so, short-circuit the clone operation here.
+	// When the last observed revision is set, check whether it is still the
+	// same at the remote branch. If so, short-circuit the clone operation here.
 	if c.LastRevision != "" {
 		heads, err := remote.Ls(c.Branch)
 		if err != nil {
 			return nil, fmt.Errorf("unable to remote ls for '%s': %w", managed.EffectiveURL(url), gitutil.LibGit2Error(err))
 		}
 		if len(heads) > 0 {
-			currentRevision := fmt.Sprintf("%s/%s", c.Branch, heads[0].Id.String())
+			hash := heads[0].Id.String()
+			currentRevision := fmt.Sprintf("%s/%s", c.Branch, hash)
 			if currentRevision == c.LastRevision {
-				return nil, git.NoChangesError{
-					Message:          "no changes since last reconciliation",
-					ObservedRevision: currentRevision,
+				// Construct a partial commit with the existing information.
+				c := &git.Commit{
+					Hash:      git.Hash(hash),
+					Reference: "refs/heads/" + c.Branch,
 				}
+				return c, nil
 			}
 		}
 	}
@@ -95,7 +114,7 @@ func (c *CheckoutBranch) Checkout(ctx context.Context, path, url string, opts *g
 	err = remote.Fetch([]string{c.Branch},
 		&git2go.FetchOptions{
 			DownloadTags:    git2go.DownloadTagsNone,
-			RemoteCallbacks: RemoteCallbacks(ctx, opts),
+			RemoteCallbacks: remoteCallBacks,
 			ProxyOptions:    git2go.ProxyOptions{Type: git2go.ProxyTypeAuto},
 		},
 		"")
@@ -151,33 +170,53 @@ type CheckoutTag struct {
 func (c *CheckoutTag) Checkout(ctx context.Context, path, url string, opts *git.AuthOptions) (_ *git.Commit, err error) {
 	defer recoverPanic(&err)
 
-	repo, remote, free, err := getBlankRepoAndRemote(ctx, path, url, opts)
+	remoteCallBacks := RemoteCallbacks(ctx, opts)
+	proxyOpts := &git2go.ProxyOptions{Type: git2go.ProxyTypeAuto}
+
+	repo, remote, err := initializeRepoWithRemote(ctx, path, url, opts)
 	if err != nil {
 		return nil, err
 	}
-	defer free()
+	// Open remote connection.
+	err = remote.ConnectFetch(&remoteCallBacks, proxyOpts, nil)
+	if err != nil {
+		remote.Free()
+		repo.Free()
+		return nil, fmt.Errorf("unable to fetch-connect to remote '%s': %w", managed.EffectiveURL(url), gitutil.LibGit2Error(err))
+	}
+	defer func() {
+		remote.Disconnect()
+		remote.Free()
+		repo.Free()
+	}()
 
+	// When the last observed revision is set, check whether it is still the
+	// same at the remote branch. If so, short-circuit the clone operation here.
 	if c.LastRevision != "" {
 		heads, err := remote.Ls(c.Tag)
 		if err != nil {
 			return nil, fmt.Errorf("unable to remote ls for '%s': %w", managed.EffectiveURL(url), gitutil.LibGit2Error(err))
 		}
 		if len(heads) > 0 {
-			currentRevision := fmt.Sprintf("%s/%s", c.Tag, heads[0].Id.String())
+			hash := heads[0].Id.String()
+			currentRevision := fmt.Sprintf("%s/%s", c.Tag, hash)
 			var same bool
 			if currentRevision == c.LastRevision {
 				same = true
 			} else if len(heads) > 1 {
-				currentAnnotatedRevision := fmt.Sprintf("%s/%s", c.Tag, heads[1].Id.String())
+				hash = heads[1].Id.String()
+				currentAnnotatedRevision := fmt.Sprintf("%s/%s", c.Tag, hash)
 				if currentAnnotatedRevision == c.LastRevision {
 					same = true
 				}
 			}
 			if same {
-				return nil, git.NoChangesError{
-					Message:          "no changes since last reconciliation",
-					ObservedRevision: currentRevision,
+				// Construct a partial commit with the existing information.
+				c := &git.Commit{
+					Hash:      git.Hash(hash),
+					Reference: "refs/tags/" + c.Tag,
 				}
+				return c, nil
 			}
 		}
 	}
@@ -185,8 +224,8 @@ func (c *CheckoutTag) Checkout(ctx context.Context, path, url string, opts *git.
 	err = remote.Fetch([]string{c.Tag},
 		&git2go.FetchOptions{
 			DownloadTags:    git2go.DownloadTagsAuto,
-			RemoteCallbacks: RemoteCallbacks(ctx, opts),
-			ProxyOptions:    git2go.ProxyOptions{Type: git2go.ProxyTypeAuto},
+			RemoteCallbacks: remoteCallBacks,
+			ProxyOptions:    *proxyOpts,
 		},
 		"")
 
@@ -408,34 +447,34 @@ func buildSignature(s *git2go.Signature) git.Signature {
 	}
 }
 
-// getBlankRepoAndRemote returns a newly initialized repository, and a remote connected to the provided url.
-// Callers must call the returning function to free all git2go objects.
-func getBlankRepoAndRemote(ctx context.Context, path, url string, opts *git.AuthOptions) (*git2go.Repository, *git2go.Remote, func(), error) {
+// initializeRepoWithRemote initializes or opens a repository at the given path
+// and configures it with the given remote "origin" URL. If a remote already
+// exists with a different URL, it returns an error.
+func initializeRepoWithRemote(ctx context.Context, path, url string, opts *git.AuthOptions) (*git2go.Repository, *git2go.Remote, error) {
 	repo, err := git2go.InitRepository(path, false)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("unable to init repository for '%s': %w", managed.EffectiveURL(url), gitutil.LibGit2Error(err))
+		return nil, nil, fmt.Errorf("unable to init repository for '%s': %w", managed.EffectiveURL(url), gitutil.LibGit2Error(err))
 	}
 
-	remote, err := repo.Remotes.Create("origin", url)
+	remote, err := repo.Remotes.Create(defaultRemoteName, url)
 	if err != nil {
-		repo.Free()
-		return nil, nil, nil, fmt.Errorf("unable to create remote for '%s': %w", managed.EffectiveURL(url), gitutil.LibGit2Error(err))
+		// If the remote already exists, lookup the remote.
+		if git2go.IsErrorCode(err, git2go.ErrorCodeExists) {
+			remote, err = repo.Remotes.Lookup(defaultRemoteName)
+			if err != nil {
+				repo.Free()
+				return nil, nil, fmt.Errorf("unable to create or lookup remote '%s'", defaultRemoteName)
+			}
+			if remote.Url() != url {
+				repo.Free()
+				return nil, nil, fmt.Errorf("remote '%s' with different address '%s' already exists", defaultRemoteName, remote.Url())
+			}
+		} else {
+			repo.Free()
+			return nil, nil, fmt.Errorf("unable to create remote for '%s': %w", managed.EffectiveURL(url), gitutil.LibGit2Error(err))
+		}
 	}
-
-	callBacks := RemoteCallbacks(ctx, opts)
-	err = remote.ConnectFetch(&callBacks, &git2go.ProxyOptions{Type: git2go.ProxyTypeAuto}, nil)
-	if err != nil {
-		remote.Free()
-		repo.Free()
-		return nil, nil, nil, fmt.Errorf("unable to fetch-connect to remote '%s': %w", managed.EffectiveURL(url), gitutil.LibGit2Error(err))
-	}
-
-	free := func() {
-		remote.Disconnect()
-		remote.Free()
-		repo.Free()
-	}
-	return repo, remote, free, nil
+	return repo, remote, nil
 }
 
 func recoverPanic(err *error) {

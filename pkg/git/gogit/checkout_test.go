@@ -67,32 +67,36 @@ func TestCheckoutBranch_Checkout(t *testing.T) {
 	}
 
 	tests := []struct {
-		name           string
-		branch         string
-		filesCreated   map[string]string
-		expectedCommit string
-		expectedErr    string
-		lastRevision   string
+		name                   string
+		branch                 string
+		filesCreated           map[string]string
+		lastRevision           string
+		expectedCommit         string
+		expectedConcreteCommit bool
+		expectedErr            string
 	}{
 		{
-			name:           "Default branch",
-			branch:         "master",
-			filesCreated:   map[string]string{"branch": "init"},
-			expectedCommit: firstCommit.String(),
+			name:                   "Default branch",
+			branch:                 "master",
+			filesCreated:           map[string]string{"branch": "init"},
+			expectedCommit:         firstCommit.String(),
+			expectedConcreteCommit: true,
 		},
 		{
-			name:         "skip clone if LastRevision hasn't changed",
-			branch:       "master",
-			filesCreated: map[string]string{"branch": "init"},
-			expectedErr:  fmt.Sprintf("no changes since last reconcilation: observed revision 'master/%s'", firstCommit.String()),
-			lastRevision: fmt.Sprintf("master/%s", firstCommit.String()),
+			name:                   "skip clone if LastRevision hasn't changed",
+			branch:                 "master",
+			filesCreated:           map[string]string{"branch": "init"},
+			lastRevision:           fmt.Sprintf("master/%s", firstCommit.String()),
+			expectedCommit:         firstCommit.String(),
+			expectedConcreteCommit: false,
 		},
 		{
-			name:           "Other branch - revision has changed",
-			branch:         "test",
-			filesCreated:   map[string]string{"branch": "second"},
-			expectedCommit: secondCommit.String(),
-			lastRevision:   fmt.Sprintf("master/%s", firstCommit.String()),
+			name:                   "Other branch - revision has changed",
+			branch:                 "test",
+			filesCreated:           map[string]string{"branch": "second"},
+			lastRevision:           fmt.Sprintf("master/%s", firstCommit.String()),
+			expectedCommit:         secondCommit.String(),
+			expectedConcreteCommit: true,
 		},
 		{
 			name:        "Non existing branch",
@@ -120,58 +124,64 @@ func TestCheckoutBranch_Checkout(t *testing.T) {
 			}
 			g.Expect(err).ToNot(HaveOccurred())
 			g.Expect(cc.String()).To(Equal(tt.branch + "/" + tt.expectedCommit))
+			g.Expect(git.IsConcreteCommit(*cc)).To(Equal(tt.expectedConcreteCommit))
 
-			for k, v := range tt.filesCreated {
-				g.Expect(filepath.Join(tmpDir, k)).To(BeARegularFile())
-				g.Expect(os.ReadFile(filepath.Join(tmpDir, k))).To(BeEquivalentTo(v))
+			if tt.expectedConcreteCommit {
+				for k, v := range tt.filesCreated {
+					g.Expect(filepath.Join(tmpDir, k)).To(BeARegularFile())
+					g.Expect(os.ReadFile(filepath.Join(tmpDir, k))).To(BeEquivalentTo(v))
+				}
 			}
 		})
 	}
 }
 
 func TestCheckoutTag_Checkout(t *testing.T) {
+	type testTag struct {
+		name      string
+		annotated bool
+	}
+
 	tests := []struct {
-		name        string
-		tag         string
-		annotated   bool
-		checkoutTag string
-		expectTag   string
-		expectErr   string
-		lastRev     string
-		setLastRev  bool
+		name                 string
+		tagsInRepo           []testTag
+		checkoutTag          string
+		lastRevTag           string
+		expectConcreteCommit bool
+		expectErr            string
 	}{
 		{
-			name:        "Tag",
-			tag:         "tag-1",
-			checkoutTag: "tag-1",
-			expectTag:   "tag-1",
+			name:                 "Tag",
+			tagsInRepo:           []testTag{{"tag-1", false}},
+			checkoutTag:          "tag-1",
+			expectConcreteCommit: true,
 		},
 		{
-			name:        "Skip Tag if last revision hasn't changed",
-			tag:         "tag-2",
-			checkoutTag: "tag-2",
-			setLastRev:  true,
-			expectErr:   "no changes since last reconcilation",
+			name:                 "Annotated",
+			tagsInRepo:           []testTag{{"annotated", true}},
+			checkoutTag:          "annotated",
+			expectConcreteCommit: true,
 		},
 		{
-			name:        "Last revision changed",
-			tag:         "tag-3",
-			checkoutTag: "tag-3",
-			expectTag:   "tag-3",
-			lastRev:     "tag-3/<fake-hash>",
-		},
-		{
-			name:        "Annotated",
-			tag:         "annotated",
-			annotated:   true,
-			checkoutTag: "annotated",
-			expectTag:   "annotated",
-		},
-		{
-			name:        "Non existing tag",
-			tag:         "tag-1",
+			name: "Non existing tag",
+			// Without this go-git returns error "remote repository is empty".
+			tagsInRepo:  []testTag{{"tag-1", false}},
 			checkoutTag: "invalid",
 			expectErr:   "couldn't find remote ref \"refs/tags/invalid\"",
+		},
+		{
+			name:                 "Skip clone - last revision unchanged",
+			tagsInRepo:           []testTag{{"tag-1", false}},
+			checkoutTag:          "tag-1",
+			lastRevTag:           "tag-1",
+			expectConcreteCommit: false,
+		},
+		{
+			name:                 "Last revision changed",
+			tagsInRepo:           []testTag{{"tag-1", false}, {"tag-2", false}},
+			checkoutTag:          "tag-2",
+			lastRevTag:           "tag-1",
+			expectConcreteCommit: true,
 		},
 	}
 	for _, tt := range tests {
@@ -183,32 +193,37 @@ func TestCheckoutTag_Checkout(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			var h plumbing.Hash
-			var tagHash *plumbing.Reference
-			if tt.tag != "" {
-				h, err = commitFile(repo, "tag", tt.tag, time.Now())
-				if err != nil {
-					t.Fatal(err)
-				}
-				tagHash, err = tag(repo, h, !tt.annotated, tt.tag, time.Now())
-				if err != nil {
-					t.Fatal(err)
+			// Collect tags and their associated commit hash for later
+			// reference.
+			tagCommits := map[string]string{}
+
+			// Populate the repo with commits and tags.
+			if tt.tagsInRepo != nil {
+				for _, tr := range tt.tagsInRepo {
+					h, err := commitFile(repo, "tag", tr.name, time.Now())
+					if err != nil {
+						t.Fatal(err)
+					}
+					_, err = tag(repo, h, tr.annotated, tr.name, time.Now())
+					if err != nil {
+						t.Fatal(err)
+					}
+					tagCommits[tr.name] = h.String()
 				}
 			}
 
-			tag := CheckoutTag{
+			checkoutTag := CheckoutTag{
 				Tag: tt.checkoutTag,
 			}
-			if tt.setLastRev {
-				tag.LastRevision = fmt.Sprintf("%s/%s", tt.tag, tagHash.Hash().String())
+			// If last revision is provided, configure it.
+			if tt.lastRevTag != "" {
+				lc := tagCommits[tt.lastRevTag]
+				checkoutTag.LastRevision = fmt.Sprintf("%s/%s", tt.lastRevTag, lc)
 			}
 
-			if tt.lastRev != "" {
-				tag.LastRevision = tt.lastRev
-			}
 			tmpDir := t.TempDir()
 
-			cc, err := tag.Checkout(context.TODO(), tmpDir, path, nil)
+			cc, err := checkoutTag.Checkout(context.TODO(), tmpDir, path, nil)
 			if tt.expectErr != "" {
 				g.Expect(err).ToNot(BeNil())
 				g.Expect(err.Error()).To(ContainSubstring(tt.expectErr))
@@ -216,10 +231,17 @@ func TestCheckoutTag_Checkout(t *testing.T) {
 				return
 			}
 
+			// Check successful checkout results.
+			g.Expect(git.IsConcreteCommit(*cc)).To(Equal(tt.expectConcreteCommit))
+			targetTagHash := tagCommits[tt.checkoutTag]
 			g.Expect(err).ToNot(HaveOccurred())
-			g.Expect(cc.String()).To(Equal(tt.expectTag + "/" + h.String()))
-			g.Expect(filepath.Join(tmpDir, "tag")).To(BeARegularFile())
-			g.Expect(os.ReadFile(filepath.Join(tmpDir, "tag"))).To(BeEquivalentTo(tt.tag))
+			g.Expect(cc.String()).To(Equal(tt.checkoutTag + "/" + targetTagHash))
+
+			// Check file content only when there's an actual checkout.
+			if tt.lastRevTag != tt.checkoutTag {
+				g.Expect(filepath.Join(tmpDir, "tag")).To(BeARegularFile())
+				g.Expect(os.ReadFile(filepath.Join(tmpDir, "tag"))).To(BeEquivalentTo(tt.checkoutTag))
+			}
 		})
 	}
 }

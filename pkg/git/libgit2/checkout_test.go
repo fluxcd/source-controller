@@ -25,6 +25,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/fluxcd/source-controller/pkg/git"
 	git2go "github.com/libgit2/git2go/v33"
 	. "github.com/onsi/gomega"
 )
@@ -76,44 +77,49 @@ func TestCheckoutBranch_Checkout(t *testing.T) {
 	}
 
 	tests := []struct {
-		name           string
-		branch         string
-		filesCreated   map[string]string
-		expectedCommit string
-		expectedErr    string
-		lastRevision   string
+		name                   string
+		branch                 string
+		filesCreated           map[string]string
+		lastRevision           string
+		expectedCommit         string
+		expectedConcreteCommit bool
+		expectedErr            string
 	}{
 		{
-			name:           "Default branch",
-			branch:         defaultBranch,
-			filesCreated:   map[string]string{"branch": "second"},
-			expectedCommit: secondCommit.String(),
+			name:                   "Default branch",
+			branch:                 defaultBranch,
+			filesCreated:           map[string]string{"branch": "second"},
+			expectedCommit:         secondCommit.String(),
+			expectedConcreteCommit: true,
 		},
 		{
-			name:           "Other branch",
-			branch:         "test",
-			filesCreated:   map[string]string{"branch": "init"},
-			expectedCommit: firstCommit.String(),
+			name:                   "Other branch",
+			branch:                 "test",
+			filesCreated:           map[string]string{"branch": "init"},
+			expectedCommit:         firstCommit.String(),
+			expectedConcreteCommit: true,
 		},
 		{
-			name:        "Non existing branch",
-			branch:      "invalid",
-			expectedErr: "reference 'refs/remotes/origin/invalid' not found",
+			name:                   "Non existing branch",
+			branch:                 "invalid",
+			expectedErr:            "reference 'refs/remotes/origin/invalid' not found",
+			expectedConcreteCommit: true,
 		},
 		{
-			name:           "skip clone - lastRevision hasn't changed",
-			branch:         defaultBranch,
-			filesCreated:   map[string]string{"branch": "second"},
-			expectedCommit: secondCommit.String(),
-			lastRevision:   fmt.Sprintf("%s/%s", defaultBranch, secondCommit.String()),
-			expectedErr:    fmt.Sprintf("no changes since last reconciliation: observed revision '%s/%s'", defaultBranch, secondCommit.String()),
+			name:                   "skip clone - lastRevision hasn't changed",
+			branch:                 defaultBranch,
+			filesCreated:           map[string]string{"branch": "second"},
+			lastRevision:           fmt.Sprintf("%s/%s", defaultBranch, secondCommit.String()),
+			expectedCommit:         secondCommit.String(),
+			expectedConcreteCommit: false,
 		},
 		{
-			name:           "lastRevision is different",
-			branch:         defaultBranch,
-			filesCreated:   map[string]string{"branch": "second"},
-			expectedCommit: secondCommit.String(),
-			lastRevision:   fmt.Sprintf("%s/%s", defaultBranch, firstCommit.String()),
+			name:                   "lastRevision is different",
+			branch:                 defaultBranch,
+			filesCreated:           map[string]string{"branch": "second"},
+			lastRevision:           fmt.Sprintf("%s/%s", defaultBranch, firstCommit.String()),
+			expectedCommit:         secondCommit.String(),
+			expectedConcreteCommit: true,
 		},
 	}
 
@@ -136,37 +142,43 @@ func TestCheckoutBranch_Checkout(t *testing.T) {
 			}
 			g.Expect(err).ToNot(HaveOccurred())
 			g.Expect(cc.String()).To(Equal(tt.branch + "/" + tt.expectedCommit))
+			g.Expect(git.IsConcreteCommit(*cc)).To(Equal(tt.expectedConcreteCommit))
 
-			for k, v := range tt.filesCreated {
-				g.Expect(filepath.Join(tmpDir, k)).To(BeARegularFile())
-				g.Expect(os.ReadFile(filepath.Join(tmpDir, k))).To(BeEquivalentTo(v))
+			if tt.expectedConcreteCommit {
+				for k, v := range tt.filesCreated {
+					g.Expect(filepath.Join(tmpDir, k)).To(BeARegularFile())
+					g.Expect(os.ReadFile(filepath.Join(tmpDir, k))).To(BeEquivalentTo(v))
+				}
 			}
 		})
 	}
 }
 
 func TestCheckoutTag_Checkout(t *testing.T) {
+	type testTag struct {
+		name      string
+		annotated bool
+	}
+
 	tests := []struct {
-		name         string
-		tag          string
-		annotated    bool
-		checkoutTag  string
-		expectTag    string
-		expectErr    string
-		lastRevision bool
+		name                 string
+		tagsInRepo           []testTag
+		checkoutTag          string
+		lastRevTag           string
+		expectErr            string
+		expectConcreteCommit bool
 	}{
 		{
-			name:        "Tag",
-			tag:         "tag-1",
-			checkoutTag: "tag-1",
-			expectTag:   "tag-1",
+			name:                 "Tag",
+			tagsInRepo:           []testTag{{"tag-1", false}},
+			checkoutTag:          "tag-1",
+			expectConcreteCommit: true,
 		},
 		{
-			name:        "Annotated",
-			tag:         "annotated",
-			annotated:   true,
-			checkoutTag: "annotated",
-			expectTag:   "annotated",
+			name:                 "Annotated",
+			tagsInRepo:           []testTag{{"annotated", true}},
+			checkoutTag:          "annotated",
+			expectConcreteCommit: true,
 		},
 		{
 			name:        "Non existing tag",
@@ -174,19 +186,18 @@ func TestCheckoutTag_Checkout(t *testing.T) {
 			expectErr:   "unable to find 'invalid': no reference found for shorthand 'invalid'",
 		},
 		{
-			name:         "skip clone - last revision is unchanged",
-			tag:          "tag-1",
-			checkoutTag:  "tag-1",
-			expectTag:    "tag-1",
-			lastRevision: true,
-			expectErr:    "no changes since last reconciliation",
+			name:                 "Skip clone - last revision unchanged",
+			tagsInRepo:           []testTag{{"tag-1", false}},
+			checkoutTag:          "tag-1",
+			lastRevTag:           "tag-1",
+			expectConcreteCommit: false,
 		},
 		{
-			name:         "last revision changed",
-			tag:          "tag-1",
-			checkoutTag:  "tag-1",
-			expectTag:    "tag-2",
-			lastRevision: true,
+			name:                 "Last revision changed",
+			tagsInRepo:           []testTag{{"tag-1", false}, {"tag-2", false}},
+			checkoutTag:          "tag-2",
+			lastRevTag:           "tag-1",
+			expectConcreteCommit: true,
 		},
 	}
 	for _, tt := range tests {
@@ -199,68 +210,57 @@ func TestCheckoutTag_Checkout(t *testing.T) {
 			}
 			defer repo.Free()
 
-			var commit *git2go.Commit
-			if tt.tag != "" {
-				c, err := commitFile(repo, "tag", tt.tag, time.Now())
-				if err != nil {
-					t.Fatal(err)
-				}
-				if commit, err = repo.LookupCommit(c); err != nil {
-					t.Fatal(err)
-				}
-				_, err = tag(repo, commit.Id(), !tt.annotated, tt.tag, time.Now())
-				if err != nil {
-					t.Fatal(err)
-				}
-			}
+			// Collect tags and their associated commit for later reference.
+			tagCommits := map[string]*git2go.Commit{}
 
-			checkoutTag := CheckoutTag{
-				Tag: tt.checkoutTag,
-			}
-			tmpDir := t.TempDir()
-
-			cc, err := checkoutTag.Checkout(context.TODO(), tmpDir, repo.Path(), nil)
-
-			if tt.expectErr != "" {
-				if tt.lastRevision {
-					tmpDir, _ = os.MkdirTemp("", "test")
-					defer os.RemoveAll(tmpDir)
-					checkoutTag.LastRevision = cc.String()
-					cc, err = checkoutTag.Checkout(context.TODO(), tmpDir, repo.Path(), nil)
-				}
-				g.Expect(err).To(HaveOccurred())
-				g.Expect(err.Error()).To(ContainSubstring(tt.expectErr))
-				g.Expect(cc).To(BeNil())
-				return
-			}
-			if tt.lastRevision {
-				checkoutTag.LastRevision = fmt.Sprintf("%s/%s", tt.tag, commit.Id().String())
-				checkoutTag.Tag = tt.expectTag
-				if tt.tag != "" {
-					c, err := commitFile(repo, "tag", "changed tag", time.Now())
+			// Populate the repo with commits and tags.
+			if tt.tagsInRepo != nil {
+				for _, tr := range tt.tagsInRepo {
+					var commit *git2go.Commit
+					c, err := commitFile(repo, "tag", tr.name, time.Now())
 					if err != nil {
 						t.Fatal(err)
 					}
 					if commit, err = repo.LookupCommit(c); err != nil {
 						t.Fatal(err)
 					}
-					_, err = tag(repo, commit.Id(), !tt.annotated, tt.expectTag, time.Now())
+					_, err = tag(repo, commit.Id(), tr.annotated, tr.name, time.Now())
 					if err != nil {
 						t.Fatal(err)
 					}
-					tmpDir, _ = os.MkdirTemp("", "test")
-					defer os.RemoveAll(tmpDir)
-					cc, err = checkoutTag.Checkout(context.TODO(), tmpDir, repo.Path(), nil)
+					tagCommits[tr.name] = commit
 				}
 			}
 
+			checkoutTag := CheckoutTag{
+				Tag: tt.checkoutTag,
+			}
+			// If last revision is provided, configure it.
+			if tt.lastRevTag != "" {
+				lc := tagCommits[tt.lastRevTag]
+				checkoutTag.LastRevision = fmt.Sprintf("%s/%s", tt.lastRevTag, lc.Id().String())
+			}
+
+			tmpDir := t.TempDir()
+
+			cc, err := checkoutTag.Checkout(context.TODO(), tmpDir, repo.Path(), nil)
+			if tt.expectErr != "" {
+				g.Expect(err).To(HaveOccurred())
+				g.Expect(err.Error()).To(ContainSubstring(tt.expectErr))
+				g.Expect(cc).To(BeNil())
+				return
+			}
+
+			// Check successful checkout results.
+			g.Expect(git.IsConcreteCommit(*cc)).To(Equal(tt.expectConcreteCommit))
+			targetTagCommit := tagCommits[tt.checkoutTag]
 			g.Expect(err).ToNot(HaveOccurred())
-			g.Expect(cc.String()).To(Equal(tt.expectTag + "/" + commit.Id().String()))
-			g.Expect(filepath.Join(tmpDir, "tag")).To(BeARegularFile())
-			if tt.lastRevision {
-				g.Expect(os.ReadFile(filepath.Join(tmpDir, "tag"))).To(BeEquivalentTo("changed tag"))
-			} else {
-				g.Expect(os.ReadFile(filepath.Join(tmpDir, "tag"))).To(BeEquivalentTo(tt.tag))
+			g.Expect(cc.String()).To(Equal(tt.checkoutTag + "/" + targetTagCommit.Id().String()))
+
+			// Check file content only when there's an actual checkout.
+			if tt.lastRevTag != tt.checkoutTag {
+				g.Expect(filepath.Join(tmpDir, "tag")).To(BeARegularFile())
+				g.Expect(os.ReadFile(filepath.Join(tmpDir, "tag"))).To(BeEquivalentTo(tt.checkoutTag))
 			}
 		})
 	}
@@ -509,4 +509,38 @@ func mockSignature(time time.Time) *git2go.Signature {
 		Email: "author@example.com",
 		When:  time,
 	}
+}
+
+func TestInitializeRepoWithRemote(t *testing.T) {
+	g := NewWithT(t)
+	tmp := t.TempDir()
+	ctx := context.TODO()
+	testRepoURL := "https://example.com/foo/bar"
+	testRepoURL2 := "https://example.com/foo/baz"
+	authOpts, err := git.AuthOptionsWithoutSecret(testRepoURL)
+	g.Expect(err).ToNot(HaveOccurred())
+	authOpts2, err := git.AuthOptionsWithoutSecret(testRepoURL2)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Fresh initialization.
+	repo, remote, err := initializeRepoWithRemote(ctx, tmp, testRepoURL, authOpts)
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(repo.IsBare()).To(BeFalse())
+	g.Expect(remote.Name()).To(Equal(defaultRemoteName))
+	g.Expect(remote.Url()).To(Equal(testRepoURL))
+	remote.Free()
+	repo.Free()
+
+	// Reinitialize to ensure it reuses the existing origin.
+	repo, remote, err = initializeRepoWithRemote(ctx, tmp, testRepoURL, authOpts)
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(repo.IsBare()).To(BeFalse())
+	g.Expect(remote.Name()).To(Equal(defaultRemoteName))
+	g.Expect(remote.Url()).To(Equal(testRepoURL))
+	remote.Free()
+	repo.Free()
+
+	// Reinitialize with a different remote URL for existing origin.
+	_, _, err = initializeRepoWithRemote(ctx, tmp, testRepoURL2, authOpts2)
+	g.Expect(err).To(HaveOccurred())
 }

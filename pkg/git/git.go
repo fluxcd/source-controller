@@ -107,14 +107,12 @@ type CheckoutStrategy interface {
 	Checkout(ctx context.Context, path, url string, config *AuthOptions) (*Commit, error)
 }
 
-// NoChangesError represents the case in which a Git clone operation
-// is attempted, but cancelled as the revision is still the same as
-// the one observed on the last successful reconciliation.
-type NoChangesError struct {
-	Message          string
-	ObservedRevision string
-}
-
-func (e NoChangesError) Error() string {
-	return fmt.Sprintf("%s: observed revision '%s'", e.Message, e.ObservedRevision)
+// IsConcreteCommit returns if a given commit is a concrete commit. Concrete
+// commits have most of commit metadata and commit content. In contrast, a
+// partial commit may only have some metadata and no commit content.
+func IsConcreteCommit(c Commit) bool {
+	if c.Hash != nil && c.Encoded != nil {
+		return true
+	}
+	return false
 }

@@ -57,6 +57,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
+	serror "github.com/fluxcd/source-controller/internal/error"
+	"github.com/fluxcd/source-controller/internal/features"
 	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
 	"github.com/fluxcd/source-controller/internal/reconcile/summarize"
 	"github.com/fluxcd/source-controller/pkg/git"
@@ -140,6 +142,7 @@ Oomb3gD/TRf/nAdVED+k81GdLzciYdUGtI71/qI47G0nMBluLRE=
 =/4e+
 -----END PGP PUBLIC KEY BLOCK-----
 `
+	emptyContentConfigChecksum = "sha256:fcbcf165908dd18a9e49f7ff27810176db8e9f63b4352213741664245224f8aa"
 )
 
 var (
@@ -499,6 +502,7 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 				Client:        builder.Build(),
 				EventRecorder: record.NewFakeRecorder(32),
 				Storage:       testStorage,
+				features:      features.FeatureGates(),
 			}
 
 			for _, i := range testGitImplementations {
@@ -545,30 +549,35 @@ func TestGitRepositoryReconciler_reconcileSource_checkoutStrategy(t *testing.T) 
 		name                  string
 		skipForImplementation string
 		reference             *sourcev1.GitRepositoryRef
+		beforeFunc            func(obj *sourcev1.GitRepository, latestRev string)
 		want                  sreconcile.Result
 		wantErr               bool
 		wantRevision          string
+		wantArtifactOutdated  bool
 	}{
 		{
-			name:         "Nil reference (default branch)",
-			want:         sreconcile.ResultSuccess,
-			wantRevision: "master/<commit>",
+			name:                 "Nil reference (default branch)",
+			want:                 sreconcile.ResultSuccess,
+			wantRevision:         "master/<commit>",
+			wantArtifactOutdated: true,
 		},
 		{
 			name: "Branch",
 			reference: &sourcev1.GitRepositoryRef{
 				Branch: "staging",
 			},
-			want:         sreconcile.ResultSuccess,
-			wantRevision: "staging/<commit>",
+			want:                 sreconcile.ResultSuccess,
+			wantRevision:         "staging/<commit>",
+			wantArtifactOutdated: true,
 		},
 		{
 			name: "Tag",
 			reference: &sourcev1.GitRepositoryRef{
 				Tag: "v0.1.0",
 			},
-			want:         sreconcile.ResultSuccess,
-			wantRevision: "v0.1.0/<commit>",
+			want:                 sreconcile.ResultSuccess,
+			wantRevision:         "v0.1.0/<commit>",
+			wantArtifactOutdated: true,
 		},
 		{
 			name:                  "Branch commit",
@@ -577,8 +586,9 @@ func TestGitRepositoryReconciler_reconcileSource_checkoutStrategy(t *testing.T) 
 				Branch: "staging",
 				Commit: "<commit>",
 			},
-			want:         sreconcile.ResultSuccess,
-			wantRevision: "staging/<commit>",
+			want:                 sreconcile.ResultSuccess,
+			wantRevision:         "staging/<commit>",
+			wantArtifactOutdated: true,
 		},
 		{
 			name:                  "Branch commit",
@@ -587,32 +597,81 @@ func TestGitRepositoryReconciler_reconcileSource_checkoutStrategy(t *testing.T) 
 				Branch: "staging",
 				Commit: "<commit>",
 			},
-			want:         sreconcile.ResultSuccess,
-			wantRevision: "HEAD/<commit>",
+			want:                 sreconcile.ResultSuccess,
+			wantRevision:         "HEAD/<commit>",
+			wantArtifactOutdated: true,
 		},
 		{
 			name: "SemVer",
 			reference: &sourcev1.GitRepositoryRef{
 				SemVer: "*",
 			},
-			want:         sreconcile.ResultSuccess,
-			wantRevision: "v2.0.0/<commit>",
+			want:                 sreconcile.ResultSuccess,
+			wantRevision:         "v2.0.0/<commit>",
+			wantArtifactOutdated: true,
 		},
 		{
 			name: "SemVer range",
 			reference: &sourcev1.GitRepositoryRef{
 				SemVer: "<v0.2.1",
 			},
-			want:         sreconcile.ResultSuccess,
-			wantRevision: "0.2.0/<commit>",
+			want:                 sreconcile.ResultSuccess,
+			wantRevision:         "0.2.0/<commit>",
+			wantArtifactOutdated: true,
 		},
 		{
 			name: "SemVer prerelease",
 			reference: &sourcev1.GitRepositoryRef{
 				SemVer: ">=1.0.0-0 <1.1.0-0",
 			},
-			wantRevision: "v1.0.0-alpha/<commit>",
-			want:         sreconcile.ResultSuccess,
+			wantRevision:         "v1.0.0-alpha/<commit>",
+			want:                 sreconcile.ResultSuccess,
+			wantArtifactOutdated: true,
+		},
+		{
+			name: "Optimized clone",
+			reference: &sourcev1.GitRepositoryRef{
+				Branch: "staging",
+			},
+			beforeFunc: func(obj *sourcev1.GitRepository, latestRev string) {
+				// Add existing artifact on the object and storage.
+				obj.Status = sourcev1.GitRepositoryStatus{
+					Artifact: &sourcev1.Artifact{
+						Revision: "staging/" + latestRev,
+						Path:     randStringRunes(10),
+					},
+					// Checksum with all the relevant fields unset.
+					ContentConfigChecksum: emptyContentConfigChecksum,
+				}
+				conditions.MarkTrue(obj, sourcev1.ArtifactInStorageCondition, meta.SucceededReason, "foo")
+			},
+			want:                 sreconcile.ResultEmpty,
+			wantErr:              true,
+			wantRevision:         "staging/<commit>",
+			wantArtifactOutdated: false,
+		},
+		{
+			name: "Optimized clone different ignore",
+			reference: &sourcev1.GitRepositoryRef{
+				Branch: "staging",
+			},
+			beforeFunc: func(obj *sourcev1.GitRepository, latestRev string) {
+				// Set new ignore value.
+				obj.Spec.Ignore = pointer.StringPtr("foo")
+				// Add existing artifact on the object and storage.
+				obj.Status = sourcev1.GitRepositoryStatus{
+					Artifact: &sourcev1.Artifact{
+						Revision: "staging/" + latestRev,
+						Path:     randStringRunes(10),
+					},
+					// Checksum with all the relevant fields unset.
+					ContentConfigChecksum: emptyContentConfigChecksum,
+				}
+				conditions.MarkTrue(obj, sourcev1.ArtifactInStorageCondition, meta.SucceededReason, "foo")
+			},
+			want:                 sreconcile.ResultSuccess,
+			wantRevision:         "staging/<commit>",
+			wantArtifactOutdated: false,
 		},
 	}
 
@@ -641,6 +700,7 @@ func TestGitRepositoryReconciler_reconcileSource_checkoutStrategy(t *testing.T) 
 		Client:        fakeclient.NewClientBuilder().WithScheme(runtime.NewScheme()).Build(),
 		EventRecorder: record.NewFakeRecorder(32),
 		Storage:       testStorage,
+		features:      features.FeatureGates(),
 	}
 
 	for _, tt := range tests {
@@ -674,6 +734,10 @@ func TestGitRepositoryReconciler_reconcileSource_checkoutStrategy(t *testing.T) 
 					obj := obj.DeepCopy()
 					obj.Spec.GitImplementation = i
 
+					if tt.beforeFunc != nil {
+						tt.beforeFunc(obj, headRef.Hash().String())
+					}
+
 					var commit git.Commit
 					var includes artifactSet
 					got, err := r.reconcileSource(ctx, obj, &commit, &includes, tmpDir)
@@ -682,10 +746,10 @@ func TestGitRepositoryReconciler_reconcileSource_checkoutStrategy(t *testing.T) 
 					}
 					g.Expect(err != nil).To(Equal(tt.wantErr))
 					g.Expect(got).To(Equal(tt.want))
-					if tt.wantRevision != "" {
+					if tt.wantRevision != "" && !tt.wantErr {
 						revision := strings.ReplaceAll(tt.wantRevision, "<commit>", headRef.Hash().String())
 						g.Expect(commit.String()).To(Equal(revision))
-						g.Expect(conditions.IsTrue(obj, sourcev1.ArtifactOutdatedCondition)).To(BeTrue())
+						g.Expect(conditions.IsTrue(obj, sourcev1.ArtifactOutdatedCondition)).To(Equal(tt.wantArtifactOutdated))
 					}
 				})
 			}
@@ -744,7 +808,8 @@ func TestGitRepositoryReconciler_reconcileArtifact(t *testing.T) {
 			beforeFunc: func(obj *sourcev1.GitRepository) {
 				obj.Spec.Interval = metav1.Duration{Duration: interval}
 				obj.Status.Artifact = &sourcev1.Artifact{Revision: "main/revision"}
-				obj.Status.IncludedArtifacts = []*sourcev1.Artifact{{Revision: "main/revision"}}
+				obj.Status.IncludedArtifacts = []*sourcev1.Artifact{{Revision: "main/revision", Checksum: "some-checksum"}}
+				obj.Status.ContentConfigChecksum = "sha256:f825d11a1c5987e033d2cb36449a3b0435a6abc9b2bfdbcdcc7c49bf40e9285d"
 			},
 			afterFunc: func(t *WithT, obj *sourcev1.GitRepository) {
 				t.Expect(obj.Status.URL).To(BeEmpty())
@@ -857,6 +922,7 @@ func TestGitRepositoryReconciler_reconcileArtifact(t *testing.T) {
 			r := &GitRepositoryReconciler{
 				EventRecorder: record.NewFakeRecorder(32),
 				Storage:       testStorage,
+				features:      features.FeatureGates(),
 			}
 
 			obj := &sourcev1.GitRepository{
@@ -948,39 +1014,6 @@ func TestGitRepositoryReconciler_reconcileInclude(t *testing.T) {
 				{name: "b", toPath: "b/", shouldExist: true},
 			},
 			want: sreconcile.ResultSuccess,
-			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "IncludeChange", "included artifacts differ from last observed includes"),
-				*conditions.TrueCondition(meta.ReconcilingCondition, "IncludeChange", "included artifacts differ from last observed includes"),
-			},
-		},
-		{
-			name: "Include get failure makes IncludeUnavailable=True and returns error",
-			includes: []include{
-				{name: "a", toPath: "a/"},
-			},
-			wantErr: true,
-			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.IncludeUnavailableCondition, "NotFound", "could not get resource for include 'a': gitrepositories.source.toolkit.fluxcd.io \"a\" not found"),
-			},
-		},
-		{
-			name: "Include without an artifact makes IncludeUnavailable=True",
-			dependencies: []dependency{
-				{
-					name:         "a",
-					withArtifact: false,
-					conditions: []metav1.Condition{
-						*conditions.TrueCondition(sourcev1.IncludeUnavailableCondition, "Foo", "foo unavailable"),
-					},
-				},
-			},
-			includes: []include{
-				{name: "a", toPath: "a/"},
-			},
-			wantErr: true,
-			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.IncludeUnavailableCondition, "NoArtifact", "no artifact available for include 'a'"),
-			},
 		},
 		{
 			name: "Invalid FromPath makes IncludeUnavailable=True and returns error",
@@ -995,16 +1028,8 @@ func TestGitRepositoryReconciler_reconcileInclude(t *testing.T) {
 			},
 			wantErr: true,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.IncludeUnavailableCondition, "CopyFailure", "unpack/path: no such file or directory"),
+				*conditions.TrueCondition(sourcev1.StorageOperationFailedCondition, "CopyFailure", "unpack/path: no such file or directory"),
 			},
-		},
-		{
-			name: "Outdated IncludeUnavailable is removed",
-			beforeFunc: func(obj *sourcev1.GitRepository) {
-				conditions.MarkTrue(obj, sourcev1.IncludeUnavailableCondition, "NoArtifact", "")
-			},
-			want:             sreconcile.ResultSuccess,
-			assertConditions: []metav1.Condition{},
 		},
 	}
 	for _, tt := range tests {
@@ -1042,6 +1067,7 @@ func TestGitRepositoryReconciler_reconcileInclude(t *testing.T) {
 				EventRecorder:     record.NewFakeRecorder(32),
 				Storage:           storage,
 				requeueDependency: dependencyInterval,
+				features:          features.FeatureGates(),
 			}
 
 			obj := &sourcev1.GitRepository{
@@ -1072,6 +1098,11 @@ func TestGitRepositoryReconciler_reconcileInclude(t *testing.T) {
 
 			var commit git.Commit
 			var includes artifactSet
+
+			// Build includes artifactSet.
+			artifactSet, err := r.fetchIncludes(ctx, obj)
+			g.Expect(err).ToNot(HaveOccurred())
+			includes = *artifactSet
 
 			got, err := r.reconcileInclude(ctx, obj, &commit, &includes, tmpDir)
 			g.Expect(obj.GetConditions()).To(conditions.MatchConditions(tt.assertConditions))
@@ -1206,6 +1237,7 @@ func TestGitRepositoryReconciler_reconcileStorage(t *testing.T) {
 			r := &GitRepositoryReconciler{
 				EventRecorder: record.NewFakeRecorder(32),
 				Storage:       testStorage,
+				features:      features.FeatureGates(),
 			}
 
 			obj := &sourcev1.GitRepository{
@@ -1247,6 +1279,7 @@ func TestGitRepositoryReconciler_reconcileDelete(t *testing.T) {
 	r := &GitRepositoryReconciler{
 		EventRecorder: record.NewFakeRecorder(32),
 		Storage:       testStorage,
+		features:      features.FeatureGates(),
 	}
 
 	obj := &sourcev1.GitRepository{
@@ -1384,6 +1417,7 @@ func TestGitRepositoryReconciler_verifyCommitSignature(t *testing.T) {
 			r := &GitRepositoryReconciler{
 				EventRecorder: record.NewFakeRecorder(32),
 				Client:        builder.Build(),
+				features:      features.FeatureGates(),
 			}
 
 			obj := &sourcev1.GitRepository{
@@ -1525,6 +1559,7 @@ func TestGitRepositoryReconciler_ConditionsUpdate(t *testing.T) {
 				Client:        builder.Build(),
 				EventRecorder: record.NewFakeRecorder(32),
 				Storage:       testStorage,
+				features:      features.FeatureGates(),
 			}
 
 			key := client.ObjectKeyFromObject(obj)
@@ -1773,12 +1808,25 @@ func TestGitRepositoryReconciler_statusConditions(t *testing.T) {
 }
 
 func TestGitRepositoryReconciler_notify(t *testing.T) {
+	concreteCommit := git.Commit{
+		Hash:    git.Hash("some-hash"),
+		Message: "test commit",
+		Encoded: []byte("content"),
+	}
+	partialCommit := git.Commit{
+		Hash: git.Hash("some-hash"),
+	}
+
+	noopErr := serror.NewGeneric(fmt.Errorf("some no-op error"), "NoOpReason")
+	noopErr.Ignore = true
+
 	tests := []struct {
 		name             string
 		res              sreconcile.Result
 		resErr           error
 		oldObjBeforeFunc func(obj *sourcev1.GitRepository)
 		newObjBeforeFunc func(obj *sourcev1.GitRepository)
+		commit           git.Commit
 		wantEvent        string
 	}{
 		{
@@ -1793,7 +1841,8 @@ func TestGitRepositoryReconciler_notify(t *testing.T) {
 			newObjBeforeFunc: func(obj *sourcev1.GitRepository) {
 				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Checksum: "yyy"}
 			},
-			wantEvent: "Normal NewArtifact stored artifact for commit",
+			commit:    concreteCommit,
+			wantEvent: "Normal NewArtifact stored artifact for commit 'test commit'",
 		},
 		{
 			name:   "recovery from failure",
@@ -1808,7 +1857,8 @@ func TestGitRepositoryReconciler_notify(t *testing.T) {
 				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Checksum: "yyy"}
 				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "ready")
 			},
-			wantEvent: "Normal Succeeded stored artifact for commit",
+			commit:    concreteCommit,
+			wantEvent: "Normal Succeeded stored artifact for commit 'test commit'",
 		},
 		{
 			name:   "recovery and new artifact",
@@ -1823,7 +1873,8 @@ func TestGitRepositoryReconciler_notify(t *testing.T) {
 				obj.Status.Artifact = &sourcev1.Artifact{Revision: "aaa", Checksum: "bbb"}
 				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "ready")
 			},
-			wantEvent: "Normal NewArtifact stored artifact for commit",
+			commit:    concreteCommit,
+			wantEvent: "Normal NewArtifact stored artifact for commit 'test commit'",
 		},
 		{
 			name:   "no updates",
@@ -1837,6 +1888,22 @@ func TestGitRepositoryReconciler_notify(t *testing.T) {
 				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Checksum: "yyy"}
 				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "ready")
 			},
+		},
+		{
+			name:   "no-op error result",
+			res:    sreconcile.ResultEmpty,
+			resErr: noopErr,
+			oldObjBeforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Checksum: "yyy"}
+				conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.GitOperationFailedReason, "fail")
+				conditions.MarkFalse(obj, meta.ReadyCondition, meta.FailedReason, "foo")
+			},
+			newObjBeforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Checksum: "yyy"}
+				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "ready")
+			},
+			commit:    partialCommit, // no-op will always result in partial commit.
+			wantEvent: "Normal Succeeded stored artifact for commit 'HEAD/some-hash'",
 		},
 	}
 
@@ -1857,11 +1924,9 @@ func TestGitRepositoryReconciler_notify(t *testing.T) {
 
 			reconciler := &GitRepositoryReconciler{
 				EventRecorder: recorder,
+				features:      features.FeatureGates(),
 			}
-			commit := &git.Commit{
-				Message: "test commit",
-			}
-			reconciler.notify(oldObj, newObj, *commit, tt.res, tt.resErr)
+			reconciler.notify(oldObj, newObj, tt.commit, tt.res, tt.resErr)
 
 			select {
 			case x, ok := <-recorder.Events:
@@ -1876,4 +1941,204 @@ func TestGitRepositoryReconciler_notify(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestGitRepositoryReconciler_fetchIncludes(t *testing.T) {
+	type dependency struct {
+		name         string
+		withArtifact bool
+		conditions   []metav1.Condition
+	}
+
+	type include struct {
+		name        string
+		fromPath    string
+		toPath      string
+		shouldExist bool
+	}
+
+	tests := []struct {
+		name             string
+		dependencies     []dependency
+		includes         []include
+		beforeFunc       func(obj *sourcev1.GitRepository)
+		wantErr          bool
+		wantArtifactSet  artifactSet
+		assertConditions []metav1.Condition
+	}{
+		{
+			name: "Existing includes",
+			dependencies: []dependency{
+				{
+					name:         "a",
+					withArtifact: true,
+					conditions: []metav1.Condition{
+						*conditions.TrueCondition(meta.ReadyCondition, "Foo", "foo ready"),
+					},
+				},
+				{
+					name:         "b",
+					withArtifact: true,
+					conditions: []metav1.Condition{
+						*conditions.TrueCondition(meta.ReadyCondition, "Bar", "bar ready"),
+					},
+				},
+			},
+			includes: []include{
+				{name: "a", toPath: "a/", shouldExist: true},
+				{name: "b", toPath: "b/", shouldExist: true},
+			},
+			wantErr: false,
+			wantArtifactSet: []*sourcev1.Artifact{
+				{Revision: "a"},
+				{Revision: "b"},
+			},
+		},
+		{
+			name: "Include get failure",
+			includes: []include{
+				{name: "a", toPath: "a/"},
+			},
+			wantErr: true,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.IncludeUnavailableCondition, "NotFound", "could not get resource for include 'a': gitrepositories.source.toolkit.fluxcd.io \"a\" not found"),
+			},
+		},
+		{
+			name: "Include without an artifact makes IncludeUnavailable=True",
+			dependencies: []dependency{
+				{
+					name:         "a",
+					withArtifact: false,
+					conditions: []metav1.Condition{
+						*conditions.TrueCondition(sourcev1.IncludeUnavailableCondition, "Foo", "foo unavailable"),
+					},
+				},
+			},
+			includes: []include{
+				{name: "a", toPath: "a/"},
+			},
+			wantErr: true,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.IncludeUnavailableCondition, "NoArtifact", "no artifact available for include 'a'"),
+			},
+		},
+		{
+			name: "Outdated IncludeUnavailable is removed",
+			beforeFunc: func(obj *sourcev1.GitRepository) {
+				conditions.MarkTrue(obj, sourcev1.IncludeUnavailableCondition, "NoArtifact", "")
+			},
+			assertConditions: []metav1.Condition{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			var depObjs []client.Object
+			for _, d := range tt.dependencies {
+				obj := &sourcev1.GitRepository{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: d.name,
+					},
+					Status: sourcev1.GitRepositoryStatus{
+						Conditions: d.conditions,
+					},
+				}
+				if d.withArtifact {
+					obj.Status.Artifact = &sourcev1.Artifact{
+						Path:           d.name + ".tar.gz",
+						Revision:       d.name,
+						LastUpdateTime: metav1.Now(),
+					}
+				}
+				depObjs = append(depObjs, obj)
+			}
+
+			builder := fakeclient.NewClientBuilder().WithScheme(testEnv.GetScheme())
+			if len(tt.dependencies) > 0 {
+				builder.WithObjects(depObjs...)
+			}
+
+			r := &GitRepositoryReconciler{
+				Client:        builder.Build(),
+				EventRecorder: record.NewFakeRecorder(32),
+			}
+
+			obj := &sourcev1.GitRepository{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "reconcile-include",
+				},
+				Spec: sourcev1.GitRepositorySpec{
+					Interval: metav1.Duration{Duration: interval},
+				},
+			}
+
+			for i, incl := range tt.includes {
+				incl := sourcev1.GitRepositoryInclude{
+					GitRepositoryRef: meta.LocalObjectReference{Name: incl.name},
+					FromPath:         incl.fromPath,
+					ToPath:           incl.toPath,
+				}
+				tt.includes[i].fromPath = incl.GetFromPath()
+				tt.includes[i].toPath = incl.GetToPath()
+				obj.Spec.Include = append(obj.Spec.Include, incl)
+			}
+
+			gotArtifactSet, err := r.fetchIncludes(ctx, obj)
+			g.Expect(err != nil).To(Equal(tt.wantErr))
+			g.Expect(obj.GetConditions()).To(conditions.MatchConditions(tt.assertConditions))
+			if !tt.wantErr && gotArtifactSet != nil {
+				g.Expect(gotArtifactSet.Diff(tt.wantArtifactSet)).To(BeFalse())
+			}
+		})
+	}
+}
+
+func TestGitRepositoryReconciler_calculateContentConfigChecksum(t *testing.T) {
+	g := NewWithT(t)
+	obj := &sourcev1.GitRepository{}
+	r := &GitRepositoryReconciler{}
+
+	emptyChecksum := r.calculateContentConfigChecksum(obj, nil)
+	g.Expect(emptyChecksum).To(Equal(emptyContentConfigChecksum))
+
+	// Ignore modified.
+	obj.Spec.Ignore = pointer.String("some-rule")
+	ignoreModChecksum := r.calculateContentConfigChecksum(obj, nil)
+	g.Expect(emptyChecksum).ToNot(Equal(ignoreModChecksum))
+
+	// Recurse submodules modified.
+	obj.Spec.RecurseSubmodules = true
+	submodModChecksum := r.calculateContentConfigChecksum(obj, nil)
+	g.Expect(ignoreModChecksum).ToNot(Equal(submodModChecksum))
+
+	// Include modified.
+	obj.Spec.Include = []sourcev1.GitRepositoryInclude{
+		{
+			GitRepositoryRef: meta.LocalObjectReference{Name: "foo"},
+			FromPath:         "aaa",
+			ToPath:           "bbb",
+		},
+	}
+	artifacts := &artifactSet{
+		&sourcev1.Artifact{Revision: "some-revision-1", Checksum: "some-checksum-1"},
+	}
+	includeModChecksum := r.calculateContentConfigChecksum(obj, artifacts)
+	g.Expect(submodModChecksum).ToNot(Equal(includeModChecksum))
+
+	// Artifact modified revision.
+	artifacts = &artifactSet{
+		&sourcev1.Artifact{Revision: "some-revision-2", Checksum: "some-checksum-1"},
+	}
+	artifactModChecksum := r.calculateContentConfigChecksum(obj, artifacts)
+	g.Expect(includeModChecksum).ToNot(Equal(artifactModChecksum))
+
+	// Artifact modified checksum.
+	artifacts = &artifactSet{
+		&sourcev1.Artifact{Revision: "some-revision-2", Checksum: "some-checksum-2"},
+	}
+	artifactCsumModChecksum := r.calculateContentConfigChecksum(obj, artifacts)
+	g.Expect(artifactModChecksum).ToNot(Equal(artifactCsumModChecksum))
 }
