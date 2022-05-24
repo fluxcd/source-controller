@@ -128,11 +128,11 @@ func ComputeReconcileResult(obj conditions.Setter, res Result, recErr error, rb 
 	switch t := recErr.(type) {
 	case *serror.Stalling:
 		if res == ResultEmpty {
+			conditions.MarkStalled(obj, t.Reason, t.Error())
 			// The current generation has been reconciled successfully and it
 			// has resulted in a stalled state. Return no error to stop further
 			// requeuing.
-			pOpts = append(pOpts, patch.WithStatusObservedGeneration{})
-			conditions.MarkStalled(obj, t.Reason, t.Error())
+			pOpts = addPatchOptionWithStatusObservedGeneration(obj, pOpts)
 			return pOpts, result, nil
 		}
 		// NOTE: Non-empty result with stalling error indicates that the
@@ -150,7 +150,7 @@ func ComputeReconcileResult(obj conditions.Setter, res Result, recErr error, rb 
 		if t.Ignore {
 			// The current generation has been reconciled successfully with
 			// no-op result. Update status observed generation.
-			pOpts = append(pOpts, patch.WithStatusObservedGeneration{})
+			pOpts = addPatchOptionWithStatusObservedGeneration(obj, pOpts)
 			conditions.Delete(obj, meta.ReconcilingCondition)
 			return pOpts, result, nil
 		}
@@ -159,7 +159,7 @@ func ComputeReconcileResult(obj conditions.Setter, res Result, recErr error, rb 
 		// state. If a requeue is requested, the current generation has not been
 		// reconciled successfully.
 		if res != ResultRequeue {
-			pOpts = append(pOpts, patch.WithStatusObservedGeneration{})
+			pOpts = addPatchOptionWithStatusObservedGeneration(obj, pOpts)
 		}
 		conditions.Delete(obj, meta.StalledCondition)
 	default:
@@ -206,4 +206,18 @@ func FailureRecovery(oldObj, newObj conditions.Getter, failConditions []string) 
 		}
 	}
 	return failuresBefore > 0
+}
+
+// addPatchOptionWithStatusObservedGeneration adds patch option
+// WithStatusObservedGeneration to the provided patch option slice only if there
+// is any condition present on the object, and returns it. This is necessary to
+// prevent setting status observed generation without any effectual observation.
+// An object must have some condition in the status if it has been observed.
+// TODO: Move this to fluxcd/pkg/runtime/patch package after it has proven its
+// need.
+func addPatchOptionWithStatusObservedGeneration(obj conditions.Setter, opts []patch.Option) []patch.Option {
+	if len(obj.GetConditions()) > 0 {
+		opts = append(opts, patch.WithStatusObservedGeneration{})
+	}
+	return opts
 }

@@ -71,11 +71,17 @@ func TestComputeReconcileResult(t *testing.T) {
 		afterFunc        func(t *WithT, obj conditions.Setter, patchOpts *patch.HelperOptions)
 	}{
 		{
-			name:       "successful result",
-			result:     ResultSuccess,
+			name:   "successful result",
+			result: ResultSuccess,
+			beforeFunc: func(obj conditions.Setter) {
+				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "foo")
+			},
 			recErr:     nil,
 			wantResult: ctrl.Result{RequeueAfter: testSuccessInterval},
 			wantErr:    false,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReadyCondition, meta.SucceededReason, "foo"),
+			},
 			afterFunc: func(t *WithT, obj conditions.Setter, patchOpts *patch.HelperOptions) {
 				t.Expect(patchOpts.IncludeStatusObservedGeneration).To(BeTrue())
 			},
@@ -85,10 +91,14 @@ func TestComputeReconcileResult(t *testing.T) {
 			result: ResultSuccess,
 			beforeFunc: func(obj conditions.Setter) {
 				conditions.MarkReconciling(obj, "NewRevision", "new revision")
+				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "foo")
 			},
 			recErr:     nil,
 			wantResult: ctrl.Result{RequeueAfter: testSuccessInterval},
 			wantErr:    false,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReadyCondition, meta.SucceededReason, "foo"),
+			},
 			afterFunc: func(t *WithT, obj conditions.Setter, patchOpts *patch.HelperOptions) {
 				t.Expect(patchOpts.IncludeStatusObservedGeneration).To(BeTrue())
 				t.Expect(conditions.IsUnknown(obj, meta.ReconcilingCondition)).To(BeTrue())
@@ -364,6 +374,61 @@ func TestFailureRecovery(t *testing.T) {
 			}
 
 			g.Expect(FailureRecovery(oldObj, newObj, tt.failConditions)).To(Equal(tt.result))
+		})
+	}
+}
+
+func TestAddOptionWithStatusObservedGeneration(t *testing.T) {
+	tests := []struct {
+		name       string
+		beforeFunc func(obj conditions.Setter)
+		patchOpts  []patch.Option
+		want       bool
+	}{
+		{
+			name: "no conditions",
+			want: false,
+		},
+		{
+			name: "some condition",
+			beforeFunc: func(obj conditions.Setter) {
+				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "foo")
+			},
+			want: true,
+		},
+		{
+			name: "existing option with conditions",
+			beforeFunc: func(obj conditions.Setter) {
+				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "foo")
+			},
+			patchOpts: []patch.Option{patch.WithForceOverwriteConditions{}, patch.WithStatusObservedGeneration{}},
+			want:      true,
+		},
+		{
+			name:      "existing option, no conditions, can't remove",
+			patchOpts: []patch.Option{patch.WithForceOverwriteConditions{}, patch.WithStatusObservedGeneration{}},
+			want:      true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			obj := &sourcev1.GitRepository{}
+
+			if tt.beforeFunc != nil {
+				tt.beforeFunc(obj)
+			}
+
+			tt.patchOpts = addPatchOptionWithStatusObservedGeneration(obj, tt.patchOpts)
+
+			// Apply the options and evaluate the result.
+			options := &patch.HelperOptions{}
+			for _, opt := range tt.patchOpts {
+				opt.ApplyToHelper(options)
+			}
+			g.Expect(options.IncludeStatusObservedGeneration).To(Equal(tt.want))
 		})
 	}
 }
