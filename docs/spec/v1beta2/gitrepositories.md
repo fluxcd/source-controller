@@ -388,16 +388,17 @@ Some Git providers like Azure DevOps _require_ the `libgit2` implementation, as
 their Git servers provide only support for the
 [v2 protocol](https://git-scm.com/docs/protocol-v2).
 
-#### Experimental managed transport for `libgit2` Git implementation
+#### Managed transport for `libgit2` Git implementation
 
-The `libgit2` Git implementation supports a new experimental transport for
+The `libgit2` Git implementation supports a new managed transport for
 improved reliability, adding timeout enforcement for Git network operations.
-Opt-in by setting the environment variable `EXPERIMENTAL_GIT_TRANSPORT` to
-`true` in the controller's Deployment. This will result in the low-level
-transport being handled by the controller, instead of `libgit2`.
 
-This may lead to an increased number of timeout messages in the logs, however
-it will fix the bug in which Git operations make the controllers hang indefinitely.
+This feature is enabled by default. It can be disabled by starting the
+controller with the argument `--feature-gates=GitManagedTransport=false`.
+
+By disabling this feature the management of the transport is passed on to
+`libgit2`, which may result in blocking Git operations leading the controllers 
+to hang indefinitely.
 
 #### Optimized Git clones
 
