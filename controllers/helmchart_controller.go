@@ -29,7 +29,7 @@ import (
 	"time"
 
 	helmgetter "helm.sh/helm/v3/pkg/getter"
-	"helm.sh/helm/v3/pkg/registry"
+	helmreg "helm.sh/helm/v3/pkg/registry"
 	corev1 "k8s.io/api/core/v1"
 	apierrs "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -60,6 +60,7 @@ import (
 	serror "github.com/fluxcd/source-controller/internal/error"
 	"github.com/fluxcd/source-controller/internal/helm/chart"
 	"github.com/fluxcd/source-controller/internal/helm/getter"
+	"github.com/fluxcd/source-controller/internal/helm/registry"
 	"github.com/fluxcd/source-controller/internal/helm/repository"
 	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
 	"github.com/fluxcd/source-controller/internal/reconcile/summarize"
@@ -380,7 +381,7 @@ func (r *HelmChartReconciler) reconcileSource(ctx context.Context, obj *sourcev1
 
 	// Assert source has an artifact
 	if s.GetArtifact() == nil || !r.Storage.ArtifactExist(*s.GetArtifact()) {
-		if helmRepo, ok := s.(*sourcev1.HelmRepository); !ok || !registry.IsOCI(helmRepo.Spec.URL) {
+		if helmRepo, ok := s.(*sourcev1.HelmRepository); !ok || !helmreg.IsOCI(helmRepo.Spec.URL) {
 			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, "NoSourceArtifact",
 				"no artifact available for %s source '%s'", obj.Spec.SourceRef.Kind, obj.Spec.SourceRef.Name)
 			r.eventLogf(ctx, obj, events.EventTypeTrace, "NoSourceArtifact",
@@ -447,7 +448,7 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 	repo *sourcev1.HelmRepository, b *chart.Build) (sreconcile.Result, error) {
 	var (
 		tlsConfig *tls.Config
-		logOpts   []registry.LoginOption
+		loginOpts []helmreg.LoginOption
 	)
 
 	// Construct the Getter options from the HelmRepository data
@@ -492,7 +493,7 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 		}
 
 		// Build registryClient options from secret
-		logOpt, err := loginOptionFromSecret(*secret)
+		loginOpt, err := registry.LoginOptionFromSecret(repo.Spec.URL, *secret)
 		if err != nil {
 			e := &serror.Event{
 				Err:    fmt.Errorf("failed to configure Helm client with secret data: %w", err),
@@ -503,14 +504,14 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 			return sreconcile.ResultEmpty, e
 		}
 
-		logOpts = append([]registry.LoginOption{}, logOpt)
+		loginOpts = append([]helmreg.LoginOption{}, loginOpt)
 	}
 
 	// Initialize the chart repository
 	var chartRepo chart.Remote
 	switch repo.Spec.Type {
 	case sourcev1.HelmRepositoryTypeOCI:
-		if !registry.IsOCI(repo.Spec.URL) {
+		if !helmreg.IsOCI(repo.Spec.URL) {
 			err := fmt.Errorf("invalid OCI registry URL: %s", repo.Spec.URL)
 			return chartRepoErrorReturn(err, obj)
 		}
@@ -519,7 +520,7 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 		// this is needed because otherwise the credentials are stored in ~/.docker/config.json.
 		// TODO@souleb: remove this once the registry move to Oras v2
 		// or rework to enable reusing credentials to avoid the unneccessary handshake operations
-		registryClient, file, err := r.RegistryClientGenerator(logOpts != nil)
+		registryClient, file, err := r.RegistryClientGenerator(loginOpts != nil)
 		if err != nil {
 			return chartRepoErrorReturn(err, obj)
 		}
@@ -540,14 +541,13 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 
 		// If login options are configured, use them to login to the registry
 		// The OCIGetter will later retrieve the stored credentials to pull the chart
-		if logOpts != nil {
-			err = ociChartRepo.Login(logOpts...)
+		if loginOpts != nil {
+			err = ociChartRepo.Login(loginOpts...)
 			if err != nil {
 				return chartRepoErrorReturn(err, obj)
 			}
 		}
 	default:
-		var httpChartRepo *repository.ChartRepository
 		httpChartRepo, err := repository.NewChartRepository(repo.Spec.URL, r.Storage.LocalPath(*repo.GetArtifact()), r.Getters, tlsConfig, clientOpts,
 			repository.WithMemoryCache(r.Storage.LocalPath(*repo.GetArtifact()), r.Cache, r.TTL, func(event string) {
 				r.IncCacheEvents(event, obj.Name, obj.Namespace)

@@ -42,7 +42,7 @@ import (
 	"github.com/fluxcd/pkg/runtime/pprof"
 	"github.com/fluxcd/pkg/runtime/probes"
 	"github.com/fluxcd/source-controller/internal/features"
-	"github.com/fluxcd/source-controller/internal/helm/util"
+	"github.com/fluxcd/source-controller/internal/helm/registry"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
 	"github.com/fluxcd/source-controller/controllers"
@@ -229,7 +229,7 @@ func main() {
 		MaxConcurrentReconciles: concurrent,
 		RateLimiter:             helper.GetRateLimiter(rateLimiterOptions),
 	}); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", sourcev1.HelmRepositoryKind)
+		setupLog.Error(err, "unable to create controller", "controller", sourcev1.HelmRepositoryKind, "type", "default")
 		os.Exit(1)
 	}
 
@@ -239,12 +239,12 @@ func main() {
 		Metrics:                 metricsH,
 		Getters:                 getters,
 		ControllerName:          controllerName,
-		RegistryClientGenerator: util.RegistryClientGenerator,
+		RegistryClientGenerator: registry.ClientGenerator,
 	}).SetupWithManagerAndOptions(mgr, controllers.HelmRepositoryReconcilerOptions{
 		MaxConcurrentReconciles: concurrent,
 		RateLimiter:             helper.GetRateLimiter(rateLimiterOptions),
 	}); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", sourcev1.HelmRepositoryKind)
+		setupLog.Error(err, "unable to create controller", "controller", sourcev1.HelmRepositoryKind, "type", "OCI")
 		os.Exit(1)
 	}
 
@@ -270,7 +270,7 @@ func main() {
 
 	if err = (&controllers.HelmChartReconciler{
 		Client:                  mgr.GetClient(),
-		RegistryClientGenerator: util.RegistryClientGenerator,
+		RegistryClientGenerator: registry.ClientGenerator,
 		Storage:                 storage,
 		Getters:                 getters,
 		EventRecorder:           eventRecorder,

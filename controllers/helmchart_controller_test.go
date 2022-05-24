@@ -19,6 +19,7 @@ package controllers
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
@@ -35,7 +36,7 @@ import (
 	. "github.com/onsi/gomega"
 	hchart "helm.sh/helm/v3/pkg/chart"
 	"helm.sh/helm/v3/pkg/chart/loader"
-	"helm.sh/helm/v3/pkg/registry"
+	helmreg "helm.sh/helm/v3/pkg/registry"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -53,7 +54,7 @@ import (
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
 	serror "github.com/fluxcd/source-controller/internal/error"
 	"github.com/fluxcd/source-controller/internal/helm/chart"
-	"github.com/fluxcd/source-controller/internal/helm/util"
+	"github.com/fluxcd/source-controller/internal/helm/registry"
 	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
 	"github.com/fluxcd/source-controller/internal/reconcile/summarize"
 )
@@ -792,8 +793,8 @@ func TestHelmChartReconciler_buildFromOCIHelmRepository(t *testing.T) {
 
 	// Login to the registry
 	err := testRegistryserver.RegistryClient.Login(testRegistryserver.DockerRegistryHost,
-		registry.LoginOptBasicAuth(testUsername, testPassword),
-		registry.LoginOptInsecure(true))
+		helmreg.LoginOptBasicAuth(testUsername, testPassword),
+		helmreg.LoginOptInsecure(true))
 	g.Expect(err).NotTo(HaveOccurred())
 
 	// Load a test chart
@@ -825,6 +826,35 @@ func TestHelmChartReconciler_buildFromOCIHelmRepository(t *testing.T) {
 		assertFunc func(g *WithT, obj *sourcev1.HelmChart, build chart.Build)
 		cleanFunc  func(g *WithT, build *chart.Build)
 	}{
+		{
+			name: "Reconciles chart build with docker repository credentials",
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "auth",
+				},
+				Type: corev1.SecretTypeDockerConfigJson,
+				Data: map[string][]byte{
+					".dockerconfigjson": []byte(`{"auths":{"` +
+						testRegistryserver.DockerRegistryHost + `":{"` +
+						`auth":"` + base64.StdEncoding.EncodeToString([]byte(testUsername+":"+testPassword)) + `"}}}`),
+				},
+			},
+			beforeFunc: func(obj *sourcev1.HelmChart, repository *sourcev1.HelmRepository) {
+				obj.Spec.Chart = metadata.Name
+				obj.Spec.Version = metadata.Version
+				repository.Spec.SecretRef = &meta.LocalObjectReference{Name: "auth"}
+			},
+			want: sreconcile.ResultSuccess,
+			assertFunc: func(g *WithT, _ *sourcev1.HelmChart, build chart.Build) {
+				g.Expect(build.Name).To(Equal(metadata.Name))
+				g.Expect(build.Version).To(Equal(metadata.Version))
+				g.Expect(build.Path).ToNot(BeEmpty())
+				g.Expect(build.Path).To(BeARegularFile())
+			},
+			cleanFunc: func(g *WithT, build *chart.Build) {
+				g.Expect(os.Remove(build.Path)).To(Succeed())
+			},
+		},
 		{
 			name: "Reconciles chart build with repository credentials",
 			secret: &corev1.Secret{
@@ -945,7 +975,7 @@ func TestHelmChartReconciler_buildFromOCIHelmRepository(t *testing.T) {
 				EventRecorder:           record.NewFakeRecorder(32),
 				Getters:                 testGetters,
 				Storage:                 storage,
-				RegistryClientGenerator: util.RegistryClientGenerator,
+				RegistryClientGenerator: registry.ClientGenerator,
 			}
 
 			repository := &sourcev1.HelmRepository{
