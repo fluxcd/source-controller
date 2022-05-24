@@ -167,7 +167,7 @@ func (t *sshSmartSubtransport) Action(credentialsID string, action git2go.SmartS
 		cert := &git2go.Certificate{
 			Kind: git2go.CertificateHostkey,
 			Hostkey: git2go.HostkeyCertificate{
-				Kind:         git2go.HostkeySHA1 | git2go.HostkeyMD5 | git2go.HostkeySHA256 | git2go.HostkeyRaw,
+				Kind:         git2go.HostkeySHA256,
 				HashMD5:      md5.Sum(marshaledKey),
 				HashSHA1:     sha1.Sum(marshaledKey),
 				HashSHA256:   sha256.Sum256(marshaledKey),
@@ -176,7 +176,10 @@ func (t *sshSmartSubtransport) Action(credentialsID string, action git2go.SmartS
 			},
 		}
 
-		return t.transport.SmartCertificateCheck(cert, true, hostname)
+		if len(opts.AuthOpts.KnownHosts) > 0 {
+			return KnownHostsCallback(hostname, opts.AuthOpts.KnownHosts)(cert, true, hostname)
+		}
+		return nil
 	}
 
 	err = t.createConn(t.addr, sshConfig)

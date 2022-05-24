@@ -123,7 +123,6 @@ func Test_ManagedSSH_KeyTypes(t *testing.T) {
 	knownHosts, err := ssh.ScanHostKey(u.Host, timeout, git.HostKeyAlgos, false)
 	g.Expect(err).ToNot(HaveOccurred())
 
-	os.Setenv("EXPERIMENTAL_GIT_TRANSPORT", "true")
 	managed.InitManagedTransport(logr.Discard())
 
 	for _, tt := range tests {
@@ -138,16 +137,6 @@ func Test_ManagedSSH_KeyTypes(t *testing.T) {
 			if tt.authorized {
 				authorizedPublicKey = string(kp.PublicKey)
 			}
-
-			// secret := corev1.Secret{
-			// Data: map[string][]byte{
-			// "identity":    kp.PrivateKey,
-			// "known_hosts": knownHosts,
-			// },
-			// }
-			//
-			// authOpts, err := git.AuthOptionsFromSecret(repoURL, &secret)
-			// g.Expect(err).ToNot(HaveOccurred())
 
 			authOpts := &git.AuthOptions{
 				Identity:   kp.PrivateKey,
@@ -233,7 +222,6 @@ func Test_ManagedSSH_KeyExchangeAlgos(t *testing.T) {
 		},
 	}
 
-	os.Setenv("EXPERIMENTAL_GIT_TRANSPORT", "true")
 	managed.InitManagedTransport(logr.Discard())
 
 	for _, tt := range tests {
@@ -280,15 +268,6 @@ func Test_ManagedSSH_KeyExchangeAlgos(t *testing.T) {
 			kp, err := ssh.GenerateKeyPair(ssh.ED25519)
 			g.Expect(err).ToNot(HaveOccurred())
 
-			// secret := corev1.Secret{
-			// Data: map[string][]byte{
-			// "identity":    kp.PrivateKey,
-			// "known_hosts": knownHosts,
-			// },
-			// }
-			//
-			// authOpts, err := git.AuthOptionsFromSecret(repoURL, &secret)
-			// g.Expect(err).ToNot(HaveOccurred())
 			authOpts := &git.AuthOptions{
 				Identity:   kp.PrivateKey,
 				KnownHosts: knownHosts,
@@ -402,7 +381,6 @@ func Test_ManagedSSH_HostKeyAlgos(t *testing.T) {
 		},
 	}
 
-	os.Setenv("EXPERIMENTAL_GIT_TRANSPORT", "true")
 	managed.InitManagedTransport(logr.Discard())
 
 	for _, tt := range tests {
@@ -459,15 +437,6 @@ func Test_ManagedSSH_HostKeyAlgos(t *testing.T) {
 			kp, err := ssh.GenerateKeyPair(ssh.ED25519)
 			g.Expect(err).ToNot(HaveOccurred())
 
-			// secret := corev1.Secret{
-			// Data: map[string][]byte{
-			// "identity":    kp.PrivateKey,
-			// "known_hosts": knownHosts,
-			// },
-			// }
-			//
-			// authOpts, err := git.AuthOptionsFromSecret(repoURL, &secret)
-			// g.Expect(err).ToNot(HaveOccurred())
 			authOpts := &git.AuthOptions{
 				Identity:   kp.PrivateKey,
 				KnownHosts: knownHosts,

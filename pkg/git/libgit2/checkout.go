@@ -69,6 +69,8 @@ type CheckoutBranch struct {
 func (c *CheckoutBranch) Checkout(ctx context.Context, path, url string, opts *git.AuthOptions) (_ *git.Commit, err error) {
 	defer recoverPanic(&err)
 
+	remoteCallBacks := RemoteCallbacks(ctx, opts)
+
 	if managed.Enabled() {
 		// We store the target url and auth options mapped to a unique ID. We overwrite the target url
 		// with the TransportAuthID, because managed transports don't provide a way for any kind of
@@ -77,15 +79,18 @@ func (c *CheckoutBranch) Checkout(ctx context.Context, path, url string, opts *g
 		// Performing all fetch operations with the TransportAuthID as the url, lets the managed
 		// transport action use it to fetch the registered transport options which contains the
 		// _actual_ target url and the correct credentials to use.
+		if opts.TransportAuthID == "" {
+			return nil, fmt.Errorf("can't use managed transport without a valid transport auth id.")
+		}
 		managed.AddTransportOptions(opts.TransportAuthID, managed.TransportOptions{
 			TargetURL: url,
 			AuthOpts:  opts,
 		})
 		url = opts.TransportAuthID
+		remoteCallBacks = managed.RemoteCallbacks()
 		defer managed.RemoveTransportOptions(opts.TransportAuthID)
 	}
 
-	remoteCallBacks := RemoteCallbacks(ctx, opts)
 	proxyOpts := &git2go.ProxyOptions{Type: git2go.ProxyTypeAuto}
 
 	repo, remote, err := initializeRepoWithRemote(ctx, path, url, opts)
@@ -186,16 +191,21 @@ type CheckoutTag struct {
 func (c *CheckoutTag) Checkout(ctx context.Context, path, url string, opts *git.AuthOptions) (_ *git.Commit, err error) {
 	defer recoverPanic(&err)
 
+	remoteCallBacks := RemoteCallbacks(ctx, opts)
+
 	if managed.Enabled() {
+		if opts.TransportAuthID == "" {
+			return nil, fmt.Errorf("can't use managed transport without a valid transport auth id.")
+		}
 		managed.AddTransportOptions(opts.TransportAuthID, managed.TransportOptions{
 			TargetURL: url,
 			AuthOpts:  opts,
 		})
 		url = opts.TransportAuthID
+		remoteCallBacks = managed.RemoteCallbacks()
 		defer managed.RemoveTransportOptions(opts.TransportAuthID)
 	}
 
-	remoteCallBacks := RemoteCallbacks(ctx, opts)
 	proxyOpts := &git2go.ProxyOptions{Type: git2go.ProxyTypeAuto}
 
 	repo, remote, err := initializeRepoWithRemote(ctx, path, url, opts)
@@ -274,19 +284,25 @@ type CheckoutCommit struct {
 func (c *CheckoutCommit) Checkout(ctx context.Context, path, url string, opts *git.AuthOptions) (_ *git.Commit, err error) {
 	defer recoverPanic(&err)
 
+	remoteCallBacks := RemoteCallbacks(ctx, opts)
+
 	if managed.Enabled() {
+		if opts.TransportAuthID == "" {
+			return nil, fmt.Errorf("can't use managed transport without a valid transport auth id.")
+		}
 		managed.AddTransportOptions(opts.TransportAuthID, managed.TransportOptions{
 			TargetURL: url,
 			AuthOpts:  opts,
 		})
 		url = opts.TransportAuthID
+		remoteCallBacks = managed.RemoteCallbacks()
 		defer managed.RemoveTransportOptions(opts.TransportAuthID)
 	}
 
 	repo, err := git2go.Clone(url, path, &git2go.CloneOptions{
 		FetchOptions: git2go.FetchOptions{
 			DownloadTags:    git2go.DownloadTagsNone,
-			RemoteCallbacks: RemoteCallbacks(ctx, opts),
+			RemoteCallbacks: remoteCallBacks,
 			ProxyOptions:    git2go.ProxyOptions{Type: git2go.ProxyTypeAuto},
 		},
 	})
@@ -312,12 +328,18 @@ type CheckoutSemVer struct {
 func (c *CheckoutSemVer) Checkout(ctx context.Context, path, url string, opts *git.AuthOptions) (_ *git.Commit, err error) {
 	defer recoverPanic(&err)
 
+	remoteCallBacks := RemoteCallbacks(ctx, opts)
+
 	if managed.Enabled() {
+		if opts.TransportAuthID == "" {
+			return nil, fmt.Errorf("can't use managed transport without a valid transport auth id.")
+		}
 		managed.AddTransportOptions(opts.TransportAuthID, managed.TransportOptions{
 			TargetURL: url,
 			AuthOpts:  opts,
 		})
 		url = opts.TransportAuthID
+		remoteCallBacks = managed.RemoteCallbacks()
 		defer managed.RemoveTransportOptions(opts.TransportAuthID)
 	}
 
@@ -329,7 +351,7 @@ func (c *CheckoutSemVer) Checkout(ctx context.Context, path, url string, opts *g
 	repo, err := git2go.Clone(url, path, &git2go.CloneOptions{
 		FetchOptions: git2go.FetchOptions{
 			DownloadTags:    git2go.DownloadTagsAll,
-			RemoteCallbacks: RemoteCallbacks(ctx, opts),
+			RemoteCallbacks: remoteCallBacks,
 			ProxyOptions:    git2go.ProxyOptions{Type: git2go.ProxyTypeAuto},
 		},
 	})

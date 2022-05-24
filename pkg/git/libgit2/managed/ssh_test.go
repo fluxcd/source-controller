@@ -113,7 +113,9 @@ func TestSSHManagedTransport_E2E(t *testing.T) {
 	// We call git2go.Clone with transportID, so that the managed ssh transport can
 	// fetch the correct set of credentials and the actual target url as well.
 	repo, err := git2go.Clone(transportID, tmpDir, &git2go.CloneOptions{
-		FetchOptions: git2go.FetchOptions{},
+		FetchOptions: git2go.FetchOptions{
+			RemoteCallbacks: RemoteCallbacks(),
+		},
 		CheckoutOptions: git2go.CheckoutOptions{
 			Strategy: git2go.CheckoutForce,
 		},

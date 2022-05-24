@@ -76,6 +76,8 @@ type AuthOptions struct {
 	// options. It's used by managed libgit2 transports to uniquely identify
 	// which credentials to use for a particular git operation, and avoid misuse
 	// of credentials in a multi tenant environment.
+	// It must be prefixed with a valid transport protocol (ssh or http) because
+	// of the way managed transports are registered and invoked.
 	TransportAuthID string
 }
 

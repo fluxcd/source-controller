@@ -455,26 +455,8 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context,
 		return sreconcile.ResultEmpty, e
 	}
 
-	repositoryURL := obj.Spec.URL
-	// managed GIT transport only affects the libgit2 implementation
-	if managed.Enabled() && obj.Spec.GitImplementation == sourcev1.LibGit2Implementation {
-		// We set the TransportAuthID of this set of authentication options here by constructing
-		// a unique ID that won't clash in a multi tenant environment. This unique ID is used by
-		// libgit2 managed transports. This enables us to bypass the inbuilt credentials callback in
-		// libgit2, which is inflexible and unstable.
-		if strings.HasPrefix(repositoryURL, "http") {
-			authOpts.TransportAuthID = fmt.Sprintf("http://%s/%s/%d", obj.Name, obj.UID, obj.Generation)
-		}
-		if strings.HasPrefix(repositoryURL, "ssh") {
-			authOpts.TransportAuthID = fmt.Sprintf("ssh://%s/%s/%d", obj.Name, obj.UID, obj.Generation)
-		}
-	}
-
 	// Fetch the included artifact metadata.
 	artifacts, err := r.fetchIncludes(ctx, obj)
-	if err != nil {
-		return sreconcile.ResultEmpty, err
-	}
 
 	// Observe if the artifacts still match the previous included ones
 	if artifacts.Diff(obj.Status.IncludedArtifacts) {
@@ -491,7 +473,27 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context,
 		optimizedClone = true
 	}
 
-	c, err := r.gitCheckout(ctx, obj, repositoryURL, authOpts, dir, optimizedClone)
+	// managed GIT transport only affects the libgit2 implementation
+	if managed.Enabled() && obj.Spec.GitImplementation == sourcev1.LibGit2Implementation {
+		// We set the TransportAuthID of this set of authentication options here by constructing
+		// a unique ID that won't clash in a multi tenant environment. This unique ID is used by
+		// libgit2 managed transports. This enables us to bypass the inbuilt credentials callback in
+		// libgit2, which is inflexible and unstable.
+		if strings.HasPrefix(obj.Spec.URL, "http") {
+			authOpts.TransportAuthID = fmt.Sprintf("http://%s/%s/%d", obj.Name, obj.UID, obj.Generation)
+		} else if strings.HasPrefix(obj.Spec.URL, "ssh") {
+			authOpts.TransportAuthID = fmt.Sprintf("ssh://%s/%s/%d", obj.Name, obj.UID, obj.Generation)
+		} else {
+			e := &serror.Stalling{
+				Err:    fmt.Errorf("git repository URL has invalid transport type: '%s'", obj.Spec.URL),
+				Reason: sourcev1.GitOperationFailedReason,
+			}
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
+			return sreconcile.ResultEmpty, e
+		}
+	}
+
+	c, err := r.gitCheckout(ctx, obj, obj.Spec.URL, authOpts, dir, optimizedClone)
 	if err != nil {
 		e := serror.NewGeneric(
 			fmt.Errorf("failed to checkout and determine revision: %w", err),
@@ -530,7 +532,7 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context,
 
 		// If we can't skip the reconciliation, checkout again without any
 		// optimization.
-		c, err := r.gitCheckout(ctx, obj, repositoryURL, authOpts, dir, false)
+		c, err := r.gitCheckout(ctx, obj, obj.Spec.URL, authOpts, dir, false)
 		if err != nil {
 			e := serror.NewGeneric(
 				fmt.Errorf("failed to checkout and determine revision: %w", err),

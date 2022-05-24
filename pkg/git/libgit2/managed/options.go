@@ -35,12 +35,19 @@ var (
 	m             sync.RWMutex
 )
 
+// AddTransportOptions registers a TransportOptions object mapped to the
+// provided id. The id must be a valid url, i.e. prefixed with http or ssh,
+// as the id is used as a dummy url for all git operations and the managed
+// transports will only be invoked for the protocols that they have been
+// registered for.
 func AddTransportOptions(id string, opts TransportOptions) {
 	m.Lock()
 	transportOpts[id] = opts
 	m.Unlock()
 }
 
+// RemoveTransportOptions removes the registerd TransportOptions object
+// mapped to the provided id.
 func RemoveTransportOptions(id string) {
 	m.Lock()
 	delete(transportOpts, id)

@@ -157,6 +157,10 @@ func createClientRequest(transportAuthID string, action git2go.SmartServiceActio
 	}
 	targetURL := opts.TargetURL
 
+	if targetURL == "" {
+		return nil, nil, fmt.Errorf("repository URL cannot be empty")
+	}
+
 	if len(targetURL) > URLMaxLength {
 		return nil, nil, fmt.Errorf("URL exceeds the max length (%d)", URLMaxLength)
 	}
@@ -197,7 +201,9 @@ func createClientRequest(transportAuthID string, action git2go.SmartServiceActio
 
 	// Add any provided certificate to the http transport.
 	if opts.AuthOpts != nil {
-		req.SetBasicAuth(opts.AuthOpts.Username, opts.AuthOpts.Password)
+		if len(opts.AuthOpts.Username) > 0 {
+			req.SetBasicAuth(opts.AuthOpts.Username, opts.AuthOpts.Password)
+		}
 		if len(opts.AuthOpts.CAFile) > 0 {
 			certPool := x509.NewCertPool()
 			if ok := certPool.AppendCertsFromPEM(opts.AuthOpts.CAFile); !ok {
