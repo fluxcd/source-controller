@@ -43,8 +43,8 @@ func TestHelmRepositoryOCIReconciler_Reconcile(t *testing.T) {
 		{
 			name: "valid auth data",
 			secretData: map[string][]byte{
-				"username": []byte(testUsername),
-				"password": []byte(testPassword),
+				"username": []byte(testRegistryUsername),
+				"password": []byte(testRegistryPassword),
 			},
 		},
 		{
@@ -56,8 +56,8 @@ func TestHelmRepositoryOCIReconciler_Reconcile(t *testing.T) {
 			secretType: corev1.SecretTypeDockerConfigJson,
 			secretData: map[string][]byte{
 				".dockerconfigjson": []byte(`{"auths":{"` +
-					testRegistryserver.DockerRegistryHost + `":{"` +
-					`auth":"` + base64.StdEncoding.EncodeToString([]byte(testUsername+":"+testPassword)) + `"}}}`),
+					testRegistryServer.registryHost + `":{"` +
+					`auth":"` + base64.StdEncoding.EncodeToString([]byte(testRegistryUsername+":"+testRegistryPassword)) + `"}}}`),
 			},
 		},
 	}
@@ -90,7 +90,7 @@ func TestHelmRepositoryOCIReconciler_Reconcile(t *testing.T) {
 				},
 				Spec: sourcev1.HelmRepositorySpec{
 					Interval: metav1.Duration{Duration: interval},
-					URL:      fmt.Sprintf("oci://%s", testRegistryserver.DockerRegistryHost),
+					URL:      fmt.Sprintf("oci://%s", testRegistryServer.registryHost),
 					SecretRef: &meta.LocalObjectReference{
 						Name: secret.Name,
 					},

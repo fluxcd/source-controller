@@ -1109,7 +1109,7 @@ func TestHelmRepositoryReconciler_ReconcileTypeUpdatePredicateFilter(t *testing.
 			URL:      testServer.URL(),
 		},
 	}
-	g.Expect(testEnv.Create(ctx, obj)).To(Succeed())
+	g.Expect(testEnv.CreateAndWait(ctx, obj)).To(Succeed())
 
 	key := client.ObjectKey{Name: obj.Name, Namespace: obj.Namespace}
 
@@ -1154,14 +1154,14 @@ func TestHelmRepositoryReconciler_ReconcileTypeUpdatePredicateFilter(t *testing.
 			Namespace:    "default",
 		},
 		Data: map[string][]byte{
-			"username": []byte(testUsername),
-			"password": []byte(testPassword),
+			"username": []byte(testRegistryUsername),
+			"password": []byte(testRegistryPassword),
 		},
 	}
 	g.Expect(testEnv.CreateAndWait(ctx, secret)).To(Succeed())
 
 	obj.Spec.Type = sourcev1.HelmRepositoryTypeOCI
-	obj.Spec.URL = fmt.Sprintf("oci://%s", testRegistryserver.DockerRegistryHost)
+	obj.Spec.URL = fmt.Sprintf("oci://%s", testRegistryServer.registryHost)
 	obj.Spec.SecretRef = &meta.LocalObjectReference{
 		Name: secret.Name,
 	}
@@ -1223,7 +1223,7 @@ func TestHelmRepositoryReconciler_ReconcileSpecUpdatePredicateFilter(t *testing.
 			URL:      testServer.URL(),
 		},
 	}
-	g.Expect(testEnv.Create(ctx, obj)).To(Succeed())
+	g.Expect(testEnv.CreateAndWait(ctx, obj)).To(Succeed())
 
 	key := client.ObjectKey{Name: obj.Name, Namespace: obj.Namespace}
 
@@ -1263,20 +1263,22 @@ func TestHelmRepositoryReconciler_ReconcileSpecUpdatePredicateFilter(t *testing.
 
 	// Change spec Interval to validate spec update
 	obj.Spec.Interval = metav1.Duration{Duration: interval + time.Second}
+	oldGen := obj.GetGeneration()
 	g.Expect(testEnv.Update(ctx, obj)).To(Succeed())
+	newGen := oldGen + 1
 
 	// Wait for HelmRepository to be Ready
 	g.Eventually(func() bool {
 		if err := testEnv.Get(ctx, key, obj); err != nil {
 			return false
 		}
-		if !conditions.IsReady(obj) {
+		if !conditions.IsReady(obj) && obj.Status.Artifact == nil {
 			return false
 		}
 		readyCondition := conditions.Get(obj, meta.ReadyCondition)
 		return readyCondition.Status == metav1.ConditionTrue &&
-			obj.Generation == readyCondition.ObservedGeneration &&
-			obj.Generation == obj.Status.ObservedGeneration
+			newGen == readyCondition.ObservedGeneration &&
+			newGen == obj.Status.ObservedGeneration
 	}, timeout).Should(BeTrue())
 
 	// Check if the object status is valid.
