@@ -142,7 +142,7 @@ func Test_ManagedSSH_KeyTypes(t *testing.T) {
 				Identity:   kp.PrivateKey,
 				KnownHosts: knownHosts,
 			}
-			authOpts.TransportAuthID = "ssh://" + getTransportAuthID()
+			authOpts.TransportOptionsURL = getTransportOptionsURL()
 
 			// Prepare for checkout.
 			branchCheckoutStrat := &CheckoutBranch{Branch: git.DefaultBranch}
@@ -272,7 +272,7 @@ func Test_ManagedSSH_KeyExchangeAlgos(t *testing.T) {
 				Identity:   kp.PrivateKey,
 				KnownHosts: knownHosts,
 			}
-			authOpts.TransportAuthID = "ssh://" + getTransportAuthID()
+			authOpts.TransportOptionsURL = getTransportOptionsURL()
 
 			// Prepare for checkout.
 			branchCheckoutStrat := &CheckoutBranch{Branch: git.DefaultBranch}
@@ -441,7 +441,7 @@ func Test_ManagedSSH_HostKeyAlgos(t *testing.T) {
 				Identity:   kp.PrivateKey,
 				KnownHosts: knownHosts,
 			}
-			authOpts.TransportAuthID = "ssh://" + getTransportAuthID()
+			authOpts.TransportOptionsURL = getTransportOptionsURL()
 
 			// Prepare for checkout.
 			branchCheckoutStrat := &CheckoutBranch{Branch: git.DefaultBranch}
@@ -457,11 +457,11 @@ func Test_ManagedSSH_HostKeyAlgos(t *testing.T) {
 	}
 }
 
-func getTransportAuthID() string {
+func getTransportOptionsURL() string {
 	letterRunes := []rune("abcdefghijklmnopqrstuvwxyz1234567890")
 	b := make([]rune, 10)
 	for i := range b {
 		b[i] = letterRunes[rand.Intn(len(letterRunes))]
 	}
-	return string(b)
+	return "ssh://" + string(b)
 }

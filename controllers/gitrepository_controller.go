@@ -473,28 +473,15 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context,
 		optimizedClone = true
 	}
 
-	// managed GIT transport only affects the libgit2 implementation
-	if managed.Enabled() && obj.Spec.GitImplementation == sourcev1.LibGit2Implementation {
-		// We set the TransportAuthID of this set of authentication options here by constructing
-		// a unique ID that won't clash in a multi tenant environment. This unique ID is used by
-		// libgit2 managed transports. This enables us to bypass the inbuilt credentials callback in
-		// libgit2, which is inflexible and unstable.
-		if strings.HasPrefix(obj.Spec.URL, "http") {
-			authOpts.TransportAuthID = fmt.Sprintf("http://%s/%s/%d", obj.Name, obj.UID, obj.Generation)
-		} else if strings.HasPrefix(obj.Spec.URL, "ssh") {
-			authOpts.TransportAuthID = fmt.Sprintf("ssh://%s/%s/%d", obj.Name, obj.UID, obj.Generation)
-		} else {
-			e := &serror.Stalling{
-				Err:    fmt.Errorf("git repository URL has invalid transport type: '%s'", obj.Spec.URL),
-				Reason: sourcev1.GitOperationFailedReason,
-			}
-			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
-			return sreconcile.ResultEmpty, e
-		}
-	}
-
-	c, err := r.gitCheckout(ctx, obj, obj.Spec.URL, authOpts, dir, optimizedClone)
+	c, err := r.gitCheckout(ctx, obj, authOpts, dir, optimizedClone)
 	if err != nil {
+		// If the error is a Stalling error, make sure to record and return that, because returning a Generic
+		// error, would force us to lose context.
+		var stalling *serror.Stalling
+		if errors.As(err, &stalling) {
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, stalling.Reason, stalling.Err.Error())
+			return sreconcile.ResultEmpty, stalling
+		}
 		e := serror.NewGeneric(
 			fmt.Errorf("failed to checkout and determine revision: %w", err),
 			sourcev1.GitOperationFailedReason,
@@ -532,8 +519,15 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context,
 
 		// If we can't skip the reconciliation, checkout again without any
 		// optimization.
-		c, err := r.gitCheckout(ctx, obj, obj.Spec.URL, authOpts, dir, false)
+		c, err := r.gitCheckout(ctx, obj, authOpts, dir, false)
 		if err != nil {
+			// If the error is a Stalling error, make sure to record and return that, because returning a Generic
+			// error, would force us to lose context.
+			var stalling *serror.Stalling
+			if errors.As(err, &stalling) {
+				conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, stalling.Reason, stalling.Err.Error())
+				return sreconcile.ResultEmpty, stalling
+			}
 			e := serror.NewGeneric(
 				fmt.Errorf("failed to checkout and determine revision: %w", err),
 				sourcev1.GitOperationFailedReason,
@@ -729,7 +723,7 @@ func (r *GitRepositoryReconciler) reconcileInclude(ctx context.Context,
 // gitCheckout builds checkout options with the given configurations and
 // performs a git checkout.
 func (r *GitRepositoryReconciler) gitCheckout(ctx context.Context,
-	obj *sourcev1.GitRepository, repoURL string, authOpts *git.AuthOptions, dir string, optimized bool) (*git.Commit, error) {
+	obj *sourcev1.GitRepository, authOpts *git.AuthOptions, dir string, optimized bool) (*git.Commit, error) {
 	// Configure checkout strategy.
 	checkoutOpts := git.CheckoutOptions{RecurseSubmodules: obj.Spec.RecurseSubmodules}
 	if ref := obj.Spec.Reference; ref != nil {
@@ -755,15 +749,33 @@ func (r *GitRepositoryReconciler) gitCheckout(ctx context.Context,
 			Err:    fmt.Errorf("failed to configure checkout strategy for Git implementation '%s': %w", obj.Spec.GitImplementation, err),
 			Reason: sourcev1.GitOperationFailedReason,
 		}
-		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
 		// Do not return err as recovery without changes is impossible.
 		return nil, e
+	}
+
+	// managed GIT transport only affects the libgit2 implementation
+	if managed.Enabled() && obj.Spec.GitImplementation == sourcev1.LibGit2Implementation {
+		// We set the TransportOptionsURL of this set of authentication options here by constructing
+		// a unique ID that won't clash in a multi tenant environment. This unique ID is used by
+		// libgit2 managed transports. This enables us to bypass the inbuilt credentials callback in
+		// libgit2, which is inflexible and unstable.
+		if strings.HasPrefix(obj.Spec.URL, "http") {
+			authOpts.TransportOptionsURL = fmt.Sprintf("http://%s/%s/%d", obj.Name, obj.UID, obj.Generation)
+		} else if strings.HasPrefix(obj.Spec.URL, "ssh") {
+			authOpts.TransportOptionsURL = fmt.Sprintf("ssh://%s/%s/%d", obj.Name, obj.UID, obj.Generation)
+		} else {
+			e := &serror.Stalling{
+				Err:    fmt.Errorf("git repository URL has invalid transport type: '%s'", obj.Spec.URL),
+				Reason: sourcev1.GitOperationFailedReason,
+			}
+			return nil, e
+		}
 	}
 
 	// Checkout HEAD of reference in object
 	gitCtx, cancel := context.WithTimeout(ctx, obj.Spec.Timeout.Duration)
 	defer cancel()
-	return checkoutStrategy.Checkout(gitCtx, dir, repoURL, authOpts)
+	return checkoutStrategy.Checkout(gitCtx, dir, obj.Spec.URL, authOpts)
 }
 
 // fetchIncludes fetches artifact metadata of all the included repos.

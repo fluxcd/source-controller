@@ -43,17 +43,14 @@ func KnownHostsCallback(host string, knownHosts []byte) git2go.CertificateCheckC
 			return fmt.Errorf("host mismatch: %q %q", hostWithoutPort, hostnameWithoutPort)
 		}
 
-		// We are now certain that the configured host and the hostname
-		// given to the callback match. Use the configured host (that
-		// includes the port), and normalize it, so we can check if there
-		// is an entry for the hostname _and_ port.
-		h := knownhosts.Normalize(host)
 		var fingerprint []byte
 		var hasher hash.Hash
 		switch {
 		case cert.Hostkey.Kind&git2go.HostkeySHA256 > 0:
 			fingerprint = cert.Hostkey.HashSHA256[:]
 			hasher = sha256.New()
+		// SHA1 and MD5 are present here, because they're used for unmanaged transport.
+		// TODO: get rid of this, when unmanaged transport is completely removed.
 		case cert.Hostkey.Kind&git2go.HostkeySHA1 > 0:
 			fingerprint = cert.Hostkey.HashSHA1[:]
 			hasher = sha1.New()
@@ -63,6 +60,12 @@ func KnownHostsCallback(host string, knownHosts []byte) git2go.CertificateCheckC
 		default:
 			return fmt.Errorf("invalid host key kind, expected to be one of SHA256, SHA1, MD5")
 		}
+
+		// We are now certain that the configured host and the hostname
+		// given to the callback match. Use the configured host (that
+		// includes the port), and normalize it, so we can check if there
+		// is an entry for the hostname _and_ port.
+		h := knownhosts.Normalize(host)
 		for _, k := range kh {
 			if k.Matches(h, fingerprint, hasher) {
 				return nil

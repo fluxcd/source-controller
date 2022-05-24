@@ -72,13 +72,16 @@ type AuthOptions struct {
 	Identity   []byte
 	KnownHosts []byte
 	CAFile     []byte
-	// TransportAuthID is a unique identifier for this set of authentication
+	// TransportOptionsURL is a unique identifier for this set of authentication
 	// options. It's used by managed libgit2 transports to uniquely identify
-	// which credentials to use for a particular git operation, and avoid misuse
-	// of credentials in a multi tenant environment.
-	// It must be prefixed with a valid transport protocol (ssh or http) because
+	// which credentials to use for a particular Git operation, and avoid misuse
+	// of credentials in a multi-tenant environment.
+	// It must be prefixed with a valid transport protocol ("ssh:// "or "http://") because
 	// of the way managed transports are registered and invoked.
-	TransportAuthID string
+	// It's a field of AuthOptions despite not providing any kind of authentication
+	// info, as it's the only way to sneak it into git.Checkout, without polluting
+	// it's args and keeping it generic.
+	TransportOptionsURL string
 }
 
 // KexAlgos hosts the key exchange algorithms to be used for SSH connections.

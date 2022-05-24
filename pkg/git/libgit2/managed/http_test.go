@@ -198,9 +198,9 @@ func TestHTTPManagedTransport_E2E(t *testing.T) {
 		},
 	})
 
-	// We call Clone with id instead of the actual url, as the transport action
-	// will fetch the actual url and the required credentials using the id as
-	// a identifier.
+	// We call git2go.Clone with transportOptsURL instead of the actual URL,
+	// as the transport action will fetch the actual URL and the required
+	// credentials using the it as an identifier.
 	repo, err := git2go.Clone(id, tmpDir, &git2go.CloneOptions{
 		CheckoutOptions: git2go.CheckoutOptions{
 			Strategy: git2go.CheckoutForce,

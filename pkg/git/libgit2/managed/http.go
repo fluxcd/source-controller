@@ -86,7 +86,7 @@ type httpSmartSubtransport struct {
 	httpTransport *http.Transport
 }
 
-func (t *httpSmartSubtransport) Action(transportAuthID string, action git2go.SmartServiceAction) (git2go.SmartSubtransportStream, error) {
+func (t *httpSmartSubtransport) Action(transportOptionsURL string, action git2go.SmartServiceAction) (git2go.SmartSubtransportStream, error) {
 	var proxyFn func(*http.Request) (*url.URL, error)
 	proxyOpts, err := t.transport.SmartProxyOptions()
 	if err != nil {
@@ -109,7 +109,7 @@ func (t *httpSmartSubtransport) Action(transportAuthID string, action git2go.Sma
 	t.httpTransport.Proxy = proxyFn
 	t.httpTransport.DisableCompression = false
 
-	client, req, err := createClientRequest(transportAuthID, action, t.httpTransport)
+	client, req, err := createClientRequest(transportOptionsURL, action, t.httpTransport)
 	if err != nil {
 		return nil, err
 	}
@@ -142,7 +142,7 @@ func (t *httpSmartSubtransport) Action(transportAuthID string, action git2go.Sma
 	return stream, nil
 }
 
-func createClientRequest(transportAuthID string, action git2go.SmartServiceAction, t *http.Transport) (*http.Client, *http.Request, error) {
+func createClientRequest(transportOptionsURL string, action git2go.SmartServiceAction, t *http.Transport) (*http.Client, *http.Request, error) {
 	var req *http.Request
 	var err error
 
@@ -150,10 +150,10 @@ func createClientRequest(transportAuthID string, action git2go.SmartServiceActio
 		return nil, nil, fmt.Errorf("failed to create client: transport cannot be nil")
 	}
 
-	opts, found := getTransportOptions(transportAuthID)
+	opts, found := getTransportOptions(transportOptionsURL)
 
 	if !found {
-		return nil, nil, fmt.Errorf("failed to create client: could not find transport options for the object: %s", transportAuthID)
+		return nil, nil, fmt.Errorf("failed to create client: could not find transport options for the object: %s", transportOptionsURL)
 	}
 	targetURL := opts.TargetURL
 
@@ -199,7 +199,7 @@ func createClientRequest(transportAuthID string, action git2go.SmartServiceActio
 		return nil, nil, err
 	}
 
-	// Add any provided certificate to the http transport.
+	// Apply authentication and TLS settings to the HTTP transport.
 	if opts.AuthOpts != nil {
 		if len(opts.AuthOpts.Username) > 0 {
 			req.SetBasicAuth(opts.AuthOpts.Username, opts.AuthOpts.Password)

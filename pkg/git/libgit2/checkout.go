@@ -72,23 +72,23 @@ func (c *CheckoutBranch) Checkout(ctx context.Context, path, url string, opts *g
 	remoteCallBacks := RemoteCallbacks(ctx, opts)
 
 	if managed.Enabled() {
-		// We store the target url and auth options mapped to a unique ID. We overwrite the target url
-		// with the TransportAuthID, because managed transports don't provide a way for any kind of
+		// We store the target URL and auth options mapped to a unique ID. We overwrite the target URL
+		// with the TransportOptionsURL, because managed transports don't provide a way for any kind of
 		// dependency injection. This lets us have a way of doing interop between application level code
 		// and transport level code.
-		// Performing all fetch operations with the TransportAuthID as the url, lets the managed
+		// Performing all fetch operations with the TransportOptionsURL as the URL, lets the managed
 		// transport action use it to fetch the registered transport options which contains the
-		// _actual_ target url and the correct credentials to use.
-		if opts.TransportAuthID == "" {
+		// _actual_ target URL and the correct credentials to use.
+		if opts.TransportOptionsURL == "" {
 			return nil, fmt.Errorf("can't use managed transport without a valid transport auth id.")
 		}
-		managed.AddTransportOptions(opts.TransportAuthID, managed.TransportOptions{
+		managed.AddTransportOptions(opts.TransportOptionsURL, managed.TransportOptions{
 			TargetURL: url,
 			AuthOpts:  opts,
 		})
-		url = opts.TransportAuthID
+		url = opts.TransportOptionsURL
 		remoteCallBacks = managed.RemoteCallbacks()
-		defer managed.RemoveTransportOptions(opts.TransportAuthID)
+		defer managed.RemoveTransportOptions(opts.TransportOptionsURL)
 	}
 
 	proxyOpts := &git2go.ProxyOptions{Type: git2go.ProxyTypeAuto}
@@ -194,16 +194,16 @@ func (c *CheckoutTag) Checkout(ctx context.Context, path, url string, opts *git.
 	remoteCallBacks := RemoteCallbacks(ctx, opts)
 
 	if managed.Enabled() {
-		if opts.TransportAuthID == "" {
+		if opts.TransportOptionsURL == "" {
 			return nil, fmt.Errorf("can't use managed transport without a valid transport auth id.")
 		}
-		managed.AddTransportOptions(opts.TransportAuthID, managed.TransportOptions{
+		managed.AddTransportOptions(opts.TransportOptionsURL, managed.TransportOptions{
 			TargetURL: url,
 			AuthOpts:  opts,
 		})
-		url = opts.TransportAuthID
+		url = opts.TransportOptionsURL
 		remoteCallBacks = managed.RemoteCallbacks()
-		defer managed.RemoveTransportOptions(opts.TransportAuthID)
+		defer managed.RemoveTransportOptions(opts.TransportOptionsURL)
 	}
 
 	proxyOpts := &git2go.ProxyOptions{Type: git2go.ProxyTypeAuto}
@@ -287,16 +287,16 @@ func (c *CheckoutCommit) Checkout(ctx context.Context, path, url string, opts *g
 	remoteCallBacks := RemoteCallbacks(ctx, opts)
 
 	if managed.Enabled() {
-		if opts.TransportAuthID == "" {
+		if opts.TransportOptionsURL == "" {
 			return nil, fmt.Errorf("can't use managed transport without a valid transport auth id.")
 		}
-		managed.AddTransportOptions(opts.TransportAuthID, managed.TransportOptions{
+		managed.AddTransportOptions(opts.TransportOptionsURL, managed.TransportOptions{
 			TargetURL: url,
 			AuthOpts:  opts,
 		})
-		url = opts.TransportAuthID
+		url = opts.TransportOptionsURL
 		remoteCallBacks = managed.RemoteCallbacks()
-		defer managed.RemoveTransportOptions(opts.TransportAuthID)
+		defer managed.RemoveTransportOptions(opts.TransportOptionsURL)
 	}
 
 	repo, err := git2go.Clone(url, path, &git2go.CloneOptions{
@@ -331,16 +331,16 @@ func (c *CheckoutSemVer) Checkout(ctx context.Context, path, url string, opts *g
 	remoteCallBacks := RemoteCallbacks(ctx, opts)
 
 	if managed.Enabled() {
-		if opts.TransportAuthID == "" {
+		if opts.TransportOptionsURL == "" {
 			return nil, fmt.Errorf("can't use managed transport without a valid transport auth id.")
 		}
-		managed.AddTransportOptions(opts.TransportAuthID, managed.TransportOptions{
+		managed.AddTransportOptions(opts.TransportOptionsURL, managed.TransportOptions{
 			TargetURL: url,
 			AuthOpts:  opts,
 		})
-		url = opts.TransportAuthID
+		url = opts.TransportOptionsURL
 		remoteCallBacks = managed.RemoteCallbacks()
-		defer managed.RemoveTransportOptions(opts.TransportAuthID)
+		defer managed.RemoveTransportOptions(opts.TransportOptionsURL)
 	}
 
 	verConstraint, err := semver.NewConstraint(c.SemVer)

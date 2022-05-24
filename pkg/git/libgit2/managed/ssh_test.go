@@ -98,9 +98,9 @@ func TestSSHManagedTransport_E2E(t *testing.T) {
 	err = server.InitRepo("../../testdata/git/repo", git.DefaultBranch, repoPath)
 	g.Expect(err).ToNot(HaveOccurred())
 
-	transportID := "ssh://git@fake-url"
+	transportOptsURL := "ssh://git@fake-url"
 	sshAddress := server.SSHAddress() + "/" + repoPath
-	AddTransportOptions(transportID, TransportOptions{
+	AddTransportOptions(transportOptsURL, TransportOptions{
 		TargetURL: sshAddress,
 		AuthOpts: &git.AuthOptions{
 			Username: "user",
@@ -110,9 +110,9 @@ func TestSSHManagedTransport_E2E(t *testing.T) {
 
 	tmpDir := t.TempDir()
 
-	// We call git2go.Clone with transportID, so that the managed ssh transport can
+	// We call git2go.Clone with transportOptsURL, so that the managed ssh transport can
 	// fetch the correct set of credentials and the actual target url as well.
-	repo, err := git2go.Clone(transportID, tmpDir, &git2go.CloneOptions{
+	repo, err := git2go.Clone(transportOptsURL, tmpDir, &git2go.CloneOptions{
 		FetchOptions: git2go.FetchOptions{
 			RemoteCallbacks: RemoteCallbacks(),
 		},

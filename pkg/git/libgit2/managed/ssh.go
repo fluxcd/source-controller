@@ -45,8 +45,6 @@ package managed
 
 import (
 	"context"
-	"crypto/md5"
-	"crypto/sha1"
 	"crypto/sha256"
 	"fmt"
 	"io"
@@ -96,13 +94,13 @@ type sshSmartSubtransport struct {
 	connected     bool
 }
 
-func (t *sshSmartSubtransport) Action(credentialsID string, action git2go.SmartServiceAction) (git2go.SmartSubtransportStream, error) {
+func (t *sshSmartSubtransport) Action(transportOptionsURL string, action git2go.SmartServiceAction) (git2go.SmartSubtransportStream, error) {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 
-	opts, found := getTransportOptions(credentialsID)
+	opts, found := getTransportOptions(transportOptionsURL)
 	if !found {
-		return nil, fmt.Errorf("could not find transport options for object: %s", credentialsID)
+		return nil, fmt.Errorf("could not find transport options for object: %s", transportOptionsURL)
 	}
 
 	u, err := url.Parse(opts.TargetURL)
@@ -168,8 +166,6 @@ func (t *sshSmartSubtransport) Action(credentialsID string, action git2go.SmartS
 			Kind: git2go.CertificateHostkey,
 			Hostkey: git2go.HostkeyCertificate{
 				Kind:         git2go.HostkeySHA256,
-				HashMD5:      md5.Sum(marshaledKey),
-				HashSHA1:     sha1.Sum(marshaledKey),
 				HashSHA256:   sha256.Sum256(marshaledKey),
 				Hostkey:      marshaledKey,
 				SSHPublicKey: key,
