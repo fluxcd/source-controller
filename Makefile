@@ -140,8 +140,8 @@ api-docs: gen-crd-api-reference-docs  ## Generate API reference documentation
 	$(GEN_CRD_API_REFERENCE_DOCS) -api-dir=./api/v1beta2 -config=./hack/api-docs/config.json -template-dir=./hack/api-docs/template -out-file=./docs/api/source.md
 
 tidy:  ## Run go mod tidy
-	go mod tidy
-	cd api; go mod tidy
+	cd api; rm -f go.sum; go mod tidy -compat=1.17
+	rm -f go.sum; go mod tidy -compat=1.17
 
 fmt:  ## Run go fmt against code
 	go fmt ./...
