@@ -1166,9 +1166,11 @@ func TestHelmRepositoryReconciler_ReconcileTypeUpdatePredicateFilter(t *testing.
 		Name: secret.Name,
 	}
 
+	oldGen := obj.GetGeneration()
 	g.Expect(testEnv.Update(ctx, obj)).To(Succeed())
+	newGen := oldGen + 1
 
-	// Wait for HelmRepository to be Ready
+	// Wait for HelmRepository to be Ready with new generation.
 	g.Eventually(func() bool {
 		if err := testEnv.Get(ctx, key, obj); err != nil {
 			return false
@@ -1178,8 +1180,8 @@ func TestHelmRepositoryReconciler_ReconcileTypeUpdatePredicateFilter(t *testing.
 		}
 		readyCondition := conditions.Get(obj, meta.ReadyCondition)
 		return readyCondition.Status == metav1.ConditionTrue &&
-			obj.Generation == readyCondition.ObservedGeneration &&
-			obj.Generation == obj.Status.ObservedGeneration
+			newGen == readyCondition.ObservedGeneration &&
+			newGen == obj.Status.ObservedGeneration
 	}, timeout).Should(BeTrue())
 
 	// Check if the object status is valid.
