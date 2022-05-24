@@ -19,15 +19,16 @@ func LoginOptionFromSecret(registryURL string, secret corev1.Secret) (registry.L
 	if secret.Type == corev1.SecretTypeDockerConfigJson {
 		dockerCfg, err := config.LoadFromReader(bytes.NewReader(secret.Data[corev1.DockerConfigJsonKey]))
 		if err != nil {
-			return nil, fmt.Errorf("unable to load Docker config: %w", err)
+			return nil, fmt.Errorf("unable to load Docker config from Secret '%s': %w", secret.Name, err)
 		}
 		parsedURL, err := url.Parse(registryURL)
 		if err != nil {
-			return nil, fmt.Errorf("unable to parse registry URL: %w", err)
+			return nil, fmt.Errorf("unable to parse registry URL '%s' while reconciling Secret '%s': %w",
+				registryURL, secret.Name, err)
 		}
 		authConfig, err := dockerCfg.GetAuthConfig(parsedURL.Host)
 		if err != nil {
-			return nil, fmt.Errorf("unable to get authentication data from Secret: %w", err)
+			return nil, fmt.Errorf("unable to get authentication data from Secret '%s': %w", secret.Name, err)
 		}
 		username = authConfig.Username
 		password = authConfig.Password
