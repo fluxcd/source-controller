@@ -5,7 +5,7 @@ go 1.17
 replace github.com/fluxcd/source-controller/api => ./api
 
 require (
-	cloud.google.com/go/storage v1.22.0
+	cloud.google.com/go/storage v1.22.1
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v0.22.0
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity v0.13.2
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v0.3.0
@@ -14,18 +14,18 @@ require (
 	// maintained by the ProtonMail team to continue to support the openpgp
 	// module, after the Go team decided to no longer maintain it.
 	// When in doubt (and not using openpgp), use /x/crypto.
-	github.com/ProtonMail/go-crypto v0.0.0-20220407094043-a94812496cf5
+	github.com/ProtonMail/go-crypto v0.0.0-20220517143526-88bb52951d5b
 	github.com/cyphar/filepath-securejoin v0.2.3
 	github.com/darkowlzz/controller-check v0.0.0-20220325122359-11f5827b7981
-	github.com/distribution/distribution/v3 v3.0.0-20211118083504-a29a3c99a684
-	github.com/docker/cli v20.10.11+incompatible
+	github.com/distribution/distribution/v3 v3.0.0-20220516112011-c202b9b0d7b7
+	github.com/docker/cli v20.10.16+incompatible
 	github.com/docker/go-units v0.4.0
 	github.com/elazarl/goproxy v0.0.0-20220417044921-416226498f94
-	github.com/fluxcd/gitkit v0.5.0
+	github.com/fluxcd/gitkit v0.5.1
 	github.com/fluxcd/pkg/apis/meta v0.14.1
 	github.com/fluxcd/pkg/gittestserver v0.5.3
 	github.com/fluxcd/pkg/gitutil v0.1.0
-	github.com/fluxcd/pkg/helmtestserver v0.5.0
+	github.com/fluxcd/pkg/helmtestserver v0.7.2
 	github.com/fluxcd/pkg/lockedfile v0.1.0
 	github.com/fluxcd/pkg/runtime v0.16.1
 	github.com/fluxcd/pkg/ssh v0.3.4
@@ -41,26 +41,23 @@ require (
 	github.com/minio/minio-go/v7 v7.0.26
 	github.com/onsi/gomega v1.19.0
 	github.com/otiai10/copy v1.7.0
-	github.com/phayes/freeport v0.0.0-20180830031419-95f893ade6f2
-	github.com/prometheus/client_golang v1.12.1
+	github.com/phayes/freeport v0.0.0-20220201140144-74d24b5ae9f5
+	github.com/prometheus/client_golang v1.12.2
 	github.com/spf13/pflag v1.0.5
-	golang.org/x/crypto v0.0.0-20220507011949-2cf3adece122
-	golang.org/x/net v0.0.0-20220425223048-2871e0cb64e4
-	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
-	google.golang.org/api v0.79.0
+	golang.org/x/crypto v0.0.0-20220518034528-6f7dac969898
+	golang.org/x/net v0.0.0-20220524220425-1d687d428aca
+	golang.org/x/sync v0.0.0-20220513210516-0976fa681c29
+	google.golang.org/api v0.81.0
 	gotest.tools v2.2.0+incompatible
 	helm.sh/helm/v3 v3.9.0
 	k8s.io/api v0.24.0
 	k8s.io/apimachinery v0.24.0
 	k8s.io/client-go v0.24.0
 	k8s.io/utils v0.0.0-20220210201930-3a6ce19ff2f9
-	sigs.k8s.io/cli-utils v0.30.0
+	sigs.k8s.io/cli-utils v0.31.1
 	sigs.k8s.io/controller-runtime v0.11.2
 	sigs.k8s.io/yaml v1.3.0
 )
-
-// Fix CVE-2022-29162
-replace github.com/opencontainers/runc => github.com/opencontainers/runc v1.1.2
 
 // Fix CVE-2022-28948
 replace gopkg.in/yaml.v3 => gopkg.in/yaml.v3 v3.0.0
@@ -126,7 +123,7 @@ require (
 	github.com/google/go-cmp v0.5.8 // indirect
 	github.com/google/gofuzz v1.2.0 // indirect
 	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510 // indirect
-	github.com/googleapis/gax-go/v2 v2.3.0 // indirect
+	github.com/googleapis/gax-go/v2 v2.4.0 // indirect
 	github.com/googleapis/go-type-adapters v1.0.0 // indirect
 	github.com/gorilla/handlers v1.5.1 // indirect
 	github.com/gorilla/mux v1.8.0 // indirect
@@ -201,15 +198,15 @@ require (
 	go.uber.org/multierr v1.6.0 // indirect
 	go.uber.org/zap v1.21.0 // indirect
 	golang.org/x/oauth2 v0.0.0-20220411215720-9780585627b5 // indirect
-	golang.org/x/sys v0.0.0-20220503163025-988cb79eb6c6 // indirect
+	golang.org/x/sys v0.0.0-20220520151302-bc2c85ada10a // indirect
 	golang.org/x/term v0.0.0-20210927222741-03fcf44c2211 // indirect
 	golang.org/x/text v0.3.7 // indirect
 	golang.org/x/time v0.0.0-20220210224613-90d013bbcef8 // indirect
-	golang.org/x/xerrors v0.0.0-20220411194840-2f41105eb62f // indirect
+	golang.org/x/xerrors v0.0.0-20220517211312-f3a8303e98df // indirect
 	gomodules.xyz/jsonpatch/v2 v2.2.0 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
-	google.golang.org/genproto v0.0.0-20220505152158-f39f71e6c8f3 // indirect
-	google.golang.org/grpc v1.46.0 // indirect
+	google.golang.org/genproto v0.0.0-20220519153652-3a47de7e79bd // indirect
+	google.golang.org/grpc v1.46.2 // indirect
 	google.golang.org/protobuf v1.28.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/ini.v1 v1.66.2 // indirect
