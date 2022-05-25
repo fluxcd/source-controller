@@ -47,6 +47,7 @@ import (
 	"bytes"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
@@ -55,6 +56,7 @@ import (
 	"sync"
 
 	pool "github.com/fluxcd/source-controller/internal/transport"
+	"github.com/fluxcd/source-controller/pkg/git"
 	git2go "github.com/libgit2/git2go/v33"
 )
 
@@ -87,29 +89,44 @@ type httpSmartSubtransport struct {
 }
 
 func (t *httpSmartSubtransport) Action(transportOptionsURL string, action git2go.SmartServiceAction) (git2go.SmartSubtransportStream, error) {
+	opts, found := getTransportOptions(transportOptionsURL)
+
+	if !found {
+		return nil, fmt.Errorf("failed to create client: could not find transport options for the object: %s", transportOptionsURL)
+	}
+	targetURL := opts.TargetURL
+
+	if targetURL == "" {
+		return nil, fmt.Errorf("repository URL cannot be empty")
+	}
+
+	if len(targetURL) > URLMaxLength {
+		return nil, fmt.Errorf("URL exceeds the max length (%d)", URLMaxLength)
+	}
+
 	var proxyFn func(*http.Request) (*url.URL, error)
-	proxyOpts, err := t.transport.SmartProxyOptions()
-	if err != nil {
-		return nil, err
-	}
-	switch proxyOpts.Type {
-	case git2go.ProxyTypeNone:
-		proxyFn = nil
-	case git2go.ProxyTypeAuto:
-		proxyFn = http.ProxyFromEnvironment
-	case git2go.ProxyTypeSpecified:
-		parsedUrl, err := url.Parse(proxyOpts.Url)
-		if err != nil {
-			return nil, err
+	proxyOpts := opts.ProxyOptions
+	if proxyOpts != nil {
+		switch proxyOpts.Type {
+		case git2go.ProxyTypeNone:
+			proxyFn = nil
+		case git2go.ProxyTypeAuto:
+			proxyFn = http.ProxyFromEnvironment
+		case git2go.ProxyTypeSpecified:
+			parsedUrl, err := url.Parse(proxyOpts.Url)
+			if err != nil {
+				return nil, err
+			}
+			proxyFn = http.ProxyURL(parsedUrl)
 		}
-
-		proxyFn = http.ProxyURL(parsedUrl)
+		t.httpTransport.Proxy = proxyFn
+		t.httpTransport.ProxyConnectHeader = map[string][]string{}
+	} else {
+		t.httpTransport.Proxy = nil
 	}
-
-	t.httpTransport.Proxy = proxyFn
 	t.httpTransport.DisableCompression = false
 
-	client, req, err := createClientRequest(transportOptionsURL, action, t.httpTransport)
+	client, req, err := createClientRequest(targetURL, action, t.httpTransport, opts.AuthOpts)
 	if err != nil {
 		return nil, err
 	}
@@ -142,27 +159,13 @@ func (t *httpSmartSubtransport) Action(transportOptionsURL string, action git2go
 	return stream, nil
 }
 
-func createClientRequest(transportOptionsURL string, action git2go.SmartServiceAction, t *http.Transport) (*http.Client, *http.Request, error) {
+func createClientRequest(targetURL string, action git2go.SmartServiceAction,
+	t *http.Transport, authOpts *git.AuthOptions) (*http.Client, *http.Request, error) {
 	var req *http.Request
 	var err error
 
 	if t == nil {
 		return nil, nil, fmt.Errorf("failed to create client: transport cannot be nil")
-	}
-
-	opts, found := getTransportOptions(transportOptionsURL)
-
-	if !found {
-		return nil, nil, fmt.Errorf("failed to create client: could not find transport options for the object: %s", transportOptionsURL)
-	}
-	targetURL := opts.TargetURL
-
-	if targetURL == "" {
-		return nil, nil, fmt.Errorf("repository URL cannot be empty")
-	}
-
-	if len(targetURL) > URLMaxLength {
-		return nil, nil, fmt.Errorf("URL exceeds the max length (%d)", URLMaxLength)
 	}
 
 	client := &http.Client{
@@ -180,6 +183,9 @@ func createClientRequest(transportOptionsURL string, action git2go.SmartServiceA
 			break
 		}
 		req.Header.Set("Content-Type", "application/x-git-upload-pack-request")
+		if t.Proxy != nil {
+			t.ProxyConnectHeader.Set("Content-Type", "application/x-git-upload-pack-request")
+		}
 
 	case git2go.SmartServiceActionReceivepackLs:
 		req, err = http.NewRequest("GET", targetURL+"/info/refs?service=git-receive-pack", nil)
@@ -190,6 +196,9 @@ func createClientRequest(transportOptionsURL string, action git2go.SmartServiceA
 			break
 		}
 		req.Header.Set("Content-Type", "application/x-git-receive-pack-request")
+		if t.Proxy != nil {
+			t.ProxyConnectHeader.Set("Content-Type", "application/x-git-receive-pack-request")
+		}
 
 	default:
 		err = errors.New("unknown action")
@@ -200,13 +209,19 @@ func createClientRequest(transportOptionsURL string, action git2go.SmartServiceA
 	}
 
 	// Apply authentication and TLS settings to the HTTP transport.
-	if opts.AuthOpts != nil {
-		if len(opts.AuthOpts.Username) > 0 {
-			req.SetBasicAuth(opts.AuthOpts.Username, opts.AuthOpts.Password)
+	if authOpts != nil {
+		if len(authOpts.Username) > 0 {
+			req.SetBasicAuth(authOpts.Username, authOpts.Password)
+			if t.Proxy != nil {
+				t.ProxyConnectHeader.Set(
+					"Authorization",
+					"Basic "+basicAuth(authOpts.Username, authOpts.Password),
+				)
+			}
 		}
-		if len(opts.AuthOpts.CAFile) > 0 {
+		if len(authOpts.CAFile) > 0 {
 			certPool := x509.NewCertPool()
-			if ok := certPool.AppendCertsFromPEM(opts.AuthOpts.CAFile); !ok {
+			if ok := certPool.AppendCertsFromPEM(authOpts.CAFile); !ok {
 				return nil, nil, fmt.Errorf("failed to use certificate from PEM")
 			}
 			t.TLSClientConfig = &tls.Config{
@@ -216,6 +231,9 @@ func createClientRequest(transportOptionsURL string, action git2go.SmartServiceA
 	}
 
 	req.Header.Set("User-Agent", "git/2.0 (flux-libgit2)")
+	if t.Proxy != nil {
+		t.ProxyConnectHeader.Set("User-Agent", "git/2.0 (flux-libgit2)")
+	}
 	return client, req, nil
 }
 
@@ -394,4 +412,10 @@ func (self *httpSmartSubtransportStream) sendRequest() error {
 	self.resp = resp
 	self.sentRequest = true
 	return nil
+}
+
+// From: https://github.com/golang/go/blob/go1.18/src/net/http/client.go#L418
+func basicAuth(username, password string) string {
+	auth := username + ":" + password
+	return base64.StdEncoding.EncodeToString([]byte(auth))
 }

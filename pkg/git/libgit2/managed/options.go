@@ -20,13 +20,15 @@ import (
 	"sync"
 
 	"github.com/fluxcd/source-controller/pkg/git"
+	git2go "github.com/libgit2/git2go/v33"
 )
 
 // TransportOptions represents options to be applied at transport-level
 // at request time.
 type TransportOptions struct {
-	TargetURL string
-	AuthOpts  *git.AuthOptions
+	TargetURL    string
+	AuthOpts     *git.AuthOptions
+	ProxyOptions *git2go.ProxyOptions
 }
 
 var (

@@ -312,6 +312,14 @@ func main() {
 
 	if enabled, _ := features.Enabled(features.GitManagedTransport); enabled {
 		managed.InitManagedTransport(ctrl.Log.WithName("managed-transport"))
+	} else {
+		if optimize, _ := feathelper.Enabled(features.OptimizedGitClones); optimize {
+			setupLog.Error(
+				fmt.Errorf("OptimizedGitClones=true but GitManagedTransport=false"),
+				"git clones can only be optimized when using managed transort",
+			)
+			os.Exit(1)
+		}
 	}
 
 	setupLog.Info("starting manager")
