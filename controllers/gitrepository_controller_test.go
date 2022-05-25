@@ -919,6 +919,8 @@ func TestGitRepositoryReconciler_reconcileArtifact(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
 
+			resetChmod(tt.dir, 0o755, 0o644)
+
 			r := &GitRepositoryReconciler{
 				EventRecorder: record.NewFakeRecorder(32),
 				Storage:       testStorage,
@@ -2141,4 +2143,25 @@ func TestGitRepositoryReconciler_calculateContentConfigChecksum(t *testing.T) {
 	}
 	artifactCsumModChecksum := r.calculateContentConfigChecksum(obj, artifacts)
 	g.Expect(artifactModChecksum).ToNot(Equal(artifactCsumModChecksum))
+}
+
+func resetChmod(path string, dirMode os.FileMode, fileMode os.FileMode) error {
+	err := filepath.Walk(path,
+		func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+
+			if info.IsDir() && info.Mode() != dirMode {
+				os.Chmod(path, dirMode)
+			} else if !info.IsDir() && info.Mode() != fileMode {
+				os.Chmod(path, fileMode)
+			}
+			return nil
+		})
+	if err != nil {
+		return fmt.Errorf("cannot reset file permissions: %v", err)
+	}
+
+	return nil
 }
