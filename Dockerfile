@@ -94,7 +94,7 @@ RUN export $(cat build/musl/$(xx-info alpine-arch).env | xargs) && \
 RUN xx-verify --static /source-controller
 
 
-FROM alpine:3.15
+FROM alpine:3.16
 
 ARG TARGETPLATFORM
 RUN apk --no-cache add ca-certificates \
