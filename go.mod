@@ -59,22 +59,8 @@ require (
 	sigs.k8s.io/yaml v1.3.0
 )
 
-// Fix GMS-2022-20
-replace github.com/docker/distribution => github.com/docker/distribution v2.8.0+incompatible
-
-// Fix CVE-2021-30465
-// Fix CVE-2021-43784
-// Fix CVE-2019-16884
-// Fix GO-2021-0085
-// Fix GO-2021-0087
-replace github.com/opencontainers/runc => github.com/opencontainers/runc v1.1.0
-
-// Fix CVE-2021-41190
-replace github.com/opencontainers/image-spec => github.com/opencontainers/image-spec v1.0.2
-
-// Fix CVE-2022-23648
-// Fix CVE-2021-43816
-replace github.com/containerd/containerd => github.com/containerd/containerd v1.6.1
+// Fix CVE-2022-29162
+replace github.com/opencontainers/runc => github.com/opencontainers/runc v1.1.2
 
 // Fix CVE-2022-28948
 replace gopkg.in/yaml.v3 => gopkg.in/yaml.v3 v3.0.0
