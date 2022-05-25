@@ -51,18 +51,18 @@ import (
 var helmRepositoryOCIReadyCondition = summarize.Conditions{
 	Target: meta.ReadyCondition,
 	Owned: []string{
-		sourcev1.FetchFailedCondition,
+		sourcev1.AddFailedCondition,
 		meta.ReadyCondition,
 		meta.ReconcilingCondition,
 		meta.StalledCondition,
 	},
 	Summarize: []string{
-		sourcev1.FetchFailedCondition,
+		sourcev1.AddFailedCondition,
 		meta.StalledCondition,
 		meta.ReconcilingCondition,
 	},
 	NegativePolarity: []string{
-		sourcev1.FetchFailedCondition,
+		sourcev1.AddFailedCondition,
 		meta.StalledCondition,
 		meta.ReconcilingCondition,
 	},
@@ -71,7 +71,7 @@ var helmRepositoryOCIReadyCondition = summarize.Conditions{
 // helmRepositoryOCIFailConditions contains the conditions that represent a
 // failure.
 var helmRepositoryOCIFailConditions = []string{
-	sourcev1.FetchFailedCondition,
+	sourcev1.AddFailedCondition,
 }
 
 // +kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=helmrepositories,verbs=get;list;watch;create;update;patch;delete
@@ -188,7 +188,8 @@ func (r *HelmRepositoryOCIReconciler) Reconcile(ctx context.Context, req ctrl.Re
 
 	// Examine if a type change has happened and act accordingly
 	if obj.Spec.Type != sourcev1.HelmRepositoryTypeOCI {
-		// just ignore the object if the type has changed
+		// remove any stale condition and ignore the object if the type has changed
+		obj.Status.Conditions = nil
 		recResult, retErr = sreconcile.ResultEmpty, nil
 		return
 	}
@@ -258,10 +259,10 @@ func (r *HelmRepositoryOCIReconciler) reconcile(ctx context.Context, obj *source
 func (r *HelmRepositoryOCIReconciler) reconcileSource(ctx context.Context, obj *sourcev1.HelmRepository) (sreconcile.Result, error) {
 	if !helmreg.IsOCI(obj.Spec.URL) {
 		e := &serror.Stalling{
-			Err:    fmt.Errorf("the url scheme is not supported: %s", obj.Spec.URL),
+			Err:    fmt.Errorf("the URL scheme is not supported: %s", obj.Spec.URL),
 			Reason: sourcev1.URLInvalidReason,
 		}
-		conditions.MarkFalse(obj, meta.ReadyCondition, e.Reason, e.Err.Error())
+		conditions.MarkTrue(obj, sourcev1.AddFailedCondition, e.Reason, e.Err.Error())
 		return sreconcile.ResultEmpty, e
 	}
 
@@ -279,7 +280,7 @@ func (r *HelmRepositoryOCIReconciler) reconcileSource(ctx context.Context, obj *
 				Err:    fmt.Errorf("failed to get secret '%s': %w", name.String(), err),
 				Reason: sourcev1.AuthenticationFailedReason,
 			}
-			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
+			conditions.MarkTrue(obj, sourcev1.AddFailedCondition, e.Reason, e.Err.Error())
 			return sreconcile.ResultEmpty, e
 		}
 
@@ -290,7 +291,7 @@ func (r *HelmRepositoryOCIReconciler) reconcileSource(ctx context.Context, obj *
 				Err:    fmt.Errorf("failed to configure Helm client with secret data: %w", err),
 				Reason: sourcev1.AuthenticationFailedReason,
 			}
-			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
+			conditions.MarkTrue(obj, sourcev1.AddFailedCondition, e.Reason, e.Err.Error())
 			// Return err as the content of the secret may change.
 			return sreconcile.ResultEmpty, e
 		}
@@ -309,10 +310,10 @@ func (r *HelmRepositoryOCIReconciler) validateSource(ctx context.Context, obj *s
 	registryClient, file, err := r.RegistryClientGenerator(logOpts != nil)
 	if err != nil {
 		e := &serror.Event{
-			Err:    fmt.Errorf("failed to create registry client:: %w", err),
+			Err:    fmt.Errorf("failed to create registry client: %w", err),
 			Reason: meta.FailedReason,
 		}
-		conditions.MarkFalse(obj, meta.ReadyCondition, e.Reason, e.Err.Error())
+		conditions.MarkTrue(obj, sourcev1.AddFailedCondition, e.Reason, e.Err.Error())
 		return sreconcile.ResultEmpty, e
 	}
 
@@ -331,22 +332,24 @@ func (r *HelmRepositoryOCIReconciler) validateSource(ctx context.Context, obj *s
 			Err:    fmt.Errorf("failed to parse URL '%s': %w", obj.Spec.URL, err),
 			Reason: sourcev1.URLInvalidReason,
 		}
-		conditions.MarkFalse(obj, meta.ReadyCondition, e.Reason, e.Err.Error())
+		conditions.MarkTrue(obj, sourcev1.AddFailedCondition, e.Reason, e.Err.Error())
 		return sreconcile.ResultEmpty, e
 	}
 
-	// Attempt to login to the registry if credentials are provided.
 	if logOpts != nil {
 		err = chartRepo.Login(logOpts...)
 		if err != nil {
 			e := &serror.Event{
-				Err:    fmt.Errorf("failed to create temporary file: %w", err),
+				Err:    fmt.Errorf("failed to login to repository '%s': %w", obj.Spec.URL, err),
 				Reason: meta.FailedReason,
 			}
-			conditions.MarkFalse(obj, meta.ReadyCondition, e.Reason, e.Err.Error())
+			conditions.MarkTrue(obj, sourcev1.AddFailedCondition, e.Reason, e.Err.Error())
 			return sreconcile.ResultEmpty, e
 		}
 	}
+
+	// Delete any stale failure observation
+	conditions.Delete(obj, sourcev1.AddFailedCondition)
 
 	conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "Helm repository %q is ready", obj.Name)
 

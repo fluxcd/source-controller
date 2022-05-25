@@ -19,6 +19,13 @@ package v1beta2
 const SourceFinalizer = "finalizers.fluxcd.io"
 
 const (
+	// AddFailedCondition indicates a transient or persistent failure
+	// to add an upstream Source.
+	// If True, the reconciliation failed while adding the source.
+	// This is a "negative polarity" or "abnormal-true" type, and is only
+	// present on the resource if it is True.
+	AddFailedCondition = "AddFailed"
+
 	// ArtifactInStorageCondition indicates the availability of the Artifact in
 	// the storage.
 	// If True, the Artifact is stored successfully.

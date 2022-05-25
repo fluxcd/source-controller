@@ -577,8 +577,8 @@ func (r *HelmRepositoryReconciler) garbageCollect(ctx context.Context, obj *sour
 		// Clean status sub-resource
 		obj.Status.Artifact = nil
 		obj.Status.URL = ""
-		// Remove the condition as the artifact doesn't exist.
-		conditions.Delete(obj, sourcev1.ArtifactInStorageCondition)
+		// Remove any stale conditions
+		obj.Status.Conditions = nil
 		return nil
 	}
 	if obj.GetArtifact() != nil {

@@ -1179,6 +1179,9 @@ func TestHelmRepositoryReconciler_ReconcileTypeUpdatePredicateFilter(t *testing.
 			return false
 		}
 		readyCondition := conditions.Get(obj, meta.ReadyCondition)
+		if readyCondition == nil {
+			return false
+		}
 		return readyCondition.Status == metav1.ConditionTrue &&
 			newGen == readyCondition.ObservedGeneration &&
 			newGen == obj.Status.ObservedGeneration
