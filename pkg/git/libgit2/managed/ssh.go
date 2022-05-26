@@ -165,7 +165,7 @@ func (t *sshSmartSubtransport) Action(transportOptionsURL string, action git2go.
 		cert := &git2go.Certificate{
 			Kind: git2go.CertificateHostkey,
 			Hostkey: git2go.HostkeyCertificate{
-				Kind:         git2go.HostkeySHA256,
+				Kind:         git2go.HostkeySHA256 | git2go.HostkeyRaw,
 				HashSHA256:   sha256.Sum256(marshaledKey),
 				Hostkey:      marshaledKey,
 				SSHPublicKey: key,

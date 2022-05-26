@@ -29,7 +29,7 @@ func TestKnownHostsCallback(t *testing.T) {
 			name:         "Match",
 			host:         "github.com",
 			knownHosts:   []byte(knownHostsFixture),
-			hostkey:      git2go.HostkeyCertificate{Kind: git2go.HostkeySHA1 | git2go.HostkeyMD5, HashSHA1: sha1Fingerprint("v2toJdKXfFEaR1u++4iq1UqSrHM")},
+			hostkey:      git2go.HostkeyCertificate{Kind: git2go.HostkeySHA256, HashSHA256: sha256Fingerprint("nThbg6kXUpJWGl7E1IGOCspRomTxdCARLviKw6E5SY8")},
 			expectedHost: "github.com",
 			want:         nil,
 		},
@@ -37,7 +37,7 @@ func TestKnownHostsCallback(t *testing.T) {
 			name:         "Match with port",
 			host:         "github.com",
 			knownHosts:   []byte(knownHostsFixture),
-			hostkey:      git2go.HostkeyCertificate{Kind: git2go.HostkeySHA1 | git2go.HostkeyMD5, HashSHA1: sha1Fingerprint("v2toJdKXfFEaR1u++4iq1UqSrHM")},
+			hostkey:      git2go.HostkeyCertificate{Kind: git2go.HostkeySHA256, HashSHA256: sha256Fingerprint("nThbg6kXUpJWGl7E1IGOCspRomTxdCARLviKw6E5SY8")},
 			expectedHost: "github.com:22",
 			want:         nil,
 		},
@@ -45,7 +45,7 @@ func TestKnownHostsCallback(t *testing.T) {
 			name:         "Hostname mismatch",
 			host:         "github.com",
 			knownHosts:   []byte(knownHostsFixture),
-			hostkey:      git2go.HostkeyCertificate{Kind: git2go.HostkeySHA1 | git2go.HostkeyMD5, HashSHA1: sha1Fingerprint("v2toJdKXfFEaR1u++4iq1UqSrHM")},
+			hostkey:      git2go.HostkeyCertificate{Kind: git2go.HostkeySHA256, HashSHA256: sha256Fingerprint("nThbg6kXUpJWGl7E1IGOCspRomTxdCARLviKw6E5SY8")},
 			expectedHost: "example.com",
 			want:         fmt.Errorf("host mismatch: %q %q", "example.com", "github.com"),
 		},
@@ -53,7 +53,7 @@ func TestKnownHostsCallback(t *testing.T) {
 			name:         "Hostkey mismatch",
 			host:         "github.com",
 			knownHosts:   []byte(knownHostsFixture),
-			hostkey:      git2go.HostkeyCertificate{Kind: git2go.HostkeyMD5, HashMD5: md5Fingerprint("\xb6\x03\x0e\x39\x97\x9e\xd0\xe7\x24\xce\xa3\x77\x3e\x01\x42\x09")},
+			hostkey:      git2go.HostkeyCertificate{Kind: git2go.HostkeySHA256, HashSHA256: sha256Fingerprint("ROQFvPThGrW4RuWLoL9tq9I9zJ42fK4XywyRtbOz/EQ")},
 			expectedHost: "github.com",
 			want:         fmt.Errorf("hostkey could not be verified"),
 		},
@@ -72,21 +72,6 @@ func TestKnownHostsCallback(t *testing.T) {
 			}
 		})
 	}
-}
-func md5Fingerprint(in string) [16]byte {
-	var out [16]byte
-	copy(out[:], in)
-	return out
-}
-
-func sha1Fingerprint(in string) [20]byte {
-	d, err := base64.RawStdEncoding.DecodeString(in)
-	if err != nil {
-		panic(err)
-	}
-	var out [20]byte
-	copy(out[:], d)
-	return out
 }
 
 func sha256Fingerprint(in string) [32]byte {

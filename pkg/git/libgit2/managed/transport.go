@@ -1,8 +1,6 @@
 package managed
 
 import (
-	"crypto/md5"
-	"crypto/sha1"
 	"crypto/sha256"
 	"fmt"
 	"hash"
@@ -49,16 +47,8 @@ func KnownHostsCallback(host string, knownHosts []byte) git2go.CertificateCheckC
 		case cert.Hostkey.Kind&git2go.HostkeySHA256 > 0:
 			fingerprint = cert.Hostkey.HashSHA256[:]
 			hasher = sha256.New()
-		// SHA1 and MD5 are present here, because they're used for unmanaged transport.
-		// TODO: get rid of this, when unmanaged transport is completely removed.
-		case cert.Hostkey.Kind&git2go.HostkeySHA1 > 0:
-			fingerprint = cert.Hostkey.HashSHA1[:]
-			hasher = sha1.New()
-		case cert.Hostkey.Kind&git2go.HostkeyMD5 > 0:
-			fingerprint = cert.Hostkey.HashMD5[:]
-			hasher = md5.New()
 		default:
-			return fmt.Errorf("invalid host key kind, expected to be one of SHA256, SHA1, MD5")
+			return fmt.Errorf("invalid host key kind, expected to be of kind SHA256")
 		}
 
 		// We are now certain that the configured host and the hostname
