@@ -22,12 +22,12 @@ require (
 	github.com/docker/go-units v0.4.0
 	github.com/elazarl/goproxy v0.0.0-20220417044921-416226498f94
 	github.com/fluxcd/gitkit v0.5.0
-	github.com/fluxcd/pkg/apis/meta v0.14.0
+	github.com/fluxcd/pkg/apis/meta v0.14.1
 	github.com/fluxcd/pkg/gittestserver v0.5.3
 	github.com/fluxcd/pkg/gitutil v0.1.0
 	github.com/fluxcd/pkg/helmtestserver v0.5.0
 	github.com/fluxcd/pkg/lockedfile v0.1.0
-	github.com/fluxcd/pkg/runtime v0.16.0
+	github.com/fluxcd/pkg/runtime v0.16.1
 	github.com/fluxcd/pkg/ssh v0.3.4
 	github.com/fluxcd/pkg/testserver v0.2.0
 	github.com/fluxcd/pkg/untar v0.1.0
@@ -75,6 +75,9 @@ replace github.com/opencontainers/image-spec => github.com/opencontainers/image-
 // Fix CVE-2022-23648
 // Fix CVE-2021-43816
 replace github.com/containerd/containerd => github.com/containerd/containerd v1.6.1
+
+// Fix CVE-2022-28948
+replace gopkg.in/yaml.v3 => gopkg.in/yaml.v3 v3.0.0
 
 require (
 	cloud.google.com/go v0.100.2 // indirect
