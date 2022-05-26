@@ -29,17 +29,23 @@ import (
 
 	"github.com/elazarl/goproxy"
 	"github.com/fluxcd/pkg/gittestserver"
+	"github.com/go-logr/logr"
 	. "github.com/onsi/gomega"
 
 	"github.com/fluxcd/source-controller/pkg/git"
 	"github.com/fluxcd/source-controller/pkg/git/gogit"
 	"github.com/fluxcd/source-controller/pkg/git/libgit2"
+	"github.com/fluxcd/source-controller/pkg/git/libgit2/managed"
 	"github.com/fluxcd/source-controller/pkg/git/strategy"
 )
 
 // These tests are run in a different _test.go file because go-git uses the ProxyFromEnvironment function of the net/http package
 // which caches the Proxy settings, hence not including other tests in the same file ensures a clean proxy setup for the tests to run.
 func TestCheckoutStrategyForImplementation_Proxied(t *testing.T) {
+	// for libgit2 we are only testing for managed transport,
+	// as unmanaged is sunsetting.
+	// Unmanaged transport does not support HTTP_PROXY.
+	managed.InitManagedTransport(logr.Discard())
 
 	type cleanupFunc func()
 
@@ -62,69 +68,7 @@ func TestCheckoutStrategyForImplementation_Proxied(t *testing.T) {
 	proxyAddr := fmt.Sprintf("localhost:%d", l.Addr().(*net.TCPAddr).Port)
 	g.Expect(l.Close()).ToNot(HaveOccurred())
 
-	// Note there is no libgit2 HTTP_PROXY test as libgit2 doesnt support proxied HTTP requests.
 	cases := []testCase{
-		{
-			name:    "libgit2_HTTPS_PROXY",
-			gitImpl: libgit2.Implementation,
-			url:     "https://example.com/bar/test-reponame",
-			branch:  "main",
-			setupGitProxy: func(g *WithT, proxy *goproxy.ProxyHttpServer, proxyGotRequest *bool) (*git.AuthOptions, cleanupFunc) {
-				// Create the git server.
-				gitServer, err := gittestserver.NewTempGitServer()
-				g.Expect(err).ToNot(HaveOccurred())
-
-				username := "test-user"
-				password := "test-password"
-				gitServer.Auth(username, password)
-				gitServer.KeyDir(gitServer.Root())
-
-				// Start the HTTPS server.
-				examplePublicKey, err := os.ReadFile("../testdata/certs/server.pem")
-				g.Expect(err).ToNot(HaveOccurred())
-				examplePrivateKey, err := os.ReadFile("../testdata/certs/server-key.pem")
-				g.Expect(err).ToNot(HaveOccurred())
-				exampleCA, err := os.ReadFile("../testdata/certs/ca.pem")
-				g.Expect(err).ToNot(HaveOccurred())
-				err = gitServer.StartHTTPS(examplePublicKey, examplePrivateKey, exampleCA, "example.com")
-				g.Expect(err).ToNot(HaveOccurred())
-
-				// Initialize a git repo.
-				repoPath := "bar/test-reponame"
-				err = gitServer.InitRepo("../testdata/repo1", "main", repoPath)
-				g.Expect(err).ToNot(HaveOccurred())
-
-				u, err := url.Parse(gitServer.HTTPAddress())
-				g.Expect(err).ToNot(HaveOccurred())
-
-				// The request is being forwarded to the local test git server in this handler.
-				// The certificate used here is valid for both example.com and localhost.
-				var proxyHandler goproxy.FuncHttpsHandler = func(host string, ctx *goproxy.ProxyCtx) (*goproxy.ConnectAction, string) {
-					// Check if the host matches with the git server address and the user-agent is the expected git client.
-					userAgent := ctx.Req.Header.Get("User-Agent")
-					if strings.Contains(host, "example.com") && strings.Contains(userAgent, "libgit2") {
-						*proxyGotRequest = true
-						return goproxy.OkConnect, u.Host
-					}
-					// Reject if it isn't our request.
-					return goproxy.RejectConnect, host
-				}
-				proxy.OnRequest().HandleConnect(proxyHandler)
-
-				return &git.AuthOptions{
-						Transport: git.HTTPS,
-						Username:  username,
-						Password:  password,
-						CAFile:    exampleCA,
-					}, func() {
-						os.RemoveAll(gitServer.Root())
-						gitServer.StopHTTP()
-					}
-			},
-			shortTimeout:  false,
-			wantUsedProxy: true,
-			wantError:     false,
-		},
 		{
 			name:    "gogit_HTTP_PROXY",
 			gitImpl: gogit.Implementation,
@@ -222,9 +166,136 @@ func TestCheckoutStrategyForImplementation_Proxied(t *testing.T) {
 			wantUsedProxy: false,
 			wantError:     true,
 		},
-		// TODO: Add a NO_PROXY test for libgit2 once the version of libgit2 used by the source controller is updated to a version that includes
-		// the NO_PROXY functionality
-		// This PR introduces the functionality in libgit2: https://github.com/libgit2/libgit2/pull/6026
+		{
+			name:    "libgit2_HTTPS_PROXY",
+			gitImpl: libgit2.Implementation,
+			url:     "https://example.com/bar/test-reponame",
+			branch:  "main",
+			setupGitProxy: func(g *WithT, proxy *goproxy.ProxyHttpServer, proxyGotRequest *bool) (*git.AuthOptions, cleanupFunc) {
+				// Create the git server.
+				gitServer, err := gittestserver.NewTempGitServer()
+				g.Expect(err).ToNot(HaveOccurred())
+
+				username := "test-user"
+				password := "test-password"
+				gitServer.Auth(username, password)
+				gitServer.KeyDir(gitServer.Root())
+
+				// Start the HTTPS server.
+				examplePublicKey, err := os.ReadFile("../testdata/certs/server.pem")
+				g.Expect(err).ToNot(HaveOccurred())
+				examplePrivateKey, err := os.ReadFile("../testdata/certs/server-key.pem")
+				g.Expect(err).ToNot(HaveOccurred())
+				exampleCA, err := os.ReadFile("../testdata/certs/ca.pem")
+				g.Expect(err).ToNot(HaveOccurred())
+				err = gitServer.StartHTTPS(examplePublicKey, examplePrivateKey, exampleCA, "example.com")
+				g.Expect(err).ToNot(HaveOccurred())
+
+				// Initialize a git repo.
+				repoPath := "bar/test-reponame"
+				err = gitServer.InitRepo("../testdata/repo1", "main", repoPath)
+				g.Expect(err).ToNot(HaveOccurred())
+
+				u, err := url.Parse(gitServer.HTTPAddress())
+				g.Expect(err).ToNot(HaveOccurred())
+
+				// The request is being forwarded to the local test git server in this handler.
+				// The certificate used here is valid for both example.com and localhost.
+				var proxyHandler goproxy.FuncHttpsHandler = func(host string, ctx *goproxy.ProxyCtx) (*goproxy.ConnectAction, string) {
+					defer managed.RemoveTransportOptions("https://example.com/bar/test-reponame")
+					// Check if the host matches with the git server address and the user-agent is the expected git client.
+					userAgent := ctx.Req.Header.Get("User-Agent")
+					if strings.Contains(host, "example.com") && strings.Contains(userAgent, "libgit2") {
+						*proxyGotRequest = true
+						return goproxy.OkConnect, u.Host
+					}
+					// Reject if it isn't our request.
+					return goproxy.RejectConnect, host
+				}
+				proxy.OnRequest().HandleConnect(proxyHandler)
+
+				return &git.AuthOptions{
+						Transport:           git.HTTPS,
+						Username:            username,
+						Password:            password,
+						CAFile:              exampleCA,
+						TransportOptionsURL: "https://proxy-test",
+					}, func() {
+						os.RemoveAll(gitServer.Root())
+						gitServer.StopHTTP()
+					}
+			},
+			shortTimeout:  false,
+			wantUsedProxy: true,
+			wantError:     false,
+		},
+		{
+			name:    "libgit2_HTTP_PROXY",
+			gitImpl: libgit2.Implementation,
+			url:     "http://example.com/bar/test-reponame",
+			branch:  "main",
+			setupGitProxy: func(g *WithT, proxy *goproxy.ProxyHttpServer, proxyGotRequest *bool) (*git.AuthOptions, cleanupFunc) {
+				// Create the git server.
+				gitServer, err := gittestserver.NewTempGitServer()
+				g.Expect(err).ToNot(HaveOccurred())
+
+				err = gitServer.StartHTTP()
+				g.Expect(err).ToNot(HaveOccurred())
+
+				// Initialize a git repo.
+				repoPath := "bar/test-reponame"
+				err = gitServer.InitRepo("../testdata/repo1", "main", repoPath)
+				g.Expect(err).ToNot(HaveOccurred())
+
+				u, err := url.Parse(gitServer.HTTPAddress())
+				g.Expect(err).ToNot(HaveOccurred())
+
+				// The request is being forwarded to the local test git server in this handler.
+				// The certificate used here is valid for both example.com and localhost.
+				var proxyHandler goproxy.FuncReqHandler = func(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
+					userAgent := req.Header.Get("User-Agent")
+					if strings.Contains(req.Host, "example.com") && strings.Contains(userAgent, "libgit2") {
+						*proxyGotRequest = true
+						req.Host = u.Host
+						req.URL.Host = req.Host
+						return req, nil
+					}
+					// Reject if it isnt our request.
+					return req, goproxy.NewResponse(req, goproxy.ContentTypeText, http.StatusForbidden, "")
+				}
+				proxy.OnRequest().Do(proxyHandler)
+
+				return &git.AuthOptions{
+						Transport:           git.HTTP,
+						TransportOptionsURL: "http://proxy-test",
+					}, func() {
+						os.RemoveAll(gitServer.Root())
+						gitServer.StopHTTP()
+					}
+			},
+			shortTimeout:  false,
+			wantUsedProxy: true,
+			wantError:     false,
+		},
+		{
+			name:    "libgit2_NO_PROXY",
+			gitImpl: libgit2.Implementation,
+			url:     "https://192.0.2.1/bar/test-reponame",
+			branch:  "main",
+			setupGitProxy: func(g *WithT, proxy *goproxy.ProxyHttpServer, proxyGotRequest *bool) (*git.AuthOptions, cleanupFunc) {
+				var proxyHandler goproxy.FuncHttpsHandler = func(host string, ctx *goproxy.ProxyCtx) (*goproxy.ConnectAction, string) {
+					// We shouldn't hit the proxy so we just want to check for any interaction, then reject.
+					*proxyGotRequest = true
+					return goproxy.RejectConnect, host
+				}
+				proxy.OnRequest().HandleConnect(proxyHandler)
+
+				return nil, func() {}
+			},
+			shortTimeout:  false,
+			wantUsedProxy: false,
+			wantError:     true,
+		},
 	}
 
 	for _, tt := range cases {
@@ -282,7 +353,6 @@ func TestCheckoutStrategyForImplementation_Proxied(t *testing.T) {
 			}
 
 			g.Expect(proxyGotRequest).To(Equal(tt.wantUsedProxy))
-
 		})
 	}
 }
