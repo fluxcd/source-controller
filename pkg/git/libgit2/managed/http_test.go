@@ -32,76 +32,88 @@ import (
 )
 
 func TestHttpAction_CreateClientRequest(t *testing.T) {
-	opts := &TransportOptions{
-		TargetURL: "https://final-target/abc",
+	authOpts := git.AuthOptions{
+		Username: "user",
+		Password: "pwd",
 	}
-
-	optsWithAuth := &TransportOptions{
-		TargetURL: "https://final-target/abc",
-		AuthOpts: &git.AuthOptions{
-			Username: "user",
-			Password: "pwd",
-		},
-	}
-	id := "https://obj-id"
+	url := "https://final-target/abc"
 
 	tests := []struct {
 		name       string
 		assertFunc func(g *WithT, req *http.Request, client *http.Client)
 		action     git2go.SmartServiceAction
-		opts       *TransportOptions
+		authOpts   git.AuthOptions
 		transport  *http.Transport
 		wantedErr  error
 	}{
 		{
-			name:      "Uploadpack: URL and method are correctly set",
-			action:    git2go.SmartServiceActionUploadpack,
-			transport: &http.Transport{},
+			name:   "Uploadpack: URL, method and headers are correctly set",
+			action: git2go.SmartServiceActionUploadpack,
+			transport: &http.Transport{
+				Proxy:              http.ProxyFromEnvironment,
+				ProxyConnectHeader: map[string][]string{},
+			},
 			assertFunc: func(g *WithT, req *http.Request, _ *http.Client) {
 				g.Expect(req.URL.String()).To(Equal("https://final-target/abc/git-upload-pack"))
 				g.Expect(req.Method).To(Equal("POST"))
+				g.Expect(req.Header).To(BeEquivalentTo(map[string][]string{
+					"User-Agent":   []string{"git/2.0 (flux-libgit2)"},
+					"Content-Type": []string{"application/x-git-upload-pack-request"},
+				}))
 			},
-			opts:      opts,
 			wantedErr: nil,
 		},
 		{
-			name:      "UploadpackLs: URL and method are correctly set",
+			name:      "UploadpackLs: URL, method and headers are correctly set",
 			action:    git2go.SmartServiceActionUploadpackLs,
 			transport: &http.Transport{},
 			assertFunc: func(g *WithT, req *http.Request, _ *http.Client) {
 				g.Expect(req.URL.String()).To(Equal("https://final-target/abc/info/refs?service=git-upload-pack"))
 				g.Expect(req.Method).To(Equal("GET"))
+				g.Expect(req.Header).To(BeEquivalentTo(map[string][]string{
+					"User-Agent": []string{"git/2.0 (flux-libgit2)"},
+				}))
 			},
-			opts:      opts,
 			wantedErr: nil,
 		},
 		{
-			name:      "Receivepack: URL and method are correctly set",
-			action:    git2go.SmartServiceActionReceivepack,
-			transport: &http.Transport{},
+			name:   "Receivepack: URL, method and headers are correctly set",
+			action: git2go.SmartServiceActionReceivepack,
+			transport: &http.Transport{
+				Proxy:              http.ProxyFromEnvironment,
+				ProxyConnectHeader: map[string][]string{},
+			},
 			assertFunc: func(g *WithT, req *http.Request, _ *http.Client) {
 				g.Expect(req.URL.String()).To(Equal("https://final-target/abc/git-receive-pack"))
 				g.Expect(req.Method).To(Equal("POST"))
+				g.Expect(req.Header).To(BeEquivalentTo(map[string][]string{
+					"Content-Type": []string{"application/x-git-receive-pack-request"},
+					"User-Agent":   []string{"git/2.0 (flux-libgit2)"},
+				}))
 			},
-			opts:      opts,
 			wantedErr: nil,
 		},
 		{
-			name:      "ReceivepackLs: URL and method are correctly set",
+			name:      "ReceivepackLs: URL, method and headars are correctly set",
 			action:    git2go.SmartServiceActionReceivepackLs,
 			transport: &http.Transport{},
 			assertFunc: func(g *WithT, req *http.Request, _ *http.Client) {
 				g.Expect(req.URL.String()).To(Equal("https://final-target/abc/info/refs?service=git-receive-pack"))
 				g.Expect(req.Method).To(Equal("GET"))
+				g.Expect(req.Header).To(BeEquivalentTo(map[string][]string{
+					"User-Agent": []string{"git/2.0 (flux-libgit2)"},
+				}))
 			},
-			opts:      opts,
 			wantedErr: nil,
 		},
 		{
-			name:      "credentials are correctly configured",
-			action:    git2go.SmartServiceActionUploadpack,
-			transport: &http.Transport{},
-			opts:      optsWithAuth,
+			name:   "credentials are correctly configured",
+			action: git2go.SmartServiceActionUploadpack,
+			transport: &http.Transport{
+				Proxy:              http.ProxyFromEnvironment,
+				ProxyConnectHeader: map[string][]string{},
+			},
+			authOpts: authOpts,
 			assertFunc: func(g *WithT, req *http.Request, client *http.Client) {
 				g.Expect(req.URL.String()).To(Equal("https://final-target/abc/git-upload-pack"))
 				g.Expect(req.Method).To(Equal("POST"))
@@ -119,26 +131,15 @@ func TestHttpAction_CreateClientRequest(t *testing.T) {
 			name:      "error when no http.transport provided",
 			action:    git2go.SmartServiceActionUploadpack,
 			transport: nil,
-			opts:      opts,
 			wantedErr: fmt.Errorf("failed to create client: transport cannot be nil"),
-		},
-		{
-			name:      "error when no transport options are registered",
-			action:    git2go.SmartServiceActionUploadpack,
-			transport: &http.Transport{},
-			opts:      nil,
-			wantedErr: fmt.Errorf("failed to create client: could not find transport options for the object: https://obj-id"),
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
-			if tt.opts != nil {
-				AddTransportOptions(id, *tt.opts)
-			}
 
-			client, req, err := createClientRequest(id, tt.action, tt.transport)
+			client, req, err := createClientRequest(url, tt.action, tt.transport, &tt.authOpts)
 			if err != nil {
 				t.Log(err)
 			}
@@ -148,9 +149,6 @@ func TestHttpAction_CreateClientRequest(t *testing.T) {
 				tt.assertFunc(g, req, client)
 			}
 
-			if tt.opts != nil {
-				RemoveTransportOptions(id)
-			}
 		})
 	}
 }
@@ -167,17 +165,9 @@ func TestHTTPManagedTransport_E2E(t *testing.T) {
 	server.Auth(user, pwd)
 	server.KeyDir(filepath.Join(server.Root(), "keys"))
 
-	err = server.ListenSSH()
-	g.Expect(err).ToNot(HaveOccurred())
-
 	err = server.StartHTTP()
 	g.Expect(err).ToNot(HaveOccurred())
 	defer server.StopHTTP()
-
-	go func() {
-		server.StartSSH()
-	}()
-	defer server.StopSSH()
 
 	// Force managed transport to be enabled
 	InitManagedTransport(logr.Discard())
@@ -188,7 +178,7 @@ func TestHTTPManagedTransport_E2E(t *testing.T) {
 
 	tmpDir := t.TempDir()
 
-	// Register the auth options and target url mapped to a unique id.
+	// Register the auth options and target url mapped to a unique url.
 	id := "http://obj-id"
 	AddTransportOptions(id, TransportOptions{
 		TargetURL: server.HTTPAddress() + "/" + repoPath,
@@ -198,9 +188,9 @@ func TestHTTPManagedTransport_E2E(t *testing.T) {
 		},
 	})
 
-	// We call Clone with id instead of the actual url, as the transport action
-	// will fetch the actual url and the required credentials using the id as
-	// a identifier.
+	// We call git2go.Clone with transportOptsURL instead of the actual URL,
+	// as the transport action will fetch the actual URL and the required
+	// credentials using the it as an identifier.
 	repo, err := git2go.Clone(id, tmpDir, &git2go.CloneOptions{
 		CheckoutOptions: git2go.CheckoutOptions{
 			Strategy: git2go.CheckoutForce,

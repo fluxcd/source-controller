@@ -362,7 +362,7 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 			},
 			wantErr: true,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.GitOperationFailedReason, "failed to checkout and determine revision: unable to fetch-connect to remote '<url>': PEM CA bundle could not be appended to x509 certificate pool"),
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.GitOperationFailedReason, "failed to checkout and determine revision: unable to clone '<url>': PEM CA bundle could not be appended to x509 certificate pool"),
 			},
 		},
 		{
@@ -645,10 +645,11 @@ func TestGitRepositoryReconciler_reconcileSource_checkoutStrategy(t *testing.T) 
 				}
 				conditions.MarkTrue(obj, sourcev1.ArtifactInStorageCondition, meta.SucceededReason, "foo")
 			},
-			want:                 sreconcile.ResultEmpty,
-			wantErr:              true,
-			wantRevision:         "staging/<commit>",
-			wantArtifactOutdated: false,
+			want:                  sreconcile.ResultEmpty,
+			wantErr:               true,
+			wantRevision:          "staging/<commit>",
+			wantArtifactOutdated:  false,
+			skipForImplementation: "libgit2",
 		},
 		{
 			name: "Optimized clone different ignore",
@@ -669,9 +670,10 @@ func TestGitRepositoryReconciler_reconcileSource_checkoutStrategy(t *testing.T) 
 				}
 				conditions.MarkTrue(obj, sourcev1.ArtifactInStorageCondition, meta.SucceededReason, "foo")
 			},
-			want:                 sreconcile.ResultSuccess,
-			wantRevision:         "staging/<commit>",
-			wantArtifactOutdated: false,
+			want:                  sreconcile.ResultSuccess,
+			wantRevision:          "staging/<commit>",
+			wantArtifactOutdated:  false,
+			skipForImplementation: "libgit2",
 		},
 	}
 

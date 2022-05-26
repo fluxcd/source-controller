@@ -20,36 +20,45 @@ import (
 	"sync"
 
 	"github.com/fluxcd/source-controller/pkg/git"
+	git2go "github.com/libgit2/git2go/v33"
 )
 
 // TransportOptions represents options to be applied at transport-level
 // at request time.
 type TransportOptions struct {
-	TargetURL string
-	AuthOpts  *git.AuthOptions
+	TargetURL    string
+	AuthOpts     *git.AuthOptions
+	ProxyOptions *git2go.ProxyOptions
 }
 
 var (
-	// transportOpts maps a unique id to a set of transport options.
+	// transportOpts maps a unique url to a set of transport options.
 	transportOpts = make(map[string]TransportOptions, 0)
 	m             sync.RWMutex
 )
 
-func AddTransportOptions(id string, opts TransportOptions) {
+// AddTransportOptions registers a TransportOptions object mapped to the
+// provided transportOptsURL, which must be a valid URL, i.e. prefixed with "http://"
+// or "ssh://", as it is used as a dummy URL for all git operations and the managed
+// transports will only be invoked for the protocols that they have been
+// registered for.
+func AddTransportOptions(transportOptsURL string, opts TransportOptions) {
 	m.Lock()
-	transportOpts[id] = opts
+	transportOpts[transportOptsURL] = opts
 	m.Unlock()
 }
 
-func RemoveTransportOptions(id string) {
+// RemoveTransportOptions removes the registerd TransportOptions object
+// mapped to the provided id.
+func RemoveTransportOptions(transportOptsURL string) {
 	m.Lock()
-	delete(transportOpts, id)
+	delete(transportOpts, transportOptsURL)
 	m.Unlock()
 }
 
-func getTransportOptions(id string) (*TransportOptions, bool) {
+func getTransportOptions(transportOptsURL string) (*TransportOptions, bool) {
 	m.RLock()
-	opts, found := transportOpts[id]
+	opts, found := transportOpts[transportOptsURL]
 	m.RUnlock()
 
 	if found {
@@ -63,16 +72,16 @@ func getTransportOptions(id string) (*TransportOptions, bool) {
 // Given that TransportOptions can allow for the target URL to be overriden
 // this returns the same input if Managed Transport is disabled or if no TargetURL
 // is set on TransportOptions.
-func EffectiveURL(id string) string {
+func EffectiveURL(transporOptsURL string) string {
 	if !Enabled() {
-		return id
+		return transporOptsURL
 	}
 
-	if opts, found := getTransportOptions(id); found {
+	if opts, found := getTransportOptions(transporOptsURL); found {
 		if opts.TargetURL != "" {
 			return opts.TargetURL
 		}
 	}
 
-	return id
+	return transporOptsURL
 }

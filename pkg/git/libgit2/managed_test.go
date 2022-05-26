@@ -36,6 +36,7 @@ import (
 	"github.com/go-logr/logr"
 	. "github.com/onsi/gomega"
 
+	git2go "github.com/libgit2/git2go/v33"
 	cryptossh "golang.org/x/crypto/ssh"
 )
 
@@ -123,7 +124,6 @@ func Test_ManagedSSH_KeyTypes(t *testing.T) {
 	knownHosts, err := ssh.ScanHostKey(u.Host, timeout, git.HostKeyAlgos, false)
 	g.Expect(err).ToNot(HaveOccurred())
 
-	os.Setenv("EXPERIMENTAL_GIT_TRANSPORT", "true")
 	managed.InitManagedTransport(logr.Discard())
 
 	for _, tt := range tests {
@@ -139,21 +139,11 @@ func Test_ManagedSSH_KeyTypes(t *testing.T) {
 				authorizedPublicKey = string(kp.PublicKey)
 			}
 
-			// secret := corev1.Secret{
-			// Data: map[string][]byte{
-			// "identity":    kp.PrivateKey,
-			// "known_hosts": knownHosts,
-			// },
-			// }
-			//
-			// authOpts, err := git.AuthOptionsFromSecret(repoURL, &secret)
-			// g.Expect(err).ToNot(HaveOccurred())
-
 			authOpts := &git.AuthOptions{
 				Identity:   kp.PrivateKey,
 				KnownHosts: knownHosts,
 			}
-			authOpts.TransportAuthID = "ssh://" + getTransportAuthID()
+			authOpts.TransportOptionsURL = getTransportOptionsURL(git.SSH)
 
 			// Prepare for checkout.
 			branchCheckoutStrat := &CheckoutBranch{Branch: git.DefaultBranch}
@@ -233,7 +223,6 @@ func Test_ManagedSSH_KeyExchangeAlgos(t *testing.T) {
 		},
 	}
 
-	os.Setenv("EXPERIMENTAL_GIT_TRANSPORT", "true")
 	managed.InitManagedTransport(logr.Discard())
 
 	for _, tt := range tests {
@@ -280,20 +269,11 @@ func Test_ManagedSSH_KeyExchangeAlgos(t *testing.T) {
 			kp, err := ssh.GenerateKeyPair(ssh.ED25519)
 			g.Expect(err).ToNot(HaveOccurred())
 
-			// secret := corev1.Secret{
-			// Data: map[string][]byte{
-			// "identity":    kp.PrivateKey,
-			// "known_hosts": knownHosts,
-			// },
-			// }
-			//
-			// authOpts, err := git.AuthOptionsFromSecret(repoURL, &secret)
-			// g.Expect(err).ToNot(HaveOccurred())
 			authOpts := &git.AuthOptions{
 				Identity:   kp.PrivateKey,
 				KnownHosts: knownHosts,
 			}
-			authOpts.TransportAuthID = "ssh://" + getTransportAuthID()
+			authOpts.TransportOptionsURL = getTransportOptionsURL(git.SSH)
 
 			// Prepare for checkout.
 			branchCheckoutStrat := &CheckoutBranch{Branch: git.DefaultBranch}
@@ -402,7 +382,6 @@ func Test_ManagedSSH_HostKeyAlgos(t *testing.T) {
 		},
 	}
 
-	os.Setenv("EXPERIMENTAL_GIT_TRANSPORT", "true")
 	managed.InitManagedTransport(logr.Discard())
 
 	for _, tt := range tests {
@@ -459,20 +438,11 @@ func Test_ManagedSSH_HostKeyAlgos(t *testing.T) {
 			kp, err := ssh.GenerateKeyPair(ssh.ED25519)
 			g.Expect(err).ToNot(HaveOccurred())
 
-			// secret := corev1.Secret{
-			// Data: map[string][]byte{
-			// "identity":    kp.PrivateKey,
-			// "known_hosts": knownHosts,
-			// },
-			// }
-			//
-			// authOpts, err := git.AuthOptionsFromSecret(repoURL, &secret)
-			// g.Expect(err).ToNot(HaveOccurred())
 			authOpts := &git.AuthOptions{
 				Identity:   kp.PrivateKey,
 				KnownHosts: knownHosts,
 			}
-			authOpts.TransportAuthID = "ssh://" + getTransportAuthID()
+			authOpts.TransportOptionsURL = getTransportOptionsURL(git.SSH)
 
 			// Prepare for checkout.
 			branchCheckoutStrat := &CheckoutBranch{Branch: git.DefaultBranch}
@@ -488,11 +458,161 @@ func Test_ManagedSSH_HostKeyAlgos(t *testing.T) {
 	}
 }
 
-func getTransportAuthID() string {
+func Test_ManagedHTTPCheckout(t *testing.T) {
+	g := NewWithT(t)
+
+	timeout := 5 * time.Second
+	server, err := gittestserver.NewTempGitServer()
+	g.Expect(err).ToNot(HaveOccurred())
+	defer os.RemoveAll(server.Root())
+
+	user := "test-user"
+	pwd := "test-pswd"
+	server.Auth(user, pwd)
+
+	err = server.StartHTTP()
+	g.Expect(err).ToNot(HaveOccurred())
+	defer server.StopHTTP()
+
+	// Force managed transport to be enabled
+	managed.InitManagedTransport(logr.Discard())
+
+	repoPath := "test.git"
+	err = server.InitRepo("../testdata/git/repo", git.DefaultBranch, repoPath)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	authOpts := &git.AuthOptions{
+		Username: "test-user",
+		Password: "test-pswd",
+	}
+	authOpts.TransportOptionsURL = getTransportOptionsURL(git.HTTP)
+
+	// Prepare for checkout.
+	branchCheckoutStrat := &CheckoutBranch{Branch: git.DefaultBranch}
+	tmpDir := t.TempDir()
+
+	ctx, cancel := context.WithTimeout(context.TODO(), timeout)
+	defer cancel()
+
+	repoURL := server.HTTPAddress() + "/" + repoPath
+	// Checkout the repo.
+	_, err = branchCheckoutStrat.Checkout(ctx, tmpDir, repoURL, authOpts)
+	g.Expect(err).Error().ShouldNot(HaveOccurred())
+}
+
+func TestManagedCheckoutBranch_Checkout(t *testing.T) {
+	managed.InitManagedTransport(logr.Discard())
+	g := NewWithT(t)
+
+	timeout := 5 * time.Second
+	server, err := gittestserver.NewTempGitServer()
+	g.Expect(err).ToNot(HaveOccurred())
+	defer os.RemoveAll(server.Root())
+
+	err = server.StartHTTP()
+	g.Expect(err).ToNot(HaveOccurred())
+	defer server.StopHTTP()
+
+	repoPath := "test.git"
+	err = server.InitRepo("../testdata/git/repo", git.DefaultBranch, repoPath)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	repo, err := git2go.OpenRepository(filepath.Join(server.Root(), repoPath))
+	g.Expect(err).ToNot(HaveOccurred())
+
+	branchRef, err := repo.References.Lookup(fmt.Sprintf("refs/heads/%s", git.DefaultBranch))
+	g.Expect(err).ToNot(HaveOccurred())
+	defer branchRef.Free()
+
+	commit, err := repo.LookupCommit(branchRef.Target())
+	g.Expect(err).ToNot(HaveOccurred())
+
+	authOpts := &git.AuthOptions{
+		TransportOptionsURL: getTransportOptionsURL(git.HTTP),
+	}
+
+	tmpDir := t.TempDir()
+
+	ctx, cancel := context.WithTimeout(context.TODO(), timeout)
+	defer cancel()
+
+	repoURL := server.HTTPAddress() + "/" + repoPath
+	branch := CheckoutBranch{
+		Branch: git.DefaultBranch,
+		// Set last revision to HEAD commit, to force a no-op clone.
+		LastRevision: fmt.Sprintf("%s/%s", git.DefaultBranch, commit.Id().String()),
+	}
+
+	cc, err := branch.Checkout(ctx, tmpDir, repoURL, authOpts)
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(cc.String()).To(Equal(git.DefaultBranch + "/" + commit.Id().String()))
+	g.Expect(git.IsConcreteCommit(*cc)).To(Equal(false))
+
+	// Set last revision to a fake commit to force a full clone.
+	branch.LastRevision = fmt.Sprintf("%s/non-existent-commit", git.DefaultBranch)
+	cc, err = branch.Checkout(ctx, tmpDir, repoURL, authOpts)
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(cc.String()).To(Equal(git.DefaultBranch + "/" + commit.Id().String()))
+	g.Expect(git.IsConcreteCommit(*cc)).To(Equal(true))
+}
+
+func TestManagedCheckoutTag_Checkout(t *testing.T) {
+	managed.InitManagedTransport(logr.Discard())
+	g := NewWithT(t)
+
+	timeout := 5 * time.Second
+	server, err := gittestserver.NewTempGitServer()
+	g.Expect(err).ToNot(HaveOccurred())
+	defer os.RemoveAll(server.Root())
+
+	err = server.StartHTTP()
+	g.Expect(err).ToNot(HaveOccurred())
+	defer server.StopHTTP()
+
+	repoPath := "test.git"
+	err = server.InitRepo("../testdata/git/repo", git.DefaultBranch, repoPath)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	repo, err := git2go.OpenRepository(filepath.Join(server.Root(), repoPath))
+	g.Expect(err).ToNot(HaveOccurred())
+
+	branchRef, err := repo.References.Lookup(fmt.Sprintf("refs/heads/%s", git.DefaultBranch))
+	g.Expect(err).ToNot(HaveOccurred())
+	defer branchRef.Free()
+
+	commit, err := repo.LookupCommit(branchRef.Target())
+	g.Expect(err).ToNot(HaveOccurred())
+	_, err = tag(repo, commit.Id(), false, "tag-1", time.Now())
+
+	checkoutTag := CheckoutTag{
+		Tag: "tag-1",
+	}
+	authOpts := &git.AuthOptions{
+		TransportOptionsURL: getTransportOptionsURL(git.HTTP),
+	}
+	repoURL := server.HTTPAddress() + "/" + repoPath
+	tmpDir := t.TempDir()
+
+	ctx, cancel := context.WithTimeout(context.TODO(), timeout)
+	defer cancel()
+
+	cc, err := checkoutTag.Checkout(ctx, tmpDir, repoURL, authOpts)
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(cc.String()).To(Equal("tag-1" + "/" + commit.Id().String()))
+	g.Expect(git.IsConcreteCommit(*cc)).To(Equal(true))
+
+	checkoutTag.LastRevision = "tag-1" + "/" + commit.Id().String()
+	cc, err = checkoutTag.Checkout(ctx, tmpDir, repoURL, authOpts)
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(cc.String()).To(Equal("tag-1" + "/" + commit.Id().String()))
+	g.Expect(git.IsConcreteCommit(*cc)).To(Equal(false))
+}
+
+func getTransportOptionsURL(transport git.TransportType) string {
 	letterRunes := []rune("abcdefghijklmnopqrstuvwxyz1234567890")
 	b := make([]rune, 10)
 	for i := range b {
 		b[i] = letterRunes[rand.Intn(len(letterRunes))]
 	}
-	return string(b)
+	return string(transport) + "://" + string(b)
 }
