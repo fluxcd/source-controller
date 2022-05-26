@@ -505,12 +505,7 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context,
 
 	c, err := r.gitCheckout(ctx, obj, repositoryURL, authOpts, dir, optimizedClone)
 	if err != nil {
-		e := serror.NewGeneric(
-			fmt.Errorf("failed to checkout and determine revision: %w", err),
-			sourcev1.GitOperationFailedReason,
-		)
-		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
-		return sreconcile.ResultEmpty, e
+		return sreconcile.ResultEmpty, err
 	}
 	// Assign the commit to the shared commit reference.
 	*commit = *c
@@ -544,12 +539,7 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context,
 		// optimization.
 		c, err := r.gitCheckout(ctx, obj, repositoryURL, authOpts, dir, false)
 		if err != nil {
-			e := serror.NewGeneric(
-				fmt.Errorf("failed to checkout and determine revision: %w", err),
-				sourcev1.GitOperationFailedReason,
-			)
-			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
-			return sreconcile.ResultEmpty, e
+			return sreconcile.ResultEmpty, err
 		}
 		*commit = *c
 	}
@@ -773,7 +763,16 @@ func (r *GitRepositoryReconciler) gitCheckout(ctx context.Context,
 	// Checkout HEAD of reference in object
 	gitCtx, cancel := context.WithTimeout(ctx, obj.Spec.Timeout.Duration)
 	defer cancel()
-	return checkoutStrategy.Checkout(gitCtx, dir, repoURL, authOpts)
+	commit, err := checkoutStrategy.Checkout(gitCtx, dir, repoURL, authOpts)
+	if err != nil {
+		e := serror.NewGeneric(
+			fmt.Errorf("failed to checkout and determine revision: %w", err),
+			sourcev1.GitOperationFailedReason,
+		)
+		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
+		return nil, e
+	}
+	return commit, nil
 }
 
 // fetchIncludes fetches artifact metadata of all the included repos.
