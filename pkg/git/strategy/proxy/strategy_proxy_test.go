@@ -292,7 +292,7 @@ func TestCheckoutStrategyForImplementation_Proxied(t *testing.T) {
 
 				return nil, func() {}
 			},
-			shortTimeout:  false,
+			shortTimeout:  true,
 			wantUsedProxy: false,
 			wantError:     true,
 		},

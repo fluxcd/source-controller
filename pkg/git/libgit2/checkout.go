@@ -91,6 +91,7 @@ func (c *CheckoutBranch) Checkout(ctx context.Context, path, url string, opts *g
 			TargetURL:    url,
 			AuthOpts:     opts,
 			ProxyOptions: &git2go.ProxyOptions{Type: git2go.ProxyTypeAuto},
+			Context:      ctx,
 		})
 		url = opts.TransportOptionsURL
 		remoteCallBacks := managed.RemoteCallbacks()
