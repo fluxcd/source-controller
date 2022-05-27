@@ -222,7 +222,7 @@ func createClientRequest(targetURL string, action git2go.SmartServiceAction,
 		if len(authOpts.CAFile) > 0 {
 			certPool := x509.NewCertPool()
 			if ok := certPool.AppendCertsFromPEM(authOpts.CAFile); !ok {
-				return nil, nil, fmt.Errorf("failed to use certificate from PEM")
+				return nil, nil, fmt.Errorf("PEM CA bundle could not be appended to x509 certificate pool")
 			}
 			t.TLSClientConfig = &tls.Config{
 				RootCAs: certPool,

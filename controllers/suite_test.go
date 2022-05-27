@@ -39,6 +39,7 @@ import (
 	"github.com/fluxcd/pkg/runtime/controller"
 	"github.com/fluxcd/pkg/runtime/testenv"
 	"github.com/fluxcd/pkg/testserver"
+	"github.com/go-logr/logr"
 	"github.com/phayes/freeport"
 
 	"github.com/distribution/distribution/v3/configuration"
@@ -50,6 +51,7 @@ import (
 	"github.com/fluxcd/source-controller/internal/cache"
 	"github.com/fluxcd/source-controller/internal/features"
 	"github.com/fluxcd/source-controller/internal/helm/registry"
+	"github.com/fluxcd/source-controller/pkg/git/libgit2/managed"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -206,6 +208,8 @@ func TestMain(m *testing.M) {
 	if err != nil {
 		panic(fmt.Sprintf("Failed to create OCI registry client"))
 	}
+
+	managed.InitManagedTransport(logr.Discard())
 
 	if err := (&GitRepositoryReconciler{
 		Client:        testEnv,

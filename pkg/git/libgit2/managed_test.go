@@ -42,6 +42,10 @@ import (
 
 const testRepositoryPath = "../testdata/git/repo"
 
+func TestMain(m *testing.M) {
+	managed.InitManagedTransport(logr.Discard())
+}
+
 // Test_ManagedSSH_KeyTypes assures support for the different
 // types of keys for SSH Authentication supported by Flux.
 func Test_ManagedSSH_KeyTypes(t *testing.T) {
@@ -123,8 +127,6 @@ func Test_ManagedSSH_KeyTypes(t *testing.T) {
 
 	knownHosts, err := ssh.ScanHostKey(u.Host, timeout, git.HostKeyAlgos, false)
 	g.Expect(err).ToNot(HaveOccurred())
-
-	managed.InitManagedTransport(logr.Discard())
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -222,8 +224,6 @@ func Test_ManagedSSH_KeyExchangeAlgos(t *testing.T) {
 			wantErr:   "ssh: no common algorithm for key exchange; client offered: [ecdh-sha2-nistp521 ext-info-c], server offered: [curve25519-sha256@libssh.org]",
 		},
 	}
-
-	managed.InitManagedTransport(logr.Discard())
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -382,8 +382,6 @@ func Test_ManagedSSH_HostKeyAlgos(t *testing.T) {
 		},
 	}
 
-	managed.InitManagedTransport(logr.Discard())
-
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
@@ -475,7 +473,6 @@ func Test_ManagedHTTPCheckout(t *testing.T) {
 	defer server.StopHTTP()
 
 	// Force managed transport to be enabled
-	managed.InitManagedTransport(logr.Discard())
 
 	repoPath := "test.git"
 	err = server.InitRepo("../testdata/git/repo", git.DefaultBranch, repoPath)
@@ -501,7 +498,6 @@ func Test_ManagedHTTPCheckout(t *testing.T) {
 }
 
 func TestManagedCheckoutBranch_Checkout(t *testing.T) {
-	managed.InitManagedTransport(logr.Discard())
 	g := NewWithT(t)
 
 	timeout := 5 * time.Second
@@ -557,7 +553,6 @@ func TestManagedCheckoutBranch_Checkout(t *testing.T) {
 }
 
 func TestManagedCheckoutTag_Checkout(t *testing.T) {
-	managed.InitManagedTransport(logr.Discard())
 	g := NewWithT(t)
 
 	timeout := 5 * time.Second
