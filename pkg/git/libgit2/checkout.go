@@ -184,33 +184,37 @@ func (c *CheckoutBranch) Checkout(ctx context.Context, path, url string, opts *g
 
 		return buildCommit(cc, "refs/heads/"+c.Branch), nil
 	} else {
-		repo, err := git2go.Clone(url, path, &git2go.CloneOptions{
-			FetchOptions: git2go.FetchOptions{
-				DownloadTags:    git2go.DownloadTagsNone,
-				RemoteCallbacks: RemoteCallbacks(ctx, opts),
-				ProxyOptions:    git2go.ProxyOptions{Type: git2go.ProxyTypeAuto},
-			},
-			CheckoutOptions: git2go.CheckoutOptions{
-				Strategy: git2go.CheckoutForce,
-			},
-			CheckoutBranch: c.Branch,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("unable to clone '%s': %w", managed.EffectiveURL(url), gitutil.LibGit2Error(err))
-		}
-		defer repo.Free()
-		head, err := repo.Head()
-		if err != nil {
-			return nil, fmt.Errorf("git resolve HEAD error: %w", err)
-		}
-		defer head.Free()
-		cc, err := repo.LookupCommit(head.Target())
-		if err != nil {
-			return nil, fmt.Errorf("failed to lookup HEAD commit '%s' for branch '%s': %w", head.Target(), c.Branch, err)
-		}
-		defer cc.Free()
-		return buildCommit(cc, "refs/heads/"+c.Branch), nil
+		return c.checkoutUnmanaged(ctx, path, url, opts)
 	}
+}
+
+func (c *CheckoutBranch) checkoutUnmanaged(ctx context.Context, path, url string, opts *git.AuthOptions) (_ *git.Commit, err error) {
+	repo, err := git2go.Clone(url, path, &git2go.CloneOptions{
+		FetchOptions: git2go.FetchOptions{
+			DownloadTags:    git2go.DownloadTagsNone,
+			RemoteCallbacks: RemoteCallbacks(ctx, opts),
+			ProxyOptions:    git2go.ProxyOptions{Type: git2go.ProxyTypeAuto},
+		},
+		CheckoutOptions: git2go.CheckoutOptions{
+			Strategy: git2go.CheckoutForce,
+		},
+		CheckoutBranch: c.Branch,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("unable to clone '%s': %w", managed.EffectiveURL(url), gitutil.LibGit2Error(err))
+	}
+	defer repo.Free()
+	head, err := repo.Head()
+	if err != nil {
+		return nil, fmt.Errorf("git resolve HEAD error: %w", err)
+	}
+	defer head.Free()
+	cc, err := repo.LookupCommit(head.Target())
+	if err != nil {
+		return nil, fmt.Errorf("failed to lookup HEAD commit '%s' for branch '%s': %w", head.Target(), c.Branch, err)
+	}
+	defer cc.Free()
+	return buildCommit(cc, "refs/heads/"+c.Branch), nil
 }
 
 type CheckoutTag struct {
@@ -305,24 +309,28 @@ func (c *CheckoutTag) Checkout(ctx context.Context, path, url string, opts *git.
 		defer cc.Free()
 		return buildCommit(cc, "refs/tags/"+c.Tag), nil
 	} else {
-		repo, err := git2go.Clone(url, path, &git2go.CloneOptions{
-			FetchOptions: git2go.FetchOptions{
-				DownloadTags:    git2go.DownloadTagsAll,
-				RemoteCallbacks: RemoteCallbacks(ctx, opts),
-				ProxyOptions:    git2go.ProxyOptions{Type: git2go.ProxyTypeAuto},
-			},
-		})
-		if err != nil {
-			return nil, fmt.Errorf("unable to clone '%s': %w", managed.EffectiveURL(url), gitutil.LibGit2Error(err))
-		}
-		defer repo.Free()
-		cc, err := checkoutDetachedDwim(repo, c.Tag)
-		if err != nil {
-			return nil, err
-		}
-		defer cc.Free()
-		return buildCommit(cc, "refs/tags/"+c.Tag), nil
+		return c.checkoutUnmanaged(ctx, path, url, opts)
 	}
+}
+
+func (c *CheckoutTag) checkoutUnmanaged(ctx context.Context, path, url string, opts *git.AuthOptions) (_ *git.Commit, err error) {
+	repo, err := git2go.Clone(url, path, &git2go.CloneOptions{
+		FetchOptions: git2go.FetchOptions{
+			DownloadTags:    git2go.DownloadTagsAll,
+			RemoteCallbacks: RemoteCallbacks(ctx, opts),
+			ProxyOptions:    git2go.ProxyOptions{Type: git2go.ProxyTypeAuto},
+		},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("unable to clone '%s': %w", managed.EffectiveURL(url), gitutil.LibGit2Error(err))
+	}
+	defer repo.Free()
+	cc, err := checkoutDetachedDwim(repo, c.Tag)
+	if err != nil {
+		return nil, err
+	}
+	defer cc.Free()
+	return buildCommit(cc, "refs/tags/"+c.Tag), nil
 }
 
 type CheckoutCommit struct {

@@ -30,7 +30,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-func TestCheckoutBranch_Checkout(t *testing.T) {
+func TestCheckoutBranch_checkoutUnmanaged(t *testing.T) {
 	repo, err := initBareRepo(t)
 	if err != nil {
 		t.Fatal(err)
@@ -126,7 +126,7 @@ func TestCheckoutBranch_Checkout(t *testing.T) {
 	}
 }
 
-func TestCheckoutTag_Checkout(t *testing.T) {
+func TestCheckoutTag_checkoutUnmanaged(t *testing.T) {
 	type testTag struct {
 		name      string
 		annotated bool
