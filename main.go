@@ -316,7 +316,7 @@ func main() {
 		if optimize, _ := feathelper.Enabled(features.OptimizedGitClones); optimize {
 			features.Disable(features.OptimizedGitClones)
 			setupLog.Info(
-				"disabling optimzied git clones; git clones can only be optimized when using managed transort",
+				"disabling optimized git clones; git clones can only be optimized when using managed transport",
 			)
 		}
 	}

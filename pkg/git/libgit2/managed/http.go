@@ -47,7 +47,6 @@ import (
 	"bytes"
 	"crypto/tls"
 	"crypto/x509"
-	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
@@ -212,12 +211,6 @@ func createClientRequest(targetURL string, action git2go.SmartServiceAction,
 	if authOpts != nil {
 		if len(authOpts.Username) > 0 {
 			req.SetBasicAuth(authOpts.Username, authOpts.Password)
-			if t.Proxy != nil {
-				t.ProxyConnectHeader.Set(
-					"Authorization",
-					"Basic "+basicAuth(authOpts.Username, authOpts.Password),
-				)
-			}
 		}
 		if len(authOpts.CAFile) > 0 {
 			certPool := x509.NewCertPool()
@@ -412,10 +405,4 @@ func (self *httpSmartSubtransportStream) sendRequest() error {
 	self.resp = resp
 	self.sentRequest = true
 	return nil
-}
-
-// From: https://github.com/golang/go/blob/go1.18/src/net/http/client.go#L418
-func basicAuth(username, password string) string {
-	auth := username + ":" + password
-	return base64.StdEncoding.EncodeToString([]byte(auth))
 }

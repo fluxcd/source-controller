@@ -735,7 +735,7 @@ func (r *GitRepositoryReconciler) gitCheckout(ctx context.Context,
 	// managed GIT transport only affects the libgit2 implementation
 	if managed.Enabled() && obj.Spec.GitImplementation == sourcev1.LibGit2Implementation {
 		// We set the TransportOptionsURL of this set of authentication options here by constructing
-		// a unique ID that won't clash in a multi tenant environment. This unique ID is used by
+		// a unique URL that won't clash in a multi tenant environment. This unique URL is used by
 		// libgit2 managed transports. This enables us to bypass the inbuilt credentials callback in
 		// libgit2, which is inflexible and unstable.
 		if strings.HasPrefix(obj.Spec.URL, "http") {
@@ -745,7 +745,7 @@ func (r *GitRepositoryReconciler) gitCheckout(ctx context.Context,
 		} else {
 			e := &serror.Stalling{
 				Err:    fmt.Errorf("git repository URL has invalid transport type: '%s'", obj.Spec.URL),
-				Reason: sourcev1.GitOperationFailedReason,
+				Reason: sourcev1.URLInvalidReason,
 			}
 			return nil, e
 		}

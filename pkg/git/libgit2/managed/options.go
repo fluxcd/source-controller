@@ -32,7 +32,7 @@ type TransportOptions struct {
 }
 
 var (
-	// transportOpts maps a unique url to a set of transport options.
+	// transportOpts maps a unique URL to a set of transport options.
 	transportOpts = make(map[string]TransportOptions, 0)
 	m             sync.RWMutex
 )

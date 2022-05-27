@@ -472,8 +472,6 @@ func Test_ManagedHTTPCheckout(t *testing.T) {
 	g.Expect(err).ToNot(HaveOccurred())
 	defer server.StopHTTP()
 
-	// Force managed transport to be enabled
-
 	repoPath := "test.git"
 	err = server.InitRepo("../testdata/git/repo", git.DefaultBranch, repoPath)
 	g.Expect(err).ToNot(HaveOccurred())

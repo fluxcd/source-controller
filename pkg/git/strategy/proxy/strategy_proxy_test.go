@@ -320,10 +320,10 @@ func TestCheckoutStrategyForImplementation_Proxied(t *testing.T) {
 			defer proxyServer.Close()
 
 			// Set the proxy env vars for both HTTP and HTTPS because go-git caches them.
-			os.Setenv("HTTPS_PROXY", fmt.Sprintf("http://%s", proxyAddr))
+			os.Setenv("HTTPS_PROXY", fmt.Sprintf("http://smth:else@%s", proxyAddr))
 			defer os.Unsetenv("HTTPS_PROXY")
 
-			os.Setenv("HTTP_PROXY", fmt.Sprintf("http://%s", proxyAddr))
+			os.Setenv("HTTP_PROXY", fmt.Sprintf("http://smth:else@%s", proxyAddr))
 			defer os.Unsetenv("HTTP_PROXY")
 
 			os.Setenv("NO_PROXY", "*.0.2.1")
