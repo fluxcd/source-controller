@@ -17,6 +17,7 @@ limitations under the License.
 package managed
 
 import (
+	"context"
 	"sync"
 
 	"github.com/fluxcd/source-controller/pkg/git"
@@ -29,6 +30,7 @@ type TransportOptions struct {
 	TargetURL    string
 	AuthOpts     *git.AuthOptions
 	ProxyOptions *git2go.ProxyOptions
+	Context      context.Context
 }
 
 var (

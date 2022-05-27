@@ -92,6 +92,7 @@ type sshSmartSubtransport struct {
 	currentStream *sshSmartSubtransportStream
 	addr          string
 	connected     bool
+	ctx           context.Context
 }
 
 func (t *sshSmartSubtransport) Action(transportOptionsURL string, action git2go.SmartServiceAction) (git2go.SmartSubtransportStream, error) {
@@ -102,6 +103,8 @@ func (t *sshSmartSubtransport) Action(transportOptionsURL string, action git2go.
 	if !found {
 		return nil, fmt.Errorf("could not find transport options for object: %s", transportOptionsURL)
 	}
+
+	t.ctx = opts.Context
 
 	u, err := url.Parse(opts.TargetURL)
 	if err != nil {
@@ -206,16 +209,33 @@ func (t *sshSmartSubtransport) Action(transportOptionsURL string, action git2go.
 	// xref: https://github.com/golang/crypto/blob/eb4f295cb31f7fb5d52810411604a2638c9b19a2/ssh/session.go#L553-L558
 	go func() error {
 		defer w.Close()
-		for {
-			if !t.connected {
-				return nil
-			}
 
-			_, err := io.Copy(w, reader)
-			if err != nil {
-				return err
+		var cancel context.CancelFunc
+		ctx := t.ctx
+
+		// When context is nil, creates a new with internal SSH connection timeout.
+		if ctx == nil {
+			ctx, cancel = context.WithTimeout(context.Background(), sshConnectionTimeOut)
+			defer cancel()
+		}
+
+		for {
+			select {
+			case <-ctx.Done():
+				t.Close()
+				return nil
+
+			default:
+				if !t.connected {
+					return nil
+				}
+
+				_, err := io.Copy(w, reader)
+				if err != nil {
+					return err
+				}
+				time.Sleep(5 * time.Millisecond)
 			}
-			time.Sleep(5 * time.Millisecond)
 		}
 	}()
 

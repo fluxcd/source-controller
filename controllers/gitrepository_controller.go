@@ -721,7 +721,10 @@ func (r *GitRepositoryReconciler) gitCheckout(ctx context.Context,
 		}
 	}
 
-	checkoutStrategy, err := strategy.CheckoutStrategyForImplementation(ctx,
+	gitCtx, cancel := context.WithTimeout(ctx, obj.Spec.Timeout.Duration)
+	defer cancel()
+
+	checkoutStrategy, err := strategy.CheckoutStrategyForImplementation(gitCtx,
 		git.Implementation(obj.Spec.GitImplementation), checkoutOpts)
 	if err != nil {
 		// Do not return err as recovery without changes is impossible.
@@ -752,10 +755,6 @@ func (r *GitRepositoryReconciler) gitCheckout(ctx context.Context,
 			return nil, e
 		}
 	}
-
-	// Checkout HEAD of reference in object
-	gitCtx, cancel := context.WithTimeout(ctx, obj.Spec.Timeout.Duration)
-	defer cancel()
 
 	commit, err := checkoutStrategy.Checkout(gitCtx, dir, obj.Spec.URL, authOpts)
 	if err != nil {
