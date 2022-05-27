@@ -30,7 +30,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-func TestCheckoutBranch_Checkout(t *testing.T) {
+func TestCheckoutBranch_checkoutUnmanaged(t *testing.T) {
 	repo, err := initBareRepo(t)
 	if err != nil {
 		t.Fatal(err)
@@ -77,49 +77,29 @@ func TestCheckoutBranch_Checkout(t *testing.T) {
 	}
 
 	tests := []struct {
-		name                   string
-		branch                 string
-		filesCreated           map[string]string
-		lastRevision           string
-		expectedCommit         string
-		expectedConcreteCommit bool
-		expectedErr            string
+		name           string
+		branch         string
+		filesCreated   map[string]string
+		lastRevision   string
+		expectedCommit string
+		expectedErr    string
 	}{
 		{
-			name:                   "Default branch",
-			branch:                 defaultBranch,
-			filesCreated:           map[string]string{"branch": "second"},
-			expectedCommit:         secondCommit.String(),
-			expectedConcreteCommit: true,
+			name:           "Default branch",
+			branch:         defaultBranch,
+			filesCreated:   map[string]string{"branch": "second"},
+			expectedCommit: secondCommit.String(),
 		},
 		{
-			name:                   "Other branch",
-			branch:                 "test",
-			filesCreated:           map[string]string{"branch": "init"},
-			expectedCommit:         firstCommit.String(),
-			expectedConcreteCommit: true,
+			name:           "Other branch",
+			branch:         "test",
+			filesCreated:   map[string]string{"branch": "init"},
+			expectedCommit: firstCommit.String(),
 		},
 		{
-			name:                   "Non existing branch",
-			branch:                 "invalid",
-			expectedErr:            "reference 'refs/remotes/origin/invalid' not found",
-			expectedConcreteCommit: true,
-		},
-		{
-			name:                   "skip clone - lastRevision hasn't changed",
-			branch:                 defaultBranch,
-			filesCreated:           map[string]string{"branch": "second"},
-			lastRevision:           fmt.Sprintf("%s/%s", defaultBranch, secondCommit.String()),
-			expectedCommit:         secondCommit.String(),
-			expectedConcreteCommit: false,
-		},
-		{
-			name:                   "lastRevision is different",
-			branch:                 defaultBranch,
-			filesCreated:           map[string]string{"branch": "second"},
-			lastRevision:           fmt.Sprintf("%s/%s", defaultBranch, firstCommit.String()),
-			expectedCommit:         secondCommit.String(),
-			expectedConcreteCommit: true,
+			name:        "Non existing branch",
+			branch:      "invalid",
+			expectedErr: "reference 'refs/remotes/origin/invalid' not found",
 		},
 	}
 
@@ -142,43 +122,31 @@ func TestCheckoutBranch_Checkout(t *testing.T) {
 			}
 			g.Expect(err).ToNot(HaveOccurred())
 			g.Expect(cc.String()).To(Equal(tt.branch + "/" + tt.expectedCommit))
-			g.Expect(git.IsConcreteCommit(*cc)).To(Equal(tt.expectedConcreteCommit))
-
-			if tt.expectedConcreteCommit {
-				for k, v := range tt.filesCreated {
-					g.Expect(filepath.Join(tmpDir, k)).To(BeARegularFile())
-					g.Expect(os.ReadFile(filepath.Join(tmpDir, k))).To(BeEquivalentTo(v))
-				}
-			}
 		})
 	}
 }
 
-func TestCheckoutTag_Checkout(t *testing.T) {
+func TestCheckoutTag_checkoutUnmanaged(t *testing.T) {
 	type testTag struct {
 		name      string
 		annotated bool
 	}
 
 	tests := []struct {
-		name                 string
-		tagsInRepo           []testTag
-		checkoutTag          string
-		lastRevTag           string
-		expectErr            string
-		expectConcreteCommit bool
+		name        string
+		tagsInRepo  []testTag
+		checkoutTag string
+		expectErr   string
 	}{
 		{
-			name:                 "Tag",
-			tagsInRepo:           []testTag{{"tag-1", false}},
-			checkoutTag:          "tag-1",
-			expectConcreteCommit: true,
+			name:        "Tag",
+			tagsInRepo:  []testTag{{"tag-1", false}},
+			checkoutTag: "tag-1",
 		},
 		{
-			name:                 "Annotated",
-			tagsInRepo:           []testTag{{"annotated", true}},
-			checkoutTag:          "annotated",
-			expectConcreteCommit: true,
+			name:        "Annotated",
+			tagsInRepo:  []testTag{{"annotated", true}},
+			checkoutTag: "annotated",
 		},
 		{
 			name:        "Non existing tag",
@@ -186,18 +154,14 @@ func TestCheckoutTag_Checkout(t *testing.T) {
 			expectErr:   "unable to find 'invalid': no reference found for shorthand 'invalid'",
 		},
 		{
-			name:                 "Skip clone - last revision unchanged",
-			tagsInRepo:           []testTag{{"tag-1", false}},
-			checkoutTag:          "tag-1",
-			lastRevTag:           "tag-1",
-			expectConcreteCommit: false,
+			name:        "Skip clone - last revision unchanged",
+			tagsInRepo:  []testTag{{"tag-1", false}},
+			checkoutTag: "tag-1",
 		},
 		{
-			name:                 "Last revision changed",
-			tagsInRepo:           []testTag{{"tag-1", false}, {"tag-2", false}},
-			checkoutTag:          "tag-2",
-			lastRevTag:           "tag-1",
-			expectConcreteCommit: true,
+			name:        "Last revision changed",
+			tagsInRepo:  []testTag{{"tag-1", false}, {"tag-2", false}},
+			checkoutTag: "tag-2",
 		},
 	}
 	for _, tt := range tests {
@@ -235,12 +199,6 @@ func TestCheckoutTag_Checkout(t *testing.T) {
 			checkoutTag := CheckoutTag{
 				Tag: tt.checkoutTag,
 			}
-			// If last revision is provided, configure it.
-			if tt.lastRevTag != "" {
-				lc := tagCommits[tt.lastRevTag]
-				checkoutTag.LastRevision = fmt.Sprintf("%s/%s", tt.lastRevTag, lc.Id().String())
-			}
-
 			tmpDir := t.TempDir()
 
 			cc, err := checkoutTag.Checkout(context.TODO(), tmpDir, repo.Path(), nil)
@@ -252,16 +210,12 @@ func TestCheckoutTag_Checkout(t *testing.T) {
 			}
 
 			// Check successful checkout results.
-			g.Expect(git.IsConcreteCommit(*cc)).To(Equal(tt.expectConcreteCommit))
 			targetTagCommit := tagCommits[tt.checkoutTag]
 			g.Expect(err).ToNot(HaveOccurred())
 			g.Expect(cc.String()).To(Equal(tt.checkoutTag + "/" + targetTagCommit.Id().String()))
 
-			// Check file content only when there's an actual checkout.
-			if tt.lastRevTag != tt.checkoutTag {
-				g.Expect(filepath.Join(tmpDir, "tag")).To(BeARegularFile())
-				g.Expect(os.ReadFile(filepath.Join(tmpDir, "tag"))).To(BeEquivalentTo(tt.checkoutTag))
-			}
+			g.Expect(filepath.Join(tmpDir, "tag")).To(BeARegularFile())
+			g.Expect(os.ReadFile(filepath.Join(tmpDir, "tag"))).To(BeEquivalentTo(tt.checkoutTag))
 		})
 	}
 }

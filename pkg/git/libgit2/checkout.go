@@ -69,96 +69,151 @@ type CheckoutBranch struct {
 func (c *CheckoutBranch) Checkout(ctx context.Context, path, url string, opts *git.AuthOptions) (_ *git.Commit, err error) {
 	defer recoverPanic(&err)
 
-	remoteCallBacks := RemoteCallbacks(ctx, opts)
-	proxyOpts := &git2go.ProxyOptions{Type: git2go.ProxyTypeAuto}
-
-	repo, remote, err := initializeRepoWithRemote(ctx, path, url, opts)
-	if err != nil {
-		return nil, err
-	}
-	// Open remote connection.
-	err = remote.ConnectFetch(&remoteCallBacks, proxyOpts, nil)
-	if err != nil {
-		remote.Free()
-		repo.Free()
-		return nil, fmt.Errorf("unable to fetch-connect to remote '%s': %w", managed.EffectiveURL(url), gitutil.LibGit2Error(err))
-	}
-	defer func() {
-		remote.Disconnect()
-		remote.Free()
-		repo.Free()
-	}()
-
-	// When the last observed revision is set, check whether it is still the
-	// same at the remote branch. If so, short-circuit the clone operation here.
-	if c.LastRevision != "" {
-		heads, err := remote.Ls(c.Branch)
-		if err != nil {
-			return nil, fmt.Errorf("unable to remote ls for '%s': %w", managed.EffectiveURL(url), gitutil.LibGit2Error(err))
+	// This branching is temporary, to address the transient panics observed when using unmanaged transport.
+	// The panics probably happen because we perform multiple fetch ops (introduced as a part of optimizing git clones).
+	// The branching lets us establish a clear code path to help us be certain of the expected behaviour.
+	// When we get rid of unmanaged transports, we can get rid of this branching as well.
+	if managed.Enabled() {
+		// We store the target URL and auth options mapped to a unique ID. We overwrite the target URL
+		// with the TransportOptionsURL, because managed transports don't provide a way for any kind of
+		// dependency injection. This lets us have a way of doing interop between application level code
+		// and transport level code.
+		// Performing all fetch operations with the TransportOptionsURL as the URL, lets the managed
+		// transport action use it to fetch the registered transport options which contains the
+		// _actual_ target URL and the correct credentials to use.
+		if opts == nil {
+			return nil, fmt.Errorf("can't use managed transport with an empty set of auth options")
 		}
-		if len(heads) > 0 {
-			hash := heads[0].Id.String()
-			currentRevision := fmt.Sprintf("%s/%s", c.Branch, hash)
-			if currentRevision == c.LastRevision {
-				// Construct a partial commit with the existing information.
-				c := &git.Commit{
-					Hash:      git.Hash(hash),
-					Reference: "refs/heads/" + c.Branch,
+		if opts.TransportOptionsURL == "" {
+			return nil, fmt.Errorf("can't use managed transport without a valid transport auth id.")
+		}
+		managed.AddTransportOptions(opts.TransportOptionsURL, managed.TransportOptions{
+			TargetURL:    url,
+			AuthOpts:     opts,
+			ProxyOptions: &git2go.ProxyOptions{Type: git2go.ProxyTypeAuto},
+		})
+		url = opts.TransportOptionsURL
+		remoteCallBacks := managed.RemoteCallbacks()
+		defer managed.RemoveTransportOptions(opts.TransportOptionsURL)
+
+		repo, remote, err := initializeRepoWithRemote(ctx, path, url, opts)
+		if err != nil {
+			return nil, err
+		}
+		// Open remote connection.
+		err = remote.ConnectFetch(&remoteCallBacks, nil, nil)
+		if err != nil {
+			remote.Free()
+			repo.Free()
+			return nil, fmt.Errorf("unable to fetch-connect to remote '%s': %w", managed.EffectiveURL(url), gitutil.LibGit2Error(err))
+		}
+		defer func() {
+			remote.Disconnect()
+			remote.Free()
+			repo.Free()
+		}()
+
+		// When the last observed revision is set, check whether it is still the
+		// same at the remote branch. If so, short-circuit the clone operation here.
+		if c.LastRevision != "" {
+			heads, err := remote.Ls(c.Branch)
+			if err != nil {
+				return nil, fmt.Errorf("unable to remote ls for '%s': %w", managed.EffectiveURL(url), gitutil.LibGit2Error(err))
+			}
+			if len(heads) > 0 {
+				hash := heads[0].Id.String()
+				currentRevision := fmt.Sprintf("%s/%s", c.Branch, hash)
+				if currentRevision == c.LastRevision {
+					// Construct a partial commit with the existing information.
+					c := &git.Commit{
+						Hash:      git.Hash(hash),
+						Reference: "refs/heads/" + c.Branch,
+					}
+					return c, nil
 				}
-				return c, nil
 			}
 		}
-	}
 
-	// Limit the fetch operation to the specific branch, to decrease network usage.
-	err = remote.Fetch([]string{c.Branch},
-		&git2go.FetchOptions{
+		// Limit the fetch operation to the specific branch, to decrease network usage.
+		err = remote.Fetch([]string{c.Branch},
+			&git2go.FetchOptions{
+				DownloadTags:    git2go.DownloadTagsNone,
+				RemoteCallbacks: remoteCallBacks,
+			},
+			"")
+		if err != nil {
+			return nil, fmt.Errorf("unable to fetch remote '%s': %w",
+				managed.EffectiveURL(url), gitutil.LibGit2Error(err))
+		}
+
+		branch, err := repo.References.Lookup(fmt.Sprintf("refs/remotes/origin/%s", c.Branch))
+		if err != nil {
+			return nil, fmt.Errorf("unable to lookup branch '%s' for '%s': %w",
+				c.Branch, managed.EffectiveURL(url), gitutil.LibGit2Error(err))
+		}
+		defer branch.Free()
+
+		upstreamCommit, err := repo.LookupCommit(branch.Target())
+		if err != nil {
+			return nil, fmt.Errorf("unable to lookup commit '%s' for '%s': %w",
+				c.Branch, managed.EffectiveURL(url), gitutil.LibGit2Error(err))
+		}
+		defer upstreamCommit.Free()
+
+		// Once the index has been updated with Fetch, and we know the tip commit,
+		// a hard reset can be used to align the local worktree with the remote branch's.
+		err = repo.ResetToCommit(upstreamCommit, git2go.ResetHard, &git2go.CheckoutOptions{
+			Strategy: git2go.CheckoutForce,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("unable to hard reset to commit for '%s': %w", managed.EffectiveURL(url), gitutil.LibGit2Error(err))
+		}
+
+		// Use the current worktree's head as reference for the commit to be returned.
+		head, err := repo.Head()
+		if err != nil {
+			return nil, fmt.Errorf("git resolve HEAD error: %w", err)
+		}
+		defer head.Free()
+
+		cc, err := repo.LookupCommit(head.Target())
+		if err != nil {
+			return nil, fmt.Errorf("failed to lookup HEAD commit '%s' for branch '%s': %w", head.Target(), c.Branch, err)
+		}
+		defer cc.Free()
+
+		return buildCommit(cc, "refs/heads/"+c.Branch), nil
+	} else {
+		return c.checkoutUnmanaged(ctx, path, url, opts)
+	}
+}
+
+func (c *CheckoutBranch) checkoutUnmanaged(ctx context.Context, path, url string, opts *git.AuthOptions) (_ *git.Commit, err error) {
+	repo, err := git2go.Clone(url, path, &git2go.CloneOptions{
+		FetchOptions: git2go.FetchOptions{
 			DownloadTags:    git2go.DownloadTagsNone,
-			RemoteCallbacks: remoteCallBacks,
+			RemoteCallbacks: RemoteCallbacks(ctx, opts),
 			ProxyOptions:    git2go.ProxyOptions{Type: git2go.ProxyTypeAuto},
 		},
-		"")
-	if err != nil {
-		return nil, fmt.Errorf("unable to fetch remote '%s': %w",
-			managed.EffectiveURL(url), gitutil.LibGit2Error(err))
-	}
-
-	branch, err := repo.References.Lookup(fmt.Sprintf("refs/remotes/origin/%s", c.Branch))
-	if err != nil {
-		return nil, fmt.Errorf("unable to lookup branch '%s' for '%s': %w",
-			c.Branch, managed.EffectiveURL(url), gitutil.LibGit2Error(err))
-	}
-	defer branch.Free()
-
-	upstreamCommit, err := repo.LookupCommit(branch.Target())
-	if err != nil {
-		return nil, fmt.Errorf("unable to lookup commit '%s' for '%s': %w",
-			c.Branch, managed.EffectiveURL(url), gitutil.LibGit2Error(err))
-	}
-	defer upstreamCommit.Free()
-
-	// Once the index has been updated with Fetch, and we know the tip commit,
-	// a hard reset can be used to align the local worktree with the remote branch's.
-	err = repo.ResetToCommit(upstreamCommit, git2go.ResetHard, &git2go.CheckoutOptions{
-		Strategy: git2go.CheckoutForce,
+		CheckoutOptions: git2go.CheckoutOptions{
+			Strategy: git2go.CheckoutForce,
+		},
+		CheckoutBranch: c.Branch,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("unable to hard reset to commit for '%s': %w", managed.EffectiveURL(url), gitutil.LibGit2Error(err))
+		return nil, fmt.Errorf("unable to clone '%s': %w", managed.EffectiveURL(url), gitutil.LibGit2Error(err))
 	}
-
-	// Use the current worktree's head as reference for the commit to be returned.
+	defer repo.Free()
 	head, err := repo.Head()
 	if err != nil {
 		return nil, fmt.Errorf("git resolve HEAD error: %w", err)
 	}
 	defer head.Free()
-
 	cc, err := repo.LookupCommit(head.Target())
 	if err != nil {
 		return nil, fmt.Errorf("failed to lookup HEAD commit '%s' for branch '%s': %w", head.Target(), c.Branch, err)
 	}
 	defer cc.Free()
-
 	return buildCommit(cc, "refs/heads/"+c.Branch), nil
 }
 
@@ -170,70 +225,106 @@ type CheckoutTag struct {
 func (c *CheckoutTag) Checkout(ctx context.Context, path, url string, opts *git.AuthOptions) (_ *git.Commit, err error) {
 	defer recoverPanic(&err)
 
-	remoteCallBacks := RemoteCallbacks(ctx, opts)
-	proxyOpts := &git2go.ProxyOptions{Type: git2go.ProxyTypeAuto}
+	// This branching is temporary, to address the transient panics observed when using unmanaged transport.
+	// The panics probably happen because we perform multiple fetch ops (introduced as a part of optimizing git clones).
+	// The branching lets us establish a clear code path to help us be certain of the expected behaviour.
+	// When we get rid of unmanaged transports, we can get rid of this branching as well.
+	if managed.Enabled() {
+		if opts.TransportOptionsURL == "" {
+			return nil, fmt.Errorf("can't use managed transport without a valid transport auth id.")
+		}
+		managed.AddTransportOptions(opts.TransportOptionsURL, managed.TransportOptions{
+			TargetURL:    url,
+			AuthOpts:     opts,
+			ProxyOptions: &git2go.ProxyOptions{Type: git2go.ProxyTypeAuto},
+		})
+		url = opts.TransportOptionsURL
+		remoteCallBacks := managed.RemoteCallbacks()
+		defer managed.RemoveTransportOptions(opts.TransportOptionsURL)
 
-	repo, remote, err := initializeRepoWithRemote(ctx, path, url, opts)
-	if err != nil {
-		return nil, err
-	}
-	// Open remote connection.
-	err = remote.ConnectFetch(&remoteCallBacks, proxyOpts, nil)
-	if err != nil {
-		remote.Free()
-		repo.Free()
-		return nil, fmt.Errorf("unable to fetch-connect to remote '%s': %w", managed.EffectiveURL(url), gitutil.LibGit2Error(err))
-	}
-	defer func() {
-		remote.Disconnect()
-		remote.Free()
-		repo.Free()
-	}()
-
-	// When the last observed revision is set, check whether it is still the
-	// same at the remote branch. If so, short-circuit the clone operation here.
-	if c.LastRevision != "" {
-		heads, err := remote.Ls(c.Tag)
+		repo, remote, err := initializeRepoWithRemote(ctx, path, url, opts)
 		if err != nil {
-			return nil, fmt.Errorf("unable to remote ls for '%s': %w", managed.EffectiveURL(url), gitutil.LibGit2Error(err))
+			return nil, err
 		}
-		if len(heads) > 0 {
-			hash := heads[0].Id.String()
-			currentRevision := fmt.Sprintf("%s/%s", c.Tag, hash)
-			var same bool
-			if currentRevision == c.LastRevision {
-				same = true
-			} else if len(heads) > 1 {
-				hash = heads[1].Id.String()
-				currentAnnotatedRevision := fmt.Sprintf("%s/%s", c.Tag, hash)
-				if currentAnnotatedRevision == c.LastRevision {
+		// Open remote connection.
+		err = remote.ConnectFetch(&remoteCallBacks, nil, nil)
+		if err != nil {
+			remote.Free()
+			repo.Free()
+			return nil, fmt.Errorf("unable to fetch-connect to remote '%s': %w", managed.EffectiveURL(url), gitutil.LibGit2Error(err))
+		}
+		defer func() {
+			remote.Disconnect()
+			remote.Free()
+			repo.Free()
+		}()
+
+		// When the last observed revision is set, check whether it is still the
+		// same at the remote branch. If so, short-circuit the clone operation here.
+		if c.LastRevision != "" {
+			heads, err := remote.Ls(c.Tag)
+			if err != nil {
+				return nil, fmt.Errorf("unable to remote ls for '%s': %w", managed.EffectiveURL(url), gitutil.LibGit2Error(err))
+			}
+			if len(heads) > 0 {
+				hash := heads[0].Id.String()
+				currentRevision := fmt.Sprintf("%s/%s", c.Tag, hash)
+				var same bool
+				if currentRevision == c.LastRevision {
 					same = true
+				} else if len(heads) > 1 {
+					hash = heads[1].Id.String()
+					currentAnnotatedRevision := fmt.Sprintf("%s/%s", c.Tag, hash)
+					if currentAnnotatedRevision == c.LastRevision {
+						same = true
+					}
 				}
-			}
-			if same {
-				// Construct a partial commit with the existing information.
-				c := &git.Commit{
-					Hash:      git.Hash(hash),
-					Reference: "refs/tags/" + c.Tag,
+				if same {
+					// Construct a partial commit with the existing information.
+					c := &git.Commit{
+						Hash:      git.Hash(hash),
+						Reference: "refs/tags/" + c.Tag,
+					}
+					return c, nil
 				}
-				return c, nil
 			}
 		}
-	}
 
-	err = remote.Fetch([]string{c.Tag},
-		&git2go.FetchOptions{
-			DownloadTags:    git2go.DownloadTagsAuto,
-			RemoteCallbacks: remoteCallBacks,
-			ProxyOptions:    *proxyOpts,
+		err = remote.Fetch([]string{c.Tag},
+			&git2go.FetchOptions{
+				DownloadTags:    git2go.DownloadTagsAuto,
+				RemoteCallbacks: remoteCallBacks,
+			},
+			"")
+
+		if err != nil {
+			return nil, fmt.Errorf("unable to fetch remote '%s': %w",
+				managed.EffectiveURL(url), gitutil.LibGit2Error(err))
+		}
+
+		cc, err := checkoutDetachedDwim(repo, c.Tag)
+		if err != nil {
+			return nil, err
+		}
+		defer cc.Free()
+		return buildCommit(cc, "refs/tags/"+c.Tag), nil
+	} else {
+		return c.checkoutUnmanaged(ctx, path, url, opts)
+	}
+}
+
+func (c *CheckoutTag) checkoutUnmanaged(ctx context.Context, path, url string, opts *git.AuthOptions) (_ *git.Commit, err error) {
+	repo, err := git2go.Clone(url, path, &git2go.CloneOptions{
+		FetchOptions: git2go.FetchOptions{
+			DownloadTags:    git2go.DownloadTagsAll,
+			RemoteCallbacks: RemoteCallbacks(ctx, opts),
+			ProxyOptions:    git2go.ProxyOptions{Type: git2go.ProxyTypeAuto},
 		},
-		"")
-
+	})
 	if err != nil {
-		return nil, fmt.Errorf("unable to fetch remote '%s': %w",
-			managed.EffectiveURL(url), gitutil.LibGit2Error(err))
+		return nil, fmt.Errorf("unable to clone '%s': %w", managed.EffectiveURL(url), gitutil.LibGit2Error(err))
 	}
-
+	defer repo.Free()
 	cc, err := checkoutDetachedDwim(repo, c.Tag)
 	if err != nil {
 		return nil, err
@@ -249,11 +340,26 @@ type CheckoutCommit struct {
 func (c *CheckoutCommit) Checkout(ctx context.Context, path, url string, opts *git.AuthOptions) (_ *git.Commit, err error) {
 	defer recoverPanic(&err)
 
+	remoteCallBacks := RemoteCallbacks(ctx, opts)
+
+	if managed.Enabled() {
+		if opts.TransportOptionsURL == "" {
+			return nil, fmt.Errorf("can't use managed transport without a valid transport auth id.")
+		}
+		managed.AddTransportOptions(opts.TransportOptionsURL, managed.TransportOptions{
+			TargetURL:    url,
+			AuthOpts:     opts,
+			ProxyOptions: &git2go.ProxyOptions{Type: git2go.ProxyTypeAuto},
+		})
+		url = opts.TransportOptionsURL
+		remoteCallBacks = managed.RemoteCallbacks()
+		defer managed.RemoveTransportOptions(opts.TransportOptionsURL)
+	}
+
 	repo, err := git2go.Clone(url, path, &git2go.CloneOptions{
 		FetchOptions: git2go.FetchOptions{
 			DownloadTags:    git2go.DownloadTagsNone,
-			RemoteCallbacks: RemoteCallbacks(ctx, opts),
-			ProxyOptions:    git2go.ProxyOptions{Type: git2go.ProxyTypeAuto},
+			RemoteCallbacks: remoteCallBacks,
 		},
 	})
 	if err != nil {
@@ -278,6 +384,22 @@ type CheckoutSemVer struct {
 func (c *CheckoutSemVer) Checkout(ctx context.Context, path, url string, opts *git.AuthOptions) (_ *git.Commit, err error) {
 	defer recoverPanic(&err)
 
+	remoteCallBacks := RemoteCallbacks(ctx, opts)
+
+	if managed.Enabled() {
+		if opts.TransportOptionsURL == "" {
+			return nil, fmt.Errorf("can't use managed transport without a valid transport auth id.")
+		}
+		managed.AddTransportOptions(opts.TransportOptionsURL, managed.TransportOptions{
+			TargetURL:    url,
+			AuthOpts:     opts,
+			ProxyOptions: &git2go.ProxyOptions{Type: git2go.ProxyTypeAuto},
+		})
+		url = opts.TransportOptionsURL
+		remoteCallBacks = managed.RemoteCallbacks()
+		defer managed.RemoveTransportOptions(opts.TransportOptionsURL)
+	}
+
 	verConstraint, err := semver.NewConstraint(c.SemVer)
 	if err != nil {
 		return nil, fmt.Errorf("semver parse error: %w", err)
@@ -286,8 +408,7 @@ func (c *CheckoutSemVer) Checkout(ctx context.Context, path, url string, opts *g
 	repo, err := git2go.Clone(url, path, &git2go.CloneOptions{
 		FetchOptions: git2go.FetchOptions{
 			DownloadTags:    git2go.DownloadTagsAll,
-			RemoteCallbacks: RemoteCallbacks(ctx, opts),
-			ProxyOptions:    git2go.ProxyOptions{Type: git2go.ProxyTypeAuto},
+			RemoteCallbacks: remoteCallBacks,
 		},
 	})
 	if err != nil {

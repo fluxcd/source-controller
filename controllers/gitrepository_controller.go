@@ -455,33 +455,6 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context,
 		return sreconcile.ResultEmpty, e
 	}
 
-	repositoryURL := obj.Spec.URL
-	// managed GIT transport only affects the libgit2 implementation
-	if managed.Enabled() && obj.Spec.GitImplementation == sourcev1.LibGit2Implementation {
-		// At present only HTTP connections have the ability to define remote options.
-		// Although this can be easily extended by ensuring that the fake URL below uses the
-		// target ssh scheme, and the libgit2/managed/ssh.go pulls that information accordingly.
-		//
-		// This is due to the fact the key libgit2 remote callbacks do not take place for HTTP
-		// whilst most still work for SSH.
-		if strings.HasPrefix(repositoryURL, "http") {
-			// Due to the lack of the callback feature, a fake target URL is created to allow
-			// for the smart sub transport be able to pick the options specific for this
-			// GitRepository object.
-			// The URL should use unique information that do not collide in a multi tenant
-			// deployment.
-			repositoryURL = fmt.Sprintf("http://%s/%s/%d", obj.Name, obj.UID, obj.Generation)
-			managed.AddTransportOptions(repositoryURL,
-				managed.TransportOptions{
-					TargetURL: obj.Spec.URL,
-					CABundle:  authOpts.CAFile,
-				})
-
-			// We remove the options from memory, to avoid accumulating unused options over time.
-			defer managed.RemoveTransportOptions(repositoryURL)
-		}
-	}
-
 	// Fetch the included artifact metadata.
 	artifacts, err := r.fetchIncludes(ctx, obj)
 	if err != nil {
@@ -503,7 +476,7 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context,
 		optimizedClone = true
 	}
 
-	c, err := r.gitCheckout(ctx, obj, repositoryURL, authOpts, dir, optimizedClone)
+	c, err := r.gitCheckout(ctx, obj, authOpts, dir, optimizedClone)
 	if err != nil {
 		return sreconcile.ResultEmpty, err
 	}
@@ -537,7 +510,7 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context,
 
 		// If we can't skip the reconciliation, checkout again without any
 		// optimization.
-		c, err := r.gitCheckout(ctx, obj, repositoryURL, authOpts, dir, false)
+		c, err := r.gitCheckout(ctx, obj, authOpts, dir, false)
 		if err != nil {
 			return sreconcile.ResultEmpty, err
 		}
@@ -729,7 +702,7 @@ func (r *GitRepositoryReconciler) reconcileInclude(ctx context.Context,
 // gitCheckout builds checkout options with the given configurations and
 // performs a git checkout.
 func (r *GitRepositoryReconciler) gitCheckout(ctx context.Context,
-	obj *sourcev1.GitRepository, repoURL string, authOpts *git.AuthOptions, dir string, optimized bool) (*git.Commit, error) {
+	obj *sourcev1.GitRepository, authOpts *git.AuthOptions, dir string, optimized bool) (*git.Commit, error) {
 	// Configure checkout strategy.
 	checkoutOpts := git.CheckoutOptions{RecurseSubmodules: obj.Spec.RecurseSubmodules}
 	if ref := obj.Spec.Reference; ref != nil {
@@ -755,15 +728,34 @@ func (r *GitRepositoryReconciler) gitCheckout(ctx context.Context,
 			Err:    fmt.Errorf("failed to configure checkout strategy for Git implementation '%s': %w", obj.Spec.GitImplementation, err),
 			Reason: sourcev1.GitOperationFailedReason,
 		}
-		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
 		// Do not return err as recovery without changes is impossible.
 		return nil, e
+	}
+
+	// managed GIT transport only affects the libgit2 implementation
+	if managed.Enabled() && obj.Spec.GitImplementation == sourcev1.LibGit2Implementation {
+		// We set the TransportOptionsURL of this set of authentication options here by constructing
+		// a unique URL that won't clash in a multi tenant environment. This unique URL is used by
+		// libgit2 managed transports. This enables us to bypass the inbuilt credentials callback in
+		// libgit2, which is inflexible and unstable.
+		if strings.HasPrefix(obj.Spec.URL, "http") {
+			authOpts.TransportOptionsURL = fmt.Sprintf("http://%s/%s/%d", obj.Name, obj.UID, obj.Generation)
+		} else if strings.HasPrefix(obj.Spec.URL, "ssh") {
+			authOpts.TransportOptionsURL = fmt.Sprintf("ssh://%s/%s/%d", obj.Name, obj.UID, obj.Generation)
+		} else {
+			e := &serror.Stalling{
+				Err:    fmt.Errorf("git repository URL has invalid transport type: '%s'", obj.Spec.URL),
+				Reason: sourcev1.URLInvalidReason,
+			}
+			return nil, e
+		}
 	}
 
 	// Checkout HEAD of reference in object
 	gitCtx, cancel := context.WithTimeout(ctx, obj.Spec.Timeout.Duration)
 	defer cancel()
-	commit, err := checkoutStrategy.Checkout(gitCtx, dir, repoURL, authOpts)
+
+	commit, err := checkoutStrategy.Checkout(gitCtx, dir, obj.Spec.URL, authOpts)
 	if err != nil {
 		e := serror.NewGeneric(
 			fmt.Errorf("failed to checkout and determine revision: %w", err),
