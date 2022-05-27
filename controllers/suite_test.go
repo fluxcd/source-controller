@@ -68,6 +68,12 @@ const (
 	retentionRecords = 2
 )
 
+const (
+	testRegistryHtpasswdFileBasename = "authtest.htpasswd"
+	testRegistryUsername             = "myuser"
+	testRegistryPassword             = "mypass"
+)
+
 var (
 	testEnv      *testenv.Environment
 	testStorage  *Storage
@@ -96,69 +102,62 @@ var (
 )
 
 var (
-	testRegistryClient *helmreg.Client
-	testRegistryserver *RegistryClientTestServer
-)
-
-var (
-	testWorkspaceDir         = "registry-test"
-	testHtpasswdFileBasename = "authtest.htpasswd"
-	testUsername             = "myuser"
-	testPassword             = "mypass"
+	testRegistryServer *registryClientTestServer
 )
 
 func init() {
 	rand.Seed(time.Now().UnixNano())
 }
 
-type RegistryClientTestServer struct {
-	Out                io.Writer
-	DockerRegistryHost string
-	WorkspaceDir       string
-	RegistryClient     *helmreg.Client
+type registryClientTestServer struct {
+	out            io.Writer
+	registryHost   string
+	workspaceDir   string
+	registryClient *helmreg.Client
 }
 
-func SetupServer(server *RegistryClientTestServer) string {
+func setupRegistryServer(ctx context.Context) (*registryClientTestServer, error) {
+	server := &registryClientTestServer{}
+
 	// Create a temporary workspace directory for the registry
-	server.WorkspaceDir = testWorkspaceDir
-	os.RemoveAll(server.WorkspaceDir)
-	err := os.Mkdir(server.WorkspaceDir, 0700)
+	workspaceDir, err := os.MkdirTemp("", "registry-test-")
 	if err != nil {
-		panic(fmt.Sprintf("failed to create workspace directory: %s", err))
+		return nil, fmt.Errorf("failed to create workspace directory: %w", err)
 	}
+	server.workspaceDir = workspaceDir
 
 	var out bytes.Buffer
-	server.Out = &out
+	server.out = &out
 
 	// init test client
-	server.RegistryClient, err = helmreg.NewClient(
+	server.registryClient, err = helmreg.NewClient(
 		helmreg.ClientOptDebug(true),
-		helmreg.ClientOptWriter(server.Out),
+		helmreg.ClientOptWriter(server.out),
 	)
 	if err != nil {
-		panic(fmt.Sprintf("failed to create registry client: %s", err))
+		return nil, fmt.Errorf("failed to create registry client: %s", err)
 	}
 
 	// create htpasswd file (w BCrypt, which is required)
-	pwBytes, err := bcrypt.GenerateFromPassword([]byte(testPassword), bcrypt.DefaultCost)
+	pwBytes, err := bcrypt.GenerateFromPassword([]byte(testRegistryPassword), bcrypt.DefaultCost)
 	if err != nil {
-		panic(fmt.Sprintf("failed to generate password: %s", err))
+		return nil, fmt.Errorf("failed to generate password: %s", err)
 	}
 
-	htpasswdPath := filepath.Join(testWorkspaceDir, testHtpasswdFileBasename)
-	err = ioutil.WriteFile(htpasswdPath, []byte(fmt.Sprintf("%s:%s\n", testUsername, string(pwBytes))), 0644)
+	htpasswdPath := filepath.Join(workspaceDir, testRegistryHtpasswdFileBasename)
+	err = ioutil.WriteFile(htpasswdPath, []byte(fmt.Sprintf("%s:%s\n", testRegistryUsername, string(pwBytes))), 0644)
 	if err != nil {
-		panic(fmt.Sprintf("failed to create htpasswd file: %s", err))
+		return nil, fmt.Errorf("failed to create htpasswd file: %s", err)
 	}
 
 	// Registry config
 	config := &configuration.Configuration{}
 	port, err := freeport.GetFreePort()
 	if err != nil {
-		panic(fmt.Sprintf("failed to get free port: %s", err))
+		return nil, fmt.Errorf("failed to get free port: %s", err)
 	}
 
-	server.DockerRegistryHost = fmt.Sprintf("localhost:%d", port)
+	server.registryHost = fmt.Sprintf("localhost:%d", port)
 	config.HTTP.Addr = fmt.Sprintf("127.0.0.1:%d", port)
 	config.HTTP.DrainTimeout = time.Duration(10) * time.Second
 	config.Storage = map[string]configuration.Parameters{"inmemory": map[string]interface{}{}}
@@ -168,15 +167,15 @@ func SetupServer(server *RegistryClientTestServer) string {
 			"path":  htpasswdPath,
 		},
 	}
-	dockerRegistry, err := dockerRegistry.NewRegistry(context.Background(), config)
+	dockerRegistry, err := dockerRegistry.NewRegistry(ctx, config)
 	if err != nil {
-		panic(fmt.Sprintf("failed to create docker registry: %s", err))
+		return nil, fmt.Errorf("failed to create docker registry: %w", err)
 	}
 
 	// Start Docker registry
 	go dockerRegistry.ListenAndServe()
 
-	return server.WorkspaceDir
+	return server, nil
 }
 
 func TestMain(m *testing.M) {
@@ -201,12 +200,9 @@ func TestMain(m *testing.M) {
 
 	testMetricsH = controller.MustMakeMetrics(testEnv)
 
-	testRegistryserver = &RegistryClientTestServer{}
-	registryWorkspaceDir := SetupServer(testRegistryserver)
-
-	testRegistryClient, err = helmreg.NewClient(helmreg.ClientOptWriter(os.Stdout))
+	testRegistryServer, err = setupRegistryServer(ctx)
 	if err != nil {
-		panic(fmt.Sprintf("Failed to create OCI registry client"))
+		panic(fmt.Sprintf("Failed to create a test registry server: %v", err))
 	}
 
 	managed.InitManagedTransport(logr.Discard())
@@ -286,7 +282,7 @@ func TestMain(m *testing.M) {
 		panic(fmt.Sprintf("Failed to remove storage server dir: %v", err))
 	}
 
-	if err := os.RemoveAll(registryWorkspaceDir); err != nil {
+	if err := os.RemoveAll(testRegistryServer.workspaceDir); err != nil {
 		panic(fmt.Sprintf("Failed to remove registry workspace dir: %v", err))
 	}
 

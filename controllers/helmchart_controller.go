@@ -513,7 +513,7 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 	case sourcev1.HelmRepositoryTypeOCI:
 		if !helmreg.IsOCI(repo.Spec.URL) {
 			err := fmt.Errorf("invalid OCI registry URL: %s", repo.Spec.URL)
-			return chartRepoErrorReturn(err, obj)
+			return chartRepoConfigErrorReturn(err, obj)
 		}
 
 		// with this function call, we create a temporary file to store the credentials if needed.
@@ -522,7 +522,12 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 		// or rework to enable reusing credentials to avoid the unneccessary handshake operations
 		registryClient, file, err := r.RegistryClientGenerator(loginOpts != nil)
 		if err != nil {
-			return chartRepoErrorReturn(err, obj)
+			e := &serror.Event{
+				Err:    fmt.Errorf("failed to construct Helm client: %w", err),
+				Reason: meta.FailedReason,
+			}
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
+			return sreconcile.ResultEmpty, e
 		}
 
 		if file != "" {
@@ -538,7 +543,7 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 		clientOpts = append(clientOpts, helmgetter.WithRegistryClient(registryClient))
 		ociChartRepo, err := repository.NewOCIChartRepository(repo.Spec.URL, repository.WithOCIGetter(r.Getters), repository.WithOCIGetterOptions(clientOpts), repository.WithOCIRegistryClient(registryClient))
 		if err != nil {
-			return chartRepoErrorReturn(err, obj)
+			return chartRepoConfigErrorReturn(err, obj)
 		}
 		chartRepo = ociChartRepo
 
@@ -547,7 +552,12 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 		if loginOpts != nil {
 			err = ociChartRepo.Login(loginOpts...)
 			if err != nil {
-				return chartRepoErrorReturn(err, obj)
+				e := &serror.Event{
+					Err:    fmt.Errorf("failed to login to OCI registry: %w", err),
+					Reason: sourcev1.AuthenticationFailedReason,
+				}
+				conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
+				return sreconcile.ResultEmpty, e
 			}
 		}
 	default:
@@ -556,7 +566,7 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 				r.IncCacheEvents(event, obj.Name, obj.Namespace)
 			}))
 		if err != nil {
-			return chartRepoErrorReturn(err, obj)
+			return chartRepoConfigErrorReturn(err, obj)
 		}
 		chartRepo = httpChartRepo
 		defer func() {
@@ -1145,7 +1155,7 @@ func reasonForBuild(build *chart.Build) string {
 	return sourcev1.ChartPullSucceededReason
 }
 
-func chartRepoErrorReturn(err error, obj *sourcev1.HelmChart) (sreconcile.Result, error) {
+func chartRepoConfigErrorReturn(err error, obj *sourcev1.HelmChart) (sreconcile.Result, error) {
 	switch err.(type) {
 	case *url.Error:
 		e := &serror.Stalling{

@@ -792,8 +792,8 @@ func TestHelmChartReconciler_buildFromOCIHelmRepository(t *testing.T) {
 	)
 
 	// Login to the registry
-	err := testRegistryserver.RegistryClient.Login(testRegistryserver.DockerRegistryHost,
-		helmreg.LoginOptBasicAuth(testUsername, testPassword),
+	err := testRegistryServer.registryClient.Login(testRegistryServer.registryHost,
+		helmreg.LoginOptBasicAuth(testRegistryUsername, testRegistryPassword),
 		helmreg.LoginOptInsecure(true))
 	g.Expect(err).NotTo(HaveOccurred())
 
@@ -804,8 +804,8 @@ func TestHelmChartReconciler_buildFromOCIHelmRepository(t *testing.T) {
 	g.Expect(err).NotTo(HaveOccurred())
 
 	// Upload the test chart
-	ref := fmt.Sprintf("%s/testrepo/%s:%s", testRegistryserver.DockerRegistryHost, metadata.Name, metadata.Version)
-	_, err = testRegistryserver.RegistryClient.Push(chartData, ref)
+	ref := fmt.Sprintf("%s/testrepo/%s:%s", testRegistryServer.registryHost, metadata.Name, metadata.Version)
+	_, err = testRegistryServer.registryClient.Push(chartData, ref)
 	g.Expect(err).NotTo(HaveOccurred())
 
 	storage, err := NewStorage(tmpDir, "example.com", retentionTTL, retentionRecords)
@@ -835,8 +835,8 @@ func TestHelmChartReconciler_buildFromOCIHelmRepository(t *testing.T) {
 				Type: corev1.SecretTypeDockerConfigJson,
 				Data: map[string][]byte{
 					".dockerconfigjson": []byte(`{"auths":{"` +
-						testRegistryserver.DockerRegistryHost + `":{"` +
-						`auth":"` + base64.StdEncoding.EncodeToString([]byte(testUsername+":"+testPassword)) + `"}}}`),
+						testRegistryServer.registryHost + `":{"` +
+						`auth":"` + base64.StdEncoding.EncodeToString([]byte(testRegistryUsername+":"+testRegistryPassword)) + `"}}}`),
 				},
 			},
 			beforeFunc: func(obj *sourcev1.HelmChart, repository *sourcev1.HelmRepository) {
@@ -862,8 +862,8 @@ func TestHelmChartReconciler_buildFromOCIHelmRepository(t *testing.T) {
 					Name: "auth",
 				},
 				Data: map[string][]byte{
-					"username": []byte(testUsername),
-					"password": []byte(testPassword),
+					"username": []byte(testRegistryUsername),
+					"password": []byte(testRegistryPassword),
 				},
 			},
 			beforeFunc: func(obj *sourcev1.HelmChart, repository *sourcev1.HelmRepository) {
@@ -983,7 +983,7 @@ func TestHelmChartReconciler_buildFromOCIHelmRepository(t *testing.T) {
 					GenerateName: "helmrepository-",
 				},
 				Spec: sourcev1.HelmRepositorySpec{
-					URL:     fmt.Sprintf("oci://%s/testrepo", testRegistryserver.DockerRegistryHost),
+					URL:     fmt.Sprintf("oci://%s/testrepo", testRegistryServer.registryHost),
 					Timeout: &metav1.Duration{Duration: timeout},
 					Type:    sourcev1.HelmRepositoryTypeOCI,
 				},

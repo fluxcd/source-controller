@@ -21,7 +21,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/fluxcd/pkg/apis/meta"
@@ -257,6 +256,15 @@ func (r *HelmRepositoryOCIReconciler) reconcile(ctx context.Context, obj *source
 }
 
 func (r *HelmRepositoryOCIReconciler) reconcileSource(ctx context.Context, obj *sourcev1.HelmRepository) (sreconcile.Result, error) {
+	if !helmreg.IsOCI(obj.Spec.URL) {
+		e := &serror.Stalling{
+			Err:    fmt.Errorf("the url scheme is not supported: %s", obj.Spec.URL),
+			Reason: sourcev1.URLInvalidReason,
+		}
+		conditions.MarkFalse(obj, meta.ReadyCondition, e.Reason, e.Err.Error())
+		return sreconcile.ResultEmpty, e
+	}
+
 	var loginOpts []helmreg.LoginOption
 	// Configure any authentication related options
 	if obj.Spec.SecretRef != nil {
@@ -292,11 +300,7 @@ func (r *HelmRepositoryOCIReconciler) reconcileSource(ctx context.Context, obj *
 		}
 	}
 
-	if result, err := r.validateSource(ctx, obj, loginOpts...); err != nil || result == sreconcile.ResultEmpty {
-		return result, err
-	}
-
-	return sreconcile.ResultSuccess, nil
+	return r.validateSource(ctx, obj, loginOpts...)
 }
 
 // validateSource the HelmRepository object by checking the url and connecting to the underlying registry
@@ -304,8 +308,8 @@ func (r *HelmRepositoryOCIReconciler) reconcileSource(ctx context.Context, obj *
 func (r *HelmRepositoryOCIReconciler) validateSource(ctx context.Context, obj *sourcev1.HelmRepository, logOpts ...helmreg.LoginOption) (sreconcile.Result, error) {
 	registryClient, file, err := r.RegistryClientGenerator(logOpts != nil)
 	if err != nil {
-		e := &serror.Stalling{
-			Err:    fmt.Errorf("failed to create registry client: %w", err),
+		e := &serror.Event{
+			Err:    fmt.Errorf("failed to create registry client:: %w", err),
 			Reason: meta.FailedReason,
 		}
 		conditions.MarkFalse(obj, meta.ReadyCondition, e.Reason, e.Err.Error())
@@ -323,21 +327,12 @@ func (r *HelmRepositoryOCIReconciler) validateSource(ctx context.Context, obj *s
 
 	chartRepo, err := repository.NewOCIChartRepository(obj.Spec.URL, repository.WithOCIRegistryClient(registryClient))
 	if err != nil {
-		if strings.Contains(err.Error(), "parse") {
-			e := &serror.Stalling{
-				Err:    fmt.Errorf("failed to parse URL '%s': %w", obj.Spec.URL, err),
-				Reason: sourcev1.URLInvalidReason,
-			}
-			conditions.MarkFalse(obj, meta.ReadyCondition, e.Reason, e.Err.Error())
-			return sreconcile.ResultEmpty, e
-		} else if strings.Contains(err.Error(), "the url scheme is not supported") {
-			e := &serror.Event{
-				Err:    err,
-				Reason: sourcev1.URLInvalidReason,
-			}
-			conditions.MarkFalse(obj, meta.ReadyCondition, e.Reason, e.Err.Error())
-			return sreconcile.ResultEmpty, e
+		e := &serror.Stalling{
+			Err:    fmt.Errorf("failed to parse URL '%s': %w", obj.Spec.URL, err),
+			Reason: sourcev1.URLInvalidReason,
 		}
+		conditions.MarkFalse(obj, meta.ReadyCondition, e.Reason, e.Err.Error())
+		return sreconcile.ResultEmpty, e
 	}
 
 	// Attempt to login to the registry if credentials are provided.
