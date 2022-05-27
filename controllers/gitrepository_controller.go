@@ -724,11 +724,12 @@ func (r *GitRepositoryReconciler) gitCheckout(ctx context.Context,
 	checkoutStrategy, err := strategy.CheckoutStrategyForImplementation(ctx,
 		git.Implementation(obj.Spec.GitImplementation), checkoutOpts)
 	if err != nil {
+		// Do not return err as recovery without changes is impossible.
 		e := &serror.Stalling{
 			Err:    fmt.Errorf("failed to configure checkout strategy for Git implementation '%s': %w", obj.Spec.GitImplementation, err),
 			Reason: sourcev1.GitOperationFailedReason,
 		}
-		// Do not return err as recovery without changes is impossible.
+		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
 		return nil, e
 	}
 
@@ -744,9 +745,10 @@ func (r *GitRepositoryReconciler) gitCheckout(ctx context.Context,
 			authOpts.TransportOptionsURL = fmt.Sprintf("ssh://%s/%s/%d", obj.Name, obj.UID, obj.Generation)
 		} else {
 			e := &serror.Stalling{
-				Err:    fmt.Errorf("git repository URL has invalid transport type: '%s'", obj.Spec.URL),
+				Err:    fmt.Errorf("git repository URL '%s' has invalid transport type, supported types are: http, https, ssh", obj.Spec.URL),
 				Reason: sourcev1.URLInvalidReason,
 			}
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
 			return nil, e
 		}
 	}
