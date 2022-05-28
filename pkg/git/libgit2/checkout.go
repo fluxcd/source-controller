@@ -238,6 +238,7 @@ func (c *CheckoutTag) Checkout(ctx context.Context, path, url string, opts *git.
 			TargetURL:    url,
 			AuthOpts:     opts,
 			ProxyOptions: &git2go.ProxyOptions{Type: git2go.ProxyTypeAuto},
+			Context:      ctx,
 		})
 		url = opts.TransportOptionsURL
 		remoteCallBacks := managed.RemoteCallbacks()
@@ -351,6 +352,7 @@ func (c *CheckoutCommit) Checkout(ctx context.Context, path, url string, opts *g
 			TargetURL:    url,
 			AuthOpts:     opts,
 			ProxyOptions: &git2go.ProxyOptions{Type: git2go.ProxyTypeAuto},
+			Context:      ctx,
 		})
 		url = opts.TransportOptionsURL
 		remoteCallBacks = managed.RemoteCallbacks()
@@ -395,6 +397,7 @@ func (c *CheckoutSemVer) Checkout(ctx context.Context, path, url string, opts *g
 			TargetURL:    url,
 			AuthOpts:     opts,
 			ProxyOptions: &git2go.ProxyOptions{Type: git2go.ProxyTypeAuto},
+			Context:      ctx,
 		})
 		url = opts.TransportOptionsURL
 		remoteCallBacks = managed.RemoteCallbacks()
