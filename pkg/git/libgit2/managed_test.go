@@ -42,13 +42,11 @@ import (
 
 const testRepositoryPath = "../testdata/git/repo"
 
-func TestMain(m *testing.M) {
-	managed.InitManagedTransport(logr.Discard())
-}
-
 // Test_ManagedSSH_KeyTypes assures support for the different
 // types of keys for SSH Authentication supported by Flux.
 func Test_ManagedSSH_KeyTypes(t *testing.T) {
+	managed.InitManagedTransport(logr.Discard())
+
 	tests := []struct {
 		name       string
 		keyType    ssh.KeyPairType
@@ -176,6 +174,8 @@ func Test_ManagedSSH_KeyTypes(t *testing.T) {
 // Test_ManagedSSH_KeyExchangeAlgos assures support for the different
 // types of SSH key exchange algorithms supported by Flux.
 func Test_ManagedSSH_KeyExchangeAlgos(t *testing.T) {
+	managed.InitManagedTransport(logr.Discard())
+
 	tests := []struct {
 		name      string
 		ClientKex []string
@@ -297,6 +297,8 @@ func Test_ManagedSSH_KeyExchangeAlgos(t *testing.T) {
 // Test_ManagedSSH_HostKeyAlgos assures support for the different
 // types of SSH Host Key algorithms supported by Flux.
 func Test_ManagedSSH_HostKeyAlgos(t *testing.T) {
+	managed.InitManagedTransport(logr.Discard())
+
 	tests := []struct {
 		name               string
 		keyType            ssh.KeyPairType
@@ -457,6 +459,7 @@ func Test_ManagedSSH_HostKeyAlgos(t *testing.T) {
 }
 
 func Test_ManagedHTTPCheckout(t *testing.T) {
+	managed.InitManagedTransport(logr.Discard())
 	g := NewWithT(t)
 
 	timeout := 5 * time.Second
@@ -496,6 +499,7 @@ func Test_ManagedHTTPCheckout(t *testing.T) {
 }
 
 func TestManagedCheckoutBranch_Checkout(t *testing.T) {
+	managed.InitManagedTransport(logr.Discard())
 	g := NewWithT(t)
 
 	timeout := 5 * time.Second
@@ -551,6 +555,7 @@ func TestManagedCheckoutBranch_Checkout(t *testing.T) {
 }
 
 func TestManagedCheckoutTag_Checkout(t *testing.T) {
+	managed.InitManagedTransport(logr.Discard())
 	g := NewWithT(t)
 
 	timeout := 5 * time.Second
