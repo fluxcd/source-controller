@@ -29,10 +29,9 @@ import (
 
 	"github.com/fluxcd/gitkit"
 	"github.com/fluxcd/pkg/gittestserver"
+	feathelper "github.com/fluxcd/pkg/runtime/features"
 	"github.com/fluxcd/pkg/ssh"
 	"github.com/go-logr/logr"
-
-	feathelper "github.com/fluxcd/pkg/runtime/features"
 	. "github.com/onsi/gomega"
 	cryptossh "golang.org/x/crypto/ssh"
 
@@ -46,7 +45,7 @@ const testRepositoryPath = "../testdata/git/repo"
 // Test_managedSSH_KeyTypes assures support for the different
 // types of keys for SSH Authentication supported by Flux.
 func Test_managedSSH_KeyTypes(t *testing.T) {
-	enableManagedTransport()
+	managed.InitManagedTransport(logr.Discard())
 
 	tests := []struct {
 		name       string
@@ -175,7 +174,7 @@ func Test_managedSSH_KeyTypes(t *testing.T) {
 // Test_managedSSH_KeyExchangeAlgos assures support for the different
 // types of SSH key exchange algorithms supported by Flux.
 func Test_managedSSH_KeyExchangeAlgos(t *testing.T) {
-	enableManagedTransport()
+	managed.InitManagedTransport(logr.Discard())
 
 	tests := []struct {
 		name      string
@@ -298,7 +297,7 @@ func Test_managedSSH_KeyExchangeAlgos(t *testing.T) {
 // Test_managedSSH_HostKeyAlgos assures support for the different
 // types of SSH Host Key algorithms supported by Flux.
 func Test_managedSSH_HostKeyAlgos(t *testing.T) {
-	enableManagedTransport()
+	managed.InitManagedTransport(logr.Discard())
 
 	tests := []struct {
 		name               string

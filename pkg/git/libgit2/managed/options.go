@@ -20,6 +20,7 @@ import (
 	"context"
 	"sync"
 
+	"github.com/fluxcd/source-controller/internal/features"
 	"github.com/fluxcd/source-controller/pkg/git"
 	git2go "github.com/libgit2/git2go/v33"
 )
@@ -75,7 +76,8 @@ func getTransportOptions(transportOptsURL string) (*TransportOptions, bool) {
 // this returns the same input if Managed Transport is disabled or if no TargetURL
 // is set on TransportOptions.
 func EffectiveURL(transporOptsURL string) string {
-	if !Enabled() {
+	if enabled, _ := features.Enabled(features.GitManagedTransport); enabled {
+
 		return transporOptsURL
 	}
 

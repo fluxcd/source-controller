@@ -55,7 +55,6 @@ import (
 	"github.com/fluxcd/source-controller/internal/reconcile/summarize"
 	"github.com/fluxcd/source-controller/internal/util"
 	"github.com/fluxcd/source-controller/pkg/git"
-	"github.com/fluxcd/source-controller/pkg/git/libgit2/managed"
 	"github.com/fluxcd/source-controller/pkg/git/strategy"
 	"github.com/fluxcd/source-controller/pkg/sourceignore"
 )
@@ -142,7 +141,12 @@ func (r *GitRepositoryReconciler) SetupWithManagerAndOptions(mgr ctrl.Manager, o
 	}
 
 	// Check and enable gated features.
-	if oc, _ := features.Enabled(features.OptimizedGitClones); oc {
+	mt, _ := features.Enabled(features.GitManagedTransport)
+	if mt {
+		r.features[features.GitManagedTransport] = true
+	}
+	// OptimizedGitClones is only enabled when GitManagedTransport is enabled.
+	if oc, _ := features.Enabled(features.OptimizedGitClones); oc && mt {
 		r.features[features.OptimizedGitClones] = true
 	}
 
@@ -739,7 +743,8 @@ func (r *GitRepositoryReconciler) gitCheckout(ctx context.Context,
 	}
 
 	// managed GIT transport only affects the libgit2 implementation
-	if managed.Enabled() && obj.Spec.GitImplementation == sourcev1.LibGit2Implementation {
+	if enabled, ok := r.features[features.GitManagedTransport]; ok && enabled &&
+		obj.Spec.GitImplementation == sourcev1.LibGit2Implementation {
 		// We set the TransportOptionsURL of this set of authentication options here by constructing
 		// a unique URL that won't clash in a multi tenant environment. This unique URL is used by
 		// libgit2 managed transports. This enables us to bypass the inbuilt credentials callback in

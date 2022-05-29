@@ -18,6 +18,7 @@ package libgit2
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -30,6 +31,7 @@ import (
 	"github.com/fluxcd/pkg/gitutil"
 	"github.com/fluxcd/pkg/version"
 
+	"github.com/fluxcd/source-controller/internal/features"
 	"github.com/fluxcd/source-controller/pkg/git"
 	"github.com/fluxcd/source-controller/pkg/git/libgit2/managed"
 )
@@ -76,40 +78,32 @@ func (c *CheckoutBranch) Checkout(ctx context.Context, path, url string, opts *g
 	// The panics probably happen because we perform multiple fetch ops (introduced as a part of optimizing git clones).
 	// The branching lets us establish a clear code path to help us be certain of the expected behaviour.
 	// When we get rid of unmanaged transports, we can get rid of this branching as well.
-	if managed.Enabled() {
-		// We store the target URL and auth options mapped to a unique ID. We overwrite the target URL
-		// with the TransportOptionsURL, because managed transports don't provide a way for any kind of
+	if enabled, _ := features.Enabled(features.GitManagedTransport); enabled {
+		// We store the target URL and auth options mapped to a unique ID. We use the TransportOptionsURL
+		// for fetch operations, because managed transports don't provide a way for any kind of
 		// dependency injection. This lets us have a way of doing interop between application level code
 		// and transport level code.
 		// Performing all fetch operations with the TransportOptionsURL as the URL, lets the managed
 		// transport action use it to fetch the registered transport options which contains the
 		// _actual_ target URL and the correct credentials to use.
-		if opts == nil {
-			return nil, fmt.Errorf("can't use managed transport with an empty set of auth options")
-		}
-		if opts.TransportOptionsURL == "" {
-			return nil, fmt.Errorf("can't use managed transport without a valid transport auth id.")
-		}
-		managed.AddTransportOptions(opts.TransportOptionsURL, managed.TransportOptions{
-			TargetURL:    url,
-			AuthOpts:     opts,
-			ProxyOptions: &git2go.ProxyOptions{Type: git2go.ProxyTypeAuto},
-			Context:      ctx,
-		})
-		url = opts.TransportOptionsURL
-		remoteCallBacks := managed.RemoteCallbacks()
-		defer managed.RemoveTransportOptions(opts.TransportOptionsURL)
-
-		repo, remote, err := initializeRepoWithRemote(ctx, path, url, opts)
+		err = registerManagedTransportOptions(ctx, url, opts)
 		if err != nil {
 			return nil, err
 		}
+		defer managed.RemoveTransportOptions(opts.TransportOptionsURL)
+
+		repo, remote, err := initializeRepoWithRemote(ctx, path, opts.TransportOptionsURL, opts)
+		if err != nil {
+			return nil, err
+		}
+
 		// Open remote connection.
+		remoteCallBacks := managed.RemoteCallbacks()
 		err = remote.ConnectFetch(&remoteCallBacks, nil, nil)
 		if err != nil {
 			remote.Free()
 			repo.Free()
-			return nil, fmt.Errorf("unable to fetch-connect to remote '%s': %w", managed.EffectiveURL(url), gitutil.LibGit2Error(err))
+			return nil, fmt.Errorf("unable to fetch-connect to remote '%s': %w", url, gitutil.LibGit2Error(err))
 		}
 		defer func() {
 			remote.Disconnect()
@@ -122,7 +116,7 @@ func (c *CheckoutBranch) Checkout(ctx context.Context, path, url string, opts *g
 		if c.LastRevision != "" {
 			heads, err := remote.Ls(c.Branch)
 			if err != nil {
-				return nil, fmt.Errorf("unable to remote ls for '%s': %w", managed.EffectiveURL(url), gitutil.LibGit2Error(err))
+				return nil, fmt.Errorf("unable to remote ls for '%s': %w", url, gitutil.LibGit2Error(err))
 			}
 			if len(heads) > 0 {
 				hash := heads[0].Id.String()
@@ -146,21 +140,20 @@ func (c *CheckoutBranch) Checkout(ctx context.Context, path, url string, opts *g
 			},
 			"")
 		if err != nil {
-			return nil, fmt.Errorf("unable to fetch remote '%s': %w",
-				managed.EffectiveURL(url), gitutil.LibGit2Error(err))
+			return nil, fmt.Errorf("unable to fetch remote '%s': %w", url, gitutil.LibGit2Error(err))
 		}
 
 		branch, err := repo.References.Lookup(fmt.Sprintf("refs/remotes/origin/%s", c.Branch))
 		if err != nil {
 			return nil, fmt.Errorf("unable to lookup branch '%s' for '%s': %w",
-				c.Branch, managed.EffectiveURL(url), gitutil.LibGit2Error(err))
+				c.Branch, url, gitutil.LibGit2Error(err))
 		}
 		defer branch.Free()
 
 		upstreamCommit, err := repo.LookupCommit(branch.Target())
 		if err != nil {
 			return nil, fmt.Errorf("unable to lookup commit '%s' for '%s': %w",
-				c.Branch, managed.EffectiveURL(url), gitutil.LibGit2Error(err))
+				c.Branch, url, gitutil.LibGit2Error(err))
 		}
 		defer upstreamCommit.Free()
 
@@ -230,7 +223,7 @@ func (c *CheckoutBranch) checkoutUnmanaged(ctx context.Context, path, url string
 		CheckoutBranch: c.Branch,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("unable to clone '%s': %w", managed.EffectiveURL(url), gitutil.LibGit2Error(err))
+		return nil, fmt.Errorf("unable to clone '%s': %w", url, gitutil.LibGit2Error(err))
 	}
 	defer repo.Free()
 	head, err := repo.Head()
@@ -258,30 +251,25 @@ func (c *CheckoutTag) Checkout(ctx context.Context, path, url string, opts *git.
 	// The panics probably happen because we perform multiple fetch ops (introduced as a part of optimizing git clones).
 	// The branching lets us establish a clear code path to help us be certain of the expected behaviour.
 	// When we get rid of unmanaged transports, we can get rid of this branching as well.
-	if managed.Enabled() {
-		if opts.TransportOptionsURL == "" {
-			return nil, fmt.Errorf("can't use managed transport without a valid transport auth id.")
-		}
-		managed.AddTransportOptions(opts.TransportOptionsURL, managed.TransportOptions{
-			TargetURL:    url,
-			AuthOpts:     opts,
-			ProxyOptions: &git2go.ProxyOptions{Type: git2go.ProxyTypeAuto},
-			Context:      ctx,
-		})
-		url = opts.TransportOptionsURL
-		remoteCallBacks := managed.RemoteCallbacks()
-		defer managed.RemoveTransportOptions(opts.TransportOptionsURL)
-
-		repo, remote, err := initializeRepoWithRemote(ctx, path, url, opts)
+	if enabled, _ := features.Enabled(features.GitManagedTransport); enabled {
+		err = registerManagedTransportOptions(ctx, url, opts)
 		if err != nil {
 			return nil, err
 		}
+		defer managed.RemoveTransportOptions(opts.TransportOptionsURL)
+
+		repo, remote, err := initializeRepoWithRemote(ctx, path, opts.TransportOptionsURL, opts)
+		if err != nil {
+			return nil, err
+		}
+
 		// Open remote connection.
+		remoteCallBacks := managed.RemoteCallbacks()
 		err = remote.ConnectFetch(&remoteCallBacks, nil, nil)
 		if err != nil {
 			remote.Free()
 			repo.Free()
-			return nil, fmt.Errorf("unable to fetch-connect to remote '%s': %w", managed.EffectiveURL(url), gitutil.LibGit2Error(err))
+			return nil, fmt.Errorf("unable to fetch-connect to remote '%s': %w", url, gitutil.LibGit2Error(err))
 		}
 		defer func() {
 			remote.Disconnect()
@@ -294,7 +282,7 @@ func (c *CheckoutTag) Checkout(ctx context.Context, path, url string, opts *git.
 		if c.LastRevision != "" {
 			heads, err := remote.Ls(c.Tag)
 			if err != nil {
-				return nil, fmt.Errorf("unable to remote ls for '%s': %w", managed.EffectiveURL(url), gitutil.LibGit2Error(err))
+				return nil, fmt.Errorf("unable to remote ls for '%s': %w", url, gitutil.LibGit2Error(err))
 			}
 			if len(heads) > 0 {
 				hash := heads[0].Id.String()
@@ -328,8 +316,7 @@ func (c *CheckoutTag) Checkout(ctx context.Context, path, url string, opts *git.
 			"")
 
 		if err != nil {
-			return nil, fmt.Errorf("unable to fetch remote '%s': %w",
-				managed.EffectiveURL(url), gitutil.LibGit2Error(err))
+			return nil, fmt.Errorf("unable to fetch remote '%s': %w", url, gitutil.LibGit2Error(err))
 		}
 
 		cc, err := checkoutDetachedDwim(repo, c.Tag)
@@ -352,7 +339,7 @@ func (c *CheckoutTag) checkoutUnmanaged(ctx context.Context, path, url string, o
 		},
 	})
 	if err != nil {
-		return nil, fmt.Errorf("unable to clone '%s': %w", managed.EffectiveURL(url), gitutil.LibGit2Error(err))
+		return nil, fmt.Errorf("unable to clone '%s': %w", url, gitutil.LibGit2Error(err))
 	}
 	defer repo.Free()
 	cc, err := checkoutDetachedDwim(repo, c.Tag)
@@ -371,30 +358,26 @@ func (c *CheckoutCommit) Checkout(ctx context.Context, path, url string, opts *g
 	defer recoverPanic(&err)
 
 	remoteCallBacks := RemoteCallbacks(ctx, opts)
+	targetURL := url
 
-	if managed.Enabled() {
-		if opts.TransportOptionsURL == "" {
-			return nil, fmt.Errorf("can't use managed transport without a valid transport auth id.")
+	if enabled, _ := features.Enabled(features.GitManagedTransport); enabled {
+		err = registerManagedTransportOptions(ctx, url, opts)
+		if err != nil {
+			return nil, err
 		}
-		managed.AddTransportOptions(opts.TransportOptionsURL, managed.TransportOptions{
-			TargetURL:    url,
-			AuthOpts:     opts,
-			ProxyOptions: &git2go.ProxyOptions{Type: git2go.ProxyTypeAuto},
-			Context:      ctx,
-		})
-		url = opts.TransportOptionsURL
-		remoteCallBacks = managed.RemoteCallbacks()
 		defer managed.RemoveTransportOptions(opts.TransportOptionsURL)
+		remoteCallBacks = managed.RemoteCallbacks()
+		targetURL = opts.TransportOptionsURL
 	}
 
-	repo, err := git2go.Clone(url, path, &git2go.CloneOptions{
+	repo, err := git2go.Clone(targetURL, path, &git2go.CloneOptions{
 		FetchOptions: git2go.FetchOptions{
 			DownloadTags:    git2go.DownloadTagsNone,
 			RemoteCallbacks: remoteCallBacks,
 		},
 	})
 	if err != nil {
-		return nil, fmt.Errorf("unable to clone '%s': %w", managed.EffectiveURL(url), gitutil.LibGit2Error(err))
+		return nil, fmt.Errorf("unable to clone '%s': %w", targetURL, gitutil.LibGit2Error(err))
 	}
 	defer repo.Free()
 	oid, err := git2go.NewOid(c.Commit)
@@ -416,20 +399,16 @@ func (c *CheckoutSemVer) Checkout(ctx context.Context, path, url string, opts *g
 	defer recoverPanic(&err)
 
 	remoteCallBacks := RemoteCallbacks(ctx, opts)
+	targetURL := url
 
-	if managed.Enabled() {
-		if opts.TransportOptionsURL == "" {
-			return nil, fmt.Errorf("can't use managed transport without a valid transport auth id.")
+	if enabled, _ := features.Enabled(features.GitManagedTransport); enabled {
+		err = registerManagedTransportOptions(ctx, url, opts)
+		if err != nil {
+			return nil, err
 		}
-		managed.AddTransportOptions(opts.TransportOptionsURL, managed.TransportOptions{
-			TargetURL:    url,
-			AuthOpts:     opts,
-			ProxyOptions: &git2go.ProxyOptions{Type: git2go.ProxyTypeAuto},
-			Context:      ctx,
-		})
-		url = opts.TransportOptionsURL
-		remoteCallBacks = managed.RemoteCallbacks()
 		defer managed.RemoveTransportOptions(opts.TransportOptionsURL)
+		remoteCallBacks = managed.RemoteCallbacks()
+		targetURL = opts.TransportOptionsURL
 	}
 
 	verConstraint, err := semver.NewConstraint(c.SemVer)
@@ -437,14 +416,14 @@ func (c *CheckoutSemVer) Checkout(ctx context.Context, path, url string, opts *g
 		return nil, fmt.Errorf("semver parse error: %w", err)
 	}
 
-	repo, err := git2go.Clone(url, path, &git2go.CloneOptions{
+	repo, err := git2go.Clone(targetURL, path, &git2go.CloneOptions{
 		FetchOptions: git2go.FetchOptions{
 			DownloadTags:    git2go.DownloadTagsAll,
 			RemoteCallbacks: remoteCallBacks,
 		},
 	})
 	if err != nil {
-		return nil, fmt.Errorf("unable to clone '%s': %w", managed.EffectiveURL(url), gitutil.LibGit2Error(err))
+		return nil, fmt.Errorf("unable to clone '%s': %w", targetURL, gitutil.LibGit2Error(err))
 	}
 	defer repo.Free()
 
@@ -628,6 +607,25 @@ func initializeRepoWithRemote(ctx context.Context, path, url string, opts *git.A
 		}
 	}
 	return repo, remote, nil
+}
+
+// registerManagedTransportOptions registers the given url and it's transport options.
+// Callers must make sure to call `managed.RemoveTransportOptions()` to avoid increase in
+// memory consumption.
+func registerManagedTransportOptions(ctx context.Context, url string, authOpts *git.AuthOptions) error {
+	if authOpts == nil {
+		return errors.New("can't use managed transport with an empty set of auth options")
+	}
+	if authOpts.TransportOptionsURL == "" {
+		return errors.New("can't use managed transport without a valid transport auth id")
+	}
+	managed.AddTransportOptions(authOpts.TransportOptionsURL, managed.TransportOptions{
+		TargetURL:    url,
+		AuthOpts:     authOpts,
+		ProxyOptions: &git2go.ProxyOptions{Type: git2go.ProxyTypeAuto},
+		Context:      ctx,
+	})
+	return nil
 }
 
 func recoverPanic(err *error) {

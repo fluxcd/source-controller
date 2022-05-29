@@ -26,12 +26,14 @@ import (
 	"time"
 
 	"github.com/fluxcd/pkg/gittestserver"
+	feathelper "github.com/fluxcd/pkg/runtime/features"
+	"github.com/go-logr/logr"
 	git2go "github.com/libgit2/git2go/v33"
 	. "github.com/onsi/gomega"
 
+	"github.com/fluxcd/source-controller/internal/features"
 	"github.com/fluxcd/source-controller/pkg/git"
-
-	mt "github.com/fluxcd/source-controller/pkg/git/libgit2/managed"
+	"github.com/fluxcd/source-controller/pkg/git/libgit2/managed"
 )
 
 func TestCheckoutBranch_unmanaged(t *testing.T) {
@@ -138,11 +140,11 @@ func checkoutBranch(t *testing.T, managed bool) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
-			g.Expect(mt.Enabled()).To(Equal(managed))
 
 			branch := CheckoutBranch{
 				Branch:       tt.branch,
 				LastRevision: tt.lastRevision,
+				Managed:      managed,
 			}
 
 			tmpDir := t.TempDir()
@@ -229,7 +231,6 @@ func checkoutTag(t *testing.T, managed bool) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
-			g.Expect(mt.Enabled()).To(Equal(managed))
 
 			server, err := gittestserver.NewTempGitServer()
 			g.Expect(err).ToNot(HaveOccurred())
@@ -272,7 +273,8 @@ func checkoutTag(t *testing.T, managed bool) {
 			}
 
 			checkoutTag := CheckoutTag{
-				Tag: tt.checkoutTag,
+				Tag:     tt.checkoutTag,
+				Managed: managed,
 			}
 			// If last revision is provided, configure it.
 			if tt.lastRevTag != "" {
@@ -319,7 +321,6 @@ func TestCheckoutCommit_unmanaged(t *testing.T) {
 // via CheckoutCommit.
 func checkoutCommit(t *testing.T, managed bool) {
 	g := NewWithT(t)
-	g.Expect(mt.Enabled()).To(Equal(managed))
 
 	server, err := gittestserver.NewTempGitServer()
 	if err != nil {
@@ -359,7 +360,8 @@ func checkoutCommit(t *testing.T, managed bool) {
 	repoURL := server.HTTPAddress() + "/" + repoPath
 
 	commit := CheckoutCommit{
-		Commit: c.String(),
+		Commit:  c.String(),
+		Managed: managed,
 	}
 
 	cc, err := commit.Checkout(context.TODO(), tmpDir, repoURL, &authOpts)
@@ -370,7 +372,8 @@ func checkoutCommit(t *testing.T, managed bool) {
 	g.Expect(os.ReadFile(filepath.Join(tmpDir, "commit"))).To(BeEquivalentTo("init"))
 
 	commit = CheckoutCommit{
-		Commit: "4dc3185c5fc94eb75048376edeb44571cece25f4",
+		Commit:  "4dc3185c5fc94eb75048376edeb44571cece25f4",
+		Managed: managed,
 	}
 	tmpDir2 := t.TempDir()
 
@@ -498,10 +501,10 @@ func checkoutSemVer(t *testing.T, managed bool) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
-			g.Expect(mt.Enabled()).To(Equal(managed))
 
 			semVer := CheckoutSemVer{
-				SemVer: tt.constraint,
+				SemVer:  tt.constraint,
+				Managed: managed,
 			}
 
 			tmpDir := t.TempDir()
@@ -617,8 +620,6 @@ func mockSignature(time time.Time) *git2go.Signature {
 
 func TestInitializeRepoWithRemote(t *testing.T) {
 	g := NewWithT(t)
-
-	g.Expect(mt.Enabled()).To(BeFalse())
 	tmp := t.TempDir()
 	ctx := context.TODO()
 	testRepoURL := "https://example.com/foo/bar"
@@ -713,4 +714,31 @@ func TestCheckoutStrategyForOptions(t *testing.T) {
 			g.Expect(strat).To(Equal(tt.expectedStrat))
 		})
 	}
+}
+
+func Test_registerManagedTransportOptions(t *testing.T) {
+	g := NewWithT(t)
+
+	// authOpts can't be nil
+	err := registerManagedTransportOptions(context.TODO(), "", nil)
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(err.Error()).To(ContainSubstring("can't use managed transport with an empty set of auth options"))
+
+	// TransportOptionsURL can't be blank
+	err = registerManagedTransportOptions(context.TODO(), "", &git.AuthOptions{})
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(err.Error()).To(ContainSubstring("can't use managed transport without a valid transport auth id"))
+
+	err = registerManagedTransportOptions(context.TODO(), "http://git.com/repo", &git.AuthOptions{
+		TransportOptionsURL: "http://obj-id",
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+}
+
+func enableManagedTransport() {
+	fg := feathelper.FeatureGates{}
+	fg.SupportedFeatures(map[string]bool{
+		features.GitManagedTransport: true,
+	})
+	managed.InitManagedTransport(logr.Discard())
 }
