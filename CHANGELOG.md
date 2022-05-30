@@ -2,6 +2,99 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.25.0
+
+**Release date:** 2022-06-01
+
+This prerelease adds support for Helm OCI. Users can specify `.spec.type` of
+a `HelmRepository` to use an OCI repository instead of an HTTP/S Helm repository.
+
+Please note that this currently has a couple of limitations (which will be addressed in a future release):
+* Chart dependencies from OCI repositories are not supported. [#722](https://github.com/fluxcd/source-controller/issues/722)
+* Custom CA certificates are not supported. [#723](https://github.com/fluxcd/source-controller/issues/723)
+
+An example of OCI `HelmRepository` can be found [here](https://github.com/fluxcd/source-controller/blob/api/v0.25.0/docs/spec/v1beta2/helmrepositories.md#helm-oci-repository).
+
+A new flag `--feature-gate` has been added to disable/enable new experimental
+features. It works in a similar manner to [Kubernetes feature gates](https://kubernetes.io/docs/reference/command-line-tools-reference/feature-gates/).
+
+The libgit2 managed transport feature has been enabled by default. Furthermore,
+a few changes have been made to make the feature more stable and enable quicker
+clones. Users that want to opt out and use the unmanaged transports may do so
+by passing the flag `--feature-gate=GitManagedTransport=false`, but please note
+that we encourage users not to do so.
+
+GitRepository reconciliation has been made more efficient by adding support for
+no-op clones, when checking out repositories using branches or tags.
+This feature is also enabled by default, and users can opt out
+by passing the flag `--feature-gate=OptimizedGitClones=false`.
+Please note that this feature is only active when the managed transport feature
+is enabled. Disabling managed transports, quietly disables optimzed Git clones.
+
+Improvements:
+- Optimise clone operations
+  [#665](https://github.com/fluxcd/source-controller/pull/665)
+- [RFC 0002] Flux OCI support for Helm
+  [#690](https://github.com/fluxcd/source-controller/pull/690)
+- Add Git test coverage for supported algorithms
+  [#708](https://github.com/fluxcd/source-controller/pull/708)
+- Add new flag --ssh-hostkey-algos
+  [#711](https://github.com/fluxcd/source-controller/pull/711)
+- libgit2: Disable connection caching
+  [#713](https://github.com/fluxcd/source-controller/pull/713)
+- Update dependencies
+  [#717](https://github.com/fluxcd/source-controller/pull/717)
+- libgit2: enable managed transport by default
+  [#718](https://github.com/fluxcd/source-controller/pull/718)
+- libgit2: Add support for hashed known_hosts
+  [#720](https://github.com/fluxcd/source-controller/pull/720)
+- Remove dependency on libgit2 credentials callback
+  [#727](https://github.com/fluxcd/source-controller/pull/727)
+- Update Alpine to v3.16
+  [#731](https://github.com/fluxcd/source-controller/pull/731)
+- Update dependencies
+  [#739](https://github.com/fluxcd/source-controller/pull/739)
+- libgit2: enforce context timeout
+  [#740](https://github.com/fluxcd/source-controller/pull/740)
+- libgit2: Pass ctx to all the transport opts
+  [#743](https://github.com/fluxcd/source-controller/pull/743)
+
+Fixes:
+- Ensure git status is checked at the correct time
+  [#575](https://github.com/fluxcd/source-controller/pull/575)
+- libgit2: recover from git2go panic
+  [#707](https://github.com/fluxcd/source-controller/pull/707)
+- Remove minio region
+  [#715](https://github.com/fluxcd/source-controller/pull/715)
+- GitRepositoryReconciler no-op clone improvements
+  [#724](https://github.com/fluxcd/source-controller/pull/724)
+- Support dockerconfigjson with OCI HelmRepositories
+  [#725](https://github.com/fluxcd/source-controller/pull/725)
+- log when the OCI temp credentials file can't be deleted
+  [#726](https://github.com/fluxcd/source-controller/pull/726)
+- Helm reconcilers conditions and test improvements
+  [#728](https://github.com/fluxcd/source-controller/pull/728)
+- reconcile: Set observed gen only when conditions exist
+  [#729](https://github.com/fluxcd/source-controller/pull/729)
+- helmrepo: Fix test flake in type update test
+  [#730](https://github.com/fluxcd/source-controller/pull/730)
+- Fix tests failing in Ubuntu
+  [#732](https://github.com/fluxcd/source-controller/pull/732)
+- tests: ignore proxy settings when running tests
+  [#734](https://github.com/fluxcd/source-controller/pull/734)
+- gitrepo: gitCheckout() return typed errors only
+  [#736](https://github.com/fluxcd/source-controller/pull/736)
+- gitrepo: set conditions in gitCheckout
+  [#741](https://github.com/fluxcd/source-controller/pull/741)
+- libgit2: Enable tests
+  [#744](https://github.com/fluxcd/source-controller/pull/744)
+- OCI HelmRepo: handle status conditions in-line
+  [#748](https://github.com/fluxcd/source-controller/pull/748)
+- registry: repo URL and dockerconfig URL mismatch
+  [#749](https://github.com/fluxcd/source-controller/pull/749)
+- libgit2: fix checkout logic for CheckoutBranch
+  [#750](https://github.com/fluxcd/source-controller/pull/750)
+
 ## 0.24.4
 
 **Release date:** 2022-05-03

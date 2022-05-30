@@ -415,6 +415,9 @@ usual.
 
 This feature is enabled by default. It can be disabled by starting the
 controller with the argument `--feature-gates=OptimizedGitClones=false`.
+Please note that this feature is only active when managed transport for
+`libgit2` is active. Disabling managed transport for `libgit2` automatically
+disables this feature.
 
 NB: GitRepository objects configured for SemVer or Commit clones are
 not affected by this functionality.
