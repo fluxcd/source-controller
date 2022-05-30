@@ -25,7 +25,6 @@ import (
 
 	"github.com/fluxcd/pkg/gittestserver"
 	"github.com/fluxcd/source-controller/pkg/git"
-	"github.com/go-logr/logr"
 	. "github.com/onsi/gomega"
 
 	git2go "github.com/libgit2/git2go/v33"
@@ -169,9 +168,6 @@ func TestHTTPManagedTransport_E2E(t *testing.T) {
 	g.Expect(err).ToNot(HaveOccurred())
 	defer server.StopHTTP()
 
-	// Force managed transport to be enabled
-	InitManagedTransport(logr.Discard())
-
 	repoPath := "test.git"
 	err = server.InitRepo("../../testdata/git/repo", git.DefaultBranch, repoPath)
 	g.Expect(err).ToNot(HaveOccurred())
@@ -200,81 +196,23 @@ func TestHTTPManagedTransport_E2E(t *testing.T) {
 	repo.Free()
 }
 
-func TestTrimActionSuffix(t *testing.T) {
-	tests := []struct {
-		name    string
-		inURL   string
-		wantURL string
-	}{
-		{
-			name:    "ignore other suffixes",
-			inURL:   "https://gitlab/repo/podinfo.git/somethingelse",
-			wantURL: "https://gitlab/repo/podinfo.git/somethingelse",
-		},
-		{
-			name:    "trim /info/refs?service=git-upload-pack",
-			inURL:   "https://gitlab/repo/podinfo.git/info/refs?service=git-upload-pack",
-			wantURL: "https://gitlab/repo/podinfo.git",
-		},
-		{
-			name:    "trim /git-upload-pack",
-			inURL:   "https://gitlab/repo/podinfo.git/git-upload-pack",
-			wantURL: "https://gitlab/repo/podinfo.git",
-		},
-		{
-			name:    "trim /info/refs?service=git-receive-pack",
-			inURL:   "https://gitlab/repo/podinfo.git/info/refs?service=git-receive-pack",
-			wantURL: "https://gitlab/repo/podinfo.git",
-		},
-		{
-			name:    "trim /git-receive-pack",
-			inURL:   "https://gitlab/repo/podinfo.git/git-receive-pack",
-			wantURL: "https://gitlab/repo/podinfo.git",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			g := NewWithT(t)
-
-			gotURL := trimActionSuffix(tt.inURL)
-			g.Expect(gotURL).To(Equal(tt.wantURL))
-		})
-	}
-}
-
 func TestHTTPManagedTransport_HandleRedirect(t *testing.T) {
-	tests := []struct {
-		name    string
-		repoURL string
-	}{
-		{name: "http to https", repoURL: "http://github.com/stefanprodan/podinfo"},
-		{name: "handle gitlab redirect", repoURL: "https://gitlab.com/stefanprodan/podinfo"},
-	}
+	g := NewWithT(t)
 
-	// Force managed transport to be enabled
-	InitManagedTransport(logr.Discard())
+	tmpDir := t.TempDir()
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			g := NewWithT(t)
+	id := "http://obj-id"
+	AddTransportOptions(id, TransportOptions{
+		TargetURL: "http://github.com/stefanprodan/podinfo",
+	})
 
-			tmpDir := t.TempDir()
+	// GitHub will cause a 301 and redirect to https
+	repo, err := git2go.Clone(id, tmpDir, &git2go.CloneOptions{
+		CheckoutOptions: git2go.CheckoutOptions{
+			Strategy: git2go.CheckoutForce,
+		},
+	})
 
-			id := "http://obj-id"
-			AddTransportOptions(id, TransportOptions{
-				TargetURL: tt.repoURL,
-			})
-
-			// GitHub will cause a 301 and redirect to https
-			repo, err := git2go.Clone(id, tmpDir, &git2go.CloneOptions{
-				CheckoutOptions: git2go.CheckoutOptions{
-					Strategy: git2go.CheckoutForce,
-				},
-			})
-
-			g.Expect(err).ToNot(HaveOccurred())
-			repo.Free()
-		})
-	}
+	g.Expect(err).ToNot(HaveOccurred())
+	repo.Free()
 }
