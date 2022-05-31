@@ -23,24 +23,27 @@ package libgit2
 
 import (
 	"testing"
+
+	"github.com/fluxcd/source-controller/pkg/git/libgit2/managed"
+	"github.com/go-logr/logr"
 )
 
 func TestCheckoutBranch_CheckoutManaged(t *testing.T) {
-	enableManagedTransport()
+	managed.InitManagedTransport(logr.Discard())
 	checkoutBranch(t, true)
 }
 
 func TestCheckoutTag_CheckoutManaged(t *testing.T) {
-	enableManagedTransport()
+	managed.InitManagedTransport(logr.Discard())
 	checkoutTag(t, true)
 }
 
 func TestCheckoutCommit_CheckoutManaged(t *testing.T) {
-	enableManagedTransport()
+	managed.InitManagedTransport(logr.Discard())
 	checkoutCommit(t, true)
 }
 
 func TestCheckoutTagSemVer_CheckoutManaged(t *testing.T) {
-	enableManagedTransport()
+	managed.InitManagedTransport(logr.Discard())
 	checkoutSemVer(t, true)
 }

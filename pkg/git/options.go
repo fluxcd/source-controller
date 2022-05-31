@@ -52,6 +52,9 @@ type CheckoutOptions struct {
 	// LastRevision holds the last observed revision of the local repository.
 	// It is used to skip clone operations when no changes were detected.
 	LastRevision string
+
+	// Managed defines if the checkout should be done using managed transports.
+	Managed bool
 }
 
 type TransportType string

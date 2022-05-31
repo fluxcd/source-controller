@@ -44,7 +44,6 @@ import (
 func TestCheckoutStrategyForImplementation_Proxied(t *testing.T) {
 	// for libgit2 we are only testing for managed transport,
 	// as unmanaged is sunsetting.
-	// Unmanaged transport does not support HTTP_PROXY.
 	managed.InitManagedTransport(logr.Discard())
 
 	type cleanupFunc func()
@@ -331,7 +330,8 @@ func TestCheckoutStrategyForImplementation_Proxied(t *testing.T) {
 
 			// Checkout the repo.
 			checkoutStrategy, err := strategy.CheckoutStrategyForImplementation(context.TODO(), tt.gitImpl, git.CheckoutOptions{
-				Branch: tt.branch,
+				Branch:  tt.branch,
+				Managed: true,
 			})
 			g.Expect(err).ToNot(HaveOccurred())
 

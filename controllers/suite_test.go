@@ -209,14 +209,19 @@ func TestMain(m *testing.M) {
 
 	fg := feathelper.FeatureGates{}
 	fg.SupportedFeatures(features.FeatureGates())
-	managed.InitManagedTransport(logr.Discard())
+
+	err = managed.InitManagedTransport(logr.Discard())
+	if err != nil {
+		panic(fmt.Sprintf("Failed to register managed transports; %v", err))
+	}
 
 	if err := (&GitRepositoryReconciler{
-		Client:        testEnv,
-		EventRecorder: record.NewFakeRecorder(32),
-		Metrics:       testMetricsH,
-		Storage:       testStorage,
-		features:      features.FeatureGates(),
+		Client:                      testEnv,
+		EventRecorder:               record.NewFakeRecorder(32),
+		Metrics:                     testMetricsH,
+		Storage:                     testStorage,
+		ManagedTransportsRegistered: true,
+		features:                    features.FeatureGates(),
 	}).SetupWithManager(testEnv); err != nil {
 		panic(fmt.Sprintf("Failed to start GitRepositoryReconciler: %v", err))
 	}

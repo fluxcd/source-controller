@@ -31,7 +31,10 @@ import (
 	"github.com/fluxcd/pkg/gittestserver"
 	feathelper "github.com/fluxcd/pkg/runtime/features"
 	"github.com/fluxcd/pkg/ssh"
+	"github.com/fluxcd/source-controller/pkg/git"
+	"github.com/fluxcd/source-controller/pkg/git/libgit2/managed"
 	"github.com/go-logr/logr"
+
 	. "github.com/onsi/gomega"
 	cryptossh "golang.org/x/crypto/ssh"
 
@@ -146,7 +149,10 @@ func Test_managedSSH_KeyTypes(t *testing.T) {
 			authOpts.TransportOptionsURL = getTransportOptionsURL(git.SSH)
 
 			// Prepare for checkout.
-			branchCheckoutStrat := &CheckoutBranch{Branch: git.DefaultBranch}
+			branchCheckoutStrat := &CheckoutBranch{
+				Branch:  git.DefaultBranch,
+				Managed: true,
+			}
 			tmpDir := t.TempDir()
 
 			ctx, cancel := context.WithTimeout(context.TODO(), timeout)
@@ -276,7 +282,10 @@ func Test_managedSSH_KeyExchangeAlgos(t *testing.T) {
 			authOpts.TransportOptionsURL = getTransportOptionsURL(git.SSH)
 
 			// Prepare for checkout.
-			branchCheckoutStrat := &CheckoutBranch{Branch: git.DefaultBranch}
+			branchCheckoutStrat := &CheckoutBranch{
+				Branch:  git.DefaultBranch,
+				Managed: true,
+			}
 			tmpDir := t.TempDir()
 
 			ctx, cancel := context.WithTimeout(context.TODO(), timeout)
@@ -445,7 +454,10 @@ func Test_managedSSH_HostKeyAlgos(t *testing.T) {
 			authOpts.TransportOptionsURL = getTransportOptionsURL(git.SSH)
 
 			// Prepare for checkout.
-			branchCheckoutStrat := &CheckoutBranch{Branch: git.DefaultBranch}
+			branchCheckoutStrat := &CheckoutBranch{
+				Branch:  git.DefaultBranch,
+				Managed: true,
+			}
 			tmpDir := t.TempDir()
 
 			ctx, cancel := context.WithTimeout(context.TODO(), timeout)

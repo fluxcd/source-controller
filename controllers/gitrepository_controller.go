@@ -112,8 +112,9 @@ type GitRepositoryReconciler struct {
 	kuberecorder.EventRecorder
 	helper.Metrics
 
-	Storage        *Storage
-	ControllerName string
+	Storage                     *Storage
+	ControllerName              string
+	ManagedTransportsRegistered bool
 
 	requeueDependency time.Duration
 	features          map[string]bool
@@ -718,6 +719,40 @@ func (r *GitRepositoryReconciler) gitCheckout(ctx context.Context,
 		checkoutOpts.SemVer = ref.SemVer
 	}
 
+	// managed GIT transport only affects the libgit2 implementation
+	if enabled, ok := r.features[features.GitManagedTransport]; ok && enabled &&
+		obj.Spec.GitImplementation == sourcev1.LibGit2Implementation {
+		// We return a stalling error if managed transports aren't registered and the related
+		// feature is enabled, since the controller can't recover from this.
+		if !r.ManagedTransportsRegistered {
+			e := &serror.Stalling{
+				Err:    errors.New("can't use managed transports because they are not registered"),
+				Reason: sourcev1.ControllerMisbehaviorReason,
+			}
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
+			return nil, e
+		}
+
+		// We set the TransportOptionsURL of this set of authentication options here by constructing
+		// a unique URL that won't clash in a multi tenant environment. This unique URL is used by
+		// libgit2 managed transports. This enables us to bypass the inbuilt credentials callback in
+		// libgit2, which is inflexible and unstable.
+		if strings.HasPrefix(obj.Spec.URL, "http") {
+			authOpts.TransportOptionsURL = fmt.Sprintf("http://%s/%s/%d", obj.Name, obj.UID, obj.Generation)
+		} else if strings.HasPrefix(obj.Spec.URL, "ssh") {
+			authOpts.TransportOptionsURL = fmt.Sprintf("ssh://%s/%s/%d", obj.Name, obj.UID, obj.Generation)
+		} else {
+			e := &serror.Stalling{
+				Err:    fmt.Errorf("git repository URL '%s' has invalid transport type, supported types are: http, https, ssh", obj.Spec.URL),
+				Reason: sourcev1.URLInvalidReason,
+			}
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
+			return nil, e
+		}
+
+		checkoutOpts.Managed = true
+	}
+
 	// Only if the object has an existing artifact in storage, attempt to
 	// short-circuit clone operation. reconcileStorage has already verified
 	// that the artifact exists.
@@ -740,27 +775,6 @@ func (r *GitRepositoryReconciler) gitCheckout(ctx context.Context,
 		}
 		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
 		return nil, e
-	}
-
-	// managed GIT transport only affects the libgit2 implementation
-	if enabled, ok := r.features[features.GitManagedTransport]; ok && enabled &&
-		obj.Spec.GitImplementation == sourcev1.LibGit2Implementation {
-		// We set the TransportOptionsURL of this set of authentication options here by constructing
-		// a unique URL that won't clash in a multi tenant environment. This unique URL is used by
-		// libgit2 managed transports. This enables us to bypass the inbuilt credentials callback in
-		// libgit2, which is inflexible and unstable.
-		if strings.HasPrefix(obj.Spec.URL, "http") {
-			authOpts.TransportOptionsURL = fmt.Sprintf("http://%s/%s/%d", obj.Name, obj.UID, obj.Generation)
-		} else if strings.HasPrefix(obj.Spec.URL, "ssh") {
-			authOpts.TransportOptionsURL = fmt.Sprintf("ssh://%s/%s/%d", obj.Name, obj.UID, obj.Generation)
-		} else {
-			e := &serror.Stalling{
-				Err:    fmt.Errorf("git repository URL '%s' has invalid transport type, supported types are: http, https, ssh", obj.Spec.URL),
-				Reason: sourcev1.URLInvalidReason,
-			}
-			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
-			return nil, e
-		}
 	}
 
 	commit, err := checkoutStrategy.Checkout(gitCtx, dir, obj.Spec.URL, authOpts)

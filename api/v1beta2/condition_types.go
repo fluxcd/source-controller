@@ -100,4 +100,8 @@ const (
 
 	// CacheOperationFailedReason signals a failure in cache operation.
 	CacheOperationFailedReason string = "CacheOperationFailed"
+
+	// ControllerMisbehaviorReason signals a failure caused by misbehavior/
+	// UB of the controller.
+	ControllerMisbehaviorReason string = "ControllerMisbehavior"
 )
