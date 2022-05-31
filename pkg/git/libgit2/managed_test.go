@@ -517,6 +517,7 @@ func TestManagedCheckoutBranch_Checkout(t *testing.T) {
 
 	repo, err := git2go.OpenRepository(filepath.Join(server.Root(), repoPath))
 	g.Expect(err).ToNot(HaveOccurred())
+	defer repo.Free()
 
 	branchRef, err := repo.References.Lookup(fmt.Sprintf("refs/heads/%s", git.DefaultBranch))
 	g.Expect(err).ToNot(HaveOccurred())
@@ -524,6 +525,7 @@ func TestManagedCheckoutBranch_Checkout(t *testing.T) {
 
 	commit, err := repo.LookupCommit(branchRef.Target())
 	g.Expect(err).ToNot(HaveOccurred())
+	defer commit.Free()
 
 	authOpts := &git.AuthOptions{
 		TransportOptionsURL: getTransportOptionsURL(git.HTTP),
@@ -552,6 +554,33 @@ func TestManagedCheckoutBranch_Checkout(t *testing.T) {
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(cc.String()).To(Equal(git.DefaultBranch + "/" + commit.Id().String()))
 	g.Expect(git.IsConcreteCommit(*cc)).To(Equal(true))
+
+	// Create a new branch and push it.
+	err = createBranch(repo, "test", nil)
+	g.Expect(err).ToNot(HaveOccurred())
+	transportOptsURL := getTransportOptionsURL(git.HTTP)
+	managed.AddTransportOptions(transportOptsURL, managed.TransportOptions{
+		TargetURL: repoURL,
+	})
+	defer managed.RemoveTransportOptions(transportOptsURL)
+	origin, err := repo.Remotes.Create("origin", transportOptsURL)
+	defer origin.Free()
+	g.Expect(err).ToNot(HaveOccurred())
+	err = origin.Push([]string{"refs/heads/test:refs/heads/test"}, &git2go.PushOptions{})
+	g.Expect(err).ToNot(HaveOccurred())
+
+	branch.Branch = "test"
+	tmpDir2 := t.TempDir()
+	cc, err = branch.Checkout(ctx, tmpDir2, repoURL, authOpts)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Check if the repo HEAD points to the branch.
+	repo, err = git2go.OpenRepository(tmpDir2)
+	g.Expect(err).ToNot(HaveOccurred())
+	head, err := repo.Head()
+	defer head.Free()
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(head.Branch().Name()).To(Equal("test"))
 }
 
 func TestManagedCheckoutTag_Checkout(t *testing.T) {
@@ -573,6 +602,7 @@ func TestManagedCheckoutTag_Checkout(t *testing.T) {
 
 	repo, err := git2go.OpenRepository(filepath.Join(server.Root(), repoPath))
 	g.Expect(err).ToNot(HaveOccurred())
+	defer repo.Free()
 
 	branchRef, err := repo.References.Lookup(fmt.Sprintf("refs/heads/%s", git.DefaultBranch))
 	g.Expect(err).ToNot(HaveOccurred())
@@ -580,6 +610,7 @@ func TestManagedCheckoutTag_Checkout(t *testing.T) {
 
 	commit, err := repo.LookupCommit(branchRef.Target())
 	g.Expect(err).ToNot(HaveOccurred())
+	defer commit.Free()
 	_, err = tag(repo, commit.Id(), false, "tag-1", time.Now())
 
 	checkoutTag := CheckoutTag{
