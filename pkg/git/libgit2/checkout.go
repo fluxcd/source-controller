@@ -161,25 +161,50 @@ func (c *CheckoutBranch) Checkout(ctx context.Context, path, url string, opts *g
 		}
 		defer upstreamCommit.Free()
 
-		// Once the index has been updated with Fetch, and we know the tip commit,
-		// a hard reset can be used to align the local worktree with the remote branch's.
-		err = repo.ResetToCommit(upstreamCommit, git2go.ResetHard, &git2go.CheckoutOptions{
+		// We try to lookup the branch (and create it if it doesn't exist), so that we can
+		// switch the repo to the specified branch. This is done so that users of this api
+		// can expect the repo to be at the desired branch, when cloned.
+		localBranch, err := repo.LookupBranch(c.Branch, git2go.BranchLocal)
+		if git2go.IsErrorCode(err, git2go.ErrorCodeNotFound) {
+			localBranch, err = repo.CreateBranch(c.Branch, upstreamCommit, false)
+			if err != nil {
+				return nil, fmt.Errorf("unable to create local branch '%s': %w", c.Branch, err)
+			}
+		} else if err != nil {
+			return nil, fmt.Errorf("unable to lookup branch '%s': %w", c.Branch, err)
+		}
+		defer localBranch.Free()
+
+		tree, err := repo.LookupTree(upstreamCommit.TreeId())
+		if err != nil {
+			return nil, fmt.Errorf("unable to lookup tree for branch '%s': %w", c.Branch, err)
+		}
+		defer tree.Free()
+
+		err = repo.CheckoutTree(tree, &git2go.CheckoutOpts{
+			// the remote branch should take precedence if it exists at this point in time.
 			Strategy: git2go.CheckoutForce,
 		})
 		if err != nil {
-			return nil, fmt.Errorf("unable to hard reset to commit for '%s': %w", managed.EffectiveURL(url), gitutil.LibGit2Error(err))
+			return nil, fmt.Errorf("unable to checkout tree for branch '%s': %w", c.Branch, err)
+		}
+
+		// Set the current head to point to the requested branch.
+		err = repo.SetHead("refs/heads/" + c.Branch)
+		if err != nil {
+			return nil, fmt.Errorf("unable to set HEAD to branch '%s':%w", c.Branch, err)
 		}
 
 		// Use the current worktree's head as reference for the commit to be returned.
 		head, err := repo.Head()
 		if err != nil {
-			return nil, fmt.Errorf("git resolve HEAD error: %w", err)
+			return nil, fmt.Errorf("unable to resolve HEAD: %w", err)
 		}
 		defer head.Free()
 
 		cc, err := repo.LookupCommit(head.Target())
 		if err != nil {
-			return nil, fmt.Errorf("failed to lookup HEAD commit '%s' for branch '%s': %w", head.Target(), c.Branch, err)
+			return nil, fmt.Errorf("unable to lookup HEAD commit '%s' for branch '%s': %w", head.Target(), c.Branch, err)
 		}
 		defer cc.Free()
 
