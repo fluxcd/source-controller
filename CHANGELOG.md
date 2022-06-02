@@ -2,6 +2,17 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.25.1
+
+**Release date:** 2022-06-01
+
+This prerelease fixes some race conditions in the libgit2 managed ssh smart
+subtransport.
+
+Fixes:
+- libgit2/managed: fix race issues in ssh transport
+  [#753](https://github.com/fluxcd/source-controller/pull/753)
+
 ## 0.25.0
 
 **Release date:** 2022-06-01
