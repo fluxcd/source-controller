@@ -1928,7 +1928,7 @@ func TestGitRepositoryReconciler_notify(t *testing.T) {
 				EventRecorder: recorder,
 				features:      features.FeatureGates(),
 			}
-			reconciler.notify(oldObj, newObj, tt.commit, tt.res, tt.resErr)
+			reconciler.notify(ctx, oldObj, newObj, tt.commit, tt.res, tt.resErr)
 
 			select {
 			case x, ok := <-recorder.Events:

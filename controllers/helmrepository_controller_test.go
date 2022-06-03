@@ -1069,7 +1069,7 @@ func TestHelmRepositoryReconciler_notify(t *testing.T) {
 			chartRepo := repository.ChartRepository{
 				URL: "some-address",
 			}
-			reconciler.notify(oldObj, newObj, chartRepo, tt.res, tt.resErr)
+			reconciler.notify(ctx, oldObj, newObj, chartRepo, tt.res, tt.resErr)
 
 			select {
 			case x, ok := <-recorder.Events:

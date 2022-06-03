@@ -286,13 +286,13 @@ func (r *GitRepositoryReconciler) reconcile(ctx context.Context, obj *sourcev1.G
 		res = sreconcile.LowestRequeuingResult(res, recResult)
 	}
 
-	r.notify(oldObj, obj, commit, res, resErr)
+	r.notify(ctx, oldObj, obj, commit, res, resErr)
 
 	return res, resErr
 }
 
 // notify emits notification related to the result of reconciliation.
-func (r *GitRepositoryReconciler) notify(oldObj, newObj *sourcev1.GitRepository, commit git.Commit, res sreconcile.Result, resErr error) {
+func (r *GitRepositoryReconciler) notify(ctx context.Context, oldObj, newObj *sourcev1.GitRepository, commit git.Commit, res sreconcile.Result, resErr error) {
 	// Notify successful reconciliation for new artifact, no-op reconciliation
 	// and recovery from any failure.
 	if r.shouldNotify(oldObj, newObj, res, resErr) {
@@ -319,10 +319,12 @@ func (r *GitRepositoryReconciler) notify(oldObj, newObj *sourcev1.GitRepository,
 		if oldChecksum != newObj.GetArtifact().Checksum {
 			r.AnnotatedEventf(newObj, annotations, corev1.EventTypeNormal,
 				"NewArtifact", message)
+			ctrl.LoggerFrom(ctx).Info(message)
 		} else {
 			if sreconcile.FailureRecovery(oldObj, newObj, gitRepositoryFailConditions) {
 				r.AnnotatedEventf(newObj, annotations, corev1.EventTypeNormal,
 					meta.SucceededReason, message)
+				ctrl.LoggerFrom(ctx).Info(message)
 			}
 		}
 	}

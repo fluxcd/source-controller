@@ -370,13 +370,13 @@ func (r *BucketReconciler) reconcile(ctx context.Context, obj *sourcev1.Bucket, 
 		res = sreconcile.LowestRequeuingResult(res, recResult)
 	}
 
-	r.notify(oldObj, obj, index, res, resErr)
+	r.notify(ctx, oldObj, obj, index, res, resErr)
 
 	return res, resErr
 }
 
 // notify emits notification related to the reconciliation.
-func (r *BucketReconciler) notify(oldObj, newObj *sourcev1.Bucket, index *etagIndex, res sreconcile.Result, resErr error) {
+func (r *BucketReconciler) notify(ctx context.Context, oldObj, newObj *sourcev1.Bucket, index *etagIndex, res sreconcile.Result, resErr error) {
 	// Notify successful reconciliation for new artifact and recovery from any
 	// failure.
 	if resErr == nil && res == sreconcile.ResultSuccess && newObj.Status.Artifact != nil {
@@ -396,10 +396,12 @@ func (r *BucketReconciler) notify(oldObj, newObj *sourcev1.Bucket, index *etagIn
 		if oldChecksum != newObj.GetArtifact().Checksum {
 			r.AnnotatedEventf(newObj, annotations, corev1.EventTypeNormal,
 				"NewArtifact", message)
+			ctrl.LoggerFrom(ctx).Info(message)
 		} else {
 			if sreconcile.FailureRecovery(oldObj, newObj, bucketFailConditions) {
 				r.AnnotatedEventf(newObj, annotations, corev1.EventTypeNormal,
 					meta.SucceededReason, message)
+				ctrl.LoggerFrom(ctx).Info(message)
 			}
 		}
 	}

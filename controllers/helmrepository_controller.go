@@ -250,13 +250,13 @@ func (r *HelmRepositoryReconciler) reconcile(ctx context.Context, obj *sourcev1.
 		res = sreconcile.LowestRequeuingResult(res, recResult)
 	}
 
-	r.notify(oldObj, obj, chartRepo, res, resErr)
+	r.notify(ctx, oldObj, obj, chartRepo, res, resErr)
 
 	return res, resErr
 }
 
 // notify emits notification related to the reconciliation.
-func (r *HelmRepositoryReconciler) notify(oldObj, newObj *sourcev1.HelmRepository, chartRepo repository.ChartRepository, res sreconcile.Result, resErr error) {
+func (r *HelmRepositoryReconciler) notify(ctx context.Context, oldObj, newObj *sourcev1.HelmRepository, chartRepo repository.ChartRepository, res sreconcile.Result, resErr error) {
 	// Notify successful reconciliation for new artifact and recovery from any
 	// failure.
 	if resErr == nil && res == sreconcile.ResultSuccess && newObj.Status.Artifact != nil {
@@ -281,11 +281,13 @@ func (r *HelmRepositoryReconciler) notify(oldObj, newObj *sourcev1.HelmRepositor
 		if oldChecksum != newObj.GetArtifact().Checksum {
 			r.AnnotatedEventf(newObj, annotations, corev1.EventTypeNormal,
 				"NewArtifact", message)
+			ctrl.LoggerFrom(ctx).Info(message)
 		} else {
 			if sreconcile.FailureRecovery(oldObj, newObj, helmRepositoryFailConditions) {
 				r.AnnotatedEventf(newObj, annotations, corev1.EventTypeNormal,
 					meta.SucceededReason, message)
 			}
+			ctrl.LoggerFrom(ctx).Info(message)
 		}
 	}
 }

@@ -1264,7 +1264,7 @@ func TestBucketReconciler_notify(t *testing.T) {
 					"bbb": "ddd",
 				},
 			}
-			reconciler.notify(oldObj, newObj, index, tt.res, tt.resErr)
+			reconciler.notify(ctx, oldObj, newObj, index, tt.res, tt.resErr)
 
 			select {
 			case x, ok := <-recorder.Events:
