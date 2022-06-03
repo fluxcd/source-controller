@@ -1917,7 +1917,7 @@ func TestHelmChartReconciler_notify(t *testing.T) {
 				Path:     "some/path",
 				Packaged: true,
 			}
-			reconciler.notify(oldObj, newObj, build, tt.res, tt.resErr)
+			reconciler.notify(ctx, oldObj, newObj, build, tt.res, tt.resErr)
 
 			select {
 			case x, ok := <-recorder.Events:

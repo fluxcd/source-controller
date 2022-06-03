@@ -229,11 +229,11 @@ func (r *HelmRepositoryOCIReconciler) reconcile(ctx context.Context, obj *v1beta
 		ready := conditions.Get(obj, meta.ReadyCondition)
 		// Became ready from not ready.
 		if !conditions.IsReady(oldObj) && conditions.IsReady(obj) {
-			r.Eventf(obj, corev1.EventTypeNormal, ready.Reason, ready.Message)
+			r.eventLogf(ctx, obj, corev1.EventTypeNormal, ready.Reason, ready.Message)
 		}
 		// Became not ready from ready.
 		if conditions.IsReady(oldObj) && !conditions.IsReady(obj) {
-			r.Eventf(obj, corev1.EventTypeWarning, ready.Reason, ready.Message)
+			r.eventLogf(ctx, obj, corev1.EventTypeWarning, ready.Reason, ready.Message)
 		}
 	}()
 
