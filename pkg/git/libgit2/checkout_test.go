@@ -498,3 +498,67 @@ func TestInitializeRepoWithRemote(t *testing.T) {
 	_, _, err = initializeRepoWithRemote(ctx, tmp, testRepoURL2, authOpts2)
 	g.Expect(err).To(HaveOccurred())
 }
+
+func TestCheckoutStrategyForOptions(t *testing.T) {
+	tests := []struct {
+		name          string
+		opts          git.CheckoutOptions
+		expectedStrat git.CheckoutStrategy
+	}{
+		{
+			name: "commit works",
+			opts: git.CheckoutOptions{
+				Commit: "commit",
+			},
+			expectedStrat: &CheckoutCommit{
+				Commit: "commit",
+			},
+		},
+		{
+			name: "semver works",
+			opts: git.CheckoutOptions{
+				SemVer: ">= 1.0.0",
+			},
+			expectedStrat: &CheckoutSemVer{
+				SemVer: ">= 1.0.0",
+			},
+		},
+		{
+			name: "tag with latest revision works",
+			opts: git.CheckoutOptions{
+				Tag:          "v0.1.0",
+				LastRevision: "ar34oi2njrngjrng",
+			},
+			expectedStrat: &CheckoutTag{
+				Tag:          "v0.1.0",
+				LastRevision: "ar34oi2njrngjrng",
+			},
+		},
+		{
+			name: "branch with latest revision works",
+			opts: git.CheckoutOptions{
+				Branch:       "main",
+				LastRevision: "rrgij20mkmrg",
+			},
+			expectedStrat: &CheckoutBranch{
+				Branch:       "main",
+				LastRevision: "rrgij20mkmrg",
+			},
+		},
+		{
+			name: "empty branch falls back to default",
+			opts: git.CheckoutOptions{},
+			expectedStrat: &CheckoutBranch{
+				Branch: git.DefaultBranch,
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+			strat := CheckoutStrategyForOptions(context.TODO(), tt.opts)
+			g.Expect(strat).To(Equal(tt.expectedStrat))
+		})
+	}
+}

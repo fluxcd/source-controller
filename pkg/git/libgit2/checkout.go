@@ -48,7 +48,10 @@ func CheckoutStrategyForOptions(ctx context.Context, opt git.CheckoutOptions) gi
 	case opt.SemVer != "":
 		return &CheckoutSemVer{SemVer: opt.SemVer}
 	case opt.Tag != "":
-		return &CheckoutTag{Tag: opt.Tag}
+		return &CheckoutTag{
+			Tag:          opt.Tag,
+			LastRevision: opt.LastRevision,
+		}
 	default:
 		branch := opt.Branch
 		if branch == "" {
