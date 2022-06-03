@@ -432,6 +432,78 @@ data:
   accountKey: <BASE64>
 ```
 
+#### Managed Identity with AAD Pod Identity
+
+If you are using [aad pod identity](https://azure.github.io/aad-pod-identity/docs), you can create an identity that has access to Azure Storage.
+
+```sh
+export IDENTITY_NAME="blob-access"
+
+az role assignment create --role "Storage Blob Data Contributor"  \
+--assignee-object-id "$(az identity show -n blob-access  -o tsv --query principalId  -g $RESOURCE_GROUP)" \
+--scope "/subscriptions/<SUBSCRIPTION-ID>/resourceGroups/aks-somto/providers/Microsoft.Storage/storageAccounts/<account-name>/blobServices/default/containers/<container-name>"
+
+export IDENTITY_CLIENT_ID="$(az identity show -n ${IDENTITY_NAME} -g ${RESOURCE_GROUP} -otsv --query clientId)"
+export IDENTITY_RESOURCE_ID="$(az identity show -n ${IDENTITY_NAME} -otsv --query id)"
+```
+
+Create an `AzureIdentity` object that references the identity created above:
+
+```yaml
+---
+apiVersion: aadpodidentity.k8s.io/v1
+kind: AzureIdentity
+metadata:
+  name:  # source-controller label will match this name
+  namespace: flux-system
+spec:
+  clientID: <IDENTITY_CLIENT_ID>
+  resourceID: <IDENTITY_RESOURCE_ID>
+  type: 0  # user-managed identity
+```
+
+Create an `AzureIdentityBinding` object that binds pods with a specific selector with the `AzureIdentity` created:
+
+```yaml
+apiVersion: "aadpodidentity.k8s.io/v1"
+kind: AzureIdentityBinding
+metadata:
+  name: ${IDENTITY_NAME}-binding
+spec:
+  azureIdentity: ${IDENTITY_NAME}
+  selector: ${IDENTITY_NAME}
+```
+
+Label the source-controller correctly so that it can match an identity binding:
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kustomize-controller
+  namespace: flux-system
+spec:
+  template:
+    metadata:
+      labels:
+        aadpodidbinding: ${IDENTITY_NAME}  # match the AzureIdentity name
+```
+
+If you have set aad-pod-identity up correctly and labeled the source-controller pod, then you don't need to reference a secret.
+
+```yaml
+apiVersion: source.toolkit.fluxcd.io/v1beta2
+kind: Bucket
+metadata:
+  name: azure-bucket
+  namespace: flux-system
+spec:
+  interval: 5m0s
+  provider: azure
+  bucketName: testsas
+  endpoint: https://testfluxsas.blob.core.windows.net
+```
+
 #### GCP
 
 When a Bucket's `.spec.provider` is set to `gcp`, the source-controller will
