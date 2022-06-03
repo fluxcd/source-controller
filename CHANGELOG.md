@@ -2,9 +2,27 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.25.2
+
+**Release date:** 2022-06-03
+
+This prerelease fixes a bug which prevented the use of the `OptimizedGitClones`
+feature when using tags to checkout a Git repository, and adds docs on how to
+access Azure Blob using managed identities and aad-pod-identity.
+
+Improvements:
+- Add docs on managed identity for Azure Blob
+  [#752](https://github.com/fluxcd/source-controller/pull/752)
+
+Fixes:
+- libgit2: return CheckoutTag with LastRevision
+  [#755](https://github.com/fluxcd/source-controller/pull/755)
+- Log on new artifact and failure recovery
+  [#759](https://github.com/fluxcd/source-controller/pull/759)
+
 ## 0.25.1
 
-**Release date:** 2022-06-01
+**Release date:** 2022-06-02
 
 This prerelease fixes some race conditions in the libgit2 managed ssh smart
 subtransport.
