@@ -103,6 +103,7 @@ var (
 
 var (
 	testRegistryServer *registryClientTestServer
+	testCache          *cache.Cache
 )
 
 func init() {
@@ -246,7 +247,7 @@ func TestMain(m *testing.M) {
 		panic(fmt.Sprintf("Failed to start HelmRepositoryOCIReconciler: %v", err))
 	}
 
-	c := cache.New(5, 1*time.Second)
+	testCache = cache.New(5, 1*time.Second)
 	cacheRecorder := cache.MustMakeMetrics()
 	if err := (&HelmChartReconciler{
 		Client:        testEnv,
@@ -254,7 +255,7 @@ func TestMain(m *testing.M) {
 		Metrics:       testMetricsH,
 		Getters:       testGetters,
 		Storage:       testStorage,
-		Cache:         c,
+		Cache:         testCache,
 		TTL:           1 * time.Second,
 		CacheRecorder: cacheRecorder,
 	}).SetupWithManager(testEnv); err != nil {

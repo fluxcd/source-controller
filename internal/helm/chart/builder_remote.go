@@ -186,7 +186,6 @@ func (b *remoteChartBuilder) downloadFromRepository(remote *repository.ChartRepo
 		err = fmt.Errorf("could not load repository index for remote chart reference: %w", err)
 		return nil, &BuildError{Reason: ErrChartPull, Err: err}
 	}
-	defer remote.Unload()
 
 	// Get the current version for the RemoteReference
 	cv, err := remote.Get(remoteRef.Name, remoteRef.Version)

@@ -159,6 +159,14 @@ func TestHelmChartReconciler_Reconcile(t *testing.T) {
 		return obj.Status.LastHandledReconcileAt == "now"
 	}, timeout).Should(BeTrue())
 
+	// Check if the cache contains the index.
+	repoKey := client.ObjectKey{Name: repository.Name, Namespace: repository.Namespace}
+	err = testEnv.Get(ctx, repoKey, repository)
+	g.Expect(err).ToNot(HaveOccurred())
+	localPath := testStorage.LocalPath(*repository.GetArtifact())
+	_, found := testCache.Get(localPath)
+	g.Expect(found).To(BeTrue())
+
 	g.Expect(testEnv.Delete(ctx, obj)).To(Succeed())
 
 	// Wait for HelmChart to be deleted
