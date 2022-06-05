@@ -115,11 +115,11 @@ func NewOCIChartRepository(repositoryURL string, chartRepoOpts ...OCIChartReposi
 	return r, nil
 }
 
-// Get returns the repo.ChartVersion for the given name, the version is expected
+// GetChartVersion returns the repo.ChartVersion for the given name, the version is expected
 // to be a semver.Constraints compatible string. If version is empty, the latest
 // stable version will be returned and prerelease versions will be ignored.
 // adapted from https://github.com/helm/helm/blob/49819b4ef782e80b0c7f78c30bd76b51ebb56dc8/pkg/downloader/chart_downloader.go#L162
-func (r *OCIChartRepository) Get(name, ver string) (*repo.ChartVersion, error) {
+func (r *OCIChartRepository) GetChartVersion(name, ver string) (*repo.ChartVersion, error) {
 	// Find chart versions matching the given name.
 	// Either in an index file or from a registry.
 	cpURL := r.URL

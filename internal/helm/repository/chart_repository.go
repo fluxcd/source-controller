@@ -150,10 +150,15 @@ func newChartRepository() *ChartRepository {
 	}
 }
 
-// Get returns the repo.ChartVersion for the given name, the version is expected
+// GetChartVersion returns the repo.ChartVersion for the given name, the version is expected
 // to be a semver.Constraints compatible string. If version is empty, the latest
 // stable version will be returned and prerelease versions will be ignored.
-func (r *ChartRepository) Get(name, ver string) (*repo.ChartVersion, error) {
+func (r *ChartRepository) GetChartVersion(name, ver string) (*repo.ChartVersion, error) {
+	// See if we already have the index in cache or try to load it.
+	if err := r.StrategicallyLoadIndex(); err != nil {
+		return nil, err
+	}
+
 	r.RLock()
 	defer r.RUnlock()
 
@@ -469,6 +474,22 @@ func (r *ChartRepository) Unload() {
 	r.Lock()
 	defer r.Unlock()
 	r.Index = nil
+}
+
+// Clear cache the index in memory before unloading it.
+// It cleans up temporary files and directories created by the repository.
+func (r *ChartRepository) Clear() (errs []error) {
+	if err := r.CacheIndexInMemory(); err != nil {
+		errs = append(errs, err)
+	}
+
+	r.Unload()
+
+	if err := r.RemoveCache(); err != nil {
+		errs = append(errs, err)
+	}
+
+	return
 }
 
 // SetMemCache sets the cache to use for this repository.

@@ -518,7 +518,7 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 	}
 
 	// Initialize the chart repository
-	var chartRepo chart.Remote
+	var chartRepo chart.Repository
 	switch repo.Spec.Type {
 	case sourcev1.HelmRepositoryTypeOCI:
 		if !helmreg.IsOCI(repo.Spec.URL) {

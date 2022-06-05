@@ -240,7 +240,7 @@ func (dm *DependencyManager) addRemoteDependency(chart *chartWithLock, dep *helm
 		return fmt.Errorf("failed to load index for '%s': %w", dep.Name, err)
 	}
 
-	ver, err := repo.Get(dep.Name, dep.Version)
+	ver, err := repo.GetChartVersion(dep.Name, dep.Version)
 	if err != nil {
 		return err
 	}

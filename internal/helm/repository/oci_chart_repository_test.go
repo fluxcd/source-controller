@@ -183,7 +183,7 @@ func TestOCIChartRepository_Get(t *testing.T) {
 			g.Expect(r).ToNot(BeNil())
 
 			chart := "podinfo"
-			cv, err := r.Get(chart, tc.version)
+			cv, err := r.GetChartVersion(chart, tc.version)
 			if tc.expectedErr != "" {
 				g.Expect(err).To(HaveOccurred())
 				g.Expect(err.Error()).To(Equal(tc.expectedErr))
