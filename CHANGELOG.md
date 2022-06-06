@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.25.3
+
+**Release date:** 2022-06-06
+
+This prerelease fixes a regression in HelmRepository index caching.
+
+Fixes:
+- Fix repository cache regression
+  [#761](https://github.com/fluxcd/source-controller/pull/761)
+
 ## 0.25.2
 
 **Release date:** 2022-06-03
