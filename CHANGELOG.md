@@ -2,6 +2,22 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.25.4
+
+**Release date:** 2022-06-07
+
+This prerelease fixes a regression when accessing Gitlab via HTTPS
+when the URL does not have the '.git' suffix. Plus some small 
+documentation fixes and dependency updates.
+
+Fixes:
+- Update link to v1beta2 in the API spec
+  [#764](https://github.com/fluxcd/source-controller/pull/764)
+- libgit2: fix gitlab redirection for HTTP
+  [#765](https://github.com/fluxcd/source-controller/pull/765)
+- Update dependencies
+  [#766](https://github.com/fluxcd/source-controller/pull/766)
+
 ## 0.25.3
 
 **Release date:** 2022-06-06
