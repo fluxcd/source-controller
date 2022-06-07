@@ -200,26 +200,81 @@ func TestHTTPManagedTransport_E2E(t *testing.T) {
 	repo.Free()
 }
 
-func TestHTTPManagedTransport_HandleRedirect(t *testing.T) {
-	g := NewWithT(t)
+func TestTrimActionSuffix(t *testing.T) {
+	tests := []struct {
+		name    string
+		inURL   string
+		wantURL string
+	}{
+		{
+			name:    "ignore other suffixes",
+			inURL:   "https://gitlab/repo/podinfo.git/somethingelse",
+			wantURL: "https://gitlab/repo/podinfo.git/somethingelse",
+		},
+		{
+			name:    "trim /info/refs?service=git-upload-pack",
+			inURL:   "https://gitlab/repo/podinfo.git/info/refs?service=git-upload-pack",
+			wantURL: "https://gitlab/repo/podinfo.git",
+		},
+		{
+			name:    "trim /git-upload-pack",
+			inURL:   "https://gitlab/repo/podinfo.git/git-upload-pack",
+			wantURL: "https://gitlab/repo/podinfo.git",
+		},
+		{
+			name:    "trim /info/refs?service=git-receive-pack",
+			inURL:   "https://gitlab/repo/podinfo.git/info/refs?service=git-receive-pack",
+			wantURL: "https://gitlab/repo/podinfo.git",
+		},
+		{
+			name:    "trim /git-receive-pack",
+			inURL:   "https://gitlab/repo/podinfo.git/git-receive-pack",
+			wantURL: "https://gitlab/repo/podinfo.git",
+		},
+	}
 
-	tmpDir := t.TempDir()
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			gotURL := trimActionSuffix(tt.inURL)
+			g.Expect(gotURL).To(Equal(tt.wantURL))
+		})
+	}
+}
+
+func TestHTTPManagedTransport_HandleRedirect(t *testing.T) {
+	tests := []struct {
+		name    string
+		repoURL string
+	}{
+		{name: "http to https", repoURL: "http://github.com/stefanprodan/podinfo"},
+		{name: "handle gitlab redirect", repoURL: "https://gitlab.com/stefanprodan/podinfo"},
+	}
 
 	// Force managed transport to be enabled
 	InitManagedTransport(logr.Discard())
 
-	id := "http://obj-id"
-	AddTransportOptions(id, TransportOptions{
-		TargetURL: "http://github.com/stefanprodan/podinfo",
-	})
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
 
-	// GitHub will cause a 301 and redirect to https
-	repo, err := git2go.Clone(id, tmpDir, &git2go.CloneOptions{
-		CheckoutOptions: git2go.CheckoutOptions{
-			Strategy: git2go.CheckoutForce,
-		},
-	})
+			tmpDir := t.TempDir()
 
-	g.Expect(err).ToNot(HaveOccurred())
-	repo.Free()
+			id := "http://obj-id"
+			AddTransportOptions(id, TransportOptions{
+				TargetURL: tt.repoURL,
+			})
+
+			// GitHub will cause a 301 and redirect to https
+			repo, err := git2go.Clone(id, tmpDir, &git2go.CloneOptions{
+				CheckoutOptions: git2go.CheckoutOptions{
+					Strategy: git2go.CheckoutForce,
+				},
+			})
+
+			g.Expect(err).ToNot(HaveOccurred())
+			repo.Free()
+		})
+	}
 }

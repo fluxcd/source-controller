@@ -52,12 +52,20 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 	"sync"
 
 	pool "github.com/fluxcd/source-controller/internal/transport"
 	"github.com/fluxcd/source-controller/pkg/git"
 	git2go "github.com/libgit2/git2go/v33"
 )
+
+var actionSuffixes = []string{
+	"/info/refs?service=git-upload-pack",
+	"/git-upload-pack",
+	"/info/refs?service=git-receive-pack",
+	"/git-receive-pack",
+}
 
 // registerManagedHTTP registers a Go-native implementation of an
 // HTTP(S) transport that doesn't rely on any lower-level libraries
@@ -152,10 +160,38 @@ func (t *httpSmartSubtransport) Action(transportOptionsURL string, action git2go
 
 			return http.ErrUseLastResponse
 		}
+
+		// Some Git servers (i.e. Gitlab) only support redirection on the GET operations.
+		// Therefore, on the initial GET operation we update the target URL to include the
+		// new target, so the subsequent actions include the correct target URL.
+		// Example of this is trying to access a Git repository without the .git suffix.
+		if req.Response != nil && req.Response.StatusCode == http.StatusMovedPermanently {
+			if newURL, err := req.Response.Location(); err == nil && newURL != nil {
+				if strings.EqualFold(newURL.Host, req.URL.Host) && strings.EqualFold(newURL.Port(), req.URL.Port()) {
+					opts, _ := getTransportOptions(transportOptionsURL)
+					if opts == nil {
+						opts = &TransportOptions{}
+					}
+
+					opts.TargetURL = trimActionSuffix(newURL.String())
+					AddTransportOptions(transportOptionsURL, *opts)
+				}
+			}
+		}
+
 		return nil
 	}
 
 	return stream, nil
+}
+
+func trimActionSuffix(url string) string {
+	newUrl := url
+	for _, s := range actionSuffixes {
+		newUrl = strings.TrimSuffix(newUrl, s)
+	}
+
+	return newUrl
 }
 
 func createClientRequest(targetURL string, action git2go.SmartServiceAction,
