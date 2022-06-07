@@ -228,7 +228,7 @@ func getLastMatchingVersionOrConstraint(cvs []string, ver string) (string, error
 		}
 	}
 
-	matchingVersions := make([]string, 0, len(cvs))
+	matchingVersions := make([]*semver.Version, 0, len(cvs))
 	for _, cv := range cvs {
 		v, err := version.ParseVersion(cv)
 		if err != nil {
@@ -239,14 +239,14 @@ func getLastMatchingVersionOrConstraint(cvs []string, ver string) (string, error
 			continue
 		}
 
-		matchingVersions = append(matchingVersions, cv)
+		matchingVersions = append(matchingVersions, v)
 	}
 	if len(matchingVersions) == 0 {
 		return "", fmt.Errorf("could not locate a version matching provided version string %s", ver)
 	}
 
 	// Sort versions
-	sort.Sort(sort.Reverse(sort.StringSlice(matchingVersions)))
+	sort.Sort(sort.Reverse(semver.Collection(matchingVersions)))
 
-	return matchingVersions[0], nil
+	return matchingVersions[0].Original(), nil
 }

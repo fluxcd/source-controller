@@ -101,6 +101,8 @@ func TestOCIChartRepoisitory_Get(t *testing.T) {
 			"0.1.5+a.min.hour",
 			"0.1.5+c.now",
 			"0.2.0",
+			"0.9.0",
+			"0.10.0",
 			"1.0.0",
 			"1.1.0-rc.1",
 		},
@@ -143,6 +145,11 @@ func TestOCIChartRepoisitory_Get(t *testing.T) {
 			name:     "should return a perfect match",
 			version:  "0.1.0",
 			expected: "0.1.0",
+		},
+		{
+			name:     "should return 0.10.0",
+			version:  "0.*",
+			expected: "0.10.0",
 		},
 		{
 			name:        "should an error for unfunfilled range",
