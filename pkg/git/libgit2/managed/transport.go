@@ -1,9 +1,7 @@
 package managed
 
 import (
-	"crypto/sha256"
 	"fmt"
-	"hash"
 	"net"
 
 	pkgkh "github.com/fluxcd/pkg/ssh/knownhosts"
@@ -42,11 +40,9 @@ func KnownHostsCallback(host string, knownHosts []byte) git2go.CertificateCheckC
 		}
 
 		var fingerprint []byte
-		var hasher hash.Hash
 		switch {
 		case cert.Hostkey.Kind&git2go.HostkeySHA256 > 0:
 			fingerprint = cert.Hostkey.HashSHA256[:]
-			hasher = sha256.New()
 		default:
 			return fmt.Errorf("invalid host key kind, expected to be of kind SHA256")
 		}
@@ -57,7 +53,7 @@ func KnownHostsCallback(host string, knownHosts []byte) git2go.CertificateCheckC
 		// is an entry for the hostname _and_ port.
 		h := knownhosts.Normalize(host)
 		for _, k := range kh {
-			if k.Matches(h, fingerprint, hasher) {
+			if k.Matches(h, fingerprint) {
 				return nil
 			}
 		}
