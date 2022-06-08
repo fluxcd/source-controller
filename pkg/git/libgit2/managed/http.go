@@ -165,7 +165,7 @@ func (t *httpSmartSubtransport) Action(transportOptionsURL string, action git2go
 		// Therefore, on the initial GET operation we update the target URL to include the
 		// new target, so the subsequent actions include the correct target URL.
 		// Example of this is trying to access a Git repository without the .git suffix.
-		if req.Response != nil && req.Response.StatusCode == http.StatusMovedPermanently {
+		if req.Response != nil {
 			if newURL, err := req.Response.Location(); err == nil && newURL != nil {
 				if strings.EqualFold(newURL.Host, req.URL.Host) && strings.EqualFold(newURL.Port(), req.URL.Port()) {
 					opts, _ := getTransportOptions(transportOptionsURL)
@@ -175,6 +175,9 @@ func (t *httpSmartSubtransport) Action(transportOptionsURL string, action git2go
 
 					opts.TargetURL = trimActionSuffix(newURL.String())
 					AddTransportOptions(transportOptionsURL, *opts)
+
+					debugLog.Info("[http]: server responded with redirect",
+						"newURL", opts.TargetURL, "StatusCode", req.Response.StatusCode)
 				}
 			}
 		}
@@ -419,7 +422,6 @@ func (self *httpSmartSubtransportStream) sendRequest() error {
 				return err
 			}
 
-			traceLog.Info("[http]: POST redirect", "URL", self.req.URL)
 			continue
 		}
 
@@ -435,7 +437,7 @@ func (self *httpSmartSubtransportStream) sendRequest() error {
 			return err
 		}
 
-		return fmt.Errorf("Unhandled HTTP error %s", resp.Status)
+		return fmt.Errorf("unhandled HTTP error %s", resp.Status)
 	}
 
 	self.resp = resp
