@@ -2,6 +2,27 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.25.5
+
+**Release date:** 2022-06-08
+
+This prerelease fixes a regression for SSH host key verification
+and fixes semver sorting for Helm OCI charts.
+
+In addition, the controller dependencies where update to Kubernetes v1.24.1.
+
+Fixes:
+- helm: Fix sorting semver from OCI repository tags
+  [#769](https://github.com/fluxcd/source-controller/pull/769)
+- libgit2: Fix SSH host key verification regression
+  [#771](https://github.com/fluxcd/source-controller/pull/771)
+
+Improvements:
+- libgit2: Improve HTTP redirection observability
+  [#772](https://github.com/fluxcd/source-controller/pull/772)
+- Update dependencies
+  [#773](https://github.com/fluxcd/source-controller/pull/773)
+
 ## 0.25.4
 
 **Release date:** 2022-06-07
@@ -15,6 +36,8 @@ Fixes:
   [#764](https://github.com/fluxcd/source-controller/pull/764)
 - libgit2: fix gitlab redirection for HTTP
   [#765](https://github.com/fluxcd/source-controller/pull/765)
+
+Improvements:
 - Update dependencies
   [#766](https://github.com/fluxcd/source-controller/pull/766)
 
