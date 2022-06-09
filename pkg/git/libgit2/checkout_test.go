@@ -25,40 +25,51 @@ import (
 	"testing"
 	"time"
 
-	"github.com/fluxcd/source-controller/pkg/git"
+	"github.com/fluxcd/pkg/gittestserver"
 	git2go "github.com/libgit2/git2go/v33"
 	. "github.com/onsi/gomega"
+
+	"github.com/fluxcd/source-controller/pkg/git"
+
+	mt "github.com/fluxcd/source-controller/pkg/git/libgit2/managed"
 )
 
-func TestCheckoutBranch_checkoutUnmanaged(t *testing.T) {
-	repo, err := initBareRepo(t)
+func TestCheckoutBranch_unmanaged(t *testing.T) {
+	checkoutBranch(t, false)
+}
+
+// checkoutBranch is a test helper function which runs the tests for checking out
+// via CheckoutBranch.
+func checkoutBranch(t *testing.T, managed bool) {
+	// we use a HTTP Git server instead of a bare repo (for all tests in this
+	// package), because our managed transports don't support the file protocol,
+	// so we wouldn't actually be using our custom transports, if we used a bare
+	// repo.
+	server, err := gittestserver.NewTempGitServer()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(server.Root())
+
+	err = server.StartHTTP()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer server.StopHTTP()
+
+	repoPath := "test.git"
+	err = server.InitRepo("../testdata/git/repo", git.DefaultBranch, repoPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	repo, err := git2go.OpenRepository(filepath.Join(server.Root(), repoPath))
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer repo.Free()
 
-	cfg, err := git2go.OpenDefault()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// ignores the error here because it can be defaulted
-	// https://github.blog/2020-07-27-highlights-from-git-2-28/#introducing-init-defaultbranch
 	defaultBranch := "master"
-	iter, err := cfg.NewIterator()
-	if err != nil {
-		t.Fatal(err)
-	}
-	for {
-		val, e := iter.Next()
-		if e != nil {
-			break
-		}
-		if val.Name == "init.defaultbranch" {
-			defaultBranch = val.Value
-			break
-		}
-	}
 
 	firstCommit, err := commitFile(repo, "branch", "init", time.Now())
 	if err != nil {
@@ -75,45 +86,71 @@ func TestCheckoutBranch_checkoutUnmanaged(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	repoURL := server.HTTPAddress() + "/" + repoPath
 
 	tests := []struct {
-		name           string
-		branch         string
-		filesCreated   map[string]string
-		lastRevision   string
-		expectedCommit string
-		expectedErr    string
+		name                   string
+		branch                 string
+		filesCreated           map[string]string
+		lastRevision           string
+		expectedCommit         string
+		expectedConcreteCommit bool
+		expectedErr            string
 	}{
 		{
-			name:           "Default branch",
-			branch:         defaultBranch,
-			filesCreated:   map[string]string{"branch": "second"},
-			expectedCommit: secondCommit.String(),
+			name:                   "Default branch",
+			branch:                 defaultBranch,
+			filesCreated:           map[string]string{"branch": "second"},
+			expectedCommit:         secondCommit.String(),
+			expectedConcreteCommit: true,
 		},
 		{
-			name:           "Other branch",
-			branch:         "test",
-			filesCreated:   map[string]string{"branch": "init"},
-			expectedCommit: firstCommit.String(),
+			name:                   "Other branch",
+			branch:                 "test",
+			filesCreated:           map[string]string{"branch": "init"},
+			expectedCommit:         firstCommit.String(),
+			expectedConcreteCommit: true,
 		},
 		{
-			name:        "Non existing branch",
-			branch:      "invalid",
-			expectedErr: "reference 'refs/remotes/origin/invalid' not found",
+			name:                   "Non existing branch",
+			branch:                 "invalid",
+			expectedErr:            "reference 'refs/remotes/origin/invalid' not found",
+			expectedConcreteCommit: true,
+		},
+		{
+			name:                   "skip clone - lastRevision hasn't changed",
+			branch:                 defaultBranch,
+			filesCreated:           map[string]string{"branch": "second"},
+			lastRevision:           fmt.Sprintf("%s/%s", defaultBranch, secondCommit.String()),
+			expectedCommit:         secondCommit.String(),
+			expectedConcreteCommit: false,
+		},
+		{
+			name:                   "lastRevision is different",
+			branch:                 defaultBranch,
+			filesCreated:           map[string]string{"branch": "second"},
+			lastRevision:           fmt.Sprintf("%s/%s", defaultBranch, firstCommit.String()),
+			expectedCommit:         secondCommit.String(),
+			expectedConcreteCommit: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
+			g.Expect(mt.Enabled()).To(Equal(managed))
 
 			branch := CheckoutBranch{
 				Branch:       tt.branch,
 				LastRevision: tt.lastRevision,
 			}
-			tmpDir := t.TempDir()
 
-			cc, err := branch.Checkout(context.TODO(), tmpDir, repo.Path(), nil)
+			tmpDir := t.TempDir()
+			authOpts := git.AuthOptions{
+				TransportOptionsURL: getTransportOptionsURL(git.HTTP),
+			}
+
+			cc, err := branch.Checkout(context.TODO(), tmpDir, repoURL, &authOpts)
 			if tt.expectedErr != "" {
 				g.Expect(err).To(HaveOccurred())
 				g.Expect(err.Error()).To(ContainSubstring(tt.expectedErr))
@@ -122,31 +159,51 @@ func TestCheckoutBranch_checkoutUnmanaged(t *testing.T) {
 			}
 			g.Expect(err).ToNot(HaveOccurred())
 			g.Expect(cc.String()).To(Equal(tt.branch + "/" + tt.expectedCommit))
+			if managed {
+				g.Expect(git.IsConcreteCommit(*cc)).To(Equal(tt.expectedConcreteCommit))
+			}
+
+			if tt.expectedConcreteCommit {
+				for k, v := range tt.filesCreated {
+					g.Expect(filepath.Join(tmpDir, k)).To(BeARegularFile())
+					g.Expect(os.ReadFile(filepath.Join(tmpDir, k))).To(BeEquivalentTo(v))
+				}
+			}
 		})
 	}
 }
 
-func TestCheckoutTag_checkoutUnmanaged(t *testing.T) {
+func TestCheckoutTag_unmanaged(t *testing.T) {
+	checkoutTag(t, false)
+}
+
+// checkoutTag is a test helper function which runs the tests for checking out
+// via CheckoutTag.
+func checkoutTag(t *testing.T, managed bool) {
 	type testTag struct {
 		name      string
 		annotated bool
 	}
 
 	tests := []struct {
-		name        string
-		tagsInRepo  []testTag
-		checkoutTag string
-		expectErr   string
+		name                 string
+		tagsInRepo           []testTag
+		checkoutTag          string
+		lastRevTag           string
+		expectErr            string
+		expectConcreteCommit bool
 	}{
 		{
-			name:        "Tag",
-			tagsInRepo:  []testTag{{"tag-1", false}},
-			checkoutTag: "tag-1",
+			name:                 "Tag",
+			tagsInRepo:           []testTag{{"tag-1", false}},
+			checkoutTag:          "tag-1",
+			expectConcreteCommit: true,
 		},
 		{
-			name:        "Annotated",
-			tagsInRepo:  []testTag{{"annotated", true}},
-			checkoutTag: "annotated",
+			name:                 "Annotated",
+			tagsInRepo:           []testTag{{"annotated", true}},
+			checkoutTag:          "annotated",
+			expectConcreteCommit: true,
 		},
 		{
 			name:        "Non existing tag",
@@ -154,28 +211,46 @@ func TestCheckoutTag_checkoutUnmanaged(t *testing.T) {
 			expectErr:   "unable to find 'invalid': no reference found for shorthand 'invalid'",
 		},
 		{
-			name:        "Skip clone - last revision unchanged",
-			tagsInRepo:  []testTag{{"tag-1", false}},
-			checkoutTag: "tag-1",
+			name:                 "Skip clone - last revision unchanged",
+			tagsInRepo:           []testTag{{"tag-1", false}},
+			checkoutTag:          "tag-1",
+			lastRevTag:           "tag-1",
+			expectConcreteCommit: false,
 		},
 		{
-			name:        "Last revision changed",
-			tagsInRepo:  []testTag{{"tag-1", false}, {"tag-2", false}},
-			checkoutTag: "tag-2",
+			name:                 "Last revision changed",
+			tagsInRepo:           []testTag{{"tag-1", false}, {"tag-2", false}},
+			checkoutTag:          "tag-2",
+			lastRevTag:           "tag-1",
+			expectConcreteCommit: true,
 		},
 	}
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
+			g.Expect(mt.Enabled()).To(Equal(managed))
 
-			repo, err := initBareRepo(t)
-			if err != nil {
-				t.Fatal(err)
-			}
+			server, err := gittestserver.NewTempGitServer()
+			g.Expect(err).ToNot(HaveOccurred())
+			defer os.RemoveAll(server.Root())
+
+			err = server.StartHTTP()
+			g.Expect(err).ToNot(HaveOccurred())
+			defer server.StopHTTP()
+
+			repoPath := "test.git"
+			err = server.InitRepo("../testdata/git/repo", git.DefaultBranch, repoPath)
+			g.Expect(err).ToNot(HaveOccurred())
+
+			repo, err := git2go.OpenRepository(filepath.Join(server.Root(), repoPath))
+			g.Expect(err).ToNot(HaveOccurred())
 			defer repo.Free()
 
 			// Collect tags and their associated commit for later reference.
 			tagCommits := map[string]*git2go.Commit{}
+
+			repoURL := server.HTTPAddress() + "/" + repoPath
 
 			// Populate the repo with commits and tags.
 			if tt.tagsInRepo != nil {
@@ -199,9 +274,18 @@ func TestCheckoutTag_checkoutUnmanaged(t *testing.T) {
 			checkoutTag := CheckoutTag{
 				Tag: tt.checkoutTag,
 			}
+			// If last revision is provided, configure it.
+			if tt.lastRevTag != "" {
+				lc := tagCommits[tt.lastRevTag]
+				checkoutTag.LastRevision = fmt.Sprintf("%s/%s", tt.lastRevTag, lc.Id().String())
+			}
+
 			tmpDir := t.TempDir()
 
-			cc, err := checkoutTag.Checkout(context.TODO(), tmpDir, repo.Path(), nil)
+			authOpts := git.AuthOptions{
+				TransportOptionsURL: getTransportOptionsURL(git.HTTP),
+			}
+			cc, err := checkoutTag.Checkout(context.TODO(), tmpDir, repoURL, &authOpts)
 			if tt.expectErr != "" {
 				g.Expect(err).To(HaveOccurred())
 				g.Expect(err.Error()).To(ContainSubstring(tt.expectErr))
@@ -213,17 +297,49 @@ func TestCheckoutTag_checkoutUnmanaged(t *testing.T) {
 			targetTagCommit := tagCommits[tt.checkoutTag]
 			g.Expect(err).ToNot(HaveOccurred())
 			g.Expect(cc.String()).To(Equal(tt.checkoutTag + "/" + targetTagCommit.Id().String()))
+			if managed {
+				g.Expect(git.IsConcreteCommit(*cc)).To(Equal(tt.expectConcreteCommit))
 
-			g.Expect(filepath.Join(tmpDir, "tag")).To(BeARegularFile())
-			g.Expect(os.ReadFile(filepath.Join(tmpDir, "tag"))).To(BeEquivalentTo(tt.checkoutTag))
+			}
+
+			// Check file content only when there's an actual checkout.
+			if tt.lastRevTag != tt.checkoutTag {
+				g.Expect(filepath.Join(tmpDir, "tag")).To(BeARegularFile())
+				g.Expect(os.ReadFile(filepath.Join(tmpDir, "tag"))).To(BeEquivalentTo(tt.checkoutTag))
+			}
 		})
 	}
 }
 
-func TestCheckoutCommit_Checkout(t *testing.T) {
-	g := NewWithT(t)
+func TestCheckoutCommit_unmanaged(t *testing.T) {
+	checkoutCommit(t, false)
+}
 
-	repo, err := initBareRepo(t)
+// checkoutCommit is a test helper function which runs the tests for checking out
+// via CheckoutCommit.
+func checkoutCommit(t *testing.T, managed bool) {
+	g := NewWithT(t)
+	g.Expect(mt.Enabled()).To(Equal(managed))
+
+	server, err := gittestserver.NewTempGitServer()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(server.Root())
+
+	err = server.StartHTTP()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer server.StopHTTP()
+
+	repoPath := "test.git"
+	err = server.InitRepo("../testdata/git/repo", git.DefaultBranch, repoPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	repo, err := git2go.OpenRepository(filepath.Join(server.Root(), repoPath))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -236,13 +352,17 @@ func TestCheckoutCommit_Checkout(t *testing.T) {
 	if _, err = commitFile(repo, "commit", "second", time.Now()); err != nil {
 		t.Fatal(err)
 	}
+	tmpDir := t.TempDir()
+	authOpts := git.AuthOptions{
+		TransportOptionsURL: getTransportOptionsURL(git.HTTP),
+	}
+	repoURL := server.HTTPAddress() + "/" + repoPath
 
 	commit := CheckoutCommit{
 		Commit: c.String(),
 	}
-	tmpDir := t.TempDir()
 
-	cc, err := commit.Checkout(context.TODO(), tmpDir, repo.Path(), nil)
+	cc, err := commit.Checkout(context.TODO(), tmpDir, repoURL, &authOpts)
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(cc).ToNot(BeNil())
 	g.Expect(cc.String()).To(Equal("HEAD/" + c.String()))
@@ -254,13 +374,19 @@ func TestCheckoutCommit_Checkout(t *testing.T) {
 	}
 	tmpDir2 := t.TempDir()
 
-	cc, err = commit.Checkout(context.TODO(), tmpDir2, repo.Path(), nil)
+	cc, err = commit.Checkout(context.TODO(), tmpDir2, repoURL, &authOpts)
 	g.Expect(err).To(HaveOccurred())
 	g.Expect(err.Error()).To(HavePrefix("git checkout error: git commit '4dc3185c5fc94eb75048376edeb44571cece25f4' not found:"))
 	g.Expect(cc).To(BeNil())
 }
 
-func TestCheckoutTagSemVer_Checkout(t *testing.T) {
+func TestCheckoutTagSemVer_unmanaged(t *testing.T) {
+	checkoutSemVer(t, false)
+}
+
+// checkoutSemVer is a test helper function which runs the tests for checking out
+// via CheckoutSemVer.
+func checkoutSemVer(t *testing.T, managed bool) {
 	g := NewWithT(t)
 	now := time.Now()
 
@@ -322,11 +448,30 @@ func TestCheckoutTagSemVer_Checkout(t *testing.T) {
 		},
 	}
 
-	repo, err := initBareRepo(t)
+	server, err := gittestserver.NewTempGitServer()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(server.Root())
+
+	err = server.StartHTTP()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer server.StopHTTP()
+
+	repoPath := "test.git"
+	err = server.InitRepo("../testdata/git/repo", git.DefaultBranch, repoPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	repo, err := git2go.OpenRepository(filepath.Join(server.Root(), repoPath))
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer repo.Free()
+	repoURL := server.HTTPAddress() + "/" + repoPath
 
 	refs := make(map[string]string, len(tags))
 	for _, tt := range tags {
@@ -353,13 +498,18 @@ func TestCheckoutTagSemVer_Checkout(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
+			g.Expect(mt.Enabled()).To(Equal(managed))
 
 			semVer := CheckoutSemVer{
 				SemVer: tt.constraint,
 			}
-			tmpDir := t.TempDir()
 
-			cc, err := semVer.Checkout(context.TODO(), tmpDir, repo.Path(), nil)
+			tmpDir := t.TempDir()
+			authOpts := git.AuthOptions{
+				TransportOptionsURL: getTransportOptionsURL(git.HTTP),
+			}
+
+			cc, err := semVer.Checkout(context.TODO(), tmpDir, repoURL, &authOpts)
 			if tt.expectErr != nil {
 				g.Expect(err).To(Equal(tt.expectErr))
 				g.Expect(cc).To(BeNil())
@@ -376,7 +526,7 @@ func TestCheckoutTagSemVer_Checkout(t *testing.T) {
 
 func initBareRepo(t *testing.T) (*git2go.Repository, error) {
 	tmpDir := t.TempDir()
-	repo, err := git2go.InitRepository(tmpDir, false)
+	repo, err := git2go.InitRepository(tmpDir, true)
 	if err != nil {
 		return nil, err
 	}
@@ -467,6 +617,8 @@ func mockSignature(time time.Time) *git2go.Signature {
 
 func TestInitializeRepoWithRemote(t *testing.T) {
 	g := NewWithT(t)
+
+	g.Expect(mt.Enabled()).To(BeFalse())
 	tmp := t.TempDir()
 	ctx := context.TODO()
 	testRepoURL := "https://example.com/foo/bar"
