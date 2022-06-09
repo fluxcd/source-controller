@@ -30,6 +30,8 @@ import (
 	. "github.com/onsi/gomega"
 
 	"github.com/fluxcd/source-controller/pkg/git"
+
+	mt "github.com/fluxcd/source-controller/pkg/git/libgit2/managed"
 )
 
 func TestCheckoutBranch_unmanaged(t *testing.T) {
@@ -136,6 +138,7 @@ func checkoutBranch(t *testing.T, managed bool) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
+			g.Expect(mt.Enabled()).To(Equal(managed))
 
 			branch := CheckoutBranch{
 				Branch:       tt.branch,
@@ -226,6 +229,7 @@ func checkoutTag(t *testing.T, managed bool) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
+			g.Expect(mt.Enabled()).To(Equal(managed))
 
 			server, err := gittestserver.NewTempGitServer()
 			g.Expect(err).ToNot(HaveOccurred())
@@ -315,6 +319,7 @@ func TestCheckoutCommit_unmanaged(t *testing.T) {
 // via CheckoutCommit.
 func checkoutCommit(t *testing.T, managed bool) {
 	g := NewWithT(t)
+	g.Expect(mt.Enabled()).To(Equal(managed))
 
 	server, err := gittestserver.NewTempGitServer()
 	if err != nil {
@@ -493,6 +498,7 @@ func checkoutSemVer(t *testing.T, managed bool) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
+			g.Expect(mt.Enabled()).To(Equal(managed))
 
 			semVer := CheckoutSemVer{
 				SemVer: tt.constraint,
@@ -611,6 +617,8 @@ func mockSignature(time time.Time) *git2go.Signature {
 
 func TestInitializeRepoWithRemote(t *testing.T) {
 	g := NewWithT(t)
+
+	g.Expect(mt.Enabled()).To(BeFalse())
 	tmp := t.TempDir()
 	ctx := context.TODO()
 	testRepoURL := "https://example.com/foo/bar"
