@@ -75,8 +75,9 @@ func InitManagedTransport(log logr.Logger) error {
 			return
 		}
 
-		err = registerManagedSSH()
-		enabled = true
+		if err = registerManagedSSH(); err == nil {
+			enabled = true
+		}
 	})
 
 	return err
