@@ -40,8 +40,8 @@ func TestCheckoutBranch_unmanaged(t *testing.T) {
 // via CheckoutBranch.
 func checkoutBranch(t *testing.T, managed bool) {
 	// we use a HTTP Git server instead of a bare repo (for all tests in this
-	// package), because our managed transports don't support the file protocol,
-	// so we wouldn't actually be using our custom transports, if we used a bare
+	// package), because our managed transport doesn't support the file protocol,
+	// so we wouldn't actually be using our custom transport, if we used a bare
 	// repo.
 	server, err := gittestserver.NewTempGitServer()
 	if err != nil {
@@ -140,6 +140,7 @@ func checkoutBranch(t *testing.T, managed bool) {
 			branch := CheckoutBranch{
 				Branch:       tt.branch,
 				LastRevision: tt.lastRevision,
+				Managed:      managed,
 			}
 
 			tmpDir := t.TempDir()
@@ -268,7 +269,8 @@ func checkoutTag(t *testing.T, managed bool) {
 			}
 
 			checkoutTag := CheckoutTag{
-				Tag: tt.checkoutTag,
+				Tag:     tt.checkoutTag,
+				Managed: managed,
 			}
 			// If last revision is provided, configure it.
 			if tt.lastRevTag != "" {
@@ -354,7 +356,8 @@ func checkoutCommit(t *testing.T, managed bool) {
 	repoURL := server.HTTPAddress() + "/" + repoPath
 
 	commit := CheckoutCommit{
-		Commit: c.String(),
+		Commit:  c.String(),
+		Managed: managed,
 	}
 
 	cc, err := commit.Checkout(context.TODO(), tmpDir, repoURL, &authOpts)
@@ -365,7 +368,8 @@ func checkoutCommit(t *testing.T, managed bool) {
 	g.Expect(os.ReadFile(filepath.Join(tmpDir, "commit"))).To(BeEquivalentTo("init"))
 
 	commit = CheckoutCommit{
-		Commit: "4dc3185c5fc94eb75048376edeb44571cece25f4",
+		Commit:  "4dc3185c5fc94eb75048376edeb44571cece25f4",
+		Managed: managed,
 	}
 	tmpDir2 := t.TempDir()
 
@@ -495,7 +499,8 @@ func checkoutSemVer(t *testing.T, managed bool) {
 			g := NewWithT(t)
 
 			semVer := CheckoutSemVer{
-				SemVer: tt.constraint,
+				SemVer:  tt.constraint,
+				Managed: managed,
 			}
 
 			tmpDir := t.TempDir()
@@ -706,4 +711,23 @@ func TestCheckoutStrategyForOptions(t *testing.T) {
 			g.Expect(strat).To(Equal(tt.expectedStrat))
 		})
 	}
+}
+
+func Test_registerManagedTransportOptions(t *testing.T) {
+	g := NewWithT(t)
+
+	// authOpts can't be nil
+	err := registerManagedTransportOptions(context.TODO(), "", nil)
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(err.Error()).To(ContainSubstring("can't use managed transport with an empty set of auth options"))
+
+	// TransportOptionsURL can't be blank
+	err = registerManagedTransportOptions(context.TODO(), "", &git.AuthOptions{})
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(err.Error()).To(ContainSubstring("can't use managed transport without a valid transport auth id"))
+
+	err = registerManagedTransportOptions(context.TODO(), "http://git.com/repo", &git.AuthOptions{
+		TransportOptionsURL: "http://obj-id",
+	})
+	g.Expect(err).ToNot(HaveOccurred())
 }

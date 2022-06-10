@@ -25,7 +25,6 @@ import (
 
 	"github.com/fluxcd/pkg/gittestserver"
 	"github.com/fluxcd/source-controller/pkg/git"
-	"github.com/go-logr/logr"
 	. "github.com/onsi/gomega"
 
 	git2go "github.com/libgit2/git2go/v33"
@@ -169,9 +168,6 @@ func TestHTTPManagedTransport_E2E(t *testing.T) {
 	g.Expect(err).ToNot(HaveOccurred())
 	defer server.StopHTTP()
 
-	// Force managed transport to be enabled
-	InitManagedTransport(logr.Discard())
-
 	repoPath := "test.git"
 	err = server.InitRepo("../../testdata/git/repo", git.DefaultBranch, repoPath)
 	g.Expect(err).ToNot(HaveOccurred())
@@ -251,9 +247,6 @@ func TestHTTPManagedTransport_HandleRedirect(t *testing.T) {
 		{name: "http to https", repoURL: "http://github.com/stefanprodan/podinfo"},
 		{name: "handle gitlab redirect", repoURL: "https://gitlab.com/stefanprodan/podinfo"},
 	}
-
-	// Force managed transport to be enabled
-	InitManagedTransport(logr.Discard())
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

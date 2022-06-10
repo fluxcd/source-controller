@@ -29,11 +29,9 @@ import (
 
 	"github.com/elazarl/goproxy"
 	"github.com/fluxcd/pkg/gittestserver"
-	feathelper "github.com/fluxcd/pkg/runtime/features"
 	"github.com/go-logr/logr"
 	. "github.com/onsi/gomega"
 
-	"github.com/fluxcd/source-controller/internal/features"
 	"github.com/fluxcd/source-controller/pkg/git"
 	"github.com/fluxcd/source-controller/pkg/git/gogit"
 	"github.com/fluxcd/source-controller/pkg/git/libgit2"
@@ -46,10 +44,6 @@ import (
 func TestCheckoutStrategyForImplementation_Proxied(t *testing.T) {
 	// for libgit2 we are only testing for managed transport,
 	// as unmanaged is sunsetting.
-	// Unmanaged transport does not support HTTP_PROXY.
-	fg := feathelper.FeatureGates{}
-	fg.SupportedFeatures(features.FeatureGates())
-
 	managed.InitManagedTransport(logr.Discard())
 
 	type cleanupFunc func()
@@ -336,7 +330,8 @@ func TestCheckoutStrategyForImplementation_Proxied(t *testing.T) {
 
 			// Checkout the repo.
 			checkoutStrategy, err := strategy.CheckoutStrategyForImplementation(context.TODO(), tt.gitImpl, git.CheckoutOptions{
-				Branch: tt.branch,
+				Branch:  tt.branch,
+				Managed: true,
 			})
 			g.Expect(err).ToNot(HaveOccurred())
 

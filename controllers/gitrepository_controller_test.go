@@ -499,10 +499,11 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 			}
 
 			r := &GitRepositoryReconciler{
-				Client:        builder.Build(),
-				EventRecorder: record.NewFakeRecorder(32),
-				Storage:       testStorage,
-				features:      features.FeatureGates(),
+				Client:                     builder.Build(),
+				EventRecorder:              record.NewFakeRecorder(32),
+				Storage:                    testStorage,
+				ManagedTransportRegistered: true,
+				features:                   features.FeatureGates(),
 			}
 
 			for _, i := range testGitImplementations {
@@ -697,10 +698,11 @@ func TestGitRepositoryReconciler_reconcileSource_checkoutStrategy(t *testing.T) 
 	}
 
 	r := &GitRepositoryReconciler{
-		Client:        fakeclient.NewClientBuilder().WithScheme(runtime.NewScheme()).Build(),
-		EventRecorder: record.NewFakeRecorder(32),
-		Storage:       testStorage,
-		features:      features.FeatureGates(),
+		Client:                     fakeclient.NewClientBuilder().WithScheme(runtime.NewScheme()).Build(),
+		EventRecorder:              record.NewFakeRecorder(32),
+		Storage:                    testStorage,
+		ManagedTransportRegistered: true,
+		features:                   features.FeatureGates(),
 	}
 
 	for _, tt := range tests {
@@ -922,9 +924,10 @@ func TestGitRepositoryReconciler_reconcileArtifact(t *testing.T) {
 			resetChmod(tt.dir, 0o755, 0o644)
 
 			r := &GitRepositoryReconciler{
-				EventRecorder: record.NewFakeRecorder(32),
-				Storage:       testStorage,
-				features:      features.FeatureGates(),
+				EventRecorder:              record.NewFakeRecorder(32),
+				Storage:                    testStorage,
+				ManagedTransportRegistered: true,
+				features:                   features.FeatureGates(),
 			}
 
 			obj := &sourcev1.GitRepository{
@@ -1065,11 +1068,12 @@ func TestGitRepositoryReconciler_reconcileInclude(t *testing.T) {
 			}
 
 			r := &GitRepositoryReconciler{
-				Client:            builder.Build(),
-				EventRecorder:     record.NewFakeRecorder(32),
-				Storage:           storage,
-				requeueDependency: dependencyInterval,
-				features:          features.FeatureGates(),
+				Client:                     builder.Build(),
+				EventRecorder:              record.NewFakeRecorder(32),
+				Storage:                    storage,
+				ManagedTransportRegistered: true,
+				requeueDependency:          dependencyInterval,
+				features:                   features.FeatureGates(),
 			}
 
 			obj := &sourcev1.GitRepository{
@@ -1237,9 +1241,10 @@ func TestGitRepositoryReconciler_reconcileStorage(t *testing.T) {
 			}()
 
 			r := &GitRepositoryReconciler{
-				EventRecorder: record.NewFakeRecorder(32),
-				Storage:       testStorage,
-				features:      features.FeatureGates(),
+				EventRecorder:              record.NewFakeRecorder(32),
+				Storage:                    testStorage,
+				ManagedTransportRegistered: true,
+				features:                   features.FeatureGates(),
 			}
 
 			obj := &sourcev1.GitRepository{
@@ -1279,9 +1284,10 @@ func TestGitRepositoryReconciler_reconcileDelete(t *testing.T) {
 	g := NewWithT(t)
 
 	r := &GitRepositoryReconciler{
-		EventRecorder: record.NewFakeRecorder(32),
-		Storage:       testStorage,
-		features:      features.FeatureGates(),
+		EventRecorder:              record.NewFakeRecorder(32),
+		Storage:                    testStorage,
+		ManagedTransportRegistered: true,
+		features:                   features.FeatureGates(),
 	}
 
 	obj := &sourcev1.GitRepository{
@@ -1417,9 +1423,10 @@ func TestGitRepositoryReconciler_verifyCommitSignature(t *testing.T) {
 			}
 
 			r := &GitRepositoryReconciler{
-				EventRecorder: record.NewFakeRecorder(32),
-				Client:        builder.Build(),
-				features:      features.FeatureGates(),
+				EventRecorder:              record.NewFakeRecorder(32),
+				Client:                     builder.Build(),
+				ManagedTransportRegistered: true,
+				features:                   features.FeatureGates(),
 			}
 
 			obj := &sourcev1.GitRepository{
@@ -1558,10 +1565,11 @@ func TestGitRepositoryReconciler_ConditionsUpdate(t *testing.T) {
 			builder := fakeclient.NewClientBuilder().WithScheme(testEnv.GetScheme()).WithObjects(obj)
 
 			r := &GitRepositoryReconciler{
-				Client:        builder.Build(),
-				EventRecorder: record.NewFakeRecorder(32),
-				Storage:       testStorage,
-				features:      features.FeatureGates(),
+				Client:                     builder.Build(),
+				EventRecorder:              record.NewFakeRecorder(32),
+				Storage:                    testStorage,
+				ManagedTransportRegistered: true,
+				features:                   features.FeatureGates(),
 			}
 
 			key := client.ObjectKeyFromObject(obj)
@@ -1925,8 +1933,9 @@ func TestGitRepositoryReconciler_notify(t *testing.T) {
 			}
 
 			reconciler := &GitRepositoryReconciler{
-				EventRecorder: recorder,
-				features:      features.FeatureGates(),
+				EventRecorder:              recorder,
+				ManagedTransportRegistered: true,
+				features:                   features.FeatureGates(),
 			}
 			reconciler.notify(ctx, oldObj, newObj, tt.commit, tt.res, tt.resErr)
 

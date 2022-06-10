@@ -15,32 +15,35 @@ limitations under the License.
 */
 
 // This file is named `managed_checkout_test.go` on purpose to make sure that
-// tests needing to use unmanaged transports run before the tests that use managed
-// transports do, since the the former are present in `checkout_test.go`. `checkout_test.go`
+// tests needing to use unmanaged transport run before the tests that use managed
+// transport do, since the the former are present in `checkout_test.go`. `checkout_test.go`
 // comes first in this package (alphabetically speaking), which makes golang run the tests
 // in that file first.
 package libgit2
 
 import (
 	"testing"
+
+	"github.com/fluxcd/source-controller/pkg/git/libgit2/managed"
+	"github.com/go-logr/logr"
 )
 
 func TestCheckoutBranch_CheckoutManaged(t *testing.T) {
-	enableManagedTransport()
+	managed.InitManagedTransport(logr.Discard())
 	checkoutBranch(t, true)
 }
 
 func TestCheckoutTag_CheckoutManaged(t *testing.T) {
-	enableManagedTransport()
+	managed.InitManagedTransport(logr.Discard())
 	checkoutTag(t, true)
 }
 
 func TestCheckoutCommit_CheckoutManaged(t *testing.T) {
-	enableManagedTransport()
+	managed.InitManagedTransport(logr.Discard())
 	checkoutCommit(t, true)
 }
 
 func TestCheckoutTagSemVer_CheckoutManaged(t *testing.T) {
-	enableManagedTransport()
+	managed.InitManagedTransport(logr.Discard())
 	checkoutSemVer(t, true)
 }

@@ -190,21 +190,21 @@ func TestMain(m *testing.M) {
 	var err error
 	testServer, err = testserver.NewTempArtifactServer()
 	if err != nil {
-		panic(fmt.Sprintf("Failed to create a temporary storage server: %v", err))
+		panic(fmt.Sprintf("failed to create a temporary storage server: %v", err))
 	}
 	fmt.Println("Starting the test storage server")
 	testServer.Start()
 
 	testStorage, err = newTestStorage(testServer.HTTPServer)
 	if err != nil {
-		panic(fmt.Sprintf("Failed to create a test storage: %v", err))
+		panic(fmt.Sprintf("failed to create a test storage: %v", err))
 	}
 
 	testMetricsH = controller.MustMakeMetrics(testEnv)
 
 	testRegistryServer, err = setupRegistryServer(ctx)
 	if err != nil {
-		panic(fmt.Sprintf("Failed to create a test registry server: %v", err))
+		panic(fmt.Sprintf("failed to create a test registry server: %v", err))
 	}
 
 	fg := feathelper.FeatureGates{}
@@ -212,13 +212,14 @@ func TestMain(m *testing.M) {
 	managed.InitManagedTransport(logr.Discard())
 
 	if err := (&GitRepositoryReconciler{
-		Client:        testEnv,
-		EventRecorder: record.NewFakeRecorder(32),
-		Metrics:       testMetricsH,
-		Storage:       testStorage,
-		features:      features.FeatureGates(),
+		Client:                     testEnv,
+		EventRecorder:              record.NewFakeRecorder(32),
+		Metrics:                    testMetricsH,
+		Storage:                    testStorage,
+		ManagedTransportRegistered: true,
+		features:                   features.FeatureGates(),
 	}).SetupWithManager(testEnv); err != nil {
-		panic(fmt.Sprintf("Failed to start GitRepositoryReconciler: %v", err))
+		panic(fmt.Sprintf("failed to start GitRepositoryReconciler: %v", err))
 	}
 
 	if err := (&BucketReconciler{
@@ -227,7 +228,7 @@ func TestMain(m *testing.M) {
 		Metrics:       testMetricsH,
 		Storage:       testStorage,
 	}).SetupWithManager(testEnv); err != nil {
-		panic(fmt.Sprintf("Failed to start BucketReconciler: %v", err))
+		panic(fmt.Sprintf("failed to start BucketReconciler: %v", err))
 	}
 
 	if err := (&HelmRepositoryReconciler{
@@ -237,7 +238,7 @@ func TestMain(m *testing.M) {
 		Getters:       testGetters,
 		Storage:       testStorage,
 	}).SetupWithManager(testEnv); err != nil {
-		panic(fmt.Sprintf("Failed to start HelmRepositoryReconciler: %v", err))
+		panic(fmt.Sprintf("failed to start HelmRepositoryReconciler: %v", err))
 	}
 
 	if err = (&HelmRepositoryOCIReconciler{
@@ -247,7 +248,7 @@ func TestMain(m *testing.M) {
 		Getters:                 testGetters,
 		RegistryClientGenerator: registry.ClientGenerator,
 	}).SetupWithManager(testEnv); err != nil {
-		panic(fmt.Sprintf("Failed to start HelmRepositoryOCIReconciler: %v", err))
+		panic(fmt.Sprintf("failed to start HelmRepositoryOCIReconciler: %v", err))
 	}
 
 	testCache = cache.New(5, 1*time.Second)
@@ -262,13 +263,13 @@ func TestMain(m *testing.M) {
 		TTL:           1 * time.Second,
 		CacheRecorder: cacheRecorder,
 	}).SetupWithManager(testEnv); err != nil {
-		panic(fmt.Sprintf("Failed to start HelmRepositoryReconciler: %v", err))
+		panic(fmt.Sprintf("failed to start HelmRepositoryReconciler: %v", err))
 	}
 
 	go func() {
 		fmt.Println("Starting the test environment")
 		if err := testEnv.Start(ctx); err != nil {
-			panic(fmt.Sprintf("Failed to start the test environment manager: %v", err))
+			panic(fmt.Sprintf("failed to start the test environment manager: %v", err))
 		}
 	}()
 	<-testEnv.Manager.Elected()
@@ -277,17 +278,17 @@ func TestMain(m *testing.M) {
 
 	fmt.Println("Stopping the test environment")
 	if err := testEnv.Stop(); err != nil {
-		panic(fmt.Sprintf("Failed to stop the test environment: %v", err))
+		panic(fmt.Sprintf("failed to stop the test environment: %v", err))
 	}
 
 	fmt.Println("Stopping the storage server")
 	testServer.Stop()
 	if err := os.RemoveAll(testServer.Root()); err != nil {
-		panic(fmt.Sprintf("Failed to remove storage server dir: %v", err))
+		panic(fmt.Sprintf("failed to remove storage server dir: %v", err))
 	}
 
 	if err := os.RemoveAll(testRegistryServer.workspaceDir); err != nil {
-		panic(fmt.Sprintf("Failed to remove registry workspace dir: %v", err))
+		panic(fmt.Sprintf("failed to remove registry workspace dir: %v", err))
 	}
 
 	os.Exit(code)
