@@ -20,6 +20,7 @@ import (
 	"context"
 	"sync"
 
+	"github.com/fluxcd/source-controller/internal/features"
 	"github.com/fluxcd/source-controller/pkg/git"
 	git2go "github.com/libgit2/git2go/v33"
 )
@@ -41,9 +42,8 @@ var (
 
 // AddTransportOptions registers a TransportOptions object mapped to the
 // provided transportOptsURL, which must be a valid URL, i.e. prefixed with "http://"
-// or "ssh://", as it is used as a dummy URL for all git operations and the managed
-// transports will only be invoked for the protocols that they have been
-// registered for.
+// or "ssh://", as it is used as a dummy URL for all libgit2 operations which use
+// managed transport.
 func AddTransportOptions(transportOptsURL string, opts TransportOptions) {
 	m.Lock()
 	transportOpts[transportOptsURL] = opts
@@ -75,7 +75,7 @@ func getTransportOptions(transportOptsURL string) (*TransportOptions, bool) {
 // this returns the same input if Managed Transport is disabled or if no TargetURL
 // is set on TransportOptions.
 func EffectiveURL(transporOptsURL string) string {
-	if !Enabled() {
+	if enabled, _ := features.Enabled(features.GitManagedTransport); enabled {
 		return transporOptsURL
 	}
 

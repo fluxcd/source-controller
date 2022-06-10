@@ -52,6 +52,9 @@ type CheckoutOptions struct {
 	// LastRevision holds the last observed revision of the local repository.
 	// It is used to skip clone operations when no changes were detected.
 	LastRevision string
+
+	// Managed defines if the checkout should be done using managed transport.
+	Managed bool
 }
 
 type TransportType string
@@ -73,11 +76,11 @@ type AuthOptions struct {
 	KnownHosts []byte
 	CAFile     []byte
 	// TransportOptionsURL is a unique identifier for this set of authentication
-	// options. It's used by managed libgit2 transports to uniquely identify
+	// options. It's used by managed libgit2 transport to uniquely identify
 	// which credentials to use for a particular Git operation, and avoid misuse
 	// of credentials in a multi-tenant environment.
 	// It must be prefixed with a valid transport protocol ("ssh:// "or "http://") because
-	// of the way managed transports are registered and invoked.
+	// of the way managed transport is registered and invoked.
 	// It's a field of AuthOptions despite not providing any kind of authentication
 	// info, as it's the only way to sneak it into git.Checkout, without polluting
 	// it's args and keeping it generic.

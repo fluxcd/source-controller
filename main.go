@@ -204,12 +204,22 @@ func main() {
 	}
 	storage := mustInitStorage(storagePath, storageAdvAddr, artifactRetentionTTL, artifactRetentionRecords, setupLog)
 
+	var registered bool
+	if enabled, _ := features.Enabled(features.GitManagedTransport); enabled {
+		if err = managed.InitManagedTransport(ctrl.Log.WithName("managed-transport")); err != nil {
+			setupLog.Error(err, "could not initialize managed transport")
+		} else {
+			registered = true
+		}
+	}
+
 	if err = (&controllers.GitRepositoryReconciler{
-		Client:         mgr.GetClient(),
-		EventRecorder:  eventRecorder,
-		Metrics:        metricsH,
-		Storage:        storage,
-		ControllerName: controllerName,
+		Client:                     mgr.GetClient(),
+		EventRecorder:              eventRecorder,
+		Metrics:                    metricsH,
+		Storage:                    storage,
+		ControllerName:             controllerName,
+		ManagedTransportRegistered: registered,
 	}).SetupWithManagerAndOptions(mgr, controllers.GitRepositoryReconcilerOptions{
 		MaxConcurrentReconciles:   concurrent,
 		DependencyRequeueInterval: requeueDependency,
@@ -309,17 +319,6 @@ func main() {
 
 		startFileServer(storage.BasePath, storageAddr, setupLog)
 	}()
-
-	if enabled, _ := features.Enabled(features.GitManagedTransport); enabled {
-		managed.InitManagedTransport(ctrl.Log.WithName("managed-transport"))
-	} else {
-		if optimize, _ := feathelper.Enabled(features.OptimizedGitClones); optimize {
-			features.Disable(features.OptimizedGitClones)
-			setupLog.Info(
-				"disabling optimized git clones; git clones can only be optimized when using managed transport",
-			)
-		}
-	}
 
 	setupLog.Info("starting manager")
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {

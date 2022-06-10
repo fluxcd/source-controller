@@ -11,7 +11,7 @@ import (
 
 // knownHostCallback returns a CertificateCheckCallback that verifies
 // the key of Git server against the given host and known_hosts for
-// git.SSH Transports.
+// git.SSH transport.
 func KnownHostsCallback(host string, knownHosts []byte) git2go.CertificateCheckCallback {
 	return func(cert *git2go.Certificate, valid bool, hostname string) error {
 		kh, err := pkgkh.ParseKnownHosts(string(knownHosts))

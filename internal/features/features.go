@@ -65,11 +65,3 @@ func FeatureGates() map[string]bool {
 func Enabled(feature string) (bool, error) {
 	return feathelper.Enabled(feature)
 }
-
-// Disable disables the specified feature. If the feature is not
-// present, it's a no-op.
-func Disable(feature string) {
-	if _, ok := features[feature]; ok {
-		features[feature] = false
-	}
-}
