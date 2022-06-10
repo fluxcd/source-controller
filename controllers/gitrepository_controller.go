@@ -478,7 +478,10 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context,
 		optimizedClone = true
 	}
 
-	c, err := r.gitCheckout(ctx, obj, authOpts, dir, optimizedClone)
+	gitCtx, cancel := context.WithTimeout(ctx, obj.Spec.Timeout.Duration)
+	defer cancel()
+
+	c, err := r.gitCheckout(gitCtx, obj, authOpts, dir, optimizedClone)
 	if err != nil {
 		return sreconcile.ResultEmpty, err
 	}
@@ -512,7 +515,7 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context,
 
 		// If we can't skip the reconciliation, checkout again without any
 		// optimization.
-		c, err := r.gitCheckout(ctx, obj, authOpts, dir, false)
+		c, err := r.gitCheckout(gitCtx, obj, authOpts, dir, false)
 		if err != nil {
 			return sreconcile.ResultEmpty, err
 		}
@@ -723,10 +726,7 @@ func (r *GitRepositoryReconciler) gitCheckout(ctx context.Context,
 		}
 	}
 
-	gitCtx, cancel := context.WithTimeout(ctx, obj.Spec.Timeout.Duration)
-	defer cancel()
-
-	checkoutStrategy, err := strategy.CheckoutStrategyForImplementation(gitCtx,
+	checkoutStrategy, err := strategy.CheckoutStrategyForImplementation(ctx,
 		git.Implementation(obj.Spec.GitImplementation), checkoutOpts)
 	if err != nil {
 		// Do not return err as recovery without changes is impossible.
@@ -758,7 +758,7 @@ func (r *GitRepositoryReconciler) gitCheckout(ctx context.Context,
 		}
 	}
 
-	commit, err := checkoutStrategy.Checkout(gitCtx, dir, obj.Spec.URL, authOpts)
+	commit, err := checkoutStrategy.Checkout(ctx, dir, obj.Spec.URL, authOpts)
 	if err != nil {
 		e := serror.NewGeneric(
 			fmt.Errorf("failed to checkout and determine revision: %w", err),
