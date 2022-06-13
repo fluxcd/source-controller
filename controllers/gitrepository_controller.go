@@ -29,6 +29,7 @@ import (
 
 	securejoin "github.com/cyphar/filepath-securejoin"
 	"github.com/fluxcd/pkg/runtime/logger"
+	"github.com/google/uuid"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -159,7 +160,13 @@ func (r *GitRepositoryReconciler) SetupWithManagerAndOptions(mgr ctrl.Manager, o
 
 func (r *GitRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, retErr error) {
 	start := time.Now()
-	log := ctrl.LoggerFrom(ctx)
+	log := ctrl.LoggerFrom(ctx).
+		// Sets a correlation ID for all transport level logs.
+		WithValues("cid", uuid.New())
+
+	// logger will be associated to the new context that is
+	// returned from ctrl.LoggerInto.
+	ctx = ctrl.LoggerInto(ctx, log)
 
 	// Fetch the GitRepository
 	obj := &sourcev1.GitRepository{}

@@ -23,7 +23,6 @@ import (
 
 	"github.com/fluxcd/pkg/ssh"
 	"github.com/fluxcd/source-controller/pkg/git"
-	"github.com/go-logr/logr"
 	. "github.com/onsi/gomega"
 
 	"github.com/fluxcd/pkg/gittestserver"
@@ -89,7 +88,7 @@ func TestSSHManagedTransport_E2E(t *testing.T) {
 		server.StartSSH()
 	}()
 	defer server.StopSSH()
-	InitManagedTransport(logr.Discard())
+	InitManagedTransport()
 
 	kp, err := ssh.NewEd25519Generator().Generate()
 	g.Expect(err).ToNot(HaveOccurred())

@@ -25,7 +25,6 @@ import (
 
 	"github.com/fluxcd/pkg/gittestserver"
 	"github.com/fluxcd/source-controller/pkg/git"
-	"github.com/go-logr/logr"
 	. "github.com/onsi/gomega"
 
 	git2go "github.com/libgit2/git2go/v33"
@@ -170,7 +169,7 @@ func TestHTTPManagedTransport_E2E(t *testing.T) {
 	defer server.StopHTTP()
 
 	// Force managed transport to be enabled
-	InitManagedTransport(logr.Discard())
+	InitManagedTransport()
 
 	repoPath := "test.git"
 	err = server.InitRepo("../../testdata/git/repo", git.DefaultBranch, repoPath)
@@ -253,7 +252,7 @@ func TestHTTPManagedTransport_HandleRedirect(t *testing.T) {
 	}
 
 	// Force managed transport to be enabled
-	InitManagedTransport(logr.Discard())
+	InitManagedTransport()
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

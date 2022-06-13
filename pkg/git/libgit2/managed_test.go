@@ -30,7 +30,6 @@ import (
 	"github.com/fluxcd/gitkit"
 	"github.com/fluxcd/pkg/gittestserver"
 	"github.com/fluxcd/pkg/ssh"
-	"github.com/go-logr/logr"
 
 	feathelper "github.com/fluxcd/pkg/runtime/features"
 	. "github.com/onsi/gomega"
@@ -471,5 +470,5 @@ func getTransportOptionsURL(transport git.TransportType) string {
 func enableManagedTransport() {
 	fg := feathelper.FeatureGates{}
 	fg.SupportedFeatures(features.FeatureGates())
-	managed.InitManagedTransport(logr.Discard())
+	managed.InitManagedTransport()
 }
