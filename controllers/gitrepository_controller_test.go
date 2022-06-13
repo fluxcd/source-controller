@@ -431,18 +431,18 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		obj := &sourcev1.GitRepository{
-			ObjectMeta: metav1.ObjectMeta{
-				GenerateName: "auth-strategy-",
-			},
-			Spec: sourcev1.GitRepositorySpec{
-				Interval: metav1.Duration{Duration: interval},
-				Timeout:  &metav1.Duration{Duration: timeout},
-			},
-		}
-
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
+
+			obj := &sourcev1.GitRepository{
+				ObjectMeta: metav1.ObjectMeta{
+					GenerateName: "auth-strategy-",
+				},
+				Spec: sourcev1.GitRepositorySpec{
+					Interval: metav1.Duration{Duration: interval},
+					Timeout:  &metav1.Duration{Duration: timeout},
+				},
+			}
 
 			server, err := gittestserver.NewTempGitServer()
 			g.Expect(err).NotTo(HaveOccurred())
