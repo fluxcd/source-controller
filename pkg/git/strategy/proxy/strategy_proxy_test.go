@@ -30,7 +30,6 @@ import (
 	"github.com/elazarl/goproxy"
 	"github.com/fluxcd/pkg/gittestserver"
 	feathelper "github.com/fluxcd/pkg/runtime/features"
-	"github.com/go-logr/logr"
 	. "github.com/onsi/gomega"
 
 	"github.com/fluxcd/source-controller/internal/features"
@@ -50,7 +49,7 @@ func TestCheckoutStrategyForImplementation_Proxied(t *testing.T) {
 	fg := feathelper.FeatureGates{}
 	fg.SupportedFeatures(features.FeatureGates())
 
-	managed.InitManagedTransport(logr.Discard())
+	managed.InitManagedTransport()
 
 	type cleanupFunc func()
 

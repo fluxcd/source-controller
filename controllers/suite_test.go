@@ -40,7 +40,6 @@ import (
 	feathelper "github.com/fluxcd/pkg/runtime/features"
 	"github.com/fluxcd/pkg/runtime/testenv"
 	"github.com/fluxcd/pkg/testserver"
-	"github.com/go-logr/logr"
 	"github.com/phayes/freeport"
 
 	"github.com/distribution/distribution/v3/configuration"
@@ -209,7 +208,7 @@ func TestMain(m *testing.M) {
 
 	fg := feathelper.FeatureGates{}
 	fg.SupportedFeatures(features.FeatureGates())
-	managed.InitManagedTransport(logr.Discard())
+	managed.InitManagedTransport()
 
 	if err := (&GitRepositoryReconciler{
 		Client:        testEnv,

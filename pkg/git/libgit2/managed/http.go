@@ -45,6 +45,7 @@ package managed
 
 import (
 	"bytes"
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
@@ -55,9 +56,12 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/fluxcd/pkg/runtime/logger"
 	pool "github.com/fluxcd/source-controller/internal/transport"
 	"github.com/fluxcd/source-controller/pkg/git"
+	"github.com/go-logr/logr"
 	git2go "github.com/libgit2/git2go/v33"
+	ctrl "sigs.k8s.io/controller-runtime"
 )
 
 var actionSuffixes = []string{
@@ -81,10 +85,11 @@ func registerManagedHTTP() error {
 }
 
 func httpSmartSubtransportFactory(remote *git2go.Remote, transport *git2go.Transport) (git2go.SmartSubtransport, error) {
-	traceLog.Info("[http]: httpSmartSubtransportFactory")
 	sst := &httpSmartSubtransport{
 		transport:     transport,
 		httpTransport: pool.NewOrIdle(nil),
+		ctx:           context.Background(),
+		logger:        logr.Discard(),
 	}
 
 	return sst, nil
@@ -93,6 +98,21 @@ func httpSmartSubtransportFactory(remote *git2go.Remote, transport *git2go.Trans
 type httpSmartSubtransport struct {
 	transport     *git2go.Transport
 	httpTransport *http.Transport
+
+	// once is used to ensure that logger and ctx is set only once,
+	// on the initial (or only) Action call. Without this a mutex must
+	// be applied to ensure that ctx won't be changed, as this would be
+	// prone to race conditions in the stdout processing goroutine.
+	once sync.Once
+	// ctx defines the context to be used across long-running or
+	// cancellable operations.
+	// Defaults to context.Background().
+	ctx context.Context
+	// logger keeps a Logger instance for logging. This was preferred
+	// due to the need to have a correlation ID and URL set and
+	// reused across all log calls.
+	// If context is not set, this defaults to logr.Discard().
+	logger logr.Logger
 }
 
 func (t *httpSmartSubtransport) Action(transportOptionsURL string, action git2go.SmartServiceAction) (git2go.SmartSubtransportStream, error) {
@@ -132,6 +152,15 @@ func (t *httpSmartSubtransport) Action(transportOptionsURL string, action git2go
 		t.httpTransport.Proxy = nil
 	}
 	t.httpTransport.DisableCompression = false
+
+	t.once.Do(func() {
+		if opts.Context != nil {
+			t.ctx = opts.Context
+			t.logger = ctrl.LoggerFrom(t.ctx,
+				"transportType", "http",
+				"url", opts.TargetURL)
+		}
+	})
 
 	client, req, err := createClientRequest(targetURL, action, t.httpTransport, opts.AuthOpts)
 	if err != nil {
@@ -176,8 +205,10 @@ func (t *httpSmartSubtransport) Action(transportOptionsURL string, action git2go
 					opts.TargetURL = trimActionSuffix(newURL.String())
 					AddTransportOptions(transportOptionsURL, *opts)
 
-					debugLog.Info("[http]: server responded with redirect",
-						"newURL", opts.TargetURL, "StatusCode", req.Response.StatusCode)
+					// show as info, as this should be visible regardless of the
+					// chosen log-level.
+					t.logger.Info("server responded with redirect",
+						"newUrl", opts.TargetURL, "StatusCode", req.Response.StatusCode)
 				}
 			}
 		}
@@ -270,15 +301,16 @@ func createClientRequest(targetURL string, action git2go.SmartServiceAction,
 }
 
 func (t *httpSmartSubtransport) Close() error {
-	traceLog.Info("[http]: httpSmartSubtransport.Close()")
+	t.logger.V(logger.TraceLevel).Info("httpSmartSubtransport.Close()")
 	return nil
 }
 
 func (t *httpSmartSubtransport) Free() {
-	traceLog.Info("[http]: httpSmartSubtransport.Free()")
+	t.logger.V(logger.TraceLevel).Info("httpSmartSubtransport.Free()")
 
 	if t.httpTransport != nil {
-		traceLog.Info("[http]: release http transport back to pool")
+		t.logger.V(logger.TraceLevel).Info("release http transport back to pool")
+
 		pool.Release(t.httpTransport)
 		t.httpTransport = nil
 	}
@@ -345,18 +377,18 @@ func (self *httpSmartSubtransportStream) Write(buf []byte) (int, error) {
 
 func (self *httpSmartSubtransportStream) Free() {
 	if self.resp != nil {
-		traceLog.Info("[http]: httpSmartSubtransportStream.Free()")
+		self.owner.logger.V(logger.TraceLevel).Info("httpSmartSubtransportStream.Free()")
 
 		if self.resp.Body != nil {
 			// ensure body is fully processed and closed
 			// for increased likelihood of transport reuse in HTTP/1.x.
 			// it should not be a problem to do this more than once.
 			if _, err := io.Copy(io.Discard, self.resp.Body); err != nil {
-				traceLog.Error(err, "[http]: cannot discard response body")
+				self.owner.logger.V(logger.TraceLevel).Error(err, "cannot discard response body")
 			}
 
 			if err := self.resp.Body.Close(); err != nil {
-				traceLog.Error(err, "[http]: cannot close response body")
+				self.owner.logger.V(logger.TraceLevel).Error(err, "cannot close response body")
 			}
 		}
 	}
@@ -399,7 +431,7 @@ func (self *httpSmartSubtransportStream) sendRequest() error {
 			req.ContentLength = -1
 		}
 
-		traceLog.Info("[http]: new request", "method", req.Method, "URL", req.URL)
+		self.owner.logger.V(logger.TraceLevel).Info("new request", "method", req.Method, "postUrl", req.URL)
 		resp, err = self.client.Do(req)
 		if err != nil {
 			return err

@@ -311,7 +311,7 @@ func main() {
 	}()
 
 	if enabled, _ := features.Enabled(features.GitManagedTransport); enabled {
-		managed.InitManagedTransport(ctrl.Log.WithName("managed-transport"))
+		managed.InitManagedTransport()
 	} else {
 		if optimize, _ := feathelper.Enabled(features.OptimizedGitClones); optimize {
 			features.Disable(features.OptimizedGitClones)

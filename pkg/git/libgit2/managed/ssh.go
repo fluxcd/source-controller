@@ -58,8 +58,11 @@ import (
 
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/net/proxy"
+	ctrl "sigs.k8s.io/controller-runtime"
 
+	"github.com/fluxcd/pkg/runtime/logger"
 	"github.com/fluxcd/source-controller/pkg/git"
+	"github.com/go-logr/logr"
 	git2go "github.com/libgit2/git2go/v33"
 )
 
@@ -79,17 +82,32 @@ func registerManagedSSH() error {
 func sshSmartSubtransportFactory(remote *git2go.Remote, transport *git2go.Transport) (git2go.SmartSubtransport, error) {
 	return &sshSmartSubtransport{
 		transport: transport,
+		ctx:       context.Background(),
+		logger:    logr.Discard(),
 	}, nil
 }
 
 type sshSmartSubtransport struct {
 	transport *git2go.Transport
 
+	// once is used to ensure that logger and ctx is set only once,
+	// on the initial (or only) Action call. Without this a mutex must
+	// be applied to ensure that ctx won't be changed, as this would be
+	// prone to race conditions in the stdout processing goroutine.
+	once sync.Once
+	// ctx defines the context to be used across long-running or
+	// cancellable operations.
+	// Defaults to context.Background().
+	ctx context.Context
+	// logger keeps a Logger instance for logging. This was preferred
+	// due to the need to have a correlation ID and Address set and
+	// reused across all log calls.
+	// If context is not set, this defaults to logr.Discard().
+	logger logr.Logger
+
 	lastAction git2go.SmartServiceAction
 	stdin      io.WriteCloser
 	stdout     io.Reader
-	addr       string
-	ctx        context.Context
 
 	con connection
 }
@@ -110,8 +128,6 @@ func (t *sshSmartSubtransport) Action(transportOptionsURL string, action git2go.
 	if !found {
 		return nil, fmt.Errorf("could not find transport options for object: %s", transportOptionsURL)
 	}
-
-	t.ctx = opts.Context
 
 	u, err := url.Parse(opts.TargetURL)
 	if err != nil {
@@ -158,7 +174,16 @@ func (t *sshSmartSubtransport) Action(transportOptionsURL string, action git2go.
 	if u.Port() != "" {
 		port = u.Port()
 	}
-	t.addr = net.JoinHostPort(u.Hostname(), port)
+	addr := net.JoinHostPort(u.Hostname(), port)
+
+	t.once.Do(func() {
+		if opts.Context != nil {
+			t.ctx = opts.Context
+			t.logger = ctrl.LoggerFrom(t.ctx,
+				"transportType", "ssh",
+				"addr", addr)
+		}
+	})
 
 	sshConfig, err := createClientConfig(opts.AuthOpts)
 	if err != nil {
@@ -191,12 +216,12 @@ func (t *sshSmartSubtransport) Action(transportOptionsURL string, action git2go.
 	}
 	t.con.m.RUnlock()
 
-	err = t.createConn(t.addr, sshConfig)
+	err = t.createConn(addr, sshConfig)
 	if err != nil {
 		return nil, err
 	}
 
-	traceLog.Info("[ssh]: creating new ssh session")
+	t.logger.V(logger.TraceLevel).Info("creating new ssh session")
 	if t.con.session, err = t.con.client.NewSession(); err != nil {
 		return nil, err
 	}
@@ -222,8 +247,8 @@ func (t *sshSmartSubtransport) Action(transportOptionsURL string, action git2go.
 
 			// In case this goroutine panics, handle recovery.
 			if r := recover(); r != nil {
-				traceLog.Error(errors.New(r.(string)),
-					"[ssh]: recovered from libgit2 ssh smart subtransport panic", "address", t.addr)
+				t.logger.V(logger.TraceLevel).Error(errors.New(r.(string)),
+					"recovered from libgit2 ssh smart subtransport panic")
 			}
 		}()
 
@@ -259,7 +284,7 @@ func (t *sshSmartSubtransport) Action(transportOptionsURL string, action git2go.
 		}
 	}()
 
-	traceLog.Info("[ssh]: run on remote", "cmd", cmd)
+	t.logger.V(logger.TraceLevel).Info("run on remote", "cmd", cmd)
 	if err := t.con.session.Start(cmd); err != nil {
 		return nil, err
 	}
@@ -276,6 +301,7 @@ func (t *sshSmartSubtransport) createConn(addr string, sshConfig *ssh.ClientConf
 	ctx, cancel := context.WithTimeout(context.TODO(), sshConnectionTimeOut)
 	defer cancel()
 
+	t.logger.V(logger.TraceLevel).Info("dial connection")
 	conn, err := proxy.Dial(ctx, "tcp", addr)
 	if err != nil {
 		return err
@@ -303,9 +329,10 @@ func (t *sshSmartSubtransport) createConn(addr string, sshConfig *ssh.ClientConf
 // may impair the transport to have successful actions on a new
 // SmartSubTransport (i.e. unreleased resources, staled connections).
 func (t *sshSmartSubtransport) Close() error {
-	traceLog.Info("[ssh]: sshSmartSubtransport.Close()", "server", t.addr)
+	t.logger.V(logger.TraceLevel).Info("sshSmartSubtransport.Close()")
 	t.con.m.Lock()
 	defer t.con.m.Unlock()
+
 	t.con.currentStream = nil
 	if t.con.client != nil && t.stdin != nil {
 		_ = t.stdin.Close()
@@ -313,13 +340,14 @@ func (t *sshSmartSubtransport) Close() error {
 	t.stdin = nil
 
 	if t.con.session != nil {
-		traceLog.Info("[ssh]: session.Close()", "server", t.addr)
+		t.logger.V(logger.TraceLevel).Info("session.Close()")
 		_ = t.con.session.Close()
 	}
 	t.con.session = nil
 
 	if t.con.client != nil {
 		_ = t.con.client.Close()
+		t.logger.V(logger.TraceLevel).Info("close client")
 	}
 
 	t.con.connected = false
@@ -343,7 +371,6 @@ func (stream *sshSmartSubtransportStream) Write(buf []byte) (int, error) {
 }
 
 func (stream *sshSmartSubtransportStream) Free() {
-	traceLog.Info("[ssh]: sshSmartSubtransportStream.Free()")
 }
 
 func createClientConfig(authOpts *git.AuthOptions) (*ssh.ClientConfig, error) {
