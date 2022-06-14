@@ -73,6 +73,14 @@ jobs:
         env:
           TEST_AZURE_ACCOUNT_NAME: ${{ secrets.TEST_AZURE_ACCOUNT_NAME }}
           TEST_AZURE_ACCOUNT_KEY: ${{ secrets.TEST_AZURE_ACCOUNT_KEY }}
+          
+          # Temporarily disabling -race for arm64 as our GitHub action
+          # runners don't seem to like it. The race detection was tested
+          # on both Apple M1 and Linux arm64 with successful results.
+          #
+          # We should reenable go test -race for arm64 runners once the
+          # current issue is resolved.
+          GO_TEST_ARGS: ''
         run: make test
       - name: Prepare
         id: prep
