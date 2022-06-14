@@ -34,23 +34,18 @@ func Test_TransportReuse(t *testing.T) {
 		t.Errorf("error releasing transport t2: %v", err)
 	}
 
-	t3 := NewOrIdle(nil)
-	if t2 != t3 {
-		t.Errorf("transported not reused")
-	}
-
-	t4 := NewOrIdle(&tls.Config{
+	t3 := NewOrIdle(&tls.Config{
 		ServerName: "testing",
 	})
-	if t4.TLSClientConfig == nil || t4.TLSClientConfig.ServerName != "testing" {
+	if t3.TLSClientConfig == nil || t3.TLSClientConfig.ServerName != "testing" {
 		t.Errorf("TLSClientConfig not properly configured")
 	}
 
-	err = Release(t4)
+	err = Release(t3)
 	if err != nil {
-		t.Errorf("error releasing transport t4: %v", err)
+		t.Errorf("error releasing transport t3: %v", err)
 	}
-	if t4.TLSClientConfig != nil {
+	if t3.TLSClientConfig != nil {
 		t.Errorf("TLSClientConfig not cleared after release")
 	}
 
