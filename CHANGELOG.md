@@ -2,6 +2,28 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.25.6
+
+**Release date:** 2022-06-14
+
+This prerelease fixes an issue with leaked SSH connections on
+managed transport and adds some general build and libgit2
+improvements.
+
+Fixes:
+- libgit2: dispose connections in SubTransport.Close
+  [#775](https://github.com/fluxcd/source-controller/pull/775)
+
+Improvements:
+- build: enable -race for go test
+  [#615](https://github.com/fluxcd/source-controller/pull/615)
+- libgit2: refactor tests to use managed and unmanaged transport cleanly
+  [#777](https://github.com/fluxcd/source-controller/pull/777)
+- libgit2: add contextual logging to subtransports
+  [#778](https://github.com/fluxcd/source-controller/pull/778)
+- libgit2: fix managed transport enabled flag update
+  [#781](https://github.com/fluxcd/source-controller/pull/781)
+
 ## 0.25.5
 
 **Release date:** 2022-06-08
