@@ -1,6 +1,7 @@
 package managed
 
 import (
+	"encoding/base64"
 	"fmt"
 	"net"
 
@@ -14,11 +15,6 @@ import (
 // git.SSH Transports.
 func KnownHostsCallback(host string, knownHosts []byte) git2go.CertificateCheckCallback {
 	return func(cert *git2go.Certificate, valid bool, hostname string) error {
-		kh, err := pkgkh.ParseKnownHosts(string(knownHosts))
-		if err != nil {
-			return fmt.Errorf("failed to parse known_hosts: %w", err)
-		}
-
 		// First, attempt to split the configured host and port to validate
 		// the port-less hostname given to the callback.
 		hostWithoutPort, _, err := net.SplitHostPort(host)
@@ -47,18 +43,36 @@ func KnownHostsCallback(host string, knownHosts []byte) git2go.CertificateCheckC
 			return fmt.Errorf("invalid host key kind, expected to be of kind SHA256")
 		}
 
-		// We are now certain that the configured host and the hostname
-		// given to the callback match. Use the configured host (that
-		// includes the port), and normalize it, so we can check if there
-		// is an entry for the hostname _and_ port.
-		h := knownhosts.Normalize(host)
-		for _, k := range kh {
-			if k.Matches(h, fingerprint) {
-				return nil
-			}
-		}
-		return fmt.Errorf("hostkey could not be verified")
+		return CheckKnownHost(host, knownHosts, fingerprint)
 	}
+}
+
+// CheckKnownHost checks whether the host being connected to is
+// part of the known_hosts, and if so, it ensures the host
+// fingerprint matches the fingerprint of the known host with
+// the same name.
+func CheckKnownHost(host string, knownHosts []byte, fingerprint []byte) error {
+	kh, err := pkgkh.ParseKnownHosts(string(knownHosts))
+	if err != nil {
+		return fmt.Errorf("failed to parse known_hosts: %w", err)
+	}
+
+	if len(kh) == 0 {
+		return fmt.Errorf("hostkey verification aborted: no known_hosts found")
+	}
+
+	// We are now certain that the configured host and the hostname
+	// given to the callback match. Use the configured host (that
+	// includes the port), and normalize it, so we can check if there
+	// is an entry for the hostname _and_ port.
+	h := knownhosts.Normalize(host)
+	for _, k := range kh {
+		if k.Matches(h, fingerprint) {
+			return nil
+		}
+	}
+	return fmt.Errorf("no entries in known_hosts match host '%s' with fingerprint '%s'",
+		h, base64.RawStdEncoding.EncodeToString(fingerprint))
 }
 
 // RemoteCallbacks constructs git2go.RemoteCallbacks with dummy callbacks.

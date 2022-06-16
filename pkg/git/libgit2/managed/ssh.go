@@ -191,21 +191,8 @@ func (t *sshSmartSubtransport) Action(transportOptionsURL string, action git2go.
 	}
 
 	sshConfig.HostKeyCallback = func(hostname string, remote net.Addr, key ssh.PublicKey) error {
-		marshaledKey := key.Marshal()
-		cert := &git2go.Certificate{
-			Kind: git2go.CertificateHostkey,
-			Hostkey: git2go.HostkeyCertificate{
-				Kind:         git2go.HostkeySHA256 | git2go.HostkeyRaw,
-				HashSHA256:   sha256.Sum256(marshaledKey),
-				Hostkey:      marshaledKey,
-				SSHPublicKey: key,
-			},
-		}
-
-		if len(opts.AuthOpts.KnownHosts) > 0 {
-			return KnownHostsCallback(hostname, opts.AuthOpts.KnownHosts)(cert, true, hostname)
-		}
-		return nil
+		keyHash := sha256.Sum256(key.Marshal())
+		return CheckKnownHost(hostname, opts.AuthOpts.KnownHosts, keyHash[:])
 	}
 
 	if t.connected {

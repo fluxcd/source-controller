@@ -17,9 +17,11 @@ limitations under the License.
 package managed
 
 import (
+	"net/url"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/fluxcd/pkg/ssh"
 	"github.com/fluxcd/source-controller/pkg/git"
@@ -97,13 +99,20 @@ func TestSSHManagedTransport_E2E(t *testing.T) {
 	err = server.InitRepo("../../testdata/git/repo", git.DefaultBranch, repoPath)
 	g.Expect(err).ToNot(HaveOccurred())
 
+	u, err := url.Parse(server.SSHAddress())
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(u.Host).ToNot(BeEmpty())
+	knownhosts, err := ssh.ScanHostKey(u.Host, 5*time.Second, git.HostKeyAlgos, false)
+	g.Expect(err).NotTo(HaveOccurred())
+
 	transportOptsURL := "ssh://git@fake-url"
 	sshAddress := server.SSHAddress() + "/" + repoPath
 	AddTransportOptions(transportOptsURL, TransportOptions{
 		TargetURL: sshAddress,
 		AuthOpts: &git.AuthOptions{
-			Username: "user",
-			Identity: kp.PrivateKey,
+			Username:   "user",
+			Identity:   kp.PrivateKey,
+			KnownHosts: knownhosts,
 		},
 	})
 
