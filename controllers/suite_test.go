@@ -235,6 +235,15 @@ func TestMain(m *testing.M) {
 	testCache = cache.New(5, 1*time.Second)
 	cacheRecorder := cache.MustMakeMetrics()
 
+	if err := (&OCIRepositoryReconciler{
+		Client:        testEnv,
+		EventRecorder: record.NewFakeRecorder(32),
+		Metrics:       testMetricsH,
+		Storage:       testStorage,
+	}).SetupWithManager(testEnv); err != nil {
+		panic(fmt.Sprintf("Failed to start OCIRepositoryReconciler: %v", err))
+	}
+
 	if err := (&HelmRepositoryReconciler{
 		Client:        testEnv,
 		EventRecorder: record.NewFakeRecorder(32),

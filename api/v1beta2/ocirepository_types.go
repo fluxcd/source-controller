@@ -158,13 +158,13 @@ func (in *OCIRepository) SetConditions(conditions []metav1.Condition) {
 	in.Status.Conditions = conditions
 }
 
-// GetRequeueAfter returns the duration after which the GitRepository must be
+// GetRequeueAfter returns the duration after which the OCIRepository must be
 // reconciled again.
 func (in OCIRepository) GetRequeueAfter() time.Duration {
 	return in.Spec.Interval.Duration
 }
 
-// GetArtifact returns the latest Artifact from the GitRepository if present in
+// GetArtifact returns the latest Artifact from the OCIRepository if present in
 // the status sub-resource.
 func (in *OCIRepository) GetArtifact() *Artifact {
 	return in.Status.Artifact
