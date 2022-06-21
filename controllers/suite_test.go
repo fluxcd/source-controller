@@ -229,6 +229,15 @@ func TestMain(m *testing.M) {
 		panic(fmt.Sprintf("Failed to start BucketReconciler: %v", err))
 	}
 
+	if err := (&OCIRepositoryReconciler{
+		Client:        testEnv,
+		EventRecorder: record.NewFakeRecorder(32),
+		Metrics:       testMetricsH,
+		Storage:       testStorage,
+	}).SetupWithManager(testEnv); err != nil {
+		panic(fmt.Sprintf("Failed to start OCIRepositoryReconciler: %v", err))
+	}
+
 	if err := (&HelmRepositoryReconciler{
 		Client:        testEnv,
 		EventRecorder: record.NewFakeRecorder(32),

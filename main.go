@@ -299,6 +299,19 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "Bucket")
 		os.Exit(1)
 	}
+	if err = (&controllers.OCIRepositoryReconciler{
+		Client:         mgr.GetClient(),
+		Storage:        storage,
+		EventRecorder:  eventRecorder,
+		ControllerName: controllerName,
+		Metrics:        metricsH,
+	}).SetupWithManagerAndOptions(mgr, controllers.OCIRepositoryReconcilerOptions{
+		MaxConcurrentReconciles: concurrent,
+		RateLimiter:             helper.GetRateLimiter(rateLimiterOptions),
+	}); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "OCIRepository")
+		os.Exit(1)
+	}
 	// +kubebuilder:scaffold:builder
 
 	go func() {
