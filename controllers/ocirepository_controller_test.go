@@ -17,18 +17,24 @@ import (
 )
 
 func TestOCIRepository_Reconcile(t *testing.T) {
-
 	tests := []struct {
 		name   string
 		url    string
 		tag    string
+		semver string
 		digest string
 	}{
 		{
-			name:   "public latest",
+			name:   "public tag",
 			url:    "ghcr.io/stefanprodan/manifests/podinfo",
 			tag:    "6.1.6",
 			digest: "3b6cdcc7adcc9a84d3214ee1c029543789d90b5ae69debe9efa3f66e982875de",
+		},
+		{
+			name:   "public semver",
+			url:    "ghcr.io/stefanprodan/manifests/podinfo",
+			semver: ">= 6.1 <= 6.1.5",
+			digest: "1d1bf6980fc86f69481bd8c875c531aa23d761ac890ce2594d4df2b39ecd8713",
 		},
 	}
 
@@ -46,12 +52,17 @@ func TestOCIRepository_Reconcile(t *testing.T) {
 					Namespace:    ns.Name,
 				},
 				Spec: sourcev1.OCIRepositorySpec{
-					URL:      tt.url,
-					Interval: metav1.Duration{Duration: 60 * time.Minute},
-					Reference: &sourcev1.OCIRepositoryRef{
-						Tag: tt.tag,
-					},
+					URL:       tt.url,
+					Interval:  metav1.Duration{Duration: 60 * time.Minute},
+					Reference: &sourcev1.OCIRepositoryRef{},
 				},
+			}
+
+			if tt.tag != "" {
+				obj.Spec.Reference.Tag = tt.tag
+			}
+			if tt.semver != "" {
+				obj.Spec.Reference.SemVer = tt.semver
 			}
 
 			g.Expect(testEnv.Create(ctx, obj)).To(Succeed())
@@ -79,7 +90,9 @@ func TestOCIRepository_Reconcile(t *testing.T) {
 					obj.Generation == obj.Status.ObservedGeneration
 			}, timeout).Should(BeTrue())
 
-			// Check if the revision is set to the digest format
+			t.Log(obj.Spec.Reference)
+
+			// Check if the revision matches the expected digest
 			g.Expect(obj.Status.Artifact.Revision).To(Equal(tt.digest))
 
 			// Check if the object status is valid
