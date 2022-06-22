@@ -2,6 +2,22 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.25.7
+
+**Release date:** 2022-06-22
+
+This prerelease comes with an improvement in the SSH managed transport error
+messages related to known hosts check and removes a deadlock in the SSH smart
+subtransport.
+
+Fixes:
+- libgit2: remove deadlock
+  [#785](https://github.com/fluxcd/source-controller/pull/785)
+
+Improvements:
+- libgit2: improve known_hosts error messages
+  [#783](https://github.com/fluxcd/source-controller/pull/783)
+
 ## 0.25.6
 
 **Release date:** 2022-06-14
