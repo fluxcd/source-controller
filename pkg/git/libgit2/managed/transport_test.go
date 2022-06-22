@@ -16,6 +16,17 @@ github.com ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAA
 github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl
 `
 
+// To fetch latest knownhosts for source.developers.google.com run:
+// ssh-keyscan -p 2022 source.developers.google.com
+//
+// Expected hash (used in the cases) can get found with:
+// ssh-keyscan -p 2022 source.developers.google.com | ssh-keygen -l -f -
+var knownHostsFixtureWithPort = `[source.developers.google.com]:2022 ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBB5Iy4/cq/gt/fPqe3uyMy4jwv1Alc94yVPxmnwNhBzJqEV5gRPiRk5u4/JJMbbu9QUVAguBABxL7sBZa5PH/xY=`
+
+// This is an incorrect known hosts entry, that does not aligned with
+// the normalized format and therefore won't match.
+var knownHostsFixtureUnormalized = `source.developers.google.com:2022 ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBB5Iy4/cq/gt/fPqe3uyMy4jwv1Alc94yVPxmnwNhBzJqEV5gRPiRk5u4/JJMbbu9QUVAguBABxL7sBZa5PH/xY=`
+
 func TestKnownHostsCallback(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -25,6 +36,38 @@ func TestKnownHostsCallback(t *testing.T) {
 		hostkey      git2go.HostkeyCertificate
 		want         error
 	}{
+		{
+			name:         "Empty",
+			host:         "source.developers.google.com",
+			knownHosts:   []byte(""),
+			hostkey:      git2go.HostkeyCertificate{Kind: git2go.HostkeySHA256, HashSHA256: sha256Fingerprint("AGvEpqYNMqsRNIviwyk4J4HM0lEylomDBKOWZsBn434")},
+			expectedHost: "source.developers.google.com:2022",
+			want:         fmt.Errorf("hostkey verification aborted: no known_hosts found"),
+		},
+		{
+			name:         "Mismatch incorrect known_hosts",
+			host:         "source.developers.google.com",
+			knownHosts:   []byte(knownHostsFixtureUnormalized),
+			hostkey:      git2go.HostkeyCertificate{Kind: git2go.HostkeySHA256, HashSHA256: sha256Fingerprint("AGvEpqYNMqsRNIviwyk4J4HM0lEylomDBKOWZsBn434")},
+			expectedHost: "source.developers.google.com:2022",
+			want:         fmt.Errorf("no entries in known_hosts match host '[source.developers.google.com]:2022' with fingerprint 'AGvEpqYNMqsRNIviwyk4J4HM0lEylomDBKOWZsBn434'"),
+		},
+		{
+			name:         "Match when host has port",
+			host:         "source.developers.google.com:2022",
+			knownHosts:   []byte(knownHostsFixtureWithPort),
+			hostkey:      git2go.HostkeyCertificate{Kind: git2go.HostkeySHA256, HashSHA256: sha256Fingerprint("AGvEpqYNMqsRNIviwyk4J4HM0lEylomDBKOWZsBn434")},
+			expectedHost: "source.developers.google.com:2022",
+			want:         nil,
+		},
+		{
+			name:         "Match even when host does not have port",
+			host:         "source.developers.google.com",
+			knownHosts:   []byte(knownHostsFixtureWithPort),
+			hostkey:      git2go.HostkeyCertificate{Kind: git2go.HostkeySHA256, HashSHA256: sha256Fingerprint("AGvEpqYNMqsRNIviwyk4J4HM0lEylomDBKOWZsBn434")},
+			expectedHost: "source.developers.google.com:2022",
+			want:         nil,
+		},
 		{
 			name:         "Match",
 			host:         "github.com",
@@ -66,7 +109,7 @@ func TestKnownHostsCallback(t *testing.T) {
 			knownHosts:   []byte(knownHostsFixture),
 			hostkey:      git2go.HostkeyCertificate{Kind: git2go.HostkeySHA256, HashSHA256: sha256Fingerprint("ROQFvPThGrW4RuWLoL9tq9I9zJ42fK4XywyRtbOz/EQ")},
 			expectedHost: "github.com",
-			want:         fmt.Errorf("hostkey could not be verified"),
+			want:         fmt.Errorf("no entries in known_hosts match host 'github.com' with fingerprint 'ROQFvPThGrW4RuWLoL9tq9I9zJ42fK4XywyRtbOz/EQ'"),
 		},
 	}
 	for _, tt := range tests {
