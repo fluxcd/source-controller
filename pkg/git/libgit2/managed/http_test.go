@@ -106,6 +106,16 @@ func TestHttpAction_CreateClientRequest(t *testing.T) {
 			wantedErr: nil,
 		},
 		{
+			name:      "incomplete credentials, no basic auth",
+			action:    git2go.SmartServiceActionReceivepackLs,
+			transport: &http.Transport{},
+			authOpts:  git.AuthOptions{Username: "user"},
+			assertFunc: func(g *WithT, req *http.Request, client *http.Client) {
+				_, _, ok := req.BasicAuth()
+				g.Expect(ok).To(BeFalse())
+			},
+		},
+		{
 			name:   "credentials are correctly configured",
 			action: git2go.SmartServiceActionUploadpack,
 			transport: &http.Transport{
