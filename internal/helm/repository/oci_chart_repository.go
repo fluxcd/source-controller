@@ -21,6 +21,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"net/url"
+	"path"
 	"sort"
 	"strings"
 
@@ -121,7 +122,9 @@ func NewOCIChartRepository(repositoryURL string, chartRepoOpts ...OCIChartReposi
 func (r *OCIChartRepository) Get(name, ver string) (*repo.ChartVersion, error) {
 	// Find chart versions matching the given name.
 	// Either in an index file or from a registry.
-	cvs, err := r.getTags(fmt.Sprintf("%s/%s", r.URL.String(), name))
+	cpURL := r.URL
+	cpURL.Path = path.Join(cpURL.Path, name)
+	cvs, err := r.getTags(cpURL.String())
 	if err != nil {
 		return nil, err
 	}
@@ -136,7 +139,7 @@ func (r *OCIChartRepository) Get(name, ver string) (*repo.ChartVersion, error) {
 	// If semver constraint string, try to find a match
 	tag, err := getLastMatchingVersionOrConstraint(cvs, ver)
 	return &repo.ChartVersion{
-		URLs: []string{fmt.Sprintf("%s/%s:%s", r.URL.String(), name, tag)},
+		URLs: []string{fmt.Sprintf("%s:%s", cpURL.String(), tag)},
 		Metadata: &chart.Metadata{
 			Name:    name,
 			Version: tag,
