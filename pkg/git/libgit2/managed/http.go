@@ -279,7 +279,7 @@ func createClientRequest(targetURL string, action git2go.SmartServiceAction,
 
 	// Apply authentication and TLS settings to the HTTP transport.
 	if authOpts != nil {
-		if len(authOpts.Username) > 0 {
+		if authOpts.Username != "" && authOpts.Password != "" {
 			req.SetBasicAuth(authOpts.Username, authOpts.Password)
 		}
 		if len(authOpts.CAFile) > 0 {
