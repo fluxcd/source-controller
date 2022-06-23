@@ -2,6 +2,21 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.25.8
+
+**Release date:** 2022-06-24
+
+This prerelease fixes an authentication issue when using libgit2 managed
+transport to checkout repos on BitBucket server.
+
+Fixes:
+- set request auth if both username and password are non empty
+  [#794](https://github.com/fluxcd/source-controller/pull/794)
+
+Improvements:
+- libgit2/managed/http: test for incomplete creds
+  [#796](https://github.com/fluxcd/source-controller/pull/796)
+
 ## 0.25.7
 
 **Release date:** 2022-06-22
