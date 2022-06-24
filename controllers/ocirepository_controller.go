@@ -25,10 +25,14 @@ import (
 	"time"
 
 	"github.com/Masterminds/semver/v3"
+	"github.com/google/go-containerregistry/pkg/authn"
+	"github.com/google/go-containerregistry/pkg/authn/k8schain"
 	"github.com/google/go-containerregistry/pkg/crane"
 	gcrv1 "github.com/google/go-containerregistry/pkg/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/uuid"
 	kuberecorder "k8s.io/client-go/tools/record"
 
@@ -280,8 +284,16 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, obj *sour
 	ctxTimeout, cancel := context.WithTimeout(ctx, obj.Spec.Timeout.Duration)
 	defer cancel()
 
+	// Generates registry credential keychain
+	keychain, err := r.keychain(ctx, obj)
+	if err != nil {
+		e := &serror.Event{Err: err, Reason: sourcev1.OCIOperationFailedReason}
+		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Error())
+		return sreconcile.ResultEmpty, e
+	}
+
 	// Determine which artifact revision to pull
-	url, err := r.getArtifactURL(ctxTimeout, obj)
+	url, err := r.getArtifactURL(ctxTimeout, obj, keychain)
 	if err != nil {
 		e := &serror.Event{Err: err, Reason: sourcev1.OCIOperationFailedReason}
 		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Error())
@@ -289,7 +301,7 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, obj *sour
 	}
 
 	// Pull artifact from the remote container registry
-	img, err := crane.Pull(url, r.craneOptions(ctxTimeout)...)
+	img, err := crane.Pull(url, r.craneOptions(ctxTimeout, keychain)...)
 	if err != nil {
 		e := &serror.Event{Err: err, Reason: sourcev1.OCIOperationFailedReason}
 		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Error())
@@ -352,7 +364,7 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, obj *sour
 }
 
 // getArtifactURL determines which tag or digest should be used and returns the OCI artifact FQN.
-func (r *OCIRepositoryReconciler) getArtifactURL(ctx context.Context, obj *sourcev1.OCIRepository) (string, error) {
+func (r *OCIRepositoryReconciler) getArtifactURL(ctx context.Context, obj *sourcev1.OCIRepository, keychain authn.Keychain) (string, error) {
 	url := obj.Spec.URL
 	if obj.Spec.Reference != nil {
 		if obj.Spec.Reference.Digest != "" {
@@ -360,7 +372,7 @@ func (r *OCIRepositoryReconciler) getArtifactURL(ctx context.Context, obj *sourc
 		}
 
 		if obj.Spec.Reference.SemVer != "" {
-			tag, err := r.getTagBySemver(ctx, url, obj.Spec.Reference.SemVer)
+			tag, err := r.getTagBySemver(ctx, url, obj.Spec.Reference.SemVer, keychain)
 			if err != nil {
 				return "", err
 			}
@@ -377,8 +389,8 @@ func (r *OCIRepositoryReconciler) getArtifactURL(ctx context.Context, obj *sourc
 
 // getTagBySemver call the remote container registry, fetches all the tags from the repository,
 // and returns the latest tag according to the semver expression.
-func (r *OCIRepositoryReconciler) getTagBySemver(ctx context.Context, url, exp string) (string, error) {
-	tags, err := crane.ListTags(url, r.craneOptions(ctx)...)
+func (r *OCIRepositoryReconciler) getTagBySemver(ctx context.Context, url, exp string, keychain authn.Keychain) (string, error) {
+	tags, err := crane.ListTags(url, r.craneOptions(ctx, keychain)...)
 	if err != nil {
 		return "", err
 	}
@@ -408,11 +420,56 @@ func (r *OCIRepositoryReconciler) getTagBySemver(ctx context.Context, url, exp s
 	return matchingVersions[0].Original(), nil
 }
 
+// keychain generates the credential keychain based on the resource
+// configuration. If no auth is specified a default keychain with
+// anonymous access is returned
+func (r *OCIRepositoryReconciler) keychain(ctx context.Context, obj *sourcev1.OCIRepository) (authn.Keychain, error) {
+	pullSecretNames := sets.NewString()
+
+	// lookup auth secret
+	if obj.Spec.SecretRef != nil {
+		pullSecretNames.Insert(obj.Spec.SecretRef.Name)
+	}
+
+	// lookup service account
+	if obj.Spec.ServiceAccountName != "" {
+		serviceAccountName := obj.Spec.ServiceAccountName
+		serviceAccount := corev1.ServiceAccount{}
+		err := r.Get(ctx, types.NamespacedName{Namespace: obj.Namespace, Name: serviceAccountName}, &serviceAccount)
+		if err != nil {
+			return nil, err
+		}
+		for _, ips := range serviceAccount.ImagePullSecrets {
+			pullSecretNames.Insert(ips.Name)
+		}
+	}
+
+	// if no pullsecrets available return DefaultKeyChain
+	if len(pullSecretNames) == 0 {
+		return authn.DefaultKeychain, nil
+	}
+
+	// lookup image pull secrets
+	imagePullSecrets := make([]corev1.Secret, len(pullSecretNames))
+	for i, imagePullSecretName := range pullSecretNames.List() {
+		imagePullSecret := corev1.Secret{}
+		err := r.Get(ctx, types.NamespacedName{Namespace: obj.Namespace, Name: imagePullSecretName}, &imagePullSecret)
+		if err != nil {
+			r.eventLogf(ctx, obj, events.EventSeverityTrace, "secret %q not found", imagePullSecretName)
+			return nil, err
+		}
+		imagePullSecrets[i] = imagePullSecret
+	}
+
+	return k8schain.NewFromPullSecrets(ctx, imagePullSecrets)
+}
+
 // craneOptions sets the timeout and user agent for all operations against remote container registries.
-func (r *OCIRepositoryReconciler) craneOptions(ctx context.Context) []crane.Option {
+func (r *OCIRepositoryReconciler) craneOptions(ctx context.Context, keychain authn.Keychain) []crane.Option {
 	return []crane.Option{
 		crane.WithContext(ctx),
 		crane.WithUserAgent("flux/v2"),
+		crane.WithAuthFromKeychain(keychain),
 	}
 }
 
