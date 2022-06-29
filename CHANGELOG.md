@@ -2,6 +2,19 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.25.9
+
+**Release date:** 2022-06-29
+
+This prerelease fixes an authentication issue for Helm OCI where the credentials
+were cached instead of being discarded after each reconciliation.
+
+Fixes:
+- helm-oci: disable cache in oci registry client
+  [#799](https://github.com/fluxcd/source-controller/pull/799)
+- helm-oci: remove the trailing slash in `spec.url`
+  [#799](https://github.com/fluxcd/source-controller/pull/799)
+
 ## 0.25.8
 
 **Release date:** 2022-06-24
