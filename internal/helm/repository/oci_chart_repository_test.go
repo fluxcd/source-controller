@@ -20,6 +20,7 @@ import (
 	"bytes"
 	"fmt"
 	"net/url"
+	"path"
 	"strings"
 	"testing"
 
@@ -46,8 +47,8 @@ type mockRegistryClient struct {
 	LastCalledURL string
 }
 
-func (m *mockRegistryClient) Tags(url string) ([]string, error) {
-	m.LastCalledURL = url
+func (m *mockRegistryClient) Tags(urlStr string) ([]string, error) {
+	m.LastCalledURL = urlStr
 	return m.tags, nil
 }
 
@@ -91,7 +92,7 @@ func TestNewOCIChartRepository(t *testing.T) {
 
 }
 
-func TestOCIChartRepoisitory_Get(t *testing.T) {
+func TestOCIChartRepository_Get(t *testing.T) {
 	registryClient := &mockRegistryClient{
 		tags: []string{
 			"0.0.1",
@@ -114,9 +115,11 @@ func TestOCIChartRepoisitory_Get(t *testing.T) {
 			New:     helmgetter.NewOCIGetter,
 		},
 	}
+	testURL := "oci://localhost:5000/my_repo"
 
 	testCases := []struct {
 		name        string
+		url         string
 		version     string
 		expected    string
 		expectedErr string
@@ -124,45 +127,58 @@ func TestOCIChartRepoisitory_Get(t *testing.T) {
 		{
 			name:     "should return latest stable version",
 			version:  "",
+			url:      testURL,
 			expected: "1.0.0",
 		},
 		{
 			name:     "should return latest stable version (asterisk)",
 			version:  "*",
+			url:      testURL,
 			expected: "1.0.0",
 		},
 		{
 			name:     "should return latest stable version (semver range)",
 			version:  ">=0.1.5",
+			url:      testURL,
 			expected: "1.0.0",
 		},
 		{
 			name:     "should return 0.2.0 (semver range)",
 			version:  "0.2.x",
+			url:      testURL,
 			expected: "0.2.0",
 		},
 		{
 			name:     "should return a perfect match",
 			version:  "0.1.0",
+			url:      testURL,
 			expected: "0.1.0",
 		},
 		{
 			name:     "should return 0.10.0",
 			version:  "0.*",
+			url:      testURL,
 			expected: "0.10.0",
 		},
 		{
 			name:        "should an error for unfunfilled range",
 			version:     ">2.0.0",
+			url:         testURL,
 			expectedErr: "could not locate a version matching provided version string >2.0.0",
+		},
+		{
+			name:     "shouldn't error out with trailing slash",
+			version:  "",
+			url:      "oci://localhost:5000/my_repo/",
+			expected: "1.0.0",
 		},
 	}
 
-	url := "oci://localhost:5000/my_repo"
 	for _, tc := range testCases {
+
 		t.Run(tc.name, func(t *testing.T) {
 			g := NewWithT(t)
-			r, err := NewOCIChartRepository(url, WithOCIRegistryClient(registryClient), WithOCIGetter(providers))
+			r, err := NewOCIChartRepository(tc.url, WithOCIRegistryClient(registryClient), WithOCIGetter(providers))
 			g.Expect(err).ToNot(HaveOccurred())
 			g.Expect(r).ToNot(BeNil())
 
@@ -173,15 +189,18 @@ func TestOCIChartRepoisitory_Get(t *testing.T) {
 				g.Expect(err.Error()).To(Equal(tc.expectedErr))
 				return
 			}
-
 			g.Expect(err).ToNot(HaveOccurred())
-			g.Expect(cv.URLs[0]).To(Equal(fmt.Sprintf("%s/%s:%s", url, chart, tc.expected)))
-			g.Expect(registryClient.LastCalledURL).To(Equal(fmt.Sprintf("%s/%s", strings.TrimPrefix(url, fmt.Sprintf("%s://", registry.OCIScheme)), chart)))
+
+			u, err := url.Parse(tc.url)
+			g.Expect(err).ToNot(HaveOccurred())
+			u.Path = path.Join(u.Path, chart)
+			g.Expect(cv.URLs[0]).To(Equal(fmt.Sprintf("%s:%s", u.String(), tc.expected)))
+			g.Expect(registryClient.LastCalledURL).To(Equal(strings.TrimPrefix(u.String(), fmt.Sprintf("%s://", registry.OCIScheme))))
 		})
 	}
 }
 
-func TestOCIChartRepoisitory_DownloadChart(t *testing.T) {
+func TestOCIChartRepository_DownloadChart(t *testing.T) {
 	client := &mockRegistryClient{}
 	testCases := []struct {
 		name         string
