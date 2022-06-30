@@ -65,7 +65,7 @@ require (
 )
 
 // Fix CVE-2022-28948
-replace gopkg.in/yaml.v3 => gopkg.in/yaml.v3 v3.0.0
+replace gopkg.in/yaml.v3 => gopkg.in/yaml.v3 v3.0.1
 
 // Fix CVE-2022-31030
 replace github.com/containerd/containerd => github.com/containerd/containerd v1.6.6
