@@ -152,7 +152,7 @@ data:
 #### SSH authentication
 
 To authenticate towards a Git repository over SSH, the referenced Secret is
-expected to contain `.data.identity` and `known_hosts` fields. With the respective
+expected to contain `identity` and `known_hosts` fields. With the respective
 private key of the SSH key pair, and the host keys of the Git repository.
 
 ```yaml
@@ -162,10 +162,27 @@ kind: Secret
 metadata:
   name: ssh-credentials
 type: Opaque
-data:
-  identity: <BASE64>
-  known_hosts: <BASE64>
+stringData:
+  identity: |
+    -----BEGIN OPENSSH PRIVATE KEY-----
+    ...
+    -----END OPENSSH PRIVATE KEY-----
+  known_hosts: |
+    github.com ecdsa-sha2-nistp256 AAAA...
 ```
+
+Alternatively, the Flux CLI can be used to automatically create the
+secret, and also populate the known_hosts:
+
+```sh
+flux create secret git podinfo-auth \
+    --url=ssh://git@github.com/stefanprodan/podinfo \
+    --private-key-file=./identity
+```
+
+For password-protected SSH private keys, the password must be provided
+via an additional `password` field in the secret. Flux CLI also supports
+this via the `--password` flag.
 
 ### Interval
 
