@@ -54,12 +54,12 @@ type Storage struct {
 	// Hostname is the file server host name used to compose the artifacts URIs.
 	Hostname string `json:"hostname"`
 
-	// ArtifactRetentionTTL is the maximum number of artifacts to be kept in storage
-	// after a garbage collection.
+	// ArtifactRetentionTTL is the duration of time that artifacts will be kept
+	// in storage before being garbage collected.
 	ArtifactRetentionTTL time.Duration `json:"artifactRetentionTTL"`
 
-	// ArtifactRetentionRecords is the duration of time that artifacts will be kept in
-	// storage before being garbage collected.
+	// ArtifactRetentionRecords is the maximum number of artifacts to be kept in
+	// storage after a garbage collection.
 	ArtifactRetentionRecords int `json:"artifactRetentionRecords"`
 }
 

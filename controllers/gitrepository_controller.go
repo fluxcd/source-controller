@@ -359,7 +359,7 @@ func (r *GitRepositoryReconciler) shouldNotify(oldObj, newObj *sourcev1.GitRepos
 // reconcileStorage ensures the current state of the storage matches the
 // desired and previously observed state.
 //
-// The garbage collection is executed based on the flag based settings and
+// The garbage collection is executed based on the flag configured settings and
 // may remove files that are beyond their TTL or the maximum number of files
 // to survive a collection cycle.
 // If the Artifact in the Status of the object disappeared from the Storage,
