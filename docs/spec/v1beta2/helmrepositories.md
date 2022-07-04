@@ -368,7 +368,7 @@ metadata:
   namespace: default
 spec:
   interval: 5m0s
-  url: oci://ghcr.io/stefanprodan/charts
+  url: oci://ghcr.io/my-user/my-private-repo
   type: "oci"
   secretRef:
     name: oci-creds
@@ -381,6 +381,17 @@ metadata:
 stringData:
   username: example
   password: 123456
+```
+
+For OCI Helm repositories, Kubernetes secrets of type [kubernetes.io/dockerconfigjson](https://kubernetes.io/docs/concepts/configuration/secret/#secret-types) are also supported.
+It is possible to create one such secret with `kubectl create secret docker-registry`
+or using the Flux CLI:
+
+```yaml
+flux create secret oci ghcr-auth \
+  --url=ghcr.io \
+  --username=flux \
+  --password=${GITHUB_PAT}
 ```
 
 #### TLS authentication
