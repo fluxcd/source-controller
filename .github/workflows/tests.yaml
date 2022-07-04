@@ -1,0 +1,80 @@
+name: tests
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read # for actions/checkout to fetch code
+
+jobs:
+
+  test-linux-amd64:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Setup Go
+        uses: actions/setup-go@v3
+        with:
+          go-version: 1.17.x
+      - name: Restore Go cache
+        uses: actions/cache@v3
+        with:
+          path: /home/runner/work/_temp/_github_home/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+      - name: Run tests
+        env:
+          TEST_AZURE_ACCOUNT_NAME: ${{ secrets.TEST_AZURE_ACCOUNT_NAME }}
+          TEST_AZURE_ACCOUNT_KEY: ${{ secrets.TEST_AZURE_ACCOUNT_KEY }}
+        run: make test
+
+  test-linux-arm64:
+    # Hosted on Equinix
+    # Docs: https://github.com/fluxcd/flux2/tree/main/.github/runners
+    runs-on: [self-hosted, Linux, ARM64, equinix]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Setup Go
+        uses: actions/setup-go@v3
+        with:
+          go-version: 1.17.x
+      - name: Run tests
+        env:
+          TEST_AZURE_ACCOUNT_NAME: ${{ secrets.TEST_AZURE_ACCOUNT_NAME }}
+          TEST_AZURE_ACCOUNT_KEY: ${{ secrets.TEST_AZURE_ACCOUNT_KEY }}
+          
+          # Temporarily disabling -race for arm64 as our GitHub action
+          # runners don't seem to like it. The race detection was tested
+          # on both Apple M1 and Linux arm64 with successful results.
+          #
+          # We should reenable go test -race for arm64 runners once the
+          # current issue is resolved.
+          GO_TEST_ARGS: ''
+        run: make test
+
+  # Runs 'make test' on macos-10.15 to assure development environment for 
+  # contributors using MacOS.
+  darwin-amd64:
+    runs-on: macos-10.15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Setup Go
+        uses: actions/setup-go@v3
+        with:
+          go-version: 1.17.x
+      - name: Restore Go cache
+        uses: actions/cache@v3
+        with:
+          path: /home/runner/work/_temp/_github_home/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+      - name: Run tests
+        run: make test
