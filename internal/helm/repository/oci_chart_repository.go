@@ -21,6 +21,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"net/url"
+	"os"
 	"path"
 	"sort"
 	"strings"
@@ -60,6 +61,8 @@ type OCIChartRepository struct {
 
 	// RegistryClient is a client to use while downloading tags or charts from a registry.
 	RegistryClient RegistryClient
+	// credentialsFile is a temporary credentials file to use while downloading tags or charts from a registry.
+	credentialsFile string
 }
 
 // OCIChartRepositoryOption is a function that can be passed to NewOCIChartRepository
@@ -90,6 +93,14 @@ func WithOCIGetter(providers getter.Providers) OCIChartRepositoryOption {
 func WithOCIGetterOptions(getterOpts []getter.Option) OCIChartRepositoryOption {
 	return func(r *OCIChartRepository) error {
 		r.Options = getterOpts
+		return nil
+	}
+}
+
+// WithCredentialsFile returns a ChartRepositoryOption that will set the credentials file
+func WithCredentialsFile(credentialsFile string) OCIChartRepositoryOption {
+	return func(r *OCIChartRepository) error {
+		r.credentialsFile = credentialsFile
 		return nil
 	}
 }
@@ -126,7 +137,7 @@ func (r *OCIChartRepository) GetChartVersion(name, ver string) (*repo.ChartVersi
 	cpURL.Path = path.Join(cpURL.Path, name)
 	cvs, err := r.getTags(cpURL.String())
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("could not get tags for %q: %s", name, err)
 	}
 
 	if len(cvs) == 0 {
@@ -153,7 +164,7 @@ func (r *OCIChartRepository) getTags(ref string) ([]string, error) {
 	// Retrieve list of repository tags
 	tags, err := r.RegistryClient.Tags(strings.TrimPrefix(ref, fmt.Sprintf("%s://", registry.OCIScheme)))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("could not fetch tags for %q: %s", ref, err)
 	}
 	if len(tags) == 0 {
 		return nil, fmt.Errorf("unable to locate any tags in provided repository: %s", ref)
@@ -203,6 +214,23 @@ func (r *OCIChartRepository) Logout() error {
 	if err != nil {
 		return err
 	}
+	return nil
+}
+
+// HasCredentials returns true if the OCIChartRepository has credentials.
+func (r *OCIChartRepository) HasCredentials() bool {
+	return r.credentialsFile != ""
+}
+
+// Clear deletes the OCI registry credentials file.
+func (r *OCIChartRepository) Clear() error {
+	// clean the credentials file if it exists
+	if r.credentialsFile != "" {
+		if err := os.Remove(r.credentialsFile); err != nil {
+			return err
+		}
+	}
+	r.credentialsFile = ""
 	return nil
 }
 

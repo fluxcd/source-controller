@@ -34,24 +34,16 @@ import (
 
 	"github.com/fluxcd/source-controller/internal/fs"
 	"github.com/fluxcd/source-controller/internal/helm/chart/secureloader"
+	"github.com/fluxcd/source-controller/internal/helm/repository"
 )
 
-// Repository is a repository.ChartRepository or a repository.OCIChartRepository.
-// It is used to download a chart from a remote Helm repository or OCI registry.
-type Repository interface {
-	// GetChartVersion returns the repo.ChartVersion for the given name and version.
-	GetChartVersion(name, version string) (*repo.ChartVersion, error)
-	// GetChartVersion returns a chart.ChartVersion from the remote repository.
-	DownloadChart(chart *repo.ChartVersion) (*bytes.Buffer, error)
-}
-
 type remoteChartBuilder struct {
-	remote Repository
+	remote repository.Downloader
 }
 
 // NewRemoteBuilder returns a Builder capable of building a Helm
-// chart with a RemoteReference in the given repository.ChartRepository.
-func NewRemoteBuilder(repository Repository) Builder {
+// chart with a RemoteReference in the given repository.Downloader.
+func NewRemoteBuilder(repository repository.Downloader) Builder {
 	return &remoteChartBuilder{
 		remote: repository,
 	}
@@ -132,7 +124,7 @@ func (b *remoteChartBuilder) Build(_ context.Context, ref Reference, p string, o
 	return result, nil
 }
 
-func (b *remoteChartBuilder) downloadFromRepository(remote Repository, remoteRef RemoteReference, opts BuildOptions) (*bytes.Buffer, *Build, error) {
+func (b *remoteChartBuilder) downloadFromRepository(remote repository.Downloader, remoteRef RemoteReference, opts BuildOptions) (*bytes.Buffer, *Build, error) {
 	// Get the current version for the RemoteReference
 	cv, err := remote.GetChartVersion(remoteRef.Name, remoteRef.Version)
 	if err != nil {

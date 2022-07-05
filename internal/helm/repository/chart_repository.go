@@ -35,6 +35,7 @@ import (
 	"github.com/Masterminds/semver/v3"
 	"helm.sh/helm/v3/pkg/getter"
 	"helm.sh/helm/v3/pkg/repo"
+	kerrors "k8s.io/apimachinery/pkg/util/errors"
 	"sigs.k8s.io/yaml"
 
 	"github.com/fluxcd/pkg/version"
@@ -476,9 +477,10 @@ func (r *ChartRepository) Unload() {
 	r.Index = nil
 }
 
-// Clear cache the index in memory before unloading it.
+// Clear caches the index in memory before unloading it.
 // It cleans up temporary files and directories created by the repository.
-func (r *ChartRepository) Clear() (errs []error) {
+func (r *ChartRepository) Clear() error {
+	var errs []error
 	if err := r.CacheIndexInMemory(); err != nil {
 		errs = append(errs, err)
 	}
@@ -489,7 +491,7 @@ func (r *ChartRepository) Clear() (errs []error) {
 		errs = append(errs, err)
 	}
 
-	return
+	return kerrors.NewAggregate(errs)
 }
 
 // SetMemCache sets the cache to use for this repository.

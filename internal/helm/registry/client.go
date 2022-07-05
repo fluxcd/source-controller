@@ -21,6 +21,7 @@ import (
 	"os"
 
 	"helm.sh/helm/v3/pkg/registry"
+	"k8s.io/apimachinery/pkg/util/errors"
 )
 
 // ClientGenerator generates a registry client and a temporary credential file.
@@ -30,16 +31,25 @@ func ClientGenerator(isLogin bool) (*registry.Client, string, error) {
 	if isLogin {
 		// create a temporary file to store the credentials
 		// this is needed because otherwise the credentials are stored in ~/.docker/config.json.
-		credentialFile, err := os.CreateTemp("", "credentials")
+		credentialsFile, err := os.CreateTemp("", "credentials")
 		if err != nil {
 			return nil, "", err
 		}
 
-		rClient, err := registry.NewClient(registry.ClientOptWriter(io.Discard), registry.ClientOptCredentialsFile(credentialFile.Name()))
+		var errs []error
+		rClient, err := registry.NewClient(registry.ClientOptWriter(io.Discard), registry.ClientOptCredentialsFile(credentialsFile.Name()))
 		if err != nil {
-			return nil, "", err
+			errs = append(errs, err)
+			// attempt to delete the temporary file
+			if credentialsFile != nil {
+				err := os.Remove(credentialsFile.Name())
+				if err != nil {
+					errs = append(errs, err)
+				}
+			}
+			return nil, "", errors.NewAggregate(errs)
 		}
-		return rClient, credentialFile.Name(), nil
+		return rClient, credentialsFile.Name(), nil
 	}
 
 	rClient, err := registry.NewClient(registry.ClientOptWriter(io.Discard))
