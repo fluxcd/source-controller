@@ -20,8 +20,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/google/go-containerregistry/pkg/name"
 	"os"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/Masterminds/semver/v3"
@@ -363,12 +365,31 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, obj *sour
 	return sreconcile.ResultSuccess, nil
 }
 
+// parseRepositoryURL extracts the repository URL.
+func (r *OCIRepositoryReconciler) parseRepositoryURL(obj *sourcev1.OCIRepository) (string, error) {
+	if !strings.HasPrefix(obj.Spec.URL, sourcev1.OCIRepositoryPrefix) {
+		return "", fmt.Errorf("URL must be in format 'oci://<domain>/<org>/<repo>'")
+	}
+
+	url := strings.TrimPrefix(obj.Spec.URL, sourcev1.OCIRepositoryPrefix)
+	ref, err := name.ParseReference(url)
+	if err != nil {
+		return "", fmt.Errorf("'%s' invalid URL: %w", obj.Spec.URL, err)
+	}
+
+	return ref.Context().Name(), nil
+}
+
 // getArtifactURL determines which tag or digest should be used and returns the OCI artifact FQN.
 func (r *OCIRepositoryReconciler) getArtifactURL(ctx context.Context, obj *sourcev1.OCIRepository, keychain authn.Keychain) (string, error) {
-	url := obj.Spec.URL
+	url, err := r.parseRepositoryURL(obj)
+	if err != nil {
+		return "", err
+	}
+
 	if obj.Spec.Reference != nil {
 		if obj.Spec.Reference.Digest != "" {
-			return fmt.Sprintf("%s@%s", obj.Spec.URL, obj.Spec.Reference.Digest), nil
+			return fmt.Sprintf("%s@%s", url, obj.Spec.Reference.Digest), nil
 		}
 
 		if obj.Spec.Reference.SemVer != "" {
@@ -376,11 +397,11 @@ func (r *OCIRepositoryReconciler) getArtifactURL(ctx context.Context, obj *sourc
 			if err != nil {
 				return "", err
 			}
-			return fmt.Sprintf("%s:%s", obj.Spec.URL, tag), nil
+			return fmt.Sprintf("%s:%s", url, tag), nil
 		}
 
 		if obj.Spec.Reference.Tag != "" {
-			return fmt.Sprintf("%s:%s", obj.Spec.URL, obj.Spec.Reference.Tag), nil
+			return fmt.Sprintf("%s:%s", url, obj.Spec.Reference.Tag), nil
 		}
 	}
 

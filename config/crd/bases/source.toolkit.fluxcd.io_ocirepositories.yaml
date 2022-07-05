@@ -120,6 +120,7 @@ spec:
               url:
                 description: URL is a reference to an OCI artifact repository hosted
                   on a remote container registry.
+                pattern: ^oci://
                 type: string
               verify:
                 description: Verification specifies the configuration to verify the

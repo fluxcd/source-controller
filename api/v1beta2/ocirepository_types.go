@@ -25,12 +25,16 @@ import (
 const (
 	// OCIRepositoryKind is the string representation of a OCIRepository.
 	OCIRepositoryKind = "OCIRepository"
+
+	// OCIRepositoryPrefix is the prefix used for OCIRepository URLs.
+	OCIRepositoryPrefix = "oci://"
 )
 
 // OCIRepositorySpec defines the desired state of OCIRepository
 type OCIRepositorySpec struct {
 	// URL is a reference to an OCI artifact repository hosted
 	// on a remote container registry.
+	// +kubebuilder:validation:Pattern="^oci://"
 	// +required
 	URL string `json:"url"`
 
