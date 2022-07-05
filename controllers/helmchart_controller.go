@@ -332,8 +332,9 @@ func (r *HelmChartReconciler) notify(ctx context.Context, oldObj, newObj *source
 // reconcileStorage ensures the current state of the storage matches the
 // desired and previously observed state.
 //
-// All Artifacts for the object except for the current one in the Status are
-// garbage collected from the Storage.
+// The garbage collection is executed based on the flag configured settings and
+// may remove files that are beyond their TTL or the maximum number of files
+// to survive a collection cycle.
 // If the Artifact in the Status of the object disappeared from the Storage,
 // it is removed from the object.
 // If the object does not have an Artifact in its Status, a Reconciling
