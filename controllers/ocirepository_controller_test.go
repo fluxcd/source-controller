@@ -239,6 +239,7 @@ func TestOCIRepository_SecretRef(t *testing.T) {
 	g.Expect(err).ToNot(HaveOccurred())
 
 	repositoryURL := fmt.Sprintf("%s/podinfo", regServer.registryHost)
+	ociURL := fmt.Sprintf("oci://%s", repositoryURL)
 
 	// Push Test Image
 	err = crane.Push(image, repositoryURL, crane.WithAuth(&authn.Basic{
@@ -260,14 +261,14 @@ func TestOCIRepository_SecretRef(t *testing.T) {
 	}{
 		{
 			name:                  "private-registry-access-via-secretref",
-			url:                   repositoryURL,
+			url:                   ociURL,
 			digest:                podinfoImageDigest,
 			includeSecretRef:      true,
 			includeServiceAccount: false,
 		},
 		{
 			name:                  "private-registry-access-via-serviceaccount",
-			url:                   repositoryURL,
+			url:                   ociURL,
 			digest:                podinfoImageDigest,
 			includeSecretRef:      false,
 			includeServiceAccount: true,
@@ -289,7 +290,7 @@ func TestOCIRepository_SecretRef(t *testing.T) {
 				},
 				Type: corev1.SecretTypeDockerConfigJson,
 				StringData: map[string]string{
-					".dockerconfigjson": fmt.Sprintf(`{"auths": {%q: {"username": %q, "password": %q}}}`, tt.url, testRegistryUsername, testRegistryPassword),
+					".dockerconfigjson": fmt.Sprintf(`{"auths": {%q: {"username": %q, "password": %q}}}`, repositoryURL, testRegistryUsername, testRegistryPassword),
 				},
 			}
 			g.Expect(testEnv.CreateAndWait(ctx, secret)).To(Succeed())
@@ -435,6 +436,7 @@ func TestOCIRepository_FailedAuth(t *testing.T) {
 	g.Expect(err).ToNot(HaveOccurred())
 
 	repositoryURL := fmt.Sprintf("%s/podinfo", regServer.registryHost)
+	ociURL := fmt.Sprintf("oci://%s", repositoryURL)
 
 	// Push Test Image
 	err = crane.Push(image, repositoryURL, crane.WithAuth(&authn.Basic{
@@ -458,7 +460,7 @@ func TestOCIRepository_FailedAuth(t *testing.T) {
 	}{
 		{
 			name:                  "missing-auth",
-			url:                   repositoryURL,
+			url:                   ociURL,
 			repoUsername:          "",
 			repoPassword:          "",
 			digest:                podinfoImageDigest,
@@ -467,7 +469,7 @@ func TestOCIRepository_FailedAuth(t *testing.T) {
 		},
 		{
 			name:                  "invalid-auth-via-secret",
-			url:                   repositoryURL,
+			url:                   ociURL,
 			repoUsername:          "InvalidUser",
 			repoPassword:          "InvalidPassword",
 			digest:                podinfoImageDigest,
@@ -476,7 +478,7 @@ func TestOCIRepository_FailedAuth(t *testing.T) {
 		},
 		{
 			name:                  "invalid-auth-via-service-account",
-			url:                   repositoryURL,
+			url:                   ociURL,
 			repoUsername:          "InvalidUser",
 			repoPassword:          "InvalidPassword",
 			digest:                podinfoImageDigest,
@@ -500,7 +502,7 @@ func TestOCIRepository_FailedAuth(t *testing.T) {
 				},
 				Type: corev1.SecretTypeDockerConfigJson,
 				StringData: map[string]string{
-					".dockerconfigjson": fmt.Sprintf(`{"auths": {%q: {"username": %q, "password": %q}}}`, tt.url, tt.repoUsername, tt.repoPassword),
+					".dockerconfigjson": fmt.Sprintf(`{"auths": {%q: {"username": %q, "password": %q}}}`, repositoryURL, tt.repoUsername, tt.repoPassword),
 				},
 			}
 			g.Expect(testEnv.CreateAndWait(ctx, secret)).To(Succeed())
@@ -623,7 +625,7 @@ func createPodinfoImageFromTar(tarFileName, tag string, imageServer *httptest.Se
 	}
 
 	return &podinfoImage{
-		url:    repositoryURL,
+		url:    "oci://" + repositoryURL,
 		tag:    tag,
 		digest: podinfoImageDigest,
 	}, nil
