@@ -342,7 +342,7 @@ func mustInitStorage(path string, storageAdvAddr string, artifactRetentionTTL ti
 	if path == "" {
 		p, _ := os.Getwd()
 		path = filepath.Join(p, "bin")
-		os.MkdirAll(path, 0o770)
+		os.MkdirAll(path, 0o700)
 	}
 
 	storage, err := controllers.NewStorage(path, storageAdvAddr, artifactRetentionTTL, artifactRetentionRecords)

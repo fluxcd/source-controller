@@ -120,7 +120,7 @@ func ensureDependencies() error {
 	// Output all embedded testdata files
 	embedDirs := []string{"testdata/crd", "testdata/certs"}
 	for _, dir := range embedDirs {
-		err := os.MkdirAll(dir, 0o750)
+		err := os.MkdirAll(dir, 0o700)
 		if err != nil {
 			return fmt.Errorf("mkdir %s: %v", dir, err)
 		}
@@ -139,7 +139,7 @@ func ensureDependencies() error {
 				return fmt.Errorf("reading embedded file %s: %v", fileName, err)
 			}
 
-			os.WriteFile(fileName, data, 0o640)
+			os.WriteFile(fileName, data, 0o600)
 			if err != nil {
 				return fmt.Errorf("writing %s: %v", fileName, err)
 			}
@@ -494,7 +494,7 @@ func createRandomFiles(f *fuzz.ConsumeFuzzer, fs billy.Filesystem, wt *git.Workt
 			return errors.New("Dir contains '..'")
 		}
 
-		err = fs.MkdirAll(dirPath, 0o770)
+		err = fs.MkdirAll(dirPath, 0o700)
 		if err != nil {
 			return errors.New("Could not create the subDir")
 		}
