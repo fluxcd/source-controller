@@ -21,6 +21,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sync"
@@ -29,11 +30,37 @@ import (
 	. "github.com/onsi/gomega"
 	helmchart "helm.sh/helm/v3/pkg/chart"
 	helmgetter "helm.sh/helm/v3/pkg/getter"
+	"helm.sh/helm/v3/pkg/registry"
 	"helm.sh/helm/v3/pkg/repo"
 
 	"github.com/fluxcd/source-controller/internal/helm/chart/secureloader"
 	"github.com/fluxcd/source-controller/internal/helm/repository"
 )
+
+type mockTagsGetter struct {
+	tags map[string][]string
+}
+
+func (m *mockTagsGetter) Tags(requestURL string) ([]string, error) {
+	u, err := url.Parse(requestURL)
+	if err != nil {
+		return nil, err
+	}
+
+	name := filepath.Base(u.Path)
+	if tags, ok := m.tags[name]; ok {
+		return tags, nil
+	}
+	return nil, fmt.Errorf("no tags found for %s with requestURL %s", name, requestURL)
+}
+
+func (m *mockTagsGetter) Login(_ string, _ ...registry.LoginOption) error {
+	return nil
+}
+
+func (m *mockTagsGetter) Logout(_ string, _ ...registry.LogoutOption) error {
+	return nil
+}
 
 // mockGetter is a simple mocking getter.Getter implementation, returning
 // a byte response to any provided URL.
@@ -49,25 +76,42 @@ func (g *mockGetter) Get(_ string, _ ...helmgetter.Option) (*bytes.Buffer, error
 func TestDependencyManager_Clear(t *testing.T) {
 	g := NewWithT(t)
 
-	repos := map[string]*repository.ChartRepository{
-		"with index": {
+	file, err := os.CreateTemp("", "")
+	g.Expect(err).ToNot(HaveOccurred())
+	ociRepoWithCreds, err := repository.NewOCIChartRepository("oci://example.com", repository.WithCredentialsFile(file.Name()))
+	g.Expect(err).ToNot(HaveOccurred())
+
+	downloaders := map[string]repository.Downloader{
+		"with index": &repository.ChartRepository{
 			Index:   repo.NewIndexFile(),
 			RWMutex: &sync.RWMutex{},
 		},
-		"cached cache path": {
+		"cached cache path": &repository.ChartRepository{
 			CachePath: "/invalid/path/resets",
 			Cached:    true,
 			RWMutex:   &sync.RWMutex{},
 		},
+		"with credentials":    ociRepoWithCreds,
+		"without credentials": &repository.OCIChartRepository{},
 	}
 
-	dm := NewDependencyManager(WithRepositories(repos))
+	dm := NewDependencyManager(WithRepositories(downloaders))
 	g.Expect(dm.Clear()).To(BeNil())
-	g.Expect(dm.repositories).To(HaveLen(len(repos)))
-	for _, v := range repos {
-		g.Expect(v.Index).To(BeNil())
-		g.Expect(v.CachePath).To(BeEmpty())
-		g.Expect(v.Cached).To(BeFalse())
+	g.Expect(dm.downloaders).To(HaveLen(len(downloaders)))
+	for _, v := range downloaders {
+		switch v := v.(type) {
+		case *repository.ChartRepository:
+			g.Expect(v.Index).To(BeNil())
+			g.Expect(v.CachePath).To(BeEmpty())
+			g.Expect(v.Cached).To(BeFalse())
+		case *repository.OCIChartRepository:
+			g.Expect(v.HasCredentials()).To(BeFalse())
+		}
+	}
+
+	if _, err := os.Stat(file.Name()); !errors.Is(err, os.ErrNotExist) {
+		err = os.Remove(file.Name())
+		g.Expect(err).ToNot(HaveOccurred())
 	}
 }
 
@@ -80,8 +124,22 @@ func TestDependencyManager_Build(t *testing.T) {
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(chartGrafana).ToNot(BeEmpty())
 
-	mockRepo := func() *repository.ChartRepository {
-		return &repository.ChartRepository{
+	mockrepos := []repository.Downloader{
+		&repository.OCIChartRepository{
+			URL: url.URL{
+				Scheme: "oci",
+				Host:   "example.com",
+			},
+			Client: &mockGetter{
+				Response: chartGrafana,
+			},
+			RegistryClient: &mockTagsGetter{
+				tags: map[string][]string{
+					"grafana": {"6.17.4"},
+				},
+			},
+		},
+		&repository.ChartRepository{
 			Client: &mockGetter{
 				Response: chartGrafana,
 			},
@@ -99,15 +157,21 @@ func TestDependencyManager_Build(t *testing.T) {
 				},
 			},
 			RWMutex: &sync.RWMutex{},
-		}
+		},
 	}
 
+	for _, repo := range mockrepos {
+		build(t, repo)
+	}
+}
+
+func build(t *testing.T, mockRepo repository.Downloader) {
 	tests := []struct {
 		name                       string
 		baseDir                    string
 		path                       string
-		repositories               map[string]*repository.ChartRepository
-		getChartRepositoryCallback GetChartRepositoryCallback
+		downloaders                map[string]repository.Downloader
+		getChartDownloaderCallback GetChartDownloaderCallback
 		want                       int
 		wantChartFunc              func(g *WithT, c *helmchart.Chart)
 		wantErr                    string
@@ -140,10 +204,10 @@ func TestDependencyManager_Build(t *testing.T) {
 			name:    "build with dependencies using lock file",
 			baseDir: "./../testdata/charts",
 			path:    "helmchartwithdeps",
-			repositories: map[string]*repository.ChartRepository{
-				"https://grafana.github.io/helm-charts/": mockRepo(),
+			downloaders: map[string]repository.Downloader{
+				"https://grafana.github.io/helm-charts/": mockRepo,
 			},
-			getChartRepositoryCallback: func(url string) (*repository.ChartRepository, error) {
+			getChartDownloaderCallback: func(url string) (repository.Downloader, error) {
 				return &repository.ChartRepository{URL: "https://grafana.github.io/helm-charts/"}, nil
 			},
 			wantChartFunc: func(g *WithT, c *helmchart.Chart) {
@@ -170,8 +234,8 @@ func TestDependencyManager_Build(t *testing.T) {
 			g.Expect(err).ToNot(HaveOccurred())
 
 			dm := NewDependencyManager(
-				WithRepositories(tt.repositories),
-				WithRepositoryCallback(tt.getChartRepositoryCallback),
+				WithRepositories(tt.downloaders),
+				WithDownloaderCallback(tt.getChartDownloaderCallback),
 			)
 			absBaseDir, err := filepath.Abs(tt.baseDir)
 			g.Expect(err).ToNot(HaveOccurred())
@@ -319,16 +383,16 @@ func TestDependencyManager_addRemoteDependency(t *testing.T) {
 	g.Expect(chartB).ToNot(BeEmpty())
 
 	tests := []struct {
-		name         string
-		repositories map[string]*repository.ChartRepository
-		dep          *helmchart.Dependency
-		wantFunc     func(g *WithT, c *helmchart.Chart)
-		wantErr      string
+		name        string
+		downloaders map[string]repository.Downloader
+		dep         *helmchart.Dependency
+		wantFunc    func(g *WithT, c *helmchart.Chart)
+		wantErr     string
 	}{
 		{
 			name: "adds remote dependency",
-			repositories: map[string]*repository.ChartRepository{
-				"https://example.com/": {
+			downloaders: map[string]repository.Downloader{
+				"https://example.com/": &repository.ChartRepository{
 					Client: &mockGetter{
 						Response: chartB,
 					},
@@ -357,8 +421,8 @@ func TestDependencyManager_addRemoteDependency(t *testing.T) {
 			},
 		},
 		{
-			name:         "resolve repository error",
-			repositories: map[string]*repository.ChartRepository{},
+			name:        "resolve repository error",
+			downloaders: map[string]repository.Downloader{},
 			dep: &helmchart.Dependency{
 				Repository: "https://example.com",
 			},
@@ -366,8 +430,8 @@ func TestDependencyManager_addRemoteDependency(t *testing.T) {
 		},
 		{
 			name: "strategic load error",
-			repositories: map[string]*repository.ChartRepository{
-				"https://example.com/": {
+			downloaders: map[string]repository.Downloader{
+				"https://example.com/": &repository.ChartRepository{
 					CachePath: "/invalid/cache/path/foo",
 					RWMutex:   &sync.RWMutex{},
 				},
@@ -379,8 +443,8 @@ func TestDependencyManager_addRemoteDependency(t *testing.T) {
 		},
 		{
 			name: "repository get error",
-			repositories: map[string]*repository.ChartRepository{
-				"https://example.com/": {
+			downloaders: map[string]repository.Downloader{
+				"https://example.com/": &repository.ChartRepository{
 					Index:   &repo.IndexFile{},
 					RWMutex: &sync.RWMutex{},
 				},
@@ -392,8 +456,8 @@ func TestDependencyManager_addRemoteDependency(t *testing.T) {
 		},
 		{
 			name: "repository version constraint error",
-			repositories: map[string]*repository.ChartRepository{
-				"https://example.com/": {
+			downloaders: map[string]repository.Downloader{
+				"https://example.com/": &repository.ChartRepository{
 					Index: &repo.IndexFile{
 						Entries: map[string]repo.ChartVersions{
 							chartName: {
@@ -418,8 +482,8 @@ func TestDependencyManager_addRemoteDependency(t *testing.T) {
 		},
 		{
 			name: "repository chart download error",
-			repositories: map[string]*repository.ChartRepository{
-				"https://example.com/": {
+			downloaders: map[string]repository.Downloader{
+				"https://example.com/": &repository.ChartRepository{
 					Index: &repo.IndexFile{
 						Entries: map[string]repo.ChartVersions{
 							chartName: {
@@ -444,8 +508,8 @@ func TestDependencyManager_addRemoteDependency(t *testing.T) {
 		},
 		{
 			name: "chart load error",
-			repositories: map[string]*repository.ChartRepository{
-				"https://example.com/": {
+			downloaders: map[string]repository.Downloader{
+				"https://example.com/": &repository.ChartRepository{
 					Client: &mockGetter{},
 					Index: &repo.IndexFile{
 						Entries: map[string]repo.ChartVersions{
@@ -476,7 +540,137 @@ func TestDependencyManager_addRemoteDependency(t *testing.T) {
 			g := NewWithT(t)
 
 			dm := &DependencyManager{
-				repositories: tt.repositories,
+				downloaders: tt.downloaders,
+			}
+			chart := &helmchart.Chart{}
+			err := dm.addRemoteDependency(&chartWithLock{Chart: chart}, tt.dep)
+			if tt.wantErr != "" {
+				g.Expect(err).To(HaveOccurred())
+				g.Expect(err.Error()).To(ContainSubstring(tt.wantErr))
+				return
+			}
+			g.Expect(err).ToNot(HaveOccurred())
+			if tt.wantFunc != nil {
+				tt.wantFunc(g, chart)
+			}
+		})
+	}
+}
+
+func TestDependencyManager_addRemoteOCIDependency(t *testing.T) {
+	g := NewWithT(t)
+
+	chartB, err := os.ReadFile("../testdata/charts/helmchart-0.1.0.tgz")
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(chartB).ToNot(BeEmpty())
+
+	tests := []struct {
+		name        string
+		downloaders map[string]repository.Downloader
+		dep         *helmchart.Dependency
+		wantFunc    func(g *WithT, c *helmchart.Chart)
+		wantErr     string
+	}{
+		{
+			name: "adds remote oci dependency",
+			downloaders: map[string]repository.Downloader{
+				"oci://example.com": &repository.OCIChartRepository{
+					URL: url.URL{
+						Scheme: "oci",
+						Host:   "example.com",
+					},
+					Client: &mockGetter{
+						Response: chartB,
+					},
+					RegistryClient: &mockTagsGetter{
+						tags: map[string][]string{
+							"helmchart": {"0.1.0"},
+						},
+					},
+				},
+			},
+			dep: &helmchart.Dependency{
+				Name:       chartName,
+				Repository: "oci://example.com",
+			},
+			wantFunc: func(g *WithT, c *helmchart.Chart) {
+				g.Expect(c.Dependencies()).To(HaveLen(1))
+			},
+		},
+		{
+			name: "remote oci repository fetch tags error",
+			downloaders: map[string]repository.Downloader{
+				"oci://example.com": &repository.OCIChartRepository{
+					URL: url.URL{
+						Scheme: "oci",
+						Host:   "example.com",
+					},
+					RegistryClient: &mockTagsGetter{
+						tags: map[string][]string{},
+					},
+				},
+			},
+			dep: &helmchart.Dependency{
+				Name:       chartName,
+				Repository: "oci://example.com",
+			},
+			wantErr: fmt.Sprintf("no tags found for %s", chartName),
+		},
+		{
+			name: "remote oci repository version constraint error",
+			downloaders: map[string]repository.Downloader{
+				"oci://example.com": &repository.OCIChartRepository{
+					URL: url.URL{
+						Scheme: "oci",
+						Host:   "example.com",
+					},
+					Client: &mockGetter{
+						Response: chartB,
+					},
+					RegistryClient: &mockTagsGetter{
+						tags: map[string][]string{
+							"helmchart": {"0.1.0"},
+						},
+					},
+				},
+			},
+			dep: &helmchart.Dependency{
+				Name:       chartName,
+				Version:    "0.2.0",
+				Repository: "oci://example.com",
+			},
+			wantErr: "could not locate a version matching provided version string 0.2.0",
+		},
+		{
+			name: "chart load error",
+			downloaders: map[string]repository.Downloader{
+				"oci://example.com": &repository.OCIChartRepository{
+					URL: url.URL{
+						Scheme: "oci",
+						Host:   "example.com",
+					},
+					Client: &mockGetter{},
+					RegistryClient: &mockTagsGetter{
+						tags: map[string][]string{
+							"helmchart": {"0.1.0"},
+						},
+					},
+				},
+			},
+			dep: &helmchart.Dependency{
+				Name:       chartName,
+				Version:    chartVersion,
+				Repository: "oci://example.com",
+			},
+			wantErr: "failed to load downloaded archive of version '0.1.0'",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			dm := &DependencyManager{
+				downloaders: tt.downloaders,
 			}
 			chart := &helmchart.Chart{}
 			err := dm.addRemoteDependency(&chartWithLock{Chart: chart}, tt.dep)
@@ -496,45 +690,89 @@ func TestDependencyManager_addRemoteDependency(t *testing.T) {
 func TestDependencyManager_resolveRepository(t *testing.T) {
 	tests := []struct {
 		name                       string
-		repositories               map[string]*repository.ChartRepository
-		getChartRepositoryCallback GetChartRepositoryCallback
+		downloaders                map[string]repository.Downloader
+		getChartDownloaderCallback GetChartDownloaderCallback
 		url                        string
-		want                       *repository.ChartRepository
-		wantRepositories           map[string]*repository.ChartRepository
+		want                       repository.Downloader
+		wantDownloaders            map[string]repository.Downloader
 		wantErr                    string
 	}{
 		{
-			name: "resolves from repositories index",
+			name: "resolves from downloaders index",
 			url:  "https://example.com",
-			repositories: map[string]*repository.ChartRepository{
-				"https://example.com/": {URL: "https://example.com"},
+			downloaders: map[string]repository.Downloader{
+				"https://example.com/": &repository.ChartRepository{URL: "https://example.com"},
 			},
 			want: &repository.ChartRepository{URL: "https://example.com"},
 		},
 		{
 			name: "resolves from callback",
 			url:  "https://example.com",
-			getChartRepositoryCallback: func(url string) (*repository.ChartRepository, error) {
+			getChartDownloaderCallback: func(_ string) (repository.Downloader, error) {
 				return &repository.ChartRepository{URL: "https://example.com"}, nil
 			},
 			want: &repository.ChartRepository{URL: "https://example.com"},
-			wantRepositories: map[string]*repository.ChartRepository{
-				"https://example.com/": {URL: "https://example.com"},
+			wantDownloaders: map[string]repository.Downloader{
+				"https://example.com/": &repository.ChartRepository{URL: "https://example.com"},
 			},
 		},
 		{
 			name: "error from callback",
 			url:  "https://example.com",
-			getChartRepositoryCallback: func(url string) (*repository.ChartRepository, error) {
+			getChartDownloaderCallback: func(_ string) (repository.Downloader, error) {
 				return nil, errors.New("a very unique error")
 			},
-			wantErr:          "a very unique error",
-			wantRepositories: map[string]*repository.ChartRepository{},
+			wantErr:         "a very unique error",
+			wantDownloaders: map[string]repository.Downloader{},
 		},
 		{
 			name:    "error on not found",
 			url:     "https://example.com",
 			wantErr: "no chart repository for URL",
+		},
+		{
+			name: "resolves from oci repository",
+			url:  "oci://example.com",
+			downloaders: map[string]repository.Downloader{
+				"oci://example.com": &repository.OCIChartRepository{
+					URL: url.URL{
+						Scheme: "oci",
+						Host:   "example.com",
+					},
+				},
+			},
+			want: &repository.OCIChartRepository{
+				URL: url.URL{
+					Scheme: "oci",
+					Host:   "example.com",
+				},
+			},
+		},
+		{
+			name: "resolves oci repository from callback",
+			url:  "oci://example.com",
+			getChartDownloaderCallback: func(_ string) (repository.Downloader, error) {
+				return &repository.OCIChartRepository{
+					URL: url.URL{
+						Scheme: "oci",
+						Host:   "example.com"},
+				}, nil
+			},
+			want: &repository.OCIChartRepository{
+				URL: url.URL{
+					Scheme: "oci",
+					Host:   "example.com",
+				},
+			},
+
+			wantDownloaders: map[string]repository.Downloader{
+				"oci://example.com": &repository.OCIChartRepository{
+					URL: url.URL{
+						Scheme: "oci",
+						Host:   "example.com",
+					},
+				},
+			},
 		},
 	}
 	for _, tt := range tests {
@@ -542,8 +780,8 @@ func TestDependencyManager_resolveRepository(t *testing.T) {
 			g := NewWithT(t)
 
 			dm := &DependencyManager{
-				repositories:          tt.repositories,
-				getRepositoryCallback: tt.getChartRepositoryCallback,
+				downloaders:                tt.downloaders,
+				getChartDownloaderCallback: tt.getChartDownloaderCallback,
 			}
 
 			got, err := dm.resolveRepository(tt.url)
@@ -556,8 +794,8 @@ func TestDependencyManager_resolveRepository(t *testing.T) {
 
 			g.Expect(err).ToNot(HaveOccurred())
 			g.Expect(got).To(Equal(tt.want))
-			if tt.wantRepositories != nil {
-				g.Expect(dm.repositories).To(Equal(tt.wantRepositories))
+			if tt.wantDownloaders != nil {
+				g.Expect(dm.downloaders).To(Equal(tt.wantDownloaders))
 			}
 		})
 	}

@@ -181,7 +181,7 @@ func TestChartRepository_Get(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
 
-			cv, err := r.Get(tt.chartName, tt.chartVersion)
+			cv, err := r.GetChartVersion(tt.chartName, tt.chartVersion)
 			if tt.wantErr != "" {
 				g.Expect(err).To(HaveOccurred())
 				g.Expect(err.Error()).To(ContainSubstring(tt.wantErr))

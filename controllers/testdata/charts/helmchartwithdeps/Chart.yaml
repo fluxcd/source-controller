@@ -31,3 +31,6 @@ dependencies:
   - name: grafana
     version: ">=5.7.0"
     repository: "https://grafana.github.io/helm-charts"
+  - name: podinfo
+    version: ">=6.1.*"
+    repository: "oci://ghcr.io/stefanprodan/charts"

@@ -18,13 +18,20 @@ package repository
 
 import (
 	"strings"
+
+	helmreg "helm.sh/helm/v3/pkg/registry"
 )
 
-// NormalizeURL normalizes a ChartRepository URL by ensuring it ends with a
-// single "/".
-func NormalizeURL(url string) string {
-	if url != "" {
-		return strings.TrimRight(url, "/") + "/"
+// NormalizeURL normalizes a ChartRepository URL by its scheme.
+func NormalizeURL(repositoryURL string) string {
+	if repositoryURL == "" {
+		return ""
 	}
-	return url
+
+	if strings.Contains(repositoryURL, helmreg.OCIScheme) {
+		return strings.TrimRight(repositoryURL, "/")
+	}
+
+	return strings.TrimRight(repositoryURL, "/") + "/"
+
 }
