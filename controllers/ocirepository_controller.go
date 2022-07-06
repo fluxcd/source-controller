@@ -20,7 +20,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/google/go-containerregistry/pkg/name"
 	"os"
 	"sort"
 	"strings"
@@ -30,6 +29,7 @@ import (
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/authn/k8schain"
 	"github.com/google/go-containerregistry/pkg/crane"
+	"github.com/google/go-containerregistry/pkg/name"
 	gcrv1 "github.com/google/go-containerregistry/pkg/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -58,6 +58,7 @@ import (
 	serror "github.com/fluxcd/source-controller/internal/error"
 	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
 	"github.com/fluxcd/source-controller/internal/reconcile/summarize"
+	"github.com/fluxcd/source-controller/internal/util"
 )
 
 // ociRepositoryReadyCondition contains the information required to summarize a
@@ -234,12 +235,12 @@ func (r *OCIRepositoryReconciler) reconcile(ctx context.Context, obj *sourcev1.O
 	}
 
 	// Create temp working dir
-	tmpDir, err := os.MkdirTemp("", fmt.Sprintf("%s-%s-%s-", obj.Kind, obj.Namespace, obj.Name))
+	tmpDir, err := util.TempDirForObj("", obj)
 	if err != nil {
-		e := &serror.Event{
-			Err:    fmt.Errorf("failed to create temporary working directory: %w", err),
-			Reason: sourcev1.DirCreationFailedReason,
-		}
+		e := serror.NewGeneric(
+			fmt.Errorf("failed to create temporary working directory: %w", err),
+			sourcev1.DirCreationFailedReason,
+		)
 		conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition, e.Reason, e.Err.Error())
 		return sreconcile.ResultEmpty, e
 	}
@@ -289,7 +290,7 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, obj *sour
 	// Generates registry credential keychain
 	keychain, err := r.keychain(ctx, obj)
 	if err != nil {
-		e := &serror.Event{Err: err, Reason: sourcev1.OCIOperationFailedReason}
+		e := serror.NewGeneric(err, sourcev1.OCIOperationFailedReason)
 		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Error())
 		return sreconcile.ResultEmpty, e
 	}
@@ -297,7 +298,7 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, obj *sour
 	// Determine which artifact revision to pull
 	url, err := r.getArtifactURL(ctxTimeout, obj, keychain)
 	if err != nil {
-		e := &serror.Event{Err: err, Reason: sourcev1.OCIOperationFailedReason}
+		e := serror.NewGeneric(err, sourcev1.OCIOperationFailedReason)
 		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Error())
 		return sreconcile.ResultEmpty, e
 	}
@@ -305,7 +306,7 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, obj *sour
 	// Pull artifact from the remote container registry
 	img, err := crane.Pull(url, r.craneOptions(ctxTimeout, keychain)...)
 	if err != nil {
-		e := &serror.Event{Err: err, Reason: sourcev1.OCIOperationFailedReason}
+		e := serror.NewGeneric(err, sourcev1.OCIOperationFailedReason)
 		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Error())
 		return sreconcile.ResultEmpty, e
 	}
@@ -313,7 +314,7 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, obj *sour
 	// Determine the artifact SHA256 digest
 	imgDigest, err := img.Digest()
 	if err != nil {
-		e := &serror.Event{Err: err, Reason: sourcev1.OCIOperationFailedReason}
+		e := serror.NewGeneric(err, sourcev1.OCIOperationFailedReason)
 		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Error())
 		return sreconcile.ResultEmpty, e
 	}
@@ -335,27 +336,27 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, obj *sour
 	if !obj.GetArtifact().HasRevision(revision) {
 		layers, err := img.Layers()
 		if err != nil {
-			e := &serror.Event{Err: err, Reason: sourcev1.OCIOperationFailedReason}
+			e := serror.NewGeneric(err, sourcev1.OCIOperationFailedReason)
 			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Error())
 			return sreconcile.ResultEmpty, e
 		}
 
 		if len(layers) < 1 {
 			err = fmt.Errorf("no layers found in artifact")
-			e := &serror.Event{Err: err, Reason: sourcev1.OCIOperationFailedReason}
+			e := serror.NewGeneric(err, sourcev1.OCIOperationFailedReason)
 			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Error())
 			return sreconcile.ResultEmpty, e
 		}
 
 		blob, err := layers[0].Compressed()
 		if err != nil {
-			e := &serror.Event{Err: err, Reason: sourcev1.OCIOperationFailedReason}
+			e := serror.NewGeneric(err, sourcev1.OCIOperationFailedReason)
 			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Error())
 			return sreconcile.ResultEmpty, e
 		}
 
 		if _, err = untar.Untar(blob, dir); err != nil {
-			e := &serror.Event{Err: err, Reason: sourcev1.OCIOperationFailedReason}
+			e := serror.NewGeneric(err, sourcev1.OCIOperationFailedReason)
 			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Error())
 			return sreconcile.ResultEmpty, e
 		}
@@ -497,8 +498,9 @@ func (r *OCIRepositoryReconciler) craneOptions(ctx context.Context, keychain aut
 // reconcileStorage ensures the current state of the storage matches the
 // desired and previously observed state.
 //
-// All Artifacts for the object except for the current one in the Status are
-// garbage collected from the Storage.
+// The garbage collection is executed based on the flag configured settings and
+// may remove files that are beyond their TTL or the maximum number of files
+// to survive a collection cycle.
 // If the Artifact in the Status of the object disappeared from the Storage,
 // it is removed from the object.
 // If the object does not have an Artifact in its Status, a Reconciling
@@ -558,51 +560,52 @@ func (r *OCIRepositoryReconciler) reconcileArtifact(ctx context.Context, obj *so
 
 	// The artifact is up-to-date
 	if obj.GetArtifact().HasRevision(artifact.Revision) {
-		r.eventLogf(ctx, obj, events.EventTypeTrace, sourcev1.ArtifactUpToDateReason, "artifact up-to-date with remote revision: '%s'", artifact.Revision)
+		r.eventLogf(ctx, obj, events.EventTypeTrace, sourcev1.ArtifactUpToDateReason,
+			"artifact up-to-date with remote revision: '%s'", artifact.Revision)
 		return sreconcile.ResultSuccess, nil
 	}
 
 	// Ensure target path exists and is a directory
 	if f, err := os.Stat(dir); err != nil {
-		e := &serror.Event{
-			Err:    fmt.Errorf("failed to stat source path: %w", err),
-			Reason: sourcev1.StatOperationFailedReason,
-		}
+		e := serror.NewGeneric(
+			fmt.Errorf("failed to stat source path: %w", err),
+			sourcev1.StatOperationFailedReason,
+		)
 		conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition, e.Reason, e.Err.Error())
 		return sreconcile.ResultEmpty, e
 	} else if !f.IsDir() {
-		e := &serror.Event{
-			Err:    fmt.Errorf("source path '%s' is not a directory", dir),
-			Reason: sourcev1.InvalidPathReason,
-		}
+		e := serror.NewGeneric(
+			fmt.Errorf("source path '%s' is not a directory", dir),
+			sourcev1.InvalidPathReason,
+		)
 		conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition, e.Reason, e.Err.Error())
 		return sreconcile.ResultEmpty, e
 	}
 
 	// Ensure artifact directory exists and acquire lock
 	if err := r.Storage.MkdirAll(artifact); err != nil {
-		e := &serror.Event{
-			Err:    fmt.Errorf("failed to create artifact directory: %w", err),
-			Reason: sourcev1.DirCreationFailedReason,
-		}
+		e := serror.NewGeneric(
+			fmt.Errorf("failed to create artifact directory: %w", err),
+			sourcev1.DirCreationFailedReason,
+		)
 		conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition, e.Reason, e.Err.Error())
 		return sreconcile.ResultEmpty, e
 	}
 	unlock, err := r.Storage.Lock(artifact)
 	if err != nil {
-		return sreconcile.ResultEmpty, &serror.Event{
-			Err:    fmt.Errorf("failed to acquire lock for artifact: %w", err),
-			Reason: meta.FailedReason,
-		}
+		return sreconcile.ResultEmpty, serror.NewGeneric(
+			fmt.Errorf("failed to acquire lock for artifact: %w", err),
+			meta.FailedReason,
+		)
 	}
 	defer unlock()
 
 	// Archive directory to storage
 	if err := r.Storage.Archive(&artifact, dir, nil); err != nil {
-		e := &serror.Event{
-			Err:    fmt.Errorf("unable to archive artifact to storage: %s", err),
-			Reason: sourcev1.ArchiveOperationFailedReason,
-		}
+		e := serror.NewGeneric(
+			fmt.Errorf("unable to archive artifact to storage: %s", err),
+			sourcev1.ArchiveOperationFailedReason,
+		)
 		conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition, e.Reason, e.Err.Error())
 		return sreconcile.ResultEmpty, e
 	}
