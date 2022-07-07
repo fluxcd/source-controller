@@ -18,8 +18,11 @@ package controllers
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"sort"
 	"strings"
@@ -31,6 +34,7 @@ import (
 	"github.com/google/go-containerregistry/pkg/crane"
 	"github.com/google/go-containerregistry/pkg/name"
 	gcrv1 "github.com/google/go-containerregistry/pkg/v1"
+	"github.com/google/go-containerregistry/pkg/v1/remote"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -59,6 +63,12 @@ import (
 	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
 	"github.com/fluxcd/source-controller/internal/reconcile/summarize"
 	"github.com/fluxcd/source-controller/internal/util"
+)
+
+const (
+	ClientCert = "certFile"
+	ClientKey  = "keyFile"
+	CACert     = "caFile"
 )
 
 // ociRepositoryReadyCondition contains the information required to summarize a
@@ -295,8 +305,16 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, obj *sour
 		return sreconcile.ResultEmpty, e
 	}
 
+	// Generates transport for remote operations
+	transport, err := r.transport(ctx, obj)
+	if err != nil {
+		e := serror.NewGeneric(err, sourcev1.OCIOperationFailedReason)
+		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Error())
+		return sreconcile.ResultEmpty, e
+	}
+
 	// Determine which artifact revision to pull
-	url, err := r.getArtifactURL(ctxTimeout, obj, keychain)
+	url, err := r.getArtifactURL(ctxTimeout, obj, keychain, transport)
 	if err != nil {
 		e := serror.NewGeneric(err, sourcev1.OCIOperationFailedReason)
 		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Error())
@@ -304,7 +322,7 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, obj *sour
 	}
 
 	// Pull artifact from the remote container registry
-	img, err := crane.Pull(url, r.craneOptions(ctxTimeout, keychain)...)
+	img, err := crane.Pull(url, r.craneOptions(ctxTimeout, keychain, transport)...)
 	if err != nil {
 		e := serror.NewGeneric(err, sourcev1.OCIOperationFailedReason)
 		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Error())
@@ -382,7 +400,7 @@ func (r *OCIRepositoryReconciler) parseRepositoryURL(obj *sourcev1.OCIRepository
 }
 
 // getArtifactURL determines which tag or digest should be used and returns the OCI artifact FQN.
-func (r *OCIRepositoryReconciler) getArtifactURL(ctx context.Context, obj *sourcev1.OCIRepository, keychain authn.Keychain) (string, error) {
+func (r *OCIRepositoryReconciler) getArtifactURL(ctx context.Context, obj *sourcev1.OCIRepository, keychain authn.Keychain, transport http.RoundTripper) (string, error) {
 	url, err := r.parseRepositoryURL(obj)
 	if err != nil {
 		return "", err
@@ -394,7 +412,7 @@ func (r *OCIRepositoryReconciler) getArtifactURL(ctx context.Context, obj *sourc
 		}
 
 		if obj.Spec.Reference.SemVer != "" {
-			tag, err := r.getTagBySemver(ctx, url, obj.Spec.Reference.SemVer, keychain)
+			tag, err := r.getTagBySemver(ctx, url, obj.Spec.Reference.SemVer, keychain, transport)
 			if err != nil {
 				return "", err
 			}
@@ -411,8 +429,8 @@ func (r *OCIRepositoryReconciler) getArtifactURL(ctx context.Context, obj *sourc
 
 // getTagBySemver call the remote container registry, fetches all the tags from the repository,
 // and returns the latest tag according to the semver expression.
-func (r *OCIRepositoryReconciler) getTagBySemver(ctx context.Context, url, exp string, keychain authn.Keychain) (string, error) {
-	tags, err := crane.ListTags(url, r.craneOptions(ctx, keychain)...)
+func (r *OCIRepositoryReconciler) getTagBySemver(ctx context.Context, url, exp string, keychain authn.Keychain, transport http.RoundTripper) (string, error) {
+	tags, err := crane.ListTags(url, r.craneOptions(ctx, keychain, transport)...)
 	if err != nil {
 		return "", err
 	}
@@ -486,13 +504,62 @@ func (r *OCIRepositoryReconciler) keychain(ctx context.Context, obj *sourcev1.OC
 	return k8schain.NewFromPullSecrets(ctx, imagePullSecrets)
 }
 
+// transport clones the default transport from remote.
+// If certSecretRef is configured in the resource configuration,
+// returned transport will iclude client and/or CA certifactes
+func (r *OCIRepositoryReconciler) transport(ctx context.Context, obj *sourcev1.OCIRepository) (http.RoundTripper, error) {
+	if obj.Spec.CertSecretRef != nil {
+		var certSecret corev1.Secret
+		err := r.Get(ctx,
+			types.NamespacedName{Namespace: obj.Namespace, Name: obj.Spec.CertSecretRef.Name},
+			&certSecret)
+
+		if err != nil {
+			r.eventLogf(ctx, obj, events.EventSeverityTrace, "secret %q not found", obj.Spec.CertSecretRef.Name)
+			return nil, err
+		}
+
+		transport := remote.DefaultTransport.Clone()
+		tlsConfig := transport.TLSClientConfig
+
+		if clientCert, ok := certSecret.Data[ClientCert]; ok {
+			// parse and set client cert and secret
+			if clientKey, ok := certSecret.Data[ClientKey]; ok {
+				cert, err := tls.X509KeyPair(clientCert, clientKey)
+				if err != nil {
+					return nil, err
+				}
+				tlsConfig.Certificates = append(tlsConfig.Certificates, cert)
+			} else {
+				return nil, fmt.Errorf("client certificate found, but no key")
+			}
+		}
+		if caCert, ok := certSecret.Data[CACert]; ok {
+			syscerts, err := x509.SystemCertPool()
+			if err != nil {
+				return nil, err
+			}
+			syscerts.AppendCertsFromPEM(caCert)
+			tlsConfig.RootCAs = syscerts
+		}
+		return transport, nil
+	}
+	return nil, nil
+}
+
 // craneOptions sets the timeout and user agent for all operations against remote container registries.
-func (r *OCIRepositoryReconciler) craneOptions(ctx context.Context, keychain authn.Keychain) []crane.Option {
-	return []crane.Option{
+func (r *OCIRepositoryReconciler) craneOptions(ctx context.Context, keychain authn.Keychain, transport http.RoundTripper) []crane.Option {
+	options := []crane.Option{
 		crane.WithContext(ctx),
 		crane.WithUserAgent("flux/v2"),
 		crane.WithAuthFromKeychain(keychain),
 	}
+
+	if transport != nil {
+		options = append(options, crane.WithTransport(transport))
+	}
+
+	return options
 }
 
 // reconcileStorage ensures the current state of the storage matches the
