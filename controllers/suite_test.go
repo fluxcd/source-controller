@@ -37,7 +37,6 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 
 	"github.com/fluxcd/pkg/runtime/controller"
-	feathelper "github.com/fluxcd/pkg/runtime/features"
 	"github.com/fluxcd/pkg/runtime/testenv"
 	"github.com/fluxcd/pkg/testserver"
 	"github.com/phayes/freeport"
@@ -206,8 +205,6 @@ func TestMain(m *testing.M) {
 		panic(fmt.Sprintf("Failed to create a test registry server: %v", err))
 	}
 
-	fg := feathelper.FeatureGates{}
-	fg.SupportedFeatures(features.FeatureGates())
 	managed.InitManagedTransport()
 
 	if err := (&GitRepositoryReconciler{

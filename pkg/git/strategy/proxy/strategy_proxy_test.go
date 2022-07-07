@@ -30,10 +30,8 @@ import (
 
 	"github.com/elazarl/goproxy"
 	"github.com/fluxcd/pkg/gittestserver"
-	feathelper "github.com/fluxcd/pkg/runtime/features"
 	. "github.com/onsi/gomega"
 
-	"github.com/fluxcd/source-controller/internal/features"
 	"github.com/fluxcd/source-controller/pkg/git"
 	"github.com/fluxcd/source-controller/pkg/git/gogit"
 	"github.com/fluxcd/source-controller/pkg/git/libgit2"
@@ -44,12 +42,6 @@ import (
 // These tests are run in a different _test.go file because go-git uses the ProxyFromEnvironment function of the net/http package
 // which caches the Proxy settings, hence not including other tests in the same file ensures a clean proxy setup for the tests to run.
 func TestCheckoutStrategyForImplementation_Proxied(t *testing.T) {
-	// for libgit2 we are only testing for managed transport,
-	// as unmanaged is sunsetting.
-	// Unmanaged transport does not support HTTP_PROXY.
-	fg := feathelper.FeatureGates{}
-	fg.SupportedFeatures(features.FeatureGates())
-
 	managed.InitManagedTransport()
 
 	type cleanupFunc func()

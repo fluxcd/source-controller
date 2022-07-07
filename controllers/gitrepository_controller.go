@@ -236,6 +236,7 @@ func (r *GitRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		r.reconcileInclude,
 		r.reconcileArtifact,
 	}
+
 	recResult, retErr = r.reconcile(ctx, obj, reconcilers)
 	return
 }
@@ -428,6 +429,13 @@ func (r *GitRepositoryReconciler) reconcileStorage(ctx context.Context,
 // change, it short-circuits the whole reconciliation with an early return.
 func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context,
 	obj *sourcev1.GitRepository, commit *git.Commit, includes *artifactSet, dir string) (sreconcile.Result, error) {
+	// Exit early, if we need to use libgit2 AND managed transport hasn't been intialized.
+	if !managed.Enabled() && obj.Spec.GitImplementation == sourcev1.LibGit2Implementation {
+		fmt.Println(managed.Enabled())
+		return sreconcile.ResultEmpty, serror.NewStalling(
+			errors.New("libgit2 managed transport not initialized"), "Libgit2TransportNotEnabled",
+		)
+	}
 	// Configure authentication strategy to access the source
 	var authOpts *git.AuthOptions
 	var err error
@@ -745,8 +753,8 @@ func (r *GitRepositoryReconciler) gitCheckout(ctx context.Context,
 		return nil, e
 	}
 
-	// managed GIT transport only affects the libgit2 implementation
-	if managed.Enabled() && obj.Spec.GitImplementation == sourcev1.LibGit2Implementation {
+	// this is needed only for libgit2, due to managed transport.
+	if obj.Spec.GitImplementation == sourcev1.LibGit2Implementation {
 		// We set the TransportOptionsURL of this set of authentication options here by constructing
 		// a unique URL that won't clash in a multi tenant environment. This unique URL is used by
 		// libgit2 managed transports. This enables us to bypass the inbuilt credentials callback in

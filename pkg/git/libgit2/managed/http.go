@@ -419,6 +419,7 @@ func (self *httpSmartSubtransportStream) sendRequest() error {
 			URL:    self.req.URL,
 			Header: self.req.Header,
 		}
+
 		if req.Method == "POST" {
 			if len(content) == 0 {
 				// a copy of the request body needs to be saved so

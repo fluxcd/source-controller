@@ -30,25 +30,12 @@ const (
 	// the last revision is still the same at the target repository,
 	// and if that is so, skips the reconciliation.
 	OptimizedGitClones = "OptimizedGitClones"
-
-	// GitManagedTransport implements a managed transport for GitRepository
-	// objects that use the libgit2 implementation.
-	//
-	// When enabled, improves the reliability of libgit2 reconciliations,
-	// by enforcing timeouts and ensuring libgit2 cannot hijack the process
-	// and hang it indefinitely.
-	GitManagedTransport = "GitManagedTransport"
 )
 
 var features = map[string]bool{
 	// OptimizedGitClones
 	// opt-out from v0.25
 	OptimizedGitClones: true,
-
-	// GitManagedTransport
-	// opt-in from v0.22 (via environment variable)
-	// opt-out from v0.25
-	GitManagedTransport: true,
 }
 
 // DefaultFeatureGates contains a list of all supported feature gates and

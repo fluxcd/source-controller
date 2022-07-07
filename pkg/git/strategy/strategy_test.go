@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math/rand"
 	"net/http"
 	"net/url"
 	"os"
@@ -39,7 +40,17 @@ import (
 	"github.com/fluxcd/source-controller/pkg/git"
 	"github.com/fluxcd/source-controller/pkg/git/gogit"
 	"github.com/fluxcd/source-controller/pkg/git/libgit2"
+	"github.com/fluxcd/source-controller/pkg/git/libgit2/managed"
 )
+
+func TestMain(m *testing.M) {
+	err := managed.InitManagedTransport()
+	if err != nil {
+		panic(fmt.Sprintf("failed to initialize libgit2 managed transport: %s", err))
+	}
+	code := m.Run()
+	os.Exit(code)
+}
 
 func TestCheckoutStrategyForImplementation_Auth(t *testing.T) {
 	gitImpls := []git.Implementation{gogit.Implementation, libgit2.Implementation}
@@ -61,9 +72,10 @@ func TestCheckoutStrategyForImplementation_Auth(t *testing.T) {
 			},
 			authOptsFunc: func(g *WithT, u *url.URL, user string, pswd string, ca []byte) *git.AuthOptions {
 				return &git.AuthOptions{
-					Transport: git.HTTP,
-					Username:  user,
-					Password:  pswd,
+					Transport:           git.HTTP,
+					Username:            user,
+					Password:            pswd,
+					TransportOptionsURL: getTransportOptionsURL(git.HTTP),
 				}
 			},
 			wantFunc: func(g *WithT, cs git.CheckoutStrategy, dir string, repoURL string, authOpts *git.AuthOptions) {
@@ -79,10 +91,11 @@ func TestCheckoutStrategyForImplementation_Auth(t *testing.T) {
 			},
 			authOptsFunc: func(g *WithT, u *url.URL, user, pswd string, ca []byte) *git.AuthOptions {
 				return &git.AuthOptions{
-					Transport: git.HTTPS,
-					Username:  user,
-					Password:  pswd,
-					CAFile:    ca,
+					Transport:           git.HTTPS,
+					Username:            user,
+					Password:            pswd,
+					CAFile:              ca,
+					TransportOptionsURL: getTransportOptionsURL(git.HTTPS),
 				}
 			},
 			wantFunc: func(g *WithT, cs git.CheckoutStrategy, dir, repoURL string, authOpts *git.AuthOptions) {
@@ -105,11 +118,12 @@ func TestCheckoutStrategyForImplementation_Auth(t *testing.T) {
 				g.Expect(err).ToNot(HaveOccurred())
 
 				return &git.AuthOptions{
-					Host:       u.Host, // Without this libgit2 returns error "user cancelled hostkey check".
-					Transport:  git.SSH,
-					Username:   "git", // Without this libgit2 returns error "username does not match previous request".
-					Identity:   pair.PrivateKey,
-					KnownHosts: knownhosts,
+					Host:                u.Host, // Without this libgit2 returns error "user cancelled hostkey check".
+					Transport:           git.SSH,
+					Username:            "git", // Without this libgit2 returns error "username does not match previous request".
+					Identity:            pair.PrivateKey,
+					KnownHosts:          knownhosts,
+					TransportOptionsURL: getTransportOptionsURL(git.SSH),
 				}
 			},
 			wantFunc: func(g *WithT, cs git.CheckoutStrategy, dir, repoURL string, authOpts *git.AuthOptions) {
@@ -225,9 +239,10 @@ func TestCheckoutStrategyForImplementation_SemVerCheckout(t *testing.T) {
 	repoURL := gitServer.HTTPAddressWithCredentials() + "/" + repoPath
 
 	authOpts := &git.AuthOptions{
-		Transport: git.HTTP,
-		Username:  username,
-		Password:  password,
+		Transport:           git.HTTP,
+		Username:            username,
+		Password:            password,
+		TransportOptionsURL: getTransportOptionsURL(git.HTTP),
 	}
 
 	// Create test tags in the repo.
@@ -408,9 +423,10 @@ func TestCheckoutStrategyForImplementation_WithCtxTimeout(t *testing.T) {
 			repoURL := gitServer.HTTPAddressWithCredentials() + "/" + repoPath
 
 			authOpts := &git.AuthOptions{
-				Transport: git.HTTP,
-				Username:  username,
-				Password:  password,
+				Transport:           git.HTTP,
+				Username:            username,
+				Password:            password,
+				TransportOptionsURL: getTransportOptionsURL(git.HTTP),
 			}
 
 			checkoutOpts := git.CheckoutOptions{
@@ -485,4 +501,13 @@ func mockSignature(time time.Time) *object.Signature {
 		Email: "jane@example.com",
 		When:  time,
 	}
+}
+
+func getTransportOptionsURL(transport git.TransportType) string {
+	letterRunes := []rune("abcdefghijklmnopqrstuvwxyz1234567890")
+	b := make([]rune, 10)
+	for i := range b {
+		b[i] = letterRunes[rand.Intn(len(letterRunes))]
+	}
+	return string(transport) + "://" + string(b)
 }

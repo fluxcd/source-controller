@@ -74,7 +74,7 @@ func TestSSHAction_clientConfig(t *testing.T) {
 	}
 }
 
-func TestSSHManagedTransport_E2E(t *testing.T) {
+func TestSSH_E2E(t *testing.T) {
 	g := NewWithT(t)
 
 	server, err := gittestserver.NewTempGitServer()
@@ -90,7 +90,6 @@ func TestSSHManagedTransport_E2E(t *testing.T) {
 		server.StartSSH()
 	}()
 	defer server.StopSSH()
-	InitManagedTransport()
 
 	kp, err := ssh.NewEd25519Generator().Generate()
 	g.Expect(err).ToNot(HaveOccurred())

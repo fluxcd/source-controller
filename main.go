@@ -310,15 +310,9 @@ func main() {
 		startFileServer(storage.BasePath, storageAddr, setupLog)
 	}()
 
-	if enabled, _ := features.Enabled(features.GitManagedTransport); enabled {
-		managed.InitManagedTransport()
-	} else {
-		if optimize, _ := feathelper.Enabled(features.OptimizedGitClones); optimize {
-			features.Disable(features.OptimizedGitClones)
-			setupLog.Info(
-				"disabling optimized git clones; git clones can only be optimized when using managed transport",
-			)
-		}
+	if err = managed.InitManagedTransport(); err != nil {
+		// Log the error, but don't exit so as to not block reconcilers that are healthy.
+		setupLog.Error(err, "unable to initialize libgit2 managed transport")
 	}
 
 	setupLog.Info("starting manager")
