@@ -1022,21 +1022,6 @@ you are using a self-signed server certificate.</p>
 </tr>
 <tr>
 <td>
-<code>verify</code><br>
-<em>
-<a href="#source.toolkit.fluxcd.io/v1beta2.OCIRepositoryVerification">
-OCIRepositoryVerification
-</a>
-</em>
-</td>
-<td>
-<em>(Optional)</em>
-<p>Verification specifies the configuration to verify the autheticity
-of an OCI Artifact.</p>
-</td>
-</tr>
-<tr>
-<td>
 <code>interval</code><br>
 <em>
 <a href="https://godoc.org/k8s.io/apimachinery/pkg/apis/meta/v1#Duration">
@@ -2678,21 +2663,6 @@ you are using a self-signed server certificate.</p>
 </tr>
 <tr>
 <td>
-<code>verify</code><br>
-<em>
-<a href="#source.toolkit.fluxcd.io/v1beta2.OCIRepositoryVerification">
-OCIRepositoryVerification
-</a>
-</em>
-</td>
-<td>
-<em>(Optional)</em>
-<p>Verification specifies the configuration to verify the autheticity
-of an OCI Artifact.</p>
-</td>
-</tr>
-<tr>
-<td>
 <code>interval</code><br>
 <em>
 <a href="https://godoc.org/k8s.io/apimachinery/pkg/apis/meta/v1#Duration">
@@ -2838,10 +2808,6 @@ github.com/fluxcd/pkg/apis/meta.ReconcileRequestStatus
 </div>
 <h3 id="source.toolkit.fluxcd.io/v1beta2.OCIRepositoryVerification">OCIRepositoryVerification
 </h3>
-<p>
-(<em>Appears on:</em>
-<a href="#source.toolkit.fluxcd.io/v1beta2.OCIRepositorySpec">OCIRepositorySpec</a>)
-</p>
 <p>OCIRepositoryVerification verifies the authenticity of an OCI Artifact</p>
 <div class="md-typeset__scrollwrap">
 <div class="md-typeset__table">
