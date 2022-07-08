@@ -446,6 +446,7 @@ This option is available only when using the &lsquo;go-git&rsquo; GitImplementat
 </em>
 </td>
 <td>
+<em>(Optional)</em>
 <p>Include specifies a list of GitRepository resources which Artifacts
 should be included in the Artifact produced for this GitRepository.</p>
 </td>
