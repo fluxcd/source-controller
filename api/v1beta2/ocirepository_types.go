@@ -69,11 +69,6 @@ type OCIRepositorySpec struct {
 	// +optional
 	CertSecretRef *meta.LocalObjectReference `json:"certSecretRef,omitempty"`
 
-	// Verification specifies the configuration to verify the autheticity
-	// of an OCI Artifact.
-	// +optional
-	Verification *OCIRepositoryVerification `json:"verify,omitempty"`
-
 	// The interval at which to check for image updates.
 	// +required
 	Interval metav1.Duration `json:"interval"`

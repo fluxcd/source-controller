@@ -122,30 +122,6 @@ spec:
                   on a remote container registry.
                 pattern: ^oci://
                 type: string
-              verify:
-                description: Verification specifies the configuration to verify the
-                  autheticity of an OCI Artifact.
-                properties:
-                  provider:
-                    description: Provider specifies the technology used to sign the
-                      OCI Artifact.
-                    enum:
-                    - cosign
-                    type: string
-                  secretRef:
-                    description: SecretRef specifies the Kubernetes Secret containing
-                      the trusted public keys.
-                    properties:
-                      name:
-                        description: Name of the referent.
-                        type: string
-                    required:
-                    - name
-                    type: object
-                required:
-                - provider
-                - secretRef
-                type: object
             required:
             - interval
             - url

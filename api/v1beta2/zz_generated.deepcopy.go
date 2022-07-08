@@ -707,11 +707,6 @@ func (in *OCIRepositorySpec) DeepCopyInto(out *OCIRepositorySpec) {
 		*out = new(meta.LocalObjectReference)
 		**out = **in
 	}
-	if in.Verification != nil {
-		in, out := &in.Verification, &out.Verification
-		*out = new(OCIRepositoryVerification)
-		**out = **in
-	}
 	out.Interval = in.Interval
 	if in.Timeout != nil {
 		in, out := &in.Timeout, &out.Timeout
