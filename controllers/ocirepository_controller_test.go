@@ -16,7 +16,17 @@ limitations under the License.
 package controllers
 
 import (
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/tls"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/pem"
+	"errors"
 	"fmt"
+	"math/big"
+	"net"
+	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"os"
@@ -138,7 +148,7 @@ func TestOCIRepository_Reconcile(t *testing.T) {
 					return false
 				}
 				return len(obj.Finalizers) > 0
-			}, timeout).Should(BeFalse())
+			}, timeout).Should(BeTrue())
 
 			// Wait for the object to be Ready
 			g.Eventually(func() bool {
@@ -336,7 +346,7 @@ func TestOCIRepository_SecretRef(t *testing.T) {
 					return false
 				}
 				return len(obj.Finalizers) > 0
-			}, timeout).Should(BeFalse())
+			}, timeout).Should(BeTrue())
 
 			// Wait for the object to be Ready
 			g.Eventually(func() bool {
@@ -582,6 +592,167 @@ func TestOCIRepository_FailedAuth(t *testing.T) {
 	}
 }
 
+func TestOCIRepository_CertSecret(t *testing.T) {
+	g := NewWithT(t)
+
+	registryServer, err := registry.TLS("localhost")
+	g.Expect(err).ToNot(HaveOccurred())
+	defer registryServer.Close()
+
+	pi, err := createPodinfoImageFromTar("podinfo-6.1.6.tar", "6.1.6", registryServer)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	ca_cert := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: registryServer.Certificate().Raw})
+	t.Logf("certdata: %v", string(ca_cert))
+
+	tlsSecretCACert := corev1.Secret{
+		StringData: map[string]string{
+			CACert: string(ca_cert),
+		},
+	}
+
+	srv, rootCertPEM, clientCertPEM, clientKeyPEM, clientTLSCert, err := createTLSServer()
+	g.Expect(err).ToNot(HaveOccurred())
+
+	srv.StartTLS()
+	defer srv.Close()
+
+	transport := &http.Transport{
+		TLSClientConfig: &tls.Config{},
+	}
+	// Use the server cert as a CA cert, so the client trusts the
+	// server cert. (Only works because the server uses the same
+	// cert in both roles).
+	pool := x509.NewCertPool()
+	pool.AddCert(srv.Certificate())
+	transport.TLSClientConfig.RootCAs = pool
+	transport.TLSClientConfig.Certificates = []tls.Certificate{clientTLSCert}
+
+	srv.Client().Transport = transport
+	pi2, err := createPodinfoImageFromTar("podinfo-6.1.5.tar", "6.1.5", srv)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	tlsSecretClientCert := corev1.Secret{
+		StringData: map[string]string{
+			CACert:     string(rootCertPEM),
+			ClientCert: string(clientCertPEM),
+			ClientKey:  string(clientKeyPEM),
+		},
+	}
+
+	tests := []struct {
+		name                  string
+		url                   string
+		tag                   string
+		digest                v1.Hash
+		certSecret            *corev1.Secret
+		expectreadyconition   bool
+		expectedstatusmessage string
+	}{
+		{
+			name:                  "test connection without CACert",
+			url:                   pi.url,
+			tag:                   pi.tag,
+			digest:                pi.digest,
+			certSecret:            nil,
+			expectreadyconition:   false,
+			expectedstatusmessage: "unexpected status code 400 Bad Request: Client sent an HTTP request to an HTTPS server.",
+		},
+		{
+			name:                  "test connection with CACert",
+			url:                   pi.url,
+			tag:                   pi.tag,
+			digest:                pi.digest,
+			certSecret:            &tlsSecretCACert,
+			expectreadyconition:   true,
+			expectedstatusmessage: fmt.Sprintf("stored artifact for revision '%s'", pi.digest.Hex),
+		},
+		{
+			name:                  "test connection with CACert, Client Cert and Private Key",
+			url:                   pi2.url,
+			tag:                   pi2.tag,
+			digest:                pi2.digest,
+			certSecret:            &tlsSecretClientCert,
+			expectreadyconition:   true,
+			expectedstatusmessage: fmt.Sprintf("stored artifact for revision '%s'", pi2.digest.Hex),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			ns, err := testEnv.CreateNamespace(ctx, "ocirepository-test")
+			g.Expect(err).ToNot(HaveOccurred())
+			defer func() { g.Expect(testEnv.Delete(ctx, ns)).To(Succeed()) }()
+
+			obj := &sourcev1.OCIRepository{
+				ObjectMeta: metav1.ObjectMeta{
+					GenerateName: "ocirepository-test-resource",
+					Namespace:    ns.Name,
+				},
+				Spec: sourcev1.OCIRepositorySpec{
+					URL:       tt.url,
+					Interval:  metav1.Duration{Duration: 60 * time.Minute},
+					Reference: &sourcev1.OCIRepositoryRef{Digest: tt.digest.String()},
+				},
+			}
+
+			if tt.certSecret != nil {
+				tt.certSecret.ObjectMeta = metav1.ObjectMeta{
+					GenerateName: "cert-secretref",
+					Namespace:    ns.Name,
+				}
+
+				g.Expect(testEnv.CreateAndWait(ctx, tt.certSecret)).To(Succeed())
+				defer func() { g.Expect(testEnv.Delete(ctx, tt.certSecret)).To(Succeed()) }()
+
+				obj.Spec.CertSecretRef = &meta.LocalObjectReference{Name: tt.certSecret.Name}
+			}
+
+			g.Expect(testEnv.Create(ctx, obj)).To(Succeed())
+
+			key := client.ObjectKey{Name: obj.Name, Namespace: obj.Namespace}
+
+			resultobj := sourcev1.OCIRepository{}
+
+			// Wait for the finalizer to be set
+			g.Eventually(func() bool {
+				if err := testEnv.Get(ctx, key, &resultobj); err != nil {
+					return false
+				}
+				return len(resultobj.Finalizers) > 0
+			}, timeout).Should(BeTrue())
+
+			// Wait for the object to fail
+			g.Eventually(func() bool {
+				if err := testEnv.Get(ctx, key, &resultobj); err != nil {
+					return false
+				}
+				readyCondition := conditions.Get(&resultobj, meta.ReadyCondition)
+				if readyCondition == nil {
+					return false
+				}
+				return obj.Generation == readyCondition.ObservedGeneration &&
+					conditions.IsReady(&resultobj) == tt.expectreadyconition
+			}, timeout).Should(BeTrue())
+
+			readyCondition := conditions.Get(&resultobj, meta.ReadyCondition)
+			g.Expect(readyCondition.Message).Should(ContainSubstring(tt.expectedstatusmessage))
+
+			// Wait for the object to be deleted
+			g.Expect(testEnv.Delete(ctx, &resultobj)).To(Succeed())
+			g.Eventually(func() bool {
+				if err := testEnv.Get(ctx, key, &resultobj); err != nil {
+					return apierrors.IsNotFound(err)
+				}
+				return false
+			}, timeout).Should(BeTrue())
+		})
+	}
+
+}
+
 type artifactFixture struct {
 	expectedPath     string
 	expectedChecksum string
@@ -593,7 +764,6 @@ type podinfoImage struct {
 }
 
 func createPodinfoImageFromTar(tarFileName, tag string, imageServer *httptest.Server) (*podinfoImage, error) {
-
 	// Create Image
 	image, err := crane.Load(path.Join("testdata", "podinfo", tarFileName))
 	if err != nil {
@@ -613,13 +783,14 @@ func createPodinfoImageFromTar(tarFileName, tag string, imageServer *httptest.Se
 	}
 
 	// Push image
-	err = crane.Push(image, repositoryURL)
+	err = crane.Push(image, repositoryURL, crane.WithTransport(imageServer.Client().Transport))
+
 	if err != nil {
 		return nil, err
 	}
 
 	// Tag the image
-	err = crane.Tag(repositoryURL, tag)
+	err = crane.Tag(repositoryURL, tag, crane.WithTransport(imageServer.Client().Transport))
 	if err != nil {
 		return nil, err
 	}
@@ -629,4 +800,115 @@ func createPodinfoImageFromTar(tarFileName, tag string, imageServer *httptest.Se
 		tag:    tag,
 		digest: podinfoImageDigest,
 	}, nil
+}
+
+// These two taken verbatim from https://ericchiang.github.io/post/go-tls/
+
+func certTemplate() (*x509.Certificate, error) {
+	// generate a random serial number (a real cert authority would
+	// have some logic behind this)
+	serialNumberLimit := new(big.Int).Lsh(big.NewInt(1), 128)
+	serialNumber, err := rand.Int(rand.Reader, serialNumberLimit)
+	if err != nil {
+		return nil, errors.New("failed to generate serial number: " + err.Error())
+	}
+
+	tmpl := x509.Certificate{
+		SerialNumber:          serialNumber,
+		Subject:               pkix.Name{Organization: []string{"Flux project"}},
+		SignatureAlgorithm:    x509.SHA256WithRSA,
+		NotBefore:             time.Now(),
+		NotAfter:              time.Now().Add(time.Hour), // valid for an hour
+		BasicConstraintsValid: true,
+	}
+	return &tmpl, nil
+}
+
+func createCert(template, parent *x509.Certificate, pub interface{}, parentPriv interface{}) (
+	cert *x509.Certificate, certPEM []byte, err error) {
+
+	certDER, err := x509.CreateCertificate(rand.Reader, template, parent, pub, parentPriv)
+	if err != nil {
+		return
+	}
+	// parse the resulting certificate so we can use it again
+	cert, err = x509.ParseCertificate(certDER)
+	if err != nil {
+		return
+	}
+	// PEM encode the certificate (this is a standard TLS encoding)
+	b := pem.Block{Type: "CERTIFICATE", Bytes: certDER}
+	certPEM = pem.EncodeToMemory(&b)
+	return
+}
+
+// ----
+
+func createTLSServer() (*httptest.Server, []byte, []byte, []byte, tls.Certificate, error) {
+	var clientTLSCert tls.Certificate
+	var rootCertPEM, clientCertPEM, clientKeyPEM []byte
+
+	srv := httptest.NewUnstartedServer(registry.New())
+
+	// Create a self-signed cert to use as the CA and server cert.
+	rootKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		return srv, rootCertPEM, clientCertPEM, clientKeyPEM, clientTLSCert, err
+	}
+	rootCertTmpl, err := certTemplate()
+	if err != nil {
+		return srv, rootCertPEM, clientCertPEM, clientKeyPEM, clientTLSCert, err
+	}
+	rootCertTmpl.IsCA = true
+	rootCertTmpl.KeyUsage = x509.KeyUsageCertSign | x509.KeyUsageDigitalSignature
+	rootCertTmpl.ExtKeyUsage = []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth}
+	rootCertTmpl.IPAddresses = []net.IP{net.ParseIP("127.0.0.1")}
+	var rootCert *x509.Certificate
+	rootCert, rootCertPEM, err = createCert(rootCertTmpl, rootCertTmpl, &rootKey.PublicKey, rootKey)
+	if err != nil {
+		return srv, rootCertPEM, clientCertPEM, clientKeyPEM, clientTLSCert, err
+	}
+
+	rootKeyPEM := pem.EncodeToMemory(&pem.Block{
+		Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(rootKey),
+	})
+
+	// Create a TLS cert using the private key and certificate.
+	rootTLSCert, err := tls.X509KeyPair(rootCertPEM, rootKeyPEM)
+	if err != nil {
+		return srv, rootCertPEM, clientCertPEM, clientKeyPEM, clientTLSCert, err
+	}
+
+	// To trust a client certificate, the server must be given a
+	// CA cert pool.
+	pool := x509.NewCertPool()
+	pool.AddCert(rootCert)
+
+	srv.TLS = &tls.Config{
+		ClientAuth:   tls.RequireAndVerifyClientCert,
+		Certificates: []tls.Certificate{rootTLSCert},
+		ClientCAs:    pool,
+	}
+
+	// Create a client cert, signed by the "CA".
+	clientKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		return srv, rootCertPEM, clientCertPEM, clientKeyPEM, clientTLSCert, err
+	}
+	clientCertTmpl, err := certTemplate()
+	if err != nil {
+		return srv, rootCertPEM, clientCertPEM, clientKeyPEM, clientTLSCert, err
+	}
+	clientCertTmpl.KeyUsage = x509.KeyUsageDigitalSignature
+	clientCertTmpl.ExtKeyUsage = []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth}
+	_, clientCertPEM, err = createCert(clientCertTmpl, rootCert, &clientKey.PublicKey, rootKey)
+	if err != nil {
+		return srv, rootCertPEM, clientCertPEM, clientKeyPEM, clientTLSCert, err
+	}
+	// Encode and load the cert and private key for the client.
+	clientKeyPEM = pem.EncodeToMemory(&pem.Block{
+		Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(clientKey),
+	})
+	clientTLSCert, err = tls.X509KeyPair(clientCertPEM, clientKeyPEM)
+	return srv, rootCertPEM, clientCertPEM, clientKeyPEM, clientTLSCert, err
 }
