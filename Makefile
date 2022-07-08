@@ -3,8 +3,8 @@ IMG ?= fluxcd/source-controller
 TAG ?= latest
 
 # Base image used to build the Go binary
-LIBGIT2_IMG ?= ghcr.io/fluxcd/golang-with-libgit2
-LIBGIT2_TAG ?= libgit2-1.3.1
+LIBGIT2_IMG ?= ghcr.io/fluxcd/golang-with-libgit2-all
+LIBGIT2_TAG ?= v0.1.0
 
 # Allows for defining additional Go test args, e.g. '-tags integration'.
 GO_TEST_ARGS ?= -race

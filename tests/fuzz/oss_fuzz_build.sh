@@ -16,7 +16,7 @@
 
 set -euxo pipefail
 
-LIBGIT2_TAG="${LIBGIT2_TAG:-libgit2-1.3.1}"
+LIBGIT2_TAG="${LIBGIT2_TAG:-v0.1.0}"
 GOPATH="${GOPATH:-/root/go}"
 GO_SRC="${GOPATH}/src"
 PROJECT_PATH="github.com/fluxcd/source-controller"
