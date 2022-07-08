@@ -665,7 +665,7 @@ func TestOCIRepository_CertSecret(t *testing.T) {
 			digest:                pi.digest,
 			certSecret:            &tlsSecretCACert,
 			expectreadyconition:   true,
-			expectedstatusmessage: fmt.Sprintf("stored artifact for revision '%s'", pi.digest.Hex),
+			expectedstatusmessage: fmt.Sprintf("stored artifact for digest '%s'", pi.digest.Hex),
 		},
 		{
 			name:                  "test connection with CACert, Client Cert and Private Key",
@@ -674,7 +674,7 @@ func TestOCIRepository_CertSecret(t *testing.T) {
 			digest:                pi2.digest,
 			certSecret:            &tlsSecretClientCert,
 			expectreadyconition:   true,
-			expectedstatusmessage: fmt.Sprintf("stored artifact for revision '%s'", pi2.digest.Hex),
+			expectedstatusmessage: fmt.Sprintf("stored artifact for digest '%s'", pi2.digest.Hex),
 		},
 	}
 

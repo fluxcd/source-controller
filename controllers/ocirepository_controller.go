@@ -654,7 +654,7 @@ func (r *OCIRepositoryReconciler) reconcileArtifact(ctx context.Context,
 		if obj.GetArtifact().HasRevision(artifact.Revision) {
 			conditions.Delete(obj, sourcev1.ArtifactOutdatedCondition)
 			conditions.MarkTrue(obj, sourcev1.ArtifactInStorageCondition, meta.SucceededReason,
-				"stored artifact for revision '%s'", artifact.Revision)
+				"stored artifact for digest '%s'", artifact.Revision)
 		}
 	}()
 
