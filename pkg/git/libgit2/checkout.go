@@ -493,15 +493,17 @@ func buildSignature(s *git2go.Signature) git.Signature {
 }
 
 // initializeRepoWithRemote initializes or opens a repository at the given path
-// and configures it with the given remote "origin" URL. If a remote already
-// exists with a different URL, it returns an error.
+// and configures it with the given transport opts URL (as a placeholder for the
+// actual target url). If a remote already exists with a different URL, it overwrites
+// it with the provided transport opts URL.
 func initializeRepoWithRemote(ctx context.Context, path, url string, opts *git.AuthOptions) (*git2go.Repository, *git2go.Remote, error) {
 	repo, err := git2go.InitRepository(path, false)
 	if err != nil {
-		return nil, nil, fmt.Errorf("unable to init repository for '%s': %w", managed.EffectiveURL(url), gitutil.LibGit2Error(err))
+		return nil, nil, fmt.Errorf("unable to init repository for '%s': %w", url, gitutil.LibGit2Error(err))
 	}
 
-	remote, err := repo.Remotes.Create(defaultRemoteName, url)
+	transportOptsURL := opts.TransportOptionsURL
+	remote, err := repo.Remotes.Create(defaultRemoteName, transportOptsURL)
 	if err != nil {
 		// If the remote already exists, lookup the remote.
 		if git2go.IsErrorCode(err, git2go.ErrorCodeExists) {
@@ -510,13 +512,25 @@ func initializeRepoWithRemote(ctx context.Context, path, url string, opts *git.A
 				repo.Free()
 				return nil, nil, fmt.Errorf("unable to create or lookup remote '%s'", defaultRemoteName)
 			}
-			if remote.Url() != url {
-				repo.Free()
-				return nil, nil, fmt.Errorf("remote '%s' with different address '%s' already exists", defaultRemoteName, remote.Url())
+
+			if remote.Url() != transportOptsURL {
+				err = repo.Remotes.SetUrl("origin", transportOptsURL)
+				if err != nil {
+					repo.Free()
+					remote.Free()
+					return nil, nil, fmt.Errorf("unable to configure remote %s origin with url %s", defaultRemoteName, url)
+				}
+
+				// refresh the remote
+				remote, err = repo.Remotes.Lookup(defaultRemoteName)
+				if err != nil {
+					repo.Free()
+					return nil, nil, fmt.Errorf("unable to create or lookup remote '%s'", defaultRemoteName)
+				}
 			}
 		} else {
 			repo.Free()
-			return nil, nil, fmt.Errorf("unable to create remote for '%s': %w", managed.EffectiveURL(url), gitutil.LibGit2Error(err))
+			return nil, nil, fmt.Errorf("unable to create remote for '%s': %w", url, gitutil.LibGit2Error(err))
 		}
 	}
 	return repo, remote, nil
