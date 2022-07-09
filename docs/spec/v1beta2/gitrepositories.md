@@ -405,18 +405,6 @@ Some Git providers like Azure DevOps _require_ the `libgit2` implementation, as
 their Git servers provide only support for the
 [v2 protocol](https://git-scm.com/docs/protocol-v2).
 
-#### Managed transport for `libgit2` Git implementation
-
-The `libgit2` Git implementation supports a new managed transport for
-improved reliability, adding timeout enforcement for Git network operations.
-
-This feature is enabled by default. It can be disabled by starting the
-controller with the argument `--feature-gates=GitManagedTransport=false`.
-
-By disabling this feature the management of the transport is passed on to
-`libgit2`, which may result in blocking Git operations leading the controllers 
-to hang indefinitely.
-
 #### Optimized Git clones
 
 Optimized Git clones decreases resource utilization for GitRepository
@@ -432,9 +420,6 @@ usual.
 
 This feature is enabled by default. It can be disabled by starting the
 controller with the argument `--feature-gates=OptimizedGitClones=false`.
-Please note that this feature is only active when managed transport for
-`libgit2` is active. Disabling managed transport for `libgit2` automatically
-disables this feature.
 
 NB: GitRepository objects configured for SemVer or Commit clones are
 not affected by this functionality.
