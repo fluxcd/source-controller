@@ -419,6 +419,7 @@ func (self *httpSmartSubtransportStream) sendRequest() error {
 			URL:    self.req.URL,
 			Header: self.req.Header,
 		}
+		req = req.WithContext(self.owner.ctx)
 
 		if req.Method == "POST" {
 			if len(content) == 0 {
