@@ -102,7 +102,6 @@ type OCIRepositoryRef struct {
 	SemVer string `json:"semver,omitempty"`
 
 	// Tag is the image tag to pull, defaults to latest.
-	// +kubebuilder:default:=latest
 	// +optional
 	Tag string `json:"tag,omitempty"`
 }
