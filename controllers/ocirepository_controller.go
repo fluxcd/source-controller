@@ -33,7 +33,6 @@ import (
 	"github.com/google/go-containerregistry/pkg/authn/k8schain"
 	"github.com/google/go-containerregistry/pkg/crane"
 	"github.com/google/go-containerregistry/pkg/name"
-	gcrv1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -110,7 +109,7 @@ var ociRepositoryFailConditions = []string{
 // ociRepositoryReconcileFunc is the function type for all the v1beta2.OCIRepository
 // (sub)reconcile functions. The type implementations are grouped and
 // executed serially to perform the complete reconcile of the object.
-type ociRepositoryReconcileFunc func(ctx context.Context, obj *sourcev1.OCIRepository, digest *gcrv1.Hash, dir string) (sreconcile.Result, error)
+type ociRepositoryReconcileFunc func(ctx context.Context, obj *sourcev1.OCIRepository, metadata *sourcev1.Artifact, dir string) (sreconcile.Result, error)
 
 // OCIRepositoryReconciler reconciles a v1beta2.OCIRepository object
 type OCIRepositoryReconciler struct {
@@ -261,16 +260,15 @@ func (r *OCIRepositoryReconciler) reconcile(ctx context.Context, obj *sourcev1.O
 	}()
 	conditions.Delete(obj, sourcev1.StorageOperationFailedCondition)
 
-	hs := gcrv1.Hash{}
 	var (
-		res    sreconcile.Result
-		resErr error
-		digest = hs.DeepCopy()
+		res      sreconcile.Result
+		resErr   error
+		metadata = sourcev1.Artifact{}
 	)
 
 	// Run the sub-reconcilers and build the result of reconciliation.
 	for _, rec := range reconcilers {
-		recResult, err := rec(ctx, obj, digest, tmpDir)
+		recResult, err := rec(ctx, obj, &metadata, tmpDir)
 		// Exit immediately on ResultRequeue.
 		if recResult == sreconcile.ResultRequeue {
 			return sreconcile.ResultRequeue, nil
@@ -286,14 +284,14 @@ func (r *OCIRepositoryReconciler) reconcile(ctx context.Context, obj *sourcev1.O
 		res = sreconcile.LowestRequeuingResult(res, recResult)
 	}
 
-	r.notify(ctx, oldObj, obj, digest, res, resErr)
+	r.notify(ctx, oldObj, obj, res, resErr)
 
 	return res, resErr
 }
 
 // reconcileSource fetches the upstream OCI artifact metadata and content.
 // If this fails, it records v1beta2.FetchFailedCondition=True on the object and returns early.
-func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, obj *sourcev1.OCIRepository, digest *gcrv1.Hash, dir string) (sreconcile.Result, error) {
+func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, obj *sourcev1.OCIRepository, metadata *sourcev1.Artifact, dir string) (sreconcile.Result, error) {
 	ctxTimeout, cancel := context.WithTimeout(ctx, obj.Spec.Timeout.Duration)
 	defer cancel()
 
@@ -352,8 +350,24 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, obj *sour
 	}
 
 	// Set the internal revision to the remote digest hex
-	imgDigest.DeepCopyInto(digest)
 	revision := imgDigest.Hex
+
+	// Copy the OCI annotations to the internal artifact metadata
+	manifest, err := img.Manifest()
+	if err != nil {
+		e := serror.NewGeneric(
+			fmt.Errorf("failed to parse artifact manifest: %w", err),
+			sourcev1.OCIOperationFailedReason,
+		)
+		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
+		return sreconcile.ResultEmpty, e
+	}
+
+	m := &sourcev1.Artifact{
+		Revision: revision,
+		Metadata: manifest.Annotations,
+	}
+	m.DeepCopyInto(metadata)
 
 	// Mark observations about the revision on the object
 	defer func() {
@@ -606,7 +620,7 @@ func (r *OCIRepositoryReconciler) craneOptions(ctx context.Context,
 // The hostname of any URL in the Status of the object are updated, to ensure
 // they match the Storage server hostname of current runtime.
 func (r *OCIRepositoryReconciler) reconcileStorage(ctx context.Context,
-	obj *sourcev1.OCIRepository, _ *gcrv1.Hash, _ string) (sreconcile.Result, error) {
+	obj *sourcev1.OCIRepository, _ *sourcev1.Artifact, _ string) (sreconcile.Result, error) {
 	// Garbage collect previous advertised artifact(s) from storage
 	_ = r.garbageCollect(ctx, obj)
 
@@ -642,9 +656,9 @@ func (r *OCIRepositoryReconciler) reconcileStorage(ctx context.Context,
 // On a successful archive, the Artifact in the Status of the object is set,
 // and the symlink in the Storage is updated to its path.
 func (r *OCIRepositoryReconciler) reconcileArtifact(ctx context.Context,
-	obj *sourcev1.OCIRepository, digest *gcrv1.Hash, dir string) (sreconcile.Result, error) {
+	obj *sourcev1.OCIRepository, metadata *sourcev1.Artifact, dir string) (sreconcile.Result, error) {
 	// Calculate revision
-	revision := digest.Hex
+	revision := metadata.Revision
 
 	// Create artifact
 	artifact := r.Storage.NewArtifactFor(obj.Kind, obj, revision, fmt.Sprintf("%s.tar.gz", revision))
@@ -712,6 +726,7 @@ func (r *OCIRepositoryReconciler) reconcileArtifact(ctx context.Context,
 
 	// Record it on the object
 	obj.Status.Artifact = artifact.DeepCopy()
+	obj.Status.Artifact.Metadata = metadata.Metadata
 
 	// Update symlink on a "best effort" basis
 	url, err := r.Storage.Symlink(artifact, "latest.tar.gz")
@@ -798,7 +813,7 @@ func (r *OCIRepositoryReconciler) eventLogf(ctx context.Context,
 
 // notify emits notification related to the reconciliation.
 func (r *OCIRepositoryReconciler) notify(ctx context.Context,
-	oldObj, newObj *sourcev1.OCIRepository, digest *gcrv1.Hash, res sreconcile.Result, resErr error) {
+	oldObj, newObj *sourcev1.OCIRepository, res sreconcile.Result, resErr error) {
 	// Notify successful reconciliation for new artifact and recovery from any
 	// failure.
 	if resErr == nil && res == sreconcile.ResultSuccess && newObj.Status.Artifact != nil {
@@ -812,7 +827,7 @@ func (r *OCIRepositoryReconciler) notify(ctx context.Context,
 			oldChecksum = oldObj.GetArtifact().Checksum
 		}
 
-		message := fmt.Sprintf("stored artifact with digest '%s' from '%s'", digest.String(), newObj.Spec.URL)
+		message := fmt.Sprintf("stored artifact with digest '%s' from '%s'", newObj.Status.Artifact.Revision, newObj.Spec.URL)
 
 		// Notify on new artifact and failure recovery.
 		if oldChecksum != newObj.GetArtifact().Checksum {

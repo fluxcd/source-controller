@@ -17,9 +17,11 @@ limitations under the License.
 package v1beta2
 
 import (
-	"github.com/fluxcd/pkg/apis/meta"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"time"
+
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/fluxcd/pkg/apis/meta"
 )
 
 const (

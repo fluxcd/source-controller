@@ -161,6 +161,8 @@ func setupRegistryServer(ctx context.Context) (*registryClientTestServer, error)
 	server.registryHost = fmt.Sprintf("localhost:%d", port)
 	config.HTTP.Addr = fmt.Sprintf("127.0.0.1:%d", port)
 	config.HTTP.DrainTimeout = time.Duration(10) * time.Second
+	config.Log.AccessLog.Disabled = true
+	config.Log.Level = "error"
 	config.Storage = map[string]configuration.Parameters{"inmemory": map[string]interface{}{}}
 	config.Auth = configuration.Auth{
 		"htpasswd": configuration.Parameters{

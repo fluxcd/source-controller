@@ -1190,6 +1190,18 @@ int64
 <p>Size is the number of bytes in the file.</p>
 </td>
 </tr>
+<tr>
+<td>
+<code>metadata</code><br>
+<em>
+map[string]string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Metadata holds upstream information such as OCI annotations.</p>
+</td>
+</tr>
 </tbody>
 </table>
 </div>
