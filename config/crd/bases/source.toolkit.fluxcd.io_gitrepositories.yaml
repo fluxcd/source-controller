@@ -559,6 +559,11 @@ spec:
                       the last update of the Artifact.
                     format: date-time
                     type: string
+                  metadata:
+                    additionalProperties:
+                      type: string
+                    description: Metadata holds upstream information such as OCI annotations.
+                    type: object
                   path:
                     description: Path is the relative file path of the Artifact. It
                       can be used to locate the file in the root of the Artifact storage
@@ -677,6 +682,12 @@ spec:
                         the last update of the Artifact.
                       format: date-time
                       type: string
+                    metadata:
+                      additionalProperties:
+                        type: string
+                      description: Metadata holds upstream information such as OCI
+                        annotations.
+                      type: object
                     path:
                       description: Path is the relative file path of the Artifact.
                         It can be used to locate the file in the root of the Artifact

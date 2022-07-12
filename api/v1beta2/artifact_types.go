@@ -54,6 +54,10 @@ type Artifact struct {
 	// Size is the number of bytes in the file.
 	// +optional
 	Size *int64 `json:"size,omitempty"`
+
+	// Metadata holds upstream information such as OCI annotations.
+	// +optional
+	Metadata map[string]string `json:"metadata,omitempty"`
 }
 
 // HasRevision returns if the given revision matches the current Revision of

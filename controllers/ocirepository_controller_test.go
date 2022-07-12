@@ -44,7 +44,8 @@ import (
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/crane"
 	"github.com/google/go-containerregistry/pkg/registry"
-	v1 "github.com/google/go-containerregistry/pkg/v1"
+	gcrv1 "github.com/google/go-containerregistry/pkg/v1"
+	"github.com/google/go-containerregistry/pkg/v1/mutate"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -163,10 +164,12 @@ func TestOCIRepository_Reconcile(t *testing.T) {
 					obj.Generation == obj.Status.ObservedGeneration
 			}, timeout).Should(BeTrue())
 
-			t.Log(obj.Spec.Reference)
-
 			// Check if the revision matches the expected digest
 			g.Expect(obj.Status.Artifact.Revision).To(Equal(tt.digest))
+
+			// Check if the metadata matches the expected annotations
+			g.Expect(obj.Status.Artifact.Metadata["org.opencontainers.image.source"]).To(ContainSubstring("podinfo"))
+			g.Expect(obj.Status.Artifact.Metadata["org.opencontainers.image.revision"]).To(ContainSubstring(tt.tag))
 
 			// Check if the artifact storage path matches the expected file path
 			localPath := testStorage.LocalPath(*obj.Status.Artifact)
@@ -252,6 +255,7 @@ func TestOCIRepository_SecretRef(t *testing.T) {
 	ociURL := fmt.Sprintf("oci://%s", repositoryURL)
 
 	// Push Test Image
+	image = setPodinfoImageAnnotations(image, "6.1.6")
 	err = crane.Push(image, repositoryURL, crane.WithAuth(&authn.Basic{
 		Username: testRegistryUsername,
 		Password: testRegistryPassword,
@@ -265,7 +269,7 @@ func TestOCIRepository_SecretRef(t *testing.T) {
 	tests := []struct {
 		name                  string
 		url                   string
-		digest                v1.Hash
+		digest                gcrv1.Hash
 		includeSecretRef      bool
 		includeServiceAccount bool
 	}{
@@ -449,6 +453,7 @@ func TestOCIRepository_FailedAuth(t *testing.T) {
 	ociURL := fmt.Sprintf("oci://%s", repositoryURL)
 
 	// Push Test Image
+	image = setPodinfoImageAnnotations(image, "6.1.6")
 	err = crane.Push(image, repositoryURL, crane.WithAuth(&authn.Basic{
 		Username: testRegistryUsername,
 		Password: testRegistryPassword,
@@ -462,7 +467,7 @@ func TestOCIRepository_FailedAuth(t *testing.T) {
 	tests := []struct {
 		name                  string
 		url                   string
-		digest                v1.Hash
+		digest                gcrv1.Hash
 		repoUsername          string
 		repoPassword          string
 		includeSecretRef      bool
@@ -644,7 +649,7 @@ func TestOCIRepository_CertSecret(t *testing.T) {
 		name                  string
 		url                   string
 		tag                   string
-		digest                v1.Hash
+		digest                gcrv1.Hash
 		certSecret            *corev1.Secret
 		expectreadyconition   bool
 		expectedstatusmessage string
@@ -760,7 +765,7 @@ type artifactFixture struct {
 type podinfoImage struct {
 	url    string
 	tag    string
-	digest v1.Hash
+	digest gcrv1.Hash
 }
 
 func createPodinfoImageFromTar(tarFileName, tag string, imageServer *httptest.Server) (*podinfoImage, error) {
@@ -769,6 +774,8 @@ func createPodinfoImageFromTar(tarFileName, tag string, imageServer *httptest.Se
 	if err != nil {
 		return nil, err
 	}
+
+	image = setPodinfoImageAnnotations(image, tag)
 
 	url, err := url.Parse(imageServer.URL)
 	if err != nil {
@@ -784,7 +791,6 @@ func createPodinfoImageFromTar(tarFileName, tag string, imageServer *httptest.Se
 
 	// Push image
 	err = crane.Push(image, repositoryURL, crane.WithTransport(imageServer.Client().Transport))
-
 	if err != nil {
 		return nil, err
 	}
@@ -802,8 +808,15 @@ func createPodinfoImageFromTar(tarFileName, tag string, imageServer *httptest.Se
 	}, nil
 }
 
-// These two taken verbatim from https://ericchiang.github.io/post/go-tls/
+func setPodinfoImageAnnotations(img gcrv1.Image, tag string) gcrv1.Image {
+	metadata := map[string]string{
+		"org.opencontainers.image.source":   "https://github.com/stefanprodan/podinfo",
+		"org.opencontainers.image.revision": fmt.Sprintf("%s/SHA", tag),
+	}
+	return mutate.Annotations(img, metadata).(gcrv1.Image)
+}
 
+// These two taken verbatim from https://ericchiang.github.io/post/go-tls/
 func certTemplate() (*x509.Certificate, error) {
 	// generate a random serial number (a real cert authority would
 	// have some logic behind this)
@@ -841,8 +854,6 @@ func createCert(template, parent *x509.Certificate, pub interface{}, parentPriv 
 	certPEM = pem.EncodeToMemory(&b)
 	return
 }
-
-// ----
 
 func createTLSServer() (*httptest.Server, []byte, []byte, []byte, tls.Certificate, error) {
 	var clientTLSCert tls.Certificate
