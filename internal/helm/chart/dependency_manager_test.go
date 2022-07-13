@@ -93,6 +93,7 @@ func TestDependencyManager_Clear(t *testing.T) {
 		},
 		"with credentials":    ociRepoWithCreds,
 		"without credentials": &repository.OCIChartRepository{},
+		"nil downloader":      nil,
 	}
 
 	dm := NewDependencyManager(WithRepositories(downloaders))
@@ -427,6 +428,14 @@ func TestDependencyManager_addRemoteDependency(t *testing.T) {
 				Repository: "https://example.com",
 			},
 			wantErr: "no chart repository for URL",
+		},
+		{
+			name:        "resolve aliased repository error",
+			downloaders: map[string]repository.Downloader{},
+			dep: &helmchart.Dependency{
+				Repository: "@fantastic-charts",
+			},
+			wantErr: "aliased repository dependency is not supported",
 		},
 		{
 			name: "strategic load error",

@@ -17,9 +17,21 @@ limitations under the License.
 package repository
 
 import (
+	"fmt"
 	"strings"
 
 	helmreg "helm.sh/helm/v3/pkg/registry"
+)
+
+const (
+	alias = "@"
+)
+
+var (
+	// errInvalidDepURL is returned when the dependency URL is not supported
+	errInvalidDepURL = fmt.Errorf("invalid dependency repository URL")
+	// errInvalidAliasedDep is returned when the dependency URL is an alias
+	errInvalidAliasedDep = fmt.Errorf("aliased repository dependency is not supported")
 )
 
 // NormalizeURL normalizes a ChartRepository URL by its scheme.
@@ -34,4 +46,20 @@ func NormalizeURL(repositoryURL string) string {
 
 	return strings.TrimRight(repositoryURL, "/") + "/"
 
+}
+
+// ValidateDepURL returns an error if the given depended repository URL declaration is not supported
+// The reason for this is that the dependency manager will not be able to resolve the alias declaration
+// e.g. repository: "@fantastic-charts"
+func ValidateDepURL(repositoryURL string) error {
+	switch {
+	case strings.HasPrefix(repositoryURL, helmreg.OCIScheme):
+		return nil
+	case strings.HasPrefix(repositoryURL, "https://") || strings.HasPrefix(repositoryURL, "http://"):
+		return nil
+	case strings.HasPrefix(repositoryURL, alias):
+		return fmt.Errorf("%w: %s", errInvalidAliasedDep, repositoryURL)
+	default:
+		return fmt.Errorf("%w: %s", errInvalidDepURL, repositoryURL)
+	}
 }
