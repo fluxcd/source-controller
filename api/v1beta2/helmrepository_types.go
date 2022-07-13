@@ -89,6 +89,10 @@ type HelmRepositorySpec struct {
 	// +kubebuilder:validation:Enum=default;oci
 	// +optional
 	Type string `json:"type,omitempty"`
+
+	// Insecure allows connecting to a non-TLS/plain HTTP OCI endpoint.
+	// +optional
+	Insecure bool `json:"insecure,omitempty"`
 }
 
 // HelmRepositoryStatus records the observed state of the HelmRepository.

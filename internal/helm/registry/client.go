@@ -27,7 +27,7 @@ import (
 // ClientGenerator generates a registry client and a temporary credential file.
 // The client is meant to be used for a single reconciliation.
 // The file is meant to be used for a single reconciliation and deleted after.
-func ClientGenerator(isLogin bool) (*registry.Client, string, error) {
+func ClientGenerator(isLogin, plainHTTP bool) (*registry.Client, string, error) {
 	if isLogin {
 		// create a temporary file to store the credentials
 		// this is needed because otherwise the credentials are stored in ~/.docker/config.json.
@@ -37,7 +37,14 @@ func ClientGenerator(isLogin bool) (*registry.Client, string, error) {
 		}
 
 		var errs []error
-		rClient, err := registry.NewClient(registry.ClientOptWriter(io.Discard), registry.ClientOptCredentialsFile(credentialsFile.Name()))
+		opts := []registry.ClientOption{
+			registry.ClientOptWriter(io.Discard),
+			registry.ClientOptCredentialsFile(credentialsFile.Name()),
+		}
+		if plainHTTP {
+			opts = append(opts, registry.ClientOptPlainHTTP())
+		}
+		rClient, err := registry.NewClient(opts...)
 		if err != nil {
 			errs = append(errs, err)
 			// attempt to delete the temporary file

@@ -84,7 +84,7 @@ type HelmRepositoryOCIReconciler struct {
 // and an optional file name.
 // The file is used to store the registry client credentials.
 // The caller is responsible for deleting the file.
-type RegistryClientGeneratorFunc func(isLogin bool) (*helmreg.Client, string, error)
+type RegistryClientGeneratorFunc func(isLogin, plainHTTP bool) (*helmreg.Client, string, error)
 
 func (r *HelmRepositoryOCIReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return r.SetupWithManagerAndOptions(mgr, HelmRepositoryReconcilerOptions{})
@@ -295,8 +295,12 @@ func (r *HelmRepositoryOCIReconciler) reconcile(ctx context.Context, obj *v1beta
 		}
 	}
 
+	if obj.Spec.Insecure {
+		loginOpts = append(loginOpts, helmreg.LoginOptInsecure(true))
+	}
+
 	// Create registry client and login if needed.
-	registryClient, file, err := r.RegistryClientGenerator(loginOpts != nil)
+	registryClient, file, err := r.RegistryClientGenerator(loginOpts != nil, obj.Spec.Insecure)
 	if err != nil {
 		e := fmt.Errorf("failed to create registry client: %w", err)
 		conditions.MarkFalse(obj, meta.ReadyCondition, meta.FailedReason, e.Error())

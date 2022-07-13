@@ -519,6 +519,10 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 		loginOpts = append([]helmreg.LoginOption{}, loginOpt)
 	}
 
+	if repo.Spec.Insecure {
+		loginOpts = append(loginOpts, helmreg.LoginOptInsecure(true))
+	}
+
 	// Initialize the chart repository
 	var chartRepo repository.Downloader
 	switch repo.Spec.Type {
@@ -532,7 +536,7 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 		// this is needed because otherwise the credentials are stored in ~/.docker/config.json.
 		// TODO@souleb: remove this once the registry move to Oras v2
 		// or rework to enable reusing credentials to avoid the unneccessary handshake operations
-		registryClient, credentialsFile, err := r.RegistryClientGenerator(loginOpts != nil)
+		registryClient, credentialsFile, err := r.RegistryClientGenerator(loginOpts != nil, repo.Spec.Insecure)
 		if err != nil {
 			e := &serror.Event{
 				Err:    fmt.Errorf("failed to construct Helm client: %w", err),
@@ -976,7 +980,7 @@ func (r *HelmChartReconciler) namespacedChartRepositoryCallback(ctx context.Cont
 
 		var chartRepo repository.Downloader
 		if helmreg.IsOCI(normalizedURL) {
-			registryClient, credentialsFile, err := r.RegistryClientGenerator(loginOpts != nil)
+			registryClient, credentialsFile, err := r.RegistryClientGenerator(loginOpts != nil, repo.Spec.Insecure)
 			if err != nil {
 				return nil, fmt.Errorf("failed to create registry client for HelmRepository '%s': %w", repo.Name, err)
 			}

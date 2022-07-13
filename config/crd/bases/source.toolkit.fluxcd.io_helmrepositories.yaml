@@ -299,6 +299,10 @@ spec:
                 required:
                 - namespaceSelectors
                 type: object
+              insecure:
+                description: Insecure allows connecting to a non-TLS/plain HTTP OCI
+                  endpoint.
+                type: boolean
               interval:
                 description: Interval at which to check the URL for updates.
                 type: string
