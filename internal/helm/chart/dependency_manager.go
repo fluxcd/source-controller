@@ -98,7 +98,9 @@ func NewDependencyManager(opts ...DependencyManagerOption) *DependencyManager {
 func (dm *DependencyManager) Clear() error {
 	var errs []error
 	for _, v := range dm.downloaders {
-		errs = append(errs, v.Clear())
+		if v != nil {
+			errs = append(errs, v.Clear())
+		}
 	}
 	return errors.NewAggregate(errs)
 }
@@ -257,6 +259,10 @@ func (dm *DependencyManager) resolveRepository(url string) (repo repository.Down
 	defer dm.mu.Unlock()
 
 	nUrl := repository.NormalizeURL(url)
+	err = repository.ValidateDepURL(nUrl)
+	if err != nil {
+		return
+	}
 	if _, ok := dm.downloaders[nUrl]; !ok {
 		if dm.getChartDownloaderCallback == nil {
 			err = fmt.Errorf("no chart repository for URL '%s'", nUrl)
