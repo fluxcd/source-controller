@@ -16,7 +16,7 @@
 
 set -euxo pipefail
 
-LIBGIT2_TAG="${LIBGIT2_TAG:-libgit2-1.3.1}"
+LIBGIT2_TAG="${LIBGIT2_TAG:-v0.1.1}"
 GOPATH="${GOPATH:-/root/go}"
 GO_SRC="${GOPATH}/src"
 PROJECT_PATH="github.com/fluxcd/source-controller"
@@ -28,9 +28,9 @@ export TARGET_DIR="$(/bin/pwd)/build/libgit2/${LIBGIT2_TAG}"
 # For most cases, libgit2 will already be present.
 # The exception being at the oss-fuzz integration.
 if [ ! -d "${TARGET_DIR}" ]; then
-    curl -o output.tar.gz -LO "https://github.com/fluxcd/golang-with-libgit2/releases/download/${LIBGIT2_TAG}/linux-$(uname -m)-libs.tar.gz"
+    curl -o output.tar.gz -LO "https://github.com/fluxcd/golang-with-libgit2/releases/download/${LIBGIT2_TAG}/linux-$(uname -m)-all-libs.tar.gz"
 
-    DIR=libgit2-linux
+    DIR=libgit2-linux-all-libs
     NEW_DIR="$(/bin/pwd)/build/libgit2/${LIBGIT2_TAG}"
     INSTALLED_DIR="/home/runner/work/golang-with-libgit2/golang-with-libgit2/build/${DIR}"
 

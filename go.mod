@@ -10,7 +10,7 @@ replace github.com/fluxcd/source-controller/api => ./api
 replace helm.sh/helm/v3 => helm.sh/helm/v3 v3.9.0-rc.1.0.20220627184942-c52cd40acef1
 
 require (
-	cloud.google.com/go/storage v1.22.1
+	cloud.google.com/go/storage v1.23.0
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v0.22.0
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity v0.13.2
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v0.3.0
@@ -19,10 +19,10 @@ require (
 	// maintained by the ProtonMail team to continue to support the openpgp
 	// module, after the Go team decided to no longer maintain it.
 	// When in doubt (and not using openpgp), use /x/crypto.
-	github.com/ProtonMail/go-crypto v0.0.0-20220517143526-88bb52951d5b
+	github.com/ProtonMail/go-crypto v0.0.0-20220623141421-5afb4c282135
 	github.com/cyphar/filepath-securejoin v0.2.3
 	github.com/darkowlzz/controller-check v0.0.0-20220325122359-11f5827b7981
-	github.com/distribution/distribution/v3 v3.0.0-20220526142353-ffbd94cbe269
+	github.com/distribution/distribution/v3 v3.0.0-20220702071910-8857a1948739
 	github.com/docker/cli v20.10.17+incompatible
 	github.com/docker/go-units v0.4.0
 	github.com/elazarl/goproxy v0.0.0-20220529153421-8ea89ba92021
@@ -43,16 +43,16 @@ require (
 	github.com/go-logr/logr v1.2.3
 	github.com/google/uuid v1.3.0
 	github.com/libgit2/git2go/v33 v33.0.9
-	github.com/minio/minio-go/v7 v7.0.27
+	github.com/minio/minio-go/v7 v7.0.31
 	github.com/onsi/gomega v1.19.0
 	github.com/otiai10/copy v1.7.0
 	github.com/phayes/freeport v0.0.0-20220201140144-74d24b5ae9f5
 	github.com/prometheus/client_golang v1.12.2
 	github.com/spf13/pflag v1.0.5
-	golang.org/x/crypto v0.0.0-20220525230936-793ad666bf5e
-	golang.org/x/net v0.0.0-20220607020251-c690dde0001d
+	golang.org/x/crypto v0.0.0-20220622213112-05595931fe9d
+	golang.org/x/net v0.0.0-20220706163947-c90051bbdb60
 	golang.org/x/sync v0.0.0-20220601150217-0de741cfad7f
-	google.golang.org/api v0.83.0
+	google.golang.org/api v0.86.0
 	gotest.tools v2.2.0+incompatible
 	helm.sh/helm/v3 v3.9.0
 	k8s.io/api v0.24.1
@@ -67,12 +67,15 @@ require (
 // Fix CVE-2022-28948
 replace gopkg.in/yaml.v3 => gopkg.in/yaml.v3 v3.0.1
 
+// Fix CVE-2022-1996 (for v2, Go Modules incompatible)
+replace github.com/emicklei/go-restful => github.com/emicklei/go-restful v2.16.0+incompatible
+
 // Fix CVE-2022-31030
 replace github.com/containerd/containerd => github.com/containerd/containerd v1.6.6
 
 require (
-	cloud.google.com/go v0.100.2 // indirect
-	cloud.google.com/go/compute v1.6.1 // indirect
+	cloud.google.com/go v0.102.1 // indirect
+	cloud.google.com/go/compute v1.7.0 // indirect
 	cloud.google.com/go/iam v0.3.0 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/internal v0.9.1 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20210617225240-d185dfc1b5a1 // indirect
@@ -131,6 +134,7 @@ require (
 	github.com/google/go-cmp v0.5.8 // indirect
 	github.com/google/gofuzz v1.2.0 // indirect
 	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510 // indirect
+	github.com/googleapis/enterprise-certificate-proxy v0.1.0 // indirect
 	github.com/googleapis/gax-go/v2 v2.4.0 // indirect
 	github.com/googleapis/go-type-adapters v1.0.0 // indirect
 	github.com/gorilla/handlers v1.5.1 // indirect
@@ -205,15 +209,15 @@ require (
 	go.uber.org/atomic v1.7.0 // indirect
 	go.uber.org/multierr v1.6.0 // indirect
 	go.uber.org/zap v1.21.0 // indirect
-	golang.org/x/oauth2 v0.0.0-20220524215830-622c5d57e401 // indirect
-	golang.org/x/sys v0.0.0-20220520151302-bc2c85ada10a // indirect
+	golang.org/x/oauth2 v0.0.0-20220622183110-fd043fe589d2 // indirect
+	golang.org/x/sys v0.0.0-20220624220833-87e55d714810 // indirect
 	golang.org/x/term v0.0.0-20210927222741-03fcf44c2211 // indirect
 	golang.org/x/text v0.3.7 // indirect
 	golang.org/x/time v0.0.0-20220210224613-90d013bbcef8 // indirect
-	golang.org/x/xerrors v0.0.0-20220517211312-f3a8303e98df // indirect
+	golang.org/x/xerrors v0.0.0-20220609144429-65e65417b02f // indirect
 	gomodules.xyz/jsonpatch/v2 v2.2.0 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
-	google.golang.org/genproto v0.0.0-20220602131408-e326c6e8e9c8 // indirect
+	google.golang.org/genproto v0.0.0-20220624142145-8cd45d7dbd1f // indirect
 	google.golang.org/grpc v1.47.0 // indirect
 	google.golang.org/protobuf v1.28.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
