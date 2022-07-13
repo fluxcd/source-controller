@@ -4,7 +4,7 @@ TAG ?= latest
 
 # Base image used to build the Go binary
 LIBGIT2_IMG ?= ghcr.io/fluxcd/golang-with-libgit2-all
-LIBGIT2_TAG ?= v0.1.0
+LIBGIT2_TAG ?= v0.1.1
 
 # Allows for defining additional Go test args, e.g. '-tags integration'.
 GO_TEST_ARGS ?= -race
@@ -195,8 +195,11 @@ install-envtest: setup-envtest ## Download envtest binaries locally.
 
 libgit2: $(LIBGIT2)  ## Detect or download libgit2 library
 
+COSIGN = $(GOBIN)/cosign
 $(LIBGIT2): $(MUSL-CC)
-	IMG=$(LIBGIT2_IMG) TAG=$(LIBGIT2_TAG) ./hack/install-libraries.sh
+	$(call go-install-tool,$(COSIGN),github.com/sigstore/cosign/cmd/cosign@latest)
+
+	IMG=$(LIBGIT2_IMG) TAG=$(LIBGIT2_TAG) PATH=$(PATH):$(GOBIN) ./hack/install-libraries.sh
 
 $(MUSL-CC):
 ifneq ($(shell uname -s),Darwin)

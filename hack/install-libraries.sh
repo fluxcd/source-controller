@@ -5,8 +5,98 @@ set -euxo pipefail
 IMG="${IMG:-}"
 TAG="${TAG:-}"
 IMG_TAG="${IMG}:${TAG}"
+DOWNLOAD_URL="https://github.com/fluxcd/golang-with-libgit2/releases/download/${TAG}"
 
-function extract(){
+TMP_DIR=$(mktemp -d)
+
+function cleanup(){
+    rm -rf "${TMP_DIR}"
+}
+trap cleanup EXIT
+
+fatal() {
+    echo '[ERROR] ' "$@" >&2
+    exit 1
+}
+
+download() {
+    [[ $# -eq 2 ]] || fatal 'download needs exactly 2 arguments'
+
+    curl -o "$1" -sfL "$2"
+
+    [[ $? -eq 0 ]] || fatal 'Download failed'
+}
+
+download_files() {
+    [[ $# -eq 1 ]] || fatal 'download_files needs exactly 1 arguments'
+
+    FILE_NAMES="checksums.txt checksums.txt.sig checksums.txt.pem $1"
+
+    for FILE_NAME in ${FILE_NAMES}; do
+        download "${TMP_DIR}/${FILE_NAME}" "${DOWNLOAD_URL}/${FILE_NAME}"
+    done    
+}
+
+cosign_verify(){
+    [[ $# -eq 3 ]] || fatal 'cosign_verify needs exactly 3 arguments'
+
+    cosign verify-blob --cert "$1" --signature "$2" "$3"
+    
+    [[ $? -eq 0 ]] || fatal 'signature verification failed'
+}
+
+assure_provenance() {
+    [[ $# -eq 1 ]] || fatal 'assure_provenance needs exactly 1 arguments'
+
+    cosign_verify "${TMP_DIR}/checksums.txt.pem" \
+                  "${TMP_DIR}/checksums.txt.sig" \
+                  "${TMP_DIR}/checksums.txt"
+
+    pushd "${TMP_DIR}" || exit
+    if command -v sha256sum; then
+        grep "$1" "checksums.txt" | sha256sum --check
+    else
+        grep "$1" "checksums.txt" | shasum -a 256 --check
+    fi
+    popd || exit
+        
+    [[ $? -eq 0 ]] || fatal 'integrity verification failed'
+}
+
+extract_libraries(){
+    [[ $# -eq 2 ]] || fatal 'extract_libraries needs exactly 2 arguments'
+
+    tar -xf "${TMP_DIR}/$1"
+
+    rm "${TMP_DIR}/$1"
+    mv "${2}" "${TAG}"
+    mv "${TAG}/" "./build/libgit2"
+}
+
+fix_pkgconfigs(){
+    DIR="$1"
+    NEW_DIR="$(/bin/pwd)/build/libgit2/${TAG}"
+
+    # Update the prefix paths included in the .pc files.
+    if [[ $OSTYPE == 'darwin'* ]]; then
+        INSTALLED_DIR="/Users/runner/work/golang-with-libgit2/golang-with-libgit2/build/${DIR}"
+
+        # This will make it easier to update to the location in which they will be used.
+        # sed has a sight different behaviour in MacOS
+        # NB: Some macOS users may override their sed with gsed. If gsed is the PATH, use that instead.
+        if command -v gsed &> /dev/null; then 
+            find "${NEW_DIR}" -type f -name "*.pc" | xargs -I {} gsed -i "s;${INSTALLED_DIR};${NEW_DIR};g" {}
+        else
+            find "${NEW_DIR}" -type f -name "*.pc" | xargs -I {} sed -i "" "s;${INSTALLED_DIR};${NEW_DIR};g" {}
+        fi
+    else
+        INSTALLED_DIR="/home/runner/work/golang-with-libgit2/golang-with-libgit2/build/${DIR}"
+    
+        find "${NEW_DIR}" -type f -name "*.pc" | xargs -I {} sed -i "s;${INSTALLED_DIR};${NEW_DIR};g" {}
+    fi
+}
+
+extract_from_image(){
     PLATFORM=$1
     DIR=$2
 
@@ -16,14 +106,7 @@ function extract(){
 
     tar -xf output.tar.gz "local/${DIR}"
     rm output.tar.gz
-}
 
-function setup() {
-    PLATFORM=$1
-    DIR=$2
-
-    extract "${PLATFORM}" "${DIR}"
-   
     NEW_DIR="$(/bin/pwd)/build/libgit2/${TAG}"
     INSTALLED_DIR="/usr/local/${DIR}"
 
@@ -36,61 +119,34 @@ function setup() {
     find "${NEW_DIR}" -type f -name "*.pc" | xargs -I {} sed -i "s;${INSTALLED_DIR};${NEW_DIR};g" {}
 }
 
-function setup_current() {
+install_libraries(){
     if [ -d "./build/libgit2/${TAG}" ]; then
-        echo "Skipping libgit2 setup as it already exists"
+        echo "Skipping: libgit2 ${TAG} already installed"
         exit 0
     fi
 
     mkdir -p "./build/libgit2"
-    if [[ $OSTYPE == 'darwin'* ]]; then
-        # For MacOS development environments, download the amd64 static libraries released from from golang-with-libgit2.
-        curl -o output.tar.gz -LO "https://github.com/fluxcd/golang-with-libgit2/releases/download/${TAG}/darwin-libs.tar.gz"
-       
-        DIR=libgit2-darwin
-        NEW_DIR="$(/bin/pwd)/build/libgit2/${TAG}"
-        INSTALLED_DIR="/Users/runner/work/golang-with-libgit2/golang-with-libgit2/build/${DIR}-amd64"
 
-        tar -xf output.tar.gz
-        rm output.tar.gz
-        mv "${DIR}" "${TAG}"
-        mv "${TAG}/" "./build/libgit2"
-
-        LIBGIT2_SED="s;-L/Applications/Xcode_.* ;;g"
-        LIBGIT2PC="$(/bin/pwd)/build/libgit2/${TAG}/lib/pkgconfig/libgit2.pc"
-        # Some macOS users may override their sed with gsed. If gsed is the PATH, use that instead.
-        if command -v gsed &> /dev/null; then 
-            # Removes abs path from build machine, and let iconv be resolved automatically by default search paths.
-            gsed -i "${LIBGIT2_SED}" "${LIBGIT2PC}"
-
-            # Update the prefix paths included in the .pc files.
-            # This will make it easier to update to the location in which they will be used.
-            # sed has a sight different behaviour in MacOS
-            find "${NEW_DIR}" -type f -name "*.pc" | xargs -I {} gsed -i "s;${INSTALLED_DIR};${NEW_DIR};g" {}
-        else
-            # Removes abs path from build machine, and let iconv be resolved automatically by default search paths.
-            sed -i "" "${LIBGIT2_SED}" "${LIBGIT2PC}"
-
-            # Update the prefix paths included in the .pc files.
-            # This will make it easier to update to the location in which they will be used.
-            # sed has a sight different behaviour in MacOS
-            find "${NEW_DIR}" -type f -name "*.pc" | xargs -I {} sed -i "" "s;${INSTALLED_DIR};${NEW_DIR};g" {}
+    # Linux ARM support is still based on the container image libraries.
+    if [[ $OSTYPE == 'linux'* ]]; then
+        if [ "$(uname -m)" = "arm64" ] || [ "$(uname -m)" = "aarch64" ]; then
+            extract_from_image "linux/arm64" "aarch64-alpine-linux-musl"
+            fix_pkgconfigs "aarch64-alpine-linux-musl"
+            exit 0
         fi
-    else
-        # for linux development environments, use the static libraries from the official container images.
-        DIR="x86_64-alpine-linux-musl"
-        PLATFORM="linux/amd64"
-
-        if [[ "$(uname -m)" == armv7* ]]; then 
-            DIR="armv7-alpine-linux-musleabihf"
-            PLATFORM="linux/arm/v7"
-        elif [ "$(uname -m)" = "arm64" ] || [ "$(uname -m)" = "aarch64" ]; then
-            DIR="aarch64-alpine-linux-musl"
-            PLATFORM="linux/arm64"
-        fi
-        
-        setup "${PLATFORM}" "${DIR}"
     fi
+
+    FILE_NAME="linux-$(uname -m)-all-libs.tar.gz"
+    DIR="libgit2-linux-all-libs"
+    if [[ $OSTYPE == 'darwin'* ]]; then
+        FILE_NAME="darwin-all-libs.tar.gz"
+        DIR="darwin-all-libs"
+    fi
+
+    download_files "${FILE_NAME}"
+    assure_provenance "${FILE_NAME}"
+    extract_libraries "${FILE_NAME}" "${DIR}"
+    fix_pkgconfigs "${DIR}"
 }
 
-setup_current
+install_libraries
