@@ -56,7 +56,6 @@ import (
 	"github.com/fluxcd/source-controller/internal/reconcile/summarize"
 	"github.com/fluxcd/source-controller/internal/util"
 	"github.com/fluxcd/source-controller/pkg/git"
-	"github.com/fluxcd/source-controller/pkg/git/libgit2/managed"
 	"github.com/fluxcd/source-controller/pkg/git/strategy"
 	"github.com/fluxcd/source-controller/pkg/sourceignore"
 )
@@ -116,6 +115,9 @@ type GitRepositoryReconciler struct {
 
 	Storage        *Storage
 	ControllerName string
+	// Libgit2TransportInitialized lets the reconciler know whether
+	// libgit2 transport was intialized successfully.
+	Libgit2TransportInitialized func() bool
 
 	requeueDependency time.Duration
 	features          map[string]bool
@@ -236,7 +238,6 @@ func (r *GitRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		r.reconcileInclude,
 		r.reconcileArtifact,
 	}
-
 	recResult, retErr = r.reconcile(ctx, obj, reconcilers)
 	return
 }
@@ -430,8 +431,7 @@ func (r *GitRepositoryReconciler) reconcileStorage(ctx context.Context,
 func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context,
 	obj *sourcev1.GitRepository, commit *git.Commit, includes *artifactSet, dir string) (sreconcile.Result, error) {
 	// Exit early, if we need to use libgit2 AND managed transport hasn't been intialized.
-	if !managed.Enabled() && obj.Spec.GitImplementation == sourcev1.LibGit2Implementation {
-		fmt.Println(managed.Enabled())
+	if !r.Libgit2TransportInitialized() && obj.Spec.GitImplementation == sourcev1.LibGit2Implementation {
 		return sreconcile.ResultEmpty, serror.NewStalling(
 			errors.New("libgit2 managed transport not initialized"), "Libgit2TransportNotEnabled",
 		)
