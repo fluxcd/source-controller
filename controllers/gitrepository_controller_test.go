@@ -337,7 +337,12 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 			},
 			wantErr: true,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.GitOperationFailedReason, "x509: certificate signed by unknown authority"),
+				// The expected error messages may differ when in darwin. In some cases it will match the
+				// error message expected in linux: "x509: certificate signed by unknown authority". In
+				// other cases it may get "x509: “example.com” certificate is not standards compliant" instead.
+				//
+				// Trimming the expected error message for consistent results.
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.GitOperationFailedReason, "x509: "),
 			},
 		},
 		{
