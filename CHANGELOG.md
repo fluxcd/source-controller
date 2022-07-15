@@ -2,6 +2,39 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.25.10
+
+**Release date:** 2022-07-13
+
+This prerelease fixes SIGSEGV when resolving charts dependencies.
+It also brings CI improvements and update dependencies to patch upstream CVEs.
+
+Fixes:
+- Fix SIGSEGV when resolving charts dependencies
+  [#827](https://github.com/fluxcd/source-controller/pull/827)
+- Fix Panic when no artifact in source
+  [#832](https://github.com/fluxcd/source-controller/pull/832)
+
+Improvements:
+- Update go-yaml to v3.0.1
+  [#804](https://github.com/fluxcd/source-controller/pull/804)
+- build: provenance and tampering checks for libgit2
+  [#823](https://github.com/fluxcd/source-controller/pull/823)
+- Decrease fs perms to 0o700
+  [#818](https://github.com/fluxcd/source-controller/pull/818)
+- build: run darwin tests on macos 10.15, 11 and 12
+  [#817](https://github.com/fluxcd/source-controller/pull/817)
+- Minor comment updates
+  [#812](https://github.com/fluxcd/source-controller/pull/812)
+- Split GitHub workflows
+  [#811](https://github.com/fluxcd/source-controller/pull/811)
+- docs: Add password-protected SSH keys information
+  [#801](https://github.com/fluxcd/source-controller/pull/801)
+- Bump Helm to v3.9.1
+  [#833](https://github.com/fluxcd/source-controller/pull/833)
+- Update libgit2 to v1.3.2
+  [#834](https://github.com/fluxcd/source-controller/pull/834)
+
 ## 0.25.9
 
 **Release date:** 2022-06-29
