@@ -326,7 +326,7 @@ func (r *HelmRepositoryOCIReconciler) reconcile(ctx context.Context, obj *v1beta
 	if loginOpts != nil {
 		err = chartRepo.Login(loginOpts...)
 		if err != nil {
-			e := fmt.Errorf("failed to login to registry '%s': %w", obj.Spec.URL, err)
+			e := fmt.Errorf("failed to log into registry '%s': %w", obj.Spec.URL, err)
 			conditions.MarkFalse(obj, meta.ReadyCondition, sourcev1.AuthenticationFailedReason, e.Error())
 			result, retErr = ctrl.Result{}, e
 			return

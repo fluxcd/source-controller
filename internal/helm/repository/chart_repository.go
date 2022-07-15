@@ -35,7 +35,6 @@ import (
 	"github.com/Masterminds/semver/v3"
 	"helm.sh/helm/v3/pkg/getter"
 	"helm.sh/helm/v3/pkg/repo"
-	kerrors "k8s.io/apimachinery/pkg/util/errors"
 	"sigs.k8s.io/yaml"
 
 	"github.com/fluxcd/pkg/version"
@@ -151,15 +150,10 @@ func newChartRepository() *ChartRepository {
 	}
 }
 
-// GetChartVersion returns the repo.ChartVersion for the given name, the version is expected
+// Get returns the repo.ChartVersion for the given name, the version is expected
 // to be a semver.Constraints compatible string. If version is empty, the latest
 // stable version will be returned and prerelease versions will be ignored.
-func (r *ChartRepository) GetChartVersion(name, ver string) (*repo.ChartVersion, error) {
-	// See if we already have the index in cache or try to load it.
-	if err := r.StrategicallyLoadIndex(); err != nil {
-		return nil, err
-	}
-
+func (r *ChartRepository) Get(name, ver string) (*repo.ChartVersion, error) {
 	r.RLock()
 	defer r.RUnlock()
 
@@ -475,23 +469,6 @@ func (r *ChartRepository) Unload() {
 	r.Lock()
 	defer r.Unlock()
 	r.Index = nil
-}
-
-// Clear caches the index in memory before unloading it.
-// It cleans up temporary files and directories created by the repository.
-func (r *ChartRepository) Clear() error {
-	var errs []error
-	if err := r.CacheIndexInMemory(); err != nil {
-		errs = append(errs, err)
-	}
-
-	r.Unload()
-
-	if err := r.RemoveCache(); err != nil {
-		errs = append(errs, err)
-	}
-
-	return kerrors.NewAggregate(errs)
 }
 
 // SetMemCache sets the cache to use for this repository.

@@ -35,7 +35,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	kerrors "k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/apimachinery/pkg/util/uuid"
 	kuberecorder "k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -463,10 +462,9 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 		loginOpts []helmreg.LoginOption
 	)
 
-	normalizedURL := repository.NormalizeURL(repo.Spec.URL)
 	// Construct the Getter options from the HelmRepository data
 	clientOpts := []helmgetter.Option{
-		helmgetter.WithURL(normalizedURL),
+		helmgetter.WithURL(repo.Spec.URL),
 		helmgetter.WithTimeout(repo.Spec.Timeout.Duration),
 		helmgetter.WithPassCredentialsAll(repo.Spec.PassCredentials),
 	}
@@ -494,7 +492,7 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 		}
 		clientOpts = append(clientOpts, opts...)
 
-		tlsConfig, err = getter.TLSClientConfigFromSecret(*secret, normalizedURL)
+		tlsConfig, err = getter.TLSClientConfigFromSecret(*secret, repo.Spec.URL)
 		if err != nil {
 			e := &serror.Event{
 				Err:    fmt.Errorf("failed to create TLS client config with secret data: %w", err),
@@ -506,7 +504,7 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 		}
 
 		// Build registryClient options from secret
-		loginOpt, err := registry.LoginOptionFromSecret(normalizedURL, *secret)
+		loginOpt, err := registry.LoginOptionFromSecret(repo.Spec.URL, *secret)
 		if err != nil {
 			e := &serror.Event{
 				Err:    fmt.Errorf("failed to configure Helm client with secret data: %w", err),
@@ -521,11 +519,11 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 	}
 
 	// Initialize the chart repository
-	var chartRepo repository.Downloader
+	var chartRepo chart.Remote
 	switch repo.Spec.Type {
 	case sourcev1.HelmRepositoryTypeOCI:
-		if !helmreg.IsOCI(normalizedURL) {
-			err := fmt.Errorf("invalid OCI registry URL: %s", normalizedURL)
+		if !helmreg.IsOCI(repo.Spec.URL) {
+			err := fmt.Errorf("invalid OCI registry URL: %s", repo.Spec.URL)
 			return chartRepoConfigErrorReturn(err, obj)
 		}
 
@@ -533,7 +531,7 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 		// this is needed because otherwise the credentials are stored in ~/.docker/config.json.
 		// TODO@souleb: remove this once the registry move to Oras v2
 		// or rework to enable reusing credentials to avoid the unneccessary handshake operations
-		registryClient, credentialsFile, err := r.RegistryClientGenerator(loginOpts != nil)
+		registryClient, file, err := r.RegistryClientGenerator(loginOpts != nil)
 		if err != nil {
 			e := &serror.Event{
 				Err:    fmt.Errorf("failed to construct Helm client: %w", err),
@@ -543,9 +541,9 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 			return sreconcile.ResultEmpty, e
 		}
 
-		if credentialsFile != "" {
+		if file != "" {
 			defer func() {
-				if err := os.Remove(credentialsFile); err != nil {
+				if err := os.Remove(file); err != nil {
 					r.eventLogf(ctx, obj, corev1.EventTypeWarning, meta.FailedReason,
 						"failed to delete temporary credentials file: %s", err)
 				}
@@ -554,7 +552,7 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 
 		// Tell the chart repository to use the OCI client with the configured getter
 		clientOpts = append(clientOpts, helmgetter.WithRegistryClient(registryClient))
-		ociChartRepo, err := repository.NewOCIChartRepository(normalizedURL, repository.WithOCIGetter(r.Getters), repository.WithOCIGetterOptions(clientOpts), repository.WithOCIRegistryClient(registryClient))
+		ociChartRepo, err := repository.NewOCIChartRepository(repo.Spec.URL, repository.WithOCIGetter(r.Getters), repository.WithOCIGetterOptions(clientOpts), repository.WithOCIRegistryClient(registryClient))
 		if err != nil {
 			return chartRepoConfigErrorReturn(err, obj)
 		}
@@ -574,7 +572,7 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 			}
 		}
 	default:
-		httpChartRepo, err := repository.NewChartRepository(normalizedURL, r.Storage.LocalPath(*repo.GetArtifact()), r.Getters, tlsConfig, clientOpts,
+		httpChartRepo, err := repository.NewChartRepository(repo.Spec.URL, r.Storage.LocalPath(*repo.GetArtifact()), r.Getters, tlsConfig, clientOpts,
 			repository.WithMemoryCache(r.Storage.LocalPath(*repo.GetArtifact()), r.Cache, r.TTL, func(event string) {
 				r.IncCacheEvents(event, obj.Name, obj.Namespace)
 			}))
@@ -687,15 +685,9 @@ func (r *HelmChartReconciler) buildFromTarballArtifact(ctx context.Context, obj 
 
 	// Setup dependency manager
 	dm := chart.NewDependencyManager(
-		chart.WithDownloaderCallback(r.namespacedChartRepositoryCallback(ctx, obj.GetName(), obj.GetNamespace())),
+		chart.WithRepositoryCallback(r.namespacedChartRepositoryCallback(ctx, obj.GetName(), obj.GetNamespace())),
 	)
-	defer func() {
-		err := dm.Clear()
-		if err != nil {
-			r.eventLogf(ctx, obj, corev1.EventTypeWarning, meta.FailedReason,
-				"dependency manager cleanup error: %s", err)
-		}
-	}()
+	defer dm.Clear()
 
 	// Configure builder options, including any previously cached chart
 	opts := chart.BuildOptions{
@@ -922,17 +914,12 @@ func (r *HelmChartReconciler) garbageCollect(ctx context.Context, obj *sourcev1.
 	return nil
 }
 
-// namespacedChartRepositoryCallback returns a chart.GetChartDownloaderCallback scoped to the given namespace.
-// The returned callback returns a repository.Downloader configured with the retrieved v1beta1.HelmRepository,
+// namespacedChartRepositoryCallback returns a chart.GetChartRepositoryCallback scoped to the given namespace.
+// The returned callback returns a repository.ChartRepository configured with the retrieved v1beta1.HelmRepository,
 // or a shim with defaults if no object could be found.
-// The callback returns an object with a state, so the caller has to do the necessary cleanup.
-func (r *HelmChartReconciler) namespacedChartRepositoryCallback(ctx context.Context, name, namespace string) chart.GetChartDownloaderCallback {
-	return func(url string) (repository.Downloader, error) {
-		var (
-			tlsConfig *tls.Config
-			loginOpts []helmreg.LoginOption
-		)
-		normalizedURL := repository.NormalizeURL(url)
+func (r *HelmChartReconciler) namespacedChartRepositoryCallback(ctx context.Context, name, namespace string) chart.GetChartRepositoryCallback {
+	return func(url string) (*repository.ChartRepository, error) {
+		var tlsConfig *tls.Config
 		repo, err := r.resolveDependencyRepository(ctx, url, namespace)
 		if err != nil {
 			// Return Kubernetes client errors, but ignore others
@@ -947,7 +934,7 @@ func (r *HelmChartReconciler) namespacedChartRepositoryCallback(ctx context.Cont
 			}
 		}
 		clientOpts := []helmgetter.Option{
-			helmgetter.WithURL(normalizedURL),
+			helmgetter.WithURL(repo.Spec.URL),
 			helmgetter.WithTimeout(repo.Spec.Timeout.Duration),
 			helmgetter.WithPassCredentialsAll(repo.Spec.PassCredentials),
 		}
@@ -961,77 +948,26 @@ func (r *HelmChartReconciler) namespacedChartRepositoryCallback(ctx context.Cont
 			}
 			clientOpts = append(clientOpts, opts...)
 
-			tlsConfig, err = getter.TLSClientConfigFromSecret(*secret, normalizedURL)
+			tlsConfig, err = getter.TLSClientConfigFromSecret(*secret, repo.Spec.URL)
 			if err != nil {
 				return nil, fmt.Errorf("failed to create TLS client config for HelmRepository '%s': %w", repo.Name, err)
 			}
-
-			// Build registryClient options from secret
-			loginOpt, err := registry.LoginOptionFromSecret(normalizedURL, *secret)
-			if err != nil {
-				return nil, fmt.Errorf("failed to create login options for HelmRepository '%s': %w", repo.Name, err)
-			}
-
-			loginOpts = append([]helmreg.LoginOption{}, loginOpt)
 		}
 
-		var chartRepo repository.Downloader
-		if helmreg.IsOCI(normalizedURL) {
-			registryClient, credentialsFile, err := r.RegistryClientGenerator(loginOpts != nil)
-			if err != nil {
-				return nil, fmt.Errorf("failed to create registry client for HelmRepository '%s': %w", repo.Name, err)
-			}
-
-			var errs []error
-			// Tell the chart repository to use the OCI client with the configured getter
-			clientOpts = append(clientOpts, helmgetter.WithRegistryClient(registryClient))
-			ociChartRepo, err := repository.NewOCIChartRepository(normalizedURL, repository.WithOCIGetter(r.Getters),
-				repository.WithOCIGetterOptions(clientOpts),
-				repository.WithOCIRegistryClient(registryClient),
-				repository.WithCredentialsFile(credentialsFile))
-			if err != nil {
-				errs = append(errs, fmt.Errorf("failed to create OCI chart repository for HelmRepository '%s': %w", repo.Name, err))
-				// clean up the credentialsFile
-				if credentialsFile != "" {
-					if err := os.Remove(credentialsFile); err != nil {
-						errs = append(errs, err)
-					}
-				}
-				return nil, kerrors.NewAggregate(errs)
-			}
-
-			// If login options are configured, use them to login to the registry
-			// The OCIGetter will later retrieve the stored credentials to pull the chart
-			if loginOpts != nil {
-				err = ociChartRepo.Login(loginOpts...)
-				if err != nil {
-					errs = append(errs, fmt.Errorf("failed to login to OCI chart repository for HelmRepository '%s': %w", repo.Name, err))
-					// clean up the credentialsFile
-					errs = append(errs, ociChartRepo.Clear())
-					return nil, kerrors.NewAggregate(errs)
-				}
-			}
-
-			chartRepo = ociChartRepo
-		} else {
-			httpChartRepo, err := repository.NewChartRepository(normalizedURL, "", r.Getters, tlsConfig, clientOpts)
-			if err != nil {
-				return nil, err
-			}
-
-			// Ensure that the cache key is the same as the artifact path
-			// otherwise don't enable caching. We don't want to cache indexes
-			// for repositories that are not reconciled by the source controller.
-			if repo.Status.Artifact != nil {
-				httpChartRepo.CachePath = r.Storage.LocalPath(*repo.GetArtifact())
-				httpChartRepo.SetMemCache(r.Storage.LocalPath(*repo.GetArtifact()), r.Cache, r.TTL, func(event string) {
-					r.IncCacheEvents(event, name, namespace)
-				})
-			}
-
-			chartRepo = httpChartRepo
+		chartRepo, err := repository.NewChartRepository(repo.Spec.URL, "", r.Getters, tlsConfig, clientOpts)
+		if err != nil {
+			return nil, err
 		}
 
+		// Ensure that the cache key is the same as the artifact path
+		// otherwise don't enable caching. We don't want to cache indexes
+		// for repositories that are not reconciled by the source controller.
+		if repo.Status.Artifact != nil {
+			chartRepo.CachePath = r.Storage.LocalPath(*repo.GetArtifact())
+			chartRepo.SetMemCache(r.Storage.LocalPath(*repo.GetArtifact()), r.Cache, r.TTL, func(event string) {
+				r.IncCacheEvents(event, name, namespace)
+			})
+		}
 		return chartRepo, nil
 	}
 }

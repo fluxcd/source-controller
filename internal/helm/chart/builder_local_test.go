@@ -67,7 +67,7 @@ func TestLocalBuilder_Build(t *testing.T) {
 		reference           Reference
 		buildOpts           BuildOptions
 		valuesFiles         []helmchart.File
-		repositories        map[string]repository.Downloader
+		repositories        map[string]*repository.ChartRepository
 		dependentChartPaths []string
 		wantValues          chartutil.Values
 		wantVersion         string
@@ -146,7 +146,7 @@ fullnameOverride: "full-foo-name-override"`),
 		{
 			name:      "chart with dependencies",
 			reference: LocalReference{Path: "../testdata/charts/helmchartwithdeps"},
-			repositories: map[string]repository.Downloader{
+			repositories: map[string]*repository.ChartRepository{
 				"https://grafana.github.io/helm-charts/": mockRepo(),
 			},
 			dependentChartPaths: []string{"./../testdata/charts/helmchart"},
@@ -165,7 +165,7 @@ fullnameOverride: "full-foo-name-override"`),
 		{
 			name:      "v1 chart with dependencies",
 			reference: LocalReference{Path: "../testdata/charts/helmchartwithdeps-v1"},
-			repositories: map[string]repository.Downloader{
+			repositories: map[string]*repository.ChartRepository{
 				"https://grafana.github.io/helm-charts/": mockRepo(),
 			},
 			dependentChartPaths: []string{"../testdata/charts/helmchart-v1"},

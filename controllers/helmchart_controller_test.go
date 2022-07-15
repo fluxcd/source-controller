@@ -411,6 +411,9 @@ func TestHelmChartReconciler_reconcileSource(t *testing.T) {
 				}))
 			},
 		},
+		//{
+		//	name: "Error on transient build error",
+		//},
 		{
 			name: "Stalling on persistent build error",
 			source: &sourcev1.GitRepository{
@@ -1217,7 +1220,7 @@ func TestHelmChartReconciler_buildFromTarballArtifact(t *testing.T) {
 			assertFunc: func(g *WithT, build chart.Build) {
 				g.Expect(build.Name).To(Equal("helmchartwithdeps"))
 				g.Expect(build.Version).To(Equal("0.1.0"))
-				g.Expect(build.ResolvedDependencies).To(Equal(4))
+				g.Expect(build.ResolvedDependencies).To(Equal(3))
 				g.Expect(build.Path).To(BeARegularFile())
 			},
 			cleanFunc: func(g *WithT, build *chart.Build) {
@@ -1325,11 +1328,10 @@ func TestHelmChartReconciler_buildFromTarballArtifact(t *testing.T) {
 			g := NewWithT(t)
 
 			r := &HelmChartReconciler{
-				Client:                  fake.NewClientBuilder().Build(),
-				EventRecorder:           record.NewFakeRecorder(32),
-				Storage:                 storage,
-				Getters:                 testGetters,
-				RegistryClientGenerator: registry.ClientGenerator,
+				Client:        fake.NewClientBuilder().Build(),
+				EventRecorder: record.NewFakeRecorder(32),
+				Storage:       storage,
+				Getters:       testGetters,
 			}
 
 			obj := &sourcev1.HelmChart{

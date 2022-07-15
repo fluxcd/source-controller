@@ -30,27 +30,26 @@ import (
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/sync/semaphore"
 	helmchart "helm.sh/helm/v3/pkg/chart"
-	"k8s.io/apimachinery/pkg/util/errors"
 
 	"github.com/fluxcd/source-controller/internal/helm/chart/secureloader"
 	"github.com/fluxcd/source-controller/internal/helm/repository"
 )
 
-// GetChartDownloaderCallback must return a Downloader for the
-// URL or an error describing why it could not be returned.
-type GetChartDownloaderCallback func(url string) (repository.Downloader, error)
+// GetChartRepositoryCallback must return a repository.ChartRepository for the
+// URL, or an error describing why it could not be returned.
+type GetChartRepositoryCallback func(url string) (*repository.ChartRepository, error)
 
 // DependencyManager manages dependencies for a Helm chart.
 type DependencyManager struct {
-	// downloaders contains a map of Downloader objects
+	// repositories contains a map of repository.ChartRepository objects
 	// indexed by their repository.NormalizeURL.
 	// It is consulted as a lookup table for missing dependencies, based on
 	// the (repository) URL the dependency refers to.
-	downloaders map[string]repository.Downloader
+	repositories map[string]*repository.ChartRepository
 
-	// getChartDownloaderCallback can be set to an on-demand GetChartDownloaderCallback
-	// whose returned result is cached to downloaders.
-	getChartDownloaderCallback GetChartDownloaderCallback
+	// getRepositoryCallback can be set to an on-demand GetChartRepositoryCallback
+	// whose returned result is cached to repositories.
+	getRepositoryCallback GetChartRepositoryCallback
 
 	// concurrent is the number of concurrent chart-add operations during
 	// Build. Defaults to 1 (non-concurrent).
@@ -65,16 +64,16 @@ type DependencyManagerOption interface {
 	applyToDependencyManager(dm *DependencyManager)
 }
 
-type WithRepositories map[string]repository.Downloader
+type WithRepositories map[string]*repository.ChartRepository
 
 func (o WithRepositories) applyToDependencyManager(dm *DependencyManager) {
-	dm.downloaders = o
+	dm.repositories = o
 }
 
-type WithDownloaderCallback GetChartDownloaderCallback
+type WithRepositoryCallback GetChartRepositoryCallback
 
-func (o WithDownloaderCallback) applyToDependencyManager(dm *DependencyManager) {
-	dm.getChartDownloaderCallback = GetChartDownloaderCallback(o)
+func (o WithRepositoryCallback) applyToDependencyManager(dm *DependencyManager) {
+	dm.getRepositoryCallback = GetChartRepositoryCallback(o)
 }
 
 type WithConcurrent int64
@@ -93,16 +92,20 @@ func NewDependencyManager(opts ...DependencyManagerOption) *DependencyManager {
 	return dm
 }
 
-// Clear iterates over the downloaders, calling Clear on all
-// items. It returns an aggregate error of all Clear errors.
-func (dm *DependencyManager) Clear() error {
+// Clear iterates over the repositories, calling Unload and RemoveCache on all
+// items. It returns a collection of (cache removal) errors.
+func (dm *DependencyManager) Clear() []error {
 	var errs []error
-	for _, v := range dm.downloaders {
-		if v != nil {
-			errs = append(errs, v.Clear())
+	for _, v := range dm.repositories {
+		if err := v.CacheIndexInMemory(); err != nil {
+			errs = append(errs, err)
+		}
+		v.Unload()
+		if err := v.RemoveCache(); err != nil {
+			errs = append(errs, err)
 		}
 	}
-	return errors.NewAggregate(errs)
+	return errs
 }
 
 // Build compiles a set of missing dependencies from chart.Chart, and attempts to
@@ -233,9 +236,13 @@ func (dm *DependencyManager) addRemoteDependency(chart *chartWithLock, dep *helm
 		return err
 	}
 
-	ver, err := repo.GetChartVersion(dep.Name, dep.Version)
+	if err = repo.StrategicallyLoadIndex(); err != nil {
+		return fmt.Errorf("failed to load index for '%s': %w", dep.Name, err)
+	}
+
+	ver, err := repo.Get(dep.Name, dep.Version)
 	if err != nil {
-		return fmt.Errorf("failed to get chart '%s' version '%s' from '%s': %w", dep.Name, dep.Version, dep.Repository, err)
+		return err
 	}
 	res, err := repo.DownloadChart(ver)
 	if err != nil {
@@ -252,9 +259,9 @@ func (dm *DependencyManager) addRemoteDependency(chart *chartWithLock, dep *helm
 	return nil
 }
 
-// resolveRepository first attempts to resolve the url from the downloaders, falling back
-// to getDownloaderCallback if set. It returns the resolved Index, or an error.
-func (dm *DependencyManager) resolveRepository(url string) (repo repository.Downloader, err error) {
+// resolveRepository first attempts to resolve the url from the repositories, falling back
+// to getRepositoryCallback if set. It returns the resolved Index, or an error.
+func (dm *DependencyManager) resolveRepository(url string) (_ *repository.ChartRepository, err error) {
 	dm.mu.Lock()
 	defer dm.mu.Unlock()
 
@@ -263,22 +270,20 @@ func (dm *DependencyManager) resolveRepository(url string) (repo repository.Down
 	if err != nil {
 		return
 	}
-	if _, ok := dm.downloaders[nUrl]; !ok {
-		if dm.getChartDownloaderCallback == nil {
+	if _, ok := dm.repositories[nUrl]; !ok {
+		if dm.getRepositoryCallback == nil {
 			err = fmt.Errorf("no chart repository for URL '%s'", nUrl)
 			return
 		}
-
-		if dm.downloaders == nil {
-			dm.downloaders = map[string]repository.Downloader{}
+		if dm.repositories == nil {
+			dm.repositories = map[string]*repository.ChartRepository{}
 		}
-
-		if dm.downloaders[nUrl], err = dm.getChartDownloaderCallback(nUrl); err != nil {
+		if dm.repositories[nUrl], err = dm.getRepositoryCallback(nUrl); err != nil {
 			err = fmt.Errorf("failed to get chart repository for URL '%s': %w", nUrl, err)
 			return
 		}
 	}
-	return dm.downloaders[nUrl], nil
+	return dm.repositories[nUrl], nil
 }
 
 // secureLocalChartPath returns the secure absolute path of a local dependency.

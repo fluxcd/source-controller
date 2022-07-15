@@ -25,6 +25,7 @@ import (
 	"path/filepath"
 
 	"github.com/Masterminds/semver/v3"
+	"github.com/fluxcd/source-controller/internal/helm/repository"
 	helmchart "helm.sh/helm/v3/pkg/chart"
 	"helm.sh/helm/v3/pkg/chartutil"
 	"helm.sh/helm/v3/pkg/repo"
@@ -34,16 +35,24 @@ import (
 
 	"github.com/fluxcd/source-controller/internal/fs"
 	"github.com/fluxcd/source-controller/internal/helm/chart/secureloader"
-	"github.com/fluxcd/source-controller/internal/helm/repository"
 )
 
+// Remote is a repository.ChartRepository or a repository.OCIChartRepository.
+// It is used to download a chart from a remote Helm repository or OCI registry.
+type Remote interface {
+	// GetChart returns a chart.Chart from the remote repository.
+	Get(name, version string) (*repo.ChartVersion, error)
+	// GetChartVersion returns a chart.ChartVersion from the remote repository.
+	DownloadChart(chart *repo.ChartVersion) (*bytes.Buffer, error)
+}
+
 type remoteChartBuilder struct {
-	remote repository.Downloader
+	remote Remote
 }
 
 // NewRemoteBuilder returns a Builder capable of building a Helm
-// chart with a RemoteReference in the given repository.Downloader.
-func NewRemoteBuilder(repository repository.Downloader) Builder {
+// chart with a RemoteReference in the given repository.ChartRepository.
+func NewRemoteBuilder(repository Remote) Builder {
 	return &remoteChartBuilder{
 		remote: repository,
 	}
@@ -74,12 +83,31 @@ func (b *remoteChartBuilder) Build(_ context.Context, ref Reference, p string, o
 		return nil, &BuildError{Reason: ErrChartReference, Err: err}
 	}
 
-	res, result, err := b.downloadFromRepository(b.remote, remoteRef, opts)
-	if err != nil {
-		return nil, &BuildError{Reason: ErrChartPull, Err: err}
-	}
-	if res == nil {
-		return result, nil
+	var (
+		res *bytes.Buffer
+		err error
+	)
+
+	result := &Build{}
+	switch b.remote.(type) {
+	case *repository.ChartRepository:
+		res, err = b.downloadFromRepository(b.remote.(*repository.ChartRepository), remoteRef, result, opts)
+		if err != nil {
+			return nil, &BuildError{Reason: ErrChartPull, Err: err}
+		}
+		if res == nil {
+			return result, nil
+		}
+	case *repository.OCIChartRepository:
+		res, err = b.downloadFromOCIRepository(b.remote.(*repository.OCIChartRepository), remoteRef, result, opts)
+		if err != nil {
+			return nil, &BuildError{Reason: ErrChartPull, Err: err}
+		}
+		if res == nil {
+			return result, nil
+		}
+	default:
+		return nil, &BuildError{Reason: ErrChartReference, Err: fmt.Errorf("unsupported remote type %T", b.remote)}
 	}
 
 	requiresPackaging := len(opts.GetValuesFiles()) != 0 || opts.VersionMetadata != ""
@@ -124,31 +152,66 @@ func (b *remoteChartBuilder) Build(_ context.Context, ref Reference, p string, o
 	return result, nil
 }
 
-func (b *remoteChartBuilder) downloadFromRepository(remote repository.Downloader, remoteRef RemoteReference, opts BuildOptions) (*bytes.Buffer, *Build, error) {
-	// Get the current version for the RemoteReference
-	cv, err := remote.GetChartVersion(remoteRef.Name, remoteRef.Version)
+func (b *remoteChartBuilder) downloadFromOCIRepository(remote *repository.OCIChartRepository, remoteRef RemoteReference, buildResult *Build, opts BuildOptions) (*bytes.Buffer, error) {
+	cv, err := remote.Get(remoteRef.Name, remoteRef.Version)
 	if err != nil {
 		err = fmt.Errorf("failed to get chart version for remote reference: %w", err)
-		return nil, nil, &BuildError{Reason: ErrChartReference, Err: err}
+		return nil, &BuildError{Reason: ErrChartPull, Err: err}
 	}
 
 	result, shouldReturn, err := generateBuildResult(cv, opts)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	if shouldReturn {
-		return nil, result, nil
+		*buildResult = *result
+		return nil, nil
 	}
 
 	// Download the package for the resolved version
 	res, err := remote.DownloadChart(cv)
 	if err != nil {
 		err = fmt.Errorf("failed to download chart for remote reference: %w", err)
-		return nil, nil, &BuildError{Reason: ErrChartPull, Err: err}
+		return nil, &BuildError{Reason: ErrChartPull, Err: err}
 	}
 
-	return res, result, nil
+	*buildResult = *result
+
+	return res, nil
+}
+
+func (b *remoteChartBuilder) downloadFromRepository(remote *repository.ChartRepository, remoteRef RemoteReference, buildResult *Build, opts BuildOptions) (*bytes.Buffer, error) {
+	if err := remote.StrategicallyLoadIndex(); err != nil {
+		err = fmt.Errorf("could not load repository index for remote chart reference: %w", err)
+		return nil, &BuildError{Reason: ErrChartPull, Err: err}
+	}
+
+	// Get the current version for the RemoteReference
+	cv, err := remote.Get(remoteRef.Name, remoteRef.Version)
+	if err != nil {
+		err = fmt.Errorf("failed to get chart version for remote reference: %w", err)
+		return nil, &BuildError{Reason: ErrChartReference, Err: err}
+	}
+
+	result, shouldReturn, err := generateBuildResult(cv, opts)
+	if err != nil {
+		return nil, err
+	}
+	*buildResult = *result
+
+	if shouldReturn {
+		return nil, nil
+	}
+
+	// Download the package for the resolved version
+	res, err := remote.DownloadChart(cv)
+	if err != nil {
+		err = fmt.Errorf("failed to download chart for remote reference: %w", err)
+		return nil, &BuildError{Reason: ErrChartPull, Err: err}
+	}
+
+	return res, nil
 }
 
 // generateBuildResult returns a Build object generated from the given chart version and build options. It also returns

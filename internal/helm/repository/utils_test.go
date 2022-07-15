@@ -48,16 +48,6 @@ func TestNormalizeURL(t *testing.T) {
 			url:  "",
 			want: "",
 		},
-		{
-			name: "oci with slash",
-			url:  "oci://example.com/",
-			want: "oci://example.com",
-		},
-		{
-			name: "oci double slash",
-			url:  "oci://example.com//",
-			want: "oci://example.com",
-		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

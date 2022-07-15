@@ -21,7 +21,6 @@ import (
 	"crypto/tls"
 	"fmt"
 	"net/url"
-	"os"
 	"path"
 	"sort"
 	"strings"
@@ -61,8 +60,6 @@ type OCIChartRepository struct {
 
 	// RegistryClient is a client to use while downloading tags or charts from a registry.
 	RegistryClient RegistryClient
-	// credentialsFile is a temporary credentials file to use while downloading tags or charts from a registry.
-	credentialsFile string
 }
 
 // OCIChartRepositoryOption is a function that can be passed to NewOCIChartRepository
@@ -97,14 +94,6 @@ func WithOCIGetterOptions(getterOpts []getter.Option) OCIChartRepositoryOption {
 	}
 }
 
-// WithCredentialsFile returns a ChartRepositoryOption that will set the credentials file
-func WithCredentialsFile(credentialsFile string) OCIChartRepositoryOption {
-	return func(r *OCIChartRepository) error {
-		r.credentialsFile = credentialsFile
-		return nil
-	}
-}
-
 // NewOCIChartRepository constructs and returns a new ChartRepository with
 // the ChartRepository.Client configured to the getter.Getter for the
 // repository URL scheme. It returns an error on URL parsing failures.
@@ -126,18 +115,18 @@ func NewOCIChartRepository(repositoryURL string, chartRepoOpts ...OCIChartReposi
 	return r, nil
 }
 
-// GetChartVersion returns the repo.ChartVersion for the given name, the version is expected
+// Get returns the repo.ChartVersion for the given name, the version is expected
 // to be a semver.Constraints compatible string. If version is empty, the latest
 // stable version will be returned and prerelease versions will be ignored.
 // adapted from https://github.com/helm/helm/blob/49819b4ef782e80b0c7f78c30bd76b51ebb56dc8/pkg/downloader/chart_downloader.go#L162
-func (r *OCIChartRepository) GetChartVersion(name, ver string) (*repo.ChartVersion, error) {
+func (r *OCIChartRepository) Get(name, ver string) (*repo.ChartVersion, error) {
 	// Find chart versions matching the given name.
 	// Either in an index file or from a registry.
 	cpURL := r.URL
 	cpURL.Path = path.Join(cpURL.Path, name)
 	cvs, err := r.getTags(cpURL.String())
 	if err != nil {
-		return nil, fmt.Errorf("could not get tags for %q: %s", name, err)
+		return nil, err
 	}
 
 	if len(cvs) == 0 {
@@ -164,7 +153,7 @@ func (r *OCIChartRepository) getTags(ref string) ([]string, error) {
 	// Retrieve list of repository tags
 	tags, err := r.RegistryClient.Tags(strings.TrimPrefix(ref, fmt.Sprintf("%s://", registry.OCIScheme)))
 	if err != nil {
-		return nil, fmt.Errorf("could not fetch tags for %q: %s", ref, err)
+		return nil, err
 	}
 	if len(tags) == 0 {
 		return nil, fmt.Errorf("unable to locate any tags in provided repository: %s", ref)
@@ -214,23 +203,6 @@ func (r *OCIChartRepository) Logout() error {
 	if err != nil {
 		return err
 	}
-	return nil
-}
-
-// HasCredentials returns true if the OCIChartRepository has credentials.
-func (r *OCIChartRepository) HasCredentials() bool {
-	return r.credentialsFile != ""
-}
-
-// Clear deletes the OCI registry credentials file.
-func (r *OCIChartRepository) Clear() error {
-	// clean the credentials file if it exists
-	if r.credentialsFile != "" {
-		if err := os.Remove(r.credentialsFile); err != nil {
-			return err
-		}
-	}
-	r.credentialsFile = ""
 	return nil
 }
 

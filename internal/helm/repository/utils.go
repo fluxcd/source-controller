@@ -39,13 +39,10 @@ func NormalizeURL(repositoryURL string) string {
 	if repositoryURL == "" {
 		return ""
 	}
-
 	if strings.Contains(repositoryURL, helmreg.OCIScheme) {
 		return strings.TrimRight(repositoryURL, "/")
 	}
-
 	return strings.TrimRight(repositoryURL, "/") + "/"
-
 }
 
 // ValidateDepURL returns an error if the given depended repository URL declaration is not supported
