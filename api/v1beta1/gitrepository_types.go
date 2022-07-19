@@ -37,7 +37,7 @@ const (
 // GitRepositorySpec defines the desired state of a Git repository.
 type GitRepositorySpec struct {
 	// The repository URL, can be a HTTP/S or SSH address.
-	// +kubebuilder:validation:Pattern="^(http|https|ssh)://"
+	// +kubebuilder:validation:Pattern="^(http|https|ssh)://.*$"
 	// +required
 	URL string `json:"url"`
 

@@ -169,7 +169,7 @@ spec:
                 type: string
               url:
                 description: The repository URL, can be a HTTP/S or SSH address.
-                pattern: ^(http|https|ssh)://
+                pattern: ^(http|https|ssh)://.*$
                 type: string
               verify:
                 description: Verify OpenPGP signature for the Git commit HEAD points
@@ -513,7 +513,7 @@ spec:
               url:
                 description: URL specifies the Git repository URL, it can be an HTTP/S
                   or SSH address.
-                pattern: ^(http|https|ssh)://
+                pattern: ^(http|https|ssh)://.*$
                 type: string
               verify:
                 description: Verification specifies the configuration to verify the
