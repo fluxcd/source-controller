@@ -68,22 +68,3 @@ func getTransportOptions(transportOptsURL string) (*TransportOptions, bool) {
 	}
 	return nil, false
 }
-
-// EffectiveURL returns the effective URL for requests.
-//
-// Given that TransportOptions can allow for the target URL to be overriden
-// this returns the same input if Managed Transport is disabled or if no TargetURL
-// is set on TransportOptions.
-func EffectiveURL(transporOptsURL string) string {
-	if !Enabled() {
-		return transporOptsURL
-	}
-
-	if opts, found := getTransportOptions(transporOptsURL); found {
-		if opts.TargetURL != "" {
-			return opts.TargetURL
-		}
-	}
-
-	return transporOptsURL
-}

@@ -62,6 +62,7 @@ import (
 	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
 	"github.com/fluxcd/source-controller/internal/reconcile/summarize"
 	"github.com/fluxcd/source-controller/pkg/git"
+	"github.com/fluxcd/source-controller/pkg/git/libgit2/managed"
 )
 
 const (
@@ -148,6 +149,10 @@ Oomb3gD/TRf/nAdVED+k81GdLzciYdUGtI71/qI47G0nMBluLRE=
 var (
 	testGitImplementations = []string{sourcev1.GoGitImplementation, sourcev1.LibGit2Implementation}
 )
+
+func mockTransportNotInitialized() bool {
+	return false
+}
 
 func TestGitRepositoryReconciler_Reconcile(t *testing.T) {
 	g := NewWithT(t)
@@ -504,10 +509,11 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 			}
 
 			r := &GitRepositoryReconciler{
-				Client:        builder.Build(),
-				EventRecorder: record.NewFakeRecorder(32),
-				Storage:       testStorage,
-				features:      features.FeatureGates(),
+				Client:                      builder.Build(),
+				EventRecorder:               record.NewFakeRecorder(32),
+				Storage:                     testStorage,
+				features:                    features.FeatureGates(),
+				Libgit2TransportInitialized: managed.Enabled,
 			}
 
 			for _, i := range testGitImplementations {
@@ -542,6 +548,40 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestGitRepositoryReconciler_reconcileSource_libgit2TransportUninitialized(t *testing.T) {
+	g := NewWithT(t)
+
+	r := &GitRepositoryReconciler{
+		Client:                      fakeclient.NewClientBuilder().WithScheme(runtime.NewScheme()).Build(),
+		EventRecorder:               record.NewFakeRecorder(32),
+		Storage:                     testStorage,
+		features:                    features.FeatureGates(),
+		Libgit2TransportInitialized: mockTransportNotInitialized,
+	}
+
+	obj := &sourcev1.GitRepository{
+		ObjectMeta: metav1.ObjectMeta{
+			GenerateName: "libgit2-transport",
+		},
+		Spec: sourcev1.GitRepositorySpec{
+			Interval: metav1.Duration{Duration: interval},
+			Timeout:  &metav1.Duration{Duration: timeout},
+			Reference: &sourcev1.GitRepositoryRef{
+				Branch: git.DefaultBranch,
+			},
+			GitImplementation: sourcev1.LibGit2Implementation,
+		},
+	}
+
+	tmpDir := t.TempDir()
+	var commit git.Commit
+	var includes artifactSet
+	_, err := r.reconcileSource(ctx, obj, &commit, &includes, tmpDir)
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(err).To(BeAssignableToTypeOf(&serror.Stalling{}))
+	g.Expect(err.Error()).To(Equal("libgit2 managed transport not initialized"))
 }
 
 func TestGitRepositoryReconciler_reconcileSource_checkoutStrategy(t *testing.T) {
@@ -702,10 +742,11 @@ func TestGitRepositoryReconciler_reconcileSource_checkoutStrategy(t *testing.T) 
 	}
 
 	r := &GitRepositoryReconciler{
-		Client:        fakeclient.NewClientBuilder().WithScheme(runtime.NewScheme()).Build(),
-		EventRecorder: record.NewFakeRecorder(32),
-		Storage:       testStorage,
-		features:      features.FeatureGates(),
+		Client:                      fakeclient.NewClientBuilder().WithScheme(runtime.NewScheme()).Build(),
+		EventRecorder:               record.NewFakeRecorder(32),
+		Storage:                     testStorage,
+		features:                    features.FeatureGates(),
+		Libgit2TransportInitialized: managed.Enabled,
 	}
 
 	for _, tt := range tests {
@@ -1563,10 +1604,11 @@ func TestGitRepositoryReconciler_ConditionsUpdate(t *testing.T) {
 			builder := fakeclient.NewClientBuilder().WithScheme(testEnv.GetScheme()).WithObjects(obj)
 
 			r := &GitRepositoryReconciler{
-				Client:        builder.Build(),
-				EventRecorder: record.NewFakeRecorder(32),
-				Storage:       testStorage,
-				features:      features.FeatureGates(),
+				Client:                      builder.Build(),
+				EventRecorder:               record.NewFakeRecorder(32),
+				Storage:                     testStorage,
+				features:                    features.FeatureGates(),
+				Libgit2TransportInitialized: managed.Enabled,
 			}
 
 			key := client.ObjectKeyFromObject(obj)

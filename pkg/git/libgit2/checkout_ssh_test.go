@@ -19,7 +19,6 @@ package libgit2
 import (
 	"context"
 	"fmt"
-	"math/rand"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -31,22 +30,17 @@ import (
 	"github.com/fluxcd/pkg/gittestserver"
 	"github.com/fluxcd/pkg/ssh"
 
-	feathelper "github.com/fluxcd/pkg/runtime/features"
 	. "github.com/onsi/gomega"
 	cryptossh "golang.org/x/crypto/ssh"
 
-	"github.com/fluxcd/source-controller/internal/features"
 	"github.com/fluxcd/source-controller/pkg/git"
-	"github.com/fluxcd/source-controller/pkg/git/libgit2/managed"
 )
 
 const testRepositoryPath = "../testdata/git/repo"
 
-// Test_managedSSH_KeyTypes assures support for the different
+// Test_ssh_keyTypes assures support for the different
 // types of keys for SSH Authentication supported by Flux.
-func Test_managedSSH_KeyTypes(t *testing.T) {
-	enableManagedTransport()
-
+func Test_ssh_keyTypes(t *testing.T) {
 	tests := []struct {
 		name       string
 		keyType    ssh.KeyPairType
@@ -171,11 +165,9 @@ func Test_managedSSH_KeyTypes(t *testing.T) {
 	}
 }
 
-// Test_managedSSH_KeyExchangeAlgos assures support for the different
+// Test_ssh_keyExchangeAlgos assures support for the different
 // types of SSH key exchange algorithms supported by Flux.
-func Test_managedSSH_KeyExchangeAlgos(t *testing.T) {
-	enableManagedTransport()
-
+func Test_ssh_keyExchangeAlgos(t *testing.T) {
 	tests := []struct {
 		name      string
 		ClientKex []string
@@ -294,11 +286,9 @@ func Test_managedSSH_KeyExchangeAlgos(t *testing.T) {
 	}
 }
 
-// Test_managedSSH_HostKeyAlgos assures support for the different
+// Test_ssh_hostKeyAlgos assures support for the different
 // types of SSH Host Key algorithms supported by Flux.
-func Test_managedSSH_HostKeyAlgos(t *testing.T) {
-	enableManagedTransport()
-
+func Test_ssh_hostKeyAlgos(t *testing.T) {
 	tests := []struct {
 		name               string
 		keyType            ssh.KeyPairType
@@ -456,19 +446,4 @@ func Test_managedSSH_HostKeyAlgos(t *testing.T) {
 			g.Expect(err).Error().ShouldNot(HaveOccurred())
 		})
 	}
-}
-
-func getTransportOptionsURL(transport git.TransportType) string {
-	letterRunes := []rune("abcdefghijklmnopqrstuvwxyz1234567890")
-	b := make([]rune, 10)
-	for i := range b {
-		b[i] = letterRunes[rand.Intn(len(letterRunes))]
-	}
-	return string(transport) + "://" + string(b)
-}
-
-func enableManagedTransport() {
-	fg := feathelper.FeatureGates{}
-	fg.SupportedFeatures(features.FeatureGates())
-	managed.InitManagedTransport()
 }

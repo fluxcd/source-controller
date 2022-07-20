@@ -37,7 +37,6 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 
 	"github.com/fluxcd/pkg/runtime/controller"
-	feathelper "github.com/fluxcd/pkg/runtime/features"
 	"github.com/fluxcd/pkg/runtime/testenv"
 	"github.com/fluxcd/pkg/testserver"
 	"github.com/phayes/freeport"
@@ -206,16 +205,17 @@ func TestMain(m *testing.M) {
 		panic(fmt.Sprintf("Failed to create a test registry server: %v", err))
 	}
 
-	fg := feathelper.FeatureGates{}
-	fg.SupportedFeatures(features.FeatureGates())
-	managed.InitManagedTransport()
+	if err = managed.InitManagedTransport(); err != nil {
+		panic(fmt.Sprintf("Failed to initialize libgit2 managed transport: %v", err))
+	}
 
 	if err := (&GitRepositoryReconciler{
-		Client:        testEnv,
-		EventRecorder: record.NewFakeRecorder(32),
-		Metrics:       testMetricsH,
-		Storage:       testStorage,
-		features:      features.FeatureGates(),
+		Client:                      testEnv,
+		EventRecorder:               record.NewFakeRecorder(32),
+		Metrics:                     testMetricsH,
+		Storage:                     testStorage,
+		features:                    features.FeatureGates(),
+		Libgit2TransportInitialized: managed.Enabled,
 	}).SetupWithManager(testEnv); err != nil {
 		panic(fmt.Sprintf("Failed to start GitRepositoryReconciler: %v", err))
 	}

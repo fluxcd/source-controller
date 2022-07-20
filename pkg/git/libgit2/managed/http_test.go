@@ -30,6 +30,15 @@ import (
 	git2go "github.com/libgit2/git2go/v33"
 )
 
+func TestMain(m *testing.M) {
+	err := InitManagedTransport()
+	if err != nil {
+		panic(fmt.Sprintf("failed to initialize libgit2 managed transport: %s", err))
+	}
+	code := m.Run()
+	os.Exit(code)
+}
+
 func TestHttpAction_CreateClientRequest(t *testing.T) {
 	authOpts := git.AuthOptions{
 		Username: "user",
@@ -56,8 +65,8 @@ func TestHttpAction_CreateClientRequest(t *testing.T) {
 				g.Expect(req.URL.String()).To(Equal("https://final-target/abc/git-upload-pack"))
 				g.Expect(req.Method).To(Equal("POST"))
 				g.Expect(req.Header).To(BeEquivalentTo(map[string][]string{
-					"User-Agent":   []string{"git/2.0 (flux-libgit2)"},
-					"Content-Type": []string{"application/x-git-upload-pack-request"},
+					"User-Agent":   {"git/2.0 (flux-libgit2)"},
+					"Content-Type": {"application/x-git-upload-pack-request"},
 				}))
 			},
 			wantedErr: nil,
@@ -70,7 +79,7 @@ func TestHttpAction_CreateClientRequest(t *testing.T) {
 				g.Expect(req.URL.String()).To(Equal("https://final-target/abc/info/refs?service=git-upload-pack"))
 				g.Expect(req.Method).To(Equal("GET"))
 				g.Expect(req.Header).To(BeEquivalentTo(map[string][]string{
-					"User-Agent": []string{"git/2.0 (flux-libgit2)"},
+					"User-Agent": {"git/2.0 (flux-libgit2)"},
 				}))
 			},
 			wantedErr: nil,
@@ -86,8 +95,8 @@ func TestHttpAction_CreateClientRequest(t *testing.T) {
 				g.Expect(req.URL.String()).To(Equal("https://final-target/abc/git-receive-pack"))
 				g.Expect(req.Method).To(Equal("POST"))
 				g.Expect(req.Header).To(BeEquivalentTo(map[string][]string{
-					"Content-Type": []string{"application/x-git-receive-pack-request"},
-					"User-Agent":   []string{"git/2.0 (flux-libgit2)"},
+					"Content-Type": {"application/x-git-receive-pack-request"},
+					"User-Agent":   {"git/2.0 (flux-libgit2)"},
 				}))
 			},
 			wantedErr: nil,
@@ -100,7 +109,7 @@ func TestHttpAction_CreateClientRequest(t *testing.T) {
 				g.Expect(req.URL.String()).To(Equal("https://final-target/abc/info/refs?service=git-receive-pack"))
 				g.Expect(req.Method).To(Equal("GET"))
 				g.Expect(req.Header).To(BeEquivalentTo(map[string][]string{
-					"User-Agent": []string{"git/2.0 (flux-libgit2)"},
+					"User-Agent": {"git/2.0 (flux-libgit2)"},
 				}))
 			},
 			wantedErr: nil,
@@ -162,7 +171,7 @@ func TestHttpAction_CreateClientRequest(t *testing.T) {
 	}
 }
 
-func TestHTTPManagedTransport_E2E(t *testing.T) {
+func TestHTTP_E2E(t *testing.T) {
 	g := NewWithT(t)
 
 	server, err := gittestserver.NewTempGitServer()
@@ -177,9 +186,6 @@ func TestHTTPManagedTransport_E2E(t *testing.T) {
 	err = server.StartHTTP()
 	g.Expect(err).ToNot(HaveOccurred())
 	defer server.StopHTTP()
-
-	// Force managed transport to be enabled
-	InitManagedTransport()
 
 	repoPath := "test.git"
 	err = server.InitRepo("../../testdata/git/repo", git.DefaultBranch, repoPath)
@@ -252,7 +258,7 @@ func TestTrimActionSuffix(t *testing.T) {
 	}
 }
 
-func TestHTTPManagedTransport_HandleRedirect(t *testing.T) {
+func TestHTTP_HandleRedirect(t *testing.T) {
 	tests := []struct {
 		name    string
 		repoURL string
@@ -260,9 +266,6 @@ func TestHTTPManagedTransport_HandleRedirect(t *testing.T) {
 		{name: "http to https", repoURL: "http://github.com/stefanprodan/podinfo"},
 		{name: "handle gitlab redirect", repoURL: "https://gitlab.com/stefanprodan/podinfo"},
 	}
-
-	// Force managed transport to be enabled
-	InitManagedTransport()
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

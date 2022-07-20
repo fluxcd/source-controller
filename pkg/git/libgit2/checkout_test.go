@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math/rand"
 	"os"
 	"path/filepath"
 	"testing"
@@ -30,17 +31,19 @@ import (
 	. "github.com/onsi/gomega"
 
 	"github.com/fluxcd/source-controller/pkg/git"
-
-	mt "github.com/fluxcd/source-controller/pkg/git/libgit2/managed"
+	"github.com/fluxcd/source-controller/pkg/git/libgit2/managed"
 )
 
-func TestCheckoutBranch_unmanaged(t *testing.T) {
-	checkoutBranch(t, false)
+func TestMain(m *testing.M) {
+	err := managed.InitManagedTransport()
+	if err != nil {
+		panic(fmt.Sprintf("failed to initialize libgit2 managed transport: %s", err))
+	}
+	code := m.Run()
+	os.Exit(code)
 }
 
-// checkoutBranch is a test helper function which runs the tests for checking out
-// via CheckoutBranch.
-func checkoutBranch(t *testing.T, managed bool) {
+func TestCheckoutBranch_Checkout(t *testing.T) {
 	// we use a HTTP Git server instead of a bare repo (for all tests in this
 	// package), because our managed transports don't support the file protocol,
 	// so we wouldn't actually be using our custom transports, if we used a bare
@@ -138,7 +141,6 @@ func checkoutBranch(t *testing.T, managed bool) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
-			g.Expect(mt.Enabled()).To(Equal(managed))
 
 			branch := CheckoutBranch{
 				Branch:       tt.branch,
@@ -159,9 +161,7 @@ func checkoutBranch(t *testing.T, managed bool) {
 			}
 			g.Expect(err).ToNot(HaveOccurred())
 			g.Expect(cc.String()).To(Equal(tt.branch + "/" + tt.expectedCommit))
-			if managed {
-				g.Expect(git.IsConcreteCommit(*cc)).To(Equal(tt.expectedConcreteCommit))
-			}
+			g.Expect(git.IsConcreteCommit(*cc)).To(Equal(tt.expectedConcreteCommit))
 
 			if tt.expectedConcreteCommit {
 				for k, v := range tt.filesCreated {
@@ -173,13 +173,7 @@ func checkoutBranch(t *testing.T, managed bool) {
 	}
 }
 
-func TestCheckoutTag_unmanaged(t *testing.T) {
-	checkoutTag(t, false)
-}
-
-// checkoutTag is a test helper function which runs the tests for checking out
-// via CheckoutTag.
-func checkoutTag(t *testing.T, managed bool) {
+func TestCheckoutTag_Checkout(t *testing.T) {
 	type testTag struct {
 		name      string
 		annotated bool
@@ -229,7 +223,6 @@ func checkoutTag(t *testing.T, managed bool) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
-			g.Expect(mt.Enabled()).To(Equal(managed))
 
 			server, err := gittestserver.NewTempGitServer()
 			g.Expect(err).ToNot(HaveOccurred())
@@ -297,10 +290,7 @@ func checkoutTag(t *testing.T, managed bool) {
 			targetTagCommit := tagCommits[tt.checkoutTag]
 			g.Expect(err).ToNot(HaveOccurred())
 			g.Expect(cc.String()).To(Equal(tt.checkoutTag + "/" + targetTagCommit.Id().String()))
-			if managed {
-				g.Expect(git.IsConcreteCommit(*cc)).To(Equal(tt.expectConcreteCommit))
-
-			}
+			g.Expect(git.IsConcreteCommit(*cc)).To(Equal(tt.expectConcreteCommit))
 
 			// Check file content only when there's an actual checkout.
 			if tt.lastRevTag != tt.checkoutTag {
@@ -311,15 +301,8 @@ func checkoutTag(t *testing.T, managed bool) {
 	}
 }
 
-func TestCheckoutCommit_unmanaged(t *testing.T) {
-	checkoutCommit(t, false)
-}
-
-// checkoutCommit is a test helper function which runs the tests for checking out
-// via CheckoutCommit.
-func checkoutCommit(t *testing.T, managed bool) {
+func TestCheckoutCommit_Checkout(t *testing.T) {
 	g := NewWithT(t)
-	g.Expect(mt.Enabled()).To(Equal(managed))
 
 	server, err := gittestserver.NewTempGitServer()
 	if err != nil {
@@ -380,13 +363,7 @@ func checkoutCommit(t *testing.T, managed bool) {
 	g.Expect(cc).To(BeNil())
 }
 
-func TestCheckoutTagSemVer_unmanaged(t *testing.T) {
-	checkoutSemVer(t, false)
-}
-
-// checkoutSemVer is a test helper function which runs the tests for checking out
-// via CheckoutSemVer.
-func checkoutSemVer(t *testing.T, managed bool) {
+func TestCheckoutSemVer_Checkout(t *testing.T) {
 	g := NewWithT(t)
 	now := time.Now()
 
@@ -498,7 +475,6 @@ func checkoutSemVer(t *testing.T, managed bool) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
-			g.Expect(mt.Enabled()).To(Equal(managed))
 
 			semVer := CheckoutSemVer{
 				SemVer: tt.constraint,
@@ -520,6 +496,112 @@ func checkoutSemVer(t *testing.T, managed bool) {
 			g.Expect(cc.String()).To(Equal(tt.expectTag + "/" + refs[tt.expectTag]))
 			g.Expect(filepath.Join(tmpDir, "tag")).To(BeARegularFile())
 			g.Expect(os.ReadFile(filepath.Join(tmpDir, "tag"))).To(BeEquivalentTo(tt.expectTag))
+		})
+	}
+}
+
+func Test_initializeRepoWithRemote(t *testing.T) {
+	g := NewWithT(t)
+
+	tmp := t.TempDir()
+	ctx := context.TODO()
+	testRepoURL := "https://example.com/foo/bar"
+	testRepoURL2 := "https://example.com/foo/baz"
+	authOpts, err := git.AuthOptionsWithoutSecret(testRepoURL)
+	g.Expect(err).ToNot(HaveOccurred())
+	authOpts.TransportOptionsURL = "https://bar123"
+	authOpts2, err := git.AuthOptionsWithoutSecret(testRepoURL2)
+	g.Expect(err).ToNot(HaveOccurred())
+	authOpts2.TransportOptionsURL = "https://baz789"
+
+	// Fresh initialization.
+	repo, remote, err := initializeRepoWithRemote(ctx, tmp, testRepoURL, authOpts)
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(repo.IsBare()).To(BeFalse())
+	g.Expect(remote.Name()).To(Equal(defaultRemoteName))
+	g.Expect(remote.Url()).To(Equal(authOpts.TransportOptionsURL))
+	remote.Free()
+	repo.Free()
+
+	// Reinitialize to ensure it reuses the existing origin.
+	repo, remote, err = initializeRepoWithRemote(ctx, tmp, testRepoURL, authOpts)
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(repo.IsBare()).To(BeFalse())
+	g.Expect(remote.Name()).To(Equal(defaultRemoteName))
+	g.Expect(remote.Url()).To(Equal(authOpts.TransportOptionsURL))
+	remote.Free()
+	repo.Free()
+
+	// Reinitialize with a different remote URL for existing origin.
+	repo, remote, err = initializeRepoWithRemote(ctx, tmp, testRepoURL2, authOpts2)
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(repo.IsBare()).To(BeFalse())
+	g.Expect(remote.Name()).To(Equal(defaultRemoteName))
+	g.Expect(remote.Url()).To(Equal(authOpts2.TransportOptionsURL))
+	remote.Free()
+	repo.Free()
+}
+
+func TestCheckoutStrategyForOptions(t *testing.T) {
+	tests := []struct {
+		name          string
+		opts          git.CheckoutOptions
+		expectedStrat git.CheckoutStrategy
+	}{
+		{
+			name: "commit works",
+			opts: git.CheckoutOptions{
+				Commit: "commit",
+			},
+			expectedStrat: &CheckoutCommit{
+				Commit: "commit",
+			},
+		},
+		{
+			name: "semver works",
+			opts: git.CheckoutOptions{
+				SemVer: ">= 1.0.0",
+			},
+			expectedStrat: &CheckoutSemVer{
+				SemVer: ">= 1.0.0",
+			},
+		},
+		{
+			name: "tag with latest revision works",
+			opts: git.CheckoutOptions{
+				Tag:          "v0.1.0",
+				LastRevision: "ar34oi2njrngjrng",
+			},
+			expectedStrat: &CheckoutTag{
+				Tag:          "v0.1.0",
+				LastRevision: "ar34oi2njrngjrng",
+			},
+		},
+		{
+			name: "branch with latest revision works",
+			opts: git.CheckoutOptions{
+				Branch:       "main",
+				LastRevision: "rrgij20mkmrg",
+			},
+			expectedStrat: &CheckoutBranch{
+				Branch:       "main",
+				LastRevision: "rrgij20mkmrg",
+			},
+		},
+		{
+			name: "empty branch falls back to default",
+			opts: git.CheckoutOptions{},
+			expectedStrat: &CheckoutBranch{
+				Branch: git.DefaultBranch,
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+			strat := CheckoutStrategyForOptions(context.TODO(), tt.opts)
+			g.Expect(strat).To(Equal(tt.expectedStrat))
 		})
 	}
 }
@@ -615,102 +697,11 @@ func mockSignature(time time.Time) *git2go.Signature {
 	}
 }
 
-func TestInitializeRepoWithRemote(t *testing.T) {
-	g := NewWithT(t)
-
-	g.Expect(mt.Enabled()).To(BeFalse())
-	tmp := t.TempDir()
-	ctx := context.TODO()
-	testRepoURL := "https://example.com/foo/bar"
-	testRepoURL2 := "https://example.com/foo/baz"
-	authOpts, err := git.AuthOptionsWithoutSecret(testRepoURL)
-	g.Expect(err).ToNot(HaveOccurred())
-	authOpts2, err := git.AuthOptionsWithoutSecret(testRepoURL2)
-	g.Expect(err).ToNot(HaveOccurred())
-
-	// Fresh initialization.
-	repo, remote, err := initializeRepoWithRemote(ctx, tmp, testRepoURL, authOpts)
-	g.Expect(err).ToNot(HaveOccurred())
-	g.Expect(repo.IsBare()).To(BeFalse())
-	g.Expect(remote.Name()).To(Equal(defaultRemoteName))
-	g.Expect(remote.Url()).To(Equal(testRepoURL))
-	remote.Free()
-	repo.Free()
-
-	// Reinitialize to ensure it reuses the existing origin.
-	repo, remote, err = initializeRepoWithRemote(ctx, tmp, testRepoURL, authOpts)
-	g.Expect(err).ToNot(HaveOccurred())
-	g.Expect(repo.IsBare()).To(BeFalse())
-	g.Expect(remote.Name()).To(Equal(defaultRemoteName))
-	g.Expect(remote.Url()).To(Equal(testRepoURL))
-	remote.Free()
-	repo.Free()
-
-	// Reinitialize with a different remote URL for existing origin.
-	_, _, err = initializeRepoWithRemote(ctx, tmp, testRepoURL2, authOpts2)
-	g.Expect(err).To(HaveOccurred())
-}
-
-func TestCheckoutStrategyForOptions(t *testing.T) {
-	tests := []struct {
-		name          string
-		opts          git.CheckoutOptions
-		expectedStrat git.CheckoutStrategy
-	}{
-		{
-			name: "commit works",
-			opts: git.CheckoutOptions{
-				Commit: "commit",
-			},
-			expectedStrat: &CheckoutCommit{
-				Commit: "commit",
-			},
-		},
-		{
-			name: "semver works",
-			opts: git.CheckoutOptions{
-				SemVer: ">= 1.0.0",
-			},
-			expectedStrat: &CheckoutSemVer{
-				SemVer: ">= 1.0.0",
-			},
-		},
-		{
-			name: "tag with latest revision works",
-			opts: git.CheckoutOptions{
-				Tag:          "v0.1.0",
-				LastRevision: "ar34oi2njrngjrng",
-			},
-			expectedStrat: &CheckoutTag{
-				Tag:          "v0.1.0",
-				LastRevision: "ar34oi2njrngjrng",
-			},
-		},
-		{
-			name: "branch with latest revision works",
-			opts: git.CheckoutOptions{
-				Branch:       "main",
-				LastRevision: "rrgij20mkmrg",
-			},
-			expectedStrat: &CheckoutBranch{
-				Branch:       "main",
-				LastRevision: "rrgij20mkmrg",
-			},
-		},
-		{
-			name: "empty branch falls back to default",
-			opts: git.CheckoutOptions{},
-			expectedStrat: &CheckoutBranch{
-				Branch: git.DefaultBranch,
-			},
-		},
+func getTransportOptionsURL(transport git.TransportType) string {
+	letterRunes := []rune("abcdefghijklmnopqrstuvwxyz1234567890")
+	b := make([]rune, 10)
+	for i := range b {
+		b[i] = letterRunes[rand.Intn(len(letterRunes))]
 	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			g := NewWithT(t)
-			strat := CheckoutStrategyForOptions(context.TODO(), tt.opts)
-			g.Expect(strat).To(Equal(tt.expectedStrat))
-		})
-	}
+	return string(transport) + "://" + string(b)
 }
