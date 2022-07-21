@@ -2,8 +2,8 @@ ARG BASE_VARIANT=alpine
 ARG GO_VERSION=1.17
 ARG XX_VERSION=1.1.0
 
-ARG LIBGIT2_IMG=ghcr.io/fluxcd/golang-with-libgit2-all
-ARG LIBGIT2_TAG=v0.1.2
+ARG LIBGIT2_IMG=ghcr.io/fluxcd/golang-with-libgit2-only
+ARG LIBGIT2_TAG=v0.1.4
 
 FROM ${LIBGIT2_IMG}:${LIBGIT2_TAG} AS libgit2-libs
 
@@ -82,9 +82,8 @@ ENV CGO_ENABLED=1
 
 # Instead of using xx-go, (cross) compile with vanilla go leveraging musl tool chain.
 RUN export $(cat build/musl/$(xx-info alpine-arch).env | xargs) && \
-    export LIBRARY_PATH="/usr/local/$(xx-info triple):/usr/local/$(xx-info triple)/lib64" && \
-    export PKG_CONFIG_PATH="/usr/local/$(xx-info triple)/lib/pkgconfig:/usr/local/$(xx-info triple)/lib64/pkgconfig" && \
-    export CGO_LDFLAGS="$(pkg-config --static --libs --cflags libssh2 openssl libgit2) -static" && \
+    export PKG_CONFIG_PATH="/usr/local/$(xx-info triple)/lib/pkgconfig" && \
+    export CGO_LDFLAGS="$(pkg-config --static --libs --cflags libgit2) -static" && \
     GOARCH=$TARGETARCH go build  \
         -ldflags "-s -w" \
         -tags 'netgo,osusergo,static_build' \
