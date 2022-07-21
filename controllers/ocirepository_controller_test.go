@@ -16,6 +16,7 @@ limitations under the License.
 package controllers
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/tls"
@@ -32,8 +33,12 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
+
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/client-go/tools/record"
 
 	"github.com/darkowlzz/controller-check/status"
 	"github.com/fluxcd/pkg/apis/meta"
@@ -41,29 +46,34 @@ import (
 	"github.com/fluxcd/pkg/runtime/patch"
 	"github.com/fluxcd/pkg/untar"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
+	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/crane"
 	"github.com/google/go-containerregistry/pkg/registry"
 	gcrv1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/mutate"
 	. "github.com/onsi/gomega"
-	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	kstatus "sigs.k8s.io/cli-utils/pkg/kstatus/status"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	fakeclient "sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 func TestOCIRepository_Reconcile(t *testing.T) {
 	g := NewWithT(t)
 
 	// Registry server with public images
-	regServer := httptest.NewServer(registry.New())
+	regServer, err := setupRegistryServer(context.Background(), registryOptions{})
+	if err != nil {
+		t.Fatalf(err.Error())
+	}
+
 	versions := []string{"6.1.4", "6.1.5", "6.1.6"}
 	podinfoVersions := make(map[string]podinfoImage)
 
 	for i := 0; i < len(versions); i++ {
-		pi, err := createPodinfoImageFromTar(fmt.Sprintf("podinfo-%s.tar", versions[i]), versions[i], regServer)
+		pi, err := createPodinfoImageFromTar(fmt.Sprintf("podinfo-%s.tar", versions[i]), versions[i], fmt.Sprintf("http://%s", regServer.registryHost))
 		g.Expect(err).ToNot(HaveOccurred())
 
 		podinfoVersions[versions[i]] = *pi
@@ -240,52 +250,202 @@ func TestOCIRepository_Reconcile(t *testing.T) {
 	}
 }
 
-func TestOCIRepository_SecretRef(t *testing.T) {
-	g := NewWithT(t)
+func TestOCIRepository_reconcileSource_authStrategy(t *testing.T) {
+	type secretOptions struct {
+		username      string
+		password      string
+		includeSA     bool
+		includeSecret bool
+	}
 
-	// Instantiate Authenticated Registry Server
-	regServer, err := setupRegistryServer(ctx)
-	g.Expect(err).ToNot(HaveOccurred())
-
-	// Create Test Image
-	image, err := crane.Load(path.Join("testdata", "podinfo", "podinfo-6.1.6.tar"))
-	g.Expect(err).ToNot(HaveOccurred())
-
-	repositoryURL := fmt.Sprintf("%s/podinfo", regServer.registryHost)
-	ociURL := fmt.Sprintf("oci://%s", repositoryURL)
-
-	// Push Test Image
-	image = setPodinfoImageAnnotations(image, "6.1.6")
-	err = crane.Push(image, repositoryURL, crane.WithAuth(&authn.Basic{
-		Username: testRegistryUsername,
-		Password: testRegistryPassword,
-	}))
-	g.Expect(err).ToNot(HaveOccurred())
-
-	// Test Image digest
-	podinfoImageDigest, err := image.Digest()
-	g.Expect(err).ToNot(HaveOccurred())
+	pool := x509.NewCertPool()
+	pool.AppendCertsFromPEM(tlsCA)
 
 	tests := []struct {
-		name                  string
-		url                   string
-		digest                gcrv1.Hash
-		includeSecretRef      bool
-		includeServiceAccount bool
+		name             string
+		url              string
+		registryOpts     registryOptions
+		craneOpts        []crane.Option
+		secretOpts       secretOptions
+		tlsCertSecret    *corev1.Secret
+		want             sreconcile.Result
+		wantErr          bool
+		assertConditions []metav1.Condition
 	}{
 		{
-			name:                  "private-registry-access-via-secretref",
-			url:                   ociURL,
-			digest:                podinfoImageDigest,
-			includeSecretRef:      true,
-			includeServiceAccount: false,
+			name: "HTTP without basic auth",
+			want: sreconcile.ResultSuccess,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new digest '<digest>' for '<url>'"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new digest '<digest>' for '<url>'"),
+			},
 		},
 		{
-			name:                  "private-registry-access-via-serviceaccount",
-			url:                   ociURL,
-			digest:                podinfoImageDigest,
-			includeSecretRef:      false,
-			includeServiceAccount: true,
+			name: "HTTP with basic auth secret",
+			want: sreconcile.ResultSuccess,
+			registryOpts: registryOptions{
+				withBasicAuth: true,
+			},
+			craneOpts: []crane.Option{crane.WithAuth(&authn.Basic{
+				Username: testRegistryUsername,
+				Password: testRegistryPassword,
+			}),
+			},
+			secretOpts: secretOptions{
+				username:      testRegistryUsername,
+				password:      testRegistryPassword,
+				includeSecret: true,
+			},
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new digest '<digest>' for '<url>'"),
+				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new digest '<digest>' for '<url>'"),
+			},
+		},
+		{
+			name: "HTTP with serviceaccount",
+			want: sreconcile.ResultSuccess,
+			registryOpts: registryOptions{
+				withBasicAuth: true,
+			},
+			craneOpts: []crane.Option{crane.WithAuth(&authn.Basic{
+				Username: testRegistryUsername,
+				Password: testRegistryPassword,
+			}),
+			},
+			secretOpts: secretOptions{
+				username:  testRegistryUsername,
+				password:  testRegistryPassword,
+				includeSA: true,
+			},
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new digest '<digest>' for '<url>'"),
+				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new digest '<digest>' for '<url>'"),
+			},
+		},
+		{
+			name: "HTTP registry - basic auth with missing secret",
+			want: sreconcile.ResultEmpty,
+			registryOpts: registryOptions{
+				withBasicAuth: true,
+			},
+			wantErr: true,
+			craneOpts: []crane.Option{crane.WithAuth(&authn.Basic{
+				Username: testRegistryUsername,
+				Password: testRegistryPassword,
+			}),
+			},
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.OCIOperationFailedReason, "failed to pull artifact from "),
+			},
+		},
+		{
+			name:    "HTTP registry - basic auth with invalid secret",
+			want:    sreconcile.ResultEmpty,
+			wantErr: true,
+			registryOpts: registryOptions{
+				withBasicAuth: true,
+			},
+			craneOpts: []crane.Option{crane.WithAuth(&authn.Basic{
+				Username: testRegistryUsername,
+				Password: testRegistryPassword,
+			}),
+			},
+			secretOpts: secretOptions{
+				username:      "wrong-pass",
+				password:      "wrong-pass",
+				includeSecret: true,
+			},
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.OCIOperationFailedReason, "failed to pull artifact from "),
+			},
+		},
+		{
+			name:    "HTTP registry - basic auth with invalid serviceaccount",
+			want:    sreconcile.ResultEmpty,
+			wantErr: true,
+			registryOpts: registryOptions{
+				withBasicAuth: true,
+			},
+			craneOpts: []crane.Option{crane.WithAuth(&authn.Basic{
+				Username: testRegistryUsername,
+				Password: testRegistryPassword,
+			}),
+			},
+			secretOpts: secretOptions{
+				username:  "wrong-pass",
+				password:  "wrong-pass",
+				includeSA: true,
+			},
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.OCIOperationFailedReason, "failed to pull artifact from "),
+			},
+		},
+		{
+			name: "HTTPS with valid certfile",
+			want: sreconcile.ResultSuccess,
+			registryOpts: registryOptions{
+				withTlS: true,
+			},
+			craneOpts: []crane.Option{crane.WithTransport(&http.Transport{
+				TLSClientConfig: &tls.Config{
+					RootCAs: pool,
+				},
+			}),
+			},
+			tlsCertSecret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "ca-file",
+				},
+				Data: map[string][]byte{
+					"caFile": tlsCA,
+				},
+			},
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new digest '<digest>' for '<url>'"),
+				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new digest '<digest>' for '<url>'"),
+			},
+		},
+		{
+			name:    "HTTPS without certfile",
+			want:    sreconcile.ResultEmpty,
+			wantErr: true,
+			registryOpts: registryOptions{
+				withTlS: true,
+			},
+			craneOpts: []crane.Option{crane.WithTransport(&http.Transport{
+				TLSClientConfig: &tls.Config{
+					RootCAs: pool,
+				},
+			}),
+			},
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.OCIOperationFailedReason, "failed to pull artifact from "),
+			},
+		},
+		{
+			name:    "HTTPS with invalid certfile",
+			want:    sreconcile.ResultEmpty,
+			wantErr: true,
+			registryOpts: registryOptions{
+				withTlS: true,
+			},
+			craneOpts: []crane.Option{crane.WithTransport(&http.Transport{
+				TLSClientConfig: &tls.Config{
+					RootCAs: pool,
+				},
+			}),
+			},
+			tlsCertSecret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "ca-file",
+				},
+				Data: map[string][]byte{
+					"caFile": []byte("invalid"),
+				},
+			},
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.OCIOperationFailedReason, "failed to pull artifact from "),
+			},
 		},
 	}
 
@@ -293,328 +453,245 @@ func TestOCIRepository_SecretRef(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
 
-			ns, err := testEnv.CreateNamespace(ctx, "ocirepository-test")
-			g.Expect(err).ToNot(HaveOccurred())
-			defer func() { g.Expect(testEnv.Delete(ctx, ns)).To(Succeed()) }()
-
-			secret := &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					GenerateName: "auth-secretref",
-					Namespace:    ns.Name,
-				},
-				Type: corev1.SecretTypeDockerConfigJson,
-				StringData: map[string]string{
-					".dockerconfigjson": fmt.Sprintf(`{"auths": {%q: {"username": %q, "password": %q}}}`, repositoryURL, testRegistryUsername, testRegistryPassword),
-				},
-			}
-			g.Expect(testEnv.CreateAndWait(ctx, secret)).To(Succeed())
-			defer func() { g.Expect(testEnv.Delete(ctx, secret)).To(Succeed()) }()
-
-			serviceAccount := &corev1.ServiceAccount{
-				ObjectMeta: metav1.ObjectMeta{
-					GenerateName: "sa-ocitest",
-					Namespace:    ns.Name,
-				},
-				ImagePullSecrets: []corev1.LocalObjectReference{{Name: secret.Name}},
-			}
-			g.Expect(testEnv.CreateAndWait(ctx, serviceAccount)).To(Succeed())
-			defer func() { g.Expect(testEnv.Delete(ctx, serviceAccount)).To(Succeed()) }()
+			builder := fakeclient.NewClientBuilder().WithScheme(testEnv.GetScheme())
 
 			obj := &sourcev1.OCIRepository{
 				ObjectMeta: metav1.ObjectMeta{
-					GenerateName: "ocirepository-test-resource",
-					Namespace:    ns.Name,
+					GenerateName: "auth-strategy-",
 				},
 				Spec: sourcev1.OCIRepositorySpec{
-					URL:       tt.url,
-					Interval:  metav1.Duration{Duration: 60 * time.Minute},
-					Reference: &sourcev1.OCIRepositoryRef{Digest: tt.digest.String()},
+					Interval: metav1.Duration{Duration: interval},
+					Timeout:  &metav1.Duration{Duration: timeout},
 				},
 			}
 
-			if tt.includeSecretRef {
-				obj.Spec.SecretRef = &meta.LocalObjectReference{Name: secret.Name}
+			server, err := setupRegistryServer(context.Background(), tt.registryOpts)
+			g.Expect(err).NotTo(HaveOccurred())
+
+			img, err := createPodinfoImageFromTar("podinfo-6.1.6.tar", "6.1.6", fmt.Sprintf("http://%s", server.registryHost), tt.craneOpts...)
+			g.Expect(err).ToNot(HaveOccurred())
+			obj.Spec.URL = img.url
+			obj.Spec.Reference = &sourcev1.OCIRepositoryRef{
+				Tag: img.tag,
 			}
 
-			if tt.includeServiceAccount {
-				obj.Spec.ServiceAccountName = serviceAccount.Name
+			if tt.secretOpts.username != "" && tt.secretOpts.password != "" {
+				secret := &corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "auth-secretref",
+					},
+					Type: corev1.SecretTypeDockerConfigJson,
+					Data: map[string][]byte{
+						".dockerconfigjson": []byte(fmt.Sprintf(`{"auths": {%q: {"username": %q, "password": %q}}}`,
+							server.registryHost, tt.secretOpts.username, tt.secretOpts.password)),
+					},
+				}
+
+				builder.WithObjects(secret)
+
+				if tt.secretOpts.includeSA {
+					serviceAccount := &corev1.ServiceAccount{
+						ObjectMeta: metav1.ObjectMeta{
+							Name: "sa-ocitest",
+						},
+						ImagePullSecrets: []corev1.LocalObjectReference{{Name: secret.Name}},
+					}
+					builder.WithObjects(serviceAccount)
+					obj.Spec.ServiceAccountName = serviceAccount.Name
+				}
+
+				if tt.secretOpts.includeSecret {
+					obj.Spec.SecretRef = &meta.LocalObjectReference{
+						Name: secret.Name,
+					}
+				}
 			}
 
-			g.Expect(testEnv.Create(ctx, obj)).To(Succeed())
-
-			key := client.ObjectKey{Name: obj.Name, Namespace: obj.Namespace}
-
-			// Wait for the finalizer to be set
-			g.Eventually(func() bool {
-				if err := testEnv.Get(ctx, key, obj); err != nil {
-					return false
+			if tt.tlsCertSecret != nil {
+				builder.WithObjects(tt.tlsCertSecret)
+				obj.Spec.CertSecretRef = &meta.LocalObjectReference{
+					Name: tt.tlsCertSecret.Name,
 				}
-				return len(obj.Finalizers) > 0
-			}, timeout).Should(BeTrue())
-
-			// Wait for the object to be Ready
-			g.Eventually(func() bool {
-				if err := testEnv.Get(ctx, key, obj); err != nil {
-					return false
-				}
-				if !conditions.IsReady(obj) {
-					return false
-				}
-				readyCondition := conditions.Get(obj, meta.ReadyCondition)
-				return obj.Generation == readyCondition.ObservedGeneration &&
-					obj.Generation == obj.Status.ObservedGeneration
-			}, timeout).Should(BeTrue())
-
-			t.Log(obj.Status.Artifact.Revision)
-
-			// Check if the revision matches the expected digest
-			g.Expect(obj.Status.Artifact.Revision).To(Equal(tt.digest.Hex))
-
-			// Check if the artifact storage path matches the expected file path
-			localPath := testStorage.LocalPath(*obj.Status.Artifact)
-			t.Logf("artifact local path: %s", localPath)
-
-			f, err := os.Open(localPath)
-			g.Expect(err).ToNot(HaveOccurred())
-			defer f.Close()
-
-			// create a tmp directory to extract artifact
-			tmp, err := os.MkdirTemp("", "ocirepository-test-")
-			g.Expect(err).ToNot(HaveOccurred())
-			defer os.RemoveAll(tmp)
-
-			ep, err := untar.Untar(f, tmp)
-			g.Expect(err).ToNot(HaveOccurred())
-			t.Logf("extracted summary: %s", ep)
-
-			expectedFile := filepath.Join(tmp, `kustomize/deployment.yaml`)
-			g.Expect(expectedFile).To(BeAnExistingFile())
-
-			f2, err := os.Open(expectedFile)
-			g.Expect(err).ToNot(HaveOccurred())
-			defer f2.Close()
-
-			h := testStorage.Checksum(f2)
-			t.Logf("hash: %q", h)
-			g.Expect(h).To(Equal("6fd625effe6bb805b6a78943ee082a4412e763edb7fcaed6e8fe644d06cbf423"))
-
-			// Check if the object status is valid
-			condns := &status.Conditions{NegativePolarity: ociRepositoryReadyCondition.NegativePolarity}
-			checker := status.NewChecker(testEnv.Client, condns)
-			checker.CheckErr(ctx, obj)
-
-			// kstatus client conformance check
-			u, err := patch.ToUnstructured(obj)
-			g.Expect(err).ToNot(HaveOccurred())
-			res, err := kstatus.Compute(u)
-			g.Expect(err).ToNot(HaveOccurred())
-			g.Expect(res.Status).To(Equal(kstatus.CurrentStatus))
-
-			// Patch the object with reconcile request annotation.
-			patchHelper, err := patch.NewHelper(obj, testEnv.Client)
-			g.Expect(err).ToNot(HaveOccurred())
-			annotations := map[string]string{
-				meta.ReconcileRequestAnnotation: "now",
 			}
-			obj.SetAnnotations(annotations)
-			g.Expect(patchHelper.Patch(ctx, obj)).ToNot(HaveOccurred())
-			g.Eventually(func() bool {
-				if err := testEnv.Get(ctx, key, obj); err != nil {
-					return false
-				}
-				return obj.Status.LastHandledReconcileAt == "now"
-			}, timeout).Should(BeTrue())
 
-			// Wait for the object to be deleted
-			g.Expect(testEnv.Delete(ctx, obj)).To(Succeed())
-			g.Eventually(func() bool {
-				if err := testEnv.Get(ctx, key, obj); err != nil {
-					return apierrors.IsNotFound(err)
-				}
-				return false
-			}, timeout).Should(BeTrue())
+			r := &OCIRepositoryReconciler{
+				Client:        builder.Build(),
+				EventRecorder: record.NewFakeRecorder(32),
+				Storage:       testStorage,
+			}
+
+			repoURL, err := r.getArtifactURL(context.Background(), obj, nil, nil)
+			g.Expect(err).To(BeNil())
+
+			assertConditions := tt.assertConditions
+			for k := range assertConditions {
+				assertConditions[k].Message = strings.ReplaceAll(assertConditions[k].Message, "<digest>", img.digest.Hex)
+				assertConditions[k].Message = strings.ReplaceAll(assertConditions[k].Message, "<url>", repoURL)
+			}
+
+			tmpDir := t.TempDir()
+			got, err := r.reconcileSource(context.Background(), obj, &sourcev1.Artifact{}, tmpDir)
+
+			if tt.wantErr {
+				g.Expect(err).ToNot(BeNil())
+			} else {
+				g.Expect(err).To(BeNil())
+			}
+			g.Expect(got).To(Equal(tt.want))
+			g.Expect(obj.Status.Conditions).To(conditions.MatchConditions(tt.assertConditions))
 
 		})
 	}
 }
 
-func TestOCIRepository_FailedAuth(t *testing.T) {
+func TestOCIRepository_reconcileSource_remoteReference(t *testing.T) {
 	g := NewWithT(t)
 
-	// Instantiate Authenticated Registry Server
-	regServer, err := setupRegistryServer(ctx)
+	server, err := setupRegistryServer(context.Background(), registryOptions{})
 	g.Expect(err).ToNot(HaveOccurred())
 
-	// Create Test Image
-	image, err := crane.Load(path.Join("testdata", "podinfo", "podinfo-6.1.6.tar"))
+	img5, err := createPodinfoImageFromTar("podinfo-6.1.5.tar", "6.1.5", fmt.Sprintf("http://%s", server.registryHost))
 	g.Expect(err).ToNot(HaveOccurred())
 
-	repositoryURL := fmt.Sprintf("%s/podinfo", regServer.registryHost)
-	ociURL := fmt.Sprintf("oci://%s", repositoryURL)
-
-	// Push Test Image
-	image = setPodinfoImageAnnotations(image, "6.1.6")
-	err = crane.Push(image, repositoryURL, crane.WithAuth(&authn.Basic{
-		Username: testRegistryUsername,
-		Password: testRegistryPassword,
-	}))
-	g.Expect(err).ToNot(HaveOccurred())
-
-	// Test Image digest
-	podinfoImageDigest, err := image.Digest()
+	img6, err := createPodinfoImageFromTar("podinfo-6.1.6.tar", "6.1.6", fmt.Sprintf("http://%s", server.registryHost))
 	g.Expect(err).ToNot(HaveOccurred())
 
 	tests := []struct {
-		name                  string
-		url                   string
-		digest                gcrv1.Hash
-		repoUsername          string
-		repoPassword          string
-		includeSecretRef      bool
-		includeServiceAccount bool
+		name             string
+		reference        *sourcev1.OCIRepositoryRef
+		want             sreconcile.Result
+		wantErr          bool
+		wantRevision     string
+		assertConditions []metav1.Condition
 	}{
 		{
-			name:                  "missing-auth",
-			url:                   ociURL,
-			repoUsername:          "",
-			repoPassword:          "",
-			digest:                podinfoImageDigest,
-			includeSecretRef:      false,
-			includeServiceAccount: false,
+			name:         "no reference (latest tag)",
+			want:         sreconcile.ResultSuccess,
+			wantRevision: img6.digest.Hex,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new digest"),
+				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new digest"),
+			},
 		},
 		{
-			name:                  "invalid-auth-via-secret",
-			url:                   ociURL,
-			repoUsername:          "InvalidUser",
-			repoPassword:          "InvalidPassword",
-			digest:                podinfoImageDigest,
-			includeSecretRef:      true,
-			includeServiceAccount: false,
+			name: "tag reference",
+			reference: &sourcev1.OCIRepositoryRef{
+				Tag: "6.1.6",
+			},
+			want:         sreconcile.ResultSuccess,
+			wantRevision: img6.digest.Hex,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new digest"),
+				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new digest"),
+			},
 		},
 		{
-			name:                  "invalid-auth-via-service-account",
-			url:                   ociURL,
-			repoUsername:          "InvalidUser",
-			repoPassword:          "InvalidPassword",
-			digest:                podinfoImageDigest,
-			includeSecretRef:      false,
-			includeServiceAccount: true,
+			name: "semver reference",
+			reference: &sourcev1.OCIRepositoryRef{
+				SemVer: ">= 6.1.5",
+			},
+			want:         sreconcile.ResultSuccess,
+			wantRevision: img6.digest.Hex,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new digest"),
+				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new digest"),
+			},
 		},
+		{
+			name: "digest reference",
+			reference: &sourcev1.OCIRepositoryRef{
+				Digest: img6.digest.String(),
+			},
+			wantRevision: img6.digest.Hex,
+			want:         sreconcile.ResultSuccess,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new digest"),
+				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new digest"),
+			},
+		},
+		{
+			name: "invalid tag reference",
+			reference: &sourcev1.OCIRepositoryRef{
+				Tag: "6.1.0",
+			},
+			want:    sreconcile.ResultEmpty,
+			wantErr: true,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.OCIOperationFailedReason, "failed to pull artifact"),
+			},
+		},
+		{
+			name: "semver should take precedence over tag",
+			reference: &sourcev1.OCIRepositoryRef{
+				SemVer: ">= 6.1.5",
+				Tag:    "6.1.5",
+			},
+			want:         sreconcile.ResultSuccess,
+			wantRevision: img6.digest.Hex,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new digest"),
+				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new digest"),
+			},
+		},
+		{
+			name: "digest should take precedence over semver",
+			reference: &sourcev1.OCIRepositoryRef{
+				Tag:    "6.1.6",
+				SemVer: ">= 6.1.6",
+				Digest: img5.digest.String(),
+			},
+			want:         sreconcile.ResultSuccess,
+			wantRevision: img5.digest.Hex,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new digest"),
+				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new digest"),
+			},
+		},
+	}
+
+	builder := fakeclient.NewClientBuilder().WithScheme(testEnv.GetScheme())
+
+	r := &OCIRepositoryReconciler{
+		Client:        builder.Build(),
+		EventRecorder: record.NewFakeRecorder(32),
+		Storage:       testStorage,
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			g := NewWithT(t)
-
-			ns, err := testEnv.CreateNamespace(ctx, "ocirepository-test")
-			g.Expect(err).ToNot(HaveOccurred())
-			defer func() { g.Expect(testEnv.Delete(ctx, ns)).To(Succeed()) }()
-
-			secret := &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					GenerateName: "auth-secretref",
-					Namespace:    ns.Name,
-				},
-				Type: corev1.SecretTypeDockerConfigJson,
-				StringData: map[string]string{
-					".dockerconfigjson": fmt.Sprintf(`{"auths": {%q: {"username": %q, "password": %q}}}`, repositoryURL, tt.repoUsername, tt.repoPassword),
-				},
-			}
-			g.Expect(testEnv.CreateAndWait(ctx, secret)).To(Succeed())
-			defer func() { g.Expect(testEnv.Delete(ctx, secret)).To(Succeed()) }()
-
-			serviceAccount := &corev1.ServiceAccount{
-				ObjectMeta: metav1.ObjectMeta{
-					GenerateName: "sa-ocitest",
-					Namespace:    ns.Name,
-				},
-				ImagePullSecrets: []corev1.LocalObjectReference{{Name: secret.Name}},
-			}
-			g.Expect(testEnv.CreateAndWait(ctx, serviceAccount)).To(Succeed())
-			defer func() { g.Expect(testEnv.Delete(ctx, serviceAccount)).To(Succeed()) }()
-
 			obj := &sourcev1.OCIRepository{
 				ObjectMeta: metav1.ObjectMeta{
-					GenerateName: "ocirepository-test-resource",
-					Namespace:    ns.Name,
+					GenerateName: "checkout-strategy-",
 				},
 				Spec: sourcev1.OCIRepositorySpec{
-					URL:       tt.url,
-					Interval:  metav1.Duration{Duration: 60 * time.Minute},
-					Reference: &sourcev1.OCIRepositoryRef{Digest: tt.digest.String()},
+					URL:      fmt.Sprintf("oci://%s/podinfo", server.registryHost),
+					Interval: metav1.Duration{Duration: interval},
+					Timeout:  &metav1.Duration{Duration: timeout},
 				},
 			}
 
-			if tt.includeSecretRef {
-				obj.Spec.SecretRef = &meta.LocalObjectReference{Name: secret.Name}
+			if tt.reference != nil {
+				obj.Spec.Reference = tt.reference
 			}
 
-			if tt.includeServiceAccount {
-				obj.Spec.ServiceAccountName = serviceAccount.Name
+			artifact := &sourcev1.Artifact{}
+			tmpDir := t.TempDir()
+			got, err := r.reconcileSource(context.TODO(), obj, artifact, tmpDir)
+			if tt.wantErr {
+				g.Expect(err).To(HaveOccurred())
+			} else {
+				g.Expect(err).ToNot(HaveOccurred())
+				g.Expect(artifact.Revision).To(Equal(tt.wantRevision))
 			}
 
-			g.Expect(testEnv.Create(ctx, obj)).To(Succeed())
-
-			key := client.ObjectKey{Name: obj.Name, Namespace: obj.Namespace}
-
-			failedObj := sourcev1.OCIRepository{}
-
-			// Wait for the finalizer to be set
-			g.Eventually(func() bool {
-				if err := testEnv.Get(ctx, key, &failedObj); err != nil {
-					return false
-				}
-				return len(failedObj.Finalizers) > 0
-			}, timeout).Should(BeTrue())
-
-			// Wait for the object to fail
-			g.Eventually(func() bool {
-				if err := testEnv.Get(ctx, key, &failedObj); err != nil {
-					return false
-				}
-				readyCondition := conditions.Get(&failedObj, meta.ReadyCondition)
-				if readyCondition == nil {
-					return false
-				}
-				return obj.Generation == readyCondition.ObservedGeneration &&
-					!conditions.IsReady(&failedObj)
-			}, timeout).Should(BeTrue())
-
-			g.Expect(testEnv.Get(ctx, key, &failedObj)).To(Succeed())
-			readyCondition := conditions.Get(&failedObj, meta.ReadyCondition)
-			g.Expect(readyCondition.Status).To(Equal(metav1.ConditionFalse))
-			g.Expect(readyCondition.Message).Should(ContainSubstring("UNAUTHORIZED: authentication required; [map[Action:pull Class: Name:podinfo Type:repository]]"))
-
-			// Wait for the object to be deleted
-			g.Expect(testEnv.Delete(ctx, &failedObj)).To(Succeed())
-			g.Eventually(func() bool {
-				if err := testEnv.Get(ctx, key, &failedObj); err != nil {
-					return apierrors.IsNotFound(err)
-				}
-				return false
-			}, timeout).Should(BeTrue())
+			g.Expect(got).To(Equal(tt.want))
+			g.Expect(obj.Status.Conditions).To(conditions.MatchConditions(tt.assertConditions))
 		})
 	}
 }
 
 func TestOCIRepository_CertSecret(t *testing.T) {
 	g := NewWithT(t)
-
-	registryServer, err := registry.TLS("localhost")
-	g.Expect(err).ToNot(HaveOccurred())
-	defer registryServer.Close()
-
-	pi, err := createPodinfoImageFromTar("podinfo-6.1.6.tar", "6.1.6", registryServer)
-	g.Expect(err).ToNot(HaveOccurred())
-
-	ca_cert := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: registryServer.Certificate().Raw})
-	t.Logf("certdata: %v", string(ca_cert))
-
-	tlsSecretCACert := corev1.Secret{
-		StringData: map[string]string{
-			CACert: string(ca_cert),
-		},
-	}
 
 	srv, rootCertPEM, clientCertPEM, clientKeyPEM, clientTLSCert, err := createTLSServer()
 	g.Expect(err).ToNot(HaveOccurred())
@@ -634,7 +711,9 @@ func TestOCIRepository_CertSecret(t *testing.T) {
 	transport.TLSClientConfig.Certificates = []tls.Certificate{clientTLSCert}
 
 	srv.Client().Transport = transport
-	pi2, err := createPodinfoImageFromTar("podinfo-6.1.5.tar", "6.1.5", srv)
+	pi2, err := createPodinfoImageFromTar("podinfo-6.1.5.tar", "6.1.5", srv.URL, []crane.Option{
+		crane.WithTransport(srv.Client().Transport),
+	}...)
 	g.Expect(err).NotTo(HaveOccurred())
 
 	tlsSecretClientCert := corev1.Secret{
@@ -655,24 +734,6 @@ func TestOCIRepository_CertSecret(t *testing.T) {
 		expectedstatusmessage string
 	}{
 		{
-			name:                  "test connection without CACert",
-			url:                   pi.url,
-			tag:                   pi.tag,
-			digest:                pi.digest,
-			certSecret:            nil,
-			expectreadyconition:   false,
-			expectedstatusmessage: "unexpected status code 400 Bad Request: Client sent an HTTP request to an HTTPS server.",
-		},
-		{
-			name:                  "test connection with CACert",
-			url:                   pi.url,
-			tag:                   pi.tag,
-			digest:                pi.digest,
-			certSecret:            &tlsSecretCACert,
-			expectreadyconition:   true,
-			expectedstatusmessage: fmt.Sprintf("stored artifact for digest '%s'", pi.digest.Hex),
-		},
-		{
 			name:                  "test connection with CACert, Client Cert and Private Key",
 			url:                   pi2.url,
 			tag:                   pi2.tag,
@@ -680,6 +741,29 @@ func TestOCIRepository_CertSecret(t *testing.T) {
 			certSecret:            &tlsSecretClientCert,
 			expectreadyconition:   true,
 			expectedstatusmessage: fmt.Sprintf("stored artifact for digest '%s'", pi2.digest.Hex),
+		},
+		{
+			name:                  "test connection with with no secret",
+			url:                   pi2.url,
+			tag:                   pi2.tag,
+			digest:                pi2.digest,
+			expectreadyconition:   false,
+			expectedstatusmessage: "failed to pull artifact",
+		},
+		{
+			name:   "test connection with with incorrect private key",
+			url:    pi2.url,
+			tag:    pi2.tag,
+			digest: pi2.digest,
+			certSecret: &corev1.Secret{
+				StringData: map[string]string{
+					CACert:     string(rootCertPEM),
+					ClientCert: string(clientCertPEM),
+					ClientKey:  string("invalid-key"),
+				},
+			},
+			expectreadyconition:   false,
+			expectedstatusmessage: "failed to generate transport",
 		},
 	}
 
@@ -768,7 +852,7 @@ type podinfoImage struct {
 	digest gcrv1.Hash
 }
 
-func createPodinfoImageFromTar(tarFileName, tag string, imageServer *httptest.Server) (*podinfoImage, error) {
+func createPodinfoImageFromTar(tarFileName, tag, registryURL string, opts ...crane.Option) (*podinfoImage, error) {
 	// Create Image
 	image, err := crane.Load(path.Join("testdata", "podinfo", tarFileName))
 	if err != nil {
@@ -777,11 +861,11 @@ func createPodinfoImageFromTar(tarFileName, tag string, imageServer *httptest.Se
 
 	image = setPodinfoImageAnnotations(image, tag)
 
-	url, err := url.Parse(imageServer.URL)
+	myURL, err := url.Parse(registryURL)
 	if err != nil {
 		return nil, err
 	}
-	repositoryURL := fmt.Sprintf("%s/podinfo", url.Host)
+	repositoryURL := fmt.Sprintf("%s/podinfo", myURL.Host)
 
 	// Image digest
 	podinfoImageDigest, err := image.Digest()
@@ -790,13 +874,13 @@ func createPodinfoImageFromTar(tarFileName, tag string, imageServer *httptest.Se
 	}
 
 	// Push image
-	err = crane.Push(image, repositoryURL, crane.WithTransport(imageServer.Client().Transport))
+	err = crane.Push(image, repositoryURL, opts...)
 	if err != nil {
 		return nil, err
 	}
 
 	// Tag the image
-	err = crane.Tag(repositoryURL, tag, crane.WithTransport(imageServer.Client().Transport))
+	err = crane.Tag(repositoryURL, tag, opts...)
 	if err != nil {
 		return nil, err
 	}

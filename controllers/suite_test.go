@@ -117,7 +117,12 @@ type registryClientTestServer struct {
 	registryClient *helmreg.Client
 }
 
-func setupRegistryServer(ctx context.Context) (*registryClientTestServer, error) {
+type registryOptions struct {
+	withBasicAuth bool
+	withTlS       bool
+}
+
+func setupRegistryServer(ctx context.Context, opts registryOptions) (*registryClientTestServer, error) {
 	server := &registryClientTestServer{}
 
 	// Create a temporary workspace directory for the registry
@@ -139,19 +144,6 @@ func setupRegistryServer(ctx context.Context) (*registryClientTestServer, error)
 		return nil, fmt.Errorf("failed to create registry client: %s", err)
 	}
 
-	// create htpasswd file (w BCrypt, which is required)
-	pwBytes, err := bcrypt.GenerateFromPassword([]byte(testRegistryPassword), bcrypt.DefaultCost)
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate password: %s", err)
-	}
-
-	htpasswdPath := filepath.Join(workspaceDir, testRegistryHtpasswdFileBasename)
-	err = ioutil.WriteFile(htpasswdPath, []byte(fmt.Sprintf("%s:%s\n", testRegistryUsername, string(pwBytes))), 0644)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create htpasswd file: %s", err)
-	}
-
-	// Registry config
 	config := &configuration.Configuration{}
 	port, err := freeport.GetFreePort()
 	if err != nil {
@@ -164,12 +156,34 @@ func setupRegistryServer(ctx context.Context) (*registryClientTestServer, error)
 	config.Log.AccessLog.Disabled = true
 	config.Log.Level = "error"
 	config.Storage = map[string]configuration.Parameters{"inmemory": map[string]interface{}{}}
-	config.Auth = configuration.Auth{
-		"htpasswd": configuration.Parameters{
-			"realm": "localhost",
-			"path":  htpasswdPath,
-		},
+
+	if opts.withBasicAuth {
+		// create htpasswd file (w BCrypt, which is required)
+		pwBytes, err := bcrypt.GenerateFromPassword([]byte(testRegistryPassword), bcrypt.DefaultCost)
+		if err != nil {
+			return nil, fmt.Errorf("failed to generate password: %s", err)
+		}
+
+		htpasswdPath := filepath.Join(workspaceDir, testRegistryHtpasswdFileBasename)
+		err = ioutil.WriteFile(htpasswdPath, []byte(fmt.Sprintf("%s:%s\n", testRegistryUsername, string(pwBytes))), 0644)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create htpasswd file: %s", err)
+		}
+
+		// Registry config
+		config.Auth = configuration.Auth{
+			"htpasswd": configuration.Parameters{
+				"realm": "localhost",
+				"path":  htpasswdPath,
+			},
+		}
 	}
+
+	if opts.withTlS {
+		config.HTTP.TLS.Certificate = "testdata/certs/server.pem"
+		config.HTTP.TLS.Key = "testdata/certs/server-key.pem"
+	}
+
 	dockerRegistry, err := dockerRegistry.NewRegistry(ctx, config)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create docker registry: %w", err)
@@ -205,7 +219,9 @@ func TestMain(m *testing.M) {
 
 	testMetricsH = controller.MustMakeMetrics(testEnv)
 
-	testRegistryServer, err = setupRegistryServer(ctx)
+	testRegistryServer, err = setupRegistryServer(ctx, registryOptions{
+		withBasicAuth: true,
+	})
 	if err != nil {
 		panic(fmt.Sprintf("Failed to create a test registry server: %v", err))
 	}
