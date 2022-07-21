@@ -26,6 +26,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/fluxcd/source-controller/internal/cache"
 	"github.com/fluxcd/source-controller/internal/helm"
 	. "github.com/onsi/gomega"
 	"helm.sh/helm/v3/pkg/chart"
@@ -448,6 +449,39 @@ func TestChartRepository_StrategicallyLoadIndex(t *testing.T) {
 	g.Expect(err.Error()).To(ContainSubstring("no API version specified"))
 	g.Expect(r.Cached).To(BeTrue())
 	g.Expect(r.RemoveCache()).To(Succeed())
+}
+
+func TestChartRepository_CacheIndexInMemory(t *testing.T) {
+	g := NewWithT(t)
+
+	interval, _ := time.ParseDuration("5s")
+	memCache := cache.New(1, interval)
+	indexPath := "/multi-tenent-safe/mock/index.yaml"
+	r := newChartRepository()
+	r.Index = repo.NewIndexFile()
+	indexFile := *r.Index
+	g.Expect(
+		indexFile.MustAdd(
+			&chart.Metadata{
+				Name:    "grafana",
+				Version: "6.17.4",
+			},
+			"grafana-6.17.4.tgz",
+			"http://example.com/charts",
+			"sha256:1234567890abc",
+		)).To(Succeed())
+	indexFile.WriteFile(indexPath, 0o640)
+	ttl, _ := time.ParseDuration("1m")
+	r.SetMemCache(indexPath, memCache, ttl, func(event string) {
+		fmt.Println(event)
+	})
+	r.CacheIndexInMemory()
+	_, cacheHit := r.IndexCache.Get(indexPath)
+	g.Expect(cacheHit).To(Equal(true))
+	r.Unload()
+	g.Expect(r.Index).To(BeNil())
+	g.Expect(r.StrategicallyLoadIndex()).To(Succeed())
+	g.Expect(r.Index.Entries["grafana"][0].Digest).To(Equal("sha256:1234567890abc"))
 }
 
 func TestChartRepository_LoadFromCache(t *testing.T) {
