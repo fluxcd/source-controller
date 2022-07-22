@@ -16,7 +16,6 @@ limitations under the License.
 package controllers
 
 import (
-	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/tls"
@@ -64,21 +63,12 @@ func TestOCIRepository_Reconcile(t *testing.T) {
 	g := NewWithT(t)
 
 	// Registry server with public images
-	regServer, err := setupRegistryServer(context.Background(), registryOptions{})
+	regServer, err := setupRegistryServer(ctx, registryOptions{})
 	if err != nil {
-		t.Fatalf(err.Error())
-	}
-
-	versions := []string{"6.1.4", "6.1.5", "6.1.6"}
-	podinfoVersions := make(map[string]podinfoImage)
-
-	for i := 0; i < len(versions); i++ {
-		pi, err := createPodinfoImageFromTar(fmt.Sprintf("podinfo-%s.tar", versions[i]), versions[i], fmt.Sprintf("http://%s", regServer.registryHost))
 		g.Expect(err).ToNot(HaveOccurred())
-
-		podinfoVersions[versions[i]] = *pi
-
 	}
+
+	podinfoVersions, err := pushMultiplePodinfoImage(regServer.registryHost, []string{"6.1.4", "6.1.5", "6.1.6"})
 
 	tests := []struct {
 		name           string
@@ -465,10 +455,10 @@ func TestOCIRepository_reconcileSource_authStrategy(t *testing.T) {
 				},
 			}
 
-			server, err := setupRegistryServer(context.Background(), tt.registryOpts)
+			server, err := setupRegistryServer(ctx, tt.registryOpts)
 			g.Expect(err).NotTo(HaveOccurred())
 
-			img, err := createPodinfoImageFromTar("podinfo-6.1.6.tar", "6.1.6", fmt.Sprintf("http://%s", server.registryHost), tt.craneOpts...)
+			img, err := createPodinfoImageFromTar("podinfo-6.1.6.tar", "6.1.6", server.registryHost, tt.craneOpts...)
 			g.Expect(err).ToNot(HaveOccurred())
 			obj.Spec.URL = img.url
 			obj.Spec.Reference = &sourcev1.OCIRepositoryRef{
@@ -520,7 +510,7 @@ func TestOCIRepository_reconcileSource_authStrategy(t *testing.T) {
 				Storage:       testStorage,
 			}
 
-			repoURL, err := r.getArtifactURL(context.Background(), obj, nil, nil)
+			repoURL, err := r.getArtifactURL(ctx, obj, nil, nil)
 			g.Expect(err).To(BeNil())
 
 			assertConditions := tt.assertConditions
@@ -530,7 +520,7 @@ func TestOCIRepository_reconcileSource_authStrategy(t *testing.T) {
 			}
 
 			tmpDir := t.TempDir()
-			got, err := r.reconcileSource(context.Background(), obj, &sourcev1.Artifact{}, tmpDir)
+			got, err := r.reconcileSource(ctx, obj, &sourcev1.Artifact{}, tmpDir)
 
 			if tt.wantErr {
 				g.Expect(err).ToNot(BeNil())
@@ -547,14 +537,12 @@ func TestOCIRepository_reconcileSource_authStrategy(t *testing.T) {
 func TestOCIRepository_reconcileSource_remoteReference(t *testing.T) {
 	g := NewWithT(t)
 
-	server, err := setupRegistryServer(context.Background(), registryOptions{})
+	server, err := setupRegistryServer(ctx, registryOptions{})
 	g.Expect(err).ToNot(HaveOccurred())
 
-	img5, err := createPodinfoImageFromTar("podinfo-6.1.5.tar", "6.1.5", fmt.Sprintf("http://%s", server.registryHost))
-	g.Expect(err).ToNot(HaveOccurred())
-
-	img6, err := createPodinfoImageFromTar("podinfo-6.1.6.tar", "6.1.6", fmt.Sprintf("http://%s", server.registryHost))
-	g.Expect(err).ToNot(HaveOccurred())
+	podinfoVersions, err := pushMultiplePodinfoImage(server.registryHost, []string{"6.1.4", "6.1.5", "6.1.6"})
+	img6 := podinfoVersions["6.1.6"]
+	img5 := podinfoVersions["6.1.5"]
 
 	tests := []struct {
 		name             string
@@ -676,7 +664,7 @@ func TestOCIRepository_reconcileSource_remoteReference(t *testing.T) {
 
 			artifact := &sourcev1.Artifact{}
 			tmpDir := t.TempDir()
-			got, err := r.reconcileSource(context.TODO(), obj, artifact, tmpDir)
+			got, err := r.reconcileSource(ctx, obj, artifact, tmpDir)
 			if tt.wantErr {
 				g.Expect(err).To(HaveOccurred())
 			} else {
@@ -686,6 +674,93 @@ func TestOCIRepository_reconcileSource_remoteReference(t *testing.T) {
 
 			g.Expect(got).To(Equal(tt.want))
 			g.Expect(obj.Status.Conditions).To(conditions.MatchConditions(tt.assertConditions))
+		})
+	}
+}
+
+func TestOCIRepository_getArtifactURL(t *testing.T) {
+	g := NewWithT(t)
+
+	server, err := setupRegistryServer(ctx, registryOptions{})
+	g.Expect(err).ToNot(HaveOccurred())
+
+	imgs, err := pushMultiplePodinfoImage(server.registryHost, []string{"6.1.4", "6.1.5", "6.1.6"})
+	g.Expect(err).ToNot(HaveOccurred())
+
+	tests := []struct {
+		name      string
+		url       string
+		reference *sourcev1.OCIRepositoryRef
+		wantErr   bool
+		want      string
+	}{
+		{
+			name: "valid url with no reference",
+			url:  "oci://ghcr.io/stefanprodan/charts",
+			want: "ghcr.io/stefanprodan/charts",
+		},
+		{
+			name: "valid url with tag reference",
+			url:  "oci://ghcr.io/stefanprodan/charts",
+			reference: &sourcev1.OCIRepositoryRef{
+				Tag: "6.1.6",
+			},
+			want: "ghcr.io/stefanprodan/charts:6.1.6",
+		},
+		{
+			name: "valid url with digest reference",
+			url:  "oci://ghcr.io/stefanprodan/charts",
+			reference: &sourcev1.OCIRepositoryRef{
+				Digest: imgs["6.1.6"].digest.Hex,
+			},
+			want: "ghcr.io/stefanprodan/charts@" + imgs["6.1.6"].digest.Hex,
+		},
+		{
+			name: "valid url with semver reference",
+			url:  fmt.Sprintf("oci://%s/podinfo", server.registryHost),
+			reference: &sourcev1.OCIRepositoryRef{
+				SemVer: ">= 6.1.6",
+			},
+			want: server.registryHost + "/podinfo:6.1.6",
+		},
+		{
+			name:    "invalid url without oci prefix",
+			url:     "ghcr.io/stefanprodan/charts",
+			wantErr: true,
+		},
+	}
+
+	builder := fakeclient.NewClientBuilder().WithScheme(testEnv.GetScheme())
+	r := &OCIRepositoryReconciler{
+		Client:        builder.Build(),
+		EventRecorder: record.NewFakeRecorder(32),
+		Storage:       testStorage,
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			obj := &sourcev1.OCIRepository{
+				ObjectMeta: metav1.ObjectMeta{
+					GenerateName: "artifact-url-",
+				},
+				Spec: sourcev1.OCIRepositorySpec{
+					URL:      tt.url,
+					Interval: metav1.Duration{Duration: interval},
+					Timeout:  &metav1.Duration{Duration: timeout},
+				},
+			}
+
+			if tt.reference != nil {
+				obj.Spec.Reference = tt.reference
+			}
+
+			got, err := r.getArtifactURL(ctx, obj, authn.DefaultKeychain, nil)
+			if tt.wantErr {
+				g.Expect(err).To(HaveOccurred())
+				return
+			}
+			g.Expect(err).ToNot(HaveOccurred())
+			g.Expect(got).To(Equal(tt.want))
 		})
 	}
 }
@@ -839,7 +914,6 @@ func TestOCIRepository_CertSecret(t *testing.T) {
 			}, timeout).Should(BeTrue())
 		})
 	}
-
 }
 
 type artifactFixture struct {
@@ -860,6 +934,11 @@ func createPodinfoImageFromTar(tarFileName, tag, registryURL string, opts ...cra
 	}
 
 	image = setPodinfoImageAnnotations(image, tag)
+
+	// url.Parse doesn't handle urls with no scheme well e.g localhost:<port>
+	if !(strings.HasPrefix(registryURL, "http://") || strings.HasPrefix(registryURL, "https://")) {
+		registryURL = fmt.Sprintf("http://%s", registryURL)
+	}
 
 	myURL, err := url.Parse(registryURL)
 	if err != nil {
@@ -890,6 +969,22 @@ func createPodinfoImageFromTar(tarFileName, tag, registryURL string, opts ...cra
 		tag:    tag,
 		digest: podinfoImageDigest,
 	}, nil
+}
+
+func pushMultiplePodinfoImage(serverURL string, versions []string) (map[string]podinfoImage, error) {
+	podinfoVersions := make(map[string]podinfoImage)
+
+	for i := 0; i < len(versions); i++ {
+		pi, err := createPodinfoImageFromTar(fmt.Sprintf("podinfo-%s.tar", versions[i]), versions[i], serverURL)
+		if err != nil {
+			return nil, err
+		}
+
+		podinfoVersions[versions[i]] = *pi
+
+	}
+
+	return podinfoVersions, nil
 }
 
 func setPodinfoImageAnnotations(img gcrv1.Image, tag string) gcrv1.Image {
