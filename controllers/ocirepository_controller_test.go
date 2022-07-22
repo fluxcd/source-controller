@@ -765,6 +765,152 @@ func TestOCIRepository_getArtifactURL(t *testing.T) {
 	}
 }
 
+func TestOCIRepository_reconcileStorage(t *testing.T) {
+	g := NewWithT(t)
+
+	tests := []struct {
+		name             string
+		beforeFunc       func(obj *sourcev1.OCIRepository) error
+		want             sreconcile.Result
+		wantErr          bool
+		assertConditions []metav1.Condition
+		assertArtifact   *sourcev1.Artifact
+		assertPaths      []string
+	}{
+		{
+			name: "garbage collects",
+			beforeFunc: func(obj *sourcev1.OCIRepository) error {
+				revisions := []string{"a", "b", "c", "d"}
+
+				for n := range revisions {
+					v := revisions[n]
+					obj.Status.Artifact = &sourcev1.Artifact{
+						Path:     fmt.Sprintf("/oci-reconcile-storage/%s.txt", v),
+						Revision: v,
+					}
+					if err := testStorage.MkdirAll(*obj.Status.Artifact); err != nil {
+						return err
+					}
+
+					if err := testStorage.AtomicWriteFile(obj.Status.Artifact, strings.NewReader(v), 0o640); err != nil {
+						return err
+					}
+
+					if n != len(revisions)-1 {
+						time.Sleep(time.Second)
+					}
+				}
+
+				testStorage.SetArtifactURL(obj.Status.Artifact)
+				return nil
+			},
+			assertArtifact: &sourcev1.Artifact{
+				Path:     "/oci-reconcile-storage/d.txt",
+				Revision: "d",
+				Checksum: "18ac3e7343f016890c510e93f935261169d9e3f565436429830faf0934f4f8e4",
+				URL:      testStorage.Hostname + "/oci-reconcile-storage/d.txt",
+				Size:     int64p(int64(len("d"))),
+			},
+			assertPaths: []string{
+				"/oci-reconcile-storage/d.txt",
+				"/oci-reconcile-storage/c.txt",
+				"!/oci-reconcile-storage/b.txt",
+				"!/oci-reconcile-storage/a.txt",
+			},
+			want: sreconcile.ResultSuccess,
+		},
+		{
+			name: "notices missing artifact in storage",
+			beforeFunc: func(obj *sourcev1.OCIRepository) error {
+				obj.Status.Artifact = &sourcev1.Artifact{
+					Path:     "/oci-reconcile-storage/invalid.txt",
+					Revision: "e",
+				}
+				testStorage.SetArtifactURL(obj.Status.Artifact)
+				return nil
+			},
+			want: sreconcile.ResultSuccess,
+			assertPaths: []string{
+				"!/oci-reconcile-storage/invalid.txt",
+			},
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReconcilingCondition, "NoArtifact", "no artifact for resource in storage"),
+			},
+		},
+		{
+			name: "updates hostname on diff from current",
+			beforeFunc: func(obj *sourcev1.OCIRepository) error {
+				obj.Status.Artifact = &sourcev1.Artifact{
+					Path:     "/oci-reconcile-storage/hostname.txt",
+					Revision: "f",
+					Checksum: "3b9c358f36f0a31b6ad3e14f309c7cf198ac9246e8316f9ce543d5b19ac02b80",
+					URL:      "http://outdated.com/oci-reconcile-storage/hostname.txt",
+				}
+				if err := testStorage.MkdirAll(*obj.Status.Artifact); err != nil {
+					return err
+				}
+				if err := testStorage.AtomicWriteFile(obj.Status.Artifact, strings.NewReader("file"), 0o640); err != nil {
+					return err
+				}
+				return nil
+			},
+			want: sreconcile.ResultSuccess,
+			assertPaths: []string{
+				"/oci-reconcile-storage/hostname.txt",
+			},
+			assertArtifact: &sourcev1.Artifact{
+				Path:     "/oci-reconcile-storage/hostname.txt",
+				Revision: "f",
+				Checksum: "3b9c358f36f0a31b6ad3e14f309c7cf198ac9246e8316f9ce543d5b19ac02b80",
+				URL:      testStorage.Hostname + "/oci-reconcile-storage/hostname.txt",
+				Size:     int64p(int64(len("file"))),
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			builder := fakeclient.NewClientBuilder().WithScheme(testEnv.GetScheme())
+			r := &OCIRepositoryReconciler{
+				Client:        builder.Build(),
+				EventRecorder: record.NewFakeRecorder(32),
+				Storage:       testStorage,
+			}
+			obj := &sourcev1.OCIRepository{
+				ObjectMeta: metav1.ObjectMeta{
+					GenerateName: "test-",
+				},
+			}
+
+			g.Expect(tt.beforeFunc(obj)).To(Succeed())
+			got, err := r.reconcileStorage(ctx, obj, &sourcev1.Artifact{}, "")
+			if tt.wantErr {
+				g.Expect(err).To(HaveOccurred())
+			} else {
+				g.Expect(err).ToNot(HaveOccurred())
+			}
+
+			g.Expect(got).To(Equal(tt.want))
+			g.Expect(obj.Status.Artifact).To(MatchArtifact(tt.assertArtifact))
+			if tt.assertArtifact != nil && tt.assertArtifact.URL != "" {
+				g.Expect(obj.Status.Artifact.URL).To(Equal(tt.assertArtifact.URL))
+			}
+
+			g.Expect(obj.Status.Conditions).To(conditions.MatchConditions(tt.assertConditions))
+
+			for _, p := range tt.assertPaths {
+				absoluteP := filepath.Join(testStorage.BasePath, p)
+				if !strings.HasPrefix(p, "!") {
+					g.Expect(absoluteP).To(BeAnExistingFile())
+					continue
+				}
+
+				g.Expect(absoluteP).ToNot(BeAnExistingFile())
+			}
+		})
+	}
+}
+
 func TestOCIRepository_CertSecret(t *testing.T) {
 	g := NewWithT(t)
 
