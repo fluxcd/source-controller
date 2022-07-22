@@ -358,6 +358,7 @@ func mustInitStorage(path string, storageAdvAddr string, artifactRetentionTTL ti
 		os.MkdirAll(path, 0o770)
 	}
 
+	fmt.Println("PARHHHH", path)
 	storage, err := controllers.NewStorage(path, storageAdvAddr, artifactRetentionTTL, artifactRetentionRecords)
 	if err != nil {
 		l.Error(err, "unable to initialise storage")
