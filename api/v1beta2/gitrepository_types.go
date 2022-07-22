@@ -48,7 +48,7 @@ const (
 // Artifact for a Git repository.
 type GitRepositorySpec struct {
 	// URL specifies the Git repository URL, it can be an HTTP/S or SSH address.
-	// +kubebuilder:validation:Pattern="^(http|https|ssh)://"
+	// +kubebuilder:validation:Pattern="^(http|https|ssh)://.*$"
 	// +required
 	URL string `json:"url"`
 
