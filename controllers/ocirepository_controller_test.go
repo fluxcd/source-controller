@@ -609,6 +609,28 @@ func TestOCIRepository_reconcileSource_remoteReference(t *testing.T) {
 			},
 		},
 		{
+			name: "invalid semver reference",
+			reference: &sourcev1.OCIRepositoryRef{
+				SemVer: "<= 6.1.0",
+			},
+			want:    sreconcile.ResultEmpty,
+			wantErr: true,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.URLInvalidReason, "no match found for semver:"),
+			},
+		},
+		{
+			name: "invalid digest reference",
+			reference: &sourcev1.OCIRepositoryRef{
+				Digest: "invalid",
+			},
+			want:    sreconcile.ResultEmpty,
+			wantErr: true,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.OCIOperationFailedReason, "failed to pull artifact"),
+			},
+		},
+		{
 			name: "semver should take precedence over tag",
 			reference: &sourcev1.OCIRepositoryRef{
 				SemVer: ">= 6.1.5",
