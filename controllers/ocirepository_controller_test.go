@@ -45,7 +45,9 @@ import (
 	"github.com/fluxcd/pkg/runtime/patch"
 	"github.com/fluxcd/pkg/untar"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
+	serror "github.com/fluxcd/source-controller/internal/error"
 	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
+	"github.com/fluxcd/source-controller/pkg/git"
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/crane"
 	"github.com/google/go-containerregistry/pkg/registry"
@@ -57,18 +59,20 @@ import (
 	kstatus "sigs.k8s.io/cli-utils/pkg/kstatus/status"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	fakeclient "sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
 func TestOCIRepository_Reconcile(t *testing.T) {
 	g := NewWithT(t)
 
 	// Registry server with public images
-	regServer, err := setupRegistryServer(ctx, registryOptions{})
+	tmpDir := t.TempDir()
+	regServer, err := setupRegistryServer(ctx, tmpDir, registryOptions{})
 	if err != nil {
 		g.Expect(err).ToNot(HaveOccurred())
 	}
 
-	podinfoVersions, err := pushMultiplePodinfoImage(regServer.registryHost, []string{"6.1.4", "6.1.5", "6.1.6"})
+	podinfoVersions, err := pushMultiplePodinfoImages(regServer.registryHost, "6.1.4", "6.1.5", "6.1.6")
 
 	tests := []struct {
 		name           string
@@ -374,7 +378,7 @@ func TestOCIRepository_reconcileSource_authStrategy(t *testing.T) {
 			name: "HTTPS with valid certfile",
 			want: sreconcile.ResultSuccess,
 			registryOpts: registryOptions{
-				withTlS: true,
+				withTLS: true,
 			},
 			craneOpts: []crane.Option{crane.WithTransport(&http.Transport{
 				TLSClientConfig: &tls.Config{
@@ -400,7 +404,7 @@ func TestOCIRepository_reconcileSource_authStrategy(t *testing.T) {
 			want:    sreconcile.ResultEmpty,
 			wantErr: true,
 			registryOpts: registryOptions{
-				withTlS: true,
+				withTLS: true,
 			},
 			craneOpts: []crane.Option{crane.WithTransport(&http.Transport{
 				TLSClientConfig: &tls.Config{
@@ -417,7 +421,7 @@ func TestOCIRepository_reconcileSource_authStrategy(t *testing.T) {
 			want:    sreconcile.ResultEmpty,
 			wantErr: true,
 			registryOpts: registryOptions{
-				withTlS: true,
+				withTLS: true,
 			},
 			craneOpts: []crane.Option{crane.WithTransport(&http.Transport{
 				TLSClientConfig: &tls.Config{
@@ -455,7 +459,9 @@ func TestOCIRepository_reconcileSource_authStrategy(t *testing.T) {
 				},
 			}
 
-			server, err := setupRegistryServer(ctx, tt.registryOpts)
+			workspaceDir := t.TempDir()
+			server, err := setupRegistryServer(ctx, workspaceDir, tt.registryOpts)
+
 			g.Expect(err).NotTo(HaveOccurred())
 
 			img, err := createPodinfoImageFromTar("podinfo-6.1.6.tar", "6.1.6", server.registryHost, tt.craneOpts...)
@@ -521,7 +527,6 @@ func TestOCIRepository_reconcileSource_authStrategy(t *testing.T) {
 
 			tmpDir := t.TempDir()
 			got, err := r.reconcileSource(ctx, obj, &sourcev1.Artifact{}, tmpDir)
-
 			if tt.wantErr {
 				g.Expect(err).ToNot(BeNil())
 			} else {
@@ -534,13 +539,163 @@ func TestOCIRepository_reconcileSource_authStrategy(t *testing.T) {
 	}
 }
 
+func TestOCIRepository_CertSecret(t *testing.T) {
+	g := NewWithT(t)
+
+	srv, rootCertPEM, clientCertPEM, clientKeyPEM, clientTLSCert, err := createTLSServer()
+	g.Expect(err).ToNot(HaveOccurred())
+
+	srv.StartTLS()
+	defer srv.Close()
+
+	transport := &http.Transport{
+		TLSClientConfig: &tls.Config{},
+	}
+	// Use the server cert as a CA cert, so the client trusts the
+	// server cert. (Only works because the server uses the same
+	// cert in both roles).
+	pool := x509.NewCertPool()
+	pool.AddCert(srv.Certificate())
+	transport.TLSClientConfig.RootCAs = pool
+	transport.TLSClientConfig.Certificates = []tls.Certificate{clientTLSCert}
+
+	srv.Client().Transport = transport
+	pi, err := createPodinfoImageFromTar("podinfo-6.1.5.tar", "6.1.5", srv.URL, []crane.Option{
+		crane.WithTransport(srv.Client().Transport),
+	}...)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	tlsSecretClientCert := corev1.Secret{
+		StringData: map[string]string{
+			CACert:     string(rootCertPEM),
+			ClientCert: string(clientCertPEM),
+			ClientKey:  string(clientKeyPEM),
+		},
+	}
+
+	tests := []struct {
+		name                  string
+		url                   string
+		digest                gcrv1.Hash
+		certSecret            *corev1.Secret
+		expectreadyconition   bool
+		expectedstatusmessage string
+	}{
+		{
+			name:                  "test connection with CACert, Client Cert and Private Key",
+			url:                   pi.url,
+			digest:                pi.digest,
+			certSecret:            &tlsSecretClientCert,
+			expectreadyconition:   true,
+			expectedstatusmessage: fmt.Sprintf("stored artifact for digest '%s'", pi.digest.Hex),
+		},
+		{
+			name:                  "test connection with no secret",
+			url:                   pi.url,
+			digest:                pi.digest,
+			expectreadyconition:   false,
+			expectedstatusmessage: "unexpected status code 400 Bad Request: Client sent an HTTP request to an HTTPS server",
+		},
+		{
+			name:   "test connection with with incorrect private key",
+			url:    pi.url,
+			digest: pi.digest,
+			certSecret: &corev1.Secret{
+				StringData: map[string]string{
+					CACert:     string(rootCertPEM),
+					ClientCert: string(clientCertPEM),
+					ClientKey:  string("invalid-key"),
+				},
+			},
+			expectreadyconition:   false,
+			expectedstatusmessage: "failed to generate transport for '<url>': tls: failed to find any PEM data in key input",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			ns, err := testEnv.CreateNamespace(ctx, "ocirepository-test")
+			g.Expect(err).ToNot(HaveOccurred())
+			defer func() { g.Expect(testEnv.Delete(ctx, ns)).To(Succeed()) }()
+
+			obj := &sourcev1.OCIRepository{
+				ObjectMeta: metav1.ObjectMeta{
+					GenerateName: "ocirepository-test-resource",
+					Namespace:    ns.Name,
+				},
+				Spec: sourcev1.OCIRepositorySpec{
+					URL:       tt.url,
+					Interval:  metav1.Duration{Duration: 60 * time.Minute},
+					Reference: &sourcev1.OCIRepositoryRef{Digest: tt.digest.String()},
+				},
+			}
+
+			if tt.certSecret != nil {
+				tt.certSecret.ObjectMeta = metav1.ObjectMeta{
+					GenerateName: "cert-secretref",
+					Namespace:    ns.Name,
+				}
+
+				g.Expect(testEnv.CreateAndWait(ctx, tt.certSecret)).To(Succeed())
+				defer func() { g.Expect(testEnv.Delete(ctx, tt.certSecret)).To(Succeed()) }()
+
+				obj.Spec.CertSecretRef = &meta.LocalObjectReference{Name: tt.certSecret.Name}
+			}
+
+			g.Expect(testEnv.Create(ctx, obj)).To(Succeed())
+
+			key := client.ObjectKey{Name: obj.Name, Namespace: obj.Namespace}
+
+			resultobj := sourcev1.OCIRepository{}
+
+			// Wait for the finalizer to be set
+			g.Eventually(func() bool {
+				if err := testEnv.Get(ctx, key, &resultobj); err != nil {
+					return false
+				}
+				return len(resultobj.Finalizers) > 0
+			}, timeout).Should(BeTrue())
+
+			// Wait for the object to fail
+			g.Eventually(func() bool {
+				if err := testEnv.Get(ctx, key, &resultobj); err != nil {
+					return false
+				}
+				readyCondition := conditions.Get(&resultobj, meta.ReadyCondition)
+				if readyCondition == nil {
+					return false
+				}
+				return obj.Generation == readyCondition.ObservedGeneration &&
+					conditions.IsReady(&resultobj) == tt.expectreadyconition
+			}, timeout).Should(BeTrue())
+
+			tt.expectedstatusmessage = strings.ReplaceAll(tt.expectedstatusmessage, "<url>", pi.url)
+
+			readyCondition := conditions.Get(&resultobj, meta.ReadyCondition)
+			g.Expect(readyCondition.Message).Should(ContainSubstring(tt.expectedstatusmessage))
+
+			// Wait for the object to be deleted
+			g.Expect(testEnv.Delete(ctx, &resultobj)).To(Succeed())
+			g.Eventually(func() bool {
+				if err := testEnv.Get(ctx, key, &resultobj); err != nil {
+					return apierrors.IsNotFound(err)
+				}
+				return false
+			}, timeout).Should(BeTrue())
+		})
+	}
+}
+
 func TestOCIRepository_reconcileSource_remoteReference(t *testing.T) {
 	g := NewWithT(t)
 
-	server, err := setupRegistryServer(ctx, registryOptions{})
+	tmpDir := t.TempDir()
+	server, err := setupRegistryServer(ctx, tmpDir, registryOptions{})
 	g.Expect(err).ToNot(HaveOccurred())
 
-	podinfoVersions, err := pushMultiplePodinfoImage(server.registryHost, []string{"6.1.4", "6.1.5", "6.1.6"})
+	podinfoVersions, err := pushMultiplePodinfoImages(server.registryHost, "6.1.4", "6.1.5", "6.1.6")
 	img6 := podinfoVersions["6.1.6"]
 	img5 := podinfoVersions["6.1.5"]
 
@@ -700,13 +855,132 @@ func TestOCIRepository_reconcileSource_remoteReference(t *testing.T) {
 	}
 }
 
+func TestOCIRepository_reconcileArtifact(t *testing.T) {
+	g := NewWithT(t)
+
+	tests := []struct {
+		name             string
+		targetPath       string
+		artifact         *sourcev1.Artifact
+		beforeFunc       func(obj *sourcev1.OCIRepository)
+		want             sreconcile.Result
+		wantErr          bool
+		assertArtifact   *sourcev1.Artifact
+		assertPaths      []string
+		assertConditions []metav1.Condition
+	}{
+		{
+			name:       "Archiving Artifact creates correct files and condition",
+			targetPath: "testdata/oci/repository",
+			artifact: &sourcev1.Artifact{
+				Revision: "revision",
+			},
+			beforeFunc: func(obj *sourcev1.OCIRepository) {
+				conditions.MarkTrue(obj, sourcev1.ArtifactOutdatedCondition, "NewRevision", "new digest")
+			},
+			want: sreconcile.ResultSuccess,
+			assertPaths: []string{
+				"latest.tar.gz",
+			},
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.ArtifactInStorageCondition, meta.SucceededReason, "stored artifact for digest"),
+			},
+		},
+		{
+			name: "No status changes if artifact is already present",
+			artifact: &sourcev1.Artifact{
+				Revision: "revision",
+			},
+			targetPath: "testdata/oci/repository",
+			want:       sreconcile.ResultSuccess,
+			beforeFunc: func(obj *sourcev1.OCIRepository) {
+				obj.Status.Artifact = &sourcev1.Artifact{
+					Revision: "revision",
+				}
+			},
+			assertArtifact: &sourcev1.Artifact{
+				Revision: "revision",
+			},
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.ArtifactInStorageCondition, meta.SucceededReason, "stored artifact for digest"),
+			},
+		},
+		{
+			name:       "target path doesn't exist",
+			targetPath: "testdata/oci/non-existent",
+			want:       sreconcile.ResultEmpty,
+			wantErr:    true,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.StorageOperationFailedCondition, sourcev1.StatOperationFailedReason, "failed to stat source path: "),
+			},
+		},
+		{
+			name:       "target path is a file",
+			targetPath: "testdata/oci/repository/foo.txt",
+			want:       sreconcile.ResultEmpty,
+			wantErr:    true,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.StorageOperationFailedCondition, sourcev1.InvalidPathReason, "source path 'testdata/oci/repository/foo.txt' is not a directory"),
+			},
+		},
+	}
+
+	builder := fakeclient.NewClientBuilder().WithScheme(testEnv.GetScheme())
+
+	r := &OCIRepositoryReconciler{
+		Client:        builder.Build(),
+		EventRecorder: record.NewFakeRecorder(32),
+		Storage:       testStorage,
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+
+			obj := &sourcev1.OCIRepository{
+				ObjectMeta: metav1.ObjectMeta{
+					GenerateName: "reconcile-artifact-",
+				},
+			}
+			if tt.beforeFunc != nil {
+				tt.beforeFunc(obj)
+			}
+
+			artifact := &sourcev1.Artifact{}
+			if tt.artifact != nil {
+				artifact = tt.artifact
+			}
+			got, err := r.reconcileArtifact(ctx, obj, artifact, tt.targetPath)
+			if tt.wantErr {
+				g.Expect(err).To(HaveOccurred())
+			} else {
+				g.Expect(err).ToNot(HaveOccurred())
+			}
+
+			g.Expect(got).To(Equal(tt.want))
+			g.Expect(obj.Status.Conditions).To(conditions.MatchConditions(tt.assertConditions))
+
+			if tt.assertArtifact != nil {
+				g.Expect(obj.Status.Artifact).To(MatchArtifact(tt.artifact))
+			}
+
+			for _, path := range tt.assertPaths {
+				localPath := testStorage.LocalPath(*obj.GetArtifact())
+				path = filepath.Join(filepath.Dir(localPath), path)
+				_, err := os.Lstat(path)
+				g.Expect(err).ToNot(HaveOccurred())
+			}
+		})
+	}
+}
+
 func TestOCIRepository_getArtifactURL(t *testing.T) {
 	g := NewWithT(t)
 
-	server, err := setupRegistryServer(ctx, registryOptions{})
+	tmpDir := t.TempDir()
+	server, err := setupRegistryServer(ctx, tmpDir, registryOptions{})
 	g.Expect(err).ToNot(HaveOccurred())
 
-	imgs, err := pushMultiplePodinfoImage(server.registryHost, []string{"6.1.4", "6.1.5", "6.1.6"})
+	imgs, err := pushMultiplePodinfoImages(server.registryHost, "6.1.4", "6.1.5", "6.1.6")
 	g.Expect(err).ToNot(HaveOccurred())
 
 	tests := []struct {
@@ -890,14 +1164,16 @@ func TestOCIRepository_reconcileStorage(t *testing.T) {
 		},
 	}
 
+	builder := fakeclient.NewClientBuilder().WithScheme(testEnv.GetScheme())
+	r := &OCIRepositoryReconciler{
+		Client:        builder.Build(),
+		EventRecorder: record.NewFakeRecorder(32),
+		Storage:       testStorage,
+	}
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			builder := fakeclient.NewClientBuilder().WithScheme(testEnv.GetScheme())
-			r := &OCIRepositoryReconciler{
-				Client:        builder.Build(),
-				EventRecorder: record.NewFakeRecorder(32),
-				Storage:       testStorage,
-			}
+
 			obj := &sourcev1.OCIRepository{
 				ObjectMeta: metav1.ObjectMeta{
 					GenerateName: "test-",
@@ -933,153 +1209,151 @@ func TestOCIRepository_reconcileStorage(t *testing.T) {
 	}
 }
 
-func TestOCIRepository_CertSecret(t *testing.T) {
+func TestOCIRepository_ReconcileDelete(t *testing.T) {
 	g := NewWithT(t)
 
-	srv, rootCertPEM, clientCertPEM, clientKeyPEM, clientTLSCert, err := createTLSServer()
-	g.Expect(err).ToNot(HaveOccurred())
-
-	srv.StartTLS()
-	defer srv.Close()
-
-	transport := &http.Transport{
-		TLSClientConfig: &tls.Config{},
+	r := &OCIRepositoryReconciler{
+		EventRecorder: record.NewFakeRecorder(32),
+		Storage:       testStorage,
 	}
-	// Use the server cert as a CA cert, so the client trusts the
-	// server cert. (Only works because the server uses the same
-	// cert in both roles).
-	pool := x509.NewCertPool()
-	pool.AddCert(srv.Certificate())
-	transport.TLSClientConfig.RootCAs = pool
-	transport.TLSClientConfig.Certificates = []tls.Certificate{clientTLSCert}
 
-	srv.Client().Transport = transport
-	pi2, err := createPodinfoImageFromTar("podinfo-6.1.5.tar", "6.1.5", srv.URL, []crane.Option{
-		crane.WithTransport(srv.Client().Transport),
-	}...)
-	g.Expect(err).NotTo(HaveOccurred())
-
-	tlsSecretClientCert := corev1.Secret{
-		StringData: map[string]string{
-			CACert:     string(rootCertPEM),
-			ClientCert: string(clientCertPEM),
-			ClientKey:  string(clientKeyPEM),
+	obj := &sourcev1.OCIRepository{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              "reconcile-delete-",
+			DeletionTimestamp: &metav1.Time{Time: time.Now()},
+			Finalizers: []string{
+				sourcev1.SourceFinalizer,
+			},
 		},
+		Status: sourcev1.OCIRepositoryStatus{},
 	}
+
+	artifact := testStorage.NewArtifactFor(sourcev1.OCIRepositoryKind, obj.GetObjectMeta(), "revision", "foo.txt")
+	obj.Status.Artifact = &artifact
+
+	got, err := r.reconcileDelete(ctx, obj)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(got).To(Equal(sreconcile.ResultEmpty))
+	g.Expect(controllerutil.ContainsFinalizer(obj, sourcev1.SourceFinalizer)).To(BeFalse())
+	g.Expect(obj.Status.Artifact).To(BeNil())
+}
+
+func TestOCIRepositoryReconciler_notify(t *testing.T) {
+
+	noopErr := serror.NewGeneric(fmt.Errorf("some no-op error"), "NoOpReason")
+	noopErr.Ignore = true
 
 	tests := []struct {
-		name                  string
-		url                   string
-		tag                   string
-		digest                gcrv1.Hash
-		certSecret            *corev1.Secret
-		expectreadyconition   bool
-		expectedstatusmessage string
+		name             string
+		res              sreconcile.Result
+		resErr           error
+		oldObjBeforeFunc func(obj *sourcev1.OCIRepository)
+		newObjBeforeFunc func(obj *sourcev1.OCIRepository)
+		commit           git.Commit
+		wantEvent        string
 	}{
 		{
-			name:                  "test connection with CACert, Client Cert and Private Key",
-			url:                   pi2.url,
-			tag:                   pi2.tag,
-			digest:                pi2.digest,
-			certSecret:            &tlsSecretClientCert,
-			expectreadyconition:   true,
-			expectedstatusmessage: fmt.Sprintf("stored artifact for digest '%s'", pi2.digest.Hex),
+			name:   "error - no event",
+			res:    sreconcile.ResultEmpty,
+			resErr: errors.New("some error"),
 		},
 		{
-			name:                  "test connection with with no secret",
-			url:                   pi2.url,
-			tag:                   pi2.tag,
-			digest:                pi2.digest,
-			expectreadyconition:   false,
-			expectedstatusmessage: "failed to pull artifact",
-		},
-		{
-			name:   "test connection with with incorrect private key",
-			url:    pi2.url,
-			tag:    pi2.tag,
-			digest: pi2.digest,
-			certSecret: &corev1.Secret{
-				StringData: map[string]string{
-					CACert:     string(rootCertPEM),
-					ClientCert: string(clientCertPEM),
-					ClientKey:  string("invalid-key"),
-				},
+			name:   "new artifact",
+			res:    sreconcile.ResultSuccess,
+			resErr: nil,
+			newObjBeforeFunc: func(obj *sourcev1.OCIRepository) {
+				obj.Spec.URL = "oci://newurl.io"
+				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Checksum: "yyy"}
 			},
-			expectreadyconition:   false,
-			expectedstatusmessage: "failed to generate transport",
+			wantEvent: "Normal NewArtifact stored artifact with digest 'xxx' from 'oci://newurl.io'",
+		},
+		{
+			name:   "recovery from failure",
+			res:    sreconcile.ResultSuccess,
+			resErr: nil,
+			oldObjBeforeFunc: func(obj *sourcev1.OCIRepository) {
+				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Checksum: "yyy"}
+				conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.OCIOperationFailedReason, "fail")
+				conditions.MarkFalse(obj, meta.ReadyCondition, meta.FailedReason, "foo")
+			},
+			newObjBeforeFunc: func(obj *sourcev1.OCIRepository) {
+				obj.Spec.URL = "oci://newurl.io"
+				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Checksum: "yyy"}
+				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "ready")
+			},
+			wantEvent: "Normal Succeeded stored artifact with digest 'xxx' from 'oci://newurl.io'",
+		},
+		{
+			name:   "recovery and new artifact",
+			res:    sreconcile.ResultSuccess,
+			resErr: nil,
+			oldObjBeforeFunc: func(obj *sourcev1.OCIRepository) {
+				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Checksum: "yyy"}
+				conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.OCIOperationFailedReason, "fail")
+				conditions.MarkFalse(obj, meta.ReadyCondition, meta.FailedReason, "foo")
+			},
+			newObjBeforeFunc: func(obj *sourcev1.OCIRepository) {
+				obj.Spec.URL = "oci://newurl.io"
+				obj.Status.Artifact = &sourcev1.Artifact{Revision: "aaa", Checksum: "bbb"}
+				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "ready")
+			},
+			wantEvent: "Normal NewArtifact stored artifact with digest 'aaa' from 'oci://newurl.io'",
+		},
+		{
+			name:   "no updates",
+			res:    sreconcile.ResultSuccess,
+			resErr: nil,
+			oldObjBeforeFunc: func(obj *sourcev1.OCIRepository) {
+				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Checksum: "yyy"}
+				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "ready")
+			},
+			newObjBeforeFunc: func(obj *sourcev1.OCIRepository) {
+				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Checksum: "yyy"}
+				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "ready")
+			},
+		},
+		{
+			name:   "no updates on requeue",
+			res:    sreconcile.ResultRequeue,
+			resErr: nil,
+			oldObjBeforeFunc: func(obj *sourcev1.OCIRepository) {
+				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Checksum: "yyy"}
+				conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.URLInvalidReason, "ready")
+			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
+			recorder := record.NewFakeRecorder(32)
 
-			ns, err := testEnv.CreateNamespace(ctx, "ocirepository-test")
-			g.Expect(err).ToNot(HaveOccurred())
-			defer func() { g.Expect(testEnv.Delete(ctx, ns)).To(Succeed()) }()
+			oldObj := &sourcev1.OCIRepository{}
+			newObj := oldObj.DeepCopy()
 
-			obj := &sourcev1.OCIRepository{
-				ObjectMeta: metav1.ObjectMeta{
-					GenerateName: "ocirepository-test-resource",
-					Namespace:    ns.Name,
-				},
-				Spec: sourcev1.OCIRepositorySpec{
-					URL:       tt.url,
-					Interval:  metav1.Duration{Duration: 60 * time.Minute},
-					Reference: &sourcev1.OCIRepositoryRef{Digest: tt.digest.String()},
-				},
+			if tt.oldObjBeforeFunc != nil {
+				tt.oldObjBeforeFunc(oldObj)
+			}
+			if tt.newObjBeforeFunc != nil {
+				tt.newObjBeforeFunc(newObj)
 			}
 
-			if tt.certSecret != nil {
-				tt.certSecret.ObjectMeta = metav1.ObjectMeta{
-					GenerateName: "cert-secretref",
-					Namespace:    ns.Name,
-				}
-
-				g.Expect(testEnv.CreateAndWait(ctx, tt.certSecret)).To(Succeed())
-				defer func() { g.Expect(testEnv.Delete(ctx, tt.certSecret)).To(Succeed()) }()
-
-				obj.Spec.CertSecretRef = &meta.LocalObjectReference{Name: tt.certSecret.Name}
+			reconciler := &OCIRepositoryReconciler{
+				EventRecorder: recorder,
 			}
+			reconciler.notify(ctx, oldObj, newObj, tt.res, tt.resErr)
 
-			g.Expect(testEnv.Create(ctx, obj)).To(Succeed())
-
-			key := client.ObjectKey{Name: obj.Name, Namespace: obj.Namespace}
-
-			resultobj := sourcev1.OCIRepository{}
-
-			// Wait for the finalizer to be set
-			g.Eventually(func() bool {
-				if err := testEnv.Get(ctx, key, &resultobj); err != nil {
-					return false
+			select {
+			case x, ok := <-recorder.Events:
+				g.Expect(ok).To(Equal(tt.wantEvent != ""), "unexpected event received")
+				if tt.wantEvent != "" {
+					g.Expect(x).To(ContainSubstring(tt.wantEvent))
 				}
-				return len(resultobj.Finalizers) > 0
-			}, timeout).Should(BeTrue())
-
-			// Wait for the object to fail
-			g.Eventually(func() bool {
-				if err := testEnv.Get(ctx, key, &resultobj); err != nil {
-					return false
+			default:
+				if tt.wantEvent != "" {
+					t.Errorf("expected some event to be emitted")
 				}
-				readyCondition := conditions.Get(&resultobj, meta.ReadyCondition)
-				if readyCondition == nil {
-					return false
-				}
-				return obj.Generation == readyCondition.ObservedGeneration &&
-					conditions.IsReady(&resultobj) == tt.expectreadyconition
-			}, timeout).Should(BeTrue())
-
-			readyCondition := conditions.Get(&resultobj, meta.ReadyCondition)
-			g.Expect(readyCondition.Message).Should(ContainSubstring(tt.expectedstatusmessage))
-
-			// Wait for the object to be deleted
-			g.Expect(testEnv.Delete(ctx, &resultobj)).To(Succeed())
-			g.Eventually(func() bool {
-				if err := testEnv.Get(ctx, key, &resultobj); err != nil {
-					return apierrors.IsNotFound(err)
-				}
-				return false
-			}, timeout).Should(BeTrue())
+			}
 		})
 	}
 }
@@ -1088,6 +1362,7 @@ type artifactFixture struct {
 	expectedPath     string
 	expectedChecksum string
 }
+
 type podinfoImage struct {
 	url    string
 	tag    string
@@ -1139,7 +1414,7 @@ func createPodinfoImageFromTar(tarFileName, tag, registryURL string, opts ...cra
 	}, nil
 }
 
-func pushMultiplePodinfoImage(serverURL string, versions []string) (map[string]podinfoImage, error) {
+func pushMultiplePodinfoImages(serverURL string, versions ...string) (map[string]podinfoImage, error) {
 	podinfoVersions := make(map[string]podinfoImage)
 
 	for i := 0; i < len(versions); i++ {
