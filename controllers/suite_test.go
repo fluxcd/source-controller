@@ -119,30 +119,30 @@ type registryClientTestServer struct {
 
 type registryOptions struct {
 	withBasicAuth bool
-	withTlS       bool
+	withTLS       bool
 }
 
-func setupRegistryServer(ctx context.Context, opts registryOptions) (*registryClientTestServer, error) {
+func setupRegistryServer(ctx context.Context, workspaceDir string, opts registryOptions) (*registryClientTestServer, error) {
 	server := &registryClientTestServer{}
 
-	// Create a temporary workspace directory for the registry
-	workspaceDir, err := os.MkdirTemp("", "registry-test-")
-	if err != nil {
-		return nil, fmt.Errorf("failed to create workspace directory: %w", err)
+	if workspaceDir == "" {
+		return nil, fmt.Errorf("workspace directory cannot be an empty string")
 	}
+
 	server.workspaceDir = workspaceDir
 
 	var out bytes.Buffer
 	server.out = &out
 
 	// init test client
-	server.registryClient, err = helmreg.NewClient(
+	client, err := helmreg.NewClient(
 		helmreg.ClientOptDebug(true),
 		helmreg.ClientOptWriter(server.out),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create registry client: %s", err)
 	}
+	server.registryClient = client
 
 	config := &configuration.Configuration{}
 	port, err := freeport.GetFreePort()
@@ -179,7 +179,7 @@ func setupRegistryServer(ctx context.Context, opts registryOptions) (*registryCl
 		}
 	}
 
-	if opts.withTlS {
+	if opts.withTLS {
 		config.HTTP.TLS.Certificate = "testdata/certs/server.pem"
 		config.HTTP.TLS.Key = "testdata/certs/server-key.pem"
 	}
@@ -217,7 +217,11 @@ func TestMain(m *testing.M) {
 
 	testMetricsH = controller.MustMakeMetrics(testEnv)
 
-	testRegistryServer, err = setupRegistryServer(ctx, registryOptions{
+	testWorkspaceDir, err := os.MkdirTemp("", "registry-test-")
+	if err != nil {
+		panic(fmt.Sprintf("failed to create workspace directory: %v", err))
+	}
+	testRegistryServer, err = setupRegistryServer(ctx, testWorkspaceDir, registryOptions{
 		withBasicAuth: true,
 	})
 	if err != nil {
@@ -312,7 +316,7 @@ func TestMain(m *testing.M) {
 		panic(fmt.Sprintf("Failed to remove storage server dir: %v", err))
 	}
 
-	if err := os.RemoveAll(testRegistryServer.workspaceDir); err != nil {
+	if err := os.RemoveAll(testWorkspaceDir); err != nil {
 		panic(fmt.Sprintf("Failed to remove registry workspace dir: %v", err))
 	}
 
