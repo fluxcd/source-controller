@@ -604,6 +604,8 @@ func TestDependencyManager_addRemoteOCIDependency(t *testing.T) {
 			},
 			wantFunc: func(g *WithT, c *helmchart.Chart) {
 				g.Expect(c.Dependencies()).To(HaveLen(1))
+				dep := c.Dependencies()[0]
+				g.Expect(dep).NotTo(BeNil())
 			},
 		},
 		{
@@ -633,9 +635,7 @@ func TestDependencyManager_addRemoteOCIDependency(t *testing.T) {
 						Scheme: "oci",
 						Host:   "example.com",
 					},
-					Client: &mockGetter{
-						Response: chartB,
-					},
+					Client: &mockGetter{},
 					RegistryClient: &mockTagsGetter{
 						tags: map[string][]string{
 							"helmchart": {"0.1.0"},
@@ -648,7 +648,7 @@ func TestDependencyManager_addRemoteOCIDependency(t *testing.T) {
 				Version:    "0.2.0",
 				Repository: "oci://example.com",
 			},
-			wantErr: "could not locate a version matching provided version string 0.2.0",
+			wantErr: "failed to load downloaded archive of version '0.2.0'",
 		},
 		{
 			name: "chart load error",

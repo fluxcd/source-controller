@@ -131,10 +131,25 @@ func NewOCIChartRepository(repositoryURL string, chartRepoOpts ...OCIChartReposi
 // stable version will be returned and prerelease versions will be ignored.
 // adapted from https://github.com/helm/helm/blob/49819b4ef782e80b0c7f78c30bd76b51ebb56dc8/pkg/downloader/chart_downloader.go#L162
 func (r *OCIChartRepository) GetChartVersion(name, ver string) (*repo.ChartVersion, error) {
-	// Find chart versions matching the given name.
-	// Either in an index file or from a registry.
+
 	cpURL := r.URL
 	cpURL.Path = path.Join(cpURL.Path, name)
+
+	// if ver is a valid semver version, take a shortcut here so we don't need to list all tags which can be an
+	// expensive operation.
+	if _, err := version.ParseVersion(ver); err == nil {
+		return &repo.ChartVersion{
+			URLs: []string{fmt.Sprintf("%s:%s", cpURL.String(), ver)},
+			Metadata: &chart.Metadata{
+				Name:    name,
+				Version: ver,
+			},
+		}, nil
+	}
+
+	// ver doesn't denote a concrete version so we interpret it as a semver range and try to find the best-matching
+	// version from the list of tags in the registry.
+
 	cvs, err := r.getTags(cpURL.String())
 	if err != nil {
 		return nil, fmt.Errorf("could not get tags for %q: %s", name, err)
