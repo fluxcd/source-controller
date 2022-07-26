@@ -3,8 +3,8 @@ IMG ?= fluxcd/source-controller
 TAG ?= latest
 
 # Base image used to build the Go binary
-LIBGIT2_IMG ?= ghcr.io/fluxcd/golang-with-libgit2-all
-LIBGIT2_TAG ?= v0.1.2
+LIBGIT2_IMG ?= ghcr.io/fluxcd/golang-with-libgit2-only
+LIBGIT2_TAG ?= v0.1.4
 
 # Allows for defining additional Go test args, e.g. '-tags integration'.
 GO_TEST_ARGS ?= -race
@@ -32,33 +32,16 @@ ENVTEST_BIN_VERSION ?= 1.19.2
 # Caches libgit2 versions per tag, "forcing" rebuild only when needed.
 LIBGIT2_PATH := $(BUILD_DIR)/libgit2/$(LIBGIT2_TAG)
 LIBGIT2_LIB_PATH := $(LIBGIT2_PATH)/lib
-LIBGIT2_LIB64_PATH := $(LIBGIT2_PATH)/lib64
 LIBGIT2 := $(LIBGIT2_LIB_PATH)/libgit2.a
 MUSL-CC =
 
 export CGO_ENABLED=1
 export PKG_CONFIG_PATH=$(LIBGIT2_LIB_PATH)/pkgconfig
-export LIBRARY_PATH=$(LIBGIT2_LIB_PATH)
-export CGO_CFLAGS=-I$(LIBGIT2_PATH)/include -I$(LIBGIT2_PATH)/include/openssl
-
-
-# The pkg-config command will yield warning messages until libgit2 is downloaded.
-ifeq ($(shell uname -s),Darwin)
-export CGO_LDFLAGS=$(shell PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) pkg-config --libs --static --cflags libssh2 openssl libgit2 2>/dev/null)
+export CGO_LDFLAGS=$(shell PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) pkg-config --libs --static --cflags libgit2 2>/dev/null)
 GO_STATIC_FLAGS=-ldflags "-s -w" -tags 'netgo,osusergo,static_build$(addprefix ,,$(GO_TAGS))'
-else
-export PKG_CONFIG_PATH:=$(PKG_CONFIG_PATH):$(LIBGIT2_LIB64_PATH)/pkgconfig
-export LIBRARY_PATH:=$(LIBRARY_PATH):$(LIBGIT2_LIB64_PATH)
-export CGO_LDFLAGS=$(shell PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) pkg-config --libs --static --cflags libssh2 openssl libgit2 2>/dev/null)
-endif
-
 
 ifeq ($(shell uname -s),Linux)
-ifeq ($(shell uname -m),x86_64)
-# Linux x86_64 seem to be able to cope with the static libraries 
-# by having only musl-dev installed, without the need of using musl toolchain.
-	GO_STATIC_FLAGS=-ldflags "-s -w" -tags 'netgo,osusergo,static_build$(addprefix ,,$(GO_TAGS))'
-else
+ifneq ($(shell uname -m),x86_64)
 	MUSL-PREFIX=$(BUILD_DIR)/musl/$(shell uname -m)-linux-musl-native/bin/$(shell uname -m)-linux-musl
 	MUSL-CC=$(MUSL-PREFIX)-gcc
 	export CC=$(MUSL-PREFIX)-gcc

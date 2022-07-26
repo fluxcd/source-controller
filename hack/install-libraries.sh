@@ -74,12 +74,12 @@ extract_libraries(){
 }
 
 fix_pkgconfigs(){
-    DIR="$1"
     NEW_DIR="$(/bin/pwd)/build/libgit2/${TAG}"
 
     # Update the prefix paths included in the .pc files.
     if [[ $OSTYPE == 'darwin'* ]]; then
-        INSTALLED_DIR="/Users/runner/work/golang-with-libgit2/golang-with-libgit2/build/${DIR}"
+        # https://github.com/fluxcd/golang-with-libgit2/blob/v0.1.4/.github/workflows/release.yaml#L158
+        INSTALLED_DIR="/Users/runner/work/golang-with-libgit2/golang-with-libgit2/build/libgit2-darwin-amd64"
 
         # This will make it easier to update to the location in which they will be used.
         # sed has a sight different behaviour in MacOS
@@ -90,7 +90,8 @@ fix_pkgconfigs(){
             find "${NEW_DIR}" -type f -name "*.pc" | xargs -I {} sed -i "" "s;${INSTALLED_DIR};${NEW_DIR};g" {}
         fi
     else
-        INSTALLED_DIR="/home/runner/work/golang-with-libgit2/golang-with-libgit2/build/${DIR}"
+        # https://github.com/fluxcd/golang-with-libgit2/blob/v0.1.4/.github/workflows/release.yaml#L52
+        INSTALLED_DIR="/home/runner/work/golang-with-libgit2/golang-with-libgit2/build/build_libgit2_only"
     
         find "${NEW_DIR}" -type f -name "*.pc" | xargs -I {} sed -i "s;${INSTALLED_DIR};${NEW_DIR};g" {}
     fi
@@ -136,17 +137,17 @@ install_libraries(){
         fi
     fi
 
-    FILE_NAME="linux-$(uname -m)-all-libs.tar.gz"
-    DIR="libgit2-linux-all-libs"
+    FILE_NAME="linux-x86_64-libgit2-only.tar.gz"
+    DIR="linux-libgit2-only"
     if [[ $OSTYPE == 'darwin'* ]]; then
-        FILE_NAME="darwin-all-libs.tar.gz"
-        DIR="darwin-all-libs"
+        FILE_NAME="darwin-libgit2-only.tar.gz"
+        DIR="darwin-libgit2-only"
     fi
 
     download_files "${FILE_NAME}"
     assure_provenance "${FILE_NAME}"
     extract_libraries "${FILE_NAME}" "${DIR}"
-    fix_pkgconfigs "${DIR}"
+    fix_pkgconfigs
 }
 
 install_libraries
