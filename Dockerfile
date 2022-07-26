@@ -1,6 +1,6 @@
 ARG BASE_VARIANT=alpine
 ARG GO_VERSION=1.17
-ARG XX_VERSION=1.1.0
+ARG XX_VERSION=1.1.2
 
 ARG LIBGIT2_IMG=ghcr.io/fluxcd/golang-with-libgit2-only
 ARG LIBGIT2_TAG=v0.1.4
