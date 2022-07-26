@@ -124,6 +124,22 @@ func (r *OCIChartRepository) Get(name, ver string) (*repo.ChartVersion, error) {
 	// Either in an index file or from a registry.
 	cpURL := r.URL
 	cpURL.Path = path.Join(cpURL.Path, name)
+
+	// if ver is a valid semver version, take a shortcut here so we don't need to list all tags which can be an
+	// expensive operation.
+	if _, err := version.ParseVersion(ver); err == nil {
+		return &repo.ChartVersion{
+			URLs: []string{fmt.Sprintf("%s:%s", cpURL.String(), ver)},
+			Metadata: &chart.Metadata{
+				Name:    name,
+				Version: ver,
+			},
+		}, nil
+	}
+
+	// ver doesn't denote a concrete version so we interpret it as a semver range and try to find the best-matching
+	// version from the list of tags in the registry.
+
 	cvs, err := r.getTags(cpURL.String())
 	if err != nil {
 		return nil, err
