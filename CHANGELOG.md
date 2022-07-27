@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.25.11
+
+**Release date:** 2022-07-27
+
+This prerelease comes with an improvement in the Helm OCI Chart to use an exact
+version when provided. This makes it possible to work with registries that don't
+support listing tags.
+
+Improvements:
+- Don't fetch tags when exact version is specified in HelmChart
+  [#846](https://github.com/fluxcd/source-controller/pull/846)
+
 ## 0.25.10
 
 **Release date:** 2022-07-13
