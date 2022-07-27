@@ -64,10 +64,14 @@ func (m *mockRegistryClient) Logout(url string, opts ...registry.LogoutOption) e
 type mockIndexChartGetter struct {
 	IndexResponse []byte
 	ChartResponse []byte
+	ErrorResponse error
 	requestedURL  string
 }
 
 func (g *mockIndexChartGetter) Get(u string, _ ...helmgetter.Option) (*bytes.Buffer, error) {
+	if g.ErrorResponse != nil {
+		return nil, g.ErrorResponse
+	}
 	g.requestedURL = u
 	r := g.ChartResponse
 	if strings.HasSuffix(u, "index.yaml") {
@@ -248,6 +252,15 @@ func TestRemoteBuilder_BuildFromOCIChatRepository(t *testing.T) {
 			RegistryClient: registryClient,
 		}
 	}
+	mockRepoWithoutChart := func() *repository.OCIChartRepository {
+		return &repository.OCIChartRepository{
+			URL: *u,
+			Client: &mockIndexChartGetter{
+				ErrorResponse: fmt.Errorf("chart doesn't exist"),
+			},
+			RegistryClient: registryClient,
+		}
+	}
 
 	tests := []struct {
 		name         string
@@ -278,8 +291,8 @@ func TestRemoteBuilder_BuildFromOCIChatRepository(t *testing.T) {
 		{
 			name:       "chart version not in repository",
 			reference:  RemoteReference{Name: "grafana", Version: "1.1.1"},
-			repository: mockRepo(),
-			wantErr:    "failed to get chart version for remote reference",
+			repository: mockRepoWithoutChart(),
+			wantErr:    "failed to download chart for remote reference",
 		},
 		{
 			name:       "invalid version metadata",
@@ -334,7 +347,7 @@ func TestRemoteBuilder_BuildFromOCIChatRepository(t *testing.T) {
 			cb, err := b.Build(context.TODO(), tt.reference, targetPath, tt.buildOpts)
 
 			if tt.wantErr != "" {
-				g.Expect(err).To(HaveOccurred())
+				g.Expect(err).To(HaveOccurred(), "expected error '%s'", tt.wantErr)
 				g.Expect(err.Error()).To(ContainSubstring(tt.wantErr))
 				g.Expect(cb).To(BeZero())
 				return

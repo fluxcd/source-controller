@@ -118,59 +118,68 @@ func TestOCIChartRepository_Get(t *testing.T) {
 	testURL := "oci://localhost:5000/my_repo"
 
 	testCases := []struct {
-		name        string
-		url         string
-		version     string
-		expected    string
-		expectedErr string
+		name           string
+		registryClient RegistryClient
+		url            string
+		version        string
+		expected       string
+		expectedErr    string
 	}{
 		{
-			name:     "should return latest stable version",
-			version:  "",
-			url:      testURL,
-			expected: "1.0.0",
+			name:           "should return latest stable version",
+			registryClient: registryClient,
+			version:        "",
+			url:            testURL,
+			expected:       "1.0.0",
 		},
 		{
-			name:     "should return latest stable version (asterisk)",
-			version:  "*",
-			url:      testURL,
-			expected: "1.0.0",
+			name:           "should return latest stable version (asterisk)",
+			registryClient: registryClient,
+			version:        "*",
+			url:            testURL,
+			expected:       "1.0.0",
 		},
 		{
-			name:     "should return latest stable version (semver range)",
-			version:  ">=0.1.5",
-			url:      testURL,
-			expected: "1.0.0",
+			name:           "should return latest stable version (semver range)",
+			registryClient: registryClient,
+			version:        ">=0.1.5",
+			url:            testURL,
+			expected:       "1.0.0",
 		},
 		{
-			name:     "should return 0.2.0 (semver range)",
-			version:  "0.2.x",
-			url:      testURL,
-			expected: "0.2.0",
+			name:           "should return 0.2.0 (semver range)",
+			registryClient: registryClient,
+			version:        "0.2.x",
+			url:            testURL,
+			expected:       "0.2.0",
 		},
 		{
-			name:     "should return a perfect match",
-			version:  "0.1.0",
-			url:      testURL,
-			expected: "0.1.0",
+			name:           "should return a perfect match",
+			registryClient: nil,
+			version:        "0.1.0",
+			url:            testURL,
+			expected:       "0.1.0",
 		},
 		{
-			name:     "should return 0.10.0",
-			version:  "0.*",
-			url:      testURL,
-			expected: "0.10.0",
+			name:           "should return 0.10.0",
+			registryClient: registryClient,
+			version:        "0.*",
+			url:            testURL,
+			expected:       "0.10.0",
 		},
 		{
-			name:        "should an error for unfunfilled range",
-			version:     ">2.0.0",
-			url:         testURL,
-			expectedErr: "could not locate a version matching provided version string >2.0.0",
+			name:           "should an error for unfulfilled range",
+			registryClient: registryClient,
+			version:        ">2.0.0",
+			url:            testURL,
+			expectedErr:    "could not locate a version matching provided version string >2.0.0",
 		},
 		{
-			name:     "shouldn't error out with trailing slash",
-			version:  "",
-			url:      "oci://localhost:5000/my_repo/",
-			expected: "1.0.0",
+			name:           "shouldn't error out with trailing slash",
+			registryClient: registryClient,
+			version:        "",
+			url:            "oci://localhost:5000/my_repo/",
+			expected:       "1.0.0",
 		},
 	}
 
@@ -178,7 +187,7 @@ func TestOCIChartRepository_Get(t *testing.T) {
 
 		t.Run(tc.name, func(t *testing.T) {
 			g := NewWithT(t)
-			r, err := NewOCIChartRepository(tc.url, WithOCIRegistryClient(registryClient), WithOCIGetter(providers))
+			r, err := NewOCIChartRepository(tc.url, WithOCIRegistryClient(tc.registryClient), WithOCIGetter(providers))
 			g.Expect(err).ToNot(HaveOccurred())
 			g.Expect(r).ToNot(BeNil())
 
