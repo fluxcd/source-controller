@@ -68,114 +68,211 @@ func TestHelmChartReconciler_Reconcile(t *testing.T) {
 		chartPath    = "testdata/charts/helmchart"
 	)
 
-	server, err := helmtestserver.NewTempHelmServer()
+	serverFactory, err := helmtestserver.NewTempHelmServer()
 	g.Expect(err).NotTo(HaveOccurred())
-	defer os.RemoveAll(server.Root())
+	defer os.RemoveAll(serverFactory.Root())
 
-	g.Expect(server.PackageChartWithVersion(chartPath, chartVersion)).To(Succeed())
-	g.Expect(server.GenerateIndex()).To(Succeed())
+	g.Expect(serverFactory.PackageChartWithVersion(chartPath, chartVersion)).To(Succeed())
+	g.Expect(serverFactory.GenerateIndex()).To(Succeed())
 
-	server.Start()
-	defer server.Stop()
+	tests := []struct {
+		name       string
+		beforeFunc func(repository *sourcev1.HelmRepository)
+		assertFunc func(g *WithT, obj *sourcev1.HelmChart, repository *sourcev1.HelmRepository)
+	}{
+		{
+			name: "Reconciles chart build",
+			assertFunc: func(g *WithT, obj *sourcev1.HelmChart, repository *sourcev1.HelmRepository) {
+				key := client.ObjectKey{Name: obj.Name, Namespace: obj.Namespace}
 
-	ns, err := testEnv.CreateNamespace(ctx, "helmchart")
-	g.Expect(err).ToNot(HaveOccurred())
-	defer func() { g.Expect(testEnv.Delete(ctx, ns)).To(Succeed()) }()
+				// Wait for finalizer to be set
+				g.Eventually(func() bool {
+					if err := testEnv.Get(ctx, key, obj); err != nil {
+						return false
+					}
+					return len(obj.Finalizers) > 0
+				}, timeout).Should(BeTrue())
 
-	repository := &sourcev1.HelmRepository{
-		ObjectMeta: metav1.ObjectMeta{
-			GenerateName: "helmrepository-",
-			Namespace:    ns.Name,
+				// Wait for HelmChart to be Ready
+				g.Eventually(func() bool {
+					if err := testEnv.Get(ctx, key, obj); err != nil {
+						return false
+					}
+					if !conditions.IsReady(obj) || obj.Status.Artifact == nil {
+						return false
+					}
+					readyCondition := conditions.Get(obj, meta.ReadyCondition)
+					return obj.Generation == readyCondition.ObservedGeneration &&
+						obj.Generation == obj.Status.ObservedGeneration
+				}, timeout).Should(BeTrue())
+
+				// Check if the object status is valid.
+				condns := &status.Conditions{NegativePolarity: helmChartReadyCondition.NegativePolarity}
+				checker := status.NewChecker(testEnv.Client, condns)
+				checker.CheckErr(ctx, obj)
+
+				// kstatus client conformance check.
+				u, err := patch.ToUnstructured(obj)
+				g.Expect(err).ToNot(HaveOccurred())
+				res, err := kstatus.Compute(u)
+				g.Expect(err).ToNot(HaveOccurred())
+				g.Expect(res.Status).To(Equal(kstatus.CurrentStatus))
+
+				// Patch the object with reconcile request annotation.
+				patchHelper, err := patch.NewHelper(obj, testEnv.Client)
+				g.Expect(err).ToNot(HaveOccurred())
+				annotations := map[string]string{
+					meta.ReconcileRequestAnnotation: "now",
+				}
+				obj.SetAnnotations(annotations)
+				g.Expect(patchHelper.Patch(ctx, obj)).ToNot(HaveOccurred())
+				g.Eventually(func() bool {
+					if err := testEnv.Get(ctx, key, obj); err != nil {
+						return false
+					}
+					return obj.Status.LastHandledReconcileAt == "now"
+				}, timeout).Should(BeTrue())
+
+				// Check if the cache contains the index.
+				repoKey := client.ObjectKey{Name: repository.Name, Namespace: repository.Namespace}
+				err = testEnv.Get(ctx, repoKey, repository)
+				g.Expect(err).ToNot(HaveOccurred())
+				localPath := testStorage.LocalPath(*repository.GetArtifact())
+				_, found := testCache.Get(localPath)
+				g.Expect(found).To(BeTrue())
+
+				g.Expect(testEnv.Delete(ctx, obj)).To(Succeed())
+
+				// Wait for HelmChart to be deleted
+				g.Eventually(func() bool {
+					if err := testEnv.Get(ctx, key, obj); err != nil {
+						return apierrors.IsNotFound(err)
+					}
+					return false
+				}, timeout).Should(BeTrue())
+			},
 		},
-		Spec: sourcev1.HelmRepositorySpec{
-			URL: server.URL(),
-		},
-	}
-	g.Expect(testEnv.CreateAndWait(ctx, repository)).To(Succeed())
+		{
+			name: "Stalling on invalid repository URL",
+			beforeFunc: func(repository *sourcev1.HelmRepository) {
+				repository.Spec.URL = "://unsupported" // Invalid URL
+			},
+			assertFunc: func(g *WithT, obj *sourcev1.HelmChart, _ *sourcev1.HelmRepository) {
+				key := client.ObjectKey{Name: obj.Name, Namespace: obj.Namespace}
+				// Wait for HelmChart to be FetchFailed == true
+				g.Eventually(func() bool {
+					if err := testEnv.Get(ctx, key, obj); err != nil {
+						return false
+					}
+					if !conditions.IsTrue(obj, sourcev1.FetchFailedCondition) {
+						return false
+					}
+					// observedGeneration is -1 because we have no successful reconciliation
+					return obj.Status.ObservedGeneration == -1
+				}, timeout).Should(BeTrue())
 
-	obj := &sourcev1.HelmChart{
-		ObjectMeta: metav1.ObjectMeta{
-			GenerateName: "helmrepository-reconcile-",
-			Namespace:    ns.Name,
+				// Check if the object status is valid.
+				condns := &status.Conditions{NegativePolarity: helmChartReadyCondition.NegativePolarity}
+				checker := status.NewChecker(testEnv.Client, condns)
+				checker.CheckErr(ctx, obj)
+
+				g.Expect(testEnv.Delete(ctx, obj)).To(Succeed())
+
+				// Wait for HelmChart to be deleted
+				g.Eventually(func() bool {
+					if err := testEnv.Get(ctx, key, obj); err != nil {
+						return apierrors.IsNotFound(err)
+					}
+					return false
+				}, timeout).Should(BeTrue())
+			},
 		},
-		Spec: sourcev1.HelmChartSpec{
-			Chart:   chartName,
-			Version: chartVersion,
-			SourceRef: sourcev1.LocalHelmChartSourceReference{
-				Kind: sourcev1.HelmRepositoryKind,
-				Name: repository.Name,
+		{
+			name: "Stalling on invalid oci repository URL",
+			beforeFunc: func(repository *sourcev1.HelmRepository) {
+				repository.Spec.URL = strings.Replace(repository.Spec.URL, "http", "oci", 1)
+			},
+			assertFunc: func(g *WithT, obj *sourcev1.HelmChart, _ *sourcev1.HelmRepository) {
+				key := client.ObjectKey{Name: obj.Name, Namespace: obj.Namespace}
+				// Wait for HelmChart to be Ready
+				g.Eventually(func() bool {
+					if err := testEnv.Get(ctx, key, obj); err != nil {
+						return false
+					}
+					if !conditions.IsTrue(obj, sourcev1.FetchFailedCondition) {
+						return false
+					}
+					// observedGeneration is -1 because we have no successful reconciliation
+					return obj.Status.ObservedGeneration == -1
+				}, timeout).Should(BeTrue())
+
+				// Check if the object status is valid.
+				condns := &status.Conditions{NegativePolarity: helmChartReadyCondition.NegativePolarity}
+				checker := status.NewChecker(testEnv.Client, condns)
+				checker.CheckErr(ctx, obj)
+
+				g.Expect(testEnv.Delete(ctx, obj)).To(Succeed())
+
+				// Wait for HelmChart to be deleted
+				g.Eventually(func() bool {
+					if err := testEnv.Get(ctx, key, obj); err != nil {
+						return apierrors.IsNotFound(err)
+					}
+					return false
+				}, timeout).Should(BeTrue())
 			},
 		},
 	}
-	g.Expect(testEnv.Create(ctx, obj)).To(Succeed())
 
-	key := client.ObjectKey{Name: obj.Name, Namespace: obj.Namespace}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
 
-	// Wait for finalizer to be set
-	g.Eventually(func() bool {
-		if err := testEnv.Get(ctx, key, obj); err != nil {
-			return false
-		}
-		return len(obj.Finalizers) > 0
-	}, timeout).Should(BeTrue())
+			server := testserver.NewHTTPServer(serverFactory.Root())
+			server.Start()
+			defer server.Stop()
 
-	// Wait for HelmChart to be Ready
-	g.Eventually(func() bool {
-		if err := testEnv.Get(ctx, key, obj); err != nil {
-			return false
-		}
-		if !conditions.IsReady(obj) || obj.Status.Artifact == nil {
-			return false
-		}
-		readyCondition := conditions.Get(obj, meta.ReadyCondition)
-		return obj.Generation == readyCondition.ObservedGeneration &&
-			obj.Generation == obj.Status.ObservedGeneration
-	}, timeout).Should(BeTrue())
+			ns, err := testEnv.CreateNamespace(ctx, "helmchart")
+			g.Expect(err).ToNot(HaveOccurred())
+			defer func() { g.Expect(testEnv.Delete(ctx, ns)).To(Succeed()) }()
 
-	// Check if the object status is valid.
-	condns := &status.Conditions{NegativePolarity: helmChartReadyCondition.NegativePolarity}
-	checker := status.NewChecker(testEnv.Client, condns)
-	checker.CheckErr(ctx, obj)
+			repository := sourcev1.HelmRepository{
+				ObjectMeta: metav1.ObjectMeta{
+					GenerateName: "helmrepository-",
+					Namespace:    ns.Name,
+				},
+				Spec: sourcev1.HelmRepositorySpec{
+					URL: server.URL(),
+				},
+			}
 
-	// kstatus client conformance check.
-	u, err := patch.ToUnstructured(obj)
-	g.Expect(err).ToNot(HaveOccurred())
-	res, err := kstatus.Compute(u)
-	g.Expect(err).ToNot(HaveOccurred())
-	g.Expect(res.Status).To(Equal(kstatus.CurrentStatus))
+			if tt.beforeFunc != nil {
+				tt.beforeFunc(&repository)
+			}
 
-	// Patch the object with reconcile request annotation.
-	patchHelper, err := patch.NewHelper(obj, testEnv.Client)
-	g.Expect(err).ToNot(HaveOccurred())
-	annotations := map[string]string{
-		meta.ReconcileRequestAnnotation: "now",
+			g.Expect(testEnv.CreateAndWait(ctx, &repository)).To(Succeed())
+
+			obj := sourcev1.HelmChart{
+				ObjectMeta: metav1.ObjectMeta{
+					GenerateName: "helmrepository-reconcile-",
+					Namespace:    ns.Name,
+				},
+				Spec: sourcev1.HelmChartSpec{
+					Chart:   chartName,
+					Version: chartVersion,
+					SourceRef: sourcev1.LocalHelmChartSourceReference{
+						Kind: sourcev1.HelmRepositoryKind,
+						Name: repository.Name,
+					},
+				},
+			}
+			g.Expect(testEnv.Create(ctx, &obj)).To(Succeed())
+
+			if tt.assertFunc != nil {
+				tt.assertFunc(g, &obj, &repository)
+			}
+		})
 	}
-	obj.SetAnnotations(annotations)
-	g.Expect(patchHelper.Patch(ctx, obj)).ToNot(HaveOccurred())
-	g.Eventually(func() bool {
-		if err := testEnv.Get(ctx, key, obj); err != nil {
-			return false
-		}
-		return obj.Status.LastHandledReconcileAt == "now"
-	}, timeout).Should(BeTrue())
-
-	// Check if the cache contains the index.
-	repoKey := client.ObjectKey{Name: repository.Name, Namespace: repository.Namespace}
-	err = testEnv.Get(ctx, repoKey, repository)
-	g.Expect(err).ToNot(HaveOccurred())
-	localPath := testStorage.LocalPath(*repository.GetArtifact())
-	_, found := testCache.Get(localPath)
-	g.Expect(found).To(BeTrue())
-
-	g.Expect(testEnv.Delete(ctx, obj)).To(Succeed())
-
-	// Wait for HelmChart to be deleted
-	g.Eventually(func() bool {
-		if err := testEnv.Get(ctx, key, obj); err != nil {
-			return apierrors.IsNotFound(err)
-		}
-		return false
-	}, timeout).Should(BeTrue())
 }
 
 func TestHelmChartReconciler_reconcileStorage(t *testing.T) {
@@ -510,156 +607,6 @@ func TestHelmChartReconciler_reconcileSource(t *testing.T) {
 
 			if tt.assertFunc != nil {
 				tt.assertFunc(g, b, obj)
-			}
-		})
-	}
-}
-
-func TestHelmChartReconciler_reconcileFromHelmRepository(t *testing.T) {
-	g := NewWithT(t)
-
-	const (
-		chartName          = "helmchart"
-		chartVersion       = "0.2.0"
-		higherChartVersion = "0.3.0"
-		chartPath          = "testdata/charts/helmchart"
-	)
-
-	serverFactory, err := helmtestserver.NewTempHelmServer()
-	g.Expect(err).NotTo(HaveOccurred())
-	defer os.RemoveAll(serverFactory.Root())
-
-	for _, ver := range []string{chartVersion, higherChartVersion} {
-		g.Expect(serverFactory.PackageChartWithVersion(chartPath, ver)).To(Succeed())
-	}
-	g.Expect(serverFactory.GenerateIndex()).To(Succeed())
-
-	tests := []struct {
-		name       string
-		beforeFunc func(repository *sourcev1.HelmRepository)
-		assertFunc func(g *WithT, obj *sourcev1.HelmChart)
-	}{
-		{
-			name: "Reconciles chart build",
-			assertFunc: func(g *WithT, obj *sourcev1.HelmChart) {
-				key := client.ObjectKey{Name: obj.Name, Namespace: obj.Namespace}
-				// Wait for HelmChart to be Ready
-				g.Eventually(func() bool {
-					if err := testEnv.Get(ctx, key, obj); err != nil {
-						return false
-					}
-					if !conditions.IsReady(obj) || obj.Status.Artifact == nil {
-						return false
-					}
-					readyCondition := conditions.Get(obj, meta.ReadyCondition)
-					return obj.Generation == readyCondition.ObservedGeneration &&
-						obj.Generation == obj.Status.ObservedGeneration
-				}, timeout).Should(BeTrue())
-
-				// Check if the object status is valid.
-				condns := &status.Conditions{NegativePolarity: helmChartReadyCondition.NegativePolarity}
-				checker := status.NewChecker(testEnv.Client, condns)
-				checker.CheckErr(ctx, obj)
-			},
-		},
-		{
-			name: "Stalling on invalid repository URL",
-			beforeFunc: func(repository *sourcev1.HelmRepository) {
-				repository.Spec.URL = "://unsupported" // Invalid URL
-			},
-			assertFunc: func(g *WithT, obj *sourcev1.HelmChart) {
-				key := client.ObjectKey{Name: obj.Name, Namespace: obj.Namespace}
-				// Wait for HelmChart to be FetchFailed == true
-				g.Eventually(func() bool {
-					if err := testEnv.Get(ctx, key, obj); err != nil {
-						return false
-					}
-					if !conditions.IsTrue(obj, sourcev1.FetchFailedCondition) {
-						return false
-					}
-					// observedGeneration is -1 because we have no successful reconciliation
-					return obj.Status.ObservedGeneration == -1
-				}, timeout).Should(BeTrue())
-
-				// Check if the object status is valid.
-				condns := &status.Conditions{NegativePolarity: helmChartReadyCondition.NegativePolarity}
-				checker := status.NewChecker(testEnv.Client, condns)
-				checker.CheckErr(ctx, obj)
-			},
-		},
-		{
-			name: "Stalling on invalid oci repository URL",
-			beforeFunc: func(repository *sourcev1.HelmRepository) {
-				repository.Spec.URL = strings.Replace(repository.Spec.URL, "http", "oci", 1)
-			},
-			assertFunc: func(g *WithT, obj *sourcev1.HelmChart) {
-				key := client.ObjectKey{Name: obj.Name, Namespace: obj.Namespace}
-				// Wait for HelmChart to be Ready
-				g.Eventually(func() bool {
-					if err := testEnv.Get(ctx, key, obj); err != nil {
-						return false
-					}
-					if !conditions.IsTrue(obj, sourcev1.FetchFailedCondition) {
-						return false
-					}
-					// observedGeneration is -1 because we have no successful reconciliation
-					return obj.Status.ObservedGeneration == -1
-				}, timeout).Should(BeTrue())
-
-				// Check if the object status is valid.
-				condns := &status.Conditions{NegativePolarity: helmChartReadyCondition.NegativePolarity}
-				checker := status.NewChecker(testEnv.Client, condns)
-				checker.CheckErr(ctx, obj)
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			g := NewWithT(t)
-
-			server := testserver.NewHTTPServer(serverFactory.Root())
-			server.Start()
-			defer server.Stop()
-
-			ns, err := testEnv.CreateNamespace(ctx, "helmchart")
-			g.Expect(err).ToNot(HaveOccurred())
-			defer func() { g.Expect(testEnv.Delete(ctx, ns)).To(Succeed()) }()
-
-			repository := sourcev1.HelmRepository{
-				ObjectMeta: metav1.ObjectMeta{
-					GenerateName: "helmrepository-",
-					Namespace:    ns.Name,
-				},
-				Spec: sourcev1.HelmRepositorySpec{
-					URL: server.URL(),
-				},
-			}
-
-			if tt.beforeFunc != nil {
-				tt.beforeFunc(&repository)
-			}
-
-			g.Expect(testEnv.CreateAndWait(ctx, &repository)).To(Succeed())
-
-			obj := sourcev1.HelmChart{
-				ObjectMeta: metav1.ObjectMeta{
-					GenerateName: "helmrepository-reconcile-",
-					Namespace:    ns.Name,
-				},
-				Spec: sourcev1.HelmChartSpec{
-					Chart:   chartName,
-					Version: chartVersion,
-					SourceRef: sourcev1.LocalHelmChartSourceReference{
-						Kind: sourcev1.HelmRepositoryKind,
-						Name: repository.Name,
-					},
-				},
-			}
-			g.Expect(testEnv.Create(ctx, &obj)).To(Succeed())
-
-			if tt.assertFunc != nil {
-				tt.assertFunc(g, &obj)
 			}
 		})
 	}
