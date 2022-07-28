@@ -9,6 +9,9 @@ LIBGIT2_TAG ?= v0.2.0
 # Allows for defining additional Go test args, e.g. '-tags integration'.
 GO_TEST_ARGS ?= -race
 
+# Allows for filtering tests based on the specified prefix
+GO_TEST_PREFIX ?=
+
 # Allows for defining additional Docker buildx arguments,
 # e.g. '--push'.
 BUILD_ARGS ?=
@@ -69,13 +72,22 @@ build: check-deps $(LIBGIT2) ## Build manager binary
 	go build $(GO_STATIC_FLAGS) -o $(BUILD_DIR)/bin/manager main.go
 
 KUBEBUILDER_ASSETS?="$(shell $(ENVTEST) --arch=$(ENVTEST_ARCH) use -i $(ENVTEST_KUBERNETES_VERSION) --bin-dir=$(ENVTEST_ASSETS_DIR) -p path)"
-test: $(LIBGIT2) install-envtest test-api check-deps ## Run tests
+test: $(LIBGIT2) install-envtest test-api check-deps ## Run all tests
 	HTTPS_PROXY="" HTTP_PROXY="" \
 	KUBEBUILDER_ASSETS=$(KUBEBUILDER_ASSETS) \
 	GIT_CONFIG_GLOBAL=/dev/null \
 	go test $(GO_STATIC_FLAGS) \
 	  ./... \
 	  $(GO_TEST_ARGS) \
+	  -coverprofile cover.out
+
+test-ctrl: $(LIBGIT2) install-envtest test-api check-deps ## Run controller tests
+	HTTPS_PROXY="" HTTP_PROXY="" \
+	KUBEBUILDER_ASSETS=$(KUBEBUILDER_ASSETS) \
+	GIT_CONFIG_GLOBAL=/dev/null \
+	go test $(GO_STATIC_FLAGS) \
+	  -run "^$(GO_TEST_PREFIX).*" \
+	  -v ./controllers \
 	  -coverprofile cover.out
 
 check-deps:
