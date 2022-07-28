@@ -65,9 +65,11 @@ import (
 )
 
 const (
-	ClientCert = "certFile"
-	ClientKey  = "keyFile"
-	CACert     = "caFile"
+	ClientCert     = "certFile"
+	ClientKey      = "keyFile"
+	CACert         = "caFile"
+	OCISourceKey   = "org.opencontainers.image.source"
+	OCIRevisionKey = "org.opencontainers.image.revision"
 )
 
 // ociRepositoryReadyCondition contains the information required to summarize a
@@ -828,6 +830,20 @@ func (r *OCIRepositoryReconciler) notify(ctx context.Context,
 		}
 
 		message := fmt.Sprintf("stored artifact with digest '%s' from '%s'", newObj.Status.Artifact.Revision, newObj.Spec.URL)
+
+		// enrich message with upstream annotations if found
+		if info := newObj.GetArtifact().Metadata; info != nil {
+			var source, revision string
+			if val, ok := info[OCISourceKey]; ok {
+				source = val
+			}
+			if val, ok := info[OCIRevisionKey]; ok {
+				revision = val
+			}
+			if source != "" && revision != "" {
+				message = fmt.Sprintf("%s, origin source '%s', origin revision '%s'", message, source, revision)
+			}
+		}
 
 		// Notify on new artifact and failure recovery.
 		if oldChecksum != newObj.GetArtifact().Checksum {

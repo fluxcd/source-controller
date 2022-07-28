@@ -172,8 +172,8 @@ func TestOCIRepository_Reconcile(t *testing.T) {
 			g.Expect(obj.Status.Artifact.Revision).To(Equal(tt.digest))
 
 			// Check if the metadata matches the expected annotations
-			g.Expect(obj.Status.Artifact.Metadata["org.opencontainers.image.source"]).To(ContainSubstring("podinfo"))
-			g.Expect(obj.Status.Artifact.Metadata["org.opencontainers.image.revision"]).To(ContainSubstring(tt.tag))
+			g.Expect(obj.Status.Artifact.Metadata[OCISourceKey]).To(ContainSubstring("podinfo"))
+			g.Expect(obj.Status.Artifact.Metadata[OCIRevisionKey]).To(ContainSubstring(tt.tag))
 
 			// Check if the artifact storage path matches the expected file path
 			localPath := testStorage.LocalPath(*obj.Status.Artifact)
@@ -534,7 +534,6 @@ func TestOCIRepository_reconcileSource_authStrategy(t *testing.T) {
 			}
 			g.Expect(got).To(Equal(tt.want))
 			g.Expect(obj.Status.Conditions).To(conditions.MatchConditions(tt.assertConditions))
-
 		})
 	}
 }
@@ -1263,9 +1262,16 @@ func TestOCIRepositoryReconciler_notify(t *testing.T) {
 			resErr: nil,
 			newObjBeforeFunc: func(obj *sourcev1.OCIRepository) {
 				obj.Spec.URL = "oci://newurl.io"
-				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Checksum: "yyy"}
+				obj.Status.Artifact = &sourcev1.Artifact{
+					Revision: "xxx",
+					Checksum: "yyy",
+					Metadata: map[string]string{
+						OCISourceKey:   "https://github.com/stefanprodan/podinfo",
+						OCIRevisionKey: "6.1.8/b3b00fe35424a45d373bf4c7214178bc36fd7872",
+					},
+				}
 			},
-			wantEvent: "Normal NewArtifact stored artifact with digest 'xxx' from 'oci://newurl.io'",
+			wantEvent: "Normal NewArtifact stored artifact with digest 'xxx' from 'oci://newurl.io', origin source 'https://github.com/stefanprodan/podinfo', origin revision '6.1.8/b3b00fe35424a45d373bf4c7214178bc36fd7872'",
 		},
 		{
 			name:   "recovery from failure",
@@ -1432,8 +1438,8 @@ func pushMultiplePodinfoImages(serverURL string, versions ...string) (map[string
 
 func setPodinfoImageAnnotations(img gcrv1.Image, tag string) gcrv1.Image {
 	metadata := map[string]string{
-		"org.opencontainers.image.source":   "https://github.com/stefanprodan/podinfo",
-		"org.opencontainers.image.revision": fmt.Sprintf("%s/SHA", tag),
+		OCISourceKey:   "https://github.com/stefanprodan/podinfo",
+		OCIRevisionKey: fmt.Sprintf("%s/SHA", tag),
 	}
 	return mutate.Annotations(img, metadata).(gcrv1.Image)
 }

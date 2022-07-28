@@ -31,7 +31,7 @@ In the above example:
   by the `.spec.interval` field.
 - It pulls the `latest` tag of the `ghcr.io/stefanprodan/manifests/podinfo`
   repository, indicated by the `.spec.ref.tag` and `.spec.url` fields.
-- The specified tag and resolved digest are used as the Artifact
+- The resolved SHA256 digest is used as the Artifact
   revision, reported in-cluster in the `.status.artifact.revision` field.
 - When the current OCIRepository digest differs from the latest fetched
   digest, a new Artifact is archived.
@@ -49,7 +49,7 @@ You can run this example by saving the manifest into `ocirepository.yaml`.
 
    ```console
    NAME      URL                                            AGE   READY   STATUS                                                                        
-   podinfo   oci://ghcr.io/stefanprodan/manifests/podinfo   5s    True    stored artifact for revision '3b6cdcc7adcc9a84d3214ee1c029543789d90b5ae69debe9efa3f66e982875de'
+   podinfo   oci://ghcr.io/stefanprodan/manifests/podinfo   5s    True    stored artifact with digest '3b6cdcc7adcc9a84d3214ee1c029543789d90b5ae69debe9efa3f66e982875de'
    ```
 
 3. Run `kubectl describe ocirepository podinfo` to see the [Artifact](#artifact)
@@ -63,7 +63,7 @@ You can run this example by saving the manifest into `ocirepository.yaml`.
        Last Update Time:  2022-06-14T11:23:36Z
        Path:              ocirepository/default/podinfo/3b6cdcc7adcc9a84d3214ee1c029543789d90b5ae69debe9efa3f66e982875de.tar.gz
        Revision:          3b6cdcc7adcc9a84d3214ee1c029543789d90b5ae69debe9efa3f66e982875de
-       URL:               http://source-controller.flux-system.svc.cluster.local./ocirepository/oci/podinfo/3b6cdcc7adcc9a84d3214ee1c029543789d90b5ae69debe9efa3f66e982875de.tar.g
+       URL:               http://source-controller.flux-system.svc.cluster.local./ocirepository/oci/podinfo/3b6cdcc7adcc9a84d3214ee1c029543789d90b5ae69debe9efa3f66e982875de.tar.gz
      Conditions:
        Last Transition Time:  2022-06-14T11:23:36Z
        Message:               stored artifact for digest '3b6cdcc7adcc9a84d3214ee1c029543789d90b5ae69debe9efa3f66e982875de'

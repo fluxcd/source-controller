@@ -141,9 +141,6 @@ type OCIRepositoryStatus struct {
 }
 
 const (
-	// OCIOperationSucceedReason signals that a Git operation (e.g. pull) succeeded.
-	OCIOperationSucceedReason string = "OCIOperationSucceeded"
-
 	// OCIOperationFailedReason signals that an OCI operation (e.g. pull) failed.
 	OCIOperationFailedReason string = "OCIOperationFailed"
 )
