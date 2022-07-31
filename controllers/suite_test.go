@@ -45,6 +45,7 @@ import (
 	dockerRegistry "github.com/distribution/distribution/v3/registry"
 	_ "github.com/distribution/distribution/v3/registry/auth/htpasswd"
 	_ "github.com/distribution/distribution/v3/registry/storage/driver/inmemory"
+	git2go "github.com/libgit2/git2go/v33"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
 	"github.com/fluxcd/source-controller/internal/cache"
@@ -179,6 +180,8 @@ func setupRegistryServer(ctx context.Context) (*registryClientTestServer, error)
 }
 
 func TestMain(m *testing.M) {
+	mustHaveNoThreadSupport()
+
 	initTestTLS()
 
 	utilruntime.Must(sourcev1.AddToScheme(scheme.Scheme))
@@ -332,4 +335,23 @@ func randStringRunes(n int) string {
 
 func int64p(i int64) *int64 {
 	return &i
+}
+
+// This provides a regression assurance for image-automation-controller/#339.
+// Validates that:
+// - libgit2 was built with no support for threads.
+// - git2go accepts libgit2 built with no support for threads.
+//
+// The logic below does the validation of the former, whilst
+// referring to git2go forces its init() execution, which is
+// where any validation to that effect resides.
+//
+// git2go does not support threadless libgit2 by default,
+// hence a fork is being used which disables such validation.
+//
+// TODO: extract logic into pkg.
+func mustHaveNoThreadSupport() {
+	if git2go.Features()&git2go.FeatureThreads != 0 {
+		panic("libgit2 must not be build with thread support")
+	}
 }

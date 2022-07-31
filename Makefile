@@ -4,7 +4,7 @@ TAG ?= latest
 
 # Base image used to build the Go binary
 LIBGIT2_IMG ?= ghcr.io/fluxcd/golang-with-libgit2-only
-LIBGIT2_TAG ?= v0.1.4
+LIBGIT2_TAG ?= v0.2.0
 
 # Allows for defining additional Go test args, e.g. '-tags integration'.
 GO_TEST_ARGS ?= -race
@@ -33,23 +33,11 @@ ENVTEST_BIN_VERSION ?= 1.19.2
 LIBGIT2_PATH := $(BUILD_DIR)/libgit2/$(LIBGIT2_TAG)
 LIBGIT2_LIB_PATH := $(LIBGIT2_PATH)/lib
 LIBGIT2 := $(LIBGIT2_LIB_PATH)/libgit2.a
-MUSL-CC =
 
 export CGO_ENABLED=1
 export PKG_CONFIG_PATH=$(LIBGIT2_LIB_PATH)/pkgconfig
 export CGO_LDFLAGS=$(shell PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) pkg-config --libs --static --cflags libgit2 2>/dev/null)
 GO_STATIC_FLAGS=-ldflags "-s -w" -tags 'netgo,osusergo,static_build$(addprefix ,,$(GO_TAGS))'
-
-ifeq ($(shell uname -s),Linux)
-ifneq ($(shell uname -m),x86_64)
-	MUSL-PREFIX=$(BUILD_DIR)/musl/$(shell uname -m)-linux-musl-native/bin/$(shell uname -m)-linux-musl
-	MUSL-CC=$(MUSL-PREFIX)-gcc
-	export CC=$(MUSL-PREFIX)-gcc
-	export CXX=$(MUSL-PREFIX)-g++
-	export AR=$(MUSL-PREFIX)-ar
-	GO_STATIC_FLAGS=-ldflags "-s -w -extldflags \"-static\"" -tags 'netgo,osusergo,static_build$(addprefix ,,$(GO_TAGS))'
-endif
-endif
 
 # API (doc) generation utilities
 CONTROLLER_GEN_VERSION ?= v0.7.0
@@ -179,15 +167,11 @@ install-envtest: setup-envtest ## Download envtest binaries locally.
 libgit2: $(LIBGIT2)  ## Detect or download libgit2 library
 
 COSIGN = $(GOBIN)/cosign
-$(LIBGIT2): $(MUSL-CC)
+$(LIBGIT2):
 	$(call go-install-tool,$(COSIGN),github.com/sigstore/cosign/cmd/cosign@latest)
 
 	IMG=$(LIBGIT2_IMG) TAG=$(LIBGIT2_TAG) PATH=$(PATH):$(GOBIN) ./hack/install-libraries.sh
 
-$(MUSL-CC):
-ifneq ($(shell uname -s),Darwin)
-	./hack/download-musl.sh
-endif
 
 .PHONY: help
 help:  ## Display this help menu
