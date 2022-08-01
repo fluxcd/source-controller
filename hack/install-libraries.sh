@@ -79,7 +79,7 @@ fix_pkgconfigs(){
     # Update the prefix paths included in the .pc files.
     if [[ $OSTYPE == 'darwin'* ]]; then
         # https://github.com/fluxcd/golang-with-libgit2/blob/v0.1.4/.github/workflows/release.yaml#L158
-        INSTALLED_DIR="/Users/runner/work/golang-with-libgit2/golang-with-libgit2/build/libgit2-darwin-amd64"
+        INSTALLED_DIR="/Users/runner/work/golang-with-libgit2/golang-with-libgit2/build/darwin-libgit2-only"
 
         # This will make it easier to update to the location in which they will be used.
         # sed has a sight different behaviour in MacOS
@@ -137,7 +137,7 @@ install_libraries(){
         fi
     fi
 
-    FILE_NAME="linux-x86_64-libgit2-only.tar.gz"
+    FILE_NAME="linux-$(uname -m)-libgit2-only.tar.gz"
     DIR="linux-libgit2-only"
     if [[ $OSTYPE == 'darwin'* ]]; then
         FILE_NAME="darwin-libgit2-only.tar.gz"
