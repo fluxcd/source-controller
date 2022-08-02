@@ -968,6 +968,19 @@ defaults to the latest tag.</p>
 </tr>
 <tr>
 <td>
+<code>provider</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>The provider used for authentication, can be &lsquo;aws&rsquo;, &lsquo;azure&rsquo;, &lsquo;gcp&rsquo; or &lsquo;generic&rsquo;.
+When not specified, defaults to &lsquo;generic&rsquo;.</p>
+</td>
+</tr>
+<tr>
+<td>
 <code>secretRef</code><br>
 <em>
 <a href="https://godoc.org/github.com/fluxcd/pkg/apis/meta#LocalObjectReference">
@@ -2617,6 +2630,19 @@ OCIRepositoryRef
 <em>(Optional)</em>
 <p>The OCI reference to pull and monitor for changes,
 defaults to the latest tag.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>provider</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>The provider used for authentication, can be &lsquo;aws&rsquo;, &lsquo;azure&rsquo;, &lsquo;gcp&rsquo; or &lsquo;generic&rsquo;.
+When not specified, defaults to &lsquo;generic&rsquo;.</p>
 </td>
 </tr>
 <tr>

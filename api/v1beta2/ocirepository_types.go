@@ -30,13 +30,28 @@ const (
 
 	// OCIRepositoryPrefix is the prefix used for OCIRepository URLs.
 	OCIRepositoryPrefix = "oci://"
+
+	// GenericOCIProvider provides support for authentication using static credentials
+	// for any OCI compatible API such as Docker Registry, GitHub Container Registry,
+	// Docker Hub, Quay, etc.
+	GenericOCIProvider string = "generic"
+
+	// AmazonOCIProvider provides support for OCI authentication using AWS IRSA.
+	AmazonOCIProvider string = "aws"
+
+	// GoogleOCIProvider provides support for OCI authentication using GCP workload identity.
+	GoogleOCIProvider string = "gcp"
+
+	// AzureOCIProvider provides support for OCI authentication using a Azure Service Principal,
+	// Managed Identity or Shared Key.
+	AzureOCIProvider string = "azure"
 )
 
 // OCIRepositorySpec defines the desired state of OCIRepository
 type OCIRepositorySpec struct {
 	// URL is a reference to an OCI artifact repository hosted
 	// on a remote container registry.
-	// +kubebuilder:validation:Pattern="^oci://"
+	// +kubebuilder:validation:Pattern="^oci://.*$"
 	// +required
 	URL string `json:"url"`
 
@@ -44,6 +59,13 @@ type OCIRepositorySpec struct {
 	// defaults to the latest tag.
 	// +optional
 	Reference *OCIRepositoryRef `json:"ref,omitempty"`
+
+	// The provider used for authentication, can be 'aws', 'azure', 'gcp' or 'generic'.
+	// When not specified, defaults to 'generic'.
+	// +kubebuilder:validation:Enum=generic;aws;azure;gcp
+	// +kubebuilder:default:=generic
+	// +optional
+	Provider string `json:"provider,omitempty"`
 
 	// SecretRef contains the secret name containing the registry login
 	// credentials to resolve image metadata.

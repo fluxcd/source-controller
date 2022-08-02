@@ -75,6 +75,16 @@ spec:
               interval:
                 description: The interval at which to check for image updates.
                 type: string
+              provider:
+                default: generic
+                description: The provider used for authentication, can be 'aws', 'azure',
+                  'gcp' or 'generic'. When not specified, defaults to 'generic'.
+                enum:
+                - generic
+                - aws
+                - azure
+                - gcp
+                type: string
               ref:
                 description: The OCI reference to pull and monitor for changes, defaults
                   to the latest tag.
@@ -119,7 +129,7 @@ spec:
               url:
                 description: URL is a reference to an OCI artifact repository hosted
                   on a remote container registry.
-                pattern: ^oci://
+                pattern: ^oci://.*$
                 type: string
             required:
             - interval
