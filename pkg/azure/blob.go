@@ -28,6 +28,7 @@ import (
 	"strings"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/cloud"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	_ "github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
@@ -56,7 +57,7 @@ const (
 
 // BlobClient is a minimal Azure Blob client for fetching objects.
 type BlobClient struct {
-	azblob.ServiceClient
+	*azblob.ServiceClient
 }
 
 // NewClient creates a new Azure Blob storage client.
@@ -162,8 +163,11 @@ func ValidateSecret(secret *corev1.Secret) error {
 // BucketExists returns if an object storage bucket with the provided name
 // exists, or returns a (client) error.
 func (c *BlobClient) BucketExists(ctx context.Context, bucketName string) (bool, error) {
-	container := c.ServiceClient.NewContainerClient(bucketName)
-	_, err := container.GetProperties(ctx, nil)
+	container, err := c.ServiceClient.NewContainerClient(bucketName)
+	if err != nil {
+		return false, err
+	}
+	_, err = container.GetProperties(ctx, nil)
 	if err != nil {
 		var stgErr *azblob.StorageError
 		if errors.As(err, &stgErr) {
@@ -181,8 +185,14 @@ func (c *BlobClient) BucketExists(ctx context.Context, bucketName string) (bool,
 // writes it to targetPath.
 // It returns the etag of the successfully fetched file, or any error.
 func (c *BlobClient) FGetObject(ctx context.Context, bucketName, objectName, localPath string) (string, error) {
-	container := c.ServiceClient.NewContainerClient(bucketName)
-	blob := container.NewBlobClient(objectName)
+	container, err := c.ServiceClient.NewContainerClient(bucketName)
+	if err != nil {
+		return "", err
+	}
+	blob, err := container.NewBlobClient(objectName)
+	if err != nil {
+		return "", err
+	}
 
 	// Verify if destination already exists.
 	dirStatus, err := os.Stat(localPath)
@@ -245,13 +255,15 @@ func (c *BlobClient) FGetObject(ctx context.Context, bucketName, objectName, loc
 // If the underlying client or the visit callback returns an error,
 // it returns early.
 func (c *BlobClient) VisitObjects(ctx context.Context, bucketName string, visit func(path, etag string) error) error {
-	container := c.ServiceClient.NewContainerClient(bucketName)
+	container, err := c.ServiceClient.NewContainerClient(bucketName)
+	if err != nil {
+		return err
+	}
 
-	items := container.ListBlobsFlat(&azblob.ContainerListBlobFlatSegmentOptions{})
+	items := container.ListBlobsFlat(&azblob.ContainerListBlobsFlatOptions{})
 	for items.NextPage(ctx) {
 		resp := items.PageResponse()
-
-		for _, blob := range resp.ContainerListBlobFlatSegmentResult.Segment.BlobItems {
+		for _, blob := range resp.Segment.BlobItems {
 			if err := visit(*blob.Name, fmt.Sprintf("%x", *blob.Properties.Etag)); err != nil {
 				err = fmt.Errorf("listing objects from bucket '%s' failed: %w", bucketName, err)
 				return err
@@ -302,7 +314,7 @@ func tokenCredentialFromSecret(secret *corev1.Secret) (azcore.TokenCredential, e
 		if clientSecret, hasClientSecret := secret.Data[clientSecretField]; hasClientSecret && len(clientSecret) > 0 {
 			opts := &azidentity.ClientSecretCredentialOptions{}
 			if authorityHost, hasAuthorityHost := secret.Data[authorityHostField]; hasAuthorityHost {
-				opts.AuthorityHost = azidentity.AuthorityHost(authorityHost)
+				opts.Cloud = cloud.Configuration{ActiveDirectoryAuthorityHost: string(authorityHost)}
 			}
 			return azidentity.NewClientSecretCredential(string(tenantID), string(clientID), string(clientSecret), opts)
 		}
@@ -313,7 +325,7 @@ func tokenCredentialFromSecret(secret *corev1.Secret) (azcore.TokenCredential, e
 			}
 			opts := &azidentity.ClientCertificateCredentialOptions{}
 			if authorityHost, hasAuthorityHost := secret.Data[authorityHostField]; hasAuthorityHost {
-				opts.AuthorityHost = azidentity.AuthorityHost(authorityHost)
+				opts.Cloud = cloud.Configuration{ActiveDirectoryAuthorityHost: string(authorityHost)}
 			}
 			if v, sendChain := secret.Data[clientCertificateSendChainField]; sendChain {
 				opts.SendCertificateChain = string(v) == "1" || strings.ToLower(string(v)) == "true"
@@ -360,7 +372,7 @@ func chainCredentialWithSecret(secret *corev1.Secret) (azcore.TokenCredential, e
 	credOpts := &azidentity.EnvironmentCredentialOptions{}
 	if secret != nil {
 		if authorityHost, hasAuthorityHost := secret.Data[authorityHostField]; hasAuthorityHost {
-			credOpts.AuthorityHost = azidentity.AuthorityHost(authorityHost)
+			credOpts.Cloud = cloud.Configuration{ActiveDirectoryAuthorityHost: string(authorityHost)}
 		}
 	}
 
