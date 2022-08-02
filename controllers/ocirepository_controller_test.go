@@ -36,11 +36,9 @@ import (
 	"testing"
 	"time"
 
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/client-go/tools/record"
-
 	"github.com/darkowlzz/controller-check/status"
 	"github.com/fluxcd/pkg/apis/meta"
+	"github.com/fluxcd/pkg/oci"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	"github.com/fluxcd/pkg/runtime/patch"
 	"github.com/fluxcd/pkg/untar"
@@ -54,8 +52,10 @@ import (
 	gcrv1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/mutate"
 	. "github.com/onsi/gomega"
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/tools/record"
 	kstatus "sigs.k8s.io/cli-utils/pkg/kstatus/status"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	fakeclient "sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -172,8 +172,8 @@ func TestOCIRepository_Reconcile(t *testing.T) {
 			g.Expect(obj.Status.Artifact.Revision).To(Equal(tt.digest))
 
 			// Check if the metadata matches the expected annotations
-			g.Expect(obj.Status.Artifact.Metadata[OCISourceKey]).To(ContainSubstring("podinfo"))
-			g.Expect(obj.Status.Artifact.Metadata[OCIRevisionKey]).To(ContainSubstring(tt.tag))
+			g.Expect(obj.Status.Artifact.Metadata[oci.SourceAnnotation]).To(ContainSubstring("podinfo"))
+			g.Expect(obj.Status.Artifact.Metadata[oci.RevisionAnnotation]).To(ContainSubstring(tt.tag))
 
 			// Check if the artifact storage path matches the expected file path
 			localPath := testStorage.LocalPath(*obj.Status.Artifact)
@@ -516,7 +516,9 @@ func TestOCIRepository_reconcileSource_authStrategy(t *testing.T) {
 				Storage:       testStorage,
 			}
 
-			repoURL, err := r.getArtifactURL(ctx, obj, nil, nil)
+			opts := r.craneOptions(ctx)
+			opts = append(opts, crane.WithAuthFromKeychain(authn.DefaultKeychain))
+			repoURL, err := r.getArtifactURL(obj, opts)
 			g.Expect(err).To(BeNil())
 
 			assertConditions := tt.assertConditions
@@ -566,9 +568,9 @@ func TestOCIRepository_CertSecret(t *testing.T) {
 
 	tlsSecretClientCert := corev1.Secret{
 		StringData: map[string]string{
-			CACert:     string(rootCertPEM),
-			ClientCert: string(clientCertPEM),
-			ClientKey:  string(clientKeyPEM),
+			oci.CACert:     string(rootCertPEM),
+			oci.ClientCert: string(clientCertPEM),
+			oci.ClientKey:  string(clientKeyPEM),
 		},
 	}
 
@@ -601,9 +603,9 @@ func TestOCIRepository_CertSecret(t *testing.T) {
 			digest: pi.digest,
 			certSecret: &corev1.Secret{
 				StringData: map[string]string{
-					CACert:     string(rootCertPEM),
-					ClientCert: string(clientCertPEM),
-					ClientKey:  string("invalid-key"),
+					oci.CACert:     string(rootCertPEM),
+					oci.ClientCert: string(clientCertPEM),
+					oci.ClientKey:  string("invalid-key"),
 				},
 			},
 			expectreadyconition:   false,
@@ -1049,7 +1051,9 @@ func TestOCIRepository_getArtifactURL(t *testing.T) {
 				obj.Spec.Reference = tt.reference
 			}
 
-			got, err := r.getArtifactURL(ctx, obj, authn.DefaultKeychain, nil)
+			opts := r.craneOptions(ctx)
+			opts = append(opts, crane.WithAuthFromKeychain(authn.DefaultKeychain))
+			got, err := r.getArtifactURL(obj, opts)
 			if tt.wantErr {
 				g.Expect(err).To(HaveOccurred())
 				return
@@ -1266,8 +1270,8 @@ func TestOCIRepositoryReconciler_notify(t *testing.T) {
 					Revision: "xxx",
 					Checksum: "yyy",
 					Metadata: map[string]string{
-						OCISourceKey:   "https://github.com/stefanprodan/podinfo",
-						OCIRevisionKey: "6.1.8/b3b00fe35424a45d373bf4c7214178bc36fd7872",
+						oci.SourceAnnotation:   "https://github.com/stefanprodan/podinfo",
+						oci.RevisionAnnotation: "6.1.8/b3b00fe35424a45d373bf4c7214178bc36fd7872",
 					},
 				}
 			},
@@ -1438,8 +1442,8 @@ func pushMultiplePodinfoImages(serverURL string, versions ...string) (map[string
 
 func setPodinfoImageAnnotations(img gcrv1.Image, tag string) gcrv1.Image {
 	metadata := map[string]string{
-		OCISourceKey:   "https://github.com/stefanprodan/podinfo",
-		OCIRevisionKey: fmt.Sprintf("%s/SHA", tag),
+		oci.SourceAnnotation:   "https://github.com/stefanprodan/podinfo",
+		oci.RevisionAnnotation: fmt.Sprintf("%s/SHA", tag),
 	}
 	return mutate.Annotations(img, metadata).(gcrv1.Image)
 }

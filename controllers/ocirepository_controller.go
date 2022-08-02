@@ -50,6 +50,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/ratelimiter"
 
 	"github.com/fluxcd/pkg/apis/meta"
+	"github.com/fluxcd/pkg/oci"
+	"github.com/fluxcd/pkg/oci/auth/login"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	helper "github.com/fluxcd/pkg/runtime/controller"
 	"github.com/fluxcd/pkg/runtime/events"
@@ -62,14 +64,6 @@ import (
 	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
 	"github.com/fluxcd/source-controller/internal/reconcile/summarize"
 	"github.com/fluxcd/source-controller/internal/util"
-)
-
-const (
-	ClientCert     = "certFile"
-	ClientKey      = "keyFile"
-	CACert         = "caFile"
-	OCISourceKey   = "org.opencontainers.image.source"
-	OCIRevisionKey = "org.opencontainers.image.revision"
 )
 
 // ociRepositoryReadyCondition contains the information required to summarize a
@@ -297,7 +291,9 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, obj *sour
 	ctxTimeout, cancel := context.WithTimeout(ctx, obj.Spec.Timeout.Duration)
 	defer cancel()
 
-	// Generate the registry credential keychain
+	options := r.craneOptions(ctxTimeout)
+
+	// Generate the registry credential keychain either from static credentials or using cloud OIDC
 	keychain, err := r.keychain(ctx, obj)
 	if err != nil {
 		e := serror.NewGeneric(
@@ -306,6 +302,22 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, obj *sour
 		)
 		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
 		return sreconcile.ResultEmpty, e
+	}
+	options = append(options, crane.WithAuthFromKeychain(keychain))
+
+	if obj.Spec.Provider != sourcev1.GenericOCIProvider {
+		auth, authErr := r.oidcAuth(ctxTimeout, obj)
+		if authErr != nil && !errors.Is(authErr, oci.ErrUnconfiguredProvider) {
+			e := serror.NewGeneric(
+				fmt.Errorf("failed to get credential from %s: %w", obj.Spec.Provider, authErr),
+				sourcev1.AuthenticationFailedReason,
+			)
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
+			return sreconcile.ResultEmpty, e
+		}
+		if auth != nil {
+			options = append(options, crane.WithAuth(auth))
+		}
 	}
 
 	// Generate the transport for remote operations
@@ -318,9 +330,12 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, obj *sour
 		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
 		return sreconcile.ResultEmpty, e
 	}
+	if transport != nil {
+		options = append(options, crane.WithTransport(transport))
+	}
 
 	// Determine which artifact revision to pull
-	url, err := r.getArtifactURL(ctxTimeout, obj, keychain, transport)
+	url, err := r.getArtifactURL(obj, options)
 	if err != nil {
 		e := serror.NewGeneric(
 			fmt.Errorf("failed to determine the artifact address for '%s': %w", obj.Spec.URL, err),
@@ -330,7 +345,7 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, obj *sour
 	}
 
 	// Pull artifact from the remote container registry
-	img, err := crane.Pull(url, r.craneOptions(ctxTimeout, keychain, transport)...)
+	img, err := crane.Pull(url, options...)
 	if err != nil {
 		e := serror.NewGeneric(
 			fmt.Errorf("failed to pull artifact from '%s': %w", obj.Spec.URL, err),
@@ -437,12 +452,16 @@ func (r *OCIRepositoryReconciler) parseRepositoryURL(obj *sourcev1.OCIRepository
 		return "", err
 	}
 
+	imageName := strings.TrimPrefix(url, ref.Context().RegistryStr())
+	if s := strings.Split(imageName, ":"); len(s) > 1 {
+		return "", fmt.Errorf("URL must not contain a tag; remove ':%s'", s[1])
+	}
+
 	return ref.Context().Name(), nil
 }
 
 // getArtifactURL determines which tag or digest should be used and returns the OCI artifact FQN.
-func (r *OCIRepositoryReconciler) getArtifactURL(ctx context.Context,
-	obj *sourcev1.OCIRepository, keychain authn.Keychain, transport http.RoundTripper) (string, error) {
+func (r *OCIRepositoryReconciler) getArtifactURL(obj *sourcev1.OCIRepository, options []crane.Option) (string, error) {
 	url, err := r.parseRepositoryURL(obj)
 	if err != nil {
 		return "", err
@@ -454,7 +473,7 @@ func (r *OCIRepositoryReconciler) getArtifactURL(ctx context.Context,
 		}
 
 		if obj.Spec.Reference.SemVer != "" {
-			tag, err := r.getTagBySemver(ctx, url, obj.Spec.Reference.SemVer, keychain, transport)
+			tag, err := r.getTagBySemver(url, obj.Spec.Reference.SemVer, options)
 			if err != nil {
 				return "", err
 			}
@@ -471,9 +490,8 @@ func (r *OCIRepositoryReconciler) getArtifactURL(ctx context.Context,
 
 // getTagBySemver call the remote container registry, fetches all the tags from the repository,
 // and returns the latest tag according to the semver expression.
-func (r *OCIRepositoryReconciler) getTagBySemver(ctx context.Context,
-	url, exp string, keychain authn.Keychain, transport http.RoundTripper) (string, error) {
-	tags, err := crane.ListTags(url, r.craneOptions(ctx, keychain, transport)...)
+func (r *OCIRepositoryReconciler) getTagBySemver(url, exp string, options []crane.Option) (string, error) {
+	tags, err := crane.ListTags(url, options...)
 	if err != nil {
 		return "", err
 	}
@@ -567,20 +585,20 @@ func (r *OCIRepositoryReconciler) transport(ctx context.Context, obj *sourcev1.O
 	transport := remote.DefaultTransport.Clone()
 	tlsConfig := transport.TLSClientConfig
 
-	if clientCert, ok := certSecret.Data[ClientCert]; ok {
+	if clientCert, ok := certSecret.Data[oci.ClientCert]; ok {
 		// parse and set client cert and secret
-		if clientKey, ok := certSecret.Data[ClientKey]; ok {
+		if clientKey, ok := certSecret.Data[oci.ClientKey]; ok {
 			cert, err := tls.X509KeyPair(clientCert, clientKey)
 			if err != nil {
 				return nil, err
 			}
 			tlsConfig.Certificates = append(tlsConfig.Certificates, cert)
 		} else {
-			return nil, fmt.Errorf("'%s' found in secret, but no %s", ClientCert, ClientKey)
+			return nil, fmt.Errorf("'%s' found in secret, but no %s", oci.ClientCert, oci.ClientKey)
 		}
 	}
 
-	if caCert, ok := certSecret.Data[CACert]; ok {
+	if caCert, ok := certSecret.Data[oci.CACert]; ok {
 		syscerts, err := x509.SystemCertPool()
 		if err != nil {
 			return nil, err
@@ -592,20 +610,34 @@ func (r *OCIRepositoryReconciler) transport(ctx context.Context, obj *sourcev1.O
 
 }
 
+// oidcAuth generates the OIDC credential authenticator based on the specified cloud provider.
+func (r *OCIRepositoryReconciler) oidcAuth(ctx context.Context, obj *sourcev1.OCIRepository) (authn.Authenticator, error) {
+	url := strings.TrimPrefix(obj.Spec.URL, sourcev1.OCIRepositoryPrefix)
+	ref, err := name.ParseReference(url)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse URL '%s': %w", obj.Spec.URL, err)
+	}
+
+	opts := login.ProviderOptions{}
+	switch obj.Spec.Provider {
+	case sourcev1.AmazonOCIProvider:
+		opts.AwsAutoLogin = true
+	case sourcev1.AzureOCIProvider:
+		opts.AzureAutoLogin = true
+	case sourcev1.GoogleOCIProvider:
+		opts.GcpAutoLogin = true
+	}
+
+	return login.NewManager().Login(ctx, url, ref, opts)
+}
+
 // craneOptions sets the auth headers, timeout and user agent
 // for all operations against remote container registries.
-func (r *OCIRepositoryReconciler) craneOptions(ctx context.Context,
-	keychain authn.Keychain, transport http.RoundTripper) []crane.Option {
+func (r *OCIRepositoryReconciler) craneOptions(ctx context.Context) []crane.Option {
 	options := []crane.Option{
 		crane.WithContext(ctx),
-		crane.WithUserAgent("flux/v2"),
-		crane.WithAuthFromKeychain(keychain),
+		crane.WithUserAgent(oci.UserAgent),
 	}
-
-	if transport != nil {
-		options = append(options, crane.WithTransport(transport))
-	}
-
 	return options
 }
 
@@ -834,10 +866,10 @@ func (r *OCIRepositoryReconciler) notify(ctx context.Context,
 		// enrich message with upstream annotations if found
 		if info := newObj.GetArtifact().Metadata; info != nil {
 			var source, revision string
-			if val, ok := info[OCISourceKey]; ok {
+			if val, ok := info[oci.SourceAnnotation]; ok {
 				source = val
 			}
-			if val, ok := info[OCIRevisionKey]; ok {
+			if val, ok := info[oci.RevisionAnnotation]; ok {
 				revision = val
 			}
 			if source != "" && revision != "" {

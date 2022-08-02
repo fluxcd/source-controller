@@ -101,6 +101,33 @@ container image repository in the format `oci://<host>:<port>/<org-name>/<repo-n
 
 **Note:** that specifying a tag or digest is not in accepted for this field.
 
+### Provider
+
+`.spec.provider` is an optional field that allows specifying an OIDC provider used for
+authentication purposes.
+
+Supported options are:
+
+- `generic`
+- `aws`
+- `azure`
+- `gcp`
+
+The `generic` provider can be used for public repositories or when
+static credentials are used for authentication, either with
+`spec.secretRef` or `spec.serviceAccountName`.
+If you do not specify `.spec.provider`, it defaults to `generic`.
+
+The `aws` provider can be used when the source-controller service account
+is associate with an AWS IAM Role using IRSA that grants read-only access to ECR.
+
+The `azure` provider can be used when the source-controller pods are associate
+with an Azure AAD Pod Identity that grants read-only access to ACR.
+
+The `gcp` provider can be used when the source-controller service account
+is associate with a GCP IAM Role using Workload Identity that grants
+read-only access to Artifact Registry.
+
 ### Secret reference
 
 `.spec.secretRef.name` is an optional field to specify a name reference to a
