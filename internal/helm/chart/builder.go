@@ -81,9 +81,9 @@ func (r RemoteReference) Validate() error {
 	if r.Name == "" {
 		return fmt.Errorf("no name set for remote chart reference")
 	}
-	name := regexp.MustCompile("^([-a-z0-9]*)$")
+	name := regexp.MustCompile("^([-a-z0-9]+/?)+$")
 	if !name.MatchString(r.Name) {
-		return fmt.Errorf("invalid chart name '%s': a valid name must be lower case letters and numbers and MAY be separated with dashes (-)", r.Name)
+		return fmt.Errorf("invalid chart name '%s': a valid name must be lower case letters and numbers and MAY be separated with dashes (-) or slashes (/)", r.Name)
 	}
 	return nil
 }
