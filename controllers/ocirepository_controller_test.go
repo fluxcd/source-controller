@@ -772,7 +772,7 @@ func TestOCIRepository_reconcileSource_remoteReference(t *testing.T) {
 			want:    sreconcile.ResultEmpty,
 			wantErr: true,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.URLInvalidReason, "no match found for semver:"),
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.OCIOperationFailedReason, "failed to determine the artifact tag for 'oci://%s/podinfo': no match found for semver: <= 6.1.0", server.registryHost),
 			},
 		},
 		{
@@ -1062,6 +1062,48 @@ func TestOCIRepository_getArtifactURL(t *testing.T) {
 			g.Expect(got).To(Equal(tt.want))
 		})
 	}
+}
+
+func TestOCIRepository_stalled(t *testing.T) {
+	g := NewWithT(t)
+
+	ns, err := testEnv.CreateNamespace(ctx, "ocirepository-stalled-test")
+	g.Expect(err).ToNot(HaveOccurred())
+	defer func() { g.Expect(testEnv.Delete(ctx, ns)).To(Succeed()) }()
+
+	obj := &sourcev1.OCIRepository{
+		ObjectMeta: metav1.ObjectMeta{
+			GenerateName: "ocirepository-reconcile",
+			Namespace:    ns.Name,
+		},
+		Spec: sourcev1.OCIRepositorySpec{
+			URL:      "oci://ghcr.io/test/test:v1",
+			Interval: metav1.Duration{Duration: 60 * time.Minute},
+		},
+	}
+
+	g.Expect(testEnv.Create(ctx, obj)).To(Succeed())
+
+	key := client.ObjectKey{Name: obj.Name, Namespace: obj.Namespace}
+	resultobj := sourcev1.OCIRepository{}
+
+	// Wait for the object to fail
+	g.Eventually(func() bool {
+		if err := testEnv.Get(ctx, key, &resultobj); err != nil {
+			return false
+		}
+		readyCondition := conditions.Get(&resultobj, meta.ReadyCondition)
+		if readyCondition == nil {
+			return false
+		}
+		return obj.Generation == readyCondition.ObservedGeneration &&
+			!conditions.IsReady(&resultobj)
+	}, timeout).Should(BeTrue())
+
+	// Verify that stalled condition is present in status
+	stalledCondition := conditions.Get(&resultobj, meta.StalledCondition)
+	g.Expect(stalledCondition).ToNot(BeNil())
+	g.Expect(stalledCondition.Reason).Should(Equal(sourcev1.URLInvalidReason))
 }
 
 func TestOCIRepository_reconcileStorage(t *testing.T) {

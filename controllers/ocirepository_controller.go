@@ -102,6 +102,14 @@ var ociRepositoryFailConditions = []string{
 	sourcev1.StorageOperationFailedCondition,
 }
 
+type invalidOCIURLError struct {
+	err error
+}
+
+func (e invalidOCIURLError) Error() string {
+	return e.err.Error()
+}
+
 // ociRepositoryReconcileFunc is the function type for all the v1beta2.OCIRepository
 // (sub)reconcile functions. The type implementations are grouped and
 // executed serially to perform the complete reconcile of the object.
@@ -337,9 +345,17 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, obj *sour
 	// Determine which artifact revision to pull
 	url, err := r.getArtifactURL(obj, options)
 	if err != nil {
+		if _, ok := err.(invalidOCIURLError); ok {
+			e := serror.NewStalling(
+				fmt.Errorf("failed to determine the artifact address for '%s': %w", obj.Spec.URL, err),
+				sourcev1.URLInvalidReason)
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
+			return sreconcile.ResultEmpty, e
+		}
+
 		e := serror.NewGeneric(
-			fmt.Errorf("failed to determine the artifact address for '%s': %w", obj.Spec.URL, err),
-			sourcev1.URLInvalidReason)
+			fmt.Errorf("failed to determine the artifact tag for '%s': %w", obj.Spec.URL, err),
+			sourcev1.OCIOperationFailedReason)
 		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
 		return sreconcile.ResultEmpty, e
 	}
@@ -464,7 +480,7 @@ func (r *OCIRepositoryReconciler) parseRepositoryURL(obj *sourcev1.OCIRepository
 func (r *OCIRepositoryReconciler) getArtifactURL(obj *sourcev1.OCIRepository, options []crane.Option) (string, error) {
 	url, err := r.parseRepositoryURL(obj)
 	if err != nil {
-		return "", err
+		return "", invalidOCIURLError{err}
 	}
 
 	if obj.Spec.Reference != nil {
