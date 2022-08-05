@@ -329,7 +329,7 @@ func TestOCIRepository_reconcileSource_authStrategy(t *testing.T) {
 			}),
 			},
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.OCIOperationFailedReason, "failed to pull artifact from "),
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.OCIPullFailedReason, "failed to pull artifact from "),
 			},
 		},
 		{
@@ -350,7 +350,7 @@ func TestOCIRepository_reconcileSource_authStrategy(t *testing.T) {
 				includeSecret: true,
 			},
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.OCIOperationFailedReason, "failed to pull artifact from "),
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.OCIPullFailedReason, "failed to pull artifact from "),
 			},
 		},
 		{
@@ -371,7 +371,7 @@ func TestOCIRepository_reconcileSource_authStrategy(t *testing.T) {
 				includeSA: true,
 			},
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.OCIOperationFailedReason, "failed to pull artifact from "),
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.OCIPullFailedReason, "failed to pull artifact from "),
 			},
 		},
 		{
@@ -413,7 +413,7 @@ func TestOCIRepository_reconcileSource_authStrategy(t *testing.T) {
 			}),
 			},
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.OCIOperationFailedReason, "failed to pull artifact from "),
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.OCIPullFailedReason, "failed to pull artifact from "),
 			},
 		},
 		{
@@ -438,7 +438,7 @@ func TestOCIRepository_reconcileSource_authStrategy(t *testing.T) {
 				},
 			},
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.OCIOperationFailedReason, "failed to pull artifact from "),
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.OCIPullFailedReason, "failed to pull artifact from "),
 			},
 		},
 	}
@@ -761,7 +761,7 @@ func TestOCIRepository_reconcileSource_remoteReference(t *testing.T) {
 			want:    sreconcile.ResultEmpty,
 			wantErr: true,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.OCIOperationFailedReason, "failed to pull artifact"),
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.OCIPullFailedReason, "failed to pull artifact"),
 			},
 		},
 		{
@@ -772,7 +772,7 @@ func TestOCIRepository_reconcileSource_remoteReference(t *testing.T) {
 			want:    sreconcile.ResultEmpty,
 			wantErr: true,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.OCIOperationFailedReason, "failed to determine the artifact tag for 'oci://%s/podinfo': no match found for semver: <= 6.1.0", server.registryHost),
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.ReadOperationFailedReason, "failed to determine the artifact tag for 'oci://%s/podinfo': no match found for semver: <= 6.1.0", server.registryHost),
 			},
 		},
 		{
@@ -783,7 +783,7 @@ func TestOCIRepository_reconcileSource_remoteReference(t *testing.T) {
 			want:    sreconcile.ResultEmpty,
 			wantErr: true,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.OCIOperationFailedReason, "failed to pull artifact"),
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.OCIPullFailedReason, "failed to pull artifact"),
 			},
 		},
 		{
@@ -1325,7 +1325,7 @@ func TestOCIRepositoryReconciler_notify(t *testing.T) {
 			resErr: nil,
 			oldObjBeforeFunc: func(obj *sourcev1.OCIRepository) {
 				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Checksum: "yyy"}
-				conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.OCIOperationFailedReason, "fail")
+				conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.ReadOperationFailedReason, "fail")
 				conditions.MarkFalse(obj, meta.ReadyCondition, meta.FailedReason, "foo")
 			},
 			newObjBeforeFunc: func(obj *sourcev1.OCIRepository) {
@@ -1341,7 +1341,7 @@ func TestOCIRepositoryReconciler_notify(t *testing.T) {
 			resErr: nil,
 			oldObjBeforeFunc: func(obj *sourcev1.OCIRepository) {
 				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Checksum: "yyy"}
-				conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.OCIOperationFailedReason, "fail")
+				conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.ReadOperationFailedReason, "fail")
 				conditions.MarkFalse(obj, meta.ReadyCondition, meta.FailedReason, "foo")
 			},
 			newObjBeforeFunc: func(obj *sourcev1.OCIRepository) {

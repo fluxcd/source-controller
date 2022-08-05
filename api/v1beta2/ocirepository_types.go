@@ -163,8 +163,11 @@ type OCIRepositoryStatus struct {
 }
 
 const (
-	// OCIOperationFailedReason signals that an OCI operation (e.g. pull) failed.
-	OCIOperationFailedReason string = "OCIOperationFailed"
+	// OCIPullFailedReason signals that a pull operation failed.
+	OCIPullFailedReason string = "OCIArtifactPullFailed"
+
+	// OCILayerOperationFailedReason signals that an OCI layer operation failed.
+	OCILayerOperationFailedReason string = "OCIArtifactLayerOperationFailed"
 )
 
 // GetConditions returns the status conditions of the object.

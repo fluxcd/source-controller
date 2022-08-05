@@ -333,7 +333,7 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, obj *sour
 	if err != nil {
 		e := serror.NewGeneric(
 			fmt.Errorf("failed to generate transport for '%s': %w", obj.Spec.URL, err),
-			sourcev1.OCIOperationFailedReason,
+			sourcev1.AuthenticationFailedReason,
 		)
 		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
 		return sreconcile.ResultEmpty, e
@@ -355,7 +355,7 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, obj *sour
 
 		e := serror.NewGeneric(
 			fmt.Errorf("failed to determine the artifact tag for '%s': %w", obj.Spec.URL, err),
-			sourcev1.OCIOperationFailedReason)
+			sourcev1.ReadOperationFailedReason)
 		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
 		return sreconcile.ResultEmpty, e
 	}
@@ -365,7 +365,7 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, obj *sour
 	if err != nil {
 		e := serror.NewGeneric(
 			fmt.Errorf("failed to pull artifact from '%s': %w", obj.Spec.URL, err),
-			sourcev1.OCIOperationFailedReason,
+			sourcev1.OCIPullFailedReason,
 		)
 		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
 		return sreconcile.ResultEmpty, e
@@ -376,7 +376,7 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, obj *sour
 	if err != nil {
 		e := serror.NewGeneric(
 			fmt.Errorf("failed to determine artifact digest: %w", err),
-			sourcev1.OCIOperationFailedReason,
+			sourcev1.OCILayerOperationFailedReason,
 		)
 		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
 		return sreconcile.ResultEmpty, e
@@ -390,7 +390,7 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, obj *sour
 	if err != nil {
 		e := serror.NewGeneric(
 			fmt.Errorf("failed to parse artifact manifest: %w", err),
-			sourcev1.OCIOperationFailedReason,
+			sourcev1.OCILayerOperationFailedReason,
 		)
 		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
 		return sreconcile.ResultEmpty, e
@@ -417,7 +417,7 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, obj *sour
 		if err != nil {
 			e := serror.NewGeneric(
 				fmt.Errorf("failed to parse artifact layers: %w", err),
-				sourcev1.OCIOperationFailedReason,
+				sourcev1.OCILayerOperationFailedReason,
 			)
 			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
 			return sreconcile.ResultEmpty, e
@@ -426,7 +426,7 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, obj *sour
 		if len(layers) < 1 {
 			e := serror.NewGeneric(
 				fmt.Errorf("no layers found in artifact"),
-				sourcev1.OCIOperationFailedReason,
+				sourcev1.OCILayerOperationFailedReason,
 			)
 			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
 			return sreconcile.ResultEmpty, e
@@ -436,7 +436,7 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, obj *sour
 		if err != nil {
 			e := serror.NewGeneric(
 				fmt.Errorf("failed to extract the first layer from artifact: %w", err),
-				sourcev1.OCIOperationFailedReason,
+				sourcev1.OCILayerOperationFailedReason,
 			)
 			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
 			return sreconcile.ResultEmpty, e
@@ -445,7 +445,7 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, obj *sour
 		if _, err = untar.Untar(blob, dir); err != nil {
 			e := serror.NewGeneric(
 				fmt.Errorf("failed to untar the first layer from artifact: %w", err),
-				sourcev1.OCIOperationFailedReason,
+				sourcev1.OCILayerOperationFailedReason,
 			)
 			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
 			return sreconcile.ResultEmpty, e

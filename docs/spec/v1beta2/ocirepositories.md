@@ -613,7 +613,7 @@ and adds a Condition with the following attributes to the OCIRepository's
 
 - `type: FetchFailed` | `type: IncludeUnavailable` | `type: StorageOperationFailed`
 - `status: "True"`
-- `reason: AuthenticationFailed` | `reason: OCIOperationFailed`
+- `reason: AuthenticationFailed` | `reason: OCIArtifactPullFailed` | `reason: OCIArtifactLayerOperationFailed`
 
 This condition has a ["negative polarity"][typical-status-properties],
 and is only present on the OCIRepository while the status value is `"True"`.
