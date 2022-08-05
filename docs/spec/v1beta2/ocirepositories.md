@@ -5,7 +5,7 @@ repository.
 
 ## Example
 
-The following is an example of a OCIRepository. It creates a tarball
+The following is an example of an OCIRepository. It creates a tarball
 (`.tar.gz`) Artifact with the fetched data from an OCI repository for the
 resolved digest.
 
@@ -25,7 +25,7 @@ spec:
 
 In the above example:
 
-- A OCIRepository named `podinfo` is created, indicated by the
+- An OCIRepository named `podinfo` is created, indicated by the
   `.metadata.name` field.
 - The source-controller checks the OCI repository every five minutes, indicated
   by the `.spec.interval` field.
@@ -87,11 +87,11 @@ You can run this example by saving the manifest into `ocirepository.yaml`.
 
 ## Writing an OCIRepository spec
 
-As with all other Kubernetes config, a OCIRepository needs `apiVersion`,
-`kind`, and `metadata` fields. The name of a OCIRepository object must be a
+As with all other Kubernetes config, an OCIRepository needs `apiVersion`,
+`kind`, and `metadata` fields. The name of an OCIRepository object must be a
 valid [DNS subdomain name](https://kubernetes.io/docs/concepts/overview/working-with-objects/names#dns-subdomain-names).
 
-A OCIRepository also needs a
+An OCIRepository also needs a
 [`.spec` section](https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md#spec-and-status).
 
 ### URL
@@ -99,7 +99,7 @@ A OCIRepository also needs a
 `.spec.url` is a required field that specifies the address of the
 container image repository in the format `oci://<host>:<port>/<org-name>/<repo-name>`.
 
-**Note:** that specifying a tag or digest is not in accepted for this field.
+**Note:** that specifying a tag or digest is not acceptable for this field.
 
 ### Provider
 
@@ -119,13 +119,13 @@ static credentials are used for authentication, either with
 If you do not specify `.spec.provider`, it defaults to `generic`.
 
 The `aws` provider can be used when the source-controller service account
-is associate with an AWS IAM Role using IRSA that grants read-only access to ECR.
+is associated with an AWS IAM Role using IRSA that grants read-only access to ECR.
 
-The `azure` provider can be used when the source-controller pods are associate
+The `azure` provider can be used when the source-controller pods are associated
 with an Azure AAD Pod Identity that grants read-only access to ACR.
 
 The `gcp` provider can be used when the source-controller service account
-is associate with a GCP IAM Role using Workload Identity that grants
+is associated with a GCP IAM Role using Workload Identity that grants
 read-only access to Artifact Registry.
 
 ### Secret reference
@@ -134,7 +134,7 @@ read-only access to Artifact Registry.
 Secret in the same namespace as the OCIRepository, containing authentication
 credentials for the OCI repository.
 
-This secret is expected to be in the same format as for[`imagePullSecrets`][image-pull-secrets].
+This secret is expected to be in the same format as [`imagePullSecrets`][image-pull-secrets].
 The usual way to create such a secret is with:
 
 ```sh
@@ -315,7 +315,7 @@ spec:
 ### Triggering a reconcile
 
 To manually tell the source-controller to reconcile a OCIRepository outside the
-[specified interval window](#interval), a OCIRepository can be annotated with
+[specified interval window](#interval), an OCIRepository can be annotated with
 `reconcile.fluxcd.io/requestedAt: <arbitrary value>`. Annotating the resource
 queues the OCIRepository for reconciliation if the `<arbitrary-value>` differs
 from the last value the controller acted on, as reported in
@@ -345,7 +345,7 @@ kubectl wait gitrepository/<repository-name> --for=condition=ready --timeout=1m
 ### Suspending and resuming
 
 When you find yourself in a situation where you temporarily want to pause the
-reconciliation of a OCIRepository, you can suspend it using the
+reconciliation of an OCIRepository, you can suspend it using the
 [`.spec.suspend` field](#suspend).
 
 #### Suspend an OCIRepository
@@ -374,7 +374,7 @@ Using `flux`:
 flux suspend source oci <repository-name>
 ```
 
-**Note:** When a OCIRepository has an Artifact and is suspended, and this
+**Note:** When an OCIRepository has an Artifact and it is suspended, and this
 Artifact later disappears from the storage due to e.g. the source-controller
 Pod being evicted from a Node, this will not be reflected in the
 OCIRepository's Status until it is resumed.
@@ -519,7 +519,7 @@ To define your own exclusion rules, see [excluding files](#excluding-files).
 
 ### Conditions
 
-A OCIRepository enters various states during its lifecycle, reflected as
+OCIRepository has various states during its lifecycle, reflected as
 [Kubernetes Conditions][typical-status-properties].
 It can be [reconciling](#reconciling-ocirepository) while fetching the remote
 state, it can be [ready](#ready-ocirepository), or it can [fail during
@@ -532,7 +532,7 @@ become `Ready`.
 
 #### Reconciling OCIRepository
 
-The source-controller marks a OCIRepository as _reconciling_ when one of the
+The source-controller marks an OCIRepository as _reconciling_ when one of the
 following is true:
 
 - There is no current Artifact for the OCIRepository, or the reported Artifact
@@ -561,7 +561,7 @@ and are only present on the OCIRepository while their status value is `"True"`.
 
 #### Ready OCIRepository
 
-The source-controller marks a OCIRepository as _ready_ when it has the
+The source-controller marks an OCIRepository as _ready_ when it has the
 following characteristics:
 
 - The OCIRepository reports an [Artifact](#artifact).
