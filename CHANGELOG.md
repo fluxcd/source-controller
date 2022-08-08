@@ -2,6 +2,40 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.26.0
+
+**Release date:** 2022-08-08
+
+This prerelease comes with a new API kind named `OCIRepository`,
+for fetching OCI artifacts from container registries as defined in
+[RFC-0003 Flux OCI support for Kubernetes manifests](https://github.com/fluxcd/flux2/tree/main/rfcs/0003-kubernetes-oci).
+Please see the
+[OCIRepository API documentation](https://github.com/fluxcd/source-controller/blob/api/v0.26.0/docs/spec/v1beta2/ocirepositories.md)
+for more details.
+
+In addition, Helm charts stored in Git can now have dependencies to
+other charts stored as OCI artifacts in container registries.
+
+Features:
+- Implement OCIRepository reconciliation
+  [#788](https://github.com/fluxcd/source-controller/pull/788)
+
+Improvements:
+- Enable Umbrella Chart with dependencies from OCI repositories
+  [#770](https://github.com/fluxcd/source-controller/pull/770)
+- Allow for charts from OCI registries to specify a chart path
+  [#856](https://github.com/fluxcd/source-controller/pull/856)
+- Remove MUSL and enable threadless libgit2 support
+  [#853](https://github.com/fluxcd/source-controller/pull/853)
+- Upgrade to Go 1.18
+  [#816](https://github.com/fluxcd/source-controller/pull/816)
+- Update Azure Go SDK to v1.1.0
+  [#786](https://github.com/fluxcd/source-controller/pull/786)
+
+Fixes:
+- fix(openapi): full regex for url to prevent error
+  [#838](https://github.com/fluxcd/source-controller/pull/838)
+
 ## 0.25.11
 
 **Release date:** 2022-07-27
