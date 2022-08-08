@@ -86,19 +86,32 @@ func TestRemoteReference_Validate(t *testing.T) {
 			ref:  RemoteReference{Name: "valid-chart-name"},
 		},
 		{
+			name: "ref with single-character name",
+			ref:  RemoteReference{Name: "a"},
+		},
+		{
 			name:    "ref with invalid name",
 			ref:     RemoteReference{Name: "iNvAlID-ChArT-NAmE!"},
 			wantErr: "invalid chart name 'iNvAlID-ChArT-NAmE!'",
 		},
 		{
-			name:    "ref with Artifactory specific invalid format",
-			ref:     RemoteReference{Name: "i-shall/not"},
-			wantErr: "invalid chart name 'i-shall/not'",
+			name: "ref with Artifactory specific valid format",
+			ref:  RemoteReference{Name: "i-shall/not"},
 		},
 		{
 			name:    "ref without name",
 			ref:     RemoteReference{},
 			wantErr: "no name set for remote chart reference",
+		},
+		{
+			name:    "ref with only a slash",
+			ref:     RemoteReference{Name: "/"},
+			wantErr: "invalid chart name '/'",
+		},
+		{
+			name:    "ref with double slash",
+			ref:     RemoteReference{Name: "not//a/valid/chart"},
+			wantErr: "invalid chart name 'not//a/valid/chart'",
 		},
 	}
 	for _, tt := range tests {

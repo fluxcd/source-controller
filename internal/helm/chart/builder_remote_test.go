@@ -234,7 +234,8 @@ func TestRemoteBuilder_BuildFromOCIChatRepository(t *testing.T) {
 
 	registryClient := &mockRegistryClient{
 		tags: map[string][]string{
-			"localhost:5000/my_repo/grafana": {"6.17.4"},
+			"localhost:5000/my_repo/grafana":         {"6.17.4"},
+			"localhost:5000/my_repo/another/grafana": {"6.17.4"},
 		},
 	}
 
@@ -312,6 +313,15 @@ func TestRemoteBuilder_BuildFromOCIChatRepository(t *testing.T) {
 		{
 			name:        "default values",
 			reference:   RemoteReference{Name: "grafana"},
+			repository:  mockRepo(),
+			wantVersion: "0.1.0",
+			wantValues: chartutil.Values{
+				"replicaCount": float64(1),
+			},
+		},
+		{
+			name:        "default values",
+			reference:   RemoteReference{Name: "another/grafana"},
 			repository:  mockRepo(),
 			wantVersion: "0.1.0",
 			wantValues: chartutil.Values{

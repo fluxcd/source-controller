@@ -75,7 +75,9 @@ kubectl -n source-system rollout status deploy/source-controller --timeout=1m
 kubectl -n source-system wait gitrepository/gitrepository-sample --for=condition=ready --timeout=1m
 kubectl -n source-system wait ocirepository/ocirepository-sample --for=condition=ready --timeout=1m
 kubectl -n source-system wait helmrepository/helmrepository-sample --for=condition=ready --timeout=1m
+kubectl -n source-system wait helmrepository/helmrepository-sample-oci --for=condition=ready --timeout=1m
 kubectl -n source-system wait helmchart/helmchart-sample --for=condition=ready --timeout=1m
+kubectl -n source-system wait helmchart/helmchart-sample-oci --for=condition=ready --timeout=1m
 kubectl -n source-system delete -f "${ROOT_DIR}/config/samples"
 
 echo "Run HelmChart values file tests"
