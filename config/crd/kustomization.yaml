@@ -5,4 +5,5 @@ resources:
 - bases/source.toolkit.fluxcd.io_helmrepositories.yaml
 - bases/source.toolkit.fluxcd.io_helmcharts.yaml
 - bases/source.toolkit.fluxcd.io_buckets.yaml
+- bases/source.toolkit.fluxcd.io_ocirepositories.yaml
 # +kubebuilder:scaffold:crdkustomizeresource

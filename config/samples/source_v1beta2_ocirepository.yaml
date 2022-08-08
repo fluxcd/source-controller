@@ -1,0 +1,9 @@
+apiVersion: source.toolkit.fluxcd.io/v1beta2
+kind: OCIRepository
+metadata:
+  name: ocirepository-sample
+spec:
+  interval: 1m
+  url: oci://ghcr.io/stefanprodan/manifests/podinfo
+  ref:
+    tag: 6.1.6

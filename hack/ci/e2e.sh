@@ -36,6 +36,7 @@ function cleanup(){
         kubectl -n kube-system describe pods
         kubectl -n source-system describe pods
         kubectl -n source-system get gitrepositories -oyaml
+        kubectl -n source-system get ocirepositories -oyaml
         kubectl -n source-system get helmrepositories -oyaml
         kubectl -n source-system get helmcharts -oyaml
         kubectl -n source-system get all
@@ -72,6 +73,7 @@ echo "Run smoke tests"
 kubectl -n source-system apply -f "${ROOT_DIR}/config/samples"
 kubectl -n source-system rollout status deploy/source-controller --timeout=1m
 kubectl -n source-system wait gitrepository/gitrepository-sample --for=condition=ready --timeout=1m
+kubectl -n source-system wait ocirepository/ocirepository-sample --for=condition=ready --timeout=1m
 kubectl -n source-system wait helmrepository/helmrepository-sample --for=condition=ready --timeout=1m
 kubectl -n source-system wait helmchart/helmchart-sample --for=condition=ready --timeout=1m
 kubectl -n source-system delete -f "${ROOT_DIR}/config/samples"
