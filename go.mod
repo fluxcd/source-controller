@@ -37,7 +37,7 @@ require (
 	github.com/fluxcd/pkg/gitutil v0.1.0
 	github.com/fluxcd/pkg/helmtestserver v0.7.4
 	github.com/fluxcd/pkg/lockedfile v0.1.0
-	github.com/fluxcd/pkg/oci v0.2.0
+	github.com/fluxcd/pkg/oci v0.3.0
 	github.com/fluxcd/pkg/runtime v0.16.2
 	github.com/fluxcd/pkg/ssh v0.5.0
 	github.com/fluxcd/pkg/testserver v0.2.0

@@ -200,7 +200,7 @@ func (r *OCIRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 			summarize.WithReconcileError(retErr),
 			summarize.WithIgnoreNotFound(),
 			summarize.WithProcessors(
-				summarize.RecordContextualError,
+				summarize.ErrorActionHandler,
 				summarize.RecordReconcileReq,
 			),
 			summarize.WithResultBuilder(sreconcile.AlwaysRequeueResultBuilder{RequeueAfter: obj.GetRequeueAfter()}),
@@ -347,7 +347,7 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, obj *sour
 	if err != nil {
 		if _, ok := err.(invalidOCIURLError); ok {
 			e := serror.NewStalling(
-				fmt.Errorf("failed to determine the artifact address for '%s': %w", obj.Spec.URL, err),
+				fmt.Errorf("URL validation failed for '%s': %w", obj.Spec.URL, err),
 				sourcev1.URLInvalidReason)
 			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
 			return sreconcile.ResultEmpty, e

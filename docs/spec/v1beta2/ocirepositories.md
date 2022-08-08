@@ -484,23 +484,36 @@ specific OCIRepository, e.g.
 The OCIRepository reports the latest synchronized state from the OCI repository
 as an Artifact object in the `.status.artifact` of the resource.
 
+The `.status.artifact.revision` holds the SHA256 digest of the upstream OCI artifact.
+
+The `.status.artifact.metadata` holds the upstream OCI artifact metadata such as the
+[OpenContainers standard annotations](https://github.com/opencontainers/image-spec/blob/main/annotations.md).
+If the OCI artifact was created with `flux push artifact`, then the `metadata` will contain the following
+annotations:
+- `org.opencontainers.image.created` the date and time on which the artifact was built
+- `org.opencontainers.image.source` the URL of the Git repository containing the source files
+- `org.opencontainers.image.revision` the Git branch and commit SHA1 of the source files
+
 The Artifact file is a gzip compressed TAR archive (`<commit sha>.tar.gz`), and
 can be retrieved in-cluster from the `.status.artifact.url` HTTP address.
 
 #### Artifact example
 
 ```yaml
----
 apiVersion: source.toolkit.fluxcd.io/v1beta2
 kind: OCIRepository
 metadata:
   name: <repository-name>
 status:
   artifact:
-    checksum: e750c7a46724acaef8f8aa926259af30bbd9face2ae065ae8896ba5ee5ab832b
-    lastUpdateTime: "2022-06-29T06:59:23Z"
+    checksum: 9f3bc0f341d4ecf2bab460cc59320a2a9ea292f01d7b96e32740a9abfd341088
+    lastUpdateTime: "2022-08-08T09:35:45Z"
+    metadata:
+      org.opencontainers.image.created: "2022-08-08T12:31:41+03:00"
+      org.opencontainers.image.revision: 6.1.8/b3b00fe35424a45d373bf4c7214178bc36fd7872
+      org.opencontainers.image.source: https://github.com/stefanprodan/podinfo.git
     path: ocirepository/<namespace>/<repository-name>/<digest>.tar.gz
-    revision: master/363a6a8fe6a7f13e05d34c163b0ef02a777da20a
+    revision: <digest>
     url: http://source-controller.<namespace>.svc.cluster.local./ocirepository/<namespace>/<repository-name>/<digest>.tar.gz
 ```
 
