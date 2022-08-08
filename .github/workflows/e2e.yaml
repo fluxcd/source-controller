@@ -2,6 +2,10 @@ name: e2e
 
 on:
   pull_request:
+    paths-ignore:
+      - 'CHANGELOG.md'
+      - 'README.md'
+      - 'MAINTAINERS'
   push:
     branches:
       - main
