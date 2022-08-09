@@ -176,6 +176,7 @@ func (r *HelmChartReconciler) SetupWithManagerAndOptions(mgr ctrl.Manager, opts 
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: opts.MaxConcurrentReconciles,
 			RateLimiter:             opts.RateLimiter,
+			RecoverPanic:            true,
 		}).
 		Complete(r)
 }
