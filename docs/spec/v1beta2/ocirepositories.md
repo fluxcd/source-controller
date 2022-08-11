@@ -120,11 +120,15 @@ If you do not specify `.spec.provider`, it defaults to `generic`.
 
 #### AWS
 
-The `aws` provider can be used when the source-controller service account
-is associated with an AWS IAM Role using IRSA that grants read-only access to ECR.
+The `aws` provider can be used to authenticate automatically using the EKS
+worker node IAM role or IAM Role for Service Accounts (IRSA), and by extension
+gain access to ECR.
 
-To enable access to ECR, add the following patch to your bootstrap repository,
-in the `flux-system/kustomization.yaml` file:
+When the worker node IAM role has access to ECR, source-controller running on it
+will also have access to ECR.
+
+When using IRSA to enable access to ECR, add the following patch to your
+bootstrap repository, in the `flux-system/kustomization.yaml` file:
 
 ```yaml
 apiVersion: kustomize.config.k8s.io/v1beta1
@@ -150,11 +154,15 @@ to the IAM role when using IRSA.
 
 #### Azure
 
-The `azure` provider can be used when the source-controller pods are associated
-with an Azure AAD Pod Identity that grants read-only access to ACR.
+The `azure` provider can be used to authenticate automatically using kubelet
+managed identity or Azure Active Directory pod-managed identity (aad-pod-identity),
+and by extension gain access to ACR.
 
-To enable access to ACR, add the following patch to your bootstrap repository,
-in the `flux-system/kustomization.yaml` file:
+When the kubelet managed identity has access to ACR, source-controller running
+on it will also have access to ACR.
+
+When using aad-pod-identity to enable access to ECR, add the following patch to
+your bootstrap repository, in the `flux-system/kustomization.yaml` file:
 
 ```yaml
 apiVersion: kustomize.config.k8s.io/v1beta1
@@ -172,7 +180,7 @@ patches:
       name: source-controller
 ``` 
 
-When using managed identity on an AKS cluster, AAD Pod Identity
+When using pod-managed identity on an AKS cluster, AAD Pod Identity
 has to be used to give the `source-controller` pod access to the ACR.
 To do this, you have to install `aad-pod-identity` on your cluster, create a managed identity
 that has access to the container registry (this can also be the Kubelet identity
@@ -185,13 +193,15 @@ if you want to use AKS pod-managed identities add-on that is in preview.
 
 #### GCP
 
-The `gcp` provider can be used when the source-controller service account
-is associated with a GCP IAM Role using Workload Identity that grants
-read-only access to Artifact Registry.
+The `gcp` provider can be used to authenticate automatically using OAuth scopes
+or Workload Identity, and by extension gain access to GCR or Artifact Registry.
 
-To enable access to Google Artifact Registry or GCR,
-add the following patch to your bootstrap repository,
-in the `flux-system/kustomization.yaml` file:
+When the GKE nodes have the appropriate OAuth scope for accessing GCR and
+Artifact Registry, source-controller running on it will also have access to them.
+
+When using Workload Identity to enable access to GCR or Artifact Registry, add
+the following patch to your bootstrap repository, in the
+`flux-system/kustomization.yaml` file:
 
 ```yaml
 apiVersion: kustomize.config.k8s.io/v1beta1
