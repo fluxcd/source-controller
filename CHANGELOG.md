@@ -2,6 +2,22 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.26.1
+
+**Release date:** 2022-08-11
+
+This prerelease comes with panic recovery, to protect the controller from crashing 
+when reconciliations lead to a crash. It also adds OCI documentation and improvements
+to the controllers CI pipeline.
+
+Improvements:
+- Enable panic recovery
+  [#859](https://github.com/fluxcd/source-controller/pull/859)
+- build: Ignore CI workflows for markdown files
+  [#858](https://github.com/fluxcd/source-controller/pull/858)
+- oci: Document Auto-Login usage in SC
+  [#860](https://github.com/fluxcd/source-controller/pull/860)
+
 ## 0.26.0
 
 **Release date:** 2022-08-08
