@@ -118,15 +118,106 @@ static credentials are used for authentication, either with
 `spec.secretRef` or `spec.serviceAccountName`.
 If you do not specify `.spec.provider`, it defaults to `generic`.
 
+#### AWS
+
 The `aws` provider can be used when the source-controller service account
 is associated with an AWS IAM Role using IRSA that grants read-only access to ECR.
+
+To enable access to ECR, add the following patch to your bootstrap repository,
+in the `flux-system/kustomization.yaml` file:
+
+```yaml
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - gotk-components.yaml
+  - gotk-sync.yaml
+patches:
+  - patch: |
+      apiVersion: v1
+      kind: ServiceAccount
+      metadata:
+        name: source-controller
+        annotations:
+          eks.amazonaws.com/role-arn: <role arn>
+    target:
+      kind: ServiceAccount
+      name: source-controller
+```
+
+Note that you can attach the AWS managed policy `arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly`
+to the IAM role when using IRSA.
+
+#### Azure
 
 The `azure` provider can be used when the source-controller pods are associated
 with an Azure AAD Pod Identity that grants read-only access to ACR.
 
+To enable access to ACR, add the following patch to your bootstrap repository,
+in the `flux-system/kustomization.yaml` file:
+
+```yaml
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - gotk-components.yaml
+  - gotk-sync.yaml
+patches:
+  - patch: |
+      - op: add
+        path: /spec/template/metadata/labels/aadpodidbinding
+        value: <identity-name>
+    target:
+      kind: Deployment
+      name: source-controller
+``` 
+
+When using managed identity on an AKS cluster, AAD Pod Identity
+has to be used to give the `source-controller` pod access to the ACR.
+To do this, you have to install `aad-pod-identity` on your cluster, create a managed identity
+that has access to the container registry (this can also be the Kubelet identity
+if it has `AcrPull` role assignment on the ACR), create an `AzureIdentity` and `AzureIdentityBinding`
+that describe the managed identity and then label the `source-controller` pods
+with the name of the AzureIdentity as shown in the patch above. Please take a look
+at [this guide](https://azure.github.io/aad-pod-identity/docs/) or
+[this one](https://docs.microsoft.com/en-us/azure/aks/use-azure-ad-pod-identity)
+if you want to use AKS pod-managed identities add-on that is in preview.
+
+#### GCP
+
 The `gcp` provider can be used when the source-controller service account
 is associated with a GCP IAM Role using Workload Identity that grants
 read-only access to Artifact Registry.
+
+To enable access to Google Artifact Registry or GCR,
+add the following patch to your bootstrap repository,
+in the `flux-system/kustomization.yaml` file:
+
+```yaml
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - gotk-components.yaml
+  - gotk-sync.yaml
+patches:
+  - patch: |
+      apiVersion: v1
+      kind: ServiceAccount
+      metadata:
+        name: source-controller
+        annotations:
+          iam.gke.io/gcp-service-account: <identity-name>
+    target:
+      kind: ServiceAccount
+      name: source-controller
+``` 
+
+The Artifact Registry service uses the permission `artifactregistry.repositories.downloadArtifacts`
+that is located under the Artifact Registry Reader role. If you are using
+Google Container Registry service, the needed permission is instead `storage.objects.list`
+which can be bound as part of the Container Registry Service Agent role.
+Take a look at [this guide](https://cloud.google.com/kubernetes-engine/docs/how-to/workload-identity)
+for more information about setting up GKE Workload Identity.
 
 ### Secret reference
 
