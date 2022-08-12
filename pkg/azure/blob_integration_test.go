@@ -163,6 +163,67 @@ func TestBlobClient_FGetObject(t *testing.T) {
 	g.Expect(f).To(Equal([]byte(testFileData)))
 }
 
+func TestBlobClientSASKey_FGetObject(t *testing.T) {
+	g := NewWithT(t)
+
+	tempDir := t.TempDir()
+
+	// create a client with the shared key
+	client, err := NewClient(testBucket.DeepCopy(), testSecret.DeepCopy())
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(client).ToNot(BeNil())
+
+	g.Expect(client.CanGetAccountSASToken()).To(BeTrue())
+
+	// Generate test container name.
+	testContainer := generateString(testContainerGenerateName)
+
+	// Create test container.
+	ctx, timeout := context.WithTimeout(context.Background(), testTimeout)
+	defer timeout()
+	g.Expect(createContainer(ctx, client, testContainer)).To(Succeed())
+	t.Cleanup(func() {
+		g.Expect(deleteContainer(context.Background(), client, testContainer)).To(Succeed())
+	})
+
+	// Create test blob.
+	ctx, timeout = context.WithTimeout(context.Background(), testTimeout)
+	defer timeout()
+	g.Expect(createBlob(ctx, client, testContainer, testFile, testFileData))
+
+	localPath := filepath.Join(tempDir, testFile)
+
+	// use the shared key client to create a SAS key for the account
+	sasKey, err := client.GetSASToken(azblob.AccountSASResourceTypes{Object: true, Container: true},
+		azblob.AccountSASPermissions{List: true, Read: true},
+		azblob.AccountSASServices{Blob: true},
+		time.Now(),
+		time.Now().Add(48*time.Hour))
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(sasKey).ToNot(BeEmpty())
+
+	// the sdk returns the full SAS url e.g test.blob.core.windows.net/?<actual-sas-token>
+	sasKey = strings.TrimPrefix(sasKey, testBucket.Spec.Endpoint+"/")
+	testSASKeySecret := corev1.Secret{
+		Data: map[string][]byte{
+			sasKeyField: []byte(sasKey),
+		},
+	}
+
+	sasKeyClient, err := NewClient(testBucket.DeepCopy(), testSASKeySecret.DeepCopy())
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Test if blob exists using sasKey.
+	ctx, timeout = context.WithTimeout(context.Background(), testTimeout)
+	defer timeout()
+	_, err = sasKeyClient.FGetObject(ctx, testContainer, testFile, localPath)
+
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(localPath).To(BeARegularFile())
+	f, _ := os.ReadFile(localPath)
+	g.Expect(f).To(Equal([]byte(testFileData)))
+}
+
 func TestBlobClient_FGetObject_NotFoundErr(t *testing.T) {
 	g := NewWithT(t)
 

@@ -35,6 +35,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 
+	"github.com/fluxcd/pkg/masktoken"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
 )
 
@@ -53,6 +54,7 @@ const (
 	clientCertificateSendChainField = "clientCertificateSendChain"
 	authorityHostField              = "authorityHost"
 	accountKeyField                 = "accountKey"
+	sasKeyField                     = "sasKey"
 )
 
 // BlobClient is a minimal Azure Blob client for fetching objects.
@@ -105,6 +107,14 @@ func NewClient(obj *sourcev1.Bucket, secret *corev1.Secret) (c *BlobClient, err 
 			c.ServiceClient, err = azblob.NewServiceClientWithSharedKey(obj.Spec.Endpoint, cred, &azblob.ClientOptions{})
 			return
 		}
+
+		var fullPath string
+		if fullPath, err = sasTokenFromSecret(obj.Spec.Endpoint, secret); err != nil {
+			return
+		}
+
+		c.ServiceClient, err = azblob.NewServiceClientWithNoCredential(fullPath, &azblob.ClientOptions{})
+		return
 	}
 
 	// Compose token chain based on environment.
@@ -147,6 +157,9 @@ func ValidateSecret(secret *corev1.Secret) error {
 		valid = true
 	}
 	if _, hasAccountKey := secret.Data[accountKeyField]; hasAccountKey {
+		valid = true
+	}
+	if _, hasSasKey := secret.Data[sasKeyField]; hasSasKey {
 		valid = true
 	}
 	if _, hasAuthorityHost := secret.Data[authorityHostField]; hasAuthorityHost {
@@ -353,6 +366,41 @@ func sharedCredentialFromSecret(endpoint string, secret *corev1.Secret) (*azblob
 		return azblob.NewSharedKeyCredential(accountName, string(accountKey))
 	}
 	return nil, nil
+}
+
+// sasTokenFromSecret retrieves the SAS Token from the `sasKey`. It returns an empty string if the Secret
+// does not contain a valid set of credentials.
+func sasTokenFromSecret(ep string, secret *corev1.Secret) (string, error) {
+	if sasKey, hasSASKey := secret.Data[sasKeyField]; hasSASKey {
+		queryString := strings.TrimPrefix(string(sasKey), "?")
+		values, err := url.ParseQuery(queryString)
+		if err != nil {
+			maskedErrorString, maskErr := masktoken.MaskTokenFromString(err.Error(), string(sasKey))
+			if maskErr != nil {
+				return "", fmt.Errorf("error redacting token from error message: %s", maskErr)
+			}
+			return "", fmt.Errorf("unable to parse SAS token: %s", maskedErrorString)
+		}
+
+		epURL, err := url.Parse(ep)
+		if err != nil {
+			return "", fmt.Errorf("unable to parse endpoint URL: %s", err)
+		}
+
+		//merge the query values in the endpoint with the token
+		epValues := epURL.Query()
+		for key, val := range epValues {
+			if !values.Has(key) {
+				for _, str := range val {
+					values.Add(key, str)
+				}
+			}
+		}
+
+		epURL.RawQuery = values.Encode()
+		return epURL.String(), nil
+	}
+	return "", nil
 }
 
 // chainCredentialWithSecret tries to create a set of tokens, and returns an

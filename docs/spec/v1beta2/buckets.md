@@ -295,6 +295,7 @@ sets of `.data` fields:
 - `clientId` for authenticating using a Managed Identity.
 - `accountKey` for authenticating using a
   [Shared Key](https://pkg.go.dev/github.com/Azure/azure-sdk-for-go/sdk/storage/azblob#SharedKeyCredential).
+- `sasKey` for authenticating using a [SAS Token](https://docs.microsoft.com/en-us/azure/storage/common/storage-sas-overview)
 
 For any Managed Identity and/or Azure Active Directory authentication method,
 the base URL can be configured using `.data.authorityHost`. If not supplied,
@@ -503,6 +504,41 @@ spec:
   bucketName: testsas
   endpoint: https://testfluxsas.blob.core.windows.net
 ```
+
+##### Azure Blob SAS Token example
+
+```yaml
+---
+apiVersion: source.toolkit.fluxcd.io/v1beta2
+kind: Bucket
+metadata:
+  name: azure-sas-token
+  namespace: default
+spec:
+  interval: 5m0s
+  provider: azure
+  bucketName: <bucket-name>
+  endpoint: https://<account-name>.blob.core.windows.net
+  secretRef:
+    name: azure-key
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: azure-key
+  namespace: default
+type: Opaque
+data:
+  sasKey: <base64>
+```
+
+The sasKey only contains the SAS token e.g `?sv=2020-08-0&ss=bfqt&srt=co&sp=rwdlacupitfx&se=2022-05-26T21:55:35Z&st=2022-05...`.
+The leading question mark is optional.
+The query values from the `sasKey` data field in the Secrets gets merged with the ones in the `spec.endpoint` of the `Bucket`.
+If the same key is present in the both of them, the value in the `sasKey` takes precedence.
+
+Note that the Azure SAS Token has an expiry date and it should be updated before it expires so that Flux can
+continue to access Azure Storage.
 
 #### GCP
 

@@ -25,6 +25,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"net/url"
 	"testing"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
@@ -65,6 +66,14 @@ func TestValidateSecret(t *testing.T) {
 					tenantIDField:     []byte("some-tenant-id-"),
 					clientIDField:     []byte("some-client-id-"),
 					clientSecretField: []byte("some-client-secret-"),
+				},
+			},
+		},
+		{
+			name: "valid SAS Key Secret",
+			secret: &corev1.Secret{
+				Data: map[string][]byte{
+					sasKeyField: []byte("?spr=<some-sas-url"),
 				},
 			},
 		},
@@ -288,6 +297,85 @@ func Test_sharedCredentialFromSecret(t *testing.T) {
 				return
 			}
 			g.Expect(got).To(BeNil())
+		})
+	}
+}
+
+func Test_sasTokenFromSecret(t *testing.T) {
+	tests := []struct {
+		name     string
+		endpoint string
+		secret   *corev1.Secret
+		want     string
+		wantErr  bool
+	}{
+		{
+			name:     "Valid SAS Token",
+			endpoint: "https://accountName.blob.windows.net",
+			secret: &corev1.Secret{
+				Data: map[string][]byte{
+					sasKeyField: []byte("?sv=2020-08-0&ss=bfqt&srt=co&sp=rwdlacupitfx&se=2022-05-26T21:55:35Z&st=2022-05-26T13:55:35Z&spr=https&sig=JlHT"),
+				},
+			},
+			want: "https://accountName.blob.windows.net?sv=2020-08-0&ss=bfqt&srt=co&sp=rwdlacupitfx&se=2022-05-26T21:55:35Z&st=2022-05-26T13:55:35Z&spr=https&sig=JlHT",
+		},
+		{
+			name:     "Valid SAS Token without leading question mark",
+			endpoint: "https://accountName.blob.windows.net",
+			secret: &corev1.Secret{
+				Data: map[string][]byte{
+					sasKeyField: []byte("sv=2020-08-04&ss=bfqt&srt=co&sp=rwdl&se=2022-05-26T21:55:35Z&st=2022-05-26&spr=https&sig=JlHT"),
+				},
+			},
+			want: "https://accountName.blob.windows.net?sv=2020-08-04&ss=bfqt&srt=co&sp=rwdl&se=2022-05-26T21:55:35Z&st=2022-05-26&spr=https&sig=JlHT",
+		},
+		{
+			name:     "endpoint with query values",
+			endpoint: "https://accountName.blob.windows.net?sv=2020-08-04",
+			secret: &corev1.Secret{
+				Data: map[string][]byte{
+					sasKeyField: []byte("ss=bfqt&srt=co&sp=rwdl&se=2022-05-26T21:55:35Z&st=2022-05-26&spr=https&sig=JlHT"),
+				},
+			},
+			want: "https://accountName.blob.windows.net?sv=2020-08-04&ss=bfqt&srt=co&sp=rwdl&se=2022-05-26T21:55:35Z&st=2022-05-26&spr=https&sig=JlHT",
+		},
+		{
+			name:     "conflicting query values in token",
+			endpoint: "https://accountName.blob.windows.net?sv=2020-08-04&ss=abcde",
+			secret: &corev1.Secret{
+				Data: map[string][]byte{
+					sasKeyField: []byte("sv=2019-07-06&ss=bfqt&srt=co&sp=rwdl&se=2022-05-26T21:55:35Z&st=2022-05-26&spr=https&sig=JlHT"),
+				},
+			},
+			want: "https://accountName.blob.windows.net?sv=2019-07-06&ss=bfqt&srt=co&sp=rwdl&se=2022-05-26T21:55:35Z&st=2022-05-26&spr=https&sig=JlHT",
+		},
+		{
+			name: "invalid sas token",
+			secret: &corev1.Secret{
+				Data: map[string][]byte{
+					sasKeyField: []byte("%##sssvecrpt"),
+				},
+			},
+			wantErr: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			_, err := url.ParseQuery("")
+			got, err := sasTokenFromSecret(tt.endpoint, tt.secret)
+			g.Expect(err != nil).To(Equal(tt.wantErr))
+			if tt.want != "" {
+				ttVaules, err := url.Parse(tt.want)
+				g.Expect(err).To(BeNil())
+
+				gotValues, err := url.Parse(got)
+				g.Expect(err).To(BeNil())
+				g.Expect(gotValues.Query()).To(Equal(ttVaules.Query()))
+				return
+			}
+			g.Expect(got).To(Equal(""))
 		})
 	}
 }
