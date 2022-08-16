@@ -26,8 +26,8 @@ import (
 	"testing"
 
 	"github.com/fluxcd/pkg/apis/meta"
+	"github.com/fluxcd/pkg/sourceignore"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
-	"github.com/fluxcd/source-controller/pkg/sourceignore"
 
 	"github.com/google/uuid"
 	miniov7 "github.com/minio/minio-go/v7"

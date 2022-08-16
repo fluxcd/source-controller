@@ -49,6 +49,7 @@ import (
 	"github.com/fluxcd/pkg/runtime/patch"
 	"github.com/fluxcd/pkg/runtime/predicates"
 
+	"github.com/fluxcd/pkg/sourceignore"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
 	serror "github.com/fluxcd/source-controller/internal/error"
 	"github.com/fluxcd/source-controller/internal/features"
@@ -57,7 +58,6 @@ import (
 	"github.com/fluxcd/source-controller/internal/util"
 	"github.com/fluxcd/source-controller/pkg/git"
 	"github.com/fluxcd/source-controller/pkg/git/strategy"
-	"github.com/fluxcd/source-controller/pkg/sourceignore"
 )
 
 // gitRepositoryReadyCondition contains the information required to summarize a
