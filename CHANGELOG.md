@@ -2,6 +2,26 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.27.0
+
+**Release date:** 2022-08-17
+
+This prerelease adds support for SAS Keys when authenticating against Azure Blob Storage
+and improves the documentation for `OCIRepository`. 
+
+The package `sourceignore`, which is used for excluding files from Flux internal artifacts,
+has been moved to `fluxcd/pkg/sourceignore`.
+
+Improvements:
+- OCIRepo docs: auto-login setup details
+  [#862](https://github.com/fluxcd/source-controller/pull/862)
+- Add Support for SAS keys in Azure Blob
+  [#738](https://github.com/fluxcd/source-controller/pull/738)
+- Use sourceignore from fluxcd/pkg/sourceignore
+  [#864](https://github.com/fluxcd/source-controller/pull/864)
+- Update dependencies
+  [#869](https://github.com/fluxcd/source-controller/pull/869)
+
 ## 0.26.1
 
 **Release date:** 2022-08-11
