@@ -39,9 +39,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	kerrors "k8s.io/apimachinery/pkg/util/errors"
 
+	"github.com/fluxcd/pkg/sourceignore"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
 	sourcefs "github.com/fluxcd/source-controller/internal/fs"
-	"github.com/fluxcd/source-controller/pkg/sourceignore"
 )
 
 const GarbageCountLimit = 1000
