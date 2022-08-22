@@ -968,6 +968,21 @@ defaults to the latest tag.</p>
 </tr>
 <tr>
 <td>
+<code>layerSelector</code><br>
+<em>
+<a href="#source.toolkit.fluxcd.io/v1beta2.OCILayerSelector">
+OCILayerSelector
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>LayerSelector specifies which layer should be extracted from the OCI artifact.
+When not specified, the first layer found in the artifact is selected.</p>
+</td>
+</tr>
+<tr>
+<td>
 <code>provider</code><br>
 <em>
 string
@@ -2529,6 +2544,40 @@ string
 </table>
 </div>
 </div>
+<h3 id="source.toolkit.fluxcd.io/v1beta2.OCILayerSelector">OCILayerSelector
+</h3>
+<p>
+(<em>Appears on:</em>
+<a href="#source.toolkit.fluxcd.io/v1beta2.OCIRepositorySpec">OCIRepositorySpec</a>)
+</p>
+<p>OCILayerSelector specifies which layer should be extracted from an OCI Artifact</p>
+<div class="md-typeset__scrollwrap">
+<div class="md-typeset__table">
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>mediaType</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>MediaType specifies the OCI media type of the layer
+which should be extracted from the OCI Artifact.</p>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
 <h3 id="source.toolkit.fluxcd.io/v1beta2.OCIRepositoryRef">OCIRepositoryRef
 </h3>
 <p>
@@ -2630,6 +2679,21 @@ OCIRepositoryRef
 <em>(Optional)</em>
 <p>The OCI reference to pull and monitor for changes,
 defaults to the latest tag.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>layerSelector</code><br>
+<em>
+<a href="#source.toolkit.fluxcd.io/v1beta2.OCILayerSelector">
+OCILayerSelector
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>LayerSelector specifies which layer should be extracted from the OCI artifact.
+When not specified, the first layer found in the artifact is selected.</p>
 </td>
 </tr>
 <tr>

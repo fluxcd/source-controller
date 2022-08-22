@@ -80,13 +80,15 @@ func TestOCIRepository_Reconcile(t *testing.T) {
 		tag            string
 		semver         string
 		digest         string
+		mediaType      string
 		assertArtifact []artifactFixture
 	}{
 		{
-			name:   "public tag",
-			url:    podinfoVersions["6.1.6"].url,
-			tag:    podinfoVersions["6.1.6"].tag,
-			digest: podinfoVersions["6.1.6"].digest.Hex,
+			name:      "public tag",
+			url:       podinfoVersions["6.1.6"].url,
+			tag:       podinfoVersions["6.1.6"].tag,
+			digest:    podinfoVersions["6.1.6"].digest.Hex,
+			mediaType: "application/vnd.docker.image.rootfs.diff.tar.gzip",
 			assertArtifact: []artifactFixture{
 				{
 					expectedPath:     "kustomize/deployment.yaml",
@@ -142,7 +144,9 @@ func TestOCIRepository_Reconcile(t *testing.T) {
 			if tt.semver != "" {
 				obj.Spec.Reference.SemVer = tt.semver
 			}
-
+			if tt.mediaType != "" {
+				obj.Spec.LayerSelector = &sourcev1.OCILayerSelector{MediaType: tt.mediaType}
+			}
 			g.Expect(testEnv.Create(ctx, obj)).To(Succeed())
 
 			key := client.ObjectKey{Name: obj.Name, Namespace: obj.Namespace}

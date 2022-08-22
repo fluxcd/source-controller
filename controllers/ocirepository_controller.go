@@ -33,6 +33,7 @@ import (
 	"github.com/google/go-containerregistry/pkg/authn/k8schain"
 	"github.com/google/go-containerregistry/pkg/crane"
 	"github.com/google/go-containerregistry/pkg/name"
+	gcrv1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -433,7 +434,40 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, obj *sour
 			return sreconcile.ResultEmpty, e
 		}
 
-		blob, err := layers[0].Compressed()
+		var layer gcrv1.Layer
+
+		switch {
+		case obj.GetLayerMediaType() != "":
+			var found bool
+			for i, l := range layers {
+				md, err := l.MediaType()
+				if err != nil {
+					e := serror.NewGeneric(
+						fmt.Errorf("failed to determine the media type of layer[%v] from artifact: %w", i, err),
+						sourcev1.OCILayerOperationFailedReason,
+					)
+					conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
+					return sreconcile.ResultEmpty, e
+				}
+				if string(md) == obj.GetLayerMediaType() {
+					layer = layers[i]
+					found = true
+					break
+				}
+			}
+			if !found {
+				e := serror.NewGeneric(
+					fmt.Errorf("failed to find layer with media type '%s' in artifact: %w", obj.GetLayerMediaType(), err),
+					sourcev1.OCILayerOperationFailedReason,
+				)
+				conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
+				return sreconcile.ResultEmpty, e
+			}
+		default:
+			layer = layers[0]
+		}
+
+		blob, err := layer.Compressed()
 		if err != nil {
 			e := serror.NewGeneric(
 				fmt.Errorf("failed to extract the first layer from artifact: %w", err),
