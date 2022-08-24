@@ -23,6 +23,7 @@ import (
 
 	"github.com/docker/cli/cli/config"
 	"github.com/docker/cli/cli/config/credentials"
+	"github.com/google/go-containerregistry/pkg/authn"
 	"helm.sh/helm/v3/pkg/registry"
 	corev1 "k8s.io/api/core/v1"
 )
@@ -65,6 +66,28 @@ func LoginOptionFromSecret(registryURL string, secret corev1.Secret) (registry.L
 		return nil, nil
 	case username == "" || password == "":
 		return nil, fmt.Errorf("invalid '%s' secret data: required fields 'username' and 'password'", secret.Name)
+	}
+	return registry.LoginOptBasicAuth(username, password), nil
+}
+
+// OIDCAdaptHelper returns an ORAS credentials callback configured with the authorization data
+// from the given authn authenticator. This allows for example to make use of credential helpers from
+// cloud providers.
+// Ref: https://github.com/google/go-containerregistry/tree/main/pkg/authn
+func OIDCAdaptHelper(authenticator authn.Authenticator) (registry.LoginOption, error) {
+	authConfig, err := authenticator.Authorization()
+	if err != nil {
+		return nil, fmt.Errorf("unable to get authentication data from OIDC: %w", err)
+	}
+
+	username := authConfig.Username
+	password := authConfig.Password
+
+	switch {
+	case username == "" && password == "":
+		return nil, nil
+	case username == "" || password == "":
+		return nil, fmt.Errorf("invalid auth data: required fields 'username' and 'password'")
 	}
 	return registry.LoginOptBasicAuth(username, password), nil
 }

@@ -1085,9 +1085,10 @@ func TestHelmChartReconciler_buildFromOCIHelmRepository(t *testing.T) {
 					GenerateName: "helmrepository-",
 				},
 				Spec: sourcev1.HelmRepositorySpec{
-					URL:     fmt.Sprintf("oci://%s/testrepo", testRegistryServer.registryHost),
-					Timeout: &metav1.Duration{Duration: timeout},
-					Type:    sourcev1.HelmRepositoryTypeOCI,
+					URL:      fmt.Sprintf("oci://%s/testrepo", testRegistryServer.registryHost),
+					Timeout:  &metav1.Duration{Duration: timeout},
+					Provider: sourcev1.GenericOCIProvider,
+					Type:     sourcev1.HelmRepositoryTypeOCI,
 				},
 			}
 			obj := &sourcev1.HelmChart{

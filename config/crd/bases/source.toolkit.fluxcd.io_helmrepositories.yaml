@@ -310,6 +310,18 @@ spec:
                   be done with caution, as it can potentially result in credentials
                   getting stolen in a MITM-attack.
                 type: boolean
+              provider:
+                default: generic
+                description: Provider used for authentication, can be 'aws', 'azure',
+                  'gcp' or 'generic'. This field is optional, and only taken into
+                  account if the .spec.type field is set to 'oci'. When not specified,
+                  defaults to 'generic'.
+                enum:
+                - generic
+                - aws
+                - azure
+                - gcp
+                type: string
               secretRef:
                 description: SecretRef specifies the Secret containing authentication
                   credentials for the HelmRepository. For HTTP/S basic auth the secret
@@ -328,7 +340,9 @@ spec:
                 type: boolean
               timeout:
                 default: 60s
-                description: Timeout of the index fetch operation, defaults to 60s.
+                description: Timeout is used for the index fetch operation for an
+                  HTTPS helm repository, and for remote OCI Repository operations
+                  like pulling for an OCI helm repository. Its default value is 60s.
                 type: string
               type:
                 description: Type of the HelmRepository. When this field is set to  "oci",

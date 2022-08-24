@@ -19,6 +19,7 @@ package registry
 import (
 	"testing"
 
+	"github.com/google/go-containerregistry/pkg/authn"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
 )
@@ -126,6 +127,57 @@ func TestLoginOptionFromSecret(t *testing.T) {
 
 			_, err := LoginOptionFromSecret(tt.url, secret)
 			g.Expect(err != nil).To(Equal(tt.wantErr))
+		})
+	}
+}
+
+func TestOIDCAdaptHelper(t *testing.T) {
+	auth := &authn.Basic{
+		Username: "flux",
+		Password: "flux_password",
+	}
+
+	tests := []struct {
+		name          string
+		auth          authn.Authenticator
+		expectedLogin bool
+		wantErr       bool
+	}{
+		{
+			name:          "Login from basic auth with empty auth",
+			auth:          &authn.Basic{},
+			expectedLogin: false,
+			wantErr:       false,
+		},
+		{
+			name:          "Login from basic auth",
+			auth:          auth,
+			expectedLogin: true,
+			wantErr:       false,
+		},
+		{
+			name:          "Login with missing password",
+			auth:          &authn.Basic{Username: "flux"},
+			expectedLogin: false,
+			wantErr:       true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+			loginOpt, err := OIDCAdaptHelper(tt.auth)
+			if tt.wantErr {
+				g.Expect(err).To(HaveOccurred())
+				return
+			}
+			g.Expect(err).To(BeNil())
+
+			if tt.expectedLogin {
+				g.Expect(loginOpt).ToNot(BeNil())
+			} else {
+				g.Expect(loginOpt).To(BeNil())
+			}
 		})
 	}
 }

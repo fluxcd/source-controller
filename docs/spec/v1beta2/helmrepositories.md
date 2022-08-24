@@ -162,6 +162,134 @@ A HelmRepository also needs a
 
 Possible values are `default` for a Helm HTTP/S repository, or `oci` for an OCI Helm repository.
 
+
+### Provider
+
+`.spec.provider` is an optional field that allows specifying an OIDC provider used
+for authentication purposes.
+
+Supported options are:
+- `generic`
+- `aws`
+- `azure`
+- `gcp`
+
+The `generic` provider can be used for public repositories or when static credentials
+are used for authentication. If you do not specify `.spec.provider`, it defaults
+to `generic`.
+
+**Note**: The provider field is supported only for Helm OCI repositories. The `spec.type`
+field must be set to `oci`.
+
+#### AWS
+
+The `aws` provider can be used to authenticate automatically using the EKS worker
+node IAM role or IAM Role for Service Accounts (IRSA), and by extension gain access
+to ECR.
+
+When the worker node IAM role has access to ECR, source-controller running on it
+will also have access to ECR.
+
+When using IRSA to enable access to ECR, add the following patch to your bootstrap
+repository, in the `flux-system/kustomization.yaml` file:
+
+```yaml
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - gotk-components.yaml
+  - gotk-sync.yaml
+patches:
+  - patch: |
+      apiVersion: v1
+      kind: ServiceAccount
+      metadata:
+        name: source-controller
+        annotations:
+          eks.amazonaws.com/role-arn: <role arn>
+    target:
+      kind: ServiceAccount
+      name: source-controller
+```
+
+Note that you can attach the AWS managed policy `arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly`
+to the IAM role when using IRSA.
+
+#### Azure
+
+The `azure` provider can be used to authenticate automatically using kubelet managed
+identity or Azure Active Directory pod-managed identity (aad-pod-identity), and 
+by extension gain access to ACR.
+
+When the kubelet managed identity has access to ACR, source-controller running on 
+it will also have access to ACR.
+
+When using aad-pod-identity to enable access to ACR, add the following patch to
+your bootstrap repository, in the `flux-system/kustomization.yaml` file:
+
+```yaml
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - gotk-components.yaml
+  - gotk-sync.yaml
+patches:
+  - patch: |
+      - op: add
+        path: /spec/template/metadata/labels/aadpodidbinding
+        value: <identity-name>
+    target:
+      kind: Deployment
+      name: source-controller
+```
+
+When using pod-managed identity on an AKS cluster, AAD Pod Identity has to be used
+to give the `source-controller` pod access to the ACR. To do this, you have to install
+`aad-pod-identity` on your cluster, create a managed identity that has access to the
+container registry (this can also be the Kubelet identity if it has `AcrPull` role
+assignment on the ACR), create an `AzureIdentity` and `AzureIdentityBinding` that describe
+the managed identity and then label the `source-controller` pods with the name of the
+AzureIdentity as shown in the patch above. Please take a look at [this guide](https://azure.github.io/aad-pod-identity/docs/)
+or [this one](https://docs.microsoft.com/en-us/azure/aks/use-azure-ad-pod-identity)
+if you want to use AKS pod-managed identities add-on that is in preview.
+
+#### GCP
+
+The `gcp` provider can be used to authenticate automatically using OAuth scopes or
+Workload Identity, and by extension gain access to GCR or Artifact Registry.
+
+When the GKE nodes have the appropriate OAuth scope for accessing GCR and Artifact Registry,
+source-controller running on it will also have access to them.
+
+When using Workload Identity to enable access to GCR or Artifact Registry, add the
+following patch to your bootstrap repository, in the `flux-system/kustomization.yaml`
+file:
+
+```yaml
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - gotk-components.yaml
+  - gotk-sync.yaml
+patches:
+  - patch: |
+      apiVersion: v1
+      kind: ServiceAccount
+      metadata:
+        name: source-controller
+        annotations:
+          iam.gke.io/gcp-service-account: <identity-name>
+    target:
+      kind: ServiceAccount
+      name: source-controller
+```
+
+The Artifact Registry service uses the permission `artifactregistry.repositories.downloadArtifacts`
+that is located under the Artifact Registry Reader role. If you are using Google Container Registry service,
+the needed permission is instead `storage.objects.list` which can be bound as part
+of the Container Registry Service Agent role. Take a look at [this guide](https://cloud.google.com/kubernetes-engine/docs/how-to/workload-identity)
+for more information about setting up GKE Workload Identity.
+
 ### Interval
 
 `.spec.interval` is a required field that specifies the interval which the

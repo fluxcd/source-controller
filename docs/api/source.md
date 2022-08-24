@@ -818,7 +818,9 @@ Kubernetes meta/v1.Duration
 </td>
 <td>
 <em>(Optional)</em>
-<p>Timeout of the index fetch operation, defaults to 60s.</p>
+<p>Timeout is used for the index fetch operation for an HTTPS helm repository,
+and for remote OCI Repository operations like pulling for an OCI helm repository.
+Its default value is 60s.</p>
 </td>
 </tr>
 <tr>
@@ -861,6 +863,20 @@ string
 <em>(Optional)</em>
 <p>Type of the HelmRepository.
 When this field is set to  &ldquo;oci&rdquo;, the URL field value must be prefixed with &ldquo;oci://&rdquo;.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>provider</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Provider used for authentication, can be &lsquo;aws&rsquo;, &lsquo;azure&rsquo;, &lsquo;gcp&rsquo; or &lsquo;generic&rsquo;.
+This field is optional, and only taken into account if the .spec.type field is set to &lsquo;oci&rsquo;.
+When not specified, defaults to &lsquo;generic&rsquo;.</p>
 </td>
 </tr>
 </table>
@@ -2347,7 +2363,9 @@ Kubernetes meta/v1.Duration
 </td>
 <td>
 <em>(Optional)</em>
-<p>Timeout of the index fetch operation, defaults to 60s.</p>
+<p>Timeout is used for the index fetch operation for an HTTPS helm repository,
+and for remote OCI Repository operations like pulling for an OCI helm repository.
+Its default value is 60s.</p>
 </td>
 </tr>
 <tr>
@@ -2390,6 +2408,20 @@ string
 <em>(Optional)</em>
 <p>Type of the HelmRepository.
 When this field is set to  &ldquo;oci&rdquo;, the URL field value must be prefixed with &ldquo;oci://&rdquo;.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>provider</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Provider used for authentication, can be &lsquo;aws&rsquo;, &lsquo;azure&rsquo;, &lsquo;gcp&rsquo; or &lsquo;generic&rsquo;.
+This field is optional, and only taken into account if the .spec.type field is set to &lsquo;oci&rsquo;.
+When not specified, defaults to &lsquo;generic&rsquo;.</p>
 </td>
 </tr>
 </tbody>

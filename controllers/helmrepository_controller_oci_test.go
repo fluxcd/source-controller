@@ -94,7 +94,8 @@ func TestHelmRepositoryOCIReconciler_Reconcile(t *testing.T) {
 					SecretRef: &meta.LocalObjectReference{
 						Name: secret.Name,
 					},
-					Type: sourcev1.HelmRepositoryTypeOCI,
+					Provider: sourcev1.GenericOCIProvider,
+					Type:     sourcev1.HelmRepositoryTypeOCI,
 				},
 			}
 			g.Expect(testEnv.Create(ctx, obj)).To(Succeed())
