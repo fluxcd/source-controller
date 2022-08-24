@@ -60,6 +60,11 @@ type OCIRepositorySpec struct {
 	// +optional
 	Reference *OCIRepositoryRef `json:"ref,omitempty"`
 
+	// LayerSelector specifies which layer should be extracted from the OCI artifact.
+	// When not specified, the first layer found in the artifact is selected.
+	// +optional
+	LayerSelector *OCILayerSelector `json:"layerSelector,omitempty"`
+
 	// The provider used for authentication, can be 'aws', 'azure', 'gcp' or 'generic'.
 	// When not specified, defaults to 'generic'.
 	// +kubebuilder:validation:Enum=generic;aws;azure;gcp
@@ -130,6 +135,15 @@ type OCIRepositoryRef struct {
 	Tag string `json:"tag,omitempty"`
 }
 
+// OCILayerSelector specifies which layer should be extracted from an OCI Artifact
+type OCILayerSelector struct {
+	// MediaType specifies the OCI media type of the layer
+	// which should be extracted from the OCI Artifact. The
+	// first layer matching this type is selected.
+	// +optional
+	MediaType string `json:"mediaType,omitempty"`
+}
+
 // OCIRepositoryVerification verifies the authenticity of an OCI Artifact
 type OCIRepositoryVerification struct {
 	// Provider specifies the technology used to sign the OCI Artifact.
@@ -190,6 +204,15 @@ func (in OCIRepository) GetRequeueAfter() time.Duration {
 // the status sub-resource.
 func (in *OCIRepository) GetArtifact() *Artifact {
 	return in.Status.Artifact
+}
+
+// GetLayerMediaType returns the media type layer selector if found in spec.
+func (in *OCIRepository) GetLayerMediaType() string {
+	if in.Spec.LayerSelector == nil {
+		return ""
+	}
+
+	return in.Spec.LayerSelector.MediaType
 }
 
 // +genclient

@@ -368,6 +368,30 @@ spec:
 
 This field takes precedence over all other fields.
 
+### Layer selector
+
+`spec.layerSelector` is an optional field to specify which layer should be extracted from the OCI Artifact.
+If not specified, the controller will extract the first layer found in the artifact.
+
+To extract a layer matching a specific
+[OCI media type](https://github.com/opencontainers/image-spec/blob/v1.0.2/media-types.md):
+
+```yaml
+---
+apiVersion: source.toolkit.fluxcd.io/v1beta2
+kind: OCIRepository
+metadata:
+  name: <repository-name>
+spec:
+  layerSelector:
+    mediaType: "application/deployment.content.v1.tar+gzip"
+```
+
+If the layer selector matches more than one layer, the first layer matching the specified media type will be used.
+Note that the selected OCI layer must be
+[compressed](https://github.com/opencontainers/image-spec/blob/v1.0.2/layer.md#gzip-media-types)
+in the `tar+gzip` format.
+
 ### Ignore
 
 `.spec.ignore` is an optional field to specify rules in [the `.gitignore`

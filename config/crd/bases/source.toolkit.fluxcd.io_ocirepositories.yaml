@@ -75,6 +75,17 @@ spec:
               interval:
                 description: The interval at which to check for image updates.
                 type: string
+              layerSelector:
+                description: LayerSelector specifies which layer should be extracted
+                  from the OCI artifact. When not specified, the first layer found
+                  in the artifact is selected.
+                properties:
+                  mediaType:
+                    description: MediaType specifies the OCI media type of the layer
+                      which should be extracted from the OCI Artifact. The first layer
+                      matching this type is selected.
+                    type: string
+                type: object
               provider:
                 default: generic
                 description: The provider used for authentication, can be 'aws', 'azure',
