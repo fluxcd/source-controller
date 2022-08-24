@@ -457,7 +457,7 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, obj *sour
 			}
 			if !found {
 				e := serror.NewGeneric(
-					fmt.Errorf("failed to find layer with media type '%s' in artifact: %w", obj.GetLayerMediaType(), err),
+					fmt.Errorf("failed to find layer with media type '%s' in artifact", obj.GetLayerMediaType()),
 					sourcev1.OCILayerOperationFailedReason,
 				)
 				conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())

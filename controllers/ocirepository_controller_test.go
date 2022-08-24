@@ -248,6 +248,109 @@ func TestOCIRepository_Reconcile(t *testing.T) {
 	}
 }
 
+func TestOCIRepository_Reconcile_MediaType(t *testing.T) {
+	g := NewWithT(t)
+
+	// Registry server with public images
+	tmpDir := t.TempDir()
+	regServer, err := setupRegistryServer(ctx, tmpDir, registryOptions{})
+	if err != nil {
+		g.Expect(err).ToNot(HaveOccurred())
+	}
+
+	podinfoVersions, err := pushMultiplePodinfoImages(regServer.registryHost, "6.1.4", "6.1.5", "6.1.6")
+
+	tests := []struct {
+		name      string
+		url       string
+		tag       string
+		mediaType string
+		wantErr   bool
+	}{
+		{
+			name: "Works with no media type",
+			url:  podinfoVersions["6.1.4"].url,
+			tag:  podinfoVersions["6.1.4"].tag,
+		},
+		{
+			name:      "Works with Flux CLI media type",
+			url:       podinfoVersions["6.1.5"].url,
+			tag:       podinfoVersions["6.1.5"].tag,
+			mediaType: "application/vnd.docker.image.rootfs.diff.tar.gzip",
+		},
+		{
+			name:      "Fails with unknown media type",
+			url:       podinfoVersions["6.1.6"].url,
+			tag:       podinfoVersions["6.1.6"].tag,
+			mediaType: "application/invalid.tar.gzip",
+			wantErr:   true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+
+			g := NewWithT(t)
+
+			ns, err := testEnv.CreateNamespace(ctx, "ocirepository-mediatype-test")
+			g.Expect(err).ToNot(HaveOccurred())
+			defer func() { g.Expect(testEnv.Delete(ctx, ns)).To(Succeed()) }()
+
+			obj := &sourcev1.OCIRepository{
+				ObjectMeta: metav1.ObjectMeta{
+					GenerateName: "ocirepository-reconcile",
+					Namespace:    ns.Name,
+				},
+				Spec: sourcev1.OCIRepositorySpec{
+					URL:      tt.url,
+					Interval: metav1.Duration{Duration: 60 * time.Minute},
+					Reference: &sourcev1.OCIRepositoryRef{
+						Tag: tt.tag,
+					},
+					LayerSelector: &sourcev1.OCILayerSelector{
+						MediaType: tt.mediaType,
+					},
+				},
+			}
+
+			g.Expect(testEnv.Create(ctx, obj)).To(Succeed())
+
+			key := client.ObjectKey{Name: obj.Name, Namespace: obj.Namespace}
+
+			// Wait for the finalizer to be set
+			g.Eventually(func() bool {
+				if err := testEnv.Get(ctx, key, obj); err != nil {
+					return false
+				}
+				return len(obj.Finalizers) > 0
+			}, timeout).Should(BeTrue())
+
+			// Wait for the object to be reconciled
+			g.Eventually(func() bool {
+				if err := testEnv.Get(ctx, key, obj); err != nil {
+					return false
+				}
+				readyCondition := conditions.Get(obj, meta.ReadyCondition)
+				return readyCondition != nil
+			}, timeout).Should(BeTrue())
+
+			g.Expect(conditions.IsReady(obj)).To(BeIdenticalTo(!tt.wantErr))
+			if tt.wantErr {
+				g.Expect(conditions.Get(obj, meta.ReadyCondition).Message).Should(ContainSubstring("failed to find layer with media type"))
+			}
+
+			// Wait for the object to be deleted
+			g.Expect(testEnv.Delete(ctx, obj)).To(Succeed())
+			g.Eventually(func() bool {
+				if err := testEnv.Get(ctx, key, obj); err != nil {
+					return apierrors.IsNotFound(err)
+				}
+				return false
+			}, timeout).Should(BeTrue())
+		})
+	}
+}
+
 func TestOCIRepository_reconcileSource_authStrategy(t *testing.T) {
 	type secretOptions struct {
 		username      string
