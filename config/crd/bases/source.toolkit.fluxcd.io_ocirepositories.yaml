@@ -82,7 +82,8 @@ spec:
                 properties:
                   mediaType:
                     description: MediaType specifies the OCI media type of the layer
-                      which should be extracted from the OCI Artifact.
+                      which should be extracted from the OCI Artifact. The first layer
+                      matching this type is selected.
                     type: string
                 type: object
               provider:

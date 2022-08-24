@@ -2571,7 +2571,8 @@ string
 <td>
 <em>(Optional)</em>
 <p>MediaType specifies the OCI media type of the layer
-which should be extracted from the OCI Artifact.</p>
+which should be extracted from the OCI Artifact. The
+first layer matching this type is selected.</p>
 </td>
 </tr>
 </tbody>

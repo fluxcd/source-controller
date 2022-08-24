@@ -138,7 +138,8 @@ type OCIRepositoryRef struct {
 // OCILayerSelector specifies which layer should be extracted from an OCI Artifact
 type OCILayerSelector struct {
 	// MediaType specifies the OCI media type of the layer
-	// which should be extracted from the OCI Artifact.
+	// which should be extracted from the OCI Artifact. The
+	// first layer matching this type is selected.
 	// +optional
 	MediaType string `json:"mediaType,omitempty"`
 }
