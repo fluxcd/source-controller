@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"strings"
 	"time"
 
 	helmgetter "helm.sh/helm/v3/pkg/getter"
@@ -41,10 +42,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	"github.com/fluxcd/pkg/apis/meta"
+	"github.com/fluxcd/pkg/oci"
+	"github.com/fluxcd/pkg/oci/auth/login"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	helper "github.com/fluxcd/pkg/runtime/controller"
 	"github.com/fluxcd/pkg/runtime/patch"
 	"github.com/fluxcd/pkg/runtime/predicates"
+	"github.com/google/go-containerregistry/pkg/name"
 
 	"github.com/fluxcd/source-controller/api/v1beta2"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
@@ -204,6 +208,9 @@ func (r *HelmRepositoryOCIReconciler) Reconcile(ctx context.Context, req ctrl.Re
 // block at the very end to summarize the conditions to be in a consistent
 // state.
 func (r *HelmRepositoryOCIReconciler) reconcile(ctx context.Context, obj *v1beta2.HelmRepository) (result ctrl.Result, retErr error) {
+	ctxTimeout, cancel := context.WithTimeout(ctx, obj.Spec.Timeout.Duration)
+	defer cancel()
+
 	oldObj := obj.DeepCopy()
 
 	defer func() {
@@ -296,6 +303,19 @@ func (r *HelmRepositoryOCIReconciler) reconcile(ctx context.Context, obj *v1beta
 		}
 	}
 
+	if obj.Spec.Provider != sourcev1.GenericOCIProvider && obj.Spec.Type == sourcev1.HelmRepositoryTypeOCI {
+		auth, authErr := oidcAuth(ctxTimeout, obj)
+		if authErr != nil && !errors.Is(authErr, oci.ErrUnconfiguredProvider) {
+			e := fmt.Errorf("failed to get credential from %s: %w", obj.Spec.Provider, authErr)
+			conditions.MarkFalse(obj, meta.ReadyCondition, sourcev1.AuthenticationFailedReason, e.Error())
+			result, retErr = ctrl.Result{}, e
+			return
+		}
+		if auth != nil {
+			loginOpts = append(loginOpts, auth)
+		}
+	}
+
 	// Create registry client and login if needed.
 	registryClient, file, err := r.RegistryClientGenerator(loginOpts != nil)
 	if err != nil {
@@ -365,4 +385,43 @@ func (r *HelmRepositoryOCIReconciler) eventLogf(ctx context.Context, obj runtime
 		ctrl.LoggerFrom(ctx).Info(msg)
 	}
 	r.Eventf(obj, eventType, reason, msg)
+}
+
+// oidcAuth generates the OIDC credential authenticator based on the specified cloud provider.
+func oidcAuth(ctx context.Context, obj *sourcev1.HelmRepository) (helmreg.LoginOption, error) {
+	url := strings.TrimPrefix(obj.Spec.URL, sourcev1.OCIRepositoryPrefix)
+	ref, err := name.ParseReference(url)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse URL '%s': %w", obj.Spec.URL, err)
+	}
+
+	loginOpt, err := loginWithManager(ctx, obj.Spec.Provider, url, ref)
+	if err != nil {
+		return nil, fmt.Errorf("failed to login to registry '%s': %w", obj.Spec.URL, err)
+	}
+
+	return loginOpt, nil
+}
+
+func loginWithManager(ctx context.Context, provider, url string, ref name.Reference) (helmreg.LoginOption, error) {
+	opts := login.ProviderOptions{}
+	switch provider {
+	case sourcev1.AmazonOCIProvider:
+		opts.AwsAutoLogin = true
+	case sourcev1.AzureOCIProvider:
+		opts.AzureAutoLogin = true
+	case sourcev1.GoogleOCIProvider:
+		opts.GcpAutoLogin = true
+	}
+
+	auth, err := login.NewManager().Login(ctx, url, ref, opts)
+	if err != nil {
+		return nil, err
+	}
+
+	if auth == nil {
+		return nil, nil
+	}
+
+	return registry.OIDCAdaptHelper(auth)
 }

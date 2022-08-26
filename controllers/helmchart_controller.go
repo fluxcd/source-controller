@@ -50,6 +50,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	"github.com/fluxcd/pkg/apis/meta"
+	"github.com/fluxcd/pkg/oci"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	helper "github.com/fluxcd/pkg/runtime/controller"
 	"github.com/fluxcd/pkg/runtime/events"
@@ -463,6 +464,9 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 		tlsConfig *tls.Config
 		loginOpts []helmreg.LoginOption
 	)
+	// Used to login with the repository declared provider
+	ctxTimeout, cancel := context.WithTimeout(ctx, repo.Spec.Timeout.Duration)
+	defer cancel()
 
 	normalizedURL := repository.NormalizeURL(repo.Spec.URL)
 	// Construct the Getter options from the HelmRepository data
@@ -519,6 +523,21 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 		}
 
 		loginOpts = append([]helmreg.LoginOption{}, loginOpt)
+	}
+
+	if repo.Spec.Provider != sourcev1.GenericOCIProvider && repo.Spec.Type == sourcev1.HelmRepositoryTypeOCI {
+		auth, authErr := oidcAuth(ctxTimeout, repo)
+		if authErr != nil && !errors.Is(authErr, oci.ErrUnconfiguredProvider) {
+			e := &serror.Event{
+				Err:    fmt.Errorf("failed to get credential from %s: %w", repo.Spec.Provider, authErr),
+				Reason: sourcev1.AuthenticationFailedReason,
+			}
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
+			return sreconcile.ResultEmpty, e
+		}
+		if auth != nil {
+			loginOpts = append([]helmreg.LoginOption{}, auth)
+		}
 	}
 
 	// Initialize the chart repository
@@ -947,6 +966,11 @@ func (r *HelmChartReconciler) namespacedChartRepositoryCallback(ctx context.Cont
 				},
 			}
 		}
+
+		// Used to login with the repository declared provider
+		ctxTimeout, cancel := context.WithTimeout(ctx, repo.Spec.Timeout.Duration)
+		defer cancel()
+
 		clientOpts := []helmgetter.Option{
 			helmgetter.WithURL(normalizedURL),
 			helmgetter.WithTimeout(repo.Spec.Timeout.Duration),
@@ -974,6 +998,16 @@ func (r *HelmChartReconciler) namespacedChartRepositoryCallback(ctx context.Cont
 			}
 
 			loginOpts = append([]helmreg.LoginOption{}, loginOpt)
+		}
+
+		if repo.Spec.Provider != sourcev1.GenericOCIProvider && repo.Spec.Type == sourcev1.HelmRepositoryTypeOCI {
+			auth, authErr := oidcAuth(ctxTimeout, repo)
+			if authErr != nil && !errors.Is(authErr, oci.ErrUnconfiguredProvider) {
+				return nil, fmt.Errorf("failed to get credential from %s: %w", repo.Spec.Provider, authErr)
+			}
+			if auth != nil {
+				loginOpts = append([]helmreg.LoginOption{}, auth)
+			}
 		}
 
 		var chartRepo repository.Downloader

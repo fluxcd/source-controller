@@ -161,7 +161,7 @@ and by extension gain access to ACR.
 When the kubelet managed identity has access to ACR, source-controller running
 on it will also have access to ACR.
 
-When using aad-pod-identity to enable access to ECR, add the following patch to
+When using aad-pod-identity to enable access to ACR, add the following patch to
 your bootstrap repository, in the `flux-system/kustomization.yaml` file:
 
 ```yaml

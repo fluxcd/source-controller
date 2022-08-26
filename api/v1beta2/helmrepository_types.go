@@ -68,7 +68,9 @@ type HelmRepositorySpec struct {
 	// +required
 	Interval metav1.Duration `json:"interval"`
 
-	// Timeout of the index fetch operation, defaults to 60s.
+	// Timeout is used for the index fetch operation for an HTTPS helm repository,
+	// and for remote OCI Repository operations like pulling for an OCI helm repository.
+	// Its default value is 60s.
 	// +kubebuilder:default:="60s"
 	// +optional
 	Timeout *metav1.Duration `json:"timeout,omitempty"`
@@ -89,6 +91,14 @@ type HelmRepositorySpec struct {
 	// +kubebuilder:validation:Enum=default;oci
 	// +optional
 	Type string `json:"type,omitempty"`
+
+	// Provider used for authentication, can be 'aws', 'azure', 'gcp' or 'generic'.
+	// This field is optional, and only taken into account if the .spec.type field is set to 'oci'.
+	// When not specified, defaults to 'generic'.
+	// +kubebuilder:validation:Enum=generic;aws;azure;gcp
+	// +kubebuilder:default:=generic
+	// +optional
+	Provider string `json:"provider,omitempty"`
 }
 
 // HelmRepositoryStatus records the observed state of the HelmRepository.
