@@ -28,6 +28,8 @@ import (
 	"strings"
 	"time"
 
+	soci "github.com/fluxcd/source-controller/internal/oci"
+
 	"github.com/Masterminds/semver/v3"
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/authn/k8schain"
@@ -408,6 +410,19 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, obj *sour
 
 	// Extract the content of the first artifact layer
 	if !obj.GetArtifact().HasRevision(revision) {
+		provider := obj.Spec.Verify.Provider
+		err := r.verifyOCISourceSignature(ctx, obj, url)
+		if err != nil {
+			e := serror.NewGeneric(
+				fmt.Errorf("failed to verify OCI image signature '%s' using provider '%s': %w", url, provider, err),
+				sourcev1.VerificationError,
+			)
+			conditions.MarkFalse(obj, sourcev1.SourceVerifiedCondition, e.Reason, e.Err.Error())
+			return sreconcile.ResultEmpty, e
+		}
+
+		conditions.MarkTrue(obj, sourcev1.SourceVerifiedCondition, "OCI image %s with digest %s verified.", url, imgDigest)
+
 		layers, err := img.Layers()
 		if err != nil {
 			e := serror.NewGeneric(
@@ -482,6 +497,91 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, obj *sour
 
 	conditions.Delete(obj, sourcev1.FetchFailedCondition)
 	return sreconcile.ResultSuccess, nil
+}
+
+// verifyOCISourceSignature verifies the authenticity of the given image reference url. First, it tries to keyful approach
+// by looking at whether the given secret exists. Then, if it does not exist, it pushes a keyless approach for verification.
+func (r *OCIRepositoryReconciler) verifyOCISourceSignature(ctx context.Context, obj *sourcev1.OCIRepository, url string) error {
+	// Verify the image
+	if obj.Spec.Verify != nil {
+		provider := obj.Spec.Verify.Provider
+		switch provider {
+		case "cosign":
+			// get the public keys from the given secret
+			secretRef := obj.Spec.Verify.SecretRef
+
+			// Generate the registry credential keychain either from static credentials or using cloud OIDC
+			keychain, err := r.keychain(ctx, obj)
+			if err != nil {
+				return err
+			}
+			authnKeychain := soci.WithAuthnKeychain(keychain)
+
+			ref, err := name.ParseReference(url)
+			if err != nil {
+				return err
+			}
+
+			if secretRef != nil {
+				certSecretName := types.NamespacedName{
+					Namespace: obj.Namespace,
+					Name:      secretRef.Name,
+				}
+
+				var pubSecret corev1.Secret
+				if err := r.Get(ctx, certSecretName, &pubSecret); err != nil {
+					return err
+				}
+
+				verified := false
+				// traverse all public keys and try to verify the signature
+				// this is brute-force approach, but it is ok for now
+				for k, data := range pubSecret.Data {
+					// search for public keys in the secret
+					if strings.HasSuffix(k, ".pub") {
+						verifier, err := soci.New(soci.WithPublicKey(data), authnKeychain)
+						if err != nil {
+							return err
+						}
+
+						signatures, _, err := verifier.VerifyImageSignatures(ctx, ref)
+						if err != nil {
+							continue
+						}
+
+						if signatures != nil {
+							verified = true
+							break
+						}
+					}
+				}
+
+				if !verified {
+					ctrl.LoggerFrom(ctx).Error(err, "none of the keys in the secret %s succeeded to verify for the image %s", secretRef.Name)
+					return fmt.Errorf("no matching signatures were found for the image %s", url)
+				}
+
+				return nil
+
+			} else {
+				verifier, err := soci.New(authnKeychain)
+				if err != nil {
+					return err
+				}
+
+				signatures, _, err := verifier.VerifyImageSignatures(ctx, ref)
+				if err != nil {
+					return err
+				}
+
+				if len(signatures) > 0 {
+					return nil
+				}
+			}
+			return nil
+		}
+	}
+	return nil
 }
 
 // parseRepositoryURL validates and extracts the repository URL.
@@ -651,7 +751,6 @@ func (r *OCIRepositoryReconciler) transport(ctx context.Context, obj *sourcev1.O
 		tlsConfig.RootCAs = syscerts
 	}
 	return transport, nil
-
 }
 
 // oidcAuth generates the OIDC credential authenticator based on the specified cloud provider.
@@ -883,7 +982,8 @@ func (r *OCIRepositoryReconciler) garbageCollect(ctx context.Context, obj *sourc
 // that this is a simple log. While the debug log contains complete details
 // about the event.
 func (r *OCIRepositoryReconciler) eventLogf(ctx context.Context,
-	obj runtime.Object, eventType string, reason string, messageFmt string, args ...interface{}) {
+	obj runtime.Object, eventType, reason, messageFmt string, args ...interface{},
+) {
 	msg := fmt.Sprintf(messageFmt, args...)
 	// Log and emit event.
 	if eventType == corev1.EventTypeWarning {

@@ -71,6 +71,10 @@ const (
 	// required fields, or the provided credentials do not match.
 	AuthenticationFailedReason string = "AuthenticationFailed"
 
+	// VerificationError signals that the Source's verification
+	// check failed.
+	VerificationError string = "VerificationError"
+
 	// DirCreationFailedReason signals a failure caused by a directory creation
 	// operation.
 	DirCreationFailedReason string = "DirectoryCreationFailed"
