@@ -308,6 +308,7 @@ func getObject() *raw.Object {
 func getBucket() *raw.Bucket {
 	labels := map[string]string{"a": "b"}
 	matchClasses := []string{"STANDARD"}
+	age := int64(10)
 	aTime := time.Date(2021, 1, 2, 0, 0, 0, 0, time.UTC)
 	rb := &raw.Bucket{
 		Name:                  bucketName,
@@ -327,7 +328,7 @@ func getBucket() *raw.Bucket {
 					StorageClass: "NEARLINE",
 				},
 				Condition: &raw.BucketLifecycleRuleCondition{
-					Age:                 10,
+					Age:                 &age,
 					IsLive:              googleapi.Bool(true),
 					CreatedBefore:       "2021-01-02",
 					MatchesStorageClass: matchClasses,
