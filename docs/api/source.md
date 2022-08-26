@@ -1028,6 +1028,22 @@ The secret must be of type kubernetes.io/dockerconfigjson.</p>
 </tr>
 <tr>
 <td>
+<code>verify</code><br>
+<em>
+<a href="#source.toolkit.fluxcd.io/v1beta2.OCIRepositoryVerification">
+OCIRepositoryVerification
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Verify contains the secret name containing the trusted public keys
+used to verify the signature and specifies which provider to use to check
+whether OCI image is authentic.</p>
+</td>
+</tr>
+<tr>
+<td>
 <code>serviceAccountName</code><br>
 <em>
 string
@@ -2772,6 +2788,22 @@ The secret must be of type kubernetes.io/dockerconfigjson.</p>
 </tr>
 <tr>
 <td>
+<code>verify</code><br>
+<em>
+<a href="#source.toolkit.fluxcd.io/v1beta2.OCIRepositoryVerification">
+OCIRepositoryVerification
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Verify contains the secret name containing the trusted public keys
+used to verify the signature and specifies which provider to use to check
+whether OCI image is authentic.</p>
+</td>
+</tr>
+<tr>
+<td>
 <code>serviceAccountName</code><br>
 <em>
 string
@@ -2967,6 +2999,10 @@ github.com/fluxcd/pkg/apis/meta.ReconcileRequestStatus
 </div>
 <h3 id="source.toolkit.fluxcd.io/v1beta2.OCIRepositoryVerification">OCIRepositoryVerification
 </h3>
+<p>
+(<em>Appears on:</em>
+<a href="#source.toolkit.fluxcd.io/v1beta2.OCIRepositorySpec">OCIRepositorySpec</a>)
+</p>
 <p>OCIRepositoryVerification verifies the authenticity of an OCI Artifact</p>
 <div class="md-typeset__scrollwrap">
 <div class="md-typeset__table">
@@ -2999,6 +3035,7 @@ github.com/fluxcd/pkg/apis/meta.LocalObjectReference
 </em>
 </td>
 <td>
+<em>(Optional)</em>
 <p>SecretRef specifies the Kubernetes Secret containing the
 trusted public keys.</p>
 </td>

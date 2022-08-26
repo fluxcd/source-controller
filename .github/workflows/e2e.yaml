@@ -9,6 +9,7 @@ on:
   push:
     branches:
       - main
+      - feature/863
 
 permissions:
   contents: read # for actions/checkout to fetch code

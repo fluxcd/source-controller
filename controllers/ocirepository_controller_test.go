@@ -5,7 +5,7 @@ Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
 
-    http://www.apache.org/licenses/LICENSE-2.0
+	http://www.apache.org/licenses/LICENSE-2.0
 
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
@@ -24,6 +24,9 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	coptions "github.com/sigstore/cosign/cmd/cosign/cli/options"
+	"github.com/sigstore/cosign/cmd/cosign/cli/sign"
+	"github.com/sigstore/cosign/pkg/cosign"
 	"math/big"
 	"net"
 	"net/http"
@@ -1211,6 +1214,128 @@ func TestOCIRepository_getArtifactURL(t *testing.T) {
 			g.Expect(got).To(Equal(tt.want))
 		})
 	}
+}
+
+func TestOCIRepository_verifyOCISourceSignature(t *testing.T) {
+	g := NewWithT(t)
+
+	tmpDir := t.TempDir()
+	regServer, err := setupRegistryServer(ctx, tmpDir, registryOptions{})
+	g.Expect(err).ToNot(HaveOccurred())
+
+	_, err = pushMultiplePodinfoImages(regServer.registryHost, "6.1.4", "6.1.5", "6.1.6")
+	g.Expect(err).ToNot(HaveOccurred())
+
+	tests := []struct {
+		name       string
+		url        string
+		reference  *sourcev1.OCIRepositoryRef
+		shouldSign bool
+		wantErr    bool
+	}{
+		{
+			name: "signed image should pass verification",
+			reference: &sourcev1.OCIRepositoryRef{
+				Tag: "6.1.4",
+			},
+			shouldSign: true,
+		},
+		{
+			name: "unsigned image should not pass verification",
+			reference: &sourcev1.OCIRepositoryRef{
+				Tag: "6.1.5",
+			},
+			shouldSign: false,
+		},
+	}
+
+	builder := fakeclient.NewClientBuilder().WithScheme(testEnv.GetScheme())
+	r := &OCIRepositoryReconciler{
+		Client:        builder.Build(),
+		EventRecorder: record.NewFakeRecorder(32),
+		Storage:       testStorage,
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			obj := &sourcev1.OCIRepository{
+				ObjectMeta: metav1.ObjectMeta{
+					GenerateName: "artifact-url-",
+				},
+				Spec: sourcev1.OCIRepositorySpec{
+					URL:       fmt.Sprintf("oci://%s/podinfo", regServer.registryHost),
+					Reference: tt.reference,
+					Verify: &sourcev1.OCIRepositoryVerification{
+						Provider:  "cosign",
+						SecretRef: &meta.LocalObjectReference{Name: "cosign-key"}},
+					Interval: metav1.Duration{Duration: interval},
+					Timeout:  &metav1.Duration{Duration: timeout},
+				},
+			}
+
+			pf := func(b bool) ([]byte, error) {
+				return []byte("foo"), nil
+			}
+
+			keys, err := cosign.GenerateKeyPair(pf)
+			if err != nil {
+				g.Expect(err).ToNot(HaveOccurred())
+			}
+
+			err = os.WriteFile("cosign.key", keys.PrivateBytes, 0600)
+			if err != nil {
+				g.Expect(err).ToNot(HaveOccurred())
+			}
+
+			secret := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "cosign-key",
+				},
+				Data: map[string][]byte{
+					"cosign.pub": keys.PublicBytes,
+				}}
+
+			err = r.Create(ctx, secret)
+			if err != nil {
+				g.Expect(err).NotTo(HaveOccurred())
+			}
+
+			keychain, err := r.keychain(ctx, obj)
+			if err != nil {
+				g.Expect(err).ToNot(HaveOccurred())
+			}
+
+			options := r.craneOptions(ctx, obj.Spec.Insecure)
+			options = append(options, crane.WithAuthFromKeychain(keychain))
+			url, err := r.getArtifactURL(obj, options)
+			if err != nil {
+				g.Expect(err).ToNot(HaveOccurred())
+			}
+
+			if tt.shouldSign {
+
+				ko := coptions.KeyOpts{
+					KeyRef:   "cosign.key",
+					PassFunc: pf,
+				}
+
+				t.Logf("url: %s", url)
+
+				ro := &coptions.RootOptions{}
+				err = sign.SignCmd(ro, ko, coptions.RegistryOptions{Keychain: keychain}, nil, []string{url}, "", "", false, "", "", "", false, false, "", false)
+				if err != nil {
+					g.Expect(err).ToNot(HaveOccurred())
+				}
+			}
+
+			err = r.verifyOCISourceSignature(ctx, obj, url, keychain)
+			if tt.wantErr {
+				g.Expect(err).To(HaveOccurred())
+				return
+			}
+		})
+	}
+
 }
 
 func TestOCIRepository_stalled(t *testing.T) {

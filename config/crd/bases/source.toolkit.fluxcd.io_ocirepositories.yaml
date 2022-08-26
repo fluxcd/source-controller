@@ -148,6 +148,31 @@ spec:
                   on a remote container registry.
                 pattern: ^oci://.*$
                 type: string
+              verify:
+                description: Verify contains the secret name containing the trusted
+                  public keys used to verify the signature and specifies which provider
+                  to use to check whether OCI image is authentic.
+                properties:
+                  provider:
+                    default: cosign
+                    description: Provider specifies the technology used to sign the
+                      OCI Artifact.
+                    enum:
+                    - cosign
+                    type: string
+                  secretRef:
+                    description: SecretRef specifies the Kubernetes Secret containing
+                      the trusted public keys.
+                    properties:
+                      name:
+                        description: Name of the referent.
+                        type: string
+                    required:
+                    - name
+                    type: object
+                required:
+                - provider
+                type: object
             required:
             - interval
             - url
