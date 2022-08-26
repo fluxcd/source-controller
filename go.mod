@@ -24,31 +24,33 @@ require (
 	// maintained by the ProtonMail team to continue to support the openpgp
 	// module, after the Go team decided to no longer maintain it.
 	// When in doubt (and not using openpgp), use /x/crypto.
-	github.com/ProtonMail/go-crypto v0.0.0-20220812175011-7fcef0dbe794
+	github.com/ProtonMail/go-crypto v0.0.0-20220824120805-4b6e5c587895
 	github.com/cyphar/filepath-securejoin v0.2.3
-	github.com/darkowlzz/controller-check v0.0.0-20220325122359-11f5827b7981
-	github.com/distribution/distribution/v3 v3.0.0-20220816150328-6c237953cbbe
+	github.com/darkowlzz/controller-check v0.0.0-20220821212613-0c0d9fe0d72e
+	github.com/distribution/distribution/v3 v3.0.0-20220822034424-3413bf8e14fd
 	github.com/docker/cli v20.10.17+incompatible
 	github.com/docker/go-units v0.4.0
 	github.com/elazarl/goproxy v0.0.0-20220529153421-8ea89ba92021
 	github.com/fluxcd/gitkit v0.6.0
-	github.com/fluxcd/pkg/apis/meta v0.14.2
-	github.com/fluxcd/pkg/gittestserver v0.6.0
-	github.com/fluxcd/pkg/gitutil v0.1.0
-	github.com/fluxcd/pkg/helmtestserver v0.7.4
+	github.com/fluxcd/pkg/apis/meta v0.15.0
+	github.com/fluxcd/pkg/gittestserver v0.7.0
+	github.com/fluxcd/pkg/gitutil v0.2.0
+	github.com/fluxcd/pkg/helmtestserver v0.8.0
 	github.com/fluxcd/pkg/lockedfile v0.1.0
-	github.com/fluxcd/pkg/masktoken v0.0.1
-	github.com/fluxcd/pkg/oci v0.5.1
-	github.com/fluxcd/pkg/runtime v0.16.2
-	github.com/fluxcd/pkg/sourceignore v0.1.0
-	github.com/fluxcd/pkg/ssh v0.5.0
-	github.com/fluxcd/pkg/testserver v0.2.0
-	github.com/fluxcd/pkg/untar v0.1.0
-	github.com/fluxcd/pkg/version v0.1.0
+	github.com/fluxcd/pkg/masktoken v0.2.0
+	github.com/fluxcd/pkg/oci v0.7.0
+	github.com/fluxcd/pkg/runtime v0.17.0
+	github.com/fluxcd/pkg/sourceignore v0.2.0
+	github.com/fluxcd/pkg/ssh v0.6.0
+	github.com/fluxcd/pkg/testserver v0.3.0
+	github.com/fluxcd/pkg/untar v0.2.0
+	github.com/fluxcd/pkg/version v0.2.0
 	github.com/fluxcd/source-controller/api v0.27.0
 	github.com/go-git/go-billy/v5 v5.3.1
 	github.com/go-git/go-git/v5 v5.4.2
 	github.com/go-logr/logr v1.2.3
+	github.com/google/go-containerregistry v0.11.0
+	github.com/google/go-containerregistry/pkg/authn/k8schain v0.0.0-20220824164412-87b3a7966622
 	github.com/google/uuid v1.3.0
 	github.com/libgit2/git2go/v33 v33.0.9
 	github.com/minio/minio-go/v7 v7.0.34
@@ -57,24 +59,19 @@ require (
 	github.com/phayes/freeport v0.0.0-20220201140144-74d24b5ae9f5
 	github.com/prometheus/client_golang v1.13.0
 	github.com/spf13/pflag v1.0.5
-	golang.org/x/crypto v0.0.0-20220722155217-630584e8d5aa
-	golang.org/x/net v0.0.0-20220812174116-3211cb980234
-	golang.org/x/sync v0.0.0-20220722155255-886fb9371eb4
-	google.golang.org/api v0.93.0
+	golang.org/x/crypto v0.0.0-20220824171710-5757bc0c5503
+	golang.org/x/net v0.0.0-20220822230855-b0a4917ee28c
+	golang.org/x/sync v0.0.0-20220819030929-7fc1605a5dde
+	google.golang.org/api v0.94.0
 	gotest.tools v2.2.0+incompatible
-	helm.sh/helm/v3 v3.9.3
-	k8s.io/api v0.24.3
-	k8s.io/apimachinery v0.24.3
-	k8s.io/client-go v0.24.3
-	k8s.io/utils v0.0.0-20220812165043-ad590609e2e5
-	sigs.k8s.io/cli-utils v0.31.2
+	helm.sh/helm/v3 v3.9.4
+	k8s.io/api v0.25.0
+	k8s.io/apimachinery v0.25.0
+	k8s.io/client-go v0.25.0
+	k8s.io/utils v0.0.0-20220823124924-e9cbc92d1a73
+	sigs.k8s.io/cli-utils v0.33.0
 	sigs.k8s.io/controller-runtime v0.11.2
 	sigs.k8s.io/yaml v1.3.0
-)
-
-require (
-	github.com/google/go-containerregistry v0.11.0
-	github.com/google/go-containerregistry/pkg/authn/k8schain v0.0.0-20220808030257-7196cf3dc436
 )
 
 // Fix CVE-2022-1996 (for v2, Go Modules incompatible)
@@ -105,7 +102,7 @@ require (
 	github.com/Shopify/logrus-bugsnag v0.0.0-20171204204709-577dee27f20d // indirect
 	github.com/acomagu/bufpipe v1.0.3 // indirect
 	github.com/asaskevich/govalidator v0.0.0-20200428143746-21a406dcc535 // indirect
-	github.com/aws/aws-sdk-go v1.44.53 // indirect
+	github.com/aws/aws-sdk-go v1.44.84 // indirect
 	github.com/aws/aws-sdk-go-v2 v1.16.7 // indirect
 	github.com/aws/aws-sdk-go-v2/config v1.15.14 // indirect
 	github.com/aws/aws-sdk-go-v2/credentials v1.12.9 // indirect
@@ -146,12 +143,12 @@ require (
 	github.com/exponent-io/jsonpath v0.0.0-20151013193312-d6023ce2651d // indirect
 	github.com/fatih/color v1.13.0 // indirect
 	github.com/felixge/httpsnoop v1.0.1 // indirect
-	github.com/fluxcd/pkg/apis/acl v0.0.3 // indirect
+	github.com/fluxcd/pkg/apis/acl v0.1.0 // indirect
 	github.com/fsnotify/fsnotify v1.5.1 // indirect
 	github.com/go-errors/errors v1.0.1 // indirect
 	github.com/go-git/gcfg v1.5.0 // indirect
 	github.com/go-gorp/gorp/v3 v3.0.2 // indirect
-	github.com/go-logr/zapr v1.2.0 // indirect
+	github.com/go-logr/zapr v1.2.3 // indirect
 	github.com/go-openapi/jsonpointer v0.19.5 // indirect
 	github.com/go-openapi/jsonreference v0.20.0 // indirect
 	github.com/go-openapi/swag v0.21.1 // indirect
@@ -244,8 +241,8 @@ require (
 	go.starlark.net v0.0.0-20200306205701-8dd3e2ee1dd5 // indirect
 	go.uber.org/atomic v1.7.0 // indirect
 	go.uber.org/multierr v1.6.0 // indirect
-	go.uber.org/zap v1.21.0 // indirect
-	golang.org/x/oauth2 v0.0.0-20220718184931-c8730f7fcb92 // indirect
+	go.uber.org/zap v1.23.0 // indirect
+	golang.org/x/oauth2 v0.0.0-20220822191816-0ebed06d0094 // indirect
 	golang.org/x/sys v0.0.0-20220728004956-3c1f35247d10 // indirect
 	golang.org/x/term v0.0.0-20220526004731-065cf7ba2467 // indirect
 	golang.org/x/text v0.3.7 // indirect
@@ -264,13 +261,13 @@ require (
 	k8s.io/apiextensions-apiserver v0.24.2 // indirect
 	k8s.io/apiserver v0.24.2 // indirect
 	k8s.io/cli-runtime v0.24.2 // indirect
-	k8s.io/component-base v0.24.2 // indirect
+	k8s.io/component-base v0.25.0 // indirect
 	k8s.io/klog/v2 v2.70.1 // indirect
-	k8s.io/kube-openapi v0.0.0-20220627174259-011e075b9cb8 // indirect
+	k8s.io/kube-openapi v0.0.0-20220803162953-67bda5d908f1 // indirect
 	k8s.io/kubectl v0.24.2 // indirect
 	oras.land/oras-go v1.2.0 // indirect
 	sigs.k8s.io/json v0.0.0-20220713155537-f223a00ba0e2 // indirect
 	sigs.k8s.io/kustomize/api v0.11.4 // indirect
 	sigs.k8s.io/kustomize/kyaml v0.13.6 // indirect
-	sigs.k8s.io/structured-merge-diff/v4 v4.2.1 // indirect
+	sigs.k8s.io/structured-merge-diff/v4 v4.2.3 // indirect
 )
