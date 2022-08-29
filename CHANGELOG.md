@@ -2,6 +2,32 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.28.0
+
+**Release date:** 2022-08-29
+
+This prerelease adds support for contextual login to container registries when pulling
+Helm charts from Azure Container Registry, Amazon Elastic Container Registry
+and Google Artifact Registry. Contextual login for `HelmRepository`
+objects can be enabled by setting the `spec.provider` field to `azure`, `aws` or `gcp`.
+
+Selecting the OCI layer containing Kubernetes manifests is now possible
+when defining `OCIRepository` objects by setting the `spec.layerSelector.mediaType` field.
+
+In addition, the controller dependencies have been updated to Kubernetes v1.25.0 and Helm v3.9.4.
+
+Improvements:
+- [HelmRepository] Enable contextual login for OCI
+  [#873](https://github.com/fluxcd/source-controller/pull/873)
+- [OCIRepository] Select layer by media type
+  [#871](https://github.com/fluxcd/source-controller/pull/871)
+- Update Kubernetes packages to v1.25.0
+  [#875](https://github.com/fluxcd/source-controller/pull/875)
+- Update dependencies
+  [#869](https://github.com/fluxcd/source-controller/pull/869)
+- Ensure Go 1.18 for fuzz image
+  [#872](https://github.com/fluxcd/source-controller/pull/872)
+
 ## 0.27.0
 
 **Release date:** 2022-08-17
@@ -190,7 +216,7 @@ Improvements:
 This prerelease fixes a regression for SSH host key verification
 and fixes semver sorting for Helm OCI charts.
 
-In addition, the controller dependencies where update to Kubernetes v1.24.1.
+In addition, the controller dependencies have been updated to Kubernetes v1.24.1.
 
 Fixes:
 - helm: Fix sorting semver from OCI repository tags
