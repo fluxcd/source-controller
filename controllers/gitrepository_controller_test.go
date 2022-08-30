@@ -30,6 +30,8 @@ import (
 
 	"github.com/darkowlzz/controller-check/status"
 	"github.com/fluxcd/pkg/apis/meta"
+	"github.com/fluxcd/pkg/git"
+	"github.com/fluxcd/pkg/git/libgit2/transport"
 	"github.com/fluxcd/pkg/gittestserver"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	"github.com/fluxcd/pkg/runtime/patch"
@@ -61,8 +63,6 @@ import (
 	"github.com/fluxcd/source-controller/internal/features"
 	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
 	"github.com/fluxcd/source-controller/internal/reconcile/summarize"
-	"github.com/fluxcd/source-controller/pkg/git"
-	"github.com/fluxcd/source-controller/pkg/git/libgit2/managed"
 )
 
 const (
@@ -513,7 +513,7 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 				EventRecorder:               record.NewFakeRecorder(32),
 				Storage:                     testStorage,
 				features:                    features.FeatureGates(),
-				Libgit2TransportInitialized: managed.Enabled,
+				Libgit2TransportInitialized: transport.Enabled,
 			}
 
 			for _, i := range testGitImplementations {
@@ -746,7 +746,7 @@ func TestGitRepositoryReconciler_reconcileSource_checkoutStrategy(t *testing.T) 
 		EventRecorder:               record.NewFakeRecorder(32),
 		Storage:                     testStorage,
 		features:                    features.FeatureGates(),
-		Libgit2TransportInitialized: managed.Enabled,
+		Libgit2TransportInitialized: transport.Enabled,
 	}
 
 	for _, tt := range tests {
@@ -1413,7 +1413,7 @@ func TestGitRepositoryReconciler_verifyCommitSignature(t *testing.T) {
 			},
 			wantErr: true,
 			assertConditions: []metav1.Condition{
-				*conditions.FalseCondition(sourcev1.SourceVerifiedCondition, "InvalidCommitSignature", "signature verification of commit 'shasum' failed: failed to verify commit with any of the given key rings"),
+				*conditions.FalseCondition(sourcev1.SourceVerifiedCondition, "InvalidCommitSignature", "signature verification of commit 'shasum' failed: unable to verify commit with any of the given key rings"),
 			},
 		},
 		{
@@ -1608,7 +1608,7 @@ func TestGitRepositoryReconciler_ConditionsUpdate(t *testing.T) {
 				EventRecorder:               record.NewFakeRecorder(32),
 				Storage:                     testStorage,
 				features:                    features.FeatureGates(),
-				Libgit2TransportInitialized: managed.Enabled,
+				Libgit2TransportInitialized: transport.Enabled,
 			}
 
 			key := client.ObjectKeyFromObject(obj)

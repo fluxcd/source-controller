@@ -12,6 +12,9 @@ replace github.com/fluxcd/source-controller/api => ./api
 // - libgit2/git2go#918.
 replace github.com/libgit2/git2go/v33 => github.com/fluxcd/git2go/v33 v33.0.9-flux
 
+// Fix CVE-2022-1996 (for v2, Go Modules incompatible)
+replace github.com/emicklei/go-restful => github.com/emicklei/go-restful v2.16.0+incompatible
+
 require (
 	cloud.google.com/go/storage v1.27.0
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.1.3
@@ -22,17 +25,20 @@ require (
 	// maintained by the ProtonMail team to continue to support the openpgp
 	// module, after the Go team decided to no longer maintain it.
 	// When in doubt (and not using openpgp), use /x/crypto.
-	github.com/ProtonMail/go-crypto v0.0.0-20220824120805-4b6e5c587895
+	github.com/ProtonMail/go-crypto v0.0.0-20220824120805-4b6e5c587895 // indirect
 	github.com/cyphar/filepath-securejoin v0.2.3
 	github.com/darkowlzz/controller-check v0.0.0-20220902134353-b2ee0ae3566c
 	github.com/distribution/distribution/v3 v3.0.0-20220907155224-78b9c98c5c31
 	github.com/docker/cli v20.10.18+incompatible
 	github.com/docker/go-units v0.5.0
-	github.com/elazarl/goproxy v0.0.0-20220901064549-fbd10ff4f5a1
-	github.com/fluxcd/gitkit v0.6.0
+	github.com/elazarl/goproxy v0.0.0-20220901064549-fbd10ff4f5a1 // indirect
+	github.com/fluxcd/gitkit v0.6.0 // indirect
 	github.com/fluxcd/pkg/apis/meta v0.16.0
+	github.com/fluxcd/pkg/git v0.6.1
+	github.com/fluxcd/pkg/git/gogit v0.1.1-0.20220902101857-4d204a4a6fa4
+	github.com/fluxcd/pkg/git/libgit2 v0.1.1-0.20220927151444-1d5a7b25a55f
 	github.com/fluxcd/pkg/gittestserver v0.7.0
-	github.com/fluxcd/pkg/gitutil v0.2.0
+	github.com/fluxcd/pkg/gitutil v0.2.0 // indirect
 	github.com/fluxcd/pkg/helmtestserver v0.9.0
 	github.com/fluxcd/pkg/lockedfile v0.1.0
 	github.com/fluxcd/pkg/masktoken v0.2.0
@@ -44,7 +50,7 @@ require (
 	github.com/fluxcd/pkg/untar v0.2.0
 	github.com/fluxcd/pkg/version v0.2.0
 	github.com/fluxcd/source-controller/api v0.30.0
-	github.com/go-git/go-billy/v5 v5.3.1
+	github.com/go-git/go-billy/v5 v5.3.2-0.20210603175951-e0768be422ff
 	github.com/go-git/go-git/v5 v5.4.2
 	github.com/go-logr/logr v1.2.3
 	github.com/google/go-containerregistry v0.11.0
@@ -61,7 +67,7 @@ require (
 	github.com/sirupsen/logrus v1.9.0
 	github.com/spf13/pflag v1.0.5
 	golang.org/x/crypto v0.0.0-20220926161630-eccd6366d1be
-	golang.org/x/net v0.0.0-20220927171203-f486391704dc
+	golang.org/x/net v0.0.0-20220927171203-f486391704dc // indirect
 	golang.org/x/sync v0.0.0-20220923202941-7f9b1623fab7
 	google.golang.org/api v0.98.0
 	gotest.tools v2.2.0+incompatible
@@ -74,9 +80,6 @@ require (
 	sigs.k8s.io/controller-runtime v0.13.0
 	sigs.k8s.io/yaml v1.3.0
 )
-
-// Fix CVE-2022-1996 (for v2, Go Modules incompatible)
-replace github.com/emicklei/go-restful => github.com/emicklei/go-restful v2.16.0+incompatible
 
 require (
 	bitbucket.org/creachadair/shell v0.0.7 // indirect
@@ -177,6 +180,7 @@ require (
 	github.com/fatih/color v1.13.0 // indirect
 	github.com/felixge/httpsnoop v1.0.1 // indirect
 	github.com/fluxcd/pkg/apis/acl v0.1.0 // indirect
+	github.com/fluxcd/pkg/http/transport v0.0.1 // indirect
 	github.com/fsnotify/fsnotify v1.5.4 // indirect
 	github.com/fullstorydev/grpcurl v1.8.7 // indirect
 	github.com/go-chi/chi v4.1.2+incompatible // indirect
