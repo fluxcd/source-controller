@@ -37,6 +37,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 
 	dcontext "github.com/distribution/distribution/v3/context"
+	"github.com/fluxcd/pkg/git/libgit2/transport"
 	"github.com/fluxcd/pkg/runtime/controller"
 	"github.com/fluxcd/pkg/runtime/testenv"
 	"github.com/fluxcd/pkg/testserver"
@@ -53,7 +54,6 @@ import (
 	"github.com/fluxcd/source-controller/internal/cache"
 	"github.com/fluxcd/source-controller/internal/features"
 	"github.com/fluxcd/source-controller/internal/helm/registry"
-	"github.com/fluxcd/source-controller/pkg/git/libgit2/managed"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -237,7 +237,7 @@ func TestMain(m *testing.M) {
 		panic(fmt.Sprintf("Failed to create a test registry server: %v", err))
 	}
 
-	if err = managed.InitManagedTransport(); err != nil {
+	if err = transport.InitManagedTransport(); err != nil {
 		panic(fmt.Sprintf("Failed to initialize libgit2 managed transport: %v", err))
 	}
 
@@ -247,7 +247,7 @@ func TestMain(m *testing.M) {
 		Metrics:                     testMetricsH,
 		Storage:                     testStorage,
 		features:                    features.FeatureGates(),
-		Libgit2TransportInitialized: managed.Enabled,
+		Libgit2TransportInitialized: transport.Enabled,
 	}).SetupWithManager(testEnv); err != nil {
 		panic(fmt.Sprintf("Failed to start GitRepositoryReconciler: %v", err))
 	}
