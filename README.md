@@ -10,7 +10,7 @@ The source-controller is a Kubernetes operator, specialised in artifacts acquisi
 from external sources such as Git, Helm repositories and S3 buckets.
 The source-controller implements the
 [source.toolkit.fluxcd.io](https://github.com/fluxcd/source-controller/tree/main/docs/spec/v1beta2) API
-and is a core component of the [GitOps toolkit](https://fluxcd.io/docs/components/).
+and is a core component of the [GitOps toolkit](https://fluxcd.io/flux/components/).
 
 ![overview](docs/diagrams/source-controller-overview.png)
 
