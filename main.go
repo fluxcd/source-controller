@@ -33,6 +33,8 @@ import (
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	ctrl "sigs.k8s.io/controller-runtime"
 
+	"github.com/fluxcd/pkg/git"
+	"github.com/fluxcd/pkg/git/libgit2/transport"
 	"github.com/fluxcd/pkg/runtime/client"
 	helper "github.com/fluxcd/pkg/runtime/controller"
 	"github.com/fluxcd/pkg/runtime/events"
@@ -48,8 +50,6 @@ import (
 	"github.com/fluxcd/source-controller/controllers"
 	"github.com/fluxcd/source-controller/internal/cache"
 	"github.com/fluxcd/source-controller/internal/helm"
-	"github.com/fluxcd/source-controller/pkg/git"
-	"github.com/fluxcd/source-controller/pkg/git/libgit2/managed"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -204,7 +204,7 @@ func main() {
 	}
 	storage := mustInitStorage(storagePath, storageAdvAddr, artifactRetentionTTL, artifactRetentionRecords, setupLog)
 
-	if err = managed.InitManagedTransport(); err != nil {
+	if err = transport.InitManagedTransport(); err != nil {
 		// Log the error, but don't exit so as to not block reconcilers that are healthy.
 		setupLog.Error(err, "unable to initialize libgit2 managed transport")
 	}
@@ -215,7 +215,7 @@ func main() {
 		Metrics:                     metricsH,
 		Storage:                     storage,
 		ControllerName:              controllerName,
-		Libgit2TransportInitialized: managed.Enabled,
+		Libgit2TransportInitialized: transport.Enabled,
 	}).SetupWithManagerAndOptions(mgr, controllers.GitRepositoryReconcilerOptions{
 		MaxConcurrentReconciles:   concurrent,
 		DependencyRequeueInterval: requeueDependency,
