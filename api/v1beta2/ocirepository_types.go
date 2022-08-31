@@ -113,6 +113,10 @@ type OCIRepositorySpec struct {
 	// +optional
 	Ignore *string `json:"ignore,omitempty"`
 
+	// Insecure allows connecting to a non-TLS HTTP container registry.
+	// +optional
+	Insecure bool `json:"insecure,omitempty"`
+
 	// This flag tells the controller to suspend the reconciliation of this source.
 	// +optional
 	Suspend bool `json:"suspend,omitempty"`
