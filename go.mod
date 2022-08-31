@@ -38,8 +38,8 @@ require (
 	github.com/fluxcd/pkg/helmtestserver v0.8.0
 	github.com/fluxcd/pkg/lockedfile v0.1.0
 	github.com/fluxcd/pkg/masktoken v0.2.0
-	github.com/fluxcd/pkg/oci v0.7.0
-	github.com/fluxcd/pkg/runtime v0.17.0
+	github.com/fluxcd/pkg/oci v0.8.0
+	github.com/fluxcd/pkg/runtime v0.18.0
 	github.com/fluxcd/pkg/sourceignore v0.2.0
 	github.com/fluxcd/pkg/ssh v0.6.0
 	github.com/fluxcd/pkg/testserver v0.3.0
@@ -70,7 +70,7 @@ require (
 	k8s.io/client-go v0.25.0
 	k8s.io/utils v0.0.0-20220823124924-e9cbc92d1a73
 	sigs.k8s.io/cli-utils v0.33.0
-	sigs.k8s.io/controller-runtime v0.11.2
+	sigs.k8s.io/controller-runtime v0.12.3
 	sigs.k8s.io/yaml v1.3.0
 )
 
