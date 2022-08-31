@@ -689,6 +689,7 @@ func (r *OCIRepositoryReconciler) craneOptions(ctx context.Context) []crane.Opti
 		crane.WithContext(ctx),
 		crane.WithUserAgent(oci.UserAgent),
 	}
+	options = append(options, crane.Insecure)
 	return options
 }
 
