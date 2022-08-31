@@ -287,6 +287,12 @@ kubectl create secret generic tls-certs \
   --from-file=caFile=ca.crt
 ```
 
+### Insecure
+
+`.spec.insecure` is an optional field to allow connecting to an insecure (HTTP)
+container registry server, if set to `true`. The default value is `false`,
+denying insecure (HTTP) connections.
+
 ### Interval
 
 `.spec.interval` is a required field that specifies the interval at which the

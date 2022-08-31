@@ -301,7 +301,7 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, obj *sour
 	ctxTimeout, cancel := context.WithTimeout(ctx, obj.Spec.Timeout.Duration)
 	defer cancel()
 
-	options := r.craneOptions(ctxTimeout)
+	options := r.craneOptions(ctxTimeout, obj.Spec.Insecure)
 
 	// Generate the registry credential keychain either from static credentials or using cloud OIDC
 	keychain, err := r.keychain(ctx, obj)
@@ -684,12 +684,16 @@ func (r *OCIRepositoryReconciler) oidcAuth(ctx context.Context, obj *sourcev1.OC
 
 // craneOptions sets the auth headers, timeout and user agent
 // for all operations against remote container registries.
-func (r *OCIRepositoryReconciler) craneOptions(ctx context.Context) []crane.Option {
+func (r *OCIRepositoryReconciler) craneOptions(ctx context.Context, insecure bool) []crane.Option {
 	options := []crane.Option{
 		crane.WithContext(ctx),
 		crane.WithUserAgent(oci.UserAgent),
 	}
-	options = append(options, crane.Insecure)
+
+	if insecure {
+		options = append(options, crane.Insecure)
+	}
+
 	return options
 }
 

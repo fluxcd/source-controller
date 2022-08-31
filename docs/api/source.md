@@ -1107,6 +1107,18 @@ consult the documentation for your version to find out what those are.</p>
 </tr>
 <tr>
 <td>
+<code>insecure</code><br>
+<em>
+bool
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Insecure allows connecting to a non-TLS HTTP container registry.</p>
+</td>
+</tr>
+<tr>
+<td>
 <code>suspend</code><br>
 <em>
 bool
@@ -2835,6 +2847,18 @@ string
 <p>Ignore overrides the set of excluded patterns in the .sourceignore format
 (which is the same as .gitignore). If not provided, a default will be used,
 consult the documentation for your version to find out what those are.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>insecure</code><br>
+<em>
+bool
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Insecure allows connecting to a non-TLS HTTP container registry.</p>
 </td>
 </tr>
 <tr>
