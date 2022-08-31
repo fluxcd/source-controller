@@ -39,7 +39,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
-	"k8s.io/apimachinery/pkg/util/uuid"
 	kuberecorder "k8s.io/client-go/tools/record"
 
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -160,9 +159,7 @@ func (r *OCIRepositoryReconciler) SetupWithManagerAndOptions(mgr ctrl.Manager, o
 
 func (r *OCIRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, retErr error) {
 	start := time.Now()
-	log := ctrl.LoggerFrom(ctx).
-		// Sets a reconcile ID to correlate logs from all suboperations.
-		WithValues("reconcileID", uuid.NewUUID())
+	log := ctrl.LoggerFrom(ctx)
 
 	// logger will be associated to the new context that is
 	// returned from ctrl.LoggerInto.
