@@ -369,6 +369,8 @@ func TestOCIRepository_reconcileSource_authStrategy(t *testing.T) {
 		craneOpts        []crane.Option
 		secretOpts       secretOptions
 		tlsCertSecret    *corev1.Secret
+		provider         string
+		providerImg      string
 		want             sreconcile.Result
 		wantErr          bool
 		assertConditions []metav1.Condition
@@ -548,6 +550,36 @@ func TestOCIRepository_reconcileSource_authStrategy(t *testing.T) {
 				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.OCIPullFailedReason, "failed to pull artifact from "),
 			},
 		},
+		{
+			name:        "with contextual login provider",
+			wantErr:     true,
+			provider:    "aws",
+			providerImg: "oci://123456789000.dkr.ecr.us-east-2.amazonaws.com/test",
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "failed to get credential from"),
+			},
+		},
+		{
+			name: "with contextual login provider and secretRef",
+			want: sreconcile.ResultSuccess,
+			registryOpts: registryOptions{
+				withBasicAuth: true,
+			},
+			craneOpts: []crane.Option{crane.WithAuth(&authn.Basic{
+				Username: testRegistryUsername,
+				Password: testRegistryPassword,
+			})},
+			secretOpts: secretOptions{
+				username:      testRegistryUsername,
+				password:      testRegistryPassword,
+				includeSecret: true,
+			},
+			provider: "azure",
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new digest '<digest>' for '<url>'"),
+				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new digest '<digest>' for '<url>'"),
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -576,6 +608,16 @@ func TestOCIRepository_reconcileSource_authStrategy(t *testing.T) {
 			obj.Spec.URL = img.url
 			obj.Spec.Reference = &sourcev1.OCIRepositoryRef{
 				Tag: img.tag,
+			}
+
+			if tt.provider != "" {
+				obj.Spec.Provider = tt.provider
+			}
+			// If a provider specific image is provided, overwrite existing URL
+			// set earlier. It'll fail but it's necessary to set them because
+			// the login check expects the URLs to be of certain pattern.
+			if tt.providerImg != "" {
+				obj.Spec.URL = tt.providerImg
 			}
 
 			if tt.secretOpts.username != "" && tt.secretOpts.password != "" {

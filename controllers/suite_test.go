@@ -36,10 +36,12 @@ import (
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 
+	dcontext "github.com/distribution/distribution/v3/context"
 	"github.com/fluxcd/pkg/runtime/controller"
 	"github.com/fluxcd/pkg/runtime/testenv"
 	"github.com/fluxcd/pkg/testserver"
 	"github.com/phayes/freeport"
+	"github.com/sirupsen/logrus"
 
 	"github.com/distribution/distribution/v3/configuration"
 	dockerRegistry "github.com/distribution/distribution/v3/registry"
@@ -153,8 +155,6 @@ func setupRegistryServer(ctx context.Context, workspaceDir string, opts registry
 	server.registryHost = fmt.Sprintf("localhost:%d", port)
 	config.HTTP.Addr = fmt.Sprintf("127.0.0.1:%d", port)
 	config.HTTP.DrainTimeout = time.Duration(10) * time.Second
-	config.Log.AccessLog.Disabled = true
-	config.Log.Level = "error"
 	config.Storage = map[string]configuration.Parameters{"inmemory": map[string]interface{}{}}
 
 	if opts.withBasicAuth {
@@ -183,6 +183,13 @@ func setupRegistryServer(ctx context.Context, workspaceDir string, opts registry
 		config.HTTP.TLS.Certificate = "testdata/certs/server.pem"
 		config.HTTP.TLS.Key = "testdata/certs/server-key.pem"
 	}
+
+	// setup logger options
+	config.Log.AccessLog.Disabled = true
+	config.Log.Level = "error"
+	logger := logrus.New()
+	logger.SetOutput(io.Discard)
+	dcontext.SetDefaultLogger(logrus.NewEntry(logger))
 
 	dockerRegistry, err := dockerRegistry.NewRegistry(ctx, config)
 	if err != nil {

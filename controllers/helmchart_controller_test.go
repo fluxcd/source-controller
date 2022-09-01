@@ -44,6 +44,7 @@ import (
 	kstatus "sigs.k8s.io/cli-utils/pkg/kstatus/status"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	fakeclient "sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	"github.com/fluxcd/pkg/apis/meta"
@@ -893,21 +894,11 @@ func TestHelmChartReconciler_buildFromOCIHelmRepository(t *testing.T) {
 		chartPath = "testdata/charts/helmchart-0.1.0.tgz"
 	)
 
-	// Login to the registry
-	err := testRegistryServer.registryClient.Login(testRegistryServer.registryHost,
-		helmreg.LoginOptBasicAuth(testRegistryUsername, testRegistryPassword),
-		helmreg.LoginOptInsecure(true))
-	g.Expect(err).NotTo(HaveOccurred())
-
 	// Load a test chart
 	chartData, err := ioutil.ReadFile(chartPath)
-	g.Expect(err).NotTo(HaveOccurred())
-	metadata, err := extractChartMeta(chartData)
-	g.Expect(err).NotTo(HaveOccurred())
 
 	// Upload the test chart
-	ref := fmt.Sprintf("%s/testrepo/%s:%s", testRegistryServer.registryHost, metadata.Name, metadata.Version)
-	_, err = testRegistryServer.registryClient.Push(chartData, ref)
+	metadata, err := loadTestChartToOCI(chartData, chartPath, testRegistryServer)
 	g.Expect(err).NotTo(HaveOccurred())
 
 	storage, err := NewStorage(tmpDir, "example.com", retentionTTL, retentionRecords)
@@ -2038,6 +2029,194 @@ func TestHelmChartReconciler_notify(t *testing.T) {
 	}
 }
 
+func TestHelmChartReconciler_reconcileSourceFromOCI_authStrategy(t *testing.T) {
+	const (
+		chartPath = "testdata/charts/helmchart-0.1.0.tgz"
+	)
+
+	type secretOptions struct {
+		username string
+		password string
+	}
+
+	tests := []struct {
+		name             string
+		url              string
+		registryOpts     registryOptions
+		secretOpts       secretOptions
+		provider         string
+		providerImg      string
+		want             sreconcile.Result
+		wantErr          bool
+		assertConditions []metav1.Condition
+	}{
+		{
+			name: "HTTP without basic auth",
+			want: sreconcile.ResultSuccess,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewChart", "pulled '<helmchart>' chart with version '<version>'"),
+			},
+		},
+		{
+			name: "HTTP with basic auth secret",
+			want: sreconcile.ResultSuccess,
+			registryOpts: registryOptions{
+				withBasicAuth: true,
+			},
+			secretOpts: secretOptions{
+				username: testRegistryUsername,
+				password: testRegistryPassword,
+			},
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewChart", "pulled '<helmchart>' chart with version '<version>'"),
+			},
+		},
+		{
+			name:    "HTTP registry - basic auth with invalid secret",
+			want:    sreconcile.ResultEmpty,
+			wantErr: true,
+			registryOpts: registryOptions{
+				withBasicAuth: true,
+			},
+			secretOpts: secretOptions{
+				username: "wrong-pass",
+				password: "wrong-pass",
+			},
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, "Unknown", "unknown build error: failed to login to OCI registry"),
+			},
+		},
+		{
+			name:        "with contextual login provider",
+			wantErr:     true,
+			provider:    "aws",
+			providerImg: "oci://123456789000.dkr.ecr.us-east-2.amazonaws.com/test",
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, "Unknown", "unknown build error: failed to get credential from"),
+			},
+		},
+		{
+			name: "with contextual login provider and secretRef",
+			want: sreconcile.ResultSuccess,
+			registryOpts: registryOptions{
+				withBasicAuth: true,
+			},
+			secretOpts: secretOptions{
+				username: testRegistryUsername,
+				password: testRegistryPassword,
+			},
+			provider: "azure",
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewChart", "pulled '<helmchart>' chart with version '<version>'"),
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			builder := fakeclient.NewClientBuilder().WithScheme(testEnv.GetScheme())
+			workspaceDir := t.TempDir()
+			server, err := setupRegistryServer(ctx, workspaceDir, tt.registryOpts)
+
+			g.Expect(err).NotTo(HaveOccurred())
+
+			// Load a test chart
+			chartData, err := ioutil.ReadFile(chartPath)
+
+			// Upload the test chart
+			metadata, err := loadTestChartToOCI(chartData, chartPath, server)
+			g.Expect(err).NotTo(HaveOccurred())
+			g.Expect(err).ToNot(HaveOccurred())
+
+			repo := &sourcev1.HelmRepository{
+				ObjectMeta: metav1.ObjectMeta{
+					GenerateName: "auth-strategy-",
+				},
+				Spec: sourcev1.HelmRepositorySpec{
+					Interval: metav1.Duration{Duration: interval},
+					Timeout:  &metav1.Duration{Duration: timeout},
+					Type:     sourcev1.HelmRepositoryTypeOCI,
+					Provider: sourcev1.GenericOCIProvider,
+					URL:      fmt.Sprintf("oci://%s/testrepo", server.registryHost),
+				},
+			}
+
+			if tt.provider != "" {
+				repo.Spec.Provider = tt.provider
+			}
+			// If a provider specific image is provided, overwrite existing URL
+			// set earlier. It'll fail but it's necessary to set them because
+			// the login check expects the URLs to be of certain pattern.
+			if tt.providerImg != "" {
+				repo.Spec.URL = tt.providerImg
+			}
+
+			if tt.secretOpts.username != "" && tt.secretOpts.password != "" {
+				secret := &corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "auth-secretref",
+					},
+					Type: corev1.SecretTypeDockerConfigJson,
+					Data: map[string][]byte{
+						".dockerconfigjson": []byte(fmt.Sprintf(`{"auths": {%q: {"username": %q, "password": %q}}}`,
+							server.registryHost, tt.secretOpts.username, tt.secretOpts.password)),
+					},
+				}
+
+				repo.Spec.SecretRef = &meta.LocalObjectReference{
+					Name: secret.Name,
+				}
+				builder.WithObjects(secret, repo)
+			} else {
+				builder.WithObjects(repo)
+			}
+
+			obj := &sourcev1.HelmChart{
+				ObjectMeta: metav1.ObjectMeta{
+					GenerateName: "auth-strategy-",
+				},
+				Spec: sourcev1.HelmChartSpec{
+					Chart:   metadata.Name,
+					Version: metadata.Version,
+					SourceRef: sourcev1.LocalHelmChartSourceReference{
+						Kind: sourcev1.HelmRepositoryKind,
+						Name: repo.Name,
+					},
+					Interval: metav1.Duration{Duration: interval},
+				},
+			}
+
+			r := &HelmChartReconciler{
+				Client:                  builder.Build(),
+				EventRecorder:           record.NewFakeRecorder(32),
+				Getters:                 testGetters,
+				RegistryClientGenerator: registry.ClientGenerator,
+			}
+
+			var b chart.Build
+			defer func() {
+				if _, err := os.Stat(b.Path); !os.IsNotExist(err) {
+					err := os.Remove(b.Path)
+					g.Expect(err).NotTo(HaveOccurred())
+				}
+			}()
+
+			assertConditions := tt.assertConditions
+			for k := range assertConditions {
+				assertConditions[k].Message = strings.ReplaceAll(assertConditions[k].Message, "<helmchart>", metadata.Name)
+				assertConditions[k].Message = strings.ReplaceAll(assertConditions[k].Message, "<version>", metadata.Version)
+			}
+
+			got, err := r.reconcileSource(ctx, obj, &b)
+			g.Expect(err != nil).To(Equal(tt.wantErr))
+			g.Expect(got).To(Equal(tt.want))
+			g.Expect(obj.Status.Conditions).To(conditions.MatchConditions(tt.assertConditions))
+		})
+	}
+}
+
 // extractChartMeta is used to extract a chart metadata from a byte array
 func extractChartMeta(chartData []byte) (*hchart.Metadata, error) {
 	ch, err := loader.LoadArchive(bytes.NewReader(chartData))
@@ -2045,4 +2224,33 @@ func extractChartMeta(chartData []byte) (*hchart.Metadata, error) {
 		return nil, err
 	}
 	return ch.Metadata, nil
+}
+
+func loadTestChartToOCI(chartData []byte, chartPath string, server *registryClientTestServer) (*hchart.Metadata, error) {
+	// Login to the registry
+	err := server.registryClient.Login(server.registryHost,
+		helmreg.LoginOptBasicAuth(testRegistryUsername, testRegistryPassword),
+		helmreg.LoginOptInsecure(true))
+	if err != nil {
+		return nil, err
+	}
+
+	// Load a test chart
+	chartData, err = ioutil.ReadFile(chartPath)
+	if err != nil {
+		return nil, err
+	}
+	metadata, err := extractChartMeta(chartData)
+	if err != nil {
+		return nil, err
+	}
+
+	// Upload the test chart
+	ref := fmt.Sprintf("%s/testrepo/%s:%s", server.registryHost, metadata.Name, metadata.Version)
+	_, err = server.registryClient.Push(chartData, ref)
+	if err != nil {
+		return nil, err
+	}
+
+	return metadata, nil
 }

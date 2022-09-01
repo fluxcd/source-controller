@@ -516,10 +516,8 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 		}
 
 		loginOpts = append([]helmreg.LoginOption{}, loginOpt)
-	}
-
-	if repo.Spec.Provider != sourcev1.GenericOCIProvider && repo.Spec.Type == sourcev1.HelmRepositoryTypeOCI {
-		auth, authErr := oidcAuth(ctxTimeout, repo)
+	} else if repo.Spec.Provider != sourcev1.GenericOCIProvider && repo.Spec.Type == sourcev1.HelmRepositoryTypeOCI {
+		auth, authErr := oidcAuthFromAdapter(ctxTimeout, repo.Spec.URL, repo.Spec.Provider)
 		if authErr != nil && !errors.Is(authErr, oci.ErrUnconfiguredProvider) {
 			e := &serror.Event{
 				Err:    fmt.Errorf("failed to get credential from %s: %w", repo.Spec.Provider, authErr),
@@ -991,10 +989,8 @@ func (r *HelmChartReconciler) namespacedChartRepositoryCallback(ctx context.Cont
 			}
 
 			loginOpts = append([]helmreg.LoginOption{}, loginOpt)
-		}
-
-		if repo.Spec.Provider != sourcev1.GenericOCIProvider && repo.Spec.Type == sourcev1.HelmRepositoryTypeOCI {
-			auth, authErr := oidcAuth(ctxTimeout, repo)
+		} else if repo.Spec.Provider != sourcev1.GenericOCIProvider && repo.Spec.Type == sourcev1.HelmRepositoryTypeOCI {
+			auth, authErr := oidcAuthFromAdapter(ctxTimeout, repo.Spec.URL, repo.Spec.Provider)
 			if authErr != nil && !errors.Is(authErr, oci.ErrUnconfiguredProvider) {
 				return nil, fmt.Errorf("failed to get credential from %s: %w", repo.Spec.Provider, authErr)
 			}
