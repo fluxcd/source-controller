@@ -244,6 +244,7 @@ fuzz-build: $(LIBGIT2)
 fuzz-smoketest: fuzz-build
 	docker run --rm \
 		-v "$(BUILD_DIR)/fuzz/out":/out \
+		-v "$(shell go env GOMODCACHE):/root/go/pkg/mod" \
 		-v "$(shell pwd)/tests/fuzz/oss_fuzz_run.sh":/runner.sh \
 		local-fuzzing:latest \
 		bash -c "/runner.sh"
