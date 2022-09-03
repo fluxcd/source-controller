@@ -234,7 +234,7 @@ fuzz-build: $(LIBGIT2)
 	rm -rf $(BUILD_DIR)/fuzz/
 	mkdir -p $(BUILD_DIR)/fuzz/out/
 
-	docker build . --tag local-fuzzing:latest -f tests/fuzz/Dockerfile.builder
+	docker build . --pull --tag local-fuzzing:latest -f tests/fuzz/Dockerfile.builder
 	docker run --rm \
 		-e FUZZING_LANGUAGE=go -e SANITIZER=address \
 		-e CIFUZZ_DEBUG='True' -e OSS_FUZZ_PROJECT_NAME=fluxcd \
@@ -244,6 +244,7 @@ fuzz-build: $(LIBGIT2)
 fuzz-smoketest: fuzz-build
 	docker run --rm \
 		-v "$(BUILD_DIR)/fuzz/out":/out \
+		-v "$(shell go env GOMODCACHE):/root/go/pkg/mod" \
 		-v "$(shell pwd)/tests/fuzz/oss_fuzz_run.sh":/runner.sh \
 		local-fuzzing:latest \
 		bash -c "/runner.sh"
