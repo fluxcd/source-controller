@@ -114,10 +114,6 @@ func (r *HelmRepositoryOCIReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	start := time.Now()
 	log := ctrl.LoggerFrom(ctx)
 
-	// logger will be associated to the new context that is
-	// returned from ctrl.LoggerInto.
-	ctx = ctrl.LoggerInto(ctx, log)
-
 	// Fetch the HelmRepository
 	obj := &sourcev1.HelmRepository{}
 	if err := r.Get(ctx, req.NamespacedName, obj); err != nil {
