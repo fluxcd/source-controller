@@ -33,7 +33,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	kerrors "k8s.io/apimachinery/pkg/util/errors"
-	"k8s.io/apimachinery/pkg/util/uuid"
 	kuberecorder "k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -113,9 +112,7 @@ func (r *HelmRepositoryOCIReconciler) SetupWithManagerAndOptions(mgr ctrl.Manage
 
 func (r *HelmRepositoryOCIReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, retErr error) {
 	start := time.Now()
-	log := ctrl.LoggerFrom(ctx).
-		// Sets a reconcile ID to correlate logs from all suboperations.
-		WithValues("reconcileID", uuid.NewUUID())
+	log := ctrl.LoggerFrom(ctx)
 
 	// logger will be associated to the new context that is
 	// returned from ctrl.LoggerInto.
