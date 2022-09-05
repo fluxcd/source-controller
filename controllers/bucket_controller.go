@@ -249,10 +249,6 @@ func (r *BucketReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 	start := time.Now()
 	log := ctrl.LoggerFrom(ctx)
 
-	// logger will be associated to the new context that is
-	// returned from ctrl.LoggerInto.
-	ctx = ctrl.LoggerInto(ctx, log)
-
 	// Fetch the Bucket
 	obj := &sourcev1.Bucket{}
 	if err := r.Get(ctx, req.NamespacedName, obj); err != nil {

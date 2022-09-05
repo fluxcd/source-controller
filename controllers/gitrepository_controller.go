@@ -164,10 +164,6 @@ func (r *GitRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	start := time.Now()
 	log := ctrl.LoggerFrom(ctx)
 
-	// logger will be associated to the new context that is
-	// returned from ctrl.LoggerInto.
-	ctx = ctrl.LoggerInto(ctx, log)
-
 	// Fetch the GitRepository
 	obj := &sourcev1.GitRepository{}
 	if err := r.Get(ctx, req.NamespacedName, obj); err != nil {

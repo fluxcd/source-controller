@@ -185,10 +185,6 @@ func (r *HelmChartReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	start := time.Now()
 	log := ctrl.LoggerFrom(ctx)
 
-	// logger will be associated to the new context that is
-	// returned from ctrl.LoggerInto.
-	ctx = ctrl.LoggerInto(ctx, log)
-
 	// Fetch the HelmChart
 	obj := &sourcev1.HelmChart{}
 	if err := r.Get(ctx, req.NamespacedName, obj); err != nil {
