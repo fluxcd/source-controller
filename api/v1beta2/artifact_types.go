@@ -28,21 +28,31 @@ type Artifact struct {
 	// Path is the relative file path of the Artifact. It can be used to locate
 	// the file in the root of the Artifact storage on the local file system of
 	// the controller managing the Source.
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=253
+	// +kubebuilder:validation:Pattern=`^([a-zA-Z0-9_\-.\\\/]|\[[0-9]{1,5}\])+$`
 	// +required
 	Path string `json:"path"`
 
 	// URL is the HTTP address of the Artifact as exposed by the controller
 	// managing the Source. It can be used to retrieve the Artifact for
 	// consumption, e.g. by another controller applying the Artifact contents.
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=253
+	// +kubebuilder:validation:Pattern="^(http|https|ssh)://.*$"
 	// +required
 	URL string `json:"url"`
 
 	// Revision is a human-readable identifier traceable in the origin source
 	// system. It can be a Git commit SHA, Git tag, a Helm chart version, etc.
+	// +kubebuilder:validation:MaxLength=63
+	// +kubebuilder:validation:Pattern=`^([a-zA-Z0-9_\-.\\\/]|\[[0-9]{1,5}\])+$`
 	// +optional
 	Revision string `json:"revision"`
 
 	// Checksum is the SHA256 checksum of the Artifact file.
+	// +kubebuilder:validation:MaxLength=250
+	// +kubebuilder:validation:Pattern=`^([a-zA-Z0-9_\-.\\\/]|\[[0-9]{1,5}\])+$`
 	// +optional
 	Checksum string `json:"checksum"`
 

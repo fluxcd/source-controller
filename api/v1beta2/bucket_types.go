@@ -57,10 +57,16 @@ type BucketSpec struct {
 	Provider string `json:"provider,omitempty"`
 
 	// BucketName is the name of the object storage bucket.
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=63
+	// +kubebuilder:validation:Pattern=`^([a-zA-Z0-9_\-.\\\/]|\[[0-9]{1,5}\])+$`
 	// +required
 	BucketName string `json:"bucketName"`
 
 	// Endpoint is the object storage address the BucketName is located at.
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=250
+	// +kubebuilder:validation:Pattern=`^([a-zA-Z0-9_\-.\\\/]|\[[0-9]{1,5}\])+$`
 	// +required
 	Endpoint string `json:"endpoint"`
 
@@ -69,6 +75,8 @@ type BucketSpec struct {
 	Insecure bool `json:"insecure,omitempty"`
 
 	// Region of the Endpoint where the BucketName is located in.
+	// +kubebuilder:validation:MaxLength=63
+	// +kubebuilder:validation:Pattern=`^([a-zA-Z0-9_\-.\\\/]|\[[0-9]{1,5}\])+$`
 	// +optional
 	Region string `json:"region,omitempty"`
 
@@ -89,6 +97,8 @@ type BucketSpec struct {
 	// Ignore overrides the set of excluded patterns in the .sourceignore format
 	// (which is the same as .gitignore). If not provided, a default will be used,
 	// consult the documentation for your version to find out what those are.
+	// +kubebuilder:validation:MaxLength=63
+	// +kubebuilder:validation:Pattern=`^([a-zA-Z0-9_\-.\\\/]|\[[0-9]{1,5}\])+$`
 	// +optional
 	Ignore *string `json:"ignore,omitempty"`
 
@@ -117,6 +127,8 @@ type BucketStatus struct {
 	// URL is the dynamic fetch link for the latest Artifact.
 	// It is provided on a "best effort" basis, and using the precise
 	// BucketStatus.Artifact data is recommended.
+	// +kubebuilder:validation:MaxLength=253
+	// +kubebuilder:validation:Pattern="^(http|https|ssh)://.*$"
 	// +optional
 	URL string `json:"url,omitempty"`
 
@@ -172,6 +184,7 @@ type Bucket struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
+	// +kubebuilder:validation:required
 	Spec BucketSpec `json:"spec,omitempty"`
 	// +kubebuilder:default={"observedGeneration":-1}
 	Status BucketStatus `json:"status,omitempty"`

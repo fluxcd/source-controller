@@ -235,6 +235,7 @@ type OCIRepository struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
+	// +kubebuilder:validation:required
 	Spec OCIRepositorySpec `json:"spec,omitempty"`
 	// +kubebuilder:default={"observedGeneration":-1}
 	Status OCIRepositoryStatus `json:"status,omitempty"`

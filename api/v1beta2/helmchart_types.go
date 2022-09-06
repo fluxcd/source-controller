@@ -32,12 +32,17 @@ const HelmChartKind = "HelmChart"
 type HelmChartSpec struct {
 	// Chart is the name or path the Helm chart is available at in the
 	// SourceRef.
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=253
+	// +kubebuilder:validation:Pattern=`^([a-zA-Z0-9_\-.\\\/]|\[[0-9]{1,5}\])+$`
 	// +required
 	Chart string `json:"chart"`
 
 	// Version is the chart version semver expression, ignored for charts from
 	// GitRepository and Bucket sources. Defaults to latest when omitted.
 	// +kubebuilder:default:=*
+	// +kubebuilder:validation:MaxLength=63
+	// +kubebuilder:validation:Pattern=`^[\-._0-9]+$`
 	// +optional
 	Version string `json:"version,omitempty"`
 
@@ -98,6 +103,8 @@ const (
 // the typed referenced object at namespace level.
 type LocalHelmChartSourceReference struct {
 	// APIVersion of the referent.
+	// +kubebuilder:validation:MaxLength=63
+	// +kubebuilder:validation:Pattern=`^([a-zA-Z0-9_\-.\\\/]|\[[0-9]{1,5}\])+$`
 	// +optional
 	APIVersion string `json:"apiVersion,omitempty"`
 
@@ -108,6 +115,9 @@ type LocalHelmChartSourceReference struct {
 	Kind string `json:"kind"`
 
 	// Name of the referent.
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=63
+	// +kubebuilder:validation:Pattern=`^([a-zA-Z0-9_\-.\\\/]|\[[0-9]{1,5}\])+$`
 	// +required
 	Name string `json:"name"`
 }
@@ -121,11 +131,15 @@ type HelmChartStatus struct {
 
 	// ObservedSourceArtifactRevision is the last observed Artifact.Revision
 	// of the HelmChartSpec.SourceRef.
+	// +kubebuilder:validation:MaxLength=253
+	// +kubebuilder:validation:Pattern=`^([a-zA-Z0-9_\-.\\\/]|\[[0-9]{1,5}\])+$`
 	// +optional
 	ObservedSourceArtifactRevision string `json:"observedSourceArtifactRevision,omitempty"`
 
 	// ObservedChartName is the last observed chart name as specified by the
 	// resolved chart reference.
+	// +kubebuilder:validation:MaxLength=253
+	// +kubebuilder:validation:Pattern=`^([a-zA-Z0-9_\-.\\\/]|\[[0-9]{1,5}\])+$`
 	// +optional
 	ObservedChartName string `json:"observedChartName,omitempty"`
 
@@ -136,6 +150,8 @@ type HelmChartStatus struct {
 	// URL is the dynamic fetch link for the latest Artifact.
 	// It is provided on a "best effort" basis, and using the precise
 	// BucketStatus.Artifact data is recommended.
+	// +kubebuilder:validation:MaxLength=253
+	// +kubebuilder:validation:Pattern="^(http|https|ssh)://.*$"
 	// +optional
 	URL string `json:"url,omitempty"`
 
@@ -208,6 +224,7 @@ type HelmChart struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
+	// +kubebuilder:validation:required
 	Spec HelmChartSpec `json:"spec,omitempty"`
 	// +kubebuilder:default={"observedGeneration":-1}
 	Status HelmChartStatus `json:"status,omitempty"`

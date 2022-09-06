@@ -37,6 +37,9 @@ const (
 // GitRepositorySpec defines the desired state of a Git repository.
 type GitRepositorySpec struct {
 	// The repository URL, can be a HTTP/S or SSH address.
+
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=253
 	// +kubebuilder:validation:Pattern="^(http|https|ssh)://.*$"
 	// +required
 	URL string `json:"url"`
@@ -70,6 +73,8 @@ type GitRepositorySpec struct {
 	// Ignore overrides the set of excluded patterns in the .sourceignore format
 	// (which is the same as .gitignore). If not provided, a default will be used,
 	// consult the documentation for your version to find out what those are.
+	// +kubebuilder:validation:MaxLength=63
+	// +kubebuilder:validation:Pattern=`^([a-zA-Z0-9_\-.\\\/]|\[[0-9]{1,5}\])+$`
 	// +optional
 	Ignore *string `json:"ignore,omitempty"`
 
@@ -115,10 +120,14 @@ type GitRepositoryInclude struct {
 	GitRepositoryRef meta.LocalObjectReference `json:"repository"`
 
 	// The path to copy contents from, defaults to the root directory.
+	// +kubebuilder:validation:MaxLength=253
+	// +kubebuilder:validation:Pattern=`^([a-zA-Z0-9_\-.\\\/]|\[[0-9]{1,5}\])+$`
 	// +optional
 	FromPath string `json:"fromPath"`
 
 	// The path to copy contents to, defaults to the name of the source ref.
+	// +kubebuilder:validation:MaxLength=253
+	// +kubebuilder:validation:Pattern=`^([a-zA-Z0-9_\-.\\\/]|\[[0-9]{1,5}\])+$`
 	// +optional
 	ToPath string `json:"toPath"`
 }
@@ -126,18 +135,26 @@ type GitRepositoryInclude struct {
 // GitRepositoryRef defines the Git ref used for pull and checkout operations.
 type GitRepositoryRef struct {
 	// The Git branch to checkout, defaults to master.
+	// +kubebuilder:validation:MaxLength=253
+	// +kubebuilder:validation:Pattern=`^[\-._a-zA-Z0-9]+$`
 	// +optional
 	Branch string `json:"branch,omitempty"`
 
 	// The Git tag to checkout, takes precedence over Branch.
+	// +kubebuilder:validation:MaxLength=253
+	// +kubebuilder:validation:Pattern=`^[\-._0-9]+$`
 	// +optional
 	Tag string `json:"tag,omitempty"`
 
 	// The Git tag semver expression, takes precedence over Tag.
+	// +kubebuilder:validation:MaxLength=253
+	// +kubebuilder:validation:Pattern=`^[\-._0-9]+$`
 	// +optional
 	SemVer string `json:"semver,omitempty"`
 
 	// The Git commit SHA to checkout, if specified Tag filters will be ignored.
+	// +kubebuilder:validation:MaxLength=253
+	// +kubebuilder:validation:Pattern=`^([a-zA-Z0-9_\-.\\\/]|\[[0-9]{1,5}\])+$
 	// +optional
 	Commit string `json:"commit,omitempty"`
 }
@@ -164,6 +181,8 @@ type GitRepositoryStatus struct {
 
 	// URL is the download link for the artifact output of the last repository
 	// sync.
+	// +kubebuilder:validation:MaxLength=253
+	// +kubebuilder:validation:Pattern="^(http|https|ssh)://.*$"
 	// +optional
 	URL string `json:"url,omitempty"`
 
@@ -279,6 +298,7 @@ type GitRepository struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
+	// +kubebuilder:validation:required
 	Spec GitRepositorySpec `json:"spec,omitempty"`
 	// +kubebuilder:default={"observedGeneration":-1}
 	Status GitRepositoryStatus `json:"status,omitempty"`

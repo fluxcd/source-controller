@@ -30,12 +30,17 @@ const HelmChartKind = "HelmChart"
 // HelmChartSpec defines the desired state of a Helm chart.
 type HelmChartSpec struct {
 	// The name or path the Helm chart is available at in the SourceRef.
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=253
+	// +kubebuilder:validation:Pattern=`^([a-zA-Z0-9_\-.\\\/]|\[[0-9]{1,5}\])+$`
 	// +required
 	Chart string `json:"chart"`
 
 	// The chart version semver expression, ignored for charts from GitRepository
 	// and Bucket sources. Defaults to latest when omitted.
 	// +kubebuilder:default:=*
+	// +kubebuilder:validation:MaxLength=63
+	// +kubebuilder:validation:Pattern=`^([a-zA-Z0-9_\-.\\\/]|\[[0-9]{1,5}\])+$`
 	// +optional
 	Version string `json:"version,omitempty"`
 
@@ -92,6 +97,9 @@ const (
 // the typed referenced object at namespace level.
 type LocalHelmChartSourceReference struct {
 	// APIVersion of the referent.
+	// +kubebuilder:validation:MaxLength=63
+	// +kubebuilder:validation:Pattern=`^([a-zA-Z0-9_\-.\\\/]|\[[0-9]{1,5}\])+$`
+
 	// +optional
 	APIVersion string `json:"apiVersion,omitempty"`
 
@@ -102,6 +110,9 @@ type LocalHelmChartSourceReference struct {
 	Kind string `json:"kind"`
 
 	// Name of the referent.
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=63
+	// +kubebuilder:validation:Pattern=`^([a-zA-Z0-9_\-.\\\/]|\[[0-9]{1,5}\])+$`
 	// +required
 	Name string `json:"name"`
 }
@@ -248,6 +259,7 @@ type HelmChart struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
+	// +kubebuilder:validation:required
 	Spec HelmChartSpec `json:"spec,omitempty"`
 	// +kubebuilder:default={"observedGeneration":-1}
 	Status HelmChartStatus `json:"status,omitempty"`
