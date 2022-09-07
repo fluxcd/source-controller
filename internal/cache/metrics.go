@@ -40,6 +40,7 @@ type CacheRecorder struct {
 //   - "miss"
 //   - "hit"
 //   - "update"
+//
 // The name is the name of the reconciled resource.
 // The namespace is the namespace of the reconciled resource.
 func NewCacheRecorder() *CacheRecorder {

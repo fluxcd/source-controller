@@ -79,15 +79,22 @@ spec:
                 type: object
               bucketName:
                 description: The bucket name.
+                maxLength: 63
+                minLength: 1
+                pattern: ^([a-zA-Z0-9_\-.\\\/]|\[[0-9]{1,5}\])+$
                 type: string
               endpoint:
                 description: The bucket endpoint address.
+                maxLength: 250
+                minLength: 1
+                pattern: ^([a-zA-Z0-9_\-.\\\/]|\[[0-9]{1,5}\])+$
                 type: string
               ignore:
                 description: Ignore overrides the set of excluded patterns in the
                   .sourceignore format (which is the same as .gitignore). If not provided,
                   a default will be used, consult the documentation for your version
                   to find out what those are.
+                maxLength: 5119
                 type: string
               insecure:
                 description: Insecure allows connecting to a non-TLS S3 HTTP endpoint.
@@ -105,6 +112,8 @@ spec:
                 type: string
               region:
                 description: The bucket region.
+                maxLength: 63
+                pattern: ^([a-zA-Z0-9_\-.\\\/]|\[[0-9]{1,5}\])+$
                 type: string
               secretRef:
                 description: The name of the secret containing authentication credentials
@@ -140,6 +149,8 @@ spec:
                 properties:
                   checksum:
                     description: Checksum is the SHA256 checksum of the artifact.
+                    maxLength: 65
+                    pattern: ^[A-Za-z0-9]{65}$
                     type: string
                   lastUpdateTime:
                     description: LastUpdateTime is the timestamp corresponding to
@@ -148,14 +159,22 @@ spec:
                     type: string
                   path:
                     description: Path is the relative file path of this artifact.
+                    maxLength: 253
+                    minLength: 1
+                    pattern: ^([a-zA-Z0-9_\-.\\\/]|\[[0-9]{1,5}\])+$
                     type: string
                   revision:
                     description: Revision is a human readable identifier traceable
                       in the origin source system. It can be a Git commit SHA, Git
                       tag, a Helm index timestamp, a Helm chart version, etc.
+                    maxLength: 65
+                    pattern: ^[A-Za-z0-9]{65}$
                     type: string
                   url:
                     description: URL is the HTTP address of this artifact.
+                    maxLength: 2048
+                    minLength: 1
+                    pattern: ^(http|https|ssh)://.*$
                     type: string
                 required:
                 - path
@@ -244,8 +263,12 @@ spec:
               url:
                 description: URL is the download link for the artifact output of the
                   last Bucket sync.
+                maxLength: 2048
+                pattern: ^(http|https|ssh)://.*$
                 type: string
             type: object
+        required:
+        - spec
         type: object
     served: true
     storage: false
@@ -315,16 +338,23 @@ spec:
                 type: object
               bucketName:
                 description: BucketName is the name of the object storage bucket.
+                maxLength: 63
+                minLength: 1
+                pattern: ^([a-zA-Z0-9_\-.\\\/]|\[[0-9]{1,5}\])+$
                 type: string
               endpoint:
                 description: Endpoint is the object storage address the BucketName
                   is located at.
+                maxLength: 250
+                minLength: 1
+                pattern: ^([a-zA-Z0-9_\-.\\\/]|\[[0-9]{1,5}\])+$
                 type: string
               ignore:
                 description: Ignore overrides the set of excluded patterns in the
                   .sourceignore format (which is the same as .gitignore). If not provided,
                   a default will be used, consult the documentation for your version
                   to find out what those are.
+                maxLength: 5119
                 type: string
               insecure:
                 description: Insecure allows connecting to a non-TLS HTTP Endpoint.
@@ -345,6 +375,8 @@ spec:
               region:
                 description: Region of the Endpoint where the BucketName is located
                   in.
+                maxLength: 63
+                pattern: ^([a-zA-Z0-9_\-.\\\/]|\[[0-9]{1,5}\])+$
                 type: string
               secretRef:
                 description: SecretRef specifies the Secret containing authentication
@@ -379,6 +411,8 @@ spec:
                 properties:
                   checksum:
                     description: Checksum is the SHA256 checksum of the Artifact file.
+                    maxLength: 65
+                    pattern: ^[A-Za-z0-9]{65}$
                     type: string
                   lastUpdateTime:
                     description: LastUpdateTime is the timestamp corresponding to
@@ -394,11 +428,15 @@ spec:
                     description: Path is the relative file path of the Artifact. It
                       can be used to locate the file in the root of the Artifact storage
                       on the local file system of the controller managing the Source.
+                    maxLength: 253
+                    minLength: 1
+                    pattern: ^([a-zA-Z0-9_\-.\\\/]|\[[0-9]{1,5}\])+$
                     type: string
                   revision:
                     description: Revision is a human-readable identifier traceable
                       in the origin source system. It can be a Git commit SHA, Git
                       tag, a Helm chart version, etc.
+                    pattern: ^[A-Za-z0-9]{65}$
                     type: string
                   size:
                     description: Size is the number of bytes in the file.
@@ -409,6 +447,9 @@ spec:
                       by the controller managing the Source. It can be used to retrieve
                       the Artifact for consumption, e.g. by another controller applying
                       the Artifact contents.
+                    maxLength: 2048
+                    minLength: 1
+                    pattern: ^(http|https|ssh)://.*$
                     type: string
                 required:
                 - path
@@ -499,8 +540,12 @@ spec:
                 description: URL is the dynamic fetch link for the latest Artifact.
                   It is provided on a "best effort" basis, and using the precise BucketStatus.Artifact
                   data is recommended.
+                maxLength: 2048
+                pattern: ^(http|https|ssh)://.*$
                 type: string
             type: object
+        required:
+        - spec
         type: object
     served: true
     storage: true

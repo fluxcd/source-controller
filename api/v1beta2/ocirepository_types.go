@@ -51,6 +51,8 @@ const (
 type OCIRepositorySpec struct {
 	// URL is a reference to an OCI artifact repository hosted
 	// on a remote container registry.
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=2048
 	// +kubebuilder:validation:Pattern="^oci://.*$"
 	// +required
 	URL string `json:"url"`
@@ -81,6 +83,8 @@ type OCIRepositorySpec struct {
 	// ServiceAccountName is the name of the Kubernetes ServiceAccount used to authenticate
 	// the image pull if the service account has attached pull secrets. For more information:
 	// https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/#add-imagepullsecrets-to-a-service-account
+	// +kubebuilder:validation:MaxLength=253
+	// +kubebuilder:validation:Pattern=`^([a-zA-Z0-9_\-.\\\/]|\[[0-9]{1,5}\])+$`
 	// +optional
 	ServiceAccountName string `json:"serviceAccountName,omitempty"`
 
@@ -110,6 +114,7 @@ type OCIRepositorySpec struct {
 	// Ignore overrides the set of excluded patterns in the .sourceignore format
 	// (which is the same as .gitignore). If not provided, a default will be used,
 	// consult the documentation for your version to find out what those are.
+	// +kubebuilder:validation:MaxLength=5119
 	// +optional
 	Ignore *string `json:"ignore,omitempty"`
 
@@ -126,15 +131,20 @@ type OCIRepositorySpec struct {
 type OCIRepositoryRef struct {
 	// Digest is the image digest to pull, takes precedence over SemVer.
 	// The value should be in the format 'sha256:<HASH>'.
+	// +kubebuilder:validation:MaxLength=65
+	// +kubebuilder:validation:Pattern=`^[A-Za-z0-9]{65}$`
 	// +optional
 	Digest string `json:"digest,omitempty"`
 
 	// SemVer is the range of tags to pull selecting the latest within
 	// the range, takes precedence over Tag.
+	// +kubebuilder:validation:Pattern=`^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$`
 	// +optional
 	SemVer string `json:"semver,omitempty"`
 
 	// Tag is the image tag to pull, defaults to latest.
+	// +kubebuilder:validation:MaxLength=253
+	// +kubebuilder:validation:Pattern=`^[\-._0-9]+$`
 	// +optional
 	Tag string `json:"tag,omitempty"`
 }
@@ -170,6 +180,8 @@ type OCIRepositoryStatus struct {
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 
 	// URL is the download link for the artifact output of the last OCI Repository sync.
+	// +kubebuilder:validation:MaxLength=2048
+	// +kubebuilder:validation:Pattern="^oci://.*$"
 	// +optional
 	URL string `json:"url,omitempty"`
 
@@ -236,7 +248,7 @@ type OCIRepository struct {
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
 	// +kubebuilder:validation:required
-	Spec OCIRepositorySpec `json:"spec,omitempty"`
+	Spec OCIRepositorySpec `json:"spec"`
 	// +kubebuilder:default={"observedGeneration":-1}
 	Status OCIRepositoryStatus `json:"status,omitempty"`
 }

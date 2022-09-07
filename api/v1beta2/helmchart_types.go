@@ -41,7 +41,7 @@ type HelmChartSpec struct {
 	// Version is the chart version semver expression, ignored for charts from
 	// GitRepository and Bucket sources. Defaults to latest when omitted.
 	// +kubebuilder:default:=*
-	// +kubebuilder:validation:MaxLength=63
+	// +kubebuilder:validation:MaxLength=2048
 	// +kubebuilder:validation:Pattern=`^[\-._0-9]+$`
 	// +optional
 	Version string `json:"version,omitempty"`
@@ -103,7 +103,7 @@ const (
 // the typed referenced object at namespace level.
 type LocalHelmChartSourceReference struct {
 	// APIVersion of the referent.
-	// +kubebuilder:validation:MaxLength=63
+	// +kubebuilder:validation:MaxLength=2048
 	// +kubebuilder:validation:Pattern=`^([a-zA-Z0-9_\-.\\\/]|\[[0-9]{1,5}\])+$`
 	// +optional
 	APIVersion string `json:"apiVersion,omitempty"`
@@ -116,7 +116,7 @@ type LocalHelmChartSourceReference struct {
 
 	// Name of the referent.
 	// +kubebuilder:validation:MinLength=1
-	// +kubebuilder:validation:MaxLength=63
+	// +kubebuilder:validation:MaxLength=253
 	// +kubebuilder:validation:Pattern=`^([a-zA-Z0-9_\-.\\\/]|\[[0-9]{1,5}\])+$`
 	// +required
 	Name string `json:"name"`
@@ -150,7 +150,7 @@ type HelmChartStatus struct {
 	// URL is the dynamic fetch link for the latest Artifact.
 	// It is provided on a "best effort" basis, and using the precise
 	// BucketStatus.Artifact data is recommended.
-	// +kubebuilder:validation:MaxLength=253
+	// +kubebuilder:validation:MaxLength=2048
 	// +kubebuilder:validation:Pattern="^(http|https|ssh)://.*$"
 	// +optional
 	URL string `json:"url,omitempty"`
@@ -225,7 +225,7 @@ type HelmChart struct {
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
 	// +kubebuilder:validation:required
-	Spec HelmChartSpec `json:"spec,omitempty"`
+	Spec HelmChartSpec `json:"spec"`
 	// +kubebuilder:default={"observedGeneration":-1}
 	Status HelmChartStatus `json:"status,omitempty"`
 }

@@ -38,21 +38,20 @@ type Artifact struct {
 	// managing the Source. It can be used to retrieve the Artifact for
 	// consumption, e.g. by another controller applying the Artifact contents.
 	// +kubebuilder:validation:MinLength=1
-	// +kubebuilder:validation:MaxLength=253
+	// +kubebuilder:validation:MaxLength=2048
 	// +kubebuilder:validation:Pattern="^(http|https|ssh)://.*$"
 	// +required
 	URL string `json:"url"`
 
 	// Revision is a human-readable identifier traceable in the origin source
 	// system. It can be a Git commit SHA, Git tag, a Helm chart version, etc.
-	// +kubebuilder:validation:MaxLength=63
-	// +kubebuilder:validation:Pattern=`^([a-zA-Z0-9_\-.\\\/]|\[[0-9]{1,5}\])+$`
+	// +kubebuilder:validation:Pattern=`^[A-Za-z0-9]{65}$`
 	// +optional
 	Revision string `json:"revision"`
 
 	// Checksum is the SHA256 checksum of the Artifact file.
-	// +kubebuilder:validation:MaxLength=250
-	// +kubebuilder:validation:Pattern=`^([a-zA-Z0-9_\-.\\\/]|\[[0-9]{1,5}\])+$`
+	// +kubebuilder:validation:MaxLength=65
+	// +kubebuilder:validation:Pattern=`^[A-Za-z0-9]{65}$`
 	// +optional
 	Checksum string `json:"checksum"`
 

@@ -112,6 +112,9 @@ spec:
               url:
                 description: The Helm repository URL, a valid URL contains at least
                   a protocol and host.
+                maxLength: 2048
+                minLength: 1
+                pattern: ^(http|https|ssh)://.*$
                 type: string
             required:
             - interval
@@ -128,6 +131,8 @@ spec:
                 properties:
                   checksum:
                     description: Checksum is the SHA256 checksum of the artifact.
+                    maxLength: 65
+                    pattern: ^[A-Za-z0-9]{65}$
                     type: string
                   lastUpdateTime:
                     description: LastUpdateTime is the timestamp corresponding to
@@ -136,14 +141,22 @@ spec:
                     type: string
                   path:
                     description: Path is the relative file path of this artifact.
+                    maxLength: 253
+                    minLength: 1
+                    pattern: ^([a-zA-Z0-9_\-.\\\/]|\[[0-9]{1,5}\])+$
                     type: string
                   revision:
                     description: Revision is a human readable identifier traceable
                       in the origin source system. It can be a Git commit SHA, Git
                       tag, a Helm index timestamp, a Helm chart version, etc.
+                    maxLength: 65
+                    pattern: ^[A-Za-z0-9]{65}$
                     type: string
                   url:
                     description: URL is the HTTP address of this artifact.
+                    maxLength: 2048
+                    minLength: 1
+                    pattern: ^(http|https|ssh)://.*$
                     type: string
                 required:
                 - path
@@ -231,8 +244,12 @@ spec:
                 type: integer
               url:
                 description: URL is the download link for the last index fetched.
+                maxLength: 2048
+                pattern: ^(http|https|ssh)://.*$
                 type: string
             type: object
+        required:
+        - spec
         type: object
     served: true
     storage: false
@@ -355,6 +372,9 @@ spec:
               url:
                 description: URL of the Helm repository, a valid URL contains at least
                   a protocol and host.
+                maxLength: 2048
+                minLength: 1
+                pattern: ^(http|https|ssh)://.*$
                 type: string
             required:
             - interval
@@ -371,6 +391,8 @@ spec:
                 properties:
                   checksum:
                     description: Checksum is the SHA256 checksum of the Artifact file.
+                    maxLength: 65
+                    pattern: ^[A-Za-z0-9]{65}$
                     type: string
                   lastUpdateTime:
                     description: LastUpdateTime is the timestamp corresponding to
@@ -386,11 +408,15 @@ spec:
                     description: Path is the relative file path of the Artifact. It
                       can be used to locate the file in the root of the Artifact storage
                       on the local file system of the controller managing the Source.
+                    maxLength: 253
+                    minLength: 1
+                    pattern: ^([a-zA-Z0-9_\-.\\\/]|\[[0-9]{1,5}\])+$
                     type: string
                   revision:
                     description: Revision is a human-readable identifier traceable
                       in the origin source system. It can be a Git commit SHA, Git
                       tag, a Helm chart version, etc.
+                    pattern: ^[A-Za-z0-9]{65}$
                     type: string
                   size:
                     description: Size is the number of bytes in the file.
@@ -401,6 +427,9 @@ spec:
                       by the controller managing the Source. It can be used to retrieve
                       the Artifact for consumption, e.g. by another controller applying
                       the Artifact contents.
+                    maxLength: 2048
+                    minLength: 1
+                    pattern: ^(http|https|ssh)://.*$
                     type: string
                 required:
                 - path
@@ -491,8 +520,12 @@ spec:
                 description: URL is the dynamic fetch link for the latest Artifact.
                   It is provided on a "best effort" basis, and using the precise HelmRepositoryStatus.Artifact
                   data is recommended.
+                maxLength: 2048
+                pattern: ^(http|https|ssh)://.*$
                 type: string
             type: object
+        required:
+        - spec
         type: object
     served: true
     storage: true

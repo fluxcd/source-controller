@@ -49,7 +49,7 @@ const (
 type GitRepositorySpec struct {
 	// URL specifies the Git repository URL, it can be an HTTP/S or SSH address.
 	// +kubebuilder:validation:MinLength=1
-	// +kubebuilder:validation:MaxLength=253
+	// +kubebuilder:validation:MaxLength=2048
 	// +kubebuilder:validation:Pattern="^(http|https|ssh)://.*$"
 	// +required
 	URL string `json:"url"`
@@ -85,7 +85,7 @@ type GitRepositorySpec struct {
 	// Ignore overrides the set of excluded patterns in the .sourceignore format
 	// (which is the same as .gitignore). If not provided, a default will be used,
 	// consult the documentation for your version to find out what those are.
-	// +kubebuilder:validation:MaxLength=253
+	// +kubebuilder:validation:MaxLength=5119
 	// +kubebuilder:validation:Pattern=`^([a-zA-Z0-9_\-.\\\/]|\[[0-9]{1,5}\])+$`
 	// +optional
 	Ignore *string `json:"ignore,omitempty"`
@@ -161,7 +161,7 @@ type GitRepositoryRef struct {
 	//
 	// When GitRepositorySpec.GitImplementation is set to 'go-git', a shallow
 	// clone of the specified branch is performed.
-	// +kubebuilder:validation:MaxLength=63
+	// +kubebuilder:validation:MaxLength=244
 	// +kubebuilder:validation:Pattern=`^([a-zA-Z0-9_\-.\\\/]|\[[0-9]{1,5}\])+$`
 	// +optional
 	Branch string `json:"branch,omitempty"`
@@ -174,7 +174,7 @@ type GitRepositoryRef struct {
 
 	// SemVer tag expression to check out, takes precedence over Tag.
 	// +kubebuilder:validation:MaxLength=63
-	// +kubebuilder:validation:Pattern=`^[\-._0-9]+$`
+	// +kubebuilder:validation:Pattern=`^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$`
 	// +optional
 	SemVer string `json:"semver,omitempty"`
 
@@ -183,8 +183,7 @@ type GitRepositoryRef struct {
 	// When GitRepositorySpec.GitImplementation is set to 'go-git', this can be
 	// combined with Branch to shallow clone the branch, in which the commit is
 	// expected to exist.
-	// +kubebuilder:validation:MaxLength=250
-	// +kubebuilder:validation:Pattern=`^([a-zA-Z0-9_\-.\\\/]|\[[0-9]{1,5}\])+$`
+	// +kubebuilder:validation:Pattern=`^[A-Za-z0-9]{65}$`
 	// +optional
 	Commit string `json:"commit,omitempty"`
 }
@@ -215,7 +214,7 @@ type GitRepositoryStatus struct {
 	// URL is the dynamic fetch link for the latest Artifact.
 	// It is provided on a "best effort" basis, and using the precise
 	// GitRepositoryStatus.Artifact data is recommended.
-	// +kubebuilder:validation:MaxLength=253
+	// +kubebuilder:validation:MaxLength=2048
 	// +kubebuilder:validation:Pattern="^(http|https|ssh)://.*$"
 	// +optional
 	URL string `json:"url,omitempty"`
@@ -293,7 +292,7 @@ type GitRepository struct {
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
 	// +kubebuilder:validation:required
-	Spec GitRepositorySpec `json:"spec,omitempty"`
+	Spec GitRepositorySpec `json:"spec"`
 	// +kubebuilder:default={"observedGeneration":-1}
 	Status GitRepositoryStatus `json:"status,omitempty"`
 }

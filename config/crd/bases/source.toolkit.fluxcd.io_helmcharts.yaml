@@ -90,6 +90,9 @@ spec:
               chart:
                 description: The name or path the Helm chart is available at in the
                   SourceRef.
+                maxLength: 253
+                minLength: 1
+                pattern: ^([a-zA-Z0-9_\-.\\\/]|\[[0-9]{1,5}\])+$
                 type: string
               interval:
                 description: The interval at which to check the Source for updates.
@@ -109,6 +112,8 @@ spec:
                 properties:
                   apiVersion:
                     description: APIVersion of the referent.
+                    maxLength: 2048
+                    pattern: ^([a-zA-Z0-9_\-.\\\/]|\[[0-9]{1,5}\])+$
                     type: string
                   kind:
                     description: Kind of the referent, valid values are ('HelmRepository',
@@ -120,6 +125,9 @@ spec:
                     type: string
                   name:
                     description: Name of the referent.
+                    maxLength: 253
+                    minLength: 1
+                    pattern: ^([a-zA-Z0-9_\-.\\\/]|\[[0-9]{1,5}\])+$
                     type: string
                 required:
                 - kind
@@ -148,6 +156,8 @@ spec:
                 default: '*'
                 description: The chart version semver expression, ignored for charts
                   from GitRepository and Bucket sources. Defaults to latest when omitted.
+                maxLength: 2048
+                pattern: ^([a-zA-Z0-9_\-.\\\/]|\[[0-9]{1,5}\])+$
                 type: string
             required:
             - chart
@@ -165,6 +175,8 @@ spec:
                 properties:
                   checksum:
                     description: Checksum is the SHA256 checksum of the artifact.
+                    maxLength: 65
+                    pattern: ^[A-Za-z0-9]{65}$
                     type: string
                   lastUpdateTime:
                     description: LastUpdateTime is the timestamp corresponding to
@@ -173,14 +185,22 @@ spec:
                     type: string
                   path:
                     description: Path is the relative file path of this artifact.
+                    maxLength: 253
+                    minLength: 1
+                    pattern: ^([a-zA-Z0-9_\-.\\\/]|\[[0-9]{1,5}\])+$
                     type: string
                   revision:
                     description: Revision is a human readable identifier traceable
                       in the origin source system. It can be a Git commit SHA, Git
                       tag, a Helm index timestamp, a Helm chart version, etc.
+                    maxLength: 65
+                    pattern: ^[A-Za-z0-9]{65}$
                     type: string
                   url:
                     description: URL is the HTTP address of this artifact.
+                    maxLength: 2048
+                    minLength: 1
+                    pattern: ^(http|https|ssh)://.*$
                     type: string
                 required:
                 - path
@@ -268,8 +288,12 @@ spec:
                 type: integer
               url:
                 description: URL is the download link for the last chart pulled.
+                maxLength: 2048
+                pattern: ^(http|https|ssh)://.*$
                 type: string
             type: object
+        required:
+        - spec
         type: object
     served: true
     storage: false
@@ -348,6 +372,9 @@ spec:
               chart:
                 description: Chart is the name or path the Helm chart is available
                   at in the SourceRef.
+                maxLength: 253
+                minLength: 1
+                pattern: ^([a-zA-Z0-9_\-.\\\/]|\[[0-9]{1,5}\])+$
                 type: string
               interval:
                 description: Interval is the interval at which to check the Source
@@ -369,6 +396,8 @@ spec:
                 properties:
                   apiVersion:
                     description: APIVersion of the referent.
+                    maxLength: 2048
+                    pattern: ^([a-zA-Z0-9_\-.\\\/]|\[[0-9]{1,5}\])+$
                     type: string
                   kind:
                     description: Kind of the referent, valid values are ('HelmRepository',
@@ -380,6 +409,9 @@ spec:
                     type: string
                   name:
                     description: Name of the referent.
+                    maxLength: 253
+                    minLength: 1
+                    pattern: ^([a-zA-Z0-9_\-.\\\/]|\[[0-9]{1,5}\])+$
                     type: string
                 required:
                 - kind
@@ -410,6 +442,8 @@ spec:
                 description: Version is the chart version semver expression, ignored
                   for charts from GitRepository and Bucket sources. Defaults to latest
                   when omitted.
+                maxLength: 2048
+                pattern: ^[\-._0-9]+$
                 type: string
             required:
             - chart
@@ -427,6 +461,8 @@ spec:
                 properties:
                   checksum:
                     description: Checksum is the SHA256 checksum of the Artifact file.
+                    maxLength: 65
+                    pattern: ^[A-Za-z0-9]{65}$
                     type: string
                   lastUpdateTime:
                     description: LastUpdateTime is the timestamp corresponding to
@@ -442,11 +478,15 @@ spec:
                     description: Path is the relative file path of the Artifact. It
                       can be used to locate the file in the root of the Artifact storage
                       on the local file system of the controller managing the Source.
+                    maxLength: 253
+                    minLength: 1
+                    pattern: ^([a-zA-Z0-9_\-.\\\/]|\[[0-9]{1,5}\])+$
                     type: string
                   revision:
                     description: Revision is a human-readable identifier traceable
                       in the origin source system. It can be a Git commit SHA, Git
                       tag, a Helm chart version, etc.
+                    pattern: ^[A-Za-z0-9]{65}$
                     type: string
                   size:
                     description: Size is the number of bytes in the file.
@@ -457,6 +497,9 @@ spec:
                       by the controller managing the Source. It can be used to retrieve
                       the Artifact for consumption, e.g. by another controller applying
                       the Artifact contents.
+                    maxLength: 2048
+                    minLength: 1
+                    pattern: ^(http|https|ssh)://.*$
                     type: string
                 required:
                 - path
@@ -541,6 +584,8 @@ spec:
               observedChartName:
                 description: ObservedChartName is the last observed chart name as
                   specified by the resolved chart reference.
+                maxLength: 253
+                pattern: ^([a-zA-Z0-9_\-.\\\/]|\[[0-9]{1,5}\])+$
                 type: string
               observedGeneration:
                 description: ObservedGeneration is the last observed generation of
@@ -550,13 +595,19 @@ spec:
               observedSourceArtifactRevision:
                 description: ObservedSourceArtifactRevision is the last observed Artifact.Revision
                   of the HelmChartSpec.SourceRef.
+                maxLength: 253
+                pattern: ^([a-zA-Z0-9_\-.\\\/]|\[[0-9]{1,5}\])+$
                 type: string
               url:
                 description: URL is the dynamic fetch link for the latest Artifact.
                   It is provided on a "best effort" basis, and using the precise BucketStatus.Artifact
                   data is recommended.
+                maxLength: 2048
+                pattern: ^(http|https|ssh)://.*$
                 type: string
             type: object
+        required:
+        - spec
         type: object
     served: true
     storage: true

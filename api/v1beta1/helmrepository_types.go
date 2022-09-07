@@ -36,7 +36,7 @@ const (
 type HelmRepositorySpec struct {
 	// The Helm repository URL, a valid URL contains at least a protocol and host.
 	// +kubebuilder:validation:MinLength=1
-	// +kubebuilder:validation:MaxLength=253
+	// +kubebuilder:validation:MaxLength=2048
 	// +kubebuilder:validation:Pattern="^(http|https|ssh)://.*$"
 	// +required
 	URL string `json:"url"`
@@ -88,7 +88,7 @@ type HelmRepositoryStatus struct {
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 
 	// URL is the download link for the last index fetched.
-	// +kubebuilder:validation:MaxLength=253
+	// +kubebuilder:validation:MaxLength=2048
 	// +kubebuilder:validation:Pattern="^(http|https|ssh)://.*$"
 	// +optional
 	URL string `json:"url,omitempty"`
@@ -201,7 +201,7 @@ type HelmRepository struct {
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
 	// +kubebuilder:validation:required
-	Spec HelmRepositorySpec `json:"spec,omitempty"`
+	Spec HelmRepositorySpec `json:"spec"`
 	// +kubebuilder:default={"observedGeneration":-1}
 	Status HelmRepositoryStatus `json:"status,omitempty"`
 }
