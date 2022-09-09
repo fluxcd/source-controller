@@ -26,12 +26,16 @@ import (
 	"github.com/fluxcd/pkg/runtime/conditions"
 	"github.com/fluxcd/pkg/runtime/patch"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
+	"github.com/fluxcd/source-controller/internal/helm/registry"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/tools/record"
 	kstatus "sigs.k8s.io/cli-utils/pkg/kstatus/status"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	fakeclient "sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 func TestHelmRepositoryOCIReconciler_Reconcile(t *testing.T) {
@@ -159,6 +163,151 @@ func TestHelmRepositoryOCIReconciler_Reconcile(t *testing.T) {
 				}
 				return false
 			}, timeout).Should(BeTrue())
+		})
+	}
+}
+
+func TestHelmRepositoryOCIReconciler_authStrategy(t *testing.T) {
+	type secretOptions struct {
+		username string
+		password string
+	}
+
+	tests := []struct {
+		name             string
+		url              string
+		registryOpts     registryOptions
+		secretOpts       secretOptions
+		provider         string
+		providerImg      string
+		want             ctrl.Result
+		wantErr          bool
+		assertConditions []metav1.Condition
+	}{
+		{
+			name: "HTTP without basic auth",
+			want: ctrl.Result{RequeueAfter: interval},
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReadyCondition, meta.SucceededReason, "Helm repository is ready"),
+			},
+		},
+		{
+			name: "HTTP with basic auth secret",
+			want: ctrl.Result{RequeueAfter: interval},
+			registryOpts: registryOptions{
+				withBasicAuth: true,
+			},
+			secretOpts: secretOptions{
+				username: testRegistryUsername,
+				password: testRegistryPassword,
+			},
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReadyCondition, meta.SucceededReason, "Helm repository is ready"),
+			},
+		},
+		{
+			name:    "HTTP registry - basic auth with invalid secret",
+			want:    ctrl.Result{},
+			wantErr: true,
+			registryOpts: registryOptions{
+				withBasicAuth: true,
+			},
+			secretOpts: secretOptions{
+				username: "wrong-pass",
+				password: "wrong-pass",
+			},
+			assertConditions: []metav1.Condition{
+				*conditions.FalseCondition(meta.ReadyCondition, sourcev1.AuthenticationFailedReason, "failed to login to registry"),
+			},
+		},
+		{
+			name:        "with contextual login provider",
+			wantErr:     true,
+			provider:    "aws",
+			providerImg: "oci://123456789000.dkr.ecr.us-east-2.amazonaws.com/test",
+			assertConditions: []metav1.Condition{
+				*conditions.FalseCondition(meta.ReadyCondition, sourcev1.AuthenticationFailedReason, "failed to get credential from"),
+			},
+		},
+		{
+			name: "with contextual login provider and secretRef",
+			want: ctrl.Result{RequeueAfter: interval},
+			registryOpts: registryOptions{
+				withBasicAuth: true,
+			},
+			secretOpts: secretOptions{
+				username: testRegistryUsername,
+				password: testRegistryPassword,
+			},
+			provider: "azure",
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReadyCondition, meta.SucceededReason, "Helm repository is ready"),
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			builder := fakeclient.NewClientBuilder().WithScheme(testEnv.GetScheme())
+			workspaceDir := t.TempDir()
+			server, err := setupRegistryServer(ctx, workspaceDir, tt.registryOpts)
+			g.Expect(err).NotTo(HaveOccurred())
+
+			obj := &sourcev1.HelmRepository{
+				ObjectMeta: metav1.ObjectMeta{
+					GenerateName: "auth-strategy-",
+				},
+				Spec: sourcev1.HelmRepositorySpec{
+					Interval: metav1.Duration{Duration: interval},
+					Timeout:  &metav1.Duration{Duration: timeout},
+					Type:     sourcev1.HelmRepositoryTypeOCI,
+					Provider: sourcev1.GenericOCIProvider,
+					URL:      fmt.Sprintf("oci://%s", server.registryHost),
+				},
+			}
+
+			if tt.provider != "" {
+				obj.Spec.Provider = tt.provider
+			}
+			// If a provider specific image is provided, overwrite existing URL
+			// set earlier. It'll fail but it's necessary to set them because
+			// the login check expects the URLs to be of certain pattern.
+			if tt.providerImg != "" {
+				obj.Spec.URL = tt.providerImg
+			}
+
+			if tt.secretOpts.username != "" && tt.secretOpts.password != "" {
+				secret := &corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "auth-secretref",
+					},
+					Type: corev1.SecretTypeDockerConfigJson,
+					Data: map[string][]byte{
+						".dockerconfigjson": []byte(fmt.Sprintf(`{"auths": {%q: {"username": %q, "password": %q}}}`,
+							server.registryHost, tt.secretOpts.username, tt.secretOpts.password)),
+					},
+				}
+
+				builder.WithObjects(secret)
+
+				obj.Spec.SecretRef = &meta.LocalObjectReference{
+					Name: secret.Name,
+				}
+			}
+
+			r := &HelmRepositoryOCIReconciler{
+				Client:                  builder.Build(),
+				EventRecorder:           record.NewFakeRecorder(32),
+				Getters:                 testGetters,
+				RegistryClientGenerator: registry.ClientGenerator,
+			}
+
+			got, err := r.reconcile(ctx, obj)
+			g.Expect(err != nil).To(Equal(tt.wantErr))
+			g.Expect(got).To(Equal(tt.want))
+			g.Expect(obj.Status.Conditions).To(conditions.MatchConditions(tt.assertConditions))
 		})
 	}
 }

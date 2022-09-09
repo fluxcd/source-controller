@@ -308,8 +308,8 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, obj *sour
 	}
 	options = append(options, crane.WithAuthFromKeychain(keychain))
 
-	if obj.Spec.Provider != sourcev1.GenericOCIProvider {
-		auth, authErr := r.oidcAuth(ctxTimeout, obj)
+	if _, ok := keychain.(util.Anonymous); obj.Spec.Provider != sourcev1.GenericOCIProvider && ok {
+		auth, authErr := oidcAuth(ctxTimeout, obj.Spec.URL, obj.Spec.Provider)
 		if authErr != nil && !errors.Is(authErr, oci.ErrUnconfiguredProvider) {
 			e := serror.NewGeneric(
 				fmt.Errorf("failed to get credential from %s: %w", obj.Spec.Provider, authErr),
@@ -589,9 +589,9 @@ func (r *OCIRepositoryReconciler) keychain(ctx context.Context, obj *sourcev1.OC
 		}
 	}
 
-	// if no pullsecrets available return DefaultKeyChain
+	// if no pullsecrets available return an AnonymousKeychain
 	if len(pullSecretNames) == 0 {
-		return authn.DefaultKeychain, nil
+		return util.Anonymous{}, nil
 	}
 
 	// lookup image pull secrets
@@ -655,15 +655,15 @@ func (r *OCIRepositoryReconciler) transport(ctx context.Context, obj *sourcev1.O
 }
 
 // oidcAuth generates the OIDC credential authenticator based on the specified cloud provider.
-func (r *OCIRepositoryReconciler) oidcAuth(ctx context.Context, obj *sourcev1.OCIRepository) (authn.Authenticator, error) {
-	url := strings.TrimPrefix(obj.Spec.URL, sourcev1.OCIRepositoryPrefix)
-	ref, err := name.ParseReference(url)
+func oidcAuth(ctx context.Context, url, provider string) (authn.Authenticator, error) {
+	u := strings.TrimPrefix(url, sourcev1.OCIRepositoryPrefix)
+	ref, err := name.ParseReference(u)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse URL '%s': %w", obj.Spec.URL, err)
+		return nil, fmt.Errorf("failed to parse URL '%s': %w", u, err)
 	}
 
 	opts := login.ProviderOptions{}
-	switch obj.Spec.Provider {
+	switch provider {
 	case sourcev1.AmazonOCIProvider:
 		opts.AwsAutoLogin = true
 	case sourcev1.AzureOCIProvider:
@@ -672,7 +672,7 @@ func (r *OCIRepositoryReconciler) oidcAuth(ctx context.Context, obj *sourcev1.OC
 		opts.GcpAutoLogin = true
 	}
 
-	return login.NewManager().Login(ctx, url, ref, opts)
+	return login.NewManager().Login(ctx, u, ref, opts)
 }
 
 // craneOptions sets the auth headers, timeout and user agent
