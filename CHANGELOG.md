@@ -2,6 +2,31 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.29.0
+
+**Release date:** 2022-09-09
+
+This prerelease adds support for non-TLS container registries such
+as [Kubernetes Kind Docker Registry](https://kind.sigs.k8s.io/docs/user/local-registry/).
+Connecting to an in-cluster registry over plain HTTP,
+requires setting the `OCIRepository.spec.insecure` field to `true`.
+
+:warning: **Breaking change:** The controller logs have been aligned
+with the Kubernetes structured logging. For more details on the new logging
+structure please see: [fluxcd/flux2#3051](https://github.com/fluxcd/flux2/issues/3051).
+
+Improvements:
+- Align controller logs to Kubernetes structured logging
+  [#882](https://github.com/fluxcd/source-controller/pull/882)
+- [OCIRepository] Add support for non-TLS insecure container registries
+  [#881](https://github.com/fluxcd/source-controller/pull/881)
+- Fuzz optimisations
+  [#886](https://github.com/fluxcd/source-controller/pull/886)
+
+Fixes:
+- [OCI] Static credentials should take precedence over the OIDC provider
+  [#884](https://github.com/fluxcd/source-controller/pull/884)
+
 ## 0.28.0
 
 **Release date:** 2022-08-29
