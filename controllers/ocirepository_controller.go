@@ -503,84 +503,84 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, obj *sour
 // verifyOCISourceSignature verifies the authenticity of the given image reference url. First, it tries to keyful approach
 // by looking at whether the given secret exists. Then, if it does not exist, it pushes a keyless approach for verification.
 func (r *OCIRepositoryReconciler) verifyOCISourceSignature(ctx context.Context, obj *sourcev1.OCIRepository, url string, keychain authn.Keychain) error {
-	// Verify the image
-	if obj.Spec.Verify != nil {
-		provider := obj.Spec.Verify.Provider
-		switch provider {
-		case "cosign":
-			// get the public keys from the given secret
-			secretRef := obj.Spec.Verify.SecretRef
+	ctxTimeout, cancel := context.WithTimeout(ctx, obj.Spec.Timeout.Duration)
+	defer cancel()
 
-			defaultCosignOciOpts := []soci.Options{
-				soci.WithAuthnKeychain(keychain),
-				soci.WithContext(ctx),
+	provider := obj.Spec.Verify.Provider
+	switch provider {
+	case "cosign":
+		// get the public keys from the given secret
+		secretRef := obj.Spec.Verify.SecretRef
+
+		defaultCosignOciOpts := []soci.Options{
+			soci.WithAuthnKeychain(keychain),
+			soci.WithContext(ctxTimeout),
+		}
+
+		ref, err := name.ParseReference(url)
+		if err != nil {
+			return err
+		}
+
+		if secretRef != nil {
+			certSecretName := types.NamespacedName{
+				Namespace: obj.Namespace,
+				Name:      secretRef.Name,
 			}
 
-			ref, err := name.ParseReference(url)
+			var pubSecret corev1.Secret
+			if err := r.Get(ctxTimeout, certSecretName, &pubSecret); err != nil {
+				return err
+			}
+
+			signatureVerified := false
+			// traverse all public keys and try to verify the signature
+			// this is brute-force approach, but it is ok for now
+			for k, data := range pubSecret.Data {
+				// search for public keys in the secret
+				if strings.HasSuffix(k, ".pub") {
+					verifier, err := soci.New(append(defaultCosignOciOpts, soci.WithPublicKey(data))...)
+					if err != nil {
+						return err
+					}
+
+					signatures, _, err := verifier.VerifyImageSignatures(ctx, ref)
+					if err != nil {
+						continue
+					}
+
+					if signatures != nil {
+						signatureVerified = true
+						break
+					}
+				}
+			}
+
+			if !signatureVerified {
+				return fmt.Errorf("no matching signatures were found for '%s'", url)
+			}
+
+			return nil
+
+		} else {
+			ctrl.LoggerFrom(ctx).Info("no secret reference is provided, trying to verify the image using keyless approach")
+			verifier, err := soci.New(defaultCosignOciOpts...)
 			if err != nil {
 				return err
 			}
 
-			if secretRef != nil {
-				certSecretName := types.NamespacedName{
-					Namespace: obj.Namespace,
-					Name:      secretRef.Name,
-				}
-
-				var pubSecret corev1.Secret
-				if err := r.Get(ctx, certSecretName, &pubSecret); err != nil {
-					return err
-				}
-
-				signatureVerified := false
-				// traverse all public keys and try to verify the signature
-				// this is brute-force approach, but it is ok for now
-				for k, data := range pubSecret.Data {
-					// search for public keys in the secret
-					if strings.HasSuffix(k, ".pub") {
-						verifier, err := soci.New(append(defaultCosignOciOpts, soci.WithPublicKey(data))...)
-						if err != nil {
-							return err
-						}
-
-						signatures, _, err := verifier.VerifyImageSignatures(ctx, ref)
-						if err != nil {
-							continue
-						}
-
-						if signatures != nil {
-							signatureVerified = true
-							break
-						}
-					}
-				}
-
-				if !signatureVerified {
-					ctrl.LoggerFrom(ctx).Error(err, "none of the keys in the secret %s succeeded to verify for the image %s", secretRef.Name)
-					return fmt.Errorf("no matching signatures were found for the image %s", url)
-				}
-
-				return nil
-
-			} else {
-				ctrl.LoggerFrom(ctx).Info("no secret reference is provided, trying to verify the image using keyless approach")
-				verifier, err := soci.New(defaultCosignOciOpts...)
-				if err != nil {
-					return err
-				}
-
-				signatures, _, err := verifier.VerifyImageSignatures(ctx, ref)
-				if err != nil {
-					return err
-				}
-
-				if len(signatures) > 0 {
-					return nil
-				}
+			signatures, _, err := verifier.VerifyImageSignatures(ctxTimeout, ref)
+			if err != nil {
+				return err
 			}
-			return nil
+
+			if len(signatures) > 0 {
+				return nil
+			}
 		}
+		return nil
 	}
+
 	return nil
 }
 
