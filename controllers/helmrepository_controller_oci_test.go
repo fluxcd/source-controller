@@ -230,6 +230,15 @@ func TestHelmRepositoryOCIReconciler_authStrategy(t *testing.T) {
 			},
 		},
 		{
+			name:        "with contextual login provider and invalid repository URL",
+			wantErr:     true,
+			provider:    "aws",
+			providerImg: "oci://123456789000.dkr.ecr.us-east-2.amazonaws.com",
+			assertConditions: []metav1.Condition{
+				*conditions.FalseCondition(meta.ReadyCondition, sourcev1.AuthenticationFailedReason, "failed to get credential from"),
+			},
+		},
+		{
 			name: "with contextual login provider and secretRef",
 			want: ctrl.Result{RequeueAfter: interval},
 			registryOpts: registryOptions{

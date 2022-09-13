@@ -382,5 +382,9 @@ func oidcAuthFromAdapter(ctx context.Context, url, provider string) (helmreg.Log
 		return nil, err
 	}
 
+	if auth == nil {
+		return nil, fmt.Errorf("could not validate OCI provider %s with URL %s", provider, url)
+	}
+
 	return registry.OIDCAdaptHelper(auth)
 }
