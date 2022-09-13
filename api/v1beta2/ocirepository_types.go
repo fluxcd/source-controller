@@ -168,7 +168,7 @@ type OCIRepositoryVerification struct {
 	// SecretRef specifies the Kubernetes Secret containing the
 	// trusted public keys.
 	// +optional
-	SecretRef *meta.LocalObjectReference `json:"secretRef"`
+	SecretRef *meta.LocalObjectReference `json:"secretRef,omitempty"`
 }
 
 // OCIRepositoryStatus defines the observed state of OCIRepository
