@@ -13,6 +13,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
+
 package controllers
 
 import (
@@ -24,9 +25,6 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
-	coptions "github.com/sigstore/cosign/cmd/cosign/cli/options"
-	"github.com/sigstore/cosign/cmd/cosign/cli/sign"
-	"github.com/sigstore/cosign/pkg/cosign"
 	"math/big"
 	"net"
 	"net/http"
@@ -55,6 +53,9 @@ import (
 	gcrv1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/mutate"
 	. "github.com/onsi/gomega"
+	coptions "github.com/sigstore/cosign/cmd/cosign/cli/options"
+	"github.com/sigstore/cosign/cmd/cosign/cli/sign"
+	"github.com/sigstore/cosign/pkg/cosign"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -1231,7 +1232,7 @@ func TestOCIRepository_verifyOCISourceSignature(t *testing.T) {
 		url        string
 		reference  *sourcev1.OCIRepositoryRef
 		shouldSign bool
-		wantErr    bool
+		wantErrMsg string
 	}{
 		{
 			name: "signed image should pass verification",
@@ -1246,6 +1247,7 @@ func TestOCIRepository_verifyOCISourceSignature(t *testing.T) {
 				Tag: "6.1.5",
 			},
 			shouldSign: false,
+			wantErrMsg: "no matching signatures were found",
 		},
 	}
 
@@ -1254,6 +1256,29 @@ func TestOCIRepository_verifyOCISourceSignature(t *testing.T) {
 		Client:        builder.Build(),
 		EventRecorder: record.NewFakeRecorder(32),
 		Storage:       testStorage,
+	}
+
+	pf := func(b bool) ([]byte, error) {
+		return []byte("cosign-password"), nil
+	}
+
+	keys, err := cosign.GenerateKeyPair(pf)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	err = os.WriteFile(path.Join(tmpDir, "cosign.key"), keys.PrivateBytes, 0600)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "cosign-key",
+		},
+		Data: map[string][]byte{
+			"cosign.pub": keys.PublicBytes,
+		}}
+
+	err = r.Create(ctx, secret)
+	if err != nil {
+		g.Expect(err).NotTo(HaveOccurred())
 	}
 
 	for _, tt := range tests {
@@ -1273,33 +1298,6 @@ func TestOCIRepository_verifyOCISourceSignature(t *testing.T) {
 				},
 			}
 
-			pf := func(b bool) ([]byte, error) {
-				return []byte("foo"), nil
-			}
-
-			keys, err := cosign.GenerateKeyPair(pf)
-			if err != nil {
-				g.Expect(err).ToNot(HaveOccurred())
-			}
-
-			err = os.WriteFile("cosign.key", keys.PrivateBytes, 0600)
-			if err != nil {
-				g.Expect(err).ToNot(HaveOccurred())
-			}
-
-			secret := &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "cosign-key",
-				},
-				Data: map[string][]byte{
-					"cosign.pub": keys.PublicBytes,
-				}}
-
-			err = r.Create(ctx, secret)
-			if err != nil {
-				g.Expect(err).NotTo(HaveOccurred())
-			}
-
 			keychain, err := r.keychain(ctx, obj)
 			if err != nil {
 				g.Expect(err).ToNot(HaveOccurred())
@@ -1307,35 +1305,37 @@ func TestOCIRepository_verifyOCISourceSignature(t *testing.T) {
 
 			options := r.craneOptions(ctx, obj.Spec.Insecure)
 			options = append(options, crane.WithAuthFromKeychain(keychain))
-			url, err := r.getArtifactURL(obj, options)
+			artifactURL, err := r.getArtifactURL(obj, options)
 			if err != nil {
 				g.Expect(err).ToNot(HaveOccurred())
 			}
 
 			if tt.shouldSign {
-
 				ko := coptions.KeyOpts{
-					KeyRef:   "cosign.key",
+					KeyRef:   path.Join(tmpDir, "cosign.key"),
 					PassFunc: pf,
 				}
 
-				t.Logf("url: %s", url)
-
-				ro := &coptions.RootOptions{}
-				err = sign.SignCmd(ro, ko, coptions.RegistryOptions{Keychain: keychain}, nil, []string{url}, "", "", false, "", "", "", false, false, "", false)
-				if err != nil {
-					g.Expect(err).ToNot(HaveOccurred())
+				ro := &coptions.RootOptions{
+					Timeout: timeout,
 				}
+				err = sign.SignCmd(ro, ko, coptions.RegistryOptions{Keychain: keychain},
+					nil, []string{artifactURL}, "",
+					"", true, "",
+					"", "", false,
+					false, "", false)
+				g.Expect(err).ToNot(HaveOccurred())
 			}
 
-			err = r.verifyOCISourceSignature(ctx, obj, url, keychain)
-			if tt.wantErr {
-				g.Expect(err).To(HaveOccurred())
-				return
+			err = r.verifyOCISourceSignature(ctx, obj, artifactURL, keychain)
+			if tt.wantErrMsg != "" {
+				g.Expect(err).ToNot(BeNil())
+				g.Expect(err.Error()).To(ContainSubstring(tt.wantErrMsg))
+			} else {
+				g.Expect(err).ToNot(HaveOccurred())
 			}
 		})
 	}
-
 }
 
 func TestOCIRepository_stalled(t *testing.T) {
