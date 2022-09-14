@@ -28,9 +28,8 @@ import (
 	"strings"
 	"time"
 
-	soci "github.com/fluxcd/source-controller/internal/oci"
-
 	"github.com/Masterminds/semver/v3"
+	soci "github.com/fluxcd/source-controller/internal/oci"
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/authn/k8schain"
 	"github.com/google/go-containerregistry/pkg/crane"
@@ -424,7 +423,7 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, obj *sour
 				return sreconcile.ResultEmpty, e
 			}
 
-			conditions.MarkTrue(obj, sourcev1.SourceVerifiedCondition, meta.SucceededReason, "OCI image %s with digest %s verified.", url, imgDigest)
+			conditions.MarkTrue(obj, sourcev1.SourceVerifiedCondition, meta.SucceededReason, "OCI image %s with digest %s verified.", url, revision)
 		}
 		layers, err := img.Layers()
 		if err != nil {
@@ -502,8 +501,8 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, obj *sour
 	return sreconcile.ResultSuccess, nil
 }
 
-// verifyOCISourceSignature verifies the authenticity of the given image reference url. First, it tries to keyful approach
-// by looking at whether the given secret exists. Then, if it does not exist, it pushes a keyless approach for verification.
+// verifyOCISourceSignature verifies the authenticity of the given image reference url. First, it tries using a key,
+// provided the secret exists and a public key exists in the secret . Then, if it does not exist, it pushes for a keyless approach for verification.
 func (r *OCIRepositoryReconciler) verifyOCISourceSignature(ctx context.Context, obj *sourcev1.OCIRepository, url string, keychain authn.Keychain) error {
 	ctxTimeout, cancel := context.WithTimeout(ctx, obj.Spec.Timeout.Duration)
 	defer cancel()
@@ -536,8 +535,6 @@ func (r *OCIRepositoryReconciler) verifyOCISourceSignature(ctx context.Context, 
 			}
 
 			signatureVerified := false
-			// traverse all public keys and try to verify the signature
-			// this is brute-force approach, but it is ok for now
 			for k, data := range pubSecret.Data {
 				// search for public keys in the secret
 				if strings.HasSuffix(k, ".pub") {
@@ -546,7 +543,7 @@ func (r *OCIRepositoryReconciler) verifyOCISourceSignature(ctx context.Context, 
 						return err
 					}
 
-					signatures, _, err := verifier.VerifyImageSignatures(ctx, ref)
+					signatures, _, err := verifier.VerifyImageSignatures(ref)
 					if err != nil {
 						continue
 					}
@@ -563,7 +560,6 @@ func (r *OCIRepositoryReconciler) verifyOCISourceSignature(ctx context.Context, 
 			}
 
 			return nil
-
 		} else {
 			ctrl.LoggerFrom(ctx).Info("no secret reference is provided, trying to verify the image using keyless approach")
 			verifier, err := soci.New(defaultCosignOciOpts...)
@@ -571,7 +567,7 @@ func (r *OCIRepositoryReconciler) verifyOCISourceSignature(ctx context.Context, 
 				return err
 			}
 
-			signatures, _, err := verifier.VerifyImageSignatures(ctxTimeout, ref)
+			signatures, _, err := verifier.VerifyImageSignatures(ref)
 			if err != nil {
 				return err
 			}

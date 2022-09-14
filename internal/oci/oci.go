@@ -65,7 +65,8 @@ func WithContext(ctx context.Context) Options {
 
 // Verifier is a struct which is responsible for executing verification logic.
 type Verifier struct {
-	opts *cosign.CheckOpts
+	opts    *cosign.CheckOpts
+	context context.Context
 }
 
 // New initializes a new Verifier.
@@ -123,11 +124,12 @@ func New(opts ...Options) (*Verifier, error) {
 	}
 
 	return &Verifier{
-		opts: checkOpts,
+		opts:    checkOpts,
+		context: o.Context,
 	}, nil
 }
 
 // VerifyImageSignatures verify the authenticity of the given ref OCI image.
-func (v *Verifier) VerifyImageSignatures(ctx context.Context, ref name.Reference) ([]oci.Signature, bool, error) {
-	return cosign.VerifyImageSignatures(ctx, ref, v.opts)
+func (v *Verifier) VerifyImageSignatures(ref name.Reference) ([]oci.Signature, bool, error) {
+	return cosign.VerifyImageSignatures(v.context, ref, v.opts)
 }

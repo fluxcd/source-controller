@@ -5,7 +5,7 @@ Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
 
-	http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
@@ -1009,6 +1009,159 @@ func TestOCIRepository_reconcileSource_remoteReference(t *testing.T) {
 	}
 }
 
+func TestOCIRepository_reconcileSource_verifyOCISourceSignature(t *testing.T) {
+	g := NewWithT(t)
+
+	tmpDir := t.TempDir()
+	server, err := setupRegistryServer(ctx, tmpDir, registryOptions{})
+	g.Expect(err).ToNot(HaveOccurred())
+
+	podinfoVersions, err := pushMultiplePodinfoImages(server.registryHost, "6.1.4", "6.1.5")
+	g.Expect(err).ToNot(HaveOccurred())
+	img4 := podinfoVersions["6.1.4"]
+	img5 := podinfoVersions["6.1.5"]
+
+	tests := []struct {
+		name             string
+		reference        *sourcev1.OCIRepositoryRef
+		digest           string
+		want             sreconcile.Result
+		wantErr          bool
+		wantErrMsg       string
+		shouldSign       bool
+		assertConditions []metav1.Condition
+	}{
+		{
+			name: "signed image should pass verification",
+			reference: &sourcev1.OCIRepositoryRef{
+				Tag: "6.1.4",
+			},
+			digest:     img4.digest.Hex,
+			shouldSign: true,
+			want:       sreconcile.ResultSuccess,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new digest '<digest>' for '<url>'"),
+				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new digest '<digest>' for '<url>'"),
+				*conditions.TrueCondition(sourcev1.SourceVerifiedCondition, meta.SucceededReason, "OCI image <url> with digest <digest> verified."),
+			},
+		},
+		{
+			name: "not signed image should not pass verification",
+			reference: &sourcev1.OCIRepositoryRef{
+				Tag: "6.1.5",
+			},
+			digest:     img5.digest.Hex,
+			wantErr:    true,
+			wantErrMsg: "failed to verify OCI image signature '<url>' using provider 'cosign': no matching signatures were found for '<url>",
+			want:       sreconcile.ResultEmpty,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new digest '<digest>' for '<url>'"),
+				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new digest '<digest>' for '<url>'"),
+				*conditions.FalseCondition(sourcev1.SourceVerifiedCondition, sourcev1.VerificationError, "failed to verify OCI image signature '<url>' using provider '<provider>': no matching signatures were found for '<url>'"),
+			},
+		},
+	}
+
+	builder := fakeclient.NewClientBuilder().WithScheme(testEnv.GetScheme())
+
+	r := &OCIRepositoryReconciler{
+		Client:        builder.Build(),
+		EventRecorder: record.NewFakeRecorder(32),
+		Storage:       testStorage,
+	}
+
+	pf := func(b bool) ([]byte, error) {
+		return []byte("cosign-password"), nil
+	}
+
+	keys, err := cosign.GenerateKeyPair(pf)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	err = os.WriteFile(path.Join(tmpDir, "cosign.key"), keys.PrivateBytes, 0600)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "cosign-key",
+		},
+		Data: map[string][]byte{
+			"cosign.pub": keys.PublicBytes,
+		}}
+
+	err = r.Create(ctx, secret)
+	if err != nil {
+		g.Expect(err).NotTo(HaveOccurred())
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			obj := &sourcev1.OCIRepository{
+				ObjectMeta: metav1.ObjectMeta{
+					GenerateName: "verify-oci-source-signature-",
+				},
+				Spec: sourcev1.OCIRepositorySpec{
+					URL: fmt.Sprintf("oci://%s/podinfo", server.registryHost),
+					Verify: &sourcev1.OCIRepositoryVerification{
+						Provider:  "cosign",
+						SecretRef: &meta.LocalObjectReference{Name: "cosign-key"}},
+					Interval: metav1.Duration{Duration: interval},
+					Timeout:  &metav1.Duration{Duration: timeout},
+				},
+			}
+
+			if tt.reference != nil {
+				obj.Spec.Reference = tt.reference
+			}
+
+			keychain, err := r.keychain(ctx, obj)
+			if err != nil {
+				g.Expect(err).ToNot(HaveOccurred())
+			}
+
+			opts := r.craneOptions(ctx, true)
+			opts = append(opts, crane.WithAuthFromKeychain(keychain))
+			artifactURL, err := r.getArtifactURL(obj, opts)
+			g.Expect(err).ToNot(HaveOccurred())
+
+			if tt.shouldSign {
+				ko := coptions.KeyOpts{
+					KeyRef:   path.Join(tmpDir, "cosign.key"),
+					PassFunc: pf,
+				}
+
+				ro := &coptions.RootOptions{
+					Timeout: timeout,
+				}
+				err = sign.SignCmd(ro, ko, coptions.RegistryOptions{Keychain: keychain},
+					nil, []string{artifactURL}, "",
+					"", true, "",
+					"", "", false,
+					false, "", false)
+				g.Expect(err).ToNot(HaveOccurred())
+			}
+
+			assertConditions := tt.assertConditions
+			for k := range assertConditions {
+				assertConditions[k].Message = strings.ReplaceAll(assertConditions[k].Message, "<digest>", tt.digest)
+				assertConditions[k].Message = strings.ReplaceAll(assertConditions[k].Message, "<url>", artifactURL)
+				assertConditions[k].Message = strings.ReplaceAll(assertConditions[k].Message, "<provider>", "cosign")
+			}
+
+			artifact := &sourcev1.Artifact{}
+			got, err := r.reconcileSource(ctx, obj, artifact, tmpDir)
+			if tt.wantErr {
+				tt.wantErrMsg = strings.ReplaceAll(tt.wantErrMsg, "<url>", artifactURL)
+				g.Expect(err).ToNot(BeNil())
+				g.Expect(err.Error()).To(ContainSubstring(tt.wantErrMsg))
+			} else {
+				g.Expect(err).ToNot(HaveOccurred())
+			}
+			g.Expect(got).To(Equal(tt.want))
+			g.Expect(obj.Status.Conditions).To(conditions.MatchConditions(tt.assertConditions))
+		})
+	}
+}
+
 func TestOCIRepository_reconcileArtifact(t *testing.T) {
 	g := NewWithT(t)
 
@@ -1213,127 +1366,6 @@ func TestOCIRepository_getArtifactURL(t *testing.T) {
 			}
 			g.Expect(err).ToNot(HaveOccurred())
 			g.Expect(got).To(Equal(tt.want))
-		})
-	}
-}
-
-func TestOCIRepository_verifyOCISourceSignature(t *testing.T) {
-	g := NewWithT(t)
-
-	tmpDir := t.TempDir()
-	regServer, err := setupRegistryServer(ctx, tmpDir, registryOptions{})
-	g.Expect(err).ToNot(HaveOccurred())
-
-	_, err = pushMultiplePodinfoImages(regServer.registryHost, "6.1.4", "6.1.5", "6.1.6")
-	g.Expect(err).ToNot(HaveOccurred())
-
-	tests := []struct {
-		name       string
-		url        string
-		reference  *sourcev1.OCIRepositoryRef
-		shouldSign bool
-		wantErrMsg string
-	}{
-		{
-			name: "signed image should pass verification",
-			reference: &sourcev1.OCIRepositoryRef{
-				Tag: "6.1.4",
-			},
-			shouldSign: true,
-		},
-		{
-			name: "unsigned image should not pass verification",
-			reference: &sourcev1.OCIRepositoryRef{
-				Tag: "6.1.5",
-			},
-			shouldSign: false,
-			wantErrMsg: "no matching signatures were found",
-		},
-	}
-
-	builder := fakeclient.NewClientBuilder().WithScheme(testEnv.GetScheme())
-	r := &OCIRepositoryReconciler{
-		Client:        builder.Build(),
-		EventRecorder: record.NewFakeRecorder(32),
-		Storage:       testStorage,
-	}
-
-	pf := func(b bool) ([]byte, error) {
-		return []byte("cosign-password"), nil
-	}
-
-	keys, err := cosign.GenerateKeyPair(pf)
-	g.Expect(err).ToNot(HaveOccurred())
-
-	err = os.WriteFile(path.Join(tmpDir, "cosign.key"), keys.PrivateBytes, 0600)
-	g.Expect(err).ToNot(HaveOccurred())
-
-	secret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "cosign-key",
-		},
-		Data: map[string][]byte{
-			"cosign.pub": keys.PublicBytes,
-		}}
-
-	err = r.Create(ctx, secret)
-	if err != nil {
-		g.Expect(err).NotTo(HaveOccurred())
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			obj := &sourcev1.OCIRepository{
-				ObjectMeta: metav1.ObjectMeta{
-					GenerateName: "artifact-url-",
-				},
-				Spec: sourcev1.OCIRepositorySpec{
-					URL:       fmt.Sprintf("oci://%s/podinfo", regServer.registryHost),
-					Reference: tt.reference,
-					Verify: &sourcev1.OCIRepositoryVerification{
-						Provider:  "cosign",
-						SecretRef: &meta.LocalObjectReference{Name: "cosign-key"}},
-					Interval: metav1.Duration{Duration: interval},
-					Timeout:  &metav1.Duration{Duration: timeout},
-				},
-			}
-
-			keychain, err := r.keychain(ctx, obj)
-			if err != nil {
-				g.Expect(err).ToNot(HaveOccurred())
-			}
-
-			options := r.craneOptions(ctx, obj.Spec.Insecure)
-			options = append(options, crane.WithAuthFromKeychain(keychain))
-			artifactURL, err := r.getArtifactURL(obj, options)
-			if err != nil {
-				g.Expect(err).ToNot(HaveOccurred())
-			}
-
-			if tt.shouldSign {
-				ko := coptions.KeyOpts{
-					KeyRef:   path.Join(tmpDir, "cosign.key"),
-					PassFunc: pf,
-				}
-
-				ro := &coptions.RootOptions{
-					Timeout: timeout,
-				}
-				err = sign.SignCmd(ro, ko, coptions.RegistryOptions{Keychain: keychain},
-					nil, []string{artifactURL}, "",
-					"", true, "",
-					"", "", false,
-					false, "", false)
-				g.Expect(err).ToNot(HaveOccurred())
-			}
-
-			err = r.verifyOCISourceSignature(ctx, obj, artifactURL, keychain)
-			if tt.wantErrMsg != "" {
-				g.Expect(err).ToNot(BeNil())
-				g.Expect(err.Error()).To(ContainSubstring(tt.wantErrMsg))
-			} else {
-				g.Expect(err).ToNot(HaveOccurred())
-			}
 		})
 	}
 }
