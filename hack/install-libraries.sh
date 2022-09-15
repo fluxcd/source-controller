@@ -40,7 +40,7 @@ download_files() {
 cosign_verify(){
     [[ $# -eq 3 ]] || fatal 'cosign_verify needs exactly 3 arguments'
 
-    cosign verify-blob --cert "$1" --signature "$2" "$3"
+    COSIGN_EXPERIMENTAL=1 cosign verify-blob --cert "$1" --signature "$2" "$3"
     
     [[ $? -eq 0 ]] || fatal 'signature verification failed'
 }
