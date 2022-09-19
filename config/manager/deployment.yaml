@@ -51,7 +51,7 @@ spec:
             valueFrom:
               fieldRef:
                 fieldPath: metadata.namespace
-          - name: TUF_ROOT
+          - name: TUF_ROOT # store the Fulcio root CA file in tmp
             value: "/tmp/.sigstore"
         args:
           - --watch-all-namespaces

@@ -409,6 +409,81 @@ list](#default-exclusions), and may overrule the [`.sourceignore` file
 exclusions](#sourceignore-file). See [excluding files](#excluding-files)
 for more information.
 
+### Verification
+
+`.spec.verify` is an optional field to enable the verification of [Cosign](https://github.com/sigstore/cosign)
+signatures. The field offers two subfields:
+
+- `.provider`, to specify the verification provider. Only supports `cosign` at present.
+- `.secretRef.name`, to specify a reference to a Secret in the same namespace as
+  the OCIRepository, containing the Cosign public keys of trusted authors.
+
+```yaml
+---
+apiVersion: source.toolkit.fluxcd.io/v1beta2
+kind: OCIRepository
+metadata:
+  name: <repository-name>
+spec:
+  verify:
+    provider: cosign
+    secretRef:
+      name: cosign-public-keys
+```
+
+When the verification succeeds, the controller adds a Condition with the
+following attributes to the OCIRepository's `.status.conditions`:
+
+- `type: SourceVerified`
+- `status: "True"`
+- `reason: Succeeded`
+
+#### Public keys verification
+
+To verify the authenticity of an OCI artifact, create a Kubernetes secret
+with the Cosign public keys:
+
+```yaml
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: cosign-public-keys
+type: Opaque
+data:
+  key1.pub: <BASE64>
+  key2.pub: <BASE64>
+```
+
+Note that the keys must have the `.pub` extension for Flux to make user of them.
+
+#### Keyless verification
+
+For publicly available OCI artifacts, which are signed using the
+[Cosign Keyless](https://github.com/sigstore/cosign/blob/main/KEYLESS.md) procedure,
+you can enable the verification by omitting the `.verify.secretRef` field.
+
+Example of verifying artifacts signed by the
+[Cosign GitHub Action](https://github.com/sigstore/cosign-installer) with GitHub OIDC Token:
+
+```yaml
+apiVersion: source.toolkit.fluxcd.io/v1beta2
+kind: OCIRepository
+metadata:
+  name: podinfo
+spec:
+  interval: 5m
+  url: oci://ghcr.io/stefanprodan/manifests/podinfo
+  verify:
+    provider: cosign
+```
+
+The controller verifies the signatures using the Fulcio root CA and the Rekor
+instance hosted at [rekor.sigstore.dev](https://rekor.sigstore.dev/).
+
+Note that keyless verification is an **experimental feature**, using
+custom root CAs or self-hosted Rekor instances are not currency supported.
+
 ### Suspend
 
 `.spec.suspend` is an optional field to suspend the reconciliation of a
