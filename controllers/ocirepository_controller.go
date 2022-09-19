@@ -501,8 +501,8 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, obj *sour
 	return sreconcile.ResultSuccess, nil
 }
 
-// verifyOCISourceSignature verifies the authenticity of the given image reference url. First, it tries using a key,
-// provided the secret exists and a public key exists in the secret . Then, if it does not exist, it pushes for a keyless approach for verification.
+// verifyOCISourceSignature verifies the authenticity of the given image reference url. First, it tries using a key
+// if a secret with a valid public key is provided. If not, it falls back to a keyless approach for verification.
 func (r *OCIRepositoryReconciler) verifyOCISourceSignature(ctx context.Context, obj *sourcev1.OCIRepository, url string, keychain authn.Keychain) error {
 	ctxTimeout, cancel := context.WithTimeout(ctx, obj.Spec.Timeout.Duration)
 	defer cancel()
@@ -510,9 +510,6 @@ func (r *OCIRepositoryReconciler) verifyOCISourceSignature(ctx context.Context, 
 	provider := obj.Spec.Verify.Provider
 	switch provider {
 	case "cosign":
-		// get the public keys from the given secret
-		secretRef := obj.Spec.Verify.SecretRef
-
 		defaultCosignOciOpts := []soci.Options{
 			soci.WithAuthnKeychain(keychain),
 			soci.WithContext(ctxTimeout),
@@ -523,7 +520,8 @@ func (r *OCIRepositoryReconciler) verifyOCISourceSignature(ctx context.Context, 
 			return err
 		}
 
-		if secretRef != nil {
+		// get the public keys from the given secret
+		if secretRef := obj.Spec.Verify.SecretRef; secretRef != nil {
 			certSecretName := types.NamespacedName{
 				Namespace: obj.Namespace,
 				Name:      secretRef.Name,
@@ -560,23 +558,25 @@ func (r *OCIRepositoryReconciler) verifyOCISourceSignature(ctx context.Context, 
 			}
 
 			return nil
-		} else {
-			ctrl.LoggerFrom(ctx).Info("no secret reference is provided, trying to verify the image using keyless approach")
-			verifier, err := soci.New(defaultCosignOciOpts...)
-			if err != nil {
-				return err
-			}
-
-			signatures, _, err := verifier.VerifyImageSignatures(ref)
-			if err != nil {
-				return err
-			}
-
-			if len(signatures) > 0 {
-				return nil
-			}
 		}
-		return nil
+
+		// if no secret is provided, try keyless verification
+		ctrl.LoggerFrom(ctx).Info("no secret reference is provided, trying to verify the image using keyless approach")
+		verifier, err := soci.New(defaultCosignOciOpts...)
+		if err != nil {
+			return err
+		}
+
+		signatures, _, err := verifier.VerifyImageSignatures(ref)
+		if err != nil {
+			return err
+		}
+
+		if len(signatures) > 0 {
+			return nil
+		}
+
+		return fmt.Errorf("no matching signatures were found for '%s'", url)
 	}
 
 	return nil
@@ -980,8 +980,7 @@ func (r *OCIRepositoryReconciler) garbageCollect(ctx context.Context, obj *sourc
 // that this is a simple log. While the debug log contains complete details
 // about the event.
 func (r *OCIRepositoryReconciler) eventLogf(ctx context.Context,
-	obj runtime.Object, eventType, reason, messageFmt string, args ...interface{},
-) {
+	obj runtime.Object, eventType string, reason string, messageFmt string, args ...interface{}) {
 	msg := fmt.Sprintf(messageFmt, args...)
 	// Log and emit event.
 	if eventType == corev1.EventTypeWarning {
