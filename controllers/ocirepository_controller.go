@@ -311,7 +311,7 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, obj *sour
 	}
 	options = append(options, crane.WithAuthFromKeychain(keychain))
 
-	if _, ok := keychain.(util.Anonymous); obj.Spec.Provider != sourcev1.GenericOCIProvider && ok {
+	if _, ok := keychain.(soci.Anonymous); obj.Spec.Provider != sourcev1.GenericOCIProvider && ok {
 		auth, authErr := oidcAuth(ctxTimeout, obj.Spec.URL, obj.Spec.Provider)
 		if authErr != nil && !errors.Is(authErr, oci.ErrUnconfiguredProvider) {
 			e := serror.NewGeneric(
@@ -409,22 +409,28 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, obj *sour
 		}
 	}()
 
+	// Verify artifact
+	if obj.Spec.Verify == nil {
+		// Remove old observations if verification was disabled
+		conditions.Delete(obj, sourcev1.SourceVerifiedCondition)
+	} else if !obj.GetArtifact().HasRevision(revision) || conditions.GetObservedGeneration(obj, sourcev1.SourceVerifiedCondition) != obj.Generation {
+		provider := obj.Spec.Verify.Provider
+		err := r.verifyOCISourceSignature(ctx, obj, url, keychain)
+		if err != nil {
+			e := serror.NewGeneric(
+				fmt.Errorf("failed to verify the signature using provider '%s': %w", provider, err),
+				sourcev1.VerificationError,
+			)
+			conditions.MarkFalse(obj, sourcev1.SourceVerifiedCondition, e.Reason, e.Err.Error())
+			conditions.MarkFalse(obj, meta.ReconcilingCondition, e.Reason, e.Err.Error())
+			return sreconcile.ResultEmpty, e
+		}
+
+		conditions.MarkTrue(obj, sourcev1.SourceVerifiedCondition, meta.SucceededReason, "verified signature of digest %s", revision)
+	}
+
 	// Extract the content of the first artifact layer
 	if !obj.GetArtifact().HasRevision(revision) {
-		if obj.Spec.Verify != nil {
-			provider := obj.Spec.Verify.Provider
-			err := r.verifyOCISourceSignature(ctx, obj, url, keychain)
-			if err != nil {
-				e := serror.NewGeneric(
-					fmt.Errorf("failed to verify OCI image signature '%s' using provider '%s': %w", url, provider, err),
-					sourcev1.VerificationError,
-				)
-				conditions.MarkFalse(obj, sourcev1.SourceVerifiedCondition, e.Reason, e.Err.Error())
-				return sreconcile.ResultEmpty, e
-			}
-
-			conditions.MarkTrue(obj, sourcev1.SourceVerifiedCondition, meta.SucceededReason, "OCI image %s with digest %s verified.", url, revision)
-		}
 		layers, err := img.Layers()
 		if err != nil {
 			e := serror.NewGeneric(
@@ -512,7 +518,6 @@ func (r *OCIRepositoryReconciler) verifyOCISourceSignature(ctx context.Context, 
 	case "cosign":
 		defaultCosignOciOpts := []soci.Options{
 			soci.WithAuthnKeychain(keychain),
-			soci.WithContext(ctxTimeout),
 		}
 
 		ref, err := name.ParseReference(url)
@@ -536,12 +541,12 @@ func (r *OCIRepositoryReconciler) verifyOCISourceSignature(ctx context.Context, 
 			for k, data := range pubSecret.Data {
 				// search for public keys in the secret
 				if strings.HasSuffix(k, ".pub") {
-					verifier, err := soci.New(append(defaultCosignOciOpts, soci.WithPublicKey(data))...)
+					verifier, err := soci.NewVerifier(ctxTimeout, append(defaultCosignOciOpts, soci.WithPublicKey(data))...)
 					if err != nil {
 						return err
 					}
 
-					signatures, _, err := verifier.VerifyImageSignatures(ref)
+					signatures, _, err := verifier.VerifyImageSignatures(ctxTimeout, ref)
 					if err != nil {
 						continue
 					}
@@ -562,12 +567,12 @@ func (r *OCIRepositoryReconciler) verifyOCISourceSignature(ctx context.Context, 
 
 		// if no secret is provided, try keyless verification
 		ctrl.LoggerFrom(ctx).Info("no secret reference is provided, trying to verify the image using keyless approach")
-		verifier, err := soci.New(defaultCosignOciOpts...)
+		verifier, err := soci.NewVerifier(ctxTimeout, defaultCosignOciOpts...)
 		if err != nil {
 			return err
 		}
 
-		signatures, _, err := verifier.VerifyImageSignatures(ref)
+		signatures, _, err := verifier.VerifyImageSignatures(ctxTimeout, ref)
 		if err != nil {
 			return err
 		}
@@ -689,7 +694,7 @@ func (r *OCIRepositoryReconciler) keychain(ctx context.Context, obj *sourcev1.OC
 
 	// if no pullsecrets available return an AnonymousKeychain
 	if len(pullSecretNames) == 0 {
-		return util.Anonymous{}, nil
+		return soci.Anonymous{}, nil
 	}
 
 	// lookup image pull secrets

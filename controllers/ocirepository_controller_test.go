@@ -1042,22 +1042,22 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignature(t *testing.T) {
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new digest '<digest>' for '<url>'"),
 				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new digest '<digest>' for '<url>'"),
-				*conditions.TrueCondition(sourcev1.SourceVerifiedCondition, meta.SucceededReason, "OCI image <url> with digest <digest> verified."),
+				*conditions.TrueCondition(sourcev1.SourceVerifiedCondition, meta.SucceededReason, "verified signature of digest <digest>"),
 			},
 		},
 		{
-			name: "not signed image should not pass verification",
+			name: "unsigned image should not pass verification",
 			reference: &sourcev1.OCIRepositoryRef{
 				Tag: "6.1.5",
 			},
 			digest:     img5.digest.Hex,
 			wantErr:    true,
-			wantErrMsg: "failed to verify OCI image signature '<url>' using provider 'cosign': no matching signatures were found for '<url>",
+			wantErrMsg: "failed to verify the signature using provider 'cosign': no matching signatures were found for '<url>'",
 			want:       sreconcile.ResultEmpty,
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new digest '<digest>' for '<url>'"),
 				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new digest '<digest>' for '<url>'"),
-				*conditions.FalseCondition(sourcev1.SourceVerifiedCondition, sourcev1.VerificationError, "failed to verify OCI image signature '<url>' using provider '<provider>': no matching signatures were found for '<url>'"),
+				*conditions.FalseCondition(sourcev1.SourceVerifiedCondition, sourcev1.VerificationError, "failed to verify the signature using provider '<provider>': no matching signatures were found for '<url>'"),
 			},
 		},
 	}

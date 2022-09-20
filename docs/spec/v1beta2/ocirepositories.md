@@ -455,7 +455,7 @@ data:
   key2.pub: <BASE64>
 ```
 
-Note that the keys must have the `.pub` extension for Flux to make user of them.
+Note that the keys must have the `.pub` extension for Flux to make use of them.
 
 #### Keyless verification
 
@@ -482,7 +482,7 @@ The controller verifies the signatures using the Fulcio root CA and the Rekor
 instance hosted at [rekor.sigstore.dev](https://rekor.sigstore.dev/).
 
 Note that keyless verification is an **experimental feature**, using
-custom root CAs or self-hosted Rekor instances are not currency supported.
+custom root CAs or self-hosted Rekor instances are not currently supported.
 
 ### Suspend
 
@@ -838,6 +838,14 @@ This condition has a ["negative polarity"][typical-status-properties],
 and is only present on the OCIRepository while the status value is `"True"`.
 There may be more arbitrary values for the `reason` field to provide accurate
 reason for a condition.
+
+In addition to the above Condition types, when the signature
+[verification](#verification) fails. A condition with
+the following attributes is added to the GitRepository's `.status.conditions`:
+
+- `type: SourceVerified`
+- `status: "False"`
+- `reason: VerificationError`
 
 While the OCIRepository has one or more of these Conditions, the controller
 will continue to attempt to produce an Artifact for the resource with an

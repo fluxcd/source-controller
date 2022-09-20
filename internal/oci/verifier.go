@@ -38,7 +38,6 @@ import (
 type options struct {
 	PublicKey []byte
 	Keychain  authn.Keychain
-	Context   context.Context
 }
 
 // Options is a function that configures the options applied to a Verifier.
@@ -57,20 +56,13 @@ func WithAuthnKeychain(keychain authn.Keychain) Options {
 	}
 }
 
-func WithContext(ctx context.Context) Options {
-	return func(opts *options) {
-		opts.Context = ctx
-	}
-}
-
 // Verifier is a struct which is responsible for executing verification logic.
 type Verifier struct {
-	opts    *cosign.CheckOpts
-	context context.Context
+	opts *cosign.CheckOpts
 }
 
-// New initializes a new Verifier.
-func New(opts ...Options) (*Verifier, error) {
+// NewVerifier initializes a new Verifier.
+func NewVerifier(ctx context.Context, opts ...Options) (*Verifier, error) {
 	o := options{}
 	for _, opt := range opts {
 		opt(&o)
@@ -79,7 +71,7 @@ func New(opts ...Options) (*Verifier, error) {
 	checkOpts := &cosign.CheckOpts{}
 
 	ro := coptions.RegistryOptions{}
-	co, err := ro.ClientOpts(o.Context)
+	co, err := ro.ClientOpts(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -124,12 +116,11 @@ func New(opts ...Options) (*Verifier, error) {
 	}
 
 	return &Verifier{
-		opts:    checkOpts,
-		context: o.Context,
+		opts: checkOpts,
 	}, nil
 }
 
 // VerifyImageSignatures verify the authenticity of the given ref OCI image.
-func (v *Verifier) VerifyImageSignatures(ref name.Reference) ([]oci.Signature, bool, error) {
-	return cosign.VerifyImageSignatures(v.context, ref, v.opts)
+func (v *Verifier) VerifyImageSignatures(ctx context.Context, ref name.Reference) ([]oci.Signature, bool, error) {
+	return cosign.VerifyImageSignatures(ctx, ref, v.opts)
 }
