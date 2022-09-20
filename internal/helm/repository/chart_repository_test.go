@@ -63,12 +63,13 @@ func TestNewChartRepository(t *testing.T) {
 			New:     helmgetter.NewHTTPGetter,
 		},
 	}
+	repoRecorder := MustMakeMetrics()
 	options := []helmgetter.Option{helmgetter.WithBasicAuth("username", "password")}
 
 	t.Run("should construct chart repository", func(t *testing.T) {
 		g := NewWithT(t)
 
-		r, err := NewChartRepository(repositoryURL, "", providers, nil, options)
+		r, err := NewChartRepository(repositoryURL, "", providers, nil, options, "fake-namespace", repoRecorder)
 		g.Expect(err).ToNot(HaveOccurred())
 		g.Expect(r).ToNot(BeNil())
 		g.Expect(r.URL).To(Equal(repositoryURL))
@@ -78,7 +79,7 @@ func TestNewChartRepository(t *testing.T) {
 
 	t.Run("should error on URL parsing failure", func(t *testing.T) {
 		g := NewWithT(t)
-		r, err := NewChartRepository("https://ex ample.com", "", nil, nil, nil)
+		r, err := NewChartRepository("https://ex ample.com", "", nil, nil, nil, "fake-namespace", repoRecorder)
 		g.Expect(err).To(HaveOccurred())
 		g.Expect(err).To(BeAssignableToTypeOf(&url.Error{}))
 		g.Expect(r).To(BeNil())
@@ -88,7 +89,7 @@ func TestNewChartRepository(t *testing.T) {
 	t.Run("should error on unsupported scheme", func(t *testing.T) {
 		g := NewWithT(t)
 
-		r, err := NewChartRepository("http://example.com", "", providers, nil, nil)
+		r, err := NewChartRepository("http://example.com", "", providers, nil, nil, "fake-namespace", repoRecorder)
 		g.Expect(err).To(HaveOccurred())
 		g.Expect(err.Error()).To(Equal("scheme \"http\" not supported"))
 		g.Expect(r).To(BeNil())

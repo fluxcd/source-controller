@@ -76,6 +76,11 @@ type ChartRepository struct {
 	*sync.RWMutex
 
 	cacheInfo
+
+	// namespace of the ChartRepository of the helm/oci chart repository object
+	Namespace string
+
+	*Recorder
 }
 
 type cacheInfo struct {
@@ -119,7 +124,7 @@ func WithMemoryCache(key string, c *cache.Cache, ttl time.Duration, rec RecordMe
 // the ChartRepository.Client configured to the getter.Getter for the
 // repository URL scheme. It returns an error on URL parsing failures,
 // or if there is no getter available for the scheme.
-func NewChartRepository(repositoryURL, cachePath string, providers getter.Providers, tlsConfig *tls.Config, getterOpts []getter.Option, chartRepoOpts ...ChartRepositoryOption) (*ChartRepository, error) {
+func NewChartRepository(repositoryURL, cachePath string, providers getter.Providers, tlsConfig *tls.Config, getterOpts []getter.Option, namespace string, repoRecorder *Recorder, chartRepoOpts ...ChartRepositoryOption) (*ChartRepository, error) {
 	u, err := url.Parse(repositoryURL)
 	if err != nil {
 		return nil, err
@@ -135,6 +140,8 @@ func NewChartRepository(repositoryURL, cachePath string, providers getter.Provid
 	r.Client = c
 	r.Options = getterOpts
 	r.tlsConfig = tlsConfig
+	r.Namespace = namespace
+	r.Recorder = repoRecorder
 
 	for _, opt := range chartRepoOpts {
 		if err := opt(r); err != nil {
@@ -275,8 +282,15 @@ func (r *ChartRepository) DownloadChart(chart *repo.ChartVersion) (*bytes.Buffer
 	t := transport.NewOrIdle(r.tlsConfig)
 	clientOpts := append(r.Options, getter.WithTransport(t))
 	defer transport.Release(t)
-
-	return r.Client.Get(u.String(), clientOpts...)
+	start := time.Now()
+	buffer, err := r.Client.Get(u.String(), clientOpts...)
+	r.Recorder.RecordChartRepoEventDuration(
+		ChartRepoTypeHelm,
+		ChartRepoEventTypeDownloadChart,
+		r.Namespace,
+		r.URL,
+		start)
+	return buffer, err
 }
 
 // LoadIndexFromBytes loads Index from the given bytes.
@@ -428,6 +442,7 @@ func (r *ChartRepository) LoadFromCache() error {
 // the Client and set Options, and writes the index to the given io.Writer.
 // It returns an url.Error if the URL failed to parse.
 func (r *ChartRepository) DownloadIndex(w io.Writer) (err error) {
+	start := time.Now()
 	u, err := url.Parse(r.URL)
 	if err != nil {
 		return err
@@ -444,6 +459,12 @@ func (r *ChartRepository) DownloadIndex(w io.Writer) (err error) {
 	if err != nil {
 		return err
 	}
+	r.Recorder.RecordChartRepoEventDuration(
+		ChartRepoTypeHelm,
+		ChartRepoEventTypeDownloadIndex,
+		r.Namespace,
+		r.URL,
+		start)
 	if _, err = io.Copy(w, res); err != nil {
 		return err
 	}
