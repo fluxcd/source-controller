@@ -78,6 +78,7 @@ spec:
                 type: boolean
               interval:
                 description: The interval at which to check for image updates.
+                pattern: ^([0-9]+(\.[0-9]+)?(ms|s|m|h))+$
                 type: string
               layerSelector:
                 description: LayerSelector specifies which layer should be extracted
@@ -140,6 +141,7 @@ spec:
                 default: 60s
                 description: The timeout for remote OCI Repository operations like
                   pulling, defaults to 60s.
+                pattern: ^([0-9]+(\.[0-9]+)?(ms|s|m))+$
                 type: string
               url:
                 description: URL is a reference to an OCI artifact repository hosted

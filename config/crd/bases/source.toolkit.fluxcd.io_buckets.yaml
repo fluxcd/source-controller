@@ -331,6 +331,7 @@ spec:
                 type: boolean
               interval:
                 description: Interval at which to check the Endpoint for updates.
+                pattern: ^([0-9]+(\.[0-9]+)?(ms|s|m|h))+$
                 type: string
               provider:
                 default: generic
@@ -363,6 +364,7 @@ spec:
               timeout:
                 default: 60s
                 description: Timeout for fetch operations, defaults to 60s.
+                pattern: ^([0-9]+(\.[0-9]+)?(ms|s|m))+$
                 type: string
             required:
             - bucketName
