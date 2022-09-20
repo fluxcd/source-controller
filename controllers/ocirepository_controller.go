@@ -409,11 +409,16 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, obj *sour
 		}
 	}()
 
-	// Verify artifact
+	// Verify artifact if:
+	// - the upstream digest differs from the one in storage (revision drift)
+	// - the OCIRepository spec has changed (generation drift)
+	// - the previous reconciliation resulted in a failed artifact verification (retry with exponential backoff)
 	if obj.Spec.Verify == nil {
 		// Remove old observations if verification was disabled
 		conditions.Delete(obj, sourcev1.SourceVerifiedCondition)
-	} else if !obj.GetArtifact().HasRevision(revision) || conditions.GetObservedGeneration(obj, sourcev1.SourceVerifiedCondition) != obj.Generation {
+	} else if !obj.GetArtifact().HasRevision(revision) ||
+		conditions.GetObservedGeneration(obj, sourcev1.SourceVerifiedCondition) != obj.Generation ||
+		conditions.IsFalse(obj, sourcev1.SourceVerifiedCondition) {
 		provider := obj.Spec.Verify.Provider
 		err := r.verifyOCISourceSignature(ctx, obj, url, keychain)
 		if err != nil {
@@ -422,7 +427,6 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, obj *sour
 				sourcev1.VerificationError,
 			)
 			conditions.MarkFalse(obj, sourcev1.SourceVerifiedCondition, e.Reason, e.Err.Error())
-			conditions.MarkFalse(obj, meta.ReconcilingCondition, e.Reason, e.Err.Error())
 			return sreconcile.ResultEmpty, e
 		}
 

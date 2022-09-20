@@ -1,6 +1,6 @@
 # Image URL to use all building/pushing image targets
-IMG ?= localhost:5050/source-controller
-TAG ?= test1
+IMG ?= fluxcd/source-controller
+TAG ?= latest
 
 # Base image used to build the Go binary
 LIBGIT2_IMG ?= ghcr.io/fluxcd/golang-with-libgit2-only
@@ -14,9 +14,9 @@ GO_TEST_PREFIX ?=
 
 # Allows for defining additional Docker buildx arguments,
 # e.g. '--push'.
-BUILD_ARGS ?= --load
+BUILD_ARGS ?=
 # Architectures to build images for
-BUILD_PLATFORMS ?= linux/arm64
+BUILD_PLATFORMS ?= linux/amd64,linux/arm64,linux/arm/v7
 
 # Go additional tag arguments, e.g. 'integration',
 # this is append to the tag arguments required for static builds
