@@ -194,14 +194,12 @@ func TestBlobClientSASKey_FGetObject(t *testing.T) {
 	localPath := filepath.Join(tempDir, testFile)
 
 	// use the shared key client to create a SAS key for the account
-	sasKey, err := client.GetSASToken(azblob.AccountSASResourceTypes{Object: true, Container: true},
+	sasKey, err := client.GetSASURL(azblob.AccountSASResourceTypes{Object: true, Container: true},
 		azblob.AccountSASPermissions{List: true, Read: true},
-		azblob.AccountSASServices{Blob: true},
 		time.Now(),
 		time.Now().Add(48*time.Hour))
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(sasKey).ToNot(BeEmpty())
-
 	// the sdk returns the full SAS url e.g test.blob.core.windows.net/?<actual-sas-token>
 	sasKey = strings.TrimPrefix(sasKey, testBucket.Spec.Endpoint+"/")
 	testSASKeySecret := corev1.Secret{
@@ -213,15 +211,82 @@ func TestBlobClientSASKey_FGetObject(t *testing.T) {
 	sasKeyClient, err := NewClient(testBucket.DeepCopy(), testSASKeySecret.DeepCopy())
 	g.Expect(err).ToNot(HaveOccurred())
 
-	// Test if blob exists using sasKey.
+	// Test if bucket and blob exists using sasKey.
 	ctx, timeout = context.WithTimeout(context.Background(), testTimeout)
 	defer timeout()
+
+	ok, err := sasKeyClient.BucketExists(ctx, testContainer)
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(ok).To(BeTrue())
+
 	_, err = sasKeyClient.FGetObject(ctx, testContainer, testFile, localPath)
 
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(localPath).To(BeARegularFile())
 	f, _ := os.ReadFile(localPath)
 	g.Expect(f).To(Equal([]byte(testFileData)))
+}
+
+func TestBlobClientContainerSASKey_BucketExists(t *testing.T) {
+	g := NewWithT(t)
+
+	// create a client with the shared key
+	client, err := NewClient(testBucket.DeepCopy(), testSecret.DeepCopy())
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(client).ToNot(BeNil())
+
+	g.Expect(client.CanGetAccountSASToken()).To(BeTrue())
+
+	// Generate test container name.
+	testContainer := generateString(testContainerGenerateName)
+
+	// Create test container.
+	ctx, timeout := context.WithTimeout(context.Background(), testTimeout)
+	defer timeout()
+	g.Expect(createContainer(ctx, client, testContainer)).To(Succeed())
+	t.Cleanup(func() {
+		g.Expect(deleteContainer(context.Background(), client, testContainer)).To(Succeed())
+	})
+
+	// Create test blob.
+	ctx, timeout = context.WithTimeout(context.Background(), testTimeout)
+	defer timeout()
+	g.Expect(createBlob(ctx, client, testContainer, testFile, testFileData))
+
+	// use the container client to create a container-level SAS key for the account
+	containerClient, err := client.NewContainerClient(testContainer)
+	g.Expect(err).ToNot(HaveOccurred())
+	// sasKey
+	sasKey, err := containerClient.GetSASURL(azblob.ContainerSASPermissions{Read: true, List: true},
+		time.Now(),
+		time.Now().Add(48*time.Hour))
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(sasKey).ToNot(BeEmpty())
+	// the sdk returns the full SAS url e.g test.blob.core.windows.net/<container-name>?<actual-sas-token>
+	sasKey = strings.TrimPrefix(sasKey, testBucket.Spec.Endpoint+"/"+testContainer)
+	testSASKeySecret := corev1.Secret{
+		Data: map[string][]byte{
+			sasKeyField: []byte(sasKey),
+		},
+	}
+
+	sasKeyClient, err := NewClient(testBucket.DeepCopy(), testSASKeySecret.DeepCopy())
+	g.Expect(err).ToNot(HaveOccurred())
+
+	ctx, timeout = context.WithTimeout(context.Background(), testTimeout)
+	defer timeout()
+
+	// Test if bucket and blob exists using sasKey.
+	ok, err := sasKeyClient.BucketExists(ctx, testContainer)
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(ok).To(BeTrue())
+
+	// BucketExists returns an error if the bucket doesn't exist with container level SAS
+	// since the error code is AuthenticationFailed.
+	ok, err = sasKeyClient.BucketExists(ctx, "non-existent")
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(err.Error()).To(ContainSubstring("Bucket name may be incorrect, it does not exist"))
+	g.Expect(ok).To(BeFalse())
 }
 
 func TestBlobClient_FGetObject_NotFoundErr(t *testing.T) {
@@ -340,8 +405,15 @@ func createContainer(ctx context.Context, client *BlobClient, name string) error
 }
 
 func createBlob(ctx context.Context, client *BlobClient, containerName, name, data string) error {
-	container := client.NewContainerClient(containerName)
-	blob := container.NewAppendBlobClient(name)
+	container, err := client.NewContainerClient(containerName)
+	if err != nil {
+		return err
+	}
+
+	blob, err := container.NewAppendBlobClient(name)
+	if err != nil {
+		return err
+	}
 
 	ctx, timeout := context.WithTimeout(context.Background(), testTimeout)
 	defer timeout()
@@ -350,7 +422,7 @@ func createBlob(ctx context.Context, client *BlobClient, containerName, name, da
 	}
 
 	hash := md5.Sum([]byte(data))
-	if _, err := blob.AppendBlock(ctx, streaming.NopCloser(strings.NewReader(data)), &azblob.AppendBlockOptions{
+	if _, err := blob.AppendBlock(ctx, streaming.NopCloser(strings.NewReader(data)), &azblob.AppendBlobAppendBlockOptions{
 		TransactionalContentMD5: hash[:16],
 	}); err != nil {
 		return err

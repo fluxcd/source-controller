@@ -537,8 +537,18 @@ The leading question mark is optional.
 The query values from the `sasKey` data field in the Secrets gets merged with the ones in the `spec.endpoint` of the `Bucket`.
 If the same key is present in the both of them, the value in the `sasKey` takes precedence.
 
-Note that the Azure SAS Token has an expiry date and it should be updated before it expires so that Flux can
-continue to access Azure Storage.
+**Note:** The SAS token has an expiry date and it must be updated before it expires to allow Flux to
+continue to access Azure Storage. It is allowed to use an account-level or container-level SAS token.
+
+The minimum permissions for an account-level SAS token are:
+- Allowed services: `Blob`
+- Allowed resource types: `Container`, `Object`
+- Allowed permissions: `Read`, `List`
+
+  The minimum permissions for a container-level SAS token are:
+- Allowed permissions: `Read`, `List`
+
+Refer to the [Azure documentation](https://learn.microsoft.com/en-us/rest/api/storageservices/create-account-sas#blob-service) for a full overview on permissions.
 
 #### GCP
 
