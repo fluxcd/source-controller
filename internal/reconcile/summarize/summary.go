@@ -90,6 +90,9 @@ type HelperOptions struct {
 	// PatchFieldOwner defines the field owner configuration for the Kubernetes
 	// patch operation.
 	PatchFieldOwner string
+	// BiPolarityConditionTypes is a list of bipolar conditions in the order
+	// of priority.
+	BiPolarityConditionTypes []string
 }
 
 // Option is configuration that modifies SummarizeAndPatch.
@@ -149,6 +152,14 @@ func WithPatchFieldOwner(fieldOwner string) Option {
 	}
 }
 
+// WithBiPolarityConditionTypes sets the BiPolarityConditionTypes used to
+// calculate the value of Ready condition in SummarizeAndPatch.
+func WithBiPolarityConditionTypes(types ...string) Option {
+	return func(s *HelperOptions) {
+		s.BiPolarityConditionTypes = types
+	}
+}
+
 // SummarizeAndPatch summarizes and patches the result to the target object.
 // When used at the very end of a reconciliation, the result builder must be
 // specified using the Option WithResultBuilder(). The returned result and error
@@ -204,6 +215,26 @@ func (h *Helper) SummarizeAndPatch(ctx context.Context, obj conditions.Setter, o
 				c.NegativePolarity...,
 			),
 		)
+	}
+
+	// Check any BiPolarity conditions in the status that are False. Failing
+	// BiPolarity condition should be set as the Ready condition value to
+	// reflect the actual cause of the reconciliation failure.
+	// NOTE: This is applicable to Ready condition only because it is a special
+	// condition in kstatus that reflects the overall state of an object.
+	// IMPLEMENTATION NOTE: An implementation of this within the
+	// conditions.merge() exists in fluxcd/pkg repo branch `bipolarity`
+	// (https://github.com/fluxcd/pkg/commit/756b9e6d253a4fae93c05419b7019d0169454858).
+	// If that gets added to conditions.merge, the following can be removed.
+	var failedBiPolarity []string
+	for _, c := range opts.BiPolarityConditionTypes {
+		if conditions.IsFalse(obj, c) {
+			failedBiPolarity = append(failedBiPolarity, c)
+		}
+	}
+	if len(failedBiPolarity) > 0 {
+		topFailedBiPolarity := conditions.Get(obj, failedBiPolarity[0])
+		conditions.MarkFalse(obj, meta.ReadyCondition, topFailedBiPolarity.Reason, topFailedBiPolarity.Message)
 	}
 
 	// If object is not stalled, result is success and runtime error is nil,
