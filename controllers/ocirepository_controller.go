@@ -719,7 +719,7 @@ func (r *OCIRepositoryReconciler) keychain(ctx context.Context, obj *sourcev1.OC
 		imagePullSecret := corev1.Secret{}
 		err := r.Get(ctx, types.NamespacedName{Namespace: obj.Namespace, Name: imagePullSecretName}, &imagePullSecret)
 		if err != nil {
-			r.eventLogf(ctx, obj, events.EventSeverityTrace, sourcev1.AuthenticationFailedReason,
+			r.eventLogf(ctx, obj, events.EventTypeTrace, sourcev1.AuthenticationFailedReason,
 				"auth secret '%s' not found", imagePullSecretName)
 			return nil, err
 		}
