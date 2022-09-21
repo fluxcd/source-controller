@@ -194,6 +194,7 @@ func (r *OCIRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		summarizeHelper := summarize.NewHelper(r.EventRecorder, patchHelper)
 		summarizeOpts := []summarize.Option{
 			summarize.WithConditions(ociRepositoryReadyCondition),
+			summarize.WithBiPolarityConditionTypes(sourcev1.SourceVerifiedCondition),
 			summarize.WithReconcileResult(recResult),
 			summarize.WithReconcileError(retErr),
 			summarize.WithIgnoreNotFound(),
@@ -296,6 +297,14 @@ func (r *OCIRepositoryReconciler) reconcile(ctx context.Context, obj *sourcev1.O
 func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, obj *sourcev1.OCIRepository, metadata *sourcev1.Artifact, dir string) (sreconcile.Result, error) {
 	ctxTimeout, cancel := context.WithTimeout(ctx, obj.Spec.Timeout.Duration)
 	defer cancel()
+
+	// Remove previously failed source verification status conditions. The
+	// failing verification should be recalculated. But an existing successful
+	// verification need not be removed as it indicates verification of previous
+	// version.
+	if conditions.IsFalse(obj, sourcev1.SourceVerifiedCondition) {
+		conditions.Delete(obj, sourcev1.SourceVerifiedCondition)
+	}
 
 	options := r.craneOptions(ctxTimeout, obj.Spec.Insecure)
 
