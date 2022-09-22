@@ -1029,6 +1029,8 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignature(t *testing.T) {
 		wantErr          bool
 		wantErrMsg       string
 		shouldSign       bool
+		keyless          bool
+		beforeFunc       func(obj *sourcev1.OCIRepository)
 		assertConditions []metav1.Condition
 	}{
 		{
@@ -1058,6 +1060,64 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignature(t *testing.T) {
 				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new digest '<digest>' for '<url>'"),
 				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new digest '<digest>' for '<url>'"),
 				*conditions.FalseCondition(sourcev1.SourceVerifiedCondition, sourcev1.VerificationError, "failed to verify the signature using provider '<provider>': no matching signatures were found for '<url>'"),
+			},
+		},
+		{
+			name: "unsigned image should not pass keyless verification",
+			reference: &sourcev1.OCIRepositoryRef{
+				Tag: "6.1.5",
+			},
+			digest:  img5.digest.Hex,
+			wantErr: true,
+			want:    sreconcile.ResultEmpty,
+			keyless: true,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new digest '<digest>' for '<url>'"),
+				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new digest '<digest>' for '<url>'"),
+				*conditions.FalseCondition(sourcev1.SourceVerifiedCondition, sourcev1.VerificationError, "failed to verify the signature using provider '<provider> keyless': no matching signatures"),
+			},
+		},
+		{
+			name:      "verify failed before, removed from spec, remove condition",
+			reference: &sourcev1.OCIRepositoryRef{Tag: "6.1.4"},
+			digest:    img4.digest.Hex,
+			beforeFunc: func(obj *sourcev1.OCIRepository) {
+				conditions.MarkFalse(obj, sourcev1.SourceVerifiedCondition, "VerifyFailed", "fail msg")
+				obj.Spec.Verify = nil
+				obj.Status.Artifact = &sourcev1.Artifact{Revision: img4.digest.Hex}
+			},
+			want: sreconcile.ResultSuccess,
+		},
+		{
+			name:       "same artifact, verified before, change in obj gen verify again",
+			reference:  &sourcev1.OCIRepositoryRef{Tag: "6.1.4"},
+			digest:     img4.digest.Hex,
+			shouldSign: true,
+			beforeFunc: func(obj *sourcev1.OCIRepository) {
+				obj.Status.Artifact = &sourcev1.Artifact{Revision: img4.digest.Hex}
+				// Set Verified with old observed generation and different reason/message.
+				conditions.MarkTrue(obj, sourcev1.SourceVerifiedCondition, "Verified", "verified")
+				// Set new object generation.
+				obj.SetGeneration(3)
+			},
+			want: sreconcile.ResultSuccess,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.SourceVerifiedCondition, meta.SucceededReason, "verified signature of digest <digest>"),
+			},
+		},
+		{
+			name:       "no verify for already verified, verified condition remains the same",
+			reference:  &sourcev1.OCIRepositoryRef{Tag: "6.1.4"},
+			digest:     img4.digest.Hex,
+			shouldSign: true,
+			beforeFunc: func(obj *sourcev1.OCIRepository) {
+				// Artifact present and custom verified condition reason/message.
+				obj.Status.Artifact = &sourcev1.Artifact{Revision: img4.digest.Hex}
+				conditions.MarkTrue(obj, sourcev1.SourceVerifiedCondition, "Verified", "verified")
+			},
+			want: sreconcile.ResultSuccess,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.SourceVerifiedCondition, "Verified", "verified"),
 			},
 		},
 	}
@@ -1102,11 +1162,15 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignature(t *testing.T) {
 				Spec: sourcev1.OCIRepositorySpec{
 					URL: fmt.Sprintf("oci://%s/podinfo", server.registryHost),
 					Verify: &sourcev1.OCIRepositoryVerification{
-						Provider:  "cosign",
-						SecretRef: &meta.LocalObjectReference{Name: "cosign-key"}},
+						Provider: "cosign",
+					},
 					Interval: metav1.Duration{Duration: interval},
 					Timeout:  &metav1.Duration{Duration: timeout},
 				},
+			}
+
+			if !tt.keyless {
+				obj.Spec.Verify.SecretRef = &meta.LocalObjectReference{Name: "cosign-key"}
 			}
 
 			if tt.reference != nil {
@@ -1145,6 +1209,10 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignature(t *testing.T) {
 				assertConditions[k].Message = strings.ReplaceAll(assertConditions[k].Message, "<digest>", tt.digest)
 				assertConditions[k].Message = strings.ReplaceAll(assertConditions[k].Message, "<url>", artifactURL)
 				assertConditions[k].Message = strings.ReplaceAll(assertConditions[k].Message, "<provider>", "cosign")
+			}
+
+			if tt.beforeFunc != nil {
+				tt.beforeFunc(obj)
 			}
 
 			artifact := &sourcev1.Artifact{}

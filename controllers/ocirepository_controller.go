@@ -419,9 +419,12 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, obj *sour
 	} else if !obj.GetArtifact().HasRevision(revision) ||
 		conditions.GetObservedGeneration(obj, sourcev1.SourceVerifiedCondition) != obj.Generation ||
 		conditions.IsFalse(obj, sourcev1.SourceVerifiedCondition) {
-		provider := obj.Spec.Verify.Provider
 		err := r.verifyOCISourceSignature(ctx, obj, url, keychain)
 		if err != nil {
+			provider := obj.Spec.Verify.Provider
+			if obj.Spec.Verify.SecretRef == nil {
+				provider = fmt.Sprintf("%s keyless", provider)
+			}
 			e := serror.NewGeneric(
 				fmt.Errorf("failed to verify the signature using provider '%s': %w", provider, err),
 				sourcev1.VerificationError,
@@ -570,7 +573,7 @@ func (r *OCIRepositoryReconciler) verifyOCISourceSignature(ctx context.Context, 
 		}
 
 		// if no secret is provided, try keyless verification
-		ctrl.LoggerFrom(ctx).Info("no secret reference is provided, trying to verify the image using keyless approach")
+		ctrl.LoggerFrom(ctx).Info("no secret reference is provided, trying to verify the image using keyless method")
 		verifier, err := soci.NewVerifier(ctxTimeout, defaultCosignOciOpts...)
 		if err != nil {
 			return err
