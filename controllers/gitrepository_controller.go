@@ -194,6 +194,7 @@ func (r *GitRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		summarizeHelper := summarize.NewHelper(r.EventRecorder, patchHelper)
 		summarizeOpts := []summarize.Option{
 			summarize.WithConditions(gitRepositoryReadyCondition),
+			summarize.WithBiPolarityConditionTypes(sourcev1.SourceVerifiedCondition),
 			summarize.WithReconcileResult(recResult),
 			summarize.WithReconcileError(retErr),
 			summarize.WithIgnoreNotFound(),
@@ -430,6 +431,15 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context,
 			errors.New("libgit2 managed transport not initialized"), "Libgit2TransportNotEnabled",
 		)
 	}
+
+	// Remove previously failed source verification status conditions. The
+	// failing verification should be recalculated. But an existing successful
+	// verification need not be removed as it indicates verification of previous
+	// version.
+	if conditions.IsFalse(obj, sourcev1.SourceVerifiedCondition) {
+		conditions.Delete(obj, sourcev1.SourceVerifiedCondition)
+	}
+
 	// Configure authentication strategy to access the source
 	var authOpts *git.AuthOptions
 	var err error

@@ -44,11 +44,16 @@ import (
 // This tests the scenario where SummarizeAndPatch is used at the very end of a
 // reconciliation.
 func TestSummarizeAndPatch(t *testing.T) {
+	testBipolarCondition1 := "FooChecked1"
+	testBipolarCondition2 := "FooChecked2"
 	var testReadyConditions = Conditions{
 		Target: meta.ReadyCondition,
 		Owned: []string{
 			sourcev1.FetchFailedCondition,
 			sourcev1.ArtifactOutdatedCondition,
+			sourcev1.SourceVerifiedCondition,
+			testBipolarCondition1,
+			testBipolarCondition2,
 			meta.ReadyCondition,
 			meta.ReconcilingCondition,
 			meta.StalledCondition,
@@ -56,6 +61,9 @@ func TestSummarizeAndPatch(t *testing.T) {
 		Summarize: []string{
 			sourcev1.FetchFailedCondition,
 			sourcev1.ArtifactOutdatedCondition,
+			sourcev1.SourceVerifiedCondition,
+			testBipolarCondition1,
+			testBipolarCondition2,
 			meta.StalledCondition,
 			meta.ReconcilingCondition,
 		},
@@ -66,6 +74,7 @@ func TestSummarizeAndPatch(t *testing.T) {
 			meta.ReconcilingCondition,
 		},
 	}
+	var testBipolarConditions = []string{sourcev1.SourceVerifiedCondition, testBipolarCondition1, testBipolarCondition2}
 	var testFooConditions = Conditions{
 		Target: "Foo",
 		Owned: []string{
@@ -83,15 +92,16 @@ func TestSummarizeAndPatch(t *testing.T) {
 	}
 
 	tests := []struct {
-		name             string
-		generation       int64
-		beforeFunc       func(obj conditions.Setter)
-		result           reconcile.Result
-		reconcileErr     error
-		conditions       []Conditions
-		wantErr          bool
-		afterFunc        func(t *WithT, obj client.Object)
-		assertConditions []metav1.Condition
+		name              string
+		generation        int64
+		beforeFunc        func(obj conditions.Setter)
+		result            reconcile.Result
+		reconcileErr      error
+		conditions        []Conditions
+		bipolarConditions []string
+		wantErr           bool
+		afterFunc         func(t *WithT, obj client.Object)
+		assertConditions  []metav1.Condition
 	}{
 		// Success/Fail indicates if a reconciliation succeeded or failed.
 		// The object generation is expected to match the observed generation in
@@ -250,6 +260,64 @@ func TestSummarizeAndPatch(t *testing.T) {
 			},
 			wantErr: true,
 		},
+		{
+			name:       "Fail, reconciling with bipolar condition False, Ready gets bipolar failure value",
+			generation: 2,
+			beforeFunc: func(obj conditions.Setter) {
+				conditions.MarkReconciling(obj, "NewRevision", "new index revision")
+				conditions.MarkFalse(obj, sourcev1.SourceVerifiedCondition, "VerifyFailed", "verify failed")
+			},
+			result:            reconcile.ResultEmpty,
+			reconcileErr:      errors.New("failed to verify source"),
+			conditions:        []Conditions{testReadyConditions},
+			bipolarConditions: testBipolarConditions,
+			wantErr:           true,
+			assertConditions: []metav1.Condition{
+				*conditions.FalseCondition(meta.ReadyCondition, "VerifyFailed", "verify failed"),
+				*conditions.FalseCondition(sourcev1.SourceVerifiedCondition, "VerifyFailed", "verify failed"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new index revision"),
+			},
+		},
+		{
+			name:       "Fail, bipolar condition True, negative polarity True, Ready gets negative polarity value",
+			generation: 2,
+			beforeFunc: func(obj conditions.Setter) {
+				conditions.MarkReconciling(obj, "NewGeneration", "new obj gen")
+				conditions.MarkTrue(obj, sourcev1.ArtifactOutdatedCondition, "NewRevision", "new digest")
+				conditions.MarkTrue(obj, sourcev1.SourceVerifiedCondition, "Success", "verified")
+			},
+			result:            reconcile.ResultEmpty,
+			reconcileErr:      errors.New("failed to create dir"),
+			conditions:        []Conditions{testReadyConditions},
+			bipolarConditions: testBipolarConditions,
+			wantErr:           true,
+			assertConditions: []metav1.Condition{
+				*conditions.FalseCondition(meta.ReadyCondition, "NewRevision", "new digest"),
+				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new digest"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, "NewGeneration", "new obj gen"),
+				*conditions.TrueCondition(sourcev1.SourceVerifiedCondition, "Success", "verified"),
+			},
+		},
+		{
+			name:       "Fail, multiple bipolar conditions False, Ready gets the bipolar with high priority",
+			generation: 2,
+			beforeFunc: func(obj conditions.Setter) {
+				conditions.MarkTrue(obj, sourcev1.SourceVerifiedCondition, "Success", "verified")
+				conditions.MarkFalse(obj, testBipolarCondition1, "AAA", "aaa")
+				conditions.MarkFalse(obj, testBipolarCondition2, "BBB", "bbb")
+			},
+			result:            reconcile.ResultEmpty,
+			reconcileErr:      errors.New("some failure"),
+			conditions:        []Conditions{testReadyConditions},
+			bipolarConditions: testBipolarConditions,
+			wantErr:           true,
+			assertConditions: []metav1.Condition{
+				*conditions.FalseCondition(meta.ReadyCondition, "AAA", "aaa"),
+				*conditions.FalseCondition(testBipolarCondition1, "AAA", "aaa"),
+				*conditions.FalseCondition(testBipolarCondition2, "BBB", "bbb"),
+				*conditions.TrueCondition(sourcev1.SourceVerifiedCondition, "Success", "verified"),
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -288,6 +356,9 @@ func TestSummarizeAndPatch(t *testing.T) {
 				WithIgnoreNotFound(),
 				WithProcessors(RecordContextualError, RecordReconcileReq),
 				WithResultBuilder(reconcile.AlwaysRequeueResultBuilder{RequeueAfter: obj.Spec.Interval.Duration}),
+			}
+			if tt.bipolarConditions != nil {
+				summaryOpts = append(summaryOpts, WithBiPolarityConditionTypes(tt.bipolarConditions...))
 			}
 			_, gotErr := summaryHelper.SummarizeAndPatch(ctx, obj, summaryOpts...)
 			g.Expect(gotErr != nil).To(Equal(tt.wantErr))
