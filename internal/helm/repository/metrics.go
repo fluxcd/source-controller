@@ -25,8 +25,8 @@ import (
 const (
 	ChartRepoTypeHelm = "helm"
 	//ChartRepoTypeOCI                = "oci"
-	ChartRepoEventTypeDownloadIndex = "chart_repository_download"
-	ChartRepoEventTypeDownloadChart = "chart_download"
+	ChartRepoEventDownloadIndex = "chart_repository_download"
+	ChartRepoEventDownloadChart = "chart_download"
 )
 
 // Recorder is a recorder for chart repository events.
@@ -58,7 +58,7 @@ func NewRepositoryRecorder() *Recorder {
 				Help:    "The duration in seconds of an event for a Helm Chart Repository.",
 				Buckets: prometheus.ExponentialBuckets(10e-9, 10, 10),
 			},
-			[]string{"name", "repo_type", "namespace", "url", "checksum"},
+			[]string{"name", "repo_type", "namespace", "url"},
 		),
 	}
 }

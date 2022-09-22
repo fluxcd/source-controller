@@ -284,12 +284,14 @@ func (r *ChartRepository) DownloadChart(chart *repo.ChartVersion) (*bytes.Buffer
 	defer transport.Release(t)
 	start := time.Now()
 	buffer, err := r.Client.Get(u.String(), clientOpts...)
-	r.Recorder.RecordChartRepoEventDuration(
-		ChartRepoTypeHelm,
-		ChartRepoEventTypeDownloadChart,
-		r.Namespace,
-		r.URL,
-		start)
+	if r.Recorder != nil {
+		r.Recorder.RecordChartRepoEventDuration(
+			ChartRepoTypeHelm,
+			ChartRepoEventDownloadChart,
+			r.Namespace,
+			r.URL,
+			start)
+	}
 	return buffer, err
 }
 
@@ -459,12 +461,15 @@ func (r *ChartRepository) DownloadIndex(w io.Writer) (err error) {
 	if err != nil {
 		return err
 	}
-	r.Recorder.RecordChartRepoEventDuration(
-		ChartRepoTypeHelm,
-		ChartRepoEventTypeDownloadIndex,
-		r.Namespace,
-		r.URL,
-		start)
+	if r.Recorder != nil {
+		r.Recorder.RecordChartRepoEventDuration(
+			ChartRepoTypeHelm,
+			ChartRepoEventDownloadIndex,
+			r.Namespace,
+			r.URL,
+			start)
+	}
+
 	if _, err = io.Copy(w, res); err != nil {
 		return err
 	}
