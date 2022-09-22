@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/Masterminds/semver/v3"
+	soci "github.com/fluxcd/source-controller/internal/oci"
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/authn/k8schain"
 	"github.com/google/go-containerregistry/pkg/crane"
@@ -75,6 +76,7 @@ var ociRepositoryReadyCondition = summarize.Conditions{
 		sourcev1.FetchFailedCondition,
 		sourcev1.ArtifactOutdatedCondition,
 		sourcev1.ArtifactInStorageCondition,
+		sourcev1.SourceVerifiedCondition,
 		meta.ReadyCondition,
 		meta.ReconcilingCondition,
 		meta.StalledCondition,
@@ -84,6 +86,7 @@ var ociRepositoryReadyCondition = summarize.Conditions{
 		sourcev1.FetchFailedCondition,
 		sourcev1.ArtifactOutdatedCondition,
 		sourcev1.ArtifactInStorageCondition,
+		sourcev1.SourceVerifiedCondition,
 		meta.StalledCondition,
 		meta.ReconcilingCondition,
 	},
@@ -308,7 +311,7 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, obj *sour
 	}
 	options = append(options, crane.WithAuthFromKeychain(keychain))
 
-	if _, ok := keychain.(util.Anonymous); obj.Spec.Provider != sourcev1.GenericOCIProvider && ok {
+	if _, ok := keychain.(soci.Anonymous); obj.Spec.Provider != sourcev1.GenericOCIProvider && ok {
 		auth, authErr := oidcAuth(ctxTimeout, obj.Spec.URL, obj.Spec.Provider)
 		if authErr != nil && !errors.Is(authErr, oci.ErrUnconfiguredProvider) {
 			e := serror.NewGeneric(
@@ -406,6 +409,33 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, obj *sour
 		}
 	}()
 
+	// Verify artifact if:
+	// - the upstream digest differs from the one in storage (revision drift)
+	// - the OCIRepository spec has changed (generation drift)
+	// - the previous reconciliation resulted in a failed artifact verification (retry with exponential backoff)
+	if obj.Spec.Verify == nil {
+		// Remove old observations if verification was disabled
+		conditions.Delete(obj, sourcev1.SourceVerifiedCondition)
+	} else if !obj.GetArtifact().HasRevision(revision) ||
+		conditions.GetObservedGeneration(obj, sourcev1.SourceVerifiedCondition) != obj.Generation ||
+		conditions.IsFalse(obj, sourcev1.SourceVerifiedCondition) {
+		err := r.verifyOCISourceSignature(ctx, obj, url, keychain)
+		if err != nil {
+			provider := obj.Spec.Verify.Provider
+			if obj.Spec.Verify.SecretRef == nil {
+				provider = fmt.Sprintf("%s keyless", provider)
+			}
+			e := serror.NewGeneric(
+				fmt.Errorf("failed to verify the signature using provider '%s': %w", provider, err),
+				sourcev1.VerificationError,
+			)
+			conditions.MarkFalse(obj, sourcev1.SourceVerifiedCondition, e.Reason, e.Err.Error())
+			return sreconcile.ResultEmpty, e
+		}
+
+		conditions.MarkTrue(obj, sourcev1.SourceVerifiedCondition, meta.SucceededReason, "verified signature of digest %s", revision)
+	}
+
 	// Extract the content of the first artifact layer
 	if !obj.GetArtifact().HasRevision(revision) {
 		layers, err := img.Layers()
@@ -482,6 +512,86 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, obj *sour
 
 	conditions.Delete(obj, sourcev1.FetchFailedCondition)
 	return sreconcile.ResultSuccess, nil
+}
+
+// verifyOCISourceSignature verifies the authenticity of the given image reference url. First, it tries using a key
+// if a secret with a valid public key is provided. If not, it falls back to a keyless approach for verification.
+func (r *OCIRepositoryReconciler) verifyOCISourceSignature(ctx context.Context, obj *sourcev1.OCIRepository, url string, keychain authn.Keychain) error {
+	ctxTimeout, cancel := context.WithTimeout(ctx, obj.Spec.Timeout.Duration)
+	defer cancel()
+
+	provider := obj.Spec.Verify.Provider
+	switch provider {
+	case "cosign":
+		defaultCosignOciOpts := []soci.Options{
+			soci.WithAuthnKeychain(keychain),
+		}
+
+		ref, err := name.ParseReference(url)
+		if err != nil {
+			return err
+		}
+
+		// get the public keys from the given secret
+		if secretRef := obj.Spec.Verify.SecretRef; secretRef != nil {
+			certSecretName := types.NamespacedName{
+				Namespace: obj.Namespace,
+				Name:      secretRef.Name,
+			}
+
+			var pubSecret corev1.Secret
+			if err := r.Get(ctxTimeout, certSecretName, &pubSecret); err != nil {
+				return err
+			}
+
+			signatureVerified := false
+			for k, data := range pubSecret.Data {
+				// search for public keys in the secret
+				if strings.HasSuffix(k, ".pub") {
+					verifier, err := soci.NewVerifier(ctxTimeout, append(defaultCosignOciOpts, soci.WithPublicKey(data))...)
+					if err != nil {
+						return err
+					}
+
+					signatures, _, err := verifier.VerifyImageSignatures(ctxTimeout, ref)
+					if err != nil {
+						continue
+					}
+
+					if signatures != nil {
+						signatureVerified = true
+						break
+					}
+				}
+			}
+
+			if !signatureVerified {
+				return fmt.Errorf("no matching signatures were found for '%s'", url)
+			}
+
+			return nil
+		}
+
+		// if no secret is provided, try keyless verification
+		ctrl.LoggerFrom(ctx).Info("no secret reference is provided, trying to verify the image using keyless method")
+		verifier, err := soci.NewVerifier(ctxTimeout, defaultCosignOciOpts...)
+		if err != nil {
+			return err
+		}
+
+		signatures, _, err := verifier.VerifyImageSignatures(ctxTimeout, ref)
+		if err != nil {
+			return err
+		}
+
+		if len(signatures) > 0 {
+			return nil
+		}
+
+		return fmt.Errorf("no matching signatures were found for '%s'", url)
+	}
+
+	return nil
 }
 
 // parseRepositoryURL validates and extracts the repository URL.
@@ -591,7 +701,7 @@ func (r *OCIRepositoryReconciler) keychain(ctx context.Context, obj *sourcev1.OC
 
 	// if no pullsecrets available return an AnonymousKeychain
 	if len(pullSecretNames) == 0 {
-		return util.Anonymous{}, nil
+		return soci.Anonymous{}, nil
 	}
 
 	// lookup image pull secrets
@@ -651,7 +761,6 @@ func (r *OCIRepositoryReconciler) transport(ctx context.Context, obj *sourcev1.O
 		tlsConfig.RootCAs = syscerts
 	}
 	return transport, nil
-
 }
 
 // oidcAuth generates the OIDC credential authenticator based on the specified cloud provider.

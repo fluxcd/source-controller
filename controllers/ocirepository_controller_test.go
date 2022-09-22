@@ -13,6 +13,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
+
 package controllers
 
 import (
@@ -52,6 +53,9 @@ import (
 	gcrv1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/mutate"
 	. "github.com/onsi/gomega"
+	coptions "github.com/sigstore/cosign/cmd/cosign/cli/options"
+	"github.com/sigstore/cosign/cmd/cosign/cli/sign"
+	"github.com/sigstore/cosign/pkg/cosign"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -999,6 +1003,227 @@ func TestOCIRepository_reconcileSource_remoteReference(t *testing.T) {
 				g.Expect(artifact.Revision).To(Equal(tt.wantRevision))
 			}
 
+			g.Expect(got).To(Equal(tt.want))
+			g.Expect(obj.Status.Conditions).To(conditions.MatchConditions(tt.assertConditions))
+		})
+	}
+}
+
+func TestOCIRepository_reconcileSource_verifyOCISourceSignature(t *testing.T) {
+	g := NewWithT(t)
+
+	tmpDir := t.TempDir()
+	server, err := setupRegistryServer(ctx, tmpDir, registryOptions{})
+	g.Expect(err).ToNot(HaveOccurred())
+
+	podinfoVersions, err := pushMultiplePodinfoImages(server.registryHost, "6.1.4", "6.1.5")
+	g.Expect(err).ToNot(HaveOccurred())
+	img4 := podinfoVersions["6.1.4"]
+	img5 := podinfoVersions["6.1.5"]
+
+	tests := []struct {
+		name             string
+		reference        *sourcev1.OCIRepositoryRef
+		digest           string
+		want             sreconcile.Result
+		wantErr          bool
+		wantErrMsg       string
+		shouldSign       bool
+		keyless          bool
+		beforeFunc       func(obj *sourcev1.OCIRepository)
+		assertConditions []metav1.Condition
+	}{
+		{
+			name: "signed image should pass verification",
+			reference: &sourcev1.OCIRepositoryRef{
+				Tag: "6.1.4",
+			},
+			digest:     img4.digest.Hex,
+			shouldSign: true,
+			want:       sreconcile.ResultSuccess,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new digest '<digest>' for '<url>'"),
+				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new digest '<digest>' for '<url>'"),
+				*conditions.TrueCondition(sourcev1.SourceVerifiedCondition, meta.SucceededReason, "verified signature of digest <digest>"),
+			},
+		},
+		{
+			name: "unsigned image should not pass verification",
+			reference: &sourcev1.OCIRepositoryRef{
+				Tag: "6.1.5",
+			},
+			digest:     img5.digest.Hex,
+			wantErr:    true,
+			wantErrMsg: "failed to verify the signature using provider 'cosign': no matching signatures were found for '<url>'",
+			want:       sreconcile.ResultEmpty,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new digest '<digest>' for '<url>'"),
+				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new digest '<digest>' for '<url>'"),
+				*conditions.FalseCondition(sourcev1.SourceVerifiedCondition, sourcev1.VerificationError, "failed to verify the signature using provider '<provider>': no matching signatures were found for '<url>'"),
+			},
+		},
+		{
+			name: "unsigned image should not pass keyless verification",
+			reference: &sourcev1.OCIRepositoryRef{
+				Tag: "6.1.5",
+			},
+			digest:  img5.digest.Hex,
+			wantErr: true,
+			want:    sreconcile.ResultEmpty,
+			keyless: true,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new digest '<digest>' for '<url>'"),
+				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new digest '<digest>' for '<url>'"),
+				*conditions.FalseCondition(sourcev1.SourceVerifiedCondition, sourcev1.VerificationError, "failed to verify the signature using provider '<provider> keyless': no matching signatures"),
+			},
+		},
+		{
+			name:      "verify failed before, removed from spec, remove condition",
+			reference: &sourcev1.OCIRepositoryRef{Tag: "6.1.4"},
+			digest:    img4.digest.Hex,
+			beforeFunc: func(obj *sourcev1.OCIRepository) {
+				conditions.MarkFalse(obj, sourcev1.SourceVerifiedCondition, "VerifyFailed", "fail msg")
+				obj.Spec.Verify = nil
+				obj.Status.Artifact = &sourcev1.Artifact{Revision: img4.digest.Hex}
+			},
+			want: sreconcile.ResultSuccess,
+		},
+		{
+			name:       "same artifact, verified before, change in obj gen verify again",
+			reference:  &sourcev1.OCIRepositoryRef{Tag: "6.1.4"},
+			digest:     img4.digest.Hex,
+			shouldSign: true,
+			beforeFunc: func(obj *sourcev1.OCIRepository) {
+				obj.Status.Artifact = &sourcev1.Artifact{Revision: img4.digest.Hex}
+				// Set Verified with old observed generation and different reason/message.
+				conditions.MarkTrue(obj, sourcev1.SourceVerifiedCondition, "Verified", "verified")
+				// Set new object generation.
+				obj.SetGeneration(3)
+			},
+			want: sreconcile.ResultSuccess,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.SourceVerifiedCondition, meta.SucceededReason, "verified signature of digest <digest>"),
+			},
+		},
+		{
+			name:       "no verify for already verified, verified condition remains the same",
+			reference:  &sourcev1.OCIRepositoryRef{Tag: "6.1.4"},
+			digest:     img4.digest.Hex,
+			shouldSign: true,
+			beforeFunc: func(obj *sourcev1.OCIRepository) {
+				// Artifact present and custom verified condition reason/message.
+				obj.Status.Artifact = &sourcev1.Artifact{Revision: img4.digest.Hex}
+				conditions.MarkTrue(obj, sourcev1.SourceVerifiedCondition, "Verified", "verified")
+			},
+			want: sreconcile.ResultSuccess,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.SourceVerifiedCondition, "Verified", "verified"),
+			},
+		},
+	}
+
+	builder := fakeclient.NewClientBuilder().WithScheme(testEnv.GetScheme())
+
+	r := &OCIRepositoryReconciler{
+		Client:        builder.Build(),
+		EventRecorder: record.NewFakeRecorder(32),
+		Storage:       testStorage,
+	}
+
+	pf := func(b bool) ([]byte, error) {
+		return []byte("cosign-password"), nil
+	}
+
+	keys, err := cosign.GenerateKeyPair(pf)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	err = os.WriteFile(path.Join(tmpDir, "cosign.key"), keys.PrivateBytes, 0600)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "cosign-key",
+		},
+		Data: map[string][]byte{
+			"cosign.pub": keys.PublicBytes,
+		}}
+
+	err = r.Create(ctx, secret)
+	if err != nil {
+		g.Expect(err).NotTo(HaveOccurred())
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			obj := &sourcev1.OCIRepository{
+				ObjectMeta: metav1.ObjectMeta{
+					GenerateName: "verify-oci-source-signature-",
+				},
+				Spec: sourcev1.OCIRepositorySpec{
+					URL: fmt.Sprintf("oci://%s/podinfo", server.registryHost),
+					Verify: &sourcev1.OCIRepositoryVerification{
+						Provider: "cosign",
+					},
+					Interval: metav1.Duration{Duration: interval},
+					Timeout:  &metav1.Duration{Duration: timeout},
+				},
+			}
+
+			if !tt.keyless {
+				obj.Spec.Verify.SecretRef = &meta.LocalObjectReference{Name: "cosign-key"}
+			}
+
+			if tt.reference != nil {
+				obj.Spec.Reference = tt.reference
+			}
+
+			keychain, err := r.keychain(ctx, obj)
+			if err != nil {
+				g.Expect(err).ToNot(HaveOccurred())
+			}
+
+			opts := r.craneOptions(ctx, true)
+			opts = append(opts, crane.WithAuthFromKeychain(keychain))
+			artifactURL, err := r.getArtifactURL(obj, opts)
+			g.Expect(err).ToNot(HaveOccurred())
+
+			if tt.shouldSign {
+				ko := coptions.KeyOpts{
+					KeyRef:   path.Join(tmpDir, "cosign.key"),
+					PassFunc: pf,
+				}
+
+				ro := &coptions.RootOptions{
+					Timeout: timeout,
+				}
+				err = sign.SignCmd(ro, ko, coptions.RegistryOptions{Keychain: keychain},
+					nil, []string{artifactURL}, "",
+					"", true, "",
+					"", "", false,
+					false, "", false)
+				g.Expect(err).ToNot(HaveOccurred())
+			}
+
+			assertConditions := tt.assertConditions
+			for k := range assertConditions {
+				assertConditions[k].Message = strings.ReplaceAll(assertConditions[k].Message, "<digest>", tt.digest)
+				assertConditions[k].Message = strings.ReplaceAll(assertConditions[k].Message, "<url>", artifactURL)
+				assertConditions[k].Message = strings.ReplaceAll(assertConditions[k].Message, "<provider>", "cosign")
+			}
+
+			if tt.beforeFunc != nil {
+				tt.beforeFunc(obj)
+			}
+
+			artifact := &sourcev1.Artifact{}
+			got, err := r.reconcileSource(ctx, obj, artifact, tmpDir)
+			if tt.wantErr {
+				tt.wantErrMsg = strings.ReplaceAll(tt.wantErrMsg, "<url>", artifactURL)
+				g.Expect(err).ToNot(BeNil())
+				g.Expect(err.Error()).To(ContainSubstring(tt.wantErrMsg))
+			} else {
+				g.Expect(err).ToNot(HaveOccurred())
+			}
 			g.Expect(got).To(Equal(tt.want))
 			g.Expect(obj.Status.Conditions).To(conditions.MatchConditions(tt.assertConditions))
 		})

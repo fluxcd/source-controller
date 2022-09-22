@@ -1,0 +1,14 @@
+---
+apiVersion: source.toolkit.fluxcd.io/v1beta2
+kind: OCIRepository
+metadata:
+  name: podinfo-deploy-signed-with-key
+spec:
+  interval: 5m
+  url: oci://ghcr.io/stefanprodan/podinfo-deploy
+  ref:
+    semver: "6.2.x"
+  verify:
+    provider: cosign
+    secretRef:
+      name: cosign-key

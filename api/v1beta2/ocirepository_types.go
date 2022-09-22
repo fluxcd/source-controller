@@ -78,6 +78,12 @@ type OCIRepositorySpec struct {
 	// +optional
 	SecretRef *meta.LocalObjectReference `json:"secretRef,omitempty"`
 
+	// Verify contains the secret name containing the trusted public keys
+	// used to verify the signature and specifies which provider to use to check
+	// whether OCI image is authentic.
+	// +optional
+	Verify *OCIRepositoryVerification `json:"verify,omitempty"`
+
 	// ServiceAccountName is the name of the Kubernetes ServiceAccount used to authenticate
 	// the image pull if the service account has attached pull secrets. For more information:
 	// https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/#add-imagepullsecrets-to-a-service-account
@@ -156,11 +162,13 @@ type OCILayerSelector struct {
 type OCIRepositoryVerification struct {
 	// Provider specifies the technology used to sign the OCI Artifact.
 	// +kubebuilder:validation:Enum=cosign
+	// +kubebuilder:default:=cosign
 	Provider string `json:"provider"`
 
 	// SecretRef specifies the Kubernetes Secret containing the
 	// trusted public keys.
-	SecretRef meta.LocalObjectReference `json:"secretRef"`
+	// +optional
+	SecretRef *meta.LocalObjectReference `json:"secretRef,omitempty"`
 }
 
 // OCIRepositoryStatus defines the observed state of OCIRepository
