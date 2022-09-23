@@ -22,8 +22,10 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -407,6 +409,23 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, obj *sour
 		Revision: revision,
 		Metadata: manifest.Annotations,
 	}
+
+	// If the artifact is a Helm chart, we set the revision to the image tag
+	// instead of using the image digest SHA
+	if obj.IsHelmMediaType() {
+		chartName, chartVersion, err := r.chartInfoFromURL(url)
+		if err != nil {
+			e := serror.NewGeneric(
+				fmt.Errorf("failed to parse Helm chart name: %w", err),
+				sourcev1.OCILayerOperationFailedReason,
+			)
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
+			return sreconcile.ResultEmpty, e
+		}
+		m.Path = chartName
+		m.Revision = chartVersion
+	}
+
 	m.DeepCopyInto(metadata)
 
 	// Mark observations about the revision on the object
@@ -445,7 +464,6 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, obj *sour
 		conditions.MarkTrue(obj, sourcev1.SourceVerifiedCondition, meta.SucceededReason, "verified signature of digest %s", revision)
 	}
 
-	// Extract the content of the first artifact layer
 	if !obj.GetArtifact().HasRevision(revision) {
 		layers, err := img.Layers()
 		if err != nil {
@@ -509,13 +527,38 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, obj *sour
 			return sreconcile.ResultEmpty, e
 		}
 
-		if _, err = untar.Untar(blob, dir); err != nil {
-			e := serror.NewGeneric(
-				fmt.Errorf("failed to untar the first layer from artifact: %w", err),
-				sourcev1.OCILayerOperationFailedReason,
-			)
-			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
-			return sreconcile.ResultEmpty, e
+		// If the artifact is a Helm chart, we write the blob as it is to the storage
+		if obj.IsHelmMediaType() {
+			file, err := os.Create(filepath.Join(dir, m.Path))
+			if err != nil {
+				e := serror.NewGeneric(
+					fmt.Errorf("failed to create Helm chart file: %w", err),
+					sourcev1.OCILayerOperationFailedReason,
+				)
+				conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
+				return sreconcile.ResultEmpty, e
+			}
+
+			defer file.Close()
+			_, err = io.Copy(file, blob)
+			if err != nil {
+				e := serror.NewGeneric(
+					fmt.Errorf("failed to extract Helm chart from artifact: %w", err),
+					sourcev1.OCILayerOperationFailedReason,
+				)
+				conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
+				return sreconcile.ResultEmpty, e
+			}
+		} else {
+			// Extract the content of the artifact layer to the storage
+			if _, err = untar.Untar(blob, dir); err != nil {
+				e := serror.NewGeneric(
+					fmt.Errorf("failed to untar the first layer from artifact: %w", err),
+					sourcev1.OCILayerOperationFailedReason,
+				)
+				conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
+				return sreconcile.ResultEmpty, e
+			}
 		}
 	}
 
@@ -621,6 +664,26 @@ func (r *OCIRepositoryReconciler) parseRepositoryURL(obj *sourcev1.OCIRepository
 	}
 
 	return ref.Context().Name(), nil
+}
+
+// chartInfoFromURL validates and extracts the Helm chart name and version from the OCI URL.
+func (r *OCIRepositoryReconciler) chartInfoFromURL(url string) (string, string, error) {
+	ref, err := name.ParseReference(url)
+	if err != nil {
+		return "", "", err
+	}
+
+	imageName := strings.TrimPrefix(url, ref.Context().RegistryStr())
+	imageParts := strings.Split(imageName, ":")
+	if len(imageParts) != 2 {
+		return "", "", fmt.Errorf("invalid Helm chart address '%s', does not contain a tag", url)
+	}
+
+	chartVersion := imageParts[1]
+	nameParts := strings.Split(imageParts[0], "/")
+	chartName := nameParts[len(nameParts)-1]
+
+	return fmt.Sprintf("%s-%s.tgz", chartName, chartVersion), chartVersion, nil
 }
 
 // getArtifactURL determines which tag or digest should be used and returns the OCI artifact FQN.
@@ -862,21 +925,30 @@ func (r *OCIRepositoryReconciler) reconcileArtifact(ctx context.Context,
 	revision := metadata.Revision
 
 	// Create artifact
-	artifact := r.Storage.NewArtifactFor(obj.Kind, obj, revision, fmt.Sprintf("%s.tar.gz", revision))
+	artifact := r.Storage.NewArtifactFor(obj.Kind, obj.GetObjectMeta(), revision, fmt.Sprintf("%s.tar.gz", revision))
+	if obj.IsHelmMediaType() {
+		artifact = r.Storage.NewArtifactFor(obj.Kind, obj.GetObjectMeta(), revision, metadata.Path)
+	}
 
 	// Set the ArtifactInStorageCondition if there's no drift.
 	defer func() {
 		if obj.GetArtifact().HasRevision(artifact.Revision) {
+			msg := fmt.Sprintf("stored artifact for digest '%s'", artifact.Revision)
+			if obj.IsHelmMediaType() {
+				msg = fmt.Sprintf("stored chart with version '%s'", artifact.Revision)
+			}
 			conditions.Delete(obj, sourcev1.ArtifactOutdatedCondition)
-			conditions.MarkTrue(obj, sourcev1.ArtifactInStorageCondition, meta.SucceededReason,
-				"stored artifact for digest '%s'", artifact.Revision)
+			conditions.MarkTrue(obj, sourcev1.ArtifactInStorageCondition, meta.SucceededReason, msg)
 		}
 	}()
 
 	// The artifact is up-to-date
 	if obj.GetArtifact().HasRevision(artifact.Revision) {
-		r.eventLogf(ctx, obj, events.EventTypeTrace, sourcev1.ArtifactUpToDateReason,
-			"artifact up-to-date with remote digest: '%s'", artifact.Revision)
+		msg := fmt.Sprintf("artifact up-to-date with remote digest: '%s'", artifact.Revision)
+		if obj.IsHelmMediaType() {
+			msg = fmt.Sprintf("chart up-to-date with remote version: '%s'", artifact.Revision)
+		}
+		r.eventLogf(ctx, obj, events.EventTypeTrace, sourcev1.ArtifactUpToDateReason, msg)
 		return sreconcile.ResultSuccess, nil
 	}
 
@@ -915,14 +987,26 @@ func (r *OCIRepositoryReconciler) reconcileArtifact(ctx context.Context,
 	}
 	defer unlock()
 
-	// Archive directory to storage
-	if err := r.Storage.Archive(&artifact, dir, nil); err != nil {
-		e := serror.NewGeneric(
-			fmt.Errorf("unable to archive artifact to storage: %s", err),
-			sourcev1.ArchiveOperationFailedReason,
-		)
-		conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition, e.Reason, e.Err.Error())
-		return sreconcile.ResultEmpty, e
+	if obj.IsHelmMediaType() {
+		// Copy the packaged chart to the artifact path
+		if err = r.Storage.CopyFromPath(&artifact, filepath.Join(dir, metadata.Path)); err != nil {
+			e := serror.NewGeneric(
+				fmt.Errorf("unable to copy Helm chart to storage: %w", err),
+				sourcev1.ArchiveOperationFailedReason,
+			)
+			conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition, e.Reason, e.Err.Error())
+			return sreconcile.ResultEmpty, e
+		}
+	} else {
+		// Archive directory to storage
+		if err := r.Storage.Archive(&artifact, dir, nil); err != nil {
+			e := serror.NewGeneric(
+				fmt.Errorf("unable to archive artifact to storage: %s", err),
+				sourcev1.ArchiveOperationFailedReason,
+			)
+			conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition, e.Reason, e.Err.Error())
+			return sreconcile.ResultEmpty, e
+		}
 	}
 
 	// Record it on the object
@@ -1029,6 +1113,9 @@ func (r *OCIRepositoryReconciler) notify(ctx context.Context,
 		}
 
 		message := fmt.Sprintf("stored artifact with digest '%s' from '%s'", newObj.Status.Artifact.Revision, newObj.Spec.URL)
+		if newObj.IsHelmMediaType() {
+			message = fmt.Sprintf("stored chart version '%s'", newObj.Status.Artifact.Revision)
+		}
 
 		// enrich message with upstream annotations if found
 		if info := newObj.GetArtifact().Metadata; info != nil {

@@ -231,6 +231,11 @@ func (in *OCIRepository) GetLayerMediaType() string {
 	return in.Spec.LayerSelector.MediaType
 }
 
+// IsHelmMediaType returns true if the selector is set to 'application/vnd.cncf.helm.chart.content.v1.tar+gzip'
+func (in *OCIRepository) IsHelmMediaType() bool {
+	return in.GetLayerMediaType() == "application/vnd.cncf.helm.chart.content.v1.tar+gzip"
+}
+
 // +genclient
 // +genclient:Namespaced
 // +kubebuilder:storageversion
