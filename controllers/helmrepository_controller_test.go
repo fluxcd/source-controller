@@ -290,6 +290,7 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 		name             string
 		protocol         string
 		server           options
+		url              string
 		secret           *corev1.Secret
 		beforeFunc       func(t *WithT, obj *sourcev1.HelmRepository, checksum string)
 		afterFunc        func(t *WithT, obj *sourcev1.HelmRepository, artifact sourcev1.Artifact, chartRepo repository.ChartRepository)
@@ -297,6 +298,24 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 		wantErr          bool
 		assertConditions []metav1.Condition
 	}{
+		{
+			name:     "HTTPS with secretRef pointing to CA cert but public repo URL succeeds",
+			protocol: "http",
+			url:      "https://stefanprodan.github.io/podinfo",
+			want:     sreconcile.ResultSuccess,
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "ca-file",
+				},
+				Data: map[string][]byte{
+					"caFile": tlsCA,
+				},
+			},
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new index revision"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new index revision"),
+			},
+		},
 		{
 			name:     "HTTP without secretRef makes ArtifactOutdated=True",
 			protocol: "http",
@@ -565,10 +584,16 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 				server.Start()
 				defer server.Stop()
 				obj.Spec.URL = server.URL()
+				if tt.url != "" {
+					obj.Spec.URL = tt.url
+				}
 			case "https":
 				g.Expect(server.StartTLS(tt.server.publicKey, tt.server.privateKey, tt.server.ca, "example.com")).To(Succeed())
 				defer server.Stop()
 				obj.Spec.URL = server.URL()
+				if tt.url != "" {
+					obj.Spec.URL = tt.url
+				}
 			default:
 				t.Fatalf("unsupported protocol %q", tt.protocol)
 			}
@@ -596,7 +621,11 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 					validSecret = false
 				}
 				clientOpts = append(clientOpts, cOpts...)
-				tOpts, serr = getter.TLSClientConfigFromSecret(*secret, server.URL())
+				repoURL := server.URL()
+				if tt.url != "" {
+					repoURL = tt.url
+				}
+				tOpts, serr = getter.TLSClientConfigFromSecret(*secret, repoURL)
 				if serr != nil {
 					validSecret = false
 				}

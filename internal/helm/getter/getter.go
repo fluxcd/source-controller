@@ -81,7 +81,10 @@ func TLSClientConfigFromSecret(secret corev1.Secret, repositoryUrl string) (*tls
 	}
 
 	if len(caBytes) > 0 {
-		cp := x509.NewCertPool()
+		cp, err := x509.SystemCertPool()
+		if err != nil {
+			return nil, fmt.Errorf("cannot retrieve system certificate pool: %w", err)
+		}
 		if !cp.AppendCertsFromPEM(caBytes) {
 			return nil, fmt.Errorf("cannot append certificate into certificate pool: invalid caFile")
 		}
