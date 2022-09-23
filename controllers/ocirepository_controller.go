@@ -22,8 +22,10 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -499,6 +501,7 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, obj *sour
 			layer = layers[0]
 		}
 
+		// Extract the compressed content from the selected layer
 		blob, err := layer.Compressed()
 		if err != nil {
 			e := serror.NewGeneric(
@@ -509,9 +512,42 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, obj *sour
 			return sreconcile.ResultEmpty, e
 		}
 
-		if _, err = untar.Untar(blob, dir); err != nil {
+		// Persist layer content to storage using the specified operation
+		switch obj.GetLayerOperation() {
+		case sourcev1.OCILayerExtract:
+			if _, err = untar.Untar(blob, dir); err != nil {
+				e := serror.NewGeneric(
+					fmt.Errorf("failed to extract layer contents from artifact: %w", err),
+					sourcev1.OCILayerOperationFailedReason,
+				)
+				conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
+				return sreconcile.ResultEmpty, e
+			}
+		case sourcev1.OCILayerCopy:
+			metadata.Path = fmt.Sprintf("%s.tgz", metadata.Revision)
+			file, err := os.Create(filepath.Join(dir, metadata.Path))
+			if err != nil {
+				e := serror.NewGeneric(
+					fmt.Errorf("failed to create file to copy layer to: %w", err),
+					sourcev1.OCILayerOperationFailedReason,
+				)
+				conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
+				return sreconcile.ResultEmpty, e
+			}
+			defer file.Close()
+
+			_, err = io.Copy(file, blob)
+			if err != nil {
+				e := serror.NewGeneric(
+					fmt.Errorf("failed to copy layer from artifact: %w", err),
+					sourcev1.OCILayerOperationFailedReason,
+				)
+				conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
+				return sreconcile.ResultEmpty, e
+			}
+		default:
 			e := serror.NewGeneric(
-				fmt.Errorf("failed to untar the first layer from artifact: %w", err),
+				fmt.Errorf("unsupported layer operation: %s", obj.GetLayerOperation()),
 				sourcev1.OCILayerOperationFailedReason,
 			)
 			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
@@ -915,14 +951,25 @@ func (r *OCIRepositoryReconciler) reconcileArtifact(ctx context.Context,
 	}
 	defer unlock()
 
-	// Archive directory to storage
-	if err := r.Storage.Archive(&artifact, dir, nil); err != nil {
-		e := serror.NewGeneric(
-			fmt.Errorf("unable to archive artifact to storage: %s", err),
-			sourcev1.ArchiveOperationFailedReason,
-		)
-		conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition, e.Reason, e.Err.Error())
-		return sreconcile.ResultEmpty, e
+	switch obj.GetLayerOperation() {
+	case sourcev1.OCILayerCopy:
+		if err = r.Storage.CopyFromPath(&artifact, filepath.Join(dir, metadata.Path)); err != nil {
+			e := serror.NewGeneric(
+				fmt.Errorf("unable to copy artifact to storage: %w", err),
+				sourcev1.ArchiveOperationFailedReason,
+			)
+			conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition, e.Reason, e.Err.Error())
+			return sreconcile.ResultEmpty, e
+		}
+	default:
+		if err := r.Storage.Archive(&artifact, dir, nil); err != nil {
+			e := serror.NewGeneric(
+				fmt.Errorf("unable to archive artifact to storage: %s", err),
+				sourcev1.ArchiveOperationFailedReason,
+			)
+			conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition, e.Reason, e.Err.Error())
+			return sreconcile.ResultEmpty, e
+		}
 	}
 
 	// Record it on the object

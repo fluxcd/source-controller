@@ -45,6 +45,12 @@ const (
 	// AzureOCIProvider provides support for OCI authentication using a Azure Service Principal,
 	// Managed Identity or Shared Key.
 	AzureOCIProvider string = "azure"
+
+	// OCILayerExtract defines the operation type for extracting the content from an OCI artifact layer.
+	OCILayerExtract = "extract"
+
+	// OCILayerCopy defines the operation type for copying the content from an OCI artifact layer.
+	OCILayerCopy = "copy"
 )
 
 // OCIRepositorySpec defines the desired state of OCIRepository
@@ -156,6 +162,14 @@ type OCILayerSelector struct {
 	// first layer matching this type is selected.
 	// +optional
 	MediaType string `json:"mediaType,omitempty"`
+
+	// Operation specifies how the selected layer should be processed.
+	// By default, the layer compressed content is extracted to storage.
+	// When the operation is set to 'copy', the layer compressed content
+	// is persisted to storage as it is.
+	// +kubebuilder:validation:Enum=extract;copy
+	// +optional
+	Operation string `json:"operation,omitempty"`
 }
 
 // OCIRepositoryVerification verifies the authenticity of an OCI Artifact
@@ -229,6 +243,15 @@ func (in *OCIRepository) GetLayerMediaType() string {
 	}
 
 	return in.Spec.LayerSelector.MediaType
+}
+
+// GetLayerOperation returns the layer selector operation (defaults to extract).
+func (in *OCIRepository) GetLayerOperation() string {
+	if in.Spec.LayerSelector == nil || in.Spec.LayerSelector.Operation == "" {
+		return OCILayerExtract
+	}
+
+	return in.Spec.LayerSelector.Operation
 }
 
 // +genclient

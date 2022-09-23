@@ -2635,6 +2635,21 @@ which should be extracted from the OCI Artifact. The
 first layer matching this type is selected.</p>
 </td>
 </tr>
+<tr>
+<td>
+<code>operation</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Operation specifies how the selected layer should be processed.
+By default, the layer compressed content is extracted to storage.
+When the operation is set to &lsquo;copy&rsquo;, the layer compressed content
+is persisted to storage as it is.</p>
+</td>
+</tr>
 </tbody>
 </table>
 </div>

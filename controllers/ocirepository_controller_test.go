@@ -85,6 +85,7 @@ func TestOCIRepository_Reconcile(t *testing.T) {
 		semver         string
 		digest         string
 		mediaType      string
+		operation      string
 		assertArtifact []artifactFixture
 	}{
 		{
@@ -93,6 +94,7 @@ func TestOCIRepository_Reconcile(t *testing.T) {
 			tag:       podinfoVersions["6.1.6"].tag,
 			digest:    podinfoVersions["6.1.6"].digest.Hex,
 			mediaType: "application/vnd.docker.image.rootfs.diff.tar.gzip",
+			operation: sourcev1.OCILayerCopy,
 			assertArtifact: []artifactFixture{
 				{
 					expectedPath:     "kustomize/deployment.yaml",
@@ -150,7 +152,12 @@ func TestOCIRepository_Reconcile(t *testing.T) {
 			}
 			if tt.mediaType != "" {
 				obj.Spec.LayerSelector = &sourcev1.OCILayerSelector{MediaType: tt.mediaType}
+
+				if tt.operation != "" {
+					obj.Spec.LayerSelector.Operation = tt.operation
+				}
 			}
+
 			g.Expect(testEnv.Create(ctx, obj)).To(Succeed())
 
 			key := client.ObjectKey{Name: obj.Name, Namespace: obj.Namespace}
