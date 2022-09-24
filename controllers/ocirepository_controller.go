@@ -369,47 +369,18 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, obj *sour
 		return sreconcile.ResultEmpty, e
 	}
 
-	// Pull artifact from the remote container registry
-	img, err := crane.Pull(url, options...)
+	// Get the upstream revision from the artifact digest
+	revision, err := r.getRevision(url, options)
 	if err != nil {
 		e := serror.NewGeneric(
-			fmt.Errorf("failed to pull artifact from '%s': %w", obj.Spec.URL, err),
+			fmt.Errorf("failed to determine artifact digest: %w", err),
 			sourcev1.OCIPullFailedReason,
 		)
 		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
 		return sreconcile.ResultEmpty, e
 	}
-
-	// Determine the artifact SHA256 digest
-	imgDigest, err := img.Digest()
-	if err != nil {
-		e := serror.NewGeneric(
-			fmt.Errorf("failed to determine artifact digest: %w", err),
-			sourcev1.OCILayerOperationFailedReason,
-		)
-		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
-		return sreconcile.ResultEmpty, e
-	}
-
-	// Set the internal revision to the remote digest hex
-	revision := imgDigest.Hex
-
-	// Copy the OCI annotations to the internal artifact metadata
-	manifest, err := img.Manifest()
-	if err != nil {
-		e := serror.NewGeneric(
-			fmt.Errorf("failed to parse artifact manifest: %w", err),
-			sourcev1.OCILayerOperationFailedReason,
-		)
-		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
-		return sreconcile.ResultEmpty, e
-	}
-
-	m := &sourcev1.Artifact{
-		Revision: revision,
-		Metadata: manifest.Annotations,
-	}
-	m.DeepCopyInto(metadata)
+	metaArtifact := &sourcev1.Artifact{Revision: revision}
+	metaArtifact.DeepCopyInto(metadata)
 
 	// Mark observations about the revision on the object
 	defer func() {
@@ -430,7 +401,7 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, obj *sour
 	} else if !obj.GetArtifact().HasRevision(revision) ||
 		conditions.GetObservedGeneration(obj, sourcev1.SourceVerifiedCondition) != obj.Generation ||
 		conditions.IsFalse(obj, sourcev1.SourceVerifiedCondition) {
-		err := r.verifyOCISourceSignature(ctx, obj, url, keychain)
+		err := r.verifySignature(ctx, obj, url, keychain)
 		if err != nil {
 			provider := obj.Spec.Verify.Provider
 			if obj.Spec.Verify.SecretRef == nil {
@@ -447,121 +418,173 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, obj *sour
 		conditions.MarkTrue(obj, sourcev1.SourceVerifiedCondition, meta.SucceededReason, "verified signature of digest %s", revision)
 	}
 
-	// Extract the content of the first artifact layer
-	if !obj.GetArtifact().HasRevision(revision) {
-		layers, err := img.Layers()
+	// Skip pulling if the artifact revision hasn't changes
+	if obj.GetArtifact().HasRevision(revision) {
+		conditions.Delete(obj, sourcev1.FetchFailedCondition)
+		return sreconcile.ResultSuccess, nil
+	}
+
+	// Pull artifact from the remote container registry
+	img, err := crane.Pull(url, options...)
+	if err != nil {
+		e := serror.NewGeneric(
+			fmt.Errorf("failed to pull artifact from '%s': %w", obj.Spec.URL, err),
+			sourcev1.OCIPullFailedReason,
+		)
+		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
+		return sreconcile.ResultEmpty, e
+	}
+
+	// Copy the OCI annotations to the internal artifact metadata
+	manifest, err := img.Manifest()
+	if err != nil {
+		e := serror.NewGeneric(
+			fmt.Errorf("failed to parse artifact manifest: %w", err),
+			sourcev1.OCILayerOperationFailedReason,
+		)
+		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
+		return sreconcile.ResultEmpty, e
+	}
+	metadata.Metadata = manifest.Annotations
+
+	// Extract the compressed content from the selected layer
+	blob, err := r.getLayerCompressed(obj, img)
+	if err != nil {
+		e := serror.NewGeneric(err, sourcev1.OCILayerOperationFailedReason)
+		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
+		return sreconcile.ResultEmpty, e
+	}
+
+	// Persist layer content to storage using the specified operation
+	switch obj.GetLayerOperation() {
+	case sourcev1.OCILayerExtract:
+		if _, err = untar.Untar(blob, dir); err != nil {
+			e := serror.NewGeneric(
+				fmt.Errorf("failed to extract layer contents from artifact: %w", err),
+				sourcev1.OCILayerOperationFailedReason,
+			)
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
+			return sreconcile.ResultEmpty, e
+		}
+	case sourcev1.OCILayerCopy:
+		metadata.Path = fmt.Sprintf("%s.tgz", r.digestFromRevision(metadata.Revision))
+		file, err := os.Create(filepath.Join(dir, metadata.Path))
 		if err != nil {
 			e := serror.NewGeneric(
-				fmt.Errorf("failed to parse artifact layers: %w", err),
+				fmt.Errorf("failed to create file to copy layer to: %w", err),
 				sourcev1.OCILayerOperationFailedReason,
 			)
 			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
 			return sreconcile.ResultEmpty, e
 		}
+		defer file.Close()
 
-		if len(layers) < 1 {
-			e := serror.NewGeneric(
-				fmt.Errorf("no layers found in artifact"),
-				sourcev1.OCILayerOperationFailedReason,
-			)
-			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
-			return sreconcile.ResultEmpty, e
-		}
-
-		var layer gcrv1.Layer
-
-		switch {
-		case obj.GetLayerMediaType() != "":
-			var found bool
-			for i, l := range layers {
-				md, err := l.MediaType()
-				if err != nil {
-					e := serror.NewGeneric(
-						fmt.Errorf("failed to determine the media type of layer[%v] from artifact: %w", i, err),
-						sourcev1.OCILayerOperationFailedReason,
-					)
-					conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
-					return sreconcile.ResultEmpty, e
-				}
-				if string(md) == obj.GetLayerMediaType() {
-					layer = layers[i]
-					found = true
-					break
-				}
-			}
-			if !found {
-				e := serror.NewGeneric(
-					fmt.Errorf("failed to find layer with media type '%s' in artifact", obj.GetLayerMediaType()),
-					sourcev1.OCILayerOperationFailedReason,
-				)
-				conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
-				return sreconcile.ResultEmpty, e
-			}
-		default:
-			layer = layers[0]
-		}
-
-		// Extract the compressed content from the selected layer
-		blob, err := layer.Compressed()
+		_, err = io.Copy(file, blob)
 		if err != nil {
 			e := serror.NewGeneric(
-				fmt.Errorf("failed to extract the first layer from artifact: %w", err),
+				fmt.Errorf("failed to copy layer from artifact: %w", err),
 				sourcev1.OCILayerOperationFailedReason,
 			)
 			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
 			return sreconcile.ResultEmpty, e
 		}
-
-		// Persist layer content to storage using the specified operation
-		switch obj.GetLayerOperation() {
-		case sourcev1.OCILayerExtract:
-			if _, err = untar.Untar(blob, dir); err != nil {
-				e := serror.NewGeneric(
-					fmt.Errorf("failed to extract layer contents from artifact: %w", err),
-					sourcev1.OCILayerOperationFailedReason,
-				)
-				conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
-				return sreconcile.ResultEmpty, e
-			}
-		case sourcev1.OCILayerCopy:
-			metadata.Path = fmt.Sprintf("%s.tgz", metadata.Revision)
-			file, err := os.Create(filepath.Join(dir, metadata.Path))
-			if err != nil {
-				e := serror.NewGeneric(
-					fmt.Errorf("failed to create file to copy layer to: %w", err),
-					sourcev1.OCILayerOperationFailedReason,
-				)
-				conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
-				return sreconcile.ResultEmpty, e
-			}
-			defer file.Close()
-
-			_, err = io.Copy(file, blob)
-			if err != nil {
-				e := serror.NewGeneric(
-					fmt.Errorf("failed to copy layer from artifact: %w", err),
-					sourcev1.OCILayerOperationFailedReason,
-				)
-				conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
-				return sreconcile.ResultEmpty, e
-			}
-		default:
-			e := serror.NewGeneric(
-				fmt.Errorf("unsupported layer operation: %s", obj.GetLayerOperation()),
-				sourcev1.OCILayerOperationFailedReason,
-			)
-			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
-			return sreconcile.ResultEmpty, e
-		}
+	default:
+		e := serror.NewGeneric(
+			fmt.Errorf("unsupported layer operation: %s", obj.GetLayerOperation()),
+			sourcev1.OCILayerOperationFailedReason,
+		)
+		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
+		return sreconcile.ResultEmpty, e
 	}
 
 	conditions.Delete(obj, sourcev1.FetchFailedCondition)
 	return sreconcile.ResultSuccess, nil
 }
 
-// verifyOCISourceSignature verifies the authenticity of the given image reference url. First, it tries using a key
+// getLayerCompressed finds the matching layer and returns its compress contents
+func (r *OCIRepositoryReconciler) getLayerCompressed(obj *sourcev1.OCIRepository, image gcrv1.Image) (io.ReadCloser, error) {
+	layers, err := image.Layers()
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse artifact layers: %w", err)
+	}
+
+	if len(layers) < 1 {
+		return nil, fmt.Errorf("no layers found in artifact")
+	}
+
+	var layer gcrv1.Layer
+	switch {
+	case obj.GetLayerMediaType() != "":
+		var found bool
+		for i, l := range layers {
+			md, err := l.MediaType()
+			if err != nil {
+				return nil, fmt.Errorf("failed to determine the media type of layer[%v] from artifact: %w", i, err)
+			}
+			if string(md) == obj.GetLayerMediaType() {
+				layer = layers[i]
+				found = true
+				break
+			}
+		}
+		if !found {
+			return nil, fmt.Errorf("failed to find layer with media type '%s' in artifact", obj.GetLayerMediaType())
+		}
+	default:
+		layer = layers[0]
+	}
+
+	blob, err := layer.Compressed()
+	if err != nil {
+		return nil, fmt.Errorf("failed to extract the first layer from artifact: %w", err)
+	}
+
+	return blob, nil
+}
+
+// getRevision fetches the upstream digest and returns the revision in the format `<tag>/<digest>`
+func (r *OCIRepositoryReconciler) getRevision(url string, options []crane.Option) (string, error) {
+	ref, err := name.ParseReference(url)
+	if err != nil {
+		return "", err
+	}
+
+	repoTag := ""
+	repoName := strings.TrimPrefix(url, ref.Context().RegistryStr())
+	if s := strings.Split(repoName, ":"); len(s) == 2 && !strings.Contains(repoName, "@") {
+		repoTag = s[1]
+	}
+
+	if repoTag == "" && !strings.Contains(repoName, "@") {
+		repoTag = "latest"
+	}
+
+	digest, err := crane.Digest(url, options...)
+	if err != nil {
+		return "", err
+	}
+
+	digestHash, err := gcrv1.NewHash(digest)
+	if err != nil {
+		return "", err
+	}
+
+	revision := digestHash.Hex
+	if repoTag != "" {
+		revision = fmt.Sprintf("%s/%s", repoTag, digestHash.Hex)
+	}
+	return revision, nil
+}
+
+// digestFromRevision extract the digest from the revision string
+func (r *OCIRepositoryReconciler) digestFromRevision(revision string) string {
+	parts := strings.Split(revision, "/")
+	return parts[len(parts)-1]
+}
+
+// verifySignature verifies the authenticity of the given image reference url. First, it tries using a key
 // if a secret with a valid public key is provided. If not, it falls back to a keyless approach for verification.
-func (r *OCIRepositoryReconciler) verifyOCISourceSignature(ctx context.Context, obj *sourcev1.OCIRepository, url string, keychain authn.Keychain) error {
+func (r *OCIRepositoryReconciler) verifySignature(ctx context.Context, obj *sourcev1.OCIRepository, url string, keychain authn.Keychain) error {
 	ctxTimeout, cancel := context.WithTimeout(ctx, obj.Spec.Timeout.Duration)
 	defer cancel()
 
@@ -856,8 +879,7 @@ func (r *OCIRepositoryReconciler) craneOptions(ctx context.Context, insecure boo
 // condition is added.
 // The hostname of any URL in the Status of the object are updated, to ensure
 // they match the Storage server hostname of current runtime.
-func (r *OCIRepositoryReconciler) reconcileStorage(ctx context.Context,
-	obj *sourcev1.OCIRepository, _ *sourcev1.Artifact, _ string) (sreconcile.Result, error) {
+func (r *OCIRepositoryReconciler) reconcileStorage(ctx context.Context, obj *sourcev1.OCIRepository, _ *sourcev1.Artifact, _ string) (sreconcile.Result, error) {
 	// Garbage collect previous advertised artifact(s) from storage
 	_ = r.garbageCollect(ctx, obj)
 
@@ -892,13 +914,12 @@ func (r *OCIRepositoryReconciler) reconcileStorage(ctx context.Context,
 // early.
 // On a successful archive, the Artifact in the Status of the object is set,
 // and the symlink in the Storage is updated to its path.
-func (r *OCIRepositoryReconciler) reconcileArtifact(ctx context.Context,
-	obj *sourcev1.OCIRepository, metadata *sourcev1.Artifact, dir string) (sreconcile.Result, error) {
-	// Calculate revision
+func (r *OCIRepositoryReconciler) reconcileArtifact(ctx context.Context, obj *sourcev1.OCIRepository, metadata *sourcev1.Artifact, dir string) (sreconcile.Result, error) {
 	revision := metadata.Revision
 
 	// Create artifact
-	artifact := r.Storage.NewArtifactFor(obj.Kind, obj, revision, fmt.Sprintf("%s.tar.gz", revision))
+	artifact := r.Storage.NewArtifactFor(obj.Kind, obj, revision,
+		fmt.Sprintf("%s.tar.gz", r.digestFromRevision(revision)))
 
 	// Set the ArtifactInStorageCondition if there's no drift.
 	defer func() {
@@ -1047,8 +1068,7 @@ func (r *OCIRepositoryReconciler) garbageCollect(ctx context.Context, obj *sourc
 // This log is different from the debug log in the EventRecorder, in the sense
 // that this is a simple log. While the debug log contains complete details
 // about the event.
-func (r *OCIRepositoryReconciler) eventLogf(ctx context.Context,
-	obj runtime.Object, eventType string, reason string, messageFmt string, args ...interface{}) {
+func (r *OCIRepositoryReconciler) eventLogf(ctx context.Context, obj runtime.Object, eventType string, reason string, messageFmt string, args ...interface{}) {
 	msg := fmt.Sprintf(messageFmt, args...)
 	// Log and emit event.
 	if eventType == corev1.EventTypeWarning {
@@ -1060,8 +1080,7 @@ func (r *OCIRepositoryReconciler) eventLogf(ctx context.Context,
 }
 
 // notify emits notification related to the reconciliation.
-func (r *OCIRepositoryReconciler) notify(ctx context.Context,
-	oldObj, newObj *sourcev1.OCIRepository, res sreconcile.Result, resErr error) {
+func (r *OCIRepositoryReconciler) notify(ctx context.Context, oldObj, newObj *sourcev1.OCIRepository, res sreconcile.Result, resErr error) {
 	// Notify successful reconciliation for new artifact and recovery from any
 	// failure.
 	if resErr == nil && res == sreconcile.ResultSuccess && newObj.Status.Artifact != nil {

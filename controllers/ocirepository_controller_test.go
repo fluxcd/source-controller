@@ -92,7 +92,7 @@ func TestOCIRepository_Reconcile(t *testing.T) {
 			name:      "public tag",
 			url:       podinfoVersions["6.1.6"].url,
 			tag:       podinfoVersions["6.1.6"].tag,
-			digest:    podinfoVersions["6.1.6"].digest.Hex,
+			digest:    fmt.Sprintf("%s/%s", podinfoVersions["6.1.6"].tag, podinfoVersions["6.1.6"].digest.Hex),
 			mediaType: "application/vnd.docker.image.rootfs.diff.tar.gzip",
 			operation: sourcev1.OCILayerCopy,
 			assertArtifact: []artifactFixture{
@@ -110,7 +110,7 @@ func TestOCIRepository_Reconcile(t *testing.T) {
 			name:   "public semver",
 			url:    podinfoVersions["6.1.5"].url,
 			semver: ">= 6.1 <= 6.1.5",
-			digest: podinfoVersions["6.1.5"].digest.Hex,
+			digest: fmt.Sprintf("%s/%s", podinfoVersions["6.1.5"].tag, podinfoVersions["6.1.5"].digest.Hex),
 			assertArtifact: []artifactFixture{
 				{
 					expectedPath:     "kustomize/deployment.yaml",
@@ -449,7 +449,7 @@ func TestOCIRepository_reconcileSource_authStrategy(t *testing.T) {
 			}),
 			},
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.OCIPullFailedReason, "failed to pull artifact from "),
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.OCIPullFailedReason, "failed to determine artifact digest"),
 			},
 		},
 		{
@@ -470,7 +470,7 @@ func TestOCIRepository_reconcileSource_authStrategy(t *testing.T) {
 				includeSecret: true,
 			},
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.OCIPullFailedReason, "failed to pull artifact from "),
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.OCIPullFailedReason, "UNAUTHORIZED"),
 			},
 		},
 		{
@@ -491,7 +491,7 @@ func TestOCIRepository_reconcileSource_authStrategy(t *testing.T) {
 				includeSA: true,
 			},
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.OCIPullFailedReason, "failed to pull artifact from "),
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.OCIPullFailedReason, "UNAUTHORIZED"),
 			},
 		},
 		{
@@ -533,7 +533,7 @@ func TestOCIRepository_reconcileSource_authStrategy(t *testing.T) {
 			}),
 			},
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.OCIPullFailedReason, "failed to pull artifact from "),
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.OCIPullFailedReason, "failed to determine artifact digest"),
 			},
 		},
 		{
@@ -558,7 +558,7 @@ func TestOCIRepository_reconcileSource_authStrategy(t *testing.T) {
 				},
 			},
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.OCIPullFailedReason, "failed to pull artifact from "),
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.OCIPullFailedReason, "failed to determine artifact digest"),
 			},
 		},
 		{
@@ -683,7 +683,7 @@ func TestOCIRepository_reconcileSource_authStrategy(t *testing.T) {
 
 			assertConditions := tt.assertConditions
 			for k := range assertConditions {
-				assertConditions[k].Message = strings.ReplaceAll(assertConditions[k].Message, "<digest>", img.digest.Hex)
+				assertConditions[k].Message = strings.ReplaceAll(assertConditions[k].Message, "<digest>", fmt.Sprintf("%s/%s", img.tag, img.digest.Hex))
 				assertConditions[k].Message = strings.ReplaceAll(assertConditions[k].Message, "<url>", repoURL)
 			}
 
@@ -871,7 +871,7 @@ func TestOCIRepository_reconcileSource_remoteReference(t *testing.T) {
 		{
 			name:         "no reference (latest tag)",
 			want:         sreconcile.ResultSuccess,
-			wantRevision: img6.digest.Hex,
+			wantRevision: fmt.Sprintf("latest/%s", img6.digest.Hex),
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new digest"),
 				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new digest"),
@@ -883,7 +883,7 @@ func TestOCIRepository_reconcileSource_remoteReference(t *testing.T) {
 				Tag: "6.1.6",
 			},
 			want:         sreconcile.ResultSuccess,
-			wantRevision: img6.digest.Hex,
+			wantRevision: fmt.Sprintf("%s/%s", img6.tag, img6.digest.Hex),
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new digest"),
 				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new digest"),
@@ -895,7 +895,7 @@ func TestOCIRepository_reconcileSource_remoteReference(t *testing.T) {
 				SemVer: ">= 6.1.5",
 			},
 			want:         sreconcile.ResultSuccess,
-			wantRevision: img6.digest.Hex,
+			wantRevision: fmt.Sprintf("%s/%s", img6.tag, img6.digest.Hex),
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new digest"),
 				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new digest"),
@@ -921,7 +921,7 @@ func TestOCIRepository_reconcileSource_remoteReference(t *testing.T) {
 			want:    sreconcile.ResultEmpty,
 			wantErr: true,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.OCIPullFailedReason, "failed to pull artifact"),
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.OCIPullFailedReason, " MANIFEST_UNKNOWN"),
 			},
 		},
 		{
@@ -943,7 +943,7 @@ func TestOCIRepository_reconcileSource_remoteReference(t *testing.T) {
 			want:    sreconcile.ResultEmpty,
 			wantErr: true,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.OCIPullFailedReason, "failed to pull artifact"),
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.OCIPullFailedReason, "failed to determine artifact digest"),
 			},
 		},
 		{
@@ -953,7 +953,7 @@ func TestOCIRepository_reconcileSource_remoteReference(t *testing.T) {
 				Tag:    "6.1.5",
 			},
 			want:         sreconcile.ResultSuccess,
-			wantRevision: img6.digest.Hex,
+			wantRevision: fmt.Sprintf("%s/%s", img6.tag, img6.digest.Hex),
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new digest"),
 				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new digest"),
@@ -1091,7 +1091,7 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignature(t *testing.T) {
 			beforeFunc: func(obj *sourcev1.OCIRepository) {
 				conditions.MarkFalse(obj, sourcev1.SourceVerifiedCondition, "VerifyFailed", "fail msg")
 				obj.Spec.Verify = nil
-				obj.Status.Artifact = &sourcev1.Artifact{Revision: img4.digest.Hex}
+				obj.Status.Artifact = &sourcev1.Artifact{Revision: fmt.Sprintf("%s/%s", img4.tag, img4.digest.Hex)}
 			},
 			want: sreconcile.ResultSuccess,
 		},
@@ -1101,7 +1101,7 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignature(t *testing.T) {
 			digest:     img4.digest.Hex,
 			shouldSign: true,
 			beforeFunc: func(obj *sourcev1.OCIRepository) {
-				obj.Status.Artifact = &sourcev1.Artifact{Revision: img4.digest.Hex}
+				obj.Status.Artifact = &sourcev1.Artifact{Revision: fmt.Sprintf("%s/%s", img4.tag, img4.digest.Hex)}
 				// Set Verified with old observed generation and different reason/message.
 				conditions.MarkTrue(obj, sourcev1.SourceVerifiedCondition, "Verified", "verified")
 				// Set new object generation.
@@ -1119,7 +1119,7 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignature(t *testing.T) {
 			shouldSign: true,
 			beforeFunc: func(obj *sourcev1.OCIRepository) {
 				// Artifact present and custom verified condition reason/message.
-				obj.Status.Artifact = &sourcev1.Artifact{Revision: img4.digest.Hex}
+				obj.Status.Artifact = &sourcev1.Artifact{Revision: fmt.Sprintf("%s/%s", img4.tag, img4.digest.Hex)}
 				conditions.MarkTrue(obj, sourcev1.SourceVerifiedCondition, "Verified", "verified")
 			},
 			want: sreconcile.ResultSuccess,
@@ -1213,7 +1213,7 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignature(t *testing.T) {
 
 			assertConditions := tt.assertConditions
 			for k := range assertConditions {
-				assertConditions[k].Message = strings.ReplaceAll(assertConditions[k].Message, "<digest>", tt.digest)
+				assertConditions[k].Message = strings.ReplaceAll(assertConditions[k].Message, "<digest>", fmt.Sprintf("%s/%s", tt.reference.Tag, tt.digest))
 				assertConditions[k].Message = strings.ReplaceAll(assertConditions[k].Message, "<url>", artifactURL)
 				assertConditions[k].Message = strings.ReplaceAll(assertConditions[k].Message, "<provider>", "cosign")
 			}
