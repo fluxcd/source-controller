@@ -90,6 +90,15 @@ spec:
                       which should be extracted from the OCI Artifact. The first layer
                       matching this type is selected.
                     type: string
+                  operation:
+                    description: Operation specifies how the selected layer should
+                      be processed. By default, the layer compressed content is extracted
+                      to storage. When the operation is set to 'copy', the layer compressed
+                      content is persisted to storage as it is.
+                    enum:
+                    - extract
+                    - copy
+                    type: string
                 type: object
               provider:
                 default: generic
