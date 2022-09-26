@@ -20,7 +20,7 @@ import (
 	"context"
 	"crypto"
 	"fmt"
-	"github.com/google/go-containerregistry/pkg/authn"
+
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	"github.com/sigstore/cosign/cmd/cosign/cli/fulcio"
 	"github.com/sigstore/cosign/cmd/cosign/cli/rekor"
@@ -37,7 +37,7 @@ import (
 // options is a struct that holds options for verifier.
 type options struct {
 	PublicKey []byte
-	Keychain  authn.Keychain
+	ROpt      []remote.Option
 }
 
 // Options is a function that configures the options applied to a Verifier.
@@ -50,9 +50,11 @@ func WithPublicKey(publicKey []byte) Options {
 	}
 }
 
-func WithAuthnKeychain(keychain authn.Keychain) Options {
-	return func(opts *options) {
-		opts.Keychain = keychain
+// WithRemoteOptions is a functional option for overriding the default
+// remote options used by the verifier.
+func WithRemoteOptions(opts ...remote.Option) Options {
+	return func(o *options) {
+		o.ROpt = opts
 	}
 }
 
@@ -76,8 +78,8 @@ func NewVerifier(ctx context.Context, opts ...Options) (*Verifier, error) {
 		return nil, err
 	}
 
-	if o.Keychain != nil {
-		co = append(co, ociremote.WithRemoteOptions(remote.WithAuthFromKeychain(o.Keychain)))
+	if o.ROpt != nil {
+		co = append(co, ociremote.WithRemoteOptions(o.ROpt...))
 	}
 
 	checkOpts.RegistryClientOpts = co

@@ -299,6 +299,8 @@ func (r *OCIRepositoryReconciler) reconcile(ctx context.Context, obj *sourcev1.O
 // reconcileSource fetches the upstream OCI artifact metadata and content.
 // If this fails, it records v1beta2.FetchFailedCondition=True on the object and returns early.
 func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, obj *sourcev1.OCIRepository, metadata *sourcev1.Artifact, dir string) (sreconcile.Result, error) {
+	var auth authn.Authenticator
+
 	ctxTimeout, cancel := context.WithTimeout(ctx, obj.Spec.Timeout.Duration)
 	defer cancel()
 
@@ -310,8 +312,6 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, obj *sour
 		conditions.Delete(obj, sourcev1.SourceVerifiedCondition)
 	}
 
-	options := r.craneOptions(ctxTimeout, obj.Spec.Insecure)
-
 	// Generate the registry credential keychain either from static credentials or using cloud OIDC
 	keychain, err := r.keychain(ctx, obj)
 	if err != nil {
@@ -322,10 +322,10 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, obj *sour
 		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
 		return sreconcile.ResultEmpty, e
 	}
-	options = append(options, crane.WithAuthFromKeychain(keychain))
 
 	if _, ok := keychain.(soci.Anonymous); obj.Spec.Provider != sourcev1.GenericOCIProvider && ok {
-		auth, authErr := oidcAuth(ctxTimeout, obj.Spec.URL, obj.Spec.Provider)
+		var authErr error
+		auth, authErr = oidcAuth(ctxTimeout, obj.Spec.URL, obj.Spec.Provider)
 		if authErr != nil && !errors.Is(authErr, oci.ErrUnconfiguredProvider) {
 			e := serror.NewGeneric(
 				fmt.Errorf("failed to get credential from %s: %w", obj.Spec.Provider, authErr),
@@ -333,9 +333,6 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, obj *sour
 			)
 			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
 			return sreconcile.ResultEmpty, e
-		}
-		if auth != nil {
-			options = append(options, crane.WithAuth(auth))
 		}
 	}
 
@@ -349,12 +346,11 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, obj *sour
 		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
 		return sreconcile.ResultEmpty, e
 	}
-	if transport != nil {
-		options = append(options, crane.WithTransport(transport))
-	}
+
+	opts := makeRemoteOptions(ctx, obj, transport, keychain, auth)
 
 	// Determine which artifact revision to pull
-	url, err := r.getArtifactURL(obj, options)
+	url, err := r.getArtifactURL(obj, opts.craneOpts)
 	if err != nil {
 		if _, ok := err.(invalidOCIURLError); ok {
 			e := serror.NewStalling(
@@ -372,7 +368,7 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, obj *sour
 	}
 
 	// Get the upstream revision from the artifact digest
-	revision, err := r.getRevision(url, options)
+	revision, err := r.getRevision(url, opts.craneOpts)
 	if err != nil {
 		e := serror.NewGeneric(
 			fmt.Errorf("failed to determine artifact digest: %w", err),
@@ -403,7 +399,7 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, obj *sour
 	} else if !obj.GetArtifact().HasRevision(revision) ||
 		conditions.GetObservedGeneration(obj, sourcev1.SourceVerifiedCondition) != obj.Generation ||
 		conditions.IsFalse(obj, sourcev1.SourceVerifiedCondition) {
-		err := r.verifySignature(ctx, obj, url, keychain)
+		err := r.verifySignature(ctx, obj, url, opts.verifyOpts...)
 		if err != nil {
 			provider := obj.Spec.Verify.Provider
 			if obj.Spec.Verify.SecretRef == nil {
@@ -429,7 +425,7 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, obj *sour
 	}
 
 	// Pull artifact from the remote container registry
-	img, err := crane.Pull(url, options...)
+	img, err := crane.Pull(url, opts.craneOpts...)
 	if err != nil {
 		e := serror.NewGeneric(
 			fmt.Errorf("failed to pull artifact from '%s': %w", obj.Spec.URL, err),
@@ -589,7 +585,7 @@ func (r *OCIRepositoryReconciler) digestFromRevision(revision string) string {
 
 // verifySignature verifies the authenticity of the given image reference url. First, it tries using a key
 // if a secret with a valid public key is provided. If not, it falls back to a keyless approach for verification.
-func (r *OCIRepositoryReconciler) verifySignature(ctx context.Context, obj *sourcev1.OCIRepository, url string, keychain authn.Keychain) error {
+func (r *OCIRepositoryReconciler) verifySignature(ctx context.Context, obj *sourcev1.OCIRepository, url string, opt ...remote.Option) error {
 	ctxTimeout, cancel := context.WithTimeout(ctx, obj.Spec.Timeout.Duration)
 	defer cancel()
 
@@ -597,7 +593,7 @@ func (r *OCIRepositoryReconciler) verifySignature(ctx context.Context, obj *sour
 	switch provider {
 	case "cosign":
 		defaultCosignOciOpts := []soci.Options{
-			soci.WithAuthnKeychain(keychain),
+			soci.WithRemoteOptions(opt...),
 		}
 
 		ref, err := name.ParseReference(url)
@@ -855,21 +851,6 @@ func oidcAuth(ctx context.Context, url, provider string) (authn.Authenticator, e
 	}
 
 	return login.NewManager().Login(ctx, u, ref, opts)
-}
-
-// craneOptions sets the auth headers, timeout and user agent
-// for all operations against remote container registries.
-func (r *OCIRepositoryReconciler) craneOptions(ctx context.Context, insecure bool) []crane.Option {
-	options := []crane.Option{
-		crane.WithContext(ctx),
-		crane.WithUserAgent(oci.UserAgent),
-	}
-
-	if insecure {
-		options = append(options, crane.Insecure)
-	}
-
-	return options
 }
 
 // reconcileStorage ensures the current state of the storage matches the
@@ -1165,4 +1146,54 @@ func (r *OCIRepositoryReconciler) calculateContentConfigChecksum(obj *sourcev1.O
 	}
 
 	return fmt.Sprintf("sha256:%x", sha256.Sum256(c))
+}
+
+// craneOptions sets the auth headers, timeout and user agent
+// for all operations against remote container registries.
+func craneOptions(ctx context.Context, insecure bool) []crane.Option {
+	options := []crane.Option{
+		crane.WithContext(ctx),
+		crane.WithUserAgent(oci.UserAgent),
+	}
+
+	if insecure {
+		options = append(options, crane.Insecure)
+	}
+
+	return options
+}
+
+// makeRemoteOptions returns a remoteOptions struct with the authentication and transport options set.
+// The returned struct can be used to interact with a remote registry using go-containerregistry based libraries.
+func makeRemoteOptions(ctxTimeout context.Context, obj *sourcev1.OCIRepository, transport http.RoundTripper,
+	keychain authn.Keychain, auth authn.Authenticator) remoteOptions {
+	o := remoteOptions{
+		craneOpts:  craneOptions(ctxTimeout, obj.Spec.Insecure),
+		verifyOpts: []remote.Option{},
+	}
+
+	if transport != nil {
+		o.craneOpts = append(o.craneOpts, crane.WithTransport(transport))
+		o.verifyOpts = append(o.verifyOpts, remote.WithTransport(transport))
+	}
+
+	if auth != nil {
+		// auth take precedence over keychain here as we expect the caller to set
+		// the auth only if it is required.
+		o.verifyOpts = append(o.verifyOpts, remote.WithAuth(auth))
+		o.craneOpts = append(o.craneOpts, crane.WithAuth(auth))
+		return o
+	}
+
+	o.verifyOpts = append(o.verifyOpts, remote.WithAuthFromKeychain(keychain))
+	o.craneOpts = append(o.craneOpts, crane.WithAuthFromKeychain(keychain))
+
+	return o
+}
+
+// remoteOptions contains the options to interact with a remote registry.
+// It can be used to pass options to go-containerregistry based libraries.
+type remoteOptions struct {
+	craneOpts  []crane.Option
+	verifyOpts []remote.Option
 }

@@ -681,7 +681,7 @@ func TestOCIRepository_reconcileSource_authStrategy(t *testing.T) {
 				Storage:       testStorage,
 			}
 
-			opts := r.craneOptions(ctx, true)
+			opts := craneOptions(ctx, true)
 			opts = append(opts, crane.WithAuthFromKeychain(authn.DefaultKeychain))
 			repoURL, err := r.getArtifactURL(obj, opts)
 			g.Expect(err).To(BeNil())
@@ -1194,7 +1194,7 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignature(t *testing.T) {
 				g.Expect(err).ToNot(HaveOccurred())
 			}
 
-			opts := r.craneOptions(ctx, true)
+			opts := craneOptions(ctx, true)
 			opts = append(opts, crane.WithAuthFromKeychain(keychain))
 			artifactURL, err := r.getArtifactURL(obj, opts)
 			g.Expect(err).ToNot(HaveOccurred())
@@ -1677,7 +1677,7 @@ func TestOCIRepository_getArtifactURL(t *testing.T) {
 				obj.Spec.Reference = tt.reference
 			}
 
-			opts := r.craneOptions(ctx, true)
+			opts := craneOptions(ctx, true)
 			opts = append(opts, crane.WithAuthFromKeychain(authn.DefaultKeychain))
 			got, err := r.getArtifactURL(obj, opts)
 			if tt.wantErr {
