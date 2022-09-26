@@ -23,26 +23,41 @@ import (
 
 	"github.com/docker/cli/cli/config"
 	"github.com/docker/cli/cli/config/credentials"
+	"github.com/fluxcd/source-controller/internal/oci"
 	"github.com/google/go-containerregistry/pkg/authn"
 	"helm.sh/helm/v3/pkg/registry"
 	corev1 "k8s.io/api/core/v1"
 )
 
+// helper is a subset of the Docker credential helper credentials.Helper interface used by NewKeychainFromHelper.
+type helper struct {
+	registry           string
+	username, password string
+	err                error
+}
+
+func (h helper) Get(serverURL string) (string, string, error) {
+	if serverURL != h.registry {
+		return "", "", fmt.Errorf("unexpected serverURL: %s", serverURL)
+	}
+	return h.username, h.password, h.err
+}
+
 // LoginOptionFromSecret derives authentication data from a Secret to login to an OCI registry. This Secret
 // may either hold "username" and "password" fields or be of the corev1.SecretTypeDockerConfigJson type and hold
 // a corev1.DockerConfigJsonKey field with a complete Docker configuration. If both, "username" and "password" are
 // empty, a nil LoginOption and a nil error will be returned.
-func LoginOptionFromSecret(registryURL string, secret corev1.Secret) (registry.LoginOption, error) {
+func LoginOptionFromSecret(registryURL string, secret corev1.Secret) (authn.Keychain, error) {
 	var username, password string
+	parsedURL, err := url.Parse(registryURL)
+	if err != nil {
+		return nil, fmt.Errorf("unable to parse registry URL '%s' while reconciling Secret '%s': %w",
+			registryURL, secret.Name, err)
+	}
 	if secret.Type == corev1.SecretTypeDockerConfigJson {
 		dockerCfg, err := config.LoadFromReader(bytes.NewReader(secret.Data[corev1.DockerConfigJsonKey]))
 		if err != nil {
 			return nil, fmt.Errorf("unable to load Docker config from Secret '%s': %w", secret.Name, err)
-		}
-		parsedURL, err := url.Parse(registryURL)
-		if err != nil {
-			return nil, fmt.Errorf("unable to parse registry URL '%s' while reconciling Secret '%s': %w",
-				registryURL, secret.Name, err)
 		}
 		authConfig, err := dockerCfg.GetAuthConfig(parsedURL.Host)
 		if err != nil {
@@ -63,19 +78,38 @@ func LoginOptionFromSecret(registryURL string, secret corev1.Secret) (registry.L
 	}
 	switch {
 	case username == "" && password == "":
-		return nil, nil
+		return oci.Anonymous{}, nil
 	case username == "" || password == "":
 		return nil, fmt.Errorf("invalid '%s' secret data: required fields 'username' and 'password'", secret.Name)
 	}
-	return registry.LoginOptBasicAuth(username, password), nil
+	return authn.NewKeychainFromHelper(helper{registry: parsedURL.Host, username: username, password: password}), nil
 }
 
-// OIDCAdaptHelper returns an ORAS credentials callback configured with the authorization data
-// from the given authn authenticator. This allows for example to make use of credential helpers from
+// KeyChainAdaptHelper returns an ORAS credentials callback configured with the authorization data
+// from the given authn keychain. This allows for example to make use of credential helpers from
 // cloud providers.
 // Ref: https://github.com/google/go-containerregistry/tree/main/pkg/authn
-func OIDCAdaptHelper(authenticator authn.Authenticator) (registry.LoginOption, error) {
-	authConfig, err := authenticator.Authorization()
+func KeychainAdaptHelper(keyChain authn.Keychain) func(string) (registry.LoginOption, error) {
+	return func(registryURL string) (registry.LoginOption, error) {
+		parsedURL, err := url.Parse(registryURL)
+		if err != nil {
+			return nil, fmt.Errorf("unable to parse registry URL '%s'", registryURL)
+		}
+		authenticator, err := keyChain.Resolve(resource{parsedURL.Host})
+		if err != nil {
+			return nil, fmt.Errorf("unable to resolve credentials for registry '%s': %w", registryURL, err)
+		}
+
+		return AuthAdaptHelper(authenticator)
+	}
+}
+
+// AuthAdaptHelper returns an ORAS credentials callback configured with the authorization data
+// from the given authn authenticator This allows for example to make use of credential helpers from
+// cloud providers.
+// Ref: https://github.com/google/go-containerregistry/tree/main/pkg/authn
+func AuthAdaptHelper(auth authn.Authenticator) (registry.LoginOption, error) {
+	authConfig, err := auth.Authorization()
 	if err != nil {
 		return nil, fmt.Errorf("unable to get authentication data from OIDC: %w", err)
 	}
@@ -90,4 +124,16 @@ func OIDCAdaptHelper(authenticator authn.Authenticator) (registry.LoginOption, e
 		return nil, fmt.Errorf("invalid auth data: required fields 'username' and 'password'")
 	}
 	return registry.LoginOptBasicAuth(username, password), nil
+}
+
+type resource struct {
+	registry string
+}
+
+func (r resource) String() string {
+	return r.registry
+}
+
+func (r resource) RegistryStr() string {
+	return r.registry
 }

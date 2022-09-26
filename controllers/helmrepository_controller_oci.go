@@ -45,6 +45,7 @@ import (
 	helper "github.com/fluxcd/pkg/runtime/controller"
 	"github.com/fluxcd/pkg/runtime/patch"
 	"github.com/fluxcd/pkg/runtime/predicates"
+	"github.com/google/go-containerregistry/pkg/authn"
 
 	"github.com/fluxcd/source-controller/api/v1beta2"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
@@ -263,36 +264,21 @@ func (r *HelmRepositoryOCIReconciler) reconcile(ctx context.Context, obj *v1beta
 	}
 	conditions.Delete(obj, meta.StalledCondition)
 
-	var loginOpts []helmreg.LoginOption
+	var (
+		authenticator authn.Authenticator
+		keychain      authn.Keychain
+		err           error
+	)
 	// Configure any authentication related options.
 	if obj.Spec.SecretRef != nil {
-		// Attempt to retrieve secret.
-		name := types.NamespacedName{
-			Namespace: obj.GetNamespace(),
-			Name:      obj.Spec.SecretRef.Name,
-		}
-		var secret corev1.Secret
-		if err := r.Client.Get(ctx, name, &secret); err != nil {
-			e := fmt.Errorf("failed to get secret '%s': %w", name.String(), err)
-			conditions.MarkFalse(obj, meta.ReadyCondition, sourcev1.AuthenticationFailedReason, e.Error())
-			result, retErr = ctrl.Result{}, e
-			return
-		}
-
-		// Construct login options.
-		loginOpt, err := registry.LoginOptionFromSecret(obj.Spec.URL, secret)
+		keychain, err = authFromSecret(ctx, r.Client, obj)
 		if err != nil {
-			e := fmt.Errorf("failed to configure Helm client with secret data: %w", err)
-			conditions.MarkFalse(obj, meta.ReadyCondition, sourcev1.AuthenticationFailedReason, e.Error())
-			result, retErr = ctrl.Result{}, e
+			conditions.MarkFalse(obj, meta.ReadyCondition, sourcev1.AuthenticationFailedReason, err.Error())
+			result, retErr = ctrl.Result{}, err
 			return
-		}
-
-		if loginOpt != nil {
-			loginOpts = append(loginOpts, loginOpt)
 		}
 	} else if obj.Spec.Provider != sourcev1.GenericOCIProvider && obj.Spec.Type == sourcev1.HelmRepositoryTypeOCI {
-		auth, authErr := oidcAuthFromAdapter(ctxTimeout, obj.Spec.URL, obj.Spec.Provider)
+		auth, authErr := oidcAuth(ctxTimeout, obj.Spec.URL, obj.Spec.Provider)
 		if authErr != nil && !errors.Is(authErr, oci.ErrUnconfiguredProvider) {
 			e := fmt.Errorf("failed to get credential from %s: %w", obj.Spec.Provider, authErr)
 			conditions.MarkFalse(obj, meta.ReadyCondition, sourcev1.AuthenticationFailedReason, e.Error())
@@ -300,12 +286,19 @@ func (r *HelmRepositoryOCIReconciler) reconcile(ctx context.Context, obj *v1beta
 			return
 		}
 		if auth != nil {
-			loginOpts = append(loginOpts, auth)
+			authenticator = auth
 		}
 	}
 
+	loginOpt, err := makeLoginOption(authenticator, keychain, obj.Spec.URL)
+	if err != nil {
+		conditions.MarkFalse(obj, meta.ReadyCondition, sourcev1.AuthenticationFailedReason, err.Error())
+		result, retErr = ctrl.Result{}, err
+		return
+	}
+
 	// Create registry client and login if needed.
-	registryClient, file, err := r.RegistryClientGenerator(loginOpts != nil)
+	registryClient, file, err := r.RegistryClientGenerator(loginOpt != nil)
 	if err != nil {
 		e := fmt.Errorf("failed to create registry client: %w", err)
 		conditions.MarkFalse(obj, meta.ReadyCondition, meta.FailedReason, e.Error())
@@ -332,8 +325,8 @@ func (r *HelmRepositoryOCIReconciler) reconcile(ctx context.Context, obj *v1beta
 	conditions.Delete(obj, meta.StalledCondition)
 
 	// Attempt to login to the registry if credentials are provided.
-	if loginOpts != nil {
-		err = chartRepo.Login(loginOpts...)
+	if loginOpt != nil {
+		err = chartRepo.Login(loginOpt)
 		if err != nil {
 			e := fmt.Errorf("failed to login to registry '%s': %w", obj.Spec.URL, err)
 			conditions.MarkFalse(obj, meta.ReadyCondition, sourcev1.AuthenticationFailedReason, e.Error())
@@ -375,16 +368,37 @@ func (r *HelmRepositoryOCIReconciler) eventLogf(ctx context.Context, obj runtime
 	r.Eventf(obj, eventType, reason, msg)
 }
 
-// oidcAuthFromAdapter generates the OIDC credential authenticator based on the specified cloud provider.
-func oidcAuthFromAdapter(ctx context.Context, url, provider string) (helmreg.LoginOption, error) {
-	auth, err := oidcAuth(ctx, url, provider)
+// authFromSecret returns an authn.Keychain for the given HelmRepository.
+// If the HelmRepository does not specify a secretRef, an anonymous keychain is returned.
+func authFromSecret(ctx context.Context, client client.Client, obj *sourcev1.HelmRepository) (authn.Keychain, error) {
+	// Attempt to retrieve secret.
+	name := types.NamespacedName{
+		Namespace: obj.GetNamespace(),
+		Name:      obj.Spec.SecretRef.Name,
+	}
+	var secret corev1.Secret
+	if err := client.Get(ctx, name, &secret); err != nil {
+		return nil, fmt.Errorf("failed to get secret '%s': %w", name.String(), err)
+	}
+
+	// Construct login options.
+	keychain, err := registry.LoginOptionFromSecret(obj.Spec.URL, secret)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to configure Helm client with secret data: %w", err)
+	}
+	return keychain, nil
+}
+
+// makeLoginOption returns a registry login option for the given HelmRepository.
+// If the HelmRepository does not specify a secretRef, a nil login option is returned.
+func makeLoginOption(auth authn.Authenticator, keychain authn.Keychain, registryURL string) (helmreg.LoginOption, error) {
+	if auth != nil {
+		return registry.AuthAdaptHelper(auth)
 	}
 
-	if auth == nil {
-		return nil, fmt.Errorf("could not validate OCI provider %s with URL %s", provider, url)
+	if keychain != nil {
+		return registry.KeychainAdaptHelper(keychain)(registryURL)
 	}
 
-	return registry.OIDCAdaptHelper(auth)
+	return nil, nil
 }

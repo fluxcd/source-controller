@@ -215,6 +215,7 @@ func (r *OCIChartRepository) DownloadChart(chart *repo.ChartVersion) (*bytes.Buf
 // Login attempts to login to the OCI registry.
 // It returns an error on failure.
 func (r *OCIChartRepository) Login(opts ...registry.LoginOption) error {
+	// Get login credentials from keychain
 	err := r.RegistryClient.Login(r.URL.Host, opts...)
 	if err != nil {
 		return err
