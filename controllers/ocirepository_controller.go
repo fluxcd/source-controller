@@ -385,7 +385,7 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, obj *sour
 	// Mark observations about the revision on the object
 	defer func() {
 		if !obj.GetArtifact().HasRevision(revision) {
-			message := fmt.Sprintf("new digest '%s' for '%s'", revision, url)
+			message := fmt.Sprintf("new revision '%s' for '%s'", revision, url)
 			conditions.MarkTrue(obj, sourcev1.ArtifactOutdatedCondition, "NewRevision", message)
 			conditions.MarkReconciling(obj, "NewRevision", message)
 		}
@@ -415,7 +415,7 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, obj *sour
 			return sreconcile.ResultEmpty, e
 		}
 
-		conditions.MarkTrue(obj, sourcev1.SourceVerifiedCondition, meta.SucceededReason, "verified signature of digest %s", revision)
+		conditions.MarkTrue(obj, sourcev1.SourceVerifiedCondition, meta.SucceededReason, "verified signature of revision %s", revision)
 	}
 
 	// Skip pulling if the artifact revision hasn't changes
@@ -448,7 +448,7 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, obj *sour
 	metadata.Metadata = manifest.Annotations
 
 	// Extract the compressed content from the selected layer
-	blob, err := r.getLayerCompressed(obj, img)
+	blob, err := r.selectLayer(obj, img)
 	if err != nil {
 		e := serror.NewGeneric(err, sourcev1.OCILayerOperationFailedReason)
 		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
@@ -501,8 +501,9 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, obj *sour
 	return sreconcile.ResultSuccess, nil
 }
 
-// getLayerCompressed finds the matching layer and returns its compress contents
-func (r *OCIRepositoryReconciler) getLayerCompressed(obj *sourcev1.OCIRepository, image gcrv1.Image) (io.ReadCloser, error) {
+// selectLayer finds the matching layer and returns its compressed contents.
+// If no layer selector was provided, we pick the first layer from the OCI artifact.
+func (r *OCIRepositoryReconciler) selectLayer(obj *sourcev1.OCIRepository, image gcrv1.Image) (io.ReadCloser, error) {
 	layers, err := image.Layers()
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse artifact layers: %w", err)
@@ -933,7 +934,7 @@ func (r *OCIRepositoryReconciler) reconcileArtifact(ctx context.Context, obj *so
 	// The artifact is up-to-date
 	if obj.GetArtifact().HasRevision(artifact.Revision) {
 		r.eventLogf(ctx, obj, events.EventTypeTrace, sourcev1.ArtifactUpToDateReason,
-			"artifact up-to-date with remote digest: '%s'", artifact.Revision)
+			"artifact up-to-date with remote revision: '%s'", artifact.Revision)
 		return sreconcile.ResultSuccess, nil
 	}
 
@@ -1094,7 +1095,7 @@ func (r *OCIRepositoryReconciler) notify(ctx context.Context, oldObj, newObj *so
 			oldChecksum = oldObj.GetArtifact().Checksum
 		}
 
-		message := fmt.Sprintf("stored artifact with digest '%s' from '%s'", newObj.Status.Artifact.Revision, newObj.Spec.URL)
+		message := fmt.Sprintf("stored artifact with revision '%s' from '%s'", newObj.Status.Artifact.Revision, newObj.Spec.URL)
 
 		// enrich message with upstream annotations if found
 		if info := newObj.GetArtifact().Metadata; info != nil {

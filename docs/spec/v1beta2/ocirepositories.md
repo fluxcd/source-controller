@@ -31,7 +31,7 @@ In the above example:
   by the `.spec.interval` field.
 - It pulls the `latest` tag of the `ghcr.io/stefanprodan/manifests/podinfo`
   repository, indicated by the `.spec.ref.tag` and `.spec.url` fields.
-- The resolved SHA256 digest is used as the Artifact
+- The resolved tag and SHA256 digest is used as the Artifact
   revision, reported in-cluster in the `.status.artifact.revision` field.
 - When the current OCIRepository digest differs from the latest fetched
   digest, a new Artifact is archived.
@@ -49,7 +49,7 @@ You can run this example by saving the manifest into `ocirepository.yaml`.
 
    ```console
    NAME      URL                                            AGE   READY   STATUS                                                                        
-   podinfo   oci://ghcr.io/stefanprodan/manifests/podinfo   5s    True    stored artifact with digest '3b6cdcc7adcc9a84d3214ee1c029543789d90b5ae69debe9efa3f66e982875de'
+   podinfo   oci://ghcr.io/stefanprodan/manifests/podinfo   5s    True    stored artifact with revision 'latest/3b6cdcc7adcc9a84d3214ee1c029543789d90b5ae69debe9efa3f66e982875de'
    ```
 
 3. Run `kubectl describe ocirepository podinfo` to see the [Artifact](#artifact)
@@ -62,17 +62,17 @@ You can run this example by saving the manifest into `ocirepository.yaml`.
        Checksum:          d7e924b4882e55b97627355c7b3d2e711e9b54303afa2f50c25377f4df66a83b
        Last Update Time:  2022-06-14T11:23:36Z
        Path:              ocirepository/default/podinfo/3b6cdcc7adcc9a84d3214ee1c029543789d90b5ae69debe9efa3f66e982875de.tar.gz
-       Revision:          3b6cdcc7adcc9a84d3214ee1c029543789d90b5ae69debe9efa3f66e982875de
+       Revision:          latest/3b6cdcc7adcc9a84d3214ee1c029543789d90b5ae69debe9efa3f66e982875de
        URL:               http://source-controller.flux-system.svc.cluster.local./ocirepository/oci/podinfo/3b6cdcc7adcc9a84d3214ee1c029543789d90b5ae69debe9efa3f66e982875de.tar.gz
      Conditions:
        Last Transition Time:  2022-06-14T11:23:36Z
-       Message:               stored artifact for digest '3b6cdcc7adcc9a84d3214ee1c029543789d90b5ae69debe9efa3f66e982875de'
+       Message:               stored artifact for revision 'latest/3b6cdcc7adcc9a84d3214ee1c029543789d90b5ae69debe9efa3f66e982875de'
        Observed Generation:   1
        Reason:                Succeeded
        Status:                True
        Type:                  Ready
        Last Transition Time:  2022-06-14T11:23:36Z
-       Message:               stored artifact for digest '3b6cdcc7adcc9a84d3214ee1c029543789d90b5ae69debe9efa3f66e982875de'
+       Message:               stored artifact for revision 'latest/3b6cdcc7adcc9a84d3214ee1c029543789d90b5ae69debe9efa3f66e982875de'
        Observed Generation:   1
        Reason:                Succeeded
        Status:                True
@@ -82,7 +82,7 @@ You can run this example by saving the manifest into `ocirepository.yaml`.
    Events:
      Type    Reason               Age   From               Message
      ----    ------               ----  ----               -------
-     Normal  NewArtifact          62s   source-controller  stored artifact with digest '3b6cdcc7adcc9a84d3214ee1c029543789d90b5ae69debe9efa3f66e982875de' from 'oci://ghcr.io/stefanprodan/manifests/podinfo'
+     Normal  NewArtifact          62s   source-controller  stored artifact with revision 'latest/3b6cdcc7adcc9a84d3214ee1c029543789d90b5ae69debe9efa3f66e982875de' from 'oci://ghcr.io/stefanprodan/manifests/podinfo'
    ```
 
 ## Writing an OCIRepository spec
@@ -391,12 +391,17 @@ metadata:
 spec:
   layerSelector:
     mediaType: "application/deployment.content.v1.tar+gzip"
+    operation: extract # can be 'extract' or 'copy', defaults to 'extract'
 ```
 
 If the layer selector matches more than one layer, the first layer matching the specified media type will be used.
 Note that the selected OCI layer must be
 [compressed](https://github.com/opencontainers/image-spec/blob/v1.0.2/layer.md#gzip-media-types)
 in the `tar+gzip` format.
+
+When `.spec.layerSelector.operation` is set to `copy`, instead of extracting the
+compressed layer, the controller copies the tarball as-is to storage, thus
+keeping the original content unaltered.
 
 ### Ignore
 
@@ -673,8 +678,8 @@ lists
 
 ```console
 LAST SEEN   TYPE     REASON                OBJECT                               MESSAGE
-2m14s       Normal   NewArtifact           ocirepository/<repository-name>      stored artifact for digest '3b6cdcc7adcc9a84d3214ee1c029543789d90b5ae69debe9efa3f66e982875de'
-36s         Normal   ArtifactUpToDate      ocirepository/<repository-name>      artifact up-to-date with remote digest: '3b6cdcc7adcc9a84d3214ee1c029543789d90b5ae69debe9efa3f66e982875de'
+2m14s       Normal   NewArtifact           ocirepository/<repository-name>      stored artifact for revision 'latest/3b6cdcc7adcc9a84d3214ee1c029543789d90b5ae69debe9efa3f66e982875de'
+36s         Normal   ArtifactUpToDate      ocirepository/<repository-name>      artifact up-to-date with remote revision: 'latest/3b6cdcc7adcc9a84d3214ee1c029543789d90b5ae69debe9efa3f66e982875de'
 94s         Warning  OCIOperationFailed    ocirepository/<repository-name>      failed to pull artifact from 'oci://ghcr.io/stefanprodan/manifests/podinfo': couldn't find tag "0.0.1"
 ```
 
@@ -690,7 +695,7 @@ specific OCIRepository, e.g.
 The OCIRepository reports the latest synchronized state from the OCI repository
 as an Artifact object in the `.status.artifact` of the resource.
 
-The `.status.artifact.revision` holds the SHA256 digest of the upstream OCI artifact.
+The `.status.artifact.revision` holds the tag and SHA256 digest of the upstream OCI artifact.
 
 The `.status.artifact.metadata` holds the upstream OCI artifact metadata such as the
 [OpenContainers standard annotations](https://github.com/opencontainers/image-spec/blob/main/annotations.md).
@@ -719,7 +724,7 @@ status:
       org.opencontainers.image.revision: 6.1.8/b3b00fe35424a45d373bf4c7214178bc36fd7872
       org.opencontainers.image.source: https://github.com/stefanprodan/podinfo.git
     path: ocirepository/<namespace>/<repository-name>/<digest>.tar.gz
-    revision: <digest>
+    revision: <tag>/<digest>
     url: http://source-controller.<namespace>.svc.cluster.local./ocirepository/<namespace>/<repository-name>/<digest>.tar.gz
 ```
 

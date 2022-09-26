@@ -390,8 +390,8 @@ func TestOCIRepository_reconcileSource_authStrategy(t *testing.T) {
 			name: "HTTP without basic auth",
 			want: sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new digest '<digest>' for '<url>'"),
-				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new digest '<digest>' for '<url>'"),
+				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new revision '<digest>' for '<url>'"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new revision '<digest>' for '<url>'"),
 			},
 		},
 		{
@@ -411,8 +411,8 @@ func TestOCIRepository_reconcileSource_authStrategy(t *testing.T) {
 				includeSecret: true,
 			},
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new digest '<digest>' for '<url>'"),
-				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new digest '<digest>' for '<url>'"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new revision '<digest>' for '<url>'"),
+				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new revision '<digest>' for '<url>'"),
 			},
 		},
 		{
@@ -432,8 +432,8 @@ func TestOCIRepository_reconcileSource_authStrategy(t *testing.T) {
 				includeSA: true,
 			},
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new digest '<digest>' for '<url>'"),
-				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new digest '<digest>' for '<url>'"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new revision '<digest>' for '<url>'"),
+				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new revision '<digest>' for '<url>'"),
 			},
 		},
 		{
@@ -515,8 +515,8 @@ func TestOCIRepository_reconcileSource_authStrategy(t *testing.T) {
 				},
 			},
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new digest '<digest>' for '<url>'"),
-				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new digest '<digest>' for '<url>'"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new revision '<digest>' for '<url>'"),
+				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new revision '<digest>' for '<url>'"),
 			},
 		},
 		{
@@ -587,8 +587,8 @@ func TestOCIRepository_reconcileSource_authStrategy(t *testing.T) {
 			},
 			provider: "azure",
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new digest '<digest>' for '<url>'"),
-				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new digest '<digest>' for '<url>'"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new revision '<digest>' for '<url>'"),
+				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new revision '<digest>' for '<url>'"),
 			},
 		},
 	}
@@ -873,8 +873,8 @@ func TestOCIRepository_reconcileSource_remoteReference(t *testing.T) {
 			want:         sreconcile.ResultSuccess,
 			wantRevision: fmt.Sprintf("latest/%s", img6.digest.Hex),
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new digest"),
-				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new digest"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new revision"),
+				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new revision"),
 			},
 		},
 		{
@@ -885,8 +885,8 @@ func TestOCIRepository_reconcileSource_remoteReference(t *testing.T) {
 			want:         sreconcile.ResultSuccess,
 			wantRevision: fmt.Sprintf("%s/%s", img6.tag, img6.digest.Hex),
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new digest"),
-				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new digest"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new revision"),
+				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new revision"),
 			},
 		},
 		{
@@ -897,8 +897,8 @@ func TestOCIRepository_reconcileSource_remoteReference(t *testing.T) {
 			want:         sreconcile.ResultSuccess,
 			wantRevision: fmt.Sprintf("%s/%s", img6.tag, img6.digest.Hex),
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new digest"),
-				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new digest"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new revision"),
+				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new revision"),
 			},
 		},
 		{
@@ -909,8 +909,8 @@ func TestOCIRepository_reconcileSource_remoteReference(t *testing.T) {
 			wantRevision: img6.digest.Hex,
 			want:         sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new digest"),
-				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new digest"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new revision"),
+				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new revision"),
 			},
 		},
 		{
@@ -955,8 +955,8 @@ func TestOCIRepository_reconcileSource_remoteReference(t *testing.T) {
 			want:         sreconcile.ResultSuccess,
 			wantRevision: fmt.Sprintf("%s/%s", img6.tag, img6.digest.Hex),
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new digest"),
-				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new digest"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new revision"),
+				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new revision"),
 			},
 		},
 		{
@@ -969,8 +969,8 @@ func TestOCIRepository_reconcileSource_remoteReference(t *testing.T) {
 			want:         sreconcile.ResultSuccess,
 			wantRevision: img5.digest.Hex,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new digest"),
-				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new digest"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new revision"),
+				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new revision"),
 			},
 		},
 	}
@@ -1049,9 +1049,9 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignature(t *testing.T) {
 			shouldSign: true,
 			want:       sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new digest '<digest>' for '<url>'"),
-				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new digest '<digest>' for '<url>'"),
-				*conditions.TrueCondition(sourcev1.SourceVerifiedCondition, meta.SucceededReason, "verified signature of digest <digest>"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new revision '<digest>' for '<url>'"),
+				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new revision '<digest>' for '<url>'"),
+				*conditions.TrueCondition(sourcev1.SourceVerifiedCondition, meta.SucceededReason, "verified signature of revision <digest>"),
 			},
 		},
 		{
@@ -1064,8 +1064,8 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignature(t *testing.T) {
 			wantErrMsg: "failed to verify the signature using provider 'cosign': no matching signatures were found for '<url>'",
 			want:       sreconcile.ResultEmpty,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new digest '<digest>' for '<url>'"),
-				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new digest '<digest>' for '<url>'"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new revision '<digest>' for '<url>'"),
+				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new revision '<digest>' for '<url>'"),
 				*conditions.FalseCondition(sourcev1.SourceVerifiedCondition, sourcev1.VerificationError, "failed to verify the signature using provider '<provider>': no matching signatures were found for '<url>'"),
 			},
 		},
@@ -1079,8 +1079,8 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignature(t *testing.T) {
 			want:    sreconcile.ResultEmpty,
 			keyless: true,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new digest '<digest>' for '<url>'"),
-				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new digest '<digest>' for '<url>'"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new revision '<digest>' for '<url>'"),
+				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new revision '<digest>' for '<url>'"),
 				*conditions.FalseCondition(sourcev1.SourceVerifiedCondition, sourcev1.VerificationError, "failed to verify the signature using provider '<provider> keyless': no matching signatures"),
 			},
 		},
@@ -1109,7 +1109,7 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignature(t *testing.T) {
 			},
 			want: sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.SourceVerifiedCondition, meta.SucceededReason, "verified signature of digest <digest>"),
+				*conditions.TrueCondition(sourcev1.SourceVerifiedCondition, meta.SucceededReason, "verified signature of revision <digest>"),
 			},
 		},
 		{
@@ -1258,7 +1258,7 @@ func TestOCIRepository_reconcileArtifact(t *testing.T) {
 				Revision: "revision",
 			},
 			beforeFunc: func(obj *sourcev1.OCIRepository) {
-				conditions.MarkTrue(obj, sourcev1.ArtifactOutdatedCondition, "NewRevision", "new digest")
+				conditions.MarkTrue(obj, sourcev1.ArtifactOutdatedCondition, "NewRevision", "new revision")
 			},
 			want: sreconcile.ResultSuccess,
 			assertPaths: []string{
@@ -1698,7 +1698,7 @@ func TestOCIRepositoryReconciler_notify(t *testing.T) {
 					},
 				}
 			},
-			wantEvent: "Normal NewArtifact stored artifact with digest 'xxx' from 'oci://newurl.io', origin source 'https://github.com/stefanprodan/podinfo', origin revision '6.1.8/b3b00fe35424a45d373bf4c7214178bc36fd7872'",
+			wantEvent: "Normal NewArtifact stored artifact with revision 'xxx' from 'oci://newurl.io', origin source 'https://github.com/stefanprodan/podinfo', origin revision '6.1.8/b3b00fe35424a45d373bf4c7214178bc36fd7872'",
 		},
 		{
 			name:   "recovery from failure",
@@ -1714,7 +1714,7 @@ func TestOCIRepositoryReconciler_notify(t *testing.T) {
 				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Checksum: "yyy"}
 				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "ready")
 			},
-			wantEvent: "Normal Succeeded stored artifact with digest 'xxx' from 'oci://newurl.io'",
+			wantEvent: "Normal Succeeded stored artifact with revision 'xxx' from 'oci://newurl.io'",
 		},
 		{
 			name:   "recovery and new artifact",
@@ -1730,7 +1730,7 @@ func TestOCIRepositoryReconciler_notify(t *testing.T) {
 				obj.Status.Artifact = &sourcev1.Artifact{Revision: "aaa", Checksum: "bbb"}
 				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "ready")
 			},
-			wantEvent: "Normal NewArtifact stored artifact with digest 'aaa' from 'oci://newurl.io'",
+			wantEvent: "Normal NewArtifact stored artifact with revision 'aaa' from 'oci://newurl.io'",
 		},
 		{
 			name:   "no updates",
