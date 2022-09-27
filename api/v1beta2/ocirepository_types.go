@@ -203,6 +203,17 @@ type OCIRepositoryStatus struct {
 	// +optional
 	Artifact *Artifact `json:"artifact,omitempty"`
 
+	// ContentConfigChecksum is a checksum of all the configurations related to
+	// the content of the source artifact:
+	//  - .spec.ignore
+	//  - .spec.layerSelector
+	// observed in .status.observedGeneration version of the object. This can
+	// be used to determine if the content configuration has changed and the
+	// artifact needs to be rebuilt.
+	// It has the format of `<algo>:<checksum>`, for example: `sha256:<checksum>`.
+	// +optional
+	ContentConfigChecksum string `json:"contentConfigChecksum,omitempty"`
+
 	meta.ReconcileRequestStatus `json:",inline"`
 }
 
