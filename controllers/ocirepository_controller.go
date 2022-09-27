@@ -61,6 +61,7 @@ import (
 	"github.com/fluxcd/pkg/runtime/events"
 	"github.com/fluxcd/pkg/runtime/patch"
 	"github.com/fluxcd/pkg/runtime/predicates"
+	"github.com/fluxcd/pkg/sourceignore"
 	"github.com/fluxcd/pkg/untar"
 	"github.com/fluxcd/pkg/version"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
@@ -992,7 +993,20 @@ func (r *OCIRepositoryReconciler) reconcileArtifact(ctx context.Context, obj *so
 			return sreconcile.ResultEmpty, e
 		}
 	default:
-		if err := r.Storage.Archive(&artifact, dir, nil); err != nil {
+		// Load ignore rules for archiving.
+		ignoreDomain := strings.Split(dir, string(filepath.Separator))
+		ps, err := sourceignore.LoadIgnorePatterns(dir, ignoreDomain)
+		if err != nil {
+			return sreconcile.ResultEmpty, serror.NewGeneric(
+				fmt.Errorf("failed to load source ignore patterns from repository: %w", err),
+				"SourceIgnoreError",
+			)
+		}
+		if obj.Spec.Ignore != nil {
+			ps = append(ps, sourceignore.ReadPatterns(strings.NewReader(*obj.Spec.Ignore), ignoreDomain)...)
+		}
+
+		if err := r.Storage.Archive(&artifact, dir, SourceIgnoreFilter(ps, ignoreDomain)); err != nil {
 			e := serror.NewGeneric(
 				fmt.Errorf("unable to archive artifact to storage: %s", err),
 				sourcev1.ArchiveOperationFailedReason,

@@ -1392,6 +1392,27 @@ func TestOCIRepository_reconcileArtifact(t *testing.T) {
 			assertPaths: []string{
 				"latest.tar.gz",
 			},
+			afterFunc: func(g *WithT, obj *sourcev1.OCIRepository) {
+				g.Expect(obj.Status.Artifact.Checksum).To(Equal("de37cb640bfe6c789f2b131416d259747d5757f7fe5e1d9d48f32d8c30af5934"))
+			},
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.ArtifactInStorageCondition, meta.SucceededReason, "stored artifact for digest"),
+			},
+		},
+		{
+			name:       "Artifact with source ignore",
+			targetPath: "testdata/oci/repository",
+			artifact:   &sourcev1.Artifact{Revision: "revision"},
+			beforeFunc: func(obj *sourcev1.OCIRepository) {
+				obj.Spec.Ignore = pointer.String("foo.txt")
+			},
+			want: sreconcile.ResultSuccess,
+			assertPaths: []string{
+				"latest.tar.gz",
+			},
+			afterFunc: func(g *WithT, obj *sourcev1.OCIRepository) {
+				g.Expect(obj.Status.Artifact.Checksum).To(Equal("05aada03e3e3e96f5f85a8f31548d833974ce862be14942fb3313eef2df861ec"))
+			},
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(sourcev1.ArtifactInStorageCondition, meta.SucceededReason, "stored artifact for digest"),
 			},
