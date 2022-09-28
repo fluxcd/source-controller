@@ -174,9 +174,10 @@ func ComputeReconcileResult(obj conditions.Setter, res Result, recErr error, rb 
 // LowestRequeuingResult returns the ReconcileResult with the lowest requeue
 // period.
 // Weightage:
-//  ResultRequeue - immediate requeue (lowest)
-//  ResultSuccess - requeue at an interval
-//  ResultEmpty - no requeue
+//
+//	ResultRequeue - immediate requeue (lowest)
+//	ResultSuccess - requeue at an interval
+//	ResultEmpty - no requeue
 func LowestRequeuingResult(i, j Result) Result {
 	switch {
 	case i == ResultEmpty:

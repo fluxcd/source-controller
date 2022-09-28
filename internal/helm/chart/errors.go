@@ -53,8 +53,9 @@ func (e *BuildError) Error() string {
 // Is returns true if the Reason or Err equals target.
 // It can be used to programmatically place an arbitrary Err in the
 // context of the Builder:
-//  err := &BuildError{Reason: ErrChartPull, Err: errors.New("arbitrary transport error")}
-//  errors.Is(err, ErrChartPull)
+//
+//	err := &BuildError{Reason: ErrChartPull, Err: errors.New("arbitrary transport error")}
+//	errors.Is(err, ErrChartPull)
 func (e *BuildError) Is(target error) bool {
 	if e.Reason == target {
 		return true
