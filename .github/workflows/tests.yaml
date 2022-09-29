@@ -34,6 +34,7 @@ jobs:
             ${{ runner.os }}-go-
       - name: Run tests
         env:
+          SKIP_COSIGN_VERIFICATION: true
           TEST_AZURE_ACCOUNT_NAME: ${{ secrets.TEST_AZURE_ACCOUNT_NAME }}
           TEST_AZURE_ACCOUNT_KEY: ${{ secrets.TEST_AZURE_ACCOUNT_KEY }}
         run: make test
@@ -51,6 +52,8 @@ jobs:
           go-version: 1.19.x
       - name: Run tests
         env:
+          SKIP_COSIGN_VERIFICATION: true
+
           TEST_AZURE_ACCOUNT_NAME: ${{ secrets.TEST_AZURE_ACCOUNT_NAME }}
           TEST_AZURE_ACCOUNT_KEY: ${{ secrets.TEST_AZURE_ACCOUNT_KEY }}
           
@@ -87,3 +90,5 @@ jobs:
             ${{ runner.os }}-go-
       - name: Run tests
         run: make test
+        env:
+          SKIP_COSIGN_VERIFICATION: true

@@ -4,13 +4,16 @@ TAG ?= latest
 
 # Base image used to build the Go binary
 LIBGIT2_IMG ?= ghcr.io/fluxcd/golang-with-libgit2-only
-LIBGIT2_TAG ?= v0.2.0
+LIBGIT2_TAG ?= v0.3.0
 
 # Allows for defining additional Go test args, e.g. '-tags integration'.
 GO_TEST_ARGS ?= -race
 
 # Allows for filtering tests based on the specified prefix
 GO_TEST_PREFIX ?=
+
+# Defines whether cosign verification should be skipped.
+SKIP_COSIGN_VERIFICATION ?= false
 
 # Allows for defining additional Docker buildx arguments,
 # e.g. '--push'.
