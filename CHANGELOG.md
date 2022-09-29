@@ -2,6 +2,60 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.30.0
+
+**Release date:** 2022-09-29
+
+This prerelease adds support for Cosign verification in `OCIRepository` source.
+The signatures verification can be configured by setting `OCIRepository.spec.verify` with
+`provider` as `cosign` and a `secretRef` to a secret containing the public key.
+Cosign keyless verification is also supported, please see the
+[OCIRepository API documentation](https://github.com/fluxcd/source-controller/blob/api/v0.30.0/docs/spec/v1beta2/ocirepositories.md#verification)
+for more details.
+
+It also comes with strict validation rules for API fields which define a
+(time) duration. Effectively, this means values without a time unit (e.g. `ms`,
+`s`, `m`, `h`) will now be rejected by the API server. To stimulate sane
+configurations, the units `ns`, `us` and `µs` can no longer be configured, nor
+can `h` be set for fields defining a timeout value.
+
+In addition, the controller dependencies have been updated
+to Kubernetes controller-runtime v0.13.
+
+:warning: **Breaking changes:**
+- `.spec.interval` new validation pattern is `"^([0-9]+(\\.[0-9]+)?(ms|s|m|h))+$"`
+- `.spec.timeout` new validation pattern is `"^([0-9]+(\\.[0-9]+)?(ms|s|m))+$"`
+
+Improvements:
+- api: add custom validation for v1.Duration types
+  [#903](https://github.com/fluxcd/source-controller/pull/903)
+- [RFC-0003] Implement OCIRepository verification using Cosign
+  [#876](https://github.com/fluxcd/source-controller/pull/876)
+- Consider bipolarity conditions in Ready condition summarization
+  [#907](https://github.com/fluxcd/source-controller/pull/907)
+- Update Bucket related SDK dependencies
+  [#911](https://github.com/fluxcd/source-controller/pull/911)
+- Add custom CA certificates to system certificates
+  [#904](https://github.com/fluxcd/source-controller/pull/904)
+- [OCIRepository] Optimise OCI artifacts reconciliation
+  [#913](https://github.com/fluxcd/source-controller/pull/913)
+- Update dependencies
+  [#919](https://github.com/fluxcd/source-controller/pull/919)
+- Build with Go 1.19
+  [#920](https://github.com/fluxcd/source-controller/pull/920)
+- Bump libgit2 image and disable cosign verification for CI
+  [#921](https://github.com/fluxcd/source-controller/pull/921)
+- OCIRepositoryReconciler no-op improvements
+  [#917](https://github.com/fluxcd/source-controller/pull/917)
+- Accept a slice of remote.Option for cosign verification
+  [#916](https://github.com/fluxcd/source-controller/pull/916)
+- Update pkg/oci to v0.11.0
+  [#922](https://github.com/fluxcd/source-controller/pull/922)
+
+Fixes:
+- Handle nil OCI authenticator with malformed registry
+  [#897](https://github.com/fluxcd/source-controller/pull/897)
+
 ## 0.29.0
 
 **Release date:** 2022-09-09
