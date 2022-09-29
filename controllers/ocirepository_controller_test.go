@@ -38,15 +38,6 @@ import (
 	"time"
 
 	"github.com/darkowlzz/controller-check/status"
-	"github.com/fluxcd/pkg/apis/meta"
-	"github.com/fluxcd/pkg/oci"
-	"github.com/fluxcd/pkg/runtime/conditions"
-	"github.com/fluxcd/pkg/runtime/patch"
-	"github.com/fluxcd/pkg/untar"
-	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
-	serror "github.com/fluxcd/source-controller/internal/error"
-	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
-	"github.com/fluxcd/source-controller/pkg/git"
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/crane"
 	"github.com/google/go-containerregistry/pkg/registry"
@@ -60,11 +51,25 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/record"
+	"k8s.io/utils/pointer"
 	kstatus "sigs.k8s.io/cli-utils/pkg/kstatus/status"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	fakeclient "sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+
+	"github.com/fluxcd/pkg/apis/meta"
+	"github.com/fluxcd/pkg/oci"
+	"github.com/fluxcd/pkg/runtime/conditions"
+	"github.com/fluxcd/pkg/runtime/patch"
+	"github.com/fluxcd/pkg/untar"
+
+	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
+	serror "github.com/fluxcd/source-controller/internal/error"
+	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
+	"github.com/fluxcd/source-controller/pkg/git"
 )
+
+const ociRepoEmptyContentConfigChecksum = "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 
 func TestOCIRepository_Reconcile(t *testing.T) {
 	g := NewWithT(t)
@@ -1237,9 +1242,131 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignature(t *testing.T) {
 	}
 }
 
-func TestOCIRepository_reconcileArtifact(t *testing.T) {
+func TestOCIRepository_reconcileSource_noop(t *testing.T) {
 	g := NewWithT(t)
 
+	testRevision := "6.1.5/d1fc4595915714af2492dc4b66097de1e10f80150c8899907d8f8e61c6d6f67d"
+
+	tmpDir := t.TempDir()
+	server, err := setupRegistryServer(ctx, tmpDir, registryOptions{})
+	g.Expect(err).ToNot(HaveOccurred())
+
+	_, err = pushMultiplePodinfoImages(server.registryHost, "6.1.5")
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// NOTE: The following verifies if it was a noop run by checking the
+	// artifact metadata which is unknown unless the image is pulled.
+
+	tests := []struct {
+		name       string
+		beforeFunc func(obj *sourcev1.OCIRepository)
+		afterFunc  func(g *WithT, artifact *sourcev1.Artifact)
+	}{
+		{
+			name: "full reconcile - no existing artifact",
+			afterFunc: func(g *WithT, artifact *sourcev1.Artifact) {
+				g.Expect(artifact.Metadata).ToNot(BeEmpty())
+			},
+		},
+		{
+			name: "noop - artifact revisions and ccc match",
+			beforeFunc: func(obj *sourcev1.OCIRepository) {
+				obj.Status.Artifact = &sourcev1.Artifact{
+					Revision: testRevision,
+				}
+				obj.Status.ContentConfigChecksum = ociRepoEmptyContentConfigChecksum
+			},
+			afterFunc: func(g *WithT, artifact *sourcev1.Artifact) {
+				g.Expect(artifact.Metadata).To(BeEmpty())
+			},
+		},
+		{
+			name: "full reconcile - same rev, different ccc",
+			beforeFunc: func(obj *sourcev1.OCIRepository) {
+				obj.Status.ContentConfigChecksum = "some-checksum"
+				obj.Status.Artifact = &sourcev1.Artifact{
+					Revision: testRevision,
+				}
+			},
+			afterFunc: func(g *WithT, artifact *sourcev1.Artifact) {
+				g.Expect(artifact.Metadata).ToNot(BeEmpty())
+			},
+		},
+		{
+			name: "noop - same rev, observed layer selector",
+			beforeFunc: func(obj *sourcev1.OCIRepository) {
+				obj.Spec.LayerSelector = &sourcev1.OCILayerSelector{
+					MediaType: "application/vnd.docker.image.rootfs.diff.tar.gzip",
+					Operation: sourcev1.OCILayerCopy,
+				}
+				obj.Status.Artifact = &sourcev1.Artifact{
+					Revision: testRevision,
+				}
+				obj.Status.ContentConfigChecksum = "sha256:fcfd705e10431a341f2df5b05ecee1fb54facd9a5e88b0be82276bdf533b6c64"
+			},
+			afterFunc: func(g *WithT, artifact *sourcev1.Artifact) {
+				g.Expect(artifact.Metadata).To(BeEmpty())
+			},
+		},
+		{
+			name: "full reconcile - same rev, observed layer selector changed",
+			beforeFunc: func(obj *sourcev1.OCIRepository) {
+				obj.Spec.LayerSelector = &sourcev1.OCILayerSelector{
+					MediaType: "application/vnd.docker.image.rootfs.diff.tar.gzip",
+					Operation: sourcev1.OCILayerExtract,
+				}
+				obj.Status.Artifact = &sourcev1.Artifact{
+					Revision: testRevision,
+				}
+				obj.Status.ContentConfigChecksum = "sha256:fcfd705e10431a341f2df5b05ecee1fb54facd9a5e88b0be82276bdf533b6c64"
+			},
+			afterFunc: func(g *WithT, artifact *sourcev1.Artifact) {
+				g.Expect(artifact.Metadata).ToNot(BeEmpty())
+			},
+		},
+	}
+
+	builder := fakeclient.NewClientBuilder().WithScheme(testEnv.GetScheme())
+	r := &OCIRepositoryReconciler{
+		Client:        builder.Build(),
+		EventRecorder: record.NewFakeRecorder(32),
+		Storage:       testStorage,
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			obj := &sourcev1.OCIRepository{
+				ObjectMeta: metav1.ObjectMeta{
+					GenerateName: "noop-",
+				},
+				Spec: sourcev1.OCIRepositorySpec{
+					URL:       fmt.Sprintf("oci://%s/podinfo", server.registryHost),
+					Reference: &sourcev1.OCIRepositoryRef{Tag: "6.1.5"},
+					Interval:  metav1.Duration{Duration: interval},
+					Timeout:   &metav1.Duration{Duration: timeout},
+				},
+			}
+
+			if tt.beforeFunc != nil {
+				tt.beforeFunc(obj)
+			}
+
+			artifact := &sourcev1.Artifact{}
+			tmpDir := t.TempDir()
+			got, err := r.reconcileSource(ctx, obj, artifact, tmpDir)
+			g.Expect(err).ToNot(HaveOccurred())
+			g.Expect(got).To(Equal(sreconcile.ResultSuccess))
+
+			if tt.afterFunc != nil {
+				tt.afterFunc(g, artifact)
+			}
+		})
+	}
+}
+
+func TestOCIRepository_reconcileArtifact(t *testing.T) {
 	tests := []struct {
 		name             string
 		targetPath       string
@@ -1250,6 +1377,7 @@ func TestOCIRepository_reconcileArtifact(t *testing.T) {
 		assertArtifact   *sourcev1.Artifact
 		assertPaths      []string
 		assertConditions []metav1.Condition
+		afterFunc        func(g *WithT, obj *sourcev1.OCIRepository)
 	}{
 		{
 			name:       "Archiving Artifact creates correct files and condition",
@@ -1263,6 +1391,27 @@ func TestOCIRepository_reconcileArtifact(t *testing.T) {
 			want: sreconcile.ResultSuccess,
 			assertPaths: []string{
 				"latest.tar.gz",
+			},
+			afterFunc: func(g *WithT, obj *sourcev1.OCIRepository) {
+				g.Expect(obj.Status.Artifact.Checksum).To(Equal("de37cb640bfe6c789f2b131416d259747d5757f7fe5e1d9d48f32d8c30af5934"))
+			},
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.ArtifactInStorageCondition, meta.SucceededReason, "stored artifact for digest"),
+			},
+		},
+		{
+			name:       "Artifact with source ignore",
+			targetPath: "testdata/oci/repository",
+			artifact:   &sourcev1.Artifact{Revision: "revision"},
+			beforeFunc: func(obj *sourcev1.OCIRepository) {
+				obj.Spec.Ignore = pointer.String("foo.txt")
+			},
+			want: sreconcile.ResultSuccess,
+			assertPaths: []string{
+				"latest.tar.gz",
+			},
+			afterFunc: func(g *WithT, obj *sourcev1.OCIRepository) {
+				g.Expect(obj.Status.Artifact.Checksum).To(Equal("05aada03e3e3e96f5f85a8f31548d833974ce862be14942fb3313eef2df861ec"))
 			},
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(sourcev1.ArtifactInStorageCondition, meta.SucceededReason, "stored artifact for digest"),
@@ -1279,7 +1428,98 @@ func TestOCIRepository_reconcileArtifact(t *testing.T) {
 				obj.Status.Artifact = &sourcev1.Artifact{
 					Revision: "revision",
 				}
+				obj.Status.ContentConfigChecksum = ociRepoEmptyContentConfigChecksum
 			},
+			assertArtifact: &sourcev1.Artifact{
+				Revision: "revision",
+			},
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.ArtifactInStorageCondition, meta.SucceededReason, "stored artifact for digest"),
+			},
+		},
+		{
+			name:       "Artifact already present, unobserved ignore, rebuild artifact",
+			targetPath: "testdata/oci/repository",
+			artifact: &sourcev1.Artifact{
+				Revision: "revision",
+			},
+			beforeFunc: func(obj *sourcev1.OCIRepository) {
+				obj.Status.Artifact = &sourcev1.Artifact{Revision: "revision"}
+				obj.Spec.Ignore = pointer.String("aaa")
+				obj.Status.ContentConfigChecksum = ociRepoEmptyContentConfigChecksum
+			},
+			want: sreconcile.ResultSuccess,
+			assertPaths: []string{
+				"latest.tar.gz",
+			},
+			afterFunc: func(g *WithT, obj *sourcev1.OCIRepository) {
+				g.Expect(obj.Status.ContentConfigChecksum).To(Equal("sha256:9834876dcfb05cb167a5c24953eba58c4ac89b1adf57f28f2f9d09af107ee8f0"))
+			},
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.ArtifactInStorageCondition, meta.SucceededReason, "stored artifact for digest"),
+			},
+		},
+		{
+			name:       "Artifact already present, unobserved layer selector, rebuild artifact",
+			targetPath: "testdata/oci/repository",
+			artifact: &sourcev1.Artifact{
+				Revision: "revision",
+			},
+			beforeFunc: func(obj *sourcev1.OCIRepository) {
+				obj.Spec.LayerSelector = &sourcev1.OCILayerSelector{MediaType: "foo"}
+				obj.Status.Artifact = &sourcev1.Artifact{Revision: "revision"}
+				obj.Status.ContentConfigChecksum = ociRepoEmptyContentConfigChecksum
+			},
+			want: sreconcile.ResultSuccess,
+			assertPaths: []string{
+				"latest.tar.gz",
+			},
+			afterFunc: func(g *WithT, obj *sourcev1.OCIRepository) {
+				g.Expect(obj.Status.ContentConfigChecksum).To(Equal("sha256:82410edf339ab2945d97e26b92b6499e57156db63b94c17654b6ab97fbf86dbb"))
+			},
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.ArtifactInStorageCondition, meta.SucceededReason, "stored artifact for digest"),
+			},
+		},
+		{
+			name:       "Artifact already present, observed layer selector changed, rebuild artifact",
+			targetPath: "testdata/oci/repository",
+			artifact: &sourcev1.Artifact{
+				Revision: "revision",
+				Path:     "foo.txt",
+			},
+			beforeFunc: func(obj *sourcev1.OCIRepository) {
+				obj.Spec.LayerSelector = &sourcev1.OCILayerSelector{
+					MediaType: "foo",
+					Operation: sourcev1.OCILayerCopy,
+				}
+				obj.Status.Artifact = &sourcev1.Artifact{Revision: "revision"}
+				obj.Status.ContentConfigChecksum = ociRepoEmptyContentConfigChecksum
+			},
+			want: sreconcile.ResultSuccess,
+			assertPaths: []string{
+				"latest.tar.gz",
+			},
+			afterFunc: func(g *WithT, obj *sourcev1.OCIRepository) {
+				g.Expect(obj.Status.ContentConfigChecksum).To(Equal("sha256:0e0e1c82f6403c8ee74fdf51349c8b5d98c508b5374c507c7ffb2e41dbc875df"))
+			},
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.ArtifactInStorageCondition, meta.SucceededReason, "stored artifact for digest"),
+			},
+		},
+		{
+			name:       "Artifact already present, observed ignore and layer selector, up-to-date",
+			targetPath: "testdata/oci/repository",
+			artifact: &sourcev1.Artifact{
+				Revision: "revision",
+			},
+			beforeFunc: func(obj *sourcev1.OCIRepository) {
+				obj.Spec.Ignore = pointer.String("aaa")
+				obj.Spec.LayerSelector = &sourcev1.OCILayerSelector{MediaType: "foo"}
+				obj.Status.Artifact = &sourcev1.Artifact{Revision: "revision"}
+				obj.Status.ContentConfigChecksum = "sha256:0b56187b81cab6c3485583a46bec631f5ea08a1f69b769457f0e4aafb47884e3"
+			},
+			want: sreconcile.ResultSuccess,
 			assertArtifact: &sourcev1.Artifact{
 				Revision: "revision",
 			},
@@ -1317,6 +1557,7 @@ func TestOCIRepository_reconcileArtifact(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
 
 			obj := &sourcev1.OCIRepository{
 				ObjectMeta: metav1.ObjectMeta{
@@ -1343,6 +1584,10 @@ func TestOCIRepository_reconcileArtifact(t *testing.T) {
 
 			if tt.assertArtifact != nil {
 				g.Expect(obj.Status.Artifact).To(MatchArtifact(tt.artifact))
+			}
+
+			if tt.afterFunc != nil {
+				tt.afterFunc(g, obj)
 			}
 
 			for _, path := range tt.assertPaths {
@@ -1977,4 +2222,28 @@ func createTLSServer() (*httptest.Server, []byte, []byte, []byte, tls.Certificat
 	})
 	clientTLSCert, err = tls.X509KeyPair(clientCertPEM, clientKeyPEM)
 	return srv, rootCertPEM, clientCertPEM, clientKeyPEM, clientTLSCert, err
+}
+
+func TestOCIRepository_calculateContentConfigChecksum(t *testing.T) {
+	g := NewWithT(t)
+	obj := &sourcev1.OCIRepository{}
+	r := &OCIRepositoryReconciler{}
+
+	emptyChecksum := r.calculateContentConfigChecksum(obj)
+	g.Expect(emptyChecksum).To(Equal(ociRepoEmptyContentConfigChecksum))
+
+	// Ignore modified.
+	obj.Spec.Ignore = pointer.String("some-rule")
+	ignoreModChecksum := r.calculateContentConfigChecksum(obj)
+	g.Expect(emptyChecksum).ToNot(Equal(ignoreModChecksum))
+
+	// LayerSelector modified.
+	obj.Spec.LayerSelector = &sourcev1.OCILayerSelector{
+		MediaType: "application/vnd.docker.image.rootfs.diff.tar.gzip",
+	}
+	mediaTypeChecksum := r.calculateContentConfigChecksum(obj)
+	g.Expect(ignoreModChecksum).ToNot(Equal(mediaTypeChecksum))
+	obj.Spec.LayerSelector.Operation = sourcev1.OCILayerCopy
+	layerCopyChecksum := r.calculateContentConfigChecksum(obj)
+	g.Expect(mediaTypeChecksum).ToNot(Equal(layerCopyChecksum))
 }

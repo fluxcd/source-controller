@@ -18,6 +18,7 @@ package controllers
 
 import (
 	"context"
+	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
@@ -60,6 +61,7 @@ import (
 	"github.com/fluxcd/pkg/runtime/events"
 	"github.com/fluxcd/pkg/runtime/patch"
 	"github.com/fluxcd/pkg/runtime/predicates"
+	"github.com/fluxcd/pkg/sourceignore"
 	"github.com/fluxcd/pkg/untar"
 	"github.com/fluxcd/pkg/version"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
@@ -418,8 +420,10 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, obj *sour
 		conditions.MarkTrue(obj, sourcev1.SourceVerifiedCondition, meta.SucceededReason, "verified signature of revision %s", revision)
 	}
 
-	// Skip pulling if the artifact revision hasn't changes
-	if obj.GetArtifact().HasRevision(revision) {
+	// Skip pulling if the artifact revision and the content config checksum has
+	// not changed.
+	if obj.GetArtifact().HasRevision(revision) &&
+		r.calculateContentConfigChecksum(obj) == obj.Status.ContentConfigChecksum {
 		conditions.Delete(obj, sourcev1.FetchFailedCondition)
 		return sreconcile.ResultSuccess, nil
 	}
@@ -922,9 +926,13 @@ func (r *OCIRepositoryReconciler) reconcileArtifact(ctx context.Context, obj *so
 	artifact := r.Storage.NewArtifactFor(obj.Kind, obj, revision,
 		fmt.Sprintf("%s.tar.gz", r.digestFromRevision(revision)))
 
+	// Calculate the content config checksum.
+	ccc := r.calculateContentConfigChecksum(obj)
+
 	// Set the ArtifactInStorageCondition if there's no drift.
 	defer func() {
-		if obj.GetArtifact().HasRevision(artifact.Revision) {
+		if obj.GetArtifact().HasRevision(artifact.Revision) &&
+			obj.Status.ContentConfigChecksum == ccc {
 			conditions.Delete(obj, sourcev1.ArtifactOutdatedCondition)
 			conditions.MarkTrue(obj, sourcev1.ArtifactInStorageCondition, meta.SucceededReason,
 				"stored artifact for digest '%s'", artifact.Revision)
@@ -932,7 +940,8 @@ func (r *OCIRepositoryReconciler) reconcileArtifact(ctx context.Context, obj *so
 	}()
 
 	// The artifact is up-to-date
-	if obj.GetArtifact().HasRevision(artifact.Revision) {
+	if obj.GetArtifact().HasRevision(artifact.Revision) &&
+		obj.Status.ContentConfigChecksum == ccc {
 		r.eventLogf(ctx, obj, events.EventTypeTrace, sourcev1.ArtifactUpToDateReason,
 			"artifact up-to-date with remote revision: '%s'", artifact.Revision)
 		return sreconcile.ResultSuccess, nil
@@ -984,7 +993,20 @@ func (r *OCIRepositoryReconciler) reconcileArtifact(ctx context.Context, obj *so
 			return sreconcile.ResultEmpty, e
 		}
 	default:
-		if err := r.Storage.Archive(&artifact, dir, nil); err != nil {
+		// Load ignore rules for archiving.
+		ignoreDomain := strings.Split(dir, string(filepath.Separator))
+		ps, err := sourceignore.LoadIgnorePatterns(dir, ignoreDomain)
+		if err != nil {
+			return sreconcile.ResultEmpty, serror.NewGeneric(
+				fmt.Errorf("failed to load source ignore patterns from repository: %w", err),
+				"SourceIgnoreError",
+			)
+		}
+		if obj.Spec.Ignore != nil {
+			ps = append(ps, sourceignore.ReadPatterns(strings.NewReader(*obj.Spec.Ignore), ignoreDomain)...)
+		}
+
+		if err := r.Storage.Archive(&artifact, dir, SourceIgnoreFilter(ps, ignoreDomain)); err != nil {
 			e := serror.NewGeneric(
 				fmt.Errorf("unable to archive artifact to storage: %s", err),
 				sourcev1.ArchiveOperationFailedReason,
@@ -997,6 +1019,7 @@ func (r *OCIRepositoryReconciler) reconcileArtifact(ctx context.Context, obj *so
 	// Record it on the object
 	obj.Status.Artifact = artifact.DeepCopy()
 	obj.Status.Artifact.Metadata = metadata.Metadata
+	obj.Status.ContentConfigChecksum = ccc
 
 	// Update symlink on a "best effort" basis
 	url, err := r.Storage.Symlink(artifact, "latest.tar.gz")
@@ -1124,4 +1147,22 @@ func (r *OCIRepositoryReconciler) notify(ctx context.Context, oldObj, newObj *so
 			}
 		}
 	}
+}
+
+// calculateContentConfigChecksum calculates a checksum of all the
+// configurations that result in a change in the source artifact. It can be used
+// to decide if further reconciliation is needed when an artifact already exists
+// for a set of configurations.
+func (r *OCIRepositoryReconciler) calculateContentConfigChecksum(obj *sourcev1.OCIRepository) string {
+	c := []byte{}
+	// Consider the ignore rules.
+	if obj.Spec.Ignore != nil {
+		c = append(c, []byte(*obj.Spec.Ignore)...)
+	}
+	// Consider the layer selector.
+	if obj.Spec.LayerSelector != nil {
+		c = append(c, []byte(obj.GetLayerMediaType()+obj.GetLayerOperation())...)
+	}
+
+	return fmt.Sprintf("sha256:%x", sha256.Sum256(c))
 }
