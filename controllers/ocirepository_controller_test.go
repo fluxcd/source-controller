@@ -681,7 +681,7 @@ func TestOCIRepository_reconcileSource_authStrategy(t *testing.T) {
 				Storage:       testStorage,
 			}
 
-			opts := r.craneOptions(ctx, true)
+			opts := craneOptions(ctx, true)
 			opts = append(opts, crane.WithAuthFromKeychain(authn.DefaultKeychain))
 			repoURL, err := r.getArtifactURL(obj, opts)
 			g.Expect(err).To(BeNil())
@@ -1036,6 +1036,7 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignature(t *testing.T) {
 	tests := []struct {
 		name             string
 		reference        *sourcev1.OCIRepositoryRef
+		insecure         bool
 		digest           string
 		want             sreconcile.Result
 		wantErr          bool
@@ -1132,6 +1133,22 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignature(t *testing.T) {
 				*conditions.TrueCondition(sourcev1.SourceVerifiedCondition, "Verified", "verified"),
 			},
 		},
+		{
+			name: "insecure registries are not supported",
+			reference: &sourcev1.OCIRepositoryRef{
+				Tag: "6.1.4",
+			},
+			digest:     img4.digest.Hex,
+			shouldSign: true,
+			insecure:   true,
+			wantErr:    true,
+			want:       sreconcile.ResultEmpty,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new revision '<digest>' for '<url>'"),
+				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new revision '<digest>' for '<url>'"),
+				*conditions.FalseCondition(sourcev1.SourceVerifiedCondition, sourcev1.VerificationError, "cosign does not support insecure registries"),
+			},
+		},
 	}
 
 	builder := fakeclient.NewClientBuilder().WithScheme(testEnv.GetScheme())
@@ -1181,6 +1198,10 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignature(t *testing.T) {
 				},
 			}
 
+			if tt.insecure {
+				obj.Spec.Insecure = true
+			}
+
 			if !tt.keyless {
 				obj.Spec.Verify.SecretRef = &meta.LocalObjectReference{Name: "cosign-key"}
 			}
@@ -1194,7 +1215,7 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignature(t *testing.T) {
 				g.Expect(err).ToNot(HaveOccurred())
 			}
 
-			opts := r.craneOptions(ctx, true)
+			opts := craneOptions(ctx, true)
 			opts = append(opts, crane.WithAuthFromKeychain(keychain))
 			artifactURL, err := r.getArtifactURL(obj, opts)
 			g.Expect(err).ToNot(HaveOccurred())
@@ -1677,7 +1698,7 @@ func TestOCIRepository_getArtifactURL(t *testing.T) {
 				obj.Spec.Reference = tt.reference
 			}
 
-			opts := r.craneOptions(ctx, true)
+			opts := craneOptions(ctx, true)
 			opts = append(opts, crane.WithAuthFromKeychain(authn.DefaultKeychain))
 			got, err := r.getArtifactURL(obj, opts)
 			if tt.wantErr {
