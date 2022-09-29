@@ -528,8 +528,8 @@ github.com/fluxcd/pkg/lockedfile v0.1.0 h1:YsYFAkd6wawMCcD74ikadAKXA4s2sukdxrn7w
 github.com/fluxcd/pkg/lockedfile v0.1.0/go.mod h1:EJLan8t9MiOcgTs8+puDjbE6I/KAfHbdvIy9VUgIjm8=
 github.com/fluxcd/pkg/masktoken v0.2.0 h1:HoSPTk4l1fz5Fevs2vVRvZGru33blfMwWSZKsHdfG/0=
 github.com/fluxcd/pkg/masktoken v0.2.0/go.mod h1:EA7GleAHL33kN6kTW06m5R3/Q26IyuGO7Ef/0CtpDI0=
-github.com/fluxcd/pkg/oci v0.10.0 h1:Ay8Btd5rG8hkzK9sQIvOp15cJ3EhzR8w2kVIUynKhbo=
-github.com/fluxcd/pkg/oci v0.10.0/go.mod h1:gsRwVj0gTwk9xF3PuPJQ4R+rv8UtT26Gi7r1XfyBw8A=
+github.com/fluxcd/pkg/oci v0.11.0 h1:mMZmF1zwUpM/Nq77aHwhiDmiOhOy3KbbBx0ZS1rOycU=
+github.com/fluxcd/pkg/oci v0.11.0/go.mod h1:gsRwVj0gTwk9xF3PuPJQ4R+rv8UtT26Gi7r1XfyBw8A=
 github.com/fluxcd/pkg/runtime v0.19.0 h1:4lRlnZfJFhWvuaNWgNsAkPQg09633xCRCf9d0SgXIWk=
 github.com/fluxcd/pkg/runtime v0.19.0/go.mod h1:9Kh46LjwQeUu6o1DUQulLGyo5e5wfQxeFf4ONNobT3U=
 github.com/fluxcd/pkg/sourceignore v0.2.0 h1:ooNbIkfxqNB+KKiY4AU+/DxwzjIKIOWBRK1As5QFlug=
