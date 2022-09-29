@@ -6,6 +6,7 @@ IMG="${IMG:-}"
 TAG="${TAG:-}"
 IMG_TAG="${IMG}:${TAG}"
 DOWNLOAD_URL="https://github.com/fluxcd/golang-with-libgit2/releases/download/${TAG}"
+SKIP_COSIGN_VERIFICATION="${SKIP_COSIGN_VERIFICATION:-false}"
 
 TMP_DIR=$(mktemp -d)
 
@@ -48,9 +49,13 @@ cosign_verify(){
 assure_provenance() {
     [[ $# -eq 1 ]] || fatal 'assure_provenance needs exactly 1 arguments'
 
-    cosign_verify "${TMP_DIR}/checksums.txt.pem" \
-                  "${TMP_DIR}/checksums.txt.sig" \
-                  "${TMP_DIR}/checksums.txt"
+    if "${SKIP_COSIGN_VERIFICATION}"; then
+        echo 'Skipping cosign verification...'
+    else
+        cosign_verify "${TMP_DIR}/checksums.txt.pem" \
+                    "${TMP_DIR}/checksums.txt.sig" \
+                    "${TMP_DIR}/checksums.txt"
+    fi
 
     pushd "${TMP_DIR}" || exit
     if command -v sha256sum; then

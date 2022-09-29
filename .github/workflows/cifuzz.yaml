@@ -33,3 +33,5 @@ jobs:
           ${{ runner.os }}-go
     - name: Smoke test Fuzzers
       run: make fuzz-smoketest
+      env:
+        SKIP_COSIGN_VERIFICATION: true
