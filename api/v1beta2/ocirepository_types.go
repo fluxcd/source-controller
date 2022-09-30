@@ -211,8 +211,21 @@ type OCIRepositoryStatus struct {
 	// be used to determine if the content configuration has changed and the
 	// artifact needs to be rebuilt.
 	// It has the format of `<algo>:<checksum>`, for example: `sha256:<checksum>`.
+	//
+	// Deprecated: Replaced with explicit fields for observed artifact content
+	// config in the status.
 	// +optional
 	ContentConfigChecksum string `json:"contentConfigChecksum,omitempty"`
+
+	// ObservedIgnore is the observed exclusion patterns used for constructing
+	// the source artifact.
+	// +optional
+	ObservedIgnore *string `json:"observedIgnore,omitempty"`
+
+	// ObservedLayerSelector is the observed layer selector used for constructing
+	// the source artifact.
+	// +optional
+	ObservedLayerSelector *OCILayerSelector `json:"observedLayerSelector,omitempty"`
 
 	meta.ReconcileRequestStatus `json:",inline"`
 }

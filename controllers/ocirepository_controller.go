@@ -18,7 +18,6 @@ package controllers
 
 import (
 	"context"
-	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
@@ -44,6 +43,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
 	kuberecorder "k8s.io/client-go/tools/record"
+	"k8s.io/utils/pointer"
 
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -427,10 +427,9 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, obj *sour
 		conditions.MarkTrue(obj, sourcev1.SourceVerifiedCondition, meta.SucceededReason, "verified signature of revision %s", revision)
 	}
 
-	// Skip pulling if the artifact revision and the content config checksum has
+	// Skip pulling if the artifact revision and the source configuration has
 	// not changed.
-	if obj.GetArtifact().HasRevision(revision) &&
-		r.calculateContentConfigChecksum(obj) == obj.Status.ContentConfigChecksum {
+	if obj.GetArtifact().HasRevision(revision) && !ociContentConfigChanged(obj) {
 		conditions.Delete(obj, sourcev1.FetchFailedCondition)
 		return sreconcile.ResultSuccess, nil
 	}
@@ -918,13 +917,9 @@ func (r *OCIRepositoryReconciler) reconcileArtifact(ctx context.Context, obj *so
 	artifact := r.Storage.NewArtifactFor(obj.Kind, obj, revision,
 		fmt.Sprintf("%s.tar.gz", r.digestFromRevision(revision)))
 
-	// Calculate the content config checksum.
-	ccc := r.calculateContentConfigChecksum(obj)
-
 	// Set the ArtifactInStorageCondition if there's no drift.
 	defer func() {
-		if obj.GetArtifact().HasRevision(artifact.Revision) &&
-			obj.Status.ContentConfigChecksum == ccc {
+		if obj.GetArtifact().HasRevision(artifact.Revision) && !ociContentConfigChanged(obj) {
 			conditions.Delete(obj, sourcev1.ArtifactOutdatedCondition)
 			conditions.MarkTrue(obj, sourcev1.ArtifactInStorageCondition, meta.SucceededReason,
 				"stored artifact for digest '%s'", artifact.Revision)
@@ -932,8 +927,7 @@ func (r *OCIRepositoryReconciler) reconcileArtifact(ctx context.Context, obj *so
 	}()
 
 	// The artifact is up-to-date
-	if obj.GetArtifact().HasRevision(artifact.Revision) &&
-		obj.Status.ContentConfigChecksum == ccc {
+	if obj.GetArtifact().HasRevision(artifact.Revision) && !ociContentConfigChanged(obj) {
 		r.eventLogf(ctx, obj, events.EventTypeTrace, sourcev1.ArtifactUpToDateReason,
 			"artifact up-to-date with remote revision: '%s'", artifact.Revision)
 		return sreconcile.ResultSuccess, nil
@@ -1008,10 +1002,12 @@ func (r *OCIRepositoryReconciler) reconcileArtifact(ctx context.Context, obj *so
 		}
 	}
 
-	// Record it on the object
+	// Record the observations on the object.
 	obj.Status.Artifact = artifact.DeepCopy()
 	obj.Status.Artifact.Metadata = metadata.Metadata
-	obj.Status.ContentConfigChecksum = ccc
+	obj.Status.ContentConfigChecksum = "" // To be removed in the next API version.
+	obj.Status.ObservedIgnore = obj.Spec.Ignore
+	obj.Status.ObservedLayerSelector = obj.Spec.LayerSelector
 
 	// Update symlink on a "best effort" basis
 	url, err := r.Storage.Symlink(artifact, "latest.tar.gz")
@@ -1141,24 +1137,6 @@ func (r *OCIRepositoryReconciler) notify(ctx context.Context, oldObj, newObj *so
 	}
 }
 
-// calculateContentConfigChecksum calculates a checksum of all the
-// configurations that result in a change in the source artifact. It can be used
-// to decide if further reconciliation is needed when an artifact already exists
-// for a set of configurations.
-func (r *OCIRepositoryReconciler) calculateContentConfigChecksum(obj *sourcev1.OCIRepository) string {
-	c := []byte{}
-	// Consider the ignore rules.
-	if obj.Spec.Ignore != nil {
-		c = append(c, []byte(*obj.Spec.Ignore)...)
-	}
-	// Consider the layer selector.
-	if obj.Spec.LayerSelector != nil {
-		c = append(c, []byte(obj.GetLayerMediaType()+obj.GetLayerOperation())...)
-	}
-
-	return fmt.Sprintf("sha256:%x", sha256.Sum256(c))
-}
-
 // craneOptions sets the auth headers, timeout and user agent
 // for all operations against remote container registries.
 func craneOptions(ctx context.Context, insecure bool) []crane.Option {
@@ -1207,4 +1185,32 @@ func makeRemoteOptions(ctxTimeout context.Context, obj *sourcev1.OCIRepository, 
 type remoteOptions struct {
 	craneOpts  []crane.Option
 	verifyOpts []remote.Option
+}
+
+// ociContentConfigChanged evaluates the current spec with the observations
+// of the artifact in the status to determine if artifact content configuration
+// has changed and requires rebuilding the artifact.
+func ociContentConfigChanged(obj *sourcev1.OCIRepository) bool {
+	if !pointer.StringEqual(obj.Spec.Ignore, obj.Status.ObservedIgnore) {
+		return true
+	}
+
+	if !layerSelectorEqual(obj.Spec.LayerSelector, obj.Status.ObservedLayerSelector) {
+		return true
+	}
+
+	return false
+}
+
+// Returns true if both arguments are nil or both arguments
+// dereference to the same value.
+// Based on k8s.io/utils/pointer/pointer.go pointer value equality.
+func layerSelectorEqual(a, b *sourcev1.OCILayerSelector) bool {
+	if (a == nil) != (b == nil) {
+		return false
+	}
+	if a == nil {
+		return true
+	}
+	return *a == *b
 }

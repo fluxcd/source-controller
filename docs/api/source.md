@@ -2608,7 +2608,8 @@ string
 </h3>
 <p>
 (<em>Appears on:</em>
-<a href="#source.toolkit.fluxcd.io/v1beta2.OCIRepositorySpec">OCIRepositorySpec</a>)
+<a href="#source.toolkit.fluxcd.io/v1beta2.OCIRepositorySpec">OCIRepositorySpec</a>, 
+<a href="#source.toolkit.fluxcd.io/v1beta2.OCIRepositoryStatus">OCIRepositoryStatus</a>)
 </p>
 <p>OCILayerSelector specifies which layer should be extracted from an OCI Artifact</p>
 <div class="md-typeset__scrollwrap">
@@ -3010,6 +3011,36 @@ observed in .status.observedGeneration version of the object. This can
 be used to determine if the content configuration has changed and the
 artifact needs to be rebuilt.
 It has the format of <code>&lt;algo&gt;:&lt;checksum&gt;</code>, for example: <code>sha256:&lt;checksum&gt;</code>.</p>
+<p>Deprecated: Replaced with explicit fields for observed artifact content
+config in the status.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>observedIgnore</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>ObservedIgnore is the observed exclusion patterns used for constructing
+the source artifact.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>observedLayerSelector</code><br>
+<em>
+<a href="#source.toolkit.fluxcd.io/v1beta2.OCILayerSelector">
+OCILayerSelector
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>ObservedLayerSelector is the observed layer selector used for constructing
+the source artifact.</p>
 </td>
 </tr>
 <tr>

@@ -69,8 +69,6 @@ import (
 	"github.com/fluxcd/source-controller/pkg/git"
 )
 
-const ociRepoEmptyContentConfigChecksum = "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-
 func TestOCIRepository_Reconcile(t *testing.T) {
 	g := NewWithT(t)
 
@@ -1290,21 +1288,48 @@ func TestOCIRepository_reconcileSource_noop(t *testing.T) {
 			},
 		},
 		{
-			name: "noop - artifact revisions and ccc match",
+			name: "noop - artifact revisions match",
 			beforeFunc: func(obj *sourcev1.OCIRepository) {
 				obj.Status.Artifact = &sourcev1.Artifact{
 					Revision: testRevision,
 				}
-				obj.Status.ContentConfigChecksum = ociRepoEmptyContentConfigChecksum
 			},
 			afterFunc: func(g *WithT, artifact *sourcev1.Artifact) {
 				g.Expect(artifact.Metadata).To(BeEmpty())
 			},
 		},
 		{
-			name: "full reconcile - same rev, different ccc",
+			name: "full reconcile - same rev, unobserved ignore",
 			beforeFunc: func(obj *sourcev1.OCIRepository) {
-				obj.Status.ContentConfigChecksum = "some-checksum"
+				obj.Status.ObservedIgnore = pointer.String("aaa")
+				obj.Status.Artifact = &sourcev1.Artifact{
+					Revision: testRevision,
+				}
+			},
+			afterFunc: func(g *WithT, artifact *sourcev1.Artifact) {
+				g.Expect(artifact.Metadata).ToNot(BeEmpty())
+			},
+		},
+		{
+			name: "noop - same rev, observed ignore",
+			beforeFunc: func(obj *sourcev1.OCIRepository) {
+				obj.Spec.Ignore = pointer.String("aaa")
+				obj.Status.ObservedIgnore = pointer.String("aaa")
+				obj.Status.Artifact = &sourcev1.Artifact{
+					Revision: testRevision,
+				}
+			},
+			afterFunc: func(g *WithT, artifact *sourcev1.Artifact) {
+				g.Expect(artifact.Metadata).To(BeEmpty())
+			},
+		},
+		{
+			name: "full reconcile - same rev, unobserved layer selector",
+			beforeFunc: func(obj *sourcev1.OCIRepository) {
+				obj.Spec.LayerSelector = &sourcev1.OCILayerSelector{
+					MediaType: "application/vnd.docker.image.rootfs.diff.tar.gzip",
+					Operation: sourcev1.OCILayerCopy,
+				}
 				obj.Status.Artifact = &sourcev1.Artifact{
 					Revision: testRevision,
 				}
@@ -1320,10 +1345,13 @@ func TestOCIRepository_reconcileSource_noop(t *testing.T) {
 					MediaType: "application/vnd.docker.image.rootfs.diff.tar.gzip",
 					Operation: sourcev1.OCILayerCopy,
 				}
+				obj.Status.ObservedLayerSelector = &sourcev1.OCILayerSelector{
+					MediaType: "application/vnd.docker.image.rootfs.diff.tar.gzip",
+					Operation: sourcev1.OCILayerCopy,
+				}
 				obj.Status.Artifact = &sourcev1.Artifact{
 					Revision: testRevision,
 				}
-				obj.Status.ContentConfigChecksum = "sha256:fcfd705e10431a341f2df5b05ecee1fb54facd9a5e88b0be82276bdf533b6c64"
 			},
 			afterFunc: func(g *WithT, artifact *sourcev1.Artifact) {
 				g.Expect(artifact.Metadata).To(BeEmpty())
@@ -1336,10 +1364,13 @@ func TestOCIRepository_reconcileSource_noop(t *testing.T) {
 					MediaType: "application/vnd.docker.image.rootfs.diff.tar.gzip",
 					Operation: sourcev1.OCILayerExtract,
 				}
+				obj.Status.ObservedLayerSelector = &sourcev1.OCILayerSelector{
+					MediaType: "application/vnd.docker.image.rootfs.diff.tar.gzip",
+					Operation: sourcev1.OCILayerCopy,
+				}
 				obj.Status.Artifact = &sourcev1.Artifact{
 					Revision: testRevision,
 				}
-				obj.Status.ContentConfigChecksum = "sha256:fcfd705e10431a341f2df5b05ecee1fb54facd9a5e88b0be82276bdf533b6c64"
 			},
 			afterFunc: func(g *WithT, artifact *sourcev1.Artifact) {
 				g.Expect(artifact.Metadata).ToNot(BeEmpty())
@@ -1449,7 +1480,6 @@ func TestOCIRepository_reconcileArtifact(t *testing.T) {
 				obj.Status.Artifact = &sourcev1.Artifact{
 					Revision: "revision",
 				}
-				obj.Status.ContentConfigChecksum = ociRepoEmptyContentConfigChecksum
 			},
 			assertArtifact: &sourcev1.Artifact{
 				Revision: "revision",
@@ -1467,14 +1497,13 @@ func TestOCIRepository_reconcileArtifact(t *testing.T) {
 			beforeFunc: func(obj *sourcev1.OCIRepository) {
 				obj.Status.Artifact = &sourcev1.Artifact{Revision: "revision"}
 				obj.Spec.Ignore = pointer.String("aaa")
-				obj.Status.ContentConfigChecksum = ociRepoEmptyContentConfigChecksum
 			},
 			want: sreconcile.ResultSuccess,
 			assertPaths: []string{
 				"latest.tar.gz",
 			},
 			afterFunc: func(g *WithT, obj *sourcev1.OCIRepository) {
-				g.Expect(obj.Status.ContentConfigChecksum).To(Equal("sha256:9834876dcfb05cb167a5c24953eba58c4ac89b1adf57f28f2f9d09af107ee8f0"))
+				g.Expect(*obj.Status.ObservedIgnore).To(Equal("aaa"))
 			},
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(sourcev1.ArtifactInStorageCondition, meta.SucceededReason, "stored artifact for digest"),
@@ -1489,14 +1518,13 @@ func TestOCIRepository_reconcileArtifact(t *testing.T) {
 			beforeFunc: func(obj *sourcev1.OCIRepository) {
 				obj.Spec.LayerSelector = &sourcev1.OCILayerSelector{MediaType: "foo"}
 				obj.Status.Artifact = &sourcev1.Artifact{Revision: "revision"}
-				obj.Status.ContentConfigChecksum = ociRepoEmptyContentConfigChecksum
 			},
 			want: sreconcile.ResultSuccess,
 			assertPaths: []string{
 				"latest.tar.gz",
 			},
 			afterFunc: func(g *WithT, obj *sourcev1.OCIRepository) {
-				g.Expect(obj.Status.ContentConfigChecksum).To(Equal("sha256:82410edf339ab2945d97e26b92b6499e57156db63b94c17654b6ab97fbf86dbb"))
+				g.Expect(obj.Status.ObservedLayerSelector.MediaType).To(Equal("foo"))
 			},
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(sourcev1.ArtifactInStorageCondition, meta.SucceededReason, "stored artifact for digest"),
@@ -1515,14 +1543,14 @@ func TestOCIRepository_reconcileArtifact(t *testing.T) {
 					Operation: sourcev1.OCILayerCopy,
 				}
 				obj.Status.Artifact = &sourcev1.Artifact{Revision: "revision"}
-				obj.Status.ContentConfigChecksum = ociRepoEmptyContentConfigChecksum
 			},
 			want: sreconcile.ResultSuccess,
 			assertPaths: []string{
 				"latest.tar.gz",
 			},
 			afterFunc: func(g *WithT, obj *sourcev1.OCIRepository) {
-				g.Expect(obj.Status.ContentConfigChecksum).To(Equal("sha256:0e0e1c82f6403c8ee74fdf51349c8b5d98c508b5374c507c7ffb2e41dbc875df"))
+				g.Expect(obj.Status.ObservedLayerSelector.MediaType).To(Equal("foo"))
+				g.Expect(obj.Status.ObservedLayerSelector.Operation).To(Equal(sourcev1.OCILayerCopy))
 			},
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(sourcev1.ArtifactInStorageCondition, meta.SucceededReason, "stored artifact for digest"),
@@ -1538,7 +1566,8 @@ func TestOCIRepository_reconcileArtifact(t *testing.T) {
 				obj.Spec.Ignore = pointer.String("aaa")
 				obj.Spec.LayerSelector = &sourcev1.OCILayerSelector{MediaType: "foo"}
 				obj.Status.Artifact = &sourcev1.Artifact{Revision: "revision"}
-				obj.Status.ContentConfigChecksum = "sha256:0b56187b81cab6c3485583a46bec631f5ea08a1f69b769457f0e4aafb47884e3"
+				obj.Status.ObservedIgnore = pointer.String("aaa")
+				obj.Status.ObservedLayerSelector = &sourcev1.OCILayerSelector{MediaType: "foo"}
 			},
 			want: sreconcile.ResultSuccess,
 			assertArtifact: &sourcev1.Artifact{
@@ -2245,26 +2274,131 @@ func createTLSServer() (*httptest.Server, []byte, []byte, []byte, tls.Certificat
 	return srv, rootCertPEM, clientCertPEM, clientKeyPEM, clientTLSCert, err
 }
 
-func TestOCIRepository_calculateContentConfigChecksum(t *testing.T) {
-	g := NewWithT(t)
-	obj := &sourcev1.OCIRepository{}
-	r := &OCIRepositoryReconciler{}
-
-	emptyChecksum := r.calculateContentConfigChecksum(obj)
-	g.Expect(emptyChecksum).To(Equal(ociRepoEmptyContentConfigChecksum))
-
-	// Ignore modified.
-	obj.Spec.Ignore = pointer.String("some-rule")
-	ignoreModChecksum := r.calculateContentConfigChecksum(obj)
-	g.Expect(emptyChecksum).ToNot(Equal(ignoreModChecksum))
-
-	// LayerSelector modified.
-	obj.Spec.LayerSelector = &sourcev1.OCILayerSelector{
-		MediaType: "application/vnd.docker.image.rootfs.diff.tar.gzip",
+func TestOCIContentConfigChanged(t *testing.T) {
+	tests := []struct {
+		name   string
+		spec   sourcev1.OCIRepositorySpec
+		status sourcev1.OCIRepositoryStatus
+		want   bool
+	}{
+		{
+			name: "same ignore, no layer selector",
+			spec: sourcev1.OCIRepositorySpec{
+				Ignore: pointer.String("nnn"),
+			},
+			status: sourcev1.OCIRepositoryStatus{
+				ObservedIgnore: pointer.String("nnn"),
+			},
+			want: false,
+		},
+		{
+			name: "different ignore, no layer selector",
+			spec: sourcev1.OCIRepositorySpec{
+				Ignore: pointer.String("nnn"),
+			},
+			status: sourcev1.OCIRepositoryStatus{
+				ObservedIgnore: pointer.String("mmm"),
+			},
+			want: true,
+		},
+		{
+			name: "same ignore, same layer selector",
+			spec: sourcev1.OCIRepositorySpec{
+				Ignore: pointer.String("nnn"),
+				LayerSelector: &sourcev1.OCILayerSelector{
+					MediaType: "foo",
+					Operation: sourcev1.OCILayerExtract,
+				},
+			},
+			status: sourcev1.OCIRepositoryStatus{
+				ObservedIgnore: pointer.String("nnn"),
+				ObservedLayerSelector: &sourcev1.OCILayerSelector{
+					MediaType: "foo",
+					Operation: sourcev1.OCILayerExtract,
+				},
+			},
+			want: false,
+		},
+		{
+			name: "same ignore, different layer selector operation",
+			spec: sourcev1.OCIRepositorySpec{
+				Ignore: pointer.String("nnn"),
+				LayerSelector: &sourcev1.OCILayerSelector{
+					MediaType: "foo",
+					Operation: sourcev1.OCILayerCopy,
+				},
+			},
+			status: sourcev1.OCIRepositoryStatus{
+				ObservedIgnore: pointer.String("nnn"),
+				ObservedLayerSelector: &sourcev1.OCILayerSelector{
+					MediaType: "foo",
+					Operation: sourcev1.OCILayerExtract,
+				},
+			},
+			want: true,
+		},
+		{
+			name: "same ignore, different layer selector mediatype",
+			spec: sourcev1.OCIRepositorySpec{
+				Ignore: pointer.String("nnn"),
+				LayerSelector: &sourcev1.OCILayerSelector{
+					MediaType: "bar",
+					Operation: sourcev1.OCILayerExtract,
+				},
+			},
+			status: sourcev1.OCIRepositoryStatus{
+				ObservedIgnore: pointer.String("nnn"),
+				ObservedLayerSelector: &sourcev1.OCILayerSelector{
+					MediaType: "foo",
+					Operation: sourcev1.OCILayerExtract,
+				},
+			},
+			want: true,
+		},
+		{
+			name: "no ignore, same layer selector",
+			spec: sourcev1.OCIRepositorySpec{
+				LayerSelector: &sourcev1.OCILayerSelector{
+					MediaType: "foo",
+					Operation: sourcev1.OCILayerExtract,
+				},
+			},
+			status: sourcev1.OCIRepositoryStatus{
+				ObservedLayerSelector: &sourcev1.OCILayerSelector{
+					MediaType: "foo",
+					Operation: sourcev1.OCILayerExtract,
+				},
+			},
+			want: false,
+		},
+		{
+			name: "no ignore, different layer selector",
+			spec: sourcev1.OCIRepositorySpec{
+				LayerSelector: &sourcev1.OCILayerSelector{
+					MediaType: "bar",
+					Operation: sourcev1.OCILayerExtract,
+				},
+			},
+			status: sourcev1.OCIRepositoryStatus{
+				ObservedLayerSelector: &sourcev1.OCILayerSelector{
+					MediaType: "foo",
+					Operation: sourcev1.OCILayerExtract,
+				},
+			},
+			want: true,
+		},
 	}
-	mediaTypeChecksum := r.calculateContentConfigChecksum(obj)
-	g.Expect(ignoreModChecksum).ToNot(Equal(mediaTypeChecksum))
-	obj.Spec.LayerSelector.Operation = sourcev1.OCILayerCopy
-	layerCopyChecksum := r.calculateContentConfigChecksum(obj)
-	g.Expect(mediaTypeChecksum).ToNot(Equal(layerCopyChecksum))
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			obj := &sourcev1.OCIRepository{
+				Spec:   tt.spec,
+				Status: tt.status,
+			}
+
+			g.Expect(ociContentConfigChanged(obj)).To(Equal(tt.want))
+		})
+	}
 }

@@ -777,6 +777,16 @@ func (in *OCIRepositoryStatus) DeepCopyInto(out *OCIRepositoryStatus) {
 		*out = new(Artifact)
 		(*in).DeepCopyInto(*out)
 	}
+	if in.ObservedIgnore != nil {
+		in, out := &in.ObservedIgnore, &out.ObservedIgnore
+		*out = new(string)
+		**out = **in
+	}
+	if in.ObservedLayerSelector != nil {
+		in, out := &in.ObservedLayerSelector, &out.ObservedLayerSelector
+		*out = new(OCILayerSelector)
+		**out = **in
+	}
 	out.ReconcileRequestStatus = in.ReconcileRequestStatus
 }
 
