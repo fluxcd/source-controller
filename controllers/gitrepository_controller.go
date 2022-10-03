@@ -18,12 +18,10 @@ package controllers
 
 import (
 	"context"
-	"crypto/sha256"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 
@@ -33,6 +31,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	kuberecorder "k8s.io/client-go/tools/record"
+	"k8s.io/utils/pointer"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -507,8 +506,8 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context,
 	// If it's a partial commit obtained from an existing artifact, check if the
 	// reconciliation can be skipped if other configurations have not changed.
 	if !git.IsConcreteCommit(*commit) {
-		// Calculate content configuration checksum.
-		if r.calculateContentConfigChecksum(obj, includes) == obj.Status.ContentConfigChecksum {
+		// Check if the content config contributing to the artifact has changed.
+		if !gitContentConfigChanged(obj, includes) {
 			ge := serror.NewGeneric(
 				fmt.Errorf("no changes since last reconcilation: observed revision '%s'",
 					commit.String()), sourcev1.GitOperationSucceedReason,
@@ -559,27 +558,24 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context,
 //
 // The inspection of the given data to the object is differed, ensuring any
 // stale observations like v1beta2.ArtifactOutdatedCondition are removed.
-// If the given Artifact and/or artifactSet (includes) and the content config
-// checksum do not differ from the object's current, it returns early.
+// If the given Artifact and/or artifactSet (includes) and observed artifact
+// content config do not differ from the object's current, it returns early.
 // Source ignore patterns are loaded, and the given directory is archived while
 // taking these patterns into account.
-// On a successful archive, the Artifact, Includes and new content config
-// checksum in the Status of the object are set, and the symlink in the Storage
-// is updated to its path.
+// On a successful archive, the Artifact, Includes, observed ignore, recurse
+// submodules and observed include in the Status of the object are set, and the
+// symlink in the Storage is updated to its path.
 func (r *GitRepositoryReconciler) reconcileArtifact(ctx context.Context,
 	obj *sourcev1.GitRepository, commit *git.Commit, includes *artifactSet, dir string) (sreconcile.Result, error) {
 
 	// Create potential new artifact with current available metadata
 	artifact := r.Storage.NewArtifactFor(obj.Kind, obj.GetObjectMeta(), commit.String(), fmt.Sprintf("%s.tar.gz", commit.Hash.String()))
 
-	// Calculate the content config checksum.
-	ccc := r.calculateContentConfigChecksum(obj, includes)
-
 	// Set the ArtifactInStorageCondition if there's no drift.
 	defer func() {
 		if obj.GetArtifact().HasRevision(artifact.Revision) &&
 			!includes.Diff(obj.Status.IncludedArtifacts) &&
-			obj.Status.ContentConfigChecksum == ccc {
+			!gitContentConfigChanged(obj, includes) {
 			conditions.Delete(obj, sourcev1.ArtifactOutdatedCondition)
 			conditions.MarkTrue(obj, sourcev1.ArtifactInStorageCondition, meta.SucceededReason,
 				"stored artifact for revision '%s'", artifact.Revision)
@@ -589,7 +585,7 @@ func (r *GitRepositoryReconciler) reconcileArtifact(ctx context.Context,
 	// The artifact is up-to-date
 	if obj.GetArtifact().HasRevision(artifact.Revision) &&
 		!includes.Diff(obj.Status.IncludedArtifacts) &&
-		obj.Status.ContentConfigChecksum == ccc {
+		!gitContentConfigChanged(obj, includes) {
 		r.eventLogf(ctx, obj, events.EventTypeTrace, sourcev1.ArtifactUpToDateReason, "artifact up-to-date with remote revision: '%s'", artifact.Revision)
 		return sreconcile.ResultSuccess, nil
 	}
@@ -652,10 +648,13 @@ func (r *GitRepositoryReconciler) reconcileArtifact(ctx context.Context,
 		return sreconcile.ResultEmpty, e
 	}
 
-	// Record it on the object
+	// Record the observations on the object.
 	obj.Status.Artifact = artifact.DeepCopy()
 	obj.Status.IncludedArtifacts = *includes
-	obj.Status.ContentConfigChecksum = ccc
+	obj.Status.ContentConfigChecksum = "" // To be removed in the next API version.
+	obj.Status.ObservedIgnore = obj.Spec.Ignore
+	obj.Status.ObservedRecurseSubmodules = obj.Spec.RecurseSubmodules
+	obj.Status.ObservedInclude = obj.Spec.Include
 
 	// Update symlink on a "best effort" basis
 	url, err := r.Storage.Symlink(artifact, "latest.tar.gz")
@@ -825,39 +824,6 @@ func (r *GitRepositoryReconciler) fetchIncludes(ctx context.Context, obj *source
 	return &artifacts, nil
 }
 
-// calculateContentConfigChecksum calculates a checksum of all the
-// configurations that result in a change in the source artifact. It can be used
-// to decide if further reconciliation is needed when an artifact already exists
-// for a set of configurations.
-func (r *GitRepositoryReconciler) calculateContentConfigChecksum(obj *sourcev1.GitRepository, includes *artifactSet) string {
-	c := []byte{}
-	// Consider the ignore rules and recurse submodules.
-	if obj.Spec.Ignore != nil {
-		c = append(c, []byte(*obj.Spec.Ignore)...)
-	}
-	c = append(c, []byte(strconv.FormatBool(obj.Spec.RecurseSubmodules))...)
-
-	// Consider the included repository attributes.
-	for _, incl := range obj.Spec.Include {
-		c = append(c, []byte(incl.GitRepositoryRef.Name+incl.FromPath+incl.ToPath)...)
-	}
-
-	// Consider the checksum and revision of all the included remote artifact.
-	// This ensures that if the included repos get updated, this checksum changes.
-	// NOTE: The content of an artifact may change at the same revision if the
-	// ignore rules change. Hence, consider both checksum and revision to
-	// capture changes in artifact checksum as well.
-	// TODO: Fix artifactSet.Diff() to consider checksum as well.
-	if includes != nil {
-		for _, incl := range *includes {
-			c = append(c, []byte(incl.Checksum)...)
-			c = append(c, []byte(incl.Revision)...)
-		}
-	}
-
-	return fmt.Sprintf("sha256:%x", sha256.Sum256(c))
-}
-
 // verifyCommitSignature verifies the signature of the given Git commit, if a
 // verification mode is specified on the object.
 // If the signature can not be verified or the verification fails, it records
@@ -977,4 +943,65 @@ func (r *GitRepositoryReconciler) eventLogf(ctx context.Context, obj runtime.Obj
 		ctrl.LoggerFrom(ctx).Info(msg)
 	}
 	r.Eventf(obj, eventType, reason, msg)
+}
+
+// gitContentConfigChanged evaluates the current spec with the observations of
+// the artifact in the status to determine if artifact content configuration has
+// changed and requires rebuilding the artifact.
+func gitContentConfigChanged(obj *sourcev1.GitRepository, includes *artifactSet) bool {
+	if !pointer.StringEqual(obj.Spec.Ignore, obj.Status.ObservedIgnore) {
+		return true
+	}
+	if obj.Spec.RecurseSubmodules != obj.Status.ObservedRecurseSubmodules {
+		return true
+	}
+	if len(obj.Spec.Include) != len(obj.Status.ObservedInclude) {
+		return true
+	}
+
+	// Convert artifactSet to index addressable artifacts and ensure that it and
+	// the included artifacts include all the include from the spec.
+	artifacts := []*sourcev1.Artifact(*includes)
+	if len(obj.Spec.Include) != len(artifacts) {
+		return true
+	}
+	if len(obj.Spec.Include) != len(obj.Status.IncludedArtifacts) {
+		return true
+	}
+
+	// The order of spec.include, status.IncludeArtifacts and
+	// status.observedInclude are the same. Compare the values by index.
+	for index, incl := range obj.Spec.Include {
+		observedIncl := obj.Status.ObservedInclude[index]
+		observedInclArtifact := obj.Status.IncludedArtifacts[index]
+		currentIncl := artifacts[index]
+
+		// Check if the include are the same in spec and status.
+		if !gitRepositoryIncludeEqual(incl, observedIncl) {
+			return true
+		}
+
+		// Check if the included repositories are still the same.
+		if observedInclArtifact.Revision != currentIncl.Revision {
+			return true
+		}
+		if observedInclArtifact.Checksum != currentIncl.Checksum {
+			return true
+		}
+	}
+	return false
+}
+
+// Returns true if both GitRepositoryIncludes are equal.
+func gitRepositoryIncludeEqual(a, b sourcev1.GitRepositoryInclude) bool {
+	if a.GitRepositoryRef != b.GitRepositoryRef {
+		return false
+	}
+	if a.FromPath != b.FromPath {
+		return false
+	}
+	if a.ToPath != b.ToPath {
+		return false
+	}
+	return true
 }

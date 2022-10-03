@@ -1539,7 +1539,8 @@ github.com/fluxcd/pkg/apis/meta.ReconcileRequestStatus
 </h3>
 <p>
 (<em>Appears on:</em>
-<a href="#source.toolkit.fluxcd.io/v1beta2.GitRepositorySpec">GitRepositorySpec</a>)
+<a href="#source.toolkit.fluxcd.io/v1beta2.GitRepositorySpec">GitRepositorySpec</a>, 
+<a href="#source.toolkit.fluxcd.io/v1beta2.GitRepositoryStatus">GitRepositoryStatus</a>)
 </p>
 <p>GitRepositoryInclude specifies a local reference to a GitRepository which
 Artifact (sub-)contents must be included, and where they should be placed.</p>
@@ -1969,6 +1970,49 @@ observed in .status.observedGeneration version of the object. This can
 be used to determine if the content of the included repository has
 changed.
 It has the format of <code>&lt;algo&gt;:&lt;checksum&gt;</code>, for example: <code>sha256:&lt;checksum&gt;</code>.</p>
+<p>Deprecated: Replaced with explicit fields for observed artifact content
+config in the status.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>observedIgnore</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>ObservedIgnore is the observed exclusion patterns used for constructing
+the source artifact.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>observedRecurseSubmodules</code><br>
+<em>
+bool
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>ObservedRecurseSubmodules is the observed resource submodules
+configuration used to produce the current Artifact.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>observedInclude</code><br>
+<em>
+<a href="#source.toolkit.fluxcd.io/v1beta2.GitRepositoryInclude">
+[]GitRepositoryInclude
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>ObservedInclude is the observed list of GitRepository resources used to
+to produce the current Artifact.</p>
 </td>
 </tr>
 <tr>

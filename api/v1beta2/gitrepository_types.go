@@ -224,8 +224,26 @@ type GitRepositoryStatus struct {
 	// be used to determine if the content of the included repository has
 	// changed.
 	// It has the format of `<algo>:<checksum>`, for example: `sha256:<checksum>`.
+	//
+	// Deprecated: Replaced with explicit fields for observed artifact content
+	// config in the status.
 	// +optional
 	ContentConfigChecksum string `json:"contentConfigChecksum,omitempty"`
+
+	// ObservedIgnore is the observed exclusion patterns used for constructing
+	// the source artifact.
+	// +optional
+	ObservedIgnore *string `json:"observedIgnore,omitempty"`
+
+	// ObservedRecurseSubmodules is the observed resource submodules
+	// configuration used to produce the current Artifact.
+	// +optional
+	ObservedRecurseSubmodules bool `json:"observedRecurseSubmodules,omitempty"`
+
+	// ObservedInclude is the observed list of GitRepository resources used to
+	// to produce the current Artifact.
+	// +optional
+	ObservedInclude []GitRepositoryInclude `json:"observedInclude,omitempty"`
 
 	meta.ReconcileRequestStatus `json:",inline"`
 }

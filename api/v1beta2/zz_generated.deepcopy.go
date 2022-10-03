@@ -346,6 +346,16 @@ func (in *GitRepositoryStatus) DeepCopyInto(out *GitRepositoryStatus) {
 			}
 		}
 	}
+	if in.ObservedIgnore != nil {
+		in, out := &in.ObservedIgnore, &out.ObservedIgnore
+		*out = new(string)
+		**out = **in
+	}
+	if in.ObservedInclude != nil {
+		in, out := &in.ObservedInclude, &out.ObservedInclude
+		*out = make([]GitRepositoryInclude, len(*in))
+		copy(*out, *in)
+	}
 	out.ReconcileRequestStatus = in.ReconcileRequestStatus
 }
 
