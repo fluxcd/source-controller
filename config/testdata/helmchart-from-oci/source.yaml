@@ -19,3 +19,17 @@ spec:
     name: podinfo
   version: '6.1.*'
   interval: 1m
+---
+apiVersion: source.toolkit.fluxcd.io/v1beta2
+kind: HelmChart
+metadata:
+  name: podinfo-keyless
+spec:
+  chart: podinfo
+  sourceRef:
+    kind: HelmRepository
+    name: podinfo
+  version: '6.2.1'
+  interval: 1m
+  verify:
+    provider: cosign

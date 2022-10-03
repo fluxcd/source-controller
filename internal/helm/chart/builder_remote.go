@@ -63,7 +63,7 @@ func NewRemoteBuilder(repository repository.Downloader) Builder {
 // After downloading the chart, it is only packaged if required due to BuildOptions
 // modifying the chart, otherwise the exact data as retrieved from the repository
 // is written to p, after validating it to be a chart.
-func (b *remoteChartBuilder) Build(_ context.Context, ref Reference, p string, opts BuildOptions) (*Build, error) {
+func (b *remoteChartBuilder) Build(ctx context.Context, ref Reference, p string, opts BuildOptions) (*Build, error) {
 	remoteRef, ok := ref.(RemoteReference)
 	if !ok {
 		err := fmt.Errorf("expected remote chart reference")
@@ -74,9 +74,9 @@ func (b *remoteChartBuilder) Build(_ context.Context, ref Reference, p string, o
 		return nil, &BuildError{Reason: ErrChartReference, Err: err}
 	}
 
-	res, result, err := b.downloadFromRepository(b.remote, remoteRef, opts)
+	res, result, err := b.downloadFromRepository(ctx, b.remote, remoteRef, opts)
 	if err != nil {
-		return nil, &BuildError{Reason: ErrChartPull, Err: err}
+		return nil, err
 	}
 	if res == nil {
 		return result, nil
@@ -124,12 +124,19 @@ func (b *remoteChartBuilder) Build(_ context.Context, ref Reference, p string, o
 	return result, nil
 }
 
-func (b *remoteChartBuilder) downloadFromRepository(remote repository.Downloader, remoteRef RemoteReference, opts BuildOptions) (*bytes.Buffer, *Build, error) {
+func (b *remoteChartBuilder) downloadFromRepository(ctx context.Context, remote repository.Downloader, remoteRef RemoteReference, opts BuildOptions) (*bytes.Buffer, *Build, error) {
 	// Get the current version for the RemoteReference
 	cv, err := remote.GetChartVersion(remoteRef.Name, remoteRef.Version)
 	if err != nil {
 		err = fmt.Errorf("failed to get chart version for remote reference: %w", err)
 		return nil, nil, &BuildError{Reason: ErrChartReference, Err: err}
+	}
+
+	// Verify the chart if necessary
+	if opts.Verify {
+		if err := remote.VerifyChart(ctx, cv); err != nil {
+			return nil, nil, &BuildError{Reason: ErrChartVerification, Err: err}
+		}
 	}
 
 	result, shouldReturn, err := generateBuildResult(cv, opts)

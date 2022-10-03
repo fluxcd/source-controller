@@ -84,5 +84,6 @@ var (
 	ErrValuesFilesMerge   = BuildErrorReason{Reason: "ValuesFilesError", Summary: "values files merge error"}
 	ErrDependencyBuild    = BuildErrorReason{Reason: "DependencyBuildError", Summary: "dependency build error"}
 	ErrChartPackage       = BuildErrorReason{Reason: "ChartPackageError", Summary: "chart package error"}
+	ErrChartVerification  = BuildErrorReason{Reason: "ChartVerificationError", Summary: "chart verification error"}
 	ErrUnknown            = BuildErrorReason{Reason: "Unknown", Summary: "unknown build error"}
 )

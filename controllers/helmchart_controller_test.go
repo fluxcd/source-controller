@@ -26,6 +26,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -33,6 +34,9 @@ import (
 	"time"
 
 	. "github.com/onsi/gomega"
+	coptions "github.com/sigstore/cosign/cmd/cosign/cli/options"
+	"github.com/sigstore/cosign/cmd/cosign/cli/sign"
+	"github.com/sigstore/cosign/pkg/cosign"
 	hchart "helm.sh/helm/v3/pkg/chart"
 	"helm.sh/helm/v3/pkg/chart/loader"
 	helmreg "helm.sh/helm/v3/pkg/registry"
@@ -57,6 +61,7 @@ import (
 	serror "github.com/fluxcd/source-controller/internal/error"
 	"github.com/fluxcd/source-controller/internal/helm/chart"
 	"github.com/fluxcd/source-controller/internal/helm/registry"
+	"github.com/fluxcd/source-controller/internal/oci"
 	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
 	"github.com/fluxcd/source-controller/internal/reconcile/summarize"
 )
@@ -2207,6 +2212,228 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_authStrategy(t *testing.T) {
 
 			got, err := r.reconcileSource(ctx, obj, &b)
 			g.Expect(err != nil).To(Equal(tt.wantErr))
+			g.Expect(got).To(Equal(tt.want))
+			g.Expect(obj.Status.Conditions).To(conditions.MatchConditions(tt.assertConditions))
+		})
+	}
+}
+
+func TestHelmChartReconciler_reconcileSourceFromOCI_verifySignature(t *testing.T) {
+	g := NewWithT(t)
+
+	tmpDir := t.TempDir()
+	server, err := setupRegistryServer(ctx, tmpDir, registryOptions{})
+	g.Expect(err).ToNot(HaveOccurred())
+
+	const (
+		chartPath = "testdata/charts/helmchart-0.1.0.tgz"
+	)
+
+	// Load a test chart
+	chartData, err := ioutil.ReadFile(chartPath)
+
+	// Upload the test chart
+	metadata, err := loadTestChartToOCI(chartData, chartPath, server)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	storage, err := NewStorage(tmpDir, "example.com", retentionTTL, retentionRecords)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	cachedArtifact := &sourcev1.Artifact{
+		Revision: "0.1.0",
+		Path:     metadata.Name + "-" + metadata.Version + ".tgz",
+	}
+	g.Expect(storage.CopyFromPath(cachedArtifact, "testdata/charts/helmchart-0.1.0.tgz")).To(Succeed())
+
+	pf := func(b bool) ([]byte, error) {
+		return []byte("cosign-password"), nil
+	}
+
+	keys, err := cosign.GenerateKeyPair(pf)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	err = os.WriteFile(path.Join(tmpDir, "cosign.key"), keys.PrivateBytes, 0600)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	defer func() {
+		err := os.Remove(path.Join(tmpDir, "cosign.key"))
+		g.Expect(err).ToNot(HaveOccurred())
+	}()
+
+	tests := []struct {
+		name             string
+		want             sreconcile.Result
+		wantErr          bool
+		wantErrMsg       string
+		shouldSign       bool
+		beforeFunc       func(obj *sourcev1.HelmChart)
+		assertConditions []metav1.Condition
+		cleanFunc        func(g *WithT, build *chart.Build)
+	}{
+		{
+			name: "unsigned charts should not pass verification",
+			beforeFunc: func(obj *sourcev1.HelmChart) {
+				obj.Spec.Chart = metadata.Name
+				obj.Spec.Version = metadata.Version
+				obj.Spec.Verify = &sourcev1.OCIRepositoryVerification{
+					Provider:  "cosign",
+					SecretRef: &meta.LocalObjectReference{Name: "cosign-key"},
+				}
+			},
+			wantErr:    true,
+			wantErrMsg: "chart verification error: failed to verify <url>: no matching signatures:",
+			want:       sreconcile.ResultEmpty,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.BuildFailedCondition, "ChartVerificationError", "chart verification error: failed to verify <url>: no matching signatures:"),
+			},
+		},
+		{
+			name: "unsigned charts should not pass keyless verification",
+			beforeFunc: func(obj *sourcev1.HelmChart) {
+				obj.Spec.Chart = metadata.Name
+				obj.Spec.Version = metadata.Version
+				obj.Spec.Verify = &sourcev1.OCIRepositoryVerification{
+					Provider: "cosign",
+				}
+			},
+			wantErr: true,
+			want:    sreconcile.ResultEmpty,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.BuildFailedCondition, "ChartVerificationError", "chart verification error: failed to verify <url>: no matching signatures:"),
+			},
+		},
+		{
+			name: "signed charts should pass verification",
+			beforeFunc: func(obj *sourcev1.HelmChart) {
+				obj.Spec.Chart = metadata.Name
+				obj.Spec.Version = metadata.Version
+				obj.Spec.Verify = &sourcev1.OCIRepositoryVerification{
+					Provider:  "cosign",
+					SecretRef: &meta.LocalObjectReference{Name: "cosign-key"},
+				}
+			},
+			shouldSign: true,
+			want:       sreconcile.ResultSuccess,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewChart", "pulled '<name>' chart with version '<version>'"),
+				*conditions.TrueCondition(sourcev1.SourceVerifiedCondition, meta.SucceededReason, "verified signature of version <version>"),
+			},
+			cleanFunc: func(g *WithT, build *chart.Build) {
+				g.Expect(os.Remove(build.Path)).To(Succeed())
+			},
+		},
+		{
+			name: "verify failed before, removed from spec, remove condition",
+			beforeFunc: func(obj *sourcev1.HelmChart) {
+				obj.Spec.Chart = metadata.Name
+				obj.Spec.Version = metadata.Version
+				obj.Spec.Verify = nil
+				conditions.MarkFalse(obj, sourcev1.SourceVerifiedCondition, "VerifyFailed", "fail msg")
+				obj.Status.Artifact = &sourcev1.Artifact{Path: metadata.Name + "-" + metadata.Version + ".tgz"}
+			},
+			want: sreconcile.ResultSuccess,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewChart", "pulled '<name>' chart with version '<version>'"),
+			},
+			cleanFunc: func(g *WithT, build *chart.Build) {
+				g.Expect(os.Remove(build.Path)).To(Succeed())
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			clientBuilder := fake.NewClientBuilder()
+
+			repository := &sourcev1.HelmRepository{
+				ObjectMeta: metav1.ObjectMeta{
+					GenerateName: "helmrepository-",
+				},
+				Spec: sourcev1.HelmRepositorySpec{
+					URL:      fmt.Sprintf("oci://%s/testrepo", server.registryHost),
+					Timeout:  &metav1.Duration{Duration: timeout},
+					Provider: sourcev1.GenericOCIProvider,
+					Type:     sourcev1.HelmRepositoryTypeOCI,
+				},
+			}
+
+			secret := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "cosign-key",
+				},
+				Data: map[string][]byte{
+					"cosign.pub": keys.PublicBytes,
+				}}
+
+			clientBuilder.WithObjects(repository, secret)
+
+			r := &HelmChartReconciler{
+				Client:                  clientBuilder.Build(),
+				EventRecorder:           record.NewFakeRecorder(32),
+				Getters:                 testGetters,
+				Storage:                 storage,
+				RegistryClientGenerator: registry.ClientGenerator,
+			}
+
+			obj := &sourcev1.HelmChart{
+				ObjectMeta: metav1.ObjectMeta{
+					GenerateName: "helmchart-",
+				},
+				Spec: sourcev1.HelmChartSpec{
+					SourceRef: sourcev1.LocalHelmChartSourceReference{
+						Kind: sourcev1.HelmRepositoryKind,
+						Name: repository.Name,
+					},
+				},
+			}
+
+			chartUrl := fmt.Sprintf("oci://%s/testrepo/%s:%s", server.registryHost, metadata.Name, metadata.Version)
+
+			if tt.beforeFunc != nil {
+				tt.beforeFunc(obj)
+			}
+
+			if tt.shouldSign {
+				ko := coptions.KeyOpts{
+					KeyRef:   path.Join(tmpDir, "cosign.key"),
+					PassFunc: pf,
+				}
+
+				ro := &coptions.RootOptions{
+					Timeout: timeout,
+				}
+
+				err = sign.SignCmd(ro, ko, coptions.RegistryOptions{Keychain: oci.Anonymous{}},
+					nil, []string{fmt.Sprintf("%s/testrepo/%s:%s", server.registryHost, metadata.Name, metadata.Version)}, "",
+					"", true, "",
+					"", "", false,
+					false, "", false)
+				g.Expect(err).ToNot(HaveOccurred())
+			}
+
+			assertConditions := tt.assertConditions
+			for k := range assertConditions {
+				assertConditions[k].Message = strings.ReplaceAll(assertConditions[k].Message, "<name>", metadata.Name)
+				assertConditions[k].Message = strings.ReplaceAll(assertConditions[k].Message, "<version>", metadata.Version)
+				assertConditions[k].Message = strings.ReplaceAll(assertConditions[k].Message, "<url>", chartUrl)
+				assertConditions[k].Message = strings.ReplaceAll(assertConditions[k].Message, "<provider>", "cosign")
+			}
+
+			var b chart.Build
+			if tt.cleanFunc != nil {
+				defer tt.cleanFunc(g, &b)
+			}
+
+			got, err := r.reconcileSource(ctx, obj, &b)
+			if tt.wantErr {
+				tt.wantErrMsg = strings.ReplaceAll(tt.wantErrMsg, "<url>", chartUrl)
+				g.Expect(err).ToNot(BeNil())
+				g.Expect(err.Error()).To(ContainSubstring(tt.wantErrMsg))
+			} else {
+				g.Expect(err).ToNot(HaveOccurred())
+			}
 			g.Expect(got).To(Equal(tt.want))
 			g.Expect(obj.Status.Conditions).To(conditions.MatchConditions(tt.assertConditions))
 		})

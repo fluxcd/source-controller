@@ -28,6 +28,7 @@ import (
 	"strings"
 	"time"
 
+	soci "github.com/fluxcd/source-controller/internal/oci"
 	helmgetter "helm.sh/helm/v3/pkg/getter"
 	helmreg "helm.sh/helm/v3/pkg/registry"
 	corev1 "k8s.io/api/core/v1"
@@ -57,6 +58,7 @@ import (
 	"github.com/fluxcd/pkg/runtime/predicates"
 	"github.com/fluxcd/pkg/untar"
 	"github.com/google/go-containerregistry/pkg/authn"
+	"github.com/google/go-containerregistry/pkg/v1/remote"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
 	"github.com/fluxcd/source-controller/internal/cache"
@@ -80,6 +82,7 @@ var helmChartReadyCondition = summarize.Conditions{
 		sourcev1.BuildFailedCondition,
 		sourcev1.ArtifactOutdatedCondition,
 		sourcev1.ArtifactInStorageCondition,
+		sourcev1.SourceVerifiedCondition,
 		meta.ReadyCondition,
 		meta.ReconcilingCondition,
 		meta.StalledCondition,
@@ -90,6 +93,7 @@ var helmChartReadyCondition = summarize.Conditions{
 		sourcev1.BuildFailedCondition,
 		sourcev1.ArtifactOutdatedCondition,
 		sourcev1.ArtifactInStorageCondition,
+		sourcev1.SourceVerifiedCondition,
 		meta.StalledCondition,
 		meta.ReconcilingCondition,
 	},
@@ -564,9 +568,30 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 			}()
 		}
 
+		var verifiers []soci.Verifier
+		if obj.Spec.Verify != nil {
+			provider := obj.Spec.Verify.Provider
+			verifiers, err = r.makeVerifiers(ctx, obj, authenticator, keychain)
+			if err != nil {
+				if obj.Spec.Verify.SecretRef == nil {
+					provider = fmt.Sprintf("%s keyless", provider)
+				}
+				e := serror.NewGeneric(
+					fmt.Errorf("failed to verify the signature using provider '%s': %w", provider, err),
+					sourcev1.VerificationError,
+				)
+				conditions.MarkFalse(obj, sourcev1.SourceVerifiedCondition, e.Reason, e.Err.Error())
+				return sreconcile.ResultEmpty, e
+			}
+		}
+
 		// Tell the chart repository to use the OCI client with the configured getter
 		clientOpts = append(clientOpts, helmgetter.WithRegistryClient(registryClient))
-		ociChartRepo, err := repository.NewOCIChartRepository(normalizedURL, repository.WithOCIGetter(r.Getters), repository.WithOCIGetterOptions(clientOpts), repository.WithOCIRegistryClient(registryClient))
+		ociChartRepo, err := repository.NewOCIChartRepository(normalizedURL,
+			repository.WithOCIGetter(r.Getters),
+			repository.WithOCIGetterOptions(clientOpts),
+			repository.WithOCIRegistryClient(registryClient),
+			repository.WithVerifiers(verifiers))
 		if err != nil {
 			return chartRepoConfigErrorReturn(err, obj)
 		}
@@ -574,7 +599,7 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 
 		// If login options are configured, use them to login to the registry
 		// The OCIGetter will later retrieve the stored credentials to pull the chart
-		if keychain != nil {
+		if loginOpt != nil {
 			err = ociChartRepo.Login(loginOpt)
 			if err != nil {
 				e := &serror.Event{
@@ -622,6 +647,17 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 	opts := chart.BuildOptions{
 		ValuesFiles: obj.GetValuesFiles(),
 		Force:       obj.Generation != obj.Status.ObservedGeneration,
+		// The remote builder will not attempt to download the chart if
+		// an artifact exist with the same name and version and the force is false.
+		// It will try to verify the chart if:
+		// - we are on the first reconciliation
+		// - the HelmChart spec has changed (generation drift)
+		// - the previous reconciliation resulted in a failed artifact verification
+		// - there is no artifact in storage
+		Verify: obj.Spec.Verify != nil && (obj.Generation <= 0 ||
+			conditions.GetObservedGeneration(obj, sourcev1.SourceVerifiedCondition) != obj.Generation ||
+			conditions.IsFalse(obj, sourcev1.SourceVerifiedCondition) ||
+			obj.GetArtifact() == nil),
 	}
 	if artifact := obj.GetArtifact(); artifact != nil {
 		opts.CachedChart = r.Storage.LocalPath(*artifact)
@@ -1030,7 +1066,7 @@ func (r *HelmChartReconciler) namespacedChartRepositoryCallback(ctx context.Cont
 
 			// If login options are configured, use them to login to the registry
 			// The OCIGetter will later retrieve the stored credentials to pull the chart
-			if keychain != nil {
+			if loginOpt != nil {
 				err = ociChartRepo.Login(loginOpt)
 				if err != nil {
 					errs = append(errs, fmt.Errorf("failed to login to OCI chart repository for HelmRepository '%s': %w", repo.Name, err))
@@ -1239,6 +1275,11 @@ func observeChartBuild(obj *sourcev1.HelmChart, build *chart.Build, err error) {
 	if build.Complete() {
 		conditions.Delete(obj, sourcev1.FetchFailedCondition)
 		conditions.Delete(obj, sourcev1.BuildFailedCondition)
+		conditions.MarkTrue(obj, sourcev1.SourceVerifiedCondition, meta.SucceededReason, fmt.Sprintf("verified signature of version %s", build.Version))
+	}
+
+	if obj.Spec.Verify == nil {
+		conditions.Delete(obj, sourcev1.SourceVerifiedCondition)
 	}
 
 	if err != nil {
@@ -1251,7 +1292,7 @@ func observeChartBuild(obj *sourcev1.HelmChart, build *chart.Build, err error) {
 		}
 
 		switch buildErr.Reason {
-		case chart.ErrChartMetadataPatch, chart.ErrValuesFilesMerge, chart.ErrDependencyBuild, chart.ErrChartPackage:
+		case chart.ErrChartMetadataPatch, chart.ErrValuesFilesMerge, chart.ErrDependencyBuild, chart.ErrChartPackage, chart.ErrChartVerification:
 			conditions.Delete(obj, sourcev1.FetchFailedCondition)
 			conditions.MarkTrue(obj, sourcev1.BuildFailedCondition, buildErr.Reason.Reason, buildErr.Error())
 		default:
@@ -1288,5 +1329,62 @@ func chartRepoConfigErrorReturn(err error, obj *sourcev1.HelmChart) (sreconcile.
 		}
 		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
 		return sreconcile.ResultEmpty, e
+	}
+}
+
+// makeVerifiers returns a list of verifiers for the given chart.
+func (r *HelmChartReconciler) makeVerifiers(ctx context.Context, obj *sourcev1.HelmChart, auth authn.Authenticator, keychain authn.Keychain) ([]soci.Verifier, error) {
+	var verifiers []soci.Verifier
+	verifyOpts := []remote.Option{}
+	if auth != nil {
+		verifyOpts = append(verifyOpts, remote.WithAuth(auth))
+	} else {
+		verifyOpts = append(verifyOpts, remote.WithAuthFromKeychain(keychain))
+	}
+
+	switch obj.Spec.Verify.Provider {
+	case "cosign":
+		defaultCosignOciOpts := []soci.Options{
+			soci.WithRemoteOptions(verifyOpts...),
+		}
+
+		// get the public keys from the given secret
+		if secretRef := obj.Spec.Verify.SecretRef; secretRef != nil {
+			certSecretName := types.NamespacedName{
+				Namespace: obj.Namespace,
+				Name:      secretRef.Name,
+			}
+
+			var pubSecret corev1.Secret
+			if err := r.Get(ctx, certSecretName, &pubSecret); err != nil {
+				return nil, err
+			}
+
+			for k, data := range pubSecret.Data {
+				// search for public keys in the secret
+				if strings.HasSuffix(k, ".pub") {
+					verifier, err := soci.NewCosignVerifier(ctx, append(defaultCosignOciOpts, soci.WithPublicKey(data))...)
+					if err != nil {
+						return nil, err
+					}
+					verifiers = append(verifiers, verifier)
+				}
+			}
+
+			if len(verifiers) == 0 {
+				return nil, fmt.Errorf("no public keys found in secret '%s'", certSecretName)
+			}
+			return verifiers, nil
+		}
+
+		// if no secret is provided, add a keyless verifier
+		verifier, err := soci.NewCosignVerifier(ctx, defaultCosignOciOpts...)
+		if err != nil {
+			return nil, err
+		}
+		verifiers = append(verifiers, verifier)
+		return verifiers, nil
+	default:
+		return nil, fmt.Errorf("unsupported verification provider: %s", obj.Spec.Verify.Provider)
 	}
 }

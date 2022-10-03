@@ -628,7 +628,7 @@ func (r *OCIRepositoryReconciler) verifySignature(ctx context.Context, obj *sour
 			for k, data := range pubSecret.Data {
 				// search for public keys in the secret
 				if strings.HasSuffix(k, ".pub") {
-					verifier, err := soci.NewVerifier(ctxTimeout, append(defaultCosignOciOpts, soci.WithPublicKey(data))...)
+					verifier, err := soci.NewCosignVerifier(ctxTimeout, append(defaultCosignOciOpts, soci.WithPublicKey(data))...)
 					if err != nil {
 						return err
 					}
@@ -654,7 +654,7 @@ func (r *OCIRepositoryReconciler) verifySignature(ctx context.Context, obj *sour
 
 		// if no secret is provided, try keyless verification
 		ctrl.LoggerFrom(ctx).Info("no secret reference is provided, trying to verify the image using keyless method")
-		verifier, err := soci.NewVerifier(ctxTimeout, defaultCosignOciOpts...)
+		verifier, err := soci.NewCosignVerifier(ctxTimeout, defaultCosignOciOpts...)
 		if err != nil {
 			return err
 		}

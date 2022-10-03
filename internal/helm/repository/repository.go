@@ -18,6 +18,7 @@ package repository
 
 import (
 	"bytes"
+	"context"
 
 	"helm.sh/helm/v3/pkg/repo"
 )
@@ -29,6 +30,8 @@ type Downloader interface {
 	GetChartVersion(name, version string) (*repo.ChartVersion, error)
 	// DownloadChart downloads a chart from the remote Helm repository or OCI Helm repository.
 	DownloadChart(chart *repo.ChartVersion) (*bytes.Buffer, error)
+	// VerifyChart verifies the chart against a signature.
+	VerifyChart(ctx context.Context, chart *repo.ChartVersion) error
 	// Clear removes all temporary files created by the downloader, caching the files if the cache is configured,
 	// and calling garbage collector to remove unused files.
 	Clear() error

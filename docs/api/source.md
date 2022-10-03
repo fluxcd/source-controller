@@ -670,6 +670,24 @@ references to this object.
 NOTE: Not implemented, provisional as of <a href="https://github.com/fluxcd/flux2/pull/2092">https://github.com/fluxcd/flux2/pull/2092</a></p>
 </td>
 </tr>
+<tr>
+<td>
+<code>verify</code><br>
+<em>
+<a href="#source.toolkit.fluxcd.io/v1beta2.OCIRepositoryVerification">
+OCIRepositoryVerification
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Verify contains the secret name containing the trusted public keys
+used to verify the signature and specifies which provider to use to check
+whether OCI image is authentic.
+This field is only supported for OCI sources.
+Chart dependencies, which are not bundled in the umbrella chart artifact, are not verified.</p>
+</td>
+</tr>
 </table>
 </td>
 </tr>
@@ -2237,6 +2255,24 @@ references to this object.
 NOTE: Not implemented, provisional as of <a href="https://github.com/fluxcd/flux2/pull/2092">https://github.com/fluxcd/flux2/pull/2092</a></p>
 </td>
 </tr>
+<tr>
+<td>
+<code>verify</code><br>
+<em>
+<a href="#source.toolkit.fluxcd.io/v1beta2.OCIRepositoryVerification">
+OCIRepositoryVerification
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Verify contains the secret name containing the trusted public keys
+used to verify the signature and specifies which provider to use to check
+whether OCI image is authentic.
+This field is only supported for OCI sources.
+Chart dependencies, which are not bundled in the umbrella chart artifact, are not verified.</p>
+</td>
+</tr>
 </tbody>
 </table>
 </div>
@@ -3123,6 +3159,7 @@ github.com/fluxcd/pkg/apis/meta.ReconcileRequestStatus
 </h3>
 <p>
 (<em>Appears on:</em>
+<a href="#source.toolkit.fluxcd.io/v1beta2.HelmChartSpec">HelmChartSpec</a>, 
 <a href="#source.toolkit.fluxcd.io/v1beta2.OCIRepositorySpec">OCIRepositorySpec</a>)
 </p>
 <p>OCIRepositoryVerification verifies the authenticity of an OCI Artifact</p>
