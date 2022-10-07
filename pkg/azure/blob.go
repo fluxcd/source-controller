@@ -29,6 +29,7 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/cloud"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	_ "github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
@@ -180,14 +181,24 @@ func (c *BlobClient) BucketExists(ctx context.Context, bucketName string) (bool,
 	if err != nil {
 		return false, err
 	}
-	_, err = container.GetProperties(ctx, nil)
-	if err != nil {
-		var stgErr *azblob.StorageError
-		if errors.As(err, &stgErr) {
-			if stgErr.ErrorCode == azblob.StorageErrorCodeContainerNotFound {
+
+	items := container.ListBlobsFlat(&azblob.ContainerListBlobsFlatOptions{
+		MaxResults: to.Ptr(int32(1)),
+	})
+	// We call next page only once since we just want to see if we get an error
+	items.NextPage(ctx)
+	if err := items.Err(); err != nil {
+		var respErr *azcore.ResponseError
+		if errors.As(err, &respErr) {
+			if respErr.ErrorCode == string(*azblob.StorageErrorCodeContainerNotFound.ToPtr()) {
 				return false, nil
 			}
-			err = stgErr
+			err = respErr
+
+			// For a container-level SASToken, we get an AuthenticationFailed when the bucket doesn't exist
+			if respErr.ErrorCode == string(azblob.StorageErrorCodeAuthenticationFailed) {
+				return false, fmt.Errorf("Bucket name may be incorrect, it does not exist or caller does not have enough permissions: %w", err)
+			}
 		}
 		return false, err
 	}
