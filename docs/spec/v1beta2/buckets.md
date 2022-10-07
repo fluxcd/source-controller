@@ -541,11 +541,13 @@ If the same key is present in the both of them, the value in the `sasKey` takes 
 continue to access Azure Storage. It is allowed to use an account-level or container-level SAS token.
 
 The minimum permissions for an account-level SAS token are:
+
 - Allowed services: `Blob`
 - Allowed resource types: `Container`, `Object`
 - Allowed permissions: `Read`, `List`
 
-  The minimum permissions for a container-level SAS token are:
+The minimum permissions for a container-level SAS token are:
+
 - Allowed permissions: `Read`, `List`
 
 Refer to the [Azure documentation](https://learn.microsoft.com/en-us/rest/api/storageservices/create-account-sas#blob-service) for a full overview on permissions.
