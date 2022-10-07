@@ -24,6 +24,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
 	"math/big"
 	"net/url"
 	"testing"
@@ -133,12 +134,12 @@ func TestBlobClient_ObjectIsNotFound(t *testing.T) {
 	}{
 		{
 			name: "StorageError with BlobNotFound code",
-			err:  &azblob.StorageError{ErrorCode: azblob.StorageErrorCodeBlobNotFound},
+			err:  &azcore.ResponseError{ErrorCode: string(bloberror.BlobNotFound)},
 			want: true,
 		},
 		{
 			name: "StorageError with different code",
-			err:  &azblob.StorageError{ErrorCode: azblob.StorageErrorCodeInternalError},
+			err:  &azcore.ResponseError{ErrorCode: string(bloberror.InternalError)},
 		},
 		{
 			name: "other error",
