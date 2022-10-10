@@ -1518,6 +1518,19 @@ Artifact
 </tr>
 <tr>
 <td>
+<code>observedIgnore</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>ObservedIgnore is the observed exclusion patterns used for constructing
+the source artifact.</p>
+</td>
+</tr>
+<tr>
+<td>
 <code>ReconcileRequestStatus</code><br>
 <em>
 <a href="https://godoc.org/github.com/fluxcd/pkg/apis/meta#ReconcileRequestStatus">

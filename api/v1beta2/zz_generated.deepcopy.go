@@ -166,6 +166,11 @@ func (in *BucketStatus) DeepCopyInto(out *BucketStatus) {
 		*out = new(Artifact)
 		(*in).DeepCopyInto(*out)
 	}
+	if in.ObservedIgnore != nil {
+		in, out := &in.ObservedIgnore, &out.ObservedIgnore
+		*out = new(string)
+		**out = **in
+	}
 	out.ReconcileRequestStatus = in.ReconcileRequestStatus
 }
 

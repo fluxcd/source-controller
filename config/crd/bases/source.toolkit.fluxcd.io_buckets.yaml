@@ -492,6 +492,10 @@ spec:
                   the Bucket object.
                 format: int64
                 type: integer
+              observedIgnore:
+                description: ObservedIgnore is the observed exclusion patterns used
+                  for constructing the source artifact.
+                type: string
               url:
                 description: URL is the dynamic fetch link for the latest Artifact.
                   It is provided on a "best effort" basis, and using the precise BucketStatus.Artifact
