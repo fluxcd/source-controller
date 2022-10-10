@@ -54,6 +54,7 @@ import (
 )
 
 const controllerName = "source-controller"
+const artifactMaxSizeDefault int64 = 50 << 20
 
 var (
 	scheme   = runtime.NewScheme()
@@ -101,6 +102,7 @@ func main() {
 		helmCachePurgeInterval   string
 		artifactRetentionTTL     time.Duration
 		artifactRetentionRecords int
+		artifactMaxSize          int64
 	)
 
 	flag.StringVar(&metricsAddr, "metrics-addr", envOrDefault("METRICS_ADDR", ":8080"),
@@ -139,6 +141,8 @@ func main() {
 		"The duration of time that artifacts will be kept in storage before being garbage collected.")
 	flag.IntVar(&artifactRetentionRecords, "artifact-retention-records", 2,
 		"The maximum number of artifacts to be kept in storage after a garbage collection.")
+	flag.Int64Var(&artifactMaxSize, "artifact-max-size", artifactMaxSizeDefault,
+		"The max allowed size in bytes of an artifact contents produced from sources. The limit can be disabled by setting the value to zero or a negative value.")
 
 	clientOptions.BindFlags(flag.CommandLine)
 	logOptions.BindFlags(flag.CommandLine)
@@ -202,7 +206,7 @@ func main() {
 	if storageAdvAddr == "" {
 		storageAdvAddr = determineAdvStorageAddr(storageAddr, setupLog)
 	}
-	storage := mustInitStorage(storagePath, storageAdvAddr, artifactRetentionTTL, artifactRetentionRecords, setupLog)
+	storage := mustInitStorage(storagePath, storageAdvAddr, artifactRetentionTTL, artifactRetentionRecords, artifactMaxSize, setupLog)
 
 	if err = managed.InitManagedTransport(); err != nil {
 		// Log the error, but don't exit so as to not block reconcilers that are healthy.
@@ -350,14 +354,14 @@ func startFileServer(path string, address string, l logr.Logger) {
 	}
 }
 
-func mustInitStorage(path string, storageAdvAddr string, artifactRetentionTTL time.Duration, artifactRetentionRecords int, l logr.Logger) *controllers.Storage {
+func mustInitStorage(path string, storageAdvAddr string, artifactRetentionTTL time.Duration, artifactRetentionRecords int, artifactMaxSize int64, l logr.Logger) *controllers.Storage {
 	if path == "" {
 		p, _ := os.Getwd()
 		path = filepath.Join(p, "bin")
 		os.MkdirAll(path, 0o700)
 	}
 
-	storage, err := controllers.NewStorage(path, storageAdvAddr, artifactRetentionTTL, artifactRetentionRecords)
+	storage, err := controllers.NewStorage(path, storageAdvAddr, artifactRetentionTTL, artifactRetentionRecords, artifactMaxSize)
 	if err != nil {
 		l.Error(err, "unable to initialise storage")
 		os.Exit(1)

@@ -61,10 +61,14 @@ type Storage struct {
 	// ArtifactRetentionRecords is the maximum number of artifacts to be kept in
 	// storage after a garbage collection.
 	ArtifactRetentionRecords int `json:"artifactRetentionRecords"`
+
+	// ArtifactMaxSize sets the max size in bytes for an artifact contents.
+	// Setting the value to zero or a negative value, disables the limit.
+	ArtifactMaxSize int64 `json:"artifactMaxSize"`
 }
 
 // NewStorage creates the storage helper for a given path and hostname.
-func NewStorage(basePath string, hostname string, artifactRetentionTTL time.Duration, artifactRetentionRecords int) (*Storage, error) {
+func NewStorage(basePath string, hostname string, artifactRetentionTTL time.Duration, artifactRetentionRecords int, artifactMaxSize int64) (*Storage, error) {
 	if f, err := os.Stat(basePath); os.IsNotExist(err) || !f.IsDir() {
 		return nil, fmt.Errorf("invalid dir path: %s", basePath)
 	}
@@ -73,6 +77,7 @@ func NewStorage(basePath string, hostname string, artifactRetentionTTL time.Dura
 		Hostname:                 hostname,
 		ArtifactRetentionTTL:     artifactRetentionTTL,
 		ArtifactRetentionRecords: artifactRetentionRecords,
+		ArtifactMaxSize:          artifactMaxSize,
 	}, nil
 }
 
@@ -430,6 +435,11 @@ func (s *Storage) Archive(artifact *sourcev1.Artifact, dir string, filter Archiv
 	}
 	if err := tf.Close(); err != nil {
 		return err
+	}
+
+	if s.ArtifactMaxSize > 0 && sz.written > s.ArtifactMaxSize {
+		return fmt.Errorf("artifact size %d exceeds the max limit of %d bytes, use .sourceignore to exclude files from the artifact",
+			sz.written, s.ArtifactMaxSize)
 	}
 
 	if err := os.Chmod(tmpName, 0o600); err != nil {
