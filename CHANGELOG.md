@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.30.1
+
+**Release date:** 2022-10-10
+
+This prerelease enables the use of container-level SAS tokens when using `Bucket` objects
+to access Azure Storage. The Azure SDK error message has also been enriched to hint Flux
+users the potential reasons in case of failure.
+
+Improvements:
+- List objects when checking if bucket exists to allow use of container-level SAS token
+  [#906](https://github.com/fluxcd/source-controller/pull/906)
+
 ## 0.30.0
 
 **Release date:** 2022-09-29
