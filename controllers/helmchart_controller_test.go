@@ -32,7 +32,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/darkowlzz/controller-check/status"
 	. "github.com/onsi/gomega"
 	hchart "helm.sh/helm/v3/pkg/chart"
 	"helm.sh/helm/v3/pkg/chart/loader"
@@ -50,8 +49,10 @@ import (
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/helmtestserver"
 	"github.com/fluxcd/pkg/runtime/conditions"
+	conditionscheck "github.com/fluxcd/pkg/runtime/conditions/check"
 	"github.com/fluxcd/pkg/runtime/patch"
 	"github.com/fluxcd/pkg/testserver"
+
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
 	serror "github.com/fluxcd/source-controller/internal/error"
 	"github.com/fluxcd/source-controller/internal/helm/chart"
@@ -108,8 +109,8 @@ func TestHelmChartReconciler_Reconcile(t *testing.T) {
 				}, timeout).Should(BeTrue())
 
 				// Check if the object status is valid.
-				condns := &status.Conditions{NegativePolarity: helmChartReadyCondition.NegativePolarity}
-				checker := status.NewChecker(testEnv.Client, condns)
+				condns := &conditionscheck.Conditions{NegativePolarity: helmChartReadyCondition.NegativePolarity}
+				checker := conditionscheck.NewChecker(testEnv.Client, condns)
 				checker.CheckErr(ctx, obj)
 
 				// kstatus client conformance check.
@@ -173,8 +174,8 @@ func TestHelmChartReconciler_Reconcile(t *testing.T) {
 				}, timeout).Should(BeTrue())
 
 				// Check if the object status is valid.
-				condns := &status.Conditions{NegativePolarity: helmChartReadyCondition.NegativePolarity}
-				checker := status.NewChecker(testEnv.Client, condns)
+				condns := &conditionscheck.Conditions{NegativePolarity: helmChartReadyCondition.NegativePolarity}
+				checker := conditionscheck.NewChecker(testEnv.Client, condns)
 				checker.CheckErr(ctx, obj)
 
 				g.Expect(testEnv.Delete(ctx, obj)).To(Succeed())
@@ -208,8 +209,8 @@ func TestHelmChartReconciler_Reconcile(t *testing.T) {
 				}, timeout).Should(BeTrue())
 
 				// Check if the object status is valid.
-				condns := &status.Conditions{NegativePolarity: helmChartReadyCondition.NegativePolarity}
-				checker := status.NewChecker(testEnv.Client, condns)
+				condns := &conditionscheck.Conditions{NegativePolarity: helmChartReadyCondition.NegativePolarity}
+				checker := conditionscheck.NewChecker(testEnv.Client, condns)
 				checker.CheckErr(ctx, obj)
 
 				g.Expect(testEnv.Delete(ctx, obj)).To(Succeed())

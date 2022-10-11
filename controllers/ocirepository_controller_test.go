@@ -37,7 +37,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/darkowlzz/controller-check/status"
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/crane"
 	"github.com/google/go-containerregistry/pkg/registry"
@@ -60,6 +59,7 @@ import (
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/oci"
 	"github.com/fluxcd/pkg/runtime/conditions"
+	conditionscheck "github.com/fluxcd/pkg/runtime/conditions/check"
 	"github.com/fluxcd/pkg/runtime/patch"
 	"github.com/fluxcd/pkg/untar"
 
@@ -224,8 +224,8 @@ func TestOCIRepository_Reconcile(t *testing.T) {
 			}
 
 			// Check if the object status is valid
-			condns := &status.Conditions{NegativePolarity: ociRepositoryReadyCondition.NegativePolarity}
-			checker := status.NewChecker(testEnv.Client, condns)
+			condns := &conditionscheck.Conditions{NegativePolarity: ociRepositoryReadyCondition.NegativePolarity}
+			checker := conditionscheck.NewChecker(testEnv.Client, condns)
 			checker.CheckErr(ctx, obj)
 
 			// kstatus client conformance check

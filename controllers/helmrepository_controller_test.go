@@ -28,11 +28,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/darkowlzz/controller-check/status"
-	"github.com/fluxcd/pkg/apis/meta"
-	"github.com/fluxcd/pkg/helmtestserver"
-	"github.com/fluxcd/pkg/runtime/conditions"
-	"github.com/fluxcd/pkg/runtime/patch"
 	. "github.com/onsi/gomega"
 	helmgetter "helm.sh/helm/v3/pkg/getter"
 	corev1 "k8s.io/api/core/v1"
@@ -43,6 +38,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	fakeclient "sigs.k8s.io/controller-runtime/pkg/client/fake"
+
+	"github.com/fluxcd/pkg/apis/meta"
+	"github.com/fluxcd/pkg/helmtestserver"
+	"github.com/fluxcd/pkg/runtime/conditions"
+	conditionscheck "github.com/fluxcd/pkg/runtime/conditions/check"
+	"github.com/fluxcd/pkg/runtime/patch"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
 	"github.com/fluxcd/source-controller/internal/helm/getter"
@@ -101,8 +102,8 @@ func TestHelmRepositoryReconciler_Reconcile(t *testing.T) {
 	}, timeout).Should(BeTrue())
 
 	// Check if the object status is valid.
-	condns := &status.Conditions{NegativePolarity: helmRepositoryReadyCondition.NegativePolarity}
-	checker := status.NewChecker(testEnv.Client, condns)
+	condns := &conditionscheck.Conditions{NegativePolarity: helmRepositoryReadyCondition.NegativePolarity}
+	checker := conditionscheck.NewChecker(testEnv.Client, condns)
 	checker.CheckErr(ctx, obj)
 
 	// kstatus client conformance check.
@@ -1165,8 +1166,8 @@ func TestHelmRepositoryReconciler_ReconcileTypeUpdatePredicateFilter(t *testing.
 	}, timeout).Should(BeTrue())
 
 	// Check if the object status is valid.
-	condns := &status.Conditions{NegativePolarity: helmRepositoryReadyCondition.NegativePolarity}
-	checker := status.NewChecker(testEnv.Client, condns)
+	condns := &conditionscheck.Conditions{NegativePolarity: helmRepositoryReadyCondition.NegativePolarity}
+	checker := conditionscheck.NewChecker(testEnv.Client, condns)
 	checker.CheckErr(ctx, obj)
 
 	// kstatus client conformance check.
@@ -1217,8 +1218,8 @@ func TestHelmRepositoryReconciler_ReconcileTypeUpdatePredicateFilter(t *testing.
 	}, timeout).Should(BeTrue())
 
 	// Check if the object status is valid.
-	condns = &status.Conditions{NegativePolarity: helmRepositoryOCINegativeConditions}
-	checker = status.NewChecker(testEnv.Client, condns)
+	condns = &conditionscheck.Conditions{NegativePolarity: helmRepositoryOCINegativeConditions}
+	checker = conditionscheck.NewChecker(testEnv.Client, condns)
 	checker.CheckErr(ctx, obj)
 
 	g.Expect(testEnv.Delete(ctx, obj)).To(Succeed())
@@ -1282,8 +1283,8 @@ func TestHelmRepositoryReconciler_ReconcileSpecUpdatePredicateFilter(t *testing.
 	}, timeout).Should(BeTrue())
 
 	// Check if the object status is valid.
-	condns := &status.Conditions{NegativePolarity: helmRepositoryReadyCondition.NegativePolarity}
-	checker := status.NewChecker(testEnv.Client, condns)
+	condns := &conditionscheck.Conditions{NegativePolarity: helmRepositoryReadyCondition.NegativePolarity}
+	checker := conditionscheck.NewChecker(testEnv.Client, condns)
 	checker.CheckErr(ctx, obj)
 
 	// kstatus client conformance check.
@@ -1314,8 +1315,8 @@ func TestHelmRepositoryReconciler_ReconcileSpecUpdatePredicateFilter(t *testing.
 	}, timeout).Should(BeTrue())
 
 	// Check if the object status is valid.
-	condns = &status.Conditions{NegativePolarity: helmRepositoryReadyCondition.NegativePolarity}
-	checker = status.NewChecker(testEnv.Client, condns)
+	condns = &conditionscheck.Conditions{NegativePolarity: helmRepositoryReadyCondition.NegativePolarity}
+	checker = conditionscheck.NewChecker(testEnv.Client, condns)
 	checker.CheckErr(ctx, obj)
 
 	g.Expect(testEnv.Delete(ctx, obj)).To(Succeed())

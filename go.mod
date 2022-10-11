@@ -24,20 +24,19 @@ require (
 	// When in doubt (and not using openpgp), use /x/crypto.
 	github.com/ProtonMail/go-crypto v0.0.0-20220824120805-4b6e5c587895
 	github.com/cyphar/filepath-securejoin v0.2.3
-	github.com/darkowlzz/controller-check v0.0.0-20220902134353-b2ee0ae3566c
 	github.com/distribution/distribution/v3 v3.0.0-20220907155224-78b9c98c5c31
 	github.com/docker/cli v20.10.18+incompatible
 	github.com/docker/go-units v0.5.0
 	github.com/elazarl/goproxy v0.0.0-20220901064549-fbd10ff4f5a1
 	github.com/fluxcd/gitkit v0.6.0
-	github.com/fluxcd/pkg/apis/meta v0.16.0
+	github.com/fluxcd/pkg/apis/meta v0.17.0
 	github.com/fluxcd/pkg/gittestserver v0.7.0
 	github.com/fluxcd/pkg/gitutil v0.2.0
 	github.com/fluxcd/pkg/helmtestserver v0.9.0
 	github.com/fluxcd/pkg/lockedfile v0.1.0
 	github.com/fluxcd/pkg/masktoken v0.2.0
-	github.com/fluxcd/pkg/oci v0.11.0
-	github.com/fluxcd/pkg/runtime v0.19.0
+	github.com/fluxcd/pkg/oci v0.13.0
+	github.com/fluxcd/pkg/runtime v0.21.0
 	github.com/fluxcd/pkg/sourceignore v0.2.0
 	github.com/fluxcd/pkg/ssh v0.6.0
 	github.com/fluxcd/pkg/testserver v0.3.0
@@ -389,7 +388,7 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	k8s.io/apiextensions-apiserver v0.25.0 // indirect
 	k8s.io/apiserver v0.25.0 // indirect
-	k8s.io/cli-runtime v0.25.0 // indirect
+	k8s.io/cli-runtime v0.25.2 // indirect
 	k8s.io/component-base v0.25.2 // indirect
 	k8s.io/klog/v2 v2.80.1 // indirect
 	k8s.io/kube-openapi v0.0.0-20220803162953-67bda5d908f1 // indirect
