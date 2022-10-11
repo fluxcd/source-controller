@@ -23,7 +23,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/darkowlzz/controller-check/status"
 	. "github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -34,6 +33,7 @@ import (
 
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/runtime/conditions"
+	conditionscheck "github.com/fluxcd/pkg/runtime/conditions/check"
 	"github.com/fluxcd/pkg/runtime/patch"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
@@ -370,8 +370,8 @@ func TestSummarizeAndPatch(t *testing.T) {
 			}
 
 			// Check if the object status is valid as per kstatus.
-			condns := &status.Conditions{NegativePolarity: testReadyConditions.NegativePolarity}
-			checker := status.NewChecker(client, condns)
+			condns := &conditionscheck.Conditions{NegativePolarity: testReadyConditions.NegativePolarity}
+			checker := conditionscheck.NewChecker(client, condns)
 			checker.CheckErr(ctx, obj)
 		})
 	}

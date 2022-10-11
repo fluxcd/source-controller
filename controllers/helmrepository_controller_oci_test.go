@@ -21,12 +21,6 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/darkowlzz/controller-check/status"
-	"github.com/fluxcd/pkg/apis/meta"
-	"github.com/fluxcd/pkg/runtime/conditions"
-	"github.com/fluxcd/pkg/runtime/patch"
-	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
-	"github.com/fluxcd/source-controller/internal/helm/registry"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -36,6 +30,14 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	fakeclient "sigs.k8s.io/controller-runtime/pkg/client/fake"
+
+	"github.com/fluxcd/pkg/apis/meta"
+	"github.com/fluxcd/pkg/runtime/conditions"
+	conditionscheck "github.com/fluxcd/pkg/runtime/conditions/check"
+	"github.com/fluxcd/pkg/runtime/patch"
+
+	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
+	"github.com/fluxcd/source-controller/internal/helm/registry"
 )
 
 func TestHelmRepositoryOCIReconciler_Reconcile(t *testing.T) {
@@ -128,8 +130,8 @@ func TestHelmRepositoryOCIReconciler_Reconcile(t *testing.T) {
 			}, timeout).Should(BeTrue())
 
 			// Check if the object status is valid.
-			condns := &status.Conditions{NegativePolarity: helmRepositoryReadyCondition.NegativePolarity}
-			checker := status.NewChecker(testEnv.Client, condns)
+			condns := &conditionscheck.Conditions{NegativePolarity: helmRepositoryReadyCondition.NegativePolarity}
+			checker := conditionscheck.NewChecker(testEnv.Client, condns)
 			checker.CheckErr(ctx, obj)
 
 			// kstatus client conformance check.

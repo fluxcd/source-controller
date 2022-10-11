@@ -28,10 +28,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/darkowlzz/controller-check/status"
-	"github.com/fluxcd/pkg/apis/meta"
-	"github.com/fluxcd/pkg/runtime/conditions"
-	"github.com/fluxcd/pkg/runtime/patch"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -41,6 +37,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	fakeclient "sigs.k8s.io/controller-runtime/pkg/client/fake"
+
+	"github.com/fluxcd/pkg/apis/meta"
+	"github.com/fluxcd/pkg/runtime/conditions"
+	conditionscheck "github.com/fluxcd/pkg/runtime/conditions/check"
+	"github.com/fluxcd/pkg/runtime/patch"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
 	gcsmock "github.com/fluxcd/source-controller/internal/mock/gcs"
@@ -127,8 +128,8 @@ func TestBucketReconciler_Reconcile(t *testing.T) {
 	}, timeout).Should(BeTrue())
 
 	// Check if the object status is valid.
-	condns := &status.Conditions{NegativePolarity: bucketReadyCondition.NegativePolarity}
-	checker := status.NewChecker(testEnv.Client, condns)
+	condns := &conditionscheck.Conditions{NegativePolarity: bucketReadyCondition.NegativePolarity}
+	checker := conditionscheck.NewChecker(testEnv.Client, condns)
 	checker.CheckErr(ctx, obj)
 
 	// kstatus client conformance check.

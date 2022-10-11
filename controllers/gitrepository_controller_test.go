@@ -28,13 +28,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/darkowlzz/controller-check/status"
-	"github.com/fluxcd/pkg/apis/meta"
-	"github.com/fluxcd/pkg/gittestserver"
-	"github.com/fluxcd/pkg/runtime/conditions"
-	"github.com/fluxcd/pkg/runtime/patch"
-	"github.com/fluxcd/pkg/ssh"
-	"github.com/fluxcd/pkg/testserver"
 	"github.com/go-git/go-billy/v5/memfs"
 	gogit "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
@@ -55,6 +48,14 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	fakeclient "sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+
+	"github.com/fluxcd/pkg/apis/meta"
+	"github.com/fluxcd/pkg/gittestserver"
+	"github.com/fluxcd/pkg/runtime/conditions"
+	conditionscheck "github.com/fluxcd/pkg/runtime/conditions/check"
+	"github.com/fluxcd/pkg/runtime/patch"
+	"github.com/fluxcd/pkg/ssh"
+	"github.com/fluxcd/pkg/testserver"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
 	serror "github.com/fluxcd/source-controller/internal/error"
@@ -203,8 +204,8 @@ func TestGitRepositoryReconciler_Reconcile(t *testing.T) {
 	}, timeout).Should(BeTrue())
 
 	// Check if the object status is valid.
-	condns := &status.Conditions{NegativePolarity: gitRepositoryReadyCondition.NegativePolarity}
-	checker := status.NewChecker(testEnv.Client, condns)
+	condns := &conditionscheck.Conditions{NegativePolarity: gitRepositoryReadyCondition.NegativePolarity}
+	checker := conditionscheck.NewChecker(testEnv.Client, condns)
 	checker.CheckErr(ctx, obj)
 
 	// kstatus client conformance check.
