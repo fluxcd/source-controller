@@ -166,6 +166,11 @@ func (in *BucketStatus) DeepCopyInto(out *BucketStatus) {
 		*out = new(Artifact)
 		(*in).DeepCopyInto(*out)
 	}
+	if in.ObservedIgnore != nil {
+		in, out := &in.ObservedIgnore, &out.ObservedIgnore
+		*out = new(string)
+		**out = **in
+	}
 	out.ReconcileRequestStatus = in.ReconcileRequestStatus
 }
 
@@ -345,6 +350,16 @@ func (in *GitRepositoryStatus) DeepCopyInto(out *GitRepositoryStatus) {
 				(*in).DeepCopyInto(*out)
 			}
 		}
+	}
+	if in.ObservedIgnore != nil {
+		in, out := &in.ObservedIgnore, &out.ObservedIgnore
+		*out = new(string)
+		**out = **in
+	}
+	if in.ObservedInclude != nil {
+		in, out := &in.ObservedInclude, &out.ObservedInclude
+		*out = make([]GitRepositoryInclude, len(*in))
+		copy(*out, *in)
 	}
 	out.ReconcileRequestStatus = in.ReconcileRequestStatus
 }
@@ -776,6 +791,16 @@ func (in *OCIRepositoryStatus) DeepCopyInto(out *OCIRepositoryStatus) {
 		in, out := &in.Artifact, &out.Artifact
 		*out = new(Artifact)
 		(*in).DeepCopyInto(*out)
+	}
+	if in.ObservedIgnore != nil {
+		in, out := &in.ObservedIgnore, &out.ObservedIgnore
+		*out = new(string)
+		**out = **in
+	}
+	if in.ObservedLayerSelector != nil {
+		in, out := &in.ObservedLayerSelector, &out.ObservedLayerSelector
+		*out = new(OCILayerSelector)
+		**out = **in
 	}
 	out.ReconcileRequestStatus = in.ReconcileRequestStatus
 }

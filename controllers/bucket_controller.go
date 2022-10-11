@@ -628,6 +628,7 @@ func (r *BucketReconciler) reconcileArtifact(ctx context.Context, obj *sourcev1.
 
 	// Record it on the object
 	obj.Status.Artifact = artifact.DeepCopy()
+	obj.Status.ObservedIgnore = obj.Spec.Ignore
 
 	// Update symlink on a "best effort" basis
 	url, err := r.Storage.Symlink(artifact, "latest.tar.gz")

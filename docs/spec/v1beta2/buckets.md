@@ -1064,6 +1064,25 @@ Note that a Bucket can be [reconciling](#reconciling-bucket) while failing at
 the same time, for example due to a newly introduced configuration issue in the
 Bucket spec.
 
+### Observed Ignore
+
+The source-controller reports an observed ignore in the Bucket's
+`.status.observedIgnore`. The observed ignore is the latest `.spec.ignore` value
+which resulted in a [ready state](#ready-bucket), or stalled due to error
+it can not recover from without human intervention. The value is the same as the
+[ignore in spec](#ignore). It indicates the ignore rules used in building the
+current artifact in storage.
+
+Example:
+```yaml
+status:
+  ...
+  observedIgnore: |
+    hpa.yaml
+    build
+  ...
+```
+
 ### Observed Generation
 
 The source-controller reports an

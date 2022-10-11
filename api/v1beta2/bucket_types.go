@@ -128,6 +128,11 @@ type BucketStatus struct {
 	// +optional
 	Artifact *Artifact `json:"artifact,omitempty"`
 
+	// ObservedIgnore is the observed exclusion patterns used for constructing
+	// the source artifact.
+	// +optional
+	ObservedIgnore *string `json:"observedIgnore,omitempty"`
+
 	meta.ReconcileRequestStatus `json:",inline"`
 }
 

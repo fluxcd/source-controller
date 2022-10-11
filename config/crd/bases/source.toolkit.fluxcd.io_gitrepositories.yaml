@@ -658,13 +658,14 @@ spec:
                   type: object
                 type: array
               contentConfigChecksum:
-                description: 'ContentConfigChecksum is a checksum of all the configurations
+                description: "ContentConfigChecksum is a checksum of all the configurations
                   related to the content of the source artifact: - .spec.ignore -
                   .spec.recurseSubmodules - .spec.included and the checksum of the
                   included artifacts observed in .status.observedGeneration version
                   of the object. This can be used to determine if the content of the
                   included repository has changed. It has the format of `<algo>:<checksum>`,
-                  for example: `sha256:<checksum>`.'
+                  for example: `sha256:<checksum>`. \n Deprecated: Replaced with explicit
+                  fields for observed artifact content config in the status."
                 type: string
               includedArtifacts:
                 description: IncludedArtifacts contains a list of the last successfully
@@ -723,6 +724,44 @@ spec:
                   the GitRepository object.
                 format: int64
                 type: integer
+              observedIgnore:
+                description: ObservedIgnore is the observed exclusion patterns used
+                  for constructing the source artifact.
+                type: string
+              observedInclude:
+                description: ObservedInclude is the observed list of GitRepository
+                  resources used to to produce the current Artifact.
+                items:
+                  description: GitRepositoryInclude specifies a local reference to
+                    a GitRepository which Artifact (sub-)contents must be included,
+                    and where they should be placed.
+                  properties:
+                    fromPath:
+                      description: FromPath specifies the path to copy contents from,
+                        defaults to the root of the Artifact.
+                      type: string
+                    repository:
+                      description: GitRepositoryRef specifies the GitRepository which
+                        Artifact contents must be included.
+                      properties:
+                        name:
+                          description: Name of the referent.
+                          type: string
+                      required:
+                      - name
+                      type: object
+                    toPath:
+                      description: ToPath specifies the path to copy contents to,
+                        defaults to the name of the GitRepositoryRef.
+                      type: string
+                  required:
+                  - repository
+                  type: object
+                type: array
+              observedRecurseSubmodules:
+                description: ObservedRecurseSubmodules is the observed resource submodules
+                  configuration used to produce the current Artifact.
+                type: boolean
               url:
                 description: URL is the dynamic fetch link for the latest Artifact.
                   It is provided on a "best effort" basis, and using the precise GitRepositoryStatus.Artifact

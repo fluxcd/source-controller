@@ -854,6 +854,79 @@ configurations of the GitRepository that indicate a change in source and
 records it in `.status.contentConfigChecksum`. This field is used to determine
 if the source artifact needs to be rebuilt.
 
+**Deprecation Note:** `contentConfigChecksum` is no longer used and will be
+removed in the next API version. The individual components used for generating
+content configuration checksum now have explicit fields in the status. This
+makes the observations used by the controller for making artifact rebuild
+decisions more transparent and easier to debug.
+
+### Observed Ignore
+
+The source-controller reports an observed ignore in the GitRepository's
+`.status.observedIgnore`. The observed ignore is the latest `.spec.ignore` value
+which resulted in a [ready state](#ready-gitrepository), or stalled due to error
+it can not recover from without human intervention.
+The value is the same as the [ignore in spec](#ignore).
+It indicates the ignore rules used in building the current artifact in storage.
+It is also used by the controller to determine if an artifact needs to be
+rebuilt.
+
+Example:
+```yaml
+status:
+  ...
+  observedIgnore: |
+    cue
+    pkg
+  ...
+```
+
+### Observed Recurse Submodules
+
+The source-controller reports an observed recurse submodule in the
+GitRepository's `.status.observedRecurseSubmodules`. The observed recurse
+submodules is the latest `.spec.recurseSubmodules` value which resulted in a
+[ready state](#ready-gitrepository), or stalled due to error it can not recover
+from without human intervention. The value is the same as the
+[recurse submodules in spec](#recurse-submodules). It indicates the recurse
+submodules configuration used in building the current artifact in storage. It is
+also used by the controller to determine if an artifact needs to be rebuilt.
+
+Example:
+```yaml
+status:
+  ...
+  observedRecurseSubmodules: true
+  ...
+```
+
+### Observed Include
+
+The source-controller reports observed include in the GitRepository's
+`.status.observedInclude`. The observed include is the latest
+`.spec.recurseSubmodules` value which resulted in a
+[ready state](#ready-gitrepository), or stalled due to error it can not recover
+from without human intervention. The value is the same as the
+[include in spec](#include). It indicates the include configuration used in
+building the current artifact in storage. It is also used by the controller to
+determine if an artifact needs to be rebuilt.
+
+Example:
+```yaml
+status:
+  ...
+  observedInclude:
+  - fromPath: deploy/webapp
+    repository:
+      name: repo1
+    toPath: foo
+  - fromPath: deploy/secure
+    repository:
+      name: repo2
+    toPath: bar
+  ...
+```
+
 ### Observed Generation
 
 The source-controller reports an [observed generation][typical-status-properties]

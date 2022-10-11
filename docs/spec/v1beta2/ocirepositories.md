@@ -868,6 +868,53 @@ configurations of the OCIRepository that indicate a change in source and
 records it in `.status.contentConfigChecksum`. This field is used to determine
 if the source artifact needs to be rebuilt.
 
+**Deprecation Note:** `contentConfigChecksum` is no longer used and will be
+removed in the next API version. The individual components used for generating
+content configuration checksum now have explicit fields in the status. This
+makes the observations used by the controller for making artifact rebuild
+decisions more transparent and easier to debug.
+
+### Observed Ignore
+
+The source-controller reports an observed ignore in the OCIRepository's
+`.status.observedIgnore`. The observed ignore is the latest `.spec.ignore` value
+which resulted in a [ready state](#ready-ocirepository), or stalled due to error
+it can not recover from without human intervention. The value is the same as the
+[ignore in spec](#ignore). It indicates the ignore rules used in building the
+current artifact in storage. It is also used by the controller to determine if
+an artifact needs to be rebuilt.
+
+Example:
+```yaml
+status:
+  ...
+  observedIgnore: |
+    hpa.yaml
+    build
+  ...
+```
+
+### Observed Layer Selector
+
+The source-controller reports an observed layer selector in the OCIRepository's
+`.status.observedLayerSelector`. The observed layer selector is the latest
+`.spec.layerSelector` value which resulted in a [ready state](#ready-ocirepository),
+or stalled due to error it can not recover from without human intervention.
+The value is the same as the [layer selector in spec](#layer-selector).
+It indicates the layer selection configuration used in building the current
+artifact in storage. It is also used by the controller to determine if an
+artifact needs to be rebuilt.
+
+Example:
+```yaml
+status:
+  ...
+  observedLayerSelector:
+    mediaType: application/vnd.docker.image.rootfs.diff.tar.gzip
+    operation: copy
+  ...
+```
+
 ### Observed Generation
 
 The source-controller reports an [observed generation][typical-status-properties]

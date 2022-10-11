@@ -143,7 +143,6 @@ Oomb3gD/TRf/nAdVED+k81GdLzciYdUGtI71/qI47G0nMBluLRE=
 =/4e+
 -----END PGP PUBLIC KEY BLOCK-----
 `
-	emptyContentConfigChecksum = "sha256:fcbcf165908dd18a9e49f7ff27810176db8e9f63b4352213741664245224f8aa"
 )
 
 var (
@@ -685,8 +684,6 @@ func TestGitRepositoryReconciler_reconcileSource_checkoutStrategy(t *testing.T) 
 						Revision: "staging/" + latestRev,
 						Path:     randStringRunes(10),
 					},
-					// Checksum with all the relevant fields unset.
-					ContentConfigChecksum: emptyContentConfigChecksum,
 				}
 				conditions.MarkTrue(obj, sourcev1.ArtifactInStorageCondition, meta.SucceededReason, "foo")
 			},
@@ -709,8 +706,6 @@ func TestGitRepositoryReconciler_reconcileSource_checkoutStrategy(t *testing.T) 
 						Revision: "staging/" + latestRev,
 						Path:     randStringRunes(10),
 					},
-					// Checksum with all the relevant fields unset.
-					ContentConfigChecksum: emptyContentConfigChecksum,
 				}
 				conditions.MarkTrue(obj, sourcev1.ArtifactInStorageCondition, meta.SucceededReason, "foo")
 			},
@@ -835,6 +830,9 @@ func TestGitRepositoryReconciler_reconcileArtifact(t *testing.T) {
 			includes: artifactSet{&sourcev1.Artifact{Revision: "main/revision"}},
 			beforeFunc: func(obj *sourcev1.GitRepository) {
 				obj.Spec.Interval = metav1.Duration{Duration: interval}
+				obj.Spec.Include = []sourcev1.GitRepositoryInclude{
+					{GitRepositoryRef: meta.LocalObjectReference{Name: "foo"}},
+				}
 			},
 			afterFunc: func(t *WithT, obj *sourcev1.GitRepository) {
 				t.Expect(obj.GetArtifact()).ToNot(BeNil())
@@ -850,12 +848,15 @@ func TestGitRepositoryReconciler_reconcileArtifact(t *testing.T) {
 		{
 			name:     "Up-to-date artifact should not update status",
 			dir:      "testdata/git/repository",
-			includes: artifactSet{&sourcev1.Artifact{Revision: "main/revision"}},
+			includes: artifactSet{&sourcev1.Artifact{Revision: "main/revision", Checksum: "some-checksum"}},
 			beforeFunc: func(obj *sourcev1.GitRepository) {
 				obj.Spec.Interval = metav1.Duration{Duration: interval}
+				obj.Spec.Include = []sourcev1.GitRepositoryInclude{
+					{GitRepositoryRef: meta.LocalObjectReference{Name: "foo"}},
+				}
 				obj.Status.Artifact = &sourcev1.Artifact{Revision: "main/revision"}
 				obj.Status.IncludedArtifacts = []*sourcev1.Artifact{{Revision: "main/revision", Checksum: "some-checksum"}}
-				obj.Status.ContentConfigChecksum = "sha256:f825d11a1c5987e033d2cb36449a3b0435a6abc9b2bfdbcdcc7c49bf40e9285d"
+				obj.Status.ObservedInclude = obj.Spec.Include
 			},
 			afterFunc: func(t *WithT, obj *sourcev1.GitRepository) {
 				t.Expect(obj.Status.URL).To(BeEmpty())
@@ -2145,53 +2146,6 @@ func TestGitRepositoryReconciler_fetchIncludes(t *testing.T) {
 	}
 }
 
-func TestGitRepositoryReconciler_calculateContentConfigChecksum(t *testing.T) {
-	g := NewWithT(t)
-	obj := &sourcev1.GitRepository{}
-	r := &GitRepositoryReconciler{}
-
-	emptyChecksum := r.calculateContentConfigChecksum(obj, nil)
-	g.Expect(emptyChecksum).To(Equal(emptyContentConfigChecksum))
-
-	// Ignore modified.
-	obj.Spec.Ignore = pointer.String("some-rule")
-	ignoreModChecksum := r.calculateContentConfigChecksum(obj, nil)
-	g.Expect(emptyChecksum).ToNot(Equal(ignoreModChecksum))
-
-	// Recurse submodules modified.
-	obj.Spec.RecurseSubmodules = true
-	submodModChecksum := r.calculateContentConfigChecksum(obj, nil)
-	g.Expect(ignoreModChecksum).ToNot(Equal(submodModChecksum))
-
-	// Include modified.
-	obj.Spec.Include = []sourcev1.GitRepositoryInclude{
-		{
-			GitRepositoryRef: meta.LocalObjectReference{Name: "foo"},
-			FromPath:         "aaa",
-			ToPath:           "bbb",
-		},
-	}
-	artifacts := &artifactSet{
-		&sourcev1.Artifact{Revision: "some-revision-1", Checksum: "some-checksum-1"},
-	}
-	includeModChecksum := r.calculateContentConfigChecksum(obj, artifacts)
-	g.Expect(submodModChecksum).ToNot(Equal(includeModChecksum))
-
-	// Artifact modified revision.
-	artifacts = &artifactSet{
-		&sourcev1.Artifact{Revision: "some-revision-2", Checksum: "some-checksum-1"},
-	}
-	artifactModChecksum := r.calculateContentConfigChecksum(obj, artifacts)
-	g.Expect(includeModChecksum).ToNot(Equal(artifactModChecksum))
-
-	// Artifact modified checksum.
-	artifacts = &artifactSet{
-		&sourcev1.Artifact{Revision: "some-revision-2", Checksum: "some-checksum-2"},
-	}
-	artifactCsumModChecksum := r.calculateContentConfigChecksum(obj, artifacts)
-	g.Expect(artifactModChecksum).ToNot(Equal(artifactCsumModChecksum))
-}
-
 func resetChmod(path string, dirMode os.FileMode, fileMode os.FileMode) error {
 	err := filepath.Walk(path,
 		func(path string, info os.FileInfo, err error) error {
@@ -2211,4 +2165,372 @@ func resetChmod(path string, dirMode os.FileMode, fileMode os.FileMode) error {
 	}
 
 	return nil
+}
+
+func TestGitRepositoryIncludeEqual(t *testing.T) {
+	tests := []struct {
+		name string
+		a    sourcev1.GitRepositoryInclude
+		b    sourcev1.GitRepositoryInclude
+		want bool
+	}{
+		{
+			name: "empty",
+			want: true,
+		},
+		{
+			name: "different refs",
+			a: sourcev1.GitRepositoryInclude{
+				GitRepositoryRef: meta.LocalObjectReference{Name: "foo"},
+			},
+			b: sourcev1.GitRepositoryInclude{
+				GitRepositoryRef: meta.LocalObjectReference{Name: "bar"},
+			},
+			want: false,
+		},
+		{
+			name: "same refs",
+			a: sourcev1.GitRepositoryInclude{
+				GitRepositoryRef: meta.LocalObjectReference{Name: "foo"},
+			},
+			b: sourcev1.GitRepositoryInclude{
+				GitRepositoryRef: meta.LocalObjectReference{Name: "foo"},
+			},
+			want: true,
+		},
+		{
+			name: "different from paths",
+			a:    sourcev1.GitRepositoryInclude{FromPath: "foo"},
+			b:    sourcev1.GitRepositoryInclude{FromPath: "bar"},
+			want: false,
+		},
+		{
+			name: "same from paths",
+			a:    sourcev1.GitRepositoryInclude{FromPath: "foo"},
+			b:    sourcev1.GitRepositoryInclude{FromPath: "foo"},
+			want: true,
+		},
+		{
+			name: "different to paths",
+			a:    sourcev1.GitRepositoryInclude{ToPath: "foo"},
+			b:    sourcev1.GitRepositoryInclude{ToPath: "bar"},
+			want: false,
+		},
+		{
+			name: "same to paths",
+			a:    sourcev1.GitRepositoryInclude{ToPath: "foo"},
+			b:    sourcev1.GitRepositoryInclude{ToPath: "foo"},
+			want: true,
+		},
+		{
+			name: "same all",
+			a: sourcev1.GitRepositoryInclude{
+				GitRepositoryRef: meta.LocalObjectReference{Name: "foo-ref"},
+				FromPath:         "foo-path",
+				ToPath:           "bar-path",
+			},
+			b: sourcev1.GitRepositoryInclude{
+				GitRepositoryRef: meta.LocalObjectReference{Name: "foo-ref"},
+				FromPath:         "foo-path",
+				ToPath:           "bar-path",
+			},
+			want: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			g.Expect(gitRepositoryIncludeEqual(tt.a, tt.b)).To(Equal(tt.want))
+		})
+	}
+}
+
+func TestGitContentConfigChanged(t *testing.T) {
+	tests := []struct {
+		name      string
+		obj       sourcev1.GitRepository
+		artifacts []*sourcev1.Artifact
+		want      bool
+	}{
+		{
+			name: "no content config",
+			want: false,
+		},
+		{
+			name: "unobserved ignore",
+			obj: sourcev1.GitRepository{
+				Spec: sourcev1.GitRepositorySpec{Ignore: pointer.String("foo")},
+			},
+			want: true,
+		},
+		{
+			name: "observed ignore",
+			obj: sourcev1.GitRepository{
+				Spec:   sourcev1.GitRepositorySpec{Ignore: pointer.String("foo")},
+				Status: sourcev1.GitRepositoryStatus{ObservedIgnore: pointer.String("foo")},
+			},
+			want: false,
+		},
+		{
+			name: "unobserved recurse submodules",
+			obj: sourcev1.GitRepository{
+				Spec: sourcev1.GitRepositorySpec{RecurseSubmodules: true},
+			},
+			want: true,
+		},
+		{
+			name: "observed recurse submodules",
+			obj: sourcev1.GitRepository{
+				Spec:   sourcev1.GitRepositorySpec{RecurseSubmodules: true},
+				Status: sourcev1.GitRepositoryStatus{ObservedRecurseSubmodules: true},
+			},
+			want: false,
+		},
+		{
+			name: "unobserved include",
+			obj: sourcev1.GitRepository{
+				Spec: sourcev1.GitRepositorySpec{
+					Include: []sourcev1.GitRepositoryInclude{
+						{GitRepositoryRef: meta.LocalObjectReference{Name: "foo"}, FromPath: "bar", ToPath: "baz"},
+					},
+				},
+			},
+			want: true,
+		},
+		{
+			name: "observed include",
+			obj: sourcev1.GitRepository{
+				Spec: sourcev1.GitRepositorySpec{
+					Include: []sourcev1.GitRepositoryInclude{
+						{
+							GitRepositoryRef: meta.LocalObjectReference{Name: "foo"},
+							FromPath:         "bar",
+							ToPath:           "baz",
+						},
+					},
+				},
+				Status: sourcev1.GitRepositoryStatus{
+					ObservedInclude: []sourcev1.GitRepositoryInclude{
+						{
+							GitRepositoryRef: meta.LocalObjectReference{Name: "foo"},
+							FromPath:         "bar",
+							ToPath:           "baz",
+						},
+					},
+					IncludedArtifacts: []*sourcev1.Artifact{{Revision: "aaa", Checksum: "bbb"}},
+				},
+			},
+			artifacts: []*sourcev1.Artifact{
+				{Revision: "aaa", Checksum: "bbb"},
+			},
+			want: false,
+		},
+		{
+			name: "observed include but different artifact revision",
+			obj: sourcev1.GitRepository{
+				Spec: sourcev1.GitRepositorySpec{
+					Include: []sourcev1.GitRepositoryInclude{
+						{
+							GitRepositoryRef: meta.LocalObjectReference{Name: "foo"},
+							FromPath:         "bar",
+							ToPath:           "baz",
+						},
+					},
+				},
+				Status: sourcev1.GitRepositoryStatus{
+					ObservedInclude: []sourcev1.GitRepositoryInclude{
+						{
+							GitRepositoryRef: meta.LocalObjectReference{Name: "foo"},
+							FromPath:         "bar",
+							ToPath:           "baz",
+						},
+					},
+					IncludedArtifacts: []*sourcev1.Artifact{{Revision: "aaa", Checksum: "bbb"}},
+				},
+			},
+			artifacts: []*sourcev1.Artifact{
+				{Revision: "ccc", Checksum: "bbb"},
+			},
+			want: true,
+		},
+		{
+			name: "observed include but different artifact checksum",
+			obj: sourcev1.GitRepository{
+				Spec: sourcev1.GitRepositorySpec{
+					Include: []sourcev1.GitRepositoryInclude{
+						{
+							GitRepositoryRef: meta.LocalObjectReference{Name: "foo"},
+							FromPath:         "bar",
+							ToPath:           "baz",
+						},
+					},
+				},
+				Status: sourcev1.GitRepositoryStatus{
+					ObservedInclude: []sourcev1.GitRepositoryInclude{
+						{
+							GitRepositoryRef: meta.LocalObjectReference{Name: "foo"},
+							FromPath:         "bar",
+							ToPath:           "baz",
+						},
+					},
+					IncludedArtifacts: []*sourcev1.Artifact{{Revision: "aaa", Checksum: "bbb"}},
+				},
+			},
+			artifacts: []*sourcev1.Artifact{
+				{Revision: "aaa", Checksum: "ddd"},
+			},
+			want: true,
+		},
+		{
+			name: "observed include but updated spec",
+			obj: sourcev1.GitRepository{
+				Spec: sourcev1.GitRepositorySpec{
+					Include: []sourcev1.GitRepositoryInclude{
+						{
+							GitRepositoryRef: meta.LocalObjectReference{Name: "foo2"},
+							FromPath:         "bar",
+							ToPath:           "baz",
+						},
+					},
+				},
+				Status: sourcev1.GitRepositoryStatus{
+					ObservedInclude: []sourcev1.GitRepositoryInclude{
+						{
+							GitRepositoryRef: meta.LocalObjectReference{Name: "foo"},
+							FromPath:         "bar",
+							ToPath:           "baz",
+						},
+					},
+					IncludedArtifacts: []*sourcev1.Artifact{{Revision: "aaa", Checksum: "bbb"}},
+				},
+			},
+			artifacts: []*sourcev1.Artifact{
+				{Revision: "aaa", Checksum: "bbb"},
+			},
+			want: true,
+		},
+		{
+			name: "different number of include and observed include",
+			obj: sourcev1.GitRepository{
+				Spec: sourcev1.GitRepositorySpec{
+					Include: []sourcev1.GitRepositoryInclude{
+						{
+							GitRepositoryRef: meta.LocalObjectReference{Name: "foo"},
+							FromPath:         "bar",
+							ToPath:           "baz",
+						},
+						{
+							GitRepositoryRef: meta.LocalObjectReference{Name: "foo2"},
+							FromPath:         "bar",
+							ToPath:           "baz",
+						},
+					},
+				},
+				Status: sourcev1.GitRepositoryStatus{
+					IncludedArtifacts: []*sourcev1.Artifact{
+						{Revision: "aaa", Checksum: "bbb"},
+						{Revision: "ccc", Checksum: "ccc"},
+					},
+				},
+			},
+			artifacts: []*sourcev1.Artifact{
+				{Revision: "aaa", Checksum: "bbb"},
+				{Revision: "ccc", Checksum: "ddd"},
+			},
+			want: true,
+		},
+		{
+			name: "different number of include and artifactset",
+			obj: sourcev1.GitRepository{
+				Spec: sourcev1.GitRepositorySpec{
+					Include: []sourcev1.GitRepositoryInclude{
+						{
+							GitRepositoryRef: meta.LocalObjectReference{Name: "foo"},
+							FromPath:         "bar",
+							ToPath:           "baz",
+						},
+						{
+							GitRepositoryRef: meta.LocalObjectReference{Name: "foo2"},
+							FromPath:         "bar",
+							ToPath:           "baz",
+						},
+					},
+				},
+				Status: sourcev1.GitRepositoryStatus{
+					ObservedInclude: []sourcev1.GitRepositoryInclude{
+						{
+							GitRepositoryRef: meta.LocalObjectReference{Name: "foo"},
+							FromPath:         "bar",
+							ToPath:           "baz",
+						},
+						{
+							GitRepositoryRef: meta.LocalObjectReference{Name: "foo2"},
+							FromPath:         "bar",
+							ToPath:           "baz",
+						},
+					},
+					IncludedArtifacts: []*sourcev1.Artifact{
+						{Revision: "aaa", Checksum: "bbb"},
+						{Revision: "ccc", Checksum: "ccc"},
+					},
+				},
+			},
+			artifacts: []*sourcev1.Artifact{
+				{Revision: "aaa", Checksum: "bbb"},
+			},
+			want: true,
+		},
+		{
+			name: "different number of include and included artifacts",
+			obj: sourcev1.GitRepository{
+				Spec: sourcev1.GitRepositorySpec{
+					Include: []sourcev1.GitRepositoryInclude{
+						{
+							GitRepositoryRef: meta.LocalObjectReference{Name: "foo"},
+							FromPath:         "bar",
+							ToPath:           "baz",
+						},
+						{
+							GitRepositoryRef: meta.LocalObjectReference{Name: "foo2"},
+							FromPath:         "bar",
+							ToPath:           "baz",
+						},
+					},
+				},
+				Status: sourcev1.GitRepositoryStatus{
+					ObservedInclude: []sourcev1.GitRepositoryInclude{
+						{
+							GitRepositoryRef: meta.LocalObjectReference{Name: "foo"},
+							FromPath:         "bar",
+							ToPath:           "baz",
+						},
+						{
+							GitRepositoryRef: meta.LocalObjectReference{Name: "foo2"},
+							FromPath:         "bar",
+							ToPath:           "baz",
+						},
+					},
+					IncludedArtifacts: []*sourcev1.Artifact{
+						{Revision: "aaa", Checksum: "bbb"},
+					},
+				},
+			},
+			artifacts: []*sourcev1.Artifact{
+				{Revision: "aaa", Checksum: "bbb"},
+				{Revision: "ccc", Checksum: "ccc"},
+			},
+			want: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			includes := artifactSet(tt.artifacts)
+			g.Expect(gitContentConfigChanged(&tt.obj, &includes)).To(Equal(tt.want))
+		})
+	}
 }
