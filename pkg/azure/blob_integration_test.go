@@ -285,7 +285,7 @@ func TestBlobClientContainerSASKey_BucketExists(t *testing.T) {
 	g.Expect(sasKey).ToNot(BeEmpty())
 
 	// the sdk returns the full SAS url e.g test.blob.core.windows.net/<container-name>/?<actual-sas-token>
-	sasKey = strings.TrimPrefix(sasKey, testBucket.Spec.Endpoint+"/"+testContainer+"/")
+	sasKey = strings.TrimPrefix(sasKey, testBucket.Spec.Endpoint+"/"+testContainer)
 	testSASKeySecret := corev1.Secret{
 		Data: map[string][]byte{
 			sasKeyField: []byte(sasKey),
