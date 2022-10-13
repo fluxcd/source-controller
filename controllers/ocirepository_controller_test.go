@@ -38,9 +38,6 @@ import (
 	"time"
 
 	"github.com/darkowlzz/controller-check/status"
-	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
-	serror "github.com/fluxcd/source-controller/internal/error"
-	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/crane"
 	"github.com/google/go-containerregistry/pkg/registry"
