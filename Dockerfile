@@ -3,7 +3,7 @@ ARG GO_VERSION=1.19
 ARG XX_VERSION=1.1.2
 
 ARG LIBGIT2_IMG=ghcr.io/fluxcd/golang-with-libgit2-only
-ARG LIBGIT2_TAG=v0.3.0
+ARG LIBGIT2_TAG=v0.4.0
 
 FROM ${LIBGIT2_IMG}:${LIBGIT2_TAG} AS libgit2-libs
 
