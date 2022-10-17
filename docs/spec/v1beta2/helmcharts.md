@@ -240,6 +240,102 @@ in a new Artifact. When the field is set to `false` or removed, it will resume.
 For practical information, see
 [suspending and resuming](#suspending-and-resuming).
 
+### Verification
+
+**Note:** This feature is available only for Helm charts fetched from an OCI Registry.
+
+`.spec.verify` is an optional field to enable the verification of [Cosign](https://github.com/sigstore/cosign)
+signatures. The field offers two subfields:
+
+- `.provider`, to specify the verification provider. Only supports `cosign` at present.
+- `.secretRef.name`, to specify a reference to a Secret in the same namespace as
+  the HelmChart, containing the Cosign public keys of trusted authors.
+
+```yaml
+---
+apiVersion: source.toolkit.fluxcd.io/v1beta2
+kind: HelmChart
+metadata:
+  name: podinfo
+spec:
+  verify:
+    provider: cosign
+    secretRef:
+      name: cosign-public-keys
+```
+
+When the verification succeeds, the controller adds a Condition with the
+following attributes to the HelmChart's `.status.conditions`:
+
+- `type: SourceVerified`
+- `status: "True"`
+- `reason: Succeeded`
+
+#### Public keys verification
+
+To verify the authenticity of HelmChart hosted in an OCI Registry, create a Kubernetes
+secret with the Cosign public keys:
+
+```yaml
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: cosign-public-keys
+type: Opaque
+data:
+  key1.pub: <BASE64>
+  key2.pub: <BASE64>
+```
+
+Note that the keys must have the `.pub` extension for Flux to make use of them.
+
+Flux will loop over the public keys and use them verify a HelmChart's signature.
+This allows for older HelmCharts to be valid as long as the right key is in the secret.
+
+#### Keyless verification
+
+For publicly available HelmCharts, which are signed using the
+[Cosign Keyless](https://github.com/sigstore/cosign/blob/main/KEYLESS.md) procedure,
+you can enable the verification by omitting the `.verify.secretRef` field.
+
+Example of verifying  HelmCharts signed by the
+[Cosign GitHub Action](https://github.com/sigstore/cosign-installer) with GitHub OIDC Token:
+
+```yaml
+apiVersion: source.toolkit.fluxcd.io/v1beta2
+kind: HelmChart
+metadata:
+  name: podinfo
+spec:
+  interval: 5m
+  reconcileStrategy: ChartVersion
+  sourceRef:
+    kind: HelmRepository
+    name: podinfo
+  version: ">=6.1.6"
+  verify:
+    provider: cosign
+```
+
+```yaml
+---
+apiVersion: source.toolkit.fluxcd.io/v1beta2
+kind: HelmRepository
+metadata:
+  name: podinfo
+spec:
+  interval: 1m0s
+  url: oci://ghcr.io/stefanprodan/charts
+  type: "oci"
+```
+
+The controller verifies the signatures using the Fulcio root CA and the Rekor
+instance hosted at [rekor.sigstore.dev](https://rekor.sigstore.dev/).
+
+Note that keyless verification is an **experimental feature**, using
+custom root CAs or self-hosted Rekor instances are not currently supported.
+
 ## Working with HelmCharts
 
 ### Triggering a reconcile
