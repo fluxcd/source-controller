@@ -86,3 +86,51 @@ func TestGetRequeueInterval(t *testing.T) {
 	_, err = GetRequeueInterval(obj2)
 	g.Expect(err).To(Equal(ErrRequeueIntervalNotFound))
 }
+
+func TestGetSuspend(t *testing.T) {
+	g := NewWithT(t)
+
+	// Get unset suspend value.
+	obj := &sourcev1.GitRepository{}
+	suspend, err := GetSuspend(obj)
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(suspend).To(BeFalse())
+
+	// Get set suspend value.
+	obj.Spec.Suspend = true
+	suspend, err = GetSuspend(obj)
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(suspend).To(BeTrue())
+}
+
+func TestSetSuspend(t *testing.T) {
+	g := NewWithT(t)
+
+	obj := &sourcev1.GitRepository{}
+	err := SetSuspend(obj, true)
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(obj.Spec.Suspend).To(BeTrue())
+
+	// Overwrite previous value.
+	err = SetSuspend(obj, false)
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(obj.Spec.Suspend).To(BeFalse())
+}
+
+func TestGetArtifact(t *testing.T) {
+	g := NewWithT(t)
+
+	// Get unset artifact value.
+	obj := &sourcev1.GitRepository{}
+	artifact, err := GetArtifact(obj)
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(artifact).To(BeNil())
+
+	// Get set artifact value.
+	obj.Status.Artifact = &sourcev1.Artifact{Path: "aaa", Revision: "zzz"}
+	artifact, err = GetArtifact(obj)
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(artifact).ToNot(BeNil())
+	g.Expect(artifact.Path).To(Equal("aaa"))
+	g.Expect(artifact.Revision).To(Equal("zzz"))
+}

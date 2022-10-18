@@ -17,11 +17,14 @@ limitations under the License.
 package object
 
 import (
+	"encoding/json"
 	"errors"
 	"time"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+
+	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
 )
 
 var (
@@ -111,4 +114,60 @@ func GetRequeueInterval(obj runtime.Object) (time.Duration, error) {
 		return period, ErrRequeueIntervalNotFound
 	}
 	return time.ParseDuration(interval)
+}
+
+// GetSuspend returns the spec.suspend of a given runtime object.
+func GetSuspend(obj runtime.Object) (bool, error) {
+	u, err := toUnstructured(obj)
+	if err != nil {
+		return false, err
+	}
+	suspend, found, err := unstructured.NestedBool(u.Object, "spec", "suspend")
+	if err != nil {
+		return false, err
+	}
+	// Since suspend is an optional field, it's false when not found.
+	if !found {
+		return false, nil
+	}
+	return suspend, nil
+}
+
+// SetSuspend sets the spec.suspend value of a given runtime object.
+func SetSuspend(obj runtime.Object, val bool) error {
+	content, err := runtime.DefaultUnstructuredConverter.ToUnstructured(obj)
+	if err != nil {
+		return err
+	}
+	u := unstructured.Unstructured{}
+	u.SetUnstructuredContent(content)
+	if err := unstructured.SetNestedField(u.Object, val, "spec", "suspend"); err != nil {
+		return err
+	}
+	return runtime.DefaultUnstructuredConverter.FromUnstructured(u.Object, obj)
+}
+
+// GetArtifact returns the status.artifact of a given runtime object.
+func GetArtifact(obj runtime.Object) (*sourcev1.Artifact, error) {
+	u, err := toUnstructured(obj)
+	if err != nil {
+		return nil, err
+	}
+	artifact, found, err := unstructured.NestedFieldNoCopy(u.Object, "status", "artifact")
+	if err != nil {
+		return nil, err
+	}
+	// Since artifact is an optional field, return nil when not found.
+	if !found {
+		return nil, nil
+	}
+	enc, err := json.Marshal(artifact)
+	if err != nil {
+		return nil, err
+	}
+	outArtifact := &sourcev1.Artifact{}
+	if err := json.Unmarshal(enc, outArtifact); err != nil {
+		return nil, err
+	}
+	return outArtifact, nil
 }
