@@ -135,7 +135,7 @@ func TestOCIRepository_Reconcile(t *testing.T) {
 			g.Expect(err).ToNot(HaveOccurred())
 			defer func() { g.Expect(testEnv.Delete(ctx, ns)).To(Succeed()) }()
 
-			obj := &sourcev1.OCIRepository{
+			origObj := &sourcev1.OCIRepository{
 				ObjectMeta: metav1.ObjectMeta{
 					GenerateName: "ocirepository-reconcile",
 					Namespace:    ns.Name,
@@ -146,6 +146,7 @@ func TestOCIRepository_Reconcile(t *testing.T) {
 					Reference: &sourcev1.OCIRepositoryRef{},
 				},
 			}
+			obj := origObj.DeepCopy()
 
 			if tt.tag != "" {
 				obj.Spec.Reference.Tag = tt.tag
@@ -174,17 +175,7 @@ func TestOCIRepository_Reconcile(t *testing.T) {
 			}, timeout).Should(BeTrue())
 
 			// Wait for the object to be Ready
-			g.Eventually(func() bool {
-				if err := testEnv.Get(ctx, key, obj); err != nil {
-					return false
-				}
-				if !conditions.IsReady(obj) {
-					return false
-				}
-				readyCondition := conditions.Get(obj, meta.ReadyCondition)
-				return obj.Generation == readyCondition.ObservedGeneration &&
-					obj.Generation == obj.Status.ObservedGeneration
-			}, timeout).Should(BeTrue())
+			waitForSourceReadyWithArtifact(ctx, g, obj)
 
 			// Check if the revision matches the expected digest
 			g.Expect(obj.Status.Artifact.Revision).To(Equal(tt.digest))
@@ -252,12 +243,11 @@ func TestOCIRepository_Reconcile(t *testing.T) {
 
 			// Wait for the object to be deleted
 			g.Expect(testEnv.Delete(ctx, obj)).To(Succeed())
-			g.Eventually(func() bool {
-				if err := testEnv.Get(ctx, key, obj); err != nil {
-					return apierrors.IsNotFound(err)
-				}
-				return false
-			}, timeout).Should(BeTrue())
+			waitForSourceDeletion(ctx, g, obj)
+
+			// Check if a suspended object gets deleted.
+			obj = origObj.DeepCopy()
+			testSuspendedObjectDeleteWithArtifact(ctx, g, obj)
 		})
 	}
 }

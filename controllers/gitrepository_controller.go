@@ -172,12 +172,6 @@ func (r *GitRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	// Record suspended status metric
 	r.RecordSuspend(ctx, obj, obj.Spec.Suspend)
 
-	// Return early if the object is suspended
-	if obj.Spec.Suspend {
-		log.Info("reconciliation is suspended for this object")
-		return ctrl.Result{}, nil
-	}
-
 	// Initialize the patch helper with the current version of the object.
 	patchHelper, err := patch.NewHelper(obj, r.Client)
 	if err != nil {
@@ -222,6 +216,13 @@ func (r *GitRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	// Examine if the object is under deletion
 	if !obj.ObjectMeta.DeletionTimestamp.IsZero() {
 		recResult, retErr = r.reconcileDelete(ctx, obj)
+		return
+	}
+
+	// Return if the object is suspended.
+	if obj.Spec.Suspend {
+		log.Info("reconciliation is suspended for this object")
+		recResult, retErr = sreconcile.ResultEmpty, nil
 		return
 	}
 

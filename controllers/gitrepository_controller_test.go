@@ -37,7 +37,6 @@ import (
 	. "github.com/onsi/gomega"
 	sshtestdata "golang.org/x/crypto/ssh/testdata"
 	corev1 "k8s.io/api/core/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
@@ -168,7 +167,7 @@ func TestGitRepositoryReconciler_Reconcile(t *testing.T) {
 	_, err = initGitRepo(server, "testdata/git/repository", git.DefaultBranch, repoPath)
 	g.Expect(err).NotTo(HaveOccurred())
 
-	obj := &sourcev1.GitRepository{
+	origObj := &sourcev1.GitRepository{
 		ObjectMeta: metav1.ObjectMeta{
 			GenerateName: "gitrepository-reconcile-",
 			Namespace:    "default",
@@ -178,6 +177,7 @@ func TestGitRepositoryReconciler_Reconcile(t *testing.T) {
 			URL:      server.HTTPAddress() + repoPath,
 		},
 	}
+	obj := origObj.DeepCopy()
 	g.Expect(testEnv.Create(ctx, obj)).To(Succeed())
 
 	key := client.ObjectKey{Name: obj.Name, Namespace: obj.Namespace}
@@ -191,17 +191,7 @@ func TestGitRepositoryReconciler_Reconcile(t *testing.T) {
 	}, timeout).Should(BeTrue())
 
 	// Wait for GitRepository to be Ready
-	g.Eventually(func() bool {
-		if err := testEnv.Get(ctx, key, obj); err != nil {
-			return false
-		}
-		if !conditions.IsReady(obj) || obj.Status.Artifact == nil {
-			return false
-		}
-		readyCondition := conditions.Get(obj, meta.ReadyCondition)
-		return obj.Generation == readyCondition.ObservedGeneration &&
-			obj.Generation == obj.Status.ObservedGeneration
-	}, timeout).Should(BeTrue())
+	waitForSourceReadyWithArtifact(ctx, g, obj)
 
 	// Check if the object status is valid.
 	condns := &conditionscheck.Conditions{NegativePolarity: gitRepositoryReadyCondition.NegativePolarity}
@@ -233,12 +223,11 @@ func TestGitRepositoryReconciler_Reconcile(t *testing.T) {
 	g.Expect(testEnv.Delete(ctx, obj)).To(Succeed())
 
 	// Wait for GitRepository to be deleted
-	g.Eventually(func() bool {
-		if err := testEnv.Get(ctx, key, obj); err != nil {
-			return apierrors.IsNotFound(err)
-		}
-		return false
-	}, timeout).Should(BeTrue())
+	waitForSourceDeletion(ctx, g, obj)
+
+	// Check if a suspended object gets deleted.
+	obj = origObj.DeepCopy()
+	testSuspendedObjectDeleteWithArtifact(ctx, g, obj)
 }
 
 func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {

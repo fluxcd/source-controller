@@ -85,6 +85,8 @@ func TestHelmChartReconciler_Reconcile(t *testing.T) {
 		{
 			name: "Reconciles chart build",
 			assertFunc: func(g *WithT, obj *sourcev1.HelmChart, repository *sourcev1.HelmRepository) {
+				origObj := obj.DeepCopy()
+
 				key := client.ObjectKey{Name: obj.Name, Namespace: obj.Namespace}
 
 				// Wait for finalizer to be set
@@ -96,17 +98,7 @@ func TestHelmChartReconciler_Reconcile(t *testing.T) {
 				}, timeout).Should(BeTrue())
 
 				// Wait for HelmChart to be Ready
-				g.Eventually(func() bool {
-					if err := testEnv.Get(ctx, key, obj); err != nil {
-						return false
-					}
-					if !conditions.IsReady(obj) || obj.Status.Artifact == nil {
-						return false
-					}
-					readyCondition := conditions.Get(obj, meta.ReadyCondition)
-					return obj.Generation == readyCondition.ObservedGeneration &&
-						obj.Generation == obj.Status.ObservedGeneration
-				}, timeout).Should(BeTrue())
+				waitForSourceReadyWithArtifact(ctx, g, obj)
 
 				// Check if the object status is valid.
 				condns := &conditionscheck.Conditions{NegativePolarity: helmChartReadyCondition.NegativePolarity}
@@ -146,12 +138,15 @@ func TestHelmChartReconciler_Reconcile(t *testing.T) {
 				g.Expect(testEnv.Delete(ctx, obj)).To(Succeed())
 
 				// Wait for HelmChart to be deleted
-				g.Eventually(func() bool {
-					if err := testEnv.Get(ctx, key, obj); err != nil {
-						return apierrors.IsNotFound(err)
-					}
-					return false
-				}, timeout).Should(BeTrue())
+				waitForSourceDeletion(ctx, g, obj)
+
+				// Check if a suspended object gets deleted.
+				// NOTE: Since the object is already created when received in
+				// this assertFunc, reset the ResourceVersion from the object
+				// before recreating it to avoid API server error.
+				obj = origObj.DeepCopy()
+				obj.ResourceVersion = ""
+				testSuspendedObjectDeleteWithArtifact(ctx, g, obj)
 			},
 		},
 		{
