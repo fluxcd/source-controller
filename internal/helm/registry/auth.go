@@ -95,7 +95,7 @@ func KeychainAdaptHelper(keyChain authn.Keychain) func(string) (registry.LoginOp
 		if err != nil {
 			return nil, fmt.Errorf("unable to parse registry URL '%s'", registryURL)
 		}
-		authenticator, err := keyChain.Resolve(resource{parsedURL.Host})
+		authenticator, err := keyChain.Resolve(stringResource{parsedURL.Host})
 		if err != nil {
 			return nil, fmt.Errorf("unable to resolve credentials for registry '%s': %w", registryURL, err)
 		}
@@ -126,14 +126,16 @@ func AuthAdaptHelper(auth authn.Authenticator) (registry.LoginOption, error) {
 	return registry.LoginOptBasicAuth(username, password), nil
 }
 
-type resource struct {
+// stringResource is there to satisfy the github.com/google/go-containerregistry/pkg/authn.Resource interface.
+// It merely wraps a given string and returns it for all of the interface's methods.
+type stringResource struct {
 	registry string
 }
 
-func (r resource) String() string {
+func (r stringResource) String() string {
 	return r.registry
 }
 
-func (r resource) RegistryStr() string {
+func (r stringResource) RegistryStr() string {
 	return r.registry
 }

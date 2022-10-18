@@ -214,6 +214,7 @@ func (r *HelmChartReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		summarizeHelper := summarize.NewHelper(r.EventRecorder, patchHelper)
 		summarizeOpts := []summarize.Option{
 			summarize.WithConditions(helmChartReadyCondition),
+			summarize.WithBiPolarityConditionTypes(sourcev1.SourceVerifiedCondition),
 			summarize.WithReconcileResult(recResult),
 			summarize.WithReconcileError(retErr),
 			summarize.WithIgnoreNotFound(),
@@ -648,7 +649,7 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 		ValuesFiles: obj.GetValuesFiles(),
 		Force:       obj.Generation != obj.Status.ObservedGeneration,
 		// The remote builder will not attempt to download the chart if
-		// an artifact exist with the same name and version and the force is false.
+		// an artifact exists with the same name and version and `Force` is false.
 		// It will try to verify the chart if:
 		// - we are on the first reconciliation
 		// - the HelmChart spec has changed (generation drift)

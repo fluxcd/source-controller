@@ -528,5 +528,5 @@ func (r *ChartRepository) RemoveCache() error {
 func (r *ChartRepository) VerifyChart(_ context.Context, _ *repo.ChartVersion) error {
 	// no-op
 	// this is a no-op because this is not implemented yet.
-	return nil
+	return fmt.Errorf("not implemented")
 }

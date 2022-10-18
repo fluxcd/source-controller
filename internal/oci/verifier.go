@@ -45,7 +45,7 @@ type options struct {
 	ROpt      []remote.Option
 }
 
-// Options is a function that configures the options applied to a CosignVerifier.
+// Options is a function that configures the options applied to a Verifier.
 type Options func(opts *options)
 
 // WithPublicKey sets the public key.
