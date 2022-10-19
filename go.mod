@@ -16,7 +16,13 @@ replace github.com/libgit2/git2go/v34 => github.com/fluxcd/git2go/v34 v34.0.0
 replace github.com/emicklei/go-restful => github.com/emicklei/go-restful v2.16.0+incompatible
 
 // Replace by named version before merging into main.
-replace github.com/fluxcd/pkg/git/libgit2 => github.com/fluxcd/pkg/git/libgit2 v0.0.0-20221007164102-c0aed7d985a4
+replace (
+	github.com/fluxcd/pkg/git/libgit2 => github.com/fluxcd/pkg/git/libgit2 v0.0.0-20221019101333-e179603d8b44
+	github.com/fluxcd/pkg/git/gogit => github.com/fluxcd/pkg/git/gogit v0.0.0-20221019101333-e179603d8b44
+	github.com/fluxcd/pkg/git => github.com/fluxcd/pkg/git v0.0.0-20221019101333-e179603d8b44
+)
+
+replace github.com/go-git/go-git/v5 => github.com/fluxcd/go-git/v5 v5.0.0-20221019082644-b33dae782906
 
 require (
 	cloud.google.com/go/storage v1.27.0
@@ -264,6 +270,7 @@ require (
 	github.com/leodido/go-urn v1.2.1 // indirect
 	github.com/letsencrypt/boulder v0.0.0-20220723181115-27de4befb95e // indirect
 	github.com/lib/pq v1.10.6 // indirect
+	github.com/libgit2/git2go/v33 v33.0.9 // indirect
 	github.com/liggitt/tabwriter v0.0.0-20181228230101-89fcab3d43de // indirect
 	github.com/magiconair/properties v1.8.6 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
@@ -315,6 +322,7 @@ require (
 	github.com/shopspring/decimal v1.2.0 // indirect
 	github.com/sigstore/fulcio v0.5.3 // indirect
 	github.com/sigstore/rekor v0.12.1-0.20220915152154-4bb6f441c1b2 // indirect
+	github.com/skeema/knownhosts v1.1.0 // indirect
 	github.com/skratchdot/open-golang v0.0.0-20200116055534-eef842397966 // indirect
 	github.com/soheilhy/cmux v0.1.5 // indirect
 	github.com/spf13/afero v1.8.2 // indirect
