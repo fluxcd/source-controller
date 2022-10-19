@@ -768,10 +768,13 @@ func (r *GitRepositoryReconciler) gitCheckout(ctx context.Context,
 	var gitReader git.RepositoryReader
 	var err error
 
-	if obj.Spec.GitImplementation == libgit2.ClientName {
+	switch obj.Spec.GitImplementation {
+	case sourcev1.LibGit2Implementation:
 		gitReader, err = libgit2.NewClient(dir, authOpts)
-	} else {
+	case sourcev1.GoGitImplementation, "":
 		gitReader, err = gogit.NewClient(dir, authOpts)
+	default:
+		err = fmt.Errorf("invalid Git implementation: %s", obj.Spec.GitImplementation)
 	}
 	if err != nil {
 		// Do not return err as recovery without changes is impossible.
