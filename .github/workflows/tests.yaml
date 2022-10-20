@@ -71,7 +71,7 @@ jobs:
   darwin-amd64:
     strategy:
       matrix:
-        os: [macos-11, macos-12]
+        os: [macos-12]
       fail-fast: false
     runs-on: ${{ matrix.os }}
     steps:
