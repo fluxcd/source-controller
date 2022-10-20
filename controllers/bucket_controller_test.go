@@ -30,7 +30,6 @@ import (
 
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/record"
 	kstatus "sigs.k8s.io/cli-utils/pkg/kstatus/status"
@@ -85,7 +84,7 @@ func TestBucketReconciler_Reconcile(t *testing.T) {
 	g.Expect(testEnv.Create(ctx, secret)).To(Succeed())
 	defer testEnv.Delete(ctx, secret)
 
-	obj := &sourcev1.Bucket{
+	origObj := &sourcev1.Bucket{
 		ObjectMeta: metav1.ObjectMeta{
 			GenerateName: "bucket-reconcile-",
 			Namespace:    "default",
@@ -102,6 +101,7 @@ func TestBucketReconciler_Reconcile(t *testing.T) {
 			},
 		},
 	}
+	obj := origObj.DeepCopy()
 	g.Expect(testEnv.Create(ctx, obj)).To(Succeed())
 
 	key := client.ObjectKey{Name: obj.Name, Namespace: obj.Namespace}
@@ -115,17 +115,7 @@ func TestBucketReconciler_Reconcile(t *testing.T) {
 	}, timeout).Should(BeTrue())
 
 	// Wait for Bucket to be Ready
-	g.Eventually(func() bool {
-		if err := testEnv.Get(ctx, key, obj); err != nil {
-			return false
-		}
-		if !conditions.IsReady(obj) || obj.Status.Artifact == nil {
-			return false
-		}
-		readyCondition := conditions.Get(obj, meta.ReadyCondition)
-		return obj.Generation == readyCondition.ObservedGeneration &&
-			obj.Generation == obj.Status.ObservedGeneration
-	}, timeout).Should(BeTrue())
+	waitForSourceReadyWithArtifact(ctx, g, obj)
 
 	// Check if the object status is valid.
 	condns := &conditionscheck.Conditions{NegativePolarity: bucketReadyCondition.NegativePolarity}
@@ -157,12 +147,11 @@ func TestBucketReconciler_Reconcile(t *testing.T) {
 	g.Expect(testEnv.Delete(ctx, obj)).To(Succeed())
 
 	// Wait for Bucket to be deleted
-	g.Eventually(func() bool {
-		if err := testEnv.Get(ctx, key, obj); err != nil {
-			return apierrors.IsNotFound(err)
-		}
-		return false
-	}, timeout).Should(BeTrue())
+	waitForSourceDeletion(ctx, g, obj)
+
+	// Check if a suspended object gets deleted.
+	obj = origObj.DeepCopy()
+	testSuspendedObjectDeleteWithArtifact(ctx, g, obj)
 }
 
 func TestBucketReconciler_reconcileStorage(t *testing.T) {

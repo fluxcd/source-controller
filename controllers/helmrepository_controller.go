@@ -159,12 +159,6 @@ func (r *HelmRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	// Record suspended status metric
 	r.RecordSuspend(ctx, obj, obj.Spec.Suspend)
 
-	// Return early if the object is suspended
-	if obj.Spec.Suspend {
-		log.Info("reconciliation is suspended for this object")
-		return ctrl.Result{}, nil
-	}
-
 	// Initialize the patch helper with the current version of the object.
 	patchHelper, err := patch.NewHelper(obj, r.Client)
 	if err != nil {
@@ -209,6 +203,13 @@ func (r *HelmRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	// or if a type change has happened
 	if !obj.ObjectMeta.DeletionTimestamp.IsZero() || (obj.Spec.Type != "" && obj.Spec.Type != sourcev1.HelmRepositoryTypeDefault) {
 		recResult, retErr = r.reconcileDelete(ctx, obj)
+		return
+	}
+
+	// Return if the object is suspended.
+	if obj.Spec.Suspend {
+		log.Info("reconciliation is suspended for this object")
+		recResult, retErr = sreconcile.ResultEmpty, nil
 		return
 	}
 

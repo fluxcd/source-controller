@@ -65,7 +65,7 @@ func TestHelmRepositoryReconciler_Reconcile(t *testing.T) {
 	testServer.Start()
 	defer testServer.Stop()
 
-	obj := &sourcev1.HelmRepository{
+	origObj := &sourcev1.HelmRepository{
 		ObjectMeta: metav1.ObjectMeta{
 			GenerateName: "helmrepository-reconcile-",
 			Namespace:    "default",
@@ -75,6 +75,7 @@ func TestHelmRepositoryReconciler_Reconcile(t *testing.T) {
 			URL:      testServer.URL(),
 		},
 	}
+	obj := origObj.DeepCopy()
 	g.Expect(testEnv.Create(ctx, obj)).To(Succeed())
 
 	key := client.ObjectKey{Name: obj.Name, Namespace: obj.Namespace}
@@ -88,18 +89,7 @@ func TestHelmRepositoryReconciler_Reconcile(t *testing.T) {
 	}, timeout).Should(BeTrue())
 
 	// Wait for HelmRepository to be Ready
-	g.Eventually(func() bool {
-		if err := testEnv.Get(ctx, key, obj); err != nil {
-			return false
-		}
-		if !conditions.IsReady(obj) && obj.Status.Artifact == nil {
-			return false
-		}
-		readyCondition := conditions.Get(obj, meta.ReadyCondition)
-		return readyCondition.Status == metav1.ConditionTrue &&
-			obj.Generation == readyCondition.ObservedGeneration &&
-			obj.Generation == obj.Status.ObservedGeneration
-	}, timeout).Should(BeTrue())
+	waitForSourceReadyWithArtifact(ctx, g, obj)
 
 	// Check if the object status is valid.
 	condns := &conditionscheck.Conditions{NegativePolarity: helmRepositoryReadyCondition.NegativePolarity}
@@ -131,12 +121,11 @@ func TestHelmRepositoryReconciler_Reconcile(t *testing.T) {
 	g.Expect(testEnv.Delete(ctx, obj)).To(Succeed())
 
 	// Wait for HelmRepository to be deleted
-	g.Eventually(func() bool {
-		if err := testEnv.Get(ctx, key, obj); err != nil {
-			return apierrors.IsNotFound(err)
-		}
-		return false
-	}, timeout).Should(BeTrue())
+	waitForSourceDeletion(ctx, g, obj)
+
+	// Check if a suspended object gets deleted.
+	obj = origObj.DeepCopy()
+	testSuspendedObjectDeleteWithArtifact(ctx, g, obj)
 }
 
 func TestHelmRepositoryReconciler_reconcileStorage(t *testing.T) {
