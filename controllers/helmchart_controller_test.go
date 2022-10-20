@@ -2262,11 +2262,11 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_verifySignature(t *testing.T
 
 	tests := []struct {
 		name             string
+		shouldSign       bool
+		beforeFunc       func(obj *sourcev1.HelmChart)
 		want             sreconcile.Result
 		wantErr          bool
 		wantErrMsg       string
-		shouldSign       bool
-		beforeFunc       func(obj *sourcev1.HelmChart)
 		assertConditions []metav1.Condition
 		cleanFunc        func(g *WithT, build *chart.Build)
 	}{
@@ -2280,11 +2280,12 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_verifySignature(t *testing.T
 					SecretRef: &meta.LocalObjectReference{Name: "cosign-key"},
 				}
 			},
+			want:       sreconcile.ResultEmpty,
 			wantErr:    true,
 			wantErrMsg: "chart verification error: failed to verify <url>: no matching signatures:",
-			want:       sreconcile.ResultEmpty,
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(sourcev1.BuildFailedCondition, "ChartVerificationError", "chart verification error: failed to verify <url>: no matching signatures:"),
+				*conditions.FalseCondition(sourcev1.SourceVerifiedCondition, sourcev1.VerificationError, "chart verification error: failed to verify <url>: no matching signatures:"),
 			},
 		},
 		{
@@ -2296,14 +2297,16 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_verifySignature(t *testing.T
 					Provider: "cosign",
 				}
 			},
-			wantErr: true,
 			want:    sreconcile.ResultEmpty,
+			wantErr: true,
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(sourcev1.BuildFailedCondition, "ChartVerificationError", "chart verification error: failed to verify <url>: no matching signatures:"),
+				*conditions.FalseCondition(sourcev1.SourceVerifiedCondition, sourcev1.VerificationError, "chart verification error: failed to verify <url>: no matching signatures:"),
 			},
 		},
 		{
-			name: "signed charts should pass verification",
+			name:       "signed charts should pass verification",
+			shouldSign: true,
 			beforeFunc: func(obj *sourcev1.HelmChart) {
 				obj.Spec.Chart = metadata.Name
 				obj.Spec.Version = metadata.Version
@@ -2312,8 +2315,7 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_verifySignature(t *testing.T
 					SecretRef: &meta.LocalObjectReference{Name: "cosign-key"},
 				}
 			},
-			shouldSign: true,
-			want:       sreconcile.ResultSuccess,
+			want: sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewChart", "pulled '<name>' chart with version '<version>'"),
 				*conditions.TrueCondition(sourcev1.SourceVerifiedCondition, meta.SucceededReason, "verified signature of version <version>"),

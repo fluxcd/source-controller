@@ -523,10 +523,8 @@ func (r *ChartRepository) RemoveCache() error {
 }
 
 // VerifyChart verifies the chart against a signature.
-// If no signature is provided, a keyless verification is performed.
 // It returns an error on failure.
 func (r *ChartRepository) VerifyChart(_ context.Context, _ *repo.ChartVersion) error {
-	// no-op
 	// this is a no-op because this is not implemented yet.
 	return fmt.Errorf("not implemented")
 }

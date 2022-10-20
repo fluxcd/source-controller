@@ -105,7 +105,7 @@ func KeychainAdaptHelper(keyChain authn.Keychain) func(string) (registry.LoginOp
 }
 
 // AuthAdaptHelper returns an ORAS credentials callback configured with the authorization data
-// from the given authn authenticator This allows for example to make use of credential helpers from
+// from the given authn authenticator. This allows for example to make use of credential helpers from
 // cloud providers.
 // Ref: https://github.com/google/go-containerregistry/tree/main/pkg/authn
 func AuthAdaptHelper(auth authn.Authenticator) (registry.LoginOption, error) {

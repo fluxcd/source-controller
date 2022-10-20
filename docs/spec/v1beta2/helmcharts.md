@@ -290,7 +290,7 @@ data:
 
 Note that the keys must have the `.pub` extension for Flux to make use of them.
 
-Flux will loop over the public keys and use them verify a HelmChart's signature.
+Flux will loop over the public keys and use them to verify a HelmChart's signature.
 This allows for older HelmCharts to be valid as long as the right key is in the secret.
 
 #### Keyless verification
@@ -309,6 +309,7 @@ metadata:
   name: podinfo
 spec:
   interval: 5m
+  chart: podinfo
   reconcileStrategy: ChartVersion
   sourceRef:
     kind: HelmRepository

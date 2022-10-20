@@ -372,6 +372,12 @@ func (r *HelmChartReconciler) reconcileStorage(ctx context.Context, obj *sourcev
 }
 
 func (r *HelmChartReconciler) reconcileSource(ctx context.Context, obj *sourcev1.HelmChart, build *chart.Build) (_ sreconcile.Result, retErr error) {
+	// Remove any failed verification condition.
+	// The reason is that a failing verification should be recalculated.
+	if conditions.IsFalse(obj, sourcev1.SourceVerifiedCondition) {
+		conditions.Delete(obj, sourcev1.SourceVerifiedCondition)
+	}
+
 	// Retrieve the source
 	s, err := r.getSource(ctx, obj)
 	if err != nil {
@@ -577,10 +583,10 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 				if obj.Spec.Verify.SecretRef == nil {
 					provider = fmt.Sprintf("%s keyless", provider)
 				}
-				e := serror.NewGeneric(
-					fmt.Errorf("failed to verify the signature using provider '%s': %w", provider, err),
-					sourcev1.VerificationError,
-				)
+				e := &serror.Event{
+					Err:    fmt.Errorf("failed to verify the signature using provider '%s': %w", provider, err),
+					Reason: sourcev1.VerificationError,
+				}
 				conditions.MarkFalse(obj, sourcev1.SourceVerifiedCondition, e.Reason, e.Err.Error())
 				return sreconcile.ResultEmpty, e
 			}
@@ -650,15 +656,8 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 		Force:       obj.Generation != obj.Status.ObservedGeneration,
 		// The remote builder will not attempt to download the chart if
 		// an artifact exists with the same name and version and `Force` is false.
-		// It will try to verify the chart if:
-		// - we are on the first reconciliation
-		// - the HelmChart spec has changed (generation drift)
-		// - the previous reconciliation resulted in a failed artifact verification
-		// - there is no artifact in storage
-		Verify: obj.Spec.Verify != nil && (obj.Generation <= 0 ||
-			conditions.GetObservedGeneration(obj, sourcev1.SourceVerifiedCondition) != obj.Generation ||
-			conditions.IsFalse(obj, sourcev1.SourceVerifiedCondition) ||
-			obj.GetArtifact() == nil),
+		// It will however try to verify the chart if `obj.Spec.Verify` is set, at every reconciliation.
+		Verify: obj.Spec.Verify != nil && obj.Spec.Verify.Provider != "",
 	}
 	if artifact := obj.GetArtifact(); artifact != nil {
 		opts.CachedChart = r.Storage.LocalPath(*artifact)
@@ -1293,9 +1292,13 @@ func observeChartBuild(obj *sourcev1.HelmChart, build *chart.Build, err error) {
 		}
 
 		switch buildErr.Reason {
-		case chart.ErrChartMetadataPatch, chart.ErrValuesFilesMerge, chart.ErrDependencyBuild, chart.ErrChartPackage, chart.ErrChartVerification:
+		case chart.ErrChartMetadataPatch, chart.ErrValuesFilesMerge, chart.ErrDependencyBuild, chart.ErrChartPackage:
 			conditions.Delete(obj, sourcev1.FetchFailedCondition)
 			conditions.MarkTrue(obj, sourcev1.BuildFailedCondition, buildErr.Reason.Reason, buildErr.Error())
+		case chart.ErrChartVerification:
+			conditions.Delete(obj, sourcev1.FetchFailedCondition)
+			conditions.MarkTrue(obj, sourcev1.BuildFailedCondition, buildErr.Reason.Reason, buildErr.Error())
+			conditions.MarkFalse(obj, sourcev1.SourceVerifiedCondition, sourcev1.VerificationError, buildErr.Error())
 		default:
 			conditions.Delete(obj, sourcev1.BuildFailedCondition)
 			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, buildErr.Reason.Reason, buildErr.Error())

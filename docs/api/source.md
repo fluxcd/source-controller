@@ -684,7 +684,7 @@ OCIRepositoryVerification
 <p>Verify contains the secret name containing the trusted public keys
 used to verify the signature and specifies which provider to use to check
 whether OCI image is authentic.
-This field is only supported for OCI sources.
+This field is only supported when using HelmRepository source with spec.type &lsquo;oci&rsquo;.
 Chart dependencies, which are not bundled in the umbrella chart artifact, are not verified.</p>
 </td>
 </tr>
@@ -2269,7 +2269,7 @@ OCIRepositoryVerification
 <p>Verify contains the secret name containing the trusted public keys
 used to verify the signature and specifies which provider to use to check
 whether OCI image is authentic.
-This field is only supported for OCI sources.
+This field is only supported when using HelmRepository source with spec.type &lsquo;oci&rsquo;.
 Chart dependencies, which are not bundled in the umbrella chart artifact, are not verified.</p>
 </td>
 </tr>
