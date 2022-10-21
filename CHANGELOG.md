@@ -2,6 +2,30 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.31.0
+
+**Release date:** 2022-10-21
+
+This prerelease comes with support for Cosign verification of Helm charts.
+The signatures verification can be configured by setting `HelmChart.spec.verify` with
+`provider` as `cosign` and a `secretRef` to a secret containing the public key.
+Cosign keyless verification is also supported, please see the
+[HelmChart API documentation](https://github.com/fluxcd/source-controller/blob/api/v0.31.0/docs/spec/v1beta2/helmcharts.md#verification)
+for more details.
+
+In addition, the controller dependencies have been updated
+to Kubernetes v1.25.3 and Helm v3.10.1.
+
+Improvements:
+- Implement Cosign verification for HelmCharts
+  [#925](https://github.com/fluxcd/source-controller/pull/925)
+- Update dependencies
+  [#942](https://github.com/fluxcd/source-controller/pull/942)
+
+Fixes:
+- Allow deleting suspended objects
+  [#937](https://github.com/fluxcd/source-controller/pull/937)
+
 ## 0.30.1
 
 **Release date:** 2022-10-10
