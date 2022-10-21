@@ -86,6 +86,14 @@ type HelmChartSpec struct {
 	// NOTE: Not implemented, provisional as of https://github.com/fluxcd/flux2/pull/2092
 	// +optional
 	AccessFrom *acl.AccessFrom `json:"accessFrom,omitempty"`
+
+	// Verify contains the secret name containing the trusted public keys
+	// used to verify the signature and specifies which provider to use to check
+	// whether OCI image is authentic.
+	// This field is only supported when using HelmRepository source with spec.type 'oci'.
+	// Chart dependencies, which are not bundled in the umbrella chart artifact, are not verified.
+	// +optional
+	Verify *OCIRepositoryVerification `json:"verify,omitempty"`
 }
 
 const (

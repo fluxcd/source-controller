@@ -113,6 +113,8 @@ type BuildOptions struct {
 	// Force can be set to force the build of the chart, for example
 	// because the list of ValuesFiles has changed.
 	Force bool
+	// Verifier can be set to the verification of the chart.
+	Verify bool
 }
 
 // GetValuesFiles returns BuildOptions.ValuesFiles, except if it equals

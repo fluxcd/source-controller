@@ -17,12 +17,15 @@ limitations under the License.
 package registry
 
 import (
+	"net/url"
 	"testing"
 
 	"github.com/google/go-containerregistry/pkg/authn"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
 )
+
+const repoURL = "https://example.com"
 
 func TestLoginOptionFromSecret(t *testing.T) {
 	testURL := "oci://registry.example.com/foo/bar"
@@ -131,33 +134,40 @@ func TestLoginOptionFromSecret(t *testing.T) {
 	}
 }
 
-func TestOIDCAdaptHelper(t *testing.T) {
-	auth := &authn.Basic{
-		Username: "flux",
-		Password: "flux_password",
+func TestKeychainAdaptHelper(t *testing.T) {
+	g := NewWithT(t)
+	reg, err := url.Parse(repoURL)
+	if err != nil {
+		g.Expect(err).ToNot(HaveOccurred())
+	}
+
+	auth := helper{
+		username: "flux",
+		password: "flux_password",
+		registry: reg.Host,
 	}
 
 	tests := []struct {
 		name          string
-		auth          authn.Authenticator
+		auth          authn.Keychain
 		expectedLogin bool
 		wantErr       bool
 	}{
 		{
 			name:          "Login from basic auth with empty auth",
-			auth:          &authn.Basic{},
+			auth:          authn.NewKeychainFromHelper(helper{}),
 			expectedLogin: false,
 			wantErr:       false,
 		},
 		{
 			name:          "Login from basic auth",
-			auth:          auth,
+			auth:          authn.NewKeychainFromHelper(auth),
 			expectedLogin: true,
 			wantErr:       false,
 		},
 		{
 			name:          "Login with missing password",
-			auth:          &authn.Basic{Username: "flux"},
+			auth:          authn.NewKeychainFromHelper(helper{username: "flux", registry: reg.Host}),
 			expectedLogin: false,
 			wantErr:       true,
 		},
@@ -166,7 +176,7 @@ func TestOIDCAdaptHelper(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
-			loginOpt, err := OIDCAdaptHelper(tt.auth)
+			loginOpt, err := KeychainAdaptHelper(tt.auth)(repoURL)
 			if tt.wantErr {
 				g.Expect(err).To(HaveOccurred())
 				return

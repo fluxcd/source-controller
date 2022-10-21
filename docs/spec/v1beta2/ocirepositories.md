@@ -462,6 +462,9 @@ data:
 
 Note that the keys must have the `.pub` extension for Flux to make use of them.
 
+Flux will loop over the public keys and use them to verify an artifact's signature.
+This allows for older artifacts to be valid as long as the right key is in the secret.
+
 #### Keyless verification
 
 For publicly available OCI artifacts, which are signed using the

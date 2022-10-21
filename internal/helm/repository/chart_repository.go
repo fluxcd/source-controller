@@ -18,6 +18,7 @@ package repository
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"crypto/tls"
 	"encoding/hex"
@@ -519,4 +520,11 @@ func (r *ChartRepository) RemoveCache() error {
 		r.Cached = false
 	}
 	return nil
+}
+
+// VerifyChart verifies the chart against a signature.
+// It returns an error on failure.
+func (r *ChartRepository) VerifyChart(_ context.Context, _ *repo.ChartVersion) error {
+	// this is a no-op because this is not implemented yet.
+	return fmt.Errorf("not implemented")
 }

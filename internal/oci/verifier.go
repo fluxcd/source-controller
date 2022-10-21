@@ -34,6 +34,11 @@ import (
 	"github.com/sigstore/sigstore/pkg/signature"
 )
 
+// Verifier is an interface for verifying the authenticity of an OCI image.
+type Verifier interface {
+	Verify(ctx context.Context, ref name.Reference) (bool, error)
+}
+
 // options is a struct that holds options for verifier.
 type options struct {
 	PublicKey []byte
@@ -58,13 +63,13 @@ func WithRemoteOptions(opts ...remote.Option) Options {
 	}
 }
 
-// Verifier is a struct which is responsible for executing verification logic.
-type Verifier struct {
+// CosignVerifier is a struct which is responsible for executing verification logic.
+type CosignVerifier struct {
 	opts *cosign.CheckOpts
 }
 
-// NewVerifier initializes a new Verifier.
-func NewVerifier(ctx context.Context, opts ...Options) (*Verifier, error) {
+// NewCosignVerifier initializes a new CosignVerifier.
+func NewCosignVerifier(ctx context.Context, opts ...Options) (*CosignVerifier, error) {
 	o := options{}
 	for _, opt := range opts {
 		opt(&o)
@@ -117,12 +122,28 @@ func NewVerifier(ctx context.Context, opts ...Options) (*Verifier, error) {
 		checkOpts.RekorClient = rc
 	}
 
-	return &Verifier{
+	return &CosignVerifier{
 		opts: checkOpts,
 	}, nil
 }
 
 // VerifyImageSignatures verify the authenticity of the given ref OCI image.
-func (v *Verifier) VerifyImageSignatures(ctx context.Context, ref name.Reference) ([]oci.Signature, bool, error) {
+func (v *CosignVerifier) VerifyImageSignatures(ctx context.Context, ref name.Reference) ([]oci.Signature, bool, error) {
 	return cosign.VerifyImageSignatures(ctx, ref, v.opts)
+}
+
+// Verify verifies the authenticity of the given ref OCI image.
+// It returns a boolean indicating if the verification was successful.
+// It returns an error if the verification fails, nil otherwise.
+func (v *CosignVerifier) Verify(ctx context.Context, ref name.Reference) (bool, error) {
+	signatures, _, err := v.VerifyImageSignatures(ctx, ref)
+	if err != nil {
+		return false, err
+	}
+
+	if len(signatures) == 0 {
+		return false, nil
+	}
+
+	return true, nil
 }

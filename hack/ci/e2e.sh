@@ -165,6 +165,7 @@ echo "Run HelmChart from OCI registry tests"
 kubectl -n source-system apply -f "${ROOT_DIR}/config/testdata/helmchart-from-oci/source.yaml"
 kubectl -n source-system wait helmrepository/podinfo --for=condition=ready --timeout=1m
 kubectl -n source-system wait helmchart/podinfo --for=condition=ready --timeout=1m
+kubectl -n source-system wait helmchart/podinfo-keyless --for=condition=ready --timeout=1m
 
 echo "Run OCIRepository verify tests"
 kubectl -n source-system apply -f "${ROOT_DIR}/config/testdata/ocirepository/signed-with-key.yaml"
