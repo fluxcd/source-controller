@@ -68,7 +68,7 @@ func TestNewChartRepository(t *testing.T) {
 	t.Run("should construct chart repository", func(t *testing.T) {
 		g := NewWithT(t)
 
-		r, err := NewChartRepository(repositoryURL, "", providers, nil, options)
+		r, err := NewChartRepository(repositoryURL, "", providers, nil, options, "fake-namespace", nil)
 		g.Expect(err).ToNot(HaveOccurred())
 		g.Expect(r).ToNot(BeNil())
 		g.Expect(r.URL).To(Equal(repositoryURL))
@@ -78,7 +78,7 @@ func TestNewChartRepository(t *testing.T) {
 
 	t.Run("should error on URL parsing failure", func(t *testing.T) {
 		g := NewWithT(t)
-		r, err := NewChartRepository("https://ex ample.com", "", nil, nil, nil)
+		r, err := NewChartRepository("https://ex ample.com", "", nil, nil, nil, "fake-namespace", nil)
 		g.Expect(err).To(HaveOccurred())
 		g.Expect(err).To(BeAssignableToTypeOf(&url.Error{}))
 		g.Expect(r).To(BeNil())
@@ -88,7 +88,7 @@ func TestNewChartRepository(t *testing.T) {
 	t.Run("should error on unsupported scheme", func(t *testing.T) {
 		g := NewWithT(t)
 
-		r, err := NewChartRepository("http://example.com", "", providers, nil, nil)
+		r, err := NewChartRepository("http://example.com", "", providers, nil, nil, "fake-namespace", nil)
 		g.Expect(err).To(HaveOccurred())
 		g.Expect(err.Error()).To(Equal("scheme \"http\" not supported"))
 		g.Expect(r).To(BeNil())
@@ -235,9 +235,12 @@ func TestChartRepository_DownloadChart(t *testing.T) {
 			t.Parallel()
 
 			mg := mockGetter{}
+
 			r := &ChartRepository{
-				URL:    tt.url,
-				Client: &mg,
+				URL:       tt.url,
+				Namespace: "dummy",
+				Client:    &mg,
+				Recorder:  nil,
 			}
 			res, err := r.DownloadChart(tt.chartVersion)
 			if tt.wantErr {

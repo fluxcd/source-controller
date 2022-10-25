@@ -18,6 +18,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/fluxcd/source-controller/internal/helm/repository"
 	"net"
 	"net/http"
 	"os"
@@ -225,6 +226,8 @@ func main() {
 		os.Exit(1)
 	}
 
+	repoRecorder := repository.MustMakeMetrics()
+
 	if err = (&controllers.HelmRepositoryOCIReconciler{
 		Client:                  mgr.GetClient(),
 		EventRecorder:           eventRecorder,
@@ -270,6 +273,7 @@ func main() {
 		Cache:          c,
 		TTL:            ttl,
 		CacheRecorder:  cacheRecorder,
+		RepoRecorder:   repoRecorder,
 	}).SetupWithManagerAndOptions(mgr, controllers.HelmRepositoryReconcilerOptions{
 		MaxConcurrentReconciles: concurrent,
 		RateLimiter:             helper.GetRateLimiter(rateLimiterOptions),

@@ -109,6 +109,7 @@ type HelmRepositoryReconciler struct {
 	Cache *cache.Cache
 	TTL   time.Duration
 	*cache.CacheRecorder
+	RepoRecorder *repository.Recorder
 }
 
 type HelmRepositoryReconcilerOptions struct {
@@ -399,7 +400,7 @@ func (r *HelmRepositoryReconciler) reconcileSource(ctx context.Context, obj *sou
 	}
 
 	// Construct Helm chart repository with options and download index
-	newChartRepo, err := repository.NewChartRepository(obj.Spec.URL, "", r.Getters, tlsConfig, clientOpts)
+	newChartRepo, err := repository.NewChartRepository(obj.Spec.URL, "", r.Getters, tlsConfig, clientOpts, obj.Namespace, r.RepoRecorder)
 	if err != nil {
 		switch err.(type) {
 		case *url.Error:

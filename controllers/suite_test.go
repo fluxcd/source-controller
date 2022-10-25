@@ -53,6 +53,7 @@ import (
 	"github.com/fluxcd/source-controller/internal/cache"
 	"github.com/fluxcd/source-controller/internal/features"
 	"github.com/fluxcd/source-controller/internal/helm/registry"
+	"github.com/fluxcd/source-controller/internal/helm/repository"
 	"github.com/fluxcd/source-controller/pkg/git/libgit2/managed"
 	// +kubebuilder:scaffold:imports
 )
@@ -106,6 +107,7 @@ var (
 var (
 	testRegistryServer *registryClientTestServer
 	testCache          *cache.Cache
+	testRepoRecorder   *repository.Recorder
 )
 
 func init() {
@@ -263,6 +265,7 @@ func TestMain(m *testing.M) {
 
 	testCache = cache.New(5, 1*time.Second)
 	cacheRecorder := cache.MustMakeMetrics()
+	testRepoRecorder = repository.MustMakeMetrics()
 
 	if err := (&OCIRepositoryReconciler{
 		Client:        testEnv,
@@ -282,6 +285,7 @@ func TestMain(m *testing.M) {
 		Cache:         testCache,
 		TTL:           1 * time.Second,
 		CacheRecorder: cacheRecorder,
+		RepoRecorder:  testRepoRecorder,
 	}).SetupWithManager(testEnv); err != nil {
 		panic(fmt.Sprintf("Failed to start HelmRepositoryReconciler: %v", err))
 	}

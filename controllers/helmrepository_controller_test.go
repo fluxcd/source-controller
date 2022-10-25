@@ -619,9 +619,9 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 				if serr != nil {
 					validSecret = false
 				}
-				newChartRepo, err = repository.NewChartRepository(obj.Spec.URL, "", testGetters, tOpts, clientOpts)
+				newChartRepo, err = repository.NewChartRepository(obj.Spec.URL, "", testGetters, tOpts, clientOpts, obj.Namespace, testRepoRecorder)
 			} else {
-				newChartRepo, err = repository.NewChartRepository(obj.Spec.URL, "", testGetters, nil, nil)
+				newChartRepo, err = repository.NewChartRepository(obj.Spec.URL, "", testGetters, nil, nil, obj.Namespace, testRepoRecorder)
 			}
 			g.Expect(err).ToNot(HaveOccurred())
 
@@ -755,7 +755,7 @@ func TestHelmRepositoryReconciler_reconcileArtifact(t *testing.T) {
 			g.Expect(err).ToNot(HaveOccurred())
 			g.Expect(cacheFile.Close()).ToNot(HaveOccurred())
 
-			chartRepo, err := repository.NewChartRepository(obj.Spec.URL, "", testGetters, nil, nil)
+			chartRepo, err := repository.NewChartRepository(obj.Spec.URL, "", testGetters, nil, nil, obj.Namespace, testRepoRecorder)
 			g.Expect(err).ToNot(HaveOccurred())
 			chartRepo.CachePath = cachePath
 

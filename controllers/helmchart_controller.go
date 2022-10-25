@@ -133,6 +133,7 @@ type HelmChartReconciler struct {
 	Cache *cache.Cache
 	TTL   time.Duration
 	*cache.CacheRecorder
+	RepoRecorder *repository.Recorder
 }
 
 func (r *HelmChartReconciler) SetupWithManager(mgr ctrl.Manager) error {
@@ -618,7 +619,7 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 			}
 		}
 	default:
-		httpChartRepo, err := repository.NewChartRepository(normalizedURL, r.Storage.LocalPath(*repo.GetArtifact()), r.Getters, tlsConfig, clientOpts,
+		httpChartRepo, err := repository.NewChartRepository(normalizedURL, r.Storage.LocalPath(*repo.GetArtifact()), r.Getters, tlsConfig, clientOpts, repo.Namespace, r.RepoRecorder,
 			repository.WithMemoryCache(r.Storage.LocalPath(*repo.GetArtifact()), r.Cache, r.TTL, func(event string) {
 				r.IncCacheEvents(event, obj.Name, obj.Namespace)
 			}))
@@ -1078,7 +1079,7 @@ func (r *HelmChartReconciler) namespacedChartRepositoryCallback(ctx context.Cont
 
 			chartRepo = ociChartRepo
 		} else {
-			httpChartRepo, err := repository.NewChartRepository(normalizedURL, "", r.Getters, tlsConfig, clientOpts)
+			httpChartRepo, err := repository.NewChartRepository(normalizedURL, "", r.Getters, tlsConfig, clientOpts, namespace, r.RepoRecorder)
 			if err != nil {
 				return nil, err
 			}
