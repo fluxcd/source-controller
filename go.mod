@@ -15,8 +15,11 @@ replace github.com/libgit2/git2go/v34 => github.com/fluxcd/git2go/v34 v34.0.0
 // Fix CVE-2022-1996 (for v2, Go Modules incompatible)
 replace github.com/emicklei/go-restful => github.com/emicklei/go-restful v2.16.0+incompatible
 
-// Replace by named version before merging into main.
-replace github.com/fluxcd/pkg/git/libgit2 => github.com/fluxcd/pkg/git/libgit2 v0.0.0-20221007164102-c0aed7d985a4
+// Use Flux's version of go-git, which allows clones with multi_ack and multi_ack_detailed.
+replace github.com/go-git/go-git/v5 => github.com/fluxcd/go-git/v5 v5.0.0-20221019082644-b33dae782906
+
+// The util.Walk func was never release as a tag.
+replace github.com/go-git/go-billy/v5 => github.com/go-git/go-billy/v5 v5.0.0-20210804024030-7ab80d7c013d
 
 require (
 	cloud.google.com/go/storage v1.27.0
@@ -37,8 +40,8 @@ require (
 	github.com/fluxcd/gitkit v0.6.0 // indirect
 	github.com/fluxcd/pkg/apis/meta v0.17.0
 	github.com/fluxcd/pkg/git v0.6.1
-	github.com/fluxcd/pkg/git/gogit v0.1.1-0.20220902101857-4d204a4a6fa4
-	github.com/fluxcd/pkg/git/libgit2 v0.2.0
+	github.com/fluxcd/pkg/git/gogit v0.0.0-20221026111216-11a3405b2580
+	github.com/fluxcd/pkg/git/libgit2 v0.0.0-20221026111216-11a3405b2580
 	github.com/fluxcd/pkg/gittestserver v0.7.0
 	github.com/fluxcd/pkg/gitutil v0.2.0 // indirect
 	github.com/fluxcd/pkg/helmtestserver v0.9.0
@@ -314,6 +317,7 @@ require (
 	github.com/shopspring/decimal v1.2.0 // indirect
 	github.com/sigstore/fulcio v0.6.0 // indirect
 	github.com/sigstore/rekor v0.12.1-0.20220915152154-4bb6f441c1b2 // indirect
+	github.com/skeema/knownhosts v1.1.0 // indirect
 	github.com/skratchdot/open-golang v0.0.0-20200116055534-eef842397966 // indirect
 	github.com/soheilhy/cmux v0.1.5 // indirect
 	github.com/spf13/afero v1.8.2 // indirect
