@@ -27,23 +27,15 @@ require (
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.1.0
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v0.4.1
 	github.com/Masterminds/semver/v3 v3.1.1
-	// github.com/ProtonMail/go-crypto is a fork of golang.org/x/crypto
-	// maintained by the ProtonMail team to continue to support the openpgp
-	// module, after the Go team decided to no longer maintain it.
-	// When in doubt (and not using openpgp), use /x/crypto.
-	github.com/ProtonMail/go-crypto v0.0.0-20220930113650-c6815a8c17ad // indirect
 	github.com/cyphar/filepath-securejoin v0.2.3
 	github.com/distribution/distribution/v3 v3.0.0-20221019080424-fb2188868d77
 	github.com/docker/cli v20.10.20+incompatible
 	github.com/docker/go-units v0.5.0
-	github.com/elazarl/goproxy v0.0.0-20221015165544-a0805db90819 // indirect
-	github.com/fluxcd/gitkit v0.6.0 // indirect
 	github.com/fluxcd/pkg/apis/meta v0.17.0
 	github.com/fluxcd/pkg/git v0.6.1
 	github.com/fluxcd/pkg/git/gogit v0.0.0-20221026111216-11a3405b2580
 	github.com/fluxcd/pkg/git/libgit2 v0.0.0-20221026111216-11a3405b2580
 	github.com/fluxcd/pkg/gittestserver v0.7.0
-	github.com/fluxcd/pkg/gitutil v0.2.0 // indirect
 	github.com/fluxcd/pkg/helmtestserver v0.9.0
 	github.com/fluxcd/pkg/lockedfile v0.1.0
 	github.com/fluxcd/pkg/masktoken v0.2.0
@@ -72,7 +64,6 @@ require (
 	github.com/sirupsen/logrus v1.9.0
 	github.com/spf13/pflag v1.0.5
 	golang.org/x/crypto v0.1.0
-	golang.org/x/net v0.1.0 // indirect
 	golang.org/x/sync v0.1.0
 	google.golang.org/api v0.100.0
 	gotest.tools v2.2.0+incompatible
@@ -110,6 +101,7 @@ require (
 	github.com/Masterminds/sprig/v3 v3.2.2 // indirect
 	github.com/Masterminds/squirrel v1.5.3 // indirect
 	github.com/Microsoft/go-winio v0.6.0 // indirect
+	github.com/ProtonMail/go-crypto v0.0.0-20220930113650-c6815a8c17ad // indirect
 	github.com/Shopify/logrus-bugsnag v0.0.0-20171204204709-577dee27f20d // indirect
 	github.com/ThalesIgnite/crypto11 v1.2.5 // indirect
 	github.com/acomagu/bufpipe v1.0.3 // indirect
@@ -175,6 +167,7 @@ require (
 	github.com/docker/go-metrics v0.0.1 // indirect
 	github.com/docker/libtrust v0.0.0-20160708172513-aabc10ec26b7 // indirect
 	github.com/dustin/go-humanize v1.0.0 // indirect
+	github.com/elazarl/goproxy v0.0.0-20221015165544-a0805db90819 // indirect
 	github.com/emicklei/go-restful/v3 v3.9.0 // indirect
 	github.com/emirpasic/gods v1.18.1 // indirect
 	github.com/envoyproxy/go-control-plane v0.10.2-0.20220325020618-49ff273808a1 // indirect
@@ -184,7 +177,9 @@ require (
 	github.com/exponent-io/jsonpath v0.0.0-20151013193312-d6023ce2651d // indirect
 	github.com/fatih/color v1.13.0 // indirect
 	github.com/felixge/httpsnoop v1.0.3 // indirect
+	github.com/fluxcd/gitkit v0.6.0 // indirect
 	github.com/fluxcd/pkg/apis/acl v0.1.0 // indirect
+	github.com/fluxcd/pkg/gitutil v0.2.0 // indirect
 	github.com/fluxcd/pkg/http/transport v0.1.0 // indirect
 	github.com/fsnotify/fsnotify v1.5.4 // indirect
 	github.com/fullstorydev/grpcurl v1.8.7 // indirect
@@ -377,6 +372,7 @@ require (
 	go.uber.org/zap v1.23.0 // indirect
 	golang.org/x/exp v0.0.0-20220823124025-807a23277127 // indirect
 	golang.org/x/mod v0.6.0 // indirect
+	golang.org/x/net v0.1.0 // indirect
 	golang.org/x/oauth2 v0.1.0 // indirect
 	golang.org/x/sys v0.1.0 // indirect
 	golang.org/x/term v0.1.0 // indirect

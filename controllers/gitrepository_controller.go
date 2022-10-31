@@ -442,7 +442,7 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context,
 		conditions.Delete(obj, sourcev1.SourceVerifiedCondition)
 	}
 
-	var data map[string][]byte
+	var authData map[string][]byte
 	if obj.Spec.SecretRef != nil {
 		// Attempt to retrieve secret
 		name := types.NamespacedName{
@@ -459,7 +459,7 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context,
 			// Return error as the world as observed may change
 			return sreconcile.ResultEmpty, e
 		}
-		data = secret.Data
+		authData = secret.Data
 	}
 
 	u, err := url.Parse(obj.Spec.URL)
@@ -473,23 +473,13 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context,
 	}
 
 	// Configure authentication strategy to access the source
-	authOpts, err := git.NewAuthOptions(*u, data)
-
+	authOpts, err := git.NewAuthOptions(*u, authData)
 	if err != nil {
 		e := serror.NewGeneric(
 			fmt.Errorf("failed to configure authentication options: %w", err),
 			sourcev1.AuthenticationFailedReason,
 		)
 		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
-		return sreconcile.ResultEmpty, e
-	}
-	if err != nil {
-		e := serror.NewGeneric(
-			fmt.Errorf("failed to configure auth strategy for Git implementation '%s': %w", obj.Spec.GitImplementation, err),
-			sourcev1.AuthenticationFailedReason,
-		)
-		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
-		// Return error as the contents of the secret may change
 		return sreconcile.ResultEmpty, e
 	}
 
@@ -771,17 +761,17 @@ func (r *GitRepositoryReconciler) gitCheckout(ctx context.Context,
 	switch obj.Spec.GitImplementation {
 	case sourcev1.LibGit2Implementation:
 		gitReader, err = libgit2.NewClient(dir, authOpts)
-	case sourcev1.GoGitImplementation, "":
+	case sourcev1.GoGitImplementation:
 		gitReader, err = gogit.NewClient(dir, authOpts)
 	default:
 		err = fmt.Errorf("invalid Git implementation: %s", obj.Spec.GitImplementation)
 	}
 	if err != nil {
 		// Do not return err as recovery without changes is impossible.
-		e := &serror.Stalling{
-			Err:    fmt.Errorf("failed to create Git client for implementation '%s': %w", obj.Spec.GitImplementation, err),
-			Reason: sourcev1.GitOperationFailedReason,
-		}
+		e := serror.NewStalling(
+			fmt.Errorf("failed to create Git client for implementation '%s': %w", obj.Spec.GitImplementation, err),
+			sourcev1.GitOperationFailedReason,
+		)
 		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
 		return nil, e
 	}
