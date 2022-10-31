@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -41,6 +42,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/ratelimiter"
 
 	"github.com/fluxcd/pkg/apis/meta"
+	"github.com/fluxcd/pkg/git"
+	"github.com/fluxcd/pkg/git/gogit"
+	"github.com/fluxcd/pkg/git/libgit2"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	helper "github.com/fluxcd/pkg/runtime/controller"
 	"github.com/fluxcd/pkg/runtime/events"
@@ -54,8 +58,6 @@ import (
 	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
 	"github.com/fluxcd/source-controller/internal/reconcile/summarize"
 	"github.com/fluxcd/source-controller/internal/util"
-	"github.com/fluxcd/source-controller/pkg/git"
-	"github.com/fluxcd/source-controller/pkg/git/strategy"
 )
 
 // gitRepositoryReadyCondition contains the information required to summarize a
@@ -440,9 +442,7 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context,
 		conditions.Delete(obj, sourcev1.SourceVerifiedCondition)
 	}
 
-	// Configure authentication strategy to access the source
-	var authOpts *git.AuthOptions
-	var err error
+	var authData map[string][]byte
 	if obj.Spec.SecretRef != nil {
 		// Attempt to retrieve secret
 		name := types.NamespacedName{
@@ -459,20 +459,27 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context,
 			// Return error as the world as observed may change
 			return sreconcile.ResultEmpty, e
 		}
-
-		// Configure strategy with secret
-		authOpts, err = git.AuthOptionsFromSecret(obj.Spec.URL, &secret)
-	} else {
-		// Set the minimal auth options for valid transport.
-		authOpts, err = git.AuthOptionsWithoutSecret(obj.Spec.URL)
+		authData = secret.Data
 	}
+
+	u, err := url.Parse(obj.Spec.URL)
+	if err != nil {
+		e := serror.NewStalling(
+			fmt.Errorf("failed to parse url '%s': %w", obj.Spec.URL, err),
+			sourcev1.URLInvalidReason,
+		)
+		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
+		return sreconcile.ResultEmpty, e
+	}
+
+	// Configure authentication strategy to access the source
+	authOpts, err := git.NewAuthOptions(*u, authData)
 	if err != nil {
 		e := serror.NewGeneric(
-			fmt.Errorf("failed to configure auth strategy for Git implementation '%s': %w", obj.Spec.GitImplementation, err),
+			fmt.Errorf("failed to configure authentication options: %w", err),
 			sourcev1.AuthenticationFailedReason,
 		)
 		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
-		// Return error as the contents of the secret may change
 		return sreconcile.ResultEmpty, e
 	}
 
@@ -725,12 +732,15 @@ func (r *GitRepositoryReconciler) reconcileInclude(ctx context.Context,
 func (r *GitRepositoryReconciler) gitCheckout(ctx context.Context,
 	obj *sourcev1.GitRepository, authOpts *git.AuthOptions, dir string, optimized bool) (*git.Commit, error) {
 	// Configure checkout strategy.
-	checkoutOpts := git.CheckoutOptions{RecurseSubmodules: obj.Spec.RecurseSubmodules}
+	cloneOpts := git.CloneOptions{
+		RecurseSubmodules: obj.Spec.RecurseSubmodules,
+		ShallowClone:      true,
+	}
 	if ref := obj.Spec.Reference; ref != nil {
-		checkoutOpts.Branch = ref.Branch
-		checkoutOpts.Commit = ref.Commit
-		checkoutOpts.Tag = ref.Tag
-		checkoutOpts.SemVer = ref.SemVer
+		cloneOpts.Branch = ref.Branch
+		cloneOpts.Commit = ref.Commit
+		cloneOpts.Tag = ref.Tag
+		cloneOpts.SemVer = ref.SemVer
 	}
 
 	// Only if the object has an existing artifact in storage, attempt to
@@ -738,46 +748,36 @@ func (r *GitRepositoryReconciler) gitCheckout(ctx context.Context,
 	// that the artifact exists.
 	if optimized && conditions.IsTrue(obj, sourcev1.ArtifactInStorageCondition) {
 		if artifact := obj.GetArtifact(); artifact != nil {
-			checkoutOpts.LastRevision = artifact.Revision
+			cloneOpts.LastObservedCommit = artifact.Revision
 		}
 	}
 
 	gitCtx, cancel := context.WithTimeout(ctx, obj.Spec.Timeout.Duration)
 	defer cancel()
 
-	checkoutStrategy, err := strategy.CheckoutStrategyForImplementation(gitCtx,
-		git.Implementation(obj.Spec.GitImplementation), checkoutOpts)
+	var gitReader git.RepositoryReader
+	var err error
+
+	switch obj.Spec.GitImplementation {
+	case sourcev1.LibGit2Implementation:
+		gitReader, err = libgit2.NewClient(dir, authOpts)
+	case sourcev1.GoGitImplementation:
+		gitReader, err = gogit.NewClient(dir, authOpts)
+	default:
+		err = fmt.Errorf("invalid Git implementation: %s", obj.Spec.GitImplementation)
+	}
 	if err != nil {
 		// Do not return err as recovery without changes is impossible.
-		e := &serror.Stalling{
-			Err:    fmt.Errorf("failed to configure checkout strategy for Git implementation '%s': %w", obj.Spec.GitImplementation, err),
-			Reason: sourcev1.GitOperationFailedReason,
-		}
+		e := serror.NewStalling(
+			fmt.Errorf("failed to create Git client for implementation '%s': %w", obj.Spec.GitImplementation, err),
+			sourcev1.GitOperationFailedReason,
+		)
 		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
 		return nil, e
 	}
+	defer gitReader.Close()
 
-	// this is needed only for libgit2, due to managed transport.
-	if obj.Spec.GitImplementation == sourcev1.LibGit2Implementation {
-		// We set the TransportOptionsURL of this set of authentication options here by constructing
-		// a unique URL that won't clash in a multi tenant environment. This unique URL is used by
-		// libgit2 managed transports. This enables us to bypass the inbuilt credentials callback in
-		// libgit2, which is inflexible and unstable.
-		if strings.HasPrefix(obj.Spec.URL, "http") {
-			authOpts.TransportOptionsURL = fmt.Sprintf("http://%s/%s/%d", obj.Name, obj.UID, obj.Generation)
-		} else if strings.HasPrefix(obj.Spec.URL, "ssh") {
-			authOpts.TransportOptionsURL = fmt.Sprintf("ssh://%s/%s/%d", obj.Name, obj.UID, obj.Generation)
-		} else {
-			e := &serror.Stalling{
-				Err:    fmt.Errorf("git repository URL '%s' has invalid transport type, supported types are: http, https, ssh", obj.Spec.URL),
-				Reason: sourcev1.URLInvalidReason,
-			}
-			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
-			return nil, e
-		}
-	}
-
-	commit, err := checkoutStrategy.Checkout(gitCtx, dir, obj.Spec.URL, authOpts)
+	commit, err := gitReader.Clone(gitCtx, obj.Spec.URL, cloneOpts)
 	if err != nil {
 		e := serror.NewGeneric(
 			fmt.Errorf("failed to checkout and determine revision: %w", err),
@@ -786,6 +786,7 @@ func (r *GitRepositoryReconciler) gitCheckout(ctx context.Context,
 		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
 		return nil, e
 	}
+
 	return commit, nil
 }
 
