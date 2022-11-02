@@ -727,10 +727,12 @@ func TestGitRepositoryReconciler_reconcileSource_checkoutStrategy(t *testing.T) 
 	}
 
 	r := &GitRepositoryReconciler{
-		Client:                      fakeclient.NewClientBuilder().WithScheme(runtime.NewScheme()).Build(),
-		EventRecorder:               record.NewFakeRecorder(32),
-		Storage:                     testStorage,
-		features:                    features.FeatureGates(),
+		Client:        fakeclient.NewClientBuilder().WithScheme(runtime.NewScheme()).Build(),
+		EventRecorder: record.NewFakeRecorder(32),
+		Storage:       testStorage,
+		features: map[string]bool{
+			features.OptimizedGitClones: true,
+		},
 		Libgit2TransportInitialized: transport.Enabled,
 	}
 

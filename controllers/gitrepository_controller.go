@@ -141,12 +141,7 @@ func (r *GitRepositoryReconciler) SetupWithManagerAndOptions(mgr ctrl.Manager, o
 	r.requeueDependency = opts.DependencyRequeueInterval
 
 	if r.features == nil {
-		r.features = map[string]bool{}
-	}
-
-	// Check and enable gated features.
-	if oc, _ := features.Enabled(features.OptimizedGitClones); oc {
-		r.features[features.OptimizedGitClones] = true
+		r.features = features.FeatureGates()
 	}
 
 	return ctrl.NewControllerManagedBy(mgr).
