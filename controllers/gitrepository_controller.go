@@ -327,6 +327,9 @@ func (r *GitRepositoryReconciler) notify(ctx context.Context, oldObj, newObj *so
 			fmt.Sprintf("%s/%s", sourcev1.GroupVersion.Group, eventv1.MetaRevisionKey): newObj.Status.Artifact.Revision,
 			fmt.Sprintf("%s/%s", sourcev1.GroupVersion.Group, eventv1.MetaChecksumKey): newObj.Status.Artifact.Checksum,
 		}
+		if newObj.Status.Artifact.Digest != "" {
+			annotations[sourcev1.GroupVersion.Group+"/digest"] = newObj.Status.Artifact.Digest
+		}
 
 		var oldChecksum string
 		if oldObj.GetArtifact() != nil {
