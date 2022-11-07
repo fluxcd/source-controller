@@ -18,6 +18,7 @@ package digest
 
 import (
 	"crypto/rand"
+	"github.com/fluxcd/source-controller/internal/digest/sha256simd"
 	"testing"
 
 	. "github.com/onsi/gomega"
@@ -100,10 +101,14 @@ func benchmarkMultiDigesterWrite(b *testing.B, algos []digest.Algorithm, pSize i
 }
 
 func BenchmarkMultiDigester_Write(b *testing.B) {
-	const pSize = 1024 * 2
+	const pSize = 1024 * 10
 
 	b.Run("sha256", func(b *testing.B) {
 		benchmarkMultiDigesterWrite(b, []digest.Algorithm{digest.SHA256}, pSize)
+	})
+
+	b.Run("sha256-simd", func(b *testing.B) {
+		benchmarkMultiDigesterWrite(b, []digest.Algorithm{sha256simd.SHA256SIMD}, pSize)
 	})
 
 	b.Run("blake3", func(b *testing.B) {
