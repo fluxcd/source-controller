@@ -1253,7 +1253,20 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>Checksum is the SHA256 checksum of the Artifact file.</p>
+<p>Checksum is the SHA256 checksum of the Artifact file.
+Deprecated: use Artifact.Digest instead.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>digest</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Digest is the digest of the file in the form of &lsquo;<algorithm>:<checksum>&rsquo;.</p>
 </td>
 </tr>
 <tr>
