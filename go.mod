@@ -10,6 +10,10 @@ replace github.com/emicklei/go-restful => github.com/emicklei/go-restful v2.16.0
 // The util.Walk func was never release as a tag.
 replace github.com/go-git/go-billy/v5 => github.com/go-git/go-billy/v5 v5.0.0-20210804024030-7ab80d7c013d
 
+// Replace digest lib to master to gather access to BLAKE3.
+// xref: https://github.com/opencontainers/go-digest/pull/66
+replace github.com/opencontainers/go-digest => github.com/opencontainers/go-digest v1.0.1-0.20220411205349-bde1400a84be
+
 require (
 	cloud.google.com/go/storage v1.29.0
 	github.com/AdaLogics/go-fuzz-headers v0.0.0-20230106234847-43070de90fa1
@@ -45,6 +49,8 @@ require (
 	github.com/google/uuid v1.3.0
 	github.com/minio/minio-go/v7 v7.0.47
 	github.com/onsi/gomega v1.26.0
+	github.com/opencontainers/go-digest v1.0.0
+	github.com/opencontainers/go-digest/blake3 v0.0.0-20220411205349-bde1400a84be
 	github.com/ory/dockertest/v3 v3.9.1
 	github.com/otiai10/copy v1.9.0
 	github.com/phayes/freeport v0.0.0-20220201140144-74d24b5ae9f5
@@ -277,7 +283,6 @@ require (
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/oklog/ulid v1.3.1 // indirect
 	github.com/olekukonko/tablewriter v0.0.5 // indirect
-	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.1.0-rc2 // indirect
 	github.com/opencontainers/runc v1.1.2 // indirect
 	github.com/opentracing/opentracing-go v1.2.0 // indirect
@@ -334,6 +339,7 @@ require (
 	github.com/yvasiyarov/go-metrics v0.0.0-20150112132944-c25f46c4b940 // indirect
 	github.com/yvasiyarov/gorelic v0.0.7 // indirect
 	github.com/yvasiyarov/newrelic_platform_go v0.0.0-20160601141957-9c099fbc30e9 // indirect
+	github.com/zeebo/blake3 v0.1.1 // indirect
 	github.com/zeebo/errs v1.2.2 // indirect
 	go.etcd.io/bbolt v1.3.6 // indirect
 	go.etcd.io/etcd/api/v3 v3.6.0-alpha.0 // indirect
