@@ -386,6 +386,9 @@ func (r *BucketReconciler) notify(ctx context.Context, oldObj, newObj *sourcev1.
 			sourcev1.GroupVersion.Group + "/revision": newObj.Status.Artifact.Revision,
 			sourcev1.GroupVersion.Group + "/checksum": newObj.Status.Artifact.Checksum,
 		}
+		if newObj.Status.Artifact.Digest != "" {
+			annotations[sourcev1.GroupVersion.Group+"/digest"] = newObj.Status.Artifact.Digest
+		}
 
 		var oldChecksum string
 		if oldObj.GetArtifact() != nil {

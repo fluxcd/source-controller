@@ -271,6 +271,9 @@ func (r *HelmRepositoryReconciler) notify(ctx context.Context, oldObj, newObj *s
 			sourcev1.GroupVersion.Group + "/revision": newObj.Status.Artifact.Revision,
 			sourcev1.GroupVersion.Group + "/checksum": newObj.Status.Artifact.Checksum,
 		}
+		if newObj.Status.Artifact.Digest != "" {
+			annotations[sourcev1.GroupVersion.Group+"/digest"] = newObj.Status.Artifact.Digest
+		}
 
 		humanReadableSize := "unknown size"
 		if size := newObj.Status.Artifact.Size; size != nil {
