@@ -43,8 +43,14 @@ type Artifact struct {
 	Revision string `json:"revision"`
 
 	// Checksum is the SHA256 checksum of the Artifact file.
+	// Deprecated, use Artifact.Digest instead.
 	// +optional
 	Checksum string `json:"checksum"`
+
+	// Digest is the digest of the file in the form of '<algorithm>:<checksum>'.
+	// +optional
+	// +kubebuilder:validation:Pattern="^[a-z0-9]+(?:[.+_-][a-z0-9]+)*:[a-zA-Z0-9=_-]+$"
+	Digest string `json:"digest"`
 
 	// LastUpdateTime is the timestamp corresponding to the last update of the
 	// Artifact.
