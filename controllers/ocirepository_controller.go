@@ -816,7 +816,7 @@ func (r *OCIRepositoryReconciler) transport(ctx context.Context, obj *sourcev1.O
 		return nil, err
 	}
 
-	transport := remote.DefaultTransport.Clone()
+	transport := remote.DefaultTransport.(*http.Transport).Clone()
 	tlsConfig := transport.TLSClientConfig
 
 	if clientCert, ok := certSecret.Data[oci.ClientCert]; ok {
