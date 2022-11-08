@@ -24,6 +24,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"log"
 	"math/rand"
 	"os"
 	"path/filepath"
@@ -31,8 +32,15 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/appendblob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
 
@@ -46,6 +54,7 @@ var (
 var (
 	testAccountName = os.Getenv("TEST_AZURE_ACCOUNT_NAME")
 	testAccountKey  = os.Getenv("TEST_AZURE_ACCOUNT_KEY")
+	cred            *azblob.SharedKeyCredential
 )
 
 var (
@@ -77,6 +86,11 @@ func init() {
 }
 
 func TestMain(m *testing.M) {
+	var err error
+	cred, err = blob.NewSharedKeyCredential(testAccountName, testAccountKey)
+	if err != nil {
+		log.Fatalf("unable to create shared key creds: %s", err.Error())
+	}
 	code := m.Run()
 	os.Exit(code)
 }
@@ -148,7 +162,8 @@ func TestBlobClient_FGetObject(t *testing.T) {
 	// Create test blob.
 	ctx, timeout = context.WithTimeout(context.Background(), testTimeout)
 	defer timeout()
-	g.Expect(createBlob(ctx, client, testContainer, testFile, testFileData))
+
+	g.Expect(createBlob(ctx, cred, testContainer, testFile, testFileData))
 
 	localPath := filepath.Join(tempDir, testFile)
 
@@ -173,8 +188,6 @@ func TestBlobClientSASKey_FGetObject(t *testing.T) {
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(client).ToNot(BeNil())
 
-	g.Expect(client.CanGetAccountSASToken()).To(BeTrue())
-
 	// Generate test container name.
 	testContainer := generateString(testContainerGenerateName)
 
@@ -189,13 +202,18 @@ func TestBlobClientSASKey_FGetObject(t *testing.T) {
 	// Create test blob.
 	ctx, timeout = context.WithTimeout(context.Background(), testTimeout)
 	defer timeout()
-	g.Expect(createBlob(ctx, client, testContainer, testFile, testFileData))
-
+	g.Expect(createBlob(ctx, cred, testContainer, testFile, testFileData)).To(Succeed())
 	localPath := filepath.Join(tempDir, testFile)
 
 	// use the shared key client to create a SAS key for the account
-	sasKey, err := client.GetSASURL(azblob.AccountSASResourceTypes{Object: true, Container: true},
-		azblob.AccountSASPermissions{List: true, Read: true},
+	cred, err := service.NewSharedKeyCredential(testAccountName, testAccountKey)
+	g.Expect(err).ToNot(HaveOccurred())
+	url := fmt.Sprintf("https://%s.blob.core.windows.net", testAccountName)
+	serviceClient, err := service.NewClientWithSharedKeyCredential(url, cred, nil)
+	g.Expect(err).ToNot(HaveOccurred())
+	sasKey, err := serviceClient.GetSASURL(sas.AccountResourceTypes{Object: true, Container: true},
+		sas.AccountPermissions{List: true, Read: true},
+		sas.AccountServices{Blob: true, File: true},
 		time.Now(),
 		time.Now().Add(48*time.Hour))
 	g.Expect(err).ToNot(HaveOccurred())
@@ -219,9 +237,11 @@ func TestBlobClientSASKey_FGetObject(t *testing.T) {
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(ok).To(BeTrue())
 
-	_, err = sasKeyClient.FGetObject(ctx, testContainer, testFile, localPath)
-
+	_, err = client.FGetObject(ctx, testContainer, testFile, localPath)
 	g.Expect(err).ToNot(HaveOccurred())
+	_, err = sasKeyClient.FGetObject(ctx, testContainer, testFile, localPath)
+	g.Expect(err).ToNot(HaveOccurred())
+
 	g.Expect(localPath).To(BeARegularFile())
 	f, _ := os.ReadFile(localPath)
 	g.Expect(f).To(Equal([]byte(testFileData)))
@@ -234,8 +254,6 @@ func TestBlobClientContainerSASKey_BucketExists(t *testing.T) {
 	client, err := NewClient(testBucket.DeepCopy(), testSecret.DeepCopy())
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(client).ToNot(BeNil())
-
-	g.Expect(client.CanGetAccountSASToken()).To(BeTrue())
 
 	// Generate test container name.
 	testContainer := generateString(testContainerGenerateName)
@@ -251,18 +269,22 @@ func TestBlobClientContainerSASKey_BucketExists(t *testing.T) {
 	// Create test blob.
 	ctx, timeout = context.WithTimeout(context.Background(), testTimeout)
 	defer timeout()
-	g.Expect(createBlob(ctx, client, testContainer, testFile, testFileData))
+	g.Expect(createBlob(ctx, cred, testContainer, testFile, testFileData))
 
 	// use the container client to create a container-level SAS key for the account
-	containerClient, err := client.NewContainerClient(testContainer)
+	cred, err := container.NewSharedKeyCredential(testAccountName, testAccountKey)
+	g.Expect(err).ToNot(HaveOccurred())
+	url := fmt.Sprintf("https://%s.blob.core.windows.net/%s", testAccountName, testContainer)
+	containerClient, err := container.NewClientWithSharedKeyCredential(url, cred, nil)
 	g.Expect(err).ToNot(HaveOccurred())
 	// sasKey
-	sasKey, err := containerClient.GetSASURL(azblob.ContainerSASPermissions{Read: true, List: true},
+	sasKey, err := containerClient.GetSASURL(sas.ContainerPermissions{Read: true, List: true},
 		time.Now(),
 		time.Now().Add(48*time.Hour))
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(sasKey).ToNot(BeEmpty())
-	// the sdk returns the full SAS url e.g test.blob.core.windows.net/<container-name>?<actual-sas-token>
+
+	// the sdk returns the full SAS url e.g test.blob.core.windows.net/<container-name>/?<actual-sas-token>
 	sasKey = strings.TrimPrefix(sasKey, testBucket.Spec.Endpoint+"/"+testContainer)
 	testSASKeySecret := corev1.Secret{
 		Data: map[string][]byte{
@@ -337,8 +359,8 @@ func TestBlobClient_VisitObjects(t *testing.T) {
 	// Create test blobs.
 	ctx, timeout = context.WithTimeout(context.Background(), testTimeout)
 	defer timeout()
-	g.Expect(createBlob(ctx, client, testContainer, testFile, testFileData))
-	g.Expect(createBlob(ctx, client, testContainer, testFile2, testFile2Data))
+	g.Expect(createBlob(ctx, cred, testContainer, testFile, testFileData))
+	g.Expect(createBlob(ctx, cred, testContainer, testFile2, testFile2Data))
 
 	visits := make(map[string]string)
 
@@ -377,7 +399,7 @@ func TestBlobClient_VisitObjects_CallbackErr(t *testing.T) {
 	// Create test blob.
 	ctx, timeout = context.WithTimeout(context.Background(), testTimeout)
 	defer timeout()
-	g.Expect(createBlob(ctx, client, testContainer, testFile, testFileData))
+	g.Expect(createBlob(ctx, cred, testContainer, testFile, testFileData))
 
 	// Visit object.
 	ctx, timeout = context.WithTimeout(context.Background(), testTimeout)
@@ -392,9 +414,9 @@ func TestBlobClient_VisitObjects_CallbackErr(t *testing.T) {
 
 func createContainer(ctx context.Context, client *BlobClient, name string) error {
 	if _, err := client.CreateContainer(ctx, name, nil); err != nil {
-		var stgErr *azblob.StorageError
+		var stgErr *azcore.ResponseError
 		if errors.As(err, &stgErr) {
-			if stgErr.ErrorCode == azblob.StorageErrorCodeContainerAlreadyExists {
+			if stgErr.ErrorCode == string(bloberror.ContainerAlreadyExists) {
 				return nil
 			}
 			err = stgErr
@@ -404,17 +426,12 @@ func createContainer(ctx context.Context, client *BlobClient, name string) error
 	return nil
 }
 
-func createBlob(ctx context.Context, client *BlobClient, containerName, name, data string) error {
-	container, err := client.NewContainerClient(containerName)
+func createBlob(ctx context.Context, cred *blob.SharedKeyCredential, containerName, name, data string) error {
+	blobURL := fmt.Sprintf("https://%s.blob.core.windows.net/%s/%s", testAccountName, containerName, name)
+	blob, err := appendblob.NewClientWithSharedKeyCredential(blobURL, cred, nil)
 	if err != nil {
 		return err
 	}
-
-	blob, err := container.NewAppendBlobClient(name)
-	if err != nil {
-		return err
-	}
-
 	ctx, timeout := context.WithTimeout(context.Background(), testTimeout)
 	defer timeout()
 	if _, err := blob.Create(ctx, nil); err != nil {
@@ -422,7 +439,8 @@ func createBlob(ctx context.Context, client *BlobClient, containerName, name, da
 	}
 
 	hash := md5.Sum([]byte(data))
-	if _, err := blob.AppendBlock(ctx, streaming.NopCloser(strings.NewReader(data)), &azblob.AppendBlobAppendBlockOptions{
+
+	if _, err := blob.AppendBlock(ctx, streaming.NopCloser(strings.NewReader(data)), &appendblob.AppendBlockOptions{
 		TransactionalContentMD5: hash[:16],
 	}); err != nil {
 		return err
@@ -432,13 +450,8 @@ func createBlob(ctx context.Context, client *BlobClient, containerName, name, da
 
 func deleteContainer(ctx context.Context, client *BlobClient, name string) error {
 	if _, err := client.DeleteContainer(ctx, name, nil); err != nil {
-		var stgErr *azblob.StorageError
-		if errors.As(err, &stgErr) {
-			if code := stgErr.ErrorCode; code == azblob.StorageErrorCodeContainerNotFound ||
-				code == azblob.StorageErrorCodeContainerBeingDeleted {
-				return nil
-			}
-			err = stgErr
+		if bloberror.HasCode(err, bloberror.ContainerNotFound, bloberror.ContainerBeingDeleted) {
+			return nil
 		}
 		return err
 	}

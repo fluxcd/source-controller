@@ -31,6 +31,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
 )
@@ -133,12 +134,12 @@ func TestBlobClient_ObjectIsNotFound(t *testing.T) {
 	}{
 		{
 			name: "StorageError with BlobNotFound code",
-			err:  &azblob.StorageError{ErrorCode: azblob.StorageErrorCodeBlobNotFound},
+			err:  &azcore.ResponseError{ErrorCode: string(bloberror.BlobNotFound)},
 			want: true,
 		},
 		{
 			name: "StorageError with different code",
-			err:  &azblob.StorageError{ErrorCode: azblob.StorageErrorCodeInternalError},
+			err:  &azcore.ResponseError{ErrorCode: string(bloberror.InternalError)},
 		},
 		{
 			name: "other error",

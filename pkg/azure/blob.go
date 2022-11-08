@@ -33,6 +33,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	_ "github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
 	corev1 "k8s.io/api/core/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 
@@ -60,7 +61,7 @@ const (
 
 // BlobClient is a minimal Azure Blob client for fetching objects.
 type BlobClient struct {
-	*azblob.ServiceClient
+	*azblob.Client
 }
 
 // NewClient creates a new Azure Blob storage client.
@@ -95,7 +96,7 @@ func NewClient(obj *sourcev1.Bucket, secret *corev1.Secret) (c *BlobClient, err 
 			return
 		}
 		if token != nil {
-			c.ServiceClient, err = azblob.NewServiceClient(obj.Spec.Endpoint, token, nil)
+			c.Client, err = azblob.NewClient(obj.Spec.Endpoint, token, nil)
 			return
 		}
 
@@ -105,7 +106,7 @@ func NewClient(obj *sourcev1.Bucket, secret *corev1.Secret) (c *BlobClient, err 
 			return
 		}
 		if cred != nil {
-			c.ServiceClient, err = azblob.NewServiceClientWithSharedKey(obj.Spec.Endpoint, cred, &azblob.ClientOptions{})
+			c.Client, err = azblob.NewClientWithSharedKeyCredential(obj.Spec.Endpoint, cred, &azblob.ClientOptions{})
 			return
 		}
 
@@ -114,7 +115,7 @@ func NewClient(obj *sourcev1.Bucket, secret *corev1.Secret) (c *BlobClient, err 
 			return
 		}
 
-		c.ServiceClient, err = azblob.NewServiceClientWithNoCredential(fullPath, &azblob.ClientOptions{})
+		c.Client, err = azblob.NewClientWithNoCredential(fullPath, &azblob.ClientOptions{})
 		return
 	}
 
@@ -127,12 +128,12 @@ func NewClient(obj *sourcev1.Bucket, secret *corev1.Secret) (c *BlobClient, err 
 		return nil, err
 	}
 	if token != nil {
-		c.ServiceClient, err = azblob.NewServiceClient(obj.Spec.Endpoint, token, nil)
+		c.Client, err = azblob.NewClient(obj.Spec.Endpoint, token, nil)
 		return
 	}
 
 	// Fallback to simple client.
-	c.ServiceClient, err = azblob.NewServiceClientWithNoCredential(obj.Spec.Endpoint, nil)
+	c.Client, err = azblob.NewClientWithNoCredential(obj.Spec.Endpoint, nil)
 	return
 }
 
@@ -177,29 +178,20 @@ func ValidateSecret(secret *corev1.Secret) error {
 // BucketExists returns if an object storage bucket with the provided name
 // exists, or returns a (client) error.
 func (c *BlobClient) BucketExists(ctx context.Context, bucketName string) (bool, error) {
-	container, err := c.ServiceClient.NewContainerClient(bucketName)
-	if err != nil {
-		return false, err
-	}
-
-	items := container.ListBlobsFlat(&azblob.ContainerListBlobsFlatOptions{
+	items := c.Client.NewListBlobsFlatPager(bucketName, &azblob.ListBlobsFlatOptions{
 		MaxResults: to.Ptr(int32(1)),
 	})
 	// We call next page only once since we just want to see if we get an error
-	items.NextPage(ctx)
-	if err := items.Err(); err != nil {
-		var respErr *azcore.ResponseError
-		if errors.As(err, &respErr) {
-			if respErr.ErrorCode == string(*azblob.StorageErrorCodeContainerNotFound.ToPtr()) {
-				return false, nil
-			}
-			err = respErr
-
-			// For a container-level SASToken, we get an AuthenticationFailed when the bucket doesn't exist
-			if respErr.ErrorCode == string(azblob.StorageErrorCodeAuthenticationFailed) {
-				return false, fmt.Errorf("Bucket name may be incorrect, it does not exist or caller does not have enough permissions: %w", err)
-			}
+	if _, err := items.NextPage(ctx); err != nil {
+		if bloberror.HasCode(err, bloberror.ContainerNotFound) {
+			return false, nil
 		}
+
+		// For a container-level SASToken, we get an AuthenticationFailed when the bucket doesn't exist
+		if bloberror.HasCode(err, bloberror.AuthenticationFailed) {
+			return false, fmt.Errorf("Bucket name may be incorrect, it does not exist or caller does not have enough permissions: %w", err)
+		}
+
 		return false, err
 	}
 	return true, nil
@@ -209,15 +201,6 @@ func (c *BlobClient) BucketExists(ctx context.Context, bucketName string) (bool,
 // writes it to targetPath.
 // It returns the etag of the successfully fetched file, or any error.
 func (c *BlobClient) FGetObject(ctx context.Context, bucketName, objectName, localPath string) (string, error) {
-	container, err := c.ServiceClient.NewContainerClient(bucketName)
-	if err != nil {
-		return "", err
-	}
-	blob, err := container.NewBlobClient(objectName)
-	if err != nil {
-		return "", err
-	}
-
 	// Verify if destination already exists.
 	dirStatus, err := os.Stat(localPath)
 	if err == nil {
@@ -244,7 +227,7 @@ func (c *BlobClient) FGetObject(ctx context.Context, bucketName, objectName, loc
 	}
 
 	// Download object.
-	res, err := blob.Download(ctx, nil)
+	res, err := c.DownloadStream(ctx, bucketName, objectName, nil)
 	if err != nil {
 		return "", err
 	}
@@ -262,7 +245,7 @@ func (c *BlobClient) FGetObject(ctx context.Context, bucketName, objectName, loc
 
 	// Off we go.
 	mw := io.MultiWriter(f, hash)
-	if _, err = io.Copy(mw, res.Body(nil)); err != nil {
+	if _, err = io.Copy(mw, res.Body); err != nil {
 		if err = f.Close(); err != nil {
 			ctrl.LoggerFrom(ctx).Error(err, "failed to close file after copy error")
 		}
@@ -271,7 +254,8 @@ func (c *BlobClient) FGetObject(ctx context.Context, bucketName, objectName, loc
 	if err = f.Close(); err != nil {
 		return "", err
 	}
-	return *res.ETag, nil
+
+	return string(*res.ETag), nil
 }
 
 // VisitObjects iterates over the items in the provided object storage
@@ -279,25 +263,21 @@ func (c *BlobClient) FGetObject(ctx context.Context, bucketName, objectName, loc
 // If the underlying client or the visit callback returns an error,
 // it returns early.
 func (c *BlobClient) VisitObjects(ctx context.Context, bucketName string, visit func(path, etag string) error) error {
-	container, err := c.ServiceClient.NewContainerClient(bucketName)
-	if err != nil {
-		return err
-	}
-
-	items := container.ListBlobsFlat(&azblob.ContainerListBlobsFlatOptions{})
-	for items.NextPage(ctx) {
-		resp := items.PageResponse()
+	items := c.NewListBlobsFlatPager(bucketName, nil)
+	for items.More() {
+		resp, err := items.NextPage(ctx)
+		if err != nil {
+			err = fmt.Errorf("listing objects from bucket '%s' failed: %w", bucketName, err)
+			return err
+		}
 		for _, blob := range resp.Segment.BlobItems {
-			if err := visit(*blob.Name, fmt.Sprintf("%x", *blob.Properties.Etag)); err != nil {
+			if err := visit(*blob.Name, fmt.Sprintf("%x", *blob.Properties.ETag)); err != nil {
 				err = fmt.Errorf("listing objects from bucket '%s' failed: %w", bucketName, err)
 				return err
 			}
 		}
 	}
-	if err := items.Err(); err != nil {
-		err = fmt.Errorf("listing objects from bucket '%s' failed: %w", bucketName, err)
-		return err
-	}
+
 	return nil
 }
 
@@ -309,13 +289,7 @@ func (c *BlobClient) Close(_ context.Context) {
 // ObjectIsNotFound checks if the error provided is an azblob.StorageError with
 // an azblob.StorageErrorCodeBlobNotFound error code.
 func (c *BlobClient) ObjectIsNotFound(err error) bool {
-	var stgErr *azblob.StorageError
-	if errors.As(err, &stgErr) {
-		if stgErr.ErrorCode == azblob.StorageErrorCodeBlobNotFound {
-			return true
-		}
-	}
-	return false
+	return bloberror.HasCode(err, bloberror.BlobNotFound)
 }
 
 // tokenCredentialsFromSecret attempts to create an azcore.TokenCredential
