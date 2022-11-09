@@ -37,10 +37,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/ratelimiter"
 
+	eventv1 "github.com/fluxcd/pkg/apis/event/v1beta1"
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	helper "github.com/fluxcd/pkg/runtime/controller"
-	"github.com/fluxcd/pkg/runtime/events"
 	"github.com/fluxcd/pkg/runtime/patch"
 	"github.com/fluxcd/pkg/runtime/predicates"
 
@@ -499,7 +499,7 @@ func (r *HelmRepositoryReconciler) reconcileArtifact(ctx context.Context, obj *s
 	}()
 
 	if obj.GetArtifact().HasRevision(artifact.Revision) && obj.GetArtifact().HasChecksum(artifact.Checksum) {
-		r.eventLogf(ctx, obj, events.EventTypeTrace, sourcev1.ArtifactUpToDateReason, "artifact up-to-date with remote revision: '%s'", artifact.Revision)
+		r.eventLogf(ctx, obj, eventv1.EventTypeTrace, sourcev1.ArtifactUpToDateReason, "artifact up-to-date with remote revision: '%s'", artifact.Revision)
 		return sreconcile.ResultSuccess, nil
 	}
 
@@ -539,7 +539,7 @@ func (r *HelmRepositoryReconciler) reconcileArtifact(ctx context.Context, obj *s
 	// Update index symlink.
 	indexURL, err := r.Storage.Symlink(*artifact, "index.yaml")
 	if err != nil {
-		r.eventLogf(ctx, obj, events.EventTypeTrace, sourcev1.SymlinkUpdateFailedReason,
+		r.eventLogf(ctx, obj, eventv1.EventTypeTrace, sourcev1.SymlinkUpdateFailedReason,
 			"failed to update status URL symlink: %s", err)
 	}
 	if indexURL != "" {
@@ -562,7 +562,7 @@ func (r *HelmRepositoryReconciler) reconcileArtifact(ctx context.Context, obj *s
 		// Using r.Storage.LocalPath(*repo.GetArtifact() is safe as the path is in the format /<helm-repository-name>/<chart-name>/<filename>.
 		err := chartRepo.CacheIndexInMemory()
 		if err != nil {
-			r.eventLogf(ctx, obj, events.EventTypeTrace, sourcev1.CacheOperationFailedReason, "failed to cache index: %s", err)
+			r.eventLogf(ctx, obj, eventv1.EventTypeTrace, sourcev1.CacheOperationFailedReason, "failed to cache index: %s", err)
 		}
 	}
 
@@ -602,7 +602,7 @@ func (r *HelmRepositoryReconciler) garbageCollect(ctx context.Context, obj *sour
 				Reason: "GarbageCollectionFailed",
 			}
 		} else if deleted != "" {
-			r.eventLogf(ctx, obj, events.EventTypeTrace, "GarbageCollectionSucceeded",
+			r.eventLogf(ctx, obj, eventv1.EventTypeTrace, "GarbageCollectionSucceeded",
 				"garbage collected artifacts for deleted resource")
 		}
 		// Clean status sub-resource
@@ -621,7 +621,7 @@ func (r *HelmRepositoryReconciler) garbageCollect(ctx context.Context, obj *sour
 			}
 		}
 		if len(delFiles) > 0 {
-			r.eventLogf(ctx, obj, events.EventTypeTrace, "GarbageCollectionSucceeded",
+			r.eventLogf(ctx, obj, eventv1.EventTypeTrace, "GarbageCollectionSucceeded",
 				fmt.Sprintf("garbage collected %d artifacts", len(delFiles)))
 			return nil
 		}

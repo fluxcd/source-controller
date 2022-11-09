@@ -31,6 +31,7 @@ import (
 	"time"
 
 	"github.com/Masterminds/semver/v3"
+	eventv1 "github.com/fluxcd/pkg/apis/event/v1beta1"
 	soci "github.com/fluxcd/source-controller/internal/oci"
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/authn/k8schain"
@@ -58,7 +59,6 @@ import (
 	"github.com/fluxcd/pkg/oci/auth/login"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	helper "github.com/fluxcd/pkg/runtime/controller"
-	"github.com/fluxcd/pkg/runtime/events"
 	"github.com/fluxcd/pkg/runtime/patch"
 	"github.com/fluxcd/pkg/runtime/predicates"
 	"github.com/fluxcd/pkg/sourceignore"
@@ -790,7 +790,7 @@ func (r *OCIRepositoryReconciler) keychain(ctx context.Context, obj *sourcev1.OC
 		imagePullSecret := corev1.Secret{}
 		err := r.Get(ctx, types.NamespacedName{Namespace: obj.Namespace, Name: imagePullSecretName}, &imagePullSecret)
 		if err != nil {
-			r.eventLogf(ctx, obj, events.EventTypeTrace, sourcev1.AuthenticationFailedReason,
+			r.eventLogf(ctx, obj, eventv1.EventTypeTrace, sourcev1.AuthenticationFailedReason,
 				"auth secret '%s' not found", imagePullSecretName)
 			return nil, err
 		}
@@ -929,7 +929,7 @@ func (r *OCIRepositoryReconciler) reconcileArtifact(ctx context.Context, obj *so
 
 	// The artifact is up-to-date
 	if obj.GetArtifact().HasRevision(artifact.Revision) && !ociContentConfigChanged(obj) {
-		r.eventLogf(ctx, obj, events.EventTypeTrace, sourcev1.ArtifactUpToDateReason,
+		r.eventLogf(ctx, obj, eventv1.EventTypeTrace, sourcev1.ArtifactUpToDateReason,
 			"artifact up-to-date with remote revision: '%s'", artifact.Revision)
 		return sreconcile.ResultSuccess, nil
 	}
@@ -1013,7 +1013,7 @@ func (r *OCIRepositoryReconciler) reconcileArtifact(ctx context.Context, obj *so
 	// Update symlink on a "best effort" basis
 	url, err := r.Storage.Symlink(artifact, "latest.tar.gz")
 	if err != nil {
-		r.eventLogf(ctx, obj, events.EventTypeTrace, sourcev1.SymlinkUpdateFailedReason,
+		r.eventLogf(ctx, obj, eventv1.EventTypeTrace, sourcev1.SymlinkUpdateFailedReason,
 			"failed to update status URL symlink: %s", err)
 	}
 	if url != "" {
@@ -1053,7 +1053,7 @@ func (r *OCIRepositoryReconciler) garbageCollect(ctx context.Context, obj *sourc
 				"GarbageCollectionFailed",
 			)
 		} else if deleted != "" {
-			r.eventLogf(ctx, obj, events.EventTypeTrace, "GarbageCollectionSucceeded",
+			r.eventLogf(ctx, obj, eventv1.EventTypeTrace, "GarbageCollectionSucceeded",
 				"garbage collected artifacts for deleted resource")
 		}
 		obj.Status.Artifact = nil
@@ -1068,7 +1068,7 @@ func (r *OCIRepositoryReconciler) garbageCollect(ctx context.Context, obj *sourc
 			)
 		}
 		if len(delFiles) > 0 {
-			r.eventLogf(ctx, obj, events.EventTypeTrace, "GarbageCollectionSucceeded",
+			r.eventLogf(ctx, obj, eventv1.EventTypeTrace, "GarbageCollectionSucceeded",
 				fmt.Sprintf("garbage collected %d artifacts", len(delFiles)))
 			return nil
 		}

@@ -24,9 +24,8 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	eventv1 "github.com/fluxcd/pkg/apis/event/v1beta1"
 	"github.com/fluxcd/pkg/apis/meta"
-	"github.com/fluxcd/pkg/runtime/events"
-
 	serror "github.com/fluxcd/source-controller/internal/error"
 	"github.com/fluxcd/source-controller/internal/object"
 	"github.com/fluxcd/source-controller/internal/reconcile"
@@ -113,7 +112,7 @@ func recordEvent(recorder kuberecorder.EventRecorder, obj client.Object, eventTy
 			recorder.Eventf(obj, corev1.EventTypeNormal, reason, err.Error())
 		} else {
 			// K8s native event only.
-			recorder.Eventf(obj, events.EventTypeTrace, reason, err.Error())
+			recorder.Eventf(obj, eventv1.EventTypeTrace, reason, err.Error())
 		}
 	case corev1.EventTypeWarning:
 		// TODO: Due to the current implementation of the event recorder, all

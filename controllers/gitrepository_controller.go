@@ -41,13 +41,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/ratelimiter"
 
+	eventv1 "github.com/fluxcd/pkg/apis/event/v1beta1"
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/git"
 	"github.com/fluxcd/pkg/git/gogit"
 	"github.com/fluxcd/pkg/git/libgit2"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	helper "github.com/fluxcd/pkg/runtime/controller"
-	"github.com/fluxcd/pkg/runtime/events"
 	"github.com/fluxcd/pkg/runtime/patch"
 	"github.com/fluxcd/pkg/runtime/predicates"
 
@@ -594,7 +594,7 @@ func (r *GitRepositoryReconciler) reconcileArtifact(ctx context.Context,
 	if obj.GetArtifact().HasRevision(artifact.Revision) &&
 		!includes.Diff(obj.Status.IncludedArtifacts) &&
 		!gitContentConfigChanged(obj, includes) {
-		r.eventLogf(ctx, obj, events.EventTypeTrace, sourcev1.ArtifactUpToDateReason, "artifact up-to-date with remote revision: '%s'", artifact.Revision)
+		r.eventLogf(ctx, obj, eventv1.EventTypeTrace, sourcev1.ArtifactUpToDateReason, "artifact up-to-date with remote revision: '%s'", artifact.Revision)
 		return sreconcile.ResultSuccess, nil
 	}
 
@@ -667,7 +667,7 @@ func (r *GitRepositoryReconciler) reconcileArtifact(ctx context.Context,
 	// Update symlink on a "best effort" basis
 	url, err := r.Storage.Symlink(artifact, "latest.tar.gz")
 	if err != nil {
-		r.eventLogf(ctx, obj, events.EventTypeTrace, sourcev1.SymlinkUpdateFailedReason,
+		r.eventLogf(ctx, obj, eventv1.EventTypeTrace, sourcev1.SymlinkUpdateFailedReason,
 			"failed to update status URL symlink: %s", err)
 	}
 	if url != "" {
@@ -873,7 +873,7 @@ func (r *GitRepositoryReconciler) verifyCommitSignature(ctx context.Context, obj
 
 	conditions.MarkTrue(obj, sourcev1.SourceVerifiedCondition, meta.SucceededReason,
 		"verified signature of commit '%s'", commit.Hash.String())
-	r.eventLogf(ctx, obj, events.EventTypeTrace, "VerifiedCommit",
+	r.eventLogf(ctx, obj, eventv1.EventTypeTrace, "VerifiedCommit",
 		"verified signature of commit '%s'", commit.Hash.String())
 	return sreconcile.ResultSuccess, nil
 }
@@ -908,7 +908,7 @@ func (r *GitRepositoryReconciler) garbageCollect(ctx context.Context, obj *sourc
 				"GarbageCollectionFailed",
 			)
 		} else if deleted != "" {
-			r.eventLogf(ctx, obj, events.EventTypeTrace, "GarbageCollectionSucceeded",
+			r.eventLogf(ctx, obj, eventv1.EventTypeTrace, "GarbageCollectionSucceeded",
 				"garbage collected artifacts for deleted resource")
 		}
 		obj.Status.Artifact = nil
@@ -923,7 +923,7 @@ func (r *GitRepositoryReconciler) garbageCollect(ctx context.Context, obj *sourc
 			)
 		}
 		if len(delFiles) > 0 {
-			r.eventLogf(ctx, obj, events.EventTypeTrace, "GarbageCollectionSucceeded",
+			r.eventLogf(ctx, obj, eventv1.EventTypeTrace, "GarbageCollectionSucceeded",
 				fmt.Sprintf("garbage collected %d artifacts", len(delFiles)))
 			return nil
 		}
