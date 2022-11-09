@@ -28,6 +28,7 @@ import (
 	"strings"
 	"time"
 
+	eventv1 "github.com/fluxcd/pkg/apis/event/v1beta1"
 	soci "github.com/fluxcd/source-controller/internal/oci"
 	helmgetter "helm.sh/helm/v3/pkg/getter"
 	helmreg "helm.sh/helm/v3/pkg/registry"
@@ -53,7 +54,6 @@ import (
 	"github.com/fluxcd/pkg/oci"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	helper "github.com/fluxcd/pkg/runtime/controller"
-	"github.com/fluxcd/pkg/runtime/events"
 	"github.com/fluxcd/pkg/runtime/patch"
 	"github.com/fluxcd/pkg/runtime/predicates"
 	"github.com/fluxcd/pkg/untar"
@@ -404,7 +404,7 @@ func (r *HelmChartReconciler) reconcileSource(ctx context.Context, obj *sourcev1
 		if helmRepo, ok := s.(*sourcev1.HelmRepository); !ok || helmRepo.Spec.Type != sourcev1.HelmRepositoryTypeOCI {
 			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, "NoSourceArtifact",
 				"no artifact available for %s source '%s'", obj.Spec.SourceRef.Kind, obj.Spec.SourceRef.Name)
-			r.eventLogf(ctx, obj, events.EventTypeTrace, "NoSourceArtifact",
+			r.eventLogf(ctx, obj, eventv1.EventTypeTrace, "NoSourceArtifact",
 				"no artifact available for %s source '%s'", obj.Spec.SourceRef.Kind, obj.Spec.SourceRef.Name)
 			return sreconcile.ResultRequeue, nil
 		}
@@ -426,7 +426,7 @@ func (r *HelmChartReconciler) reconcileSource(ctx context.Context, obj *sourcev1
 		// a sudden (partial) disappearance of observed state.
 		// TODO(hidde): include specific name/version information?
 		if depNum := build.ResolvedDependencies; build.Complete() && depNum > 0 {
-			r.Eventf(obj, events.EventTypeTrace, "ResolvedDependencies", "resolved %d chart dependencies", depNum)
+			r.Eventf(obj, eventv1.EventTypeTrace, "ResolvedDependencies", "resolved %d chart dependencies", depNum)
 		}
 
 		// Handle any build error
@@ -638,7 +638,7 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 				// Using r.Storage.LocalPath(*repo.GetArtifact() is safe as the path is in the format /<helm-repository-name>/<chart-name>/<filename>.
 				err := httpChartRepo.CacheIndexInMemory()
 				if err != nil {
-					r.eventLogf(ctx, obj, events.EventTypeTrace, sourcev1.CacheOperationFailedReason, "failed to cache index: %s", err)
+					r.eventLogf(ctx, obj, eventv1.EventTypeTrace, sourcev1.CacheOperationFailedReason, "failed to cache index: %s", err)
 				}
 			}
 
@@ -829,7 +829,7 @@ func (r *HelmChartReconciler) reconcileArtifact(ctx context.Context, obj *source
 
 	// Return early if the build path equals the current artifact path
 	if curArtifact := obj.GetArtifact(); curArtifact != nil && r.Storage.LocalPath(*curArtifact) == b.Path {
-		r.eventLogf(ctx, obj, events.EventTypeTrace, sourcev1.ArtifactUpToDateReason, "artifact up-to-date with remote revision: '%s'", artifact.Revision)
+		r.eventLogf(ctx, obj, eventv1.EventTypeTrace, sourcev1.ArtifactUpToDateReason, "artifact up-to-date with remote revision: '%s'", artifact.Revision)
 		return sreconcile.ResultSuccess, nil
 	}
 
@@ -873,7 +873,7 @@ func (r *HelmChartReconciler) reconcileArtifact(ctx context.Context, obj *source
 	// Update symlink on a "best effort" basis
 	symURL, err := r.Storage.Symlink(artifact, "latest.tar.gz")
 	if err != nil {
-		r.eventLogf(ctx, obj, events.EventTypeTrace, sourcev1.SymlinkUpdateFailedReason,
+		r.eventLogf(ctx, obj, eventv1.EventTypeTrace, sourcev1.SymlinkUpdateFailedReason,
 			"failed to update status URL symlink: %s", err)
 	}
 	if symURL != "" {
@@ -947,7 +947,7 @@ func (r *HelmChartReconciler) garbageCollect(ctx context.Context, obj *sourcev1.
 				Reason: "GarbageCollectionFailed",
 			}
 		} else if deleted != "" {
-			r.eventLogf(ctx, obj, events.EventTypeTrace, "GarbageCollectionSucceeded",
+			r.eventLogf(ctx, obj, eventv1.EventTypeTrace, "GarbageCollectionSucceeded",
 				"garbage collected artifacts for deleted resource")
 		}
 		obj.Status.Artifact = nil
@@ -962,7 +962,7 @@ func (r *HelmChartReconciler) garbageCollect(ctx context.Context, obj *sourcev1.
 			}
 		}
 		if len(delFiles) > 0 {
-			r.eventLogf(ctx, obj, events.EventTypeTrace, "GarbageCollectionSucceeded",
+			r.eventLogf(ctx, obj, eventv1.EventTypeTrace, "GarbageCollectionSucceeded",
 				fmt.Sprintf("garbage collected %d artifacts", len(delFiles)))
 			return nil
 		}
