@@ -422,8 +422,13 @@ func (r *GitRepositoryReconciler) reconcileStorage(ctx context.Context,
 // change, it short-circuits the whole reconciliation with an early return.
 func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context,
 	obj *sourcev1.GitRepository, commit *git.Commit, includes *artifactSet, dir string) (sreconcile.Result, error) {
+	gitImplementation := obj.Spec.GitImplementation
+	if goGitOnly, _ := r.features[features.ForceGoGitImplementation]; goGitOnly {
+		gitImplementation = sourcev1.GoGitImplementation
+	}
+
 	// Exit early, if we need to use libgit2 AND managed transport hasn't been intialized.
-	if !r.Libgit2TransportInitialized() && obj.Spec.GitImplementation == sourcev1.LibGit2Implementation {
+	if !r.Libgit2TransportInitialized() && gitImplementation == sourcev1.LibGit2Implementation {
 		return sreconcile.ResultEmpty, serror.NewStalling(
 			errors.New("libgit2 managed transport not initialized"), "Libgit2TransportNotEnabled",
 		)
@@ -499,7 +504,7 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context,
 		optimizedClone = true
 	}
 
-	c, err := r.gitCheckout(ctx, obj, authOpts, dir, optimizedClone)
+	c, err := r.gitCheckout(ctx, obj, authOpts, dir, optimizedClone, gitImplementation)
 	if err != nil {
 		return sreconcile.ResultEmpty, err
 	}
@@ -533,7 +538,7 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context,
 
 		// If we can't skip the reconciliation, checkout again without any
 		// optimization.
-		c, err := r.gitCheckout(ctx, obj, authOpts, dir, false)
+		c, err := r.gitCheckout(ctx, obj, authOpts, dir, false, gitImplementation)
 		if err != nil {
 			return sreconcile.ResultEmpty, err
 		}
@@ -725,7 +730,8 @@ func (r *GitRepositoryReconciler) reconcileInclude(ctx context.Context,
 // gitCheckout builds checkout options with the given configurations and
 // performs a git checkout.
 func (r *GitRepositoryReconciler) gitCheckout(ctx context.Context,
-	obj *sourcev1.GitRepository, authOpts *git.AuthOptions, dir string, optimized bool) (*git.Commit, error) {
+	obj *sourcev1.GitRepository, authOpts *git.AuthOptions, dir string,
+	optimized bool, gitImplementation string) (*git.Commit, error) {
 	// Configure checkout strategy.
 	cloneOpts := git.CloneOptions{
 		RecurseSubmodules: obj.Spec.RecurseSubmodules,
@@ -753,18 +759,18 @@ func (r *GitRepositoryReconciler) gitCheckout(ctx context.Context,
 	var gitReader git.RepositoryReader
 	var err error
 
-	switch obj.Spec.GitImplementation {
+	switch gitImplementation {
 	case sourcev1.LibGit2Implementation:
 		gitReader, err = libgit2.NewClient(dir, authOpts)
 	case sourcev1.GoGitImplementation:
 		gitReader, err = gogit.NewClient(dir, authOpts)
 	default:
-		err = fmt.Errorf("invalid Git implementation: %s", obj.Spec.GitImplementation)
+		err = fmt.Errorf("invalid Git implementation: %s", gitImplementation)
 	}
 	if err != nil {
 		// Do not return err as recovery without changes is impossible.
 		e := serror.NewStalling(
-			fmt.Errorf("failed to create Git client for implementation '%s': %w", obj.Spec.GitImplementation, err),
+			fmt.Errorf("failed to create Git client for implementation '%s': %w", gitImplementation, err),
 			sourcev1.GitOperationFailedReason,
 		)
 		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())

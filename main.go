@@ -204,9 +204,11 @@ func main() {
 	}
 	storage := mustInitStorage(storagePath, storageAdvAddr, artifactRetentionTTL, artifactRetentionRecords, setupLog)
 
-	if err = transport.InitManagedTransport(); err != nil {
-		// Log the error, but don't exit so as to not block reconcilers that are healthy.
-		setupLog.Error(err, "unable to initialize libgit2 managed transport")
+	if gogitOnly, _ := features.Enabled(features.ForceGoGitImplementation); !gogitOnly {
+		if err = transport.InitManagedTransport(); err != nil {
+			// Log the error, but don't exit so as to not block reconcilers that are healthy.
+			setupLog.Error(err, "unable to initialize libgit2 managed transport")
+		}
 	}
 
 	if err = (&controllers.GitRepositoryReconciler{
