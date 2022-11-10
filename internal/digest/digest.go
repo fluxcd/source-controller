@@ -17,6 +17,8 @@ limitations under the License.
 package digest
 
 import (
+	"crypto"
+	_ "crypto/sha1"
 	_ "crypto/sha256"
 	_ "crypto/sha512"
 	"fmt"
@@ -25,8 +27,19 @@ import (
 	_ "github.com/opencontainers/go-digest/blake3"
 )
 
-// Canonical is the primary digest algorithm used to calculate checksums.
-const Canonical = digest.SHA256
+const (
+	SHA1 digest.Algorithm = "sha1"
+)
+
+var (
+	// Canonical is the primary digest algorithm used to calculate checksums.
+	Canonical = digest.SHA256
+)
+
+func init() {
+	// Register SHA-1 algorithm for support of e.g. Git commit SHAs.
+	digest.RegisterAlgorithm(SHA1, crypto.SHA1)
+}
 
 // AlgorithmForName returns the digest algorithm for the given name, or an
 // error of type digest.ErrDigestUnsupported if the algorithm is unavailable.

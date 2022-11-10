@@ -102,6 +102,10 @@ func benchmarkMultiDigesterWrite(b *testing.B, algos []digest.Algorithm, pSize i
 func BenchmarkMultiDigester_Write(b *testing.B) {
 	const pSize = 1024 * 2
 
+	b.Run("sha1", func(b *testing.B) {
+		benchmarkMultiDigesterWrite(b, []digest.Algorithm{SHA1}, pSize)
+	})
+
 	b.Run("sha256", func(b *testing.B) {
 		benchmarkMultiDigesterWrite(b, []digest.Algorithm{digest.SHA256}, pSize)
 	})
