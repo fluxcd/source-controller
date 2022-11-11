@@ -43,6 +43,8 @@ import (
 	"github.com/fluxcd/pkg/runtime/patch"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
+	intdigest "github.com/fluxcd/source-controller/internal/digest"
+	"github.com/fluxcd/source-controller/internal/index"
 	gcsmock "github.com/fluxcd/source-controller/internal/mock/gcs"
 	s3mock "github.com/fluxcd/source-controller/internal/mock/s3"
 	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
@@ -297,7 +299,7 @@ func TestBucketReconciler_reconcileStorage(t *testing.T) {
 				g.Expect(r.Client.Delete(context.TODO(), obj)).ToNot(HaveOccurred())
 			}()
 
-			index := newEtagIndex()
+			index := index.NewDigester()
 			sp := patch.NewSerialPatcher(obj, r.Client)
 
 			got, err := r.reconcileStorage(context.TODO(), sp, obj, index, "")
@@ -336,7 +338,7 @@ func TestBucketReconciler_reconcileSource_generic(t *testing.T) {
 		beforeFunc       func(obj *sourcev1.Bucket)
 		want             sreconcile.Result
 		wantErr          bool
-		assertIndex      *etagIndex
+		assertIndex      *index.Digester
 		assertConditions []metav1.Condition
 	}{
 		{
@@ -351,14 +353,12 @@ func TestBucketReconciler_reconcileSource_generic(t *testing.T) {
 				},
 			},
 			want: sreconcile.ResultSuccess,
-			assertIndex: &etagIndex{
-				index: map[string]string{
-					"test.txt": "098f6bcd4621d373cade4e832627b4f6",
-				},
-			},
+			assertIndex: index.NewDigester(index.WithIndex(map[string]string{
+				"test.txt": "098f6bcd4621d373cade4e832627b4f6",
+			})),
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new upstream revision 'b4c2a60ce44b67f5b659a95ce4e4cc9e2a86baf13afb72bd397c5384cbc0e479'"),
-				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new upstream revision 'b4c2a60ce44b67f5b659a95ce4e4cc9e2a86baf13afb72bd397c5384cbc0e479'"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new upstream revision 'sha256:b4c2a60ce44b67f5b659a95ce4e4cc9e2a86baf13afb72bd397c5384cbc0e479'"),
+				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new upstream revision 'sha256:b4c2a60ce44b67f5b659a95ce4e4cc9e2a86baf13afb72bd397c5384cbc0e479'"),
 			},
 		},
 		// TODO(hidde): middleware for mock server
@@ -377,7 +377,7 @@ func TestBucketReconciler_reconcileSource_generic(t *testing.T) {
 				conditions.MarkUnknown(obj, meta.ReadyCondition, "foo", "bar")
 			},
 			wantErr:     true,
-			assertIndex: newEtagIndex(),
+			assertIndex: index.NewDigester(),
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "failed to get secret '/dummy': secrets \"dummy\" not found"),
 				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "foo"),
@@ -400,7 +400,7 @@ func TestBucketReconciler_reconcileSource_generic(t *testing.T) {
 				conditions.MarkUnknown(obj, meta.ReadyCondition, "foo", "bar")
 			},
 			wantErr:     true,
-			assertIndex: newEtagIndex(),
+			assertIndex: index.NewDigester(),
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "invalid 'dummy' secret data: required fields 'accesskey' and 'secretkey'"),
 				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "foo"),
@@ -416,7 +416,7 @@ func TestBucketReconciler_reconcileSource_generic(t *testing.T) {
 				conditions.MarkUnknown(obj, meta.ReadyCondition, "foo", "bar")
 			},
 			wantErr:     true,
-			assertIndex: newEtagIndex(),
+			assertIndex: index.NewDigester(),
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason, "bucket 'invalid' not found"),
 				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "foo"),
@@ -432,7 +432,7 @@ func TestBucketReconciler_reconcileSource_generic(t *testing.T) {
 				conditions.MarkUnknown(obj, meta.ReadyCondition, "foo", "bar")
 			},
 			wantErr:     true,
-			assertIndex: newEtagIndex(),
+			assertIndex: index.NewDigester(),
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason, "failed to confirm existence of 'unavailable' bucket"),
 				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "foo"),
@@ -463,14 +463,12 @@ func TestBucketReconciler_reconcileSource_generic(t *testing.T) {
 				},
 			},
 			want: sreconcile.ResultSuccess,
-			assertIndex: &etagIndex{
-				index: map[string]string{
-					"included/file.txt": "5a4bc7048b3301f677fe15b8678be2f8",
-				},
-			},
+			assertIndex: index.NewDigester(index.WithIndex(map[string]string{
+				"included/file.txt": "5a4bc7048b3301f677fe15b8678be2f8",
+			})),
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new upstream revision '9fc2ddfc4a6f44e6c3efee40af36578b9e76d4d930eaf384b8435a0aa0bf7a0f'"),
-				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new upstream revision '9fc2ddfc4a6f44e6c3efee40af36578b9e76d4d930eaf384b8435a0aa0bf7a0f'"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new upstream revision 'sha256:9fc2ddfc4a6f44e6c3efee40af36578b9e76d4d930eaf384b8435a0aa0bf7a0f'"),
+				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new upstream revision 'sha256:9fc2ddfc4a6f44e6c3efee40af36578b9e76d4d930eaf384b8435a0aa0bf7a0f'"),
 			},
 		},
 		{
@@ -501,15 +499,13 @@ func TestBucketReconciler_reconcileSource_generic(t *testing.T) {
 				},
 			},
 			want: sreconcile.ResultSuccess,
-			assertIndex: &etagIndex{
-				index: map[string]string{
-					"ignored/file.txt":  "f08907038338288420ae7dc2d30c0497",
-					"included/file.txt": "5a4bc7048b3301f677fe15b8678be2f8",
-				},
-			},
+			assertIndex: index.NewDigester(index.WithIndex(map[string]string{
+				"ignored/file.txt":  "f08907038338288420ae7dc2d30c0497",
+				"included/file.txt": "5a4bc7048b3301f677fe15b8678be2f8",
+			})),
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new upstream revision '117f586dc64cfc559329e21d286edcbb94cb6b1581517eaddc0ab5292b470cd5'"),
-				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new upstream revision '117f586dc64cfc559329e21d286edcbb94cb6b1581517eaddc0ab5292b470cd5'"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new upstream revision 'sha256:117f586dc64cfc559329e21d286edcbb94cb6b1581517eaddc0ab5292b470cd5'"),
+				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new upstream revision 'sha256:117f586dc64cfc559329e21d286edcbb94cb6b1581517eaddc0ab5292b470cd5'"),
 			},
 		},
 		{
@@ -531,11 +527,9 @@ func TestBucketReconciler_reconcileSource_generic(t *testing.T) {
 				},
 			},
 			want: sreconcile.ResultSuccess,
-			assertIndex: &etagIndex{
-				index: map[string]string{
-					"test.txt": "098f6bcd4621d373cade4e832627b4f6",
-				},
-			},
+			assertIndex: index.NewDigester(index.WithIndex(map[string]string{
+				"test.txt": "098f6bcd4621d373cade4e832627b4f6",
+			})),
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "foo"),
 				*conditions.UnknownCondition(meta.ReadyCondition, "foo", "bar"),
@@ -556,14 +550,12 @@ func TestBucketReconciler_reconcileSource_generic(t *testing.T) {
 				},
 			},
 			want: sreconcile.ResultSuccess,
-			assertIndex: &etagIndex{
-				index: map[string]string{
-					"test.txt": "098f6bcd4621d373cade4e832627b4f6",
-				},
-			},
+			assertIndex: index.NewDigester(index.WithIndex(map[string]string{
+				"test.txt": "098f6bcd4621d373cade4e832627b4f6",
+			})),
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new upstream revision 'b4c2a60ce44b67f5b659a95ce4e4cc9e2a86baf13afb72bd397c5384cbc0e479'"),
-				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new upstream revision 'b4c2a60ce44b67f5b659a95ce4e4cc9e2a86baf13afb72bd397c5384cbc0e479'"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new upstream revision 'sha256:b4c2a60ce44b67f5b659a95ce4e4cc9e2a86baf13afb72bd397c5384cbc0e479'"),
+				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new upstream revision 'sha256:b4c2a60ce44b67f5b659a95ce4e4cc9e2a86baf13afb72bd397c5384cbc0e479'"),
 			},
 		},
 		{
@@ -584,15 +576,13 @@ func TestBucketReconciler_reconcileSource_generic(t *testing.T) {
 				}
 			},
 			want: sreconcile.ResultSuccess,
-			assertIndex: &etagIndex{
-				index: map[string]string{
-					"test.txt": "098f6bcd4621d373cade4e832627b4f6",
-				},
-			},
+			assertIndex: index.NewDigester(index.WithIndex(map[string]string{
+				"test.txt": "098f6bcd4621d373cade4e832627b4f6",
+			})),
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new upstream revision 'b4c2a60ce44b67f5b659a95ce4e4cc9e2a86baf13afb72bd397c5384cbc0e479'"),
-				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new upstream revision 'b4c2a60ce44b67f5b659a95ce4e4cc9e2a86baf13afb72bd397c5384cbc0e479'"),
-				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new upstream revision 'b4c2a60ce44b67f5b659a95ce4e4cc9e2a86baf13afb72bd397c5384cbc0e479'"),
+				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new upstream revision 'sha256:b4c2a60ce44b67f5b659a95ce4e4cc9e2a86baf13afb72bd397c5384cbc0e479'"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new upstream revision 'sha256:b4c2a60ce44b67f5b659a95ce4e4cc9e2a86baf13afb72bd397c5384cbc0e479'"),
+				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new upstream revision 'sha256:b4c2a60ce44b67f5b659a95ce4e4cc9e2a86baf13afb72bd397c5384cbc0e479'"),
 			},
 		},
 	}
@@ -650,7 +640,7 @@ func TestBucketReconciler_reconcileSource_generic(t *testing.T) {
 				g.Expect(r.Client.Delete(context.TODO(), obj)).ToNot(HaveOccurred())
 			}()
 
-			index := newEtagIndex()
+			index := index.NewDigester()
 			sp := patch.NewSerialPatcher(obj, r.Client)
 
 			got, err := r.reconcileSource(context.TODO(), sp, obj, index, tmpDir)
@@ -676,7 +666,7 @@ func TestBucketReconciler_reconcileSource_gcs(t *testing.T) {
 		beforeFunc       func(obj *sourcev1.Bucket)
 		want             sreconcile.Result
 		wantErr          bool
-		assertIndex      *etagIndex
+		assertIndex      *index.Digester
 		assertConditions []metav1.Condition
 	}{
 		{
@@ -706,14 +696,12 @@ func TestBucketReconciler_reconcileSource_gcs(t *testing.T) {
 				}
 			},
 			want: sreconcile.ResultSuccess,
-			assertIndex: &etagIndex{
-				index: map[string]string{
-					"test.txt": "098f6bcd4621d373cade4e832627b4f6",
-				},
-			},
+			assertIndex: index.NewDigester(index.WithIndex(map[string]string{
+				"test.txt": "098f6bcd4621d373cade4e832627b4f6",
+			})),
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new upstream revision 'b4c2a60ce44b67f5b659a95ce4e4cc9e2a86baf13afb72bd397c5384cbc0e479'"),
-				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new upstream revision 'b4c2a60ce44b67f5b659a95ce4e4cc9e2a86baf13afb72bd397c5384cbc0e479'"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new upstream revision 'sha256:b4c2a60ce44b67f5b659a95ce4e4cc9e2a86baf13afb72bd397c5384cbc0e479'"),
+				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new upstream revision 'sha256:b4c2a60ce44b67f5b659a95ce4e4cc9e2a86baf13afb72bd397c5384cbc0e479'"),
 			},
 		},
 		{
@@ -728,7 +716,7 @@ func TestBucketReconciler_reconcileSource_gcs(t *testing.T) {
 			},
 			want:        sreconcile.ResultEmpty,
 			wantErr:     true,
-			assertIndex: newEtagIndex(),
+			assertIndex: index.NewDigester(),
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "failed to get secret '/dummy': secrets \"dummy\" not found"),
 				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "foo"),
@@ -752,7 +740,7 @@ func TestBucketReconciler_reconcileSource_gcs(t *testing.T) {
 			},
 			want:        sreconcile.ResultEmpty,
 			wantErr:     true,
-			assertIndex: newEtagIndex(),
+			assertIndex: index.NewDigester(),
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "invalid 'dummy' secret data: required fields"),
 				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "foo"),
@@ -769,7 +757,7 @@ func TestBucketReconciler_reconcileSource_gcs(t *testing.T) {
 			},
 			want:        sreconcile.ResultEmpty,
 			wantErr:     true,
-			assertIndex: newEtagIndex(),
+			assertIndex: index.NewDigester(),
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason, "bucket 'invalid' not found"),
 				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "foo"),
@@ -786,7 +774,7 @@ func TestBucketReconciler_reconcileSource_gcs(t *testing.T) {
 			},
 			want:        sreconcile.ResultEmpty,
 			wantErr:     true,
-			assertIndex: newEtagIndex(),
+			assertIndex: index.NewDigester(),
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason, "failed to confirm existence of 'unavailable' bucket"),
 				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "foo"),
@@ -817,14 +805,12 @@ func TestBucketReconciler_reconcileSource_gcs(t *testing.T) {
 				},
 			},
 			want: sreconcile.ResultSuccess,
-			assertIndex: &etagIndex{
-				index: map[string]string{
-					"included/file.txt": "5a4bc7048b3301f677fe15b8678be2f8",
-				},
-			},
+			assertIndex: index.NewDigester(index.WithIndex(map[string]string{
+				"included/file.txt": "5a4bc7048b3301f677fe15b8678be2f8",
+			})),
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new upstream revision '9fc2ddfc4a6f44e6c3efee40af36578b9e76d4d930eaf384b8435a0aa0bf7a0f'"),
-				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new upstream revision '9fc2ddfc4a6f44e6c3efee40af36578b9e76d4d930eaf384b8435a0aa0bf7a0f'"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new upstream revision 'sha256:9fc2ddfc4a6f44e6c3efee40af36578b9e76d4d930eaf384b8435a0aa0bf7a0f'"),
+				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new upstream revision 'sha256:9fc2ddfc4a6f44e6c3efee40af36578b9e76d4d930eaf384b8435a0aa0bf7a0f'"),
 			},
 		},
 		{
@@ -855,15 +841,13 @@ func TestBucketReconciler_reconcileSource_gcs(t *testing.T) {
 				},
 			},
 			want: sreconcile.ResultSuccess,
-			assertIndex: &etagIndex{
-				index: map[string]string{
-					"ignored/file.txt":  "f08907038338288420ae7dc2d30c0497",
-					"included/file.txt": "5a4bc7048b3301f677fe15b8678be2f8",
-				},
-			},
+			assertIndex: index.NewDigester(index.WithIndex(map[string]string{
+				"ignored/file.txt":  "f08907038338288420ae7dc2d30c0497",
+				"included/file.txt": "5a4bc7048b3301f677fe15b8678be2f8",
+			})),
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new upstream revision '117f586dc64cfc559329e21d286edcbb94cb6b1581517eaddc0ab5292b470cd5'"),
-				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new upstream revision '117f586dc64cfc559329e21d286edcbb94cb6b1581517eaddc0ab5292b470cd5'"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new upstream revision 'sha256:117f586dc64cfc559329e21d286edcbb94cb6b1581517eaddc0ab5292b470cd5'"),
+				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new upstream revision 'sha256:117f586dc64cfc559329e21d286edcbb94cb6b1581517eaddc0ab5292b470cd5'"),
 			},
 		},
 		{
@@ -885,11 +869,9 @@ func TestBucketReconciler_reconcileSource_gcs(t *testing.T) {
 				},
 			},
 			want: sreconcile.ResultSuccess,
-			assertIndex: &etagIndex{
-				index: map[string]string{
-					"test.txt": "098f6bcd4621d373cade4e832627b4f6",
-				},
-			},
+			assertIndex: index.NewDigester(index.WithIndex(map[string]string{
+				"test.txt": "098f6bcd4621d373cade4e832627b4f6",
+			})),
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "foo"),
 				*conditions.UnknownCondition(meta.ReadyCondition, "foo", "bar"),
@@ -910,14 +892,12 @@ func TestBucketReconciler_reconcileSource_gcs(t *testing.T) {
 				},
 			},
 			want: sreconcile.ResultSuccess,
-			assertIndex: &etagIndex{
-				index: map[string]string{
-					"test.txt": "098f6bcd4621d373cade4e832627b4f6",
-				},
-			},
+			assertIndex: index.NewDigester(index.WithIndex(map[string]string{
+				"test.txt": "098f6bcd4621d373cade4e832627b4f6",
+			})),
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new upstream revision 'b4c2a60ce44b67f5b659a95ce4e4cc9e2a86baf13afb72bd397c5384cbc0e479'"),
-				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new upstream revision 'b4c2a60ce44b67f5b659a95ce4e4cc9e2a86baf13afb72bd397c5384cbc0e479'"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new upstream revision 'sha256:b4c2a60ce44b67f5b659a95ce4e4cc9e2a86baf13afb72bd397c5384cbc0e479'"),
+				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new upstream revision 'sha256:b4c2a60ce44b67f5b659a95ce4e4cc9e2a86baf13afb72bd397c5384cbc0e479'"),
 			},
 		},
 		{
@@ -938,15 +918,13 @@ func TestBucketReconciler_reconcileSource_gcs(t *testing.T) {
 				}
 			},
 			want: sreconcile.ResultSuccess,
-			assertIndex: &etagIndex{
-				index: map[string]string{
-					"test.txt": "098f6bcd4621d373cade4e832627b4f6",
-				},
-			},
+			assertIndex: index.NewDigester(index.WithIndex(map[string]string{
+				"test.txt": "098f6bcd4621d373cade4e832627b4f6",
+			})),
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new upstream revision 'b4c2a60ce44b67f5b659a95ce4e4cc9e2a86baf13afb72bd397c5384cbc0e479'"),
-				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new upstream revision 'b4c2a60ce44b67f5b659a95ce4e4cc9e2a86baf13afb72bd397c5384cbc0e479'"),
-				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new upstream revision 'b4c2a60ce44b67f5b659a95ce4e4cc9e2a86baf13afb72bd397c5384cbc0e479'"),
+				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new upstream revision 'sha256:b4c2a60ce44b67f5b659a95ce4e4cc9e2a86baf13afb72bd397c5384cbc0e479'"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new upstream revision 'sha256:b4c2a60ce44b67f5b659a95ce4e4cc9e2a86baf13afb72bd397c5384cbc0e479'"),
+				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new upstream revision 'sha256:b4c2a60ce44b67f5b659a95ce4e4cc9e2a86baf13afb72bd397c5384cbc0e479'"),
 			},
 		},
 		// TODO: Middleware for mock server to test authentication using secret.
@@ -1009,11 +987,10 @@ func TestBucketReconciler_reconcileSource_gcs(t *testing.T) {
 				g.Expect(r.Client.Delete(context.TODO(), obj)).ToNot(HaveOccurred())
 			}()
 
-			index := newEtagIndex()
+			index := index.NewDigester()
 			sp := patch.NewSerialPatcher(obj, r.Client)
 
 			got, err := r.reconcileSource(context.TODO(), sp, obj, index, tmpDir)
-			t.Log(err)
 			g.Expect(err != nil).To(Equal(tt.wantErr))
 			g.Expect(got).To(Equal(tt.want))
 
@@ -1030,7 +1007,7 @@ func TestBucketReconciler_reconcileSource_gcs(t *testing.T) {
 func TestBucketReconciler_reconcileArtifact(t *testing.T) {
 	tests := []struct {
 		name             string
-		beforeFunc       func(t *WithT, obj *sourcev1.Bucket, index *etagIndex, dir string)
+		beforeFunc       func(t *WithT, obj *sourcev1.Bucket, index *index.Digester, dir string)
 		afterFunc        func(t *WithT, obj *sourcev1.Bucket, dir string)
 		want             sreconcile.Result
 		wantErr          bool
@@ -1038,25 +1015,25 @@ func TestBucketReconciler_reconcileArtifact(t *testing.T) {
 	}{
 		{
 			name: "Archiving artifact to storage makes ArtifactInStorage=True",
-			beforeFunc: func(t *WithT, obj *sourcev1.Bucket, index *etagIndex, dir string) {
+			beforeFunc: func(t *WithT, obj *sourcev1.Bucket, index *index.Digester, dir string) {
 				obj.Spec.Interval = metav1.Duration{Duration: interval}
 				conditions.MarkReconciling(obj, meta.ProgressingReason, "foo")
 				conditions.MarkUnknown(obj, meta.ReadyCondition, "foo", "bar")
 			},
 			want: sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.ArtifactInStorageCondition, meta.SucceededReason, "stored artifact: revision 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'"),
+				*conditions.TrueCondition(sourcev1.ArtifactInStorageCondition, meta.SucceededReason, "stored artifact: revision 'sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'"),
 				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "foo"),
 				*conditions.UnknownCondition(meta.ReadyCondition, "foo", "bar"),
 			},
 		},
 		{
 			name: "Up-to-date artifact should not persist and update status",
-			beforeFunc: func(t *WithT, obj *sourcev1.Bucket, index *etagIndex, dir string) {
-				revision, _ := index.Revision()
+			beforeFunc: func(t *WithT, obj *sourcev1.Bucket, index *index.Digester, dir string) {
+				revision := index.Digest(intdigest.Canonical)
 				obj.Spec.Interval = metav1.Duration{Duration: interval}
 				// Incomplete artifact
-				obj.Status.Artifact = &sourcev1.Artifact{Revision: revision}
+				obj.Status.Artifact = &sourcev1.Artifact{Revision: revision.String()}
 				conditions.MarkReconciling(obj, meta.ProgressingReason, "foo")
 				conditions.MarkUnknown(obj, meta.ReadyCondition, "foo", "bar")
 			},
@@ -1066,14 +1043,14 @@ func TestBucketReconciler_reconcileArtifact(t *testing.T) {
 			},
 			want: sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.ArtifactInStorageCondition, meta.SucceededReason, "stored artifact: revision 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'"),
+				*conditions.TrueCondition(sourcev1.ArtifactInStorageCondition, meta.SucceededReason, "stored artifact: revision 'sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'"),
 				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "foo"),
 				*conditions.UnknownCondition(meta.ReadyCondition, "foo", "bar"),
 			},
 		},
 		{
 			name: "Removes ArtifactOutdatedCondition after creating a new artifact",
-			beforeFunc: func(t *WithT, obj *sourcev1.Bucket, index *etagIndex, dir string) {
+			beforeFunc: func(t *WithT, obj *sourcev1.Bucket, index *index.Digester, dir string) {
 				obj.Spec.Interval = metav1.Duration{Duration: interval}
 				conditions.MarkTrue(obj, sourcev1.ArtifactOutdatedCondition, "Foo", "")
 				conditions.MarkReconciling(obj, meta.ProgressingReason, "foo")
@@ -1081,14 +1058,14 @@ func TestBucketReconciler_reconcileArtifact(t *testing.T) {
 			},
 			want: sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.ArtifactInStorageCondition, meta.SucceededReason, "stored artifact: revision 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'"),
+				*conditions.TrueCondition(sourcev1.ArtifactInStorageCondition, meta.SucceededReason, "stored artifact: revision 'sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'"),
 				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "foo"),
 				*conditions.UnknownCondition(meta.ReadyCondition, "foo", "bar"),
 			},
 		},
 		{
 			name: "Creates latest symlink to the created artifact",
-			beforeFunc: func(t *WithT, obj *sourcev1.Bucket, index *etagIndex, dir string) {
+			beforeFunc: func(t *WithT, obj *sourcev1.Bucket, index *index.Digester, dir string) {
 				obj.Spec.Interval = metav1.Duration{Duration: interval}
 				conditions.MarkReconciling(obj, meta.ProgressingReason, "foo")
 				conditions.MarkUnknown(obj, meta.ReadyCondition, "foo", "bar")
@@ -1102,14 +1079,14 @@ func TestBucketReconciler_reconcileArtifact(t *testing.T) {
 			},
 			want: sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.ArtifactInStorageCondition, meta.SucceededReason, "stored artifact: revision 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'"),
+				*conditions.TrueCondition(sourcev1.ArtifactInStorageCondition, meta.SucceededReason, "stored artifact: revision 'sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'"),
 				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "foo"),
 				*conditions.UnknownCondition(meta.ReadyCondition, "foo", "bar"),
 			},
 		},
 		{
 			name: "Dir path deleted",
-			beforeFunc: func(t *WithT, obj *sourcev1.Bucket, index *etagIndex, dir string) {
+			beforeFunc: func(t *WithT, obj *sourcev1.Bucket, index *index.Digester, dir string) {
 				t.Expect(os.RemoveAll(dir)).ToNot(HaveOccurred())
 				conditions.MarkReconciling(obj, meta.ProgressingReason, "foo")
 				conditions.MarkUnknown(obj, meta.ReadyCondition, "foo", "bar")
@@ -1124,7 +1101,7 @@ func TestBucketReconciler_reconcileArtifact(t *testing.T) {
 		},
 		{
 			name: "Dir path is not a directory",
-			beforeFunc: func(t *WithT, obj *sourcev1.Bucket, index *etagIndex, dir string) {
+			beforeFunc: func(t *WithT, obj *sourcev1.Bucket, index *index.Digester, dir string) {
 				// Remove the given directory and create a file for the same
 				// path.
 				t.Expect(os.RemoveAll(dir)).ToNot(HaveOccurred())
@@ -1174,7 +1151,7 @@ func TestBucketReconciler_reconcileArtifact(t *testing.T) {
 				},
 			}
 
-			index := newEtagIndex()
+			index := index.NewDigester()
 
 			if tt.beforeFunc != nil {
 				tt.beforeFunc(g, obj, index, tmpDir)
@@ -1202,57 +1179,6 @@ func TestBucketReconciler_reconcileArtifact(t *testing.T) {
 			// In-progress status condition validity.
 			checker := conditionscheck.NewInProgressChecker(r.Client)
 			checker.WithT(g).CheckErr(ctx, obj)
-		})
-	}
-}
-
-func Test_etagIndex_Revision(t *testing.T) {
-	tests := []struct {
-		name    string
-		list    map[string]string
-		want    string
-		wantErr bool
-	}{
-		{
-			name: "index with items",
-			list: map[string]string{
-				"one":   "one",
-				"two":   "two",
-				"three": "three",
-			},
-			want: "c0837b3f32bb67c5275858fdb96595f87801cf3c2f622c049918a051d29b2c7f",
-		},
-		{
-			name: "index with items in different order",
-			list: map[string]string{
-				"three": "three",
-				"one":   "one",
-				"two":   "two",
-			},
-			want: "c0837b3f32bb67c5275858fdb96595f87801cf3c2f622c049918a051d29b2c7f",
-		},
-		{
-			name: "empty index",
-			list: map[string]string{},
-			want: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-		},
-		{
-			name: "nil index",
-			list: nil,
-			want: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			index := &etagIndex{index: tt.list}
-			got, err := index.Revision()
-			if (err != nil) != tt.wantErr {
-				t.Errorf("revision() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if got != tt.want {
-				t.Errorf("revision() got = %v, want %v", got, tt.want)
-			}
 		})
 	}
 }
@@ -1439,12 +1365,10 @@ func TestBucketReconciler_notify(t *testing.T) {
 				EventRecorder: recorder,
 				patchOptions:  getPatchOptions(bucketReadyCondition.Owned, "sc"),
 			}
-			index := &etagIndex{
-				index: map[string]string{
-					"zzz": "qqq",
-					"bbb": "ddd",
-				},
-			}
+			index := index.NewDigester(index.WithIndex(map[string]string{
+				"zzz": "qqq",
+				"bbb": "ddd",
+			}))
 			reconciler.notify(ctx, oldObj, newObj, index, tt.res, tt.resErr)
 
 			select {

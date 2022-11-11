@@ -18,17 +18,14 @@ package controllers
 
 import (
 	"context"
-	"crypto/sha256"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
-	"sync"
 	"time"
 
-	"github.com/fluxcd/source-controller/pkg/azure"
+	"github.com/opencontainers/go-digest"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/sync/semaphore"
 	corev1 "k8s.io/api/core/v1"
@@ -51,10 +48,14 @@ import (
 
 	eventv1 "github.com/fluxcd/pkg/apis/event/v1beta1"
 	"github.com/fluxcd/pkg/sourceignore"
+
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
+	intdigest "github.com/fluxcd/source-controller/internal/digest"
 	serror "github.com/fluxcd/source-controller/internal/error"
+	"github.com/fluxcd/source-controller/internal/index"
 	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
 	"github.com/fluxcd/source-controller/internal/reconcile/summarize"
+	"github.com/fluxcd/source-controller/pkg/azure"
 	"github.com/fluxcd/source-controller/pkg/gcp"
 	"github.com/fluxcd/source-controller/pkg/minio"
 )
@@ -154,83 +155,7 @@ type BucketProvider interface {
 // bucketReconcileFunc is the function type for all the v1beta2.Bucket
 // (sub)reconcile functions. The type implementations are grouped and
 // executed serially to perform the complete reconcile of the object.
-type bucketReconcileFunc func(ctx context.Context, sp *patch.SerialPatcher, obj *sourcev1.Bucket, index *etagIndex, dir string) (sreconcile.Result, error)
-
-// etagIndex is an index of storage object keys and their Etag values.
-type etagIndex struct {
-	sync.RWMutex
-	index map[string]string
-}
-
-// newEtagIndex returns a new etagIndex with an empty initialized index.
-func newEtagIndex() *etagIndex {
-	return &etagIndex{
-		index: make(map[string]string),
-	}
-}
-
-func (i *etagIndex) Add(key, etag string) {
-	i.Lock()
-	defer i.Unlock()
-	i.index[key] = etag
-}
-
-func (i *etagIndex) Delete(key string) {
-	i.Lock()
-	defer i.Unlock()
-	delete(i.index, key)
-}
-
-func (i *etagIndex) Get(key string) string {
-	i.RLock()
-	defer i.RUnlock()
-	return i.index[key]
-}
-
-func (i *etagIndex) Has(key string) bool {
-	i.RLock()
-	defer i.RUnlock()
-	_, ok := i.index[key]
-	return ok
-}
-
-func (i *etagIndex) Index() map[string]string {
-	i.RLock()
-	defer i.RUnlock()
-	index := make(map[string]string)
-	for k, v := range i.index {
-		index[k] = v
-	}
-	return index
-}
-
-func (i *etagIndex) Len() int {
-	i.RLock()
-	defer i.RUnlock()
-	return len(i.index)
-}
-
-// Revision calculates the SHA256 checksum of the index.
-// The keys are stable sorted, and the SHA256 sum is then calculated for the
-// string representation of the key/value pairs, each pair written on a newline
-// with a space between them. The sum result is returned as a string.
-func (i *etagIndex) Revision() (string, error) {
-	i.RLock()
-	defer i.RUnlock()
-	keyIndex := make([]string, 0, len(i.index))
-	for k := range i.index {
-		keyIndex = append(keyIndex, k)
-	}
-
-	sort.Strings(keyIndex)
-	sum := sha256.New()
-	for _, k := range keyIndex {
-		if _, err := sum.Write([]byte(fmt.Sprintf("%s %s\n", k, i.index[k]))); err != nil {
-			return "", err
-		}
-	}
-	return fmt.Sprintf("%x", sum.Sum(nil)), nil
-}
+type bucketReconcileFunc func(ctx context.Context, sp *patch.SerialPatcher, obj *sourcev1.Bucket, index *index.Digester, dir string) (sreconcile.Result, error)
 
 func (r *BucketReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return r.SetupWithManagerAndOptions(mgr, BucketReconcilerOptions{})
@@ -371,7 +296,7 @@ func (r *BucketReconciler) reconcile(ctx context.Context, sp *patch.SerialPatche
 	var (
 		res    sreconcile.Result
 		resErr error
-		index  = newEtagIndex()
+		index  = index.NewDigester()
 	)
 
 	for _, rec := range reconcilers {
@@ -397,7 +322,7 @@ func (r *BucketReconciler) reconcile(ctx context.Context, sp *patch.SerialPatche
 }
 
 // notify emits notification related to the reconciliation.
-func (r *BucketReconciler) notify(ctx context.Context, oldObj, newObj *sourcev1.Bucket, index *etagIndex, res sreconcile.Result, resErr error) {
+func (r *BucketReconciler) notify(ctx context.Context, oldObj, newObj *sourcev1.Bucket, index *index.Digester, res sreconcile.Result, resErr error) {
 	// Notify successful reconciliation for new artifact and recovery from any
 	// failure.
 	if resErr == nil && res == sreconcile.ResultSuccess && newObj.Status.Artifact != nil {
@@ -443,7 +368,7 @@ func (r *BucketReconciler) notify(ctx context.Context, oldObj, newObj *sourcev1.
 // condition is added.
 // The hostname of any URL in the Status of the object are updated, to ensure
 // they match the Storage server hostname of current runtime.
-func (r *BucketReconciler) reconcileStorage(ctx context.Context, sp *patch.SerialPatcher, obj *sourcev1.Bucket, _ *etagIndex, _ string) (sreconcile.Result, error) {
+func (r *BucketReconciler) reconcileStorage(ctx context.Context, sp *patch.SerialPatcher, obj *sourcev1.Bucket, _ *index.Digester, _ string) (sreconcile.Result, error) {
 	// Garbage collect previous advertised artifact(s) from storage
 	_ = r.garbageCollect(ctx, obj)
 
@@ -484,7 +409,7 @@ func (r *BucketReconciler) reconcileStorage(ctx context.Context, sp *patch.Seria
 // When a SecretRef is defined, it attempts to fetch the Secret before calling
 // the provider. If this fails, it records v1beta2.FetchFailedCondition=True on
 // the object and returns early.
-func (r *BucketReconciler) reconcileSource(ctx context.Context, sp *patch.SerialPatcher, obj *sourcev1.Bucket, index *etagIndex, dir string) (sreconcile.Result, error) {
+func (r *BucketReconciler) reconcileSource(ctx context.Context, sp *patch.SerialPatcher, obj *sourcev1.Bucket, index *index.Digester, dir string) (sreconcile.Result, error) {
 	secret, err := r.getBucketSecret(ctx, obj)
 	if err != nil {
 		e := &serror.Event{Err: err, Reason: sourcev1.AuthenticationFailedReason}
@@ -538,26 +463,21 @@ func (r *BucketReconciler) reconcileSource(ctx context.Context, sp *patch.Serial
 		return sreconcile.ResultEmpty, e
 	}
 
-	// Calculate revision
-	revision, err := index.Revision()
-	if err != nil {
-		return sreconcile.ResultEmpty, &serror.Event{
-			Err:    fmt.Errorf("failed to calculate revision: %w", err),
-			Reason: meta.FailedReason,
-		}
+	// Check if index has changed compared to current Artifact revision.
+	var changed bool
+	if artifact := obj.Status.Artifact; artifact != nil && artifact.Revision != "" {
+		curRev := backwardsCompatibleDigest(artifact.Revision)
+		changed = curRev != index.Digest(curRev.Algorithm())
 	}
 
-	// Mark observations about the revision on the object
-	defer func() {
-		// As fetchIndexFiles can make last-minute modifications to the etag
-		// index, we need to re-calculate the revision at the end
-		revision, err := index.Revision()
-		if err != nil {
-			ctrl.LoggerFrom(ctx).Error(err, "failed to calculate revision after fetching etag index")
-			return
-		}
+	// Fetch the bucket objects if required to.
+	if artifact := obj.GetArtifact(); artifact == nil || changed {
+		// Mark observations about the revision on the object
+		defer func() {
+			// As fetchIndexFiles can make last-minute modifications to the etag
+			// index, we need to re-calculate the revision at the end
+			revision := index.Digest(intdigest.Canonical)
 
-		if !obj.GetArtifact().HasRevision(revision) {
 			message := fmt.Sprintf("new upstream revision '%s'", revision)
 			if obj.GetArtifact() != nil {
 				conditions.MarkTrue(obj, sourcev1.ArtifactOutdatedCondition, "NewRevision", message)
@@ -567,10 +487,8 @@ func (r *BucketReconciler) reconcileSource(ctx context.Context, sp *patch.Serial
 				ctrl.LoggerFrom(ctx).Error(err, "failed to patch")
 				return
 			}
-		}
-	}()
+		}()
 
-	if !obj.GetArtifact().HasRevision(revision) {
 		if err = fetchIndexFiles(ctx, provider, obj, index, dir); err != nil {
 			e := &serror.Event{Err: err, Reason: sourcev1.BucketOperationFailedReason}
 			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Error())
@@ -591,32 +509,32 @@ func (r *BucketReconciler) reconcileSource(ctx context.Context, sp *patch.Serial
 // early.
 // On a successful archive, the Artifact in the Status of the object is set,
 // and the symlink in the Storage is updated to its path.
-func (r *BucketReconciler) reconcileArtifact(ctx context.Context, sp *patch.SerialPatcher, obj *sourcev1.Bucket, index *etagIndex, dir string) (sreconcile.Result, error) {
+func (r *BucketReconciler) reconcileArtifact(ctx context.Context, sp *patch.SerialPatcher, obj *sourcev1.Bucket, index *index.Digester, dir string) (sreconcile.Result, error) {
 	// Calculate revision
-	revision, err := index.Revision()
-	if err != nil {
-		return sreconcile.ResultEmpty, &serror.Event{
-			Err:    fmt.Errorf("failed to calculate revision of new artifact: %w", err),
-			Reason: meta.FailedReason,
-		}
-	}
+	revision := index.Digest(intdigest.Canonical)
 
 	// Create artifact
-	artifact := r.Storage.NewArtifactFor(obj.Kind, obj, revision, fmt.Sprintf("%s.tar.gz", revision))
+	artifact := r.Storage.NewArtifactFor(obj.Kind, obj, revision.String(), fmt.Sprintf("%s.tar.gz", revision.Encoded()))
 
 	// Set the ArtifactInStorageCondition if there's no drift.
 	defer func() {
-		if obj.GetArtifact().HasRevision(artifact.Revision) {
-			conditions.Delete(obj, sourcev1.ArtifactOutdatedCondition)
-			conditions.MarkTrue(obj, sourcev1.ArtifactInStorageCondition, meta.SucceededReason,
-				"stored artifact: revision '%s'", artifact.Revision)
+		if curArtifact := obj.GetArtifact(); curArtifact != nil && curArtifact.Revision != "" {
+			curRev := backwardsCompatibleDigest(curArtifact.Revision)
+			if index.Digest(curRev.Algorithm()) == curRev {
+				conditions.Delete(obj, sourcev1.ArtifactOutdatedCondition)
+				conditions.MarkTrue(obj, sourcev1.ArtifactInStorageCondition, meta.SucceededReason,
+					"stored artifact: revision '%s'", artifact.Revision)
+			}
 		}
 	}()
 
 	// The artifact is up-to-date
-	if obj.GetArtifact().HasRevision(artifact.Revision) {
-		r.eventLogf(ctx, obj, eventv1.EventTypeTrace, sourcev1.ArtifactUpToDateReason, "artifact up-to-date with remote revision: '%s'", artifact.Revision)
-		return sreconcile.ResultSuccess, nil
+	if curArtifact := obj.GetArtifact(); curArtifact != nil && curArtifact.Revision != "" {
+		curRev := backwardsCompatibleDigest(curArtifact.Revision)
+		if index.Digest(curRev.Algorithm()) == curRev {
+			r.eventLogf(ctx, obj, eventv1.EventTypeTrace, sourcev1.ArtifactUpToDateReason, "artifact up-to-date with remote revision: '%s'", artifact.Revision)
+			return sreconcile.ResultSuccess, nil
+		}
 	}
 
 	// Ensure target path exists and is a directory
@@ -781,7 +699,7 @@ func (r *BucketReconciler) annotatedEventLogf(ctx context.Context,
 // bucket using the given provider, while filtering them using .sourceignore
 // rules. After fetching an object, the etag value in the index is updated to
 // the current value to ensure accuracy.
-func fetchEtagIndex(ctx context.Context, provider BucketProvider, obj *sourcev1.Bucket, index *etagIndex, tempDir string) error {
+func fetchEtagIndex(ctx context.Context, provider BucketProvider, obj *sourcev1.Bucket, index *index.Digester, tempDir string) error {
 	ctxTimeout, cancel := context.WithTimeout(ctx, obj.Spec.Timeout.Duration)
 	defer cancel()
 
@@ -835,7 +753,7 @@ func fetchEtagIndex(ctx context.Context, provider BucketProvider, obj *sourcev1.
 // using the given provider, and stores them into tempDir. It downloads in
 // parallel, but limited to the maxConcurrentBucketFetches.
 // Given an index is provided, the bucket is assumed to exist.
-func fetchIndexFiles(ctx context.Context, provider BucketProvider, obj *sourcev1.Bucket, index *etagIndex, tempDir string) error {
+func fetchIndexFiles(ctx context.Context, provider BucketProvider, obj *sourcev1.Bucket, index *index.Digester, tempDir string) error {
 	ctxTimeout, cancel := context.WithTimeout(ctx, obj.Spec.Timeout.Duration)
 	defer cancel()
 
@@ -878,4 +796,11 @@ func fetchIndexFiles(ctx context.Context, provider BucketProvider, obj *sourcev1
 	}
 
 	return nil
+}
+
+func backwardsCompatibleDigest(d string) digest.Digest {
+	if !strings.Contains(d, ":") {
+		d = digest.SHA256.String() + ":" + d
+	}
+	return digest.Digest(d)
 }

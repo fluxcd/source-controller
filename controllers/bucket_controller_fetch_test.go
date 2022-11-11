@@ -28,6 +28,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
+	"github.com/fluxcd/source-controller/internal/index"
 )
 
 type mockBucketObject struct {
@@ -88,8 +89,8 @@ func (m *mockBucketClient) addObject(key string, object mockBucketObject) {
 	m.objects[key] = object
 }
 
-func (m *mockBucketClient) objectsToEtagIndex() *etagIndex {
-	i := newEtagIndex()
+func (m *mockBucketClient) objectsToDigestIndex() *index.Digester {
+	i := index.NewDigester()
 	for k, v := range m.objects {
 		i.Add(k, v.etag)
 	}
@@ -114,7 +115,7 @@ func Test_fetchEtagIndex(t *testing.T) {
 		client.addObject("bar.yaml", mockBucketObject{data: "bar.yaml", etag: "etag2"})
 		client.addObject("baz.yaml", mockBucketObject{data: "baz.yaml", etag: "etag3"})
 
-		index := newEtagIndex()
+		index := index.NewDigester()
 		err := fetchEtagIndex(context.TODO(), client, bucket.DeepCopy(), index, tmp)
 		if err != nil {
 			t.Fatal(err)
@@ -128,7 +129,7 @@ func Test_fetchEtagIndex(t *testing.T) {
 
 		client := mockBucketClient{bucketName: "other-bucket-name"}
 
-		index := newEtagIndex()
+		index := index.NewDigester()
 		err := fetchEtagIndex(context.TODO(), client, bucket.DeepCopy(), index, tmp)
 		assert.ErrorContains(t, err, "not found")
 	})
@@ -141,7 +142,7 @@ func Test_fetchEtagIndex(t *testing.T) {
 		client.addObject("foo.yaml", mockBucketObject{etag: "etag1", data: "foo.yaml"})
 		client.addObject("foo.txt", mockBucketObject{etag: "etag2", data: "foo.txt"})
 
-		index := newEtagIndex()
+		index := index.NewDigester()
 		err := fetchEtagIndex(context.TODO(), client, bucket.DeepCopy(), index, tmp)
 		if err != nil {
 			t.Fatal(err)
@@ -168,7 +169,7 @@ func Test_fetchEtagIndex(t *testing.T) {
 		bucket := bucket.DeepCopy()
 		bucket.Spec.Ignore = &ignore
 
-		index := newEtagIndex()
+		index := index.NewDigester()
 		err := fetchEtagIndex(context.TODO(), client, bucket.DeepCopy(), index, tmp)
 		if err != nil {
 			t.Fatal(err)
@@ -203,7 +204,7 @@ func Test_fetchFiles(t *testing.T) {
 		client.addObject("bar.yaml", mockBucketObject{data: "bar.yaml", etag: "etag2"})
 		client.addObject("baz.yaml", mockBucketObject{data: "baz.yaml", etag: "etag3"})
 
-		index := client.objectsToEtagIndex()
+		index := client.objectsToDigestIndex()
 
 		err := fetchIndexFiles(context.TODO(), client, bucket.DeepCopy(), index, tmp)
 		if err != nil {
@@ -225,7 +226,7 @@ func Test_fetchFiles(t *testing.T) {
 		client := mockBucketClient{bucketName: bucketName, objects: map[string]mockBucketObject{}}
 		client.objects["error"] = mockBucketObject{}
 
-		err := fetchIndexFiles(context.TODO(), client, bucket.DeepCopy(), client.objectsToEtagIndex(), tmp)
+		err := fetchIndexFiles(context.TODO(), client, bucket.DeepCopy(), client.objectsToDigestIndex(), tmp)
 		if err == nil {
 			t.Fatal("expected error but got nil")
 		}
@@ -237,7 +238,7 @@ func Test_fetchFiles(t *testing.T) {
 		client := mockBucketClient{bucketName: bucketName}
 		client.addObject("foo.yaml", mockBucketObject{data: "foo.yaml", etag: "etag2"})
 
-		index := newEtagIndex()
+		index := index.NewDigester()
 		index.Add("foo.yaml", "etag1")
 		err := fetchIndexFiles(context.TODO(), client, bucket.DeepCopy(), index, tmp)
 		if err != nil {
@@ -253,7 +254,7 @@ func Test_fetchFiles(t *testing.T) {
 		client := mockBucketClient{bucketName: bucketName}
 		client.addObject("foo.yaml", mockBucketObject{data: "foo.yaml", etag: "etag1"})
 
-		index := newEtagIndex()
+		index := index.NewDigester()
 		index.Add("foo.yaml", "etag1")
 		// Does not exist on server
 		index.Add("bar.yaml", "etag2")
@@ -276,7 +277,7 @@ func Test_fetchFiles(t *testing.T) {
 			f := fmt.Sprintf("file-%d", i)
 			client.addObject(f, mockBucketObject{etag: f, data: f})
 		}
-		index := client.objectsToEtagIndex()
+		index := client.objectsToDigestIndex()
 
 		err := fetchIndexFiles(context.TODO(), client, bucket.DeepCopy(), index, tmp)
 		if err != nil {
