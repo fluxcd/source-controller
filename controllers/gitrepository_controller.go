@@ -768,8 +768,7 @@ func (r *GitRepositoryReconciler) gitCheckout(ctx context.Context,
 		err = fmt.Errorf("invalid Git implementation: %s", gitImplementation)
 	}
 	if err != nil {
-		// Do not return err as recovery without changes is impossible.
-		e := serror.NewStalling(
+		e := serror.NewGeneric(
 			fmt.Errorf("failed to create Git client for implementation '%s': %w", gitImplementation, err),
 			sourcev1.GitOperationFailedReason,
 		)
