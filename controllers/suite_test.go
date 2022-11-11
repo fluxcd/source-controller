@@ -242,11 +242,15 @@ func TestMain(m *testing.M) {
 	}
 
 	if err := (&GitRepositoryReconciler{
-		Client:                      testEnv,
-		EventRecorder:               record.NewFakeRecorder(32),
-		Metrics:                     testMetricsH,
-		Storage:                     testStorage,
-		features:                    features.FeatureGates(),
+		Client:        testEnv,
+		EventRecorder: record.NewFakeRecorder(32),
+		Metrics:       testMetricsH,
+		Storage:       testStorage,
+		features: map[string]bool{
+			features.OptimizedGitClones: true,
+			// Ensure that both implementations are used during tests.
+			features.ForceGoGitImplementation: false,
+		},
 		Libgit2TransportInitialized: transport.Enabled,
 	}).SetupWithManager(testEnv); err != nil {
 		panic(fmt.Sprintf("Failed to start GitRepositoryReconciler: %v", err))

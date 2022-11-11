@@ -498,10 +498,14 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 			}
 
 			r := &GitRepositoryReconciler{
-				Client:                      builder.Build(),
-				EventRecorder:               record.NewFakeRecorder(32),
-				Storage:                     testStorage,
-				features:                    features.FeatureGates(),
+				Client:        builder.Build(),
+				EventRecorder: record.NewFakeRecorder(32),
+				Storage:       testStorage,
+				features: map[string]bool{
+					features.OptimizedGitClones: true,
+					// Ensure that both implementations are tested.
+					features.ForceGoGitImplementation: false,
+				},
 				Libgit2TransportInitialized: transport.Enabled,
 			}
 
@@ -543,10 +547,12 @@ func TestGitRepositoryReconciler_reconcileSource_libgit2TransportUninitialized(t
 	g := NewWithT(t)
 
 	r := &GitRepositoryReconciler{
-		Client:                      fakeclient.NewClientBuilder().WithScheme(runtime.NewScheme()).Build(),
-		EventRecorder:               record.NewFakeRecorder(32),
-		Storage:                     testStorage,
-		features:                    features.FeatureGates(),
+		Client:        fakeclient.NewClientBuilder().WithScheme(runtime.NewScheme()).Build(),
+		EventRecorder: record.NewFakeRecorder(32),
+		Storage:       testStorage,
+		features: map[string]bool{
+			features.ForceGoGitImplementation: false,
+		},
 		Libgit2TransportInitialized: mockTransportNotInitialized,
 	}
 
@@ -727,10 +733,14 @@ func TestGitRepositoryReconciler_reconcileSource_checkoutStrategy(t *testing.T) 
 	}
 
 	r := &GitRepositoryReconciler{
-		Client:                      fakeclient.NewClientBuilder().WithScheme(runtime.NewScheme()).Build(),
-		EventRecorder:               record.NewFakeRecorder(32),
-		Storage:                     testStorage,
-		features:                    features.FeatureGates(),
+		Client:        fakeclient.NewClientBuilder().WithScheme(runtime.NewScheme()).Build(),
+		EventRecorder: record.NewFakeRecorder(32),
+		Storage:       testStorage,
+		features: map[string]bool{
+			features.OptimizedGitClones: true,
+			// Ensure that both implementations are tested.
+			features.ForceGoGitImplementation: false,
+		},
 		Libgit2TransportInitialized: transport.Enabled,
 	}
 

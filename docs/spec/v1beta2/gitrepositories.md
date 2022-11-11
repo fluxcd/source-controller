@@ -385,6 +385,13 @@ resume.
 
 ### Git implementation
 
+> **_NOTE:_**  `libgit2` is being deprecated. When it is used the controllers
+are known to panic over long periods of time, or when under high GC pressure.
+A new opt-out feature gate `ForceGoGitImplementation` was introduced, which will
+use `go-git` regardless of the value defined at `.spec.gitImplementation`.
+This can be disabled by starting the controller with the additional flag below:
+`--feature-gates=ForceGoGitImplementation=false`.
+
 `.spec.gitImplementation` is an optional field to change the client library
 implementation used for Git operations (e.g. clone, checkout). The default
 value is `go-git`.
@@ -396,14 +403,8 @@ drawbacks. For example, not being able to make use of shallow clones forces the
 controller to fetch the whole Git history tree instead of a specific one,
 resulting in an increase of disk space and traffic usage.
 
-| Git Implementation | Shallow Clones | Git Submodules | V2 Protocol Support |
-|--------------------|----------------|----------------|---------------------|
-| `go-git`           | true           | true           | false               |
-| `libgit2`          | false          | false          | true                |
-
-Some Git providers like Azure DevOps _require_ the `libgit2` implementation, as
-their Git servers provide only support for the
-[v2 protocol](https://git-scm.com/docs/protocol-v2).
+**Note:** The `libgit2` implementation does not support shallow clones or
+Git submodules.
 
 #### Optimized Git clones
 
