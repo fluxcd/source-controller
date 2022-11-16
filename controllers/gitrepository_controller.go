@@ -46,6 +46,7 @@ import (
 	"github.com/fluxcd/pkg/git"
 	"github.com/fluxcd/pkg/git/gogit"
 	"github.com/fluxcd/pkg/git/libgit2"
+	"github.com/fluxcd/pkg/git/repository"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	helper "github.com/fluxcd/pkg/runtime/controller"
 	"github.com/fluxcd/pkg/runtime/patch"
@@ -733,7 +734,7 @@ func (r *GitRepositoryReconciler) gitCheckout(ctx context.Context,
 	obj *sourcev1.GitRepository, authOpts *git.AuthOptions, dir string,
 	optimized bool, gitImplementation string) (*git.Commit, error) {
 	// Configure checkout strategy.
-	cloneOpts := git.CloneOptions{
+	cloneOpts := repository.CloneOptions{
 		RecurseSubmodules: obj.Spec.RecurseSubmodules,
 		ShallowClone:      true,
 	}
@@ -756,14 +757,22 @@ func (r *GitRepositoryReconciler) gitCheckout(ctx context.Context,
 	gitCtx, cancel := context.WithTimeout(ctx, obj.Spec.Timeout.Duration)
 	defer cancel()
 
-	var gitReader git.RepositoryReader
+	var gitReader repository.Reader
 	var err error
 
 	switch gitImplementation {
 	case sourcev1.LibGit2Implementation:
-		gitReader, err = libgit2.NewClient(dir, authOpts)
+		clientOpts := []libgit2.ClientOption{libgit2.WithDiskStorage()}
+		if authOpts.Transport == git.HTTP {
+			clientOpts = append(clientOpts, libgit2.WithInsecureCredentialsOverHTTP())
+		}
+		gitReader, err = libgit2.NewClient(dir, authOpts, clientOpts...)
 	case sourcev1.GoGitImplementation:
-		gitReader, err = gogit.NewClient(dir, authOpts)
+		clientOpts := []gogit.ClientOption{gogit.WithDiskStorage()}
+		if authOpts.Transport == git.HTTP {
+			clientOpts = append(clientOpts, gogit.WithInsecureCredentialsOverHTTP())
+		}
+		gitReader, err = gogit.NewClient(dir, authOpts, clientOpts...)
 	default:
 		err = fmt.Errorf("invalid Git implementation: %s", gitImplementation)
 	}
