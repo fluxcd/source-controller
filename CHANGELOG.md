@@ -2,6 +2,55 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.32.0
+
+**Release date:** 2022-11-17
+
+This prerelease comes with a major refactoring of the controller's Git operations.
+The `go-git` implementation now supports all Git servers, including
+Azure DevOps, which previously was only supported by `libgit2`.
+
+This version initiates the soft deprecation of the `libgit2` implementation.
+The motivation for removing support for `libgit2` being:
+- Reliability: over the past months we managed to substantially reduce the
+issues users experienced, but there are still crashes happening when the controller
+runs over longer periods of time, or when under intense GC pressure.
+- Performance: due to the inherit nature of `libgit2` implementation, which
+is a C library called via CGO through `git2go`, it will never perform as well as
+a pure Go implementations. At scale, memory pressure insues which then triggers
+the reliability issues above.
+- Lack of Shallow Clone Support.
+- Maintainability: supporting two Git implementations is a big task, even more
+so when one of them is in a complete different tech stack. Given its nature, to
+support `libgit2`, we have to maintain an additional repository. Statically built
+`libgit2` libraries need to be cross-compiled for all our supported platforms.
+And a lot of "unnecessary" code has to be in place to make building, testing and
+fuzzing work seamlessly.
+
+As a result the field `spec.gitImplementation` is ignored and the
+reconciliations will use `go-git`. To opt-out from this behaviour, start
+the controller with: `--feature-gates=ForceGoGitImplementation=false`.
+
+Users having any issues with `go-git` should report it to the Flux team,
+so any issues can be resolved before support for `libgit2` is completely
+removed from the codebase.
+
+Improvements:
+- Refactor Git operations and introduce go-git support for Azure DevOps and AWS CodeCommit
+  [#944](https://github.com/fluxcd/source-controller/pull/944)
+- Use Flux Event API v1beta1
+  [#952](https://github.com/fluxcd/source-controller/pull/952)
+- gogit: Add new ForceGoGitImplementation FeatureGate
+  [#945](https://github.com/fluxcd/source-controller/pull/945)
+- Remove nsswitch.conf creation from Dockerfile
+  [#958](https://github.com/fluxcd/source-controller/pull/958)
+- Update dependencies
+  [#960](https://github.com/fluxcd/source-controller/pull/960)
+  [#950](https://github.com/fluxcd/source-controller/pull/950)
+  [#959](https://github.com/fluxcd/source-controller/pull/959)
+- Upgrade to azure-sdk-for-go/storage/azblob v0.5.1
+  [#931](https://github.com/fluxcd/source-controller/pull/931)
+
 ## 0.31.0
 
 **Release date:** 2022-10-21

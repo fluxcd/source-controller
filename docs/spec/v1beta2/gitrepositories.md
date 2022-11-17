@@ -385,8 +385,8 @@ resume.
 
 ### Git implementation
 
-> **_NOTE:_**  `libgit2` is being deprecated. When it is used the controllers
-are known to panic over long periods of time, or when under high GC pressure.
+**Note:** `libgit2` is being deprecated, as its use is known to cause controllers
+to panic when running over long periods of time, or when under high GC pressure.
 A new opt-out feature gate `ForceGoGitImplementation` was introduced, which will
 use `go-git` regardless of the value defined at `.spec.gitImplementation`.
 This can be disabled by starting the controller with the additional flag below:
