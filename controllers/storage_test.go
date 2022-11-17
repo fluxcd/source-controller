@@ -29,7 +29,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-git/go-git/v5/plumbing/format/gitignore"
+	"github.com/fluxcd/go-git/v5/plumbing/format/gitignore"
 	. "github.com/onsi/gomega"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
