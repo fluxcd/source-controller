@@ -45,7 +45,7 @@ require (
 	github.com/fluxcd/pkg/testserver v0.4.0
 	github.com/fluxcd/pkg/untar v0.2.0
 	github.com/fluxcd/pkg/version v0.2.0
-	github.com/fluxcd/source-controller/api v0.31.0
+	github.com/fluxcd/source-controller/api v0.32.1
 	github.com/go-git/go-billy/v5 v5.3.1
 	github.com/go-logr/logr v1.2.3
 	github.com/google/go-containerregistry v0.12.1
@@ -403,4 +403,8 @@ require (
 	sigs.k8s.io/kustomize/kyaml v0.13.9 // indirect
 	sigs.k8s.io/release-utils v0.7.3 // indirect
 	sigs.k8s.io/structured-merge-diff/v4 v4.2.3 // indirect
+)
+
+retract (
+	v0.32.0 // Refers to incorrect ./api version.
 )
