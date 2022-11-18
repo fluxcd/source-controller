@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.32.1
+
+**Release date:** 2022-11-18
+
+This prerelease rectifies the `v0.32.0` release by retracting the previous Go
+version, bumping the controller api version and the controller deployment.
+
 ## 0.32.0
 
 **Release date:** 2022-11-17
