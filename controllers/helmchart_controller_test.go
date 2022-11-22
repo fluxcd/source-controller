@@ -422,7 +422,7 @@ func TestHelmChartReconciler_reconcileSource(t *testing.T) {
 
 	tmpDir := t.TempDir()
 
-	storage, err := NewStorage(tmpDir, "example.com", retentionTTL, retentionRecords)
+	storage, err := NewStorage(tmpDir, "example.com", retentionTTL, retentionRecords, 0)
 	g.Expect(err).ToNot(HaveOccurred())
 
 	gitArtifact := &sourcev1.Artifact{
@@ -902,7 +902,7 @@ func TestHelmChartReconciler_buildFromOCIHelmRepository(t *testing.T) {
 	metadata, err := loadTestChartToOCI(chartData, chartPath, testRegistryServer)
 	g.Expect(err).NotTo(HaveOccurred())
 
-	storage, err := NewStorage(tmpDir, "example.com", retentionTTL, retentionRecords)
+	storage, err := NewStorage(tmpDir, "example.com", retentionTTL, retentionRecords, 0)
 	g.Expect(err).ToNot(HaveOccurred())
 
 	cachedArtifact := &sourcev1.Artifact{
@@ -1119,7 +1119,7 @@ func TestHelmChartReconciler_buildFromTarballArtifact(t *testing.T) {
 
 	tmpDir := t.TempDir()
 
-	storage, err := NewStorage(tmpDir, "example.com", retentionTTL, retentionRecords)
+	storage, err := NewStorage(tmpDir, "example.com", retentionTTL, retentionRecords, 0)
 	g.Expect(err).ToNot(HaveOccurred())
 
 	chartsArtifact := &sourcev1.Artifact{

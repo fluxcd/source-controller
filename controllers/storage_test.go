@@ -38,7 +38,7 @@ import (
 func TestStorageConstructor(t *testing.T) {
 	dir := t.TempDir()
 
-	if _, err := NewStorage("/nonexistent", "hostname", time.Minute, 2); err == nil {
+	if _, err := NewStorage("/nonexistent", "hostname", time.Minute, 2, 0); err == nil {
 		t.Fatal("nonexistent path was allowable in storage constructor")
 	}
 
@@ -48,13 +48,13 @@ func TestStorageConstructor(t *testing.T) {
 	}
 	f.Close()
 
-	if _, err := NewStorage(f.Name(), "hostname", time.Minute, 2); err == nil {
+	if _, err := NewStorage(f.Name(), "hostname", time.Minute, 2, 0); err == nil {
 		os.Remove(f.Name())
 		t.Fatal("file path was accepted as basedir")
 	}
 	os.Remove(f.Name())
 
-	if _, err := NewStorage(dir, "hostname", time.Minute, 2); err != nil {
+	if _, err := NewStorage(dir, "hostname", time.Minute, 2, 0); err != nil {
 		t.Fatalf("Valid path did not successfully return: %v", err)
 	}
 }
@@ -103,7 +103,7 @@ func walkTar(tarFile string, match string, dir bool) (int64, bool, error) {
 func TestStorage_Archive(t *testing.T) {
 	dir := t.TempDir()
 
-	storage, err := NewStorage(dir, "hostname", time.Minute, 2)
+	storage, err := NewStorage(dir, "hostname", time.Minute, 2, 0)
 	if err != nil {
 		t.Fatalf("error while bootstrapping storage: %v", err)
 	}
@@ -263,7 +263,7 @@ func TestStorageRemoveAllButCurrent(t *testing.T) {
 	t.Run("bad directory in archive", func(t *testing.T) {
 		dir := t.TempDir()
 
-		s, err := NewStorage(dir, "hostname", time.Minute, 2)
+		s, err := NewStorage(dir, "hostname", time.Minute, 2, 0)
 		if err != nil {
 			t.Fatalf("Valid path did not successfully return: %v", err)
 		}
@@ -277,7 +277,7 @@ func TestStorageRemoveAllButCurrent(t *testing.T) {
 		g := NewWithT(t)
 		dir := t.TempDir()
 
-		s, err := NewStorage(dir, "hostname", time.Minute, 2)
+		s, err := NewStorage(dir, "hostname", time.Minute, 2, 0)
 		g.Expect(err).ToNot(HaveOccurred(), "failed to create new storage")
 
 		artifact := sourcev1.Artifact{
@@ -338,7 +338,7 @@ func TestStorageRemoveAll(t *testing.T) {
 			g := NewWithT(t)
 			dir := t.TempDir()
 
-			s, err := NewStorage(dir, "hostname", time.Minute, 2)
+			s, err := NewStorage(dir, "hostname", time.Minute, 2, 0)
 			g.Expect(err).ToNot(HaveOccurred(), "failed to create new storage")
 
 			artifact := sourcev1.Artifact{
@@ -364,7 +364,7 @@ func TestStorageCopyFromPath(t *testing.T) {
 
 	dir := t.TempDir()
 
-	storage, err := NewStorage(dir, "hostname", time.Minute, 2)
+	storage, err := NewStorage(dir, "hostname", time.Minute, 2, 0)
 	if err != nil {
 		t.Fatalf("error while bootstrapping storage: %v", err)
 	}
@@ -542,7 +542,7 @@ func TestStorage_getGarbageFiles(t *testing.T) {
 			g := NewWithT(t)
 			dir := t.TempDir()
 
-			s, err := NewStorage(dir, "hostname", tt.ttl, tt.maxItemsToBeRetained)
+			s, err := NewStorage(dir, "hostname", tt.ttl, tt.maxItemsToBeRetained, 0)
 			g.Expect(err).ToNot(HaveOccurred(), "failed to create new storage")
 
 			artifact := sourcev1.Artifact{
@@ -616,7 +616,7 @@ func TestStorage_GarbageCollect(t *testing.T) {
 			g := NewWithT(t)
 			dir := t.TempDir()
 
-			s, err := NewStorage(dir, "hostname", time.Second*2, 2)
+			s, err := NewStorage(dir, "hostname", time.Second*2, 2, 0)
 			g.Expect(err).ToNot(HaveOccurred(), "failed to create new storage")
 
 			artifact := sourcev1.Artifact{
@@ -654,6 +654,93 @@ func TestStorage_GarbageCollect(t *testing.T) {
 						g.Fail(fmt.Sprintf("expected file to be deleted, still exists: %s", wantDeletedPath))
 					}
 				}
+			}
+		})
+	}
+}
+
+func TestStorage_MaxSize(t *testing.T) {
+	createFiles := func(files map[string][]byte) (dir string, err error) {
+		dir = t.TempDir()
+		for name, b := range files {
+			absPath := filepath.Join(dir, name)
+			if err = os.MkdirAll(filepath.Dir(absPath), 0o750); err != nil {
+				return
+			}
+			f, err := os.Create(absPath)
+			if err != nil {
+				return "", fmt.Errorf("could not create file %q: %w", absPath, err)
+			}
+			if n, err := f.Write(b); err != nil {
+				f.Close()
+				return "", fmt.Errorf("could not write %d bytes to file %q: %w", n, f.Name(), err)
+			}
+			f.Close()
+		}
+		return
+	}
+
+	tests := []struct {
+		name         string
+		files        map[string][]byte
+		maxSize      int64
+		wantErrMatch string
+	}{
+		{
+			name: "creates artifact without size limit",
+			files: map[string][]byte{
+				"test.txt":  []byte(`contents`),
+				"test.yaml": []byte(`a: b`),
+			},
+			maxSize:      -1,
+			wantErrMatch: "",
+		},
+		{
+			name: "fails to create artifact due to size limit",
+			files: map[string][]byte{
+				"test.txt":  []byte(`contents`),
+				"test.yaml": []byte(`a: b`),
+			},
+			maxSize:      200,
+			wantErrMatch: "exceeds the max limit",
+		},
+		{
+			name: "creates artifact in the size limit range",
+			files: map[string][]byte{
+				"test.txt":  []byte(`contents`),
+				"test.yaml": []byte(`a: b`),
+			},
+			maxSize: 300,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			dir, err := createFiles(tt.files)
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			defer os.RemoveAll(dir)
+
+			artifact := sourcev1.Artifact{
+				Path: filepath.Join(randStringRunes(10), randStringRunes(10), randStringRunes(10)+".tar.gz"),
+			}
+
+			s, err := NewStorage(dir, "hostname", time.Second*2, 2, tt.maxSize)
+			g.Expect(err).ToNot(HaveOccurred(), "failed to create new storage")
+
+			if err := s.MkdirAll(artifact); err != nil {
+				t.Fatalf("artifact directory creation failed: %v", err)
+			}
+
+			err = s.Archive(&artifact, dir, SourceIgnoreFilter(nil, nil))
+			if tt.wantErrMatch == "" {
+				g.Expect(err).ToNot(HaveOccurred())
+			} else {
+				g.Expect(err.Error()).To(ContainSubstring(tt.wantErrMatch))
 			}
 		})
 	}
