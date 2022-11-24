@@ -201,7 +201,7 @@ update-attributions:
 e2e:
 	./hack/ci/e2e.sh
 
-verify: update-attributions fmt vet manifests api-docs
+verify: update-attributions fmt vet manifests api-docs tidy
 ifneq ($(shell grep -o 'LIBGIT2_IMG ?= \w.*' Makefile | cut -d ' ' -f 3):$(shell grep -o 'LIBGIT2_TAG ?= \w.*' Makefile | cut -d ' ' -f 3), \
 		$(shell grep -o "LIBGIT2_IMG=\w.*" Dockerfile | cut -d'=' -f2):$(shell grep -o "LIBGIT2_TAG=\w.*" Dockerfile | cut -d'=' -f2))
 	@{ \
