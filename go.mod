@@ -20,6 +20,7 @@ replace github.com/go-git/go-billy/v5 => github.com/go-git/go-billy/v5 v5.0.0-20
 
 require (
 	cloud.google.com/go/storage v1.28.0
+	github.com/AdaLogics/go-fuzz-headers v0.0.0-20221103172237-443f56ff4ba8
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.2.0
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.2.0
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v0.5.1
@@ -405,6 +406,4 @@ require (
 	sigs.k8s.io/structured-merge-diff/v4 v4.2.3 // indirect
 )
 
-retract (
-	v0.32.0 // Refers to incorrect ./api version.
-)
+retract v0.32.0 // Refers to incorrect ./api version.
