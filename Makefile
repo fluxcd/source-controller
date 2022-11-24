@@ -33,7 +33,11 @@ REPOSITORY_ROOT := $(shell git rev-parse --show-toplevel)
 BUILD_DIR := $(REPOSITORY_ROOT)/build
 
 # Other dependency versions
-ENVTEST_BIN_VERSION ?= 1.19.2
+ENVTEST_BIN_VERSION ?= 1.24.0
+
+# FUZZ_TIME defines the max amount of time, in Go Duration,
+# each fuzzer should run for.
+FUZZ_TIME ?= 1m
 
 # Caches libgit2 versions per tag, "forcing" rebuild only when needed.
 LIBGIT2_PATH := $(BUILD_DIR)/libgit2/$(LIBGIT2_TAG)
@@ -206,9 +210,9 @@ ifneq ($(shell grep -o 'LIBGIT2_IMG ?= \w.*' Makefile | cut -d ' ' -f 3):$(shell
 	exit 1; \
 	}
 endif
-ifneq ($(shell grep -o 'LIBGIT2_TAG ?= \w.*' Makefile | cut -d ' ' -f 3), $(shell grep -o "LIBGIT2_TAG=.*" tests/fuzz/oss_fuzz_build.sh | sed 's;LIBGIT2_TAG="$${LIBGIT2_TAG:-;;g' | sed 's;}";;g'))
+ifneq ($(shell grep -o 'LIBGIT2_TAG ?= \w.*' Makefile | cut -d ' ' -f 3), $(shell grep -o "LIBGIT2_TAG=.*" tests/fuzz/oss_fuzz_prebuild.sh | sed 's;LIBGIT2_TAG="$${LIBGIT2_TAG:-;;g' | sed 's;}";;g'))
 	@{ \
-	echo "LIBGIT2_TAG must match in both Makefile and tests/fuzz/oss_fuzz_build.sh"; \
+	echo "LIBGIT2_TAG must match in both Makefile and tests/fuzz/oss_fuzz_prebuild.sh"; \
 	exit 1; \
 	}
 endif
@@ -232,25 +236,31 @@ rm -rf $$TMP_DIR ;\
 }
 endef
 
-# Build fuzzers
+# Build fuzzers used by oss-fuzz.
 fuzz-build: $(LIBGIT2)
-	rm -rf $(BUILD_DIR)/fuzz/
-	mkdir -p $(BUILD_DIR)/fuzz/out/
+	rm -rf $(shell pwd)/build/fuzz/
+	mkdir -p $(shell pwd)/build/fuzz/out/
 
-	docker build . --pull --tag local-fuzzing:latest -f tests/fuzz/Dockerfile.builder
+	docker build . --tag local-fuzzing:latest -f tests/fuzz/Dockerfile.builder
 	docker run --rm \
 		-e FUZZING_LANGUAGE=go -e SANITIZER=address \
 		-e CIFUZZ_DEBUG='True' -e OSS_FUZZ_PROJECT_NAME=fluxcd \
-		-v "$(BUILD_DIR)/fuzz/out":/out \
+		-v "$(shell pwd)/build/fuzz/out":/out \
 		local-fuzzing:latest
 
+# Run each fuzzer once to ensure they will work when executed by oss-fuzz.
 fuzz-smoketest: fuzz-build
 	docker run --rm \
-		-v "$(BUILD_DIR)/fuzz/out":/out \
-		-v "$(shell go env GOMODCACHE):/root/go/pkg/mod" \
+		-v "$(shell pwd)/build/fuzz/out":/out \
 		-v "$(shell pwd)/tests/fuzz/oss_fuzz_run.sh":/runner.sh \
 		local-fuzzing:latest \
 		bash -c "/runner.sh"
+
+# Run fuzz tests for the duration set in FUZZ_TIME.
+fuzz-native: 
+	KUBEBUILDER_ASSETS=$(KUBEBUILDER_ASSETS) \
+	FUZZ_TIME=$(FUZZ_TIME) \
+		./tests/fuzz/native_go_run.sh
 
 # Creates an env file that can be used to load all source-controller's dependencies
 # this is handy when you want to run adhoc debug sessions on tests or start the 
