@@ -1,5 +1,5 @@
-//go:build gofuzz
-// +build gofuzz
+//go:build gofuzz_libfuzzer
+// +build gofuzz_libfuzzer
 
 /*
 Copyright 2022 The Flux authors
@@ -61,7 +61,6 @@ import (
 	"github.com/fluxcd/pkg/gittestserver"
 	"github.com/fluxcd/pkg/runtime/testenv"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
-	"github.com/fluxcd/source-controller/controllers"
 )
 
 var (
@@ -75,7 +74,7 @@ var (
 	cfg              *rest.Config
 	testEnv          *testenv.Environment
 
-	storage *controllers.Storage
+	storage *Storage
 
 	examplePublicKey  []byte
 	examplePrivateKey []byte
@@ -87,277 +86,140 @@ var (
 var testFiles embed.FS
 
 const (
-	defaultBinVersion     = "1.23"
+	defaultBinVersion     = "1.24"
 	lettersAndNumbers     = "abcdefghijklmnopqrstuvwxyz123456789"
 	lettersNumbersAndDash = "abcdefghijklmnopqrstuvwxyz123456789-"
 )
 
-func envtestBinVersion() string {
-	if binVersion := os.Getenv("ENVTEST_BIN_VERSION"); binVersion != "" {
-		return binVersion
-	}
-	return defaultBinVersion
-}
-
-func ensureDependencies() error {
-	if _, err := os.Stat("/.dockerenv"); os.IsNotExist(err) {
-		return nil
-	}
-
-	if os.Getenv("KUBEBUILDER_ASSETS") == "" {
-		binVersion := envtestBinVersion()
-		cmd := exec.Command("/usr/bin/bash", "-c", fmt.Sprintf(`go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest && \
-		/root/go/bin/setup-envtest use -p path %s`, binVersion))
-
-		cmd.Env = append(os.Environ(), "GOPATH=/root/go")
-		assetsPath, err := cmd.Output()
-		if err != nil {
-			return err
-		}
-		os.Setenv("KUBEBUILDER_ASSETS", string(assetsPath))
-	}
-
-	// Output all embedded testdata files
-	embedDirs := []string{"testdata/crd", "testdata/certs"}
-	for _, dir := range embedDirs {
-		err := os.MkdirAll(dir, 0o700)
-		if err != nil {
-			return fmt.Errorf("mkdir %s: %v", dir, err)
-		}
-
-		templates, err := fs.ReadDir(testFiles, dir)
-		if err != nil {
-			return fmt.Errorf("reading embedded dir: %v", err)
-		}
-
-		for _, template := range templates {
-			fileName := fmt.Sprintf("%s/%s", dir, template.Name())
-			fmt.Println(fileName)
-
-			data, err := testFiles.ReadFile(fileName)
-			if err != nil {
-				return fmt.Errorf("reading embedded file %s: %v", fileName, err)
-			}
-
-			os.WriteFile(fileName, data, 0o600)
-			if err != nil {
-				return fmt.Errorf("writing %s: %v", fileName, err)
-			}
-		}
-	}
-
-	startEnvServer(func(m manager.Manager) {
-		utilruntime.Must((&controllers.GitRepositoryReconciler{
-			Client:  m.GetClient(),
-			Storage: storage,
-		}).SetupWithManager(m))
-	})
-
-	return nil
-}
-
-func startEnvServer(setupReconcilers func(manager.Manager)) *envtest.Environment {
-	testEnv := &envtest.Environment{
-		CRDDirectoryPaths: []string{filepath.Join("testdata", "crd")},
-	}
-	fmt.Println("Starting the test environment")
-	cfg, err := testEnv.Start()
-	if err != nil {
-		panic(fmt.Sprintf("Failed to start the test environment manager: %v", err))
-	}
-
-	utilruntime.Must(loadExampleKeys())
-	utilruntime.Must(sourcev1.AddToScheme(scheme.Scheme))
-
-	tmpStoragePath, err := os.MkdirTemp("", "source-controller-storage-")
-	if err != nil {
-		panic(err)
-	}
-	defer os.RemoveAll(tmpStoragePath)
-	storage, err = controllers.NewStorage(tmpStoragePath, "localhost:5050", time.Minute*1, 2)
-	if err != nil {
-		panic(err)
-	}
-	// serve artifacts from the filesystem, as done in main.go
-	fs := http.FileServer(http.Dir(tmpStoragePath))
-	http.Handle("/", fs)
-	go http.ListenAndServe(":5050", nil)
-
-	cert, err := tls.X509KeyPair(examplePublicKey, examplePrivateKey)
-	if err != nil {
-		panic(err)
-	}
-
-	caCertPool := x509.NewCertPool()
-	caCertPool.AppendCertsFromPEM(exampleCA)
-
-	tlsConfig := &tls.Config{
-		Certificates: []tls.Certificate{cert},
-		RootCAs:      caCertPool,
-	}
-	tlsConfig.BuildNameToCertificate()
-
-	var transport = httptransport.NewClient(&http.Client{
-		Transport: &http.Transport{
-			TLSClientConfig: tlsConfig,
-		},
-	})
-	gitclient.InstallProtocol("https", transport)
-
-	k8sClient, err = client.New(cfg, client.Options{Scheme: scheme.Scheme})
-	if err != nil {
-		panic(err)
-	}
-	if k8sClient == nil {
-		panic("cfg is nil but should not be")
-	}
-
-	k8sManager, err := ctrl.NewManager(cfg, ctrl.Options{
-		Scheme: scheme.Scheme,
-	})
-	if err != nil {
-		panic(err)
-	}
-
-	setupReconcilers(k8sManager)
-
-	time.Sleep(2 * time.Second)
-	go func() {
-		fmt.Println("Starting k8sManager...")
-		utilruntime.Must(k8sManager.Start(context.TODO()))
-	}()
-
-	return testEnv
-}
-
 // FuzzRandomGitFiles implements a fuzzer that
 // targets the GitRepository reconciler.
-func FuzzRandomGitFiles(data []byte) int {
-	initter.Do(func() {
-		utilruntime.Must(ensureDependencies())
+func FuzzRandomGitFiles(f *testing.F) {
+	f.Fuzz(func(t *testing.T, data []byte) {
+		initter.Do(func() {
+			utilruntime.Must(ensureDependencies())
+		})
+
+		f := fuzz.NewConsumer(data)
+		namespace, deleteNamespace, err := createNamespace(f)
+		if err != nil {
+			return
+		}
+		defer deleteNamespace()
+
+		gitServerURL, stopGitServer := createGitServer(f)
+		defer stopGitServer()
+
+		fs := memfs.New()
+		gitrepo, err := git.Init(memory.NewStorage(), fs)
+		if err != nil {
+			panic(err)
+		}
+		wt, err := gitrepo.Worktree()
+		if err != nil {
+			panic(err)
+		}
+
+		// Create random files for the git source
+		err = createRandomFiles(f, fs, wt)
+		if err != nil {
+			return
+		}
+
+		commit, err := pushFilesToGit(gitrepo, wt, gitServerURL.String())
+		if err != nil {
+			return
+		}
+		created, err := createGitRepository(f, gitServerURL.String(), commit.String(), namespace.Name)
+		if err != nil {
+			return
+		}
+		err = k8sClient.Create(context.Background(), created)
+		if err != nil {
+			return
+		}
+		defer k8sClient.Delete(context.Background(), created)
+
+		// Let the reconciler do its thing:
+		time.Sleep(60 * time.Millisecond)
 	})
-
-	f := fuzz.NewConsumer(data)
-	namespace, deleteNamespace, err := createNamespace(f)
-	if err != nil {
-		return 0
-	}
-	defer deleteNamespace()
-
-	gitServerURL, stopGitServer := createGitServer(f)
-	defer stopGitServer()
-
-	fs := memfs.New()
-	gitrepo, err := git.Init(memory.NewStorage(), fs)
-	if err != nil {
-		panic(err)
-	}
-	wt, err := gitrepo.Worktree()
-	if err != nil {
-		panic(err)
-	}
-
-	// Create random files for the git source
-	err = createRandomFiles(f, fs, wt)
-	if err != nil {
-		return 0
-	}
-
-	commit, err := pushFilesToGit(gitrepo, wt, gitServerURL.String())
-	if err != nil {
-		return 0
-	}
-	created, err := createGitRepository(f, gitServerURL.String(), commit.String(), namespace.Name)
-	if err != nil {
-		return 0
-	}
-	err = k8sClient.Create(context.Background(), created)
-	if err != nil {
-		return 0
-	}
-	defer k8sClient.Delete(context.Background(), created)
-
-	// Let the reconciler do its thing:
-	time.Sleep(60 * time.Millisecond)
-
-	return 1
 }
 
 // FuzzGitResourceObject implements a fuzzer that targets
 // the GitRepository reconciler.
-func FuzzGitResourceObject(data []byte) int {
-	initter.Do(func() {
-		utilruntime.Must(ensureDependencies())
+func FuzzGitResourceObject(f *testing.F) {
+	f.Fuzz(func(t *testing.T, data []byte) {
+		initter.Do(func() {
+			utilruntime.Must(ensureDependencies())
+		})
+
+		f := fuzz.NewConsumer(data)
+
+		// Create this early because if it fails, then the fuzzer
+		// does not need to proceed.
+		repository := &sourcev1.GitRepository{}
+		err := f.GenerateStruct(repository)
+		if err != nil {
+			return
+		}
+
+		metaName, err := f.GetStringFrom(lettersNumbersAndDash, 59)
+		if err != nil {
+			return
+		}
+
+		gitServerURL, stopGitServer := createGitServer(f)
+		defer stopGitServer()
+
+		fs := memfs.New()
+		gitrepo, err := git.Init(memory.NewStorage(), fs)
+		if err != nil {
+			return
+		}
+		wt, err := gitrepo.Worktree()
+		if err != nil {
+			return
+		}
+
+		// Add a file
+		ff, _ := fs.Create("fixture")
+		_ = ff.Close()
+		_, err = wt.Add(fs.Join("fixture"))
+		if err != nil {
+			return
+		}
+
+		commit, err := pushFilesToGit(gitrepo, wt, gitServerURL.String())
+		if err != nil {
+			return
+		}
+
+		namespace, deleteNamespace, err := createNamespace(f)
+		if err != nil {
+			return
+		}
+		defer deleteNamespace()
+
+		repository.Spec.URL = gitServerURL.String()
+		repository.Spec.Verification.Mode = "head"
+		repository.Spec.SecretRef = nil
+
+		reference := &sourcev1.GitRepositoryRef{Branch: "some-branch"}
+		reference.Commit = strings.Replace(reference.Commit, "<commit>", commit.String(), 1)
+		repository.Spec.Reference = reference
+
+		repository.ObjectMeta = metav1.ObjectMeta{
+			Name:      metaName,
+			Namespace: namespace.Name,
+		}
+		err = k8sClient.Create(context.Background(), repository)
+		if err != nil {
+			return
+		}
+		defer k8sClient.Delete(context.Background(), repository)
+
+		// Let the reconciler do its thing.
+		time.Sleep(50 * time.Millisecond)
 	})
-
-	f := fuzz.NewConsumer(data)
-
-	// Create this early because if it fails, then the fuzzer
-	// does not need to proceed.
-	repository := &sourcev1.GitRepository{}
-	err := f.GenerateStruct(repository)
-	if err != nil {
-		return 0
-	}
-
-	metaName, err := f.GetStringFrom(lettersNumbersAndDash, 59)
-	if err != nil {
-		return 0
-	}
-
-	gitServerURL, stopGitServer := createGitServer(f)
-	defer stopGitServer()
-
-	fs := memfs.New()
-	gitrepo, err := git.Init(memory.NewStorage(), fs)
-	if err != nil {
-		return 0
-	}
-	wt, err := gitrepo.Worktree()
-	if err != nil {
-		return 0
-	}
-
-	// Add a file
-	ff, _ := fs.Create("fixture")
-	_ = ff.Close()
-	_, err = wt.Add(fs.Join("fixture"))
-	if err != nil {
-		return 0
-	}
-
-	commit, err := pushFilesToGit(gitrepo, wt, gitServerURL.String())
-	if err != nil {
-		return 0
-	}
-
-	namespace, deleteNamespace, err := createNamespace(f)
-	if err != nil {
-		return 0
-	}
-	defer deleteNamespace()
-
-	repository.Spec.URL = gitServerURL.String()
-	repository.Spec.Verification.Mode = "head"
-	repository.Spec.SecretRef = nil
-
-	reference := &sourcev1.GitRepositoryRef{Branch: "some-branch"}
-	reference.Commit = strings.Replace(reference.Commit, "<commit>", commit.String(), 1)
-	repository.Spec.Reference = reference
-
-	repository.ObjectMeta = metav1.ObjectMeta{
-		Name:      metaName,
-		Namespace: namespace.Name,
-	}
-	err = k8sClient.Create(context.Background(), repository)
-	if err != nil {
-		return 0
-	}
-	defer k8sClient.Delete(context.Background(), repository)
-
-	// Let the reconciler do its thing.
-	time.Sleep(50 * time.Millisecond)
-	return 1
 }
 
 func loadExampleKeys() (err error) {
@@ -526,4 +388,142 @@ func createRandomFiles(f *fuzz.ConsumeFuzzer, fs billy.Filesystem, wt *git.Workt
 		noOfCreatedFiles++
 	}
 	return nil
+}
+
+func envtestBinVersion() string {
+	if binVersion := os.Getenv("ENVTEST_BIN_VERSION"); binVersion != "" {
+		return binVersion
+	}
+	return defaultBinVersion
+}
+
+func ensureDependencies() error {
+	if _, err := os.Stat("/.dockerenv"); os.IsNotExist(err) {
+		return nil
+	}
+
+	if os.Getenv("KUBEBUILDER_ASSETS") == "" {
+		binVersion := envtestBinVersion()
+		cmd := exec.Command("/usr/bin/bash", "-c", fmt.Sprintf(`go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest && \
+		/root/go/bin/setup-envtest use -p path %s`, binVersion))
+
+		cmd.Env = append(os.Environ(), "GOPATH=/root/go")
+		assetsPath, err := cmd.Output()
+		if err != nil {
+			return err
+		}
+		os.Setenv("KUBEBUILDER_ASSETS", string(assetsPath))
+	}
+
+	// Output all embedded testdata files
+	embedDirs := []string{"testdata/crd", "testdata/certs"}
+	for _, dir := range embedDirs {
+		err := os.MkdirAll(dir, 0o700)
+		if err != nil {
+			return fmt.Errorf("mkdir %s: %v", dir, err)
+		}
+
+		templates, err := fs.ReadDir(testFiles, dir)
+		if err != nil {
+			return fmt.Errorf("reading embedded dir: %v", err)
+		}
+
+		for _, template := range templates {
+			fileName := fmt.Sprintf("%s/%s", dir, template.Name())
+			fmt.Println(fileName)
+
+			data, err := testFiles.ReadFile(fileName)
+			if err != nil {
+				return fmt.Errorf("reading embedded file %s: %v", fileName, err)
+			}
+
+			os.WriteFile(fileName, data, 0o600)
+			if err != nil {
+				return fmt.Errorf("writing %s: %v", fileName, err)
+			}
+		}
+	}
+
+	startEnvServer(func(m manager.Manager) {
+		utilruntime.Must((&GitRepositoryReconciler{
+			Client:  m.GetClient(),
+			Storage: storage,
+		}).SetupWithManager(m))
+	})
+
+	return nil
+}
+
+func startEnvServer(setupReconcilers func(manager.Manager)) *envtest.Environment {
+	testEnv := &envtest.Environment{
+		CRDDirectoryPaths: []string{filepath.Join("testdata", "crd")},
+	}
+	fmt.Println("Starting the test environment")
+	cfg, err := testEnv.Start()
+	if err != nil {
+		panic(fmt.Sprintf("Failed to start the test environment manager: %v", err))
+	}
+
+	utilruntime.Must(loadExampleKeys())
+	utilruntime.Must(sourcev1.AddToScheme(scheme.Scheme))
+
+	tmpStoragePath, err := os.MkdirTemp("", "source-controller-storage-")
+	if err != nil {
+		panic(err)
+	}
+	defer os.RemoveAll(tmpStoragePath)
+	storage, err = NewStorage(tmpStoragePath, "localhost:5050", time.Minute*1, 2)
+	if err != nil {
+		panic(err)
+	}
+	// serve artifacts from the filesystem, as done in main.go
+	fs := http.FileServer(http.Dir(tmpStoragePath))
+	http.Handle("/", fs)
+	go http.ListenAndServe(":5050", nil)
+
+	cert, err := tls.X509KeyPair(examplePublicKey, examplePrivateKey)
+	if err != nil {
+		panic(err)
+	}
+
+	caCertPool := x509.NewCertPool()
+	caCertPool.AppendCertsFromPEM(exampleCA)
+
+	tlsConfig := &tls.Config{
+		Certificates: []tls.Certificate{cert},
+		RootCAs:      caCertPool,
+	}
+	tlsConfig.BuildNameToCertificate()
+
+	var transport = httptransport.NewClient(&http.Client{
+		Transport: &http.Transport{
+			TLSClientConfig: tlsConfig,
+		},
+	})
+	gitclient.InstallProtocol("https", transport)
+
+	k8sClient, err = client.New(cfg, client.Options{Scheme: scheme.Scheme})
+	if err != nil {
+		panic(err)
+	}
+	if k8sClient == nil {
+		panic("cfg is nil but should not be")
+	}
+
+	k8sManager, err := ctrl.NewManager(cfg, ctrl.Options{
+		Scheme: scheme.Scheme,
+	})
+	if err != nil {
+		panic(err)
+	}
+
+	setupReconcilers(k8sManager)
+
+	time.Sleep(2 * time.Second)
+	go func() {
+		fmt.Println("Starting k8sManager...")
+		utilruntime.Must(k8sManager.Start(context.TODO()))
+	}()
+
+	return testEnv
 }
