@@ -17,9 +17,11 @@ limitations under the License.
 package main
 
 import (
+	"crypto/tls"
 	"fmt"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"time"
@@ -101,6 +103,8 @@ func main() {
 		helmCachePurgeInterval   string
 		artifactRetentionTTL     time.Duration
 		artifactRetentionRecords int
+		storageCertDir           string
+		storageHttpsEnabled      bool
 	)
 
 	flag.StringVar(&metricsAddr, "metrics-addr", envOrDefault("METRICS_ADDR", ":8080"),
@@ -112,6 +116,8 @@ func main() {
 		"The local storage path.")
 	flag.StringVar(&storageAddr, "storage-addr", envOrDefault("STORAGE_ADDR", ":9090"),
 		"The address the static file server binds to.")
+	flag.BoolVar(&storageHttpsEnabled, "storage-https-enabled", false, "The static server serves https.")
+	flag.StringVar(&storageCertDir, "storage-cert-path", "", "The path to static server certificate.")
 	flag.StringVar(&storageAdvAddr, "storage-adv-addr", envOrDefault("STORAGE_ADV_ADDR", ""),
 		"The advertised address of the static file server.")
 	flag.IntVar(&concurrent, "concurrent", 2, "The number of concurrent reconciles per controller.")
@@ -202,6 +208,9 @@ func main() {
 	if storageAdvAddr == "" {
 		storageAdvAddr = determineAdvStorageAddr(storageAddr, setupLog)
 	}
+
+	storageAdvAddr = appendScheme(storageAdvAddr, storageHttpsEnabled)
+
 	storage := mustInitStorage(storagePath, storageAdvAddr, artifactRetentionTTL, artifactRetentionRecords, setupLog)
 
 	if gogitOnly, _ := features.Enabled(features.ForceGoGitImplementation); !gogitOnly {
@@ -332,7 +341,7 @@ func main() {
 		// to handle that.
 		<-mgr.Elected()
 
-		startFileServer(storage.BasePath, storageAddr, setupLog)
+		startFileServer(storage.BasePath, storageAddr, storageHttpsEnabled, storageCertDir, setupLog)
 	}()
 
 	setupLog.Info("starting manager")
@@ -342,13 +351,37 @@ func main() {
 	}
 }
 
-func startFileServer(path string, address string, l logr.Logger) {
+func getCertificateLoader(certDir string) func(info *tls.ClientHelloInfo) (*tls.Certificate, error) {
+	return func(_ *tls.ClientHelloInfo) (*tls.Certificate, error) {
+		crt := fmt.Sprintf("%s/%s", certDir, "tls.crt")
+		key := fmt.Sprintf("%s/%s", certDir, "tls.key")
+
+		certificate, err := tls.LoadX509KeyPair(crt, key)
+		return &certificate, err
+	}
+}
+
+func startFileServer(path string, address string, enableHttpsStorage bool, certDir string, l logr.Logger) {
 	l.Info("starting file server")
-	fs := http.FileServer(http.Dir(path))
-	http.Handle("/", fs)
-	err := http.ListenAndServe(address, nil)
-	if err != nil {
-		l.Error(err, "file server error")
+
+	server := http.Server{
+		Addr:    address,
+		Handler: http.FileServer(http.Dir(path)),
+		TLSConfig: &tls.Config{
+			GetCertificate: getCertificateLoader(certDir),
+		},
+	}
+
+	if enableHttpsStorage {
+		err := server.ListenAndServeTLS("", "")
+		if err != nil {
+			l.Error(err, "https file server error")
+		}
+	} else {
+		err := server.ListenAndServe()
+		if err != nil {
+			l.Error(err, "http file server error")
+		}
 	}
 }
 
@@ -389,6 +422,19 @@ func determineAdvStorageAddr(storageAddr string, l logr.Logger) string {
 		}
 	}
 	return net.JoinHostPort(host, port)
+}
+
+func appendScheme(storageAdvAddr string, enableHttpsStorage bool) string {
+	u, err := url.Parse(storageAdvAddr)
+	if err != nil {
+		return storageAdvAddr
+	}
+
+	u.Scheme = "http"
+	if enableHttpsStorage {
+		u.Scheme = "https"
+	}
+	return u.String()
 }
 
 func envOrDefault(envName, defaultValue string) string {
