@@ -16,93 +16,65 @@
 
 set -euxo pipefail
 
-LIBGIT2_TAG="${LIBGIT2_TAG:-v0.4.0}"
+# This file aims for:
+# - Dynamically discover and build all fuzz tests within the repository.
+# - Work for both local make fuzz-smoketest and the upstream oss-fuzz.
+
 GOPATH="${GOPATH:-/root/go}"
 GO_SRC="${GOPATH}/src"
 PROJECT_PATH="github.com/fluxcd/source-controller"
 
-pushd "${GO_SRC}/${PROJECT_PATH}"
-
-export TARGET_DIR="$(/bin/pwd)/build/libgit2/${LIBGIT2_TAG}"
-
-# For most cases, libgit2 will already be present.
-# The exception being at the oss-fuzz integration.
-if [ ! -d "${TARGET_DIR}" ]; then
-    curl -o output.tar.gz -LO "https://github.com/fluxcd/golang-with-libgit2/releases/download/${LIBGIT2_TAG}/linux-x86_64-libgit2-only.tar.gz"
-
-    DIR=linux-libgit2-only
-    NEW_DIR="$(/bin/pwd)/build/libgit2/${LIBGIT2_TAG}"
-    INSTALLED_DIR="/home/runner/work/golang-with-libgit2/golang-with-libgit2/build/${DIR}"
-
-    mkdir -p ./build/libgit2
-
-    tar -xf output.tar.gz
-    rm output.tar.gz
-    mv "${DIR}" "${LIBGIT2_TAG}"
-    mv "${LIBGIT2_TAG}/" "./build/libgit2"
-
-    # Update the prefix paths included in the .pc files.
-    # This will make it easier to update to the location in which they will be used.
-    find "${NEW_DIR}" -type f -name "*.pc" | xargs -I {} sed -i "s;${INSTALLED_DIR};${NEW_DIR};g" {}
-fi
-
-apt-get update && apt-get install -y pkg-config
-
-export CGO_ENABLED=1
-export PKG_CONFIG_PATH="${TARGET_DIR}/lib/pkgconfig"
-export CGO_LDFLAGS="$(pkg-config --libs --static --cflags libgit2)"
-export LIBRARY_PATH="${TARGET_DIR}/lib"
-export CGO_CFLAGS="-I${TARGET_DIR}/include"
-
-go get -d github.com/AdaLogics/go-fuzz-headers
-
-# The implementation of libgit2 is sensitive to the versions of git2go.
-# Leaving it to its own devices, the minimum version of git2go used may not
-# be compatible with the currently implemented version. Hence the modifications
-# of the existing go.mod.
-sed "s;\./api;$(/bin/pwd)/api;g" go.mod > tests/fuzz/go.mod
-sed -i 's;module github.com/fluxcd/source-controller;module github.com/fluxcd/source-controller/tests/fuzz;g' tests/fuzz/go.mod
-echo "replace github.com/fluxcd/source-controller => $(/bin/pwd)/" >> tests/fuzz/go.mod
-
-cp go.sum tests/fuzz/go.sum
-
-pushd "tests/fuzz"
-
-go mod download
-
-go get -d github.com/AdaLogics/go-fuzz-headers
-go get -d github.com/fluxcd/source-controller
-
-# Setup files to be embedded into controllers_fuzzer.go's testFiles variable.
-mkdir -p testdata/crd
-cp ../../config/crd/bases/*.yaml testdata/crd/
-cp -r ../../controllers/testdata/certs testdata/
-
-go get -d github.com/AdaLogics/go-fuzz-headers
-
-# Using compile_go_fuzzer to compile fails when statically linking libgit2 dependencies
-# via CFLAGS/CXXFLAGS.
-function go_compile(){
-    function=$1
-    fuzzer=$2
-
-    if [[ $SANITIZER = *coverage* ]]; then
-        # ref: https://github.com/google/oss-fuzz/blob/master/infra/base-images/base-builder/compile_go_fuzzer
-        compile_go_fuzzer "${PROJECT_PATH}/tests/fuzz" "${function}" "${fuzzer}"
-    else
-        go-fuzz -tags gofuzz -func="${function}" -o "${fuzzer}.a" .
-        ${CXX} ${CXXFLAGS} ${LIB_FUZZING_ENGINE} -o "${OUT}/${fuzzer}" \
-            "${fuzzer}.a" "${TARGET_DIR}/lib/libgit2.a" \
-            -fsanitize="${SANITIZER}"
-    fi
+# install_deps installs all dependencies needed for upstream oss-fuzz.
+# Unfortunately we can't pin versions here, as we want to always
+# have the latest, so that we can reproduce errors occuring upstream.
+install_deps(){
+	if ! command -v go-118-fuzz-build &> /dev/null; then
+		go install github.com/AdamKorcz/go-118-fuzz-build@latest
+	fi
 }
 
-go_compile FuzzRandomGitFiles fuzz_gitrepository_fuzzer
-go_compile FuzzGitResourceObject fuzz_git_resource_object
+install_deps
 
-# By now testdata is embedded in the binaries and no longer needed.
-# Remove the dir given that it will be owned by root otherwise.
-rm -rf testdata/
+cd "${GO_SRC}/${PROJECT_PATH}"
 
-popd
-popd
+# Ensure any project-specific requirements are catered for ahead of
+# the generic build process.
+if [ -f "tests/fuzz/oss_fuzz_prebuild.sh" ]; then
+	. tests/fuzz/oss_fuzz_prebuild.sh
+fi
+
+modules=$(find . -mindepth 1 -maxdepth 4 -type f -name 'go.mod' | cut -c 3- | sed 's|/[^/]*$$||' | sort -u | sed 's;/go.mod;;g' | sed 's;go.mod;.;g')
+
+for module in ${modules}; do
+
+	cd "${GO_SRC}/${PROJECT_PATH}/${module}"
+
+	test_files=$(grep -r --include='**_test.go' --files-with-matches 'func Fuzz' . || echo "")
+	if [ -z "${test_files}" ]; then
+		continue
+	fi
+
+	go get github.com/AdamKorcz/go-118-fuzz-build/testing
+
+	# Iterate through all Go Fuzz targets, compiling each into a fuzzer.
+	for file in ${test_files}; do
+		# If the subdir is a module, skip this file, as it will be handled
+		# at the next iteration of the outer loop. 
+		if [ -f "$(dirname "${file}")/go.mod" ]; then
+			continue
+		fi
+
+		targets=$(grep -oP 'func \K(Fuzz\w*)' "${file}")
+		for target_name in ${targets}; do
+			# Transform module path into module name (e.g. git/libgit2 to git_libgit2).
+			module_name="$(echo ${module} | tr / _)_"
+			# Compose fuzzer name based on the lowercase version of the func names.
+			# The module name is added after the fuzz prefix, for better discoverability.
+			fuzzer_name=$(echo "${target_name}" | tr '[:upper:]' '[:lower:]' | sed "s;fuzz_;fuzz_${module_name//._/};g")
+			target_dir=$(dirname "${file}")
+
+			echo "Building ${file}.${target_name} into ${fuzzer_name}"
+			compile_native_go_fuzzer "${target_dir}" "${target_name}" "${fuzzer_name}"
+		done
+	done
+done
