@@ -20,10 +20,14 @@ set -euxo pipefail
 # Use it for unsetting any environment variables that may impact other building
 # processes.
 
+if [[ -n "${PRE_LIB_FUZZING_ENGINE}" ]]; then
+	export LIB_FUZZING_ENGINE="${PRE_LIB_FUZZING_ENGINE}"
+fi
+
 unset TARGET_DIR
 unset CGO_ENABLED
 unset LIBRARY_PATH
 unset PKG_CONFIG_PATH
 unset CGO_CFLAGS
 unset CGO_LDFLAGS
-unset ADDITIONAL_LIBS
+unset PRE_LIB_FUZZING_ENGINE

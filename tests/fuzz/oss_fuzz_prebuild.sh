@@ -62,4 +62,15 @@ export PKG_CONFIG_PATH="${TARGET_DIR}/lib/pkgconfig"
 export CGO_CFLAGS="-I${TARGET_DIR}/include"
 export CGO_LDFLAGS="$(pkg-config --libs --static --cflags libgit2)"
 
-export ADDITIONAL_LIBS="${TARGET_DIR}/lib/libgit2.a"
+# Temporary hack whilst libgit2 is still in use.
+# Enables the fuzzing compilation to link libgit2.
+#
+# After building the fuzzers, the value of
+# LIB_FUZZING_ENGINE is reset to what it was before
+# it to avoid side effects onto other repositories.
+#
+# For context refer to:
+# https://github.com/google/oss-fuzz/pull/9063
+export PRE_LIB_FUZZING_ENGINE="${LIB_FUZZING_ENGINE}"
+
+export LIB_FUZZING_ENGINE="${LIB_FUZZING_ENGINE} -Wl,--start-group ${TARGET_DIR}/lib/libgit2.a"
