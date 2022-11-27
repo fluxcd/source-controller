@@ -89,24 +89,30 @@ func (s *Storage) NewArtifactFor(kind string, metadata metav1.Object, revision, 
 }
 
 // SetArtifactURL sets the URL on the given v1beta1.Artifact.
-func (s Storage) SetArtifactURL(artifact *sourcev1.Artifact) {
+func (s *Storage) SetArtifactURL(artifact *sourcev1.Artifact) {
 	if artifact.Path == "" {
 		return
 	}
 	format := "http://%s/%s"
-	if strings.HasPrefix(s.Hostname, "http://") || strings.HasPrefix(s.Hostname, "https://") {
+	if s.hasSchemeInHostname() {
 		format = "%s/%s"
 	}
 	artifact.URL = fmt.Sprintf(format, s.Hostname, strings.TrimLeft(artifact.Path, "/"))
 }
 
 // SetHostname sets the hostname of the given URL string to the current Storage.Hostname and returns the result.
-func (s Storage) SetHostname(URL string) string {
+func (s *Storage) SetHostname(URL string) string {
 	u, err := url.Parse(URL)
 	if err != nil {
 		return ""
 	}
-	u.Host = s.Hostname
+	if s.hasSchemeInHostname() {
+		su, _ := url.Parse(s.Hostname)
+		u.Host = su.Host
+		u.Scheme = su.Scheme
+	} else {
+		u.Host = s.Hostname
+	}
 	return u.String()
 }
 
@@ -602,8 +608,13 @@ func (s *Storage) Symlink(artifact sourcev1.Artifact, linkName string) (string, 
 		return "", err
 	}
 
-	url := fmt.Sprintf("http://%s/%s", s.Hostname, filepath.Join(filepath.Dir(artifact.Path), linkName))
-	return url, nil
+	format := "http://%s/%s"
+	if s.hasSchemeInHostname() {
+		format = "%s/%s"
+	}
+
+	u := fmt.Sprintf(format, s.Hostname, filepath.Join(filepath.Dir(artifact.Path), linkName))
+	return u, nil
 }
 
 // Checksum returns the SHA256 checksum for the data of the given io.Reader as a string.
@@ -630,6 +641,10 @@ func (s *Storage) LocalPath(artifact sourcev1.Artifact) string {
 		return ""
 	}
 	return path
+}
+
+func (s *Storage) hasSchemeInHostname() bool {
+	return strings.HasPrefix(s.Hostname, "http://") || strings.HasPrefix(s.Hostname, "https://")
 }
 
 // newHash returns a new SHA256 hash.
