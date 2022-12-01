@@ -345,8 +345,9 @@ func main() {
 func startFileServer(path string, address string, l logr.Logger) {
 	l.Info("starting file server")
 	fs := http.FileServer(http.Dir(path))
-	http.Handle("/", fs)
-	err := http.ListenAndServe(address, nil)
+	mux := http.NewServeMux()
+	mux.Handle("/", fs)
+	err := http.ListenAndServe(address, mux)
 	if err != nil {
 		l.Error(err, "file server error")
 	}
