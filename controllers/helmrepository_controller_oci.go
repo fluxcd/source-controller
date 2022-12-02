@@ -24,6 +24,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/google/go-containerregistry/pkg/authn"
 	helmgetter "helm.sh/helm/v3/pkg/getter"
 	helmreg "helm.sh/helm/v3/pkg/registry"
 	corev1 "k8s.io/api/core/v1"
@@ -45,7 +46,7 @@ import (
 	helper "github.com/fluxcd/pkg/runtime/controller"
 	"github.com/fluxcd/pkg/runtime/patch"
 	"github.com/fluxcd/pkg/runtime/predicates"
-	"github.com/google/go-containerregistry/pkg/authn"
+	rreconcile "github.com/fluxcd/pkg/runtime/reconcile"
 
 	"github.com/fluxcd/source-controller/api/v1beta2"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
@@ -79,6 +80,8 @@ type HelmRepositoryOCIReconciler struct {
 	Getters                 helmgetter.Providers
 	ControllerName          string
 	RegistryClientGenerator RegistryClientGeneratorFunc
+
+	patchOptions []patch.Option
 }
 
 // RegistryClientGeneratorFunc is a function that returns a registry client
@@ -92,6 +95,8 @@ func (r *HelmRepositoryOCIReconciler) SetupWithManager(mgr ctrl.Manager) error {
 }
 
 func (r *HelmRepositoryOCIReconciler) SetupWithManagerAndOptions(mgr ctrl.Manager, opts HelmRepositoryReconcilerOptions) error {
+	r.patchOptions = getPatchOptions(helmRepositoryOCIOwnedConditions, r.ControllerName)
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&sourcev1.HelmRepository{}).
 		WithEventFilter(
@@ -122,26 +127,18 @@ func (r *HelmRepositoryOCIReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	r.RecordSuspend(ctx, obj, obj.Spec.Suspend)
 
 	// Initialize the patch helper with the current version of the object.
-	patchHelper, err := patch.NewHelper(obj, r.Client)
-	if err != nil {
-		return ctrl.Result{}, err
-	}
+	serialPatcher := patch.NewSerialPatcher(obj, r.Client)
 
 	// Always attempt to patch the object after each reconciliation.
 	defer func() {
-		// Patch the object, prioritizing the conditions owned by the controller in
-		// case of any conflicts.
-		patchOpts := []patch.Option{
-			patch.WithOwnedConditions{
-				Conditions: helmRepositoryOCIOwnedConditions,
-			},
-		}
-		patchOpts = append(patchOpts, patch.WithFieldOwner(r.ControllerName))
 		// If a reconcile annotation value is found, set it in the object status
 		// as status.lastHandledReconcileAt.
 		if v, ok := meta.ReconcileAnnotationValue(obj.GetAnnotations()); ok {
 			object.SetStatusLastHandledReconcileAt(obj, v)
 		}
+
+		patchOpts := []patch.Option{}
+		patchOpts = append(patchOpts, r.patchOptions...)
 
 		// Set status observed generation option if the object is stalled, or
 		// if the object is ready.
@@ -149,7 +146,7 @@ func (r *HelmRepositoryOCIReconciler) Reconcile(ctx context.Context, req ctrl.Re
 			patchOpts = append(patchOpts, patch.WithStatusObservedGeneration{})
 		}
 
-		if err = patchHelper.Patch(ctx, obj, patchOpts...); err != nil {
+		if err := serialPatcher.Patch(ctx, obj, patchOpts...); err != nil {
 			// Ignore patch error "not found" when the object is being deleted.
 			if !obj.GetDeletionTimestamp().IsZero() {
 				err = kerrors.FilterOut(err, func(e error) bool { return apierrors.IsNotFound(e) })
@@ -188,7 +185,7 @@ func (r *HelmRepositoryOCIReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		return ctrl.Result{}, nil
 	}
 
-	result, retErr = r.reconcile(ctx, obj)
+	result, retErr = r.reconcile(ctx, serialPatcher, obj)
 	return
 }
 
@@ -198,7 +195,7 @@ func (r *HelmRepositoryOCIReconciler) Reconcile(ctx context.Context, req ctrl.Re
 // status conditions and the returned results are evaluated in the deferred
 // block at the very end to summarize the conditions to be in a consistent
 // state.
-func (r *HelmRepositoryOCIReconciler) reconcile(ctx context.Context, obj *v1beta2.HelmRepository) (result ctrl.Result, retErr error) {
+func (r *HelmRepositoryOCIReconciler) reconcile(ctx context.Context, sp *patch.SerialPatcher, obj *v1beta2.HelmRepository) (result ctrl.Result, retErr error) {
 	ctxTimeout, cancel := context.WithTimeout(ctx, obj.Spec.Timeout.Duration)
 	defer cancel()
 
@@ -224,6 +221,15 @@ func (r *HelmRepositoryOCIReconciler) reconcile(ctx context.Context, obj *v1beta
 			}
 		}
 
+		// Presence of reconciling means that the reconciliation didn't succeed.
+		// Set the Reconciling reason to ProgressingWithRetry to indicate a
+		// failure retry.
+		if conditions.IsReconciling(obj) {
+			reconciling := conditions.Get(obj, meta.ReconcilingCondition)
+			reconciling.Reason = meta.ProgressingWithRetryReason
+			conditions.Set(obj, reconciling)
+		}
+
 		// If it's still a successful reconciliation and it's not reconciling or
 		// stalled, mark Ready=True.
 		if !conditions.IsReconciling(obj) && !conditions.IsStalled(obj) &&
@@ -244,8 +250,27 @@ func (r *HelmRepositoryOCIReconciler) reconcile(ctx context.Context, obj *v1beta
 	}()
 
 	// Set reconciling condition.
-	if obj.Generation != obj.Status.ObservedGeneration {
-		conditions.MarkReconciling(obj, "NewGeneration", "reconciling new object generation (%d)", obj.Generation)
+	rreconcile.ProgressiveStatus(false, obj, meta.ProgressingReason, "reconciliation in progress")
+
+	var reconcileAtVal string
+	if v, ok := meta.ReconcileAnnotationValue(obj.GetAnnotations()); ok {
+		reconcileAtVal = v
+	}
+
+	// Persist reconciling if generation differs or reconciliation is requested.
+	switch {
+	case obj.Generation != obj.Status.ObservedGeneration:
+		rreconcile.ProgressiveStatus(false, obj, meta.ProgressingReason,
+			"processing object: new generation %d -> %d", obj.Status.ObservedGeneration, obj.Generation)
+		if err := sp.Patch(ctx, obj, r.patchOptions...); err != nil {
+			result, retErr = ctrl.Result{}, err
+			return
+		}
+	case reconcileAtVal != obj.Status.GetLastHandledReconcileRequest():
+		if err := sp.Patch(ctx, obj, r.patchOptions...); err != nil {
+			result, retErr = ctrl.Result{}, err
+			return
+		}
 	}
 
 	// Ensure that it's an OCI URL before continuing.

@@ -208,6 +208,7 @@ func TestHelmRepositoryOCIReconciler_authStrategy(t *testing.T) {
 				password: "wrong-pass",
 			},
 			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingWithRetryReason, "processing object: new generation"),
 				*conditions.FalseCondition(meta.ReadyCondition, sourcev1.AuthenticationFailedReason, "failed to login to registry"),
 			},
 		},
@@ -217,6 +218,7 @@ func TestHelmRepositoryOCIReconciler_authStrategy(t *testing.T) {
 			provider:    "aws",
 			providerImg: "oci://123456789000.dkr.ecr.us-east-2.amazonaws.com/test",
 			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingWithRetryReason, "processing object: new generation"),
 				*conditions.FalseCondition(meta.ReadyCondition, sourcev1.AuthenticationFailedReason, "failed to get credential from"),
 			},
 		},
@@ -249,6 +251,7 @@ func TestHelmRepositoryOCIReconciler_authStrategy(t *testing.T) {
 			obj := &sourcev1.HelmRepository{
 				ObjectMeta: metav1.ObjectMeta{
 					GenerateName: "auth-strategy-",
+					Generation:   1,
 				},
 				Spec: sourcev1.HelmRepositorySpec{
 					Interval: metav1.Duration{Duration: interval},
@@ -293,12 +296,27 @@ func TestHelmRepositoryOCIReconciler_authStrategy(t *testing.T) {
 				EventRecorder:           record.NewFakeRecorder(32),
 				Getters:                 testGetters,
 				RegistryClientGenerator: registry.ClientGenerator,
+				patchOptions:            getPatchOptions(helmRepositoryOCIOwnedConditions, "sc"),
 			}
 
-			got, err := r.reconcile(ctx, obj)
+			g.Expect(r.Client.Create(ctx, obj)).ToNot(HaveOccurred())
+			defer func() {
+				g.Expect(r.Client.Delete(ctx, obj)).ToNot(HaveOccurred())
+			}()
+
+			sp := patch.NewSerialPatcher(obj, r.Client)
+
+			got, err := r.reconcile(ctx, sp, obj)
 			g.Expect(err != nil).To(Equal(tt.wantErr))
 			g.Expect(got).To(Equal(tt.want))
 			g.Expect(obj.Status.Conditions).To(conditions.MatchConditions(tt.assertConditions))
+
+			// In-progress status condition validity.
+			checker := conditionscheck.NewInProgressChecker(r.Client)
+			// NOTE: Check the object directly as reconcile() doesn't apply the
+			// final patch, the object has unapplied changes.
+			checker.DisableFetch = true
+			checker.CheckErr(ctx, obj)
 		})
 	}
 }
