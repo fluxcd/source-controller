@@ -124,6 +124,15 @@ func ComputeReconcileResult(obj conditions.Setter, res Result, recErr error, rb 
 		conditions.Delete(obj, meta.ReconcilingCondition)
 	}
 
+	// Presence of reconciling means that the reconciliation didn't succeed.
+	// Set the Reconciling reason to ProgressingWithRetry to indicate a failure
+	// retry.
+	if conditions.IsReconciling(obj) {
+		reconciling := conditions.Get(obj, meta.ReconcilingCondition)
+		reconciling.Reason = meta.ProgressingWithRetryReason
+		conditions.Set(obj, reconciling)
+	}
+
 	// Analyze the reconcile error.
 	switch t := recErr.(type) {
 	case *serror.Stalling:

@@ -50,15 +50,15 @@ type Conditions struct {
 
 // Helper is SummarizeAndPatch helper.
 type Helper struct {
-	recorder    kuberecorder.EventRecorder
-	patchHelper *patch.Helper
+	recorder      kuberecorder.EventRecorder
+	serialPatcher *patch.SerialPatcher
 }
 
 // NewHelper returns an initialized Helper.
-func NewHelper(recorder kuberecorder.EventRecorder, patchHelper *patch.Helper) *Helper {
+func NewHelper(recorder kuberecorder.EventRecorder, serialPatcher *patch.SerialPatcher) *Helper {
 	return &Helper{
-		recorder:    recorder,
-		patchHelper: patchHelper,
+		recorder:      recorder,
+		serialPatcher: serialPatcher,
 	}
 }
 
@@ -250,7 +250,7 @@ func (h *Helper) SummarizeAndPatch(ctx context.Context, obj conditions.Setter, o
 	}
 
 	// Finally, patch the resource.
-	if err := h.patchHelper.Patch(ctx, obj, patchOpts...); err != nil {
+	if err := h.serialPatcher.Patch(ctx, obj, patchOpts...); err != nil {
 		// Ignore patch error "not found" when the object is being deleted.
 		if opts.IgnoreNotFound && !obj.GetDeletionTimestamp().IsZero() {
 			err = kerrors.FilterOut(err, func(e error) bool { return apierrors.IsNotFound(e) })
