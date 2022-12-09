@@ -23,36 +23,18 @@ import feathelper "github.com/fluxcd/pkg/runtime/features"
 
 const (
 	// OptimizedGitClones decreases resource utilization for GitRepository
-	// reconciliations. It supports both go-git and libgit2 implementations
-	// when cloning repositories using branches or tags.
+	// reconciliations.
 	//
 	// When enabled, avoids full clone operations by first checking whether
 	// the last revision is still the same at the target repository,
 	// and if that is so, skips the reconciliation.
 	OptimizedGitClones = "OptimizedGitClones"
-	// ForceGoGitImplementation ignores the value set for gitImplementation
-	// and ensures that go-git is used for all GitRepository objects.
-	//
-	// Libgit2 is built in C and we use the Go bindings provided by git2go
-	// to cross the C-GO chasm. Unfortunately, when libgit2 is being used the
-	// controllers are known to panic over long periods of time, or when
-	// under high GC pressure.
-	//
-	// This feature gate enables the gradual deprecation of libgit2 in favour
-	// of go-git, which so far is the most stable of the pair.
-	//
-	// When enabled, libgit2 won't be initialized, nor will any git2go CGO
-	// code be called.
-	ForceGoGitImplementation = "ForceGoGitImplementation"
 )
 
 var features = map[string]bool{
 	// OptimizedGitClones
 	// opt-out from v0.25
 	OptimizedGitClones: true,
-	// ForceGoGitImplementation
-	// opt-out from v0.32
-	ForceGoGitImplementation: true,
 }
 
 // DefaultFeatureGates contains a list of all supported feature gates and
