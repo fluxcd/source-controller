@@ -57,7 +57,6 @@ import (
 	"github.com/fluxcd/pkg/testserver"
 
 	"github.com/fluxcd/pkg/git"
-	"github.com/fluxcd/pkg/git/libgit2/transport"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
 	serror "github.com/fluxcd/source-controller/internal/error"
 	"github.com/fluxcd/source-controller/internal/features"
@@ -144,14 +143,6 @@ Oomb3gD/TRf/nAdVED+k81GdLzciYdUGtI71/qI47G0nMBluLRE=
 -----END PGP PUBLIC KEY BLOCK-----
 `
 )
-
-var (
-	testGitImplementations = []string{sourcev1.GoGitImplementation, sourcev1.LibGit2Implementation}
-)
-
-func mockTransportNotInitialized() bool {
-	return false
-}
 
 func TestGitRepositoryReconciler_Reconcile(t *testing.T) {
 	g := NewWithT(t)
@@ -240,15 +231,14 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 	}
 
 	tests := []struct {
-		name                  string
-		skipForImplementation string
-		protocol              string
-		server                options
-		secret                *corev1.Secret
-		beforeFunc            func(obj *sourcev1.GitRepository)
-		want                  sreconcile.Result
-		wantErr               bool
-		assertConditions      []metav1.Condition
+		name             string
+		protocol         string
+		server           options
+		secret           *corev1.Secret
+		beforeFunc       func(obj *sourcev1.GitRepository)
+		want             sreconcile.Result
+		wantErr          bool
+		assertConditions []metav1.Condition
 	}{
 		{
 			name:     "HTTP without secretRef makes ArtifactOutdated=True",
@@ -310,9 +300,8 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 			},
 		},
 		{
-			name:                  "HTTPS with invalid CAFile secret makes CheckoutFailed=True and returns error",
-			skipForImplementation: sourcev1.LibGit2Implementation,
-			protocol:              "https",
+			name:     "HTTPS with invalid CAFile secret makes CheckoutFailed=True and returns error",
+			protocol: "https",
 			server: options{
 				publicKey:  tlsPublicKey,
 				privateKey: tlsPrivateKey,
@@ -337,31 +326,6 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 				//
 				// Trimming the expected error message for consistent results.
 				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.GitOperationFailedReason, "x509: "),
-			},
-		},
-		{
-			name:                  "HTTPS with invalid CAFile secret makes CheckoutFailed=True and returns error",
-			skipForImplementation: sourcev1.GoGitImplementation,
-			protocol:              "https",
-			server: options{
-				publicKey:  tlsPublicKey,
-				privateKey: tlsPrivateKey,
-				ca:         tlsCA,
-			},
-			secret: &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "invalid-ca",
-				},
-				Data: map[string][]byte{
-					"caFile": []byte("invalid"),
-				},
-			},
-			beforeFunc: func(obj *sourcev1.GitRepository) {
-				obj.Spec.SecretRef = &meta.LocalObjectReference{Name: "invalid-ca"}
-			},
-			wantErr: true,
-			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.GitOperationFailedReason, "failed to checkout and determine revision: unable to fetch-connect to remote '<url>': PEM CA bundle could not be appended to x509 certificate pool"),
 			},
 		},
 		{
@@ -503,80 +467,34 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 				Storage:       testStorage,
 				features: map[string]bool{
 					features.OptimizedGitClones: true,
-					// Ensure that both implementations are tested.
-					features.ForceGoGitImplementation: false,
 				},
-				Libgit2TransportInitialized: transport.Enabled,
 			}
 
-			for _, i := range testGitImplementations {
-				t.Run(i, func(t *testing.T) {
-					g := NewWithT(t)
+			t.Run(sourcev1.GoGitImplementation, func(t *testing.T) {
+				g := NewWithT(t)
 
-					if tt.skipForImplementation == i {
-						t.Skipf("Skipped for Git implementation %q", i)
-					}
+				tmpDir := t.TempDir()
 
-					tmpDir := t.TempDir()
+				obj := obj.DeepCopy()
 
-					obj := obj.DeepCopy()
-					obj.Spec.GitImplementation = i
+				head, _ := localRepo.Head()
+				assertConditions := tt.assertConditions
+				for k := range assertConditions {
+					assertConditions[k].Message = strings.ReplaceAll(assertConditions[k].Message, "<commit>", head.Hash().String())
+					assertConditions[k].Message = strings.ReplaceAll(assertConditions[k].Message, "<url>", obj.Spec.URL)
+				}
 
-					head, _ := localRepo.Head()
-					assertConditions := tt.assertConditions
-					for k := range assertConditions {
-						assertConditions[k].Message = strings.ReplaceAll(assertConditions[k].Message, "<commit>", head.Hash().String())
-						assertConditions[k].Message = strings.ReplaceAll(assertConditions[k].Message, "<url>", obj.Spec.URL)
-					}
+				var commit git.Commit
+				var includes artifactSet
 
-					var commit git.Commit
-					var includes artifactSet
-
-					got, err := r.reconcileSource(context.TODO(), obj, &commit, &includes, tmpDir)
-					g.Expect(obj.Status.Conditions).To(conditions.MatchConditions(tt.assertConditions))
-					g.Expect(err != nil).To(Equal(tt.wantErr))
-					g.Expect(got).To(Equal(tt.want))
-					g.Expect(commit).ToNot(BeNil())
-				})
-			}
+				got, err := r.reconcileSource(context.TODO(), obj, &commit, &includes, tmpDir)
+				g.Expect(obj.Status.Conditions).To(conditions.MatchConditions(tt.assertConditions))
+				g.Expect(err != nil).To(Equal(tt.wantErr))
+				g.Expect(got).To(Equal(tt.want))
+				g.Expect(commit).ToNot(BeNil())
+			})
 		})
 	}
-}
-
-func TestGitRepositoryReconciler_reconcileSource_libgit2TransportUninitialized(t *testing.T) {
-	g := NewWithT(t)
-
-	r := &GitRepositoryReconciler{
-		Client:        fakeclient.NewClientBuilder().WithScheme(runtime.NewScheme()).Build(),
-		EventRecorder: record.NewFakeRecorder(32),
-		Storage:       testStorage,
-		features: map[string]bool{
-			features.ForceGoGitImplementation: false,
-		},
-		Libgit2TransportInitialized: mockTransportNotInitialized,
-	}
-
-	obj := &sourcev1.GitRepository{
-		ObjectMeta: metav1.ObjectMeta{
-			GenerateName: "libgit2-transport",
-		},
-		Spec: sourcev1.GitRepositorySpec{
-			Interval: metav1.Duration{Duration: interval},
-			Timeout:  &metav1.Duration{Duration: timeout},
-			Reference: &sourcev1.GitRepositoryRef{
-				Branch: git.DefaultBranch,
-			},
-			GitImplementation: sourcev1.LibGit2Implementation,
-		},
-	}
-
-	tmpDir := t.TempDir()
-	var commit git.Commit
-	var includes artifactSet
-	_, err := r.reconcileSource(ctx, obj, &commit, &includes, tmpDir)
-	g.Expect(err).To(HaveOccurred())
-	g.Expect(err).To(BeAssignableToTypeOf(&serror.Stalling{}))
-	g.Expect(err.Error()).To(Equal("libgit2 managed transport not initialized"))
 }
 
 func TestGitRepositoryReconciler_reconcileSource_checkoutStrategy(t *testing.T) {
@@ -586,14 +504,13 @@ func TestGitRepositoryReconciler_reconcileSource_checkoutStrategy(t *testing.T) 
 	tags := []string{"non-semver-tag", "v0.1.0", "0.2.0", "v0.2.1", "v1.0.0-alpha", "v1.1.0", "v2.0.0"}
 
 	tests := []struct {
-		name                  string
-		skipForImplementation string
-		reference             *sourcev1.GitRepositoryRef
-		beforeFunc            func(obj *sourcev1.GitRepository, latestRev string)
-		want                  sreconcile.Result
-		wantErr               bool
-		wantRevision          string
-		wantArtifactOutdated  bool
+		name                 string
+		reference            *sourcev1.GitRepositoryRef
+		beforeFunc           func(obj *sourcev1.GitRepository, latestRev string)
+		want                 sreconcile.Result
+		wantErr              bool
+		wantRevision         string
+		wantArtifactOutdated bool
 	}{
 		{
 			name:                 "Nil reference (default branch)",
@@ -620,25 +537,13 @@ func TestGitRepositoryReconciler_reconcileSource_checkoutStrategy(t *testing.T) 
 			wantArtifactOutdated: true,
 		},
 		{
-			name:                  "Branch commit",
-			skipForImplementation: sourcev1.LibGit2Implementation,
+			name: "Branch commit",
 			reference: &sourcev1.GitRepositoryRef{
 				Branch: "staging",
 				Commit: "<commit>",
 			},
 			want:                 sreconcile.ResultSuccess,
 			wantRevision:         "staging/<commit>",
-			wantArtifactOutdated: true,
-		},
-		{
-			name:                  "Branch commit",
-			skipForImplementation: sourcev1.GoGitImplementation,
-			reference: &sourcev1.GitRepositoryRef{
-				Branch: "staging",
-				Commit: "<commit>",
-			},
-			want:                 sreconcile.ResultSuccess,
-			wantRevision:         "HEAD/<commit>",
 			wantArtifactOutdated: true,
 		},
 		{
@@ -738,10 +643,7 @@ func TestGitRepositoryReconciler_reconcileSource_checkoutStrategy(t *testing.T) 
 		Storage:       testStorage,
 		features: map[string]bool{
 			features.OptimizedGitClones: true,
-			// Ensure that both implementations are tested.
-			features.ForceGoGitImplementation: false,
 		},
-		Libgit2TransportInitialized: transport.Enabled,
 	}
 
 	for _, tt := range tests {
@@ -762,38 +664,30 @@ func TestGitRepositoryReconciler_reconcileSource_checkoutStrategy(t *testing.T) 
 				obj.Spec.Reference.Commit = headRef.Hash().String()
 			}
 
-			for _, i := range testGitImplementations {
-				t.Run(i, func(t *testing.T) {
-					g := NewWithT(t)
+			t.Run(sourcev1.GoGitImplementation, func(t *testing.T) {
+				g := NewWithT(t)
 
-					if tt.skipForImplementation == i {
-						t.Skipf("Skipped for Git implementation %q", i)
-					}
+				tmpDir := t.TempDir()
+				obj := obj.DeepCopy()
 
-					tmpDir := t.TempDir()
+				if tt.beforeFunc != nil {
+					tt.beforeFunc(obj, headRef.Hash().String())
+				}
 
-					obj := obj.DeepCopy()
-					obj.Spec.GitImplementation = i
-
-					if tt.beforeFunc != nil {
-						tt.beforeFunc(obj, headRef.Hash().String())
-					}
-
-					var commit git.Commit
-					var includes artifactSet
-					got, err := r.reconcileSource(ctx, obj, &commit, &includes, tmpDir)
-					if err != nil {
-						println(err.Error())
-					}
-					g.Expect(err != nil).To(Equal(tt.wantErr))
-					g.Expect(got).To(Equal(tt.want))
-					if tt.wantRevision != "" && !tt.wantErr {
-						revision := strings.ReplaceAll(tt.wantRevision, "<commit>", headRef.Hash().String())
-						g.Expect(commit.String()).To(Equal(revision))
-						g.Expect(conditions.IsTrue(obj, sourcev1.ArtifactOutdatedCondition)).To(Equal(tt.wantArtifactOutdated))
-					}
-				})
-			}
+				var commit git.Commit
+				var includes artifactSet
+				got, err := r.reconcileSource(ctx, obj, &commit, &includes, tmpDir)
+				if err != nil {
+					println(err.Error())
+				}
+				g.Expect(err != nil).To(Equal(tt.wantErr))
+				g.Expect(got).To(Equal(tt.want))
+				if tt.wantRevision != "" && !tt.wantErr {
+					revision := strings.ReplaceAll(tt.wantRevision, "<commit>", headRef.Hash().String())
+					g.Expect(commit.String()).To(Equal(revision))
+					g.Expect(conditions.IsTrue(obj, sourcev1.ArtifactOutdatedCondition)).To(Equal(tt.wantArtifactOutdated))
+				}
+			})
 		})
 	}
 }
@@ -1605,11 +1499,10 @@ func TestGitRepositoryReconciler_ConditionsUpdate(t *testing.T) {
 			builder := fakeclient.NewClientBuilder().WithScheme(testEnv.GetScheme()).WithObjects(obj)
 
 			r := &GitRepositoryReconciler{
-				Client:                      builder.Build(),
-				EventRecorder:               record.NewFakeRecorder(32),
-				Storage:                     testStorage,
-				features:                    features.FeatureGates(),
-				Libgit2TransportInitialized: transport.Enabled,
+				Client:        builder.Build(),
+				EventRecorder: record.NewFakeRecorder(32),
+				Storage:       testStorage,
+				features:      features.FeatureGates(),
 			}
 
 			key := client.ObjectKeyFromObject(obj)

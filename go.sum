@@ -502,8 +502,6 @@ github.com/felixge/httpsnoop v1.0.1/go.mod h1:m8KPJKqk1gH5J9DgRY2ASl2lWCfGKXixSw
 github.com/felixge/httpsnoop v1.0.3 h1:s/nj+GCswXYzN5v2DpNMuMQYe+0DDwt5WVCU6CWBdXk=
 github.com/felixge/httpsnoop v1.0.3/go.mod h1:m8KPJKqk1gH5J9DgRY2ASl2lWCfGKXixSwevea8zH2U=
 github.com/flowstack/go-jsonschema v0.1.1/go.mod h1:yL7fNggx1o8rm9RlgXv7hTBWxdBM0rVwpMwimd3F3N0=
-github.com/fluxcd/git2go/v34 v34.0.0 h1:08PEpdbsLO4sUTvFKuxmt6xBowaqObro9veChBWFwa8=
-github.com/fluxcd/git2go/v34 v34.0.0/go.mod h1:blVco2jDAw6YTXkErMMqzHLcAjKkwF0aWIRHBqiJkZ0=
 github.com/fluxcd/gitkit v0.6.0 h1:iNg5LTx6ePo+Pl0ZwqHTAkhbUHxGVSY3YCxCdw7VIFg=
 github.com/fluxcd/gitkit v0.6.0/go.mod h1:svOHuKi0fO9HoawdK4HfHAJJseZDHHjk7I3ihnCIqNo=
 github.com/fluxcd/go-git/v5 v5.0.0-20221104190732-329fd6659b10 h1:au798417R1iWtgcgKe3Dg495mexQmuxelL+NebAtexE=
@@ -516,16 +514,12 @@ github.com/fluxcd/pkg/apis/meta v0.18.0 h1:s0LeulWcQ4DxVX6805vgDTxlA6bAYk+Lq1QHS
 github.com/fluxcd/pkg/apis/meta v0.18.0/go.mod h1:pYvXRFi1UKNNrGR34jw3uqOnMXw9X6dTkML8j5Z7tis=
 github.com/fluxcd/pkg/git v0.7.0 h1:sQHRpFMcOzEdqlyGMjFv2LKMdcoE5xeUr2UcRrsLRG8=
 github.com/fluxcd/pkg/git v0.7.0/go.mod h1:3deiLPws4DSQ3hqwtQd7Dt66GXTN/4RcT/yHAljXaHo=
-github.com/fluxcd/pkg/git/gogit v0.2.0 h1:vhFzk2Pky4tDZwisx8+26YZumRDPxERnkV8l2dbLSoo=
-github.com/fluxcd/pkg/git/gogit v0.2.0/go.mod h1:d1RIwl6DVdU8/2dBIhw6n7GNokIKqs+b9cKc/8tz7ew=
-github.com/fluxcd/pkg/git/libgit2 v0.3.0 h1:fgw/Cm7Id2AxanMab3qU+UuvdnhfwRMbbWF27xu413o=
-github.com/fluxcd/pkg/git/libgit2 v0.3.0/go.mod h1:JHeZBeq+jbUpRpP5OoEYXua0EF5dyqAlbEfYcXY228A=
+github.com/fluxcd/pkg/git/gogit v0.2.1-0.20221128153352-fbb8b9f29f38 h1:FGDncVUlMfK7eZiw0m/mWa6CGczGeGomw8jJ0uX2zIw=
+github.com/fluxcd/pkg/git/gogit v0.2.1-0.20221128153352-fbb8b9f29f38/go.mod h1:d1RIwl6DVdU8/2dBIhw6n7GNokIKqs+b9cKc/8tz7ew=
 github.com/fluxcd/pkg/gittestserver v0.8.0 h1:YrYe63KScKlLxx0GAiQthx2XqHDx0vKitIIx4JnDtIo=
 github.com/fluxcd/pkg/gittestserver v0.8.0/go.mod h1:/LI/xKMrnQbIsTDnTyABQ71iaYhFIZ8fb4cvY7WAlBU=
 github.com/fluxcd/pkg/helmtestserver v0.10.0 h1:/cnx1D6/cln7v06iXZMLeshl82mV1wv3OVZoBE9Bbm4=
 github.com/fluxcd/pkg/helmtestserver v0.10.0/go.mod h1:sJwcAw/4ENiJO6i0HJSMV8ypp7k+U4amDwH7RJ57ScY=
-github.com/fluxcd/pkg/http/transport v0.1.0 h1:tzRprpCAUkPFlF/9VMLSbw95jcAKCbimDC//VULQXnY=
-github.com/fluxcd/pkg/http/transport v0.1.0/go.mod h1:BNXQYy3ifMTc3DaOu3GlIR6j5DtTwMEyvTr2EA7XP8w=
 github.com/fluxcd/pkg/lockedfile v0.1.0 h1:YsYFAkd6wawMCcD74ikadAKXA4s2sukdxrn7w8RB5eo=
 github.com/fluxcd/pkg/lockedfile v0.1.0/go.mod h1:EJLan8t9MiOcgTs8+puDjbE6I/KAfHbdvIy9VUgIjm8=
 github.com/fluxcd/pkg/masktoken v0.2.0 h1:HoSPTk4l1fz5Fevs2vVRvZGru33blfMwWSZKsHdfG/0=
@@ -1736,7 +1730,6 @@ golang.org/x/crypto v0.0.0-20200622213623-75b288015ac9/go.mod h1:LzIPMQfyMNhhGPh
 golang.org/x/crypto v0.0.0-20200820211705-5c72a883971a/go.mod h1:LzIPMQfyMNhhGPhUkYOs5KpL4U8rLKemX1yGLhDgUto=
 golang.org/x/crypto v0.0.0-20200930160638-afb6bcd081ae/go.mod h1:LzIPMQfyMNhhGPhUkYOs5KpL4U8rLKemX1yGLhDgUto=
 golang.org/x/crypto v0.0.0-20201002170205-7f63de1d35b0/go.mod h1:LzIPMQfyMNhhGPhUkYOs5KpL4U8rLKemX1yGLhDgUto=
-golang.org/x/crypto v0.0.0-20201203163018-be400aefbc4c/go.mod h1:jdWPYTVW3xRLrWPugEBEK3UY2ZEsg3UU495nc5E+M+I=
 golang.org/x/crypto v0.0.0-20201216223049-8b5274cf687f/go.mod h1:jdWPYTVW3xRLrWPugEBEK3UY2ZEsg3UU495nc5E+M+I=
 golang.org/x/crypto v0.0.0-20210421170649-83a5a9bb288b/go.mod h1:T9bdIzuCu7OtxOm1hfPfRQxPLYneinmdGuTeoZ9dtd4=
 golang.org/x/crypto v0.0.0-20210921155107-089bfa567519/go.mod h1:GvvjBRRGRdwPK5ydBHafDWAxML/pGHZbMvKqRZ5+Abc=
@@ -1975,7 +1968,6 @@ golang.org/x/sys v0.0.0-20200930185726-fdedc70b468f/go.mod h1:h1NjWce9XRLGQEsW7w
 golang.org/x/sys v0.0.0-20201009025420-dfb3f7c4e634/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=
 golang.org/x/sys v0.0.0-20201119102817-f84b799fce68/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=
 golang.org/x/sys v0.0.0-20201201145000-ef89a241ccb3/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=
-golang.org/x/sys v0.0.0-20201204225414-ed752295db88/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=
 golang.org/x/sys v0.0.0-20210104204734-6f8348627aad/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=
 golang.org/x/sys v0.0.0-20210112080510-489259a85091/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=
 golang.org/x/sys v0.0.0-20210119212857-b64e53b001e4/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=

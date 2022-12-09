@@ -2,11 +2,6 @@ ARG BASE_VARIANT=alpine
 ARG GO_VERSION=1.19
 ARG XX_VERSION=1.1.2
 
-ARG LIBGIT2_IMG=ghcr.io/fluxcd/golang-with-libgit2-only
-ARG LIBGIT2_TAG=v0.4.0
-
-FROM ${LIBGIT2_IMG}:${LIBGIT2_TAG} AS libgit2-libs
-
 FROM --platform=$BUILDPLATFORM tonistiigi/xx:${XX_VERSION} AS xx
 
 FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-${BASE_VARIANT} as gostable
@@ -17,12 +12,18 @@ FROM gostable AS go-linux
 # These will be used at current arch to yield execute the cross compilations.
 FROM go-${TARGETOS} AS build-base
 
-RUN apk add --no-cache clang lld pkgconfig
+RUN apk add --no-cache clang lld
 
 COPY --from=xx / /
 
 # build-go-mod can still be cached at build platform architecture.
-FROM build-base as build-go-mod
+FROM build-base as build
+
+ARG TARGETPLATFORM
+
+# Some dependencies have to installed 
+# for the target platform: https://github.com/tonistiigi/xx#go--cgo
+RUN xx-apk add musl-dev gcc clang lld
 
 # Configure workspace
 WORKDIR /workspace
@@ -37,21 +38,6 @@ COPY go.sum go.sum
 # Cache modules
 RUN go mod download
 
-
-# Build stage install per target platform
-# dependency and effectively cross compile the application.
-FROM build-go-mod as build
-
-ARG TARGETPLATFORM
-
-COPY --from=libgit2-libs /usr/local/ /usr/local/
-
-# Some dependencies have to installed 
-# for the target platform: https://github.com/tonistiigi/xx#go--cgo
-RUN xx-apk add musl-dev gcc clang lld
-
-WORKDIR /workspace
-
 # Copy source code
 COPY main.go main.go
 COPY controllers/ controllers/
@@ -60,11 +46,13 @@ COPY internal/ internal/
 
 ARG TARGETPLATFORM
 ARG TARGETARCH
+
+# Reasons why CGO is in use:
+# - The SHA1 implementation (sha1cd) used by go-git depends on CGO for
+#   performance reasons. See: https://github.com/pjbgf/sha1cd/issues/15
 ENV CGO_ENABLED=1
 
-# Instead of using xx-go, (cross) compile with vanilla go leveraging musl tool chain.
-RUN export PKG_CONFIG_PATH="/usr/local/$(xx-info triple)/lib/pkgconfig" && \
-  export CGO_LDFLAGS="$(pkg-config --static --libs --cflags libgit2) -static -fuse-ld=lld" && \
+RUN export CGO_LDFLAGS="-static -fuse-ld=lld" && \
   xx-go build \
   -ldflags "-s -w" \
   -tags 'netgo,osusergo,static_build' \
@@ -72,7 +60,6 @@ RUN export PKG_CONFIG_PATH="/usr/local/$(xx-info triple)/lib/pkgconfig" && \
 
 # Ensure that the binary was cross-compiled correctly to the target platform.
 RUN xx-verify --static /source-controller
-
 
 FROM alpine:3.16
 
@@ -82,7 +69,6 @@ RUN apk --no-cache add ca-certificates \
 
 # Copy over binary from build
 COPY --from=build /source-controller /usr/local/bin/
-COPY ATTRIBUTIONS.md /
 
 USER 65534:65534
 ENTRYPOINT [ "source-controller" ]

@@ -45,7 +45,6 @@ import (
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/git"
 	"github.com/fluxcd/pkg/git/gogit"
-	"github.com/fluxcd/pkg/git/libgit2"
 	"github.com/fluxcd/pkg/git/repository"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	helper "github.com/fluxcd/pkg/runtime/controller"
@@ -116,9 +115,6 @@ type GitRepositoryReconciler struct {
 
 	Storage        *Storage
 	ControllerName string
-	// Libgit2TransportInitialized lets the reconciler know whether
-	// libgit2 transport was intialized successfully.
-	Libgit2TransportInitialized func() bool
 
 	requeueDependency time.Duration
 	features          map[string]bool
@@ -423,18 +419,6 @@ func (r *GitRepositoryReconciler) reconcileStorage(ctx context.Context,
 // change, it short-circuits the whole reconciliation with an early return.
 func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context,
 	obj *sourcev1.GitRepository, commit *git.Commit, includes *artifactSet, dir string) (sreconcile.Result, error) {
-	gitImplementation := obj.Spec.GitImplementation
-	if goGitOnly, _ := r.features[features.ForceGoGitImplementation]; goGitOnly {
-		gitImplementation = sourcev1.GoGitImplementation
-	}
-
-	// Exit early, if we need to use libgit2 AND managed transport hasn't been intialized.
-	if !r.Libgit2TransportInitialized() && gitImplementation == sourcev1.LibGit2Implementation {
-		return sreconcile.ResultEmpty, serror.NewStalling(
-			errors.New("libgit2 managed transport not initialized"), "Libgit2TransportNotEnabled",
-		)
-	}
-
 	// Remove previously failed source verification status conditions. The
 	// failing verification should be recalculated. But an existing successful
 	// verification need not be removed as it indicates verification of previous
@@ -505,7 +489,7 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context,
 		optimizedClone = true
 	}
 
-	c, err := r.gitCheckout(ctx, obj, authOpts, dir, optimizedClone, gitImplementation)
+	c, err := r.gitCheckout(ctx, obj, authOpts, dir, optimizedClone)
 	if err != nil {
 		return sreconcile.ResultEmpty, err
 	}
@@ -539,7 +523,7 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context,
 
 		// If we can't skip the reconciliation, checkout again without any
 		// optimization.
-		c, err := r.gitCheckout(ctx, obj, authOpts, dir, false, gitImplementation)
+		c, err := r.gitCheckout(ctx, obj, authOpts, dir, false)
 		if err != nil {
 			return sreconcile.ResultEmpty, err
 		}
@@ -732,7 +716,7 @@ func (r *GitRepositoryReconciler) reconcileInclude(ctx context.Context,
 // performs a git checkout.
 func (r *GitRepositoryReconciler) gitCheckout(ctx context.Context,
 	obj *sourcev1.GitRepository, authOpts *git.AuthOptions, dir string,
-	optimized bool, gitImplementation string) (*git.Commit, error) {
+	optimized bool) (*git.Commit, error) {
 	// Configure checkout strategy.
 	cloneOpts := repository.CloneOptions{
 		RecurseSubmodules: obj.Spec.RecurseSubmodules,
@@ -757,28 +741,15 @@ func (r *GitRepositoryReconciler) gitCheckout(ctx context.Context,
 	gitCtx, cancel := context.WithTimeout(ctx, obj.Spec.Timeout.Duration)
 	defer cancel()
 
-	var gitReader repository.Reader
-	var err error
-
-	switch gitImplementation {
-	case sourcev1.LibGit2Implementation:
-		clientOpts := []libgit2.ClientOption{libgit2.WithDiskStorage()}
-		if authOpts.Transport == git.HTTP {
-			clientOpts = append(clientOpts, libgit2.WithInsecureCredentialsOverHTTP())
-		}
-		gitReader, err = libgit2.NewClient(dir, authOpts, clientOpts...)
-	case sourcev1.GoGitImplementation:
-		clientOpts := []gogit.ClientOption{gogit.WithDiskStorage()}
-		if authOpts.Transport == git.HTTP {
-			clientOpts = append(clientOpts, gogit.WithInsecureCredentialsOverHTTP())
-		}
-		gitReader, err = gogit.NewClient(dir, authOpts, clientOpts...)
-	default:
-		err = fmt.Errorf("invalid Git implementation: %s", gitImplementation)
+	clientOpts := []gogit.ClientOption{gogit.WithDiskStorage()}
+	if authOpts.Transport == git.HTTP {
+		clientOpts = append(clientOpts, gogit.WithInsecureCredentialsOverHTTP())
 	}
+
+	gitReader, err := gogit.NewClient(dir, authOpts, clientOpts...)
 	if err != nil {
 		e := serror.NewGeneric(
-			fmt.Errorf("failed to create Git client for implementation '%s': %w", gitImplementation, err),
+			fmt.Errorf("failed to create Git client: %w", err),
 			sourcev1.GitOperationFailedReason,
 		)
 		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
