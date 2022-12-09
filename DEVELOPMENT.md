@@ -13,27 +13,6 @@ There are a number of dependencies required to be able to run the controller and
 - [Install Docker](https://docs.docker.com/engine/install/)
 - (Optional) [Install Kubebuilder](https://book.kubebuilder.io/quick-start.html#installation)
 
-The [libgit2](https://libgit2.org/) dependency is now automatically managed by the Makefile logic.
-However, it depends on [pkg-config](https://freedesktop.org/wiki/Software/pkg-config/) being installed:
-
-### macOS
-
-```console
-$ # Ensure pkg-config is installed
-$ brew install pkg-config
-```
-
-### Linux
-
-```console
-$ # Ensure pkg-config is installed
-$ pacman -S pkgconf
-```
-
-**Note:** Example shown is for Arch Linux, but likewise procedure can be
-followed using any other package manager. Some distributions may have slight 
-variation of package names (e.g. `apt install -y pkg-config`).
-
 In addition to the above, the following dependencies are also used by some of the `make` targets:
 
 - `controller-gen` (v0.7.0)
@@ -149,17 +128,10 @@ Create a `.vscode/launch.json` file:
             "type": "go",
             "request": "launch",
             "mode": "auto",
-            "envFile": "${workspaceFolder}/build/.env",
             "program": "${workspaceFolder}/main.go"
         }
     ]
 }
-```
-
-Create the environment file containing details on how to load 
-`libgit2` dependencies:
-```bash
-make env
 ```
 
 Start debugging by either clicking `Run` > `Start Debugging` or using
