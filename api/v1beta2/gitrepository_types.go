@@ -97,6 +97,8 @@ type GitRepositorySpec struct {
 
 	// GitImplementation specifies which Git client library implementation to
 	// use. Defaults to 'go-git', valid values are ('go-git', 'libgit2').
+	// Deprecated: gitImplementation is deprecated now that 'go-git' is the
+	// only supported implementation.
 	// +kubebuilder:validation:Enum=go-git;libgit2
 	// +kubebuilder:default:=go-git
 	// +optional
