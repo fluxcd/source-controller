@@ -37,7 +37,6 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 
 	dcontext "github.com/distribution/distribution/v3/context"
-	"github.com/fluxcd/pkg/git/libgit2/transport"
 	"github.com/fluxcd/pkg/runtime/controller"
 	"github.com/fluxcd/pkg/runtime/testenv"
 	"github.com/fluxcd/pkg/testserver"
@@ -48,7 +47,6 @@ import (
 	dockerRegistry "github.com/distribution/distribution/v3/registry"
 	_ "github.com/distribution/distribution/v3/registry/auth/htpasswd"
 	_ "github.com/distribution/distribution/v3/registry/storage/driver/inmemory"
-	git2go "github.com/libgit2/git2go/v34"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
 	"github.com/fluxcd/source-controller/internal/cache"
@@ -203,8 +201,6 @@ func setupRegistryServer(ctx context.Context, workspaceDir string, opts registry
 }
 
 func TestMain(m *testing.M) {
-	mustHaveNoThreadSupport()
-
 	initTestTLS()
 
 	utilruntime.Must(sourcev1.AddToScheme(scheme.Scheme))
@@ -237,10 +233,6 @@ func TestMain(m *testing.M) {
 		panic(fmt.Sprintf("Failed to create a test registry server: %v", err))
 	}
 
-	if err = transport.InitManagedTransport(); err != nil {
-		panic(fmt.Sprintf("Failed to initialize libgit2 managed transport: %v", err))
-	}
-
 	if err := (&GitRepositoryReconciler{
 		Client:        testEnv,
 		EventRecorder: record.NewFakeRecorder(32),
@@ -248,10 +240,7 @@ func TestMain(m *testing.M) {
 		Storage:       testStorage,
 		features: map[string]bool{
 			features.OptimizedGitClones: true,
-			// Ensure that both implementations are used during tests.
-			features.ForceGoGitImplementation: false,
 		},
-		Libgit2TransportInitialized: transport.Enabled,
 	}).SetupWithManager(testEnv); err != nil {
 		panic(fmt.Sprintf("Failed to start GitRepositoryReconciler: %v", err))
 	}
@@ -377,23 +366,4 @@ func randStringRunes(n int) string {
 
 func int64p(i int64) *int64 {
 	return &i
-}
-
-// This provides a regression assurance for image-automation-controller/#339.
-// Validates that:
-// - libgit2 was built with no support for threads.
-// - git2go accepts libgit2 built with no support for threads.
-//
-// The logic below does the validation of the former, whilst
-// referring to git2go forces its init() execution, which is
-// where any validation to that effect resides.
-//
-// git2go does not support threadless libgit2 by default,
-// hence a fork is being used which disables such validation.
-//
-// TODO: extract logic into pkg.
-func mustHaveNoThreadSupport() {
-	if git2go.Features()&git2go.FeatureThreads != 0 {
-		panic("libgit2 must not be build with thread support")
-	}
 }

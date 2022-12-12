@@ -2,10 +2,6 @@
 IMG ?= fluxcd/source-controller
 TAG ?= latest
 
-# Base image used to build the Go binary
-LIBGIT2_IMG ?= ghcr.io/fluxcd/golang-with-libgit2-only
-LIBGIT2_TAG ?= v0.4.0
-
 # Allows for defining additional Go test args, e.g. '-tags integration'.
 GO_TEST_ARGS ?= -race
 
@@ -39,14 +35,6 @@ ENVTEST_BIN_VERSION ?= 1.24.0
 # each fuzzer should run for.
 FUZZ_TIME ?= 1m
 
-# Caches libgit2 versions per tag, "forcing" rebuild only when needed.
-LIBGIT2_PATH := $(BUILD_DIR)/libgit2/$(LIBGIT2_TAG)
-LIBGIT2_LIB_PATH := $(LIBGIT2_PATH)/lib
-LIBGIT2 := $(LIBGIT2_LIB_PATH)/libgit2.a
-
-export CGO_ENABLED=1
-export PKG_CONFIG_PATH=$(LIBGIT2_LIB_PATH)/pkgconfig
-export CGO_LDFLAGS=$(shell PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) pkg-config --libs --static --cflags libgit2 2>/dev/null)
 GO_STATIC_FLAGS=-ldflags "-s -w" -tags 'netgo,osusergo,static_build$(addprefix ,,$(GO_TAGS))'
 
 # API (doc) generation utilities
@@ -75,11 +63,11 @@ endif
 
 all: build
 
-build: check-deps $(LIBGIT2) ## Build manager binary
+build: check-deps ## Build manager binary
 	go build $(GO_STATIC_FLAGS) -o $(BUILD_DIR)/bin/manager main.go
 
 KUBEBUILDER_ASSETS?="$(shell $(ENVTEST) --arch=$(ENVTEST_ARCH) use -i $(ENVTEST_KUBERNETES_VERSION) --bin-dir=$(ENVTEST_ASSETS_DIR) -p path)"
-test: $(LIBGIT2) install-envtest test-api check-deps ## Run all tests
+test: install-envtest test-api check-deps ## Run all tests
 	HTTPS_PROXY="" HTTP_PROXY="" \
 	KUBEBUILDER_ASSETS=$(KUBEBUILDER_ASSETS) \
 	GIT_CONFIG_GLOBAL=/dev/null \
@@ -88,7 +76,7 @@ test: $(LIBGIT2) install-envtest test-api check-deps ## Run all tests
 	  $(GO_TEST_ARGS) \
 	  -coverprofile cover.out
 
-test-ctrl: $(LIBGIT2) install-envtest test-api check-deps ## Run controller tests
+test-ctrl: install-envtest test-api check-deps ## Run controller tests
 	HTTPS_PROXY="" HTTP_PROXY="" \
 	KUBEBUILDER_ASSETS=$(KUBEBUILDER_ASSETS) \
 	GIT_CONFIG_GLOBAL=/dev/null \
@@ -105,7 +93,7 @@ endif
 test-api: ## Run api tests
 	cd api; go test $(GO_TEST_ARGS) ./... -coverprofile cover.out
 
-run: $(LIBGIT2) generate fmt vet manifests  ## Run against the configured Kubernetes cluster in ~/.kube/config
+run: generate fmt vet manifests  ## Run against the configured Kubernetes cluster in ~/.kube/config
 	go run $(GO_STATIC_FLAGS) ./main.go
 
 install: manifests  ## Install CRDs into a cluster
@@ -139,7 +127,7 @@ fmt:  ## Run go fmt against code
 	go fmt ./...
 	cd api; go fmt ./...
 
-vet: $(LIBGIT2)	## Run go vet against code
+vet:  ## Run go vet against code
 	go vet ./...
 	cd api; go vet ./...
 
@@ -148,8 +136,6 @@ generate: controller-gen  ## Generate API code
 
 docker-build:  ## Build the Docker image
 	docker buildx build \
-		--build-arg LIBGIT2_IMG=$(LIBGIT2_IMG) \
-		--build-arg LIBGIT2_TAG=$(LIBGIT2_TAG) \
 		--platform=$(BUILD_PLATFORMS) \
 		-t $(IMG):$(TAG) \
 		$(BUILD_ARGS) .
@@ -182,40 +168,14 @@ install-envtest: setup-envtest ## Download envtest binaries locally.
 # setup-envtest sets anything below k8s to 0555
 	chmod -R u+w $(BUILD_DIR)/testbin
 
-libgit2: $(LIBGIT2)  ## Detect or download libgit2 library
-
-COSIGN = $(GOBIN)/cosign
-$(LIBGIT2):
-	$(call go-install-tool,$(COSIGN),github.com/sigstore/cosign/cmd/cosign@latest)
-
-	IMG=$(LIBGIT2_IMG) TAG=$(LIBGIT2_TAG) PATH=$(PATH):$(GOBIN) ./hack/install-libraries.sh
-
-
 .PHONY: help
 help:  ## Display this help menu
 	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make \033[36m<target>\033[0m\n"} /^[a-zA-Z_0-9-]+:.*?##/ { printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2 } /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) } ' $(MAKEFILE_LIST)
 
-update-attributions:
-	./hack/update-attributions.sh
-
 e2e:
 	./hack/ci/e2e.sh
 
-verify: update-attributions fmt vet manifests api-docs tidy
-ifneq ($(shell grep -o 'LIBGIT2_IMG ?= \w.*' Makefile | cut -d ' ' -f 3):$(shell grep -o 'LIBGIT2_TAG ?= \w.*' Makefile | cut -d ' ' -f 3), \
-		$(shell grep -o "LIBGIT2_IMG=\w.*" Dockerfile | cut -d'=' -f2):$(shell grep -o "LIBGIT2_TAG=\w.*" Dockerfile | cut -d'=' -f2))
-	@{ \
-	echo "LIBGIT2_IMG and LIBGIT2_TAG must match in both Makefile and Dockerfile"; \
-	exit 1; \
-	}
-endif
-ifneq ($(shell grep -o 'LIBGIT2_TAG ?= \w.*' Makefile | cut -d ' ' -f 3), $(shell grep -o "LIBGIT2_TAG=.*" tests/fuzz/oss_fuzz_prebuild.sh | sed 's;LIBGIT2_TAG="$${LIBGIT2_TAG:-;;g' | sed 's;}";;g'))
-	@{ \
-	echo "LIBGIT2_TAG must match in both Makefile and tests/fuzz/oss_fuzz_prebuild.sh"; \
-	exit 1; \
-	}
-endif
-
+verify: fmt vet manifests api-docs tidy
 	@if [ ! "$$(git status --porcelain --untracked-files=no)" = "" ]; then \
 		echo "working directory is dirty:"; \
 		git --no-pager diff; \
@@ -236,7 +196,7 @@ rm -rf $$TMP_DIR ;\
 endef
 
 # Build fuzzers used by oss-fuzz.
-fuzz-build: $(LIBGIT2)
+fuzz-build:
 	rm -rf $(shell pwd)/build/fuzz/
 	mkdir -p $(shell pwd)/build/fuzz/out/
 
@@ -260,15 +220,3 @@ fuzz-native:
 	KUBEBUILDER_ASSETS=$(KUBEBUILDER_ASSETS) \
 	FUZZ_TIME=$(FUZZ_TIME) \
 		./tests/fuzz/native_go_run.sh
-
-# Creates an env file that can be used to load all source-controller's dependencies
-# this is handy when you want to run adhoc debug sessions on tests or start the 
-# controller in a new debug session.
-env: $(LIBGIT2)
-	echo 'GO_ENABLED="1"' > $(BUILD_DIR)/.env
-	echo 'PKG_CONFIG_PATH="$(PKG_CONFIG_PATH)"' >> $(BUILD_DIR)/.env
-	echo 'LIBRARY_PATH="$(LIBRARY_PATH)"' >> $(BUILD_DIR)/.env
-	echo 'CGO_CFLAGS="$(CGO_CFLAGS)"' >> $(BUILD_DIR)/.env
-	echo 'CGO_LDFLAGS="$(CGO_LDFLAGS)"' >> $(BUILD_DIR)/.env
-	echo 'KUBEBUILDER_ASSETS=$(KUBEBUILDER_ASSETS)' >> $(BUILD_DIR)/.env
-	echo 'GIT_CONFIG_GLOBAL=/dev/null' >> $(BUILD_DIR)/.env

@@ -421,7 +421,9 @@ string
 <td>
 <em>(Optional)</em>
 <p>GitImplementation specifies which Git client library implementation to
-use. Defaults to &lsquo;go-git&rsquo;, valid values are (&lsquo;go-git&rsquo;, &lsquo;libgit2&rsquo;).</p>
+use. Defaults to &lsquo;go-git&rsquo;, valid values are (&lsquo;go-git&rsquo;, &lsquo;libgit2&rsquo;).
+Deprecated: gitImplementation is deprecated now that &lsquo;go-git&rsquo; is the
+only supported implementation.</p>
 </td>
 </tr>
 <tr>
@@ -1845,7 +1847,9 @@ string
 <td>
 <em>(Optional)</em>
 <p>GitImplementation specifies which Git client library implementation to
-use. Defaults to &lsquo;go-git&rsquo;, valid values are (&lsquo;go-git&rsquo;, &lsquo;libgit2&rsquo;).</p>
+use. Defaults to &lsquo;go-git&rsquo;, valid values are (&lsquo;go-git&rsquo;, &lsquo;libgit2&rsquo;).
+Deprecated: gitImplementation is deprecated now that &lsquo;go-git&rsquo; is the
+only supported implementation.</p>
 </td>
 </tr>
 <tr>

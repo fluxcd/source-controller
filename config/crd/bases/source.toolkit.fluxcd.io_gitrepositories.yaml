@@ -411,9 +411,10 @@ spec:
                 type: object
               gitImplementation:
                 default: go-git
-                description: GitImplementation specifies which Git client library
-                  implementation to use. Defaults to 'go-git', valid values are ('go-git',
-                  'libgit2').
+                description: 'GitImplementation specifies which Git client library
+                  implementation to use. Defaults to ''go-git'', valid values are
+                  (''go-git'', ''libgit2''). Deprecated: gitImplementation is deprecated
+                  now that ''go-git'' is the only supported implementation.'
                 enum:
                 - go-git
                 - libgit2

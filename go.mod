@@ -4,14 +4,6 @@ go 1.18
 
 replace github.com/fluxcd/source-controller/api => ./api
 
-// Flux has its own git2go fork to enable changes in behaviour for improved
-// reliability.
-//
-// For more information refer to:
-// - fluxcd/image-automation-controller/#339.
-// - libgit2/git2go#918.
-replace github.com/libgit2/git2go/v34 => github.com/fluxcd/git2go/v34 v34.0.0
-
 // Fix CVE-2022-1996 (for v2, Go Modules incompatible)
 replace github.com/emicklei/go-restful => github.com/emicklei/go-restful v2.16.0+incompatible
 
@@ -33,8 +25,7 @@ require (
 	github.com/fluxcd/pkg/apis/event v0.2.0
 	github.com/fluxcd/pkg/apis/meta v0.18.0
 	github.com/fluxcd/pkg/git v0.7.0
-	github.com/fluxcd/pkg/git/gogit v0.2.0
-	github.com/fluxcd/pkg/git/libgit2 v0.3.0
+	github.com/fluxcd/pkg/git/gogit v0.2.1-0.20221128153352-fbb8b9f29f38
 	github.com/fluxcd/pkg/gittestserver v0.8.0
 	github.com/fluxcd/pkg/helmtestserver v0.10.0
 	github.com/fluxcd/pkg/lockedfile v0.1.0
@@ -52,7 +43,6 @@ require (
 	github.com/google/go-containerregistry v0.12.1
 	github.com/google/go-containerregistry/pkg/authn/k8schain v0.0.0-20221114162634-781782aa2757
 	github.com/google/uuid v1.3.0
-	github.com/libgit2/git2go/v34 v34.0.0
 	github.com/minio/minio-go/v7 v7.0.43
 	github.com/onsi/gomega v1.24.1
 	github.com/otiai10/copy v1.9.0
@@ -178,7 +168,6 @@ require (
 	github.com/felixge/httpsnoop v1.0.3 // indirect
 	github.com/fluxcd/gitkit v0.6.0 // indirect
 	github.com/fluxcd/pkg/apis/acl v0.1.0 // indirect
-	github.com/fluxcd/pkg/http/transport v0.1.0 // indirect
 	github.com/fsnotify/fsnotify v1.6.0 // indirect
 	github.com/fullstorydev/grpcurl v1.8.7 // indirect
 	github.com/go-chi/chi v4.1.2+incompatible // indirect

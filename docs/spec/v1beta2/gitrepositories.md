@@ -228,8 +228,7 @@ spec:
     branch: <branch-name>
 ```
 
-Using the [`go-git` Git implementation](#git-implementation), this will perform
-a shallow clone to only fetch the specified branch.
+This will perform a shallow clone to only fetch the specified branch.
 
 #### Tag example
 
@@ -284,9 +283,9 @@ spec:
     commit: "<commit SHA>"
 ``` 
 
-This field takes precedence over all other fields. Using the [`go-git` Git
-implementation](#git-implementation), it can be combined with `.spec.ref.branch`
-to perform a shallow clone of the branch, in which the commit must exist:
+This field takes precedence over all other fields. It can be combined with
+`.spec.ref.branch` to perform a shallow clone of the branch, in which the
+commit must exist:
 
 ```yaml
 ---
@@ -385,32 +384,13 @@ resume.
 
 ### Git implementation
 
-**Note:** `libgit2` is being deprecated, as its use is known to cause controllers
-to panic when running over long periods of time, or when under high GC pressure.
-A new opt-out feature gate `ForceGoGitImplementation` was introduced, which will
-use `go-git` regardless of the value defined at `.spec.gitImplementation`.
-This can be disabled by starting the controller with the additional flag below:
-`--feature-gates=ForceGoGitImplementation=false`.
-
-`.spec.gitImplementation` is an optional field to change the client library
-implementation used for Git operations (e.g. clone, checkout). The default
-value is `go-git`.
-
-Unless you need support for a specific Git wire protocol functionality not
-supported by the default implementation (as documented below), changing the
-implementation is generally not recommended as it can come with its own set of
-drawbacks. For example, not being able to make use of shallow clones forces the
-controller to fetch the whole Git history tree instead of a specific one,
-resulting in an increase of disk space and traffic usage.
-
-**Note:** The `libgit2` implementation does not support shallow clones or
-Git submodules.
+`.spec.gitImplementation` is deprecated and its value ignored, the git
+implementation used across Flux is go-git.
 
 #### Optimized Git clones
 
 Optimized Git clones decreases resource utilization for GitRepository
-reconciliations. It supports both `go-git` and `libgit2` implementations
-when cloning repositories using branches or tags.
+reconciliations.
 
 When enabled, it avoids full Git clone operations by first checking whether
 the revision of the last stored artifact is still the head of the remote
@@ -428,20 +408,13 @@ not affected by this functionality.
 #### Proxy support
 
 When a proxy is configured in the source-controller Pod through the appropriate
-environment variables, for example `HTTPS_PROXY`, `NO_PROXY`, etc. There may be
-some limitations in the proxy support based on the Git implementation.
-
-| Git Implementation | HTTP_PROXY | HTTPS_PROXY | NO_PROXY | Self-signed Certs |
-|--------------------|------------|-------------|----------|-------------------|
-| `go-git`           | true       | true        | true     | false             |n
-| `libgit2`          | true       | true        | true     | true              |
+environment variables, for example `HTTPS_PROXY`, `NO_PROXY`, etc.
 
 ### Recurse submodules
 
 `.spec.recurseSubmodules` is an optional field to enable the initialization of
 all submodules within the cloned Git repository, using their default settings.
-This option is only available when using the (default) `go-git` [Git
-implementation](#git-implementation), and defaults to `false`.
+This option defaults to `false`.
 
 Note that for most Git providers (e.g. GitHub and GitLab), deploy keys can not
 be used as reusing a key across multiple repositories is not allowed. You have
