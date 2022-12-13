@@ -470,29 +470,23 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 				},
 			}
 
-			t.Run(sourcev1.GoGitImplementation, func(t *testing.T) {
-				g := NewWithT(t)
+			tmpDir := t.TempDir()
 
-				tmpDir := t.TempDir()
+			head, _ := localRepo.Head()
+			assertConditions := tt.assertConditions
+			for k := range assertConditions {
+				assertConditions[k].Message = strings.ReplaceAll(assertConditions[k].Message, "<commit>", head.Hash().String())
+				assertConditions[k].Message = strings.ReplaceAll(assertConditions[k].Message, "<url>", obj.Spec.URL)
+			}
 
-				obj := obj.DeepCopy()
+			var commit git.Commit
+			var includes artifactSet
 
-				head, _ := localRepo.Head()
-				assertConditions := tt.assertConditions
-				for k := range assertConditions {
-					assertConditions[k].Message = strings.ReplaceAll(assertConditions[k].Message, "<commit>", head.Hash().String())
-					assertConditions[k].Message = strings.ReplaceAll(assertConditions[k].Message, "<url>", obj.Spec.URL)
-				}
-
-				var commit git.Commit
-				var includes artifactSet
-
-				got, err := r.reconcileSource(context.TODO(), obj, &commit, &includes, tmpDir)
-				g.Expect(obj.Status.Conditions).To(conditions.MatchConditions(tt.assertConditions))
-				g.Expect(err != nil).To(Equal(tt.wantErr))
-				g.Expect(got).To(Equal(tt.want))
-				g.Expect(commit).ToNot(BeNil())
-			})
+			got, err := r.reconcileSource(context.TODO(), obj, &commit, &includes, tmpDir)
+			g.Expect(obj.Status.Conditions).To(conditions.MatchConditions(tt.assertConditions))
+			g.Expect(err != nil).To(Equal(tt.wantErr))
+			g.Expect(got).To(Equal(tt.want))
+			g.Expect(commit).ToNot(BeNil())
 		})
 	}
 }
@@ -664,30 +658,25 @@ func TestGitRepositoryReconciler_reconcileSource_checkoutStrategy(t *testing.T) 
 				obj.Spec.Reference.Commit = headRef.Hash().String()
 			}
 
-			t.Run(sourcev1.GoGitImplementation, func(t *testing.T) {
-				g := NewWithT(t)
+			tmpDir := t.TempDir()
 
-				tmpDir := t.TempDir()
-				obj := obj.DeepCopy()
+			if tt.beforeFunc != nil {
+				tt.beforeFunc(obj, headRef.Hash().String())
+			}
 
-				if tt.beforeFunc != nil {
-					tt.beforeFunc(obj, headRef.Hash().String())
-				}
-
-				var commit git.Commit
-				var includes artifactSet
-				got, err := r.reconcileSource(ctx, obj, &commit, &includes, tmpDir)
-				if err != nil {
-					println(err.Error())
-				}
-				g.Expect(err != nil).To(Equal(tt.wantErr))
-				g.Expect(got).To(Equal(tt.want))
-				if tt.wantRevision != "" && !tt.wantErr {
-					revision := strings.ReplaceAll(tt.wantRevision, "<commit>", headRef.Hash().String())
-					g.Expect(commit.String()).To(Equal(revision))
-					g.Expect(conditions.IsTrue(obj, sourcev1.ArtifactOutdatedCondition)).To(Equal(tt.wantArtifactOutdated))
-				}
-			})
+			var commit git.Commit
+			var includes artifactSet
+			got, err := r.reconcileSource(ctx, obj, &commit, &includes, tmpDir)
+			if err != nil {
+				println(err.Error())
+			}
+			g.Expect(err != nil).To(Equal(tt.wantErr))
+			g.Expect(got).To(Equal(tt.want))
+			if tt.wantRevision != "" && !tt.wantErr {
+				revision := strings.ReplaceAll(tt.wantRevision, "<commit>", headRef.Hash().String())
+				g.Expect(commit.String()).To(Equal(revision))
+				g.Expect(conditions.IsTrue(obj, sourcev1.ArtifactOutdatedCondition)).To(Equal(tt.wantArtifactOutdated))
+			}
 		})
 	}
 }
