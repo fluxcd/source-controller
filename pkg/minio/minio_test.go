@@ -24,16 +24,18 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/google/uuid"
+	miniov7 "github.com/minio/minio-go/v7"
+	"github.com/ory/dockertest/v3"
+	"gotest.tools/assert"
+	corev1 "k8s.io/api/core/v1"
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/sourceignore"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
-
-	"github.com/google/uuid"
-	miniov7 "github.com/minio/minio-go/v7"
-	"gotest.tools/assert"
-	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 const (
@@ -42,16 +44,31 @@ const (
 )
 
 var (
-	minioClient *MinioClient
-	bucketName  = "test-bucket-minio" + uuid.New().String()
-	secret      = corev1.Secret{
+	// testMinioVersion is the version (image tag) of the Minio server image
+	// used to test against.
+	testMinioVersion = "RELEASE.2022-12-12T19-27-27Z"
+	// testMinioRootUser is the root user of the Minio server.
+	testMinioRootUser = "fluxcd"
+	// testMinioRootPassword is the root password of the Minio server.
+	testMinioRootPassword = "passw0rd!"
+	// testVaultAddress is the address of the Minio server, it is set
+	// by TestMain after booting it.
+	testMinioAddress string
+	// testMinioClient is the Minio client used to test against, it is set
+	// by TestMain after booting the Minio server.
+	testMinioClient *MinioClient
+)
+
+var (
+	bucketName = "test-bucket-minio" + uuid.New().String()
+	secret     = corev1.Secret{
 		ObjectMeta: v1.ObjectMeta{
 			Name:      "minio-secret",
 			Namespace: "default",
 		},
 		Data: map[string][]byte{
-			"accesskey": []byte("Q3AM3UQ867SPQQA43P2F"),
-			"secretkey": []byte("zuf+tfteSlswRu7BJ86wekitnifILbZam1KYY3TG"),
+			"accesskey": []byte(testMinioRootUser),
+			"secretkey": []byte(testMinioRootPassword),
 		},
 		Type: "Opaque",
 	}
@@ -70,9 +87,7 @@ var (
 		},
 		Spec: sourcev1.BucketSpec{
 			BucketName: bucketName,
-			Endpoint:   "play.min.io",
 			Provider:   "generic",
-			Insecure:   true,
 			SecretRef: &meta.LocalObjectReference{
 				Name: secret.Name,
 			},
@@ -85,20 +100,69 @@ var (
 		},
 		Spec: sourcev1.BucketSpec{
 			BucketName: bucketName,
-			Endpoint:   "play.min.io",
 			Provider:   "aws",
-			Insecure:   true,
 		},
 	}
 )
 
 func TestMain(m *testing.M) {
-	var err error
-	ctx := context.Background()
-	minioClient, err = NewClient(bucket.DeepCopy(), secret.DeepCopy())
+	// Uses a sensible default on Windows (TCP/HTTP) and Linux/MacOS (socket)
+	pool, err := dockertest.NewPool("")
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("could not connect to docker: %s", err)
 	}
+
+	// Pull the image, create a container based on it, and run it
+	resource, err := pool.RunWithOptions(&dockertest.RunOptions{
+		Repository: "minio/minio",
+		Tag:        testMinioVersion,
+		ExposedPorts: []string{
+			"9000/tcp",
+			"9001/tcp",
+		},
+		Env: []string{
+			"MINIO_ROOT_USER=" + testMinioRootUser,
+			"MINIO_ROOT_PASSWORD=" + testMinioRootPassword,
+		},
+		Cmd: []string{"server", "/data", "--console-address", ":9001"},
+	})
+	if err != nil {
+		log.Fatalf("could not start resource: %s", err)
+	}
+
+	purgeResource := func() {
+		if err := pool.Purge(resource); err != nil {
+			log.Printf("could not purge resource: %s", err)
+		}
+	}
+
+	// Set the address of the Minio server used for testing.
+	testMinioAddress = fmt.Sprintf("127.0.0.1:%v", resource.GetPort("9000/tcp"))
+
+	// Construct a Minio client using the address of the Minio server.
+	testMinioClient, err = NewClient(bucketStub(bucket, testMinioAddress), secret.DeepCopy())
+	if err != nil {
+		log.Fatalf("cannot create Minio client: %s", err)
+	}
+
+	// Wait until Minio is ready to serve requests...
+	if err := pool.Retry(func() error {
+		hCancel, err := testMinioClient.HealthCheck(1 * time.Second)
+		if err != nil {
+			log.Fatalf("cannot start Minio health check: %s", err)
+		}
+		defer hCancel()
+
+		if !testMinioClient.IsOnline() {
+			return fmt.Errorf("client is offline: Minio is not ready")
+		}
+		return nil
+	}); err != nil {
+		purgeResource()
+		log.Fatalf("could not connect to docker: %s", err)
+	}
+
+	ctx := context.Background()
 	createBucket(ctx)
 	addObjectToBucket(ctx)
 	run := m.Run()
@@ -108,33 +172,33 @@ func TestMain(m *testing.M) {
 }
 
 func TestNewClient(t *testing.T) {
-	minioClient, err := NewClient(bucket.DeepCopy(), secret.DeepCopy())
+	minioClient, err := NewClient(bucketStub(bucket, testMinioAddress), secret.DeepCopy())
 	assert.NilError(t, err)
 	assert.Assert(t, minioClient != nil)
 }
 
 func TestNewClientEmptySecret(t *testing.T) {
-	minioClient, err := NewClient(bucket.DeepCopy(), emptySecret.DeepCopy())
+	minioClient, err := NewClient(bucketStub(bucket, testMinioAddress), emptySecret.DeepCopy())
 	assert.NilError(t, err)
 	assert.Assert(t, minioClient != nil)
 }
 
 func TestNewClientAwsProvider(t *testing.T) {
-	minioClient, err := NewClient(bucketAwsProvider.DeepCopy(), nil)
+	minioClient, err := NewClient(bucketStub(bucketAwsProvider, testMinioAddress), nil)
 	assert.NilError(t, err)
 	assert.Assert(t, minioClient != nil)
 }
 
 func TestBucketExists(t *testing.T) {
 	ctx := context.Background()
-	exists, err := minioClient.BucketExists(ctx, bucketName)
+	exists, err := testMinioClient.BucketExists(ctx, bucketName)
 	assert.NilError(t, err)
 	assert.Assert(t, exists)
 }
 
 func TestBucketNotExists(t *testing.T) {
 	ctx := context.Background()
-	exists, err := minioClient.BucketExists(ctx, "notexistsbucket")
+	exists, err := testMinioClient.BucketExists(ctx, "notexistsbucket")
 	assert.NilError(t, err)
 	assert.Assert(t, !exists)
 }
@@ -143,7 +207,7 @@ func TestFGetObject(t *testing.T) {
 	ctx := context.Background()
 	tempDir := t.TempDir()
 	path := filepath.Join(tempDir, sourceignore.IgnoreFile)
-	_, err := minioClient.FGetObject(ctx, bucketName, objectName, path)
+	_, err := testMinioClient.FGetObject(ctx, bucketName, objectName, path)
 	assert.NilError(t, err)
 }
 
@@ -152,15 +216,15 @@ func TestFGetObjectNotExists(t *testing.T) {
 	tempDir := t.TempDir()
 	badKey := "invalid.txt"
 	path := filepath.Join(tempDir, badKey)
-	_, err := minioClient.FGetObject(ctx, bucketName, badKey, path)
+	_, err := testMinioClient.FGetObject(ctx, bucketName, badKey, path)
 	assert.Error(t, err, "The specified key does not exist.")
-	assert.Check(t, minioClient.ObjectIsNotFound(err))
+	assert.Check(t, testMinioClient.ObjectIsNotFound(err))
 }
 
 func TestVisitObjects(t *testing.T) {
 	keys := []string{}
 	etags := []string{}
-	err := minioClient.VisitObjects(context.TODO(), bucketName, func(key, etag string) error {
+	err := testMinioClient.VisitObjects(context.TODO(), bucketName, func(key, etag string) error {
 		keys = append(keys, key)
 		etags = append(etags, etag)
 		return nil
@@ -173,7 +237,7 @@ func TestVisitObjects(t *testing.T) {
 func TestVisitObjectsErr(t *testing.T) {
 	ctx := context.Background()
 	badBucketName := "bad-bucket"
-	err := minioClient.VisitObjects(ctx, badBucketName, func(string, string) error {
+	err := testMinioClient.VisitObjects(ctx, badBucketName, func(string, string) error {
 		return nil
 	})
 	assert.Error(t, err, fmt.Sprintf("listing objects from bucket '%s' failed: The specified bucket does not exist", badBucketName))
@@ -181,7 +245,7 @@ func TestVisitObjectsErr(t *testing.T) {
 
 func TestVisitObjectsCallbackErr(t *testing.T) {
 	mockErr := fmt.Errorf("mock")
-	err := minioClient.VisitObjects(context.TODO(), bucketName, func(key, etag string) error {
+	err := testMinioClient.VisitObjects(context.TODO(), bucketName, func(key, etag string) error {
 		return mockErr
 	})
 	assert.Error(t, err, mockErr.Error())
@@ -222,19 +286,26 @@ func TestValidateSecret(t *testing.T) {
 	}
 }
 
+func bucketStub(bucket sourcev1.Bucket, endpoint string) *sourcev1.Bucket {
+	b := bucket.DeepCopy()
+	b.Spec.Endpoint = endpoint
+	b.Spec.Insecure = true
+	return b
+}
+
 func createBucket(ctx context.Context) {
-	if err := minioClient.Client.MakeBucket(ctx, bucketName, miniov7.MakeBucketOptions{}); err != nil {
-		exists, errBucketExists := minioClient.BucketExists(ctx, bucketName)
+	if err := testMinioClient.Client.MakeBucket(ctx, bucketName, miniov7.MakeBucketOptions{}); err != nil {
+		exists, errBucketExists := testMinioClient.BucketExists(ctx, bucketName)
 		if errBucketExists == nil && exists {
 			deleteBucket(ctx)
 		} else {
-			log.Fatalln(err)
+			log.Fatalf("could not create bucket: %s", err)
 		}
 	}
 }
 
 func deleteBucket(ctx context.Context) {
-	if err := minioClient.Client.RemoveBucket(ctx, bucketName); err != nil {
+	if err := testMinioClient.Client.RemoveBucket(ctx, bucketName); err != nil {
 		log.Println(err)
 	}
 }
@@ -242,7 +313,7 @@ func deleteBucket(ctx context.Context) {
 func addObjectToBucket(ctx context.Context) {
 	fileReader := strings.NewReader(getObjectFile())
 	fileSize := fileReader.Size()
-	_, err := minioClient.Client.PutObject(ctx, bucketName, objectName, fileReader, fileSize, miniov7.PutObjectOptions{
+	_, err := testMinioClient.Client.PutObject(ctx, bucketName, objectName, fileReader, fileSize, miniov7.PutObjectOptions{
 		ContentType: "text/x-yaml",
 	})
 	if err != nil {
@@ -251,7 +322,7 @@ func addObjectToBucket(ctx context.Context) {
 }
 
 func removeObjectFromBucket(ctx context.Context) {
-	if err := minioClient.Client.RemoveObject(ctx, bucketName, objectName, miniov7.RemoveObjectOptions{
+	if err := testMinioClient.Client.RemoveObject(ctx, bucketName, objectName, miniov7.RemoveObjectOptions{
 		GovernanceBypass: true,
 	}); err != nil {
 		log.Println(err)
