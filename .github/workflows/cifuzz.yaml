@@ -8,30 +8,27 @@ on:
       - 'README.md'
       - 'MAINTAINERS'
 
-permissions:
-  contents: read
+permissions: {}
   
 jobs:
   Fuzzing:
-    runs-on: ubuntu-latest
-    steps:
-    - name: Checkout
-      uses: actions/checkout@v3
-    - name: Setup Go
-      uses: actions/setup-go@v3
-      with:
-        go-version: 1.19.x
-    - id: go-env
-      run: |
-        echo "::set-output name=go-mod-cache::$(go env GOMODCACHE)"
-    - name: Restore Go cache
-      uses: actions/cache@v3
-      with:
-        path: ${{ steps.go-env.outputs.go-mod-cache }}
-        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-        restore-keys: |
-          ${{ runner.os }}-go
-    - name: Smoke test Fuzzers
-      run: make fuzz-smoketest
-      env:
-        SKIP_COSIGN_VERIFICATION: true
+   runs-on: ubuntu-latest
+   steps:
+   - name: Build Fuzzers
+     id: build
+     uses: google/oss-fuzz/infra/cifuzz/actions/build_fuzzers@master
+     with:
+       oss-fuzz-project-name: 'fluxcd'
+       language: go
+   - name: Run Fuzzers
+     uses: google/oss-fuzz/infra/cifuzz/actions/run_fuzzers@master
+     with:
+       oss-fuzz-project-name: 'fluxcd'
+       language: go
+       fuzz-seconds: 120
+   - name: Upload Crash
+     uses: actions/upload-artifact@v3
+     if: failure() && steps.build.outcome == 'success'
+     with:
+       name: artifacts
+       path: ./out/artifacts

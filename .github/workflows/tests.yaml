@@ -93,5 +93,5 @@ jobs:
           echo "DOCKER_HOST=unix://$HOME/.colima/default/docker.sock" >> $GITHUB_ENV
       - name: Run tests
         run: make test
-        env:
-          SKIP_COSIGN_VERIFICATION: true
+      - name: Smoke test Fuzzers
+        run: make fuzz-smoketest
