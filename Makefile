@@ -8,9 +8,6 @@ GO_TEST_ARGS ?= -race
 # Allows for filtering tests based on the specified prefix
 GO_TEST_PREFIX ?=
 
-# Defines whether cosign verification should be skipped.
-SKIP_COSIGN_VERIFICATION ?= false
-
 # Allows for defining additional Docker buildx arguments,
 # e.g. '--push'.
 BUILD_ARGS ?=
