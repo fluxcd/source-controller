@@ -30,7 +30,7 @@ require (
 	github.com/fluxcd/pkg/helmtestserver v0.10.0
 	github.com/fluxcd/pkg/lockedfile v0.1.0
 	github.com/fluxcd/pkg/masktoken v0.2.0
-	github.com/fluxcd/pkg/oci v0.15.0
+	github.com/fluxcd/pkg/oci v0.17.0
 	github.com/fluxcd/pkg/runtime v0.24.0
 	github.com/fluxcd/pkg/sourceignore v0.3.0
 	github.com/fluxcd/pkg/ssh v0.7.0
@@ -109,21 +109,20 @@ require (
 	github.com/alibabacloud-go/tea-xml v1.1.2 // indirect
 	github.com/aliyun/credentials-go v1.2.3 // indirect
 	github.com/asaskevich/govalidator v0.0.0-20210307081110-f21760c49a8d // indirect
-	github.com/aws/aws-sdk-go v1.44.137 // indirect
-	github.com/aws/aws-sdk-go-v2 v1.16.16 // indirect
-	github.com/aws/aws-sdk-go-v2/config v1.17.8 // indirect
-	github.com/aws/aws-sdk-go-v2/credentials v1.12.21 // indirect
-	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.12.17 // indirect
-	github.com/aws/aws-sdk-go-v2/internal/configsources v1.1.23 // indirect
-	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.4.17 // indirect
-	github.com/aws/aws-sdk-go-v2/internal/ini v1.3.24 // indirect
-	github.com/aws/aws-sdk-go-v2/service/ecr v1.17.18 // indirect
+	github.com/aws/aws-sdk-go-v2 v1.17.2 // indirect
+	github.com/aws/aws-sdk-go-v2/config v1.18.4 // indirect
+	github.com/aws/aws-sdk-go-v2/credentials v1.13.4 // indirect
+	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.12.20 // indirect
+	github.com/aws/aws-sdk-go-v2/internal/configsources v1.1.26 // indirect
+	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.4.20 // indirect
+	github.com/aws/aws-sdk-go-v2/internal/ini v1.3.27 // indirect
+	github.com/aws/aws-sdk-go-v2/service/ecr v1.17.22 // indirect
 	github.com/aws/aws-sdk-go-v2/service/ecrpublic v1.13.17 // indirect
-	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.9.17 // indirect
-	github.com/aws/aws-sdk-go-v2/service/sso v1.11.23 // indirect
-	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.13.6 // indirect
-	github.com/aws/aws-sdk-go-v2/service/sts v1.16.19 // indirect
-	github.com/aws/smithy-go v1.13.3 // indirect
+	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.9.20 // indirect
+	github.com/aws/aws-sdk-go-v2/service/sso v1.11.26 // indirect
+	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.13.9 // indirect
+	github.com/aws/aws-sdk-go-v2/service/sts v1.17.6 // indirect
+	github.com/aws/smithy-go v1.13.5 // indirect
 	github.com/awslabs/amazon-ecr-credential-helper/ecr-login v0.0.0-20221004211355-a250ad2ca1e3 // indirect
 	github.com/benbjohnson/clock v1.1.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
