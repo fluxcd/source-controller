@@ -11,21 +11,21 @@ replace github.com/emicklei/go-restful => github.com/emicklei/go-restful v2.16.0
 replace github.com/go-git/go-billy/v5 => github.com/go-git/go-billy/v5 v5.0.0-20210804024030-7ab80d7c013d
 
 require (
-	cloud.google.com/go/storage v1.28.0
-	github.com/AdaLogics/go-fuzz-headers v0.0.0-20221103172237-443f56ff4ba8
+	cloud.google.com/go/storage v1.28.1
+	github.com/AdaLogics/go-fuzz-headers v0.0.0-20221206110420-d395f97c4830
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.2.0
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.2.0
-	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v0.5.1
+	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v0.6.1
 	github.com/Masterminds/semver/v3 v3.2.0
 	github.com/cyphar/filepath-securejoin v0.2.3
-	github.com/distribution/distribution/v3 v3.0.0-20221111170714-3b8fbf975279
-	github.com/docker/cli v20.10.21+incompatible
+	github.com/distribution/distribution/v3 v3.0.0-20221208165359-362910506bc2
+	github.com/docker/cli v20.10.22+incompatible
 	github.com/docker/go-units v0.5.0
 	github.com/fluxcd/go-git/v5 v5.0.0-20221206140629-ec778c2c37df
 	github.com/fluxcd/pkg/apis/event v0.2.0
 	github.com/fluxcd/pkg/apis/meta v0.18.0
 	github.com/fluxcd/pkg/git v0.7.0
-	github.com/fluxcd/pkg/git/gogit v0.3.2
+	github.com/fluxcd/pkg/git/gogit v0.4.0
 	github.com/fluxcd/pkg/gittestserver v0.8.0
 	github.com/fluxcd/pkg/helmtestserver v0.10.0
 	github.com/fluxcd/pkg/lockedfile v0.1.0
@@ -41,27 +41,27 @@ require (
 	github.com/go-git/go-billy/v5 v5.3.1
 	github.com/go-logr/logr v1.2.3
 	github.com/google/go-containerregistry v0.12.1
-	github.com/google/go-containerregistry/pkg/authn/k8schain v0.0.0-20221114162634-781782aa2757
+	github.com/google/go-containerregistry/pkg/authn/k8schain v0.0.0-20221213180026-23d895d08035
 	github.com/google/uuid v1.3.0
-	github.com/minio/minio-go/v7 v7.0.43
-	github.com/onsi/gomega v1.24.1
+	github.com/minio/minio-go/v7 v7.0.45
+	github.com/onsi/gomega v1.24.2
 	github.com/ory/dockertest/v3 v3.9.1
 	github.com/otiai10/copy v1.9.0
 	github.com/phayes/freeport v0.0.0-20220201140144-74d24b5ae9f5
 	github.com/prometheus/client_golang v1.14.0
 	github.com/sigstore/cosign v1.13.1
-	github.com/sigstore/sigstore v1.4.5
+	github.com/sigstore/sigstore v1.5.0
 	github.com/sirupsen/logrus v1.9.0
 	github.com/spf13/pflag v1.0.5
-	golang.org/x/crypto v0.3.0
+	golang.org/x/crypto v0.4.0
 	golang.org/x/sync v0.1.0
-	google.golang.org/api v0.103.0
+	google.golang.org/api v0.105.0
 	gotest.tools v2.2.0+incompatible
 	helm.sh/helm/v3 v3.10.3
 	k8s.io/api v0.25.4
 	k8s.io/apimachinery v0.25.4
 	k8s.io/client-go v0.25.4
-	k8s.io/utils v0.0.0-20221108210102-8e77b1f39fe2
+	k8s.io/utils v0.0.0-20221128185143-99ec85e7a448
 	sigs.k8s.io/cli-utils v0.34.0
 	sigs.k8s.io/controller-runtime v0.13.1
 	sigs.k8s.io/yaml v1.3.0
@@ -70,11 +70,11 @@ require (
 require (
 	bitbucket.org/creachadair/shell v0.0.7 // indirect
 	cloud.google.com/go v0.105.0 // indirect
-	cloud.google.com/go/compute v1.12.1 // indirect
-	cloud.google.com/go/compute/metadata v0.2.1 // indirect
-	cloud.google.com/go/iam v0.7.0 // indirect
+	cloud.google.com/go/compute v1.13.0 // indirect
+	cloud.google.com/go/compute/metadata v0.2.2 // indirect
+	cloud.google.com/go/iam v0.8.0 // indirect
 	github.com/AliyunContainerService/ack-ram-tool/pkg/credentials/alibabacloudsdkgo/helper v0.2.0 // indirect
-	github.com/Azure/azure-sdk-for-go v67.0.0+incompatible // indirect
+	github.com/Azure/azure-sdk-for-go v67.1.0+incompatible // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/internal v1.0.1 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20210617225240-d185dfc1b5a1 // indirect
 	github.com/Azure/go-autorest v14.2.0+incompatible // indirect
@@ -234,7 +234,7 @@ require (
 	github.com/inconshreveable/mousetrap v1.0.1 // indirect
 	github.com/jbenet/go-context v0.0.0-20150711004518-d14ea06fba99 // indirect
 	github.com/jedisct1/go-minisign v0.0.0-20211028175153-1c139d1cc84b // indirect
-	github.com/jhump/protoreflect v1.13.0 // indirect
+	github.com/jhump/protoreflect v1.14.0 // indirect
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/jmoiron/sqlx v1.3.5 // indirect
 	github.com/jonboulle/clockwork v0.3.0 // indirect
@@ -248,7 +248,7 @@ require (
 	github.com/lann/builder v0.0.0-20180802200727-47ae307949d0 // indirect
 	github.com/lann/ps v0.0.0-20150810152359-62de8c46ede0 // indirect
 	github.com/leodido/go-urn v1.2.1 // indirect
-	github.com/letsencrypt/boulder v0.0.0-20220929215747-76583552c2be // indirect
+	github.com/letsencrypt/boulder v0.0.0-20221109233200-85aa52084eaf // indirect
 	github.com/lib/pq v1.10.7 // indirect
 	github.com/liggitt/tabwriter v0.0.0-20181228230101-89fcab3d43de // indirect
 	github.com/magiconair/properties v1.8.6 // indirect
@@ -363,18 +363,18 @@ require (
 	go.uber.org/zap v1.23.0 // indirect
 	golang.org/x/exp v0.0.0-20220823124025-807a23277127 // indirect
 	golang.org/x/mod v0.7.0 // indirect
-	golang.org/x/net v0.2.0 // indirect
-	golang.org/x/oauth2 v0.2.0 // indirect
-	golang.org/x/sys v0.2.0 // indirect
-	golang.org/x/term v0.2.0 // indirect
-	golang.org/x/text v0.4.0 // indirect
+	golang.org/x/net v0.4.0 // indirect
+	golang.org/x/oauth2 v0.3.0 // indirect
+	golang.org/x/sys v0.3.0 // indirect
+	golang.org/x/term v0.3.0 // indirect
+	golang.org/x/text v0.5.0 // indirect
 	golang.org/x/time v0.2.0 // indirect
 	golang.org/x/tools v0.3.0 // indirect
 	golang.org/x/xerrors v0.0.0-20220907171357-04be3eba64a2 // indirect
 	gomodules.xyz/jsonpatch/v2 v2.2.0 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
-	google.golang.org/genproto v0.0.0-20221114212237-e4508ebdbee1 // indirect
-	google.golang.org/grpc v1.50.1 // indirect
+	google.golang.org/genproto v0.0.0-20221206210731-b1a01be3a5f6 // indirect
+	google.golang.org/grpc v1.51.0 // indirect
 	google.golang.org/protobuf v1.28.1 // indirect
 	gopkg.in/cheggaaa/pb.v1 v1.0.28 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
