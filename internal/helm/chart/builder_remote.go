@@ -128,8 +128,17 @@ func (b *remoteChartBuilder) downloadFromRepository(ctx context.Context, remote 
 	// Get the current version for the RemoteReference
 	cv, err := remote.GetChartVersion(remoteRef.Name, remoteRef.Version)
 	if err != nil {
+		var reason BuildErrorReason
+		switch err.(type) {
+		case *repository.ErrReference:
+			reason = ErrChartReference
+		case *repository.ErrExternal:
+			reason = ErrChartPull
+		default:
+			reason = ErrUnknown
+		}
 		err = fmt.Errorf("failed to get chart version for remote reference: %w", err)
-		return nil, nil, &BuildError{Reason: ErrChartReference, Err: err}
+		return nil, nil, &BuildError{Reason: reason, Err: err}
 	}
 
 	// Verify the chart if necessary

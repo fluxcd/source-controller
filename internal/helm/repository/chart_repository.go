@@ -158,9 +158,17 @@ func newChartRepository() *ChartRepository {
 func (r *ChartRepository) GetChartVersion(name, ver string) (*repo.ChartVersion, error) {
 	// See if we already have the index in cache or try to load it.
 	if err := r.StrategicallyLoadIndex(); err != nil {
-		return nil, err
+		return nil, &ErrExternal{Err: err}
 	}
 
+	cv, err := r.getChartVersion(name, ver)
+	if err != nil {
+		return nil, &ErrReference{Err: err}
+	}
+	return cv, nil
+}
+
+func (r *ChartRepository) getChartVersion(name, ver string) (*repo.ChartVersion, error) {
 	r.RLock()
 	defer r.RUnlock()
 
