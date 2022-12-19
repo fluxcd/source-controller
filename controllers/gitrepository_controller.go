@@ -295,8 +295,8 @@ func (r *GitRepositoryReconciler) notify(ctx context.Context, oldObj, newObj *so
 	// and recovery from any failure.
 	if r.shouldNotify(oldObj, newObj, res, resErr) {
 		annotations := map[string]string{
-			sourcev1.GroupVersion.Group + "/revision": newObj.Status.Artifact.Revision,
-			sourcev1.GroupVersion.Group + "/checksum": newObj.Status.Artifact.Checksum,
+			fmt.Sprintf("%s/%s", sourcev1.GroupVersion.Group, eventv1.MetaRevisionKey): newObj.Status.Artifact.Revision,
+			fmt.Sprintf("%s/%s", sourcev1.GroupVersion.Group, eventv1.MetaChecksumKey): newObj.Status.Artifact.Checksum,
 		}
 
 		var oldChecksum string

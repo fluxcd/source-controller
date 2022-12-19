@@ -1098,8 +1098,8 @@ func (r *OCIRepositoryReconciler) notify(ctx context.Context, oldObj, newObj *so
 	// failure.
 	if resErr == nil && res == sreconcile.ResultSuccess && newObj.Status.Artifact != nil {
 		annotations := map[string]string{
-			sourcev1.GroupVersion.Group + "/revision": newObj.Status.Artifact.Revision,
-			sourcev1.GroupVersion.Group + "/checksum": newObj.Status.Artifact.Checksum,
+			fmt.Sprintf("%s/%s", sourcev1.GroupVersion.Group, eventv1.MetaRevisionKey): newObj.Status.Artifact.Revision,
+			fmt.Sprintf("%s/%s", sourcev1.GroupVersion.Group, eventv1.MetaChecksumKey): newObj.Status.Artifact.Checksum,
 		}
 
 		var oldChecksum string
