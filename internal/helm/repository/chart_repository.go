@@ -156,6 +156,11 @@ func newChartRepository() *ChartRepository {
 // to be a semver.Constraints compatible string. If version is empty, the latest
 // stable version will be returned and prerelease versions will be ignored.
 func (r *ChartRepository) GetChartVersion(name, ver string) (*repo.ChartVersion, error) {
+	// See if we already have the index in cache or try to load it.
+	if err := r.StrategicallyLoadIndex(); err != nil {
+		return nil, &ErrExternal{Err: err}
+	}
+
 	cv, err := r.getChartVersion(name, ver)
 	if err != nil {
 		return nil, &ErrReference{Err: err}
@@ -164,11 +169,6 @@ func (r *ChartRepository) GetChartVersion(name, ver string) (*repo.ChartVersion,
 }
 
 func (r *ChartRepository) getChartVersion(name, ver string) (*repo.ChartVersion, error) {
-	// See if we already have the index in cache or try to load it.
-	if err := r.StrategicallyLoadIndex(); err != nil {
-		return nil, err
-	}
-
 	r.RLock()
 	defer r.RUnlock()
 
