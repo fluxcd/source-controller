@@ -676,12 +676,12 @@ is true:
 - The newly fetched Artifact revision differs from the current Artifact.
 
 When the HelmRepository is "reconciling", the `Ready` Condition status becomes
-`False`, and the controller adds a Condition with the following attributes to
-the HelmRepository's `.status.conditions`:
+`Unknown` when the controller detects drift, and the controller adds a Condition
+with the following attributes to the HelmRepository's `.status.conditions`:
 
 - `type: Reconciling`
 - `status: "True"`
-- `reason: NewGeneration` | `reason: NoArtifact` | `reason: NewRevision`
+- `reason: Progressing` | `reason: ProgressingWithRetry`
 
 If the reconciling state is due to a new revision, it adds an additional
 Condition with the following attributes:
@@ -760,7 +760,10 @@ until it succeeds and the HelmRepository is marked as [ready](#ready-helmreposit
 
 Note that a HelmRepository can be [reconciling](#reconciling-helmrepository)
 while failing at the same time, for example due to a newly introduced
-configuration issue in the HelmRepository spec.
+configuration issue in the HelmRepository spec. When a reconciliation fails, the
+`Reconciling` Condition reason would be `ProgressingWithRetry`. When the
+reconciliation is performed again after the failure, the reason is updated to
+`Progressing`.
 
 #### Stalled HelmRepository
 

@@ -633,12 +633,12 @@ following is true:
 - The newly fetched Artifact revision differs from the current Artifact.
 
 When the HelmChart is "reconciling", the `Ready` Condition status becomes
-`False`, and the controller adds a Condition with the following attributes to
-the HelmChart's `.status.conditions`:
+`Unknown` when the controller detects drift, and the controller adds a Condition
+with the following attributes to the HelmChart's `.status.conditions`:
 
 - `type: Reconciling`
 - `status: "True"`
-- `reason: NewGeneration` | `reason: NoArtifact`
+- `reason: Progressing` | `reason: ProgressingWithRetry`
 
 If the reconciling state is due to a new version, it adds an additional
 Condition with the following attributes:
@@ -715,7 +715,10 @@ until it succeeds and the HelmChart is marked as [ready](#ready-helmchart).
 
 Note that a HelmChart can be [reconciling](#reconciling-helmchart)
 while failing at the same time, for example due to a newly introduced
-configuration issue in the HelmChart spec.
+configuration issue in the HelmChart spec. When a reconciliation fails, the
+`Reconciling` Condition reason would be `ProgressingWithRetry`. When the
+reconciliation is performed again after the failure, the reason is updated to
+`Progressing`.
 
 #### Stalled HelmChart
 
