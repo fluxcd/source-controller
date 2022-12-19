@@ -218,6 +218,10 @@ func (dm *DependencyManager) addLocalDependency(ref LocalReference, c *chartWith
 		return err
 	}
 
+	if dep.Alias != "" {
+		ch.Metadata.Name = dep.Alias
+	}
+
 	c.mu.Lock()
 	c.AddDependency(ch)
 	c.mu.Unlock()
@@ -244,6 +248,10 @@ func (dm *DependencyManager) addRemoteDependency(chart *chartWithLock, dep *helm
 	ch, err := secureloader.LoadArchive(res)
 	if err != nil {
 		return fmt.Errorf("failed to load downloaded archive of version '%s': %w", ver.Version, err)
+	}
+
+	if dep.Alias != "" {
+		ch.Metadata.Name = dep.Alias
 	}
 
 	chart.mu.Lock()

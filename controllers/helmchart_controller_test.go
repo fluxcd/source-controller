@@ -60,6 +60,7 @@ import (
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
 	serror "github.com/fluxcd/source-controller/internal/error"
 	"github.com/fluxcd/source-controller/internal/helm/chart"
+	"github.com/fluxcd/source-controller/internal/helm/chart/secureloader"
 	"github.com/fluxcd/source-controller/internal/helm/registry"
 	"github.com/fluxcd/source-controller/internal/oci"
 	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
@@ -1159,6 +1160,11 @@ func TestHelmChartReconciler_buildFromTarballArtifact(t *testing.T) {
 				g.Expect(build.Version).To(Equal("0.1.0"))
 				g.Expect(build.ResolvedDependencies).To(Equal(4))
 				g.Expect(build.Path).To(BeARegularFile())
+				chart, err := secureloader.LoadFile(build.Path)
+				g.Expect(err).ToNot(HaveOccurred())
+				g.Expect(chart.Metadata.Name).To(Equal("helmchartwithdeps"))
+				g.Expect(chart.Metadata.Version).To(Equal("0.1.0"))
+				g.Expect(chart.Dependencies()).To(HaveLen(4))
 			},
 			cleanFunc: func(g *WithT, build *chart.Build) {
 				g.Expect(os.Remove(build.Path)).To(Succeed())
