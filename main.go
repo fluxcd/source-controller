@@ -135,7 +135,7 @@ func main() {
 	flag.StringSliceVar(&git.HostKeyAlgos, "ssh-hostkey-algos", []string{},
 		"The list of hostkey algorithms to use for ssh connections, arranged from most preferred to the least.")
 	flag.DurationVar(&artifactRetentionTTL, "artifact-retention-ttl", 60*time.Second,
-		"The duration of time that artifacts will be kept in storage before being garbage collected.")
+		"The duration of time that artifacts from previous reconcilations will be kept in storage before being garbage collected.")
 	flag.IntVar(&artifactRetentionRecords, "artifact-retention-records", 2,
 		"The maximum number of artifacts to be kept in storage after a garbage collection.")
 
