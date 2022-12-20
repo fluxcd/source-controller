@@ -2,6 +2,55 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.33.0
+
+**Release date:** 2022-12-20
+
+This prerelease comes with dedicated mux for the controller's fileserver. All code references to `libgit2` were removed, and the `spec.gitImplementation`
+field is no longer being honored, but rather `go-git` is used.
+For more information, refer to version 0.32.0's changelog, which started `libgit2`'s
+deprecation process.
+
+The controller's garbage collection now takes into consideration
+lock files.
+
+The feature gate `ForceGoGitImplementation` was removed, users passing it as their
+controller's startup args will need to remove it before upgrading.
+
+Fixes:
+- git: Fix issue with recurseSubmodules
+  [#975](https://github.com/fluxcd/source-controller/pull/975)
+- Fix aliased chart dependencies resolution
+  [#988](https://github.com/fluxcd/source-controller/pull/988)
+
+Improvements:
+- fileserver: Use new ServeMux
+  [#972](https://github.com/fluxcd/source-controller/pull/972)
+- Remove libgit2 and git2go from codebase
+  [#977](https://github.com/fluxcd/source-controller/pull/977)
+- Use Event v1 API metadata keys in notifications
+  [#990](https://github.com/fluxcd/source-controller/pull/990)
+- storage: take lock files into consideration while garbage collecting
+  [#991](https://github.com/fluxcd/source-controller/pull/991)
+- Migrate to Go Native fuzz and improve reliability
+  [#965](https://github.com/fluxcd/source-controller/pull/965)
+- build: Add tidy to make verify
+  [#966](https://github.com/fluxcd/source-controller/pull/966)
+- build: Add postbuild script for fuzzing
+  [#968](https://github.com/fluxcd/source-controller/pull/968)
+- build: Link libgit2 via LIB_FUZZING_ENGINE
+  [#969](https://github.com/fluxcd/source-controller/pull/969)
+- GitRepo: git impl. deprecation test cleanup
+  [#980](https://github.com/fluxcd/source-controller/pull/980)
+- minio: use container image for tests
+  [#981](https://github.com/fluxcd/source-controller/pull/981)
+- helm: Update SDK to v3.10.3
+  [#982](https://github.com/fluxcd/source-controller/pull/982)
+- Update fluxcd/pkg/oci dependency
+  [#983](https://github.com/fluxcd/source-controller/pull/983)
+- Update dependencies
+  [#985](https://github.com/fluxcd/source-controller/pull/985)
+
 ## 0.32.1
 
 **Release date:** 2022-11-18
