@@ -479,10 +479,52 @@ func TestStorage_getGarbageFiles(t *testing.T) {
 			},
 		},
 		{
+			name: "delete files based on maxItemsToBeRetained, ignore lock files",
+			artifactPaths: []string{
+				path.Join(artifactFolder, "artifact1.tar.gz"),
+				path.Join(artifactFolder, "artifact1.tar.gz.lock"),
+				path.Join(artifactFolder, "artifact2.tar.gz"),
+				path.Join(artifactFolder, "artifact2.tar.gz.lock"),
+				path.Join(artifactFolder, "artifact3.tar.gz"),
+				path.Join(artifactFolder, "artifact3.tar.gz.lock"),
+				path.Join(artifactFolder, "artifact4.tar.gz"),
+				path.Join(artifactFolder, "artifact5.tar.gz"),
+			},
+			createPause:          time.Millisecond * 10,
+			ttl:                  time.Minute * 2,
+			totalCountLimit:      10,
+			maxItemsToBeRetained: 2,
+			wantDeleted: []string{
+				path.Join(artifactFolder, "artifact1.tar.gz"),
+				path.Join(artifactFolder, "artifact2.tar.gz"),
+				path.Join(artifactFolder, "artifact3.tar.gz"),
+			},
+		},
+		{
 			name: "delete files based on ttl",
 			artifactPaths: []string{
 				path.Join(artifactFolder, "artifact1.tar.gz"),
 				path.Join(artifactFolder, "artifact2.tar.gz"),
+				path.Join(artifactFolder, "artifact3.tar.gz"),
+				path.Join(artifactFolder, "artifact4.tar.gz"),
+				path.Join(artifactFolder, "artifact5.tar.gz"),
+			},
+			createPause:          time.Second * 1,
+			ttl:                  time.Second*3 + time.Millisecond*500,
+			totalCountLimit:      10,
+			maxItemsToBeRetained: 4,
+			wantDeleted: []string{
+				path.Join(artifactFolder, "artifact1.tar.gz"),
+				path.Join(artifactFolder, "artifact2.tar.gz"),
+			},
+		},
+		{
+			name: "delete files based on ttl, ignore lock files",
+			artifactPaths: []string{
+				path.Join(artifactFolder, "artifact1.tar.gz"),
+				path.Join(artifactFolder, "artifact1.tar.gz.lock"),
+				path.Join(artifactFolder, "artifact2.tar.gz"),
+				path.Join(artifactFolder, "artifact2.tar.gz.lock"),
 				path.Join(artifactFolder, "artifact3.tar.gz"),
 				path.Join(artifactFolder, "artifact4.tar.gz"),
 				path.Join(artifactFolder, "artifact5.tar.gz"),
@@ -580,6 +622,7 @@ func TestStorage_GarbageCollect(t *testing.T) {
 	tests := []struct {
 		name          string
 		artifactPaths []string
+		wantCollected []string
 		wantDeleted   []string
 		wantErr       string
 		ctxTimeout    time.Duration
@@ -588,13 +631,21 @@ func TestStorage_GarbageCollect(t *testing.T) {
 			name: "garbage collects",
 			artifactPaths: []string{
 				path.Join(artifactFolder, "artifact1.tar.gz"),
+				path.Join(artifactFolder, "artifact1.tar.gz.lock"),
 				path.Join(artifactFolder, "artifact2.tar.gz"),
+				path.Join(artifactFolder, "artifact2.tar.gz.lock"),
 				path.Join(artifactFolder, "artifact3.tar.gz"),
 				path.Join(artifactFolder, "artifact4.tar.gz"),
 			},
-			wantDeleted: []string{
+			wantCollected: []string{
 				path.Join(artifactFolder, "artifact1.tar.gz"),
 				path.Join(artifactFolder, "artifact2.tar.gz"),
+			},
+			wantDeleted: []string{
+				path.Join(artifactFolder, "artifact1.tar.gz"),
+				path.Join(artifactFolder, "artifact1.tar.gz.lock"),
+				path.Join(artifactFolder, "artifact2.tar.gz"),
+				path.Join(artifactFolder, "artifact2.tar.gz.lock"),
 			},
 			ctxTimeout: time.Second * 1,
 		},
@@ -632,28 +683,31 @@ func TestStorage_GarbageCollect(t *testing.T) {
 				}
 			}
 
-			deletedPaths, err := s.GarbageCollect(context.TODO(), artifact, tt.ctxTimeout)
+			collectedPaths, err := s.GarbageCollect(context.TODO(), artifact, tt.ctxTimeout)
 			if tt.wantErr == "" {
 				g.Expect(err).ToNot(HaveOccurred(), "failed to collect garbage files")
 			} else {
 				g.Expect(err).To(HaveOccurred())
 				g.Expect(err.Error()).To(ContainSubstring(tt.wantErr))
 			}
-			if len(tt.wantDeleted) > 0 {
-				g.Expect(len(tt.wantDeleted)).To(Equal(len(deletedPaths)))
-				for _, wantDeletedPath := range tt.wantDeleted {
+			if len(tt.wantCollected) > 0 {
+				g.Expect(len(tt.wantCollected)).To(Equal(len(collectedPaths)))
+				for _, wantCollectedPath := range tt.wantCollected {
 					present := false
-					for _, deletedPath := range deletedPaths {
-						if strings.Contains(deletedPath, wantDeletedPath) {
-							g.Expect(deletedPath).ToNot(BeAnExistingFile())
+					for _, collectedPath := range collectedPaths {
+						if strings.Contains(collectedPath, wantCollectedPath) {
+							g.Expect(collectedPath).ToNot(BeAnExistingFile())
 							present = true
 							break
 						}
 					}
 					if present == false {
-						g.Fail(fmt.Sprintf("expected file to be deleted, still exists: %s", wantDeletedPath))
+						g.Fail(fmt.Sprintf("expected file to be garbage collected, still exists: %s", wantCollectedPath))
 					}
 				}
+			}
+			for _, delFile := range tt.wantDeleted {
+				g.Expect(filepath.Join(dir, delFile)).ToNot(BeAnExistingFile())
 			}
 		})
 	}
