@@ -1394,6 +1394,9 @@ func TestHelmChartReconciler_buildFromTarballArtifact(t *testing.T) {
 			}
 
 			got, err := r.buildFromTarballArtifact(context.TODO(), obj, tt.source, &b)
+			if err != nil {
+				t.Log(err)
+			}
 			g.Expect(err != nil).To(Equal(tt.wantErr != nil))
 			if tt.wantErr != nil {
 				g.Expect(reflect.TypeOf(err).String()).To(Equal(reflect.TypeOf(tt.wantErr).String()))
