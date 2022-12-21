@@ -23,7 +23,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -268,7 +267,7 @@ func TestStorageRemoveAllButCurrent(t *testing.T) {
 			t.Fatalf("Valid path did not successfully return: %v", err)
 		}
 
-		if _, err := s.RemoveAllButCurrent(sourcev1.Artifact{Path: path.Join(dir, "really", "nonexistent")}); err == nil {
+		if _, err := s.RemoveAllButCurrent(sourcev1.Artifact{Path: filepath.Join(dir, "really", "nonexistent")}); err == nil {
 			t.Fatal("Did not error while pruning non-existent path")
 		}
 	})
@@ -281,18 +280,18 @@ func TestStorageRemoveAllButCurrent(t *testing.T) {
 		g.Expect(err).ToNot(HaveOccurred(), "failed to create new storage")
 
 		artifact := sourcev1.Artifact{
-			Path: path.Join("foo", "bar", "artifact1.tar.gz"),
+			Path: filepath.Join("foo", "bar", "artifact1.tar.gz"),
 		}
 
 		// Create artifact dir and artifacts.
-		artifactDir := path.Join(dir, "foo", "bar")
+		artifactDir := filepath.Join(dir, "foo", "bar")
 		g.Expect(os.MkdirAll(artifactDir, 0o750)).NotTo(HaveOccurred())
 		current := []string{
-			path.Join(artifactDir, "artifact1.tar.gz"),
+			filepath.Join(artifactDir, "artifact1.tar.gz"),
 		}
 		wantDeleted := []string{
-			path.Join(artifactDir, "file1.txt"),
-			path.Join(artifactDir, "file2.txt"),
+			filepath.Join(artifactDir, "file1.txt"),
+			filepath.Join(artifactDir, "file2.txt"),
 		}
 		createFile := func(files []string) {
 			for _, c := range files {
@@ -321,15 +320,15 @@ func TestStorageRemoveAll(t *testing.T) {
 	}{
 		{
 			name:               "delete non-existent path",
-			artifactPath:       path.Join("foo", "bar", "artifact1.tar.gz"),
+			artifactPath:       filepath.Join("foo", "bar", "artifact1.tar.gz"),
 			createArtifactPath: false,
 			wantDeleted:        "",
 		},
 		{
 			name:               "delete existing path",
-			artifactPath:       path.Join("foo", "bar", "artifact1.tar.gz"),
+			artifactPath:       filepath.Join("foo", "bar", "artifact1.tar.gz"),
 			createArtifactPath: true,
-			wantDeleted:        path.Join("foo", "bar"),
+			wantDeleted:        filepath.Join("foo", "bar"),
 		},
 	}
 
@@ -346,7 +345,7 @@ func TestStorageRemoveAll(t *testing.T) {
 			}
 
 			if tt.createArtifactPath {
-				g.Expect(os.MkdirAll(path.Join(dir, tt.artifactPath), 0o750)).ToNot(HaveOccurred())
+				g.Expect(os.MkdirAll(filepath.Join(dir, tt.artifactPath), 0o750)).ToNot(HaveOccurred())
 			}
 
 			deleted, err := s.RemoveAll(artifact)
@@ -449,7 +448,7 @@ func TestStorageCopyFromPath(t *testing.T) {
 }
 
 func TestStorage_getGarbageFiles(t *testing.T) {
-	artifactFolder := path.Join("foo", "bar")
+	artifactFolder := filepath.Join("foo", "bar")
 	tests := []struct {
 		name                 string
 		artifactPaths        []string
@@ -462,77 +461,119 @@ func TestStorage_getGarbageFiles(t *testing.T) {
 		{
 			name: "delete files based on maxItemsToBeRetained",
 			artifactPaths: []string{
-				path.Join(artifactFolder, "artifact1.tar.gz"),
-				path.Join(artifactFolder, "artifact2.tar.gz"),
-				path.Join(artifactFolder, "artifact3.tar.gz"),
-				path.Join(artifactFolder, "artifact4.tar.gz"),
-				path.Join(artifactFolder, "artifact5.tar.gz"),
+				filepath.Join(artifactFolder, "artifact1.tar.gz"),
+				filepath.Join(artifactFolder, "artifact2.tar.gz"),
+				filepath.Join(artifactFolder, "artifact3.tar.gz"),
+				filepath.Join(artifactFolder, "artifact4.tar.gz"),
+				filepath.Join(artifactFolder, "artifact5.tar.gz"),
 			},
 			createPause:          time.Millisecond * 10,
 			ttl:                  time.Minute * 2,
 			totalCountLimit:      10,
 			maxItemsToBeRetained: 2,
 			wantDeleted: []string{
-				path.Join(artifactFolder, "artifact1.tar.gz"),
-				path.Join(artifactFolder, "artifact2.tar.gz"),
-				path.Join(artifactFolder, "artifact3.tar.gz"),
+				filepath.Join(artifactFolder, "artifact1.tar.gz"),
+				filepath.Join(artifactFolder, "artifact2.tar.gz"),
+				filepath.Join(artifactFolder, "artifact3.tar.gz"),
+			},
+		},
+		{
+			name: "delete files based on maxItemsToBeRetained, ignore lock files",
+			artifactPaths: []string{
+				filepath.Join(artifactFolder, "artifact1.tar.gz"),
+				filepath.Join(artifactFolder, "artifact1.tar.gz.lock"),
+				filepath.Join(artifactFolder, "artifact2.tar.gz"),
+				filepath.Join(artifactFolder, "artifact2.tar.gz.lock"),
+				filepath.Join(artifactFolder, "artifact3.tar.gz"),
+				filepath.Join(artifactFolder, "artifact3.tar.gz.lock"),
+				filepath.Join(artifactFolder, "artifact4.tar.gz"),
+				filepath.Join(artifactFolder, "artifact5.tar.gz"),
+			},
+			createPause:          time.Millisecond * 10,
+			ttl:                  time.Minute * 2,
+			totalCountLimit:      10,
+			maxItemsToBeRetained: 2,
+			wantDeleted: []string{
+				filepath.Join(artifactFolder, "artifact1.tar.gz"),
+				filepath.Join(artifactFolder, "artifact2.tar.gz"),
+				filepath.Join(artifactFolder, "artifact3.tar.gz"),
 			},
 		},
 		{
 			name: "delete files based on ttl",
 			artifactPaths: []string{
-				path.Join(artifactFolder, "artifact1.tar.gz"),
-				path.Join(artifactFolder, "artifact2.tar.gz"),
-				path.Join(artifactFolder, "artifact3.tar.gz"),
-				path.Join(artifactFolder, "artifact4.tar.gz"),
-				path.Join(artifactFolder, "artifact5.tar.gz"),
+				filepath.Join(artifactFolder, "artifact1.tar.gz"),
+				filepath.Join(artifactFolder, "artifact2.tar.gz"),
+				filepath.Join(artifactFolder, "artifact3.tar.gz"),
+				filepath.Join(artifactFolder, "artifact4.tar.gz"),
+				filepath.Join(artifactFolder, "artifact5.tar.gz"),
 			},
 			createPause:          time.Second * 1,
 			ttl:                  time.Second*3 + time.Millisecond*500,
 			totalCountLimit:      10,
 			maxItemsToBeRetained: 4,
 			wantDeleted: []string{
-				path.Join(artifactFolder, "artifact1.tar.gz"),
-				path.Join(artifactFolder, "artifact2.tar.gz"),
+				filepath.Join(artifactFolder, "artifact1.tar.gz"),
+				filepath.Join(artifactFolder, "artifact2.tar.gz"),
+			},
+		},
+		{
+			name: "delete files based on ttl, ignore lock files",
+			artifactPaths: []string{
+				filepath.Join(artifactFolder, "artifact1.tar.gz"),
+				filepath.Join(artifactFolder, "artifact1.tar.gz.lock"),
+				filepath.Join(artifactFolder, "artifact2.tar.gz"),
+				filepath.Join(artifactFolder, "artifact2.tar.gz.lock"),
+				filepath.Join(artifactFolder, "artifact3.tar.gz"),
+				filepath.Join(artifactFolder, "artifact4.tar.gz"),
+				filepath.Join(artifactFolder, "artifact5.tar.gz"),
+			},
+			createPause:          time.Second * 1,
+			ttl:                  time.Second*3 + time.Millisecond*500,
+			totalCountLimit:      10,
+			maxItemsToBeRetained: 4,
+			wantDeleted: []string{
+				filepath.Join(artifactFolder, "artifact1.tar.gz"),
+				filepath.Join(artifactFolder, "artifact2.tar.gz"),
 			},
 		},
 		{
 			name: "delete files based on ttl and maxItemsToBeRetained",
 			artifactPaths: []string{
-				path.Join(artifactFolder, "artifact1.tar.gz"),
-				path.Join(artifactFolder, "artifact2.tar.gz"),
-				path.Join(artifactFolder, "artifact3.tar.gz"),
-				path.Join(artifactFolder, "artifact4.tar.gz"),
-				path.Join(artifactFolder, "artifact5.tar.gz"),
-				path.Join(artifactFolder, "artifact6.tar.gz"),
+				filepath.Join(artifactFolder, "artifact1.tar.gz"),
+				filepath.Join(artifactFolder, "artifact2.tar.gz"),
+				filepath.Join(artifactFolder, "artifact3.tar.gz"),
+				filepath.Join(artifactFolder, "artifact4.tar.gz"),
+				filepath.Join(artifactFolder, "artifact5.tar.gz"),
+				filepath.Join(artifactFolder, "artifact6.tar.gz"),
 			},
 			createPause:          time.Second * 1,
 			ttl:                  time.Second*5 + time.Millisecond*500,
 			totalCountLimit:      10,
 			maxItemsToBeRetained: 4,
 			wantDeleted: []string{
-				path.Join(artifactFolder, "artifact1.tar.gz"),
-				path.Join(artifactFolder, "artifact2.tar.gz"),
+				filepath.Join(artifactFolder, "artifact1.tar.gz"),
+				filepath.Join(artifactFolder, "artifact2.tar.gz"),
 			},
 		},
 		{
 			name: "delete files based on ttl and maxItemsToBeRetained and totalCountLimit",
 			artifactPaths: []string{
-				path.Join(artifactFolder, "artifact1.tar.gz"),
-				path.Join(artifactFolder, "artifact2.tar.gz"),
-				path.Join(artifactFolder, "artifact3.tar.gz"),
-				path.Join(artifactFolder, "artifact4.tar.gz"),
-				path.Join(artifactFolder, "artifact5.tar.gz"),
-				path.Join(artifactFolder, "artifact6.tar.gz"),
+				filepath.Join(artifactFolder, "artifact1.tar.gz"),
+				filepath.Join(artifactFolder, "artifact2.tar.gz"),
+				filepath.Join(artifactFolder, "artifact3.tar.gz"),
+				filepath.Join(artifactFolder, "artifact4.tar.gz"),
+				filepath.Join(artifactFolder, "artifact5.tar.gz"),
+				filepath.Join(artifactFolder, "artifact6.tar.gz"),
 			},
 			createPause:          time.Millisecond * 500,
 			ttl:                  time.Millisecond * 500,
 			totalCountLimit:      3,
 			maxItemsToBeRetained: 2,
 			wantDeleted: []string{
-				path.Join(artifactFolder, "artifact1.tar.gz"),
-				path.Join(artifactFolder, "artifact2.tar.gz"),
-				path.Join(artifactFolder, "artifact3.tar.gz"),
+				filepath.Join(artifactFolder, "artifact1.tar.gz"),
+				filepath.Join(artifactFolder, "artifact2.tar.gz"),
+				filepath.Join(artifactFolder, "artifact3.tar.gz"),
 			},
 		},
 	}
@@ -548,9 +589,9 @@ func TestStorage_getGarbageFiles(t *testing.T) {
 			artifact := sourcev1.Artifact{
 				Path: tt.artifactPaths[len(tt.artifactPaths)-1],
 			}
-			g.Expect(os.MkdirAll(path.Join(dir, artifactFolder), 0o750)).ToNot(HaveOccurred())
+			g.Expect(os.MkdirAll(filepath.Join(dir, artifactFolder), 0o750)).ToNot(HaveOccurred())
 			for _, artifactPath := range tt.artifactPaths {
-				f, err := os.Create(path.Join(dir, artifactPath))
+				f, err := os.Create(filepath.Join(dir, artifactPath))
 				g.Expect(err).ToNot(HaveOccurred())
 				g.Expect(f.Close()).ToNot(HaveOccurred())
 				time.Sleep(tt.createPause)
@@ -576,10 +617,11 @@ func TestStorage_getGarbageFiles(t *testing.T) {
 }
 
 func TestStorage_GarbageCollect(t *testing.T) {
-	artifactFolder := path.Join("foo", "bar")
+	artifactFolder := filepath.Join("foo", "bar")
 	tests := []struct {
 		name          string
 		artifactPaths []string
+		wantCollected []string
 		wantDeleted   []string
 		wantErr       string
 		ctxTimeout    time.Duration
@@ -587,24 +629,32 @@ func TestStorage_GarbageCollect(t *testing.T) {
 		{
 			name: "garbage collects",
 			artifactPaths: []string{
-				path.Join(artifactFolder, "artifact1.tar.gz"),
-				path.Join(artifactFolder, "artifact2.tar.gz"),
-				path.Join(artifactFolder, "artifact3.tar.gz"),
-				path.Join(artifactFolder, "artifact4.tar.gz"),
+				filepath.Join(artifactFolder, "artifact1.tar.gz"),
+				filepath.Join(artifactFolder, "artifact1.tar.gz.lock"),
+				filepath.Join(artifactFolder, "artifact2.tar.gz"),
+				filepath.Join(artifactFolder, "artifact2.tar.gz.lock"),
+				filepath.Join(artifactFolder, "artifact3.tar.gz"),
+				filepath.Join(artifactFolder, "artifact4.tar.gz"),
+			},
+			wantCollected: []string{
+				filepath.Join(artifactFolder, "artifact1.tar.gz"),
+				filepath.Join(artifactFolder, "artifact2.tar.gz"),
 			},
 			wantDeleted: []string{
-				path.Join(artifactFolder, "artifact1.tar.gz"),
-				path.Join(artifactFolder, "artifact2.tar.gz"),
+				filepath.Join(artifactFolder, "artifact1.tar.gz"),
+				filepath.Join(artifactFolder, "artifact1.tar.gz.lock"),
+				filepath.Join(artifactFolder, "artifact2.tar.gz"),
+				filepath.Join(artifactFolder, "artifact2.tar.gz.lock"),
 			},
 			ctxTimeout: time.Second * 1,
 		},
 		{
 			name: "garbage collection fails with context timeout",
 			artifactPaths: []string{
-				path.Join(artifactFolder, "artifact1.tar.gz"),
-				path.Join(artifactFolder, "artifact2.tar.gz"),
-				path.Join(artifactFolder, "artifact3.tar.gz"),
-				path.Join(artifactFolder, "artifact4.tar.gz"),
+				filepath.Join(artifactFolder, "artifact1.tar.gz"),
+				filepath.Join(artifactFolder, "artifact2.tar.gz"),
+				filepath.Join(artifactFolder, "artifact3.tar.gz"),
+				filepath.Join(artifactFolder, "artifact4.tar.gz"),
 			},
 			wantErr:    "context deadline exceeded",
 			ctxTimeout: time.Nanosecond * 1,
@@ -622,9 +672,9 @@ func TestStorage_GarbageCollect(t *testing.T) {
 			artifact := sourcev1.Artifact{
 				Path: tt.artifactPaths[len(tt.artifactPaths)-1],
 			}
-			g.Expect(os.MkdirAll(path.Join(dir, artifactFolder), 0o750)).ToNot(HaveOccurred())
+			g.Expect(os.MkdirAll(filepath.Join(dir, artifactFolder), 0o750)).ToNot(HaveOccurred())
 			for i, artifactPath := range tt.artifactPaths {
-				f, err := os.Create(path.Join(dir, artifactPath))
+				f, err := os.Create(filepath.Join(dir, artifactPath))
 				g.Expect(err).ToNot(HaveOccurred())
 				g.Expect(f.Close()).ToNot(HaveOccurred())
 				if i != len(tt.artifactPaths)-1 {
@@ -632,28 +682,31 @@ func TestStorage_GarbageCollect(t *testing.T) {
 				}
 			}
 
-			deletedPaths, err := s.GarbageCollect(context.TODO(), artifact, tt.ctxTimeout)
+			collectedPaths, err := s.GarbageCollect(context.TODO(), artifact, tt.ctxTimeout)
 			if tt.wantErr == "" {
 				g.Expect(err).ToNot(HaveOccurred(), "failed to collect garbage files")
 			} else {
 				g.Expect(err).To(HaveOccurred())
 				g.Expect(err.Error()).To(ContainSubstring(tt.wantErr))
 			}
-			if len(tt.wantDeleted) > 0 {
-				g.Expect(len(tt.wantDeleted)).To(Equal(len(deletedPaths)))
-				for _, wantDeletedPath := range tt.wantDeleted {
+			if len(tt.wantCollected) > 0 {
+				g.Expect(len(tt.wantCollected)).To(Equal(len(collectedPaths)))
+				for _, wantCollectedPath := range tt.wantCollected {
 					present := false
-					for _, deletedPath := range deletedPaths {
-						if strings.Contains(deletedPath, wantDeletedPath) {
-							g.Expect(deletedPath).ToNot(BeAnExistingFile())
+					for _, collectedPath := range collectedPaths {
+						if strings.Contains(collectedPath, wantCollectedPath) {
+							g.Expect(collectedPath).ToNot(BeAnExistingFile())
 							present = true
 							break
 						}
 					}
 					if present == false {
-						g.Fail(fmt.Sprintf("expected file to be deleted, still exists: %s", wantDeletedPath))
+						g.Fail(fmt.Sprintf("expected file to be garbage collected, still exists: %s", wantCollectedPath))
 					}
 				}
+			}
+			for _, delFile := range tt.wantDeleted {
+				g.Expect(filepath.Join(dir, delFile)).ToNot(BeAnExistingFile())
 			}
 		})
 	}
