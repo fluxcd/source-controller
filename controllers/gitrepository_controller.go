@@ -516,7 +516,7 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 	}
 
 	// Observe if the artifacts still match the previous included ones
-	if artifacts.Diff(obj.Status.IncludedArtifacts) {
+	if artifacts.Diff(obj.Status.IncludedArtifacts, gitArtifactRevisionEqual) {
 		message := fmt.Sprintf("included artifacts differ from last observed includes")
 		if obj.Status.IncludedArtifacts != nil {
 			conditions.MarkTrue(obj, sourcev1.ArtifactOutdatedCondition, "IncludeChange", message)
@@ -593,7 +593,8 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 	}
 
 	// Mark observations about the revision on the object
-	if !obj.GetArtifact().HasRevision(commit.String()) {
+	if curArtifact := obj.Status.Artifact; curArtifact == nil ||
+		git.TransformRevision(curArtifact.Revision) != commit.String() {
 		message := fmt.Sprintf("new upstream revision '%s'", commit.String())
 		if obj.GetArtifact() != nil {
 			conditions.MarkTrue(obj, sourcev1.ArtifactOutdatedCondition, "NewRevision", message)
@@ -626,20 +627,22 @@ func (r *GitRepositoryReconciler) reconcileArtifact(ctx context.Context, sp *pat
 
 	// Set the ArtifactInStorageCondition if there's no drift.
 	defer func() {
-		if obj.GetArtifact().HasRevision(artifact.Revision) &&
-			!includes.Diff(obj.Status.IncludedArtifacts) &&
+		if curArtifact := obj.GetArtifact(); curArtifact != nil &&
+			git.TransformRevision(curArtifact.Revision) == artifact.Revision &&
+			!includes.Diff(obj.Status.IncludedArtifacts, gitArtifactRevisionEqual) &&
 			!gitContentConfigChanged(obj, includes) {
 			conditions.Delete(obj, sourcev1.ArtifactOutdatedCondition)
 			conditions.MarkTrue(obj, sourcev1.ArtifactInStorageCondition, meta.SucceededReason,
-				"stored artifact for revision '%s'", artifact.Revision)
+				"stored artifact for revision '%s'", curArtifact.Revision)
 		}
 	}()
 
 	// The artifact is up-to-date
-	if obj.GetArtifact().HasRevision(artifact.Revision) &&
-		!includes.Diff(obj.Status.IncludedArtifacts) &&
+	if curArtifact := obj.GetArtifact(); curArtifact != nil &&
+		git.TransformRevision(curArtifact.Revision) == artifact.Revision &&
+		!includes.Diff(obj.Status.IncludedArtifacts, gitArtifactRevisionEqual) &&
 		!gitContentConfigChanged(obj, includes) {
-		r.eventLogf(ctx, obj, eventv1.EventTypeTrace, sourcev1.ArtifactUpToDateReason, "artifact up-to-date with remote revision: '%s'", artifact.Revision)
+		r.eventLogf(ctx, obj, eventv1.EventTypeTrace, sourcev1.ArtifactUpToDateReason, "artifact up-to-date with remote revision: '%s'", curArtifact.Revision)
 		return sreconcile.ResultSuccess, nil
 	}
 
@@ -1024,7 +1027,7 @@ func gitContentConfigChanged(obj *sourcev1.GitRepository, includes *artifactSet)
 		}
 
 		// Check if the included repositories are still the same.
-		if observedInclArtifact.Revision != currentIncl.Revision {
+		if git.TransformRevision(observedInclArtifact.Revision) != git.TransformRevision(currentIncl.Revision) {
 			return true
 		}
 		if observedInclArtifact.Checksum != currentIncl.Checksum {
@@ -1046,4 +1049,11 @@ func gitRepositoryIncludeEqual(a, b sourcev1.GitRepositoryInclude) bool {
 		return false
 	}
 	return true
+}
+
+func gitArtifactRevisionEqual(x, y *sourcev1.Artifact) bool {
+	if x == nil || y == nil {
+		return false
+	}
+	return git.TransformRevision(x.Revision) == git.TransformRevision(y.Revision)
 }

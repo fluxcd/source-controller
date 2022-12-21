@@ -294,8 +294,8 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 			protocol: "http",
 			want:     sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new upstream revision 'master/<commit>'"),
-				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new upstream revision 'master/<commit>'"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new upstream revision 'master@sha1:<commit>'"),
+				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new upstream revision 'master@sha1:<commit>'"),
 			},
 		},
 		{
@@ -319,8 +319,8 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 			},
 			want: sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new upstream revision 'master/<commit>'"),
-				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new upstream revision 'master/<commit>'"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new upstream revision 'master@sha1:<commit>'"),
+				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new upstream revision 'master@sha1:<commit>'"),
 			},
 		},
 		{
@@ -344,8 +344,8 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 			},
 			want: sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new upstream revision 'master/<commit>'"),
-				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new upstream revision 'master/<commit>'"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new upstream revision 'master@sha1:<commit>'"),
+				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new upstream revision 'master@sha1:<commit>'"),
 			},
 		},
 		{
@@ -404,8 +404,8 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 			},
 			want: sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new upstream revision 'master/<commit>'"),
-				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new upstream revision 'master/<commit>"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new upstream revision 'master@sha1:<commit>'"),
+				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new upstream revision 'master@sha1:<commit>"),
 			},
 		},
 		{
@@ -429,8 +429,8 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 			},
 			want: sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new upstream revision 'master/<commit>'"),
-				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new upstream revision 'master/<commit>'"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new upstream revision 'master@sha1:<commit>'"),
+				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new upstream revision 'master@sha1:<commit>'"),
 			},
 		},
 		{
@@ -478,9 +478,9 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 			},
 			want: sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new upstream revision 'master/<commit>'"),
-				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new upstream revision 'master/<commit>'"),
-				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new upstream revision 'master/<commit>'"),
+				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new upstream revision 'master@sha1:<commit>'"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new upstream revision 'master@sha1:<commit>'"),
+				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new upstream revision 'master@sha1:<commit>'"),
 			},
 		},
 	}
@@ -614,7 +614,7 @@ func TestGitRepositoryReconciler_reconcileSource_checkoutStrategy(t *testing.T) 
 		{
 			name:            "Nil reference (default branch)",
 			want:            sreconcile.ResultSuccess,
-			wantRevision:    "master/<commit>",
+			wantRevision:    "master@sha1:<commit>",
 			wantReconciling: true,
 		},
 		{
@@ -623,7 +623,7 @@ func TestGitRepositoryReconciler_reconcileSource_checkoutStrategy(t *testing.T) 
 				Branch: "staging",
 			},
 			want:            sreconcile.ResultSuccess,
-			wantRevision:    "staging/<commit>",
+			wantRevision:    "staging@sha1:<commit>",
 			wantReconciling: true,
 		},
 		{
@@ -632,7 +632,7 @@ func TestGitRepositoryReconciler_reconcileSource_checkoutStrategy(t *testing.T) 
 				Tag: "v0.1.0",
 			},
 			want:            sreconcile.ResultSuccess,
-			wantRevision:    "v0.1.0/<commit>",
+			wantRevision:    "v0.1.0@sha1:<commit>",
 			wantReconciling: true,
 		},
 		{
@@ -642,7 +642,7 @@ func TestGitRepositoryReconciler_reconcileSource_checkoutStrategy(t *testing.T) 
 				Commit: "<commit>",
 			},
 			want:            sreconcile.ResultSuccess,
-			wantRevision:    "staging/<commit>",
+			wantRevision:    "staging@sha1:<commit>",
 			wantReconciling: true,
 		},
 		{
@@ -651,7 +651,7 @@ func TestGitRepositoryReconciler_reconcileSource_checkoutStrategy(t *testing.T) 
 				SemVer: "*",
 			},
 			want:            sreconcile.ResultSuccess,
-			wantRevision:    "v2.0.0/<commit>",
+			wantRevision:    "v2.0.0@sha1:<commit>",
 			wantReconciling: true,
 		},
 		{
@@ -660,7 +660,7 @@ func TestGitRepositoryReconciler_reconcileSource_checkoutStrategy(t *testing.T) 
 				SemVer: "<v0.2.1",
 			},
 			want:            sreconcile.ResultSuccess,
-			wantRevision:    "0.2.0/<commit>",
+			wantRevision:    "0.2.0@sha1:<commit>",
 			wantReconciling: true,
 		},
 		{
@@ -668,7 +668,7 @@ func TestGitRepositoryReconciler_reconcileSource_checkoutStrategy(t *testing.T) 
 			reference: &sourcev1.GitRepositoryRef{
 				SemVer: ">=1.0.0-0 <1.1.0-0",
 			},
-			wantRevision:    "v1.0.0-alpha/<commit>",
+			wantRevision:    "v1.0.0-alpha@sha1:<commit>",
 			want:            sreconcile.ResultSuccess,
 			wantReconciling: true,
 		},
@@ -688,12 +688,33 @@ func TestGitRepositoryReconciler_reconcileSource_checkoutStrategy(t *testing.T) 
 				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "foo")
 			},
 			want:                 sreconcile.ResultSuccess,
-			wantRevision:         "staging/<commit>",
+			wantRevision:         "staging@sha1:<commit>",
 			wantArtifactOutdated: true,
 			wantReconciling:      true,
 		},
 		{
 			name: "Optimized clone",
+			reference: &sourcev1.GitRepositoryRef{
+				Branch: "staging",
+			},
+			beforeFunc: func(obj *sourcev1.GitRepository, latestRev string) {
+				// Add existing artifact on the object and storage.
+				obj.Status = sourcev1.GitRepositoryStatus{
+					Artifact: &sourcev1.Artifact{
+						Revision: "staging@sha1:" + latestRev,
+						Path:     randStringRunes(10),
+					},
+				}
+				conditions.MarkTrue(obj, sourcev1.ArtifactInStorageCondition, meta.SucceededReason, "foo")
+				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "foo")
+			},
+			want:            sreconcile.ResultEmpty,
+			wantErr:         true,
+			wantRevision:    "staging@sha1:<commit>",
+			wantReconciling: false,
+		},
+		{
+			name: "Optimized clone (legacy revision format)",
 			reference: &sourcev1.GitRepositoryRef{
 				Branch: "staging",
 			},
@@ -710,11 +731,33 @@ func TestGitRepositoryReconciler_reconcileSource_checkoutStrategy(t *testing.T) 
 			},
 			want:            sreconcile.ResultEmpty,
 			wantErr:         true,
-			wantRevision:    "staging/<commit>",
+			wantRevision:    "staging@sha1:<commit>",
 			wantReconciling: false,
 		},
 		{
 			name: "Optimized clone different ignore",
+			reference: &sourcev1.GitRepositoryRef{
+				Branch: "staging",
+			},
+			beforeFunc: func(obj *sourcev1.GitRepository, latestRev string) {
+				// Set new ignore value.
+				obj.Spec.Ignore = pointer.StringPtr("foo")
+				// Add existing artifact on the object and storage.
+				obj.Status = sourcev1.GitRepositoryStatus{
+					Artifact: &sourcev1.Artifact{
+						Revision: "staging@sha1:" + latestRev,
+						Path:     randStringRunes(10),
+					},
+				}
+				conditions.MarkTrue(obj, sourcev1.ArtifactInStorageCondition, meta.SucceededReason, "foo")
+				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "foo")
+			},
+			want:            sreconcile.ResultSuccess,
+			wantRevision:    "staging@sha1:<commit>",
+			wantReconciling: false,
+		},
+		{
+			name: "Optimized clone different ignore (legacy revision format)",
 			reference: &sourcev1.GitRepositoryRef{
 				Branch: "staging",
 			},
@@ -732,7 +775,7 @@ func TestGitRepositoryReconciler_reconcileSource_checkoutStrategy(t *testing.T) 
 				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "foo")
 			},
 			want:            sreconcile.ResultSuccess,
-			wantRevision:    "staging/<commit>",
+			wantRevision:    "staging@sha1:<commit>",
 			wantReconciling: false,
 		},
 	}
@@ -770,6 +813,8 @@ func TestGitRepositoryReconciler_reconcileSource_checkoutStrategy(t *testing.T) 
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
 			obj := &sourcev1.GitRepository{
 				ObjectMeta: metav1.ObjectMeta{
 					GenerateName: "checkout-strategy-",
@@ -802,8 +847,8 @@ func TestGitRepositoryReconciler_reconcileSource_checkoutStrategy(t *testing.T) 
 			var includes artifactSet
 			sp := patch.NewSerialPatcher(obj, r.Client)
 			got, err := r.reconcileSource(ctx, sp, obj, &commit, &includes, tmpDir)
-			if err != nil {
-				println(err.Error())
+			if err != nil && !tt.wantErr {
+				t.Log(err)
 			}
 			g.Expect(err != nil).To(Equal(tt.wantErr))
 			g.Expect(got).To(Equal(tt.want))
@@ -843,13 +888,13 @@ func TestGitRepositoryReconciler_reconcileArtifact(t *testing.T) {
 			},
 			want: sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.ArtifactInStorageCondition, meta.SucceededReason, "stored artifact for revision 'main/revision'"),
+				*conditions.TrueCondition(sourcev1.ArtifactInStorageCondition, meta.SucceededReason, "stored artifact for revision 'main@sha1:b9b3feadba509cb9b22e968a5d27e96c2bc2ff91'"),
 			},
 		},
 		{
 			name:     "Archiving artifact to storage with includes makes ArtifactInStorage=True",
 			dir:      "testdata/git/repository",
-			includes: artifactSet{&sourcev1.Artifact{Revision: "main/revision"}},
+			includes: artifactSet{&sourcev1.Artifact{Revision: "main@sha1:b9b3feadba509cb9b22e968a5d27e96c2bc2ff91"}},
 			beforeFunc: func(obj *sourcev1.GitRepository) {
 				obj.Spec.Interval = metav1.Duration{Duration: interval}
 				obj.Spec.Include = []sourcev1.GitRepositoryInclude{
@@ -864,20 +909,20 @@ func TestGitRepositoryReconciler_reconcileArtifact(t *testing.T) {
 			},
 			want: sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.ArtifactInStorageCondition, meta.SucceededReason, "stored artifact for revision 'main/revision'"),
+				*conditions.TrueCondition(sourcev1.ArtifactInStorageCondition, meta.SucceededReason, "stored artifact for revision 'main@sha1:b9b3feadba509cb9b22e968a5d27e96c2bc2ff91'"),
 			},
 		},
 		{
 			name:     "Up-to-date artifact should not update status",
 			dir:      "testdata/git/repository",
-			includes: artifactSet{&sourcev1.Artifact{Revision: "main/revision", Checksum: "some-checksum"}},
+			includes: artifactSet{&sourcev1.Artifact{Revision: "main@sha1:b9b3feadba509cb9b22e968a5d27e96c2bc2ff91", Checksum: "some-checksum"}},
 			beforeFunc: func(obj *sourcev1.GitRepository) {
 				obj.Spec.Interval = metav1.Duration{Duration: interval}
 				obj.Spec.Include = []sourcev1.GitRepositoryInclude{
 					{GitRepositoryRef: meta.LocalObjectReference{Name: "foo"}},
 				}
-				obj.Status.Artifact = &sourcev1.Artifact{Revision: "main/revision"}
-				obj.Status.IncludedArtifacts = []*sourcev1.Artifact{{Revision: "main/revision", Checksum: "some-checksum"}}
+				obj.Status.Artifact = &sourcev1.Artifact{Revision: "main@sha1:b9b3feadba509cb9b22e968a5d27e96c2bc2ff91"}
+				obj.Status.IncludedArtifacts = []*sourcev1.Artifact{{Revision: "main@sha1:b9b3feadba509cb9b22e968a5d27e96c2bc2ff91", Checksum: "some-checksum"}}
 				obj.Status.ObservedInclude = obj.Spec.Include
 			},
 			afterFunc: func(t *WithT, obj *sourcev1.GitRepository) {
@@ -885,7 +930,29 @@ func TestGitRepositoryReconciler_reconcileArtifact(t *testing.T) {
 			},
 			want: sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.ArtifactInStorageCondition, meta.SucceededReason, "stored artifact for revision 'main/revision'"),
+				*conditions.TrueCondition(sourcev1.ArtifactInStorageCondition, meta.SucceededReason, "stored artifact for revision 'main@sha1:b9b3feadba509cb9b22e968a5d27e96c2bc2ff91'"),
+			},
+		},
+		{
+			name:     "Up-to-date artifact with legacy revision format should not update status",
+			dir:      "testdata/git/repository",
+			includes: artifactSet{&sourcev1.Artifact{Revision: "main@sha1:b9b3feadba509cb9b22e968a5d27e96c2bc2ff91", Checksum: "some-checksum"}},
+			beforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Spec.Interval = metav1.Duration{Duration: interval}
+				obj.Spec.Include = []sourcev1.GitRepositoryInclude{
+					{GitRepositoryRef: meta.LocalObjectReference{Name: "foo"}},
+				}
+				obj.Status.Artifact = &sourcev1.Artifact{Revision: "main/b9b3feadba509cb9b22e968a5d27e96c2bc2ff91"}
+				obj.Status.IncludedArtifacts = []*sourcev1.Artifact{{Revision: "main/b9b3feadba509cb9b22e968a5d27e96c2bc2ff91", Checksum: "some-checksum"}}
+				obj.Status.ObservedInclude = obj.Spec.Include
+			},
+			afterFunc: func(t *WithT, obj *sourcev1.GitRepository) {
+				t.Expect(obj.Status.URL).To(BeEmpty())
+				t.Expect(obj.Status.Artifact.Revision).To(Equal("main/b9b3feadba509cb9b22e968a5d27e96c2bc2ff91"))
+			},
+			want: sreconcile.ResultSuccess,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.ArtifactInStorageCondition, meta.SucceededReason, "stored artifact for revision 'main/b9b3feadba509cb9b22e968a5d27e96c2bc2ff91'"),
 			},
 		},
 		{
@@ -901,11 +968,11 @@ func TestGitRepositoryReconciler_reconcileArtifact(t *testing.T) {
 			},
 			want: sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.ArtifactInStorageCondition, meta.SucceededReason, "stored artifact for revision 'main/revision'"),
+				*conditions.TrueCondition(sourcev1.ArtifactInStorageCondition, meta.SucceededReason, "stored artifact for revision 'main@sha1:b9b3feadba509cb9b22e968a5d27e96c2bc2ff91'"),
 			},
 		},
 		{
-			name: "source ignore for subdir ignore patterns",
+			name: "Source ignore for subdir ignore patterns",
 			dir:  "testdata/git/repowithsubdirs",
 			beforeFunc: func(obj *sourcev1.GitRepository) {
 				obj.Spec.Interval = metav1.Duration{Duration: interval}
@@ -916,7 +983,7 @@ func TestGitRepositoryReconciler_reconcileArtifact(t *testing.T) {
 			},
 			want: sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.ArtifactInStorageCondition, meta.SucceededReason, "stored artifact for revision 'main/revision'"),
+				*conditions.TrueCondition(sourcev1.ArtifactInStorageCondition, meta.SucceededReason, "stored artifact for revision 'main@sha1:b9b3feadba509cb9b22e968a5d27e96c2bc2ff91'"),
 			},
 		},
 		{
@@ -933,7 +1000,7 @@ func TestGitRepositoryReconciler_reconcileArtifact(t *testing.T) {
 			},
 			want: sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.ArtifactInStorageCondition, meta.SucceededReason, "stored artifact for revision 'main/revision'"),
+				*conditions.TrueCondition(sourcev1.ArtifactInStorageCondition, meta.SucceededReason, "stored artifact for revision 'main@sha1:b9b3feadba509cb9b22e968a5d27e96c2bc2ff91'"),
 			},
 		},
 		{
@@ -953,7 +1020,7 @@ func TestGitRepositoryReconciler_reconcileArtifact(t *testing.T) {
 			},
 			want: sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.ArtifactInStorageCondition, meta.SucceededReason, "stored artifact for revision 'main/revision'"),
+				*conditions.TrueCondition(sourcev1.ArtifactInStorageCondition, meta.SucceededReason, "stored artifact for revision 'main@sha1:b9b3feadba509cb9b22e968a5d27e96c2bc2ff91'"),
 			},
 		},
 		{
@@ -1010,7 +1077,7 @@ func TestGitRepositoryReconciler_reconcileArtifact(t *testing.T) {
 			}
 
 			commit := git.Commit{
-				Hash:      []byte("revision"),
+				Hash:      []byte("b9b3feadba509cb9b22e968a5d27e96c2bc2ff91"),
 				Reference: "refs/heads/main",
 			}
 			sp := patch.NewSerialPatcher(obj, r.Client)
@@ -1918,12 +1985,12 @@ func TestGitRepositoryReconciler_statusConditions(t *testing.T) {
 
 func TestGitRepositoryReconciler_notify(t *testing.T) {
 	concreteCommit := git.Commit{
-		Hash:    git.Hash("some-hash"),
+		Hash:    git.Hash("b9b3feadba509cb9b22e968a5d27e96c2bc2ff91"),
 		Message: "test commit",
 		Encoded: []byte("content"),
 	}
 	partialCommit := git.Commit{
-		Hash: git.Hash("some-hash"),
+		Hash: git.Hash("b9b3feadba509cb9b22e968a5d27e96c2bc2ff91"),
 	}
 
 	noopErr := serror.NewGeneric(fmt.Errorf("some no-op error"), "NoOpReason")
@@ -2012,7 +2079,7 @@ func TestGitRepositoryReconciler_notify(t *testing.T) {
 				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "ready")
 			},
 			commit:    partialCommit, // no-op will always result in partial commit.
-			wantEvent: "Normal Succeeded stored artifact for commit 'HEAD/some-hash'",
+			wantEvent: "Normal Succeeded stored artifact for commit 'sha1:b9b3feadba509cb9b22e968a5d27e96c2bc2ff91'",
 		},
 	}
 
@@ -2201,7 +2268,7 @@ func TestGitRepositoryReconciler_fetchIncludes(t *testing.T) {
 			g.Expect(err != nil).To(Equal(tt.wantErr))
 			g.Expect(obj.GetConditions()).To(conditions.MatchConditions(tt.assertConditions))
 			if !tt.wantErr && gotArtifactSet != nil {
-				g.Expect(gotArtifactSet.Diff(tt.wantArtifactSet)).To(BeFalse())
+				g.Expect(gotArtifactSet.Diff(tt.wantArtifactSet, gitArtifactRevisionEqual)).To(BeFalse())
 			}
 		})
 	}
