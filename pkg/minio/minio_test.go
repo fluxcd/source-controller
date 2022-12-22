@@ -29,6 +29,7 @@ import (
 	"github.com/google/uuid"
 	miniov7 "github.com/minio/minio-go/v7"
 	"github.com/ory/dockertest/v3"
+	"github.com/ory/dockertest/v3/docker"
 	"gotest.tools/assert"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -125,6 +126,8 @@ func TestMain(m *testing.M) {
 			"MINIO_ROOT_PASSWORD=" + testMinioRootPassword,
 		},
 		Cmd: []string{"server", "/data", "--console-address", ":9001"},
+	}, func(config *docker.HostConfig) {
+		config.AutoRemove = true
 	})
 	if err != nil {
 		log.Fatalf("could not start resource: %s", err)
@@ -168,6 +171,7 @@ func TestMain(m *testing.M) {
 	run := m.Run()
 	removeObjectFromBucket(ctx)
 	deleteBucket(ctx)
+	purgeResource()
 	os.Exit(run)
 }
 
