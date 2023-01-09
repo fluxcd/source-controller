@@ -794,7 +794,7 @@ for the HelmRepository.
 For HTTP/S basic auth the secret must contain &lsquo;username&rsquo; and &lsquo;password&rsquo;
 fields.
 For TLS the secret must contain a &lsquo;certFile&rsquo; and &lsquo;keyFile&rsquo;, and/or
-&lsquo;caCert&rsquo; fields.</p>
+&lsquo;caFile&rsquo; fields.</p>
 </td>
 </tr>
 <tr>
@@ -2444,7 +2444,7 @@ for the HelmRepository.
 For HTTP/S basic auth the secret must contain &lsquo;username&rsquo; and &lsquo;password&rsquo;
 fields.
 For TLS the secret must contain a &lsquo;certFile&rsquo; and &lsquo;keyFile&rsquo;, and/or
-&lsquo;caCert&rsquo; fields.</p>
+&lsquo;caFile&rsquo; fields.</p>
 </td>
 </tr>
 <tr>

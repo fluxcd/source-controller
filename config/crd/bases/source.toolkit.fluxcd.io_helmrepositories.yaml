@@ -92,7 +92,7 @@ spec:
                 description: The name of the secret containing authentication credentials
                   for the Helm repository. For HTTP/S basic auth the secret must contain
                   username and password fields. For TLS the secret must contain a
-                  certFile and keyFile, and/or caCert fields.
+                  certFile and keyFile, and/or caFile fields.
                 properties:
                   name:
                     description: Name of the referent.
@@ -325,7 +325,7 @@ spec:
                 description: SecretRef specifies the Secret containing authentication
                   credentials for the HelmRepository. For HTTP/S basic auth the secret
                   must contain 'username' and 'password' fields. For TLS the secret
-                  must contain a 'certFile' and 'keyFile', and/or 'caCert' fields.
+                  must contain a 'certFile' and 'keyFile', and/or 'caFile' fields.
                 properties:
                   name:
                     description: Name of the referent.
