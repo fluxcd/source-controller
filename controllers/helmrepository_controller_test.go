@@ -159,6 +159,7 @@ func TestHelmRepositoryReconciler_reconcileStorage(t *testing.T) {
 					}
 				}
 				testStorage.SetArtifactURL(obj.Status.Artifact)
+				conditions.MarkTrue(obj, meta.ReadyCondition, "foo", "bar")
 				return nil
 			},
 			assertArtifact: &sourcev1.Artifact{
@@ -175,6 +176,17 @@ func TestHelmRepositoryReconciler_reconcileStorage(t *testing.T) {
 				"!/reconcile-storage/a.txt",
 			},
 			want: sreconcile.ResultSuccess,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReadyCondition, "foo", "bar"),
+			},
+		},
+		{
+			name: "build artifact first time",
+			want: sreconcile.ResultSuccess,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact"),
+				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact"),
+			},
 		},
 		{
 			name: "notices missing artifact in storage",
@@ -191,7 +203,8 @@ func TestHelmRepositoryReconciler_reconcileStorage(t *testing.T) {
 				"!/reconcile-storage/invalid.txt",
 			},
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(meta.ReconcilingCondition, "NoArtifact", "no artifact for resource in storage"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: disappeared from storage"),
+				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: disappeared from storage"),
 			},
 		},
 		{
@@ -209,6 +222,7 @@ func TestHelmRepositoryReconciler_reconcileStorage(t *testing.T) {
 				if err := testStorage.AtomicWriteFile(obj.Status.Artifact, strings.NewReader("file"), 0o640); err != nil {
 					return err
 				}
+				conditions.MarkTrue(obj, meta.ReadyCondition, "foo", "bar")
 				return nil
 			},
 			want: sreconcile.ResultSuccess,
@@ -222,6 +236,9 @@ func TestHelmRepositoryReconciler_reconcileStorage(t *testing.T) {
 				URL:      testStorage.Hostname + "/reconcile-storage/hostname.txt",
 				Size:     int64p(int64(len("file"))),
 			},
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReadyCondition, "foo", "bar"),
+			},
 		},
 	}
 	for _, tt := range tests {
@@ -229,23 +246,32 @@ func TestHelmRepositoryReconciler_reconcileStorage(t *testing.T) {
 			g := NewWithT(t)
 
 			r := &HelmRepositoryReconciler{
+				Client:        fakeclient.NewClientBuilder().WithScheme(testEnv.GetScheme()).Build(),
 				EventRecorder: record.NewFakeRecorder(32),
 				Storage:       testStorage,
+				patchOptions:  getPatchOptions(helmRepositoryReadyCondition.Owned, "sc"),
 			}
 
 			obj := &sourcev1.HelmRepository{
 				ObjectMeta: metav1.ObjectMeta{
 					GenerateName: "test-",
+					Generation:   1,
 				},
 			}
 			if tt.beforeFunc != nil {
 				g.Expect(tt.beforeFunc(obj, testStorage)).To(Succeed())
 			}
 
+			g.Expect(r.Client.Create(context.TODO(), obj)).ToNot(HaveOccurred())
+			defer func() {
+				g.Expect(r.Client.Delete(context.TODO(), obj)).ToNot(HaveOccurred())
+			}()
+
 			var chartRepo repository.ChartRepository
 			var artifact sourcev1.Artifact
+			sp := patch.NewSerialPatcher(obj, r.Client)
 
-			got, err := r.reconcileStorage(context.TODO(), obj, &artifact, &chartRepo)
+			got, err := r.reconcileStorage(context.TODO(), sp, obj, &artifact, &chartRepo)
 			g.Expect(err != nil).To(Equal(tt.wantErr))
 			g.Expect(got).To(Equal(tt.want))
 
@@ -263,6 +289,10 @@ func TestHelmRepositoryReconciler_reconcileStorage(t *testing.T) {
 				}
 				g.Expect(absoluteP).NotTo(BeAnExistingFile())
 			}
+
+			// In-progress status condition validity.
+			checker := conditionscheck.NewInProgressChecker(r.Client)
+			checker.CheckErr(ctx, obj)
 		})
 	}
 }
@@ -302,8 +332,8 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 				},
 			},
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new index revision"),
-				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new index revision"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new index revision"),
+				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new index revision"),
 			},
 		},
 		{
@@ -311,8 +341,8 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 			protocol: "http",
 			want:     sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new index revision"),
-				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new index revision"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new index revision"),
+				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new index revision"),
 			},
 			afterFunc: func(t *WithT, obj *sourcev1.HelmRepository, artifact sourcev1.Artifact, chartRepo repository.ChartRepository) {
 				t.Expect(chartRepo.Checksum).ToNot(BeEmpty())
@@ -342,8 +372,8 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 			},
 			want: sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new index revision"),
-				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new index revision"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new index revision"),
+				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new index revision"),
 			},
 			afterFunc: func(t *WithT, obj *sourcev1.HelmRepository, artifact sourcev1.Artifact, chartRepo repository.ChartRepository) {
 				t.Expect(chartRepo.Checksum).ToNot(BeEmpty())
@@ -373,8 +403,8 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 			},
 			want: sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new index revision"),
-				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new index revision"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new index revision"),
+				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new index revision"),
 			},
 			afterFunc: func(t *WithT, obj *sourcev1.HelmRepository, artifact sourcev1.Artifact, chartRepo repository.ChartRepository) {
 				t.Expect(chartRepo.Checksum).ToNot(BeEmpty())
@@ -401,10 +431,14 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 			},
 			beforeFunc: func(t *WithT, obj *sourcev1.HelmRepository, checksum string) {
 				obj.Spec.SecretRef = &meta.LocalObjectReference{Name: "invalid-ca"}
+				conditions.MarkReconciling(obj, meta.ProgressingReason, "foo")
+				conditions.MarkUnknown(obj, meta.ReadyCondition, "foo", "bar")
 			},
 			wantErr: true,
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "failed to create TLS client config with secret data: cannot append certificate into certificate pool: invalid caFile"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "foo"),
+				*conditions.UnknownCondition(meta.ReadyCondition, "foo", "bar"),
 			},
 			afterFunc: func(t *WithT, obj *sourcev1.HelmRepository, artifact sourcev1.Artifact, chartRepo repository.ChartRepository) {
 				// No repo index due to fetch fail.
@@ -419,11 +453,15 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 			protocol: "http",
 			beforeFunc: func(t *WithT, obj *sourcev1.HelmRepository, checksum string) {
 				obj.Spec.URL = strings.ReplaceAll(obj.Spec.URL, "http://", "")
+				conditions.MarkReconciling(obj, meta.ProgressingReason, "foo")
+				conditions.MarkUnknown(obj, meta.ReadyCondition, "foo", "bar")
 			},
 			want:    sreconcile.ResultEmpty,
 			wantErr: true,
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.URLInvalidReason, "first path segment in URL cannot contain colon"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "foo"),
+				*conditions.UnknownCondition(meta.ReadyCondition, "foo", "bar"),
 			},
 			afterFunc: func(t *WithT, obj *sourcev1.HelmRepository, artifact sourcev1.Artifact, chartRepo repository.ChartRepository) {
 				// No repo index due to fetch fail.
@@ -438,11 +476,15 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 			protocol: "http",
 			beforeFunc: func(t *WithT, obj *sourcev1.HelmRepository, checksum string) {
 				obj.Spec.URL = strings.ReplaceAll(obj.Spec.URL, "http://", "ftp://")
+				conditions.MarkReconciling(obj, meta.ProgressingReason, "foo")
+				conditions.MarkUnknown(obj, meta.ReadyCondition, "foo", "bar")
 			},
 			want:    sreconcile.ResultEmpty,
 			wantErr: true,
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(sourcev1.FetchFailedCondition, meta.FailedReason, "scheme \"ftp\" not supported"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "foo"),
+				*conditions.UnknownCondition(meta.ReadyCondition, "foo", "bar"),
 			},
 			afterFunc: func(t *WithT, obj *sourcev1.HelmRepository, artifact sourcev1.Artifact, chartRepo repository.ChartRepository) {
 				// No repo index due to fetch fail.
@@ -457,10 +499,14 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 			protocol: "http",
 			beforeFunc: func(t *WithT, obj *sourcev1.HelmRepository, checksum string) {
 				obj.Spec.SecretRef = &meta.LocalObjectReference{Name: "non-existing"}
+				conditions.MarkReconciling(obj, meta.ProgressingReason, "foo")
+				conditions.MarkUnknown(obj, meta.ReadyCondition, "foo", "bar")
 			},
 			wantErr: true,
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "secrets \"non-existing\" not found"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "foo"),
+				*conditions.UnknownCondition(meta.ReadyCondition, "foo", "bar"),
 			},
 			afterFunc: func(t *WithT, obj *sourcev1.HelmRepository, artifact sourcev1.Artifact, chartRepo repository.ChartRepository) {
 				// No repo index due to fetch fail.
@@ -483,10 +529,14 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 			},
 			beforeFunc: func(t *WithT, obj *sourcev1.HelmRepository, checksum string) {
 				obj.Spec.SecretRef = &meta.LocalObjectReference{Name: "malformed-basic-auth"}
+				conditions.MarkReconciling(obj, meta.ProgressingReason, "foo")
+				conditions.MarkUnknown(obj, meta.ReadyCondition, "foo", "bar")
 			},
 			wantErr: true,
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "required fields 'username' and 'password"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "foo"),
+				*conditions.UnknownCondition(meta.ReadyCondition, "foo", "bar"),
 			},
 			afterFunc: func(t *WithT, obj *sourcev1.HelmRepository, artifact sourcev1.Artifact, chartRepo repository.ChartRepository) {
 				// No repo index due to fetch fail.
@@ -504,6 +554,12 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 					Revision: checksum,
 					Checksum: checksum,
 				}
+				conditions.MarkReconciling(obj, meta.ProgressingReason, "foo")
+				conditions.MarkUnknown(obj, meta.ReadyCondition, "foo", "bar")
+			},
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "foo"),
+				*conditions.UnknownCondition(meta.ReadyCondition, "foo", "bar"),
 			},
 			afterFunc: func(t *WithT, obj *sourcev1.HelmRepository, artifact sourcev1.Artifact, chartRepo repository.ChartRepository) {
 				// chartRepo.Checksum isn't populated, artifact.Checksum is
@@ -523,6 +579,12 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 					Revision: checksum,
 					Checksum: "foo",
 				}
+				conditions.MarkReconciling(obj, meta.ProgressingReason, "foo")
+				conditions.MarkUnknown(obj, meta.ReadyCondition, "foo", "bar")
+			},
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "foo"),
+				*conditions.UnknownCondition(meta.ReadyCondition, "foo", "bar"),
 			},
 			afterFunc: func(t *WithT, obj *sourcev1.HelmRepository, artifact sourcev1.Artifact, chartRepo repository.ChartRepository) {
 				t.Expect(chartRepo.Checksum).ToNot(BeEmpty())
@@ -532,12 +594,29 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 			},
 			want: sreconcile.ResultSuccess,
 		},
+		{
+			name:     "Existing artifact makes ArtifactOutdated=True",
+			protocol: "http",
+			beforeFunc: func(t *WithT, obj *sourcev1.HelmRepository, checksum string) {
+				obj.Status.Artifact = &sourcev1.Artifact{
+					Path:     "some-path",
+					Revision: "some-rev",
+				}
+			},
+			want: sreconcile.ResultSuccess,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new index revision"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new index revision"),
+				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new index revision"),
+			},
+		},
 	}
 
 	for _, tt := range tests {
 		obj := &sourcev1.HelmRepository{
 			ObjectMeta: metav1.ObjectMeta{
 				GenerateName: "auth-strategy-",
+				Generation:   1,
 			},
 			Spec: sourcev1.HelmRepositorySpec{
 				Interval: metav1.Duration{Duration: interval},
@@ -642,11 +721,19 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 				Client:        builder.Build(),
 				Storage:       testStorage,
 				Getters:       testGetters,
+				patchOptions:  getPatchOptions(helmRepositoryReadyCondition.Owned, "sc"),
 			}
+
+			g.Expect(r.Client.Create(context.TODO(), obj)).ToNot(HaveOccurred())
+			defer func() {
+				g.Expect(r.Client.Delete(context.TODO(), obj)).ToNot(HaveOccurred())
+			}()
 
 			var chartRepo repository.ChartRepository
 			var artifact sourcev1.Artifact
-			got, err := r.reconcileSource(context.TODO(), obj, &artifact, &chartRepo)
+			sp := patch.NewSerialPatcher(obj, r.Client)
+
+			got, err := r.reconcileSource(context.TODO(), sp, obj, &artifact, &chartRepo)
 			defer os.Remove(chartRepo.CachePath)
 
 			g.Expect(obj.Status.Conditions).To(conditions.MatchConditions(tt.assertConditions))
@@ -656,6 +743,10 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 			if tt.afterFunc != nil {
 				tt.afterFunc(g, obj, artifact, chartRepo)
 			}
+
+			// In-progress status condition validity.
+			checker := conditionscheck.NewInProgressChecker(r.Client)
+			checker.CheckErr(ctx, obj)
 		})
 	}
 }
@@ -676,7 +767,7 @@ func TestHelmRepositoryReconciler_reconcileArtifact(t *testing.T) {
 			},
 			want: sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.ArtifactInStorageCondition, meta.SucceededReason, "stored artifact for revision 'existing'"),
+				*conditions.TrueCondition(sourcev1.ArtifactInStorageCondition, meta.SucceededReason, "stored artifact: revision 'existing'"),
 			},
 		},
 		{
@@ -690,7 +781,7 @@ func TestHelmRepositoryReconciler_reconcileArtifact(t *testing.T) {
 			},
 			want: sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.ArtifactInStorageCondition, meta.SucceededReason, "stored artifact for revision 'existing'"),
+				*conditions.TrueCondition(sourcev1.ArtifactInStorageCondition, meta.SucceededReason, "stored artifact: revision 'existing'"),
 			},
 		},
 		{
@@ -701,7 +792,7 @@ func TestHelmRepositoryReconciler_reconcileArtifact(t *testing.T) {
 			},
 			want: sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.ArtifactInStorageCondition, meta.SucceededReason, "stored artifact for revision 'existing'"),
+				*conditions.TrueCondition(sourcev1.ArtifactInStorageCondition, meta.SucceededReason, "stored artifact: revision 'existing'"),
 			},
 		},
 		{
@@ -718,7 +809,7 @@ func TestHelmRepositoryReconciler_reconcileArtifact(t *testing.T) {
 			},
 			want: sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.ArtifactInStorageCondition, meta.SucceededReason, "stored artifact for revision 'existing'"),
+				*conditions.TrueCondition(sourcev1.ArtifactInStorageCondition, meta.SucceededReason, "stored artifact: revision 'existing'"),
 			},
 		},
 	}
@@ -728,8 +819,10 @@ func TestHelmRepositoryReconciler_reconcileArtifact(t *testing.T) {
 			g := NewWithT(t)
 
 			r := &HelmRepositoryReconciler{
+				Client:        fakeclient.NewClientBuilder().WithScheme(testEnv.GetScheme()).Build(),
 				EventRecorder: record.NewFakeRecorder(32),
 				Storage:       testStorage,
+				patchOptions:  getPatchOptions(helmRepositoryReadyCondition.Owned, "sc"),
 			}
 
 			obj := &sourcev1.HelmRepository{
@@ -766,8 +859,9 @@ func TestHelmRepositoryReconciler_reconcileArtifact(t *testing.T) {
 			if tt.beforeFunc != nil {
 				tt.beforeFunc(g, obj, artifact, chartRepo)
 			}
+			sp := patch.NewSerialPatcher(obj, r.Client)
 
-			got, err := r.reconcileArtifact(context.TODO(), obj, &artifact, chartRepo)
+			got, err := r.reconcileArtifact(context.TODO(), sp, obj, &artifact, chartRepo)
 			g.Expect(err != nil).To(Equal(tt.wantErr))
 			g.Expect(got).To(Equal(tt.want))
 
@@ -788,7 +882,7 @@ func TestHelmRepositoryReconciler_reconcileArtifact(t *testing.T) {
 func TestHelmRepositoryReconciler_reconcileSubRecs(t *testing.T) {
 	// Helper to build simple helmRepositoryReconcileFunc with result and error.
 	buildReconcileFuncs := func(r sreconcile.Result, e error) helmRepositoryReconcileFunc {
-		return func(ctx context.Context, obj *sourcev1.HelmRepository, artifact *sourcev1.Artifact, repo *repository.ChartRepository) (sreconcile.Result, error) {
+		return func(ctx context.Context, sp *patch.SerialPatcher, obj *sourcev1.HelmRepository, artifact *sourcev1.Artifact, repo *repository.ChartRepository) (sreconcile.Result, error) {
 			return r, e
 		}
 	}
@@ -809,6 +903,10 @@ func TestHelmRepositoryReconciler_reconcileSubRecs(t *testing.T) {
 			},
 			wantResult: sreconcile.ResultSuccess,
 			wantErr:    false,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "reconciliation in progress"),
+				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "reconciliation in progress"),
+			},
 		},
 		{
 			name:               "successful reconciliation with generation difference",
@@ -820,7 +918,8 @@ func TestHelmRepositoryReconciler_reconcileSubRecs(t *testing.T) {
 			wantResult: sreconcile.ResultSuccess,
 			wantErr:    false,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(meta.ReconcilingCondition, "NewGeneration", "reconciling new object generation (3)"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "processing object: new generation 2 -> 3"),
+				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "processing object: new generation 2 -> 3"),
 			},
 		},
 		{
@@ -830,16 +929,20 @@ func TestHelmRepositoryReconciler_reconcileSubRecs(t *testing.T) {
 			},
 			wantResult: sreconcile.ResultEmpty,
 			wantErr:    true,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "reconciliation in progress"),
+				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "reconciliation in progress"),
+			},
 		},
 		{
 			name: "multiple object status conditions mutations",
 			reconcileFuncs: []helmRepositoryReconcileFunc{
-				func(ctx context.Context, obj *sourcev1.HelmRepository, artifact *sourcev1.Artifact, repo *repository.ChartRepository) (sreconcile.Result, error) {
+				func(ctx context.Context, sp *patch.SerialPatcher, obj *sourcev1.HelmRepository, artifact *sourcev1.Artifact, repo *repository.ChartRepository) (sreconcile.Result, error) {
 					conditions.MarkTrue(obj, sourcev1.ArtifactOutdatedCondition, "NewRevision", "new index revision")
 					return sreconcile.ResultSuccess, nil
 				},
-				func(ctx context.Context, obj *sourcev1.HelmRepository, artifact *sourcev1.Artifact, repo *repository.ChartRepository) (sreconcile.Result, error) {
-					conditions.MarkTrue(obj, meta.ReconcilingCondition, "Progressing", "creating artifact")
+				func(ctx context.Context, sp *patch.SerialPatcher, obj *sourcev1.HelmRepository, artifact *sourcev1.Artifact, repo *repository.ChartRepository) (sreconcile.Result, error) {
+					conditions.MarkTrue(obj, meta.ReconcilingCondition, meta.ProgressingReason, "creating artifact")
 					return sreconcile.ResultSuccess, nil
 				},
 			},
@@ -847,7 +950,8 @@ func TestHelmRepositoryReconciler_reconcileSubRecs(t *testing.T) {
 			wantErr:    false,
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new index revision"),
-				*conditions.TrueCondition(meta.ReconcilingCondition, "Progressing", "creating artifact"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "creating artifact"),
+				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "reconciliation in progress"),
 			},
 		},
 		{
@@ -859,6 +963,10 @@ func TestHelmRepositoryReconciler_reconcileSubRecs(t *testing.T) {
 			},
 			wantResult: sreconcile.ResultRequeue,
 			wantErr:    false,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "reconciliation in progress"),
+				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "reconciliation in progress"),
+			},
 		},
 		{
 			name: "subrecs with error before result=Requeue",
@@ -869,6 +977,10 @@ func TestHelmRepositoryReconciler_reconcileSubRecs(t *testing.T) {
 			},
 			wantResult: sreconcile.ResultEmpty,
 			wantErr:    true,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "reconciliation in progress"),
+				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "reconciliation in progress"),
+			},
 		},
 	}
 
@@ -876,7 +988,10 @@ func TestHelmRepositoryReconciler_reconcileSubRecs(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
 
-			r := &HelmRepositoryReconciler{}
+			r := &HelmRepositoryReconciler{
+				Client:       fakeclient.NewClientBuilder().WithScheme(testEnv.GetScheme()).Build(),
+				patchOptions: getPatchOptions(helmRepositoryReadyCondition.Owned, "sc"),
+			}
 			obj := &sourcev1.HelmRepository{
 				ObjectMeta: metav1.ObjectMeta{
 					GenerateName: "test-",
@@ -887,9 +1002,15 @@ func TestHelmRepositoryReconciler_reconcileSubRecs(t *testing.T) {
 				},
 			}
 
-			ctx := context.TODO()
+			g.Expect(r.Client.Create(context.TODO(), obj)).ToNot(HaveOccurred())
+			defer func() {
+				g.Expect(r.Client.Delete(context.TODO(), obj)).ToNot(HaveOccurred())
+			}()
 
-			gotRes, gotErr := r.reconcile(ctx, obj, tt.reconcileFuncs)
+			ctx := context.TODO()
+			sp := patch.NewSerialPatcher(obj, r.Client)
+
+			gotRes, gotErr := r.reconcile(ctx, sp, obj, tt.reconcileFuncs)
 			g.Expect(gotErr != nil).To(Equal(tt.wantErr))
 			g.Expect(gotRes).To(Equal(tt.wantResult))
 
@@ -960,8 +1081,7 @@ func TestHelmRepositoryReconciler_statusConditions(t *testing.T) {
 			clientBuilder.WithObjects(obj)
 			c := clientBuilder.Build()
 
-			patchHelper, err := patch.NewHelper(obj, c)
-			g.Expect(err).ToNot(HaveOccurred())
+			serialPatcher := patch.NewSerialPatcher(obj, c)
 
 			if tt.beforeFunc != nil {
 				tt.beforeFunc(obj)
@@ -971,7 +1091,7 @@ func TestHelmRepositoryReconciler_statusConditions(t *testing.T) {
 			recResult := sreconcile.ResultSuccess
 			var retErr error
 
-			summarizeHelper := summarize.NewHelper(record.NewFakeRecorder(32), patchHelper)
+			summarizeHelper := summarize.NewHelper(record.NewFakeRecorder(32), serialPatcher)
 			summarizeOpts := []summarize.Option{
 				summarize.WithConditions(helmRepositoryReadyCondition),
 				summarize.WithReconcileResult(recResult),
@@ -1084,6 +1204,7 @@ func TestHelmRepositoryReconciler_notify(t *testing.T) {
 
 			reconciler := &HelmRepositoryReconciler{
 				EventRecorder: recorder,
+				patchOptions:  getPatchOptions(helmRepositoryReadyCondition.Owned, "sc"),
 			}
 			chartRepo := repository.ChartRepository{
 				URL: "some-address",

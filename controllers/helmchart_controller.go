@@ -30,6 +30,8 @@ import (
 
 	eventv1 "github.com/fluxcd/pkg/apis/event/v1beta1"
 	soci "github.com/fluxcd/source-controller/internal/oci"
+	"github.com/google/go-containerregistry/pkg/authn"
+	"github.com/google/go-containerregistry/pkg/v1/remote"
 	helmgetter "helm.sh/helm/v3/pkg/getter"
 	helmreg "helm.sh/helm/v3/pkg/registry"
 	corev1 "k8s.io/api/core/v1"
@@ -56,9 +58,8 @@ import (
 	helper "github.com/fluxcd/pkg/runtime/controller"
 	"github.com/fluxcd/pkg/runtime/patch"
 	"github.com/fluxcd/pkg/runtime/predicates"
+	rreconcile "github.com/fluxcd/pkg/runtime/reconcile"
 	"github.com/fluxcd/pkg/untar"
-	"github.com/google/go-containerregistry/pkg/authn"
-	"github.com/google/go-containerregistry/pkg/v1/remote"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
 	"github.com/fluxcd/source-controller/internal/cache"
@@ -133,6 +134,8 @@ type HelmChartReconciler struct {
 	Cache *cache.Cache
 	TTL   time.Duration
 	*cache.CacheRecorder
+
+	patchOptions []patch.Option
 }
 
 func (r *HelmChartReconciler) SetupWithManager(mgr ctrl.Manager) error {
@@ -147,9 +150,11 @@ type HelmChartReconcilerOptions struct {
 // helmChartReconcileFunc is the function type for all the v1beta2.HelmChart
 // (sub)reconcile functions. The type implementations are grouped and
 // executed serially to perform the complete reconcile of the object.
-type helmChartReconcileFunc func(ctx context.Context, obj *sourcev1.HelmChart, build *chart.Build) (sreconcile.Result, error)
+type helmChartReconcileFunc func(ctx context.Context, sp *patch.SerialPatcher, obj *sourcev1.HelmChart, build *chart.Build) (sreconcile.Result, error)
 
 func (r *HelmChartReconciler) SetupWithManagerAndOptions(mgr ctrl.Manager, opts HelmChartReconcilerOptions) error {
+	r.patchOptions = getPatchOptions(helmChartReadyCondition.Owned, r.ControllerName)
+
 	if err := mgr.GetCache().IndexField(context.TODO(), &sourcev1.HelmRepository{}, sourcev1.HelmRepositoryURLIndexKey,
 		r.indexHelmRepositoryByURL); err != nil {
 		return fmt.Errorf("failed setting index fields: %w", err)
@@ -200,10 +205,7 @@ func (r *HelmChartReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	r.RecordSuspend(ctx, obj, obj.Spec.Suspend)
 
 	// Initialize the patch helper with the current version of the object.
-	patchHelper, err := patch.NewHelper(obj, r.Client)
-	if err != nil {
-		return ctrl.Result{}, err
-	}
+	serialPatcher := patch.NewSerialPatcher(obj, r.Client)
 
 	// recResult stores the abstracted reconcile result.
 	var recResult sreconcile.Result
@@ -211,7 +213,7 @@ func (r *HelmChartReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	// Always attempt to patch the object after each reconciliation.
 	// NOTE: The final runtime result and error are set in this block.
 	defer func() {
-		summarizeHelper := summarize.NewHelper(r.EventRecorder, patchHelper)
+		summarizeHelper := summarize.NewHelper(r.EventRecorder, serialPatcher)
 		summarizeOpts := []summarize.Option{
 			summarize.WithConditions(helmChartReadyCondition),
 			summarize.WithBiPolarityConditionTypes(sourcev1.SourceVerifiedCondition),
@@ -259,19 +261,35 @@ func (r *HelmChartReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		r.reconcileSource,
 		r.reconcileArtifact,
 	}
-	recResult, retErr = r.reconcile(ctx, obj, reconcilers)
+	recResult, retErr = r.reconcile(ctx, serialPatcher, obj, reconcilers)
 	return
 }
 
 // reconcile iterates through the helmChartReconcileFunc tasks for the
 // object. It returns early on the first call that returns
 // reconcile.ResultRequeue, or produces an error.
-func (r *HelmChartReconciler) reconcile(ctx context.Context, obj *sourcev1.HelmChart, reconcilers []helmChartReconcileFunc) (sreconcile.Result, error) {
+func (r *HelmChartReconciler) reconcile(ctx context.Context, sp *patch.SerialPatcher, obj *sourcev1.HelmChart, reconcilers []helmChartReconcileFunc) (sreconcile.Result, error) {
 	oldObj := obj.DeepCopy()
 
-	// Mark as reconciling if generation differs.
-	if obj.Generation != obj.Status.ObservedGeneration {
-		conditions.MarkReconciling(obj, "NewGeneration", "reconciling new object generation (%d)", obj.Generation)
+	rreconcile.ProgressiveStatus(false, obj, meta.ProgressingReason, "reconciliation in progress")
+
+	var reconcileAtVal string
+	if v, ok := meta.ReconcileAnnotationValue(obj.GetAnnotations()); ok {
+		reconcileAtVal = v
+	}
+
+	// Persist reconciling if generation differs or reconciliation is requested.
+	switch {
+	case obj.Generation != obj.Status.ObservedGeneration:
+		rreconcile.ProgressiveStatus(false, obj, meta.ProgressingReason,
+			"processing object: new generation %d -> %d", obj.Status.ObservedGeneration, obj.Generation)
+		if err := sp.Patch(ctx, obj, r.patchOptions...); err != nil {
+			return sreconcile.ResultEmpty, err
+		}
+	case reconcileAtVal != obj.Status.GetLastHandledReconcileRequest():
+		if err := sp.Patch(ctx, obj, r.patchOptions...); err != nil {
+			return sreconcile.ResultEmpty, err
+		}
 	}
 
 	// Run the sub-reconcilers and build the result of reconciliation.
@@ -281,7 +299,7 @@ func (r *HelmChartReconciler) reconcile(ctx context.Context, obj *sourcev1.HelmC
 		resErr error
 	)
 	for _, rec := range reconcilers {
-		recResult, err := rec(ctx, obj, &build)
+		recResult, err := rec(ctx, sp, obj, &build)
 		// Exit immediately on ResultRequeue.
 		if recResult == sreconcile.ResultRequeue {
 			return sreconcile.ResultRequeue, nil
@@ -344,22 +362,31 @@ func (r *HelmChartReconciler) notify(ctx context.Context, oldObj, newObj *source
 // condition is added.
 // The hostname of any URL in the Status of the object are updated, to ensure
 // they match the Storage server hostname of current runtime.
-func (r *HelmChartReconciler) reconcileStorage(ctx context.Context, obj *sourcev1.HelmChart, build *chart.Build) (sreconcile.Result, error) {
+func (r *HelmChartReconciler) reconcileStorage(ctx context.Context, sp *patch.SerialPatcher, obj *sourcev1.HelmChart, build *chart.Build) (sreconcile.Result, error) {
 	// Garbage collect previous advertised artifact(s) from storage
 	_ = r.garbageCollect(ctx, obj)
 
 	// Determine if the advertised artifact is still in storage
+	var artifactMissing bool
 	if artifact := obj.GetArtifact(); artifact != nil && !r.Storage.ArtifactExist(*artifact) {
 		obj.Status.Artifact = nil
 		obj.Status.URL = ""
+		artifactMissing = true
 		// Remove the condition as the artifact doesn't exist.
 		conditions.Delete(obj, sourcev1.ArtifactInStorageCondition)
 	}
 
 	// Record that we do not have an artifact
 	if obj.GetArtifact() == nil {
-		conditions.MarkReconciling(obj, "NoArtifact", "no artifact for resource in storage")
+		msg := "building artifact"
+		if artifactMissing {
+			msg += ": disappeared from storage"
+		}
+		rreconcile.ProgressiveStatus(true, obj, meta.ProgressingReason, msg)
 		conditions.Delete(obj, sourcev1.ArtifactInStorageCondition)
+		if err := sp.Patch(ctx, obj, r.patchOptions...); err != nil {
+			return sreconcile.ResultEmpty, err
+		}
 		return sreconcile.ResultSuccess, nil
 	}
 
@@ -371,7 +398,7 @@ func (r *HelmChartReconciler) reconcileStorage(ctx context.Context, obj *sourcev
 	return sreconcile.ResultSuccess, nil
 }
 
-func (r *HelmChartReconciler) reconcileSource(ctx context.Context, obj *sourcev1.HelmChart, build *chart.Build) (_ sreconcile.Result, retErr error) {
+func (r *HelmChartReconciler) reconcileSource(ctx context.Context, sp *patch.SerialPatcher, obj *sourcev1.HelmChart, build *chart.Build) (_ sreconcile.Result, retErr error) {
 	// Remove any failed verification condition.
 	// The reason is that a failing verification should be recalculated.
 	if conditions.IsFalse(obj, sourcev1.SourceVerifiedCondition) {
@@ -418,7 +445,7 @@ func (r *HelmChartReconciler) reconcileSource(ctx context.Context, obj *sourcev1
 	// Defer observation of build result
 	defer func() {
 		// Record both success and error observations on the object
-		observeChartBuild(obj, build, retErr)
+		observeChartBuild(ctx, sp, r.patchOptions, obj, build, retErr)
 
 		// If we actually build a chart, take a historical note of any dependencies we resolved.
 		// The reason this is a done conditionally, is because if we have a cached one in storage,
@@ -810,7 +837,7 @@ func (r *HelmChartReconciler) buildFromTarballArtifact(ctx context.Context, obj 
 // early.
 // On a successful archive, the Artifact in the Status of the object is set,
 // and the symlink in the Storage is updated to its path.
-func (r *HelmChartReconciler) reconcileArtifact(ctx context.Context, obj *sourcev1.HelmChart, b *chart.Build) (sreconcile.Result, error) {
+func (r *HelmChartReconciler) reconcileArtifact(ctx context.Context, sp *patch.SerialPatcher, obj *sourcev1.HelmChart, b *chart.Build) (sreconcile.Result, error) {
 	// Without a complete chart build, there is little to reconcile
 	if !b.Complete() {
 		return sreconcile.ResultRequeue, nil
@@ -1265,10 +1292,16 @@ func (r *HelmChartReconciler) eventLogf(ctx context.Context, obj runtime.Object,
 }
 
 // observeChartBuild records the observation on the given given build and error on the object.
-func observeChartBuild(obj *sourcev1.HelmChart, build *chart.Build, err error) {
+func observeChartBuild(ctx context.Context, sp *patch.SerialPatcher, pOpts []patch.Option, obj *sourcev1.HelmChart, build *chart.Build, err error) {
 	if build.HasMetadata() {
 		if build.Name != obj.Status.ObservedChartName || !obj.GetArtifact().HasRevision(build.Version) {
-			conditions.MarkTrue(obj, sourcev1.ArtifactOutdatedCondition, "NewChart", build.Summary())
+			if obj.GetArtifact() != nil {
+				conditions.MarkTrue(obj, sourcev1.ArtifactOutdatedCondition, "NewChart", build.Summary())
+			}
+			rreconcile.ProgressiveStatus(true, obj, meta.ProgressingReason, "building artifact: %s", build.Summary())
+			if err := sp.Patch(ctx, obj, pOpts...); err != nil {
+				ctrl.LoggerFrom(ctx).Error(err, "failed to patch")
+			}
 		}
 	}
 

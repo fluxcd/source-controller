@@ -866,9 +866,9 @@ Status:
 ...
   Conditions:
     Last Transition Time:  2022-02-02T13:26:55Z
-    Message:               reconciling new object generation (2)
+    Message:               processing object: new generation 1 -> 2
     Observed Generation:   2
-    Reason:                NewGeneration
+    Reason:                ProgressingWithRetry
     Status:                True
     Type:                  Reconciling
     Last Transition Time:  2022-02-02T13:26:55Z
@@ -978,13 +978,13 @@ is true:
 - The generation of the Bucket is newer than the [Observed Generation](#observed-generation).
 - The newly calculated Artifact revision differs from the current Artifact.
 
-When the Bucket is "reconciling", the `Ready` Condition status becomes `False`,
-and the controller adds a Condition with the following attributes to the
-Bucket's `.status.conditions`:
+When the Bucket is "reconciling", the `Ready` Condition status becomes
+`Unknown` when the controller detects drift, and the controller adds a Condition
+with the following attributes to the Bucket's `.status.conditions`:
 
 - `type: Reconciling`
 - `status: "True"`
-- `reason: NewGeneration` | `reason: NoArtifact` | `reason: NewRevision`
+- `reason: Progressing` | `reason: ProgressingWithRetry`
 
 If the reconciling state is due to a new revision, an additional Condition is
 added with the following attributes:
@@ -1062,7 +1062,9 @@ it succeeds and the Bucket is marked as [ready](#ready-bucket).
 
 Note that a Bucket can be [reconciling](#reconciling-bucket) while failing at
 the same time, for example due to a newly introduced configuration issue in the
-Bucket spec.
+Bucket spec. When a reconciliation fails, the `Reconciling` Condition reason
+would be `ProgressingWithRetry`. When the reconciliation is performed again
+after the failure, the reason is updated to `Progressing`.
 
 ### Observed Ignore
 

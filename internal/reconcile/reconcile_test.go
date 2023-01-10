@@ -206,6 +206,21 @@ func TestComputeReconcileResult(t *testing.T) {
 				t.Expect(conditions.IsUnknown(obj, meta.StalledCondition)).To(BeTrue())
 			},
 		},
+		{
+			name: "failed with Reconciling=True adds ProgressingWithRetry reason",
+			beforeFunc: func(obj conditions.Setter) {
+				conditions.MarkReconciling(obj, meta.ProgressingReason, "some msg")
+			},
+			result:     ResultEmpty,
+			recErr:     fmt.Errorf("some error"),
+			wantResult: ctrl.Result{},
+			wantErr:    true,
+			afterFunc: func(t *WithT, obj conditions.Setter, patchOpts *patch.HelperOptions) {
+			},
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingWithRetryReason, "some msg"),
+			},
+		},
 	}
 
 	for _, tt := range tests {

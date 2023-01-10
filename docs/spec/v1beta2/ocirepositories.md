@@ -642,9 +642,9 @@ Status:
 ...
   Conditions:
     Last Transition Time:  2022-02-14T09:40:27Z
-    Message:               reconciling new object generation (2)
+    Message:               processing object: new generation 1 -> 2
     Observed Generation:   2
-    Reason:                NewGeneration
+    Reason:                ProgressingWithRetry
     Status:                True
     Type:                  Reconciling
     Last Transition Time:  2022-02-14T09:40:27Z
@@ -769,12 +769,12 @@ following is true:
 - The newly resolved Artifact digest differs from the current Artifact.
 
 When the OCIRepository is "reconciling", the `Ready` Condition status becomes
-`False`, and the controller adds a Condition with the following attributes to
-the OCIRepository's `.status.conditions`:
+`Unknown` when the controller detects drift, and the controller adds a Condition
+with the following attributes to the OCIRepository's `.status.conditions`:
 
 - `type: Reconciling`
 - `status: "True"`
-- `reason: NewGeneration` | `reason: NoArtifact` | `reason: NewRevision`
+- `reason: Progressing` | `reason: ProgressingWithRetry`
 
 If the reconciling state is due to a new revision, an additional Condition is
 added with the following attributes:
@@ -862,7 +862,10 @@ exponential backoff, until it succeeds and the OCIRepository is marked as
 
 Note that a OCIRepository can be [reconciling](#reconciling-ocirepository)
 while failing at the same time, for example due to a newly introduced
-configuration issue in the OCIRepository spec.
+configuration issue in the OCIRepository spec. When a reconciliation fails, the
+`Reconciling` Condition reason would be `ProgressingWithRetry`. When the
+reconciliation is performed again after the failure, the reason is updated to
+`Progressing`.
 
 ### Content Configuration Checksum
 

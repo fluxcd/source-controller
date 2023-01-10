@@ -128,7 +128,7 @@ func TestSummarizeAndPatch(t *testing.T) {
 			name:       "Success, removes reconciling for successful result",
 			generation: 2,
 			beforeFunc: func(obj conditions.Setter) {
-				conditions.MarkReconciling(obj, "NewRevision", "new index version")
+				conditions.MarkReconciling(obj, meta.ProgressingReason, "new index version")
 				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "stored artifact")
 			},
 			conditions: []Conditions{testReadyConditions},
@@ -167,7 +167,7 @@ func TestSummarizeAndPatch(t *testing.T) {
 			generation: 7,
 			beforeFunc: func(obj conditions.Setter) {
 				conditions.MarkTrue(obj, sourcev1.ArtifactOutdatedCondition, "NewRevision", "new index revision")
-				conditions.MarkReconciling(obj, "NewRevision", "new index revision")
+				conditions.MarkReconciling(obj, meta.ProgressingReason, "new index revision")
 			},
 			conditions:   []Conditions{testReadyConditions},
 			reconcileErr: fmt.Errorf("failed to create dir"),
@@ -175,7 +175,7 @@ func TestSummarizeAndPatch(t *testing.T) {
 			assertConditions: []metav1.Condition{
 				*conditions.FalseCondition(meta.ReadyCondition, "NewRevision", "new index revision"),
 				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new index revision"),
-				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new index revision"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingWithRetryReason, "new index revision"),
 			},
 			afterFunc: func(t *WithT, obj client.Object) {
 				t.Expect(obj).ToNot(HaveStatusObservedGeneration(7))
@@ -264,7 +264,7 @@ func TestSummarizeAndPatch(t *testing.T) {
 			name:       "Fail, reconciling with bipolar condition False, Ready gets bipolar failure value",
 			generation: 2,
 			beforeFunc: func(obj conditions.Setter) {
-				conditions.MarkReconciling(obj, "NewRevision", "new index revision")
+				conditions.MarkReconciling(obj, meta.ProgressingReason, "new index revision")
 				conditions.MarkFalse(obj, sourcev1.SourceVerifiedCondition, "VerifyFailed", "verify failed")
 			},
 			result:            reconcile.ResultEmpty,
@@ -275,14 +275,14 @@ func TestSummarizeAndPatch(t *testing.T) {
 			assertConditions: []metav1.Condition{
 				*conditions.FalseCondition(meta.ReadyCondition, "VerifyFailed", "verify failed"),
 				*conditions.FalseCondition(sourcev1.SourceVerifiedCondition, "VerifyFailed", "verify failed"),
-				*conditions.TrueCondition(meta.ReconcilingCondition, "NewRevision", "new index revision"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingWithRetryReason, "new index revision"),
 			},
 		},
 		{
 			name:       "Fail, bipolar condition True, negative polarity True, Ready gets negative polarity value",
 			generation: 2,
 			beforeFunc: func(obj conditions.Setter) {
-				conditions.MarkReconciling(obj, "NewGeneration", "new obj gen")
+				conditions.MarkReconciling(obj, meta.ProgressingReason, "new obj gen")
 				conditions.MarkTrue(obj, sourcev1.ArtifactOutdatedCondition, "NewRevision", "new digest")
 				conditions.MarkTrue(obj, sourcev1.SourceVerifiedCondition, "Success", "verified")
 			},
@@ -294,7 +294,7 @@ func TestSummarizeAndPatch(t *testing.T) {
 			assertConditions: []metav1.Condition{
 				*conditions.FalseCondition(meta.ReadyCondition, "NewRevision", "new digest"),
 				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new digest"),
-				*conditions.TrueCondition(meta.ReconcilingCondition, "NewGeneration", "new obj gen"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingWithRetryReason, "new obj gen"),
 				*conditions.TrueCondition(sourcev1.SourceVerifiedCondition, "Success", "verified"),
 			},
 		},
@@ -345,10 +345,9 @@ func TestSummarizeAndPatch(t *testing.T) {
 
 			ctx := context.TODO()
 			g.Expect(client.Create(ctx, obj)).To(Succeed())
-			patchHelper, err := patch.NewHelper(obj, client)
-			g.Expect(err).ToNot(HaveOccurred())
+			serialPatcher := patch.NewSerialPatcher(obj, client)
 
-			summaryHelper := NewHelper(record.NewFakeRecorder(32), patchHelper)
+			summaryHelper := NewHelper(record.NewFakeRecorder(32), serialPatcher)
 			summaryOpts := []Option{
 				WithReconcileResult(tt.result),
 				WithReconcileError(tt.reconcileErr),
@@ -471,15 +470,14 @@ func TestSummarizeAndPatch_Intermediate(t *testing.T) {
 
 			ctx := context.TODO()
 			g.Expect(kclient.Create(ctx, obj)).To(Succeed())
-			patchHelper, err := patch.NewHelper(obj, kclient)
-			g.Expect(err).ToNot(HaveOccurred())
+			serialPatcher := patch.NewSerialPatcher(obj, kclient)
 
-			summaryHelper := NewHelper(record.NewFakeRecorder(32), patchHelper)
+			summaryHelper := NewHelper(record.NewFakeRecorder(32), serialPatcher)
 			summaryOpts := []Option{
 				WithConditions(tt.conditions...),
 				WithResultBuilder(reconcile.AlwaysRequeueResultBuilder{RequeueAfter: interval}),
 			}
-			_, err = summaryHelper.SummarizeAndPatch(ctx, obj, summaryOpts...)
+			_, err := summaryHelper.SummarizeAndPatch(ctx, obj, summaryOpts...)
 			g.Expect(err).ToNot(HaveOccurred())
 
 			g.Expect(obj.Status.Conditions).To(conditions.MatchConditions(tt.assertConditions))
