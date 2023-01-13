@@ -24,6 +24,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"github.com/opencontainers/go-digest"
 	"io"
 	"net/url"
 	"os"
@@ -302,7 +303,7 @@ func (r *ChartRepository) LoadIndexFromBytes(b []byte) error {
 
 	r.Lock()
 	r.Index = i
-	r.Checksum = fmt.Sprintf("%x", sha256.Sum256(b))
+	r.Checksum = digest.SHA256.FromBytes(b).Hex()
 	r.Unlock()
 	return nil
 }
