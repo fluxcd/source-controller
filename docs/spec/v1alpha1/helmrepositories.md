@@ -19,7 +19,7 @@ type HelmRepositorySpec struct {
 	// repository.
 	// For HTTP/S basic auth the secret must contain username and
 	// password fields.
-	// For TLS the secret must contain caFile, keyFile and caCert
+	// For TLS the secret must contain caFile, keyFile and caFile
 	// fields.
     // +optional
 	SecretRef *corev1.LocalObjectReference `json:"secretRef,omitempty"`
