@@ -22,6 +22,7 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
+	"github.com/fluxcd/pkg/git"
 	"io"
 	"net/http"
 	"os"
@@ -390,7 +391,7 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 		return sreconcile.ResultEmpty, e
 	}
 
-	// Get the upstream revision from the artifact digest
+	// Get the upstream revision from the artifact revision
 	revision, err := r.getRevision(url, opts.craneOpts)
 	if err != nil {
 		e := serror.NewGeneric(
@@ -405,7 +406,7 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 
 	// Mark observations about the revision on the object
 	defer func() {
-		if !obj.GetArtifact().HasRevision(revision) {
+		if obj.GetArtifact() == nil || git.TransformRevision(obj.GetArtifact().Revision) != git.TransformRevision(revision) {
 			message := fmt.Sprintf("new revision '%s' for '%s'", revision, url)
 			if obj.GetArtifact() != nil {
 				conditions.MarkTrue(obj, sourcev1.ArtifactOutdatedCondition, "NewRevision", message)
@@ -425,7 +426,7 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 	if obj.Spec.Verify == nil {
 		// Remove old observations if verification was disabled
 		conditions.Delete(obj, sourcev1.SourceVerifiedCondition)
-	} else if !obj.GetArtifact().HasRevision(revision) ||
+	} else if (obj.GetArtifact() == nil || git.TransformRevision(obj.GetArtifact().Revision) != git.TransformRevision(revision)) ||
 		conditions.GetObservedGeneration(obj, sourcev1.SourceVerifiedCondition) != obj.Generation ||
 		conditions.IsFalse(obj, sourcev1.SourceVerifiedCondition) {
 
@@ -458,7 +459,9 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 
 	// Skip pulling if the artifact revision and the source configuration has
 	// not changed.
-	if obj.GetArtifact().HasRevision(revision) && !ociContentConfigChanged(obj) {
+	if (obj.GetArtifact() != nil &&
+		git.TransformRevision(obj.GetArtifact().Revision) == git.TransformRevision(revision)) &&
+		!ociContentConfigChanged(obj) {
 		conditions.Delete(obj, sourcev1.FetchFailedCondition)
 		return sreconcile.ResultSuccess, nil
 	}
@@ -582,7 +585,7 @@ func (r *OCIRepositoryReconciler) selectLayer(obj *sourcev1.OCIRepository, image
 	return blob, nil
 }
 
-// getRevision fetches the upstream digest and returns the revision in the format `<tag>/<digest>`
+// getRevision fetches the upstream revision and returns the revision in the format `<tag>/<revision>`
 func (r *OCIRepositoryReconciler) getRevision(url string, options []crane.Option) (string, error) {
 	ref, err := name.ParseReference(url)
 	if err != nil {
@@ -609,16 +612,16 @@ func (r *OCIRepositoryReconciler) getRevision(url string, options []crane.Option
 		return "", err
 	}
 
-	revision := digestHash.Hex
+	revision := digestHash.String()
 	if repoTag != "" {
-		revision = fmt.Sprintf("%s/%s", repoTag, digestHash.Hex)
+		revision = fmt.Sprintf("%s@%s", repoTag, revision)
 	}
 	return revision, nil
 }
 
-// digestFromRevision extract the digest from the revision string
+// digestFromRevision extract the revision from the revision string
 func (r *OCIRepositoryReconciler) digestFromRevision(revision string) string {
-	parts := strings.Split(revision, "/")
+	parts := strings.Split(revision, "@")
 	return parts[len(parts)-1]
 }
 
@@ -722,7 +725,7 @@ func (r *OCIRepositoryReconciler) parseRepositoryURL(obj *sourcev1.OCIRepository
 	return ref.Context().Name(), nil
 }
 
-// getArtifactURL determines which tag or digest should be used and returns the OCI artifact FQN.
+// getArtifactURL determines which tag or revision should be used and returns the OCI artifact FQN.
 func (r *OCIRepositoryReconciler) getArtifactURL(obj *sourcev1.OCIRepository, options []crane.Option) (string, error) {
 	url, err := r.parseRepositoryURL(obj)
 	if err != nil {
@@ -967,7 +970,9 @@ func (r *OCIRepositoryReconciler) reconcileArtifact(ctx context.Context, sp *pat
 	}()
 
 	// The artifact is up-to-date
-	if obj.GetArtifact().HasRevision(artifact.Revision) && !ociContentConfigChanged(obj) {
+	if (obj.GetArtifact() != nil &&
+		git.TransformRevision(obj.GetArtifact().Revision) == git.TransformRevision(revision)) &&
+		!ociContentConfigChanged(obj) {
 		r.eventLogf(ctx, obj, eventv1.EventTypeTrace, sourcev1.ArtifactUpToDateReason,
 			"artifact up-to-date with remote revision: '%s'", artifact.Revision)
 		return sreconcile.ResultSuccess, nil
@@ -1141,7 +1146,7 @@ func (r *OCIRepositoryReconciler) notify(ctx context.Context, oldObj, newObj *so
 			fmt.Sprintf("%s/%s", sourcev1.GroupVersion.Group, eventv1.MetaChecksumKey): newObj.Status.Artifact.Checksum,
 		}
 		if newObj.Status.Artifact.Digest != "" {
-			annotations[sourcev1.GroupVersion.Group+"/digest"] = newObj.Status.Artifact.Digest
+			annotations[sourcev1.GroupVersion.Group+"/revision"] = newObj.Status.Artifact.Digest
 		}
 
 		var oldChecksum string
