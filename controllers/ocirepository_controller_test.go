@@ -1281,7 +1281,7 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignature(t *testing.T) {
 func TestOCIRepository_reconcileSource_noop(t *testing.T) {
 	g := NewWithT(t)
 
-	testRevision := "6.1.5@sha256:8a0eed109e056ab1f7e70e8fb47e00cf6f560ca5cd910c83451882e07edb77fa"
+	testRevision := "6.1.5@sha256:8e4057c22d531d40e12b065443cb0d80394b7257c4dc557cb1fbd4dce892b86d"
 
 	tmpDir := t.TempDir()
 	server, err := setupRegistryServer(ctx, tmpDir, registryOptions{})
@@ -1319,18 +1319,7 @@ func TestOCIRepository_reconcileSource_noop(t *testing.T) {
 			name: "noop - artifact revisions match (legacy)",
 			beforeFunc: func(obj *sourcev1.OCIRepository) {
 				obj.Status.Artifact = &sourcev1.Artifact{
-					Revision: "6.1.5/8a0eed109e056ab1f7e70e8fb47e00cf6f560ca5cd910c83451882e07edb77fa",
-				}
-			},
-			afterFunc: func(g *WithT, artifact *sourcev1.Artifact) {
-				g.Expect(artifact.Metadata).To(BeEmpty())
-			},
-		},
-		{
-			name: "noop - artifact revisions match (legacy: digest)",
-			beforeFunc: func(obj *sourcev1.OCIRepository) {
-				obj.Status.Artifact = &sourcev1.Artifact{
-					Revision: "8a0eed109e056ab1f7e70e8fb47e00cf6f560ca5cd910c83451882e07edb77fa",
+					Revision: "6.1.5/8e4057c22d531d40e12b065443cb0d80394b7257c4dc557cb1fbd4dce892b86d",
 				}
 			},
 			afterFunc: func(g *WithT, artifact *sourcev1.Artifact) {
@@ -2257,7 +2246,7 @@ func pushMultiplePodinfoImages(serverURL string, versions ...string) (map[string
 func setPodinfoImageAnnotations(img gcrv1.Image, tag string) gcrv1.Image {
 	metadata := map[string]string{
 		oci.SourceAnnotation:   "https://github.com/stefanprodan/podinfo",
-		oci.RevisionAnnotation: fmt.Sprintf("%s@sha256:8a0eed109e056ab1f7e70e8fb47e00cf6f560ca5cd910c83451882e07edb77fa", tag),
+		oci.RevisionAnnotation: fmt.Sprintf("%s@sha1:b3b00fe35424a45d373bf4c7214178bc36fd7872", tag),
 	}
 	return mutate.Annotations(img, metadata).(gcrv1.Image)
 }

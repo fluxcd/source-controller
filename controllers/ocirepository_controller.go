@@ -22,7 +22,6 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
-	"github.com/fluxcd/pkg/git"
 	"io"
 	"net/http"
 	"os"
@@ -391,7 +390,7 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 		return sreconcile.ResultEmpty, e
 	}
 
-	// Get the upstream revision from the artifact revision
+	// Get the upstream revision from the artifact digest
 	revision, err := r.getRevision(url, opts.craneOpts)
 	if err != nil {
 		e := serror.NewGeneric(
@@ -406,7 +405,7 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 
 	// Mark observations about the revision on the object
 	defer func() {
-		if obj.GetArtifact() == nil || git.TransformRevision(obj.GetArtifact().Revision) != git.TransformRevision(revision) {
+		if !obj.GetArtifact().HasRevision(revision) {
 			message := fmt.Sprintf("new revision '%s' for '%s'", revision, url)
 			if obj.GetArtifact() != nil {
 				conditions.MarkTrue(obj, sourcev1.ArtifactOutdatedCondition, "NewRevision", message)
@@ -426,7 +425,7 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 	if obj.Spec.Verify == nil {
 		// Remove old observations if verification was disabled
 		conditions.Delete(obj, sourcev1.SourceVerifiedCondition)
-	} else if (obj.GetArtifact() == nil || git.TransformRevision(obj.GetArtifact().Revision) != git.TransformRevision(revision)) ||
+	} else if !obj.GetArtifact().HasRevision(revision) ||
 		conditions.GetObservedGeneration(obj, sourcev1.SourceVerifiedCondition) != obj.Generation ||
 		conditions.IsFalse(obj, sourcev1.SourceVerifiedCondition) {
 
@@ -459,9 +458,7 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 
 	// Skip pulling if the artifact revision and the source configuration has
 	// not changed.
-	if (obj.GetArtifact() != nil &&
-		git.TransformRevision(obj.GetArtifact().Revision) == git.TransformRevision(revision)) &&
-		!ociContentConfigChanged(obj) {
+	if obj.GetArtifact().HasRevision(revision) && !ociContentConfigChanged(obj) {
 		conditions.Delete(obj, sourcev1.FetchFailedCondition)
 		return sreconcile.ResultSuccess, nil
 	}
@@ -585,7 +582,8 @@ func (r *OCIRepositoryReconciler) selectLayer(obj *sourcev1.OCIRepository, image
 	return blob, nil
 }
 
-// getRevision fetches the upstream revision and returns the revision in the format `<tag>/<revision>`
+// getRevision fetches the upstream digest, returning the revision in the
+// format '<tag>@<digest>'.
 func (r *OCIRepositoryReconciler) getRevision(url string, options []crane.Option) (string, error) {
 	ref, err := name.ParseReference(url)
 	if err != nil {
@@ -619,14 +617,15 @@ func (r *OCIRepositoryReconciler) getRevision(url string, options []crane.Option
 	return revision, nil
 }
 
-// digestFromRevision extract the revision from the revision string
+// digestFromRevision extracts the digest from the revision string.
 func (r *OCIRepositoryReconciler) digestFromRevision(revision string) string {
 	parts := strings.Split(revision, "@")
 	return parts[len(parts)-1]
 }
 
-// verifySignature verifies the authenticity of the given image reference url. First, it tries using a key
-// if a secret with a valid public key is provided. If not, it falls back to a keyless approach for verification.
+// verifySignature verifies the authenticity of the given image reference URL.
+// First, it tries to use a key if a Secret with a valid public key is provided.
+// If not, it falls back to a keyless approach for verification.
 func (r *OCIRepositoryReconciler) verifySignature(ctx context.Context, obj *sourcev1.OCIRepository, url string, opt ...remote.Option) error {
 	ctxTimeout, cancel := context.WithTimeout(ctx, obj.Spec.Timeout.Duration)
 	defer cancel()
@@ -954,11 +953,9 @@ func (r *OCIRepositoryReconciler) reconcileStorage(ctx context.Context, sp *patc
 // and the symlink in the Storage is updated to its path.
 func (r *OCIRepositoryReconciler) reconcileArtifact(ctx context.Context, sp *patch.SerialPatcher,
 	obj *sourcev1.OCIRepository, metadata *sourcev1.Artifact, dir string) (sreconcile.Result, error) {
-	revision := metadata.Revision
-
 	// Create artifact
-	artifact := r.Storage.NewArtifactFor(obj.Kind, obj, revision,
-		fmt.Sprintf("%s.tar.gz", r.digestFromRevision(revision)))
+	artifact := r.Storage.NewArtifactFor(obj.Kind, obj, metadata.Revision,
+		fmt.Sprintf("%s.tar.gz", r.digestFromRevision(metadata.Revision)))
 
 	// Set the ArtifactInStorageCondition if there's no drift.
 	defer func() {
@@ -970,9 +967,7 @@ func (r *OCIRepositoryReconciler) reconcileArtifact(ctx context.Context, sp *pat
 	}()
 
 	// The artifact is up-to-date
-	if (obj.GetArtifact() != nil &&
-		git.TransformRevision(obj.GetArtifact().Revision) == git.TransformRevision(revision)) &&
-		!ociContentConfigChanged(obj) {
+	if obj.GetArtifact().HasRevision(artifact.Revision) && !ociContentConfigChanged(obj) {
 		r.eventLogf(ctx, obj, eventv1.EventTypeTrace, sourcev1.ArtifactUpToDateReason,
 			"artifact up-to-date with remote revision: '%s'", artifact.Revision)
 		return sreconcile.ResultSuccess, nil

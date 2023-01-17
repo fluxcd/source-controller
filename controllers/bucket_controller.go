@@ -466,8 +466,8 @@ func (r *BucketReconciler) reconcileSource(ctx context.Context, sp *patch.Serial
 	// Check if index has changed compared to current Artifact revision.
 	var changed bool
 	if artifact := obj.Status.Artifact; artifact != nil && artifact.Revision != "" {
-		curRev := backwardsCompatibleDigest(artifact.Revision)
-		changed = curRev != index.Digest(curRev.Algorithm())
+		curRev := digest.Digest(sourcev1.TransformLegacyRevision(artifact.Revision))
+		changed = curRev.Validate() != nil || curRev != index.Digest(curRev.Algorithm())
 	}
 
 	// Fetch the bucket objects if required to.
@@ -519,8 +519,8 @@ func (r *BucketReconciler) reconcileArtifact(ctx context.Context, sp *patch.Seri
 	// Set the ArtifactInStorageCondition if there's no drift.
 	defer func() {
 		if curArtifact := obj.GetArtifact(); curArtifact != nil && curArtifact.Revision != "" {
-			curRev := backwardsCompatibleDigest(curArtifact.Revision)
-			if index.Digest(curRev.Algorithm()) == curRev {
+			curRev := digest.Digest(sourcev1.TransformLegacyRevision(curArtifact.Revision))
+			if curRev.Validate() == nil && index.Digest(curRev.Algorithm()) == curRev {
 				conditions.Delete(obj, sourcev1.ArtifactOutdatedCondition)
 				conditions.MarkTrue(obj, sourcev1.ArtifactInStorageCondition, meta.SucceededReason,
 					"stored artifact: revision '%s'", artifact.Revision)
@@ -530,8 +530,8 @@ func (r *BucketReconciler) reconcileArtifact(ctx context.Context, sp *patch.Seri
 
 	// The artifact is up-to-date
 	if curArtifact := obj.GetArtifact(); curArtifact != nil && curArtifact.Revision != "" {
-		curRev := backwardsCompatibleDigest(curArtifact.Revision)
-		if index.Digest(curRev.Algorithm()) == curRev {
+		curRev := digest.Digest(sourcev1.TransformLegacyRevision(curArtifact.Revision))
+		if curRev.Validate() == nil && index.Digest(curRev.Algorithm()) == curRev {
 			r.eventLogf(ctx, obj, eventv1.EventTypeTrace, sourcev1.ArtifactUpToDateReason, "artifact up-to-date with remote revision: '%s'", artifact.Revision)
 			return sreconcile.ResultSuccess, nil
 		}
@@ -796,11 +796,4 @@ func fetchIndexFiles(ctx context.Context, provider BucketProvider, obj *sourcev1
 	}
 
 	return nil
-}
-
-func backwardsCompatibleDigest(d string) digest.Digest {
-	if !strings.Contains(d, ":") {
-		d = digest.SHA256.String() + ":" + d
-	}
-	return digest.Digest(d)
 }

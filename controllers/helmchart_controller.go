@@ -22,6 +22,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/fluxcd/pkg/git"
+	"github.com/opencontainers/go-digest"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -793,7 +794,9 @@ func (r *HelmChartReconciler) buildFromTarballArtifact(ctx context.Context, obj 
 			rev = git.ExtractHashFromRevision(rev).String()
 		}
 		if obj.Spec.SourceRef.Kind == sourcev1.BucketKind {
-			rev = backwardsCompatibleDigest(rev).Hex()
+			if dig := digest.Digest(sourcev1.TransformLegacyRevision(rev)); dig.Validate() == nil {
+				rev = dig.Hex()
+			}
 		}
 		if kind := obj.Spec.SourceRef.Kind; kind == sourcev1.GitRepositoryKind || kind == sourcev1.BucketKind {
 			// The SemVer from the metadata is at times used in e.g. the label metadata for a resource
@@ -1244,10 +1247,9 @@ func (r *HelmChartReconciler) requestsForGitRepositoryChange(o client.Object) []
 		return nil
 	}
 
-	revision := git.TransformRevision(repo.GetArtifact().Revision)
 	var reqs []reconcile.Request
 	for _, i := range list.Items {
-		if git.TransformRevision(i.Status.ObservedSourceArtifactRevision) != revision {
+		if !repo.GetArtifact().HasRevision(i.Status.ObservedSourceArtifactRevision) {
 			reqs = append(reqs, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(&i)})
 		}
 	}
@@ -1272,10 +1274,9 @@ func (r *HelmChartReconciler) requestsForBucketChange(o client.Object) []reconci
 		return nil
 	}
 
-	revision := backwardsCompatibleDigest(bucket.GetArtifact().Revision)
 	var reqs []reconcile.Request
 	for _, i := range list.Items {
-		if backwardsCompatibleDigest(i.Status.ObservedSourceArtifactRevision) != revision {
+		if !bucket.GetArtifact().HasRevision(i.Status.ObservedSourceArtifactRevision) {
 			reqs = append(reqs, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(&i)})
 		}
 	}

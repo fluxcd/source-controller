@@ -21,19 +21,15 @@ import sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
 type artifactSet []*sourcev1.Artifact
 
 // Diff returns true if any of the revisions in the artifactSet does not match any of the given artifacts.
-func (s artifactSet) Diff(set artifactSet, comp func(x, y *sourcev1.Artifact) bool) bool {
+func (s artifactSet) Diff(set artifactSet) bool {
 	if len(s) != len(set) {
 		return true
-	}
-
-	if comp == nil {
-		comp = defaultCompare
 	}
 
 outer:
 	for _, j := range s {
 		for _, k := range set {
-			if comp(j, k) {
+			if k.HasRevision(j.Revision) {
 				continue outer
 			}
 		}
@@ -41,11 +37,3 @@ outer:
 	}
 	return false
 }
-
-func defaultCompare(x, y *sourcev1.Artifact) bool {
-	if y == nil {
-		return false
-	}
-	return x.HasRevision(y.Revision)
-}
-

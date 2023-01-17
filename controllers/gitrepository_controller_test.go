@@ -2268,7 +2268,7 @@ func TestGitRepositoryReconciler_fetchIncludes(t *testing.T) {
 			g.Expect(err != nil).To(Equal(tt.wantErr))
 			g.Expect(obj.GetConditions()).To(conditions.MatchConditions(tt.assertConditions))
 			if !tt.wantErr && gotArtifactSet != nil {
-				g.Expect(gotArtifactSet.Diff(tt.wantArtifactSet, gitArtifactRevisionEqual)).To(BeFalse())
+				g.Expect(gotArtifactSet.Diff(tt.wantArtifactSet)).To(BeFalse())
 			}
 		})
 	}
