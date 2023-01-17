@@ -18,6 +18,7 @@ package v1beta2
 
 import (
 	"path"
+	"regexp"
 	"strings"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -72,7 +73,7 @@ func (in *Artifact) HasRevision(revision string) bool {
 	if in == nil {
 		return false
 	}
-	return in.Revision == revision
+	return TransformLegacyRevision(in.Revision) == TransformLegacyRevision(revision)
 }
 
 // HasChecksum returns if the given checksum matches the current Checksum of
@@ -95,4 +96,61 @@ func ArtifactDir(kind, namespace, name string) string {
 // '<kind>/<namespace>/name>/<filename>'.
 func ArtifactPath(kind, namespace, name, filename string) string {
 	return path.Join(ArtifactDir(kind, namespace, name), filename)
+}
+
+// TransformLegacyRevision transforms a "legacy" revision string into a "new"
+// revision string. It accepts the following formats:
+//
+//   - main/5394cb7f48332b2de7c17dd8b8384bbc84b7e738
+//   - feature/branch/5394cb7f48332b2de7c17dd8b8384bbc84b7e738
+//   - HEAD/5394cb7f48332b2de7c17dd8b8384bbc84b7e738
+//   - tag/55609ff9d959589ed917ce32e6bc0f0a36809565f308602c15c3668965979edc
+//   - d52bde83c5b2bd0fa7910264e0afc3ac9cfe9b6636ca29c05c09742f01d5a4bd
+//
+// Which are transformed into the following formats respectively:
+//
+//   - main@sha1:5394cb7f48332b2de7c17dd8b8384bbc84b7e738
+//   - feature/branch@sha1:5394cb7f48332b2de7c17dd8b8384bbc84b7e738
+//   - sha1:5394cb7f48332b2de7c17dd8b8384bbc84b7e738
+//   - tag@sha256:55609ff9d959589ed917ce32e6bc0f0a36809565f308602c15c3668965979edc
+//   - sha256:d52bde83c5b2bd0fa7910264e0afc3ac9cfe9b6636ca29c05c09742f01d5a4bd
+//
+// Deprecated, this function exists for backwards compatibility with existing
+// resources, and to provide a transition period. Will be removed in a future
+// release.
+func TransformLegacyRevision(rev string) string {
+	if rev != "" && strings.LastIndex(rev, ":") == -1 {
+		if i := strings.LastIndex(rev, "/"); i >= 0 {
+			sha := rev[i+1:]
+			if algo := determineSHAType(sha); algo != "" {
+				if name := rev[:i]; name != "HEAD" {
+					return name + "@" + algo + ":" + sha
+				}
+				return algo + ":" + sha
+			}
+		}
+		if algo := determineSHAType(rev); algo != "" {
+			return algo + ":" + rev
+		}
+	}
+	return rev
+}
+
+// isAlphaNumHex returns true if the given string only contains 0-9 and a-f
+// characters.
+var isAlphaNumHex = regexp.MustCompile(`^[0-9a-f]+$`).MatchString
+
+// determineSHAType returns the SHA algorithm used to compute the provided hex.
+// The determination is heuristic and based on the length of the hex string. If
+// the size is not recognized, an empty string is returned.
+func determineSHAType(hex string) string {
+	if isAlphaNumHex(hex) {
+		switch len(hex) {
+		case 40:
+			return "sha1"
+		case 64:
+			return "sha256"
+		}
+	}
+	return ""
 }
