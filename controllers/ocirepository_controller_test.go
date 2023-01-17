@@ -1637,6 +1637,8 @@ func TestOCIRepository_reconcileArtifact(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
 
+			resetChmod(tt.targetPath, 0o755, 0o644)
+
 			obj := &sourcev1.OCIRepository{
 				ObjectMeta: metav1.ObjectMeta{
 					GenerateName: "reconcile-artifact-",
