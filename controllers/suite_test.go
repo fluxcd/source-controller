@@ -28,6 +28,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/phayes/freeport"
+	"github.com/sirupsen/logrus"
 	"golang.org/x/crypto/bcrypt"
 	"helm.sh/helm/v3/pkg/getter"
 	helmreg "helm.sh/helm/v3/pkg/registry"
@@ -36,17 +38,15 @@ import (
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 
-	dcontext "github.com/distribution/distribution/v3/context"
-	"github.com/fluxcd/pkg/runtime/controller"
-	"github.com/fluxcd/pkg/runtime/testenv"
-	"github.com/fluxcd/pkg/testserver"
-	"github.com/phayes/freeport"
-	"github.com/sirupsen/logrus"
-
 	"github.com/distribution/distribution/v3/configuration"
+	dcontext "github.com/distribution/distribution/v3/context"
 	dockerRegistry "github.com/distribution/distribution/v3/registry"
 	_ "github.com/distribution/distribution/v3/registry/auth/htpasswd"
 	_ "github.com/distribution/distribution/v3/registry/storage/driver/inmemory"
+
+	"github.com/fluxcd/pkg/runtime/controller"
+	"github.com/fluxcd/pkg/runtime/testenv"
+	"github.com/fluxcd/pkg/testserver"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
 	"github.com/fluxcd/source-controller/internal/cache"
@@ -241,7 +241,9 @@ func TestMain(m *testing.M) {
 		features: map[string]bool{
 			features.OptimizedGitClones: true,
 		},
-	}).SetupWithManager(testEnv); err != nil {
+	}).SetupWithManagerAndOptions(testEnv, GitRepositoryReconcilerOptions{
+		RateLimiter: controller.GetDefaultRateLimiter(),
+	}); err != nil {
 		panic(fmt.Sprintf("Failed to start GitRepositoryReconciler: %v", err))
 	}
 
@@ -250,7 +252,9 @@ func TestMain(m *testing.M) {
 		EventRecorder: record.NewFakeRecorder(32),
 		Metrics:       testMetricsH,
 		Storage:       testStorage,
-	}).SetupWithManager(testEnv); err != nil {
+	}).SetupWithManagerAndOptions(testEnv, BucketReconcilerOptions{
+		RateLimiter: controller.GetDefaultRateLimiter(),
+	}); err != nil {
 		panic(fmt.Sprintf("Failed to start BucketReconciler: %v", err))
 	}
 
@@ -262,7 +266,9 @@ func TestMain(m *testing.M) {
 		EventRecorder: record.NewFakeRecorder(32),
 		Metrics:       testMetricsH,
 		Storage:       testStorage,
-	}).SetupWithManager(testEnv); err != nil {
+	}).SetupWithManagerAndOptions(testEnv, OCIRepositoryReconcilerOptions{
+		RateLimiter: controller.GetDefaultRateLimiter(),
+	}); err != nil {
 		panic(fmt.Sprintf("Failed to start OCIRepositoryReconciler: %v", err))
 	}
 
@@ -275,7 +281,9 @@ func TestMain(m *testing.M) {
 		Cache:         testCache,
 		TTL:           1 * time.Second,
 		CacheRecorder: cacheRecorder,
-	}).SetupWithManager(testEnv); err != nil {
+	}).SetupWithManagerAndOptions(testEnv, HelmRepositoryReconcilerOptions{
+		RateLimiter: controller.GetDefaultRateLimiter(),
+	}); err != nil {
 		panic(fmt.Sprintf("Failed to start HelmRepositoryReconciler: %v", err))
 	}
 
@@ -285,7 +293,9 @@ func TestMain(m *testing.M) {
 		Metrics:                 testMetricsH,
 		Getters:                 testGetters,
 		RegistryClientGenerator: registry.ClientGenerator,
-	}).SetupWithManager(testEnv); err != nil {
+	}).SetupWithManagerAndOptions(testEnv, HelmRepositoryReconcilerOptions{
+		RateLimiter: controller.GetDefaultRateLimiter(),
+	}); err != nil {
 		panic(fmt.Sprintf("Failed to start HelmRepositoryOCIReconciler: %v", err))
 	}
 
@@ -298,8 +308,10 @@ func TestMain(m *testing.M) {
 		Cache:         testCache,
 		TTL:           1 * time.Second,
 		CacheRecorder: cacheRecorder,
-	}).SetupWithManager(testEnv); err != nil {
-		panic(fmt.Sprintf("Failed to start HelmRepositoryReconciler: %v", err))
+	}).SetupWithManagerAndOptions(testEnv, HelmChartReconcilerOptions{
+		RateLimiter: controller.GetDefaultRateLimiter(),
+	}); err != nil {
+		panic(fmt.Sprintf("Failed to start HelmChartReconciler: %v", err))
 	}
 
 	go func() {

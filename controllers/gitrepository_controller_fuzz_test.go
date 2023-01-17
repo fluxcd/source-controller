@@ -59,7 +59,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 
 	"github.com/fluxcd/pkg/gittestserver"
+	"github.com/fluxcd/pkg/runtime/controller"
 	"github.com/fluxcd/pkg/runtime/testenv"
+
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
 )
 
@@ -448,7 +450,9 @@ func ensureDependencies() error {
 		utilruntime.Must((&GitRepositoryReconciler{
 			Client:  m.GetClient(),
 			Storage: storage,
-		}).SetupWithManager(m))
+		}).SetupWithManagerAndOptions(m, GitRepositoryReconcilerOptions{
+			RateLimiter: controller.GetDefaultRateLimiter(),
+		}))
 	})
 
 	return nil
