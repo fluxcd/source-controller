@@ -131,6 +131,23 @@ data:
   password: <BASE64>
 ```
 
+#### Bearer token authentication
+
+To authenticate towards a Git repository over HTTPS using bearer token
+authentication (in other words: using a `Authorization: Bearer` header), the referenced
+Secret is expected to contain the token in `.data.bearerToken`.
+
+```yaml
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: bearer-token-auth
+type: Opaque
+data:
+  bearerToken: <BASE64>
+```
+
 #### HTTPS Certificate Authority
 
 To provide a Certificate Authority to trust while connecting with a Git
