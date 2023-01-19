@@ -19,12 +19,9 @@ package repository
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
 	"crypto/tls"
-	"encoding/hex"
 	"errors"
 	"fmt"
-	"github.com/opencontainers/go-digest"
 	"io"
 	"net/url"
 	"os"
@@ -32,22 +29,79 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/Masterminds/semver/v3"
+	"github.com/opencontainers/go-digest"
+	"helm.sh/helm/v3/pkg/chart"
 	"helm.sh/helm/v3/pkg/getter"
 	"helm.sh/helm/v3/pkg/repo"
-	kerrors "k8s.io/apimachinery/pkg/util/errors"
 	"sigs.k8s.io/yaml"
 
 	"github.com/fluxcd/pkg/version"
 
-	"github.com/fluxcd/source-controller/internal/cache"
 	"github.com/fluxcd/source-controller/internal/helm"
 	"github.com/fluxcd/source-controller/internal/transport"
 )
 
-var ErrNoChartIndex = errors.New("no chart index")
+var (
+	ErrNoChartIndex = errors.New("no chart index")
+)
+
+// IndexFromFile loads a repo.IndexFile from the given path. It returns an
+// error if the file does not exist, is not a regular file, exceeds the
+// maximum index file size, or if the file cannot be parsed.
+func IndexFromFile(path string) (*repo.IndexFile, error) {
+	st, err := os.Lstat(path)
+	if err != nil {
+		return nil, err
+	}
+	if !st.Mode().IsRegular() {
+		return nil, fmt.Errorf("%s is not a regular file", path)
+	}
+	if st.Size() > helm.MaxIndexSize {
+		return nil, fmt.Errorf("%s exceeds the maximum index file size of %d bytes", path, helm.MaxIndexSize)
+	}
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	return IndexFromBytes(b)
+}
+
+// IndexFromBytes loads a repo.IndexFile from the given bytes. It returns an
+// error if the bytes cannot be parsed, or if the API version is not set.
+// The entries are sorted before the index is returned.
+func IndexFromBytes(b []byte) (*repo.IndexFile, error) {
+	if len(b) == 0 {
+		return nil, repo.ErrEmptyIndexYaml
+	}
+
+	i := &repo.IndexFile{}
+	if err := yaml.UnmarshalStrict(b, i); err != nil {
+		return nil, err
+	}
+
+	if i.APIVersion == "" {
+		return nil, repo.ErrNoAPIVersion
+	}
+
+	for _, cvs := range i.Entries {
+		for idx := len(cvs) - 1; idx >= 0; idx-- {
+			if cvs[idx] == nil {
+				continue
+			}
+			if cvs[idx].APIVersion == "" {
+				cvs[idx].APIVersion = chart.APIVersionV1
+			}
+			if err := cvs[idx].Validate(); err != nil {
+				cvs = append(cvs[:idx], cvs[idx+1:]...)
+			}
+		}
+	}
+
+	i.SortEntries()
+	return i, nil
+}
 
 // ChartRepository represents a Helm chart repository, and the configuration
 // required to download the chart index and charts from the repository.
@@ -56,73 +110,32 @@ type ChartRepository struct {
 	// URL the ChartRepository's index.yaml can be found at,
 	// without the index.yaml suffix.
 	URL string
+	// Path is the absolute path to the Index file.
+	Path string
+	// Index of the ChartRepository.
+	Index *repo.IndexFile
+
 	// Client to use while downloading the Index or a chart from the URL.
 	Client getter.Getter
 	// Options to configure the Client with while downloading the Index
 	// or a chart from the URL.
 	Options []getter.Option
-	// CachePath is the path of a cached index.yaml for read-only operations.
-	CachePath string
-	// Cached indicates if the ChartRepository index.yaml has been cached
-	// to CachePath.
-	Cached bool
-	// Index contains a loaded chart repository index if not nil.
-	Index *repo.IndexFile
-	// Checksum contains the SHA256 checksum of the loaded chart repository
-	// index bytes. This is different from the checksum of the CachePath, which
-	// may contain unordered entries.
-	Checksum string
 
 	tlsConfig *tls.Config
 
+	cached    bool
+	revisions map[digest.Algorithm]digest.Digest
+	digests   map[digest.Algorithm]digest.Digest
+
 	*sync.RWMutex
-
-	cacheInfo
-}
-
-type cacheInfo struct {
-	// In memory cache of the index.yaml file.
-	IndexCache *cache.Cache
-	// IndexKey is the cache key for the index.yaml file.
-	IndexKey string
-	// IndexTTL is the cache TTL for the index.yaml file.
-	IndexTTL time.Duration
-	// RecordIndexCacheMetric records the cache hit/miss metrics for the index.yaml file.
-	RecordIndexCacheMetric RecordMetricsFunc
-}
-
-// ChartRepositoryOption is a function that can be passed to NewChartRepository
-// to configure a ChartRepository.
-type ChartRepositoryOption func(*ChartRepository) error
-
-// RecordMetricsFunc is a function that records metrics.
-type RecordMetricsFunc func(event string)
-
-// WithMemoryCache returns a ChartRepositoryOptions that will enable the
-// ChartRepository to cache the index.yaml file in memory.
-// The cache key have to be safe in multi-tenancy environments,
-// as otherwise it could be used as a vector to bypass the helm repository's authentication.
-func WithMemoryCache(key string, c *cache.Cache, ttl time.Duration, rec RecordMetricsFunc) ChartRepositoryOption {
-	return func(r *ChartRepository) error {
-		if c != nil {
-			if key == "" {
-				return errors.New("cache key cannot be empty")
-			}
-		}
-		r.IndexCache = c
-		r.IndexKey = key
-		r.IndexTTL = ttl
-		r.RecordIndexCacheMetric = rec
-		return nil
-	}
 }
 
 // NewChartRepository constructs and returns a new ChartRepository with
 // the ChartRepository.Client configured to the getter.Getter for the
 // repository URL scheme. It returns an error on URL parsing failures,
 // or if there is no getter available for the scheme.
-func NewChartRepository(repositoryURL, cachePath string, providers getter.Providers, tlsConfig *tls.Config, getterOpts []getter.Option, chartRepoOpts ...ChartRepositoryOption) (*ChartRepository, error) {
-	u, err := url.Parse(repositoryURL)
+func NewChartRepository(URL, path string, providers getter.Providers, tlsConfig *tls.Config, getterOpts ...getter.Option) (*ChartRepository, error) {
+	u, err := url.Parse(URL)
 	if err != nil {
 		return nil, err
 	}
@@ -132,24 +145,20 @@ func NewChartRepository(repositoryURL, cachePath string, providers getter.Provid
 	}
 
 	r := newChartRepository()
-	r.URL = repositoryURL
-	r.CachePath = cachePath
+	r.URL = URL
+	r.Path = path
 	r.Client = c
 	r.Options = getterOpts
 	r.tlsConfig = tlsConfig
-
-	for _, opt := range chartRepoOpts {
-		if err := opt(r); err != nil {
-			return nil, err
-		}
-	}
 
 	return r, nil
 }
 
 func newChartRepository() *ChartRepository {
 	return &ChartRepository{
-		RWMutex: &sync.RWMutex{},
+		revisions: make(map[digest.Algorithm]digest.Digest, 0),
+		digests:   make(map[digest.Algorithm]digest.Digest, 0),
+		RWMutex:   &sync.RWMutex{},
 	}
 }
 
@@ -206,10 +215,10 @@ func (r *ChartRepository) getChartVersion(name, ver string) (*repo.ChartVersion,
 		}
 	}
 
-	// Filter out chart versions that doesn't satisfy constraints if any,
+	// Filter out chart versions that don't satisfy constraints if any,
 	// parse semver and build a lookup table
 	var matchedVersions semver.Collection
-	lookup := make(map[*semver.Version]*repo.ChartVersion)
+	lookup := make(map[*semver.Version]*repo.ChartVersion, 0)
 	for _, cv := range cvs {
 		v, err := version.ParseVersion(cv.Version)
 		if err != nil {
@@ -289,155 +298,86 @@ func (r *ChartRepository) DownloadChart(chart *repo.ChartVersion) (*bytes.Buffer
 	return r.Client.Get(u.String(), clientOpts...)
 }
 
-// LoadIndexFromBytes loads Index from the given bytes.
-// It returns a repo.ErrNoAPIVersion error if the API version is not set
-func (r *ChartRepository) LoadIndexFromBytes(b []byte) error {
-	i := &repo.IndexFile{}
-	if err := yaml.UnmarshalStrict(b, i); err != nil {
-		return err
-	}
-	if i.APIVersion == "" {
-		return repo.ErrNoAPIVersion
-	}
-	i.SortEntries()
-
-	r.Lock()
-	r.Index = i
-	r.Checksum = digest.SHA256.FromBytes(b).Hex()
-	r.Unlock()
-	return nil
-}
-
-// LoadFromFile reads the file at the given path and loads it into Index.
-func (r *ChartRepository) LoadFromFile(path string) error {
-	stat, err := os.Stat(path)
-	if err != nil || stat.IsDir() {
-		if err == nil {
-			err = fmt.Errorf("'%s' is a directory", path)
-		}
-		return err
-	}
-	if stat.Size() > helm.MaxIndexSize {
-		return fmt.Errorf("size of index '%s' exceeds '%d' bytes limit", stat.Name(), helm.MaxIndexSize)
-	}
-	b, err := os.ReadFile(path)
-	if err != nil {
-		return err
-	}
-	return r.LoadIndexFromBytes(b)
-}
-
 // CacheIndex attempts to write the index from the remote into a new temporary file
-// using DownloadIndex, and sets CachePath and Cached.
+// using DownloadIndex, and sets Path and cached.
 // It returns the SHA256 checksum of the downloaded index bytes, or an error.
-// The caller is expected to handle the garbage collection of CachePath, and to
-// load the Index separately using LoadFromCache if required.
-func (r *ChartRepository) CacheIndex() (string, error) {
+// The caller is expected to handle the garbage collection of Path, and to
+// load the Index separately using LoadFromPath if required.
+func (r *ChartRepository) CacheIndex() error {
 	f, err := os.CreateTemp("", "chart-index-*.yaml")
 	if err != nil {
-		return "", fmt.Errorf("failed to create temp file to cache index to: %w", err)
+		return fmt.Errorf("failed to create temp file to cache index to: %w", err)
 	}
 
-	h := sha256.New()
-	mw := io.MultiWriter(f, h)
-	if err = r.DownloadIndex(mw); err != nil {
+	if err = r.DownloadIndex(f); err != nil {
 		f.Close()
-		os.RemoveAll(f.Name())
-		return "", fmt.Errorf("failed to cache index to temporary file: %w", err)
+		os.Remove(f.Name())
+		return fmt.Errorf("failed to cache index to temporary file: %w", err)
 	}
 	if err = f.Close(); err != nil {
-		os.RemoveAll(f.Name())
-		return "", fmt.Errorf("failed to close cached index file '%s': %w", f.Name(), err)
+		os.Remove(f.Name())
+		return fmt.Errorf("failed to close cached index file '%s': %w", f.Name(), err)
 	}
 
 	r.Lock()
-	r.CachePath = f.Name()
-	r.Cached = true
+	r.Path = f.Name()
+	r.Index = nil
+	r.cached = true
+	r.invalidate()
 	r.Unlock()
-	return hex.EncodeToString(h.Sum(nil)), nil
-}
-
-// CacheIndexInMemory attempts to cache the index in memory.
-// It returns an error if it fails.
-// The cache key have to be safe in multi-tenancy environments,
-// as otherwise it could be used as a vector to bypass the helm repository's authentication.
-func (r *ChartRepository) CacheIndexInMemory() error {
-	// Cache the index if it was successfully retrieved
-	// and the chart was successfully built
-	if r.IndexCache != nil && r.Index != nil {
-		err := r.IndexCache.Set(r.IndexKey, r.Index, r.IndexTTL)
-		if err != nil {
-			return err
-		}
-	}
 
 	return nil
 }
 
-// StrategicallyLoadIndex lazy-loads the Index
-// first from Indexcache,
-// then from CachePath using oadFromCache if it does not HasIndex.
-// If not HasCacheFile, a cache attempt is made using CacheIndex
-// before continuing to load.
+// StrategicallyLoadIndex lazy-loads the Index if required, first
+// attempting to load it from Path if the file exists, before falling
+// back to caching it.
 func (r *ChartRepository) StrategicallyLoadIndex() (err error) {
 	if r.HasIndex() {
 		return
 	}
 
-	if r.IndexCache != nil {
-		if found := r.LoadFromMemCache(); found {
+	if !r.HasFile() {
+		if err = r.CacheIndex(); err != nil {
+			err = fmt.Errorf("failed to cache index: %w", err)
 			return
 		}
 	}
 
-	if !r.HasCacheFile() {
-		if _, err = r.CacheIndex(); err != nil {
-			err = fmt.Errorf("failed to strategically load index: %w", err)
-			return
-		}
-	}
-	if err = r.LoadFromCache(); err != nil {
-		err = fmt.Errorf("failed to strategically load index: %w", err)
+	if err = r.LoadFromPath(); err != nil {
+		err = fmt.Errorf("failed to load index: %w", err)
 		return
 	}
 	return
 }
 
-// LoadFromMemCache attempts to load the Index from the provided cache.
-// It returns true if the Index was found in the cache, and false otherwise.
-func (r *ChartRepository) LoadFromMemCache() bool {
-	if index, found := r.IndexCache.Get(r.IndexKey); found {
-		r.Lock()
-		r.Index = index.(*repo.IndexFile)
-		r.Unlock()
+// LoadFromPath attempts to load the Index from the configured Path.
+// It returns an error if no Path is set, or if the load failed.
+func (r *ChartRepository) LoadFromPath() error {
+	r.Lock()
+	defer r.Unlock()
 
-		// record the cache hit
-		if r.RecordIndexCacheMetric != nil {
-			r.RecordIndexCacheMetric(cache.CacheEventTypeHit)
-		}
-		return true
+	if len(r.Path) == 0 {
+		return fmt.Errorf("no cache path")
 	}
 
-	// record the cache miss
-	if r.RecordIndexCacheMetric != nil {
-		r.RecordIndexCacheMetric(cache.CacheEventTypeMiss)
+	i, err := IndexFromFile(r.Path)
+	if err != nil {
+		return fmt.Errorf("failed to load index: %w", err)
 	}
-	return false
-}
 
-// LoadFromCache attempts to load the Index from the configured CachePath.
-// It returns an error if no CachePath is set, or if the load failed.
-func (r *ChartRepository) LoadFromCache() error {
-	if cachePath := r.CachePath; cachePath != "" {
-		return r.LoadFromFile(cachePath)
-	}
-	return fmt.Errorf("no cache path set")
+	r.Index = i
+	r.revisions = make(map[digest.Algorithm]digest.Digest, 0)
+	return nil
 }
 
 // DownloadIndex attempts to download the chart repository index using
 // the Client and set Options, and writes the index to the given io.Writer.
 // It returns an url.Error if the URL failed to parse.
 func (r *ChartRepository) DownloadIndex(w io.Writer) (err error) {
+	r.RLock()
+	defer r.RUnlock()
+
 	u, err := url.Parse(r.URL)
 	if err != nil {
 		return err
@@ -460,75 +400,96 @@ func (r *ChartRepository) DownloadIndex(w io.Writer) (err error) {
 	return nil
 }
 
+// Revision returns the revision of the ChartRepository's Index. It assumes
+// the Index is stable sorted.
+func (r *ChartRepository) Revision(algorithm digest.Algorithm) digest.Digest {
+	if !r.HasIndex() {
+		return ""
+	}
+
+	r.Lock()
+	defer r.Unlock()
+
+	if _, ok := r.revisions[algorithm]; !ok {
+		if b, _ := yaml.Marshal(r.Index); len(b) > 0 {
+			r.revisions[algorithm] = algorithm.FromBytes(b)
+		}
+	}
+	return r.revisions[algorithm]
+}
+
+// Digest returns the digest of the file at the ChartRepository's Path.
+func (r *ChartRepository) Digest(algorithm digest.Algorithm) digest.Digest {
+	if !r.HasFile() {
+		return ""
+	}
+
+	r.Lock()
+	defer r.Unlock()
+
+	if _, ok := r.digests[algorithm]; !ok {
+		if f, err := os.Open(r.Path); err == nil {
+			defer f.Close()
+			rd := io.LimitReader(f, helm.MaxIndexSize)
+			if d, err := algorithm.FromReader(rd); err == nil {
+				r.digests[algorithm] = d
+			}
+		}
+	}
+	return r.digests[algorithm]
+}
+
 // HasIndex returns true if the Index is not nil.
 func (r *ChartRepository) HasIndex() bool {
 	r.RLock()
 	defer r.RUnlock()
+
 	return r.Index != nil
 }
 
-// HasCacheFile returns true if CachePath is not empty.
-func (r *ChartRepository) HasCacheFile() bool {
+// HasFile returns true if Path exists and is a regular file.
+func (r *ChartRepository) HasFile() bool {
 	r.RLock()
 	defer r.RUnlock()
-	return r.CachePath != ""
-}
 
-// Unload can be used to signal the Go garbage collector the Index can
-// be freed from memory if the ChartRepository object is expected to
-// continue to exist in the stack for some time.
-func (r *ChartRepository) Unload() {
-	if r == nil {
-		return
-	}
-
-	r.Lock()
-	defer r.Unlock()
-	r.Index = nil
-}
-
-// Clear caches the index in memory before unloading it.
-// It cleans up temporary files and directories created by the repository.
-func (r *ChartRepository) Clear() error {
-	var errs []error
-	if err := r.CacheIndexInMemory(); err != nil {
-		errs = append(errs, err)
-	}
-
-	r.Unload()
-
-	if err := r.RemoveCache(); err != nil {
-		errs = append(errs, err)
-	}
-
-	return kerrors.NewAggregate(errs)
-}
-
-// SetMemCache sets the cache to use for this repository.
-func (r *ChartRepository) SetMemCache(key string, c *cache.Cache, ttl time.Duration, rec RecordMetricsFunc) {
-	r.IndexKey = key
-	r.IndexCache = c
-	r.IndexTTL = ttl
-	r.RecordIndexCacheMetric = rec
-}
-
-// RemoveCache removes the CachePath if Cached.
-func (r *ChartRepository) RemoveCache() error {
-	if r == nil {
-		return nil
-	}
-
-	r.Lock()
-	defer r.Unlock()
-
-	if r.Cached {
-		if err := os.Remove(r.CachePath); err != nil && !os.IsNotExist(err) {
-			return err
+	if r.Path != "" {
+		if stat, err := os.Lstat(r.Path); err == nil {
+			return stat.Mode().IsRegular()
 		}
-		r.CachePath = ""
-		r.Cached = false
 	}
+	return false
+}
+
+// Clear clears the Index and removes the file at Path, if cached.
+func (r *ChartRepository) Clear() error {
+	r.Lock()
+	defer r.Unlock()
+
+	r.Index = nil
+
+	if r.cached {
+		if err := os.Remove(r.Path); err != nil {
+			return fmt.Errorf("failed to remove cached index: %w", err)
+		}
+		r.Path = ""
+		r.cached = false
+	}
+
+	r.invalidate()
 	return nil
+}
+
+// Invalidate clears any cached digests and revisions.
+func (r *ChartRepository) Invalidate() {
+	r.Lock()
+	defer r.Unlock()
+
+	r.invalidate()
+}
+
+func (r *ChartRepository) invalidate() {
+	r.digests = make(map[digest.Algorithm]digest.Digest, 0)
+	r.revisions = make(map[digest.Algorithm]digest.Digest, 0)
 }
 
 // VerifyChart verifies the chart against a signature.

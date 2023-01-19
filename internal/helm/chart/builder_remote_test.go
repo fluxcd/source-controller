@@ -193,10 +193,9 @@ entries:
 			targetPath := filepath.Join(tmpDir, "chart.tgz")
 
 			if tt.repository != nil {
-				_, err := tt.repository.CacheIndex()
-				g.Expect(err).ToNot(HaveOccurred())
+				g.Expect(tt.repository.CacheIndex()).ToNot(HaveOccurred())
 				// Cleanup the cache index path.
-				defer os.Remove(tt.repository.CachePath)
+				defer os.Remove(tt.repository.Path)
 			}
 
 			b := NewRemoteBuilder(tt.repository)
@@ -411,10 +410,10 @@ entries:
 	reference := RemoteReference{Name: "helmchart"}
 	repository := mockRepo()
 
-	_, err = repository.CacheIndex()
+	err = repository.CacheIndex()
 	g.Expect(err).ToNot(HaveOccurred())
 	// Cleanup the cache index path.
-	defer os.Remove(repository.CachePath)
+	defer os.Remove(repository.Path)
 
 	b := NewRemoteBuilder(repository)
 
