@@ -55,7 +55,7 @@ type GitRepositorySpec struct {
 	// SecretRef specifies the Secret containing authentication credentials for
 	// the GitRepository.
 	// For HTTPS repositories the Secret must contain 'username' and 'password'
-	// fields.
+	// fields for basic auth or 'bearerToken' field for token auth.
 	// For SSH repositories the Secret must contain 'identity'
 	// and 'known_hosts' fields.
 	// +optional

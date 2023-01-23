@@ -331,6 +331,9 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "foo"),
 			},
 		},
+		// TODO: Add test case for HTTPS with bearer token auth secret. It
+		// depends on gitkit to have support for bearer token based
+		// authentication.
 		{
 			name:     "SSH with private key secret makes Reconciling=True",
 			protocol: "ssh",

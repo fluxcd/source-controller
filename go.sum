@@ -535,10 +535,10 @@ github.com/fluxcd/pkg/apis/event v0.2.0 h1:cmAtkZfoEaNVYegI4SFM8XstdRAil3O9AoP+8
 github.com/fluxcd/pkg/apis/event v0.2.0/go.mod h1:OyzKqs90J+MK7rQaEOFMMCkALpPkfmxlkabgyY2wSFQ=
 github.com/fluxcd/pkg/apis/meta v0.18.0 h1:s0LeulWcQ4DxVX6805vgDTxlA6bAYk+Lq1QHSnNdqLM=
 github.com/fluxcd/pkg/apis/meta v0.18.0/go.mod h1:pYvXRFi1UKNNrGR34jw3uqOnMXw9X6dTkML8j5Z7tis=
-github.com/fluxcd/pkg/git v0.7.0 h1:sQHRpFMcOzEdqlyGMjFv2LKMdcoE5xeUr2UcRrsLRG8=
-github.com/fluxcd/pkg/git v0.7.0/go.mod h1:3deiLPws4DSQ3hqwtQd7Dt66GXTN/4RcT/yHAljXaHo=
-github.com/fluxcd/pkg/git/gogit v0.4.0 h1:u2Rcd/jHdvXUfgv72CES5Gq/nxAp/PblgrBDAm8ZQtQ=
-github.com/fluxcd/pkg/git/gogit v0.4.0/go.mod h1:fMBM6efbAPqDEoU2M/ve+P3b/oQCuwRbia4bn9006jM=
+github.com/fluxcd/pkg/git v0.8.0 h1:7mIbdqSf+qXwY17+A+Kge2yWIJCMJ1p1DiBDGnKRohg=
+github.com/fluxcd/pkg/git v0.8.0/go.mod h1:3deiLPws4DSQ3hqwtQd7Dt66GXTN/4RcT/yHAljXaHo=
+github.com/fluxcd/pkg/git/gogit v0.5.0 h1:3Fzx2W16K/37ZHT6WmLFuRYgs+CGvzka+dwY7ktoxJE=
+github.com/fluxcd/pkg/git/gogit v0.5.0/go.mod h1:cqoJhKXCmWuN2ezD/2ECUYwR8gR7svMRJoHRr9VyTQc=
 github.com/fluxcd/pkg/gittestserver v0.8.0 h1:YrYe63KScKlLxx0GAiQthx2XqHDx0vKitIIx4JnDtIo=
 github.com/fluxcd/pkg/gittestserver v0.8.0/go.mod h1:/LI/xKMrnQbIsTDnTyABQ71iaYhFIZ8fb4cvY7WAlBU=
 github.com/fluxcd/pkg/helmtestserver v0.10.0 h1:/cnx1D6/cln7v06iXZMLeshl82mV1wv3OVZoBE9Bbm4=
