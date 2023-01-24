@@ -24,8 +24,8 @@ require (
 	github.com/fluxcd/go-git/v5 v5.0.0-20221206140629-ec778c2c37df
 	github.com/fluxcd/pkg/apis/event v0.2.0
 	github.com/fluxcd/pkg/apis/meta v0.18.0
-	github.com/fluxcd/pkg/git v0.7.0
-	github.com/fluxcd/pkg/git/gogit v0.4.0
+	github.com/fluxcd/pkg/git v0.8.0
+	github.com/fluxcd/pkg/git/gogit v0.5.0
 	github.com/fluxcd/pkg/gittestserver v0.8.0
 	github.com/fluxcd/pkg/helmtestserver v0.10.0
 	github.com/fluxcd/pkg/lockedfile v0.1.0

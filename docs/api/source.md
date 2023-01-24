@@ -322,7 +322,7 @@ github.com/fluxcd/pkg/apis/meta.LocalObjectReference
 <p>SecretRef specifies the Secret containing authentication credentials for
 the GitRepository.
 For HTTPS repositories the Secret must contain &lsquo;username&rsquo; and &lsquo;password&rsquo;
-fields.
+fields for basic auth or &lsquo;bearerToken&rsquo; field for token auth.
 For SSH repositories the Secret must contain &lsquo;identity&rsquo;
 and &lsquo;known_hosts&rsquo; fields.</p>
 </td>
@@ -1748,7 +1748,7 @@ github.com/fluxcd/pkg/apis/meta.LocalObjectReference
 <p>SecretRef specifies the Secret containing authentication credentials for
 the GitRepository.
 For HTTPS repositories the Secret must contain &lsquo;username&rsquo; and &lsquo;password&rsquo;
-fields.
+fields for basic auth or &lsquo;bearerToken&rsquo; field for token auth.
 For SSH repositories the Secret must contain &lsquo;identity&rsquo;
 and &lsquo;known_hosts&rsquo; fields.</p>
 </td>
