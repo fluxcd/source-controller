@@ -526,6 +526,16 @@ spec:
     /deploy/**/*.txt
 ```
 
+#### `.sourceignore` file
+
+Excluding files is possible by adding a `.sourceignore` file in the artifact.
+The `.sourceignore` file follows [the `.gitignore` pattern
+format](https://git-scm.com/docs/gitignore#_pattern_format), and pattern
+entries may overrule [default exclusions](#default-exclusions).
+
+The controller recursively loads ignore files so a `.sourceignore` can be
+placed in the artifact root or in subdirectories.
+
 ### Triggering a reconcile
 
 To manually tell the source-controller to reconcile a OCIRepository outside the
