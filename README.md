@@ -5,7 +5,7 @@
 [![report](https://goreportcard.com/badge/github.com/fluxcd/source-controller)](https://goreportcard.com/report/github.com/fluxcd/source-controller)
 [![license](https://img.shields.io/github/license/fluxcd/source-controller.svg)](https://github.com/fluxcd/source-controller/blob/main/LICENSE)
 [![release](https://img.shields.io/github/release/fluxcd/source-controller/all.svg)](https://github.com/fluxcd/source-controller/releases)
- 
+
 The source-controller is a Kubernetes operator, specialised in artifacts acquisition
 from external sources such as Git, Helm repositories and S3 buckets.
 The source-controller implements the
@@ -25,3 +25,5 @@ Features:
 * makes the artifacts available in-cluster to interested 3rd parties
 * notifies interested 3rd parties of source changes and availability (status conditions, events, hooks)
 * reacts to Git push and Helm chart upload events (via [notification-controller](https://github.com/fluxcd/notification-controller))
+
+See [the docs folder](docs/spec/README.md) for more information.
