@@ -1242,7 +1242,7 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignature(t *testing.T) {
 					nil, []string{artifactURL}, "",
 					"", true, "",
 					"", "", false,
-					false, "", false)
+					false, "", true)
 				g.Expect(err).ToNot(HaveOccurred())
 			}
 

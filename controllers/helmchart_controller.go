@@ -164,6 +164,7 @@ func (r *HelmChartReconciler) SetupWithManagerAndOptions(mgr ctrl.Manager, opts 
 		return fmt.Errorf("failed setting index fields: %w", err)
 	}
 
+	recoverPanic := true
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&sourcev1.HelmChart{}, builder.WithPredicates(
 			predicate.Or(predicate.GenerationChangedPredicate{}, predicates.ReconcileRequestedPredicate{}),
@@ -186,7 +187,7 @@ func (r *HelmChartReconciler) SetupWithManagerAndOptions(mgr ctrl.Manager, opts 
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: opts.MaxConcurrentReconciles,
 			RateLimiter:             opts.RateLimiter,
-			RecoverPanic:            true,
+			RecoverPanic:            &recoverPanic,
 		}).
 		Complete(r)
 }
