@@ -62,6 +62,8 @@ jobs:
       - name: Publish images
         uses: docker/build-push-action@v3
         with:
+          sbom: true
+          provenance: true
           push: true
           builder: ${{ steps.buildx.outputs.name }}
           context: .
