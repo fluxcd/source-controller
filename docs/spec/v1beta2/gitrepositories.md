@@ -487,6 +487,9 @@ repository. The `.sourceignore` file follows [the `.gitignore` pattern
 format](https://git-scm.com/docs/gitignore#_pattern_format), and
 pattern entries may overrule [default exclusions](#default-exclusions).
 
+The controller recursively loads ignore files so a `.sourceignore` can be
+placed in the repository root or in subdirectories.
+
 #### Ignore spec
 
 Another option is to define the exclusions within the GitRepository spec, using
