@@ -2,6 +2,63 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.34.0
+
+**Release date:** 2023-01-31
+
+This prerelease comes with support for HTTPS bearer token authentication for Git
+repository. The GitRepository authentication Secret is expected to contain the
+bearer token in `.data.bearerToken`.
+
+The caching of Secret and ConfigMap resources is disabled by
+default to improve memory usage. To opt-out from this behavior, start the
+controller with: `--feature-gates=CacheSecretsAndConfigMaps=true`.
+
+All the Source kinds now support progressive status updates. The progress made
+by the controller during reconciliation of a Source is reported immediately in
+the status of the Source object.
+
+In addition, the controller dependencies have been updated to Kubernetes v1.26.
+
+:warning: **Breaking change:** When using SSH authentication in GitRepository,
+if the referenced Secret contained `.data.username`, it was used as the SSH
+user. With this version, SSH user will be the username in the SSH address. For
+example, if the Git repository address is `ssh://flux@example.com`, `flux` will
+be used as the SSH user during SSH authentication. When no username is
+specified, `git` remains the default SSH user.
+
+Improvements:
+- Garbage collection lock file ignore tests
+  [#992](https://github.com/fluxcd/source-controller/pull/992)
+- purge minio test container at the end of tests
+  [#993](https://github.com/fluxcd/source-controller/pull/993)
+- Introduce Progressive status
+  [#974](https://github.com/fluxcd/source-controller/pull/974)
+- build(deps): bump github.com/containerd/containerd from 1.6.10 to 1.6.12
+  [#997](https://github.com/fluxcd/source-controller/pull/997)
+- fix typo in helmRepo secretRef spec CRD
+  [#996](https://github.com/fluxcd/source-controller/pull/996)
+- Fix OCIRepository testdata permissions
+  [#998](https://github.com/fluxcd/source-controller/pull/998)
+- Set rate limiter option in test reconcilers
+  [#999](https://github.com/fluxcd/source-controller/pull/999)
+- Update git dependencies for bearer token support
+  [#1003](https://github.com/fluxcd/source-controller/pull/1003)
+- Document support for bearer token authentication over https in gitrepositories
+  [#1000](https://github.com/fluxcd/source-controller/pull/1000)
+- Disable caching of secrets and configmaps
+  [#989](https://github.com/fluxcd/source-controller/pull/989)
+- Update dependencies
+  [#1008](https://github.com/fluxcd/source-controller/pull/1008)
+- build: Enable SBOM and SLSA Provenance
+  [#1009](https://github.com/fluxcd/source-controller/pull/1009)
+- Add note about sourceignore recursion
+  [#1007](https://github.com/fluxcd/source-controller/pull/1007)
+- CI: Replace engineerd/setup-kind with helm/kind-action
+  [#1010](https://github.com/fluxcd/source-controller/pull/1010)
+- helm/oci: Add context to chart download failure
+  [#1013](https://github.com/fluxcd/source-controller/pull/1013)
+
 ## 0.33.0
 
 **Release date:** 2022-12-20
