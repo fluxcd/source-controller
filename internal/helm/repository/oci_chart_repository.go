@@ -231,7 +231,11 @@ func (r *OCIChartRepository) DownloadChart(chart *repo.ChartVersion) (*bytes.Buf
 	defer transport.Release(t)
 
 	// trim the oci scheme prefix if needed
-	return r.Client.Get(strings.TrimPrefix(u.String(), fmt.Sprintf("%s://", registry.OCIScheme)), clientOpts...)
+	b, err := r.Client.Get(strings.TrimPrefix(u.String(), fmt.Sprintf("%s://", registry.OCIScheme)), clientOpts...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get '%s': %w", ref, err)
+	}
+	return b, nil
 }
 
 // Login attempts to login to the OCI registry.
