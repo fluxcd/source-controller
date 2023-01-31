@@ -266,7 +266,10 @@ func (dm *DependencyManager) resolveRepository(url string) (repo repository.Down
 	dm.mu.Lock()
 	defer dm.mu.Unlock()
 
-	nUrl := repository.NormalizeURL(url)
+	nUrl, err := repository.NormalizeURL(url)
+	if err != nil {
+		return
+	}
 	err = repository.ValidateDepURL(nUrl)
 	if err != nil {
 		return

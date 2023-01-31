@@ -509,7 +509,10 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 	ctxTimeout, cancel := context.WithTimeout(ctx, repo.Spec.Timeout.Duration)
 	defer cancel()
 
-	normalizedURL := repository.NormalizeURL(repo.Spec.URL)
+	normalizedURL, err := repository.NormalizeURL(repo.Spec.URL)
+	if err != nil {
+		return chartRepoConfigErrorReturn(err, obj)
+	}
 	// Construct the Getter options from the HelmRepository data
 	clientOpts := []helmgetter.Option{
 		helmgetter.WithURL(normalizedURL),
@@ -1021,7 +1024,10 @@ func (r *HelmChartReconciler) namespacedChartRepositoryCallback(ctx context.Cont
 			keychain      authn.Keychain
 		)
 
-		normalizedURL := repository.NormalizeURL(url)
+		normalizedURL, err := repository.NormalizeURL(url)
+		if err != nil {
+			return nil, err
+		}
 		obj, err := r.resolveDependencyRepository(ctx, url, namespace)
 		if err != nil {
 			// Return Kubernetes client errors, but ignore others
@@ -1201,8 +1207,8 @@ func (r *HelmChartReconciler) indexHelmRepositoryByURL(o client.Object) []string
 	if !ok {
 		panic(fmt.Sprintf("Expected a HelmRepository, got %T", o))
 	}
-	u := repository.NormalizeURL(repo.Spec.URL)
-	if u != "" {
+	u, err := repository.NormalizeURL(repo.Spec.URL)
+	if u != "" && err == nil {
 		return []string{u}
 	}
 	return nil
