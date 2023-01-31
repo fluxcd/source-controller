@@ -225,7 +225,7 @@ entries:
 	}
 }
 
-func TestRemoteBuilder_BuildFromOCIChatRepository(t *testing.T) {
+func TestRemoteBuilder_BuildFromOCIChartRepository(t *testing.T) {
 	g := NewWithT(t)
 
 	chartGrafana, err := os.ReadFile("./../testdata/charts/helmchart-0.1.0.tgz")
@@ -293,7 +293,7 @@ func TestRemoteBuilder_BuildFromOCIChatRepository(t *testing.T) {
 			name:       "chart version not in repository",
 			reference:  RemoteReference{Name: "grafana", Version: "1.1.1"},
 			repository: mockRepoWithoutChart(),
-			wantErr:    "failed to download chart for remote reference",
+			wantErr:    "failed to download chart for remote reference: failed to get",
 		},
 		{
 			name:       "invalid version metadata",
