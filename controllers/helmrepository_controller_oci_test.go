@@ -122,7 +122,7 @@ func TestHelmRepositoryOCIReconciler_Reconcile(t *testing.T) {
 			// Check if the object status is valid.
 			condns := &conditionscheck.Conditions{NegativePolarity: helmRepositoryReadyCondition.NegativePolarity}
 			checker := conditionscheck.NewChecker(testEnv.Client, condns)
-			checker.CheckErr(ctx, obj)
+			checker.WithT(g).CheckErr(ctx, obj)
 
 			// kstatus client conformance check.
 			u, err := patch.ToUnstructured(obj)
@@ -316,7 +316,7 @@ func TestHelmRepositoryOCIReconciler_authStrategy(t *testing.T) {
 			// NOTE: Check the object directly as reconcile() doesn't apply the
 			// final patch, the object has unapplied changes.
 			checker.DisableFetch = true
-			checker.CheckErr(ctx, obj)
+			checker.WithT(g).CheckErr(ctx, obj)
 		})
 	}
 }

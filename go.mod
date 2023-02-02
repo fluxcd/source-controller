@@ -31,7 +31,7 @@ require (
 	github.com/fluxcd/pkg/lockedfile v0.1.0
 	github.com/fluxcd/pkg/masktoken v0.2.0
 	github.com/fluxcd/pkg/oci v0.18.0
-	github.com/fluxcd/pkg/runtime v0.27.0
+	github.com/fluxcd/pkg/runtime v0.28.0
 	github.com/fluxcd/pkg/sourceignore v0.3.0
 	github.com/fluxcd/pkg/ssh v0.7.0
 	github.com/fluxcd/pkg/testserver v0.4.0
