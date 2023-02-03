@@ -49,6 +49,13 @@ import (
 
 const GarbageCountLimit = 1000
 
+const (
+	// defaultFileMode is the permission mode applied to all files inside of an artifact archive.
+	defaultFileMode int64 = 0o644
+	// defaultDirMode is the permission mode applied to all directories inside of an artifact archive.
+	defaultDirMode int64 = 0o755
+)
+
 // Storage manages artifacts
 type Storage struct {
 	// BasePath is the local directory path where the source artifacts are stored.
@@ -409,6 +416,10 @@ func (s *Storage) Archive(artifact *sourcev1.Artifact, dir string, filter Archiv
 		header.ModTime = time.Time{}
 		header.AccessTime = time.Time{}
 		header.ChangeTime = time.Time{}
+		header.Mode = defaultFileMode
+		if fi.Mode().IsDir() {
+			header.Mode = defaultDirMode
+		}
 
 		if err := tw.WriteHeader(header); err != nil {
 			return err
