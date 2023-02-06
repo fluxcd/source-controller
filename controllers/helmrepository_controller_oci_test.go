@@ -19,6 +19,7 @@ package controllers
 import (
 	"encoding/base64"
 	"fmt"
+	"strconv"
 	"testing"
 
 	. "github.com/onsi/gomega"
@@ -317,6 +318,27 @@ func TestHelmRepositoryOCIReconciler_authStrategy(t *testing.T) {
 			// final patch, the object has unapplied changes.
 			checker.DisableFetch = true
 			checker.WithT(g).CheckErr(ctx, obj)
+		})
+	}
+}
+
+func TestConditionsDiff(t *testing.T) {
+	tests := []struct {
+		a, b, want []string
+	}{
+		{[]string{"a", "b", "c"}, []string{"b", "d"}, []string{"a", "c"}},
+		{[]string{"a", "b", "c"}, []string{}, []string{"a", "b", "c"}},
+		{[]string{}, []string{"b", "d"}, []string{}},
+		{[]string{}, []string{}, []string{}},
+		{[]string{"a", "b"}, nil, []string{"a", "b"}},
+		{nil, []string{"a", "b"}, []string{}},
+		{nil, nil, []string{}},
+	}
+
+	for i, tt := range tests {
+		t.Run(strconv.Itoa(i), func(t *testing.T) {
+			g := NewWithT(t)
+			g.Expect(conditionsDiff(tt.a, tt.b)).To(Equal(tt.want))
 		})
 	}
 }
