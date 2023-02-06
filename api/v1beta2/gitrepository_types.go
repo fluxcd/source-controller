@@ -170,13 +170,19 @@ type GitRepositoryRef struct {
 	// +optional
 	SemVer string `json:"semver,omitempty"`
 
-	// Commit SHA to check out, takes precedence over all reference fields.
+	// Commit SHA to check out, takes precedence over Branch, Tag and SemVer.
 	//
 	// When GitRepositorySpec.GitImplementation is set to 'go-git', this can be
 	// combined with Branch to shallow clone the branch, in which the commit is
 	// expected to exist.
 	// +optional
 	Commit string `json:"commit,omitempty"`
+
+	// Name to checkout, takes precedence over all reference fields.
+	//
+	// If Name is found for both Branch and Tag, Tag is used
+	// +optional
+	Name string `json:"name,omitempty"`
 }
 
 // GitRepositoryVerification specifies the Git commit signature verification

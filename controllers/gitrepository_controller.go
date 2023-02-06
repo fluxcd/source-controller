@@ -27,6 +27,8 @@ import (
 	"time"
 
 	securejoin "github.com/cyphar/filepath-securejoin"
+	gogitv5 "github.com/fluxcd/go-git/v5"
+	gogitv5config "github.com/fluxcd/go-git/v5/config"
 	"github.com/fluxcd/pkg/runtime/logger"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -771,12 +773,6 @@ func (r *GitRepositoryReconciler) gitCheckout(ctx context.Context,
 		RecurseSubmodules: obj.Spec.RecurseSubmodules,
 		ShallowClone:      true,
 	}
-	if ref := obj.Spec.Reference; ref != nil {
-		cloneOpts.Branch = ref.Branch
-		cloneOpts.Commit = ref.Commit
-		cloneOpts.Tag = ref.Tag
-		cloneOpts.SemVer = ref.SemVer
-	}
 
 	// Only if the object has an existing artifact in storage, attempt to
 	// short-circuit clone operation. reconcileStorage has already verified
@@ -805,6 +801,51 @@ func (r *GitRepositoryReconciler) gitCheckout(ctx context.Context,
 		return nil, e
 	}
 	defer gitReader.Close()
+
+	if ref := obj.Spec.Reference; ref != nil {
+		if ref.Name != "" {
+			remoteConfig := &gogitv5config.RemoteConfig{
+				Name: "origin",
+				URLs: []string{obj.Spec.URL},
+			}
+
+			rem, err := util.NewGitName(remoteConfig)
+			if err != nil {
+				e := serror.NewGeneric(
+					fmt.Errorf("failed to create Git remote: %w", err),
+					sourcev1.GitOperationFailedReason,
+				)
+				conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
+				return nil, e
+			}
+			o := gogitv5.ListOptions{}
+			o.Auth, o.CABundle, err = util.AuthGit(authOpts)
+			if err != nil {
+				e := serror.NewGeneric(
+					fmt.Errorf("failed to auth for Git remote: %w", err),
+					sourcev1.GitOperationFailedReason,
+				)
+				conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
+				return nil, e
+			}
+
+			commitFromName, err := rem.GetGitCommitForName(ref.Name, &o)
+			if err != nil {
+				e := serror.NewGeneric(
+					fmt.Errorf("failed to determine commit from name: %w", err),
+					sourcev1.GitOperationFailedReason,
+				)
+				conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
+				return nil, e
+			}
+			cloneOpts.Commit = commitFromName
+		} else {
+			cloneOpts.Branch = ref.Branch
+			cloneOpts.Commit = ref.Commit
+			cloneOpts.Tag = ref.Tag
+			cloneOpts.SemVer = ref.SemVer
+		}
+	}
 
 	commit, err := gitReader.Clone(gitCtx, obj.Spec.URL, cloneOpts)
 	if err != nil {

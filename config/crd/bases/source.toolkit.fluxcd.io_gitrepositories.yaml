@@ -476,10 +476,15 @@ spec:
                       is performed."
                     type: string
                   commit:
-                    description: "Commit SHA to check out, takes precedence over all
-                      reference fields. \n When GitRepositorySpec.GitImplementation
+                    description: "Commit SHA to check out, takes precedence over Branch,
+                      Tag and SemVer. \n When GitRepositorySpec.GitImplementation
                       is set to 'go-git', this can be combined with Branch to shallow
                       clone the branch, in which the commit is expected to exist."
+                    type: string
+                  name:
+                    description: "Name to checkout, takes precedence over all reference
+                      fields. \n If Name is found for both Branch and Tag, Tag is
+                      used"
                     type: string
                   semver:
                     description: SemVer tag expression to check out, takes precedence
