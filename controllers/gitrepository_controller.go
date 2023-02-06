@@ -537,6 +537,14 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 	if err != nil {
 		return sreconcile.ResultEmpty, err
 	}
+	if c == nil {
+		e := serror.NewGeneric(
+			fmt.Errorf("git repository is empty"),
+			"EmptyGitRepository",
+		)
+		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
+		return sreconcile.ResultEmpty, e
+	}
 	// Assign the commit to the shared commit reference.
 	*commit = *c
 
