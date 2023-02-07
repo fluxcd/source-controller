@@ -220,6 +220,56 @@ func TestGitRepositoryReconciler_Reconcile(t *testing.T) {
 	testSuspendedObjectDeleteWithArtifact(ctx, g, obj)
 }
 
+func TestGitRepositoryReconciler_reconcileSource_emptyRepository(t *testing.T) {
+	g := NewWithT(t)
+
+	server, err := gittestserver.NewTempGitServer()
+	g.Expect(err).NotTo(HaveOccurred())
+	defer os.RemoveAll(server.Root())
+	server.AutoCreate()
+	g.Expect(server.StartHTTP()).To(Succeed())
+	defer server.StopHTTP()
+
+	obj := &sourcev1.GitRepository{
+		ObjectMeta: metav1.ObjectMeta{
+			GenerateName: "empty-",
+			Generation:   1,
+		},
+		Spec: sourcev1.GitRepositorySpec{
+			Interval: metav1.Duration{Duration: interval},
+			Timeout:  &metav1.Duration{Duration: timeout},
+			URL:      server.HTTPAddress() + "/test.git",
+		},
+	}
+
+	builder := fakeclient.NewClientBuilder().WithScheme(testEnv.GetScheme())
+
+	r := &GitRepositoryReconciler{
+		Client:        builder.Build(),
+		EventRecorder: record.NewFakeRecorder(32),
+		Storage:       testStorage,
+		patchOptions:  getPatchOptions(gitRepositoryReadyCondition.Owned, "sc"),
+	}
+
+	g.Expect(r.Client.Create(context.TODO(), obj)).ToNot(HaveOccurred())
+	defer func() {
+		g.Expect(r.Client.Delete(context.TODO(), obj)).ToNot(HaveOccurred())
+	}()
+
+	var commit git.Commit
+	var includes artifactSet
+	sp := patch.NewSerialPatcher(obj, r.Client)
+
+	got, err := r.reconcileSource(context.TODO(), sp, obj, &commit, &includes, t.TempDir())
+	assertConditions := []metav1.Condition{
+		*conditions.TrueCondition(sourcev1.FetchFailedCondition, "EmptyGitRepository", "git repository is empty"),
+	}
+	g.Expect(obj.Status.Conditions).To(conditions.MatchConditions(assertConditions))
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(got).To(Equal(sreconcile.ResultEmpty))
+	g.Expect(commit).ToNot(BeNil())
+}
+
 func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 	type options struct {
 		username   string
