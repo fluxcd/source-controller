@@ -49,7 +49,7 @@ You can run this example by saving the manifest into `gitrepository.yaml`.
 
    ```console
    NAME      URL                                       AGE   READY   STATUS                                                                        
-   podinfo   https://github.com/stefanprodan/podinfo   5s    True    stored artifact for revision 'master/132f4e719209eb10b9485302f8593fc0e680f4fc'
+   podinfo   https://github.com/stefanprodan/podinfo   5s    True    stored artifact for revision 'master@sha1:132f4e719209eb10b9485302f8593fc0e680f4fc'
    ```
 
 3. Run `kubectl describe gitrepository podinfo` to see the [Artifact](#artifact)
@@ -60,19 +60,21 @@ You can run this example by saving the manifest into `gitrepository.yaml`.
    Status:
      Artifact:
        Checksum:          95e386f421272710c4cedbbd8607dbbaa019d500e7a5a0b6720bc7bebefc7bf2
+       Digest:            sha256:95e386f421272710c4cedbbd8607dbbaa019d500e7a5a0b6720bc7bebefc7bf2
        Last Update Time:  2022-02-14T11:23:36Z
        Path:              gitrepository/default/podinfo/132f4e719209eb10b9485302f8593fc0e680f4fc.tar.gz
-       Revision:          master/132f4e719209eb10b9485302f8593fc0e680f4fc
+       Revision:          master@sha1:132f4e719209eb10b9485302f8593fc0e680f4fc
+       Size:              91318
        URL:               http://source-controller.source-system.svc.cluster.local./gitrepository/default/podinfo/132f4e719209eb10b9485302f8593fc0e680f4fc.tar.gz
      Conditions:
        Last Transition Time:  2022-02-14T11:23:36Z
-       Message:               stored artifact for revision 'master/132f4e719209eb10b9485302f8593fc0e680f4fc'
+       Message:               stored artifact for revision 'master@sha1:132f4e719209eb10b9485302f8593fc0e680f4fc'
        Observed Generation:   1
        Reason:                Succeeded
        Status:                True
        Type:                  Ready
        Last Transition Time:  2022-02-14T11:23:36Z
-       Message:               stored artifact for revision 'master/132f4e719209eb10b9485302f8593fc0e680f4fc'
+       Message:               stored artifact for revision 'master@sha1:132f4e719209eb10b9485302f8593fc0e680f4fc'
        Observed Generation:   1
        Reason:                Succeeded
        Status:                True
@@ -670,7 +672,7 @@ lists
 ```console
 LAST SEEN   TYPE     REASON                OBJECT                               MESSAGE
 2m14s       Normal   NewArtifact           gitrepository/<repository-name>      stored artifact for commit 'Merge pull request #160 from stefanprodan/release-6.0.3'
-36s         Normal   ArtifactUpToDate      gitrepository/<repository-name>      artifact up-to-date with remote revision: 'master/132f4e719209eb10b9485302f8593fc0e680f4fc'
+36s         Normal   ArtifactUpToDate      gitrepository/<repository-name>      artifact up-to-date with remote revision: 'master@sha1:132f4e719209eb10b9485302f8593fc0e680f4fc'
 94s         Warning  GitOperationFailed    gitrepository/<repository-name>      failed to checkout and determine revision: unable to clone 'https://github.com/stefanprodan/podinfo': couldn't find remote ref "refs/heads/invalid"
 ```
 
@@ -700,9 +702,11 @@ metadata:
 status:
   artifact:
     checksum: e750c7a46724acaef8f8aa926259af30bbd9face2ae065ae8896ba5ee5ab832b
+    digest: sha256:e750c7a46724acaef8f8aa926259af30bbd9face2ae065ae8896ba5ee5ab832b
     lastUpdateTime: "2022-01-29T06:59:23Z"
     path: gitrepository/<namespace>/<repository-name>/c3ab8ff13720e8ad9047dd39466b3c8974e592c2fa383d4a3960714caef0c4f2.tar.gz
-    revision: master/363a6a8fe6a7f13e05d34c163b0ef02a777da20a
+    revision: master@sha1:363a6a8fe6a7f13e05d34c163b0ef02a777da20a
+    size: 91318
     url: http://source-controller.<namespace>.svc.cluster.local./gitrepository/<namespace>/<repository-name>/363a6a8fe6a7f13e05d34c163b0ef02a777da20a.tar.gz
 ```
 

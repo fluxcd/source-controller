@@ -34,9 +34,9 @@ In the above example:
 - The source-controller fetches the Helm repository index YAML every five
   minutes from `https://stefanprodan.github.io/podinfo`, indicated by the
   `.spec.interval` and `.spec.url` fields.
-- The SHA256 sum of the Helm repository index after stable sorting the entries
-  is used as Artifact revision, reported in-cluster in the
-  `.status.artifact.revision` field.
+- The digest (algorithm defaults to SHA256) of the Helm repository index after
+  stable sorting the entries is used as Artifact revision, reported in-cluster
+  in the `.status.artifact.revision` field.
 - When the current HelmRepository revision differs from the latest fetched 
   revision, it is stored as a new Artifact.
 - The new Artifact is reported in the `.status.artifact` field.
@@ -53,7 +53,7 @@ You can run this example by saving the manifest into `helmrepository.yaml`.
 
    ```console
    NAME      URL                                      AGE   READY   STATUS                                                                                         
-   podinfo   https://stefanprodan.github.io/podinfo   4s    True    stored artifact for revision '83a3c595163a6ff0333e0154c790383b5be441b9db632cb36da11db1c4ece111'
+   podinfo   https://stefanprodan.github.io/podinfo   4s    True    stored artifact for revision 'sha256:83a3c595163a6ff0333e0154c790383b5be441b9db632cb36da11db1c4ece111'
    ```
 
 3. Run `kubectl describe helmrepository podinfo` to see the [Artifact](#artifact)
@@ -64,19 +64,21 @@ You can run this example by saving the manifest into `helmrepository.yaml`.
    Status:
      Artifact:
        Checksum:          83a3c595163a6ff0333e0154c790383b5be441b9db632cb36da11db1c4ece111
+       Digest:            sha256:83a3c595163a6ff0333e0154c790383b5be441b9db632cb36da11db1c4ece111
        Last Update Time:  2022-02-04T09:55:58Z
        Path:              helmrepository/default/podinfo/index-83a3c595163a6ff0333e0154c790383b5be441b9db632cb36da11db1c4ece111.yaml
-       Revision:          83a3c595163a6ff0333e0154c790383b5be441b9db632cb36da11db1c4ece111
+       Revision:          sha256:83a3c595163a6ff0333e0154c790383b5be441b9db632cb36da11db1c4ece111
+       Size:              40898
        URL:               http://source-controller.flux-system.svc.cluster.local./helmrepository/default/podinfo/index-83a3c595163a6ff0333e0154c790383b5be441b9db632cb36da11db1c4ece111.yaml
      Conditions:
        Last Transition Time:  2022-02-04T09:55:58Z
-       Message:               stored artifact for revision '83a3c595163a6ff0333e0154c790383b5be441b9db632cb36da11db1c4ece111'
+       Message:               stored artifact for revision 'sha256:83a3c595163a6ff0333e0154c790383b5be441b9db632cb36da11db1c4ece111'
        Observed Generation:   1
        Reason:                Succeeded
        Status:                True
        Type:                  Ready
        Last Transition Time:  2022-02-04T09:55:58Z
-       Message:               stored artifact for revision '83a3c595163a6ff0333e0154c790383b5be441b9db632cb36da11db1c4ece111'
+       Message:               stored artifact for revision 'sha256:83a3c595163a6ff0333e0154c790383b5be441b9db632cb36da11db1c4ece111'
        Observed Generation:   1
        Reason:                Succeeded
        Status:                True
@@ -609,7 +611,7 @@ lists
 LAST SEEN   TYPE      REASON           OBJECT                             MESSAGE
 107s        Warning   Failed           helmrepository/<repository-name>   failed to construct Helm client: scheme "invalid" not supported
 7s          Normal    NewArtifact      helmrepository/<repository-name>   fetched index of size 30.88kB from 'https://stefanprodan.github.io/podinfo'
-3s          Normal    ArtifactUpToDate helmrepository/<repository-name>   artifact up-to-date with remote revision: '83a3c595163a6ff0333e0154c790383b5be441b9db632cb36da11db1c4ece111'
+3s          Normal    ArtifactUpToDate helmrepository/<repository-name>   artifact up-to-date with remote revision: 'sha256:83a3c595163a6ff0333e0154c790383b5be441b9db632cb36da11db1c4ece111'
 ```
 
 Besides being reported in Events, the reconciliation errors are also logged by
@@ -640,9 +642,11 @@ metadata:
 status:
   artifact:
     checksum: 83a3c595163a6ff0333e0154c790383b5be441b9db632cb36da11db1c4ece111
+    digest: sha256:83a3c595163a6ff0333e0154c790383b5be441b9db632cb36da11db1c4ece111
     lastUpdateTime: "2022-02-04T09:55:58Z"
     path: helmrepository/<namespace>/<repository-name>/index-83a3c595163a6ff0333e0154c790383b5be441b9db632cb36da11db1c4ece111.yaml
-    revision: 83a3c595163a6ff0333e0154c790383b5be441b9db632cb36da11db1c4ece111
+    revision: sha256:83a3c595163a6ff0333e0154c790383b5be441b9db632cb36da11db1c4ece111
+    size: 40898
     url: http://source-controller.flux-system.svc.cluster.local./helmrepository/<namespace>/<repository-name>/index-83a3c595163a6ff0333e0154c790383b5be441b9db632cb36da11db1c4ece111.yaml
 ```
 
