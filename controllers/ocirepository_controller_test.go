@@ -217,7 +217,7 @@ func TestOCIRepository_Reconcile(t *testing.T) {
 			// Check if the object status is valid
 			condns := &conditionscheck.Conditions{NegativePolarity: ociRepositoryReadyCondition.NegativePolarity}
 			checker := conditionscheck.NewChecker(testEnv.Client, condns)
-			checker.CheckErr(ctx, obj)
+			checker.WithT(g).CheckErr(ctx, obj)
 
 			// kstatus client conformance check
 			u, err := patch.ToUnstructured(obj)
@@ -1998,7 +1998,7 @@ func TestOCIRepository_reconcileStorage(t *testing.T) {
 
 			// In-progress status condition validity.
 			checker := conditionscheck.NewInProgressChecker(r.Client)
-			checker.CheckErr(ctx, obj)
+			checker.WithT(g).CheckErr(ctx, obj)
 		})
 	}
 }

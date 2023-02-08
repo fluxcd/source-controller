@@ -40,6 +40,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
+	eventv1 "github.com/fluxcd/pkg/apis/event/v1beta1"
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/oci"
 	"github.com/fluxcd/pkg/runtime/conditions"
@@ -82,6 +83,11 @@ type HelmRepositoryOCIReconciler struct {
 	RegistryClientGenerator RegistryClientGeneratorFunc
 
 	patchOptions []patch.Option
+
+	// unmanagedConditions are the conditions that are not managed by this
+	// reconciler and need to be removed from the object before taking ownership
+	// of the object being reconciled.
+	unmanagedConditions []string
 }
 
 // RegistryClientGeneratorFunc is a function that returns a registry client
@@ -95,6 +101,7 @@ func (r *HelmRepositoryOCIReconciler) SetupWithManager(mgr ctrl.Manager) error {
 }
 
 func (r *HelmRepositoryOCIReconciler) SetupWithManagerAndOptions(mgr ctrl.Manager, opts HelmRepositoryReconcilerOptions) error {
+	r.unmanagedConditions = conditionsDiff(helmRepositoryReadyCondition.Owned, helmRepositoryOCIOwnedConditions)
 	r.patchOptions = getPatchOptions(helmRepositoryOCIOwnedConditions, r.ControllerName)
 
 	recoverPanic := true
@@ -122,6 +129,16 @@ func (r *HelmRepositoryOCIReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	obj := &sourcev1.HelmRepository{}
 	if err := r.Get(ctx, req.NamespacedName, obj); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
+	}
+
+	// If the object contains any of the unmanaged conditions, requeue and wait
+	// for those conditions to be removed first before processing the object.
+	// NOTE: This will happen only when a HelmRepository's spec.type is switched
+	// from "default" to "oci".
+	if conditions.HasAny(obj, r.unmanagedConditions) {
+		r.eventLogf(ctx, obj, eventv1.EventTypeTrace, "IncompleteTransition",
+			"object contains conditions managed by other reconciler")
+		return ctrl.Result{RequeueAfter: time.Second}, nil
 	}
 
 	// Record suspended status metric
@@ -427,4 +444,19 @@ func makeLoginOption(auth authn.Authenticator, keychain authn.Keychain, registry
 	}
 
 	return nil, nil
+}
+
+func conditionsDiff(a, b []string) []string {
+	bMap := make(map[string]struct{}, len(b))
+	for _, j := range b {
+		bMap[j] = struct{}{}
+	}
+
+	r := []string{}
+	for _, i := range a {
+		if _, exists := bMap[i]; !exists {
+			r = append(r, i)
+		}
+	}
+	return r
 }

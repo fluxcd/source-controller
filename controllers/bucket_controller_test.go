@@ -120,7 +120,7 @@ func TestBucketReconciler_Reconcile(t *testing.T) {
 	// Check if the object status is valid.
 	condns := &conditionscheck.Conditions{NegativePolarity: bucketReadyCondition.NegativePolarity}
 	checker := conditionscheck.NewChecker(testEnv.Client, condns)
-	checker.CheckErr(ctx, obj)
+	checker.WithT(g).CheckErr(ctx, obj)
 
 	// kstatus client conformance check.
 	uo, err := patch.ToUnstructured(obj)
@@ -321,7 +321,7 @@ func TestBucketReconciler_reconcileStorage(t *testing.T) {
 
 			// In-progress status condition validity.
 			checker := conditionscheck.NewInProgressChecker(r.Client)
-			checker.CheckErr(ctx, obj)
+			checker.WithT(g).CheckErr(ctx, obj)
 		})
 	}
 }
@@ -662,7 +662,7 @@ func TestBucketReconciler_reconcileSource_generic(t *testing.T) {
 
 			// In-progress status condition validity.
 			checker := conditionscheck.NewInProgressChecker(r.Client)
-			checker.CheckErr(ctx, obj)
+			checker.WithT(g).CheckErr(ctx, obj)
 		})
 	}
 }
@@ -1022,7 +1022,7 @@ func TestBucketReconciler_reconcileSource_gcs(t *testing.T) {
 
 			// In-progress status condition validity.
 			checker := conditionscheck.NewInProgressChecker(r.Client)
-			checker.CheckErr(ctx, obj)
+			checker.WithT(g).CheckErr(ctx, obj)
 		})
 	}
 }
@@ -1201,7 +1201,7 @@ func TestBucketReconciler_reconcileArtifact(t *testing.T) {
 
 			// In-progress status condition validity.
 			checker := conditionscheck.NewInProgressChecker(r.Client)
-			checker.CheckErr(ctx, obj)
+			checker.WithT(g).CheckErr(ctx, obj)
 		})
 	}
 }

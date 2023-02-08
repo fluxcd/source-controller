@@ -186,7 +186,7 @@ func TestGitRepositoryReconciler_Reconcile(t *testing.T) {
 	// Check if the object status is valid.
 	condns := &conditionscheck.Conditions{NegativePolarity: gitRepositoryReadyCondition.NegativePolarity}
 	checker := conditionscheck.NewChecker(testEnv.Client, condns)
-	checker.CheckErr(ctx, obj)
+	checker.WithT(g).CheckErr(ctx, obj)
 
 	// kstatus client conformance check.
 	u, err := patch.ToUnstructured(obj)
@@ -590,7 +590,7 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 
 			// In-progress status condition validity.
 			checker := conditionscheck.NewInProgressChecker(r.Client)
-			checker.CheckErr(ctx, obj)
+			checker.WithT(g).CheckErr(ctx, obj)
 		})
 	}
 }
@@ -815,7 +815,7 @@ func TestGitRepositoryReconciler_reconcileSource_checkoutStrategy(t *testing.T) 
 			}
 			// In-progress status condition validity.
 			checker := conditionscheck.NewInProgressChecker(r.Client)
-			checker.CheckErr(ctx, obj)
+			checker.WithT(g).CheckErr(ctx, obj)
 		})
 	}
 }
@@ -1374,7 +1374,7 @@ func TestGitRepositoryReconciler_reconcileStorage(t *testing.T) {
 
 			// In-progress status condition validity.
 			checker := conditionscheck.NewInProgressChecker(r.Client)
-			checker.CheckErr(ctx, obj)
+			checker.WithT(g).CheckErr(ctx, obj)
 		})
 	}
 }

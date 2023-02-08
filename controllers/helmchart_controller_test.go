@@ -109,7 +109,7 @@ func TestHelmChartReconciler_Reconcile(t *testing.T) {
 				// Check if the object status is valid.
 				condns := &conditionscheck.Conditions{NegativePolarity: helmChartReadyCondition.NegativePolarity}
 				checker := conditionscheck.NewChecker(testEnv.Client, condns)
-				checker.CheckErr(ctx, obj)
+				checker.WithT(g).CheckErr(ctx, obj)
 
 				// kstatus client conformance check.
 				u, err := patch.ToUnstructured(obj)
@@ -177,7 +177,7 @@ func TestHelmChartReconciler_Reconcile(t *testing.T) {
 				// Check if the object status is valid.
 				condns := &conditionscheck.Conditions{NegativePolarity: helmChartReadyCondition.NegativePolarity}
 				checker := conditionscheck.NewChecker(testEnv.Client, condns)
-				checker.CheckErr(ctx, obj)
+				checker.WithT(g).CheckErr(ctx, obj)
 
 				g.Expect(testEnv.Delete(ctx, obj)).To(Succeed())
 
@@ -212,7 +212,7 @@ func TestHelmChartReconciler_Reconcile(t *testing.T) {
 				// Check if the object status is valid.
 				condns := &conditionscheck.Conditions{NegativePolarity: helmChartReadyCondition.NegativePolarity}
 				checker := conditionscheck.NewChecker(testEnv.Client, condns)
-				checker.CheckErr(ctx, obj)
+				checker.WithT(g).CheckErr(ctx, obj)
 
 				g.Expect(testEnv.Delete(ctx, obj)).To(Succeed())
 
@@ -444,7 +444,7 @@ func TestHelmChartReconciler_reconcileStorage(t *testing.T) {
 
 			// In-progress status condition validity.
 			checker := conditionscheck.NewInProgressChecker(r.Client)
-			checker.CheckErr(ctx, obj)
+			checker.WithT(g).CheckErr(ctx, obj)
 		})
 	}
 }
@@ -708,7 +708,7 @@ func TestHelmChartReconciler_reconcileSource(t *testing.T) {
 
 			// In-progress status condition validity.
 			checker := conditionscheck.NewInProgressChecker(r.Client)
-			checker.CheckErr(ctx, &obj)
+			checker.WithT(g).CheckErr(ctx, &obj)
 		})
 	}
 }
