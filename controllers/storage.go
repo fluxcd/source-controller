@@ -34,7 +34,7 @@ import (
 
 	securejoin "github.com/cyphar/filepath-securejoin"
 	"github.com/fluxcd/go-git/v5/plumbing/format/gitignore"
-	digestlib "github.com/opencontainers/go-digest"
+	"github.com/opencontainers/go-digest"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	kerrors "k8s.io/apimachinery/pkg/util/errors"
 
@@ -43,7 +43,7 @@ import (
 	"github.com/fluxcd/pkg/untar"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
-	"github.com/fluxcd/source-controller/internal/digest"
+	intdigest "github.com/fluxcd/source-controller/internal/digest"
 	sourcefs "github.com/fluxcd/source-controller/internal/fs"
 )
 
@@ -360,7 +360,7 @@ func (s *Storage) Archive(artifact *sourcev1.Artifact, dir string, filter Archiv
 		}
 	}()
 
-	md, err := digest.NewMultiDigester(digest.Canonical, digestlib.SHA256)
+	md, err := intdigest.NewMultiDigester(intdigest.Canonical, digest.SHA256)
 	if err != nil {
 		return fmt.Errorf("failed to create digester: %w", err)
 	}
@@ -455,8 +455,8 @@ func (s *Storage) Archive(artifact *sourcev1.Artifact, dir string, filter Archiv
 		return err
 	}
 
-	artifact.Digest = md.Digest(digest.Canonical).String()
-	artifact.Checksum = md.Digest(digestlib.SHA256).Encoded()
+	artifact.Digest = md.Digest(intdigest.Canonical).String()
+	artifact.Checksum = md.Digest(digest.SHA256).Encoded()
 	artifact.LastUpdateTime = metav1.Now()
 	artifact.Size = &sz.written
 
@@ -478,7 +478,7 @@ func (s *Storage) AtomicWriteFile(artifact *sourcev1.Artifact, reader io.Reader,
 		}
 	}()
 
-	md, err := digest.NewMultiDigester(digest.Canonical, digestlib.SHA256)
+	md, err := intdigest.NewMultiDigester(intdigest.Canonical, digest.SHA256)
 	if err != nil {
 		return fmt.Errorf("failed to create digester: %w", err)
 	}
@@ -501,8 +501,8 @@ func (s *Storage) AtomicWriteFile(artifact *sourcev1.Artifact, reader io.Reader,
 		return err
 	}
 
-	artifact.Digest = md.Digest(digest.Canonical).String()
-	artifact.Checksum = md.Digest(digestlib.SHA256).Encoded()
+	artifact.Digest = md.Digest(intdigest.Canonical).String()
+	artifact.Checksum = md.Digest(digest.SHA256).Encoded()
 	artifact.LastUpdateTime = metav1.Now()
 	artifact.Size = &sz.written
 
@@ -524,7 +524,7 @@ func (s *Storage) Copy(artifact *sourcev1.Artifact, reader io.Reader) (err error
 		}
 	}()
 
-	md, err := digest.NewMultiDigester(digest.Canonical, digestlib.SHA256)
+	md, err := intdigest.NewMultiDigester(intdigest.Canonical, digest.SHA256)
 	if err != nil {
 		return fmt.Errorf("failed to create digester: %w", err)
 	}
@@ -543,8 +543,8 @@ func (s *Storage) Copy(artifact *sourcev1.Artifact, reader io.Reader) (err error
 		return err
 	}
 
-	artifact.Digest = md.Digest(digest.Canonical).String()
-	artifact.Checksum = md.Digest(digestlib.SHA256).Encoded()
+	artifact.Digest = md.Digest(intdigest.Canonical).String()
+	artifact.Checksum = md.Digest(digest.SHA256).Encoded()
 	artifact.LastUpdateTime = metav1.Now()
 	artifact.Size = &sz.written
 

@@ -28,7 +28,7 @@ import (
 	"time"
 
 	. "github.com/onsi/gomega"
-	digestlib "github.com/opencontainers/go-digest"
+	"github.com/opencontainers/go-digest"
 	"helm.sh/helm/v3/pkg/chart"
 	helmgetter "helm.sh/helm/v3/pkg/getter"
 	"helm.sh/helm/v3/pkg/repo"
@@ -512,7 +512,7 @@ func TestChartRepository_Revision(t *testing.T) {
 		r := newChartRepository()
 		r.Index = repo.NewIndexFile()
 
-		for _, algo := range []digestlib.Algorithm{digestlib.SHA256, digestlib.SHA512} {
+		for _, algo := range []digest.Algorithm{digest.SHA256, digest.SHA512} {
 			t.Run(algo.String(), func(t *testing.T) {
 				g := NewWithT(t)
 
@@ -528,14 +528,14 @@ func TestChartRepository_Revision(t *testing.T) {
 		g := NewWithT(t)
 
 		r := newChartRepository()
-		g.Expect(r.Revision(digestlib.SHA256)).To(BeEmpty())
+		g.Expect(r.Revision(digest.SHA256)).To(BeEmpty())
 	})
 
 	t.Run("from cache", func(t *testing.T) {
 		g := NewWithT(t)
 
-		algo := digestlib.SHA256
-		expect := digestlib.Digest("sha256:fake")
+		algo := digest.SHA256
+		expect := digest.Digest("sha256:fake")
 
 		r := newChartRepository()
 		r.Index = repo.NewIndexFile()
@@ -555,7 +555,7 @@ func TestChartRepository_Digest(t *testing.T) {
 		r := newChartRepository()
 		r.Path = p
 
-		for _, algo := range []digestlib.Algorithm{digestlib.SHA256, digestlib.SHA512} {
+		for _, algo := range []digest.Algorithm{digest.SHA256, digest.SHA512} {
 			t.Run(algo.String(), func(t *testing.T) {
 				g := NewWithT(t)
 
@@ -571,14 +571,14 @@ func TestChartRepository_Digest(t *testing.T) {
 		g := NewWithT(t)
 
 		r := newChartRepository()
-		g.Expect(r.Digest(digestlib.SHA256)).To(BeEmpty())
+		g.Expect(r.Digest(digest.SHA256)).To(BeEmpty())
 	})
 
 	t.Run("from cache", func(t *testing.T) {
 		g := NewWithT(t)
 
-		algo := digestlib.SHA256
-		expect := digestlib.Digest("sha256:fake")
+		algo := digest.SHA256
+		expect := digest.Digest("sha256:fake")
 
 		i := filepath.Join(t.TempDir(), "index.yaml")
 		g.Expect(os.WriteFile(i, []byte(`apiVersion: v1`), 0o644)).To(Succeed())

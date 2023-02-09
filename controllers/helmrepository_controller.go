@@ -21,12 +21,11 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
-	"github.com/fluxcd/source-controller/internal/digest"
 	"net/url"
 	"time"
 
 	"github.com/docker/go-units"
-	digestlib "github.com/opencontainers/go-digest"
+	"github.com/opencontainers/go-digest"
 	helmgetter "helm.sh/helm/v3/pkg/getter"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -49,6 +48,7 @@ import (
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
 	"github.com/fluxcd/source-controller/internal/cache"
+	intdigest "github.com/fluxcd/source-controller/internal/digest"
 	serror "github.com/fluxcd/source-controller/internal/error"
 	"github.com/fluxcd/source-controller/internal/helm/getter"
 	"github.com/fluxcd/source-controller/internal/helm/repository"
@@ -469,9 +469,9 @@ func (r *HelmRepositoryReconciler) reconcileSource(ctx context.Context, sp *patc
 
 	// Early comparison to current Artifact.
 	if curArtifact := obj.GetArtifact(); curArtifact != nil {
-		curDig := digestlib.Digest(curArtifact.Digest)
+		curDig := digest.Digest(curArtifact.Digest)
 		if curDig == "" {
-			curDig = digestlib.Digest(sourcev1.TransformLegacyRevision(curArtifact.Checksum))
+			curDig = digest.Digest(sourcev1.TransformLegacyRevision(curArtifact.Checksum))
 		}
 		if curDig.Validate() == nil {
 			// Short-circuit based on the fetched index being an exact match to the
@@ -500,12 +500,12 @@ func (r *HelmRepositoryReconciler) reconcileSource(ctx context.Context, sp *patc
 	// Check if index has changed compared to current Artifact revision.
 	var changed bool
 	if artifact := obj.Status.Artifact; artifact != nil {
-		curRev := digestlib.Digest(sourcev1.TransformLegacyRevision(artifact.Revision))
+		curRev := digest.Digest(sourcev1.TransformLegacyRevision(artifact.Revision))
 		changed = curRev.Validate() != nil || curRev != chartRepo.Revision(curRev.Algorithm())
 	}
 
 	// Calculate revision.
-	revision := chartRepo.Revision(digest.Canonical)
+	revision := chartRepo.Revision(intdigest.Canonical)
 	if revision.Validate() != nil {
 		e := &serror.Event{
 			Err:    fmt.Errorf("failed to calculate revision: %w", err),
