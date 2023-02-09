@@ -339,6 +339,7 @@ spec:
                 - aws
                 - gcp
                 - azure
+                - http
                 type: string
               region:
                 description: Region of the Endpoint where the BucketName is located

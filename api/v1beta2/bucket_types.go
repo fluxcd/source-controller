@@ -43,6 +43,8 @@ const (
 	// Provides support for authentication using a Service Principal,
 	// Managed Identity or Shared Key.
 	AzureBucketProvider string = "azure"
+	// HttpProvider for an HTTP location as a Bucket.
+	HttpProvider string = "http"
 )
 
 // BucketSpec specifies the required configuration to produce an Artifact for
@@ -51,7 +53,7 @@ type BucketSpec struct {
 	// Provider of the object storage bucket.
 	// Defaults to 'generic', which expects an S3 (API) compatible object
 	// storage.
-	// +kubebuilder:validation:Enum=generic;aws;gcp;azure
+	// +kubebuilder:validation:Enum=generic;aws;gcp;azure;http
 	// +kubebuilder:default:=generic
 	// +optional
 	Provider string `json:"provider,omitempty"`
