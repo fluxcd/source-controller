@@ -667,16 +667,16 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 
 		// Attempt to load the index from the cache.
 		if r.Cache != nil {
-			if index, ok := r.Cache.Get(httpChartRepo.Path); ok {
+			if index, ok := r.Cache.Get(repo.GetArtifact().Path); ok {
 				r.IncCacheEvents(cache.CacheEventTypeHit, repo.Name, repo.Namespace)
-				r.Cache.SetExpiration(httpChartRepo.Path, r.TTL)
+				r.Cache.SetExpiration(repo.GetArtifact().Path, r.TTL)
 				httpChartRepo.Index = index.(*helmrepo.IndexFile)
 			} else {
 				r.IncCacheEvents(cache.CacheEventTypeMiss, repo.Name, repo.Namespace)
 				defer func() {
 					// If we succeed in loading the index, cache it.
 					if httpChartRepo.Index != nil {
-						if err = r.Cache.Set(httpChartRepo.Path, httpChartRepo.Index, r.TTL); err != nil {
+						if err = r.Cache.Set(repo.GetArtifact().Path, httpChartRepo.Index, r.TTL); err != nil {
 							r.eventLogf(ctx, obj, eventv1.EventTypeTrace, sourcev1.CacheOperationFailedReason, "failed to cache index: %s", err)
 						}
 					}
@@ -1123,21 +1123,21 @@ func (r *HelmChartReconciler) namespacedChartRepositoryCallback(ctx context.Cont
 				return nil, err
 			}
 
-			if obj.Status.Artifact != nil {
-				// Attempt to load the index from the cache.
-				httpChartRepo.Path = r.Storage.LocalPath(*obj.GetArtifact())
-				if r.Cache != nil {
-					if index, ok := r.Cache.Get(httpChartRepo.Path); ok {
-						r.IncCacheEvents(cache.CacheEventTypeHit, name, namespace)
-						r.Cache.SetExpiration(httpChartRepo.Path, r.TTL)
+			if artifact := obj.GetArtifact(); artifact != nil {
+				httpChartRepo.Path = r.Storage.LocalPath(*artifact)
 
+				// Attempt to load the index from the cache.
+				if r.Cache != nil {
+					if index, ok := r.Cache.Get(artifact.Path); ok {
+						r.IncCacheEvents(cache.CacheEventTypeHit, name, namespace)
+						r.Cache.SetExpiration(artifact.Path, r.TTL)
 						httpChartRepo.Index = index.(*helmrepo.IndexFile)
 					} else {
 						r.IncCacheEvents(cache.CacheEventTypeMiss, name, namespace)
 						if err := httpChartRepo.LoadFromPath(); err != nil {
 							return nil, err
 						}
-						r.Cache.Set(httpChartRepo.Path, httpChartRepo.Index, r.TTL)
+						r.Cache.Set(artifact.Path, httpChartRepo.Index, r.TTL)
 					}
 				}
 			}

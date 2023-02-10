@@ -563,7 +563,7 @@ func (r *HelmRepositoryReconciler) reconcileArtifact(ctx context.Context, sp *pa
 	if obj.GetArtifact().HasRevision(artifact.Revision) && obj.GetArtifact().HasChecksum(artifact.Checksum) {
 		// Extend TTL of the Index in the cache (if present).
 		if r.Cache != nil {
-			r.Cache.SetExpiration(r.Storage.LocalPath(*artifact), r.TTL)
+			r.Cache.SetExpiration(artifact.Path, r.TTL)
 		}
 
 		r.eventLogf(ctx, obj, eventv1.EventTypeTrace, sourcev1.ArtifactUpToDateReason, "artifact up-to-date with remote revision: '%s'", artifact.Revision)
@@ -607,10 +607,9 @@ func (r *HelmRepositoryReconciler) reconcileArtifact(ctx context.Context, sp *pa
 	if r.Cache != nil && chartRepo.Index != nil {
 		// The cache keys have to be safe in multi-tenancy environments, as
 		// otherwise it could be used as a vector to bypass the repository's
-		// authentication. Using r.Storage.LocalPath(*repo.GetArtifact())
-		// is safe as the path is in the format of:
-		// /<repository-name>/<chart-name>/<filename>.
-		if err := r.Cache.Set(r.Storage.LocalPath(*artifact), chartRepo.Index, r.TTL); err != nil {
+		// authentication. Using the Artifact.Path is safe as the path is in
+		// the format of: /<repository-name>/<chart-name>/<filename>.
+		if err := r.Cache.Set(artifact.Path, chartRepo.Index, r.TTL); err != nil {
 			r.eventLogf(ctx, obj, eventv1.EventTypeTrace, sourcev1.CacheOperationFailedReason, "failed to cache index: %s", err)
 		}
 	}

@@ -137,8 +137,7 @@ func TestHelmChartReconciler_Reconcile(t *testing.T) {
 				repoKey := client.ObjectKey{Name: repository.Name, Namespace: repository.Namespace}
 				err = testEnv.Get(ctx, repoKey, repository)
 				g.Expect(err).ToNot(HaveOccurred())
-				localPath := testStorage.LocalPath(*repository.GetArtifact())
-				_, found := testCache.Get(localPath)
+				_, found := testCache.Get(repository.GetArtifact().Path)
 				g.Expect(found).To(BeTrue())
 
 				g.Expect(testEnv.Delete(ctx, obj)).To(Succeed())

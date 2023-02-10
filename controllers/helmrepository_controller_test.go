@@ -848,7 +848,7 @@ func TestHelmRepositoryReconciler_reconcileArtifact(t *testing.T) {
 			},
 			want: sreconcile.ResultSuccess,
 			afterFunc: func(t *WithT, obj *sourcev1.HelmRepository, cache *cache.Cache) {
-				i, ok := cache.Get(testStorage.LocalPath(*obj.GetArtifact()))
+				i, ok := cache.Get(obj.GetArtifact().Path)
 				t.Expect(ok).To(BeTrue())
 				t.Expect(i).To(BeAssignableToTypeOf(&repo.IndexFile{}))
 			},
@@ -1581,7 +1581,6 @@ func TestHelmRepositoryReconciler_InMemoryCaching(t *testing.T) {
 
 	err = testEnv.Get(ctx, key, helmRepo)
 	g.Expect(err).ToNot(HaveOccurred())
-	localPath := testStorage.LocalPath(*helmRepo.GetArtifact())
-	_, cacheHit := testCache.Get(localPath)
+	_, cacheHit := testCache.Get(helmRepo.GetArtifact().Path)
 	g.Expect(cacheHit).To(BeTrue())
 }
