@@ -23,7 +23,7 @@ require (
 	github.com/docker/cli v20.10.23+incompatible
 	github.com/docker/go-units v0.5.0
 	github.com/fluxcd/go-git/v5 v5.0.0-20221219190809-2e5c9d01cfc4
-	github.com/fluxcd/pkg/apis/event v0.3.0
+	github.com/fluxcd/pkg/apis/event v0.4.0
 	github.com/fluxcd/pkg/apis/meta v0.19.0
 	github.com/fluxcd/pkg/git v0.9.0
 	github.com/fluxcd/pkg/git/gogit v0.6.0

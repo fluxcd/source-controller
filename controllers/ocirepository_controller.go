@@ -1141,7 +1141,7 @@ func (r *OCIRepositoryReconciler) notify(ctx context.Context, oldObj, newObj *so
 			fmt.Sprintf("%s/%s", sourcev1.GroupVersion.Group, eventv1.MetaChecksumKey): newObj.Status.Artifact.Checksum,
 		}
 		if newObj.Status.Artifact.Digest != "" {
-			annotations[sourcev1.GroupVersion.Group+"/revision"] = newObj.Status.Artifact.Digest
+			annotations[sourcev1.GroupVersion.Group+"/"+eventv1.MetaDigestKey] = newObj.Status.Artifact.Digest
 		}
 
 		var oldChecksum string
