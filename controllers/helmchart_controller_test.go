@@ -137,8 +137,7 @@ func TestHelmChartReconciler_Reconcile(t *testing.T) {
 				repoKey := client.ObjectKey{Name: repository.Name, Namespace: repository.Namespace}
 				err = testEnv.Get(ctx, repoKey, repository)
 				g.Expect(err).ToNot(HaveOccurred())
-				localPath := testStorage.LocalPath(*repository.GetArtifact())
-				_, found := testCache.Get(localPath)
+				_, found := testCache.Get(repository.GetArtifact().Path)
 				g.Expect(found).To(BeTrue())
 
 				g.Expect(testEnv.Delete(ctx, obj)).To(Succeed())
@@ -1394,6 +1393,9 @@ func TestHelmChartReconciler_buildFromTarballArtifact(t *testing.T) {
 			}
 
 			got, err := r.buildFromTarballArtifact(context.TODO(), obj, tt.source, &b)
+			if err != nil {
+				t.Log(err)
+			}
 			g.Expect(err != nil).To(Equal(tt.wantErr != nil))
 			if tt.wantErr != nil {
 				g.Expect(reflect.TypeOf(err).String()).To(Equal(reflect.TypeOf(tt.wantErr).String()))

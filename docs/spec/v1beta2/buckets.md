@@ -48,8 +48,8 @@ In the above example:
 - A list of object keys and their [etags](https://en.wikipedia.org/wiki/HTTP_ETag)
   in the `.spec.bucketName` bucket is compiled, while filtering the keys using
   [default ignore rules](#default-exclusions).
-- The SHA256 sum of the list is used as Artifact revision, reported
-  in-cluster in the `.status.artifact.revision` field.
+- The digest (algorithm defaults to SHA256) of the list is used as Artifact
+  revision, reported in-cluster in the `.status.artifact.revision` field.
 - When the current Bucket revision differs from the latest calculated revision,
   all objects are fetched and archived.
 - The new Artifact is reported in the `.status.artifact` field.
@@ -71,7 +71,7 @@ control over.
 
    ```console
    NAME           ENDPOINT            AGE   READY   STATUS                                                                                         
-   minio-bucket   minio.example.com   34s   True    stored artifact for revision 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'
+   minio-bucket   minio.example.com   34s   True    stored artifact for revision 'sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'
    ```
 
 3. Run `kubectl describe bucket minio-bucket` to see the [Artifact](#artifact)
@@ -82,19 +82,21 @@ control over.
    Status:
      Artifact:
        Checksum:          72aa638abb455ca5f9ef4825b949fd2de4d4be0a74895bf7ed2338622cd12686
+       Digest:            sha256:72aa638abb455ca5f9ef4825b949fd2de4d4be0a74895bf7ed2338622cd12686
        Last Update Time:  2022-02-01T23:43:38Z
        Path:              bucket/default/minio-bucket/e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855.tar.gz
-       Revision:          e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+       Revision:          sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+       Size:              38099
        URL:               http://source-controller.source-system.svc.cluster.local./bucket/default/minio-bucket/e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855.tar.gz
      Conditions:
        Last Transition Time:  2022-02-01T23:43:38Z
-       Message:               stored artifact for revision 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'
+       Message:               stored artifact for revision 'sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'
        Observed Generation:   1
        Reason:                Succeeded
        Status:                True
        Type:                  Ready
        Last Transition Time:  2022-02-01T23:43:38Z
-       Message:               stored artifact for revision 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'
+       Message:               stored artifact for revision 'sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'
        Observed Generation:   1
        Reason:                Succeeded
        Status:                True
@@ -104,7 +106,7 @@ control over.
    Events:
      Type    Reason                  Age   From               Message
      ----    ------                  ----  ----               -------
-     Normal  NewArtifact             82s   source-controller  fetched 16 files from 'example'
+     Normal  NewArtifact             82s   source-controller  stored artifact with 16 fetched files from 'example' bucket
    ```
 
 ## Writing a Bucket spec
@@ -906,7 +908,7 @@ lists
 ```console
 LAST SEEN   TYPE      REASON                       OBJECT                 MESSAGE
 2m30s       Normal    NewArtifact                  bucket/<bucket-name>   fetched 16 files with revision from 'my-new-bucket'
-36s         Normal    ArtifactUpToDate             bucket/<bucket-name>   artifact up-to-date with remote revision: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'
+36s         Normal    ArtifactUpToDate             bucket/<bucket-name>   artifact up-to-date with remote revision: 'sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'
 18s         Warning   BucketOperationFailed        bucket/<bucket-name>   bucket 'my-new-bucket' does not exist
 ```
 
@@ -936,9 +938,11 @@ metadata:
 status:
   artifact:
     checksum: cbec34947cc2f36dee8adcdd12ee62ca6a8a36699fc6e56f6220385ad5bd421a
+    digest: sha256:cbec34947cc2f36dee8adcdd12ee62ca6a8a36699fc6e56f6220385ad5bd421a
     lastUpdateTime: "2022-01-28T10:30:30Z"
     path: bucket/<namespace>/<bucket-name>/c3ab8ff13720e8ad9047dd39466b3c8974e592c2fa383d4a3960714caef0c4f2.tar.gz
-    revision: c3ab8ff13720e8ad9047dd39466b3c8974e592c2fa383d4a3960714caef0c4f2
+    revision: sha256:c3ab8ff13720e8ad9047dd39466b3c8974e592c2fa383d4a3960714caef0c4f2
+    size: 38099
     url: http://source-controller.<namespace>.svc.cluster.local./bucket/<namespace>/<bucket-name>/c3ab8ff13720e8ad9047dd39466b3c8974e592c2fa383d4a3960714caef0c4f2.tar.gz
 ```
 

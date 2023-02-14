@@ -86,7 +86,7 @@ func TestOCIRepository_Reconcile(t *testing.T) {
 		url            string
 		tag            string
 		semver         string
-		digest         string
+		revision       string
 		mediaType      string
 		operation      string
 		assertArtifact []artifactFixture
@@ -95,7 +95,7 @@ func TestOCIRepository_Reconcile(t *testing.T) {
 			name:      "public tag",
 			url:       podinfoVersions["6.1.6"].url,
 			tag:       podinfoVersions["6.1.6"].tag,
-			digest:    fmt.Sprintf("%s/%s", podinfoVersions["6.1.6"].tag, podinfoVersions["6.1.6"].digest.Hex),
+			revision:  fmt.Sprintf("%s@%s", podinfoVersions["6.1.6"].tag, podinfoVersions["6.1.6"].digest.String()),
 			mediaType: "application/vnd.docker.image.rootfs.diff.tar.gzip",
 			operation: sourcev1.OCILayerCopy,
 			assertArtifact: []artifactFixture{
@@ -110,10 +110,10 @@ func TestOCIRepository_Reconcile(t *testing.T) {
 			},
 		},
 		{
-			name:   "public semver",
-			url:    podinfoVersions["6.1.5"].url,
-			semver: ">= 6.1 <= 6.1.5",
-			digest: fmt.Sprintf("%s/%s", podinfoVersions["6.1.5"].tag, podinfoVersions["6.1.5"].digest.Hex),
+			name:     "public semver",
+			url:      podinfoVersions["6.1.5"].url,
+			semver:   ">= 6.1 <= 6.1.5",
+			revision: fmt.Sprintf("%s@%s", podinfoVersions["6.1.5"].tag, podinfoVersions["6.1.5"].digest.String()),
 			assertArtifact: []artifactFixture{
 				{
 					expectedPath:     "kustomize/deployment.yaml",
@@ -177,8 +177,8 @@ func TestOCIRepository_Reconcile(t *testing.T) {
 			// Wait for the object to be Ready
 			waitForSourceReadyWithArtifact(ctx, g, obj)
 
-			// Check if the revision matches the expected digest
-			g.Expect(obj.Status.Artifact.Revision).To(Equal(tt.digest))
+			// Check if the revision matches the expected revision
+			g.Expect(obj.Status.Artifact.Revision).To(Equal(tt.revision))
 
 			// Check if the metadata matches the expected annotations
 			g.Expect(obj.Status.Artifact.Metadata[oci.SourceAnnotation]).To(ContainSubstring("podinfo"))
@@ -293,7 +293,6 @@ func TestOCIRepository_Reconcile_MediaType(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-
 			g := NewWithT(t)
 
 			ns, err := testEnv.CreateNamespace(ctx, "ocirepository-mediatype-test")
@@ -383,8 +382,8 @@ func TestOCIRepository_reconcileSource_authStrategy(t *testing.T) {
 			name: "HTTP without basic auth",
 			want: sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new revision '<digest>' for '<url>'"),
-				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new revision '<digest>' for '<url>'"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new revision '<revision>' for '<url>'"),
+				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new revision '<revision>' for '<url>'"),
 			},
 		},
 		{
@@ -404,8 +403,8 @@ func TestOCIRepository_reconcileSource_authStrategy(t *testing.T) {
 				includeSecret: true,
 			},
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new revision '<digest>' for '<url>'"),
-				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new revision '<digest>' for '<url>'"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new revision '<revision>' for '<url>'"),
+				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new revision '<revision>' for '<url>'"),
 			},
 		},
 		{
@@ -425,8 +424,8 @@ func TestOCIRepository_reconcileSource_authStrategy(t *testing.T) {
 				includeSA: true,
 			},
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new revision '<digest>' for '<url>'"),
-				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new revision '<digest>' for '<url>'"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new revision '<revision>' for '<url>'"),
+				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new revision '<revision>' for '<url>'"),
 			},
 		},
 		{
@@ -508,8 +507,8 @@ func TestOCIRepository_reconcileSource_authStrategy(t *testing.T) {
 				},
 			},
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new revision '<digest>' for '<url>'"),
-				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new revision '<digest>' for '<url>'"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new revision '<revision>' for '<url>'"),
+				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new revision '<revision>' for '<url>'"),
 			},
 		},
 		{
@@ -580,8 +579,8 @@ func TestOCIRepository_reconcileSource_authStrategy(t *testing.T) {
 			},
 			provider: "azure",
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new revision '<digest>' for '<url>'"),
-				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new revision '<digest>' for '<url>'"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new revision '<revision>' for '<url>'"),
+				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new revision '<revision>' for '<url>'"),
 			},
 		},
 	}
@@ -678,7 +677,7 @@ func TestOCIRepository_reconcileSource_authStrategy(t *testing.T) {
 
 			assertConditions := tt.assertConditions
 			for k := range assertConditions {
-				assertConditions[k].Message = strings.ReplaceAll(assertConditions[k].Message, "<digest>", fmt.Sprintf("%s/%s", img.tag, img.digest.Hex))
+				assertConditions[k].Message = strings.ReplaceAll(assertConditions[k].Message, "<revision>", fmt.Sprintf("%s@%s", img.tag, img.digest.String()))
 				assertConditions[k].Message = strings.ReplaceAll(assertConditions[k].Message, "<url>", repoURL)
 			}
 
@@ -750,7 +749,7 @@ func TestOCIRepository_CertSecret(t *testing.T) {
 			digest:                pi.digest,
 			certSecret:            &tlsSecretClientCert,
 			expectreadyconition:   true,
-			expectedstatusmessage: fmt.Sprintf("stored artifact for digest '%s'", pi.digest.Hex),
+			expectedstatusmessage: fmt.Sprintf("stored artifact for digest '%s'", pi.digest.String()),
 		},
 		{
 			name:                  "test connection with no secret",
@@ -874,7 +873,7 @@ func TestOCIRepository_reconcileSource_remoteReference(t *testing.T) {
 		{
 			name:         "no reference (latest tag)",
 			want:         sreconcile.ResultSuccess,
-			wantRevision: fmt.Sprintf("latest/%s", img6.digest.Hex),
+			wantRevision: fmt.Sprintf("latest@%s", img6.digest.String()),
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new revision"),
 				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new revision"),
@@ -886,7 +885,7 @@ func TestOCIRepository_reconcileSource_remoteReference(t *testing.T) {
 				Tag: "6.1.6",
 			},
 			want:         sreconcile.ResultSuccess,
-			wantRevision: fmt.Sprintf("%s/%s", img6.tag, img6.digest.Hex),
+			wantRevision: fmt.Sprintf("%s@%s", img6.tag, img6.digest.String()),
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new revision"),
 				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new revision"),
@@ -898,7 +897,7 @@ func TestOCIRepository_reconcileSource_remoteReference(t *testing.T) {
 				SemVer: ">= 6.1.5",
 			},
 			want:         sreconcile.ResultSuccess,
-			wantRevision: fmt.Sprintf("%s/%s", img6.tag, img6.digest.Hex),
+			wantRevision: fmt.Sprintf("%s@%s", img6.tag, img6.digest.String()),
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new revision"),
 				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new revision"),
@@ -909,7 +908,7 @@ func TestOCIRepository_reconcileSource_remoteReference(t *testing.T) {
 			reference: &sourcev1.OCIRepositoryRef{
 				Digest: img6.digest.String(),
 			},
-			wantRevision: img6.digest.Hex,
+			wantRevision: img6.digest.String(),
 			want:         sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new revision"),
@@ -956,7 +955,7 @@ func TestOCIRepository_reconcileSource_remoteReference(t *testing.T) {
 				Tag:    "6.1.5",
 			},
 			want:         sreconcile.ResultSuccess,
-			wantRevision: fmt.Sprintf("%s/%s", img6.tag, img6.digest.Hex),
+			wantRevision: fmt.Sprintf("%s@%s", img6.tag, img6.digest.String()),
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new revision"),
 				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new revision"),
@@ -970,7 +969,7 @@ func TestOCIRepository_reconcileSource_remoteReference(t *testing.T) {
 				Digest: img5.digest.String(),
 			},
 			want:         sreconcile.ResultSuccess,
-			wantRevision: img5.digest.Hex,
+			wantRevision: img5.digest.String(),
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new revision"),
 				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new revision"),
@@ -1058,13 +1057,13 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignature(t *testing.T) {
 			reference: &sourcev1.OCIRepositoryRef{
 				Tag: "6.1.4",
 			},
-			digest:     img4.digest.Hex,
+			digest:     img4.digest.String(),
 			shouldSign: true,
 			want:       sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new revision '<digest>' for '<url>'"),
-				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new revision '<digest>' for '<url>'"),
-				*conditions.TrueCondition(sourcev1.SourceVerifiedCondition, meta.SucceededReason, "verified signature of revision <digest>"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new revision '<revision>' for '<url>'"),
+				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new revision '<revision>' for '<url>'"),
+				*conditions.TrueCondition(sourcev1.SourceVerifiedCondition, meta.SucceededReason, "verified signature of revision <revision>"),
 			},
 		},
 		{
@@ -1072,13 +1071,13 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignature(t *testing.T) {
 			reference: &sourcev1.OCIRepositoryRef{
 				Tag: "6.1.5",
 			},
-			digest:     img5.digest.Hex,
+			digest:     img5.digest.String(),
 			wantErr:    true,
 			wantErrMsg: "failed to verify the signature using provider 'cosign': no matching signatures were found for '<url>'",
 			want:       sreconcile.ResultEmpty,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new revision '<digest>' for '<url>'"),
-				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new revision '<digest>' for '<url>'"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new revision '<revision>' for '<url>'"),
+				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new revision '<revision>' for '<url>'"),
 				*conditions.FalseCondition(sourcev1.SourceVerifiedCondition, sourcev1.VerificationError, "failed to verify the signature using provider '<provider>': no matching signatures were found for '<url>'"),
 			},
 		},
@@ -1087,34 +1086,34 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignature(t *testing.T) {
 			reference: &sourcev1.OCIRepositoryRef{
 				Tag: "6.1.5",
 			},
-			digest:  img5.digest.Hex,
+			digest:  img5.digest.String(),
 			wantErr: true,
 			want:    sreconcile.ResultEmpty,
 			keyless: true,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new revision '<digest>' for '<url>'"),
-				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new revision '<digest>' for '<url>'"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new revision '<revision>' for '<url>'"),
+				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new revision '<revision>' for '<url>'"),
 				*conditions.FalseCondition(sourcev1.SourceVerifiedCondition, sourcev1.VerificationError, "failed to verify the signature using provider '<provider> keyless': no matching signatures"),
 			},
 		},
 		{
 			name:      "verify failed before, removed from spec, remove condition",
 			reference: &sourcev1.OCIRepositoryRef{Tag: "6.1.4"},
-			digest:    img4.digest.Hex,
+			digest:    img4.digest.String(),
 			beforeFunc: func(obj *sourcev1.OCIRepository) {
 				conditions.MarkFalse(obj, sourcev1.SourceVerifiedCondition, "VerifyFailed", "fail msg")
 				obj.Spec.Verify = nil
-				obj.Status.Artifact = &sourcev1.Artifact{Revision: fmt.Sprintf("%s/%s", img4.tag, img4.digest.Hex)}
+				obj.Status.Artifact = &sourcev1.Artifact{Revision: fmt.Sprintf("%s@%s", img4.tag, img4.digest.String())}
 			},
 			want: sreconcile.ResultSuccess,
 		},
 		{
 			name:       "same artifact, verified before, change in obj gen verify again",
 			reference:  &sourcev1.OCIRepositoryRef{Tag: "6.1.4"},
-			digest:     img4.digest.Hex,
+			digest:     img4.digest.String(),
 			shouldSign: true,
 			beforeFunc: func(obj *sourcev1.OCIRepository) {
-				obj.Status.Artifact = &sourcev1.Artifact{Revision: fmt.Sprintf("%s/%s", img4.tag, img4.digest.Hex)}
+				obj.Status.Artifact = &sourcev1.Artifact{Revision: fmt.Sprintf("%s@%s", img4.tag, img4.digest.String())}
 				// Set Verified with old observed generation and different reason/message.
 				conditions.MarkTrue(obj, sourcev1.SourceVerifiedCondition, "Verified", "verified")
 				// Set new object generation.
@@ -1122,17 +1121,17 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignature(t *testing.T) {
 			},
 			want: sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.SourceVerifiedCondition, meta.SucceededReason, "verified signature of revision <digest>"),
+				*conditions.TrueCondition(sourcev1.SourceVerifiedCondition, meta.SucceededReason, "verified signature of revision <revision>"),
 			},
 		},
 		{
 			name:       "no verify for already verified, verified condition remains the same",
 			reference:  &sourcev1.OCIRepositoryRef{Tag: "6.1.4"},
-			digest:     img4.digest.Hex,
+			digest:     img4.digest.String(),
 			shouldSign: true,
 			beforeFunc: func(obj *sourcev1.OCIRepository) {
 				// Artifact present and custom verified condition reason/message.
-				obj.Status.Artifact = &sourcev1.Artifact{Revision: fmt.Sprintf("%s/%s", img4.tag, img4.digest.Hex)}
+				obj.Status.Artifact = &sourcev1.Artifact{Revision: fmt.Sprintf("%s@%s", img4.tag, img4.digest.String())}
 				conditions.MarkTrue(obj, sourcev1.SourceVerifiedCondition, "Verified", "verified")
 			},
 			want: sreconcile.ResultSuccess,
@@ -1145,14 +1144,14 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignature(t *testing.T) {
 			reference: &sourcev1.OCIRepositoryRef{
 				Tag: "6.1.4",
 			},
-			digest:     img4.digest.Hex,
+			digest:     img4.digest.String(),
 			shouldSign: true,
 			insecure:   true,
 			wantErr:    true,
 			want:       sreconcile.ResultEmpty,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new revision '<digest>' for '<url>'"),
-				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new revision '<digest>' for '<url>'"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new revision '<revision>' for '<url>'"),
+				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new revision '<revision>' for '<url>'"),
 				*conditions.FalseCondition(sourcev1.SourceVerifiedCondition, sourcev1.VerificationError, "cosign does not support insecure registries"),
 			},
 		},
@@ -1248,7 +1247,7 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignature(t *testing.T) {
 
 			assertConditions := tt.assertConditions
 			for k := range assertConditions {
-				assertConditions[k].Message = strings.ReplaceAll(assertConditions[k].Message, "<digest>", fmt.Sprintf("%s/%s", tt.reference.Tag, tt.digest))
+				assertConditions[k].Message = strings.ReplaceAll(assertConditions[k].Message, "<revision>", fmt.Sprintf("%s@%s", tt.reference.Tag, tt.digest))
 				assertConditions[k].Message = strings.ReplaceAll(assertConditions[k].Message, "<url>", artifactURL)
 				assertConditions[k].Message = strings.ReplaceAll(assertConditions[k].Message, "<provider>", "cosign")
 			}
@@ -1282,7 +1281,7 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignature(t *testing.T) {
 func TestOCIRepository_reconcileSource_noop(t *testing.T) {
 	g := NewWithT(t)
 
-	testRevision := "6.1.5/d1fc4595915714af2492dc4b66097de1e10f80150c8899907d8f8e61c6d6f67d"
+	testRevision := "6.1.5@sha256:8e4057c22d531d40e12b065443cb0d80394b7257c4dc557cb1fbd4dce892b86d"
 
 	tmpDir := t.TempDir()
 	server, err := setupRegistryServer(ctx, tmpDir, registryOptions{})
@@ -1310,6 +1309,17 @@ func TestOCIRepository_reconcileSource_noop(t *testing.T) {
 			beforeFunc: func(obj *sourcev1.OCIRepository) {
 				obj.Status.Artifact = &sourcev1.Artifact{
 					Revision: testRevision,
+				}
+			},
+			afterFunc: func(g *WithT, artifact *sourcev1.Artifact) {
+				g.Expect(artifact.Metadata).To(BeEmpty())
+			},
+		},
+		{
+			name: "noop - artifact revisions match (legacy)",
+			beforeFunc: func(obj *sourcev1.OCIRepository) {
+				obj.Status.Artifact = &sourcev1.Artifact{
+					Revision: "6.1.5/8e4057c22d531d40e12b065443cb0d80394b7257c4dc557cb1fbd4dce892b86d",
 				}
 			},
 			afterFunc: func(g *WithT, artifact *sourcev1.Artifact) {
@@ -1723,9 +1733,9 @@ func TestOCIRepository_getArtifactURL(t *testing.T) {
 			name: "valid url with digest reference",
 			url:  "oci://ghcr.io/stefanprodan/charts",
 			reference: &sourcev1.OCIRepositoryRef{
-				Digest: imgs["6.1.6"].digest.Hex,
+				Digest: imgs["6.1.6"].digest.String(),
 			},
-			want: "ghcr.io/stefanprodan/charts@" + imgs["6.1.6"].digest.Hex,
+			want: "ghcr.io/stefanprodan/charts@" + imgs["6.1.6"].digest.String(),
 		},
 		{
 			name: "valid url with semver reference",
@@ -2236,7 +2246,7 @@ func pushMultiplePodinfoImages(serverURL string, versions ...string) (map[string
 func setPodinfoImageAnnotations(img gcrv1.Image, tag string) gcrv1.Image {
 	metadata := map[string]string{
 		oci.SourceAnnotation:   "https://github.com/stefanprodan/podinfo",
-		oci.RevisionAnnotation: fmt.Sprintf("%s/SHA", tag),
+		oci.RevisionAnnotation: fmt.Sprintf("%s@sha1:b3b00fe35424a45d373bf4c7214178bc36fd7872", tag),
 	}
 	return mutate.Annotations(img, metadata).(gcrv1.Image)
 }

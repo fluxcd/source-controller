@@ -18,20 +18,22 @@ package repository
 
 import (
 	"bytes"
-	"crypto/sha256"
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
-	"github.com/fluxcd/source-controller/internal/cache"
-	"github.com/fluxcd/source-controller/internal/helm"
 	. "github.com/onsi/gomega"
+	"github.com/opencontainers/go-digest"
 	"helm.sh/helm/v3/pkg/chart"
 	helmgetter "helm.sh/helm/v3/pkg/getter"
 	"helm.sh/helm/v3/pkg/repo"
+
+	"github.com/fluxcd/source-controller/internal/helm"
 )
 
 var now = time.Now()
@@ -55,6 +57,136 @@ func (g *mockGetter) Get(u string, _ ...helmgetter.Option) (*bytes.Buffer, error
 	return bytes.NewBuffer(r), nil
 }
 
+// Index load tests are derived from https://github.com/helm/helm/blob/v3.3.4/pkg/repo/index_test.go#L108
+// to ensure parity with Helm behaviour.
+func TestIndexFromFile(t *testing.T) {
+	g := NewWithT(t)
+
+	// Create an index file that exceeds the max index size.
+	tmpDir := t.TempDir()
+	bigIndexFile := filepath.Join(tmpDir, "index.yaml")
+	data := make([]byte, helm.MaxIndexSize+10)
+	g.Expect(os.WriteFile(bigIndexFile, data, 0o640)).ToNot(HaveOccurred())
+
+	tests := []struct {
+		name     string
+		filename string
+		wantErr  string
+	}{
+		{
+			name:     "regular index file",
+			filename: testFile,
+		},
+		{
+			name:     "chartmuseum index file",
+			filename: chartmuseumTestFile,
+		},
+		{
+			name:     "error if index size exceeds max size",
+			filename: bigIndexFile,
+			wantErr:  "exceeds the maximum index file size",
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			i, err := IndexFromFile(tt.filename)
+			if tt.wantErr != "" {
+				g.Expect(err).To(HaveOccurred())
+				g.Expect(err.Error()).To(ContainSubstring(tt.wantErr))
+				return
+			}
+
+			g.Expect(err).ToNot(HaveOccurred())
+
+			verifyLocalIndex(t, i)
+		})
+	}
+}
+
+func TestIndexFromBytes(t *testing.T) {
+	tests := []struct {
+		name        string
+		b           []byte
+		wantName    string
+		wantVersion string
+		wantDigest  string
+		wantErr     string
+	}{
+		{
+			name: "index",
+			b: []byte(`
+apiVersion: v1
+entries:
+  nginx:
+    - urls:
+        - https://kubernetes-charts.storage.googleapis.com/nginx-0.2.0.tgz
+      name: nginx
+      description: string
+      version: 0.2.0
+      home: https://github.com/something/else
+      digest: "sha256:1234567890abcdef"
+`),
+			wantName:    "nginx",
+			wantVersion: "0.2.0",
+			wantDigest:  "sha256:1234567890abcdef",
+		},
+		{
+			name: "index without API version",
+			b: []byte(`entries:
+  nginx:
+    - name: nginx`),
+			wantErr: "no API version specified",
+		},
+		{
+			name: "index with duplicate entry",
+			b: []byte(`apiVersion: v1
+entries:
+  nginx:
+    - name: nginx"
+  nginx:
+    - name: nginx`),
+			wantErr: "key \"nginx\" already set in map",
+		},
+	}
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+			t.Parallel()
+
+			i, err := IndexFromBytes(tt.b)
+			if tt.wantErr != "" {
+				g.Expect(err).To(HaveOccurred())
+				g.Expect(err.Error()).To(ContainSubstring(tt.wantErr))
+				g.Expect(i).To(BeNil())
+				return
+			}
+
+			g.Expect(err).ToNot(HaveOccurred())
+			g.Expect(i).ToNot(BeNil())
+			got, err := i.Get(tt.wantName, tt.wantVersion)
+			g.Expect(err).ToNot(HaveOccurred())
+			g.Expect(got.Digest).To(Equal(tt.wantDigest))
+		})
+	}
+}
+
+func TestIndexFromBytes_Unordered(t *testing.T) {
+	b, err := os.ReadFile(unorderedTestFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	i, err := IndexFromBytes(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	verifyLocalIndex(t, i)
+}
+
 func TestNewChartRepository(t *testing.T) {
 	repositoryURL := "https://example.com"
 	providers := helmgetter.Providers{
@@ -68,7 +200,7 @@ func TestNewChartRepository(t *testing.T) {
 	t.Run("should construct chart repository", func(t *testing.T) {
 		g := NewWithT(t)
 
-		r, err := NewChartRepository(repositoryURL, "", providers, nil, options)
+		r, err := NewChartRepository(repositoryURL, "", providers, nil, options...)
 		g.Expect(err).ToNot(HaveOccurred())
 		g.Expect(r).ToNot(BeNil())
 		g.Expect(r.URL).To(Equal(repositoryURL))
@@ -95,7 +227,7 @@ func TestNewChartRepository(t *testing.T) {
 	})
 }
 
-func TestChartRepository_Get(t *testing.T) {
+func TestChartRepository_GetChartVersion(t *testing.T) {
 	g := NewWithT(t)
 
 	r := newChartRepository()
@@ -252,6 +384,31 @@ func TestChartRepository_DownloadChart(t *testing.T) {
 	}
 }
 
+func TestChartRepository_CacheIndex(t *testing.T) {
+	g := NewWithT(t)
+
+	mg := mockGetter{Response: []byte("foo")}
+
+	r := newChartRepository()
+	r.URL = "https://example.com"
+	r.Client = &mg
+	r.revisions["key"] = "value"
+	r.digests["key"] = "value"
+
+	err := r.CacheIndex()
+	g.Expect(err).To(Not(HaveOccurred()))
+
+	g.Expect(r.Path).ToNot(BeEmpty())
+	t.Cleanup(func() { _ = os.Remove(r.Path) })
+
+	g.Expect(r.Path).To(BeARegularFile())
+	b, _ := os.ReadFile(r.Path)
+	g.Expect(b).To(Equal(mg.Response))
+
+	g.Expect(r.revisions).To(BeEmpty())
+	g.Expect(r.digests).To(BeEmpty())
+}
+
 func TestChartRepository_DownloadIndex(t *testing.T) {
 	g := NewWithT(t)
 
@@ -260,8 +417,9 @@ func TestChartRepository_DownloadIndex(t *testing.T) {
 
 	mg := mockGetter{Response: b}
 	r := &ChartRepository{
-		URL:    "https://example.com",
-		Client: &mg,
+		URL:     "https://example.com",
+		Client:  &mg,
+		RWMutex: &sync.RWMutex{},
 	}
 
 	buf := bytes.NewBuffer([]byte{})
@@ -271,258 +429,166 @@ func TestChartRepository_DownloadIndex(t *testing.T) {
 	g.Expect(err).To(BeNil())
 }
 
-func TestChartRepository_LoadIndexFromBytes(t *testing.T) {
-	tests := []struct {
-		name        string
-		b           []byte
-		wantName    string
-		wantVersion string
-		wantDigest  string
-		wantErr     string
-	}{
-		{
-			name: "index",
-			b: []byte(`
-apiVersion: v1
-entries:
-  nginx:
-    - urls:
-        - https://kubernetes-charts.storage.googleapis.com/nginx-0.2.0.tgz
-      name: nginx
-      description: string
-      version: 0.2.0
-      home: https://github.com/something/else
-      digest: "sha256:1234567890abcdef"
-`),
-			wantName:    "nginx",
-			wantVersion: "0.2.0",
-			wantDigest:  "sha256:1234567890abcdef",
-		},
-		{
-			name: "index without API version",
-			b: []byte(`entries:
-  nginx:
-    - name: nginx`),
-			wantErr: "no API version specified",
-		},
-		{
-			name: "index with duplicate entry",
-			b: []byte(`apiVersion: v1
-entries:
-  nginx:
-    - name: nginx"
-  nginx:
-    - name: nginx`),
-			wantErr: "key \"nginx\" already set in map",
-		},
-	}
-	for _, tt := range tests {
-		tt := tt
-		t.Run(tt.name, func(t *testing.T) {
-			g := NewWithT(t)
-			t.Parallel()
-
-			r := newChartRepository()
-			err := r.LoadIndexFromBytes(tt.b)
-			if tt.wantErr != "" {
-				g.Expect(err).To(HaveOccurred())
-				g.Expect(err.Error()).To(ContainSubstring(tt.wantErr))
-				g.Expect(r.Index).To(BeNil())
-				return
-			}
-
-			g.Expect(err).ToNot(HaveOccurred())
-			g.Expect(r.Index).ToNot(BeNil())
-			got, err := r.Index.Get(tt.wantName, tt.wantVersion)
-			g.Expect(err).ToNot(HaveOccurred())
-			g.Expect(got.Digest).To(Equal(tt.wantDigest))
-		})
-	}
-}
-
-func TestChartRepository_LoadIndexFromBytes_Unordered(t *testing.T) {
-	b, err := os.ReadFile(unorderedTestFile)
-	if err != nil {
-		t.Fatal(err)
-	}
-	r := newChartRepository()
-	err = r.LoadIndexFromBytes(b)
-	if err != nil {
-		t.Fatal(err)
-	}
-	verifyLocalIndex(t, r.Index)
-}
-
-// Index load tests are derived from https://github.com/helm/helm/blob/v3.3.4/pkg/repo/index_test.go#L108
-// to ensure parity with Helm behaviour.
-func TestChartRepository_LoadIndexFromFile(t *testing.T) {
-	g := NewWithT(t)
-
-	// Create an index file that exceeds the max index size.
-	tmpDir := t.TempDir()
-	bigIndexFile := filepath.Join(tmpDir, "index.yaml")
-	data := make([]byte, helm.MaxIndexSize+10)
-	g.Expect(os.WriteFile(bigIndexFile, data, 0o640)).ToNot(HaveOccurred())
-
-	tests := []struct {
-		name     string
-		filename string
-		wantErr  string
-	}{
-		{
-			name:     "regular index file",
-			filename: testFile,
-		},
-		{
-			name:     "chartmuseum index file",
-			filename: chartmuseumTestFile,
-		},
-		{
-			name:     "error if index size exceeds max size",
-			filename: bigIndexFile,
-			wantErr:  "size of index 'index.yaml' exceeds",
-		},
-	}
-
-	for _, tt := range tests {
-		tt := tt
-		t.Run(tt.name, func(t *testing.T) {
-			g := NewWithT(t)
-
-			r := newChartRepository()
-			err := r.LoadFromFile(tt.filename)
-			if tt.wantErr != "" {
-				g.Expect(err).To(HaveOccurred())
-				g.Expect(err.Error()).To(ContainSubstring(tt.wantErr))
-				return
-			}
-
-			g.Expect(err).ToNot(HaveOccurred())
-
-			verifyLocalIndex(t, r.Index)
-		})
-	}
-}
-
-func TestChartRepository_CacheIndex(t *testing.T) {
-	g := NewWithT(t)
-
-	mg := mockGetter{Response: []byte("foo")}
-	expectSum := fmt.Sprintf("%x", sha256.Sum256(mg.Response))
-
-	r := newChartRepository()
-	r.URL = "https://example.com"
-	r.Client = &mg
-
-	sum, err := r.CacheIndex()
-	g.Expect(err).To(Not(HaveOccurred()))
-
-	g.Expect(r.CachePath).ToNot(BeEmpty())
-	defer os.RemoveAll(r.CachePath)
-	g.Expect(r.CachePath).To(BeARegularFile())
-	b, _ := os.ReadFile(r.CachePath)
-
-	g.Expect(b).To(Equal(mg.Response))
-	g.Expect(sum).To(BeEquivalentTo(expectSum))
-}
-
 func TestChartRepository_StrategicallyLoadIndex(t *testing.T) {
-	g := NewWithT(t)
+	t.Run("loads from path", func(t *testing.T) {
+		g := NewWithT(t)
 
-	r := newChartRepository()
-	r.Index = repo.NewIndexFile()
-	g.Expect(r.StrategicallyLoadIndex()).To(Succeed())
-	g.Expect(r.CachePath).To(BeEmpty())
-	g.Expect(r.Cached).To(BeFalse())
+		i := filepath.Join(t.TempDir(), "index.yaml")
+		g.Expect(os.WriteFile(i, []byte(`apiVersion: v1`), 0o644)).To(Succeed())
 
-	r.Index = nil
-	r.CachePath = "/invalid/cache/index/path.yaml"
-	err := r.StrategicallyLoadIndex()
-	g.Expect(err).To(HaveOccurred())
-	g.Expect(err.Error()).To(ContainSubstring("/invalid/cache/index/path.yaml: no such file or directory"))
-	g.Expect(r.Cached).To(BeFalse())
+		r := newChartRepository()
+		r.Path = i
 
-	r.CachePath = ""
-	r.Client = &mockGetter{}
-	err = r.StrategicallyLoadIndex()
-	g.Expect(err).To(HaveOccurred())
-	g.Expect(err.Error()).To(ContainSubstring("no API version specified"))
-	g.Expect(r.Cached).To(BeTrue())
-	g.Expect(r.RemoveCache()).To(Succeed())
-}
-
-func TestChartRepository_CacheIndexInMemory(t *testing.T) {
-	g := NewWithT(t)
-
-	interval, _ := time.ParseDuration("5s")
-	memCache := cache.New(1, interval)
-	indexPath := "/multi-tenent-safe/mock/index.yaml"
-	r := newChartRepository()
-	r.Index = repo.NewIndexFile()
-	indexFile := *r.Index
-	g.Expect(
-		indexFile.MustAdd(
-			&chart.Metadata{
-				Name:    "grafana",
-				Version: "6.17.4",
-			},
-			"grafana-6.17.4.tgz",
-			"http://example.com/charts",
-			"sha256:1234567890abc",
-		)).To(Succeed())
-	indexFile.WriteFile(indexPath, 0o640)
-	ttl, _ := time.ParseDuration("1m")
-	r.SetMemCache(indexPath, memCache, ttl, func(event string) {
-		fmt.Println(event)
+		err := r.StrategicallyLoadIndex()
+		g.Expect(err).To(Succeed())
+		g.Expect(r.Index).ToNot(BeNil())
 	})
-	r.CacheIndexInMemory()
-	_, cacheHit := r.IndexCache.Get(indexPath)
-	g.Expect(cacheHit).To(Equal(true))
-	r.Unload()
-	g.Expect(r.Index).To(BeNil())
-	g.Expect(r.StrategicallyLoadIndex()).To(Succeed())
-	g.Expect(r.Index.Entries["grafana"][0].Digest).To(Equal("sha256:1234567890abc"))
+
+	t.Run("loads from client", func(t *testing.T) {
+		g := NewWithT(t)
+
+		r := newChartRepository()
+		r.Client = &mockGetter{
+			Response: []byte(`apiVersion: v1`),
+		}
+		t.Cleanup(func() {
+			_ = os.Remove(r.Path)
+		})
+
+		err := r.StrategicallyLoadIndex()
+		g.Expect(err).To(Succeed())
+		g.Expect(r.Path).ToNot(BeEmpty())
+		g.Expect(r.Index).ToNot(BeNil())
+	})
+
+	t.Run("skips if index is already loaded", func(t *testing.T) {
+		g := NewWithT(t)
+
+		r := newChartRepository()
+		r.Index = repo.NewIndexFile()
+
+		g.Expect(r.StrategicallyLoadIndex()).To(Succeed())
+	})
 }
 
-func TestChartRepository_LoadFromCache(t *testing.T) {
-	tests := []struct {
-		name      string
-		cachePath string
-		wantErr   string
-	}{
-		{
-			name:      "cache path",
-			cachePath: chartmuseumTestFile,
-		},
-		{
-			name:      "invalid cache path",
-			cachePath: "invalid",
-			wantErr:   "stat invalid: no such file",
-		},
-		{
-			name:      "no cache path",
-			cachePath: "",
-			wantErr:   "no cache path set",
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			g := NewWithT(t)
+func TestChartRepository_LoadFromPath(t *testing.T) {
+	t.Run("loads index", func(t *testing.T) {
+		g := NewWithT(t)
 
-			r := newChartRepository()
-			r.CachePath = tt.cachePath
-			err := r.LoadFromCache()
-			if tt.wantErr != "" {
-				g.Expect(err).To(HaveOccurred())
-				g.Expect(err.Error()).To(ContainSubstring(tt.wantErr))
-				g.Expect(r.Index).To(BeNil())
-				return
-			}
+		i := filepath.Join(t.TempDir(), "index.yaml")
+		g.Expect(os.WriteFile(i, []byte(`apiVersion: v1`), 0o644)).To(Succeed())
 
-			g.Expect(err).ToNot(HaveOccurred())
-			verifyLocalIndex(t, r.Index)
-		})
-	}
+		r := newChartRepository()
+		r.Path = i
+		r.revisions["key"] = "value"
+
+		g.Expect(r.LoadFromPath()).To(Succeed())
+		g.Expect(r.Index).ToNot(BeNil())
+		g.Expect(r.revisions).To(BeEmpty())
+	})
+
+	t.Run("no cache path", func(t *testing.T) {
+		g := NewWithT(t)
+
+		err := newChartRepository().LoadFromPath()
+		g.Expect(err).To(HaveOccurred())
+		g.Expect(err.Error()).To(ContainSubstring("no cache path"))
+	})
+
+	t.Run("index load error", func(t *testing.T) {
+		g := NewWithT(t)
+
+		r := newChartRepository()
+		r.Path = filepath.Join(t.TempDir(), "index.yaml")
+
+		err := r.LoadFromPath()
+		g.Expect(err).To(HaveOccurred())
+		g.Expect(errors.Is(err, os.ErrNotExist)).To(BeTrue())
+	})
+}
+
+func TestChartRepository_Revision(t *testing.T) {
+	t.Run("with algorithm", func(t *testing.T) {
+		r := newChartRepository()
+		r.Index = repo.NewIndexFile()
+
+		for _, algo := range []digest.Algorithm{digest.SHA256, digest.SHA512} {
+			t.Run(algo.String(), func(t *testing.T) {
+				g := NewWithT(t)
+
+				d := r.Revision(algo)
+				g.Expect(d).ToNot(BeEmpty())
+				g.Expect(d.Algorithm()).To(Equal(algo))
+				g.Expect(r.revisions[algo]).To(Equal(d))
+			})
+		}
+	})
+
+	t.Run("without index", func(t *testing.T) {
+		g := NewWithT(t)
+
+		r := newChartRepository()
+		g.Expect(r.Revision(digest.SHA256)).To(BeEmpty())
+	})
+
+	t.Run("from cache", func(t *testing.T) {
+		g := NewWithT(t)
+
+		algo := digest.SHA256
+		expect := digest.Digest("sha256:fake")
+
+		r := newChartRepository()
+		r.Index = repo.NewIndexFile()
+		r.revisions[algo] = expect
+
+		g.Expect(r.Revision(algo)).To(Equal(expect))
+	})
+}
+
+func TestChartRepository_Digest(t *testing.T) {
+	t.Run("with algorithm", func(t *testing.T) {
+		g := NewWithT(t)
+
+		p := filepath.Join(t.TempDir(), "index.yaml")
+		g.Expect(repo.NewIndexFile().WriteFile(p, 0o644)).To(Succeed())
+
+		r := newChartRepository()
+		r.Path = p
+
+		for _, algo := range []digest.Algorithm{digest.SHA256, digest.SHA512} {
+			t.Run(algo.String(), func(t *testing.T) {
+				g := NewWithT(t)
+
+				d := r.Digest(algo)
+				g.Expect(d).ToNot(BeEmpty())
+				g.Expect(d.Algorithm()).To(Equal(algo))
+				g.Expect(r.digests[algo]).To(Equal(d))
+			})
+		}
+	})
+
+	t.Run("without path", func(t *testing.T) {
+		g := NewWithT(t)
+
+		r := newChartRepository()
+		g.Expect(r.Digest(digest.SHA256)).To(BeEmpty())
+	})
+
+	t.Run("from cache", func(t *testing.T) {
+		g := NewWithT(t)
+
+		algo := digest.SHA256
+		expect := digest.Digest("sha256:fake")
+
+		i := filepath.Join(t.TempDir(), "index.yaml")
+		g.Expect(os.WriteFile(i, []byte(`apiVersion: v1`), 0o644)).To(Succeed())
+
+		r := newChartRepository()
+		r.Path = i
+		r.digests[algo] = expect
+
+		g.Expect(r.Digest(algo)).To(Equal(expect))
+	})
 }
 
 func TestChartRepository_HasIndex(t *testing.T) {
@@ -534,23 +600,88 @@ func TestChartRepository_HasIndex(t *testing.T) {
 	g.Expect(r.HasIndex()).To(BeTrue())
 }
 
-func TestChartRepository_HasCacheFile(t *testing.T) {
+func TestChartRepository_HasFile(t *testing.T) {
 	g := NewWithT(t)
 
 	r := newChartRepository()
-	g.Expect(r.HasCacheFile()).To(BeFalse())
-	r.CachePath = "foo"
-	g.Expect(r.HasCacheFile()).To(BeTrue())
+	g.Expect(r.HasFile()).To(BeFalse())
+
+	i := filepath.Join(t.TempDir(), "index.yaml")
+	g.Expect(os.WriteFile(i, []byte(`apiVersion: v1`), 0o644)).To(Succeed())
+	r.Path = i
+	g.Expect(r.HasFile()).To(BeTrue())
 }
 
-func TestChartRepository_UnloadIndex(t *testing.T) {
+func TestChartRepository_Clear(t *testing.T) {
+	t.Run("without index", func(t *testing.T) {
+		g := NewWithT(t)
+
+		r := newChartRepository()
+		g.Expect(r.Clear()).To(Succeed())
+	})
+
+	t.Run("with index", func(t *testing.T) {
+		g := NewWithT(t)
+
+		r := newChartRepository()
+		r.Index = repo.NewIndexFile()
+		r.revisions["key"] = "value"
+
+		g.Expect(r.Clear()).To(Succeed())
+		g.Expect(r.Index).To(BeNil())
+		g.Expect(r.revisions).To(BeEmpty())
+	})
+
+	t.Run("with index and cached path", func(t *testing.T) {
+		g := NewWithT(t)
+
+		f, err := os.CreateTemp(t.TempDir(), "index-*.yaml")
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(f.Close()).To(Succeed())
+
+		r := newChartRepository()
+		r.Path = f.Name()
+		r.Index = repo.NewIndexFile()
+		r.digests["key"] = "value"
+		r.revisions["key"] = "value"
+		r.cached = true
+
+		g.Expect(r.Clear()).To(Succeed())
+		g.Expect(r.Index).To(BeNil())
+		g.Expect(r.Path).To(BeEmpty())
+		g.Expect(r.digests).To(BeEmpty())
+		g.Expect(r.revisions).To(BeEmpty())
+		g.Expect(r.cached).To(BeFalse())
+	})
+
+	t.Run("with path", func(t *testing.T) {
+		g := NewWithT(t)
+
+		f, err := os.CreateTemp(t.TempDir(), "index-*.yaml")
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(f.Close()).To(Succeed())
+
+		r := newChartRepository()
+		r.Path = f.Name()
+		r.digests["key"] = "value"
+
+		g.Expect(r.Clear()).To(Succeed())
+		g.Expect(r.Path).ToNot(BeEmpty())
+		g.Expect(r.Path).To(BeARegularFile())
+		g.Expect(r.digests).To(BeEmpty())
+	})
+}
+
+func TestChartRepository_Invalidate(t *testing.T) {
 	g := NewWithT(t)
 
 	r := newChartRepository()
-	g.Expect(r.HasIndex()).To(BeFalse())
-	r.Index = repo.NewIndexFile()
-	r.Unload()
-	g.Expect(r.Index).To(BeNil())
+	r.digests["key"] = "value"
+	r.revisions["key"] = "value"
+
+	r.Invalidate()
+	g.Expect(r.digests).To(BeEmpty())
+	g.Expect(r.revisions).To(BeEmpty())
 }
 
 func verifyLocalIndex(t *testing.T, i *repo.IndexFile) {
@@ -621,28 +752,4 @@ func verifyLocalIndex(t *testing.T, i *repo.IndexFile) {
 		g.Expect(tt.URLs).To(ContainElements(expect.URLs))
 		g.Expect(tt.Keywords).To(ContainElements(expect.Keywords))
 	}
-}
-
-func TestChartRepository_RemoveCache(t *testing.T) {
-	g := NewWithT(t)
-
-	tmpFile, err := os.CreateTemp("", "remove-cache-")
-	g.Expect(err).ToNot(HaveOccurred())
-	defer os.Remove(tmpFile.Name())
-
-	r := newChartRepository()
-	r.CachePath = tmpFile.Name()
-	r.Cached = true
-
-	g.Expect(r.RemoveCache()).To(Succeed())
-	g.Expect(r.CachePath).To(BeEmpty())
-	g.Expect(r.Cached).To(BeFalse())
-	g.Expect(tmpFile.Name()).ToNot(BeAnExistingFile())
-
-	r.CachePath = tmpFile.Name()
-	r.Cached = true
-
-	g.Expect(r.RemoveCache()).To(Succeed())
-	g.Expect(r.CachePath).To(BeEmpty())
-	g.Expect(r.Cached).To(BeFalse())
 }

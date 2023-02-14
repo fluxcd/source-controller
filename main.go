@@ -44,6 +44,8 @@ import (
 	"github.com/fluxcd/pkg/runtime/logger"
 	"github.com/fluxcd/pkg/runtime/pprof"
 	"github.com/fluxcd/pkg/runtime/probes"
+
+	"github.com/fluxcd/source-controller/internal/digest"
 	"github.com/fluxcd/source-controller/internal/features"
 	"github.com/fluxcd/source-controller/internal/helm/registry"
 
@@ -102,6 +104,7 @@ func main() {
 		helmCachePurgeInterval   string
 		artifactRetentionTTL     time.Duration
 		artifactRetentionRecords int
+		artifactDigestAlgo       string
 	)
 
 	flag.StringVar(&metricsAddr, "metrics-addr", envOrDefault("METRICS_ADDR", ":8080"),
@@ -137,9 +140,11 @@ func main() {
 	flag.StringSliceVar(&git.HostKeyAlgos, "ssh-hostkey-algos", []string{},
 		"The list of hostkey algorithms to use for ssh connections, arranged from most preferred to the least.")
 	flag.DurationVar(&artifactRetentionTTL, "artifact-retention-ttl", 60*time.Second,
-		"The duration of time that artifacts from previous reconcilations will be kept in storage before being garbage collected.")
+		"The duration of time that artifacts from previous reconciliations will be kept in storage before being garbage collected.")
 	flag.IntVar(&artifactRetentionRecords, "artifact-retention-records", 2,
 		"The maximum number of artifacts to be kept in storage after a garbage collection.")
+	flag.StringVar(&artifactDigestAlgo, "artifact-digest-algo", digest.Canonical.String(),
+		"The algorithm to use to calculate the digest of artifacts.")
 
 	clientOptions.BindFlags(flag.CommandLine)
 	logOptions.BindFlags(flag.CommandLine)
@@ -159,7 +164,15 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Set upper bound file size limits Helm
+	if artifactDigestAlgo != digest.Canonical.String() {
+		algo, err := digest.AlgorithmForName(artifactDigestAlgo)
+		if err != nil {
+			setupLog.Error(err, "unable to configure canonical digest algorithm")
+			os.Exit(1)
+		}
+		digest.Canonical = algo
+	}
+
 	helm.MaxIndexSize = helmIndexLimit
 	helm.MaxChartSize = helmChartLimit
 	helm.MaxChartFileSize = helmChartFileLimit
@@ -169,7 +182,7 @@ func main() {
 		watchNamespace = os.Getenv("RUNTIME_NAMESPACE")
 	}
 
-	disableCacheFor := []ctrlclient.Object{}
+	var disableCacheFor []ctrlclient.Object
 	shouldCache, err := features.Enabled(features.CacheSecretsAndConfigMaps)
 	if err != nil {
 		setupLog.Error(err, "unable to check feature gate "+features.CacheSecretsAndConfigMaps)

@@ -86,11 +86,6 @@ func TestDependencyManager_Clear(t *testing.T) {
 			Index:   repo.NewIndexFile(),
 			RWMutex: &sync.RWMutex{},
 		},
-		"cached cache path": &repository.ChartRepository{
-			CachePath: "/invalid/path/resets",
-			Cached:    true,
-			RWMutex:   &sync.RWMutex{},
-		},
 		"with credentials":    ociRepoWithCreds,
 		"without credentials": &repository.OCIChartRepository{},
 		"nil downloader":      nil,
@@ -103,8 +98,6 @@ func TestDependencyManager_Clear(t *testing.T) {
 		switch v := v.(type) {
 		case *repository.ChartRepository:
 			g.Expect(v.Index).To(BeNil())
-			g.Expect(v.CachePath).To(BeEmpty())
-			g.Expect(v.Cached).To(BeFalse())
 		case *repository.OCIChartRepository:
 			g.Expect(v.HasCredentials()).To(BeFalse())
 		}
@@ -441,14 +434,14 @@ func TestDependencyManager_addRemoteDependency(t *testing.T) {
 			name: "strategic load error",
 			downloaders: map[string]repository.Downloader{
 				"https://example.com/": &repository.ChartRepository{
-					CachePath: "/invalid/cache/path/foo",
-					RWMutex:   &sync.RWMutex{},
+					Client:  &mockGetter{},
+					RWMutex: &sync.RWMutex{},
 				},
 			},
 			dep: &helmchart.Dependency{
 				Repository: "https://example.com",
 			},
-			wantErr: "failed to strategically load index",
+			wantErr: "failed to load index",
 		},
 		{
 			name: "repository get error",

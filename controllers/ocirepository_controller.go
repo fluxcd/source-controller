@@ -582,7 +582,8 @@ func (r *OCIRepositoryReconciler) selectLayer(obj *sourcev1.OCIRepository, image
 	return blob, nil
 }
 
-// getRevision fetches the upstream digest and returns the revision in the format `<tag>/<digest>`
+// getRevision fetches the upstream digest, returning the revision in the
+// format '<tag>@<digest>'.
 func (r *OCIRepositoryReconciler) getRevision(url string, options []crane.Option) (string, error) {
 	ref, err := name.ParseReference(url)
 	if err != nil {
@@ -609,21 +610,22 @@ func (r *OCIRepositoryReconciler) getRevision(url string, options []crane.Option
 		return "", err
 	}
 
-	revision := digestHash.Hex
+	revision := digestHash.String()
 	if repoTag != "" {
-		revision = fmt.Sprintf("%s/%s", repoTag, digestHash.Hex)
+		revision = fmt.Sprintf("%s@%s", repoTag, revision)
 	}
 	return revision, nil
 }
 
-// digestFromRevision extract the digest from the revision string
+// digestFromRevision extracts the digest from the revision string.
 func (r *OCIRepositoryReconciler) digestFromRevision(revision string) string {
-	parts := strings.Split(revision, "/")
+	parts := strings.Split(revision, "@")
 	return parts[len(parts)-1]
 }
 
-// verifySignature verifies the authenticity of the given image reference url. First, it tries using a key
-// if a secret with a valid public key is provided. If not, it falls back to a keyless approach for verification.
+// verifySignature verifies the authenticity of the given image reference URL.
+// First, it tries to use a key if a Secret with a valid public key is provided.
+// If not, it falls back to a keyless approach for verification.
 func (r *OCIRepositoryReconciler) verifySignature(ctx context.Context, obj *sourcev1.OCIRepository, url string, opt ...remote.Option) error {
 	ctxTimeout, cancel := context.WithTimeout(ctx, obj.Spec.Timeout.Duration)
 	defer cancel()
@@ -722,7 +724,7 @@ func (r *OCIRepositoryReconciler) parseRepositoryURL(obj *sourcev1.OCIRepository
 	return ref.Context().Name(), nil
 }
 
-// getArtifactURL determines which tag or digest should be used and returns the OCI artifact FQN.
+// getArtifactURL determines which tag or revision should be used and returns the OCI artifact FQN.
 func (r *OCIRepositoryReconciler) getArtifactURL(obj *sourcev1.OCIRepository, options []crane.Option) (string, error) {
 	url, err := r.parseRepositoryURL(obj)
 	if err != nil {
@@ -951,11 +953,9 @@ func (r *OCIRepositoryReconciler) reconcileStorage(ctx context.Context, sp *patc
 // and the symlink in the Storage is updated to its path.
 func (r *OCIRepositoryReconciler) reconcileArtifact(ctx context.Context, sp *patch.SerialPatcher,
 	obj *sourcev1.OCIRepository, metadata *sourcev1.Artifact, dir string) (sreconcile.Result, error) {
-	revision := metadata.Revision
-
 	// Create artifact
-	artifact := r.Storage.NewArtifactFor(obj.Kind, obj, revision,
-		fmt.Sprintf("%s.tar.gz", r.digestFromRevision(revision)))
+	artifact := r.Storage.NewArtifactFor(obj.Kind, obj, metadata.Revision,
+		fmt.Sprintf("%s.tar.gz", r.digestFromRevision(metadata.Revision)))
 
 	// Set the ArtifactInStorageCondition if there's no drift.
 	defer func() {
@@ -1139,6 +1139,9 @@ func (r *OCIRepositoryReconciler) notify(ctx context.Context, oldObj, newObj *so
 		annotations := map[string]string{
 			fmt.Sprintf("%s/%s", sourcev1.GroupVersion.Group, eventv1.MetaRevisionKey): newObj.Status.Artifact.Revision,
 			fmt.Sprintf("%s/%s", sourcev1.GroupVersion.Group, eventv1.MetaChecksumKey): newObj.Status.Artifact.Checksum,
+		}
+		if newObj.Status.Artifact.Digest != "" {
+			annotations[sourcev1.GroupVersion.Group+"/"+eventv1.MetaDigestKey] = newObj.Status.Artifact.Digest
 		}
 
 		var oldChecksum string

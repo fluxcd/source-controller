@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/docker/go-units"
+	"github.com/opencontainers/go-digest"
 	helmgetter "helm.sh/helm/v3/pkg/getter"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -47,6 +48,7 @@ import (
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
 	"github.com/fluxcd/source-controller/internal/cache"
+	intdigest "github.com/fluxcd/source-controller/internal/digest"
 	serror "github.com/fluxcd/source-controller/internal/error"
 	"github.com/fluxcd/source-controller/internal/helm/getter"
 	"github.com/fluxcd/source-controller/internal/helm/repository"
@@ -277,19 +279,22 @@ func (r *HelmRepositoryReconciler) reconcile(ctx context.Context, sp *patch.Seri
 		res = sreconcile.LowestRequeuingResult(res, recResult)
 	}
 
-	r.notify(ctx, oldObj, obj, chartRepo, res, resErr)
+	r.notify(ctx, oldObj, obj, &chartRepo, res, resErr)
 
 	return res, resErr
 }
 
 // notify emits notification related to the reconciliation.
-func (r *HelmRepositoryReconciler) notify(ctx context.Context, oldObj, newObj *sourcev1.HelmRepository, chartRepo repository.ChartRepository, res sreconcile.Result, resErr error) {
+func (r *HelmRepositoryReconciler) notify(ctx context.Context, oldObj, newObj *sourcev1.HelmRepository, chartRepo *repository.ChartRepository, res sreconcile.Result, resErr error) {
 	// Notify successful reconciliation for new artifact and recovery from any
 	// failure.
 	if resErr == nil && res == sreconcile.ResultSuccess && newObj.Status.Artifact != nil {
 		annotations := map[string]string{
 			fmt.Sprintf("%s/%s", sourcev1.GroupVersion.Group, eventv1.MetaRevisionKey): newObj.Status.Artifact.Revision,
 			fmt.Sprintf("%s/%s", sourcev1.GroupVersion.Group, eventv1.MetaChecksumKey): newObj.Status.Artifact.Checksum,
+		}
+		if newObj.Status.Artifact.Digest != "" {
+			annotations[sourcev1.GroupVersion.Group+"/"+eventv1.MetaDigestKey] = newObj.Status.Artifact.Digest
 		}
 
 		humanReadableSize := "unknown size"
@@ -430,7 +435,7 @@ func (r *HelmRepositoryReconciler) reconcileSource(ctx context.Context, sp *patc
 	}
 
 	// Construct Helm chart repository with options and download index
-	newChartRepo, err := repository.NewChartRepository(obj.Spec.URL, "", r.Getters, tlsConfig, clientOpts)
+	newChartRepo, err := repository.NewChartRepository(obj.Spec.URL, "", r.Getters, tlsConfig, clientOpts...)
 	if err != nil {
 		switch err.(type) {
 		case *url.Error:
@@ -451,8 +456,7 @@ func (r *HelmRepositoryReconciler) reconcileSource(ctx context.Context, sp *patc
 	}
 
 	// Fetch the repository index from remote.
-	checksum, err := newChartRepo.CacheIndex()
-	if err != nil {
+	if err := newChartRepo.CacheIndex(); err != nil {
 		e := &serror.Event{
 			Err:    fmt.Errorf("failed to fetch Helm repository index: %w", err),
 			Reason: meta.FailedReason,
@@ -463,20 +467,48 @@ func (r *HelmRepositoryReconciler) reconcileSource(ctx context.Context, sp *patc
 	}
 	*chartRepo = *newChartRepo
 
-	// Short-circuit based on the fetched index being an exact match to the
-	// stored Artifact. This prevents having to unmarshal the YAML to calculate
-	// the (stable) revision, which is a memory expensive operation.
-	if obj.GetArtifact().HasChecksum(checksum) {
-		*artifact = *obj.GetArtifact()
-		conditions.Delete(obj, sourcev1.FetchFailedCondition)
-		return sreconcile.ResultSuccess, nil
+	// Early comparison to current Artifact.
+	if curArtifact := obj.GetArtifact(); curArtifact != nil {
+		curDig := digest.Digest(curArtifact.Digest)
+		if curDig == "" {
+			curDig = digest.Digest(sourcev1.TransformLegacyRevision(curArtifact.Checksum))
+		}
+		if curDig.Validate() == nil {
+			// Short-circuit based on the fetched index being an exact match to the
+			// stored Artifact. This prevents having to unmarshal the YAML to calculate
+			// the (stable) revision, which is a memory expensive operation.
+			if newDig := chartRepo.Digest(curDig.Algorithm()); newDig.Validate() == nil && (newDig == curDig) {
+				*artifact = *curArtifact
+				conditions.Delete(obj, sourcev1.FetchFailedCondition)
+				return sreconcile.ResultSuccess, nil
+			}
+		}
 	}
 
-	// Load the cached repository index to ensure it passes validation. This
-	// also populates chartRepo.Checksum.
-	if err := chartRepo.LoadFromCache(); err != nil {
+	// Load the cached repository index to ensure it passes validation.
+	if err := chartRepo.LoadFromPath(); err != nil {
 		e := &serror.Event{
-			Err:    fmt.Errorf("failed to load Helm repository from cache: %w", err),
+			Err:    fmt.Errorf("failed to load Helm repository from index YAML: %w", err),
+			Reason: sourcev1.IndexationFailedReason,
+		}
+		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
+		return sreconcile.ResultEmpty, e
+	}
+	// Delete any stale failure observation
+	conditions.Delete(obj, sourcev1.FetchFailedCondition)
+
+	// Check if index has changed compared to current Artifact revision.
+	var changed bool
+	if artifact := obj.Status.Artifact; artifact != nil {
+		curRev := digest.Digest(sourcev1.TransformLegacyRevision(artifact.Revision))
+		changed = curRev.Validate() != nil || curRev != chartRepo.Revision(curRev.Algorithm())
+	}
+
+	// Calculate revision.
+	revision := chartRepo.Revision(intdigest.Canonical)
+	if revision.Validate() != nil {
+		e := &serror.Event{
+			Err:    fmt.Errorf("failed to calculate revision: %w", err),
 			Reason: sourcev1.IndexationFailedReason,
 		}
 		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
@@ -484,8 +516,8 @@ func (r *HelmRepositoryReconciler) reconcileSource(ctx context.Context, sp *patc
 	}
 
 	// Mark observations about the revision on the object.
-	if !obj.GetArtifact().HasRevision(chartRepo.Checksum) {
-		message := fmt.Sprintf("new index revision '%s'", checksum)
+	if obj.Status.Artifact == nil || changed {
+		message := fmt.Sprintf("new index revision '%s'", revision)
 		if obj.GetArtifact() != nil {
 			conditions.MarkTrue(obj, sourcev1.ArtifactOutdatedCondition, "NewRevision", message)
 		}
@@ -497,15 +529,11 @@ func (r *HelmRepositoryReconciler) reconcileSource(ctx context.Context, sp *patc
 	}
 
 	// Create potential new artifact.
-	// Note: Since this is a potential artifact, artifact.Checksum is empty at
-	// this stage. It's populated when the artifact is written in storage.
 	*artifact = r.Storage.NewArtifactFor(obj.Kind,
 		obj.ObjectMeta.GetObjectMeta(),
-		chartRepo.Checksum,
-		fmt.Sprintf("index-%s.yaml", checksum))
-
-	// Delete any stale failure observation
-	conditions.Delete(obj, sourcev1.FetchFailedCondition)
+		revision.String(),
+		fmt.Sprintf("index-%s.yaml", revision.Hex()),
+	)
 
 	return sreconcile.ResultSuccess, nil
 }
@@ -527,15 +555,17 @@ func (r *HelmRepositoryReconciler) reconcileArtifact(ctx context.Context, sp *pa
 			conditions.MarkTrue(obj, sourcev1.ArtifactInStorageCondition, meta.SucceededReason,
 				"stored artifact: revision '%s'", artifact.Revision)
 		}
-
-		chartRepo.Unload()
-
-		if err := chartRepo.RemoveCache(); err != nil {
+		if err := chartRepo.Clear(); err != nil {
 			ctrl.LoggerFrom(ctx).Error(err, "failed to remove temporary cached index file")
 		}
 	}()
 
 	if obj.GetArtifact().HasRevision(artifact.Revision) && obj.GetArtifact().HasChecksum(artifact.Checksum) {
+		// Extend TTL of the Index in the cache (if present).
+		if r.Cache != nil {
+			r.Cache.SetExpiration(artifact.Path, r.TTL)
+		}
+
 		r.eventLogf(ctx, obj, eventv1.EventTypeTrace, sourcev1.ArtifactUpToDateReason, "artifact up-to-date with remote revision: '%s'", artifact.Revision)
 		return sreconcile.ResultSuccess, nil
 	}
@@ -561,7 +591,7 @@ func (r *HelmRepositoryReconciler) reconcileArtifact(ctx context.Context, sp *pa
 	defer unlock()
 
 	// Save artifact to storage.
-	if err = r.Storage.CopyFromPath(artifact, chartRepo.CachePath); err != nil {
+	if err = r.Storage.CopyFromPath(artifact, chartRepo.Path); err != nil {
 		e := &serror.Event{
 			Err:    fmt.Errorf("unable to save artifact to storage: %w", err),
 			Reason: sourcev1.ArchiveOperationFailedReason,
@@ -573,6 +603,17 @@ func (r *HelmRepositoryReconciler) reconcileArtifact(ctx context.Context, sp *pa
 	// Record it on the object.
 	obj.Status.Artifact = artifact.DeepCopy()
 
+	// Cache the index if it was successfully retrieved.
+	if r.Cache != nil && chartRepo.Index != nil {
+		// The cache keys have to be safe in multi-tenancy environments, as
+		// otherwise it could be used as a vector to bypass the repository's
+		// authentication. Using the Artifact.Path is safe as the path is in
+		// the format of: /<repository-name>/<chart-name>/<filename>.
+		if err := r.Cache.Set(artifact.Path, chartRepo.Index, r.TTL); err != nil {
+			r.eventLogf(ctx, obj, eventv1.EventTypeTrace, sourcev1.CacheOperationFailedReason, "failed to cache index: %s", err)
+		}
+	}
+
 	// Update index symlink.
 	indexURL, err := r.Storage.Symlink(*artifact, "index.yaml")
 	if err != nil {
@@ -583,26 +624,6 @@ func (r *HelmRepositoryReconciler) reconcileArtifact(ctx context.Context, sp *pa
 		obj.Status.URL = indexURL
 	}
 	conditions.Delete(obj, sourcev1.StorageOperationFailedCondition)
-
-	// enable cache if applicable
-	if r.Cache != nil && chartRepo.IndexCache == nil {
-		chartRepo.SetMemCache(r.Storage.LocalPath(*artifact), r.Cache, r.TTL, func(event string) {
-			r.IncCacheEvents(event, obj.GetName(), obj.GetNamespace())
-		})
-	}
-
-	// Cache the index if it was successfully retrieved
-	// and the chart was successfully built
-	if r.Cache != nil && chartRepo.Index != nil {
-		// The cache key have to be safe in multi-tenancy environments,
-		// as otherwise it could be used as a vector to bypass the helm repository's authentication.
-		// Using r.Storage.LocalPath(*repo.GetArtifact() is safe as the path is in the format /<helm-repository-name>/<chart-name>/<filename>.
-		err := chartRepo.CacheIndexInMemory()
-		if err != nil {
-			r.eventLogf(ctx, obj, eventv1.EventTypeTrace, sourcev1.CacheOperationFailedReason, "failed to cache index: %s", err)
-		}
-	}
-
 	return sreconcile.ResultSuccess, nil
 }
 

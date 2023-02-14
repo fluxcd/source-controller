@@ -327,6 +327,9 @@ func (r *GitRepositoryReconciler) notify(ctx context.Context, oldObj, newObj *so
 			fmt.Sprintf("%s/%s", sourcev1.GroupVersion.Group, eventv1.MetaRevisionKey): newObj.Status.Artifact.Revision,
 			fmt.Sprintf("%s/%s", sourcev1.GroupVersion.Group, eventv1.MetaChecksumKey): newObj.Status.Artifact.Checksum,
 		}
+		if newObj.Status.Artifact.Digest != "" {
+			annotations[sourcev1.GroupVersion.Group+"/"+eventv1.MetaDigestKey] = newObj.Status.Artifact.Digest
+		}
 
 		var oldChecksum string
 		if oldObj.GetArtifact() != nil {
@@ -623,20 +626,20 @@ func (r *GitRepositoryReconciler) reconcileArtifact(ctx context.Context, sp *pat
 
 	// Set the ArtifactInStorageCondition if there's no drift.
 	defer func() {
-		if obj.GetArtifact().HasRevision(artifact.Revision) &&
+		if curArtifact := obj.GetArtifact(); curArtifact.HasRevision(artifact.Revision) &&
 			!includes.Diff(obj.Status.IncludedArtifacts) &&
 			!gitContentConfigChanged(obj, includes) {
 			conditions.Delete(obj, sourcev1.ArtifactOutdatedCondition)
 			conditions.MarkTrue(obj, sourcev1.ArtifactInStorageCondition, meta.SucceededReason,
-				"stored artifact for revision '%s'", artifact.Revision)
+				"stored artifact for revision '%s'", curArtifact.Revision)
 		}
 	}()
 
 	// The artifact is up-to-date
-	if obj.GetArtifact().HasRevision(artifact.Revision) &&
+	if curArtifact := obj.GetArtifact(); curArtifact.HasRevision(artifact.Revision) &&
 		!includes.Diff(obj.Status.IncludedArtifacts) &&
 		!gitContentConfigChanged(obj, includes) {
-		r.eventLogf(ctx, obj, eventv1.EventTypeTrace, sourcev1.ArtifactUpToDateReason, "artifact up-to-date with remote revision: '%s'", artifact.Revision)
+		r.eventLogf(ctx, obj, eventv1.EventTypeTrace, sourcev1.ArtifactUpToDateReason, "artifact up-to-date with remote revision: '%s'", curArtifact.Revision)
 		return sreconcile.ResultSuccess, nil
 	}
 
@@ -1021,7 +1024,7 @@ func gitContentConfigChanged(obj *sourcev1.GitRepository, includes *artifactSet)
 		}
 
 		// Check if the included repositories are still the same.
-		if observedInclArtifact.Revision != currentIncl.Revision {
+		if !observedInclArtifact.HasRevision(currentIncl.Revision) {
 			return true
 		}
 		if observedInclArtifact.Checksum != currentIncl.Checksum {

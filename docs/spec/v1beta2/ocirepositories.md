@@ -49,7 +49,7 @@ You can run this example by saving the manifest into `ocirepository.yaml`.
 
    ```console
    NAME      URL                                            AGE   READY   STATUS                                                                        
-   podinfo   oci://ghcr.io/stefanprodan/manifests/podinfo   5s    True    stored artifact with revision 'latest/3b6cdcc7adcc9a84d3214ee1c029543789d90b5ae69debe9efa3f66e982875de'
+   podinfo   oci://ghcr.io/stefanprodan/manifests/podinfo   5s    True    stored artifact with revision 'latest@sha256:3b6cdcc7adcc9a84d3214ee1c029543789d90b5ae69debe9efa3f66e982875de'
    ```
 
 3. Run `kubectl describe ocirepository podinfo` to see the [Artifact](#artifact)
@@ -60,19 +60,21 @@ You can run this example by saving the manifest into `ocirepository.yaml`.
    Status:
      Artifact:
        Checksum:          d7e924b4882e55b97627355c7b3d2e711e9b54303afa2f50c25377f4df66a83b
+       Digest:            sha256:d7e924b4882e55b97627355c7b3d2e711e9b54303afa2f50c25377f4df66a83b
        Last Update Time:  2022-06-14T11:23:36Z
        Path:              ocirepository/default/podinfo/3b6cdcc7adcc9a84d3214ee1c029543789d90b5ae69debe9efa3f66e982875de.tar.gz
-       Revision:          latest/3b6cdcc7adcc9a84d3214ee1c029543789d90b5ae69debe9efa3f66e982875de
+       Revision:          latest@sha256:3b6cdcc7adcc9a84d3214ee1c029543789d90b5ae69debe9efa3f66e982875de
+       Size:              1105
        URL:               http://source-controller.flux-system.svc.cluster.local./ocirepository/oci/podinfo/3b6cdcc7adcc9a84d3214ee1c029543789d90b5ae69debe9efa3f66e982875de.tar.gz
      Conditions:
        Last Transition Time:  2022-06-14T11:23:36Z
-       Message:               stored artifact for revision 'latest/3b6cdcc7adcc9a84d3214ee1c029543789d90b5ae69debe9efa3f66e982875de'
+       Message:               stored artifact for revision 'latest@sha256:3b6cdcc7adcc9a84d3214ee1c029543789d90b5ae69debe9efa3f66e982875de'
        Observed Generation:   1
        Reason:                Succeeded
        Status:                True
        Type:                  Ready
        Last Transition Time:  2022-06-14T11:23:36Z
-       Message:               stored artifact for revision 'latest/3b6cdcc7adcc9a84d3214ee1c029543789d90b5ae69debe9efa3f66e982875de'
+       Message:               stored artifact for revision 'latest@sha256:3b6cdcc7adcc9a84d3214ee1c029543789d90b5ae69debe9efa3f66e982875de'
        Observed Generation:   1
        Reason:                Succeeded
        Status:                True
@@ -691,8 +693,8 @@ lists
 
 ```console
 LAST SEEN   TYPE     REASON                OBJECT                               MESSAGE
-2m14s       Normal   NewArtifact           ocirepository/<repository-name>      stored artifact for revision 'latest/3b6cdcc7adcc9a84d3214ee1c029543789d90b5ae69debe9efa3f66e982875de'
-36s         Normal   ArtifactUpToDate      ocirepository/<repository-name>      artifact up-to-date with remote revision: 'latest/3b6cdcc7adcc9a84d3214ee1c029543789d90b5ae69debe9efa3f66e982875de'
+2m14s       Normal   NewArtifact           ocirepository/<repository-name>      stored artifact for revision 'latest@sha256:3b6cdcc7adcc9a84d3214ee1c029543789d90b5ae69debe9efa3f66e982875de'
+36s         Normal   ArtifactUpToDate      ocirepository/<repository-name>      artifact up-to-date with remote revision: 'latest@sha256:3b6cdcc7adcc9a84d3214ee1c029543789d90b5ae69debe9efa3f66e982875de'
 94s         Warning  OCIOperationFailed    ocirepository/<repository-name>      failed to pull artifact from 'oci://ghcr.io/stefanprodan/manifests/podinfo': couldn't find tag "0.0.1"
 ```
 
@@ -731,13 +733,15 @@ metadata:
 status:
   artifact:
     checksum: 9f3bc0f341d4ecf2bab460cc59320a2a9ea292f01d7b96e32740a9abfd341088
+    digest: sha256:9f3bc0f341d4ecf2bab460cc59320a2a9ea292f01d7b96e32740a9abfd341088
     lastUpdateTime: "2022-08-08T09:35:45Z"
     metadata:
       org.opencontainers.image.created: "2022-08-08T12:31:41+03:00"
       org.opencontainers.image.revision: 6.1.8/b3b00fe35424a45d373bf4c7214178bc36fd7872
       org.opencontainers.image.source: https://github.com/stefanprodan/podinfo.git
     path: ocirepository/<namespace>/<repository-name>/<digest>.tar.gz
-    revision: <tag>/<digest>
+    revision: <tag>@<digest>
+    size: 1105
     url: http://source-controller.<namespace>.svc.cluster.local./ocirepository/<namespace>/<repository-name>/<digest>.tar.gz
 ```
 
