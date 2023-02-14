@@ -90,6 +90,8 @@ spec:
                   .sourceignore format (which is the same as .gitignore). If not provided,
                   a default will be used, consult the documentation for your version
                   to find out what those are.
+                maxLength: 5119
+                pattern: ^([a-zA-Z0-9_\-.\\\/]|\[[0-9]{1,5}\])+$
                 type: string
               include:
                 description: Extra git repositories to map into the repository
@@ -100,6 +102,8 @@ spec:
                     fromPath:
                       description: The path to copy contents from, defaults to the
                         root directory.
+                      maxLength: 253
+                      pattern: ^([a-zA-Z0-9_\-.\\\/]|\[[0-9]{1,5}\])+$
                       type: string
                     repository:
                       description: Reference to a GitRepository to include.
@@ -113,6 +117,8 @@ spec:
                     toPath:
                       description: The path to copy contents to, defaults to the name
                         of the source ref.
+                      maxLength: 253
+                      pattern: ^([a-zA-Z0-9_\-.\\\/]|\[[0-9]{1,5}\])+$
                       type: string
                   required:
                   - repository
@@ -132,17 +138,25 @@ spec:
                 properties:
                   branch:
                     description: The Git branch to checkout, defaults to master.
+                    maxLength: 244
+                    pattern: ^[\-._a-zA-Z0-9]+$
                     type: string
                   commit:
                     description: The Git commit SHA to checkout, if specified Tag
                       filters will be ignored.
+                    maxLength: 65
+                    pattern: ^[A-Za-z0-9]{65}$
                     type: string
                   semver:
                     description: The Git tag semver expression, takes precedence over
                       Tag.
+                    maxLength: 63
+                    pattern: ^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$
                     type: string
                   tag:
                     description: The Git tag to checkout, takes precedence over Branch.
+                    maxLength: 253
+                    pattern: ^[\-._0-9]+$
                     type: string
                 type: object
               secretRef:
@@ -167,7 +181,8 @@ spec:
                   to 60s.
                 type: string
               url:
-                description: The repository URL, can be a HTTP/S or SSH address.
+                maxLength: 2048
+                minLength: 1
                 pattern: ^(http|https|ssh)://.*$
                 type: string
               verify:
@@ -208,6 +223,8 @@ spec:
                 properties:
                   checksum:
                     description: Checksum is the SHA256 checksum of the artifact.
+                    maxLength: 65
+                    pattern: ^[A-Za-z0-9]{65}$
                     type: string
                   lastUpdateTime:
                     description: LastUpdateTime is the timestamp corresponding to
@@ -216,14 +233,22 @@ spec:
                     type: string
                   path:
                     description: Path is the relative file path of this artifact.
+                    maxLength: 253
+                    minLength: 1
+                    pattern: ^([a-zA-Z0-9_\-.\\\/]|\[[0-9]{1,5}\])+$
                     type: string
                   revision:
                     description: Revision is a human readable identifier traceable
                       in the origin source system. It can be a Git commit SHA, Git
                       tag, a Helm index timestamp, a Helm chart version, etc.
+                    maxLength: 65
+                    pattern: ^[A-Za-z0-9]{65}$
                     type: string
                   url:
                     description: URL is the HTTP address of this artifact.
+                    maxLength: 2048
+                    minLength: 1
+                    pattern: ^(http|https|ssh)://.*$
                     type: string
                 required:
                 - path
@@ -306,6 +331,8 @@ spec:
                   properties:
                     checksum:
                       description: Checksum is the SHA256 checksum of the artifact.
+                      maxLength: 65
+                      pattern: ^[A-Za-z0-9]{65}$
                       type: string
                     lastUpdateTime:
                       description: LastUpdateTime is the timestamp corresponding to
@@ -314,14 +341,22 @@ spec:
                       type: string
                     path:
                       description: Path is the relative file path of this artifact.
+                      maxLength: 253
+                      minLength: 1
+                      pattern: ^([a-zA-Z0-9_\-.\\\/]|\[[0-9]{1,5}\])+$
                       type: string
                     revision:
                       description: Revision is a human readable identifier traceable
                         in the origin source system. It can be a Git commit SHA, Git
                         tag, a Helm index timestamp, a Helm chart version, etc.
+                      maxLength: 65
+                      pattern: ^[A-Za-z0-9]{65}$
                       type: string
                     url:
                       description: URL is the HTTP address of this artifact.
+                      maxLength: 2048
+                      minLength: 1
+                      pattern: ^(http|https|ssh)://.*$
                       type: string
                   required:
                   - path
@@ -340,8 +375,12 @@ spec:
               url:
                 description: URL is the download link for the artifact output of the
                   last repository sync.
+                maxLength: 2048
+                pattern: ^(http|https|ssh)://.*$
                 type: string
             type: object
+        required:
+        - spec
         type: object
     served: true
     storage: false
@@ -424,6 +463,8 @@ spec:
                   .sourceignore format (which is the same as .gitignore). If not provided,
                   a default will be used, consult the documentation for your version
                   to find out what those are.
+                maxLength: 5119
+                pattern: ^([a-zA-Z0-9_\-.\\\/]|\[[0-9]{1,5}\])+$
                 type: string
               include:
                 description: Include specifies a list of GitRepository resources which
@@ -436,6 +477,8 @@ spec:
                     fromPath:
                       description: FromPath specifies the path to copy contents from,
                         defaults to the root of the Artifact.
+                      maxLength: 253
+                      pattern: ^([a-zA-Z0-9_\-.\\\/]|\[[0-9]{1,5}\])+$
                       type: string
                     repository:
                       description: GitRepositoryRef specifies the GitRepository which
@@ -450,6 +493,8 @@ spec:
                     toPath:
                       description: ToPath specifies the path to copy contents to,
                         defaults to the name of the GitRepositoryRef.
+                      maxLength: 253
+                      pattern: ^([a-zA-Z0-9_\-.\\\/]|\[[0-9]{1,5}\])+$
                       type: string
                   required:
                   - repository
@@ -474,19 +519,26 @@ spec:
                       other field is defined. \n When GitRepositorySpec.GitImplementation
                       is set to 'go-git', a shallow clone of the specified branch
                       is performed."
+                    maxLength: 244
+                    pattern: ^([a-zA-Z0-9_\-.\\\/]|\[[0-9]{1,5}\])+$
                     type: string
                   commit:
                     description: "Commit SHA to check out, takes precedence over all
                       reference fields. \n When GitRepositorySpec.GitImplementation
                       is set to 'go-git', this can be combined with Branch to shallow
                       clone the branch, in which the commit is expected to exist."
+                    pattern: ^[A-Za-z0-9]{65}$
                     type: string
                   semver:
                     description: SemVer tag expression to check out, takes precedence
                       over Tag.
+                    maxLength: 63
+                    pattern: ^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$
                     type: string
                   tag:
                     description: Tag to check out, takes precedence over Branch.
+                    maxLength: 253
+                    pattern: ^[\-._0-9]+$
                     type: string
                 type: object
               secretRef:
@@ -515,6 +567,8 @@ spec:
               url:
                 description: URL specifies the Git repository URL, it can be an HTTP/S
                   or SSH address.
+                maxLength: 2048
+                minLength: 1
                 pattern: ^(http|https|ssh)://.*$
                 type: string
               verify:
@@ -555,6 +609,8 @@ spec:
                 properties:
                   checksum:
                     description: Checksum is the SHA256 checksum of the Artifact file.
+                    maxLength: 65
+                    pattern: ^[A-Za-z0-9]{65}$
                     type: string
                   lastUpdateTime:
                     description: LastUpdateTime is the timestamp corresponding to
@@ -570,11 +626,15 @@ spec:
                     description: Path is the relative file path of the Artifact. It
                       can be used to locate the file in the root of the Artifact storage
                       on the local file system of the controller managing the Source.
+                    maxLength: 253
+                    minLength: 1
+                    pattern: ^([a-zA-Z0-9_\-.\\\/]|\[[0-9]{1,5}\])+$
                     type: string
                   revision:
                     description: Revision is a human-readable identifier traceable
                       in the origin source system. It can be a Git commit SHA, Git
                       tag, a Helm chart version, etc.
+                    pattern: ^[A-Za-z0-9]{65}$
                     type: string
                   size:
                     description: Size is the number of bytes in the file.
@@ -585,6 +645,9 @@ spec:
                       by the controller managing the Source. It can be used to retrieve
                       the Artifact for consumption, e.g. by another controller applying
                       the Artifact contents.
+                    maxLength: 2048
+                    minLength: 1
+                    pattern: ^(http|https|ssh)://.*$
                     type: string
                 required:
                 - path
@@ -678,6 +741,8 @@ spec:
                     checksum:
                       description: Checksum is the SHA256 checksum of the Artifact
                         file.
+                      maxLength: 65
+                      pattern: ^[A-Za-z0-9]{65}$
                       type: string
                     lastUpdateTime:
                       description: LastUpdateTime is the timestamp corresponding to
@@ -695,11 +760,15 @@ spec:
                         It can be used to locate the file in the root of the Artifact
                         storage on the local file system of the controller managing
                         the Source.
+                      maxLength: 253
+                      minLength: 1
+                      pattern: ^([a-zA-Z0-9_\-.\\\/]|\[[0-9]{1,5}\])+$
                       type: string
                     revision:
                       description: Revision is a human-readable identifier traceable
                         in the origin source system. It can be a Git commit SHA, Git
                         tag, a Helm chart version, etc.
+                      pattern: ^[A-Za-z0-9]{65}$
                       type: string
                     size:
                       description: Size is the number of bytes in the file.
@@ -710,6 +779,9 @@ spec:
                         by the controller managing the Source. It can be used to retrieve
                         the Artifact for consumption, e.g. by another controller applying
                         the Artifact contents.
+                      maxLength: 2048
+                      minLength: 1
+                      pattern: ^(http|https|ssh)://.*$
                       type: string
                   required:
                   - path
@@ -768,8 +840,12 @@ spec:
                 description: URL is the dynamic fetch link for the latest Artifact.
                   It is provided on a "best effort" basis, and using the precise GitRepositoryStatus.Artifact
                   data is recommended.
+                maxLength: 2048
+                pattern: ^(http|https|ssh)://.*$
                 type: string
             type: object
+        required:
+        - spec
         type: object
     served: true
     storage: true

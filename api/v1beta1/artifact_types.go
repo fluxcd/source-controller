@@ -26,20 +26,30 @@ import (
 // Artifact represents the output of a source synchronisation.
 type Artifact struct {
 	// Path is the relative file path of this artifact.
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=253
+	// +kubebuilder:validation:Pattern=`^([a-zA-Z0-9_\-.\\\/]|\[[0-9]{1,5}\])+$`
 	// +required
 	Path string `json:"path"`
 
 	// URL is the HTTP address of this artifact.
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=2048
+	// +kubebuilder:validation:Pattern="^(http|https|ssh)://.*$"
 	// +required
 	URL string `json:"url"`
 
 	// Revision is a human readable identifier traceable in the origin source
 	// system. It can be a Git commit SHA, Git tag, a Helm index timestamp, a Helm
 	// chart version, etc.
+	// +kubebuilder:validation:MaxLength=65
+	// +kubebuilder:validation:Pattern=`^[A-Za-z0-9]{65}$`
 	// +optional
 	Revision string `json:"revision"`
 
 	// Checksum is the SHA256 checksum of the artifact.
+	// +kubebuilder:validation:MaxLength=65
+	// +kubebuilder:validation:Pattern=`^[A-Za-z0-9]{65}$`
 	// +optional
 	Checksum string `json:"checksum"`
 

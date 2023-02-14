@@ -70,6 +70,7 @@ spec:
                   .sourceignore format (which is the same as .gitignore). If not provided,
                   a default will be used, consult the documentation for your version
                   to find out what those are.
+                maxLength: 5119
                 type: string
               insecure:
                 description: Insecure allows connecting to a non-TLS HTTP container
@@ -116,13 +117,18 @@ spec:
                   digest:
                     description: Digest is the image digest to pull, takes precedence
                       over SemVer. The value should be in the format 'sha256:<HASH>'.
+                    maxLength: 65
+                    pattern: ^[A-Za-z0-9]{65}$
                     type: string
                   semver:
                     description: SemVer is the range of tags to pull selecting the
                       latest within the range, takes precedence over Tag.
+                    pattern: ^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$
                     type: string
                   tag:
                     description: Tag is the image tag to pull, defaults to latest.
+                    maxLength: 253
+                    pattern: ^[\-._0-9]+$
                     type: string
                 type: object
               secretRef:
@@ -140,6 +146,8 @@ spec:
                 description: 'ServiceAccountName is the name of the Kubernetes ServiceAccount
                   used to authenticate the image pull if the service account has attached
                   pull secrets. For more information: https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/#add-imagepullsecrets-to-a-service-account'
+                maxLength: 253
+                pattern: ^([a-zA-Z0-9_\-.\\\/]|\[[0-9]{1,5}\])+$
                 type: string
               suspend:
                 description: This flag tells the controller to suspend the reconciliation
@@ -154,6 +162,8 @@ spec:
               url:
                 description: URL is a reference to an OCI artifact repository hosted
                   on a remote container registry.
+                maxLength: 2048
+                minLength: 1
                 pattern: ^oci://.*$
                 type: string
               verify:
@@ -196,6 +206,8 @@ spec:
                 properties:
                   checksum:
                     description: Checksum is the SHA256 checksum of the Artifact file.
+                    maxLength: 65
+                    pattern: ^[A-Za-z0-9]{65}$
                     type: string
                   lastUpdateTime:
                     description: LastUpdateTime is the timestamp corresponding to
@@ -211,11 +223,15 @@ spec:
                     description: Path is the relative file path of the Artifact. It
                       can be used to locate the file in the root of the Artifact storage
                       on the local file system of the controller managing the Source.
+                    maxLength: 253
+                    minLength: 1
+                    pattern: ^([a-zA-Z0-9_\-.\\\/]|\[[0-9]{1,5}\])+$
                     type: string
                   revision:
                     description: Revision is a human-readable identifier traceable
                       in the origin source system. It can be a Git commit SHA, Git
                       tag, a Helm chart version, etc.
+                    pattern: ^[A-Za-z0-9]{65}$
                     type: string
                   size:
                     description: Size is the number of bytes in the file.
@@ -226,6 +242,9 @@ spec:
                       by the controller managing the Source. It can be used to retrieve
                       the Artifact for consumption, e.g. by another controller applying
                       the Artifact contents.
+                    maxLength: 2048
+                    minLength: 1
+                    pattern: ^(http|https|ssh)://.*$
                     type: string
                 required:
                 - path
@@ -345,8 +364,12 @@ spec:
               url:
                 description: URL is the download link for the artifact output of the
                   last OCI Repository sync.
+                maxLength: 2048
+                pattern: ^oci://.*$
                 type: string
             type: object
+        required:
+        - spec
         type: object
     served: true
     storage: true
