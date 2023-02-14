@@ -60,16 +60,16 @@ func TestStorageConstructor(t *testing.T) {
 
 // walks a tar.gz and looks for paths with the basename. It does not match
 // symlinks properly at this time because that's painful.
-func walkTar(tarFile string, match string, dir bool) (int64, bool, error) {
+func walkTar(tarFile string, match string, dir bool) (int64, int64, bool, error) {
 	f, err := os.Open(tarFile)
 	if err != nil {
-		return 0, false, fmt.Errorf("could not open file: %w", err)
+		return 0, 0, false, fmt.Errorf("could not open file: %w", err)
 	}
 	defer f.Close()
 
 	gzr, err := gzip.NewReader(f)
 	if err != nil {
-		return 0, false, fmt.Errorf("could not unzip file: %w", err)
+		return 0, 0, false, fmt.Errorf("could not unzip file: %w", err)
 	}
 	defer gzr.Close()
 
@@ -79,24 +79,24 @@ func walkTar(tarFile string, match string, dir bool) (int64, bool, error) {
 		if err == io.EOF {
 			break
 		} else if err != nil {
-			return 0, false, fmt.Errorf("corrupt tarball reading header: %w", err)
+			return 0, 0, false, fmt.Errorf("corrupt tarball reading header: %w", err)
 		}
 
 		switch header.Typeflag {
 		case tar.TypeDir:
 			if header.Name == match && dir {
-				return 0, true, nil
+				return 0, header.Mode, true, nil
 			}
 		case tar.TypeReg:
 			if header.Name == match {
-				return header.Size, true, nil
+				return header.Size, header.Mode, true, nil
 			}
 		default:
 			// skip
 		}
 	}
 
-	return 0, false, nil
+	return 0, 0, false, nil
 }
 
 func TestStorage_Archive(t *testing.T) {
@@ -134,7 +134,7 @@ func TestStorage_Archive(t *testing.T) {
 			if !mustExist {
 				name = name[1:]
 			}
-			s, exist, err := walkTar(storage.LocalPath(artifact), name, false)
+			s, m, exist, err := walkTar(storage.LocalPath(artifact), name, false)
 			if err != nil {
 				t.Fatalf("failed reading tarball: %v", err)
 			}
@@ -148,13 +148,16 @@ func TestStorage_Archive(t *testing.T) {
 					t.Errorf("tarball contained excluded file %q", name)
 				}
 			}
+			if exist && m != defaultFileMode {
+				t.Fatalf("%q mode %v != %v", name, m, defaultFileMode)
+			}
 		}
 		for _, name := range dirs {
 			mustExist := !(name[0:1] == "!")
 			if !mustExist {
 				name = name[1:]
 			}
-			_, exist, err := walkTar(storage.LocalPath(artifact), name, true)
+			_, m, exist, err := walkTar(storage.LocalPath(artifact), name, true)
 			if err != nil {
 				t.Fatalf("failed reading tarball: %v", err)
 			}
@@ -165,6 +168,10 @@ func TestStorage_Archive(t *testing.T) {
 					t.Errorf("tarball contained excluded file %q", name)
 				}
 			}
+			if exist && m != defaultDirMode {
+				t.Fatalf("%q mode %v != %v", name, m, defaultDirMode)
+			}
+
 		}
 	}
 
