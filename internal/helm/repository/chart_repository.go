@@ -332,6 +332,11 @@ func (r *ChartRepository) LoadFromFile(path string) error {
 // The caller is expected to handle the garbage collection of CachePath, and to
 // load the Index separately using LoadFromCache if required.
 func (r *ChartRepository) CacheIndex() (string, error) {
+	index, err := r.DownloadIndex()
+	if err != nil {
+		return "", err
+	}
+
 	f, err := os.CreateTemp("", "chart-index-*.yaml")
 	if err != nil {
 		return "", fmt.Errorf("failed to create temp file to cache index to: %w", err)
@@ -339,7 +344,7 @@ func (r *ChartRepository) CacheIndex() (string, error) {
 
 	h := sha256.New()
 	mw := io.MultiWriter(f, h)
-	if err = r.DownloadIndex(mw); err != nil {
+	if _, err = io.Copy(mw, index); err != nil {
 		f.Close()
 		os.RemoveAll(f.Name())
 		return "", fmt.Errorf("failed to cache index to temporary file: %w", err)
@@ -434,12 +439,12 @@ func (r *ChartRepository) LoadFromCache() error {
 }
 
 // DownloadIndex attempts to download the chart repository index using
-// the Client and set Options, and writes the index to the given io.Writer.
-// It returns an url.Error if the URL failed to parse.
-func (r *ChartRepository) DownloadIndex(w io.Writer) (err error) {
+// the Client and set Options.
+// It returns the downloaded index bytes, or an error if it's unreachable or invalid.
+func (r *ChartRepository) DownloadIndex() (*bytes.Buffer, error) {
 	u, err := url.Parse(r.URL)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	u.RawPath = path.Join(u.RawPath, "index.yaml")
 	u.Path = path.Join(u.Path, "index.yaml")
@@ -448,15 +453,11 @@ func (r *ChartRepository) DownloadIndex(w io.Writer) (err error) {
 	clientOpts := append(r.Options, getter.WithTransport(t))
 	defer transport.Release(t)
 
-	var res *bytes.Buffer
-	res, err = r.Client.Get(u.String(), clientOpts...)
+	res, err := r.Client.Get(u.String(), clientOpts...)
 	if err != nil {
-		return err
+		return nil, fmt.Errorf("looks like %q is not a valid chart repository or cannot be reached: %w", r.URL, err)
 	}
-	if _, err = io.Copy(w, res); err != nil {
-		return err
-	}
-	return nil
+	return res, nil
 }
 
 // HasIndex returns true if the Index is not nil.
