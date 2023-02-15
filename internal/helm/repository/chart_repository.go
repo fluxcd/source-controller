@@ -27,7 +27,6 @@ import (
 	"os"
 	"path"
 	"sort"
-	"strings"
 	"sync"
 
 	"github.com/Masterminds/semver/v3"
@@ -271,31 +270,16 @@ func (r *ChartRepository) DownloadChart(chart *repo.ChartVersion) (*bytes.Buffer
 	//  always the correct one to pick, check for updates once in awhile.
 	//  Ref: https://github.com/helm/helm/blob/v3.3.0/pkg/downloader/chart_downloader.go#L241
 	ref := chart.URLs[0]
-	u, err := url.Parse(ref)
+	resolvedUrl, err := repo.ResolveReferenceURL(r.URL, ref)
 	if err != nil {
-		err = fmt.Errorf("invalid chart URL format '%s': %w", ref, err)
 		return nil, err
-	}
-
-	// Prepend the chart repository base URL if the URL is relative
-	if !u.IsAbs() {
-		repoURL, err := url.Parse(r.URL)
-		if err != nil {
-			err = fmt.Errorf("invalid chart repository URL format '%s': %w", r.URL, err)
-			return nil, err
-		}
-		q := repoURL.Query()
-		// Trailing slash is required for ResolveReference to work
-		repoURL.Path = strings.TrimSuffix(repoURL.Path, "/") + "/"
-		u = repoURL.ResolveReference(u)
-		u.RawQuery = q.Encode()
 	}
 
 	t := transport.NewOrIdle(r.tlsConfig)
 	clientOpts := append(r.Options, getter.WithTransport(t))
 	defer transport.Release(t)
 
-	return r.Client.Get(u.String(), clientOpts...)
+	return r.Client.Get(resolvedUrl, clientOpts...)
 }
 
 // CacheIndex attempts to write the index from the remote into a new temporary file
