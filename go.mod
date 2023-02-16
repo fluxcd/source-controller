@@ -19,25 +19,25 @@ require (
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.0.0
 	github.com/Masterminds/semver/v3 v3.2.0
 	github.com/cyphar/filepath-securejoin v0.2.3
-	github.com/distribution/distribution/v3 v3.0.0-20230131081513-cf87e8d07e8d
+	github.com/distribution/distribution/v3 v3.0.0-20230214150026-36d8c594d7aa
 	github.com/docker/cli v23.0.1+incompatible
 	github.com/docker/go-units v0.5.0
 	github.com/fluxcd/go-git/v5 v5.0.0-20221219190809-2e5c9d01cfc4
 	github.com/fluxcd/pkg/apis/event v0.4.0
 	github.com/fluxcd/pkg/apis/meta v0.19.0
-	github.com/fluxcd/pkg/git v0.9.0
-	github.com/fluxcd/pkg/git/gogit v0.6.0
-	github.com/fluxcd/pkg/gittestserver v0.8.0
-	github.com/fluxcd/pkg/helmtestserver v0.11.0
+	github.com/fluxcd/pkg/git v0.10.0
+	github.com/fluxcd/pkg/git/gogit v0.7.1
+	github.com/fluxcd/pkg/gittestserver v0.8.1
+	github.com/fluxcd/pkg/helmtestserver v0.11.1
 	github.com/fluxcd/pkg/lockedfile v0.1.0
 	github.com/fluxcd/pkg/masktoken v0.2.0
-	github.com/fluxcd/pkg/oci v0.19.0
-	github.com/fluxcd/pkg/runtime v0.28.0
-	github.com/fluxcd/pkg/sourceignore v0.3.0
-	github.com/fluxcd/pkg/ssh v0.7.0
+	github.com/fluxcd/pkg/oci v0.19.1
+	github.com/fluxcd/pkg/runtime v0.29.0
+	github.com/fluxcd/pkg/sourceignore v0.3.1
+	github.com/fluxcd/pkg/ssh v0.7.1
 	github.com/fluxcd/pkg/testserver v0.4.0
 	github.com/fluxcd/pkg/untar v0.2.0
-	github.com/fluxcd/pkg/version v0.2.0
+	github.com/fluxcd/pkg/version v0.2.1
 	github.com/fluxcd/source-controller/api v0.34.0
 	github.com/go-git/go-billy/v5 v5.4.1
 	github.com/go-logr/logr v1.2.3
@@ -96,7 +96,7 @@ require (
 	github.com/Masterminds/squirrel v1.5.3 // indirect
 	github.com/Microsoft/go-winio v0.6.0 // indirect
 	github.com/Nvveen/Gotty v0.0.0-20120604004816-cd527374f1e5 // indirect
-	github.com/ProtonMail/go-crypto v0.0.0-20230201104953-d1d05f4e2bfb // indirect
+	github.com/ProtonMail/go-crypto v0.0.0-20230214155104-81033d7f4442 // indirect
 	github.com/Shopify/logrus-bugsnag v0.0.0-20171204204709-577dee27f20d // indirect
 	github.com/ThalesIgnite/crypto11 v1.2.5 // indirect
 	github.com/acomagu/bufpipe v1.0.3 // indirect
@@ -113,17 +113,17 @@ require (
 	github.com/aliyun/credentials-go v1.2.3 // indirect
 	github.com/asaskevich/govalidator v0.0.0-20210307081110-f21760c49a8d // indirect
 	github.com/aws/aws-sdk-go-v2 v1.17.4 // indirect
-	github.com/aws/aws-sdk-go-v2/config v1.18.12 // indirect
-	github.com/aws/aws-sdk-go-v2/credentials v1.13.12 // indirect
+	github.com/aws/aws-sdk-go-v2/config v1.18.13 // indirect
+	github.com/aws/aws-sdk-go-v2/credentials v1.13.13 // indirect
 	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.12.22 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/configsources v1.1.28 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.4.22 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/ini v1.3.29 // indirect
-	github.com/aws/aws-sdk-go-v2/service/ecr v1.18.2 // indirect
+	github.com/aws/aws-sdk-go-v2/service/ecr v1.18.3 // indirect
 	github.com/aws/aws-sdk-go-v2/service/ecrpublic v1.13.17 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.9.22 // indirect
-	github.com/aws/aws-sdk-go-v2/service/sso v1.12.1 // indirect
-	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.14.1 // indirect
+	github.com/aws/aws-sdk-go-v2/service/sso v1.12.2 // indirect
+	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.14.2 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sts v1.18.3 // indirect
 	github.com/aws/smithy-go v1.13.5 // indirect
 	github.com/awslabs/amazon-ecr-credential-helper/ecr-login v0.0.0-20221004211355-a250ad2ca1e3 // indirect
@@ -366,7 +366,7 @@ require (
 	go.uber.org/zap v1.24.0 // indirect
 	golang.org/x/exp v0.0.0-20220823124025-807a23277127 // indirect
 	golang.org/x/mod v0.8.0 // indirect
-	golang.org/x/net v0.6.0 // indirect
+	golang.org/x/net v0.7.0 // indirect
 	golang.org/x/oauth2 v0.5.0 // indirect
 	golang.org/x/sys v0.5.0 // indirect
 	golang.org/x/term v0.5.0 // indirect
