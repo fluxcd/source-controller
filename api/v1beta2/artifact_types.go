@@ -51,7 +51,7 @@ type Artifact struct {
 	// Digest is the digest of the file in the form of '<algorithm>:<checksum>'.
 	// +optional
 	// +kubebuilder:validation:Pattern="^[a-z0-9]+(?:[.+_-][a-z0-9]+)*:[a-zA-Z0-9=_-]+$"
-	Digest string `json:"digest"`
+	Digest string `json:"digest,omitempty"`
 
 	// LastUpdateTime is the timestamp corresponding to the last update of the
 	// Artifact.
