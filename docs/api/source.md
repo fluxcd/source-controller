@@ -436,8 +436,7 @@ bool
 <td>
 <em>(Optional)</em>
 <p>RecurseSubmodules enables the initialization of all submodules within
-the GitRepository as cloned from the URL, using their default settings.
-This option is available only when using the &lsquo;go-git&rsquo; GitImplementation.</p>
+the GitRepository as cloned from the URL, using their default settings.</p>
 </td>
 </tr>
 <tr>
@@ -1671,8 +1670,6 @@ string
 <td>
 <em>(Optional)</em>
 <p>Branch to check out, defaults to &lsquo;master&rsquo; if no other field is defined.</p>
-<p>When GitRepositorySpec.GitImplementation is set to &lsquo;go-git&rsquo;, a shallow
-clone of the specified branch is performed.</p>
 </td>
 </tr>
 <tr>
@@ -1701,6 +1698,20 @@ string
 </tr>
 <tr>
 <td>
+<code>name</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Name of the reference to check out; takes precedence over Branch, Tag and SemVer.</p>
+<p>It must be a valid Git reference: <a href="https://git-scm.com/docs/git-check-ref-format#_description">https://git-scm.com/docs/git-check-ref-format#_description</a>
+Examples: &ldquo;refs/heads/main&rdquo;, &ldquo;refs/tags/v0.1.0&rdquo;, &ldquo;refs/pull/420/head&rdquo;, &ldquo;refs/merge-requests/1/head&rdquo;</p>
+</td>
+</tr>
+<tr>
+<td>
 <code>commit</code><br>
 <em>
 string
@@ -1709,9 +1720,8 @@ string
 <td>
 <em>(Optional)</em>
 <p>Commit SHA to check out, takes precedence over all reference fields.</p>
-<p>When GitRepositorySpec.GitImplementation is set to &lsquo;go-git&rsquo;, this can be
-combined with Branch to shallow clone the branch, in which the commit is
-expected to exist.</p>
+<p>This can be combined with Branch to shallow clone the branch, in which
+the commit is expected to exist.</p>
 </td>
 </tr>
 </tbody>
@@ -1875,8 +1885,7 @@ bool
 <td>
 <em>(Optional)</em>
 <p>RecurseSubmodules enables the initialization of all submodules within
-the GitRepository as cloned from the URL, using their default settings.
-This option is available only when using the &lsquo;go-git&rsquo; GitImplementation.</p>
+the GitRepository as cloned from the URL, using their default settings.</p>
 </td>
 </tr>
 <tr>
