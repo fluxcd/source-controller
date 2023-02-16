@@ -2,6 +2,113 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.35.0
+
+**Release date:** 2023-02-16
+
+This release introduces a new format for the Artifact `Revision`, and deprecates
+the `Checksum` field in favor of a new `Digest` field. In addition, it adds
+support for Git reference names in a GitRepository, and comes with the usual
+collection of dependency updates.
+
+### Highlights
+
+#### Support for Git reference names
+
+Starting with this version, it is possible to define a [Git Reference](https://git-scm.com/book/en/v2/Git-Internals-Git-References)
+in a GitRepository using `.spec.ref.name`.
+
+This opens the door to a range of functionalities not available before, as it
+for example allows the controller to follow pull (`refs/pull/<id>/head`) or
+merge (`refs/merge-requests/<id>/head`) requests, and allows a transition from
+the HEAD of a branch (`refs/heads/main`) to a tag (`refs/tags/v0.1.0`) by
+changing a single field value.
+
+Refer to the [GitRepository specification](https://github.com/fluxcd/source-controller/blob/v0.35.0/docs/spec/v1beta2/gitrepositories.md#name-example)
+for more details. 
+
+#### Introduction of Artifact Digest
+
+The Artifact of a Source will now advertise a `Digest` field containing the
+checksum of the file advertised in the `Path`, and the alias of the algorithm
+used to calculate it. Creating a "digest" in the format of `<algo>:<checksum>`.
+
+The algorithm is configurable using the newly introduced `--artifact-digest-algo`
+flag, which allows configuration of other algorithms (`sha384`, `sha512`, and
+`blake3`) than the hardcoded `sha256` default of the [now deprecated `Checksum`
+field](#deprecation-of-artifact-checksum).
+
+Please note that until the `Checksum` is fully deprecated, changing the
+algorithm is not yet advised (albeit supported), as this will result in a
+double computation.
+
+### :warning: Breaking changes
+
+#### Artifact Revision format
+
+The `Revision` format for an Artifact consisting of a named pointer (a Git
+branch or tag) and/or a specific revision (a Git commit SHA or other calculated
+checksum) has changed to contain an `@` separator opposed to `/`, and includes
+the algorithm alias as a prefix to a checksum (creating a "digest").
+In addition, `HEAD` is no longer used as a named pointer for exact commit
+references, but will now only advertise the commit itself.
+
+For example:
+
+- `main/1eabc9a41ca088515cab83f1cce49eb43e84b67f` => `main@sha1:1eabc9a41ca088515cab83f1cce49eb43e84b67f`
+- `HEAD/5394cb7f48332b2de7c17dd8b8384bbc84b7e738` => `sha1:5394cb7f48332b2de7c17dd8b8384bbc84b7e738`
+- `tag/55609ff9d959589ed917ce32e6bc0f0a36809565f308602c15c3668965979edc` => `tag@sha256:55609ff9d959589ed917ce32e6bc0f0a36809565f308602c15c3668965979edc`
+- `8fb62a09c9e48ace5463bf940dc15e85f525be4f230e223bbceef6e13024110c` => `sha256:8fb62a09c9e48ace5463bf940dc15e85f525be4f230e223bbceef6e13024110c`
+
+When the storage of the controller is backed by a Persistent Volume, the
+rollout of this new format happens for the next new revision the controller
+encounters. Otherwise, the new revision will be advertised as soon as the
+Artifact has been reproduced after the controller is deployed.
+
+Other Flux controllers making use of an Artifact are aware of the change in
+format, and work with it in a backwards compatible manner. Avoiding observing
+a change of revision when this is actually just a change of format. If you
+programmatically make use of the Revision, please refer to [the
+`TransformLegacyRevision` helper](https://github.com/fluxcd/source-controller/blob/api/v0.35.0/api/v1beta2/artifact_types.go#L121)
+to allow a transition period in your application.
+
+For more information around this change, refer to
+[RFC-0005](https://github.com/fluxcd/flux2/tree/main/rfcs/0005-artifact-revision-and-digest#establish-an-artifact-revision-format).
+
+#### Deprecation of Artifact Checksum
+
+The `Checksum` field of an Artifact has been deprecated in favor of the newly
+introduced `Digest`. Until the deprecated field is removed in the next version
+of the API, the controller will continue to produce the SHA-256 checksum in
+addition to the digest. Changing the algorithm used to produce the digest using
+`--artifact-digest-algo` is therefore not yet advised (albeit supported), as
+this will result in a double computation.
+
+For more information around this change, refer to
+[RFC-0005](https://github.com/fluxcd/flux2/tree/main/rfcs/0005-artifact-revision-and-digest#introduce-a-digest-field).
+
+### Full changelog
+
+Improvements:
+- Introduction of Digest and change of Revision format
+  [#1001](https://github.com/fluxcd/source-controller/pull/1001)
+- Improve HelmRepository type switching from default to oci
+  [#1016](https://github.com/fluxcd/source-controller/pull/1016)
+- Apply default permission mode to all files/dirs in an artifact archive
+  [#1020](https://github.com/fluxcd/source-controller/pull/1020)
+- Add support for checking out Git references
+  [#1026](https://github.com/fluxcd/source-controller/pull/1026)
+- Update dependencies
+  [#1025](https://github.com/fluxcd/source-controller/pull/1025)
+  [#1028](https://github.com/fluxcd/source-controller/pull/1028)
+  [#1030](https://github.com/fluxcd/source-controller/pull/1030)
+
+Fixes:
+- Normalize Helm repository URL with query params properly
+  [#1015](https://github.com/fluxcd/source-controller/pull/1015)
+- Prevent panic when cloning empty Git repository
+  [#1021](https://github.com/fluxcd/source-controller/pull/1021)
+
 ## 0.34.0
 
 **Release date:** 2023-01-31
