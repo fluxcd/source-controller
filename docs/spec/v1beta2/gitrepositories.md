@@ -228,7 +228,7 @@ is `60s`.
 
 `.spec.ref` is an optional field to specify the Git reference to resolve and
 watch for changes. References are specified in one or more subfields
-(`.branch`, `.tag`, `.semver`, `.commit`), with latter listed fields taking
+(`.branch`, `.tag`, `.semver`, `.name`, `.commit`), with latter listed fields taking
 precedence over earlier ones. If not specified, it defaults to a `master`
 branch reference.
 
@@ -286,6 +286,30 @@ spec:
 
 This field takes precedence over [`.branch`](#branch-example) and
 [`.tag`](#tag-example).
+
+
+#### Name example
+
+To Git checkout a specfied [reference](https://git-scm.com/book/en/v2/Git-Internals-Git-References),
+use `.spec.ref.name`:
+
+```yaml
+---
+apiVersion: source.toolkit.fluxcd.io/v1beta2
+kind: GitRepository
+metadata:
+  name: <repository-name>
+spec:
+  ref:
+    # Ref name format reference: https://git-scm.com/docs/git-check-ref-format#_description
+    name: <reference-name>
+```
+
+Valid examples are: `refs/heads/main`, `refs/tags/v0.1.0`, `refs/pull/420/head`,
+`refs/merge-requests/1/head`.
+
+This field takes precedence over [`.branch`](#branch-example),
+[`.tag`](#tag-example), and [`.semver`](#semver-example).
 
 #### Commit example
 

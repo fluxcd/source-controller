@@ -106,7 +106,6 @@ type GitRepositorySpec struct {
 
 	// RecurseSubmodules enables the initialization of all submodules within
 	// the GitRepository as cloned from the URL, using their default settings.
-	// This option is available only when using the 'go-git' GitImplementation.
 	// +optional
 	RecurseSubmodules bool `json:"recurseSubmodules,omitempty"`
 
@@ -156,9 +155,6 @@ func (in *GitRepositoryInclude) GetToPath() string {
 // GitRepositoryRef specifies the Git reference to resolve and checkout.
 type GitRepositoryRef struct {
 	// Branch to check out, defaults to 'master' if no other field is defined.
-	//
-	// When GitRepositorySpec.GitImplementation is set to 'go-git', a shallow
-	// clone of the specified branch is performed.
 	// +optional
 	Branch string `json:"branch,omitempty"`
 
@@ -170,11 +166,17 @@ type GitRepositoryRef struct {
 	// +optional
 	SemVer string `json:"semver,omitempty"`
 
+	// Name of the reference to check out; takes precedence over Branch, Tag and SemVer.
+	//
+	// It must be a valid Git reference: https://git-scm.com/docs/git-check-ref-format#_description
+	// Examples: "refs/heads/main", "refs/tags/v0.1.0", "refs/pull/420/head", "refs/merge-requests/1/head"
+	// +optional
+	Name string `json:"name,omitempty"`
+
 	// Commit SHA to check out, takes precedence over all reference fields.
 	//
-	// When GitRepositorySpec.GitImplementation is set to 'go-git', this can be
-	// combined with Branch to shallow clone the branch, in which the commit is
-	// expected to exist.
+	// This can be combined with Branch to shallow clone the branch, in which
+	// the commit is expected to exist.
 	// +optional
 	Commit string `json:"commit,omitempty"`
 }

@@ -462,24 +462,27 @@ spec:
               recurseSubmodules:
                 description: RecurseSubmodules enables the initialization of all submodules
                   within the GitRepository as cloned from the URL, using their default
-                  settings. This option is available only when using the 'go-git'
-                  GitImplementation.
+                  settings.
                 type: boolean
               ref:
                 description: Reference specifies the Git reference to resolve and
                   monitor for changes, defaults to the 'master' branch.
                 properties:
                   branch:
-                    description: "Branch to check out, defaults to 'master' if no
-                      other field is defined. \n When GitRepositorySpec.GitImplementation
-                      is set to 'go-git', a shallow clone of the specified branch
-                      is performed."
+                    description: Branch to check out, defaults to 'master' if no other
+                      field is defined.
                     type: string
                   commit:
                     description: "Commit SHA to check out, takes precedence over all
-                      reference fields. \n When GitRepositorySpec.GitImplementation
-                      is set to 'go-git', this can be combined with Branch to shallow
+                      reference fields. \n This can be combined with Branch to shallow
                       clone the branch, in which the commit is expected to exist."
+                    type: string
+                  name:
+                    description: "Name of the reference to check out; takes precedence
+                      over Branch, Tag and SemVer. \n It must be a valid Git reference:
+                      https://git-scm.com/docs/git-check-ref-format#_description Examples:
+                      \"refs/heads/main\", \"refs/tags/v0.1.0\", \"refs/pull/420/head\",
+                      \"refs/merge-requests/1/head\""
                     type: string
                   semver:
                     description: SemVer tag expression to check out, takes precedence

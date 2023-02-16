@@ -787,6 +787,7 @@ func (r *GitRepositoryReconciler) gitCheckout(ctx context.Context,
 		cloneOpts.Commit = ref.Commit
 		cloneOpts.Tag = ref.Tag
 		cloneOpts.SemVer = ref.SemVer
+		cloneOpts.RefName = ref.Name
 	}
 
 	// Only if the object has an existing artifact in storage, attempt to
