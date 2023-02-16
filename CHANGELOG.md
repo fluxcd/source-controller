@@ -2,6 +2,23 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.35.1
+
+**Release date:** 2023-02-17
+
+This release addresses a hypothetical issue with the Artifact `Digest` field
+validation, where a patch of the Artifact could fail to be applied to an object
+due to the lack of an `omitempty` tag on the optional field. In reality, this
+issue is not possible to encounter, as the `Digest` field is always set when
+the Artifact is created.
+
+Note that `v0.35.0` contains breaking changes. Please refer to the [changelog
+entry](#0350) for more information.
+
+Fixes:
+- api: omit empty Digest in Artifact
+  [#1031](https://github.com/fluxcd/source-controller/pull/1031)
+
 ## 0.35.0
 
 **Release date:** 2023-02-16
