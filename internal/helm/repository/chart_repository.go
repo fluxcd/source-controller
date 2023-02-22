@@ -386,6 +386,8 @@ func (r *ChartRepository) DownloadIndex(w io.Writer) (err error) {
 
 // Revision returns the revision of the ChartRepository's Index. It assumes
 // the Index is stable sorted.
+// Deprecated: because of expensive memory usage of (YAML) marshal operations.
+// We only use Digest now.
 func (r *ChartRepository) Revision(algorithm digest.Algorithm) digest.Digest {
 	if !r.HasIndex() {
 		return ""
