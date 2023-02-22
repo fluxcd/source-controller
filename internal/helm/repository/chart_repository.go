@@ -20,6 +20,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -395,7 +396,7 @@ func (r *ChartRepository) Revision(algorithm digest.Algorithm) digest.Digest {
 	defer r.Unlock()
 
 	if _, ok := r.revisions[algorithm]; !ok {
-		if b, _ := yaml.Marshal(r.Index); len(b) > 0 {
+		if b, _ := json.Marshal(r.Index); len(b) > 0 {
 			r.revisions[algorithm] = algorithm.FromBytes(b)
 		}
 	}
