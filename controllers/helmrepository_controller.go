@@ -318,8 +318,8 @@ func (r *HelmRepositoryReconciler) notify(ctx context.Context, oldObj, newObj *s
 			if sreconcile.FailureRecovery(oldObj, newObj, helmRepositoryFailConditions) {
 				r.AnnotatedEventf(newObj, annotations, corev1.EventTypeNormal,
 					meta.SucceededReason, message)
+				ctrl.LoggerFrom(ctx).Info(message)
 			}
-			ctrl.LoggerFrom(ctx).Info(message)
 		}
 	}
 }
