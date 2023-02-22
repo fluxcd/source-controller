@@ -775,7 +775,7 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 				checksum = newChartRepo.Digest(intdigest.Canonical)
 
 				g.Expect(newChartRepo.LoadFromPath()).To(Succeed())
-				revision = newChartRepo.Revision(intdigest.Canonical)
+				revision = newChartRepo.Digest(intdigest.Canonical)
 			}
 			if tt.beforeFunc != nil {
 				tt.beforeFunc(g, obj, revision, checksum)

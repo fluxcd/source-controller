@@ -122,9 +122,8 @@ type ChartRepository struct {
 
 	tlsConfig *tls.Config
 
-	cached    bool
-	revisions map[digest.Algorithm]digest.Digest
-	digests   map[digest.Algorithm]digest.Digest
+	cached  bool
+	digests map[digest.Algorithm]digest.Digest
 
 	*sync.RWMutex
 }
@@ -155,9 +154,8 @@ func NewChartRepository(URL, path string, providers getter.Providers, tlsConfig 
 
 func newChartRepository() *ChartRepository {
 	return &ChartRepository{
-		revisions: make(map[digest.Algorithm]digest.Digest, 0),
-		digests:   make(map[digest.Algorithm]digest.Digest, 0),
-		RWMutex:   &sync.RWMutex{},
+		digests: make(map[digest.Algorithm]digest.Digest, 0),
+		RWMutex: &sync.RWMutex{},
 	}
 }
 
@@ -351,7 +349,6 @@ func (r *ChartRepository) LoadFromPath() error {
 	}
 
 	r.Index = i
-	r.revisions = make(map[digest.Algorithm]digest.Digest, 0)
 	return nil
 }
 
@@ -382,26 +379,6 @@ func (r *ChartRepository) DownloadIndex(w io.Writer) (err error) {
 		return err
 	}
 	return nil
-}
-
-// Revision returns the revision of the ChartRepository's Index. It assumes
-// the Index is stable sorted.
-// Deprecated: because of expensive memory usage of (YAML) marshal operations.
-// We only use Digest now.
-func (r *ChartRepository) Revision(algorithm digest.Algorithm) digest.Digest {
-	if !r.HasIndex() {
-		return ""
-	}
-
-	r.Lock()
-	defer r.Unlock()
-
-	if _, ok := r.revisions[algorithm]; !ok {
-		if b, _ := yaml.Marshal(r.Index); len(b) > 0 {
-			r.revisions[algorithm] = algorithm.FromBytes(b)
-		}
-	}
-	return r.revisions[algorithm]
 }
 
 // Digest returns the digest of the file at the ChartRepository's Path.
@@ -465,7 +442,7 @@ func (r *ChartRepository) Clear() error {
 	return nil
 }
 
-// Invalidate clears any cached digests and revisions.
+// Invalidate clears any cached digests.
 func (r *ChartRepository) Invalidate() {
 	r.Lock()
 	defer r.Unlock()
@@ -475,7 +452,6 @@ func (r *ChartRepository) Invalidate() {
 
 func (r *ChartRepository) invalidate() {
 	r.digests = make(map[digest.Algorithm]digest.Digest, 0)
-	r.revisions = make(map[digest.Algorithm]digest.Digest, 0)
 }
 
 // VerifyChart verifies the chart against a signature.

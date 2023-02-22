@@ -392,7 +392,6 @@ func TestChartRepository_CacheIndex(t *testing.T) {
 	r := newChartRepository()
 	r.URL = "https://example.com"
 	r.Client = &mg
-	r.revisions["key"] = "value"
 	r.digests["key"] = "value"
 
 	err := r.CacheIndex()
@@ -405,7 +404,6 @@ func TestChartRepository_CacheIndex(t *testing.T) {
 	b, _ := os.ReadFile(r.Path)
 	g.Expect(b).To(Equal(mg.Response))
 
-	g.Expect(r.revisions).To(BeEmpty())
 	g.Expect(r.digests).To(BeEmpty())
 }
 
@@ -480,11 +478,9 @@ func TestChartRepository_LoadFromPath(t *testing.T) {
 
 		r := newChartRepository()
 		r.Path = i
-		r.revisions["key"] = "value"
 
 		g.Expect(r.LoadFromPath()).To(Succeed())
 		g.Expect(r.Index).ToNot(BeNil())
-		g.Expect(r.revisions).To(BeEmpty())
 	})
 
 	t.Run("no cache path", func(t *testing.T) {
@@ -504,44 +500,6 @@ func TestChartRepository_LoadFromPath(t *testing.T) {
 		err := r.LoadFromPath()
 		g.Expect(err).To(HaveOccurred())
 		g.Expect(errors.Is(err, os.ErrNotExist)).To(BeTrue())
-	})
-}
-
-func TestChartRepository_Revision(t *testing.T) {
-	t.Run("with algorithm", func(t *testing.T) {
-		r := newChartRepository()
-		r.Index = repo.NewIndexFile()
-
-		for _, algo := range []digest.Algorithm{digest.SHA256, digest.SHA512} {
-			t.Run(algo.String(), func(t *testing.T) {
-				g := NewWithT(t)
-
-				d := r.Revision(algo)
-				g.Expect(d).ToNot(BeEmpty())
-				g.Expect(d.Algorithm()).To(Equal(algo))
-				g.Expect(r.revisions[algo]).To(Equal(d))
-			})
-		}
-	})
-
-	t.Run("without index", func(t *testing.T) {
-		g := NewWithT(t)
-
-		r := newChartRepository()
-		g.Expect(r.Revision(digest.SHA256)).To(BeEmpty())
-	})
-
-	t.Run("from cache", func(t *testing.T) {
-		g := NewWithT(t)
-
-		algo := digest.SHA256
-		expect := digest.Digest("sha256:fake")
-
-		r := newChartRepository()
-		r.Index = repo.NewIndexFile()
-		r.revisions[algo] = expect
-
-		g.Expect(r.Revision(algo)).To(Equal(expect))
 	})
 }
 
@@ -625,11 +583,9 @@ func TestChartRepository_Clear(t *testing.T) {
 
 		r := newChartRepository()
 		r.Index = repo.NewIndexFile()
-		r.revisions["key"] = "value"
 
 		g.Expect(r.Clear()).To(Succeed())
 		g.Expect(r.Index).To(BeNil())
-		g.Expect(r.revisions).To(BeEmpty())
 	})
 
 	t.Run("with index and cached path", func(t *testing.T) {
@@ -643,14 +599,12 @@ func TestChartRepository_Clear(t *testing.T) {
 		r.Path = f.Name()
 		r.Index = repo.NewIndexFile()
 		r.digests["key"] = "value"
-		r.revisions["key"] = "value"
 		r.cached = true
 
 		g.Expect(r.Clear()).To(Succeed())
 		g.Expect(r.Index).To(BeNil())
 		g.Expect(r.Path).To(BeEmpty())
 		g.Expect(r.digests).To(BeEmpty())
-		g.Expect(r.revisions).To(BeEmpty())
 		g.Expect(r.cached).To(BeFalse())
 	})
 
@@ -677,11 +631,9 @@ func TestChartRepository_Invalidate(t *testing.T) {
 
 	r := newChartRepository()
 	r.digests["key"] = "value"
-	r.revisions["key"] = "value"
 
 	r.Invalidate()
 	g.Expect(r.digests).To(BeEmpty())
-	g.Expect(r.revisions).To(BeEmpty())
 }
 
 func verifyLocalIndex(t *testing.T, i *repo.IndexFile) {
