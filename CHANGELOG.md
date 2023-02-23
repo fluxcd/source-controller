@@ -2,6 +2,30 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.35.2
+
+**Release date:** 2023-02-23
+
+This release reduces the amount of memory consumed by the controller when
+reconciling HelmRepositories, by using only the digest of the YAML file as the
+Revision of the Artifact instead of the stable sorted version of the entire
+index. This aligns with the behavior before `v0.35.0`, and is therefore
+considered a bug fix.
+
+In addition, the dependencies have been updated to include some minor security
+patches.
+
+Note that `v0.35.0` contains breaking changes. Please refer to the [changelog
+entry](#0350) for more information.
+
+Fixes:
+- helm: only use Digest to calculcate index revision
+  [#1035](https://github.com/fluxcd/source-controller/pull/1035)
+
+Improvements:
+- Update dependencies
+  [#1036](https://github.com/fluxcd/source-controller/pull/1036)
+
 ## 0.35.1
 
 **Release date:** 2023-02-17
