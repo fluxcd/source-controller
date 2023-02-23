@@ -318,8 +318,8 @@ func (r *HelmRepositoryReconciler) notify(ctx context.Context, oldObj, newObj *s
 			if sreconcile.FailureRecovery(oldObj, newObj, helmRepositoryFailConditions) {
 				r.AnnotatedEventf(newObj, annotations, corev1.EventTypeNormal,
 					meta.SucceededReason, message)
+				ctrl.LoggerFrom(ctx).Info(message)
 			}
-			ctrl.LoggerFrom(ctx).Info(message)
 		}
 	}
 }
@@ -475,8 +475,7 @@ func (r *HelmRepositoryReconciler) reconcileSource(ctx context.Context, sp *patc
 		}
 		if curDig.Validate() == nil {
 			// Short-circuit based on the fetched index being an exact match to the
-			// stored Artifact. This prevents having to unmarshal the YAML to calculate
-			// the (stable) revision, which is a memory expensive operation.
+			// stored Artifact.
 			if newDig := chartRepo.Digest(curDig.Algorithm()); newDig.Validate() == nil && (newDig == curDig) {
 				*artifact = *curArtifact
 				conditions.Delete(obj, sourcev1.FetchFailedCondition)
@@ -501,11 +500,11 @@ func (r *HelmRepositoryReconciler) reconcileSource(ctx context.Context, sp *patc
 	var changed bool
 	if artifact := obj.Status.Artifact; artifact != nil {
 		curRev := digest.Digest(sourcev1.TransformLegacyRevision(artifact.Revision))
-		changed = curRev.Validate() != nil || curRev != chartRepo.Revision(curRev.Algorithm())
+		changed = curRev.Validate() != nil || curRev != chartRepo.Digest(curRev.Algorithm())
 	}
 
 	// Calculate revision.
-	revision := chartRepo.Revision(intdigest.Canonical)
+	revision := chartRepo.Digest(intdigest.Canonical)
 	if revision.Validate() != nil {
 		e := &serror.Event{
 			Err:    fmt.Errorf("failed to calculate revision: %w", err),
