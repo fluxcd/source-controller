@@ -342,7 +342,7 @@ func (r *GitRepositoryReconciler) notify(ctx context.Context, oldObj, newObj *so
 		if git.IsConcreteCommit(commit) {
 			message = fmt.Sprintf("stored artifact for commit '%s'", commit.ShortMessage())
 		} else {
-			message = fmt.Sprintf("stored artifact for commit '%s'", commit.String())
+			message = fmt.Sprintf("stored artifact for commit '%s'", commitReference(newObj, &commit))
 		}
 
 		// Notify on new artifact and failure recovery.
@@ -558,7 +558,7 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 		if !gitContentConfigChanged(obj, includes) {
 			ge := serror.NewGeneric(
 				fmt.Errorf("no changes since last reconcilation: observed revision '%s'",
-					commit.String()), sourcev1.GitOperationSucceedReason,
+					commitReference(obj, commit)), sourcev1.GitOperationSucceedReason,
 			)
 			ge.Notification = false
 			ge.Ignore = true
@@ -570,7 +570,7 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 			// reconciliation reconcileArtifact() ensures that it's set at the
 			// very end.
 			conditions.MarkTrue(obj, sourcev1.ArtifactInStorageCondition, meta.SucceededReason,
-				"stored artifact for revision '%s'", commit.String())
+				"stored artifact for revision '%s'", commitReference(obj, commit))
 			// TODO: Find out if such condition setting is needed when commit
 			// signature verification is enabled.
 			return sreconcile.ResultEmpty, ge
@@ -584,7 +584,7 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 		}
 		*commit = *c
 	}
-	ctrl.LoggerFrom(ctx).V(logger.DebugLevel).Info("git repository checked out", "url", obj.Spec.URL, "revision", commit.String())
+	ctrl.LoggerFrom(ctx).V(logger.DebugLevel).Info("git repository checked out", "url", obj.Spec.URL, "revision", commitReference(obj, commit))
 	conditions.Delete(obj, sourcev1.FetchFailedCondition)
 
 	// Verify commit signature
@@ -593,8 +593,8 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 	}
 
 	// Mark observations about the revision on the object
-	if !obj.GetArtifact().HasRevision(commit.String()) {
-		message := fmt.Sprintf("new upstream revision '%s'", commit.String())
+	if !obj.GetArtifact().HasRevision(commitReference(obj, commit)) {
+		message := fmt.Sprintf("new upstream revision '%s'", commitReference(obj, commit))
 		if obj.GetArtifact() != nil {
 			conditions.MarkTrue(obj, sourcev1.ArtifactOutdatedCondition, "NewRevision", message)
 		}
@@ -622,7 +622,7 @@ func (r *GitRepositoryReconciler) reconcileArtifact(ctx context.Context, sp *pat
 	obj *sourcev1.GitRepository, commit *git.Commit, includes *artifactSet, dir string) (sreconcile.Result, error) {
 
 	// Create potential new artifact with current available metadata
-	artifact := r.Storage.NewArtifactFor(obj.Kind, obj.GetObjectMeta(), commit.String(), fmt.Sprintf("%s.tar.gz", commit.Hash.String()))
+	artifact := r.Storage.NewArtifactFor(obj.Kind, obj.GetObjectMeta(), commitReference(obj, commit), fmt.Sprintf("%s.tar.gz", commit.Hash.String()))
 
 	// Set the ArtifactInStorageCondition if there's no drift.
 	defer func() {
@@ -1047,4 +1047,11 @@ func gitRepositoryIncludeEqual(a, b sourcev1.GitRepositoryInclude) bool {
 		return false
 	}
 	return true
+}
+
+func commitReference(obj *sourcev1.GitRepository, commit *git.Commit) string {
+	if obj.Spec.Reference != nil && obj.Spec.Reference.Name != "" {
+		return commit.AbsoluteReference()
+	}
+	return commit.String()
 }

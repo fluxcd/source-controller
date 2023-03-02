@@ -600,6 +600,7 @@ func TestGitRepositoryReconciler_reconcileSource_checkoutStrategy(t *testing.T) 
 
 	branches := []string{"staging"}
 	tags := []string{"non-semver-tag", "v0.1.0", "0.2.0", "v0.2.1", "v1.0.0-alpha", "v1.1.0", "v2.0.0"}
+	refs := []string{"refs/pull/420/head"}
 
 	tests := []struct {
 		name                 string
@@ -643,6 +644,24 @@ func TestGitRepositoryReconciler_reconcileSource_checkoutStrategy(t *testing.T) 
 			},
 			want:            sreconcile.ResultSuccess,
 			wantRevision:    "staging@sha1:<commit>",
+			wantReconciling: true,
+		},
+		{
+			name: "Ref Name pointing to a branch",
+			reference: &sourcev1.GitRepositoryRef{
+				Name: "refs/heads/staging",
+			},
+			want:            sreconcile.ResultSuccess,
+			wantRevision:    "refs/heads/staging@sha1:<commit>",
+			wantReconciling: true,
+		},
+		{
+			name: "Ref Name pointing to a PR",
+			reference: &sourcev1.GitRepositoryRef{
+				Name: "refs/pull/420/head",
+			},
+			want:            sreconcile.ResultSuccess,
+			wantRevision:    "refs/pull/420/head@sha1:<commit>",
 			wantReconciling: true,
 		},
 		{
@@ -801,6 +820,10 @@ func TestGitRepositoryReconciler_reconcileSource_checkoutStrategy(t *testing.T) 
 		g.Expect(remoteTagForHead(localRepo, headRef, tag)).To(Succeed())
 	}
 
+	for _, ref := range refs {
+		g.Expect(remoteRefForHead(localRepo, headRef, ref)).To(Succeed())
+	}
+
 	r := &GitRepositoryReconciler{
 		Client:        fakeclient.NewClientBuilder().WithScheme(testEnv.GetScheme()).Build(),
 		EventRecorder: record.NewFakeRecorder(32),
@@ -854,7 +877,7 @@ func TestGitRepositoryReconciler_reconcileSource_checkoutStrategy(t *testing.T) 
 			g.Expect(got).To(Equal(tt.want))
 			if tt.wantRevision != "" && !tt.wantErr {
 				revision := strings.ReplaceAll(tt.wantRevision, "<commit>", headRef.Hash().String())
-				g.Expect(commit.String()).To(Equal(revision))
+				g.Expect(commitReference(obj, &commit)).To(Equal(revision))
 				g.Expect(conditions.IsTrue(obj, sourcev1.ArtifactOutdatedCondition)).To(Equal(tt.wantArtifactOutdated))
 				g.Expect(conditions.IsTrue(obj, meta.ReconcilingCondition)).To(Equal(tt.wantReconciling))
 			}
@@ -1886,6 +1909,20 @@ func remoteTagForHead(repo *gogit.Repository, head *plumbing.Reference, tag stri
 	return repo.Push(&gogit.PushOptions{
 		RefSpecs: []config.RefSpec{config.RefSpec(refSpec)},
 	})
+}
+
+func remoteRefForHead(repo *gogit.Repository, head *plumbing.Reference, reference string) error {
+	if err := repo.Storer.SetReference(plumbing.NewHashReference(plumbing.ReferenceName(reference), head.Hash())); err != nil {
+		return err
+	}
+	if err := repo.Push(&gogit.PushOptions{
+		RefSpecs: []config.RefSpec{
+			config.RefSpec("+" + reference + ":" + reference),
+		},
+	}); err != nil {
+		return err
+	}
+	return nil
 }
 
 func TestGitRepositoryReconciler_statusConditions(t *testing.T) {
