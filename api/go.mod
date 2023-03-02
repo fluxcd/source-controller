@@ -4,9 +4,9 @@ go 1.18
 
 require (
 	github.com/fluxcd/pkg/apis/acl v0.1.0
-	github.com/fluxcd/pkg/apis/meta v0.19.0
-	k8s.io/apimachinery v0.26.1
-	sigs.k8s.io/controller-runtime v0.14.4
+	github.com/fluxcd/pkg/apis/meta v0.19.1
+	k8s.io/apimachinery v0.26.2
+	sigs.k8s.io/controller-runtime v0.14.5
 )
 
 // Fix CVE-2022-28948
