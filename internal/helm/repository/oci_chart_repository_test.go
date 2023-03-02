@@ -210,7 +210,6 @@ func TestOCIChartRepository_Get(t *testing.T) {
 }
 
 func TestOCIChartRepository_DownloadChart(t *testing.T) {
-	client := &mockRegistryClient{}
 	testCases := []struct {
 		name         string
 		url          string
@@ -225,7 +224,7 @@ func TestOCIChartRepository_DownloadChart(t *testing.T) {
 				Metadata: &chart.Metadata{Name: "chart"},
 				URLs:     []string{"oci://localhost:5000/my_repo/podinfo:1.0.0"},
 			},
-			expected: "oci://localhost:5000/my_repo/podinfo:1.0.0",
+			expected: "localhost:5000/my_repo/podinfo:1.0.0",
 		},
 		{
 			name:         "no chart URL",
@@ -245,19 +244,21 @@ func TestOCIChartRepository_DownloadChart(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
+		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			g := NewWithT(t)
 			t.Parallel()
-			mg := OCIMockGetter{}
+
+			g := NewWithT(t)
+
 			u, err := url.Parse(tc.url)
 			g.Expect(err).ToNot(HaveOccurred())
+
+			mg := OCIMockGetter{}
 			r := OCIChartRepository{
 				Client: &mg,
 				URL:    *u,
 			}
-			r.Client = &mg
-			g.Expect(err).ToNot(HaveOccurred())
-			g.Expect(r).ToNot(BeNil())
+
 			res, err := r.DownloadChart(tc.chartVersion)
 			if tc.expectedErr {
 				g.Expect(err).To(HaveOccurred())
@@ -265,7 +266,7 @@ func TestOCIChartRepository_DownloadChart(t *testing.T) {
 			}
 
 			g.Expect(err).ToNot(HaveOccurred())
-			g.Expect(client.LastCalledURL).To(Equal(tc.expected))
+			g.Expect(mg.LastCalledURL).To(Equal(tc.expected))
 			g.Expect(res).ToNot(BeNil())
 			g.Expect(err).ToNot(HaveOccurred())
 		})
