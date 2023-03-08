@@ -2,6 +2,33 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.36.0
+
+**Release date:** 2023-03-08
+
+This release changes the format of the Artifact `Revision` field when using a
+GitRepository with a `.spec.ref.name` set (introduced in [`v0.35.0`](#0350)),
+changing it from `sha1:<commit>` to `<name>@sha1:<commit>`. Offering a more
+precise reflection of the revision the Artifact was created from.
+
+In addition, `klog` is now configured to log using the same logger as the rest
+of the controller (providing a consistent log format).
+
+Lastly, the controller is now built using Go `1.20`, and the dependencies have
+been updated to their latest versions.
+
+Improvements:
+- Advertise absolute reference in Artifact for GitRepository name ref
+  [#1036](https://github.com/fluxcd/source-controller/pull/1036)
+- Update Go to 1.20
+  [#1040](https://github.com/fluxcd/source-controller/pull/1040)
+- Update dependencies
+  [#1040](https://github.com/fluxcd/source-controller/pull/1040)
+  [#1041](https://github.com/fluxcd/source-controller/pull/1041)
+  [#1043](https://github.com/fluxcd/source-controller/pull/1043)
+- Use `logger.SetLogger` to also configure `klog`
+  [#1044](https://github.com/fluxcd/source-controller/pull/1044)
+
 ## 0.35.2
 
 **Release date:** 2023-02-23
