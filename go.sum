@@ -550,8 +550,8 @@ github.com/fluxcd/pkg/oci v0.21.1 h1:9kn19wkabE2xB77NRlOtMJlSYhZmUjdloZCzlHdAS6s
 github.com/fluxcd/pkg/oci v0.21.1/go.mod h1:9E2DBlQII7YmeWt2ieTh38wwkiBqx3yg5NEJ51uefaA=
 github.com/fluxcd/pkg/runtime v0.31.0 h1:addyXaANHl/A68bEjCbiR4HzcFKgfXv1eaG7B7ZHxOo=
 github.com/fluxcd/pkg/runtime v0.31.0/go.mod h1:toGOOubMo4ZC1aWhB8C3drdTglr1/A1dETeNwjiIv0g=
-github.com/fluxcd/pkg/sourceignore v0.3.2 h1:UXRguBJA9frgRDSr7Lsc873a9YTbbpbJafEaYjkpVEs=
-github.com/fluxcd/pkg/sourceignore v0.3.2/go.mod h1:yuJzKggph0Bdbk9LgXjJQhvJZSTJV/1vS7mJuB7mPa0=
+github.com/fluxcd/pkg/sourceignore v0.3.3 h1:Ue29JAuPECEYdvIqdpXpQaDxpeySn7amarLArp7XoIs=
+github.com/fluxcd/pkg/sourceignore v0.3.3/go.mod h1:yuJzKggph0Bdbk9LgXjJQhvJZSTJV/1vS7mJuB7mPa0=
 github.com/fluxcd/pkg/ssh v0.7.3 h1:Dhs+nXdp806lBriUJtPyRi0SVIVWbJafJGD/qQ71GiY=
 github.com/fluxcd/pkg/ssh v0.7.3/go.mod h1:/z5ZNgQz+h9s/2nNFKAcZDHtZRMA1nj5YcriGDUOoLY=
 github.com/fluxcd/pkg/testserver v0.4.0 h1:pDZ3gistqYhwlf3sAjn1Q8NzN4Qe6I1BEmHMHi46lMg=

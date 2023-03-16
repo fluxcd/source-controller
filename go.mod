@@ -30,7 +30,7 @@ require (
 	github.com/fluxcd/pkg/masktoken v0.2.0
 	github.com/fluxcd/pkg/oci v0.21.1
 	github.com/fluxcd/pkg/runtime v0.31.0
-	github.com/fluxcd/pkg/sourceignore v0.3.2
+	github.com/fluxcd/pkg/sourceignore v0.3.3
 	github.com/fluxcd/pkg/ssh v0.7.3
 	github.com/fluxcd/pkg/testserver v0.4.0
 	github.com/fluxcd/pkg/untar v0.2.0
