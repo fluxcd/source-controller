@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.36.1
+
+**Release date:** 2023-03-20
+
+This release fixes a bug where after reading a `.sourceignore` file in a
+subdirectory, the controller could start to ignore files from directories next
+to the directory the `.sourceignore` file was placed in.
+
+Fixes:
+- Update sourceignore to fix pattern domain bug
+  [#1050](https://github.com/fluxcd/source-controller/pull/1050)
+
 ## 0.36.0
 
 **Release date:** 2023-03-08
