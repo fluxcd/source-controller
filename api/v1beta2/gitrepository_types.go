@@ -21,7 +21,6 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/fluxcd/pkg/apis/acl"
 	"github.com/fluxcd/pkg/apis/meta"
 )
 
@@ -112,12 +111,6 @@ type GitRepositorySpec struct {
 	// Include specifies a list of GitRepository resources which Artifacts
 	// should be included in the Artifact produced for this GitRepository.
 	Include []GitRepositoryInclude `json:"include,omitempty"`
-
-	// AccessFrom specifies an Access Control List for allowing cross-namespace
-	// references to this object.
-	// NOTE: Not implemented, provisional as of https://github.com/fluxcd/flux2/pull/2092
-	// +optional
-	AccessFrom *acl.AccessFrom `json:"accessFrom,omitempty"`
 }
 
 // GitRepositoryInclude specifies a local reference to a GitRepository which

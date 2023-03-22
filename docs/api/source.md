@@ -205,22 +205,6 @@ bool
 Bucket.</p>
 </td>
 </tr>
-<tr>
-<td>
-<code>accessFrom</code><br>
-<em>
-<a href="https://godoc.org/github.com/fluxcd/pkg/apis/acl#AccessFrom">
-github.com/fluxcd/pkg/apis/acl.AccessFrom
-</a>
-</em>
-</td>
-<td>
-<em>(Optional)</em>
-<p>AccessFrom specifies an Access Control List for allowing cross-namespace
-references to this object.
-NOTE: Not implemented, provisional as of <a href="https://github.com/fluxcd/flux2/pull/2092">https://github.com/fluxcd/flux2/pull/2092</a></p>
-</td>
-</tr>
 </table>
 </td>
 </tr>
@@ -453,22 +437,6 @@ the GitRepository as cloned from the URL, using their default settings.</p>
 should be included in the Artifact produced for this GitRepository.</p>
 </td>
 </tr>
-<tr>
-<td>
-<code>accessFrom</code><br>
-<em>
-<a href="https://godoc.org/github.com/fluxcd/pkg/apis/acl#AccessFrom">
-github.com/fluxcd/pkg/apis/acl.AccessFrom
-</a>
-</em>
-</td>
-<td>
-<em>(Optional)</em>
-<p>AccessFrom specifies an Access Control List for allowing cross-namespace
-references to this object.
-NOTE: Not implemented, provisional as of <a href="https://github.com/fluxcd/flux2/pull/2092">https://github.com/fluxcd/flux2/pull/2092</a></p>
-</td>
-</tr>
 </table>
 </td>
 </tr>
@@ -657,22 +625,6 @@ source.</p>
 </tr>
 <tr>
 <td>
-<code>accessFrom</code><br>
-<em>
-<a href="https://godoc.org/github.com/fluxcd/pkg/apis/acl#AccessFrom">
-github.com/fluxcd/pkg/apis/acl.AccessFrom
-</a>
-</em>
-</td>
-<td>
-<em>(Optional)</em>
-<p>AccessFrom specifies an Access Control List for allowing cross-namespace
-references to this object.
-NOTE: Not implemented, provisional as of <a href="https://github.com/fluxcd/flux2/pull/2092">https://github.com/fluxcd/flux2/pull/2092</a></p>
-</td>
-</tr>
-<tr>
-<td>
 <code>verify</code><br>
 <em>
 <a href="#source.toolkit.fluxcd.io/v1beta2.OCIRepositoryVerification">
@@ -853,22 +805,6 @@ bool
 <em>(Optional)</em>
 <p>Suspend tells the controller to suspend the reconciliation of this
 HelmRepository.</p>
-</td>
-</tr>
-<tr>
-<td>
-<code>accessFrom</code><br>
-<em>
-<a href="https://godoc.org/github.com/fluxcd/pkg/apis/acl#AccessFrom">
-github.com/fluxcd/pkg/apis/acl.AccessFrom
-</a>
-</em>
-</td>
-<td>
-<em>(Optional)</em>
-<p>AccessFrom specifies an Access Control List for allowing cross-namespace
-references to this object.
-NOTE: Not implemented, provisional as of <a href="https://github.com/fluxcd/flux2/pull/2092">https://github.com/fluxcd/flux2/pull/2092</a></p>
 </td>
 </tr>
 <tr>
@@ -1457,22 +1393,6 @@ bool
 Bucket.</p>
 </td>
 </tr>
-<tr>
-<td>
-<code>accessFrom</code><br>
-<em>
-<a href="https://godoc.org/github.com/fluxcd/pkg/apis/acl#AccessFrom">
-github.com/fluxcd/pkg/apis/acl.AccessFrom
-</a>
-</em>
-</td>
-<td>
-<em>(Optional)</em>
-<p>AccessFrom specifies an Access Control List for allowing cross-namespace
-references to this object.
-NOTE: Not implemented, provisional as of <a href="https://github.com/fluxcd/flux2/pull/2092">https://github.com/fluxcd/flux2/pull/2092</a></p>
-</td>
-</tr>
 </tbody>
 </table>
 </div>
@@ -1902,22 +1822,6 @@ the GitRepository as cloned from the URL, using their default settings.</p>
 should be included in the Artifact produced for this GitRepository.</p>
 </td>
 </tr>
-<tr>
-<td>
-<code>accessFrom</code><br>
-<em>
-<a href="https://godoc.org/github.com/fluxcd/pkg/apis/acl#AccessFrom">
-github.com/fluxcd/pkg/apis/acl.AccessFrom
-</a>
-</em>
-</td>
-<td>
-<em>(Optional)</em>
-<p>AccessFrom specifies an Access Control List for allowing cross-namespace
-references to this object.
-NOTE: Not implemented, provisional as of <a href="https://github.com/fluxcd/flux2/pull/2092">https://github.com/fluxcd/flux2/pull/2092</a></p>
-</td>
-</tr>
 </tbody>
 </table>
 </div>
@@ -2267,22 +2171,6 @@ source.</p>
 </tr>
 <tr>
 <td>
-<code>accessFrom</code><br>
-<em>
-<a href="https://godoc.org/github.com/fluxcd/pkg/apis/acl#AccessFrom">
-github.com/fluxcd/pkg/apis/acl.AccessFrom
-</a>
-</em>
-</td>
-<td>
-<em>(Optional)</em>
-<p>AccessFrom specifies an Access Control List for allowing cross-namespace
-references to this object.
-NOTE: Not implemented, provisional as of <a href="https://github.com/fluxcd/flux2/pull/2092">https://github.com/fluxcd/flux2/pull/2092</a></p>
-</td>
-</tr>
-<tr>
-<td>
 <code>verify</code><br>
 <em>
 <a href="#source.toolkit.fluxcd.io/v1beta2.OCIRepositoryVerification">
@@ -2526,22 +2414,6 @@ bool
 <em>(Optional)</em>
 <p>Suspend tells the controller to suspend the reconciliation of this
 HelmRepository.</p>
-</td>
-</tr>
-<tr>
-<td>
-<code>accessFrom</code><br>
-<em>
-<a href="https://godoc.org/github.com/fluxcd/pkg/apis/acl#AccessFrom">
-github.com/fluxcd/pkg/apis/acl.AccessFrom
-</a>
-</em>
-</td>
-<td>
-<em>(Optional)</em>
-<p>AccessFrom specifies an Access Control List for allowing cross-namespace
-references to this object.
-NOTE: Not implemented, provisional as of <a href="https://github.com/fluxcd/flux2/pull/2092">https://github.com/fluxcd/flux2/pull/2092</a></p>
 </td>
 </tr>
 <tr>

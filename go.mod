@@ -170,7 +170,6 @@ require (
 	github.com/fatih/color v1.13.0 // indirect
 	github.com/felixge/httpsnoop v1.0.3 // indirect
 	github.com/fluxcd/gitkit v0.6.0 // indirect
-	github.com/fluxcd/pkg/apis/acl v0.1.0 // indirect
 	github.com/fsnotify/fsnotify v1.6.0 // indirect
 	github.com/fullstorydev/grpcurl v1.8.7 // indirect
 	github.com/go-chi/chi v4.1.2+incompatible // indirect

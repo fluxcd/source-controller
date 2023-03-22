@@ -21,7 +21,6 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/fluxcd/pkg/apis/acl"
 	"github.com/fluxcd/pkg/apis/meta"
 )
 
@@ -80,12 +79,6 @@ type HelmChartSpec struct {
 	// source.
 	// +optional
 	Suspend bool `json:"suspend,omitempty"`
-
-	// AccessFrom specifies an Access Control List for allowing cross-namespace
-	// references to this object.
-	// NOTE: Not implemented, provisional as of https://github.com/fluxcd/flux2/pull/2092
-	// +optional
-	AccessFrom *acl.AccessFrom `json:"accessFrom,omitempty"`
 
 	// Verify contains the secret name containing the trusted public keys
 	// used to verify the signature and specifies which provider to use to check

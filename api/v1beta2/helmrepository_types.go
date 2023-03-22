@@ -21,7 +21,6 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/fluxcd/pkg/apis/acl"
 	"github.com/fluxcd/pkg/apis/meta"
 )
 
@@ -83,12 +82,6 @@ type HelmRepositorySpec struct {
 	// HelmRepository.
 	// +optional
 	Suspend bool `json:"suspend,omitempty"`
-
-	// AccessFrom specifies an Access Control List for allowing cross-namespace
-	// references to this object.
-	// NOTE: Not implemented, provisional as of https://github.com/fluxcd/flux2/pull/2092
-	// +optional
-	AccessFrom *acl.AccessFrom `json:"accessFrom,omitempty"`
 
 	// Type of the HelmRepository.
 	// When this field is set to  "oci", the URL field value must be prefixed with "oci://".
