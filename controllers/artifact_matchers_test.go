@@ -19,7 +19,7 @@ package controllers
 import (
 	"fmt"
 
-	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
+	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/types"
 )

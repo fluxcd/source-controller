@@ -64,7 +64,8 @@ import (
 	"github.com/fluxcd/pkg/runtime/patch"
 	"github.com/fluxcd/pkg/untar"
 
-	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
+	sourcev1 "github.com/fluxcd/source-controller/api/v1"
+	ociv1 "github.com/fluxcd/source-controller/api/v1beta2"
 	serror "github.com/fluxcd/source-controller/internal/error"
 	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
 )
@@ -97,7 +98,7 @@ func TestOCIRepository_Reconcile(t *testing.T) {
 			tag:       podinfoVersions["6.1.6"].tag,
 			revision:  fmt.Sprintf("%s@%s", podinfoVersions["6.1.6"].tag, podinfoVersions["6.1.6"].digest.String()),
 			mediaType: "application/vnd.docker.image.rootfs.diff.tar.gzip",
-			operation: sourcev1.OCILayerCopy,
+			operation: ociv1.OCILayerCopy,
 			assertArtifact: []artifactFixture{
 				{
 					expectedPath:     "kustomize/deployment.yaml",
@@ -135,15 +136,15 @@ func TestOCIRepository_Reconcile(t *testing.T) {
 			g.Expect(err).ToNot(HaveOccurred())
 			defer func() { g.Expect(testEnv.Delete(ctx, ns)).To(Succeed()) }()
 
-			origObj := &sourcev1.OCIRepository{
+			origObj := &ociv1.OCIRepository{
 				ObjectMeta: metav1.ObjectMeta{
 					GenerateName: "ocirepository-reconcile",
 					Namespace:    ns.Name,
 				},
-				Spec: sourcev1.OCIRepositorySpec{
+				Spec: ociv1.OCIRepositorySpec{
 					URL:       tt.url,
 					Interval:  metav1.Duration{Duration: 60 * time.Minute},
-					Reference: &sourcev1.OCIRepositoryRef{},
+					Reference: &ociv1.OCIRepositoryRef{},
 				},
 			}
 			obj := origObj.DeepCopy()
@@ -155,7 +156,7 @@ func TestOCIRepository_Reconcile(t *testing.T) {
 				obj.Spec.Reference.SemVer = tt.semver
 			}
 			if tt.mediaType != "" {
-				obj.Spec.LayerSelector = &sourcev1.OCILayerSelector{MediaType: tt.mediaType}
+				obj.Spec.LayerSelector = &ociv1.OCILayerSelector{MediaType: tt.mediaType}
 
 				if tt.operation != "" {
 					obj.Spec.LayerSelector.Operation = tt.operation
@@ -299,18 +300,18 @@ func TestOCIRepository_Reconcile_MediaType(t *testing.T) {
 			g.Expect(err).ToNot(HaveOccurred())
 			defer func() { g.Expect(testEnv.Delete(ctx, ns)).To(Succeed()) }()
 
-			obj := &sourcev1.OCIRepository{
+			obj := &ociv1.OCIRepository{
 				ObjectMeta: metav1.ObjectMeta{
 					GenerateName: "ocirepository-reconcile",
 					Namespace:    ns.Name,
 				},
-				Spec: sourcev1.OCIRepositorySpec{
+				Spec: ociv1.OCIRepositorySpec{
 					URL:      tt.url,
 					Interval: metav1.Duration{Duration: 60 * time.Minute},
-					Reference: &sourcev1.OCIRepositoryRef{
+					Reference: &ociv1.OCIRepositoryRef{
 						Tag: tt.tag,
 					},
-					LayerSelector: &sourcev1.OCILayerSelector{
+					LayerSelector: &ociv1.OCILayerSelector{
 						MediaType: tt.mediaType,
 					},
 				},
@@ -441,7 +442,7 @@ func TestOCIRepository_reconcileSource_authStrategy(t *testing.T) {
 			}),
 			},
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.OCIPullFailedReason, "failed to determine artifact digest"),
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, ociv1.OCIPullFailedReason, "failed to determine artifact digest"),
 			},
 		},
 		{
@@ -462,7 +463,7 @@ func TestOCIRepository_reconcileSource_authStrategy(t *testing.T) {
 				includeSecret: true,
 			},
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.OCIPullFailedReason, "UNAUTHORIZED"),
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, ociv1.OCIPullFailedReason, "UNAUTHORIZED"),
 			},
 		},
 		{
@@ -483,7 +484,7 @@ func TestOCIRepository_reconcileSource_authStrategy(t *testing.T) {
 				includeSA: true,
 			},
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.OCIPullFailedReason, "UNAUTHORIZED"),
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, ociv1.OCIPullFailedReason, "UNAUTHORIZED"),
 			},
 		},
 		{
@@ -525,7 +526,7 @@ func TestOCIRepository_reconcileSource_authStrategy(t *testing.T) {
 			}),
 			},
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.OCIPullFailedReason, "failed to determine artifact digest"),
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, ociv1.OCIPullFailedReason, "failed to determine artifact digest"),
 			},
 		},
 		{
@@ -550,7 +551,7 @@ func TestOCIRepository_reconcileSource_authStrategy(t *testing.T) {
 				},
 			},
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.OCIPullFailedReason, "failed to determine artifact digest"),
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, ociv1.OCIPullFailedReason, "failed to determine artifact digest"),
 			},
 		},
 		{
@@ -591,12 +592,12 @@ func TestOCIRepository_reconcileSource_authStrategy(t *testing.T) {
 
 			builder := fakeclient.NewClientBuilder().WithScheme(testEnv.GetScheme())
 
-			obj := &sourcev1.OCIRepository{
+			obj := &ociv1.OCIRepository{
 				ObjectMeta: metav1.ObjectMeta{
 					GenerateName: "auth-strategy-",
 					Generation:   1,
 				},
-				Spec: sourcev1.OCIRepositorySpec{
+				Spec: ociv1.OCIRepositorySpec{
 					Interval: metav1.Duration{Duration: interval},
 					Timeout:  &metav1.Duration{Duration: timeout},
 				},
@@ -610,7 +611,7 @@ func TestOCIRepository_reconcileSource_authStrategy(t *testing.T) {
 			img, err := createPodinfoImageFromTar("podinfo-6.1.6.tar", "6.1.6", server.registryHost, tt.craneOpts...)
 			g.Expect(err).ToNot(HaveOccurred())
 			obj.Spec.URL = img.url
-			obj.Spec.Reference = &sourcev1.OCIRepositoryRef{
+			obj.Spec.Reference = &ociv1.OCIRepositoryRef{
 				Tag: img.tag,
 			}
 
@@ -782,16 +783,16 @@ func TestOCIRepository_CertSecret(t *testing.T) {
 			g.Expect(err).ToNot(HaveOccurred())
 			defer func() { g.Expect(testEnv.Delete(ctx, ns)).To(Succeed()) }()
 
-			obj := &sourcev1.OCIRepository{
+			obj := &ociv1.OCIRepository{
 				ObjectMeta: metav1.ObjectMeta{
 					GenerateName: "ocirepository-test-resource",
 					Namespace:    ns.Name,
 					Generation:   1,
 				},
-				Spec: sourcev1.OCIRepositorySpec{
+				Spec: ociv1.OCIRepositorySpec{
 					URL:       tt.url,
 					Interval:  metav1.Duration{Duration: 60 * time.Minute},
-					Reference: &sourcev1.OCIRepositoryRef{Digest: tt.digest.String()},
+					Reference: &ociv1.OCIRepositoryRef{Digest: tt.digest.String()},
 				},
 			}
 
@@ -811,7 +812,7 @@ func TestOCIRepository_CertSecret(t *testing.T) {
 
 			key := client.ObjectKey{Name: obj.Name, Namespace: obj.Namespace}
 
-			resultobj := sourcev1.OCIRepository{}
+			resultobj := ociv1.OCIRepository{}
 
 			// Wait for the finalizer to be set
 			g.Eventually(func() bool {
@@ -864,7 +865,7 @@ func TestOCIRepository_reconcileSource_remoteReference(t *testing.T) {
 
 	tests := []struct {
 		name             string
-		reference        *sourcev1.OCIRepositoryRef
+		reference        *ociv1.OCIRepositoryRef
 		want             sreconcile.Result
 		wantErr          bool
 		wantRevision     string
@@ -881,7 +882,7 @@ func TestOCIRepository_reconcileSource_remoteReference(t *testing.T) {
 		},
 		{
 			name: "tag reference",
-			reference: &sourcev1.OCIRepositoryRef{
+			reference: &ociv1.OCIRepositoryRef{
 				Tag: "6.1.6",
 			},
 			want:         sreconcile.ResultSuccess,
@@ -893,7 +894,7 @@ func TestOCIRepository_reconcileSource_remoteReference(t *testing.T) {
 		},
 		{
 			name: "semver reference",
-			reference: &sourcev1.OCIRepositoryRef{
+			reference: &ociv1.OCIRepositoryRef{
 				SemVer: ">= 6.1.5",
 			},
 			want:         sreconcile.ResultSuccess,
@@ -905,7 +906,7 @@ func TestOCIRepository_reconcileSource_remoteReference(t *testing.T) {
 		},
 		{
 			name: "digest reference",
-			reference: &sourcev1.OCIRepositoryRef{
+			reference: &ociv1.OCIRepositoryRef{
 				Digest: img6.digest.String(),
 			},
 			wantRevision: img6.digest.String(),
@@ -917,18 +918,18 @@ func TestOCIRepository_reconcileSource_remoteReference(t *testing.T) {
 		},
 		{
 			name: "invalid tag reference",
-			reference: &sourcev1.OCIRepositoryRef{
+			reference: &ociv1.OCIRepositoryRef{
 				Tag: "6.1.0",
 			},
 			want:    sreconcile.ResultEmpty,
 			wantErr: true,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.OCIPullFailedReason, " MANIFEST_UNKNOWN"),
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, ociv1.OCIPullFailedReason, " MANIFEST_UNKNOWN"),
 			},
 		},
 		{
 			name: "invalid semver reference",
-			reference: &sourcev1.OCIRepositoryRef{
+			reference: &ociv1.OCIRepositoryRef{
 				SemVer: "<= 6.1.0",
 			},
 			want:    sreconcile.ResultEmpty,
@@ -939,18 +940,18 @@ func TestOCIRepository_reconcileSource_remoteReference(t *testing.T) {
 		},
 		{
 			name: "invalid digest reference",
-			reference: &sourcev1.OCIRepositoryRef{
+			reference: &ociv1.OCIRepositoryRef{
 				Digest: "invalid",
 			},
 			want:    sreconcile.ResultEmpty,
 			wantErr: true,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.OCIPullFailedReason, "failed to determine artifact digest"),
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, ociv1.OCIPullFailedReason, "failed to determine artifact digest"),
 			},
 		},
 		{
 			name: "semver should take precedence over tag",
-			reference: &sourcev1.OCIRepositoryRef{
+			reference: &ociv1.OCIRepositoryRef{
 				SemVer: ">= 6.1.5",
 				Tag:    "6.1.5",
 			},
@@ -963,7 +964,7 @@ func TestOCIRepository_reconcileSource_remoteReference(t *testing.T) {
 		},
 		{
 			name: "digest should take precedence over semver",
-			reference: &sourcev1.OCIRepositoryRef{
+			reference: &ociv1.OCIRepositoryRef{
 				Tag:    "6.1.6",
 				SemVer: ">= 6.1.6",
 				Digest: img5.digest.String(),
@@ -988,12 +989,12 @@ func TestOCIRepository_reconcileSource_remoteReference(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			obj := &sourcev1.OCIRepository{
+			obj := &ociv1.OCIRepository{
 				ObjectMeta: metav1.ObjectMeta{
 					GenerateName: "checkout-strategy-",
 					Generation:   1,
 				},
-				Spec: sourcev1.OCIRepositorySpec{
+				Spec: ociv1.OCIRepositorySpec{
 					URL:      fmt.Sprintf("oci://%s/podinfo", server.registryHost),
 					Interval: metav1.Duration{Duration: interval},
 					Timeout:  &metav1.Duration{Duration: timeout},
@@ -1041,7 +1042,7 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignature(t *testing.T) {
 
 	tests := []struct {
 		name             string
-		reference        *sourcev1.OCIRepositoryRef
+		reference        *ociv1.OCIRepositoryRef
 		insecure         bool
 		digest           string
 		want             sreconcile.Result
@@ -1049,12 +1050,12 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignature(t *testing.T) {
 		wantErrMsg       string
 		shouldSign       bool
 		keyless          bool
-		beforeFunc       func(obj *sourcev1.OCIRepository)
+		beforeFunc       func(obj *ociv1.OCIRepository)
 		assertConditions []metav1.Condition
 	}{
 		{
 			name: "signed image should pass verification",
-			reference: &sourcev1.OCIRepositoryRef{
+			reference: &ociv1.OCIRepositoryRef{
 				Tag: "6.1.4",
 			},
 			digest:     img4.digest.String(),
@@ -1068,7 +1069,7 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignature(t *testing.T) {
 		},
 		{
 			name: "unsigned image should not pass verification",
-			reference: &sourcev1.OCIRepositoryRef{
+			reference: &ociv1.OCIRepositoryRef{
 				Tag: "6.1.5",
 			},
 			digest:     img5.digest.String(),
@@ -1083,7 +1084,7 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignature(t *testing.T) {
 		},
 		{
 			name: "unsigned image should not pass keyless verification",
-			reference: &sourcev1.OCIRepositoryRef{
+			reference: &ociv1.OCIRepositoryRef{
 				Tag: "6.1.5",
 			},
 			digest:  img5.digest.String(),
@@ -1098,9 +1099,9 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignature(t *testing.T) {
 		},
 		{
 			name:      "verify failed before, removed from spec, remove condition",
-			reference: &sourcev1.OCIRepositoryRef{Tag: "6.1.4"},
+			reference: &ociv1.OCIRepositoryRef{Tag: "6.1.4"},
 			digest:    img4.digest.String(),
-			beforeFunc: func(obj *sourcev1.OCIRepository) {
+			beforeFunc: func(obj *ociv1.OCIRepository) {
 				conditions.MarkFalse(obj, sourcev1.SourceVerifiedCondition, "VerifyFailed", "fail msg")
 				obj.Spec.Verify = nil
 				obj.Status.Artifact = &sourcev1.Artifact{Revision: fmt.Sprintf("%s@%s", img4.tag, img4.digest.String())}
@@ -1109,10 +1110,10 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignature(t *testing.T) {
 		},
 		{
 			name:       "same artifact, verified before, change in obj gen verify again",
-			reference:  &sourcev1.OCIRepositoryRef{Tag: "6.1.4"},
+			reference:  &ociv1.OCIRepositoryRef{Tag: "6.1.4"},
 			digest:     img4.digest.String(),
 			shouldSign: true,
-			beforeFunc: func(obj *sourcev1.OCIRepository) {
+			beforeFunc: func(obj *ociv1.OCIRepository) {
 				obj.Status.Artifact = &sourcev1.Artifact{Revision: fmt.Sprintf("%s@%s", img4.tag, img4.digest.String())}
 				// Set Verified with old observed generation and different reason/message.
 				conditions.MarkTrue(obj, sourcev1.SourceVerifiedCondition, "Verified", "verified")
@@ -1126,10 +1127,10 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignature(t *testing.T) {
 		},
 		{
 			name:       "no verify for already verified, verified condition remains the same",
-			reference:  &sourcev1.OCIRepositoryRef{Tag: "6.1.4"},
+			reference:  &ociv1.OCIRepositoryRef{Tag: "6.1.4"},
 			digest:     img4.digest.String(),
 			shouldSign: true,
-			beforeFunc: func(obj *sourcev1.OCIRepository) {
+			beforeFunc: func(obj *ociv1.OCIRepository) {
 				// Artifact present and custom verified condition reason/message.
 				obj.Status.Artifact = &sourcev1.Artifact{Revision: fmt.Sprintf("%s@%s", img4.tag, img4.digest.String())}
 				conditions.MarkTrue(obj, sourcev1.SourceVerifiedCondition, "Verified", "verified")
@@ -1141,7 +1142,7 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignature(t *testing.T) {
 		},
 		{
 			name: "insecure registries are not supported",
-			reference: &sourcev1.OCIRepositoryRef{
+			reference: &ociv1.OCIRepositoryRef{
 				Tag: "6.1.4",
 			},
 			digest:     img4.digest.String(),
@@ -1191,14 +1192,14 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignature(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			obj := &sourcev1.OCIRepository{
+			obj := &ociv1.OCIRepository{
 				ObjectMeta: metav1.ObjectMeta{
 					GenerateName: "verify-oci-source-signature-",
 					Generation:   1,
 				},
-				Spec: sourcev1.OCIRepositorySpec{
+				Spec: ociv1.OCIRepositorySpec{
 					URL: fmt.Sprintf("oci://%s/podinfo", server.registryHost),
-					Verify: &sourcev1.OCIRepositoryVerification{
+					Verify: &ociv1.OCIRepositoryVerification{
 						Provider: "cosign",
 					},
 					Interval: metav1.Duration{Duration: interval},
@@ -1295,7 +1296,7 @@ func TestOCIRepository_reconcileSource_noop(t *testing.T) {
 
 	tests := []struct {
 		name       string
-		beforeFunc func(obj *sourcev1.OCIRepository)
+		beforeFunc func(obj *ociv1.OCIRepository)
 		afterFunc  func(g *WithT, artifact *sourcev1.Artifact)
 	}{
 		{
@@ -1306,7 +1307,7 @@ func TestOCIRepository_reconcileSource_noop(t *testing.T) {
 		},
 		{
 			name: "noop - artifact revisions match",
-			beforeFunc: func(obj *sourcev1.OCIRepository) {
+			beforeFunc: func(obj *ociv1.OCIRepository) {
 				obj.Status.Artifact = &sourcev1.Artifact{
 					Revision: testRevision,
 				}
@@ -1317,7 +1318,7 @@ func TestOCIRepository_reconcileSource_noop(t *testing.T) {
 		},
 		{
 			name: "noop - artifact revisions match (legacy)",
-			beforeFunc: func(obj *sourcev1.OCIRepository) {
+			beforeFunc: func(obj *ociv1.OCIRepository) {
 				obj.Status.Artifact = &sourcev1.Artifact{
 					Revision: "6.1.5/8e4057c22d531d40e12b065443cb0d80394b7257c4dc557cb1fbd4dce892b86d",
 				}
@@ -1328,7 +1329,7 @@ func TestOCIRepository_reconcileSource_noop(t *testing.T) {
 		},
 		{
 			name: "full reconcile - same rev, unobserved ignore",
-			beforeFunc: func(obj *sourcev1.OCIRepository) {
+			beforeFunc: func(obj *ociv1.OCIRepository) {
 				obj.Status.ObservedIgnore = pointer.String("aaa")
 				obj.Status.Artifact = &sourcev1.Artifact{
 					Revision: testRevision,
@@ -1340,7 +1341,7 @@ func TestOCIRepository_reconcileSource_noop(t *testing.T) {
 		},
 		{
 			name: "noop - same rev, observed ignore",
-			beforeFunc: func(obj *sourcev1.OCIRepository) {
+			beforeFunc: func(obj *ociv1.OCIRepository) {
 				obj.Spec.Ignore = pointer.String("aaa")
 				obj.Status.ObservedIgnore = pointer.String("aaa")
 				obj.Status.Artifact = &sourcev1.Artifact{
@@ -1353,10 +1354,10 @@ func TestOCIRepository_reconcileSource_noop(t *testing.T) {
 		},
 		{
 			name: "full reconcile - same rev, unobserved layer selector",
-			beforeFunc: func(obj *sourcev1.OCIRepository) {
-				obj.Spec.LayerSelector = &sourcev1.OCILayerSelector{
+			beforeFunc: func(obj *ociv1.OCIRepository) {
+				obj.Spec.LayerSelector = &ociv1.OCILayerSelector{
 					MediaType: "application/vnd.docker.image.rootfs.diff.tar.gzip",
-					Operation: sourcev1.OCILayerCopy,
+					Operation: ociv1.OCILayerCopy,
 				}
 				obj.Status.Artifact = &sourcev1.Artifact{
 					Revision: testRevision,
@@ -1368,14 +1369,14 @@ func TestOCIRepository_reconcileSource_noop(t *testing.T) {
 		},
 		{
 			name: "noop - same rev, observed layer selector",
-			beforeFunc: func(obj *sourcev1.OCIRepository) {
-				obj.Spec.LayerSelector = &sourcev1.OCILayerSelector{
+			beforeFunc: func(obj *ociv1.OCIRepository) {
+				obj.Spec.LayerSelector = &ociv1.OCILayerSelector{
 					MediaType: "application/vnd.docker.image.rootfs.diff.tar.gzip",
-					Operation: sourcev1.OCILayerCopy,
+					Operation: ociv1.OCILayerCopy,
 				}
-				obj.Status.ObservedLayerSelector = &sourcev1.OCILayerSelector{
+				obj.Status.ObservedLayerSelector = &ociv1.OCILayerSelector{
 					MediaType: "application/vnd.docker.image.rootfs.diff.tar.gzip",
-					Operation: sourcev1.OCILayerCopy,
+					Operation: ociv1.OCILayerCopy,
 				}
 				obj.Status.Artifact = &sourcev1.Artifact{
 					Revision: testRevision,
@@ -1387,14 +1388,14 @@ func TestOCIRepository_reconcileSource_noop(t *testing.T) {
 		},
 		{
 			name: "full reconcile - same rev, observed layer selector changed",
-			beforeFunc: func(obj *sourcev1.OCIRepository) {
-				obj.Spec.LayerSelector = &sourcev1.OCILayerSelector{
+			beforeFunc: func(obj *ociv1.OCIRepository) {
+				obj.Spec.LayerSelector = &ociv1.OCILayerSelector{
 					MediaType: "application/vnd.docker.image.rootfs.diff.tar.gzip",
-					Operation: sourcev1.OCILayerExtract,
+					Operation: ociv1.OCILayerExtract,
 				}
-				obj.Status.ObservedLayerSelector = &sourcev1.OCILayerSelector{
+				obj.Status.ObservedLayerSelector = &ociv1.OCILayerSelector{
 					MediaType: "application/vnd.docker.image.rootfs.diff.tar.gzip",
-					Operation: sourcev1.OCILayerCopy,
+					Operation: ociv1.OCILayerCopy,
 				}
 				obj.Status.Artifact = &sourcev1.Artifact{
 					Revision: testRevision,
@@ -1418,14 +1419,14 @@ func TestOCIRepository_reconcileSource_noop(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
 
-			obj := &sourcev1.OCIRepository{
+			obj := &ociv1.OCIRepository{
 				ObjectMeta: metav1.ObjectMeta{
 					GenerateName: "noop-",
 					Generation:   1,
 				},
-				Spec: sourcev1.OCIRepositorySpec{
+				Spec: ociv1.OCIRepositorySpec{
 					URL:       fmt.Sprintf("oci://%s/podinfo", server.registryHost),
-					Reference: &sourcev1.OCIRepositoryRef{Tag: "6.1.5"},
+					Reference: &ociv1.OCIRepositoryRef{Tag: "6.1.5"},
 					Interval:  metav1.Duration{Duration: interval},
 					Timeout:   &metav1.Duration{Duration: timeout},
 				},
@@ -1460,13 +1461,13 @@ func TestOCIRepository_reconcileArtifact(t *testing.T) {
 		name             string
 		targetPath       string
 		artifact         *sourcev1.Artifact
-		beforeFunc       func(obj *sourcev1.OCIRepository)
+		beforeFunc       func(obj *ociv1.OCIRepository)
 		want             sreconcile.Result
 		wantErr          bool
 		assertArtifact   *sourcev1.Artifact
 		assertPaths      []string
 		assertConditions []metav1.Condition
-		afterFunc        func(g *WithT, obj *sourcev1.OCIRepository)
+		afterFunc        func(g *WithT, obj *ociv1.OCIRepository)
 	}{
 		{
 			name:       "Archiving Artifact creates correct files and condition",
@@ -1474,14 +1475,14 @@ func TestOCIRepository_reconcileArtifact(t *testing.T) {
 			artifact: &sourcev1.Artifact{
 				Revision: "revision",
 			},
-			beforeFunc: func(obj *sourcev1.OCIRepository) {
+			beforeFunc: func(obj *ociv1.OCIRepository) {
 				conditions.MarkTrue(obj, sourcev1.ArtifactOutdatedCondition, "NewRevision", "new revision")
 			},
 			want: sreconcile.ResultSuccess,
 			assertPaths: []string{
 				"latest.tar.gz",
 			},
-			afterFunc: func(g *WithT, obj *sourcev1.OCIRepository) {
+			afterFunc: func(g *WithT, obj *ociv1.OCIRepository) {
 				g.Expect(obj.Status.Artifact.Checksum).To(Equal("de37cb640bfe6c789f2b131416d259747d5757f7fe5e1d9d48f32d8c30af5934"))
 			},
 			assertConditions: []metav1.Condition{
@@ -1492,14 +1493,14 @@ func TestOCIRepository_reconcileArtifact(t *testing.T) {
 			name:       "Artifact with source ignore",
 			targetPath: "testdata/oci/repository",
 			artifact:   &sourcev1.Artifact{Revision: "revision"},
-			beforeFunc: func(obj *sourcev1.OCIRepository) {
+			beforeFunc: func(obj *ociv1.OCIRepository) {
 				obj.Spec.Ignore = pointer.String("foo.txt")
 			},
 			want: sreconcile.ResultSuccess,
 			assertPaths: []string{
 				"latest.tar.gz",
 			},
-			afterFunc: func(g *WithT, obj *sourcev1.OCIRepository) {
+			afterFunc: func(g *WithT, obj *ociv1.OCIRepository) {
 				g.Expect(obj.Status.Artifact.Checksum).To(Equal("05aada03e3e3e96f5f85a8f31548d833974ce862be14942fb3313eef2df861ec"))
 			},
 			assertConditions: []metav1.Condition{
@@ -1513,7 +1514,7 @@ func TestOCIRepository_reconcileArtifact(t *testing.T) {
 			},
 			targetPath: "testdata/oci/repository",
 			want:       sreconcile.ResultSuccess,
-			beforeFunc: func(obj *sourcev1.OCIRepository) {
+			beforeFunc: func(obj *ociv1.OCIRepository) {
 				obj.Status.Artifact = &sourcev1.Artifact{
 					Revision: "revision",
 				}
@@ -1531,7 +1532,7 @@ func TestOCIRepository_reconcileArtifact(t *testing.T) {
 			artifact: &sourcev1.Artifact{
 				Revision: "revision",
 			},
-			beforeFunc: func(obj *sourcev1.OCIRepository) {
+			beforeFunc: func(obj *ociv1.OCIRepository) {
 				obj.Status.Artifact = &sourcev1.Artifact{Revision: "revision"}
 				obj.Spec.Ignore = pointer.String("aaa")
 			},
@@ -1539,7 +1540,7 @@ func TestOCIRepository_reconcileArtifact(t *testing.T) {
 			assertPaths: []string{
 				"latest.tar.gz",
 			},
-			afterFunc: func(g *WithT, obj *sourcev1.OCIRepository) {
+			afterFunc: func(g *WithT, obj *ociv1.OCIRepository) {
 				g.Expect(*obj.Status.ObservedIgnore).To(Equal("aaa"))
 			},
 			assertConditions: []metav1.Condition{
@@ -1552,15 +1553,15 @@ func TestOCIRepository_reconcileArtifact(t *testing.T) {
 			artifact: &sourcev1.Artifact{
 				Revision: "revision",
 			},
-			beforeFunc: func(obj *sourcev1.OCIRepository) {
-				obj.Spec.LayerSelector = &sourcev1.OCILayerSelector{MediaType: "foo"}
+			beforeFunc: func(obj *ociv1.OCIRepository) {
+				obj.Spec.LayerSelector = &ociv1.OCILayerSelector{MediaType: "foo"}
 				obj.Status.Artifact = &sourcev1.Artifact{Revision: "revision"}
 			},
 			want: sreconcile.ResultSuccess,
 			assertPaths: []string{
 				"latest.tar.gz",
 			},
-			afterFunc: func(g *WithT, obj *sourcev1.OCIRepository) {
+			afterFunc: func(g *WithT, obj *ociv1.OCIRepository) {
 				g.Expect(obj.Status.ObservedLayerSelector.MediaType).To(Equal("foo"))
 			},
 			assertConditions: []metav1.Condition{
@@ -1574,10 +1575,10 @@ func TestOCIRepository_reconcileArtifact(t *testing.T) {
 				Revision: "revision",
 				Path:     "foo.txt",
 			},
-			beforeFunc: func(obj *sourcev1.OCIRepository) {
-				obj.Spec.LayerSelector = &sourcev1.OCILayerSelector{
+			beforeFunc: func(obj *ociv1.OCIRepository) {
+				obj.Spec.LayerSelector = &ociv1.OCILayerSelector{
 					MediaType: "foo",
-					Operation: sourcev1.OCILayerCopy,
+					Operation: ociv1.OCILayerCopy,
 				}
 				obj.Status.Artifact = &sourcev1.Artifact{Revision: "revision"}
 			},
@@ -1585,9 +1586,9 @@ func TestOCIRepository_reconcileArtifact(t *testing.T) {
 			assertPaths: []string{
 				"latest.tar.gz",
 			},
-			afterFunc: func(g *WithT, obj *sourcev1.OCIRepository) {
+			afterFunc: func(g *WithT, obj *ociv1.OCIRepository) {
 				g.Expect(obj.Status.ObservedLayerSelector.MediaType).To(Equal("foo"))
-				g.Expect(obj.Status.ObservedLayerSelector.Operation).To(Equal(sourcev1.OCILayerCopy))
+				g.Expect(obj.Status.ObservedLayerSelector.Operation).To(Equal(ociv1.OCILayerCopy))
 			},
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(sourcev1.ArtifactInStorageCondition, meta.SucceededReason, "stored artifact for digest"),
@@ -1599,12 +1600,12 @@ func TestOCIRepository_reconcileArtifact(t *testing.T) {
 			artifact: &sourcev1.Artifact{
 				Revision: "revision",
 			},
-			beforeFunc: func(obj *sourcev1.OCIRepository) {
+			beforeFunc: func(obj *ociv1.OCIRepository) {
 				obj.Spec.Ignore = pointer.String("aaa")
-				obj.Spec.LayerSelector = &sourcev1.OCILayerSelector{MediaType: "foo"}
+				obj.Spec.LayerSelector = &ociv1.OCILayerSelector{MediaType: "foo"}
 				obj.Status.Artifact = &sourcev1.Artifact{Revision: "revision"}
 				obj.Status.ObservedIgnore = pointer.String("aaa")
-				obj.Status.ObservedLayerSelector = &sourcev1.OCILayerSelector{MediaType: "foo"}
+				obj.Status.ObservedLayerSelector = &ociv1.OCILayerSelector{MediaType: "foo"}
 			},
 			want: sreconcile.ResultSuccess,
 			assertArtifact: &sourcev1.Artifact{
@@ -1649,7 +1650,7 @@ func TestOCIRepository_reconcileArtifact(t *testing.T) {
 
 			resetChmod(tt.targetPath, 0o755, 0o644)
 
-			obj := &sourcev1.OCIRepository{
+			obj := &ociv1.OCIRepository{
 				ObjectMeta: metav1.ObjectMeta{
 					GenerateName: "reconcile-artifact-",
 					Generation:   1,
@@ -1712,7 +1713,7 @@ func TestOCIRepository_getArtifactURL(t *testing.T) {
 	tests := []struct {
 		name      string
 		url       string
-		reference *sourcev1.OCIRepositoryRef
+		reference *ociv1.OCIRepositoryRef
 		wantErr   bool
 		want      string
 	}{
@@ -1724,7 +1725,7 @@ func TestOCIRepository_getArtifactURL(t *testing.T) {
 		{
 			name: "valid url with tag reference",
 			url:  "oci://ghcr.io/stefanprodan/charts",
-			reference: &sourcev1.OCIRepositoryRef{
+			reference: &ociv1.OCIRepositoryRef{
 				Tag: "6.1.6",
 			},
 			want: "ghcr.io/stefanprodan/charts:6.1.6",
@@ -1732,7 +1733,7 @@ func TestOCIRepository_getArtifactURL(t *testing.T) {
 		{
 			name: "valid url with digest reference",
 			url:  "oci://ghcr.io/stefanprodan/charts",
-			reference: &sourcev1.OCIRepositoryRef{
+			reference: &ociv1.OCIRepositoryRef{
 				Digest: imgs["6.1.6"].digest.String(),
 			},
 			want: "ghcr.io/stefanprodan/charts@" + imgs["6.1.6"].digest.String(),
@@ -1740,7 +1741,7 @@ func TestOCIRepository_getArtifactURL(t *testing.T) {
 		{
 			name: "valid url with semver reference",
 			url:  fmt.Sprintf("oci://%s/podinfo", server.registryHost),
-			reference: &sourcev1.OCIRepositoryRef{
+			reference: &ociv1.OCIRepositoryRef{
 				SemVer: ">= 6.1.6",
 			},
 			want: server.registryHost + "/podinfo:6.1.6",
@@ -1762,11 +1763,11 @@ func TestOCIRepository_getArtifactURL(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			obj := &sourcev1.OCIRepository{
+			obj := &ociv1.OCIRepository{
 				ObjectMeta: metav1.ObjectMeta{
 					GenerateName: "artifact-url-",
 				},
-				Spec: sourcev1.OCIRepositorySpec{
+				Spec: ociv1.OCIRepositorySpec{
 					URL:      tt.url,
 					Interval: metav1.Duration{Duration: interval},
 					Timeout:  &metav1.Duration{Duration: timeout},
@@ -1797,12 +1798,12 @@ func TestOCIRepository_stalled(t *testing.T) {
 	g.Expect(err).ToNot(HaveOccurred())
 	defer func() { g.Expect(testEnv.Delete(ctx, ns)).To(Succeed()) }()
 
-	obj := &sourcev1.OCIRepository{
+	obj := &ociv1.OCIRepository{
 		ObjectMeta: metav1.ObjectMeta{
 			GenerateName: "ocirepository-reconcile",
 			Namespace:    ns.Name,
 		},
-		Spec: sourcev1.OCIRepositorySpec{
+		Spec: ociv1.OCIRepositorySpec{
 			URL:      "oci://ghcr.io/test/test:v1",
 			Interval: metav1.Duration{Duration: 60 * time.Minute},
 		},
@@ -1811,7 +1812,7 @@ func TestOCIRepository_stalled(t *testing.T) {
 	g.Expect(testEnv.Create(ctx, obj)).To(Succeed())
 
 	key := client.ObjectKey{Name: obj.Name, Namespace: obj.Namespace}
-	resultobj := sourcev1.OCIRepository{}
+	resultobj := ociv1.OCIRepository{}
 
 	// Wait for the object to fail
 	g.Eventually(func() bool {
@@ -1837,7 +1838,7 @@ func TestOCIRepository_reconcileStorage(t *testing.T) {
 
 	tests := []struct {
 		name             string
-		beforeFunc       func(obj *sourcev1.OCIRepository) error
+		beforeFunc       func(obj *ociv1.OCIRepository) error
 		want             sreconcile.Result
 		wantErr          bool
 		assertConditions []metav1.Condition
@@ -1846,7 +1847,7 @@ func TestOCIRepository_reconcileStorage(t *testing.T) {
 	}{
 		{
 			name: "garbage collects",
-			beforeFunc: func(obj *sourcev1.OCIRepository) error {
+			beforeFunc: func(obj *ociv1.OCIRepository) error {
 				revisions := []string{"a", "b", "c", "d"}
 
 				for n := range revisions {
@@ -1900,7 +1901,7 @@ func TestOCIRepository_reconcileStorage(t *testing.T) {
 		},
 		{
 			name: "notices missing artifact in storage",
-			beforeFunc: func(obj *sourcev1.OCIRepository) error {
+			beforeFunc: func(obj *ociv1.OCIRepository) error {
 				obj.Status.Artifact = &sourcev1.Artifact{
 					Path:     "/oci-reconcile-storage/invalid.txt",
 					Revision: "e",
@@ -1919,7 +1920,7 @@ func TestOCIRepository_reconcileStorage(t *testing.T) {
 		},
 		{
 			name: "updates hostname on diff from current",
-			beforeFunc: func(obj *sourcev1.OCIRepository) error {
+			beforeFunc: func(obj *ociv1.OCIRepository) error {
 				obj.Status.Artifact = &sourcev1.Artifact{
 					Path:     "/oci-reconcile-storage/hostname.txt",
 					Revision: "f",
@@ -1963,7 +1964,7 @@ func TestOCIRepository_reconcileStorage(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 
-			obj := &sourcev1.OCIRepository{
+			obj := &ociv1.OCIRepository{
 				ObjectMeta: metav1.ObjectMeta{
 					GenerateName: "test-",
 					Generation:   1,
@@ -2022,7 +2023,7 @@ func TestOCIRepository_ReconcileDelete(t *testing.T) {
 		patchOptions:  getPatchOptions(ociRepositoryReadyCondition.Owned, "sc"),
 	}
 
-	obj := &sourcev1.OCIRepository{
+	obj := &ociv1.OCIRepository{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:              "reconcile-delete-",
 			DeletionTimestamp: &metav1.Time{Time: time.Now()},
@@ -2030,10 +2031,10 @@ func TestOCIRepository_ReconcileDelete(t *testing.T) {
 				sourcev1.SourceFinalizer,
 			},
 		},
-		Status: sourcev1.OCIRepositoryStatus{},
+		Status: ociv1.OCIRepositoryStatus{},
 	}
 
-	artifact := testStorage.NewArtifactFor(sourcev1.OCIRepositoryKind, obj.GetObjectMeta(), "revision", "foo.txt")
+	artifact := testStorage.NewArtifactFor(ociv1.OCIRepositoryKind, obj.GetObjectMeta(), "revision", "foo.txt")
 	obj.Status.Artifact = &artifact
 
 	got, err := r.reconcileDelete(ctx, obj)
@@ -2052,8 +2053,8 @@ func TestOCIRepositoryReconciler_notify(t *testing.T) {
 		name             string
 		res              sreconcile.Result
 		resErr           error
-		oldObjBeforeFunc func(obj *sourcev1.OCIRepository)
-		newObjBeforeFunc func(obj *sourcev1.OCIRepository)
+		oldObjBeforeFunc func(obj *ociv1.OCIRepository)
+		newObjBeforeFunc func(obj *ociv1.OCIRepository)
 		commit           git.Commit
 		wantEvent        string
 	}{
@@ -2066,7 +2067,7 @@ func TestOCIRepositoryReconciler_notify(t *testing.T) {
 			name:   "new artifact",
 			res:    sreconcile.ResultSuccess,
 			resErr: nil,
-			newObjBeforeFunc: func(obj *sourcev1.OCIRepository) {
+			newObjBeforeFunc: func(obj *ociv1.OCIRepository) {
 				obj.Spec.URL = "oci://newurl.io"
 				obj.Status.Artifact = &sourcev1.Artifact{
 					Revision: "xxx",
@@ -2083,12 +2084,12 @@ func TestOCIRepositoryReconciler_notify(t *testing.T) {
 			name:   "recovery from failure",
 			res:    sreconcile.ResultSuccess,
 			resErr: nil,
-			oldObjBeforeFunc: func(obj *sourcev1.OCIRepository) {
+			oldObjBeforeFunc: func(obj *ociv1.OCIRepository) {
 				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Checksum: "yyy"}
 				conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.ReadOperationFailedReason, "fail")
 				conditions.MarkFalse(obj, meta.ReadyCondition, meta.FailedReason, "foo")
 			},
-			newObjBeforeFunc: func(obj *sourcev1.OCIRepository) {
+			newObjBeforeFunc: func(obj *ociv1.OCIRepository) {
 				obj.Spec.URL = "oci://newurl.io"
 				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Checksum: "yyy"}
 				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "ready")
@@ -2099,12 +2100,12 @@ func TestOCIRepositoryReconciler_notify(t *testing.T) {
 			name:   "recovery and new artifact",
 			res:    sreconcile.ResultSuccess,
 			resErr: nil,
-			oldObjBeforeFunc: func(obj *sourcev1.OCIRepository) {
+			oldObjBeforeFunc: func(obj *ociv1.OCIRepository) {
 				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Checksum: "yyy"}
 				conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.ReadOperationFailedReason, "fail")
 				conditions.MarkFalse(obj, meta.ReadyCondition, meta.FailedReason, "foo")
 			},
-			newObjBeforeFunc: func(obj *sourcev1.OCIRepository) {
+			newObjBeforeFunc: func(obj *ociv1.OCIRepository) {
 				obj.Spec.URL = "oci://newurl.io"
 				obj.Status.Artifact = &sourcev1.Artifact{Revision: "aaa", Checksum: "bbb"}
 				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "ready")
@@ -2115,11 +2116,11 @@ func TestOCIRepositoryReconciler_notify(t *testing.T) {
 			name:   "no updates",
 			res:    sreconcile.ResultSuccess,
 			resErr: nil,
-			oldObjBeforeFunc: func(obj *sourcev1.OCIRepository) {
+			oldObjBeforeFunc: func(obj *ociv1.OCIRepository) {
 				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Checksum: "yyy"}
 				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "ready")
 			},
-			newObjBeforeFunc: func(obj *sourcev1.OCIRepository) {
+			newObjBeforeFunc: func(obj *ociv1.OCIRepository) {
 				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Checksum: "yyy"}
 				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "ready")
 			},
@@ -2128,7 +2129,7 @@ func TestOCIRepositoryReconciler_notify(t *testing.T) {
 			name:   "no updates on requeue",
 			res:    sreconcile.ResultRequeue,
 			resErr: nil,
-			oldObjBeforeFunc: func(obj *sourcev1.OCIRepository) {
+			oldObjBeforeFunc: func(obj *ociv1.OCIRepository) {
 				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Checksum: "yyy"}
 				conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.URLInvalidReason, "ready")
 			},
@@ -2140,7 +2141,7 @@ func TestOCIRepositoryReconciler_notify(t *testing.T) {
 			g := NewWithT(t)
 			recorder := record.NewFakeRecorder(32)
 
-			oldObj := &sourcev1.OCIRepository{}
+			oldObj := &ociv1.OCIRepository{}
 			newObj := oldObj.DeepCopy()
 
 			if tt.oldObjBeforeFunc != nil {
@@ -2362,112 +2363,112 @@ func createTLSServer() (*httptest.Server, []byte, []byte, []byte, tls.Certificat
 func TestOCIContentConfigChanged(t *testing.T) {
 	tests := []struct {
 		name   string
-		spec   sourcev1.OCIRepositorySpec
-		status sourcev1.OCIRepositoryStatus
+		spec   ociv1.OCIRepositorySpec
+		status ociv1.OCIRepositoryStatus
 		want   bool
 	}{
 		{
 			name: "same ignore, no layer selector",
-			spec: sourcev1.OCIRepositorySpec{
+			spec: ociv1.OCIRepositorySpec{
 				Ignore: pointer.String("nnn"),
 			},
-			status: sourcev1.OCIRepositoryStatus{
+			status: ociv1.OCIRepositoryStatus{
 				ObservedIgnore: pointer.String("nnn"),
 			},
 			want: false,
 		},
 		{
 			name: "different ignore, no layer selector",
-			spec: sourcev1.OCIRepositorySpec{
+			spec: ociv1.OCIRepositorySpec{
 				Ignore: pointer.String("nnn"),
 			},
-			status: sourcev1.OCIRepositoryStatus{
+			status: ociv1.OCIRepositoryStatus{
 				ObservedIgnore: pointer.String("mmm"),
 			},
 			want: true,
 		},
 		{
 			name: "same ignore, same layer selector",
-			spec: sourcev1.OCIRepositorySpec{
+			spec: ociv1.OCIRepositorySpec{
 				Ignore: pointer.String("nnn"),
-				LayerSelector: &sourcev1.OCILayerSelector{
+				LayerSelector: &ociv1.OCILayerSelector{
 					MediaType: "foo",
-					Operation: sourcev1.OCILayerExtract,
+					Operation: ociv1.OCILayerExtract,
 				},
 			},
-			status: sourcev1.OCIRepositoryStatus{
+			status: ociv1.OCIRepositoryStatus{
 				ObservedIgnore: pointer.String("nnn"),
-				ObservedLayerSelector: &sourcev1.OCILayerSelector{
+				ObservedLayerSelector: &ociv1.OCILayerSelector{
 					MediaType: "foo",
-					Operation: sourcev1.OCILayerExtract,
+					Operation: ociv1.OCILayerExtract,
 				},
 			},
 			want: false,
 		},
 		{
 			name: "same ignore, different layer selector operation",
-			spec: sourcev1.OCIRepositorySpec{
+			spec: ociv1.OCIRepositorySpec{
 				Ignore: pointer.String("nnn"),
-				LayerSelector: &sourcev1.OCILayerSelector{
+				LayerSelector: &ociv1.OCILayerSelector{
 					MediaType: "foo",
-					Operation: sourcev1.OCILayerCopy,
+					Operation: ociv1.OCILayerCopy,
 				},
 			},
-			status: sourcev1.OCIRepositoryStatus{
+			status: ociv1.OCIRepositoryStatus{
 				ObservedIgnore: pointer.String("nnn"),
-				ObservedLayerSelector: &sourcev1.OCILayerSelector{
+				ObservedLayerSelector: &ociv1.OCILayerSelector{
 					MediaType: "foo",
-					Operation: sourcev1.OCILayerExtract,
+					Operation: ociv1.OCILayerExtract,
 				},
 			},
 			want: true,
 		},
 		{
 			name: "same ignore, different layer selector mediatype",
-			spec: sourcev1.OCIRepositorySpec{
+			spec: ociv1.OCIRepositorySpec{
 				Ignore: pointer.String("nnn"),
-				LayerSelector: &sourcev1.OCILayerSelector{
+				LayerSelector: &ociv1.OCILayerSelector{
 					MediaType: "bar",
-					Operation: sourcev1.OCILayerExtract,
+					Operation: ociv1.OCILayerExtract,
 				},
 			},
-			status: sourcev1.OCIRepositoryStatus{
+			status: ociv1.OCIRepositoryStatus{
 				ObservedIgnore: pointer.String("nnn"),
-				ObservedLayerSelector: &sourcev1.OCILayerSelector{
+				ObservedLayerSelector: &ociv1.OCILayerSelector{
 					MediaType: "foo",
-					Operation: sourcev1.OCILayerExtract,
+					Operation: ociv1.OCILayerExtract,
 				},
 			},
 			want: true,
 		},
 		{
 			name: "no ignore, same layer selector",
-			spec: sourcev1.OCIRepositorySpec{
-				LayerSelector: &sourcev1.OCILayerSelector{
+			spec: ociv1.OCIRepositorySpec{
+				LayerSelector: &ociv1.OCILayerSelector{
 					MediaType: "foo",
-					Operation: sourcev1.OCILayerExtract,
+					Operation: ociv1.OCILayerExtract,
 				},
 			},
-			status: sourcev1.OCIRepositoryStatus{
-				ObservedLayerSelector: &sourcev1.OCILayerSelector{
+			status: ociv1.OCIRepositoryStatus{
+				ObservedLayerSelector: &ociv1.OCILayerSelector{
 					MediaType: "foo",
-					Operation: sourcev1.OCILayerExtract,
+					Operation: ociv1.OCILayerExtract,
 				},
 			},
 			want: false,
 		},
 		{
 			name: "no ignore, different layer selector",
-			spec: sourcev1.OCIRepositorySpec{
-				LayerSelector: &sourcev1.OCILayerSelector{
+			spec: ociv1.OCIRepositorySpec{
+				LayerSelector: &ociv1.OCILayerSelector{
 					MediaType: "bar",
-					Operation: sourcev1.OCILayerExtract,
+					Operation: ociv1.OCILayerExtract,
 				},
 			},
-			status: sourcev1.OCIRepositoryStatus{
-				ObservedLayerSelector: &sourcev1.OCILayerSelector{
+			status: ociv1.OCIRepositoryStatus{
+				ObservedLayerSelector: &ociv1.OCILayerSelector{
 					MediaType: "foo",
-					Operation: sourcev1.OCILayerExtract,
+					Operation: ociv1.OCILayerExtract,
 				},
 			},
 			want: true,
@@ -2478,7 +2479,7 @@ func TestOCIContentConfigChanged(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
 
-			obj := &sourcev1.OCIRepository{
+			obj := &ociv1.OCIRepository{
 				Spec:   tt.spec,
 				Status: tt.status,
 			}

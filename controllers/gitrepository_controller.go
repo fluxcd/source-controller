@@ -53,7 +53,7 @@ import (
 	rreconcile "github.com/fluxcd/pkg/runtime/reconcile"
 
 	"github.com/fluxcd/pkg/sourceignore"
-	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
+	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	serror "github.com/fluxcd/source-controller/internal/error"
 	"github.com/fluxcd/source-controller/internal/features"
 	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"

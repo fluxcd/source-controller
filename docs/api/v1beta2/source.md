@@ -1183,133 +1183,6 @@ OCIRepositoryStatus
 </table>
 </div>
 </div>
-<h3 id="source.toolkit.fluxcd.io/v1beta2.Artifact">Artifact
-</h3>
-<p>
-(<em>Appears on:</em>
-<a href="#source.toolkit.fluxcd.io/v1beta2.BucketStatus">BucketStatus</a>, 
-<a href="#source.toolkit.fluxcd.io/v1beta2.GitRepositoryStatus">GitRepositoryStatus</a>, 
-<a href="#source.toolkit.fluxcd.io/v1beta2.HelmChartStatus">HelmChartStatus</a>, 
-<a href="#source.toolkit.fluxcd.io/v1beta2.HelmRepositoryStatus">HelmRepositoryStatus</a>, 
-<a href="#source.toolkit.fluxcd.io/v1beta2.OCIRepositoryStatus">OCIRepositoryStatus</a>)
-</p>
-<p>Artifact represents the output of a Source reconciliation.</p>
-<div class="md-typeset__scrollwrap">
-<div class="md-typeset__table">
-<table>
-<thead>
-<tr>
-<th>Field</th>
-<th>Description</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>
-<code>path</code><br>
-<em>
-string
-</em>
-</td>
-<td>
-<p>Path is the relative file path of the Artifact. It can be used to locate
-the file in the root of the Artifact storage on the local file system of
-the controller managing the Source.</p>
-</td>
-</tr>
-<tr>
-<td>
-<code>url</code><br>
-<em>
-string
-</em>
-</td>
-<td>
-<p>URL is the HTTP address of the Artifact as exposed by the controller
-managing the Source. It can be used to retrieve the Artifact for
-consumption, e.g. by another controller applying the Artifact contents.</p>
-</td>
-</tr>
-<tr>
-<td>
-<code>revision</code><br>
-<em>
-string
-</em>
-</td>
-<td>
-<em>(Optional)</em>
-<p>Revision is a human-readable identifier traceable in the origin source
-system. It can be a Git commit SHA, Git tag, a Helm chart version, etc.</p>
-</td>
-</tr>
-<tr>
-<td>
-<code>checksum</code><br>
-<em>
-string
-</em>
-</td>
-<td>
-<em>(Optional)</em>
-<p>Checksum is the SHA256 checksum of the Artifact file.
-Deprecated: use Artifact.Digest instead.</p>
-</td>
-</tr>
-<tr>
-<td>
-<code>digest</code><br>
-<em>
-string
-</em>
-</td>
-<td>
-<em>(Optional)</em>
-<p>Digest is the digest of the file in the form of &lsquo;<algorithm>:<checksum>&rsquo;.</p>
-</td>
-</tr>
-<tr>
-<td>
-<code>lastUpdateTime</code><br>
-<em>
-<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.19/#time-v1-meta">
-Kubernetes meta/v1.Time
-</a>
-</em>
-</td>
-<td>
-<p>LastUpdateTime is the timestamp corresponding to the last update of the
-Artifact.</p>
-</td>
-</tr>
-<tr>
-<td>
-<code>size</code><br>
-<em>
-int64
-</em>
-</td>
-<td>
-<em>(Optional)</em>
-<p>Size is the number of bytes in the file.</p>
-</td>
-</tr>
-<tr>
-<td>
-<code>metadata</code><br>
-<em>
-map[string]string
-</em>
-</td>
-<td>
-<em>(Optional)</em>
-<p>Metadata holds upstream information such as OCI annotations.</p>
-</td>
-</tr>
-</tbody>
-</table>
-</div>
-</div>
 <h3 id="source.toolkit.fluxcd.io/v1beta2.BucketSpec">BucketSpec
 </h3>
 <p>
@@ -1538,9 +1411,7 @@ BucketStatus.Artifact data is recommended.</p>
 <td>
 <code>artifact</code><br>
 <em>
-<a href="#source.toolkit.fluxcd.io/v1beta2.Artifact">
-Artifact
-</a>
+github.com/fluxcd/source-controller/api/v1.Artifact
 </em>
 </td>
 <td>
@@ -1984,9 +1855,7 @@ GitRepositoryStatus.Artifact data is recommended.</p>
 <td>
 <code>artifact</code><br>
 <em>
-<a href="#source.toolkit.fluxcd.io/v1beta2.Artifact">
-Artifact
-</a>
+github.com/fluxcd/source-controller/api/v1.Artifact
 </em>
 </td>
 <td>
@@ -1998,9 +1867,7 @@ Artifact
 <td>
 <code>includedArtifacts</code><br>
 <em>
-<a href="#source.toolkit.fluxcd.io/v1beta2.Artifact">
-[]Artifact
-</a>
+[]github.com/fluxcd/source-controller/api/v1.Artifact
 </em>
 </td>
 <td>
@@ -2391,9 +2258,7 @@ BucketStatus.Artifact data is recommended.</p>
 <td>
 <code>artifact</code><br>
 <em>
-<a href="#source.toolkit.fluxcd.io/v1beta2.Artifact">
-Artifact
-</a>
+github.com/fluxcd/source-controller/api/v1.Artifact
 </em>
 </td>
 <td>
@@ -2637,9 +2502,7 @@ HelmRepositoryStatus.Artifact data is recommended.</p>
 <td>
 <code>artifact</code><br>
 <em>
-<a href="#source.toolkit.fluxcd.io/v1beta2.Artifact">
-Artifact
-</a>
+github.com/fluxcd/source-controller/api/v1.Artifact
 </em>
 </td>
 <td>
@@ -3103,9 +2966,7 @@ string
 <td>
 <code>artifact</code><br>
 <em>
-<a href="#source.toolkit.fluxcd.io/v1beta2.Artifact">
-Artifact
-</a>
+github.com/fluxcd/source-controller/api/v1.Artifact
 </em>
 </td>
 <td>
@@ -3229,12 +3090,6 @@ trusted public keys.</p>
 </table>
 </div>
 </div>
-<h3 id="source.toolkit.fluxcd.io/v1beta2.Source">Source
-</h3>
-<p>Source interface must be supported by all API types.
-Source is the interface that provides generic access to the Artifact and
-interval. It must be supported by all kinds of the source.toolkit.fluxcd.io
-API group.</p>
 <div class="admonition note">
 <p class="last">This page was automatically generated with <code>gen-crd-api-reference-docs</code></p>
 </div>

@@ -49,7 +49,8 @@ import (
 	"github.com/fluxcd/source-controller/internal/features"
 	"github.com/fluxcd/source-controller/internal/helm/registry"
 
-	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
+	v1 "github.com/fluxcd/source-controller/api/v1"
+	v1beta2 "github.com/fluxcd/source-controller/api/v1beta2"
 	"github.com/fluxcd/source-controller/controllers"
 	"github.com/fluxcd/source-controller/internal/cache"
 	"github.com/fluxcd/source-controller/internal/helm"
@@ -76,7 +77,8 @@ var (
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 
-	utilruntime.Must(sourcev1.AddToScheme(scheme))
+	utilruntime.Must(v1beta2.AddToScheme(scheme))
+	utilruntime.Must(v1.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme
 }
 
@@ -240,7 +242,7 @@ func main() {
 		DependencyRequeueInterval: requeueDependency,
 		RateLimiter:               helper.GetRateLimiter(rateLimiterOptions),
 	}); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", sourcev1.GitRepositoryKind)
+		setupLog.Error(err, "unable to create controller", "controller", v1beta2.GitRepositoryKind)
 		os.Exit(1)
 	}
 
@@ -255,7 +257,7 @@ func main() {
 		MaxConcurrentReconciles: concurrent,
 		RateLimiter:             helper.GetRateLimiter(rateLimiterOptions),
 	}); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", sourcev1.HelmRepositoryKind, "type", "OCI")
+		setupLog.Error(err, "unable to create controller", "controller", v1beta2.HelmRepositoryKind, "type", "OCI")
 		os.Exit(1)
 	}
 
@@ -293,7 +295,7 @@ func main() {
 		MaxConcurrentReconciles: concurrent,
 		RateLimiter:             helper.GetRateLimiter(rateLimiterOptions),
 	}); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", sourcev1.HelmRepositoryKind)
+		setupLog.Error(err, "unable to create controller", "controller", v1beta2.HelmRepositoryKind)
 		os.Exit(1)
 	}
 
@@ -312,7 +314,7 @@ func main() {
 		MaxConcurrentReconciles: concurrent,
 		RateLimiter:             helper.GetRateLimiter(rateLimiterOptions),
 	}); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", sourcev1.HelmChartKind)
+		setupLog.Error(err, "unable to create controller", "controller", v1beta2.HelmChartKind)
 		os.Exit(1)
 	}
 	if err = (&controllers.BucketReconciler{

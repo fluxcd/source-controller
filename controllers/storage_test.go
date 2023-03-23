@@ -31,7 +31,7 @@ import (
 	"github.com/fluxcd/go-git/v5/plumbing/format/gitignore"
 	. "github.com/onsi/gomega"
 
-	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
+	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 )
 
 func TestStorageConstructor(t *testing.T) {

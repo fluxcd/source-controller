@@ -36,7 +36,8 @@ import (
 	conditionscheck "github.com/fluxcd/pkg/runtime/conditions/check"
 	"github.com/fluxcd/pkg/runtime/patch"
 
-	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
+	sourcev1 "github.com/fluxcd/source-controller/api/v1"
+	helmv1 "github.com/fluxcd/source-controller/api/v1beta2"
 	"github.com/fluxcd/source-controller/internal/helm/registry"
 )
 
@@ -89,19 +90,19 @@ func TestHelmRepositoryOCIReconciler_Reconcile(t *testing.T) {
 
 			g.Expect(testEnv.CreateAndWait(ctx, secret)).To(Succeed())
 
-			origObj := &sourcev1.HelmRepository{
+			origObj := &helmv1.HelmRepository{
 				ObjectMeta: metav1.ObjectMeta{
 					GenerateName: "helmrepository-oci-reconcile-",
 					Namespace:    ns.Name,
 				},
-				Spec: sourcev1.HelmRepositorySpec{
+				Spec: helmv1.HelmRepositorySpec{
 					Interval: metav1.Duration{Duration: interval},
 					URL:      fmt.Sprintf("oci://%s", testRegistryServer.registryHost),
 					SecretRef: &meta.LocalObjectReference{
 						Name: secret.Name,
 					},
-					Provider: sourcev1.GenericOCIProvider,
-					Type:     sourcev1.HelmRepositoryTypeOCI,
+					Provider: helmv1.GenericOCIProvider,
+					Type:     helmv1.HelmRepositoryTypeOCI,
 				},
 			}
 			obj := origObj.DeepCopy()
@@ -249,16 +250,16 @@ func TestHelmRepositoryOCIReconciler_authStrategy(t *testing.T) {
 			server, err := setupRegistryServer(ctx, workspaceDir, tt.registryOpts)
 			g.Expect(err).NotTo(HaveOccurred())
 
-			obj := &sourcev1.HelmRepository{
+			obj := &helmv1.HelmRepository{
 				ObjectMeta: metav1.ObjectMeta{
 					GenerateName: "auth-strategy-",
 					Generation:   1,
 				},
-				Spec: sourcev1.HelmRepositorySpec{
+				Spec: helmv1.HelmRepositorySpec{
 					Interval: metav1.Duration{Duration: interval},
 					Timeout:  &metav1.Duration{Duration: timeout},
-					Type:     sourcev1.HelmRepositoryTypeOCI,
-					Provider: sourcev1.GenericOCIProvider,
+					Type:     helmv1.HelmRepositoryTypeOCI,
+					Provider: helmv1.GenericOCIProvider,
 					URL:      fmt.Sprintf("oci://%s", server.registryHost),
 				},
 			}

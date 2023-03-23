@@ -49,8 +49,8 @@ import (
 	"github.com/fluxcd/pkg/runtime/predicates"
 	rreconcile "github.com/fluxcd/pkg/runtime/reconcile"
 
-	"github.com/fluxcd/source-controller/api/v1beta2"
-	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
+	sourcev1 "github.com/fluxcd/source-controller/api/v1"
+	helmv1 "github.com/fluxcd/source-controller/api/v1beta2"
 	"github.com/fluxcd/source-controller/internal/helm/registry"
 	"github.com/fluxcd/source-controller/internal/helm/repository"
 	"github.com/fluxcd/source-controller/internal/object"
@@ -106,10 +106,10 @@ func (r *HelmRepositoryOCIReconciler) SetupWithManagerAndOptions(mgr ctrl.Manage
 
 	recoverPanic := true
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&sourcev1.HelmRepository{}).
+		For(&helmv1.HelmRepository{}).
 		WithEventFilter(
 			predicate.And(
-				intpredicates.HelmRepositoryTypePredicate{RepositoryType: sourcev1.HelmRepositoryTypeOCI},
+				intpredicates.HelmRepositoryTypePredicate{RepositoryType: helmv1.HelmRepositoryTypeOCI},
 				predicate.Or(predicate.GenerationChangedPredicate{}, predicates.ReconcileRequestedPredicate{}),
 			),
 		).
@@ -126,7 +126,7 @@ func (r *HelmRepositoryOCIReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	log := ctrl.LoggerFrom(ctx)
 
 	// Fetch the HelmRepository
-	obj := &sourcev1.HelmRepository{}
+	obj := &helmv1.HelmRepository{}
 	if err := r.Get(ctx, req.NamespacedName, obj); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
@@ -196,7 +196,7 @@ func (r *HelmRepositoryOCIReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	}
 
 	// Examine if a type change has happened and act accordingly
-	if obj.Spec.Type != sourcev1.HelmRepositoryTypeOCI {
+	if obj.Spec.Type != helmv1.HelmRepositoryTypeOCI {
 		// Remove any stale condition and ignore the object if the type has
 		// changed.
 		obj.Status.Conditions = nil
@@ -213,7 +213,7 @@ func (r *HelmRepositoryOCIReconciler) Reconcile(ctx context.Context, req ctrl.Re
 // status conditions and the returned results are evaluated in the deferred
 // block at the very end to summarize the conditions to be in a consistent
 // state.
-func (r *HelmRepositoryOCIReconciler) reconcile(ctx context.Context, sp *patch.SerialPatcher, obj *v1beta2.HelmRepository) (result ctrl.Result, retErr error) {
+func (r *HelmRepositoryOCIReconciler) reconcile(ctx context.Context, sp *patch.SerialPatcher, obj *helmv1.HelmRepository) (result ctrl.Result, retErr error) {
 	ctxTimeout, cancel := context.WithTimeout(ctx, obj.Spec.Timeout.Duration)
 	defer cancel()
 
@@ -320,7 +320,7 @@ func (r *HelmRepositoryOCIReconciler) reconcile(ctx context.Context, sp *patch.S
 			result, retErr = ctrl.Result{}, err
 			return
 		}
-	} else if obj.Spec.Provider != sourcev1.GenericOCIProvider && obj.Spec.Type == sourcev1.HelmRepositoryTypeOCI {
+	} else if obj.Spec.Provider != helmv1.GenericOCIProvider && obj.Spec.Type == helmv1.HelmRepositoryTypeOCI {
 		auth, authErr := oidcAuth(ctxTimeout, obj.Spec.URL, obj.Spec.Provider)
 		if authErr != nil && !errors.Is(authErr, oci.ErrUnconfiguredProvider) {
 			e := fmt.Errorf("failed to get credential from %s: %w", obj.Spec.Provider, authErr)
@@ -387,7 +387,7 @@ func (r *HelmRepositoryOCIReconciler) reconcile(ctx context.Context, sp *patch.S
 	return
 }
 
-func (r *HelmRepositoryOCIReconciler) reconcileDelete(ctx context.Context, obj *sourcev1.HelmRepository) (ctrl.Result, error) {
+func (r *HelmRepositoryOCIReconciler) reconcileDelete(ctx context.Context, obj *helmv1.HelmRepository) (ctrl.Result, error) {
 	// Remove our finalizer from the list
 	controllerutil.RemoveFinalizer(obj, sourcev1.SourceFinalizer)
 
@@ -413,7 +413,7 @@ func (r *HelmRepositoryOCIReconciler) eventLogf(ctx context.Context, obj runtime
 
 // authFromSecret returns an authn.Keychain for the given HelmRepository.
 // If the HelmRepository does not specify a secretRef, an anonymous keychain is returned.
-func authFromSecret(ctx context.Context, client client.Client, obj *sourcev1.HelmRepository) (authn.Keychain, error) {
+func authFromSecret(ctx context.Context, client client.Client, obj *helmv1.HelmRepository) (authn.Keychain, error) {
 	// Attempt to retrieve secret.
 	name := types.NamespacedName{
 		Namespace: obj.GetNamespace(),

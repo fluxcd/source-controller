@@ -23,6 +23,7 @@ import (
 
 	"github.com/fluxcd/pkg/apis/acl"
 	"github.com/fluxcd/pkg/apis/meta"
+	apiv1 "github.com/fluxcd/source-controller/api/v1"
 )
 
 // HelmChartKind is the string representation of a HelmChart.
@@ -151,7 +152,7 @@ type HelmChartStatus struct {
 
 	// Artifact represents the output of the last successful reconciliation.
 	// +optional
-	Artifact *Artifact `json:"artifact,omitempty"`
+	Artifact *apiv1.Artifact `json:"artifact,omitempty"`
 
 	meta.ReconcileRequestStatus `json:",inline"`
 }
@@ -184,7 +185,7 @@ func (in HelmChart) GetRequeueAfter() time.Duration {
 
 // GetArtifact returns the latest artifact from the source if present in the
 // status sub-resource.
-func (in *HelmChart) GetArtifact() *Artifact {
+func (in *HelmChart) GetArtifact() *apiv1.Artifact {
 	return in.Status.Artifact
 }
 

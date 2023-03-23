@@ -23,6 +23,7 @@ import (
 
 	"github.com/fluxcd/pkg/apis/acl"
 	"github.com/fluxcd/pkg/apis/meta"
+	apiv1 "github.com/fluxcd/source-controller/api/v1"
 )
 
 const (
@@ -126,7 +127,7 @@ type BucketStatus struct {
 
 	// Artifact represents the last successful Bucket reconciliation.
 	// +optional
-	Artifact *Artifact `json:"artifact,omitempty"`
+	Artifact *apiv1.Artifact `json:"artifact,omitempty"`
 
 	// ObservedIgnore is the observed exclusion patterns used for constructing
 	// the source artifact.
@@ -162,7 +163,7 @@ func (in Bucket) GetRequeueAfter() time.Duration {
 }
 
 // GetArtifact returns the latest artifact from the source if present in the status sub-resource.
-func (in *Bucket) GetArtifact() *Artifact {
+func (in *Bucket) GetArtifact() *apiv1.Artifact {
 	return in.Status.Artifact
 }
 
