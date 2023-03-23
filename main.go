@@ -53,6 +53,7 @@ import (
 	"github.com/fluxcd/source-controller/controllers"
 	"github.com/fluxcd/source-controller/internal/cache"
 	"github.com/fluxcd/source-controller/internal/helm"
+	"github.com/fluxcd/source-controller/internal/jitter"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -105,6 +106,7 @@ func main() {
 		artifactRetentionTTL     time.Duration
 		artifactRetentionRecords int
 		artifactDigestAlgo       string
+		intervalJitterPercent    float64
 	)
 
 	flag.StringVar(&metricsAddr, "metrics-addr", envOrDefault("METRICS_ADDR", ":8080"),
@@ -145,6 +147,8 @@ func main() {
 		"The maximum number of artifacts to be kept in storage after a garbage collection.")
 	flag.StringVar(&artifactDigestAlgo, "artifact-digest-algo", digest.Canonical.String(),
 		"The algorithm to use to calculate the digest of artifacts.")
+	flag.Float64Var(&intervalJitterPercent, "interval-jitter-percent", 0.0,
+		"The jitter percentage to apply to the interval duration. A value of 0.1 will apply a jitter of +/-10% to the interval duration. Can not be negative, and must be less than 1.0.")
 
 	clientOptions.BindFlags(flag.CommandLine)
 	logOptions.BindFlags(flag.CommandLine)
@@ -239,6 +243,7 @@ func main() {
 		MaxConcurrentReconciles:   concurrent,
 		DependencyRequeueInterval: requeueDependency,
 		RateLimiter:               helper.GetRateLimiter(rateLimiterOptions),
+		RequeueAfterJitter:        jitter.Percent(intervalJitterPercent, nil),
 	}); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", sourcev1.GitRepositoryKind)
 		os.Exit(1)
@@ -254,6 +259,7 @@ func main() {
 	}).SetupWithManagerAndOptions(mgr, controllers.HelmRepositoryReconcilerOptions{
 		MaxConcurrentReconciles: concurrent,
 		RateLimiter:             helper.GetRateLimiter(rateLimiterOptions),
+		RequeueAfterJitter:      jitter.Percent(intervalJitterPercent, nil),
 	}); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", sourcev1.HelmRepositoryKind, "type", "OCI")
 		os.Exit(1)
@@ -276,7 +282,6 @@ func main() {
 
 		c = cache.New(helmCacheMaxSize, interval)
 	}
-
 	cacheRecorder := cache.MustMakeMetrics()
 
 	if err = (&controllers.HelmRepositoryReconciler{
@@ -292,6 +297,7 @@ func main() {
 	}).SetupWithManagerAndOptions(mgr, controllers.HelmRepositoryReconcilerOptions{
 		MaxConcurrentReconciles: concurrent,
 		RateLimiter:             helper.GetRateLimiter(rateLimiterOptions),
+		RequeueAfterJitter:      jitter.Percent(intervalJitterPercent, nil),
 	}); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", sourcev1.HelmRepositoryKind)
 		os.Exit(1)
@@ -311,6 +317,7 @@ func main() {
 	}).SetupWithManagerAndOptions(mgr, controllers.HelmChartReconcilerOptions{
 		MaxConcurrentReconciles: concurrent,
 		RateLimiter:             helper.GetRateLimiter(rateLimiterOptions),
+		RequeueAfterJitter:      jitter.Percent(intervalJitterPercent, nil),
 	}); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", sourcev1.HelmChartKind)
 		os.Exit(1)
@@ -324,6 +331,7 @@ func main() {
 	}).SetupWithManagerAndOptions(mgr, controllers.BucketReconcilerOptions{
 		MaxConcurrentReconciles: concurrent,
 		RateLimiter:             helper.GetRateLimiter(rateLimiterOptions),
+		RequeueAfterJitter:      jitter.Percent(intervalJitterPercent, nil),
 	}); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Bucket")
 		os.Exit(1)
@@ -337,6 +345,7 @@ func main() {
 	}).SetupWithManagerAndOptions(mgr, controllers.OCIRepositoryReconcilerOptions{
 		MaxConcurrentReconciles: concurrent,
 		RateLimiter:             helper.GetRateLimiter(rateLimiterOptions),
+		RequeueAfterJitter:      jitter.Percent(intervalJitterPercent, nil),
 	}); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "OCIRepository")
 		os.Exit(1)

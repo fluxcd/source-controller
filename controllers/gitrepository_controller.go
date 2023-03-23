@@ -56,6 +56,7 @@ import (
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
 	serror "github.com/fluxcd/source-controller/internal/error"
 	"github.com/fluxcd/source-controller/internal/features"
+	"github.com/fluxcd/source-controller/internal/jitter"
 	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
 	"github.com/fluxcd/source-controller/internal/reconcile/summarize"
 	"github.com/fluxcd/source-controller/internal/util"
@@ -126,16 +127,19 @@ type GitRepositoryReconciler struct {
 	Storage        *Storage
 	ControllerName string
 
-	requeueDependency time.Duration
-	features          map[string]bool
+	requeueDependency  time.Duration
+	requeueAfterJitter jitter.Duration
+
+	features map[string]bool
 
 	patchOptions []patch.Option
 }
 
 type GitRepositoryReconcilerOptions struct {
 	MaxConcurrentReconciles   int
-	DependencyRequeueInterval time.Duration
 	RateLimiter               ratelimiter.RateLimiter
+	DependencyRequeueInterval time.Duration
+	RequeueAfterJitter        jitter.Duration
 }
 
 // gitRepositoryReconcileFunc is the function type for all the
@@ -150,6 +154,10 @@ func (r *GitRepositoryReconciler) SetupWithManagerAndOptions(mgr ctrl.Manager, o
 	r.patchOptions = getPatchOptions(gitRepositoryReadyCondition.Owned, r.ControllerName)
 
 	r.requeueDependency = opts.DependencyRequeueInterval
+	r.requeueAfterJitter = opts.RequeueAfterJitter
+	if r.requeueAfterJitter == nil {
+		r.requeueAfterJitter = jitter.NoJitter
+	}
 
 	if r.features == nil {
 		r.features = features.FeatureGates()
@@ -201,7 +209,9 @@ func (r *GitRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 				summarize.ErrorActionHandler,
 				summarize.RecordReconcileReq,
 			),
-			summarize.WithResultBuilder(sreconcile.AlwaysRequeueResultBuilder{RequeueAfter: obj.GetRequeueAfter()}),
+			summarize.WithResultBuilder(sreconcile.AlwaysRequeueResultBuilder{
+				RequeueAfter: r.requeueAfterJitter(obj.GetRequeueAfter())},
+			),
 			summarize.WithPatchFieldOwner(r.ControllerName),
 		}
 		result, retErr = summarizeHelper.SummarizeAndPatch(ctx, obj, summarizeOpts...)

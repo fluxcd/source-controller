@@ -70,6 +70,7 @@ import (
 	"github.com/fluxcd/source-controller/internal/helm/getter"
 	"github.com/fluxcd/source-controller/internal/helm/registry"
 	"github.com/fluxcd/source-controller/internal/helm/repository"
+	"github.com/fluxcd/source-controller/internal/jitter"
 	soci "github.com/fluxcd/source-controller/internal/oci"
 	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
 	"github.com/fluxcd/source-controller/internal/reconcile/summarize"
@@ -138,7 +139,8 @@ type HelmChartReconciler struct {
 	TTL   time.Duration
 	*cache.CacheRecorder
 
-	patchOptions []patch.Option
+	patchOptions       []patch.Option
+	requeueAfterJitter jitter.Duration
 }
 
 func (r *HelmChartReconciler) SetupWithManager(mgr ctrl.Manager) error {
@@ -148,6 +150,7 @@ func (r *HelmChartReconciler) SetupWithManager(mgr ctrl.Manager) error {
 type HelmChartReconcilerOptions struct {
 	MaxConcurrentReconciles int
 	RateLimiter             ratelimiter.RateLimiter
+	RequeueAfterJitter      jitter.Duration
 }
 
 // helmChartReconcileFunc is the function type for all the v1beta2.HelmChart
@@ -157,6 +160,11 @@ type helmChartReconcileFunc func(ctx context.Context, sp *patch.SerialPatcher, o
 
 func (r *HelmChartReconciler) SetupWithManagerAndOptions(mgr ctrl.Manager, opts HelmChartReconcilerOptions) error {
 	r.patchOptions = getPatchOptions(helmChartReadyCondition.Owned, r.ControllerName)
+
+	r.requeueAfterJitter = opts.RequeueAfterJitter
+	if r.requeueAfterJitter == nil {
+		r.requeueAfterJitter = jitter.NoJitter
+	}
 
 	if err := mgr.GetCache().IndexField(context.TODO(), &sourcev1.HelmRepository{}, sourcev1.HelmRepositoryURLIndexKey,
 		r.indexHelmRepositoryByURL); err != nil {
@@ -228,7 +236,9 @@ func (r *HelmChartReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 				summarize.RecordContextualError,
 				summarize.RecordReconcileReq,
 			),
-			summarize.WithResultBuilder(sreconcile.AlwaysRequeueResultBuilder{RequeueAfter: obj.GetRequeueAfter()}),
+			summarize.WithResultBuilder(sreconcile.AlwaysRequeueResultBuilder{
+				RequeueAfter: r.requeueAfterJitter(obj.GetRequeueAfter()),
+			}),
 			summarize.WithPatchFieldOwner(r.ControllerName),
 		}
 		result, retErr = summarizeHelper.SummarizeAndPatch(ctx, obj, summarizeOpts...)

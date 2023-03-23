@@ -53,6 +53,7 @@ import (
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
 	"github.com/fluxcd/source-controller/internal/helm/registry"
 	"github.com/fluxcd/source-controller/internal/helm/repository"
+	"github.com/fluxcd/source-controller/internal/jitter"
 	"github.com/fluxcd/source-controller/internal/object"
 	intpredicates "github.com/fluxcd/source-controller/internal/predicates"
 )
@@ -82,6 +83,8 @@ type HelmRepositoryOCIReconciler struct {
 	ControllerName          string
 	RegistryClientGenerator RegistryClientGeneratorFunc
 
+	requeueAfterJitter jitter.Duration
+
 	patchOptions []patch.Option
 
 	// unmanagedConditions are the conditions that are not managed by this
@@ -103,6 +106,11 @@ func (r *HelmRepositoryOCIReconciler) SetupWithManager(mgr ctrl.Manager) error {
 func (r *HelmRepositoryOCIReconciler) SetupWithManagerAndOptions(mgr ctrl.Manager, opts HelmRepositoryReconcilerOptions) error {
 	r.unmanagedConditions = conditionsDiff(helmRepositoryReadyCondition.Owned, helmRepositoryOCIOwnedConditions)
 	r.patchOptions = getPatchOptions(helmRepositoryOCIOwnedConditions, r.ControllerName)
+
+	r.requeueAfterJitter = opts.RequeueAfterJitter
+	if r.requeueAfterJitter == nil {
+		r.requeueAfterJitter = jitter.NoJitter
+	}
 
 	recoverPanic := true
 	return ctrl.NewControllerManagedBy(mgr).
@@ -383,7 +391,7 @@ func (r *HelmRepositoryOCIReconciler) reconcile(ctx context.Context, sp *patch.S
 	// block at the very end.
 	conditions.Delete(obj, meta.ReadyCondition)
 
-	result, retErr = ctrl.Result{RequeueAfter: obj.GetRequeueAfter()}, nil
+	result, retErr = ctrl.Result{RequeueAfter: r.requeueAfterJitter(obj.GetRequeueAfter())}, nil
 	return
 }
 

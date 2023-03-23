@@ -52,6 +52,7 @@ import (
 	serror "github.com/fluxcd/source-controller/internal/error"
 	"github.com/fluxcd/source-controller/internal/helm/getter"
 	"github.com/fluxcd/source-controller/internal/helm/repository"
+	"github.com/fluxcd/source-controller/internal/jitter"
 	intpredicates "github.com/fluxcd/source-controller/internal/predicates"
 	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
 	"github.com/fluxcd/source-controller/internal/reconcile/summarize"
@@ -113,12 +114,14 @@ type HelmRepositoryReconciler struct {
 	TTL   time.Duration
 	*cache.CacheRecorder
 
-	patchOptions []patch.Option
+	patchOptions       []patch.Option
+	requeueAfterJitter jitter.Duration
 }
 
 type HelmRepositoryReconcilerOptions struct {
 	MaxConcurrentReconciles int
 	RateLimiter             ratelimiter.RateLimiter
+	RequeueAfterJitter      jitter.Duration
 }
 
 // helmRepositoryReconcileFunc is the function type for all the
@@ -133,6 +136,11 @@ func (r *HelmRepositoryReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 func (r *HelmRepositoryReconciler) SetupWithManagerAndOptions(mgr ctrl.Manager, opts HelmRepositoryReconcilerOptions) error {
 	r.patchOptions = getPatchOptions(helmRepositoryReadyCondition.Owned, r.ControllerName)
+
+	r.requeueAfterJitter = opts.RequeueAfterJitter
+	if r.requeueAfterJitter == nil {
+		r.requeueAfterJitter = jitter.NoJitter
+	}
 
 	recoverPanic := true
 	return ctrl.NewControllerManagedBy(mgr).
@@ -186,7 +194,9 @@ func (r *HelmRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 				summarize.RecordContextualError,
 				summarize.RecordReconcileReq,
 			),
-			summarize.WithResultBuilder(sreconcile.AlwaysRequeueResultBuilder{RequeueAfter: obj.GetRequeueAfter()}),
+			summarize.WithResultBuilder(sreconcile.AlwaysRequeueResultBuilder{
+				RequeueAfter: r.requeueAfterJitter(obj.GetRequeueAfter()),
+			}),
 			summarize.WithPatchFieldOwner(r.ControllerName),
 		}
 		result, retErr = summarizeHelper.SummarizeAndPatch(ctx, obj, summarizeOpts...)

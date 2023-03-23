@@ -68,6 +68,7 @@ import (
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
 	serror "github.com/fluxcd/source-controller/internal/error"
+	"github.com/fluxcd/source-controller/internal/jitter"
 	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
 	"github.com/fluxcd/source-controller/internal/reconcile/summarize"
 	"github.com/fluxcd/source-controller/internal/util"
@@ -130,17 +131,20 @@ type OCIRepositoryReconciler struct {
 	helper.Metrics
 	kuberecorder.EventRecorder
 
-	Storage           *Storage
-	ControllerName    string
-	requeueDependency time.Duration
+	Storage        *Storage
+	ControllerName string
+
+	requeueDependency  time.Duration
+	requeueAfterJitter jitter.Duration
 
 	patchOptions []patch.Option
 }
 
 type OCIRepositoryReconcilerOptions struct {
 	MaxConcurrentReconciles   int
-	DependencyRequeueInterval time.Duration
 	RateLimiter               ratelimiter.RateLimiter
+	DependencyRequeueInterval time.Duration
+	RequeueAfterJitter        jitter.Duration
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -152,6 +156,10 @@ func (r *OCIRepositoryReconciler) SetupWithManagerAndOptions(mgr ctrl.Manager, o
 	r.patchOptions = getPatchOptions(ociRepositoryReadyCondition.Owned, r.ControllerName)
 
 	r.requeueDependency = opts.DependencyRequeueInterval
+	r.requeueAfterJitter = opts.RequeueAfterJitter
+	if r.requeueAfterJitter == nil {
+		r.requeueAfterJitter = jitter.NoJitter
+	}
 
 	recoverPanic := true
 	return ctrl.NewControllerManagedBy(mgr).
@@ -204,7 +212,9 @@ func (r *OCIRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 				summarize.ErrorActionHandler,
 				summarize.RecordReconcileReq,
 			),
-			summarize.WithResultBuilder(sreconcile.AlwaysRequeueResultBuilder{RequeueAfter: obj.GetRequeueAfter()}),
+			summarize.WithResultBuilder(sreconcile.AlwaysRequeueResultBuilder{
+				RequeueAfter: r.requeueAfterJitter(obj.GetRequeueAfter())},
+			),
 			summarize.WithPatchFieldOwner(r.ControllerName),
 		}
 		result, retErr = summarizeHelper.SummarizeAndPatch(ctx, obj, summarizeOpts...)

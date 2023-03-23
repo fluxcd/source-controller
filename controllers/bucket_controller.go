@@ -53,6 +53,7 @@ import (
 	intdigest "github.com/fluxcd/source-controller/internal/digest"
 	serror "github.com/fluxcd/source-controller/internal/error"
 	"github.com/fluxcd/source-controller/internal/index"
+	"github.com/fluxcd/source-controller/internal/jitter"
 	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
 	"github.com/fluxcd/source-controller/internal/reconcile/summarize"
 	"github.com/fluxcd/source-controller/pkg/azure"
@@ -122,12 +123,15 @@ type BucketReconciler struct {
 	Storage        *Storage
 	ControllerName string
 
+	requeueAfterJitter jitter.Duration
+
 	patchOptions []patch.Option
 }
 
 type BucketReconcilerOptions struct {
 	MaxConcurrentReconciles int
 	RateLimiter             ratelimiter.RateLimiter
+	RequeueAfterJitter      jitter.Duration
 }
 
 // BucketProvider is an interface for fetching objects from a storage provider
@@ -163,6 +167,11 @@ func (r *BucketReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 func (r *BucketReconciler) SetupWithManagerAndOptions(mgr ctrl.Manager, opts BucketReconcilerOptions) error {
 	r.patchOptions = getPatchOptions(bucketReadyCondition.Owned, r.ControllerName)
+
+	r.requeueAfterJitter = opts.RequeueAfterJitter
+	if r.requeueAfterJitter == nil {
+		r.requeueAfterJitter = jitter.NoJitter
+	}
 
 	recoverPanic := true
 	return ctrl.NewControllerManagedBy(mgr).
@@ -208,7 +217,9 @@ func (r *BucketReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 				summarize.RecordContextualError,
 				summarize.RecordReconcileReq,
 			),
-			summarize.WithResultBuilder(sreconcile.AlwaysRequeueResultBuilder{RequeueAfter: obj.GetRequeueAfter()}),
+			summarize.WithResultBuilder(sreconcile.AlwaysRequeueResultBuilder{
+				RequeueAfter: r.requeueAfterJitter(obj.GetRequeueAfter()),
+			}),
 			summarize.WithPatchFieldOwner(r.ControllerName),
 		}
 		result, retErr = summarizeHelper.SummarizeAndPatch(ctx, obj, summarizeOpts...)
