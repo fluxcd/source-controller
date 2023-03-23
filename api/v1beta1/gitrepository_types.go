@@ -269,6 +269,7 @@ func (in *GitRepository) GetInterval() metav1.Duration {
 // +kubebuilder:object:root=true
 // +kubebuilder:resource:shortName=gitrepo
 // +kubebuilder:subresource:status
+// +kubebuilder:deprecatedversion:warning="v1beta1 GitRepository is deprecated, upgrade to v1"
 // +kubebuilder:printcolumn:name="URL",type=string,JSONPath=`.spec.url`
 // +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type==\"Ready\")].status",description=""
 // +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.conditions[?(@.type==\"Ready\")].message",description=""
