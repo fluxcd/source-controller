@@ -332,19 +332,11 @@ func (r *HelmChartReconciler) notify(ctx context.Context, oldObj, newObj *helmv1
 	if resErr == nil && res == sreconcile.ResultSuccess && newObj.Status.Artifact != nil {
 		annotations := map[string]string{
 			fmt.Sprintf("%s/%s", sourcev1.GroupVersion.Group, eventv1.MetaRevisionKey): newObj.Status.Artifact.Revision,
-			fmt.Sprintf("%s/%s", sourcev1.GroupVersion.Group, eventv1.MetaChecksumKey): newObj.Status.Artifact.Checksum,
-		}
-		if newObj.Status.Artifact.Digest != "" {
-			annotations[sourcev1.GroupVersion.Group+"/"+eventv1.MetaDigestKey] = newObj.Status.Artifact.Digest
-		}
-
-		var oldChecksum string
-		if oldObj.GetArtifact() != nil {
-			oldChecksum = oldObj.GetArtifact().Checksum
+			fmt.Sprintf("%s/%s", sourcev1.GroupVersion.Group, eventv1.MetaDigestKey):   newObj.Status.Artifact.Digest,
 		}
 
 		// Notify on new artifact and failure recovery.
-		if oldChecksum != newObj.GetArtifact().Checksum {
+		if !oldObj.GetArtifact().HasDigest(newObj.GetArtifact().Digest) {
 			r.AnnotatedEventf(newObj, annotations, corev1.EventTypeNormal,
 				reasonForBuild(build), build.Summary())
 			ctrl.LoggerFrom(ctx).Info(build.Summary())
@@ -803,7 +795,7 @@ func (r *HelmChartReconciler) buildFromTarballArtifact(ctx context.Context, obj 
 		}
 		if obj.Spec.SourceRef.Kind == helmv1.BucketKind {
 			if dig := digest.Digest(sourcev1.TransformLegacyRevision(rev)); dig.Validate() == nil {
-				rev = dig.Hex()
+				rev = dig.Encoded()
 			}
 		}
 		if kind := obj.Spec.SourceRef.Kind; kind == sourcev1.GitRepositoryKind || kind == helmv1.BucketKind {

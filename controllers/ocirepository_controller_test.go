@@ -66,6 +66,7 @@ import (
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	ociv1 "github.com/fluxcd/source-controller/api/v1beta2"
+	intdigest "github.com/fluxcd/source-controller/internal/digest"
 	serror "github.com/fluxcd/source-controller/internal/error"
 	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
 )
@@ -210,9 +211,9 @@ func TestOCIRepository_Reconcile(t *testing.T) {
 				g.Expect(err).ToNot(HaveOccurred())
 				defer f2.Close()
 
-				h := testStorage.Checksum(f2)
-				t.Logf("file %q hash: %q", expectedFile, h)
-				g.Expect(h).To(Equal(af.expectedChecksum))
+				d, err := intdigest.Canonical.FromReader(f2)
+				g.Expect(err).ToNot(HaveOccurred())
+				g.Expect(d.Encoded()).To(Equal(af.expectedChecksum))
 			}
 
 			// Check if the object status is valid
@@ -1483,7 +1484,7 @@ func TestOCIRepository_reconcileArtifact(t *testing.T) {
 				"latest.tar.gz",
 			},
 			afterFunc: func(g *WithT, obj *ociv1.OCIRepository) {
-				g.Expect(obj.Status.Artifact.Checksum).To(Equal("de37cb640bfe6c789f2b131416d259747d5757f7fe5e1d9d48f32d8c30af5934"))
+				g.Expect(obj.Status.Artifact.Digest).To(Equal("sha256:de37cb640bfe6c789f2b131416d259747d5757f7fe5e1d9d48f32d8c30af5934"))
 			},
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(sourcev1.ArtifactInStorageCondition, meta.SucceededReason, "stored artifact for digest"),
@@ -1501,7 +1502,7 @@ func TestOCIRepository_reconcileArtifact(t *testing.T) {
 				"latest.tar.gz",
 			},
 			afterFunc: func(g *WithT, obj *ociv1.OCIRepository) {
-				g.Expect(obj.Status.Artifact.Checksum).To(Equal("05aada03e3e3e96f5f85a8f31548d833974ce862be14942fb3313eef2df861ec"))
+				g.Expect(obj.Status.Artifact.Digest).To(Equal("sha256:05aada03e3e3e96f5f85a8f31548d833974ce862be14942fb3313eef2df861ec"))
 			},
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(sourcev1.ArtifactInStorageCondition, meta.SucceededReason, "stored artifact for digest"),
@@ -1876,7 +1877,7 @@ func TestOCIRepository_reconcileStorage(t *testing.T) {
 			assertArtifact: &sourcev1.Artifact{
 				Path:     "/oci-reconcile-storage/d.txt",
 				Revision: "d",
-				Checksum: "18ac3e7343f016890c510e93f935261169d9e3f565436429830faf0934f4f8e4",
+				Digest:   "sha256:18ac3e7343f016890c510e93f935261169d9e3f565436429830faf0934f4f8e4",
 				URL:      testStorage.Hostname + "/oci-reconcile-storage/d.txt",
 				Size:     int64p(int64(len("d"))),
 			},
@@ -1924,7 +1925,7 @@ func TestOCIRepository_reconcileStorage(t *testing.T) {
 				obj.Status.Artifact = &sourcev1.Artifact{
 					Path:     "/oci-reconcile-storage/hostname.txt",
 					Revision: "f",
-					Checksum: "3b9c358f36f0a31b6ad3e14f309c7cf198ac9246e8316f9ce543d5b19ac02b80",
+					Digest:   "sha256:3b9c358f36f0a31b6ad3e14f309c7cf198ac9246e8316f9ce543d5b19ac02b80",
 					URL:      "http://outdated.com/oci-reconcile-storage/hostname.txt",
 				}
 				if err := testStorage.MkdirAll(*obj.Status.Artifact); err != nil {
@@ -1943,7 +1944,7 @@ func TestOCIRepository_reconcileStorage(t *testing.T) {
 			assertArtifact: &sourcev1.Artifact{
 				Path:     "/oci-reconcile-storage/hostname.txt",
 				Revision: "f",
-				Checksum: "3b9c358f36f0a31b6ad3e14f309c7cf198ac9246e8316f9ce543d5b19ac02b80",
+				Digest:   "sha256:3b9c358f36f0a31b6ad3e14f309c7cf198ac9246e8316f9ce543d5b19ac02b80",
 				URL:      testStorage.Hostname + "/oci-reconcile-storage/hostname.txt",
 				Size:     int64p(int64(len("file"))),
 			},
@@ -2071,7 +2072,7 @@ func TestOCIRepositoryReconciler_notify(t *testing.T) {
 				obj.Spec.URL = "oci://newurl.io"
 				obj.Status.Artifact = &sourcev1.Artifact{
 					Revision: "xxx",
-					Checksum: "yyy",
+					Digest:   "yyy",
 					Metadata: map[string]string{
 						oci.SourceAnnotation:   "https://github.com/stefanprodan/podinfo",
 						oci.RevisionAnnotation: "6.1.8/b3b00fe35424a45d373bf4c7214178bc36fd7872",
@@ -2085,13 +2086,13 @@ func TestOCIRepositoryReconciler_notify(t *testing.T) {
 			res:    sreconcile.ResultSuccess,
 			resErr: nil,
 			oldObjBeforeFunc: func(obj *ociv1.OCIRepository) {
-				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Checksum: "yyy"}
+				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Digest: "yyy"}
 				conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.ReadOperationFailedReason, "fail")
 				conditions.MarkFalse(obj, meta.ReadyCondition, meta.FailedReason, "foo")
 			},
 			newObjBeforeFunc: func(obj *ociv1.OCIRepository) {
 				obj.Spec.URL = "oci://newurl.io"
-				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Checksum: "yyy"}
+				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Digest: "yyy"}
 				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "ready")
 			},
 			wantEvent: "Normal Succeeded stored artifact with revision 'xxx' from 'oci://newurl.io'",
@@ -2101,13 +2102,13 @@ func TestOCIRepositoryReconciler_notify(t *testing.T) {
 			res:    sreconcile.ResultSuccess,
 			resErr: nil,
 			oldObjBeforeFunc: func(obj *ociv1.OCIRepository) {
-				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Checksum: "yyy"}
+				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Digest: "yyy"}
 				conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.ReadOperationFailedReason, "fail")
 				conditions.MarkFalse(obj, meta.ReadyCondition, meta.FailedReason, "foo")
 			},
 			newObjBeforeFunc: func(obj *ociv1.OCIRepository) {
 				obj.Spec.URL = "oci://newurl.io"
-				obj.Status.Artifact = &sourcev1.Artifact{Revision: "aaa", Checksum: "bbb"}
+				obj.Status.Artifact = &sourcev1.Artifact{Revision: "aaa", Digest: "bbb"}
 				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "ready")
 			},
 			wantEvent: "Normal NewArtifact stored artifact with revision 'aaa' from 'oci://newurl.io'",
@@ -2117,11 +2118,11 @@ func TestOCIRepositoryReconciler_notify(t *testing.T) {
 			res:    sreconcile.ResultSuccess,
 			resErr: nil,
 			oldObjBeforeFunc: func(obj *ociv1.OCIRepository) {
-				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Checksum: "yyy"}
+				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Digest: "yyy"}
 				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "ready")
 			},
 			newObjBeforeFunc: func(obj *ociv1.OCIRepository) {
-				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Checksum: "yyy"}
+				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Digest: "yyy"}
 				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "ready")
 			},
 		},
@@ -2130,7 +2131,7 @@ func TestOCIRepositoryReconciler_notify(t *testing.T) {
 			res:    sreconcile.ResultRequeue,
 			resErr: nil,
 			oldObjBeforeFunc: func(obj *ociv1.OCIRepository) {
-				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Checksum: "yyy"}
+				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Digest: "yyy"}
 				conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.URLInvalidReason, "ready")
 			},
 		},

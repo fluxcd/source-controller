@@ -282,7 +282,6 @@ func (r *ChartRepository) DownloadChart(chart *repo.ChartVersion) (*bytes.Buffer
 
 // CacheIndex attempts to write the index from the remote into a new temporary file
 // using DownloadIndex, and sets Path and cached.
-// It returns the SHA256 checksum of the downloaded index bytes, or an error.
 // The caller is expected to handle the garbage collection of Path, and to
 // load the Index separately using LoadFromPath if required.
 func (r *ChartRepository) CacheIndex() error {

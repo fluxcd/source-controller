@@ -325,15 +325,7 @@ func (r *GitRepositoryReconciler) notify(ctx context.Context, oldObj, newObj *so
 	if r.shouldNotify(oldObj, newObj, res, resErr) {
 		annotations := map[string]string{
 			fmt.Sprintf("%s/%s", sourcev1.GroupVersion.Group, eventv1.MetaRevisionKey): newObj.Status.Artifact.Revision,
-			fmt.Sprintf("%s/%s", sourcev1.GroupVersion.Group, eventv1.MetaChecksumKey): newObj.Status.Artifact.Checksum,
-		}
-		if newObj.Status.Artifact.Digest != "" {
-			annotations[sourcev1.GroupVersion.Group+"/"+eventv1.MetaDigestKey] = newObj.Status.Artifact.Digest
-		}
-
-		var oldChecksum string
-		if oldObj.GetArtifact() != nil {
-			oldChecksum = oldObj.GetArtifact().Checksum
+			fmt.Sprintf("%s/%s", sourcev1.GroupVersion.Group, eventv1.MetaDigestKey):   newObj.Status.Artifact.Digest,
 		}
 
 		// A partial commit due to no-op clone doesn't contain the commit
@@ -346,7 +338,7 @@ func (r *GitRepositoryReconciler) notify(ctx context.Context, oldObj, newObj *so
 		}
 
 		// Notify on new artifact and failure recovery.
-		if oldChecksum != newObj.GetArtifact().Checksum {
+		if !oldObj.GetArtifact().HasDigest(newObj.GetArtifact().Digest) {
 			r.AnnotatedEventf(newObj, annotations, corev1.EventTypeNormal,
 				"NewArtifact", message)
 			ctrl.LoggerFrom(ctx).Info(message)
@@ -1019,7 +1011,7 @@ func gitContentConfigChanged(obj *sourcev1.GitRepository, includes *artifactSet)
 		observedInclArtifact := obj.Status.IncludedArtifacts[index]
 		currentIncl := artifacts[index]
 
-		// Check if the include are the same in spec and status.
+		// Check if include is the same in spec and status.
 		if !gitRepositoryIncludeEqual(incl, observedIncl) {
 			return true
 		}
@@ -1028,7 +1020,7 @@ func gitContentConfigChanged(obj *sourcev1.GitRepository, includes *artifactSet)
 		if !observedInclArtifact.HasRevision(currentIncl.Revision) {
 			return true
 		}
-		if observedInclArtifact.Checksum != currentIncl.Checksum {
+		if !observedInclArtifact.HasDigest(currentIncl.Digest) {
 			return true
 		}
 	}

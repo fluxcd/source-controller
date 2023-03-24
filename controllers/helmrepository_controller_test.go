@@ -170,7 +170,7 @@ func TestHelmRepositoryReconciler_reconcileStorage(t *testing.T) {
 			assertArtifact: &sourcev1.Artifact{
 				Path:     "/reconcile-storage/d.txt",
 				Revision: "d",
-				Checksum: "18ac3e7343f016890c510e93f935261169d9e3f565436429830faf0934f4f8e4",
+				Digest:   "sha256:18ac3e7343f016890c510e93f935261169d9e3f565436429830faf0934f4f8e4",
 				URL:      testStorage.Hostname + "/reconcile-storage/d.txt",
 				Size:     int64p(int64(len("d"))),
 			},
@@ -218,7 +218,7 @@ func TestHelmRepositoryReconciler_reconcileStorage(t *testing.T) {
 				obj.Status.Artifact = &sourcev1.Artifact{
 					Path:     "/reconcile-storage/hostname.txt",
 					Revision: "f",
-					Checksum: "3b9c358f36f0a31b6ad3e14f309c7cf198ac9246e8316f9ce543d5b19ac02b80",
+					Digest:   "sha256:3b9c358f36f0a31b6ad3e14f309c7cf198ac9246e8316f9ce543d5b19ac02b80",
 					URL:      "http://outdated.com/reconcile-storage/hostname.txt",
 				}
 				if err := testStorage.MkdirAll(*obj.Status.Artifact); err != nil {
@@ -237,7 +237,7 @@ func TestHelmRepositoryReconciler_reconcileStorage(t *testing.T) {
 			assertArtifact: &sourcev1.Artifact{
 				Path:     "/reconcile-storage/hostname.txt",
 				Revision: "f",
-				Checksum: "3b9c358f36f0a31b6ad3e14f309c7cf198ac9246e8316f9ce543d5b19ac02b80",
+				Digest:   "sha256:3b9c358f36f0a31b6ad3e14f309c7cf198ac9246e8316f9ce543d5b19ac02b80",
 				URL:      testStorage.Hostname + "/reconcile-storage/hostname.txt",
 				Size:     int64p(int64(len("file"))),
 			},
@@ -317,7 +317,7 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 		server           options
 		url              string
 		secret           *corev1.Secret
-		beforeFunc       func(t *WithT, obj *helmv1.HelmRepository, revision, digest digest.Digest)
+		beforeFunc       func(t *WithT, obj *helmv1.HelmRepository, rev, dig digest.Digest)
 		afterFunc        func(t *WithT, obj *helmv1.HelmRepository, artifact sourcev1.Artifact, chartRepo *repository.ChartRepository)
 		want             sreconcile.Result
 		wantErr          bool
@@ -352,7 +352,6 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 			afterFunc: func(t *WithT, obj *helmv1.HelmRepository, artifact sourcev1.Artifact, chartRepo *repository.ChartRepository) {
 				t.Expect(chartRepo.Path).ToNot(BeEmpty())
 				t.Expect(chartRepo.Index).ToNot(BeNil())
-				t.Expect(artifact.Checksum).To(BeEmpty())
 				t.Expect(artifact.Revision).ToNot(BeEmpty())
 			},
 		},
@@ -372,7 +371,7 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 					"password": []byte("1234"),
 				},
 			},
-			beforeFunc: func(t *WithT, obj *helmv1.HelmRepository, revision, checksum digest.Digest) {
+			beforeFunc: func(t *WithT, obj *helmv1.HelmRepository, rev, dig digest.Digest) {
 				obj.Spec.SecretRef = &meta.LocalObjectReference{Name: "basic-auth"}
 			},
 			want: sreconcile.ResultSuccess,
@@ -383,7 +382,6 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 			afterFunc: func(t *WithT, obj *helmv1.HelmRepository, artifact sourcev1.Artifact, chartRepo *repository.ChartRepository) {
 				t.Expect(chartRepo.Path).ToNot(BeEmpty())
 				t.Expect(chartRepo.Index).ToNot(BeNil())
-				t.Expect(artifact.Checksum).To(BeEmpty())
 				t.Expect(artifact.Revision).ToNot(BeEmpty())
 			},
 		},
@@ -403,7 +401,7 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 					"caFile": tlsCA,
 				},
 			},
-			beforeFunc: func(t *WithT, obj *helmv1.HelmRepository, revision, checksum digest.Digest) {
+			beforeFunc: func(t *WithT, obj *helmv1.HelmRepository, rev, dig digest.Digest) {
 				obj.Spec.SecretRef = &meta.LocalObjectReference{Name: "ca-file"}
 			},
 			want: sreconcile.ResultSuccess,
@@ -414,7 +412,6 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 			afterFunc: func(t *WithT, obj *helmv1.HelmRepository, artifact sourcev1.Artifact, chartRepo *repository.ChartRepository) {
 				t.Expect(chartRepo.Path).ToNot(BeEmpty())
 				t.Expect(chartRepo.Index).ToNot(BeNil())
-				t.Expect(artifact.Checksum).To(BeEmpty())
 				t.Expect(artifact.Revision).ToNot(BeEmpty())
 			},
 		},
@@ -434,7 +431,7 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 					"caFile": []byte("invalid"),
 				},
 			},
-			beforeFunc: func(t *WithT, obj *helmv1.HelmRepository, revision, checksum digest.Digest) {
+			beforeFunc: func(t *WithT, obj *helmv1.HelmRepository, rev, dig digest.Digest) {
 				obj.Spec.SecretRef = &meta.LocalObjectReference{Name: "invalid-ca"}
 				conditions.MarkReconciling(obj, meta.ProgressingReason, "foo")
 				conditions.MarkUnknown(obj, meta.ReadyCondition, "foo", "bar")
@@ -449,14 +446,13 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 				// No repo index due to fetch fail.
 				t.Expect(chartRepo.Path).To(BeEmpty())
 				t.Expect(chartRepo.Index).To(BeNil())
-				t.Expect(artifact.Checksum).To(BeEmpty())
 				t.Expect(artifact.Revision).To(BeEmpty())
 			},
 		},
 		{
 			name:     "Invalid URL makes FetchFailed=True and returns stalling error",
 			protocol: "http",
-			beforeFunc: func(t *WithT, obj *helmv1.HelmRepository, revision, checksum digest.Digest) {
+			beforeFunc: func(t *WithT, obj *helmv1.HelmRepository, rev, dig digest.Digest) {
 				obj.Spec.URL = strings.ReplaceAll(obj.Spec.URL, "http://", "")
 				conditions.MarkReconciling(obj, meta.ProgressingReason, "foo")
 				conditions.MarkUnknown(obj, meta.ReadyCondition, "foo", "bar")
@@ -472,14 +468,13 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 				// No repo index due to fetch fail.
 				t.Expect(chartRepo.Path).To(BeEmpty())
 				t.Expect(chartRepo.Index).To(BeNil())
-				t.Expect(artifact.Checksum).To(BeEmpty())
 				t.Expect(artifact.Revision).To(BeEmpty())
 			},
 		},
 		{
 			name:     "Unsupported scheme makes FetchFailed=True and returns stalling error",
 			protocol: "http",
-			beforeFunc: func(t *WithT, obj *helmv1.HelmRepository, revision, checksum digest.Digest) {
+			beforeFunc: func(t *WithT, obj *helmv1.HelmRepository, rev, dig digest.Digest) {
 				obj.Spec.URL = strings.ReplaceAll(obj.Spec.URL, "http://", "ftp://")
 				conditions.MarkReconciling(obj, meta.ProgressingReason, "foo")
 				conditions.MarkUnknown(obj, meta.ReadyCondition, "foo", "bar")
@@ -495,14 +490,13 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 				// No repo index due to fetch fail.
 				t.Expect(chartRepo.Path).To(BeEmpty())
 				t.Expect(chartRepo.Index).To(BeNil())
-				t.Expect(artifact.Checksum).To(BeEmpty())
 				t.Expect(artifact.Revision).To(BeEmpty())
 			},
 		},
 		{
 			name:     "Missing secret returns FetchFailed=True and returns error",
 			protocol: "http",
-			beforeFunc: func(t *WithT, obj *helmv1.HelmRepository, revision, checksum digest.Digest) {
+			beforeFunc: func(t *WithT, obj *helmv1.HelmRepository, rev, dig digest.Digest) {
 				obj.Spec.SecretRef = &meta.LocalObjectReference{Name: "non-existing"}
 				conditions.MarkReconciling(obj, meta.ProgressingReason, "foo")
 				conditions.MarkUnknown(obj, meta.ReadyCondition, "foo", "bar")
@@ -517,7 +511,6 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 				// No repo index due to fetch fail.
 				t.Expect(chartRepo.Path).To(BeEmpty())
 				t.Expect(chartRepo.Index).To(BeNil())
-				t.Expect(artifact.Checksum).To(BeEmpty())
 				t.Expect(artifact.Revision).To(BeEmpty())
 			},
 		},
@@ -532,7 +525,7 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 					"username": []byte("git"),
 				},
 			},
-			beforeFunc: func(t *WithT, obj *helmv1.HelmRepository, revision, checksum digest.Digest) {
+			beforeFunc: func(t *WithT, obj *helmv1.HelmRepository, rev, dig digest.Digest) {
 				obj.Spec.SecretRef = &meta.LocalObjectReference{Name: "malformed-basic-auth"}
 				conditions.MarkReconciling(obj, meta.ProgressingReason, "foo")
 				conditions.MarkUnknown(obj, meta.ReadyCondition, "foo", "bar")
@@ -547,43 +540,16 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 				// No repo index due to fetch fail.
 				t.Expect(chartRepo.Path).To(BeEmpty())
 				t.Expect(chartRepo.Index).To(BeNil())
-				t.Expect(artifact.Checksum).To(BeEmpty())
 				t.Expect(artifact.Revision).To(BeEmpty())
 			},
 		},
 		{
 			name:     "Stored index with same digest and revision",
 			protocol: "http",
-			beforeFunc: func(t *WithT, obj *helmv1.HelmRepository, revision, digest digest.Digest) {
+			beforeFunc: func(t *WithT, obj *helmv1.HelmRepository, rev, dig digest.Digest) {
 				obj.Status.Artifact = &sourcev1.Artifact{
-					Revision: revision.String(),
-					Digest:   digest.String(),
-					Checksum: digest.Hex(),
-				}
-
-				conditions.MarkReconciling(obj, meta.ProgressingReason, "foo")
-				conditions.MarkUnknown(obj, meta.ReadyCondition, "foo", "bar")
-				conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, "foo", "bar")
-			},
-			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "foo"),
-				*conditions.UnknownCondition(meta.ReadyCondition, "foo", "bar"),
-			},
-			afterFunc: func(t *WithT, obj *helmv1.HelmRepository, artifact sourcev1.Artifact, chartRepo *repository.ChartRepository) {
-				t.Expect(chartRepo.Path).ToNot(BeEmpty())
-				t.Expect(chartRepo.Index).To(BeNil())
-
-				t.Expect(&artifact).To(BeEquivalentTo(obj.Status.Artifact))
-			},
-			want: sreconcile.ResultSuccess,
-		},
-		{
-			name:     "Stored index with same checksum and (legacy) revision",
-			protocol: "http",
-			beforeFunc: func(t *WithT, obj *helmv1.HelmRepository, revision, digest digest.Digest) {
-				obj.Status.Artifact = &sourcev1.Artifact{
-					Revision: revision.Hex(),
-					Checksum: digest.Hex(),
+					Revision: rev.String(),
+					Digest:   dig.String(),
 				}
 
 				conditions.MarkReconciling(obj, meta.ProgressingReason, "foo")
@@ -605,11 +571,10 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 		{
 			name:     "Stored index with different digest and same revision",
 			protocol: "http",
-			beforeFunc: func(t *WithT, obj *helmv1.HelmRepository, revision, digest digest.Digest) {
+			beforeFunc: func(t *WithT, obj *helmv1.HelmRepository, rev, dig digest.Digest) {
 				obj.Status.Artifact = &sourcev1.Artifact{
-					Revision: revision.String(),
+					Revision: rev.String(),
 					Digest:   "sha256:80bb3dd67c63095d985850459834ea727603727a370079de90d221191d375a86",
-					Checksum: "80bb3dd67c63095d985850459834ea727603727a370079de90d221191d375a86",
 				}
 
 				conditions.MarkReconciling(obj, meta.ProgressingReason, "foo")
@@ -626,17 +591,15 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 
 				t.Expect(artifact.Revision).To(Equal(obj.Status.Artifact.Revision))
 				t.Expect(artifact.Digest).ToNot(Equal(obj.Status.Artifact.Digest))
-				t.Expect(artifact.Checksum).ToNot(Equal(obj.Status.Artifact.Checksum))
 			},
 			want: sreconcile.ResultSuccess,
 		},
 		{
 			name:     "Stored index with different revision and digest",
 			protocol: "http",
-			beforeFunc: func(t *WithT, obj *helmv1.HelmRepository, revision, checksum digest.Digest) {
+			beforeFunc: func(t *WithT, obj *helmv1.HelmRepository, rev, dig digest.Digest) {
 				obj.Status.Artifact = &sourcev1.Artifact{
 					Revision: "80bb3dd67c63095d985850459834ea727603727a370079de90d221191d375a86",
-					Checksum: "80bb3dd67c63095d985850459834ea727603727a370079de90d221191d375a86",
 					Digest:   "sha256:80bb3dd67c63095d985850459834ea727603727a370079de90d221191d375a86",
 				}
 				conditions.MarkReconciling(obj, meta.ProgressingReason, "foo")
@@ -654,14 +617,13 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 				t.Expect(artifact.Path).To(Not(BeEmpty()))
 				t.Expect(artifact.Revision).ToNot(Equal(obj.Status.Artifact.Revision))
 				t.Expect(artifact.Digest).ToNot(Equal(obj.Status.Artifact.Digest))
-				t.Expect(artifact.Checksum).ToNot(Equal(obj.Status.Artifact.Checksum))
 			},
 			want: sreconcile.ResultSuccess,
 		},
 		{
 			name:     "Existing artifact makes ArtifactOutdated=True",
 			protocol: "http",
-			beforeFunc: func(t *WithT, obj *helmv1.HelmRepository, revision, checksum digest.Digest) {
+			beforeFunc: func(t *WithT, obj *helmv1.HelmRepository, rev, dig digest.Digest) {
 				obj.Status.Artifact = &sourcev1.Artifact{
 					Path:     "some-path",
 					Revision: "some-rev",
@@ -736,7 +698,7 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 				builder.WithObjects(secret.DeepCopy())
 			}
 
-			// Calculate the artifact checksum for valid repos configurations.
+			// Calculate the artifact digest for valid repos configurations.
 			clientOpts := []helmgetter.Option{
 				helmgetter.WithURL(server.URL()),
 			}
@@ -745,7 +707,7 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 			validSecret := true
 			if secret != nil {
 				// Extract the client options from secret, ignoring any invalid
-				// value. validSecret is used to determine if the indexChecksum
+				// value. validSecret is used to determine if the index digest
 				// should be calculated below.
 				var cOpts []helmgetter.Option
 				var serr error
@@ -768,18 +730,18 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 			}
 			g.Expect(err).ToNot(HaveOccurred())
 
-			// NOTE: checksum will be empty in beforeFunc for invalid repo
+			// NOTE: digest will be empty in beforeFunc for invalid repo
 			// configurations as the client can't get the repo.
-			var revision, checksum digest.Digest
+			var rev, dig digest.Digest
 			if validSecret {
 				g.Expect(newChartRepo.CacheIndex()).To(Succeed())
-				checksum = newChartRepo.Digest(intdigest.Canonical)
+				dig = newChartRepo.Digest(intdigest.Canonical)
 
 				g.Expect(newChartRepo.LoadFromPath()).To(Succeed())
-				revision = newChartRepo.Digest(intdigest.Canonical)
+				rev = newChartRepo.Digest(intdigest.Canonical)
 			}
 			if tt.beforeFunc != nil {
-				tt.beforeFunc(g, obj, revision, checksum)
+				tt.beforeFunc(g, obj, rev, dig)
 			}
 
 			r := &HelmRepositoryReconciler{
@@ -942,8 +904,8 @@ func TestHelmRepositoryReconciler_reconcileArtifact(t *testing.T) {
 			chartRepo.Path = cachePath
 
 			artifact := testStorage.NewArtifactFor(obj.Kind, obj, "existing", "foo.tar.gz")
-			// Checksum of the index file calculated by the ChartRepository.
-			artifact.Checksum = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+			// Digest of the index file calculated by the ChartRepository.
+			artifact.Digest = "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 
 			if tt.beforeFunc != nil {
 				tt.beforeFunc(g, obj, artifact, chartRepo)
@@ -1218,7 +1180,7 @@ func TestHelmRepositoryReconciler_notify(t *testing.T) {
 			res:    sreconcile.ResultSuccess,
 			resErr: nil,
 			newObjBeforeFunc: func(obj *helmv1.HelmRepository) {
-				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Checksum: "yyy", Size: nil}
+				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Digest: "yyy", Size: nil}
 			},
 			wantEvent: "Normal NewArtifact stored fetched index of unknown size",
 		},
@@ -1227,7 +1189,7 @@ func TestHelmRepositoryReconciler_notify(t *testing.T) {
 			res:    sreconcile.ResultSuccess,
 			resErr: nil,
 			newObjBeforeFunc: func(obj *helmv1.HelmRepository) {
-				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Checksum: "yyy", Size: &aSize}
+				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Digest: "yyy", Size: &aSize}
 			},
 			wantEvent: "Normal NewArtifact stored fetched index of size",
 		},
@@ -1236,12 +1198,12 @@ func TestHelmRepositoryReconciler_notify(t *testing.T) {
 			res:    sreconcile.ResultSuccess,
 			resErr: nil,
 			oldObjBeforeFunc: func(obj *helmv1.HelmRepository) {
-				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Checksum: "yyy", Size: &aSize}
+				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Digest: "yyy", Size: &aSize}
 				conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.GitOperationFailedReason, "fail")
 				conditions.MarkFalse(obj, meta.ReadyCondition, meta.FailedReason, "foo")
 			},
 			newObjBeforeFunc: func(obj *helmv1.HelmRepository) {
-				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Checksum: "yyy", Size: &aSize}
+				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Digest: "yyy", Size: &aSize}
 				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "ready")
 			},
 			wantEvent: "Normal Succeeded stored fetched index of size",
@@ -1251,12 +1213,12 @@ func TestHelmRepositoryReconciler_notify(t *testing.T) {
 			res:    sreconcile.ResultSuccess,
 			resErr: nil,
 			oldObjBeforeFunc: func(obj *helmv1.HelmRepository) {
-				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Checksum: "yyy", Size: &aSize}
+				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Digest: "yyy", Size: &aSize}
 				conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.GitOperationFailedReason, "fail")
 				conditions.MarkFalse(obj, meta.ReadyCondition, meta.FailedReason, "foo")
 			},
 			newObjBeforeFunc: func(obj *helmv1.HelmRepository) {
-				obj.Status.Artifact = &sourcev1.Artifact{Revision: "aaa", Checksum: "bbb", Size: &aSize}
+				obj.Status.Artifact = &sourcev1.Artifact{Revision: "aaa", Digest: "bbb", Size: &aSize}
 				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "ready")
 			},
 			wantEvent: "Normal NewArtifact stored fetched index of size",
@@ -1266,11 +1228,11 @@ func TestHelmRepositoryReconciler_notify(t *testing.T) {
 			res:    sreconcile.ResultSuccess,
 			resErr: nil,
 			oldObjBeforeFunc: func(obj *helmv1.HelmRepository) {
-				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Checksum: "yyy", Size: &aSize}
+				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Digest: "yyy", Size: &aSize}
 				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "ready")
 			},
 			newObjBeforeFunc: func(obj *helmv1.HelmRepository) {
-				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Checksum: "yyy", Size: &aSize}
+				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Digest: "yyy", Size: &aSize}
 				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "ready")
 			},
 		},

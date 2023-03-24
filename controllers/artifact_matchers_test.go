@@ -51,9 +51,6 @@ func (m matchArtifact) Match(actual interface{}) (success bool, err error) {
 	if ok, err = Equal(m.expected.Revision).Match(actualArtifact.Revision); !ok {
 		return ok, err
 	}
-	if ok, err = Equal(m.expected.Checksum).Match(actualArtifact.Checksum); !ok {
-		return ok, err
-	}
 	if ok, err = Equal(m.expected.Size).Match(actualArtifact.Size); !ok {
 		return ok, err
 	}

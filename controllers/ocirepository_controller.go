@@ -1139,15 +1139,7 @@ func (r *OCIRepositoryReconciler) notify(ctx context.Context, oldObj, newObj *oc
 	if resErr == nil && res == sreconcile.ResultSuccess && newObj.Status.Artifact != nil {
 		annotations := map[string]string{
 			fmt.Sprintf("%s/%s", sourcev1.GroupVersion.Group, eventv1.MetaRevisionKey): newObj.Status.Artifact.Revision,
-			fmt.Sprintf("%s/%s", sourcev1.GroupVersion.Group, eventv1.MetaChecksumKey): newObj.Status.Artifact.Checksum,
-		}
-		if newObj.Status.Artifact.Digest != "" {
-			annotations[sourcev1.GroupVersion.Group+"/"+eventv1.MetaDigestKey] = newObj.Status.Artifact.Digest
-		}
-
-		var oldChecksum string
-		if oldObj.GetArtifact() != nil {
-			oldChecksum = oldObj.GetArtifact().Checksum
+			fmt.Sprintf("%s/%s", sourcev1.GroupVersion.Group, eventv1.MetaDigestKey):   newObj.Status.Artifact.Digest,
 		}
 
 		message := fmt.Sprintf("stored artifact with revision '%s' from '%s'", newObj.Status.Artifact.Revision, newObj.Spec.URL)
@@ -1167,7 +1159,7 @@ func (r *OCIRepositoryReconciler) notify(ctx context.Context, oldObj, newObj *oc
 		}
 
 		// Notify on new artifact and failure recovery.
-		if oldChecksum != newObj.GetArtifact().Checksum {
+		if !oldObj.GetArtifact().HasDigest(newObj.GetArtifact().Digest) {
 			r.AnnotatedEventf(newObj, annotations, corev1.EventTypeNormal,
 				"NewArtifact", message)
 			ctrl.LoggerFrom(ctx).Info(message)

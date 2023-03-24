@@ -20,9 +20,7 @@ import (
 	"archive/tar"
 	"compress/gzip"
 	"context"
-	"crypto/sha256"
 	"fmt"
-	"hash"
 	"io"
 	"io/fs"
 	"net/url"
@@ -34,7 +32,6 @@ import (
 
 	securejoin "github.com/cyphar/filepath-securejoin"
 	"github.com/fluxcd/go-git/v5/plumbing/format/gitignore"
-	"github.com/opencontainers/go-digest"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	kerrors "k8s.io/apimachinery/pkg/util/errors"
 
@@ -349,7 +346,7 @@ func SourceIgnoreFilter(ps []gitignore.Pattern, domain []string) ArchiveFileFilt
 // Archive atomically archives the given directory as a tarball to the given v1beta1.Artifact path, excluding
 // directories and any ArchiveFileFilter matches. While archiving, any environment specific data (for example,
 // the user and group name) is stripped from file headers.
-// If successful, it sets the checksum and last update time on the artifact.
+// If successful, it sets the digest and last update time on the artifact.
 func (s *Storage) Archive(artifact *sourcev1.Artifact, dir string, filter ArchiveFileFilter) (err error) {
 	if f, err := os.Stat(dir); os.IsNotExist(err) || !f.IsDir() {
 		return fmt.Errorf("invalid dir path: %s", dir)
@@ -367,12 +364,9 @@ func (s *Storage) Archive(artifact *sourcev1.Artifact, dir string, filter Archiv
 		}
 	}()
 
-	md, err := intdigest.NewMultiDigester(intdigest.Canonical, digest.SHA256)
-	if err != nil {
-		return fmt.Errorf("failed to create digester: %w", err)
-	}
+	d := intdigest.Canonical.Digester()
 	sz := &writeCounter{}
-	mw := io.MultiWriter(md, tf, sz)
+	mw := io.MultiWriter(d.Hash(), tf, sz)
 
 	gw := gzip.NewWriter(mw)
 	tw := tar.NewWriter(gw)
@@ -466,8 +460,7 @@ func (s *Storage) Archive(artifact *sourcev1.Artifact, dir string, filter Archiv
 		return err
 	}
 
-	artifact.Digest = md.Digest(intdigest.Canonical).String()
-	artifact.Checksum = md.Digest(digest.SHA256).Encoded()
+	artifact.Digest = d.Digest().String()
 	artifact.LastUpdateTime = metav1.Now()
 	artifact.Size = &sz.written
 
@@ -475,7 +468,7 @@ func (s *Storage) Archive(artifact *sourcev1.Artifact, dir string, filter Archiv
 }
 
 // AtomicWriteFile atomically writes the io.Reader contents to the v1beta1.Artifact path.
-// If successful, it sets the checksum and last update time on the artifact.
+// If successful, it sets the digest and last update time on the artifact.
 func (s *Storage) AtomicWriteFile(artifact *sourcev1.Artifact, reader io.Reader, mode os.FileMode) (err error) {
 	localPath := s.LocalPath(*artifact)
 	tf, err := os.CreateTemp(filepath.Split(localPath))
@@ -489,12 +482,9 @@ func (s *Storage) AtomicWriteFile(artifact *sourcev1.Artifact, reader io.Reader,
 		}
 	}()
 
-	md, err := intdigest.NewMultiDigester(intdigest.Canonical, digest.SHA256)
-	if err != nil {
-		return fmt.Errorf("failed to create digester: %w", err)
-	}
+	d := intdigest.Canonical.Digester()
 	sz := &writeCounter{}
-	mw := io.MultiWriter(md, tf, sz)
+	mw := io.MultiWriter(tf, d.Hash(), sz)
 
 	if _, err := io.Copy(mw, reader); err != nil {
 		tf.Close()
@@ -512,8 +502,7 @@ func (s *Storage) AtomicWriteFile(artifact *sourcev1.Artifact, reader io.Reader,
 		return err
 	}
 
-	artifact.Digest = md.Digest(intdigest.Canonical).String()
-	artifact.Checksum = md.Digest(digest.SHA256).Encoded()
+	artifact.Digest = d.Digest().String()
 	artifact.LastUpdateTime = metav1.Now()
 	artifact.Size = &sz.written
 
@@ -521,7 +510,7 @@ func (s *Storage) AtomicWriteFile(artifact *sourcev1.Artifact, reader io.Reader,
 }
 
 // Copy atomically copies the io.Reader contents to the v1beta1.Artifact path.
-// If successful, it sets the checksum and last update time on the artifact.
+// If successful, it sets the digest and last update time on the artifact.
 func (s *Storage) Copy(artifact *sourcev1.Artifact, reader io.Reader) (err error) {
 	localPath := s.LocalPath(*artifact)
 	tf, err := os.CreateTemp(filepath.Split(localPath))
@@ -535,12 +524,9 @@ func (s *Storage) Copy(artifact *sourcev1.Artifact, reader io.Reader) (err error
 		}
 	}()
 
-	md, err := intdigest.NewMultiDigester(intdigest.Canonical, digest.SHA256)
-	if err != nil {
-		return fmt.Errorf("failed to create digester: %w", err)
-	}
+	d := intdigest.Canonical.Digester()
 	sz := &writeCounter{}
-	mw := io.MultiWriter(md, tf, sz)
+	mw := io.MultiWriter(tf, d.Hash(), sz)
 
 	if _, err := io.Copy(mw, reader); err != nil {
 		tf.Close()
@@ -554,8 +540,7 @@ func (s *Storage) Copy(artifact *sourcev1.Artifact, reader io.Reader) (err error
 		return err
 	}
 
-	artifact.Digest = md.Digest(intdigest.Canonical).String()
-	artifact.Checksum = md.Digest(digest.SHA256).Encoded()
+	artifact.Digest = d.Digest().String()
 	artifact.LastUpdateTime = metav1.Now()
 	artifact.Size = &sz.written
 
@@ -563,7 +548,7 @@ func (s *Storage) Copy(artifact *sourcev1.Artifact, reader io.Reader) (err error
 }
 
 // CopyFromPath atomically copies the contents of the given path to the path of the v1beta1.Artifact.
-// If successful, the checksum and last update time on the artifact is set.
+// If successful, the digest and last update time on the artifact is set.
 func (s *Storage) CopyFromPath(artifact *sourcev1.Artifact, path string) (err error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -640,13 +625,6 @@ func (s *Storage) Symlink(artifact sourcev1.Artifact, linkName string) (string, 
 	return url, nil
 }
 
-// Checksum returns the SHA256 checksum for the data of the given io.Reader as a string.
-func (s *Storage) Checksum(reader io.Reader) string {
-	h := newHash()
-	_, _ = io.Copy(h, reader)
-	return fmt.Sprintf("%x", h.Sum(nil))
-}
-
 // Lock creates a file lock for the given v1beta1.Artifact.
 func (s *Storage) Lock(artifact sourcev1.Artifact) (unlock func(), err error) {
 	lockFile := s.LocalPath(artifact) + ".lock"
@@ -664,11 +642,6 @@ func (s *Storage) LocalPath(artifact sourcev1.Artifact) string {
 		return ""
 	}
 	return path
-}
-
-// newHash returns a new SHA256 hash.
-func newHash() hash.Hash {
-	return sha256.New()
 }
 
 // writecounter is an implementation of io.Writer that only records the number

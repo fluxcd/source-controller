@@ -43,11 +43,6 @@ type Artifact struct {
 	// +optional
 	Revision string `json:"revision"`
 
-	// Checksum is the SHA256 checksum of the Artifact file.
-	// Deprecated: use Artifact.Digest instead.
-	// +optional
-	Checksum string `json:"checksum,omitempty"`
-
 	// Digest is the digest of the file in the form of '<algorithm>:<checksum>'.
 	// +optional
 	// +kubebuilder:validation:Pattern="^[a-z0-9]+(?:[.+_-][a-z0-9]+)*:[a-zA-Z0-9=_-]+$"
@@ -76,13 +71,13 @@ func (in *Artifact) HasRevision(revision string) bool {
 	return TransformLegacyRevision(in.Revision) == TransformLegacyRevision(revision)
 }
 
-// HasChecksum returns if the given checksum matches the current Checksum of
-// the Artifact.
-func (in *Artifact) HasChecksum(checksum string) bool {
+// HasDigest returns if the given digest matches the current Digest of the
+// Artifact.
+func (in *Artifact) HasDigest(digest string) bool {
 	if in == nil {
 		return false
 	}
-	return in.Checksum == checksum
+	return in.Digest == digest
 }
 
 // ArtifactDir returns the artifact dir path in the form of

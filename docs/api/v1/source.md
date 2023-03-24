@@ -301,19 +301,6 @@ system. It can be a Git commit SHA, Git tag, a Helm chart version, etc.</p>
 </tr>
 <tr>
 <td>
-<code>checksum</code><br>
-<em>
-string
-</em>
-</td>
-<td>
-<em>(Optional)</em>
-<p>Checksum is the SHA256 checksum of the Artifact file.
-Deprecated: use Artifact.Digest instead.</p>
-</td>
-</tr>
-<tr>
-<td>
 <code>digest</code><br>
 <em>
 string

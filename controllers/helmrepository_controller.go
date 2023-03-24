@@ -292,10 +292,7 @@ func (r *HelmRepositoryReconciler) notify(ctx context.Context, oldObj, newObj *h
 	if resErr == nil && res == sreconcile.ResultSuccess && newObj.Status.Artifact != nil {
 		annotations := map[string]string{
 			fmt.Sprintf("%s/%s", sourcev1.GroupVersion.Group, eventv1.MetaRevisionKey): newObj.Status.Artifact.Revision,
-			fmt.Sprintf("%s/%s", sourcev1.GroupVersion.Group, eventv1.MetaChecksumKey): newObj.Status.Artifact.Checksum,
-		}
-		if newObj.Status.Artifact.Digest != "" {
-			annotations[sourcev1.GroupVersion.Group+"/"+eventv1.MetaDigestKey] = newObj.Status.Artifact.Digest
+			fmt.Sprintf("%s/%s", sourcev1.GroupVersion.Group, eventv1.MetaDigestKey):   newObj.Status.Artifact.Digest,
 		}
 
 		humanReadableSize := "unknown size"
@@ -303,15 +300,10 @@ func (r *HelmRepositoryReconciler) notify(ctx context.Context, oldObj, newObj *h
 			humanReadableSize = fmt.Sprintf("size %s", units.HumanSize(float64(*size)))
 		}
 
-		var oldChecksum string
-		if oldObj.GetArtifact() != nil {
-			oldChecksum = oldObj.GetArtifact().Checksum
-		}
-
 		message := fmt.Sprintf("stored fetched index of %s from '%s'", humanReadableSize, chartRepo.URL)
 
 		// Notify on new artifact and failure recovery.
-		if oldChecksum != newObj.GetArtifact().Checksum {
+		if !oldObj.GetArtifact().HasDigest(newObj.GetArtifact().Digest) {
 			r.AnnotatedEventf(newObj, annotations, corev1.EventTypeNormal,
 				"NewArtifact", message)
 			ctrl.LoggerFrom(ctx).Info(message)
@@ -471,9 +463,6 @@ func (r *HelmRepositoryReconciler) reconcileSource(ctx context.Context, sp *patc
 	// Early comparison to current Artifact.
 	if curArtifact := obj.GetArtifact(); curArtifact != nil {
 		curDig := digest.Digest(curArtifact.Digest)
-		if curDig == "" {
-			curDig = digest.Digest(sourcev1.TransformLegacyRevision(curArtifact.Checksum))
-		}
 		if curDig.Validate() == nil {
 			// Short-circuit based on the fetched index being an exact match to the
 			// stored Artifact.
@@ -532,7 +521,7 @@ func (r *HelmRepositoryReconciler) reconcileSource(ctx context.Context, sp *patc
 	*artifact = r.Storage.NewArtifactFor(obj.Kind,
 		obj.ObjectMeta.GetObjectMeta(),
 		revision.String(),
-		fmt.Sprintf("index-%s.yaml", revision.Hex()),
+		fmt.Sprintf("index-%s.yaml", revision.Encoded()),
 	)
 
 	return sreconcile.ResultSuccess, nil
@@ -560,7 +549,7 @@ func (r *HelmRepositoryReconciler) reconcileArtifact(ctx context.Context, sp *pa
 		}
 	}()
 
-	if obj.GetArtifact().HasRevision(artifact.Revision) && obj.GetArtifact().HasChecksum(artifact.Checksum) {
+	if obj.GetArtifact().HasRevision(artifact.Revision) && obj.GetArtifact().HasDigest(artifact.Digest) {
 		// Extend TTL of the Index in the cache (if present).
 		if r.Cache != nil {
 			r.Cache.SetExpiration(artifact.Path, r.TTL)
