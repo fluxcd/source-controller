@@ -1740,10 +1740,9 @@ func TestGitRepositoryReconciler_ConditionsUpdate(t *testing.T) {
 					Finalizers: []string{sourcev1.SourceFinalizer},
 				},
 				Spec: sourcev1.GitRepositorySpec{
-					URL:               server.HTTPAddress() + repoPath,
-					GitImplementation: sourcev1.GoGitImplementation,
-					Interval:          metav1.Duration{Duration: interval},
-					Timeout:           &metav1.Duration{Duration: timeout},
+					URL:      server.HTTPAddress() + repoPath,
+					Interval: metav1.Duration{Duration: interval},
+					Timeout:  &metav1.Duration{Duration: timeout},
 				},
 			}
 

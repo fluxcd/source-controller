@@ -94,15 +94,6 @@ type GitRepositorySpec struct {
 	// +optional
 	Suspend bool `json:"suspend,omitempty"`
 
-	// GitImplementation specifies which Git client library implementation to
-	// use. Defaults to 'go-git', valid values are ('go-git', 'libgit2').
-	// Deprecated: gitImplementation is deprecated now that 'go-git' is the
-	// only supported implementation.
-	// +kubebuilder:validation:Enum=go-git;libgit2
-	// +kubebuilder:default:=go-git
-	// +optional
-	GitImplementation string `json:"gitImplementation,omitempty"`
-
 	// RecurseSubmodules enables the initialization of all submodules within
 	// the GitRepository as cloned from the URL, using their default settings.
 	// +optional

@@ -184,21 +184,6 @@ GitRepository.</p>
 </tr>
 <tr>
 <td>
-<code>gitImplementation</code><br>
-<em>
-string
-</em>
-</td>
-<td>
-<em>(Optional)</em>
-<p>GitImplementation specifies which Git client library implementation to
-use. Defaults to &lsquo;go-git&rsquo;, valid values are (&lsquo;go-git&rsquo;, &lsquo;libgit2&rsquo;).
-Deprecated: gitImplementation is deprecated now that &lsquo;go-git&rsquo; is the
-only supported implementation.</p>
-</td>
-</tr>
-<tr>
-<td>
 <code>recurseSubmodules</code><br>
 <em>
 bool
@@ -631,21 +616,6 @@ bool
 <em>(Optional)</em>
 <p>Suspend tells the controller to suspend the reconciliation of this
 GitRepository.</p>
-</td>
-</tr>
-<tr>
-<td>
-<code>gitImplementation</code><br>
-<em>
-string
-</em>
-</td>
-<td>
-<em>(Optional)</em>
-<p>GitImplementation specifies which Git client library implementation to
-use. Defaults to &lsquo;go-git&rsquo;, valid values are (&lsquo;go-git&rsquo;, &lsquo;libgit2&rsquo;).
-Deprecated: gitImplementation is deprecated now that &lsquo;go-git&rsquo; is the
-only supported implementation.</p>
 </td>
 </tr>
 <tr>

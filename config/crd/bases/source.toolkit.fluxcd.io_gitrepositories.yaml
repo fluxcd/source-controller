@@ -51,16 +51,6 @@ spec:
             description: GitRepositorySpec specifies the required configuration to
               produce an Artifact for a Git repository.
             properties:
-              gitImplementation:
-                default: go-git
-                description: 'GitImplementation specifies which Git client library
-                  implementation to use. Defaults to ''go-git'', valid values are
-                  (''go-git'', ''libgit2''). Deprecated: gitImplementation is deprecated
-                  now that ''go-git'' is the only supported implementation.'
-                enum:
-                - go-git
-                - libgit2
-                type: string
               ignore:
                 description: Ignore overrides the set of excluded patterns in the
                   .sourceignore format (which is the same as .gitignore). If not provided,
