@@ -305,16 +305,6 @@ spec:
                   - type
                   type: object
                 type: array
-              contentConfigChecksum:
-                description: "ContentConfigChecksum is a checksum of all the configurations
-                  related to the content of the source artifact: - .spec.ignore -
-                  .spec.recurseSubmodules - .spec.included and the checksum of the
-                  included artifacts observed in .status.observedGeneration version
-                  of the object. This can be used to determine if the content of the
-                  included repository has changed. It has the format of `<algo>:<checksum>`,
-                  for example: `sha256:<checksum>`. \n Deprecated: Replaced with explicit
-                  fields for observed artifact content config in the status."
-                type: string
               includedArtifacts:
                 description: IncludedArtifacts contains a list of the last successfully
                   included Artifacts as instructed by GitRepositorySpec.Include.
@@ -379,7 +369,7 @@ spec:
                 type: string
               observedInclude:
                 description: ObservedInclude is the observed list of GitRepository
-                  resources used to to produce the current Artifact.
+                  resources used to produce the current Artifact.
                 items:
                   description: GitRepositoryInclude specifies a local reference to
                     a GitRepository which Artifact (sub-)contents must be included,

@@ -212,21 +212,6 @@ type GitRepositoryStatus struct {
 	// +optional
 	IncludedArtifacts []*Artifact `json:"includedArtifacts,omitempty"`
 
-	// ContentConfigChecksum is a checksum of all the configurations related to
-	// the content of the source artifact:
-	//  - .spec.ignore
-	//  - .spec.recurseSubmodules
-	//  - .spec.included and the checksum of the included artifacts
-	// observed in .status.observedGeneration version of the object. This can
-	// be used to determine if the content of the included repository has
-	// changed.
-	// It has the format of `<algo>:<checksum>`, for example: `sha256:<checksum>`.
-	//
-	// Deprecated: Replaced with explicit fields for observed artifact content
-	// config in the status.
-	// +optional
-	ContentConfigChecksum string `json:"contentConfigChecksum,omitempty"`
-
 	// ObservedIgnore is the observed exclusion patterns used for constructing
 	// the source artifact.
 	// +optional
@@ -238,7 +223,7 @@ type GitRepositoryStatus struct {
 	ObservedRecurseSubmodules bool `json:"observedRecurseSubmodules,omitempty"`
 
 	// ObservedInclude is the observed list of GitRepository resources used to
-	// to produce the current Artifact.
+	// produce the current Artifact.
 	// +optional
 	ObservedInclude []GitRepositoryInclude `json:"observedInclude,omitempty"`
 

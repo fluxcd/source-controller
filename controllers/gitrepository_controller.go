@@ -696,7 +696,6 @@ func (r *GitRepositoryReconciler) reconcileArtifact(ctx context.Context, sp *pat
 	// Record the observations on the object.
 	obj.Status.Artifact = artifact.DeepCopy()
 	obj.Status.IncludedArtifacts = *includes
-	obj.Status.ContentConfigChecksum = "" // To be removed in the next API version.
 	obj.Status.ObservedIgnore = obj.Spec.Ignore
 	obj.Status.ObservedRecurseSubmodules = obj.Spec.RecurseSubmodules
 	obj.Status.ObservedInclude = obj.Spec.Include

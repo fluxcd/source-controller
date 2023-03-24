@@ -768,28 +768,6 @@ Artifacts as instructed by GitRepositorySpec.Include.</p>
 </tr>
 <tr>
 <td>
-<code>contentConfigChecksum</code><br>
-<em>
-string
-</em>
-</td>
-<td>
-<em>(Optional)</em>
-<p>ContentConfigChecksum is a checksum of all the configurations related to
-the content of the source artifact:
-- .spec.ignore
-- .spec.recurseSubmodules
-- .spec.included and the checksum of the included artifacts
-observed in .status.observedGeneration version of the object. This can
-be used to determine if the content of the included repository has
-changed.
-It has the format of <code>&lt;algo&gt;:&lt;checksum&gt;</code>, for example: <code>sha256:&lt;checksum&gt;</code>.</p>
-<p>Deprecated: Replaced with explicit fields for observed artifact content
-config in the status.</p>
-</td>
-</tr>
-<tr>
-<td>
 <code>observedIgnore</code><br>
 <em>
 string
@@ -826,7 +804,7 @@ configuration used to produce the current Artifact.</p>
 <td>
 <em>(Optional)</em>
 <p>ObservedInclude is the observed list of GitRepository resources used to
-to produce the current Artifact.</p>
+produce the current Artifact.</p>
 </td>
 </tr>
 <tr>
