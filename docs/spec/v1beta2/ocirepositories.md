@@ -1,5 +1,7 @@
 # OCI Repositories
 
+<!-- menuweight:20 -->
+
 The `OCIRepository` API defines a Source to produce an Artifact for an OCI
 repository.
 

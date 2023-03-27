@@ -1,5 +1,7 @@
 # Buckets
 
+<!-- menuweight:30 -->
+
 The `Bucket` API defines a Source to produce an Artifact for objects from storage
 solutions like Amazon S3, Google Cloud Storage buckets, or any other solution
 with a S3 compatible API such as Minio, Alibaba Cloud OSS and others.

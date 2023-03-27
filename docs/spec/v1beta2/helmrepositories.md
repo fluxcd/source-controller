@@ -1,5 +1,7 @@
 # Helm Repositories
 
+<!-- menuweight:40 -->
+
 There are 2 [Helm repository types](#type) defined by the `HelmRepository` API:
 - Helm HTTP/S repository, which defines a Source to produce an Artifact for a Helm
 repository index YAML (`index.yaml`). 

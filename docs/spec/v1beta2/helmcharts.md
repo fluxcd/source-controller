@@ -1,5 +1,7 @@
 # Helm Charts
 
+<!-- menuweight:50 -->
+
 The `HelmChart` API defines a Source to produce an Artifact for a Helm chart
 archive with a set of specific configurations.
 
