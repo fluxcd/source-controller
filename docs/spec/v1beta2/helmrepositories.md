@@ -65,7 +65,6 @@ You can run this example by saving the manifest into `helmrepository.yaml`.
    ...
    Status:
      Artifact:
-       Checksum:          83a3c595163a6ff0333e0154c790383b5be441b9db632cb36da11db1c4ece111
        Digest:            sha256:83a3c595163a6ff0333e0154c790383b5be441b9db632cb36da11db1c4ece111
        Last Update Time:  2022-02-04T09:55:58Z
        Path:              helmrepository/default/podinfo/index-83a3c595163a6ff0333e0154c790383b5be441b9db632cb36da11db1c4ece111.yaml
@@ -643,7 +642,6 @@ metadata:
   name: <repository-name>
 status:
   artifact:
-    checksum: 83a3c595163a6ff0333e0154c790383b5be441b9db632cb36da11db1c4ece111
     digest: sha256:83a3c595163a6ff0333e0154c790383b5be441b9db632cb36da11db1c4ece111
     lastUpdateTime: "2022-02-04T09:55:58Z"
     path: helmrepository/<namespace>/<repository-name>/index-83a3c595163a6ff0333e0154c790383b5be441b9db632cb36da11db1c4ece111.yaml

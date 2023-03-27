@@ -69,7 +69,6 @@ helm-controller.
    Status:
      Observed Source Artifact Revision:  sha256:83a3c595163a6ff0333e0154c790383b5be441b9db632cb36da11db1c4ece111
      Artifact:
-       Checksum:          6c3cc3b955bce1686036ae6822ee2ca0ef6ecb994e3f2d19eaf3ec03dcba84b3
        Digest:            sha256:6c3cc3b955bce1686036ae6822ee2ca0ef6ecb994e3f2d19eaf3ec03dcba84b3
        Last Update Time:  2022-02-13T11:24:10Z
        Path:              helmchart/default/podinfo/podinfo-5.2.1.tgz
@@ -558,7 +557,6 @@ metadata:
   name: <chart-name>
 status:
   artifact:
-    checksum: e30b95a08787de69ffdad3c232d65cfb131b5b50c6fd44295f48a078fceaa44e
     digest: sha256:e30b95a08787de69ffdad3c232d65cfb131b5b50c6fd44295f48a078fceaa44e
     lastUpdateTime: "2022-02-10T18:53:47Z"
     path: helmchart/<source-namespace>/<chart-name>/<chart-name>-<chart-version>.tgz
@@ -581,7 +579,6 @@ metadata:
   name: <chart-name>
 status:
   artifact:
-    checksum: ee68224ded207ebb18a8e9730cf3313fa6bc1f31e6d8d3943ab541113559bb52
     digest: sha256:ee68224ded207ebb18a8e9730cf3313fa6bc1f31e6d8d3943ab541113559bb52
     lastUpdateTime: "2022-02-28T08:07:12Z"
     path: helmchart/<source-namespace>/<chart-name>/<chart-name>-6.0.3+1.tgz
@@ -607,7 +604,6 @@ metadata:
   name: <chart-name>
 status:
   artifact:
-    checksum: 8d1f0ac3f4b0e8759a32180086f17ac87ca04e5d46c356e67f97e97616ef4718
     digest: sha256:8d1f0ac3f4b0e8759a32180086f17ac87ca04e5d46c356e67f97e97616ef4718
     lastUpdateTime: "2022-02-28T08:07:12Z"
     path: helmchart/<source-namespace>/<chart-name>/<chart-name>-6.0.3+4e5cbb7b97d0.tgz

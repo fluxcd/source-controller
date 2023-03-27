@@ -61,7 +61,6 @@ You can run this example by saving the manifest into `gitrepository.yaml`.
    ...
    Status:
      Artifact:
-       Checksum:          95e386f421272710c4cedbbd8607dbbaa019d500e7a5a0b6720bc7bebefc7bf2
        Digest:            sha256:95e386f421272710c4cedbbd8607dbbaa019d500e7a5a0b6720bc7bebefc7bf2
        Last Update Time:  2022-02-14T11:23:36Z
        Path:              gitrepository/default/podinfo/132f4e719209eb10b9485302f8593fc0e680f4fc.tar.gz
@@ -727,7 +726,6 @@ metadata:
   name: <repository-name>
 status:
   artifact:
-    checksum: e750c7a46724acaef8f8aa926259af30bbd9face2ae065ae8896ba5ee5ab832b
     digest: sha256:e750c7a46724acaef8f8aa926259af30bbd9face2ae065ae8896ba5ee5ab832b
     lastUpdateTime: "2022-01-29T06:59:23Z"
     path: gitrepository/<namespace>/<repository-name>/c3ab8ff13720e8ad9047dd39466b3c8974e592c2fa383d4a3960714caef0c4f2.tar.gz

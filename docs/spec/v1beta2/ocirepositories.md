@@ -61,7 +61,6 @@ You can run this example by saving the manifest into `ocirepository.yaml`.
    ...
    Status:
      Artifact:
-       Checksum:          d7e924b4882e55b97627355c7b3d2e711e9b54303afa2f50c25377f4df66a83b
        Digest:            sha256:d7e924b4882e55b97627355c7b3d2e711e9b54303afa2f50c25377f4df66a83b
        Last Update Time:  2022-06-14T11:23:36Z
        Path:              ocirepository/default/podinfo/3b6cdcc7adcc9a84d3214ee1c029543789d90b5ae69debe9efa3f66e982875de.tar.gz
@@ -734,7 +733,6 @@ metadata:
   name: <repository-name>
 status:
   artifact:
-    checksum: 9f3bc0f341d4ecf2bab460cc59320a2a9ea292f01d7b96e32740a9abfd341088
     digest: sha256:9f3bc0f341d4ecf2bab460cc59320a2a9ea292f01d7b96e32740a9abfd341088
     lastUpdateTime: "2022-08-08T09:35:45Z"
     metadata:
