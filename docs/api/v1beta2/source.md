@@ -140,7 +140,7 @@ string
 <td>
 <code>secretRef</code><br>
 <em>
-<a href="https://godoc.org/github.com/fluxcd/pkg/apis/meta#LocalObjectReference">
+<a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/meta#LocalObjectReference">
 github.com/fluxcd/pkg/apis/meta.LocalObjectReference
 </a>
 </em>
@@ -155,7 +155,7 @@ for the Bucket.</p>
 <td>
 <code>interval</code><br>
 <em>
-<a href="https://godoc.org/k8s.io/apimachinery/pkg/apis/meta/v1#Duration">
+<a href="https://pkg.go.dev/k8s.io/apimachinery/pkg/apis/meta/v1#Duration">
 Kubernetes meta/v1.Duration
 </a>
 </em>
@@ -168,7 +168,7 @@ Kubernetes meta/v1.Duration
 <td>
 <code>timeout</code><br>
 <em>
-<a href="https://godoc.org/k8s.io/apimachinery/pkg/apis/meta/v1#Duration">
+<a href="https://pkg.go.dev/k8s.io/apimachinery/pkg/apis/meta/v1#Duration">
 Kubernetes meta/v1.Duration
 </a>
 </em>
@@ -209,7 +209,7 @@ Bucket.</p>
 <td>
 <code>accessFrom</code><br>
 <em>
-<a href="https://godoc.org/github.com/fluxcd/pkg/apis/acl#AccessFrom">
+<a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/acl#AccessFrom">
 github.com/fluxcd/pkg/apis/acl.AccessFrom
 </a>
 </em>
@@ -312,7 +312,7 @@ string
 <td>
 <code>secretRef</code><br>
 <em>
-<a href="https://godoc.org/github.com/fluxcd/pkg/apis/meta#LocalObjectReference">
+<a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/meta#LocalObjectReference">
 github.com/fluxcd/pkg/apis/meta.LocalObjectReference
 </a>
 </em>
@@ -331,7 +331,7 @@ and &lsquo;known_hosts&rsquo; fields.</p>
 <td>
 <code>interval</code><br>
 <em>
-<a href="https://godoc.org/k8s.io/apimachinery/pkg/apis/meta/v1#Duration">
+<a href="https://pkg.go.dev/k8s.io/apimachinery/pkg/apis/meta/v1#Duration">
 Kubernetes meta/v1.Duration
 </a>
 </em>
@@ -344,7 +344,7 @@ Kubernetes meta/v1.Duration
 <td>
 <code>timeout</code><br>
 <em>
-<a href="https://godoc.org/k8s.io/apimachinery/pkg/apis/meta/v1#Duration">
+<a href="https://pkg.go.dev/k8s.io/apimachinery/pkg/apis/meta/v1#Duration">
 Kubernetes meta/v1.Duration
 </a>
 </em>
@@ -457,7 +457,7 @@ should be included in the Artifact produced for this GitRepository.</p>
 <td>
 <code>accessFrom</code><br>
 <em>
-<a href="https://godoc.org/github.com/fluxcd/pkg/apis/acl#AccessFrom">
+<a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/acl#AccessFrom">
 github.com/fluxcd/pkg/apis/acl.AccessFrom
 </a>
 </em>
@@ -587,7 +587,7 @@ LocalHelmChartSourceReference
 <td>
 <code>interval</code><br>
 <em>
-<a href="https://godoc.org/k8s.io/apimachinery/pkg/apis/meta/v1#Duration">
+<a href="https://pkg.go.dev/k8s.io/apimachinery/pkg/apis/meta/v1#Duration">
 Kubernetes meta/v1.Duration
 </a>
 </em>
@@ -659,7 +659,7 @@ source.</p>
 <td>
 <code>accessFrom</code><br>
 <em>
-<a href="https://godoc.org/github.com/fluxcd/pkg/apis/acl#AccessFrom">
+<a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/acl#AccessFrom">
 github.com/fluxcd/pkg/apis/acl.AccessFrom
 </a>
 </em>
@@ -781,7 +781,7 @@ host.</p>
 <td>
 <code>secretRef</code><br>
 <em>
-<a href="https://godoc.org/github.com/fluxcd/pkg/apis/meta#LocalObjectReference">
+<a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/meta#LocalObjectReference">
 github.com/fluxcd/pkg/apis/meta.LocalObjectReference
 </a>
 </em>
@@ -817,7 +817,7 @@ in credentials getting stolen in a MITM-attack.</p>
 <td>
 <code>interval</code><br>
 <em>
-<a href="https://godoc.org/k8s.io/apimachinery/pkg/apis/meta/v1#Duration">
+<a href="https://pkg.go.dev/k8s.io/apimachinery/pkg/apis/meta/v1#Duration">
 Kubernetes meta/v1.Duration
 </a>
 </em>
@@ -830,7 +830,7 @@ Kubernetes meta/v1.Duration
 <td>
 <code>timeout</code><br>
 <em>
-<a href="https://godoc.org/k8s.io/apimachinery/pkg/apis/meta/v1#Duration">
+<a href="https://pkg.go.dev/k8s.io/apimachinery/pkg/apis/meta/v1#Duration">
 Kubernetes meta/v1.Duration
 </a>
 </em>
@@ -859,7 +859,7 @@ HelmRepository.</p>
 <td>
 <code>accessFrom</code><br>
 <em>
-<a href="https://godoc.org/github.com/fluxcd/pkg/apis/acl#AccessFrom">
+<a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/acl#AccessFrom">
 github.com/fluxcd/pkg/apis/acl.AccessFrom
 </a>
 </em>
@@ -1033,7 +1033,7 @@ When not specified, defaults to &lsquo;generic&rsquo;.</p>
 <td>
 <code>secretRef</code><br>
 <em>
-<a href="https://godoc.org/github.com/fluxcd/pkg/apis/meta#LocalObjectReference">
+<a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/meta#LocalObjectReference">
 github.com/fluxcd/pkg/apis/meta.LocalObjectReference
 </a>
 </em>
@@ -1079,7 +1079,7 @@ the image pull if the service account has attached pull secrets. For more inform
 <td>
 <code>certSecretRef</code><br>
 <em>
-<a href="https://godoc.org/github.com/fluxcd/pkg/apis/meta#LocalObjectReference">
+<a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/meta#LocalObjectReference">
 github.com/fluxcd/pkg/apis/meta.LocalObjectReference
 </a>
 </em>
@@ -1103,7 +1103,7 @@ you are using a self-signed server certificate.</p>
 <td>
 <code>interval</code><br>
 <em>
-<a href="https://godoc.org/k8s.io/apimachinery/pkg/apis/meta/v1#Duration">
+<a href="https://pkg.go.dev/k8s.io/apimachinery/pkg/apis/meta/v1#Duration">
 Kubernetes meta/v1.Duration
 </a>
 </em>
@@ -1116,7 +1116,7 @@ Kubernetes meta/v1.Duration
 <td>
 <code>timeout</code><br>
 <em>
-<a href="https://godoc.org/k8s.io/apimachinery/pkg/apis/meta/v1#Duration">
+<a href="https://pkg.go.dev/k8s.io/apimachinery/pkg/apis/meta/v1#Duration">
 Kubernetes meta/v1.Duration
 </a>
 </em>
@@ -1386,7 +1386,7 @@ string
 <td>
 <code>secretRef</code><br>
 <em>
-<a href="https://godoc.org/github.com/fluxcd/pkg/apis/meta#LocalObjectReference">
+<a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/meta#LocalObjectReference">
 github.com/fluxcd/pkg/apis/meta.LocalObjectReference
 </a>
 </em>
@@ -1401,7 +1401,7 @@ for the Bucket.</p>
 <td>
 <code>interval</code><br>
 <em>
-<a href="https://godoc.org/k8s.io/apimachinery/pkg/apis/meta/v1#Duration">
+<a href="https://pkg.go.dev/k8s.io/apimachinery/pkg/apis/meta/v1#Duration">
 Kubernetes meta/v1.Duration
 </a>
 </em>
@@ -1414,7 +1414,7 @@ Kubernetes meta/v1.Duration
 <td>
 <code>timeout</code><br>
 <em>
-<a href="https://godoc.org/k8s.io/apimachinery/pkg/apis/meta/v1#Duration">
+<a href="https://pkg.go.dev/k8s.io/apimachinery/pkg/apis/meta/v1#Duration">
 Kubernetes meta/v1.Duration
 </a>
 </em>
@@ -1455,7 +1455,7 @@ Bucket.</p>
 <td>
 <code>accessFrom</code><br>
 <em>
-<a href="https://godoc.org/github.com/fluxcd/pkg/apis/acl#AccessFrom">
+<a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/acl#AccessFrom">
 github.com/fluxcd/pkg/apis/acl.AccessFrom
 </a>
 </em>
@@ -1504,7 +1504,7 @@ int64
 <td>
 <code>conditions</code><br>
 <em>
-<a href="https://godoc.org/k8s.io/apimachinery/pkg/apis/meta/v1#Condition">
+<a href="https://pkg.go.dev/k8s.io/apimachinery/pkg/apis/meta/v1#Condition">
 []Kubernetes meta/v1.Condition
 </a>
 </em>
@@ -1532,7 +1532,9 @@ BucketStatus.Artifact data is recommended.</p>
 <td>
 <code>artifact</code><br>
 <em>
+<a href="https://pkg.go.dev/github.com/fluxcd/source-controller/api/v1#Artifact">
 github.com/fluxcd/source-controller/api/v1.Artifact
+</a>
 </em>
 </td>
 <td>
@@ -1557,7 +1559,7 @@ the source artifact.</p>
 <td>
 <code>ReconcileRequestStatus</code><br>
 <em>
-<a href="https://godoc.org/github.com/fluxcd/pkg/apis/meta#ReconcileRequestStatus">
+<a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/meta#ReconcileRequestStatus">
 github.com/fluxcd/pkg/apis/meta.ReconcileRequestStatus
 </a>
 </em>
@@ -1595,7 +1597,7 @@ Artifact (sub-)contents must be included, and where they should be placed.</p>
 <td>
 <code>repository</code><br>
 <em>
-<a href="https://godoc.org/github.com/fluxcd/pkg/apis/meta#LocalObjectReference">
+<a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/meta#LocalObjectReference">
 github.com/fluxcd/pkg/apis/meta.LocalObjectReference
 </a>
 </em>
@@ -1753,7 +1755,7 @@ string
 <td>
 <code>secretRef</code><br>
 <em>
-<a href="https://godoc.org/github.com/fluxcd/pkg/apis/meta#LocalObjectReference">
+<a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/meta#LocalObjectReference">
 github.com/fluxcd/pkg/apis/meta.LocalObjectReference
 </a>
 </em>
@@ -1772,7 +1774,7 @@ and &lsquo;known_hosts&rsquo; fields.</p>
 <td>
 <code>interval</code><br>
 <em>
-<a href="https://godoc.org/k8s.io/apimachinery/pkg/apis/meta/v1#Duration">
+<a href="https://pkg.go.dev/k8s.io/apimachinery/pkg/apis/meta/v1#Duration">
 Kubernetes meta/v1.Duration
 </a>
 </em>
@@ -1785,7 +1787,7 @@ Kubernetes meta/v1.Duration
 <td>
 <code>timeout</code><br>
 <em>
-<a href="https://godoc.org/k8s.io/apimachinery/pkg/apis/meta/v1#Duration">
+<a href="https://pkg.go.dev/k8s.io/apimachinery/pkg/apis/meta/v1#Duration">
 Kubernetes meta/v1.Duration
 </a>
 </em>
@@ -1898,7 +1900,7 @@ should be included in the Artifact produced for this GitRepository.</p>
 <td>
 <code>accessFrom</code><br>
 <em>
-<a href="https://godoc.org/github.com/fluxcd/pkg/apis/acl#AccessFrom">
+<a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/acl#AccessFrom">
 github.com/fluxcd/pkg/apis/acl.AccessFrom
 </a>
 </em>
@@ -1948,7 +1950,7 @@ object.</p>
 <td>
 <code>conditions</code><br>
 <em>
-<a href="https://godoc.org/k8s.io/apimachinery/pkg/apis/meta/v1#Condition">
+<a href="https://pkg.go.dev/k8s.io/apimachinery/pkg/apis/meta/v1#Condition">
 []Kubernetes meta/v1.Condition
 </a>
 </em>
@@ -1976,7 +1978,9 @@ GitRepositoryStatus.Artifact data is recommended.</p>
 <td>
 <code>artifact</code><br>
 <em>
+<a href="https://pkg.go.dev/github.com/fluxcd/source-controller/api/v1#Artifact">
 github.com/fluxcd/source-controller/api/v1.Artifact
+</a>
 </em>
 </td>
 <td>
@@ -1988,7 +1992,9 @@ github.com/fluxcd/source-controller/api/v1.Artifact
 <td>
 <code>includedArtifacts</code><br>
 <em>
+<a href="https://pkg.go.dev/github.com/fluxcd/source-controller/api/v1#Artifact">
 []github.com/fluxcd/source-controller/api/v1.Artifact
+</a>
 </em>
 </td>
 <td>
@@ -2064,7 +2070,7 @@ to produce the current Artifact.</p>
 <td>
 <code>ReconcileRequestStatus</code><br>
 <em>
-<a href="https://godoc.org/github.com/fluxcd/pkg/apis/meta#ReconcileRequestStatus">
+<a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/meta#ReconcileRequestStatus">
 github.com/fluxcd/pkg/apis/meta.ReconcileRequestStatus
 </a>
 </em>
@@ -2112,7 +2118,7 @@ string
 <td>
 <code>secretRef</code><br>
 <em>
-<a href="https://godoc.org/github.com/fluxcd/pkg/apis/meta#LocalObjectReference">
+<a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/meta#LocalObjectReference">
 github.com/fluxcd/pkg/apis/meta.LocalObjectReference
 </a>
 </em>
@@ -2185,7 +2191,7 @@ LocalHelmChartSourceReference
 <td>
 <code>interval</code><br>
 <em>
-<a href="https://godoc.org/k8s.io/apimachinery/pkg/apis/meta/v1#Duration">
+<a href="https://pkg.go.dev/k8s.io/apimachinery/pkg/apis/meta/v1#Duration">
 Kubernetes meta/v1.Duration
 </a>
 </em>
@@ -2257,7 +2263,7 @@ source.</p>
 <td>
 <code>accessFrom</code><br>
 <em>
-<a href="https://godoc.org/github.com/fluxcd/pkg/apis/acl#AccessFrom">
+<a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/acl#AccessFrom">
 github.com/fluxcd/pkg/apis/acl.AccessFrom
 </a>
 </em>
@@ -2351,7 +2357,7 @@ resolved chart reference.</p>
 <td>
 <code>conditions</code><br>
 <em>
-<a href="https://godoc.org/k8s.io/apimachinery/pkg/apis/meta/v1#Condition">
+<a href="https://pkg.go.dev/k8s.io/apimachinery/pkg/apis/meta/v1#Condition">
 []Kubernetes meta/v1.Condition
 </a>
 </em>
@@ -2379,7 +2385,9 @@ BucketStatus.Artifact data is recommended.</p>
 <td>
 <code>artifact</code><br>
 <em>
+<a href="https://pkg.go.dev/github.com/fluxcd/source-controller/api/v1#Artifact">
 github.com/fluxcd/source-controller/api/v1.Artifact
+</a>
 </em>
 </td>
 <td>
@@ -2391,7 +2399,7 @@ github.com/fluxcd/source-controller/api/v1.Artifact
 <td>
 <code>ReconcileRequestStatus</code><br>
 <em>
-<a href="https://godoc.org/github.com/fluxcd/pkg/apis/meta#ReconcileRequestStatus">
+<a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/meta#ReconcileRequestStatus">
 github.com/fluxcd/pkg/apis/meta.ReconcileRequestStatus
 </a>
 </em>
@@ -2440,7 +2448,7 @@ host.</p>
 <td>
 <code>secretRef</code><br>
 <em>
-<a href="https://godoc.org/github.com/fluxcd/pkg/apis/meta#LocalObjectReference">
+<a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/meta#LocalObjectReference">
 github.com/fluxcd/pkg/apis/meta.LocalObjectReference
 </a>
 </em>
@@ -2476,7 +2484,7 @@ in credentials getting stolen in a MITM-attack.</p>
 <td>
 <code>interval</code><br>
 <em>
-<a href="https://godoc.org/k8s.io/apimachinery/pkg/apis/meta/v1#Duration">
+<a href="https://pkg.go.dev/k8s.io/apimachinery/pkg/apis/meta/v1#Duration">
 Kubernetes meta/v1.Duration
 </a>
 </em>
@@ -2489,7 +2497,7 @@ Kubernetes meta/v1.Duration
 <td>
 <code>timeout</code><br>
 <em>
-<a href="https://godoc.org/k8s.io/apimachinery/pkg/apis/meta/v1#Duration">
+<a href="https://pkg.go.dev/k8s.io/apimachinery/pkg/apis/meta/v1#Duration">
 Kubernetes meta/v1.Duration
 </a>
 </em>
@@ -2518,7 +2526,7 @@ HelmRepository.</p>
 <td>
 <code>accessFrom</code><br>
 <em>
-<a href="https://godoc.org/github.com/fluxcd/pkg/apis/acl#AccessFrom">
+<a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/acl#AccessFrom">
 github.com/fluxcd/pkg/apis/acl.AccessFrom
 </a>
 </em>
@@ -2595,7 +2603,7 @@ object.</p>
 <td>
 <code>conditions</code><br>
 <em>
-<a href="https://godoc.org/k8s.io/apimachinery/pkg/apis/meta/v1#Condition">
+<a href="https://pkg.go.dev/k8s.io/apimachinery/pkg/apis/meta/v1#Condition">
 []Kubernetes meta/v1.Condition
 </a>
 </em>
@@ -2623,7 +2631,9 @@ HelmRepositoryStatus.Artifact data is recommended.</p>
 <td>
 <code>artifact</code><br>
 <em>
+<a href="https://pkg.go.dev/github.com/fluxcd/source-controller/api/v1#Artifact">
 github.com/fluxcd/source-controller/api/v1.Artifact
+</a>
 </em>
 </td>
 <td>
@@ -2635,7 +2645,7 @@ github.com/fluxcd/source-controller/api/v1.Artifact
 <td>
 <code>ReconcileRequestStatus</code><br>
 <em>
-<a href="https://godoc.org/github.com/fluxcd/pkg/apis/meta#ReconcileRequestStatus">
+<a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/meta#ReconcileRequestStatus">
 github.com/fluxcd/pkg/apis/meta.ReconcileRequestStatus
 </a>
 </em>
@@ -2893,7 +2903,7 @@ When not specified, defaults to &lsquo;generic&rsquo;.</p>
 <td>
 <code>secretRef</code><br>
 <em>
-<a href="https://godoc.org/github.com/fluxcd/pkg/apis/meta#LocalObjectReference">
+<a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/meta#LocalObjectReference">
 github.com/fluxcd/pkg/apis/meta.LocalObjectReference
 </a>
 </em>
@@ -2939,7 +2949,7 @@ the image pull if the service account has attached pull secrets. For more inform
 <td>
 <code>certSecretRef</code><br>
 <em>
-<a href="https://godoc.org/github.com/fluxcd/pkg/apis/meta#LocalObjectReference">
+<a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/meta#LocalObjectReference">
 github.com/fluxcd/pkg/apis/meta.LocalObjectReference
 </a>
 </em>
@@ -2963,7 +2973,7 @@ you are using a self-signed server certificate.</p>
 <td>
 <code>interval</code><br>
 <em>
-<a href="https://godoc.org/k8s.io/apimachinery/pkg/apis/meta/v1#Duration">
+<a href="https://pkg.go.dev/k8s.io/apimachinery/pkg/apis/meta/v1#Duration">
 Kubernetes meta/v1.Duration
 </a>
 </em>
@@ -2976,7 +2986,7 @@ Kubernetes meta/v1.Duration
 <td>
 <code>timeout</code><br>
 <em>
-<a href="https://godoc.org/k8s.io/apimachinery/pkg/apis/meta/v1#Duration">
+<a href="https://pkg.go.dev/k8s.io/apimachinery/pkg/apis/meta/v1#Duration">
 Kubernetes meta/v1.Duration
 </a>
 </em>
@@ -3061,7 +3071,7 @@ int64
 <td>
 <code>conditions</code><br>
 <em>
-<a href="https://godoc.org/k8s.io/apimachinery/pkg/apis/meta/v1#Condition">
+<a href="https://pkg.go.dev/k8s.io/apimachinery/pkg/apis/meta/v1#Condition">
 []Kubernetes meta/v1.Condition
 </a>
 </em>
@@ -3087,7 +3097,9 @@ string
 <td>
 <code>artifact</code><br>
 <em>
+<a href="https://pkg.go.dev/github.com/fluxcd/source-controller/api/v1#Artifact">
 github.com/fluxcd/source-controller/api/v1.Artifact
+</a>
 </em>
 </td>
 <td>
@@ -3148,7 +3160,7 @@ the source artifact.</p>
 <td>
 <code>ReconcileRequestStatus</code><br>
 <em>
-<a href="https://godoc.org/github.com/fluxcd/pkg/apis/meta#ReconcileRequestStatus">
+<a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/meta#ReconcileRequestStatus">
 github.com/fluxcd/pkg/apis/meta.ReconcileRequestStatus
 </a>
 </em>
@@ -3196,7 +3208,7 @@ string
 <td>
 <code>secretRef</code><br>
 <em>
-<a href="https://godoc.org/github.com/fluxcd/pkg/apis/meta#LocalObjectReference">
+<a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/meta#LocalObjectReference">
 github.com/fluxcd/pkg/apis/meta.LocalObjectReference
 </a>
 </em>
