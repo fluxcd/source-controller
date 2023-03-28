@@ -81,7 +81,6 @@ You can run this example by saving the manifest into `gitrepository.yaml`.
        Status:                True
        Type:                  ArtifactInStorage
      Observed Generation:     1
-     URL:                     http://source-controller.source-system.svc.cluster.local./gitrepository/default/podinfo/latest.tar.gz
    Events:
      Type    Reason               Age   From               Message
      ----    ------               ----  ----               -------
@@ -670,7 +669,6 @@ Status:
     Status:                True
     Type:                  FetchFailed
   Observed Generation:     1
-  URL:                     http://source-controller.source-system.svc.cluster.local./gitrepository/default/gitrepository-sample/latest.tar.gz
 Events:
   Type     Reason                      Age                  From               Message
   ----     ------                      ----                 ----               -------
@@ -679,12 +677,12 @@ Events:
 
 #### Trace emitted Events
 
-To view events for specific GitRepository(s), `kubectl get events` can be used
-in combination with `--field-sector` to list the Events for specific objects.
-For example, running
+To view events for specific GitRepository(s), `kubectl events` can be used in
+combination with `--for` to list the Events for specific objects. For example,
+running
 
 ```sh
-kubectl get events --field-selector involvedObject.kind=GitRepository,involvedObject.name=<repository-name>
+kubectl events --for GitRepository/<repository-name>
 ```
 
 lists

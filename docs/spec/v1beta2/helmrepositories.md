@@ -598,12 +598,12 @@ Events:
 
 #### Trace emitted Events
 
-To view events for specific HelmRepository(s), `kubectl get events` can be used in
-combination with `--field-sector` to list the Events for specific objects.
-For example, running
+To view events for specific HelmRepository(s), `kubectl events` can be used in
+combination with `--for` to list the Events for specific objects. For example,
+running
 
 ```sh
-kubectl get events --field-selector involvedObject.kind=HelmRepository,involvedObject.name=<repository-name>
+kubectl events --for HelmRepository/<repository-name>
 ```
 
 lists

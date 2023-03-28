@@ -469,12 +469,12 @@ sion matching '9.*' found
 
 #### Trace emitted Events
 
-To view events for specific HelmChart(s), `kubectl get events` can be used in
-combination with `--field-selector` to list the Events for specific objects.
-For example, running
+To view events for specific HelmChart(s), `kubectl events` can be used in
+combination with `--for` to list the Events for specific objects. For example,
+running
 
 ```sh
-kubectl get events --field-selector involvedObject.kind=HelmChart,involvedObject.name=<chart-name>
+kubectl events --for HelmChart/<chart-name>
 ```
 
 lists

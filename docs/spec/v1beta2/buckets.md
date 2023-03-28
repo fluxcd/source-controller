@@ -896,12 +896,12 @@ Events:
 
 #### Trace emitted Events
 
-To view events for specific Bucket(s), `kubectl get events` can be used in
-combination with `--field-sector` to list the Events for specific objects.
-For example, running
+To view events for specific Bucket(s), `kubectl events` can be used in
+combination with `--for` to list the Events for specific objects. For example,
+running
 
 ```sh
-kubectl get events --field-selector involvedObject.kind=Bucket,involvedObject.name=<bucket-name>
+kubectl events --for Bucket/<bucket-name>
 ```
 
 lists
