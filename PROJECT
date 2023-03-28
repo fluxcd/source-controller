@@ -3,6 +3,9 @@ repo: github.com/fluxcd/source-controller
 resources:
 - group: source
   kind: GitRepository
+  version: v1
+- group: source
+  kind: GitRepository
   version: v1beta2
 - group: source
   kind: HelmRepository
