@@ -27,11 +27,6 @@ import (
 const (
 	// GitRepositoryKind is the string representation of a GitRepository.
 	GitRepositoryKind = "GitRepository"
-
-	// GoGitImplementation for performing Git operations using go-git.
-	GoGitImplementation = "go-git"
-	// LibGit2Implementation for performing Git operations using libgit2.
-	LibGit2Implementation = "libgit2"
 )
 
 const (

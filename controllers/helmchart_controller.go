@@ -794,7 +794,7 @@ func (r *HelmChartReconciler) buildFromTarballArtifact(ctx context.Context, obj 
 			rev = git.ExtractHashFromRevision(rev).String()
 		}
 		if obj.Spec.SourceRef.Kind == helmv1.BucketKind {
-			if dig := digest.Digest(sourcev1.TransformLegacyRevision(rev)); dig.Validate() == nil {
+			if dig := digest.Digest(rev); dig.Validate() == nil {
 				rev = dig.Encoded()
 			}
 		}

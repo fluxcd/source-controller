@@ -489,7 +489,7 @@ func (r *HelmRepositoryReconciler) reconcileSource(ctx context.Context, sp *patc
 	// Check if index has changed compared to current Artifact revision.
 	var changed bool
 	if artifact := obj.Status.Artifact; artifact != nil {
-		curRev := digest.Digest(sourcev1.TransformLegacyRevision(artifact.Revision))
+		curRev := digest.Digest(artifact.Revision)
 		changed = curRev.Validate() != nil || curRev != chartRepo.Digest(curRev.Algorithm())
 	}
 

@@ -733,27 +733,6 @@ func TestGitRepositoryReconciler_reconcileSource_checkoutStrategy(t *testing.T) 
 			wantReconciling: false,
 		},
 		{
-			name: "Optimized clone (legacy revision format)",
-			reference: &sourcev1.GitRepositoryRef{
-				Branch: "staging",
-			},
-			beforeFunc: func(obj *sourcev1.GitRepository, latestRev string) {
-				// Add existing artifact on the object and storage.
-				obj.Status = sourcev1.GitRepositoryStatus{
-					Artifact: &sourcev1.Artifact{
-						Revision: "staging/" + latestRev,
-						Path:     randStringRunes(10),
-					},
-				}
-				conditions.MarkTrue(obj, sourcev1.ArtifactInStorageCondition, meta.SucceededReason, "foo")
-				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "foo")
-			},
-			want:            sreconcile.ResultEmpty,
-			wantErr:         true,
-			wantRevision:    "staging@sha1:<commit>",
-			wantReconciling: false,
-		},
-		{
 			name: "Optimized clone different ignore",
 			reference: &sourcev1.GitRepositoryRef{
 				Branch: "staging",
@@ -765,28 +744,6 @@ func TestGitRepositoryReconciler_reconcileSource_checkoutStrategy(t *testing.T) 
 				obj.Status = sourcev1.GitRepositoryStatus{
 					Artifact: &sourcev1.Artifact{
 						Revision: "staging@sha1:" + latestRev,
-						Path:     randStringRunes(10),
-					},
-				}
-				conditions.MarkTrue(obj, sourcev1.ArtifactInStorageCondition, meta.SucceededReason, "foo")
-				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "foo")
-			},
-			want:            sreconcile.ResultSuccess,
-			wantRevision:    "staging@sha1:<commit>",
-			wantReconciling: false,
-		},
-		{
-			name: "Optimized clone different ignore (legacy revision format)",
-			reference: &sourcev1.GitRepositoryRef{
-				Branch: "staging",
-			},
-			beforeFunc: func(obj *sourcev1.GitRepository, latestRev string) {
-				// Set new ignore value.
-				obj.Spec.Ignore = pointer.StringPtr("foo")
-				// Add existing artifact on the object and storage.
-				obj.Status = sourcev1.GitRepositoryStatus{
-					Artifact: &sourcev1.Artifact{
-						Revision: "staging/" + latestRev,
 						Path:     randStringRunes(10),
 					},
 				}
@@ -954,28 +911,6 @@ func TestGitRepositoryReconciler_reconcileArtifact(t *testing.T) {
 			want: sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(sourcev1.ArtifactInStorageCondition, meta.SucceededReason, "stored artifact for revision 'main@sha1:b9b3feadba509cb9b22e968a5d27e96c2bc2ff91'"),
-			},
-		},
-		{
-			name:     "Up-to-date artifact with legacy revision format should not update status",
-			dir:      "testdata/git/repository",
-			includes: artifactSet{&sourcev1.Artifact{Revision: "main@sha1:b9b3feadba509cb9b22e968a5d27e96c2bc2ff91", Digest: "some-checksum"}},
-			beforeFunc: func(obj *sourcev1.GitRepository) {
-				obj.Spec.Interval = metav1.Duration{Duration: interval}
-				obj.Spec.Include = []sourcev1.GitRepositoryInclude{
-					{GitRepositoryRef: meta.LocalObjectReference{Name: "foo"}},
-				}
-				obj.Status.Artifact = &sourcev1.Artifact{Revision: "main/b9b3feadba509cb9b22e968a5d27e96c2bc2ff91"}
-				obj.Status.IncludedArtifacts = []*sourcev1.Artifact{{Revision: "main/b9b3feadba509cb9b22e968a5d27e96c2bc2ff91", Digest: "some-checksum"}}
-				obj.Status.ObservedInclude = obj.Spec.Include
-			},
-			afterFunc: func(t *WithT, obj *sourcev1.GitRepository) {
-				t.Expect(obj.Status.URL).To(BeEmpty())
-				t.Expect(obj.Status.Artifact.Revision).To(Equal("main/b9b3feadba509cb9b22e968a5d27e96c2bc2ff91"))
-			},
-			want: sreconcile.ResultSuccess,
-			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.ArtifactInStorageCondition, meta.SucceededReason, "stored artifact for revision 'main/b9b3feadba509cb9b22e968a5d27e96c2bc2ff91'"),
 			},
 		},
 		{

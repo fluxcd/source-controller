@@ -1318,17 +1318,6 @@ func TestOCIRepository_reconcileSource_noop(t *testing.T) {
 			},
 		},
 		{
-			name: "noop - artifact revisions match (legacy)",
-			beforeFunc: func(obj *ociv1.OCIRepository) {
-				obj.Status.Artifact = &sourcev1.Artifact{
-					Revision: "6.1.5/8e4057c22d531d40e12b065443cb0d80394b7257c4dc557cb1fbd4dce892b86d",
-				}
-			},
-			afterFunc: func(g *WithT, artifact *sourcev1.Artifact) {
-				g.Expect(artifact.Metadata).To(BeEmpty())
-			},
-		},
-		{
 			name: "full reconcile - same rev, unobserved ignore",
 			beforeFunc: func(obj *ociv1.OCIRepository) {
 				obj.Status.ObservedIgnore = pointer.String("aaa")

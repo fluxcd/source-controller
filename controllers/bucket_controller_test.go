@@ -514,7 +514,7 @@ func TestBucketReconciler_reconcileSource_generic(t *testing.T) {
 			bucketName: "dummy",
 			beforeFunc: func(obj *bucketv1.Bucket) {
 				obj.Status.Artifact = &sourcev1.Artifact{
-					Revision: "b4c2a60ce44b67f5b659a95ce4e4cc9e2a86baf13afb72bd397c5384cbc0e479",
+					Revision: "sha256:b4c2a60ce44b67f5b659a95ce4e4cc9e2a86baf13afb72bd397c5384cbc0e479",
 				}
 				conditions.MarkReconciling(obj, meta.ProgressingReason, "foo")
 				conditions.MarkUnknown(obj, meta.ReadyCondition, "foo", "bar")
@@ -856,7 +856,7 @@ func TestBucketReconciler_reconcileSource_gcs(t *testing.T) {
 			bucketName: "dummy",
 			beforeFunc: func(obj *bucketv1.Bucket) {
 				obj.Status.Artifact = &sourcev1.Artifact{
-					Revision: "b4c2a60ce44b67f5b659a95ce4e4cc9e2a86baf13afb72bd397c5384cbc0e479",
+					Revision: "sha256:b4c2a60ce44b67f5b659a95ce4e4cc9e2a86baf13afb72bd397c5384cbc0e479",
 				}
 				conditions.MarkReconciling(obj, meta.ProgressingReason, "foo")
 				conditions.MarkUnknown(obj, meta.ReadyCondition, "foo", "bar")
