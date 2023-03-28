@@ -28,11 +28,13 @@ import (
 	flag "github.com/spf13/pflag"
 	"helm.sh/helm/v3/pkg/getter"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	ctrl "sigs.k8s.io/controller-runtime"
+	ctrlcache "sigs.k8s.io/controller-runtime/pkg/cache"
 	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/fluxcd/pkg/git"
@@ -45,16 +47,16 @@ import (
 	"github.com/fluxcd/pkg/runtime/pprof"
 	"github.com/fluxcd/pkg/runtime/probes"
 
-	"github.com/fluxcd/source-controller/internal/digest"
-	"github.com/fluxcd/source-controller/internal/features"
-	"github.com/fluxcd/source-controller/internal/helm/registry"
+	"github.com/fluxcd/source-controller/api/v1"
+	"github.com/fluxcd/source-controller/api/v1beta2"
+	// +kubebuilder:scaffold:imports
 
-	v1 "github.com/fluxcd/source-controller/api/v1"
-	v1beta2 "github.com/fluxcd/source-controller/api/v1beta2"
 	"github.com/fluxcd/source-controller/controllers"
 	"github.com/fluxcd/source-controller/internal/cache"
+	"github.com/fluxcd/source-controller/internal/digest"
+	"github.com/fluxcd/source-controller/internal/features"
 	"github.com/fluxcd/source-controller/internal/helm"
-	// +kubebuilder:scaffold:imports
+	"github.com/fluxcd/source-controller/internal/helm/registry"
 )
 
 const controllerName = "source-controller"
@@ -92,7 +94,6 @@ func main() {
 		storageAdvAddr           string
 		concurrent               int
 		requeueDependency        time.Duration
-		watchAllNamespaces       bool
 		helmIndexLimit           int64
 		helmChartLimit           int64
 		helmChartFileLimit       int64
@@ -101,6 +102,7 @@ func main() {
 		leaderElectionOptions    leaderelection.Options
 		rateLimiterOptions       helper.RateLimiterOptions
 		featureGates             feathelper.FeatureGates
+		watchOptions             helper.WatchOptions
 		helmCacheMaxSize         int
 		helmCacheTTL             string
 		helmCachePurgeInterval   string
@@ -121,8 +123,6 @@ func main() {
 	flag.StringVar(&storageAdvAddr, "storage-adv-addr", envOrDefault("STORAGE_ADV_ADDR", ""),
 		"The advertised address of the static file server.")
 	flag.IntVar(&concurrent, "concurrent", 2, "The number of concurrent reconciles per controller.")
-	flag.BoolVar(&watchAllNamespaces, "watch-all-namespaces", true,
-		"Watch for custom resources in all namespaces, if set to false it will only watch the runtime namespace.")
 	flag.Int64Var(&helmIndexLimit, "helm-index-max-size", helm.MaxIndexSize,
 		"The max allowed size in bytes of a Helm repository index file.")
 	flag.Int64Var(&helmChartLimit, "helm-chart-max-size", helm.MaxChartSize,
@@ -153,6 +153,7 @@ func main() {
 	leaderElectionOptions.BindFlags(flag.CommandLine)
 	rateLimiterOptions.BindFlags(flag.CommandLine)
 	featureGates.BindFlags(flag.CommandLine)
+	watchOptions.BindFlags(flag.CommandLine)
 
 	flag.Parse()
 
@@ -180,8 +181,26 @@ func main() {
 	helm.MaxChartFileSize = helmChartFileLimit
 
 	watchNamespace := ""
-	if !watchAllNamespaces {
+	if !watchOptions.AllNamespaces {
 		watchNamespace = os.Getenv("RUNTIME_NAMESPACE")
+	}
+
+	var newSelectingCache ctrlcache.NewCacheFunc
+	watchSelector, err := helper.GetWatchSelector(watchOptions)
+	if err != nil {
+		setupLog.Error(err, "unable to configure watch label selector")
+		os.Exit(1)
+	}
+	if watchSelector != labels.Everything() {
+		newSelectingCache = ctrlcache.BuilderWithOptions(ctrlcache.Options{
+			SelectorsByObject: ctrlcache.SelectorsByObject{
+				&v1.GitRepository{}:       {Label: watchSelector},
+				&v1beta2.HelmRepository{}: {Label: watchSelector},
+				&v1beta2.HelmChart{}:      {Label: watchSelector},
+				&v1beta2.Bucket{}:         {Label: watchSelector},
+				&v1beta2.OCIRepository{}:  {Label: watchSelector},
+			},
+		})
 	}
 
 	var disableCacheFor []ctrlclient.Object
@@ -209,6 +228,7 @@ func main() {
 		Namespace:                     watchNamespace,
 		Logger:                        ctrl.Log,
 		ClientDisableCacheFor:         disableCacheFor,
+		NewCache:                      newSelectingCache,
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
