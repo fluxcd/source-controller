@@ -52,7 +52,7 @@ import (
 
 	"github.com/fluxcd/source-controller/controllers"
 	"github.com/fluxcd/source-controller/internal/cache"
-	"github.com/fluxcd/source-controller/internal/digest"
+	intdigest "github.com/fluxcd/source-controller/internal/digest"
 	"github.com/fluxcd/source-controller/internal/features"
 	"github.com/fluxcd/source-controller/internal/helm"
 	"github.com/fluxcd/source-controller/internal/helm/registry"
@@ -144,7 +144,7 @@ func main() {
 		"The duration of time that artifacts from previous reconciliations will be kept in storage before being garbage collected.")
 	flag.IntVar(&artifactRetentionRecords, "artifact-retention-records", 2,
 		"The maximum number of artifacts to be kept in storage after a garbage collection.")
-	flag.StringVar(&artifactDigestAlgo, "artifact-digest-algo", digest.Canonical.String(),
+	flag.StringVar(&artifactDigestAlgo, "artifact-digest-algo", intdigest.Canonical.String(),
 		"The algorithm to use to calculate the digest of artifacts.")
 
 	clientOptions.BindFlags(flag.CommandLine)
@@ -339,6 +339,11 @@ func mustSetupManager(metricsAddr, healthAddr string, watchOpts helper.WatchOpti
 		disableCacheFor = append(disableCacheFor, &corev1.Secret{}, &corev1.ConfigMap{})
 	}
 
+	leaderElectionId := fmt.Sprintf("%s-%s", controllerName, "leader-election")
+	if watchOpts.LabelSelector != "" {
+		leaderElectionId = leaderelection.GenerateID(leaderElectionId, watchOpts.LabelSelector)
+	}
+
 	restConfig := client.GetConfigOrDie(clientOpts)
 	mgr, err := ctrl.NewManager(restConfig, ctrl.Options{
 		Scheme:                        scheme,
@@ -350,7 +355,7 @@ func mustSetupManager(metricsAddr, healthAddr string, watchOpts helper.WatchOpti
 		LeaseDuration:                 &leaderOpts.LeaseDuration,
 		RenewDeadline:                 &leaderOpts.RenewDeadline,
 		RetryPeriod:                   &leaderOpts.RetryPeriod,
-		LeaderElectionID:              fmt.Sprintf("%s-leader-election", controllerName),
+		LeaderElectionID:              leaderElectionId,
 		Namespace:                     watchNamespace,
 		Logger:                        ctrl.Log,
 		ClientDisableCacheFor:         disableCacheFor,
@@ -395,13 +400,13 @@ func mustInitStorage(path string, storageAdvAddr string, artifactRetentionTTL ti
 		storageAdvAddr = determineAdvStorageAddr(storageAdvAddr)
 	}
 
-	if artifactDigestAlgo != digest.Canonical.String() {
-		algo, err := digest.AlgorithmForName(artifactDigestAlgo)
+	if artifactDigestAlgo != intdigest.Canonical.String() {
+		algo, err := intdigest.AlgorithmForName(artifactDigestAlgo)
 		if err != nil {
 			setupLog.Error(err, "unable to configure canonical digest algorithm")
 			os.Exit(1)
 		}
-		digest.Canonical = algo
+		intdigest.Canonical = algo
 	}
 
 	if path == "" {
