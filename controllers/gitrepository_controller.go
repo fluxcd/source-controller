@@ -392,7 +392,6 @@ func (r *GitRepositoryReconciler) reconcileStorage(ctx context.Context, sp *patc
 	var artifactMissing bool
 	if artifact := obj.GetArtifact(); artifact != nil && !r.Storage.ArtifactExist(*artifact) {
 		obj.Status.Artifact = nil
-		obj.Status.URL = ""
 		artifactMissing = true
 		// Remove the condition as the artifact doesn't exist.
 		conditions.Delete(obj, sourcev1.ArtifactInStorageCondition)
@@ -415,7 +414,6 @@ func (r *GitRepositoryReconciler) reconcileStorage(ctx context.Context, sp *patc
 	// Always update URLs to ensure hostname is up-to-date
 	// TODO(hidde): we may want to send out an event only if we notice the URL has changed
 	r.Storage.SetArtifactURL(obj.GetArtifact())
-	obj.Status.URL = r.Storage.SetHostname(obj.Status.URL)
 
 	return sreconcile.ResultSuccess, nil
 }
@@ -700,15 +698,19 @@ func (r *GitRepositoryReconciler) reconcileArtifact(ctx context.Context, sp *pat
 	obj.Status.ObservedRecurseSubmodules = obj.Spec.RecurseSubmodules
 	obj.Status.ObservedInclude = obj.Spec.Include
 
-	// Update symlink on a "best effort" basis
-	url, err := r.Storage.Symlink(artifact, "latest.tar.gz")
-	if err != nil {
-		r.eventLogf(ctx, obj, eventv1.EventTypeTrace, sourcev1.SymlinkUpdateFailedReason,
-			"failed to update status URL symlink: %s", err)
+	// Remove the deprecated symlink.
+	// TODO(hidde): remove 2 minor versions from introduction of v1.
+	symArtifact := artifact.DeepCopy()
+	symArtifact.Path = filepath.Join(filepath.Dir(symArtifact.Path), "latest.tar.gz")
+	if fi, err := os.Lstat(r.Storage.LocalPath(artifact)); err == nil {
+		if fi.Mode()&os.ModeSymlink != 0 {
+			if err := os.Remove(r.Storage.LocalPath(*symArtifact)); err != nil {
+				r.eventLogf(ctx, obj, eventv1.EventTypeTrace, sourcev1.SymlinkUpdateFailedReason,
+					"failed to remove (deprecated) symlink: %s", err)
+			}
+		}
 	}
-	if url != "" {
-		obj.Status.URL = url
-	}
+
 	conditions.Delete(obj, sourcev1.StorageOperationFailedCondition)
 	return sreconcile.ResultSuccess, nil
 }

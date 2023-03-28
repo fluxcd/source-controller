@@ -864,7 +864,6 @@ func TestGitRepositoryReconciler_reconcileArtifact(t *testing.T) {
 			},
 			afterFunc: func(t *WithT, obj *sourcev1.GitRepository) {
 				t.Expect(obj.GetArtifact()).ToNot(BeNil())
-				t.Expect(obj.Status.URL).ToNot(BeEmpty())
 			},
 			want: sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
@@ -885,7 +884,6 @@ func TestGitRepositoryReconciler_reconcileArtifact(t *testing.T) {
 				t.Expect(obj.GetArtifact()).ToNot(BeNil())
 				t.Expect(obj.GetArtifact().Digest).To(Equal("sha256:60a3bf69f337cb5ec9ebd00abefbb6e7f2a2cf27158ecf438d52b2035b184172"))
 				t.Expect(obj.Status.IncludedArtifacts).ToNot(BeEmpty())
-				t.Expect(obj.Status.URL).ToNot(BeEmpty())
 			},
 			want: sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
@@ -904,9 +902,6 @@ func TestGitRepositoryReconciler_reconcileArtifact(t *testing.T) {
 				obj.Status.Artifact = &sourcev1.Artifact{Revision: "main@sha1:b9b3feadba509cb9b22e968a5d27e96c2bc2ff91"}
 				obj.Status.IncludedArtifacts = []*sourcev1.Artifact{{Revision: "main@sha1:b9b3feadba509cb9b22e968a5d27e96c2bc2ff91", Digest: "some-checksum"}}
 				obj.Status.ObservedInclude = obj.Spec.Include
-			},
-			afterFunc: func(t *WithT, obj *sourcev1.GitRepository) {
-				t.Expect(obj.Status.URL).To(BeEmpty())
 			},
 			want: sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
@@ -954,27 +949,6 @@ func TestGitRepositoryReconciler_reconcileArtifact(t *testing.T) {
 			afterFunc: func(t *WithT, obj *sourcev1.GitRepository) {
 				t.Expect(obj.GetArtifact()).ToNot(BeNil())
 				t.Expect(obj.GetArtifact().Digest).To(Equal("sha256:60a3bf69f337cb5ec9ebd00abefbb6e7f2a2cf27158ecf438d52b2035b184172"))
-				t.Expect(obj.Status.URL).ToNot(BeEmpty())
-			},
-			want: sreconcile.ResultSuccess,
-			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.ArtifactInStorageCondition, meta.SucceededReason, "stored artifact for revision 'main@sha1:b9b3feadba509cb9b22e968a5d27e96c2bc2ff91'"),
-			},
-		},
-		{
-			name: "Creates latest symlink to the created artifact",
-			dir:  "testdata/git/repository",
-			beforeFunc: func(obj *sourcev1.GitRepository) {
-				obj.Spec.Interval = metav1.Duration{Duration: interval}
-			},
-			afterFunc: func(t *WithT, obj *sourcev1.GitRepository) {
-				t.Expect(obj.GetArtifact()).ToNot(BeNil())
-
-				localPath := testStorage.LocalPath(*obj.GetArtifact())
-				symlinkPath := filepath.Join(filepath.Dir(localPath), "latest.tar.gz")
-				targetFile, err := os.Readlink(symlinkPath)
-				t.Expect(err).NotTo(HaveOccurred())
-				t.Expect(localPath).To(Equal(targetFile))
 			},
 			want: sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{

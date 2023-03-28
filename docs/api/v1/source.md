@@ -695,20 +695,6 @@ object.</p>
 </tr>
 <tr>
 <td>
-<code>url</code><br>
-<em>
-string
-</em>
-</td>
-<td>
-<em>(Optional)</em>
-<p>URL is the dynamic fetch link for the latest Artifact.
-It is provided on a &ldquo;best effort&rdquo; basis, and using the precise
-GitRepositoryStatus.Artifact data is recommended.</p>
-</td>
-</tr>
-<tr>
-<td>
 <code>artifact</code><br>
 <em>
 <a href="#source.toolkit.fluxcd.io/v1.Artifact">

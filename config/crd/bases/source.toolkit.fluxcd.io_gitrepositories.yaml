@@ -391,11 +391,6 @@ spec:
                 description: ObservedRecurseSubmodules is the observed resource submodules
                   configuration used to produce the current Artifact.
                 type: boolean
-              url:
-                description: URL is the dynamic fetch link for the latest Artifact.
-                  It is provided on a "best effort" basis, and using the precise GitRepositoryStatus.Artifact
-                  data is recommended.
-                type: string
             type: object
         type: object
     served: true

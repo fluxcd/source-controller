@@ -183,12 +183,6 @@ type GitRepositoryStatus struct {
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 
-	// URL is the dynamic fetch link for the latest Artifact.
-	// It is provided on a "best effort" basis, and using the precise
-	// GitRepositoryStatus.Artifact data is recommended.
-	// +optional
-	URL string `json:"url,omitempty"`
-
 	// Artifact represents the last successful GitRepository reconciliation.
 	// +optional
 	Artifact *Artifact `json:"artifact,omitempty"`
