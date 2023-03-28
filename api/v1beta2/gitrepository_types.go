@@ -23,6 +23,7 @@ import (
 
 	"github.com/fluxcd/pkg/apis/acl"
 	"github.com/fluxcd/pkg/apis/meta"
+
 	apiv1 "github.com/fluxcd/source-controller/api/v1"
 )
 
@@ -191,7 +192,7 @@ type GitRepositoryVerification struct {
 
 	// SecretRef specifies the Secret containing the public keys of trusted Git
 	// authors.
-	SecretRef meta.LocalObjectReference `json:"secretRef,omitempty"`
+	SecretRef meta.LocalObjectReference `json:"secretRef"`
 }
 
 // GitRepositoryStatus records the observed state of a Git repository.

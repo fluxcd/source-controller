@@ -39,7 +39,7 @@ type Artifact struct {
 
 	// Revision is a human-readable identifier traceable in the origin source
 	// system. It can be a Git commit SHA, Git tag, a Helm chart version, etc.
-	// +optional
+	// +required
 	Revision string `json:"revision"`
 
 	// Digest is the digest of the file in the form of '<algorithm>:<checksum>'.
@@ -50,7 +50,7 @@ type Artifact struct {
 	// LastUpdateTime is the timestamp corresponding to the last update of the
 	// Artifact.
 	// +required
-	LastUpdateTime metav1.Time `json:"lastUpdateTime,omitempty"`
+	LastUpdateTime metav1.Time `json:"lastUpdateTime"`
 
 	// Size is the number of bytes in the file.
 	// +optional

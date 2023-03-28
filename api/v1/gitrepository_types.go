@@ -96,6 +96,7 @@ type GitRepositorySpec struct {
 
 	// Include specifies a list of GitRepository resources which Artifacts
 	// should be included in the Artifact produced for this GitRepository.
+	// +optional
 	Include []GitRepositoryInclude `json:"include,omitempty"`
 }
 
@@ -104,17 +105,18 @@ type GitRepositorySpec struct {
 type GitRepositoryInclude struct {
 	// GitRepositoryRef specifies the GitRepository which Artifact contents
 	// must be included.
+	// +required
 	GitRepositoryRef meta.LocalObjectReference `json:"repository"`
 
 	// FromPath specifies the path to copy contents from, defaults to the root
 	// of the Artifact.
 	// +optional
-	FromPath string `json:"fromPath"`
+	FromPath string `json:"fromPath,omitempty"`
 
 	// ToPath specifies the path to copy contents to, defaults to the name of
 	// the GitRepositoryRef.
 	// +optional
-	ToPath string `json:"toPath"`
+	ToPath string `json:"toPath,omitempty"`
 }
 
 // GetFromPath returns the specified FromPath.
@@ -169,7 +171,8 @@ type GitRepositoryVerification struct {
 
 	// SecretRef specifies the Secret containing the public keys of trusted Git
 	// authors.
-	SecretRef meta.LocalObjectReference `json:"secretRef,omitempty"`
+	// +required
+	SecretRef meta.LocalObjectReference `json:"secretRef"`
 }
 
 // GitRepositoryStatus records the observed state of a Git repository.

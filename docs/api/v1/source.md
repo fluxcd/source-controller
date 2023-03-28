@@ -205,6 +205,7 @@ the GitRepository as cloned from the URL, using their default settings.</p>
 </em>
 </td>
 <td>
+<em>(Optional)</em>
 <p>Include specifies a list of GitRepository resources which Artifacts
 should be included in the Artifact produced for this GitRepository.</p>
 </td>
@@ -279,7 +280,6 @@ string
 </em>
 </td>
 <td>
-<em>(Optional)</em>
 <p>Revision is a human-readable identifier traceable in the origin source
 system. It can be a Git commit SHA, Git tag, a Helm chart version, etc.</p>
 </td>
@@ -641,6 +641,7 @@ the GitRepository as cloned from the URL, using their default settings.</p>
 </em>
 </td>
 <td>
+<em>(Optional)</em>
 <p>Include specifies a list of GitRepository resources which Artifacts
 should be included in the Artifact produced for this GitRepository.</p>
 </td>

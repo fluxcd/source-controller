@@ -411,7 +411,9 @@ spec:
                       the Artifact contents.
                     type: string
                 required:
+                - lastUpdateTime
                 - path
+                - revision
                 - url
                 type: object
               conditions:
