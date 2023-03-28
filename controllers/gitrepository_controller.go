@@ -53,6 +53,7 @@ import (
 	rreconcile "github.com/fluxcd/pkg/runtime/reconcile"
 
 	"github.com/fluxcd/pkg/sourceignore"
+
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	serror "github.com/fluxcd/source-controller/internal/error"
 	"github.com/fluxcd/source-controller/internal/features"
@@ -381,8 +382,8 @@ func (r *GitRepositoryReconciler) shouldNotify(oldObj, newObj *sourcev1.GitRepos
 // it is removed from the object.
 // If the object does not have an Artifact in its Status, a Reconciling
 // condition is added.
-// The hostname of any URL in the Status of the object are updated, to ensure
-// they match the Storage server hostname of current runtime.
+// The hostname of the Artifact in the Status of the object is updated, to
+// ensure it matches the Storage server hostname of current runtime.
 func (r *GitRepositoryReconciler) reconcileStorage(ctx context.Context, sp *patch.SerialPatcher,
 	obj *sourcev1.GitRepository, _ *git.Commit, _ *artifactSet, _ string) (sreconcile.Result, error) {
 	// Garbage collect previous advertised artifact(s) from storage
@@ -606,8 +607,7 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 // Source ignore patterns are loaded, and the given directory is archived while
 // taking these patterns into account.
 // On a successful archive, the Artifact, Includes, observed ignore, recurse
-// submodules and observed include in the Status of the object are set, and the
-// symlink in the Storage is updated to its path.
+// submodules and observed include in the Status of the object are set.
 func (r *GitRepositoryReconciler) reconcileArtifact(ctx context.Context, sp *patch.SerialPatcher,
 	obj *sourcev1.GitRepository, commit *git.Commit, includes *artifactSet, dir string) (sreconcile.Result, error) {
 
