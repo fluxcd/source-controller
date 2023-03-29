@@ -21,7 +21,6 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"path/filepath"
 	"time"
 
 	flag "github.com/spf13/pflag"
@@ -407,14 +406,6 @@ func mustInitStorage(path string, storageAdvAddr string, artifactRetentionTTL ti
 			os.Exit(1)
 		}
 		intdigest.Canonical = algo
-	}
-
-	if path == "" {
-		p, _ := os.Getwd()
-		// TODO(hidde): look at this default path, seems to be an artifact of
-		//  old things.
-		path = filepath.Join(p, "bin")
-		os.MkdirAll(path, 0o700)
 	}
 
 	storage, err := controllers.NewStorage(path, storageAdvAddr, artifactRetentionTTL, artifactRetentionRecords)
