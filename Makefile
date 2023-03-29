@@ -94,7 +94,8 @@ test-api: ## Run api tests
 	cd api; go test $(GO_TEST_ARGS) ./... -coverprofile cover.out
 
 run: generate fmt vet manifests  ## Run against the configured Kubernetes cluster in ~/.kube/config
-	go run $(GO_STATIC_FLAGS) ./main.go
+	@mkdir -p $(PWD)/bin/data
+	go run $(GO_STATIC_FLAGS) ./main.go --storage-adv-addr=:0 --storage-path=$(PWD)/bin/data
 
 install: manifests  ## Install CRDs into a cluster
 	kustomize build config/crd | kubectl apply -f -
