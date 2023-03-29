@@ -23,7 +23,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@24cb9080177205b6e8c946b17badbe402adc938f # v3.4.0
+        uses: actions/checkout@8f4b7f84864484a7bf31766abe9204da3cbe65b3 # v3.5.0
       - name: Setup Kustomize
         uses: fluxcd/pkg/actions/kustomize@main
       - name: Prepare
@@ -92,7 +92,7 @@ jobs:
           kustomize build ./config/crd > ./config/release/${{ env.CONTROLLER }}.crds.yaml
           kustomize build ./config/manager > ./config/release/${{ env.CONTROLLER }}.deployment.yaml
           echo '[CHANGELOG](https://github.com/fluxcd/${{ env.CONTROLLER }}/blob/main/CHANGELOG.md)' > ./config/release/notes.md
-      - uses: anchore/sbom-action/download-syft@07978da4bdb4faa726e52dfc6b1bed63d4b56479 # v0.13.3
+      - uses: anchore/sbom-action/download-syft@448520c4f19577ffce70a8317e619089054687e3 # v0.13.4
       - name: Create release and SBOM
         if: startsWith(github.ref, 'refs/tags/v')
         uses: goreleaser/goreleaser-action@f82d6c1c344bcacabba2c841718984797f664a6b # v4.2.0
