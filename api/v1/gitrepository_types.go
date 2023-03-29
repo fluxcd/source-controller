@@ -1,5 +1,5 @@
 /*
-Copyright 2022 The Flux authors
+Copyright 2023 The Flux authors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -14,27 +14,19 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package v1beta2
+package v1
 
 import (
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/fluxcd/pkg/apis/acl"
 	"github.com/fluxcd/pkg/apis/meta"
-
-	apiv1 "github.com/fluxcd/source-controller/api/v1"
 )
 
 const (
 	// GitRepositoryKind is the string representation of a GitRepository.
 	GitRepositoryKind = "GitRepository"
-
-	// GoGitImplementation for performing Git operations using go-git.
-	GoGitImplementation = "go-git"
-	// LibGit2Implementation for performing Git operations using libgit2.
-	LibGit2Implementation = "libgit2"
 )
 
 const (
@@ -97,15 +89,6 @@ type GitRepositorySpec struct {
 	// +optional
 	Suspend bool `json:"suspend,omitempty"`
 
-	// GitImplementation specifies which Git client library implementation to
-	// use. Defaults to 'go-git', valid values are ('go-git', 'libgit2').
-	// Deprecated: gitImplementation is deprecated now that 'go-git' is the
-	// only supported implementation.
-	// +kubebuilder:validation:Enum=go-git;libgit2
-	// +kubebuilder:default:=go-git
-	// +optional
-	GitImplementation string `json:"gitImplementation,omitempty"`
-
 	// RecurseSubmodules enables the initialization of all submodules within
 	// the GitRepository as cloned from the URL, using their default settings.
 	// +optional
@@ -113,13 +96,8 @@ type GitRepositorySpec struct {
 
 	// Include specifies a list of GitRepository resources which Artifacts
 	// should be included in the Artifact produced for this GitRepository.
-	Include []GitRepositoryInclude `json:"include,omitempty"`
-
-	// AccessFrom specifies an Access Control List for allowing cross-namespace
-	// references to this object.
-	// NOTE: Not implemented, provisional as of https://github.com/fluxcd/flux2/pull/2092
 	// +optional
-	AccessFrom *acl.AccessFrom `json:"accessFrom,omitempty"`
+	Include []GitRepositoryInclude `json:"include,omitempty"`
 }
 
 // GitRepositoryInclude specifies a local reference to a GitRepository which
@@ -127,17 +105,18 @@ type GitRepositorySpec struct {
 type GitRepositoryInclude struct {
 	// GitRepositoryRef specifies the GitRepository which Artifact contents
 	// must be included.
+	// +required
 	GitRepositoryRef meta.LocalObjectReference `json:"repository"`
 
 	// FromPath specifies the path to copy contents from, defaults to the root
 	// of the Artifact.
 	// +optional
-	FromPath string `json:"fromPath"`
+	FromPath string `json:"fromPath,omitempty"`
 
 	// ToPath specifies the path to copy contents to, defaults to the name of
 	// the GitRepositoryRef.
 	// +optional
-	ToPath string `json:"toPath"`
+	ToPath string `json:"toPath,omitempty"`
 }
 
 // GetFromPath returns the specified FromPath.
@@ -192,6 +171,7 @@ type GitRepositoryVerification struct {
 
 	// SecretRef specifies the Secret containing the public keys of trusted Git
 	// authors.
+	// +required
 	SecretRef meta.LocalObjectReference `json:"secretRef"`
 }
 
@@ -206,35 +186,14 @@ type GitRepositoryStatus struct {
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 
-	// URL is the dynamic fetch link for the latest Artifact.
-	// It is provided on a "best effort" basis, and using the precise
-	// GitRepositoryStatus.Artifact data is recommended.
-	// +optional
-	URL string `json:"url,omitempty"`
-
 	// Artifact represents the last successful GitRepository reconciliation.
 	// +optional
-	Artifact *apiv1.Artifact `json:"artifact,omitempty"`
+	Artifact *Artifact `json:"artifact,omitempty"`
 
 	// IncludedArtifacts contains a list of the last successfully included
 	// Artifacts as instructed by GitRepositorySpec.Include.
 	// +optional
-	IncludedArtifacts []*apiv1.Artifact `json:"includedArtifacts,omitempty"`
-
-	// ContentConfigChecksum is a checksum of all the configurations related to
-	// the content of the source artifact:
-	//  - .spec.ignore
-	//  - .spec.recurseSubmodules
-	//  - .spec.included and the checksum of the included artifacts
-	// observed in .status.observedGeneration version of the object. This can
-	// be used to determine if the content of the included repository has
-	// changed.
-	// It has the format of `<algo>:<checksum>`, for example: `sha256:<checksum>`.
-	//
-	// Deprecated: Replaced with explicit fields for observed artifact content
-	// config in the status.
-	// +optional
-	ContentConfigChecksum string `json:"contentConfigChecksum,omitempty"`
+	IncludedArtifacts []*Artifact `json:"includedArtifacts,omitempty"`
 
 	// ObservedIgnore is the observed exclusion patterns used for constructing
 	// the source artifact.
@@ -247,7 +206,7 @@ type GitRepositoryStatus struct {
 	ObservedRecurseSubmodules bool `json:"observedRecurseSubmodules,omitempty"`
 
 	// ObservedInclude is the observed list of GitRepository resources used to
-	// to produce the current Artifact.
+	// produce the current Artifact.
 	// +optional
 	ObservedInclude []GitRepositoryInclude `json:"observedInclude,omitempty"`
 
@@ -282,16 +241,16 @@ func (in GitRepository) GetRequeueAfter() time.Duration {
 
 // GetArtifact returns the latest Artifact from the GitRepository if present in
 // the status sub-resource.
-func (in *GitRepository) GetArtifact() *apiv1.Artifact {
+func (in *GitRepository) GetArtifact() *Artifact {
 	return in.Status.Artifact
 }
 
 // +genclient
 // +genclient:Namespaced
+// +kubebuilder:storageversion
 // +kubebuilder:object:root=true
 // +kubebuilder:resource:shortName=gitrepo
 // +kubebuilder:subresource:status
-// +kubebuilder:deprecatedversion:warning="v1beta2 GitRepository is deprecated, upgrade to v1"
 // +kubebuilder:printcolumn:name="URL",type=string,JSONPath=`.spec.url`
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description=""
 // +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type==\"Ready\")].status",description=""

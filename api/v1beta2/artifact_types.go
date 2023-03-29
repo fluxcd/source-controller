@@ -25,6 +25,9 @@ import (
 )
 
 // Artifact represents the output of a Source reconciliation.
+//
+// Deprecated: use Artifact from api/v1 instead. This type will be removed in
+// a future release.
 type Artifact struct {
 	// Path is the relative file path of the Artifact. It can be used to locate
 	// the file in the root of the Artifact storage on the local file system of

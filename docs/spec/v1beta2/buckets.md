@@ -1,5 +1,7 @@
 # Buckets
 
+<!-- menuweight:30 -->
+
 The `Bucket` API defines a Source to produce an Artifact for objects from storage
 solutions like Amazon S3, Google Cloud Storage buckets, or any other solution
 with a S3 compatible API such as Minio, Alibaba Cloud OSS and others.
@@ -81,7 +83,6 @@ control over.
    ...
    Status:
      Artifact:
-       Checksum:          72aa638abb455ca5f9ef4825b949fd2de4d4be0a74895bf7ed2338622cd12686
        Digest:            sha256:72aa638abb455ca5f9ef4825b949fd2de4d4be0a74895bf7ed2338622cd12686
        Last Update Time:  2022-02-01T23:43:38Z
        Path:              bucket/default/minio-bucket/e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855.tar.gz
@@ -895,12 +896,12 @@ Events:
 
 #### Trace emitted Events
 
-To view events for specific Bucket(s), `kubectl get events` can be used in
-combination with `--field-sector` to list the Events for specific objects.
-For example, running
+To view events for specific Bucket(s), `kubectl events` can be used in
+combination with `--for` to list the Events for specific objects. For example,
+running
 
 ```sh
-kubectl get events --field-selector involvedObject.kind=Bucket,involvedObject.name=<bucket-name>
+kubectl events --for Bucket/<bucket-name>
 ```
 
 lists
@@ -937,7 +938,6 @@ metadata:
   name: <bucket-name>
 status:
   artifact:
-    checksum: cbec34947cc2f36dee8adcdd12ee62ca6a8a36699fc6e56f6220385ad5bd421a
     digest: sha256:cbec34947cc2f36dee8adcdd12ee62ca6a8a36699fc6e56f6220385ad5bd421a
     lastUpdateTime: "2022-01-28T10:30:30Z"
     path: bucket/<namespace>/<bucket-name>/c3ab8ff13720e8ad9047dd39466b3c8974e592c2fa383d4a3960714caef0c4f2.tar.gz

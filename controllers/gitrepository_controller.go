@@ -53,7 +53,8 @@ import (
 	rreconcile "github.com/fluxcd/pkg/runtime/reconcile"
 
 	"github.com/fluxcd/pkg/sourceignore"
-	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
+
+	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	serror "github.com/fluxcd/source-controller/internal/error"
 	"github.com/fluxcd/source-controller/internal/features"
 	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
@@ -325,15 +326,7 @@ func (r *GitRepositoryReconciler) notify(ctx context.Context, oldObj, newObj *so
 	if r.shouldNotify(oldObj, newObj, res, resErr) {
 		annotations := map[string]string{
 			fmt.Sprintf("%s/%s", sourcev1.GroupVersion.Group, eventv1.MetaRevisionKey): newObj.Status.Artifact.Revision,
-			fmt.Sprintf("%s/%s", sourcev1.GroupVersion.Group, eventv1.MetaChecksumKey): newObj.Status.Artifact.Checksum,
-		}
-		if newObj.Status.Artifact.Digest != "" {
-			annotations[sourcev1.GroupVersion.Group+"/"+eventv1.MetaDigestKey] = newObj.Status.Artifact.Digest
-		}
-
-		var oldChecksum string
-		if oldObj.GetArtifact() != nil {
-			oldChecksum = oldObj.GetArtifact().Checksum
+			fmt.Sprintf("%s/%s", sourcev1.GroupVersion.Group, eventv1.MetaDigestKey):   newObj.Status.Artifact.Digest,
 		}
 
 		// A partial commit due to no-op clone doesn't contain the commit
@@ -346,7 +339,7 @@ func (r *GitRepositoryReconciler) notify(ctx context.Context, oldObj, newObj *so
 		}
 
 		// Notify on new artifact and failure recovery.
-		if oldChecksum != newObj.GetArtifact().Checksum {
+		if !oldObj.GetArtifact().HasDigest(newObj.GetArtifact().Digest) {
 			r.AnnotatedEventf(newObj, annotations, corev1.EventTypeNormal,
 				"NewArtifact", message)
 			ctrl.LoggerFrom(ctx).Info(message)
@@ -389,8 +382,8 @@ func (r *GitRepositoryReconciler) shouldNotify(oldObj, newObj *sourcev1.GitRepos
 // it is removed from the object.
 // If the object does not have an Artifact in its Status, a Reconciling
 // condition is added.
-// The hostname of any URL in the Status of the object are updated, to ensure
-// they match the Storage server hostname of current runtime.
+// The hostname of the Artifact in the Status of the object is updated, to
+// ensure it matches the Storage server hostname of current runtime.
 func (r *GitRepositoryReconciler) reconcileStorage(ctx context.Context, sp *patch.SerialPatcher,
 	obj *sourcev1.GitRepository, _ *git.Commit, _ *artifactSet, _ string) (sreconcile.Result, error) {
 	// Garbage collect previous advertised artifact(s) from storage
@@ -400,7 +393,6 @@ func (r *GitRepositoryReconciler) reconcileStorage(ctx context.Context, sp *patc
 	var artifactMissing bool
 	if artifact := obj.GetArtifact(); artifact != nil && !r.Storage.ArtifactExist(*artifact) {
 		obj.Status.Artifact = nil
-		obj.Status.URL = ""
 		artifactMissing = true
 		// Remove the condition as the artifact doesn't exist.
 		conditions.Delete(obj, sourcev1.ArtifactInStorageCondition)
@@ -423,7 +415,6 @@ func (r *GitRepositoryReconciler) reconcileStorage(ctx context.Context, sp *patc
 	// Always update URLs to ensure hostname is up-to-date
 	// TODO(hidde): we may want to send out an event only if we notice the URL has changed
 	r.Storage.SetArtifactURL(obj.GetArtifact())
-	obj.Status.URL = r.Storage.SetHostname(obj.Status.URL)
 
 	return sreconcile.ResultSuccess, nil
 }
@@ -616,8 +607,7 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 // Source ignore patterns are loaded, and the given directory is archived while
 // taking these patterns into account.
 // On a successful archive, the Artifact, Includes, observed ignore, recurse
-// submodules and observed include in the Status of the object are set, and the
-// symlink in the Storage is updated to its path.
+// submodules and observed include in the Status of the object are set.
 func (r *GitRepositoryReconciler) reconcileArtifact(ctx context.Context, sp *patch.SerialPatcher,
 	obj *sourcev1.GitRepository, commit *git.Commit, includes *artifactSet, dir string) (sreconcile.Result, error) {
 
@@ -704,20 +694,23 @@ func (r *GitRepositoryReconciler) reconcileArtifact(ctx context.Context, sp *pat
 	// Record the observations on the object.
 	obj.Status.Artifact = artifact.DeepCopy()
 	obj.Status.IncludedArtifacts = *includes
-	obj.Status.ContentConfigChecksum = "" // To be removed in the next API version.
 	obj.Status.ObservedIgnore = obj.Spec.Ignore
 	obj.Status.ObservedRecurseSubmodules = obj.Spec.RecurseSubmodules
 	obj.Status.ObservedInclude = obj.Spec.Include
 
-	// Update symlink on a "best effort" basis
-	url, err := r.Storage.Symlink(artifact, "latest.tar.gz")
-	if err != nil {
-		r.eventLogf(ctx, obj, eventv1.EventTypeTrace, sourcev1.SymlinkUpdateFailedReason,
-			"failed to update status URL symlink: %s", err)
+	// Remove the deprecated symlink.
+	// TODO(hidde): remove 2 minor versions from introduction of v1.
+	symArtifact := artifact.DeepCopy()
+	symArtifact.Path = filepath.Join(filepath.Dir(symArtifact.Path), "latest.tar.gz")
+	if fi, err := os.Lstat(r.Storage.LocalPath(artifact)); err == nil {
+		if fi.Mode()&os.ModeSymlink != 0 {
+			if err := os.Remove(r.Storage.LocalPath(*symArtifact)); err != nil {
+				r.eventLogf(ctx, obj, eventv1.EventTypeTrace, sourcev1.SymlinkUpdateFailedReason,
+					"failed to remove (deprecated) symlink: %s", err)
+			}
+		}
 	}
-	if url != "" {
-		obj.Status.URL = url
-	}
+
 	conditions.Delete(obj, sourcev1.StorageOperationFailedCondition)
 	return sreconcile.ResultSuccess, nil
 }
@@ -1019,7 +1012,7 @@ func gitContentConfigChanged(obj *sourcev1.GitRepository, includes *artifactSet)
 		observedInclArtifact := obj.Status.IncludedArtifacts[index]
 		currentIncl := artifacts[index]
 
-		// Check if the include are the same in spec and status.
+		// Check if include is the same in spec and status.
 		if !gitRepositoryIncludeEqual(incl, observedIncl) {
 			return true
 		}
@@ -1028,7 +1021,7 @@ func gitContentConfigChanged(obj *sourcev1.GitRepository, includes *artifactSet)
 		if !observedInclArtifact.HasRevision(currentIncl.Revision) {
 			return true
 		}
-		if observedInclArtifact.Checksum != currentIncl.Checksum {
+		if !observedInclArtifact.HasDigest(currentIncl.Digest) {
 			return true
 		}
 	}

@@ -22,6 +22,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fluxcd/pkg/apis/meta"
+	apiv1 "github.com/fluxcd/source-controller/api/v1"
 )
 
 const (
@@ -201,7 +202,7 @@ type OCIRepositoryStatus struct {
 
 	// Artifact represents the output of the last successful OCI Repository sync.
 	// +optional
-	Artifact *Artifact `json:"artifact,omitempty"`
+	Artifact *apiv1.Artifact `json:"artifact,omitempty"`
 
 	// ContentConfigChecksum is a checksum of all the configurations related to
 	// the content of the source artifact:
@@ -256,7 +257,7 @@ func (in OCIRepository) GetRequeueAfter() time.Duration {
 
 // GetArtifact returns the latest Artifact from the OCIRepository if present in
 // the status sub-resource.
-func (in *OCIRepository) GetArtifact() *Artifact {
+func (in *OCIRepository) GetArtifact() *apiv1.Artifact {
 	return in.Status.Artifact
 }
 

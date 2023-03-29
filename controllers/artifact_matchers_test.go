@@ -19,7 +19,7 @@ package controllers
 import (
 	"fmt"
 
-	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
+	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/types"
 )
@@ -49,9 +49,6 @@ func (m matchArtifact) Match(actual interface{}) (success bool, err error) {
 		return ok, err
 	}
 	if ok, err = Equal(m.expected.Revision).Match(actualArtifact.Revision); !ok {
-		return ok, err
-	}
-	if ok, err = Equal(m.expected.Checksum).Match(actualArtifact.Checksum); !ok {
 		return ok, err
 	}
 	if ok, err = Equal(m.expected.Size).Match(actualArtifact.Size); !ok {

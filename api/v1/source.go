@@ -1,5 +1,5 @@
 /*
-Copyright 2022 The Flux authors
+Copyright 2023 The Flux authors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package v1beta2
+package v1
 
 import (
 	"time"
@@ -32,9 +32,6 @@ const (
 // Source is the interface that provides generic access to the Artifact and
 // interval. It must be supported by all kinds of the source.toolkit.fluxcd.io
 // API group.
-//
-// Deprecated: use the Source interface from api/v1 instead. This type will be
-// removed in a future release.
 //
 // +k8s:deepcopy-gen=false
 type Source interface {

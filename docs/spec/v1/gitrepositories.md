@@ -13,7 +13,7 @@ resolved reference.
 
 ```yaml
 ---
-apiVersion: source.toolkit.fluxcd.io/v1beta2
+apiVersion: source.toolkit.fluxcd.io/v1
 kind: GitRepository
 metadata:
   name: podinfo
@@ -81,7 +81,6 @@ You can run this example by saving the manifest into `gitrepository.yaml`.
        Status:                True
        Type:                  ArtifactInStorage
      Observed Generation:     1
-     URL:                     http://source-controller.source-system.svc.cluster.local./gitrepository/default/podinfo/latest.tar.gz
    Events:
      Type    Reason               Age   From               Message
      ----    ------               ----  ----               -------
@@ -239,7 +238,7 @@ To Git checkout a specified branch, use `.spec.ref.branch`:
 
 ```yaml
 ---
-apiVersion: source.toolkit.fluxcd.io/v1beta2
+apiVersion: source.toolkit.fluxcd.io/v1
 kind: GitRepository
 metadata:
   name: <repository-name>
@@ -256,7 +255,7 @@ To Git checkout a specified tag, use `.spec.ref.tag`:
 
 ```yaml
 ---
-apiVersion: source.toolkit.fluxcd.io/v1beta2
+apiVersion: source.toolkit.fluxcd.io/v1
 kind: GitRepository
 metadata:
   name: <repository-name>
@@ -275,7 +274,7 @@ use `.spec.ref.semver`:
 
 ```yaml
 ---
-apiVersion: source.toolkit.fluxcd.io/v1beta2
+apiVersion: source.toolkit.fluxcd.io/v1
 kind: GitRepository
 metadata:
   name: <repository-name>
@@ -291,12 +290,12 @@ This field takes precedence over [`.branch`](#branch-example) and
 
 #### Name example
 
-To Git checkout a specfied [reference](https://git-scm.com/book/en/v2/Git-Internals-Git-References),
+To Git checkout a specified [reference](https://git-scm.com/book/en/v2/Git-Internals-Git-References),
 use `.spec.ref.name`:
 
 ```yaml
 ---
-apiVersion: source.toolkit.fluxcd.io/v1beta2
+apiVersion: source.toolkit.fluxcd.io/v1
 kind: GitRepository
 metadata:
   name: <repository-name>
@@ -318,7 +317,7 @@ To Git checkout a specified commit, use `.spec.ref.commit`:
 
 ```yaml
 ---
-apiVersion: source.toolkit.fluxcd.io/v1beta2
+apiVersion: source.toolkit.fluxcd.io/v1
 kind: GitRepository
 metadata:
   name: <repository-name>
@@ -333,7 +332,7 @@ commit must exist:
 
 ```yaml
 ---
-apiVersion: source.toolkit.fluxcd.io/v1beta2
+apiVersion: source.toolkit.fluxcd.io/v1
 kind: GitRepository
 metadata:
   name: <repository-name>
@@ -426,11 +425,6 @@ GitRepository, and changes to the resource or in the Git repository will not
 result in a new Artifact. When the field is set to `false` or removed, it will
 resume.
 
-### Git implementation
-
-`.spec.gitImplementation` is deprecated and its value ignored, the git
-implementation used across Flux is go-git.
-
 #### Optimized Git clones
 
 Optimized Git clones decreases resource utilization for GitRepository
@@ -481,7 +475,7 @@ multiple benefits over regular submodules:
 
 ```yaml
 ---
-apiVersion: source.toolkit.fluxcd.io/v1beta2
+apiVersion: source.toolkit.fluxcd.io/v1
 kind: GitRepository
 metadata:
   name: include-example
@@ -526,7 +520,7 @@ exclusions.
 
 ```yaml
 ---
-apiVersion: source.toolkit.fluxcd.io/v1beta2
+apiVersion: source.toolkit.fluxcd.io/v1
 kind: GitRepository
 metadata:
   name: <repository-name>
@@ -583,7 +577,7 @@ In your YAML declaration:
 
 ```yaml
 ---
-apiVersion: source.toolkit.fluxcd.io/v1beta2
+apiVersion: source.toolkit.fluxcd.io/v1
 kind: GitRepository
 metadata:
   name: <repository-name>
@@ -614,7 +608,7 @@ In your YAML declaration, comment out (or remove) the field:
 
 ```yaml
 ---
-apiVersion: source.toolkit.fluxcd.io/v1beta2
+apiVersion: source.toolkit.fluxcd.io/v1
 kind: GitRepository
 metadata:
   name: <repository-name>
@@ -675,7 +669,6 @@ Status:
     Status:                True
     Type:                  FetchFailed
   Observed Generation:     1
-  URL:                     http://source-controller.source-system.svc.cluster.local./gitrepository/default/gitrepository-sample/latest.tar.gz
 Events:
   Type     Reason                      Age                  From               Message
   ----     ------                      ----                 ----               -------
@@ -684,12 +677,12 @@ Events:
 
 #### Trace emitted Events
 
-To view events for specific GitRepository(s), `kubectl get events` can be used
-in combination with `--field-sector` to list the Events for specific objects.
-For example, running
+To view events for specific GitRepository(s), `kubectl events` can be used in
+combination with `--for` to list the Events for specific objects. For example,
+running
 
 ```sh
-kubectl get events --field-selector involvedObject.kind=GitRepository,involvedObject.name=<repository-name>
+kubectl events --for GitRepository/<repository-name>
 ```
 
 lists
@@ -720,7 +713,7 @@ can be retrieved in-cluster from the `.status.artifact.url` HTTP address.
 
 ```yaml
 ---
-apiVersion: source.toolkit.fluxcd.io/v1beta2
+apiVersion: source.toolkit.fluxcd.io/v1
 kind: GitRepository
 metadata:
   name: <repository-name>
@@ -872,19 +865,6 @@ configuration issue in the GitRepository spec. When a reconciliation fails, the
 `Reconciling` Condition reason would be `ProgressingWithRetry`. When the
 reconciliation is performed again after the failure, the reason is updated to
 `Progressing`.
-
-### Content Configuration Checksum
-
-The source-controller calculates the SHA256 checksum of the various
-configurations of the GitRepository that indicate a change in source and
-records it in `.status.contentConfigChecksum`. This field is used to determine
-if the source artifact needs to be rebuilt.
-
-**Deprecation Note:** `contentConfigChecksum` is no longer used and will be
-removed in the next API version. The individual components used for generating
-content configuration checksum now have explicit fields in the status. This
-makes the observations used by the controller for making artifact rebuild
-decisions more transparent and easier to debug.
 
 ### Observed Ignore
 

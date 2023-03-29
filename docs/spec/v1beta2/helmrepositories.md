@@ -1,5 +1,7 @@
 # Helm Repositories
 
+<!-- menuweight:40 -->
+
 There are 2 [Helm repository types](#type) defined by the `HelmRepository` API:
 - Helm HTTP/S repository, which defines a Source to produce an Artifact for a Helm
 repository index YAML (`index.yaml`). 
@@ -63,7 +65,6 @@ You can run this example by saving the manifest into `helmrepository.yaml`.
    ...
    Status:
      Artifact:
-       Checksum:          83a3c595163a6ff0333e0154c790383b5be441b9db632cb36da11db1c4ece111
        Digest:            sha256:83a3c595163a6ff0333e0154c790383b5be441b9db632cb36da11db1c4ece111
        Last Update Time:  2022-02-04T09:55:58Z
        Path:              helmrepository/default/podinfo/index-83a3c595163a6ff0333e0154c790383b5be441b9db632cb36da11db1c4ece111.yaml
@@ -597,12 +598,12 @@ Events:
 
 #### Trace emitted Events
 
-To view events for specific HelmRepository(s), `kubectl get events` can be used in
-combination with `--field-sector` to list the Events for specific objects.
-For example, running
+To view events for specific HelmRepository(s), `kubectl events` can be used in
+combination with `--for` to list the Events for specific objects. For example,
+running
 
 ```sh
-kubectl get events --field-selector involvedObject.kind=HelmRepository,involvedObject.name=<repository-name>
+kubectl events --for HelmRepository/<repository-name>
 ```
 
 lists
@@ -641,7 +642,6 @@ metadata:
   name: <repository-name>
 status:
   artifact:
-    checksum: 83a3c595163a6ff0333e0154c790383b5be441b9db632cb36da11db1c4ece111
     digest: sha256:83a3c595163a6ff0333e0154c790383b5be441b9db632cb36da11db1c4ece111
     lastUpdateTime: "2022-02-04T09:55:58Z"
     path: helmrepository/<namespace>/<repository-name>/index-83a3c595163a6ff0333e0154c790383b5be441b9db632cb36da11db1c4ece111.yaml
