@@ -2,6 +2,78 @@
 
 All notable changes to this project are documented in this file.
 
+## 1.0.0-rc.1
+
+**Release date:** 2023-03-30
+
+This release candidate promotes the `GitRepository` API from `v1beta2` to `v1`.
+The controller now supports horizontal scaling using
+sharding based on a label selector.
+
+In addition, support for Azure Workload Identity was added to
+`OCIRepositories`, `Buckets` and `HelmRepositories` when using `provider: azure`.
+
+### Highlights
+
+#### API changes
+
+The `GitRepository` kind was promoted from v1beta2 to v1 (GA) and deprecated fields were removed.
+
+The common types `Artifact`, `Conditions` and the `Source` interface were promoted to v1.
+
+The `gitrepositories.source.toolkit.fluxcd.io` CRD contains the following versions:
+- v1 (storage version)
+- v1beta2 (deprecated)
+- v1beta1 (deprecated)
+
+#### Upgrade procedure
+
+The `GitRepository` v1 API is backwards compatible with v1beta2, except for the following:
+- the deprecated field `.spec.gitImplementation` was removed
+- the unused field `.spec.accessFrom` was removed
+- the deprecated field `.status.contentConfigChecksum` was removed
+- the deprecated field `.status.artifact.checksum` was removed
+- the `.status.url` was removed in favor of the absolute `.status.artifact.url`
+
+To upgrade from v1beta2, after deploying the new CRD and controller,
+set  `apiVersion: source.toolkit.fluxcd.io/v1` in the YAML files that
+contain `GitRepository` definitions and remove the deprecated fields if any.
+Bumping the API version in manifests can be done gradually.
+It is advised to not delay this procedure as the beta versions will be removed after 6 months.
+
+#### Sharding
+
+Starting with this release, the controller can be configured with
+`--watch-label-selector`, after which only objects with this label will
+be reconciled by the controller.
+
+This allows for horizontal scaling, where source-controller
+can be deployed multiple times with a unique label selector
+which is used as the sharding key.
+
+Note that this also requires configuration of the `--storage-adv-addr`
+to a unique address (in combination with a proper Service definition).
+This to ensure the Artifacts handled by the sharding controller point
+to a unique endpoint.
+
+In addition, Source object kinds which have a dependency on another
+kind (i.e. a HelmChart on a HelmRepository) need to have the same
+labels applied to work as expected.
+
+### Full changelog
+
+Improvements:
+- GA: Promote `GitRepository` API to `source.toolkit.fluxcd.io/v1`
+  [#1056](https://github.com/fluxcd/source-controller/pull/1056)
+- Add reconciler sharding capability based on label selector
+  [#1059](https://github.com/fluxcd/source-controller/pull/1059)
+- Support Azure Workload Identity
+  [#1048](https://github.com/fluxcd/source-controller/pull/1048)
+- Update dependencies
+  [#1062](https://github.com/fluxcd/source-controller/pull/1062)
+- Update workflows
+  [#1054](https://github.com/fluxcd/source-controller/pull/1054)
+
 ## 0.36.1
 
 **Release date:** 2023-03-20
