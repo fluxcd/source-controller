@@ -213,9 +213,8 @@ func TestBlobClientSASKey_FGetObject(t *testing.T) {
 	g.Expect(err).ToNot(HaveOccurred())
 	sasKey, err := serviceClient.GetSASURL(sas.AccountResourceTypes{Object: true, Container: true},
 		sas.AccountPermissions{List: true, Read: true},
-		sas.AccountServices{Blob: true, File: true},
-		time.Now(),
-		time.Now().Add(48*time.Hour))
+		time.Now().Add(48*time.Hour),
+		&service.GetSASURLOptions{})
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(sasKey).ToNot(BeEmpty())
 	// the sdk returns the full SAS url e.g test.blob.core.windows.net/?<actual-sas-token>
@@ -279,8 +278,7 @@ func TestBlobClientContainerSASKey_BucketExists(t *testing.T) {
 	g.Expect(err).ToNot(HaveOccurred())
 	// sasKey
 	sasKey, err := containerClient.GetSASURL(sas.ContainerPermissions{Read: true, List: true},
-		time.Now(),
-		time.Now().Add(48*time.Hour))
+		time.Now().Add(48*time.Hour), &container.GetSASURLOptions{})
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(sasKey).ToNot(BeEmpty())
 
@@ -428,20 +426,20 @@ func createContainer(ctx context.Context, client *BlobClient, name string) error
 
 func createBlob(ctx context.Context, cred *blob.SharedKeyCredential, containerName, name, data string) error {
 	blobURL := fmt.Sprintf("https://%s.blob.core.windows.net/%s/%s", testAccountName, containerName, name)
-	blob, err := appendblob.NewClientWithSharedKeyCredential(blobURL, cred, nil)
+	blobC, err := appendblob.NewClientWithSharedKeyCredential(blobURL, cred, nil)
 	if err != nil {
 		return err
 	}
 	ctx, timeout := context.WithTimeout(context.Background(), testTimeout)
 	defer timeout()
-	if _, err := blob.Create(ctx, nil); err != nil {
+	if _, err := blobC.Create(ctx, nil); err != nil {
 		return err
 	}
 
 	hash := md5.Sum([]byte(data))
 
-	if _, err := blob.AppendBlock(ctx, streaming.NopCloser(strings.NewReader(data)), &appendblob.AppendBlockOptions{
-		TransactionalContentMD5: hash[:16],
+	if _, err := blobC.AppendBlock(ctx, streaming.NopCloser(strings.NewReader(data)), &appendblob.AppendBlockOptions{
+		TransactionalValidation: blob.TransferValidationTypeMD5(hash[:16]),
 	}); err != nil {
 		return err
 	}
