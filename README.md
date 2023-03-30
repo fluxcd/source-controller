@@ -7,23 +7,47 @@
 [![release](https://img.shields.io/github/release/fluxcd/source-controller/all.svg)](https://github.com/fluxcd/source-controller/releases)
 
 The source-controller is a Kubernetes operator, specialised in artifacts acquisition
-from external sources such as Git, Helm repositories and S3 buckets.
+from external sources such as Git, OCI, Helm repositories and S3-compatible buckets.
 The source-controller implements the
-[source.toolkit.fluxcd.io](https://github.com/fluxcd/source-controller/tree/main/docs/spec/v1beta2) API
+[source.toolkit.fluxcd.io](docs/spec/README.md) API
 and is a core component of the [GitOps toolkit](https://fluxcd.io/flux/components/).
 
 ![overview](docs/diagrams/source-controller-overview.png)
 
-Features:
+## APIs
 
-* authenticates to sources (SSH, user/password, API token)
-* validates source authenticity (PGP)
+| Kind                                                    | API Version                        |
+|---------------------------------------------------------|------------------------------------|
+| [GitRepository](docs/spec/v1/gitrepositories.md)        | `source.toolkit.fluxcd.io/v1`      |
+| [OCIRepository](docs/spec/v1beta2/ocirepositories.md)   | `source.toolkit.fluxcd.io/v1beta2` |
+| [HelmRepository](docs/spec/v1beta2/helmrepositories.md) | `source.toolkit.fluxcd.io/v1beta2` |
+| [HelmChart](docs/spec/v1beta2/helmcharts.md)            | `source.toolkit.fluxcd.io/v1beta2` |
+| [Bucket](docs/spec/v1beta2/buckets.md)                  | `source.toolkit.fluxcd.io/v1beta2` |
+
+## Features
+
+* authenticates to sources (SSH, user/password, API token, Workload Identity)
+* validates source authenticity (PGP, Cosign)
 * detects source changes based on update policies (semver)
 * fetches resources on-demand and on-a-schedule
 * packages the fetched resources into a well-known format (tar.gz, yaml)
 * makes the artifacts addressable by their source identifier (sha, version, ts)
 * makes the artifacts available in-cluster to interested 3rd parties
 * notifies interested 3rd parties of source changes and availability (status conditions, events, hooks)
-* reacts to Git push and Helm chart upload events (via [notification-controller](https://github.com/fluxcd/notification-controller))
+* reacts to Git, Helm and OCI artifacts push events (via [notification-controller](https://github.com/fluxcd/notification-controller))
 
-See [the docs folder](docs/spec/README.md) for more information.
+## Guides
+
+* [Get started with Flux](https://fluxcd.io/flux/get-started/)
+* [Setup Webhook Receivers](https://fluxcd.io/flux/guides/webhook-receivers/)
+* [Setup Notifications](https://fluxcd.io/flux/guides/notifications/)
+* [How to build, publish and consume OCI Artifacts with Flux](https://fluxcd.io/flux/cheatsheets/oci-artifacts/)
+
+## Roadmap
+
+The roadmap for the Flux family of projects can be found at <https://fluxcd.io/roadmap/>.
+
+## Contributing
+
+This project is Apache 2.0 licensed and accepts contributions via GitHub pull requests.
+To start contributing please see the [development guide](DEVELOPMENT.md).

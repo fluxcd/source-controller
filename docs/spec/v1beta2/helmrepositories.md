@@ -312,12 +312,12 @@ if you want to use AKS pod-managed identities add-on that is in preview.
 The `gcp` provider can be used to authenticate automatically using OAuth scopes or
 Workload Identity, and by extension gain access to GCR or Artifact Registry.
 
-#### Access Scopes
+##### Access Scopes
 
 When the GKE nodes have the appropriate OAuth scope for accessing GCR and Artifact Registry,
 source-controller running on it will also have access to them.
 
-#### GKE Workload Identity
+##### GKE Workload Identity
 
 When using Workload Identity to enable access to GCR or Artifact Registry, add the
 following patch to your bootstrap repository, in the `flux-system/kustomization.yaml`
