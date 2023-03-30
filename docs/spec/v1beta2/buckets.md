@@ -280,6 +280,7 @@ Without a [Secret reference](#secret-reference), authentication using a chain
 with:
 
 - [Environment credentials](https://pkg.go.dev/github.com/Azure/azure-sdk-for-go/sdk/azidentity#EnvironmentCredential)
+- [Workload Identity](https://pkg.go.dev/github.com/Azure/azure-sdk-for-go/sdk/azidentity@v1.3.0-beta.4#WorkloadIdentityCredential)
 - [Managed Identity](https://pkg.go.dev/github.com/Azure/azure-sdk-for-go/sdk/azidentity#ManagedIdentityCredential)
   with the `AZURE_CLIENT_ID`
 - Managed Identity with a system-assigned identity
@@ -436,22 +437,103 @@ data:
   accountKey: <BASE64>
 ```
 
-#### Managed Identity with AAD Pod Identity
+##### Workload Identity
 
-If you are using [aad pod identity](https://azure.github.io/aad-pod-identity/docs), you can create an identity that has access to Azure Storage.
+If you have [Workload Identity mutating webhook](https://azure.github.io/azure-workload-identity/docs/installation/managed-clusters.html)
+installed on your cluster. You need to create an Azure Identity and give it
+access to Azure Blob Storage.
+
+```shell
+export IDENTITY_NAME="blob-access"
+
+az role assignment create --role "Storage Blob Data Reader" \
+--assignee-object-id "$(az identity show -n $IDENTITY_NAME  -o tsv --query principalId  -g $RESOURCE_GROUP)" \
+--scope "/subscriptions/<SUBSCRIPTION-ID>/resourceGroups/<RESOURCE_GROUP>/providers/Microsoft.Storage/storageAccounts/<account-name>/blobServices/default/containers/<container-name>"
+```
+
+Establish a federated identity between the Identity and the source-controller
+ServiceAccount.
+
+```shell
+export SERVICE_ACCOUNT_ISSUER="$(az aks show --resource-group <RESOURCE_GROUP> --name <CLUSTER-NAME> --query "oidcIssuerProfile.issuerUrl" -otsv)"
+
+az identity federated-credential create \
+  --name "kubernetes-federated-credential" \
+  --identity-name "${IDENTITY_NAME}" \
+  --resource-group "${RESOURCE_GROUP}" \
+  --issuer "${SERVICE_ACCOUNT_ISSUER}" \
+  --subject "system:serviceaccount:flux-system:source-controller"
+```
+
+Add a patch to label and annotate the source-controller Pods and ServiceAccount
+correctly so that it can match an identity binding:
+
+```yaml
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - gotk-components.yaml
+  - gotk-sync.yaml
+patches:
+  - patch: |-
+      apiVersion: v1
+      kind: ServiceAccount
+      metadata:
+        name: source-controller
+        namespace: flux-system
+        annotations:
+          azure.workload.identity/client-id: <AZURE_CLIENT_ID>
+        labels:
+          azure.workload.identity/use: "true"
+  - patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: source-controller
+        namespace: flux-system
+        labels:
+          azure.workload.identity/use: "true"
+      spec:
+        template:
+          metadata:
+            labels:
+              azure.workload.identity/use: "true"
+```
+
+If you have set up Workload Identity correctly and labeled the source-controller
+Pod and ServiceAccount, then you don't need to reference a Secret. For more information,
+please see [documentation](https://azure.github.io/azure-workload-identity/docs/quick-start.html).
+
+```yaml
+apiVersion: source.toolkit.fluxcd.io/v1beta2
+kind: Bucket
+metadata:
+  name: azure-bucket
+  namespace: flux-system
+spec:
+  interval: 5m0s
+  provider: azure
+  bucketName: testsas
+  endpoint: https://testfluxsas.blob.core.windows.net
+```
+
+##### Managed Identity with AAD Pod Identity
+
+If you are using [aad pod identity](https://azure.github.io/aad-pod-identity/docs),
+You need to create an Azure Identity and give it access to Azure Blob Storage.
 
 ```sh
 export IDENTITY_NAME="blob-access"
 
-az role assignment create --role "Storage Blob Data Contributor"  \
---assignee-object-id "$(az identity show -n blob-access  -o tsv --query principalId  -g $RESOURCE_GROUP)" \
---scope "/subscriptions/<SUBSCRIPTION-ID>/resourceGroups/aks-somto/providers/Microsoft.Storage/storageAccounts/<account-name>/blobServices/default/containers/<container-name>"
+az role assignment create --role "Storage Blob Data Reader"  \
+--assignee-object-id "$(az identity show -n $IDENTITY_NAME -o tsv --query principalId  -g $RESOURCE_GROUP)" \
+--scope "/subscriptions/<SUBSCRIPTION-ID>/resourceGroups/$RESOURCE_GROUP/providers/Microsoft.Storage/storageAccounts/<account-name>/blobServices/default/containers/<container-name>"
 
 export IDENTITY_CLIENT_ID="$(az identity show -n ${IDENTITY_NAME} -g ${RESOURCE_GROUP} -otsv --query clientId)"
 export IDENTITY_RESOURCE_ID="$(az identity show -n ${IDENTITY_NAME} -otsv --query id)"
 ```
 
-Create an `AzureIdentity` object that references the identity created above:
+Create an AzureIdentity object that references the identity created above:
 
 ```yaml
 ---
@@ -466,7 +548,8 @@ spec:
   type: 0  # user-managed identity
 ```
 
-Create an `AzureIdentityBinding` object that binds pods with a specific selector with the `AzureIdentity` created:
+Create an AzureIdentityBinding object that binds Pods with a specific selector
+with the AzureIdentity created:
 
 ```yaml
 apiVersion: "aadpodidentity.k8s.io/v1"
@@ -493,7 +576,8 @@ spec:
         aadpodidbinding: ${IDENTITY_NAME}  # match the AzureIdentity name
 ```
 
-If you have set aad-pod-identity up correctly and labeled the source-controller pod, then you don't need to reference a secret.
+If you have set up aad-pod-identity correctly and labeled the source-controller
+Pod, then you don't need to reference a Secret.
 
 ```yaml
 apiVersion: source.toolkit.fluxcd.io/v1beta2
@@ -535,13 +619,16 @@ data:
   sasKey: <base64>
 ```
 
-The sasKey only contains the SAS token e.g `?sv=2020-08-0&ss=bfqt&srt=co&sp=rwdlacupitfx&se=2022-05-26T21:55:35Z&st=2022-05...`.
-The leading question mark is optional.
-The query values from the `sasKey` data field in the Secrets gets merged with the ones in the `spec.endpoint` of the `Bucket`.
-If the same key is present in the both of them, the value in the `sasKey` takes precedence.
+The `sasKey` only contains the SAS token e.g
+`?sv=2020-08-0&ss=bfqt&srt=co&sp=rwdlacupitfx&se=2022-05-26T21:55:35Z&st=2022-05...`.
+The leading question mark (`?`) is optional. The query values from the `sasKey`
+data field in the Secrets gets merged with the ones in the `.spec.endpoint` of
+the Bucket. If the same key is present in the both of them, the value in the
+`sasKey` takes precedence.
 
-**Note:** The SAS token has an expiry date and it must be updated before it expires to allow Flux to
-continue to access Azure Storage. It is allowed to use an account-level or container-level SAS token.
+**Note:** The SAS token has an expiry date, and it must be updated before it
+expires to allow Flux to continue to access Azure Storage. It is allowed to use
+an account-level or container-level SAS token.
 
 The minimum permissions for an account-level SAS token are:
 
@@ -756,7 +843,7 @@ spec:
 
 ### Triggering a reconcile
 
-To manually tell the source-controller to reconcile a Bucket outside of the
+To manually tell the source-controller to reconcile a Bucket outside the
 [specified interval window](#interval), a Bucket can be annotated with
 `reconcile.fluxcd.io/requestedAt: <arbitrary value>`. Annotating the resource
 queues the Bucket for reconciliation if the `<arbitrary-value>` differs from

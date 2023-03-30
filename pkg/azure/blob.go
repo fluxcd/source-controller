@@ -76,6 +76,9 @@ type BlobClient struct {
 //     are found.
 //   - azidentity.ManagedIdentityCredential for a User ID, when a `clientId`
 //     field but no `tenantId` is found.
+//   - azidentity.WorkloadIdentityCredential for when environment variables
+//     (AZURE_AUTHORITY_HOST, AZURE_CLIENT_ID, AZURE_FEDERATED_TOKEN_FILE, AZURE_TENANT_ID)
+//     are set by the Azure workload identity webhook.
 //   - azblob.SharedKeyCredential when an `accountKey` field is found.
 //     The account name is extracted from the endpoint specified on the Bucket
 //     object.
@@ -394,6 +397,9 @@ func sasTokenFromSecret(ep string, secret *corev1.Secret) (string, error) {
 //
 //   - azidentity.EnvironmentCredential with `authorityHost` from Secret, if
 //     provided.
+//   - azidentity.WorkloadIdentityCredential with Client ID from AZURE_CLIENT_ID plus
+//     AZURE_TENANT_ID, AZURE_FEDERATED_TOKEN_FILE from environment variables
+//     environment variable, if found.
 //   - azidentity.ManagedIdentityCredential with Client ID from AZURE_CLIENT_ID
 //     environment variable, if found.
 //   - azidentity.ManagedIdentityCredential with defaults.
@@ -413,6 +419,16 @@ func chainCredentialWithSecret(secret *corev1.Secret) (azcore.TokenCredential, e
 		creds = append(creds, token)
 	}
 	if clientID := os.Getenv("AZURE_CLIENT_ID"); clientID != "" {
+		if file, ok := os.LookupEnv("AZURE_FEDERATED_TOKEN_FILE"); ok {
+			if _, ok := os.LookupEnv("AZURE_AUTHORITY_HOST"); ok {
+				if tenantID, ok := os.LookupEnv("AZURE_TENANT_ID"); ok {
+					if token, _ := azidentity.NewWorkloadIdentityCredential(tenantID, clientID, file, &azidentity.WorkloadIdentityCredentialOptions{}); token != nil {
+						creds = append(creds, token)
+					}
+				}
+			}
+		}
+
 		if token, _ := azidentity.NewManagedIdentityCredential(&azidentity.ManagedIdentityCredentialOptions{
 			ID: azidentity.ClientID(clientID),
 		}); token != nil {
