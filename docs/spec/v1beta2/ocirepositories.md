@@ -161,9 +161,55 @@ The `azure` provider can be used to authenticate automatically using kubelet
 managed identity or Azure Active Directory pod-managed identity (aad-pod-identity),
 and by extension gain access to ACR.
 
+##### Kubelet Managed Identity
+
 When the kubelet managed identity has access to ACR, source-controller running
 on it will also have access to ACR.
 
+##### Workload Identity
+
+When using Workload Identity to enable access to ACR, add the following patch to
+your bootstrap repository, in the `flux-system/kustomization.yaml` file:
+
+```yaml
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - gotk-components.yaml
+  - gotk-sync.yaml
+patches:
+  - patch: |-
+      apiVersion: v1
+      kind: ServiceAccount
+      metadata:
+        name: source-controller
+        namespace: flux-system
+        annotations:
+          azure.workload.identity/client-id: <AZURE_CLIENT_ID>
+        labels:
+          azure.workload.identity/use: "true"
+  - patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: source-controller
+        namespace: flux-system
+        labels:
+          azure.workload.identity/use: "true"
+      spec:
+        template:
+          metadata:
+            labels:
+              azure.workload.identity/use: "true"
+```
+
+To use Workload Identity, you have to install the Workload Identity
+mutating webhook and create an identity that has access to ACR. Next, establish 
+a federated identity between the source-controller ServiceAccount and the 
+identity. Patch the source-controller Pod and ServiceAccount as shown in the patch
+above. Please take a look at this [guide](https://azure.github.io/azure-workload-identity/docs/quick-start.html#6-establish-federated-identity-credential-between-the-identity-and-the-service-account-issuer--subject).
+
+##### AAD Pod Identity
 When using aad-pod-identity to enable access to ACR, add the following patch to
 your bootstrap repository, in the `flux-system/kustomization.yaml` file:
 
