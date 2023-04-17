@@ -82,7 +82,7 @@ test-ctrl: install-envtest test-api check-deps ## Run controller tests
 	GIT_CONFIG_GLOBAL=/dev/null \
 	go test $(GO_STATIC_FLAGS) \
 	  -run "^$(GO_TEST_PREFIX).*" \
-	  -v ./controllers \
+	  -v ./internal/controller \
 	  -coverprofile cover.out
 
 check-deps:

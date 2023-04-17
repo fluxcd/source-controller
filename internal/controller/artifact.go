@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package controllers
+package controller
 
 import sourcev1 "github.com/fluxcd/source-controller/api/v1"
 

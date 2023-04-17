@@ -47,13 +47,13 @@ import (
 	"github.com/fluxcd/pkg/runtime/pprof"
 	"github.com/fluxcd/pkg/runtime/probes"
 
-	"github.com/fluxcd/source-controller/api/v1"
+	v1 "github.com/fluxcd/source-controller/api/v1"
 	"github.com/fluxcd/source-controller/api/v1beta2"
 
 	// +kubebuilder:scaffold:imports
 
-	"github.com/fluxcd/source-controller/controllers"
 	"github.com/fluxcd/source-controller/internal/cache"
+	"github.com/fluxcd/source-controller/internal/controller"
 	intdigest "github.com/fluxcd/source-controller/internal/digest"
 	"github.com/fluxcd/source-controller/internal/features"
 	"github.com/fluxcd/source-controller/internal/helm"
@@ -178,13 +178,13 @@ func main() {
 	mustSetupHelmLimits(helmIndexLimit, helmChartLimit, helmChartFileLimit)
 	helmIndexCache, helmIndexCacheItemTTL := mustInitHelmCache(helmCacheMaxSize, helmCacheTTL, helmCachePurgeInterval)
 
-	if err := (&controllers.GitRepositoryReconciler{
+	if err := (&controller.GitRepositoryReconciler{
 		Client:         mgr.GetClient(),
 		EventRecorder:  eventRecorder,
 		Metrics:        metrics,
 		Storage:        storage,
 		ControllerName: controllerName,
-	}).SetupWithManagerAndOptions(mgr, controllers.GitRepositoryReconcilerOptions{
+	}).SetupWithManagerAndOptions(mgr, controller.GitRepositoryReconcilerOptions{
 		MaxConcurrentReconciles:   concurrent,
 		DependencyRequeueInterval: requeueDependency,
 		RateLimiter:               helper.GetRateLimiter(rateLimiterOptions),
@@ -193,14 +193,14 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := (&controllers.HelmRepositoryOCIReconciler{
+	if err := (&controller.HelmRepositoryOCIReconciler{
 		Client:                  mgr.GetClient(),
 		EventRecorder:           eventRecorder,
 		Metrics:                 metrics,
 		Getters:                 getters,
 		ControllerName:          controllerName,
 		RegistryClientGenerator: registry.ClientGenerator,
-	}).SetupWithManagerAndOptions(mgr, controllers.HelmRepositoryReconcilerOptions{
+	}).SetupWithManagerAndOptions(mgr, controller.HelmRepositoryReconcilerOptions{
 		MaxConcurrentReconciles: concurrent,
 		RateLimiter:             helper.GetRateLimiter(rateLimiterOptions),
 	}); err != nil {
@@ -208,7 +208,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := (&controllers.HelmRepositoryReconciler{
+	if err := (&controller.HelmRepositoryReconciler{
 		Client:         mgr.GetClient(),
 		EventRecorder:  eventRecorder,
 		Metrics:        metrics,
@@ -218,7 +218,7 @@ func main() {
 		Cache:          helmIndexCache,
 		TTL:            helmIndexCacheItemTTL,
 		CacheRecorder:  cacheRecorder,
-	}).SetupWithManagerAndOptions(mgr, controllers.HelmRepositoryReconcilerOptions{
+	}).SetupWithManagerAndOptions(mgr, controller.HelmRepositoryReconcilerOptions{
 		MaxConcurrentReconciles: concurrent,
 		RateLimiter:             helper.GetRateLimiter(rateLimiterOptions),
 	}); err != nil {
@@ -226,7 +226,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := (&controllers.HelmChartReconciler{
+	if err := (&controller.HelmChartReconciler{
 		Client:                  mgr.GetClient(),
 		RegistryClientGenerator: registry.ClientGenerator,
 		Storage:                 storage,
@@ -237,7 +237,7 @@ func main() {
 		Cache:                   helmIndexCache,
 		TTL:                     helmIndexCacheItemTTL,
 		CacheRecorder:           cacheRecorder,
-	}).SetupWithManagerAndOptions(mgr, controllers.HelmChartReconcilerOptions{
+	}).SetupWithManagerAndOptions(mgr, controller.HelmChartReconcilerOptions{
 		MaxConcurrentReconciles: concurrent,
 		RateLimiter:             helper.GetRateLimiter(rateLimiterOptions),
 	}); err != nil {
@@ -245,13 +245,13 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := (&controllers.BucketReconciler{
+	if err := (&controller.BucketReconciler{
 		Client:         mgr.GetClient(),
 		EventRecorder:  eventRecorder,
 		Metrics:        metrics,
 		Storage:        storage,
 		ControllerName: controllerName,
-	}).SetupWithManagerAndOptions(mgr, controllers.BucketReconcilerOptions{
+	}).SetupWithManagerAndOptions(mgr, controller.BucketReconcilerOptions{
 		MaxConcurrentReconciles: concurrent,
 		RateLimiter:             helper.GetRateLimiter(rateLimiterOptions),
 	}); err != nil {
@@ -259,13 +259,13 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := (&controllers.OCIRepositoryReconciler{
+	if err := (&controller.OCIRepositoryReconciler{
 		Client:         mgr.GetClient(),
 		Storage:        storage,
 		EventRecorder:  eventRecorder,
 		ControllerName: controllerName,
 		Metrics:        metrics,
-	}).SetupWithManagerAndOptions(mgr, controllers.OCIRepositoryReconcilerOptions{
+	}).SetupWithManagerAndOptions(mgr, controller.OCIRepositoryReconcilerOptions{
 		MaxConcurrentReconciles: concurrent,
 		RateLimiter:             helper.GetRateLimiter(rateLimiterOptions),
 	}); err != nil {
@@ -400,7 +400,7 @@ func mustInitHelmCache(maxSize int, purgeInterval, itemTTL string) (*cache.Cache
 	return cache.New(maxSize, interval), ttl
 }
 
-func mustInitStorage(path string, storageAdvAddr string, artifactRetentionTTL time.Duration, artifactRetentionRecords int, artifactDigestAlgo string) *controllers.Storage {
+func mustInitStorage(path string, storageAdvAddr string, artifactRetentionTTL time.Duration, artifactRetentionRecords int, artifactDigestAlgo string) *controller.Storage {
 	if storageAdvAddr == "" {
 		storageAdvAddr = determineAdvStorageAddr(storageAdvAddr)
 	}
@@ -414,7 +414,7 @@ func mustInitStorage(path string, storageAdvAddr string, artifactRetentionTTL ti
 		intdigest.Canonical = algo
 	}
 
-	storage, err := controllers.NewStorage(path, storageAdvAddr, artifactRetentionTTL, artifactRetentionRecords)
+	storage, err := controller.NewStorage(path, storageAdvAddr, artifactRetentionTTL, artifactRetentionRecords)
 	if err != nil {
 		setupLog.Error(err, "unable to initialise storage")
 		os.Exit(1)
