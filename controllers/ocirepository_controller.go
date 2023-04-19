@@ -154,7 +154,6 @@ func (r *OCIRepositoryReconciler) SetupWithManagerAndOptions(mgr ctrl.Manager, o
 
 	r.requeueDependency = opts.DependencyRequeueInterval
 
-	recoverPanic := true
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&ociv1.OCIRepository{}, builder.WithPredicates(
 			predicate.Or(predicate.GenerationChangedPredicate{}, predicates.ReconcileRequestedPredicate{}),
@@ -162,7 +161,6 @@ func (r *OCIRepositoryReconciler) SetupWithManagerAndOptions(mgr ctrl.Manager, o
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: opts.MaxConcurrentReconciles,
 			RateLimiter:             opts.RateLimiter,
-			RecoverPanic:            &recoverPanic,
 		}).
 		Complete(r)
 }
