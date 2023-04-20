@@ -165,14 +165,12 @@ func (r *BucketReconciler) SetupWithManager(mgr ctrl.Manager) error {
 func (r *BucketReconciler) SetupWithManagerAndOptions(mgr ctrl.Manager, opts BucketReconcilerOptions) error {
 	r.patchOptions = getPatchOptions(bucketReadyCondition.Owned, r.ControllerName)
 
-	recoverPanic := true
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&bucketv1.Bucket{}).
 		WithEventFilter(predicate.Or(predicate.GenerationChangedPredicate{}, predicates.ReconcileRequestedPredicate{})).
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: opts.MaxConcurrentReconciles,
 			RateLimiter:             opts.RateLimiter,
-			RecoverPanic:            &recoverPanic,
 		}).
 		Complete(r)
 }

@@ -31,9 +31,11 @@ import (
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	"k8s.io/client-go/tools/record"
+	"k8s.io/utils/pointer"
 	ctrl "sigs.k8s.io/controller-runtime"
 	ctrlcache "sigs.k8s.io/controller-runtime/pkg/cache"
 	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/config/v1alpha1"
 
 	"github.com/fluxcd/pkg/git"
 	"github.com/fluxcd/pkg/runtime/client"
@@ -47,6 +49,7 @@ import (
 
 	"github.com/fluxcd/source-controller/api/v1"
 	"github.com/fluxcd/source-controller/api/v1beta2"
+
 	// +kubebuilder:scaffold:imports
 
 	"github.com/fluxcd/source-controller/controllers"
@@ -359,6 +362,9 @@ func mustSetupManager(metricsAddr, healthAddr string, watchOpts helper.WatchOpti
 		Logger:                        ctrl.Log,
 		ClientDisableCacheFor:         disableCacheFor,
 		NewCache:                      newSelectingCache,
+		Controller: v1alpha1.ControllerConfigurationSpec{
+			RecoverPanic: pointer.Bool(true),
+		},
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")

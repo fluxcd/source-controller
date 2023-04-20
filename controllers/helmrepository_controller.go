@@ -135,7 +135,6 @@ func (r *HelmRepositoryReconciler) SetupWithManager(mgr ctrl.Manager) error {
 func (r *HelmRepositoryReconciler) SetupWithManagerAndOptions(mgr ctrl.Manager, opts HelmRepositoryReconcilerOptions) error {
 	r.patchOptions = getPatchOptions(helmRepositoryReadyCondition.Owned, r.ControllerName)
 
-	recoverPanic := true
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&helmv1.HelmRepository{}).
 		WithEventFilter(
@@ -150,7 +149,6 @@ func (r *HelmRepositoryReconciler) SetupWithManagerAndOptions(mgr ctrl.Manager, 
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: opts.MaxConcurrentReconciles,
 			RateLimiter:             opts.RateLimiter,
-			RecoverPanic:            &recoverPanic,
 		}).
 		Complete(r)
 }

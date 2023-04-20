@@ -104,7 +104,6 @@ func (r *HelmRepositoryOCIReconciler) SetupWithManagerAndOptions(mgr ctrl.Manage
 	r.unmanagedConditions = conditionsDiff(helmRepositoryReadyCondition.Owned, helmRepositoryOCIOwnedConditions)
 	r.patchOptions = getPatchOptions(helmRepositoryOCIOwnedConditions, r.ControllerName)
 
-	recoverPanic := true
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&helmv1.HelmRepository{}).
 		WithEventFilter(
@@ -116,7 +115,6 @@ func (r *HelmRepositoryOCIReconciler) SetupWithManagerAndOptions(mgr ctrl.Manage
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: opts.MaxConcurrentReconciles,
 			RateLimiter:             opts.RateLimiter,
-			RecoverPanic:            &recoverPanic,
 		}).
 		Complete(r)
 }
