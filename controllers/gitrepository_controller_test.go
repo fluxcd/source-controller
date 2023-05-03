@@ -272,11 +272,12 @@ func TestGitRepositoryReconciler_reconcileSource_emptyRepository(t *testing.T) {
 
 func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 	type options struct {
-		username   string
-		password   string
-		publicKey  []byte
-		privateKey []byte
-		ca         []byte
+		username    string
+		password    string
+		publicKey   []byte
+		privateKey  []byte
+		ca          []byte
+		bearerToken []byte
 	}
 
 	tests := []struct {
@@ -381,9 +382,29 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "foo"),
 			},
 		},
-		// TODO: Add test case for HTTPS with bearer token auth secret. It
-		// depends on gitkit to have support for bearer token based
-		// authentication.
+		{
+			name:     "HTTP with bearer-token secret makes Reconciling=True",
+			protocol: "http",
+			server: options{
+				bearerToken: []byte("ghp_baM3qnEE0O41WluceBL4udt2N0vVZS4R0hMS"),
+			},
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "bearer-token",
+				},
+				Data: map[string][]byte{
+					"bearerToken": []byte("ghp_baM3qnEE0O41WluceBL4udt2N0vVZS4R0hMS"),
+				},
+			},
+			beforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Spec.SecretRef = &meta.LocalObjectReference{Name: "bearer-token"}
+			},
+			want: sreconcile.ResultSuccess,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new upstream revision 'master@sha1:<commit>'"),
+				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new upstream revision 'master@sha1:<commit>'"),
+			},
+		},
 		{
 			name:     "SSH with private key secret makes Reconciling=True",
 			protocol: "ssh",
@@ -405,7 +426,7 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 			want: sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new upstream revision 'master@sha1:<commit>'"),
-				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new upstream revision 'master@sha1:<commit>"),
+				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new upstream revision 'master@sha1:<commit>'"),
 			},
 		},
 		{
