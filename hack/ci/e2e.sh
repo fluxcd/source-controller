@@ -133,7 +133,7 @@ kubectl -n source-system wait bucket/podinfo --for=condition=ready --timeout=1m
 
 echo "Run HelmChart from Bucket tests"
 "${BUILD_DIR}/mc" mb minio/charts
-"${BUILD_DIR}/mc" mirror "${ROOT_DIR}/controllers/testdata/charts/helmchart/" minio/charts/helmchart
+"${BUILD_DIR}/mc" mirror "${ROOT_DIR}/internal/controller/testdata/charts/helmchart/" minio/charts/helmchart
 
 kubectl -n source-system apply -f "${ROOT_DIR}/config/testdata/helmchart-from-bucket/source.yaml"
 kubectl -n source-system wait bucket/charts --for=condition=ready --timeout=1m

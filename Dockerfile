@@ -40,7 +40,6 @@ RUN go mod download
 
 # Copy source code
 COPY main.go main.go
-COPY controllers/ controllers/
 COPY pkg/ pkg/
 COPY internal/ internal/
 

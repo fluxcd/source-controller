@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package controllers
+package controller
 
 import (
 	"bytes"
@@ -207,7 +207,7 @@ func TestMain(m *testing.M) {
 	utilruntime.Must(sourcev1.AddToScheme(scheme.Scheme))
 	utilruntime.Must(sourcev1beta2.AddToScheme(scheme.Scheme))
 
-	testEnv = testenv.New(testenv.WithCRDPath(filepath.Join("..", "config", "crd", "bases")))
+	testEnv = testenv.New(testenv.WithCRDPath(filepath.Join("..", "..", "config", "crd", "bases")))
 
 	var err error
 	testServer, err = testserver.NewTempArtifactServer()

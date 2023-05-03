@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package controllers
+package controller
 
 import (
 	"archive/tar"
@@ -39,7 +39,7 @@ import (
 	"github.com/fluxcd/pkg/sourceignore"
 	"github.com/fluxcd/pkg/untar"
 
-	"github.com/fluxcd/source-controller/api/v1"
+	v1 "github.com/fluxcd/source-controller/api/v1"
 	intdigest "github.com/fluxcd/source-controller/internal/digest"
 	sourcefs "github.com/fluxcd/source-controller/internal/fs"
 )
