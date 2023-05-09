@@ -2,6 +2,21 @@
 
 All notable changes to this project are documented in this file.
 
+## 1.0.0-rc.2
+
+**Release date:** 2023-05-09
+
+This release candidate comes with various updates to the controller's dependencies,
+most notable, Helm was updated to v3.11.3.
+
+Improvements:
+- Update dependencies
+  [#1086](https://github.com/fluxcd/source-controller/pull/1086)
+- Set RecoverPanic globally across controllers
+  [#1077](https://github.com/fluxcd/source-controller/pull/1077)
+- Move controllers to internal/controller
+  [#1076](https://github.com/fluxcd/source-controller/pull/1076)
+
 ## 1.0.0-rc.1
 
 **Release date:** 2023-03-30

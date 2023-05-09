@@ -42,7 +42,7 @@ require (
 	github.com/fluxcd/pkg/testserver v0.4.0
 	github.com/fluxcd/pkg/untar v0.3.0
 	github.com/fluxcd/pkg/version v0.2.1
-	github.com/fluxcd/source-controller/api v1.0.0-rc.1
+	github.com/fluxcd/source-controller/api v1.0.0-rc.2
 	github.com/go-git/go-billy/v5 v5.4.1
 	github.com/go-logr/logr v1.2.4
 	github.com/google/go-containerregistry v0.15.1
