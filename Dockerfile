@@ -60,7 +60,7 @@ RUN export CGO_LDFLAGS="-static -fuse-ld=lld" && \
 # Ensure that the binary was cross-compiled correctly to the target platform.
 RUN xx-verify --static /source-controller
 
-FROM alpine:3.17
+FROM alpine:3.18
 
 ARG TARGETPLATFORM
 RUN apk --no-cache add ca-certificates \
