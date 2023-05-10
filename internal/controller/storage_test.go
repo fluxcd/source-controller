@@ -18,6 +18,7 @@ package controller
 
 import (
 	"archive/tar"
+	"bytes"
 	"compress/gzip"
 	"context"
 	"errors"
@@ -264,6 +265,44 @@ func TestStorage_Archive(t *testing.T) {
 			matchFiles(t, storage, artifact, tt.want, tt.wantDirs)
 		})
 	}
+}
+
+func TestStorage_Remove(t *testing.T) {
+	t.Run("removes file", func(t *testing.T) {
+		g := NewWithT(t)
+
+		dir := t.TempDir()
+
+		s, err := NewStorage(dir, "", 0, 0)
+		g.Expect(err).ToNot(HaveOccurred())
+
+		artifact := sourcev1.Artifact{
+			Path: filepath.Join(dir, "test.txt"),
+		}
+		g.Expect(s.MkdirAll(artifact)).To(Succeed())
+		g.Expect(s.AtomicWriteFile(&artifact, bytes.NewReader([]byte("test")), 0o600)).To(Succeed())
+		g.Expect(s.ArtifactExist(artifact)).To(BeTrue())
+
+		g.Expect(s.Remove(artifact)).To(Succeed())
+		g.Expect(s.ArtifactExist(artifact)).To(BeFalse())
+	})
+
+	t.Run("error if file does not exist", func(t *testing.T) {
+		g := NewWithT(t)
+
+		dir := t.TempDir()
+
+		s, err := NewStorage(dir, "", 0, 0)
+		g.Expect(err).ToNot(HaveOccurred())
+
+		artifact := sourcev1.Artifact{
+			Path: filepath.Join(dir, "test.txt"),
+		}
+
+		err = s.Remove(artifact)
+		g.Expect(err).To(HaveOccurred())
+		g.Expect(errors.Is(err, os.ErrNotExist)).To(BeTrue())
+	})
 }
 
 func TestStorageRemoveAllButCurrent(t *testing.T) {

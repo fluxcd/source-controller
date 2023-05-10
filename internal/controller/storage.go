@@ -21,7 +21,6 @@ import (
 	"compress/gzip"
 	"context"
 	"fmt"
-	"github.com/opencontainers/go-digest"
 	"io"
 	"io/fs"
 	"net/url"
@@ -33,6 +32,7 @@ import (
 
 	securejoin "github.com/cyphar/filepath-securejoin"
 	"github.com/fluxcd/go-git/v5/plumbing/format/gitignore"
+	"github.com/opencontainers/go-digest"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	kerrors "k8s.io/apimachinery/pkg/util/errors"
 
@@ -121,6 +121,11 @@ func (s Storage) SetHostname(URL string) string {
 func (s *Storage) MkdirAll(artifact v1.Artifact) error {
 	dir := filepath.Dir(s.LocalPath(artifact))
 	return os.MkdirAll(dir, 0o700)
+}
+
+// Remove calls os.Remove for the given v1.Artifact path.
+func (s *Storage) Remove(artifact v1.Artifact) error {
+	return os.Remove(s.LocalPath(artifact))
 }
 
 // RemoveAll calls os.RemoveAll for the given v1.Artifact base dir.

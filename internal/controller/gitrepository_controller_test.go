@@ -1225,17 +1225,17 @@ func TestGitRepositoryReconciler_reconcileStorage(t *testing.T) {
 						Path:     fmt.Sprintf("/reconcile-storage/%s.txt", v),
 						Revision: v,
 					}
-					if err := testStorage.MkdirAll(*obj.Status.Artifact); err != nil {
+					if err := storage.MkdirAll(*obj.Status.Artifact); err != nil {
 						return err
 					}
-					if err := testStorage.AtomicWriteFile(obj.Status.Artifact, strings.NewReader(v), 0o640); err != nil {
+					if err := storage.AtomicWriteFile(obj.Status.Artifact, strings.NewReader(v), 0o640); err != nil {
 						return err
 					}
 					if n != len(revisions)-1 {
 						time.Sleep(time.Second * 1)
 					}
 				}
-				testStorage.SetArtifactURL(obj.Status.Artifact)
+				storage.SetArtifactURL(obj.Status.Artifact)
 				conditions.MarkTrue(obj, meta.ReadyCondition, "foo", "bar")
 				return nil
 			},
@@ -1272,12 +1272,74 @@ func TestGitRepositoryReconciler_reconcileStorage(t *testing.T) {
 					Path:     "/reconcile-storage/invalid.txt",
 					Revision: "e",
 				}
-				testStorage.SetArtifactURL(obj.Status.Artifact)
+				storage.SetArtifactURL(obj.Status.Artifact)
 				return nil
 			},
 			want: sreconcile.ResultSuccess,
 			assertPaths: []string{
 				"!/reconcile-storage/invalid.txt",
+			},
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: disappeared from storage"),
+				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: disappeared from storage"),
+			},
+		},
+		{
+			name: "notices empty artifact digest",
+			beforeFunc: func(obj *sourcev1.GitRepository, storage *Storage) error {
+				f := "empty-digest.txt"
+
+				obj.Status.Artifact = &sourcev1.Artifact{
+					Path:     fmt.Sprintf("/reconcile-storage/%s.txt", f),
+					Revision: "fake",
+				}
+
+				if err := storage.MkdirAll(*obj.Status.Artifact); err != nil {
+					return err
+				}
+				if err := storage.AtomicWriteFile(obj.Status.Artifact, strings.NewReader(f), 0o600); err != nil {
+					return err
+				}
+
+				// Overwrite with a different digest
+				obj.Status.Artifact.Digest = ""
+
+				return nil
+			},
+			want: sreconcile.ResultSuccess,
+			assertPaths: []string{
+				"!/reconcile-storage/empty-digest.txt",
+			},
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: disappeared from storage"),
+				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: disappeared from storage"),
+			},
+		},
+		{
+			name: "notices artifact digest mismatch",
+			beforeFunc: func(obj *sourcev1.GitRepository, storage *Storage) error {
+				f := "digest-mismatch.txt"
+
+				obj.Status.Artifact = &sourcev1.Artifact{
+					Path:     fmt.Sprintf("/reconcile-storage/%s.txt", f),
+					Revision: "fake",
+				}
+
+				if err := storage.MkdirAll(*obj.Status.Artifact); err != nil {
+					return err
+				}
+				if err := storage.AtomicWriteFile(obj.Status.Artifact, strings.NewReader(f), 0o600); err != nil {
+					return err
+				}
+
+				// Overwrite with a different digest
+				obj.Status.Artifact.Digest = "sha256:6c329d5322473f904e2f908a51c12efa0ca8aa4201dd84f2c9d203a6ab3e9023"
+
+				return nil
+			},
+			want: sreconcile.ResultSuccess,
+			assertPaths: []string{
+				"!/reconcile-storage/digest-mismatch.txt",
 			},
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: disappeared from storage"),
@@ -1293,10 +1355,10 @@ func TestGitRepositoryReconciler_reconcileStorage(t *testing.T) {
 					Digest:   "sha256:3b9c358f36f0a31b6ad3e14f309c7cf198ac9246e8316f9ce543d5b19ac02b80",
 					URL:      "http://outdated.com/reconcile-storage/hostname.txt",
 				}
-				if err := testStorage.MkdirAll(*obj.Status.Artifact); err != nil {
+				if err := storage.MkdirAll(*obj.Status.Artifact); err != nil {
 					return err
 				}
-				if err := testStorage.AtomicWriteFile(obj.Status.Artifact, strings.NewReader("file"), 0o640); err != nil {
+				if err := storage.AtomicWriteFile(obj.Status.Artifact, strings.NewReader("file"), 0o640); err != nil {
 					return err
 				}
 				conditions.MarkTrue(obj, meta.ReadyCondition, "foo", "bar")

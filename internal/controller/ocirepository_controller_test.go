@@ -1828,7 +1828,7 @@ func TestOCIRepository_reconcileStorage(t *testing.T) {
 
 	tests := []struct {
 		name             string
-		beforeFunc       func(obj *ociv1.OCIRepository) error
+		beforeFunc       func(obj *ociv1.OCIRepository, storage *Storage) error
 		want             sreconcile.Result
 		wantErr          bool
 		assertConditions []metav1.Condition
@@ -1837,7 +1837,7 @@ func TestOCIRepository_reconcileStorage(t *testing.T) {
 	}{
 		{
 			name: "garbage collects",
-			beforeFunc: func(obj *ociv1.OCIRepository) error {
+			beforeFunc: func(obj *ociv1.OCIRepository, storage *Storage) error {
 				revisions := []string{"a", "b", "c", "d"}
 
 				for n := range revisions {
@@ -1846,11 +1846,11 @@ func TestOCIRepository_reconcileStorage(t *testing.T) {
 						Path:     fmt.Sprintf("/oci-reconcile-storage/%s.txt", v),
 						Revision: v,
 					}
-					if err := testStorage.MkdirAll(*obj.Status.Artifact); err != nil {
+					if err := storage.MkdirAll(*obj.Status.Artifact); err != nil {
 						return err
 					}
 
-					if err := testStorage.AtomicWriteFile(obj.Status.Artifact, strings.NewReader(v), 0o640); err != nil {
+					if err := storage.AtomicWriteFile(obj.Status.Artifact, strings.NewReader(v), 0o640); err != nil {
 						return err
 					}
 
@@ -1859,7 +1859,7 @@ func TestOCIRepository_reconcileStorage(t *testing.T) {
 					}
 				}
 
-				testStorage.SetArtifactURL(obj.Status.Artifact)
+				storage.SetArtifactURL(obj.Status.Artifact)
 				conditions.MarkTrue(obj, meta.ReadyCondition, "foo", "bar")
 				return nil
 			},
@@ -1891,12 +1891,12 @@ func TestOCIRepository_reconcileStorage(t *testing.T) {
 		},
 		{
 			name: "notices missing artifact in storage",
-			beforeFunc: func(obj *ociv1.OCIRepository) error {
+			beforeFunc: func(obj *ociv1.OCIRepository, storage *Storage) error {
 				obj.Status.Artifact = &sourcev1.Artifact{
 					Path:     "/oci-reconcile-storage/invalid.txt",
 					Revision: "e",
 				}
-				testStorage.SetArtifactURL(obj.Status.Artifact)
+				storage.SetArtifactURL(obj.Status.Artifact)
 				return nil
 			},
 			want: sreconcile.ResultSuccess,
@@ -1909,18 +1909,80 @@ func TestOCIRepository_reconcileStorage(t *testing.T) {
 			},
 		},
 		{
+			name: "notices empty artifact digest",
+			beforeFunc: func(obj *ociv1.OCIRepository, storage *Storage) error {
+				f := "empty-digest.txt"
+
+				obj.Status.Artifact = &sourcev1.Artifact{
+					Path:     fmt.Sprintf("/oci-reconcile-storage/%s.txt", f),
+					Revision: "fake",
+				}
+
+				if err := storage.MkdirAll(*obj.Status.Artifact); err != nil {
+					return err
+				}
+				if err := storage.AtomicWriteFile(obj.Status.Artifact, strings.NewReader(f), 0o600); err != nil {
+					return err
+				}
+
+				// Overwrite with a different digest
+				obj.Status.Artifact.Digest = ""
+
+				return nil
+			},
+			want: sreconcile.ResultSuccess,
+			assertPaths: []string{
+				"!/oci-reconcile-storage/empty-digest.txt",
+			},
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: disappeared from storage"),
+				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: disappeared from storage"),
+			},
+		},
+		{
+			name: "notices artifact digest mismatch",
+			beforeFunc: func(obj *ociv1.OCIRepository, storage *Storage) error {
+				f := "digest-mismatch.txt"
+
+				obj.Status.Artifact = &sourcev1.Artifact{
+					Path:     fmt.Sprintf("/oci-reconcile-storage/%s.txt", f),
+					Revision: "fake",
+				}
+
+				if err := storage.MkdirAll(*obj.Status.Artifact); err != nil {
+					return err
+				}
+				if err := storage.AtomicWriteFile(obj.Status.Artifact, strings.NewReader(f), 0o600); err != nil {
+					return err
+				}
+
+				// Overwrite with a different digest
+				obj.Status.Artifact.Digest = "sha256:6c329d5322473f904e2f908a51c12efa0ca8aa4201dd84f2c9d203a6ab3e9023"
+
+				return nil
+			},
+			want: sreconcile.ResultSuccess,
+			assertPaths: []string{
+				"!/oci-reconcile-storage/digest-mismatch.txt",
+			},
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: disappeared from storage"),
+				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: disappeared from storage"),
+			},
+		},
+		{
 			name: "updates hostname on diff from current",
-			beforeFunc: func(obj *ociv1.OCIRepository) error {
+			beforeFunc: func(obj *ociv1.OCIRepository, storage *Storage) error {
 				obj.Status.Artifact = &sourcev1.Artifact{
 					Path:     "/oci-reconcile-storage/hostname.txt",
 					Revision: "f",
 					Digest:   "sha256:3b9c358f36f0a31b6ad3e14f309c7cf198ac9246e8316f9ce543d5b19ac02b80",
 					URL:      "http://outdated.com/oci-reconcile-storage/hostname.txt",
 				}
-				if err := testStorage.MkdirAll(*obj.Status.Artifact); err != nil {
+				if err := storage.MkdirAll(*obj.Status.Artifact); err != nil {
 					return err
 				}
-				if err := testStorage.AtomicWriteFile(obj.Status.Artifact, strings.NewReader("file"), 0o640); err != nil {
+				if err := storage.AtomicWriteFile(obj.Status.Artifact, strings.NewReader("file"), 0o640); err != nil {
 					return err
 				}
 				conditions.MarkTrue(obj, meta.ReadyCondition, "foo", "bar")
@@ -1962,7 +2024,7 @@ func TestOCIRepository_reconcileStorage(t *testing.T) {
 			}
 
 			if tt.beforeFunc != nil {
-				g.Expect(tt.beforeFunc(obj)).To(Succeed())
+				g.Expect(tt.beforeFunc(obj, testStorage)).To(Succeed())
 			}
 
 			g.Expect(r.Client.Create(ctx, obj)).ToNot(HaveOccurred())
