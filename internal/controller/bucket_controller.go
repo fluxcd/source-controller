@@ -363,14 +363,32 @@ func (r *BucketReconciler) reconcileStorage(ctx context.Context, sp *patch.Seria
 	// Garbage collect previous advertised artifact(s) from storage
 	_ = r.garbageCollect(ctx, obj)
 
-	// Determine if the advertised artifact is still in storage
 	var artifactMissing bool
-	if artifact := obj.GetArtifact(); artifact != nil && !r.Storage.ArtifactExist(*artifact) {
-		obj.Status.Artifact = nil
-		obj.Status.URL = ""
-		artifactMissing = true
-		// Remove the condition as the artifact doesn't exist.
-		conditions.Delete(obj, sourcev1.ArtifactInStorageCondition)
+	if artifact := obj.GetArtifact(); artifact != nil {
+		// Determine if the advertised artifact is still in storage
+		if !r.Storage.ArtifactExist(*artifact) {
+			artifactMissing = true
+		}
+
+		// If the artifact is in storage, verify if the advertised digest still
+		// matches the actual artifact
+		if !artifactMissing {
+			if err := r.Storage.VerifyArtifact(*artifact); err != nil {
+				r.Eventf(obj, corev1.EventTypeWarning, "ArtifactVerificationFailed", "failed to verify integrity of artifact: %s", err.Error())
+
+				if err = r.Storage.Remove(*artifact); err != nil {
+					return sreconcile.ResultEmpty, fmt.Errorf("failed to remove artifact after digest mismatch: %w", err)
+				}
+
+				artifactMissing = true
+			}
+		}
+
+		// If the artifact is missing, remove it from the object
+		if artifactMissing {
+			obj.Status.Artifact = nil
+			obj.Status.URL = ""
+		}
 	}
 
 	// Record that we do not have an artifact
