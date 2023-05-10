@@ -21,6 +21,7 @@ import (
 	"compress/gzip"
 	"context"
 	"fmt"
+	"github.com/opencontainers/go-digest"
 	"io"
 	"io/fs"
 	"net/url"
@@ -323,6 +324,35 @@ func (s *Storage) ArtifactExist(artifact v1.Artifact) bool {
 		return false
 	}
 	return fi.Mode().IsRegular()
+}
+
+// VerifyArtifact verifies if the Digest of the v1.Artifact matches the digest
+// of the file in Storage. It returns an error if the digests don't match, or
+// if it can't be verified.
+func (s *Storage) VerifyArtifact(artifact v1.Artifact) error {
+	if artifact.Digest == "" {
+		return fmt.Errorf("artifact has no digest")
+	}
+
+	d, err := digest.Parse(artifact.Digest)
+	if err != nil {
+		return fmt.Errorf("failed to parse artifact digest '%s': %w", artifact.Digest, err)
+	}
+
+	f, err := os.Open(s.LocalPath(artifact))
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	verifier := d.Verifier()
+	if _, err = io.Copy(verifier, f); err != nil {
+		return err
+	}
+	if !verifier.Verified() {
+		return fmt.Errorf("computed digest doesn't match '%s'", d.String())
+	}
+	return nil
 }
 
 // ArchiveFileFilter must return true if a file should not be included in the archive after inspecting the given path

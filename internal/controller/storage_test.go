@@ -20,6 +20,7 @@ import (
 	"archive/tar"
 	"compress/gzip"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -717,4 +718,62 @@ func TestStorage_GarbageCollect(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestStorage_VerifyArtifact(t *testing.T) {
+	g := NewWithT(t)
+
+	dir := t.TempDir()
+	s, err := NewStorage(dir, "", 0, 0)
+	g.Expect(err).ToNot(HaveOccurred(), "failed to create new storage")
+
+	g.Expect(os.WriteFile(filepath.Join(dir, "artifact"), []byte("test"), 0o600)).To(Succeed())
+
+	t.Run("artifact without digest", func(t *testing.T) {
+		g := NewWithT(t)
+
+		err := s.VerifyArtifact(sourcev1.Artifact{})
+		g.Expect(err).To(HaveOccurred())
+		g.Expect(err).To(MatchError("artifact has no digest"))
+	})
+
+	t.Run("artifact with invalid digest", func(t *testing.T) {
+		g := NewWithT(t)
+
+		err := s.VerifyArtifact(sourcev1.Artifact{Digest: "invalid"})
+		g.Expect(err).To(HaveOccurred())
+		g.Expect(err).To(MatchError("failed to parse artifact digest 'invalid': invalid checksum digest format"))
+	})
+
+	t.Run("artifact with invalid path", func(t *testing.T) {
+		g := NewWithT(t)
+
+		err := s.VerifyArtifact(sourcev1.Artifact{
+			Digest: "sha256:9ba7a35ce8acd3557fe30680ef193ca7a36bb5dc62788f30de7122a0a5beab69",
+			Path:   "invalid",
+		})
+		g.Expect(err).To(HaveOccurred())
+		g.Expect(errors.Is(err, os.ErrNotExist)).To(BeTrue())
+	})
+
+	t.Run("artifact with digest mismatch", func(t *testing.T) {
+		g := NewWithT(t)
+
+		err := s.VerifyArtifact(sourcev1.Artifact{
+			Digest: "sha256:9ba7a35ce8acd3557fe30680ef193ca7a36bb5dc62788f30de7122a0a5beab69",
+			Path:   "artifact",
+		})
+		g.Expect(err).To(HaveOccurred())
+		g.Expect(err).To(MatchError("computed digest doesn't match 'sha256:9ba7a35ce8acd3557fe30680ef193ca7a36bb5dc62788f30de7122a0a5beab69'"))
+	})
+
+	t.Run("artifact with digest match", func(t *testing.T) {
+		g := NewWithT(t)
+
+		err := s.VerifyArtifact(sourcev1.Artifact{
+			Digest: "sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+			Path:   "artifact",
+		})
+		g.Expect(err).ToNot(HaveOccurred())
+	})
 }
