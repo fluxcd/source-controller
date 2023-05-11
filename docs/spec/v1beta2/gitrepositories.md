@@ -140,6 +140,14 @@ To authenticate towards a Git repository over HTTPS using bearer token
 authentication (in other words: using a `Authorization: Bearer` header), the referenced
 Secret is expected to contain the token in `.data.bearerToken`.
 
+**Note:** If you are looking to use OAuth tokens with popular servers (e.g.
+[GitHub](https://docs.github.com/en/rest/overview/authenticating-to-the-rest-api?apiVersion=2022-11-28#authenticating-with-a-token-generated-by-an-app),
+[Bitbucket](https://support.atlassian.com/bitbucket-cloud/docs/using-access-tokens/),
+[GitLab](https://docs.gitlab.com/ee/gitlab-basics/start-using-git.html#clone-using-a-token)),
+you should use basic access authentication instead. These servers use basic HTTP
+authentication, with the OAuth token as the password. Check the documentation of
+your Git server for details.
+
 ```yaml
 ---
 apiVersion: v1
