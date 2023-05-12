@@ -145,7 +145,7 @@ require (
 	github.com/chai2010/gettext-go v1.0.2 // indirect
 	github.com/chrismellard/docker-credential-acr-env v0.0.0-20221002210726-e883f69e0206 // indirect
 	github.com/clbanning/mxj/v2 v2.5.6 // indirect
-	github.com/cloudflare/circl v1.3.2 // indirect
+	github.com/cloudflare/circl v1.3.3 // indirect
 	github.com/cncf/udpa/go v0.0.0-20220112060539-c52dc94e7fbe // indirect
 	github.com/cncf/xds/go v0.0.0-20230105202645-06c439db220b // indirect
 	github.com/common-nighthawk/go-figure v0.0.0-20210622060536-734e95fb86be // indirect
