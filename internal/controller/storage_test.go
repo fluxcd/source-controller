@@ -109,9 +109,14 @@ func TestStorage_Archive(t *testing.T) {
 		t.Fatalf("error while bootstrapping storage: %v", err)
 	}
 
-	createFiles := func(files map[string][]byte) (dir string, err error) {
+	type dummyFile struct {
+		content []byte
+		mode    int64
+	}
+
+	createFiles := func(files map[string]dummyFile) (dir string, err error) {
 		dir = t.TempDir()
-		for name, b := range files {
+		for name, df := range files {
 			absPath := filepath.Join(dir, name)
 			if err = os.MkdirAll(filepath.Dir(absPath), 0o750); err != nil {
 				return
@@ -120,18 +125,24 @@ func TestStorage_Archive(t *testing.T) {
 			if err != nil {
 				return "", fmt.Errorf("could not create file %q: %w", absPath, err)
 			}
-			if n, err := f.Write(b); err != nil {
+			if n, err := f.Write(df.content); err != nil {
 				f.Close()
 				return "", fmt.Errorf("could not write %d bytes to file %q: %w", n, f.Name(), err)
 			}
 			f.Close()
+
+			if df.mode != 0 {
+				if err = os.Chmod(absPath, os.FileMode(df.mode)); err != nil {
+					return "", fmt.Errorf("could not chmod file %q: %w", absPath, err)
+				}
+			}
 		}
 		return
 	}
 
-	matchFiles := func(t *testing.T, storage *Storage, artifact sourcev1.Artifact, files map[string][]byte, dirs []string) {
+	matchFiles := func(t *testing.T, storage *Storage, artifact sourcev1.Artifact, files map[string]dummyFile, dirs []string) {
 		t.Helper()
-		for name, b := range files {
+		for name, df := range files {
 			mustExist := !(name[0:1] == "!")
 			if !mustExist {
 				name = name[1:]
@@ -140,7 +151,7 @@ func TestStorage_Archive(t *testing.T) {
 			if err != nil {
 				t.Fatalf("failed reading tarball: %v", err)
 			}
-			if bs := int64(len(b)); s != bs {
+			if bs := int64(len(df.content)); s != bs {
 				t.Fatalf("%q size %v != %v", name, s, bs)
 			}
 			if exist != mustExist {
@@ -150,8 +161,12 @@ func TestStorage_Archive(t *testing.T) {
 					t.Errorf("tarball contained excluded file %q", name)
 				}
 			}
-			if exist && m != defaultFileMode {
-				t.Fatalf("%q mode %v != %v", name, m, defaultFileMode)
+			expectMode := df.mode
+			if expectMode == 0 {
+				expectMode = defaultFileMode
+			}
+			if exist && m != expectMode {
+				t.Fatalf("%q mode %v != %v", name, m, expectMode)
 			}
 		}
 		for _, name := range dirs {
@@ -179,68 +194,88 @@ func TestStorage_Archive(t *testing.T) {
 
 	tests := []struct {
 		name     string
-		files    map[string][]byte
+		files    map[string]dummyFile
 		filter   ArchiveFileFilter
-		want     map[string][]byte
+		want     map[string]dummyFile
 		wantDirs []string
 		wantErr  bool
 	}{
 		{
 			name: "no filter",
-			files: map[string][]byte{
-				".git/config":   nil,
-				"file.jpg":      []byte(`contents`),
-				"manifest.yaml": nil,
+			files: map[string]dummyFile{
+				".git/config":   {},
+				"file.jpg":      {content: []byte(`contents`)},
+				"manifest.yaml": {},
 			},
 			filter: nil,
-			want: map[string][]byte{
-				".git/config":   nil,
-				"file.jpg":      []byte(`contents`),
-				"manifest.yaml": nil,
+			want: map[string]dummyFile{
+				".git/config":   {},
+				"file.jpg":      {content: []byte(`contents`)},
+				"manifest.yaml": {},
 			},
 		},
 		{
 			name: "exclude VCS",
-			files: map[string][]byte{
-				".git/config":   nil,
-				"manifest.yaml": nil,
+			files: map[string]dummyFile{
+				".git/config":   {},
+				"manifest.yaml": {},
 			},
 			wantDirs: []string{
 				"!.git",
 			},
 			filter: SourceIgnoreFilter(nil, nil),
-			want: map[string][]byte{
-				"!.git/config":  nil,
-				"manifest.yaml": nil,
+			want: map[string]dummyFile{
+				"!.git/config":  {},
+				"manifest.yaml": {},
 			},
 		},
 		{
 			name: "custom",
-			files: map[string][]byte{
-				".git/config": nil,
-				"custom":      nil,
-				"horse.jpg":   nil,
+			files: map[string]dummyFile{
+				".git/config": {},
+				"custom":      {},
+				"horse.jpg":   {},
 			},
 			filter: SourceIgnoreFilter([]gitignore.Pattern{
 				gitignore.ParsePattern("custom", nil),
 			}, nil),
-			want: map[string][]byte{
-				"!git/config": nil,
-				"!custom":     nil,
-				"horse.jpg":   nil,
+			want: map[string]dummyFile{
+				"!git/config": {},
+				"!custom":     {},
+				"horse.jpg":   {},
 			},
 			wantErr: false,
 		},
 		{
 			name: "including directories",
-			files: map[string][]byte{
-				"test/.gitkeep": nil,
+			files: map[string]dummyFile{
+				"test/.gitkeep": {},
 			},
 			filter: SourceIgnoreFilter([]gitignore.Pattern{
 				gitignore.ParsePattern("custom", nil),
 			}, nil),
 			wantDirs: []string{
 				"test",
+			},
+			wantErr: false,
+		},
+		{
+			name: "sets default file modes",
+			files: map[string]dummyFile{
+				"test/file": {
+					mode: 0o666,
+				},
+				"test/executable": {
+					mode: 0o777,
+				},
+			},
+			want: map[string]dummyFile{
+				"test/file": {
+					mode: defaultFileMode,
+				},
+				"test/executable": {
+					mode: defaultExeFileMode,
+				},
 			},
 			wantErr: false,
 		},
