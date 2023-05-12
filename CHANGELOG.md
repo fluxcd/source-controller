@@ -2,6 +2,33 @@
 
 All notable changes to this project are documented in this file.
 
+## 1.0.0-rc.3
+
+**Release date:** 2023-05-12
+
+This release candidate introduces the verification of the Artifact digest in
+storage during reconciliation. This ensures that the Artifact is not tampered
+with after it was written to storage. When the digest does not match, the
+controller will emit a warning event and remove the file from storage, forcing
+the Artifact to be re-downloaded.
+
+In addition, files with executable permissions are now archived with their mode
+set to `0o744` instead of `0o644`. Allowing the extracted file to be executable
+by the user.
+
+Lastly, the controller's dependencies were updated to mitigate CVE-2023-1732
+and CVE-2023-2253, and the controller base image was updated to Alpine 3.18.
+
+Improvements:
+- Verify digest of Artifact in Storage
+  [#1088](https://github.com/fluxcd/source-controller/pull/1088)
+- build(deps): bump github.com/cloudflare/circl from 1.3.2 to 1.3.3
+  [#1092](https://github.com/fluxcd/source-controller/pull/1092)
+- build(deps): bump github.com/docker/distribution from 2.8.1+incompatible to 2.8.2+incompatible
+  [#1093](https://github.com/fluxcd/source-controller/pull/1093)
+- storage: set `0o744` for files with exec mode set
+  [#1094](https://github.com/fluxcd/source-controller/pull/1094)
+
 ## 1.0.0-rc.2
 
 **Release date:** 2023-05-09
