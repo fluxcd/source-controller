@@ -50,10 +50,12 @@ import (
 const GarbageCountLimit = 1000
 
 const (
-	// defaultFileMode is the permission mode applied to all files inside of an artifact archive.
+	// defaultFileMode is the permission mode applied to files inside of an artifact archive.
 	defaultFileMode int64 = 0o644
 	// defaultDirMode is the permission mode applied to all directories inside of an artifact archive.
 	defaultDirMode int64 = 0o755
+	// defaultExeFileMode is the permission mode applied to executable files inside an artifact archive.
+	defaultExeFileMode int64 = 0o744
 )
 
 // Storage manages artifacts
@@ -395,6 +397,7 @@ func (s *Storage) Archive(artifact *sourcev1.Artifact, dir string, filter Archiv
 		if err != nil {
 			return err
 		}
+
 		// The name needs to be modified to maintain directory structure
 		// as tar.FileInfoHeader only has access to the base name of the file.
 		// Ref: https://golang.org/src/archive/tar/common.go?#L626
@@ -405,21 +408,7 @@ func (s *Storage) Archive(artifact *sourcev1.Artifact, dir string, filter Archiv
 				return err
 			}
 		}
-		header.Name = relFilePath
-
-		// We want to remove any environment specific data as well, this
-		// ensures the checksum is purely content based.
-		header.Gid = 0
-		header.Uid = 0
-		header.Uname = ""
-		header.Gname = ""
-		header.ModTime = time.Time{}
-		header.AccessTime = time.Time{}
-		header.ChangeTime = time.Time{}
-		header.Mode = defaultFileMode
-		if fi.Mode().IsDir() {
-			header.Mode = defaultDirMode
-		}
+		sanitizeHeader(relFilePath, header)
 
 		if err := tw.WriteHeader(header); err != nil {
 			return err
@@ -681,4 +670,43 @@ func (wc *writeCounter) Write(p []byte) (int, error) {
 	n := len(p)
 	wc.written += int64(n)
 	return n, nil
+}
+
+// sanitizeHeader modifies the tar.Header to be relative to the root of the
+// archive and removes any environment specific data.
+func sanitizeHeader(relP string, h *tar.Header) {
+	// Modify the name to be relative to the root of the archive,
+	// this ensures we maintain the same structure when extracting.
+	h.Name = relP
+
+	// We want to remove any environment specific data as well, this
+	// ensures the checksum is purely content based.
+	h.Gid = 0
+	h.Uid = 0
+	h.Uname = ""
+	h.Gname = ""
+	h.ModTime = time.Time{}
+	h.AccessTime = time.Time{}
+	h.ChangeTime = time.Time{}
+
+	// Override the mode to be the default for the type of file.
+	setDefaultMode(h)
+}
+
+// setDefaultMode sets the default mode for the given header.
+func setDefaultMode(h *tar.Header) {
+	if h.FileInfo().IsDir() {
+		h.Mode = defaultDirMode
+		return
+	}
+
+	if h.FileInfo().Mode().IsRegular() {
+		mode := h.FileInfo().Mode()
+		if mode&os.ModeType == 0 && mode&0o111 != 0 {
+			h.Mode = defaultExeFileMode
+			return
+		}
+		h.Mode = defaultFileMode
+		return
+	}
 }
