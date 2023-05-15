@@ -22,14 +22,14 @@ import (
 	"fmt"
 
 	"github.com/google/go-containerregistry/pkg/v1/remote"
-	"github.com/sigstore/cosign/cmd/cosign/cli/fulcio"
-	"github.com/sigstore/cosign/cmd/cosign/cli/rekor"
-	ociremote "github.com/sigstore/cosign/pkg/oci/remote"
+	"github.com/sigstore/cosign/v2/cmd/cosign/cli/fulcio"
+	"github.com/sigstore/cosign/v2/cmd/cosign/cli/rekor"
+	"github.com/sigstore/cosign/v2/pkg/cosign"
+	ociremote "github.com/sigstore/cosign/v2/pkg/oci/remote"
 
 	"github.com/google/go-containerregistry/pkg/name"
-	coptions "github.com/sigstore/cosign/cmd/cosign/cli/options"
-	"github.com/sigstore/cosign/pkg/cosign"
-	"github.com/sigstore/cosign/pkg/oci"
+	coptions "github.com/sigstore/cosign/v2/cmd/cosign/cli/options"
+	"github.com/sigstore/cosign/v2/pkg/oci"
 	"github.com/sigstore/sigstore/pkg/cryptoutils"
 	"github.com/sigstore/sigstore/pkg/signature"
 )
@@ -102,6 +102,9 @@ func NewCosignVerifier(ctx context.Context, opts ...Options) (*CosignVerifier, e
 		if err != nil {
 			return nil, err
 		}
+
+		checkOpts.Offline = true
+
 	} else {
 		rcerts, err := fulcio.GetRoots()
 		if err != nil {
@@ -120,6 +123,11 @@ func NewCosignVerifier(ctx context.Context, opts ...Options) (*CosignVerifier, e
 			return nil, fmt.Errorf("unable to create Rekor client: %w", err)
 		}
 		checkOpts.RekorClient = rc
+
+		checkOpts.RekorPubKeys, err = cosign.GetRekorPubs(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("unable to get Rekor public keys: %w", err)
+		}
 	}
 
 	return &CosignVerifier{
@@ -129,7 +137,17 @@ func NewCosignVerifier(ctx context.Context, opts ...Options) (*CosignVerifier, e
 
 // VerifyImageSignatures verify the authenticity of the given ref OCI image.
 func (v *CosignVerifier) VerifyImageSignatures(ctx context.Context, ref name.Reference) ([]oci.Signature, bool, error) {
-	return cosign.VerifyImageSignatures(ctx, ref, v.opts)
+	opts := v.opts
+
+	// TODO: expose the match conditions in the CRD
+	opts.Identities = []cosign.Identity{
+		{
+			IssuerRegExp:  ".*",
+			SubjectRegExp: ".*",
+		},
+	}
+
+	return cosign.VerifyImageSignatures(ctx, ref, opts)
 }
 
 // Verify verifies the authenticity of the given ref OCI image.

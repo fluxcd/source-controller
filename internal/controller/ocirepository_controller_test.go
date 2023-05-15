@@ -43,9 +43,9 @@ import (
 	gcrv1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/mutate"
 	. "github.com/onsi/gomega"
-	coptions "github.com/sigstore/cosign/cmd/cosign/cli/options"
-	"github.com/sigstore/cosign/cmd/cosign/cli/sign"
-	"github.com/sigstore/cosign/pkg/cosign"
+	coptions "github.com/sigstore/cosign/v2/cmd/cosign/cli/options"
+	"github.com/sigstore/cosign/v2/cmd/cosign/cli/sign"
+	"github.com/sigstore/cosign/v2/pkg/cosign"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -1239,11 +1239,14 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignature(t *testing.T) {
 				ro := &coptions.RootOptions{
 					Timeout: timeout,
 				}
-				err = sign.SignCmd(ro, ko, coptions.RegistryOptions{Keychain: keychain},
-					nil, []string{artifactURL}, "",
-					"", true, "",
-					"", "", false,
-					false, "", true)
+				err = sign.SignCmd(ro, ko, coptions.SignOptions{
+					Upload:           true,
+					SkipConfirmation: true,
+					TlogUpload:       false,
+
+					Registry: coptions.RegistryOptions{Keychain: keychain, AllowInsecure: true},
+				}, []string{artifactURL})
+
 				g.Expect(err).ToNot(HaveOccurred())
 			}
 

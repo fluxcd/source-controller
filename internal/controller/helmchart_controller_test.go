@@ -34,9 +34,9 @@ import (
 	"time"
 
 	. "github.com/onsi/gomega"
-	coptions "github.com/sigstore/cosign/cmd/cosign/cli/options"
-	"github.com/sigstore/cosign/cmd/cosign/cli/sign"
-	"github.com/sigstore/cosign/pkg/cosign"
+	coptions "github.com/sigstore/cosign/v2/cmd/cosign/cli/options"
+	"github.com/sigstore/cosign/v2/cmd/cosign/cli/sign"
+	"github.com/sigstore/cosign/v2/pkg/cosign"
 	hchart "helm.sh/helm/v3/pkg/chart"
 	"helm.sh/helm/v3/pkg/chart/loader"
 	helmreg "helm.sh/helm/v3/pkg/registry"
@@ -2633,11 +2633,13 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_verifySignature(t *testing.T
 					Timeout: timeout,
 				}
 
-				err = sign.SignCmd(ro, ko, coptions.RegistryOptions{Keychain: oci.Anonymous{}},
-					nil, []string{fmt.Sprintf("%s/testrepo/%s:%s", server.registryHost, metadata.Name, metadata.Version)}, "",
-					"", true, "",
-					"", "", false,
-					false, "", false)
+				err = sign.SignCmd(ro, ko, coptions.SignOptions{
+					Upload:           true,
+					SkipConfirmation: true,
+					TlogUpload:       false,
+					Registry:         coptions.RegistryOptions{Keychain: oci.Anonymous{}, AllowInsecure: true},
+				},
+					[]string{fmt.Sprintf("%s/testrepo/%s:%s", server.registryHost, metadata.Name, metadata.Version)})
 				g.Expect(err).ToNot(HaveOccurred())
 			}
 
