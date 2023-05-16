@@ -205,7 +205,10 @@ func TestHelmRepositoryOCIReconciler_authStrategy(t *testing.T) {
 		name             string
 		url              string
 		registryOpts     registryOptions
+		insecure         bool
 		secretOpts       secretOptions
+		secret           *corev1.Secret
+		certsSecret      *corev1.Secret
 		provider         string
 		providerImg      string
 		want             ctrl.Result
@@ -220,8 +223,9 @@ func TestHelmRepositoryOCIReconciler_authStrategy(t *testing.T) {
 			},
 		},
 		{
-			name: "HTTP with basic auth secret",
-			want: ctrl.Result{RequeueAfter: interval},
+			name:     "HTTP with basic auth secret",
+			want:     ctrl.Result{RequeueAfter: interval},
+			insecure: true,
 			registryOpts: registryOptions{
 				withBasicAuth: true,
 			},
@@ -229,20 +233,35 @@ func TestHelmRepositoryOCIReconciler_authStrategy(t *testing.T) {
 				username: testRegistryUsername,
 				password: testRegistryPassword,
 			},
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "auth-secretref",
+				},
+				Type: corev1.SecretTypeDockerConfigJson,
+				Data: map[string][]byte{},
+			},
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(meta.ReadyCondition, meta.SucceededReason, "Helm repository is ready"),
 			},
 		},
 		{
-			name:    "HTTP registry - basic auth with invalid secret",
-			want:    ctrl.Result{},
-			wantErr: true,
+			name:     "HTTP registry - basic auth with invalid secret",
+			want:     ctrl.Result{},
+			wantErr:  true,
+			insecure: true,
 			registryOpts: registryOptions{
 				withBasicAuth: true,
 			},
 			secretOpts: secretOptions{
 				username: "wrong-pass",
 				password: "wrong-pass",
+			},
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "auth-secretref",
+				},
+				Type: corev1.SecretTypeDockerConfigJson,
+				Data: map[string][]byte{},
 			},
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingWithRetryReason, "processing object: new generation"),
@@ -252,6 +271,7 @@ func TestHelmRepositoryOCIReconciler_authStrategy(t *testing.T) {
 		{
 			name:        "with contextual login provider",
 			wantErr:     true,
+			insecure:    true,
 			provider:    "aws",
 			providerImg: "oci://123456789000.dkr.ecr.us-east-2.amazonaws.com/test",
 			assertConditions: []metav1.Condition{
@@ -265,11 +285,82 @@ func TestHelmRepositoryOCIReconciler_authStrategy(t *testing.T) {
 			registryOpts: registryOptions{
 				withBasicAuth: true,
 			},
+			insecure: true,
 			secretOpts: secretOptions{
 				username: testRegistryUsername,
 				password: testRegistryPassword,
 			},
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "auth-secretref",
+				},
+				Type: corev1.SecretTypeDockerConfigJson,
+				Data: map[string][]byte{},
+			},
 			provider: "azure",
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReadyCondition, meta.SucceededReason, "Helm repository is ready"),
+			},
+		},
+		{
+			name:    "HTTPS With invalid CA cert",
+			wantErr: true,
+			registryOpts: registryOptions{
+				withTLS:            true,
+				withClientCertAuth: true,
+			},
+			secretOpts: secretOptions{
+				username: testRegistryUsername,
+				password: testRegistryPassword,
+			},
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "auth-secretref",
+				},
+				Type: corev1.SecretTypeDockerConfigJson,
+				Data: map[string][]byte{},
+			},
+			certsSecret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "certs-secretref",
+				},
+				Data: map[string][]byte{
+					"caFile": []byte("invalid caFile"),
+				},
+			},
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingWithRetryReason, "processing object: new generation 0 -> 1"),
+				*conditions.FalseCondition(meta.ReadyCondition, sourcev1.AuthenticationFailedReason, "cannot append certificate into certificate pool: invalid caFile"),
+			},
+		},
+		{
+			name: "HTTPS With CA cert",
+			want: ctrl.Result{RequeueAfter: interval},
+			registryOpts: registryOptions{
+				withTLS:            true,
+				withClientCertAuth: true,
+			},
+			secretOpts: secretOptions{
+				username: testRegistryUsername,
+				password: testRegistryPassword,
+			},
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "auth-secretref",
+				},
+				Type: corev1.SecretTypeDockerConfigJson,
+				Data: map[string][]byte{},
+			},
+			certsSecret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "certs-secretref",
+				},
+				Data: map[string][]byte{
+					"caFile":   tlsCA,
+					"certFile": clientPublicKey,
+					"keyFile":  clientPrivateKey,
+				},
+			},
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(meta.ReadyCondition, meta.SucceededReason, "Helm repository is ready"),
 			},
@@ -285,7 +376,9 @@ func TestHelmRepositoryOCIReconciler_authStrategy(t *testing.T) {
 				WithStatusSubresource(&helmv1.HelmRepository{})
 
 			workspaceDir := t.TempDir()
-			tt.registryOpts.disableDNSMocking = true
+			if tt.insecure {
+				tt.registryOpts.disableDNSMocking = true
+			}
 			server, err := setupRegistryServer(ctx, workspaceDir, tt.registryOpts)
 			g.Expect(err).NotTo(HaveOccurred())
 			t.Cleanup(func() {
@@ -317,28 +410,27 @@ func TestHelmRepositoryOCIReconciler_authStrategy(t *testing.T) {
 			}
 
 			if tt.secretOpts.username != "" && tt.secretOpts.password != "" {
-				secret := &corev1.Secret{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "auth-secretref",
-					},
-					Type: corev1.SecretTypeDockerConfigJson,
-					Data: map[string][]byte{
-						".dockerconfigjson": []byte(fmt.Sprintf(`{"auths": {%q: {"username": %q, "password": %q}}}`,
-							server.registryHost, tt.secretOpts.username, tt.secretOpts.password)),
-					},
-				}
+				tt.secret.Data[".dockerconfigjson"] = []byte(fmt.Sprintf(`{"auths": {%q: {"username": %q, "password": %q}}}`,
+					server.registryHost, tt.secretOpts.username, tt.secretOpts.password))
+			}
 
-				clientBuilder.WithObjects(secret)
-
+			if tt.secret != nil {
+				clientBuilder.WithObjects(tt.secret)
 				obj.Spec.SecretRef = &meta.LocalObjectReference{
-					Name: secret.Name,
+					Name: tt.secret.Name,
+				}
+			}
+
+			if tt.certsSecret != nil {
+				clientBuilder.WithObjects(tt.certsSecret)
+				obj.Spec.CertSecretRef = &meta.LocalObjectReference{
+					Name: tt.certsSecret.Name,
 				}
 			}
 
 			r := &HelmRepositoryOCIReconciler{
 				Client:                  clientBuilder.Build(),
 				EventRecorder:           record.NewFakeRecorder(32),
-				Getters:                 testGetters,
 				RegistryClientGenerator: registry.ClientGenerator,
 				patchOptions:            getPatchOptions(helmRepositoryOCIOwnedConditions, "sc"),
 			}
@@ -349,7 +441,6 @@ func TestHelmRepositoryOCIReconciler_authStrategy(t *testing.T) {
 			}()
 
 			sp := patch.NewSerialPatcher(obj, r.Client)
-
 			got, err := r.reconcile(ctx, sp, obj)
 			g.Expect(err != nil).To(Equal(tt.wantErr))
 			g.Expect(got).To(Equal(tt.want))

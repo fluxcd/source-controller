@@ -1109,7 +1109,7 @@ func TestHelmChartReconciler_buildFromOCIHelmRepository(t *testing.T) {
 	g.Expect(err).NotTo(HaveOccurred())
 
 	// Upload the test chart
-	metadata, err := loadTestChartToOCI(chartData, chartPath, testRegistryServer)
+	metadata, err := loadTestChartToOCI(chartData, testRegistryServer, "", "", "")
 	g.Expect(err).NotTo(HaveOccurred())
 
 	storage, err := NewStorage(tmpDir, "example.com", retentionTTL, retentionRecords)
@@ -2244,6 +2244,9 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_authStrategy(t *testing.T) {
 		url              string
 		registryOpts     registryOptions
 		secretOpts       secretOptions
+		secret           *corev1.Secret
+		certsecret       *corev1.Secret
+		insecure         bool
 		provider         string
 		providerImg      string
 		want             sreconcile.Result
@@ -2251,16 +2254,18 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_authStrategy(t *testing.T) {
 		assertConditions []metav1.Condition
 	}{
 		{
-			name: "HTTP without basic auth",
-			want: sreconcile.ResultSuccess,
+			name:     "HTTP without basic auth",
+			want:     sreconcile.ResultSuccess,
+			insecure: true,
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: pulled 'helmchart' chart with version '0.1.0'"),
 				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: pulled 'helmchart' chart with version '0.1.0'"),
 			},
 		},
 		{
-			name: "HTTP with basic auth secret",
-			want: sreconcile.ResultSuccess,
+			name:     "HTTP with basic auth secret",
+			want:     sreconcile.ResultSuccess,
+			insecure: true,
 			registryOpts: registryOptions{
 				withBasicAuth: true,
 			},
@@ -2268,21 +2273,36 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_authStrategy(t *testing.T) {
 				username: testRegistryUsername,
 				password: testRegistryPassword,
 			},
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "auth-secretref",
+				},
+				Type: corev1.SecretTypeDockerConfigJson,
+				Data: map[string][]byte{},
+			},
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: pulled 'helmchart' chart with version '0.1.0'"),
 				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: pulled 'helmchart' chart with version '0.1.0'"),
 			},
 		},
 		{
-			name:    "HTTP registry - basic auth with invalid secret",
-			want:    sreconcile.ResultEmpty,
-			wantErr: true,
+			name:     "HTTP registry - basic auth with invalid secret",
+			want:     sreconcile.ResultEmpty,
+			wantErr:  true,
+			insecure: true,
 			registryOpts: registryOptions{
 				withBasicAuth: true,
 			},
 			secretOpts: secretOptions{
 				username: "wrong-pass",
 				password: "wrong-pass",
+			},
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "auth-secretref",
+				},
+				Type: corev1.SecretTypeDockerConfigJson,
+				Data: map[string][]byte{},
 			},
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(sourcev1.FetchFailedCondition, "Unknown", "unknown build error: failed to login to OCI registry"),
@@ -2291,6 +2311,7 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_authStrategy(t *testing.T) {
 		{
 			name:        "with contextual login provider",
 			wantErr:     true,
+			insecure:    true,
 			provider:    "aws",
 			providerImg: "oci://123456789000.dkr.ecr.us-east-2.amazonaws.com/test",
 			assertConditions: []metav1.Condition{
@@ -2303,11 +2324,82 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_authStrategy(t *testing.T) {
 			registryOpts: registryOptions{
 				withBasicAuth: true,
 			},
+			insecure: true,
 			secretOpts: secretOptions{
 				username: testRegistryUsername,
 				password: testRegistryPassword,
 			},
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "auth-secretref",
+				},
+				Type: corev1.SecretTypeDockerConfigJson,
+				Data: map[string][]byte{},
+			},
 			provider: "azure",
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: pulled 'helmchart' chart with version '0.1.0'"),
+				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: pulled 'helmchart' chart with version '0.1.0'"),
+			},
+		},
+		{
+			name:    "HTTPS With invalid CA cert",
+			wantErr: true,
+			registryOpts: registryOptions{
+				withTLS:            true,
+				withClientCertAuth: true,
+			},
+			secretOpts: secretOptions{
+				username: testRegistryUsername,
+				password: testRegistryPassword,
+			},
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "auth-secretref",
+				},
+				Type: corev1.SecretTypeDockerConfigJson,
+				Data: map[string][]byte{},
+			},
+			certsecret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "certs-secretref",
+				},
+				Data: map[string][]byte{
+					"caFile": []byte("invalid caFile"),
+				},
+			},
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, "Unknown", "unknown build error: failed to construct Helm client's TLS config: cannot append certificate into certificate pool: invalid caFile"),
+			},
+		},
+		{
+			name: "HTTPS With CA cert",
+			want: sreconcile.ResultSuccess,
+			registryOpts: registryOptions{
+				withTLS:            true,
+				withClientCertAuth: true,
+			},
+			secretOpts: secretOptions{
+				username: testRegistryUsername,
+				password: testRegistryPassword,
+			},
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "auth-secretref",
+				},
+				Type: corev1.SecretTypeDockerConfigJson,
+				Data: map[string][]byte{},
+			},
+			certsecret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "certs-secretref",
+				},
+				Data: map[string][]byte{
+					"caFile":   tlsCA,
+					"certFile": clientPublicKey,
+					"keyFile":  clientPrivateKey,
+				},
+			},
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: pulled 'helmchart' chart with version '0.1.0'"),
 				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: pulled 'helmchart' chart with version '0.1.0'"),
@@ -2325,7 +2417,9 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_authStrategy(t *testing.T) {
 
 			workspaceDir := t.TempDir()
 
-			tt.registryOpts.disableDNSMocking = true
+			if tt.insecure {
+				tt.registryOpts.disableDNSMocking = true
+			}
 			server, err := setupRegistryServer(ctx, workspaceDir, tt.registryOpts)
 			g.Expect(err).NotTo(HaveOccurred())
 			t.Cleanup(func() {
@@ -2337,7 +2431,7 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_authStrategy(t *testing.T) {
 			g.Expect(err).ToNot(HaveOccurred())
 
 			// Upload the test chart
-			metadata, err := loadTestChartToOCI(chartData, chartPath, server)
+			metadata, err := loadTestChartToOCI(chartData, server, "testdata/certs/client.pem", "testdata/certs/client-key.pem", "testdata/certs/ca.pem")
 			g.Expect(err).ToNot(HaveOccurred())
 
 			repo := &helmv1.HelmRepository{
@@ -2364,24 +2458,25 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_authStrategy(t *testing.T) {
 			}
 
 			if tt.secretOpts.username != "" && tt.secretOpts.password != "" {
-				secret := &corev1.Secret{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "auth-secretref",
-					},
-					Type: corev1.SecretTypeDockerConfigJson,
-					Data: map[string][]byte{
-						".dockerconfigjson": []byte(fmt.Sprintf(`{"auths": {%q: {"username": %q, "password": %q}}}`,
-							server.registryHost, tt.secretOpts.username, tt.secretOpts.password)),
-					},
-				}
-
-				repo.Spec.SecretRef = &meta.LocalObjectReference{
-					Name: secret.Name,
-				}
-				clientBuilder.WithObjects(secret, repo)
-			} else {
-				clientBuilder.WithObjects(repo)
+				tt.secret.Data[".dockerconfigjson"] = []byte(fmt.Sprintf(`{"auths": {%q: {"username": %q, "password": %q}}}`,
+					server.registryHost, tt.secretOpts.username, tt.secretOpts.password))
 			}
+
+			if tt.secret != nil {
+				repo.Spec.SecretRef = &meta.LocalObjectReference{
+					Name: tt.secret.Name,
+				}
+				clientBuilder.WithObjects(tt.secret)
+			}
+
+			if tt.certsecret != nil {
+				repo.Spec.CertSecretRef = &meta.LocalObjectReference{
+					Name: tt.certsecret.Name,
+				}
+				clientBuilder.WithObjects(tt.certsecret)
+			}
+
+			clientBuilder.WithObjects(repo)
 
 			obj := &helmv1.HelmChart{
 				ObjectMeta: metav1.ObjectMeta{
@@ -2456,7 +2551,7 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_verifySignature(t *testing.T
 	g.Expect(err).ToNot(HaveOccurred())
 
 	// Upload the test chart
-	metadata, err := loadTestChartToOCI(chartData, chartPath, server)
+	metadata, err := loadTestChartToOCI(chartData, server, "", "", "")
 	g.Expect(err).NotTo(HaveOccurred())
 
 	storage, err := NewStorage(tmpDir, "example.com", retentionTTL, retentionRecords)
@@ -2687,30 +2782,24 @@ func extractChartMeta(chartData []byte) (*hchart.Metadata, error) {
 	return ch.Metadata, nil
 }
 
-func loadTestChartToOCI(chartData []byte, chartPath string, server *registryClientTestServer) (*hchart.Metadata, error) {
+func loadTestChartToOCI(chartData []byte, server *registryClientTestServer, certFile, keyFile, cafile string) (*hchart.Metadata, error) {
 	// Login to the registry
 	err := server.registryClient.Login(server.registryHost,
 		helmreg.LoginOptBasicAuth(testRegistryUsername, testRegistryPassword),
-		helmreg.LoginOptInsecure(true))
+		helmreg.LoginOptTLSClientConfig(certFile, keyFile, cafile))
 	if err != nil {
-		return nil, err
-	}
-
-	// Load a test chart
-	chartData, err = os.ReadFile(chartPath)
-	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to login to OCI registry: %w", err)
 	}
 	metadata, err := extractChartMeta(chartData)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to extract chart metadata: %w", err)
 	}
 
 	// Upload the test chart
 	ref := fmt.Sprintf("%s/testrepo/%s:%s", server.registryHost, metadata.Name, metadata.Version)
 	_, err = server.registryClient.Push(chartData, ref)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to push chart: %w", err)
 	}
 
 	return metadata, nil

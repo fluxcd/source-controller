@@ -796,7 +796,7 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 				if tt.url != "" {
 					repoURL = tt.url
 				}
-				tlsConf, serr = getter.TLSClientConfigFromSecret(*secret, repoURL)
+				tlsConf, _, serr = getter.TLSClientConfigFromSecret(*secret, repoURL)
 				if serr != nil {
 					validSecret = false
 				}

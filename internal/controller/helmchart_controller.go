@@ -512,7 +512,8 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 	if err != nil {
 		return chartRepoConfigErrorReturn(err, obj)
 	}
-	clientOpts, err := getter.GetClientOpts(ctxTimeout, r.Client, repo, normalizedURL)
+
+	clientOpts, certsTmpDir, err := getter.GetClientOpts(ctxTimeout, r.Client, repo, normalizedURL)
 	if err != nil && !errors.Is(err, getter.ErrDeprecatedTLSConfig) {
 		e := &serror.Event{
 			Err:    err,
@@ -521,6 +522,15 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
 		return sreconcile.ResultEmpty, e
 	}
+	if certsTmpDir != "" {
+		defer func() {
+			if err := os.RemoveAll(certsTmpDir); err != nil {
+				r.eventLogf(ctx, obj, corev1.EventTypeWarning, meta.FailedReason,
+					"failed to delete temporary certificates directory: %s", err)
+			}
+		}()
+	}
+
 	getterOpts := clientOpts.GetterOpts
 
 	// Initialize the chart repository
@@ -536,7 +546,7 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 		// this is needed because otherwise the credentials are stored in ~/.docker/config.json.
 		// TODO@souleb: remove this once the registry move to Oras v2
 		// or rework to enable reusing credentials to avoid the unneccessary handshake operations
-		registryClient, credentialsFile, err := r.RegistryClientGenerator(clientOpts.RegLoginOpt != nil)
+		registryClient, credentialsFile, err := r.RegistryClientGenerator(clientOpts.TlsConfig, clientOpts.MustLoginToRegistry())
 		if err != nil {
 			e := &serror.Event{
 				Err:    fmt.Errorf("failed to construct Helm client: %w", err),
@@ -585,8 +595,8 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 
 		// If login options are configured, use them to login to the registry
 		// The OCIGetter will later retrieve the stored credentials to pull the chart
-		if clientOpts.RegLoginOpt != nil {
-			err = ociChartRepo.Login(clientOpts.RegLoginOpt)
+		if clientOpts.MustLoginToRegistry() {
+			err = ociChartRepo.Login(clientOpts.RegLoginOpts...)
 			if err != nil {
 				e := &serror.Event{
 					Err:    fmt.Errorf("failed to login to OCI registry: %w", err),
@@ -983,7 +993,7 @@ func (r *HelmChartReconciler) namespacedChartRepositoryCallback(ctx context.Cont
 		ctxTimeout, cancel := context.WithTimeout(ctx, obj.Spec.Timeout.Duration)
 		defer cancel()
 
-		clientOpts, err := getter.GetClientOpts(ctxTimeout, r.Client, obj, normalizedURL)
+		clientOpts, certsTmpDir, err := getter.GetClientOpts(ctxTimeout, r.Client, obj, normalizedURL)
 		if err != nil && !errors.Is(err, getter.ErrDeprecatedTLSConfig) {
 			return nil, err
 		}
@@ -991,7 +1001,7 @@ func (r *HelmChartReconciler) namespacedChartRepositoryCallback(ctx context.Cont
 
 		var chartRepo repository.Downloader
 		if helmreg.IsOCI(normalizedURL) {
-			registryClient, credentialsFile, err := r.RegistryClientGenerator(clientOpts.RegLoginOpt != nil)
+			registryClient, credentialsFile, err := r.RegistryClientGenerator(clientOpts.TlsConfig, clientOpts.MustLoginToRegistry())
 			if err != nil {
 				return nil, fmt.Errorf("failed to create registry client: %w", err)
 			}
@@ -1002,6 +1012,7 @@ func (r *HelmChartReconciler) namespacedChartRepositoryCallback(ctx context.Cont
 			ociChartRepo, err := repository.NewOCIChartRepository(normalizedURL, repository.WithOCIGetter(r.Getters),
 				repository.WithOCIGetterOptions(getterOpts),
 				repository.WithOCIRegistryClient(registryClient),
+				repository.WithCertificatesStore(certsTmpDir),
 				repository.WithCredentialsFile(credentialsFile))
 			if err != nil {
 				errs = append(errs, fmt.Errorf("failed to create OCI chart repository: %w", err))
@@ -1016,8 +1027,8 @@ func (r *HelmChartReconciler) namespacedChartRepositoryCallback(ctx context.Cont
 
 			// If login options are configured, use them to login to the registry
 			// The OCIGetter will later retrieve the stored credentials to pull the chart
-			if clientOpts.RegLoginOpt != nil {
-				err = ociChartRepo.Login(clientOpts.RegLoginOpt)
+			if clientOpts.MustLoginToRegistry() {
+				err = ociChartRepo.Login(clientOpts.RegLoginOpts...)
 				if err != nil {
 					errs = append(errs, fmt.Errorf("failed to login to OCI chart repository: %w", err))
 					// clean up the credentialsFile

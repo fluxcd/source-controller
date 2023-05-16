@@ -459,8 +459,6 @@ a deprecation warning will be logged.
 
 ### Cert secret reference
 
-**Note:** TLS authentication is not yet supported by OCI Helm repositories.
-
 `.spec.certSecretRef.name` is an optional field to specify a secret containing TLS
 certificate data. The secret can contain the following keys:
 

@@ -149,7 +149,7 @@ func TestGetClientOpts(t *testing.T) {
 			}
 			c := clientBuilder.Build()
 
-			clientOpts, err := GetClientOpts(context.TODO(), c, helmRepo, "https://ghcr.io/dummy")
+			clientOpts, _, err := GetClientOpts(context.TODO(), c, helmRepo, "https://ghcr.io/dummy")
 			if tt.err != nil {
 				g.Expect(err).To(Equal(tt.err))
 			} else {
@@ -183,13 +183,125 @@ func Test_tlsClientConfigFromSecret(t *testing.T) {
 				tt.modify(secret)
 			}
 
-			got, err := TLSClientConfigFromSecret(*secret, "")
+			got, _, err := TLSClientConfigFromSecret(*secret, "")
 			if (err != nil) != tt.wantErr {
 				t.Errorf("TLSClientConfigFromSecret() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 			if tt.wantNil && got != nil {
 				t.Error("TLSClientConfigFromSecret() != nil")
+				return
+			}
+		})
+	}
+}
+
+func TestGetClientOpts_registryTLSLoginOption(t *testing.T) {
+	tlsCA, err := os.ReadFile("../../controller/testdata/certs/ca.pem")
+	if err != nil {
+		t.Errorf("could not read CA file: %s", err)
+	}
+
+	tests := []struct {
+		name       string
+		certSecret *corev1.Secret
+		authSecret *corev1.Secret
+		loginOptsN int
+	}{
+		{
+			name: "with valid caFile",
+			certSecret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "ca-file",
+				},
+				Data: map[string][]byte{
+					"caFile": tlsCA,
+				},
+			},
+			authSecret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "auth-oci",
+				},
+				Data: map[string][]byte{
+					"username": []byte("user"),
+					"password": []byte("pass"),
+				},
+			},
+			loginOptsN: 2,
+		},
+		{
+			name: "without caFile",
+			certSecret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "ca-file",
+				},
+				Data: map[string][]byte{},
+			},
+			authSecret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "auth-oci",
+				},
+				Data: map[string][]byte{
+					"username": []byte("user"),
+					"password": []byte("pass"),
+				},
+			},
+			loginOptsN: 1,
+		},
+		{
+			name:       "without cert secret",
+			certSecret: nil,
+			authSecret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "auth-oci",
+				},
+				Data: map[string][]byte{
+					"username": []byte("user"),
+					"password": []byte("pass"),
+				},
+			},
+			loginOptsN: 1,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			helmRepo := &helmv1.HelmRepository{
+				Spec: helmv1.HelmRepositorySpec{
+					Timeout: &metav1.Duration{
+						Duration: time.Second,
+					},
+					Type: helmv1.HelmRepositoryTypeOCI,
+				},
+			}
+
+			clientBuilder := fakeclient.NewClientBuilder()
+
+			if tt.authSecret != nil {
+				clientBuilder.WithObjects(tt.authSecret.DeepCopy())
+				helmRepo.Spec.SecretRef = &meta.LocalObjectReference{
+					Name: tt.authSecret.Name,
+				}
+			}
+
+			if tt.certSecret != nil {
+				clientBuilder.WithObjects(tt.certSecret.DeepCopy())
+				helmRepo.Spec.CertSecretRef = &meta.LocalObjectReference{
+					Name: tt.certSecret.Name,
+				}
+			}
+			c := clientBuilder.Build()
+
+			clientOpts, tmpDir, err := GetClientOpts(context.TODO(), c, helmRepo, "https://ghcr.io/dummy")
+			if err != nil {
+				t.Errorf("GetClientOpts() error = %v", err)
+				return
+			}
+			if tmpDir != "" {
+				defer os.RemoveAll(tmpDir)
+			}
+			if tt.loginOptsN != len(clientOpts.RegLoginOpts) {
+				// we should have a login option but no TLS option
+				t.Error("registryTLSLoginOption() != nil")
 				return
 			}
 		})
