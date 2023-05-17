@@ -21,7 +21,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math/rand"
 	"os"
 	"path/filepath"
@@ -164,8 +163,7 @@ func setupRegistryServer(ctx context.Context, workspaceDir string, opts registry
 		}
 
 		htpasswdPath := filepath.Join(workspaceDir, testRegistryHtpasswdFileBasename)
-		err = ioutil.WriteFile(htpasswdPath, []byte(fmt.Sprintf("%s:%s\n", testRegistryUsername, string(pwBytes))), 0644)
-		if err != nil {
+		if err = os.WriteFile(htpasswdPath, []byte(fmt.Sprintf("%s:%s\n", testRegistryUsername, string(pwBytes))), 0644); err != nil {
 			return nil, fmt.Errorf("failed to create htpasswd file: %s", err)
 		}
 

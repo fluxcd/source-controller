@@ -23,7 +23,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"os"
 	"path"
@@ -1058,7 +1057,8 @@ func TestHelmChartReconciler_buildFromOCIHelmRepository(t *testing.T) {
 	)
 
 	// Load a test chart
-	chartData, err := ioutil.ReadFile(chartPath)
+	chartData, err := os.ReadFile(chartPath)
+	g.Expect(err).NotTo(HaveOccurred())
 
 	// Upload the test chart
 	metadata, err := loadTestChartToOCI(chartData, chartPath, testRegistryServer)
@@ -2333,16 +2333,16 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_authStrategy(t *testing.T) {
 
 			builder := fakeclient.NewClientBuilder().WithScheme(testEnv.GetScheme())
 			workspaceDir := t.TempDir()
-			server, err := setupRegistryServer(ctx, workspaceDir, tt.registryOpts)
 
+			server, err := setupRegistryServer(ctx, workspaceDir, tt.registryOpts)
 			g.Expect(err).NotTo(HaveOccurred())
 
 			// Load a test chart
-			chartData, err := ioutil.ReadFile(chartPath)
+			chartData, err := os.ReadFile(chartPath)
+			g.Expect(err).ToNot(HaveOccurred())
 
 			// Upload the test chart
 			metadata, err := loadTestChartToOCI(chartData, chartPath, server)
-			g.Expect(err).NotTo(HaveOccurred())
 			g.Expect(err).ToNot(HaveOccurred())
 
 			repo := &helmv1.HelmRepository{
@@ -2452,7 +2452,8 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_verifySignature(t *testing.T
 	)
 
 	// Load a test chart
-	chartData, err := ioutil.ReadFile(chartPath)
+	chartData, err := os.ReadFile(chartPath)
+	g.Expect(err).ToNot(HaveOccurred())
 
 	// Upload the test chart
 	metadata, err := loadTestChartToOCI(chartData, chartPath, server)
@@ -2504,10 +2505,10 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_verifySignature(t *testing.T
 			},
 			want:       sreconcile.ResultEmpty,
 			wantErr:    true,
-			wantErrMsg: "chart verification error: failed to verify <url>: no matching signatures:",
+			wantErrMsg: "chart verification error: failed to verify <url>: no signatures found for image",
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.BuildFailedCondition, "ChartVerificationError", "chart verification error: failed to verify <url>: no matching signatures:"),
-				*conditions.FalseCondition(sourcev1.SourceVerifiedCondition, sourcev1.VerificationError, "chart verification error: failed to verify <url>: no matching signatures:"),
+				*conditions.TrueCondition(sourcev1.BuildFailedCondition, "ChartVerificationError", "chart verification error: failed to verify <url>: no signatures found for image"),
+				*conditions.FalseCondition(sourcev1.SourceVerifiedCondition, sourcev1.VerificationError, "chart verification error: failed to verify <url>: no signatures found for image"),
 			},
 		},
 		{
@@ -2522,8 +2523,8 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_verifySignature(t *testing.T
 			want:    sreconcile.ResultEmpty,
 			wantErr: true,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.BuildFailedCondition, "ChartVerificationError", "chart verification error: failed to verify <url>: no matching signatures:"),
-				*conditions.FalseCondition(sourcev1.SourceVerifiedCondition, sourcev1.VerificationError, "chart verification error: failed to verify <url>: no matching signatures:"),
+				*conditions.TrueCondition(sourcev1.BuildFailedCondition, "ChartVerificationError", "chart verification error: failed to verify <url>: no signatures found for image"),
+				*conditions.FalseCondition(sourcev1.SourceVerifiedCondition, sourcev1.VerificationError, "chart verification error: failed to verify <url>: no signatures found for image"),
 			},
 		},
 		{
@@ -2696,7 +2697,7 @@ func loadTestChartToOCI(chartData []byte, chartPath string, server *registryClie
 	}
 
 	// Load a test chart
-	chartData, err = ioutil.ReadFile(chartPath)
+	chartData, err = os.ReadFile(chartPath)
 	if err != nil {
 		return nil, err
 	}
