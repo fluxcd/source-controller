@@ -31,7 +31,6 @@ import (
 	"time"
 
 	"github.com/Masterminds/semver/v3"
-	soci "github.com/fluxcd/source-controller/internal/oci"
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/authn/k8schain"
 	"github.com/google/go-containerregistry/pkg/crane"
@@ -69,6 +68,7 @@ import (
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	ociv1 "github.com/fluxcd/source-controller/api/v1beta2"
 	serror "github.com/fluxcd/source-controller/internal/error"
+	soci "github.com/fluxcd/source-controller/internal/oci"
 	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
 	"github.com/fluxcd/source-controller/internal/reconcile/summarize"
 	"github.com/fluxcd/source-controller/internal/util"

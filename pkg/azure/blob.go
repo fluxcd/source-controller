@@ -38,6 +38,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 
 	"github.com/fluxcd/pkg/masktoken"
+
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
 )
 
@@ -422,7 +423,11 @@ func chainCredentialWithSecret(secret *corev1.Secret) (azcore.TokenCredential, e
 		if file, ok := os.LookupEnv("AZURE_FEDERATED_TOKEN_FILE"); ok {
 			if _, ok := os.LookupEnv("AZURE_AUTHORITY_HOST"); ok {
 				if tenantID, ok := os.LookupEnv("AZURE_TENANT_ID"); ok {
-					if token, _ := azidentity.NewWorkloadIdentityCredential(tenantID, clientID, file, &azidentity.WorkloadIdentityCredentialOptions{}); token != nil {
+					if token, _ := azidentity.NewWorkloadIdentityCredential(&azidentity.WorkloadIdentityCredentialOptions{
+						ClientID:      clientID,
+						TenantID:      tenantID,
+						TokenFilePath: file,
+					}); token != nil {
 						creds = append(creds, token)
 					}
 				}

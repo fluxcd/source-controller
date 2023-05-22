@@ -21,15 +21,14 @@ import (
 	"crypto"
 	"fmt"
 
-	"github.com/google/go-containerregistry/pkg/v1/remote"
-	"github.com/sigstore/cosign/cmd/cosign/cli/fulcio"
-	"github.com/sigstore/cosign/cmd/cosign/cli/rekor"
-	ociremote "github.com/sigstore/cosign/pkg/oci/remote"
-
 	"github.com/google/go-containerregistry/pkg/name"
-	coptions "github.com/sigstore/cosign/cmd/cosign/cli/options"
-	"github.com/sigstore/cosign/pkg/cosign"
-	"github.com/sigstore/cosign/pkg/oci"
+	"github.com/google/go-containerregistry/pkg/v1/remote"
+	"github.com/sigstore/cosign/v2/cmd/cosign/cli/fulcio"
+	coptions "github.com/sigstore/cosign/v2/cmd/cosign/cli/options"
+	"github.com/sigstore/cosign/v2/cmd/cosign/cli/rekor"
+	"github.com/sigstore/cosign/v2/pkg/cosign"
+	"github.com/sigstore/cosign/v2/pkg/oci"
+	ociremote "github.com/sigstore/cosign/v2/pkg/oci/remote"
 	"github.com/sigstore/sigstore/pkg/cryptoutils"
 	"github.com/sigstore/sigstore/pkg/signature"
 )
@@ -93,6 +92,11 @@ func NewCosignVerifier(ctx context.Context, opts ...Options) (*CosignVerifier, e
 	// If there is no public key provided, it will try keyless verification.
 	// https://github.com/sigstore/cosign/blob/main/KEYLESS.md.
 	if len(o.PublicKey) > 0 {
+		checkOpts.Offline = true
+		// TODO(hidde): this is an oversight in our implementation. As it is
+		//  theoretically possible to have a custom PK, without disabling tlog.
+		checkOpts.IgnoreTlog = true
+
 		pubKeyRaw, err := cryptoutils.UnmarshalPEMToPublicKey(o.PublicKey)
 		if err != nil {
 			return nil, err
@@ -103,23 +107,31 @@ func NewCosignVerifier(ctx context.Context, opts ...Options) (*CosignVerifier, e
 			return nil, err
 		}
 	} else {
-		rcerts, err := fulcio.GetRoots()
-		if err != nil {
-			return nil, fmt.Errorf("unable to get Fulcio root certs: %w", err)
-		}
-		checkOpts.RootCerts = rcerts
-
-		icerts, err := fulcio.GetIntermediates()
-		if err != nil {
-			return nil, fmt.Errorf("unable to get Fulcio intermediate certs: %w", err)
-		}
-		checkOpts.IntermediateCerts = icerts
-
-		rc, err := rekor.NewClient(coptions.DefaultRekorURL)
+		checkOpts.RekorClient, err = rekor.NewClient(coptions.DefaultRekorURL)
 		if err != nil {
 			return nil, fmt.Errorf("unable to create Rekor client: %w", err)
 		}
-		checkOpts.RekorClient = rc
+
+		// This performs an online fetch of the Rekor public keys, but this is needed
+		// for verifying tlog entries (both online and offline).
+		// TODO(hidde): above note is important to keep in mind when we implement
+		//  "offline" tlog above.
+		if checkOpts.RekorPubKeys, err = cosign.GetRekorPubs(ctx); err != nil {
+			return nil, fmt.Errorf("unable to get Rekor public keys: %w", err)
+		}
+
+		checkOpts.CTLogPubKeys, err = cosign.GetCTLogPubs(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("unable to get CTLog public keys: %w", err)
+		}
+
+		if checkOpts.RootCerts, err = fulcio.GetRoots(); err != nil {
+			return nil, fmt.Errorf("unable to get Fulcio root certs: %w", err)
+		}
+
+		if checkOpts.IntermediateCerts, err = fulcio.GetIntermediates(); err != nil {
+			return nil, fmt.Errorf("unable to get Fulcio intermediate certs: %w", err)
+		}
 	}
 
 	return &CosignVerifier{
@@ -129,7 +141,17 @@ func NewCosignVerifier(ctx context.Context, opts ...Options) (*CosignVerifier, e
 
 // VerifyImageSignatures verify the authenticity of the given ref OCI image.
 func (v *CosignVerifier) VerifyImageSignatures(ctx context.Context, ref name.Reference) ([]oci.Signature, bool, error) {
-	return cosign.VerifyImageSignatures(ctx, ref, v.opts)
+	opts := v.opts
+
+	// TODO: expose the match conditions in the CRD
+	opts.Identities = []cosign.Identity{
+		{
+			IssuerRegExp:  ".*",
+			SubjectRegExp: ".*",
+		},
+	}
+
+	return cosign.VerifyImageSignatures(ctx, ref, opts)
 }
 
 // Verify verifies the authenticity of the given ref OCI image.
