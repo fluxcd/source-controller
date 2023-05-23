@@ -113,8 +113,7 @@ func (r *HelmRepositoryOCIReconciler) SetupWithManagerAndOptions(mgr ctrl.Manage
 			),
 		).
 		WithOptions(controller.Options{
-			MaxConcurrentReconciles: opts.MaxConcurrentReconciles,
-			RateLimiter:             opts.RateLimiter,
+			RateLimiter: opts.RateLimiter,
 		}).
 		Complete(r)
 }

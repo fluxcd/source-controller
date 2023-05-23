@@ -205,7 +205,10 @@ func TestMain(m *testing.M) {
 	utilruntime.Must(sourcev1.AddToScheme(scheme.Scheme))
 	utilruntime.Must(sourcev1beta2.AddToScheme(scheme.Scheme))
 
-	testEnv = testenv.New(testenv.WithCRDPath(filepath.Join("..", "..", "config", "crd", "bases")))
+	testEnv = testenv.New(
+		testenv.WithCRDPath(filepath.Join("..", "..", "config", "crd", "bases")),
+		testenv.WithMaxConcurrentReconciles(4),
+	)
 
 	var err error
 	testServer, err = testserver.NewTempArtifactServer()
@@ -308,7 +311,7 @@ func TestMain(m *testing.M) {
 		Cache:         testCache,
 		TTL:           1 * time.Second,
 		CacheRecorder: cacheRecorder,
-	}).SetupWithManagerAndOptions(testEnv, HelmChartReconcilerOptions{
+	}).SetupWithManagerAndOptions(ctx, testEnv, HelmChartReconcilerOptions{
 		RateLimiter: controller.GetDefaultRateLimiter(),
 	}); err != nil {
 		panic(fmt.Sprintf("Failed to start HelmChartReconciler: %v", err))

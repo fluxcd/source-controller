@@ -591,7 +591,9 @@ func TestOCIRepository_reconcileSource_authStrategy(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
 
-			builder := fakeclient.NewClientBuilder().WithScheme(testEnv.GetScheme())
+			clientBuilder := fakeclient.NewClientBuilder().
+				WithScheme(testEnv.GetScheme()).
+				WithStatusSubresource(&ociv1.OCIRepository{})
 
 			obj := &ociv1.OCIRepository{
 				ObjectMeta: metav1.ObjectMeta{
@@ -637,8 +639,7 @@ func TestOCIRepository_reconcileSource_authStrategy(t *testing.T) {
 							server.registryHost, tt.secretOpts.username, tt.secretOpts.password)),
 					},
 				}
-
-				builder.WithObjects(secret)
+				clientBuilder.WithObjects(secret)
 
 				if tt.secretOpts.includeSA {
 					serviceAccount := &corev1.ServiceAccount{
@@ -647,7 +648,7 @@ func TestOCIRepository_reconcileSource_authStrategy(t *testing.T) {
 						},
 						ImagePullSecrets: []corev1.LocalObjectReference{{Name: secret.Name}},
 					}
-					builder.WithObjects(serviceAccount)
+					clientBuilder.WithObjects(serviceAccount)
 					obj.Spec.ServiceAccountName = serviceAccount.Name
 				}
 
@@ -659,14 +660,14 @@ func TestOCIRepository_reconcileSource_authStrategy(t *testing.T) {
 			}
 
 			if tt.tlsCertSecret != nil {
-				builder.WithObjects(tt.tlsCertSecret)
+				clientBuilder.WithObjects(tt.tlsCertSecret)
 				obj.Spec.CertSecretRef = &meta.LocalObjectReference{
 					Name: tt.tlsCertSecret.Name,
 				}
 			}
 
 			r := &OCIRepositoryReconciler{
-				Client:        builder.Build(),
+				Client:        clientBuilder.Build(),
 				EventRecorder: record.NewFakeRecorder(32),
 				Storage:       testStorage,
 				patchOptions:  getPatchOptions(ociRepositoryReadyCondition.Owned, "sc"),
@@ -979,10 +980,12 @@ func TestOCIRepository_reconcileSource_remoteReference(t *testing.T) {
 		},
 	}
 
-	builder := fakeclient.NewClientBuilder().WithScheme(testEnv.GetScheme())
+	clientBuilder := fakeclient.NewClientBuilder().
+		WithScheme(testEnv.GetScheme()).
+		WithStatusSubresource(&ociv1.OCIRepository{})
 
 	r := &OCIRepositoryReconciler{
-		Client:        builder.Build(),
+		Client:        clientBuilder.Build(),
 		EventRecorder: record.NewFakeRecorder(32),
 		Storage:       testStorage,
 		patchOptions:  getPatchOptions(ociRepositoryReadyCondition.Owned, "sc"),
@@ -1159,10 +1162,12 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignature(t *testing.T) {
 		},
 	}
 
-	builder := fakeclient.NewClientBuilder().WithScheme(testEnv.GetScheme())
+	clientBuilder := fakeclient.NewClientBuilder().
+		WithScheme(testEnv.GetScheme()).
+		WithStatusSubresource(&ociv1.OCIRepository{})
 
 	r := &OCIRepositoryReconciler{
-		Client:        builder.Build(),
+		Client:        clientBuilder.Build(),
 		EventRecorder: record.NewFakeRecorder(32),
 		Storage:       testStorage,
 		patchOptions:  getPatchOptions(ociRepositoryReadyCondition.Owned, "sc"),
@@ -1402,9 +1407,12 @@ func TestOCIRepository_reconcileSource_noop(t *testing.T) {
 		},
 	}
 
-	builder := fakeclient.NewClientBuilder().WithScheme(testEnv.GetScheme())
+	clientBuilder := fakeclient.NewClientBuilder().
+		WithScheme(testEnv.GetScheme()).
+		WithStatusSubresource(&ociv1.OCIRepository{})
+
 	r := &OCIRepositoryReconciler{
-		Client:        builder.Build(),
+		Client:        clientBuilder.Build(),
 		EventRecorder: record.NewFakeRecorder(32),
 		Storage:       testStorage,
 		patchOptions:  getPatchOptions(ociRepositoryReadyCondition.Owned, "sc"),
@@ -1630,10 +1638,12 @@ func TestOCIRepository_reconcileArtifact(t *testing.T) {
 		},
 	}
 
-	builder := fakeclient.NewClientBuilder().WithScheme(testEnv.GetScheme())
+	clientBuilder := fakeclient.NewClientBuilder().
+		WithScheme(testEnv.GetScheme()).
+		WithStatusSubresource(&ociv1.OCIRepository{})
 
 	r := &OCIRepositoryReconciler{
-		Client:        builder.Build(),
+		Client:        clientBuilder.Build(),
 		EventRecorder: record.NewFakeRecorder(32),
 		Storage:       testStorage,
 		patchOptions:  getPatchOptions(ociRepositoryReadyCondition.Owned, "sc"),
@@ -1643,7 +1653,7 @@ func TestOCIRepository_reconcileArtifact(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
 
-			resetChmod(tt.targetPath, 0o755, 0o644)
+			_ = resetChmod(tt.targetPath, 0o755, 0o644)
 
 			obj := &ociv1.OCIRepository{
 				ObjectMeta: metav1.ObjectMeta{
@@ -1748,9 +1758,12 @@ func TestOCIRepository_getArtifactURL(t *testing.T) {
 		},
 	}
 
-	builder := fakeclient.NewClientBuilder().WithScheme(testEnv.GetScheme())
+	clientBuilder := fakeclient.NewClientBuilder().
+		WithScheme(testEnv.GetScheme()).
+		WithStatusSubresource(&ociv1.OCIRepository{})
+
 	r := &OCIRepositoryReconciler{
-		Client:        builder.Build(),
+		Client:        clientBuilder.Build(),
 		EventRecorder: record.NewFakeRecorder(32),
 		Storage:       testStorage,
 		patchOptions:  getPatchOptions(ociRepositoryReadyCondition.Owned, "sc"),
@@ -1829,8 +1842,6 @@ func TestOCIRepository_stalled(t *testing.T) {
 }
 
 func TestOCIRepository_reconcileStorage(t *testing.T) {
-	g := NewWithT(t)
-
 	tests := []struct {
 		name             string
 		beforeFunc       func(obj *ociv1.OCIRepository, storage *Storage) error
@@ -2010,9 +2021,12 @@ func TestOCIRepository_reconcileStorage(t *testing.T) {
 		},
 	}
 
-	builder := fakeclient.NewClientBuilder().WithScheme(testEnv.GetScheme())
+	clientBuilder := fakeclient.NewClientBuilder().
+		WithScheme(testEnv.GetScheme()).
+		WithStatusSubresource(&ociv1.OCIRepository{})
+
 	r := &OCIRepositoryReconciler{
-		Client:        builder.Build(),
+		Client:        clientBuilder.Build(),
 		EventRecorder: record.NewFakeRecorder(32),
 		Storage:       testStorage,
 		patchOptions:  getPatchOptions(ociRepositoryReadyCondition.Owned, "sc"),
@@ -2020,6 +2034,7 @@ func TestOCIRepository_reconcileStorage(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
 
 			obj := &ociv1.OCIRepository{
 				ObjectMeta: metav1.ObjectMeta{

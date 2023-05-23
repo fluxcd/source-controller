@@ -325,10 +325,8 @@ func TestSummarizeAndPatch(t *testing.T) {
 			g := NewWithT(t)
 
 			scheme := runtime.NewScheme()
-			g.Expect(sourcev1.AddToScheme(scheme))
+			g.Expect(sourcev1.AddToScheme(scheme)).To(Succeed())
 
-			builder := fakeclient.NewClientBuilder().WithScheme(scheme)
-			client := builder.Build()
 			obj := &sourcev1.GitRepository{
 				ObjectMeta: metav1.ObjectMeta{
 					GenerateName: "test-",
@@ -343,9 +341,15 @@ func TestSummarizeAndPatch(t *testing.T) {
 				tt.beforeFunc(obj)
 			}
 
+			c := fakeclient.NewClientBuilder().
+				WithScheme(scheme).
+				WithStatusSubresource(&sourcev1.GitRepository{}).
+				Build()
+
 			ctx := context.TODO()
-			g.Expect(client.Create(ctx, obj)).To(Succeed())
-			serialPatcher := patch.NewSerialPatcher(obj, client)
+			g.Expect(c.Create(ctx, obj)).To(Succeed())
+
+			serialPatcher := patch.NewSerialPatcher(obj, c)
 
 			summaryHelper := NewHelper(record.NewFakeRecorder(32), serialPatcher)
 			summaryOpts := []Option{
@@ -359,8 +363,9 @@ func TestSummarizeAndPatch(t *testing.T) {
 			if tt.bipolarConditions != nil {
 				summaryOpts = append(summaryOpts, WithBiPolarityConditionTypes(tt.bipolarConditions...))
 			}
+
 			_, gotErr := summaryHelper.SummarizeAndPatch(ctx, obj, summaryOpts...)
-			g.Expect(gotErr != nil).To(Equal(tt.wantErr))
+			g.Expect(gotErr != nil).To(Equal(tt.wantErr), "SummarizeAndPatch() wantErr = %v, gotErr = %v", tt.wantErr, gotErr)
 
 			g.Expect(obj.Status.Conditions).To(conditions.MatchConditions(tt.assertConditions))
 
@@ -368,9 +373,13 @@ func TestSummarizeAndPatch(t *testing.T) {
 				tt.afterFunc(g, obj)
 			}
 
+			if obj == nil {
+				t.Fail()
+			}
+
 			// Check if the object status is valid as per kstatus.
 			condns := &conditionscheck.Conditions{NegativePolarity: testReadyConditions.NegativePolarity}
-			checker := conditionscheck.NewChecker(client, condns)
+			checker := conditionscheck.NewChecker(c, condns)
 			checker.WithT(g).CheckErr(ctx, obj)
 		})
 	}
@@ -447,8 +456,10 @@ func TestSummarizeAndPatch_Intermediate(t *testing.T) {
 			scheme := runtime.NewScheme()
 			g.Expect(sourcev1.AddToScheme(scheme))
 
-			builder := fakeclient.NewClientBuilder().WithScheme(scheme)
-			kclient := builder.Build()
+			c := fakeclient.NewClientBuilder().
+				WithScheme(scheme).
+				WithStatusSubresource(&sourcev1.GitRepository{}).
+				Build()
 
 			obj := &sourcev1.GitRepository{
 				ObjectMeta: metav1.ObjectMeta{
@@ -469,8 +480,8 @@ func TestSummarizeAndPatch_Intermediate(t *testing.T) {
 			}
 
 			ctx := context.TODO()
-			g.Expect(kclient.Create(ctx, obj)).To(Succeed())
-			serialPatcher := patch.NewSerialPatcher(obj, kclient)
+			g.Expect(c.Create(ctx, obj)).To(Succeed())
+			serialPatcher := patch.NewSerialPatcher(obj, c)
 
 			summaryHelper := NewHelper(record.NewFakeRecorder(32), serialPatcher)
 			summaryOpts := []Option{

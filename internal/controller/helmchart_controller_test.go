@@ -45,7 +45,6 @@ import (
 	"k8s.io/client-go/tools/record"
 	kstatus "sigs.k8s.io/cli-utils/pkg/kstatus/status"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	fakeclient "sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
@@ -461,7 +460,10 @@ func TestHelmChartReconciler_reconcileStorage(t *testing.T) {
 			}()
 
 			r := &HelmChartReconciler{
-				Client:        fakeclient.NewClientBuilder().WithScheme(testEnv.GetScheme()).Build(),
+				Client: fakeclient.NewClientBuilder().
+					WithScheme(testEnv.GetScheme()).
+					WithStatusSubresource(&helmv1.HelmChart{}).
+					Build(),
 				EventRecorder: record.NewFakeRecorder(32),
 				Storage:       testStorage,
 				patchOptions:  getPatchOptions(helmChartReadyCondition.Owned, "sc"),
@@ -718,7 +720,10 @@ func TestHelmChartReconciler_reconcileSource(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
 
-			clientBuilder := fake.NewClientBuilder().WithScheme(testEnv.GetScheme())
+			clientBuilder := fakeclient.NewClientBuilder().
+				WithScheme(testEnv.GetScheme()).
+				WithStatusSubresource(&helmv1.HelmChart{})
+
 			if tt.source != nil {
 				clientBuilder.WithRuntimeObjects(tt.source)
 			}
@@ -732,9 +737,9 @@ func TestHelmChartReconciler_reconcileSource(t *testing.T) {
 
 			obj := helmv1.HelmChart{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:       "chart",
-					Namespace:  "default",
-					Generation: 1,
+					GenerateName: "chart",
+					Namespace:    "default",
+					Generation:   1,
 				},
 				Spec: helmv1.HelmChartSpec{},
 			}
@@ -986,7 +991,10 @@ func TestHelmChartReconciler_buildFromHelmRepository(t *testing.T) {
 				})
 			}
 
-			clientBuilder := fake.NewClientBuilder()
+			clientBuilder := fakeclient.NewClientBuilder().
+				WithScheme(testEnv.Scheme()).
+				WithStatusSubresource(&helmv1.HelmChart{})
+
 			if tt.secret != nil {
 				clientBuilder.WithObjects(tt.secret.DeepCopy())
 			}
@@ -1219,7 +1227,10 @@ func TestHelmChartReconciler_buildFromOCIHelmRepository(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
 
-			clientBuilder := fake.NewClientBuilder()
+			clientBuilder := fakeclient.NewClientBuilder().
+				WithScheme(testEnv.Scheme()).
+				WithStatusSubresource(&helmv1.HelmChart{})
+
 			if tt.secret != nil {
 				clientBuilder.WithObjects(tt.secret.DeepCopy())
 			}
@@ -1431,7 +1442,10 @@ func TestHelmChartReconciler_buildFromTarballArtifact(t *testing.T) {
 			g := NewWithT(t)
 
 			r := &HelmChartReconciler{
-				Client:                  fake.NewClientBuilder().Build(),
+				Client: fakeclient.NewClientBuilder().
+					WithScheme(testEnv.Scheme()).
+					WithStatusSubresource(&helmv1.HelmChart{}).
+					Build(),
 				EventRecorder:           record.NewFakeRecorder(32),
 				Storage:                 storage,
 				Getters:                 testGetters,
@@ -1597,7 +1611,10 @@ func TestHelmChartReconciler_reconcileArtifact(t *testing.T) {
 			g := NewWithT(t)
 
 			r := &HelmChartReconciler{
-				Client:        fakeclient.NewClientBuilder().WithScheme(testEnv.GetScheme()).Build(),
+				Client: fakeclient.NewClientBuilder().
+					WithScheme(testEnv.GetScheme()).
+					WithStatusSubresource(&helmv1.HelmChart{}).
+					Build(),
 				EventRecorder: record.NewFakeRecorder(32),
 				Storage:       testStorage,
 				patchOptions:  getPatchOptions(helmChartReadyCondition.Owned, "sc"),
@@ -1646,11 +1663,11 @@ func TestHelmChartReconciler_getHelmRepositorySecret(t *testing.T) {
 			"key": []byte("bar"),
 		},
 	}
-	clientBuilder := fake.NewClientBuilder()
-	clientBuilder.WithObjects(mock)
 
 	r := &HelmChartReconciler{
-		Client:       clientBuilder.Build(),
+		Client: fakeclient.NewClientBuilder().
+			WithObjects(mock).
+			Build(),
 		patchOptions: getPatchOptions(helmChartReadyCondition.Owned, "sc"),
 	}
 
@@ -1742,8 +1759,10 @@ func TestHelmChartReconciler_getSource(t *testing.T) {
 			},
 		},
 	}
-	clientBuilder := fake.NewClientBuilder()
-	clientBuilder.WithObjects(mocks...)
+
+	clientBuilder := fakeclient.NewClientBuilder().
+		WithStatusSubresource(&helmv1.HelmChart{}).
+		WithObjects(mocks...)
 
 	r := &HelmChartReconciler{
 		Client:       clientBuilder.Build(),
@@ -1987,7 +2006,10 @@ func TestHelmChartReconciler_reconcileSubRecs(t *testing.T) {
 			g := NewWithT(t)
 
 			r := &HelmChartReconciler{
-				Client:       fakeclient.NewClientBuilder().WithScheme(testEnv.GetScheme()).Build(),
+				Client: fakeclient.NewClientBuilder().
+					WithScheme(testEnv.GetScheme()).
+					WithStatusSubresource(&helmv1.HelmChart{}).
+					Build(),
 				patchOptions: getPatchOptions(helmChartReadyCondition.Owned, "sc"),
 			}
 			obj := &helmv1.HelmChart{
@@ -2091,15 +2113,18 @@ func TestHelmChartReconciler_statusConditions(t *testing.T) {
 			obj := &helmv1.HelmChart{
 				TypeMeta: metav1.TypeMeta{
 					Kind:       helmv1.HelmChartKind,
-					APIVersion: "source.toolkit.fluxcd.io/v1beta2",
+					APIVersion: helmv1.GroupVersion.String(),
 				},
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "helmchart",
 					Namespace: "foo",
 				},
 			}
-			clientBuilder := fake.NewClientBuilder()
-			clientBuilder.WithObjects(obj)
+
+			clientBuilder := fakeclient.NewClientBuilder().
+				WithObjects(obj).
+				WithStatusSubresource(&helmv1.HelmChart{})
+
 			c := clientBuilder.Build()
 
 			serialPatcher := patch.NewSerialPatcher(obj, c)
@@ -2331,7 +2356,10 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_authStrategy(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
 
-			builder := fakeclient.NewClientBuilder().WithScheme(testEnv.GetScheme())
+			clientBuilder := fakeclient.NewClientBuilder().
+				WithScheme(testEnv.GetScheme()).
+				WithStatusSubresource(&helmv1.HelmChart{})
+
 			workspaceDir := t.TempDir()
 
 			server, err := setupRegistryServer(ctx, workspaceDir, tt.registryOpts)
@@ -2362,7 +2390,7 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_authStrategy(t *testing.T) {
 				repo.Spec.Provider = tt.provider
 			}
 			// If a provider specific image is provided, overwrite existing URL
-			// set earlier. It'll fail but it's necessary to set them because
+			// set earlier. It'll fail, but it's necessary to set them because
 			// the login check expects the URLs to be of certain pattern.
 			if tt.providerImg != "" {
 				repo.Spec.URL = tt.providerImg
@@ -2383,9 +2411,9 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_authStrategy(t *testing.T) {
 				repo.Spec.SecretRef = &meta.LocalObjectReference{
 					Name: secret.Name,
 				}
-				builder.WithObjects(secret, repo)
+				clientBuilder.WithObjects(secret, repo)
 			} else {
-				builder.WithObjects(repo)
+				clientBuilder.WithObjects(repo)
 			}
 
 			obj := &helmv1.HelmChart{
@@ -2404,7 +2432,7 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_authStrategy(t *testing.T) {
 			}
 
 			r := &HelmChartReconciler{
-				Client:                  builder.Build(),
+				Client:                  clientBuilder.Build(),
 				EventRecorder:           record.NewFakeRecorder(32),
 				Getters:                 testGetters,
 				RegistryClientGenerator: registry.ClientGenerator,
@@ -2573,7 +2601,7 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_verifySignature(t *testing.T
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
 
-			clientBuilder := fake.NewClientBuilder()
+			clientBuilder := fakeclient.NewClientBuilder()
 
 			repository := &helmv1.HelmRepository{
 				ObjectMeta: metav1.ObjectMeta{

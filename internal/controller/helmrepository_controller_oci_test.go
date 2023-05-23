@@ -245,7 +245,10 @@ func TestHelmRepositoryOCIReconciler_authStrategy(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
 
-			builder := fakeclient.NewClientBuilder().WithScheme(testEnv.GetScheme())
+			clientBuilder := fakeclient.NewClientBuilder().
+				WithScheme(testEnv.GetScheme()).
+				WithStatusSubresource(&helmv1.HelmRepository{})
+
 			workspaceDir := t.TempDir()
 			server, err := setupRegistryServer(ctx, workspaceDir, tt.registryOpts)
 			g.Expect(err).NotTo(HaveOccurred())
@@ -268,7 +271,7 @@ func TestHelmRepositoryOCIReconciler_authStrategy(t *testing.T) {
 				obj.Spec.Provider = tt.provider
 			}
 			// If a provider specific image is provided, overwrite existing URL
-			// set earlier. It'll fail but it's necessary to set them because
+			// set earlier. It'll fail, but it's necessary to set them because
 			// the login check expects the URLs to be of certain pattern.
 			if tt.providerImg != "" {
 				obj.Spec.URL = tt.providerImg
@@ -286,7 +289,7 @@ func TestHelmRepositoryOCIReconciler_authStrategy(t *testing.T) {
 					},
 				}
 
-				builder.WithObjects(secret)
+				clientBuilder.WithObjects(secret)
 
 				obj.Spec.SecretRef = &meta.LocalObjectReference{
 					Name: secret.Name,
@@ -294,7 +297,7 @@ func TestHelmRepositoryOCIReconciler_authStrategy(t *testing.T) {
 			}
 
 			r := &HelmRepositoryOCIReconciler{
-				Client:                  builder.Build(),
+				Client:                  clientBuilder.Build(),
 				EventRecorder:           record.NewFakeRecorder(32),
 				Getters:                 testGetters,
 				RegistryClientGenerator: registry.ClientGenerator,

@@ -34,7 +34,6 @@ import (
 	"k8s.io/client-go/tools/record"
 	kstatus "sigs.k8s.io/cli-utils/pkg/kstatus/status"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	fakeclient "sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"github.com/fluxcd/pkg/apis/meta"
@@ -341,7 +340,10 @@ func TestBucketReconciler_reconcileStorage(t *testing.T) {
 			}()
 
 			r := &BucketReconciler{
-				Client:        fakeclient.NewClientBuilder().WithScheme(testEnv.GetScheme()).Build(),
+				Client: fakeclient.NewClientBuilder().
+					WithScheme(testEnv.GetScheme()).
+					WithStatusSubresource(&bucketv1.Bucket{}).
+					Build(),
 				EventRecorder: record.NewFakeRecorder(32),
 				Storage:       testStorage,
 				patchOptions:  getPatchOptions(bucketReadyCondition.Owned, "sc"),
@@ -653,25 +655,26 @@ func TestBucketReconciler_reconcileSource_generic(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
 
-			builder := fakeclient.NewClientBuilder().WithScheme(testEnv.Scheme())
+			clientBuilder := fakeclient.NewClientBuilder().
+				WithScheme(testEnv.Scheme()).
+				WithStatusSubresource(&bucketv1.Bucket{})
+
 			if tt.secret != nil {
-				builder.WithObjects(tt.secret)
+				clientBuilder.WithObjects(tt.secret)
 			}
+
 			r := &BucketReconciler{
 				EventRecorder: record.NewFakeRecorder(32),
-				Client:        builder.Build(),
+				Client:        clientBuilder.Build(),
 				Storage:       testStorage,
 				patchOptions:  getPatchOptions(bucketReadyCondition.Owned, "sc"),
 			}
 			tmpDir := t.TempDir()
 
 			obj := &bucketv1.Bucket{
-				TypeMeta: metav1.TypeMeta{
-					Kind: bucketv1.BucketKind,
-				},
 				ObjectMeta: metav1.ObjectMeta{
-					Name:       "test-bucket",
-					Generation: 1,
+					GenerateName: "test-bucket-",
+					Generation:   1,
 				},
 				Spec: bucketv1.BucketSpec{
 					Timeout: &metav1.Duration{Duration: timeout},
@@ -996,13 +999,17 @@ func TestBucketReconciler_reconcileSource_gcs(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
 
-			builder := fakeclient.NewClientBuilder().WithScheme(testEnv.Scheme())
+			clientBuilder := fakeclient.NewClientBuilder().
+				WithScheme(testEnv.Scheme()).
+				WithStatusSubresource(&bucketv1.Bucket{})
+
 			if tt.secret != nil {
-				builder.WithObjects(tt.secret)
+				clientBuilder.WithObjects(tt.secret)
 			}
+
 			r := &BucketReconciler{
 				EventRecorder: record.NewFakeRecorder(32),
-				Client:        builder.Build(),
+				Client:        clientBuilder.Build(),
 				Storage:       testStorage,
 				patchOptions:  getPatchOptions(bucketReadyCondition.Owned, "sc"),
 			}
@@ -1010,12 +1017,9 @@ func TestBucketReconciler_reconcileSource_gcs(t *testing.T) {
 
 			// Test bucket object.
 			obj := &bucketv1.Bucket{
-				TypeMeta: metav1.TypeMeta{
-					Kind: bucketv1.BucketKind,
-				},
 				ObjectMeta: metav1.ObjectMeta{
-					Name:       "test-bucket",
-					Generation: 1,
+					GenerateName: "test-bucket-",
+					Generation:   1,
 				},
 				Spec: bucketv1.BucketSpec{
 					BucketName: tt.bucketName,
@@ -1191,19 +1195,18 @@ func TestBucketReconciler_reconcileArtifact(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
 
+			clientBuilder := fakeclient.NewClientBuilder().
+				WithScheme(testEnv.GetScheme()).
+				WithStatusSubresource(&bucketv1.Bucket{})
+
 			r := &BucketReconciler{
-				Client:        fakeclient.NewClientBuilder().WithScheme(testEnv.GetScheme()).Build(),
+				Client:        clientBuilder.Build(),
 				EventRecorder: record.NewFakeRecorder(32),
 				Storage:       testStorage,
 				patchOptions:  getPatchOptions(bucketReadyCondition.Owned, "sc"),
 			}
 
-			tmpDir := t.TempDir()
-
 			obj := &bucketv1.Bucket{
-				TypeMeta: metav1.TypeMeta{
-					Kind: bucketv1.BucketKind,
-				},
 				ObjectMeta: metav1.ObjectMeta{
 					GenerateName: "test-bucket-",
 					Generation:   1,
@@ -1214,6 +1217,7 @@ func TestBucketReconciler_reconcileArtifact(t *testing.T) {
 				},
 			}
 
+			tmpDir := t.TempDir()
 			index := index.NewDigester()
 
 			if tt.beforeFunc != nil {
@@ -1296,17 +1300,20 @@ func TestBucketReconciler_statusConditions(t *testing.T) {
 
 			obj := &bucketv1.Bucket{
 				TypeMeta: metav1.TypeMeta{
+					APIVersion: bucketv1.GroupVersion.String(),
 					Kind:       bucketv1.BucketKind,
-					APIVersion: "source.toolkit.fluxcd.io/v1beta2",
 				},
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "bucket",
+					Name:      "test-bucket",
 					Namespace: "foo",
 				},
 			}
-			clientBuilder := fake.NewClientBuilder()
-			clientBuilder.WithObjects(obj)
-			c := clientBuilder.Build()
+
+			c := fakeclient.NewClientBuilder().
+				WithScheme(testEnv.Scheme()).
+				WithObjects(obj).
+				WithStatusSubresource(&bucketv1.Bucket{}).
+				Build()
 
 			serialPatcher := patch.NewSerialPatcher(obj, c)
 

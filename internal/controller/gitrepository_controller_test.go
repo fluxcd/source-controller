@@ -43,7 +43,6 @@ import (
 	kstatus "sigs.k8s.io/cli-utils/pkg/kstatus/status"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	fakeclient "sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
@@ -242,10 +241,12 @@ func TestGitRepositoryReconciler_reconcileSource_emptyRepository(t *testing.T) {
 		},
 	}
 
-	builder := fakeclient.NewClientBuilder().WithScheme(testEnv.GetScheme())
+	clientBuilder := fakeclient.NewClientBuilder().
+		WithScheme(testEnv.GetScheme()).
+		WithStatusSubresource(&sourcev1.GitRepository{})
 
 	r := &GitRepositoryReconciler{
-		Client:        builder.Build(),
+		Client:        clientBuilder.Build(),
 		EventRecorder: record.NewFakeRecorder(32),
 		Storage:       testStorage,
 		patchOptions:  getPatchOptions(gitRepositoryReadyCondition.Owned, "sc"),
@@ -549,13 +550,16 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 				tt.beforeFunc(obj)
 			}
 
-			builder := fakeclient.NewClientBuilder().WithScheme(testEnv.GetScheme())
+			clientBuilder := fakeclient.NewClientBuilder().
+				WithScheme(testEnv.GetScheme()).
+				WithStatusSubresource(&sourcev1.GitRepository{})
+
 			if secret != nil {
-				builder.WithObjects(secret.DeepCopy())
+				clientBuilder.WithObjects(secret.DeepCopy())
 			}
 
 			r := &GitRepositoryReconciler{
-				Client:        builder.Build(),
+				Client:        clientBuilder.Build(),
 				EventRecorder: record.NewFakeRecorder(32),
 				Storage:       testStorage,
 				features: map[string]bool{
@@ -782,7 +786,10 @@ func TestGitRepositoryReconciler_reconcileSource_checkoutStrategy(t *testing.T) 
 	}
 
 	r := &GitRepositoryReconciler{
-		Client:        fakeclient.NewClientBuilder().WithScheme(testEnv.GetScheme()).Build(),
+		Client: fakeclient.NewClientBuilder().
+			WithScheme(testEnv.GetScheme()).
+			WithStatusSubresource(&sourcev1.GitRepository{}).
+			Build(),
 		EventRecorder: record.NewFakeRecorder(32),
 		Storage:       testStorage,
 		features: map[string]bool{
@@ -1129,13 +1136,16 @@ func TestGitRepositoryReconciler_reconcileInclude(t *testing.T) {
 				depObjs = append(depObjs, obj)
 			}
 
-			builder := fakeclient.NewClientBuilder().WithScheme(testEnv.GetScheme())
+			clientBuilder := fakeclient.NewClientBuilder().
+				WithScheme(testEnv.GetScheme()).
+				WithStatusSubresource(&sourcev1.GitRepository{})
+
 			if len(tt.dependencies) > 0 {
-				builder.WithObjects(depObjs...)
+				clientBuilder.WithObjects(depObjs...)
 			}
 
 			r := &GitRepositoryReconciler{
-				Client:            builder.Build(),
+				Client:            clientBuilder.Build(),
 				EventRecorder:     record.NewFakeRecorder(32),
 				Storage:           storage,
 				requeueDependency: dependencyInterval,
@@ -1389,7 +1399,10 @@ func TestGitRepositoryReconciler_reconcileStorage(t *testing.T) {
 			}()
 
 			r := &GitRepositoryReconciler{
-				Client:        fakeclient.NewClientBuilder().WithScheme(testEnv.GetScheme()).Build(),
+				Client: fakeclient.NewClientBuilder().
+					WithScheme(testEnv.GetScheme()).
+					WithStatusSubresource(&sourcev1.GitRepository{}).
+					Build(),
 				EventRecorder: record.NewFakeRecorder(32),
 				Storage:       testStorage,
 				features:      features.FeatureGates(),
@@ -1577,14 +1590,17 @@ func TestGitRepositoryReconciler_verifyCommitSignature(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
 
-			builder := fakeclient.NewClientBuilder().WithScheme(testEnv.GetScheme())
+			clientBuilder := fakeclient.NewClientBuilder().
+				WithScheme(testEnv.GetScheme()).
+				WithStatusSubresource(&sourcev1.GitRepository{})
+
 			if tt.secret != nil {
-				builder.WithObjects(tt.secret)
+				clientBuilder.WithObjects(tt.secret)
 			}
 
 			r := &GitRepositoryReconciler{
 				EventRecorder: record.NewFakeRecorder(32),
-				Client:        builder.Build(),
+				Client:        clientBuilder.Build(),
 				features:      features.FeatureGates(),
 				patchOptions:  getPatchOptions(gitRepositoryReadyCondition.Owned, "sc"),
 			}
@@ -1721,10 +1737,13 @@ func TestGitRepositoryReconciler_ConditionsUpdate(t *testing.T) {
 				tt.beforeFunc(obj)
 			}
 
-			builder := fakeclient.NewClientBuilder().WithScheme(testEnv.GetScheme()).WithObjects(obj)
+			clientBuilder := fakeclient.NewClientBuilder().
+				WithScheme(testEnv.GetScheme()).
+				WithObjects(obj).
+				WithStatusSubresource(&sourcev1.GitRepository{})
 
 			r := &GitRepositoryReconciler{
-				Client:        builder.Build(),
+				Client:        clientBuilder.Build(),
 				EventRecorder: record.NewFakeRecorder(32),
 				Storage:       testStorage,
 				features:      features.FeatureGates(),
@@ -1949,16 +1968,20 @@ func TestGitRepositoryReconciler_statusConditions(t *testing.T) {
 
 			obj := &sourcev1.GitRepository{
 				TypeMeta: metav1.TypeMeta{
+					APIVersion: sourcev1.GroupVersion.String(),
 					Kind:       sourcev1.GitRepositoryKind,
-					APIVersion: "source.toolkit.fluxcd.io/v1beta2",
 				},
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "gitrepo",
 					Namespace: "foo",
 				},
 			}
-			clientBuilder := fake.NewClientBuilder()
-			clientBuilder.WithObjects(obj)
+
+			clientBuilder := fakeclient.NewClientBuilder().
+				WithScheme(testEnv.Scheme()).
+				WithObjects(obj).
+				WithStatusSubresource(&sourcev1.GitRepository{})
+
 			c := clientBuilder.Build()
 
 			serialPatcher := patch.NewSerialPatcher(obj, c)
@@ -2240,13 +2263,16 @@ func TestGitRepositoryReconciler_fetchIncludes(t *testing.T) {
 				depObjs = append(depObjs, obj)
 			}
 
-			builder := fakeclient.NewClientBuilder().WithScheme(testEnv.GetScheme())
+			clientBuilder := fakeclient.NewClientBuilder().
+				WithScheme(testEnv.GetScheme()).
+				WithStatusSubresource(&sourcev1.GitRepository{})
+
 			if len(tt.dependencies) > 0 {
-				builder.WithObjects(depObjs...)
+				clientBuilder.WithObjects(depObjs...)
 			}
 
 			r := &GitRepositoryReconciler{
-				Client:        builder.Build(),
+				Client:        clientBuilder.Build(),
 				EventRecorder: record.NewFakeRecorder(32),
 				patchOptions:  getPatchOptions(gitRepositoryReadyCondition.Owned, "sc"),
 			}
