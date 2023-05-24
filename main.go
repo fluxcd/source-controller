@@ -35,7 +35,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	ctrlcache "sigs.k8s.io/controller-runtime/pkg/cache"
 	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/config/v1alpha1"
+	ctrlcfg "sigs.k8s.io/controller-runtime/pkg/config"
 
 	"github.com/fluxcd/pkg/git"
 	"github.com/fluxcd/pkg/runtime/client"
@@ -165,7 +165,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	mgr := mustSetupManager(metricsAddr, healthAddr, watchOptions, clientOptions, leaderElectionOptions)
+	mgr := mustSetupManager(metricsAddr, healthAddr, concurrent, watchOptions, clientOptions, leaderElectionOptions)
 
 	probes.SetupChecks(mgr, setupLog)
 	pprof.SetupHandlers(mgr, setupLog)
@@ -178,6 +178,8 @@ func main() {
 	mustSetupHelmLimits(helmIndexLimit, helmChartLimit, helmChartFileLimit)
 	helmIndexCache, helmIndexCacheItemTTL := mustInitHelmCache(helmCacheMaxSize, helmCacheTTL, helmCachePurgeInterval)
 
+	ctx := ctrl.SetupSignalHandler()
+
 	if err := (&controller.GitRepositoryReconciler{
 		Client:         mgr.GetClient(),
 		EventRecorder:  eventRecorder,
@@ -185,7 +187,6 @@ func main() {
 		Storage:        storage,
 		ControllerName: controllerName,
 	}).SetupWithManagerAndOptions(mgr, controller.GitRepositoryReconcilerOptions{
-		MaxConcurrentReconciles:   concurrent,
 		DependencyRequeueInterval: requeueDependency,
 		RateLimiter:               helper.GetRateLimiter(rateLimiterOptions),
 	}); err != nil {
@@ -201,8 +202,7 @@ func main() {
 		ControllerName:          controllerName,
 		RegistryClientGenerator: registry.ClientGenerator,
 	}).SetupWithManagerAndOptions(mgr, controller.HelmRepositoryReconcilerOptions{
-		MaxConcurrentReconciles: concurrent,
-		RateLimiter:             helper.GetRateLimiter(rateLimiterOptions),
+		RateLimiter: helper.GetRateLimiter(rateLimiterOptions),
 	}); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", v1beta2.HelmRepositoryKind, "type", "OCI")
 		os.Exit(1)
@@ -219,8 +219,7 @@ func main() {
 		TTL:            helmIndexCacheItemTTL,
 		CacheRecorder:  cacheRecorder,
 	}).SetupWithManagerAndOptions(mgr, controller.HelmRepositoryReconcilerOptions{
-		MaxConcurrentReconciles: concurrent,
-		RateLimiter:             helper.GetRateLimiter(rateLimiterOptions),
+		RateLimiter: helper.GetRateLimiter(rateLimiterOptions),
 	}); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", v1beta2.HelmRepositoryKind)
 		os.Exit(1)
@@ -237,9 +236,8 @@ func main() {
 		Cache:                   helmIndexCache,
 		TTL:                     helmIndexCacheItemTTL,
 		CacheRecorder:           cacheRecorder,
-	}).SetupWithManagerAndOptions(mgr, controller.HelmChartReconcilerOptions{
-		MaxConcurrentReconciles: concurrent,
-		RateLimiter:             helper.GetRateLimiter(rateLimiterOptions),
+	}).SetupWithManagerAndOptions(ctx, mgr, controller.HelmChartReconcilerOptions{
+		RateLimiter: helper.GetRateLimiter(rateLimiterOptions),
 	}); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", v1beta2.HelmChartKind)
 		os.Exit(1)
@@ -252,8 +250,7 @@ func main() {
 		Storage:        storage,
 		ControllerName: controllerName,
 	}).SetupWithManagerAndOptions(mgr, controller.BucketReconcilerOptions{
-		MaxConcurrentReconciles: concurrent,
-		RateLimiter:             helper.GetRateLimiter(rateLimiterOptions),
+		RateLimiter: helper.GetRateLimiter(rateLimiterOptions),
 	}); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Bucket")
 		os.Exit(1)
@@ -266,8 +263,7 @@ func main() {
 		ControllerName: controllerName,
 		Metrics:        metrics,
 	}).SetupWithManagerAndOptions(mgr, controller.OCIRepositoryReconcilerOptions{
-		MaxConcurrentReconciles: concurrent,
-		RateLimiter:             helper.GetRateLimiter(rateLimiterOptions),
+		RateLimiter: helper.GetRateLimiter(rateLimiterOptions),
 	}); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "OCIRepository")
 		os.Exit(1)
@@ -284,7 +280,7 @@ func main() {
 	}()
 
 	setupLog.Info("starting manager")
-	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
+	if err := mgr.Start(ctx); err != nil {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
 	}
@@ -310,7 +306,9 @@ func mustSetupEventRecorder(mgr ctrl.Manager, eventsAddr, controllerName string)
 	return eventRecorder
 }
 
-func mustSetupManager(metricsAddr, healthAddr string, watchOpts helper.WatchOptions, clientOpts client.Options, leaderOpts leaderelection.Options) ctrl.Manager {
+func mustSetupManager(metricsAddr, healthAddr string, maxConcurrent int,
+	watchOpts helper.WatchOptions, clientOpts client.Options, leaderOpts leaderelection.Options) ctrl.Manager {
+
 	watchNamespace := ""
 	if !watchOpts.AllNamespaces {
 		watchNamespace = os.Getenv("RUNTIME_NAMESPACE")
@@ -321,15 +319,6 @@ func mustSetupManager(metricsAddr, healthAddr string, watchOpts helper.WatchOpti
 		setupLog.Error(err, "unable to configure watch label selector for manager")
 		os.Exit(1)
 	}
-	newSelectingCache := ctrlcache.BuilderWithOptions(ctrlcache.Options{
-		SelectorsByObject: ctrlcache.SelectorsByObject{
-			&v1.GitRepository{}:       {Label: watchSelector},
-			&v1beta2.HelmRepository{}: {Label: watchSelector},
-			&v1beta2.HelmChart{}:      {Label: watchSelector},
-			&v1beta2.Bucket{}:         {Label: watchSelector},
-			&v1beta2.OCIRepository{}:  {Label: watchSelector},
-		},
-	})
 
 	var disableCacheFor []ctrlclient.Object
 	shouldCache, err := features.Enabled(features.CacheSecretsAndConfigMaps)
@@ -351,19 +340,31 @@ func mustSetupManager(metricsAddr, healthAddr string, watchOpts helper.WatchOpti
 		Scheme:                        scheme,
 		MetricsBindAddress:            metricsAddr,
 		HealthProbeBindAddress:        healthAddr,
-		Port:                          9443,
 		LeaderElection:                leaderOpts.Enable,
 		LeaderElectionReleaseOnCancel: leaderOpts.ReleaseOnCancel,
 		LeaseDuration:                 &leaderOpts.LeaseDuration,
 		RenewDeadline:                 &leaderOpts.RenewDeadline,
 		RetryPeriod:                   &leaderOpts.RetryPeriod,
 		LeaderElectionID:              leaderElectionId,
-		Namespace:                     watchNamespace,
 		Logger:                        ctrl.Log,
-		ClientDisableCacheFor:         disableCacheFor,
-		NewCache:                      newSelectingCache,
-		Controller: v1alpha1.ControllerConfigurationSpec{
-			RecoverPanic: pointer.Bool(true),
+		Client: ctrlclient.Options{
+			Cache: &ctrlclient.CacheOptions{
+				DisableFor: disableCacheFor,
+			},
+		},
+		Cache: ctrlcache.Options{
+			ByObject: map[ctrlclient.Object]ctrlcache.ByObject{
+				&v1.GitRepository{}:       {Label: watchSelector},
+				&v1beta2.HelmRepository{}: {Label: watchSelector},
+				&v1beta2.HelmChart{}:      {Label: watchSelector},
+				&v1beta2.Bucket{}:         {Label: watchSelector},
+				&v1beta2.OCIRepository{}:  {Label: watchSelector},
+			},
+			Namespaces: []string{watchNamespace},
+		},
+		Controller: ctrlcfg.Controller{
+			RecoverPanic:            pointer.Bool(true),
+			MaxConcurrentReconciles: maxConcurrent,
 		},
 	})
 	if err != nil {

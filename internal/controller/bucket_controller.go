@@ -127,8 +127,7 @@ type BucketReconciler struct {
 }
 
 type BucketReconcilerOptions struct {
-	MaxConcurrentReconciles int
-	RateLimiter             ratelimiter.RateLimiter
+	RateLimiter ratelimiter.RateLimiter
 }
 
 // BucketProvider is an interface for fetching objects from a storage provider
@@ -169,8 +168,7 @@ func (r *BucketReconciler) SetupWithManagerAndOptions(mgr ctrl.Manager, opts Buc
 		For(&bucketv1.Bucket{}).
 		WithEventFilter(predicate.Or(predicate.GenerationChangedPredicate{}, predicates.ReconcileRequestedPredicate{})).
 		WithOptions(controller.Options{
-			MaxConcurrentReconciles: opts.MaxConcurrentReconciles,
-			RateLimiter:             opts.RateLimiter,
+			RateLimiter: opts.RateLimiter,
 		}).
 		Complete(r)
 }

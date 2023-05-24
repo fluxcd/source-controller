@@ -38,7 +38,6 @@ import (
 	"k8s.io/client-go/tools/record"
 	kstatus "sigs.k8s.io/cli-utils/pkg/kstatus/status"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	fakeclient "sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"github.com/fluxcd/pkg/apis/meta"
@@ -313,7 +312,10 @@ func TestHelmRepositoryReconciler_reconcileStorage(t *testing.T) {
 			g := NewWithT(t)
 
 			r := &HelmRepositoryReconciler{
-				Client:        fakeclient.NewClientBuilder().WithScheme(testEnv.GetScheme()).Build(),
+				Client: fakeclient.NewClientBuilder().
+					WithScheme(testEnv.GetScheme()).
+					WithStatusSubresource(&helmv1.HelmRepository{}).
+					Build(),
 				EventRecorder: record.NewFakeRecorder(32),
 				Storage:       testStorage,
 				patchOptions:  getPatchOptions(helmRepositoryReadyCondition.Owned, "sc"),
@@ -755,9 +757,12 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 				t.Fatalf("unsupported protocol %q", tt.protocol)
 			}
 
-			builder := fakeclient.NewClientBuilder().WithScheme(testEnv.GetScheme())
+			clientBuilder := fakeclient.NewClientBuilder().
+				WithScheme(testEnv.GetScheme()).
+				WithStatusSubresource(&helmv1.HelmRepository{})
+
 			if secret != nil {
-				builder.WithObjects(secret.DeepCopy())
+				clientBuilder.WithObjects(secret.DeepCopy())
 			}
 
 			// Calculate the artifact digest for valid repos configurations.
@@ -808,7 +813,7 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 
 			r := &HelmRepositoryReconciler{
 				EventRecorder: record.NewFakeRecorder(32),
-				Client:        builder.Build(),
+				Client:        clientBuilder.Build(),
 				Storage:       testStorage,
 				Getters:       testGetters,
 				patchOptions:  getPatchOptions(helmRepositoryReadyCondition.Owned, "sc"),
@@ -930,7 +935,10 @@ func TestHelmRepositoryReconciler_reconcileArtifact(t *testing.T) {
 			g := NewWithT(t)
 
 			r := &HelmRepositoryReconciler{
-				Client:        fakeclient.NewClientBuilder().WithScheme(testEnv.GetScheme()).Build(),
+				Client: fakeclient.NewClientBuilder().
+					WithScheme(testEnv.GetScheme()).
+					WithStatusSubresource(&helmv1.HelmRepository{}).
+					Build(),
 				EventRecorder: record.NewFakeRecorder(32),
 				Storage:       testStorage,
 				Cache:         tt.cache,
@@ -1102,7 +1110,10 @@ func TestHelmRepositoryReconciler_reconcileSubRecs(t *testing.T) {
 			g := NewWithT(t)
 
 			r := &HelmRepositoryReconciler{
-				Client:       fakeclient.NewClientBuilder().WithScheme(testEnv.GetScheme()).Build(),
+				Client: fakeclient.NewClientBuilder().
+					WithScheme(testEnv.GetScheme()).
+					WithStatusSubresource(&helmv1.HelmRepository{}).
+					Build(),
 				patchOptions: getPatchOptions(helmRepositoryReadyCondition.Owned, "sc"),
 			}
 			obj := &helmv1.HelmRepository{
@@ -1183,15 +1194,18 @@ func TestHelmRepositoryReconciler_statusConditions(t *testing.T) {
 			obj := &helmv1.HelmRepository{
 				TypeMeta: metav1.TypeMeta{
 					Kind:       helmv1.HelmRepositoryKind,
-					APIVersion: "source.toolkit.fluxcd.io/v1beta2",
+					APIVersion: helmv1.GroupVersion.String(),
 				},
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "helmrepo",
 					Namespace: "foo",
 				},
 			}
-			clientBuilder := fake.NewClientBuilder()
-			clientBuilder.WithObjects(obj)
+
+			clientBuilder := fakeclient.NewClientBuilder().
+				WithObjects(obj).
+				WithStatusSubresource(&helmv1.HelmRepository{})
+
 			c := clientBuilder.Build()
 
 			serialPatcher := patch.NewSerialPatcher(obj, c)

@@ -139,7 +139,6 @@ type OCIRepositoryReconciler struct {
 }
 
 type OCIRepositoryReconcilerOptions struct {
-	MaxConcurrentReconciles   int
 	DependencyRequeueInterval time.Duration
 	RateLimiter               ratelimiter.RateLimiter
 }
@@ -159,8 +158,7 @@ func (r *OCIRepositoryReconciler) SetupWithManagerAndOptions(mgr ctrl.Manager, o
 			predicate.Or(predicate.GenerationChangedPredicate{}, predicates.ReconcileRequestedPredicate{}),
 		)).
 		WithOptions(controller.Options{
-			MaxConcurrentReconciles: opts.MaxConcurrentReconciles,
-			RateLimiter:             opts.RateLimiter,
+			RateLimiter: opts.RateLimiter,
 		}).
 		Complete(r)
 }

@@ -134,7 +134,6 @@ type GitRepositoryReconciler struct {
 }
 
 type GitRepositoryReconcilerOptions struct {
-	MaxConcurrentReconciles   int
 	DependencyRequeueInterval time.Duration
 	RateLimiter               ratelimiter.RateLimiter
 }
@@ -161,8 +160,7 @@ func (r *GitRepositoryReconciler) SetupWithManagerAndOptions(mgr ctrl.Manager, o
 			predicate.Or(predicate.GenerationChangedPredicate{}, predicates.ReconcileRequestedPredicate{}),
 		)).
 		WithOptions(controller.Options{
-			MaxConcurrentReconciles: opts.MaxConcurrentReconciles,
-			RateLimiter:             opts.RateLimiter,
+			RateLimiter: opts.RateLimiter,
 		}).
 		Complete(r)
 }
@@ -787,7 +785,7 @@ func (r *GitRepositoryReconciler) gitCheckout(ctx context.Context,
 	obj *sourcev1.GitRepository, authOpts *git.AuthOptions, dir string,
 	optimized bool) (*git.Commit, error) {
 	// Configure checkout strategy.
-	cloneOpts := repository.CloneOptions{
+	cloneOpts := repository.CloneConfig{
 		RecurseSubmodules: obj.Spec.RecurseSubmodules,
 		ShallowClone:      true,
 	}

@@ -50,7 +50,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/ratelimiter"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	eventv1 "github.com/fluxcd/pkg/apis/event/v1beta1"
 	"github.com/fluxcd/pkg/apis/meta"
@@ -142,13 +141,12 @@ type HelmChartReconciler struct {
 	patchOptions []patch.Option
 }
 
-func (r *HelmChartReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	return r.SetupWithManagerAndOptions(mgr, HelmChartReconcilerOptions{})
+func (r *HelmChartReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
+	return r.SetupWithManagerAndOptions(ctx, mgr, HelmChartReconcilerOptions{})
 }
 
 type HelmChartReconcilerOptions struct {
-	MaxConcurrentReconciles int
-	RateLimiter             ratelimiter.RateLimiter
+	RateLimiter ratelimiter.RateLimiter
 }
 
 // helmChartReconcileFunc is the function type for all the v1beta2.HelmChart
@@ -156,14 +154,14 @@ type HelmChartReconcilerOptions struct {
 // executed serially to perform the complete reconcile of the object.
 type helmChartReconcileFunc func(ctx context.Context, sp *patch.SerialPatcher, obj *helmv1.HelmChart, build *chart.Build) (sreconcile.Result, error)
 
-func (r *HelmChartReconciler) SetupWithManagerAndOptions(mgr ctrl.Manager, opts HelmChartReconcilerOptions) error {
+func (r *HelmChartReconciler) SetupWithManagerAndOptions(ctx context.Context, mgr ctrl.Manager, opts HelmChartReconcilerOptions) error {
 	r.patchOptions = getPatchOptions(helmChartReadyCondition.Owned, r.ControllerName)
 
-	if err := mgr.GetCache().IndexField(context.TODO(), &helmv1.HelmRepository{}, helmv1.HelmRepositoryURLIndexKey,
+	if err := mgr.GetCache().IndexField(ctx, &helmv1.HelmRepository{}, helmv1.HelmRepositoryURLIndexKey,
 		r.indexHelmRepositoryByURL); err != nil {
 		return fmt.Errorf("failed setting index fields: %w", err)
 	}
-	if err := mgr.GetCache().IndexField(context.TODO(), &helmv1.HelmChart{}, sourcev1.SourceIndexKey,
+	if err := mgr.GetCache().IndexField(ctx, &helmv1.HelmChart{}, sourcev1.SourceIndexKey,
 		r.indexHelmChartBySource); err != nil {
 		return fmt.Errorf("failed setting index fields: %w", err)
 	}
@@ -173,23 +171,22 @@ func (r *HelmChartReconciler) SetupWithManagerAndOptions(mgr ctrl.Manager, opts 
 			predicate.Or(predicate.GenerationChangedPredicate{}, predicates.ReconcileRequestedPredicate{}),
 		)).
 		Watches(
-			&source.Kind{Type: &helmv1.HelmRepository{}},
+			&helmv1.HelmRepository{},
 			handler.EnqueueRequestsFromMapFunc(r.requestsForHelmRepositoryChange),
 			builder.WithPredicates(SourceRevisionChangePredicate{}),
 		).
 		Watches(
-			&source.Kind{Type: &sourcev1.GitRepository{}},
+			&sourcev1.GitRepository{},
 			handler.EnqueueRequestsFromMapFunc(r.requestsForGitRepositoryChange),
 			builder.WithPredicates(SourceRevisionChangePredicate{}),
 		).
 		Watches(
-			&source.Kind{Type: &helmv1.Bucket{}},
+			&helmv1.Bucket{},
 			handler.EnqueueRequestsFromMapFunc(r.requestsForBucketChange),
 			builder.WithPredicates(SourceRevisionChangePredicate{}),
 		).
 		WithOptions(controller.Options{
-			MaxConcurrentReconciles: opts.MaxConcurrentReconciles,
-			RateLimiter:             opts.RateLimiter,
+			RateLimiter: opts.RateLimiter,
 		}).
 		Complete(r)
 }
@@ -360,7 +357,7 @@ func (r *HelmChartReconciler) notify(ctx context.Context, oldObj, newObj *helmv1
 // condition is added.
 // The hostname of any URL in the Status of the object are updated, to ensure
 // they match the Storage server hostname of current runtime.
-func (r *HelmChartReconciler) reconcileStorage(ctx context.Context, sp *patch.SerialPatcher, obj *helmv1.HelmChart, build *chart.Build) (sreconcile.Result, error) {
+func (r *HelmChartReconciler) reconcileStorage(ctx context.Context, sp *patch.SerialPatcher, obj *helmv1.HelmChart, _ *chart.Build) (sreconcile.Result, error) {
 	// Garbage collect previous advertised artifact(s) from storage
 	_ = r.garbageCollect(ctx, obj)
 
@@ -1231,21 +1228,23 @@ func (r *HelmChartReconciler) indexHelmChartBySource(o client.Object) []string {
 	return []string{fmt.Sprintf("%s/%s", hc.Spec.SourceRef.Kind, hc.Spec.SourceRef.Name)}
 }
 
-func (r *HelmChartReconciler) requestsForHelmRepositoryChange(o client.Object) []reconcile.Request {
+func (r *HelmChartReconciler) requestsForHelmRepositoryChange(ctx context.Context, o client.Object) []reconcile.Request {
 	repo, ok := o.(*helmv1.HelmRepository)
 	if !ok {
-		panic(fmt.Sprintf("Expected a HelmRepository, got %T", o))
+		ctrl.LoggerFrom(ctx).Error(fmt.Errorf("expected a HelmRepository, got %T", o), "failed to get requests for HelmRepository change")
+		return nil
 	}
+
 	// If we do not have an artifact, we have no requests to make
 	if repo.GetArtifact() == nil {
 		return nil
 	}
 
-	ctx := context.Background()
 	var list helmv1.HelmChartList
 	if err := r.List(ctx, &list, client.MatchingFields{
 		sourcev1.SourceIndexKey: fmt.Sprintf("%s/%s", helmv1.HelmRepositoryKind, repo.Name),
 	}); err != nil {
+		ctrl.LoggerFrom(ctx).Error(err, "failed to list HelmCharts for HelmRepository change")
 		return nil
 	}
 
@@ -1258,10 +1257,12 @@ func (r *HelmChartReconciler) requestsForHelmRepositoryChange(o client.Object) [
 	return reqs
 }
 
-func (r *HelmChartReconciler) requestsForGitRepositoryChange(o client.Object) []reconcile.Request {
+func (r *HelmChartReconciler) requestsForGitRepositoryChange(ctx context.Context, o client.Object) []reconcile.Request {
 	repo, ok := o.(*sourcev1.GitRepository)
 	if !ok {
-		panic(fmt.Sprintf("Expected a GitRepository, got %T", o))
+		ctrl.LoggerFrom(ctx).Error(fmt.Errorf("expected a GitRepository, got %T", o),
+			"failed to get reconcile requests for GitRepository change")
+		return nil
 	}
 
 	// If we do not have an artifact, we have no requests to make
@@ -1270,9 +1271,10 @@ func (r *HelmChartReconciler) requestsForGitRepositoryChange(o client.Object) []
 	}
 
 	var list helmv1.HelmChartList
-	if err := r.List(context.TODO(), &list, client.MatchingFields{
+	if err := r.List(ctx, &list, client.MatchingFields{
 		sourcev1.SourceIndexKey: fmt.Sprintf("%s/%s", sourcev1.GitRepositoryKind, repo.Name),
 	}); err != nil {
+		ctrl.LoggerFrom(ctx).Error(err, "failed to list HelmCharts for GitRepository change")
 		return nil
 	}
 
@@ -1285,10 +1287,12 @@ func (r *HelmChartReconciler) requestsForGitRepositoryChange(o client.Object) []
 	return reqs
 }
 
-func (r *HelmChartReconciler) requestsForBucketChange(o client.Object) []reconcile.Request {
+func (r *HelmChartReconciler) requestsForBucketChange(ctx context.Context, o client.Object) []reconcile.Request {
 	bucket, ok := o.(*helmv1.Bucket)
 	if !ok {
-		panic(fmt.Sprintf("Expected a Bucket, got %T", o))
+		ctrl.LoggerFrom(ctx).Error(fmt.Errorf("expected a Bucket, got %T", o),
+			"failed to get reconcile requests for Bucket change")
+		return nil
 	}
 
 	// If we do not have an artifact, we have no requests to make
@@ -1297,9 +1301,10 @@ func (r *HelmChartReconciler) requestsForBucketChange(o client.Object) []reconci
 	}
 
 	var list helmv1.HelmChartList
-	if err := r.List(context.TODO(), &list, client.MatchingFields{
+	if err := r.List(ctx, &list, client.MatchingFields{
 		sourcev1.SourceIndexKey: fmt.Sprintf("%s/%s", helmv1.BucketKind, bucket.Name),
 	}); err != nil {
+		ctrl.LoggerFrom(ctx).Error(err, "failed to list HelmCharts for Bucket change")
 		return nil
 	}
 
