@@ -62,7 +62,7 @@ import (
 	"github.com/fluxcd/pkg/runtime/conditions"
 	conditionscheck "github.com/fluxcd/pkg/runtime/conditions/check"
 	"github.com/fluxcd/pkg/runtime/patch"
-	"github.com/fluxcd/pkg/untar"
+	"github.com/fluxcd/pkg/tar"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	ociv1 "github.com/fluxcd/source-controller/api/v1beta2"
@@ -199,9 +199,8 @@ func TestOCIRepository_Reconcile(t *testing.T) {
 			g.Expect(err).ToNot(HaveOccurred())
 			defer os.RemoveAll(tmp)
 
-			ep, err := untar.Untar(f, tmp)
+			err = tar.Untar(f, tmp, tar.WithMaxUntarSize(-1))
 			g.Expect(err).ToNot(HaveOccurred())
-			t.Logf("extracted summary: %s", ep)
 
 			for _, af := range tt.assertArtifact {
 				expectedFile := filepath.Join(tmp, af.expectedPath)
