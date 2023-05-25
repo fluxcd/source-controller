@@ -31,7 +31,7 @@ import (
 	"time"
 
 	securejoin "github.com/cyphar/filepath-securejoin"
-	"github.com/fluxcd/go-git/v5/plumbing/format/gitignore"
+	"github.com/go-git/go-git/v5/plumbing/format/gitignore"
 	"github.com/opencontainers/go-digest"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	kerrors "k8s.io/apimachinery/pkg/util/errors"
