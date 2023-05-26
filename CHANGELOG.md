@@ -2,6 +2,31 @@
 
 All notable changes to this project are documented in this file.
 
+## 1.0.0-rc.4
+
+**Release date:** 2023-05-26
+
+This release candidate comes with support for Kubernetes v1.27 and Cosign v2.
+It also enables the use of annotated Git tags with `.spec.ref.name` in
+`GitRepository`. Furthermore, it fixes a bug related to accessing Helm OCI
+charts on ACR using OIDC auth.
+
+Improvements:
+- build(deps): bump helm/kind-action from 1.5.0 to 1.7.0
+  [#1100](https://github.com/fluxcd/source-controller/pull/1100)
+- build(deps): bump sigstore/cosign-installer from 3.0.3 to 3.0.5
+  [#1101](https://github.com/fluxcd/source-controller/pull/1101)
+- build(deps): bump actions/setup-go from 4.0.0 to 4.0.1
+  [#1102](https://github.com/fluxcd/source-controller/pull/1102)
+- Update cosign to v2
+  [#1096](https://github.com/fluxcd/source-controller/pull/1096)
+- build(deps): bump github.com/sigstore/rekor from 0.12.1-0.20220915152154-4bb6f441c1b2 to 1.1.1
+  [#1083](https://github.com/fluxcd/source-controller/pull/1083)
+- Update controller-runtime and Kubernetes dependencies
+  [#1104](https://github.com/fluxcd/source-controller/pull/1104)
+- Update dependencies; switch to `go-git/go-git` and `pkg/tar`
+  [#1105](https://github.com/fluxcd/source-controller/pull/1105)
+
 ## 1.0.0-rc.3
 
 **Release date:** 2023-05-12
