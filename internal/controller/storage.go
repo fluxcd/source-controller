@@ -31,14 +31,14 @@ import (
 	"time"
 
 	securejoin "github.com/cyphar/filepath-securejoin"
-	"github.com/fluxcd/go-git/v5/plumbing/format/gitignore"
+	"github.com/go-git/go-git/v5/plumbing/format/gitignore"
 	"github.com/opencontainers/go-digest"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	kerrors "k8s.io/apimachinery/pkg/util/errors"
 
 	"github.com/fluxcd/pkg/lockedfile"
 	"github.com/fluxcd/pkg/sourceignore"
-	"github.com/fluxcd/pkg/untar"
+	pkgtar "github.com/fluxcd/pkg/tar"
 
 	v1 "github.com/fluxcd/source-controller/api/v1"
 	intdigest "github.com/fluxcd/source-controller/internal/digest"
@@ -606,7 +606,7 @@ func (s Storage) CopyToPath(artifact *v1.Artifact, subPath, toPath string) error
 
 	// untar the artifact
 	untarPath := filepath.Join(tmp, "unpack")
-	if _, err = untar.Untar(f, untarPath); err != nil {
+	if err = pkgtar.Untar(f, untarPath, pkgtar.WithMaxUntarSize(-1)); err != nil {
 		return err
 	}
 

@@ -60,7 +60,7 @@ import (
 	"github.com/fluxcd/pkg/runtime/patch"
 	"github.com/fluxcd/pkg/runtime/predicates"
 	rreconcile "github.com/fluxcd/pkg/runtime/reconcile"
-	"github.com/fluxcd/pkg/untar"
+	"github.com/fluxcd/pkg/tar"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	helmv1 "github.com/fluxcd/source-controller/api/v1beta2"
@@ -765,7 +765,7 @@ func (r *HelmChartReconciler) buildFromTarballArtifact(ctx context.Context, obj 
 		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
 		return sreconcile.ResultEmpty, e
 	}
-	if _, err = untar.Untar(f, sourceDir); err != nil {
+	if err = tar.Untar(f, sourceDir, tar.WithMaxUntarSize(-1)); err != nil {
 		_ = f.Close()
 		return sreconcile.ResultEmpty, &serror.Event{
 			Err:    fmt.Errorf("artifact untar error: %w", err),

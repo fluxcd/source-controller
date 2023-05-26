@@ -62,7 +62,7 @@ import (
 	"github.com/fluxcd/pkg/runtime/predicates"
 	rreconcile "github.com/fluxcd/pkg/runtime/reconcile"
 	"github.com/fluxcd/pkg/sourceignore"
-	"github.com/fluxcd/pkg/untar"
+	"github.com/fluxcd/pkg/tar"
 	"github.com/fluxcd/pkg/version"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
@@ -494,7 +494,7 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 	// Persist layer content to storage using the specified operation
 	switch obj.GetLayerOperation() {
 	case ociv1.OCILayerExtract:
-		if _, err = untar.Untar(blob, dir); err != nil {
+		if err = tar.Untar(blob, dir, tar.WithMaxUntarSize(-1)); err != nil {
 			e := serror.NewGeneric(
 				fmt.Errorf("failed to extract layer contents from artifact: %w", err),
 				ociv1.OCILayerOperationFailedReason,
