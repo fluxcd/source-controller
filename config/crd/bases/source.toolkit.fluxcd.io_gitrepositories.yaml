@@ -90,6 +90,16 @@ spec:
                 description: Interval at which to check the GitRepository for updates.
                 pattern: ^([0-9]+(\.[0-9]+)?(ms|s|m|h))+$
                 type: string
+              proxySecretRef:
+                description: ProxySecretRef specifies the Secret containing the proxy
+                  configuration to use while communicating with the Git server.
+                properties:
+                  name:
+                    description: Name of the referent.
+                    type: string
+                required:
+                - name
+                type: object
               recurseSubmodules:
                 description: RecurseSubmodules enables the initialization of all submodules
                   within the GitRepository as cloned from the URL, using their default

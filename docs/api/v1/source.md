@@ -157,6 +157,21 @@ signature(s).</p>
 </tr>
 <tr>
 <td>
+<code>proxySecretRef</code><br>
+<em>
+<a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/meta#LocalObjectReference">
+github.com/fluxcd/pkg/apis/meta.LocalObjectReference
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>ProxySecretRef specifies the Secret containing the proxy configuration
+to use while communicating with the Git server.</p>
+</td>
+</tr>
+<tr>
+<td>
 <code>ignore</code><br>
 <em>
 string
@@ -589,6 +604,21 @@ GitRepositoryVerification
 <em>(Optional)</em>
 <p>Verification specifies the configuration to verify the Git commit
 signature(s).</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>proxySecretRef</code><br>
+<em>
+<a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/meta#LocalObjectReference">
+github.com/fluxcd/pkg/apis/meta.LocalObjectReference
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>ProxySecretRef specifies the Secret containing the proxy configuration
+to use while communicating with the Git server.</p>
 </td>
 </tr>
 <tr>

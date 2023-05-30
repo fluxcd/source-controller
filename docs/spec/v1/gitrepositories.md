@@ -439,6 +439,55 @@ GitRepository, and changes to the resource or in the Git repository will not
 result in a new Artifact. When the field is set to `false` or removed, it will
 resume.
 
+### Proxy secret reference
+
+`.spec.proxySecretRef.name` is an optional field used to specify the name of a
+Secret that contains the proxy settings for the object. These settings are used
+for all remote Git operations related to the GitRepository.
+The Secret can contain three keys:
+
+- `address`, to specify the address of the proxy server. This is a required key.
+- `username`, to specify the username to use if the proxy server is protected by
+   basic authentication. This is an optional key.
+- `password`, to specify the password to use if the proxy server is protected by
+   basic authentication. This is an optional key.
+
+The proxy server must be either HTTP/S or SOCKS5. You can use a SOCKS5 proxy
+with a HTTP/S Git repository url.
+
+Examples:
+
+```yaml
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: http-proxy
+type: Opaque
+stringData:
+  address: http://proxy.com
+  username: mandalorian
+  password: grogu
+```
+
+```yaml
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: ssh-proxy
+type: Opaque
+stringData:
+  address: socks5://proxy.com
+  username: mandalorian
+  password: grogu
+```
+
+Proxying can also be configured in the source-controller Deployment directly by
+using the standard environment variables such as `HTTPS_PROXY`, `ALL_PROXY`, etc.
+
+`.spec.proxySecretRef.name` takes precedence over all environment variables.
+
 ### Recurse submodules
 
 `.spec.recurseSubmodules` is an optional field to enable the initialization of

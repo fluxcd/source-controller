@@ -169,6 +169,11 @@ func (in *GitRepositorySpec) DeepCopyInto(out *GitRepositorySpec) {
 		*out = new(GitRepositoryVerification)
 		**out = **in
 	}
+	if in.ProxySecretRef != nil {
+		in, out := &in.ProxySecretRef, &out.ProxySecretRef
+		*out = new(meta.LocalObjectReference)
+		**out = **in
+	}
 	if in.Ignore != nil {
 		in, out := &in.Ignore, &out.Ignore
 		*out = new(string)
