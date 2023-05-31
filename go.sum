@@ -382,8 +382,8 @@ github.com/fluxcd/pkg/apis/meta v1.1.0 h1:vYU1mvUzztnQyTzZOLHQ3wm/tXd7E1QZ2V91zu
 github.com/fluxcd/pkg/apis/meta v1.1.0/go.mod h1:/QwCotRKL/BT6RSa4O75FlYW14fU8eRfKnoagzbkmL4=
 github.com/fluxcd/pkg/git v0.12.2 h1:96xH3hy3WfwiD0DioyJZcGapYT3lmPc2s7jU5UM8buw=
 github.com/fluxcd/pkg/git v0.12.2/go.mod h1:9TG4fEfGCF1XHLt9Xs7X2YOmkmWOiwfjH9tdGIQs8/8=
-github.com/fluxcd/pkg/git/gogit v0.11.1 h1:17UbHEPQovLOhlrsPaDoJa3J7jX0I7G92TWXeEDf2eU=
-github.com/fluxcd/pkg/git/gogit v0.11.1/go.mod h1:Hh358WYfwmvGf6Aaj1wjGZMN2AWlAcXRR6aubMQYq8M=
+github.com/fluxcd/pkg/git/gogit v0.12.0 h1:0mCwQND0WpCVZYHLWcXJxRvKVcyWxH4JjMQFMaea8Q4=
+github.com/fluxcd/pkg/git/gogit v0.12.0/go.mod h1:Kn+GfYfZBBIaXmQj39cQvrDxT/6y8leQxXZ5/B+YYTQ=
 github.com/fluxcd/pkg/gittestserver v0.8.4 h1:rA/QUZnfH77ZZG+5xfMqjgEHJdzeeE6Nn1o8cops/bU=
 github.com/fluxcd/pkg/gittestserver v0.8.4/go.mod h1:i3Vng3Stl5zOuGhN4+RuP2NWf5snJCeGUKA7pzAvcHU=
 github.com/fluxcd/pkg/helmtestserver v0.13.0 h1:bRzOO955nDKWKJZvDORfmDvRdb/558BX4ffgx1vT4LI=
