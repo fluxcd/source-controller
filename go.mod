@@ -35,7 +35,7 @@ require (
 	github.com/fluxcd/pkg/apis/event v0.5.0
 	github.com/fluxcd/pkg/apis/meta v1.1.0
 	github.com/fluxcd/pkg/git v0.12.2
-	github.com/fluxcd/pkg/git/gogit v0.11.1
+	github.com/fluxcd/pkg/git/gogit v0.12.0
 	github.com/fluxcd/pkg/gittestserver v0.8.4
 	github.com/fluxcd/pkg/helmtestserver v0.13.0
 	github.com/fluxcd/pkg/lockedfile v0.1.0
