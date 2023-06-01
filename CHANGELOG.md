@@ -2,6 +2,24 @@
 
 All notable changes to this project are documented in this file.
 
+## 1.0.0-rc.5
+
+**Release date:** 2023-06-01
+
+This release candidate fixes a regression introduced in `1.0.0.-rc.4` where
+support for Git servers that exclusively use v2 of the wire protocol like Azure
+Devops and AWS CodeCommit was broken.
+
+Lastly, the controller's dependencies were updated to mitigate CVE-2023-33199.
+
+Improvements:
+- build(deps): bump github.com/sigstore/rekor from 1.1.1 to 1.2.0
+  [#1107](https://github.com/fluxcd/source-controller/pull/1107)
+
+Fixes:
+-  Bump `fluxcd/pkg/git/gogit` to v0.12.0
+  [#1111](https://github.com/fluxcd/source-controller/pull/1111)
+
 ## 1.0.0-rc.4
 
 **Release date:** 2023-05-26
