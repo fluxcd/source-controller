@@ -22,13 +22,6 @@ package features
 import feathelper "github.com/fluxcd/pkg/runtime/features"
 
 const (
-	// OptimizedGitClones decreases resource utilization for GitRepository
-	// reconciliations.
-	//
-	// When enabled, avoids full clone operations by first checking whether
-	// the last revision is still the same at the target repository,
-	// and if that is so, skips the reconciliation.
-	OptimizedGitClones = "OptimizedGitClones"
 	// CacheSecretsAndConfigMaps controls whether secrets and configmaps should be cached.
 	//
 	// When enabled, it will cache both object types, resulting in increased memory usage
@@ -37,9 +30,6 @@ const (
 )
 
 var features = map[string]bool{
-	// OptimizedGitClones
-	// opt-out from v0.25
-	OptimizedGitClones: true,
 	// CacheSecretsAndConfigMaps
 	// opt-in from v0.34
 	CacheSecretsAndConfigMaps: false,

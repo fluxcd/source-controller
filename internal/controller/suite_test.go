@@ -50,7 +50,6 @@ import (
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	sourcev1beta2 "github.com/fluxcd/source-controller/api/v1beta2"
 	"github.com/fluxcd/source-controller/internal/cache"
-	"github.com/fluxcd/source-controller/internal/features"
 	"github.com/fluxcd/source-controller/internal/helm/registry"
 	// +kubebuilder:scaffold:imports
 )
@@ -241,9 +240,6 @@ func TestMain(m *testing.M) {
 		EventRecorder: record.NewFakeRecorder(32),
 		Metrics:       testMetricsH,
 		Storage:       testStorage,
-		features: map[string]bool{
-			features.OptimizedGitClones: true,
-		},
 	}).SetupWithManagerAndOptions(testEnv, GitRepositoryReconcilerOptions{
 		RateLimiter: controller.GetDefaultRateLimiter(),
 	}); err != nil {

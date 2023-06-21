@@ -562,10 +562,7 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 				Client:        clientBuilder.Build(),
 				EventRecorder: record.NewFakeRecorder(32),
 				Storage:       testStorage,
-				features: map[string]bool{
-					features.OptimizedGitClones: true,
-				},
-				patchOptions: getPatchOptions(gitRepositoryReadyCondition.Owned, "sc"),
+				patchOptions:  getPatchOptions(gitRepositoryReadyCondition.Owned, "sc"),
 			}
 
 			tmpDir := t.TempDir()
@@ -792,10 +789,7 @@ func TestGitRepositoryReconciler_reconcileSource_checkoutStrategy(t *testing.T) 
 			Build(),
 		EventRecorder: record.NewFakeRecorder(32),
 		Storage:       testStorage,
-		features: map[string]bool{
-			features.OptimizedGitClones: true,
-		},
-		patchOptions: getPatchOptions(gitRepositoryReadyCondition.Owned, "sc"),
+		patchOptions:  getPatchOptions(gitRepositoryReadyCondition.Owned, "sc"),
 	}
 
 	for _, tt := range tests {
