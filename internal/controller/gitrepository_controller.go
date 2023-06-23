@@ -536,7 +536,7 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 	// Persist the ArtifactSet.
 	*includes = *artifacts
 
-	c, err := r.gitCheckout(ctx, obj, authOpts, dir)
+	c, err := r.gitCheckout(ctx, obj, authOpts, dir, true)
 	if err != nil {
 		return sreconcile.ResultEmpty, err
 	}
@@ -578,7 +578,7 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 
 		// If we can't skip the reconciliation, checkout again without any
 		// optimization.
-		c, err := r.gitCheckout(ctx, obj, authOpts, dir)
+		c, err := r.gitCheckout(ctx, obj, authOpts, dir, false)
 		if err != nil {
 			return sreconcile.ResultEmpty, err
 		}
@@ -777,7 +777,7 @@ func (r *GitRepositoryReconciler) reconcileInclude(ctx context.Context, sp *patc
 // gitCheckout builds checkout options with the given configurations and
 // performs a git checkout.
 func (r *GitRepositoryReconciler) gitCheckout(ctx context.Context,
-	obj *sourcev1.GitRepository, authOpts *git.AuthOptions, dir string) (*git.Commit, error) {
+	obj *sourcev1.GitRepository, authOpts *git.AuthOptions, dir string, optimized bool) (*git.Commit, error) {
 	// Configure checkout strategy.
 	cloneOpts := repository.CloneConfig{
 		RecurseSubmodules: obj.Spec.RecurseSubmodules,
@@ -794,7 +794,7 @@ func (r *GitRepositoryReconciler) gitCheckout(ctx context.Context,
 	// Only if the object has an existing artifact in storage, attempt to
 	// short-circuit clone operation. reconcileStorage has already verified
 	// that the artifact exists.
-	if conditions.IsTrue(obj, sourcev1.ArtifactInStorageCondition) {
+	if optimized && conditions.IsTrue(obj, sourcev1.ArtifactInStorageCondition) {
 		if artifact := obj.GetArtifact(); artifact != nil {
 			cloneOpts.LastObservedCommit = artifact.Revision
 		}
