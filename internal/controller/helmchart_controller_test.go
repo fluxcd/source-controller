@@ -2533,10 +2533,10 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_verifySignature(t *testing.T
 			},
 			want:       sreconcile.ResultEmpty,
 			wantErr:    true,
-			wantErrMsg: "chart verification error: failed to verify <url>: no signatures found for image",
+			wantErrMsg: "chart verification error: failed to verify <url>: no matching signatures",
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.BuildFailedCondition, "ChartVerificationError", "chart verification error: failed to verify <url>: no signatures found for image"),
-				*conditions.FalseCondition(sourcev1.SourceVerifiedCondition, sourcev1.VerificationError, "chart verification error: failed to verify <url>: no signatures found for image"),
+				*conditions.TrueCondition(sourcev1.BuildFailedCondition, "ChartVerificationError", "chart verification error: failed to verify <url>: no matching signatures"),
+				*conditions.FalseCondition(sourcev1.SourceVerifiedCondition, sourcev1.VerificationError, "chart verification error: failed to verify <url>: no matching signatures"),
 			},
 		},
 		{
@@ -2551,8 +2551,8 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_verifySignature(t *testing.T
 			want:    sreconcile.ResultEmpty,
 			wantErr: true,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.BuildFailedCondition, "ChartVerificationError", "chart verification error: failed to verify <url>: no signatures found for image"),
-				*conditions.FalseCondition(sourcev1.SourceVerifiedCondition, sourcev1.VerificationError, "chart verification error: failed to verify <url>: no signatures found for image"),
+				*conditions.TrueCondition(sourcev1.BuildFailedCondition, "ChartVerificationError", "chart verification error: failed to verify <url>: no matching signatures"),
+				*conditions.FalseCondition(sourcev1.SourceVerifiedCondition, sourcev1.VerificationError, "chart verification error: failed to verify <url>: no matching signatures"),
 			},
 		},
 		{
