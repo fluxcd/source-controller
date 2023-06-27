@@ -55,7 +55,7 @@ require (
 	github.com/otiai10/copy v1.12.0
 	github.com/phayes/freeport v0.0.0-20220201140144-74d24b5ae9f5
 	github.com/prometheus/client_golang v1.16.0
-	github.com/sigstore/cosign/v2 v2.1.0
+	github.com/sigstore/cosign/v2 v2.1.1
 	github.com/sigstore/sigstore v1.7.1
 	github.com/sirupsen/logrus v1.9.3
 	github.com/spf13/pflag v1.0.5
@@ -293,10 +293,6 @@ require (
 	github.com/shopspring/decimal v1.3.1 // indirect
 	github.com/sigstore/fulcio v1.3.1 // indirect
 	github.com/sigstore/rekor v1.2.2-0.20230530122220-67cc9e58bd23 // indirect
-	github.com/sigstore/sigstore/pkg/signature/kms/aws v1.7.1 // indirect
-	github.com/sigstore/sigstore/pkg/signature/kms/azure v1.7.1 // indirect
-	github.com/sigstore/sigstore/pkg/signature/kms/gcp v1.7.1 // indirect
-	github.com/sigstore/sigstore/pkg/signature/kms/hashivault v1.7.1 // indirect
 	github.com/sigstore/timestamp-authority v1.1.1 // indirect
 	github.com/skeema/knownhosts v1.1.1 // indirect
 	github.com/skratchdot/open-golang v0.0.0-20200116055534-eef842397966 // indirect
