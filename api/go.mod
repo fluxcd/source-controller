@@ -1,6 +1,6 @@
 module github.com/fluxcd/source-controller/api
 
-go 1.18
+go 1.20
 
 require (
 	github.com/fluxcd/pkg/apis/acl v0.1.0
