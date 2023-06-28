@@ -903,7 +903,8 @@ func (r *GitRepositoryReconciler) verifyCommitSignature(ctx context.Context, obj
 		keyRings = append(keyRings, string(v))
 	}
 	// Verify commit with GPG data from secret
-	if _, err := commit.Verify(keyRings...); err != nil {
+	entity, err := commit.Verify(keyRings...)
+	if err != nil {
 		e := serror.NewGeneric(
 			fmt.Errorf("signature verification of commit '%s' failed: %w", commit.Hash.String(), err),
 			"InvalidCommitSignature",
@@ -914,9 +915,9 @@ func (r *GitRepositoryReconciler) verifyCommitSignature(ctx context.Context, obj
 	}
 
 	conditions.MarkTrue(obj, sourcev1.SourceVerifiedCondition, meta.SucceededReason,
-		"verified signature of commit '%s'", commit.Hash.String())
+		"verified signature of commit '%s' with key '%s'", commit.Hash.String(), entity)
 	r.eventLogf(ctx, obj, eventv1.EventTypeTrace, "VerifiedCommit",
-		"verified signature of commit '%s'", commit.Hash.String())
+		"verified signature of commit '%s' with key '%s'", commit.Hash.String(), entity)
 	return sreconcile.ResultSuccess, nil
 }
 
