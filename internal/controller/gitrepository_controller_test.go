@@ -1519,7 +1519,7 @@ func TestGitRepositoryReconciler_verifyCommitSignature(t *testing.T) {
 			},
 			want: sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.SourceVerifiedCondition, meta.SucceededReason, "verified signature of commit 'shasum'"),
+				*conditions.TrueCondition(sourcev1.SourceVerifiedCondition, meta.SucceededReason, "verified signature of commit 'shasum' with key '3299AEB0E4085BAF'"),
 			},
 		},
 		{
