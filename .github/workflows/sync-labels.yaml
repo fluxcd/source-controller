@@ -1,4 +1,4 @@
-name: Sync labels
+name: sync-labels
 on:
   workflow_dispatch:
   push:
