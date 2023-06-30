@@ -21,6 +21,8 @@ jobs:
       - uses: EndBug/label-sync@da00f2c11fdb78e4fae44adac2fdd713778ea3e8 # v2.3.2
         with:
           # Configuration file
-          config-file: .github/labels.yaml
+          config-file: |
+            https://raw.githubusercontent.com/fluxcd/community/main/.github/standard-labels.yaml
+            .github/labels.yaml
           # Strictly declarative
           delete-other-labels: true
