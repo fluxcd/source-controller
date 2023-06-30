@@ -8,8 +8,7 @@ permissions:
   contents: read
 
 jobs:
-  backport:
-    name: Backport pull request
+  pull-request:
     runs-on: ubuntu-latest
     permissions:
       contents: write
