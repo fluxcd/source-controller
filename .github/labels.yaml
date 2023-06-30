@@ -1,0 +1,78 @@
+# Configuration file to declaratively configure labels
+# Ref: https://github.com/EndBug/label-sync#Config-files
+
+- name: area/bucket
+  description: Bucket related issues and PRs
+  color: '#169b4e'
+- name: area/ci
+  description: Internal CI related issues and pull requests
+  color: '#fccb4c'
+  aliases: ['area/build']
+- name: area/docs
+  description: Documentation related issues and PRs
+  color: '#007bc7'
+- name: area/git
+  description: Git related issues and PRs
+  color: '#8762c7'
+- name: area/helm
+  description: Helm related issues and PRs
+  color: '#3c1f81'
+- name: area/oci
+  description: OCI related issues and PRs
+  color: '#d621a5'
+- name: area/security
+  description: Security related issues and PRs
+  color: '#e64c15'
+- name: area/storage
+  description: Storage related issues and PRs
+  color: '#707070'
+- name: area/testing
+  description: (Unit) testing related issues and PRs
+  color: '#e8c612'
+- name: backport:release/v1.0.x
+  description: To be backported to release/v1.0.x
+  color: '#ffa600'
+- name: blocked/needs-validation
+  description: Requires wider review and validation
+  color: '#ffc985'
+  aliases: ['blocked-needs-validation']
+- name: blocked/upstream
+  description: Blocked by an upstream dependency or issue
+  color: '#a86fbb'
+  aliases: ['blocked-upstream']
+- name: bug
+  description: Something isn't working
+  color: '#e63946'
+- name: dependencies
+  description: Pull requests that update a dependency
+  color: '#186faf'
+- name: duplicate
+  description: This issue or pull request already exists
+  color: '#c4c8cc'
+- name: enhancement
+  description: New feature or request
+  color: '#68c6e8'
+- name: experimental
+  description: Issues and PRs related to experimental features
+  color: '#e5437b'
+- name: good first issue
+  description: Good for newcomers
+  color: '#6074ff'
+- name: help wanted
+  description: Extra attention is needed
+  color: '#00a87b'
+- name: hold
+  description: Issues and pull requests put on hold
+  color: '#e64c15'
+- name: invalid
+  description: This doesn't seem right
+  color: '#ffffff'
+- name: question
+  description: Further information is requested
+  color: '#e175e5'
+- name: umbrella-issue
+  description: Umbrella issue for tracking progress of a larger effort
+  color: '#b162a9'
+- name: wontfix
+  description: This will not be worked on
+  color: '#c4c8cc'
