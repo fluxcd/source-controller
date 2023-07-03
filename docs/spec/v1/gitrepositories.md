@@ -433,11 +433,6 @@ GitRepository, and changes to the resource or in the Git repository will not
 result in a new Artifact. When the field is set to `false` or removed, it will
 resume.
 
-#### Proxy support
-
-When a proxy is configured in the source-controller Pod through the appropriate
-environment variables, for example `HTTPS_PROXY`, `NO_PROXY`, etc.
-
 ### Recurse submodules
 
 `.spec.recurseSubmodules` is an optional field to enable the initialization of
