@@ -2,7 +2,8 @@ name: fuzz
 on:
   pull_request:
     branches:
-      - main
+      - 'main'
+      - 'release/**'
     paths-ignore:
       - 'CHANGELOG.md'
       - 'README.md'
