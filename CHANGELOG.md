@@ -2,6 +2,45 @@
 
 All notable changes to this project are documented in this file.
 
+## 1.0.0
+
+**Release date:** 2023-07-03
+
+This is the first stable release of the controller. From now on, this controller
+follows the [Flux 2 release cadence and support pledge](https://fluxcd.io/flux/releases/).
+
+Starting with this version, the build, release and provenance portions of the
+Flux project supply chain [provisionally meet SLSA Build Level 3](https://fluxcd.io/flux/security/slsa-assessment/).
+
+This release includes several minor changes that primarily focus on addressing
+forgotten and obsolete bits in the logic related to GitRepository objects.
+
+Including a removal of the `OptimizedGitClones` feature flag. If your
+Deployment is configured to disable this flag, you should remove it.
+
+In addition, dependencies have been updated to their latest version, including
+an update of Kubernetes to v1.27.3.
+
+For a comprehensive list of changes since `v0.36.x`, please refer to the
+changelog for [v1.0.0-rc.1](#100-rc1), [v1.0.0-rc.3](#100-rc3) and
+[`v1.0.0-rc.4](#100-rc4).
+
+Improvements:
+- gitrepo: remove `OptimizedGitClones` as a feature gate
+  [#1124](https://github.com/fluxcd/source-controller/pull/1124)
+  [#1126](https://github.com/fluxcd/source-controller/pull/1126)
+- Update dependencies
+  [#1127](https://github.com/fluxcd/source-controller/pull/1127)
+  [#1147](https://github.com/fluxcd/source-controller/pull/1147)
+- Update Cosign to v2.1.0
+  [#1132](https://github.com/fluxcd/source-controller/pull/1132)
+- Align `go.mod` version with Kubernetes (Go 1.20)
+  [#1134](https://github.com/fluxcd/source-controller/pull/1134)
+- Add the verification key to the GitRepository verified status condition
+- [#1136](https://github.com/fluxcd/source-controller/pull/1136)
+- gitrepo: remove obsolete proxy docs
+  [#1144](https://github.com/fluxcd/source-controller/pull/1144)
+
 ## 1.0.0-rc.5
 
 **Release date:** 2023-06-01
