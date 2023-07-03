@@ -14,6 +14,9 @@ replace github.com/opencontainers/go-digest => github.com/opencontainers/go-dige
 // Check again when oras.land/oras-go is updated, which is a dependency of Helm.
 replace github.com/docker/docker => github.com/docker/docker v23.0.6+incompatible
 
+// Replace go-git to unreleased v5.8.0 to improve support for Git v2.41+.
+replace github.com/go-git/go-git/v5 => github.com/go-git/go-git/v5 v5.7.1-0.20230702134234-dd4e2b7f4b01
+
 require (
 	cloud.google.com/go/storage v1.30.1
 	github.com/AdaLogics/go-fuzz-headers v0.0.0-20230106234847-43070de90fa1
