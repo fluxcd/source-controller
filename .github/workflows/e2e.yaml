@@ -8,7 +8,8 @@ on:
       - 'MAINTAINERS'
   push:
     branches:
-      - main
+      - 'main'
+      - 'release/**'
 
 permissions:
   contents: read # for actions/checkout to fetch code
@@ -28,8 +29,8 @@ jobs:
             **/go.sum
             **/go.mod
       - name: Enable integration tests
-        # Only run integration tests for main branch
-        if: github.ref == 'refs/heads/main'
+        # Only run integration tests for main and release branches
+        if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/')
         run: |
           echo 'GO_TAGS=integration' >> $GITHUB_ENV
       - name: Setup Kubernetes
@@ -63,8 +64,8 @@ jobs:
             **/go.sum
             **/go.mod
       - name: Enable integration tests
-        # Only run integration tests for main branch
-        if: github.ref == 'refs/heads/main'
+        # Only run integration tests for main and release branches
+        if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/')
         run: |
           echo 'GO_TAGS=integration' >> $GITHUB_ENV
       - name: Prepare
