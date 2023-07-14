@@ -157,14 +157,20 @@ to the IAM role when using IRSA.
 
 #### Azure
 
-The `azure` provider can be used to authenticate automatically using kubelet
-managed identity or Azure Active Directory pod-managed identity (aad-pod-identity),
+The `azure` provider can be used to authenticate automatically using Workload Identity, Kubelet Managed
+Identity or Azure Active Directory pod-managed identity (aad-pod-identity),
 and by extension gain access to ACR.
 
 ##### Kubelet Managed Identity
 
 When the kubelet managed identity has access to ACR, source-controller running
 on it will also have access to ACR.
+
+**Note:** If you have more than one identity configured on the cluster, you have to specify which one to use
+by setting the `AZURE_CLIENT_ID` environment variable in the source-controller deployment.
+
+If you are running into further issues, please look at the
+[troubleshooting guide](https://github.com/Azure/azure-sdk-for-go/blob/main/sdk/azidentity/TROUBLESHOOTING.md#azure-virtual-machine-managed-identity).
 
 ##### Workload Identity
 
@@ -203,13 +209,17 @@ patches:
               azure.workload.identity/use: "true"
 ```
 
-To use Workload Identity, you have to install the Workload Identity
-mutating webhook and create an identity that has access to ACR. Next, establish 
-a federated identity between the source-controller ServiceAccount and the 
-identity. Patch the source-controller Pod and ServiceAccount as shown in the patch
+Ensure Workload Identity is properly set up on your cluster and the mutating webhook is installed.
+Create an identity that has access to ACR. Next, establish
+a federated identity between the source-controller ServiceAccount and the
+identity. Patch the source-controller Deployment and ServiceAccount as shown in the patch
 above. Please take a look at this [guide](https://azure.github.io/azure-workload-identity/docs/quick-start.html#6-establish-federated-identity-credential-between-the-identity-and-the-service-account-issuer--subject).
 
-##### AAD Pod Identity
+##### Deprecated: AAD Pod Identity
+
+**Note:** The AAD Pod Identity project will be archived in [September 2023](https://github.com/Azure/aad-pod-identity#-announcement),
+and you are advised to use Workload Identity instead.
+
 When using aad-pod-identity to enable access to ACR, add the following patch to
 your bootstrap repository, in the `flux-system/kustomization.yaml` file:
 
@@ -234,7 +244,7 @@ has to be used to give the `source-controller` pod access to the ACR.
 To do this, you have to install `aad-pod-identity` on your cluster, create a managed identity
 that has access to the container registry (this can also be the Kubelet identity
 if it has `AcrPull` role assignment on the ACR), create an `AzureIdentity` and `AzureIdentityBinding`
-that describe the managed identity and then label the `source-controller` pods
+that describe the managed identity and then label the `source-controller` deployment
 with the name of the AzureIdentity as shown in the patch above. Please take a look
 at [this guide](https://azure.github.io/aad-pod-identity/docs/) or
 [this one](https://docs.microsoft.com/en-us/azure/aks/use-azure-ad-pod-identity)

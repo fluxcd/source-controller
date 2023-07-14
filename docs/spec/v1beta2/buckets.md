@@ -439,8 +439,8 @@ data:
 
 ##### Workload Identity
 
-If you have [Workload Identity mutating webhook](https://azure.github.io/azure-workload-identity/docs/installation/managed-clusters.html)
-installed on your cluster. You need to create an Azure Identity and give it
+If you have [Workload Identity](https://azure.github.io/azure-workload-identity/docs/installation/managed-clusters.html)
+set up on your cluster, you need to create an Azure Identity and give it
 access to Azure Blob Storage.
 
 ```shell
@@ -465,7 +465,7 @@ az identity federated-credential create \
   --subject "system:serviceaccount:flux-system:source-controller"
 ```
 
-Add a patch to label and annotate the source-controller Pods and ServiceAccount
+Add a patch to label and annotate the source-controller Deployment and ServiceAccount
 correctly so that it can match an identity binding:
 
 ```yaml
@@ -501,7 +501,7 @@ patches:
 ```
 
 If you have set up Workload Identity correctly and labeled the source-controller
-Pod and ServiceAccount, then you don't need to reference a Secret. For more information,
+Deployment and ServiceAccount, then you don't need to reference a Secret. For more information,
 please see [documentation](https://azure.github.io/azure-workload-identity/docs/quick-start.html).
 
 ```yaml
@@ -517,7 +517,7 @@ spec:
   endpoint: https://testfluxsas.blob.core.windows.net
 ```
 
-##### Managed Identity with AAD Pod Identity
+##### Deprecated: Managed Identity with AAD Pod Identity
 
 If you are using [aad pod identity](https://azure.github.io/aad-pod-identity/docs),
 You need to create an Azure Identity and give it access to Azure Blob Storage.
@@ -561,7 +561,7 @@ spec:
   selector: ${IDENTITY_NAME}
 ```
 
-Label the source-controller correctly so that it can match an identity binding:
+Label the source-controller Deployment correctly so that it can match an identity binding:
 
 ```yaml
 apiVersion: apps/v1
@@ -577,7 +577,7 @@ spec:
 ```
 
 If you have set up aad-pod-identity correctly and labeled the source-controller
-Pod, then you don't need to reference a Secret.
+Deployment, then you don't need to reference a Secret.
 
 ```yaml
 apiVersion: source.toolkit.fluxcd.io/v1beta2
