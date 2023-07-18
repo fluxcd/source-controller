@@ -452,15 +452,37 @@ flux create secret oci ghcr-auth \
   --password=${GITHUB_PAT}
 ```
 
-#### TLS authentication
+**Note:** Support for specifying TLS authentication data using this API has been
+deprecated. Please use [`.spec.certSecretRef`](#cert-secret-reference) instead.
+If the controller uses the secret specfied by this field to configure TLS, then
+a deprecation warning will be logged.
+
+### Cert secret reference
 
 **Note:** TLS authentication is not yet supported by OCI Helm repositories.
 
-To provide TLS credentials to use while connecting with the Helm repository,
-the referenced Secret is expected to contain `.data.certFile` and
-`.data.keyFile`, and/or `.data.caFile` values.
+`.spec.certSecretRef.name` is an optional field to specify a secret containing TLS
+certificate data. The secret can contain the following keys:
 
-For example:
+* `certFile` and `keyFile`, to specify the client certificate and private key used for
+TLS client authentication. These must be used in conjunction, i.e. specifying one without
+the other will lead to an error.
+* `caFile`, to specify the CA certificate used to verify the server, which is required
+if the server is using a self-signed certificate.
+
+If the server is using a self-signed certificate and has TLS client authentication enabled,
+all three values are required.
+
+All the files in the secret are expected to be [PEM-encoded][pem-encoding]. Assuming you have
+three files; `client.key`, `client.crt` and `ca.crt` for the client private key, client
+certificate and the CA certificate respectively, you can generate the required secret using
+the `flux creat secret helm` command:
+
+```sh
+flux create secret helm tls --key-file=client.key --cert-file=client.crt --ca-file=ca.crt
+```
+
+Example usage:
 
 ```yaml
 ---
@@ -472,7 +494,7 @@ metadata:
 spec:
   interval: 5m0s
   url: https://example.com
-  secretRef:
+  certSecretRef:
     name: example-tls
 ---
 apiVersion: v1
