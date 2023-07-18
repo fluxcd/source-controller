@@ -18,7 +18,6 @@ package controller
 
 import (
 	"context"
-	"crypto/tls"
 	"errors"
 	"fmt"
 	"net/url"
@@ -29,7 +28,6 @@ import (
 	helmgetter "helm.sh/helm/v3/pkg/getter"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	kuberecorder "k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -390,59 +388,33 @@ func (r *HelmRepositoryReconciler) reconcileStorage(ctx context.Context, sp *pat
 // pointer is set to the newly fetched index.
 func (r *HelmRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch.SerialPatcher,
 	obj *helmv1.HelmRepository, artifact *sourcev1.Artifact, chartRepo *repository.ChartRepository) (sreconcile.Result, error) {
-	var tlsConfig *tls.Config
-
-	// Configure Helm client to access repository
-	clientOpts := []helmgetter.Option{
-		helmgetter.WithTimeout(obj.Spec.Timeout.Duration),
-		helmgetter.WithURL(obj.Spec.URL),
-		helmgetter.WithPassCredentialsAll(obj.Spec.PassCredentials),
+	normalizedURL, err := repository.NormalizeURL(obj.Spec.URL)
+	if err != nil {
+		e := &serror.Stalling{
+			Err:    fmt.Errorf("invalid Helm repository URL: %w", err),
+			Reason: sourcev1.URLInvalidReason,
+		}
+		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
+		return sreconcile.ResultEmpty, e
 	}
 
-	// Configure any authentication related options
-	if obj.Spec.SecretRef != nil {
-		// Attempt to retrieve secret
-		name := types.NamespacedName{
-			Namespace: obj.GetNamespace(),
-			Name:      obj.Spec.SecretRef.Name,
-		}
-		var secret corev1.Secret
-		if err := r.Client.Get(ctx, name, &secret); err != nil {
+	clientOpts, err := getter.GetClientOpts(ctx, r.Client, obj, normalizedURL)
+	if err != nil {
+		if errors.Is(err, getter.ErrDeprecatedTLSConfig) {
+			ctrl.LoggerFrom(ctx).
+				Info("warning: specifying TLS authentication data via `.spec.secretRef` is deprecated, please use `.spec.certSecretRef` instead")
+		} else {
 			e := &serror.Event{
-				Err:    fmt.Errorf("failed to get secret '%s': %w", name.String(), err),
+				Err:    err,
 				Reason: sourcev1.AuthenticationFailedReason,
 			}
 			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
-			return sreconcile.ResultEmpty, e
-		}
-
-		// Construct actual options
-		opts, err := getter.ClientOptionsFromSecret(secret)
-		if err != nil {
-			e := &serror.Event{
-				Err:    fmt.Errorf("failed to configure Helm client with secret data: %w", err),
-				Reason: sourcev1.AuthenticationFailedReason,
-			}
-			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
-			// Return err as the content of the secret may change.
-			return sreconcile.ResultEmpty, e
-		}
-		clientOpts = append(clientOpts, opts...)
-
-		tlsConfig, err = getter.TLSClientConfigFromSecret(secret, obj.Spec.URL)
-		if err != nil {
-			e := &serror.Event{
-				Err:    fmt.Errorf("failed to create TLS client config with secret data: %w", err),
-				Reason: sourcev1.AuthenticationFailedReason,
-			}
-			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
-			// Requeue as content of secret might change
 			return sreconcile.ResultEmpty, e
 		}
 	}
 
 	// Construct Helm chart repository with options and download index
-	newChartRepo, err := repository.NewChartRepository(obj.Spec.URL, "", r.Getters, tlsConfig, clientOpts...)
+	newChartRepo, err := repository.NewChartRepository(obj.Spec.URL, "", r.Getters, clientOpts.TlsConfig, clientOpts.GetterOpts...)
 	if err != nil {
 		switch err.(type) {
 		case *url.Error:

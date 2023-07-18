@@ -55,7 +55,6 @@ import (
 	eventv1 "github.com/fluxcd/pkg/apis/event/v1beta1"
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/oci"
-	"github.com/fluxcd/pkg/oci/auth/login"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	helper "github.com/fluxcd/pkg/runtime/controller"
 	"github.com/fluxcd/pkg/runtime/patch"
@@ -345,7 +344,7 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 
 	if _, ok := keychain.(soci.Anonymous); obj.Spec.Provider != ociv1.GenericOCIProvider && ok {
 		var authErr error
-		auth, authErr = oidcAuth(ctxTimeout, obj.Spec.URL, obj.Spec.Provider)
+		auth, authErr = soci.OIDCAuth(ctxTimeout, obj.Spec.URL, obj.Spec.Provider)
 		if authErr != nil && !errors.Is(authErr, oci.ErrUnconfiguredProvider) {
 			e := serror.NewGeneric(
 				fmt.Errorf("failed to get credential from %s: %w", obj.Spec.Provider, authErr),
@@ -868,27 +867,6 @@ func (r *OCIRepositoryReconciler) transport(ctx context.Context, obj *ociv1.OCIR
 		tlsConfig.RootCAs = syscerts
 	}
 	return transport, nil
-}
-
-// oidcAuth generates the OIDC credential authenticator based on the specified cloud provider.
-func oidcAuth(ctx context.Context, url, provider string) (authn.Authenticator, error) {
-	u := strings.TrimPrefix(url, ociv1.OCIRepositoryPrefix)
-	ref, err := name.ParseReference(u)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse URL '%s': %w", u, err)
-	}
-
-	opts := login.ProviderOptions{}
-	switch provider {
-	case ociv1.AmazonOCIProvider:
-		opts.AwsAutoLogin = true
-	case ociv1.AzureOCIProvider:
-		opts.AzureAutoLogin = true
-	case ociv1.GoogleOCIProvider:
-		opts.GcpAutoLogin = true
-	}
-
-	return login.NewManager().Login(ctx, u, ref, opts)
 }
 
 // reconcileStorage ensures the current state of the storage matches the
