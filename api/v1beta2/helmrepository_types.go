@@ -51,10 +51,17 @@ type HelmRepositorySpec struct {
 	// for the HelmRepository.
 	// For HTTP/S basic auth the secret must contain 'username' and 'password'
 	// fields.
-	// For TLS the secret must contain a 'certFile' and 'keyFile', and/or
-	// 'caFile' fields.
+	// Support for TLS auth using the 'certFile' and 'keyFile', and/or 'caFile'
+	// keys is deprecated. Please use `.spec.certSecretRef` instead.
 	// +optional
 	SecretRef *meta.LocalObjectReference `json:"secretRef,omitempty"`
+
+	// CertSecretRef specifies the Secret containing the TLS authentication
+	// data. The secret must contain a 'certFile' and 'keyFile', and/or 'caFile'
+	// fields. It takes precedence over the values specified in the Secret
+	// referred to by `.spec.secretRef`.
+	// +optional
+	CertSecretRef *meta.LocalObjectReference `json:"certSecretRef,omitempty"`
 
 	// PassCredentials allows the credentials from the SecretRef to be passed
 	// on to a host that does not match the host as defined in URL.
