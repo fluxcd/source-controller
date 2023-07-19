@@ -380,7 +380,7 @@ func mustSetupHelmLimits(indexLimit, chartLimit, chartFileLimit int64) {
 	helm.MaxChartFileSize = chartFileLimit
 }
 
-func mustInitHelmCache(maxSize int, purgeInterval, itemTTL string) (*cache.Cache, time.Duration) {
+func mustInitHelmCache(maxSize int, itemTTL, purgeInterval string) (*cache.Cache, time.Duration) {
 	if maxSize <= 0 {
 		setupLog.Info("caching of Helm index files is disabled")
 		return nil, -1
