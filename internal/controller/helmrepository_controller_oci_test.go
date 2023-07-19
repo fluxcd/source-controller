@@ -250,8 +250,12 @@ func TestHelmRepositoryOCIReconciler_authStrategy(t *testing.T) {
 				WithStatusSubresource(&helmv1.HelmRepository{})
 
 			workspaceDir := t.TempDir()
+			tt.registryOpts.disableDNSMocking = true
 			server, err := setupRegistryServer(ctx, workspaceDir, tt.registryOpts)
 			g.Expect(err).NotTo(HaveOccurred())
+			t.Cleanup(func() {
+				server.Close()
+			})
 
 			obj := &helmv1.HelmRepository{
 				ObjectMeta: metav1.ObjectMeta{

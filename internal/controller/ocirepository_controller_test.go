@@ -18,7 +18,6 @@ package controller
 
 import (
 	"crypto/rand"
-	"crypto/rsa"
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
@@ -26,9 +25,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
-	"net"
 	"net/http"
-	"net/http/httptest"
 	"net/url"
 	"os"
 	"path"
@@ -39,7 +36,6 @@ import (
 
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/crane"
-	"github.com/google/go-containerregistry/pkg/registry"
 	gcrv1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/mutate"
 	. "github.com/onsi/gomega"
@@ -80,8 +76,11 @@ func TestOCIRepository_Reconcile(t *testing.T) {
 	if err != nil {
 		g.Expect(err).ToNot(HaveOccurred())
 	}
+	t.Cleanup(func() {
+		regServer.Close()
+	})
 
-	podinfoVersions, err := pushMultiplePodinfoImages(regServer.registryHost, "6.1.4", "6.1.5", "6.1.6")
+	podinfoVersions, err := pushMultiplePodinfoImages(regServer.registryHost, true, "6.1.4", "6.1.5", "6.1.6")
 
 	tests := []struct {
 		name           string
@@ -146,6 +145,7 @@ func TestOCIRepository_Reconcile(t *testing.T) {
 					URL:       tt.url,
 					Interval:  metav1.Duration{Duration: 60 * time.Minute},
 					Reference: &ociv1.OCIRepositoryRef{},
+					Insecure:  true,
 				},
 			}
 			obj := origObj.DeepCopy()
@@ -262,8 +262,11 @@ func TestOCIRepository_Reconcile_MediaType(t *testing.T) {
 	if err != nil {
 		g.Expect(err).ToNot(HaveOccurred())
 	}
+	t.Cleanup(func() {
+		regServer.Close()
+	})
 
-	podinfoVersions, err := pushMultiplePodinfoImages(regServer.registryHost, "6.1.4", "6.1.5", "6.1.6")
+	podinfoVersions, err := pushMultiplePodinfoImages(regServer.registryHost, true, "6.1.4", "6.1.5", "6.1.6")
 
 	tests := []struct {
 		name      string
@@ -314,6 +317,7 @@ func TestOCIRepository_Reconcile_MediaType(t *testing.T) {
 					LayerSelector: &ociv1.OCILayerSelector{
 						MediaType: tt.mediaType,
 					},
+					Insecure: true,
 				},
 			}
 
@@ -373,6 +377,7 @@ func TestOCIRepository_reconcileSource_authStrategy(t *testing.T) {
 		craneOpts        []crane.Option
 		secretOpts       secretOptions
 		tlsCertSecret    *corev1.Secret
+		insecure         bool
 		provider         string
 		providerImg      string
 		want             sreconcile.Result
@@ -380,8 +385,10 @@ func TestOCIRepository_reconcileSource_authStrategy(t *testing.T) {
 		assertConditions []metav1.Condition
 	}{
 		{
-			name: "HTTP without basic auth",
-			want: sreconcile.ResultSuccess,
+			name:      "HTTP without basic auth",
+			want:      sreconcile.ResultSuccess,
+			craneOpts: []crane.Option{crane.Insecure},
+			insecure:  true,
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new revision '<revision>' for '<url>'"),
 				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new revision '<revision>' for '<url>'"),
@@ -393,10 +400,13 @@ func TestOCIRepository_reconcileSource_authStrategy(t *testing.T) {
 			registryOpts: registryOptions{
 				withBasicAuth: true,
 			},
-			craneOpts: []crane.Option{crane.WithAuth(&authn.Basic{
-				Username: testRegistryUsername,
-				Password: testRegistryPassword,
-			}),
+			insecure: true,
+			craneOpts: []crane.Option{
+				crane.WithAuth(&authn.Basic{
+					Username: testRegistryUsername,
+					Password: testRegistryPassword,
+				}),
+				crane.Insecure,
 			},
 			secretOpts: secretOptions{
 				username:      testRegistryUsername,
@@ -414,10 +424,13 @@ func TestOCIRepository_reconcileSource_authStrategy(t *testing.T) {
 			registryOpts: registryOptions{
 				withBasicAuth: true,
 			},
-			craneOpts: []crane.Option{crane.WithAuth(&authn.Basic{
-				Username: testRegistryUsername,
-				Password: testRegistryPassword,
-			}),
+			insecure: true,
+			craneOpts: []crane.Option{
+				crane.WithAuth(&authn.Basic{
+					Username: testRegistryUsername,
+					Password: testRegistryPassword,
+				}),
+				crane.Insecure,
 			},
 			secretOpts: secretOptions{
 				username:  testRegistryUsername,
@@ -435,11 +448,14 @@ func TestOCIRepository_reconcileSource_authStrategy(t *testing.T) {
 			registryOpts: registryOptions{
 				withBasicAuth: true,
 			},
-			wantErr: true,
-			craneOpts: []crane.Option{crane.WithAuth(&authn.Basic{
-				Username: testRegistryUsername,
-				Password: testRegistryPassword,
-			}),
+			insecure: true,
+			wantErr:  true,
+			craneOpts: []crane.Option{
+				crane.WithAuth(&authn.Basic{
+					Username: testRegistryUsername,
+					Password: testRegistryPassword,
+				}),
+				crane.Insecure,
 			},
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(sourcev1.FetchFailedCondition, ociv1.OCIPullFailedReason, "failed to determine artifact digest"),
@@ -452,10 +468,13 @@ func TestOCIRepository_reconcileSource_authStrategy(t *testing.T) {
 			registryOpts: registryOptions{
 				withBasicAuth: true,
 			},
-			craneOpts: []crane.Option{crane.WithAuth(&authn.Basic{
-				Username: testRegistryUsername,
-				Password: testRegistryPassword,
-			}),
+			insecure: true,
+			craneOpts: []crane.Option{
+				crane.WithAuth(&authn.Basic{
+					Username: testRegistryUsername,
+					Password: testRegistryPassword,
+				}),
+				crane.Insecure,
 			},
 			secretOpts: secretOptions{
 				username:      "wrong-pass",
@@ -467,16 +486,19 @@ func TestOCIRepository_reconcileSource_authStrategy(t *testing.T) {
 			},
 		},
 		{
-			name:    "HTTP registry - basic auth with invalid serviceaccount",
-			want:    sreconcile.ResultEmpty,
-			wantErr: true,
+			name:     "HTTP registry - basic auth with invalid serviceaccount",
+			want:     sreconcile.ResultEmpty,
+			wantErr:  true,
+			insecure: true,
 			registryOpts: registryOptions{
 				withBasicAuth: true,
 			},
-			craneOpts: []crane.Option{crane.WithAuth(&authn.Basic{
-				Username: testRegistryUsername,
-				Password: testRegistryPassword,
-			}),
+			craneOpts: []crane.Option{
+				crane.WithAuth(&authn.Basic{
+					Username: testRegistryUsername,
+					Password: testRegistryPassword,
+				}),
+				crane.Insecure,
 			},
 			secretOpts: secretOptions{
 				username:  "wrong-pass",
@@ -559,25 +581,32 @@ func TestOCIRepository_reconcileSource_authStrategy(t *testing.T) {
 			wantErr:     true,
 			provider:    "aws",
 			providerImg: "oci://123456789000.dkr.ecr.us-east-2.amazonaws.com/test",
+			craneOpts: []crane.Option{
+				crane.Insecure,
+			},
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "failed to get credential from"),
 			},
 		},
 		{
-			name: "with contextual login provider and secretRef",
+			name: "secretRef takes precedence over provider",
 			want: sreconcile.ResultSuccess,
 			registryOpts: registryOptions{
 				withBasicAuth: true,
 			},
-			craneOpts: []crane.Option{crane.WithAuth(&authn.Basic{
-				Username: testRegistryUsername,
-				Password: testRegistryPassword,
-			})},
+			craneOpts: []crane.Option{
+				crane.WithAuth(&authn.Basic{
+					Username: testRegistryUsername,
+					Password: testRegistryPassword,
+				}),
+				crane.Insecure,
+			},
 			secretOpts: secretOptions{
 				username:      testRegistryUsername,
 				password:      testRegistryPassword,
 				includeSecret: true,
 			},
+			insecure: true,
 			provider: "azure",
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new revision '<revision>' for '<url>'"),
@@ -607,8 +636,10 @@ func TestOCIRepository_reconcileSource_authStrategy(t *testing.T) {
 
 			workspaceDir := t.TempDir()
 			server, err := setupRegistryServer(ctx, workspaceDir, tt.registryOpts)
-
 			g.Expect(err).NotTo(HaveOccurred())
+			t.Cleanup(func() {
+				server.Close()
+			})
 
 			img, err := createPodinfoImageFromTar("podinfo-6.1.6.tar", "6.1.6", server.registryHost, tt.craneOpts...)
 			g.Expect(err).ToNot(HaveOccurred())
@@ -664,6 +695,9 @@ func TestOCIRepository_reconcileSource_authStrategy(t *testing.T) {
 					Name: tt.tlsCertSecret.Name,
 				}
 			}
+			if tt.insecure {
+				obj.Spec.Insecure = true
+			}
 
 			r := &OCIRepositoryReconciler{
 				Client:        clientBuilder.Build(),
@@ -672,7 +706,7 @@ func TestOCIRepository_reconcileSource_authStrategy(t *testing.T) {
 				patchOptions:  getPatchOptions(ociRepositoryReadyCondition.Owned, "sc"),
 			}
 
-			opts := craneOptions(ctx, true)
+			opts := craneOptions(ctx, tt.insecure)
 			opts = append(opts, crane.WithAuthFromKeychain(authn.DefaultKeychain))
 			repoURL, err := r.getArtifactURL(obj, opts)
 			g.Expect(err).To(BeNil())
@@ -706,34 +740,36 @@ func TestOCIRepository_reconcileSource_authStrategy(t *testing.T) {
 func TestOCIRepository_CertSecret(t *testing.T) {
 	g := NewWithT(t)
 
-	srv, rootCertPEM, clientCertPEM, clientKeyPEM, clientTLSCert, err := createTLSServer()
+	tmpDir := t.TempDir()
+	regServer, err := setupRegistryServer(ctx, tmpDir, registryOptions{
+		withTLS:            true,
+		withClientCertAuth: true,
+	})
+	g.Expect(err).ToNot(HaveOccurred())
+	t.Cleanup(func() {
+		regServer.Close()
+	})
+
+	pool := x509.NewCertPool()
+	pool.AppendCertsFromPEM(tlsCA)
+	clientTLSCert, err := tls.X509KeyPair(clientPublicKey, clientPrivateKey)
 	g.Expect(err).ToNot(HaveOccurred())
 
-	srv.StartTLS()
-	defer srv.Close()
-
-	transport := &http.Transport{
-		TLSClientConfig: &tls.Config{},
+	transport := http.DefaultTransport.(*http.Transport)
+	transport.TLSClientConfig = &tls.Config{
+		RootCAs:      pool,
+		Certificates: []tls.Certificate{clientTLSCert},
 	}
-	// Use the server cert as a CA cert, so the client trusts the
-	// server cert. (Only works because the server uses the same
-	// cert in both roles).
-	pool := x509.NewCertPool()
-	pool.AddCert(srv.Certificate())
-	transport.TLSClientConfig.RootCAs = pool
-	transport.TLSClientConfig.Certificates = []tls.Certificate{clientTLSCert}
-
-	srv.Client().Transport = transport
-	pi, err := createPodinfoImageFromTar("podinfo-6.1.5.tar", "6.1.5", srv.URL, []crane.Option{
-		crane.WithTransport(srv.Client().Transport),
+	pi, err := createPodinfoImageFromTar("podinfo-6.1.5.tar", "6.1.5", regServer.registryHost, []crane.Option{
+		crane.WithTransport(transport),
 	}...)
 	g.Expect(err).NotTo(HaveOccurred())
 
 	tlsSecretClientCert := corev1.Secret{
-		StringData: map[string]string{
-			oci.CACert:     string(rootCertPEM),
-			oci.ClientCert: string(clientCertPEM),
-			oci.ClientKey:  string(clientKeyPEM),
+		Data: map[string][]byte{
+			oci.CACert:     tlsCA,
+			oci.ClientCert: clientPublicKey,
+			oci.ClientKey:  clientPrivateKey,
 		},
 	}
 
@@ -758,17 +794,17 @@ func TestOCIRepository_CertSecret(t *testing.T) {
 			url:                   pi.url,
 			digest:                pi.digest,
 			expectreadyconition:   false,
-			expectedstatusmessage: "unexpected status code 400 Bad Request: Client sent an HTTP request to an HTTPS server",
+			expectedstatusmessage: "tls: failed to verify certificate: x509:",
 		},
 		{
 			name:   "test connection with with incorrect private key",
 			url:    pi.url,
 			digest: pi.digest,
 			certSecret: &corev1.Secret{
-				StringData: map[string]string{
-					oci.CACert:     string(rootCertPEM),
-					oci.ClientCert: string(clientCertPEM),
-					oci.ClientKey:  string("invalid-key"),
+				Data: map[string][]byte{
+					oci.CACert:     tlsCA,
+					oci.ClientCert: clientPublicKey,
+					oci.ClientKey:  []byte("invalid-key"),
 				},
 			},
 			expectreadyconition:   false,
@@ -859,8 +895,11 @@ func TestOCIRepository_reconcileSource_remoteReference(t *testing.T) {
 	tmpDir := t.TempDir()
 	server, err := setupRegistryServer(ctx, tmpDir, registryOptions{})
 	g.Expect(err).ToNot(HaveOccurred())
+	t.Cleanup(func() {
+		server.Close()
+	})
 
-	podinfoVersions, err := pushMultiplePodinfoImages(server.registryHost, "6.1.4", "6.1.5", "6.1.6")
+	podinfoVersions, err := pushMultiplePodinfoImages(server.registryHost, true, "6.1.4", "6.1.5", "6.1.6")
 	img6 := podinfoVersions["6.1.6"]
 	img5 := podinfoVersions["6.1.5"]
 
@@ -1001,6 +1040,7 @@ func TestOCIRepository_reconcileSource_remoteReference(t *testing.T) {
 					URL:      fmt.Sprintf("oci://%s/podinfo", server.registryHost),
 					Interval: metav1.Duration{Duration: interval},
 					Timeout:  &metav1.Duration{Duration: timeout},
+					Insecure: true,
 				},
 			}
 
@@ -1034,26 +1074,16 @@ func TestOCIRepository_reconcileSource_remoteReference(t *testing.T) {
 func TestOCIRepository_reconcileSource_verifyOCISourceSignature(t *testing.T) {
 	g := NewWithT(t)
 
-	tmpDir := t.TempDir()
-	server, err := setupRegistryServer(ctx, tmpDir, registryOptions{})
-	g.Expect(err).ToNot(HaveOccurred())
-
-	podinfoVersions, err := pushMultiplePodinfoImages(server.registryHost, "6.1.4", "6.1.5")
-	g.Expect(err).ToNot(HaveOccurred())
-	img4 := podinfoVersions["6.1.4"]
-	img5 := podinfoVersions["6.1.5"]
-
 	tests := []struct {
 		name             string
 		reference        *ociv1.OCIRepositoryRef
 		insecure         bool
-		digest           string
 		want             sreconcile.Result
 		wantErr          bool
 		wantErrMsg       string
 		shouldSign       bool
 		keyless          bool
-		beforeFunc       func(obj *ociv1.OCIRepository)
+		beforeFunc       func(obj *ociv1.OCIRepository, tag, revision string)
 		assertConditions []metav1.Condition
 	}{
 		{
@@ -1061,7 +1091,6 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignature(t *testing.T) {
 			reference: &ociv1.OCIRepositoryRef{
 				Tag: "6.1.4",
 			},
-			digest:     img4.digest.String(),
 			shouldSign: true,
 			want:       sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
@@ -1075,7 +1104,6 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignature(t *testing.T) {
 			reference: &ociv1.OCIRepositoryRef{
 				Tag: "6.1.5",
 			},
-			digest:     img5.digest.String(),
 			wantErr:    true,
 			wantErrMsg: "failed to verify the signature using provider 'cosign': no matching signatures were found for '<url>'",
 			want:       sreconcile.ResultEmpty,
@@ -1090,7 +1118,6 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignature(t *testing.T) {
 			reference: &ociv1.OCIRepositoryRef{
 				Tag: "6.1.5",
 			},
-			digest:  img5.digest.String(),
 			wantErr: true,
 			want:    sreconcile.ResultEmpty,
 			keyless: true,
@@ -1103,21 +1130,19 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignature(t *testing.T) {
 		{
 			name:      "verify failed before, removed from spec, remove condition",
 			reference: &ociv1.OCIRepositoryRef{Tag: "6.1.4"},
-			digest:    img4.digest.String(),
-			beforeFunc: func(obj *ociv1.OCIRepository) {
+			beforeFunc: func(obj *ociv1.OCIRepository, tag, revision string) {
 				conditions.MarkFalse(obj, sourcev1.SourceVerifiedCondition, "VerifyFailed", "fail msg")
 				obj.Spec.Verify = nil
-				obj.Status.Artifact = &sourcev1.Artifact{Revision: fmt.Sprintf("%s@%s", img4.tag, img4.digest.String())}
+				obj.Status.Artifact = &sourcev1.Artifact{Revision: fmt.Sprintf("%s@%s", tag, revision)}
 			},
 			want: sreconcile.ResultSuccess,
 		},
 		{
 			name:       "same artifact, verified before, change in obj gen verify again",
 			reference:  &ociv1.OCIRepositoryRef{Tag: "6.1.4"},
-			digest:     img4.digest.String(),
 			shouldSign: true,
-			beforeFunc: func(obj *ociv1.OCIRepository) {
-				obj.Status.Artifact = &sourcev1.Artifact{Revision: fmt.Sprintf("%s@%s", img4.tag, img4.digest.String())}
+			beforeFunc: func(obj *ociv1.OCIRepository, tag, revision string) {
+				obj.Status.Artifact = &sourcev1.Artifact{Revision: fmt.Sprintf("%s@%s", tag, revision)}
 				// Set Verified with old observed generation and different reason/message.
 				conditions.MarkTrue(obj, sourcev1.SourceVerifiedCondition, "Verified", "verified")
 				// Set new object generation.
@@ -1131,11 +1156,10 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignature(t *testing.T) {
 		{
 			name:       "no verify for already verified, verified condition remains the same",
 			reference:  &ociv1.OCIRepositoryRef{Tag: "6.1.4"},
-			digest:     img4.digest.String(),
 			shouldSign: true,
-			beforeFunc: func(obj *ociv1.OCIRepository) {
+			beforeFunc: func(obj *ociv1.OCIRepository, tag, revision string) {
 				// Artifact present and custom verified condition reason/message.
-				obj.Status.Artifact = &sourcev1.Artifact{Revision: fmt.Sprintf("%s@%s", img4.tag, img4.digest.String())}
+				obj.Status.Artifact = &sourcev1.Artifact{Revision: fmt.Sprintf("%s@%s", tag, revision)}
 				conditions.MarkTrue(obj, sourcev1.SourceVerifiedCondition, "Verified", "verified")
 			},
 			want: sreconcile.ResultSuccess,
@@ -1144,19 +1168,17 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignature(t *testing.T) {
 			},
 		},
 		{
-			name: "insecure registries are not supported",
+			name: "signed image on an insecure registry passes verification",
 			reference: &ociv1.OCIRepositoryRef{
-				Tag: "6.1.4",
+				Tag: "6.1.6",
 			},
-			digest:     img4.digest.String(),
 			shouldSign: true,
 			insecure:   true,
-			wantErr:    true,
-			want:       sreconcile.ResultEmpty,
+			want:       sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new revision '<revision>' for '<url>'"),
 				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new revision '<revision>' for '<url>'"),
-				*conditions.FalseCondition(sourcev1.SourceVerifiedCondition, sourcev1.VerificationError, "cosign does not support insecure registries"),
+				*conditions.TrueCondition(sourcev1.SourceVerifiedCondition, meta.SucceededReason, "verified signature of revision <revision>"),
 			},
 		},
 	}
@@ -1179,6 +1201,7 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignature(t *testing.T) {
 	keys, err := cosign.GenerateKeyPair(pf)
 	g.Expect(err).ToNot(HaveOccurred())
 
+	tmpDir := t.TempDir()
 	err = os.WriteFile(path.Join(tmpDir, "cosign.key"), keys.PrivateBytes, 0600)
 	g.Expect(err).ToNot(HaveOccurred())
 
@@ -1190,14 +1213,33 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignature(t *testing.T) {
 			"cosign.pub": keys.PublicBytes,
 		}}
 
-	err = r.Create(ctx, secret)
-	if err != nil {
-		g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(r.Create(ctx, secret)).NotTo(HaveOccurred())
+
+	caSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "ca-cert-cosign",
+			Generation: 1,
+		},
+		Data: map[string][]byte{
+			"caFile": tlsCA,
+		},
 	}
+
+	g.Expect(r.Create(ctx, caSecret)).ToNot(HaveOccurred())
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
+
+			workspaceDir := t.TempDir()
+			regOpts := registryOptions{
+				withTLS: !tt.insecure,
+			}
+			server, err := setupRegistryServer(ctx, workspaceDir, regOpts)
+			g.Expect(err).NotTo(HaveOccurred())
+			t.Cleanup(func() {
+				server.Close()
+			})
 
 			obj := &ociv1.OCIRepository{
 				ObjectMeta: metav1.ObjectMeta{
@@ -1216,6 +1258,10 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignature(t *testing.T) {
 
 			if tt.insecure {
 				obj.Spec.Insecure = true
+			} else {
+				obj.Spec.CertSecretRef = &meta.LocalObjectReference{
+					Name: "ca-cert-cosign",
+				}
 			}
 
 			if !tt.keyless {
@@ -1226,12 +1272,15 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignature(t *testing.T) {
 				obj.Spec.Reference = tt.reference
 			}
 
+			podinfoVersions, err := pushMultiplePodinfoImages(server.registryHost, tt.insecure, tt.reference.Tag)
+			g.Expect(err).ToNot(HaveOccurred())
+
 			keychain, err := r.keychain(ctx, obj)
 			if err != nil {
 				g.Expect(err).ToNot(HaveOccurred())
 			}
 
-			opts := craneOptions(ctx, true)
+			opts := craneOptions(ctx, false)
 			opts = append(opts, crane.WithAuthFromKeychain(keychain))
 			artifactURL, err := r.getArtifactURL(obj, opts)
 			g.Expect(err).ToNot(HaveOccurred())
@@ -1250,21 +1299,22 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignature(t *testing.T) {
 					SkipConfirmation: true,
 					TlogUpload:       false,
 
-					Registry: coptions.RegistryOptions{Keychain: keychain, AllowInsecure: true},
+					Registry: coptions.RegistryOptions{Keychain: keychain, AllowInsecure: true, AllowHTTPRegistry: tt.insecure},
 				}, []string{artifactURL})
 
 				g.Expect(err).ToNot(HaveOccurred())
 			}
 
+			image := podinfoVersions[tt.reference.Tag]
 			assertConditions := tt.assertConditions
 			for k := range assertConditions {
-				assertConditions[k].Message = strings.ReplaceAll(assertConditions[k].Message, "<revision>", fmt.Sprintf("%s@%s", tt.reference.Tag, tt.digest))
+				assertConditions[k].Message = strings.ReplaceAll(assertConditions[k].Message, "<revision>", fmt.Sprintf("%s@%s", tt.reference.Tag, image.digest.String()))
 				assertConditions[k].Message = strings.ReplaceAll(assertConditions[k].Message, "<url>", artifactURL)
 				assertConditions[k].Message = strings.ReplaceAll(assertConditions[k].Message, "<provider>", "cosign")
 			}
 
 			if tt.beforeFunc != nil {
-				tt.beforeFunc(obj)
+				tt.beforeFunc(obj, image.tag, image.digest.String())
 			}
 
 			g.Expect(r.Client.Create(ctx, obj)).ToNot(HaveOccurred())
@@ -1297,8 +1347,11 @@ func TestOCIRepository_reconcileSource_noop(t *testing.T) {
 	tmpDir := t.TempDir()
 	server, err := setupRegistryServer(ctx, tmpDir, registryOptions{})
 	g.Expect(err).ToNot(HaveOccurred())
+	t.Cleanup(func() {
+		server.Close()
+	})
 
-	_, err = pushMultiplePodinfoImages(server.registryHost, "6.1.5")
+	_, err = pushMultiplePodinfoImages(server.registryHost, true, "6.1.5")
 	g.Expect(err).ToNot(HaveOccurred())
 
 	// NOTE: The following verifies if it was a noop run by checking the
@@ -1431,6 +1484,7 @@ func TestOCIRepository_reconcileSource_noop(t *testing.T) {
 					Reference: &ociv1.OCIRepositoryRef{Tag: "6.1.5"},
 					Interval:  metav1.Duration{Duration: interval},
 					Timeout:   &metav1.Duration{Duration: timeout},
+					Insecure:  true,
 				},
 			}
 
@@ -1709,9 +1763,11 @@ func TestOCIRepository_getArtifactURL(t *testing.T) {
 
 	tmpDir := t.TempDir()
 	server, err := setupRegistryServer(ctx, tmpDir, registryOptions{})
-	g.Expect(err).ToNot(HaveOccurred())
+	t.Cleanup(func() {
+		server.Close()
+	})
 
-	imgs, err := pushMultiplePodinfoImages(server.registryHost, "6.1.4", "6.1.5", "6.1.6")
+	imgs, err := pushMultiplePodinfoImages(server.registryHost, true, "6.1.4", "6.1.5", "6.1.6")
 	g.Expect(err).ToNot(HaveOccurred())
 
 	tests := []struct {
@@ -1778,6 +1834,7 @@ func TestOCIRepository_getArtifactURL(t *testing.T) {
 					URL:      tt.url,
 					Interval: metav1.Duration{Duration: interval},
 					Timeout:  &metav1.Duration{Duration: timeout},
+					Insecure: true,
 				},
 			}
 
@@ -2299,11 +2356,25 @@ func createPodinfoImageFromTar(tarFileName, tag, registryURL string, opts ...cra
 	}, nil
 }
 
-func pushMultiplePodinfoImages(serverURL string, versions ...string) (map[string]podinfoImage, error) {
+func pushMultiplePodinfoImages(serverURL string, insecure bool, versions ...string) (map[string]podinfoImage, error) {
 	podinfoVersions := make(map[string]podinfoImage)
 
+	var opts []crane.Option
+	// If the registry is insecure then instruct configure an insecure HTTP client,
+	// otherwise add the root CA certificate since the HTTPS server is self signed.
+	if insecure {
+		opts = append(opts, crane.Insecure)
+	} else {
+		transport := http.DefaultTransport.(*http.Transport)
+		pool := x509.NewCertPool()
+		pool.AppendCertsFromPEM(tlsCA)
+		transport.TLSClientConfig = &tls.Config{
+			RootCAs: pool,
+		}
+		opts = append(opts, crane.WithTransport(transport))
+	}
 	for i := 0; i < len(versions); i++ {
-		pi, err := createPodinfoImageFromTar(fmt.Sprintf("podinfo-%s.tar", versions[i]), versions[i], serverURL)
+		pi, err := createPodinfoImageFromTar(fmt.Sprintf("podinfo-%s.tar", versions[i]), versions[i], serverURL, opts...)
 		if err != nil {
 			return nil, err
 		}
@@ -2360,75 +2431,6 @@ func createCert(template, parent *x509.Certificate, pub interface{}, parentPriv 
 	b := pem.Block{Type: "CERTIFICATE", Bytes: certDER}
 	certPEM = pem.EncodeToMemory(&b)
 	return
-}
-
-func createTLSServer() (*httptest.Server, []byte, []byte, []byte, tls.Certificate, error) {
-	var clientTLSCert tls.Certificate
-	var rootCertPEM, clientCertPEM, clientKeyPEM []byte
-
-	srv := httptest.NewUnstartedServer(registry.New())
-
-	// Create a self-signed cert to use as the CA and server cert.
-	rootKey, err := rsa.GenerateKey(rand.Reader, 2048)
-	if err != nil {
-		return srv, rootCertPEM, clientCertPEM, clientKeyPEM, clientTLSCert, err
-	}
-	rootCertTmpl, err := certTemplate()
-	if err != nil {
-		return srv, rootCertPEM, clientCertPEM, clientKeyPEM, clientTLSCert, err
-	}
-	rootCertTmpl.IsCA = true
-	rootCertTmpl.KeyUsage = x509.KeyUsageCertSign | x509.KeyUsageDigitalSignature
-	rootCertTmpl.ExtKeyUsage = []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth}
-	rootCertTmpl.IPAddresses = []net.IP{net.ParseIP("127.0.0.1")}
-	var rootCert *x509.Certificate
-	rootCert, rootCertPEM, err = createCert(rootCertTmpl, rootCertTmpl, &rootKey.PublicKey, rootKey)
-	if err != nil {
-		return srv, rootCertPEM, clientCertPEM, clientKeyPEM, clientTLSCert, err
-	}
-
-	rootKeyPEM := pem.EncodeToMemory(&pem.Block{
-		Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(rootKey),
-	})
-
-	// Create a TLS cert using the private key and certificate.
-	rootTLSCert, err := tls.X509KeyPair(rootCertPEM, rootKeyPEM)
-	if err != nil {
-		return srv, rootCertPEM, clientCertPEM, clientKeyPEM, clientTLSCert, err
-	}
-
-	// To trust a client certificate, the server must be given a
-	// CA cert pool.
-	pool := x509.NewCertPool()
-	pool.AddCert(rootCert)
-
-	srv.TLS = &tls.Config{
-		ClientAuth:   tls.RequireAndVerifyClientCert,
-		Certificates: []tls.Certificate{rootTLSCert},
-		ClientCAs:    pool,
-	}
-
-	// Create a client cert, signed by the "CA".
-	clientKey, err := rsa.GenerateKey(rand.Reader, 2048)
-	if err != nil {
-		return srv, rootCertPEM, clientCertPEM, clientKeyPEM, clientTLSCert, err
-	}
-	clientCertTmpl, err := certTemplate()
-	if err != nil {
-		return srv, rootCertPEM, clientCertPEM, clientKeyPEM, clientTLSCert, err
-	}
-	clientCertTmpl.KeyUsage = x509.KeyUsageDigitalSignature
-	clientCertTmpl.ExtKeyUsage = []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth}
-	_, clientCertPEM, err = createCert(clientCertTmpl, rootCert, &clientKey.PublicKey, rootKey)
-	if err != nil {
-		return srv, rootCertPEM, clientCertPEM, clientKeyPEM, clientTLSCert, err
-	}
-	// Encode and load the cert and private key for the client.
-	clientKeyPEM = pem.EncodeToMemory(&pem.Block{
-		Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(clientKey),
-	})
-	clientTLSCert, err = tls.X509KeyPair(clientCertPEM, clientKeyPEM)
-	return srv, rootCertPEM, clientCertPEM, clientKeyPEM, clientTLSCert, err
 }
 
 func TestOCIContentConfigChanged(t *testing.T) {
