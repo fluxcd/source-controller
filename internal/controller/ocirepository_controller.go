@@ -425,16 +425,6 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 		conditions.GetObservedGeneration(obj, sourcev1.SourceVerifiedCondition) != obj.Generation ||
 		conditions.IsFalse(obj, sourcev1.SourceVerifiedCondition) {
 
-		// Insecure is not supported for verification
-		if obj.Spec.Insecure {
-			e := serror.NewGeneric(
-				fmt.Errorf("cosign does not support insecure registries"),
-				sourcev1.VerificationError,
-			)
-			conditions.MarkFalse(obj, sourcev1.SourceVerifiedCondition, e.Reason, e.Err.Error())
-			return sreconcile.ResultEmpty, e
-		}
-
 		err := r.verifySignature(ctx, obj, url, opts.verifyOpts...)
 		if err != nil {
 			provider := obj.Spec.Verify.Provider
@@ -633,7 +623,11 @@ func (r *OCIRepositoryReconciler) verifySignature(ctx context.Context, obj *ociv
 			soci.WithRemoteOptions(opt...),
 		}
 
-		ref, err := name.ParseReference(url)
+		var nameOpts []name.Option
+		if obj.Spec.Insecure {
+			nameOpts = append(nameOpts, name.Insecure)
+		}
+		ref, err := name.ParseReference(url, nameOpts...)
 		if err != nil {
 			return err
 		}
