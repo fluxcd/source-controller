@@ -319,6 +319,12 @@ Valid examples are: `refs/heads/main`, `refs/tags/v0.1.0`, `refs/pull/420/head`,
 This field takes precedence over [`.branch`](#branch-example),
 [`.tag`](#tag-example), and [`.semver`](#semver-example).
 
+**Note:** Azure DevOps and AWS CodeCommit do not support fetching the HEAD of
+a pull request. While Azure DevOps allows you to fetch the merge commit that
+will be created after merging a PR (using `refs/pull/<id>/merge`), this field
+can only be used to fetch references that exist in the current state of the Git
+repository and not references that will be created in the future.
+
 #### Commit example
 
 To Git checkout a specified commit, use `.spec.ref.commit`:
