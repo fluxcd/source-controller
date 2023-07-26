@@ -17,6 +17,7 @@ limitations under the License.
 package controller
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -449,11 +450,11 @@ func (r *HelmRepositoryReconciler) reconcileSource(ctx context.Context, sp *patc
 
 	// Early comparison to current Artifact.
 	if curArtifact := obj.GetArtifact(); curArtifact != nil {
-		curDig := digest.Digest(curArtifact.Digest)
-		if curDig.Validate() == nil {
+		curRev := digest.Digest(curArtifact.Revision)
+		if curRev.Validate() == nil {
 			// Short-circuit based on the fetched index being an exact match to the
 			// stored Artifact.
-			if newDig := chartRepo.Digest(curDig.Algorithm()); newDig.Validate() == nil && (newDig == curDig) {
+			if newRev := chartRepo.Digest(curRev.Algorithm()); newRev.Validate() == nil && (newRev == curRev) {
 				*artifact = *curArtifact
 				conditions.Delete(obj, sourcev1.FetchFailedCondition)
 				return sreconcile.ResultSuccess, nil
@@ -473,13 +474,6 @@ func (r *HelmRepositoryReconciler) reconcileSource(ctx context.Context, sp *patc
 	// Delete any stale failure observation
 	conditions.Delete(obj, sourcev1.FetchFailedCondition)
 
-	// Check if index has changed compared to current Artifact revision.
-	var changed bool
-	if artifact := obj.Status.Artifact; artifact != nil {
-		curRev := digest.Digest(artifact.Revision)
-		changed = curRev.Validate() != nil || curRev != chartRepo.Digest(curRev.Algorithm())
-	}
-
 	// Calculate revision.
 	revision := chartRepo.Digest(intdigest.Canonical)
 	if revision.Validate() != nil {
@@ -492,16 +486,14 @@ func (r *HelmRepositoryReconciler) reconcileSource(ctx context.Context, sp *patc
 	}
 
 	// Mark observations about the revision on the object.
-	if obj.Status.Artifact == nil || changed {
-		message := fmt.Sprintf("new index revision '%s'", revision)
-		if obj.GetArtifact() != nil {
-			conditions.MarkTrue(obj, sourcev1.ArtifactOutdatedCondition, "NewRevision", message)
-		}
-		rreconcile.ProgressiveStatus(true, obj, meta.ProgressingReason, "building artifact: %s", message)
-		if err := sp.Patch(ctx, obj, r.patchOptions...); err != nil {
-			ctrl.LoggerFrom(ctx).Error(err, "failed to patch")
-			return sreconcile.ResultEmpty, err
-		}
+	message := fmt.Sprintf("new index revision '%s'", revision)
+	if obj.GetArtifact() != nil {
+		conditions.MarkTrue(obj, sourcev1.ArtifactOutdatedCondition, "NewRevision", message)
+	}
+	rreconcile.ProgressiveStatus(true, obj, meta.ProgressingReason, "building artifact: %s", message)
+	if err := sp.Patch(ctx, obj, r.patchOptions...); err != nil {
+		ctrl.LoggerFrom(ctx).Error(err, "failed to patch")
+		return sreconcile.ResultEmpty, err
 	}
 
 	// Create potential new artifact.
@@ -566,8 +558,17 @@ func (r *HelmRepositoryReconciler) reconcileArtifact(ctx context.Context, sp *pa
 	}
 	defer unlock()
 
-	// Save artifact to storage.
-	if err = r.Storage.CopyFromPath(artifact, chartRepo.Path); err != nil {
+	// Save artifact to storage in JSON format.
+	b, err := chartRepo.ToJSON()
+	if err != nil {
+		e := &serror.Event{
+			Err:    fmt.Errorf("unable to get JSON index from chart repo: %w", err),
+			Reason: sourcev1.ArchiveOperationFailedReason,
+		}
+		conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition, e.Reason, e.Err.Error())
+		return sreconcile.ResultEmpty, e
+	}
+	if err = r.Storage.Copy(artifact, bytes.NewBuffer(b)); err != nil {
 		e := &serror.Event{
 			Err:    fmt.Errorf("unable to save artifact to storage: %w", err),
 			Reason: sourcev1.ArchiveOperationFailedReason,
