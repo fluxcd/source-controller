@@ -40,6 +40,7 @@ import (
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/distribution/distribution/v3/configuration"
 	dcontext "github.com/distribution/distribution/v3/context"
@@ -78,6 +79,7 @@ const (
 )
 
 var (
+	k8sClient    client.Client
 	testEnv      *testenv.Environment
 	testStorage  *Storage
 	testServer   *testserver.ArtifactServer
@@ -255,6 +257,12 @@ func TestMain(m *testing.M) {
 	)
 
 	var err error
+	// Initialize a cacheless client for tests that need the latest objects.
+	k8sClient, err = client.New(testEnv.Config, client.Options{Scheme: scheme.Scheme})
+	if err != nil {
+		panic(fmt.Sprintf("failed to create k8s client: %v", err))
+	}
+
 	testServer, err = testserver.NewTempArtifactServer()
 	if err != nil {
 		panic(fmt.Sprintf("Failed to create a temporary storage server: %v", err))

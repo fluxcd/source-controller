@@ -143,6 +143,41 @@ Oomb3gD/TRf/nAdVED+k81GdLzciYdUGtI71/qI47G0nMBluLRE=
 `
 )
 
+func TestGitRepositoryReconciler_deleteBeforeFinalizer(t *testing.T) {
+	g := NewWithT(t)
+
+	namespaceName := "gitrepo-" + randStringRunes(5)
+	namespace := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{Name: namespaceName},
+	}
+	g.Expect(k8sClient.Create(ctx, namespace)).ToNot(HaveOccurred())
+	t.Cleanup(func() {
+		g.Expect(k8sClient.Delete(ctx, namespace)).NotTo(HaveOccurred())
+	})
+
+	gitRepo := &sourcev1.GitRepository{}
+	gitRepo.Name = "test-gitrepo"
+	gitRepo.Namespace = namespaceName
+	gitRepo.Spec = sourcev1.GitRepositorySpec{
+		Interval: metav1.Duration{Duration: interval},
+		URL:      "https://example.com",
+	}
+	// Add a test finalizer to prevent the object from getting deleted.
+	gitRepo.SetFinalizers([]string{"test-finalizer"})
+	g.Expect(k8sClient.Create(ctx, gitRepo)).NotTo(HaveOccurred())
+	// Add deletion timestamp by deleting the object.
+	g.Expect(k8sClient.Delete(ctx, gitRepo)).NotTo(HaveOccurred())
+
+	r := &GitRepositoryReconciler{
+		Client:        k8sClient,
+		EventRecorder: record.NewFakeRecorder(32),
+		Storage:       testStorage,
+	}
+	// NOTE: Only a real API server responds with an error in this scenario.
+	_, err := r.Reconcile(ctx, ctrl.Request{NamespacedName: client.ObjectKeyFromObject(gitRepo)})
+	g.Expect(err).NotTo(HaveOccurred())
+}
+
 func TestGitRepositoryReconciler_Reconcile(t *testing.T) {
 	g := NewWithT(t)
 
