@@ -28,6 +28,7 @@ import (
 
 	securejoin "github.com/cyphar/filepath-securejoin"
 	"github.com/fluxcd/pkg/runtime/logger"
+	"github.com/go-git/go-git/v5/plumbing/transport"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -473,24 +474,19 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 		conditions.Delete(obj, sourcev1.SourceVerifiedCondition)
 	}
 
-	var authData map[string][]byte
-	if obj.Spec.SecretRef != nil {
-		// Attempt to retrieve secret
-		name := types.NamespacedName{
-			Namespace: obj.GetNamespace(),
-			Name:      obj.Spec.SecretRef.Name,
-		}
-		var secret corev1.Secret
-		if err := r.Client.Get(ctx, name, &secret); err != nil {
+	var proxyOpts *transport.ProxyOptions
+	if obj.Spec.ProxySecretRef != nil {
+		var err error
+		proxyOpts, err = r.getProxyOpts(ctx, obj.Spec.ProxySecretRef.Name, obj.GetNamespace())
+		if err != nil {
 			e := serror.NewGeneric(
-				fmt.Errorf("failed to get secret '%s': %w", name.String(), err),
+				fmt.Errorf("failed to configure proxy options: %w", err),
 				sourcev1.AuthenticationFailedReason,
 			)
 			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
 			// Return error as the world as observed may change
 			return sreconcile.ResultEmpty, e
 		}
-		authData = secret.Data
 	}
 
 	u, err := url.Parse(obj.Spec.URL)
@@ -503,14 +499,14 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 		return sreconcile.ResultEmpty, e
 	}
 
-	// Configure authentication strategy to access the source
-	authOpts, err := git.NewAuthOptions(*u, authData)
+	authOpts, err := r.getAuthOpts(ctx, obj, *u)
 	if err != nil {
 		e := serror.NewGeneric(
 			fmt.Errorf("failed to configure authentication options: %w", err),
 			sourcev1.AuthenticationFailedReason,
 		)
 		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
+		// Return error as the world as observed may change
 		return sreconcile.ResultEmpty, e
 	}
 
@@ -536,7 +532,7 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 	// Persist the ArtifactSet.
 	*includes = *artifacts
 
-	c, err := r.gitCheckout(ctx, obj, authOpts, dir, true)
+	c, err := r.gitCheckout(ctx, obj, authOpts, proxyOpts, dir, true)
 	if err != nil {
 		return sreconcile.ResultEmpty, err
 	}
@@ -578,7 +574,7 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 
 		// If we can't skip the reconciliation, checkout again without any
 		// optimization.
-		c, err := r.gitCheckout(ctx, obj, authOpts, dir, false)
+		c, err := r.gitCheckout(ctx, obj, authOpts, proxyOpts, dir, false)
 		if err != nil {
 			return sreconcile.ResultEmpty, err
 		}
@@ -604,6 +600,60 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 		}
 	}
 	return sreconcile.ResultSuccess, nil
+}
+
+// getProxyOpts fetches the secret containing the proxy settings, constructs a
+// transport.ProxyOptions object using those settings and then returns it.
+func (r *GitRepositoryReconciler) getProxyOpts(ctx context.Context, proxySecretName,
+	proxySecretNamespace string) (*transport.ProxyOptions, error) {
+	proxyData, err := r.getSecretData(ctx, proxySecretName, proxySecretNamespace)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get proxy secret '%s/%s': %w", proxySecretNamespace, proxySecretName, err)
+	}
+	address, ok := proxyData["address"]
+	if !ok {
+		return nil, fmt.Errorf("invalid proxy secret '%s/%s': key 'address' is missing", proxySecretNamespace, proxySecretName)
+	}
+
+	proxyOpts := &transport.ProxyOptions{
+		URL:      string(address),
+		Username: string(proxyData["username"]),
+		Password: string(proxyData["password"]),
+	}
+	return proxyOpts, nil
+}
+
+// getAuthOpts fetches the secret containing the auth options (if specified),
+// constructs a git.AuthOptions object using those options along with the provided
+// URL and returns it.
+func (r *GitRepositoryReconciler) getAuthOpts(ctx context.Context, obj *sourcev1.GitRepository, u url.URL) (*git.AuthOptions, error) {
+	var authData map[string][]byte
+	if obj.Spec.SecretRef != nil {
+		var err error
+		authData, err = r.getSecretData(ctx, obj.Spec.SecretRef.Name, obj.GetNamespace())
+		if err != nil {
+			return nil, fmt.Errorf("failed to get secret '%s/%s': %w", obj.GetNamespace(), obj.Spec.SecretRef.Name, err)
+		}
+	}
+
+	// Configure authentication strategy to access the source
+	authOpts, err := git.NewAuthOptions(u, authData)
+	if err != nil {
+		return nil, err
+	}
+	return authOpts, nil
+}
+
+func (r *GitRepositoryReconciler) getSecretData(ctx context.Context, name, namespace string) (map[string][]byte, error) {
+	key := types.NamespacedName{
+		Namespace: namespace,
+		Name:      name,
+	}
+	var secret corev1.Secret
+	if err := r.Client.Get(ctx, key, &secret); err != nil {
+		return nil, err
+	}
+	return secret.Data, nil
 }
 
 // reconcileArtifact archives a new Artifact to the Storage, if the current
@@ -776,8 +826,8 @@ func (r *GitRepositoryReconciler) reconcileInclude(ctx context.Context, sp *patc
 
 // gitCheckout builds checkout options with the given configurations and
 // performs a git checkout.
-func (r *GitRepositoryReconciler) gitCheckout(ctx context.Context,
-	obj *sourcev1.GitRepository, authOpts *git.AuthOptions, dir string, optimized bool) (*git.Commit, error) {
+func (r *GitRepositoryReconciler) gitCheckout(ctx context.Context, obj *sourcev1.GitRepository,
+	authOpts *git.AuthOptions, proxyOpts *transport.ProxyOptions, dir string, optimized bool) (*git.Commit, error) {
 	// Configure checkout strategy.
 	cloneOpts := repository.CloneConfig{
 		RecurseSubmodules: obj.Spec.RecurseSubmodules,
@@ -806,6 +856,9 @@ func (r *GitRepositoryReconciler) gitCheckout(ctx context.Context,
 	clientOpts := []gogit.ClientOption{gogit.WithDiskStorage()}
 	if authOpts.Transport == git.HTTP {
 		clientOpts = append(clientOpts, gogit.WithInsecureCredentialsOverHTTP())
+	}
+	if proxyOpts != nil {
+		clientOpts = append(clientOpts, gogit.WithProxy(*proxyOpts))
 	}
 
 	gitReader, err := gogit.NewClient(dir, authOpts, clientOpts...)

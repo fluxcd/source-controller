@@ -78,6 +78,11 @@ type GitRepositorySpec struct {
 	// +optional
 	Verification *GitRepositoryVerification `json:"verify,omitempty"`
 
+	// ProxySecretRef specifies the Secret containing the proxy configuration
+	// to use while communicating with the Git server.
+	// +optional
+	ProxySecretRef *meta.LocalObjectReference `json:"proxySecretRef,omitempty"`
+
 	// Ignore overrides the set of excluded patterns in the .sourceignore format
 	// (which is the same as .gitignore). If not provided, a default will be used,
 	// consult the documentation for your version to find out what those are.

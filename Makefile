@@ -63,11 +63,11 @@ endif
 
 all: build
 
-build: check-deps ## Build manager binary
+build: ## Build manager binary
 	go build $(GO_STATIC_FLAGS) -o $(BUILD_DIR)/bin/manager main.go
 
 KUBEBUILDER_ASSETS?="$(shell $(ENVTEST) --arch=$(ENVTEST_ARCH) use -i $(ENVTEST_KUBERNETES_VERSION) --bin-dir=$(ENVTEST_ASSETS_DIR) -p path)"
-test: install-envtest test-api check-deps ## Run all tests
+test: install-envtest test-api ## Run all tests
 	HTTPS_PROXY="" HTTP_PROXY="" \
 	KUBEBUILDER_ASSETS=$(KUBEBUILDER_ASSETS) \
 	GIT_CONFIG_GLOBAL=/dev/null \
@@ -76,7 +76,7 @@ test: install-envtest test-api check-deps ## Run all tests
 	  $(GO_TEST_ARGS) \
 	  -coverprofile cover.out
 
-test-ctrl: install-envtest test-api check-deps ## Run controller tests
+test-ctrl: install-envtest test-api ## Run controller tests
 	HTTPS_PROXY="" HTTP_PROXY="" \
 	KUBEBUILDER_ASSETS=$(KUBEBUILDER_ASSETS) \
 	GIT_CONFIG_GLOBAL=/dev/null \
@@ -84,11 +84,6 @@ test-ctrl: install-envtest test-api check-deps ## Run controller tests
 	  -run "^$(GO_TEST_PREFIX).*" \
 	  -v ./internal/controller \
 	  -coverprofile cover.out
-
-check-deps:
-ifeq ($(shell uname -s),Darwin)
-	if ! command -v pkg-config &> /dev/null; then echo "pkg-config is required"; exit 1; fi
-endif
 
 test-api: ## Run api tests
 	cd api; go test $(GO_TEST_ARGS) ./... -coverprofile cover.out

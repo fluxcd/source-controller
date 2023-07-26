@@ -33,6 +33,7 @@ import (
 	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
+	"github.com/go-git/go-git/v5/plumbing/transport"
 	"github.com/go-git/go-git/v5/storage/memory"
 	. "github.com/onsi/gomega"
 	sshtestdata "golang.org/x/crypto/ssh/testdata"
@@ -1615,6 +1616,78 @@ func TestGitRepositoryReconciler_verifyCommitSignature(t *testing.T) {
 			g.Expect(obj.Status.Conditions).To(conditions.MatchConditions(tt.assertConditions))
 			g.Expect(err != nil).To(Equal(tt.wantErr))
 			g.Expect(got).To(Equal(tt.want))
+		})
+	}
+}
+
+func TestGitRepositoryReconciler_getProxyOpts(t *testing.T) {
+	invalidProxy := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "invalid-proxy",
+			Namespace: "default",
+		},
+		Data: map[string][]byte{
+			"url": []byte("https://example.com"),
+		},
+	}
+	validProxy := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "valid-proxy",
+			Namespace: "default",
+		},
+		Data: map[string][]byte{
+			"address":  []byte("https://example.com"),
+			"username": []byte("user"),
+			"password": []byte("pass"),
+		},
+	}
+
+	clientBuilder := fakeclient.NewClientBuilder().
+		WithScheme(testEnv.GetScheme()).
+		WithObjects(invalidProxy, validProxy)
+
+	r := &GitRepositoryReconciler{
+		Client: clientBuilder.Build(),
+	}
+
+	tests := []struct {
+		name      string
+		secret    string
+		err       string
+		proxyOpts *transport.ProxyOptions
+	}{
+		{
+			name:   "non-existent secret",
+			secret: "non-existent",
+			err:    "failed to get proxy secret 'default/non-existent': ",
+		},
+		{
+			name:   "invalid proxy secret",
+			secret: "invalid-proxy",
+			err:    "invalid proxy secret 'default/invalid-proxy': key 'address' is missing",
+		},
+		{
+			name:   "valid proxy secret",
+			secret: "valid-proxy",
+			proxyOpts: &transport.ProxyOptions{
+				URL:      "https://example.com",
+				Username: "user",
+				Password: "pass",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+			opts, err := r.getProxyOpts(context.TODO(), tt.secret, "default")
+			if opts != nil {
+				g.Expect(err).ToNot(HaveOccurred())
+				g.Expect(opts).To(Equal(tt.proxyOpts))
+			} else {
+				g.Expect(err).To(HaveOccurred())
+				g.Expect(err.Error()).To(ContainSubstring(tt.err))
+			}
 		})
 	}
 }
