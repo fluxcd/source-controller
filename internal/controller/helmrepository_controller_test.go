@@ -388,7 +388,7 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 		assertConditions []metav1.Condition
 	}{
 		{
-			name:     "HTTPS with secretRef pointing to CA cert but public repo URL succeeds",
+			name:     "HTTPS with certSecretRef pointing to CA cert but public repo URL succeeds",
 			protocol: "http",
 			url:      "https://stefanprodan.github.io/podinfo",
 			want:     sreconcile.ResultSuccess,
@@ -399,6 +399,9 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 				Data: map[string][]byte{
 					"caFile": tlsCA,
 				},
+			},
+			beforeFunc: func(t *WithT, obj *helmv1.HelmRepository, rev, dig digest.Digest) {
+				obj.Spec.CertSecretRef = &meta.LocalObjectReference{Name: "ca-file"}
 			},
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new index revision"),
@@ -450,37 +453,7 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 			},
 		},
 		{
-			name:     "HTTPS with CAFile secret makes ArtifactOutdated=True",
-			protocol: "https",
-			server: options{
-				publicKey:  tlsPublicKey,
-				privateKey: tlsPrivateKey,
-				ca:         tlsCA,
-			},
-			secret: &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "ca-file",
-				},
-				Data: map[string][]byte{
-					"caFile": tlsCA,
-				},
-			},
-			beforeFunc: func(t *WithT, obj *helmv1.HelmRepository, rev, dig digest.Digest) {
-				obj.Spec.SecretRef = &meta.LocalObjectReference{Name: "ca-file"}
-			},
-			want: sreconcile.ResultSuccess,
-			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new index revision"),
-				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new index revision"),
-			},
-			afterFunc: func(t *WithT, obj *helmv1.HelmRepository, artifact sourcev1.Artifact, chartRepo *repository.ChartRepository) {
-				t.Expect(chartRepo.Path).ToNot(BeEmpty())
-				t.Expect(chartRepo.Index).ToNot(BeNil())
-				t.Expect(artifact.Revision).ToNot(BeEmpty())
-			},
-		},
-		{
-			name:     "HTTPS with invalid CAFile secret makes FetchFailed=True and returns error",
+			name:     "HTTPS with invalid CAFile in certSecretRef makes FetchFailed=True and returns error",
 			protocol: "https",
 			server: options{
 				publicKey:  tlsPublicKey,
@@ -496,13 +469,13 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 				},
 			},
 			beforeFunc: func(t *WithT, obj *helmv1.HelmRepository, rev, dig digest.Digest) {
-				obj.Spec.SecretRef = &meta.LocalObjectReference{Name: "invalid-ca"}
+				obj.Spec.CertSecretRef = &meta.LocalObjectReference{Name: "invalid-ca"}
 				conditions.MarkReconciling(obj, meta.ProgressingReason, "foo")
 				conditions.MarkUnknown(obj, meta.ReadyCondition, "foo", "bar")
 			},
 			wantErr: true,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "failed to create TLS client config with secret data: cannot append certificate into certificate pool: invalid caFile"),
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "cannot append certificate into certificate pool: invalid caFile"),
 				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "foo"),
 				*conditions.UnknownCondition(meta.ReadyCondition, "foo", "bar"),
 			},
@@ -766,32 +739,32 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 			}
 
 			// Calculate the artifact digest for valid repos configurations.
-			clientOpts := []helmgetter.Option{
+			getterOpts := []helmgetter.Option{
 				helmgetter.WithURL(server.URL()),
 			}
 			var newChartRepo *repository.ChartRepository
-			var tOpts *tls.Config
+			var tlsConf *tls.Config
 			validSecret := true
 			if secret != nil {
 				// Extract the client options from secret, ignoring any invalid
 				// value. validSecret is used to determine if the index digest
 				// should be calculated below.
-				var cOpts []helmgetter.Option
+				var gOpts []helmgetter.Option
 				var serr error
-				cOpts, serr = getter.ClientOptionsFromSecret(*secret)
+				gOpts, serr = getter.GetterOptionsFromSecret(*secret)
 				if serr != nil {
 					validSecret = false
 				}
-				clientOpts = append(clientOpts, cOpts...)
+				getterOpts = append(getterOpts, gOpts...)
 				repoURL := server.URL()
 				if tt.url != "" {
 					repoURL = tt.url
 				}
-				tOpts, serr = getter.TLSClientConfigFromSecret(*secret, repoURL)
+				tlsConf, serr = getter.TLSClientConfigFromSecret(*secret, repoURL)
 				if serr != nil {
 					validSecret = false
 				}
-				newChartRepo, err = repository.NewChartRepository(obj.Spec.URL, "", testGetters, tOpts, clientOpts...)
+				newChartRepo, err = repository.NewChartRepository(obj.Spec.URL, "", testGetters, tlsConf, getterOpts...)
 			} else {
 				newChartRepo, err = repository.NewChartRepository(obj.Spec.URL, "", testGetters, nil)
 			}
@@ -807,9 +780,6 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 				g.Expect(newChartRepo.LoadFromPath()).To(Succeed())
 				rev = newChartRepo.Digest(intdigest.Canonical)
 			}
-			if tt.beforeFunc != nil {
-				tt.beforeFunc(g, obj, rev, dig)
-			}
 
 			r := &HelmRepositoryReconciler{
 				EventRecorder: record.NewFakeRecorder(32),
@@ -817,6 +787,9 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 				Storage:       testStorage,
 				Getters:       testGetters,
 				patchOptions:  getPatchOptions(helmRepositoryReadyCondition.Owned, "sc"),
+			}
+			if tt.beforeFunc != nil {
+				tt.beforeFunc(g, obj, rev, dig)
 			}
 
 			g.Expect(r.Client.Create(context.TODO(), obj)).ToNot(HaveOccurred())

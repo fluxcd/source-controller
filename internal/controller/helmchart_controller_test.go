@@ -922,12 +922,12 @@ func TestHelmChartReconciler_buildFromHelmRepository(t *testing.T) {
 				}
 			},
 			want:    sreconcile.ResultEmpty,
-			wantErr: &serror.Event{Err: errors.New("failed to get secret 'invalid'")},
+			wantErr: &serror.Event{Err: errors.New("failed to get authentication secret '/invalid'")},
 			assertFunc: func(g *WithT, obj *helmv1.HelmChart, build chart.Build) {
 				g.Expect(build.Complete()).To(BeFalse())
 
 				g.Expect(obj.Status.Conditions).To(conditions.MatchConditions([]metav1.Condition{
-					*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "failed to get secret 'invalid'"),
+					*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "failed to get authentication secret '/invalid'"),
 				}))
 			},
 		},
@@ -1190,12 +1190,12 @@ func TestHelmChartReconciler_buildFromOCIHelmRepository(t *testing.T) {
 				}
 			},
 			want:    sreconcile.ResultEmpty,
-			wantErr: &serror.Event{Err: errors.New("failed to get secret 'invalid'")},
+			wantErr: &serror.Event{Err: errors.New("failed to get authentication secret '/invalid'")},
 			assertFunc: func(g *WithT, obj *helmv1.HelmChart, build chart.Build) {
 				g.Expect(build.Complete()).To(BeFalse())
 
 				g.Expect(obj.Status.Conditions).To(conditions.MatchConditions([]metav1.Condition{
-					*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "failed to get secret 'invalid'"),
+					*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "failed to get authentication secret '/invalid'"),
 				}))
 			},
 		},
@@ -1645,83 +1645,6 @@ func TestHelmChartReconciler_reconcileArtifact(t *testing.T) {
 			if tt.afterFunc != nil {
 				tt.afterFunc(g, obj)
 			}
-		})
-	}
-}
-
-func TestHelmChartReconciler_getHelmRepositorySecret(t *testing.T) {
-	mock := &corev1.Secret{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "Secret",
-			APIVersion: "v1",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "secret",
-			Namespace: "foo",
-		},
-		Data: map[string][]byte{
-			"key": []byte("bar"),
-		},
-	}
-
-	r := &HelmChartReconciler{
-		Client: fakeclient.NewClientBuilder().
-			WithObjects(mock).
-			Build(),
-		patchOptions: getPatchOptions(helmChartReadyCondition.Owned, "sc"),
-	}
-
-	tests := []struct {
-		name       string
-		repository *helmv1.HelmRepository
-		want       *corev1.Secret
-		wantErr    bool
-	}{
-		{
-			name: "Existing secret reference",
-			repository: &helmv1.HelmRepository{
-				ObjectMeta: metav1.ObjectMeta{
-					Namespace: mock.Namespace,
-				},
-				Spec: helmv1.HelmRepositorySpec{
-					SecretRef: &meta.LocalObjectReference{
-						Name: mock.Name,
-					},
-				},
-			},
-			want: mock,
-		},
-		{
-			name: "Empty secret reference",
-			repository: &helmv1.HelmRepository{
-				Spec: helmv1.HelmRepositorySpec{
-					SecretRef: nil,
-				},
-			},
-			want: nil,
-		},
-		{
-			name: "Error on client error",
-			repository: &helmv1.HelmRepository{
-				ObjectMeta: metav1.ObjectMeta{
-					Namespace: "different",
-				},
-				Spec: helmv1.HelmRepositorySpec{
-					SecretRef: &meta.LocalObjectReference{
-						Name: mock.Name,
-					},
-				},
-			},
-			wantErr: true,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			g := NewWithT(t)
-
-			got, err := r.getHelmRepositorySecret(context.TODO(), tt.repository)
-			g.Expect(err != nil).To(Equal(tt.wantErr))
-			g.Expect(got).To(Equal(tt.want))
 		})
 	}
 }

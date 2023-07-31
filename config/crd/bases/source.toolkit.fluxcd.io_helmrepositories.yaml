@@ -296,6 +296,18 @@ spec:
                 required:
                 - namespaceSelectors
                 type: object
+              certSecretRef:
+                description: CertSecretRef specifies the Secret containing the TLS
+                  authentication data. The secret must contain a 'certFile' and 'keyFile',
+                  and/or 'caFile' fields. It takes precedence over the values specified
+                  in the Secret referred to by `.spec.secretRef`.
+                properties:
+                  name:
+                    description: Name of the referent.
+                    type: string
+                required:
+                - name
+                type: object
               interval:
                 description: Interval at which to check the URL for updates.
                 pattern: ^([0-9]+(\.[0-9]+)?(ms|s|m|h))+$
@@ -323,8 +335,9 @@ spec:
               secretRef:
                 description: SecretRef specifies the Secret containing authentication
                   credentials for the HelmRepository. For HTTP/S basic auth the secret
-                  must contain 'username' and 'password' fields. For TLS the secret
-                  must contain a 'certFile' and 'keyFile', and/or 'caFile' fields.
+                  must contain 'username' and 'password' fields. Support for TLS auth
+                  using the 'certFile' and 'keyFile', and/or 'caFile' keys is deprecated.
+                  Please use `.spec.certSecretRef` instead.
                 properties:
                   name:
                     description: Name of the referent.

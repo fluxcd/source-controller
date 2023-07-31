@@ -18,7 +18,6 @@ package controller
 
 import (
 	"context"
-	"crypto/tls"
 	"errors"
 	"fmt"
 	"net/url"
@@ -28,7 +27,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	"github.com/opencontainers/go-digest"
 	helmgetter "helm.sh/helm/v3/pkg/getter"
@@ -54,7 +52,6 @@ import (
 	eventv1 "github.com/fluxcd/pkg/apis/event/v1beta1"
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/git"
-	"github.com/fluxcd/pkg/oci"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	helper "github.com/fluxcd/pkg/runtime/controller"
 	"github.com/fluxcd/pkg/runtime/patch"
@@ -68,7 +65,6 @@ import (
 	serror "github.com/fluxcd/source-controller/internal/error"
 	"github.com/fluxcd/source-controller/internal/helm/chart"
 	"github.com/fluxcd/source-controller/internal/helm/getter"
-	"github.com/fluxcd/source-controller/internal/helm/registry"
 	"github.com/fluxcd/source-controller/internal/helm/repository"
 	soci "github.com/fluxcd/source-controller/internal/oci"
 	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
@@ -506,11 +502,6 @@ func (r *HelmChartReconciler) reconcileSource(ctx context.Context, sp *patch.Ser
 // object, and returns early.
 func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *helmv1.HelmChart,
 	repo *helmv1.HelmRepository, b *chart.Build) (sreconcile.Result, error) {
-	var (
-		tlsConfig     *tls.Config
-		authenticator authn.Authenticator
-		keychain      authn.Keychain
-	)
 	// Used to login with the repository declared provider
 	ctxTimeout, cancel := context.WithTimeout(ctx, repo.Spec.Timeout.Duration)
 	defer cancel()
@@ -519,65 +510,8 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 	if err != nil {
 		return chartRepoConfigErrorReturn(err, obj)
 	}
-	// Construct the Getter options from the HelmRepository data
-	clientOpts := []helmgetter.Option{
-		helmgetter.WithURL(normalizedURL),
-		helmgetter.WithTimeout(repo.Spec.Timeout.Duration),
-		helmgetter.WithPassCredentialsAll(repo.Spec.PassCredentials),
-	}
-	if secret, err := r.getHelmRepositorySecret(ctx, repo); secret != nil || err != nil {
-		if err != nil {
-			e := &serror.Event{
-				Err:    fmt.Errorf("failed to get secret '%s': %w", repo.Spec.SecretRef.Name, err),
-				Reason: sourcev1.AuthenticationFailedReason,
-			}
-			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
-			// Return error as the world as observed may change
-			return sreconcile.ResultEmpty, e
-		}
-
-		// Build client options from secret
-		opts, tlsCfg, err := r.clientOptionsFromSecret(secret, normalizedURL)
-		if err != nil {
-			e := &serror.Event{
-				Err:    err,
-				Reason: sourcev1.AuthenticationFailedReason,
-			}
-			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
-			// Requeue as content of secret might change
-			return sreconcile.ResultEmpty, e
-		}
-		clientOpts = append(clientOpts, opts...)
-		tlsConfig = tlsCfg
-
-		// Build registryClient options from secret
-		keychain, err = registry.LoginOptionFromSecret(normalizedURL, *secret)
-		if err != nil {
-			e := &serror.Event{
-				Err:    fmt.Errorf("failed to configure Helm client with secret data: %w", err),
-				Reason: sourcev1.AuthenticationFailedReason,
-			}
-			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
-			// Requeue as content of secret might change
-			return sreconcile.ResultEmpty, e
-		}
-	} else if repo.Spec.Provider != helmv1.GenericOCIProvider && repo.Spec.Type == helmv1.HelmRepositoryTypeOCI {
-		auth, authErr := oidcAuth(ctxTimeout, repo.Spec.URL, repo.Spec.Provider)
-		if authErr != nil && !errors.Is(authErr, oci.ErrUnconfiguredProvider) {
-			e := &serror.Event{
-				Err:    fmt.Errorf("failed to get credential from %s: %w", repo.Spec.Provider, authErr),
-				Reason: sourcev1.AuthenticationFailedReason,
-			}
-			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
-			return sreconcile.ResultEmpty, e
-		}
-		if auth != nil {
-			authenticator = auth
-		}
-	}
-
-	loginOpt, err := makeLoginOption(authenticator, keychain, normalizedURL)
-	if err != nil {
+	clientOpts, err := getter.GetClientOpts(ctxTimeout, r.Client, repo, normalizedURL)
+	if err != nil && !errors.Is(err, getter.ErrDeprecatedTLSConfig) {
 		e := &serror.Event{
 			Err:    err,
 			Reason: sourcev1.AuthenticationFailedReason,
@@ -585,6 +519,7 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
 		return sreconcile.ResultEmpty, e
 	}
+	getterOpts := clientOpts.GetterOpts
 
 	// Initialize the chart repository
 	var chartRepo repository.Downloader
@@ -599,7 +534,7 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 		// this is needed because otherwise the credentials are stored in ~/.docker/config.json.
 		// TODO@souleb: remove this once the registry move to Oras v2
 		// or rework to enable reusing credentials to avoid the unneccessary handshake operations
-		registryClient, credentialsFile, err := r.RegistryClientGenerator(loginOpt != nil)
+		registryClient, credentialsFile, err := r.RegistryClientGenerator(clientOpts.RegLoginOpt != nil)
 		if err != nil {
 			e := &serror.Event{
 				Err:    fmt.Errorf("failed to construct Helm client: %w", err),
@@ -621,7 +556,7 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 		var verifiers []soci.Verifier
 		if obj.Spec.Verify != nil {
 			provider := obj.Spec.Verify.Provider
-			verifiers, err = r.makeVerifiers(ctx, obj, authenticator, keychain)
+			verifiers, err = r.makeVerifiers(ctx, obj, *clientOpts)
 			if err != nil {
 				if obj.Spec.Verify.SecretRef == nil {
 					provider = fmt.Sprintf("%s keyless", provider)
@@ -636,21 +571,20 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 		}
 
 		// Tell the chart repository to use the OCI client with the configured getter
-		clientOpts = append(clientOpts, helmgetter.WithRegistryClient(registryClient))
+		getterOpts = append(getterOpts, helmgetter.WithRegistryClient(registryClient))
 		ociChartRepo, err := repository.NewOCIChartRepository(normalizedURL,
 			repository.WithOCIGetter(r.Getters),
-			repository.WithOCIGetterOptions(clientOpts),
+			repository.WithOCIGetterOptions(getterOpts),
 			repository.WithOCIRegistryClient(registryClient),
 			repository.WithVerifiers(verifiers))
 		if err != nil {
 			return chartRepoConfigErrorReturn(err, obj)
 		}
-		chartRepo = ociChartRepo
 
 		// If login options are configured, use them to login to the registry
 		// The OCIGetter will later retrieve the stored credentials to pull the chart
-		if loginOpt != nil {
-			err = ociChartRepo.Login(loginOpt)
+		if clientOpts.RegLoginOpt != nil {
+			err = ociChartRepo.Login(clientOpts.RegLoginOpt)
 			if err != nil {
 				e := &serror.Event{
 					Err:    fmt.Errorf("failed to login to OCI registry: %w", err),
@@ -660,8 +594,9 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 				return sreconcile.ResultEmpty, e
 			}
 		}
+		chartRepo = ociChartRepo
 	default:
-		httpChartRepo, err := repository.NewChartRepository(normalizedURL, r.Storage.LocalPath(*repo.GetArtifact()), r.Getters, tlsConfig, clientOpts...)
+		httpChartRepo, err := repository.NewChartRepository(normalizedURL, r.Storage.LocalPath(*repo.GetArtifact()), r.Getters, clientOpts.TlsConfig, getterOpts...)
 		if err != nil {
 			return chartRepoConfigErrorReturn(err, obj)
 		}
@@ -1024,12 +959,6 @@ func (r *HelmChartReconciler) garbageCollect(ctx context.Context, obj *helmv1.He
 // The callback returns an object with a state, so the caller has to do the necessary cleanup.
 func (r *HelmChartReconciler) namespacedChartRepositoryCallback(ctx context.Context, name, namespace string) chart.GetChartDownloaderCallback {
 	return func(url string) (repository.Downloader, error) {
-		var (
-			tlsConfig     *tls.Config
-			authenticator authn.Authenticator
-			keychain      authn.Keychain
-		)
-
 		normalizedURL, err := repository.NormalizeURL(url)
 		if err != nil {
 			return nil, err
@@ -1052,61 +981,28 @@ func (r *HelmChartReconciler) namespacedChartRepositoryCallback(ctx context.Cont
 		ctxTimeout, cancel := context.WithTimeout(ctx, obj.Spec.Timeout.Duration)
 		defer cancel()
 
-		clientOpts := []helmgetter.Option{
-			helmgetter.WithURL(normalizedURL),
-			helmgetter.WithTimeout(obj.Spec.Timeout.Duration),
-			helmgetter.WithPassCredentialsAll(obj.Spec.PassCredentials),
-		}
-		if secret, err := r.getHelmRepositorySecret(ctx, obj); secret != nil || err != nil {
-			if err != nil {
-				return nil, err
-			}
-
-			// Build client options from secret
-			opts, tlsCfg, err := r.clientOptionsFromSecret(secret, normalizedURL)
-			if err != nil {
-				return nil, err
-			}
-			clientOpts = append(clientOpts, opts...)
-			tlsConfig = tlsCfg
-
-			// Build registryClient options from secret
-			keychain, err = registry.LoginOptionFromSecret(normalizedURL, *secret)
-			if err != nil {
-				return nil, fmt.Errorf("failed to create login options for HelmRepository '%s': %w", obj.Name, err)
-			}
-
-		} else if obj.Spec.Provider != helmv1.GenericOCIProvider && obj.Spec.Type == helmv1.HelmRepositoryTypeOCI {
-			auth, authErr := oidcAuth(ctxTimeout, obj.Spec.URL, obj.Spec.Provider)
-			if authErr != nil && !errors.Is(authErr, oci.ErrUnconfiguredProvider) {
-				return nil, fmt.Errorf("failed to get credential from %s: %w", obj.Spec.Provider, authErr)
-			}
-			if auth != nil {
-				authenticator = auth
-			}
-		}
-
-		loginOpt, err := makeLoginOption(authenticator, keychain, normalizedURL)
-		if err != nil {
+		clientOpts, err := getter.GetClientOpts(ctxTimeout, r.Client, obj, normalizedURL)
+		if err != nil && !errors.Is(err, getter.ErrDeprecatedTLSConfig) {
 			return nil, err
 		}
+		getterOpts := clientOpts.GetterOpts
 
 		var chartRepo repository.Downloader
 		if helmreg.IsOCI(normalizedURL) {
-			registryClient, credentialsFile, err := r.RegistryClientGenerator(loginOpt != nil)
+			registryClient, credentialsFile, err := r.RegistryClientGenerator(clientOpts.RegLoginOpt != nil)
 			if err != nil {
-				return nil, fmt.Errorf("failed to create registry client for HelmRepository '%s': %w", obj.Name, err)
+				return nil, fmt.Errorf("failed to create registry client: %w", err)
 			}
 
 			var errs []error
 			// Tell the chart repository to use the OCI client with the configured getter
-			clientOpts = append(clientOpts, helmgetter.WithRegistryClient(registryClient))
+			getterOpts = append(getterOpts, helmgetter.WithRegistryClient(registryClient))
 			ociChartRepo, err := repository.NewOCIChartRepository(normalizedURL, repository.WithOCIGetter(r.Getters),
-				repository.WithOCIGetterOptions(clientOpts),
+				repository.WithOCIGetterOptions(getterOpts),
 				repository.WithOCIRegistryClient(registryClient),
 				repository.WithCredentialsFile(credentialsFile))
 			if err != nil {
-				errs = append(errs, fmt.Errorf("failed to create OCI chart repository for HelmRepository '%s': %w", obj.Name, err))
+				errs = append(errs, fmt.Errorf("failed to create OCI chart repository: %w", err))
 				// clean up the credentialsFile
 				if credentialsFile != "" {
 					if err := os.Remove(credentialsFile); err != nil {
@@ -1118,10 +1014,10 @@ func (r *HelmChartReconciler) namespacedChartRepositoryCallback(ctx context.Cont
 
 			// If login options are configured, use them to login to the registry
 			// The OCIGetter will later retrieve the stored credentials to pull the chart
-			if loginOpt != nil {
-				err = ociChartRepo.Login(loginOpt)
+			if clientOpts.RegLoginOpt != nil {
+				err = ociChartRepo.Login(clientOpts.RegLoginOpt)
 				if err != nil {
-					errs = append(errs, fmt.Errorf("failed to login to OCI chart repository for HelmRepository '%s': %w", obj.Name, err))
+					errs = append(errs, fmt.Errorf("failed to login to OCI chart repository: %w", err))
 					// clean up the credentialsFile
 					errs = append(errs, ociChartRepo.Clear())
 					return nil, kerrors.NewAggregate(errs)
@@ -1130,7 +1026,7 @@ func (r *HelmChartReconciler) namespacedChartRepositoryCallback(ctx context.Cont
 
 			chartRepo = ociChartRepo
 		} else {
-			httpChartRepo, err := repository.NewChartRepository(normalizedURL, "", r.Getters, tlsConfig, clientOpts...)
+			httpChartRepo, err := repository.NewChartRepository(normalizedURL, "", r.Getters, clientOpts.TlsConfig, getterOpts...)
 			if err != nil {
 				return nil, err
 			}
@@ -1176,36 +1072,6 @@ func (r *HelmChartReconciler) resolveDependencyRepository(ctx context.Context, u
 		return &list.Items[0], nil
 	}
 	return nil, fmt.Errorf("no HelmRepository found for '%s' in '%s' namespace", url, namespace)
-}
-
-func (r *HelmChartReconciler) clientOptionsFromSecret(secret *corev1.Secret, normalizedURL string) ([]helmgetter.Option, *tls.Config, error) {
-	opts, err := getter.ClientOptionsFromSecret(*secret)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to configure Helm client with secret data: %w", err)
-	}
-
-	tlsConfig, err := getter.TLSClientConfigFromSecret(*secret, normalizedURL)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to create TLS client config with secret data: %w", err)
-	}
-
-	return opts, tlsConfig, nil
-}
-
-func (r *HelmChartReconciler) getHelmRepositorySecret(ctx context.Context, repository *helmv1.HelmRepository) (*corev1.Secret, error) {
-	if repository.Spec.SecretRef == nil {
-		return nil, nil
-	}
-	name := types.NamespacedName{
-		Namespace: repository.GetNamespace(),
-		Name:      repository.Spec.SecretRef.Name,
-	}
-	var secret corev1.Secret
-	err := r.Client.Get(ctx, name, &secret)
-	if err != nil {
-		return nil, err
-	}
-	return &secret, nil
 }
 
 func (r *HelmChartReconciler) indexHelmRepositoryByURL(o client.Object) []string {
@@ -1412,13 +1278,14 @@ func chartRepoConfigErrorReturn(err error, obj *helmv1.HelmChart) (sreconcile.Re
 }
 
 // makeVerifiers returns a list of verifiers for the given chart.
-func (r *HelmChartReconciler) makeVerifiers(ctx context.Context, obj *helmv1.HelmChart, auth authn.Authenticator, keychain authn.Keychain) ([]soci.Verifier, error) {
+func (r *HelmChartReconciler) makeVerifiers(ctx context.Context, obj *helmv1.HelmChart, clientOpts getter.ClientOpts) ([]soci.Verifier, error) {
 	var verifiers []soci.Verifier
 	verifyOpts := []remote.Option{}
-	if auth != nil {
-		verifyOpts = append(verifyOpts, remote.WithAuth(auth))
+
+	if clientOpts.Authenticator != nil {
+		verifyOpts = append(verifyOpts, remote.WithAuth(clientOpts.Authenticator))
 	} else {
-		verifyOpts = append(verifyOpts, remote.WithAuthFromKeychain(keychain))
+		verifyOpts = append(verifyOpts, remote.WithAuthFromKeychain(clientOpts.Keychain))
 	}
 
 	switch obj.Spec.Verify.Provider {

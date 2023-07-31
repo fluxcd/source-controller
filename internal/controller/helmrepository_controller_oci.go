@@ -54,6 +54,7 @@ import (
 	"github.com/fluxcd/source-controller/internal/helm/registry"
 	"github.com/fluxcd/source-controller/internal/helm/repository"
 	"github.com/fluxcd/source-controller/internal/object"
+	soci "github.com/fluxcd/source-controller/internal/oci"
 	intpredicates "github.com/fluxcd/source-controller/internal/predicates"
 )
 
@@ -318,7 +319,7 @@ func (r *HelmRepositoryOCIReconciler) reconcile(ctx context.Context, sp *patch.S
 			return
 		}
 	} else if obj.Spec.Provider != helmv1.GenericOCIProvider && obj.Spec.Type == helmv1.HelmRepositoryTypeOCI {
-		auth, authErr := oidcAuth(ctxTimeout, obj.Spec.URL, obj.Spec.Provider)
+		auth, authErr := soci.OIDCAuth(ctxTimeout, obj.Spec.URL, obj.Spec.Provider)
 		if authErr != nil && !errors.Is(authErr, oci.ErrUnconfiguredProvider) {
 			e := fmt.Errorf("failed to get credential from %s: %w", obj.Spec.Provider, authErr)
 			conditions.MarkFalse(obj, meta.ReadyCondition, sourcev1.AuthenticationFailedReason, e.Error())

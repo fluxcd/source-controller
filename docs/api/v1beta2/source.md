@@ -792,8 +792,25 @@ github.com/fluxcd/pkg/apis/meta.LocalObjectReference
 for the HelmRepository.
 For HTTP/S basic auth the secret must contain &lsquo;username&rsquo; and &lsquo;password&rsquo;
 fields.
-For TLS the secret must contain a &lsquo;certFile&rsquo; and &lsquo;keyFile&rsquo;, and/or
-&lsquo;caFile&rsquo; fields.</p>
+Support for TLS auth using the &lsquo;certFile&rsquo; and &lsquo;keyFile&rsquo;, and/or &lsquo;caFile&rsquo;
+keys is deprecated. Please use <code>.spec.certSecretRef</code> instead.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>certSecretRef</code><br>
+<em>
+<a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/meta#LocalObjectReference">
+github.com/fluxcd/pkg/apis/meta.LocalObjectReference
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>CertSecretRef specifies the Secret containing the TLS authentication
+data. The secret must contain a &lsquo;certFile&rsquo; and &lsquo;keyFile&rsquo;, and/or &lsquo;caFile&rsquo;
+fields. It takes precedence over the values specified in the Secret
+referred to by <code>.spec.secretRef</code>.</p>
 </td>
 </tr>
 <tr>
@@ -2459,8 +2476,25 @@ github.com/fluxcd/pkg/apis/meta.LocalObjectReference
 for the HelmRepository.
 For HTTP/S basic auth the secret must contain &lsquo;username&rsquo; and &lsquo;password&rsquo;
 fields.
-For TLS the secret must contain a &lsquo;certFile&rsquo; and &lsquo;keyFile&rsquo;, and/or
-&lsquo;caFile&rsquo; fields.</p>
+Support for TLS auth using the &lsquo;certFile&rsquo; and &lsquo;keyFile&rsquo;, and/or &lsquo;caFile&rsquo;
+keys is deprecated. Please use <code>.spec.certSecretRef</code> instead.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>certSecretRef</code><br>
+<em>
+<a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/meta#LocalObjectReference">
+github.com/fluxcd/pkg/apis/meta.LocalObjectReference
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>CertSecretRef specifies the Secret containing the TLS authentication
+data. The secret must contain a &lsquo;certFile&rsquo; and &lsquo;keyFile&rsquo;, and/or &lsquo;caFile&rsquo;
+fields. It takes precedence over the values specified in the Secret
+referred to by <code>.spec.secretRef</code>.</p>
 </td>
 </tr>
 <tr>

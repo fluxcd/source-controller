@@ -577,6 +577,11 @@ func (in *HelmRepositorySpec) DeepCopyInto(out *HelmRepositorySpec) {
 		*out = new(meta.LocalObjectReference)
 		**out = **in
 	}
+	if in.CertSecretRef != nil {
+		in, out := &in.CertSecretRef, &out.CertSecretRef
+		*out = new(meta.LocalObjectReference)
+		**out = **in
+	}
 	out.Interval = in.Interval
 	if in.Timeout != nil {
 		in, out := &in.Timeout, &out.Timeout
