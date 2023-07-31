@@ -37,6 +37,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/record"
 	kstatus "sigs.k8s.io/cli-utils/pkg/kstatus/status"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	fakeclient "sigs.k8s.io/controller-runtime/pkg/client/fake"
 
@@ -55,6 +56,41 @@ import (
 	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
 	"github.com/fluxcd/source-controller/internal/reconcile/summarize"
 )
+
+func TestHelmRepositoryReconciler_deleteBeforeFinalizer(t *testing.T) {
+	g := NewWithT(t)
+
+	namespaceName := "helmrepo-" + randStringRunes(5)
+	namespace := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{Name: namespaceName},
+	}
+	g.Expect(k8sClient.Create(ctx, namespace)).ToNot(HaveOccurred())
+	t.Cleanup(func() {
+		g.Expect(k8sClient.Delete(ctx, namespace)).NotTo(HaveOccurred())
+	})
+
+	helmrepo := &helmv1.HelmRepository{}
+	helmrepo.Name = "test-helmrepo"
+	helmrepo.Namespace = namespaceName
+	helmrepo.Spec = helmv1.HelmRepositorySpec{
+		Interval: metav1.Duration{Duration: interval},
+		URL:      "https://example.com",
+	}
+	// Add a test finalizer to prevent the object from getting deleted.
+	helmrepo.SetFinalizers([]string{"test-finalizer"})
+	g.Expect(k8sClient.Create(ctx, helmrepo)).NotTo(HaveOccurred())
+	// Add deletion timestamp by deleting the object.
+	g.Expect(k8sClient.Delete(ctx, helmrepo)).NotTo(HaveOccurred())
+
+	r := &HelmRepositoryReconciler{
+		Client:        k8sClient,
+		EventRecorder: record.NewFakeRecorder(32),
+		Storage:       testStorage,
+	}
+	// NOTE: Only a real API server responds with an error in this scenario.
+	_, err := r.Reconcile(ctx, ctrl.Request{NamespacedName: client.ObjectKeyFromObject(helmrepo)})
+	g.Expect(err).NotTo(HaveOccurred())
+}
 
 func TestHelmRepositoryReconciler_Reconcile(t *testing.T) {
 	g := NewWithT(t)

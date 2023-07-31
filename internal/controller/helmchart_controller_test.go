@@ -44,6 +44,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/record"
 	kstatus "sigs.k8s.io/cli-utils/pkg/kstatus/status"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	fakeclient "sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -65,6 +66,45 @@ import (
 	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
 	"github.com/fluxcd/source-controller/internal/reconcile/summarize"
 )
+
+func TestHelmChartReconciler_deleteBeforeFinalizer(t *testing.T) {
+	g := NewWithT(t)
+
+	namespaceName := "helmchart-" + randStringRunes(5)
+	namespace := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{Name: namespaceName},
+	}
+	g.Expect(k8sClient.Create(ctx, namespace)).ToNot(HaveOccurred())
+	t.Cleanup(func() {
+		g.Expect(k8sClient.Delete(ctx, namespace)).NotTo(HaveOccurred())
+	})
+
+	helmchart := &helmv1.HelmChart{}
+	helmchart.Name = "test-helmchart"
+	helmchart.Namespace = namespaceName
+	helmchart.Spec = helmv1.HelmChartSpec{
+		Interval: metav1.Duration{Duration: interval},
+		Chart:    "foo",
+		SourceRef: helmv1.LocalHelmChartSourceReference{
+			Kind: "HelmRepository",
+			Name: "bar",
+		},
+	}
+	// Add a test finalizer to prevent the object from getting deleted.
+	helmchart.SetFinalizers([]string{"test-finalizer"})
+	g.Expect(k8sClient.Create(ctx, helmchart)).NotTo(HaveOccurred())
+	// Add deletion timestamp by deleting the object.
+	g.Expect(k8sClient.Delete(ctx, helmchart)).NotTo(HaveOccurred())
+
+	r := &HelmChartReconciler{
+		Client:        k8sClient,
+		EventRecorder: record.NewFakeRecorder(32),
+		Storage:       testStorage,
+	}
+	// NOTE: Only a real API server responds with an error in this scenario.
+	_, err := r.Reconcile(ctx, ctrl.Request{NamespacedName: client.ObjectKeyFromObject(helmchart)})
+	g.Expect(err).NotTo(HaveOccurred())
+}
 
 func TestHelmChartReconciler_Reconcile(t *testing.T) {
 	g := NewWithT(t)

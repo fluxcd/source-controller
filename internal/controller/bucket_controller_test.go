@@ -33,6 +33,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/record"
 	kstatus "sigs.k8s.io/cli-utils/pkg/kstatus/status"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	fakeclient "sigs.k8s.io/controller-runtime/pkg/client/fake"
 
@@ -53,6 +54,42 @@ import (
 
 // Environment variable to set the GCP Storage host for the GCP client.
 const EnvGcpStorageHost = "STORAGE_EMULATOR_HOST"
+
+func TestBucketReconciler_deleteBeforeFinalizer(t *testing.T) {
+	g := NewWithT(t)
+
+	namespaceName := "bucket-" + randStringRunes(5)
+	namespace := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{Name: namespaceName},
+	}
+	g.Expect(k8sClient.Create(ctx, namespace)).ToNot(HaveOccurred())
+	t.Cleanup(func() {
+		g.Expect(k8sClient.Delete(ctx, namespace)).NotTo(HaveOccurred())
+	})
+
+	bucket := &bucketv1.Bucket{}
+	bucket.Name = "test-bucket"
+	bucket.Namespace = namespaceName
+	bucket.Spec = bucketv1.BucketSpec{
+		Interval:   metav1.Duration{Duration: interval},
+		BucketName: "foo",
+		Endpoint:   "bar",
+	}
+	// Add a test finalizer to prevent the object from getting deleted.
+	bucket.SetFinalizers([]string{"test-finalizer"})
+	g.Expect(k8sClient.Create(ctx, bucket)).NotTo(HaveOccurred())
+	// Add deletion timestamp by deleting the object.
+	g.Expect(k8sClient.Delete(ctx, bucket)).NotTo(HaveOccurred())
+
+	r := &BucketReconciler{
+		Client:        k8sClient,
+		EventRecorder: record.NewFakeRecorder(32),
+		Storage:       testStorage,
+	}
+	// NOTE: Only a real API server responds with an error in this scenario.
+	_, err := r.Reconcile(ctx, ctrl.Request{NamespacedName: client.ObjectKeyFromObject(bucket)})
+	g.Expect(err).NotTo(HaveOccurred())
+}
 
 func TestBucketReconciler_Reconcile(t *testing.T) {
 	g := NewWithT(t)

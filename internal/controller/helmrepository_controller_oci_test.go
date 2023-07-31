@@ -41,6 +41,41 @@ import (
 	"github.com/fluxcd/source-controller/internal/helm/registry"
 )
 
+func TestHelmRepositoryOCIReconciler_deleteBeforeFinalizer(t *testing.T) {
+	g := NewWithT(t)
+
+	namespaceName := "helmrepo-" + randStringRunes(5)
+	namespace := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{Name: namespaceName},
+	}
+	g.Expect(k8sClient.Create(ctx, namespace)).ToNot(HaveOccurred())
+	t.Cleanup(func() {
+		g.Expect(k8sClient.Delete(ctx, namespace)).NotTo(HaveOccurred())
+	})
+
+	helmrepo := &helmv1.HelmRepository{}
+	helmrepo.Name = "test-helmrepo"
+	helmrepo.Namespace = namespaceName
+	helmrepo.Spec = helmv1.HelmRepositorySpec{
+		Interval: metav1.Duration{Duration: interval},
+		URL:      "https://example.com",
+		Type:     "oci",
+	}
+	// Add a test finalizer to prevent the object from getting deleted.
+	helmrepo.SetFinalizers([]string{"test-finalizer"})
+	g.Expect(k8sClient.Create(ctx, helmrepo)).NotTo(HaveOccurred())
+	// Add deletion timestamp by deleting the object.
+	g.Expect(k8sClient.Delete(ctx, helmrepo)).NotTo(HaveOccurred())
+
+	r := &HelmRepositoryOCIReconciler{
+		Client:        k8sClient,
+		EventRecorder: record.NewFakeRecorder(32),
+	}
+	// NOTE: Only a real API server responds with an error in this scenario.
+	_, err := r.Reconcile(ctx, ctrl.Request{NamespacedName: client.ObjectKeyFromObject(helmrepo)})
+	g.Expect(err).NotTo(HaveOccurred())
+}
+
 func TestHelmRepositoryOCIReconciler_Reconcile(t *testing.T) {
 	tests := []struct {
 		name       string
