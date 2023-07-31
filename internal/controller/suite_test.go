@@ -21,12 +21,16 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"io/ioutil"
+	"log"
 	"math/rand"
+	"net"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/foxcpp/go-mockdns"
 	"github.com/phayes/freeport"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/crypto/bcrypt"
@@ -95,9 +99,11 @@ var (
 )
 
 var (
-	tlsPublicKey  []byte
-	tlsPrivateKey []byte
-	tlsCA         []byte
+	tlsPublicKey     []byte
+	tlsPrivateKey    []byte
+	tlsCA            []byte
+	clientPublicKey  []byte
+	clientPrivateKey []byte
 )
 
 var (
@@ -114,11 +120,18 @@ type registryClientTestServer struct {
 	registryHost   string
 	workspaceDir   string
 	registryClient *helmreg.Client
+	dnsServer      *mockdns.Server
 }
 
 type registryOptions struct {
-	withBasicAuth bool
-	withTLS       bool
+	withBasicAuth      bool
+	withTLS            bool
+	withClientCertAuth bool
+	// Allow disbaling DNS mocking since Helm OCI doesn't yet suppot
+	// insecure OCI registries, which means we need Docker's automatic
+	// connection downgrading if the registry is hosted on localhost.
+	// Once Helm OCI supports insecure registries, we can get rid of this.
+	disableDNSMocking bool
 }
 
 func setupRegistryServer(ctx context.Context, workspaceDir string, opts registryOptions) (*registryClientTestServer, error) {
@@ -150,7 +163,28 @@ func setupRegistryServer(ctx context.Context, workspaceDir string, opts registry
 	}
 
 	server.registryHost = fmt.Sprintf("localhost:%d", port)
-	config.HTTP.Addr = fmt.Sprintf("127.0.0.1:%d", port)
+
+	// Change the registry host to a host which is not localhost and
+	// mock DNS to map example.com to 127.0.0.1.
+	// This is required because Docker enforces HTTP if the registry
+	// is hosted on localhost/127.0.0.1.
+	if !opts.disableDNSMocking {
+		server.registryHost = fmt.Sprintf("example.com:%d", port)
+		// Disable DNS server logging as it is extremely chatty.
+		dnsLog := log.Default()
+		dnsLog.SetOutput(ioutil.Discard)
+		server.dnsServer, err = mockdns.NewServerWithLogger(map[string]mockdns.Zone{
+			"example.com.": {
+				A: []string{"127.0.0.1"},
+			},
+		}, dnsLog, false)
+		if err != nil {
+			return nil, err
+		}
+		server.dnsServer.PatchNet(net.DefaultResolver)
+	}
+
+	config.HTTP.Addr = fmt.Sprintf(":%d", port)
 	config.HTTP.DrainTimeout = time.Duration(10) * time.Second
 	config.Storage = map[string]configuration.Parameters{"inmemory": map[string]interface{}{}}
 
@@ -178,6 +212,10 @@ func setupRegistryServer(ctx context.Context, workspaceDir string, opts registry
 	if opts.withTLS {
 		config.HTTP.TLS.Certificate = "testdata/certs/server.pem"
 		config.HTTP.TLS.Key = "testdata/certs/server-key.pem"
+		// Configure CA certificates only if client cert authentication is enabled.
+		if opts.withClientCertAuth {
+			config.HTTP.TLS.ClientCAs = []string{"testdata/certs/ca.pem"}
+		}
 	}
 
 	// setup logger options
@@ -196,6 +234,13 @@ func setupRegistryServer(ctx context.Context, workspaceDir string, opts registry
 	go dockerRegistry.ListenAndServe()
 
 	return server, nil
+}
+
+func (r *registryClientTestServer) Close() {
+	if r.dnsServer != nil {
+		mockdns.UnpatchNet(net.DefaultResolver)
+		r.dnsServer.Close()
+	}
 }
 
 func TestMain(m *testing.M) {
@@ -229,11 +274,13 @@ func TestMain(m *testing.M) {
 		panic(fmt.Sprintf("failed to create workspace directory: %v", err))
 	}
 	testRegistryServer, err = setupRegistryServer(ctx, testWorkspaceDir, registryOptions{
-		withBasicAuth: true,
+		withBasicAuth:     true,
+		disableDNSMocking: true,
 	})
 	if err != nil {
 		panic(fmt.Sprintf("Failed to create a test registry server: %v", err))
 	}
+	defer testRegistryServer.Close()
 
 	if err := (&GitRepositoryReconciler{
 		Client:        testEnv,
@@ -352,6 +399,14 @@ func initTestTLS() {
 		panic(err)
 	}
 	tlsCA, err = os.ReadFile("testdata/certs/ca.pem")
+	if err != nil {
+		panic(err)
+	}
+	clientPrivateKey, err = os.ReadFile("testdata/certs/client-key.pem")
+	if err != nil {
+		panic(err)
+	}
+	clientPublicKey, err = os.ReadFile("testdata/certs/client.pem")
 	if err != nil {
 		panic(err)
 	}

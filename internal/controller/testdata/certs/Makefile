@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-all: server-key.pem
+all: server-key.pem client-key.pem
 
 ca-key.pem: ca-csr.json
 	cfssl gencert -initca ca-csr.json | cfssljson -bare ca –
@@ -28,3 +28,13 @@ server-key.pem: server-csr.json ca-config.json ca-key.pem
 		server-csr.json | cfssljson -bare server
 sever.pem: server-key.pem
 server.csr: server-key.pem
+
+client-key.pem: client-csr.json ca-config.json ca-key.pem
+	cfssl gencert \
+		-ca=ca.pem \
+		-ca-key=ca-key.pem \
+		-config=ca-config.json \
+		-profile=web-servers \
+		client-csr.json | cfssljson -bare client
+client.pem: client-key.pem
+client.csr: client-key.pem

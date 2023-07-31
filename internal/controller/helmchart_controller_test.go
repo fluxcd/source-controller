@@ -2285,8 +2285,12 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_authStrategy(t *testing.T) {
 
 			workspaceDir := t.TempDir()
 
+			tt.registryOpts.disableDNSMocking = true
 			server, err := setupRegistryServer(ctx, workspaceDir, tt.registryOpts)
 			g.Expect(err).NotTo(HaveOccurred())
+			t.Cleanup(func() {
+				server.Close()
+			})
 
 			// Load a test chart
 			chartData, err := os.ReadFile(chartPath)
@@ -2395,8 +2399,13 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_verifySignature(t *testing.T
 	g := NewWithT(t)
 
 	tmpDir := t.TempDir()
-	server, err := setupRegistryServer(ctx, tmpDir, registryOptions{})
+	server, err := setupRegistryServer(ctx, tmpDir, registryOptions{
+		disableDNSMocking: true,
+	})
 	g.Expect(err).ToNot(HaveOccurred())
+	t.Cleanup(func() {
+		server.Close()
+	})
 
 	const (
 		chartPath = "testdata/charts/helmchart-0.1.0.tgz"
