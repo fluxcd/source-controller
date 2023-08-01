@@ -51,6 +51,7 @@ import (
 	"github.com/fluxcd/pkg/gittestserver"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	conditionscheck "github.com/fluxcd/pkg/runtime/conditions/check"
+	"github.com/fluxcd/pkg/runtime/jitter"
 	"github.com/fluxcd/pkg/runtime/patch"
 	"github.com/fluxcd/pkg/ssh"
 	"github.com/fluxcd/pkg/testserver"
@@ -2103,7 +2104,9 @@ func TestGitRepositoryReconciler_statusConditions(t *testing.T) {
 				summarize.WithReconcileResult(recResult),
 				summarize.WithReconcileError(retErr),
 				summarize.WithIgnoreNotFound(),
-				summarize.WithResultBuilder(sreconcile.AlwaysRequeueResultBuilder{RequeueAfter: obj.GetRequeueAfter()}),
+				summarize.WithResultBuilder(sreconcile.AlwaysRequeueResultBuilder{
+					RequeueAfter: jitter.JitteredIntervalDuration(obj.GetRequeueAfter()),
+				}),
 				summarize.WithPatchFieldOwner("source-controller"),
 			}
 			_, retErr = summarizeHelper.SummarizeAndPatch(ctx, obj, summarizeOpts...)
