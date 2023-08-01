@@ -132,7 +132,7 @@ func (c *cache) Delete(key string) {
 }
 
 // Clear all items from the cache.
-// This reallocate the inderlying array holding the items,
+// This reallocates the underlying array holding the items,
 // so that the memory used by the items is reclaimed.
 func (c *cache) Clear() {
 	c.mu.Lock()
@@ -163,11 +163,10 @@ func (c *cache) HasExpired(key string) bool {
 func (c *cache) SetExpiration(key string, expiration time.Duration) {
 	c.mu.Lock()
 	item, ok := c.Items[key]
-	if !ok {
-		c.mu.Unlock()
-		return
+	if ok {
+		item.Expiration = time.Now().Add(expiration).UnixNano()
+		c.Items[key] = item
 	}
-	item.Expiration = time.Now().Add(expiration).UnixNano()
 	c.mu.Unlock()
 }
 
