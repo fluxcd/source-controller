@@ -198,7 +198,6 @@ func main() {
 		Client:                  mgr.GetClient(),
 		EventRecorder:           eventRecorder,
 		Metrics:                 metrics,
-		Getters:                 getters,
 		ControllerName:          controllerName,
 		RegistryClientGenerator: registry.ClientGenerator,
 	}).SetupWithManagerAndOptions(mgr, controller.HelmRepositoryReconcilerOptions{

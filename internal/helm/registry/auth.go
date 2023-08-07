@@ -154,3 +154,13 @@ func NewLoginOption(auth authn.Authenticator, keychain authn.Keychain, registryU
 
 	return nil, nil
 }
+
+// TLSLoginOption returns a LoginOption that can be used to configure the TLS client.
+// It requires either the caFile or both certFile and keyFile to be not blank.
+func TLSLoginOption(certFile, keyFile, caFile string) registry.LoginOption {
+	if (certFile != "" && keyFile != "") || caFile != "" {
+		return registry.LoginOptTLSClientConfig(certFile, keyFile, caFile)
+	}
+
+	return nil
+}

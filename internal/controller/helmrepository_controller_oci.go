@@ -18,20 +18,18 @@ package controller
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"net/url"
 	"os"
 	"time"
 
-	"github.com/google/go-containerregistry/pkg/authn"
-	helmgetter "helm.sh/helm/v3/pkg/getter"
 	helmreg "helm.sh/helm/v3/pkg/registry"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	kerrors "k8s.io/apimachinery/pkg/util/errors"
 	kuberecorder "k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -42,7 +40,6 @@ import (
 
 	eventv1 "github.com/fluxcd/pkg/apis/event/v1beta1"
 	"github.com/fluxcd/pkg/apis/meta"
-	"github.com/fluxcd/pkg/oci"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	helper "github.com/fluxcd/pkg/runtime/controller"
 	"github.com/fluxcd/pkg/runtime/patch"
@@ -51,10 +48,9 @@ import (
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	helmv1 "github.com/fluxcd/source-controller/api/v1beta2"
-	"github.com/fluxcd/source-controller/internal/helm/registry"
+	"github.com/fluxcd/source-controller/internal/helm/getter"
 	"github.com/fluxcd/source-controller/internal/helm/repository"
 	"github.com/fluxcd/source-controller/internal/object"
-	soci "github.com/fluxcd/source-controller/internal/oci"
 	intpredicates "github.com/fluxcd/source-controller/internal/predicates"
 )
 
@@ -79,7 +75,7 @@ type HelmRepositoryOCIReconciler struct {
 	client.Client
 	kuberecorder.EventRecorder
 	helper.Metrics
-	Getters                 helmgetter.Providers
+
 	ControllerName          string
 	RegistryClientGenerator RegistryClientGeneratorFunc
 
@@ -95,7 +91,7 @@ type HelmRepositoryOCIReconciler struct {
 // and an optional file name.
 // The file is used to store the registry client credentials.
 // The caller is responsible for deleting the file.
-type RegistryClientGeneratorFunc func(isLogin bool) (*helmreg.Client, string, error)
+type RegistryClientGeneratorFunc func(tlsConfig *tls.Config, isLogin bool) (*helmreg.Client, string, error)
 
 func (r *HelmRepositoryOCIReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return r.SetupWithManagerAndOptions(mgr, HelmRepositoryReconcilerOptions{})
@@ -226,7 +222,7 @@ func (r *HelmRepositoryOCIReconciler) reconcile(ctx context.Context, sp *patch.S
 		}
 
 		// Check if it's a successful reconciliation.
-		if result.RequeueAfter == obj.GetRequeueAfter() && result.Requeue == false &&
+		if result.RequeueAfter == obj.GetRequeueAfter() && !result.Requeue &&
 			retErr == nil {
 			// Remove reconciling condition if the reconciliation was successful.
 			conditions.Delete(obj, meta.ReconcilingCondition)
@@ -305,43 +301,34 @@ func (r *HelmRepositoryOCIReconciler) reconcile(ctx context.Context, sp *patch.S
 		result, retErr = ctrl.Result{}, nil
 		return
 	}
-	conditions.Delete(obj, meta.StalledCondition)
 
-	var (
-		authenticator authn.Authenticator
-		keychain      authn.Keychain
-		err           error
-	)
-	// Configure any authentication related options.
-	if obj.Spec.SecretRef != nil {
-		keychain, err = authFromSecret(ctx, r.Client, obj)
-		if err != nil {
-			conditions.MarkFalse(obj, meta.ReadyCondition, sourcev1.AuthenticationFailedReason, err.Error())
-			result, retErr = ctrl.Result{}, err
-			return
-		}
-	} else if obj.Spec.Provider != helmv1.GenericOCIProvider && obj.Spec.Type == helmv1.HelmRepositoryTypeOCI {
-		auth, authErr := soci.OIDCAuth(ctxTimeout, obj.Spec.URL, obj.Spec.Provider)
-		if authErr != nil && !errors.Is(authErr, oci.ErrUnconfiguredProvider) {
-			e := fmt.Errorf("failed to get credential from %s: %w", obj.Spec.Provider, authErr)
-			conditions.MarkFalse(obj, meta.ReadyCondition, sourcev1.AuthenticationFailedReason, e.Error())
-			result, retErr = ctrl.Result{}, e
-			return
-		}
-		if auth != nil {
-			authenticator = auth
-		}
+	normalizedURL, err := repository.NormalizeURL(obj.Spec.URL)
+	if err != nil {
+		conditions.MarkStalled(obj, sourcev1.URLInvalidReason, err.Error())
+		conditions.MarkFalse(obj, meta.ReadyCondition, sourcev1.URLInvalidReason, err.Error())
+		result, retErr = ctrl.Result{}, nil
+		return
 	}
 
-	loginOpt, err := makeLoginOption(authenticator, keychain, obj.Spec.URL)
+	conditions.Delete(obj, meta.StalledCondition)
+
+	clientOpts, certsTmpDir, err := getter.GetClientOpts(ctxTimeout, r.Client, obj, normalizedURL)
 	if err != nil {
 		conditions.MarkFalse(obj, meta.ReadyCondition, sourcev1.AuthenticationFailedReason, err.Error())
 		result, retErr = ctrl.Result{}, err
 		return
 	}
+	if certsTmpDir != "" {
+		defer func() {
+			if err := os.RemoveAll(certsTmpDir); err != nil {
+				r.eventLogf(ctx, obj, corev1.EventTypeWarning, meta.FailedReason,
+					"failed to delete temporary certs directory: %s", err)
+			}
+		}()
+	}
 
 	// Create registry client and login if needed.
-	registryClient, file, err := r.RegistryClientGenerator(loginOpt != nil)
+	registryClient, file, err := r.RegistryClientGenerator(clientOpts.TlsConfig, clientOpts.MustLoginToRegistry())
 	if err != nil {
 		e := fmt.Errorf("failed to create registry client: %w", err)
 		conditions.MarkFalse(obj, meta.ReadyCondition, meta.FailedReason, e.Error())
@@ -368,8 +355,8 @@ func (r *HelmRepositoryOCIReconciler) reconcile(ctx context.Context, sp *patch.S
 	conditions.Delete(obj, meta.StalledCondition)
 
 	// Attempt to login to the registry if credentials are provided.
-	if loginOpt != nil {
-		err = chartRepo.Login(loginOpt)
+	if clientOpts.MustLoginToRegistry() {
+		err = chartRepo.Login(clientOpts.RegLoginOpts...)
 		if err != nil {
 			e := fmt.Errorf("failed to login to registry '%s': %w", obj.Spec.URL, err)
 			conditions.MarkFalse(obj, meta.ReadyCondition, sourcev1.AuthenticationFailedReason, e.Error())
@@ -409,41 +396,6 @@ func (r *HelmRepositoryOCIReconciler) eventLogf(ctx context.Context, obj runtime
 		ctrl.LoggerFrom(ctx).Info(msg)
 	}
 	r.Eventf(obj, eventType, reason, msg)
-}
-
-// authFromSecret returns an authn.Keychain for the given HelmRepository.
-// If the HelmRepository does not specify a secretRef, an anonymous keychain is returned.
-func authFromSecret(ctx context.Context, client client.Client, obj *helmv1.HelmRepository) (authn.Keychain, error) {
-	// Attempt to retrieve secret.
-	name := types.NamespacedName{
-		Namespace: obj.GetNamespace(),
-		Name:      obj.Spec.SecretRef.Name,
-	}
-	var secret corev1.Secret
-	if err := client.Get(ctx, name, &secret); err != nil {
-		return nil, fmt.Errorf("failed to get secret '%s': %w", name.String(), err)
-	}
-
-	// Construct login options.
-	keychain, err := registry.LoginOptionFromSecret(obj.Spec.URL, secret)
-	if err != nil {
-		return nil, fmt.Errorf("failed to configure Helm client with secret data: %w", err)
-	}
-	return keychain, nil
-}
-
-// makeLoginOption returns a registry login option for the given HelmRepository.
-// If the HelmRepository does not specify a secretRef, a nil login option is returned.
-func makeLoginOption(auth authn.Authenticator, keychain authn.Keychain, registryURL string) (helmreg.LoginOption, error) {
-	if auth != nil {
-		return registry.AuthAdaptHelper(auth)
-	}
-
-	if keychain != nil {
-		return registry.KeychainAdaptHelper(keychain)(registryURL)
-	}
-
-	return nil, nil
 }
 
 func conditionsDiff(a, b []string) []string {

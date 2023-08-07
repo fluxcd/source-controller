@@ -17,7 +17,9 @@ limitations under the License.
 package registry
 
 import (
+	"crypto/tls"
 	"io"
+	"net/http"
 	"os"
 
 	"helm.sh/helm/v3/pkg/registry"
@@ -27,7 +29,7 @@ import (
 // ClientGenerator generates a registry client and a temporary credential file.
 // The client is meant to be used for a single reconciliation.
 // The file is meant to be used for a single reconciliation and deleted after.
-func ClientGenerator(isLogin bool) (*registry.Client, string, error) {
+func ClientGenerator(tlsConfig *tls.Config, isLogin bool) (*registry.Client, string, error) {
 	if isLogin {
 		// create a temporary file to store the credentials
 		// this is needed because otherwise the credentials are stored in ~/.docker/config.json.
@@ -37,7 +39,7 @@ func ClientGenerator(isLogin bool) (*registry.Client, string, error) {
 		}
 
 		var errs []error
-		rClient, err := registry.NewClient(registry.ClientOptWriter(io.Discard), registry.ClientOptCredentialsFile(credentialsFile.Name()))
+		rClient, err := newClient(credentialsFile.Name(), tlsConfig)
 		if err != nil {
 			errs = append(errs, err)
 			// attempt to delete the temporary file
@@ -52,9 +54,27 @@ func ClientGenerator(isLogin bool) (*registry.Client, string, error) {
 		return rClient, credentialsFile.Name(), nil
 	}
 
-	rClient, err := registry.NewClient(registry.ClientOptWriter(io.Discard))
+	rClient, err := newClient("", tlsConfig)
 	if err != nil {
 		return nil, "", err
 	}
 	return rClient, "", nil
+}
+
+func newClient(credentialsFile string, tlsConfig *tls.Config) (*registry.Client, error) {
+	opts := []registry.ClientOption{
+		registry.ClientOptWriter(io.Discard),
+	}
+	if tlsConfig != nil {
+		opts = append(opts, registry.ClientOptHTTPClient(&http.Client{
+			Transport: &http.Transport{
+				TLSClientConfig: tlsConfig,
+			},
+		}))
+	}
+	if credentialsFile != "" {
+		opts = append(opts, registry.ClientOptCredentialsFile(credentialsFile))
+	}
+
+	return registry.NewClient(opts...)
 }

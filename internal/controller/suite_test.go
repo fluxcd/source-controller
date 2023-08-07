@@ -19,12 +19,15 @@ package controller
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
 	"math/rand"
 	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"testing"
@@ -148,15 +151,11 @@ func setupRegistryServer(ctx context.Context, workspaceDir string, opts registry
 	var out bytes.Buffer
 	server.out = &out
 
-	// init test client
-	client, err := helmreg.NewClient(
+	// init test client options
+	clientOpts := []helmreg.ClientOption{
 		helmreg.ClientOptDebug(true),
 		helmreg.ClientOptWriter(server.out),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create registry client: %s", err)
 	}
-	server.registryClient = client
 
 	config := &configuration.Configuration{}
 	port, err := freeport.GetFreePort()
@@ -218,6 +217,13 @@ func setupRegistryServer(ctx context.Context, workspaceDir string, opts registry
 		if opts.withClientCertAuth {
 			config.HTTP.TLS.ClientCAs = []string{"testdata/certs/ca.pem"}
 		}
+
+		// add TLS configured HTTP client option to clientOpts
+		httpClient, err := tlsConfiguredHTTPCLient()
+		if err != nil {
+			return nil, fmt.Errorf("failed to create TLS configured HTTP client: %s", err)
+		}
+		clientOpts = append(clientOpts, helmreg.ClientOptHTTPClient(httpClient))
 	}
 
 	// setup logger options
@@ -232,10 +238,39 @@ func setupRegistryServer(ctx context.Context, workspaceDir string, opts registry
 		return nil, fmt.Errorf("failed to create docker registry: %w", err)
 	}
 
+	// init test client
+	client, err := helmreg.NewClient(clientOpts...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create registry client: %s", err)
+	}
+	server.registryClient = client
+
 	// Start Docker registry
 	go dockerRegistry.ListenAndServe()
 
 	return server, nil
+}
+
+func tlsConfiguredHTTPCLient() (*http.Client, error) {
+	pool := x509.NewCertPool()
+	if !pool.AppendCertsFromPEM(tlsCA) {
+		return nil, fmt.Errorf("failed to append CA certificate to pool")
+	}
+	cert, err := tls.LoadX509KeyPair("testdata/certs/server.pem", "testdata/certs/server-key.pem")
+	if err != nil {
+		return nil, fmt.Errorf("failed to load server certificate: %s", err)
+	}
+	httpClient := &http.Client{
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{
+				RootCAs: pool,
+				Certificates: []tls.Certificate{
+					cert,
+				},
+			},
+		},
+	}
+	return httpClient, nil
 }
 
 func (r *registryClientTestServer) Close() {
@@ -345,7 +380,6 @@ func TestMain(m *testing.M) {
 		Client:                  testEnv,
 		EventRecorder:           record.NewFakeRecorder(32),
 		Metrics:                 testMetricsH,
-		Getters:                 testGetters,
 		RegistryClientGenerator: registry.ClientGenerator,
 	}).SetupWithManagerAndOptions(testEnv, HelmRepositoryReconcilerOptions{
 		RateLimiter: controller.GetDefaultRateLimiter(),
