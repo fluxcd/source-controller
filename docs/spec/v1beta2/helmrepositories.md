@@ -361,6 +361,11 @@ e.g. `10m0s` to fetch the HelmRepository index YAML every 10 minutes.
 If the `.metadata.generation` of a resource changes (due to e.g. applying a
 change to the spec), this is handled instantly outside the interval window.
 
+**Note:** The controller can be configured to apply a jitter to the interval in
+order to distribute the load more evenly when multiple HelmRepository objects
+are set up with the same interval. For more information, please refer to the
+[source-controller configuration options](https://fluxcd.io/flux/components/source/options/).
+
 ### URL
 
 `.spec.url` is a required field that depending on the [type of the HelmRepository object](#type)
