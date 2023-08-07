@@ -44,12 +44,13 @@ func TestGetClientOpts(t *testing.T) {
 	}
 
 	tests := []struct {
-		name       string
-		certSecret *corev1.Secret
-		authSecret *corev1.Secret
-		afterFunc  func(t *WithT, hcOpts *ClientOpts)
-		oci        bool
-		err        error
+		name           string
+		certSecret     *corev1.Secret
+		authSecret     *corev1.Secret
+		serviceAccount *corev1.ServiceAccount
+		afterFunc      func(t *WithT, hcOpts *ClientOpts)
+		oci            bool
+		err            error
 	}{
 		{
 			name: "HelmRepository with certSecretRef discards TLS config in secretRef",
@@ -117,6 +118,39 @@ func TestGetClientOpts(t *testing.T) {
 			},
 			oci: true,
 		},
+		{
+			name: "OCI HelmRepository with serviceaccount name",
+			serviceAccount: &corev1.ServiceAccount{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-sa",
+				},
+				ImagePullSecrets: []corev1.LocalObjectReference{
+					{
+						Name: "pull-secret",
+					},
+				},
+			},
+			authSecret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "pull-secret",
+				},
+				Type: corev1.SecretTypeDockerConfigJson,
+				Data: map[string][]byte{
+					corev1.DockerConfigJsonKey: []byte(`{"auths":{"ghcr.io":{"username":"user","password":"pass","auth":"dXNlcjpwYXNz"}}}`),
+				},
+			},
+			afterFunc: func(t *WithT, hcOpts *ClientOpts) {
+				repo, err := name.NewRepository("ghcr.io/dummy")
+				t.Expect(err).ToNot(HaveOccurred())
+				authenticator, err := hcOpts.Keychain.Resolve(repo)
+				t.Expect(err).ToNot(HaveOccurred())
+				config, err := authenticator.Authorization()
+				t.Expect(err).ToNot(HaveOccurred())
+				t.Expect(config.Username).To(Equal("user"))
+				t.Expect(config.Password).To(Equal("pass"))
+			},
+			oci: true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -146,6 +180,10 @@ func TestGetClientOpts(t *testing.T) {
 				helmRepo.Spec.CertSecretRef = &meta.LocalObjectReference{
 					Name: tt.certSecret.Name,
 				}
+			}
+			if tt.serviceAccount != nil {
+				clientBuilder.WithObjects(tt.serviceAccount.DeepCopy())
+				helmRepo.Spec.ServiceAccountName = tt.serviceAccount.Name
 			}
 			c := clientBuilder.Build()
 

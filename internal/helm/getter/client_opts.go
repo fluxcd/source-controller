@@ -26,6 +26,7 @@ import (
 
 	"github.com/fluxcd/pkg/oci"
 	"github.com/google/go-containerregistry/pkg/authn"
+	"github.com/google/go-containerregistry/pkg/authn/k8schain"
 	helmgetter "helm.sh/helm/v3/pkg/getter"
 	helmreg "helm.sh/helm/v3/pkg/registry"
 	corev1 "k8s.io/api/core/v1"
@@ -80,6 +81,39 @@ func GetClientOpts(ctx context.Context, c client.Client, obj *helmv1.HelmReposit
 
 	var authSecret *corev1.Secret
 	var deprecatedTLSConfig bool
+
+	if ociRepo {
+		if obj.Spec.ServiceAccountName != "" {
+			serviceAccount := corev1.ServiceAccount{}
+			// Lookup service account
+			if err := c.Get(ctx, types.NamespacedName{
+				Namespace: obj.GetNamespace(),
+				Name:      obj.Spec.ServiceAccountName,
+			}, &serviceAccount); err != nil {
+				return nil, fmt.Errorf("failed to get serviceaccout: %s", err)
+			}
+
+			if len(serviceAccount.ImagePullSecrets) > 0 {
+				imagePullSecrets := make([]corev1.Secret, len(serviceAccount.ImagePullSecrets))
+				for i, ips := range serviceAccount.ImagePullSecrets {
+					var saAuthSecret corev1.Secret
+					if err := c.Get(ctx, types.NamespacedName{
+						Namespace: obj.GetNamespace(),
+						Name:      ips.Name,
+					}, &saAuthSecret); err != nil {
+						return nil, fmt.Errorf("failed to get image pull secret '%s' for serviceaccount '%s': %w",
+							ips.Name, obj.Spec.ServiceAccountName, err)
+					}
+					imagePullSecrets[i] = saAuthSecret
+				}
+				hrOpts.Keychain, err = k8schain.NewFromPullSecrets(ctx, imagePullSecrets)
+				if err != nil {
+					return nil, fmt.Errorf("error constructing keychain from image pull secrets: %w", err)
+				}
+			}
+		}
+	}
+
 	if obj.Spec.SecretRef != nil {
 		authSecret, err = fetchSecret(ctx, c, obj.Spec.SecretRef.Name, obj.GetNamespace())
 		if err != nil {
@@ -107,9 +141,15 @@ func GetClientOpts(ctx context.Context, c client.Client, obj *helmv1.HelmReposit
 		}
 
 		if ociRepo {
-			hrOpts.Keychain, err = registry.LoginOptionFromSecret(url, *authSecret)
+			keychain, err := registry.LoginOptionFromSecret(url, *authSecret)
 			if err != nil {
 				return nil, fmt.Errorf("failed to configure login options: %w", err)
+			}
+
+			if hrOpts.Keychain != nil {
+				hrOpts.Keychain = authn.NewMultiKeychain(keychain, hrOpts.Keychain)
+			} else {
+				hrOpts.Keychain = keychain
 			}
 		}
 	} else if obj.Spec.Provider != helmv1.GenericOCIProvider && obj.Spec.Type == helmv1.HelmRepositoryTypeOCI && ociRepo {

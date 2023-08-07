@@ -104,6 +104,12 @@ type HelmRepositorySpec struct {
 	// +optional
 	Type string `json:"type,omitempty"`
 
+	// ServiceAccountName is the name of the Kubernetes ServiceAccount used to authenticate
+	// the OCI image pull if the service account has attached pull secrets. For more information:
+	// https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/#add-imagepullsecrets-to-a-service-account
+	// +optional
+	ServiceAccountName string `json:"serviceAccountName,omitempty"`
+
 	// Provider used for authentication, can be 'aws', 'azure', 'gcp' or 'generic'.
 	// This field is optional, and only taken into account if the .spec.type field is set to 'oci'.
 	// When not specified, defaults to 'generic'.
