@@ -161,7 +161,9 @@ Kubernetes meta/v1.Duration
 </em>
 </td>
 <td>
-<p>Interval at which to check the Endpoint for updates.</p>
+<p>Interval at which the Bucket Endpoint is checked for updates.
+This interval is approximate and may be subject to jitter to ensure
+efficient use of resources.</p>
 </td>
 </tr>
 <tr>
@@ -593,7 +595,9 @@ Kubernetes meta/v1.Duration
 </em>
 </td>
 <td>
-<p>Interval is the interval at which to check the Source for updates.</p>
+<p>Interval at which the HelmChart SourceRef is checked for updates.
+This interval is approximate and may be subject to jitter to ensure
+efficient use of resources.</p>
 </td>
 </tr>
 <tr>
@@ -840,7 +844,9 @@ Kubernetes meta/v1.Duration
 </em>
 </td>
 <td>
-<p>Interval at which to check the URL for updates.</p>
+<p>Interval at which the HelmRepository URL is checked for updates.
+This interval is approximate and may be subject to jitter to ensure
+efficient use of resources.</p>
 </td>
 </tr>
 <tr>
@@ -1126,7 +1132,9 @@ Kubernetes meta/v1.Duration
 </em>
 </td>
 <td>
-<p>The interval at which to check for image updates.</p>
+<p>Interval at which the OCIRepository URL is checked for updates.
+This interval is approximate and may be subject to jitter to ensure
+efficient use of resources.</p>
 </td>
 </tr>
 <tr>
@@ -1424,7 +1432,9 @@ Kubernetes meta/v1.Duration
 </em>
 </td>
 <td>
-<p>Interval at which to check the Endpoint for updates.</p>
+<p>Interval at which the Bucket Endpoint is checked for updates.
+This interval is approximate and may be subject to jitter to ensure
+efficient use of resources.</p>
 </td>
 </tr>
 <tr>
@@ -2214,7 +2224,9 @@ Kubernetes meta/v1.Duration
 </em>
 </td>
 <td>
-<p>Interval is the interval at which to check the Source for updates.</p>
+<p>Interval at which the HelmChart SourceRef is checked for updates.
+This interval is approximate and may be subject to jitter to ensure
+efficient use of resources.</p>
 </td>
 </tr>
 <tr>
@@ -2524,7 +2536,9 @@ Kubernetes meta/v1.Duration
 </em>
 </td>
 <td>
-<p>Interval at which to check the URL for updates.</p>
+<p>Interval at which the HelmRepository URL is checked for updates.
+This interval is approximate and may be subject to jitter to ensure
+efficient use of resources.</p>
 </td>
 </tr>
 <tr>
@@ -3013,7 +3027,9 @@ Kubernetes meta/v1.Duration
 </em>
 </td>
 <td>
-<p>The interval at which to check for image updates.</p>
+<p>Interval at which the OCIRepository URL is checked for updates.
+This interval is approximate and may be subject to jitter to ensure
+efficient use of resources.</p>
 </td>
 </tr>
 <tr>

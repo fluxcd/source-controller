@@ -724,7 +724,7 @@ Where the (base64 decoded) value of `.data.serviceaccount` looks like this:
 
 ### Interval
 
-`.spec.interval` is a required field that specifices the interval which the
+`.spec.interval` is a required field that specifies the interval which the
 object storage bucket must be consulted at.
 
 After successfully reconciling a Bucket object, the source-controller requeues
@@ -733,7 +733,12 @@ the object for inspection after the specified interval. The value must be in a
 e.g. `10m0s` to look at the object storage bucket every 10 minutes.
 
 If the `.metadata.generation` of a resource changes (due to e.g. the apply of a
-change to the spec), this is handled instantly outside of the interval window.
+change to the spec), this is handled instantly outside the interval window.
+
+**Note:** The controller can be configured to apply a jitter to the interval in
+order to distribute the load more evenly when multiple Bucket objects are set up
+with the same interval. For more information, please refer to the
+[source-controller configuration options](https://fluxcd.io/flux/components/source/options/).
 
 ### Endpoint
 

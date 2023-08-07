@@ -40,6 +40,7 @@ import (
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	conditionscheck "github.com/fluxcd/pkg/runtime/conditions/check"
+	"github.com/fluxcd/pkg/runtime/jitter"
 	"github.com/fluxcd/pkg/runtime/patch"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
@@ -1368,7 +1369,9 @@ func TestBucketReconciler_statusConditions(t *testing.T) {
 				summarize.WithReconcileResult(recResult),
 				summarize.WithReconcileError(retErr),
 				summarize.WithIgnoreNotFound(),
-				summarize.WithResultBuilder(sreconcile.AlwaysRequeueResultBuilder{RequeueAfter: obj.GetRequeueAfter()}),
+				summarize.WithResultBuilder(sreconcile.AlwaysRequeueResultBuilder{
+					RequeueAfter: jitter.JitteredIntervalDuration(obj.GetRequeueAfter()),
+				}),
 				summarize.WithPatchFieldOwner("source-controller"),
 			}
 			_, retErr = summarizeHelper.SummarizeAndPatch(ctx, obj, summarizeOpts...)

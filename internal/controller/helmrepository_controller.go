@@ -41,6 +41,7 @@ import (
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	helper "github.com/fluxcd/pkg/runtime/controller"
+	"github.com/fluxcd/pkg/runtime/jitter"
 	"github.com/fluxcd/pkg/runtime/patch"
 	"github.com/fluxcd/pkg/runtime/predicates"
 	rreconcile "github.com/fluxcd/pkg/runtime/reconcile"
@@ -182,7 +183,9 @@ func (r *HelmRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 				summarize.RecordContextualError,
 				summarize.RecordReconcileReq,
 			),
-			summarize.WithResultBuilder(sreconcile.AlwaysRequeueResultBuilder{RequeueAfter: obj.GetRequeueAfter()}),
+			summarize.WithResultBuilder(sreconcile.AlwaysRequeueResultBuilder{
+				RequeueAfter: jitter.JitteredIntervalDuration(obj.GetRequeueAfter()),
+			}),
 			summarize.WithPatchFieldOwner(r.ControllerName),
 		}
 		result, retErr = summarizeHelper.SummarizeAndPatch(ctx, obj, summarizeOpts...)

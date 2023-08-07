@@ -108,7 +108,9 @@ Kubernetes meta/v1.Duration
 </em>
 </td>
 <td>
-<p>Interval at which to check the GitRepository for updates.</p>
+<p>Interval at which the GitRepository URL is checked for updates.
+This interval is approximate and may be subject to jitter to ensure
+efficient use of resources.</p>
 </td>
 </tr>
 <tr>
@@ -559,7 +561,9 @@ Kubernetes meta/v1.Duration
 </em>
 </td>
 <td>
-<p>Interval at which to check the GitRepository for updates.</p>
+<p>Interval at which the GitRepository URL is checked for updates.
+This interval is approximate and may be subject to jitter to ensure
+efficient use of resources.</p>
 </td>
 </tr>
 <tr>

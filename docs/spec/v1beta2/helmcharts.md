@@ -45,7 +45,7 @@ In the above example:
 
 You can run this example by saving the manifest into `helmchart.yaml`.
 
-**NOTE:** HelmChart is usually used by the helm-controller. Based on the
+**Note:** HelmChart is usually used by the helm-controller. Based on the
 HelmRelease configuration, an associated HelmChart is created by the 
 helm-controller.
 
@@ -211,7 +211,7 @@ changes in a `HelmRepository`. `Revision` is used for creating a new artifact
 when the source revision changes in a `GitRepository` or a `Bucket` Source. It
 defaults to `ChartVersion`.
 
-**NOTE:** If the reconcile strategy is `ChartVersion` and the source reference
+**Note:** If the reconcile strategy is `ChartVersion` and the source reference
 is a `GitRepository` or a `Bucket`, no new chart artifact is produced on updates
 to the source unless the `version` in `Chart.yaml` is incremented. To produce
 new chart artifact on change in source revision, set the reconcile strategy to
@@ -232,6 +232,11 @@ e.g. `10m0s` to look at the source for updates every 10 minutes.
 
 If the `.metadata.generation` of a resource changes (due to e.g. applying a
 change to the spec), this is handled instantly outside the interval window.
+
+**Note:** The controller can be configured to apply a jitter to the interval in
+order to distribute the load more evenly when multiple HelmChart objects are set
+up with the same interval. For more information, please refer to the
+[source-controller configuration options](https://fluxcd.io/flux/components/source/options/).
 
 ### Suspend
 

@@ -42,6 +42,7 @@ import (
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	helper "github.com/fluxcd/pkg/runtime/controller"
+	"github.com/fluxcd/pkg/runtime/jitter"
 	"github.com/fluxcd/pkg/runtime/patch"
 	"github.com/fluxcd/pkg/runtime/predicates"
 	rreconcile "github.com/fluxcd/pkg/runtime/reconcile"
@@ -260,6 +261,11 @@ func (r *HelmRepositoryOCIReconciler) reconcile(ctx context.Context, sp *patch.S
 		// Became not ready from ready.
 		if conditions.IsReady(oldObj) && !conditions.IsReady(obj) {
 			r.eventLogf(ctx, obj, corev1.EventTypeWarning, ready.Reason, ready.Message)
+		}
+
+		// Apply jitter.
+		if result.RequeueAfter == obj.GetRequeueAfter() {
+			result.RequeueAfter = jitter.JitteredIntervalDuration(result.RequeueAfter)
 		}
 	}()
 
