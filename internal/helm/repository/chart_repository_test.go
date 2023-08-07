@@ -39,9 +39,10 @@ import (
 var now = time.Now()
 
 const (
-	testFile            = "../testdata/local-index.yaml"
-	chartmuseumTestFile = "../testdata/chartmuseum-index.yaml"
-	unorderedTestFile   = "../testdata/local-index-unordered.yaml"
+	testFile                = "../testdata/local-index.yaml"
+	chartmuseumTestFile     = "../testdata/chartmuseum-index.yaml"
+	chartmuseumJSONTestFile = "../testdata/chartmuseum-index.json"
+	unorderedTestFile       = "../testdata/local-index-unordered.yaml"
 )
 
 // mockGetter is a simple mocking getter.Getter implementation, returning
@@ -80,6 +81,10 @@ func TestIndexFromFile(t *testing.T) {
 		{
 			name:     "chartmuseum index file",
 			filename: chartmuseumTestFile,
+		},
+		{
+			name:     "chartmuseum json index file",
+			filename: chartmuseumJSONTestFile,
 		},
 		{
 			name:     "error if index size exceeds max size",
@@ -405,6 +410,25 @@ func TestChartRepository_CacheIndex(t *testing.T) {
 	g.Expect(b).To(Equal(mg.Response))
 
 	g.Expect(r.digests).To(BeEmpty())
+}
+
+func TestChartRepository_ToJSON(t *testing.T) {
+	g := NewWithT(t)
+
+	r := newChartRepository()
+	r.Path = chartmuseumTestFile
+
+	_, err := r.ToJSON()
+	g.Expect(err).To(HaveOccurred())
+
+	g.Expect(r.LoadFromPath()).To(Succeed())
+	b, err := r.ToJSON()
+	g.Expect(err).ToNot(HaveOccurred())
+
+	jsonBytes, err := os.ReadFile(chartmuseumJSONTestFile)
+	jsonBytes = bytes.TrimRight(jsonBytes, "\n")
+	g.Expect(err).To(Not(HaveOccurred()))
+	g.Expect(string(b)).To(Equal(string(jsonBytes)))
 }
 
 func TestChartRepository_DownloadIndex(t *testing.T) {

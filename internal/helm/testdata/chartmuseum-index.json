@@ -1,0 +1,82 @@
+{
+  "serverInfo": {
+    "contextPath": "/v1/helm"
+  },
+  "apiVersion": "v1",
+  "generated": "0001-01-01T00:00:00Z",
+  "entries": {
+    "alpine": [
+      {
+        "name": "alpine",
+        "home": "https://github.com/something",
+        "version": "1.0.0",
+        "description": "string",
+        "keywords": [
+          "linux",
+          "alpine",
+          "small",
+          "sumtin"
+        ],
+        "apiVersion": "v1",
+        "urls": [
+          "https://kubernetes-charts.storage.googleapis.com/alpine-1.0.0.tgz",
+          "http://storage2.googleapis.com/kubernetes-charts/alpine-1.0.0.tgz"
+        ],
+        "created": "0001-01-01T00:00:00Z",
+        "digest": "sha256:1234567890abcdef"
+      }
+    ],
+    "chartWithNoURL": [
+      {
+        "name": "chartWithNoURL",
+        "home": "https://github.com/something",
+        "version": "1.0.0",
+        "description": "string",
+        "keywords": [
+          "small",
+          "sumtin"
+        ],
+        "apiVersion": "v1",
+        "urls": null,
+        "created": "0001-01-01T00:00:00Z",
+        "digest": "sha256:1234567890abcdef"
+      }
+    ],
+    "nginx": [
+      {
+        "name": "nginx",
+        "home": "https://github.com/something/else",
+        "version": "0.2.0",
+        "description": "string",
+        "keywords": [
+          "popular",
+          "web server",
+          "proxy"
+        ],
+        "apiVersion": "v1",
+        "urls": [
+          "https://kubernetes-charts.storage.googleapis.com/nginx-0.2.0.tgz"
+        ],
+        "created": "0001-01-01T00:00:00Z",
+        "digest": "sha256:1234567890abcdef"
+      },
+      {
+        "name": "nginx",
+        "home": "https://github.com/something",
+        "version": "0.1.0",
+        "description": "string",
+        "keywords": [
+          "popular",
+          "web server",
+          "proxy"
+        ],
+        "apiVersion": "v1",
+        "urls": [
+          "https://kubernetes-charts.storage.googleapis.com/nginx-0.1.0.tgz"
+        ],
+        "created": "0001-01-01T00:00:00Z",
+        "digest": "sha256:1234567890abcdef"
+      }
+    ]
+  }
+}

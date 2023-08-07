@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 	"crypto/tls"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -417,7 +418,7 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 		server           options
 		url              string
 		secret           *corev1.Secret
-		beforeFunc       func(t *WithT, obj *helmv1.HelmRepository, rev, dig digest.Digest)
+		beforeFunc       func(t *WithT, obj *helmv1.HelmRepository, rev digest.Digest)
 		afterFunc        func(t *WithT, obj *helmv1.HelmRepository, artifact sourcev1.Artifact, chartRepo *repository.ChartRepository)
 		want             sreconcile.Result
 		wantErr          bool
@@ -436,7 +437,7 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 					"caFile": tlsCA,
 				},
 			},
-			beforeFunc: func(t *WithT, obj *helmv1.HelmRepository, rev, dig digest.Digest) {
+			beforeFunc: func(t *WithT, obj *helmv1.HelmRepository, rev digest.Digest) {
 				obj.Spec.CertSecretRef = &meta.LocalObjectReference{Name: "ca-file"}
 			},
 			assertConditions: []metav1.Condition{
@@ -474,7 +475,7 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 					"password": []byte("1234"),
 				},
 			},
-			beforeFunc: func(t *WithT, obj *helmv1.HelmRepository, rev, dig digest.Digest) {
+			beforeFunc: func(t *WithT, obj *helmv1.HelmRepository, rev digest.Digest) {
 				obj.Spec.SecretRef = &meta.LocalObjectReference{Name: "basic-auth"}
 			},
 			want: sreconcile.ResultSuccess,
@@ -504,7 +505,7 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 					"caFile": []byte("invalid"),
 				},
 			},
-			beforeFunc: func(t *WithT, obj *helmv1.HelmRepository, rev, dig digest.Digest) {
+			beforeFunc: func(t *WithT, obj *helmv1.HelmRepository, rev digest.Digest) {
 				obj.Spec.CertSecretRef = &meta.LocalObjectReference{Name: "invalid-ca"}
 				conditions.MarkReconciling(obj, meta.ProgressingReason, "foo")
 				conditions.MarkUnknown(obj, meta.ReadyCondition, "foo", "bar")
@@ -525,7 +526,7 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 		{
 			name:     "Invalid URL makes FetchFailed=True and returns stalling error",
 			protocol: "http",
-			beforeFunc: func(t *WithT, obj *helmv1.HelmRepository, rev, dig digest.Digest) {
+			beforeFunc: func(t *WithT, obj *helmv1.HelmRepository, rev digest.Digest) {
 				obj.Spec.URL = strings.ReplaceAll(obj.Spec.URL, "http://", "")
 				conditions.MarkReconciling(obj, meta.ProgressingReason, "foo")
 				conditions.MarkUnknown(obj, meta.ReadyCondition, "foo", "bar")
@@ -547,7 +548,7 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 		{
 			name:     "Unsupported scheme makes FetchFailed=True and returns stalling error",
 			protocol: "http",
-			beforeFunc: func(t *WithT, obj *helmv1.HelmRepository, rev, dig digest.Digest) {
+			beforeFunc: func(t *WithT, obj *helmv1.HelmRepository, rev digest.Digest) {
 				obj.Spec.URL = strings.ReplaceAll(obj.Spec.URL, "http://", "ftp://")
 				conditions.MarkReconciling(obj, meta.ProgressingReason, "foo")
 				conditions.MarkUnknown(obj, meta.ReadyCondition, "foo", "bar")
@@ -569,7 +570,7 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 		{
 			name:     "Missing secret returns FetchFailed=True and returns error",
 			protocol: "http",
-			beforeFunc: func(t *WithT, obj *helmv1.HelmRepository, rev, dig digest.Digest) {
+			beforeFunc: func(t *WithT, obj *helmv1.HelmRepository, rev digest.Digest) {
 				obj.Spec.SecretRef = &meta.LocalObjectReference{Name: "non-existing"}
 				conditions.MarkReconciling(obj, meta.ProgressingReason, "foo")
 				conditions.MarkUnknown(obj, meta.ReadyCondition, "foo", "bar")
@@ -598,7 +599,7 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 					"username": []byte("git"),
 				},
 			},
-			beforeFunc: func(t *WithT, obj *helmv1.HelmRepository, rev, dig digest.Digest) {
+			beforeFunc: func(t *WithT, obj *helmv1.HelmRepository, rev digest.Digest) {
 				obj.Spec.SecretRef = &meta.LocalObjectReference{Name: "malformed-basic-auth"}
 				conditions.MarkReconciling(obj, meta.ProgressingReason, "foo")
 				conditions.MarkUnknown(obj, meta.ReadyCondition, "foo", "bar")
@@ -617,12 +618,11 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 			},
 		},
 		{
-			name:     "Stored index with same digest and revision",
+			name:     "Stored index with same revision",
 			protocol: "http",
-			beforeFunc: func(t *WithT, obj *helmv1.HelmRepository, rev, dig digest.Digest) {
+			beforeFunc: func(t *WithT, obj *helmv1.HelmRepository, rev digest.Digest) {
 				obj.Status.Artifact = &sourcev1.Artifact{
 					Revision: rev.String(),
-					Digest:   dig.String(),
 				}
 
 				conditions.MarkReconciling(obj, meta.ProgressingReason, "foo")
@@ -642,41 +642,15 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 			want: sreconcile.ResultSuccess,
 		},
 		{
-			name:     "Stored index with different digest and same revision",
+			name:     "Stored index with different revision",
 			protocol: "http",
-			beforeFunc: func(t *WithT, obj *helmv1.HelmRepository, rev, dig digest.Digest) {
+			beforeFunc: func(t *WithT, obj *helmv1.HelmRepository, rev digest.Digest) {
 				obj.Status.Artifact = &sourcev1.Artifact{
-					Revision: rev.String(),
-					Digest:   "sha256:80bb3dd67c63095d985850459834ea727603727a370079de90d221191d375a86",
+					Revision: "80bb3dd67c63095d985850459834ea727603727a370079de90d221191d375a86",
 				}
-
 				conditions.MarkReconciling(obj, meta.ProgressingReason, "foo")
 				conditions.MarkUnknown(obj, meta.ReadyCondition, "foo", "bar")
 				conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, "foo", "bar")
-			},
-			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "foo"),
-				*conditions.UnknownCondition(meta.ReadyCondition, "foo", "bar"),
-			},
-			afterFunc: func(t *WithT, obj *helmv1.HelmRepository, artifact sourcev1.Artifact, chartRepo *repository.ChartRepository) {
-				t.Expect(chartRepo.Path).ToNot(BeEmpty())
-				t.Expect(chartRepo.Index).ToNot(BeNil())
-
-				t.Expect(artifact.Revision).To(Equal(obj.Status.Artifact.Revision))
-				t.Expect(artifact.Digest).ToNot(Equal(obj.Status.Artifact.Digest))
-			},
-			want: sreconcile.ResultSuccess,
-		},
-		{
-			name:     "Stored index with different revision and digest",
-			protocol: "http",
-			beforeFunc: func(t *WithT, obj *helmv1.HelmRepository, rev, dig digest.Digest) {
-				obj.Status.Artifact = &sourcev1.Artifact{
-					Revision: "80bb3dd67c63095d985850459834ea727603727a370079de90d221191d375a86",
-					Digest:   "sha256:80bb3dd67c63095d985850459834ea727603727a370079de90d221191d375a86",
-				}
-				conditions.MarkReconciling(obj, meta.ProgressingReason, "foo")
-				conditions.MarkUnknown(obj, meta.ReadyCondition, "foo", "bar")
 			},
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new index revision"),
@@ -689,14 +663,13 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 
 				t.Expect(artifact.Path).To(Not(BeEmpty()))
 				t.Expect(artifact.Revision).ToNot(Equal(obj.Status.Artifact.Revision))
-				t.Expect(artifact.Digest).ToNot(Equal(obj.Status.Artifact.Digest))
 			},
 			want: sreconcile.ResultSuccess,
 		},
 		{
 			name:     "Existing artifact makes ArtifactOutdated=True",
 			protocol: "http",
-			beforeFunc: func(t *WithT, obj *helmv1.HelmRepository, rev, dig digest.Digest) {
+			beforeFunc: func(t *WithT, obj *helmv1.HelmRepository, rev digest.Digest) {
 				obj.Status.Artifact = &sourcev1.Artifact{
 					Path:     "some-path",
 					Revision: "some-rev",
@@ -806,14 +779,9 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 			}
 			g.Expect(err).ToNot(HaveOccurred())
 
-			// NOTE: digest will be empty in beforeFunc for invalid repo
-			// configurations as the client can't get the repo.
-			var rev, dig digest.Digest
+			var rev digest.Digest
 			if validSecret {
 				g.Expect(newChartRepo.CacheIndex()).To(Succeed())
-				dig = newChartRepo.Digest(intdigest.Canonical)
-
-				g.Expect(newChartRepo.LoadFromPath()).To(Succeed())
 				rev = newChartRepo.Digest(intdigest.Canonical)
 			}
 
@@ -825,7 +793,7 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 				patchOptions:  getPatchOptions(helmRepositoryReadyCondition.Owned, "sc"),
 			}
 			if tt.beforeFunc != nil {
-				tt.beforeFunc(g, obj, rev, dig)
+				tt.beforeFunc(g, obj, rev)
 			}
 
 			g.Expect(r.Client.Create(context.TODO(), obj)).ToNot(HaveOccurred())
@@ -866,11 +834,17 @@ func TestHelmRepositoryReconciler_reconcileArtifact(t *testing.T) {
 		assertConditions []metav1.Condition
 	}{
 		{
-			name: "Archiving artifact to storage makes ArtifactInStorage=True",
+			name: "Archiving artifact to storage makes ArtifactInStorage=True and artifact is stored as JSON",
 			beforeFunc: func(t *WithT, obj *helmv1.HelmRepository, artifact sourcev1.Artifact, index *repository.ChartRepository) {
 				obj.Spec.Interval = metav1.Duration{Duration: interval}
 			},
 			want: sreconcile.ResultSuccess,
+			afterFunc: func(t *WithT, obj *helmv1.HelmRepository, cache *cache.Cache) {
+				localPath := testStorage.LocalPath(*obj.GetArtifact())
+				b, err := os.ReadFile(localPath)
+				t.Expect(err).To(Not(HaveOccurred()))
+				t.Expect(json.Valid(b)).To(BeTrue())
+			},
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(sourcev1.ArtifactInStorageCondition, meta.SucceededReason, "stored artifact: revision 'existing'"),
 			},
@@ -970,17 +944,9 @@ func TestHelmRepositoryReconciler_reconcileArtifact(t *testing.T) {
 				},
 			}
 
-			tmpDir := t.TempDir()
-
-			// Create an empty cache file.
-			cachePath := filepath.Join(tmpDir, "index.yaml")
-			cacheFile, err := os.Create(cachePath)
-			g.Expect(err).ToNot(HaveOccurred())
-			g.Expect(cacheFile.Close()).ToNot(HaveOccurred())
-
 			chartRepo, err := repository.NewChartRepository(obj.Spec.URL, "", testGetters, nil)
 			g.Expect(err).ToNot(HaveOccurred())
-			chartRepo.Path = cachePath
+			chartRepo.Index = &repo.IndexFile{}
 
 			artifact := testStorage.NewArtifactFor(obj.Kind, obj, "existing", "foo.tar.gz")
 			// Digest of the index file calculated by the ChartRepository.

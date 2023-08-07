@@ -20,6 +20,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -76,7 +77,7 @@ func IndexFromBytes(b []byte) (*repo.IndexFile, error) {
 	}
 
 	i := &repo.IndexFile{}
-	if err := yaml.UnmarshalStrict(b, i); err != nil {
+	if err := jsonOrYamlUnmarshal(b, i); err != nil {
 		return nil, err
 	}
 
@@ -401,6 +402,15 @@ func (r *ChartRepository) Digest(algorithm digest.Algorithm) digest.Digest {
 	return r.digests[algorithm]
 }
 
+// ToJSON returns the index formatted as JSON.
+func (r *ChartRepository) ToJSON() ([]byte, error) {
+	if !r.HasIndex() {
+		return nil, fmt.Errorf("index not loaded yet")
+	}
+
+	return json.MarshalIndent(r.Index, "", "  ")
+}
+
 // HasIndex returns true if the Index is not nil.
 func (r *ChartRepository) HasIndex() bool {
 	r.RLock()
@@ -458,4 +468,21 @@ func (r *ChartRepository) invalidate() {
 func (r *ChartRepository) VerifyChart(_ context.Context, _ *repo.ChartVersion) error {
 	// this is a no-op because this is not implemented yet.
 	return fmt.Errorf("not implemented")
+}
+
+// jsonOrYamlUnmarshal unmarshals the given byte slice containing JSON or YAML
+// into the provided interface.
+//
+// It automatically detects whether the data is in JSON or YAML format by
+// checking its validity as JSON. If the data is valid JSON, it will use the
+// `encoding/json` package to unmarshal it. Otherwise, it will use the
+// `sigs.k8s.io/yaml` package to unmarshal the YAML data.
+//
+// Can potentially be replaced when Helm PR for JSON support has been merged.
+// xref: https://github.com/helm/helm/pull/12245
+func jsonOrYamlUnmarshal(b []byte, i interface{}) error {
+	if json.Valid(b) {
+		return json.Unmarshal(b, i)
+	}
+	return yaml.UnmarshalStrict(b, i)
 }
