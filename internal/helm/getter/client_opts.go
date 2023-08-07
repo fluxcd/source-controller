@@ -84,32 +84,9 @@ func GetClientOpts(ctx context.Context, c client.Client, obj *helmv1.HelmReposit
 
 	if ociRepo {
 		if obj.Spec.ServiceAccountName != "" {
-			serviceAccount := corev1.ServiceAccount{}
-			// Lookup service account
-			if err := c.Get(ctx, types.NamespacedName{
-				Namespace: obj.GetNamespace(),
-				Name:      obj.Spec.ServiceAccountName,
-			}, &serviceAccount); err != nil {
-				return nil, fmt.Errorf("failed to get serviceaccout: %s", err)
-			}
-
-			if len(serviceAccount.ImagePullSecrets) > 0 {
-				imagePullSecrets := make([]corev1.Secret, len(serviceAccount.ImagePullSecrets))
-				for i, ips := range serviceAccount.ImagePullSecrets {
-					var saAuthSecret corev1.Secret
-					if err := c.Get(ctx, types.NamespacedName{
-						Namespace: obj.GetNamespace(),
-						Name:      ips.Name,
-					}, &saAuthSecret); err != nil {
-						return nil, fmt.Errorf("failed to get image pull secret '%s' for serviceaccount '%s': %w",
-							ips.Name, obj.Spec.ServiceAccountName, err)
-					}
-					imagePullSecrets[i] = saAuthSecret
-				}
-				hrOpts.Keychain, err = k8schain.NewFromPullSecrets(ctx, imagePullSecrets)
-				if err != nil {
-					return nil, fmt.Errorf("error constructing keychain from image pull secrets: %w", err)
-				}
+			hrOpts.Keychain, err = getKeychainFromSAImagePullSecrets(ctx, c, obj.GetNamespace(), obj.Spec.ServiceAccountName)
+			if err != nil {
+				return nil, fmt.Errorf("failed to get keychain from service account: %w", err)
 			}
 		}
 	}
@@ -233,4 +210,36 @@ func TLSClientConfigFromSecret(secret corev1.Secret, repositoryUrl string) (*tls
 	tlsConf.ServerName = u.Hostname()
 
 	return tlsConf, nil
+}
+
+// getKeychainFromSAImagePullSecrets returns an authn.Keychain gotten from the image pull secrets attached to a
+// service account.
+func getKeychainFromSAImagePullSecrets(ctx context.Context, c client.Client, ns, saName string) (authn.Keychain, error) {
+	serviceAccount := corev1.ServiceAccount{}
+	// Lookup service account
+	if err := c.Get(ctx, types.NamespacedName{
+		Namespace: ns,
+		Name:      saName,
+	}, &serviceAccount); err != nil {
+		return nil, fmt.Errorf("failed to get serviceaccout: %s", err)
+	}
+
+	if len(serviceAccount.ImagePullSecrets) > 0 {
+		imagePullSecrets := make([]corev1.Secret, len(serviceAccount.ImagePullSecrets))
+		for i, ips := range serviceAccount.ImagePullSecrets {
+			var saAuthSecret corev1.Secret
+			if err := c.Get(ctx, types.NamespacedName{
+				Namespace: ns,
+				Name:      ips.Name,
+			}, &saAuthSecret); err != nil {
+				return nil, fmt.Errorf("failed to get image pull secret '%s' for serviceaccount '%s': %w",
+					ips.Name, saName, err)
+			}
+			imagePullSecrets[i] = saAuthSecret
+		}
+
+		return k8schain.NewFromPullSecrets(ctx, imagePullSecrets)
+	}
+
+	return nil, nil
 }
