@@ -811,10 +811,20 @@ github.com/fluxcd/pkg/apis/meta.LocalObjectReference
 </td>
 <td>
 <em>(Optional)</em>
-<p>CertSecretRef specifies the Secret containing the TLS authentication
-data. The secret must contain a &lsquo;certFile&rsquo; and &lsquo;keyFile&rsquo;, and/or &lsquo;caFile&rsquo;
-fields. It takes precedence over the values specified in the Secret
-referred to by <code>.spec.secretRef</code>.</p>
+<p>CertSecretRef can be given the name of a Secret containing
+either or both of</p>
+<ul>
+<li>a PEM-encoded client certificate (<code>tls.crt</code>) and private
+key (<code>tls.key</code>);</li>
+<li>a PEM-encoded CA certificate (<code>ca.crt</code>)</li>
+</ul>
+<p>and whichever are supplied, will be used for connecting to the
+registry. The client cert and key are useful if you are
+authenticating with a certificate; the CA cert is useful if
+you are using a self-signed server certificate. The Secret must
+be of type <code>Opaque</code> or <code>kubernetes.io/tls</code>.</p>
+<p>It takes precedence over the values specified in the Secret referred
+to by <code>.spec.secretRef</code>.</p>
 </td>
 </tr>
 <tr>
@@ -2503,10 +2513,20 @@ github.com/fluxcd/pkg/apis/meta.LocalObjectReference
 </td>
 <td>
 <em>(Optional)</em>
-<p>CertSecretRef specifies the Secret containing the TLS authentication
-data. The secret must contain a &lsquo;certFile&rsquo; and &lsquo;keyFile&rsquo;, and/or &lsquo;caFile&rsquo;
-fields. It takes precedence over the values specified in the Secret
-referred to by <code>.spec.secretRef</code>.</p>
+<p>CertSecretRef can be given the name of a Secret containing
+either or both of</p>
+<ul>
+<li>a PEM-encoded client certificate (<code>tls.crt</code>) and private
+key (<code>tls.key</code>);</li>
+<li>a PEM-encoded CA certificate (<code>ca.crt</code>)</li>
+</ul>
+<p>and whichever are supplied, will be used for connecting to the
+registry. The client cert and key are useful if you are
+authenticating with a certificate; the CA cert is useful if
+you are using a self-signed server certificate. The Secret must
+be of type <code>Opaque</code> or <code>kubernetes.io/tls</code>.</p>
+<p>It takes precedence over the values specified in the Secret referred
+to by <code>.spec.secretRef</code>.</p>
 </td>
 </tr>
 <tr>

@@ -2248,7 +2248,7 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_authStrategy(t *testing.T) {
 		registryOpts     registryOptions
 		secretOpts       secretOptions
 		secret           *corev1.Secret
-		certsecret       *corev1.Secret
+		certSecret       *corev1.Secret
 		insecure         bool
 		provider         string
 		providerImg      string
@@ -2363,16 +2363,16 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_authStrategy(t *testing.T) {
 				Type: corev1.SecretTypeDockerConfigJson,
 				Data: map[string][]byte{},
 			},
-			certsecret: &corev1.Secret{
+			certSecret: &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "certs-secretref",
 				},
 				Data: map[string][]byte{
-					"caFile": []byte("invalid caFile"),
+					"ca.crt": []byte("invalid caFile"),
 				},
 			},
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.FetchFailedCondition, "Unknown", "unknown build error: failed to construct Helm client's TLS config: cannot append certificate into certificate pool: invalid caFile"),
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, "Unknown", "unknown build error: failed to construct Helm client's TLS config: cannot append certificate into certificate pool: invalid CA certificate"),
 			},
 		},
 		{
@@ -2393,14 +2393,14 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_authStrategy(t *testing.T) {
 				Type: corev1.SecretTypeDockerConfigJson,
 				Data: map[string][]byte{},
 			},
-			certsecret: &corev1.Secret{
+			certSecret: &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "certs-secretref",
 				},
 				Data: map[string][]byte{
-					"caFile":   tlsCA,
-					"certFile": clientPublicKey,
-					"keyFile":  clientPrivateKey,
+					"ca.crt":  tlsCA,
+					"tls.crt": clientPublicKey,
+					"tls.key": clientPrivateKey,
 				},
 			},
 			assertConditions: []metav1.Condition{
@@ -2472,11 +2472,11 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_authStrategy(t *testing.T) {
 				clientBuilder.WithObjects(tt.secret)
 			}
 
-			if tt.certsecret != nil {
+			if tt.certSecret != nil {
 				repo.Spec.CertSecretRef = &meta.LocalObjectReference{
-					Name: tt.certsecret.Name,
+					Name: tt.certSecret.Name,
 				}
-				clientBuilder.WithObjects(tt.certsecret)
+				clientBuilder.WithObjects(tt.certSecret)
 			}
 
 			clientBuilder.WithObjects(repo)

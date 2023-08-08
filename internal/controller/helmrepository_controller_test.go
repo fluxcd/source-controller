@@ -56,6 +56,7 @@ import (
 	"github.com/fluxcd/source-controller/internal/helm/repository"
 	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
 	"github.com/fluxcd/source-controller/internal/reconcile/summarize"
+	stls "github.com/fluxcd/source-controller/internal/tls"
 )
 
 func TestHelmRepositoryReconciler_deleteBeforeFinalizer(t *testing.T) {
@@ -434,7 +435,7 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 					Name: "ca-file",
 				},
 				Data: map[string][]byte{
-					"caFile": tlsCA,
+					"ca.crt": tlsCA,
 				},
 			},
 			beforeFunc: func(t *WithT, obj *helmv1.HelmRepository, rev digest.Digest) {
@@ -443,6 +444,66 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new index revision"),
 				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new index revision"),
+			},
+		},
+		{
+			name:     "HTTPS with certSecretRef makes ArtifactOutdated=True",
+			protocol: "https",
+			server: options{
+				publicKey:  tlsPublicKey,
+				privateKey: tlsPrivateKey,
+				ca:         tlsCA,
+			},
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "ca-file",
+				},
+				Data: map[string][]byte{
+					"ca.crt": tlsCA,
+				},
+			},
+			beforeFunc: func(t *WithT, obj *helmv1.HelmRepository, rev digest.Digest) {
+				obj.Spec.CertSecretRef = &meta.LocalObjectReference{Name: "ca-file"}
+			},
+			want: sreconcile.ResultSuccess,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new index revision"),
+				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new index revision"),
+			},
+			afterFunc: func(t *WithT, obj *helmv1.HelmRepository, artifact sourcev1.Artifact, chartRepo *repository.ChartRepository) {
+				t.Expect(chartRepo.Path).ToNot(BeEmpty())
+				t.Expect(chartRepo.Index).ToNot(BeNil())
+				t.Expect(artifact.Revision).ToNot(BeEmpty())
+			},
+		},
+		{
+			name:     "HTTPS with secretRef and caFile key makes ArtifactOutdated=True",
+			protocol: "https",
+			server: options{
+				publicKey:  tlsPublicKey,
+				privateKey: tlsPrivateKey,
+				ca:         tlsCA,
+			},
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "ca-file",
+				},
+				Data: map[string][]byte{
+					"caFile": tlsCA,
+				},
+			},
+			beforeFunc: func(t *WithT, obj *helmv1.HelmRepository, rev digest.Digest) {
+				obj.Spec.SecretRef = &meta.LocalObjectReference{Name: "ca-file"}
+			},
+			want: sreconcile.ResultSuccess,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new index revision"),
+				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new index revision"),
+			},
+			afterFunc: func(t *WithT, obj *helmv1.HelmRepository, artifact sourcev1.Artifact, chartRepo *repository.ChartRepository) {
+				t.Expect(chartRepo.Path).ToNot(BeEmpty())
+				t.Expect(chartRepo.Index).ToNot(BeNil())
+				t.Expect(artifact.Revision).ToNot(BeEmpty())
 			},
 		},
 		{
@@ -502,7 +563,7 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 					Name: "invalid-ca",
 				},
 				Data: map[string][]byte{
-					"caFile": []byte("invalid"),
+					"ca.crt": []byte("invalid"),
 				},
 			},
 			beforeFunc: func(t *WithT, obj *helmv1.HelmRepository, rev digest.Digest) {
@@ -512,7 +573,7 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 			},
 			wantErr: true,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "cannot append certificate into certificate pool: invalid caFile"),
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "cannot append certificate into certificate pool: invalid CA certificate"),
 				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "foo"),
 				*conditions.UnknownCondition(meta.ReadyCondition, "foo", "bar"),
 			},
@@ -769,9 +830,15 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 				if tt.url != "" {
 					repoURL = tt.url
 				}
-				tlsConf, _, serr = getter.TLSClientConfigFromSecret(*secret, repoURL)
+				tlsConf, _, serr = stls.KubeTLSClientConfigFromSecret(*secret, repoURL)
 				if serr != nil {
 					validSecret = false
+				}
+				if tlsConf == nil {
+					tlsConf, _, serr = stls.TLSClientConfigFromSecret(*secret, repoURL)
+					if serr != nil {
+						validSecret = false
+					}
 				}
 				newChartRepo, err = repository.NewChartRepository(obj.Spec.URL, "", testGetters, tlsConf, getterOpts...)
 			} else {

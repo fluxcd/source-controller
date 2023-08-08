@@ -325,12 +325,12 @@ func TestHelmRepositoryOCIReconciler_authStrategy(t *testing.T) {
 					Name: "certs-secretref",
 				},
 				Data: map[string][]byte{
-					"caFile": []byte("invalid caFile"),
+					"ca.crt": []byte("invalid caFile"),
 				},
 			},
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingWithRetryReason, "processing object: new generation 0 -> 1"),
-				*conditions.FalseCondition(meta.ReadyCondition, sourcev1.AuthenticationFailedReason, "cannot append certificate into certificate pool: invalid caFile"),
+				*conditions.FalseCondition(meta.ReadyCondition, sourcev1.AuthenticationFailedReason, "cannot append certificate into certificate pool: invalid CA certificate"),
 			},
 		},
 		{
@@ -356,9 +356,9 @@ func TestHelmRepositoryOCIReconciler_authStrategy(t *testing.T) {
 					Name: "certs-secretref",
 				},
 				Data: map[string][]byte{
-					"caFile":   tlsCA,
-					"certFile": clientPublicKey,
-					"keyFile":  clientPrivateKey,
+					"ca.crt":  tlsCA,
+					"tls.crt": clientPublicKey,
+					"tls.key": clientPrivateKey,
 				},
 			},
 			assertConditions: []metav1.Condition{
