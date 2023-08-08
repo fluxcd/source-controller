@@ -161,8 +161,9 @@ data:
 #### HTTPS Certificate Authority
 
 To provide a Certificate Authority to trust while connecting with a Git
-repository over HTTPS, the referenced Secret can contain a `.data.caFile`
-value.
+repository over HTTPS, the referenced Secret's `.data` can contain a `ca.crt`
+or `caFile` key. `ca.crt` takes precedence over `caFile`, i.e. if both keys 
+are present, the value of `ca.crt` will be taken into consideration.
 
 ```yaml
 ---
@@ -173,7 +174,7 @@ metadata:
   namespace: default
 type: Opaque
 data:
-  caFile: <BASE64>
+  ca.crt: <BASE64>
 ```
 
 #### SSH authentication
