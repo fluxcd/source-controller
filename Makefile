@@ -71,6 +71,7 @@ test: install-envtest test-api ## Run all tests
 	HTTPS_PROXY="" HTTP_PROXY="" \
 	KUBEBUILDER_ASSETS=$(KUBEBUILDER_ASSETS) \
 	GIT_CONFIG_GLOBAL=/dev/null \
+	GIT_CONFIG_NOSYSTEM=true \
 	go test $(GO_STATIC_FLAGS) \
 	  ./... \
 	  $(GO_TEST_ARGS) \
