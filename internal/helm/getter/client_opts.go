@@ -24,7 +24,6 @@ import (
 	"fmt"
 	"net/url"
 
-	"github.com/fluxcd/pkg/oci"
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/authn/k8schain"
 	helmgetter "helm.sh/helm/v3/pkg/getter"
@@ -33,6 +32,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	"github.com/fluxcd/pkg/oci"
 	helmv1 "github.com/fluxcd/source-controller/api/v1beta2"
 	"github.com/fluxcd/source-controller/internal/helm/registry"
 	soci "github.com/fluxcd/source-controller/internal/oci"
@@ -82,15 +82,6 @@ func GetClientOpts(ctx context.Context, c client.Client, obj *helmv1.HelmReposit
 	var authSecret *corev1.Secret
 	var deprecatedTLSConfig bool
 
-	if ociRepo {
-		if obj.Spec.ServiceAccountName != "" {
-			hrOpts.Keychain, err = getKeychainFromSAImagePullSecrets(ctx, c, obj.GetNamespace(), obj.Spec.ServiceAccountName)
-			if err != nil {
-				return nil, fmt.Errorf("failed to get keychain from service account: %w", err)
-			}
-		}
-	}
-
 	if obj.Spec.SecretRef != nil {
 		authSecret, err = fetchSecret(ctx, c, obj.Spec.SecretRef.Name, obj.GetNamespace())
 		if err != nil {
@@ -118,28 +109,43 @@ func GetClientOpts(ctx context.Context, c client.Client, obj *helmv1.HelmReposit
 		}
 
 		if ociRepo {
-			keychain, err := registry.LoginOptionFromSecret(url, *authSecret)
+			hrOpts.Keychain, err = registry.LoginOptionFromSecret(url, *authSecret)
 			if err != nil {
 				return nil, fmt.Errorf("failed to configure login options: %w", err)
 			}
-
-			if hrOpts.Keychain != nil {
-				hrOpts.Keychain = authn.NewMultiKeychain(keychain, hrOpts.Keychain)
-			} else {
-				hrOpts.Keychain = keychain
-			}
-		}
-	} else if obj.Spec.Provider != helmv1.GenericOCIProvider && obj.Spec.Type == helmv1.HelmRepositoryTypeOCI && ociRepo {
-		authenticator, authErr := soci.OIDCAuth(ctx, obj.Spec.URL, obj.Spec.Provider)
-		if authErr != nil && !errors.Is(authErr, oci.ErrUnconfiguredProvider) {
-			return nil, fmt.Errorf("failed to get credential from '%s': %w", obj.Spec.Provider, authErr)
-		}
-		if authenticator != nil {
-			hrOpts.Authenticator = authenticator
 		}
 	}
 
 	if ociRepo {
+		if obj.Spec.ServiceAccountName != "" {
+			keychain, err := getKeychainFromSAImagePullSecrets(ctx, c, obj.GetNamespace(), obj.Spec.ServiceAccountName)
+			if err != nil {
+				return nil, fmt.Errorf("failed to get keychain from service account: %w", err)
+			}
+
+			if hrOpts.Keychain != nil {
+				hrOpts.Keychain = authn.NewMultiKeychain(hrOpts.Keychain, keychain)
+			} else {
+				hrOpts.Keychain = keychain
+			}
+		}
+
+		var hasKeychain bool
+		if hrOpts.Keychain != nil {
+			_, ok := hrOpts.Keychain.(soci.Anonymous)
+			hasKeychain = !ok
+		}
+
+		if !hasKeychain && obj.Spec.Provider != helmv1.GenericOCIProvider {
+			authenticator, authErr := soci.OIDCAuth(ctx, obj.Spec.URL, obj.Spec.Provider)
+			if authErr != nil && !errors.Is(authErr, oci.ErrUnconfiguredProvider) {
+				return nil, fmt.Errorf("failed to get credential from '%s': %w", obj.Spec.Provider, authErr)
+			}
+			if authenticator != nil {
+				hrOpts.Authenticator = authenticator
+			}
+		}
+
 		hrOpts.RegLoginOpt, err = registry.NewLoginOption(hrOpts.Authenticator, hrOpts.Keychain, url)
 		if err != nil {
 			return nil, err

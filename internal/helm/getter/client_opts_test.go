@@ -44,13 +44,15 @@ func TestGetClientOpts(t *testing.T) {
 	}
 
 	tests := []struct {
-		name           string
-		certSecret     *corev1.Secret
-		authSecret     *corev1.Secret
-		serviceAccount *corev1.ServiceAccount
-		afterFunc      func(t *WithT, hcOpts *ClientOpts)
-		oci            bool
-		err            error
+		name            string
+		certSecret      *corev1.Secret
+		authSecret      *corev1.Secret
+		imagePullSecret *corev1.Secret
+		serviceAccount  *corev1.ServiceAccount
+		provider        string
+		afterFunc       func(t *WithT, hcOpts *ClientOpts)
+		oci             bool
+		err             error
 	}{
 		{
 			name: "HelmRepository with certSecretRef discards TLS config in secretRef",
@@ -130,7 +132,41 @@ func TestGetClientOpts(t *testing.T) {
 					},
 				},
 			},
-			authSecret: &corev1.Secret{
+			imagePullSecret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "pull-secret",
+				},
+				Type: corev1.SecretTypeDockerConfigJson,
+				Data: map[string][]byte{
+					corev1.DockerConfigJsonKey: []byte(`{"auths":{"ghcr.io":{"username":"user","password":"pass","auth":"dXNlcjpwYXNz"}}}`),
+				},
+			},
+			afterFunc: func(t *WithT, hcOpts *ClientOpts) {
+				repo, err := name.NewRepository("ghcr.io/dummy")
+				t.Expect(err).ToNot(HaveOccurred())
+				authenticator, err := hcOpts.Keychain.Resolve(repo)
+				t.Expect(err).ToNot(HaveOccurred())
+				config, err := authenticator.Authorization()
+				t.Expect(err).ToNot(HaveOccurred())
+				t.Expect(config.Username).To(Equal("user"))
+				t.Expect(config.Password).To(Equal("pass"))
+			},
+			oci: true,
+		},
+		{
+			name:     "OCI HelmRepository with serviceaccount name and provider (serviceaccount takes precedence)",
+			provider: helmv1.AzureOCIProvider,
+			serviceAccount: &corev1.ServiceAccount{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-sa",
+				},
+				ImagePullSecrets: []corev1.LocalObjectReference{
+					{
+						Name: "pull-secret",
+					},
+				},
+			},
+			imagePullSecret: &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "pull-secret",
 				},
@@ -159,6 +195,7 @@ func TestGetClientOpts(t *testing.T) {
 
 			helmRepo := &helmv1.HelmRepository{
 				Spec: helmv1.HelmRepositorySpec{
+					Provider: tt.provider,
 					Timeout: &metav1.Duration{
 						Duration: time.Second,
 					},
@@ -180,6 +217,9 @@ func TestGetClientOpts(t *testing.T) {
 				helmRepo.Spec.CertSecretRef = &meta.LocalObjectReference{
 					Name: tt.certSecret.Name,
 				}
+			}
+			if tt.imagePullSecret != nil {
+				clientBuilder.WithObjects(tt.imagePullSecret.DeepCopy())
 			}
 			if tt.serviceAccount != nil {
 				clientBuilder.WithObjects(tt.serviceAccount.DeepCopy())
