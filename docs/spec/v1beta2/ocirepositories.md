@@ -310,41 +310,61 @@ fetch the image pull secrets attached to the service account and use them for au
 **Note:** that for a publicly accessible image repository, you don't need to provide a `secretRef`
 nor `serviceAccountName`.
 
-### TLS Certificates
+### Cert secret reference
 
-`.spec.certSecretRef` field names a secret with TLS certificate data. This is for two separate
-purposes:
+`.spec.certSecretRef.name` is an optional field to specify a secret containing
+TLS certificate data. The secret can contain the following keys:
 
-- to provide a client certificate and private key, if you use a certificate to authenticate with
-  the container registry; and,
-- to provide a CA certificate, if the registry uses a self-signed certificate.
+* `tls.crt` and `tls.key`, to specify the client certificate and private key used
+for TLS client authentication. These must be used in conjunction, i.e.
+specifying one without the other will lead to an error.
+* `ca.crt`, to specify the CA certificate used to verify the server, which is
+required if the server is using a self-signed certificate.
 
-These will often go together, if you are hosting a container registry yourself. All the files in the
-secret are expected to be [PEM-encoded][pem-encoding]. This is an ASCII format for certificates and
-keys; `openssl` and such tools will typically give you an option of PEM output.
+If the server is using a self-signed certificate and has TLS client
+authentication enabled, all three values are required.
 
-Assuming you have obtained a certificate file and private key and put them in the files `client.crt`
-and `client.key` respectively, you can create a secret with `kubectl` like this:
+The Secret should be of type `Opaque` or `kubernetes.io/tls`. All the files in
+the Secret are expected to be [PEM-encoded][pem-encoding]. Assuming you have
+three files; `client.key`, `client.crt` and `ca.crt` for the client private key,
+client certificate and the CA certificate respectively, you can generate the
+required Secret using the `flux create secret tls` command:
 
-```bash
-kubectl create secret generic tls-certs \
-  --from-file=certFile=client.crt \
-  --from-file=keyFile=client.key
+```sh
+flux create secret tls --tls-key-file=client.key --tls-crt-file=client.crt --ca-crt-file=ca.crt
 ```
 
-You could also [prepare a secret and encrypt it][sops-guide]; the important bit is that the data
-keys in the secret are `certFile` and `keyFile`.
+Example usage:
 
-If you have a CA certificate for the client to use, the data key for that is `caFile`. Adapting the
-previous example, if you have the certificate in the file `ca.crt`, and the client certificate and
-key as before, the whole command would be:
-
-```bash
-kubectl create secret generic tls-certs \
-  --from-file=certFile=client.crt \
-  --from-file=keyFile=client.key \
-  --from-file=caFile=ca.crt
+```yaml
+---
+apiVersion: source.toolkit.fluxcd.io/v1beta2
+kind: OCIRepository
+metadata:
+  name: example
+  namespace: default
+spec:
+  interval: 5m0s
+  url: oci://example.com
+  certSecretRef:
+    name: example-tls
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: example-tls
+  namespace: default
+type: kubernetes.io/tls # or Opaque
+data:
+  tls.crt: <BASE64>
+  tls.key: <BASE64>
+  # NOTE: Can be supplied without the above values
+  ca.crt: <BASE64>
 ```
+
+**Warning:** Support for the `caFile`, `certFile` and `keyFile` keys have been
+deprecated. If you have any Secrets using these keys and specified in an
+OCIRepository, the controller will log a deprecation warning.
 
 ### Insecure
 

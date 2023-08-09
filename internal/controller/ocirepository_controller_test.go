@@ -562,6 +562,31 @@ func TestOCIRepository_reconcileSource_authStrategy(t *testing.T) {
 					Name: "ca-file",
 				},
 				Data: map[string][]byte{
+					"ca.crt": tlsCA,
+				},
+			},
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new revision '<revision>' for '<url>'"),
+				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new revision '<revision>' for '<url>'"),
+			},
+		},
+		{
+			name: "HTTPS with valid certfile using deprecated keys",
+			want: sreconcile.ResultSuccess,
+			registryOpts: registryOptions{
+				withTLS: true,
+			},
+			craneOpts: []crane.Option{crane.WithTransport(&http.Transport{
+				TLSClientConfig: &tls.Config{
+					RootCAs: pool,
+				},
+			}),
+			},
+			tlsCertSecret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "ca-file",
+				},
+				Data: map[string][]byte{
 					"caFile": tlsCA,
 				},
 			},
@@ -605,11 +630,37 @@ func TestOCIRepository_reconcileSource_authStrategy(t *testing.T) {
 					Name: "ca-file",
 				},
 				Data: map[string][]byte{
+					"ca.crt": []byte("invalid"),
+				},
+			},
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, ociv1.AuthenticationFailedReason, "cannot append certificate into certificate pool: invalid CA certificate"),
+			},
+		},
+		{
+			name: "HTTPS with certfile using both caFile and ca.crt ignores caFile",
+			want: sreconcile.ResultSuccess,
+			registryOpts: registryOptions{
+				withTLS: true,
+			},
+			craneOpts: []crane.Option{crane.WithTransport(&http.Transport{
+				TLSClientConfig: &tls.Config{
+					RootCAs: pool,
+				},
+			}),
+			},
+			tlsCertSecret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "ca-file",
+				},
+				Data: map[string][]byte{
+					"ca.crt": tlsCA,
 					"caFile": []byte("invalid"),
 				},
 			},
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.FetchFailedCondition, ociv1.OCIPullFailedReason, "failed to determine artifact digest"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new revision '<revision>' for '<url>'"),
+				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new revision '<revision>' for '<url>'"),
 			},
 		},
 		{
@@ -1257,7 +1308,7 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignature(t *testing.T) {
 			Generation: 1,
 		},
 		Data: map[string][]byte{
-			"caFile": tlsCA,
+			"ca.crt": tlsCA,
 		},
 	}
 
