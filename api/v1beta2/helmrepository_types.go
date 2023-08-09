@@ -108,6 +108,7 @@ type HelmRepositorySpec struct {
 	// the OCI image pull if the service account has attached pull secrets. For more information:
 	// https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/#add-imagepullsecrets-to-a-service-account
 	// +optional
+	// This field is only considered for Helm Repositories of type oci
 	ServiceAccountName string `json:"serviceAccountName,omitempty"`
 
 	// Provider used for authentication, can be 'aws', 'azure', 'gcp' or 'generic'.

@@ -509,6 +509,16 @@ data:
   caFile: <BASE64>
 ```
 
+
+### Service Account Name
+
+*Note:* This field is only taken into account for Helm Repository of
+type `oci`.
+
+`.spec.serviceAccountName` is an optional field to specify a name of a
+ServiceAccount in the same namespace as the HelmRepository, which has image
+pull secrets that can be used for authentication to the OCI image repository.
+
 ### Pass credentials
 
 `.spec.passCredentials` is an optional field to allow the credentials from the
