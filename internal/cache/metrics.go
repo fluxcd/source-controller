@@ -67,6 +67,11 @@ func (r *CacheRecorder) IncCacheEvents(event, name, namespace string) {
 	r.cacheEventsCounter.WithLabelValues(event, name, namespace).Inc()
 }
 
+// DeleteCacheEvent deletes the cache event metric.
+func (r *CacheRecorder) DeleteCacheEvent(event, name, namespace string) {
+	r.cacheEventsCounter.DeleteLabelValues(event, name, namespace)
+}
+
 // MustMakeMetrics creates a new CacheRecorder, and registers the metrics collectors in the controller-runtime metrics registry.
 func MustMakeMetrics() *CacheRecorder {
 	r := NewCacheRecorder()

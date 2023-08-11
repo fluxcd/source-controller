@@ -52,6 +52,7 @@ import (
 	_ "github.com/distribution/distribution/v3/registry/storage/driver/inmemory"
 
 	"github.com/fluxcd/pkg/runtime/controller"
+	"github.com/fluxcd/pkg/runtime/metrics"
 	"github.com/fluxcd/pkg/runtime/testenv"
 	"github.com/fluxcd/pkg/testserver"
 
@@ -310,7 +311,7 @@ func TestMain(m *testing.M) {
 		panic(fmt.Sprintf("Failed to create a test storage: %v", err))
 	}
 
-	testMetricsH = controller.MustMakeMetrics(testEnv)
+	testMetricsH = controller.NewMetrics(testEnv, metrics.MustMakeRecorder(), sourcev1.SourceFinalizer)
 
 	testWorkspaceDir, err := os.MkdirTemp("", "registry-test-")
 	if err != nil {
