@@ -198,9 +198,6 @@ func (r *HelmChartReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	// Record suspended status metric
-	r.RecordSuspend(ctx, obj, obj.Spec.Suspend)
-
 	// Initialize the patch helper with the current version of the object.
 	serialPatcher := patch.NewSerialPatcher(obj, r.Client)
 
@@ -228,7 +225,8 @@ func (r *HelmChartReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		}
 		result, retErr = summarizeHelper.SummarizeAndPatch(ctx, obj, summarizeOpts...)
 
-		// Always record readiness and duration metrics
+		// Always record suspend, readiness and duration metrics.
+		r.Metrics.RecordSuspend(ctx, obj, obj.Spec.Suspend)
 		r.Metrics.RecordReadiness(ctx, obj)
 		r.Metrics.RecordDuration(ctx, obj, start)
 	}()

@@ -136,9 +136,6 @@ func (r *HelmRepositoryOCIReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		return ctrl.Result{RequeueAfter: time.Second}, nil
 	}
 
-	// Record suspended status metric
-	r.RecordSuspend(ctx, obj, obj.Spec.Suspend)
-
 	// Initialize the patch helper with the current version of the object.
 	serialPatcher := patch.NewSerialPatcher(obj, r.Client)
 
@@ -167,7 +164,8 @@ func (r *HelmRepositoryOCIReconciler) Reconcile(ctx context.Context, req ctrl.Re
 			retErr = kerrors.NewAggregate([]error{retErr, err})
 		}
 
-		// Always record readiness and duration metrics
+		// Always record suspend, readiness and duration metrics.
+		r.Metrics.RecordSuspend(ctx, obj, obj.Spec.Suspend)
 		r.Metrics.RecordReadiness(ctx, obj)
 		r.Metrics.RecordDuration(ctx, obj, start)
 	}()

@@ -407,8 +407,8 @@ github.com/fluxcd/pkg/masktoken v0.2.0 h1:HoSPTk4l1fz5Fevs2vVRvZGru33blfMwWSZKsH
 github.com/fluxcd/pkg/masktoken v0.2.0/go.mod h1:EA7GleAHL33kN6kTW06m5R3/Q26IyuGO7Ef/0CtpDI0=
 github.com/fluxcd/pkg/oci v0.30.1 h1:XRCWzufSRtI6g6TvCH8pJHIqw9qXUf2+9fBH8pOpoU0=
 github.com/fluxcd/pkg/oci v0.30.1/go.mod h1:HAWYIdzEbCnAT7Me2YGVUlgA5y/CCBdJ0+tFdEOb2nI=
-github.com/fluxcd/pkg/runtime v0.41.0 h1:hjWUwVRCKDuGEUhovWrygt/6PRry4p278yKuJNgTfv8=
-github.com/fluxcd/pkg/runtime v0.41.0/go.mod h1:1GN+nxoQ7LmSsLJwjH8JW8pA27tBSO+KLH43HpywCDM=
+github.com/fluxcd/pkg/runtime v0.42.0 h1:a5DQ/f90YjoHBmiXZUpnp4bDSLORjInbmqP7K11L4uY=
+github.com/fluxcd/pkg/runtime v0.42.0/go.mod h1:p6A3xWVV8cKLLQW0N90GehKgGMMmbNYv+OSJ/0qB0vg=
 github.com/fluxcd/pkg/sourceignore v0.3.5 h1:omcHTH5X5tlPr9w1b9T7WuJTOP+o/KdVdarYb4kgkCU=
 github.com/fluxcd/pkg/sourceignore v0.3.5/go.mod h1:6Xz3jErz8RsidsdrjUBBUGKes24rbdp/F38MnTGibEw=
 github.com/fluxcd/pkg/ssh v0.8.1 h1:v35y7Ks/+ABWce8RcnrC7psVIhf3EdCUNFJi5+tYOps=

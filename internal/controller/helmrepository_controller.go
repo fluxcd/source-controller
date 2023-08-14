@@ -161,9 +161,6 @@ func (r *HelmRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	// Record suspended status metric
-	r.RecordSuspend(ctx, obj, obj.Spec.Suspend)
-
 	// Initialize the patch helper with the current version of the object.
 	serialPatcher := patch.NewSerialPatcher(obj, r.Client)
 
@@ -190,7 +187,8 @@ func (r *HelmRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		}
 		result, retErr = summarizeHelper.SummarizeAndPatch(ctx, obj, summarizeOpts...)
 
-		// Always record readiness and duration metrics
+		// Always record suspend, readiness and duration metrics.
+		r.Metrics.RecordSuspend(ctx, obj, obj.Spec.Suspend)
 		r.Metrics.RecordReadiness(ctx, obj)
 		r.Metrics.RecordDuration(ctx, obj, start)
 	}()
@@ -620,6 +618,12 @@ func (r *HelmRepositoryReconciler) reconcileDelete(ctx context.Context, obj *hel
 	// Remove our finalizer from the list if we are deleting the object
 	if !obj.DeletionTimestamp.IsZero() {
 		controllerutil.RemoveFinalizer(obj, sourcev1.SourceFinalizer)
+	}
+
+	// Delete cache metrics.
+	if r.CacheRecorder != nil && r.Metrics.IsDelete(obj) {
+		r.DeleteCacheEvent(cache.CacheEventTypeHit, obj.Name, obj.Namespace)
+		r.DeleteCacheEvent(cache.CacheEventTypeMiss, obj.Name, obj.Namespace)
 	}
 
 	// Stop reconciliation as the object is being deleted
