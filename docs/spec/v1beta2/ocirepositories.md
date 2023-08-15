@@ -609,7 +609,7 @@ flux reconcile source oci <repository-name>
 ### Waiting for `Ready`
 
 When a change is applied, it is possible to wait for the OCIRepository to reach
-a [ready state](#ready-gitrepository) using `kubectl`:
+a [ready state](#ready-ocirepository) using `kubectl`:
 
 ```sh
 kubectl wait gitrepository/<repository-name> --for=condition=ready --timeout=1m
@@ -866,8 +866,8 @@ following attributes in the OCIRepository's `.status.conditions`:
 - `reason: Succeeded`
 
 This `Ready` Condition will retain a status value of `"True"` until the
-OCIRepository is marked as [reconciling](#reconciling-gitrepository), or e.g. a
-[transient error](#failed-gitrepository) occurs due to a temporary network issue.
+OCIRepository is marked as [reconciling](#reconciling-ocirepository), or e.g. a
+[transient error](#failed-ocirepository) occurs due to a temporary network issue.
 
 When the OCIRepository Artifact is archived in the controller's Artifact
 storage, the controller sets a Condition with the following attributes in the
