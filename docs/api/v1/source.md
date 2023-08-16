@@ -800,6 +800,21 @@ produce the current Artifact.</p>
 </tr>
 <tr>
 <td>
+<code>sourceVerificationMode</code><br>
+<em>
+<a href="#source.toolkit.fluxcd.io/v1.GitVerificationMode">
+GitVerificationMode
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>SourceVerificationMode is the last used verification mode indicating
+which Git object(s) have been verified.</p>
+</td>
+</tr>
+<tr>
+<td>
 <code>ReconcileRequestStatus</code><br>
 <em>
 <a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/meta#ReconcileRequestStatus">
@@ -839,11 +854,17 @@ strategy.</p>
 <td>
 <code>mode</code><br>
 <em>
-string
+<a href="#source.toolkit.fluxcd.io/v1.GitVerificationMode">
+GitVerificationMode
+</a>
 </em>
 </td>
 <td>
-<p>Mode specifies what Git object should be verified, currently (&lsquo;head&rsquo;).</p>
+<em>(Optional)</em>
+<p>Mode specifies which Git object(s) should be verified.</p>
+<p>The variants &ldquo;head&rdquo; and &ldquo;HEAD&rdquo; both imply the same thing, i.e. verify
+the commit that the HEAD of the Git repository points to. The variant
+&ldquo;head&rdquo; solely exists to ensure backwards compatibility.</p>
 </td>
 </tr>
 <tr>
@@ -864,6 +885,14 @@ authors.</p>
 </table>
 </div>
 </div>
+<h3 id="source.toolkit.fluxcd.io/v1.GitVerificationMode">GitVerificationMode
+(<code>string</code> alias)</h3>
+<p>
+(<em>Appears on:</em>
+<a href="#source.toolkit.fluxcd.io/v1.GitRepositoryStatus">GitRepositoryStatus</a>, 
+<a href="#source.toolkit.fluxcd.io/v1.GitRepositoryVerification">GitRepositoryVerification</a>)
+</p>
+<p>GitVerificationMode specifies the verification mode for a Git repository.</p>
 <h3 id="source.toolkit.fluxcd.io/v1.Source">Source
 </h3>
 <p>Source interface must be supported by all API types.

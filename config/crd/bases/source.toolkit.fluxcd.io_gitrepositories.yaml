@@ -168,10 +168,16 @@ spec:
                   Git commit signature(s).
                 properties:
                   mode:
-                    description: Mode specifies what Git object should be verified,
-                      currently ('head').
+                    default: HEAD
+                    description: "Mode specifies which Git object(s) should be verified.
+                      \n The variants \"head\" and \"HEAD\" both imply the same thing,
+                      i.e. verify the commit that the HEAD of the Git repository points
+                      to. The variant \"head\" solely exists to ensure backwards compatibility."
                     enum:
                     - head
+                    - HEAD
+                    - Tag
+                    - TagAndHEAD
                     type: string
                   secretRef:
                     description: SecretRef specifies the Secret containing the public
@@ -184,7 +190,6 @@ spec:
                     - name
                     type: object
                 required:
-                - mode
                 - secretRef
                 type: object
             required:
@@ -407,6 +412,10 @@ spec:
                 description: ObservedRecurseSubmodules is the observed resource submodules
                   configuration used to produce the current Artifact.
                 type: boolean
+              sourceVerificationMode:
+                description: SourceVerificationMode is the last used verification
+                  mode indicating which Git object(s) have been verified.
+                type: string
             type: object
         type: object
     served: true
