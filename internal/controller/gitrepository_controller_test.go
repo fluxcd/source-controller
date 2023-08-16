@@ -1515,7 +1515,7 @@ func TestGitRepositoryReconciler_reconcileDelete(t *testing.T) {
 	g.Expect(obj.Status.Artifact).To(BeNil())
 }
 
-func TestGitRepositoryReconciler_verifyCommitSignature(t *testing.T) {
+func TestGitRepositoryReconciler_verifySignature(t *testing.T) {
 	tests := []struct {
 		name             string
 		secret           *corev1.Secret
@@ -1551,7 +1551,7 @@ func TestGitRepositoryReconciler_verifyCommitSignature(t *testing.T) {
 			},
 			want: sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.SourceVerifiedCondition, meta.SucceededReason, "verified signature of commit 'shasum' with key '3299AEB0E4085BAF'"),
+				*conditions.TrueCondition(sourcev1.SourceVerifiedCondition, meta.SucceededReason, "verified signature of\n\t- commit 'shasum' with key '3299AEB0E4085BAF'"),
 			},
 		},
 		{
@@ -1577,7 +1577,7 @@ func TestGitRepositoryReconciler_verifyCommitSignature(t *testing.T) {
 			},
 			wantErr: true,
 			assertConditions: []metav1.Condition{
-				*conditions.FalseCondition(sourcev1.SourceVerifiedCondition, "InvalidCommitSignature", "signature verification of commit 'shasum' failed: unable to verify commit with any of the given key rings"),
+				*conditions.FalseCondition(sourcev1.SourceVerifiedCondition, "InvalidCommitSignature", "signature verification of commit 'shasum' failed: unable to verify Git commit: unable to verify payload with any of the given key rings"),
 			},
 		},
 		{
@@ -1648,7 +1648,7 @@ func TestGitRepositoryReconciler_verifyCommitSignature(t *testing.T) {
 				tt.beforeFunc(obj)
 			}
 
-			got, err := r.verifyCommitSignature(context.TODO(), obj, tt.commit)
+			got, err := r.verifySignature(context.TODO(), obj, tt.commit)
 			g.Expect(obj.Status.Conditions).To(conditions.MatchConditions(tt.assertConditions))
 			g.Expect(err != nil).To(Equal(tt.wantErr))
 			g.Expect(got).To(Equal(tt.want))

@@ -587,7 +587,7 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 	conditions.Delete(obj, sourcev1.FetchFailedCondition)
 
 	// Verify commit signature
-	if result, err := r.verifyCommitSignature(ctx, obj, *commit); err != nil || result == sreconcile.ResultEmpty {
+	if result, err := r.verifySignature(ctx, obj, *commit); err != nil || result == sreconcile.ResultEmpty {
 		return result, err
 	}
 
@@ -924,17 +924,18 @@ func (r *GitRepositoryReconciler) fetchIncludes(ctx context.Context, obj *source
 	return &artifacts, nil
 }
 
-// verifyCommitSignature verifies the signature of the given Git commit, if a
-// verification mode is specified on the object.
+// verifySignature verifies the signature of the given Git commit and/or its referencing tag
+// depending on the verification mode specified on the object.
 // If the signature can not be verified or the verification fails, it records
 // v1beta2.SourceVerifiedCondition=False and returns.
 // When successful, it records v1beta2.SourceVerifiedCondition=True.
 // If no verification mode is specified on the object, the
 // v1beta2.SourceVerifiedCondition Condition is removed.
-func (r *GitRepositoryReconciler) verifyCommitSignature(ctx context.Context, obj *sourcev1.GitRepository, commit git.Commit) (sreconcile.Result, error) {
+func (r *GitRepositoryReconciler) verifySignature(ctx context.Context, obj *sourcev1.GitRepository, commit git.Commit) (sreconcile.Result, error) {
 	// Check if there is a commit verification is configured and remove any old
 	// observations if there is none
 	if obj.Spec.Verification == nil || obj.Spec.Verification.Mode == "" {
+		obj.Status.SourceVerificationMode = nil
 		conditions.Delete(obj, sourcev1.SourceVerifiedCondition)
 		return sreconcile.ResultSuccess, nil
 	}
@@ -958,22 +959,74 @@ func (r *GitRepositoryReconciler) verifyCommitSignature(ctx context.Context, obj
 	for _, v := range secret.Data {
 		keyRings = append(keyRings, string(v))
 	}
-	// Verify commit with GPG data from secret
-	entity, err := commit.Verify(keyRings...)
-	if err != nil {
-		e := serror.NewGeneric(
-			fmt.Errorf("signature verification of commit '%s' failed: %w", commit.Hash.String(), err),
-			"InvalidCommitSignature",
-		)
-		conditions.MarkFalse(obj, sourcev1.SourceVerifiedCondition, e.Reason, e.Err.Error())
-		// Return error in the hope the secret changes
-		return sreconcile.ResultEmpty, e
+
+	var message strings.Builder
+	if obj.Spec.Verification.VerifyTag() {
+		// If we need to verify a tag object, then the commit must have a tag
+		// that points to it. If it does not, then its safe to asssume that
+		// the checkout didn't happen via a tag reference, thus the object can
+		// be marked as stalled.
+		tag := commit.ReferencingTag
+		if tag == nil {
+			err := serror.NewStalling(
+				errors.New("cannot verify tag object's signature if a tag reference is not specified"),
+				"InvalidVerificationMode",
+			)
+			conditions.MarkFalse(obj, sourcev1.SourceVerifiedCondition, err.Reason, err.Err.Error())
+			return sreconcile.ResultEmpty, err
+		}
+		if !git.IsSignedTag(*tag) {
+			// If the tag was not signed then we can't verify its signature
+			// but since the upstream tag object can change at any time, we can't
+			// mark the object as stalled.
+			err := serror.NewGeneric(
+				fmt.Errorf("cannot verify signature of tag '%s' since it is not signed", commit.ReferencingTag.String()),
+				"InvalidGitObject",
+			)
+			conditions.MarkFalse(obj, sourcev1.SourceVerifiedCondition, err.Reason, err.Err.Error())
+			return sreconcile.ResultEmpty, err
+		}
+
+		// Verify tag with GPG data from secret
+		tagEntity, err := tag.Verify(keyRings...)
+		if err != nil {
+			e := serror.NewGeneric(
+				fmt.Errorf("signature verification of tag '%s' failed: %w", tag.String(), err),
+				"InvalidTagSignature",
+			)
+			conditions.MarkFalse(obj, sourcev1.SourceVerifiedCondition, e.Reason, e.Err.Error())
+			// Return error in the hope the secret changes
+			return sreconcile.ResultEmpty, e
+		}
+
+		message.WriteString(fmt.Sprintf("verified signature of\n\t- tag '%s' with key '%s'", tag.String(), tagEntity))
 	}
 
-	conditions.MarkTrue(obj, sourcev1.SourceVerifiedCondition, meta.SucceededReason,
-		"verified signature of commit '%s' with key '%s'", commit.Hash.String(), entity)
-	r.eventLogf(ctx, obj, eventv1.EventTypeTrace, "VerifiedCommit",
-		"verified signature of commit '%s' with key '%s'", commit.Hash.String(), entity)
+	if obj.Spec.Verification.VerifyHEAD() {
+		// Verify commit with GPG data from secret
+		headEntity, err := commit.Verify(keyRings...)
+		if err != nil {
+			e := serror.NewGeneric(
+				fmt.Errorf("signature verification of commit '%s' failed: %w", commit.Hash.String(), err),
+				"InvalidCommitSignature",
+			)
+			conditions.MarkFalse(obj, sourcev1.SourceVerifiedCondition, e.Reason, e.Err.Error())
+			// Return error in the hope the secret changes
+			return sreconcile.ResultEmpty, e
+		}
+		// If we also verified the tag previously, then append to the message.
+		if message.Len() > 0 {
+			message.WriteString(fmt.Sprintf("\n\t- commit '%s' with key '%s'", commit.Hash.String(), headEntity))
+		} else {
+			message.WriteString(fmt.Sprintf("verified signature of\n\t- commit '%s' with key '%s'", commit.Hash.String(), headEntity))
+		}
+	}
+
+	reason := meta.SucceededReason
+	mode := obj.Spec.Verification.GetMode()
+	obj.Status.SourceVerificationMode = &mode
+	conditions.MarkTrue(obj, sourcev1.SourceVerifiedCondition, reason, message.String())
+	r.eventLogf(ctx, obj, eventv1.EventTypeTrace, reason, message.String())
 	return sreconcile.ResultSuccess, nil
 }
 
@@ -1048,7 +1101,8 @@ func (r *GitRepositoryReconciler) eventLogf(ctx context.Context, obj runtime.Obj
 
 // gitContentConfigChanged evaluates the current spec with the observations of
 // the artifact in the status to determine if artifact content configuration has
-// changed and requires rebuilding the artifact.
+// changed and requires rebuilding the artifact. Rebuilding the artifact is also
+// required if the object needs to be (re)verified.
 func gitContentConfigChanged(obj *sourcev1.GitRepository, includes *artifactSet) bool {
 	if !pointer.StringEqual(obj.Spec.Ignore, obj.Status.ObservedIgnore) {
 		return true
@@ -1057,6 +1111,9 @@ func gitContentConfigChanged(obj *sourcev1.GitRepository, includes *artifactSet)
 		return true
 	}
 	if len(obj.Spec.Include) != len(obj.Status.ObservedInclude) {
+		return true
+	}
+	if requiresVerification(obj) {
 		return true
 	}
 
@@ -1112,4 +1169,29 @@ func commitReference(obj *sourcev1.GitRepository, commit *git.Commit) string {
 		return commit.AbsoluteReference()
 	}
 	return commit.String()
+}
+
+// requiresVerification inspects a GitRepository's verification spec and its status
+// to determine whether the Git repository needs to be verified again. It does so by
+// first checking if the GitRepository has a verification spec. If it does, then
+// it returns true based on the following three conditions:
+//
+//   - If the object does not have a observed verification mode in its status.
+//   - If the observed verification mode indicates that only the tag had been
+//     verified earlier and the HEAD also needs to be verified now.
+//   - If the observed verification mode indicates that only the HEAD had been
+//     verified earlier and the tag also needs to be verified now.
+func requiresVerification(obj *sourcev1.GitRepository) bool {
+	if obj.Spec.Verification != nil {
+		observedMode := obj.Status.SourceVerificationMode
+		mode := obj.Spec.Verification.GetMode()
+		if observedMode == nil {
+			return true
+		}
+		if (*observedMode == sourcev1.ModeGitTag && (mode == sourcev1.ModeGitHEAD || mode == sourcev1.ModeGitTagAndHEAD)) ||
+			(*observedMode == sourcev1.ModeGitHEAD && (mode == sourcev1.ModeGitTag || mode == sourcev1.ModeGitTagAndHEAD)) {
+			return true
+		}
+	}
+	return false
 }
