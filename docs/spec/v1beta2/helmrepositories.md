@@ -678,7 +678,7 @@ specific HelmRepository, e.g. `flux logs --level=error --kind=HelmRepository --n
 
 ### Artifact
 
-**Note:** This section does not apply to [OCI Helm Repositories](#helm-oci-repositories), they do not emit artifacts.
+**Note:** This section does not apply to [OCI Helm Repositories](#helm-oci-repository), they do not emit artifacts.
 
 The HelmRepository reports the last fetched repository index as an Artifact
 object in the `.status.artifact` of the resource.
