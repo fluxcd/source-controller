@@ -56,10 +56,21 @@ type HelmRepositorySpec struct {
 	// +optional
 	SecretRef *meta.LocalObjectReference `json:"secretRef,omitempty"`
 
-	// CertSecretRef specifies the Secret containing the TLS authentication
-	// data. The secret must contain a 'certFile' and 'keyFile', and/or 'caFile'
-	// fields. It takes precedence over the values specified in the Secret
-	// referred to by `.spec.secretRef`.
+	// CertSecretRef can be given the name of a Secret containing
+	// either or both of
+	//
+	// - a PEM-encoded client certificate (`tls.crt`) and private
+	// key (`tls.key`);
+	// - a PEM-encoded CA certificate (`ca.crt`)
+	//
+	// and whichever are supplied, will be used for connecting to the
+	// registry. The client cert and key are useful if you are
+	// authenticating with a certificate; the CA cert is useful if
+	// you are using a self-signed server certificate. The Secret must
+	// be of type `Opaque` or `kubernetes.io/tls`.
+	//
+	// It takes precedence over the values specified in the Secret referred
+	// to by `.spec.secretRef`.
 	// +optional
 	CertSecretRef *meta.LocalObjectReference `json:"certSecretRef,omitempty"`
 

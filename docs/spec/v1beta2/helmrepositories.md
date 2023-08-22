@@ -467,32 +467,33 @@ flux create secret oci ghcr-auth \
   --password=${GITHUB_PAT}
 ```
 
-**Note:** Support for specifying TLS authentication data using this API has been
+**Warning:** Support for specifying TLS authentication data using this API has been
 deprecated. Please use [`.spec.certSecretRef`](#cert-secret-reference) instead.
 If the controller uses the secret specfied by this field to configure TLS, then
 a deprecation warning will be logged.
 
 ### Cert secret reference
 
-`.spec.certSecretRef.name` is an optional field to specify a secret containing TLS
-certificate data. The secret can contain the following keys:
+`.spec.certSecretRef.name` is an optional field to specify a secret containing
+TLS certificate data. The secret can contain the following keys:
 
-* `certFile` and `keyFile`, to specify the client certificate and private key used for
-TLS client authentication. These must be used in conjunction, i.e. specifying one without
-the other will lead to an error.
-* `caFile`, to specify the CA certificate used to verify the server, which is required
-if the server is using a self-signed certificate.
+* `tls.crt` and `tls.key`, to specify the client certificate and private key used
+for TLS client authentication. These must be used in conjunction, i.e.
+specifying one without the other will lead to an error.
+* `ca.crt`, to specify the CA certificate used to verify the server, which is
+required if the server is using a self-signed certificate.
 
-If the server is using a self-signed certificate and has TLS client authentication enabled,
-all three values are required.
+If the server is using a self-signed certificate and has TLS client
+authentication enabled, all three values are required.
 
-All the files in the secret are expected to be [PEM-encoded][pem-encoding]. Assuming you have
-three files; `client.key`, `client.crt` and `ca.crt` for the client private key, client
-certificate and the CA certificate respectively, you can generate the required secret using
-the `flux creat secret helm` command:
+The Secret should be of type `Opaque` or `kubernetes.io/tls`. All the files in
+the Secret are expected to be [PEM-encoded][pem-encoding]. Assuming you have
+three files; `client.key`, `client.crt` and `ca.crt` for the client private key,
+client certificate and the CA certificate respectively, you can generate the
+required Secret using the `flux create secret tls` command:
 
 ```sh
-flux create secret helm tls --key-file=client.key --cert-file=client.crt --ca-file=ca.crt
+flux create secret tls --tls-key-file=client.key --tls-crt-file=client.crt --ca-crt-file=ca.crt
 ```
 
 Example usage:
@@ -515,11 +516,12 @@ kind: Secret
 metadata:
   name: example-tls
   namespace: default
+type: kubernetes.io/tls # or Opaque
 data:
-  certFile: <BASE64>
-  keyFile: <BASE64>
+  tls.crt: <BASE64>
+  tls.key: <BASE64>
   # NOTE: Can be supplied without the above values
-  caFile: <BASE64>
+  ca.crt: <BASE64>
 ```
 
 ### Pass credentials

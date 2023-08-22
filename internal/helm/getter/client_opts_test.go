@@ -18,11 +18,6 @@ package getter
 
 import (
 	"context"
-	"crypto/rand"
-	"crypto/rsa"
-	"crypto/x509"
-	"encoding/pem"
-	"math/big"
 	"os"
 	"testing"
 	"time"
@@ -58,7 +53,7 @@ func TestGetClientOpts(t *testing.T) {
 					Name: "ca-file",
 				},
 				Data: map[string][]byte{
-					"caFile": tlsCA,
+					"ca.crt": tlsCA,
 				},
 			},
 			authSecret: &corev1.Secret{
@@ -160,42 +155,6 @@ func TestGetClientOpts(t *testing.T) {
 	}
 }
 
-func Test_tlsClientConfigFromSecret(t *testing.T) {
-	tlsSecretFixture := validTlsSecret(t)
-
-	tests := []struct {
-		name    string
-		secret  corev1.Secret
-		modify  func(secret *corev1.Secret)
-		wantErr bool
-		wantNil bool
-	}{
-		{"certFile, keyFile and caFile", tlsSecretFixture, nil, false, false},
-		{"without certFile", tlsSecretFixture, func(s *corev1.Secret) { delete(s.Data, "certFile") }, true, true},
-		{"without keyFile", tlsSecretFixture, func(s *corev1.Secret) { delete(s.Data, "keyFile") }, true, true},
-		{"without caFile", tlsSecretFixture, func(s *corev1.Secret) { delete(s.Data, "caFile") }, false, false},
-		{"empty", corev1.Secret{}, nil, false, true},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			secret := tt.secret.DeepCopy()
-			if tt.modify != nil {
-				tt.modify(secret)
-			}
-
-			got, _, err := TLSClientConfigFromSecret(*secret, "")
-			if (err != nil) != tt.wantErr {
-				t.Errorf("TLSClientConfigFromSecret() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if tt.wantNil && got != nil {
-				t.Error("TLSClientConfigFromSecret() != nil")
-				return
-			}
-		})
-	}
-}
-
 func TestGetClientOpts_registryTLSLoginOption(t *testing.T) {
 	tlsCA, err := os.ReadFile("../../controller/testdata/certs/ca.pem")
 	if err != nil {
@@ -215,7 +174,7 @@ func TestGetClientOpts_registryTLSLoginOption(t *testing.T) {
 					Name: "ca-file",
 				},
 				Data: map[string][]byte{
-					"caFile": tlsCA,
+					"ca.crt": tlsCA,
 				},
 			},
 			authSecret: &corev1.Secret{
@@ -305,62 +264,5 @@ func TestGetClientOpts_registryTLSLoginOption(t *testing.T) {
 				return
 			}
 		})
-	}
-}
-
-// validTlsSecret creates a secret containing key pair and CA certificate that are
-// valid from a syntax (minimum requirements) perspective.
-func validTlsSecret(t *testing.T) corev1.Secret {
-	key, err := rsa.GenerateKey(rand.Reader, 2048)
-	if err != nil {
-		t.Fatal("Private key cannot be created.", err.Error())
-	}
-
-	certTemplate := x509.Certificate{
-		SerialNumber: big.NewInt(1337),
-	}
-	cert, err := x509.CreateCertificate(rand.Reader, &certTemplate, &certTemplate, &key.PublicKey, key)
-	if err != nil {
-		t.Fatal("Certificate cannot be created.", err.Error())
-	}
-
-	ca := &x509.Certificate{
-		SerialNumber: big.NewInt(7331),
-		IsCA:         true,
-		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth},
-		KeyUsage:     x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign,
-	}
-
-	caPrivKey, err := rsa.GenerateKey(rand.Reader, 4096)
-	if err != nil {
-		t.Fatal("CA private key cannot be created.", err.Error())
-	}
-
-	caBytes, err := x509.CreateCertificate(rand.Reader, ca, ca, &caPrivKey.PublicKey, caPrivKey)
-	if err != nil {
-		t.Fatal("CA certificate cannot be created.", err.Error())
-	}
-
-	keyPem := pem.EncodeToMemory(&pem.Block{
-		Type:  "RSA PRIVATE KEY",
-		Bytes: x509.MarshalPKCS1PrivateKey(key),
-	})
-
-	certPem := pem.EncodeToMemory(&pem.Block{
-		Type:  "CERTIFICATE",
-		Bytes: cert,
-	})
-
-	caPem := pem.EncodeToMemory(&pem.Block{
-		Type:  "CERTIFICATE",
-		Bytes: caBytes,
-	})
-
-	return corev1.Secret{
-		Data: map[string][]byte{
-			"certFile": []byte(certPem),
-			"keyFile":  []byte(keyPem),
-			"caFile":   []byte(caPem),
-		},
 	}
 }

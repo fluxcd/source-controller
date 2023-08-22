@@ -19,10 +19,8 @@ package getter
 import (
 	"context"
 	"crypto/tls"
-	"crypto/x509"
 	"errors"
 	"fmt"
-	"net/url"
 	"os"
 	"path"
 
@@ -37,6 +35,7 @@ import (
 	helmv1 "github.com/fluxcd/source-controller/api/v1beta2"
 	"github.com/fluxcd/source-controller/internal/helm/registry"
 	soci "github.com/fluxcd/source-controller/internal/oci"
+	stls "github.com/fluxcd/source-controller/internal/tls"
 )
 
 const (
@@ -46,16 +45,6 @@ const (
 )
 
 var ErrDeprecatedTLSConfig = errors.New("TLS configured in a deprecated manner")
-
-// TLSBytes contains the bytes of the TLS files.
-type TLSBytes struct {
-	// CertBytes is the bytes of the certificate file.
-	CertBytes []byte
-	// KeyBytes is the bytes of the key file.
-	KeyBytes []byte
-	// CABytes is the bytes of the CA file.
-	CABytes []byte
-}
 
 // ClientOpts contains the various options to use while constructing
 // a Helm repository client.
@@ -91,7 +80,7 @@ func GetClientOpts(ctx context.Context, c client.Client, obj *helmv1.HelmReposit
 
 	var (
 		certSecret *corev1.Secret
-		tlsBytes   *TLSBytes
+		tlsBytes   *stls.TLSBytes
 		certFile   string
 		keyFile    string
 		caFile     string
@@ -105,7 +94,7 @@ func GetClientOpts(ctx context.Context, c client.Client, obj *helmv1.HelmReposit
 			return nil, "", fmt.Errorf("failed to get TLS authentication secret '%s/%s': %w", obj.GetNamespace(), obj.Spec.CertSecretRef.Name, err)
 		}
 
-		hrOpts.TlsConfig, tlsBytes, err = TLSClientConfigFromSecret(*certSecret, url)
+		hrOpts.TlsConfig, tlsBytes, err = stls.KubeTLSClientConfigFromSecret(*certSecret, url)
 		if err != nil {
 			return nil, "", fmt.Errorf("failed to construct Helm client's TLS config: %w", err)
 		}
@@ -128,8 +117,8 @@ func GetClientOpts(ctx context.Context, c client.Client, obj *helmv1.HelmReposit
 
 		// If the TLS config is nil, i.e. one couldn't be constructed using `.spec.certSecretRef`
 		// then try to use `.spec.secretRef`.
-		if hrOpts.TlsConfig == nil {
-			hrOpts.TlsConfig, tlsBytes, err = TLSClientConfigFromSecret(*authSecret, url)
+		if hrOpts.TlsConfig == nil && !ociRepo {
+			hrOpts.TlsConfig, tlsBytes, err = stls.TLSClientConfigFromSecret(*authSecret, url)
 			if err != nil {
 				return nil, "", fmt.Errorf("failed to construct Helm client's TLS config: %w", err)
 			}
@@ -162,7 +151,7 @@ func GetClientOpts(ctx context.Context, c client.Client, obj *helmv1.HelmReposit
 			if err != nil {
 				return nil, "", fmt.Errorf("cannot create temporary directory: %w", err)
 			}
-			certFile, keyFile, caFile, err = StoreTLSCertificateFiles(tlsBytes, dir)
+			certFile, keyFile, caFile, err = storeTLSCertificateFiles(tlsBytes, dir)
 			if err != nil {
 				return nil, "", fmt.Errorf("cannot write certs files to path: %w", err)
 			}
@@ -198,60 +187,8 @@ func fetchSecret(ctx context.Context, c client.Client, name, namespace string) (
 	return &secret, nil
 }
 
-// TLSClientConfigFromSecret attempts to construct a TLS client config
-// for the given v1.Secret. It returns the TLS client config or an error.
-//
-// Secrets with no certFile, keyFile, AND caFile are ignored, if only a
-// certBytes OR keyBytes is defined it returns an error.
-func TLSClientConfigFromSecret(secret corev1.Secret, repositoryUrl string) (*tls.Config, *TLSBytes, error) {
-	certBytes, keyBytes, caBytes := secret.Data["certFile"], secret.Data["keyFile"], secret.Data["caFile"]
-	switch {
-	case len(certBytes)+len(keyBytes)+len(caBytes) == 0:
-		return nil, nil, nil
-	case (len(certBytes) > 0 && len(keyBytes) == 0) || (len(keyBytes) > 0 && len(certBytes) == 0):
-		return nil, nil, fmt.Errorf("invalid '%s' secret data: fields 'certFile' and 'keyFile' require each other's presence",
-			secret.Name)
-	}
-
-	tlsConf := &tls.Config{}
-	if len(certBytes) > 0 && len(keyBytes) > 0 {
-		cert, err := tls.X509KeyPair(certBytes, keyBytes)
-		if err != nil {
-			return nil, nil, err
-		}
-		tlsConf.Certificates = append(tlsConf.Certificates, cert)
-	}
-
-	if len(caBytes) > 0 {
-		cp, err := x509.SystemCertPool()
-		if err != nil {
-			return nil, nil, fmt.Errorf("cannot retrieve system certificate pool: %w", err)
-		}
-		if !cp.AppendCertsFromPEM(caBytes) {
-			return nil, nil, fmt.Errorf("cannot append certificate into certificate pool: invalid caFile")
-		}
-
-		tlsConf.RootCAs = cp
-	}
-
-	tlsConf.BuildNameToCertificate()
-
-	u, err := url.Parse(repositoryUrl)
-	if err != nil {
-		return nil, nil, fmt.Errorf("cannot parse repository URL: %w", err)
-	}
-
-	tlsConf.ServerName = u.Hostname()
-
-	return tlsConf, &TLSBytes{
-		CertBytes: certBytes,
-		KeyBytes:  keyBytes,
-		CABytes:   caBytes,
-	}, nil
-}
-
-// StoreTLSCertificateFiles writes the certs files to the given path and returns the files paths.
-func StoreTLSCertificateFiles(tlsBytes *TLSBytes, path string) (string, string, string, error) {
+// storeTLSCertificateFiles writes the certs files to the given path and returns the files paths.
+func storeTLSCertificateFiles(tlsBytes *stls.TLSBytes, path string) (string, string, string, error) {
 	var (
 		certFile string
 		keyFile  string

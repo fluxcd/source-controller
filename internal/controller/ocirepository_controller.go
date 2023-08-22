@@ -18,8 +18,6 @@ package controller
 
 import (
 	"context"
-	"crypto/tls"
-	"crypto/x509"
 	"errors"
 	"fmt"
 	"io"
@@ -71,6 +69,7 @@ import (
 	soci "github.com/fluxcd/source-controller/internal/oci"
 	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
 	"github.com/fluxcd/source-controller/internal/reconcile/summarize"
+	"github.com/fluxcd/source-controller/internal/tls"
 	"github.com/fluxcd/source-controller/internal/util"
 )
 
@@ -841,29 +840,22 @@ func (r *OCIRepositoryReconciler) transport(ctx context.Context, obj *ociv1.OCIR
 	}
 
 	transport := remote.DefaultTransport.(*http.Transport).Clone()
-	tlsConfig := transport.TLSClientConfig
-
-	if clientCert, ok := certSecret.Data[oci.ClientCert]; ok {
-		// parse and set client cert and secret
-		if clientKey, ok := certSecret.Data[oci.ClientKey]; ok {
-			cert, err := tls.X509KeyPair(clientCert, clientKey)
-			if err != nil {
-				return nil, err
-			}
-			tlsConfig.Certificates = append(tlsConfig.Certificates, cert)
-		} else {
-			return nil, fmt.Errorf("'%s' found in secret, but no %s", oci.ClientCert, oci.ClientKey)
-		}
+	tlsConfig, _, err := tls.KubeTLSClientConfigFromSecret(certSecret, "")
+	if err != nil {
+		return nil, err
 	}
-
-	if caCert, ok := certSecret.Data[oci.CACert]; ok {
-		syscerts, err := x509.SystemCertPool()
+	if tlsConfig == nil {
+		tlsConfig, _, err = tls.TLSClientConfigFromSecret(certSecret, "")
 		if err != nil {
 			return nil, err
 		}
-		syscerts.AppendCertsFromPEM(caCert)
-		tlsConfig.RootCAs = syscerts
+		if tlsConfig != nil {
+			ctrl.LoggerFrom(ctx).
+				Info("warning: specifying TLS auth data via `certFile`/`keyFile`/`caFile` is deprecated, please use `tls.crt`/`tls.key`/`ca.crt` instead")
+		}
 	}
+	transport.TLSClientConfig = tlsConfig
+
 	return transport, nil
 }
 
