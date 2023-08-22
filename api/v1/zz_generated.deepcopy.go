@@ -232,6 +232,11 @@ func (in *GitRepositoryStatus) DeepCopyInto(out *GitRepositoryStatus) {
 		*out = make([]GitRepositoryInclude, len(*in))
 		copy(*out, *in)
 	}
+	if in.SourceVerificationMode != nil {
+		in, out := &in.SourceVerificationMode, &out.SourceVerificationMode
+		*out = new(GitVerificationMode)
+		**out = **in
+	}
 	out.ReconcileRequestStatus = in.ReconcileRequestStatus
 }
 

@@ -366,8 +366,17 @@ spec:
 `.spec.verify` is an optional field to enable the verification of Git commit
 signatures. The field offers two subfields:
 
-- `.mode`, to specify what Git commit object should be verified. Only supports
-  `head` at present.
+- `.mode`, to specify what Git object(s) should be verified. Supported
+  values are:
+  - `HEAD`: Verifies the commit object pointed to by the HEAD of the repository
+     after performing a checkout via `.spec.ref`.
+  - `head`: Same as `HEAD`, supported for backwards compatibility purposes.
+  - `Tag`: Verifies the tag object pointed to by the specified/inferred tag
+     reference in `.spec.ref.tag`, `.spec.ref.semver` or `.spec.ref.name`.
+  - `TagAndHEAD`: Verifies the tag object pointed to by the specified/inferred tag
+     reference in `.spec.ref.tag`, `.spec.ref.semver` or `.spec.ref.name` and
+     the commit object pointed to by the tag.
+
 - `.secretRef.name`, to specify a reference to a Secret in the same namespace as
   the GitRepository. Containing the (PGP) public keys of trusted Git authors.
 
@@ -384,7 +393,7 @@ spec:
   ref:
     branch: master
   verify:
-    mode: head
+    mode: HEAD
     secretRef:
       name: pgp-public-keys
 ```
@@ -977,6 +986,15 @@ status:
     toPath: bar
   ...
 ```
+
+### Source Verification Mode
+
+The source-controller reports the Git object(s) it verified in the Git
+repository to create an artifact in the GitRepository's
+`.status.sourceVerificationMode`. This value is the same as the [verification
+mode in spec](#verification). The verification status is applicable only to the
+latest Git repository revision used to successfully build and store an
+artifact.
 
 ### Observed Generation
 
