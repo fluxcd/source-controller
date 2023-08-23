@@ -65,6 +65,16 @@ func TestNormalizeURL(t *testing.T) {
 			want: "http://example.com/?st=pr",
 		},
 		{
+			name: "url with encoded path",
+			url:  "http://example.com/next%2Fpath",
+			want: "http://example.com/next%2Fpath/",
+		},
+		{
+			name: "url with encoded path and slash",
+			url:  "http://example.com/next%2Fpath/",
+			want: "http://example.com/next%2Fpath/",
+		},
+		{
 			name: "empty url",
 			url:  "",
 			want: "",
