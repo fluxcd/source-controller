@@ -2,6 +2,95 @@
 
 All notable changes to this project are documented in this file.
 
+## 1.1.0
+
+**Release date:** 2023-08-23
+
+This minor release comes with API changes, bug fixes and several new features.
+
+All APIs that accept TLS data have been modified to adopt Secrets of type
+`kubernetes.io/tls`. This includes:
+* HelmRepository: The field `.spec.secretRef` has been __deprecated__ in favor
+of a new field [`.spec.certSecretRef`](https://github.com/fluxcd/source-controller/blob/v1.1.0/docs/spec/v1beta2/helmrepositories.md#cert-secret-reference).
+  This field is also supported by OCI HelmRepositories.
+* OCIRepository: Support for the`caFile`, `keyFile` and `certFile` keys in the
+  Secret specified in [`.spec.certSecretRef`](https://github.com/fluxcd/source-controller/blob/v1.1.0/docs/spec/v1beta2/ocirepositories.md#cert-secret-reference)
+  have been __deprecated__ in favor of `ca.crt`, `tls.key` and `tls.crt`.
+  Also, the Secret now must be of type `Opaque` or `kubernete.io/tls`.
+* GitRepository: CA certificate can now be provided in the Secret sepcified in
+  `.spec.secretRef` using the `ca.crt` key, which takes precedence over the
+  existing `caFile` key.
+
+Furthermore, GitRepository has a couple of new features:
+* Proxy support: A new field [`.spec.proxySecretRef`](https://github.com/fluxcd/source-controller/blob/v1.1.0/docs/spec/v1/gitrepositories.md#proxy-secret-reference)
+  has been introduced which can be used to specify the proxy configuration to
+  use for all remote Git operations related to the particular object.
+* Tag verification: The field [`.spec.verification.mode`](https://github.com/fluxcd/source-controller/blob/v1.1.0/docs/spec/v1/gitrepositories.md#verification)
+  now supports the following values:
+    * HEAD: Verify the HEAD of the Git repository.
+    * Tag: Verify the tag specified in `.spec.ref`
+    * TagAndHead: Verify the tag specified in `.spec.ref` and the commit it
+      points to.
+
+Starting with this version, the controller now stops exporting an object's
+metrics as soon as the object has been deleted.
+
+In addition, the controller now consumes significantly less CPU and memory when
+reconciling Helm repository indexes.
+
+Lastly, a new flag `--interval-jitter-percentage` has been introduced which can
+be used to specify a jitter to the reconciliation interval in order to
+distribute the load more evenly when multiple objects are set up with the same
+interval.
+
+Improvements:
+- gitrepo: Add support for specifying proxy per `GitRepository`
+  [#1109](https://github.com/fluxcd/source-controller/pull/1109)
+- helmrepo: add `.spec.certSecretRef` for specifying TLS auth data
+  [#1160](https://github.com/fluxcd/source-controller/pull/1160)
+- Update docs on Azure identity
+  [#1167](https://github.com/fluxcd/source-controller/pull/1167)
+- gitrepo: document limitation of `spec.ref.name` with Azure Devops
+  [#1175](https://github.com/fluxcd/source-controller/pull/1175)
+- ocirepo: add cosign support for insecure HTTP registries
+  [#1176](https://github.com/fluxcd/source-controller/pull/1176)
+- Handle delete before adding finalizer
+  [#1177](https://github.com/fluxcd/source-controller/pull/1177)
+- Store Helm indexes in JSON format
+  [#1178](https://github.com/fluxcd/source-controller/pull/1178)
+- Unpin go-git and update to v5.8.1
+  [#1179](https://github.com/fluxcd/source-controller/pull/1179)
+- controller: jitter requeue interval
+  [#1184](https://github.com/fluxcd/source-controller/pull/1184)
+- cache: ensure new expiration is persisted
+  [#1185](https://github.com/fluxcd/source-controller/pull/1185)
+- gitrepo: add support for Git tag verification
+  [#1187](https://github.com/fluxcd/source-controller/pull/1187)
+- Update dependencies
+  [#1191](https://github.com/fluxcd/source-controller/pull/1191)
+- Adopt Kubernetes style TLS Secrets
+  [#1194](https://github.com/fluxcd/source-controller/pull/1194)
+- Update dependencies
+  [#1196](https://github.com/fluxcd/source-controller/pull/1196)
+- Helm OCI: Add support for TLS registries with self-signed certs
+  [#1197](https://github.com/fluxcd/source-controller/pull/1197)
+- Update dependencies
+  [#1202](https://github.com/fluxcd/source-controller/pull/1202)
+- Preserve url encoded path in normalized helm repository URL
+  [#1203](https://github.com/fluxcd/source-controller/pull/1203)
+- Fix link ref in API docs
+  [#1204](https://github.com/fluxcd/source-controller/pull/1204)
+
+Fixes:
+- Fix the helm cache arguments
+  [#1170](https://github.com/fluxcd/source-controller/pull/1170)
+- Delete stale metrics on object delete
+  [#1183](https://github.com/fluxcd/source-controller/pull/1183)
+- Disable system-wide git config in tests
+  [#1192](https://github.com/fluxcd/source-controller/pull/1192)
+- Fix links in API docs
+  [#1200](https://github.com/fluxcd/source-controller/pull/1200)
+
 ## 1.0.1
 
 **Release date:** 2023-07-10
@@ -33,7 +122,7 @@ an update of Kubernetes to v1.27.3.
 
 For a comprehensive list of changes since `v0.36.x`, please refer to the
 changelog for [v1.0.0-rc.1](#100-rc1), [v1.0.0-rc.3](#100-rc3) and
-[`v1.0.0-rc.4](#100-rc4).
+[`v1.0.0-rc.4`](#100-rc4).
 
 Improvements:
 - gitrepo: remove `OptimizedGitClones` as a feature gate
