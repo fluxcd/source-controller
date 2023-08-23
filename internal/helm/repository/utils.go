@@ -47,10 +47,16 @@ func NormalizeURL(repositoryURL string) (string, error) {
 
 	if u.Scheme == helmreg.OCIScheme {
 		u.Path = strings.TrimRight(u.Path, "/")
+		// we perform the same operation on u.RawPath so that it will be a valid encoding
+		// of u.Path. This allows u.EscapedPath() (which is used in computing u.String()) to return
+		// the correct value when the path is url encoded.
+		// ref: https://pkg.go.dev/net/url#URL.EscapedPath
+		u.RawPath = strings.TrimRight(u.RawPath, "/")
 		return u.String(), nil
 	}
 
 	u.Path = strings.TrimRight(u.Path, "/") + "/"
+	u.RawPath = strings.TrimRight(u.RawPath, "/") + "/"
 	return u.String(), nil
 }
 
