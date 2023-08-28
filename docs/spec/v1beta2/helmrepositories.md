@@ -896,5 +896,6 @@ annotation value it acted on in the `.status.lastHandledReconcileAt` field.
 For practical information about this field, see [triggering a
 reconcile](#triggering-a-reconcile).
 
+[pem-encoding]: https://en.wikipedia.org/wiki/Privacy-Enhanced_Mail
 [typical-status-properties]: https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md#typical-status-properties
 [kstatus-spec]: https://github.com/kubernetes-sigs/cli-utils/tree/master/pkg/kstatus
