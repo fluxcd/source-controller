@@ -659,7 +659,7 @@ func TestHelmChartReconciler_reconcileSource(t *testing.T) {
 				conditions.MarkUnknown(obj, meta.ReadyCondition, "foo", "bar")
 			},
 			want:    sreconcile.ResultEmpty,
-			wantErr: &serror.Event{Err: errors.New("gitrepositories.source.toolkit.fluxcd.io \"unavailable\" not found")},
+			wantErr: &serror.Generic{Err: errors.New("gitrepositories.source.toolkit.fluxcd.io \"unavailable\" not found")},
 			assertFunc: func(g *WithT, build chart.Build, obj helmv1.HelmChart) {
 				g.Expect(build.Complete()).To(BeFalse())
 
@@ -963,7 +963,7 @@ func TestHelmChartReconciler_buildFromHelmRepository(t *testing.T) {
 				}
 			},
 			want:    sreconcile.ResultEmpty,
-			wantErr: &serror.Event{Err: errors.New("failed to get authentication secret '/invalid'")},
+			wantErr: &serror.Generic{Err: errors.New("failed to get authentication secret '/invalid'")},
 			assertFunc: func(g *WithT, obj *helmv1.HelmChart, build chart.Build) {
 				g.Expect(build.Complete()).To(BeFalse())
 
@@ -1231,7 +1231,7 @@ func TestHelmChartReconciler_buildFromOCIHelmRepository(t *testing.T) {
 				}
 			},
 			want:    sreconcile.ResultEmpty,
-			wantErr: &serror.Event{Err: errors.New("failed to get authentication secret '/invalid'")},
+			wantErr: &serror.Generic{Err: errors.New("failed to get authentication secret '/invalid'")},
 			assertFunc: func(g *WithT, obj *helmv1.HelmChart, build chart.Build) {
 				g.Expect(build.Complete()).To(BeFalse())
 
@@ -1463,7 +1463,7 @@ func TestHelmChartReconciler_buildFromTarballArtifact(t *testing.T) {
 			name:    "Empty source artifact",
 			source:  sourcev1.Artifact{},
 			want:    sreconcile.ResultEmpty,
-			wantErr: &serror.Event{Err: errors.New("no such file or directory")},
+			wantErr: &serror.Generic{Err: errors.New("no such file or directory")},
 			assertFunc: func(g *WithT, build chart.Build) {
 				g.Expect(build.Complete()).To(BeFalse())
 			},
@@ -1472,7 +1472,7 @@ func TestHelmChartReconciler_buildFromTarballArtifact(t *testing.T) {
 			name:    "Invalid artifact type",
 			source:  *yamlArtifact,
 			want:    sreconcile.ResultEmpty,
-			wantErr: &serror.Event{Err: errors.New("artifact untar error: requires gzip-compressed body")},
+			wantErr: &serror.Generic{Err: errors.New("artifact untar error: requires gzip-compressed body")},
 			assertFunc: func(g *WithT, build chart.Build) {
 				g.Expect(build.Complete()).To(BeFalse())
 			},

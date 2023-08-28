@@ -90,28 +90,6 @@ func NewStalling(err error, reason string) *Stalling {
 	}
 }
 
-// Event is an error event. It can be used to construct an event to be
-// recorded.
-// Deprecated: use Generic error with NewGeneric() for the same behavior and
-// replace the RecordContextualError with ErrorActionHandler for result
-// processing.
-type Event struct {
-	// Reason is the reason for the event error.
-	Reason string
-	// Error is the actual error for the event.
-	Err error
-}
-
-// Error implements error interface.
-func (ee *Event) Error() string {
-	return ee.Err.Error()
-}
-
-// Unwrap returns the underlying error.
-func (ee *Event) Unwrap() error {
-	return ee.Err
-}
-
 // Waiting is the reconciliation wait state error. It contains an error, wait
 // duration and a reason for the wait. It is a contextual error, used to express
 // the scenario which contributed to the reconciliation result.
@@ -176,13 +154,13 @@ func (g *Generic) Unwrap() error {
 
 // NewGeneric constructs a new Generic error with default configuration.
 func NewGeneric(err error, reason string) *Generic {
-	// Since it's a error, ensure to log and send failure notification.
+	// Since it's a generic error, it'll be returned to the runtime and logged
+	// automatically, do not log it. Send failure notification.
 	return &Generic{
 		Reason: reason,
 		Err:    err,
 		Config: Config{
 			Event:        corev1.EventTypeWarning,
-			Log:          true,
 			Notification: true,
 		},
 	}

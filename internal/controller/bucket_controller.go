@@ -200,7 +200,7 @@ func (r *BucketReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 			summarize.WithReconcileError(retErr),
 			summarize.WithIgnoreNotFound(),
 			summarize.WithProcessors(
-				summarize.RecordContextualError,
+				summarize.ErrorActionHandler,
 				summarize.RecordReconcileReq,
 			),
 			summarize.WithResultBuilder(sreconcile.AlwaysRequeueResultBuilder{
@@ -279,10 +279,10 @@ func (r *BucketReconciler) reconcile(ctx context.Context, sp *patch.SerialPatche
 	// Create temp working dir
 	tmpDir, err := os.MkdirTemp("", fmt.Sprintf("%s-%s-%s-", obj.Kind, obj.Namespace, obj.Name))
 	if err != nil {
-		e := &serror.Event{
-			Err:    fmt.Errorf("failed to create temporary working directory: %w", err),
-			Reason: sourcev1.DirCreationFailedReason,
-		}
+		e := serror.NewGeneric(
+			fmt.Errorf("failed to create temporary working directory: %w", err),
+			sourcev1.DirCreationFailedReason,
+		)
 		conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition, e.Reason, e.Err.Error())
 		return sreconcile.ResultEmpty, e
 	}
@@ -423,7 +423,7 @@ func (r *BucketReconciler) reconcileStorage(ctx context.Context, sp *patch.Seria
 func (r *BucketReconciler) reconcileSource(ctx context.Context, sp *patch.SerialPatcher, obj *bucketv1.Bucket, index *index.Digester, dir string) (sreconcile.Result, error) {
 	secret, err := r.getBucketSecret(ctx, obj)
 	if err != nil {
-		e := &serror.Event{Err: err, Reason: sourcev1.AuthenticationFailedReason}
+		e := serror.NewGeneric(err, sourcev1.AuthenticationFailedReason)
 		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Error())
 		// Return error as the world as observed may change
 		return sreconcile.ResultEmpty, e
@@ -434,34 +434,34 @@ func (r *BucketReconciler) reconcileSource(ctx context.Context, sp *patch.Serial
 	switch obj.Spec.Provider {
 	case bucketv1.GoogleBucketProvider:
 		if err = gcp.ValidateSecret(secret); err != nil {
-			e := &serror.Event{Err: err, Reason: sourcev1.AuthenticationFailedReason}
+			e := serror.NewGeneric(err, sourcev1.AuthenticationFailedReason)
 			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Error())
 			return sreconcile.ResultEmpty, e
 		}
 		if provider, err = gcp.NewClient(ctx, secret); err != nil {
-			e := &serror.Event{Err: err, Reason: "ClientError"}
+			e := serror.NewGeneric(err, "ClientError")
 			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Error())
 			return sreconcile.ResultEmpty, e
 		}
 	case bucketv1.AzureBucketProvider:
 		if err = azure.ValidateSecret(secret); err != nil {
-			e := &serror.Event{Err: err, Reason: sourcev1.AuthenticationFailedReason}
+			e := serror.NewGeneric(err, sourcev1.AuthenticationFailedReason)
 			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Error())
 			return sreconcile.ResultEmpty, e
 		}
 		if provider, err = azure.NewClient(obj, secret); err != nil {
-			e := &serror.Event{Err: err, Reason: "ClientError"}
+			e := serror.NewGeneric(err, "ClientError")
 			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Error())
 			return sreconcile.ResultEmpty, e
 		}
 	default:
 		if err = minio.ValidateSecret(secret); err != nil {
-			e := &serror.Event{Err: err, Reason: sourcev1.AuthenticationFailedReason}
+			e := serror.NewGeneric(err, sourcev1.AuthenticationFailedReason)
 			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Error())
 			return sreconcile.ResultEmpty, e
 		}
 		if provider, err = minio.NewClient(obj, secret); err != nil {
-			e := &serror.Event{Err: err, Reason: "ClientError"}
+			e := serror.NewGeneric(err, "ClientError")
 			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Error())
 			return sreconcile.ResultEmpty, e
 		}
@@ -469,7 +469,7 @@ func (r *BucketReconciler) reconcileSource(ctx context.Context, sp *patch.Serial
 
 	// Fetch etag index
 	if err = fetchEtagIndex(ctx, provider, obj, index, dir); err != nil {
-		e := &serror.Event{Err: err, Reason: bucketv1.BucketOperationFailedReason}
+		e := serror.NewGeneric(err, bucketv1.BucketOperationFailedReason)
 		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Error())
 		return sreconcile.ResultEmpty, e
 	}
@@ -501,7 +501,7 @@ func (r *BucketReconciler) reconcileSource(ctx context.Context, sp *patch.Serial
 		}()
 
 		if err = fetchIndexFiles(ctx, provider, obj, index, dir); err != nil {
-			e := &serror.Event{Err: err, Reason: bucketv1.BucketOperationFailedReason}
+			e := serror.NewGeneric(err, bucketv1.BucketOperationFailedReason)
 			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Error())
 			return sreconcile.ResultEmpty, e
 		}
@@ -550,45 +550,45 @@ func (r *BucketReconciler) reconcileArtifact(ctx context.Context, sp *patch.Seri
 
 	// Ensure target path exists and is a directory
 	if f, err := os.Stat(dir); err != nil {
-		e := &serror.Event{
-			Err:    fmt.Errorf("failed to stat source path: %w", err),
-			Reason: sourcev1.StatOperationFailedReason,
-		}
+		e := serror.NewGeneric(
+			fmt.Errorf("failed to stat source path: %w", err),
+			sourcev1.StatOperationFailedReason,
+		)
 		conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition, e.Reason, e.Err.Error())
 		return sreconcile.ResultEmpty, e
 	} else if !f.IsDir() {
-		e := &serror.Event{
-			Err:    fmt.Errorf("source path '%s' is not a directory", dir),
-			Reason: sourcev1.InvalidPathReason,
-		}
+		e := serror.NewGeneric(
+			fmt.Errorf("source path '%s' is not a directory", dir),
+			sourcev1.InvalidPathReason,
+		)
 		conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition, e.Reason, e.Err.Error())
 		return sreconcile.ResultEmpty, e
 	}
 
 	// Ensure artifact directory exists and acquire lock
 	if err := r.Storage.MkdirAll(artifact); err != nil {
-		e := &serror.Event{
-			Err:    fmt.Errorf("failed to create artifact directory: %w", err),
-			Reason: sourcev1.DirCreationFailedReason,
-		}
+		e := serror.NewGeneric(
+			fmt.Errorf("failed to create artifact directory: %w", err),
+			sourcev1.DirCreationFailedReason,
+		)
 		conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition, e.Reason, e.Err.Error())
 		return sreconcile.ResultEmpty, e
 	}
 	unlock, err := r.Storage.Lock(artifact)
 	if err != nil {
-		return sreconcile.ResultEmpty, &serror.Event{
-			Err:    fmt.Errorf("failed to acquire lock for artifact: %w", err),
-			Reason: meta.FailedReason,
-		}
+		return sreconcile.ResultEmpty, serror.NewGeneric(
+			fmt.Errorf("failed to acquire lock for artifact: %w", err),
+			meta.FailedReason,
+		)
 	}
 	defer unlock()
 
 	// Archive directory to storage
 	if err := r.Storage.Archive(&artifact, dir, nil); err != nil {
-		e := &serror.Event{
-			Err:    fmt.Errorf("unable to archive artifact to storage: %s", err),
-			Reason: sourcev1.ArchiveOperationFailedReason,
-		}
+		e := serror.NewGeneric(
+			fmt.Errorf("unable to archive artifact to storage: %s", err),
+			sourcev1.ArchiveOperationFailedReason,
+		)
 		conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition, e.Reason, e.Err.Error())
 		return sreconcile.ResultEmpty, e
 	}
@@ -635,10 +635,10 @@ func (r *BucketReconciler) reconcileDelete(ctx context.Context, obj *bucketv1.Bu
 func (r *BucketReconciler) garbageCollect(ctx context.Context, obj *bucketv1.Bucket) error {
 	if !obj.DeletionTimestamp.IsZero() {
 		if deleted, err := r.Storage.RemoveAll(r.Storage.NewArtifactFor(obj.Kind, obj.GetObjectMeta(), "", "*")); err != nil {
-			return &serror.Event{
-				Err:    fmt.Errorf("garbage collection for deleted resource failed: %s", err),
-				Reason: "GarbageCollectionFailed",
-			}
+			return serror.NewGeneric(
+				fmt.Errorf("garbage collection for deleted resource failed: %s", err),
+				"GarbageCollectionFailed",
+			)
 		} else if deleted != "" {
 			r.eventLogf(ctx, obj, eventv1.EventTypeTrace, "GarbageCollectionSucceeded",
 				"garbage collected artifacts for deleted resource")
@@ -649,10 +649,10 @@ func (r *BucketReconciler) garbageCollect(ctx context.Context, obj *bucketv1.Buc
 	if obj.GetArtifact() != nil {
 		delFiles, err := r.Storage.GarbageCollect(ctx, *obj.GetArtifact(), time.Second*5)
 		if err != nil {
-			return &serror.Event{
-				Err:    fmt.Errorf("garbage collection of artifacts failed: %w", err),
-				Reason: "GarbageCollectionFailed",
-			}
+			return serror.NewGeneric(
+				fmt.Errorf("garbage collection of artifacts failed: %w", err),
+				"GarbageCollectionFailed",
+			)
 		}
 		if len(delFiles) > 0 {
 			r.eventLogf(ctx, obj, eventv1.EventTypeTrace, "GarbageCollectionSucceeded",

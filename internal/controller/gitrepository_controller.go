@@ -561,6 +561,8 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 			)
 			ge.Notification = false
 			ge.Ignore = true
+			// Log it as this will not be passed to the runtime.
+			ge.Log = true
 			ge.Event = corev1.EventTypeNormal
 			// Remove any stale fetch failed condition.
 			conditions.Delete(obj, sourcev1.FetchFailedCondition)
@@ -815,10 +817,10 @@ func (r *GitRepositoryReconciler) reconcileInclude(ctx context.Context, sp *patc
 
 		// Copy artifact (sub)contents to configured directory.
 		if err := r.Storage.CopyToPath(artifact, incl.GetFromPath(), toPath); err != nil {
-			e := &serror.Event{
-				Err:    fmt.Errorf("failed to copy '%s' include from %s to %s: %w", incl.GitRepositoryRef.Name, incl.GetFromPath(), incl.GetToPath(), err),
-				Reason: "CopyFailure",
-			}
+			e := serror.NewGeneric(
+				fmt.Errorf("failed to copy '%s' include from %s to %s: %w", incl.GitRepositoryRef.Name, incl.GetFromPath(), incl.GetToPath(), err),
+				"CopyFailure",
+			)
 			conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition, e.Reason, e.Err.Error())
 			return sreconcile.ResultEmpty, e
 		}

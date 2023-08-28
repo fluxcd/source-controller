@@ -357,7 +357,7 @@ func TestSummarizeAndPatch(t *testing.T) {
 				WithReconcileError(tt.reconcileErr),
 				WithConditions(tt.conditions...),
 				WithIgnoreNotFound(),
-				WithProcessors(RecordContextualError, RecordReconcileReq),
+				WithProcessors(ErrorActionHandler, RecordReconcileReq),
 				WithResultBuilder(reconcile.AlwaysRequeueResultBuilder{RequeueAfter: obj.Spec.Interval.Duration}),
 			}
 			if tt.bipolarConditions != nil {

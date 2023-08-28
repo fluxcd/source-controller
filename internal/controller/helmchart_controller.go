@@ -215,7 +215,7 @@ func (r *HelmChartReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			summarize.WithReconcileError(retErr),
 			summarize.WithIgnoreNotFound(),
 			summarize.WithProcessors(
-				summarize.RecordContextualError,
+				summarize.ErrorActionHandler,
 				summarize.RecordReconcileReq,
 			),
 			summarize.WithResultBuilder(sreconcile.AlwaysRequeueResultBuilder{
@@ -420,19 +420,19 @@ func (r *HelmChartReconciler) reconcileSource(ctx context.Context, sp *patch.Ser
 	// Retrieve the source
 	s, err := r.getSource(ctx, obj)
 	if err != nil {
-		e := &serror.Event{
-			Err:    fmt.Errorf("failed to get source: %w", err),
-			Reason: "SourceUnavailable",
-		}
+		e := serror.NewGeneric(
+			fmt.Errorf("failed to get source: %w", err),
+			"SourceUnavailable",
+		)
 		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
 
 		// Return Kubernetes client errors, but ignore others which can only be
 		// solved by a change in generation
 		if apierrs.ReasonForError(err) == metav1.StatusReasonUnknown {
-			return sreconcile.ResultEmpty, &serror.Stalling{
-				Err:    fmt.Errorf("failed to get source: %w", err),
-				Reason: "UnsupportedSourceKind",
-			}
+			return sreconcile.ResultEmpty, serror.NewStalling(
+				fmt.Errorf("failed to get source: %w", err),
+				"UnsupportedSourceKind",
+			)
 		}
 		return sreconcile.ResultEmpty, e
 	}
@@ -471,15 +471,15 @@ func (r *HelmChartReconciler) reconcileSource(ctx context.Context, sp *patch.Ser
 		// Handle any build error
 		if retErr != nil {
 			if buildErr := new(chart.BuildError); errors.As(retErr, &buildErr) {
-				retErr = &serror.Event{
-					Err:    buildErr,
-					Reason: buildErr.Reason.Reason,
-				}
+				retErr = serror.NewGeneric(
+					buildErr,
+					buildErr.Reason.Reason,
+				)
 				if chart.IsPersistentBuildErrorReason(buildErr.Reason) {
-					retErr = &serror.Stalling{
-						Err:    buildErr,
-						Reason: buildErr.Reason.Reason,
-					}
+					retErr = serror.NewStalling(
+						buildErr,
+						buildErr.Reason.Reason,
+					)
 				}
 			}
 		}
@@ -516,10 +516,10 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 
 	clientOpts, certsTmpDir, err := getter.GetClientOpts(ctxTimeout, r.Client, repo, normalizedURL)
 	if err != nil && !errors.Is(err, getter.ErrDeprecatedTLSConfig) {
-		e := &serror.Event{
-			Err:    err,
-			Reason: sourcev1.AuthenticationFailedReason,
-		}
+		e := serror.NewGeneric(
+			err,
+			sourcev1.AuthenticationFailedReason,
+		)
 		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
 		return sreconcile.ResultEmpty, e
 	}
@@ -549,10 +549,10 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 		// or rework to enable reusing credentials to avoid the unneccessary handshake operations
 		registryClient, credentialsFile, err := r.RegistryClientGenerator(clientOpts.TlsConfig, clientOpts.MustLoginToRegistry())
 		if err != nil {
-			e := &serror.Event{
-				Err:    fmt.Errorf("failed to construct Helm client: %w", err),
-				Reason: meta.FailedReason,
-			}
+			e := serror.NewGeneric(
+				fmt.Errorf("failed to construct Helm client: %w", err),
+				meta.FailedReason,
+			)
 			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
 			return sreconcile.ResultEmpty, e
 		}
@@ -574,10 +574,10 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 				if obj.Spec.Verify.SecretRef == nil {
 					provider = fmt.Sprintf("%s keyless", provider)
 				}
-				e := &serror.Event{
-					Err:    fmt.Errorf("failed to verify the signature using provider '%s': %w", provider, err),
-					Reason: sourcev1.VerificationError,
-				}
+				e := serror.NewGeneric(
+					fmt.Errorf("failed to verify the signature using provider '%s': %w", provider, err),
+					sourcev1.VerificationError,
+				)
 				conditions.MarkFalse(obj, sourcev1.SourceVerifiedCondition, e.Reason, e.Err.Error())
 				return sreconcile.ResultEmpty, e
 			}
@@ -599,10 +599,10 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 		if clientOpts.MustLoginToRegistry() {
 			err = ociChartRepo.Login(clientOpts.RegLoginOpts...)
 			if err != nil {
-				e := &serror.Event{
-					Err:    fmt.Errorf("failed to login to OCI registry: %w", err),
-					Reason: sourcev1.AuthenticationFailedReason,
-				}
+				e := serror.NewGeneric(
+					fmt.Errorf("failed to login to OCI registry: %w", err),
+					sourcev1.AuthenticationFailedReason,
+				)
 				conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
 				return sreconcile.ResultEmpty, e
 			}
@@ -683,10 +683,10 @@ func (r *HelmChartReconciler) buildFromTarballArtifact(ctx context.Context, obj 
 	// Create temporary working directory
 	tmpDir, err := util.TempDirForObj("", obj)
 	if err != nil {
-		e := &serror.Event{
-			Err:    fmt.Errorf("failed to create temporary working directory: %w", err),
-			Reason: sourcev1.DirCreationFailedReason,
-		}
+		e := serror.NewGeneric(
+			fmt.Errorf("failed to create temporary working directory: %w", err),
+			sourcev1.DirCreationFailedReason,
+		)
 		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
 		return sreconcile.ResultEmpty, e
 	}
@@ -695,10 +695,10 @@ func (r *HelmChartReconciler) buildFromTarballArtifact(ctx context.Context, obj 
 	// Create directory to untar source into
 	sourceDir := filepath.Join(tmpDir, "source")
 	if err := os.Mkdir(sourceDir, 0o700); err != nil {
-		e := &serror.Event{
-			Err:    fmt.Errorf("failed to create directory to untar source into: %w", err),
-			Reason: sourcev1.DirCreationFailedReason,
-		}
+		e := serror.NewGeneric(
+			fmt.Errorf("failed to create directory to untar source into: %w", err),
+			sourcev1.DirCreationFailedReason,
+		)
 		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
 		return sreconcile.ResultEmpty, e
 	}
@@ -706,25 +706,25 @@ func (r *HelmChartReconciler) buildFromTarballArtifact(ctx context.Context, obj 
 	// Open the tarball artifact file and untar files into working directory
 	f, err := os.Open(r.Storage.LocalPath(source))
 	if err != nil {
-		e := &serror.Event{
-			Err:    fmt.Errorf("failed to open source artifact: %w", err),
-			Reason: sourcev1.ReadOperationFailedReason,
-		}
+		e := serror.NewGeneric(
+			fmt.Errorf("failed to open source artifact: %w", err),
+			sourcev1.ReadOperationFailedReason,
+		)
 		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
 		return sreconcile.ResultEmpty, e
 	}
 	if err = tar.Untar(f, sourceDir, tar.WithMaxUntarSize(-1)); err != nil {
 		_ = f.Close()
-		return sreconcile.ResultEmpty, &serror.Event{
-			Err:    fmt.Errorf("artifact untar error: %w", err),
-			Reason: meta.FailedReason,
-		}
+		return sreconcile.ResultEmpty, serror.NewGeneric(
+			fmt.Errorf("artifact untar error: %w", err),
+			meta.FailedReason,
+		)
 	}
 	if err = f.Close(); err != nil {
-		return sreconcile.ResultEmpty, &serror.Event{
-			Err:    fmt.Errorf("artifact close error: %w", err),
-			Reason: meta.FailedReason,
-		}
+		return sreconcile.ResultEmpty, serror.NewGeneric(
+			fmt.Errorf("artifact close error: %w", err),
+			meta.FailedReason,
+		)
 	}
 
 	// Setup dependency manager
@@ -834,19 +834,19 @@ func (r *HelmChartReconciler) reconcileArtifact(ctx context.Context, _ *patch.Se
 
 	// Ensure artifact directory exists and acquire lock
 	if err := r.Storage.MkdirAll(artifact); err != nil {
-		e := &serror.Event{
-			Err:    fmt.Errorf("failed to create artifact directory: %w", err),
-			Reason: sourcev1.DirCreationFailedReason,
-		}
+		e := serror.NewGeneric(
+			fmt.Errorf("failed to create artifact directory: %w", err),
+			sourcev1.DirCreationFailedReason,
+		)
 		conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition, e.Reason, e.Err.Error())
 		return sreconcile.ResultEmpty, e
 	}
 	unlock, err := r.Storage.Lock(artifact)
 	if err != nil {
-		e := &serror.Event{
-			Err:    fmt.Errorf("failed to acquire lock for artifact: %w", err),
-			Reason: sourcev1.AcquireLockFailedReason,
-		}
+		e := serror.NewGeneric(
+			fmt.Errorf("failed to acquire lock for artifact: %w", err),
+			sourcev1.AcquireLockFailedReason,
+		)
 		conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition, e.Reason, e.Err.Error())
 		return sreconcile.ResultEmpty, e
 	}
@@ -854,10 +854,10 @@ func (r *HelmChartReconciler) reconcileArtifact(ctx context.Context, _ *patch.Se
 
 	// Copy the packaged chart to the artifact path
 	if err = r.Storage.CopyFromPath(&artifact, b.Path); err != nil {
-		e := &serror.Event{
-			Err:    fmt.Errorf("unable to copy Helm chart to storage: %w", err),
-			Reason: sourcev1.ArchiveOperationFailedReason,
-		}
+		e := serror.NewGeneric(
+			fmt.Errorf("unable to copy Helm chart to storage: %w", err),
+			sourcev1.ArchiveOperationFailedReason,
+		)
 		conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition, e.Reason, e.Err.Error())
 		return sreconcile.ResultEmpty, e
 	}
@@ -938,10 +938,10 @@ func (r *HelmChartReconciler) reconcileDelete(ctx context.Context, obj *helmv1.H
 func (r *HelmChartReconciler) garbageCollect(ctx context.Context, obj *helmv1.HelmChart) error {
 	if !obj.DeletionTimestamp.IsZero() {
 		if deleted, err := r.Storage.RemoveAll(r.Storage.NewArtifactFor(obj.Kind, obj.GetObjectMeta(), "", "*")); err != nil {
-			return &serror.Event{
-				Err:    fmt.Errorf("garbage collection for deleted resource failed: %w", err),
-				Reason: "GarbageCollectionFailed",
-			}
+			return serror.NewGeneric(
+				fmt.Errorf("garbage collection for deleted resource failed: %w", err),
+				"GarbageCollectionFailed",
+			)
 		} else if deleted != "" {
 			r.eventLogf(ctx, obj, eventv1.EventTypeTrace, "GarbageCollectionSucceeded",
 				"garbage collected artifacts for deleted resource")
@@ -952,10 +952,10 @@ func (r *HelmChartReconciler) garbageCollect(ctx context.Context, obj *helmv1.He
 	if obj.GetArtifact() != nil {
 		delFiles, err := r.Storage.GarbageCollect(ctx, *obj.GetArtifact(), time.Second*5)
 		if err != nil {
-			return &serror.Event{
-				Err:    fmt.Errorf("garbage collection of artifacts failed: %w", err),
-				Reason: "GarbageCollectionFailed",
-			}
+			return serror.NewGeneric(
+				fmt.Errorf("garbage collection of artifacts failed: %w", err),
+				"GarbageCollectionFailed",
+			)
 		}
 		if len(delFiles) > 0 {
 			r.eventLogf(ctx, obj, eventv1.EventTypeTrace, "GarbageCollectionSucceeded",
@@ -1275,17 +1275,17 @@ func reasonForBuild(build *chart.Build) string {
 func chartRepoConfigErrorReturn(err error, obj *helmv1.HelmChart) (sreconcile.Result, error) {
 	switch err.(type) {
 	case *url.Error:
-		e := &serror.Stalling{
-			Err:    fmt.Errorf("invalid Helm repository URL: %w", err),
-			Reason: sourcev1.URLInvalidReason,
-		}
+		e := serror.NewStalling(
+			fmt.Errorf("invalid Helm repository URL: %w", err),
+			sourcev1.URLInvalidReason,
+		)
 		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
 		return sreconcile.ResultEmpty, e
 	default:
-		e := &serror.Stalling{
-			Err:    fmt.Errorf("failed to construct Helm client: %w", err),
-			Reason: meta.FailedReason,
-		}
+		e := serror.NewStalling(
+			fmt.Errorf("failed to construct Helm client: %w", err),
+			meta.FailedReason,
+		)
 		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
 		return sreconcile.ResultEmpty, e
 	}

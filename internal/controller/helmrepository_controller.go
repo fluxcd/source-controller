@@ -177,7 +177,7 @@ func (r *HelmRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 			summarize.WithReconcileError(retErr),
 			summarize.WithIgnoreNotFound(),
 			summarize.WithProcessors(
-				summarize.RecordContextualError,
+				summarize.ErrorActionHandler,
 				summarize.RecordReconcileReq,
 			),
 			summarize.WithResultBuilder(sreconcile.AlwaysRequeueResultBuilder{
@@ -393,10 +393,10 @@ func (r *HelmRepositoryReconciler) reconcileSource(ctx context.Context, sp *patc
 	obj *helmv1.HelmRepository, artifact *sourcev1.Artifact, chartRepo *repository.ChartRepository) (sreconcile.Result, error) {
 	normalizedURL, err := repository.NormalizeURL(obj.Spec.URL)
 	if err != nil {
-		e := &serror.Stalling{
-			Err:    fmt.Errorf("invalid Helm repository URL: %w", err),
-			Reason: sourcev1.URLInvalidReason,
-		}
+		e := serror.NewStalling(
+			fmt.Errorf("invalid Helm repository URL: %w", err),
+			sourcev1.URLInvalidReason,
+		)
 		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
 		return sreconcile.ResultEmpty, e
 	}
@@ -407,10 +407,10 @@ func (r *HelmRepositoryReconciler) reconcileSource(ctx context.Context, sp *patc
 			ctrl.LoggerFrom(ctx).
 				Info("warning: specifying TLS authentication data via `.spec.secretRef` is deprecated, please use `.spec.certSecretRef` instead")
 		} else {
-			e := &serror.Event{
-				Err:    err,
-				Reason: sourcev1.AuthenticationFailedReason,
-			}
+			e := serror.NewGeneric(
+				err,
+				sourcev1.AuthenticationFailedReason,
+			)
 			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
 			return sreconcile.ResultEmpty, e
 		}
@@ -421,17 +421,17 @@ func (r *HelmRepositoryReconciler) reconcileSource(ctx context.Context, sp *patc
 	if err != nil {
 		switch err.(type) {
 		case *url.Error:
-			e := &serror.Stalling{
-				Err:    fmt.Errorf("invalid Helm repository URL: %w", err),
-				Reason: sourcev1.URLInvalidReason,
-			}
+			e := serror.NewStalling(
+				fmt.Errorf("invalid Helm repository URL: %w", err),
+				sourcev1.URLInvalidReason,
+			)
 			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
 			return sreconcile.ResultEmpty, e
 		default:
-			e := &serror.Stalling{
-				Err:    fmt.Errorf("failed to construct Helm client: %w", err),
-				Reason: meta.FailedReason,
-			}
+			e := serror.NewStalling(
+				fmt.Errorf("failed to construct Helm client: %w", err),
+				meta.FailedReason,
+			)
 			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
 			return sreconcile.ResultEmpty, e
 		}
@@ -439,10 +439,10 @@ func (r *HelmRepositoryReconciler) reconcileSource(ctx context.Context, sp *patc
 
 	// Fetch the repository index from remote.
 	if err := newChartRepo.CacheIndex(); err != nil {
-		e := &serror.Event{
-			Err:    fmt.Errorf("failed to fetch Helm repository index: %w", err),
-			Reason: meta.FailedReason,
-		}
+		e := serror.NewGeneric(
+			fmt.Errorf("failed to fetch Helm repository index: %w", err),
+			meta.FailedReason,
+		)
 		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
 		// Coin flip on transient or persistent error, return error and hope for the best
 		return sreconcile.ResultEmpty, e
@@ -465,10 +465,10 @@ func (r *HelmRepositoryReconciler) reconcileSource(ctx context.Context, sp *patc
 
 	// Load the cached repository index to ensure it passes validation.
 	if err := chartRepo.LoadFromPath(); err != nil {
-		e := &serror.Event{
-			Err:    fmt.Errorf("failed to load Helm repository from index YAML: %w", err),
-			Reason: helmv1.IndexationFailedReason,
-		}
+		e := serror.NewGeneric(
+			fmt.Errorf("failed to load Helm repository from index YAML: %w", err),
+			helmv1.IndexationFailedReason,
+		)
 		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
 		return sreconcile.ResultEmpty, e
 	}
@@ -478,10 +478,10 @@ func (r *HelmRepositoryReconciler) reconcileSource(ctx context.Context, sp *patc
 	// Calculate revision.
 	revision := chartRepo.Digest(intdigest.Canonical)
 	if revision.Validate() != nil {
-		e := &serror.Event{
-			Err:    fmt.Errorf("failed to calculate revision: %w", err),
-			Reason: helmv1.IndexationFailedReason,
-		}
+		e := serror.NewGeneric(
+			fmt.Errorf("failed to calculate revision: %w", err),
+			helmv1.IndexationFailedReason,
+		)
 		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
 		return sreconcile.ResultEmpty, e
 	}
@@ -541,10 +541,10 @@ func (r *HelmRepositoryReconciler) reconcileArtifact(ctx context.Context, sp *pa
 
 	// Create artifact dir
 	if err := r.Storage.MkdirAll(*artifact); err != nil {
-		e := &serror.Event{
-			Err:    fmt.Errorf("failed to create artifact directory: %w", err),
-			Reason: sourcev1.DirCreationFailedReason,
-		}
+		e := serror.NewGeneric(
+			fmt.Errorf("failed to create artifact directory: %w", err),
+			sourcev1.DirCreationFailedReason,
+		)
 		conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition, e.Reason, e.Err.Error())
 		return sreconcile.ResultEmpty, e
 	}
@@ -552,28 +552,28 @@ func (r *HelmRepositoryReconciler) reconcileArtifact(ctx context.Context, sp *pa
 	// Acquire lock.
 	unlock, err := r.Storage.Lock(*artifact)
 	if err != nil {
-		return sreconcile.ResultEmpty, &serror.Event{
-			Err:    fmt.Errorf("failed to acquire lock for artifact: %w", err),
-			Reason: meta.FailedReason,
-		}
+		return sreconcile.ResultEmpty, serror.NewGeneric(
+			fmt.Errorf("failed to acquire lock for artifact: %w", err),
+			meta.FailedReason,
+		)
 	}
 	defer unlock()
 
 	// Save artifact to storage in JSON format.
 	b, err := chartRepo.ToJSON()
 	if err != nil {
-		e := &serror.Event{
-			Err:    fmt.Errorf("unable to get JSON index from chart repo: %w", err),
-			Reason: sourcev1.ArchiveOperationFailedReason,
-		}
+		e := serror.NewGeneric(
+			fmt.Errorf("unable to get JSON index from chart repo: %w", err),
+			sourcev1.ArchiveOperationFailedReason,
+		)
 		conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition, e.Reason, e.Err.Error())
 		return sreconcile.ResultEmpty, e
 	}
 	if err = r.Storage.Copy(artifact, bytes.NewBuffer(b)); err != nil {
-		e := &serror.Event{
-			Err:    fmt.Errorf("unable to save artifact to storage: %w", err),
-			Reason: sourcev1.ArchiveOperationFailedReason,
-		}
+		e := serror.NewGeneric(
+			fmt.Errorf("unable to save artifact to storage: %w", err),
+			sourcev1.ArchiveOperationFailedReason,
+		)
 		conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition, e.Reason, e.Err.Error())
 		return sreconcile.ResultEmpty, e
 	}
@@ -639,10 +639,10 @@ func (r *HelmRepositoryReconciler) reconcileDelete(ctx context.Context, obj *hel
 func (r *HelmRepositoryReconciler) garbageCollect(ctx context.Context, obj *helmv1.HelmRepository) error {
 	if !obj.DeletionTimestamp.IsZero() || (obj.Spec.Type != "" && obj.Spec.Type != helmv1.HelmRepositoryTypeDefault) {
 		if deleted, err := r.Storage.RemoveAll(r.Storage.NewArtifactFor(obj.Kind, obj.GetObjectMeta(), "", "*")); err != nil {
-			return &serror.Event{
-				Err:    fmt.Errorf("garbage collection for deleted resource failed: %w", err),
-				Reason: "GarbageCollectionFailed",
-			}
+			return serror.NewGeneric(
+				fmt.Errorf("garbage collection for deleted resource failed: %w", err),
+				"GarbageCollectionFailed",
+			)
 		} else if deleted != "" {
 			r.eventLogf(ctx, obj, eventv1.EventTypeTrace, "GarbageCollectionSucceeded",
 				"garbage collected artifacts for deleted resource")
@@ -657,10 +657,10 @@ func (r *HelmRepositoryReconciler) garbageCollect(ctx context.Context, obj *helm
 	if obj.GetArtifact() != nil {
 		delFiles, err := r.Storage.GarbageCollect(ctx, *obj.GetArtifact(), time.Second*5)
 		if err != nil {
-			return &serror.Event{
-				Err:    fmt.Errorf("garbage collection of artifacts failed: %w", err),
-				Reason: "GarbageCollectionFailed",
-			}
+			return serror.NewGeneric(
+				fmt.Errorf("garbage collection of artifacts failed: %w", err),
+				"GarbageCollectionFailed",
+			)
 		}
 		if len(delFiles) > 0 {
 			r.eventLogf(ctx, obj, eventv1.EventTypeTrace, "GarbageCollectionSucceeded",
