@@ -35,13 +35,14 @@ func Test_tlsClientConfigFromSecret(t *testing.T) {
 	tlsSecretFixture := validTlsSecret(t, false)
 
 	tests := []struct {
-		name    string
-		secret  corev1.Secret
-		modify  func(secret *corev1.Secret)
-		tlsKeys bool
-		url     string
-		wantErr bool
-		wantNil bool
+		name      string
+		secret    corev1.Secret
+		modify    func(secret *corev1.Secret)
+		tlsKeys   bool
+		checkType bool
+		url       string
+		wantErr   bool
+		wantNil   bool
 	}{
 		{
 			name:    "tls.crt, tls.key and ca.crt",
@@ -86,10 +87,20 @@ func Test_tlsClientConfigFromSecret(t *testing.T) {
 			wantNil: true,
 		},
 		{
-			name:    "invalid secret type",
-			secret:  corev1.Secret{Type: corev1.SecretTypeDockerConfigJson},
-			wantErr: true,
-			wantNil: true,
+			name:      "docker config secret with type checking enabled",
+			secret:    tlsSecretFixture,
+			modify:    func(secret *corev1.Secret) { secret.Type = corev1.SecretTypeDockerConfigJson },
+			tlsKeys:   false,
+			checkType: true,
+			wantErr:   true,
+			wantNil:   true,
+		},
+		{
+			name:    "docker config secret with type checking disabled",
+			secret:  tlsSecretFixture,
+			modify:  func(secret *corev1.Secret) { secret.Type = corev1.SecretTypeDockerConfigJson },
+			tlsKeys: false,
+			url:     "https://example.com",
 		},
 	}
 	for _, tt := range tests {
@@ -100,7 +111,7 @@ func Test_tlsClientConfigFromSecret(t *testing.T) {
 				tt.modify(secret)
 			}
 
-			tlsConfig, _, err := tlsClientConfigFromSecret(*secret, tt.url, tt.tlsKeys)
+			tlsConfig, _, err := tlsClientConfigFromSecret(*secret, tt.url, tt.tlsKeys, tt.checkType)
 			g.Expect(err != nil).To(Equal(tt.wantErr), fmt.Sprintf("expected error: %v, got: %v", tt.wantErr, err))
 			g.Expect(tlsConfig == nil).To(Equal(tt.wantNil))
 			if tt.url != "" {

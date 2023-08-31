@@ -115,10 +115,10 @@ func GetClientOpts(ctx context.Context, c client.Client, obj *helmv1.HelmReposit
 		}
 		hrOpts.GetterOpts = append(hrOpts.GetterOpts, opts...)
 
-		// If the TLS config is nil, i.e. one couldn't be constructed using `.spec.certSecretRef`
-		// then try to use `.spec.secretRef`.
+		// If the TLS config is nil, i.e. one couldn't be constructed using
+		// `.spec.certSecretRef`, then try to use `.spec.secretRef`.
 		if hrOpts.TlsConfig == nil && !ociRepo {
-			hrOpts.TlsConfig, tlsBytes, err = stls.TLSClientConfigFromSecret(*authSecret, url)
+			hrOpts.TlsConfig, tlsBytes, err = stls.LegacyTLSClientConfigFromSecret(*authSecret, url)
 			if err != nil {
 				return nil, "", fmt.Errorf("failed to construct Helm client's TLS config: %w", err)
 			}
