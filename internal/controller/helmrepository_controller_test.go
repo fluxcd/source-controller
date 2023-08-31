@@ -507,6 +507,38 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 			},
 		},
 		{
+			// Regression test for: https://github.com/fluxcd/source-controller/issues/1218
+			name:     "HTTPS with docker config secretRef and caFile key makes ArtifactOutdated=True",
+			protocol: "https",
+			server: options{
+				publicKey:  tlsPublicKey,
+				privateKey: tlsPrivateKey,
+				ca:         tlsCA,
+			},
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "ca-file",
+				},
+				Data: map[string][]byte{
+					"caFile": tlsCA,
+				},
+				Type: corev1.SecretTypeDockerConfigJson,
+			},
+			beforeFunc: func(t *WithT, obj *helmv1.HelmRepository, rev digest.Digest) {
+				obj.Spec.SecretRef = &meta.LocalObjectReference{Name: "ca-file"}
+			},
+			want: sreconcile.ResultSuccess,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new index revision"),
+				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new index revision"),
+			},
+			afterFunc: func(t *WithT, obj *helmv1.HelmRepository, artifact sourcev1.Artifact, chartRepo *repository.ChartRepository) {
+				t.Expect(chartRepo.Path).ToNot(BeEmpty())
+				t.Expect(chartRepo.Index).ToNot(BeNil())
+				t.Expect(artifact.Revision).ToNot(BeEmpty())
+			},
+		},
+		{
 			name:     "HTTP without secretRef makes ArtifactOutdated=True",
 			protocol: "http",
 			want:     sreconcile.ResultSuccess,
@@ -535,6 +567,38 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 					"username": []byte("git"),
 					"password": []byte("1234"),
 				},
+			},
+			beforeFunc: func(t *WithT, obj *helmv1.HelmRepository, rev digest.Digest) {
+				obj.Spec.SecretRef = &meta.LocalObjectReference{Name: "basic-auth"}
+			},
+			want: sreconcile.ResultSuccess,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new index revision"),
+				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new index revision"),
+			},
+			afterFunc: func(t *WithT, obj *helmv1.HelmRepository, artifact sourcev1.Artifact, chartRepo *repository.ChartRepository) {
+				t.Expect(chartRepo.Path).ToNot(BeEmpty())
+				t.Expect(chartRepo.Index).ToNot(BeNil())
+				t.Expect(artifact.Revision).ToNot(BeEmpty())
+			},
+		},
+		{
+			// Regression test for: https://github.com/fluxcd/source-controller/issues/1218
+			name:     "HTTP with docker config secretRef sets Reconciling=True",
+			protocol: "http",
+			server: options{
+				username: "git",
+				password: "1234",
+			},
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "basic-auth",
+				},
+				Data: map[string][]byte{
+					"username": []byte("git"),
+					"password": []byte("1234"),
+				},
+				Type: corev1.SecretTypeDockerConfigJson,
 			},
 			beforeFunc: func(t *WithT, obj *helmv1.HelmRepository, rev digest.Digest) {
 				obj.Spec.SecretRef = &meta.LocalObjectReference{Name: "basic-auth"}
