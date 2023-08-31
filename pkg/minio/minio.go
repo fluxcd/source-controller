@@ -38,9 +38,11 @@ type MinioClient struct {
 // NewClient creates a new Minio storage client.
 func NewClient(bucket *sourcev1.Bucket, secret *corev1.Secret) (*MinioClient, error) {
 	opt := minio.Options{
-		Region:       bucket.Spec.Region,
-		Secure:       !bucket.Spec.Insecure,
-		BucketLookup: minio.BucketLookupPath,
+		Region: bucket.Spec.Region,
+		Secure: !bucket.Spec.Insecure,
+		// About BucketLookup, it should be noted that not all S3 providers support
+		// path-type access (e.g., Ali OSS). Hence, we revert to using the default
+		// auto access, which we believe can cover most use cases.
 	}
 
 	if secret != nil {
