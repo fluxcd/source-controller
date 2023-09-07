@@ -45,9 +45,10 @@ type TLSBytes struct {
 // - ca.crt, for the CA certificate
 //
 // Secrets with no certificate, private key, AND CA cert are ignored. If only a
-// certificate OR private key is found, an error is returned.
+// certificate OR private key is found, an error is returned. The Secret type
+// can be blank, Opaque or kubernetes.io/tls.
 func KubeTLSClientConfigFromSecret(secret corev1.Secret, url string) (*tls.Config, *TLSBytes, error) {
-	return tlsClientConfigFromSecret(secret, url, true)
+	return tlsClientConfigFromSecret(secret, url, true, true)
 }
 
 // TLSClientConfigFromSecret returns a TLS client config as a `tls.Config`
@@ -58,9 +59,23 @@ func KubeTLSClientConfigFromSecret(secret corev1.Secret, url string) (*tls.Confi
 // - caFile, for the CA certificate
 //
 // Secrets with no certificate, private key, AND CA cert are ignored. If only a
-// certificate OR private key is found, an error is returned.
+// certificate OR private key is found, an error is returned. The Secret type
+// can be blank, Opaque or kubernetes.io/tls.
 func TLSClientConfigFromSecret(secret corev1.Secret, url string) (*tls.Config, *TLSBytes, error) {
-	return tlsClientConfigFromSecret(secret, url, false)
+	return tlsClientConfigFromSecret(secret, url, false, true)
+}
+
+// LegacyTLSClientConfigFromSecret returns a TLS client config as a `tls.Config`
+// object and in its bytes representation. The secret is expected to have the
+// following keys:
+// - keyFile, for the private key
+// - certFile, for the certificate
+// - caFile, for the CA certificate
+//
+// Secrets with no certificate, private key, AND CA cert are ignored. If only a
+// certificate OR private key is found, an error is returned.
+func LegacyTLSClientConfigFromSecret(secret corev1.Secret, url string) (*tls.Config, *TLSBytes, error) {
+	return tlsClientConfigFromSecret(secret, url, false, false)
 }
 
 // tlsClientConfigFromSecret attempts to construct and return a TLS client
@@ -75,14 +90,20 @@ func TLSClientConfigFromSecret(secret corev1.Secret, url string) (*tls.Config, *
 // - ca.crt/caFile for the CA certificate
 // The keys should adhere to a single convention, i.e. a Secret with tls.key
 // and certFile is invalid.
-func tlsClientConfigFromSecret(secret corev1.Secret, url string, kubernetesTLSKeys bool) (*tls.Config, *TLSBytes, error) {
-	// Only Secrets of type Opaque and TLS are allowed. We also allow Secrets with a blank
-	// type, to avoid having to specify the type of the Secret for every test case.
-	// Since a real Kubernetes Secret is of type Opaque by default, its safe to allow this.
-	switch secret.Type {
-	case corev1.SecretTypeOpaque, corev1.SecretTypeTLS, "":
-	default:
-		return nil, nil, fmt.Errorf("cannot use secret '%s' to construct TLS config: invalid secret type: '%s'", secret.Name, secret.Type)
+//
+// checkType is a boolean indicating whether to check the Secret type. If true
+// and the Secret's type is not blank, Opaque or kubernetes.io/tls, then an
+// error is returned.
+func tlsClientConfigFromSecret(secret corev1.Secret, url string, kubernetesTLSKeys bool, checkType bool) (*tls.Config, *TLSBytes, error) {
+	if checkType {
+		// Only Secrets of type Opaque and TLS are allowed. We also allow Secrets with a blank
+		// type, to avoid having to specify the type of the Secret for every test case.
+		// Since a real Kubernetes Secret is of type Opaque by default, its safe to allow this.
+		switch secret.Type {
+		case corev1.SecretTypeOpaque, corev1.SecretTypeTLS, "":
+		default:
+			return nil, nil, fmt.Errorf("cannot use secret '%s' to construct TLS config: invalid secret type: '%s'", secret.Name, secret.Type)
+		}
 	}
 
 	var certBytes, keyBytes, caBytes []byte
