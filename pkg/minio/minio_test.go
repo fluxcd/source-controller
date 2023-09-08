@@ -36,6 +36,7 @@ import (
 
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/sourceignore"
+
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
 )
 
@@ -62,6 +63,7 @@ var (
 
 var (
 	bucketName = "test-bucket-minio" + uuid.New().String()
+	prefix     = ""
 	secret     = corev1.Secret{
 		ObjectMeta: v1.ObjectMeta{
 			Name:      "minio-secret",
@@ -228,7 +230,7 @@ func TestFGetObjectNotExists(t *testing.T) {
 func TestVisitObjects(t *testing.T) {
 	keys := []string{}
 	etags := []string{}
-	err := testMinioClient.VisitObjects(context.TODO(), bucketName, func(key, etag string) error {
+	err := testMinioClient.VisitObjects(context.TODO(), bucketName, prefix, func(key, etag string) error {
 		keys = append(keys, key)
 		etags = append(etags, etag)
 		return nil
@@ -241,7 +243,7 @@ func TestVisitObjects(t *testing.T) {
 func TestVisitObjectsErr(t *testing.T) {
 	ctx := context.Background()
 	badBucketName := "bad-bucket"
-	err := testMinioClient.VisitObjects(ctx, badBucketName, func(string, string) error {
+	err := testMinioClient.VisitObjects(ctx, badBucketName, prefix, func(string, string) error {
 		return nil
 	})
 	assert.Error(t, err, fmt.Sprintf("listing objects from bucket '%s' failed: The specified bucket does not exist", badBucketName))
@@ -249,7 +251,7 @@ func TestVisitObjectsErr(t *testing.T) {
 
 func TestVisitObjectsCallbackErr(t *testing.T) {
 	mockErr := fmt.Errorf("mock")
-	err := testMinioClient.VisitObjects(context.TODO(), bucketName, func(key, etag string) error {
+	err := testMinioClient.VisitObjects(context.TODO(), bucketName, prefix, func(key, etag string) error {
 		return mockErr
 	})
 	assert.Error(t, err, mockErr.Error())

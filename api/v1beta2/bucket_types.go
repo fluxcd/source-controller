@@ -23,6 +23,7 @@ import (
 
 	"github.com/fluxcd/pkg/apis/acl"
 	"github.com/fluxcd/pkg/apis/meta"
+
 	apiv1 "github.com/fluxcd/source-controller/api/v1"
 )
 
@@ -72,6 +73,10 @@ type BucketSpec struct {
 	// Region of the Endpoint where the BucketName is located in.
 	// +optional
 	Region string `json:"region,omitempty"`
+
+	// Prefix to use for server-side filtering of files in the Bucket.
+	// +optional
+	Prefix string `json:"prefix,omitempty"`
 
 	// SecretRef specifies the Secret containing authentication credentials
 	// for the Bucket.

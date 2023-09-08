@@ -265,7 +265,7 @@ func (c *BlobClient) FGetObject(ctx context.Context, bucketName, objectName, loc
 // bucket, calling visit for every item.
 // If the underlying client or the visit callback returns an error,
 // it returns early.
-func (c *BlobClient) VisitObjects(ctx context.Context, bucketName string, visit func(path, etag string) error) error {
+func (c *BlobClient) VisitObjects(ctx context.Context, bucketName string, prefix string, visit func(path, etag string) error) error {
 	items := c.NewListBlobsFlatPager(bucketName, nil)
 	for items.More() {
 		resp, err := items.NextPage(ctx)

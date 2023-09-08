@@ -165,7 +165,7 @@ func (c *GCSClient) FGetObject(ctx context.Context, bucketName, objectName, loca
 // bucket, calling visit for every item.
 // If the underlying client or the visit callback returns an error,
 // it returns early.
-func (c *GCSClient) VisitObjects(ctx context.Context, bucketName string, visit func(path, etag string) error) error {
+func (c *GCSClient) VisitObjects(ctx context.Context, bucketName string, prefix string, visit func(path, etag string) error) error {
 	items := c.Client.Bucket(bucketName).Objects(ctx, nil)
 	for {
 		object, err := items.Next()

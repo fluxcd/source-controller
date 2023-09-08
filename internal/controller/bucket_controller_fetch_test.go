@@ -69,7 +69,7 @@ func (m mockBucketClient) ObjectIsNotFound(e error) bool {
 	return e == errMockNotFound
 }
 
-func (m mockBucketClient) VisitObjects(_ context.Context, _ string, f func(key, etag string) error) error {
+func (m mockBucketClient) VisitObjects(_ context.Context, _ string, _ string, f func(key, etag string) error) error {
 	for key, obj := range m.objects {
 		if err := f(key, obj.etag); err != nil {
 			return err
