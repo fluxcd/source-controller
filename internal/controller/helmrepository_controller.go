@@ -246,11 +246,11 @@ func (r *HelmRepositoryReconciler) reconcile(ctx context.Context, sp *patch.Seri
 		rreconcile.ProgressiveStatus(false, obj, meta.ProgressingReason,
 			"processing object: new generation %d -> %d", obj.Status.ObservedGeneration, obj.Generation)
 		if err := sp.Patch(ctx, obj, r.patchOptions...); err != nil {
-			return sreconcile.ResultEmpty, err
+			return sreconcile.ResultEmpty, serror.NewGeneric(err, sourcev1.PatchOperationFailedReason)
 		}
 	case reconcileAtVal != obj.Status.GetLastHandledReconcileRequest():
 		if err := sp.Patch(ctx, obj, r.patchOptions...); err != nil {
-			return sreconcile.ResultEmpty, err
+			return sreconcile.ResultEmpty, serror.NewGeneric(err, sourcev1.PatchOperationFailedReason)
 		}
 	}
 
@@ -368,7 +368,7 @@ func (r *HelmRepositoryReconciler) reconcileStorage(ctx context.Context, sp *pat
 		rreconcile.ProgressiveStatus(true, obj, meta.ProgressingReason, msg)
 		conditions.Delete(obj, sourcev1.ArtifactInStorageCondition)
 		if err := sp.Patch(ctx, obj, r.patchOptions...); err != nil {
-			return sreconcile.ResultEmpty, err
+			return sreconcile.ResultEmpty, serror.NewGeneric(err, sourcev1.PatchOperationFailedReason)
 		}
 		return sreconcile.ResultSuccess, nil
 	}
@@ -493,8 +493,7 @@ func (r *HelmRepositoryReconciler) reconcileSource(ctx context.Context, sp *patc
 	}
 	rreconcile.ProgressiveStatus(true, obj, meta.ProgressingReason, "building artifact: %s", message)
 	if err := sp.Patch(ctx, obj, r.patchOptions...); err != nil {
-		ctrl.LoggerFrom(ctx).Error(err, "failed to patch")
-		return sreconcile.ResultEmpty, err
+		return sreconcile.ResultEmpty, serror.NewGeneric(err, sourcev1.PatchOperationFailedReason)
 	}
 
 	// Create potential new artifact.

@@ -283,11 +283,11 @@ func (r *HelmChartReconciler) reconcile(ctx context.Context, sp *patch.SerialPat
 		rreconcile.ProgressiveStatus(false, obj, meta.ProgressingReason,
 			"processing object: new generation %d -> %d", obj.Status.ObservedGeneration, obj.Generation)
 		if err := sp.Patch(ctx, obj, r.patchOptions...); err != nil {
-			return sreconcile.ResultEmpty, err
+			return sreconcile.ResultEmpty, serror.NewGeneric(err, sourcev1.PatchOperationFailedReason)
 		}
 	case reconcileAtVal != obj.Status.GetLastHandledReconcileRequest():
 		if err := sp.Patch(ctx, obj, r.patchOptions...); err != nil {
-			return sreconcile.ResultEmpty, err
+			return sreconcile.ResultEmpty, serror.NewGeneric(err, sourcev1.PatchOperationFailedReason)
 		}
 	}
 
@@ -397,7 +397,7 @@ func (r *HelmChartReconciler) reconcileStorage(ctx context.Context, sp *patch.Se
 		rreconcile.ProgressiveStatus(true, obj, meta.ProgressingReason, msg)
 		conditions.Delete(obj, sourcev1.ArtifactInStorageCondition)
 		if err := sp.Patch(ctx, obj, r.patchOptions...); err != nil {
-			return sreconcile.ResultEmpty, err
+			return sreconcile.ResultEmpty, serror.NewGeneric(err, sourcev1.PatchOperationFailedReason)
 		}
 		return sreconcile.ResultSuccess, nil
 	}
