@@ -27,8 +27,8 @@ require (
 	github.com/docker/go-units v0.5.0
 	github.com/fluxcd/pkg/apis/event v0.5.2
 	github.com/fluxcd/pkg/apis/meta v1.1.2
-	github.com/fluxcd/pkg/git v0.13.0
-	github.com/fluxcd/pkg/git/gogit v0.13.0
+	github.com/fluxcd/pkg/git v0.14.0
+	github.com/fluxcd/pkg/git/gogit v0.14.0
 	github.com/fluxcd/pkg/gittestserver v0.8.6
 	github.com/fluxcd/pkg/helmtestserver v0.13.3
 	github.com/fluxcd/pkg/lockedfile v0.1.0
@@ -42,8 +42,8 @@ require (
 	github.com/fluxcd/pkg/version v0.2.2
 	github.com/fluxcd/source-controller/api v1.1.0
 	github.com/foxcpp/go-mockdns v1.0.0
-	github.com/go-git/go-billy/v5 v5.4.1
-	github.com/go-git/go-git/v5 v5.8.1
+	github.com/go-git/go-billy/v5 v5.5.0
+	github.com/go-git/go-git/v5 v5.9.0
 	github.com/go-logr/logr v1.2.4
 	github.com/google/go-containerregistry v0.16.1
 	github.com/google/go-containerregistry/pkg/authn/k8schain v0.0.0-20230802205906-a54d64203cff
@@ -60,7 +60,7 @@ require (
 	github.com/sigstore/sigstore v1.7.2
 	github.com/sirupsen/logrus v1.9.3
 	github.com/spf13/pflag v1.0.5
-	golang.org/x/crypto v0.12.0
+	golang.org/x/crypto v0.13.0
 	golang.org/x/sync v0.3.0
 	google.golang.org/api v0.138.0
 	gotest.tools v2.2.0+incompatible
@@ -101,7 +101,7 @@ require (
 	github.com/Masterminds/squirrel v1.5.4 // indirect
 	github.com/Microsoft/go-winio v0.6.1 // indirect
 	github.com/Nvveen/Gotty v0.0.0-20120604004816-cd527374f1e5 // indirect
-	github.com/ProtonMail/go-crypto v0.0.0-20230717121422-5aa5874ade95 // indirect
+	github.com/ProtonMail/go-crypto v0.0.0-20230828082145-3c4c8a2d2371 // indirect
 	github.com/Shopify/logrus-bugsnag v0.0.0-20171204204709-577dee27f20d // indirect
 	github.com/ThalesIgnite/crypto11 v1.2.5 // indirect
 	github.com/acomagu/bufpipe v1.0.4 // indirect
@@ -196,7 +196,7 @@ require (
 	github.com/go-playground/universal-translator v0.18.1 // indirect
 	github.com/go-playground/validator/v10 v10.14.0 // indirect
 	github.com/gobwas/glob v0.2.3 // indirect
-	github.com/gofrs/uuid v4.2.0+incompatible // indirect
+	github.com/gofrs/uuid v4.4.0+incompatible // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang-jwt/jwt/v4 v4.5.0 // indirect
 	github.com/golang-jwt/jwt/v5 v5.0.0 // indirect
@@ -333,14 +333,14 @@ require (
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.25.0 // indirect
 	golang.org/x/exp v0.0.0-20230321023759-10a507213a29 // indirect
-	golang.org/x/mod v0.11.0 // indirect
-	golang.org/x/net v0.14.0 // indirect
+	golang.org/x/mod v0.12.0 // indirect
+	golang.org/x/net v0.15.0 // indirect
 	golang.org/x/oauth2 v0.11.0 // indirect
-	golang.org/x/sys v0.11.0 // indirect
-	golang.org/x/term v0.11.0 // indirect
-	golang.org/x/text v0.12.0 // indirect
+	golang.org/x/sys v0.12.0 // indirect
+	golang.org/x/term v0.12.0 // indirect
+	golang.org/x/text v0.13.0 // indirect
 	golang.org/x/time v0.3.0 // indirect
-	golang.org/x/tools v0.9.3 // indirect
+	golang.org/x/tools v0.13.0 // indirect
 	golang.org/x/xerrors v0.0.0-20220907171357-04be3eba64a2 // indirect
 	gomodules.xyz/jsonpatch/v2 v2.3.0 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
