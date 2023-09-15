@@ -264,11 +264,11 @@ func (r *GitRepositoryReconciler) reconcile(ctx context.Context, sp *patch.Seria
 		rreconcile.ProgressiveStatus(false, obj, meta.ProgressingReason,
 			"processing object: new generation %d -> %d", obj.Status.ObservedGeneration, obj.Generation)
 		if err := sp.Patch(ctx, obj, r.patchOptions...); err != nil {
-			return sreconcile.ResultEmpty, err
+			return sreconcile.ResultEmpty, serror.NewGeneric(err, sourcev1.PatchOperationFailedReason)
 		}
 	case recAtVal != obj.Status.GetLastHandledReconcileRequest():
 		if err := sp.Patch(ctx, obj, r.patchOptions...); err != nil {
-			return sreconcile.ResultEmpty, err
+			return sreconcile.ResultEmpty, serror.NewGeneric(err, sourcev1.PatchOperationFailedReason)
 		}
 	}
 
@@ -425,7 +425,7 @@ func (r *GitRepositoryReconciler) reconcileStorage(ctx context.Context, sp *patc
 		rreconcile.ProgressiveStatus(true, obj, meta.ProgressingReason, msg)
 		conditions.Delete(obj, sourcev1.ArtifactInStorageCondition)
 		if err := sp.Patch(ctx, obj, r.patchOptions...); err != nil {
-			return sreconcile.ResultEmpty, err
+			return sreconcile.ResultEmpty, serror.NewGeneric(err, sourcev1.PatchOperationFailedReason)
 		}
 		return sreconcile.ResultSuccess, nil
 	}
@@ -527,7 +527,7 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 		}
 		rreconcile.ProgressiveStatus(true, obj, meta.ProgressingReason, "building artifact: %s", message)
 		if err := sp.Patch(ctx, obj, r.patchOptions...); err != nil {
-			return sreconcile.ResultEmpty, err
+			return sreconcile.ResultEmpty, serror.NewGeneric(err, sourcev1.PatchOperationFailedReason)
 		}
 	}
 	conditions.Delete(obj, sourcev1.ArtifactOutdatedCondition)
@@ -561,6 +561,8 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 			)
 			ge.Notification = false
 			ge.Ignore = true
+			// Log it as this will not be passed to the runtime.
+			ge.Log = true
 			ge.Event = corev1.EventTypeNormal
 			// Remove any stale fetch failed condition.
 			conditions.Delete(obj, sourcev1.FetchFailedCondition)
@@ -599,7 +601,7 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 		}
 		rreconcile.ProgressiveStatus(true, obj, meta.ProgressingReason, "building artifact: %s", message)
 		if err := sp.Patch(ctx, obj, r.patchOptions...); err != nil {
-			return sreconcile.ResultEmpty, err
+			return sreconcile.ResultEmpty, serror.NewGeneric(err, sourcev1.PatchOperationFailedReason)
 		}
 	}
 	return sreconcile.ResultSuccess, nil
@@ -815,10 +817,10 @@ func (r *GitRepositoryReconciler) reconcileInclude(ctx context.Context, sp *patc
 
 		// Copy artifact (sub)contents to configured directory.
 		if err := r.Storage.CopyToPath(artifact, incl.GetFromPath(), toPath); err != nil {
-			e := &serror.Event{
-				Err:    fmt.Errorf("failed to copy '%s' include from %s to %s: %w", incl.GitRepositoryRef.Name, incl.GetFromPath(), incl.GetToPath(), err),
-				Reason: "CopyFailure",
-			}
+			e := serror.NewGeneric(
+				fmt.Errorf("failed to copy '%s' include from %s to %s: %w", incl.GitRepositoryRef.Name, incl.GetFromPath(), incl.GetToPath(), err),
+				"CopyFailure",
+			)
 			conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition, e.Reason, e.Err.Error())
 			return sreconcile.ResultEmpty, e
 		}

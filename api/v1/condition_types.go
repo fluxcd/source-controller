@@ -104,4 +104,8 @@ const (
 
 	// CacheOperationFailedReason signals a failure in cache operation.
 	CacheOperationFailedReason string = "CacheOperationFailed"
+
+	// PatchOperationFailedReason signals a failure in patching a kubernetes API
+	// object.
+	PatchOperationFailedReason string = "PatchOperationFailed"
 )

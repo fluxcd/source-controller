@@ -36,27 +36,6 @@ import (
 // reconciliation failure. The errors can be recorded as logs and events.
 type ResultProcessor func(context.Context, kuberecorder.EventRecorder, client.Object, reconcile.Result, error)
 
-// RecordContextualError is a ResultProcessor that records the contextual errors
-// based on their types.
-// An event is recorded for the errors that are returned to the runtime. The
-// runtime handles the logging of the error.
-// An event is recorded and an error is logged for errors that are known to be
-// swallowed, not returned to the runtime.
-func RecordContextualError(ctx context.Context, recorder kuberecorder.EventRecorder, obj client.Object, _ reconcile.Result, err error) {
-	switch e := err.(type) {
-	case *serror.Event:
-		recorder.Eventf(obj, corev1.EventTypeWarning, e.Reason, e.Error())
-	case *serror.Waiting:
-		// Waiting errors are not returned to the runtime. Log it explicitly.
-		ctrl.LoggerFrom(ctx).Info("reconciliation waiting", "reason", e.Err, "duration", e.RequeueAfter)
-		recorder.Event(obj, corev1.EventTypeNormal, e.Reason, e.Error())
-	case *serror.Stalling:
-		// Stalling errors are not returned to the runtime. Log it explicitly.
-		ctrl.LoggerFrom(ctx).Error(e, "reconciliation stalled")
-		recorder.Eventf(obj, corev1.EventTypeWarning, e.Reason, e.Error())
-	}
-}
-
 // RecordReconcileReq is a ResultProcessor that checks the reconcile
 // annotation value and sets it in the object status as
 // status.lastHandledReconcileAt.
