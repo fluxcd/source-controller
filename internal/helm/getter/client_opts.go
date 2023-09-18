@@ -23,8 +23,10 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"path/filepath"
 
-	"github.com/fluxcd/pkg/oci"
+	"github.com/fluxcd/pkg/cache"
+	"github.com/fluxcd/pkg/oci/auth"
 	"github.com/google/go-containerregistry/pkg/authn"
 	helmgetter "helm.sh/helm/v3/pkg/getter"
 	helmreg "helm.sh/helm/v3/pkg/registry"
@@ -49,17 +51,16 @@ var ErrDeprecatedTLSConfig = errors.New("TLS configured in a deprecated manner")
 // ClientOpts contains the various options to use while constructing
 // a Helm repository client.
 type ClientOpts struct {
-	Authenticator authn.Authenticator
-	Keychain      authn.Keychain
-	RegLoginOpts  []helmreg.LoginOption
-	TlsConfig     *tls.Config
-	GetterOpts    []helmgetter.Option
+	Keychain   authn.Keychain
+	AuthClient auth.Client
+	TlsConfig  *tls.Config
+	GetterOpts []helmgetter.Option
 }
 
-// MustLoginToRegistry returns true if the client options contain at least
-// one registry login option.
-func (o ClientOpts) MustLoginToRegistry() bool {
-	return len(o.RegLoginOpts) > 0 && o.RegLoginOpts[0] != nil
+// MustLoginToRegistry returns true if the provided login options contain
+// at least one login option.
+func MustLoginToRegistry(regLoginOpts []helmreg.LoginOption) bool {
+	return len(regLoginOpts) > 0 && regLoginOpts[0] != nil
 }
 
 // GetClientOpts uses the provided HelmRepository object and a normalized
@@ -68,7 +69,7 @@ func (o ClientOpts) MustLoginToRegistry() bool {
 // auth mechanisms.
 // A temporary directory is created to store the certs files if needed and its path is returned along with the options object. It is the
 // caller's responsibility to clean up the directory.
-func GetClientOpts(ctx context.Context, c client.Client, obj *helmv1.HelmRepository, url string) (*ClientOpts, string, error) {
+func GetClientOpts(ctx context.Context, c client.Client, obj *helmv1.HelmRepository, url string, cache *cache.Cache) (*ClientOpts, string, error) {
 	hrOpts := &ClientOpts{
 		GetterOpts: []helmgetter.Option{
 			helmgetter.WithURL(url),
@@ -81,9 +82,6 @@ func GetClientOpts(ctx context.Context, c client.Client, obj *helmv1.HelmReposit
 	var (
 		certSecret *corev1.Secret
 		tlsBytes   *stls.TLSBytes
-		certFile   string
-		keyFile    string
-		caFile     string
 		dir        string
 		err        error
 	)
@@ -134,14 +132,12 @@ func GetClientOpts(ctx context.Context, c client.Client, obj *helmv1.HelmReposit
 				return nil, "", fmt.Errorf("failed to configure login options: %w", err)
 			}
 		}
-	} else if obj.Spec.Provider != helmv1.GenericOCIProvider && obj.Spec.Type == helmv1.HelmRepositoryTypeOCI && ociRepo {
-		authenticator, authErr := soci.OIDCAuth(ctx, obj.Spec.URL, obj.Spec.Provider)
-		if authErr != nil && !errors.Is(authErr, oci.ErrUnconfiguredProvider) {
-			return nil, "", fmt.Errorf("failed to get credential from '%s': %w", obj.Spec.Provider, authErr)
+	} else if obj.Spec.Provider != helmv1.GenericOCIProvider && ociRepo {
+		authClient, err := soci.AuthClient(obj.Spec.Provider, cache)
+		if err != nil {
+			return nil, "", fmt.Errorf("failed to construct OCI auth client: %w", err)
 		}
-		if authenticator != nil {
-			hrOpts.Authenticator = authenticator
-		}
+		hrOpts.AuthClient = authClient
 	}
 
 	if ociRepo {
@@ -151,21 +147,10 @@ func GetClientOpts(ctx context.Context, c client.Client, obj *helmv1.HelmReposit
 			if err != nil {
 				return nil, "", fmt.Errorf("cannot create temporary directory: %w", err)
 			}
-			certFile, keyFile, caFile, err = storeTLSCertificateFiles(tlsBytes, dir)
+			_, _, _, err = storeTLSCertificateFiles(tlsBytes, dir)
 			if err != nil {
 				return nil, "", fmt.Errorf("cannot write certs files to path: %w", err)
 			}
-		}
-		loginOpt, err := registry.NewLoginOption(hrOpts.Authenticator, hrOpts.Keychain, url)
-		if err != nil {
-			return nil, "", err
-		}
-		if loginOpt != nil {
-			hrOpts.RegLoginOpts = []helmreg.LoginOption{loginOpt}
-		}
-		tlsLoginOpt := registry.TLSLoginOption(certFile, keyFile, caFile)
-		if tlsLoginOpt != nil {
-			hrOpts.RegLoginOpts = append(hrOpts.RegLoginOpts, tlsLoginOpt)
 		}
 	}
 	if deprecatedTLSConfig {
@@ -173,6 +158,28 @@ func GetClientOpts(ctx context.Context, c client.Client, obj *helmv1.HelmReposit
 	}
 
 	return hrOpts, dir, err
+}
+
+// GetRegLoginOptions returns the login options needed for logging into a Helm
+// OCI registry.
+func GetRegLoginOptions(authenticator authn.Authenticator, keychain authn.Keychain,
+	url, tlsCertsDir string) ([]helmreg.LoginOption, error) {
+	var regLoginOpts []helmreg.LoginOption
+
+	loginOpt, err := registry.NewLoginOption(authenticator, keychain, url)
+	if err != nil {
+		return nil, err
+	}
+	regLoginOpts = append(regLoginOpts, loginOpt)
+
+	tlsLoginOpt := registry.TLSLoginOption(
+		filepath.Join(tlsCertsDir, certFileName),
+		filepath.Join(tlsCertsDir, keyFileName),
+		filepath.Join(tlsCertsDir, caFileName),
+	)
+	regLoginOpts = append(regLoginOpts, tlsLoginOpt)
+
+	return regLoginOpts, nil
 }
 
 func fetchSecret(ctx context.Context, c client.Client, name, namespace string) (*corev1.Secret, error) {

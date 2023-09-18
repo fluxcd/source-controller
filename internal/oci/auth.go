@@ -17,14 +17,14 @@ limitations under the License.
 package oci
 
 import (
-	"context"
 	"fmt"
-	"strings"
 
-	"github.com/fluxcd/pkg/oci/auth/login"
+	"github.com/fluxcd/pkg/oci/auth"
+	"github.com/fluxcd/pkg/oci/auth/aws"
+	"github.com/fluxcd/pkg/oci/auth/azure"
 	"github.com/google/go-containerregistry/pkg/authn"
-	"github.com/google/go-containerregistry/pkg/name"
 
+	"github.com/fluxcd/pkg/cache"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
 )
 
@@ -39,23 +39,18 @@ func (a Anonymous) Resolve(_ authn.Resource) (authn.Authenticator, error) {
 	return authn.Anonymous, nil
 }
 
-// OIDCAuth generates the OIDC credential authenticator based on the specified cloud provider.
-func OIDCAuth(ctx context.Context, url, provider string) (authn.Authenticator, error) {
-	u := strings.TrimPrefix(url, sourcev1.OCIRepositoryPrefix)
-	ref, err := name.ParseReference(u)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse URL '%s': %w", u, err)
-	}
-
-	opts := login.ProviderOptions{}
+// AuthClient returns a client that can authenticate against an OCI registry.
+func AuthClient(provider string, cache *cache.Cache) (auth.Client, error) {
+	var client auth.Client
 	switch provider {
 	case sourcev1.AmazonOCIProvider:
-		opts.AwsAutoLogin = true
+		client = aws.NewClient().WithCache(cache)
 	case sourcev1.AzureOCIProvider:
-		opts.AzureAutoLogin = true
+		client = azure.NewClient().WithCache(cache)
 	case sourcev1.GoogleOCIProvider:
-		opts.GcpAutoLogin = true
+		client = azure.NewClient().WithCache(cache)
+	default:
+		return nil, fmt.Errorf("unknown auth provider: %s", provider)
 	}
-
-	return login.NewManager().Login(ctx, u, ref, opts)
+	return client, nil
 }

@@ -54,6 +54,7 @@ import (
 
 	// +kubebuilder:scaffold:imports
 
+	pkgcache "github.com/fluxcd/pkg/cache"
 	"github.com/fluxcd/source-controller/internal/cache"
 	"github.com/fluxcd/source-controller/internal/controller"
 	intdigest "github.com/fluxcd/source-controller/internal/digest"
@@ -186,6 +187,7 @@ func main() {
 
 	mustSetupHelmLimits(helmIndexLimit, helmChartLimit, helmChartFileLimit)
 	helmIndexCache, helmIndexCacheItemTTL := mustInitHelmCache(helmCacheMaxSize, helmCacheTTL, helmCachePurgeInterval)
+	ociTokenCache := pkgcache.New(1000, 0)
 
 	ctx := ctrl.SetupSignalHandler()
 
@@ -209,6 +211,7 @@ func main() {
 		Metrics:                 metrics,
 		ControllerName:          controllerName,
 		RegistryClientGenerator: registry.ClientGenerator,
+		OCITokenCache:           ociTokenCache,
 	}).SetupWithManagerAndOptions(mgr, controller.HelmRepositoryReconcilerOptions{
 		RateLimiter: helper.GetRateLimiter(rateLimiterOptions),
 	}); err != nil {
@@ -242,6 +245,7 @@ func main() {
 		Metrics:                 metrics,
 		ControllerName:          controllerName,
 		Cache:                   helmIndexCache,
+		OCITokenCache:           ociTokenCache,
 		TTL:                     helmIndexCacheItemTTL,
 		CacheRecorder:           cacheRecorder,
 	}).SetupWithManagerAndOptions(ctx, mgr, controller.HelmChartReconcilerOptions{
@@ -270,6 +274,7 @@ func main() {
 		EventRecorder:  eventRecorder,
 		ControllerName: controllerName,
 		Metrics:        metrics,
+		TokenCache:     ociTokenCache,
 	}).SetupWithManagerAndOptions(mgr, controller.OCIRepositoryReconcilerOptions{
 		RateLimiter: helper.GetRateLimiter(rateLimiterOptions),
 	}); err != nil {

@@ -40,12 +40,15 @@ import (
 
 	eventv1 "github.com/fluxcd/pkg/apis/event/v1beta1"
 	"github.com/fluxcd/pkg/apis/meta"
+	"github.com/fluxcd/pkg/cache"
+	"github.com/fluxcd/pkg/oci/auth"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	helper "github.com/fluxcd/pkg/runtime/controller"
 	"github.com/fluxcd/pkg/runtime/jitter"
 	"github.com/fluxcd/pkg/runtime/patch"
 	"github.com/fluxcd/pkg/runtime/predicates"
 	rreconcile "github.com/fluxcd/pkg/runtime/reconcile"
+	"github.com/google/go-containerregistry/pkg/authn"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	helmv1 "github.com/fluxcd/source-controller/api/v1beta2"
@@ -80,7 +83,8 @@ type HelmRepositoryOCIReconciler struct {
 	ControllerName          string
 	RegistryClientGenerator RegistryClientGeneratorFunc
 
-	patchOptions []patch.Option
+	patchOptions  []patch.Option
+	OCITokenCache *cache.Cache
 
 	// unmanagedConditions are the conditions that are not managed by this
 	// reconciler and need to be removed from the object before taking ownership
@@ -316,23 +320,51 @@ func (r *HelmRepositoryOCIReconciler) reconcile(ctx context.Context, sp *patch.S
 
 	conditions.Delete(obj, meta.StalledCondition)
 
-	clientOpts, certsTmpDir, err := getter.GetClientOpts(ctxTimeout, r.Client, obj, normalizedURL)
+	clientOpts, certsTmpDir, err := getter.GetClientOpts(ctxTimeout, r.Client, obj, normalizedURL, r.OCITokenCache)
 	if err != nil {
 		conditions.MarkFalse(obj, meta.ReadyCondition, sourcev1.AuthenticationFailedReason, err.Error())
 		result, retErr = ctrl.Result{}, err
 		return
 	}
-	if certsTmpDir != "" {
-		defer func() {
+
+	// If we return an error and we configured OCI authentication then make sure to
+	// logout, in order to avoid potentially caching invalid tokens. Also make sure
+	// to remove the temporary directory created for storing TLS certs.
+	defer func() {
+		if clientOpts.AuthClient != nil && retErr != nil {
+			clientOpts.AuthClient.Logout(auth.AuthOptions{
+				RegistryURL: obj.Spec.URL,
+			})
+		}
+		if certsTmpDir != "" {
 			if err := os.RemoveAll(certsTmpDir); err != nil {
 				r.eventLogf(ctx, obj, corev1.EventTypeWarning, meta.FailedReason,
 					"failed to delete temporary certs directory: %s", err)
 			}
-		}()
+		}
+	}()
+
+	var authenticator authn.Authenticator
+	if clientOpts.AuthClient != nil {
+		authenticator, err = clientOpts.AuthClient.Login(ctx, auth.AuthOptions{
+			RegistryURL: obj.Spec.URL,
+		})
+		if err != nil {
+			e := fmt.Errorf("failed to get authentication token: %w", err)
+			conditions.MarkFalse(obj, meta.ReadyCondition, meta.FailedReason, e.Error())
+			result, retErr = ctrl.Result{}, e
+			return
+		}
+	}
+	regLoginOpts, err := getter.GetRegLoginOptions(authenticator, clientOpts.Keychain, obj.Spec.URL, certsTmpDir)
+	if err != nil {
+		result, retErr = ctrl.Result{}, err
+		conditions.MarkFalse(obj, meta.ReadyCondition, meta.FailedReason, err.Error())
+		return
 	}
 
 	// Create registry client and login if needed.
-	registryClient, file, err := r.RegistryClientGenerator(clientOpts.TlsConfig, clientOpts.MustLoginToRegistry())
+	registryClient, file, err := r.RegistryClientGenerator(clientOpts.TlsConfig, getter.MustLoginToRegistry(regLoginOpts))
 	if err != nil {
 		e := fmt.Errorf("failed to create registry client: %w", err)
 		conditions.MarkFalse(obj, meta.ReadyCondition, meta.FailedReason, e.Error())
@@ -359,8 +391,8 @@ func (r *HelmRepositoryOCIReconciler) reconcile(ctx context.Context, sp *patch.S
 	conditions.Delete(obj, meta.StalledCondition)
 
 	// Attempt to login to the registry if credentials are provided.
-	if clientOpts.MustLoginToRegistry() {
-		err = chartRepo.Login(clientOpts.RegLoginOpts...)
+	if getter.MustLoginToRegistry(regLoginOpts) {
+		err = chartRepo.Login(regLoginOpts...)
 		if err != nil {
 			e := fmt.Errorf("failed to login to registry '%s': %w", obj.Spec.URL, err)
 			conditions.MarkFalse(obj, meta.ReadyCondition, sourcev1.AuthenticationFailedReason, e.Error())

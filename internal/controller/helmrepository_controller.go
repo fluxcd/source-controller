@@ -401,7 +401,7 @@ func (r *HelmRepositoryReconciler) reconcileSource(ctx context.Context, sp *patc
 		return sreconcile.ResultEmpty, e
 	}
 
-	clientOpts, _, err := getter.GetClientOpts(ctx, r.Client, obj, normalizedURL)
+	clientOpts, _, err := getter.GetClientOpts(ctx, r.Client, obj, normalizedURL, nil)
 	if err != nil {
 		if errors.Is(err, getter.ErrDeprecatedTLSConfig) {
 			ctrl.LoggerFrom(ctx).

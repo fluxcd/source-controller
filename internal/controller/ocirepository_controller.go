@@ -52,7 +52,9 @@ import (
 
 	eventv1 "github.com/fluxcd/pkg/apis/event/v1beta1"
 	"github.com/fluxcd/pkg/apis/meta"
+	"github.com/fluxcd/pkg/cache"
 	"github.com/fluxcd/pkg/oci"
+	"github.com/fluxcd/pkg/oci/auth"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	helper "github.com/fluxcd/pkg/runtime/controller"
 	"github.com/fluxcd/pkg/runtime/jitter"
@@ -133,6 +135,7 @@ type OCIRepositoryReconciler struct {
 	Storage           *Storage
 	ControllerName    string
 	requeueDependency time.Duration
+	TokenCache        *cache.Cache
 
 	patchOptions []patch.Option
 }
@@ -321,7 +324,8 @@ func (r *OCIRepositoryReconciler) reconcile(ctx context.Context, sp *patch.Seria
 // If this fails, it records v1beta2.FetchFailedCondition=True on the object and returns early.
 func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch.SerialPatcher,
 	obj *ociv1.OCIRepository, metadata *sourcev1.Artifact, dir string) (sreconcile.Result, error) {
-	var auth authn.Authenticator
+	var genericErr *serror.Generic
+	var stallingErr *serror.Stalling
 
 	ctxTimeout, cancel := context.WithTimeout(ctx, obj.Spec.Timeout.Duration)
 	defer cancel()
@@ -334,70 +338,82 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 		conditions.Delete(obj, sourcev1.SourceVerifiedCondition)
 	}
 
+	// failWithGenericErr is a helper func which returns a new Generic error and sets the
+	// appropriate condition on the object based on the provided error and reason.
+	failWithGenericErr := func(e error, template string, reason string) *serror.Generic {
+		if template != "" {
+			genericErr = serror.NewGeneric(fmt.Errorf("%s: %w", template, e), reason)
+		} else {
+			genericErr = serror.NewGeneric(e, reason)
+		}
+		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, reason, genericErr.Err.Error())
+		return genericErr
+	}
+
 	// Generate the registry credential keychain either from static credentials or using cloud OIDC
 	keychain, err := r.keychain(ctx, obj)
 	if err != nil {
-		e := serror.NewGeneric(
-			fmt.Errorf("failed to get credential: %w", err),
-			sourcev1.AuthenticationFailedReason,
-		)
-		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
-		return sreconcile.ResultEmpty, e
+		return sreconcile.ResultEmpty, failWithGenericErr(err, "failed to get credential", sourcev1.AuthenticationFailedReason)
 	}
 
+	// If the registry credential keychain is anonymous and a non-generic provider
+	// has been specified, then try to automatically authenticate against the registry.
+	var authenticator authn.Authenticator
 	if _, ok := keychain.(soci.Anonymous); obj.Spec.Provider != ociv1.GenericOCIProvider && ok {
+		authClient, err := soci.AuthClient(obj.Spec.Provider, r.TokenCache)
+		if err != nil {
+			return sreconcile.ResultEmpty, failWithGenericErr(err, "", sourcev1.AuthenticationFailedReason)
+		}
+
 		var authErr error
-		auth, authErr = soci.OIDCAuth(ctxTimeout, obj.Spec.URL, obj.Spec.Provider)
-		if authErr != nil && !errors.Is(authErr, oci.ErrUnconfiguredProvider) {
-			e := serror.NewGeneric(
-				fmt.Errorf("failed to get credential from %s: %w", obj.Spec.Provider, authErr),
-				sourcev1.AuthenticationFailedReason,
-			)
-			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
-			return sreconcile.ResultEmpty, e
+		authenticator, authErr = authClient.Login(ctxTimeout, auth.AuthOptions{
+			RegistryURL: obj.Spec.URL,
+		})
+
+		// If we return an error and we configured OCI authentication then make sure to
+		// logout, in order to avoid potentially caching invalid tokens.
+		defer func() {
+			if authClient != nil && (genericErr != nil || stallingErr != nil) {
+				authClient.Logout(auth.AuthOptions{
+					RegistryURL: obj.Spec.URL,
+				})
+			}
+		}()
+
+		if authErr != nil {
+			return sreconcile.ResultEmpty, failWithGenericErr(err,
+				fmt.Sprintf("failed to get credential from %s", obj.Spec.Provider), sourcev1.AuthenticationFailedReason)
 		}
 	}
 
 	// Generate the transport for remote operations
 	transport, err := r.transport(ctx, obj)
 	if err != nil {
-		e := serror.NewGeneric(
-			fmt.Errorf("failed to generate transport for '%s': %w", obj.Spec.URL, err),
-			sourcev1.AuthenticationFailedReason,
-		)
-		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
-		return sreconcile.ResultEmpty, e
+		return sreconcile.ResultEmpty, failWithGenericErr(err,
+			fmt.Sprintf("failed to generate transport for '%s'", obj.Spec.URL), sourcev1.AuthenticationFailedReason)
 	}
 
-	opts := makeRemoteOptions(ctx, obj, transport, keychain, auth)
+	opts := makeRemoteOptions(ctx, obj, transport, keychain, authenticator)
 
 	// Determine which artifact revision to pull
 	url, err := r.getArtifactURL(obj, opts.craneOpts)
 	if err != nil {
 		if _, ok := err.(invalidOCIURLError); ok {
-			e := serror.NewStalling(
+			stallingErr = serror.NewStalling(
 				fmt.Errorf("URL validation failed for '%s': %w", obj.Spec.URL, err),
 				sourcev1.URLInvalidReason)
-			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
-			return sreconcile.ResultEmpty, e
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, stallingErr.Reason, stallingErr.Err.Error())
+			return sreconcile.ResultEmpty, stallingErr
 		}
 
-		e := serror.NewGeneric(
-			fmt.Errorf("failed to determine the artifact tag for '%s': %w", obj.Spec.URL, err),
-			sourcev1.ReadOperationFailedReason)
-		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
-		return sreconcile.ResultEmpty, e
+		return sreconcile.ResultEmpty, failWithGenericErr(err,
+			fmt.Sprintf("failed to determine the artifact tag for '%s'", obj.Spec.URL), sourcev1.AuthenticationFailedReason)
 	}
 
 	// Get the upstream revision from the artifact digest
 	revision, err := r.getRevision(url, opts.craneOpts)
 	if err != nil {
-		e := serror.NewGeneric(
-			fmt.Errorf("failed to determine artifact digest: %w", err),
-			ociv1.OCIPullFailedReason,
-		)
-		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
-		return sreconcile.ResultEmpty, e
+		return sreconcile.ResultEmpty, failWithGenericErr(err, "failed to determine artifact digest", sourcev1.AuthenticationFailedReason)
 	}
 	metaArtifact := &sourcev1.Artifact{Revision: revision}
 	metaArtifact.DeepCopyInto(metadata)
@@ -434,12 +450,8 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 			if obj.Spec.Verify.SecretRef == nil {
 				provider = fmt.Sprintf("%s keyless", provider)
 			}
-			e := serror.NewGeneric(
-				fmt.Errorf("failed to verify the signature using provider '%s': %w", provider, err),
-				sourcev1.VerificationError,
-			)
-			conditions.MarkFalse(obj, sourcev1.SourceVerifiedCondition, e.Reason, e.Err.Error())
-			return sreconcile.ResultEmpty, e
+			return sreconcile.ResultEmpty, failWithGenericErr(err,
+				fmt.Sprintf("failed to verify the signature using provider '%s'", provider), sourcev1.VerificationError)
 		}
 
 		conditions.MarkTrue(obj, sourcev1.SourceVerifiedCondition, meta.SucceededReason, "verified signature of revision %s", revision)
@@ -455,12 +467,8 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 	// Pull artifact from the remote container registry
 	img, err := crane.Pull(url, opts.craneOpts...)
 	if err != nil {
-		e := serror.NewGeneric(
-			fmt.Errorf("failed to pull artifact from '%s': %w", obj.Spec.URL, err),
-			ociv1.OCIPullFailedReason,
-		)
-		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
-		return sreconcile.ResultEmpty, e
+		return sreconcile.ResultEmpty, failWithGenericErr(err,
+			fmt.Sprintf("failed to pull artifact from '%s'", obj.Spec.URL), ociv1.OCIPullFailedReason)
 	}
 
 	// Copy the OCI annotations to the internal artifact metadata
@@ -471,58 +479,41 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 			ociv1.OCILayerOperationFailedReason,
 		)
 		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
-		return sreconcile.ResultEmpty, e
+		return sreconcile.ResultEmpty, failWithGenericErr(err,
+			"failed to parse artifact manifest", ociv1.OCILayerOperationFailedReason)
 	}
 	metadata.Metadata = manifest.Annotations
 
 	// Extract the compressed content from the selected layer
 	blob, err := r.selectLayer(obj, img)
 	if err != nil {
-		e := serror.NewGeneric(err, ociv1.OCILayerOperationFailedReason)
-		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
-		return sreconcile.ResultEmpty, e
+		return sreconcile.ResultEmpty, failWithGenericErr(err, "", ociv1.OCILayerOperationFailedReason)
 	}
 
 	// Persist layer content to storage using the specified operation
 	switch obj.GetLayerOperation() {
 	case ociv1.OCILayerExtract:
 		if err = tar.Untar(blob, dir, tar.WithMaxUntarSize(-1)); err != nil {
-			e := serror.NewGeneric(
-				fmt.Errorf("failed to extract layer contents from artifact: %w", err),
-				ociv1.OCILayerOperationFailedReason,
-			)
-			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
-			return sreconcile.ResultEmpty, e
+			return sreconcile.ResultEmpty, failWithGenericErr(err,
+				"failed to extract layer contents from artifact", ociv1.OCILayerOperationFailedReason)
 		}
 	case ociv1.OCILayerCopy:
 		metadata.Path = fmt.Sprintf("%s.tgz", r.digestFromRevision(metadata.Revision))
 		file, err := os.Create(filepath.Join(dir, metadata.Path))
 		if err != nil {
-			e := serror.NewGeneric(
-				fmt.Errorf("failed to create file to copy layer to: %w", err),
-				ociv1.OCILayerOperationFailedReason,
-			)
-			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
-			return sreconcile.ResultEmpty, e
+			return sreconcile.ResultEmpty, failWithGenericErr(err,
+				"failed to create file to copy layer to", ociv1.OCILayerOperationFailedReason)
 		}
 		defer file.Close()
 
 		_, err = io.Copy(file, blob)
 		if err != nil {
-			e := serror.NewGeneric(
-				fmt.Errorf("failed to copy layer from artifact: %w", err),
-				ociv1.OCILayerOperationFailedReason,
-			)
-			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
-			return sreconcile.ResultEmpty, e
+			return sreconcile.ResultEmpty, failWithGenericErr(err,
+				"failed to copy layer from artifact", ociv1.OCILayerOperationFailedReason)
 		}
 	default:
-		e := serror.NewGeneric(
-			fmt.Errorf("unsupported layer operation: %s", obj.GetLayerOperation()),
-			ociv1.OCILayerOperationFailedReason,
-		)
-		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
-		return sreconcile.ResultEmpty, e
+		return sreconcile.ResultEmpty, failWithGenericErr(fmt.Errorf("unsupported layer operation: %s", obj.GetLayerOperation()),
+			"", ociv1.OCILayerOperationFailedReason)
 	}
 
 	conditions.Delete(obj, sourcev1.FetchFailedCondition)
