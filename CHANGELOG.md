@@ -2,6 +2,38 @@
 
 All notable changes to this project are documented in this file.
 
+## 1.1.1
+
+**Release date:** 2023-09-18
+
+This is a patch release that fixes a regression introduced in v1.1.0 where
+HelmRepository objects would not be reconciled if they provided a TLS Secret
+using `.spec.secretRef` with a type other than `Opaque` or `kubernetes.io/tls`.
+
+In addition, the URL lookup strategy for Buckets has been changed from path to
+auto, to widen support for S3-compatible object storage services.
+
+Lastly, several dependencies have been updated to their latest versions.
+
+Fixes:
+- bucket: use auto lookup type
+  [#1222](https://github.com/fluxcd/source-controller/pull/1222)
+- helmrepo: fix Secret type check for TLS via `.spec.secretRef`
+  [#1225](https://github.com/fluxcd/source-controller/pull/1225)
+- Upgrade github.com/fluxcd/pkg/{git,git/gogit}
+  [#1236](https://github.com/fluxcd/source-controller/pull/1236)
+
+Improvements:
+- build(deps): bump the ci group dependencies
+  [#1213](https://github.com/fluxcd/source-controller/pull/1213)
+  [#1224](https://github.com/fluxcd/source-controller/pull/1224)
+  [#1230](https://github.com/fluxcd/source-controller/pull/1230)
+  [#1235](https://github.com/fluxcd/source-controller/pull/1235)
+- docs: Add missing pem-encoding reference
+  [#1216](https://github.com/fluxcd/source-controller/pull/1216)
+- build(deps): bump github.com/cyphar/filepath-securejoin from 0.2.3 to 0.2.4
+  [#1227](https://github.com/fluxcd/source-controller/pull/1227)
+
 ## 1.1.0
 
 **Release date:** 2023-08-23
