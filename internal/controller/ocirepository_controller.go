@@ -142,6 +142,8 @@ type OCIRepositoryReconcilerOptions struct {
 	RateLimiter               ratelimiter.RateLimiter
 }
 
+type versionParsingFunction func(string) (*semver.Version, error)
+
 // SetupWithManager sets up the controller with the Manager.
 func (r *OCIRepositoryReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return r.SetupWithManagerAndOptions(mgr, OCIRepositoryReconcilerOptions{})
@@ -730,7 +732,7 @@ func (r *OCIRepositoryReconciler) getArtifactURL(obj *ociv1.OCIRepository, optio
 		}
 
 		if obj.Spec.Reference.SemVer != "" {
-			tag, err := r.getTagBySemver(url, obj.Spec.Reference.SemVer, options)
+			tag, err := r.getTagBySemver(url, obj.Spec.Reference.SemVer, obj.Spec.Reference.LenientSemVer, options)
 			if err != nil {
 				return "", err
 			}
@@ -747,7 +749,7 @@ func (r *OCIRepositoryReconciler) getArtifactURL(obj *ociv1.OCIRepository, optio
 
 // getTagBySemver call the remote container registry, fetches all the tags from the repository,
 // and returns the latest tag according to the semver expression.
-func (r *OCIRepositoryReconciler) getTagBySemver(url, exp string, options []crane.Option) (string, error) {
+func (r *OCIRepositoryReconciler) getTagBySemver(url, exp string, lenient bool, options []crane.Option) (string, error) {
 	tags, err := crane.ListTags(url, options...)
 	if err != nil {
 		return "", err
@@ -758,9 +760,16 @@ func (r *OCIRepositoryReconciler) getTagBySemver(url, exp string, options []cran
 		return "", fmt.Errorf("semver '%s' parse error: %w", exp, err)
 	}
 
+	var parseVersion versionParsingFunction
+	if lenient {
+		parseVersion = semver.NewVersion
+	} else {
+		parseVersion = version.ParseVersion
+	}
+
 	var matchingVersions []*semver.Version
 	for _, t := range tags {
-		v, err := version.ParseVersion(t)
+		v, err := parseVersion(t)
 		if err != nil {
 			continue
 		}

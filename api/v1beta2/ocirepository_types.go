@@ -160,6 +160,12 @@ type OCIRepositoryRef struct {
 	// Tag is the image tag to pull, defaults to latest.
 	// +optional
 	Tag string `json:"tag,omitempty"`
+
+	// Enable lenient SemVer tag handling, supporting anything that
+	// the Masterminds/semver/v3 library can handle in it's lenient
+	// mode. Defaults to false.
+	// +optional
+	LenientSemVer bool `json:"lenient-semver"`
 }
 
 // OCILayerSelector specifies which layer should be extracted from an OCI Artifact
