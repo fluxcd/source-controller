@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	cryptotls "crypto/tls"
 	"errors"
 	"fmt"
 	"io"
@@ -31,9 +32,9 @@ import (
 	"github.com/Masterminds/semver/v3"
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/authn/k8schain"
-	"github.com/google/go-containerregistry/pkg/crane"
 	"github.com/google/go-containerregistry/pkg/name"
 	gcrv1 "github.com/google/go-containerregistry/pkg/v1"
+	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -369,10 +370,10 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 		return sreconcile.ResultEmpty, e
 	}
 
-	opts := makeRemoteOptions(ctx, obj, transport, keychain, auth)
+	opts := makeRemoteOptions(ctx, transport, keychain, auth)
 
 	// Determine which artifact revision to pull
-	url, err := r.getArtifactURL(obj, opts.craneOpts)
+	ref, err := r.getArtifactRef(obj, opts)
 	if err != nil {
 		if _, ok := err.(invalidOCIURLError); ok {
 			e := serror.NewStalling(
@@ -390,7 +391,8 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 	}
 
 	// Get the upstream revision from the artifact digest
-	revision, err := r.getRevision(url, opts.craneOpts)
+	// TODO: getRevision resolves the digest, which may change before image is fetched, so it should probaly update ref
+	revision, err := r.getRevision(ref, opts)
 	if err != nil {
 		e := serror.NewGeneric(
 			fmt.Errorf("failed to determine artifact digest: %w", err),
@@ -405,7 +407,7 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 	// Mark observations about the revision on the object
 	defer func() {
 		if !obj.GetArtifact().HasRevision(revision) {
-			message := fmt.Sprintf("new revision '%s' for '%s'", revision, url)
+			message := fmt.Sprintf("new revision '%s' for '%s'", revision, ref)
 			if obj.GetArtifact() != nil {
 				conditions.MarkTrue(obj, sourcev1.ArtifactOutdatedCondition, "NewRevision", message)
 			}
@@ -428,7 +430,7 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 		conditions.GetObservedGeneration(obj, sourcev1.SourceVerifiedCondition) != obj.Generation ||
 		conditions.IsFalse(obj, sourcev1.SourceVerifiedCondition) {
 
-		err := r.verifySignature(ctx, obj, url, opts.verifyOpts...)
+		err := r.verifySignature(ctx, obj, ref, opts...)
 		if err != nil {
 			provider := obj.Spec.Verify.Provider
 			if obj.Spec.Verify.SecretRef == nil {
@@ -453,7 +455,7 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 	}
 
 	// Pull artifact from the remote container registry
-	img, err := crane.Pull(url, opts.craneOpts...)
+	img, err := remote.Image(ref, opts...)
 	if err != nil {
 		e := serror.NewGeneric(
 			fmt.Errorf("failed to pull artifact from '%s': %w", obj.Spec.URL, err),
@@ -573,37 +575,31 @@ func (r *OCIRepositoryReconciler) selectLayer(obj *ociv1.OCIRepository, image gc
 
 // getRevision fetches the upstream digest, returning the revision in the
 // format '<tag>@<digest>'.
-func (r *OCIRepositoryReconciler) getRevision(url string, options []crane.Option) (string, error) {
-	ref, err := name.ParseReference(url)
-	if err != nil {
-		return "", err
-	}
+func (r *OCIRepositoryReconciler) getRevision(ref name.Reference, options []remote.Option) (string, error) {
+	switch ref := ref.(type) {
+	case name.Digest:
+		digest, err := v1.NewHash(ref.DigestStr())
+		if err != nil {
+			return "", err
+		}
+		return digest.String(), nil
+	case name.Tag:
+		var digest v1.Hash
 
-	repoTag := ""
-	repoName := strings.TrimPrefix(url, ref.Context().RegistryStr())
-	if s := strings.Split(repoName, ":"); len(s) == 2 && !strings.Contains(repoName, "@") {
-		repoTag = s[1]
+		desc, err := remote.Head(ref, options...)
+		if err == nil {
+			digest = desc.Digest
+		} else {
+			rdesc, err := remote.Get(ref, options...)
+			if err != nil {
+				return "", err
+			}
+			digest = rdesc.Descriptor.Digest
+		}
+		return fmt.Sprintf("%s@%s", ref.TagStr(), digest.String()), nil
+	default:
+		return "", fmt.Errorf("unsupported reference type: %T", ref)
 	}
-
-	if repoTag == "" && !strings.Contains(repoName, "@") {
-		repoTag = "latest"
-	}
-
-	digest, err := crane.Digest(url, options...)
-	if err != nil {
-		return "", err
-	}
-
-	digestHash, err := gcrv1.NewHash(digest)
-	if err != nil {
-		return "", err
-	}
-
-	revision := digestHash.String()
-	if repoTag != "" {
-		revision = fmt.Sprintf("%s@%s", repoTag, revision)
-	}
-	return revision, nil
 }
 
 // digestFromRevision extracts the digest from the revision string.
@@ -615,7 +611,7 @@ func (r *OCIRepositoryReconciler) digestFromRevision(revision string) string {
 // verifySignature verifies the authenticity of the given image reference URL.
 // First, it tries to use a key if a Secret with a valid public key is provided.
 // If not, it falls back to a keyless approach for verification.
-func (r *OCIRepositoryReconciler) verifySignature(ctx context.Context, obj *ociv1.OCIRepository, url string, opt ...remote.Option) error {
+func (r *OCIRepositoryReconciler) verifySignature(ctx context.Context, obj *ociv1.OCIRepository, ref name.Reference, opt ...remote.Option) error {
 	ctxTimeout, cancel := context.WithTimeout(ctx, obj.Spec.Timeout.Duration)
 	defer cancel()
 
@@ -624,15 +620,6 @@ func (r *OCIRepositoryReconciler) verifySignature(ctx context.Context, obj *ociv
 	case "cosign":
 		defaultCosignOciOpts := []soci.Options{
 			soci.WithRemoteOptions(opt...),
-		}
-
-		var nameOpts []name.Option
-		if obj.Spec.Insecure {
-			nameOpts = append(nameOpts, name.Insecure)
-		}
-		ref, err := name.ParseReference(url, nameOpts...)
-		if err != nil {
-			return err
 		}
 
 		// get the public keys from the given secret
@@ -669,7 +656,7 @@ func (r *OCIRepositoryReconciler) verifySignature(ctx context.Context, obj *ociv
 			}
 
 			if !signatureVerified {
-				return fmt.Errorf("no matching signatures were found for '%s'", url)
+				return fmt.Errorf("no matching signatures were found for '%s'", ref)
 			}
 
 			return nil
@@ -691,71 +678,72 @@ func (r *OCIRepositoryReconciler) verifySignature(ctx context.Context, obj *ociv
 			return nil
 		}
 
-		return fmt.Errorf("no matching signatures were found for '%s'", url)
+		return fmt.Errorf("no matching signatures were found for '%s'", ref)
 	}
 
 	return nil
 }
 
-// parseRepositoryURL validates and extracts the repository URL.
-func (r *OCIRepositoryReconciler) parseRepositoryURL(obj *ociv1.OCIRepository) (string, error) {
+// parseRepository validates and extracts the repository URL.
+func (r *OCIRepositoryReconciler) parseRepository(obj *ociv1.OCIRepository) (name.Repository, error) {
 	if !strings.HasPrefix(obj.Spec.URL, ociv1.OCIRepositoryPrefix) {
-		return "", fmt.Errorf("URL must be in format 'oci://<domain>/<org>/<repo>'")
+		return name.Repository{}, fmt.Errorf("URL must be in format 'oci://<domain>/<org>/<repo>'")
 	}
 
 	url := strings.TrimPrefix(obj.Spec.URL, ociv1.OCIRepositoryPrefix)
-	ref, err := name.ParseReference(url)
+
+	options := []name.Option{}
+	if obj.Spec.Insecure {
+		options = append(options, name.Insecure)
+	}
+	repo, err := name.NewRepository(url, options...)
 	if err != nil {
-		return "", err
+		return name.Repository{}, err
 	}
 
-	imageName := strings.TrimPrefix(url, ref.Context().RegistryStr())
+	imageName := strings.TrimPrefix(url, repo.RegistryStr())
 	if s := strings.Split(imageName, ":"); len(s) > 1 {
-		return "", fmt.Errorf("URL must not contain a tag; remove ':%s'", s[1])
+		return name.Repository{}, fmt.Errorf("URL must not contain a tag; remove ':%s'", s[1])
 	}
 
-	return ref.Context().Name(), nil
+	return repo, nil
 }
 
-// getArtifactURL determines which tag or revision should be used and returns the OCI artifact FQN.
-func (r *OCIRepositoryReconciler) getArtifactURL(obj *ociv1.OCIRepository, options []crane.Option) (string, error) {
-	url, err := r.parseRepositoryURL(obj)
+// getArtifactRef determines which tag or revision should be used and returns the OCI artifact FQN.
+func (r *OCIRepositoryReconciler) getArtifactRef(obj *ociv1.OCIRepository, options []remote.Option) (name.Reference, error) {
+	repo, err := r.parseRepository(obj)
 	if err != nil {
-		return "", invalidOCIURLError{err}
+		return nil, invalidOCIURLError{err}
 	}
 
 	if obj.Spec.Reference != nil {
 		if obj.Spec.Reference.Digest != "" {
-			return fmt.Sprintf("%s@%s", url, obj.Spec.Reference.Digest), nil
+			return repo.Digest(obj.Spec.Reference.Digest), nil
 		}
 
 		if obj.Spec.Reference.SemVer != "" {
-			tag, err := r.getTagBySemver(url, obj.Spec.Reference.SemVer, options)
-			if err != nil {
-				return "", err
-			}
-			return fmt.Sprintf("%s:%s", url, tag), nil
+			return r.getTagBySemver(repo, obj.Spec.Reference.SemVer, options)
 		}
 
 		if obj.Spec.Reference.Tag != "" {
-			return fmt.Sprintf("%s:%s", url, obj.Spec.Reference.Tag), nil
+			return repo.Tag(obj.Spec.Reference.Tag), nil
 		}
 	}
 
-	return url, nil
+	return repo.Tag(name.DefaultTag), nil
 }
 
 // getTagBySemver call the remote container registry, fetches all the tags from the repository,
 // and returns the latest tag according to the semver expression.
-func (r *OCIRepositoryReconciler) getTagBySemver(url, exp string, options []crane.Option) (string, error) {
-	tags, err := crane.ListTags(url, options...)
+func (r *OCIRepositoryReconciler) getTagBySemver(repo name.Repository, exp string, options []remote.Option) (name.Reference, error) {
+	tags, err := remote.List(repo, options...)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	constraint, err := semver.NewConstraint(exp)
 	if err != nil {
-		return "", fmt.Errorf("semver '%s' parse error: %w", exp, err)
+		return nil, fmt.Errorf("semver '%s' parse error: %w", exp, err)
 	}
 
 	var matchingVersions []*semver.Version
@@ -771,11 +759,11 @@ func (r *OCIRepositoryReconciler) getTagBySemver(url, exp string, options []cran
 	}
 
 	if len(matchingVersions) == 0 {
-		return "", fmt.Errorf("no match found for semver: %s", exp)
+		return nil, fmt.Errorf("no match found for semver: %s", exp)
 	}
 
 	sort.Sort(sort.Reverse(semver.Collection(matchingVersions)))
-	return matchingVersions[0].Original(), nil
+	return repo.Tag(matchingVersions[0].Original()), nil
 }
 
 // keychain generates the credential keychain based on the resource
@@ -825,9 +813,16 @@ func (r *OCIRepositoryReconciler) keychain(ctx context.Context, obj *ociv1.OCIRe
 
 // transport clones the default transport from remote and when a certSecretRef is specified,
 // the returned transport will include the TLS client and/or CA certificates.
-func (r *OCIRepositoryReconciler) transport(ctx context.Context, obj *ociv1.OCIRepository) (http.RoundTripper, error) {
+func (r *OCIRepositoryReconciler) transport(ctx context.Context, obj *ociv1.OCIRepository) (*http.Transport, error) {
+	transport := remote.DefaultTransport.(*http.Transport).Clone()
+
 	if obj.Spec.CertSecretRef == nil || obj.Spec.CertSecretRef.Name == "" {
-		return nil, nil
+		if obj.Spec.Insecure {
+			transport.TLSClientConfig = &cryptotls.Config{
+				InsecureSkipVerify: true,
+			}
+		}
+		return transport, nil
 	}
 
 	certSecretName := types.NamespacedName{
@@ -839,7 +834,6 @@ func (r *OCIRepositoryReconciler) transport(ctx context.Context, obj *ociv1.OCIR
 		return nil, err
 	}
 
-	transport := remote.DefaultTransport.(*http.Transport).Clone()
 	tlsConfig, _, err := tls.KubeTLSClientConfigFromSecret(certSecret, "")
 	if err != nil {
 		return nil, err
@@ -1155,55 +1149,28 @@ func (r *OCIRepositoryReconciler) notify(ctx context.Context, oldObj, newObj *oc
 	}
 }
 
-// craneOptions sets the auth headers, timeout and user agent
-// for all operations against remote container registries.
-func craneOptions(ctx context.Context, insecure bool) []crane.Option {
-	options := []crane.Option{
-		crane.WithContext(ctx),
-		crane.WithUserAgent(oci.UserAgent),
-	}
-
-	if insecure {
-		options = append(options, crane.Insecure)
-	}
-
-	return options
-}
-
 // makeRemoteOptions returns a remoteOptions struct with the authentication and transport options set.
 // The returned struct can be used to interact with a remote registry using go-containerregistry based libraries.
-func makeRemoteOptions(ctxTimeout context.Context, obj *ociv1.OCIRepository, transport http.RoundTripper,
+func makeRemoteOptions(ctxTimeout context.Context, transport http.RoundTripper,
 	keychain authn.Keychain, auth authn.Authenticator) remoteOptions {
-	o := remoteOptions{
-		craneOpts:  craneOptions(ctxTimeout, obj.Spec.Insecure),
-		verifyOpts: []remote.Option{},
-	}
 
-	if transport != nil {
-		o.craneOpts = append(o.craneOpts, crane.WithTransport(transport))
-		o.verifyOpts = append(o.verifyOpts, remote.WithTransport(transport))
-	}
-
+	authOption := remote.WithAuthFromKeychain(keychain)
 	if auth != nil {
 		// auth take precedence over keychain here as we expect the caller to set
 		// the auth only if it is required.
-		o.verifyOpts = append(o.verifyOpts, remote.WithAuth(auth))
-		o.craneOpts = append(o.craneOpts, crane.WithAuth(auth))
-		return o
+		authOption = remote.WithAuth(auth)
 	}
-
-	o.verifyOpts = append(o.verifyOpts, remote.WithAuthFromKeychain(keychain))
-	o.craneOpts = append(o.craneOpts, crane.WithAuthFromKeychain(keychain))
-
-	return o
+	return remoteOptions{
+		remote.WithContext(ctxTimeout),
+		remote.WithUserAgent(oci.UserAgent),
+		remote.WithTransport(transport),
+		authOption,
+	}
 }
 
 // remoteOptions contains the options to interact with a remote registry.
 // It can be used to pass options to go-containerregistry based libraries.
-type remoteOptions struct {
-	craneOpts  []crane.Option
-	verifyOpts []remote.Option
-}
+type remoteOptions []remote.Option
 
 // ociContentConfigChanged evaluates the current spec with the observations
 // of the artifact in the status to determine if artifact content configuration
