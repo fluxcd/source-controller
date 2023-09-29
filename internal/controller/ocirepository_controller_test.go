@@ -19,6 +19,7 @@ package controller
 import (
 	"crypto/rand"
 	"crypto/tls"
+	cryptotls "crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
@@ -38,6 +39,7 @@ import (
 	"github.com/google/go-containerregistry/pkg/crane"
 	gcrv1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/mutate"
+	"github.com/google/go-containerregistry/pkg/v1/remote"
 	. "github.com/onsi/gomega"
 	coptions "github.com/sigstore/cosign/v2/cmd/cosign/cli/options"
 	"github.com/sigstore/cosign/v2/cmd/cosign/cli/sign"
@@ -793,15 +795,14 @@ func TestOCIRepository_reconcileSource_authStrategy(t *testing.T) {
 				patchOptions:  getPatchOptions(ociRepositoryReadyCondition.Owned, "sc"),
 			}
 
-			opts := craneOptions(ctx, tt.insecure)
-			opts = append(opts, crane.WithAuthFromKeychain(authn.DefaultKeychain))
-			repoURL, err := r.getArtifactURL(obj, opts)
+			opts := makeRemoteOptions(ctx, makeTransport(tt.insecure), authn.DefaultKeychain, nil)
+			ref, err := r.getArtifactRef(obj, opts)
 			g.Expect(err).To(BeNil())
 
 			assertConditions := tt.assertConditions
 			for k := range assertConditions {
 				assertConditions[k].Message = strings.ReplaceAll(assertConditions[k].Message, "<revision>", fmt.Sprintf("%s@%s", img.tag, img.digest.String()))
-				assertConditions[k].Message = strings.ReplaceAll(assertConditions[k].Message, "<url>", repoURL)
+				assertConditions[k].Message = strings.ReplaceAll(assertConditions[k].Message, "<url>", ref.String())
 			}
 
 			g.Expect(r.Client.Create(ctx, obj)).ToNot(HaveOccurred())
@@ -824,6 +825,15 @@ func TestOCIRepository_reconcileSource_authStrategy(t *testing.T) {
 	}
 }
 
+func makeTransport(insecure bool) http.RoundTripper {
+	transport := remote.DefaultTransport.(*http.Transport).Clone()
+	if insecure {
+		transport.TLSClientConfig = &cryptotls.Config{
+			InsecureSkipVerify: true,
+		}
+	}
+	return transport
+}
 func TestOCIRepository_CertSecret(t *testing.T) {
 	g := NewWithT(t)
 
@@ -1367,9 +1377,9 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignature(t *testing.T) {
 				g.Expect(err).ToNot(HaveOccurred())
 			}
 
-			opts := craneOptions(ctx, false)
-			opts = append(opts, crane.WithAuthFromKeychain(keychain))
-			artifactURL, err := r.getArtifactURL(obj, opts)
+			opts := makeRemoteOptions(ctx, makeTransport(true), keychain, nil)
+
+			artifactRef, err := r.getArtifactRef(obj, opts)
 			g.Expect(err).ToNot(HaveOccurred())
 
 			if tt.shouldSign {
@@ -1387,7 +1397,7 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignature(t *testing.T) {
 					TlogUpload:       false,
 
 					Registry: coptions.RegistryOptions{Keychain: keychain, AllowInsecure: true, AllowHTTPRegistry: tt.insecure},
-				}, []string{artifactURL})
+				}, []string{artifactRef.String()})
 
 				g.Expect(err).ToNot(HaveOccurred())
 			}
@@ -1396,7 +1406,7 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignature(t *testing.T) {
 			assertConditions := tt.assertConditions
 			for k := range assertConditions {
 				assertConditions[k].Message = strings.ReplaceAll(assertConditions[k].Message, "<revision>", fmt.Sprintf("%s@%s", tt.reference.Tag, image.digest.String()))
-				assertConditions[k].Message = strings.ReplaceAll(assertConditions[k].Message, "<url>", artifactURL)
+				assertConditions[k].Message = strings.ReplaceAll(assertConditions[k].Message, "<url>", artifactRef.String())
 				assertConditions[k].Message = strings.ReplaceAll(assertConditions[k].Message, "<provider>", "cosign")
 			}
 
@@ -1414,7 +1424,7 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignature(t *testing.T) {
 			artifact := &sourcev1.Artifact{}
 			got, err := r.reconcileSource(ctx, sp, obj, artifact, tmpDir)
 			if tt.wantErr {
-				tt.wantErrMsg = strings.ReplaceAll(tt.wantErrMsg, "<url>", artifactURL)
+				tt.wantErrMsg = strings.ReplaceAll(tt.wantErrMsg, "<url>", artifactRef.String())
 				g.Expect(err).ToNot(BeNil())
 				g.Expect(err.Error()).To(ContainSubstring(tt.wantErrMsg))
 			} else {
@@ -1845,11 +1855,12 @@ func TestOCIRepository_reconcileArtifact(t *testing.T) {
 	}
 }
 
-func TestOCIRepository_getArtifactURL(t *testing.T) {
+func TestOCIRepository_getArtifactRef(t *testing.T) {
 	g := NewWithT(t)
 
 	tmpDir := t.TempDir()
 	server, err := setupRegistryServer(ctx, tmpDir, registryOptions{})
+	g.Expect(err).ToNot(HaveOccurred())
 	t.Cleanup(func() {
 		server.Close()
 	})
@@ -1867,7 +1878,7 @@ func TestOCIRepository_getArtifactURL(t *testing.T) {
 		{
 			name: "valid url with no reference",
 			url:  "oci://ghcr.io/stefanprodan/charts",
-			want: "ghcr.io/stefanprodan/charts",
+			want: "ghcr.io/stefanprodan/charts:latest",
 		},
 		{
 			name: "valid url with tag reference",
@@ -1929,15 +1940,14 @@ func TestOCIRepository_getArtifactURL(t *testing.T) {
 				obj.Spec.Reference = tt.reference
 			}
 
-			opts := craneOptions(ctx, true)
-			opts = append(opts, crane.WithAuthFromKeychain(authn.DefaultKeychain))
-			got, err := r.getArtifactURL(obj, opts)
+			opts := makeRemoteOptions(ctx, makeTransport(true), authn.DefaultKeychain, nil)
+			got, err := r.getArtifactRef(obj, opts)
 			if tt.wantErr {
 				g.Expect(err).To(HaveOccurred())
 				return
 			}
 			g.Expect(err).ToNot(HaveOccurred())
-			g.Expect(got).To(Equal(tt.want))
+			g.Expect(got.String()).To(Equal(tt.want))
 		})
 	}
 }
