@@ -539,30 +539,40 @@ func (r *OCIRepositoryReconciler) selectLayer(obj *ociv1.OCIRepository, image gc
 		return nil, fmt.Errorf("failed to parse artifact layers: %w", err)
 	}
 
-	if len(layers) < 1 {
+	offset := obj.GetLayerOffset()
+	mediaType := obj.GetLayerMediaType()
+
+	if len(layers) == 0 {
 		return nil, fmt.Errorf("no layers found in artifact")
+	}
+
+	if len(layers) <= offset {
+		return nil, fmt.Errorf("layer offset %d is out of bounds", offset)
 	}
 
 	var layer gcrv1.Layer
 	switch {
-	case obj.GetLayerMediaType() != "":
+	case mediaType != "":
 		var found bool
 		for i, l := range layers {
+			if i < offset {
+				continue
+			}
 			md, err := l.MediaType()
 			if err != nil {
 				return nil, fmt.Errorf("failed to determine the media type of layer[%v] from artifact: %w", i, err)
 			}
-			if string(md) == obj.GetLayerMediaType() {
+			if string(md) == mediaType {
 				layer = layers[i]
 				found = true
 				break
 			}
 		}
 		if !found {
-			return nil, fmt.Errorf("failed to find layer with media type '%s' in artifact", obj.GetLayerMediaType())
+			return nil, fmt.Errorf("failed to find layer with media type '%s' in artifact at offset %d", obj.GetLayerMediaType(), offset)
 		}
 	default:
-		layer = layers[0]
+		layer = layers[offset]
 	}
 
 	blob, err := layer.Compressed()
