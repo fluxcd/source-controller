@@ -39,6 +39,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	kerrors "k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/apimachinery/pkg/util/sets"
 	kuberecorder "k8s.io/client-go/tools/record"
 	"k8s.io/utils/ptr"
@@ -392,7 +393,7 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 
 	// Get the upstream revision from the artifact digest
 	// TODO: getRevision resolves the digest, which may change before image is fetched, so it should probaly update ref
-	revision, err := r.getRevision(ref, opts)
+	revision, ref, desc, err := r.getRevision(ref, opts)
 	if err != nil {
 		e := serror.NewGeneric(
 			fmt.Errorf("failed to determine artifact digest: %w", err),
@@ -454,35 +455,10 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 		return sreconcile.ResultSuccess, nil
 	}
 
-	// Pull artifact from the remote container registry
-	img, err := remote.Image(ref, opts...)
-	if err != nil {
-		e := serror.NewGeneric(
-			fmt.Errorf("failed to pull artifact from '%s': %w", obj.Spec.URL, err),
-			ociv1.OCIPullFailedReason,
-		)
-		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
-		return sreconcile.ResultEmpty, e
-	}
-
-	// Copy the OCI annotations to the internal artifact metadata
-	manifest, err := img.Manifest()
-	if err != nil {
-		e := serror.NewGeneric(
-			fmt.Errorf("failed to parse artifact manifest: %w", err),
-			ociv1.OCILayerOperationFailedReason,
-		)
-		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
-		return sreconcile.ResultEmpty, e
-	}
-	metadata.Metadata = manifest.Annotations
-
-	// Extract the compressed content from the selected layer
-	blob, err := r.selectLayer(obj, img)
-	if err != nil {
-		e := serror.NewGeneric(err, ociv1.OCILayerOperationFailedReason)
-		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
-		return sreconcile.ResultEmpty, e
+	blob, serr := r.fetchArtifact(obj, metadata, ref, desc, opts)
+	if serr != nil {
+		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, serr.Reason, serr.Err.Error())
+		return sreconcile.ResultEmpty, serr
 	}
 
 	// Persist layer content to storage using the specified operation
@@ -583,32 +559,130 @@ func (r *OCIRepositoryReconciler) selectLayer(obj *ociv1.OCIRepository, image gc
 	return blob, nil
 }
 
+func newPullErr(format string, a ...any) *serror.Generic {
+	return serror.NewGeneric(fmt.Errorf(format, a...), ociv1.OCIPullFailedReason)
+}
+
+func newLayerOperationErr(format string, a ...any) *serror.Generic {
+	return serror.NewGeneric(fmt.Errorf(format, a...), ociv1.OCILayerOperationFailedReason)
+}
+
+func (r *OCIRepositoryReconciler) fetchArtifact(obj *ociv1.OCIRepository, metadata *sourcev1.Artifact, ref name.Reference, desc *remote.Descriptor, options remoteOptions) (io.ReadCloser, *serror.Generic) {
+	switch mt := desc.MediaType; {
+	case mt.IsImage():
+		// Pull artifact from the remote container registry
+		img, err := desc.Image()
+		if err != nil {
+			return nil, newPullErr("failed to parse artifact image from '%s': %w", obj.Spec.URL, err)
+		}
+
+		// Copy the OCI annotations to the internal artifact metadata
+		manifest, err := img.Manifest()
+		if err != nil {
+			return nil, newLayerOperationErr("failed to parse artifact image manifest: %w", err)
+		}
+		metadata.Metadata = manifest.Annotations
+
+		// Extract the compressed content from the selected layer
+		blob, err := r.selectLayer(obj, img)
+		if err != nil {
+			e := serror.NewGeneric(err, ociv1.OCILayerOperationFailedReason)
+			return nil, e
+		}
+		return blob, nil
+	case mt.IsIndex():
+		idx, err := desc.ImageIndex()
+		if err != nil {
+			return nil, newPullErr("failed to parse artifact index from '%s': %w", obj.Spec.URL, err)
+		}
+
+		manifest, err := idx.IndexManifest()
+		if err != nil {
+			return nil, newPullErr("failed to parse artifact index manifest: %w", err)
+		}
+
+		if len(manifest.Manifests) == 0 {
+			return nil, newLayerOperationErr("empty index")
+		}
+
+		images := make([]gcrv1.Image, 0, len(manifest.Manifests))
+
+		for i := range manifest.Manifests {
+			manifest := manifest.Manifests[i]
+			if manifest.MediaType.IsIndex() {
+				r.Eventf(obj, corev1.EventTypeWarning, "OCINestedIndexUnsupported", "skipping nested index manifest '%s' in '%s'", manifest.Digest.String(), desc.Digest.String())
+				continue
+			}
+			if !manifest.MediaType.IsImage() {
+				r.Eventf(obj, corev1.EventTypeNormal, "OCIImageUnsupported", "skipping runnable image '%s' in '%s'", manifest.Digest.String(), ref)
+				continue
+			}
+			if manifest.ArtifactType != "" {
+				img, err := idx.Image(manifest.Digest)
+				if err != nil {
+					return nil, newPullErr("failed to pull artifact image '%s' from '%s': %w", manifest.Digest.String(), ref, err)
+				}
+				images = append(images, img)
+			}
+		}
+
+		if len(images) == 0 {
+			return nil, newPullErr("no suitable artifacts found in index '%s': %w", desc.Digest.String(), err)
+		}
+
+		var errs []error
+		for i := range images {
+			blob, err := r.selectLayer(obj, images[i])
+			if err != nil {
+				errs = append(errs, err)
+				continue
+			}
+			return blob, nil
+		}
+		if len(errs) > 0 {
+			return nil, newLayerOperationErr("%w", kerrors.NewAggregate(errs))
+		}
+		return nil, newPullErr("no suitable layers found in index '%s': %w", desc.Digest.String(), err)
+	default:
+		return nil, newLayerOperationErr("media type '%s' of '%s' is not index or image", mt, ref)
+	}
+}
+
+func (r *OCIRepositoryReconciler) getDescriptor(ref name.Reference, options remoteOptions) (*remote.Descriptor, error) {
+	// NB: there is no good enought reason to use remote.Head first,
+	// as it's only in error case that remote.Get won't have to be
+	// done afterwards anyway
+	desc, err := remote.Get(ref, options...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch %w", err)
+	}
+	return desc, nil
+
+}
+
 // getRevision fetches the upstream digest, returning the revision in the
 // format '<tag>@<digest>'.
-func (r *OCIRepositoryReconciler) getRevision(ref name.Reference, options []remote.Option) (string, error) {
+func (r *OCIRepositoryReconciler) getRevision(ref name.Reference, options remoteOptions) (string, name.Reference, *remote.Descriptor, error) {
 	switch ref := ref.(type) {
 	case name.Digest:
 		digest, err := gcrv1.NewHash(ref.DigestStr())
 		if err != nil {
-			return "", err
+			return "", nil, nil, err
 		}
-		return digest.String(), nil
+		desc, err := r.getDescriptor(ref, options)
+		if err != nil {
+			return "", nil, nil, fmt.Errorf("unable to check digest in registry: %w", err)
+		}
+		return digest.String(), ref, desc, nil
 	case name.Tag:
-		var digest gcrv1.Hash
-
-		desc, err := remote.Head(ref, options...)
-		if err == nil {
-			digest = desc.Digest
-		} else {
-			rdesc, err := remote.Get(ref, options...)
-			if err != nil {
-				return "", err
-			}
-			digest = rdesc.Descriptor.Digest
+		desc, err := r.getDescriptor(ref, options)
+		if err != nil {
+			return "", nil, nil, err
 		}
-		return fmt.Sprintf("%s@%s", ref.TagStr(), digest.String()), nil
+		digest := desc.Digest.String()
+		return fmt.Sprintf("%s@%s", ref.TagStr(), digest), ref.Digest(digest), desc, nil
 	default:
-		return "", fmt.Errorf("unsupported reference type: %T", ref)
+		return "", nil, nil, fmt.Errorf("unsupported reference type: %T", ref)
 	}
 }
 

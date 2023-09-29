@@ -183,6 +183,10 @@ type OCILayerSelector struct {
 	// +kubebuilder:validation:Minimum=0
 	// +optional
 	Offset *int `json:"offset,omitempty"`
+
+	// TODO: next API version should probably use artifact media types
+	// at the top level and make layer selector optional
+	ArtifactMediaType string `json:"artifactMediaType,omitempty"`
 }
 
 // OCIRepositoryVerification verifies the authenticity of an OCI Artifact
