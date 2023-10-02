@@ -488,7 +488,7 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 	// Persist layer content to storage using the specified operation
 	switch obj.GetLayerOperation() {
 	case ociv1.OCILayerExtract:
-		if err = tar.Untar(blob, dir, tar.WithMaxUntarSize(-1)); err != nil {
+		if err = tar.Untar(blob, dir, tar.WithMaxUntarSize(-1), tar.WithSkipSymlinks()); err != nil {
 			e := serror.NewGeneric(
 				fmt.Errorf("failed to extract layer contents from artifact: %w", err),
 				ociv1.OCILayerOperationFailedReason,
