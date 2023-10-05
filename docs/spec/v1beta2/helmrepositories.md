@@ -5,9 +5,9 @@
 There are 2 [Helm repository types](#type) defined by the `HelmRepository` API:
 - Helm HTTP/S repository, which defines a Source to produce an Artifact for a Helm
 repository index YAML (`index.yaml`). 
-- OCI Helm repository, which defines a source that does not produce an Artifact. 
-Instead a validation of the Helm repository is performed and the outcome is reported in the
-`.status.conditions` field.
+- OCI Helm repository, which defines a source that does not produce an Artifact.
+  It's a data container to store the information about the OCI repository that
+  can be used by [HelmChart](helmcharts.md) to access OCI Helm charts.
 
 ## Examples
 
@@ -113,9 +113,11 @@ In the above example:
 
 - A HelmRepository named `podinfo` is created, indicated by the
   `.metadata.name` field.
-- The source-controller performs the Helm repository url validation i.e. the url 
-is a valid OCI registry url, every five minutes with the information indicated by the
-`.spec.interval` and `.spec.url` fields.
+- A HelmChart that refers to this HelmRepository uses the URL in the `.spec.url`
+  field to access the OCI Helm chart.
+
+**NOTE:** The `.spec.interval` field is only used by the `default` Helm
+repository and is ignored for any value in `oci` Helm repository.
 
 You can run this example by saving the manifest into `helmrepository.yaml`.
 
@@ -129,25 +131,12 @@ You can run this example by saving the manifest into `helmrepository.yaml`.
 
    ```console
    NAME      URL                                 AGE     READY   STATUS
-   podinfo   oci://ghcr.io/stefanprodan/charts   3m22s   True    Helm repository "podinfo" is ready
+   podinfo   oci://ghcr.io/stefanprodan/charts   3m22s
    ```
 
-3. Run `kubectl describe helmrepository podinfo` to see the [Conditions](#conditions) 
-in the HelmRepository's Status:
-
-   ```console
-   ...
-   Status:
-     Conditions:
-       Last Transition Time:  2022-05-12T14:02:12Z
-       Message:               Helm repository "podinfo" is ready
-       Observed Generation:   1
-       Reason:                Succeeded
-       Status:                True
-       Type:                  Ready
-     Observed Generation:     1
-   Events:                    <none>
-   ```
+Because the OCI Helm repository is a data container, there's nothing to report
+for `READY` and `STATUS` columns above. The existence of the object can be
+considered to be ready for use.
 
 ## Writing a HelmRepository spec
 
@@ -360,6 +349,9 @@ for more information about setting up GKE Workload Identity.
 
 ### Interval
 
+**Note:** This field is ineffectual for [OCI Helm
+Repositories](#helm-oci-repository).
+
 `.spec.interval` is a required field that specifies the interval which the
 Helm repository index must be consulted at.
 
@@ -386,6 +378,9 @@ For OCI, the URL is expected to point to a registry repository, e.g. `oci://ghcr
 For Helm repositories which require authentication, see [Secret reference](#secret-reference).
 
 ### Timeout
+
+**Note:** This field is not applicable to [OCI Helm
+Repositories](#helm-oci-repository).
 
 `.spec.timeout` is an optional field to specify a timeout for the fetch
 operation. The value must be in a
@@ -537,6 +532,9 @@ to HTTP/S Helm repositories.
 
 ### Suspend
 
+**Note:** This field is not applicable to [OCI Helm
+Repositories](#helm-oci-repository).
+
 `.spec.suspend` is an optional field to suspend the reconciliation of a
 HelmRepository. When set to `true`, the controller will stop reconciling the
 HelmRepository, and changes to the resource or the Helm repository index will
@@ -547,6 +545,10 @@ For practical information, see
 [suspending and resuming](#suspending-and-resuming).
 
 ## Working with HelmRepositories
+
+**Note:** This section does not apply to [OCI Helm
+Repositories](#helm-oci-repository), being a data container, once created, they
+are ready to used by [HelmCharts](helmcharts.md).
  
 ### Triggering a reconcile
 
@@ -648,6 +650,10 @@ flux resume source helm <repository-name>
 
 ### Debugging a HelmRepository
 
+**Note:** This section does not apply to [OCI Helm
+Repositories](#helm-oci-repository), being a data container, they are static
+objects that don't require debugging if valid.
+
 There are several ways to gather information about a HelmRepository for debugging
 purposes.
 
@@ -713,9 +719,11 @@ specific HelmRepository, e.g. `flux logs --level=error --kind=HelmRepository --n
 
 ## HelmRepository Status
 
-### Artifact
+**Note:** This section does not apply to [OCI Helm
+Repositories](#helm-oci-repository), they do not contain any information in the
+status.
 
-**Note:** This section does not apply to [OCI Helm Repositories](#helm-oci-repository), they do not emit artifacts.
+### Artifact
 
 The HelmRepository reports the last fetched repository index as an Artifact
 object in the `.status.artifact` of the resource.
@@ -756,9 +764,6 @@ specification][kstatus-spec],
 and reports `Reconciling` and `Stalled` conditions where applicable to
 provide better (timeout) support to solutions polling the HelmRepository to become
 `Ready`.
-
- OCI Helm repositories use only `Reconciling`, `Ready`, `FetchFailed`, and `Stalled`
- condition types.
 
 #### Reconciling HelmRepository
 
