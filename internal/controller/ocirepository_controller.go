@@ -35,6 +35,7 @@ import (
 	"github.com/google/go-containerregistry/pkg/name"
 	gcrv1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
+	"github.com/sigstore/cosign/v2/pkg/cosign"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -663,6 +664,16 @@ func (r *OCIRepositoryReconciler) verifySignature(ctx context.Context, obj *ociv
 
 		// if no secret is provided, try keyless verification
 		ctrl.LoggerFrom(ctx).Info("no secret reference is provided, trying to verify the image using keyless method")
+
+		var identities []cosign.Identity
+		for _, match := range obj.Spec.Verify.MatchOIDCIdentity {
+			identities = append(identities, cosign.Identity{
+				IssuerRegExp:  match.Issuer,
+				SubjectRegExp: match.Subject,
+			})
+		}
+		defaultCosignOciOpts = append(defaultCosignOciOpts, soci.WithIdentities(identities))
+
 		verifier, err := soci.NewCosignVerifier(ctxTimeout, defaultCosignOciOpts...)
 		if err != nil {
 			return err

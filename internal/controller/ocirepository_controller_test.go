@@ -1435,6 +1435,181 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignature(t *testing.T) {
 	}
 }
 
+func TestOCIRepository_reconcileSource_verifyOCISourceSignature_keyless(t *testing.T) {
+	tests := []struct {
+		name             string
+		reference        *ociv1.OCIRepositoryRef
+		want             sreconcile.Result
+		wantErr          bool
+		wantErrMsg       string
+		beforeFunc       func(obj *ociv1.OCIRepository)
+		assertConditions []metav1.Condition
+		revision         string
+	}{
+		{
+			name: "signed image with no identity matching specified should pass verification",
+			reference: &ociv1.OCIRepositoryRef{
+				Tag: "6.5.1",
+			},
+			want: sreconcile.ResultSuccess,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new revision '<revision>' for '<url>'"),
+				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new revision '<revision>' for '<url>'"),
+				*conditions.TrueCondition(sourcev1.SourceVerifiedCondition, meta.SucceededReason, "verified signature of revision <revision>"),
+			},
+			revision: "6.5.1@sha256:049fff8f9c92abba8615c6c3dcf9d10d30082213f6fe86c9305257f806c31e31",
+		},
+		{
+			name: "signed image with correct subject and issuer should pass verification",
+			reference: &ociv1.OCIRepositoryRef{
+				Tag: "6.5.1",
+			},
+			want: sreconcile.ResultSuccess,
+			beforeFunc: func(obj *ociv1.OCIRepository) {
+				obj.Spec.Verify.MatchOIDCIdentity = []ociv1.OIDCIdentityMatch{
+					{
+
+						Subject: "^https://github.com/stefanprodan/podinfo.*$",
+						Issuer:  "^https://token.actions.githubusercontent.com$",
+					},
+				}
+			},
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new revision '<revision>' for '<url>'"),
+				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new revision '<revision>' for '<url>'"),
+				*conditions.TrueCondition(sourcev1.SourceVerifiedCondition, meta.SucceededReason, "verified signature of revision <revision>"),
+			},
+			revision: "6.5.1@sha256:049fff8f9c92abba8615c6c3dcf9d10d30082213f6fe86c9305257f806c31e31",
+		},
+		{
+			name: "signed image with both incorrect and correct identity matchers should pass verification",
+			reference: &ociv1.OCIRepositoryRef{
+				Tag: "6.5.1",
+			},
+			want: sreconcile.ResultSuccess,
+			beforeFunc: func(obj *ociv1.OCIRepository) {
+				obj.Spec.Verify.MatchOIDCIdentity = []ociv1.OIDCIdentityMatch{
+					{
+						Subject: "intruder",
+						Issuer:  "^https://honeypot.com$",
+					},
+					{
+
+						Subject: "^https://github.com/stefanprodan/podinfo.*$",
+						Issuer:  "^https://token.actions.githubusercontent.com$",
+					},
+				}
+			},
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new revision '<revision>' for '<url>'"),
+				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new revision '<revision>' for '<url>'"),
+				*conditions.TrueCondition(sourcev1.SourceVerifiedCondition, meta.SucceededReason, "verified signature of revision <revision>"),
+			},
+			revision: "6.5.1@sha256:049fff8f9c92abba8615c6c3dcf9d10d30082213f6fe86c9305257f806c31e31",
+		},
+		{
+			name: "signed image with incorrect subject and issuer should not pass verification",
+			reference: &ociv1.OCIRepositoryRef{
+				Tag: "6.5.1",
+			},
+			wantErr: true,
+			want:    sreconcile.ResultEmpty,
+			beforeFunc: func(obj *ociv1.OCIRepository) {
+				obj.Spec.Verify.MatchOIDCIdentity = []ociv1.OIDCIdentityMatch{
+					{
+						Subject: "intruder",
+						Issuer:  "^https://honeypot.com$",
+					},
+				}
+			},
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new revision '<revision>' for '<url>'"),
+				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new revision '<revision>' for '<url>'"),
+				*conditions.FalseCondition(sourcev1.SourceVerifiedCondition, sourcev1.VerificationError, "failed to verify the signature using provider '<provider> keyless': no matching signatures: none of the expected identities matched what was in the certificate"),
+			},
+			revision: "6.5.1@sha256:049fff8f9c92abba8615c6c3dcf9d10d30082213f6fe86c9305257f806c31e31",
+		},
+		{
+			name: "unsigned image should not pass verification",
+			reference: &ociv1.OCIRepositoryRef{
+				Tag: "6.1.0",
+			},
+			wantErr: true,
+			want:    sreconcile.ResultEmpty,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new revision '<revision>' for '<url>'"),
+				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new revision '<revision>' for '<url>'"),
+				*conditions.FalseCondition(sourcev1.SourceVerifiedCondition, sourcev1.VerificationError, "failed to verify the signature using provider '<provider> keyless': no matching signatures"),
+			},
+			revision: "6.1.0@sha256:3816fe9636a297f0c934b1fa0f46fe4c068920375536ac2803604adfb4c55894",
+		},
+	}
+
+	clientBuilder := fakeclient.NewClientBuilder().
+		WithScheme(testEnv.GetScheme()).
+		WithStatusSubresource(&ociv1.OCIRepository{})
+
+	r := &OCIRepositoryReconciler{
+		Client:        clientBuilder.Build(),
+		EventRecorder: record.NewFakeRecorder(32),
+		Storage:       testStorage,
+		patchOptions:  getPatchOptions(ociRepositoryReadyCondition.Owned, "sc"),
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			obj := &ociv1.OCIRepository{
+				ObjectMeta: metav1.ObjectMeta{
+					GenerateName: "verify-oci-source-signature-",
+					Generation:   1,
+				},
+				Spec: ociv1.OCIRepositorySpec{
+					URL: "oci://ghcr.io/stefanprodan/manifests/podinfo",
+					Verify: &ociv1.OCIRepositoryVerification{
+						Provider: "cosign",
+					},
+					Interval:  metav1.Duration{Duration: interval},
+					Timeout:   &metav1.Duration{Duration: timeout},
+					Reference: tt.reference,
+				},
+			}
+			url := strings.TrimPrefix(obj.Spec.URL, "oci://") + ":" + tt.reference.Tag
+
+			assertConditions := tt.assertConditions
+			for k := range assertConditions {
+				assertConditions[k].Message = strings.ReplaceAll(assertConditions[k].Message, "<revision>", tt.revision)
+				assertConditions[k].Message = strings.ReplaceAll(assertConditions[k].Message, "<url>", url)
+				assertConditions[k].Message = strings.ReplaceAll(assertConditions[k].Message, "<provider>", "cosign")
+			}
+
+			if tt.beforeFunc != nil {
+				tt.beforeFunc(obj)
+			}
+
+			g.Expect(r.Client.Create(ctx, obj)).ToNot(HaveOccurred())
+			defer func() {
+				g.Expect(r.Client.Delete(ctx, obj)).ToNot(HaveOccurred())
+			}()
+
+			sp := patch.NewSerialPatcher(obj, r.Client)
+
+			artifact := &sourcev1.Artifact{}
+			got, err := r.reconcileSource(ctx, sp, obj, artifact, t.TempDir())
+			if tt.wantErr {
+				g.Expect(err).To(HaveOccurred())
+				tt.wantErrMsg = strings.ReplaceAll(tt.wantErrMsg, "<url>", url)
+				g.Expect(err.Error()).To(ContainSubstring(tt.wantErrMsg))
+			} else {
+				g.Expect(err).ToNot(HaveOccurred())
+			}
+			g.Expect(got).To(Equal(tt.want))
+			g.Expect(obj.Status.Conditions).To(conditions.MatchConditions(tt.assertConditions))
+		})
+	}
+}
+
 func TestOCIRepository_reconcileSource_noop(t *testing.T) {
 	g := NewWithT(t)
 

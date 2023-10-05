@@ -23,6 +23,7 @@ import (
 
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
+	"github.com/sigstore/cosign/v2/pkg/cosign"
 )
 
 func TestOptions(t *testing.T) {
@@ -73,6 +74,30 @@ func TestOptions(t *testing.T) {
 				remote.WithAuth(&authn.Basic{Username: "foo", Password: "bar"}),
 				remote.WithAuthFromKeychain(authn.DefaultKeychain),
 				remote.WithTransport(http.DefaultTransport),
+			},
+		},
+	}, {
+		name: "identities option",
+		opts: []Options{WithIdentities([]cosign.Identity{
+			{
+				SubjectRegExp: "test-user",
+				IssuerRegExp:  "^https://token.actions.githubusercontent.com$",
+			},
+			{
+				SubjectRegExp: "dev-user",
+				IssuerRegExp:  "^https://accounts.google.com$",
+			},
+		})},
+		want: &options{
+			Identities: []cosign.Identity{
+				{
+					SubjectRegExp: "test-user",
+					IssuerRegExp:  "^https://token.actions.githubusercontent.com$",
+				},
+				{
+					SubjectRegExp: "dev-user",
+					IssuerRegExp:  "^https://accounts.google.com$",
+				},
 			},
 		},
 	},

@@ -2533,6 +2533,181 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_authStrategy(t *testing.T) {
 	}
 }
 
+func TestHelmChartRepository_reconcileSource_verifyOCISourceSignature_keyless(t *testing.T) {
+	tests := []struct {
+		name             string
+		version          string
+		want             sreconcile.Result
+		wantErr          bool
+		beforeFunc       func(obj *helmv1.HelmChart)
+		assertConditions []metav1.Condition
+		revision         string
+	}{
+		{
+			name:    "signed image with no identity matching specified should pass verification",
+			version: "6.5.1",
+			want:    sreconcile.ResultSuccess,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.SourceVerifiedCondition, meta.SucceededReason, "verified signature of version <version>"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: pulled '<name>' chart with version '<version>'"),
+				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: pulled '<name>' chart with version '<version>'"),
+			},
+			revision: "6.5.1@sha256:af589b918022cd8d85a4543312d28170c2e894ccab8484050ff4bdefdde30b4e",
+		},
+		{
+			name:    "signed image with correct subject and issuer should pass verification",
+			version: "6.5.1",
+			want:    sreconcile.ResultSuccess,
+			beforeFunc: func(obj *helmv1.HelmChart) {
+				obj.Spec.Verify.MatchOIDCIdentity = []helmv1.OIDCIdentityMatch{
+					{
+
+						Subject: "^https://github.com/stefanprodan/podinfo.*$",
+						Issuer:  "^https://token.actions.githubusercontent.com$",
+					},
+				}
+			},
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.SourceVerifiedCondition, meta.SucceededReason, "verified signature of version <version>"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: pulled '<name>' chart with version '<version>'"),
+				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: pulled '<name>' chart with version '<version>'"),
+			},
+			revision: "6.5.1@sha256:af589b918022cd8d85a4543312d28170c2e894ccab8484050ff4bdefdde30b4e",
+		},
+		{
+			name:    "signed image with incorrect and correct identity matchers should pass verification",
+			version: "6.5.1",
+			want:    sreconcile.ResultSuccess,
+			beforeFunc: func(obj *helmv1.HelmChart) {
+				obj.Spec.Verify.MatchOIDCIdentity = []helmv1.OIDCIdentityMatch{
+					{
+						Subject: "intruder",
+						Issuer:  "^https://honeypot.com$",
+					},
+					{
+
+						Subject: "^https://github.com/stefanprodan/podinfo.*$",
+						Issuer:  "^https://token.actions.githubusercontent.com$",
+					},
+				}
+			},
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.SourceVerifiedCondition, meta.SucceededReason, "verified signature of version <version>"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: pulled '<name>' chart with version '<version>'"),
+				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: pulled '<name>' chart with version '<version>'"),
+			},
+			revision: "6.5.1@sha256:af589b918022cd8d85a4543312d28170c2e894ccab8484050ff4bdefdde30b4e",
+		},
+		{
+			name:    "signed image with incorrect subject and issuer should not pass verification",
+			version: "6.5.1",
+			wantErr: true,
+			want:    sreconcile.ResultEmpty,
+			beforeFunc: func(obj *helmv1.HelmChart) {
+				obj.Spec.Verify.MatchOIDCIdentity = []helmv1.OIDCIdentityMatch{
+					{
+						Subject: "intruder",
+						Issuer:  "^https://honeypot.com$",
+					},
+				}
+			},
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.BuildFailedCondition, "ChartVerificationError", "chart verification error: failed to verify <url>: no matching signatures: none of the expected identities matched what was in the certificate"),
+				*conditions.FalseCondition(sourcev1.SourceVerifiedCondition, sourcev1.VerificationError, "chart verification error: failed to verify <url>: no matching signatures"),
+			},
+			revision: "6.5.1@sha256:af589b918022cd8d85a4543312d28170c2e894ccab8484050ff4bdefdde30b4e",
+		},
+		{
+			name:    "unsigned image should not pass verification",
+			version: "6.1.0",
+			wantErr: true,
+			want:    sreconcile.ResultEmpty,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.BuildFailedCondition, "ChartVerificationError", "chart verification error: failed to verify <url>: no matching signatures"),
+				*conditions.FalseCondition(sourcev1.SourceVerifiedCondition, sourcev1.VerificationError, "chart verification error: failed to verify <url>: no matching signatures"),
+			},
+			revision: "6.1.0@sha256:642383f56ccb529e3f658d40312d01b58d9bc6caeef653da43e58d1afe88982a",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			clientBuilder := fakeclient.NewClientBuilder()
+
+			repository := &helmv1.HelmRepository{
+				ObjectMeta: metav1.ObjectMeta{
+					GenerateName: "helmrepository-",
+				},
+				Spec: helmv1.HelmRepositorySpec{
+					URL:      "oci://ghcr.io/stefanprodan/charts",
+					Timeout:  &metav1.Duration{Duration: timeout},
+					Provider: helmv1.GenericOCIProvider,
+					Type:     helmv1.HelmRepositoryTypeOCI,
+				},
+			}
+			clientBuilder.WithObjects(repository)
+
+			r := &HelmChartReconciler{
+				Client:                  clientBuilder.Build(),
+				EventRecorder:           record.NewFakeRecorder(32),
+				Getters:                 testGetters,
+				Storage:                 testStorage,
+				RegistryClientGenerator: registry.ClientGenerator,
+				patchOptions:            getPatchOptions(helmChartReadyCondition.Owned, "sc"),
+			}
+
+			obj := &helmv1.HelmChart{
+				ObjectMeta: metav1.ObjectMeta{
+					GenerateName: "helmchart-",
+				},
+				Spec: helmv1.HelmChartSpec{
+					SourceRef: helmv1.LocalHelmChartSourceReference{
+						Kind: helmv1.HelmRepositoryKind,
+						Name: repository.Name,
+					},
+					Version: tt.version,
+					Chart:   "podinfo",
+					Verify: &helmv1.OCIRepositoryVerification{
+						Provider: "cosign",
+					},
+				},
+			}
+			chartUrl := fmt.Sprintf("%s/%s:%s", repository.Spec.URL, obj.Spec.Chart, obj.Spec.Version)
+
+			assertConditions := tt.assertConditions
+			for k := range assertConditions {
+				assertConditions[k].Message = strings.ReplaceAll(assertConditions[k].Message, "<name>", obj.Spec.Chart)
+				assertConditions[k].Message = strings.ReplaceAll(assertConditions[k].Message, "<version>", obj.Spec.Version)
+				assertConditions[k].Message = strings.ReplaceAll(assertConditions[k].Message, "<url>", chartUrl)
+				assertConditions[k].Message = strings.ReplaceAll(assertConditions[k].Message, "<provider>", "cosign")
+			}
+
+			if tt.beforeFunc != nil {
+				tt.beforeFunc(obj)
+			}
+
+			g.Expect(r.Client.Create(ctx, obj)).ToNot(HaveOccurred())
+			defer func() {
+				g.Expect(r.Client.Delete(ctx, obj)).ToNot(HaveOccurred())
+			}()
+
+			sp := patch.NewSerialPatcher(obj, r.Client)
+
+			var b chart.Build
+			got, err := r.reconcileSource(ctx, sp, obj, &b)
+			if tt.wantErr {
+				g.Expect(err).To(HaveOccurred())
+			} else {
+				g.Expect(err).ToNot(HaveOccurred())
+			}
+			g.Expect(got).To(Equal(tt.want))
+			g.Expect(obj.Status.Conditions).To(conditions.MatchConditions(tt.assertConditions))
+		})
+	}
+}
+
 func TestHelmChartReconciler_reconcileSourceFromOCI_verifySignature(t *testing.T) {
 	g := NewWithT(t)
 
