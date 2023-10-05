@@ -18,6 +18,7 @@ package main
 
 import (
 	"fmt"
+	qhelm "github.com/hossainemruz/qdrant-cloud-apis/api/helm/v1"
 	"net"
 	"net/http"
 	"os"
@@ -84,6 +85,7 @@ func init() {
 
 	utilruntime.Must(v1beta2.AddToScheme(scheme))
 	utilruntime.Must(v1.AddToScheme(scheme))
+	utilruntime.Must(qhelm.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme
 }
 
@@ -362,11 +364,11 @@ func mustSetupManager(metricsAddr, healthAddr string, maxConcurrent int,
 		},
 		Cache: ctrlcache.Options{
 			ByObject: map[ctrlclient.Object]ctrlcache.ByObject{
-				&v1.GitRepository{}:       {Label: watchSelector},
-				&v1beta2.HelmRepository{}: {Label: watchSelector},
-				&v1beta2.HelmChart{}:      {Label: watchSelector},
-				&v1beta2.Bucket{}:         {Label: watchSelector},
-				&v1beta2.OCIRepository{}:  {Label: watchSelector},
+				&v1.GitRepository{}:      {Label: watchSelector},
+				&qhelm.HelmRepository{}:  {Label: watchSelector},
+				&qhelm.HelmChart{}:       {Label: watchSelector},
+				&v1beta2.Bucket{}:        {Label: watchSelector},
+				&v1beta2.OCIRepository{}: {Label: watchSelector},
 			},
 			Namespaces: []string{watchNamespace},
 		},

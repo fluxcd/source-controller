@@ -18,6 +18,7 @@ package getter
 
 import (
 	"context"
+	qhelm "github.com/hossainemruz/qdrant-cloud-apis/api/helm/v1"
 	"os"
 	"testing"
 	"time"
@@ -118,7 +119,7 @@ func TestGetClientOpts(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
 
-			helmRepo := &helmv1.HelmRepository{
+			helmRepo := &qhelm.HelmRepository{
 				Spec: helmv1.HelmRepositorySpec{
 					Timeout: &metav1.Duration{
 						Duration: time.Second,
@@ -224,7 +225,7 @@ func TestGetClientOpts_registryTLSLoginOption(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			helmRepo := &helmv1.HelmRepository{
+			helmRepo := &qhelm.HelmRepository{
 				Spec: helmv1.HelmRepositorySpec{
 					Timeout: &metav1.Duration{
 						Duration: time.Second,

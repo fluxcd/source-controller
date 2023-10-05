@@ -17,11 +17,10 @@ limitations under the License.
 package predicates
 
 import (
+	qhelm "github.com/hossainemruz/qdrant-cloud-apis/api/helm/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
-
-	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
 )
 
 // helmRepositoryTypeFilter filters events for a given HelmRepository type.
@@ -33,7 +32,7 @@ func helmRepositoryTypeFilter(repositoryType string, o client.Object) bool {
 
 	// return true if the object is a HelmRepository
 	// and the type is the same as the one we are looking for.
-	hr, ok := o.(*sourcev1.HelmRepository)
+	hr, ok := o.(*qhelm.HelmRepository)
 	if !ok {
 		return false
 	}
@@ -59,13 +58,13 @@ func (h HelmRepositoryTypePredicate) Update(e event.UpdateEvent) bool {
 	}
 
 	// check if the old object is a HelmRepository
-	oldObj, ok := e.ObjectOld.(*sourcev1.HelmRepository)
+	oldObj, ok := e.ObjectOld.(*qhelm.HelmRepository)
 	if !ok {
 		return false
 	}
 
 	// check if the new object is a HelmRepository
-	newObj, ok := e.ObjectNew.(*sourcev1.HelmRepository)
+	newObj, ok := e.ObjectNew.(*qhelm.HelmRepository)
 	if !ok {
 		return false
 	}

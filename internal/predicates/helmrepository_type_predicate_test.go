@@ -17,6 +17,7 @@ limitations under the License.
 package predicates
 
 import (
+	qhelm "github.com/hossainemruz/qdrant-cloud-apis/api/helm/v1"
 	"testing"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
@@ -27,9 +28,9 @@ import (
 )
 
 func TestHelmRepositoryTypePredicate_Create(t *testing.T) {
-	obj := &sourcev1.HelmRepository{Spec: sourcev1.HelmRepositorySpec{}}
-	http := &sourcev1.HelmRepository{Spec: sourcev1.HelmRepositorySpec{Type: "default"}}
-	oci := &sourcev1.HelmRepository{Spec: sourcev1.HelmRepositorySpec{Type: "oci"}}
+	obj := &qhelm.HelmRepository{Spec: sourcev1.HelmRepositorySpec{}}
+	http := &qhelm.HelmRepository{Spec: sourcev1.HelmRepositorySpec{Type: "default"}}
+	oci := &qhelm.HelmRepository{Spec: sourcev1.HelmRepositorySpec{Type: "oci"}}
 	not := &unstructured.Unstructured{}
 
 	tests := []struct {
@@ -57,15 +58,15 @@ func TestHelmRepositoryTypePredicate_Create(t *testing.T) {
 }
 
 func TestHelmRepositoryTypePredicate_Update(t *testing.T) {
-	repoA := &sourcev1.HelmRepository{Spec: sourcev1.HelmRepositorySpec{
+	repoA := &qhelm.HelmRepository{Spec: sourcev1.HelmRepositorySpec{
 		Type: sourcev1.HelmRepositoryTypeDefault,
 	}}
 
-	repoB := &sourcev1.HelmRepository{Spec: sourcev1.HelmRepositorySpec{
+	repoB := &qhelm.HelmRepository{Spec: sourcev1.HelmRepositorySpec{
 		Type: sourcev1.HelmRepositoryTypeOCI,
 	}}
 
-	empty := &sourcev1.HelmRepository{}
+	empty := &qhelm.HelmRepository{}
 	not := &unstructured.Unstructured{}
 
 	tests := []struct {
@@ -97,9 +98,9 @@ func TestHelmRepositoryTypePredicate_Update(t *testing.T) {
 }
 
 func TestHelmRepositoryTypePredicate_Delete(t *testing.T) {
-	obj := &sourcev1.HelmRepository{Spec: sourcev1.HelmRepositorySpec{}}
-	http := &sourcev1.HelmRepository{Spec: sourcev1.HelmRepositorySpec{Type: "default"}}
-	oci := &sourcev1.HelmRepository{Spec: sourcev1.HelmRepositorySpec{Type: "oci"}}
+	obj := &qhelm.HelmRepository{Spec: sourcev1.HelmRepositorySpec{}}
+	http := &qhelm.HelmRepository{Spec: sourcev1.HelmRepositorySpec{Type: "default"}}
+	oci := &qhelm.HelmRepository{Spec: sourcev1.HelmRepositorySpec{Type: "oci"}}
 	not := &unstructured.Unstructured{}
 
 	tests := []struct {

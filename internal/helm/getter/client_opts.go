@@ -21,6 +21,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	qhelm "github.com/hossainemruz/qdrant-cloud-apis/api/helm/v1"
 	"os"
 	"path"
 
@@ -68,7 +69,7 @@ func (o ClientOpts) MustLoginToRegistry() bool {
 // auth mechanisms.
 // A temporary directory is created to store the certs files if needed and its path is returned along with the options object. It is the
 // caller's responsibility to clean up the directory.
-func GetClientOpts(ctx context.Context, c client.Client, obj *helmv1.HelmRepository, url string) (*ClientOpts, string, error) {
+func GetClientOpts(ctx context.Context, c client.Client, obj *qhelm.HelmRepository, url string) (*ClientOpts, string, error) {
 	hrOpts := &ClientOpts{
 		GetterOpts: []helmgetter.Option{
 			helmgetter.WithURL(url),

@@ -21,6 +21,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	qhelm "github.com/hossainemruz/qdrant-cloud-apis/api/helm/v1"
 	"net/url"
 	"os"
 	"time"
@@ -103,7 +104,7 @@ func (r *HelmRepositoryOCIReconciler) SetupWithManagerAndOptions(mgr ctrl.Manage
 	r.patchOptions = getPatchOptions(helmRepositoryOCIOwnedConditions, r.ControllerName)
 
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&helmv1.HelmRepository{}).
+		For(&qhelm.HelmRepository{}).
 		WithEventFilter(
 			predicate.And(
 				intpredicates.HelmRepositoryTypePredicate{RepositoryType: helmv1.HelmRepositoryTypeOCI},
@@ -121,7 +122,7 @@ func (r *HelmRepositoryOCIReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	log := ctrl.LoggerFrom(ctx)
 
 	// Fetch the HelmRepository
-	obj := &helmv1.HelmRepository{}
+	obj := &qhelm.HelmRepository{}
 	if err := r.Get(ctx, req.NamespacedName, obj); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
@@ -208,7 +209,7 @@ func (r *HelmRepositoryOCIReconciler) Reconcile(ctx context.Context, req ctrl.Re
 // status conditions and the returned results are evaluated in the deferred
 // block at the very end to summarize the conditions to be in a consistent
 // state.
-func (r *HelmRepositoryOCIReconciler) reconcile(ctx context.Context, sp *patch.SerialPatcher, obj *helmv1.HelmRepository) (result ctrl.Result, retErr error) {
+func (r *HelmRepositoryOCIReconciler) reconcile(ctx context.Context, sp *patch.SerialPatcher, obj *qhelm.HelmRepository) (result ctrl.Result, retErr error) {
 	ctxTimeout, cancel := context.WithTimeout(ctx, obj.Spec.Timeout.Duration)
 	defer cancel()
 
@@ -378,7 +379,7 @@ func (r *HelmRepositoryOCIReconciler) reconcile(ctx context.Context, sp *patch.S
 	return
 }
 
-func (r *HelmRepositoryOCIReconciler) reconcileDelete(ctx context.Context, obj *helmv1.HelmRepository) (ctrl.Result, error) {
+func (r *HelmRepositoryOCIReconciler) reconcileDelete(ctx context.Context, obj *qhelm.HelmRepository) (ctrl.Result, error) {
 	// Remove our finalizer from the list
 	controllerutil.RemoveFinalizer(obj, sourcev1.SourceFinalizer)
 

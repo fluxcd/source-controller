@@ -19,6 +19,7 @@ package controller
 import (
 	"encoding/base64"
 	"fmt"
+	qhelm "github.com/hossainemruz/qdrant-cloud-apis/api/helm/v1"
 	"strconv"
 	"testing"
 
@@ -53,7 +54,7 @@ func TestHelmRepositoryOCIReconciler_deleteBeforeFinalizer(t *testing.T) {
 		g.Expect(k8sClient.Delete(ctx, namespace)).NotTo(HaveOccurred())
 	})
 
-	helmrepo := &helmv1.HelmRepository{}
+	helmrepo := &qhelm.HelmRepository{}
 	helmrepo.Name = "test-helmrepo"
 	helmrepo.Namespace = namespaceName
 	helmrepo.Spec = helmv1.HelmRepositorySpec{
@@ -125,7 +126,7 @@ func TestHelmRepositoryOCIReconciler_Reconcile(t *testing.T) {
 
 			g.Expect(testEnv.CreateAndWait(ctx, secret)).To(Succeed())
 
-			origObj := &helmv1.HelmRepository{
+			origObj := &qhelm.HelmRepository{
 				ObjectMeta: metav1.ObjectMeta{
 					GenerateName: "helmrepository-oci-reconcile-",
 					Namespace:    ns.Name,
@@ -373,7 +374,7 @@ func TestHelmRepositoryOCIReconciler_authStrategy(t *testing.T) {
 
 			clientBuilder := fakeclient.NewClientBuilder().
 				WithScheme(testEnv.GetScheme()).
-				WithStatusSubresource(&helmv1.HelmRepository{})
+				WithStatusSubresource(&qhelm.HelmRepository{})
 
 			workspaceDir := t.TempDir()
 			if tt.insecure {
@@ -385,7 +386,7 @@ func TestHelmRepositoryOCIReconciler_authStrategy(t *testing.T) {
 				server.Close()
 			})
 
-			obj := &helmv1.HelmRepository{
+			obj := &qhelm.HelmRepository{
 				ObjectMeta: metav1.ObjectMeta{
 					GenerateName: "auth-strategy-",
 					Generation:   1,

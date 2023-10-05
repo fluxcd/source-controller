@@ -19,3 +19,5 @@ config/release/
 
 # Exclude temporary build files
 build/
+vendor/
+.idea/

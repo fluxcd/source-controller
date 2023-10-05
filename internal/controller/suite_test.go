@@ -22,6 +22,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
+	qhelm "github.com/hossainemruz/qdrant-cloud-apis/api/helm/v1"
 	"io"
 	"io/ioutil"
 	"log"
@@ -286,6 +287,7 @@ func TestMain(m *testing.M) {
 
 	utilruntime.Must(sourcev1.AddToScheme(scheme.Scheme))
 	utilruntime.Must(sourcev1beta2.AddToScheme(scheme.Scheme))
+	utilruntime.Must(qhelm.AddToScheme(scheme.Scheme))
 
 	testEnv = testenv.New(
 		testenv.WithCRDPath(filepath.Join("..", "..", "config", "crd", "bases")),

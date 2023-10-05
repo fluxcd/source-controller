@@ -1,6 +1,6 @@
 module github.com/fluxcd/source-controller
 
-go 1.20
+go 1.21.1
 
 replace github.com/fluxcd/source-controller/api => ./api
 
@@ -13,6 +13,19 @@ replace github.com/opencontainers/go-digest => github.com/opencontainers/go-dige
 //
 // Check again when oras.land/oras-go is updated, which is a dependency of Helm.
 replace github.com/docker/docker => github.com/docker/docker v23.0.6+incompatible
+
+replace (
+	k8s.io/api => k8s.io/api v0.27.4
+	k8s.io/cli-runtime => k8s.io/cli-runtime v0.27.4
+	k8s.io/client-go => k8s.io/client-go v0.27.4
+
+	k8s.io/kube-openapi => k8s.io/kube-openapi v0.0.0-20230515203736-54b630e78af5
+	// Pin controller runtime to v0.15.1
+	sigs.k8s.io/controller-runtime => sigs.k8s.io/controller-runtime v0.15.1
+	// Pin kustomize to v5.0.3
+	sigs.k8s.io/kustomize/api => sigs.k8s.io/kustomize/api v0.13.4
+	sigs.k8s.io/kustomize/kyaml => sigs.k8s.io/kustomize/kyaml v0.14.2
+)
 
 require (
 	cloud.google.com/go/storage v1.32.0
@@ -40,7 +53,7 @@ require (
 	github.com/fluxcd/pkg/tar v0.3.0
 	github.com/fluxcd/pkg/testserver v0.4.0
 	github.com/fluxcd/pkg/version v0.2.2
-	github.com/fluxcd/source-controller/api v1.1.0
+	github.com/fluxcd/source-controller/api v1.1.1
 	github.com/foxcpp/go-mockdns v1.0.0
 	github.com/go-git/go-billy/v5 v5.5.0
 	github.com/go-git/go-git/v5 v5.9.0
@@ -48,6 +61,7 @@ require (
 	github.com/google/go-containerregistry v0.16.1
 	github.com/google/go-containerregistry/pkg/authn/k8schain v0.0.0-20230802205906-a54d64203cff
 	github.com/google/uuid v1.3.1
+	github.com/hossainemruz/qdrant-cloud-apis v0.0.0-20231005162040-e2ca8373172a
 	github.com/minio/minio-go/v7 v7.0.62
 	github.com/onsi/gomega v1.27.10
 	github.com/opencontainers/go-digest v1.0.0
@@ -65,12 +79,12 @@ require (
 	google.golang.org/api v0.138.0
 	gotest.tools v2.2.0+incompatible
 	helm.sh/helm/v3 v3.12.3
-	k8s.io/api v0.27.4
-	k8s.io/apimachinery v0.27.4
-	k8s.io/client-go v0.27.4
+	k8s.io/api v0.28.2
+	k8s.io/apimachinery v0.28.2
+	k8s.io/client-go v0.28.1
 	k8s.io/utils v0.0.0-20230505201702-9f6742963106
 	sigs.k8s.io/cli-utils v0.35.0
-	sigs.k8s.io/controller-runtime v0.15.1
+	sigs.k8s.io/controller-runtime v0.16.2
 	sigs.k8s.io/yaml v1.3.0
 )
 
@@ -171,7 +185,9 @@ require (
 	github.com/fatih/color v1.13.0 // indirect
 	github.com/felixge/httpsnoop v1.0.3 // indirect
 	github.com/fluxcd/gitkit v0.6.0 // indirect
+	github.com/fluxcd/helm-controller/api v0.36.1 // indirect
 	github.com/fluxcd/pkg/apis/acl v0.1.0 // indirect
+	github.com/fluxcd/pkg/apis/kustomize v1.1.1 // indirect
 	github.com/fsnotify/fsnotify v1.6.0 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.2 // indirect
 	github.com/go-chi/chi v4.1.2+incompatible // indirect
@@ -284,7 +300,7 @@ require (
 	github.com/pkg/browser v0.0.0-20210911075715-681adbf594b8 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/prometheus/client_model v0.4.0 // indirect
-	github.com/prometheus/common v0.42.0 // indirect
+	github.com/prometheus/common v0.44.0 // indirect
 	github.com/prometheus/procfs v0.10.1 // indirect
 	github.com/rivo/uniseg v0.4.2 // indirect
 	github.com/rs/xid v1.5.0 // indirect
@@ -342,7 +358,7 @@ require (
 	golang.org/x/time v0.3.0 // indirect
 	golang.org/x/tools v0.13.0 // indirect
 	golang.org/x/xerrors v0.0.0-20220907171357-04be3eba64a2 // indirect
-	gomodules.xyz/jsonpatch/v2 v2.3.0 // indirect
+	gomodules.xyz/jsonpatch/v2 v2.4.0 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
 	google.golang.org/genproto v0.0.0-20230803162519-f966b187b2e5 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20230803162519-f966b187b2e5 // indirect
@@ -355,17 +371,17 @@ require (
 	gopkg.in/warnings.v0 v0.1.2 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
-	k8s.io/apiextensions-apiserver v0.27.3 // indirect
-	k8s.io/apiserver v0.27.3 // indirect
+	k8s.io/apiextensions-apiserver v0.28.0 // indirect
+	k8s.io/apiserver v0.28.1 // indirect
 	k8s.io/cli-runtime v0.27.3 // indirect
-	k8s.io/component-base v0.27.4 // indirect
+	k8s.io/component-base v0.28.1 // indirect
 	k8s.io/klog/v2 v2.100.1 // indirect
-	k8s.io/kube-openapi v0.0.0-20230515203736-54b630e78af5 // indirect
+	k8s.io/kube-openapi v0.0.0-20230717233707-2695361300d9 // indirect
 	k8s.io/kubectl v0.27.3 // indirect
 	oras.land/oras-go v1.2.3 // indirect
 	sigs.k8s.io/json v0.0.0-20221116044647-bc3834ca7abd // indirect
 	sigs.k8s.io/kustomize/api v0.13.2 // indirect
-	sigs.k8s.io/kustomize/kyaml v0.14.1 // indirect
+	sigs.k8s.io/kustomize/kyaml v0.14.2 // indirect
 	sigs.k8s.io/release-utils v0.7.4 // indirect
 	sigs.k8s.io/structured-merge-diff/v4 v4.2.3 // indirect
 )
