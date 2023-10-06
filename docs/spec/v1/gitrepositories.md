@@ -106,6 +106,8 @@ Git repository.
 is not supported for SSH addresses (e.g. `user@example.com:repository.git`).
 Instead, the valid URL format is `ssh://user@example.com:22/repository.git`.
 
+If your provider gives you a ssh URL containing an extra `:` not related to a port (gitlab.com does that) then simply replace it with a `/` like this : `ssh://git@gitlab.com:root_group/a_group/your_repo.git` => `ssh://git@gitlab.com/root_group/a_group/your_repo.git`
+
 ### Secret reference
 
 `.spec.secretRef.name` is an optional field to specify a name reference to a
@@ -195,8 +197,10 @@ stringData:
     -----BEGIN OPENSSH PRIVATE KEY-----
     ...
     -----END OPENSSH PRIVATE KEY-----
+  #github.com usage example : base64 below the correct line (github.com ecdsa-sha2-nistp256) of this command output: ssh-keyscan github.com
+  #gitlab.com usage example : base64 below the correct line (gitlab.com ecdsa-sha2-nistp256) of this command output: ssh-keyscan gitlab.com
   known_hosts: |
-    github.com ecdsa-sha2-nistp256 AAAA...
+    Z2l0bGFiLmNvbSBlY2Rz...
 ```
 
 Alternatively, the Flux CLI can be used to automatically create the
