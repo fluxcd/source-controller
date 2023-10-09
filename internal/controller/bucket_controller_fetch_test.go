@@ -41,7 +41,7 @@ type mockBucketClient struct {
 	objects    map[string]mockBucketObject
 }
 
-var mockNotFound = fmt.Errorf("not found")
+var errMockNotFound = fmt.Errorf("not found")
 
 func (m mockBucketClient) BucketExists(_ context.Context, name string) (bool, error) {
 	return name == m.bucketName, nil
@@ -57,7 +57,7 @@ func (m mockBucketClient) FGetObject(_ context.Context, bucket, obj, path string
 	}
 	object, ok := m.objects[obj]
 	if !ok {
-		return "", mockNotFound
+		return "", errMockNotFound
 	}
 	if err := os.WriteFile(path, []byte(object.data), os.FileMode(0660)); err != nil {
 		return "", err
@@ -66,7 +66,7 @@ func (m mockBucketClient) FGetObject(_ context.Context, bucket, obj, path string
 }
 
 func (m mockBucketClient) ObjectIsNotFound(e error) bool {
-	return e == mockNotFound
+	return e == errMockNotFound
 }
 
 func (m mockBucketClient) VisitObjects(_ context.Context, _ string, f func(key, etag string) error) error {

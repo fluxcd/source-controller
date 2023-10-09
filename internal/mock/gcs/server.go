@@ -32,7 +32,7 @@ import (
 )
 
 var (
-	ObjectNotFound = errors.New("object not found")
+	ErrObjectNotFound = errors.New("object not found")
 )
 
 // Object is a mock Server object.
@@ -101,7 +101,7 @@ func (s *Server) getObjectFile(key string, generation int64) ([]byte, error) {
 			}
 		}
 	}
-	return nil, ObjectNotFound
+	return nil, ErrObjectNotFound
 }
 
 func (s *Server) handler(w http.ResponseWriter, r *http.Request) {
