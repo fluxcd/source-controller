@@ -34,7 +34,6 @@ import (
 	"github.com/google/go-containerregistry/pkg/authn/k8schain"
 	"github.com/google/go-containerregistry/pkg/name"
 	gcrv1 "github.com/google/go-containerregistry/pkg/v1"
-	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -578,13 +577,13 @@ func (r *OCIRepositoryReconciler) selectLayer(obj *ociv1.OCIRepository, image gc
 func (r *OCIRepositoryReconciler) getRevision(ref name.Reference, options []remote.Option) (string, error) {
 	switch ref := ref.(type) {
 	case name.Digest:
-		digest, err := v1.NewHash(ref.DigestStr())
+		digest, err := gcrv1.NewHash(ref.DigestStr())
 		if err != nil {
 			return "", err
 		}
 		return digest.String(), nil
 	case name.Tag:
-		var digest v1.Hash
+		var digest gcrv1.Hash
 
 		desc, err := remote.Head(ref, options...)
 		if err == nil {

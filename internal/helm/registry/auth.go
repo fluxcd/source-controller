@@ -26,7 +26,6 @@ import (
 	"github.com/fluxcd/source-controller/internal/oci"
 	"github.com/google/go-containerregistry/pkg/authn"
 	"helm.sh/helm/v3/pkg/registry"
-	helmreg "helm.sh/helm/v3/pkg/registry"
 	corev1 "k8s.io/api/core/v1"
 )
 
@@ -143,7 +142,7 @@ func (r stringResource) RegistryStr() string {
 
 // NewLoginOption returns a registry login option for the given HelmRepository.
 // If the HelmRepository does not specify a secretRef, a nil login option is returned.
-func NewLoginOption(auth authn.Authenticator, keychain authn.Keychain, registryURL string) (helmreg.LoginOption, error) {
+func NewLoginOption(auth authn.Authenticator, keychain authn.Keychain, registryURL string) (registry.LoginOption, error) {
 	if auth != nil {
 		return AuthAdaptHelper(auth)
 	}

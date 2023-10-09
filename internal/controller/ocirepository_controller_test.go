@@ -19,7 +19,6 @@ package controller
 import (
 	"crypto/rand"
 	"crypto/tls"
-	cryptotls "crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
@@ -830,7 +829,7 @@ func TestOCIRepository_reconcileSource_authStrategy(t *testing.T) {
 func makeTransport(insecure bool) http.RoundTripper {
 	transport := remote.DefaultTransport.(*http.Transport).Clone()
 	if insecure {
-		transport.TLSClientConfig = &cryptotls.Config{
+		transport.TLSClientConfig = &tls.Config{
 			InsecureSkipVerify: true,
 		}
 	}
