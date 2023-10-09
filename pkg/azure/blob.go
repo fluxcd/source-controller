@@ -192,7 +192,7 @@ func (c *BlobClient) BucketExists(ctx context.Context, bucketName string) (bool,
 
 		// For a container-level SASToken, we get an AuthenticationFailed when the bucket doesn't exist
 		if bloberror.HasCode(err, bloberror.AuthenticationFailed) {
-			return false, fmt.Errorf("Bucket name may be incorrect, it does not exist or caller does not have enough permissions: %w", err)
+			return false, fmt.Errorf("the specified bucket name may be incorrect, nonexistent, or the caller might lack sufficient permissions to access it: %w", err)
 		}
 
 		return false, err
