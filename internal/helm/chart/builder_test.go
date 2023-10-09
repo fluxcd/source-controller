@@ -17,8 +17,8 @@ limitations under the License.
 package chart
 
 import (
+	"crypto/rand"
 	"encoding/hex"
-	"math/rand"
 	"os"
 	"path/filepath"
 	"testing"
