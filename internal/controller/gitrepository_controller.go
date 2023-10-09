@@ -366,7 +366,7 @@ func (r *GitRepositoryReconciler) shouldNotify(oldObj, newObj *sourcev1.GitRepos
 	if resErr != nil && res == sreconcile.ResultEmpty && newObj.Status.Artifact != nil {
 		// Convert to Generic error and check for ignore.
 		if ge, ok := resErr.(*serror.Generic); ok {
-			return ge.Ignore == true
+			return ge.Ignore
 		}
 	}
 	return false
