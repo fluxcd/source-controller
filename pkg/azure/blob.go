@@ -286,9 +286,7 @@ func (c *BlobClient) VisitObjects(ctx context.Context, bucketName string, visit 
 }
 
 // Close has no effect on BlobClient.
-func (c *BlobClient) Close(_ context.Context) {
-	return
-}
+func (c *BlobClient) Close(_ context.Context) {}
 
 // ObjectIsNotFound checks if the error provided is an azblob.StorageError with
 // an azblob.StorageErrorCodeBlobNotFound error code.

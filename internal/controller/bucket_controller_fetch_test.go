@@ -78,9 +78,7 @@ func (m mockBucketClient) VisitObjects(_ context.Context, _ string, f func(key, 
 	return nil
 }
 
-func (m mockBucketClient) Close(_ context.Context) {
-	return
-}
+func (m mockBucketClient) Close(_ context.Context) {}
 
 func (m *mockBucketClient) addObject(key string, object mockBucketObject) {
 	if m.objects == nil {
