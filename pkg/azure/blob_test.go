@@ -364,16 +364,15 @@ func Test_sasTokenFromSecret(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
 
-			_, err := url.ParseQuery("")
 			got, err := sasTokenFromSecret(tt.endpoint, tt.secret)
 			g.Expect(err != nil).To(Equal(tt.wantErr))
 			if tt.want != "" {
-				ttVaules, err := url.Parse(tt.want)
+				ttValues, err := url.Parse(tt.want)
 				g.Expect(err).To(BeNil())
 
 				gotValues, err := url.Parse(got)
 				g.Expect(err).To(BeNil())
-				g.Expect(gotValues.Query()).To(Equal(ttVaules.Query()))
+				g.Expect(gotValues.Query()).To(Equal(ttValues.Query()))
 				return
 			}
 			g.Expect(got).To(Equal(""))

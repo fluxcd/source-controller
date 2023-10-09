@@ -119,6 +119,7 @@ func TestOCIRepository_Reconcile(t *testing.T) {
 	})
 
 	podinfoVersions, err := pushMultiplePodinfoImages(regServer.registryHost, true, "6.1.4", "6.1.5", "6.1.6")
+	g.Expect(err).ToNot(HaveOccurred())
 
 	tests := []struct {
 		name           string
@@ -305,6 +306,7 @@ func TestOCIRepository_Reconcile_MediaType(t *testing.T) {
 	})
 
 	podinfoVersions, err := pushMultiplePodinfoImages(regServer.registryHost, true, "6.1.4", "6.1.5", "6.1.6")
+	g.Expect(err).ToNot(HaveOccurred())
 
 	tests := []struct {
 		name      string
@@ -997,6 +999,8 @@ func TestOCIRepository_reconcileSource_remoteReference(t *testing.T) {
 	})
 
 	podinfoVersions, err := pushMultiplePodinfoImages(server.registryHost, true, "6.1.4", "6.1.5", "6.1.6")
+	g.Expect(err).ToNot(HaveOccurred())
+
 	img6 := podinfoVersions["6.1.6"]
 	img5 := podinfoVersions["6.1.5"]
 

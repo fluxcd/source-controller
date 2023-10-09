@@ -2328,6 +2328,7 @@ func TestGitRepositoryReconciler_statusConditions(t *testing.T) {
 		name             string
 		beforeFunc       func(obj *sourcev1.GitRepository)
 		assertConditions []metav1.Condition
+		wantErr          bool
 	}{
 		{
 			name: "multiple positive conditions",
@@ -2356,6 +2357,7 @@ func TestGitRepositoryReconciler_statusConditions(t *testing.T) {
 				*conditions.TrueCondition(sourcev1.StorageOperationFailedCondition, sourcev1.DirCreationFailedReason, "failed to create directory"),
 				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "some error"),
 			},
+			wantErr: true,
 		},
 		{
 			name: "mixed positive and negative conditions",
@@ -2368,6 +2370,7 @@ func TestGitRepositoryReconciler_statusConditions(t *testing.T) {
 				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "failed to get secret"),
 				*conditions.TrueCondition(sourcev1.ArtifactInStorageCondition, meta.SucceededReason, "stored artifact for revision"),
 			},
+			wantErr: true,
 		},
 	}
 
@@ -2400,22 +2403,19 @@ func TestGitRepositoryReconciler_statusConditions(t *testing.T) {
 			}
 
 			ctx := context.TODO()
-			recResult := sreconcile.ResultSuccess
-			var retErr error
-
 			summarizeHelper := summarize.NewHelper(record.NewFakeRecorder(32), serialPatcher)
 			summarizeOpts := []summarize.Option{
 				summarize.WithConditions(gitRepositoryReadyCondition),
 				summarize.WithBiPolarityConditionTypes(sourcev1.SourceVerifiedCondition),
-				summarize.WithReconcileResult(recResult),
-				summarize.WithReconcileError(retErr),
+				summarize.WithReconcileResult(sreconcile.ResultSuccess),
 				summarize.WithIgnoreNotFound(),
 				summarize.WithResultBuilder(sreconcile.AlwaysRequeueResultBuilder{
 					RequeueAfter: jitter.JitteredIntervalDuration(obj.GetRequeueAfter()),
 				}),
 				summarize.WithPatchFieldOwner("source-controller"),
 			}
-			_, retErr = summarizeHelper.SummarizeAndPatch(ctx, obj, summarizeOpts...)
+			_, err := summarizeHelper.SummarizeAndPatch(ctx, obj, summarizeOpts...)
+			g.Expect(err != nil).To(Equal(tt.wantErr))
 
 			key := client.ObjectKeyFromObject(obj)
 			g.Expect(c.Get(ctx, key, obj)).ToNot(HaveOccurred())
