@@ -116,10 +116,6 @@ var (
 	testCache          *cache.Cache
 )
 
-func init() {
-	rand.Seed(time.Now().UnixNano())
-}
-
 type registryClientTestServer struct {
 	out            io.Writer
 	registryHost   string

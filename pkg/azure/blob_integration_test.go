@@ -81,10 +81,6 @@ test: file2
 	}
 )
 
-func init() {
-	rand.Seed(time.Now().UnixNano())
-}
-
 func TestMain(m *testing.M) {
 	var err error
 	cred, err = blob.NewSharedKeyCredential(testAccountName, testAccountKey)
