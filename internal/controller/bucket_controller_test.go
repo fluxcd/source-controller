@@ -1211,8 +1211,8 @@ func TestBucketReconciler_reconcileArtifact(t *testing.T) {
 				// path.
 				t.Expect(os.RemoveAll(dir)).ToNot(HaveOccurred())
 				f, err := os.Create(dir)
-				defer f.Close()
 				t.Expect(err).ToNot(HaveOccurred())
+				t.Expect(f.Close()).ToNot(HaveOccurred())
 				conditions.MarkReconciling(obj, meta.ProgressingReason, "foo")
 				conditions.MarkUnknown(obj, meta.ReadyCondition, "foo", "bar")
 			},
