@@ -41,7 +41,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
 	kuberecorder "k8s.io/client-go/tools/record"
-	"k8s.io/utils/pointer"
+	"k8s.io/utils/ptr"
 
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -1176,7 +1176,7 @@ type remoteOptions []remote.Option
 // of the artifact in the status to determine if artifact content configuration
 // has changed and requires rebuilding the artifact.
 func ociContentConfigChanged(obj *ociv1.OCIRepository) bool {
-	if !pointer.StringEqual(obj.Spec.Ignore, obj.Status.ObservedIgnore) {
+	if !ptr.Equal(obj.Spec.Ignore, obj.Status.ObservedIgnore) {
 		return true
 	}
 

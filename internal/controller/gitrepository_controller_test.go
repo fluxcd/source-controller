@@ -40,7 +40,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/record"
-	"k8s.io/utils/pointer"
+	"k8s.io/utils/ptr"
 	kstatus "sigs.k8s.io/cli-utils/pkg/kstatus/status"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -827,7 +827,7 @@ func TestGitRepositoryReconciler_reconcileSource_checkoutStrategy(t *testing.T) 
 			},
 			beforeFunc: func(obj *sourcev1.GitRepository, latestRev string) {
 				// Set new ignore value.
-				obj.Spec.Ignore = pointer.StringPtr("foo")
+				obj.Spec.Ignore = ptr.To("foo")
 				// Add existing artifact on the object and storage.
 				obj.Status = sourcev1.GitRepositoryStatus{
 					Artifact: &sourcev1.Artifact{
@@ -1001,7 +1001,7 @@ func TestGitRepositoryReconciler_reconcileArtifact(t *testing.T) {
 			dir:  "testdata/git/repository",
 			beforeFunc: func(obj *sourcev1.GitRepository) {
 				obj.Spec.Interval = metav1.Duration{Duration: interval}
-				obj.Spec.Ignore = pointer.StringPtr("!**.txt\n")
+				obj.Spec.Ignore = ptr.To("!**.txt\n")
 			},
 			afterFunc: func(t *WithT, obj *sourcev1.GitRepository) {
 				t.Expect(obj.GetArtifact()).ToNot(BeNil())
@@ -2833,15 +2833,15 @@ func TestGitContentConfigChanged(t *testing.T) {
 		{
 			name: "unobserved ignore",
 			obj: sourcev1.GitRepository{
-				Spec: sourcev1.GitRepositorySpec{Ignore: pointer.String("foo")},
+				Spec: sourcev1.GitRepositorySpec{Ignore: ptr.To("foo")},
 			},
 			want: true,
 		},
 		{
 			name: "observed ignore",
 			obj: sourcev1.GitRepository{
-				Spec:   sourcev1.GitRepositorySpec{Ignore: pointer.String("foo")},
-				Status: sourcev1.GitRepositoryStatus{ObservedIgnore: pointer.String("foo")},
+				Spec:   sourcev1.GitRepositorySpec{Ignore: ptr.To("foo")},
+				Status: sourcev1.GitRepositoryStatus{ObservedIgnore: ptr.To("foo")},
 			},
 			want: false,
 		},

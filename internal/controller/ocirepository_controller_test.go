@@ -48,7 +48,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/record"
-	"k8s.io/utils/pointer"
+	"k8s.io/utils/ptr"
 	kstatus "sigs.k8s.io/cli-utils/pkg/kstatus/status"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -1483,7 +1483,7 @@ func TestOCIRepository_reconcileSource_noop(t *testing.T) {
 		{
 			name: "full reconcile - same rev, unobserved ignore",
 			beforeFunc: func(obj *ociv1.OCIRepository) {
-				obj.Status.ObservedIgnore = pointer.String("aaa")
+				obj.Status.ObservedIgnore = ptr.To("aaa")
 				obj.Status.Artifact = &sourcev1.Artifact{
 					Revision: testRevision,
 				}
@@ -1495,8 +1495,8 @@ func TestOCIRepository_reconcileSource_noop(t *testing.T) {
 		{
 			name: "noop - same rev, observed ignore",
 			beforeFunc: func(obj *ociv1.OCIRepository) {
-				obj.Spec.Ignore = pointer.String("aaa")
-				obj.Status.ObservedIgnore = pointer.String("aaa")
+				obj.Spec.Ignore = ptr.To("aaa")
+				obj.Status.ObservedIgnore = ptr.To("aaa")
 				obj.Status.Artifact = &sourcev1.Artifact{
 					Revision: testRevision,
 				}
@@ -1651,7 +1651,7 @@ func TestOCIRepository_reconcileArtifact(t *testing.T) {
 			targetPath: "testdata/oci/repository",
 			artifact:   &sourcev1.Artifact{Revision: "revision"},
 			beforeFunc: func(obj *ociv1.OCIRepository) {
-				obj.Spec.Ignore = pointer.String("foo.txt")
+				obj.Spec.Ignore = ptr.To("foo.txt")
 			},
 			want: sreconcile.ResultSuccess,
 			assertPaths: []string{
@@ -1691,7 +1691,7 @@ func TestOCIRepository_reconcileArtifact(t *testing.T) {
 			},
 			beforeFunc: func(obj *ociv1.OCIRepository) {
 				obj.Status.Artifact = &sourcev1.Artifact{Revision: "revision"}
-				obj.Spec.Ignore = pointer.String("aaa")
+				obj.Spec.Ignore = ptr.To("aaa")
 			},
 			want: sreconcile.ResultSuccess,
 			assertPaths: []string{
@@ -1758,10 +1758,10 @@ func TestOCIRepository_reconcileArtifact(t *testing.T) {
 				Revision: "revision",
 			},
 			beforeFunc: func(obj *ociv1.OCIRepository) {
-				obj.Spec.Ignore = pointer.String("aaa")
+				obj.Spec.Ignore = ptr.To("aaa")
 				obj.Spec.LayerSelector = &ociv1.OCILayerSelector{MediaType: "foo"}
 				obj.Status.Artifact = &sourcev1.Artifact{Revision: "revision"}
-				obj.Status.ObservedIgnore = pointer.String("aaa")
+				obj.Status.ObservedIgnore = ptr.To("aaa")
 				obj.Status.ObservedLayerSelector = &ociv1.OCILayerSelector{MediaType: "foo"}
 			},
 			want: sreconcile.ResultSuccess,
@@ -2544,34 +2544,34 @@ func TestOCIContentConfigChanged(t *testing.T) {
 		{
 			name: "same ignore, no layer selector",
 			spec: ociv1.OCIRepositorySpec{
-				Ignore: pointer.String("nnn"),
+				Ignore: ptr.To("nnn"),
 			},
 			status: ociv1.OCIRepositoryStatus{
-				ObservedIgnore: pointer.String("nnn"),
+				ObservedIgnore: ptr.To("nnn"),
 			},
 			want: false,
 		},
 		{
 			name: "different ignore, no layer selector",
 			spec: ociv1.OCIRepositorySpec{
-				Ignore: pointer.String("nnn"),
+				Ignore: ptr.To("nnn"),
 			},
 			status: ociv1.OCIRepositoryStatus{
-				ObservedIgnore: pointer.String("mmm"),
+				ObservedIgnore: ptr.To("mmm"),
 			},
 			want: true,
 		},
 		{
 			name: "same ignore, same layer selector",
 			spec: ociv1.OCIRepositorySpec{
-				Ignore: pointer.String("nnn"),
+				Ignore: ptr.To("nnn"),
 				LayerSelector: &ociv1.OCILayerSelector{
 					MediaType: "foo",
 					Operation: ociv1.OCILayerExtract,
 				},
 			},
 			status: ociv1.OCIRepositoryStatus{
-				ObservedIgnore: pointer.String("nnn"),
+				ObservedIgnore: ptr.To("nnn"),
 				ObservedLayerSelector: &ociv1.OCILayerSelector{
 					MediaType: "foo",
 					Operation: ociv1.OCILayerExtract,
@@ -2582,14 +2582,14 @@ func TestOCIContentConfigChanged(t *testing.T) {
 		{
 			name: "same ignore, different layer selector operation",
 			spec: ociv1.OCIRepositorySpec{
-				Ignore: pointer.String("nnn"),
+				Ignore: ptr.To("nnn"),
 				LayerSelector: &ociv1.OCILayerSelector{
 					MediaType: "foo",
 					Operation: ociv1.OCILayerCopy,
 				},
 			},
 			status: ociv1.OCIRepositoryStatus{
-				ObservedIgnore: pointer.String("nnn"),
+				ObservedIgnore: ptr.To("nnn"),
 				ObservedLayerSelector: &ociv1.OCILayerSelector{
 					MediaType: "foo",
 					Operation: ociv1.OCILayerExtract,
@@ -2600,14 +2600,14 @@ func TestOCIContentConfigChanged(t *testing.T) {
 		{
 			name: "same ignore, different layer selector mediatype",
 			spec: ociv1.OCIRepositorySpec{
-				Ignore: pointer.String("nnn"),
+				Ignore: ptr.To("nnn"),
 				LayerSelector: &ociv1.OCILayerSelector{
 					MediaType: "bar",
 					Operation: ociv1.OCILayerExtract,
 				},
 			},
 			status: ociv1.OCIRepositoryStatus{
-				ObservedIgnore: pointer.String("nnn"),
+				ObservedIgnore: ptr.To("nnn"),
 				ObservedLayerSelector: &ociv1.OCILayerSelector{
 					MediaType: "foo",
 					Operation: ociv1.OCILayerExtract,

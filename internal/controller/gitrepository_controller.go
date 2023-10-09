@@ -33,7 +33,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	kuberecorder "k8s.io/client-go/tools/record"
-	"k8s.io/utils/pointer"
+	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -1106,7 +1106,7 @@ func (r *GitRepositoryReconciler) eventLogf(ctx context.Context, obj runtime.Obj
 // changed and requires rebuilding the artifact. Rebuilding the artifact is also
 // required if the object needs to be (re)verified.
 func gitContentConfigChanged(obj *sourcev1.GitRepository, includes *artifactSet) bool {
-	if !pointer.StringEqual(obj.Spec.Ignore, obj.Status.ObservedIgnore) {
+	if !ptr.Equal(obj.Spec.Ignore, obj.Status.ObservedIgnore) {
 		return true
 	}
 	if obj.Spec.RecurseSubmodules != obj.Status.ObservedRecurseSubmodules {
