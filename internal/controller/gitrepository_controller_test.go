@@ -1850,6 +1850,41 @@ func TestGitRepositoryReconciler_verifySignature(t *testing.T) {
 			},
 		},
 		{
+			name: "Invalid tag signature with mode=tag makes SourceVerifiedCondition=False",
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "existing",
+				},
+				Data: map[string][]byte{
+					"foo": []byte(armoredKeyRingFixture),
+				},
+			},
+			commit: git.Commit{
+				ReferencingTag: &git.Tag{
+					Name:      "v0.1.0",
+					Hash:      []byte("shasum"),
+					Encoded:   []byte(malformedEncodedTagFixture),
+					Signature: signatureTagFixture,
+				},
+			},
+			beforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Spec.Reference = &sourcev1.GitRepositoryRef{
+					Tag: "v0.1.0",
+				}
+				obj.Spec.Interval = metav1.Duration{Duration: interval}
+				obj.Spec.Verification = &sourcev1.GitRepositoryVerification{
+					Mode: sourcev1.ModeGitTag,
+					SecretRef: meta.LocalObjectReference{
+						Name: "existing",
+					},
+				}
+			},
+			wantErr: true,
+			assertConditions: []metav1.Condition{
+				*conditions.FalseCondition(sourcev1.SourceVerifiedCondition, "InvalidTagSignature", "signature verification of tag 'v0.1.0@shasum' failed: unable to verify Git tag: unable to verify payload with any of the given key rings"),
+			},
+		},
+		{
 			name: "Invalid PGP key makes SourceVerifiedCondition=False and returns error",
 			secret: &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
