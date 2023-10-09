@@ -521,7 +521,7 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 
 	// Observe if the artifacts still match the previous included ones
 	if artifacts.Diff(obj.Status.IncludedArtifacts) {
-		message := fmt.Sprintf("included artifacts differ from last observed includes")
+		message := "included artifacts differ from last observed includes"
 		if obj.Status.IncludedArtifacts != nil {
 			conditions.MarkTrue(obj, sourcev1.ArtifactOutdatedCondition, "IncludeChange", message)
 		}

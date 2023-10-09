@@ -258,7 +258,7 @@ func TestBucketReconciler_reconcileStorage(t *testing.T) {
 			name: "notices missing artifact in storage",
 			beforeFunc: func(obj *bucketv1.Bucket, storage *Storage) error {
 				obj.Status.Artifact = &sourcev1.Artifact{
-					Path:     fmt.Sprintf("/reconcile-storage/invalid.txt"),
+					Path:     "/reconcile-storage/invalid.txt",
 					Revision: "d",
 				}
 				storage.SetArtifactURL(obj.Status.Artifact)
@@ -339,7 +339,7 @@ func TestBucketReconciler_reconcileStorage(t *testing.T) {
 			name: "updates hostname on diff from current",
 			beforeFunc: func(obj *bucketv1.Bucket, storage *Storage) error {
 				obj.Status.Artifact = &sourcev1.Artifact{
-					Path:     fmt.Sprintf("/reconcile-storage/hostname.txt"),
+					Path:     "/reconcile-storage/hostname.txt",
 					Revision: "f",
 					Digest:   "sha256:3b9c358f36f0a31b6ad3e14f309c7cf198ac9246e8316f9ce543d5b19ac02b80",
 					URL:      "http://outdated.com/reconcile-storage/hostname.txt",
