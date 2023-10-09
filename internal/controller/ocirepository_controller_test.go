@@ -17,14 +17,10 @@ limitations under the License.
 package controller
 
 import (
-	"crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
-	"crypto/x509/pkix"
-	"encoding/pem"
 	"errors"
 	"fmt"
-	"math/big"
 	"net/http"
 	"net/url"
 	"os"
@@ -2492,45 +2488,6 @@ func setPodinfoImageAnnotations(img gcrv1.Image, tag string) gcrv1.Image {
 		oci.RevisionAnnotation: fmt.Sprintf("%s@sha1:b3b00fe35424a45d373bf4c7214178bc36fd7872", tag),
 	}
 	return mutate.Annotations(img, metadata).(gcrv1.Image)
-}
-
-// These two taken verbatim from https://ericchiang.github.io/post/go-tls/
-func certTemplate() (*x509.Certificate, error) {
-	// generate a random serial number (a real cert authority would
-	// have some logic behind this)
-	serialNumberLimit := new(big.Int).Lsh(big.NewInt(1), 128)
-	serialNumber, err := rand.Int(rand.Reader, serialNumberLimit)
-	if err != nil {
-		return nil, errors.New("failed to generate serial number: " + err.Error())
-	}
-
-	tmpl := x509.Certificate{
-		SerialNumber:          serialNumber,
-		Subject:               pkix.Name{Organization: []string{"Flux project"}},
-		SignatureAlgorithm:    x509.SHA256WithRSA,
-		NotBefore:             time.Now(),
-		NotAfter:              time.Now().Add(time.Hour), // valid for an hour
-		BasicConstraintsValid: true,
-	}
-	return &tmpl, nil
-}
-
-func createCert(template, parent *x509.Certificate, pub interface{}, parentPriv interface{}) (
-	cert *x509.Certificate, certPEM []byte, err error) {
-
-	certDER, err := x509.CreateCertificate(rand.Reader, template, parent, pub, parentPriv)
-	if err != nil {
-		return
-	}
-	// parse the resulting certificate so we can use it again
-	cert, err = x509.ParseCertificate(certDER)
-	if err != nil {
-		return
-	}
-	// PEM encode the certificate (this is a standard TLS encoding)
-	b := pem.Block{Type: "CERTIFICATE", Bytes: certDER}
-	certPEM = pem.EncodeToMemory(&b)
-	return
 }
 
 func TestOCIContentConfigChanged(t *testing.T) {
