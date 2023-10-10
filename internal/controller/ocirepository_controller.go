@@ -53,6 +53,7 @@ import (
 
 	eventv1 "github.com/fluxcd/pkg/apis/event/v1beta1"
 	"github.com/fluxcd/pkg/apis/meta"
+	authpkg "github.com/fluxcd/pkg/auth"
 	"github.com/fluxcd/pkg/oci"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	helper "github.com/fluxcd/pkg/runtime/controller"
@@ -347,11 +348,11 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 	}
 
 	if _, ok := keychain.(soci.Anonymous); obj.Spec.Provider != ociv1.GenericOCIProvider && ok {
-		var authErr error
-		auth, authErr = soci.OIDCAuth(ctxTimeout, obj.Spec.URL, obj.Spec.Provider)
-		if authErr != nil && !errors.Is(authErr, oci.ErrUnconfiguredProvider) {
+		authenticator := authpkg.Authenticator{}
+		auth, err = authenticator.GetRegistryAuthenticator(ctxTimeout, obj.Spec.URL, obj.Spec.Provider, string(obj.UID))
+		if err != nil {
 			e := serror.NewGeneric(
-				fmt.Errorf("failed to get credential from %s: %w", obj.Spec.Provider, authErr),
+				fmt.Errorf("failed to get credential from %s: %w", obj.Spec.Provider, err),
 				sourcev1.AuthenticationFailedReason,
 			)
 			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())

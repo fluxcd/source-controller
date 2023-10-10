@@ -130,6 +130,8 @@ type GitRepositorySpec struct {
 	// should be included in the Artifact produced for this GitRepository.
 	// +optional
 	Include []GitRepositoryInclude `json:"include,omitempty"`
+
+	Provider string `json:"provider,omitempty"`
 }
 
 // GitRepositoryInclude specifies a local reference to a GitRepository which

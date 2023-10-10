@@ -24,7 +24,7 @@ import (
 	"os"
 	"path"
 
-	"github.com/fluxcd/pkg/oci"
+	"github.com/fluxcd/pkg/auth"
 	"github.com/google/go-containerregistry/pkg/authn"
 	helmgetter "helm.sh/helm/v3/pkg/getter"
 	helmreg "helm.sh/helm/v3/pkg/registry"
@@ -34,7 +34,6 @@ import (
 
 	helmv1 "github.com/fluxcd/source-controller/api/v1beta2"
 	"github.com/fluxcd/source-controller/internal/helm/registry"
-	soci "github.com/fluxcd/source-controller/internal/oci"
 	stls "github.com/fluxcd/source-controller/internal/tls"
 )
 
@@ -135,13 +134,12 @@ func GetClientOpts(ctx context.Context, c client.Client, obj *helmv1.HelmReposit
 			}
 		}
 	} else if obj.Spec.Provider != helmv1.GenericOCIProvider && obj.Spec.Type == helmv1.HelmRepositoryTypeOCI && ociRepo {
-		authenticator, authErr := soci.OIDCAuth(ctx, obj.Spec.URL, obj.Spec.Provider)
-		if authErr != nil && !errors.Is(authErr, oci.ErrUnconfiguredProvider) {
-			return nil, "", fmt.Errorf("failed to get credential from '%s': %w", obj.Spec.Provider, authErr)
+		authenticator := auth.Authenticator{}
+		regAuthenticator, err := authenticator.GetRegistryAuthenticator(ctx, obj.Spec.URL, obj.Spec.Provider, string(obj.UID))
+		if err != nil {
+			return nil, "", fmt.Errorf("failed to get credential from '%s': %w", obj.Spec.Provider, err)
 		}
-		if authenticator != nil {
-			hrOpts.Authenticator = authenticator
-		}
+		hrOpts.Authenticator = regAuthenticator
 	}
 
 	if ociRepo {

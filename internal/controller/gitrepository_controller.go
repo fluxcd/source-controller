@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -27,6 +28,8 @@ import (
 	"time"
 
 	securejoin "github.com/cyphar/filepath-securejoin"
+	"github.com/fluxcd/pkg/auth"
+	"github.com/fluxcd/pkg/auth/github"
 	"github.com/fluxcd/pkg/runtime/logger"
 	"github.com/go-git/go-git/v5/plumbing/transport"
 	corev1 "k8s.io/api/core/v1"
@@ -502,7 +505,7 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 		return sreconcile.ResultEmpty, e
 	}
 
-	authOpts, err := r.getAuthOpts(ctx, obj, *u)
+	authOpts, err := r.getAuthOpts(ctx, obj, *u, proxyOpts)
 	if err != nil {
 		e := serror.NewGeneric(
 			fmt.Errorf("failed to configure authentication options: %w", err),
@@ -611,19 +614,19 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 // transport.ProxyOptions object using those settings and then returns it.
 func (r *GitRepositoryReconciler) getProxyOpts(ctx context.Context, proxySecretName,
 	proxySecretNamespace string) (*transport.ProxyOptions, error) {
-	proxyData, err := r.getSecretData(ctx, proxySecretName, proxySecretNamespace)
+	proxySecret, err := r.getSecretData(ctx, proxySecretName, proxySecretNamespace)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get proxy secret '%s/%s': %w", proxySecretNamespace, proxySecretName, err)
 	}
-	address, ok := proxyData["address"]
+	address, ok := proxySecret.Data["address"]
 	if !ok {
 		return nil, fmt.Errorf("invalid proxy secret '%s/%s': key 'address' is missing", proxySecretNamespace, proxySecretName)
 	}
 
 	proxyOpts := &transport.ProxyOptions{
 		URL:      string(address),
-		Username: string(proxyData["username"]),
-		Password: string(proxyData["password"]),
+		Username: string(proxySecret.Data["username"]),
+		Password: string(proxySecret.Data["password"]),
 	}
 	return proxyOpts, nil
 }
@@ -631,25 +634,61 @@ func (r *GitRepositoryReconciler) getProxyOpts(ctx context.Context, proxySecretN
 // getAuthOpts fetches the secret containing the auth options (if specified),
 // constructs a git.AuthOptions object using those options along with the provided
 // URL and returns it.
-func (r *GitRepositoryReconciler) getAuthOpts(ctx context.Context, obj *sourcev1.GitRepository, u url.URL) (*git.AuthOptions, error) {
-	var authData map[string][]byte
+func (r *GitRepositoryReconciler) getAuthOpts(ctx context.Context, obj *sourcev1.GitRepository, u url.URL,
+	proxyOpts *transport.ProxyOptions) (*git.AuthOptions, error) {
+	var authSecret *corev1.Secret
 	if obj.Spec.SecretRef != nil {
 		var err error
-		authData, err = r.getSecretData(ctx, obj.Spec.SecretRef.Name, obj.GetNamespace())
+		authSecret, err = r.getSecretData(ctx, obj.Spec.SecretRef.Name, obj.GetNamespace())
 		if err != nil {
 			return nil, fmt.Errorf("failed to get secret '%s/%s': %w", obj.GetNamespace(), obj.Spec.SecretRef.Name, err)
 		}
 	}
 
+	if obj.Spec.Provider != "" {
+		authOpts, err := r.getAuthOptsForProvider(ctx, u, obj, authSecret, proxyOpts)
+		if err != nil {
+			return nil, err
+		}
+		if authOpts != nil {
+			return authOpts, nil
+		}
+	}
+
 	// Configure authentication strategy to access the source
-	authOpts, err := git.NewAuthOptions(u, authData)
+	var data map[string][]byte
+	if authSecret != nil {
+		data = authSecret.Data
+	}
+	authOpts, err := git.NewAuthOptions(u, data)
 	if err != nil {
 		return nil, err
 	}
 	return authOpts, nil
 }
 
-func (r *GitRepositoryReconciler) getSecretData(ctx context.Context, name, namespace string) (map[string][]byte, error) {
+func (r *GitRepositoryReconciler) getAuthOptsForProvider(ctx context.Context, u url.URL, obj *sourcev1.GitRepository,
+	authSecret *corev1.Secret, proxyOpts *transport.ProxyOptions) (*git.AuthOptions, error) {
+	authenticator := &auth.Authenticator{}
+	if obj.Spec.Provider == auth.GitHubProvider {
+		if authSecret == nil {
+			return nil, fmt.Errorf("secret ref is required for %s", obj.Spec.Provider)
+		}
+		authenticator.GitHubOpts = []github.ProviderOptFunc{github.WithSecret(*authSecret)}
+		if proxyOpts != nil {
+			tr := http.DefaultTransport.(*http.Transport).Clone()
+			proxyUrl, err := proxyOpts.FullURL()
+			if err != nil {
+				return nil, err
+			}
+			tr.Proxy = http.ProxyURL(proxyUrl)
+			authenticator.GitHubOpts = append(authenticator.GitHubOpts, github.WithTransport(tr))
+		}
+	}
+	return authenticator.GetGitAuthOptions(ctx, u, obj.Spec.Provider, string(obj.UID))
+}
+
+func (r *GitRepositoryReconciler) getSecretData(ctx context.Context, name, namespace string) (*corev1.Secret, error) {
 	key := types.NamespacedName{
 		Namespace: namespace,
 		Name:      name,
@@ -658,7 +697,7 @@ func (r *GitRepositoryReconciler) getSecretData(ctx context.Context, name, names
 	if err := r.Client.Get(ctx, key, &secret); err != nil {
 		return nil, err
 	}
-	return secret.Data, nil
+	return &secret, nil
 }
 
 // reconcileArtifact archives a new Artifact to the Storage, if the current
