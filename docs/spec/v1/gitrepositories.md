@@ -196,7 +196,6 @@ stringData:
     ...
     -----END OPENSSH PRIVATE KEY-----
   #github.com usage example : copy-paste below the correct line (github.com ecdsa-sha2-nistp256...) of this command output: ssh-keyscan github.com
-  #gitlab.com usage example : copy-paste below the correct line (gitlab.com ecdsa-sha2-nistp256...) of this command output: ssh-keyscan gitlab.com
   known_hosts: |
     github.com ecdsa-sha2-nistp256 AAAA...
 ```
