@@ -103,8 +103,8 @@ Git repository.
 
 **Note:** Unlike using `git`, the
 [shorter scp-like syntax](https://git-scm.com/book/en/v2/Git-on-the-Server-The-Protocols#_the_ssh_protocol)
-is not supported for SSH addresses (e.g. gitlab.com will give you this pattern when you clone a project `ssh://git@gitlab.com:root_group/a_group/your_repo.git`).
-In that case, the valid URL format is `ssh://git@gitlab.com/root_group/a_group/your_repo.git`.
+is not supported for SSH addresses (e.g. `user@example.com:repository.git`).
+Instead, the valid URL format is `ssh://user@example.com/repository.git` (only 1 `:` allowed).
 
 ### Secret reference
 
@@ -195,8 +195,8 @@ stringData:
     -----BEGIN OPENSSH PRIVATE KEY-----
     ...
     -----END OPENSSH PRIVATE KEY-----
-  #github.com usage example : base64 below the correct line (github.com ecdsa-sha2-nistp256) of this command output: ssh-keyscan github.com
-  #gitlab.com usage example : base64 below the correct line (gitlab.com ecdsa-sha2-nistp256) of this command output: ssh-keyscan gitlab.com
+  #github.com usage example : copy-paste below the correct line (github.com ecdsa-sha2-nistp256...) of this command output: ssh-keyscan github.com
+  #gitlab.com usage example : copy-paste below the correct line (gitlab.com ecdsa-sha2-nistp256...) of this command output: ssh-keyscan gitlab.com
   known_hosts: |
     github.com ecdsa-sha2-nistp256 AAAA...
 ```
