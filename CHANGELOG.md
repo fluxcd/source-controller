@@ -2,6 +2,21 @@
 
 All notable changes to this project are documented in this file.
 
+## 1.1.2
+
+**Release date:** 2023-10-11
+
+This patch release fixes a bug where OCIRepository objects can't be consumed
+when the OCI image layer contains symlinks.
+
+Fixes:
+- oci: Skip symlinks found in upstream artifacts
+  [#1246](https://github.com/fluxcd/source-controller/pull/1246/)
+
+Improvements:
+- build(deps): bump the ci group with 1 update
+  [#1256](https://github.com/fluxcd/source-controller/pull/1256)
+
 ## 1.1.1
 
 **Release date:** 2023-09-18
