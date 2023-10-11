@@ -54,6 +54,7 @@ import (
 	eventv1 "github.com/fluxcd/pkg/apis/event/v1beta1"
 	"github.com/fluxcd/pkg/apis/meta"
 	authpkg "github.com/fluxcd/pkg/auth"
+	"github.com/fluxcd/pkg/auth/registry"
 	"github.com/fluxcd/pkg/oci"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	helper "github.com/fluxcd/pkg/runtime/controller"
@@ -348,8 +349,10 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 	}
 
 	if _, ok := keychain.(soci.Anonymous); obj.Spec.Provider != ociv1.GenericOCIProvider && ok {
-		authenticator := authpkg.Authenticator{}
-		auth, err = authenticator.GetRegistryAuthenticator(ctxTimeout, obj.Spec.URL, obj.Spec.Provider, string(obj.UID))
+		authOpts := &authpkg.AuthOptions{
+			CacheKey: string(obj.UID),
+		}
+		auth, err = registry.GetAuthenticator(ctxTimeout, obj.Spec.URL, obj.Spec.Provider, authOpts, nil)
 		if err != nil {
 			e := serror.NewGeneric(
 				fmt.Errorf("failed to get credential from %s: %w", obj.Spec.Provider, err),

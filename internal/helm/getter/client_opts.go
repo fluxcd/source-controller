@@ -25,6 +25,7 @@ import (
 	"path"
 
 	"github.com/fluxcd/pkg/auth"
+	regauth "github.com/fluxcd/pkg/auth/registry"
 	"github.com/google/go-containerregistry/pkg/authn"
 	helmgetter "helm.sh/helm/v3/pkg/getter"
 	helmreg "helm.sh/helm/v3/pkg/registry"
@@ -134,12 +135,13 @@ func GetClientOpts(ctx context.Context, c client.Client, obj *helmv1.HelmReposit
 			}
 		}
 	} else if obj.Spec.Provider != helmv1.GenericOCIProvider && obj.Spec.Type == helmv1.HelmRepositoryTypeOCI && ociRepo {
-		authenticator := auth.Authenticator{}
-		regAuthenticator, err := authenticator.GetRegistryAuthenticator(ctx, obj.Spec.URL, obj.Spec.Provider, string(obj.UID))
+		authOpts := &auth.AuthOptions{
+			CacheKey: string(obj.UID),
+		}
+		hrOpts.Authenticator, err = regauth.GetAuthenticator(ctx, obj.Spec.URL, obj.Spec.Provider, authOpts, nil)
 		if err != nil {
 			return nil, "", fmt.Errorf("failed to get credential from '%s': %w", obj.Spec.Provider, err)
 		}
-		hrOpts.Authenticator = regAuthenticator
 	}
 
 	if ociRepo {

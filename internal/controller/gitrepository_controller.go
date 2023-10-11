@@ -47,6 +47,7 @@ import (
 
 	eventv1 "github.com/fluxcd/pkg/apis/event/v1beta1"
 	"github.com/fluxcd/pkg/apis/meta"
+	gitauth "github.com/fluxcd/pkg/auth/git"
 	"github.com/fluxcd/pkg/git"
 	"github.com/fluxcd/pkg/git/gogit"
 	"github.com/fluxcd/pkg/git/repository"
@@ -637,29 +638,29 @@ func (r *GitRepositoryReconciler) getProxyOpts(ctx context.Context, proxySecretN
 func (r *GitRepositoryReconciler) getAuthOpts(ctx context.Context, obj *sourcev1.GitRepository, u url.URL,
 	proxyOpts *transport.ProxyOptions) (*git.AuthOptions, error) {
 	var authSecret *corev1.Secret
+	var err error
+
+	// Fetch the secret, if specified
 	if obj.Spec.SecretRef != nil {
-		var err error
 		authSecret, err = r.getSecretData(ctx, obj.Spec.SecretRef.Name, obj.GetNamespace())
 		if err != nil {
 			return nil, fmt.Errorf("failed to get secret '%s/%s': %w", obj.GetNamespace(), obj.Spec.SecretRef.Name, err)
 		}
 	}
 
-	if obj.Spec.Provider != "" {
-		authOpts, err := r.getAuthOptsForProvider(ctx, u, obj, authSecret, proxyOpts)
-		if err != nil {
-			return nil, err
-		}
-		if authOpts != nil {
-			return authOpts, nil
-		}
-	}
-
-	// Configure authentication strategy to access the source
 	var data map[string][]byte
 	if authSecret != nil {
 		data = authSecret.Data
 	}
+
+	// If a auth provider is specified, then get the auth data from the provider.
+	if obj.Spec.Provider != "" {
+		data, err = r.getAuthDataFromProvider(ctx, obj, authSecret, proxyOpts)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	authOpts, err := git.NewAuthOptions(u, data)
 	if err != nil {
 		return nil, err
@@ -667,14 +668,14 @@ func (r *GitRepositoryReconciler) getAuthOpts(ctx context.Context, obj *sourcev1
 	return authOpts, nil
 }
 
-func (r *GitRepositoryReconciler) getAuthOptsForProvider(ctx context.Context, u url.URL, obj *sourcev1.GitRepository,
-	authSecret *corev1.Secret, proxyOpts *transport.ProxyOptions) (*git.AuthOptions, error) {
-	authenticator := &auth.Authenticator{}
+func (r *GitRepositoryReconciler) getAuthDataFromProvider(ctx context.Context, obj *sourcev1.GitRepository,
+	authSecret *corev1.Secret, proxyOpts *transport.ProxyOptions) (map[string][]byte, error) {
+	var providerOpts *auth.ProviderOptions
+
 	if obj.Spec.Provider == auth.GitHubProvider {
 		if authSecret == nil {
 			return nil, fmt.Errorf("secret ref is required for %s", obj.Spec.Provider)
 		}
-		authenticator.GitHubOpts = []github.ProviderOptFunc{github.WithSecret(*authSecret)}
 		if proxyOpts != nil {
 			tr := http.DefaultTransport.(*http.Transport).Clone()
 			proxyUrl, err := proxyOpts.FullURL()
@@ -682,10 +683,21 @@ func (r *GitRepositoryReconciler) getAuthOptsForProvider(ctx context.Context, u 
 				return nil, err
 			}
 			tr.Proxy = http.ProxyURL(proxyUrl)
-			authenticator.GitHubOpts = append(authenticator.GitHubOpts, github.WithTransport(tr))
+			providerOpts = &auth.ProviderOptions{
+				GitHubOpts: []github.ProviderOptFunc{github.WithTransport(tr)},
+			}
 		}
 	}
-	return authenticator.GetGitAuthOptions(ctx, u, obj.Spec.Provider, string(obj.UID))
+	authOpts := &auth.AuthOptions{
+		CacheKey: string(obj.UID),
+		Secret:   authSecret,
+	}
+
+	creds, err := gitauth.GetCredentials(ctx, obj.Spec.Provider, authOpts, providerOpts)
+	if err != nil {
+		return nil, err
+	}
+	return creds.ToSecretData(), nil
 }
 
 func (r *GitRepositoryReconciler) getSecretData(ctx context.Context, name, namespace string) (*corev1.Secret, error) {
