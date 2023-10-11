@@ -23,7 +23,6 @@ import (
 	"crypto/x509"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"math/rand"
 	"net"
@@ -117,10 +116,6 @@ var (
 	testCache          *cache.Cache
 )
 
-func init() {
-	rand.Seed(time.Now().UnixNano())
-}
-
 type registryClientTestServer struct {
 	out            io.Writer
 	registryHost   string
@@ -174,7 +169,7 @@ func setupRegistryServer(ctx context.Context, workspaceDir string, opts registry
 		server.registryHost = fmt.Sprintf("example.com:%d", port)
 		// Disable DNS server logging as it is extremely chatty.
 		dnsLog := log.Default()
-		dnsLog.SetOutput(ioutil.Discard)
+		dnsLog.SetOutput(io.Discard)
 		server.dnsServer, err = mockdns.NewServerWithLogger(map[string]mockdns.Zone{
 			"example.com.": {
 				A: []string{"127.0.0.1"},

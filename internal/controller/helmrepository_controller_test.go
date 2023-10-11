@@ -1254,6 +1254,7 @@ func TestHelmRepositoryReconciler_statusConditions(t *testing.T) {
 		name             string
 		beforeFunc       func(obj *helmv1.HelmRepository)
 		assertConditions []metav1.Condition
+		wantErr          bool
 	}{
 		{
 			name: "positive conditions only",
@@ -1264,6 +1265,7 @@ func TestHelmRepositoryReconciler_statusConditions(t *testing.T) {
 				*conditions.TrueCondition(meta.ReadyCondition, meta.SucceededReason, "stored artifact for revision"),
 				*conditions.TrueCondition(sourcev1.ArtifactInStorageCondition, meta.SucceededReason, "stored artifact for revision"),
 			},
+			wantErr: false,
 		},
 		{
 			name: "multiple failures",
@@ -1278,6 +1280,7 @@ func TestHelmRepositoryReconciler_statusConditions(t *testing.T) {
 				*conditions.TrueCondition(sourcev1.StorageOperationFailedCondition, sourcev1.DirCreationFailedReason, "failed to create directory"),
 				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "some error"),
 			},
+			wantErr: true,
 		},
 		{
 			name: "mixed positive and negative conditions",
@@ -1290,6 +1293,7 @@ func TestHelmRepositoryReconciler_statusConditions(t *testing.T) {
 				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "failed to get secret"),
 				*conditions.TrueCondition(sourcev1.ArtifactInStorageCondition, meta.SucceededReason, "stored artifact for revision"),
 			},
+			wantErr: true,
 		},
 	}
 
@@ -1321,19 +1325,16 @@ func TestHelmRepositoryReconciler_statusConditions(t *testing.T) {
 			}
 
 			ctx := context.TODO()
-			recResult := sreconcile.ResultSuccess
-			var retErr error
-
 			summarizeHelper := summarize.NewHelper(record.NewFakeRecorder(32), serialPatcher)
 			summarizeOpts := []summarize.Option{
 				summarize.WithConditions(helmRepositoryReadyCondition),
-				summarize.WithReconcileResult(recResult),
-				summarize.WithReconcileError(retErr),
+				summarize.WithReconcileResult(sreconcile.ResultSuccess),
 				summarize.WithIgnoreNotFound(),
 				summarize.WithResultBuilder(sreconcile.AlwaysRequeueResultBuilder{RequeueAfter: obj.GetRequeueAfter()}),
 				summarize.WithPatchFieldOwner("source-controller"),
 			}
-			_, retErr = summarizeHelper.SummarizeAndPatch(ctx, obj, summarizeOpts...)
+			_, err := summarizeHelper.SummarizeAndPatch(ctx, obj, summarizeOpts...)
+			g.Expect(err != nil).To(Equal(tt.wantErr))
 
 			key := client.ObjectKeyFromObject(obj)
 			g.Expect(c.Get(ctx, key, obj)).ToNot(HaveOccurred())

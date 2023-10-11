@@ -40,7 +40,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/record"
-	"k8s.io/utils/pointer"
+	"k8s.io/utils/ptr"
 	kstatus "sigs.k8s.io/cli-utils/pkg/kstatus/status"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -827,7 +827,7 @@ func TestGitRepositoryReconciler_reconcileSource_checkoutStrategy(t *testing.T) 
 			},
 			beforeFunc: func(obj *sourcev1.GitRepository, latestRev string) {
 				// Set new ignore value.
-				obj.Spec.Ignore = pointer.StringPtr("foo")
+				obj.Spec.Ignore = ptr.To("foo")
 				// Add existing artifact on the object and storage.
 				obj.Status = sourcev1.GitRepositoryStatus{
 					Artifact: &sourcev1.Artifact{
@@ -1001,7 +1001,7 @@ func TestGitRepositoryReconciler_reconcileArtifact(t *testing.T) {
 			dir:  "testdata/git/repository",
 			beforeFunc: func(obj *sourcev1.GitRepository) {
 				obj.Spec.Interval = metav1.Duration{Duration: interval}
-				obj.Spec.Ignore = pointer.StringPtr("!**.txt\n")
+				obj.Spec.Ignore = ptr.To("!**.txt\n")
 			},
 			afterFunc: func(t *WithT, obj *sourcev1.GitRepository) {
 				t.Expect(obj.GetArtifact()).ToNot(BeNil())
@@ -1850,6 +1850,41 @@ func TestGitRepositoryReconciler_verifySignature(t *testing.T) {
 			},
 		},
 		{
+			name: "Invalid tag signature with mode=tag makes SourceVerifiedCondition=False",
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "existing",
+				},
+				Data: map[string][]byte{
+					"foo": []byte(armoredKeyRingFixture),
+				},
+			},
+			commit: git.Commit{
+				ReferencingTag: &git.Tag{
+					Name:      "v0.1.0",
+					Hash:      []byte("shasum"),
+					Encoded:   []byte(malformedEncodedTagFixture),
+					Signature: signatureTagFixture,
+				},
+			},
+			beforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Spec.Reference = &sourcev1.GitRepositoryRef{
+					Tag: "v0.1.0",
+				}
+				obj.Spec.Interval = metav1.Duration{Duration: interval}
+				obj.Spec.Verification = &sourcev1.GitRepositoryVerification{
+					Mode: sourcev1.ModeGitTag,
+					SecretRef: meta.LocalObjectReference{
+						Name: "existing",
+					},
+				}
+			},
+			wantErr: true,
+			assertConditions: []metav1.Condition{
+				*conditions.FalseCondition(sourcev1.SourceVerifiedCondition, "InvalidTagSignature", "signature verification of tag 'v0.1.0@shasum' failed: unable to verify Git tag: unable to verify payload with any of the given key rings"),
+			},
+		},
+		{
 			name: "Invalid PGP key makes SourceVerifiedCondition=False and returns error",
 			secret: &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
@@ -2328,6 +2363,7 @@ func TestGitRepositoryReconciler_statusConditions(t *testing.T) {
 		name             string
 		beforeFunc       func(obj *sourcev1.GitRepository)
 		assertConditions []metav1.Condition
+		wantErr          bool
 	}{
 		{
 			name: "multiple positive conditions",
@@ -2356,6 +2392,7 @@ func TestGitRepositoryReconciler_statusConditions(t *testing.T) {
 				*conditions.TrueCondition(sourcev1.StorageOperationFailedCondition, sourcev1.DirCreationFailedReason, "failed to create directory"),
 				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "some error"),
 			},
+			wantErr: true,
 		},
 		{
 			name: "mixed positive and negative conditions",
@@ -2368,6 +2405,7 @@ func TestGitRepositoryReconciler_statusConditions(t *testing.T) {
 				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "failed to get secret"),
 				*conditions.TrueCondition(sourcev1.ArtifactInStorageCondition, meta.SucceededReason, "stored artifact for revision"),
 			},
+			wantErr: true,
 		},
 	}
 
@@ -2400,22 +2438,19 @@ func TestGitRepositoryReconciler_statusConditions(t *testing.T) {
 			}
 
 			ctx := context.TODO()
-			recResult := sreconcile.ResultSuccess
-			var retErr error
-
 			summarizeHelper := summarize.NewHelper(record.NewFakeRecorder(32), serialPatcher)
 			summarizeOpts := []summarize.Option{
 				summarize.WithConditions(gitRepositoryReadyCondition),
 				summarize.WithBiPolarityConditionTypes(sourcev1.SourceVerifiedCondition),
-				summarize.WithReconcileResult(recResult),
-				summarize.WithReconcileError(retErr),
+				summarize.WithReconcileResult(sreconcile.ResultSuccess),
 				summarize.WithIgnoreNotFound(),
 				summarize.WithResultBuilder(sreconcile.AlwaysRequeueResultBuilder{
 					RequeueAfter: jitter.JitteredIntervalDuration(obj.GetRequeueAfter()),
 				}),
 				summarize.WithPatchFieldOwner("source-controller"),
 			}
-			_, retErr = summarizeHelper.SummarizeAndPatch(ctx, obj, summarizeOpts...)
+			_, err := summarizeHelper.SummarizeAndPatch(ctx, obj, summarizeOpts...)
+			g.Expect(err != nil).To(Equal(tt.wantErr))
 
 			key := client.ObjectKeyFromObject(obj)
 			g.Expect(c.Get(ctx, key, obj)).ToNot(HaveOccurred())
@@ -2833,15 +2868,15 @@ func TestGitContentConfigChanged(t *testing.T) {
 		{
 			name: "unobserved ignore",
 			obj: sourcev1.GitRepository{
-				Spec: sourcev1.GitRepositorySpec{Ignore: pointer.String("foo")},
+				Spec: sourcev1.GitRepositorySpec{Ignore: ptr.To("foo")},
 			},
 			want: true,
 		},
 		{
 			name: "observed ignore",
 			obj: sourcev1.GitRepository{
-				Spec:   sourcev1.GitRepositorySpec{Ignore: pointer.String("foo")},
-				Status: sourcev1.GitRepositoryStatus{ObservedIgnore: pointer.String("foo")},
+				Spec:   sourcev1.GitRepositorySpec{Ignore: ptr.To("foo")},
+				Status: sourcev1.GitRepositoryStatus{ObservedIgnore: ptr.To("foo")},
 			},
 			want: false,
 		},

@@ -21,11 +21,11 @@ package azure
 import (
 	"context"
 	"crypto/md5"
+	"crypto/rand"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"log"
-	"math/rand"
 	"os"
 	"path/filepath"
 	"strings"
@@ -80,10 +80,6 @@ test: file2
 		},
 	}
 )
-
-func init() {
-	rand.Seed(time.Now().UnixNano())
-}
 
 func TestMain(m *testing.M) {
 	var err error

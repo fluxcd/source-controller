@@ -34,14 +34,13 @@ import (
 	"github.com/google/go-containerregistry/pkg/authn/k8schain"
 	"github.com/google/go-containerregistry/pkg/name"
 	gcrv1 "github.com/google/go-containerregistry/pkg/v1"
-	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
 	kuberecorder "k8s.io/client-go/tools/record"
-	"k8s.io/utils/pointer"
+	"k8s.io/utils/ptr"
 
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -578,13 +577,13 @@ func (r *OCIRepositoryReconciler) selectLayer(obj *ociv1.OCIRepository, image gc
 func (r *OCIRepositoryReconciler) getRevision(ref name.Reference, options []remote.Option) (string, error) {
 	switch ref := ref.(type) {
 	case name.Digest:
-		digest, err := v1.NewHash(ref.DigestStr())
+		digest, err := gcrv1.NewHash(ref.DigestStr())
 		if err != nil {
 			return "", err
 		}
 		return digest.String(), nil
 	case name.Tag:
-		var digest v1.Hash
+		var digest gcrv1.Hash
 
 		desc, err := remote.Head(ref, options...)
 		if err == nil {
@@ -1176,7 +1175,7 @@ type remoteOptions []remote.Option
 // of the artifact in the status to determine if artifact content configuration
 // has changed and requires rebuilding the artifact.
 func ociContentConfigChanged(obj *ociv1.OCIRepository) bool {
-	if !pointer.StringEqual(obj.Spec.Ignore, obj.Status.ObservedIgnore) {
+	if !ptr.Equal(obj.Spec.Ignore, obj.Status.ObservedIgnore) {
 		return true
 	}
 

@@ -17,15 +17,10 @@ limitations under the License.
 package controller
 
 import (
-	"crypto/rand"
 	"crypto/tls"
-	cryptotls "crypto/tls"
 	"crypto/x509"
-	"crypto/x509/pkix"
-	"encoding/pem"
 	"errors"
 	"fmt"
-	"math/big"
 	"net/http"
 	"net/url"
 	"os"
@@ -48,7 +43,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/record"
-	"k8s.io/utils/pointer"
+	"k8s.io/utils/ptr"
 	kstatus "sigs.k8s.io/cli-utils/pkg/kstatus/status"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -119,6 +114,7 @@ func TestOCIRepository_Reconcile(t *testing.T) {
 	})
 
 	podinfoVersions, err := pushMultiplePodinfoImages(regServer.registryHost, true, "6.1.4", "6.1.5", "6.1.6")
+	g.Expect(err).ToNot(HaveOccurred())
 
 	tests := []struct {
 		name           string
@@ -305,6 +301,7 @@ func TestOCIRepository_Reconcile_MediaType(t *testing.T) {
 	})
 
 	podinfoVersions, err := pushMultiplePodinfoImages(regServer.registryHost, true, "6.1.4", "6.1.5", "6.1.6")
+	g.Expect(err).ToNot(HaveOccurred())
 
 	tests := []struct {
 		name      string
@@ -828,7 +825,7 @@ func TestOCIRepository_reconcileSource_authStrategy(t *testing.T) {
 func makeTransport(insecure bool) http.RoundTripper {
 	transport := remote.DefaultTransport.(*http.Transport).Clone()
 	if insecure {
-		transport.TLSClientConfig = &cryptotls.Config{
+		transport.TLSClientConfig = &tls.Config{
 			InsecureSkipVerify: true,
 		}
 	}
@@ -997,6 +994,8 @@ func TestOCIRepository_reconcileSource_remoteReference(t *testing.T) {
 	})
 
 	podinfoVersions, err := pushMultiplePodinfoImages(server.registryHost, true, "6.1.4", "6.1.5", "6.1.6")
+	g.Expect(err).ToNot(HaveOccurred())
+
 	img6 := podinfoVersions["6.1.6"]
 	img5 := podinfoVersions["6.1.5"]
 
@@ -1479,7 +1478,7 @@ func TestOCIRepository_reconcileSource_noop(t *testing.T) {
 		{
 			name: "full reconcile - same rev, unobserved ignore",
 			beforeFunc: func(obj *ociv1.OCIRepository) {
-				obj.Status.ObservedIgnore = pointer.String("aaa")
+				obj.Status.ObservedIgnore = ptr.To("aaa")
 				obj.Status.Artifact = &sourcev1.Artifact{
 					Revision: testRevision,
 				}
@@ -1491,8 +1490,8 @@ func TestOCIRepository_reconcileSource_noop(t *testing.T) {
 		{
 			name: "noop - same rev, observed ignore",
 			beforeFunc: func(obj *ociv1.OCIRepository) {
-				obj.Spec.Ignore = pointer.String("aaa")
-				obj.Status.ObservedIgnore = pointer.String("aaa")
+				obj.Spec.Ignore = ptr.To("aaa")
+				obj.Status.ObservedIgnore = ptr.To("aaa")
 				obj.Status.Artifact = &sourcev1.Artifact{
 					Revision: testRevision,
 				}
@@ -1647,7 +1646,7 @@ func TestOCIRepository_reconcileArtifact(t *testing.T) {
 			targetPath: "testdata/oci/repository",
 			artifact:   &sourcev1.Artifact{Revision: "revision"},
 			beforeFunc: func(obj *ociv1.OCIRepository) {
-				obj.Spec.Ignore = pointer.String("foo.txt")
+				obj.Spec.Ignore = ptr.To("foo.txt")
 			},
 			want: sreconcile.ResultSuccess,
 			assertPaths: []string{
@@ -1687,7 +1686,7 @@ func TestOCIRepository_reconcileArtifact(t *testing.T) {
 			},
 			beforeFunc: func(obj *ociv1.OCIRepository) {
 				obj.Status.Artifact = &sourcev1.Artifact{Revision: "revision"}
-				obj.Spec.Ignore = pointer.String("aaa")
+				obj.Spec.Ignore = ptr.To("aaa")
 			},
 			want: sreconcile.ResultSuccess,
 			assertPaths: []string{
@@ -1754,10 +1753,10 @@ func TestOCIRepository_reconcileArtifact(t *testing.T) {
 				Revision: "revision",
 			},
 			beforeFunc: func(obj *ociv1.OCIRepository) {
-				obj.Spec.Ignore = pointer.String("aaa")
+				obj.Spec.Ignore = ptr.To("aaa")
 				obj.Spec.LayerSelector = &ociv1.OCILayerSelector{MediaType: "foo"}
 				obj.Status.Artifact = &sourcev1.Artifact{Revision: "revision"}
-				obj.Status.ObservedIgnore = pointer.String("aaa")
+				obj.Status.ObservedIgnore = ptr.To("aaa")
 				obj.Status.ObservedLayerSelector = &ociv1.OCILayerSelector{MediaType: "foo"}
 			},
 			want: sreconcile.ResultSuccess,
@@ -2491,45 +2490,6 @@ func setPodinfoImageAnnotations(img gcrv1.Image, tag string) gcrv1.Image {
 	return mutate.Annotations(img, metadata).(gcrv1.Image)
 }
 
-// These two taken verbatim from https://ericchiang.github.io/post/go-tls/
-func certTemplate() (*x509.Certificate, error) {
-	// generate a random serial number (a real cert authority would
-	// have some logic behind this)
-	serialNumberLimit := new(big.Int).Lsh(big.NewInt(1), 128)
-	serialNumber, err := rand.Int(rand.Reader, serialNumberLimit)
-	if err != nil {
-		return nil, errors.New("failed to generate serial number: " + err.Error())
-	}
-
-	tmpl := x509.Certificate{
-		SerialNumber:          serialNumber,
-		Subject:               pkix.Name{Organization: []string{"Flux project"}},
-		SignatureAlgorithm:    x509.SHA256WithRSA,
-		NotBefore:             time.Now(),
-		NotAfter:              time.Now().Add(time.Hour), // valid for an hour
-		BasicConstraintsValid: true,
-	}
-	return &tmpl, nil
-}
-
-func createCert(template, parent *x509.Certificate, pub interface{}, parentPriv interface{}) (
-	cert *x509.Certificate, certPEM []byte, err error) {
-
-	certDER, err := x509.CreateCertificate(rand.Reader, template, parent, pub, parentPriv)
-	if err != nil {
-		return
-	}
-	// parse the resulting certificate so we can use it again
-	cert, err = x509.ParseCertificate(certDER)
-	if err != nil {
-		return
-	}
-	// PEM encode the certificate (this is a standard TLS encoding)
-	b := pem.Block{Type: "CERTIFICATE", Bytes: certDER}
-	certPEM = pem.EncodeToMemory(&b)
-	return
-}
-
 func TestOCIContentConfigChanged(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -2540,34 +2500,34 @@ func TestOCIContentConfigChanged(t *testing.T) {
 		{
 			name: "same ignore, no layer selector",
 			spec: ociv1.OCIRepositorySpec{
-				Ignore: pointer.String("nnn"),
+				Ignore: ptr.To("nnn"),
 			},
 			status: ociv1.OCIRepositoryStatus{
-				ObservedIgnore: pointer.String("nnn"),
+				ObservedIgnore: ptr.To("nnn"),
 			},
 			want: false,
 		},
 		{
 			name: "different ignore, no layer selector",
 			spec: ociv1.OCIRepositorySpec{
-				Ignore: pointer.String("nnn"),
+				Ignore: ptr.To("nnn"),
 			},
 			status: ociv1.OCIRepositoryStatus{
-				ObservedIgnore: pointer.String("mmm"),
+				ObservedIgnore: ptr.To("mmm"),
 			},
 			want: true,
 		},
 		{
 			name: "same ignore, same layer selector",
 			spec: ociv1.OCIRepositorySpec{
-				Ignore: pointer.String("nnn"),
+				Ignore: ptr.To("nnn"),
 				LayerSelector: &ociv1.OCILayerSelector{
 					MediaType: "foo",
 					Operation: ociv1.OCILayerExtract,
 				},
 			},
 			status: ociv1.OCIRepositoryStatus{
-				ObservedIgnore: pointer.String("nnn"),
+				ObservedIgnore: ptr.To("nnn"),
 				ObservedLayerSelector: &ociv1.OCILayerSelector{
 					MediaType: "foo",
 					Operation: ociv1.OCILayerExtract,
@@ -2578,14 +2538,14 @@ func TestOCIContentConfigChanged(t *testing.T) {
 		{
 			name: "same ignore, different layer selector operation",
 			spec: ociv1.OCIRepositorySpec{
-				Ignore: pointer.String("nnn"),
+				Ignore: ptr.To("nnn"),
 				LayerSelector: &ociv1.OCILayerSelector{
 					MediaType: "foo",
 					Operation: ociv1.OCILayerCopy,
 				},
 			},
 			status: ociv1.OCIRepositoryStatus{
-				ObservedIgnore: pointer.String("nnn"),
+				ObservedIgnore: ptr.To("nnn"),
 				ObservedLayerSelector: &ociv1.OCILayerSelector{
 					MediaType: "foo",
 					Operation: ociv1.OCILayerExtract,
@@ -2596,14 +2556,14 @@ func TestOCIContentConfigChanged(t *testing.T) {
 		{
 			name: "same ignore, different layer selector mediatype",
 			spec: ociv1.OCIRepositorySpec{
-				Ignore: pointer.String("nnn"),
+				Ignore: ptr.To("nnn"),
 				LayerSelector: &ociv1.OCILayerSelector{
 					MediaType: "bar",
 					Operation: ociv1.OCILayerExtract,
 				},
 			},
 			status: ociv1.OCIRepositoryStatus{
-				ObservedIgnore: pointer.String("nnn"),
+				ObservedIgnore: ptr.To("nnn"),
 				ObservedLayerSelector: &ociv1.OCILayerSelector{
 					MediaType: "foo",
 					Operation: ociv1.OCILayerExtract,

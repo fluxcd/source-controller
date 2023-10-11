@@ -1129,9 +1129,9 @@ func (r *HelmChartReconciler) requestsForHelmRepositoryChange(ctx context.Contex
 	}
 
 	var reqs []reconcile.Request
-	for _, i := range list.Items {
-		if i.Status.ObservedSourceArtifactRevision != repo.GetArtifact().Revision {
-			reqs = append(reqs, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(&i)})
+	for i, v := range list.Items {
+		if v.Status.ObservedSourceArtifactRevision != repo.GetArtifact().Revision {
+			reqs = append(reqs, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(&list.Items[i])})
 		}
 	}
 	return reqs
@@ -1159,9 +1159,9 @@ func (r *HelmChartReconciler) requestsForGitRepositoryChange(ctx context.Context
 	}
 
 	var reqs []reconcile.Request
-	for _, i := range list.Items {
-		if !repo.GetArtifact().HasRevision(i.Status.ObservedSourceArtifactRevision) {
-			reqs = append(reqs, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(&i)})
+	for i, v := range list.Items {
+		if !repo.GetArtifact().HasRevision(v.Status.ObservedSourceArtifactRevision) {
+			reqs = append(reqs, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(&list.Items[i])})
 		}
 	}
 	return reqs
@@ -1189,9 +1189,9 @@ func (r *HelmChartReconciler) requestsForBucketChange(ctx context.Context, o cli
 	}
 
 	var reqs []reconcile.Request
-	for _, i := range list.Items {
-		if !bucket.GetArtifact().HasRevision(i.Status.ObservedSourceArtifactRevision) {
-			reqs = append(reqs, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(&i)})
+	for i, v := range list.Items {
+		if !bucket.GetArtifact().HasRevision(v.Status.ObservedSourceArtifactRevision) {
+			reqs = append(reqs, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(&list.Items[i])})
 		}
 	}
 	return reqs

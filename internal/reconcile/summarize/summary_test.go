@@ -373,10 +373,6 @@ func TestSummarizeAndPatch(t *testing.T) {
 				tt.afterFunc(g, obj)
 			}
 
-			if obj == nil {
-				t.Fail()
-			}
-
 			// Check if the object status is valid as per kstatus.
 			condns := &conditionscheck.Conditions{NegativePolarity: testReadyConditions.NegativePolarity}
 			checker := conditionscheck.NewChecker(c, condns)

@@ -258,7 +258,7 @@ func TestBucketReconciler_reconcileStorage(t *testing.T) {
 			name: "notices missing artifact in storage",
 			beforeFunc: func(obj *bucketv1.Bucket, storage *Storage) error {
 				obj.Status.Artifact = &sourcev1.Artifact{
-					Path:     fmt.Sprintf("/reconcile-storage/invalid.txt"),
+					Path:     "/reconcile-storage/invalid.txt",
 					Revision: "d",
 				}
 				storage.SetArtifactURL(obj.Status.Artifact)
@@ -339,7 +339,7 @@ func TestBucketReconciler_reconcileStorage(t *testing.T) {
 			name: "updates hostname on diff from current",
 			beforeFunc: func(obj *bucketv1.Bucket, storage *Storage) error {
 				obj.Status.Artifact = &sourcev1.Artifact{
-					Path:     fmt.Sprintf("/reconcile-storage/hostname.txt"),
+					Path:     "/reconcile-storage/hostname.txt",
 					Revision: "f",
 					Digest:   "sha256:3b9c358f36f0a31b6ad3e14f309c7cf198ac9246e8316f9ce543d5b19ac02b80",
 					URL:      "http://outdated.com/reconcile-storage/hostname.txt",
@@ -1211,8 +1211,8 @@ func TestBucketReconciler_reconcileArtifact(t *testing.T) {
 				// path.
 				t.Expect(os.RemoveAll(dir)).ToNot(HaveOccurred())
 				f, err := os.Create(dir)
-				defer f.Close()
 				t.Expect(err).ToNot(HaveOccurred())
+				t.Expect(f.Close()).ToNot(HaveOccurred())
 				conditions.MarkReconciling(obj, meta.ProgressingReason, "foo")
 				conditions.MarkUnknown(obj, meta.ReadyCondition, "foo", "bar")
 			},
@@ -1293,6 +1293,7 @@ func TestBucketReconciler_statusConditions(t *testing.T) {
 		name             string
 		beforeFunc       func(obj *bucketv1.Bucket)
 		assertConditions []metav1.Condition
+		wantErr          bool
 	}{
 		{
 			name: "positive conditions only",
@@ -1317,6 +1318,7 @@ func TestBucketReconciler_statusConditions(t *testing.T) {
 				*conditions.TrueCondition(sourcev1.StorageOperationFailedCondition, sourcev1.DirCreationFailedReason, "failed to create directory"),
 				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "some error"),
 			},
+			wantErr: true,
 		},
 		{
 			name: "mixed positive and negative conditions",
@@ -1329,6 +1331,7 @@ func TestBucketReconciler_statusConditions(t *testing.T) {
 				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "failed to get secret"),
 				*conditions.TrueCondition(sourcev1.ArtifactInStorageCondition, meta.SucceededReason, "stored artifact for revision"),
 			},
+			wantErr: true,
 		},
 	}
 
@@ -1360,21 +1363,18 @@ func TestBucketReconciler_statusConditions(t *testing.T) {
 			}
 
 			ctx := context.TODO()
-			recResult := sreconcile.ResultSuccess
-			var retErr error
-
 			summarizeHelper := summarize.NewHelper(record.NewFakeRecorder(32), serialPatcher)
 			summarizeOpts := []summarize.Option{
 				summarize.WithConditions(bucketReadyCondition),
-				summarize.WithReconcileResult(recResult),
-				summarize.WithReconcileError(retErr),
+				summarize.WithReconcileResult(sreconcile.ResultSuccess),
 				summarize.WithIgnoreNotFound(),
 				summarize.WithResultBuilder(sreconcile.AlwaysRequeueResultBuilder{
 					RequeueAfter: jitter.JitteredIntervalDuration(obj.GetRequeueAfter()),
 				}),
 				summarize.WithPatchFieldOwner("source-controller"),
 			}
-			_, retErr = summarizeHelper.SummarizeAndPatch(ctx, obj, summarizeOpts...)
+			_, err := summarizeHelper.SummarizeAndPatch(ctx, obj, summarizeOpts...)
+			g.Expect(err != nil).To(Equal(tt.wantErr))
 
 			key := client.ObjectKeyFromObject(obj)
 			g.Expect(c.Get(ctx, key, obj)).ToNot(HaveOccurred())

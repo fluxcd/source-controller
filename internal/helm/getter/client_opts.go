@@ -216,7 +216,7 @@ func storeTLSCertificateFiles(tlsBytes *stls.TLSBytes, path string) (string, str
 
 func writeToFile(data []byte, filename, tmpDir string) (string, error) {
 	file := path.Join(tmpDir, filename)
-	err := os.WriteFile(file, data, 0o644)
+	err := os.WriteFile(file, data, 0o600)
 	if err != nil {
 		return "", err
 	}
