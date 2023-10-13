@@ -253,11 +253,13 @@ For practical information, see
 **Note:** This feature is available only for Helm charts fetched from an OCI Registry.
 
 `.spec.verify` is an optional field to enable the verification of [Cosign](https://github.com/sigstore/cosign)
-signatures. The field offers two subfields:
+signatures. The field offers three subfields:
 
 - `.provider`, to specify the verification provider. Only supports `cosign` at present.
 - `.secretRef.name`, to specify a reference to a Secret in the same namespace as
   the HelmChart, containing the Cosign public keys of trusted authors.
+- `.matchOIDCIdentity`, to specify a list of OIDC identity matchers. Please see
+   [Keyless verification](#keyless-verification) for more details.
 
 ```yaml
 ---
@@ -307,6 +309,18 @@ For publicly available HelmCharts, which are signed using the
 [Cosign Keyless](https://github.com/sigstore/cosign/blob/main/KEYLESS.md) procedure,
 you can enable the verification by omitting the `.verify.secretRef` field.
 
+To verify the identity's subject and the OIDC issuer present in the Fulcio
+certificate, you can specify a list of OIDC identity matchers using
+`.spec.verify.matchOIDCIdentity`. The matcher provides two required fields:
+
+- `.issuer`, to specify a regexp that matches against the OIDC issuer.
+- `.subject`, to specify a regexp that matches against the subject identity in
+   the certificate.
+Both values should follow the [Go regular expression syntax](https://golang.org/s/re2syntax).
+
+The matchers are evaluated in an OR fashion, i.e. the identity is deemed to be
+verified if any one matcher successfully matches against the identity.
+
 Example of verifying  HelmCharts signed by the
 [Cosign GitHub Action](https://github.com/sigstore/cosign-installer) with GitHub OIDC Token:
 
@@ -325,6 +339,9 @@ spec:
   version: ">=6.1.6"
   verify:
     provider: cosign
+    matchOIDCIdentity:
+      - issuer: "^https://token.actions.githubusercontent.com$"
+        subject: "^https://github.com/stefanprodan/podinfo.*$"
 ```
 
 ```yaml
