@@ -785,6 +785,15 @@ credentials for the object storage. For some `.spec.provider` implementations
 the presence of the field is required, see [Provider](#provider) for more
 details and examples.
 
+### Prefix
+
+`.spec.prefix` is an optional field to enable server-side filtering
+of files in the Bucket.
+
+**Note:** The server-side filtering works only with the `generic` and `aws`
+[provider](#provider) and is preferred over [`.spec.ignore`](#ignore)
+as a more efficient way of excluding files. 
+
 ### Ignore
 
 `.spec.ignore` is an optional field to specify rules in [the `.gitignore`
