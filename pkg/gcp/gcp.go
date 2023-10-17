@@ -166,7 +166,9 @@ func (c *GCSClient) FGetObject(ctx context.Context, bucketName, objectName, loca
 // If the underlying client or the visit callback returns an error,
 // it returns early.
 func (c *GCSClient) VisitObjects(ctx context.Context, bucketName string, prefix string, visit func(path, etag string) error) error {
-	items := c.Client.Bucket(bucketName).Objects(ctx, nil)
+	items := c.Client.Bucket(bucketName).Objects(ctx, &gcpstorage.Query{
+		Prefix: prefix,
+	})
 	for {
 		object, err := items.Next()
 		if err == IteratorDone {

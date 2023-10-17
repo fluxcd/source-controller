@@ -790,8 +790,8 @@ details and examples.
 `.spec.prefix` is an optional field to enable server-side filtering
 of files in the Bucket.
 
-**Note:** The server-side filtering works only with the `generic` and `aws`
-[provider](#provider) and is preferred over [`.spec.ignore`](#ignore)
+**Note:** The server-side filtering works only with the `generic`, `aws`
+and `gcp` [provider](#provider) and is preferred over [`.spec.ignore`](#ignore)
 as a more efficient way of excluding files. 
 
 ### Ignore
