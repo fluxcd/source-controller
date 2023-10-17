@@ -89,13 +89,13 @@ type HelmRepositorySpec struct {
 	// efficient use of resources.
 	// +kubebuilder:validation:Type=string
 	// +kubebuilder:validation:Pattern="^([0-9]+(\\.[0-9]+)?(ms|s|m|h))+$"
-	// +required
-	Interval metav1.Duration `json:"interval"`
+	// +optional
+	Interval metav1.Duration `json:"interval,omitempty"`
 
 	// Timeout is used for the index fetch operation for an HTTPS helm repository,
-	// and for remote OCI Repository operations like pulling for an OCI helm repository.
+	// and for remote OCI Repository operations like pulling for an OCI helm
+	// chart by the associated HelmChart.
 	// Its default value is 60s.
-	// +kubebuilder:default:="60s"
 	// +kubebuilder:validation:Type=string
 	// +kubebuilder:validation:Pattern="^([0-9]+(\\.[0-9]+)?(ms|s|m))+$"
 	// +optional
@@ -170,7 +170,19 @@ func (in *HelmRepository) SetConditions(conditions []metav1.Condition) {
 // GetRequeueAfter returns the duration after which the source must be
 // reconciled again.
 func (in HelmRepository) GetRequeueAfter() time.Duration {
-	return in.Spec.Interval.Duration
+	if in.Spec.Interval.Duration != 0 {
+		return in.Spec.Interval.Duration
+	}
+	return time.Minute
+}
+
+// GetTimeout returns the timeout duration used for various operations related
+// to this HelmRepository.
+func (in HelmRepository) GetTimeout() time.Duration {
+	if in.Spec.Timeout != nil {
+		return in.Spec.Timeout.Duration
+	}
+	return time.Minute
 }
 
 // GetArtifact returns the latest artifact from the source if present in the

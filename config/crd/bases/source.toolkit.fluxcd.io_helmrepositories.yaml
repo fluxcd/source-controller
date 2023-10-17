@@ -357,10 +357,10 @@ spec:
                   of this HelmRepository.
                 type: boolean
               timeout:
-                default: 60s
                 description: Timeout is used for the index fetch operation for an
                   HTTPS helm repository, and for remote OCI Repository operations
-                  like pulling for an OCI helm repository. Its default value is 60s.
+                  like pulling for an OCI helm chart by the associated HelmChart.
+                  Its default value is 60s.
                 pattern: ^([0-9]+(\.[0-9]+)?(ms|s|m))+$
                 type: string
               type:
@@ -376,7 +376,6 @@ spec:
                 pattern: ^(http|https|oci)://.*$
                 type: string
             required:
-            - interval
             - url
             type: object
           status:

@@ -514,7 +514,7 @@ func (r *HelmChartReconciler) reconcileSource(ctx context.Context, sp *patch.Ser
 func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *helmv1.HelmChart,
 	repo *helmv1.HelmRepository, b *chart.Build) (sreconcile.Result, error) {
 	// Used to login with the repository declared provider
-	ctxTimeout, cancel := context.WithTimeout(ctx, repo.Spec.Timeout.Duration)
+	ctxTimeout, cancel := context.WithTimeout(ctx, repo.GetTimeout())
 	defer cancel()
 
 	normalizedURL, err := repository.NormalizeURL(repo.Spec.URL)
@@ -999,7 +999,7 @@ func (r *HelmChartReconciler) namespacedChartRepositoryCallback(ctx context.Cont
 		}
 
 		// Used to login with the repository declared provider
-		ctxTimeout, cancel := context.WithTimeout(ctx, obj.Spec.Timeout.Duration)
+		ctxTimeout, cancel := context.WithTimeout(ctx, obj.GetTimeout())
 		defer cancel()
 
 		clientOpts, certsTmpDir, err := getter.GetClientOpts(ctxTimeout, r.Client, obj, normalizedURL)

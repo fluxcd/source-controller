@@ -352,8 +352,9 @@ for more information about setting up GKE Workload Identity.
 **Note:** This field is ineffectual for [OCI Helm
 Repositories](#helm-oci-repository).
 
-`.spec.interval` is a required field that specifies the interval which the
-Helm repository index must be consulted at.
+`.spec.interval` is a an optional field that specifies the interval which the
+Helm repository index must be consulted at. When not set, the default value is
+`1m`.
 
 After successfully reconciling a HelmRepository object, the source-controller
 requeues the object for inspection after the specified interval. The value
@@ -385,8 +386,8 @@ Repositories](#helm-oci-repository).
 `.spec.timeout` is an optional field to specify a timeout for the fetch
 operation. The value must be in a
 [Go recognized duration string format](https://pkg.go.dev/time#ParseDuration),
-e.g. `1m30s` for a timeout of one minute and thirty seconds. The default value
-is `60s`.
+e.g. `1m30s` for a timeout of one minute and thirty seconds. When not set, the
+default value is `1m`.
 
 ### Secret reference
 
