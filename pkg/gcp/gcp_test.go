@@ -170,7 +170,7 @@ func TestVisitObjects(t *testing.T) {
 	}
 	keys := []string{}
 	etags := []string{}
-	err := gcpClient.VisitObjects(context.Background(), bucketName, func(key, etag string) error {
+	err := gcpClient.VisitObjects(context.Background(), bucketName, "", func(key, etag string) error {
 		keys = append(keys, key)
 		etags = append(etags, etag)
 		return nil
@@ -185,7 +185,7 @@ func TestVisitObjectsErr(t *testing.T) {
 		Client: client,
 	}
 	badBucketName := "bad-bucket"
-	err := gcpClient.VisitObjects(context.Background(), badBucketName, func(key, etag string) error {
+	err := gcpClient.VisitObjects(context.Background(), badBucketName, "", func(key, etag string) error {
 		return nil
 	})
 	assert.Error(t, err, fmt.Sprintf("listing objects from bucket '%s' failed: storage: bucket doesn't exist", badBucketName))
@@ -196,7 +196,7 @@ func TestVisitObjectsCallbackErr(t *testing.T) {
 		Client: client,
 	}
 	mockErr := fmt.Errorf("mock")
-	err := gcpClient.VisitObjects(context.Background(), bucketName, func(key, etag string) error {
+	err := gcpClient.VisitObjects(context.Background(), bucketName, "", func(key, etag string) error {
 		return mockErr
 	})
 	assert.Error(t, err, mockErr.Error())

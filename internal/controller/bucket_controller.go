@@ -145,7 +145,7 @@ type BucketProvider interface {
 	// bucket, calling visit for every item.
 	// If the underlying client or the visit callback returns an error,
 	// it returns early.
-	VisitObjects(ctx context.Context, bucketName string, visit func(key, etag string) error) error
+	VisitObjects(ctx context.Context, bucketName string, prefix string, visit func(key, etag string) error) error
 	// ObjectIsNotFound returns true if the given error indicates an object
 	// could not be found.
 	ObjectIsNotFound(error) bool
@@ -742,7 +742,7 @@ func fetchEtagIndex(ctx context.Context, provider BucketProvider, obj *bucketv1.
 	matcher := sourceignore.NewMatcher(ps)
 
 	// Build up index
-	err = provider.VisitObjects(ctxTimeout, obj.Spec.BucketName, func(key, etag string) error {
+	err = provider.VisitObjects(ctxTimeout, obj.Spec.BucketName, obj.Spec.Prefix, func(key, etag string) error {
 		if strings.HasSuffix(key, "/") || key == sourceignore.IgnoreFile {
 			return nil
 		}

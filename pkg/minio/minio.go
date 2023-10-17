@@ -105,9 +105,10 @@ func (c *MinioClient) FGetObject(ctx context.Context, bucketName, objectName, lo
 // bucket, calling visit for every item.
 // If the underlying client or the visit callback returns an error,
 // it returns early.
-func (c *MinioClient) VisitObjects(ctx context.Context, bucketName string, visit func(key, etag string) error) error {
+func (c *MinioClient) VisitObjects(ctx context.Context, bucketName string, prefix string, visit func(key, etag string) error) error {
 	for object := range c.Client.ListObjects(ctx, bucketName, minio.ListObjectsOptions{
 		Recursive: true,
+		Prefix:    prefix,
 		UseV1:     s3utils.IsGoogleEndpoint(*c.Client.EndpointURL()),
 	}) {
 		if object.Err != nil {
