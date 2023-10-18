@@ -293,6 +293,7 @@ func TestHelmChartReconciler_Reconcile(t *testing.T) {
 			}
 
 			g.Expect(testEnv.CreateAndWait(ctx, &repository)).To(Succeed())
+			defer func() { g.Expect(testEnv.Delete(ctx, &repository)).To(Succeed()) }()
 
 			obj := helmv1.HelmChart{
 				ObjectMeta: metav1.ObjectMeta{

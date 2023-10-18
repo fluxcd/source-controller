@@ -1703,6 +1703,16 @@ func TestHelmRepositoryReconciler_InMemoryCaching(t *testing.T) {
 	g.Expect(err).ToNot(HaveOccurred())
 	_, cacheHit := testCache.Get(helmRepo.GetArtifact().Path)
 	g.Expect(cacheHit).To(BeTrue())
+
+	g.Expect(testEnv.Delete(ctx, helmRepo)).To(Succeed())
+
+	// Wait for HelmRepository to be deleted
+	g.Eventually(func() bool {
+		if err := testEnv.Get(ctx, key, helmRepo); err != nil {
+			return apierrors.IsNotFound(err)
+		}
+		return false
+	}, timeout).Should(BeTrue())
 }
 
 func TestHelmRepositoryReconciler_ociMigration(t *testing.T) {
