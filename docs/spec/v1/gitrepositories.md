@@ -195,8 +195,7 @@ stringData:
     -----BEGIN OPENSSH PRIVATE KEY-----
     ...
     -----END OPENSSH PRIVATE KEY-----
-  #github.com usage example : copy-paste below the correct line (github.com ecdsa-sha2-nistp256...) of this command output: ssh-keyscan github.com
-  #if your repo is elsewhere : replace github.com with the right host
+  # The list of public SSH host keys can be obtained by running `ssh-keyscan <host>`
   known_hosts: |
     github.com ecdsa-sha2-nistp256 AAAA...
 ```
