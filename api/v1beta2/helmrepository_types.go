@@ -44,6 +44,7 @@ const (
 type HelmRepositorySpec struct {
 	// URL of the Helm repository, a valid URL contains at least a protocol and
 	// host.
+	// +kubebuilder:validation:Pattern="^(http|https|oci)://.*$"
 	// +required
 	URL string `json:"url"`
 

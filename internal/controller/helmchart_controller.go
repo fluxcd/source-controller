@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"net/url"
@@ -138,6 +139,12 @@ type HelmChartReconciler struct {
 
 	patchOptions []patch.Option
 }
+
+// RegistryClientGeneratorFunc is a function that returns a registry client
+// and an optional file name.
+// The file is used to store the registry client credentials.
+// The caller is responsible for deleting the file.
+type RegistryClientGeneratorFunc func(tlsConfig *tls.Config, isLogin bool) (*helmreg.Client, string, error)
 
 func (r *HelmChartReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
 	return r.SetupWithManagerAndOptions(ctx, mgr, HelmChartReconcilerOptions{})

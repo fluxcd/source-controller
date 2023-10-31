@@ -373,6 +373,7 @@ spec:
               url:
                 description: URL of the Helm repository, a valid URL contains at least
                   a protocol and host.
+                pattern: ^(http|https|oci)://.*$
                 type: string
             required:
             - interval

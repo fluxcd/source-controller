@@ -22,11 +22,13 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/docker/go-units"
 	"github.com/opencontainers/go-digest"
 	helmgetter "helm.sh/helm/v3/pkg/getter"
+	helmreg "helm.sh/helm/v3/pkg/registry"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	kuberecorder "k8s.io/client-go/tools/record"
@@ -138,10 +140,7 @@ func (r *HelmRepositoryReconciler) SetupWithManagerAndOptions(mgr ctrl.Manager, 
 		For(&helmv1.HelmRepository{}).
 		WithEventFilter(
 			predicate.And(
-				predicate.Or(
-					intpredicates.HelmRepositoryTypePredicate{RepositoryType: helmv1.HelmRepositoryTypeDefault},
-					intpredicates.HelmRepositoryTypePredicate{RepositoryType: ""},
-				),
+				intpredicates.HelmRepositoryOCIMigrationPredicate{},
 				predicate.Or(predicate.GenerationChangedPredicate{}, predicates.ReconcileRequestedPredicate{}),
 			),
 		).
@@ -163,6 +162,11 @@ func (r *HelmRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 
 	// Initialize the patch helper with the current version of the object.
 	serialPatcher := patch.NewSerialPatcher(obj, r.Client)
+
+	// If it's of type OCI, migrate the object to static.
+	if obj.Spec.Type == helmv1.HelmRepositoryTypeOCI {
+		return r.migrationToStatic(ctx, serialPatcher, obj)
+	}
 
 	// recResult stores the abstracted reconcile result.
 	var recResult sreconcile.Result
@@ -193,8 +197,8 @@ func (r *HelmRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		r.Metrics.RecordDuration(ctx, obj, start)
 	}()
 
-	// Examine if the object is under deletion or if a type change has happened.
-	if !obj.ObjectMeta.DeletionTimestamp.IsZero() || (obj.Spec.Type != "" && obj.Spec.Type != helmv1.HelmRepositoryTypeDefault) {
+	// Examine if the object is under deletion.
+	if !obj.ObjectMeta.DeletionTimestamp.IsZero() {
 		recResult, retErr = r.reconcileDelete(ctx, obj)
 		return
 	}
@@ -391,6 +395,18 @@ func (r *HelmRepositoryReconciler) reconcileStorage(ctx context.Context, sp *pat
 // pointer is set to the newly fetched index.
 func (r *HelmRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch.SerialPatcher,
 	obj *helmv1.HelmRepository, artifact *sourcev1.Artifact, chartRepo *repository.ChartRepository) (sreconcile.Result, error) {
+	// Ensure it's not an OCI URL. API validation ensures that only
+	// http/https/oci scheme are allowed.
+	if strings.HasPrefix(obj.Spec.URL, helmreg.OCIScheme) {
+		err := fmt.Errorf("'oci' URL scheme cannot be used with 'default' HelmRepository type")
+		e := serror.NewStalling(
+			fmt.Errorf("invalid Helm repository URL: %w", err),
+			sourcev1.URLInvalidReason,
+		)
+		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Err.Error())
+		return sreconcile.ResultEmpty, e
+	}
+
 	normalizedURL, err := repository.NormalizeURL(obj.Spec.URL)
 	if err != nil {
 		e := serror.NewStalling(
@@ -684,4 +700,34 @@ func (r *HelmRepositoryReconciler) eventLogf(ctx context.Context, obj runtime.Ob
 		ctrl.LoggerFrom(ctx).Info(msg)
 	}
 	r.Eventf(obj, eventType, reason, msg)
+}
+
+// migrateToStatic is HelmRepository OCI migration to static object.
+func (r *HelmRepositoryReconciler) migrationToStatic(ctx context.Context, sp *patch.SerialPatcher, obj *helmv1.HelmRepository) (result ctrl.Result, err error) {
+	// Skip migration if suspended and not being deleted.
+	if obj.Spec.Suspend && obj.DeletionTimestamp.IsZero() {
+		return ctrl.Result{}, nil
+	}
+
+	if !intpredicates.HelmRepositoryOCIRequireMigration(obj) {
+		// Already migrated, nothing to do.
+		return ctrl.Result{}, nil
+	}
+
+	// Delete any artifact.
+	_, err = r.reconcileDelete(ctx, obj)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	// Delete finalizer and reset the status.
+	controllerutil.RemoveFinalizer(obj, sourcev1.SourceFinalizer)
+	obj.Status = helmv1.HelmRepositoryStatus{}
+
+	if err := sp.Patch(ctx, obj); err != nil {
+		return ctrl.Result{}, err
+	}
+
+	r.eventLogf(ctx, obj, eventv1.EventTypeTrace, "Migration",
+		"removed artifact and finalizer to migrate to static HelmRepository of type OCI")
+	return ctrl.Result{}, nil
 }
