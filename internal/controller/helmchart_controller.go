@@ -29,6 +29,7 @@ import (
 
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	"github.com/opencontainers/go-digest"
+	"github.com/sigstore/cosign/v2/pkg/cosign"
 	helmgetter "helm.sh/helm/v3/pkg/getter"
 	helmreg "helm.sh/helm/v3/pkg/registry"
 	helmrepo "helm.sh/helm/v3/pkg/repo"
@@ -1338,6 +1339,15 @@ func (r *HelmChartReconciler) makeVerifiers(ctx context.Context, obj *helmv1.Hel
 		}
 
 		// if no secret is provided, add a keyless verifier
+		var identities []cosign.Identity
+		for _, match := range obj.Spec.Verify.MatchOIDCIdentity {
+			identities = append(identities, cosign.Identity{
+				IssuerRegExp:  match.Issuer,
+				SubjectRegExp: match.Subject,
+			})
+		}
+		defaultCosignOciOpts = append(defaultCosignOciOpts, soci.WithIdentities(identities))
+
 		verifier, err := soci.NewCosignVerifier(ctx, defaultCosignOciOpts...)
 		if err != nil {
 			return nil, err
