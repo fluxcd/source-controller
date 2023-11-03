@@ -48,6 +48,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	"github.com/fluxcd/pkg/apis/meta"
+	"github.com/fluxcd/pkg/git"
 	"github.com/fluxcd/pkg/gittestserver"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	conditionscheck "github.com/fluxcd/pkg/runtime/conditions/check"
@@ -56,7 +57,6 @@ import (
 	"github.com/fluxcd/pkg/ssh"
 	"github.com/fluxcd/pkg/testserver"
 
-	"github.com/fluxcd/pkg/git"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	serror "github.com/fluxcd/source-controller/internal/error"
 	"github.com/fluxcd/source-controller/internal/features"
@@ -970,7 +970,7 @@ func TestGitRepositoryReconciler_reconcileArtifact(t *testing.T) {
 			},
 			afterFunc: func(t *WithT, obj *sourcev1.GitRepository) {
 				t.Expect(obj.GetArtifact()).ToNot(BeNil())
-				t.Expect(obj.GetArtifact().Digest).To(Equal("sha256:60a3bf69f337cb5ec9ebd00abefbb6e7f2a2cf27158ecf438d52b2035b184172"))
+				t.Expect(obj.GetArtifact().Digest).To(Equal("sha256:34d9af1a2fcfaef3ee9487d67dc2d642bc7babdb9444a5f60d1f32df32e4de7d"))
 				t.Expect(obj.Status.IncludedArtifacts).ToNot(BeEmpty())
 			},
 			want: sreconcile.ResultSuccess,
@@ -1005,7 +1005,7 @@ func TestGitRepositoryReconciler_reconcileArtifact(t *testing.T) {
 			},
 			afterFunc: func(t *WithT, obj *sourcev1.GitRepository) {
 				t.Expect(obj.GetArtifact()).ToNot(BeNil())
-				t.Expect(obj.GetArtifact().Digest).To(Equal("sha256:11f7f007dce5619bd79e6c57688261058d09f5271e802463ac39f2b9ead7cabd"))
+				t.Expect(obj.GetArtifact().Digest).To(Equal("sha256:a17037f96f541a47bdadcd12ab40b943c50a9ffd25dc8a30a5e9af52971fd94f"))
 			},
 			want: sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
@@ -1020,7 +1020,7 @@ func TestGitRepositoryReconciler_reconcileArtifact(t *testing.T) {
 			},
 			afterFunc: func(t *WithT, obj *sourcev1.GitRepository) {
 				t.Expect(obj.GetArtifact()).ToNot(BeNil())
-				t.Expect(obj.GetArtifact().Digest).To(Equal("sha256:29186e024dde5a414cfc990829c6b2e85f6b3bd2d950f50ca9f418f5d2261d79"))
+				t.Expect(obj.GetArtifact().Digest).To(Equal("sha256:ad9943d761b30e943e2a770ea9083a40fc03f09846efd61f6c442cc48fefad11"))
 			},
 			want: sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
@@ -1036,7 +1036,7 @@ func TestGitRepositoryReconciler_reconcileArtifact(t *testing.T) {
 			},
 			afterFunc: func(t *WithT, obj *sourcev1.GitRepository) {
 				t.Expect(obj.GetArtifact()).ToNot(BeNil())
-				t.Expect(obj.GetArtifact().Digest).To(Equal("sha256:60a3bf69f337cb5ec9ebd00abefbb6e7f2a2cf27158ecf438d52b2035b184172"))
+				t.Expect(obj.GetArtifact().Digest).To(Equal("sha256:34d9af1a2fcfaef3ee9487d67dc2d642bc7babdb9444a5f60d1f32df32e4de7d"))
 			},
 			want: sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
@@ -1075,7 +1075,7 @@ func TestGitRepositoryReconciler_reconcileArtifact(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
 
-			resetChmod(tt.dir, 0o755, 0o644)
+			resetChmod(tt.dir, 0o750, 0o600)
 
 			r := &GitRepositoryReconciler{
 				EventRecorder: record.NewFakeRecorder(32),
