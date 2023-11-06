@@ -456,7 +456,7 @@ func TestChartRepository_StrategicallyLoadIndex(t *testing.T) {
 		g := NewWithT(t)
 
 		i := filepath.Join(t.TempDir(), "index.yaml")
-		g.Expect(os.WriteFile(i, []byte(`apiVersion: v1`), 0o644)).To(Succeed())
+		g.Expect(os.WriteFile(i, []byte(`apiVersion: v1`), 0o600)).To(Succeed())
 
 		r := newChartRepository()
 		r.Path = i
@@ -498,7 +498,7 @@ func TestChartRepository_LoadFromPath(t *testing.T) {
 		g := NewWithT(t)
 
 		i := filepath.Join(t.TempDir(), "index.yaml")
-		g.Expect(os.WriteFile(i, []byte(`apiVersion: v1`), 0o644)).To(Succeed())
+		g.Expect(os.WriteFile(i, []byte(`apiVersion: v1`), 0o600)).To(Succeed())
 
 		r := newChartRepository()
 		r.Path = i
@@ -532,7 +532,7 @@ func TestChartRepository_Digest(t *testing.T) {
 		g := NewWithT(t)
 
 		p := filepath.Join(t.TempDir(), "index.yaml")
-		g.Expect(repo.NewIndexFile().WriteFile(p, 0o644)).To(Succeed())
+		g.Expect(repo.NewIndexFile().WriteFile(p, 0o600)).To(Succeed())
 
 		r := newChartRepository()
 		r.Path = p
@@ -563,7 +563,7 @@ func TestChartRepository_Digest(t *testing.T) {
 		expect := digest.Digest("sha256:fake")
 
 		i := filepath.Join(t.TempDir(), "index.yaml")
-		g.Expect(os.WriteFile(i, []byte(`apiVersion: v1`), 0o644)).To(Succeed())
+		g.Expect(os.WriteFile(i, []byte(`apiVersion: v1`), 0o600)).To(Succeed())
 
 		r := newChartRepository()
 		r.Path = i
@@ -589,7 +589,7 @@ func TestChartRepository_HasFile(t *testing.T) {
 	g.Expect(r.HasFile()).To(BeFalse())
 
 	i := filepath.Join(t.TempDir(), "index.yaml")
-	g.Expect(os.WriteFile(i, []byte(`apiVersion: v1`), 0o644)).To(Succeed())
+	g.Expect(os.WriteFile(i, []byte(`apiVersion: v1`), 0o600)).To(Succeed())
 	r.Path = i
 	g.Expect(r.HasFile()).To(BeTrue())
 }

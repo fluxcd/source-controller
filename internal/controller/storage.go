@@ -49,11 +49,11 @@ const GarbageCountLimit = 1000
 
 const (
 	// defaultFileMode is the permission mode applied to files inside an artifact archive.
-	defaultFileMode int64 = 0o644
+	defaultFileMode int64 = 0o600
 	// defaultDirMode is the permission mode applied to all directories inside an artifact archive.
-	defaultDirMode int64 = 0o755
+	defaultDirMode int64 = 0o750
 	// defaultExeFileMode is the permission mode applied to executable files inside an artifact archive.
-	defaultExeFileMode int64 = 0o744
+	defaultExeFileMode int64 = 0o700
 )
 
 // Storage manages artifacts

@@ -1810,7 +1810,7 @@ func TestOCIRepository_reconcileArtifact(t *testing.T) {
 				"latest.tar.gz",
 			},
 			afterFunc: func(g *WithT, obj *ociv1.OCIRepository) {
-				g.Expect(obj.Status.Artifact.Digest).To(Equal("sha256:de37cb640bfe6c789f2b131416d259747d5757f7fe5e1d9d48f32d8c30af5934"))
+				g.Expect(obj.Status.Artifact.Digest).To(Equal("sha256:6a5bd135a816ec0ad246c41cfdd87629e40ef6520001aeb2d0118a703abe9e7a"))
 			},
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(sourcev1.ArtifactInStorageCondition, meta.SucceededReason, "stored artifact for digest"),
@@ -1828,7 +1828,7 @@ func TestOCIRepository_reconcileArtifact(t *testing.T) {
 				"latest.tar.gz",
 			},
 			afterFunc: func(g *WithT, obj *ociv1.OCIRepository) {
-				g.Expect(obj.Status.Artifact.Digest).To(Equal("sha256:05aada03e3e3e96f5f85a8f31548d833974ce862be14942fb3313eef2df861ec"))
+				g.Expect(obj.Status.Artifact.Digest).To(Equal("sha256:9102e9c8626e48821a91a4963436f1673cd85f8fb3deb843c992f85b995c38ea"))
 			},
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(sourcev1.ArtifactInStorageCondition, meta.SucceededReason, "stored artifact for digest"),
@@ -2019,10 +2019,10 @@ func TestOCIRepository_reconcileArtifact(t *testing.T) {
 				tt.afterFunc(g, obj)
 			}
 
-			for _, path := range tt.assertPaths {
+			for _, p := range tt.assertPaths {
 				localPath := testStorage.LocalPath(*obj.GetArtifact())
-				path = filepath.Join(filepath.Dir(localPath), path)
-				_, err := os.Lstat(path)
+				p = filepath.Join(filepath.Dir(localPath), p)
+				_, err := os.Lstat(p)
 				g.Expect(err).ToNot(HaveOccurred())
 			}
 		})
