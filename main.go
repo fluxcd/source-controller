@@ -36,6 +36,7 @@ import (
 	ctrlcache "sigs.k8s.io/controller-runtime/pkg/cache"
 	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 	ctrlcfg "sigs.k8s.io/controller-runtime/pkg/config"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	"github.com/fluxcd/pkg/git"
 	"github.com/fluxcd/pkg/runtime/client"
@@ -177,7 +178,6 @@ func main() {
 	mgr := mustSetupManager(metricsAddr, healthAddr, concurrent, watchOptions, clientOptions, leaderElectionOptions)
 
 	probes.SetupChecks(mgr, setupLog)
-	pprof.SetupHandlers(mgr, setupLog)
 
 	metrics := helper.NewMetrics(mgr, metrics.MustMakeRecorder(), v1.SourceFinalizer)
 	cacheRecorder := cache.MustMakeMetrics()
@@ -344,9 +344,8 @@ func mustSetupManager(metricsAddr, healthAddr string, maxConcurrent int,
 	}
 
 	restConfig := client.GetConfigOrDie(clientOpts)
-	mgr, err := ctrl.NewManager(restConfig, ctrl.Options{
+	mgrConfig := ctrl.Options{
 		Scheme:                        scheme,
-		MetricsBindAddress:            metricsAddr,
 		HealthProbeBindAddress:        healthAddr,
 		LeaderElection:                leaderOpts.Enable,
 		LeaderElectionReleaseOnCancel: leaderOpts.ReleaseOnCancel,
@@ -368,13 +367,24 @@ func mustSetupManager(metricsAddr, healthAddr string, maxConcurrent int,
 				&v1beta2.Bucket{}:         {Label: watchSelector},
 				&v1beta2.OCIRepository{}:  {Label: watchSelector},
 			},
-			Namespaces: []string{watchNamespace},
+		},
+		Metrics: metricsserver.Options{
+			BindAddress:   metricsAddr,
+			ExtraHandlers: pprof.GetHandlers(),
 		},
 		Controller: ctrlcfg.Controller{
 			RecoverPanic:            ptr.To(true),
 			MaxConcurrentReconciles: maxConcurrent,
 		},
-	})
+	}
+
+	if watchNamespace != "" {
+		mgrConfig.Cache.DefaultNamespaces = map[string]ctrlcache.Config{
+			watchNamespace: ctrlcache.Config{},
+		}
+	}
+
+	mgr, err := ctrl.NewManager(restConfig, mgrConfig)
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
 		os.Exit(1)
