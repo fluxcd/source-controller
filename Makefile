@@ -119,7 +119,7 @@ api-docs: gen-crd-api-reference-docs  ## Generate API reference documentation
 
 tidy:  ## Run go mod tidy
 	cd api; rm -f go.sum; go mod tidy -compat=1.20
-	rm -f go.sum; go mod tidy -compat=1.20
+	rm -f go.sum; go mod tidy -compat=1.21
 
 fmt:  ## Run go fmt against code
 	go fmt ./...
