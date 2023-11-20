@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 	cryptotls "crypto/tls"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -72,6 +73,10 @@ import (
 	"github.com/fluxcd/source-controller/internal/reconcile/summarize"
 	"github.com/fluxcd/source-controller/internal/tls"
 	"github.com/fluxcd/source-controller/internal/util"
+
+	_ "github.com/notaryproject/notation-core-go/signature/cose"
+	_ "github.com/notaryproject/notation-core-go/signature/jws"
+	"github.com/notaryproject/notation-go/verifier/trustpolicy"
 )
 
 // ociRepositoryReadyCondition contains the information required to summarize a
@@ -373,7 +378,7 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 	opts := makeRemoteOptions(ctx, transport, keychain, auth)
 
 	// Determine which artifact revision to pull
-	ref, err := r.getArtifactRef(obj, opts)
+	ref, err := r.getArtifactRef(obj, opts.options)
 	if err != nil {
 		if _, ok := err.(invalidOCIURLError); ok {
 			e := serror.NewStalling(
@@ -392,7 +397,7 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 
 	// Get the upstream revision from the artifact digest
 	// TODO: getRevision resolves the digest, which may change before image is fetched, so it should probaly update ref
-	revision, err := r.getRevision(ref, opts)
+	revision, err := r.getRevision(ref, opts.options)
 	if err != nil {
 		e := serror.NewGeneric(
 			fmt.Errorf("failed to determine artifact digest: %w", err),
@@ -430,7 +435,7 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 		conditions.GetObservedGeneration(obj, sourcev1.SourceVerifiedCondition) != obj.Generation ||
 		conditions.IsFalse(obj, sourcev1.SourceVerifiedCondition) {
 
-		err := r.verifySignature(ctx, obj, ref, opts...)
+		err := r.verifySignature(ctx, obj, ref, opts.keychain, opts.options...)
 		if err != nil {
 			provider := obj.Spec.Verify.Provider
 			if obj.Spec.Verify.SecretRef == nil {
@@ -455,7 +460,7 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 	}
 
 	// Pull artifact from the remote container registry
-	img, err := remote.Image(ref, opts...)
+	img, err := remote.Image(ref, opts.options...)
 	if err != nil {
 		e := serror.NewGeneric(
 			fmt.Errorf("failed to pull artifact from '%s': %w", obj.Spec.URL, err),
@@ -611,7 +616,7 @@ func (r *OCIRepositoryReconciler) digestFromRevision(revision string) string {
 // verifySignature verifies the authenticity of the given image reference URL.
 // First, it tries to use a key if a Secret with a valid public key is provided.
 // If not, it falls back to a keyless approach for verification.
-func (r *OCIRepositoryReconciler) verifySignature(ctx context.Context, obj *ociv1.OCIRepository, ref name.Reference, opt ...remote.Option) error {
+func (r *OCIRepositoryReconciler) verifySignature(ctx context.Context, obj *ociv1.OCIRepository, ref name.Reference, auth authn.Keychain, opt ...remote.Option) error {
 	ctxTimeout, cancel := context.WithTimeout(ctx, obj.Spec.Timeout.Duration)
 	defer cancel()
 
@@ -689,6 +694,63 @@ func (r *OCIRepositoryReconciler) verifySignature(ctx context.Context, obj *ociv
 		}
 
 		return fmt.Errorf("no matching signatures were found for '%s'", ref)
+	case "notation":
+		// get the public keys from the given secret
+		if secretRef := obj.Spec.Verify.SecretRef; secretRef != nil {
+			certSecretName := types.NamespacedName{
+				Namespace: obj.Namespace,
+				Name:      secretRef.Name,
+			}
+
+			var pubSecret corev1.Secret
+			if err := r.Get(ctxTimeout, certSecretName, &pubSecret); err != nil {
+				return err
+			}
+
+			var doc trustpolicy.Document
+
+			signatureVerified := false
+			for k, data := range pubSecret.Data {
+				if strings.HasSuffix(k, ".json") {
+					if err := json.Unmarshal(data, &doc); err != nil {
+						return err
+					}
+				}
+			}
+
+			defaultNotaryOciOpts := []soci.NotationOptions{
+				soci.WithTrustStore(&doc),
+				soci.WithNotaryRemoteOptions(opt...),
+			}
+
+			for k, data := range pubSecret.Data {
+				// search for public keys in the secret
+				if strings.HasSuffix(k, ".pem") {
+
+					verifier, err := soci.NewNotaryVerifier(append(defaultNotaryOciOpts, soci.WithNotaryPublicKey(data), soci.WithNotaryKeychain(auth))...)
+					if err != nil {
+						return err
+					}
+
+					signatures, err := verifier.Verify(ctxTimeout, ref)
+					if err != nil {
+						continue
+					}
+
+					if signatures {
+						signatureVerified = true
+						break
+					}
+				}
+			}
+
+			if !signatureVerified {
+				return fmt.Errorf("no matching signatures were found for '%s'", ref)
+			}
+
+			return nil
+		}
+		return nil
 	}
 
 	return nil
@@ -1171,16 +1233,24 @@ func makeRemoteOptions(ctxTimeout context.Context, transport http.RoundTripper,
 		authOption = remote.WithAuth(auth)
 	}
 	return remoteOptions{
-		remote.WithContext(ctxTimeout),
-		remote.WithUserAgent(oci.UserAgent),
-		remote.WithTransport(transport),
-		authOption,
+		options: []remote.Option{
+			remote.WithContext(ctxTimeout),
+			remote.WithUserAgent(oci.UserAgent),
+			remote.WithTransport(transport),
+			authOption,
+		},
+		keychain: keychain,
 	}
 }
 
 // remoteOptions contains the options to interact with a remote registry.
 // It can be used to pass options to go-containerregistry based libraries.
-type remoteOptions []remote.Option
+// remoteOptions contains the options to interact with a remote registry.
+// It can be used to pass options to go-containerregistry based libraries.
+type remoteOptions struct {
+	options  []remote.Option
+	keychain authn.Keychain
+}
 
 // ociContentConfigChanged evaluates the current spec with the observations
 // of the artifact in the status to determine if artifact content configuration

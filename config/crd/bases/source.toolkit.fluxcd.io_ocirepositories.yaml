@@ -196,6 +196,7 @@ spec:
                       OCI Artifact.
                     enum:
                     - cosign
+                    - notation
                     type: string
                   secretRef:
                     description: SecretRef specifies the Kubernetes Secret containing
