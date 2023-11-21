@@ -147,13 +147,11 @@ valid [DNS subdomain name](https://kubernetes.io/docs/concepts/overview/working-
 A HelmRepository also needs a
 [`.spec` section](https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md#spec-and-status).
 
-
 ### Type
 
 `.spec.type` is an optional field that specifies the Helm repository type. 
 
 Possible values are `default` for a Helm HTTP/S repository, or `oci` for an OCI Helm repository.
-
 
 ### Provider
 
@@ -347,6 +345,15 @@ the needed permission is instead `storage.objects.list` which can be bound as pa
 of the Container Registry Service Agent role. Take a look at [this guide](https://cloud.google.com/kubernetes-engine/docs/how-to/workload-identity)
 for more information about setting up GKE Workload Identity.
 
+### Insecure
+
+`.spec.insecure` is an optional field to allow connecting to an insecure (HTTP)
+container registry server, if set to `true`. The default value is `false`,
+denying insecure non-TLS connections when fetching Helm chart OCI artifacts.
+
+**Note**: The insecure field is supported only for Helm OCI repositories.
+The `spec.type` field must be set to `oci`.
+
 ### Interval
 
 **Note:** This field is ineffectual for [OCI Helm
@@ -422,8 +429,8 @@ metadata:
   name: example-user
   namespace: default
 stringData:
-  username: example
-  password: 123456
+  username: "user-123456"
+  password: "pass-123456"
 ```
 
 OCI Helm repository example:
@@ -448,8 +455,8 @@ metadata:
   name: oci-creds
   namespace: default
 stringData:
-  username: example
-  password: 123456
+  username: "user-123456"
+  password: "pass-123456"
 ```
 
 For OCI Helm repositories, Kubernetes secrets of type [kubernetes.io/dockerconfigjson](https://kubernetes.io/docs/concepts/configuration/secret/#secret-types) are also supported.
@@ -465,7 +472,7 @@ flux create secret oci ghcr-auth \
 
 **Warning:** Support for specifying TLS authentication data using this API has been
 deprecated. Please use [`.spec.certSecretRef`](#cert-secret-reference) instead.
-If the controller uses the secret specfied by this field to configure TLS, then
+If the controller uses the secret specified by this field to configure TLS, then
 a deprecation warning will be logged.
 
 ### Cert secret reference

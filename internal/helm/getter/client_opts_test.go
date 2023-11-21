@@ -68,7 +68,7 @@ func TestGetClientOpts(t *testing.T) {
 			},
 			afterFunc: func(t *WithT, hcOpts *ClientOpts) {
 				t.Expect(hcOpts.TlsConfig).ToNot(BeNil())
-				t.Expect(len(hcOpts.GetterOpts)).To(Equal(4))
+				t.Expect(len(hcOpts.GetterOpts)).To(Equal(5))
 			},
 		},
 		{
@@ -85,7 +85,7 @@ func TestGetClientOpts(t *testing.T) {
 			},
 			afterFunc: func(t *WithT, hcOpts *ClientOpts) {
 				t.Expect(hcOpts.TlsConfig).ToNot(BeNil())
-				t.Expect(len(hcOpts.GetterOpts)).To(Equal(4))
+				t.Expect(len(hcOpts.GetterOpts)).To(Equal(5))
 			},
 			err: ErrDeprecatedTLSConfig,
 		},

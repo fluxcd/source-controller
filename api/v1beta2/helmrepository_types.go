@@ -23,6 +23,7 @@ import (
 
 	"github.com/fluxcd/pkg/apis/acl"
 	"github.com/fluxcd/pkg/apis/meta"
+
 	apiv1 "github.com/fluxcd/source-controller/api/v1"
 )
 
@@ -91,6 +92,11 @@ type HelmRepositorySpec struct {
 	// +kubebuilder:validation:Pattern="^([0-9]+(\\.[0-9]+)?(ms|s|m|h))+$"
 	// +optional
 	Interval metav1.Duration `json:"interval,omitempty"`
+
+	// Insecure allows connecting to a non-TLS HTTP container registry.
+	// This field is only taken into account if the .spec.type field is set to 'oci'.
+	// +optional
+	Insecure bool `json:"insecure,omitempty"`
 
 	// Timeout is used for the index fetch operation for an HTTPS helm repository,
 	// and for remote OCI Repository operations like pulling for an OCI helm

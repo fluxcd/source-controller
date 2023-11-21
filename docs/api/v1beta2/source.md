@@ -874,6 +874,19 @@ efficient use of resources.</p>
 </tr>
 <tr>
 <td>
+<code>insecure</code><br>
+<em>
+bool
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Insecure allows connecting to a non-TLS HTTP container registry.
+This field is only taken into account if the .spec.type field is set to &lsquo;oci&rsquo;.</p>
+</td>
+</tr>
+<tr>
+<td>
 <code>timeout</code><br>
 <em>
 <a href="https://pkg.go.dev/k8s.io/apimachinery/pkg/apis/meta/v1#Duration">
@@ -2589,6 +2602,19 @@ Kubernetes meta/v1.Duration
 <p>Interval at which the HelmRepository URL is checked for updates.
 This interval is approximate and may be subject to jitter to ensure
 efficient use of resources.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>insecure</code><br>
+<em>
+bool
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Insecure allows connecting to a non-TLS HTTP container registry.
+This field is only taken into account if the .spec.type field is set to &lsquo;oci&rsquo;.</p>
 </td>
 </tr>
 <tr>
