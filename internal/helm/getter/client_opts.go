@@ -162,10 +162,10 @@ func GetClientOpts(ctx context.Context, c client.Client, obj *helmv1.HelmReposit
 		}
 		if loginOpt != nil {
 			hrOpts.RegLoginOpts = []helmreg.LoginOption{loginOpt}
-		}
-		tlsLoginOpt := registry.TLSLoginOption(certFile, keyFile, caFile)
-		if tlsLoginOpt != nil {
-			hrOpts.RegLoginOpts = append(hrOpts.RegLoginOpts, tlsLoginOpt)
+			tlsLoginOpt := registry.TLSLoginOption(certFile, keyFile, caFile)
+			if tlsLoginOpt != nil {
+				hrOpts.RegLoginOpts = append(hrOpts.RegLoginOpts, tlsLoginOpt)
+			}
 		}
 	}
 	if deprecatedTLSConfig {
