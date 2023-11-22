@@ -2376,22 +2376,31 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_authStrategy(t *testing.T) {
 			},
 		},
 		{
-			name: "HTTPS With CA cert",
+			name: "HTTPS With CA cert only",
+			want: sreconcile.ResultSuccess,
+			registryOpts: registryOptions{
+				withTLS: true,
+			},
+			certSecret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "certs-secretref",
+				},
+				Type: corev1.SecretTypeOpaque,
+				Data: map[string][]byte{
+					"ca.crt": tlsCA,
+				},
+			},
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: pulled 'helmchart' chart with version '0.1.0'"),
+				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: pulled 'helmchart' chart with version '0.1.0'"),
+			},
+		},
+		{
+			name: "HTTPS With CA cert and client cert auth",
 			want: sreconcile.ResultSuccess,
 			registryOpts: registryOptions{
 				withTLS:            true,
 				withClientCertAuth: true,
-			},
-			secretOpts: secretOptions{
-				username: testRegistryUsername,
-				password: testRegistryPassword,
-			},
-			secret: &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "auth-secretref",
-				},
-				Type: corev1.SecretTypeDockerConfigJson,
-				Data: map[string][]byte{},
 			},
 			certSecret: &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
@@ -2526,8 +2535,12 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_authStrategy(t *testing.T) {
 			sp := patch.NewSerialPatcher(obj, r.Client)
 
 			got, err := r.reconcileSource(ctx, sp, obj, &b)
-			g.Expect(err != nil).To(Equal(tt.wantErr))
-			g.Expect(got).To(Equal(tt.want))
+			if tt.wantErr {
+				g.Expect(err).To(HaveOccurred())
+			} else {
+				g.Expect(err).ToNot(HaveOccurred())
+				g.Expect(got).To(Equal(tt.want))
+			}
 			g.Expect(obj.Status.Conditions).To(conditions.MatchConditions(tt.assertConditions))
 		})
 	}
