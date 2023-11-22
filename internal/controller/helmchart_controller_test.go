@@ -197,7 +197,7 @@ func TestHelmChartReconciler_Reconcile(t *testing.T) {
 		{
 			name: "Stalling on invalid repository URL",
 			beforeFunc: func(repository *helmv1.HelmRepository) {
-				repository.Spec.URL = "://unsupported" // Invalid URL
+				repository.Spec.URL = "https://unsupported/foo://" // Invalid URL
 			},
 			assertFunc: func(g *WithT, obj *helmv1.HelmChart, _ *helmv1.HelmRepository) {
 				key := client.ObjectKey{Name: obj.Name, Namespace: obj.Namespace}
@@ -293,6 +293,7 @@ func TestHelmChartReconciler_Reconcile(t *testing.T) {
 			}
 
 			g.Expect(testEnv.CreateAndWait(ctx, &repository)).To(Succeed())
+			defer func() { g.Expect(testEnv.Delete(ctx, &repository)).To(Succeed()) }()
 
 			obj := helmv1.HelmChart{
 				ObjectMeta: metav1.ObjectMeta{

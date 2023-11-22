@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"net/url"
@@ -138,6 +139,12 @@ type HelmChartReconciler struct {
 
 	patchOptions []patch.Option
 }
+
+// RegistryClientGeneratorFunc is a function that returns a registry client
+// and an optional file name.
+// The file is used to store the registry client credentials.
+// The caller is responsible for deleting the file.
+type RegistryClientGeneratorFunc func(tlsConfig *tls.Config, isLogin bool) (*helmreg.Client, string, error)
 
 func (r *HelmChartReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
 	return r.SetupWithManagerAndOptions(ctx, mgr, HelmChartReconcilerOptions{})
@@ -507,7 +514,7 @@ func (r *HelmChartReconciler) reconcileSource(ctx context.Context, sp *patch.Ser
 func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *helmv1.HelmChart,
 	repo *helmv1.HelmRepository, b *chart.Build) (sreconcile.Result, error) {
 	// Used to login with the repository declared provider
-	ctxTimeout, cancel := context.WithTimeout(ctx, repo.Spec.Timeout.Duration)
+	ctxTimeout, cancel := context.WithTimeout(ctx, repo.GetTimeout())
 	defer cancel()
 
 	normalizedURL, err := repository.NormalizeURL(repo.Spec.URL)
@@ -992,7 +999,7 @@ func (r *HelmChartReconciler) namespacedChartRepositoryCallback(ctx context.Cont
 		}
 
 		// Used to login with the repository declared provider
-		ctxTimeout, cancel := context.WithTimeout(ctx, obj.Spec.Timeout.Duration)
+		ctxTimeout, cancel := context.WithTimeout(ctx, obj.GetTimeout())
 		defer cancel()
 
 		clientOpts, certsTmpDir, err := getter.GetClientOpts(ctxTimeout, r.Client, obj, normalizedURL)

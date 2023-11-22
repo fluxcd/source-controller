@@ -203,19 +203,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := (&controller.HelmRepositoryOCIReconciler{
-		Client:                  mgr.GetClient(),
-		EventRecorder:           eventRecorder,
-		Metrics:                 metrics,
-		ControllerName:          controllerName,
-		RegistryClientGenerator: registry.ClientGenerator,
-	}).SetupWithManagerAndOptions(mgr, controller.HelmRepositoryReconcilerOptions{
-		RateLimiter: helper.GetRateLimiter(rateLimiterOptions),
-	}); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", v1beta2.HelmRepositoryKind, "type", "OCI")
-		os.Exit(1)
-	}
-
 	if err := (&controller.HelmRepositoryReconciler{
 		Client:         mgr.GetClient(),
 		EventRecorder:  eventRecorder,

@@ -40,6 +40,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	fakeclient "sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	kstatus "github.com/fluxcd/cli-utils/pkg/kstatus/status"
 	"github.com/fluxcd/pkg/apis/meta"
@@ -54,6 +55,7 @@ import (
 	intdigest "github.com/fluxcd/source-controller/internal/digest"
 	"github.com/fluxcd/source-controller/internal/helm/getter"
 	"github.com/fluxcd/source-controller/internal/helm/repository"
+	intpredicates "github.com/fluxcd/source-controller/internal/predicates"
 	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
 	"github.com/fluxcd/source-controller/internal/reconcile/summarize"
 	stls "github.com/fluxcd/source-controller/internal/tls"
@@ -1522,49 +1524,21 @@ func TestHelmRepositoryReconciler_ReconcileTypeUpdatePredicateFilter(t *testing.
 	g.Expect(res.Status).To(Equal(kstatus.CurrentStatus))
 
 	// Switch to a OCI helm repository type
-	secret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			GenerateName: "helmrepository-reconcile-",
-			Namespace:    "default",
-		},
-		Data: map[string][]byte{
-			"username": []byte(testRegistryUsername),
-			"password": []byte(testRegistryPassword),
-		},
-	}
-	g.Expect(testEnv.CreateAndWait(ctx, secret)).To(Succeed())
-
 	obj.Spec.Type = helmv1.HelmRepositoryTypeOCI
 	obj.Spec.URL = fmt.Sprintf("oci://%s", testRegistryServer.registryHost)
-	obj.Spec.SecretRef = &meta.LocalObjectReference{
-		Name: secret.Name,
-	}
 
 	oldGen := obj.GetGeneration()
 	g.Expect(testEnv.Update(ctx, obj)).To(Succeed())
 	newGen := oldGen + 1
 
-	// Wait for HelmRepository to be Ready with new generation.
+	// Wait for HelmRepository to become static for new generation.
 	g.Eventually(func() bool {
 		if err := testEnv.Get(ctx, key, obj); err != nil {
 			return false
 		}
-		if !conditions.IsReady(obj) && obj.Status.Artifact != nil {
-			return false
-		}
-		readyCondition := conditions.Get(obj, meta.ReadyCondition)
-		if readyCondition == nil {
-			return false
-		}
-		return readyCondition.Status == metav1.ConditionTrue &&
-			newGen == readyCondition.ObservedGeneration &&
-			newGen == obj.Status.ObservedGeneration
+		return newGen == obj.Generation &&
+			!intpredicates.HelmRepositoryOCIRequireMigration(obj)
 	}, timeout).Should(BeTrue())
-
-	// Check if the object status is valid.
-	condns = &conditionscheck.Conditions{NegativePolarity: helmRepositoryOCINegativeConditions}
-	checker = conditionscheck.NewChecker(testEnv.Client, condns)
-	checker.WithT(g).CheckErr(ctx, obj)
 
 	g.Expect(testEnv.Delete(ctx, obj)).To(Succeed())
 
@@ -1729,4 +1703,101 @@ func TestHelmRepositoryReconciler_InMemoryCaching(t *testing.T) {
 	g.Expect(err).ToNot(HaveOccurred())
 	_, cacheHit := testCache.Get(helmRepo.GetArtifact().Path)
 	g.Expect(cacheHit).To(BeTrue())
+
+	g.Expect(testEnv.Delete(ctx, helmRepo)).To(Succeed())
+
+	// Wait for HelmRepository to be deleted
+	g.Eventually(func() bool {
+		if err := testEnv.Get(ctx, key, helmRepo); err != nil {
+			return apierrors.IsNotFound(err)
+		}
+		return false
+	}, timeout).Should(BeTrue())
+}
+
+func TestHelmRepositoryReconciler_ociMigration(t *testing.T) {
+	g := NewWithT(t)
+
+	testns, err := testEnv.CreateNamespace(ctx, "hr-oci-migration-test")
+	g.Expect(err).ToNot(HaveOccurred())
+
+	t.Cleanup(func() {
+		g.Expect(testEnv.Cleanup(ctx, testns)).ToNot(HaveOccurred())
+	})
+
+	hr := &helmv1.HelmRepository{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      fmt.Sprintf("hr-%s", randStringRunes(5)),
+			Namespace: testns.Name,
+		},
+	}
+	hrKey := client.ObjectKeyFromObject(hr)
+
+	// Migrates newly created object with finalizer.
+
+	hr.ObjectMeta.Finalizers = append(hr.ObjectMeta.Finalizers, "foo.bar", sourcev1.SourceFinalizer)
+	hr.Spec = helmv1.HelmRepositorySpec{
+		Type:     helmv1.HelmRepositoryTypeOCI,
+		URL:      "oci://foo/bar",
+		Interval: metav1.Duration{Duration: interval},
+	}
+	g.Expect(testEnv.Create(ctx, hr)).ToNot(HaveOccurred())
+
+	g.Eventually(func() bool {
+		_ = testEnv.Get(ctx, hrKey, hr)
+		return !intpredicates.HelmRepositoryOCIRequireMigration(hr)
+	}, timeout, time.Second).Should(BeTrue())
+
+	// Migrates updated object with finalizer.
+
+	patchHelper, err := patch.NewHelper(hr, testEnv.Client)
+	g.Expect(err).ToNot(HaveOccurred())
+	hr.ObjectMeta.Finalizers = append(hr.ObjectMeta.Finalizers, sourcev1.SourceFinalizer)
+	hr.Spec.URL = "oci://foo/baz"
+	g.Expect(patchHelper.Patch(ctx, hr)).ToNot(HaveOccurred())
+
+	g.Eventually(func() bool {
+		_ = testEnv.Get(ctx, hrKey, hr)
+		return !intpredicates.HelmRepositoryOCIRequireMigration(hr)
+	}, timeout, time.Second).Should(BeTrue())
+
+	// Migrates deleted object with finalizer.
+
+	patchHelper, err = patch.NewHelper(hr, testEnv.Client)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Suspend the object to prevent finalizer from getting removed.
+	// Ensure only flux finalizer is set to allow the object to be garbage
+	// collected at the end.
+	// NOTE: Suspending and updating finalizers are done separately here as
+	// doing them in a single patch results in flaky test where the finalizer
+	// update doesn't gets registered with the kube-apiserver, resulting in
+	// timeout waiting for finalizer to appear on the object below.
+	hr.Spec.Suspend = true
+	g.Expect(patchHelper.Patch(ctx, hr)).ToNot(HaveOccurred())
+	g.Eventually(func() bool {
+		_ = k8sClient.Get(ctx, hrKey, hr)
+		return hr.Spec.Suspend == true
+	}, timeout).Should(BeTrue())
+
+	patchHelper, err = patch.NewHelper(hr, testEnv.Client)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Add finalizer and verify that finalizer exists on the object using a live
+	// client.
+	hr.ObjectMeta.Finalizers = []string{sourcev1.SourceFinalizer}
+	g.Expect(patchHelper.Patch(ctx, hr)).ToNot(HaveOccurred())
+	g.Eventually(func() bool {
+		_ = k8sClient.Get(ctx, hrKey, hr)
+		return controllerutil.ContainsFinalizer(hr, sourcev1.SourceFinalizer)
+	}, timeout).Should(BeTrue())
+
+	// Delete the object and verify.
+	g.Expect(testEnv.Delete(ctx, hr)).ToNot(HaveOccurred())
+	g.Eventually(func() bool {
+		if err := testEnv.Get(ctx, hrKey, hr); err != nil {
+			return apierrors.IsNotFound(err)
+		}
+		return false
+	}, timeout).Should(BeTrue())
 }
