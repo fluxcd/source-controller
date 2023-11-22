@@ -74,7 +74,6 @@ func GetClientOpts(ctx context.Context, c client.Client, obj *helmv1.HelmReposit
 			helmgetter.WithURL(url),
 			helmgetter.WithTimeout(obj.GetTimeout()),
 			helmgetter.WithPassCredentialsAll(obj.Spec.PassCredentials),
-			helmgetter.WithPlainHTTP(obj.Spec.Insecure),
 		},
 	}
 	ociRepo := obj.Spec.Type == helmv1.HelmRepositoryTypeOCI

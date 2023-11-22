@@ -144,7 +144,7 @@ type HelmChartReconciler struct {
 // and an optional file name.
 // The file is used to store the registry client credentials.
 // The caller is responsible for deleting the file.
-type RegistryClientGeneratorFunc func(tlsConfig *tls.Config, isLogin bool) (*helmreg.Client, string, error)
+type RegistryClientGeneratorFunc func(tlsConfig *tls.Config, isLogin, insecure bool) (*helmreg.Client, string, error)
 
 func (r *HelmChartReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
 	return r.SetupWithManagerAndOptions(ctx, mgr, HelmChartReconcilerOptions{})
@@ -555,7 +555,7 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 		// this is needed because otherwise the credentials are stored in ~/.docker/config.json.
 		// TODO@souleb: remove this once the registry move to Oras v2
 		// or rework to enable reusing credentials to avoid the unneccessary handshake operations
-		registryClient, credentialsFile, err := r.RegistryClientGenerator(clientOpts.TlsConfig, clientOpts.MustLoginToRegistry())
+		registryClient, credentialsFile, err := r.RegistryClientGenerator(clientOpts.TlsConfig, clientOpts.MustLoginToRegistry(), repo.Spec.Insecure)
 		if err != nil {
 			e := serror.NewGeneric(
 				fmt.Errorf("failed to construct Helm client: %w", err),
@@ -593,11 +593,17 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 
 		// Tell the chart repository to use the OCI client with the configured getter
 		getterOpts = append(getterOpts, helmgetter.WithRegistryClient(registryClient))
-		ociChartRepo, err := repository.NewOCIChartRepository(normalizedURL,
+		chartRepoOpts := []repository.OCIChartRepositoryOption{
 			repository.WithOCIGetter(r.Getters),
 			repository.WithOCIGetterOptions(getterOpts),
 			repository.WithOCIRegistryClient(registryClient),
-			repository.WithVerifiers(verifiers))
+			repository.WithVerifiers(verifiers),
+		}
+		if repo.Spec.Insecure {
+			chartRepoOpts = append(chartRepoOpts, repository.WithInsecureHTTP())
+		}
+
+		ociChartRepo, err := repository.NewOCIChartRepository(normalizedURL, chartRepoOpts...)
 		if err != nil {
 			return chartRepoConfigErrorReturn(err, obj)
 		}
@@ -1010,7 +1016,7 @@ func (r *HelmChartReconciler) namespacedChartRepositoryCallback(ctx context.Cont
 
 		var chartRepo repository.Downloader
 		if helmreg.IsOCI(normalizedURL) {
-			registryClient, credentialsFile, err := r.RegistryClientGenerator(clientOpts.TlsConfig, clientOpts.MustLoginToRegistry())
+			registryClient, credentialsFile, err := r.RegistryClientGenerator(clientOpts.TlsConfig, clientOpts.MustLoginToRegistry(), obj.Spec.Insecure)
 			if err != nil {
 				return nil, fmt.Errorf("failed to create registry client: %w", err)
 			}
