@@ -313,6 +313,11 @@ spec:
                 required:
                 - name
                 type: object
+              insecure:
+                description: Insecure allows connecting to a non-TLS HTTP container
+                  registry. This field is only taken into account if the .spec.type
+                  field is set to 'oci'.
+                type: boolean
               interval:
                 description: Interval at which the HelmRepository URL is checked for
                   updates. This interval is approximate and may be subject to jitter
