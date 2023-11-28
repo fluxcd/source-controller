@@ -76,8 +76,8 @@ type OCIChartRepository struct {
 	// verifiers is a list of verifiers to use when verifying a chart.
 	verifiers []oci.Verifier
 
-	// insecureHTTP indicates that the chart is hosted on an insecure registry.
-	insecure bool
+	// insecureHTTP indicates that the chart is hosted on an insecure HTTP registry.
+	insecureHTTP bool
 }
 
 // OCIChartRepositoryOption is a function that can be passed to NewOCIChartRepository
@@ -94,7 +94,7 @@ func WithVerifiers(verifiers []oci.Verifier) OCIChartRepositoryOption {
 
 func WithInsecureHTTP() OCIChartRepositoryOption {
 	return func(r *OCIChartRepository) error {
-		r.insecure = true
+		r.insecureHTTP = true
 		return nil
 	}
 }
@@ -369,7 +369,7 @@ func (r *OCIChartRepository) VerifyChart(ctx context.Context, chart *repo.ChartV
 	}
 
 	var nameOpts []name.Option
-	if r.insecure {
+	if r.insecureHTTP {
 		nameOpts = append(nameOpts, name.Insecure)
 	}
 
