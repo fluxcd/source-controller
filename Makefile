@@ -61,9 +61,10 @@ ifeq ($(shell uname -s),Darwin)
 ENVTEST_ARCH=amd64
 endif
 
-all: build
+all: manager
 
-build: ## Build manager binary
+# Build manager binary
+manager: generate fmt vet
 	go build $(GO_STATIC_FLAGS) -o $(BUILD_DIR)/bin/manager main.go
 
 KUBEBUILDER_ASSETS?="$(shell $(ENVTEST) --arch=$(ENVTEST_ARCH) use -i $(ENVTEST_KUBERNETES_VERSION) --bin-dir=$(ENVTEST_ASSETS_DIR) -p path)"
