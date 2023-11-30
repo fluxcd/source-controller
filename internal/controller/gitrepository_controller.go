@@ -61,8 +61,8 @@ import (
 	"github.com/fluxcd/source-controller/internal/features"
 	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
 	"github.com/fluxcd/source-controller/internal/reconcile/summarize"
-	"github.com/fluxcd/source-controller/internal/util"
 	"github.com/fluxcd/source-controller/internal/tls"
+	"github.com/fluxcd/source-controller/internal/util"
 	gitclient "github.com/go-git/go-git/v5/plumbing/transport/client"
 )
 
@@ -214,8 +214,6 @@ func (h *GitClientHttpConfigurer) ConfigureGitClient(ctx context.Context, obj *s
 	}
 	// }
 }
-
-
 
 // configureHttpTransport sets up the HTTP transport configuration for the Git client.
 func (r *GitRepositoryReconciler) configureHttpTransport(ctx context.Context, obj *sourcev1.GitRepository) (*GitClientHttpConfigurer, error) {

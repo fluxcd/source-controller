@@ -30,5 +30,3 @@ func HttpTransportwithCustomCerts(tlsConfig *tls.Config, proxyStr *transport.Pro
 	}), nil
 
 }
-
-//

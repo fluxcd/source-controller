@@ -121,16 +121,39 @@ make deploy
 Create a `.vscode/launch.json` file:
 ```json
 {
-    "version": "0.2.0",
+"version": "0.2.0",
     "configurations": [
         {
-            "name": "Launch Package",
+            "name": "Debug Test Function",
+            "type": "go",
+            "request": "launch",
+            "mode": "test",
+            "program": "${workspaceFolder}/internal/controller/",
+            "env": {
+                "HTTPS_PROXY": "",
+                "HTTP_PROXY": "",
+                "KUBEBUILDER_ASSETS": "${workspaceFolder}/build/testbin/k8s/1.28.0-linux-amd64/",
+                "GIT_CONFIG_GLOBAL":"/dev/null",
+                "GIT_CONFIG_NOSYSTEM":"true",
+
+            },
+            "args": [
+                "-test.run", "^.*",
+                "-test.v"
+            ]
+        },
+        {
+            "name": "Debug",
             "type": "go",
             "request": "launch",
             "mode": "auto",
-            "program": "${workspaceFolder}/main.go"
+            "program": "${workspaceFolder}/main.go",
+            "args": [
+                "--storage-adv-addr=:0",
+                "--storage-path=/tmp/"
+              ]
         }
-    ]
+    ],
 }
 ```
 
