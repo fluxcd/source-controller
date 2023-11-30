@@ -87,6 +87,7 @@ echo "Setup Minio"
 kubectl create ns minio
 helm upgrade minio oci://registry-1.docker.io/bitnamicharts/minio --wait -i \
     --version "${MINIO_HELM_VER}" \
+    --timeout 10m0s \
     --namespace minio \
     --set auth.rootUser=myaccesskey \
     --set auth.rootPassword=mysecretkey \
