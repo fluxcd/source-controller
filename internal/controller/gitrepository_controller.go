@@ -155,7 +155,6 @@ func (r *GitRepositoryReconciler) SetupWithManager(mgr ctrl.Manager) error {
 type GitClientConfigurer interface {
 	ConfigureGitClient(ctx context.Context, obj *sourcev1.GitRepository)
 	IsValid() bool
-	backupHttpsTransport()
 }
 
 type GitClientHttpConfigurer struct {
@@ -184,9 +183,6 @@ func (r *GitRepositoryReconciler) isCertificateDataValid(sslCertificateData map[
 	return len(certBytes) > 0 && len(keyBytes) > 0
 }
 
-func (h *GitClientHttpConfigurer) backupHttpsTransport() {
-	h.DefaultTransport = gitclient.Protocols["https"]
-}
 
 func (h *GitClientHttpConfigurer) ConfigureGitClient(ctx context.Context, obj *sourcev1.GitRepository) {
 
@@ -201,7 +197,7 @@ func (h *GitClientHttpConfigurer) ConfigureGitClient(ctx context.Context, obj *s
 			fmt.Println("Error generating TLS config:", err)
 			return
 		}
-		h.backupHttpsTransport()
+
 
 		transportHttp, err := HttpTransportwithCustomCerts(tlsConfig, h.ProxyOpts, ctx)
 		if err != nil {

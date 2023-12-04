@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"net/http"
+	"net/url"
 
 	"github.com/go-git/go-git/v5/plumbing/transport"
 	httptransport "github.com/go-git/go-git/v5/plumbing/transport/http"
@@ -18,6 +19,17 @@ func HttpTransportwithCustomCerts(tlsConfig *tls.Config, proxyStr *transport.Pro
 	log := ctrl.LoggerFrom(ctx)
 	// var message string
 
+	var (
+		proxyUrl *url.URL
+		err      error
+	)
+	if proxyStr != nil {
+		proxyUrl, err = url.Parse(proxyStr.URL)
+		if err != nil {
+			log.Info("failed to parse proxy url: %w", err)
+		}
+	}
+
 	if tlsConfig == nil || len(tlsConfig.Certificates) == 0 {
 		log.Info("tlsConfig cannot be nil")
 		return nil, nil
@@ -25,6 +37,7 @@ func HttpTransportwithCustomCerts(tlsConfig *tls.Config, proxyStr *transport.Pro
 
 	return httptransport.NewClient(&http.Client{
 		Transport: &http.Transport{
+			Proxy:           http.ProxyURL(proxyUrl),
 			TLSClientConfig: tlsConfig,
 		},
 	}), nil
