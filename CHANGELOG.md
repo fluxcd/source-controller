@@ -2,6 +2,21 @@
 
 All notable changes to this project are documented in this file.
 
+## 1.2.1
+
+**Release date:** 2023-12-08
+
+This patch release ensures the controller is built with the latest Go `1.21.x`
+release, to mitigate multiple security vulnerabilities which were published
+shortly after the release of v1.2.0.
+
+In addition, a small number of dependencies have been updated to their latest
+version.
+
+Improvements:
+- Update dependencies
+  [#1309](https://github.com/fluxcd/source-controller/pull/1309)
+
 ## 1.2.0
 
 **Release date:** 2023-12-05
