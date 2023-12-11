@@ -2,6 +2,30 @@
 
 All notable changes to this project are documented in this file.
 
+## 1.2.2
+
+**Release date:** 2023-12-11
+
+This patch release addresses an issue with AWS ECR authentication introduced in
+v1.2.0.
+
+In addition, a variety of dependencies have been updated. Including an update
+of the container base image to Alpine v3.19.
+
+Fixes:
+- Address issue with authenticating towards AWS ECR
+  [#1318](https://github.com/fluxcd/source-controller/pull/1318)
+  [#1321](https://github.com/fluxcd/source-controller/pull/1318)
+
+Improvements:
+
+- Update dependencies
+  [#1314](https://github.com/fluxcd/source-controller/pull/1314)
+  [#1318](https://github.com/fluxcd/source-controller/pull/1318)
+  [#1321](https://github.com/fluxcd/source-controller/pull/1321)
+- build: update Alpine to 3.19
+  [#1316](https://github.com/fluxcd/source-controller/pull/1316)
+
 ## 1.2.1
 
 **Release date:** 2023-12-08
