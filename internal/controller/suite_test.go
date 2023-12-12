@@ -58,7 +58,6 @@ import (
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	sourcev1beta2 "github.com/fluxcd/source-controller/api/v1beta2"
 	"github.com/fluxcd/source-controller/internal/cache"
-	"github.com/fluxcd/source-controller/internal/helm/registry"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -128,11 +127,6 @@ type registryOptions struct {
 	withBasicAuth      bool
 	withTLS            bool
 	withClientCertAuth bool
-	// Allow disbaling DNS mocking since Helm OCI doesn't yet suppot
-	// insecure OCI registries, which means we need Docker's automatic
-	// connection downgrading if the registry is hosted on localhost.
-	// Once Helm OCI supports insecure registries, we can get rid of this.
-	disableDNSMocking bool
 }
 
 func setupRegistryServer(ctx context.Context, workspaceDir string, opts registryOptions) (*registryClientTestServer, error) {
@@ -159,27 +153,23 @@ func setupRegistryServer(ctx context.Context, workspaceDir string, opts registry
 		return nil, fmt.Errorf("failed to get free port: %s", err)
 	}
 
-	server.registryHost = fmt.Sprintf("localhost:%d", port)
-
 	// Change the registry host to a host which is not localhost and
 	// mock DNS to map example.com to 127.0.0.1.
 	// This is required because Docker enforces HTTP if the registry
 	// is hosted on localhost/127.0.0.1.
-	if !opts.disableDNSMocking {
-		server.registryHost = fmt.Sprintf("example.com:%d", port)
-		// Disable DNS server logging as it is extremely chatty.
-		dnsLog := log.Default()
-		dnsLog.SetOutput(io.Discard)
-		server.dnsServer, err = mockdns.NewServerWithLogger(map[string]mockdns.Zone{
-			"example.com.": {
-				A: []string{"127.0.0.1"},
-			},
-		}, dnsLog, false)
-		if err != nil {
-			return nil, err
-		}
-		server.dnsServer.PatchNet(net.DefaultResolver)
+	server.registryHost = fmt.Sprintf("example.com:%d", port)
+	// Disable DNS server logging as it is extremely chatty.
+	dnsLog := log.Default()
+	dnsLog.SetOutput(io.Discard)
+	server.dnsServer, err = mockdns.NewServerWithLogger(map[string]mockdns.Zone{
+		"example.com.": {
+			A: []string{"127.0.0.1"},
+		},
+	}, dnsLog, false)
+	if err != nil {
+		return nil, err
 	}
+	server.dnsServer.PatchNet(net.DefaultResolver)
 
 	config.HTTP.Addr = fmt.Sprintf(":%d", port)
 	config.HTTP.DrainTimeout = time.Duration(10) * time.Second
@@ -220,6 +210,8 @@ func setupRegistryServer(ctx context.Context, workspaceDir string, opts registry
 			return nil, fmt.Errorf("failed to create TLS configured HTTP client: %s", err)
 		}
 		clientOpts = append(clientOpts, helmreg.ClientOptHTTPClient(httpClient))
+	} else {
+		clientOpts = append(clientOpts, helmreg.ClientOptPlainHTTP())
 	}
 
 	// setup logger options
@@ -313,8 +305,7 @@ func TestMain(m *testing.M) {
 		panic(fmt.Sprintf("failed to create workspace directory: %v", err))
 	}
 	testRegistryServer, err = setupRegistryServer(ctx, testWorkspaceDir, registryOptions{
-		withBasicAuth:     true,
-		disableDNSMocking: true,
+		withBasicAuth: true,
 	})
 	if err != nil {
 		panic(fmt.Sprintf("Failed to create a test registry server: %v", err))
@@ -370,17 +361,6 @@ func TestMain(m *testing.M) {
 		RateLimiter: controller.GetDefaultRateLimiter(),
 	}); err != nil {
 		panic(fmt.Sprintf("Failed to start HelmRepositoryReconciler: %v", err))
-	}
-
-	if err = (&HelmRepositoryOCIReconciler{
-		Client:                  testEnv,
-		EventRecorder:           record.NewFakeRecorder(32),
-		Metrics:                 testMetricsH,
-		RegistryClientGenerator: registry.ClientGenerator,
-	}).SetupWithManagerAndOptions(testEnv, HelmRepositoryReconcilerOptions{
-		RateLimiter: controller.GetDefaultRateLimiter(),
-	}); err != nil {
-		panic(fmt.Sprintf("Failed to start HelmRepositoryOCIReconciler: %v", err))
 	}
 
 	if err := (&HelmChartReconciler{

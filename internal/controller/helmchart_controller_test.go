@@ -23,6 +23,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"path"
@@ -32,6 +33,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/foxcpp/go-mockdns"
 	. "github.com/onsi/gomega"
 	coptions "github.com/sigstore/cosign/v2/cmd/cosign/cli/options"
 	"github.com/sigstore/cosign/v2/cmd/cosign/cli/sign"
@@ -197,7 +199,7 @@ func TestHelmChartReconciler_Reconcile(t *testing.T) {
 		{
 			name: "Stalling on invalid repository URL",
 			beforeFunc: func(repository *helmv1.HelmRepository) {
-				repository.Spec.URL = "://unsupported" // Invalid URL
+				repository.Spec.URL = "https://unsupported/foo://" // Invalid URL
 			},
 			assertFunc: func(g *WithT, obj *helmv1.HelmChart, _ *helmv1.HelmRepository) {
 				key := client.ObjectKey{Name: obj.Name, Namespace: obj.Namespace}
@@ -293,6 +295,7 @@ func TestHelmChartReconciler_Reconcile(t *testing.T) {
 			}
 
 			g.Expect(testEnv.CreateAndWait(ctx, &repository)).To(Succeed())
+			defer func() { g.Expect(testEnv.Delete(ctx, &repository)).To(Succeed()) }()
 
 			obj := helmv1.HelmChart{
 				ObjectMeta: metav1.ObjectMeta{
@@ -1294,6 +1297,7 @@ func TestHelmChartReconciler_buildFromOCIHelmRepository(t *testing.T) {
 					Timeout:  &metav1.Duration{Duration: timeout},
 					Provider: helmv1.GenericOCIProvider,
 					Type:     helmv1.HelmRepositoryTypeOCI,
+					Insecure: true,
 				},
 			}
 			obj := &helmv1.HelmChart{
@@ -1313,12 +1317,14 @@ func TestHelmChartReconciler_buildFromOCIHelmRepository(t *testing.T) {
 			}
 			got, err := r.buildFromHelmRepository(context.TODO(), obj, repository, &b)
 
-			g.Expect(err != nil).To(Equal(tt.wantErr != nil))
 			if tt.wantErr != nil {
+				g.Expect(err).To(HaveOccurred())
 				g.Expect(reflect.TypeOf(err).String()).To(Equal(reflect.TypeOf(tt.wantErr).String()))
 				g.Expect(err.Error()).To(ContainSubstring(tt.wantErr.Error()))
+			} else {
+				g.Expect(err).ToNot(HaveOccurred())
+				g.Expect(got).To(Equal(tt.want))
 			}
-			g.Expect(got).To(Equal(tt.want))
 
 			if tt.assertFunc != nil {
 				tt.assertFunc(g, obj, b)
@@ -1331,6 +1337,14 @@ func TestHelmChartReconciler_buildFromTarballArtifact(t *testing.T) {
 	g := NewWithT(t)
 
 	tmpDir := t.TempDir()
+
+	// Unpatch the changes we make to the default DNS resolver in `setupRegistryServer()`.
+	// This is required because the changes somehow also cause remote lookups to fail and
+	// this test tests functionality related to remote dependencies.
+	mockdns.UnpatchNet(net.DefaultResolver)
+	defer func() {
+		testRegistryServer.dnsServer.PatchNet(net.DefaultResolver)
+	}()
 
 	storage, err := NewStorage(tmpDir, "example.com", retentionTTL, retentionRecords)
 	g.Expect(err).ToNot(HaveOccurred())
@@ -2429,9 +2443,6 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_authStrategy(t *testing.T) {
 
 			workspaceDir := t.TempDir()
 
-			if tt.insecure {
-				tt.registryOpts.disableDNSMocking = true
-			}
 			server, err := setupRegistryServer(ctx, workspaceDir, tt.registryOpts)
 			g.Expect(err).NotTo(HaveOccurred())
 			t.Cleanup(func() {
@@ -2456,6 +2467,7 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_authStrategy(t *testing.T) {
 					Type:     helmv1.HelmRepositoryTypeOCI,
 					Provider: helmv1.GenericOCIProvider,
 					URL:      fmt.Sprintf("oci://%s/testrepo", server.registryHost),
+					Insecure: tt.insecure,
 				},
 			}
 
@@ -2725,9 +2737,7 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_verifySignature(t *testing.T
 	g := NewWithT(t)
 
 	tmpDir := t.TempDir()
-	server, err := setupRegistryServer(ctx, tmpDir, registryOptions{
-		disableDNSMocking: true,
-	})
+	server, err := setupRegistryServer(ctx, tmpDir, registryOptions{})
 	g.Expect(err).ToNot(HaveOccurred())
 	t.Cleanup(func() {
 		server.Close()
@@ -2870,6 +2880,7 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_verifySignature(t *testing.T
 					Timeout:  &metav1.Duration{Duration: timeout},
 					Provider: helmv1.GenericOCIProvider,
 					Type:     helmv1.HelmRepositoryTypeOCI,
+					Insecure: true,
 				},
 			}
 
@@ -2924,7 +2935,7 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_verifySignature(t *testing.T
 					Upload:           true,
 					SkipConfirmation: true,
 					TlogUpload:       false,
-					Registry:         coptions.RegistryOptions{Keychain: oci.Anonymous{}, AllowInsecure: true},
+					Registry:         coptions.RegistryOptions{Keychain: oci.Anonymous{}, AllowHTTPRegistry: true},
 				},
 					[]string{fmt.Sprintf("%s/testrepo/%s:%s", server.registryHost, metadata.Name, metadata.Version)})
 				g.Expect(err).ToNot(HaveOccurred())

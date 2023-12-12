@@ -5,9 +5,9 @@
 There are 2 [Helm repository types](#type) defined by the `HelmRepository` API:
 - Helm HTTP/S repository, which defines a Source to produce an Artifact for a Helm
 repository index YAML (`index.yaml`). 
-- OCI Helm repository, which defines a source that does not produce an Artifact. 
-Instead a validation of the Helm repository is performed and the outcome is reported in the
-`.status.conditions` field.
+- OCI Helm repository, which defines a source that does not produce an Artifact.
+  It's a data container to store the information about the OCI repository that
+  can be used by [HelmChart](helmcharts.md) to access OCI Helm charts.
 
 ## Examples
 
@@ -113,9 +113,11 @@ In the above example:
 
 - A HelmRepository named `podinfo` is created, indicated by the
   `.metadata.name` field.
-- The source-controller performs the Helm repository url validation i.e. the url 
-is a valid OCI registry url, every five minutes with the information indicated by the
-`.spec.interval` and `.spec.url` fields.
+- A HelmChart that refers to this HelmRepository uses the URL in the `.spec.url`
+  field to access the OCI Helm chart.
+
+**NOTE:** The `.spec.interval` field is only used by the `default` Helm
+repository and is ignored for any value in `oci` Helm repository.
 
 You can run this example by saving the manifest into `helmrepository.yaml`.
 
@@ -129,25 +131,12 @@ You can run this example by saving the manifest into `helmrepository.yaml`.
 
    ```console
    NAME      URL                                 AGE     READY   STATUS
-   podinfo   oci://ghcr.io/stefanprodan/charts   3m22s   True    Helm repository "podinfo" is ready
+   podinfo   oci://ghcr.io/stefanprodan/charts   3m22s
    ```
 
-3. Run `kubectl describe helmrepository podinfo` to see the [Conditions](#conditions) 
-in the HelmRepository's Status:
-
-   ```console
-   ...
-   Status:
-     Conditions:
-       Last Transition Time:  2022-05-12T14:02:12Z
-       Message:               Helm repository "podinfo" is ready
-       Observed Generation:   1
-       Reason:                Succeeded
-       Status:                True
-       Type:                  Ready
-     Observed Generation:     1
-   Events:                    <none>
-   ```
+Because the OCI Helm repository is a data container, there's nothing to report
+for `READY` and `STATUS` columns above. The existence of the object can be
+considered to be ready for use.
 
 ## Writing a HelmRepository spec
 
@@ -158,13 +147,11 @@ valid [DNS subdomain name](https://kubernetes.io/docs/concepts/overview/working-
 A HelmRepository also needs a
 [`.spec` section](https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md#spec-and-status).
 
-
 ### Type
 
 `.spec.type` is an optional field that specifies the Helm repository type. 
 
 Possible values are `default` for a Helm HTTP/S repository, or `oci` for an OCI Helm repository.
-
 
 ### Provider
 
@@ -358,10 +345,23 @@ the needed permission is instead `storage.objects.list` which can be bound as pa
 of the Container Registry Service Agent role. Take a look at [this guide](https://cloud.google.com/kubernetes-engine/docs/how-to/workload-identity)
 for more information about setting up GKE Workload Identity.
 
+### Insecure
+
+`.spec.insecure` is an optional field to allow connecting to an insecure (HTTP)
+container registry server, if set to `true`. The default value is `false`,
+denying insecure non-TLS connections when fetching Helm chart OCI artifacts.
+
+**Note**: The insecure field is supported only for Helm OCI repositories.
+The `spec.type` field must be set to `oci`.
+
 ### Interval
 
-`.spec.interval` is a required field that specifies the interval which the
-Helm repository index must be consulted at.
+**Note:** This field is ineffectual for [OCI Helm
+Repositories](#helm-oci-repository).
+
+`.spec.interval` is a an optional field that specifies the interval which the
+Helm repository index must be consulted at. When not set, the default value is
+`1m`.
 
 After successfully reconciling a HelmRepository object, the source-controller
 requeues the object for inspection after the specified interval. The value
@@ -387,11 +387,14 @@ For Helm repositories which require authentication, see [Secret reference](#secr
 
 ### Timeout
 
+**Note:** This field is not applicable to [OCI Helm
+Repositories](#helm-oci-repository).
+
 `.spec.timeout` is an optional field to specify a timeout for the fetch
 operation. The value must be in a
 [Go recognized duration string format](https://pkg.go.dev/time#ParseDuration),
-e.g. `1m30s` for a timeout of one minute and thirty seconds. The default value
-is `60s`.
+e.g. `1m30s` for a timeout of one minute and thirty seconds. When not set, the
+default value is `1m`.
 
 ### Secret reference
 
@@ -426,8 +429,8 @@ metadata:
   name: example-user
   namespace: default
 stringData:
-  username: example
-  password: 123456
+  username: "user-123456"
+  password: "pass-123456"
 ```
 
 OCI Helm repository example:
@@ -452,8 +455,8 @@ metadata:
   name: oci-creds
   namespace: default
 stringData:
-  username: example
-  password: 123456
+  username: "user-123456"
+  password: "pass-123456"
 ```
 
 For OCI Helm repositories, Kubernetes secrets of type [kubernetes.io/dockerconfigjson](https://kubernetes.io/docs/concepts/configuration/secret/#secret-types) are also supported.
@@ -469,7 +472,7 @@ flux create secret oci ghcr-auth \
 
 **Warning:** Support for specifying TLS authentication data using this API has been
 deprecated. Please use [`.spec.certSecretRef`](#cert-secret-reference) instead.
-If the controller uses the secret specfied by this field to configure TLS, then
+If the controller uses the secret specified by this field to configure TLS, then
 a deprecation warning will be logged.
 
 ### Cert secret reference
@@ -537,6 +540,9 @@ to HTTP/S Helm repositories.
 
 ### Suspend
 
+**Note:** This field is not applicable to [OCI Helm
+Repositories](#helm-oci-repository).
+
 `.spec.suspend` is an optional field to suspend the reconciliation of a
 HelmRepository. When set to `true`, the controller will stop reconciling the
 HelmRepository, and changes to the resource or the Helm repository index will
@@ -547,6 +553,10 @@ For practical information, see
 [suspending and resuming](#suspending-and-resuming).
 
 ## Working with HelmRepositories
+
+**Note:** This section does not apply to [OCI Helm
+Repositories](#helm-oci-repository), being a data container, once created, they
+are ready to used by [HelmCharts](helmcharts.md).
  
 ### Triggering a reconcile
 
@@ -648,6 +658,10 @@ flux resume source helm <repository-name>
 
 ### Debugging a HelmRepository
 
+**Note:** This section does not apply to [OCI Helm
+Repositories](#helm-oci-repository), being a data container, they are static
+objects that don't require debugging if valid.
+
 There are several ways to gather information about a HelmRepository for debugging
 purposes.
 
@@ -713,9 +727,11 @@ specific HelmRepository, e.g. `flux logs --level=error --kind=HelmRepository --n
 
 ## HelmRepository Status
 
-### Artifact
+**Note:** This section does not apply to [OCI Helm
+Repositories](#helm-oci-repository), they do not contain any information in the
+status.
 
-**Note:** This section does not apply to [OCI Helm Repositories](#helm-oci-repository), they do not emit artifacts.
+### Artifact
 
 The HelmRepository reports the last fetched repository index as an Artifact
 object in the `.status.artifact` of the resource.
@@ -756,9 +772,6 @@ specification][kstatus-spec],
 and reports `Reconciling` and `Stalled` conditions where applicable to
 provide better (timeout) support to solutions polling the HelmRepository to become
 `Ready`.
-
- OCI Helm repositories use only `Reconciling`, `Ready`, `FetchFailed`, and `Stalled`
- condition types.
 
 #### Reconciling HelmRepository
 

@@ -2,6 +2,130 @@
 
 All notable changes to this project are documented in this file.
 
+## 1.2.2
+
+**Release date:** 2023-12-11
+
+This patch release addresses an issue with AWS ECR authentication introduced in
+v1.2.0.
+
+In addition, a variety of dependencies have been updated. Including an update
+of the container base image to Alpine v3.19.
+
+Fixes:
+- Address issue with authenticating towards AWS ECR
+  [#1318](https://github.com/fluxcd/source-controller/pull/1318)
+  [#1321](https://github.com/fluxcd/source-controller/pull/1318)
+
+Improvements:
+
+- Update dependencies
+  [#1314](https://github.com/fluxcd/source-controller/pull/1314)
+  [#1318](https://github.com/fluxcd/source-controller/pull/1318)
+  [#1321](https://github.com/fluxcd/source-controller/pull/1321)
+- build: update Alpine to 3.19
+  [#1316](https://github.com/fluxcd/source-controller/pull/1316)
+
+## 1.2.1
+
+**Release date:** 2023-12-08
+
+This patch release ensures the controller is built with the latest Go `1.21.x`
+release, to mitigate multiple security vulnerabilities which were published
+shortly after the release of v1.2.0.
+
+In addition, a small number of dependencies have been updated to their latest
+version.
+
+Improvements:
+- Update dependencies
+  [#1309](https://github.com/fluxcd/source-controller/pull/1309)
+
+## 1.2.0
+
+**Release date:** 2023-12-05
+
+This minor release comes with API changes, bug fixes and several new features.
+
+### Bucket
+
+A new field, `.spec.prefix`, has been added to the Bucket API, which enables
+server-side filtering of files if the object's `.spec.provider` is set to
+`generic`/`aws`/`gcp`.
+
+### OCIRepository and HelmChart
+
+Two new fields, `.spec.verify.matchOIDCIdentity.issuer` and
+`.spec.verify.matchOIDCIdentity.subject` have been added to the HelmChart and
+OCIRepository APIs. If the image has been keylessly signed via Cosign, these
+fields can be used to verify the OIDC issuer of the Fulcio certificate and the
+OIDC identity's subject respectively.
+
+### HelmRepository
+
+A new boolean field, `.spec.insecure`, has been introduced to the HelmRepository
+API, which allows connecting to a non-TLS HTTP container registry. It is only
+considered if the object's `.spec.type` is set to `oci`.
+
+From this release onwards, HelmRepository objects of type OCI are treated as
+static objects, i.e. they have an empty status.
+Existing objects undergo a one-time automatic migration and new objects
+will be undergo a one-time reconciliation to remove any status fields.
+
+Additionally, the controller now performs a shallow clone if the
+`.spec.ref.name` of the GitRepository object points to a branch or a tag.
+
+Furthermore, a bug has been fixed, where the controller would try to
+authenticate against public OCI registries if the HelmRepository object has a
+reference to a Secret containing a CA certificate.
+
+Lastly, dependencies have been updated to their latest version, including an
+update of Kubernetes to v1.28.4.
+
+Fixes:
+- Address miscellaneous issues throughout code base
+  [#1257](https://github.com/fluxcd/source-controller/pull/1257)
+- helmrepo: only configure tls login option when required
+  [#1289](https://github.com/fluxcd/source-controller/pull/1289)
+- oci: rename `OCIChartRepository.insecure` to `insecureHTTP`
+  [#1299](https://github.com/fluxcd/source-controller/pull/1299)
+- Use bitnami Minio oci chart for e2e
+  [#1301](https://github.com/fluxcd/source-controller/pull/1301)
+
+Improvements:
+- build(deps): bump Go dependencies
+  [#1260](https://github.com/fluxcd/source-controller/pull/1260)
+  [#1261](https://github.com/fluxcd/source-controller/pull/1261)
+  [#1269](https://github.com/fluxcd/source-controller/pull/1269)
+  [#1291](https://github.com/fluxcd/source-controller/pull/1291)
+- build(deps): bump the ci group dependencies
+  [#1265](https://github.com/fluxcd/source-controller/pull/1265)
+  [#1266](https://github.com/fluxcd/source-controller/pull/1266)
+  [#1272](https://github.com/fluxcd/source-controller/pull/1272)
+  [#1277](https://github.com/fluxcd/source-controller/pull/1277)
+  [#1281](https://github.com/fluxcd/source-controller/pull/1281)
+  [#1285](https://github.com/fluxcd/source-controller/pull/1285)
+  [#1296](https://github.com/fluxcd/source-controller/pull/1296)
+  [#1303](https://github.com/fluxcd/source-controller/pull/1303)
+- bucket: Add prefix filtering capability
+  [#1228](https://github.com/fluxcd/source-controller/pull/1228)
+- Static HelmRepository OCI
+  [#1243](https://github.com/fluxcd/source-controller/pull/1243)
+- cosign: allow identity matching for keyless verification
+  [#1250](https://github.com/fluxcd/source-controller/pull/1250)
+- Upgrade `go-git` to v5.10.0
+  [#1271](https://github.com/fluxcd/source-controller/pull/1271)
+- storage: change default file permissions
+  [#1276](https://github.com/fluxcd/source-controller/pull/1276)
+- Update dependencies to Kubernetes v1.28
+  [#1286](https://github.com/fluxcd/source-controller/pull/1286)
+- Add `.spec.insecure` to `HelmRepository` for `type: oci`
+  [#1288](https://github.com/fluxcd/source-controller/pull/1288)
+- Update Git dependencies
+  [#1300](https://github.com/fluxcd/source-controller/pull/1300)
+- Update Go dependencies
+  [#1304](https://github.com/fluxcd/source-controller/pull/1304)
+
 ## 1.1.2
 
 **Release date:** 2023-10-11

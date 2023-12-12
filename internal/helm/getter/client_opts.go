@@ -72,7 +72,7 @@ func GetClientOpts(ctx context.Context, c client.Client, obj *helmv1.HelmReposit
 	hrOpts := &ClientOpts{
 		GetterOpts: []helmgetter.Option{
 			helmgetter.WithURL(url),
-			helmgetter.WithTimeout(obj.Spec.Timeout.Duration),
+			helmgetter.WithTimeout(obj.GetTimeout()),
 			helmgetter.WithPassCredentialsAll(obj.Spec.PassCredentials),
 		},
 	}
