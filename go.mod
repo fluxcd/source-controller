@@ -59,7 +59,7 @@ require (
 	golang.org/x/sync v0.5.0
 	google.golang.org/api v0.153.0
 	gotest.tools v2.2.0+incompatible
-	helm.sh/helm/v3 v3.13.2
+	helm.sh/helm/v3 v3.13.3
 	k8s.io/api v0.28.4
 	k8s.io/apimachinery v0.28.4
 	k8s.io/client-go v0.28.4
