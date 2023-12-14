@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented in this file.
 
+## 1.2.3
+
+**Release date:** 2023-12-14
+
+This patch release updates the controller's Helm dependency to v3.13.3.
+
+Improvements:
+- Update Helm to v3.13.3
+  [#1325](https://github.com/fluxcd/source-controller/pull/1325)
+- helmrepo: Remove migration log/event
+  [#1324](https://github.com/fluxcd/source-controller/pull/1324)
+
 ## 1.2.2
 
 **Release date:** 2023-12-11
