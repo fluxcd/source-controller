@@ -727,7 +727,5 @@ func (r *HelmRepositoryReconciler) migrationToStatic(ctx context.Context, sp *pa
 		return ctrl.Result{}, err
 	}
 
-	r.eventLogf(ctx, obj, eventv1.EventTypeTrace, "Migration",
-		"removed artifact and finalizer to migrate to static HelmRepository of type OCI")
 	return ctrl.Result{}, nil
 }
