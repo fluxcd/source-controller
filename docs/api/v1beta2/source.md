@@ -887,7 +887,7 @@ This field is only taken into account if the .spec.type field is set to &lsquo;o
 </tr>
 <tr>
 <td>
-<code>insecureskipverify</code><br>
+<code>insecureSkipVerify</code><br>
 <em>
 bool
 </em>
@@ -2633,7 +2633,7 @@ This field is only taken into account if the .spec.type field is set to &lsquo;o
 </tr>
 <tr>
 <td>
-<code>insecureskipverify</code><br>
+<code>insecureSkipVerify</code><br>
 <em>
 bool
 </em>
