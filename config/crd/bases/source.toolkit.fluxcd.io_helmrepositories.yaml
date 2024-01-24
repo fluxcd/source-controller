@@ -318,6 +318,11 @@ spec:
                   registry. This field is only taken into account if the .spec.type
                   field is set to 'oci'.
                 type: boolean
+              insecureSkipVerify:
+                description: Insecure allows connecting to a HTTPS container registry
+                  without verifying the server's certificate chain and host name.
+                  This field is only taken into account if the .spec.type field is set to 'oci'.
+                type: boolean
               interval:
                 description: Interval at which the HelmRepository URL is checked for
                   updates. This interval is approximate and may be subject to jitter

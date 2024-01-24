@@ -887,6 +887,20 @@ This field is only taken into account if the .spec.type field is set to &lsquo;o
 </tr>
 <tr>
 <td>
+<code>insecureskipverify</code><br>
+<em>
+bool
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>InsecureSkipVerify allows connecting to a HTTPS container registry without
+verifying the server&rsquo;s certificate chain and host name.
+This field is only taken into account if the .spec.type field is set to &lsquo;oci&rsquo;.</p>
+</td>
+</tr>
+<tr>
+<td>
 <code>timeout</code><br>
 <em>
 <a href="https://pkg.go.dev/k8s.io/apimachinery/pkg/apis/meta/v1#Duration">
@@ -2614,6 +2628,20 @@ bool
 <td>
 <em>(Optional)</em>
 <p>Insecure allows connecting to a non-TLS HTTP container registry.
+This field is only taken into account if the .spec.type field is set to &lsquo;oci&rsquo;.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>insecureskipverify</code><br>
+<em>
+bool
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>InsecureSkipVerify allows connecting to a HTTPS container registry without
+verifying the server&rsquo;s certificate chain and host name.
 This field is only taken into account if the .spec.type field is set to &lsquo;oci&rsquo;.</p>
 </td>
 </tr>
