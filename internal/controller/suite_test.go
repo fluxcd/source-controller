@@ -45,7 +45,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/distribution/distribution/v3/configuration"
-	dcontext "github.com/distribution/distribution/v3/context"
 	dockerRegistry "github.com/distribution/distribution/v3/registry"
 	_ "github.com/distribution/distribution/v3/registry/auth/htpasswd"
 	_ "github.com/distribution/distribution/v3/registry/storage/driver/inmemory"
@@ -217,24 +216,22 @@ func setupRegistryServer(ctx context.Context, workspaceDir string, opts registry
 	// setup logger options
 	config.Log.AccessLog.Disabled = true
 	config.Log.Level = "error"
-	logger := logrus.New()
-	logger.SetOutput(io.Discard)
-	dcontext.SetDefaultLogger(logrus.NewEntry(logger))
+	logrus.SetOutput(io.Discard)
 
-	dockerRegistry, err := dockerRegistry.NewRegistry(ctx, config)
+	registry, err := dockerRegistry.NewRegistry(ctx, config)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create docker registry: %w", err)
 	}
 
 	// init test client
-	client, err := helmreg.NewClient(clientOpts...)
+	helmClient, err := helmreg.NewClient(clientOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create registry client: %s", err)
 	}
-	server.registryClient = client
+	server.registryClient = helmClient
 
 	// Start Docker registry
-	go dockerRegistry.ListenAndServe()
+	go registry.ListenAndServe()
 
 	return server, nil
 }
