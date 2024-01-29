@@ -4,8 +4,8 @@ go 1.20
 
 require (
 	github.com/fluxcd/pkg/apis/acl v0.1.0
-	github.com/fluxcd/pkg/apis/meta v1.2.0
-	k8s.io/apimachinery v0.28.4
+	github.com/fluxcd/pkg/apis/meta v1.3.0
+	k8s.io/apimachinery v0.28.6
 	sigs.k8s.io/controller-runtime v0.16.3
 )
 
@@ -20,7 +20,7 @@ require (
 	github.com/kr/text v0.2.0 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
-	golang.org/x/net v0.19.0 // indirect
+	golang.org/x/net v0.20.0 // indirect
 	golang.org/x/text v0.14.0 // indirect
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
