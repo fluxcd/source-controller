@@ -57,7 +57,7 @@ require (
 	github.com/spf13/pflag v1.0.5
 	golang.org/x/crypto v0.18.0
 	golang.org/x/sync v0.6.0
-	google.golang.org/api v0.159.0
+	google.golang.org/api v0.161.0
 	gotest.tools v2.2.0+incompatible
 	helm.sh/helm/v3 v3.13.3
 	k8s.io/api v0.28.6
