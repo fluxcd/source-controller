@@ -2,6 +2,25 @@
 
 All notable changes to this project are documented in this file.
 
+## 1.2.4
+
+**Release date:** 2024-02-01
+
+This patch release updates the Kubernetes dependencies to v1.28.6 and various
+other dependencies to their latest version to patch upstream CVEs.
+
+Improvements:
+- Various dependency updates
+  [#1362](https://github.com/fluxcd/source-controller/pull/1362)
+  [#1357](https://github.com/fluxcd/source-controller/pull/1357)
+  [#1353](https://github.com/fluxcd/source-controller/pull/1353)
+  [#1347](https://github.com/fluxcd/source-controller/pull/1347)
+  [#1343](https://github.com/fluxcd/source-controller/pull/1343)
+  [#1340](https://github.com/fluxcd/source-controller/pull/1340)
+  [#1338](https://github.com/fluxcd/source-controller/pull/1338)
+  [#1336](https://github.com/fluxcd/source-controller/pull/1336)
+  [#1334](https://github.com/fluxcd/source-controller/pull/1334)
+
 ## 1.2.3
 
 **Release date:** 2023-12-14
