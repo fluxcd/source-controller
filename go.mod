@@ -29,7 +29,7 @@ require (
 	github.com/fluxcd/pkg/lockedfile v0.1.0
 	github.com/fluxcd/pkg/masktoken v0.2.0
 	github.com/fluxcd/pkg/oci v0.35.0
-	github.com/fluxcd/pkg/runtime v0.44.0
+	github.com/fluxcd/pkg/runtime v0.44.1
 	github.com/fluxcd/pkg/sourceignore v0.5.0
 	github.com/fluxcd/pkg/ssh v0.11.0
 	github.com/fluxcd/pkg/tar v0.4.0
@@ -57,7 +57,7 @@ require (
 	github.com/spf13/pflag v1.0.5
 	golang.org/x/crypto v0.18.0
 	golang.org/x/sync v0.6.0
-	google.golang.org/api v0.161.0
+	google.golang.org/api v0.162.0
 	gotest.tools v2.2.0+incompatible
 	helm.sh/helm/v3 v3.13.3
 	k8s.io/api v0.28.6
@@ -354,9 +354,9 @@ require (
 	golang.org/x/tools v0.17.0 // indirect
 	gomodules.xyz/jsonpatch/v2 v2.4.0 // indirect
 	google.golang.org/appengine v1.6.8 // indirect
-	google.golang.org/genproto v0.0.0-20240102182953-50ed04b92917 // indirect
+	google.golang.org/genproto v0.0.0-20240116215550-a9fa1716bcac // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20240102182953-50ed04b92917 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20240116215550-a9fa1716bcac // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20240125205218-1f4bbc51befe // indirect
 	google.golang.org/grpc v1.61.0 // indirect
 	google.golang.org/protobuf v1.32.0 // indirect
 	gopkg.in/evanphx/json-patch.v5 v5.7.0 // indirect
