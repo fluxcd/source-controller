@@ -567,7 +567,7 @@ func newLayerOperationErr(format string, a ...any) *serror.Generic {
 	return serror.NewGeneric(fmt.Errorf(format, a...), ociv1.OCILayerOperationFailedReason)
 }
 
-func (r *OCIRepositoryReconciler) fetchArtifact(obj *ociv1.OCIRepository, metadata *sourcev1.Artifact, ref name.Reference, desc *remote.Descriptor, options remoteOptions) (io.ReadCloser, *serror.Generic) {
+func (r *OCIRepositoryReconciler) fetchArtifact(obj *ociv1.OCIRepository, metadata *sourcev1.Artifact, ref name.Reference, desc *remote.Descriptor, options []remote.Option) (io.ReadCloser, *serror.Generic) {
 	switch mt := desc.MediaType; {
 	case mt.IsImage():
 		// Pull artifact from the remote container registry
@@ -648,7 +648,7 @@ func (r *OCIRepositoryReconciler) fetchArtifact(obj *ociv1.OCIRepository, metada
 	}
 }
 
-func (r *OCIRepositoryReconciler) getDescriptor(ref name.Reference, options remoteOptions) (*remote.Descriptor, error) {
+func (r *OCIRepositoryReconciler) getDescriptor(ref name.Reference, options []remote.Option) (*remote.Descriptor, error) {
 	// NB: there is no good enought reason to use remote.Head first,
 	// as it's only in error case that remote.Get won't have to be
 	// done afterwards anyway
@@ -662,7 +662,7 @@ func (r *OCIRepositoryReconciler) getDescriptor(ref name.Reference, options remo
 
 // getRevision fetches the upstream digest, returning the revision in the
 // format '<tag>@<digest>'.
-func (r *OCIRepositoryReconciler) getRevision(ref name.Reference, options remoteOptions) (string, name.Reference, *remote.Descriptor, error) {
+func (r *OCIRepositoryReconciler) getRevision(ref name.Reference, options []remote.Option) (string, name.Reference, *remote.Descriptor, error) {
 	switch ref := ref.(type) {
 	case name.Digest:
 		digest, err := gcrv1.NewHash(ref.DigestStr())
@@ -1246,7 +1246,7 @@ func (r *OCIRepositoryReconciler) notify(ctx context.Context, oldObj, newObj *oc
 // makeRemoteOptions returns a remoteOptions struct with the authentication and transport options set.
 // The returned struct can be used to interact with a remote registry using go-containerregistry based libraries.
 func makeRemoteOptions(ctxTimeout context.Context, transport http.RoundTripper,
-	keychain authn.Keychain, auth authn.Authenticator) remoteOptions {
+	keychain authn.Keychain, auth authn.Authenticator) []remote.Option {
 
 	authOption := remote.WithAuthFromKeychain(keychain)
 	if auth != nil {
@@ -1254,17 +1254,13 @@ func makeRemoteOptions(ctxTimeout context.Context, transport http.RoundTripper,
 		// the auth only if it is required.
 		authOption = remote.WithAuth(auth)
 	}
-	return remoteOptions{
+	return []remote.Option{
 		remote.WithContext(ctxTimeout),
 		remote.WithUserAgent(oci.UserAgent),
 		remote.WithTransport(transport),
 		authOption,
 	}
 }
-
-// remoteOptions contains the options to interact with a remote registry.
-// It can be used to pass options to go-containerregistry based libraries.
-type remoteOptions []remote.Option
 
 // ociContentConfigChanged evaluates the current spec with the observations
 // of the artifact in the status to determine if artifact content configuration
