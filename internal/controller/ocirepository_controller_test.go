@@ -1575,12 +1575,13 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignature_keyless(t *testi
 					Reference: tt.reference,
 				},
 			}
-			url := strings.TrimPrefix(obj.Spec.URL, "oci://") + ":" + tt.reference.Tag
+
+			url := strings.TrimPrefix(obj.Spec.URL, "oci://")
 
 			assertConditions := tt.assertConditions
 			for k := range assertConditions {
 				assertConditions[k].Message = strings.ReplaceAll(assertConditions[k].Message, "<revision>", tt.revision)
-				assertConditions[k].Message = strings.ReplaceAll(assertConditions[k].Message, "<url>", url)
+				assertConditions[k].Message = strings.ReplaceAll(assertConditions[k].Message, "<url>", obj.Spec.URL)
 				assertConditions[k].Message = strings.ReplaceAll(assertConditions[k].Message, "<provider>", "cosign")
 			}
 

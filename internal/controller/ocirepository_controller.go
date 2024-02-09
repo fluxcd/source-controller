@@ -408,7 +408,7 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 	// Mark observations about the revision on the object
 	defer func() {
 		if !obj.GetArtifact().HasRevision(revision) {
-			message := fmt.Sprintf("new revision '%s' for '%s'", revision, ref)
+			message := fmt.Sprintf("new revision '%s' for '%s'", revision, obj.Spec.URL)
 			if obj.GetArtifact() != nil {
 				conditions.MarkTrue(obj, sourcev1.ArtifactOutdatedCondition, "NewRevision", message)
 			}
