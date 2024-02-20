@@ -81,9 +81,9 @@ func (r RemoteReference) Validate() error {
 	if r.Name == "" {
 		return fmt.Errorf("no name set for remote chart reference")
 	}
-	name := regexp.MustCompile("^([-a-z0-9]+/?)+$")
+	name := regexp.MustCompile(`^([-a-z0-9]+/?\.?)+$`)
 	if !name.MatchString(r.Name) {
-		return fmt.Errorf("invalid chart name '%s': a valid name must be lower case letters and numbers and MAY be separated with dashes (-) or slashes (/)", r.Name)
+		return fmt.Errorf("invalid chart name '%s': a valid name must be lower case letters and numbers and MAY be separated with dashes (-), slashes (/) or periods (.)", r.Name)
 	}
 	return nil
 }
@@ -199,6 +199,11 @@ func (b *Build) String() string {
 
 // packageToPath attempts to package the given chart to the out filepath.
 func packageToPath(chart *helmchart.Chart, out string) error {
+	// Names cannot have directory name characters.
+	if chart.Name() != filepath.Base(chart.Name()) {
+		return fmt.Errorf("%q is not a valid chart name", chart.Name())
+	}
+
 	o, err := os.MkdirTemp("", "chart-build-*")
 	if err != nil {
 		return fmt.Errorf("failed to create temporary directory for chart: %w", err)
