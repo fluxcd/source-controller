@@ -113,6 +113,15 @@ func TestRemoteReference_Validate(t *testing.T) {
 			ref:     RemoteReference{Name: "not//a/valid/chart"},
 			wantErr: "invalid chart name 'not//a/valid/chart'",
 		},
+		{
+			name: "ref with period in name",
+			ref:  RemoteReference{Name: "valid.chart.name"},
+		},
+		{
+			name:    "ref with double period in name",
+			ref:     RemoteReference{Name: "../valid-chart-name"},
+			wantErr: "invalid chart name '../valid-chart-name",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -246,6 +255,14 @@ func Test_packageToPath(t *testing.T) {
 	g.Expect(out).To(BeARegularFile())
 	_, err = secureloader.LoadFile(out)
 	g.Expect(err).ToNot(HaveOccurred())
+
+	chart, err = secureloader.LoadFile("../testdata/charts/helmchart-badname-0.1.0.tgz")
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(chart).ToNot(BeNil())
+
+	out2 := tmpFile("chart-badname-0.1.0", ".tgz")
+	err = packageToPath(chart, out2)
+	g.Expect(err).To(HaveOccurred())
 }
 
 func tmpFile(prefix, suffix string) string {
