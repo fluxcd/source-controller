@@ -198,7 +198,6 @@ func (in *HelmRepository) GetArtifact() *apiv1.Artifact {
 }
 
 // +genclient
-// +genclient:Namespaced
 // +kubebuilder:storageversion
 // +kubebuilder:object:root=true
 // +kubebuilder:resource:shortName=helmrepo

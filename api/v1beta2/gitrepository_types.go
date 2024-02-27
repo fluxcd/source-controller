@@ -287,7 +287,6 @@ func (in *GitRepository) GetArtifact() *apiv1.Artifact {
 }
 
 // +genclient
-// +genclient:Namespaced
 // +kubebuilder:object:root=true
 // +kubebuilder:resource:shortName=gitrepo
 // +kubebuilder:subresource:status

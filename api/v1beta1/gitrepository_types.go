@@ -265,7 +265,6 @@ func (in *GitRepository) GetInterval() metav1.Duration {
 }
 
 // +genclient
-// +genclient:Namespaced
 // +kubebuilder:object:root=true
 // +kubebuilder:resource:shortName=gitrepo
 // +kubebuilder:subresource:status

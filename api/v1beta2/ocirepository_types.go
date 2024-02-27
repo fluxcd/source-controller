@@ -308,7 +308,6 @@ func (in *OCIRepository) GetLayerOperation() string {
 }
 
 // +genclient
-// +genclient:Namespaced
 // +kubebuilder:storageversion
 // +kubebuilder:object:root=true
 // +kubebuilder:resource:shortName=ocirepo

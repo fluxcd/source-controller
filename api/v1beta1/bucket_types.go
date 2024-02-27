@@ -193,7 +193,6 @@ func (in *Bucket) GetInterval() metav1.Duration {
 }
 
 // +genclient
-// +genclient:Namespaced
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="Endpoint",type=string,JSONPath=`.spec.endpoint`

@@ -231,7 +231,6 @@ func (in *HelmChart) GetValuesFiles() []string {
 }
 
 // +genclient
-// +genclient:Namespaced
 // +kubebuilder:object:root=true
 // +kubebuilder:resource:shortName=hc
 // +kubebuilder:subresource:status

@@ -175,7 +175,6 @@ func (in *Bucket) GetArtifact() *apiv1.Artifact {
 }
 
 // +genclient
-// +genclient:Namespaced
 // +kubebuilder:storageversion
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
