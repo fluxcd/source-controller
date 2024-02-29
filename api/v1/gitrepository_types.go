@@ -309,7 +309,6 @@ func (v *GitRepositoryVerification) VerifyTag() bool {
 }
 
 // +genclient
-// +genclient:Namespaced
 // +kubebuilder:storageversion
 // +kubebuilder:object:root=true
 // +kubebuilder:resource:shortName=gitrepo

@@ -181,7 +181,6 @@ func (in *HelmRepository) GetInterval() metav1.Duration {
 }
 
 // +genclient
-// +genclient:Namespaced
 // +kubebuilder:object:root=true
 // +kubebuilder:resource:shortName=helmrepo
 // +kubebuilder:subresource:status
