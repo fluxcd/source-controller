@@ -331,7 +331,7 @@ client certificate and the CA certificate respectively, you can generate the
 required Secret using the `flux create secret tls` command:
 
 ```sh
-flux create secret tls --tls-key-file=client.key --tls-crt-file=client.crt --ca-crt-file=ca.crt
+flux create secret tls example-tls --key-file=client.key --cert-file=client.crt --ca-file=ca.crt
 ```
 
 Example usage:
