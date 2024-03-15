@@ -255,14 +255,6 @@ func Test_packageToPath(t *testing.T) {
 	g.Expect(out).To(BeARegularFile())
 	_, err = secureloader.LoadFile(out)
 	g.Expect(err).ToNot(HaveOccurred())
-
-	chart, err = secureloader.LoadFile("../testdata/charts/helmchart-badname-0.1.0.tgz")
-	g.Expect(err).ToNot(HaveOccurred())
-	g.Expect(chart).ToNot(BeNil())
-
-	out2 := tmpFile("chart-badname-0.1.0", ".tgz")
-	err = packageToPath(chart, out2)
-	g.Expect(err).To(HaveOccurred())
 }
 
 func tmpFile(prefix, suffix string) string {

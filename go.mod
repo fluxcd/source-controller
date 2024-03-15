@@ -59,12 +59,12 @@ require (
 	golang.org/x/sync v0.6.0
 	google.golang.org/api v0.161.0
 	gotest.tools v2.2.0+incompatible
-	helm.sh/helm/v3 v3.13.3
-	k8s.io/api v0.28.6
-	k8s.io/apimachinery v0.28.6
-	k8s.io/client-go v0.28.6
+	helm.sh/helm/v3 v3.14.2
+	k8s.io/api v0.29.0
+	k8s.io/apimachinery v0.29.0
+	k8s.io/client-go v0.29.0
 	k8s.io/utils v0.0.0-20231127182322-b307cd553661
-	sigs.k8s.io/controller-runtime v0.16.3
+	sigs.k8s.io/controller-runtime v0.17.0
 	sigs.k8s.io/yaml v1.4.0
 )
 
@@ -162,7 +162,7 @@ require (
 	github.com/emicklei/go-restful/v3 v3.11.0 // indirect
 	github.com/emirpasic/gods v1.18.1 // indirect
 	github.com/evanphx/json-patch v5.7.0+incompatible // indirect
-	github.com/evanphx/json-patch/v5 v5.7.0 // indirect
+	github.com/evanphx/json-patch/v5 v5.8.0 // indirect
 	github.com/exponent-io/jsonpath v0.0.0-20210407135951-1de76d718b3f // indirect
 	github.com/fatih/color v1.15.0 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
@@ -209,6 +209,7 @@ require (
 	github.com/googleapis/gax-go/v2 v2.12.0 // indirect
 	github.com/gorilla/handlers v1.5.1 // indirect
 	github.com/gorilla/mux v1.8.1 // indirect
+	github.com/gorilla/websocket v1.5.0 // indirect
 	github.com/gosuri/uitable v0.0.4 // indirect
 	github.com/gregjones/httpcache v0.0.0-20190611155906-901d90724c79 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.18.0 // indirect
@@ -262,6 +263,7 @@ require (
 	github.com/morikuni/aec v1.0.0 // indirect
 	github.com/mozillazg/docker-credential-acr-helper v0.3.0 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
+	github.com/mxk/go-flowrate v0.0.0-20140419014527-cca7078d478f // indirect
 	github.com/nozzle/throttler v0.0.0-20180817012639-2ea982251481 // indirect
 	github.com/oklog/ulid v1.3.1 // indirect
 	github.com/oleiade/reflections v1.0.1 // indirect
@@ -366,13 +368,13 @@ require (
 	gopkg.in/warnings.v0 v0.1.2 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
-	k8s.io/apiextensions-apiserver v0.28.6 // indirect
-	k8s.io/apiserver v0.28.6 // indirect
-	k8s.io/cli-runtime v0.28.6 // indirect
-	k8s.io/component-base v0.28.6 // indirect
+	k8s.io/apiextensions-apiserver v0.29.0 // indirect
+	k8s.io/apiserver v0.29.0 // indirect
+	k8s.io/cli-runtime v0.29.0 // indirect
+	k8s.io/component-base v0.29.0 // indirect
 	k8s.io/klog/v2 v2.110.1 // indirect
 	k8s.io/kube-openapi v0.0.0-20231206194836-bf4651e18aa8 // indirect
-	k8s.io/kubectl v0.28.6 // indirect
+	k8s.io/kubectl v0.29.0 // indirect
 	oras.land/oras-go v1.2.4 // indirect
 	sigs.k8s.io/json v0.0.0-20221116044647-bc3834ca7abd // indirect
 	sigs.k8s.io/kustomize/api v0.16.0 // indirect
