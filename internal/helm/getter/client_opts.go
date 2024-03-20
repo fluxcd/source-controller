@@ -88,7 +88,11 @@ func GetClientOpts(ctx context.Context, c client.Client, obj *helmv1.HelmReposit
 		err        error
 	)
 	// Check `.spec.certSecretRef` first for any TLS auth data.
-	if obj.Spec.CertSecretRef != nil {
+	if obj.Spec.InsecureSkipVerify {
+		hrOpts.TlsConfig = &tls.Config{
+			InsecureSkipVerify: true,
+		}
+	} else if obj.Spec.CertSecretRef != nil {
 		certSecret, err = fetchSecret(ctx, c, obj.Spec.CertSecretRef.Name, obj.GetNamespace())
 		if err != nil {
 			return nil, "", fmt.Errorf("failed to get TLS authentication secret '%s/%s': %w", obj.GetNamespace(), obj.Spec.CertSecretRef.Name, err)
