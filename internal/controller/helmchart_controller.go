@@ -32,6 +32,7 @@ import (
 	"github.com/opencontainers/go-digest"
 	"github.com/sigstore/cosign/v2/pkg/cosign"
 	helmgetter "helm.sh/helm/v3/pkg/getter"
+	"helm.sh/helm/v3/pkg/registry"
 	helmreg "helm.sh/helm/v3/pkg/registry"
 	helmrepo "helm.sh/helm/v3/pkg/repo"
 	corev1 "k8s.io/api/core/v1"
@@ -601,6 +602,7 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 		}
 		if repo.Spec.Insecure {
 			chartRepoOpts = append(chartRepoOpts, repository.WithInsecureHTTP())
+			clientOpts.RegLoginOpts = append(clientOpts.RegLoginOpts, registry.LoginOptInsecure(repo.Spec.Insecure))
 		}
 
 		ociChartRepo, err := repository.NewOCIChartRepository(normalizedURL, chartRepoOpts...)
