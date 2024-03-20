@@ -171,7 +171,7 @@ func setupRegistryServer(ctx context.Context, workspaceDir string, opts registry
 		}
 		server.dnsServer.PatchNet(net.DefaultResolver)
 	} else {
-		server.registryHost = fmt.Sprintf("localhost:%d", port)
+		server.registryHost = fmt.Sprintf("127.0.0.1:%d", port)
 	}
 
 	config.HTTP.Addr = fmt.Sprintf(":%d", port)

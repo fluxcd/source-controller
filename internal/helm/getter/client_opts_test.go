@@ -206,7 +206,7 @@ func TestGetClientOpts_registryTLSLoginOption(t *testing.T) {
 					"password": []byte("pass"),
 				},
 			},
-			loginOptsN: 2,
+			loginOptsN: 3,
 		},
 		{
 			name: "without caFile",
@@ -225,7 +225,7 @@ func TestGetClientOpts_registryTLSLoginOption(t *testing.T) {
 					"password": []byte("pass"),
 				},
 			},
-			loginOptsN: 1,
+			loginOptsN: 2,
 		},
 		{
 			name:       "without cert secret",
@@ -239,7 +239,7 @@ func TestGetClientOpts_registryTLSLoginOption(t *testing.T) {
 					"password": []byte("pass"),
 				},
 			},
-			loginOptsN: 1,
+			loginOptsN: 2,
 		},
 	}
 	for _, tt := range tests {
@@ -280,7 +280,7 @@ func TestGetClientOpts_registryTLSLoginOption(t *testing.T) {
 			}
 			if tt.loginOptsN != len(clientOpts.RegLoginOpts) {
 				// we should have a login option but no TLS option
-				t.Error("registryTLSLoginOption() != nil")
+				t.Errorf("expected length of %d for clientOpts.RegLoginOpts but got %d", tt.loginOptsN, len(clientOpts.RegLoginOpts))
 				return
 			}
 		})
