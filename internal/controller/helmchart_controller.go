@@ -602,7 +602,9 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 		}
 		if repo.Spec.Insecure {
 			chartRepoOpts = append(chartRepoOpts, repository.WithInsecureHTTP())
-			clientOpts.RegLoginOpts = append(clientOpts.RegLoginOpts, registry.LoginOptInsecure(repo.Spec.Insecure))
+			if clientOpts.MustLoginToRegistry() {
+				clientOpts.RegLoginOpts = append(clientOpts.RegLoginOpts, registry.LoginOptInsecure(repo.Spec.Insecure))
+			}
 		}
 
 		ociChartRepo, err := repository.NewOCIChartRepository(normalizedURL, chartRepoOpts...)
