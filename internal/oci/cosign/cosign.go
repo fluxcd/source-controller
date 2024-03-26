@@ -27,7 +27,6 @@ import (
 	coptions "github.com/sigstore/cosign/v2/cmd/cosign/cli/options"
 	"github.com/sigstore/cosign/v2/cmd/cosign/cli/rekor"
 	"github.com/sigstore/cosign/v2/pkg/cosign"
-	"github.com/sigstore/cosign/v2/pkg/oci"
 	ociremote "github.com/sigstore/cosign/v2/pkg/oci/remote"
 	"github.com/sigstore/sigstore/pkg/cryptoutils"
 	"github.com/sigstore/sigstore/pkg/signature"
@@ -146,16 +145,11 @@ func NewCosignVerifier(ctx context.Context, opts ...Options) (*CosignVerifier, e
 	}, nil
 }
 
-// verifyImageSignatures verify the authenticity of the given ref OCI image.
-func (v *CosignVerifier) verifyImageSignatures(ctx context.Context, ref name.Reference) ([]oci.Signature, bool, error) {
-	return cosign.VerifyImageSignatures(ctx, ref, v.opts)
-}
-
 // Verify verifies the authenticity of the given ref OCI image.
 // It returns a boolean indicating if the verification was successful.
 // It returns an error if the verification fails, nil otherwise.
 func (v *CosignVerifier) Verify(ctx context.Context, ref name.Reference) (soci.VerificationResult, error) {
-	signatures, _, err := v.verifyImageSignatures(ctx, ref)
+	signatures, _, err := cosign.VerifyImageSignatures(ctx, ref, v.opts)
 	if err != nil {
 		return soci.VerificationResultFailed, err
 	}
