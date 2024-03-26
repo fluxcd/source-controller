@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package oci
+package cosign
 
 import (
 	"net/http"
@@ -38,15 +38,15 @@ func TestOptions(t *testing.T) {
 		name: "signature option",
 		opts: []Options{WithPublicKey([]byte("foo"))},
 		want: &options{
-			PublicKey: []byte("foo"),
-			ROpt:      nil,
+			publicKey: []byte("foo"),
+			rOpt:      nil,
 		},
 	}, {
 		name: "keychain option",
 		opts: []Options{WithRemoteOptions(remote.WithAuthFromKeychain(authn.DefaultKeychain))},
 		want: &options{
-			PublicKey: nil,
-			ROpt:      []remote.Option{remote.WithAuthFromKeychain(authn.DefaultKeychain)},
+			publicKey: nil,
+			rOpt:      []remote.Option{remote.WithAuthFromKeychain(authn.DefaultKeychain)},
 		},
 	}, {
 		name: "keychain and authenticator option",
@@ -55,8 +55,8 @@ func TestOptions(t *testing.T) {
 			remote.WithAuthFromKeychain(authn.DefaultKeychain),
 		)},
 		want: &options{
-			PublicKey: nil,
-			ROpt: []remote.Option{
+			publicKey: nil,
+			rOpt: []remote.Option{
 				remote.WithAuth(&authn.Basic{Username: "foo", Password: "bar"}),
 				remote.WithAuthFromKeychain(authn.DefaultKeychain),
 			},
@@ -69,8 +69,8 @@ func TestOptions(t *testing.T) {
 			remote.WithTransport(http.DefaultTransport),
 		)},
 		want: &options{
-			PublicKey: nil,
-			ROpt: []remote.Option{
+			publicKey: nil,
+			rOpt: []remote.Option{
 				remote.WithAuth(&authn.Basic{Username: "foo", Password: "bar"}),
 				remote.WithAuthFromKeychain(authn.DefaultKeychain),
 				remote.WithTransport(http.DefaultTransport),
@@ -89,7 +89,7 @@ func TestOptions(t *testing.T) {
 			},
 		})},
 		want: &options{
-			Identities: []cosign.Identity{
+			identities: []cosign.Identity{
 				{
 					SubjectRegExp: "test-user",
 					IssuerRegExp:  "^https://token.actions.githubusercontent.com$",
@@ -109,20 +109,20 @@ func TestOptions(t *testing.T) {
 			for _, opt := range test.opts {
 				opt(&o)
 			}
-			if !reflect.DeepEqual(o.PublicKey, test.want.PublicKey) {
-				t.Errorf("got %#v, want %#v", &o.PublicKey, test.want.PublicKey)
+			if !reflect.DeepEqual(o.publicKey, test.want.publicKey) {
+				t.Errorf("got %#v, want %#v", &o.publicKey, test.want.publicKey)
 			}
 
-			if test.want.ROpt != nil {
-				if len(o.ROpt) != len(test.want.ROpt) {
-					t.Errorf("got %d remote options, want %d", len(o.ROpt), len(test.want.ROpt))
+			if test.want.rOpt != nil {
+				if len(o.rOpt) != len(test.want.rOpt) {
+					t.Errorf("got %d remote options, want %d", len(o.rOpt), len(test.want.rOpt))
 				}
 				return
 			}
 
-			if test.want.ROpt == nil {
-				if len(o.ROpt) != 0 {
-					t.Errorf("got %d remote options, want %d", len(o.ROpt), 0)
+			if test.want.rOpt == nil {
+				if len(o.rOpt) != 0 {
+					t.Errorf("got %d remote options, want %d", len(o.rOpt), 0)
 				}
 			}
 		})

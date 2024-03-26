@@ -35,6 +35,7 @@ import (
 	"github.com/fluxcd/source-controller/internal/fs"
 	"github.com/fluxcd/source-controller/internal/helm/chart/secureloader"
 	"github.com/fluxcd/source-controller/internal/helm/repository"
+	"github.com/fluxcd/source-controller/internal/oci"
 )
 
 type remoteChartBuilder struct {
@@ -141,9 +142,11 @@ func (b *remoteChartBuilder) downloadFromRepository(ctx context.Context, remote 
 		return nil, nil, &BuildError{Reason: reason, Err: err}
 	}
 
+	verifiedResult := oci.VerificationResultIgnored
+
 	// Verify the chart if necessary
 	if opts.Verify {
-		if err := remote.VerifyChart(ctx, cv); err != nil {
+		if verifiedResult, err = remote.VerifyChart(ctx, cv); err != nil {
 			return nil, nil, &BuildError{Reason: ErrChartVerification, Err: err}
 		}
 	}
@@ -152,6 +155,8 @@ func (b *remoteChartBuilder) downloadFromRepository(ctx context.Context, remote 
 	if err != nil {
 		return nil, nil, err
 	}
+
+	result.VerifiedResult = verifiedResult
 
 	if shouldReturn {
 		return nil, result, nil
@@ -173,6 +178,7 @@ func generateBuildResult(cv *repo.ChartVersion, opts BuildOptions) (*Build, bool
 	result := &Build{}
 	result.Version = cv.Version
 	result.Name = cv.Name
+	result.VerifiedResult = oci.VerificationResultIgnored
 
 	// Set build specific metadata if instructed
 	if opts.VersionMetadata != "" {

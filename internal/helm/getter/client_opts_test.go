@@ -44,6 +44,7 @@ func TestGetClientOpts(t *testing.T) {
 		authSecret *corev1.Secret
 		afterFunc  func(t *WithT, hcOpts *ClientOpts)
 		oci        bool
+		insecure   bool
 		err        error
 	}{
 		{
@@ -109,8 +110,26 @@ func TestGetClientOpts(t *testing.T) {
 				t.Expect(err).ToNot(HaveOccurred())
 				t.Expect(config.Username).To(Equal("user"))
 				t.Expect(config.Password).To(Equal("pass"))
+				t.Expect(hcOpts.Insecure).To(BeFalse())
 			},
 			oci: true,
+		},
+		{
+			name: "OCI HelmRepository with insecure repository",
+			authSecret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "auth-oci",
+				},
+				Data: map[string][]byte{
+					"username": []byte("user"),
+					"password": []byte("pass"),
+				},
+			},
+			afterFunc: func(t *WithT, hcOpts *ClientOpts) {
+				t.Expect(hcOpts.Insecure).To(BeTrue())
+			},
+			oci:      true,
+			insecure: true,
 		},
 	}
 
@@ -123,6 +142,7 @@ func TestGetClientOpts(t *testing.T) {
 					Timeout: &metav1.Duration{
 						Duration: time.Second,
 					},
+					Insecure: tt.insecure,
 				},
 			}
 			if tt.oci {

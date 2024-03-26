@@ -144,6 +144,12 @@ kubectl -n source-system apply -f "${ROOT_DIR}/config/testdata/helmchart-from-oc
 kubectl -n source-system wait helmchart/podinfo --for=condition=ready --timeout=1m
 kubectl -n source-system wait helmchart/podinfo-keyless --for=condition=ready --timeout=1m
 
+kubectl -n source-system apply -f "${ROOT_DIR}/config/testdata/helmchart-from-oci/notation.yaml"
+curl -sSLo notation.crt https://raw.githubusercontent.com/stefanprodan/podinfo/master/.notation/notation.crt
+curl -sSLo trustpolicy.json https://raw.githubusercontent.com/stefanprodan/podinfo/master/.notation/trustpolicy.json
+kubectl -n source-system create secret generic notation-config --from-file=notation.crt --from-file=trustpolicy.json --dry-run=client -o yaml | kubectl apply -f -
+kubectl -n source-system wait helmchart/podinfo-notation --for=condition=ready --timeout=1m
+
 echo "Run OCIRepository verify tests"
 kubectl -n source-system apply -f "${ROOT_DIR}/config/testdata/ocirepository/signed-with-key.yaml"
 kubectl -n source-system apply -f "${ROOT_DIR}/config/testdata/ocirepository/signed-with-keyless.yaml"
@@ -152,3 +158,6 @@ kubectl -n source-system create secret generic cosign-key --from-file=cosign.pub
 
 kubectl -n source-system wait ocirepository/podinfo-deploy-signed-with-key --for=condition=ready --timeout=1m
 kubectl -n source-system wait ocirepository/podinfo-deploy-signed-with-keyless --for=condition=ready --timeout=1m
+
+kubectl -n source-system apply -f "${ROOT_DIR}/config/testdata/ocirepository/signed-with-notation.yaml"
+kubectl -n source-system wait ocirepository/podinfo-deploy-signed-with-notation --for=condition=ready --timeout=1m

@@ -58,7 +58,7 @@ make run
 
 ### Building the container image
 
-Set the name of the container image to be created from the source code. This will be used 
+Set the name of the container image to be created from the source code. This will be used
 when building, pushing and referring to the image on YAML files:
 
 ```sh
@@ -79,7 +79,7 @@ make docker-push
 ```
 
 Alternatively, the three steps above can be done in a single line:
-  
+
 ```sh
 IMG=registry-path/source-controller TAG=latest BUILD_ARGS=--push \
     make docker-build
@@ -128,7 +128,8 @@ Create a `.vscode/launch.json` file:
             "type": "go",
             "request": "launch",
             "mode": "auto",
-            "program": "${workspaceFolder}/main.go"
+            "program": "${workspaceFolder}/main.go",
+            "args": ["--storage-adv-addr=:0", "--storage-path=${workspaceFolder}/bin/data"]
         }
     ]
 }

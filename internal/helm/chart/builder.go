@@ -28,6 +28,7 @@ import (
 	"helm.sh/helm/v3/pkg/chartutil"
 
 	"github.com/fluxcd/source-controller/internal/fs"
+	"github.com/fluxcd/source-controller/internal/oci"
 )
 
 // Reference holds information to locate a chart.
@@ -146,6 +147,9 @@ type Build struct {
 	// This can for example be false if ValuesFiles is empty and the chart
 	// source was already packaged.
 	Packaged bool
+	// VerifiedResult indicates the results of verifying the chart.
+	// If no verification was performed, this field should be VerificationResultIgnored.
+	VerifiedResult oci.VerificationResult
 }
 
 // Summary returns a human-readable summary of the Build.
