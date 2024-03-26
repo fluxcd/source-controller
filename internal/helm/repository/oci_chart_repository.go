@@ -357,15 +357,16 @@ func getLastMatchingVersionOrConstraint(cvs []string, ver string) (string, error
 }
 
 // VerifyChart verifies the chart against a signature.
-// If no signature is provided, a keyless verification is performed.
-// It returns an error on failure.
-func (r *OCIChartRepository) VerifyChart(ctx context.Context, chart *repo.ChartVersion) error {
+// Supports signature verification using either cosign or notation providers.
+// If no signature is provided, when cosign is used, a keyless verification is performed.
+// The verification result is returned as a VerificationResult and any error encountered.
+func (r *OCIChartRepository) VerifyChart(ctx context.Context, chart *repo.ChartVersion) (oci.VerificationResult, error) {
 	if len(r.verifiers) == 0 {
-		return fmt.Errorf("no verifiers available")
+		return oci.VerificationResultFailed, fmt.Errorf("no verifiers available")
 	}
 
 	if len(chart.URLs) == 0 {
-		return fmt.Errorf("chart '%s' has no downloadable URLs", chart.Name)
+		return oci.VerificationResultFailed, fmt.Errorf("chart '%s' has no downloadable URLs", chart.Name)
 	}
 
 	var nameOpts []name.Option
@@ -375,17 +376,26 @@ func (r *OCIChartRepository) VerifyChart(ctx context.Context, chart *repo.ChartV
 
 	ref, err := name.ParseReference(strings.TrimPrefix(chart.URLs[0], fmt.Sprintf("%s://", registry.OCIScheme)), nameOpts...)
 	if err != nil {
-		return fmt.Errorf("invalid chart reference: %s", err)
+		return oci.VerificationResultFailed, fmt.Errorf("invalid chart reference: %s", err)
 	}
+
+	verificationResult := oci.VerificationResultFailed
 
 	// verify the chart
 	for _, verifier := range r.verifiers {
-		if verified, err := verifier.Verify(ctx, ref); err != nil {
-			return fmt.Errorf("failed to verify %s: %w", chart.URLs[0], err)
-		} else if verified {
-			return nil
+		result, err := verifier.Verify(ctx, ref)
+		if err != nil {
+			return result, fmt.Errorf("failed to verify %s: %w", chart.URLs[0], err)
 		}
+		if result == oci.VerificationResultSuccess {
+			return result, nil
+		}
+		verificationResult = result
 	}
 
-	return fmt.Errorf("no matching signatures were found for '%s'", ref.Name())
+	if verificationResult == oci.VerificationResultIgnored {
+		return verificationResult, nil
+	}
+
+	return oci.VerificationResultFailed, fmt.Errorf("no matching signatures were found for '%s'", ref.Name())
 }

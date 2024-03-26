@@ -19,7 +19,9 @@ package controller
 import (
 	"bytes"
 	"context"
+	"crypto/x509"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -34,6 +36,12 @@ import (
 	"time"
 
 	"github.com/foxcpp/go-mockdns"
+	"github.com/notaryproject/notation-core-go/signature/cose"
+	"github.com/notaryproject/notation-core-go/testhelper"
+	"github.com/notaryproject/notation-go"
+	nr "github.com/notaryproject/notation-go/registry"
+	"github.com/notaryproject/notation-go/signer"
+	"github.com/notaryproject/notation-go/verifier/trustpolicy"
 	. "github.com/onsi/gomega"
 	coptions "github.com/sigstore/cosign/v2/cmd/cosign/cli/options"
 	"github.com/sigstore/cosign/v2/cmd/cosign/cli/sign"
@@ -45,6 +53,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/record"
+	oras "oras.land/oras-go/v2/registry/remote"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	fakeclient "sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -66,6 +75,7 @@ import (
 	"github.com/fluxcd/source-controller/internal/helm/chart/secureloader"
 	"github.com/fluxcd/source-controller/internal/helm/registry"
 	"github.com/fluxcd/source-controller/internal/oci"
+	snotation "github.com/fluxcd/source-controller/internal/oci/notation"
 	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
 	"github.com/fluxcd/source-controller/internal/reconcile/summarize"
 )
@@ -2733,7 +2743,331 @@ func TestHelmChartRepository_reconcileSource_verifyOCISourceSignature_keyless(t 
 	}
 }
 
-func TestHelmChartReconciler_reconcileSourceFromOCI_verifySignature(t *testing.T) {
+func TestHelmChartReconciler_reconcileSourceFromOCI_verifySignatureNotation(t *testing.T) {
+	g := NewWithT(t)
+
+	tmpDir := t.TempDir()
+	server, err := setupRegistryServer(ctx, tmpDir, registryOptions{})
+	g.Expect(err).ToNot(HaveOccurred())
+	t.Cleanup(func() {
+		server.Close()
+	})
+
+	const (
+		chartPath = "testdata/charts/helmchart-0.1.0.tgz"
+	)
+
+	// Load a test chart
+	chartData, err := os.ReadFile(chartPath)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Upload the test chart
+	metadata, err := loadTestChartToOCI(chartData, server, "", "", "")
+	g.Expect(err).NotTo(HaveOccurred())
+
+	storage, err := NewStorage(tmpDir, "example.com", retentionTTL, retentionRecords)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	cachedArtifact := &sourcev1.Artifact{
+		Revision: "0.1.0",
+		Path:     metadata.Name + "-" + metadata.Version + ".tgz",
+	}
+	g.Expect(storage.CopyFromPath(cachedArtifact, "testdata/charts/helmchart-0.1.0.tgz")).To(Succeed())
+
+	certTuple := testhelper.GetRSASelfSignedSigningCertTuple("notation self-signed certs for testing")
+	certs := []*x509.Certificate{certTuple.Cert}
+
+	signer, err := signer.New(certTuple.PrivateKey, certs)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	policyDocument := trustpolicy.Document{
+		Version: "1.0",
+		TrustPolicies: []trustpolicy.TrustPolicy{
+			{
+				Name:                  "test-statement-name",
+				RegistryScopes:        []string{"*"},
+				SignatureVerification: trustpolicy.SignatureVerification{VerificationLevel: trustpolicy.LevelStrict.Name, Override: map[trustpolicy.ValidationType]trustpolicy.ValidationAction{trustpolicy.TypeRevocation: trustpolicy.ActionSkip}},
+				TrustStores:           []string{"ca:valid-trust-store"},
+				TrustedIdentities:     []string{"*"},
+			},
+		},
+	}
+
+	tests := []struct {
+		name             string
+		shouldSign       bool
+		beforeFunc       func(obj *helmv1.HelmChart)
+		want             sreconcile.Result
+		wantErr          bool
+		wantErrMsg       string
+		addMultipleCerts bool
+		provideNoCert    bool
+		provideNoPolicy  bool
+		assertConditions []metav1.Condition
+		cleanFunc        func(g *WithT, build *chart.Build)
+	}{
+		{
+			name: "unsigned charts should not pass verification",
+			beforeFunc: func(obj *helmv1.HelmChart) {
+				obj.Spec.Chart = metadata.Name
+				obj.Spec.Version = metadata.Version
+				obj.Spec.Verify = &helmv1.OCIRepositoryVerification{
+					Provider:  "notation",
+					SecretRef: &meta.LocalObjectReference{Name: "notation-config"},
+				}
+			},
+			want:       sreconcile.ResultEmpty,
+			wantErr:    true,
+			wantErrMsg: "chart verification error: failed to verify <url>: no signature",
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.BuildFailedCondition, "ChartVerificationError", "chart verification error: failed to verify <url>: no signature"),
+				*conditions.FalseCondition(sourcev1.SourceVerifiedCondition, sourcev1.VerificationError, "chart verification error: failed to verify <url>: no signature"),
+			},
+		},
+		{
+			name:       "signed charts should pass verification",
+			shouldSign: true,
+			beforeFunc: func(obj *helmv1.HelmChart) {
+				obj.Spec.Chart = metadata.Name
+				obj.Spec.Version = metadata.Version
+				obj.Spec.Verify = &helmv1.OCIRepositoryVerification{
+					Provider:  "notation",
+					SecretRef: &meta.LocalObjectReference{Name: "notation-config"},
+				}
+			},
+			want: sreconcile.ResultSuccess,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.SourceVerifiedCondition, meta.SucceededReason, "verified signature of version <version>"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: pulled '<name>' chart with version '<version>'"),
+				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: pulled '<name>' chart with version '<version>'"),
+			},
+			cleanFunc: func(g *WithT, build *chart.Build) {
+				g.Expect(os.Remove(build.Path)).To(Succeed())
+			},
+		},
+		{
+			name:             "multiple certs should still pass verification",
+			addMultipleCerts: true,
+			beforeFunc: func(obj *helmv1.HelmChart) {
+				obj.Spec.Chart = metadata.Name
+				obj.Spec.Version = metadata.Version
+				obj.Spec.Verify = &helmv1.OCIRepositoryVerification{
+					Provider:  "notation",
+					SecretRef: &meta.LocalObjectReference{Name: "notation-config"},
+				}
+			},
+			want: sreconcile.ResultSuccess,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.SourceVerifiedCondition, meta.SucceededReason, "verified signature of version <version>"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: pulled '<name>' chart with version '<version>'"),
+				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: pulled '<name>' chart with version '<version>'"),
+			},
+			cleanFunc: func(g *WithT, build *chart.Build) {
+				g.Expect(os.Remove(build.Path)).To(Succeed())
+			},
+		},
+		{
+			name: "verify failed before, removed from spec, remove condition",
+			beforeFunc: func(obj *helmv1.HelmChart) {
+				obj.Spec.Chart = metadata.Name
+				obj.Spec.Version = metadata.Version
+				obj.Spec.Verify = nil
+				conditions.MarkFalse(obj, sourcev1.SourceVerifiedCondition, "VerifyFailed", "fail msg")
+				obj.Status.Artifact = &sourcev1.Artifact{Path: metadata.Name + "-" + metadata.Version + ".tgz"}
+			},
+			want: sreconcile.ResultSuccess,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewChart", "pulled '<name>' chart with version '<version>'"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: pulled '<name>' chart with version '<version>'"),
+				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: pulled '<name>' chart with version '<version>'"),
+			},
+			cleanFunc: func(g *WithT, build *chart.Build) {
+				g.Expect(os.Remove(build.Path)).To(Succeed())
+			},
+		},
+		{
+			name: "no cert provided should not pass verification",
+			beforeFunc: func(obj *helmv1.HelmChart) {
+				obj.Spec.Chart = metadata.Name
+				obj.Spec.Version = metadata.Version
+				obj.Spec.Verify = &helmv1.OCIRepositoryVerification{
+					Provider:  "notation",
+					SecretRef: &meta.LocalObjectReference{Name: "notation-config"},
+				}
+			},
+			wantErr:       true,
+			provideNoCert: true,
+			// no namespace but the namespace name should appear before the /notation-config
+			wantErrMsg: "failed to verify the signature using provider 'notation': no certificates found in secret '/notation-config'",
+			want:       sreconcile.ResultEmpty,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, "Unknown", "failed to verify the signature using provider 'notation': no certificates found in secret '/notation-config'"),
+				*conditions.FalseCondition(sourcev1.SourceVerifiedCondition, sourcev1.VerificationError, "failed to verify the signature using provider 'notation': no certificates found in secret '/notation-config'"),
+			},
+		},
+		{
+			name: "empty string should fail verification",
+			beforeFunc: func(obj *helmv1.HelmChart) {
+				obj.Spec.Chart = metadata.Name
+				obj.Spec.Version = metadata.Version
+				obj.Spec.Verify = &helmv1.OCIRepositoryVerification{
+					Provider:  "notation",
+					SecretRef: &meta.LocalObjectReference{Name: "notation-config"},
+				}
+			},
+			provideNoPolicy: true,
+			wantErr:         true,
+			wantErrMsg:      fmt.Sprintf("failed to verify the signature using provider 'notation': '%s' not found in secret '/notation-config'", snotation.DefaultTrustPolicyKey),
+			want:            sreconcile.ResultEmpty,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, "Unknown", fmt.Sprintf("failed to verify the signature using provider 'notation': '%s' not found in secret '/notation-config'", snotation.DefaultTrustPolicyKey)),
+				*conditions.FalseCondition(sourcev1.SourceVerifiedCondition, sourcev1.VerificationError, fmt.Sprintf("failed to verify the signature using provider 'notation': '%s' not found in secret '/notation-config'", snotation.DefaultTrustPolicyKey)),
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			clientBuilder := fakeclient.NewClientBuilder()
+
+			repository := &helmv1.HelmRepository{
+				ObjectMeta: metav1.ObjectMeta{
+					GenerateName: "helmrepository-",
+				},
+				Spec: helmv1.HelmRepositorySpec{
+					URL:      fmt.Sprintf("oci://%s/testrepo", server.registryHost),
+					Timeout:  &metav1.Duration{Duration: timeout},
+					Provider: helmv1.GenericOCIProvider,
+					Type:     helmv1.HelmRepositoryTypeOCI,
+					Insecure: true,
+				},
+			}
+
+			policy, err := json.Marshal(policyDocument)
+			g.Expect(err).NotTo(HaveOccurred())
+
+			data := map[string][]byte{}
+
+			if tt.addMultipleCerts {
+				data["a.crt"] = testhelper.GetRSASelfSignedSigningCertTuple("a not used for signing").Cert.Raw
+				data["b.crt"] = testhelper.GetRSASelfSignedSigningCertTuple("b not used for signing").Cert.Raw
+				data["c.crt"] = testhelper.GetRSASelfSignedSigningCertTuple("c not used for signing").Cert.Raw
+			}
+
+			if !tt.provideNoCert {
+				data["notation.crt"] = certTuple.Cert.Raw
+			}
+
+			if !tt.provideNoPolicy {
+				data["trustpolicy.json"] = policy
+			}
+
+			secret := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "notation-config",
+				},
+				Data: data,
+			}
+
+			caSecret := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       "valid-trust-store",
+					Generation: 1,
+				},
+				Data: map[string][]byte{
+					"ca.crt": tlsCA,
+				},
+			}
+
+			clientBuilder.WithObjects(repository, secret, caSecret)
+
+			r := &HelmChartReconciler{
+				Client:                  clientBuilder.Build(),
+				EventRecorder:           record.NewFakeRecorder(32),
+				Getters:                 testGetters,
+				Storage:                 storage,
+				RegistryClientGenerator: registry.ClientGenerator,
+				patchOptions:            getPatchOptions(helmChartReadyCondition.Owned, "sc"),
+			}
+
+			obj := &helmv1.HelmChart{
+				ObjectMeta: metav1.ObjectMeta{
+					GenerateName: "helmchart-",
+				},
+				Spec: helmv1.HelmChartSpec{
+					SourceRef: helmv1.LocalHelmChartSourceReference{
+						Kind: helmv1.HelmRepositoryKind,
+						Name: repository.Name,
+					},
+				},
+			}
+
+			chartUrl := fmt.Sprintf("oci://%s/testrepo/%s:%s", server.registryHost, metadata.Name, metadata.Version)
+
+			if tt.beforeFunc != nil {
+				tt.beforeFunc(obj)
+			}
+
+			if tt.shouldSign {
+				artifact := fmt.Sprintf("%s/testrepo/%s:%s", server.registryHost, metadata.Name, metadata.Version)
+
+				remoteRepo, err := oras.NewRepository(artifact)
+				g.Expect(err).ToNot(HaveOccurred())
+
+				remoteRepo.PlainHTTP = true
+
+				repo := nr.NewRepository(remoteRepo)
+
+				signatureMediaType := cose.MediaTypeEnvelope
+
+				signOptions := notation.SignOptions{
+					SignerSignOptions: notation.SignerSignOptions{
+						SignatureMediaType: signatureMediaType,
+					},
+					ArtifactReference: artifact,
+				}
+
+				_, err = notation.Sign(ctx, signer, repo, signOptions)
+				g.Expect(err).ToNot(HaveOccurred())
+			}
+
+			assertConditions := tt.assertConditions
+			for k := range assertConditions {
+				assertConditions[k].Message = strings.ReplaceAll(assertConditions[k].Message, "<name>", metadata.Name)
+				assertConditions[k].Message = strings.ReplaceAll(assertConditions[k].Message, "<version>", metadata.Version)
+				assertConditions[k].Message = strings.ReplaceAll(assertConditions[k].Message, "<url>", chartUrl)
+				assertConditions[k].Message = strings.ReplaceAll(assertConditions[k].Message, "<provider>", "notation")
+			}
+
+			var b chart.Build
+			if tt.cleanFunc != nil {
+				defer tt.cleanFunc(g, &b)
+			}
+
+			g.Expect(r.Client.Create(context.TODO(), obj)).ToNot(HaveOccurred())
+			defer func() {
+				g.Expect(r.Client.Delete(context.TODO(), obj)).ToNot(HaveOccurred())
+			}()
+
+			sp := patch.NewSerialPatcher(obj, r.Client)
+
+			got, err := r.reconcileSource(ctx, sp, obj, &b)
+			if tt.wantErr {
+				tt.wantErrMsg = strings.ReplaceAll(tt.wantErrMsg, "<url>", chartUrl)
+				g.Expect(err).ToNot(BeNil())
+				g.Expect(err.Error()).To(ContainSubstring(tt.wantErrMsg))
+			} else {
+				g.Expect(err).ToNot(HaveOccurred())
+			}
+			g.Expect(got).To(Equal(tt.want))
+			g.Expect(obj.Status.Conditions).To(conditions.MatchConditions(tt.assertConditions))
+		})
+	}
+}
+
+func TestHelmChartReconciler_reconcileSourceFromOCI_verifySignatureCosign(t *testing.T) {
 	g := NewWithT(t)
 
 	tmpDir := t.TempDir()

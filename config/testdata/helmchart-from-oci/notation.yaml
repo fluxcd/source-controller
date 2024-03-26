@@ -1,0 +1,25 @@
+---
+apiVersion: source.toolkit.fluxcd.io/v1beta2
+kind: HelmRepository
+metadata:
+  name: podinfo-notation
+spec:
+  url: oci://ghcr.io/stefanprodan/charts
+  type: "oci"
+  interval: 1m
+---
+apiVersion: source.toolkit.fluxcd.io/v1beta2
+kind: HelmChart
+metadata:
+  name: podinfo-notation
+spec:
+  chart: podinfo
+  sourceRef:
+    kind: HelmRepository
+    name: podinfo-notation
+  version: '6.6.0'
+  interval: 1m
+  verify:
+    provider: notation
+    secretRef:
+      name: notation-config

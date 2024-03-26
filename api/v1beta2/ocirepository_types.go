@@ -182,7 +182,7 @@ type OCILayerSelector struct {
 // OCIRepositoryVerification verifies the authenticity of an OCI Artifact
 type OCIRepositoryVerification struct {
 	// Provider specifies the technology used to sign the OCI Artifact.
-	// +kubebuilder:validation:Enum=cosign
+	// +kubebuilder:validation:Enum=cosign;notation
 	// +kubebuilder:default:=cosign
 	Provider string `json:"provider"`
 
