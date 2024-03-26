@@ -237,7 +237,7 @@ patches:
     target:
       kind: Deployment
       name: source-controller
-``` 
+```
 
 When using pod-managed identity on an AKS cluster, AAD Pod Identity
 has to be used to give the `source-controller` pod access to the ACR.
@@ -279,7 +279,7 @@ patches:
     target:
       kind: ServiceAccount
       name: source-controller
-``` 
+```
 
 The Artifact Registry service uses the permission `artifactregistry.repositories.downloadArtifacts`
 that is located under the Artifact Registry Reader role. If you are using
@@ -454,7 +454,7 @@ metadata:
 spec:
   ref:
     digest: "sha256:<SHA-value>"
-``` 
+```
 
 This field takes precedence over all other fields.
 
@@ -501,13 +501,22 @@ for more information.
 ### Verification
 
 `.spec.verify` is an optional field to enable the verification of [Cosign](https://github.com/sigstore/cosign)
+or [Notation](https://github.com/notaryproject/notation)
 signatures. The field offers three subfields:
 
-- `.provider`, to specify the verification provider. Only supports `cosign` at present.
+- `.provider`, to specify the verification provider. The supported options are `cosign` and `notation` at present.
 - `.secretRef.name`, to specify a reference to a Secret in the same namespace as
-  the OCIRepository, containing the Cosign public keys of trusted authors.
-- `.matchOIDCIdentity`, to specify a list of OIDC identity matchers. Please see
+  the OCIRepository, containing the Cosign public keys of trusted authors. For Notation this Secret should also
+  include the [trust policy](https://github.com/notaryproject/specifications/blob/v1.0.0/specs/trust-store-trust-policy.md#trust-policy) in
+  addition to the CA certificate.
+- `.matchOIDCIdentity`, to specify a list of OIDC identity matchers (only supported when using `cosign` as the
+  verification provider). Please see
    [Keyless verification](#keyless-verification) for more details.
+
+#### Cosign
+
+The `cosign` provider can be used to verify the signature of an OCI artifact using either a known public key
+or via the [Cosign Keyless](https://github.com/sigstore/cosign/blob/main/KEYLESS.md) procedure.
 
 ```yaml
 ---
@@ -529,7 +538,7 @@ following attributes to the OCIRepository's `.status.conditions`:
 - `status: "True"`
 - `reason: Succeeded`
 
-#### Public keys verification
+##### Public keys verification
 
 To verify the authenticity of an OCI artifact, create a Kubernetes secret
 with the Cosign public keys:
@@ -551,7 +560,7 @@ Note that the keys must have the `.pub` extension for Flux to make use of them.
 Flux will loop over the public keys and use them to verify an artifact's signature.
 This allows for older artifacts to be valid as long as the right key is in the secret.
 
-#### Keyless verification
+##### Keyless verification
 
 For publicly available OCI artifacts, which are signed using the
 [Cosign Keyless](https://github.com/sigstore/cosign/blob/main/KEYLESS.md) procedure,
@@ -592,6 +601,55 @@ instance hosted at [rekor.sigstore.dev](https://rekor.sigstore.dev/).
 
 Note that keyless verification is an **experimental feature**, using
 custom root CAs or self-hosted Rekor instances are not currently supported.
+
+#### Notation
+
+The `notation` provider can be used to verify the signature of an OCI artifact using known
+trust policy and CA certificate.
+
+```yaml
+---
+apiVersion: source.toolkit.fluxcd.io/v1beta2
+kind: OCIRepository
+metadata:
+  name: <repository-name>
+spec:
+  verify:
+    provider: notation
+    secretRef:
+      name: notation-config
+```
+
+When the verification succeeds, the controller adds a Condition with the
+following attributes to the OCIRepository's `.status.conditions`:
+
+- `type: SourceVerified`
+- `status: "True"`
+- `reason: Succeeded`
+
+To verify the authenticity of an OCI artifact, create a Kubernetes secret
+containing Certificate Authority (CA) root certificates and the a `trust policy`
+
+```yaml
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: notation-config
+type: Opaque
+data:
+  certificate1.pem: <BASE64>
+  certificate2.crt: <BASE64>
+  trustpolicy.json: <BASE64>
+```
+
+Note that the CA certificates must have either `.pem` or `.crt` extension and your trust policy must
+be named `trustpolicy.json` for Flux to make use of them.
+
+For more information on the signing and verification process see [Signing and Verification Workflow](https://github.com/notaryproject/specifications/blob/v1.0.0/specs/signing-and-verification-workflow.md).
+
+Flux will loop over the certificates and use them to verify an artifact's signature.
+This allows for older artifacts to be valid as long as the right certificate is in the secret.
 
 ### Suspend
 
