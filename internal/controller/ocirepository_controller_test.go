@@ -19,6 +19,7 @@ package controller
 import (
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -35,7 +36,14 @@ import (
 	gcrv1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/mutate"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
+	"github.com/notaryproject/notation-core-go/signature/cose"
+	"github.com/notaryproject/notation-core-go/testhelper"
+	"github.com/notaryproject/notation-go"
+	"github.com/notaryproject/notation-go/registry"
+	"github.com/notaryproject/notation-go/signer"
+	"github.com/notaryproject/notation-go/verifier/trustpolicy"
 	. "github.com/onsi/gomega"
+	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	coptions "github.com/sigstore/cosign/v2/cmd/cosign/cli/options"
 	"github.com/sigstore/cosign/v2/cmd/cosign/cli/sign"
 	"github.com/sigstore/cosign/v2/pkg/cosign"
@@ -44,6 +52,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/utils/ptr"
+	oras "oras.land/oras-go/v2/registry/remote"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	fakeclient "sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -62,6 +71,7 @@ import (
 	ociv1 "github.com/fluxcd/source-controller/api/v1beta2"
 	intdigest "github.com/fluxcd/source-controller/internal/digest"
 	serror "github.com/fluxcd/source-controller/internal/error"
+	snotation "github.com/fluxcd/source-controller/internal/oci/notation"
 	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
 )
 
@@ -1167,7 +1177,715 @@ func TestOCIRepository_reconcileSource_remoteReference(t *testing.T) {
 	}
 }
 
-func TestOCIRepository_reconcileSource_verifyOCISourceSignature(t *testing.T) {
+func TestOCIRepository_reconcileSource_verifyOCISourceSignatureNotation(t *testing.T) {
+	g := NewWithT(t)
+
+	tests := []struct {
+		name             string
+		reference        *ociv1.OCIRepositoryRef
+		insecure         bool
+		want             sreconcile.Result
+		wantErr          bool
+		wantErrMsg       string
+		shouldSign       bool
+		useDigest        bool
+		addMultipleCerts bool
+		provideNoCert    bool
+		beforeFunc       func(obj *ociv1.OCIRepository, tag, revision string)
+		assertConditions []metav1.Condition
+	}{
+		{
+			name: "signed image should pass verification",
+			reference: &ociv1.OCIRepositoryRef{
+				Tag: "6.1.4",
+			},
+			shouldSign: true,
+			want:       sreconcile.ResultSuccess,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new revision '<revision>' for '<url>'"),
+				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new revision '<revision>' for '<url>'"),
+				*conditions.TrueCondition(sourcev1.SourceVerifiedCondition, meta.SucceededReason, "verified signature of revision <revision>"),
+			},
+		},
+		{
+			name: "unsigned image should not pass verification",
+			reference: &ociv1.OCIRepositoryRef{
+				Tag: "6.1.5",
+			},
+			wantErr:    true,
+			useDigest:  true,
+			wantErrMsg: "failed to verify the signature using provider 'notation': no signature is associated with \"<url>\"",
+			want:       sreconcile.ResultEmpty,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new revision '<revision>' for '<url>'"),
+				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new revision '<revision>' for '<url>'"),
+				*conditions.FalseCondition(sourcev1.SourceVerifiedCondition, sourcev1.VerificationError, "failed to verify the signature using provider '<provider>': no signature is associated with \"<url>\", make sure the artifact was signed successfully"),
+			},
+		},
+		{
+			name:      "verify failed before, removed from spec, remove condition",
+			reference: &ociv1.OCIRepositoryRef{Tag: "6.1.4"},
+			beforeFunc: func(obj *ociv1.OCIRepository, tag, revision string) {
+				conditions.MarkFalse(obj, sourcev1.SourceVerifiedCondition, "VerifyFailed", "fail msg")
+				obj.Spec.Verify = nil
+				obj.Status.Artifact = &sourcev1.Artifact{Revision: fmt.Sprintf("%s@%s", tag, revision)}
+			},
+			want: sreconcile.ResultSuccess,
+		},
+		{
+			name:       "same artifact, verified before, change in obj gen verify again",
+			reference:  &ociv1.OCIRepositoryRef{Tag: "6.1.4"},
+			shouldSign: true,
+			beforeFunc: func(obj *ociv1.OCIRepository, tag, revision string) {
+				obj.Status.Artifact = &sourcev1.Artifact{Revision: fmt.Sprintf("%s@%s", tag, revision)}
+				// Set Verified with old observed generation and different reason/message.
+				conditions.MarkTrue(obj, sourcev1.SourceVerifiedCondition, "Verified", "verified")
+				// Set new object generation.
+				obj.SetGeneration(3)
+			},
+			want: sreconcile.ResultSuccess,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.SourceVerifiedCondition, meta.SucceededReason, "verified signature of revision <revision>"),
+			},
+		},
+		{
+			name:       "no verify for already verified, verified condition remains the same",
+			reference:  &ociv1.OCIRepositoryRef{Tag: "6.1.4"},
+			shouldSign: true,
+			beforeFunc: func(obj *ociv1.OCIRepository, tag, revision string) {
+				// Artifact present and custom verified condition reason/message.
+				obj.Status.Artifact = &sourcev1.Artifact{Revision: fmt.Sprintf("%s@%s", tag, revision)}
+				conditions.MarkTrue(obj, sourcev1.SourceVerifiedCondition, "Verified", "verified")
+			},
+			want: sreconcile.ResultSuccess,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.SourceVerifiedCondition, "Verified", "verified"),
+			},
+		},
+		{
+			name: "signed image on an insecure registry passes verification",
+			reference: &ociv1.OCIRepositoryRef{
+				Tag: "6.1.6",
+			},
+			shouldSign: true,
+			insecure:   true,
+			want:       sreconcile.ResultSuccess,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new revision '<revision>' for '<url>'"),
+				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new revision '<revision>' for '<url>'"),
+				*conditions.TrueCondition(sourcev1.SourceVerifiedCondition, meta.SucceededReason, "verified signature of revision <revision>"),
+			},
+		},
+		{
+			name: "signed image on an insecure registry using digest as reference passes verification",
+			reference: &ociv1.OCIRepositoryRef{
+				Tag: "6.1.6",
+			},
+			shouldSign: true,
+			insecure:   true,
+			useDigest:  true,
+			want:       sreconcile.ResultSuccess,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new revision '<revision>' for '<url>'"),
+				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new revision '<revision>' for '<url>'"),
+				*conditions.TrueCondition(sourcev1.SourceVerifiedCondition, meta.SucceededReason, "verified signature of revision <revision>"),
+			},
+		},
+		{
+			name: "verification level audit and correct trust identity should pass verification",
+			reference: &ociv1.OCIRepositoryRef{
+				Tag: "6.1.6",
+			},
+			shouldSign:       true,
+			insecure:         true,
+			useDigest:        true,
+			want:             sreconcile.ResultSuccess,
+			addMultipleCerts: true,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new revision '<revision>' for '<url>'"),
+				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new revision '<revision>' for '<url>'"),
+				*conditions.TrueCondition(sourcev1.SourceVerifiedCondition, meta.SucceededReason, "verified signature of revision <revision>"),
+			},
+		},
+		{
+			name: "no cert provided should not pass verification",
+			reference: &ociv1.OCIRepositoryRef{
+				Tag: "6.1.5",
+			},
+			wantErr:       true,
+			useDigest:     true,
+			provideNoCert: true,
+			// no namespace but the namespace name should appear before the /notation-config
+			wantErrMsg: "failed to verify the signature using provider 'notation': no certificates found in secret '/notation-config'",
+			want:       sreconcile.ResultEmpty,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new revision '<revision>' for '<url>'"),
+				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new revision '<revision>' for '<url>'"),
+				*conditions.FalseCondition(sourcev1.SourceVerifiedCondition, sourcev1.VerificationError, "failed to verify the signature using provider '<provider>': no certificates found in secret '/notation-config'"),
+			},
+		},
+	}
+
+	clientBuilder := fakeclient.NewClientBuilder().
+		WithScheme(testEnv.GetScheme()).
+		WithStatusSubresource(&ociv1.OCIRepository{})
+
+	r := &OCIRepositoryReconciler{
+		Client:        clientBuilder.Build(),
+		EventRecorder: record.NewFakeRecorder(32),
+		Storage:       testStorage,
+		patchOptions:  getPatchOptions(ociRepositoryReadyCondition.Owned, "sc"),
+	}
+
+	certTuple := testhelper.GetRSASelfSignedSigningCertTuple("notation self-signed certs for testing")
+	certs := []*x509.Certificate{certTuple.Cert}
+
+	signer, err := signer.New(certTuple.PrivateKey, certs)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	policyDocument := trustpolicy.Document{
+		Version: "1.0",
+		TrustPolicies: []trustpolicy.TrustPolicy{
+			{
+				Name:                  "test-statement-name",
+				RegistryScopes:        []string{"*"},
+				SignatureVerification: trustpolicy.SignatureVerification{VerificationLevel: trustpolicy.LevelStrict.Name, Override: map[trustpolicy.ValidationType]trustpolicy.ValidationAction{trustpolicy.TypeRevocation: trustpolicy.ActionSkip}},
+				TrustStores:           []string{"ca:valid-trust-store"},
+				TrustedIdentities:     []string{"*"},
+			},
+		},
+	}
+
+	tmpDir := t.TempDir()
+
+	policy, err := json.Marshal(policyDocument)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	caSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "valid-trust-store",
+			Generation: 1,
+		},
+		Data: map[string][]byte{
+			"ca.crt": tlsCA,
+		},
+	}
+
+	g.Expect(r.Create(ctx, caSecret)).ToNot(HaveOccurred())
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			workspaceDir := t.TempDir()
+			regOpts := registryOptions{
+				withTLS: !tt.insecure,
+			}
+			server, err := setupRegistryServer(ctx, workspaceDir, regOpts)
+			g.Expect(err).NotTo(HaveOccurred())
+			t.Cleanup(func() {
+				server.Close()
+			})
+
+			obj := &ociv1.OCIRepository{
+				ObjectMeta: metav1.ObjectMeta{
+					GenerateName: "verify-oci-source-signature-",
+					Generation:   1,
+				},
+				Spec: ociv1.OCIRepositorySpec{
+					URL: fmt.Sprintf("oci://%s/podinfo", server.registryHost),
+					Verify: &ociv1.OCIRepositoryVerification{
+						Provider: "notation",
+					},
+					Interval: metav1.Duration{Duration: interval},
+					Timeout:  &metav1.Duration{Duration: timeout},
+				},
+			}
+
+			data := map[string][]byte{}
+
+			if tt.addMultipleCerts {
+				data["a.crt"] = testhelper.GetRSASelfSignedSigningCertTuple("a not used for signing").Cert.Raw
+				data["b.crt"] = testhelper.GetRSASelfSignedSigningCertTuple("b not used for signing").Cert.Raw
+				data["c.crt"] = testhelper.GetRSASelfSignedSigningCertTuple("c not used for signing").Cert.Raw
+			}
+
+			if !tt.provideNoCert {
+				data["notation.crt"] = certTuple.Cert.Raw
+			}
+
+			data["trustpolicy.json"] = policy
+
+			secret := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "notation-config",
+				},
+				Data: data,
+			}
+
+			g.Expect(r.Create(ctx, secret)).NotTo(HaveOccurred())
+
+			if tt.insecure {
+				obj.Spec.Insecure = true
+			} else {
+				obj.Spec.CertSecretRef = &meta.LocalObjectReference{
+					Name: "valid-trust-store",
+				}
+			}
+
+			obj.Spec.Verify.SecretRef = &meta.LocalObjectReference{Name: "notation-config"}
+
+			if tt.reference != nil {
+				obj.Spec.Reference = tt.reference
+			}
+
+			podinfoVersions, err := pushMultiplePodinfoImages(server.registryHost, tt.insecure, tt.reference.Tag)
+			g.Expect(err).ToNot(HaveOccurred())
+
+			if tt.useDigest {
+				obj.Spec.Reference.Digest = podinfoVersions[tt.reference.Tag].digest.String()
+			}
+
+			keychain, err := r.keychain(ctx, obj)
+			if err != nil {
+				g.Expect(err).ToNot(HaveOccurred())
+			}
+
+			opts := makeRemoteOptions(ctx, makeTransport(true), keychain, nil)
+
+			artifactRef, err := r.getArtifactRef(obj, opts)
+			g.Expect(err).ToNot(HaveOccurred())
+
+			if tt.shouldSign {
+				remoteRepo, err := oras.NewRepository(artifactRef.String())
+				g.Expect(err).ToNot(HaveOccurred())
+
+				if tt.insecure {
+					remoteRepo.PlainHTTP = true
+				}
+
+				repo := registry.NewRepository(remoteRepo)
+
+				signatureMediaType := cose.MediaTypeEnvelope
+
+				signOptions := notation.SignOptions{
+					SignerSignOptions: notation.SignerSignOptions{
+						SignatureMediaType: signatureMediaType,
+					},
+					ArtifactReference: artifactRef.String(),
+				}
+
+				_, err = notation.Sign(ctx, signer, repo, signOptions)
+				g.Expect(err).ToNot(HaveOccurred())
+			}
+
+			image := podinfoVersions[tt.reference.Tag]
+			assertConditions := tt.assertConditions
+			for k := range assertConditions {
+				if tt.useDigest {
+					assertConditions[k].Message = strings.ReplaceAll(assertConditions[k].Message, "<revision>", image.digest.String())
+				} else {
+					assertConditions[k].Message = strings.ReplaceAll(assertConditions[k].Message, "<revision>", fmt.Sprintf("%s@%s", tt.reference.Tag, image.digest.String()))
+				}
+				assertConditions[k].Message = strings.ReplaceAll(assertConditions[k].Message, "<url>", artifactRef.String())
+				assertConditions[k].Message = strings.ReplaceAll(assertConditions[k].Message, "<provider>", "notation")
+			}
+
+			if tt.beforeFunc != nil {
+				tt.beforeFunc(obj, image.tag, image.digest.String())
+			}
+
+			g.Expect(r.Client.Create(ctx, obj)).ToNot(HaveOccurred())
+			defer func() {
+				g.Expect(r.Client.Delete(ctx, obj)).ToNot(HaveOccurred())
+				g.Expect(r.Delete(ctx, secret)).NotTo(HaveOccurred())
+			}()
+
+			sp := patch.NewSerialPatcher(obj, r.Client)
+
+			artifact := &sourcev1.Artifact{}
+			got, err := r.reconcileSource(ctx, sp, obj, artifact, tmpDir)
+			if tt.wantErr {
+				tt.wantErrMsg = strings.ReplaceAll(tt.wantErrMsg, "<url>", artifactRef.String())
+				g.Expect(err).ToNot(BeNil())
+				g.Expect(err.Error()).To(ContainSubstring(tt.wantErrMsg))
+			} else {
+				g.Expect(err).ToNot(HaveOccurred())
+			}
+			g.Expect(got).To(Equal(tt.want))
+			g.Expect(obj.Status.Conditions).To(conditions.MatchConditions(tt.assertConditions))
+		})
+	}
+}
+
+func TestOCIRepository_reconcileSource_verifyOCISourceTrustPolicyNotation(t *testing.T) {
+	g := NewWithT(t)
+
+	tests := []struct {
+		name                  string
+		reference             *ociv1.OCIRepositoryRef
+		insecure              bool
+		signatureVerification trustpolicy.SignatureVerification
+		trustedIdentities     []string
+		trustStores           []string
+		want                  sreconcile.Result
+		wantErr               bool
+		wantErrMsg            string
+		useDigest             bool
+		usePolicyJson         bool
+		provideNoPolicy       bool
+		policyJson            string
+		beforeFunc            func(obj *ociv1.OCIRepository, tag, revision string)
+		assertConditions      []metav1.Condition
+	}{
+		{
+			name: "verification level audit and incorrect trust identity should fail verification but not error",
+			reference: &ociv1.OCIRepositoryRef{
+				Tag: "6.1.4",
+			},
+			signatureVerification: trustpolicy.SignatureVerification{VerificationLevel: trustpolicy.LevelAudit.Name},
+			trustedIdentities:     []string{"x509.subject: C=US, ST=WA, L=Seattle, O=Notary, CN=example.com"},
+			trustStores:           []string{"ca:valid-trust-store"},
+			want:                  sreconcile.ResultSuccess,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new revision '<revision>' for '<url>'"),
+				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new revision '<revision>' for '<url>'"),
+			},
+		},
+		{
+			name: "verification level permissive and incorrect trust identity should fail verification and error",
+			reference: &ociv1.OCIRepositoryRef{
+				Tag: "6.1.4",
+			},
+			signatureVerification: trustpolicy.SignatureVerification{VerificationLevel: trustpolicy.LevelPermissive.Name},
+			trustedIdentities:     []string{"x509.subject: C=US, ST=WA, L=Seattle, O=Notary, CN=example.com"},
+			trustStores:           []string{"ca:valid-trust-store"},
+			useDigest:             true,
+			want:                  sreconcile.ResultEmpty,
+			wantErr:               true,
+			wantErrMsg:            "failed to verify the signature using provider 'notation': signature verification failed\nfailed to verify signature with digest <sigrevision>, signing certificate from the digital signature does not match the X.509 trusted identities [map[\"C\":\"US\" \"CN\":\"example.com\" \"L\":\"Seattle\" \"O\":\"Notary\" \"ST\":\"WA\"]] defined in the trust policy \"test-statement-name\"",
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new revision '<revision>' for '<url>'"),
+				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new revision '<revision>' for '<url>'"),
+				*conditions.FalseCondition(sourcev1.SourceVerifiedCondition, sourcev1.VerificationError, "failed to verify the signature using provider 'notation': signature verification failed\nfailed to verify signature with digest <sigrevision>, signing certificate from the digital signature does not match the X.509 trusted identities [map[\"C\":\"US\" \"CN\":\"example.com\" \"L\":\"Seattle\" \"O\":\"Notary\" \"ST\":\"WA\"]] defined in the trust policy \"test-statement-name\""),
+			},
+		},
+		{
+			name: "verification level permissive and correct trust identity should pass verification",
+			reference: &ociv1.OCIRepositoryRef{
+				Tag: "6.1.4",
+			},
+			signatureVerification: trustpolicy.SignatureVerification{VerificationLevel: trustpolicy.LevelPermissive.Name},
+			trustedIdentities:     []string{"*"},
+			trustStores:           []string{"ca:valid-trust-store"},
+			want:                  sreconcile.ResultSuccess,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new revision '<revision>' for '<url>'"),
+				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new revision '<revision>' for '<url>'"),
+				*conditions.TrueCondition(sourcev1.SourceVerifiedCondition, meta.SucceededReason, "verified signature of revision <revision>"),
+			},
+		},
+		{
+			name: "verification level audit and correct trust identity should pass verification",
+			reference: &ociv1.OCIRepositoryRef{
+				Tag: "6.1.4",
+			},
+			signatureVerification: trustpolicy.SignatureVerification{VerificationLevel: trustpolicy.LevelAudit.Name},
+			trustedIdentities:     []string{"*"},
+			trustStores:           []string{"ca:valid-trust-store"},
+			want:                  sreconcile.ResultSuccess,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new revision '<revision>' for '<url>'"),
+				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new revision '<revision>' for '<url>'"),
+				*conditions.TrueCondition(sourcev1.SourceVerifiedCondition, meta.SucceededReason, "verified signature of revision <revision>"),
+			},
+		},
+		{
+			name: "verification level skip and should not be marked as verified",
+			reference: &ociv1.OCIRepositoryRef{
+				Tag: "6.1.4",
+			},
+			signatureVerification: trustpolicy.SignatureVerification{VerificationLevel: trustpolicy.LevelSkip.Name},
+			trustedIdentities:     []string{},
+			want:                  sreconcile.ResultSuccess,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new revision '<revision>' for '<url>'"),
+				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new revision '<revision>' for '<url>'"),
+			},
+		},
+		{
+			name: "valid json but empty policy json should fail verification",
+			reference: &ociv1.OCIRepositoryRef{
+				Tag: "6.1.4",
+			},
+			usePolicyJson: true,
+			policyJson:    "{}",
+			wantErr:       true,
+			wantErrMsg:    "trust policy document is missing or has empty version, it must be specified",
+			want:          sreconcile.ResultEmpty,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new revision '<revision>' for '<url>'"),
+				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new revision '<revision>' for '<url>'"),
+				*conditions.FalseCondition(sourcev1.SourceVerifiedCondition, sourcev1.VerificationError, "trust policy document is missing or has empty version, it must be specified"),
+			},
+		},
+		{
+			name: "empty string should fail verification",
+			reference: &ociv1.OCIRepositoryRef{
+				Tag: "6.1.4",
+			},
+			usePolicyJson: true,
+			policyJson:    "",
+			wantErr:       true,
+			wantErrMsg:    fmt.Sprintf("error occurred while parsing %s: unexpected end of JSON input", snotation.DefaultTrustPolicyKey),
+			want:          sreconcile.ResultEmpty,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new revision '<revision>' for '<url>'"),
+				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new revision '<revision>' for '<url>'"),
+				*conditions.FalseCondition(sourcev1.SourceVerifiedCondition, sourcev1.VerificationError, fmt.Sprintf("error occurred while parsing %s: unexpected end of JSON input", snotation.DefaultTrustPolicyKey)),
+			},
+		},
+		{
+			name: "invalid character in string should fail verification",
+			reference: &ociv1.OCIRepositoryRef{
+				Tag: "6.1.4",
+			},
+			usePolicyJson: true,
+			policyJson:    "{\"version\": \"1.0\u000A\", \"trust_policies\": []}",
+			wantErr:       true,
+			wantErrMsg:    fmt.Sprintf("error occurred while parsing %s: invalid character '\\n' in string literal", snotation.DefaultTrustPolicyKey),
+			want:          sreconcile.ResultEmpty,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new revision '<revision>' for '<url>'"),
+				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new revision '<revision>' for '<url>'"),
+				*conditions.FalseCondition(sourcev1.SourceVerifiedCondition, sourcev1.VerificationError, fmt.Sprintf("error occurred while parsing %s: invalid character '\\n' in string literal", snotation.DefaultTrustPolicyKey)),
+			},
+		},
+		{
+			name: "empty string should fail verification",
+			reference: &ociv1.OCIRepositoryRef{
+				Tag: "6.1.4",
+			},
+			provideNoPolicy: true,
+			wantErr:         true,
+			wantErrMsg:      fmt.Sprintf("failed to verify the signature using provider 'notation': '%s' not found in secret '/notation'", snotation.DefaultTrustPolicyKey),
+			want:            sreconcile.ResultEmpty,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new revision '<revision>' for '<url>'"),
+				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new revision '<revision>' for '<url>'"),
+				*conditions.FalseCondition(sourcev1.SourceVerifiedCondition, sourcev1.VerificationError, fmt.Sprintf("failed to verify the signature using provider 'notation': '%s' not found in secret '/notation'", snotation.DefaultTrustPolicyKey)),
+			},
+		},
+	}
+
+	clientBuilder := fakeclient.NewClientBuilder().
+		WithScheme(testEnv.GetScheme()).
+		WithStatusSubresource(&ociv1.OCIRepository{})
+
+	r := &OCIRepositoryReconciler{
+		Client:        clientBuilder.Build(),
+		EventRecorder: record.NewFakeRecorder(32),
+		Storage:       testStorage,
+		patchOptions:  getPatchOptions(ociRepositoryReadyCondition.Owned, "sc"),
+	}
+
+	certTuple := testhelper.GetRSASelfSignedSigningCertTuple("notation self-signed certs for testing")
+	certs := []*x509.Certificate{certTuple.Cert}
+
+	signer, err := signer.New(certTuple.PrivateKey, certs)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	tmpDir := t.TempDir()
+
+	caSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "valid-trust-store",
+			Generation: 1,
+		},
+		Data: map[string][]byte{
+			"ca.crt": tlsCA,
+		},
+	}
+
+	g.Expect(r.Create(ctx, caSecret)).ToNot(HaveOccurred())
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			workspaceDir := t.TempDir()
+			regOpts := registryOptions{
+				withTLS: !tt.insecure,
+			}
+			server, err := setupRegistryServer(ctx, workspaceDir, regOpts)
+			g.Expect(err).NotTo(HaveOccurred())
+			t.Cleanup(func() {
+				server.Close()
+			})
+
+			obj := &ociv1.OCIRepository{
+				ObjectMeta: metav1.ObjectMeta{
+					GenerateName: "verify-oci-source-signature-",
+					Generation:   1,
+				},
+				Spec: ociv1.OCIRepositorySpec{
+					URL: fmt.Sprintf("oci://%s/podinfo", server.registryHost),
+					Verify: &ociv1.OCIRepositoryVerification{
+						Provider: "notation",
+					},
+					Interval: metav1.Duration{Duration: interval},
+					Timeout:  &metav1.Duration{Duration: timeout},
+				},
+			}
+
+			var policy []byte
+
+			if !tt.usePolicyJson {
+				policyDocument := trustpolicy.Document{
+					Version: "1.0",
+					TrustPolicies: []trustpolicy.TrustPolicy{
+						{
+							Name:                  "test-statement-name",
+							RegistryScopes:        []string{"*"},
+							SignatureVerification: tt.signatureVerification,
+							TrustStores:           tt.trustStores,
+							TrustedIdentities:     tt.trustedIdentities,
+						},
+					},
+				}
+
+				policy, err = json.Marshal(policyDocument)
+				g.Expect(err).NotTo(HaveOccurred())
+			} else {
+				policy = []byte(tt.policyJson)
+			}
+
+			data := map[string][]byte{}
+
+			if !tt.provideNoPolicy {
+				data["trustpolicy.json"] = policy
+			}
+
+			data["notation.crt"] = certTuple.Cert.Raw
+
+			secret := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "notation",
+				},
+				Data: data,
+			}
+
+			g.Expect(r.Create(ctx, secret)).NotTo(HaveOccurred())
+
+			if tt.insecure {
+				obj.Spec.Insecure = true
+			} else {
+				obj.Spec.CertSecretRef = &meta.LocalObjectReference{
+					Name: "valid-trust-store",
+				}
+			}
+
+			obj.Spec.Verify.SecretRef = &meta.LocalObjectReference{Name: "notation"}
+
+			if tt.reference != nil {
+				obj.Spec.Reference = tt.reference
+			}
+
+			podinfoVersions, err := pushMultiplePodinfoImages(server.registryHost, tt.insecure, tt.reference.Tag)
+			g.Expect(err).ToNot(HaveOccurred())
+
+			if tt.useDigest {
+				obj.Spec.Reference.Digest = podinfoVersions[tt.reference.Tag].digest.String()
+			}
+
+			keychain, err := r.keychain(ctx, obj)
+			if err != nil {
+				g.Expect(err).ToNot(HaveOccurred())
+			}
+
+			opts := makeRemoteOptions(ctx, makeTransport(true), keychain, nil)
+
+			artifactRef, err := r.getArtifactRef(obj, opts)
+			g.Expect(err).ToNot(HaveOccurred())
+
+			remoteRepo, err := oras.NewRepository(artifactRef.String())
+			g.Expect(err).ToNot(HaveOccurred())
+
+			if tt.insecure {
+				remoteRepo.PlainHTTP = true
+			}
+
+			repo := registry.NewRepository(remoteRepo)
+
+			signatureMediaType := cose.MediaTypeEnvelope
+
+			signOptions := notation.SignOptions{
+				SignerSignOptions: notation.SignerSignOptions{
+					SignatureMediaType: signatureMediaType,
+				},
+				ArtifactReference: artifactRef.String(),
+			}
+
+			_, err = notation.Sign(ctx, signer, repo, signOptions)
+			g.Expect(err).ToNot(HaveOccurred())
+
+			image := podinfoVersions[tt.reference.Tag]
+			signatureDigest := ""
+
+			artifactDescriptor, err := repo.Resolve(ctx, image.tag)
+			g.Expect(err).ToNot(HaveOccurred())
+			_ = repo.ListSignatures(ctx, artifactDescriptor, func(signatureManifests []ocispec.Descriptor) error {
+				g.Expect(len(signatureManifests)).Should(Equal(1))
+				signatureDigest = signatureManifests[0].Digest.String()
+				return nil
+			})
+
+			assertConditions := tt.assertConditions
+			for k := range assertConditions {
+				if tt.useDigest {
+					assertConditions[k].Message = strings.ReplaceAll(assertConditions[k].Message, "<revision>", image.digest.String())
+				} else {
+					assertConditions[k].Message = strings.ReplaceAll(assertConditions[k].Message, "<revision>", fmt.Sprintf("%s@%s", tt.reference.Tag, image.digest.String()))
+				}
+
+				if signatureDigest != "" {
+					assertConditions[k].Message = strings.ReplaceAll(assertConditions[k].Message, "<sigrevision>", signatureDigest)
+				}
+				assertConditions[k].Message = strings.ReplaceAll(assertConditions[k].Message, "<url>", artifactRef.String())
+				assertConditions[k].Message = strings.ReplaceAll(assertConditions[k].Message, "<provider>", "notation")
+			}
+
+			if tt.beforeFunc != nil {
+				tt.beforeFunc(obj, image.tag, image.digest.String())
+			}
+
+			g.Expect(r.Client.Create(ctx, obj)).ToNot(HaveOccurred())
+			defer func() {
+				g.Expect(r.Client.Delete(ctx, obj)).ToNot(HaveOccurred())
+			}()
+
+			sp := patch.NewSerialPatcher(obj, r.Client)
+
+			artifact := &sourcev1.Artifact{}
+			got, err := r.reconcileSource(ctx, sp, obj, artifact, tmpDir)
+			g.Expect(r.Delete(ctx, secret)).NotTo(HaveOccurred())
+			if tt.wantErr {
+				tt.wantErrMsg = strings.ReplaceAll(tt.wantErrMsg, "<url>", artifactRef.String())
+				if signatureDigest != "" {
+					tt.wantErrMsg = strings.ReplaceAll(tt.wantErrMsg, "<sigrevision>", signatureDigest)
+				}
+				g.Expect(err).ToNot(BeNil())
+				g.Expect(err.Error()).To(ContainSubstring(tt.wantErrMsg))
+			} else {
+				g.Expect(err).ToNot(HaveOccurred())
+			}
+			g.Expect(got).To(Equal(tt.want))
+			g.Expect(obj.Status.Conditions).To(conditions.MatchConditions(tt.assertConditions))
+		})
+	}
+}
+
+func TestOCIRepository_reconcileSource_verifyOCISourceSignatureCosign(t *testing.T) {
 	g := NewWithT(t)
 
 	tests := []struct {

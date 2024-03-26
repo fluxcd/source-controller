@@ -40,6 +40,7 @@ import (
 	"github.com/fluxcd/pkg/version"
 
 	"github.com/fluxcd/source-controller/internal/helm"
+	"github.com/fluxcd/source-controller/internal/oci"
 	"github.com/fluxcd/source-controller/internal/transport"
 )
 
@@ -465,9 +466,9 @@ func (r *ChartRepository) invalidate() {
 
 // VerifyChart verifies the chart against a signature.
 // It returns an error on failure.
-func (r *ChartRepository) VerifyChart(_ context.Context, _ *repo.ChartVersion) error {
+func (r *ChartRepository) VerifyChart(_ context.Context, _ *repo.ChartVersion) (oci.VerificationResult, error) {
 	// this is a no-op because this is not implemented yet.
-	return fmt.Errorf("not implemented")
+	return oci.VerificationResultIgnored, fmt.Errorf("not implemented")
 }
 
 // jsonOrYamlUnmarshal unmarshals the given byte slice containing JSON or YAML

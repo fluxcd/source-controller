@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 	"crypto/tls"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
@@ -29,6 +30,7 @@ import (
 	"time"
 
 	"github.com/google/go-containerregistry/pkg/v1/remote"
+	"github.com/notaryproject/notation-go/verifier/trustpolicy"
 	"github.com/opencontainers/go-digest"
 	"github.com/sigstore/cosign/v2/pkg/cosign"
 	helmgetter "helm.sh/helm/v3/pkg/getter"
@@ -69,7 +71,10 @@ import (
 	"github.com/fluxcd/source-controller/internal/helm/chart"
 	"github.com/fluxcd/source-controller/internal/helm/getter"
 	"github.com/fluxcd/source-controller/internal/helm/repository"
+	"github.com/fluxcd/source-controller/internal/oci"
 	soci "github.com/fluxcd/source-controller/internal/oci"
+	scosign "github.com/fluxcd/source-controller/internal/oci/cosign"
+	"github.com/fluxcd/source-controller/internal/oci/notation"
 	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
 	"github.com/fluxcd/source-controller/internal/reconcile/summarize"
 	"github.com/fluxcd/source-controller/internal/util"
@@ -579,7 +584,7 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 			provider := obj.Spec.Verify.Provider
 			verifiers, err = r.makeVerifiers(ctx, obj, *clientOpts)
 			if err != nil {
-				if obj.Spec.Verify.SecretRef == nil {
+				if obj.Spec.Verify.SecretRef == nil && obj.Spec.Verify.Provider == "cosign" {
 					provider = fmt.Sprintf("%s keyless", provider)
 				}
 				e := serror.NewGeneric(
@@ -1244,7 +1249,9 @@ func observeChartBuild(ctx context.Context, sp *patch.SerialPatcher, pOpts []pat
 	if build.Complete() {
 		conditions.Delete(obj, sourcev1.FetchFailedCondition)
 		conditions.Delete(obj, sourcev1.BuildFailedCondition)
-		conditions.MarkTrue(obj, sourcev1.SourceVerifiedCondition, meta.SucceededReason, fmt.Sprintf("verified signature of version %s", build.Version))
+		if build.VerifiedResult == oci.VerificationResultSuccess {
+			conditions.MarkTrue(obj, sourcev1.SourceVerifiedCondition, meta.SucceededReason, fmt.Sprintf("verified signature of version %s", build.Version))
+		}
 	}
 
 	if obj.Spec.Verify == nil {
@@ -1318,26 +1325,27 @@ func (r *HelmChartReconciler) makeVerifiers(ctx context.Context, obj *helmv1.Hel
 
 	switch obj.Spec.Verify.Provider {
 	case "cosign":
-		defaultCosignOciOpts := []soci.Options{
-			soci.WithRemoteOptions(verifyOpts...),
+		defaultCosignOciOpts := []scosign.Options{
+			scosign.WithRemoteOptions(verifyOpts...),
 		}
 
 		// get the public keys from the given secret
 		if secretRef := obj.Spec.Verify.SecretRef; secretRef != nil {
-			certSecretName := types.NamespacedName{
+
+			verifySecret := types.NamespacedName{
 				Namespace: obj.Namespace,
 				Name:      secretRef.Name,
 			}
 
-			var pubSecret corev1.Secret
-			if err := r.Get(ctx, certSecretName, &pubSecret); err != nil {
+			pubSecret, err := r.retrieveSecret(ctx, verifySecret)
+			if err != nil {
 				return nil, err
 			}
 
 			for k, data := range pubSecret.Data {
 				// search for public keys in the secret
 				if strings.HasSuffix(k, ".pub") {
-					verifier, err := soci.NewCosignVerifier(ctx, append(defaultCosignOciOpts, soci.WithPublicKey(data))...)
+					verifier, err := scosign.NewCosignVerifier(ctx, append(defaultCosignOciOpts, scosign.WithPublicKey(data))...)
 					if err != nil {
 						return nil, err
 					}
@@ -1346,7 +1354,7 @@ func (r *HelmChartReconciler) makeVerifiers(ctx context.Context, obj *helmv1.Hel
 			}
 
 			if len(verifiers) == 0 {
-				return nil, fmt.Errorf("no public keys found in secret '%s'", certSecretName)
+				return nil, fmt.Errorf("no public keys found in secret '%s'", verifySecret.String())
 			}
 			return verifiers, nil
 		}
@@ -1359,9 +1367,67 @@ func (r *HelmChartReconciler) makeVerifiers(ctx context.Context, obj *helmv1.Hel
 				SubjectRegExp: match.Subject,
 			})
 		}
-		defaultCosignOciOpts = append(defaultCosignOciOpts, soci.WithIdentities(identities))
+		defaultCosignOciOpts = append(defaultCosignOciOpts, scosign.WithIdentities(identities))
 
-		verifier, err := soci.NewCosignVerifier(ctx, defaultCosignOciOpts...)
+		verifier, err := scosign.NewCosignVerifier(ctx, defaultCosignOciOpts...)
+		if err != nil {
+			return nil, err
+		}
+		verifiers = append(verifiers, verifier)
+		return verifiers, nil
+	case "notation":
+		// get the public keys from the given secret
+		secretRef := obj.Spec.Verify.SecretRef
+
+		if secretRef == nil {
+			return nil, fmt.Errorf("verification secret cannot be empty: '%s'", obj.Name)
+		}
+
+		verifySecret := types.NamespacedName{
+			Namespace: obj.Namespace,
+			Name:      secretRef.Name,
+		}
+
+		pubSecret, err := r.retrieveSecret(ctx, verifySecret)
+		if err != nil {
+			return nil, err
+		}
+
+		data, ok := pubSecret.Data[notation.DefaultTrustPolicyKey]
+		if !ok {
+			return nil, fmt.Errorf("'%s' not found in secret '%s'", notation.DefaultTrustPolicyKey, verifySecret.String())
+		}
+
+		var doc trustpolicy.Document
+
+		if err := json.Unmarshal(data, &doc); err != nil {
+			return nil, fmt.Errorf("error occurred while parsing %s: %w", notation.DefaultTrustPolicyKey, err)
+		}
+
+		var certs [][]byte
+
+		for k, data := range pubSecret.Data {
+			if strings.HasSuffix(k, ".crt") || strings.HasSuffix(k, ".pem") {
+				certs = append(certs, data)
+			}
+		}
+
+		if certs == nil {
+			return nil, fmt.Errorf("no certificates found in secret '%s'", verifySecret.String())
+		}
+
+		trustPolicy := notation.CleanTrustPolicy(&doc, ctrl.LoggerFrom(ctx))
+		defaultNotationOciOpts := []notation.Options{
+			notation.WithTrustPolicy(trustPolicy),
+			notation.WithRemoteOptions(verifyOpts...),
+			notation.WithAuth(clientOpts.Authenticator),
+			notation.WithKeychain(clientOpts.Keychain),
+			notation.WithInsecureRegistry(clientOpts.Insecure),
+			notation.WithLogger(ctrl.LoggerFrom(ctx)),
+			notation.WithRootCertificates(certs),
+		}
+
+		verifier, err := notation.NewNotationVerifier(defaultNotationOciOpts...)
 		if err != nil {
 			return nil, err
 		}
@@ -1370,4 +1436,16 @@ func (r *HelmChartReconciler) makeVerifiers(ctx context.Context, obj *helmv1.Hel
 	default:
 		return nil, fmt.Errorf("unsupported verification provider: %s", obj.Spec.Verify.Provider)
 	}
+}
+
+// retrieveSecret retrieves a secret from the specified namespace with the given secret name.
+// It returns the retrieved secret and any error encountered during the retrieval process.
+func (r *HelmChartReconciler) retrieveSecret(ctx context.Context, verifySecret types.NamespacedName) (corev1.Secret, error) {
+
+	var pubSecret corev1.Secret
+
+	if err := r.Get(ctx, verifySecret, &pubSecret); err != nil {
+		return corev1.Secret{}, err
+	}
+	return pubSecret, nil
 }

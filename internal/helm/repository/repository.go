@@ -21,6 +21,8 @@ import (
 	"context"
 
 	"helm.sh/helm/v3/pkg/repo"
+
+	"github.com/fluxcd/source-controller/internal/oci"
 )
 
 // Downloader is used to download a chart from a remote Helm repository or OCI Helm repository.
@@ -31,7 +33,7 @@ type Downloader interface {
 	// DownloadChart downloads a chart from the remote Helm repository or OCI Helm repository.
 	DownloadChart(chart *repo.ChartVersion) (*bytes.Buffer, error)
 	// VerifyChart verifies the chart against a signature.
-	VerifyChart(ctx context.Context, chart *repo.ChartVersion) error
+	VerifyChart(ctx context.Context, chart *repo.ChartVersion) (oci.VerificationResult, error)
 	// Clear removes all temporary files created by the downloader, caching the files if the cache is configured,
 	// and calling garbage collector to remove unused files.
 	Clear() error

@@ -54,6 +54,7 @@ type ClientOpts struct {
 	RegLoginOpts  []helmreg.LoginOption
 	TlsConfig     *tls.Config
 	GetterOpts    []helmgetter.Option
+	Insecure      bool
 }
 
 // MustLoginToRegistry returns true if the client options contain at least
@@ -171,6 +172,8 @@ func GetClientOpts(ctx context.Context, c client.Client, obj *helmv1.HelmReposit
 	if deprecatedTLSConfig {
 		err = ErrDeprecatedTLSConfig
 	}
+
+	hrOpts.Insecure = obj.Spec.Insecure
 
 	return hrOpts, dir, err
 }

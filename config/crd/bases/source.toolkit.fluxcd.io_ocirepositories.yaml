@@ -224,6 +224,7 @@ spec:
                       OCI Artifact.
                     enum:
                     - cosign
+                    - notation
                     type: string
                   secretRef:
                     description: |-

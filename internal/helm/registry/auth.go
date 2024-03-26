@@ -23,6 +23,7 @@ import (
 
 	"github.com/docker/cli/cli/config"
 	"github.com/docker/cli/cli/config/credentials"
+	"github.com/fluxcd/source-controller/internal/helm/common"
 	"github.com/fluxcd/source-controller/internal/oci"
 	"github.com/google/go-containerregistry/pkg/authn"
 	"helm.sh/helm/v3/pkg/registry"
@@ -95,7 +96,7 @@ func KeychainAdaptHelper(keyChain authn.Keychain) func(string) (registry.LoginOp
 		if err != nil {
 			return nil, fmt.Errorf("unable to parse registry URL '%s'", registryURL)
 		}
-		authenticator, err := keyChain.Resolve(stringResource{parsedURL.Host})
+		authenticator, err := keyChain.Resolve(common.StringResource{Registry: parsedURL.Host})
 		if err != nil {
 			return nil, fmt.Errorf("unable to resolve credentials for registry '%s': %w", registryURL, err)
 		}
@@ -124,20 +125,6 @@ func AuthAdaptHelper(auth authn.Authenticator) (registry.LoginOption, error) {
 		return nil, fmt.Errorf("invalid auth data: required fields 'username' and 'password'")
 	}
 	return registry.LoginOptBasicAuth(username, password), nil
-}
-
-// stringResource is there to satisfy the github.com/google/go-containerregistry/pkg/authn.Resource interface.
-// It merely wraps a given string and returns it for all of the interface's methods.
-type stringResource struct {
-	registry string
-}
-
-func (r stringResource) String() string {
-	return r.registry
-}
-
-func (r stringResource) RegistryStr() string {
-	return r.registry
 }
 
 // NewLoginOption returns a registry login option for the given HelmRepository.

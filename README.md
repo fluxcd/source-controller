@@ -27,7 +27,7 @@ and is a core component of the [GitOps toolkit](https://fluxcd.io/flux/component
 ## Features
 
 * authenticates to sources (SSH, user/password, API token, Workload Identity)
-* validates source authenticity (PGP, Cosign)
+* validates source authenticity (PGP, Cosign, Notation)
 * detects source changes based on update policies (semver)
 * fetches resources on-demand and on-a-schedule
 * packages the fetched resources into a well-known format (tar.gz, yaml)
