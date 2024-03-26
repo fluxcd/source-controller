@@ -146,8 +146,8 @@ func NewCosignVerifier(ctx context.Context, opts ...Options) (*CosignVerifier, e
 	}, nil
 }
 
-// VerifyImageSignatures verify the authenticity of the given ref OCI image.
-func (v *CosignVerifier) VerifyImageSignatures(ctx context.Context, ref name.Reference) ([]oci.Signature, bool, error) {
+// verifyImageSignatures verify the authenticity of the given ref OCI image.
+func (v *CosignVerifier) verifyImageSignatures(ctx context.Context, ref name.Reference) ([]oci.Signature, bool, error) {
 	return cosign.VerifyImageSignatures(ctx, ref, v.opts)
 }
 
@@ -155,7 +155,7 @@ func (v *CosignVerifier) VerifyImageSignatures(ctx context.Context, ref name.Ref
 // It returns a boolean indicating if the verification was successful.
 // It returns an error if the verification fails, nil otherwise.
 func (v *CosignVerifier) Verify(ctx context.Context, ref name.Reference) (soci.VerificationResult, error) {
-	signatures, _, err := v.VerifyImageSignatures(ctx, ref)
+	signatures, _, err := v.verifyImageSignatures(ctx, ref)
 	if err != nil {
 		return soci.VerificationResultFailed, err
 	}
