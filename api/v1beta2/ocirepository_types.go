@@ -157,6 +157,10 @@ type OCIRepositoryRef struct {
 	// +optional
 	SemVer string `json:"semver,omitempty"`
 
+	// SemverFilter is a regex pattern to filter the tags within the SemVer range.
+	// +optional
+	SemverFilter string `json:"semverFilter,omitempty"`
+
 	// Tag is the image tag to pull, defaults to latest.
 	// +optional
 	Tag string `json:"tag,omitempty"`

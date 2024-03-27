@@ -441,6 +441,37 @@ spec:
 
 This field takes precedence over [`.tag`](#tag-example).
 
+#### SemverFilter example
+
+`.spec.ref.semverFilter` is an optional field to specify a SemVer filter to apply
+when fetching tags from the OCI repository. The filter is a regular expression
+that is applied to the tags fetched from the repository. Only tags that match
+the filter are considered for the semver range resolution.
+
+**Note:** The filter is only taken into account when the `.spec.ref.semver` field
+is set.
+
+```yaml
+---
+apiVersion: source.toolkit.fluxcd.io/v1beta2
+kind: OCIRepository
+metadata:
+  name: podinfo
+  namespace: default
+spec:
+  interval: 5m0s
+  url: oci://ghcr.io/stefanprodan/manifests/podinfo
+  ref:
+    # SemVer comparisons using constraints without a prerelease comparator will skip prerelease versions.
+    # Adding a `-0` suffix to the semver range will include prerelease versions.
+    semver: ">= 6.1.x-0"
+    semverFilter: ".*-rc.*"
+```
+
+In the above example, the controller fetches tags from the `ghcr.io/stefanprodan/manifests/podinfo`
+repository and filters them using the regular expression `.*-rc.*`. Only tags that
+contain the `-rc` suffix are considered for the semver range resolution.
+
 #### Digest example
 
 To pull a specific digest, use `.spec.ref.digest`:

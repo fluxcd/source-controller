@@ -2757,7 +2757,14 @@ func TestOCIRepository_getArtifactRef(t *testing.T) {
 		server.Close()
 	})
 
-	imgs, err := pushMultiplePodinfoImages(server.registryHost, true, "6.1.4", "6.1.5", "6.1.6")
+	imgs, err := pushMultiplePodinfoImages(server.registryHost, true,
+		"6.1.4",
+		"6.1.5-beta.1",
+		"6.1.5-rc.1",
+		"6.1.5",
+		"6.1.6-rc.1",
+		"6.1.6",
+	)
 	g.Expect(err).ToNot(HaveOccurred())
 
 	tests := []struct {
@@ -2799,6 +2806,24 @@ func TestOCIRepository_getArtifactRef(t *testing.T) {
 		{
 			name:    "invalid url without oci prefix",
 			url:     "ghcr.io/stefanprodan/charts",
+			wantErr: true,
+		},
+		{
+			name: "valid url with semver filter",
+			url:  fmt.Sprintf("oci://%s/podinfo", server.registryHost),
+			reference: &ociv1.OCIRepositoryRef{
+				SemVer:       ">= 6.1.x-0",
+				SemverFilter: ".*-rc.*",
+			},
+			want: server.registryHost + "/podinfo:6.1.6-rc.1",
+		},
+		{
+			name: "valid url with semver filter and unexisting version",
+			url:  fmt.Sprintf("oci://%s/podinfo", server.registryHost),
+			reference: &ociv1.OCIRepositoryRef{
+				SemVer:       ">= 6.1.x-0",
+				SemverFilter: ".*-alpha.*",
+			},
 			wantErr: true,
 		},
 	}

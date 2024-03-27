@@ -146,6 +146,10 @@ spec:
                       SemVer is the range of tags to pull selecting the latest within
                       the range, takes precedence over Tag.
                     type: string
+                  semverFilter:
+                    description: SemverFilter is a regex pattern to filter the tags
+                      within the SemVer range.
+                    type: string
                   tag:
                     description: Tag is the image tag to pull, defaults to latest.
                     type: string
