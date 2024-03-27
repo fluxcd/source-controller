@@ -644,7 +644,7 @@ func (r *OCIRepositoryReconciler) verifySignature(ctx context.Context, obj *ociv
 				return soci.VerificationResultFailed, err
 			}
 
-			signatureVerified := false
+			signatureVerified := soci.VerificationResultFailed
 			for k, data := range pubSecret.Data {
 				// search for public keys in the secret
 				if strings.HasSuffix(k, ".pub") {
@@ -653,19 +653,19 @@ func (r *OCIRepositoryReconciler) verifySignature(ctx context.Context, obj *ociv
 						return soci.VerificationResultFailed, err
 					}
 
-					signatures, _, err := verifier.VerifyImageSignatures(ctxTimeout, ref)
-					if err != nil {
+					result, err := verifier.Verify(ctxTimeout, ref)
+					if err != nil || result == soci.VerificationResultFailed {
 						continue
 					}
 
-					if signatures != nil {
-						signatureVerified = true
+					if result == soci.VerificationResultSuccess {
+						signatureVerified = result
 						break
 					}
 				}
 			}
 
-			if !signatureVerified {
+			if signatureVerified == soci.VerificationResultFailed {
 				return soci.VerificationResultFailed, fmt.Errorf("no matching signatures were found for '%s'", ref)
 			}
 
@@ -689,16 +689,16 @@ func (r *OCIRepositoryReconciler) verifySignature(ctx context.Context, obj *ociv
 			return soci.VerificationResultFailed, err
 		}
 
-		signatures, _, err := verifier.VerifyImageSignatures(ctxTimeout, ref)
+		result, err := verifier.Verify(ctxTimeout, ref)
 		if err != nil {
 			return soci.VerificationResultFailed, err
 		}
 
-		if len(signatures) > 0 {
-			return soci.VerificationResultSuccess, nil
+		if result == soci.VerificationResultFailed {
+			return soci.VerificationResultFailed, fmt.Errorf("no matching signatures were found for '%s'", ref)
 		}
 
-		return soci.VerificationResultFailed, fmt.Errorf("no matching signatures were found for '%s'", ref)
+		return soci.VerificationResultSuccess, nil
 
 	case "notation":
 		// get the public keys from the given secret
