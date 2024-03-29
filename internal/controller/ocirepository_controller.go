@@ -26,6 +26,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -115,6 +116,8 @@ var ociRepositoryFailConditions = []string{
 	sourcev1.FetchFailedCondition,
 	sourcev1.StorageOperationFailedCondition,
 }
+
+type filterFunc func(tags []string) ([]string, error)
 
 type invalidOCIURLError struct {
 	err error
@@ -821,7 +824,7 @@ func (r *OCIRepositoryReconciler) getArtifactRef(obj *ociv1.OCIRepository, optio
 		}
 
 		if obj.Spec.Reference.SemVer != "" {
-			return r.getTagBySemver(repo, obj.Spec.Reference.SemVer, options)
+			return r.getTagBySemver(repo, obj.Spec.Reference.SemVer, filterTags(obj.Spec.Reference.SemverFilter), options)
 		}
 
 		if obj.Spec.Reference.Tag != "" {
@@ -834,8 +837,13 @@ func (r *OCIRepositoryReconciler) getArtifactRef(obj *ociv1.OCIRepository, optio
 
 // getTagBySemver call the remote container registry, fetches all the tags from the repository,
 // and returns the latest tag according to the semver expression.
-func (r *OCIRepositoryReconciler) getTagBySemver(repo name.Repository, exp string, options []remote.Option) (name.Reference, error) {
+func (r *OCIRepositoryReconciler) getTagBySemver(repo name.Repository, exp string, filter filterFunc, options []remote.Option) (name.Reference, error) {
 	tags, err := remote.List(repo, options...)
+	if err != nil {
+		return nil, err
+	}
+
+	validTags, err := filter(tags)
 	if err != nil {
 		return nil, err
 	}
@@ -846,7 +854,7 @@ func (r *OCIRepositoryReconciler) getTagBySemver(repo name.Repository, exp strin
 	}
 
 	var matchingVersions []*semver.Version
-	for _, t := range tags {
+	for _, t := range validTags {
 		v, err := version.ParseVersion(t)
 		if err != nil {
 			continue
@@ -1297,4 +1305,25 @@ func layerSelectorEqual(a, b *ociv1.OCILayerSelector) bool {
 		return true
 	}
 	return *a == *b
+}
+
+func filterTags(filter string) filterFunc {
+	return func(tags []string) ([]string, error) {
+		if filter == "" {
+			return tags, nil
+		}
+
+		match, err := regexp.Compile(filter)
+		if err != nil {
+			return nil, err
+		}
+
+		validTags := []string{}
+		for _, tag := range tags {
+			if match.MatchString(tag) {
+				validTags = append(validTags, tag)
+			}
+		}
+		return validTags, nil
+	}
 }

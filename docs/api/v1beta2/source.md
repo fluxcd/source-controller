@@ -2938,6 +2938,18 @@ the range, takes precedence over Tag.</p>
 </tr>
 <tr>
 <td>
+<code>semverFilter</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>SemverFilter is a regex pattern to filter the tags within the SemVer range.</p>
+</td>
+</tr>
+<tr>
+<td>
 <code>tag</code><br>
 <em>
 string
