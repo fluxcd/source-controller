@@ -1378,10 +1378,9 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignatureNotation(t *testi
 			g := NewWithT(t)
 
 			workspaceDir := t.TempDir()
-			regOpts := registryOptions{
+			server, err := setupRegistryServer(ctx, workspaceDir, registryOptions{
 				withTLS: !tt.insecure,
-			}
-			server, err := setupRegistryServer(ctx, workspaceDir, regOpts)
+			})
 			g.Expect(err).NotTo(HaveOccurred())
 			t.Cleanup(func() {
 				server.Close()
@@ -1524,7 +1523,6 @@ func TestOCIRepository_reconcileSource_verifyOCISourceTrustPolicyNotation(t *tes
 	tests := []struct {
 		name                  string
 		reference             *ociv1.OCIRepositoryRef
-		insecure              bool
 		signatureVerification trustpolicy.SignatureVerification
 		trustedIdentities     []string
 		trustStores           []string
@@ -1697,27 +1695,12 @@ func TestOCIRepository_reconcileSource_verifyOCISourceTrustPolicyNotation(t *tes
 
 	tmpDir := t.TempDir()
 
-	caSecret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:       "valid-trust-store",
-			Generation: 1,
-		},
-		Data: map[string][]byte{
-			"ca.crt": tlsCA,
-		},
-	}
-
-	g.Expect(r.Create(ctx, caSecret)).ToNot(HaveOccurred())
-
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
 
 			workspaceDir := t.TempDir()
-			regOpts := registryOptions{
-				withTLS: !tt.insecure,
-			}
-			server, err := setupRegistryServer(ctx, workspaceDir, regOpts)
+			server, err := setupRegistryServer(ctx, workspaceDir, registryOptions{})
 			g.Expect(err).NotTo(HaveOccurred())
 			t.Cleanup(func() {
 				server.Close()
@@ -1777,13 +1760,7 @@ func TestOCIRepository_reconcileSource_verifyOCISourceTrustPolicyNotation(t *tes
 
 			g.Expect(r.Create(ctx, secret)).NotTo(HaveOccurred())
 
-			if tt.insecure {
-				obj.Spec.Insecure = true
-			} else {
-				obj.Spec.CertSecretRef = &meta.LocalObjectReference{
-					Name: "valid-trust-store",
-				}
-			}
+			obj.Spec.Insecure = true
 
 			obj.Spec.Verify.SecretRef = &meta.LocalObjectReference{Name: "notation"}
 
@@ -1791,7 +1768,7 @@ func TestOCIRepository_reconcileSource_verifyOCISourceTrustPolicyNotation(t *tes
 				obj.Spec.Reference = tt.reference
 			}
 
-			podinfoVersions, err := pushMultiplePodinfoImages(server.registryHost, tt.insecure, tt.reference.Tag)
+			podinfoVersions, err := pushMultiplePodinfoImages(server.registryHost, true, tt.reference.Tag)
 			g.Expect(err).ToNot(HaveOccurred())
 
 			if tt.useDigest {
@@ -1811,9 +1788,7 @@ func TestOCIRepository_reconcileSource_verifyOCISourceTrustPolicyNotation(t *tes
 			remoteRepo, err := oras.NewRepository(artifactRef.String())
 			g.Expect(err).ToNot(HaveOccurred())
 
-			if tt.insecure {
-				remoteRepo.PlainHTTP = true
-			}
+			remoteRepo.PlainHTTP = true
 
 			repo := registry.NewRepository(remoteRepo)
 

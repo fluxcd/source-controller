@@ -156,19 +156,23 @@ func setupRegistryServer(ctx context.Context, workspaceDir string, opts registry
 	// mock DNS to map example.com to 127.0.0.1.
 	// This is required because Docker enforces HTTP if the registry
 	// is hosted on localhost/127.0.0.1.
-	server.registryHost = fmt.Sprintf("example.com:%d", port)
-	// Disable DNS server logging as it is extremely chatty.
-	dnsLog := log.Default()
-	dnsLog.SetOutput(io.Discard)
-	server.dnsServer, err = mockdns.NewServerWithLogger(map[string]mockdns.Zone{
-		"example.com.": {
-			A: []string{"127.0.0.1"},
-		},
-	}, dnsLog, false)
-	if err != nil {
-		return nil, err
+	if opts.withTLS {
+		server.registryHost = fmt.Sprintf("example.com:%d", port)
+		// Disable DNS server logging as it is extremely chatty.
+		dnsLog := log.Default()
+		dnsLog.SetOutput(io.Discard)
+		server.dnsServer, err = mockdns.NewServerWithLogger(map[string]mockdns.Zone{
+			"example.com.": {
+				A: []string{"127.0.0.1"},
+			},
+		}, dnsLog, false)
+		if err != nil {
+			return nil, err
+		}
+		server.dnsServer.PatchNet(net.DefaultResolver)
+	} else {
+		server.registryHost = fmt.Sprintf("localhost:%d", port)
 	}
-	server.dnsServer.PatchNet(net.DefaultResolver)
 
 	config.HTTP.Addr = fmt.Sprintf(":%d", port)
 	config.HTTP.DrainTimeout = time.Duration(10) * time.Second
