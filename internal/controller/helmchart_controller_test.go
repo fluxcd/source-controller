@@ -25,7 +25,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"os"
 	"path"
@@ -35,7 +34,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/foxcpp/go-mockdns"
 	"github.com/notaryproject/notation-core-go/signature/cose"
 	"github.com/notaryproject/notation-core-go/testhelper"
 	"github.com/notaryproject/notation-go"
@@ -1347,14 +1345,6 @@ func TestHelmChartReconciler_buildFromTarballArtifact(t *testing.T) {
 	g := NewWithT(t)
 
 	tmpDir := t.TempDir()
-
-	// Unpatch the changes we make to the default DNS resolver in `setupRegistryServer()`.
-	// This is required because the changes somehow also cause remote lookups to fail and
-	// this test tests functionality related to remote dependencies.
-	mockdns.UnpatchNet(net.DefaultResolver)
-	defer func() {
-		testRegistryServer.dnsServer.PatchNet(net.DefaultResolver)
-	}()
 
 	storage, err := NewStorage(tmpDir, "example.com", retentionTTL, retentionRecords)
 	g.Expect(err).ToNot(HaveOccurred())
@@ -2765,7 +2755,7 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_verifySignatureNotation(t *t
 	metadata, err := loadTestChartToOCI(chartData, server, "", "", "")
 	g.Expect(err).NotTo(HaveOccurred())
 
-	storage, err := NewStorage(tmpDir, "example.com", retentionTTL, retentionRecords)
+	storage, err := NewStorage(tmpDir, server.registryHost, retentionTTL, retentionRecords)
 	g.Expect(err).ToNot(HaveOccurred())
 
 	cachedArtifact := &sourcev1.Artifact{
@@ -3089,7 +3079,7 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_verifySignatureCosign(t *tes
 	metadata, err := loadTestChartToOCI(chartData, server, "", "", "")
 	g.Expect(err).NotTo(HaveOccurred())
 
-	storage, err := NewStorage(tmpDir, "example.com", retentionTTL, retentionRecords)
+	storage, err := NewStorage(tmpDir, server.registryHost, retentionTTL, retentionRecords)
 	g.Expect(err).ToNot(HaveOccurred())
 
 	cachedArtifact := &sourcev1.Artifact{
