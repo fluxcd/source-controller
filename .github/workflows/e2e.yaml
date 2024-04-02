@@ -24,7 +24,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@0c52d547c9bc32b1aa3301fd7a9cb496313a4491 # v5.0.0
         with:
-          go-version: 1.21.x
+          go-version-file: 'go.mod'
           cache-dependency-path: |
             **/go.sum
             **/go.mod
@@ -36,9 +36,7 @@ jobs:
       - name: Setup Kubernetes
         uses: helm/kind-action@99576bfa6ddf9a8e612d83b513da5a75875caced # v1.9.0
         with:
-          version: v0.19.0
           cluster_name: kind
-          node_image: kindest/node:v1.21.1@sha256:69860bda5563ac81e3c0057d654b5253219618a22ec3a346306239bba8cfa1a6
       - name: Setup Kustomize
         uses: fluxcd/pkg/actions/kustomize@main
       - name: Setup Helm
@@ -59,7 +57,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@0c52d547c9bc32b1aa3301fd7a9cb496313a4491 # v5.0.0
         with:
-          go-version: 1.21.x
+          go-version-file: 'go.mod'
           cache-dependency-path: |
             **/go.sum
             **/go.mod
