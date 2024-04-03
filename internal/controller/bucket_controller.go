@@ -20,8 +20,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -728,7 +730,7 @@ func fetchEtagIndex(ctx context.Context, provider BucketProvider, obj *bucketv1.
 	path := filepath.Join(tempDir, sourceignore.IgnoreFile)
 	if _, err := provider.FGetObject(ctxTimeout, obj.Spec.BucketName, sourceignore.IgnoreFile, path); err != nil {
 		if !provider.ObjectIsNotFound(err) {
-			return err
+			return fmt.Errorf("failed to get Etag Index '%s' object: %s", sourceignore.IgnoreFile, sanitizeErrorMessage(err.Error()))
 		}
 	}
 	ps, err := sourceignore.ReadIgnoreFile(path, nil)
@@ -792,7 +794,8 @@ func fetchIndexFiles(ctx context.Context, provider BucketProvider, obj *bucketv1
 						index.Delete(k)
 						return nil
 					}
-					return fmt.Errorf("failed to get '%s' object: %w", k, err)
+
+					return fmt.Errorf("failed to get '%s' object: %s", k, sanitizeErrorMessage(err.Error()))
 				}
 				if t != etag {
 					index.Add(k, etag)
@@ -807,4 +810,49 @@ func fetchIndexFiles(ctx context.Context, provider BucketProvider, obj *bucketv1
 	}
 
 	return nil
+}
+
+// sanitizeErrorMessage extracts all URLs from the error message
+// and replaces them with the URL without the query string.
+func sanitizeErrorMessage(errorMessage string) string {
+	urls := extractURLs(errorMessage)
+	for _, url := range urls {
+		urlWithoutQueryString, err := removeQueryString(url)
+		if err == nil {
+			re, err := regexp.Compile(fmt.Sprintf("%s*", regexp.QuoteMeta(url)))
+			if err == nil {
+				errorMessage = re.ReplaceAllString(errorMessage, urlWithoutQueryString)
+			}
+		}
+
+	}
+	return errorMessage
+}
+
+// removeQueryString takes a URL string as input and returns the URL without the query string.
+func removeQueryString(urlStr string) (string, error) {
+	// Parse the URL.
+	u, err := url.Parse(urlStr)
+	if err != nil {
+		return "", err
+	}
+
+	// Rebuild the URL without the query string.
+	u.RawQuery = ""
+	return u.String(), nil
+}
+
+// extractURLs takes a log message as input and returns the URLs found.
+func extractURLs(logMessage string) []string {
+	// Define a regular expression to match a URL.
+	// This is a simple pattern and might need to be adjusted depending on the log message format.
+	urlRegex := regexp.MustCompile(`https?://[^\s]+`)
+
+	// Find the first match in the log message.
+	matches := urlRegex.FindAllString(logMessage, -1)
+	if len(matches) == 0 {
+		return []string{}
+	}
+
+	return matches
 }
