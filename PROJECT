@@ -9,7 +9,13 @@ resources:
   version: v1beta2
 - group: source
   kind: HelmRepository
+  version: v1
+- group: source
+  kind: HelmRepository
   version: v1beta2
+- group: source
+  kind: HelmChart
+  version: v1
 - group: source
   kind: HelmChart
   version: v1beta2

@@ -25,8 +25,7 @@ import (
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/runtime/conditions"
 
-	v1 "github.com/fluxcd/source-controller/api/v1"
-	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
+	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 )
 
 func TestHelmRepositoryOCIMigrationPredicate_Create(t *testing.T) {
@@ -161,7 +160,7 @@ func TestHelmRepositoryOCIMigrationPredicate_Update(t *testing.T) {
 					Type: sourcev1.HelmRepositoryTypeDefault,
 				}
 				oldObj.Status = sourcev1.HelmRepositoryStatus{
-					Artifact:           &v1.Artifact{},
+					Artifact:           &sourcev1.Artifact{},
 					URL:                "http://some-address",
 					ObservedGeneration: 3,
 				}

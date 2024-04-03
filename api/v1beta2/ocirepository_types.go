@@ -22,6 +22,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fluxcd/pkg/apis/meta"
+
 	apiv1 "github.com/fluxcd/source-controller/api/v1"
 )
 
@@ -89,7 +90,7 @@ type OCIRepositorySpec struct {
 	// used to verify the signature and specifies which provider to use to check
 	// whether OCI image is authentic.
 	// +optional
-	Verify *OCIRepositoryVerification `json:"verify,omitempty"`
+	Verify *apiv1.OCIRepositoryVerification `json:"verify,omitempty"`
 
 	// ServiceAccountName is the name of the Kubernetes ServiceAccount used to authenticate
 	// the image pull if the service account has attached pull secrets. For more information:
@@ -181,41 +182,6 @@ type OCILayerSelector struct {
 	// +kubebuilder:validation:Enum=extract;copy
 	// +optional
 	Operation string `json:"operation,omitempty"`
-}
-
-// OCIRepositoryVerification verifies the authenticity of an OCI Artifact
-type OCIRepositoryVerification struct {
-	// Provider specifies the technology used to sign the OCI Artifact.
-	// +kubebuilder:validation:Enum=cosign;notation
-	// +kubebuilder:default:=cosign
-	Provider string `json:"provider"`
-
-	// SecretRef specifies the Kubernetes Secret containing the
-	// trusted public keys.
-	// +optional
-	SecretRef *meta.LocalObjectReference `json:"secretRef,omitempty"`
-
-	// MatchOIDCIdentity specifies the identity matching criteria to use
-	// while verifying an OCI artifact which was signed using Cosign keyless
-	// signing. The artifact's identity is deemed to be verified if any of the
-	// specified matchers match against the identity.
-	// +optional
-	MatchOIDCIdentity []OIDCIdentityMatch `json:"matchOIDCIdentity,omitempty"`
-}
-
-// OIDCIdentityMatch specifies options for verifying the certificate identity,
-// i.e. the issuer and the subject of the certificate.
-type OIDCIdentityMatch struct {
-	// Issuer specifies the regex pattern to match against to verify
-	// the OIDC issuer in the Fulcio certificate. The pattern must be a
-	// valid Go regular expression.
-	// +required
-	Issuer string `json:"issuer"`
-	// Subject specifies the regex pattern to match against to verify
-	// the identity subject in the Fulcio certificate. The pattern must
-	// be a valid Go regular expression.
-	// +required
-	Subject string `json:"subject"`
 }
 
 // OCIRepositoryStatus defines the observed state of OCIRepository

@@ -50,7 +50,7 @@ import (
 	"github.com/fluxcd/pkg/runtime/pprof"
 	"github.com/fluxcd/pkg/runtime/probes"
 
-	v1 "github.com/fluxcd/source-controller/api/v1"
+	"github.com/fluxcd/source-controller/api/v1"
 	"github.com/fluxcd/source-controller/api/v1beta2"
 
 	// +kubebuilder:scaffold:imports
@@ -199,7 +199,7 @@ func main() {
 		DependencyRequeueInterval: requeueDependency,
 		RateLimiter:               helper.GetRateLimiter(rateLimiterOptions),
 	}); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", v1beta2.GitRepositoryKind)
+		setupLog.Error(err, "unable to create controller", "controller", v1.GitRepositoryKind)
 		os.Exit(1)
 	}
 
@@ -216,7 +216,7 @@ func main() {
 	}).SetupWithManagerAndOptions(mgr, controller.HelmRepositoryReconcilerOptions{
 		RateLimiter: helper.GetRateLimiter(rateLimiterOptions),
 	}); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", v1beta2.HelmRepositoryKind)
+		setupLog.Error(err, "unable to create controller", "controller", v1.HelmRepositoryKind)
 		os.Exit(1)
 	}
 
@@ -234,7 +234,7 @@ func main() {
 	}).SetupWithManagerAndOptions(ctx, mgr, controller.HelmChartReconcilerOptions{
 		RateLimiter: helper.GetRateLimiter(rateLimiterOptions),
 	}); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", v1beta2.HelmChartKind)
+		setupLog.Error(err, "unable to create controller", "controller", v1.HelmChartKind)
 		os.Exit(1)
 	}
 
@@ -247,7 +247,7 @@ func main() {
 	}).SetupWithManagerAndOptions(mgr, controller.BucketReconcilerOptions{
 		RateLimiter: helper.GetRateLimiter(rateLimiterOptions),
 	}); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "Bucket")
+		setupLog.Error(err, "unable to create controller", "controller", v1beta2.BucketKind)
 		os.Exit(1)
 	}
 
@@ -260,7 +260,7 @@ func main() {
 	}).SetupWithManagerAndOptions(mgr, controller.OCIRepositoryReconcilerOptions{
 		RateLimiter: helper.GetRateLimiter(rateLimiterOptions),
 	}); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "OCIRepository")
+		setupLog.Error(err, "unable to create controller", "controller", v1beta2.OCIRepositoryKind)
 		os.Exit(1)
 	}
 	// +kubebuilder:scaffold:builder
@@ -348,11 +348,11 @@ func mustSetupManager(metricsAddr, healthAddr string, maxConcurrent int,
 		},
 		Cache: ctrlcache.Options{
 			ByObject: map[ctrlclient.Object]ctrlcache.ByObject{
-				&v1.GitRepository{}:       {Label: watchSelector},
-				&v1beta2.HelmRepository{}: {Label: watchSelector},
-				&v1beta2.HelmChart{}:      {Label: watchSelector},
-				&v1beta2.Bucket{}:         {Label: watchSelector},
-				&v1beta2.OCIRepository{}:  {Label: watchSelector},
+				&v1.GitRepository{}:      {Label: watchSelector},
+				&v1.HelmRepository{}:     {Label: watchSelector},
+				&v1.HelmChart{}:          {Label: watchSelector},
+				&v1beta2.Bucket{}:        {Label: watchSelector},
+				&v1beta2.OCIRepository{}: {Label: watchSelector},
 			},
 		},
 		Metrics: metricsserver.Options{

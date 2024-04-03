@@ -67,7 +67,7 @@ import (
 	"github.com/fluxcd/pkg/testserver"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
-	helmv1 "github.com/fluxcd/source-controller/api/v1beta2"
+	sourcev1beta2 "github.com/fluxcd/source-controller/api/v1beta2"
 	serror "github.com/fluxcd/source-controller/internal/error"
 	"github.com/fluxcd/source-controller/internal/helm/chart"
 	"github.com/fluxcd/source-controller/internal/helm/chart/secureloader"
@@ -90,13 +90,13 @@ func TestHelmChartReconciler_deleteBeforeFinalizer(t *testing.T) {
 		g.Expect(k8sClient.Delete(ctx, namespace)).NotTo(HaveOccurred())
 	})
 
-	helmchart := &helmv1.HelmChart{}
+	helmchart := &sourcev1.HelmChart{}
 	helmchart.Name = "test-helmchart"
 	helmchart.Namespace = namespaceName
-	helmchart.Spec = helmv1.HelmChartSpec{
+	helmchart.Spec = sourcev1.HelmChartSpec{
 		Interval: metav1.Duration{Duration: interval},
 		Chart:    "foo",
-		SourceRef: helmv1.LocalHelmChartSourceReference{
+		SourceRef: sourcev1.LocalHelmChartSourceReference{
 			Kind: "HelmRepository",
 			Name: "bar",
 		},
@@ -135,12 +135,12 @@ func TestHelmChartReconciler_Reconcile(t *testing.T) {
 
 	tests := []struct {
 		name       string
-		beforeFunc func(repository *helmv1.HelmRepository)
-		assertFunc func(g *WithT, obj *helmv1.HelmChart, repository *helmv1.HelmRepository)
+		beforeFunc func(repository *sourcev1.HelmRepository)
+		assertFunc func(g *WithT, obj *sourcev1.HelmChart, repository *sourcev1.HelmRepository)
 	}{
 		{
 			name: "Reconciles chart build",
-			assertFunc: func(g *WithT, obj *helmv1.HelmChart, repository *helmv1.HelmRepository) {
+			assertFunc: func(g *WithT, obj *sourcev1.HelmChart, repository *sourcev1.HelmRepository) {
 				origObj := obj.DeepCopy()
 
 				key := client.ObjectKey{Name: obj.Name, Namespace: obj.Namespace}
@@ -206,10 +206,10 @@ func TestHelmChartReconciler_Reconcile(t *testing.T) {
 		},
 		{
 			name: "Stalling on invalid repository URL",
-			beforeFunc: func(repository *helmv1.HelmRepository) {
+			beforeFunc: func(repository *sourcev1.HelmRepository) {
 				repository.Spec.URL = "https://unsupported/foo://" // Invalid URL
 			},
-			assertFunc: func(g *WithT, obj *helmv1.HelmChart, _ *helmv1.HelmRepository) {
+			assertFunc: func(g *WithT, obj *sourcev1.HelmChart, _ *sourcev1.HelmRepository) {
 				key := client.ObjectKey{Name: obj.Name, Namespace: obj.Namespace}
 				// Wait for HelmChart to be FetchFailed == true
 				g.Eventually(func() bool {
@@ -241,10 +241,10 @@ func TestHelmChartReconciler_Reconcile(t *testing.T) {
 		},
 		{
 			name: "Stalling on invalid oci repository URL",
-			beforeFunc: func(repository *helmv1.HelmRepository) {
+			beforeFunc: func(repository *sourcev1.HelmRepository) {
 				repository.Spec.URL = strings.Replace(repository.Spec.URL, "http", "oci", 1)
 			},
-			assertFunc: func(g *WithT, obj *helmv1.HelmChart, _ *helmv1.HelmRepository) {
+			assertFunc: func(g *WithT, obj *sourcev1.HelmChart, _ *sourcev1.HelmRepository) {
 				key := client.ObjectKey{Name: obj.Name, Namespace: obj.Namespace}
 				// Wait for HelmChart to be Ready
 				g.Eventually(func() bool {
@@ -288,12 +288,12 @@ func TestHelmChartReconciler_Reconcile(t *testing.T) {
 			g.Expect(err).ToNot(HaveOccurred())
 			defer func() { g.Expect(testEnv.Delete(ctx, ns)).To(Succeed()) }()
 
-			repository := helmv1.HelmRepository{
+			repository := sourcev1.HelmRepository{
 				ObjectMeta: metav1.ObjectMeta{
 					GenerateName: "helmrepository-",
 					Namespace:    ns.Name,
 				},
-				Spec: helmv1.HelmRepositorySpec{
+				Spec: sourcev1.HelmRepositorySpec{
 					URL: server.URL(),
 				},
 			}
@@ -305,16 +305,16 @@ func TestHelmChartReconciler_Reconcile(t *testing.T) {
 			g.Expect(testEnv.CreateAndWait(ctx, &repository)).To(Succeed())
 			defer func() { g.Expect(testEnv.Delete(ctx, &repository)).To(Succeed()) }()
 
-			obj := helmv1.HelmChart{
+			obj := sourcev1.HelmChart{
 				ObjectMeta: metav1.ObjectMeta{
 					GenerateName: "helmrepository-reconcile-",
 					Namespace:    ns.Name,
 				},
-				Spec: helmv1.HelmChartSpec{
+				Spec: sourcev1.HelmChartSpec{
 					Chart:   chartName,
 					Version: chartVersion,
-					SourceRef: helmv1.LocalHelmChartSourceReference{
-						Kind: helmv1.HelmRepositoryKind,
+					SourceRef: sourcev1.LocalHelmChartSourceReference{
+						Kind: sourcev1.HelmRepositoryKind,
 						Name: repository.Name,
 					},
 				},
@@ -331,7 +331,7 @@ func TestHelmChartReconciler_Reconcile(t *testing.T) {
 func TestHelmChartReconciler_reconcileStorage(t *testing.T) {
 	tests := []struct {
 		name             string
-		beforeFunc       func(obj *helmv1.HelmChart, storage *Storage) error
+		beforeFunc       func(obj *sourcev1.HelmChart, storage *Storage) error
 		want             sreconcile.Result
 		wantErr          bool
 		assertArtifact   *sourcev1.Artifact
@@ -340,7 +340,7 @@ func TestHelmChartReconciler_reconcileStorage(t *testing.T) {
 	}{
 		{
 			name: "garbage collects",
-			beforeFunc: func(obj *helmv1.HelmChart, storage *Storage) error {
+			beforeFunc: func(obj *sourcev1.HelmChart, storage *Storage) error {
 				revisions := []string{"a", "b", "c", "d"}
 				for n := range revisions {
 					v := revisions[n]
@@ -390,7 +390,7 @@ func TestHelmChartReconciler_reconcileStorage(t *testing.T) {
 		},
 		{
 			name: "notices missing artifact in storage",
-			beforeFunc: func(obj *helmv1.HelmChart, storage *Storage) error {
+			beforeFunc: func(obj *sourcev1.HelmChart, storage *Storage) error {
 				obj.Status.Artifact = &sourcev1.Artifact{
 					Path:     "/reconcile-storage/invalid.txt",
 					Revision: "d",
@@ -409,7 +409,7 @@ func TestHelmChartReconciler_reconcileStorage(t *testing.T) {
 		},
 		{
 			name: "notices empty artifact digest",
-			beforeFunc: func(obj *helmv1.HelmChart, storage *Storage) error {
+			beforeFunc: func(obj *sourcev1.HelmChart, storage *Storage) error {
 				f := "empty-digest.txt"
 
 				obj.Status.Artifact = &sourcev1.Artifact{
@@ -440,7 +440,7 @@ func TestHelmChartReconciler_reconcileStorage(t *testing.T) {
 		},
 		{
 			name: "notices artifact digest mismatch",
-			beforeFunc: func(obj *helmv1.HelmChart, storage *Storage) error {
+			beforeFunc: func(obj *sourcev1.HelmChart, storage *Storage) error {
 				f := "digest-mismatch.txt"
 
 				obj.Status.Artifact = &sourcev1.Artifact{
@@ -471,7 +471,7 @@ func TestHelmChartReconciler_reconcileStorage(t *testing.T) {
 		},
 		{
 			name: "updates hostname on diff from current",
-			beforeFunc: func(obj *helmv1.HelmChart, storage *Storage) error {
+			beforeFunc: func(obj *sourcev1.HelmChart, storage *Storage) error {
 				obj.Status.Artifact = &sourcev1.Artifact{
 					Path:     "/reconcile-storage/hostname.txt",
 					Revision: "f",
@@ -514,14 +514,14 @@ func TestHelmChartReconciler_reconcileStorage(t *testing.T) {
 			r := &HelmChartReconciler{
 				Client: fakeclient.NewClientBuilder().
 					WithScheme(testEnv.GetScheme()).
-					WithStatusSubresource(&helmv1.HelmChart{}).
+					WithStatusSubresource(&sourcev1.HelmChart{}).
 					Build(),
 				EventRecorder: record.NewFakeRecorder(32),
 				Storage:       testStorage,
 				patchOptions:  getPatchOptions(helmChartReadyCondition.Owned, "sc"),
 			}
 
-			obj := &helmv1.HelmChart{
+			obj := &sourcev1.HelmChart{
 				ObjectMeta: metav1.ObjectMeta{
 					GenerateName: "test-",
 					Generation:   1,
@@ -581,10 +581,10 @@ func TestHelmChartReconciler_reconcileSource(t *testing.T) {
 	tests := []struct {
 		name       string
 		source     sourcev1.Source
-		beforeFunc func(obj *helmv1.HelmChart)
+		beforeFunc func(obj *sourcev1.HelmChart)
 		want       sreconcile.Result
 		wantErr    error
-		assertFunc func(g *WithT, build chart.Build, obj helmv1.HelmChart)
+		assertFunc func(g *WithT, build chart.Build, obj sourcev1.HelmChart)
 		cleanFunc  func(g *WithT, build *chart.Build)
 	}{
 		{
@@ -598,15 +598,15 @@ func TestHelmChartReconciler_reconcileSource(t *testing.T) {
 					Artifact: gitArtifact,
 				},
 			},
-			beforeFunc: func(obj *helmv1.HelmChart) {
+			beforeFunc: func(obj *sourcev1.HelmChart) {
 				obj.Spec.Chart = "testdata/charts/helmchart-0.1.0.tgz"
-				obj.Spec.SourceRef = helmv1.LocalHelmChartSourceReference{
+				obj.Spec.SourceRef = sourcev1.LocalHelmChartSourceReference{
 					Name: "gitrepository",
 					Kind: sourcev1.GitRepositoryKind,
 				}
 			},
 			want: sreconcile.ResultSuccess,
-			assertFunc: func(g *WithT, build chart.Build, obj helmv1.HelmChart) {
+			assertFunc: func(g *WithT, build chart.Build, obj sourcev1.HelmChart) {
 				g.Expect(build.Complete()).To(BeTrue())
 				g.Expect(build.Name).To(Equal("helmchart"))
 				g.Expect(build.Version).To(Equal("0.1.0"))
@@ -633,9 +633,9 @@ func TestHelmChartReconciler_reconcileSource(t *testing.T) {
 					Artifact: gitArtifact,
 				},
 			},
-			beforeFunc: func(obj *helmv1.HelmChart) {
+			beforeFunc: func(obj *sourcev1.HelmChart) {
 				obj.Spec.Chart = "testdata/charts/helmchart-0.1.0.tgz"
-				obj.Spec.SourceRef = helmv1.LocalHelmChartSourceReference{
+				obj.Spec.SourceRef = sourcev1.LocalHelmChartSourceReference{
 					Name: "gitrepository",
 					Kind: sourcev1.GitRepositoryKind,
 				}
@@ -645,7 +645,7 @@ func TestHelmChartReconciler_reconcileSource(t *testing.T) {
 				}
 			},
 			want: sreconcile.ResultSuccess,
-			assertFunc: func(g *WithT, build chart.Build, obj helmv1.HelmChart) {
+			assertFunc: func(g *WithT, build chart.Build, obj sourcev1.HelmChart) {
 				g.Expect(build.Complete()).To(BeTrue())
 				g.Expect(build.Name).To(Equal("helmchart"))
 				g.Expect(build.Version).To(Equal("0.1.0"))
@@ -661,8 +661,8 @@ func TestHelmChartReconciler_reconcileSource(t *testing.T) {
 		},
 		{
 			name: "Error on unavailable source",
-			beforeFunc: func(obj *helmv1.HelmChart) {
-				obj.Spec.SourceRef = helmv1.LocalHelmChartSourceReference{
+			beforeFunc: func(obj *sourcev1.HelmChart) {
+				obj.Spec.SourceRef = sourcev1.LocalHelmChartSourceReference{
 					Name: "unavailable",
 					Kind: sourcev1.GitRepositoryKind,
 				}
@@ -671,7 +671,7 @@ func TestHelmChartReconciler_reconcileSource(t *testing.T) {
 			},
 			want:    sreconcile.ResultEmpty,
 			wantErr: &serror.Generic{Err: errors.New("gitrepositories.source.toolkit.fluxcd.io \"unavailable\" not found")},
-			assertFunc: func(g *WithT, build chart.Build, obj helmv1.HelmChart) {
+			assertFunc: func(g *WithT, build chart.Build, obj sourcev1.HelmChart) {
 				g.Expect(build.Complete()).To(BeFalse())
 
 				g.Expect(obj.Status.Conditions).To(conditions.MatchConditions([]metav1.Condition{
@@ -683,8 +683,8 @@ func TestHelmChartReconciler_reconcileSource(t *testing.T) {
 		},
 		{
 			name: "Stalling on unsupported source kind",
-			beforeFunc: func(obj *helmv1.HelmChart) {
-				obj.Spec.SourceRef = helmv1.LocalHelmChartSourceReference{
+			beforeFunc: func(obj *sourcev1.HelmChart) {
+				obj.Spec.SourceRef = sourcev1.LocalHelmChartSourceReference{
 					Name: "unavailable",
 					Kind: "Unsupported",
 				}
@@ -693,7 +693,7 @@ func TestHelmChartReconciler_reconcileSource(t *testing.T) {
 			},
 			want:    sreconcile.ResultEmpty,
 			wantErr: &serror.Stalling{Err: errors.New("unsupported source kind 'Unsupported'")},
-			assertFunc: func(g *WithT, build chart.Build, obj helmv1.HelmChart) {
+			assertFunc: func(g *WithT, build chart.Build, obj sourcev1.HelmChart) {
 				g.Expect(build.Complete()).To(BeFalse())
 
 				g.Expect(obj.Status.Conditions).To(conditions.MatchConditions([]metav1.Condition{
@@ -714,9 +714,9 @@ func TestHelmChartReconciler_reconcileSource(t *testing.T) {
 					Artifact: gitArtifact,
 				},
 			},
-			beforeFunc: func(obj *helmv1.HelmChart) {
+			beforeFunc: func(obj *sourcev1.HelmChart) {
 				obj.Spec.Chart = "testdata/charts/helmchart-0.1.0.tgz"
-				obj.Spec.SourceRef = helmv1.LocalHelmChartSourceReference{
+				obj.Spec.SourceRef = sourcev1.LocalHelmChartSourceReference{
 					Name: "gitrepository",
 					Kind: sourcev1.GitRepositoryKind,
 				}
@@ -726,7 +726,7 @@ func TestHelmChartReconciler_reconcileSource(t *testing.T) {
 			},
 			want:    sreconcile.ResultEmpty,
 			wantErr: &serror.Stalling{Err: errors.New("values files merge error: no values file found at path")},
-			assertFunc: func(g *WithT, build chart.Build, obj helmv1.HelmChart) {
+			assertFunc: func(g *WithT, build chart.Build, obj sourcev1.HelmChart) {
 				g.Expect(build.Complete()).To(BeFalse())
 
 				g.Expect(obj.Status.Conditions).To(conditions.MatchConditions([]metav1.Condition{
@@ -745,9 +745,9 @@ func TestHelmChartReconciler_reconcileSource(t *testing.T) {
 				},
 				Status: sourcev1.GitRepositoryStatus{},
 			},
-			beforeFunc: func(obj *helmv1.HelmChart) {
+			beforeFunc: func(obj *sourcev1.HelmChart) {
 				obj.Spec.Chart = "testdata/charts/helmchart-0.1.0.tgz"
-				obj.Spec.SourceRef = helmv1.LocalHelmChartSourceReference{
+				obj.Spec.SourceRef = sourcev1.LocalHelmChartSourceReference{
 					Name: "gitrepository",
 					Kind: sourcev1.GitRepositoryKind,
 				}
@@ -756,7 +756,7 @@ func TestHelmChartReconciler_reconcileSource(t *testing.T) {
 				conditions.MarkUnknown(obj, meta.ReadyCondition, meta.ProgressingReason, "foo")
 			},
 			want: sreconcile.ResultRequeue,
-			assertFunc: func(g *WithT, build chart.Build, obj helmv1.HelmChart) {
+			assertFunc: func(g *WithT, build chart.Build, obj sourcev1.HelmChart) {
 				g.Expect(build.Complete()).To(BeFalse())
 
 				g.Expect(obj.Status.ObservedSourceArtifactRevision).To(Equal("foo"))
@@ -774,7 +774,7 @@ func TestHelmChartReconciler_reconcileSource(t *testing.T) {
 
 			clientBuilder := fakeclient.NewClientBuilder().
 				WithScheme(testEnv.GetScheme()).
-				WithStatusSubresource(&helmv1.HelmChart{})
+				WithStatusSubresource(&sourcev1.HelmChart{})
 
 			if tt.source != nil {
 				clientBuilder.WithRuntimeObjects(tt.source)
@@ -787,13 +787,13 @@ func TestHelmChartReconciler_reconcileSource(t *testing.T) {
 				patchOptions:  getPatchOptions(helmChartReadyCondition.Owned, "sc"),
 			}
 
-			obj := helmv1.HelmChart{
+			obj := sourcev1.HelmChart{
 				ObjectMeta: metav1.ObjectMeta{
 					GenerateName: "chart",
 					Namespace:    "default",
 					Generation:   1,
 				},
-				Spec: helmv1.HelmChartSpec{},
+				Spec: sourcev1.HelmChartSpec{},
 			}
 			if tt.beforeFunc != nil {
 				tt.beforeFunc(&obj)
@@ -859,19 +859,19 @@ func TestHelmChartReconciler_buildFromHelmRepository(t *testing.T) {
 		name       string
 		server     options
 		secret     *corev1.Secret
-		beforeFunc func(obj *helmv1.HelmChart, repository *helmv1.HelmRepository)
+		beforeFunc func(obj *sourcev1.HelmChart, repository *sourcev1.HelmRepository)
 		want       sreconcile.Result
 		wantErr    error
-		assertFunc func(g *WithT, obj *helmv1.HelmChart, build chart.Build)
+		assertFunc func(g *WithT, obj *sourcev1.HelmChart, build chart.Build)
 		cleanFunc  func(g *WithT, build *chart.Build)
 	}{
 		{
 			name: "Reconciles chart build",
-			beforeFunc: func(obj *helmv1.HelmChart, repository *helmv1.HelmRepository) {
+			beforeFunc: func(obj *sourcev1.HelmChart, repository *sourcev1.HelmRepository) {
 				obj.Spec.Chart = "helmchart"
 			},
 			want: sreconcile.ResultSuccess,
-			assertFunc: func(g *WithT, _ *helmv1.HelmChart, build chart.Build) {
+			assertFunc: func(g *WithT, _ *sourcev1.HelmChart, build chart.Build) {
 				g.Expect(build.Name).To(Equal(chartName))
 				g.Expect(build.Version).To(Equal(higherChartVersion))
 				g.Expect(build.Path).ToNot(BeEmpty())
@@ -896,13 +896,13 @@ func TestHelmChartReconciler_buildFromHelmRepository(t *testing.T) {
 					"password": []byte("bar"),
 				},
 			},
-			beforeFunc: func(obj *helmv1.HelmChart, repository *helmv1.HelmRepository) {
+			beforeFunc: func(obj *sourcev1.HelmChart, repository *sourcev1.HelmRepository) {
 				obj.Spec.Chart = chartName
 				obj.Spec.Version = chartVersion
 				repository.Spec.SecretRef = &meta.LocalObjectReference{Name: "auth"}
 			},
 			want: sreconcile.ResultSuccess,
-			assertFunc: func(g *WithT, _ *helmv1.HelmChart, build chart.Build) {
+			assertFunc: func(g *WithT, _ *sourcev1.HelmChart, build chart.Build) {
 				g.Expect(build.Name).To(Equal(chartName))
 				g.Expect(build.Version).To(Equal(chartVersion))
 				g.Expect(build.Path).ToNot(BeEmpty())
@@ -914,13 +914,13 @@ func TestHelmChartReconciler_buildFromHelmRepository(t *testing.T) {
 		},
 		{
 			name: "Uses artifact as build cache",
-			beforeFunc: func(obj *helmv1.HelmChart, repository *helmv1.HelmRepository) {
+			beforeFunc: func(obj *sourcev1.HelmChart, repository *sourcev1.HelmRepository) {
 				obj.Spec.Chart = chartName
 				obj.Spec.Version = chartVersion
 				obj.Status.Artifact = &sourcev1.Artifact{Path: chartName + "-" + chartVersion + ".tgz"}
 			},
 			want: sreconcile.ResultSuccess,
-			assertFunc: func(g *WithT, obj *helmv1.HelmChart, build chart.Build) {
+			assertFunc: func(g *WithT, obj *sourcev1.HelmChart, build chart.Build) {
 				g.Expect(build.Name).To(Equal(chartName))
 				g.Expect(build.Version).To(Equal(chartVersion))
 				g.Expect(build.Path).To(Equal(filepath.Join(serverFactory.Root(), obj.Status.Artifact.Path)))
@@ -946,13 +946,13 @@ func TestHelmChartReconciler_buildFromHelmRepository(t *testing.T) {
 		},
 		{
 			name: "Sets Generation as VersionMetadata with values files",
-			beforeFunc: func(obj *helmv1.HelmChart, repository *helmv1.HelmRepository) {
+			beforeFunc: func(obj *sourcev1.HelmChart, repository *sourcev1.HelmRepository) {
 				obj.Spec.Chart = chartName
 				obj.Generation = 3
 				obj.Spec.ValuesFiles = []string{"values.yaml", "override.yaml"}
 			},
 			want: sreconcile.ResultSuccess,
-			assertFunc: func(g *WithT, _ *helmv1.HelmChart, build chart.Build) {
+			assertFunc: func(g *WithT, _ *sourcev1.HelmChart, build chart.Build) {
 				g.Expect(build.Name).To(Equal(chartName))
 				g.Expect(build.Version).To(Equal(higherChartVersion + "+3"))
 				g.Expect(build.Path).ToNot(BeEmpty())
@@ -1009,7 +1009,7 @@ func TestHelmChartReconciler_buildFromHelmRepository(t *testing.T) {
 		},
 		{
 			name: "Forces build on generation change",
-			beforeFunc: func(obj *helmv1.HelmChart, repository *helmv1.HelmRepository) {
+			beforeFunc: func(obj *sourcev1.HelmChart, repository *sourcev1.HelmRepository) {
 				obj.Generation = 3
 				obj.Spec.Chart = chartName
 				obj.Spec.Version = chartVersion
@@ -1018,7 +1018,7 @@ func TestHelmChartReconciler_buildFromHelmRepository(t *testing.T) {
 				obj.Status.Artifact = &sourcev1.Artifact{Path: chartName + "-" + chartVersion + ".tgz"}
 			},
 			want: sreconcile.ResultSuccess,
-			assertFunc: func(g *WithT, obj *helmv1.HelmChart, build chart.Build) {
+			assertFunc: func(g *WithT, obj *sourcev1.HelmChart, build chart.Build) {
 				g.Expect(build.Name).To(Equal(chartName))
 				g.Expect(build.Version).To(Equal(chartVersion))
 				g.Expect(build.Path).ToNot(Equal(filepath.Join(serverFactory.Root(), obj.Status.Artifact.Path)))
@@ -1030,14 +1030,14 @@ func TestHelmChartReconciler_buildFromHelmRepository(t *testing.T) {
 		},
 		{
 			name: "Event on unsuccessful secret retrieval",
-			beforeFunc: func(_ *helmv1.HelmChart, repository *helmv1.HelmRepository) {
+			beforeFunc: func(_ *sourcev1.HelmChart, repository *sourcev1.HelmRepository) {
 				repository.Spec.SecretRef = &meta.LocalObjectReference{
 					Name: "invalid",
 				}
 			},
 			want:    sreconcile.ResultEmpty,
 			wantErr: &serror.Generic{Err: errors.New("failed to get authentication secret '/invalid'")},
-			assertFunc: func(g *WithT, obj *helmv1.HelmChart, build chart.Build) {
+			assertFunc: func(g *WithT, obj *sourcev1.HelmChart, build chart.Build) {
 				g.Expect(build.Complete()).To(BeFalse())
 
 				g.Expect(obj.Status.Conditions).To(conditions.MatchConditions([]metav1.Condition{
@@ -1047,12 +1047,12 @@ func TestHelmChartReconciler_buildFromHelmRepository(t *testing.T) {
 		},
 		{
 			name: "Stalling on invalid client options",
-			beforeFunc: func(obj *helmv1.HelmChart, repository *helmv1.HelmRepository) {
+			beforeFunc: func(obj *sourcev1.HelmChart, repository *sourcev1.HelmRepository) {
 				repository.Spec.URL = "file://unsupported" // Unsupported protocol
 			},
 			want:    sreconcile.ResultEmpty,
 			wantErr: &serror.Stalling{Err: errors.New("scheme \"file\" not supported")},
-			assertFunc: func(g *WithT, obj *helmv1.HelmChart, build chart.Build) {
+			assertFunc: func(g *WithT, obj *sourcev1.HelmChart, build chart.Build) {
 				g.Expect(build.Complete()).To(BeFalse())
 
 				g.Expect(obj.Status.Conditions).To(conditions.MatchConditions([]metav1.Condition{
@@ -1062,12 +1062,12 @@ func TestHelmChartReconciler_buildFromHelmRepository(t *testing.T) {
 		},
 		{
 			name: "Stalling on invalid repository URL",
-			beforeFunc: func(obj *helmv1.HelmChart, repository *helmv1.HelmRepository) {
+			beforeFunc: func(obj *sourcev1.HelmChart, repository *sourcev1.HelmRepository) {
 				repository.Spec.URL = "://unsupported" // Invalid URL
 			},
 			want:    sreconcile.ResultEmpty,
 			wantErr: &serror.Stalling{Err: errors.New("missing protocol scheme")},
-			assertFunc: func(g *WithT, obj *helmv1.HelmChart, build chart.Build) {
+			assertFunc: func(g *WithT, obj *sourcev1.HelmChart, build chart.Build) {
 				g.Expect(build.Complete()).To(BeFalse())
 
 				g.Expect(obj.Status.Conditions).To(conditions.MatchConditions([]metav1.Condition{
@@ -1077,7 +1077,7 @@ func TestHelmChartReconciler_buildFromHelmRepository(t *testing.T) {
 		},
 		{
 			name: "BuildError on temporary build error",
-			beforeFunc: func(obj *helmv1.HelmChart, _ *helmv1.HelmRepository) {
+			beforeFunc: func(obj *sourcev1.HelmChart, _ *sourcev1.HelmRepository) {
 				obj.Spec.Chart = "invalid"
 			},
 			want:    sreconcile.ResultEmpty,
@@ -1107,7 +1107,7 @@ func TestHelmChartReconciler_buildFromHelmRepository(t *testing.T) {
 
 			clientBuilder := fakeclient.NewClientBuilder().
 				WithScheme(testEnv.Scheme()).
-				WithStatusSubresource(&helmv1.HelmChart{})
+				WithStatusSubresource(&sourcev1.HelmChart{})
 
 			if tt.secret != nil {
 				clientBuilder.WithObjects(tt.secret.DeepCopy())
@@ -1124,25 +1124,25 @@ func TestHelmChartReconciler_buildFromHelmRepository(t *testing.T) {
 				patchOptions:  getPatchOptions(helmChartReadyCondition.Owned, "sc"),
 			}
 
-			repository := &helmv1.HelmRepository{
+			repository := &sourcev1.HelmRepository{
 				ObjectMeta: metav1.ObjectMeta{
 					GenerateName: "helmrepository-",
 				},
-				Spec: helmv1.HelmRepositorySpec{
+				Spec: sourcev1.HelmRepositorySpec{
 					URL:     server.URL(),
 					Timeout: &metav1.Duration{Duration: timeout},
 				},
-				Status: helmv1.HelmRepositoryStatus{
+				Status: sourcev1.HelmRepositoryStatus{
 					Artifact: &sourcev1.Artifact{
 						Path: "index.yaml",
 					},
 				},
 			}
-			obj := &helmv1.HelmChart{
+			obj := &sourcev1.HelmChart{
 				ObjectMeta: metav1.ObjectMeta{
 					GenerateName: "helmrepository-",
 				},
-				Spec: helmv1.HelmChartSpec{},
+				Spec: sourcev1.HelmChartSpec{},
 			}
 
 			if tt.beforeFunc != nil {
@@ -1198,10 +1198,10 @@ func TestHelmChartReconciler_buildFromOCIHelmRepository(t *testing.T) {
 	tests := []struct {
 		name       string
 		secret     *corev1.Secret
-		beforeFunc func(obj *helmv1.HelmChart, repository *helmv1.HelmRepository)
+		beforeFunc func(obj *sourcev1.HelmChart, repository *sourcev1.HelmRepository)
 		want       sreconcile.Result
 		wantErr    error
-		assertFunc func(g *WithT, obj *helmv1.HelmChart, build chart.Build)
+		assertFunc func(g *WithT, obj *sourcev1.HelmChart, build chart.Build)
 		cleanFunc  func(g *WithT, build *chart.Build)
 	}{
 		{
@@ -1217,13 +1217,13 @@ func TestHelmChartReconciler_buildFromOCIHelmRepository(t *testing.T) {
 						`auth":"` + base64.StdEncoding.EncodeToString([]byte(testRegistryUsername+":"+testRegistryPassword)) + `"}}}`),
 				},
 			},
-			beforeFunc: func(obj *helmv1.HelmChart, repository *helmv1.HelmRepository) {
+			beforeFunc: func(obj *sourcev1.HelmChart, repository *sourcev1.HelmRepository) {
 				obj.Spec.Chart = metadata.Name
 				obj.Spec.Version = metadata.Version
 				repository.Spec.SecretRef = &meta.LocalObjectReference{Name: "auth"}
 			},
 			want: sreconcile.ResultSuccess,
-			assertFunc: func(g *WithT, _ *helmv1.HelmChart, build chart.Build) {
+			assertFunc: func(g *WithT, _ *sourcev1.HelmChart, build chart.Build) {
 				g.Expect(build.Name).To(Equal(metadata.Name))
 				g.Expect(build.Version).To(Equal(metadata.Version))
 				g.Expect(build.Path).ToNot(BeEmpty())
@@ -1244,13 +1244,13 @@ func TestHelmChartReconciler_buildFromOCIHelmRepository(t *testing.T) {
 					"password": []byte(testRegistryPassword),
 				},
 			},
-			beforeFunc: func(obj *helmv1.HelmChart, repository *helmv1.HelmRepository) {
+			beforeFunc: func(obj *sourcev1.HelmChart, repository *sourcev1.HelmRepository) {
 				obj.Spec.Chart = metadata.Name
 				obj.Spec.Version = metadata.Version
 				repository.Spec.SecretRef = &meta.LocalObjectReference{Name: "auth"}
 			},
 			want: sreconcile.ResultSuccess,
-			assertFunc: func(g *WithT, _ *helmv1.HelmChart, build chart.Build) {
+			assertFunc: func(g *WithT, _ *sourcev1.HelmChart, build chart.Build) {
 				g.Expect(build.Name).To(Equal(metadata.Name))
 				g.Expect(build.Version).To(Equal(metadata.Version))
 				g.Expect(build.Path).ToNot(BeEmpty())
@@ -1262,13 +1262,13 @@ func TestHelmChartReconciler_buildFromOCIHelmRepository(t *testing.T) {
 		},
 		{
 			name: "Uses artifact as build cache",
-			beforeFunc: func(obj *helmv1.HelmChart, repository *helmv1.HelmRepository) {
+			beforeFunc: func(obj *sourcev1.HelmChart, repository *sourcev1.HelmRepository) {
 				obj.Spec.Chart = metadata.Name
 				obj.Spec.Version = metadata.Version
 				obj.Status.Artifact = &sourcev1.Artifact{Path: metadata.Name + "-" + metadata.Version + ".tgz"}
 			},
 			want: sreconcile.ResultSuccess,
-			assertFunc: func(g *WithT, obj *helmv1.HelmChart, build chart.Build) {
+			assertFunc: func(g *WithT, obj *sourcev1.HelmChart, build chart.Build) {
 				g.Expect(build.Name).To(Equal(metadata.Name))
 				g.Expect(build.Version).To(Equal(metadata.Version))
 				g.Expect(build.Path).To(Equal(storage.LocalPath(*cachedArtifact.DeepCopy())))
@@ -1278,7 +1278,7 @@ func TestHelmChartReconciler_buildFromOCIHelmRepository(t *testing.T) {
 		},
 		{
 			name: "Forces build on generation change",
-			beforeFunc: func(obj *helmv1.HelmChart, repository *helmv1.HelmRepository) {
+			beforeFunc: func(obj *sourcev1.HelmChart, repository *sourcev1.HelmRepository) {
 				obj.Generation = 3
 				obj.Spec.Chart = metadata.Name
 				obj.Spec.Version = metadata.Version
@@ -1287,7 +1287,7 @@ func TestHelmChartReconciler_buildFromOCIHelmRepository(t *testing.T) {
 				obj.Status.Artifact = &sourcev1.Artifact{Path: metadata.Name + "-" + metadata.Version + ".tgz"}
 			},
 			want: sreconcile.ResultSuccess,
-			assertFunc: func(g *WithT, obj *helmv1.HelmChart, build chart.Build) {
+			assertFunc: func(g *WithT, obj *sourcev1.HelmChart, build chart.Build) {
 				g.Expect(build.Name).To(Equal(metadata.Name))
 				g.Expect(build.Version).To(Equal(metadata.Version))
 				g.Expect(build.Path).ToNot(Equal(storage.LocalPath(*cachedArtifact.DeepCopy())))
@@ -1299,14 +1299,14 @@ func TestHelmChartReconciler_buildFromOCIHelmRepository(t *testing.T) {
 		},
 		{
 			name: "Event on unsuccessful secret retrieval",
-			beforeFunc: func(_ *helmv1.HelmChart, repository *helmv1.HelmRepository) {
+			beforeFunc: func(_ *sourcev1.HelmChart, repository *sourcev1.HelmRepository) {
 				repository.Spec.SecretRef = &meta.LocalObjectReference{
 					Name: "invalid",
 				}
 			},
 			want:    sreconcile.ResultEmpty,
 			wantErr: &serror.Generic{Err: errors.New("failed to get authentication secret '/invalid'")},
-			assertFunc: func(g *WithT, obj *helmv1.HelmChart, build chart.Build) {
+			assertFunc: func(g *WithT, obj *sourcev1.HelmChart, build chart.Build) {
 				g.Expect(build.Complete()).To(BeFalse())
 
 				g.Expect(obj.Status.Conditions).To(conditions.MatchConditions([]metav1.Condition{
@@ -1316,12 +1316,12 @@ func TestHelmChartReconciler_buildFromOCIHelmRepository(t *testing.T) {
 		},
 		{
 			name: "Stalling on invalid client options",
-			beforeFunc: func(obj *helmv1.HelmChart, repository *helmv1.HelmRepository) {
+			beforeFunc: func(obj *sourcev1.HelmChart, repository *sourcev1.HelmRepository) {
 				repository.Spec.URL = "https://unsupported" // Unsupported protocol
 			},
 			want:    sreconcile.ResultEmpty,
 			wantErr: &serror.Stalling{Err: errors.New("failed to construct Helm client: invalid OCI registry URL: https://unsupported")},
-			assertFunc: func(g *WithT, obj *helmv1.HelmChart, build chart.Build) {
+			assertFunc: func(g *WithT, obj *sourcev1.HelmChart, build chart.Build) {
 				g.Expect(build.Complete()).To(BeFalse())
 
 				g.Expect(obj.Status.Conditions).To(conditions.MatchConditions([]metav1.Condition{
@@ -1331,7 +1331,7 @@ func TestHelmChartReconciler_buildFromOCIHelmRepository(t *testing.T) {
 		},
 		{
 			name: "BuildError on temporary build error",
-			beforeFunc: func(obj *helmv1.HelmChart, _ *helmv1.HelmRepository) {
+			beforeFunc: func(obj *sourcev1.HelmChart, _ *sourcev1.HelmRepository) {
 				obj.Spec.Chart = "invalid"
 			},
 			want:    sreconcile.ResultEmpty,
@@ -1344,7 +1344,7 @@ func TestHelmChartReconciler_buildFromOCIHelmRepository(t *testing.T) {
 
 			clientBuilder := fakeclient.NewClientBuilder().
 				WithScheme(testEnv.Scheme()).
-				WithStatusSubresource(&helmv1.HelmChart{})
+				WithStatusSubresource(&sourcev1.HelmChart{})
 
 			if tt.secret != nil {
 				clientBuilder.WithObjects(tt.secret.DeepCopy())
@@ -1359,23 +1359,23 @@ func TestHelmChartReconciler_buildFromOCIHelmRepository(t *testing.T) {
 				patchOptions:            getPatchOptions(helmChartReadyCondition.Owned, "sc"),
 			}
 
-			repository := &helmv1.HelmRepository{
+			repository := &sourcev1.HelmRepository{
 				ObjectMeta: metav1.ObjectMeta{
 					GenerateName: "helmrepository-",
 				},
-				Spec: helmv1.HelmRepositorySpec{
+				Spec: sourcev1.HelmRepositorySpec{
 					URL:      fmt.Sprintf("oci://%s/testrepo", testRegistryServer.registryHost),
 					Timeout:  &metav1.Duration{Duration: timeout},
-					Provider: helmv1.GenericOCIProvider,
-					Type:     helmv1.HelmRepositoryTypeOCI,
+					Provider: sourcev1beta2.GenericOCIProvider,
+					Type:     sourcev1.HelmRepositoryTypeOCI,
 					Insecure: true,
 				},
 			}
-			obj := &helmv1.HelmChart{
+			obj := &sourcev1.HelmChart{
 				ObjectMeta: metav1.ObjectMeta{
 					GenerateName: "helmrepository-",
 				},
-				Spec: helmv1.HelmChartSpec{},
+				Spec: sourcev1.HelmChartSpec{},
 			}
 
 			if tt.beforeFunc != nil {
@@ -1431,7 +1431,7 @@ func TestHelmChartReconciler_buildFromTarballArtifact(t *testing.T) {
 	tests := []struct {
 		name       string
 		source     sourcev1.Artifact
-		beforeFunc func(obj *helmv1.HelmChart)
+		beforeFunc func(obj *sourcev1.HelmChart)
 		want       sreconcile.Result
 		wantErr    error
 		assertFunc func(g *WithT, build chart.Build)
@@ -1440,7 +1440,7 @@ func TestHelmChartReconciler_buildFromTarballArtifact(t *testing.T) {
 		{
 			name:   "Resolves chart dependencies and builds",
 			source: *chartsArtifact.DeepCopy(),
-			beforeFunc: func(obj *helmv1.HelmChart) {
+			beforeFunc: func(obj *sourcev1.HelmChart) {
 				obj.Spec.Chart = "testdata/charts/helmchartwithdeps"
 			},
 			want: sreconcile.ResultSuccess,
@@ -1462,10 +1462,10 @@ func TestHelmChartReconciler_buildFromTarballArtifact(t *testing.T) {
 		{
 			name:   "ReconcileStrategyRevision sets VersionMetadata",
 			source: *chartsArtifact.DeepCopy(),
-			beforeFunc: func(obj *helmv1.HelmChart) {
+			beforeFunc: func(obj *sourcev1.HelmChart) {
 				obj.Spec.Chart = "testdata/charts/helmchart"
 				obj.Spec.SourceRef.Kind = sourcev1.GitRepositoryKind
-				obj.Spec.ReconcileStrategy = helmv1.ReconcileStrategyRevision
+				obj.Spec.ReconcileStrategy = sourcev1.ReconcileStrategyRevision
 			},
 			want: sreconcile.ResultSuccess,
 			assertFunc: func(g *WithT, build chart.Build) {
@@ -1481,7 +1481,7 @@ func TestHelmChartReconciler_buildFromTarballArtifact(t *testing.T) {
 		{
 			name:   "ValuesFiles sets Generation as VersionMetadata",
 			source: *chartsArtifact.DeepCopy(),
-			beforeFunc: func(obj *helmv1.HelmChart) {
+			beforeFunc: func(obj *sourcev1.HelmChart) {
 				obj.Generation = 3
 				obj.Spec.Chart = "testdata/charts/helmchart"
 				obj.Spec.SourceRef.Kind = sourcev1.GitRepositoryKind
@@ -1508,7 +1508,7 @@ func TestHelmChartReconciler_buildFromTarballArtifact(t *testing.T) {
 		{
 			name:   "Chart from storage cache",
 			source: *chartsArtifact.DeepCopy(),
-			beforeFunc: func(obj *helmv1.HelmChart) {
+			beforeFunc: func(obj *sourcev1.HelmChart) {
 				obj.Spec.Chart = "testdata/charts/helmchart-0.1.0.tgz"
 				obj.Status.Artifact = cachedArtifact.DeepCopy()
 			},
@@ -1541,7 +1541,7 @@ func TestHelmChartReconciler_buildFromTarballArtifact(t *testing.T) {
 		{
 			name:   "Generation change forces rebuild",
 			source: *chartsArtifact.DeepCopy(),
-			beforeFunc: func(obj *helmv1.HelmChart) {
+			beforeFunc: func(obj *sourcev1.HelmChart) {
 				obj.Generation = 2
 				obj.Spec.Chart = "testdata/charts/helmchart-0.1.0.tgz"
 				obj.Status.Artifact = cachedArtifact.DeepCopy()
@@ -1585,7 +1585,7 @@ func TestHelmChartReconciler_buildFromTarballArtifact(t *testing.T) {
 			r := &HelmChartReconciler{
 				Client: fakeclient.NewClientBuilder().
 					WithScheme(testEnv.Scheme()).
-					WithStatusSubresource(&helmv1.HelmChart{}).
+					WithStatusSubresource(&sourcev1.HelmChart{}).
 					Build(),
 				EventRecorder:           record.NewFakeRecorder(32),
 				Storage:                 storage,
@@ -1594,12 +1594,12 @@ func TestHelmChartReconciler_buildFromTarballArtifact(t *testing.T) {
 				patchOptions:            getPatchOptions(helmChartReadyCondition.Owned, "sc"),
 			}
 
-			obj := &helmv1.HelmChart{
+			obj := &sourcev1.HelmChart{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "artifact",
 					Namespace: "default",
 				},
-				Spec: helmv1.HelmChartSpec{},
+				Spec: sourcev1.HelmChartSpec{},
 			}
 			if tt.beforeFunc != nil {
 				tt.beforeFunc(obj)
@@ -1632,16 +1632,16 @@ func TestHelmChartReconciler_reconcileArtifact(t *testing.T) {
 	tests := []struct {
 		name             string
 		build            *chart.Build
-		beforeFunc       func(obj *helmv1.HelmChart)
+		beforeFunc       func(obj *sourcev1.HelmChart)
 		want             sreconcile.Result
 		wantErr          bool
 		assertConditions []metav1.Condition
-		afterFunc        func(t *WithT, obj *helmv1.HelmChart)
+		afterFunc        func(t *WithT, obj *sourcev1.HelmChart)
 	}{
 		{
 			name:  "Incomplete build requeues and does not update status",
 			build: &chart.Build{},
-			beforeFunc: func(obj *helmv1.HelmChart) {
+			beforeFunc: func(obj *sourcev1.HelmChart) {
 				conditions.MarkTrue(obj, sourcev1.ArtifactOutdatedCondition, "Foo", "")
 			},
 			want: sreconcile.ResultRequeue,
@@ -1652,10 +1652,10 @@ func TestHelmChartReconciler_reconcileArtifact(t *testing.T) {
 		{
 			name:  "Copying artifact to storage from build makes ArtifactInStorage=True",
 			build: mockChartBuild("helmchart", "0.1.0", "testdata/charts/helmchart-0.1.0.tgz", nil),
-			beforeFunc: func(obj *helmv1.HelmChart) {
+			beforeFunc: func(obj *sourcev1.HelmChart) {
 				conditions.MarkTrue(obj, sourcev1.ArtifactOutdatedCondition, "Foo", "")
 			},
-			afterFunc: func(t *WithT, obj *helmv1.HelmChart) {
+			afterFunc: func(t *WithT, obj *sourcev1.HelmChart) {
 				t.Expect(obj.GetArtifact()).ToNot(BeNil())
 				t.Expect(obj.GetArtifact().Digest).To(Equal("sha256:bbdf96023c912c393b49d5238e227576ed0d20d1bb145d7476d817b80e20c11a"))
 				t.Expect(obj.GetArtifact().Revision).To(Equal("0.1.0"))
@@ -1665,7 +1665,7 @@ func TestHelmChartReconciler_reconcileArtifact(t *testing.T) {
 			},
 			want: sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.ArtifactInStorageCondition, helmv1.ChartPullSucceededReason, "pulled 'helmchart' chart with version '0.1.0'"),
+				*conditions.TrueCondition(sourcev1.ArtifactInStorageCondition, sourcev1.ChartPullSucceededReason, "pulled 'helmchart' chart with version '0.1.0'"),
 			},
 		},
 		{
@@ -1675,13 +1675,13 @@ func TestHelmChartReconciler_reconcileArtifact(t *testing.T) {
 				Version: "0.1.0",
 				Path:    filepath.Join(testStorage.BasePath, "testdata/charts/helmchart-0.1.0.tgz"),
 			},
-			beforeFunc: func(obj *helmv1.HelmChart) {
+			beforeFunc: func(obj *sourcev1.HelmChart) {
 				obj.Status.Artifact = &sourcev1.Artifact{
 					Path: "testdata/charts/helmchart-0.1.0.tgz",
 				}
 			},
 			want: sreconcile.ResultSuccess,
-			afterFunc: func(t *WithT, obj *helmv1.HelmChart) {
+			afterFunc: func(t *WithT, obj *sourcev1.HelmChart) {
 				t.Expect(obj.Status.Artifact.Path).To(Equal("testdata/charts/helmchart-0.1.0.tgz"))
 				t.Expect(obj.Status.ObservedChartName).To(BeEmpty())
 				t.Expect(obj.Status.ObservedValuesFiles).To(BeNil())
@@ -1696,7 +1696,7 @@ func TestHelmChartReconciler_reconcileArtifact(t *testing.T) {
 				Path:     filepath.Join(testStorage.BasePath, "testdata/charts/helmchart-0.1.0.tgz"),
 				Packaged: true,
 			},
-			beforeFunc: func(obj *helmv1.HelmChart) {
+			beforeFunc: func(obj *sourcev1.HelmChart) {
 				obj.Status.ObservedChartName = "helmchart"
 				obj.Status.Artifact = &sourcev1.Artifact{
 					Revision: "0.1.0",
@@ -1704,21 +1704,21 @@ func TestHelmChartReconciler_reconcileArtifact(t *testing.T) {
 				}
 			},
 			want: sreconcile.ResultSuccess,
-			afterFunc: func(t *WithT, obj *helmv1.HelmChart) {
+			afterFunc: func(t *WithT, obj *sourcev1.HelmChart) {
 				t.Expect(obj.Status.Artifact.Path).To(Equal("testdata/charts/helmchart-0.1.0.tgz"))
 				t.Expect(obj.Status.URL).To(BeEmpty())
 			},
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.ArtifactInStorageCondition, helmv1.ChartPackageSucceededReason, "packaged 'helmchart' chart with version '0.1.0'"),
+				*conditions.TrueCondition(sourcev1.ArtifactInStorageCondition, sourcev1.ChartPackageSucceededReason, "packaged 'helmchart' chart with version '0.1.0'"),
 			},
 		},
 		{
 			name:  "Removes ArtifactOutdatedCondition after creating new artifact",
 			build: mockChartBuild("helmchart", "0.1.0", "testdata/charts/helmchart-0.1.0.tgz", nil),
-			beforeFunc: func(obj *helmv1.HelmChart) {
+			beforeFunc: func(obj *sourcev1.HelmChart) {
 				conditions.MarkTrue(obj, sourcev1.ArtifactOutdatedCondition, "Foo", "")
 			},
-			afterFunc: func(t *WithT, obj *helmv1.HelmChart) {
+			afterFunc: func(t *WithT, obj *sourcev1.HelmChart) {
 				t.Expect(obj.GetArtifact()).ToNot(BeNil())
 				t.Expect(obj.GetArtifact().Digest).To(Equal("sha256:bbdf96023c912c393b49d5238e227576ed0d20d1bb145d7476d817b80e20c11a"))
 				t.Expect(obj.GetArtifact().Revision).To(Equal("0.1.0"))
@@ -1728,13 +1728,13 @@ func TestHelmChartReconciler_reconcileArtifact(t *testing.T) {
 			},
 			want: sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.ArtifactInStorageCondition, helmv1.ChartPullSucceededReason, "pulled 'helmchart' chart with version '0.1.0'"),
+				*conditions.TrueCondition(sourcev1.ArtifactInStorageCondition, sourcev1.ChartPullSucceededReason, "pulled 'helmchart' chart with version '0.1.0'"),
 			},
 		},
 		{
 			name:  "Creates latest symlink to the created artifact",
 			build: mockChartBuild("helmchart", "0.1.0", "testdata/charts/helmchart-0.1.0.tgz", nil),
-			afterFunc: func(t *WithT, obj *helmv1.HelmChart) {
+			afterFunc: func(t *WithT, obj *sourcev1.HelmChart) {
 				t.Expect(obj.GetArtifact()).ToNot(BeNil())
 
 				localPath := testStorage.LocalPath(*obj.GetArtifact())
@@ -1745,7 +1745,7 @@ func TestHelmChartReconciler_reconcileArtifact(t *testing.T) {
 			},
 			want: sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.ArtifactInStorageCondition, helmv1.ChartPullSucceededReason, "pulled 'helmchart' chart with version '0.1.0'"),
+				*conditions.TrueCondition(sourcev1.ArtifactInStorageCondition, sourcev1.ChartPullSucceededReason, "pulled 'helmchart' chart with version '0.1.0'"),
 			},
 		},
 		{
@@ -1797,19 +1797,19 @@ func TestHelmChartReconciler_reconcileArtifact(t *testing.T) {
 			r := &HelmChartReconciler{
 				Client: fakeclient.NewClientBuilder().
 					WithScheme(testEnv.GetScheme()).
-					WithStatusSubresource(&helmv1.HelmChart{}).
+					WithStatusSubresource(&sourcev1.HelmChart{}).
 					Build(),
 				EventRecorder: record.NewFakeRecorder(32),
 				Storage:       testStorage,
 				patchOptions:  getPatchOptions(helmChartReadyCondition.Owned, "sc"),
 			}
 
-			obj := &helmv1.HelmChart{
+			obj := &sourcev1.HelmChart{
 				ObjectMeta: metav1.ObjectMeta{
 					GenerateName: "reconcile-artifact-",
 					Generation:   1,
 				},
-				Status: helmv1.HelmChartStatus{},
+				Status: sourcev1.HelmChartStatus{},
 			}
 			if tt.beforeFunc != nil {
 				tt.beforeFunc(obj)
@@ -1835,10 +1835,10 @@ func TestHelmChartReconciler_reconcileArtifact(t *testing.T) {
 
 func TestHelmChartReconciler_getSource(t *testing.T) {
 	mocks := []client.Object{
-		&helmv1.HelmRepository{
+		&sourcev1.HelmRepository{
 			TypeMeta: metav1.TypeMeta{
-				Kind:       helmv1.HelmRepositoryKind,
-				APIVersion: helmv1.GroupVersion.String(),
+				Kind:       sourcev1.HelmRepositoryKind,
+				APIVersion: sourcev1.GroupVersion.String(),
 			},
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "helmrepository",
@@ -1855,10 +1855,10 @@ func TestHelmChartReconciler_getSource(t *testing.T) {
 				Namespace: "foo",
 			},
 		},
-		&helmv1.Bucket{
+		&sourcev1beta2.Bucket{
 			TypeMeta: metav1.TypeMeta{
-				Kind:       helmv1.BucketKind,
-				APIVersion: helmv1.GroupVersion.String(),
+				Kind:       sourcev1beta2.BucketKind,
+				APIVersion: sourcev1beta2.GroupVersion.String(),
 			},
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "bucket",
@@ -1868,7 +1868,7 @@ func TestHelmChartReconciler_getSource(t *testing.T) {
 	}
 
 	clientBuilder := fakeclient.NewClientBuilder().
-		WithStatusSubresource(&helmv1.HelmChart{}).
+		WithStatusSubresource(&sourcev1.HelmChart{}).
 		WithObjects(mocks...)
 
 	r := &HelmChartReconciler{
@@ -1878,18 +1878,18 @@ func TestHelmChartReconciler_getSource(t *testing.T) {
 
 	tests := []struct {
 		name    string
-		obj     *helmv1.HelmChart
+		obj     *sourcev1.HelmChart
 		want    sourcev1.Source
 		wantErr bool
 	}{
 		{
 			name: "Get HelmRepository source for reference",
-			obj: &helmv1.HelmChart{
+			obj: &sourcev1.HelmChart{
 				ObjectMeta: metav1.ObjectMeta{
 					Namespace: mocks[0].GetNamespace(),
 				},
-				Spec: helmv1.HelmChartSpec{
-					SourceRef: helmv1.LocalHelmChartSourceReference{
+				Spec: sourcev1.HelmChartSpec{
+					SourceRef: sourcev1.LocalHelmChartSourceReference{
 						Name: mocks[0].GetName(),
 						Kind: mocks[0].GetObjectKind().GroupVersionKind().Kind,
 					},
@@ -1899,12 +1899,12 @@ func TestHelmChartReconciler_getSource(t *testing.T) {
 		},
 		{
 			name: "Get GitRepository source for reference",
-			obj: &helmv1.HelmChart{
+			obj: &sourcev1.HelmChart{
 				ObjectMeta: metav1.ObjectMeta{
 					Namespace: mocks[1].GetNamespace(),
 				},
-				Spec: helmv1.HelmChartSpec{
-					SourceRef: helmv1.LocalHelmChartSourceReference{
+				Spec: sourcev1.HelmChartSpec{
+					SourceRef: sourcev1.LocalHelmChartSourceReference{
 						Name: mocks[1].GetName(),
 						Kind: mocks[1].GetObjectKind().GroupVersionKind().Kind,
 					},
@@ -1914,12 +1914,12 @@ func TestHelmChartReconciler_getSource(t *testing.T) {
 		},
 		{
 			name: "Get Bucket source for reference",
-			obj: &helmv1.HelmChart{
+			obj: &sourcev1.HelmChart{
 				ObjectMeta: metav1.ObjectMeta{
 					Namespace: mocks[2].GetNamespace(),
 				},
-				Spec: helmv1.HelmChartSpec{
-					SourceRef: helmv1.LocalHelmChartSourceReference{
+				Spec: sourcev1.HelmChartSpec{
+					SourceRef: sourcev1.LocalHelmChartSourceReference{
 						Name: mocks[2].GetName(),
 						Kind: mocks[2].GetObjectKind().GroupVersionKind().Kind,
 					},
@@ -1929,12 +1929,12 @@ func TestHelmChartReconciler_getSource(t *testing.T) {
 		},
 		{
 			name: "Error on client error",
-			obj: &helmv1.HelmChart{
+			obj: &sourcev1.HelmChart{
 				ObjectMeta: metav1.ObjectMeta{
 					Namespace: mocks[2].GetNamespace(),
 				},
-				Spec: helmv1.HelmChartSpec{
-					SourceRef: helmv1.LocalHelmChartSourceReference{
+				Spec: sourcev1.HelmChartSpec{
+					SourceRef: sourcev1.LocalHelmChartSourceReference{
 						Name: mocks[1].GetName(),
 						Kind: mocks[2].GetObjectKind().GroupVersionKind().Kind,
 					},
@@ -1944,9 +1944,9 @@ func TestHelmChartReconciler_getSource(t *testing.T) {
 		},
 		{
 			name: "Error on unsupported source kind",
-			obj: &helmv1.HelmChart{
-				Spec: helmv1.HelmChartSpec{
-					SourceRef: helmv1.LocalHelmChartSourceReference{
+			obj: &sourcev1.HelmChart{
+				Spec: sourcev1.HelmChartSpec{
+					SourceRef: sourcev1.LocalHelmChartSourceReference{
 						Name: "unsupported",
 						Kind: "Unsupported",
 					},
@@ -1982,7 +1982,7 @@ func TestHelmChartReconciler_reconcileDelete(t *testing.T) {
 		patchOptions:  getPatchOptions(helmChartReadyCondition.Owned, "sc"),
 	}
 
-	obj := &helmv1.HelmChart{
+	obj := &sourcev1.HelmChart{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:              "reconcile-delete-",
 			DeletionTimestamp: &metav1.Time{Time: time.Now()},
@@ -1990,10 +1990,10 @@ func TestHelmChartReconciler_reconcileDelete(t *testing.T) {
 				sourcev1.SourceFinalizer,
 			},
 		},
-		Status: helmv1.HelmChartStatus{},
+		Status: sourcev1.HelmChartStatus{},
 	}
 
-	artifact := testStorage.NewArtifactFor(helmv1.HelmChartKind, obj.GetObjectMeta(), "revision", "foo.txt")
+	artifact := testStorage.NewArtifactFor(sourcev1.HelmChartKind, obj.GetObjectMeta(), "revision", "foo.txt")
 	obj.Status.Artifact = &artifact
 
 	got, err := r.reconcileDelete(ctx, obj)
@@ -2006,7 +2006,7 @@ func TestHelmChartReconciler_reconcileDelete(t *testing.T) {
 func TestHelmChartReconciler_reconcileSubRecs(t *testing.T) {
 	// Helper to build simple helmChartReconcileFunc with result and error.
 	buildReconcileFuncs := func(r sreconcile.Result, e error) helmChartReconcileFunc {
-		return func(_ context.Context, _ *patch.SerialPatcher, _ *helmv1.HelmChart, _ *chart.Build) (sreconcile.Result, error) {
+		return func(_ context.Context, _ *patch.SerialPatcher, _ *sourcev1.HelmChart, _ *chart.Build) (sreconcile.Result, error) {
 			return r, e
 		}
 	}
@@ -2061,11 +2061,11 @@ func TestHelmChartReconciler_reconcileSubRecs(t *testing.T) {
 		{
 			name: "multiple object status conditions mutations",
 			reconcileFuncs: []helmChartReconcileFunc{
-				func(_ context.Context, _ *patch.SerialPatcher, obj *helmv1.HelmChart, _ *chart.Build) (sreconcile.Result, error) {
+				func(_ context.Context, _ *patch.SerialPatcher, obj *sourcev1.HelmChart, _ *chart.Build) (sreconcile.Result, error) {
 					conditions.MarkTrue(obj, sourcev1.ArtifactOutdatedCondition, "NewRevision", "new index revision")
 					return sreconcile.ResultSuccess, nil
 				},
-				func(_ context.Context, _ *patch.SerialPatcher, obj *helmv1.HelmChart, _ *chart.Build) (sreconcile.Result, error) {
+				func(_ context.Context, _ *patch.SerialPatcher, obj *sourcev1.HelmChart, _ *chart.Build) (sreconcile.Result, error) {
 					conditions.MarkTrue(obj, meta.ReconcilingCondition, "Progressing", "creating artifact")
 					return sreconcile.ResultSuccess, nil
 				},
@@ -2115,16 +2115,16 @@ func TestHelmChartReconciler_reconcileSubRecs(t *testing.T) {
 			r := &HelmChartReconciler{
 				Client: fakeclient.NewClientBuilder().
 					WithScheme(testEnv.GetScheme()).
-					WithStatusSubresource(&helmv1.HelmChart{}).
+					WithStatusSubresource(&sourcev1.HelmChart{}).
 					Build(),
 				patchOptions: getPatchOptions(helmChartReadyCondition.Owned, "sc"),
 			}
-			obj := &helmv1.HelmChart{
+			obj := &sourcev1.HelmChart{
 				ObjectMeta: metav1.ObjectMeta{
 					GenerateName: "test-",
 					Generation:   tt.generation,
 				},
-				Status: helmv1.HelmChartStatus{
+				Status: sourcev1.HelmChartStatus{
 					ObservedGeneration: tt.observedGeneration,
 				},
 			}
@@ -2171,13 +2171,13 @@ func mockChartBuild(name, version, path string, valuesFiles []string) *chart.Bui
 func TestHelmChartReconciler_statusConditions(t *testing.T) {
 	tests := []struct {
 		name             string
-		beforeFunc       func(obj *helmv1.HelmChart)
+		beforeFunc       func(obj *sourcev1.HelmChart)
 		assertConditions []metav1.Condition
 		wantErr          bool
 	}{
 		{
 			name: "positive conditions only",
-			beforeFunc: func(obj *helmv1.HelmChart) {
+			beforeFunc: func(obj *sourcev1.HelmChart) {
 				conditions.MarkTrue(obj, sourcev1.ArtifactInStorageCondition, meta.SucceededReason, "stored artifact for revision")
 			},
 			assertConditions: []metav1.Condition{
@@ -2187,7 +2187,7 @@ func TestHelmChartReconciler_statusConditions(t *testing.T) {
 		},
 		{
 			name: "multiple failures",
-			beforeFunc: func(obj *helmv1.HelmChart) {
+			beforeFunc: func(obj *sourcev1.HelmChart) {
 				conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "failed to get secret")
 				conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition, sourcev1.DirCreationFailedReason, "failed to create directory")
 				conditions.MarkTrue(obj, sourcev1.BuildFailedCondition, "ChartPackageError", "some error")
@@ -2204,7 +2204,7 @@ func TestHelmChartReconciler_statusConditions(t *testing.T) {
 		},
 		{
 			name: "mixed positive and negative conditions",
-			beforeFunc: func(obj *helmv1.HelmChart) {
+			beforeFunc: func(obj *sourcev1.HelmChart) {
 				conditions.MarkTrue(obj, sourcev1.ArtifactInStorageCondition, meta.SucceededReason, "stored artifact for revision")
 				conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "failed to get secret")
 			},
@@ -2221,10 +2221,10 @@ func TestHelmChartReconciler_statusConditions(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
 
-			obj := &helmv1.HelmChart{
+			obj := &sourcev1.HelmChart{
 				TypeMeta: metav1.TypeMeta{
-					Kind:       helmv1.HelmChartKind,
-					APIVersion: helmv1.GroupVersion.String(),
+					Kind:       sourcev1.HelmChartKind,
+					APIVersion: sourcev1.GroupVersion.String(),
 				},
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "helmchart",
@@ -2234,7 +2234,7 @@ func TestHelmChartReconciler_statusConditions(t *testing.T) {
 
 			clientBuilder := fakeclient.NewClientBuilder().
 				WithObjects(obj).
-				WithStatusSubresource(&helmv1.HelmChart{})
+				WithStatusSubresource(&sourcev1.HelmChart{})
 
 			c := clientBuilder.Build()
 
@@ -2271,8 +2271,8 @@ func TestHelmChartReconciler_notify(t *testing.T) {
 		name             string
 		res              sreconcile.Result
 		resErr           error
-		oldObjBeforeFunc func(obj *helmv1.HelmChart)
-		newObjBeforeFunc func(obj *helmv1.HelmChart)
+		oldObjBeforeFunc func(obj *sourcev1.HelmChart)
+		newObjBeforeFunc func(obj *sourcev1.HelmChart)
 		wantEvent        string
 	}{
 		{
@@ -2284,7 +2284,7 @@ func TestHelmChartReconciler_notify(t *testing.T) {
 			name:   "new artifact",
 			res:    sreconcile.ResultSuccess,
 			resErr: nil,
-			newObjBeforeFunc: func(obj *helmv1.HelmChart) {
+			newObjBeforeFunc: func(obj *sourcev1.HelmChart) {
 				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Digest: "yyy"}
 			},
 			wantEvent: "Normal ChartPackageSucceeded packaged",
@@ -2293,12 +2293,12 @@ func TestHelmChartReconciler_notify(t *testing.T) {
 			name:   "recovery from failure",
 			res:    sreconcile.ResultSuccess,
 			resErr: nil,
-			oldObjBeforeFunc: func(obj *helmv1.HelmChart) {
+			oldObjBeforeFunc: func(obj *sourcev1.HelmChart) {
 				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Digest: "yyy"}
 				conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.GitOperationFailedReason, "fail")
 				conditions.MarkFalse(obj, meta.ReadyCondition, meta.FailedReason, "foo")
 			},
-			newObjBeforeFunc: func(obj *helmv1.HelmChart) {
+			newObjBeforeFunc: func(obj *sourcev1.HelmChart) {
 				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Digest: "yyy"}
 				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "ready")
 			},
@@ -2308,12 +2308,12 @@ func TestHelmChartReconciler_notify(t *testing.T) {
 			name:   "recovery and new artifact",
 			res:    sreconcile.ResultSuccess,
 			resErr: nil,
-			oldObjBeforeFunc: func(obj *helmv1.HelmChart) {
+			oldObjBeforeFunc: func(obj *sourcev1.HelmChart) {
 				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Digest: "yyy"}
 				conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.GitOperationFailedReason, "fail")
 				conditions.MarkFalse(obj, meta.ReadyCondition, meta.FailedReason, "foo")
 			},
-			newObjBeforeFunc: func(obj *helmv1.HelmChart) {
+			newObjBeforeFunc: func(obj *sourcev1.HelmChart) {
 				obj.Status.Artifact = &sourcev1.Artifact{Revision: "aaa", Digest: "bbb"}
 				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "ready")
 			},
@@ -2323,11 +2323,11 @@ func TestHelmChartReconciler_notify(t *testing.T) {
 			name:   "no updates",
 			res:    sreconcile.ResultSuccess,
 			resErr: nil,
-			oldObjBeforeFunc: func(obj *helmv1.HelmChart) {
+			oldObjBeforeFunc: func(obj *sourcev1.HelmChart) {
 				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Digest: "yyy"}
 				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "ready")
 			},
-			newObjBeforeFunc: func(obj *helmv1.HelmChart) {
+			newObjBeforeFunc: func(obj *sourcev1.HelmChart) {
 				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Digest: "yyy"}
 				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "ready")
 			},
@@ -2339,7 +2339,7 @@ func TestHelmChartReconciler_notify(t *testing.T) {
 			g := NewWithT(t)
 			recorder := record.NewFakeRecorder(32)
 
-			oldObj := &helmv1.HelmChart{}
+			oldObj := &sourcev1.HelmChart{}
 			newObj := oldObj.DeepCopy()
 
 			if tt.oldObjBeforeFunc != nil {
@@ -2569,7 +2569,7 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_authStrategy(t *testing.T) {
 
 			clientBuilder := fakeclient.NewClientBuilder().
 				WithScheme(testEnv.GetScheme()).
-				WithStatusSubresource(&helmv1.HelmChart{})
+				WithStatusSubresource(&sourcev1.HelmChart{})
 
 			workspaceDir := t.TempDir()
 
@@ -2587,15 +2587,15 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_authStrategy(t *testing.T) {
 			metadata, err := loadTestChartToOCI(chartData, server, "testdata/certs/client.pem", "testdata/certs/client-key.pem", "testdata/certs/ca.pem")
 			g.Expect(err).ToNot(HaveOccurred())
 
-			repo := &helmv1.HelmRepository{
+			repo := &sourcev1.HelmRepository{
 				ObjectMeta: metav1.ObjectMeta{
 					GenerateName: "auth-strategy-",
 				},
-				Spec: helmv1.HelmRepositorySpec{
+				Spec: sourcev1.HelmRepositorySpec{
 					Interval: metav1.Duration{Duration: interval},
 					Timeout:  &metav1.Duration{Duration: timeout},
-					Type:     helmv1.HelmRepositoryTypeOCI,
-					Provider: helmv1.GenericOCIProvider,
+					Type:     sourcev1.HelmRepositoryTypeOCI,
+					Provider: sourcev1beta2.GenericOCIProvider,
 					URL:      fmt.Sprintf("oci://%s/testrepo", server.registryHost),
 					Insecure: tt.insecure,
 				},
@@ -2632,15 +2632,15 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_authStrategy(t *testing.T) {
 
 			clientBuilder.WithObjects(repo)
 
-			obj := &helmv1.HelmChart{
+			obj := &sourcev1.HelmChart{
 				ObjectMeta: metav1.ObjectMeta{
 					GenerateName: "auth-strategy-",
 				},
-				Spec: helmv1.HelmChartSpec{
+				Spec: sourcev1.HelmChartSpec{
 					Chart:   metadata.Name,
 					Version: metadata.Version,
-					SourceRef: helmv1.LocalHelmChartSourceReference{
-						Kind: helmv1.HelmRepositoryKind,
+					SourceRef: sourcev1.LocalHelmChartSourceReference{
+						Kind: sourcev1.HelmRepositoryKind,
 						Name: repo.Name,
 					},
 					Interval: metav1.Duration{Duration: interval},
@@ -2694,7 +2694,7 @@ func TestHelmChartRepository_reconcileSource_verifyOCISourceSignature_keyless(t 
 		version          string
 		want             sreconcile.Result
 		wantErr          bool
-		beforeFunc       func(obj *helmv1.HelmChart)
+		beforeFunc       func(obj *sourcev1.HelmChart)
 		assertConditions []metav1.Condition
 		revision         string
 	}{
@@ -2713,8 +2713,8 @@ func TestHelmChartRepository_reconcileSource_verifyOCISourceSignature_keyless(t 
 			name:    "signed image with correct subject and issuer should pass verification",
 			version: "6.5.1",
 			want:    sreconcile.ResultSuccess,
-			beforeFunc: func(obj *helmv1.HelmChart) {
-				obj.Spec.Verify.MatchOIDCIdentity = []helmv1.OIDCIdentityMatch{
+			beforeFunc: func(obj *sourcev1.HelmChart) {
+				obj.Spec.Verify.MatchOIDCIdentity = []sourcev1.OIDCIdentityMatch{
 					{
 
 						Subject: "^https://github.com/stefanprodan/podinfo.*$",
@@ -2733,8 +2733,8 @@ func TestHelmChartRepository_reconcileSource_verifyOCISourceSignature_keyless(t 
 			name:    "signed image with incorrect and correct identity matchers should pass verification",
 			version: "6.5.1",
 			want:    sreconcile.ResultSuccess,
-			beforeFunc: func(obj *helmv1.HelmChart) {
-				obj.Spec.Verify.MatchOIDCIdentity = []helmv1.OIDCIdentityMatch{
+			beforeFunc: func(obj *sourcev1.HelmChart) {
+				obj.Spec.Verify.MatchOIDCIdentity = []sourcev1.OIDCIdentityMatch{
 					{
 						Subject: "intruder",
 						Issuer:  "^https://honeypot.com$",
@@ -2758,8 +2758,8 @@ func TestHelmChartRepository_reconcileSource_verifyOCISourceSignature_keyless(t 
 			version: "6.5.1",
 			wantErr: true,
 			want:    sreconcile.ResultEmpty,
-			beforeFunc: func(obj *helmv1.HelmChart) {
-				obj.Spec.Verify.MatchOIDCIdentity = []helmv1.OIDCIdentityMatch{
+			beforeFunc: func(obj *sourcev1.HelmChart) {
+				obj.Spec.Verify.MatchOIDCIdentity = []sourcev1.OIDCIdentityMatch{
 					{
 						Subject: "intruder",
 						Issuer:  "^https://honeypot.com$",
@@ -2791,15 +2791,15 @@ func TestHelmChartRepository_reconcileSource_verifyOCISourceSignature_keyless(t 
 
 			clientBuilder := fakeclient.NewClientBuilder()
 
-			repository := &helmv1.HelmRepository{
+			repository := &sourcev1.HelmRepository{
 				ObjectMeta: metav1.ObjectMeta{
 					GenerateName: "helmrepository-",
 				},
-				Spec: helmv1.HelmRepositorySpec{
+				Spec: sourcev1.HelmRepositorySpec{
 					URL:      "oci://ghcr.io/stefanprodan/charts",
 					Timeout:  &metav1.Duration{Duration: timeout},
-					Provider: helmv1.GenericOCIProvider,
-					Type:     helmv1.HelmRepositoryTypeOCI,
+					Provider: sourcev1beta2.GenericOCIProvider,
+					Type:     sourcev1.HelmRepositoryTypeOCI,
 				},
 			}
 			clientBuilder.WithObjects(repository)
@@ -2813,18 +2813,18 @@ func TestHelmChartRepository_reconcileSource_verifyOCISourceSignature_keyless(t 
 				patchOptions:            getPatchOptions(helmChartReadyCondition.Owned, "sc"),
 			}
 
-			obj := &helmv1.HelmChart{
+			obj := &sourcev1.HelmChart{
 				ObjectMeta: metav1.ObjectMeta{
 					GenerateName: "helmchart-",
 				},
-				Spec: helmv1.HelmChartSpec{
-					SourceRef: helmv1.LocalHelmChartSourceReference{
-						Kind: helmv1.HelmRepositoryKind,
+				Spec: sourcev1.HelmChartSpec{
+					SourceRef: sourcev1.LocalHelmChartSourceReference{
+						Kind: sourcev1.HelmRepositoryKind,
 						Name: repository.Name,
 					},
 					Version: tt.version,
 					Chart:   "podinfo",
-					Verify: &helmv1.OCIRepositoryVerification{
+					Verify: &sourcev1.OCIRepositoryVerification{
 						Provider: "cosign",
 					},
 				},
@@ -2916,7 +2916,7 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_verifySignatureNotation(t *t
 	tests := []struct {
 		name             string
 		shouldSign       bool
-		beforeFunc       func(obj *helmv1.HelmChart)
+		beforeFunc       func(obj *sourcev1.HelmChart)
 		want             sreconcile.Result
 		wantErr          bool
 		wantErrMsg       string
@@ -2928,10 +2928,10 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_verifySignatureNotation(t *t
 	}{
 		{
 			name: "unsigned charts should not pass verification",
-			beforeFunc: func(obj *helmv1.HelmChart) {
+			beforeFunc: func(obj *sourcev1.HelmChart) {
 				obj.Spec.Chart = metadata.Name
 				obj.Spec.Version = metadata.Version
-				obj.Spec.Verify = &helmv1.OCIRepositoryVerification{
+				obj.Spec.Verify = &sourcev1.OCIRepositoryVerification{
 					Provider:  "notation",
 					SecretRef: &meta.LocalObjectReference{Name: "notation-config"},
 				}
@@ -2947,10 +2947,10 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_verifySignatureNotation(t *t
 		{
 			name:       "signed charts should pass verification",
 			shouldSign: true,
-			beforeFunc: func(obj *helmv1.HelmChart) {
+			beforeFunc: func(obj *sourcev1.HelmChart) {
 				obj.Spec.Chart = metadata.Name
 				obj.Spec.Version = metadata.Version
-				obj.Spec.Verify = &helmv1.OCIRepositoryVerification{
+				obj.Spec.Verify = &sourcev1.OCIRepositoryVerification{
 					Provider:  "notation",
 					SecretRef: &meta.LocalObjectReference{Name: "notation-config"},
 				}
@@ -2968,10 +2968,10 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_verifySignatureNotation(t *t
 		{
 			name:             "multiple certs should still pass verification",
 			addMultipleCerts: true,
-			beforeFunc: func(obj *helmv1.HelmChart) {
+			beforeFunc: func(obj *sourcev1.HelmChart) {
 				obj.Spec.Chart = metadata.Name
 				obj.Spec.Version = metadata.Version
-				obj.Spec.Verify = &helmv1.OCIRepositoryVerification{
+				obj.Spec.Verify = &sourcev1.OCIRepositoryVerification{
 					Provider:  "notation",
 					SecretRef: &meta.LocalObjectReference{Name: "notation-config"},
 				}
@@ -2988,7 +2988,7 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_verifySignatureNotation(t *t
 		},
 		{
 			name: "verify failed before, removed from spec, remove condition",
-			beforeFunc: func(obj *helmv1.HelmChart) {
+			beforeFunc: func(obj *sourcev1.HelmChart) {
 				obj.Spec.Chart = metadata.Name
 				obj.Spec.Version = metadata.Version
 				obj.Spec.Verify = nil
@@ -3007,10 +3007,10 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_verifySignatureNotation(t *t
 		},
 		{
 			name: "no cert provided should not pass verification",
-			beforeFunc: func(obj *helmv1.HelmChart) {
+			beforeFunc: func(obj *sourcev1.HelmChart) {
 				obj.Spec.Chart = metadata.Name
 				obj.Spec.Version = metadata.Version
-				obj.Spec.Verify = &helmv1.OCIRepositoryVerification{
+				obj.Spec.Verify = &sourcev1.OCIRepositoryVerification{
 					Provider:  "notation",
 					SecretRef: &meta.LocalObjectReference{Name: "notation-config"},
 				}
@@ -3027,10 +3027,10 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_verifySignatureNotation(t *t
 		},
 		{
 			name: "empty string should fail verification",
-			beforeFunc: func(obj *helmv1.HelmChart) {
+			beforeFunc: func(obj *sourcev1.HelmChart) {
 				obj.Spec.Chart = metadata.Name
 				obj.Spec.Version = metadata.Version
-				obj.Spec.Verify = &helmv1.OCIRepositoryVerification{
+				obj.Spec.Verify = &sourcev1.OCIRepositoryVerification{
 					Provider:  "notation",
 					SecretRef: &meta.LocalObjectReference{Name: "notation-config"},
 				}
@@ -3052,15 +3052,15 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_verifySignatureNotation(t *t
 
 			clientBuilder := fakeclient.NewClientBuilder()
 
-			repository := &helmv1.HelmRepository{
+			repository := &sourcev1.HelmRepository{
 				ObjectMeta: metav1.ObjectMeta{
 					GenerateName: "helmrepository-",
 				},
-				Spec: helmv1.HelmRepositorySpec{
+				Spec: sourcev1.HelmRepositorySpec{
 					URL:      fmt.Sprintf("oci://%s/testrepo", server.registryHost),
 					Timeout:  &metav1.Duration{Duration: timeout},
-					Provider: helmv1.GenericOCIProvider,
-					Type:     helmv1.HelmRepositoryTypeOCI,
+					Provider: sourcev1beta2.GenericOCIProvider,
+					Type:     sourcev1.HelmRepositoryTypeOCI,
 					Insecure: true,
 				},
 			}
@@ -3112,13 +3112,13 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_verifySignatureNotation(t *t
 				patchOptions:            getPatchOptions(helmChartReadyCondition.Owned, "sc"),
 			}
 
-			obj := &helmv1.HelmChart{
+			obj := &sourcev1.HelmChart{
 				ObjectMeta: metav1.ObjectMeta{
 					GenerateName: "helmchart-",
 				},
-				Spec: helmv1.HelmChartSpec{
-					SourceRef: helmv1.LocalHelmChartSourceReference{
-						Kind: helmv1.HelmRepositoryKind,
+				Spec: sourcev1.HelmChartSpec{
+					SourceRef: sourcev1.LocalHelmChartSourceReference{
+						Kind: sourcev1.HelmRepositoryKind,
 						Name: repository.Name,
 					},
 				},
@@ -3236,7 +3236,7 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_verifySignatureCosign(t *tes
 	tests := []struct {
 		name             string
 		shouldSign       bool
-		beforeFunc       func(obj *helmv1.HelmChart)
+		beforeFunc       func(obj *sourcev1.HelmChart)
 		want             sreconcile.Result
 		wantErr          bool
 		wantErrMsg       string
@@ -3245,10 +3245,10 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_verifySignatureCosign(t *tes
 	}{
 		{
 			name: "unsigned charts should not pass verification",
-			beforeFunc: func(obj *helmv1.HelmChart) {
+			beforeFunc: func(obj *sourcev1.HelmChart) {
 				obj.Spec.Chart = metadata.Name
 				obj.Spec.Version = metadata.Version
-				obj.Spec.Verify = &helmv1.OCIRepositoryVerification{
+				obj.Spec.Verify = &sourcev1.OCIRepositoryVerification{
 					Provider:  "cosign",
 					SecretRef: &meta.LocalObjectReference{Name: "cosign-key"},
 				}
@@ -3263,10 +3263,10 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_verifySignatureCosign(t *tes
 		},
 		{
 			name: "unsigned charts should not pass keyless verification",
-			beforeFunc: func(obj *helmv1.HelmChart) {
+			beforeFunc: func(obj *sourcev1.HelmChart) {
 				obj.Spec.Chart = metadata.Name
 				obj.Spec.Version = metadata.Version
-				obj.Spec.Verify = &helmv1.OCIRepositoryVerification{
+				obj.Spec.Verify = &sourcev1.OCIRepositoryVerification{
 					Provider: "cosign",
 				}
 			},
@@ -3280,10 +3280,10 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_verifySignatureCosign(t *tes
 		{
 			name:       "signed charts should pass verification",
 			shouldSign: true,
-			beforeFunc: func(obj *helmv1.HelmChart) {
+			beforeFunc: func(obj *sourcev1.HelmChart) {
 				obj.Spec.Chart = metadata.Name
 				obj.Spec.Version = metadata.Version
-				obj.Spec.Verify = &helmv1.OCIRepositoryVerification{
+				obj.Spec.Verify = &sourcev1.OCIRepositoryVerification{
 					Provider:  "cosign",
 					SecretRef: &meta.LocalObjectReference{Name: "cosign-key"},
 				}
@@ -3300,7 +3300,7 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_verifySignatureCosign(t *tes
 		},
 		{
 			name: "verify failed before, removed from spec, remove condition",
-			beforeFunc: func(obj *helmv1.HelmChart) {
+			beforeFunc: func(obj *sourcev1.HelmChart) {
 				obj.Spec.Chart = metadata.Name
 				obj.Spec.Version = metadata.Version
 				obj.Spec.Verify = nil
@@ -3325,15 +3325,15 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_verifySignatureCosign(t *tes
 
 			clientBuilder := fakeclient.NewClientBuilder()
 
-			repository := &helmv1.HelmRepository{
+			repository := &sourcev1.HelmRepository{
 				ObjectMeta: metav1.ObjectMeta{
 					GenerateName: "helmrepository-",
 				},
-				Spec: helmv1.HelmRepositorySpec{
+				Spec: sourcev1.HelmRepositorySpec{
 					URL:      fmt.Sprintf("oci://%s/testrepo", server.registryHost),
 					Timeout:  &metav1.Duration{Duration: timeout},
-					Provider: helmv1.GenericOCIProvider,
-					Type:     helmv1.HelmRepositoryTypeOCI,
+					Provider: sourcev1beta2.GenericOCIProvider,
+					Type:     sourcev1.HelmRepositoryTypeOCI,
 					Insecure: true,
 				},
 			}
@@ -3357,13 +3357,13 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_verifySignatureCosign(t *tes
 				patchOptions:            getPatchOptions(helmChartReadyCondition.Owned, "sc"),
 			}
 
-			obj := &helmv1.HelmChart{
+			obj := &sourcev1.HelmChart{
 				ObjectMeta: metav1.ObjectMeta{
 					GenerateName: "helmchart-",
 				},
-				Spec: helmv1.HelmChartSpec{
-					SourceRef: helmv1.LocalHelmChartSourceReference{
-						Kind: helmv1.HelmRepositoryKind,
+				Spec: sourcev1.HelmChartSpec{
+					SourceRef: sourcev1.LocalHelmChartSourceReference{
+						Kind: sourcev1.HelmRepositoryKind,
 						Name: repository.Name,
 					},
 				},
