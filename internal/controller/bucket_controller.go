@@ -728,7 +728,7 @@ func fetchEtagIndex(ctx context.Context, provider BucketProvider, obj *bucketv1.
 	path := filepath.Join(tempDir, sourceignore.IgnoreFile)
 	if _, err := provider.FGetObject(ctxTimeout, obj.Spec.BucketName, sourceignore.IgnoreFile, path); err != nil {
 		if !provider.ObjectIsNotFound(err) {
-			return err
+			return fmt.Errorf("failed to get Etag for '%s' object: %w", sourceignore.IgnoreFile, serror.SanitizeError(err))
 		}
 	}
 	ps, err := sourceignore.ReadIgnoreFile(path, nil)
@@ -792,7 +792,7 @@ func fetchIndexFiles(ctx context.Context, provider BucketProvider, obj *bucketv1
 						index.Delete(k)
 						return nil
 					}
-					return fmt.Errorf("failed to get '%s' object: %w", k, err)
+					return fmt.Errorf("failed to get '%s' object: %w", k, serror.SanitizeError(err))
 				}
 				if t != etag {
 					index.Add(k, etag)
