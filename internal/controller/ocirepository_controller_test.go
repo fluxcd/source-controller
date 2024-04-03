@@ -1316,12 +1316,12 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignatureNotation(t *testi
 			useDigest:     true,
 			provideNoCert: true,
 			// no namespace but the namespace name should appear before the /notation-config
-			wantErrMsg: "failed to verify the signature using provider 'notation': no certificates found in secret '/notation-config'",
+			wantErrMsg: "failed to verify the signature using provider 'notation': no certificates found in secret '/notation-config",
 			want:       sreconcile.ResultEmpty,
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new revision '<revision>' for '<url>'"),
 				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new revision '<revision>' for '<url>'"),
-				*conditions.FalseCondition(sourcev1.SourceVerifiedCondition, sourcev1.VerificationError, "failed to verify the signature using provider '<provider>': no certificates found in secret '/notation-config'"),
+				*conditions.FalseCondition(sourcev1.SourceVerifiedCondition, sourcev1.VerificationError, "failed to verify the signature using provider '<provider>': no certificates found in secret '/notation-config"),
 			},
 		},
 	}
@@ -1417,7 +1417,7 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignatureNotation(t *testi
 
 			secret := &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: "notation-config",
+					GenerateName: "notation-config-",
 				},
 				Data: data,
 			}
@@ -1432,7 +1432,7 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignatureNotation(t *testi
 				}
 			}
 
-			obj.Spec.Verify.SecretRef = &meta.LocalObjectReference{Name: "notation-config"}
+			obj.Spec.Verify.SecretRef = &meta.LocalObjectReference{Name: secret.GetName()}
 
 			if tt.reference != nil {
 				obj.Spec.Reference = tt.reference
@@ -1666,12 +1666,12 @@ func TestOCIRepository_reconcileSource_verifyOCISourceTrustPolicyNotation(t *tes
 			},
 			provideNoPolicy: true,
 			wantErr:         true,
-			wantErrMsg:      fmt.Sprintf("failed to verify the signature using provider 'notation': '%s' not found in secret '/notation'", snotation.DefaultTrustPolicyKey),
+			wantErrMsg:      fmt.Sprintf("failed to verify the signature using provider 'notation': '%s' not found in secret '/notation", snotation.DefaultTrustPolicyKey),
 			want:            sreconcile.ResultEmpty,
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new revision '<revision>' for '<url>'"),
 				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new revision '<revision>' for '<url>'"),
-				*conditions.FalseCondition(sourcev1.SourceVerifiedCondition, sourcev1.VerificationError, fmt.Sprintf("failed to verify the signature using provider 'notation': '%s' not found in secret '/notation'", snotation.DefaultTrustPolicyKey)),
+				*conditions.FalseCondition(sourcev1.SourceVerifiedCondition, sourcev1.VerificationError, fmt.Sprintf("failed to verify the signature using provider 'notation': '%s' not found in secret '/notation", snotation.DefaultTrustPolicyKey)),
 			},
 		},
 	}
@@ -1753,7 +1753,7 @@ func TestOCIRepository_reconcileSource_verifyOCISourceTrustPolicyNotation(t *tes
 
 			secret := &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: "notation",
+					GenerateName: "notation-",
 				},
 				Data: data,
 			}
@@ -1762,7 +1762,7 @@ func TestOCIRepository_reconcileSource_verifyOCISourceTrustPolicyNotation(t *tes
 
 			obj.Spec.Insecure = true
 
-			obj.Spec.Verify.SecretRef = &meta.LocalObjectReference{Name: "notation"}
+			obj.Spec.Verify.SecretRef = &meta.LocalObjectReference{Name: secret.GetName()}
 
 			if tt.reference != nil {
 				obj.Spec.Reference = tt.reference
