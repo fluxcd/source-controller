@@ -929,14 +929,14 @@ func TestHelmChartReconciler_buildFromHelmRepository(t *testing.T) {
 		},
 		{
 			name: "Uses artifact as build cache with observedValuesFiles",
-			beforeFunc: func(obj *helmv1.HelmChart, repository *helmv1.HelmRepository) {
+			beforeFunc: func(obj *sourcev1.HelmChart, repository *sourcev1.HelmRepository) {
 				obj.Spec.Chart = chartName
 				obj.Spec.Version = chartVersion
 				obj.Status.Artifact = &sourcev1.Artifact{Path: chartName + "-" + chartVersion + ".tgz"}
 				obj.Status.ObservedValuesFiles = []string{"values.yaml", "override.yaml"}
 			},
 			want: sreconcile.ResultSuccess,
-			assertFunc: func(g *WithT, obj *helmv1.HelmChart, build chart.Build) {
+			assertFunc: func(g *WithT, obj *sourcev1.HelmChart, build chart.Build) {
 				g.Expect(build.Name).To(Equal(chartName))
 				g.Expect(build.Version).To(Equal(chartVersion))
 				g.Expect(build.Path).To(Equal(filepath.Join(serverFactory.Root(), obj.Status.Artifact.Path)))
@@ -965,7 +965,7 @@ func TestHelmChartReconciler_buildFromHelmRepository(t *testing.T) {
 		},
 		{
 			name: "Missing values files are an error",
-			beforeFunc: func(obj *helmv1.HelmChart, repository *helmv1.HelmRepository) {
+			beforeFunc: func(obj *sourcev1.HelmChart, repository *sourcev1.HelmRepository) {
 				obj.Spec.Chart = chartName
 				obj.Spec.ValuesFiles = []string{"missing.yaml"}
 			},
@@ -973,14 +973,14 @@ func TestHelmChartReconciler_buildFromHelmRepository(t *testing.T) {
 		},
 		{
 			name: "All missing values files ignored",
-			beforeFunc: func(obj *helmv1.HelmChart, repository *helmv1.HelmRepository) {
+			beforeFunc: func(obj *sourcev1.HelmChart, repository *sourcev1.HelmRepository) {
 				obj.Spec.Chart = chartName
 				obj.Spec.Version = chartVersion
 				obj.Spec.ValuesFiles = []string{"missing.yaml"}
 				obj.Spec.IgnoreMissingValuesFiles = true
 			},
 			want: sreconcile.ResultSuccess,
-			assertFunc: func(g *WithT, obj *helmv1.HelmChart, build chart.Build) {
+			assertFunc: func(g *WithT, obj *sourcev1.HelmChart, build chart.Build) {
 				g.Expect(build.Name).To(Equal(chartName))
 				g.Expect(build.Version).To(Equal(chartVersion + "+0"))
 				g.Expect(build.ValuesFiles).To(BeEmpty())
@@ -991,14 +991,14 @@ func TestHelmChartReconciler_buildFromHelmRepository(t *testing.T) {
 		},
 		{
 			name: "Partial missing values files ignored",
-			beforeFunc: func(obj *helmv1.HelmChart, repository *helmv1.HelmRepository) {
+			beforeFunc: func(obj *sourcev1.HelmChart, repository *sourcev1.HelmRepository) {
 				obj.Spec.Chart = chartName
 				obj.Spec.Version = chartVersion
 				obj.Spec.ValuesFiles = []string{"values.yaml", "override.yaml", "invalid.yaml"}
 				obj.Spec.IgnoreMissingValuesFiles = true
 			},
 			want: sreconcile.ResultSuccess,
-			assertFunc: func(g *WithT, obj *helmv1.HelmChart, build chart.Build) {
+			assertFunc: func(g *WithT, obj *sourcev1.HelmChart, build chart.Build) {
 				g.Expect(build.Name).To(Equal(chartName))
 				g.Expect(build.Version).To(Equal(chartVersion + "+0"))
 				g.Expect(build.ValuesFiles).To(Equal([]string{"values.yaml", "override.yaml"}))
@@ -1524,7 +1524,7 @@ func TestHelmChartReconciler_buildFromTarballArtifact(t *testing.T) {
 		{
 			name:   "Chart from storage cache with ObservedValuesFiles",
 			source: *chartsArtifact.DeepCopy(),
-			beforeFunc: func(obj *helmv1.HelmChart) {
+			beforeFunc: func(obj *sourcev1.HelmChart) {
 				obj.Spec.Chart = "testdata/charts/helmchart-0.1.0.tgz"
 				obj.Status.Artifact = cachedArtifact.DeepCopy()
 				obj.Status.ObservedValuesFiles = []string{"values.yaml", "override.yaml"}
@@ -1751,10 +1751,10 @@ func TestHelmChartReconciler_reconcileArtifact(t *testing.T) {
 		{
 			name:  "Updates ObservedValuesFiles after creating new artifact",
 			build: mockChartBuild("helmchart", "0.1.0", "testdata/charts/helmchart-0.1.0.tgz", []string{"values.yaml", "override.yaml"}),
-			beforeFunc: func(obj *helmv1.HelmChart) {
+			beforeFunc: func(obj *sourcev1.HelmChart) {
 				conditions.MarkTrue(obj, sourcev1.ArtifactOutdatedCondition, "Foo", "")
 			},
-			afterFunc: func(t *WithT, obj *helmv1.HelmChart) {
+			afterFunc: func(t *WithT, obj *sourcev1.HelmChart) {
 				t.Expect(obj.GetArtifact()).ToNot(BeNil())
 				t.Expect(obj.GetArtifact().Digest).To(Equal("sha256:bbdf96023c912c393b49d5238e227576ed0d20d1bb145d7476d817b80e20c11a"))
 				t.Expect(obj.GetArtifact().Revision).To(Equal("0.1.0"))
@@ -1764,18 +1764,18 @@ func TestHelmChartReconciler_reconcileArtifact(t *testing.T) {
 			},
 			want: sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.ArtifactInStorageCondition, helmv1.ChartPullSucceededReason, "pulled 'helmchart' chart with version '0.1.0'"),
+				*conditions.TrueCondition(sourcev1.ArtifactInStorageCondition, sourcev1.ChartPullSucceededReason, "pulled 'helmchart' chart with version '0.1.0'"),
 			},
 		},
 		{
 			name:  "Updates ObservedValuesFiles with IgnoreMissingValuesFiles after creating new artifact",
 			build: mockChartBuild("helmchart", "0.1.0", "testdata/charts/helmchart-0.1.0.tgz", []string{"values.yaml", "override.yaml"}),
-			beforeFunc: func(obj *helmv1.HelmChart) {
+			beforeFunc: func(obj *sourcev1.HelmChart) {
 				conditions.MarkTrue(obj, sourcev1.ArtifactOutdatedCondition, "Foo", "")
 				obj.Spec.ValuesFiles = []string{"values.yaml", "missing.yaml", "override.yaml"}
 				obj.Spec.IgnoreMissingValuesFiles = true
 			},
-			afterFunc: func(t *WithT, obj *helmv1.HelmChart) {
+			afterFunc: func(t *WithT, obj *sourcev1.HelmChart) {
 				t.Expect(obj.GetArtifact()).ToNot(BeNil())
 				t.Expect(obj.GetArtifact().Digest).To(Equal("sha256:bbdf96023c912c393b49d5238e227576ed0d20d1bb145d7476d817b80e20c11a"))
 				t.Expect(obj.GetArtifact().Revision).To(Equal("0.1.0"))
@@ -1785,7 +1785,7 @@ func TestHelmChartReconciler_reconcileArtifact(t *testing.T) {
 			},
 			want: sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.ArtifactInStorageCondition, helmv1.ChartPullSucceededReason, "pulled 'helmchart' chart with version '0.1.0'"),
+				*conditions.TrueCondition(sourcev1.ArtifactInStorageCondition, sourcev1.ChartPullSucceededReason, "pulled 'helmchart' chart with version '0.1.0'"),
 			},
 		},
 	}
