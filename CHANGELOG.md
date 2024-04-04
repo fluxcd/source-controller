@@ -2,6 +2,23 @@
 
 All notable changes to this project are documented in this file.
 
+## 1.2.5
+
+**Release date:** 2024-04-04
+
+This patch release comes with improvements to the `HelmChart` name validation 
+and adds logging sanitization of connection error messages for `Bucket` sources.
+
+Fixes:
+- Improve chart name validation
+  [#1377](https://github.com/fluxcd/source-controller/pull/1377)
+- Sanitize URLs for bucket fetch error messages
+  [#1430](https://github.com/fluxcd/source-controller/pull/1430)
+
+Improvements:
+- Update controller-gen to v0.14.0
+  [#1399](https://github.com/fluxcd/source-controller/pull/1399)
+
 ## 1.2.4
 
 **Release date:** 2024-02-01
