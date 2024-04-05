@@ -19,7 +19,7 @@ require (
 	github.com/distribution/distribution/v3 v3.0.0-alpha.1
 	github.com/docker/cli v24.0.9+incompatible
 	github.com/docker/go-units v0.5.0
-	github.com/fluxcd/cli-utils v0.36.0-flux.4
+	github.com/fluxcd/cli-utils v0.36.0-flux.5
 	github.com/fluxcd/pkg/apis/event v0.8.0
 	github.com/fluxcd/pkg/apis/meta v1.4.0
 	github.com/fluxcd/pkg/git v0.18.0
@@ -58,8 +58,8 @@ require (
 	github.com/sigstore/sigstore v1.8.3
 	github.com/sirupsen/logrus v1.9.3
 	github.com/spf13/pflag v1.0.5
-	golang.org/x/crypto v0.21.0
-	golang.org/x/sync v0.6.0
+	golang.org/x/crypto v0.22.0
+	golang.org/x/sync v0.7.0
 	google.golang.org/api v0.172.0
 	gotest.tools v2.2.0+incompatible
 	helm.sh/helm/v3 v3.14.3
@@ -133,6 +133,7 @@ require (
 	github.com/awslabs/amazon-ecr-credential-helper/ecr-login v0.0.0-20231024185945-8841054dbdb8 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/blang/semver v3.5.1+incompatible // indirect
+	github.com/blang/semver/v4 v4.0.0 // indirect
 	github.com/bshuster-repo/logrus-logstash-hook v1.0.0 // indirect
 	github.com/buildkite/agent/v3 v3.62.0 // indirect
 	github.com/buildkite/go-pipeline v0.3.2 // indirect
@@ -357,8 +358,8 @@ require (
 	golang.org/x/mod v0.16.0 // indirect
 	golang.org/x/net v0.22.0 // indirect
 	golang.org/x/oauth2 v0.18.0 // indirect
-	golang.org/x/sys v0.18.0 // indirect
-	golang.org/x/term v0.18.0 // indirect
+	golang.org/x/sys v0.19.0 // indirect
+	golang.org/x/term v0.19.0 // indirect
 	golang.org/x/text v0.14.0 // indirect
 	golang.org/x/time v0.5.0 // indirect
 	golang.org/x/tools v0.19.0 // indirect
@@ -369,7 +370,7 @@ require (
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20240318140521-94a12d6c2237 // indirect
 	google.golang.org/grpc v1.62.1 // indirect
 	google.golang.org/protobuf v1.33.0 // indirect
-	gopkg.in/evanphx/json-patch.v5 v5.7.0 // indirect
+	gopkg.in/evanphx/json-patch.v4 v4.12.0 // indirect
 	gopkg.in/go-jose/go-jose.v2 v2.6.3 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
@@ -385,8 +386,8 @@ require (
 	k8s.io/kubectl v0.29.3 // indirect
 	oras.land/oras-go v1.2.4 // indirect
 	sigs.k8s.io/json v0.0.0-20221116044647-bc3834ca7abd // indirect
-	sigs.k8s.io/kustomize/api v0.16.0 // indirect
-	sigs.k8s.io/kustomize/kyaml v0.16.0 // indirect
+	sigs.k8s.io/kustomize/api v0.17.0 // indirect
+	sigs.k8s.io/kustomize/kyaml v0.17.0 // indirect
 	sigs.k8s.io/release-utils v0.7.7 // indirect
 	sigs.k8s.io/structured-merge-diff/v4 v4.4.1 // indirect
 )
