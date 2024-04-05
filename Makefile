@@ -156,7 +156,7 @@ gen-crd-api-reference-docs: ## Download gen-crd-api-reference-docs locally if ne
 ENVTEST = $(GOBIN)/setup-envtest
 .PHONY: envtest
 setup-envtest: ## Download setup-envtest locally if necessary.
-	$(call go-install-tool,$(ENVTEST),sigs.k8s.io/controller-runtime/tools/setup-envtest@latest)
+	$(call go-install-tool,$(ENVTEST),sigs.k8s.io/controller-runtime/tools/setup-envtest@release-0.16)
 
 ENVTEST_ASSETS_DIR=$(BUILD_DIR)/testbin
 ENVTEST_KUBERNETES_VERSION?=latest
