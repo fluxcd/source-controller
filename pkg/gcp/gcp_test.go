@@ -104,6 +104,7 @@ func TestMain(m *testing.M) {
 		case fmt.Sprintf("/storage/v1/b/%s/o?alt=json&delimiter=&endOffset=&pageToken=&prefix=&prettyPrint=false&projection=full&startOffset=&versions=false", bucketName):
 		case fmt.Sprintf("/storage/v1/b/%s/o?alt=json&delimiter=&endOffset=&includeTrailingDelimiter=false&pageToken=&prefix=&prettyPrint=false&projection=full&startOffset=&versions=false", bucketName):
 		case fmt.Sprintf("/storage/v1/b/%s/o?alt=json&delimiter=&endOffset=&includeTrailingDelimiter=false&matchGlob=&pageToken=&prefix=&prettyPrint=false&projection=full&startOffset=&versions=false", bucketName):
+		case fmt.Sprintf("/storage/v1/b/%s/o?alt=json&delimiter=&endOffset=&includeFoldersAsPrefixes=false&includeTrailingDelimiter=false&matchGlob=&pageToken=&prefix=&prettyPrint=false&projection=full&startOffset=&versions=false", bucketName):
 			w.WriteHeader(200)
 			response := &raw.Objects{}
 			response.Items = append(response.Items, getObject())
