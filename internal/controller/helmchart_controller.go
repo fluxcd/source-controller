@@ -665,8 +665,9 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 	// Construct the chart builder with scoped configuration
 	cb := chart.NewRemoteBuilder(chartRepo)
 	opts := chart.BuildOptions{
-		ValuesFiles: obj.GetValuesFiles(),
-		Force:       obj.Generation != obj.Status.ObservedGeneration,
+		ValuesFiles:              obj.GetValuesFiles(),
+		IgnoreMissingValuesFiles: obj.Spec.IgnoreMissingValuesFiles,
+		Force:                    obj.Generation != obj.Status.ObservedGeneration,
 		// The remote builder will not attempt to download the chart if
 		// an artifact exists with the same name and version and `Force` is false.
 		// It will however try to verify the chart if `obj.Spec.Verify` is set, at every reconciliation.
@@ -760,8 +761,9 @@ func (r *HelmChartReconciler) buildFromTarballArtifact(ctx context.Context, obj 
 
 	// Configure builder options, including any previously cached chart
 	opts := chart.BuildOptions{
-		ValuesFiles: obj.GetValuesFiles(),
-		Force:       obj.Generation != obj.Status.ObservedGeneration,
+		ValuesFiles:              obj.GetValuesFiles(),
+		IgnoreMissingValuesFiles: obj.Spec.IgnoreMissingValuesFiles,
+		Force:                    obj.Generation != obj.Status.ObservedGeneration,
 	}
 	if artifact := obj.Status.Artifact; artifact != nil {
 		opts.CachedChart = r.Storage.LocalPath(*artifact)

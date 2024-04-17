@@ -103,7 +103,7 @@ func (b *remoteChartBuilder) Build(ctx context.Context, ref Reference, p string,
 	}
 	chart.Metadata.Version = result.Version
 
-	mergedValues, err := mergeChartValues(chart, opts.ValuesFiles)
+	mergedValues, valuesFiles, err := mergeChartValues(chart, opts.ValuesFiles, opts.IgnoreMissingValuesFiles)
 	if err != nil {
 		err = fmt.Errorf("failed to merge chart values: %w", err)
 		return result, &BuildError{Reason: ErrValuesFilesMerge, Err: err}
@@ -113,7 +113,7 @@ func (b *remoteChartBuilder) Build(ctx context.Context, ref Reference, p string,
 		if err != nil {
 			return nil, &BuildError{Reason: ErrValuesFilesMerge, Err: err}
 		}
-		result.ValuesFiles = opts.GetValuesFiles()
+		result.ValuesFiles = valuesFiles
 	}
 
 	// Package the chart with the custom values
@@ -226,13 +226,18 @@ func setBuildMetaData(version, versionMetadata string) (*semver.Version, error) 
 }
 
 // mergeChartValues merges the given chart.Chart Files paths into a single "values.yaml" map.
-// It returns the merge result, or an error.
-func mergeChartValues(chart *helmchart.Chart, paths []string) (map[string]interface{}, error) {
+// By default, a missing file is considered an error. If ignoreMissing is set true,
+// missing files are ignored.
+// It returns the merge result and the list of files that contributed to that result,
+// or an error.
+func mergeChartValues(chart *helmchart.Chart, paths []string, ignoreMissing bool) (map[string]interface{}, []string, error) {
 	mergedValues := make(map[string]interface{})
+	valuesFiles := make([]string, 0, len(paths))
 	for _, p := range paths {
 		cfn := filepath.Clean(p)
 		if cfn == chartutil.ValuesfileName {
 			mergedValues = transform.MergeMaps(mergedValues, chart.Values)
+			valuesFiles = append(valuesFiles, p)
 			continue
 		}
 		var b []byte
@@ -243,15 +248,19 @@ func mergeChartValues(chart *helmchart.Chart, paths []string) (map[string]interf
 			}
 		}
 		if b == nil {
-			return nil, fmt.Errorf("no values file found at path '%s'", p)
+			if ignoreMissing {
+				continue
+			}
+			return nil, nil, fmt.Errorf("no values file found at path '%s'", p)
 		}
 		values := make(map[string]interface{})
 		if err := yaml.Unmarshal(b, &values); err != nil {
-			return nil, fmt.Errorf("unmarshaling values from '%s' failed: %w", p, err)
+			return nil, nil, fmt.Errorf("unmarshaling values from '%s' failed: %w", p, err)
 		}
 		mergedValues = transform.MergeMaps(mergedValues, values)
+		valuesFiles = append(valuesFiles, p)
 	}
-	return mergedValues, nil
+	return mergedValues, valuesFiles, nil
 }
 
 // validatePackageAndWriteToPath atomically writes the packaged chart from reader

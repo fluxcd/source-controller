@@ -79,6 +79,11 @@ type HelmChartSpec struct {
 	// +deprecated
 	ValuesFile string `json:"valuesFile,omitempty"`
 
+	// IgnoreMissingValuesFiles controls whether to silently ignore missing values
+	// files rather than failing.
+	// +optional
+	IgnoreMissingValuesFiles bool `json:"ignoreMissingValuesFiles,omitempty"`
+
 	// Suspend tells the controller to suspend the reconciliation of this
 	// source.
 	// +optional

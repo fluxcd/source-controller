@@ -93,6 +93,11 @@ spec:
                 description: The name or path the Helm chart is available at in the
                   SourceRef.
                 type: string
+              ignoreMissingValuesFiles:
+                description: |-
+                  IgnoreMissingValuesFiles controls whether to silently ignore missing values
+                  files rather than failing.
+                type: boolean
               interval:
                 description: The interval at which to check the Source for updates.
                 type: string
@@ -363,6 +368,11 @@ spec:
                   Chart is the name or path the Helm chart is available at in the
                   SourceRef.
                 type: string
+              ignoreMissingValuesFiles:
+                description: |-
+                  IgnoreMissingValuesFiles controls whether to silently ignore missing values
+                  files rather than failing.
+                type: boolean
               interval:
                 description: |-
                   Interval at which the HelmChart SourceRef is checked for updates.
