@@ -162,7 +162,7 @@ func GetClientOpts(ctx context.Context, c client.Client, obj *helmv1.HelmReposit
 			return nil, "", err
 		}
 		if loginOpt != nil {
-			hrOpts.RegLoginOpts = []helmreg.LoginOption{loginOpt}
+			hrOpts.RegLoginOpts = []helmreg.LoginOption{loginOpt, helmreg.LoginOptInsecure(obj.Spec.Insecure)}
 			tlsLoginOpt := registry.TLSLoginOption(certFile, keyFile, caFile)
 			if tlsLoginOpt != nil {
 				hrOpts.RegLoginOpts = append(hrOpts.RegLoginOpts, tlsLoginOpt)
