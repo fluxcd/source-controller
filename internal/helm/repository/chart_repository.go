@@ -292,13 +292,20 @@ func (r *ChartRepository) CacheIndex() error {
 		return fmt.Errorf("failed to create temp file to cache index to: %w", err)
 	}
 
-	if err = r.DownloadIndex(f); err != nil {
+	if err = r.DownloadIndex(f, helm.MaxIndexSize); err != nil {
 		f.Close()
-		os.Remove(f.Name())
+		removeErr := os.Remove(f.Name())
+		if removeErr != nil {
+			err = errors.Join(err, removeErr)
+		}
 		return fmt.Errorf("failed to cache index to temporary file: %w", err)
 	}
+
 	if err = f.Close(); err != nil {
-		os.Remove(f.Name())
+		removeErr := os.Remove(f.Name())
+		if removeErr != nil {
+			err = errors.Join(err, removeErr)
+		}
 		return fmt.Errorf("failed to close cached index file '%s': %w", f.Name(), err)
 	}
 
@@ -355,8 +362,10 @@ func (r *ChartRepository) LoadFromPath() error {
 
 // DownloadIndex attempts to download the chart repository index using
 // the Client and set Options, and writes the index to the given io.Writer.
-// It returns an url.Error if the URL failed to parse.
-func (r *ChartRepository) DownloadIndex(w io.Writer) (err error) {
+// Upon download, the index is copied to the writer if the index size
+// does not exceed the maximum index file size. Otherwise, it returns an error.
+// A url.Error is returned if the URL failed to parse.
+func (r *ChartRepository) DownloadIndex(w io.Writer, maxSize int64) (err error) {
 	r.RLock()
 	defer r.RUnlock()
 
@@ -376,6 +385,11 @@ func (r *ChartRepository) DownloadIndex(w io.Writer) (err error) {
 	if err != nil {
 		return err
 	}
+
+	if int64(res.Len()) > maxSize {
+		return fmt.Errorf("index exceeds the maximum index file size of %d bytes", maxSize)
+	}
+
 	if _, err = io.Copy(w, res); err != nil {
 		return err
 	}
