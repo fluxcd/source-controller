@@ -444,11 +444,19 @@ func TestChartRepository_DownloadIndex(t *testing.T) {
 		RWMutex: &sync.RWMutex{},
 	}
 
-	buf := bytes.NewBuffer([]byte{})
-	g.Expect(r.DownloadIndex(buf)).To(Succeed())
-	g.Expect(buf.Bytes()).To(Equal(b))
-	g.Expect(mg.LastCalledURL).To(Equal(r.URL + "/index.yaml"))
-	g.Expect(err).To(BeNil())
+	t.Run("download index", func(t *testing.T) {
+		buf := bytes.NewBuffer([]byte{})
+		g.Expect(r.DownloadIndex(buf, helm.MaxIndexSize)).To(Succeed())
+		g.Expect(buf.Bytes()).To(Equal(b))
+		g.Expect(mg.LastCalledURL).To(Equal(r.URL + "/index.yaml"))
+		g.Expect(err).To(BeNil())
+	})
+
+	t.Run("download index size error", func(t *testing.T) {
+		buf := bytes.NewBuffer([]byte{})
+		g.Expect(r.DownloadIndex(buf, int64(len(b)-1))).To(HaveOccurred())
+		g.Expect(mg.LastCalledURL).To(Equal(r.URL + "/index.yaml"))
+	})
 }
 
 func TestChartRepository_StrategicallyLoadIndex(t *testing.T) {
