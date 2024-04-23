@@ -107,6 +107,9 @@ type BuildOptions struct {
 	// ValuesFiles can be set to a list of relative paths, used to compose
 	// and overwrite an alternative default "values.yaml" for the chart.
 	ValuesFiles []string
+	// ObservedValuesFiles is calculated when the chart is built. If BuildOptions.IgnoreMissingValuesFiles is set,
+	// this list will contain the values files that were actually found on disk.
+	ObservedValuesFiles []string
 	// IgnoreMissingValuesFiles controls whether to silently ignore missing values files rather than failing.
 	IgnoreMissingValuesFiles bool
 	// CachedChart can be set to the absolute path of a chart stored on

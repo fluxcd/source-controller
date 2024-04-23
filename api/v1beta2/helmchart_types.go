@@ -147,6 +147,10 @@ type HelmChartStatus struct {
 	// +optional
 	ObservedChartName string `json:"observedChartName,omitempty"`
 
+	// ObservedValuesFiles are the last observed value files.
+	// +optional
+	ObservedValuesFiles []string `json:"observedValuesFiles,omitempty"`
+
 	// Conditions holds the conditions for the HelmChart.
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`

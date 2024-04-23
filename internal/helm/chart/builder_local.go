@@ -120,7 +120,7 @@ func (b *localChartBuilder) Build(ctx context.Context, ref Reference, p string, 
 			if err = curMeta.Validate(); err == nil {
 				if result.Name == curMeta.Name && result.Version == curMeta.Version {
 					result.Path = opts.CachedChart
-					result.ValuesFiles = opts.GetValuesFiles()
+					result.ValuesFiles = opts.ObservedValuesFiles
 					result.Packaged = requiresPackaging
 
 					return result, nil
