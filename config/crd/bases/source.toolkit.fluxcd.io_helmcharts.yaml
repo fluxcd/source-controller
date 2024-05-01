@@ -93,11 +93,6 @@ spec:
                 description: The name or path the Helm chart is available at in the
                   SourceRef.
                 type: string
-              ignoreMissingValuesFiles:
-                description: |-
-                  IgnoreMissingValuesFiles controls whether to silently ignore missing values
-                  files rather than failing.
-                type: boolean
               interval:
                 description: The interval at which to check the Source for updates.
                 type: string
@@ -648,6 +643,11 @@ spec:
                   ObservedSourceArtifactRevision is the last observed Artifact.Revision
                   of the HelmChartSpec.SourceRef.
                 type: string
+              observedValuesFiles:
+                description: ObservedValuesFiles are the last observed value files.
+                items:
+                  type: string
+                type: array
               url:
                 description: |-
                   URL is the dynamic fetch link for the latest Artifact.

@@ -667,8 +667,8 @@ bool
 </td>
 <td>
 <em>(Optional)</em>
-<p>Whether to silently ignore missing values files rather than failing.
-</p>
+<p>IgnoreMissingValuesFiles controls whether to silently ignore missing values
+files rather than failing.</p>
 </td>
 </tr>
 <tr>
@@ -2349,8 +2349,8 @@ bool
 </td>
 <td>
 <em>(Optional)</em>
-<p>Whether to silently ignore missing values files rather than failing.
-</p>
+<p>IgnoreMissingValuesFiles controls whether to silently ignore missing values
+files rather than failing.</p>
 </td>
 </tr>
 <tr>
@@ -2458,6 +2458,18 @@ string
 <em>(Optional)</em>
 <p>ObservedChartName is the last observed chart name as specified by the
 resolved chart reference.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>observedValuesFiles</code><br>
+<em>
+[]string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>ObservedValuesFiles are the last observed value files.</p>
 </td>
 </tr>
 <tr>
