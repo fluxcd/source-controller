@@ -147,7 +147,9 @@ type HelmChartStatus struct {
 	// +optional
 	ObservedChartName string `json:"observedChartName,omitempty"`
 
-	// ObservedValuesFiles are the last observed value files.
+	// ObservedValuesFiles are the observed value files of the last successful
+	// reconciliation.
+	// It matches the chart in the last successfully reconciled artifact.
 	// +optional
 	ObservedValuesFiles []string `json:"observedValuesFiles,omitempty"`
 

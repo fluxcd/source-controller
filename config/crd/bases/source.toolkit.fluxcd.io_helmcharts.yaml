@@ -644,7 +644,10 @@ spec:
                   of the HelmChartSpec.SourceRef.
                 type: string
               observedValuesFiles:
-                description: ObservedValuesFiles are the last observed value files.
+                description: |-
+                  ObservedValuesFiles are the observed value files of the last successful
+                  reconciliation.
+                  It matches the chart in the last successfully reconciled artifact.
                 items:
                   type: string
                 type: array

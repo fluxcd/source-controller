@@ -120,7 +120,7 @@ func (b *localChartBuilder) Build(ctx context.Context, ref Reference, p string, 
 			if err = curMeta.Validate(); err == nil {
 				if result.Name == curMeta.Name && result.Version == curMeta.Version {
 					result.Path = opts.CachedChart
-					result.ValuesFiles = opts.ObservedValuesFiles
+					result.ValuesFiles = opts.CachedChartValuesFiles
 					result.Packaged = requiresPackaging
 
 					return result, nil
@@ -191,7 +191,7 @@ func (b *localChartBuilder) Build(ctx context.Context, ref Reference, p string, 
 
 // mergeFileValues merges the given value file paths into a single "values.yaml" map.
 // The provided (relative) paths may not traverse outside baseDir. By default, a missing
-// file is considered an error. If ignoreMissing is set true, missing files are ignored.
+// file is considered an error. If ignoreMissing is true, missing files are ignored.
 // It returns the merge result and the list of files that contributed to that result,
 // or an error.
 func mergeFileValues(baseDir string, paths []string, ignoreMissing bool) (map[string]interface{}, []string, error) {

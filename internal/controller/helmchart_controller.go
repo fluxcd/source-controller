@@ -666,7 +666,7 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 	cb := chart.NewRemoteBuilder(chartRepo)
 	opts := chart.BuildOptions{
 		ValuesFiles:              obj.GetValuesFiles(),
-		ObservedValuesFiles:      obj.Status.ObservedValuesFiles,
+		CachedChartValuesFiles:   obj.Status.ObservedValuesFiles,
 		IgnoreMissingValuesFiles: obj.Spec.IgnoreMissingValuesFiles,
 		Force:                    obj.Generation != obj.Status.ObservedGeneration,
 		// The remote builder will not attempt to download the chart if
@@ -763,12 +763,12 @@ func (r *HelmChartReconciler) buildFromTarballArtifact(ctx context.Context, obj 
 	// Configure builder options, including any previously cached chart
 	opts := chart.BuildOptions{
 		ValuesFiles:              obj.GetValuesFiles(),
-		ObservedValuesFiles:      obj.Status.ObservedValuesFiles,
 		IgnoreMissingValuesFiles: obj.Spec.IgnoreMissingValuesFiles,
 		Force:                    obj.Generation != obj.Status.ObservedGeneration,
 	}
-	if artifact := obj.Status.Artifact; artifact != nil {
+	if artifact := obj.GetArtifact(); artifact != nil {
 		opts.CachedChart = r.Storage.LocalPath(*artifact)
+		opts.CachedChartValuesFiles = obj.Status.ObservedValuesFiles
 	}
 
 	// Configure revision metadata for chart build if we should react to revision changes

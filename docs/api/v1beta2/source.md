@@ -2469,7 +2469,9 @@ resolved chart reference.</p>
 </td>
 <td>
 <em>(Optional)</em>
-<p>ObservedValuesFiles are the last observed value files.</p>
+<p>ObservedValuesFiles are the observed value files of the last successful
+reconciliation.
+It matches the chart in the last successfully reconciled artifact.</p>
 </td>
 </tr>
 <tr>
