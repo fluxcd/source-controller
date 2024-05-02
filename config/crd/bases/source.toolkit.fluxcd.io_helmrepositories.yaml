@@ -347,6 +347,8 @@ spec:
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
+    deprecated: true
+    deprecationWarning: v1beta1 HelmRepository is deprecated, upgrade to v1
     name: v1beta1
     schema:
       openAPIV3Schema:

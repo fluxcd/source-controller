@@ -159,7 +159,7 @@ type HelmChartReconcilerOptions struct {
 	RateLimiter ratelimiter.RateLimiter
 }
 
-// helmChartReconcileFunc is the function type for all the v1beta2.HelmChart
+// helmChartReconcileFunc is the function type for all the v1.HelmChart
 // (sub)reconcile functions. The type implementations are grouped and
 // executed serially to perform the complete reconcile of the object.
 type helmChartReconcileFunc func(ctx context.Context, sp *patch.SerialPatcher, obj *sourcev1.HelmChart, build *chart.Build) (sreconcile.Result, error)
@@ -512,9 +512,9 @@ func (r *HelmChartReconciler) reconcileSource(ctx context.Context, sp *patch.Ser
 }
 
 // buildFromHelmRepository attempts to pull and/or package a Helm chart with
-// the specified data from the v1beta2.HelmRepository and v1beta2.HelmChart
+// the specified data from the v1.HelmRepository and v1.HelmChart
 // objects.
-// In case of a failure it records v1beta2.FetchFailedCondition on the chart
+// In case of a failure it records v1.FetchFailedCondition on the chart
 // object, and returns early.
 func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *sourcev1.HelmChart,
 	repo *sourcev1.HelmRepository, b *chart.Build) (sreconcile.Result, error) {
@@ -696,9 +696,9 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 }
 
 // buildFromTarballArtifact attempts to pull and/or package a Helm chart with
-// the specified data from the v1beta2.HelmChart object and the given
-// v1beta2.Artifact.
-// In case of a failure it records v1beta2.FetchFailedCondition on the chart
+// the specified data from the v1.HelmChart object and the given
+// v1.Artifact.
+// In case of a failure it records v1.FetchFailedCondition on the chart
 // object, and returns early.
 func (r *HelmChartReconciler) buildFromTarballArtifact(ctx context.Context, obj *sourcev1.HelmChart, source sourcev1.Artifact, b *chart.Build) (sreconcile.Result, error) {
 	// Create temporary working directory
@@ -824,7 +824,7 @@ func (r *HelmChartReconciler) buildFromTarballArtifact(ctx context.Context, obj 
 // (Status) data on the object does not match the given.
 //
 // The inspection of the given data to the object is differed, ensuring any
-// stale observations like v1beta2.ArtifactOutdatedCondition are removed.
+// stale observations like v1.ArtifactOutdatedCondition are removed.
 // If the given Artifact does not differ from the object's current, it returns
 // early.
 // On a successful archive, the Artifact in the Status of the object is set,

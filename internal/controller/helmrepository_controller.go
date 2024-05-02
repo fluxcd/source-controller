@@ -387,7 +387,7 @@ func (r *HelmRepositoryReconciler) reconcileStorage(ctx context.Context, sp *pat
 // reconcileSource attempts to fetch the Helm repository index using the
 // specified configuration on the v1.HelmRepository object.
 //
-// When the fetch fails, it records v.FetchFailedCondition=True and
+// When the fetch fails, it records v1.FetchFailedCondition=True and
 // returns early.
 // If successful and the index is valid, any previous
 // v1.FetchFailedCondition is removed, and the repository.ChartRepository
