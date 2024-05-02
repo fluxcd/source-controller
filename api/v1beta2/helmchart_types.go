@@ -79,6 +79,11 @@ type HelmChartSpec struct {
 	// +deprecated
 	ValuesFile string `json:"valuesFile,omitempty"`
 
+	// IgnoreMissingValuesFiles controls whether to silently ignore missing values
+	// files rather than failing.
+	// +optional
+	IgnoreMissingValuesFiles bool `json:"ignoreMissingValuesFiles,omitempty"`
+
 	// Suspend tells the controller to suspend the reconciliation of this
 	// source.
 	// +optional
@@ -141,6 +146,12 @@ type HelmChartStatus struct {
 	// resolved chart reference.
 	// +optional
 	ObservedChartName string `json:"observedChartName,omitempty"`
+
+	// ObservedValuesFiles are the observed value files of the last successful
+	// reconciliation.
+	// It matches the chart in the last successfully reconciled artifact.
+	// +optional
+	ObservedValuesFiles []string `json:"observedValuesFiles,omitempty"`
 
 	// Conditions holds the conditions for the HelmChart.
 	// +optional

@@ -665,8 +665,9 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 	// Construct the chart builder with scoped configuration
 	cb := chart.NewRemoteBuilder(chartRepo)
 	opts := chart.BuildOptions{
-		ValuesFiles: obj.GetValuesFiles(),
-		Force:       obj.Generation != obj.Status.ObservedGeneration,
+		ValuesFiles:              obj.GetValuesFiles(),
+		IgnoreMissingValuesFiles: obj.Spec.IgnoreMissingValuesFiles,
+		Force:                    obj.Generation != obj.Status.ObservedGeneration,
 		// The remote builder will not attempt to download the chart if
 		// an artifact exists with the same name and version and `Force` is false.
 		// It will however try to verify the chart if `obj.Spec.Verify` is set, at every reconciliation.
@@ -674,6 +675,7 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 	}
 	if artifact := obj.GetArtifact(); artifact != nil {
 		opts.CachedChart = r.Storage.LocalPath(*artifact)
+		opts.CachedChartValuesFiles = obj.Status.ObservedValuesFiles
 	}
 
 	// Set the VersionMetadata to the object's Generation if ValuesFiles is defined
@@ -760,11 +762,13 @@ func (r *HelmChartReconciler) buildFromTarballArtifact(ctx context.Context, obj 
 
 	// Configure builder options, including any previously cached chart
 	opts := chart.BuildOptions{
-		ValuesFiles: obj.GetValuesFiles(),
-		Force:       obj.Generation != obj.Status.ObservedGeneration,
+		ValuesFiles:              obj.GetValuesFiles(),
+		IgnoreMissingValuesFiles: obj.Spec.IgnoreMissingValuesFiles,
+		Force:                    obj.Generation != obj.Status.ObservedGeneration,
 	}
-	if artifact := obj.Status.Artifact; artifact != nil {
+	if artifact := obj.GetArtifact(); artifact != nil {
 		opts.CachedChart = r.Storage.LocalPath(*artifact)
+		opts.CachedChartValuesFiles = obj.Status.ObservedValuesFiles
 	}
 
 	// Configure revision metadata for chart build if we should react to revision changes
@@ -884,6 +888,11 @@ func (r *HelmChartReconciler) reconcileArtifact(ctx context.Context, _ *patch.Se
 	// Record it on the object
 	obj.Status.Artifact = artifact.DeepCopy()
 	obj.Status.ObservedChartName = b.Name
+	if obj.Spec.IgnoreMissingValuesFiles {
+		obj.Status.ObservedValuesFiles = b.ValuesFiles
+	} else {
+		obj.Status.ObservedValuesFiles = nil
+	}
 
 	// Update symlink on a "best effort" basis
 	symURL, err := r.Storage.Symlink(artifact, "latest.tar.gz")

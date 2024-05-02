@@ -202,6 +202,16 @@ spec:
 Values files also affect the generated artifact revision, see
 [artifact](#artifact).
 
+### Ignore missing values files
+
+`.spec.ignoreMissingValuesFiles` is an optional field to specify whether missing
+values files should be ignored rather than be considered errors.  It defaults to
+`false`.
+
+When `.spec.valuesFiles` and  `.spec.ignoreMissingValuesFiles` are specified,
+the `.status.observedValuesFiles` field is populated with the list of values
+files that were found and actually contributed to the packaged chart.
+
 ### Reconcile strategy
 
 `.spec.reconcileStrategy` is an optional field to specify what enables the

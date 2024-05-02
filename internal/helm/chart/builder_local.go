@@ -121,6 +121,11 @@ func (b *localChartBuilder) Build(ctx context.Context, ref Reference, p string, 
 				if result.Name == curMeta.Name && result.Version == curMeta.Version {
 					result.Path = opts.CachedChart
 					result.ValuesFiles = opts.GetValuesFiles()
+					if opts.CachedChartValuesFiles != nil {
+						// If the cached chart values files are set, we should use them
+						// instead of reporting the values files.
+						result.ValuesFiles = opts.CachedChartValuesFiles
+					}
 					result.Packaged = requiresPackaging
 
 					return result, nil
@@ -140,9 +145,12 @@ func (b *localChartBuilder) Build(ctx context.Context, ref Reference, p string, 
 	}
 
 	// Merge chart values, if instructed
-	var mergedValues map[string]interface{}
+	var (
+		mergedValues map[string]interface{}
+		valuesFiles  []string
+	)
 	if len(opts.GetValuesFiles()) > 0 {
-		if mergedValues, err = mergeFileValues(localRef.WorkDir, opts.ValuesFiles); err != nil {
+		if mergedValues, valuesFiles, err = mergeFileValues(localRef.WorkDir, opts.ValuesFiles, opts.IgnoreMissingValuesFiles); err != nil {
 			return result, &BuildError{Reason: ErrValuesFilesMerge, Err: err}
 		}
 	}
@@ -163,7 +171,7 @@ func (b *localChartBuilder) Build(ctx context.Context, ref Reference, p string, 
 		if err != nil {
 			return result, &BuildError{Reason: ErrValuesFilesMerge, Err: err}
 		}
-		result.ValuesFiles = opts.GetValuesFiles()
+		result.ValuesFiles = valuesFiles
 	}
 
 	// Ensure dependencies are fetched if building from a directory
@@ -187,31 +195,42 @@ func (b *localChartBuilder) Build(ctx context.Context, ref Reference, p string, 
 }
 
 // mergeFileValues merges the given value file paths into a single "values.yaml" map.
-// The provided (relative) paths may not traverse outside baseDir. It returns the merge
-// result, or an error.
-func mergeFileValues(baseDir string, paths []string) (map[string]interface{}, error) {
+// The provided (relative) paths may not traverse outside baseDir. By default, a missing
+// file is considered an error. If ignoreMissing is true, missing files are ignored.
+// It returns the merge result and the list of files that contributed to that result,
+// or an error.
+func mergeFileValues(baseDir string, paths []string, ignoreMissing bool) (map[string]interface{}, []string, error) {
 	mergedValues := make(map[string]interface{})
+	valuesFiles := make([]string, 0, len(paths))
 	for _, p := range paths {
 		secureP, err := securejoin.SecureJoin(baseDir, p)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
-		if f, err := os.Stat(secureP); err != nil || !f.Mode().IsRegular() {
-			return nil, fmt.Errorf("no values file found at path '%s' (reference '%s')",
+		f, err := os.Stat(secureP)
+		switch {
+		case err != nil:
+			if ignoreMissing && os.IsNotExist(err) {
+				continue
+			}
+			fallthrough
+		case !f.Mode().IsRegular():
+			return nil, nil, fmt.Errorf("no values file found at path '%s' (reference '%s')",
 				strings.TrimPrefix(secureP, baseDir), p)
 		}
 		b, err := os.ReadFile(secureP)
 		if err != nil {
-			return nil, fmt.Errorf("could not read values from file '%s': %w", p, err)
+			return nil, nil, fmt.Errorf("could not read values from file '%s': %w", p, err)
 		}
 		values := make(map[string]interface{})
 		err = yaml.Unmarshal(b, &values)
 		if err != nil {
-			return nil, fmt.Errorf("unmarshaling values from '%s' failed: %w", p, err)
+			return nil, nil, fmt.Errorf("unmarshaling values from '%s' failed: %w", p, err)
 		}
 		mergedValues = transform.MergeMaps(mergedValues, values)
+		valuesFiles = append(valuesFiles, p)
 	}
-	return mergedValues, nil
+	return mergedValues, valuesFiles, nil
 }
 
 // copyFileToPath attempts to copy in to out. It returns an error if out already exists.

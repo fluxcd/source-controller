@@ -660,6 +660,19 @@ is merged before the ValuesFiles items. Ignored when omitted.</p>
 </tr>
 <tr>
 <td>
+<code>ignoreMissingValuesFiles</code><br>
+<em>
+bool
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>IgnoreMissingValuesFiles controls whether to silently ignore missing values
+files rather than failing.</p>
+</td>
+</tr>
+<tr>
+<td>
 <code>suspend</code><br>
 <em>
 bool
@@ -2329,6 +2342,19 @@ is merged before the ValuesFiles items. Ignored when omitted.</p>
 </tr>
 <tr>
 <td>
+<code>ignoreMissingValuesFiles</code><br>
+<em>
+bool
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>IgnoreMissingValuesFiles controls whether to silently ignore missing values
+files rather than failing.</p>
+</td>
+</tr>
+<tr>
+<td>
 <code>suspend</code><br>
 <em>
 bool
@@ -2432,6 +2458,20 @@ string
 <em>(Optional)</em>
 <p>ObservedChartName is the last observed chart name as specified by the
 resolved chart reference.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>observedValuesFiles</code><br>
+<em>
+[]string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>ObservedValuesFiles are the observed value files of the last successful
+reconciliation.
+It matches the chart in the last successfully reconciled artifact.</p>
 </td>
 </tr>
 <tr>
