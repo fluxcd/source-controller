@@ -1,11 +1,12 @@
-apiVersion: source.toolkit.fluxcd.io/v1beta2
+apiVersion: source.toolkit.fluxcd.io/v1
 kind: HelmChart
 metadata:
   name: helmchart-sample
 spec:
   chart: podinfo
-  version: '>=2.0.0 <3.0.0'
+  version: '6.x'
   sourceRef:
     kind: HelmRepository
     name: helmrepository-sample
   interval: 1m
+  ignoreMissingValuesFiles: true
