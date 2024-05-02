@@ -704,8 +704,8 @@ NOTE: Not implemented, provisional as of <a href="https://github.com/fluxcd/flux
 <td>
 <code>verify</code><br>
 <em>
-<a href="#source.toolkit.fluxcd.io/v1beta2.OCIRepositoryVerification">
-OCIRepositoryVerification
+<a href="https://pkg.go.dev/github.com/fluxcd/source-controller/api/v1#OCIRepositoryVerification">
+github.com/fluxcd/source-controller/api/v1.OCIRepositoryVerification
 </a>
 </em>
 </td>
@@ -1122,8 +1122,8 @@ The secret must be of type kubernetes.io/dockerconfigjson.</p>
 <td>
 <code>verify</code><br>
 <em>
-<a href="#source.toolkit.fluxcd.io/v1beta2.OCIRepositoryVerification">
-OCIRepositoryVerification
+<a href="https://pkg.go.dev/github.com/fluxcd/source-controller/api/v1#OCIRepositoryVerification">
+github.com/fluxcd/source-controller/api/v1.OCIRepositoryVerification
 </a>
 </em>
 </td>
@@ -2386,8 +2386,8 @@ NOTE: Not implemented, provisional as of <a href="https://github.com/fluxcd/flux
 <td>
 <code>verify</code><br>
 <em>
-<a href="#source.toolkit.fluxcd.io/v1beta2.OCIRepositoryVerification">
-OCIRepositoryVerification
+<a href="https://pkg.go.dev/github.com/fluxcd/source-controller/api/v1#OCIRepositoryVerification">
+github.com/fluxcd/source-controller/api/v1.OCIRepositoryVerification
 </a>
 </em>
 </td>
@@ -3096,8 +3096,8 @@ The secret must be of type kubernetes.io/dockerconfigjson.</p>
 <td>
 <code>verify</code><br>
 <em>
-<a href="#source.toolkit.fluxcd.io/v1beta2.OCIRepositoryVerification">
-OCIRepositoryVerification
+<a href="https://pkg.go.dev/github.com/fluxcd/source-controller/api/v1#OCIRepositoryVerification">
+github.com/fluxcd/source-controller/api/v1.OCIRepositoryVerification
 </a>
 </em>
 </td>
@@ -3351,119 +3351,6 @@ github.com/fluxcd/pkg/apis/meta.ReconcileRequestStatus
 <p>
 (Members of <code>ReconcileRequestStatus</code> are embedded into this type.)
 </p>
-</td>
-</tr>
-</tbody>
-</table>
-</div>
-</div>
-<h3 id="source.toolkit.fluxcd.io/v1beta2.OCIRepositoryVerification">OCIRepositoryVerification
-</h3>
-<p>
-(<em>Appears on:</em>
-<a href="#source.toolkit.fluxcd.io/v1beta2.HelmChartSpec">HelmChartSpec</a>, 
-<a href="#source.toolkit.fluxcd.io/v1beta2.OCIRepositorySpec">OCIRepositorySpec</a>)
-</p>
-<p>OCIRepositoryVerification verifies the authenticity of an OCI Artifact</p>
-<div class="md-typeset__scrollwrap">
-<div class="md-typeset__table">
-<table>
-<thead>
-<tr>
-<th>Field</th>
-<th>Description</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>
-<code>provider</code><br>
-<em>
-string
-</em>
-</td>
-<td>
-<p>Provider specifies the technology used to sign the OCI Artifact.</p>
-</td>
-</tr>
-<tr>
-<td>
-<code>secretRef</code><br>
-<em>
-<a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/meta#LocalObjectReference">
-github.com/fluxcd/pkg/apis/meta.LocalObjectReference
-</a>
-</em>
-</td>
-<td>
-<em>(Optional)</em>
-<p>SecretRef specifies the Kubernetes Secret containing the
-trusted public keys.</p>
-</td>
-</tr>
-<tr>
-<td>
-<code>matchOIDCIdentity</code><br>
-<em>
-<a href="#source.toolkit.fluxcd.io/v1beta2.OIDCIdentityMatch">
-[]OIDCIdentityMatch
-</a>
-</em>
-</td>
-<td>
-<em>(Optional)</em>
-<p>MatchOIDCIdentity specifies the identity matching criteria to use
-while verifying an OCI artifact which was signed using Cosign keyless
-signing. The artifact&rsquo;s identity is deemed to be verified if any of the
-specified matchers match against the identity.</p>
-</td>
-</tr>
-</tbody>
-</table>
-</div>
-</div>
-<h3 id="source.toolkit.fluxcd.io/v1beta2.OIDCIdentityMatch">OIDCIdentityMatch
-</h3>
-<p>
-(<em>Appears on:</em>
-<a href="#source.toolkit.fluxcd.io/v1beta2.OCIRepositoryVerification">OCIRepositoryVerification</a>)
-</p>
-<p>OIDCIdentityMatch specifies options for verifying the certificate identity,
-i.e. the issuer and the subject of the certificate.</p>
-<div class="md-typeset__scrollwrap">
-<div class="md-typeset__table">
-<table>
-<thead>
-<tr>
-<th>Field</th>
-<th>Description</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>
-<code>issuer</code><br>
-<em>
-string
-</em>
-</td>
-<td>
-<p>Issuer specifies the regex pattern to match against to verify
-the OIDC issuer in the Fulcio certificate. The pattern must be a
-valid Go regular expression.</p>
-</td>
-</tr>
-<tr>
-<td>
-<code>subject</code><br>
-<em>
-string
-</em>
-</td>
-<td>
-<p>Subject specifies the regex pattern to match against to verify
-the identity subject in the Fulcio certificate. The pattern must
-be a valid Go regular expression.</p>
 </td>
 </tr>
 </tbody>

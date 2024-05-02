@@ -10,6 +10,10 @@
 Resource Types:
 <ul class="simple"><li>
 <a href="#source.toolkit.fluxcd.io/v1.GitRepository">GitRepository</a>
+</li><li>
+<a href="#source.toolkit.fluxcd.io/v1.HelmChart">HelmChart</a>
+</li><li>
+<a href="#source.toolkit.fluxcd.io/v1.HelmRepository">HelmRepository</a>
 </li></ul>
 <h3 id="source.toolkit.fluxcd.io/v1.GitRepository">GitRepository
 </h3>
@@ -246,11 +250,470 @@ GitRepositoryStatus
 </table>
 </div>
 </div>
+<h3 id="source.toolkit.fluxcd.io/v1.HelmChart">HelmChart
+</h3>
+<p>HelmChart is the Schema for the helmcharts API.</p>
+<div class="md-typeset__scrollwrap">
+<div class="md-typeset__table">
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>apiVersion</code><br>
+string</td>
+<td>
+<code>source.toolkit.fluxcd.io/v1</code>
+</td>
+</tr>
+<tr>
+<td>
+<code>kind</code><br>
+string
+</td>
+<td>
+<code>HelmChart</code>
+</td>
+</tr>
+<tr>
+<td>
+<code>metadata</code><br>
+<em>
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.19/#objectmeta-v1-meta">
+Kubernetes meta/v1.ObjectMeta
+</a>
+</em>
+</td>
+<td>
+Refer to the Kubernetes API documentation for the fields of the
+<code>metadata</code> field.
+</td>
+</tr>
+<tr>
+<td>
+<code>spec</code><br>
+<em>
+<a href="#source.toolkit.fluxcd.io/v1.HelmChartSpec">
+HelmChartSpec
+</a>
+</em>
+</td>
+<td>
+<br/>
+<br/>
+<table>
+<tr>
+<td>
+<code>chart</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<p>Chart is the name or path the Helm chart is available at in the
+SourceRef.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>version</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Version is the chart version semver expression, ignored for charts from
+GitRepository and Bucket sources. Defaults to latest when omitted.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>sourceRef</code><br>
+<em>
+<a href="#source.toolkit.fluxcd.io/v1.LocalHelmChartSourceReference">
+LocalHelmChartSourceReference
+</a>
+</em>
+</td>
+<td>
+<p>SourceRef is the reference to the Source the chart is available at.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>interval</code><br>
+<em>
+<a href="https://pkg.go.dev/k8s.io/apimachinery/pkg/apis/meta/v1#Duration">
+Kubernetes meta/v1.Duration
+</a>
+</em>
+</td>
+<td>
+<p>Interval at which the HelmChart SourceRef is checked for updates.
+This interval is approximate and may be subject to jitter to ensure
+efficient use of resources.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>reconcileStrategy</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>ReconcileStrategy determines what enables the creation of a new artifact.
+Valid values are (&lsquo;ChartVersion&rsquo;, &lsquo;Revision&rsquo;).
+See the documentation of the values for an explanation on their behavior.
+Defaults to ChartVersion when omitted.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>valuesFiles</code><br>
+<em>
+[]string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>ValuesFiles is an alternative list of values files to use as the chart
+values (values.yaml is not included by default), expected to be a
+relative path in the SourceRef.
+Values files are merged in the order of this list with the last file
+overriding the first. Ignored when omitted.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>ignoreMissingValuesFiles</code><br>
+<em>
+bool
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>IgnoreMissingValuesFiles controls whether to silently ignore missing values
+files rather than failing.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>suspend</code><br>
+<em>
+bool
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Suspend tells the controller to suspend the reconciliation of this
+source.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>verify</code><br>
+<em>
+<a href="#source.toolkit.fluxcd.io/v1.OCIRepositoryVerification">
+OCIRepositoryVerification
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Verify contains the secret name containing the trusted public keys
+used to verify the signature and specifies which provider to use to check
+whether OCI image is authentic.
+This field is only supported when using HelmRepository source with spec.type &lsquo;oci&rsquo;.
+Chart dependencies, which are not bundled in the umbrella chart artifact, are not verified.</p>
+</td>
+</tr>
+</table>
+</td>
+</tr>
+<tr>
+<td>
+<code>status</code><br>
+<em>
+<a href="#source.toolkit.fluxcd.io/v1.HelmChartStatus">
+HelmChartStatus
+</a>
+</em>
+</td>
+<td>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<h3 id="source.toolkit.fluxcd.io/v1.HelmRepository">HelmRepository
+</h3>
+<p>HelmRepository is the Schema for the helmrepositories API.</p>
+<div class="md-typeset__scrollwrap">
+<div class="md-typeset__table">
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>apiVersion</code><br>
+string</td>
+<td>
+<code>source.toolkit.fluxcd.io/v1</code>
+</td>
+</tr>
+<tr>
+<td>
+<code>kind</code><br>
+string
+</td>
+<td>
+<code>HelmRepository</code>
+</td>
+</tr>
+<tr>
+<td>
+<code>metadata</code><br>
+<em>
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.19/#objectmeta-v1-meta">
+Kubernetes meta/v1.ObjectMeta
+</a>
+</em>
+</td>
+<td>
+Refer to the Kubernetes API documentation for the fields of the
+<code>metadata</code> field.
+</td>
+</tr>
+<tr>
+<td>
+<code>spec</code><br>
+<em>
+<a href="#source.toolkit.fluxcd.io/v1.HelmRepositorySpec">
+HelmRepositorySpec
+</a>
+</em>
+</td>
+<td>
+<br/>
+<br/>
+<table>
+<tr>
+<td>
+<code>url</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<p>URL of the Helm repository, a valid URL contains at least a protocol and
+host.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>secretRef</code><br>
+<em>
+<a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/meta#LocalObjectReference">
+github.com/fluxcd/pkg/apis/meta.LocalObjectReference
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>SecretRef specifies the Secret containing authentication credentials
+for the HelmRepository.
+For HTTP/S basic auth the secret must contain &lsquo;username&rsquo; and &lsquo;password&rsquo;
+fields.
+Support for TLS auth using the &lsquo;certFile&rsquo; and &lsquo;keyFile&rsquo;, and/or &lsquo;caFile&rsquo;
+keys is deprecated. Please use <code>.spec.certSecretRef</code> instead.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>certSecretRef</code><br>
+<em>
+<a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/meta#LocalObjectReference">
+github.com/fluxcd/pkg/apis/meta.LocalObjectReference
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>CertSecretRef can be given the name of a Secret containing
+either or both of</p>
+<ul>
+<li>a PEM-encoded client certificate (<code>tls.crt</code>) and private
+key (<code>tls.key</code>);</li>
+<li>a PEM-encoded CA certificate (<code>ca.crt</code>)</li>
+</ul>
+<p>and whichever are supplied, will be used for connecting to the
+registry. The client cert and key are useful if you are
+authenticating with a certificate; the CA cert is useful if
+you are using a self-signed server certificate. The Secret must
+be of type <code>Opaque</code> or <code>kubernetes.io/tls</code>.</p>
+<p>It takes precedence over the values specified in the Secret referred
+to by <code>.spec.secretRef</code>.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>passCredentials</code><br>
+<em>
+bool
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>PassCredentials allows the credentials from the SecretRef to be passed
+on to a host that does not match the host as defined in URL.
+This may be required if the host of the advertised chart URLs in the
+index differ from the defined URL.
+Enabling this should be done with caution, as it can potentially result
+in credentials getting stolen in a MITM-attack.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>interval</code><br>
+<em>
+<a href="https://pkg.go.dev/k8s.io/apimachinery/pkg/apis/meta/v1#Duration">
+Kubernetes meta/v1.Duration
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Interval at which the HelmRepository URL is checked for updates.
+This interval is approximate and may be subject to jitter to ensure
+efficient use of resources.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>insecure</code><br>
+<em>
+bool
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Insecure allows connecting to a non-TLS HTTP container registry.
+This field is only taken into account if the .spec.type field is set to &lsquo;oci&rsquo;.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>timeout</code><br>
+<em>
+<a href="https://pkg.go.dev/k8s.io/apimachinery/pkg/apis/meta/v1#Duration">
+Kubernetes meta/v1.Duration
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Timeout is used for the index fetch operation for an HTTPS helm repository,
+and for remote OCI Repository operations like pulling for an OCI helm
+chart by the associated HelmChart.
+Its default value is 60s.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>suspend</code><br>
+<em>
+bool
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Suspend tells the controller to suspend the reconciliation of this
+HelmRepository.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>accessFrom</code><br>
+<em>
+<a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/acl#AccessFrom">
+github.com/fluxcd/pkg/apis/acl.AccessFrom
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>AccessFrom specifies an Access Control List for allowing cross-namespace
+references to this object.
+NOTE: Not implemented, provisional as of <a href="https://github.com/fluxcd/flux2/pull/2092">https://github.com/fluxcd/flux2/pull/2092</a></p>
+</td>
+</tr>
+<tr>
+<td>
+<code>type</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Type of the HelmRepository.
+When this field is set to  &ldquo;oci&rdquo;, the URL field value must be prefixed with &ldquo;oci://&rdquo;.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>provider</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Provider used for authentication, can be &lsquo;aws&rsquo;, &lsquo;azure&rsquo;, &lsquo;gcp&rsquo; or &lsquo;generic&rsquo;.
+This field is optional, and only taken into account if the .spec.type field is set to &lsquo;oci&rsquo;.
+When not specified, defaults to &lsquo;generic&rsquo;.</p>
+</td>
+</tr>
+</table>
+</td>
+</tr>
+<tr>
+<td>
+<code>status</code><br>
+<em>
+<a href="#source.toolkit.fluxcd.io/v1.HelmRepositoryStatus">
+HelmRepositoryStatus
+</a>
+</em>
+</td>
+<td>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
 <h3 id="source.toolkit.fluxcd.io/v1.Artifact">Artifact
 </h3>
 <p>
 (<em>Appears on:</em>
-<a href="#source.toolkit.fluxcd.io/v1.GitRepositoryStatus">GitRepositoryStatus</a>)
+<a href="#source.toolkit.fluxcd.io/v1.GitRepositoryStatus">GitRepositoryStatus</a>, 
+<a href="#source.toolkit.fluxcd.io/v1.HelmChartStatus">HelmChartStatus</a>, 
+<a href="#source.toolkit.fluxcd.io/v1.HelmRepositoryStatus">HelmRepositoryStatus</a>)
 </p>
 <p>Artifact represents the output of a Source reconciliation.</p>
 <div class="md-typeset__scrollwrap">
@@ -893,6 +1356,745 @@ authors.</p>
 <a href="#source.toolkit.fluxcd.io/v1.GitRepositoryVerification">GitRepositoryVerification</a>)
 </p>
 <p>GitVerificationMode specifies the verification mode for a Git repository.</p>
+<h3 id="source.toolkit.fluxcd.io/v1.HelmChartSpec">HelmChartSpec
+</h3>
+<p>
+(<em>Appears on:</em>
+<a href="#source.toolkit.fluxcd.io/v1.HelmChart">HelmChart</a>)
+</p>
+<p>HelmChartSpec specifies the desired state of a Helm chart.</p>
+<div class="md-typeset__scrollwrap">
+<div class="md-typeset__table">
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>chart</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<p>Chart is the name or path the Helm chart is available at in the
+SourceRef.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>version</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Version is the chart version semver expression, ignored for charts from
+GitRepository and Bucket sources. Defaults to latest when omitted.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>sourceRef</code><br>
+<em>
+<a href="#source.toolkit.fluxcd.io/v1.LocalHelmChartSourceReference">
+LocalHelmChartSourceReference
+</a>
+</em>
+</td>
+<td>
+<p>SourceRef is the reference to the Source the chart is available at.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>interval</code><br>
+<em>
+<a href="https://pkg.go.dev/k8s.io/apimachinery/pkg/apis/meta/v1#Duration">
+Kubernetes meta/v1.Duration
+</a>
+</em>
+</td>
+<td>
+<p>Interval at which the HelmChart SourceRef is checked for updates.
+This interval is approximate and may be subject to jitter to ensure
+efficient use of resources.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>reconcileStrategy</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>ReconcileStrategy determines what enables the creation of a new artifact.
+Valid values are (&lsquo;ChartVersion&rsquo;, &lsquo;Revision&rsquo;).
+See the documentation of the values for an explanation on their behavior.
+Defaults to ChartVersion when omitted.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>valuesFiles</code><br>
+<em>
+[]string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>ValuesFiles is an alternative list of values files to use as the chart
+values (values.yaml is not included by default), expected to be a
+relative path in the SourceRef.
+Values files are merged in the order of this list with the last file
+overriding the first. Ignored when omitted.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>ignoreMissingValuesFiles</code><br>
+<em>
+bool
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>IgnoreMissingValuesFiles controls whether to silently ignore missing values
+files rather than failing.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>suspend</code><br>
+<em>
+bool
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Suspend tells the controller to suspend the reconciliation of this
+source.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>verify</code><br>
+<em>
+<a href="#source.toolkit.fluxcd.io/v1.OCIRepositoryVerification">
+OCIRepositoryVerification
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Verify contains the secret name containing the trusted public keys
+used to verify the signature and specifies which provider to use to check
+whether OCI image is authentic.
+This field is only supported when using HelmRepository source with spec.type &lsquo;oci&rsquo;.
+Chart dependencies, which are not bundled in the umbrella chart artifact, are not verified.</p>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<h3 id="source.toolkit.fluxcd.io/v1.HelmChartStatus">HelmChartStatus
+</h3>
+<p>
+(<em>Appears on:</em>
+<a href="#source.toolkit.fluxcd.io/v1.HelmChart">HelmChart</a>)
+</p>
+<p>HelmChartStatus records the observed state of the HelmChart.</p>
+<div class="md-typeset__scrollwrap">
+<div class="md-typeset__table">
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>observedGeneration</code><br>
+<em>
+int64
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>ObservedGeneration is the last observed generation of the HelmChart
+object.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>observedSourceArtifactRevision</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>ObservedSourceArtifactRevision is the last observed Artifact.Revision
+of the HelmChartSpec.SourceRef.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>observedChartName</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>ObservedChartName is the last observed chart name as specified by the
+resolved chart reference.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>observedValuesFiles</code><br>
+<em>
+[]string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>ObservedValuesFiles are the observed value files of the last successful
+reconciliation.
+It matches the chart in the last successfully reconciled artifact.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>conditions</code><br>
+<em>
+<a href="https://pkg.go.dev/k8s.io/apimachinery/pkg/apis/meta/v1#Condition">
+[]Kubernetes meta/v1.Condition
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Conditions holds the conditions for the HelmChart.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>url</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>URL is the dynamic fetch link for the latest Artifact.
+It is provided on a &ldquo;best effort&rdquo; basis, and using the precise
+BucketStatus.Artifact data is recommended.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>artifact</code><br>
+<em>
+<a href="#source.toolkit.fluxcd.io/v1.Artifact">
+Artifact
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Artifact represents the output of the last successful reconciliation.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>ReconcileRequestStatus</code><br>
+<em>
+<a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/meta#ReconcileRequestStatus">
+github.com/fluxcd/pkg/apis/meta.ReconcileRequestStatus
+</a>
+</em>
+</td>
+<td>
+<p>
+(Members of <code>ReconcileRequestStatus</code> are embedded into this type.)
+</p>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<h3 id="source.toolkit.fluxcd.io/v1.HelmRepositorySpec">HelmRepositorySpec
+</h3>
+<p>
+(<em>Appears on:</em>
+<a href="#source.toolkit.fluxcd.io/v1.HelmRepository">HelmRepository</a>)
+</p>
+<p>HelmRepositorySpec specifies the required configuration to produce an
+Artifact for a Helm repository index YAML.</p>
+<div class="md-typeset__scrollwrap">
+<div class="md-typeset__table">
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>url</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<p>URL of the Helm repository, a valid URL contains at least a protocol and
+host.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>secretRef</code><br>
+<em>
+<a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/meta#LocalObjectReference">
+github.com/fluxcd/pkg/apis/meta.LocalObjectReference
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>SecretRef specifies the Secret containing authentication credentials
+for the HelmRepository.
+For HTTP/S basic auth the secret must contain &lsquo;username&rsquo; and &lsquo;password&rsquo;
+fields.
+Support for TLS auth using the &lsquo;certFile&rsquo; and &lsquo;keyFile&rsquo;, and/or &lsquo;caFile&rsquo;
+keys is deprecated. Please use <code>.spec.certSecretRef</code> instead.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>certSecretRef</code><br>
+<em>
+<a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/meta#LocalObjectReference">
+github.com/fluxcd/pkg/apis/meta.LocalObjectReference
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>CertSecretRef can be given the name of a Secret containing
+either or both of</p>
+<ul>
+<li>a PEM-encoded client certificate (<code>tls.crt</code>) and private
+key (<code>tls.key</code>);</li>
+<li>a PEM-encoded CA certificate (<code>ca.crt</code>)</li>
+</ul>
+<p>and whichever are supplied, will be used for connecting to the
+registry. The client cert and key are useful if you are
+authenticating with a certificate; the CA cert is useful if
+you are using a self-signed server certificate. The Secret must
+be of type <code>Opaque</code> or <code>kubernetes.io/tls</code>.</p>
+<p>It takes precedence over the values specified in the Secret referred
+to by <code>.spec.secretRef</code>.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>passCredentials</code><br>
+<em>
+bool
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>PassCredentials allows the credentials from the SecretRef to be passed
+on to a host that does not match the host as defined in URL.
+This may be required if the host of the advertised chart URLs in the
+index differ from the defined URL.
+Enabling this should be done with caution, as it can potentially result
+in credentials getting stolen in a MITM-attack.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>interval</code><br>
+<em>
+<a href="https://pkg.go.dev/k8s.io/apimachinery/pkg/apis/meta/v1#Duration">
+Kubernetes meta/v1.Duration
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Interval at which the HelmRepository URL is checked for updates.
+This interval is approximate and may be subject to jitter to ensure
+efficient use of resources.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>insecure</code><br>
+<em>
+bool
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Insecure allows connecting to a non-TLS HTTP container registry.
+This field is only taken into account if the .spec.type field is set to &lsquo;oci&rsquo;.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>timeout</code><br>
+<em>
+<a href="https://pkg.go.dev/k8s.io/apimachinery/pkg/apis/meta/v1#Duration">
+Kubernetes meta/v1.Duration
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Timeout is used for the index fetch operation for an HTTPS helm repository,
+and for remote OCI Repository operations like pulling for an OCI helm
+chart by the associated HelmChart.
+Its default value is 60s.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>suspend</code><br>
+<em>
+bool
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Suspend tells the controller to suspend the reconciliation of this
+HelmRepository.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>accessFrom</code><br>
+<em>
+<a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/acl#AccessFrom">
+github.com/fluxcd/pkg/apis/acl.AccessFrom
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>AccessFrom specifies an Access Control List for allowing cross-namespace
+references to this object.
+NOTE: Not implemented, provisional as of <a href="https://github.com/fluxcd/flux2/pull/2092">https://github.com/fluxcd/flux2/pull/2092</a></p>
+</td>
+</tr>
+<tr>
+<td>
+<code>type</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Type of the HelmRepository.
+When this field is set to  &ldquo;oci&rdquo;, the URL field value must be prefixed with &ldquo;oci://&rdquo;.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>provider</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Provider used for authentication, can be &lsquo;aws&rsquo;, &lsquo;azure&rsquo;, &lsquo;gcp&rsquo; or &lsquo;generic&rsquo;.
+This field is optional, and only taken into account if the .spec.type field is set to &lsquo;oci&rsquo;.
+When not specified, defaults to &lsquo;generic&rsquo;.</p>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<h3 id="source.toolkit.fluxcd.io/v1.HelmRepositoryStatus">HelmRepositoryStatus
+</h3>
+<p>
+(<em>Appears on:</em>
+<a href="#source.toolkit.fluxcd.io/v1.HelmRepository">HelmRepository</a>)
+</p>
+<p>HelmRepositoryStatus records the observed state of the HelmRepository.</p>
+<div class="md-typeset__scrollwrap">
+<div class="md-typeset__table">
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>observedGeneration</code><br>
+<em>
+int64
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>ObservedGeneration is the last observed generation of the HelmRepository
+object.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>conditions</code><br>
+<em>
+<a href="https://pkg.go.dev/k8s.io/apimachinery/pkg/apis/meta/v1#Condition">
+[]Kubernetes meta/v1.Condition
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Conditions holds the conditions for the HelmRepository.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>url</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>URL is the dynamic fetch link for the latest Artifact.
+It is provided on a &ldquo;best effort&rdquo; basis, and using the precise
+HelmRepositoryStatus.Artifact data is recommended.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>artifact</code><br>
+<em>
+<a href="#source.toolkit.fluxcd.io/v1.Artifact">
+Artifact
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Artifact represents the last successful HelmRepository reconciliation.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>ReconcileRequestStatus</code><br>
+<em>
+<a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/meta#ReconcileRequestStatus">
+github.com/fluxcd/pkg/apis/meta.ReconcileRequestStatus
+</a>
+</em>
+</td>
+<td>
+<p>
+(Members of <code>ReconcileRequestStatus</code> are embedded into this type.)
+</p>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<h3 id="source.toolkit.fluxcd.io/v1.LocalHelmChartSourceReference">LocalHelmChartSourceReference
+</h3>
+<p>
+(<em>Appears on:</em>
+<a href="#source.toolkit.fluxcd.io/v1.HelmChartSpec">HelmChartSpec</a>)
+</p>
+<p>LocalHelmChartSourceReference contains enough information to let you locate
+the typed referenced object at namespace level.</p>
+<div class="md-typeset__scrollwrap">
+<div class="md-typeset__table">
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>apiVersion</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>APIVersion of the referent.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>kind</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<p>Kind of the referent, valid values are (&lsquo;HelmRepository&rsquo;, &lsquo;GitRepository&rsquo;,
+&lsquo;Bucket&rsquo;).</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>name</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<p>Name of the referent.</p>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<h3 id="source.toolkit.fluxcd.io/v1.OCIRepositoryVerification">OCIRepositoryVerification
+</h3>
+<p>
+(<em>Appears on:</em>
+<a href="#source.toolkit.fluxcd.io/v1.HelmChartSpec">HelmChartSpec</a>)
+</p>
+<p>OCIRepositoryVerification verifies the authenticity of an OCI Artifact</p>
+<div class="md-typeset__scrollwrap">
+<div class="md-typeset__table">
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>provider</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<p>Provider specifies the technology used to sign the OCI Artifact.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>secretRef</code><br>
+<em>
+<a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/meta#LocalObjectReference">
+github.com/fluxcd/pkg/apis/meta.LocalObjectReference
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>SecretRef specifies the Kubernetes Secret containing the
+trusted public keys.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>matchOIDCIdentity</code><br>
+<em>
+<a href="#source.toolkit.fluxcd.io/v1.OIDCIdentityMatch">
+[]OIDCIdentityMatch
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>MatchOIDCIdentity specifies the identity matching criteria to use
+while verifying an OCI artifact which was signed using Cosign keyless
+signing. The artifact&rsquo;s identity is deemed to be verified if any of the
+specified matchers match against the identity.</p>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<h3 id="source.toolkit.fluxcd.io/v1.OIDCIdentityMatch">OIDCIdentityMatch
+</h3>
+<p>
+(<em>Appears on:</em>
+<a href="#source.toolkit.fluxcd.io/v1.OCIRepositoryVerification">OCIRepositoryVerification</a>)
+</p>
+<p>OIDCIdentityMatch specifies options for verifying the certificate identity,
+i.e. the issuer and the subject of the certificate.</p>
+<div class="md-typeset__scrollwrap">
+<div class="md-typeset__table">
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>issuer</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<p>Issuer specifies the regex pattern to match against to verify
+the OIDC issuer in the Fulcio certificate. The pattern must be a
+valid Go regular expression.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>subject</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<p>Subject specifies the regex pattern to match against to verify
+the identity subject in the Fulcio certificate. The pattern must
+be a valid Go regular expression.</p>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
 <h3 id="source.toolkit.fluxcd.io/v1.Source">Source
 </h3>
 <p>Source interface must be supported by all API types.

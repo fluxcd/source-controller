@@ -1393,7 +1393,7 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignatureNotation(t *testi
 				},
 				Spec: ociv1.OCIRepositorySpec{
 					URL: fmt.Sprintf("oci://%s/podinfo", server.registryHost),
-					Verify: &ociv1.OCIRepositoryVerification{
+					Verify: &sourcev1.OCIRepositoryVerification{
 						Provider: "notation",
 					},
 					Interval: metav1.Duration{Duration: interval},
@@ -1713,7 +1713,7 @@ func TestOCIRepository_reconcileSource_verifyOCISourceTrustPolicyNotation(t *tes
 				},
 				Spec: ociv1.OCIRepositorySpec{
 					URL: fmt.Sprintf("oci://%s/podinfo", server.registryHost),
-					Verify: &ociv1.OCIRepositoryVerification{
+					Verify: &sourcev1.OCIRepositoryVerification{
 						Provider: "notation",
 					},
 					Interval: metav1.Duration{Duration: interval},
@@ -2037,7 +2037,7 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignatureCosign(t *testing
 				},
 				Spec: ociv1.OCIRepositorySpec{
 					URL: fmt.Sprintf("oci://%s/podinfo", server.registryHost),
-					Verify: &ociv1.OCIRepositoryVerification{
+					Verify: &sourcev1.OCIRepositoryVerification{
 						Provider: "cosign",
 					},
 					Interval: metav1.Duration{Duration: interval},
@@ -2159,7 +2159,7 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignature_keyless(t *testi
 			},
 			want: sreconcile.ResultSuccess,
 			beforeFunc: func(obj *ociv1.OCIRepository) {
-				obj.Spec.Verify.MatchOIDCIdentity = []ociv1.OIDCIdentityMatch{
+				obj.Spec.Verify.MatchOIDCIdentity = []sourcev1.OIDCIdentityMatch{
 					{
 
 						Subject: "^https://github.com/stefanprodan/podinfo.*$",
@@ -2181,7 +2181,7 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignature_keyless(t *testi
 			},
 			want: sreconcile.ResultSuccess,
 			beforeFunc: func(obj *ociv1.OCIRepository) {
-				obj.Spec.Verify.MatchOIDCIdentity = []ociv1.OIDCIdentityMatch{
+				obj.Spec.Verify.MatchOIDCIdentity = []sourcev1.OIDCIdentityMatch{
 					{
 						Subject: "intruder",
 						Issuer:  "^https://honeypot.com$",
@@ -2208,7 +2208,7 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignature_keyless(t *testi
 			wantErr: true,
 			want:    sreconcile.ResultEmpty,
 			beforeFunc: func(obj *ociv1.OCIRepository) {
-				obj.Spec.Verify.MatchOIDCIdentity = []ociv1.OIDCIdentityMatch{
+				obj.Spec.Verify.MatchOIDCIdentity = []sourcev1.OIDCIdentityMatch{
 					{
 						Subject: "intruder",
 						Issuer:  "^https://honeypot.com$",
@@ -2260,7 +2260,7 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignature_keyless(t *testi
 				},
 				Spec: ociv1.OCIRepositorySpec{
 					URL: "oci://ghcr.io/stefanprodan/manifests/podinfo",
-					Verify: &ociv1.OCIRepositoryVerification{
+					Verify: &sourcev1.OCIRepositoryVerification{
 						Provider: "cosign",
 					},
 					Interval:  metav1.Duration{Duration: interval},

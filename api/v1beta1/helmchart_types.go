@@ -234,6 +234,7 @@ func (in *HelmChart) GetValuesFiles() []string {
 // +kubebuilder:object:root=true
 // +kubebuilder:resource:shortName=hc
 // +kubebuilder:subresource:status
+// +kubebuilder:deprecatedversion:warning="v1beta1 HelmChart is deprecated, upgrade to v1"
 // +kubebuilder:printcolumn:name="Chart",type=string,JSONPath=`.spec.chart`
 // +kubebuilder:printcolumn:name="Version",type=string,JSONPath=`.spec.version`
 // +kubebuilder:printcolumn:name="Source Kind",type=string,JSONPath=`.spec.sourceRef.kind`

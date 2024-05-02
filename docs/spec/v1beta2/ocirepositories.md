@@ -157,9 +157,8 @@ to the IAM role when using IRSA.
 
 #### Azure
 
-The `azure` provider can be used to authenticate automatically using Workload Identity, Kubelet Managed
-Identity or Azure Active Directory pod-managed identity (aad-pod-identity),
-and by extension gain access to ACR.
+The `azure` provider can be used to authenticate automatically using Workload Identity and Kubelet Managed
+Identity to gain access to ACR.
 
 ##### Kubelet Managed Identity
 
@@ -214,41 +213,6 @@ Create an identity that has access to ACR. Next, establish
 a federated identity between the source-controller ServiceAccount and the
 identity. Patch the source-controller Deployment and ServiceAccount as shown in the patch
 above. Please take a look at this [guide](https://azure.github.io/azure-workload-identity/docs/quick-start.html#6-establish-federated-identity-credential-between-the-identity-and-the-service-account-issuer--subject).
-
-##### Deprecated: AAD Pod Identity
-
-**Note:** The AAD Pod Identity project will be archived in [September 2023](https://github.com/Azure/aad-pod-identity#-announcement),
-and you are advised to use Workload Identity instead.
-
-When using aad-pod-identity to enable access to ACR, add the following patch to
-your bootstrap repository, in the `flux-system/kustomization.yaml` file:
-
-```yaml
-apiVersion: kustomize.config.k8s.io/v1beta1
-kind: Kustomization
-resources:
-  - gotk-components.yaml
-  - gotk-sync.yaml
-patches:
-  - patch: |
-      - op: add
-        path: /spec/template/metadata/labels/aadpodidbinding
-        value: <identity-name>
-    target:
-      kind: Deployment
-      name: source-controller
-```
-
-When using pod-managed identity on an AKS cluster, AAD Pod Identity
-has to be used to give the `source-controller` pod access to the ACR.
-To do this, you have to install `aad-pod-identity` on your cluster, create a managed identity
-that has access to the container registry (this can also be the Kubelet identity
-if it has `AcrPull` role assignment on the ACR), create an `AzureIdentity` and `AzureIdentityBinding`
-that describe the managed identity and then label the `source-controller` deployment
-with the name of the AzureIdentity as shown in the patch above. Please take a look
-at [this guide](https://azure.github.io/aad-pod-identity/docs/) or
-[this one](https://docs.microsoft.com/en-us/azure/aks/use-azure-ad-pod-identity)
-if you want to use AKS pod-managed identities add-on that is in preview.
 
 #### GCP
 

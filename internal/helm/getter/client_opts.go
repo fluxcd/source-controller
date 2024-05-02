@@ -32,7 +32,8 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	helmv1 "github.com/fluxcd/source-controller/api/v1beta2"
+	sourcev1 "github.com/fluxcd/source-controller/api/v1"
+	sourcev1beta2 "github.com/fluxcd/source-controller/api/v1beta2"
 	"github.com/fluxcd/source-controller/internal/helm/registry"
 	soci "github.com/fluxcd/source-controller/internal/oci"
 	stls "github.com/fluxcd/source-controller/internal/tls"
@@ -69,7 +70,7 @@ func (o ClientOpts) MustLoginToRegistry() bool {
 // auth mechanisms.
 // A temporary directory is created to store the certs files if needed and its path is returned along with the options object. It is the
 // caller's responsibility to clean up the directory.
-func GetClientOpts(ctx context.Context, c client.Client, obj *helmv1.HelmRepository, url string) (*ClientOpts, string, error) {
+func GetClientOpts(ctx context.Context, c client.Client, obj *sourcev1.HelmRepository, url string) (*ClientOpts, string, error) {
 	hrOpts := &ClientOpts{
 		GetterOpts: []helmgetter.Option{
 			helmgetter.WithURL(url),
@@ -77,7 +78,7 @@ func GetClientOpts(ctx context.Context, c client.Client, obj *helmv1.HelmReposit
 			helmgetter.WithPassCredentialsAll(obj.Spec.PassCredentials),
 		},
 	}
-	ociRepo := obj.Spec.Type == helmv1.HelmRepositoryTypeOCI
+	ociRepo := obj.Spec.Type == sourcev1.HelmRepositoryTypeOCI
 
 	var (
 		certSecret *corev1.Secret
@@ -135,7 +136,7 @@ func GetClientOpts(ctx context.Context, c client.Client, obj *helmv1.HelmReposit
 				return nil, "", fmt.Errorf("failed to configure login options: %w", err)
 			}
 		}
-	} else if obj.Spec.Provider != helmv1.GenericOCIProvider && obj.Spec.Type == helmv1.HelmRepositoryTypeOCI && ociRepo {
+	} else if obj.Spec.Provider != sourcev1beta2.GenericOCIProvider && obj.Spec.Type == sourcev1.HelmRepositoryTypeOCI && ociRepo {
 		authenticator, authErr := soci.OIDCAuth(ctx, obj.Spec.URL, obj.Spec.Provider)
 		if authErr != nil && !errors.Is(authErr, oci.ErrUnconfiguredProvider) {
 			return nil, "", fmt.Errorf("failed to get credential from '%s': %w", obj.Spec.Provider, authErr)
