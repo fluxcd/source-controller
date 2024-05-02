@@ -393,21 +393,6 @@ overriding the first. Ignored when omitted.</p>
 </tr>
 <tr>
 <td>
-<code>valuesFile</code><br>
-<em>
-string
-</em>
-</td>
-<td>
-<em>(Optional)</em>
-<p>ValuesFile is an alternative values file to use as the default chart
-values, expected to be a relative path in the SourceRef. Deprecated in
-favor of ValuesFiles, for backwards compatibility the file specified here
-is merged before the ValuesFiles items. Ignored when omitted.</p>
-</td>
-</tr>
-<tr>
-<td>
 <code>ignoreMissingValuesFiles</code><br>
 <em>
 bool
@@ -430,22 +415,6 @@ bool
 <em>(Optional)</em>
 <p>Suspend tells the controller to suspend the reconciliation of this
 source.</p>
-</td>
-</tr>
-<tr>
-<td>
-<code>accessFrom</code><br>
-<em>
-<a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/acl#AccessFrom">
-github.com/fluxcd/pkg/apis/acl.AccessFrom
-</a>
-</em>
-</td>
-<td>
-<em>(Optional)</em>
-<p>AccessFrom specifies an Access Control List for allowing cross-namespace
-references to this object.
-NOTE: Not implemented, provisional as of <a href="https://github.com/fluxcd/flux2/pull/2092">https://github.com/fluxcd/flux2/pull/2092</a></p>
 </td>
 </tr>
 <tr>
@@ -1490,21 +1459,6 @@ overriding the first. Ignored when omitted.</p>
 </tr>
 <tr>
 <td>
-<code>valuesFile</code><br>
-<em>
-string
-</em>
-</td>
-<td>
-<em>(Optional)</em>
-<p>ValuesFile is an alternative values file to use as the default chart
-values, expected to be a relative path in the SourceRef. Deprecated in
-favor of ValuesFiles, for backwards compatibility the file specified here
-is merged before the ValuesFiles items. Ignored when omitted.</p>
-</td>
-</tr>
-<tr>
-<td>
 <code>ignoreMissingValuesFiles</code><br>
 <em>
 bool
@@ -1527,22 +1481,6 @@ bool
 <em>(Optional)</em>
 <p>Suspend tells the controller to suspend the reconciliation of this
 source.</p>
-</td>
-</tr>
-<tr>
-<td>
-<code>accessFrom</code><br>
-<em>
-<a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/acl#AccessFrom">
-github.com/fluxcd/pkg/apis/acl.AccessFrom
-</a>
-</em>
-</td>
-<td>
-<em>(Optional)</em>
-<p>AccessFrom specifies an Access Control List for allowing cross-namespace
-references to this object.
-NOTE: Not implemented, provisional as of <a href="https://github.com/fluxcd/flux2/pull/2092">https://github.com/fluxcd/flux2/pull/2092</a></p>
 </td>
 </tr>
 <tr>

@@ -63,34 +63,6 @@ spec:
           spec:
             description: HelmChartSpec specifies the desired state of a Helm chart.
             properties:
-              accessFrom:
-                description: |-
-                  AccessFrom specifies an Access Control List for allowing cross-namespace
-                  references to this object.
-                  NOTE: Not implemented, provisional as of https://github.com/fluxcd/flux2/pull/2092
-                properties:
-                  namespaceSelectors:
-                    description: |-
-                      NamespaceSelectors is the list of namespace selectors to which this ACL applies.
-                      Items in this list are evaluated using a logical OR operation.
-                    items:
-                      description: |-
-                        NamespaceSelector selects the namespaces to which this ACL applies.
-                        An empty map of MatchLabels matches all namespaces in a cluster.
-                      properties:
-                        matchLabels:
-                          additionalProperties:
-                            type: string
-                          description: |-
-                            MatchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels
-                            map is equivalent to an element of matchExpressions, whose key field is "key", the
-                            operator is "In", and the values array contains only "value". The requirements are ANDed.
-                          type: object
-                      type: object
-                    type: array
-                required:
-                - namespaceSelectors
-                type: object
               chart:
                 description: |-
                   Chart is the name or path the Helm chart is available at in the
@@ -147,13 +119,6 @@ spec:
                   Suspend tells the controller to suspend the reconciliation of this
                   source.
                 type: boolean
-              valuesFile:
-                description: |-
-                  ValuesFile is an alternative values file to use as the default chart
-                  values, expected to be a relative path in the SourceRef. Deprecated in
-                  favor of ValuesFiles, for backwards compatibility the file specified here
-                  is merged before the ValuesFiles items. Ignored when omitted.
-                type: string
               valuesFiles:
                 description: |-
                   ValuesFiles is an alternative list of values files to use as the chart

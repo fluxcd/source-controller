@@ -335,11 +335,6 @@ func (in *HelmChartSpec) DeepCopyInto(out *HelmChartSpec) {
 		*out = make([]string, len(*in))
 		copy(*out, *in)
 	}
-	if in.AccessFrom != nil {
-		in, out := &in.AccessFrom, &out.AccessFrom
-		*out = new(acl.AccessFrom)
-		(*in).DeepCopyInto(*out)
-	}
 	if in.Verify != nil {
 		in, out := &in.Verify, &out.Verify
 		*out = new(OCIRepositoryVerification)

@@ -21,7 +21,6 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/fluxcd/pkg/apis/acl"
 	"github.com/fluxcd/pkg/apis/meta"
 )
 
@@ -70,14 +69,6 @@ type HelmChartSpec struct {
 	// +optional
 	ValuesFiles []string `json:"valuesFiles,omitempty"`
 
-	// ValuesFile is an alternative values file to use as the default chart
-	// values, expected to be a relative path in the SourceRef. Deprecated in
-	// favor of ValuesFiles, for backwards compatibility the file specified here
-	// is merged before the ValuesFiles items. Ignored when omitted.
-	// +optional
-	// +deprecated
-	ValuesFile string `json:"valuesFile,omitempty"`
-
 	// IgnoreMissingValuesFiles controls whether to silently ignore missing values
 	// files rather than failing.
 	// +optional
@@ -87,12 +78,6 @@ type HelmChartSpec struct {
 	// source.
 	// +optional
 	Suspend bool `json:"suspend,omitempty"`
-
-	// AccessFrom specifies an Access Control List for allowing cross-namespace
-	// references to this object.
-	// NOTE: Not implemented, provisional as of https://github.com/fluxcd/flux2/pull/2092
-	// +optional
-	AccessFrom *acl.AccessFrom `json:"accessFrom,omitempty"`
 
 	// Verify contains the secret name containing the trusted public keys
 	// used to verify the signature and specifies which provider to use to check
@@ -203,13 +188,7 @@ func (in *HelmChart) GetArtifact() *Artifact {
 
 // GetValuesFiles returns a merged list of HelmChartSpec.ValuesFiles.
 func (in *HelmChart) GetValuesFiles() []string {
-	valuesFiles := in.Spec.ValuesFiles
-
-	// Prepend the deprecated ValuesFile to the list
-	if in.Spec.ValuesFile != "" {
-		valuesFiles = append([]string{in.Spec.ValuesFile}, valuesFiles...)
-	}
-	return valuesFiles
+	return in.Spec.ValuesFiles
 }
 
 // +genclient
