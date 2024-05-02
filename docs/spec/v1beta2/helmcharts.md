@@ -208,9 +208,9 @@ Values files also affect the generated artifact revision, see
 values files should be ignored rather than be considered errors.  It defaults to
 `false`.
 
-When `.spec.valuesFiles` is specified, the `.status.observedValuesFiles` field
-is populated with the list of values files that were found and actually
-contributed to the packaged chart.
+When `.spec.valuesFiles` and  `.spec.ignoreMissingValuesFiles` are specified,
+the `.status.observedValuesFiles` field is populated with the list of values
+files that were found and actually contributed to the packaged chart.
 
 ### Reconcile strategy
 

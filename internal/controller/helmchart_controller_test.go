@@ -1661,7 +1661,7 @@ func TestHelmChartReconciler_reconcileArtifact(t *testing.T) {
 				t.Expect(obj.GetArtifact().Revision).To(Equal("0.1.0"))
 				t.Expect(obj.Status.URL).ToNot(BeEmpty())
 				t.Expect(obj.Status.ObservedChartName).To(Equal("helmchart"))
-				t.Expect(obj.Status.ObservedValuesFiles).To(BeEmpty())
+				t.Expect(obj.Status.ObservedValuesFiles).To(BeNil())
 			},
 			want: sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
@@ -1684,7 +1684,7 @@ func TestHelmChartReconciler_reconcileArtifact(t *testing.T) {
 			afterFunc: func(t *WithT, obj *helmv1.HelmChart) {
 				t.Expect(obj.Status.Artifact.Path).To(Equal("testdata/charts/helmchart-0.1.0.tgz"))
 				t.Expect(obj.Status.ObservedChartName).To(BeEmpty())
-				t.Expect(obj.Status.ObservedValuesFiles).To(BeEmpty())
+				t.Expect(obj.Status.ObservedValuesFiles).To(BeNil())
 				t.Expect(obj.Status.URL).To(BeEmpty())
 			},
 		},
@@ -1724,7 +1724,7 @@ func TestHelmChartReconciler_reconcileArtifact(t *testing.T) {
 				t.Expect(obj.GetArtifact().Revision).To(Equal("0.1.0"))
 				t.Expect(obj.Status.URL).ToNot(BeEmpty())
 				t.Expect(obj.Status.ObservedChartName).To(Equal("helmchart"))
-				t.Expect(obj.Status.ObservedValuesFiles).To(BeEmpty())
+				t.Expect(obj.Status.ObservedValuesFiles).To(BeNil())
 			},
 			want: sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
@@ -1753,6 +1753,27 @@ func TestHelmChartReconciler_reconcileArtifact(t *testing.T) {
 			build: mockChartBuild("helmchart", "0.1.0", "testdata/charts/helmchart-0.1.0.tgz", []string{"values.yaml", "override.yaml"}),
 			beforeFunc: func(obj *helmv1.HelmChart) {
 				conditions.MarkTrue(obj, sourcev1.ArtifactOutdatedCondition, "Foo", "")
+			},
+			afterFunc: func(t *WithT, obj *helmv1.HelmChart) {
+				t.Expect(obj.GetArtifact()).ToNot(BeNil())
+				t.Expect(obj.GetArtifact().Digest).To(Equal("sha256:bbdf96023c912c393b49d5238e227576ed0d20d1bb145d7476d817b80e20c11a"))
+				t.Expect(obj.GetArtifact().Revision).To(Equal("0.1.0"))
+				t.Expect(obj.Status.URL).ToNot(BeEmpty())
+				t.Expect(obj.Status.ObservedChartName).To(Equal("helmchart"))
+				t.Expect(obj.Status.ObservedValuesFiles).To(BeNil())
+			},
+			want: sreconcile.ResultSuccess,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.ArtifactInStorageCondition, helmv1.ChartPullSucceededReason, "pulled 'helmchart' chart with version '0.1.0'"),
+			},
+		},
+		{
+			name:  "Updates ObservedValuesFiles with IgnoreMissingValuesFiles after creating new artifact",
+			build: mockChartBuild("helmchart", "0.1.0", "testdata/charts/helmchart-0.1.0.tgz", []string{"values.yaml", "override.yaml"}),
+			beforeFunc: func(obj *helmv1.HelmChart) {
+				conditions.MarkTrue(obj, sourcev1.ArtifactOutdatedCondition, "Foo", "")
+				obj.Spec.ValuesFiles = []string{"values.yaml", "missing.yaml", "override.yaml"}
+				obj.Spec.IgnoreMissingValuesFiles = true
 			},
 			afterFunc: func(t *WithT, obj *helmv1.HelmChart) {
 				t.Expect(obj.GetArtifact()).ToNot(BeNil())

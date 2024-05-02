@@ -202,7 +202,12 @@ func generateBuildResult(cv *repo.ChartVersion, opts BuildOptions) (*Build, bool
 			if err = curMeta.Validate(); err == nil {
 				if result.Name == curMeta.Name && result.Version == curMeta.Version {
 					result.Path = opts.CachedChart
-					result.ValuesFiles = opts.CachedChartValuesFiles
+					result.ValuesFiles = opts.GetValuesFiles()
+					if opts.CachedChartValuesFiles != nil {
+						// If the cached chart values files are set, we should use them
+						// instead of reporting the values files.
+						result.ValuesFiles = opts.CachedChartValuesFiles
+					}
 					result.Packaged = requiresPackaging
 					return result, true, nil
 				}

@@ -666,7 +666,6 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 	cb := chart.NewRemoteBuilder(chartRepo)
 	opts := chart.BuildOptions{
 		ValuesFiles:              obj.GetValuesFiles(),
-		CachedChartValuesFiles:   obj.Status.ObservedValuesFiles,
 		IgnoreMissingValuesFiles: obj.Spec.IgnoreMissingValuesFiles,
 		Force:                    obj.Generation != obj.Status.ObservedGeneration,
 		// The remote builder will not attempt to download the chart if
@@ -676,6 +675,7 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 	}
 	if artifact := obj.GetArtifact(); artifact != nil {
 		opts.CachedChart = r.Storage.LocalPath(*artifact)
+		opts.CachedChartValuesFiles = obj.Status.ObservedValuesFiles
 	}
 
 	// Set the VersionMetadata to the object's Generation if ValuesFiles is defined
@@ -888,7 +888,11 @@ func (r *HelmChartReconciler) reconcileArtifact(ctx context.Context, _ *patch.Se
 	// Record it on the object
 	obj.Status.Artifact = artifact.DeepCopy()
 	obj.Status.ObservedChartName = b.Name
-	obj.Status.ObservedValuesFiles = b.ValuesFiles
+	if obj.Spec.IgnoreMissingValuesFiles {
+		obj.Status.ObservedValuesFiles = b.ValuesFiles
+	} else {
+		obj.Status.ObservedValuesFiles = nil
+	}
 
 	// Update symlink on a "best effort" basis
 	symURL, err := r.Storage.Symlink(artifact, "latest.tar.gz")
