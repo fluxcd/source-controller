@@ -2,6 +2,79 @@
 
 All notable changes to this project are documented in this file.
 
+## 1.3.0
+
+**Release date:** 2024-05-03
+
+This minor release promotes the Helm APIs to GA, and comes with new features,
+improvements and bug fixes.
+
+### HelmRepository
+
+The `HelmRepository` API has been promoted from `v1beta2` to `v1` (GA).
+The `v1` API is backwards compatible with `v1beta2`.
+
+For `HelmRepository` of type `oci`, the `.spec.insecure` field allows connecting
+over HTTP to an insecure non-TLS container registry. 
+
+To upgrade from `v1beta2`, after deploying the new CRD and controller,
+set  `apiVersion: source.toolkit.fluxcd.io/v1` in the YAML files that
+contain `HelmRepository` definitions.
+Bumping the API version in manifests can be done gradually.
+It is advised not to delay this procedure as the beta versions will be removed after 6 months.
+
+### HelmChart
+
+The `HelmChart` API have been promoted from `v1beta2` to `v1` (GA).
+The `v1` API is backwards compatible with `v1beta2`, with the exception
+of the removal of the deprecated field `.spec.valuesFile` which was replaced with `spec.valuesFiles`.
+
+The `HelmChart` API was extended with support for
+[Notation signature verification](https://github.com/fluxcd/source-controller/blob/release/v1.3.x/docs/spec/v1/helmcharts.md#notation)
+of Helm OCI charts.
+
+A new optional field `.spec.ignoreMissingValuesFiles` has been added,
+which allows the controller to ignore missing values files rather than failing to reconcile the `HelmChart`.
+
+### OCIRepository
+
+The `OCIRepository` API was extended with support for
+[Notation signature verification](https://github.com/fluxcd/source-controller/blob/release/v1.3.x/docs/spec/v1beta2/ocirepositories.md#notation)
+of OCI artifacts.
+
+A new optional field `.spec.ref.semverFilter` has been added,
+which allows the controller to filter the tags based on regular expressions
+before applying the semver range. This allows 
+[picking the latest release candidate](https://github.com/fluxcd/source-controller/blob/release/v1.3.x/docs/spec/v1beta2/ocirepositories.md#semverfilter-example)
+instead of the latest stable release.
+
+In addition, the controller has been updated to Kubernetes v1.30.0,
+Helm v3.14.4, and various other dependencies to their latest version
+to patch upstream CVEs.
+
+Improvements:
+- Promote Helm APIs to `source.toolkit.fluxcd.io/v1` (GA)
+  [#1428](https://github.com/fluxcd/source-controller/pull/1428)
+- Add `.spec.ignoreMissingValuesFiles` to HelmChart API
+  [#1447](https://github.com/fluxcd/source-controller/pull/1447)
+- Implement `.spec.ref.semverFilter` in OCIRepository API
+  [#1407](https://github.com/fluxcd/source-controller/pull/1407)
+- Helm: Allow insecure registry login
+  [#1412](https://github.com/fluxcd/source-controller/pull/1442)
+- Add support for Notation verification to HelmChart and OCIRepository
+  [#1075](https://github.com/fluxcd/source-controller/pull/1075)
+- Various dependency updates
+  [#1442](https://github.com/fluxcd/source-controller/pull/1442)
+  [#1450](https://github.com/fluxcd/source-controller/pull/1450)
+  [#1469](https://github.com/fluxcd/source-controller/pull/1469)
+  [#1378](https://github.com/fluxcd/source-controller/pull/1378)
+
+Fixes:
+- Bind cached helm index to the maximum index size
+  [#1457](https://github.com/fluxcd/source-controller/pull/1457)
+- Remove `genclient:Namespaced` tag
+  [#1386](https://github.com/fluxcd/source-controller/pull/1386)
+
 ## 1.2.5
 
 **Release date:** 2024-04-04
