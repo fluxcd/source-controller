@@ -46,6 +46,11 @@ jobs:
           SKIP_COSIGN_VERIFICATION: true
           CREATE_CLUSTER: false
         run: make e2e
+      - name: Print controller logs
+        if: always()
+        continue-on-error: true
+        run: |
+          kubectl -n source-system logs -l app=source-controller
 
   kind-linux-arm64:
     # Hosted on Equinix
