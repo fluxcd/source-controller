@@ -18,6 +18,9 @@ package minio
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -48,7 +51,7 @@ const (
 var (
 	// testMinioVersion is the version (image tag) of the Minio server image
 	// used to test against.
-	testMinioVersion = "RELEASE.2022-12-12T19-27-27Z"
+	testMinioVersion = "RELEASE.2024-05-07T06-41-25Z"
 	// testMinioRootUser is the root user of the Minio server.
 	testMinioRootUser = "fluxcd"
 	// testMinioRootPassword is the root password of the Minio server.
@@ -59,6 +62,8 @@ var (
 	// testMinioClient is the Minio client used to test against, it is set
 	// by TestMain after booting the Minio server.
 	testMinioClient *MinioClient
+	// testTLSConfig is the TLS configuration used to connect to the Minio server.
+	testTLSConfig *tls.Config
 )
 
 var (
@@ -115,6 +120,14 @@ func TestMain(m *testing.M) {
 		log.Fatalf("could not connect to docker: %s", err)
 	}
 
+	// Load a private key and certificate from a self-signed CA for the Minio server and
+	// a client TLS configuration to connect to the Minio server.
+	var serverCert, serverKey string
+	serverCert, serverKey, testTLSConfig, err = loadServerCertAndClientTLSConfig()
+	if err != nil {
+		log.Fatalf("could not load server cert and client TLS config: %s", err)
+	}
+
 	// Pull the image, create a container based on it, and run it
 	resource, err := pool.RunWithOptions(&dockertest.RunOptions{
 		Repository: "minio/minio",
@@ -128,6 +141,10 @@ func TestMain(m *testing.M) {
 			"MINIO_ROOT_PASSWORD=" + testMinioRootPassword,
 		},
 		Cmd: []string{"server", "/data", "--console-address", ":9001"},
+		Mounts: []string{
+			fmt.Sprintf("%s:/root/.minio/certs/public.crt", serverCert),
+			fmt.Sprintf("%s:/root/.minio/certs/private.key", serverKey),
+		},
 	}, func(config *docker.HostConfig) {
 		config.AutoRemove = true
 	})
@@ -145,7 +162,7 @@ func TestMain(m *testing.M) {
 	testMinioAddress = fmt.Sprintf("127.0.0.1:%v", resource.GetPort("9000/tcp"))
 
 	// Construct a Minio client using the address of the Minio server.
-	testMinioClient, err = NewClient(bucketStub(bucket, testMinioAddress), secret.DeepCopy())
+	testMinioClient, err = NewClient(bucketStub(bucket, testMinioAddress), secret.DeepCopy(), testTLSConfig)
 	if err != nil {
 		log.Fatalf("cannot create Minio client: %s", err)
 	}
@@ -178,19 +195,19 @@ func TestMain(m *testing.M) {
 }
 
 func TestNewClient(t *testing.T) {
-	minioClient, err := NewClient(bucketStub(bucket, testMinioAddress), secret.DeepCopy())
+	minioClient, err := NewClient(bucketStub(bucket, testMinioAddress), secret.DeepCopy(), testTLSConfig)
 	assert.NilError(t, err)
 	assert.Assert(t, minioClient != nil)
 }
 
 func TestNewClientEmptySecret(t *testing.T) {
-	minioClient, err := NewClient(bucketStub(bucket, testMinioAddress), emptySecret.DeepCopy())
+	minioClient, err := NewClient(bucketStub(bucket, testMinioAddress), emptySecret.DeepCopy(), testTLSConfig)
 	assert.NilError(t, err)
 	assert.Assert(t, minioClient != nil)
 }
 
 func TestNewClientAwsProvider(t *testing.T) {
-	minioClient, err := NewClient(bucketStub(bucketAwsProvider, testMinioAddress), nil)
+	minioClient, err := NewClient(bucketStub(bucketAwsProvider, testMinioAddress), nil, nil)
 	assert.NilError(t, err)
 	assert.Assert(t, minioClient != nil)
 }
@@ -295,7 +312,7 @@ func TestValidateSecret(t *testing.T) {
 func bucketStub(bucket sourcev1.Bucket, endpoint string) *sourcev1.Bucket {
 	b := bucket.DeepCopy()
 	b.Spec.Endpoint = endpoint
-	b.Spec.Insecure = true
+	b.Spec.Insecure = false
 	return b
 }
 
@@ -350,4 +367,38 @@ func getObjectFile() string {
 	  region: us-east-1
 	  timeout: 30s
 	`
+}
+
+func loadServerCertAndClientTLSConfig() (serverCert string, serverKey string, clientConf *tls.Config, err error) {
+	const certsDir = "../../internal/controller/testdata/certs"
+	clientConf = &tls.Config{}
+
+	serverCert, err = filepath.Abs(filepath.Join(certsDir, "server.pem"))
+	if err != nil {
+		return "", "", nil, fmt.Errorf("failed to get server cert path: %w", err)
+	}
+	serverKey, err = filepath.Abs(filepath.Join(certsDir, "server-key.pem"))
+	if err != nil {
+		return "", "", nil, fmt.Errorf("failed to get server key path: %w", err)
+	}
+
+	b, err := os.ReadFile(filepath.Join(certsDir, "ca.pem"))
+	if err != nil {
+		return "", "", nil, fmt.Errorf("failed to load CA: %w", err)
+	}
+	caPool := x509.NewCertPool()
+	if !caPool.AppendCertsFromPEM(b) {
+		return "", "", nil, errors.New("failed to append CA to pool")
+	}
+	clientConf.RootCAs = caPool
+
+	clientCert := filepath.Join(certsDir, "client.pem")
+	clientKey := filepath.Join(certsDir, "client-key.pem")
+	client, err := tls.LoadX509KeyPair(clientCert, clientKey)
+	if err != nil {
+		return "", "", nil, fmt.Errorf("failed to load client cert and key: %w", err)
+	}
+	clientConf.Certificates = []tls.Certificate{client}
+
+	return
 }

@@ -511,6 +511,47 @@ func TestBucketReconciler_reconcileSource_generic(t *testing.T) {
 			},
 		},
 		{
+			name:       "Observes non-existing certSecretRef",
+			bucketName: "dummy",
+			beforeFunc: func(obj *bucketv1.Bucket) {
+				obj.Spec.CertSecretRef = &meta.LocalObjectReference{
+					Name: "dummy",
+				}
+				conditions.MarkReconciling(obj, meta.ProgressingReason, "foo")
+				conditions.MarkUnknown(obj, meta.ReadyCondition, "foo", "bar")
+			},
+			wantErr:     true,
+			assertIndex: index.NewDigester(),
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "failed to get secret '/dummy': secrets \"dummy\" not found"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "foo"),
+				*conditions.UnknownCondition(meta.ReadyCondition, "foo", "bar"),
+			},
+		},
+		{
+			name:       "Observes invalid certSecretRef",
+			bucketName: "dummy",
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "dummy",
+				},
+			},
+			beforeFunc: func(obj *bucketv1.Bucket) {
+				obj.Spec.CertSecretRef = &meta.LocalObjectReference{
+					Name: "dummy",
+				}
+				conditions.MarkReconciling(obj, meta.ProgressingReason, "foo")
+				conditions.MarkUnknown(obj, meta.ReadyCondition, "foo", "bar")
+			},
+			wantErr:     true,
+			assertIndex: index.NewDigester(),
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "foo"),
+				*conditions.UnknownCondition(meta.ReadyCondition, "foo", "bar"),
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "certificate secret does not contain any TLS configuration"),
+			},
+		},
+		{
 			name:       "Observes non-existing bucket name",
 			bucketName: "dummy",
 			beforeFunc: func(obj *bucketv1.Bucket) {
