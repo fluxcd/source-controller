@@ -15,7 +15,7 @@ require (
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.5.2
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.3.2
 	github.com/Masterminds/semver/v3 v3.2.1
-	github.com/cyphar/filepath-securejoin v0.2.4
+	github.com/cyphar/filepath-securejoin v0.2.5
 	github.com/distribution/distribution/v3 v3.0.0-alpha.1
 	github.com/docker/cli v24.0.9+incompatible
 	github.com/docker/go-units v0.5.0
