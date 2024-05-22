@@ -83,6 +83,23 @@ type BucketSpec struct {
 	// +optional
 	SecretRef *meta.LocalObjectReference `json:"secretRef,omitempty"`
 
+	// CertSecretRef can be given the name of a Secret containing
+	// either or both of
+	//
+	// - a PEM-encoded client certificate (`tls.crt`) and private
+	// key (`tls.key`);
+	// - a PEM-encoded CA certificate (`ca.crt`)
+	//
+	// and whichever are supplied, will be used for connecting to the
+	// bucket. The client cert and key are useful if you are
+	// authenticating with a certificate; the CA cert is useful if
+	// you are using a self-signed server certificate. The Secret must
+	// be of type `Opaque` or `kubernetes.io/tls`.
+	//
+	// This field is only supported for the `generic` provider.
+	// +optional
+	CertSecretRef *meta.LocalObjectReference `json:"certSecretRef,omitempty"`
+
 	// Interval at which the Bucket Endpoint is checked for updates.
 	// This interval is approximate and may be subject to jitter to ensure
 	// efficient use of resources.

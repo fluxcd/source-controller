@@ -165,6 +165,32 @@ for the Bucket.</p>
 </tr>
 <tr>
 <td>
+<code>certSecretRef</code><br>
+<em>
+<a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/meta#LocalObjectReference">
+github.com/fluxcd/pkg/apis/meta.LocalObjectReference
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>CertSecretRef can be given the name of a Secret containing
+either or both of</p>
+<ul>
+<li>a PEM-encoded client certificate (<code>tls.crt</code>) and private
+key (<code>tls.key</code>);</li>
+<li>a PEM-encoded CA certificate (<code>ca.crt</code>)</li>
+</ul>
+<p>and whichever are supplied, will be used for connecting to the
+bucket. The client cert and key are useful if you are
+authenticating with a certificate; the CA cert is useful if
+you are using a self-signed server certificate. The Secret must
+be of type <code>Opaque</code> or <code>kubernetes.io/tls</code>.</p>
+<p>This field is only supported for the <code>generic</code> provider.</p>
+</td>
+</tr>
+<tr>
+<td>
 <code>interval</code><br>
 <em>
 <a href="https://pkg.go.dev/k8s.io/apimachinery/pkg/apis/meta/v1#Duration">
@@ -1485,6 +1511,32 @@ github.com/fluxcd/pkg/apis/meta.LocalObjectReference
 <em>(Optional)</em>
 <p>SecretRef specifies the Secret containing authentication credentials
 for the Bucket.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>certSecretRef</code><br>
+<em>
+<a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/meta#LocalObjectReference">
+github.com/fluxcd/pkg/apis/meta.LocalObjectReference
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>CertSecretRef can be given the name of a Secret containing
+either or both of</p>
+<ul>
+<li>a PEM-encoded client certificate (<code>tls.crt</code>) and private
+key (<code>tls.key</code>);</li>
+<li>a PEM-encoded CA certificate (<code>ca.crt</code>)</li>
+</ul>
+<p>and whichever are supplied, will be used for connecting to the
+bucket. The client cert and key are useful if you are
+authenticating with a certificate; the CA cert is useful if
+you are using a self-signed server certificate. The Secret must
+be of type <code>Opaque</code> or <code>kubernetes.io/tls</code>.</p>
+<p>This field is only supported for the <code>generic</code> provider.</p>
 </td>
 </tr>
 <tr>

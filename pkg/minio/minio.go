@@ -18,6 +18,7 @@ package minio
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 
@@ -36,7 +37,7 @@ type MinioClient struct {
 }
 
 // NewClient creates a new Minio storage client.
-func NewClient(bucket *sourcev1.Bucket, secret *corev1.Secret) (*MinioClient, error) {
+func NewClient(bucket *sourcev1.Bucket, secret *corev1.Secret, tlsConfig *tls.Config) (*MinioClient, error) {
 	opt := minio.Options{
 		Region: bucket.Spec.Region,
 		Secure: !bucket.Spec.Insecure,
@@ -58,6 +59,18 @@ func NewClient(bucket *sourcev1.Bucket, secret *corev1.Secret) (*MinioClient, er
 		}
 	} else if bucket.Spec.Provider == sourcev1.AmazonBucketProvider {
 		opt.Creds = credentials.NewIAM("")
+	}
+
+	if opt.Secure && tlsConfig != nil {
+		// Use the default minio transport, but override the TLS config.
+		secure := false // true causes the TLS config to be defined internally, but here we have our own so we just pass false.
+		transport, err := minio.DefaultTransport(secure)
+		if err != nil {
+			// The error returned here is always nil, but we keep the check for future compatibility.
+			return nil, fmt.Errorf("failed to create default minio transport: %w", err)
+		}
+		transport.TLSClientConfig = tlsConfig.Clone()
+		opt.Transport = transport
 	}
 
 	client, err := minio.New(bucket.Spec.Endpoint, &opt)

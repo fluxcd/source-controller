@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	stdtls "crypto/tls"
 	"errors"
 	"fmt"
 	"os"
@@ -57,6 +58,7 @@ import (
 	"github.com/fluxcd/source-controller/internal/index"
 	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
 	"github.com/fluxcd/source-controller/internal/reconcile/summarize"
+	"github.com/fluxcd/source-controller/internal/tls"
 	"github.com/fluxcd/source-controller/pkg/azure"
 	"github.com/fluxcd/source-controller/pkg/gcp"
 	"github.com/fluxcd/source-controller/pkg/minio"
@@ -421,7 +423,7 @@ func (r *BucketReconciler) reconcileStorage(ctx context.Context, sp *patch.Seria
 // the provider. If this fails, it records v1beta2.FetchFailedCondition=True on
 // the object and returns early.
 func (r *BucketReconciler) reconcileSource(ctx context.Context, sp *patch.SerialPatcher, obj *bucketv1.Bucket, index *index.Digester, dir string) (sreconcile.Result, error) {
-	secret, err := r.getBucketSecret(ctx, obj)
+	secret, err := r.getSecret(ctx, obj.Spec.SecretRef, obj.GetNamespace())
 	if err != nil {
 		e := serror.NewGeneric(err, sourcev1.AuthenticationFailedReason)
 		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Error())
@@ -460,7 +462,13 @@ func (r *BucketReconciler) reconcileSource(ctx context.Context, sp *patch.Serial
 			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Error())
 			return sreconcile.ResultEmpty, e
 		}
-		if provider, err = minio.NewClient(obj, secret); err != nil {
+		tlsConfig, err := r.getTLSConfig(ctx, obj)
+		if err != nil {
+			e := serror.NewGeneric(err, sourcev1.AuthenticationFailedReason)
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Error())
+			return sreconcile.ResultEmpty, e
+		}
+		if provider, err = minio.NewClient(obj, secret, tlsConfig); err != nil {
 			e := serror.NewGeneric(err, "ClientError")
 			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Error())
 			return sreconcile.ResultEmpty, e
@@ -663,21 +671,36 @@ func (r *BucketReconciler) garbageCollect(ctx context.Context, obj *bucketv1.Buc
 	return nil
 }
 
-// getBucketSecret attempts to fetch the Secret reference if specified on the
-// obj. It returns any client error.
-func (r *BucketReconciler) getBucketSecret(ctx context.Context, obj *bucketv1.Bucket) (*corev1.Secret, error) {
-	if obj.Spec.SecretRef == nil {
+// getSecret attempts to fetch a Secret reference if specified. It returns any client error.
+func (r *BucketReconciler) getSecret(ctx context.Context, secretRef *meta.LocalObjectReference,
+	namespace string) (*corev1.Secret, error) {
+	if secretRef == nil {
 		return nil, nil
 	}
 	secretName := types.NamespacedName{
-		Namespace: obj.GetNamespace(),
-		Name:      obj.Spec.SecretRef.Name,
+		Namespace: namespace,
+		Name:      secretRef.Name,
 	}
 	secret := &corev1.Secret{}
 	if err := r.Get(ctx, secretName, secret); err != nil {
 		return nil, fmt.Errorf("failed to get secret '%s': %w", secretName.String(), err)
 	}
 	return secret, nil
+}
+
+func (r *BucketReconciler) getTLSConfig(ctx context.Context, obj *bucketv1.Bucket) (*stdtls.Config, error) {
+	certSecret, err := r.getSecret(ctx, obj.Spec.CertSecretRef, obj.GetNamespace())
+	if err != nil || certSecret == nil {
+		return nil, err
+	}
+	tlsConfig, _, err := tls.KubeTLSClientConfigFromSecret(*certSecret, obj.Spec.Endpoint)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create TLS config: %w", err)
+	}
+	if tlsConfig == nil {
+		return nil, fmt.Errorf("certificate secret does not contain any TLS configuration")
+	}
+	return tlsConfig, nil
 }
 
 // eventLogf records events, and logs at the same time.
