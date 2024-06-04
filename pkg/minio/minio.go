@@ -21,6 +21,8 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"net/http"
+	"net/url"
 
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
@@ -37,7 +39,9 @@ type MinioClient struct {
 }
 
 // NewClient creates a new Minio storage client.
-func NewClient(bucket *sourcev1.Bucket, secret *corev1.Secret, tlsConfig *tls.Config) (*MinioClient, error) {
+func NewClient(bucket *sourcev1.Bucket, secret *corev1.Secret,
+	tlsConfig *tls.Config, proxyURL *url.URL) (*MinioClient, error) {
+
 	opt := minio.Options{
 		Region: bucket.Spec.Region,
 		Secure: !bucket.Spec.Insecure,
@@ -61,15 +65,28 @@ func NewClient(bucket *sourcev1.Bucket, secret *corev1.Secret, tlsConfig *tls.Co
 		opt.Creds = credentials.NewIAM("")
 	}
 
+	var transportOpts []func(*http.Transport)
+
 	if opt.Secure && tlsConfig != nil {
-		// Use the default minio transport, but override the TLS config.
-		secure := false // true causes the TLS config to be defined internally, but here we have our own so we just pass false.
-		transport, err := minio.DefaultTransport(secure)
+		transportOpts = append(transportOpts, func(t *http.Transport) {
+			t.TLSClientConfig = tlsConfig.Clone()
+		})
+	}
+
+	if proxyURL != nil {
+		transportOpts = append(transportOpts, func(t *http.Transport) {
+			t.Proxy = http.ProxyURL(proxyURL)
+		})
+	}
+
+	if len(transportOpts) > 0 {
+		transport, err := minio.DefaultTransport(true /*secure*/)
 		if err != nil {
-			// The error returned here is always nil, but we keep the check for future compatibility.
 			return nil, fmt.Errorf("failed to create default minio transport: %w", err)
 		}
-		transport.TLSClientConfig = tlsConfig.Clone()
+		for _, opt := range transportOpts {
+			opt(transport)
+		}
 		opt.Transport = transport
 	}
 

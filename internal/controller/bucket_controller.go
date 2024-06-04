@@ -21,6 +21,7 @@ import (
 	stdtls "crypto/tls"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -431,6 +432,13 @@ func (r *BucketReconciler) reconcileSource(ctx context.Context, sp *patch.Serial
 		return sreconcile.ResultEmpty, e
 	}
 
+	proxyURL, err := r.getProxyURL(ctx, obj)
+	if err != nil {
+		e := serror.NewGeneric(err, sourcev1.AuthenticationFailedReason)
+		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Error())
+		return sreconcile.ResultEmpty, e
+	}
+
 	// Construct provider client
 	var provider BucketProvider
 	switch obj.Spec.Provider {
@@ -468,7 +476,7 @@ func (r *BucketReconciler) reconcileSource(ctx context.Context, sp *patch.Serial
 			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Error())
 			return sreconcile.ResultEmpty, e
 		}
-		if provider, err = minio.NewClient(obj, secret, tlsConfig); err != nil {
+		if provider, err = minio.NewClient(obj, secret, tlsConfig, proxyURL); err != nil {
 			e := serror.NewGeneric(err, "ClientError")
 			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Error())
 			return sreconcile.ResultEmpty, e
@@ -701,6 +709,30 @@ func (r *BucketReconciler) getTLSConfig(ctx context.Context, obj *bucketv1.Bucke
 		return nil, fmt.Errorf("certificate secret does not contain any TLS configuration")
 	}
 	return tlsConfig, nil
+}
+
+func (r *BucketReconciler) getProxyURL(ctx context.Context, obj *bucketv1.Bucket) (*url.URL, error) {
+	namespace := obj.GetNamespace()
+	proxySecret, err := r.getSecret(ctx, obj.Spec.ProxySecretRef, namespace)
+	if err != nil || proxySecret == nil {
+		return nil, err
+	}
+	proxyData := proxySecret.Data
+	address, ok := proxyData["address"]
+	if !ok {
+		return nil, fmt.Errorf("invalid proxy secret '%s/%s': key 'address' is missing",
+			obj.Spec.ProxySecretRef.Name, namespace)
+	}
+	proxyURL, err := url.Parse(string(address))
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse proxy address '%s': %w", address, err)
+	}
+	user, hasUser := proxyData["username"]
+	password, hasPassword := proxyData["password"]
+	if hasUser || hasPassword {
+		proxyURL.User = url.UserPassword(string(user), string(password))
+	}
+	return proxyURL, nil
 }
 
 // eventLogf records events, and logs at the same time.

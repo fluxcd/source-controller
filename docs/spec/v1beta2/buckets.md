@@ -824,6 +824,41 @@ stringData:
   ca.crt: <PEM-encoded cert>
 ```
 
+### Proxy secret reference
+
+`.spec.proxySecretRef.name` is an optional field used to specify the name of a
+Secret that contains the proxy settings for the object. These settings are used
+for all the remote operations related to the Bucket.
+The Secret can contain three keys:
+
+- `address`, to specify the address of the proxy server. This is a required key.
+- `username`, to specify the username to use if the proxy server is protected by
+   basic authentication. This is an optional key.
+- `password`, to specify the password to use if the proxy server is protected by
+   basic authentication. This is an optional key.
+
+The proxy server must be HTTP/S.
+
+Example:
+
+```yaml
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: http-proxy
+type: Opaque
+stringData:
+  address: http://proxy.com
+  username: mandalorian
+  password: grogu
+```
+
+Proxying can also be configured in the source-controller Deployment directly by
+using the standard environment variables such as `HTTPS_PROXY`, `ALL_PROXY`, etc.
+
+`.spec.proxySecretRef.name` takes precedence over all environment variables.
+
 ### Insecure
 
 `.spec.insecure` is an optional field to allow connecting to an insecure (HTTP)
