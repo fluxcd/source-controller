@@ -552,6 +552,47 @@ func TestBucketReconciler_reconcileSource_generic(t *testing.T) {
 			},
 		},
 		{
+			name:       "Observes non-existing proxySecretRef",
+			bucketName: "dummy",
+			beforeFunc: func(obj *bucketv1.Bucket) {
+				obj.Spec.ProxySecretRef = &meta.LocalObjectReference{
+					Name: "dummy",
+				}
+				conditions.MarkReconciling(obj, meta.ProgressingReason, "foo")
+				conditions.MarkUnknown(obj, meta.ReadyCondition, "foo", "bar")
+			},
+			wantErr:     true,
+			assertIndex: index.NewDigester(),
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "failed to get secret '/dummy': secrets \"dummy\" not found"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "foo"),
+				*conditions.UnknownCondition(meta.ReadyCondition, "foo", "bar"),
+			},
+		},
+		{
+			name:       "Observes invalid proxySecretRef",
+			bucketName: "dummy",
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "dummy",
+				},
+			},
+			beforeFunc: func(obj *bucketv1.Bucket) {
+				obj.Spec.ProxySecretRef = &meta.LocalObjectReference{
+					Name: "dummy",
+				}
+				conditions.MarkReconciling(obj, meta.ProgressingReason, "foo")
+				conditions.MarkUnknown(obj, meta.ReadyCondition, "foo", "bar")
+			},
+			wantErr:     true,
+			assertIndex: index.NewDigester(),
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "foo"),
+				*conditions.UnknownCondition(meta.ReadyCondition, "foo", "bar"),
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "invalid proxy secret 'dummy/': key 'address' is missing"),
+			},
+		},
+		{
 			name:       "Observes non-existing bucket name",
 			bucketName: "dummy",
 			beforeFunc: func(obj *bucketv1.Bucket) {
@@ -1532,6 +1573,191 @@ func TestBucketReconciler_notify(t *testing.T) {
 				if tt.wantEvent != "" {
 					t.Errorf("expected some event to be emitted")
 				}
+			}
+		})
+	}
+}
+
+func TestBucketReconciler_getProxyURL(t *testing.T) {
+	tests := []struct {
+		name        string
+		bucket      *bucketv1.Bucket
+		objects     []client.Object
+		expectedURL string
+		expectedErr string
+	}{
+		{
+			name: "empty proxySecretRef",
+			bucket: &bucketv1.Bucket{
+				Spec: bucketv1.BucketSpec{
+					ProxySecretRef: nil,
+				},
+			},
+		},
+		{
+			name: "non-existing proxySecretRef",
+			bucket: &bucketv1.Bucket{
+				Spec: bucketv1.BucketSpec{
+					ProxySecretRef: &meta.LocalObjectReference{
+						Name: "non-existing",
+					},
+				},
+			},
+			expectedErr: "failed to get secret '/non-existing': secrets \"non-existing\" not found",
+		},
+		{
+			name: "missing address in proxySecretRef",
+			bucket: &bucketv1.Bucket{
+				Spec: bucketv1.BucketSpec{
+					ProxySecretRef: &meta.LocalObjectReference{
+						Name: "dummy",
+					},
+				},
+			},
+			objects: []client.Object{
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "dummy",
+					},
+					Data: map[string][]byte{},
+				},
+			},
+			expectedErr: "invalid proxy secret 'dummy/': key 'address' is missing",
+		},
+		{
+			name: "invalid address in proxySecretRef",
+			bucket: &bucketv1.Bucket{
+				Spec: bucketv1.BucketSpec{
+					ProxySecretRef: &meta.LocalObjectReference{
+						Name: "dummy",
+					},
+				},
+			},
+			objects: []client.Object{
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "dummy",
+					},
+					Data: map[string][]byte{
+						"address": {0x7f},
+					},
+				},
+			},
+			expectedErr: "failed to parse proxy address '\x7f': parse \"\\x7f\": net/url: invalid control character in URL",
+		},
+		{
+			name: "no user, no password",
+			bucket: &bucketv1.Bucket{
+				Spec: bucketv1.BucketSpec{
+					ProxySecretRef: &meta.LocalObjectReference{
+						Name: "dummy",
+					},
+				},
+			},
+			objects: []client.Object{
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "dummy",
+					},
+					Data: map[string][]byte{
+						"address": []byte("http://proxy.example.com"),
+					},
+				},
+			},
+			expectedURL: "http://proxy.example.com",
+		},
+		{
+			name: "user, no password",
+			bucket: &bucketv1.Bucket{
+				Spec: bucketv1.BucketSpec{
+					ProxySecretRef: &meta.LocalObjectReference{
+						Name: "dummy",
+					},
+				},
+			},
+			objects: []client.Object{
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "dummy",
+					},
+					Data: map[string][]byte{
+						"address":  []byte("http://proxy.example.com"),
+						"username": []byte("user"),
+					},
+				},
+			},
+			expectedURL: "http://user:@proxy.example.com",
+		},
+		{
+			name: "no user, password",
+			bucket: &bucketv1.Bucket{
+				Spec: bucketv1.BucketSpec{
+					ProxySecretRef: &meta.LocalObjectReference{
+						Name: "dummy",
+					},
+				},
+			},
+			objects: []client.Object{
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "dummy",
+					},
+					Data: map[string][]byte{
+						"address":  []byte("http://proxy.example.com"),
+						"password": []byte("password"),
+					},
+				},
+			},
+			expectedURL: "http://:password@proxy.example.com",
+		},
+		{
+			name: "user, password",
+			bucket: &bucketv1.Bucket{
+				Spec: bucketv1.BucketSpec{
+					ProxySecretRef: &meta.LocalObjectReference{
+						Name: "dummy",
+					},
+				},
+			},
+			objects: []client.Object{
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "dummy",
+					},
+					Data: map[string][]byte{
+						"address":  []byte("http://proxy.example.com"),
+						"username": []byte("user"),
+						"password": []byte("password"),
+					},
+				},
+			},
+			expectedURL: "http://user:password@proxy.example.com",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			c := fakeclient.NewClientBuilder().
+				WithScheme(testEnv.Scheme()).
+				WithObjects(tt.objects...).
+				Build()
+
+			r := &BucketReconciler{
+				Client: c,
+			}
+
+			u, err := r.getProxyURL(ctx, tt.bucket)
+			if tt.expectedErr == "" {
+				g.Expect(err).To(BeNil())
+			} else {
+				g.Expect(err.Error()).To(ContainSubstring(tt.expectedErr))
+			}
+			if tt.expectedURL == "" {
+				g.Expect(u).To(BeNil())
+			} else {
+				g.Expect(u.String()).To(Equal(tt.expectedURL))
 			}
 		})
 	}

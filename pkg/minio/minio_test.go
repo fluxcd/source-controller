@@ -23,12 +23,16 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net"
+	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/elazarl/goproxy"
 	"github.com/google/uuid"
 	miniov7 "github.com/minio/minio-go/v7"
 	"github.com/ory/dockertest/v3"
@@ -162,7 +166,9 @@ func TestMain(m *testing.M) {
 	testMinioAddress = fmt.Sprintf("127.0.0.1:%v", resource.GetPort("9000/tcp"))
 
 	// Construct a Minio client using the address of the Minio server.
-	testMinioClient, err = NewClient(bucketStub(bucket, testMinioAddress), secret.DeepCopy(), testTLSConfig)
+	testMinioClient, err = NewClient(bucketStub(bucket, testMinioAddress),
+		WithSecret(secret.DeepCopy()),
+		WithTLSConfig(testTLSConfig))
 	if err != nil {
 		log.Fatalf("cannot create Minio client: %s", err)
 	}
@@ -195,19 +201,23 @@ func TestMain(m *testing.M) {
 }
 
 func TestNewClient(t *testing.T) {
-	minioClient, err := NewClient(bucketStub(bucket, testMinioAddress), secret.DeepCopy(), testTLSConfig)
+	minioClient, err := NewClient(bucketStub(bucket, testMinioAddress),
+		WithSecret(secret.DeepCopy()),
+		WithTLSConfig(testTLSConfig))
 	assert.NilError(t, err)
 	assert.Assert(t, minioClient != nil)
 }
 
 func TestNewClientEmptySecret(t *testing.T) {
-	minioClient, err := NewClient(bucketStub(bucket, testMinioAddress), emptySecret.DeepCopy(), testTLSConfig)
+	minioClient, err := NewClient(bucketStub(bucket, testMinioAddress),
+		WithSecret(emptySecret.DeepCopy()),
+		WithTLSConfig(testTLSConfig))
 	assert.NilError(t, err)
 	assert.Assert(t, minioClient != nil)
 }
 
 func TestNewClientAwsProvider(t *testing.T) {
-	minioClient, err := NewClient(bucketStub(bucketAwsProvider, testMinioAddress), nil, nil)
+	minioClient, err := NewClient(bucketStub(bucketAwsProvider, testMinioAddress))
 	assert.NilError(t, err)
 	assert.Assert(t, minioClient != nil)
 }
@@ -231,6 +241,36 @@ func TestFGetObject(t *testing.T) {
 	tempDir := t.TempDir()
 	path := filepath.Join(tempDir, sourceignore.IgnoreFile)
 	_, err := testMinioClient.FGetObject(ctx, bucketName, objectName, path)
+	assert.NilError(t, err)
+}
+
+func TestNewClientAndFGetObjectWithProxy(t *testing.T) {
+	// start proxy
+	proxyListener, err := net.Listen("tcp", ":0")
+	assert.NilError(t, err, "could not start proxy server")
+	defer proxyListener.Close()
+	proxyAddr := proxyListener.Addr().String()
+	proxyHandler := goproxy.NewProxyHttpServer()
+	proxyHandler.Verbose = true
+	proxyServer := &http.Server{
+		Addr:    proxyAddr,
+		Handler: proxyHandler,
+	}
+	go proxyServer.Serve(proxyListener)
+	defer proxyServer.Shutdown(context.Background())
+	proxyURL := &url.URL{Scheme: "http", Host: proxyAddr}
+
+	// run test
+	minioClient, err := NewClient(bucketStub(bucket, testMinioAddress),
+		WithSecret(secret.DeepCopy()),
+		WithTLSConfig(testTLSConfig),
+		WithProxyURL(proxyURL))
+	assert.NilError(t, err)
+	assert.Assert(t, minioClient != nil)
+	ctx := context.Background()
+	tempDir := t.TempDir()
+	path := filepath.Join(tempDir, sourceignore.IgnoreFile)
+	_, err = minioClient.FGetObject(ctx, bucketName, objectName, path)
 	assert.NilError(t, err)
 }
 
