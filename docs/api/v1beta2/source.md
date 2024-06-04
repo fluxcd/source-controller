@@ -191,6 +191,22 @@ be of type <code>Opaque</code> or <code>kubernetes.io/tls</code>.</p>
 </tr>
 <tr>
 <td>
+<code>proxySecretRef</code><br>
+<em>
+<a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/meta#LocalObjectReference">
+github.com/fluxcd/pkg/apis/meta.LocalObjectReference
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>ProxySecretRef specifies the Secret containing the proxy configuration
+to use while communicating with the Bucket server.</p>
+<p>Only supported for the generic provider.</p>
+</td>
+</tr>
+<tr>
+<td>
 <code>interval</code><br>
 <em>
 <a href="https://pkg.go.dev/k8s.io/apimachinery/pkg/apis/meta/v1#Duration">
@@ -1537,6 +1553,22 @@ authenticating with a certificate; the CA cert is useful if
 you are using a self-signed server certificate. The Secret must
 be of type <code>Opaque</code> or <code>kubernetes.io/tls</code>.</p>
 <p>This field is only supported for the <code>generic</code> provider.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>proxySecretRef</code><br>
+<em>
+<a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/meta#LocalObjectReference">
+github.com/fluxcd/pkg/apis/meta.LocalObjectReference
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>ProxySecretRef specifies the Secret containing the proxy configuration
+to use while communicating with the Bucket server.</p>
+<p>Only supported for the generic provider.</p>
 </td>
 </tr>
 <tr>
