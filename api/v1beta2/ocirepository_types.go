@@ -171,7 +171,8 @@ type OCIRepositoryRef struct {
 type OCILayerSelector struct {
 	// MediaType specifies the OCI media type of the layer
 	// which should be extracted from the OCI Artifact. The
-	// first layer matching this type is selected.
+	// first layer matching this type is selected by default,
+	// otherwise 'offest' needs to be specified.
 	// +optional
 	MediaType string `json:"mediaType,omitempty"`
 
@@ -182,6 +183,15 @@ type OCILayerSelector struct {
 	// +kubebuilder:validation:Enum=extract;copy
 	// +optional
 	Operation string `json:"operation,omitempty"`
+
+	// Offset specifies the index of the layer which should be extracted.
+	// +kubebuilder:validation:Minimum=0
+	// +optional
+	Offset *int `json:"offset,omitempty"`
+
+	// TODO: next API version should probably use artifact media types
+	// at the top level and make layer selector optional
+	ArtifactMediaType string `json:"artifactMediaType,omitempty"`
 }
 
 // OCIRepositoryStatus defines the observed state of OCIRepository
@@ -275,6 +285,14 @@ func (in *OCIRepository) GetLayerOperation() string {
 	}
 
 	return in.Spec.LayerSelector.Operation
+}
+
+func (in *OCIRepository) GetLayerOffset() int {
+	if in.Spec.LayerSelector == nil || in.Spec.LayerSelector.Offset == nil {
+		return 0
+	}
+
+	return *in.Spec.LayerSelector.Offset
 }
 
 // +genclient
