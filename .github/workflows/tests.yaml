@@ -36,10 +36,9 @@ jobs:
         run: make test
 
   test-linux-arm64:
-    # Hosted on Equinix
-    # Docs: https://github.com/fluxcd/flux2/tree/main/.github/runners
-    runs-on: [self-hosted, Linux, ARM64, equinix]
-    if: (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && github.actor != 'dependabot[bot]'
+    runs-on:
+      group: "ARM64"
+    if: github.actor != 'dependabot[bot]'
     steps:
       - name: Checkout
         uses: actions/checkout@a5ac7e51b41094c92402da3b24376905380afc29 # v4.1.6
@@ -53,15 +52,6 @@ jobs:
       - name: Run tests
         env:
           SKIP_COSIGN_VERIFICATION: true
-
           TEST_AZURE_ACCOUNT_NAME: ${{ secrets.TEST_AZURE_ACCOUNT_NAME }}
           TEST_AZURE_ACCOUNT_KEY: ${{ secrets.TEST_AZURE_ACCOUNT_KEY }}
-          
-          # Temporarily disabling -race for arm64 as our GitHub action
-          # runners don't seem to like it. The race detection was tested
-          # on both Apple M1 and Linux arm64 with successful results.
-          #
-          # We should reenable go test -race for arm64 runners once the
-          # current issue is resolved.
-          GO_TEST_ARGS: ''
         run: make test
