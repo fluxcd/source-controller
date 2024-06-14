@@ -69,10 +69,10 @@ func newClient(credentialsFile string, tlsConfig *tls.Config, insecureHTTP bool)
 		opts = append(opts, registry.ClientOptPlainHTTP())
 	}
 	if tlsConfig != nil {
+		t := http.DefaultTransport.(*http.Transport).Clone()
+		t.TLSClientConfig = tlsConfig
 		opts = append(opts, registry.ClientOptHTTPClient(&http.Client{
-			Transport: &http.Transport{
-				TLSClientConfig: tlsConfig,
-			},
+			Transport: t,
 		}))
 	}
 	if credentialsFile != "" {
