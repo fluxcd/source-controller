@@ -141,6 +141,7 @@ type OCIRepositoryReconciler struct {
 	Storage           *Storage
 	ControllerName    string
 	requeueDependency time.Duration
+	OIDCAuthenticator *soci.OIDCAuthenticator
 
 	patchOptions []patch.Option
 }
@@ -355,7 +356,7 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 
 	if _, ok := keychain.(soci.Anonymous); obj.Spec.Provider != ociv1.GenericOCIProvider && ok {
 		var authErr error
-		auth, authErr = soci.OIDCAuth(ctxTimeout, obj.Spec.URL, obj.Spec.Provider)
+		auth, authErr = r.OIDCAuthenticator.Authorization(ctxTimeout, obj.Spec.URL, obj.Spec.Provider)
 		if authErr != nil && !errors.Is(authErr, oci.ErrUnconfiguredProvider) {
 			e := serror.NewGeneric(
 				fmt.Errorf("failed to get credential from %s: %w", obj.Spec.Provider, authErr),

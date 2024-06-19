@@ -50,7 +50,7 @@ import (
 	"github.com/fluxcd/pkg/runtime/pprof"
 	"github.com/fluxcd/pkg/runtime/probes"
 
-	"github.com/fluxcd/source-controller/api/v1"
+	v1 "github.com/fluxcd/source-controller/api/v1"
 	"github.com/fluxcd/source-controller/api/v1beta2"
 
 	// +kubebuilder:scaffold:imports
@@ -61,6 +61,7 @@ import (
 	"github.com/fluxcd/source-controller/internal/features"
 	"github.com/fluxcd/source-controller/internal/helm"
 	"github.com/fluxcd/source-controller/internal/helm/registry"
+	"github.com/fluxcd/source-controller/internal/oci"
 )
 
 const controllerName = "source-controller"
@@ -187,6 +188,8 @@ func main() {
 	mustSetupHelmLimits(helmIndexLimit, helmChartLimit, helmChartFileLimit)
 	helmIndexCache, helmIndexCacheItemTTL := mustInitHelmCache(helmCacheMaxSize, helmCacheTTL, helmCachePurgeInterval)
 
+	authenticator := mustInitOIDCAuthenticator()
+
 	ctx := ctrl.SetupSignalHandler()
 
 	if err := (&controller.GitRepositoryReconciler{
@@ -228,6 +231,7 @@ func main() {
 		EventRecorder:           eventRecorder,
 		Metrics:                 metrics,
 		ControllerName:          controllerName,
+		OIDCAuthenticator:       authenticator,
 		Cache:                   helmIndexCache,
 		TTL:                     helmIndexCacheItemTTL,
 		CacheRecorder:           cacheRecorder,
@@ -252,11 +256,12 @@ func main() {
 	}
 
 	if err := (&controller.OCIRepositoryReconciler{
-		Client:         mgr.GetClient(),
-		Storage:        storage,
-		EventRecorder:  eventRecorder,
-		ControllerName: controllerName,
-		Metrics:        metrics,
+		Client:            mgr.GetClient(),
+		Storage:           storage,
+		EventRecorder:     eventRecorder,
+		ControllerName:    controllerName,
+		Metrics:           metrics,
+		OIDCAuthenticator: authenticator,
 	}).SetupWithManagerAndOptions(mgr, controller.OCIRepositoryReconcilerOptions{
 		RateLimiter: helper.GetRateLimiter(rateLimiterOptions),
 	}); err != nil {
@@ -404,6 +409,20 @@ func mustInitHelmCache(maxSize int, itemTTL, purgeInterval string) (*cache.Cache
 	}
 
 	return cache.New(maxSize, interval), ttl
+}
+
+func mustInitOIDCAuthenticator() *oci.OIDCAuthenticator {
+	capacity := oci.DefaultAuthCacheCapacity
+	disabled, found := os.LookupEnv("LOGIN_CACHE_DISABLED")
+	if found && disabled == "true" {
+		capacity = -1
+	}
+	authenticator, err := oci.NewOIDCAuthenticator(oci.WithCacheCapacity(capacity))
+	if err != nil {
+		setupLog.Error(err, "unable to initialise OIDC authenticator")
+		os.Exit(1)
+	}
+	return authenticator
 }
 
 func mustInitStorage(path string, storageAdvAddr string, artifactRetentionTTL time.Duration, artifactRetentionRecords int, artifactDigestAlgo string) *controller.Storage {

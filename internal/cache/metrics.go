@@ -47,7 +47,7 @@ func NewCacheRecorder() *CacheRecorder {
 	return &CacheRecorder{
 		cacheEventsCounter: prometheus.NewCounterVec(
 			prometheus.CounterOpts{
-				Name: "gotk_cache_events_total",
+				Name: "gotk_sc_cache_events_total",
 				Help: "Total number of cache retrieval events for a Gitops Toolkit resource reconciliation.",
 			},
 			[]string{"event_type", "name", "namespace"},

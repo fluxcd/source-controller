@@ -64,13 +64,17 @@ func (o ClientOpts) MustLoginToRegistry() bool {
 	return len(o.RegLoginOpts) > 0 && o.RegLoginOpts[0] != nil
 }
 
-// GetClientOpts uses the provided HelmRepository object and a normalized
+// GetClientOptsWithOIDCAuth uses the provided HelmRepository object and a normalized
 // URL to construct a HelmClientOpts object. If obj is an OCI HelmRepository,
 // then the returned options object will also contain the required registry
 // auth mechanisms.
 // A temporary directory is created to store the certs files if needed and its path is returned along with the options object. It is the
 // caller's responsibility to clean up the directory.
-func GetClientOpts(ctx context.Context, c client.Client, obj *sourcev1.HelmRepository, url string) (*ClientOpts, string, error) {
+func GetClientOptsWithOIDCAuth(ctx context.Context, c client.Client, oidcAuthenticator *soci.OIDCAuthenticator,
+	obj *sourcev1.HelmRepository, url string) (*ClientOpts, string, error) {
+	if obj.Spec.Provider != sourcev1beta2.GenericOCIProvider && oidcAuthenticator == nil {
+		return nil, "", fmt.Errorf("OIDC authenticator is not configured")
+	}
 	hrOpts := &ClientOpts{
 		GetterOpts: []helmgetter.Option{
 			helmgetter.WithURL(url),
@@ -137,7 +141,7 @@ func GetClientOpts(ctx context.Context, c client.Client, obj *sourcev1.HelmRepos
 			}
 		}
 	} else if obj.Spec.Provider != sourcev1beta2.GenericOCIProvider && obj.Spec.Type == sourcev1.HelmRepositoryTypeOCI && ociRepo {
-		authenticator, authErr := soci.OIDCAuth(ctx, obj.Spec.URL, obj.Spec.Provider)
+		authenticator, authErr := oidcAuthenticator.Authorization(ctx, obj.Spec.URL, obj.Spec.Provider)
 		if authErr != nil && !errors.Is(authErr, oci.ErrUnconfiguredProvider) {
 			return nil, "", fmt.Errorf("failed to get credential from '%s': %w", obj.Spec.Provider, authErr)
 		}
@@ -177,6 +181,16 @@ func GetClientOpts(ctx context.Context, c client.Client, obj *sourcev1.HelmRepos
 	hrOpts.Insecure = obj.Spec.Insecure
 
 	return hrOpts, dir, err
+}
+
+// GetClientOpts uses the provided HelmRepository object and a normalized
+// URL to construct a HelmClientOpts object. If obj is an OCI HelmRepository,
+// then the returned options object will also contain the required registry
+// auth mechanisms.
+// A temporary directory is created to store the certs files if needed and its path is returned along with the options object. It is the
+// caller's responsibility to clean up the directory.
+func GetClientOpts(ctx context.Context, c client.Client, obj *sourcev1.HelmRepository, url string) (*ClientOpts, string, error) {
+	return GetClientOptsWithOIDCAuth(ctx, c, nil, obj, url)
 }
 
 func fetchSecret(ctx context.Context, c client.Client, name, namespace string) (*corev1.Secret, error) {
