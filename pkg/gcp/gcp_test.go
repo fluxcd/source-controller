@@ -33,12 +33,13 @@ import (
 
 	gcpstorage "cloud.google.com/go/storage"
 	"google.golang.org/api/googleapi"
+	"google.golang.org/api/option"
 	raw "google.golang.org/api/storage/v1"
 	"gotest.tools/assert"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"google.golang.org/api/option"
+	pkgtesting "github.com/fluxcd/source-controller/pkg/testing"
 )
 
 const (
@@ -49,11 +50,12 @@ const (
 )
 
 var (
-	hc     *http.Client
-	client *gcpstorage.Client
-	close  func()
-	err    error
-	secret = corev1.Secret{
+	hc         *http.Client
+	serverAddr string
+	client     *gcpstorage.Client
+	close      func()
+	err        error
+	secret     = corev1.Secret{
 		ObjectMeta: v1.ObjectMeta{
 			Name:      "gcp-secret",
 			Namespace: "default",
@@ -76,7 +78,7 @@ var (
 )
 
 func TestMain(m *testing.M) {
-	hc, close = newTestServer(func(w http.ResponseWriter, r *http.Request) {
+	hc, serverAddr, close = newTestServer(func(w http.ResponseWriter, r *http.Request) {
 		io.Copy(io.Discard, r.Body)
 		switch r.RequestURI {
 		case fmt.Sprintf("/storage/v1/b/%s?alt=json&prettyPrint=false&projection=full", bucketName):
@@ -140,7 +142,7 @@ func TestMain(m *testing.M) {
 }
 
 func TestNewClientWithSecretErr(t *testing.T) {
-	gcpClient, err := NewClient(context.Background(), secret.DeepCopy())
+	gcpClient, err := NewClient(context.Background(), nil, secret.DeepCopy(), nil)
 	t.Log(err)
 	assert.Error(t, err, "dialing: invalid character 'e' looking for beginning of value")
 	assert.Assert(t, gcpClient == nil)
@@ -216,6 +218,27 @@ func TestFGetObject(t *testing.T) {
 	assert.Equal(t, etag, objectEtag)
 }
 
+func TestFGetObjectWithProxy(t *testing.T) {
+	proxyURL, closeProxy := pkgtesting.NewHTTPProxy(t, serverAddr)
+	defer closeProxy()
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.Proxy = http.ProxyURL(proxyURL)
+	transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true} // needed because the server is a mock
+	httpClient := &http.Client{Transport: transport}
+	client, err := gcpstorage.NewClient(context.Background(), option.WithHTTPClient(httpClient))
+	assert.NilError(t, err)
+	gcpClient := &GCSClient{
+		Client: client,
+	}
+	tempDir := t.TempDir()
+	localPath := filepath.Join(tempDir, objectName)
+	etag, err := gcpClient.FGetObject(context.Background(), bucketName, objectName, localPath)
+	if err != io.EOF {
+		assert.NilError(t, err)
+	}
+	assert.Equal(t, etag, objectEtag)
+}
+
 func TestFGetObjectNotExists(t *testing.T) {
 	object := "notexists.txt"
 	tempDir := t.TempDir()
@@ -272,16 +295,17 @@ func TestValidateSecret(t *testing.T) {
 	}
 }
 
-func newTestServer(handler func(w http.ResponseWriter, r *http.Request)) (*http.Client, func()) {
-	ts := httptest.NewTLSServer(http.HandlerFunc(handler))
+func newTestServer(handler http.HandlerFunc) (*http.Client, string, func()) {
+	ts := httptest.NewTLSServer(handler)
+	serverAddr := ts.Listener.Addr().String()
 	tlsConf := &tls.Config{InsecureSkipVerify: true}
 	tr := &http.Transport{
 		TLSClientConfig: tlsConf,
 		DialTLS: func(netw, addr string) (net.Conn, error) {
-			return tls.Dial("tcp", ts.Listener.Addr().String(), tlsConf)
+			return tls.Dial("tcp", serverAddr, tlsConf)
 		},
 	}
-	return &http.Client{Transport: tr}, func() {
+	return &http.Client{Transport: tr}, serverAddr, func() {
 		tr.CloseIdleConnections()
 		ts.Close()
 	}

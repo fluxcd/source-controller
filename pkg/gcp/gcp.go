@@ -21,6 +21,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 
@@ -30,6 +32,8 @@ import (
 	"google.golang.org/api/option"
 	corev1 "k8s.io/api/core/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
+
+	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
 )
 
 var (
@@ -48,24 +52,28 @@ type GCSClient struct {
 	*gcpstorage.Client
 }
 
-// NewClient creates a new GCP storage client. The Client will automatically look for  the Google Application
+// NewClient creates a new GCP storage client. The Client will automatically look for the Google Application
 // Credential environment variable or look for the Google Application Credential file.
-func NewClient(ctx context.Context, secret *corev1.Secret) (*GCSClient, error) {
-	c := &GCSClient{}
+func NewClient(ctx context.Context, bucket *sourcev1.Bucket,
+	secret *corev1.Secret, proxyURL *url.URL) (*GCSClient, error) {
+	var opts []option.ClientOption
+
 	if secret != nil {
-		client, err := gcpstorage.NewClient(ctx, option.WithCredentialsJSON(secret.Data["serviceaccount"]))
-		if err != nil {
-			return nil, err
-		}
-		c.Client = client
-	} else {
-		client, err := gcpstorage.NewClient(ctx)
-		if err != nil {
-			return nil, err
-		}
-		c.Client = client
+		opts = append(opts, option.WithCredentialsJSON(secret.Data["serviceaccount"]))
 	}
-	return c, nil
+
+	if proxyURL != nil {
+		transport := http.DefaultTransport.(*http.Transport).Clone()
+		transport.Proxy = http.ProxyURL(proxyURL)
+		opts = append(opts, option.WithHTTPClient(&http.Client{Transport: transport}))
+	}
+
+	client, err := gcpstorage.NewClient(ctx, opts...)
+	if err != nil {
+		return nil, err
+	}
+
+	return &GCSClient{Client: client}, nil
 }
 
 // ValidateSecret validates the credential secret. The provided Secret may

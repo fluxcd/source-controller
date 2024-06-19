@@ -236,7 +236,7 @@ func TestFGetObject(t *testing.T) {
 }
 
 func TestNewClientAndFGetObjectWithProxy(t *testing.T) {
-	proxyURL, closeProxy := pkgtesting.NewHTTPProxy(t)
+	proxyURL, closeProxy := pkgtesting.NewHTTPProxy(t, "")
 	defer closeProxy()
 	minioClient, err := NewClient(bucketStub(bucket, testMinioAddress), secret.DeepCopy(), testTLSConfig, proxyURL)
 	assert.NilError(t, err)

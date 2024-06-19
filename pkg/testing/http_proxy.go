@@ -13,13 +13,20 @@ import (
 
 // NewHTTPProxy starts an HTTP proxy server in a random port and returns the
 // URL of the proxy server and a function to stop the server.
-func NewHTTPProxy(t *testing.T) (*url.URL, func()) {
+// If httpsTargetAddr is not empty, the proxy server will handle CONNECT
+// HTTPS requests to that address.
+func NewHTTPProxy(t *testing.T, httpsTargetAddr string) (*url.URL, func()) {
 	listener, err := net.Listen("tcp", ":0")
 	assert.NilError(t, err, "could not start proxy server")
 
 	addr := listener.Addr().String()
 	proxy := goproxy.NewProxyHttpServer()
 	proxy.Verbose = true
+	if httpsTargetAddr != "" {
+		proxy.OnRequest().HandleConnectFunc(func(host string, ctx *goproxy.ProxyCtx) (*goproxy.ConnectAction, string) {
+			return goproxy.OkConnect, httpsTargetAddr
+		})
+	}
 	server := &http.Server{
 		Addr:    addr,
 		Handler: proxy,

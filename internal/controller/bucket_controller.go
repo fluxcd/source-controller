@@ -448,7 +448,7 @@ func (r *BucketReconciler) reconcileSource(ctx context.Context, sp *patch.Serial
 			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Error())
 			return sreconcile.ResultEmpty, e
 		}
-		if provider, err = gcp.NewClient(ctx, secret); err != nil {
+		if provider, err = gcp.NewClient(ctx, obj, secret, proxyURL); err != nil {
 			e := serror.NewGeneric(err, "ClientError")
 			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Error())
 			return sreconcile.ResultEmpty, e
