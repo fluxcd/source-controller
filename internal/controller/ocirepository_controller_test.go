@@ -69,8 +69,10 @@ import (
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	ociv1 "github.com/fluxcd/source-controller/api/v1beta2"
+	sourcev1beta2 "github.com/fluxcd/source-controller/api/v1beta2"
 	intdigest "github.com/fluxcd/source-controller/internal/digest"
 	serror "github.com/fluxcd/source-controller/internal/error"
+	soci "github.com/fluxcd/source-controller/internal/oci"
 	snotation "github.com/fluxcd/source-controller/internal/oci/notation"
 	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
 )
@@ -795,11 +797,15 @@ func TestOCIRepository_reconcileSource_authStrategy(t *testing.T) {
 				obj.Spec.Insecure = true
 			}
 
+			authenticator, er := soci.NewOIDCAuthenticator(soci.WithCacheCapacity(1))
+			g.Expect(er).NotTo(HaveOccurred())
+
 			r := &OCIRepositoryReconciler{
-				Client:        clientBuilder.Build(),
-				EventRecorder: record.NewFakeRecorder(32),
-				Storage:       testStorage,
-				patchOptions:  getPatchOptions(ociRepositoryReadyCondition.Owned, "sc"),
+				Client:            clientBuilder.Build(),
+				EventRecorder:     record.NewFakeRecorder(32),
+				Storage:           testStorage,
+				OIDCAuthenticator: authenticator,
+				patchOptions:      getPatchOptions(ociRepositoryReadyCondition.Owned, "sc"),
 			}
 
 			opts := makeRemoteOptions(ctx, makeTransport(tt.insecure), authn.DefaultKeychain, nil)
@@ -1147,6 +1153,7 @@ func TestOCIRepository_reconcileSource_remoteReference(t *testing.T) {
 					Interval: metav1.Duration{Duration: interval},
 					Timeout:  &metav1.Duration{Duration: timeout},
 					Insecure: true,
+					Provider: sourcev1beta2.GenericOCIProvider,
 				},
 			}
 
@@ -1398,6 +1405,7 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignatureNotation(t *testi
 					},
 					Interval: metav1.Duration{Duration: interval},
 					Timeout:  &metav1.Duration{Duration: timeout},
+					Provider: sourcev1beta2.GenericOCIProvider,
 				},
 			}
 
@@ -1718,6 +1726,7 @@ func TestOCIRepository_reconcileSource_verifyOCISourceTrustPolicyNotation(t *tes
 					},
 					Interval: metav1.Duration{Duration: interval},
 					Timeout:  &metav1.Duration{Duration: timeout},
+					Provider: sourcev1beta2.GenericOCIProvider,
 				},
 			}
 
@@ -2042,6 +2051,7 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignatureCosign(t *testing
 					},
 					Interval: metav1.Duration{Duration: interval},
 					Timeout:  &metav1.Duration{Duration: timeout},
+					Provider: sourcev1beta2.GenericOCIProvider,
 				},
 			}
 
@@ -2265,6 +2275,7 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignature_keyless(t *testi
 					},
 					Interval:  metav1.Duration{Duration: interval},
 					Timeout:   &metav1.Duration{Duration: timeout},
+					Provider:  sourcev1beta2.GenericOCIProvider,
 					Reference: tt.reference,
 				},
 			}
@@ -2448,6 +2459,7 @@ func TestOCIRepository_reconcileSource_noop(t *testing.T) {
 					Reference: &ociv1.OCIRepositoryRef{Tag: "6.1.5"},
 					Interval:  metav1.Duration{Duration: interval},
 					Timeout:   &metav1.Duration{Duration: timeout},
+					Provider:  sourcev1beta2.GenericOCIProvider,
 					Insecure:  true,
 				},
 			}

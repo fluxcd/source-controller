@@ -342,6 +342,8 @@ github.com/fluxcd/pkg/apis/event v0.9.0 h1:iKxU+3v/3bAuC1C1iXg1mjbIiaEQet7WETh8l
 github.com/fluxcd/pkg/apis/event v0.9.0/go.mod h1:5LjcTeppPMEyOgtTbIP7q2GbVwIRUfujIxynIjHBV/k=
 github.com/fluxcd/pkg/apis/meta v1.5.0 h1:/G82d2Az5D9op3F+wJUpD8jw/eTV0suM6P7+cSURoUM=
 github.com/fluxcd/pkg/apis/meta v1.5.0/go.mod h1:Y3u7JomuuKtr5fvP1Iji2/50FdRe5GcBug2jawNVkdM=
+github.com/fluxcd/pkg/cache v0.0.1 h1:aeDQm4D37btj6I01p6ZKW6JNOZm3CIYN5PaVzyhHr38=
+github.com/fluxcd/pkg/cache v0.0.1/go.mod h1:R3TJIK9XaohHNc3BeqfZX/UivMrx8Xz6ihGoVAjh75k=
 github.com/fluxcd/pkg/git v0.19.0 h1:zIv+GAT0ieIUpnGBVi3Bhax/qq4Rr28BW7Jv4DTt6zE=
 github.com/fluxcd/pkg/git v0.19.0/go.mod h1:wkqUOSrTjtsVVk/gC6/7RxVpi9GcqAA+7O5HVJF5S14=
 github.com/fluxcd/pkg/git/gogit v0.19.0 h1:SdoNAmC/HTPXniQjp609X59rCsBiA+Sdq1Hv8SnYC6I=
@@ -354,8 +356,8 @@ github.com/fluxcd/pkg/lockedfile v0.3.0 h1:tZkBAffcxyt4zMigHIKc54cKgN5I/kFF005gy
 github.com/fluxcd/pkg/lockedfile v0.3.0/go.mod h1:5iCYXAs953LlXZq7nTId9ZSGnHVvTfZ0mDmrDE49upk=
 github.com/fluxcd/pkg/masktoken v0.4.0 h1:pRItymXzW8dhT9Fd4XfnbrgKeySPeeLCrr6W1pgrUbM=
 github.com/fluxcd/pkg/masktoken v0.4.0/go.mod h1:MP1nCsr2tJbH8hnhZP4+7TfTR0ggrKOJgi9Bo7Mj/6M=
-github.com/fluxcd/pkg/oci v0.37.1 h1:p4rfCHZlBWL+Q5Xey51iiBRmoje0IevCBT0/r8iae3M=
-github.com/fluxcd/pkg/oci v0.37.1/go.mod h1:LrVuX6VACenJ5ycQJxec+I7YJegCsE4nzRUV+6RuxcY=
+github.com/fluxcd/pkg/oci v0.38.0 h1:a9pCdqiUPZ7YOnYDXVXCxELBU0r6xbDnGv4C6YUz7vU=
+github.com/fluxcd/pkg/oci v0.38.0/go.mod h1:mYVSxnpVutRmWu6mpwxm7hXFn6qdhLEjspL04ej/WZU=
 github.com/fluxcd/pkg/runtime v0.47.1 h1:Q1tAFsp92uurWyoEe52AmMC4k+6DYTPBrUQDs+nz/9c=
 github.com/fluxcd/pkg/runtime v0.47.1/go.mod h1:97a+PqpWMgQsoqh91uH3EQz+/DC7Uxc8xcu/rDHFC5c=
 github.com/fluxcd/pkg/sourceignore v0.7.0 h1:qQrB2o543wA1o4vgR62ufwkAaDp8+f8Wdj1HKDlmDrU=
@@ -911,8 +913,8 @@ github.com/stretchr/objx v0.1.1/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+
 github.com/stretchr/objx v0.2.0/go.mod h1:qt09Ya8vawLte6SNmTgCsAVtYtaKzEcn8ATUoHMkEqE=
 github.com/stretchr/objx v0.4.0/go.mod h1:YvHI0jy2hoMjB+UWwv71VJQ9isScKT/TqJzVSSt89Yw=
 github.com/stretchr/objx v0.5.0/go.mod h1:Yh+to48EsGEfYuaHDzXPcE3xhTkx73EhmCGUpEOglKo=
-github.com/stretchr/objx v0.5.1 h1:4VhoImhV/Bm0ToFkXFi8hXNXwpDRZ/ynw3amt82mzq0=
-github.com/stretchr/objx v0.5.1/go.mod h1:/iHQpkQwBD6DLUmQ4pE+s1TXdob1mORJ4/UFdrifcy0=
+github.com/stretchr/objx v0.5.2 h1:xuMeJ0Sdp5ZMRXx/aWO6RZxdr3beISkG5/G/aIRr3pY=
+github.com/stretchr/objx v0.5.2/go.mod h1:FRsXN1f5AsAjCGJKqEizvkpNtU+EGNCLh3NxZ/8L+MA=
 github.com/stretchr/testify v1.2.2/go.mod h1:a8OnRcib4nhh0OaRAV+Yts87kKdq0PP7pXfy6kDkUVs=
 github.com/stretchr/testify v1.3.0/go.mod h1:M5WIy9Dh21IEIfnGCwXGc5bZfKNJtfHm1UVUgZn+9EI=
 github.com/stretchr/testify v1.4.0/go.mod h1:j7eGeouHqKxXV5pUuKE4zz7dFj8WfuZ+81PSLYec5m4=

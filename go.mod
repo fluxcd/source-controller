@@ -22,13 +22,14 @@ require (
 	github.com/fluxcd/cli-utils v0.36.0-flux.7
 	github.com/fluxcd/pkg/apis/event v0.9.0
 	github.com/fluxcd/pkg/apis/meta v1.5.0
+	github.com/fluxcd/pkg/cache v0.0.1
 	github.com/fluxcd/pkg/git v0.19.0
 	github.com/fluxcd/pkg/git/gogit v0.19.0
 	github.com/fluxcd/pkg/gittestserver v0.12.0
 	github.com/fluxcd/pkg/helmtestserver v0.18.0
 	github.com/fluxcd/pkg/lockedfile v0.3.0
 	github.com/fluxcd/pkg/masktoken v0.4.0
-	github.com/fluxcd/pkg/oci v0.37.1
+	github.com/fluxcd/pkg/oci v0.38.0
 	github.com/fluxcd/pkg/runtime v0.47.1
 	github.com/fluxcd/pkg/sourceignore v0.7.0
 	github.com/fluxcd/pkg/ssh v0.13.0
@@ -314,7 +315,6 @@ require (
 	github.com/spf13/cobra v1.8.0 // indirect
 	github.com/spf13/viper v1.18.2 // indirect
 	github.com/spiffe/go-spiffe/v2 v2.2.0 // indirect
-	github.com/stretchr/objx v0.5.1 // indirect
 	github.com/subosito/gotenv v1.6.0 // indirect
 	github.com/syndtr/goleveldb v1.0.1-0.20220721030215-126854af5e6d // indirect
 	github.com/thales-e-security/pool v0.0.2 // indirect
