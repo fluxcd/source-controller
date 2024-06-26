@@ -234,7 +234,7 @@ func (h *Helper) SummarizeAndPatch(ctx context.Context, obj conditions.Setter, o
 	}
 	if len(failedBiPolarity) > 0 {
 		topFailedBiPolarity := conditions.Get(obj, failedBiPolarity[0])
-		conditions.MarkFalse(obj, meta.ReadyCondition, topFailedBiPolarity.Reason, topFailedBiPolarity.Message)
+		conditions.MarkFalse(obj, meta.ReadyCondition, topFailedBiPolarity.Reason, "%s", topFailedBiPolarity.Message)
 	}
 
 	// If object is not stalled, result is success and runtime error is nil,
