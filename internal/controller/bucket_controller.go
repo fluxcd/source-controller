@@ -285,7 +285,7 @@ func (r *BucketReconciler) reconcile(ctx context.Context, sp *patch.SerialPatche
 			fmt.Errorf("failed to create temporary working directory: %w", err),
 			sourcev1.DirCreationFailedReason,
 		)
-		conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition, e.Reason, e.Err.Error())
+		conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition, e.Reason, "%v", e)
 		return sreconcile.ResultEmpty, e
 	}
 	defer func() {
@@ -426,7 +426,7 @@ func (r *BucketReconciler) reconcileSource(ctx context.Context, sp *patch.Serial
 	secret, err := r.getSecret(ctx, obj.Spec.SecretRef, obj.GetNamespace())
 	if err != nil {
 		e := serror.NewGeneric(err, sourcev1.AuthenticationFailedReason)
-		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Error())
+		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%v", e)
 		// Return error as the world as observed may change
 		return sreconcile.ResultEmpty, e
 	}
@@ -437,40 +437,40 @@ func (r *BucketReconciler) reconcileSource(ctx context.Context, sp *patch.Serial
 	case bucketv1.GoogleBucketProvider:
 		if err = gcp.ValidateSecret(secret); err != nil {
 			e := serror.NewGeneric(err, sourcev1.AuthenticationFailedReason)
-			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Error())
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%v", e)
 			return sreconcile.ResultEmpty, e
 		}
 		if provider, err = gcp.NewClient(ctx, secret); err != nil {
 			e := serror.NewGeneric(err, "ClientError")
-			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Error())
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%v", e)
 			return sreconcile.ResultEmpty, e
 		}
 	case bucketv1.AzureBucketProvider:
 		if err = azure.ValidateSecret(secret); err != nil {
 			e := serror.NewGeneric(err, sourcev1.AuthenticationFailedReason)
-			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Error())
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%v", e)
 			return sreconcile.ResultEmpty, e
 		}
 		if provider, err = azure.NewClient(obj, secret); err != nil {
 			e := serror.NewGeneric(err, "ClientError")
-			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Error())
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%v", e)
 			return sreconcile.ResultEmpty, e
 		}
 	default:
 		if err = minio.ValidateSecret(secret); err != nil {
 			e := serror.NewGeneric(err, sourcev1.AuthenticationFailedReason)
-			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Error())
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%v", e)
 			return sreconcile.ResultEmpty, e
 		}
 		tlsConfig, err := r.getTLSConfig(ctx, obj)
 		if err != nil {
 			e := serror.NewGeneric(err, sourcev1.AuthenticationFailedReason)
-			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Error())
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%v", e)
 			return sreconcile.ResultEmpty, e
 		}
 		if provider, err = minio.NewClient(obj, secret, tlsConfig); err != nil {
 			e := serror.NewGeneric(err, "ClientError")
-			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Error())
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%v", e)
 			return sreconcile.ResultEmpty, e
 		}
 	}
@@ -478,7 +478,7 @@ func (r *BucketReconciler) reconcileSource(ctx context.Context, sp *patch.Serial
 	// Fetch etag index
 	if err = fetchEtagIndex(ctx, provider, obj, index, dir); err != nil {
 		e := serror.NewGeneric(err, bucketv1.BucketOperationFailedReason)
-		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Error())
+		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%v", e)
 		return sreconcile.ResultEmpty, e
 	}
 
@@ -499,7 +499,7 @@ func (r *BucketReconciler) reconcileSource(ctx context.Context, sp *patch.Serial
 
 			message := fmt.Sprintf("new upstream revision '%s'", revision)
 			if obj.GetArtifact() != nil {
-				conditions.MarkTrue(obj, sourcev1.ArtifactOutdatedCondition, "NewRevision", message)
+				conditions.MarkTrue(obj, sourcev1.ArtifactOutdatedCondition, "NewRevision", "%s", message)
 			}
 			rreconcile.ProgressiveStatus(true, obj, meta.ProgressingReason, "building artifact: %s", message)
 			if err := sp.Patch(ctx, obj, r.patchOptions...); err != nil {
@@ -510,7 +510,7 @@ func (r *BucketReconciler) reconcileSource(ctx context.Context, sp *patch.Serial
 
 		if err = fetchIndexFiles(ctx, provider, obj, index, dir); err != nil {
 			e := serror.NewGeneric(err, bucketv1.BucketOperationFailedReason)
-			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Error())
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%v", e)
 			return sreconcile.ResultEmpty, e
 		}
 	}
@@ -562,14 +562,14 @@ func (r *BucketReconciler) reconcileArtifact(ctx context.Context, sp *patch.Seri
 			fmt.Errorf("failed to stat source path: %w", err),
 			sourcev1.StatOperationFailedReason,
 		)
-		conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition, e.Reason, e.Err.Error())
+		conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition, e.Reason, "%v", e)
 		return sreconcile.ResultEmpty, e
 	} else if !f.IsDir() {
 		e := serror.NewGeneric(
 			fmt.Errorf("source path '%s' is not a directory", dir),
 			sourcev1.InvalidPathReason,
 		)
-		conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition, e.Reason, e.Err.Error())
+		conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition, e.Reason, "%v", e)
 		return sreconcile.ResultEmpty, e
 	}
 
@@ -579,7 +579,7 @@ func (r *BucketReconciler) reconcileArtifact(ctx context.Context, sp *patch.Seri
 			fmt.Errorf("failed to create artifact directory: %w", err),
 			sourcev1.DirCreationFailedReason,
 		)
-		conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition, e.Reason, e.Err.Error())
+		conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition, e.Reason, "%v", e)
 		return sreconcile.ResultEmpty, e
 	}
 	unlock, err := r.Storage.Lock(artifact)
@@ -597,7 +597,7 @@ func (r *BucketReconciler) reconcileArtifact(ctx context.Context, sp *patch.Seri
 			fmt.Errorf("unable to archive artifact to storage: %s", err),
 			sourcev1.ArchiveOperationFailedReason,
 		)
-		conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition, e.Reason, e.Err.Error())
+		conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition, e.Reason, "%v", e)
 		return sreconcile.ResultEmpty, e
 	}
 
