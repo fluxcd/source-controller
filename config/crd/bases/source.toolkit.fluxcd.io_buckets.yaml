@@ -391,6 +391,20 @@ spec:
                 - gcp
                 - azure
                 type: string
+              proxySecretRef:
+                description: |-
+                  ProxySecretRef specifies the Secret containing the proxy configuration
+                  to use while communicating with the Bucket server.
+
+
+                  Only supported for the generic provider.
+                properties:
+                  name:
+                    description: Name of the referent.
+                    type: string
+                required:
+                - name
+                type: object
               region:
                 description: Region of the Endpoint where the BucketName is located
                   in.

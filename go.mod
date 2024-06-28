@@ -19,6 +19,7 @@ require (
 	github.com/distribution/distribution/v3 v3.0.0-alpha.1
 	github.com/docker/cli v24.0.9+incompatible
 	github.com/docker/go-units v0.5.0
+	github.com/elazarl/goproxy v0.0.0-20231117061959-7cc037d33fb5
 	github.com/fluxcd/cli-utils v0.36.0-flux.7
 	github.com/fluxcd/pkg/apis/event v0.9.0
 	github.com/fluxcd/pkg/apis/meta v1.5.0
