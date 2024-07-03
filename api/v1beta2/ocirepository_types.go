@@ -116,6 +116,11 @@ type OCIRepositorySpec struct {
 	// +optional
 	CertSecretRef *meta.LocalObjectReference `json:"certSecretRef,omitempty"`
 
+	// ProxySecretRef specifies the Secret containing the proxy configuration
+	// to use while communicating with the container registry.
+	// +optional
+	ProxySecretRef *meta.LocalObjectReference `json:"proxySecretRef,omitempty"`
+
 	// Interval at which the OCIRepository URL is checked for updates.
 	// This interval is approximate and may be subject to jitter to ensure
 	// efficient use of resources.

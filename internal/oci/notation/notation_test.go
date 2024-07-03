@@ -17,8 +17,11 @@ limitations under the License.
 package notation
 
 import (
+	"context"
 	"fmt"
 	"net/http"
+	"net/url"
+	"path"
 	"reflect"
 	"testing"
 
@@ -31,6 +34,8 @@ import (
 	. "github.com/onsi/gomega"
 
 	"github.com/fluxcd/source-controller/internal/oci"
+	testproxy "github.com/fluxcd/source-controller/tests/proxy"
+	testregistry "github.com/fluxcd/source-controller/tests/registry"
 )
 
 func TestOptions(t *testing.T) {
@@ -537,6 +542,61 @@ func TestRepoUrlWithDigest(t *testing.T) {
 	}
 }
 
+func TestVerificationWithProxy(t *testing.T) {
+	g := NewWithT(t)
+
+	registryAddr := testregistry.New(t)
+
+	tarFilePath := path.Join("..", "..", "controller", "testdata", "podinfo", "podinfo-6.1.5.tar")
+	_, err := testregistry.CreatePodinfoImageFromTar(tarFilePath, "6.1.5", registryAddr)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	tagURL := fmt.Sprintf("%s/podinfo:6.1.5", registryAddr)
+	ref, err := name.ParseReference(tagURL)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	proxyAddr, proxyPort := testproxy.New(t)
+
+	tests := []struct {
+		name     string
+		proxyURL *url.URL
+		err      string
+	}{
+		{
+			name:     "with correct proxy",
+			proxyURL: &url.URL{Scheme: "http", Host: proxyAddr},
+			err:      "no signature is associated with",
+		},
+		{
+			name:     "with incorrect proxy",
+			proxyURL: &url.URL{Scheme: "http", Host: fmt.Sprintf("localhost:%d", proxyPort+1)},
+			err:      "connection refused",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			ctx := context.Background()
+
+			transport := http.DefaultTransport.(*http.Transport).Clone()
+			transport.Proxy = http.ProxyURL(tt.proxyURL)
+
+			var opts []Options
+			opts = append(opts, WithTransport(transport))
+			opts = append(opts, WithTrustPolicy(dummyPolicyDocument()))
+			opts = append(opts, WithInsecureRegistry(true))
+
+			verifier, err := NewNotationVerifier(opts...)
+			g.Expect(err).NotTo(HaveOccurred())
+
+			_, err = verifier.Verify(ctx, ref)
+			g.Expect(err.Error()).To(ContainSubstring(tt.err))
+		})
+	}
+}
+
 func dummyPolicyDocument() (policyDoc *trustpolicy.Document) {
 	policyDoc = &trustpolicy.Document{
 		Version:       "1.0",
@@ -548,7 +608,7 @@ func dummyPolicyDocument() (policyDoc *trustpolicy.Document) {
 func dummyPolicyStatement() (policyStatement trustpolicy.TrustPolicy) {
 	policyStatement = trustpolicy.TrustPolicy{
 		Name:                  "test-statement-name",
-		RegistryScopes:        []string{"registry.acme-rockets.io/software/net-monitor"},
+		RegistryScopes:        []string{"*"},
 		SignatureVerification: trustpolicy.SignatureVerification{VerificationLevel: "strict"},
 		TrustStores:           []string{"ca:valid-trust-store", "signingAuthority:valid-trust-store"},
 		TrustedIdentities:     []string{"x509.subject:CN=Notation Test Root,O=Notary,L=Seattle,ST=WA,C=US"},

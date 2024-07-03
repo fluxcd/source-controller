@@ -73,6 +73,7 @@ import (
 	serror "github.com/fluxcd/source-controller/internal/error"
 	snotation "github.com/fluxcd/source-controller/internal/oci/notation"
 	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
+	testproxy "github.com/fluxcd/source-controller/tests/proxy"
 )
 
 func TestOCIRepositoryReconciler_deleteBeforeFinalizer(t *testing.T) {
@@ -963,7 +964,133 @@ func TestOCIRepository_CertSecret(t *testing.T) {
 				return len(resultobj.Finalizers) > 0
 			}, timeout).Should(BeTrue())
 
-			// Wait for the object to fail
+			// Wait for the object to be ready
+			g.Eventually(func() bool {
+				if err := testEnv.Get(ctx, key, &resultobj); err != nil {
+					return false
+				}
+				readyCondition := conditions.Get(&resultobj, meta.ReadyCondition)
+				if readyCondition == nil || conditions.IsUnknown(&resultobj, meta.ReadyCondition) {
+					return false
+				}
+				return obj.Generation == readyCondition.ObservedGeneration &&
+					conditions.IsReady(&resultobj) == tt.expectreadyconition
+			}, timeout).Should(BeTrue())
+
+			tt.expectedstatusmessage = strings.ReplaceAll(tt.expectedstatusmessage, "<url>", pi.url)
+
+			readyCondition := conditions.Get(&resultobj, meta.ReadyCondition)
+			g.Expect(readyCondition.Message).Should(ContainSubstring(tt.expectedstatusmessage))
+
+			// Wait for the object to be deleted
+			g.Expect(testEnv.Delete(ctx, &resultobj)).To(Succeed())
+			g.Eventually(func() bool {
+				if err := testEnv.Get(ctx, key, &resultobj); err != nil {
+					return apierrors.IsNotFound(err)
+				}
+				return false
+			}, timeout).Should(BeTrue())
+		})
+	}
+}
+
+func TestOCIRepository_ProxySecret(t *testing.T) {
+	g := NewWithT(t)
+
+	tmpDir := t.TempDir()
+	regServer, err := setupRegistryServer(ctx, tmpDir, registryOptions{})
+	g.Expect(err).ToNot(HaveOccurred())
+	t.Cleanup(func() {
+		regServer.Close()
+	})
+
+	pi, err := createPodinfoImageFromTar("podinfo-6.1.5.tar", "6.1.5", regServer.registryHost)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	proxyAddr, proxyPort := testproxy.New(t)
+
+	tests := []struct {
+		name                  string
+		url                   string
+		digest                gcrv1.Hash
+		proxySecret           *corev1.Secret
+		expectreadyconition   bool
+		expectedstatusmessage string
+	}{
+		{
+			name:   "test proxied connection",
+			url:    pi.url,
+			digest: pi.digest,
+			proxySecret: &corev1.Secret{
+				Data: map[string][]byte{
+					"address": []byte(fmt.Sprintf("http://%s", proxyAddr)),
+				},
+			},
+			expectreadyconition:   true,
+			expectedstatusmessage: fmt.Sprintf("stored artifact for digest '%s'", pi.digest.String()),
+		},
+		{
+			name:   "test proxy connection error",
+			url:    pi.url,
+			digest: pi.digest,
+			proxySecret: &corev1.Secret{
+				Data: map[string][]byte{
+					"address": []byte(fmt.Sprintf("http://localhost:%d", proxyPort+1)),
+				},
+			},
+			expectreadyconition:   false,
+			expectedstatusmessage: "failed to pull artifact",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			ns, err := testEnv.CreateNamespace(ctx, "ocirepository-test")
+			g.Expect(err).ToNot(HaveOccurred())
+			defer func() { g.Expect(testEnv.Delete(ctx, ns)).To(Succeed()) }()
+
+			obj := &ociv1.OCIRepository{
+				ObjectMeta: metav1.ObjectMeta{
+					GenerateName: "ocirepository-test-resource",
+					Namespace:    ns.Name,
+					Generation:   1,
+				},
+				Spec: ociv1.OCIRepositorySpec{
+					URL:       tt.url,
+					Interval:  metav1.Duration{Duration: 60 * time.Minute},
+					Reference: &ociv1.OCIRepositoryRef{Digest: tt.digest.String()},
+				},
+			}
+
+			if tt.proxySecret != nil {
+				tt.proxySecret.ObjectMeta = metav1.ObjectMeta{
+					GenerateName: "proxy-secretref",
+					Namespace:    ns.Name,
+				}
+
+				g.Expect(testEnv.CreateAndWait(ctx, tt.proxySecret)).To(Succeed())
+				defer func() { g.Expect(testEnv.Delete(ctx, tt.proxySecret)).To(Succeed()) }()
+
+				obj.Spec.ProxySecretRef = &meta.LocalObjectReference{Name: tt.proxySecret.Name}
+			}
+
+			g.Expect(testEnv.Create(ctx, obj)).To(Succeed())
+
+			key := client.ObjectKey{Name: obj.Name, Namespace: obj.Namespace}
+
+			resultobj := ociv1.OCIRepository{}
+
+			// Wait for the finalizer to be set
+			g.Eventually(func() bool {
+				if err := testEnv.Get(ctx, key, &resultobj); err != nil {
+					return false
+				}
+				return len(resultobj.Finalizers) > 0
+			}, timeout).Should(BeTrue())
+
+			// Wait for the object to be ready
 			g.Eventually(func() bool {
 				if err := testEnv.Get(ctx, key, &resultobj); err != nil {
 					return false
@@ -3508,6 +3635,191 @@ func TestOCIContentConfigChanged(t *testing.T) {
 			}
 
 			g.Expect(ociContentConfigChanged(obj)).To(Equal(tt.want))
+		})
+	}
+}
+
+func TestOCIRepositoryReconciler_getProxyURL(t *testing.T) {
+	tests := []struct {
+		name        string
+		ociRepo     *ociv1.OCIRepository
+		objects     []client.Object
+		expectedURL string
+		expectedErr string
+	}{
+		{
+			name: "empty proxySecretRef",
+			ociRepo: &ociv1.OCIRepository{
+				Spec: ociv1.OCIRepositorySpec{
+					ProxySecretRef: nil,
+				},
+			},
+		},
+		{
+			name: "non-existing proxySecretRef",
+			ociRepo: &ociv1.OCIRepository{
+				Spec: ociv1.OCIRepositorySpec{
+					ProxySecretRef: &meta.LocalObjectReference{
+						Name: "non-existing",
+					},
+				},
+			},
+			expectedErr: "secrets \"non-existing\" not found",
+		},
+		{
+			name: "missing address in proxySecretRef",
+			ociRepo: &ociv1.OCIRepository{
+				Spec: ociv1.OCIRepositorySpec{
+					ProxySecretRef: &meta.LocalObjectReference{
+						Name: "dummy",
+					},
+				},
+			},
+			objects: []client.Object{
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "dummy",
+					},
+					Data: map[string][]byte{},
+				},
+			},
+			expectedErr: "invalid proxy secret '/dummy': key 'address' is missing",
+		},
+		{
+			name: "invalid address in proxySecretRef",
+			ociRepo: &ociv1.OCIRepository{
+				Spec: ociv1.OCIRepositorySpec{
+					ProxySecretRef: &meta.LocalObjectReference{
+						Name: "dummy",
+					},
+				},
+			},
+			objects: []client.Object{
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "dummy",
+					},
+					Data: map[string][]byte{
+						"address": {0x7f},
+					},
+				},
+			},
+			expectedErr: "failed to parse proxy address '\x7f': parse \"\\x7f\": net/url: invalid control character in URL",
+		},
+		{
+			name: "no user, no password",
+			ociRepo: &ociv1.OCIRepository{
+				Spec: ociv1.OCIRepositorySpec{
+					ProxySecretRef: &meta.LocalObjectReference{
+						Name: "dummy",
+					},
+				},
+			},
+			objects: []client.Object{
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "dummy",
+					},
+					Data: map[string][]byte{
+						"address": []byte("http://proxy.example.com"),
+					},
+				},
+			},
+			expectedURL: "http://proxy.example.com",
+		},
+		{
+			name: "user, no password",
+			ociRepo: &ociv1.OCIRepository{
+				Spec: ociv1.OCIRepositorySpec{
+					ProxySecretRef: &meta.LocalObjectReference{
+						Name: "dummy",
+					},
+				},
+			},
+			objects: []client.Object{
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "dummy",
+					},
+					Data: map[string][]byte{
+						"address":  []byte("http://proxy.example.com"),
+						"username": []byte("user"),
+					},
+				},
+			},
+			expectedURL: "http://user:@proxy.example.com",
+		},
+		{
+			name: "no user, password",
+			ociRepo: &ociv1.OCIRepository{
+				Spec: ociv1.OCIRepositorySpec{
+					ProxySecretRef: &meta.LocalObjectReference{
+						Name: "dummy",
+					},
+				},
+			},
+			objects: []client.Object{
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "dummy",
+					},
+					Data: map[string][]byte{
+						"address":  []byte("http://proxy.example.com"),
+						"password": []byte("password"),
+					},
+				},
+			},
+			expectedURL: "http://:password@proxy.example.com",
+		},
+		{
+			name: "user, password",
+			ociRepo: &ociv1.OCIRepository{
+				Spec: ociv1.OCIRepositorySpec{
+					ProxySecretRef: &meta.LocalObjectReference{
+						Name: "dummy",
+					},
+				},
+			},
+			objects: []client.Object{
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "dummy",
+					},
+					Data: map[string][]byte{
+						"address":  []byte("http://proxy.example.com"),
+						"username": []byte("user"),
+						"password": []byte("password"),
+					},
+				},
+			},
+			expectedURL: "http://user:password@proxy.example.com",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			c := fakeclient.NewClientBuilder().
+				WithScheme(testEnv.Scheme()).
+				WithObjects(tt.objects...).
+				Build()
+
+			r := &OCIRepositoryReconciler{
+				Client: c,
+			}
+
+			u, err := r.getProxyURL(ctx, tt.ociRepo)
+			if tt.expectedErr == "" {
+				g.Expect(err).To(BeNil())
+			} else {
+				g.Expect(err.Error()).To(ContainSubstring(tt.expectedErr))
+			}
+			if tt.expectedURL == "" {
+				g.Expect(u).To(BeNil())
+			} else {
+				g.Expect(u.String()).To(Equal(tt.expectedURL))
+			}
 		})
 	}
 }

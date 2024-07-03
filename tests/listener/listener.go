@@ -32,7 +32,7 @@ import (
 func New(t *testing.T) (net.Listener, string, int) {
 	t.Helper()
 
-	lis, err := net.Listen("tcp", ":0")
+	lis, err := net.Listen("tcp", "localhost:0")
 	assert.NilError(t, err)
 	t.Cleanup(func() { lis.Close() })
 

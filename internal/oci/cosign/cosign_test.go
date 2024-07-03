@@ -17,13 +17,21 @@ limitations under the License.
 package cosign
 
 import (
+	"context"
+	"fmt"
 	"net/http"
+	"net/url"
 	"reflect"
 	"testing"
 
 	"github.com/google/go-containerregistry/pkg/authn"
+	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
+	. "github.com/onsi/gomega"
 	"github.com/sigstore/cosign/v2/pkg/cosign"
+
+	testproxy "github.com/fluxcd/source-controller/tests/proxy"
+	testregistry "github.com/fluxcd/source-controller/tests/registry"
 )
 
 func TestOptions(t *testing.T) {
@@ -125,6 +133,61 @@ func TestOptions(t *testing.T) {
 					t.Errorf("got %d remote options, want %d", len(o.rOpt), 0)
 				}
 			}
+		})
+	}
+}
+
+func TestPrivateKeyVerificationWithProxy(t *testing.T) {
+	g := NewWithT(t)
+
+	registryAddr := testregistry.New(t)
+
+	tagURL := fmt.Sprintf("%s/fluxcd/source-controller:v1.3.0", registryAddr)
+	ref, err := name.ParseReference(tagURL)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	proxyAddr, proxyPort := testproxy.New(t)
+
+	keys, err := cosign.GenerateKeyPair(func(b bool) ([]byte, error) {
+		return []byte("cosign-password"), nil
+	})
+	g.Expect(err).NotTo(HaveOccurred())
+
+	tests := []struct {
+		name     string
+		proxyURL *url.URL
+		err      string
+	}{
+		{
+			name:     "with correct proxy",
+			proxyURL: &url.URL{Scheme: "http", Host: proxyAddr},
+			err:      "image tag not found",
+		},
+		{
+			name:     "with incorrect proxy",
+			proxyURL: &url.URL{Scheme: "http", Host: fmt.Sprintf("localhost:%d", proxyPort+1)},
+			err:      "connection refused",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			ctx := context.Background()
+
+			transport := http.DefaultTransport.(*http.Transport).Clone()
+			transport.Proxy = http.ProxyURL(tt.proxyURL)
+
+			var opts []Options
+			opts = append(opts, WithRemoteOptions(remote.WithTransport(transport)))
+			opts = append(opts, WithPublicKey(keys.PublicBytes))
+
+			verifier, err := NewCosignVerifier(ctx, opts...)
+			g.Expect(err).NotTo(HaveOccurred())
+
+			_, err = verifier.Verify(ctx, ref)
+			g.Expect(err.Error()).To(ContainSubstring(tt.err))
 		})
 	}
 }
