@@ -286,7 +286,7 @@ func (r *OCIRepositoryReconciler) reconcile(ctx context.Context, sp *patch.Seria
 			fmt.Errorf("failed to create temporary working directory: %w", err),
 			sourcev1.DirCreationFailedReason,
 		)
-		conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition, e.Reason, "%v", e)
+		conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition, e.Reason, "%s", e)
 		return sreconcile.ResultEmpty, e
 	}
 	defer func() {
@@ -349,7 +349,7 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 			fmt.Errorf("failed to get credential: %w", err),
 			sourcev1.AuthenticationFailedReason,
 		)
-		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%v", e)
+		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
 		return sreconcile.ResultEmpty, e
 	}
 
@@ -361,7 +361,7 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 				fmt.Errorf("failed to get credential from %s: %w", obj.Spec.Provider, authErr),
 				sourcev1.AuthenticationFailedReason,
 			)
-			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%v", e)
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
 			return sreconcile.ResultEmpty, e
 		}
 	}
@@ -373,7 +373,7 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 			fmt.Errorf("failed to generate transport for '%s': %w", obj.Spec.URL, err),
 			sourcev1.AuthenticationFailedReason,
 		)
-		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%v", e)
+		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
 		return sreconcile.ResultEmpty, e
 	}
 
@@ -386,14 +386,14 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 			e := serror.NewStalling(
 				fmt.Errorf("URL validation failed for '%s': %w", obj.Spec.URL, err),
 				sourcev1.URLInvalidReason)
-			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%v", e)
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
 			return sreconcile.ResultEmpty, e
 		}
 
 		e := serror.NewGeneric(
 			fmt.Errorf("failed to determine the artifact tag for '%s': %w", obj.Spec.URL, err),
 			sourcev1.ReadOperationFailedReason)
-		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%v", e)
+		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
 		return sreconcile.ResultEmpty, e
 	}
 
@@ -405,7 +405,7 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 			fmt.Errorf("failed to determine artifact digest: %w", err),
 			ociv1.OCIPullFailedReason,
 		)
-		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%v", e)
+		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
 		return sreconcile.ResultEmpty, e
 	}
 	metaArtifact := &sourcev1.Artifact{Revision: revision}
@@ -447,7 +447,7 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 				fmt.Errorf("failed to verify the signature using provider '%s': %w", provider, err),
 				sourcev1.VerificationError,
 			)
-			conditions.MarkFalse(obj, sourcev1.SourceVerifiedCondition, e.Reason, "%v", e)
+			conditions.MarkFalse(obj, sourcev1.SourceVerifiedCondition, e.Reason, "%s", e)
 			return sreconcile.ResultEmpty, e
 		}
 
@@ -470,7 +470,7 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 			fmt.Errorf("failed to pull artifact from '%s': %w", obj.Spec.URL, err),
 			ociv1.OCIPullFailedReason,
 		)
-		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%v", e)
+		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
 		return sreconcile.ResultEmpty, e
 	}
 
@@ -481,7 +481,7 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 			fmt.Errorf("failed to parse artifact manifest: %w", err),
 			ociv1.OCILayerOperationFailedReason,
 		)
-		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%v", e)
+		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
 		return sreconcile.ResultEmpty, e
 	}
 	metadata.Metadata = manifest.Annotations
@@ -490,7 +490,7 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 	blob, err := r.selectLayer(obj, img)
 	if err != nil {
 		e := serror.NewGeneric(err, ociv1.OCILayerOperationFailedReason)
-		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%v", e)
+		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
 		return sreconcile.ResultEmpty, e
 	}
 
@@ -502,7 +502,7 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 				fmt.Errorf("failed to extract layer contents from artifact: %w", err),
 				ociv1.OCILayerOperationFailedReason,
 			)
-			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%v", e)
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
 			return sreconcile.ResultEmpty, e
 		}
 	case ociv1.OCILayerCopy:
@@ -513,7 +513,7 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 				fmt.Errorf("failed to create file to copy layer to: %w", err),
 				ociv1.OCILayerOperationFailedReason,
 			)
-			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%v", e)
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
 			return sreconcile.ResultEmpty, e
 		}
 		defer file.Close()
@@ -524,7 +524,7 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 				fmt.Errorf("failed to copy layer from artifact: %w", err),
 				ociv1.OCILayerOperationFailedReason,
 			)
-			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%v", e)
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
 			return sreconcile.ResultEmpty, e
 		}
 	default:
@@ -532,7 +532,7 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 			fmt.Errorf("unsupported layer operation: %s", obj.GetLayerOperation()),
 			ociv1.OCILayerOperationFailedReason,
 		)
-		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%v", e)
+		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
 		return sreconcile.ResultEmpty, e
 	}
 
@@ -1063,14 +1063,14 @@ func (r *OCIRepositoryReconciler) reconcileArtifact(ctx context.Context, sp *pat
 			fmt.Errorf("failed to stat source path: %w", err),
 			sourcev1.StatOperationFailedReason,
 		)
-		conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition, e.Reason, "%v", e)
+		conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition, e.Reason, "%s", e)
 		return sreconcile.ResultEmpty, e
 	} else if !f.IsDir() {
 		e := serror.NewGeneric(
 			fmt.Errorf("source path '%s' is not a directory", dir),
 			sourcev1.InvalidPathReason,
 		)
-		conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition, e.Reason, "%v", e)
+		conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition, e.Reason, "%s", e)
 		return sreconcile.ResultEmpty, e
 	}
 
@@ -1080,7 +1080,7 @@ func (r *OCIRepositoryReconciler) reconcileArtifact(ctx context.Context, sp *pat
 			fmt.Errorf("failed to create artifact directory: %w", err),
 			sourcev1.DirCreationFailedReason,
 		)
-		conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition, e.Reason, "%v", e)
+		conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition, e.Reason, "%s", e)
 		return sreconcile.ResultEmpty, e
 	}
 	unlock, err := r.Storage.Lock(artifact)
@@ -1099,7 +1099,7 @@ func (r *OCIRepositoryReconciler) reconcileArtifact(ctx context.Context, sp *pat
 				fmt.Errorf("unable to copy artifact to storage: %w", err),
 				sourcev1.ArchiveOperationFailedReason,
 			)
-			conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition, e.Reason, "%v", e)
+			conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition, e.Reason, "%s", e)
 			return sreconcile.ResultEmpty, e
 		}
 	default:
@@ -1121,7 +1121,7 @@ func (r *OCIRepositoryReconciler) reconcileArtifact(ctx context.Context, sp *pat
 				fmt.Errorf("unable to archive artifact to storage: %s", err),
 				sourcev1.ArchiveOperationFailedReason,
 			)
-			conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition, e.Reason, "%v", e)
+			conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition, e.Reason, "%s", e)
 			return sreconcile.ResultEmpty, e
 		}
 	}

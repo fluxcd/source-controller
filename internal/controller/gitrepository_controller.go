@@ -279,7 +279,7 @@ func (r *GitRepositoryReconciler) reconcile(ctx context.Context, sp *patch.Seria
 			fmt.Errorf("failed to create temporary working directory: %w", err),
 			sourcev1.DirCreationFailedReason,
 		)
-		conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition, e.Reason, "%v", e)
+		conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition, e.Reason, "%s", e)
 		return sreconcile.ResultEmpty, e
 	}
 	defer func() {
@@ -486,7 +486,7 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 				fmt.Errorf("failed to configure proxy options: %w", err),
 				sourcev1.AuthenticationFailedReason,
 			)
-			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%v", e)
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
 			// Return error as the world as observed may change
 			return sreconcile.ResultEmpty, e
 		}
@@ -498,7 +498,7 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 			fmt.Errorf("failed to parse url '%s': %w", obj.Spec.URL, err),
 			sourcev1.URLInvalidReason,
 		)
-		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%v", e)
+		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
 		return sreconcile.ResultEmpty, e
 	}
 
@@ -508,7 +508,7 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 			fmt.Errorf("failed to configure authentication options: %w", err),
 			sourcev1.AuthenticationFailedReason,
 		)
-		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%v", e)
+		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
 		// Return error as the world as observed may change
 		return sreconcile.ResultEmpty, e
 	}
@@ -544,7 +544,7 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 			fmt.Errorf("git repository is empty"),
 			"EmptyGitRepository",
 		)
-		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%v", e)
+		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
 		return sreconcile.ResultEmpty, e
 	}
 	// Assign the commit to the shared commit reference.
@@ -703,14 +703,14 @@ func (r *GitRepositoryReconciler) reconcileArtifact(ctx context.Context, sp *pat
 			fmt.Errorf("failed to stat target artifact path: %w", err),
 			sourcev1.StatOperationFailedReason,
 		)
-		conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition, e.Reason, "%v", e)
+		conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition, e.Reason, "%s", e)
 		return sreconcile.ResultEmpty, e
 	} else if !f.IsDir() {
 		e := serror.NewGeneric(
 			fmt.Errorf("invalid target path: '%s' is not a directory", dir),
 			sourcev1.InvalidPathReason,
 		)
-		conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition, e.Reason, "%v", e)
+		conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition, e.Reason, "%s", e)
 		return sreconcile.ResultEmpty, e
 	}
 
@@ -720,7 +720,7 @@ func (r *GitRepositoryReconciler) reconcileArtifact(ctx context.Context, sp *pat
 			fmt.Errorf("failed to create artifact directory: %w", err),
 			sourcev1.DirCreationFailedReason,
 		)
-		conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition, e.Reason, "%v", e)
+		conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition, e.Reason, "%s", e)
 		return sreconcile.ResultEmpty, e
 	}
 	unlock, err := r.Storage.Lock(artifact)
@@ -751,7 +751,7 @@ func (r *GitRepositoryReconciler) reconcileArtifact(ctx context.Context, sp *pat
 			fmt.Errorf("unable to archive artifact to storage: %w", err),
 			sourcev1.ArchiveOperationFailedReason,
 		)
-		conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition, e.Reason, "%v", e)
+		conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition, e.Reason, "%s", e)
 		return sreconcile.ResultEmpty, e
 	}
 
@@ -800,7 +800,7 @@ func (r *GitRepositoryReconciler) reconcileInclude(ctx context.Context, sp *patc
 				fmt.Errorf("path calculation for include '%s' failed: %w", incl.GitRepositoryRef.Name, err),
 				"IllegalPath",
 			)
-			conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition, e.Reason, "%v", e)
+			conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition, e.Reason, "%s", e)
 			return sreconcile.ResultEmpty, e
 		}
 
@@ -821,7 +821,7 @@ func (r *GitRepositoryReconciler) reconcileInclude(ctx context.Context, sp *patc
 				fmt.Errorf("failed to copy '%s' include from %s to %s: %w", incl.GitRepositoryRef.Name, incl.GetFromPath(), incl.GetToPath(), err),
 				"CopyFailure",
 			)
-			conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition, e.Reason, "%v", e)
+			conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition, e.Reason, "%s", e)
 			return sreconcile.ResultEmpty, e
 		}
 	}
@@ -872,7 +872,7 @@ func (r *GitRepositoryReconciler) gitCheckout(ctx context.Context, obj *sourcev1
 			fmt.Errorf("failed to create Git client: %w", err),
 			sourcev1.GitOperationFailedReason,
 		)
-		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%v", e)
+		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
 		return nil, e
 	}
 	defer gitReader.Close()
@@ -883,7 +883,7 @@ func (r *GitRepositoryReconciler) gitCheckout(ctx context.Context, obj *sourcev1
 			fmt.Errorf("failed to checkout and determine revision: %w", err),
 			sourcev1.GitOperationFailedReason,
 		)
-		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%v", e)
+		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
 		return nil, e
 	}
 
@@ -902,7 +902,7 @@ func (r *GitRepositoryReconciler) fetchIncludes(ctx context.Context, obj *source
 				"NotFound",
 			)
 			e.RequeueAfter = r.requeueDependency
-			conditions.MarkTrue(obj, sourcev1.IncludeUnavailableCondition, e.Reason, "%v", e)
+			conditions.MarkTrue(obj, sourcev1.IncludeUnavailableCondition, e.Reason, "%s", e)
 			return nil, e
 		}
 
@@ -913,7 +913,7 @@ func (r *GitRepositoryReconciler) fetchIncludes(ctx context.Context, obj *source
 				"NoArtifact",
 			)
 			e.RequeueAfter = r.requeueDependency
-			conditions.MarkTrue(obj, sourcev1.IncludeUnavailableCondition, e.Reason, "%v", e)
+			conditions.MarkTrue(obj, sourcev1.IncludeUnavailableCondition, e.Reason, "%s", e)
 			return nil, e
 		}
 
@@ -953,7 +953,7 @@ func (r *GitRepositoryReconciler) verifySignature(ctx context.Context, obj *sour
 			fmt.Errorf("PGP public keys secret error: %w", err),
 			"VerificationError",
 		)
-		conditions.MarkFalse(obj, sourcev1.SourceVerifiedCondition, e.Reason, "%v", e)
+		conditions.MarkFalse(obj, sourcev1.SourceVerifiedCondition, e.Reason, "%s", e)
 		return sreconcile.ResultEmpty, e
 	}
 
@@ -974,7 +974,7 @@ func (r *GitRepositoryReconciler) verifySignature(ctx context.Context, obj *sour
 				errors.New("cannot verify tag object's signature if a tag reference is not specified"),
 				"InvalidVerificationMode",
 			)
-			conditions.MarkFalse(obj, sourcev1.SourceVerifiedCondition, err.Reason, "%v", err)
+			conditions.MarkFalse(obj, sourcev1.SourceVerifiedCondition, err.Reason, "%s", err)
 			return sreconcile.ResultEmpty, err
 		}
 		if !git.IsSignedTag(*tag) {
@@ -985,7 +985,7 @@ func (r *GitRepositoryReconciler) verifySignature(ctx context.Context, obj *sour
 				fmt.Errorf("cannot verify signature of tag '%s' since it is not signed", commit.ReferencingTag.String()),
 				"InvalidGitObject",
 			)
-			conditions.MarkFalse(obj, sourcev1.SourceVerifiedCondition, err.Reason, "%v", err)
+			conditions.MarkFalse(obj, sourcev1.SourceVerifiedCondition, err.Reason, "%s", err)
 			return sreconcile.ResultEmpty, err
 		}
 
@@ -996,7 +996,7 @@ func (r *GitRepositoryReconciler) verifySignature(ctx context.Context, obj *sour
 				fmt.Errorf("signature verification of tag '%s' failed: %w", tag.String(), err),
 				"InvalidTagSignature",
 			)
-			conditions.MarkFalse(obj, sourcev1.SourceVerifiedCondition, e.Reason, "%v", e)
+			conditions.MarkFalse(obj, sourcev1.SourceVerifiedCondition, e.Reason, "%s", e)
 			// Return error in the hope the secret changes
 			return sreconcile.ResultEmpty, e
 		}
@@ -1012,7 +1012,7 @@ func (r *GitRepositoryReconciler) verifySignature(ctx context.Context, obj *sour
 				fmt.Errorf("signature verification of commit '%s' failed: %w", commit.Hash.String(), err),
 				"InvalidCommitSignature",
 			)
-			conditions.MarkFalse(obj, sourcev1.SourceVerifiedCondition, e.Reason, "%v", e)
+			conditions.MarkFalse(obj, sourcev1.SourceVerifiedCondition, e.Reason, "%s", e)
 			// Return error in the hope the secret changes
 			return sreconcile.ResultEmpty, e
 		}
