@@ -1027,7 +1027,7 @@ func (r *GitRepositoryReconciler) verifySignature(ctx context.Context, obj *sour
 	reason := meta.SucceededReason
 	mode := obj.Spec.Verification.GetMode()
 	obj.Status.SourceVerificationMode = &mode
-	conditions.MarkTrue(obj, sourcev1.SourceVerifiedCondition, reason, "%v", message)
+	conditions.MarkTrue(obj, sourcev1.SourceVerifiedCondition, reason, "%s", message.String())
 	r.eventLogf(ctx, obj, eventv1.EventTypeTrace, reason, message.String())
 	return sreconcile.ResultSuccess, nil
 }
