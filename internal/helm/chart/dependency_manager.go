@@ -296,6 +296,9 @@ func (dm *DependencyManager) resolveRepository(url string) (repo repository.Down
 // It does not allow the dependency's path to be outside the scope of
 // LocalReference.WorkDir.
 func (dm *DependencyManager) secureLocalChartPath(ref LocalReference, dep *helmchart.Dependency) (string, error) {
+	if dep.Repository == "" {
+		return securejoin.SecureJoin(ref.WorkDir, filepath.Join(ref.Path, "charts", dep.Name))
+	}
 	localUrl, err := url.Parse(dep.Repository)
 	if err != nil {
 		return "", fmt.Errorf("failed to parse alleged local chart reference: %w", err)
