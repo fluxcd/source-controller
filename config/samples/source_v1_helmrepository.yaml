@@ -4,4 +4,4 @@ metadata:
   name: helmrepository-sample
 spec:
   interval: 1m
-  url: https://stefanprodan.github.io/podinfo
+  url: https://github.com/stefanprodan/podinfo
