@@ -730,7 +730,7 @@ func (r *BucketReconciler) getProxyURL(ctx context.Context, obj *bucketv1.Bucket
 	address, ok := proxyData["address"]
 	if !ok {
 		return nil, fmt.Errorf("invalid proxy secret '%s/%s': key 'address' is missing",
-			obj.Spec.ProxySecretRef.Name, namespace)
+			namespace, obj.Spec.ProxySecretRef.Name)
 	}
 	proxyURL, err := url.Parse(string(address))
 	if err != nil {

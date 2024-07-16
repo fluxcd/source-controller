@@ -589,7 +589,7 @@ func TestBucketReconciler_reconcileSource_generic(t *testing.T) {
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "foo"),
 				*conditions.UnknownCondition(meta.ReadyCondition, "foo", "bar"),
-				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "invalid proxy secret 'dummy/': key 'address' is missing"),
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "invalid proxy secret '/dummy': key 'address' is missing"),
 			},
 		},
 		{
@@ -1622,7 +1622,7 @@ func TestBucketReconciler_getProxyURL(t *testing.T) {
 					Data: map[string][]byte{},
 				},
 			},
-			expectedErr: "invalid proxy secret 'dummy/': key 'address' is missing",
+			expectedErr: "invalid proxy secret '/dummy': key 'address' is missing",
 		},
 		{
 			name: "invalid address in proxySecretRef",
