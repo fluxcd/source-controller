@@ -420,6 +420,30 @@ spec:
                 required:
                 - name
                 type: object
+              sts:
+                description: |-
+                  STS specifies the required configuration to use a Security Token
+                  Service for fetching temporary credentials to authenticate in a
+                  Bucket provider.
+
+
+                  This field is only supported for the `aws` provider.
+                properties:
+                  endpoint:
+                    description: |-
+                      Endpoint is the HTTP/S endpoint of the Security Token Service from
+                      where temporary credentials will be fetched.
+                    pattern: ^(http|https)://.*$
+                    type: string
+                  provider:
+                    description: Provider of the Security Token Service.
+                    enum:
+                    - aws
+                    type: string
+                required:
+                - endpoint
+                - provider
+                type: object
               suspend:
                 description: |-
                   Suspend tells the controller to suspend the reconciliation of this
@@ -435,6 +459,13 @@ spec:
             - endpoint
             - interval
             type: object
+            x-kubernetes-validations:
+            - message: STS configuration is only supported for the 'aws' Bucket provider
+              rule: self.provider == 'aws' || !has(self.sts)
+            - message: '''aws'' is the only supported STS provider for the ''aws''
+                Bucket provider'
+              rule: self.provider != 'aws' || !has(self.sts) || self.sts.provider
+                == 'aws'
           status:
             default:
               observedGeneration: -1

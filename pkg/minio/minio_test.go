@@ -20,10 +20,10 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
-	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -32,9 +32,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/elazarl/goproxy"
 	"github.com/google/uuid"
 	miniov7 "github.com/minio/minio-go/v7"
+	"github.com/minio/minio-go/v7/pkg/credentials"
 	"github.com/ory/dockertest/v3"
 	"github.com/ory/dockertest/v3/docker"
 	"gotest.tools/assert"
@@ -45,6 +45,8 @@ import (
 	"github.com/fluxcd/pkg/sourceignore"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
+	testlistener "github.com/fluxcd/source-controller/tests/listener"
+	testproxy "github.com/fluxcd/source-controller/tests/proxy"
 )
 
 const (
@@ -244,34 +246,153 @@ func TestFGetObject(t *testing.T) {
 	assert.NilError(t, err)
 }
 
-func TestNewClientAndFGetObjectWithProxy(t *testing.T) {
-	// start proxy
-	proxyListener, err := net.Listen("tcp", ":0")
-	assert.NilError(t, err, "could not start proxy server")
-	defer proxyListener.Close()
-	proxyAddr := proxyListener.Addr().String()
-	proxyHandler := goproxy.NewProxyHttpServer()
-	proxyHandler.Verbose = true
-	proxyServer := &http.Server{
-		Addr:    proxyAddr,
-		Handler: proxyHandler,
+func TestNewClientAndFGetObjectWithSTSEndpoint(t *testing.T) {
+	// start a mock STS server
+	stsListener, stsAddr, stsPort := testlistener.New(t)
+	stsEndpoint := fmt.Sprintf("http://%s", stsAddr)
+	stsHandler := http.NewServeMux()
+	stsHandler.HandleFunc("PUT "+credentials.TokenPath,
+		func(w http.ResponseWriter, r *http.Request) {
+			_, err := w.Write([]byte("mock-token"))
+			assert.NilError(t, err)
+		})
+	stsHandler.HandleFunc("GET "+credentials.DefaultIAMSecurityCredsPath,
+		func(w http.ResponseWriter, r *http.Request) {
+			token := r.Header.Get(credentials.TokenRequestHeader)
+			assert.Equal(t, token, "mock-token")
+			_, err := w.Write([]byte("mock-role"))
+			assert.NilError(t, err)
+		})
+	var roleCredsRetrieved bool
+	stsHandler.HandleFunc("GET "+credentials.DefaultIAMSecurityCredsPath+"mock-role",
+		func(w http.ResponseWriter, r *http.Request) {
+			token := r.Header.Get(credentials.TokenRequestHeader)
+			assert.Equal(t, token, "mock-token")
+			err := json.NewEncoder(w).Encode(map[string]any{
+				"Code":            "Success",
+				"AccessKeyID":     testMinioRootUser,
+				"SecretAccessKey": testMinioRootPassword,
+			})
+			assert.NilError(t, err)
+			roleCredsRetrieved = true
+		})
+	stsServer := &http.Server{
+		Addr:    stsAddr,
+		Handler: stsHandler,
 	}
-	go proxyServer.Serve(proxyListener)
-	defer proxyServer.Shutdown(context.Background())
-	proxyURL := &url.URL{Scheme: "http", Host: proxyAddr}
+	go stsServer.Serve(stsListener)
+	defer stsServer.Shutdown(context.Background())
+
+	// start proxy
+	proxyAddr, proxyPort := testproxy.New(t)
+
+	tests := []struct {
+		name     string
+		provider string
+		stsSpec  *sourcev1.BucketSTSSpec
+		opts     []Option
+		err      string
+	}{
+		{
+			name:     "with correct endpoint",
+			provider: "aws",
+			stsSpec: &sourcev1.BucketSTSSpec{
+				Provider: "aws",
+				Endpoint: stsEndpoint,
+			},
+		},
+		{
+			name:     "with incorrect endpoint",
+			provider: "aws",
+			stsSpec: &sourcev1.BucketSTSSpec{
+				Provider: "aws",
+				Endpoint: fmt.Sprintf("http://localhost:%d", stsPort+1),
+			},
+			err: "connection refused",
+		},
+		{
+			name:     "with correct endpoint and proxy",
+			provider: "aws",
+			stsSpec: &sourcev1.BucketSTSSpec{
+				Provider: "aws",
+				Endpoint: stsEndpoint,
+			},
+			opts: []Option{WithProxyURL(&url.URL{Scheme: "http", Host: proxyAddr})},
+		},
+		{
+			name:     "with correct endpoint and incorrect proxy",
+			provider: "aws",
+			stsSpec: &sourcev1.BucketSTSSpec{
+				Provider: "aws",
+				Endpoint: stsEndpoint,
+			},
+			opts: []Option{WithProxyURL(&url.URL{Scheme: "http", Host: fmt.Sprintf("localhost:%d", proxyPort+1)})},
+			err:  "connection refused",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			roleCredsRetrieved = false
+			bucket := bucketStub(bucket, testMinioAddress)
+			bucket.Spec.Provider = tt.provider
+			bucket.Spec.STS = tt.stsSpec
+			minioClient, err := NewClient(bucket, append(tt.opts, WithTLSConfig(testTLSConfig))...)
+			assert.NilError(t, err)
+			assert.Assert(t, minioClient != nil)
+			ctx := context.Background()
+			tempDir := t.TempDir()
+			path := filepath.Join(tempDir, sourceignore.IgnoreFile)
+			_, err = minioClient.FGetObject(ctx, bucketName, objectName, path)
+			if tt.err != "" {
+				assert.ErrorContains(t, err, tt.err)
+			} else {
+				assert.NilError(t, err)
+				assert.Assert(t, roleCredsRetrieved)
+			}
+		})
+	}
+}
+
+func TestNewClientAndFGetObjectWithProxy(t *testing.T) {
+	proxyAddr, proxyPort := testproxy.New(t)
+
+	tests := []struct {
+		name         string
+		proxyURL     *url.URL
+		errSubstring string
+	}{
+		{
+			name:     "with correct proxy",
+			proxyURL: &url.URL{Scheme: "http", Host: proxyAddr},
+		},
+		{
+			name:         "with incorrect proxy",
+			proxyURL:     &url.URL{Scheme: "http", Host: fmt.Sprintf("localhost:%d", proxyPort+1)},
+			errSubstring: "connection refused",
+		},
+	}
 
 	// run test
-	minioClient, err := NewClient(bucketStub(bucket, testMinioAddress),
-		WithSecret(secret.DeepCopy()),
-		WithTLSConfig(testTLSConfig),
-		WithProxyURL(proxyURL))
-	assert.NilError(t, err)
-	assert.Assert(t, minioClient != nil)
-	ctx := context.Background()
-	tempDir := t.TempDir()
-	path := filepath.Join(tempDir, sourceignore.IgnoreFile)
-	_, err = minioClient.FGetObject(ctx, bucketName, objectName, path)
-	assert.NilError(t, err)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			minioClient, err := NewClient(bucketStub(bucket, testMinioAddress),
+				WithSecret(secret.DeepCopy()),
+				WithTLSConfig(testTLSConfig),
+				WithProxyURL(tt.proxyURL))
+			assert.NilError(t, err)
+			assert.Assert(t, minioClient != nil)
+			ctx := context.Background()
+			tempDir := t.TempDir()
+			path := filepath.Join(tempDir, sourceignore.IgnoreFile)
+			_, err = minioClient.FGetObject(ctx, bucketName, objectName, path)
+			if tt.errSubstring != "" {
+				assert.ErrorContains(t, err, tt.errSubstring)
+			} else {
+				assert.NilError(t, err)
+			}
+		})
+	}
 }
 
 func TestFGetObjectNotExists(t *testing.T) {
@@ -342,6 +463,47 @@ func TestValidateSecret(t *testing.T) {
 			err := ValidateSecret(tt.secret)
 			if tt.error {
 				assert.Error(t, err, fmt.Sprintf("invalid '%v' secret data: required fields 'accesskey' and 'secretkey'", tt.secret.Name))
+			} else {
+				assert.NilError(t, err)
+			}
+		})
+	}
+}
+
+func TestValidateSTSProvider(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name           string
+		bucketProvider string
+		stsProvider    string
+		err            string
+	}{
+		{
+			name:           "aws",
+			bucketProvider: "aws",
+			stsProvider:    "aws",
+		},
+		{
+			name:           "unsupported for aws",
+			bucketProvider: "aws",
+			stsProvider:    "ldap",
+			err:            "STS provider 'ldap' is not supported for 'aws' bucket provider",
+		},
+		{
+			name:           "unsupported bucket provider",
+			bucketProvider: "gcp",
+			stsProvider:    "gcp",
+			err:            "STS configuration is not supported for 'gcp' bucket provider",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			err := ValidateSTSProvider(tt.bucketProvider, tt.stsProvider)
+			if tt.err != "" {
+				assert.Error(t, err, tt.err)
 			} else {
 				assert.NilError(t, err)
 			}

@@ -749,6 +749,23 @@ HTTP endpoint requires enabling [`.spec.insecure`](#insecure).
 Some endpoints require the specification of a [`.spec.region`](#region),
 see [Provider](#provider) for more (provider specific) examples.
 
+### STS
+
+`.spec.sts` is an optional field for specifying the Security Token Service
+configuration. A Security Token Service (STS) is a web service that issues
+temporary security credentials. By adding this field, one may specify the
+STS endpoint from where temporary credentials will be fetched.
+
+If using `.spec.sts`, the following fields are required:
+
+- `.spec.sts.provider`, the Security Token Service provider. The only supported
+  option is `aws`.
+- `.spec.sts.endpoint`, the HTTP/S endpoint of the Security Token Service. In
+  the case of AWS, this can be `https://sts.amazonaws.com`, or a Regional STS
+  Endpoint, or an Interface Endpoint created inside a VPC.
+
+This field is only supported for the `aws` bucket provider.
+
 ### Bucket name
 
 `.spec.bucketName` is a required field that specifies which object storage

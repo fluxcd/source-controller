@@ -71,14 +71,10 @@ func WithProxyURL(proxyURL *url.URL) Option {
 
 // NewClient creates a new Minio storage client.
 func NewClient(bucket *sourcev1.Bucket, opts ...Option) (*MinioClient, error) {
-
 	var o options
 	for _, opt := range opts {
 		opt(&o)
 	}
-	secret := o.secret
-	tlsConfig := o.tlsConfig
-	proxyURL := o.proxyURL
 
 	minioOpts := minio.Options{
 		Region: bucket.Spec.Region,
@@ -88,32 +84,24 @@ func NewClient(bucket *sourcev1.Bucket, opts ...Option) (*MinioClient, error) {
 		// auto access, which we believe can cover most use cases.
 	}
 
-	if secret != nil {
-		var accessKey, secretKey string
-		if k, ok := secret.Data["accesskey"]; ok {
-			accessKey = string(k)
-		}
-		if k, ok := secret.Data["secretkey"]; ok {
-			secretKey = string(k)
-		}
-		if accessKey != "" && secretKey != "" {
-			minioOpts.Creds = credentials.NewStaticV4(accessKey, secretKey, "")
-		}
-	} else if bucket.Spec.Provider == sourcev1.AmazonBucketProvider {
-		minioOpts.Creds = credentials.NewIAM("")
+	switch bucketProvider := bucket.Spec.Provider; {
+	case o.secret != nil:
+		minioOpts.Creds = newCredsFromSecret(o.secret)
+	case bucketProvider == sourcev1.AmazonBucketProvider:
+		minioOpts.Creds = newAWSCreds(bucket, o.proxyURL)
 	}
 
 	var transportOpts []func(*http.Transport)
 
-	if minioOpts.Secure && tlsConfig != nil {
+	if minioOpts.Secure && o.tlsConfig != nil {
 		transportOpts = append(transportOpts, func(t *http.Transport) {
-			t.TLSClientConfig = tlsConfig.Clone()
+			t.TLSClientConfig = o.tlsConfig.Clone()
 		})
 	}
 
-	if proxyURL != nil {
+	if o.proxyURL != nil {
 		transportOpts = append(transportOpts, func(t *http.Transport) {
-			t.Proxy = http.ProxyURL(proxyURL)
+			t.Proxy = http.ProxyURL(o.proxyURL)
 		})
 	}
 
@@ -135,6 +123,42 @@ func NewClient(bucket *sourcev1.Bucket, opts ...Option) (*MinioClient, error) {
 	return &MinioClient{Client: client}, nil
 }
 
+// newCredsFromSecret creates a new Minio credentials object from the provided
+// secret.
+func newCredsFromSecret(secret *corev1.Secret) *credentials.Credentials {
+	var accessKey, secretKey string
+	if k, ok := secret.Data["accesskey"]; ok {
+		accessKey = string(k)
+	}
+	if k, ok := secret.Data["secretkey"]; ok {
+		secretKey = string(k)
+	}
+	if accessKey != "" && secretKey != "" {
+		return credentials.NewStaticV4(accessKey, secretKey, "")
+	}
+	return nil
+}
+
+// newAWSCreds creates a new Minio credentials object for `aws` bucket provider.
+func newAWSCreds(bucket *sourcev1.Bucket, proxyURL *url.URL) *credentials.Credentials {
+	stsEndpoint := ""
+	if sts := bucket.Spec.STS; sts != nil {
+		stsEndpoint = sts.Endpoint
+	}
+
+	creds := credentials.NewIAM(stsEndpoint)
+	if proxyURL != nil {
+		transport := http.DefaultTransport.(*http.Transport).Clone()
+		transport.Proxy = http.ProxyURL(proxyURL)
+		client := &http.Client{Transport: transport}
+		creds = credentials.New(&credentials.IAM{
+			Client:   client,
+			Endpoint: stsEndpoint,
+		})
+	}
+	return creds
+}
+
 // ValidateSecret validates the credential secret. The provided Secret may
 // be nil.
 func ValidateSecret(secret *corev1.Secret) error {
@@ -149,6 +173,24 @@ func ValidateSecret(secret *corev1.Secret) error {
 		return err
 	}
 	return nil
+}
+
+// ValidateSTSProvider validates the STS provider.
+func ValidateSTSProvider(bucketProvider, stsProvider string) error {
+	errProviderIncompatbility := fmt.Errorf("STS provider '%s' is not supported for '%s' bucket provider",
+		stsProvider, bucketProvider)
+
+	switch bucketProvider {
+	case sourcev1.AmazonBucketProvider:
+		switch stsProvider {
+		case sourcev1.STSProviderAmazon:
+			return nil
+		default:
+			return errProviderIncompatbility
+		}
+	}
+
+	return fmt.Errorf("STS configuration is not supported for '%s' bucket provider", bucketProvider)
 }
 
 // FGetObject gets the object from the provided object storage bucket, and

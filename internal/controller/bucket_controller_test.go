@@ -609,6 +609,45 @@ func TestBucketReconciler_reconcileSource_generic(t *testing.T) {
 			},
 		},
 		{
+			name:       "Observes incompatible STS provider",
+			bucketName: "dummy",
+			beforeFunc: func(obj *bucketv1.Bucket) {
+				obj.Spec.Provider = "generic"
+				obj.Spec.STS = &bucketv1.BucketSTSSpec{
+					Provider: "aws",
+				}
+				conditions.MarkReconciling(obj, meta.ProgressingReason, "foo")
+				conditions.MarkUnknown(obj, meta.ReadyCondition, "foo", "bar")
+			},
+			wantErr:     true,
+			assertIndex: index.NewDigester(),
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.InvalidSTSConfigurationReason, "STS configuration is not supported for 'generic' bucket provider"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "foo"),
+				*conditions.UnknownCondition(meta.ReadyCondition, "foo", "bar"),
+			},
+		},
+		{
+			name:       "Observes invalid STS endpoint",
+			bucketName: "dummy",
+			beforeFunc: func(obj *bucketv1.Bucket) {
+				obj.Spec.Provider = "aws" // TODO: change to generic when ldap STS provider is implemented
+				obj.Spec.STS = &bucketv1.BucketSTSSpec{
+					Provider: "aws", // TODO: change to ldap when ldap STS provider is implemented
+					Endpoint: "something\t",
+				}
+				conditions.MarkReconciling(obj, meta.ProgressingReason, "foo")
+				conditions.MarkUnknown(obj, meta.ReadyCondition, "foo", "bar")
+			},
+			wantErr:     true,
+			assertIndex: index.NewDigester(),
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.URLInvalidReason, "failed to parse STS endpoint 'something\t': parse \"something\\t\": net/url: invalid control character in URL"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "foo"),
+				*conditions.UnknownCondition(meta.ReadyCondition, "foo", "bar"),
+			},
+		},
+		{
 			name: "Transient bucket name API failure",
 			beforeFunc: func(obj *bucketv1.Bucket) {
 				obj.Spec.Endpoint = "transient.example.com"
@@ -1758,6 +1797,122 @@ func TestBucketReconciler_getProxyURL(t *testing.T) {
 				g.Expect(u).To(BeNil())
 			} else {
 				g.Expect(u.String()).To(Equal(tt.expectedURL))
+			}
+		})
+	}
+}
+
+func TestBucketReconciler_APIServerValidation_STS(t *testing.T) {
+	tests := []struct {
+		name           string
+		bucketProvider string
+		stsConfig      *bucketv1.BucketSTSSpec
+		err            string
+	}{
+		{
+			name:           "gcp unsupported",
+			bucketProvider: "gcp",
+			stsConfig: &bucketv1.BucketSTSSpec{
+				Provider: "aws",
+				Endpoint: "http://test",
+			},
+			err: "STS configuration is only supported for the 'aws' Bucket provider",
+		},
+		{
+			name:           "azure unsupported",
+			bucketProvider: "azure",
+			stsConfig: &bucketv1.BucketSTSSpec{
+				Provider: "aws",
+				Endpoint: "http://test",
+			},
+			err: "STS configuration is only supported for the 'aws' Bucket provider",
+		},
+		{
+			name:           "generic unsupported",
+			bucketProvider: "generic",
+			stsConfig: &bucketv1.BucketSTSSpec{
+				Provider: "aws",
+				Endpoint: "http://test",
+			},
+			err: "STS configuration is only supported for the 'aws' Bucket provider",
+		},
+		{
+			name:           "aws supported",
+			bucketProvider: "aws",
+			stsConfig: &bucketv1.BucketSTSSpec{
+				Provider: "aws",
+				Endpoint: "http://test",
+			},
+		},
+		{
+			name:           "invalid endpoint",
+			bucketProvider: "aws",
+			stsConfig: &bucketv1.BucketSTSSpec{
+				Provider: "aws",
+				Endpoint: "test",
+			},
+			err: "spec.sts.endpoint in body should match '^(http|https)://.*$'",
+		},
+		{
+			name:           "gcp can be created without STS config",
+			bucketProvider: "gcp",
+		},
+		{
+			name:           "azure can be created without STS config",
+			bucketProvider: "azure",
+		},
+		{
+			name:           "generic can be created without STS config",
+			bucketProvider: "generic",
+		},
+		{
+			name:           "aws can be created without STS config",
+			bucketProvider: "aws",
+		},
+		// Can't be tested at present with only one allowed sts provider.
+		// {
+		// 	name:           "ldap unsupported for aws",
+		// 	bucketProvider: "aws",
+		// 	stsConfig: &bucketv1.BucketSTSSpec{
+		// 		Provider: "ldap",
+		// 		Endpoint: "http://test",
+		// 	},
+		// 	err: "'aws' is the only supported STS provider for the 'aws' Bucket provider",
+		// },
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			obj := &bucketv1.Bucket{
+				ObjectMeta: metav1.ObjectMeta{
+					GenerateName: "bucket-reconcile-",
+					Namespace:    "default",
+				},
+				Spec: bucketv1.BucketSpec{
+					Provider:   tt.bucketProvider,
+					BucketName: "test",
+					Endpoint:   "test",
+					Suspend:    true,
+					Interval:   metav1.Duration{Duration: interval},
+					Timeout:    &metav1.Duration{Duration: timeout},
+					STS:        tt.stsConfig,
+				},
+			}
+
+			err := testEnv.Create(ctx, obj)
+			if err == nil {
+				defer func() {
+					err := testEnv.Delete(ctx, obj)
+					g.Expect(err).NotTo(HaveOccurred())
+				}()
+			}
+
+			if tt.err != "" {
+				g.Expect(err.Error()).To(ContainSubstring(tt.err))
+			} else {
+				g.Expect(err).NotTo(HaveOccurred())
 			}
 		})
 	}
