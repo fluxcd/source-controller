@@ -99,6 +99,7 @@ entries:
         - https://example.com/grafana.tgz
       description: string
       version: 6.17.4
+      name: grafana
 `)
 
 	mockGetter := &mockIndexChartGetter{
