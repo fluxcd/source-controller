@@ -77,6 +77,36 @@
         "created": "0001-01-01T00:00:00Z",
         "digest": "sha256:1234567890abcdef"
       }
+    ],
+    "xChartWithDuplicateDependenciesAndMissingAlias": [
+      {
+        "name": "xChartWithDuplicateDependenciesAndMissingAlias",
+        "home": "https://example.com/something",
+        "version": "1.2.3",
+        "description": "string",
+        "keywords": [
+          "broken",
+          "still accepted"
+        ],
+        "apiVersion": "v1",
+        "dependencies": [
+          {
+            "name": "kube-rbac-proxy",
+            "version": "0.9.1",
+            "repository": ""
+          },
+          {
+            "name": "kube-rbac-proxy",
+            "version": "0.9.1",
+            "repository": ""
+          }
+        ],
+        "urls": [
+          "https://kubernetes-charts.storage.googleapis.com/nginx-1.2.3.tgz"
+        ],
+        "created": "0001-01-01T00:00:00Z",
+        "digest": "sha256:1234567890abcdef"
+      }
     ]
   }
 }
