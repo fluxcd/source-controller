@@ -672,7 +672,7 @@ func verifyLocalIndex(t *testing.T, i *repo.IndexFile) {
 	g := NewWithT(t)
 
 	g.Expect(i.Entries).ToNot(BeNil())
-	g.Expect(i.Entries).To(HaveLen(3), "expected 3 entries in index file")
+	g.Expect(i.Entries).To(HaveLen(4), "expected 4 entries in index file")
 
 	alpine, ok := i.Entries["alpine"]
 	g.Expect(ok).To(BeTrue(), "expected 'alpine' entry to exist")
@@ -681,6 +681,10 @@ func verifyLocalIndex(t *testing.T, i *repo.IndexFile) {
 	nginx, ok := i.Entries["nginx"]
 	g.Expect(ok).To(BeTrue(), "expected 'nginx' entry to exist")
 	g.Expect(nginx).To(HaveLen(2), "'nginx' should have 2 entries")
+
+	broken, ok := i.Entries["xChartWithDuplicateDependenciesAndMissingAlias"]
+	g.Expect(ok).To(BeTrue(), "expected 'xChartWithDuplicateDependenciesAndMissingAlias' entry to exist")
+	g.Expect(broken).To(HaveLen(1), "'xChartWithDuplicateDependenciesAndMissingAlias' should have 1 entries")
 
 	expects := []*repo.ChartVersion{
 		{
@@ -723,8 +727,24 @@ func verifyLocalIndex(t *testing.T, i *repo.IndexFile) {
 			},
 			Digest: "sha256:1234567890abcdef",
 		},
+		{
+			Metadata: &chart.Metadata{
+				Name:        "xChartWithDuplicateDependenciesAndMissingAlias",
+				Description: "string",
+				Version:     "1.2.3",
+				Keywords:    []string{"broken", "still accepted"},
+				Home:        "https://example.com/something",
+				Dependencies: []*chart.Dependency{
+					{Name: "kube-rbac-proxy", Version: "0.9.1"},
+				},
+			},
+			URLs: []string{
+				"https://kubernetes-charts.storage.googleapis.com/nginx-1.2.3.tgz",
+			},
+			Digest: "sha256:1234567890abcdef",
+		},
 	}
-	tests := []*repo.ChartVersion{alpine[0], nginx[0], nginx[1]}
+	tests := []*repo.ChartVersion{alpine[0], nginx[0], nginx[1], broken[0]}
 
 	for i, tt := range tests {
 		expect := expects[i]
@@ -735,5 +755,129 @@ func verifyLocalIndex(t *testing.T, i *repo.IndexFile) {
 		g.Expect(tt.Home).To(Equal(expect.Home))
 		g.Expect(tt.URLs).To(ContainElements(expect.URLs))
 		g.Expect(tt.Keywords).To(ContainElements(expect.Keywords))
+		g.Expect(tt.Dependencies).To(ContainElements(expect.Dependencies))
+	}
+}
+
+// This code is taken from https://github.com/helm/helm/blob/v3.15.2/pkg/repo/index_test.go#L601
+// and refers to: https://github.com/helm/helm/issues/12748
+func TestIgnoreSkippableChartValidationError(t *testing.T) {
+	type TestCase struct {
+		Input        error
+		ErrorSkipped bool
+	}
+	testCases := map[string]TestCase{
+		"nil": {
+			Input: nil,
+		},
+		"generic_error": {
+			Input: fmt.Errorf("foo"),
+		},
+		"non_skipped_validation_error": {
+			Input: chart.ValidationError("chart.metadata.type must be application or library"),
+		},
+		"skipped_validation_error": {
+			Input:        chart.ValidationErrorf("more than one dependency with name or alias %q", "foo"),
+			ErrorSkipped: true,
+		},
+	}
+
+	for name, tc := range testCases {
+		t.Run(name, func(t *testing.T) {
+			result := ignoreSkippableChartValidationError(tc.Input)
+
+			if tc.Input == nil {
+				if result != nil {
+					t.Error("expected nil result for nil input")
+				}
+				return
+			}
+
+			if tc.ErrorSkipped {
+				if result != nil {
+					t.Error("expected nil result for skipped error")
+				}
+				return
+			}
+
+			if tc.Input != result {
+				t.Error("expected the result equal to input")
+			}
+
+		})
+	}
+}
+
+var indexWithFirstVersionInvalid = `
+apiVersion: v1
+entries:
+  nginx:
+    - urls:
+        - https://charts.helm.sh/stable/alpine-1.0.0.tgz
+        - http://storage2.googleapis.com/kubernetes-charts/alpine-1.0.0.tgz
+      name: nginx
+      version: 0..1.0
+      description: string
+      home: https://github.com/something
+      digest: "sha256:1234567890abcdef"
+    - urls:
+        - https://charts.helm.sh/stable/nginx-0.2.0.tgz
+      name: nginx
+      description: string
+      version: 0.2.0
+      home: https://github.com/something/else
+      digest: "sha256:1234567890abcdef"
+`
+var indexWithLastVersionInvalid = `
+apiVersion: v1
+entries:
+  nginx:
+    - urls:
+        - https://charts.helm.sh/stable/nginx-0.2.0.tgz
+      name: nginx
+      description: string
+      version: 0.2.0
+      home: https://github.com/something/else
+      digest: "sha256:1234567890abcdef"
+    - urls:
+        - https://charts.helm.sh/stable/alpine-1.0.0.tgz
+        - http://storage2.googleapis.com/kubernetes-charts/alpine-1.0.0.tgz
+      name: nginx
+      version: 0..1.0
+      description: string
+      home: https://github.com/something
+      digest: "sha256:1234567890abcdef"
+`
+
+func TestIndexFromBytes_InvalidEntries(t *testing.T) {
+	tests := []struct {
+		source string
+		data   string
+	}{
+		{
+			source: "indexWithFirstVersionInvalid",
+			data:   indexWithFirstVersionInvalid,
+		},
+		{
+			source: "indexWithLastVersionInvalid",
+			data:   indexWithLastVersionInvalid,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.source, func(t *testing.T) {
+			idx, err := IndexFromBytes([]byte(tc.data))
+			if err != nil {
+				t.Fatalf("unexpected error: %s", err)
+			}
+			cvs := idx.Entries["nginx"]
+			if len(cvs) == 0 {
+				t.Error("expected one chart version not to be filtered out")
+			}
+			for _, v := range cvs {
+				if v.Version == "0..1.0" {
+					t.Error("malformed version was not filtered out")
+				}
+			}
+		})
 	}
 }
