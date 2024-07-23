@@ -30,6 +30,7 @@ import (
 	fakeclient "sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	helmv1 "github.com/fluxcd/source-controller/api/v1"
+	sourcev1beta2 "github.com/fluxcd/source-controller/api/v1beta2"
 )
 
 func TestGetClientOpts(t *testing.T) {
@@ -143,6 +144,7 @@ func TestGetClientOpts(t *testing.T) {
 						Duration: time.Second,
 					},
 					Insecure: tt.insecure,
+					Provider: sourcev1beta2.GenericOCIProvider,
 				},
 			}
 			if tt.oci {
@@ -249,7 +251,8 @@ func TestGetClientOpts_registryTLSLoginOption(t *testing.T) {
 					Timeout: &metav1.Duration{
 						Duration: time.Second,
 					},
-					Type: helmv1.HelmRepositoryTypeOCI,
+					Provider: sourcev1beta2.GenericOCIProvider,
+					Type:     helmv1.HelmRepositoryTypeOCI,
 				},
 			}
 

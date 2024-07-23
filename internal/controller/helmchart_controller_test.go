@@ -1129,8 +1129,9 @@ func TestHelmChartReconciler_buildFromHelmRepository(t *testing.T) {
 					GenerateName: "helmrepository-",
 				},
 				Spec: sourcev1.HelmRepositorySpec{
-					URL:     server.URL(),
-					Timeout: &metav1.Duration{Duration: timeout},
+					URL:      server.URL(),
+					Timeout:  &metav1.Duration{Duration: timeout},
+					Provider: sourcev1beta2.GenericOCIProvider,
 				},
 				Status: sourcev1.HelmRepositoryStatus{
 					Artifact: &sourcev1.Artifact{
@@ -2647,11 +2648,14 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_authStrategy(t *testing.T) {
 				},
 			}
 
+			authenticator, er := oci.NewOIDCAuthenticator(oci.WithCacheCapacity(1))
+			g.Expect(er).NotTo(HaveOccurred())
 			r := &HelmChartReconciler{
 				Client:                  clientBuilder.Build(),
 				EventRecorder:           record.NewFakeRecorder(32),
 				Getters:                 testGetters,
 				RegistryClientGenerator: registry.ClientGenerator,
+				OIDCAuthenticator:       authenticator,
 				patchOptions:            getPatchOptions(helmChartReadyCondition.Owned, "sc"),
 			}
 

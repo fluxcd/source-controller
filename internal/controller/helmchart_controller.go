@@ -138,8 +138,9 @@ type HelmChartReconciler struct {
 	Getters                 helmgetter.Providers
 	ControllerName          string
 
-	Cache *cache.Cache
-	TTL   time.Duration
+	OIDCAuthenticator *soci.OIDCAuthenticator
+	Cache             *cache.Cache
+	TTL               time.Duration
 	*cache.CacheRecorder
 
 	patchOptions []patch.Option
@@ -527,7 +528,8 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 		return chartRepoConfigErrorReturn(err, obj)
 	}
 
-	clientOpts, certsTmpDir, err := getter.GetClientOpts(ctxTimeout, r.Client, repo, normalizedURL)
+	clientOpts, certsTmpDir, err := getter.GetClientOptsWithOIDCAuth(ctxTimeout,
+		r.Client, r.OIDCAuthenticator, repo, normalizedURL)
 	if err != nil && !errors.Is(err, getter.ErrDeprecatedTLSConfig) {
 		e := serror.NewGeneric(
 			err,
@@ -1012,8 +1014,9 @@ func (r *HelmChartReconciler) namespacedChartRepositoryCallback(ctx context.Cont
 			}
 			obj = &sourcev1.HelmRepository{
 				Spec: sourcev1.HelmRepositorySpec{
-					URL:     url,
-					Timeout: &metav1.Duration{Duration: 60 * time.Second},
+					URL:      url,
+					Timeout:  &metav1.Duration{Duration: 60 * time.Second},
+					Provider: sourcev1beta2.GenericOCIProvider,
 				},
 			}
 		}
@@ -1022,7 +1025,8 @@ func (r *HelmChartReconciler) namespacedChartRepositoryCallback(ctx context.Cont
 		ctxTimeout, cancel := context.WithTimeout(ctx, obj.GetTimeout())
 		defer cancel()
 
-		clientOpts, certsTmpDir, err := getter.GetClientOpts(ctxTimeout, r.Client, obj, normalizedURL)
+		clientOpts, certsTmpDir, err := getter.GetClientOptsWithOIDCAuth(ctxTimeout, r.Client,
+			r.OIDCAuthenticator, obj, normalizedURL)
 		if err != nil && !errors.Is(err, getter.ErrDeprecatedTLSConfig) {
 			return nil, err
 		}

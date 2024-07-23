@@ -50,6 +50,7 @@ import (
 	"github.com/fluxcd/pkg/runtime/patch"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
+	sourcev1beta2 "github.com/fluxcd/source-controller/api/v1beta2"
 	"github.com/fluxcd/source-controller/internal/cache"
 	intdigest "github.com/fluxcd/source-controller/internal/digest"
 	"github.com/fluxcd/source-controller/internal/helm/getter"
@@ -819,6 +820,7 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 			Spec: sourcev1.HelmRepositorySpec{
 				Interval: metav1.Duration{Duration: interval},
 				Timeout:  &metav1.Duration{Duration: timeout},
+				Provider: sourcev1beta2.GenericOCIProvider,
 			},
 		}
 
