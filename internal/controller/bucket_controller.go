@@ -431,6 +431,12 @@ func (r *BucketReconciler) reconcileSource(ctx context.Context, sp *patch.Serial
 		// Return error as the world as observed may change
 		return sreconcile.ResultEmpty, e
 	}
+	proxyURL, err := r.getProxyURL(ctx, obj)
+	if err != nil {
+		e := serror.NewGeneric(err, sourcev1.AuthenticationFailedReason)
+		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
+		return sreconcile.ResultEmpty, e
+	}
 
 	// Construct provider client
 	var provider BucketProvider
@@ -441,7 +447,14 @@ func (r *BucketReconciler) reconcileSource(ctx context.Context, sp *patch.Serial
 			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
 			return sreconcile.ResultEmpty, e
 		}
-		if provider, err = gcp.NewClient(ctx, secret); err != nil {
+		var opts []gcp.Option
+		if secret != nil {
+			opts = append(opts, gcp.WithSecret(secret))
+		}
+		if proxyURL != nil {
+			opts = append(opts, gcp.WithProxyURL(proxyURL))
+		}
+		if provider, err = gcp.NewClient(ctx, opts...); err != nil {
 			e := serror.NewGeneric(err, "ClientError")
 			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
 			return sreconcile.ResultEmpty, e
@@ -480,12 +493,6 @@ func (r *BucketReconciler) reconcileSource(ctx context.Context, sp *patch.Serial
 		if err != nil {
 			e := serror.NewGeneric(err, sourcev1.AuthenticationFailedReason)
 			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
-			return sreconcile.ResultEmpty, e
-		}
-		proxyURL, err := r.getProxyURL(ctx, obj)
-		if err != nil {
-			e := serror.NewGeneric(err, sourcev1.AuthenticationFailedReason)
-			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, e.Error())
 			return sreconcile.ResultEmpty, e
 		}
 		var opts []minio.Option
