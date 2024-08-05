@@ -103,7 +103,7 @@ type BucketSpec struct {
 	// ProxySecretRef specifies the Secret containing the proxy configuration
 	// to use while communicating with the Bucket server.
 	//
-	// Only supported for the generic provider.
+	// Only supported for the `generic` and `azure` providers.
 	// +optional
 	ProxySecretRef *meta.LocalObjectReference `json:"proxySecretRef,omitempty"`
 

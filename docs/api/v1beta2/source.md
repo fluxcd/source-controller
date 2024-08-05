@@ -202,7 +202,7 @@ github.com/fluxcd/pkg/apis/meta.LocalObjectReference
 <em>(Optional)</em>
 <p>ProxySecretRef specifies the Secret containing the proxy configuration
 to use while communicating with the Bucket server.</p>
-<p>Only supported for the generic provider.</p>
+<p>Only supported for the <code>generic</code> and <code>azure</code> providers.</p>
 </td>
 </tr>
 <tr>
@@ -1568,7 +1568,7 @@ github.com/fluxcd/pkg/apis/meta.LocalObjectReference
 <em>(Optional)</em>
 <p>ProxySecretRef specifies the Secret containing the proxy configuration
 to use while communicating with the Bucket server.</p>
-<p>Only supported for the generic provider.</p>
+<p>Only supported for the <code>generic</code> and <code>azure</code> providers.</p>
 </td>
 </tr>
 <tr>
