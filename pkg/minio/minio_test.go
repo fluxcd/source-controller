@@ -21,6 +21,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
+	"encoding/xml"
 	"errors"
 	"fmt"
 	"log"
@@ -70,6 +71,11 @@ var (
 	testMinioClient *MinioClient
 	// testTLSConfig is the TLS configuration used to connect to the Minio server.
 	testTLSConfig *tls.Config
+	// testServerCert is the path to the server certificate used to start the Minio
+	// and STS servers.
+	testServerCert string
+	// testServerKey is the path to the server key used to start the Minio and STS servers.
+	testServerKey string
 )
 
 var (
@@ -128,8 +134,7 @@ func TestMain(m *testing.M) {
 
 	// Load a private key and certificate from a self-signed CA for the Minio server and
 	// a client TLS configuration to connect to the Minio server.
-	var serverCert, serverKey string
-	serverCert, serverKey, testTLSConfig, err = loadServerCertAndClientTLSConfig()
+	testServerCert, testServerKey, testTLSConfig, err = loadServerCertAndClientTLSConfig()
 	if err != nil {
 		log.Fatalf("could not load server cert and client TLS config: %s", err)
 	}
@@ -148,8 +153,8 @@ func TestMain(m *testing.M) {
 		},
 		Cmd: []string{"server", "/data", "--console-address", ":9001"},
 		Mounts: []string{
-			fmt.Sprintf("%s:/root/.minio/certs/public.crt", serverCert),
-			fmt.Sprintf("%s:/root/.minio/certs/private.key", serverKey),
+			fmt.Sprintf("%s:/root/.minio/certs/public.crt", testServerCert),
+			fmt.Sprintf("%s:/root/.minio/certs/private.key", testServerKey),
 		},
 	}, func(config *docker.HostConfig) {
 		config.AutoRemove = true
@@ -247,24 +252,24 @@ func TestFGetObject(t *testing.T) {
 }
 
 func TestNewClientAndFGetObjectWithSTSEndpoint(t *testing.T) {
-	// start a mock STS server
-	stsListener, stsAddr, stsPort := testlistener.New(t)
-	stsEndpoint := fmt.Sprintf("http://%s", stsAddr)
-	stsHandler := http.NewServeMux()
-	stsHandler.HandleFunc("PUT "+credentials.TokenPath,
+	// start a mock AWS STS server
+	awsSTSListener, awsSTSAddr, awsSTSPort := testlistener.New(t)
+	awsSTSEndpoint := fmt.Sprintf("http://%s", awsSTSAddr)
+	awsSTSHandler := http.NewServeMux()
+	awsSTSHandler.HandleFunc("PUT "+credentials.TokenPath,
 		func(w http.ResponseWriter, r *http.Request) {
 			_, err := w.Write([]byte("mock-token"))
 			assert.NilError(t, err)
 		})
-	stsHandler.HandleFunc("GET "+credentials.DefaultIAMSecurityCredsPath,
+	awsSTSHandler.HandleFunc("GET "+credentials.DefaultIAMSecurityCredsPath,
 		func(w http.ResponseWriter, r *http.Request) {
 			token := r.Header.Get(credentials.TokenRequestHeader)
 			assert.Equal(t, token, "mock-token")
 			_, err := w.Write([]byte("mock-role"))
 			assert.NilError(t, err)
 		})
-	var roleCredsRetrieved bool
-	stsHandler.HandleFunc("GET "+credentials.DefaultIAMSecurityCredsPath+"mock-role",
+	var credsRetrieved bool
+	awsSTSHandler.HandleFunc("GET "+credentials.DefaultIAMSecurityCredsPath+"mock-role",
 		func(w http.ResponseWriter, r *http.Request) {
 			token := r.Header.Get(credentials.TokenRequestHeader)
 			assert.Equal(t, token, "mock-token")
@@ -274,81 +279,187 @@ func TestNewClientAndFGetObjectWithSTSEndpoint(t *testing.T) {
 				"SecretAccessKey": testMinioRootPassword,
 			})
 			assert.NilError(t, err)
-			roleCredsRetrieved = true
+			credsRetrieved = true
 		})
-	stsServer := &http.Server{
-		Addr:    stsAddr,
-		Handler: stsHandler,
+	awsSTSServer := &http.Server{
+		Addr:    awsSTSAddr,
+		Handler: awsSTSHandler,
 	}
-	go stsServer.Serve(stsListener)
-	defer stsServer.Shutdown(context.Background())
+	go awsSTSServer.Serve(awsSTSListener)
+	defer awsSTSServer.Shutdown(context.Background())
+
+	// start a mock LDAP STS server
+	ldapSTSListener, ldapSTSAddr, ldapSTSPort := testlistener.New(t)
+	ldapSTSEndpoint := fmt.Sprintf("https://%s", ldapSTSAddr)
+	ldapSTSHandler := http.NewServeMux()
+	var ldapUsername, ldapPassword string
+	ldapSTSHandler.HandleFunc("POST /",
+		func(w http.ResponseWriter, r *http.Request) {
+			err := r.ParseForm()
+			assert.NilError(t, err)
+			username := r.Form.Get("LDAPUsername")
+			password := r.Form.Get("LDAPPassword")
+			assert.Equal(t, username, ldapUsername)
+			assert.Equal(t, password, ldapPassword)
+			var result credentials.LDAPIdentityResult
+			result.Credentials.AccessKey = testMinioRootUser
+			result.Credentials.SecretKey = testMinioRootPassword
+			err = xml.NewEncoder(w).Encode(credentials.AssumeRoleWithLDAPResponse{Result: result})
+			assert.NilError(t, err)
+			credsRetrieved = true
+		})
+	ldapSTSServer := &http.Server{
+		Addr:    ldapSTSAddr,
+		Handler: ldapSTSHandler,
+	}
+	go ldapSTSServer.ServeTLS(ldapSTSListener, testServerCert, testServerKey)
+	defer ldapSTSServer.Shutdown(context.Background())
 
 	// start proxy
 	proxyAddr, proxyPort := testproxy.New(t)
 
 	tests := []struct {
-		name     string
-		provider string
-		stsSpec  *sourcev1.BucketSTSSpec
-		opts     []Option
-		err      string
+		name         string
+		provider     string
+		stsSpec      *sourcev1.BucketSTSSpec
+		opts         []Option
+		ldapUsername string
+		ldapPassword string
+		err          string
 	}{
 		{
-			name:     "with correct endpoint",
+			name:     "with correct aws endpoint",
 			provider: "aws",
 			stsSpec: &sourcev1.BucketSTSSpec{
 				Provider: "aws",
-				Endpoint: stsEndpoint,
+				Endpoint: awsSTSEndpoint,
 			},
 		},
 		{
-			name:     "with incorrect endpoint",
+			name:     "with incorrect aws endpoint",
 			provider: "aws",
 			stsSpec: &sourcev1.BucketSTSSpec{
 				Provider: "aws",
-				Endpoint: fmt.Sprintf("http://localhost:%d", stsPort+1),
+				Endpoint: fmt.Sprintf("http://localhost:%d", awsSTSPort+1),
 			},
 			err: "connection refused",
 		},
 		{
-			name:     "with correct endpoint and proxy",
+			name:     "with correct aws endpoint and proxy",
 			provider: "aws",
 			stsSpec: &sourcev1.BucketSTSSpec{
 				Provider: "aws",
-				Endpoint: stsEndpoint,
+				Endpoint: awsSTSEndpoint,
 			},
 			opts: []Option{WithProxyURL(&url.URL{Scheme: "http", Host: proxyAddr})},
 		},
 		{
-			name:     "with correct endpoint and incorrect proxy",
+			name:     "with correct aws endpoint and incorrect proxy",
 			provider: "aws",
 			stsSpec: &sourcev1.BucketSTSSpec{
 				Provider: "aws",
-				Endpoint: stsEndpoint,
+				Endpoint: awsSTSEndpoint,
 			},
 			opts: []Option{WithProxyURL(&url.URL{Scheme: "http", Host: fmt.Sprintf("localhost:%d", proxyPort+1)})},
 			err:  "connection refused",
+		},
+		{
+			name:     "with correct ldap endpoint",
+			provider: "generic",
+			stsSpec: &sourcev1.BucketSTSSpec{
+				Provider: "ldap",
+				Endpoint: ldapSTSEndpoint,
+			},
+			opts: []Option{WithSTSTLSConfig(testTLSConfig)},
+		},
+		{
+			name:     "with incorrect ldap endpoint",
+			provider: "generic",
+			stsSpec: &sourcev1.BucketSTSSpec{
+				Provider: "ldap",
+				Endpoint: fmt.Sprintf("http://localhost:%d", ldapSTSPort+1),
+			},
+			err: "connection refused",
+		},
+		{
+			name:     "with correct ldap endpoint and secret",
+			provider: "generic",
+			stsSpec: &sourcev1.BucketSTSSpec{
+				Provider: "ldap",
+				Endpoint: ldapSTSEndpoint,
+			},
+			opts: []Option{
+				WithSTSTLSConfig(testTLSConfig),
+				WithSTSSecret(&corev1.Secret{
+					Data: map[string][]byte{
+						"username": []byte("user"),
+						"password": []byte("password"),
+					},
+				}),
+			},
+			ldapUsername: "user",
+			ldapPassword: "password",
+		},
+		{
+			name:     "with correct ldap endpoint and proxy",
+			provider: "generic",
+			stsSpec: &sourcev1.BucketSTSSpec{
+				Provider: "ldap",
+				Endpoint: ldapSTSEndpoint,
+			},
+			opts: []Option{
+				WithProxyURL(&url.URL{Scheme: "http", Host: proxyAddr}),
+				WithSTSTLSConfig(testTLSConfig),
+			},
+		},
+		{
+			name:     "with correct ldap endpoint and incorrect proxy",
+			provider: "generic",
+			stsSpec: &sourcev1.BucketSTSSpec{
+				Provider: "ldap",
+				Endpoint: ldapSTSEndpoint,
+			},
+			opts: []Option{
+				WithProxyURL(&url.URL{Scheme: "http", Host: fmt.Sprintf("localhost:%d", proxyPort+1)}),
+			},
+			err: "connection refused",
+		},
+		{
+			name:     "with correct ldap endpoint and without client tls config",
+			provider: "generic",
+			stsSpec: &sourcev1.BucketSTSSpec{
+				Provider: "ldap",
+				Endpoint: ldapSTSEndpoint,
+			},
+			err: "tls: failed to verify certificate: x509: certificate signed by unknown authority",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			roleCredsRetrieved = false
+			credsRetrieved = false
+			ldapUsername = tt.ldapUsername
+			ldapPassword = tt.ldapPassword
+
 			bucket := bucketStub(bucket, testMinioAddress)
 			bucket.Spec.Provider = tt.provider
 			bucket.Spec.STS = tt.stsSpec
-			minioClient, err := NewClient(bucket, append(tt.opts, WithTLSConfig(testTLSConfig))...)
+
+			opts := tt.opts
+			opts = append(opts, WithTLSConfig(testTLSConfig))
+
+			minioClient, err := NewClient(bucket, opts...)
 			assert.NilError(t, err)
 			assert.Assert(t, minioClient != nil)
+
 			ctx := context.Background()
-			tempDir := t.TempDir()
-			path := filepath.Join(tempDir, sourceignore.IgnoreFile)
+			path := filepath.Join(t.TempDir(), sourceignore.IgnoreFile)
 			_, err = minioClient.FGetObject(ctx, bucketName, objectName, path)
 			if tt.err != "" {
 				assert.ErrorContains(t, err, tt.err)
 			} else {
 				assert.NilError(t, err)
-				assert.Assert(t, roleCredsRetrieved)
+				assert.Assert(t, credsRetrieved)
 			}
 		})
 	}
@@ -477,6 +588,8 @@ func TestValidateSTSProvider(t *testing.T) {
 		name           string
 		bucketProvider string
 		stsProvider    string
+		withSecret     bool
+		withCertSecret bool
 		err            string
 	}{
 		{
@@ -485,15 +598,52 @@ func TestValidateSTSProvider(t *testing.T) {
 			stsProvider:    "aws",
 		},
 		{
-			name:           "unsupported for aws",
+			name:           "aws does not require a secret",
+			bucketProvider: "aws",
+			stsProvider:    "aws",
+			withSecret:     true,
+			err:            "spec.sts.secretRef is not required for the 'aws' STS provider",
+		},
+		{
+			name:           "aws does not require a cert secret",
+			bucketProvider: "aws",
+			stsProvider:    "aws",
+			withCertSecret: true,
+			err:            "spec.sts.certSecretRef is not required for the 'aws' STS provider",
+		},
+		{
+			name:           "ldap",
+			bucketProvider: "generic",
+			stsProvider:    "ldap",
+		},
+		{
+			name:           "ldap may use a secret",
+			bucketProvider: "generic",
+			stsProvider:    "ldap",
+			withSecret:     true,
+		},
+		{
+			name:           "ldap may use a cert secret",
+			bucketProvider: "generic",
+			stsProvider:    "ldap",
+			withCertSecret: true,
+		},
+		{
+			name:           "ldap sts provider unsupported for aws bucket provider",
 			bucketProvider: "aws",
 			stsProvider:    "ldap",
 			err:            "STS provider 'ldap' is not supported for 'aws' bucket provider",
 		},
 		{
+			name:           "aws sts provider unsupported for generic bucket provider",
+			bucketProvider: "generic",
+			stsProvider:    "aws",
+			err:            "STS provider 'aws' is not supported for 'generic' bucket provider",
+		},
+		{
 			name:           "unsupported bucket provider",
 			bucketProvider: "gcp",
-			stsProvider:    "gcp",
+			stsProvider:    "ldap",
 			err:            "STS configuration is not supported for 'gcp' bucket provider",
 		},
 	}
@@ -501,7 +651,102 @@ func TestValidateSTSProvider(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			err := ValidateSTSProvider(tt.bucketProvider, tt.stsProvider)
+			sts := &sourcev1.BucketSTSSpec{
+				Provider: tt.stsProvider,
+			}
+			if tt.withSecret {
+				sts.SecretRef = &meta.LocalObjectReference{}
+			}
+			if tt.withCertSecret {
+				sts.CertSecretRef = &meta.LocalObjectReference{}
+			}
+			err := ValidateSTSProvider(tt.bucketProvider, sts)
+			if tt.err != "" {
+				assert.Error(t, err, tt.err)
+			} else {
+				assert.NilError(t, err)
+			}
+		})
+	}
+}
+
+func TestValidateSTSSecret(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		provider string
+		secret   *corev1.Secret
+		err      string
+	}{
+		{
+			name:     "ldap provider does not require a secret",
+			provider: "ldap",
+		},
+		{
+			name:     "valid ldap secret",
+			provider: "ldap",
+			secret: &corev1.Secret{
+				Data: map[string][]byte{
+					"username": []byte("user"),
+					"password": []byte("pass"),
+				},
+			},
+		},
+		{
+			name:     "empty ldap secret",
+			provider: "ldap",
+			secret:   &corev1.Secret{ObjectMeta: v1.ObjectMeta{Name: "ldap-secret"}},
+			err:      "invalid 'ldap-secret' secret data for 'ldap' STS provider: required fields username, password",
+		},
+		{
+			name:     "ldap secret missing password",
+			provider: "ldap",
+			secret: &corev1.Secret{
+				Data: map[string][]byte{
+					"username": []byte("user"),
+				},
+			},
+			err: "invalid '' secret data for 'ldap' STS provider: required fields username, password",
+		},
+		{
+			name:     "ldap secret missing username",
+			provider: "ldap",
+			secret: &corev1.Secret{
+				Data: map[string][]byte{
+					"password": []byte("pass"),
+				},
+			},
+			err: "invalid '' secret data for 'ldap' STS provider: required fields username, password",
+		},
+		{
+			name:     "ldap secret with empty username",
+			provider: "ldap",
+			secret: &corev1.Secret{
+				Data: map[string][]byte{
+					"username": []byte(""),
+					"password": []byte("pass"),
+				},
+			},
+			err: "invalid '' secret data for 'ldap' STS provider: required fields username, password",
+		},
+		{
+			name:     "ldap secret with empty password",
+			provider: "ldap",
+			secret: &corev1.Secret{
+				Data: map[string][]byte{
+					"username": []byte("user"),
+					"password": []byte(""),
+				},
+			},
+			err: "invalid '' secret data for 'ldap' STS provider: required fields username, password",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			err := ValidateSTSSecret(tt.provider, tt.secret)
 			if tt.err != "" {
 				assert.Error(t, err, tt.err)
 			} else {

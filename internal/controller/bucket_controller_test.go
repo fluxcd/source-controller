@@ -593,6 +593,94 @@ func TestBucketReconciler_reconcileSource_generic(t *testing.T) {
 			},
 		},
 		{
+			name:       "Observes non-existing sts.secretRef",
+			bucketName: "dummy",
+			beforeFunc: func(obj *bucketv1.Bucket) {
+				obj.Spec.STS = &bucketv1.BucketSTSSpec{
+					SecretRef: &meta.LocalObjectReference{Name: "dummy"},
+				}
+				conditions.MarkReconciling(obj, meta.ProgressingReason, "foo")
+				conditions.MarkUnknown(obj, meta.ReadyCondition, "foo", "bar")
+			},
+			wantErr:     true,
+			assertIndex: index.NewDigester(),
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "failed to get secret '/dummy': secrets \"dummy\" not found"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "foo"),
+				*conditions.UnknownCondition(meta.ReadyCondition, "foo", "bar"),
+			},
+		},
+		{
+			name:       "Observes invalid sts.secretRef",
+			bucketName: "dummy",
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "dummy",
+				},
+			},
+			beforeFunc: func(obj *bucketv1.Bucket) {
+				obj.Spec.Provider = "generic"
+				obj.Spec.STS = &bucketv1.BucketSTSSpec{
+					Provider:  "ldap",
+					Endpoint:  "https://something",
+					SecretRef: &meta.LocalObjectReference{Name: "dummy"},
+				}
+				conditions.MarkReconciling(obj, meta.ProgressingReason, "foo")
+				conditions.MarkUnknown(obj, meta.ReadyCondition, "foo", "bar")
+			},
+			wantErr:     true,
+			assertIndex: index.NewDigester(),
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "foo"),
+				*conditions.UnknownCondition(meta.ReadyCondition, "foo", "bar"),
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "invalid 'dummy' secret data for 'ldap' STS provider: required fields username, password"),
+			},
+		},
+		{
+			name:       "Observes non-existing sts.certSecretRef",
+			bucketName: "dummy",
+			beforeFunc: func(obj *bucketv1.Bucket) {
+				obj.Spec.STS = &bucketv1.BucketSTSSpec{
+					CertSecretRef: &meta.LocalObjectReference{Name: "dummy"},
+				}
+				conditions.MarkReconciling(obj, meta.ProgressingReason, "foo")
+				conditions.MarkUnknown(obj, meta.ReadyCondition, "foo", "bar")
+			},
+			wantErr:     true,
+			assertIndex: index.NewDigester(),
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "failed to get secret '/dummy': secrets \"dummy\" not found"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "foo"),
+				*conditions.UnknownCondition(meta.ReadyCondition, "foo", "bar"),
+			},
+		},
+		{
+			name:       "Observes invalid sts.certSecretRef",
+			bucketName: "dummy",
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "dummy",
+				},
+			},
+			beforeFunc: func(obj *bucketv1.Bucket) {
+				obj.Spec.Provider = "generic"
+				obj.Spec.STS = &bucketv1.BucketSTSSpec{
+					Provider:      "ldap",
+					Endpoint:      "https://something",
+					CertSecretRef: &meta.LocalObjectReference{Name: "dummy"},
+				}
+				conditions.MarkReconciling(obj, meta.ProgressingReason, "foo")
+				conditions.MarkUnknown(obj, meta.ReadyCondition, "foo", "bar")
+			},
+			wantErr:     true,
+			assertIndex: index.NewDigester(),
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "foo"),
+				*conditions.UnknownCondition(meta.ReadyCondition, "foo", "bar"),
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "failed to get STS TLS config: certificate secret does not contain any TLS configuration"),
+			},
+		},
+		{
 			name:       "Observes non-existing bucket name",
 			bucketName: "dummy",
 			beforeFunc: func(obj *bucketv1.Bucket) {
@@ -609,7 +697,7 @@ func TestBucketReconciler_reconcileSource_generic(t *testing.T) {
 			},
 		},
 		{
-			name:       "Observes incompatible STS provider",
+			name:       "Observes incompatible sts.provider",
 			bucketName: "dummy",
 			beforeFunc: func(obj *bucketv1.Bucket) {
 				obj.Spec.Provider = "generic"
@@ -622,18 +710,18 @@ func TestBucketReconciler_reconcileSource_generic(t *testing.T) {
 			wantErr:     true,
 			assertIndex: index.NewDigester(),
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.InvalidSTSConfigurationReason, "STS configuration is not supported for 'generic' bucket provider"),
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.InvalidSTSConfigurationReason, "STS provider 'aws' is not supported for 'generic' bucket provider"),
 				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "foo"),
 				*conditions.UnknownCondition(meta.ReadyCondition, "foo", "bar"),
 			},
 		},
 		{
-			name:       "Observes invalid STS endpoint",
+			name:       "Observes invalid sts.endpoint",
 			bucketName: "dummy",
 			beforeFunc: func(obj *bucketv1.Bucket) {
-				obj.Spec.Provider = "aws" // TODO: change to generic when ldap STS provider is implemented
+				obj.Spec.Provider = "generic"
 				obj.Spec.STS = &bucketv1.BucketSTSSpec{
-					Provider: "aws", // TODO: change to ldap when ldap STS provider is implemented
+					Provider: "ldap",
 					Endpoint: "something\t",
 				}
 				conditions.MarkReconciling(obj, meta.ProgressingReason, "foo")
@@ -1863,7 +1951,7 @@ func TestBucketReconciler_APIServerValidation_STS(t *testing.T) {
 				Provider: "aws",
 				Endpoint: "http://test",
 			},
-			err: "STS configuration is only supported for the 'aws' Bucket provider",
+			err: "STS configuration is only supported for the 'aws' and 'generic' Bucket providers",
 		},
 		{
 			name:           "azure unsupported",
@@ -1872,16 +1960,7 @@ func TestBucketReconciler_APIServerValidation_STS(t *testing.T) {
 				Provider: "aws",
 				Endpoint: "http://test",
 			},
-			err: "STS configuration is only supported for the 'aws' Bucket provider",
-		},
-		{
-			name:           "generic unsupported",
-			bucketProvider: "generic",
-			stsConfig: &bucketv1.BucketSTSSpec{
-				Provider: "aws",
-				Endpoint: "http://test",
-			},
-			err: "STS configuration is only supported for the 'aws' Bucket provider",
+			err: "STS configuration is only supported for the 'aws' and 'generic' Bucket providers",
 		},
 		{
 			name:           "aws supported",
@@ -1916,16 +1995,70 @@ func TestBucketReconciler_APIServerValidation_STS(t *testing.T) {
 			name:           "aws can be created without STS config",
 			bucketProvider: "aws",
 		},
-		// Can't be tested at present with only one allowed sts provider.
-		// {
-		// 	name:           "ldap unsupported for aws",
-		// 	bucketProvider: "aws",
-		// 	stsConfig: &bucketv1.BucketSTSSpec{
-		// 		Provider: "ldap",
-		// 		Endpoint: "http://test",
-		// 	},
-		// 	err: "'aws' is the only supported STS provider for the 'aws' Bucket provider",
-		// },
+		{
+			name:           "ldap unsupported for aws",
+			bucketProvider: "aws",
+			stsConfig: &bucketv1.BucketSTSSpec{
+				Provider: "ldap",
+				Endpoint: "http://test",
+			},
+			err: "'aws' is the only supported STS provider for the 'aws' Bucket provider",
+		},
+		{
+			name:           "aws unsupported for generic",
+			bucketProvider: "generic",
+			stsConfig: &bucketv1.BucketSTSSpec{
+				Provider: "aws",
+				Endpoint: "http://test",
+			},
+			err: "'ldap' is the only supported STS provider for the 'generic' Bucket provider",
+		},
+		{
+			name:           "aws does not require a secret",
+			bucketProvider: "aws",
+			stsConfig: &bucketv1.BucketSTSSpec{
+				Provider:  "aws",
+				Endpoint:  "http://test",
+				SecretRef: &meta.LocalObjectReference{},
+			},
+			err: "spec.sts.secretRef is not required for the 'aws' STS provider",
+		},
+		{
+			name:           "aws does not require a cert secret",
+			bucketProvider: "aws",
+			stsConfig: &bucketv1.BucketSTSSpec{
+				Provider:      "aws",
+				Endpoint:      "http://test",
+				CertSecretRef: &meta.LocalObjectReference{},
+			},
+			err: "spec.sts.certSecretRef is not required for the 'aws' STS provider",
+		},
+		{
+			name:           "ldap may use a secret",
+			bucketProvider: "generic",
+			stsConfig: &bucketv1.BucketSTSSpec{
+				Provider:  "ldap",
+				Endpoint:  "http://test",
+				SecretRef: &meta.LocalObjectReference{},
+			},
+		},
+		{
+			name:           "ldap may use a cert secret",
+			bucketProvider: "generic",
+			stsConfig: &bucketv1.BucketSTSSpec{
+				Provider:      "ldap",
+				Endpoint:      "http://test",
+				CertSecretRef: &meta.LocalObjectReference{},
+			},
+		},
+		{
+			name:           "ldap may not use a secret or cert secret",
+			bucketProvider: "generic",
+			stsConfig: &bucketv1.BucketSTSSpec{
+				Provider: "ldap",
+				Endpoint: "http://test",
+			},
+		},
 	}
 
 	for _, tt := range tests {
