@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -920,16 +921,40 @@ func (r *OCIRepositoryReconciler) keychain(ctx context.Context, obj *ociv1.OCIRe
 
 // transport clones the default transport from remote and when a certSecretRef is specified,
 // the returned transport will include the TLS client and/or CA certificates.
+// If the insecure flag is set, the transport will skip the verification of the server's certificate.
+// Additionally, if a proxy is specified, transport will use it.
 func (r *OCIRepositoryReconciler) transport(ctx context.Context, obj *ociv1.OCIRepository) (*http.Transport, error) {
 	transport := remote.DefaultTransport.(*http.Transport).Clone()
 
+	tlsConfig, err := r.getTLSConfig(ctx, obj)
+	if err != nil {
+		return nil, err
+	}
+	if tlsConfig != nil {
+		transport.TLSClientConfig = tlsConfig
+	}
+
+	proxyURL, err := r.getProxyURL(ctx, obj)
+	if err != nil {
+		return nil, err
+	}
+	if proxyURL != nil {
+		transport.Proxy = http.ProxyURL(proxyURL)
+	}
+
+	return transport, nil
+}
+
+// getTLSConfig gets the TLS configuration for the transport based on the
+// specified secret reference in the OCIRepository object, or the insecure flag.
+func (r *OCIRepositoryReconciler) getTLSConfig(ctx context.Context, obj *ociv1.OCIRepository) (*cryptotls.Config, error) {
 	if obj.Spec.CertSecretRef == nil || obj.Spec.CertSecretRef.Name == "" {
 		if obj.Spec.Insecure {
-			transport.TLSClientConfig = &cryptotls.Config{
+			return &cryptotls.Config{
 				InsecureSkipVerify: true,
-			}
+			}, nil
 		}
-		return transport, nil
+		return nil, nil
 	}
 
 	certSecretName := types.NamespacedName{
@@ -955,9 +980,42 @@ func (r *OCIRepositoryReconciler) transport(ctx context.Context, obj *ociv1.OCIR
 				Info("warning: specifying TLS auth data via `certFile`/`keyFile`/`caFile` is deprecated, please use `tls.crt`/`tls.key`/`ca.crt` instead")
 		}
 	}
-	transport.TLSClientConfig = tlsConfig
 
-	return transport, nil
+	return tlsConfig, nil
+}
+
+// getProxyURL gets the proxy configuration for the transport based on the
+// specified proxy secret reference in the OCIRepository object.
+func (r *OCIRepositoryReconciler) getProxyURL(ctx context.Context, obj *ociv1.OCIRepository) (*url.URL, error) {
+	if obj.Spec.ProxySecretRef == nil || obj.Spec.ProxySecretRef.Name == "" {
+		return nil, nil
+	}
+
+	proxySecretName := types.NamespacedName{
+		Namespace: obj.Namespace,
+		Name:      obj.Spec.ProxySecretRef.Name,
+	}
+	var proxySecret corev1.Secret
+	if err := r.Get(ctx, proxySecretName, &proxySecret); err != nil {
+		return nil, err
+	}
+
+	proxyData := proxySecret.Data
+	address, ok := proxyData["address"]
+	if !ok {
+		return nil, fmt.Errorf("invalid proxy secret '%s/%s': key 'address' is missing",
+			obj.Namespace, obj.Spec.ProxySecretRef.Name)
+	}
+	proxyURL, err := url.Parse(string(address))
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse proxy address '%s': %w", address, err)
+	}
+	user, hasUser := proxyData["username"]
+	password, hasPassword := proxyData["password"]
+	if hasUser || hasPassword {
+		proxyURL.User = url.UserPassword(string(user), string(password))
+	}
+	return proxyURL, nil
 }
 
 // reconcileStorage ensures the current state of the storage matches the

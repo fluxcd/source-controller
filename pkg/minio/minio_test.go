@@ -23,8 +23,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"net"
-	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -32,7 +30,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/elazarl/goproxy"
 	"github.com/google/uuid"
 	miniov7 "github.com/minio/minio-go/v7"
 	"github.com/ory/dockertest/v3"
@@ -45,6 +42,7 @@ import (
 	"github.com/fluxcd/pkg/sourceignore"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
+	testproxy "github.com/fluxcd/source-controller/tests/proxy"
 )
 
 const (
@@ -245,33 +243,44 @@ func TestFGetObject(t *testing.T) {
 }
 
 func TestNewClientAndFGetObjectWithProxy(t *testing.T) {
-	// start proxy
-	proxyListener, err := net.Listen("tcp", ":0")
-	assert.NilError(t, err, "could not start proxy server")
-	defer proxyListener.Close()
-	proxyAddr := proxyListener.Addr().String()
-	proxyHandler := goproxy.NewProxyHttpServer()
-	proxyHandler.Verbose = true
-	proxyServer := &http.Server{
-		Addr:    proxyAddr,
-		Handler: proxyHandler,
+	proxyAddr, proxyPort := testproxy.New(t)
+
+	tests := []struct {
+		name         string
+		proxyURL     *url.URL
+		errSubstring string
+	}{
+		{
+			name:     "with correct proxy",
+			proxyURL: &url.URL{Scheme: "http", Host: proxyAddr},
+		},
+		{
+			name:         "with incorrect proxy",
+			proxyURL:     &url.URL{Scheme: "http", Host: fmt.Sprintf("localhost:%d", proxyPort+1)},
+			errSubstring: "connection refused",
+		},
 	}
-	go proxyServer.Serve(proxyListener)
-	defer proxyServer.Shutdown(context.Background())
-	proxyURL := &url.URL{Scheme: "http", Host: proxyAddr}
 
 	// run test
-	minioClient, err := NewClient(bucketStub(bucket, testMinioAddress),
-		WithSecret(secret.DeepCopy()),
-		WithTLSConfig(testTLSConfig),
-		WithProxyURL(proxyURL))
-	assert.NilError(t, err)
-	assert.Assert(t, minioClient != nil)
-	ctx := context.Background()
-	tempDir := t.TempDir()
-	path := filepath.Join(tempDir, sourceignore.IgnoreFile)
-	_, err = minioClient.FGetObject(ctx, bucketName, objectName, path)
-	assert.NilError(t, err)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			minioClient, err := NewClient(bucketStub(bucket, testMinioAddress),
+				WithSecret(secret.DeepCopy()),
+				WithTLSConfig(testTLSConfig),
+				WithProxyURL(tt.proxyURL))
+			assert.NilError(t, err)
+			assert.Assert(t, minioClient != nil)
+			ctx := context.Background()
+			tempDir := t.TempDir()
+			path := filepath.Join(tempDir, sourceignore.IgnoreFile)
+			_, err = minioClient.FGetObject(ctx, bucketName, objectName, path)
+			if tt.errSubstring != "" {
+				assert.ErrorContains(t, err, tt.errSubstring)
+			} else {
+				assert.NilError(t, err)
+			}
+		})
+	}
 }
 
 func TestFGetObjectNotExists(t *testing.T) {
