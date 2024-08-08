@@ -94,7 +94,7 @@ func TestMain(m *testing.M) {
 func TestBlobClient_BucketExists(t *testing.T) {
 	g := NewWithT(t)
 
-	client, err := NewClient(testBucket.DeepCopy(), testSecret.DeepCopy())
+	client, err := NewClient(testBucket.DeepCopy(), WithSecret(testSecret.DeepCopy()))
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(client).ToNot(BeNil())
 
@@ -120,7 +120,7 @@ func TestBlobClient_BucketExists(t *testing.T) {
 func TestBlobClient_BucketNotExists(t *testing.T) {
 	g := NewWithT(t)
 
-	client, err := NewClient(testBucket.DeepCopy(), testSecret.DeepCopy())
+	client, err := NewClient(testBucket.DeepCopy(), WithSecret(testSecret.DeepCopy()))
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(client).ToNot(BeNil())
 
@@ -140,7 +140,7 @@ func TestBlobClient_FGetObject(t *testing.T) {
 
 	tempDir := t.TempDir()
 
-	client, err := NewClient(testBucket.DeepCopy(), testSecret.DeepCopy())
+	client, err := NewClient(testBucket.DeepCopy(), WithSecret(testSecret.DeepCopy()))
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(client).ToNot(BeNil())
 
@@ -180,7 +180,7 @@ func TestBlobClientSASKey_FGetObject(t *testing.T) {
 	tempDir := t.TempDir()
 
 	// create a client with the shared key
-	client, err := NewClient(testBucket.DeepCopy(), testSecret.DeepCopy())
+	client, err := NewClient(testBucket.DeepCopy(), WithSecret(testSecret.DeepCopy()))
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(client).ToNot(BeNil())
 
@@ -221,7 +221,7 @@ func TestBlobClientSASKey_FGetObject(t *testing.T) {
 		},
 	}
 
-	sasKeyClient, err := NewClient(testBucket.DeepCopy(), testSASKeySecret.DeepCopy())
+	sasKeyClient, err := NewClient(testBucket.DeepCopy(), WithSecret(testSASKeySecret.DeepCopy()))
 	g.Expect(err).ToNot(HaveOccurred())
 
 	// Test if bucket and blob exists using sasKey.
@@ -246,7 +246,7 @@ func TestBlobClientContainerSASKey_BucketExists(t *testing.T) {
 	g := NewWithT(t)
 
 	// create a client with the shared key
-	client, err := NewClient(testBucket.DeepCopy(), testSecret.DeepCopy())
+	client, err := NewClient(testBucket.DeepCopy(), WithSecret(testSecret.DeepCopy()))
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(client).ToNot(BeNil())
 
@@ -286,7 +286,7 @@ func TestBlobClientContainerSASKey_BucketExists(t *testing.T) {
 		},
 	}
 
-	sasKeyClient, err := NewClient(testBucket.DeepCopy(), testSASKeySecret.DeepCopy())
+	sasKeyClient, err := NewClient(testBucket.DeepCopy(), WithSecret(testSASKeySecret.DeepCopy()))
 	g.Expect(err).ToNot(HaveOccurred())
 
 	ctx, timeout = context.WithTimeout(context.Background(), testTimeout)
@@ -308,7 +308,7 @@ func TestBlobClientContainerSASKey_BucketExists(t *testing.T) {
 func TestBlobClient_FGetObject_NotFoundErr(t *testing.T) {
 	g := NewWithT(t)
 
-	client, err := NewClient(testBucket.DeepCopy(), testSecret.DeepCopy())
+	client, err := NewClient(testBucket.DeepCopy(), WithSecret(testSecret.DeepCopy()))
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(client).ToNot(BeNil())
 
@@ -335,7 +335,7 @@ func TestBlobClient_FGetObject_NotFoundErr(t *testing.T) {
 func TestBlobClient_VisitObjects(t *testing.T) {
 	g := NewWithT(t)
 
-	client, err := NewClient(testBucket.DeepCopy(), testSecret.DeepCopy())
+	client, err := NewClient(testBucket.DeepCopy(), WithSecret(testSecret.DeepCopy()))
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(client).ToNot(BeNil())
 
@@ -375,7 +375,7 @@ func TestBlobClient_VisitObjects(t *testing.T) {
 func TestBlobClient_VisitObjects_CallbackErr(t *testing.T) {
 	g := NewWithT(t)
 
-	client, err := NewClient(testBucket.DeepCopy(), testSecret.DeepCopy())
+	client, err := NewClient(testBucket.DeepCopy(), WithSecret(testSecret.DeepCopy()))
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(client).ToNot(BeNil())
 
