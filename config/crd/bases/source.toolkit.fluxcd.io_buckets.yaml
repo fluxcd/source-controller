@@ -397,7 +397,7 @@ spec:
                   to use while communicating with the Bucket server.
 
 
-                  Only supported for the generic provider.
+                  Only supported for the `generic` and `aws` providers.
                 properties:
                   name:
                     description: Name of the referent.
