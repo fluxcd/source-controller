@@ -463,6 +463,19 @@ func (r *BucketReconciler) reconcileSource(ctx context.Context, sp *patch.Serial
 			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
 			return sreconcile.ResultEmpty, e
 		}
+		if sts := obj.Spec.STS; sts != nil {
+			if err := minio.ValidateSTSProvider(obj.Spec.Provider, sts.Provider); err != nil {
+				e := serror.NewStalling(err, sourcev1.InvalidSTSConfigurationReason)
+				conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
+				return sreconcile.ResultEmpty, e
+			}
+			if _, err := url.Parse(sts.Endpoint); err != nil {
+				err := fmt.Errorf("failed to parse STS endpoint '%s': %w", sts.Endpoint, err)
+				e := serror.NewStalling(err, sourcev1.URLInvalidReason)
+				conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
+				return sreconcile.ResultEmpty, e
+			}
+		}
 		tlsConfig, err := r.getTLSConfig(ctx, obj)
 		if err != nil {
 			e := serror.NewGeneric(err, sourcev1.AuthenticationFailedReason)

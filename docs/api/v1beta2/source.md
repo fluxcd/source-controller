@@ -114,6 +114,23 @@ string
 </tr>
 <tr>
 <td>
+<code>sts</code><br>
+<em>
+<a href="#source.toolkit.fluxcd.io/v1beta2.BucketSTSSpec">
+BucketSTSSpec
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>STS specifies the required configuration to use a Security Token
+Service for fetching temporary credentials to authenticate in a
+Bucket provider.</p>
+<p>This field is only supported for the <code>aws</code> provider.</p>
+</td>
+</tr>
+<tr>
+<td>
 <code>insecure</code><br>
 <em>
 bool
@@ -1424,6 +1441,52 @@ map[string]string
 </table>
 </div>
 </div>
+<h3 id="source.toolkit.fluxcd.io/v1beta2.BucketSTSSpec">BucketSTSSpec
+</h3>
+<p>
+(<em>Appears on:</em>
+<a href="#source.toolkit.fluxcd.io/v1beta2.BucketSpec">BucketSpec</a>)
+</p>
+<p>BucketSTSSpec specifies the required configuration to use a Security Token
+Service for fetching temporary credentials to authenticate in a Bucket
+provider.</p>
+<div class="md-typeset__scrollwrap">
+<div class="md-typeset__table">
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>provider</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<p>Provider of the Security Token Service.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>endpoint</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<p>Endpoint is the HTTP/S endpoint of the Security Token Service from
+where temporary credentials will be fetched.</p>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
 <h3 id="source.toolkit.fluxcd.io/v1beta2.BucketSpec">BucketSpec
 </h3>
 <p>
@@ -1476,6 +1539,23 @@ string
 </td>
 <td>
 <p>Endpoint is the object storage address the BucketName is located at.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>sts</code><br>
+<em>
+<a href="#source.toolkit.fluxcd.io/v1beta2.BucketSTSSpec">
+BucketSTSSpec
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>STS specifies the required configuration to use a Security Token
+Service for fetching temporary credentials to authenticate in a
+Bucket provider.</p>
+<p>This field is only supported for the <code>aws</code> provider.</p>
 </td>
 </tr>
 <tr>

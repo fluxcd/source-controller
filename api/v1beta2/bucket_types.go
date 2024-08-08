@@ -49,6 +49,8 @@ const (
 
 // BucketSpec specifies the required configuration to produce an Artifact for
 // an object storage bucket.
+// +kubebuilder:validation:XValidation:rule="self.provider == 'aws' || !has(self.sts)", message="STS configuration is only supported for the 'aws' Bucket provider"
+// +kubebuilder:validation:XValidation:rule="self.provider != 'aws' || !has(self.sts) || self.sts.provider == 'aws'", message="'aws' is the only supported STS provider for the 'aws' Bucket provider"
 type BucketSpec struct {
 	// Provider of the object storage bucket.
 	// Defaults to 'generic', which expects an S3 (API) compatible object
@@ -65,6 +67,14 @@ type BucketSpec struct {
 	// Endpoint is the object storage address the BucketName is located at.
 	// +required
 	Endpoint string `json:"endpoint"`
+
+	// STS specifies the required configuration to use a Security Token
+	// Service for fetching temporary credentials to authenticate in a
+	// Bucket provider.
+	//
+	// This field is only supported for the `aws` provider.
+	// +optional
+	STS *BucketSTSSpec `json:"sts,omitempty"`
 
 	// Insecure allows connecting to a non-TLS HTTP Endpoint.
 	// +optional
@@ -138,6 +148,22 @@ type BucketSpec struct {
 	// NOTE: Not implemented, provisional as of https://github.com/fluxcd/flux2/pull/2092
 	// +optional
 	AccessFrom *acl.AccessFrom `json:"accessFrom,omitempty"`
+}
+
+// BucketSTSSpec specifies the required configuration to use a Security Token
+// Service for fetching temporary credentials to authenticate in a Bucket
+// provider.
+type BucketSTSSpec struct {
+	// Provider of the Security Token Service.
+	// +kubebuilder:validation:Enum=aws
+	// +required
+	Provider string `json:"provider"`
+
+	// Endpoint is the HTTP/S endpoint of the Security Token Service from
+	// where temporary credentials will be fetched.
+	// +required
+	// +kubebuilder:validation:Pattern="^(http|https)://.*$"
+	Endpoint string `json:"endpoint"`
 }
 
 // BucketStatus records the observed state of a Bucket.

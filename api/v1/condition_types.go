@@ -108,4 +108,7 @@ const (
 	// PatchOperationFailedReason signals a failure in patching a kubernetes API
 	// object.
 	PatchOperationFailedReason string = "PatchOperationFailed"
+
+	// InvalidSTSConfigurationReason signals that the STS configurtion is invalid.
+	InvalidSTSConfigurationReason string = "InvalidSTSConfiguration"
 )
