@@ -21,13 +21,17 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 
 	gcpstorage "cloud.google.com/go/storage"
 	"github.com/go-logr/logr"
+	"golang.org/x/oauth2/google"
 	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
+	htransport "google.golang.org/api/transport/http"
 	corev1 "k8s.io/api/core/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
@@ -48,24 +52,96 @@ type GCSClient struct {
 	*gcpstorage.Client
 }
 
-// NewClient creates a new GCP storage client. The Client will automatically look for  the Google Application
-// Credential environment variable or look for the Google Application Credential file.
-func NewClient(ctx context.Context, secret *corev1.Secret) (*GCSClient, error) {
-	c := &GCSClient{}
-	if secret != nil {
-		client, err := gcpstorage.NewClient(ctx, option.WithCredentialsJSON(secret.Data["serviceaccount"]))
-		if err != nil {
-			return nil, err
-		}
-		c.Client = client
-	} else {
-		client, err := gcpstorage.NewClient(ctx)
-		if err != nil {
-			return nil, err
-		}
-		c.Client = client
+// Option is a functional option for configuring the GCS client.
+type Option func(*options)
+
+// WithSecret sets the secret to use for authenticating with GCP.
+func WithSecret(secret *corev1.Secret) Option {
+	return func(o *options) {
+		o.secret = secret
 	}
-	return c, nil
+}
+
+// WithProxyURL sets the proxy URL to use for the GCS client.
+func WithProxyURL(proxyURL *url.URL) Option {
+	return func(o *options) {
+		o.proxyURL = proxyURL
+	}
+}
+
+type options struct {
+	secret   *corev1.Secret
+	proxyURL *url.URL
+
+	// newCustomHTTPClient should create a new HTTP client for interacting with the GCS API.
+	// This is a test-only option required for mocking the real logic, which requires either
+	// a valid Google Service Account Key or ADC. Both are not available in tests.
+	// The real logic is implemented in the newHTTPClient function, which is used when
+	// constructing the default options object.
+	newCustomHTTPClient func(context.Context, *options) (*http.Client, error)
+}
+
+func newOptions() *options {
+	return &options{
+		newCustomHTTPClient: newHTTPClient,
+	}
+}
+
+// NewClient creates a new GCP storage client. The Client will automatically look for the Google Application
+// Credential environment variable or look for the Google Application Credential file.
+func NewClient(ctx context.Context, opts ...Option) (*GCSClient, error) {
+	o := newOptions()
+	for _, opt := range opts {
+		opt(o)
+	}
+
+	var clientOpts []option.ClientOption
+
+	switch {
+	case o.secret != nil && o.proxyURL == nil:
+		clientOpts = append(clientOpts, option.WithCredentialsJSON(o.secret.Data["serviceaccount"]))
+	case o.proxyURL != nil:
+		httpClient, err := o.newCustomHTTPClient(ctx, o)
+		if err != nil {
+			return nil, err
+		}
+		clientOpts = append(clientOpts, option.WithHTTPClient(httpClient))
+	}
+
+	client, err := gcpstorage.NewClient(ctx, clientOpts...)
+	if err != nil {
+		return nil, err
+	}
+
+	return &GCSClient{client}, nil
+}
+
+// newHTTPClient creates a new HTTP client for interacting with Google Cloud APIs.
+func newHTTPClient(ctx context.Context, o *options) (*http.Client, error) {
+	baseTransport := http.DefaultTransport.(*http.Transport).Clone()
+	if o.proxyURL != nil {
+		baseTransport.Proxy = http.ProxyURL(o.proxyURL)
+	}
+
+	var opts []option.ClientOption
+
+	if o.secret != nil {
+		// Here we can't use option.WithCredentialsJSON() because htransport.NewTransport()
+		// won't know what scopes to use and yield a 400 Bad Request error when retrieving
+		// the OAuth token. Instead we use google.CredentialsFromJSON(), which allows us to
+		// specify the GCS read-only scope.
+		creds, err := google.CredentialsFromJSON(ctx, o.secret.Data["serviceaccount"], gcpstorage.ScopeReadOnly)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create Google credentials from secret: %w", err)
+		}
+		opts = append(opts, option.WithCredentials(creds))
+	}
+
+	transport, err := htransport.NewTransport(ctx, baseTransport, opts...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create Google HTTP transport: %w", err)
+	}
+	return &http.Client{Transport: transport}, nil
 }
 
 // ValidateSecret validates the credential secret. The provided Secret may

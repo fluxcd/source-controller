@@ -445,7 +445,7 @@ func TestBucketReconciler_reconcileSource_generic(t *testing.T) {
 		assertConditions []metav1.Condition
 	}{
 		{
-			name:       "Reconciles GCS source",
+			name:       "Reconciles generic source",
 			bucketName: "dummy",
 			bucketObjects: []*s3mock.Object{
 				{
@@ -973,6 +973,49 @@ func TestBucketReconciler_reconcileSource_gcs(t *testing.T) {
 			},
 		},
 		{
+			name:       "Observes non-existing proxySecretRef",
+			bucketName: "dummy",
+			beforeFunc: func(obj *bucketv1.Bucket) {
+				obj.Spec.ProxySecretRef = &meta.LocalObjectReference{
+					Name: "dummy",
+				}
+				conditions.MarkReconciling(obj, meta.ProgressingReason, "foo")
+				conditions.MarkUnknown(obj, meta.ReadyCondition, "foo", "bar")
+			},
+			want:        sreconcile.ResultEmpty,
+			wantErr:     true,
+			assertIndex: index.NewDigester(),
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "failed to get secret '/dummy': secrets \"dummy\" not found"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "foo"),
+				*conditions.UnknownCondition(meta.ReadyCondition, "foo", "bar"),
+			},
+		},
+		{
+			name:       "Observes invalid proxySecretRef",
+			bucketName: "dummy",
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "dummy",
+				},
+			},
+			beforeFunc: func(obj *bucketv1.Bucket) {
+				obj.Spec.ProxySecretRef = &meta.LocalObjectReference{
+					Name: "dummy",
+				}
+				conditions.MarkReconciling(obj, meta.ProgressingReason, "foo")
+				conditions.MarkUnknown(obj, meta.ReadyCondition, "foo", "bar")
+			},
+			want:        sreconcile.ResultEmpty,
+			wantErr:     true,
+			assertIndex: index.NewDigester(),
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "invalid proxy secret '/dummy': key 'address' is missing"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "foo"),
+				*conditions.UnknownCondition(meta.ReadyCondition, "foo", "bar"),
+			},
+		},
+		{
 			name:       "Observes non-existing bucket name",
 			bucketName: "dummy",
 			beforeFunc: func(obj *bucketv1.Bucket) {
@@ -1217,7 +1260,11 @@ func TestBucketReconciler_reconcileSource_gcs(t *testing.T) {
 			sp := patch.NewSerialPatcher(obj, r.Client)
 
 			got, err := r.reconcileSource(context.TODO(), sp, obj, index, tmpDir)
-			g.Expect(err != nil).To(Equal(tt.wantErr))
+			if tt.wantErr {
+				g.Expect(err).To(HaveOccurred())
+			} else {
+				g.Expect(err).ToNot(HaveOccurred())
+			}
 			g.Expect(got).To(Equal(tt.want))
 
 			g.Expect(index.Index()).To(Equal(tt.assertIndex.Index()))
