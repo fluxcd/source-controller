@@ -26,19 +26,22 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
+	"cloud.google.com/go/compute/metadata"
 	gcpstorage "cloud.google.com/go/storage"
 	"google.golang.org/api/googleapi"
+	"google.golang.org/api/option"
 	raw "google.golang.org/api/storage/v1"
 	"gotest.tools/assert"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"google.golang.org/api/option"
+	testproxy "github.com/fluxcd/source-controller/tests/proxy"
 )
 
 const (
@@ -46,10 +49,13 @@ const (
 	objectName       string = "test.yaml"
 	objectGeneration int64  = 3
 	objectEtag       string = "bFbHCDvedeecefdgmfmhfuRxBdcedGe96S82XJOAXxjJpk="
+	envGCSHost       string = "STORAGE_EMULATOR_HOST"
+	envADC           string = "GOOGLE_APPLICATION_CREDENTIALS"
 )
 
 var (
 	hc     *http.Client
+	host   string
 	client *gcpstorage.Client
 	close  func()
 	err    error
@@ -76,7 +82,7 @@ var (
 )
 
 func TestMain(m *testing.M) {
-	hc, close = newTestServer(func(w http.ResponseWriter, r *http.Request) {
+	hc, host, close = newTestServer(func(w http.ResponseWriter, r *http.Request) {
 		io.Copy(io.Discard, r.Body)
 		switch r.RequestURI {
 		case fmt.Sprintf("/storage/v1/b/%s?alt=json&prettyPrint=false&projection=full", bucketName):
@@ -140,10 +146,96 @@ func TestMain(m *testing.M) {
 }
 
 func TestNewClientWithSecretErr(t *testing.T) {
-	gcpClient, err := NewClient(context.Background(), secret.DeepCopy())
+	gcpClient, err := NewClient(context.Background(), WithSecret(secret.DeepCopy()))
 	t.Log(err)
 	assert.Error(t, err, "dialing: invalid character 'e' looking for beginning of value")
 	assert.Assert(t, gcpClient == nil)
+}
+
+func TestNewClientWithProxyErr(t *testing.T) {
+	_, envADCIsSet := os.LookupEnv(envADC)
+	assert.Assert(t, !envADCIsSet)
+	assert.Assert(t, !metadata.OnGCE())
+
+	tests := []struct {
+		name string
+		opts []Option
+		err  string
+	}{
+		{
+			name: "invalid secret",
+			opts: []Option{WithSecret(secret.DeepCopy())},
+			err:  "failed to create Google credentials from secret: invalid character 'e' looking for beginning of value",
+		},
+		{
+			name: "attempts default credentials",
+			err:  "failed to create Google HTTP transport: google: could not find default credentials. See https://cloud.google.com/docs/authentication/external/set-up-adc for more information",
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			opts := append([]Option{WithProxyURL(&url.URL{})}, tt.opts...)
+			gcpClient, err := NewClient(context.Background(), opts...)
+			assert.Error(t, err, tt.err)
+			assert.Assert(t, gcpClient == nil)
+		})
+	}
+}
+
+func TestProxy(t *testing.T) {
+	proxyAddr, proxyPort := testproxy.New(t)
+
+	err := os.Setenv(envGCSHost, fmt.Sprintf("https://%s", host))
+	assert.NilError(t, err)
+	defer func() {
+		err := os.Unsetenv(envGCSHost)
+		assert.NilError(t, err)
+	}()
+
+	tests := []struct {
+		name     string
+		proxyURL *url.URL
+		err      string
+	}{
+		{
+			name:     "with correct address",
+			proxyURL: &url.URL{Scheme: "http", Host: proxyAddr},
+		},
+		{
+			name:     "with incorrect address",
+			proxyURL: &url.URL{Scheme: "http", Host: fmt.Sprintf("localhost:%d", proxyPort+1)},
+			err:      "connection refused",
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			opts := []Option{WithProxyURL(tt.proxyURL)}
+			opts = append(opts, func(o *options) {
+				o.newCustomHTTPClient = func(ctx context.Context, o *options) (*http.Client, error) {
+					transport := &http.Transport{
+						TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+						Proxy:           http.ProxyURL(o.proxyURL),
+					}
+					return &http.Client{Transport: transport}, nil
+				}
+			})
+			gcpClient, err := NewClient(context.Background(), opts...)
+			assert.NilError(t, err)
+			assert.Assert(t, gcpClient != nil)
+			gcpClient.Client.SetRetry(gcpstorage.WithMaxAttempts(1))
+			exists, err := gcpClient.BucketExists(context.Background(), bucketName)
+			if tt.err != "" {
+				assert.ErrorContains(t, err, tt.err)
+			} else {
+				assert.NilError(t, err)
+				assert.Assert(t, exists)
+			}
+		})
+	}
 }
 
 func TestBucketExists(t *testing.T) {
@@ -272,16 +364,17 @@ func TestValidateSecret(t *testing.T) {
 	}
 }
 
-func newTestServer(handler func(w http.ResponseWriter, r *http.Request)) (*http.Client, func()) {
+func newTestServer(handler func(w http.ResponseWriter, r *http.Request)) (*http.Client, string, func()) {
 	ts := httptest.NewTLSServer(http.HandlerFunc(handler))
+	host := ts.Listener.Addr().String()
 	tlsConf := &tls.Config{InsecureSkipVerify: true}
 	tr := &http.Transport{
 		TLSClientConfig: tlsConf,
 		DialTLS: func(netw, addr string) (net.Conn, error) {
-			return tls.Dial("tcp", ts.Listener.Addr().String(), tlsConf)
+			return tls.Dial("tcp", host, tlsConf)
 		},
 	}
-	return &http.Client{Transport: tr}, func() {
+	return &http.Client{Transport: tr}, host, func() {
 		tr.CloseIdleConnections()
 		ts.Close()
 	}
