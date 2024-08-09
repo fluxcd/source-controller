@@ -361,7 +361,7 @@ func TestBlobClient_VisitObjects(t *testing.T) {
 	// Visit objects.
 	ctx, timeout = context.WithTimeout(context.Background(), testTimeout)
 	defer timeout()
-	got := client.VisitObjects(ctx, testContainer, func(path, etag string) error {
+	got := client.VisitObjects(ctx, testContainer, "", func(path, etag string) error {
 		visits[path] = etag
 		return nil
 	})
@@ -399,7 +399,7 @@ func TestBlobClient_VisitObjects_CallbackErr(t *testing.T) {
 	ctx, timeout = context.WithTimeout(context.Background(), testTimeout)
 	defer timeout()
 	mockErr := fmt.Errorf("mock")
-	err = client.VisitObjects(ctx, testContainer, func(path, etag string) error {
+	err = client.VisitObjects(ctx, testContainer, "", func(path, etag string) error {
 		return mockErr
 	})
 	g.Expect(err).To(HaveOccurred())
