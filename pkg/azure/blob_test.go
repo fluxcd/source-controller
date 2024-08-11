@@ -18,6 +18,7 @@ package azure
 
 import (
 	"bytes"
+	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
@@ -25,6 +26,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"net/http"
 	"net/url"
 	"testing"
 
@@ -34,7 +36,94 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
+
+	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
+	testlistener "github.com/fluxcd/source-controller/tests/listener"
+	testproxy "github.com/fluxcd/source-controller/tests/proxy"
 )
+
+func TestNewClientAndBucketExistsWithProxy(t *testing.T) {
+	g := NewWithT(t)
+
+	proxyAddr, proxyPort := testproxy.New(t)
+
+	// start mock bucket server
+	bucketListener, bucketAddr, _ := testlistener.New(t)
+	bucketEndpoint := fmt.Sprintf("http://%s", bucketAddr)
+	bucketHandler := http.NewServeMux()
+	bucketHandler.HandleFunc("GET /podinfo", func(w http.ResponseWriter, r *http.Request) {
+		// verify query params comp=list&maxresults=1&restype=container
+		q := r.URL.Query()
+		g.Expect(q.Get("comp")).To(Equal("list"))
+		g.Expect(q.Get("maxresults")).To(Equal("1"))
+		g.Expect(q.Get("restype")).To(Equal("container"))
+		// the azure library does not expose the struct for this response
+		// and copying its definition yields a strange "unsupported type"
+		// error when marshaling to xml, so we just hardcode a valid response
+		// here
+		resp := fmt.Sprintf(`<?xml version="1.0" encoding="utf-8"?>
+<EnumerationResults ContainerName="%s/podinfo">
+<MaxResults>1</MaxResults>
+<Blobs />
+<NextMarker />
+</EnumerationResults>`, bucketEndpoint)
+		_, err := w.Write([]byte(resp))
+		g.Expect(err).ToNot(HaveOccurred())
+	})
+	bucketServer := &http.Server{
+		Addr:    bucketAddr,
+		Handler: bucketHandler,
+	}
+	go bucketServer.Serve(bucketListener)
+	defer bucketServer.Shutdown(context.Background())
+
+	tests := []struct {
+		name     string
+		endpoint string
+		proxyURL *url.URL
+		err      string
+	}{
+		{
+			name:     "with correct proxy",
+			endpoint: bucketEndpoint,
+			proxyURL: &url.URL{Scheme: "http", Host: proxyAddr},
+		},
+		{
+			name:     "with incorrect proxy",
+			endpoint: bucketEndpoint,
+			proxyURL: &url.URL{Scheme: "http", Host: fmt.Sprintf("localhost:%d", proxyPort+1)},
+			err:      "connection refused",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			bucket := &sourcev1.Bucket{
+				Spec: sourcev1.BucketSpec{
+					Endpoint: tt.endpoint,
+				},
+			}
+
+			client, err := NewClient(bucket,
+				WithProxyURL(tt.proxyURL),
+				withoutCredentials(),
+				withoutRetries())
+			g.Expect(err).ToNot(HaveOccurred())
+			g.Expect(client).ToNot(BeNil())
+
+			ok, err := client.BucketExists(context.Background(), "podinfo")
+			if tt.err != "" {
+				g.Expect(err.Error()).To(ContainSubstring(tt.err))
+				g.Expect(ok).To(BeFalse())
+			} else {
+				g.Expect(err).ToNot(HaveOccurred())
+				g.Expect(ok).To(BeTrue())
+			}
+		})
+	}
+}
 
 func TestValidateSecret(t *testing.T) {
 	tests := []struct {

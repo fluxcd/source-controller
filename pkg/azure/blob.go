@@ -22,6 +22,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -64,6 +65,48 @@ type BlobClient struct {
 	*azblob.Client
 }
 
+// Option configures the BlobClient.
+type Option func(*options)
+
+// WithSecret sets the Secret to use for the BlobClient.
+func WithSecret(secret *corev1.Secret) Option {
+	return func(o *options) {
+		o.secret = secret
+	}
+}
+
+// WithProxyURL sets the proxy URL to use for the BlobClient.
+func WithProxyURL(proxyURL *url.URL) Option {
+	return func(o *options) {
+		o.proxyURL = proxyURL
+	}
+}
+
+type options struct {
+	secret             *corev1.Secret
+	proxyURL           *url.URL
+	withoutCredentials bool
+	withoutRetries     bool
+}
+
+// withoutCredentials forces the BlobClient to not use any credentials.
+// This is a test-only option useful for testing the client with HTTP
+// endpoints (without TLS) alongside all the other options unrelated to
+// credentials.
+func withoutCredentials() Option {
+	return func(o *options) {
+		o.withoutCredentials = true
+	}
+}
+
+// withoutRetries sets the BlobClient to not retry requests.
+// This is a test-only option useful for testing connection errors.
+func withoutRetries() Option {
+	return func(o *options) {
+		o.withoutRetries = true
+	}
+}
+
 // NewClient creates a new Azure Blob storage client.
 // The credential config on the client is set based on the data from the
 // Bucket and Secret. It detects credentials in the Secret in the following
@@ -87,56 +130,80 @@ type BlobClient struct {
 //
 // If no credentials are found, and the azidentity.ChainedTokenCredential can
 // not be established. A simple client without credentials is returned.
-func NewClient(obj *sourcev1.Bucket, secret *corev1.Secret) (c *BlobClient, err error) {
+func NewClient(obj *sourcev1.Bucket, opts ...Option) (c *BlobClient, err error) {
 	c = &BlobClient{}
+
+	var o options
+	for _, opt := range opts {
+		opt(&o)
+	}
+
+	clientOpts := &azblob.ClientOptions{}
+
+	if o.proxyURL != nil {
+		transport := http.DefaultTransport.(*http.Transport).Clone()
+		transport.Proxy = http.ProxyURL(o.proxyURL)
+		clientOpts.ClientOptions.Transport = &http.Client{Transport: transport}
+	}
+
+	if o.withoutRetries {
+		clientOpts.ClientOptions.Retry.ShouldRetry = func(resp *http.Response, err error) bool {
+			return false
+		}
+	}
+
+	if o.withoutCredentials {
+		c.Client, err = azblob.NewClientWithNoCredential(obj.Spec.Endpoint, clientOpts)
+		return
+	}
 
 	var token azcore.TokenCredential
 
-	if secret != nil && len(secret.Data) > 0 {
+	if o.secret != nil && len(o.secret.Data) > 0 {
 		// Attempt AAD Token Credential options first.
-		if token, err = tokenCredentialFromSecret(secret); err != nil {
-			err = fmt.Errorf("failed to create token credential from '%s' Secret: %w", secret.Name, err)
+		if token, err = tokenCredentialFromSecret(o.secret); err != nil {
+			err = fmt.Errorf("failed to create token credential from '%s' Secret: %w", o.secret.Name, err)
 			return
 		}
 		if token != nil {
-			c.Client, err = azblob.NewClient(obj.Spec.Endpoint, token, nil)
+			c.Client, err = azblob.NewClient(obj.Spec.Endpoint, token, clientOpts)
 			return
 		}
 
 		// Fallback to Shared Key Credential.
 		var cred *azblob.SharedKeyCredential
-		if cred, err = sharedCredentialFromSecret(obj.Spec.Endpoint, secret); err != nil {
+		if cred, err = sharedCredentialFromSecret(obj.Spec.Endpoint, o.secret); err != nil {
 			return
 		}
 		if cred != nil {
-			c.Client, err = azblob.NewClientWithSharedKeyCredential(obj.Spec.Endpoint, cred, &azblob.ClientOptions{})
+			c.Client, err = azblob.NewClientWithSharedKeyCredential(obj.Spec.Endpoint, cred, clientOpts)
 			return
 		}
 
 		var fullPath string
-		if fullPath, err = sasTokenFromSecret(obj.Spec.Endpoint, secret); err != nil {
+		if fullPath, err = sasTokenFromSecret(obj.Spec.Endpoint, o.secret); err != nil {
 			return
 		}
 
-		c.Client, err = azblob.NewClientWithNoCredential(fullPath, &azblob.ClientOptions{})
+		c.Client, err = azblob.NewClientWithNoCredential(fullPath, clientOpts)
 		return
 	}
 
 	// Compose token chain based on environment.
 	// This functions as a replacement for azidentity.NewDefaultAzureCredential
 	// to not shell out.
-	token, err = chainCredentialWithSecret(secret)
+	token, err = chainCredentialWithSecret(o.secret)
 	if err != nil {
 		err = fmt.Errorf("failed to create environment credential chain: %w", err)
 		return nil, err
 	}
 	if token != nil {
-		c.Client, err = azblob.NewClient(obj.Spec.Endpoint, token, nil)
+		c.Client, err = azblob.NewClient(obj.Spec.Endpoint, token, clientOpts)
 		return
 	}
 
 	// Fallback to simple client.
-	c.Client, err = azblob.NewClientWithNoCredential(obj.Spec.Endpoint, nil)
+	c.Client, err = azblob.NewClientWithNoCredential(obj.Spec.Endpoint, clientOpts)
 	return
 }
 

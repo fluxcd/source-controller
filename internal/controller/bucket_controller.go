@@ -465,7 +465,14 @@ func (r *BucketReconciler) reconcileSource(ctx context.Context, sp *patch.Serial
 			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
 			return sreconcile.ResultEmpty, e
 		}
-		if provider, err = azure.NewClient(obj, secret); err != nil {
+		var opts []azure.Option
+		if secret != nil {
+			opts = append(opts, azure.WithSecret(secret))
+		}
+		if proxyURL != nil {
+			opts = append(opts, azure.WithProxyURL(proxyURL))
+		}
+		if provider, err = azure.NewClient(obj, opts...); err != nil {
 			e := serror.NewGeneric(err, "ClientError")
 			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
 			return sreconcile.ResultEmpty, e
