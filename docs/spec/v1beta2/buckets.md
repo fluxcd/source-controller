@@ -854,8 +854,6 @@ The Secret can contain three keys:
 - `password`, to specify the password to use if the proxy server is protected by
    basic authentication. This is an optional key.
 
-This API is only supported for the `generic`, `gcp` and `azure` [providers](#provider).
-
 Example:
 
 ```yaml
