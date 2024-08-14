@@ -1,6 +1,6 @@
 module github.com/fluxcd/source-controller
 
-go 1.22.0
+go 1.22.6
 
 replace github.com/fluxcd/source-controller/api => ./api
 
