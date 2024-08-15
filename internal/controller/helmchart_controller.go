@@ -43,6 +43,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	kerrors "k8s.io/apimachinery/pkg/util/errors"
 	kuberecorder "k8s.io/client-go/tools/record"
+	"k8s.io/client-go/util/workqueue"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -50,7 +51,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
-	"sigs.k8s.io/controller-runtime/pkg/ratelimiter"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	eventv1 "github.com/fluxcd/pkg/apis/event/v1beta1"
@@ -156,7 +156,7 @@ func (r *HelmChartReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Man
 }
 
 type HelmChartReconcilerOptions struct {
-	RateLimiter ratelimiter.RateLimiter
+	RateLimiter workqueue.TypedRateLimiter[reconcile.Request]
 }
 
 // helmChartReconcileFunc is the function type for all the v1.HelmChart

@@ -44,15 +44,9 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
 	kuberecorder "k8s.io/client-go/tools/record"
+	"k8s.io/client-go/util/workqueue"
 	"k8s.io/utils/ptr"
-
-	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/builder"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"sigs.k8s.io/controller-runtime/pkg/predicate"
-	"sigs.k8s.io/controller-runtime/pkg/ratelimiter"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	eventv1 "github.com/fluxcd/pkg/apis/event/v1beta1"
 	"github.com/fluxcd/pkg/apis/meta"
@@ -66,6 +60,12 @@ import (
 	"github.com/fluxcd/pkg/sourceignore"
 	"github.com/fluxcd/pkg/tar"
 	"github.com/fluxcd/pkg/version"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	ociv1 "github.com/fluxcd/source-controller/api/v1beta2"
@@ -147,7 +147,7 @@ type OCIRepositoryReconciler struct {
 
 type OCIRepositoryReconcilerOptions struct {
 	DependencyRequeueInterval time.Duration
-	RateLimiter               ratelimiter.RateLimiter
+	RateLimiter               workqueue.TypedRateLimiter[reconcile.Request]
 }
 
 // SetupWithManager sets up the controller with the Manager.
