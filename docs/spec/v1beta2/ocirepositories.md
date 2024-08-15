@@ -330,6 +330,47 @@ data:
 deprecated. If you have any Secrets using these keys and specified in an
 OCIRepository, the controller will log a deprecation warning.
 
+### Proxy secret reference
+
+`.spec.proxySecretRef.name` is an optional field used to specify the name of a
+Secret that contains the proxy settings for the object. These settings are used
+for all the remote operations related to the OCIRepository.
+The Secret can contain three keys:
+
+- `address`, to specify the address of the proxy server. This is a required key.
+- `username`, to specify the username to use if the proxy server is protected by
+   basic authentication. This is an optional key.
+- `password`, to specify the password to use if the proxy server is protected by
+   basic authentication. This is an optional key.
+
+Example:
+
+```yaml
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: http-proxy
+type: Opaque
+stringData:
+  address: http://proxy.com
+  username: mandalorian
+  password: grogu
+```
+
+Proxying can also be configured in the source-controller Deployment directly by
+using the standard environment variables such as `HTTPS_PROXY`, `ALL_PROXY`, etc.
+
+`.spec.proxySecretRef.name` takes precedence over all environment variables.
+
+**Warning:** [Cosign](https://github.com/sigstore/cosign) *keyless*
+[verification](#verification) is not supported for this API. If you
+require cosign keyless verification to use a proxy you must use the
+standard environment variables mentioned above. If you specify a
+`proxySecretRef` the controller will simply send out the requests
+needed for keyless verification without the associated object-level
+proxy settings.
+
 ### Insecure
 
 `.spec.insecure` is an optional field to allow connecting to an insecure (HTTP)

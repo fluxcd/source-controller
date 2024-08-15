@@ -799,6 +799,11 @@ func (in *OCIRepositorySpec) DeepCopyInto(out *OCIRepositorySpec) {
 		*out = new(meta.LocalObjectReference)
 		**out = **in
 	}
+	if in.ProxySecretRef != nil {
+		in, out := &in.ProxySecretRef, &out.ProxySecretRef
+		*out = new(meta.LocalObjectReference)
+		**out = **in
+	}
 	out.Interval = in.Interval
 	if in.Timeout != nil {
 		in, out := &in.Timeout, &out.Timeout

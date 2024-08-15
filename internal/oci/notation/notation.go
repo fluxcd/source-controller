@@ -56,6 +56,7 @@ type options struct {
 	keychain         authn.Keychain
 	insecure         bool
 	logger           logr.Logger
+	transport        *http.Transport
 }
 
 // Options is a function that configures the options applied to a Verifier.
@@ -118,14 +119,22 @@ func WithLogger(logger logr.Logger) Options {
 	}
 }
 
+// WithTransport is a function that returns an Options function to set the transport for the options.
+func WithTransport(transport *http.Transport) Options {
+	return func(o *options) {
+		o.transport = transport
+	}
+}
+
 // NotationVerifier is a struct which is responsible for executing verification logic
 type NotationVerifier struct {
-	auth     authn.Authenticator
-	keychain authn.Keychain
-	verifier *notation.Verifier
-	opts     []remote.Option
-	insecure bool
-	logger   logr.Logger
+	auth      authn.Authenticator
+	keychain  authn.Keychain
+	verifier  *notation.Verifier
+	opts      []remote.Option
+	insecure  bool
+	logger    logr.Logger
+	transport *http.Transport
 }
 
 var _ truststore.X509TrustStore = &trustStore{}
@@ -181,12 +190,13 @@ func NewNotationVerifier(opts ...Options) (*NotationVerifier, error) {
 	}
 
 	return &NotationVerifier{
-		auth:     o.auth,
-		keychain: o.keychain,
-		verifier: &verifier,
-		opts:     o.rOpt,
-		insecure: o.insecure,
-		logger:   o.logger,
+		auth:      o.auth,
+		keychain:  o.keychain,
+		verifier:  &verifier,
+		opts:      o.rOpt,
+		insecure:  o.insecure,
+		logger:    o.logger,
+		transport: o.transport,
 	}, nil
 }
 
@@ -344,8 +354,14 @@ func (v *NotationVerifier) remoteRepo(repoUrl string) (*oras.Repository, error) 
 		}
 	}
 
+	hc := retryhttp.DefaultClient
+	if v.transport != nil {
+		hc = &http.Client{
+			Transport: retryhttp.NewTransport(v.transport),
+		}
+	}
 	repoClient := &oauth.Client{
-		Client: retryhttp.DefaultClient,
+		Client: hc,
 		Header: http.Header{
 			"User-Agent": {"flux"},
 		},
