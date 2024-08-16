@@ -63,7 +63,7 @@ require (
 	golang.org/x/crypto v0.26.0
 	golang.org/x/oauth2 v0.22.0
 	golang.org/x/sync v0.8.0
-	google.golang.org/api v0.190.0
+	google.golang.org/api v0.192.0
 	gotest.tools v2.2.0+incompatible
 	helm.sh/helm/v3 v3.15.4
 	k8s.io/api v0.31.0
@@ -77,7 +77,7 @@ require (
 
 require (
 	cloud.google.com/go v0.115.0 // indirect
-	cloud.google.com/go/auth v0.7.3 // indirect
+	cloud.google.com/go/auth v0.8.1 // indirect
 	cloud.google.com/go/auth/oauth2adapt v0.2.3 // indirect
 	cloud.google.com/go/iam v1.1.12 // indirect
 	dario.cat/mergo v1.0.0 // indirect
