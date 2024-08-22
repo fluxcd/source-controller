@@ -483,8 +483,27 @@ func (r *BucketReconciler) reconcileSource(ctx context.Context, sp *patch.Serial
 			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
 			return sreconcile.ResultEmpty, e
 		}
+		tlsConfig, err := r.getTLSConfig(ctx, obj.Spec.CertSecretRef, obj.GetNamespace(), obj.Spec.Endpoint)
+		if err != nil {
+			e := serror.NewGeneric(err, sourcev1.AuthenticationFailedReason)
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
+			return sreconcile.ResultEmpty, e
+		}
+		stsSecret, err := r.getSTSSecret(ctx, obj)
+		if err != nil {
+			e := serror.NewGeneric(err, sourcev1.AuthenticationFailedReason)
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
+			return sreconcile.ResultEmpty, e
+		}
+		stsTLSConfig, err := r.getSTSTLSConfig(ctx, obj)
+		if err != nil {
+			err := fmt.Errorf("failed to get STS TLS config: %w", err)
+			e := serror.NewGeneric(err, sourcev1.AuthenticationFailedReason)
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
+			return sreconcile.ResultEmpty, e
+		}
 		if sts := obj.Spec.STS; sts != nil {
-			if err := minio.ValidateSTSProvider(obj.Spec.Provider, sts.Provider); err != nil {
+			if err := minio.ValidateSTSProvider(obj.Spec.Provider, sts); err != nil {
 				e := serror.NewStalling(err, sourcev1.InvalidSTSConfigurationReason)
 				conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
 				return sreconcile.ResultEmpty, e
@@ -495,12 +514,11 @@ func (r *BucketReconciler) reconcileSource(ctx context.Context, sp *patch.Serial
 				conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
 				return sreconcile.ResultEmpty, e
 			}
-		}
-		tlsConfig, err := r.getTLSConfig(ctx, obj)
-		if err != nil {
-			e := serror.NewGeneric(err, sourcev1.AuthenticationFailedReason)
-			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
-			return sreconcile.ResultEmpty, e
+			if err := minio.ValidateSTSSecret(sts.Provider, stsSecret); err != nil {
+				e := serror.NewGeneric(err, sourcev1.AuthenticationFailedReason)
+				conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
+				return sreconcile.ResultEmpty, e
+			}
 		}
 		var opts []minio.Option
 		if secret != nil {
@@ -511,6 +529,12 @@ func (r *BucketReconciler) reconcileSource(ctx context.Context, sp *patch.Serial
 		}
 		if proxyURL != nil {
 			opts = append(opts, minio.WithProxyURL(proxyURL))
+		}
+		if stsSecret != nil {
+			opts = append(opts, minio.WithSTSSecret(stsSecret))
+		}
+		if stsTLSConfig != nil {
+			opts = append(opts, minio.WithSTSTLSConfig(stsTLSConfig))
 		}
 		if provider, err = minio.NewClient(obj, opts...); err != nil {
 			e := serror.NewGeneric(err, "ClientError")
@@ -732,12 +756,15 @@ func (r *BucketReconciler) getSecret(ctx context.Context, secretRef *meta.LocalO
 	return secret, nil
 }
 
-func (r *BucketReconciler) getTLSConfig(ctx context.Context, obj *bucketv1.Bucket) (*stdtls.Config, error) {
-	certSecret, err := r.getSecret(ctx, obj.Spec.CertSecretRef, obj.GetNamespace())
+// getTLSConfig attempts to fetch a TLS configuration from the given
+// Secret reference, namespace and endpoint.
+func (r *BucketReconciler) getTLSConfig(ctx context.Context,
+	secretRef *meta.LocalObjectReference, namespace, endpoint string) (*stdtls.Config, error) {
+	certSecret, err := r.getSecret(ctx, secretRef, namespace)
 	if err != nil || certSecret == nil {
 		return nil, err
 	}
-	tlsConfig, _, err := tls.KubeTLSClientConfigFromSecret(*certSecret, obj.Spec.Endpoint)
+	tlsConfig, _, err := tls.KubeTLSClientConfigFromSecret(*certSecret, endpoint)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create TLS config: %w", err)
 	}
@@ -747,6 +774,8 @@ func (r *BucketReconciler) getTLSConfig(ctx context.Context, obj *bucketv1.Bucke
 	return tlsConfig, nil
 }
 
+// getProxyURL attempts to fetch a proxy URL from the object's proxy secret
+// reference.
 func (r *BucketReconciler) getProxyURL(ctx context.Context, obj *bucketv1.Bucket) (*url.URL, error) {
 	namespace := obj.GetNamespace()
 	proxySecret, err := r.getSecret(ctx, obj.Spec.ProxySecretRef, namespace)
@@ -769,6 +798,24 @@ func (r *BucketReconciler) getProxyURL(ctx context.Context, obj *bucketv1.Bucket
 		proxyURL.User = url.UserPassword(string(user), string(password))
 	}
 	return proxyURL, nil
+}
+
+// getSTSSecret attempts to fetch the secret from the object's STS secret
+// reference.
+func (r *BucketReconciler) getSTSSecret(ctx context.Context, obj *bucketv1.Bucket) (*corev1.Secret, error) {
+	if obj.Spec.STS == nil {
+		return nil, nil
+	}
+	return r.getSecret(ctx, obj.Spec.STS.SecretRef, obj.GetNamespace())
+}
+
+// getSTSTLSConfig attempts to fetch the certificate secret from the object's
+// STS configuration.
+func (r *BucketReconciler) getSTSTLSConfig(ctx context.Context, obj *bucketv1.Bucket) (*stdtls.Config, error) {
+	if obj.Spec.STS == nil {
+		return nil, nil
+	}
+	return r.getTLSConfig(ctx, obj.Spec.STS.CertSecretRef, obj.GetNamespace(), obj.Spec.STS.Endpoint)
 }
 
 // eventLogf records events, and logs at the same time.

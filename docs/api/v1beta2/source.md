@@ -126,7 +126,7 @@ BucketSTSSpec
 <p>STS specifies the required configuration to use a Security Token
 Service for fetching temporary credentials to authenticate in a
 Bucket provider.</p>
-<p>This field is only supported for the <code>aws</code> provider.</p>
+<p>This field is only supported for the <code>aws</code> and <code>generic</code> providers.</p>
 </td>
 </tr>
 <tr>
@@ -1497,6 +1497,48 @@ string
 where temporary credentials will be fetched.</p>
 </td>
 </tr>
+<tr>
+<td>
+<code>secretRef</code><br>
+<em>
+<a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/meta#LocalObjectReference">
+github.com/fluxcd/pkg/apis/meta.LocalObjectReference
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>SecretRef specifies the Secret containing authentication credentials
+for the STS endpoint. This Secret must contain the fields <code>username</code>
+and <code>password</code> and is supported only for the <code>ldap</code> provider.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>certSecretRef</code><br>
+<em>
+<a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/meta#LocalObjectReference">
+github.com/fluxcd/pkg/apis/meta.LocalObjectReference
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>CertSecretRef can be given the name of a Secret containing
+either or both of</p>
+<ul>
+<li>a PEM-encoded client certificate (<code>tls.crt</code>) and private
+key (<code>tls.key</code>);</li>
+<li>a PEM-encoded CA certificate (<code>ca.crt</code>)</li>
+</ul>
+<p>and whichever are supplied, will be used for connecting to the
+STS endpoint. The client cert and key are useful if you are
+authenticating with a certificate; the CA cert is useful if
+you are using a self-signed server certificate. The Secret must
+be of type <code>Opaque</code> or <code>kubernetes.io/tls</code>.</p>
+<p>This field is only supported for the <code>ldap</code> provider.</p>
+</td>
+</tr>
 </tbody>
 </table>
 </div>
@@ -1569,7 +1611,7 @@ BucketSTSSpec
 <p>STS specifies the required configuration to use a Security Token
 Service for fetching temporary credentials to authenticate in a
 Bucket provider.</p>
-<p>This field is only supported for the <code>aws</code> provider.</p>
+<p>This field is only supported for the <code>aws</code> and <code>generic</code> providers.</p>
 </td>
 </tr>
 <tr>

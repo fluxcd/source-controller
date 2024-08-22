@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
@@ -40,9 +41,11 @@ type MinioClient struct {
 
 // options holds the configuration for the Minio client.
 type options struct {
-	secret    *corev1.Secret
-	tlsConfig *tls.Config
-	proxyURL  *url.URL
+	secret       *corev1.Secret
+	stsSecret    *corev1.Secret
+	tlsConfig    *tls.Config
+	stsTLSConfig *tls.Config
+	proxyURL     *url.URL
 }
 
 // Option is a function that configures the Minio client.
@@ -69,6 +72,20 @@ func WithProxyURL(proxyURL *url.URL) Option {
 	}
 }
 
+// WithSTSSecret sets the STS secret for the Minio client.
+func WithSTSSecret(secret *corev1.Secret) Option {
+	return func(o *options) {
+		o.stsSecret = secret
+	}
+}
+
+// WithSTSTLSConfig sets the STS TLS configuration for the Minio client.
+func WithSTSTLSConfig(tlsConfig *tls.Config) Option {
+	return func(o *options) {
+		o.stsTLSConfig = tlsConfig
+	}
+}
+
 // NewClient creates a new Minio storage client.
 func NewClient(bucket *sourcev1.Bucket, opts ...Option) (*MinioClient, error) {
 	var o options
@@ -89,6 +106,8 @@ func NewClient(bucket *sourcev1.Bucket, opts ...Option) (*MinioClient, error) {
 		minioOpts.Creds = newCredsFromSecret(o.secret)
 	case bucketProvider == sourcev1.AmazonBucketProvider:
 		minioOpts.Creds = newAWSCreds(bucket, o.proxyURL)
+	case bucketProvider == sourcev1.GenericBucketProvider:
+		minioOpts.Creds = newGenericCreds(bucket, &o)
 	}
 
 	var transportOpts []func(*http.Transport)
@@ -159,6 +178,43 @@ func newAWSCreds(bucket *sourcev1.Bucket, proxyURL *url.URL) *credentials.Creden
 	return creds
 }
 
+// newGenericCreds creates a new Minio credentials object for the `generic` bucket provider.
+func newGenericCreds(bucket *sourcev1.Bucket, o *options) *credentials.Credentials {
+
+	sts := bucket.Spec.STS
+	if sts == nil {
+		return nil
+	}
+
+	switch sts.Provider {
+	case sourcev1.STSProviderLDAP:
+		client := &http.Client{Transport: http.DefaultTransport}
+		if o.proxyURL != nil || o.stsTLSConfig != nil {
+			transport := http.DefaultTransport.(*http.Transport).Clone()
+			if o.proxyURL != nil {
+				transport.Proxy = http.ProxyURL(o.proxyURL)
+			}
+			if o.stsTLSConfig != nil {
+				transport.TLSClientConfig = o.stsTLSConfig.Clone()
+			}
+			client = &http.Client{Transport: transport}
+		}
+		var username, password string
+		if o.stsSecret != nil {
+			username = string(o.stsSecret.Data["username"])
+			password = string(o.stsSecret.Data["password"])
+		}
+		return credentials.New(&credentials.LDAPIdentity{
+			Client:       client,
+			STSEndpoint:  sts.Endpoint,
+			LDAPUsername: username,
+			LDAPPassword: password,
+		})
+	}
+
+	return nil
+}
+
 // ValidateSecret validates the credential secret. The provided Secret may
 // be nil.
 func ValidateSecret(secret *corev1.Secret) error {
@@ -176,14 +232,31 @@ func ValidateSecret(secret *corev1.Secret) error {
 }
 
 // ValidateSTSProvider validates the STS provider.
-func ValidateSTSProvider(bucketProvider, stsProvider string) error {
+func ValidateSTSProvider(bucketProvider string, sts *sourcev1.BucketSTSSpec) error {
 	errProviderIncompatbility := fmt.Errorf("STS provider '%s' is not supported for '%s' bucket provider",
-		stsProvider, bucketProvider)
+		sts.Provider, bucketProvider)
+	errSecretNotRequired := fmt.Errorf("spec.sts.secretRef is not required for the '%s' STS provider",
+		sts.Provider)
+	errCertSecretNotRequired := fmt.Errorf("spec.sts.certSecretRef is not required for the '%s' STS provider",
+		sts.Provider)
 
 	switch bucketProvider {
 	case sourcev1.AmazonBucketProvider:
-		switch stsProvider {
+		switch sts.Provider {
 		case sourcev1.STSProviderAmazon:
+			if sts.SecretRef != nil {
+				return errSecretNotRequired
+			}
+			if sts.CertSecretRef != nil {
+				return errCertSecretNotRequired
+			}
+			return nil
+		default:
+			return errProviderIncompatbility
+		}
+	case sourcev1.GenericBucketProvider:
+		switch sts.Provider {
+		case sourcev1.STSProviderLDAP:
 			return nil
 		default:
 			return errProviderIncompatbility
@@ -191,6 +264,36 @@ func ValidateSTSProvider(bucketProvider, stsProvider string) error {
 	}
 
 	return fmt.Errorf("STS configuration is not supported for '%s' bucket provider", bucketProvider)
+}
+
+// ValidateSTSSecret validates the STS secret. The provided Secret may be nil.
+func ValidateSTSSecret(stsProvider string, secret *corev1.Secret) error {
+	switch stsProvider {
+	case sourcev1.STSProviderLDAP:
+		return validateSTSSecretForProvider(stsProvider, secret, "username", "password")
+	default:
+		return nil
+	}
+}
+
+// validateSTSSecretForProvider validates the STS secret for each provider.
+// The provided Secret may be nil.
+func validateSTSSecretForProvider(stsProvider string, secret *corev1.Secret, keys ...string) error {
+	if secret == nil {
+		return nil
+	}
+	err := fmt.Errorf("invalid '%s' secret data for '%s' STS provider: required fields %s",
+		secret.Name, stsProvider, strings.Join(keys, ", "))
+	if len(secret.Data) == 0 {
+		return err
+	}
+	for _, key := range keys {
+		value, ok := secret.Data[key]
+		if !ok || len(value) == 0 {
+			return err
+		}
+	}
+	return nil
 }
 
 // FGetObject gets the object from the provided object storage bucket, and
