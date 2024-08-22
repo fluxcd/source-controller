@@ -441,7 +441,7 @@ func (r *BucketReconciler) reconcileSource(ctx context.Context, sp *patch.Serial
 	// Construct provider client
 	var provider BucketProvider
 	switch obj.Spec.Provider {
-	case bucketv1.GoogleBucketProvider:
+	case bucketv1.BucketProviderGoogle:
 		if err = gcp.ValidateSecret(secret); err != nil {
 			e := serror.NewGeneric(err, sourcev1.AuthenticationFailedReason)
 			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
@@ -459,7 +459,7 @@ func (r *BucketReconciler) reconcileSource(ctx context.Context, sp *patch.Serial
 			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
 			return sreconcile.ResultEmpty, e
 		}
-	case bucketv1.AzureBucketProvider:
+	case bucketv1.BucketProviderAzure:
 		if err = azure.ValidateSecret(secret); err != nil {
 			e := serror.NewGeneric(err, sourcev1.AuthenticationFailedReason)
 			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)

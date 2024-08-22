@@ -1314,7 +1314,7 @@ func TestBucketReconciler_reconcileSource_gcs(t *testing.T) {
 				Spec: bucketv1.BucketSpec{
 					BucketName: tt.bucketName,
 					Timeout:    &metav1.Duration{Duration: timeout},
-					Provider:   bucketv1.GoogleBucketProvider,
+					Provider:   "gcp",
 				},
 			}
 
