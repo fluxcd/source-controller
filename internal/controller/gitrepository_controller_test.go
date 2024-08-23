@@ -683,6 +683,54 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 	}
 }
 
+func TestGitRepositoryReconciler_getAuthOpts_provider(t *testing.T) {
+	tests := []struct {
+		name                 string
+		beforeFunc           func(obj *sourcev1.GitRepository)
+		wantProviderOptsName string
+	}{
+		{
+			name: "azure provider",
+			beforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Spec.Provider = sourcev1.GitProviderAzure
+			},
+			wantProviderOptsName: sourcev1.GitProviderAzure,
+		},
+		{
+			name: "generic provider",
+			beforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Spec.Provider = sourcev1.GitProviderGeneric
+			},
+		},
+		{
+			name: "no provider",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+			obj := &sourcev1.GitRepository{}
+			r := &GitRepositoryReconciler{}
+			url, _ := url.Parse("https://dev.azure.com/foo/bar/_git/baz")
+
+			if tt.beforeFunc != nil {
+				tt.beforeFunc(obj)
+			}
+			opts, err := r.getAuthOpts(context.TODO(), obj, *url)
+
+			g.Expect(err).ToNot(HaveOccurred())
+			g.Expect(opts).ToNot(BeNil())
+			if tt.wantProviderOptsName != "" {
+				g.Expect(opts.ProviderOpts).ToNot(BeNil())
+				g.Expect(opts.ProviderOpts.Name).To(Equal(tt.wantProviderOptsName))
+			} else {
+				g.Expect(opts.ProviderOpts).To(BeNil())
+			}
+		})
+	}
+}
+
 func TestGitRepositoryReconciler_reconcileSource_checkoutStrategy(t *testing.T) {
 	g := NewWithT(t)
 

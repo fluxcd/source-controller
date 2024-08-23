@@ -16,7 +16,7 @@ require (
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.7.0
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.4.0
 	github.com/Masterminds/semver/v3 v3.3.0
-	github.com/cyphar/filepath-securejoin v0.3.1
+	github.com/cyphar/filepath-securejoin v0.3.2
 	github.com/distribution/distribution/v3 v3.0.0-beta.1
 	github.com/docker/cli v27.2.1+incompatible
 	github.com/docker/go-units v0.5.0
@@ -24,19 +24,20 @@ require (
 	github.com/fluxcd/cli-utils v0.36.0-flux.9
 	github.com/fluxcd/pkg/apis/event v0.10.0
 	github.com/fluxcd/pkg/apis/meta v1.6.0
-	github.com/fluxcd/pkg/git v0.20.0
-	github.com/fluxcd/pkg/git/gogit v0.20.0
-	github.com/fluxcd/pkg/gittestserver v0.13.0
+	github.com/fluxcd/pkg/auth v0.0.1
+	github.com/fluxcd/pkg/git v0.21.0
+	github.com/fluxcd/pkg/git/gogit v0.21.0
+	github.com/fluxcd/pkg/gittestserver v0.13.1
 	github.com/fluxcd/pkg/helmtestserver v0.19.0
 	github.com/fluxcd/pkg/lockedfile v0.3.0
 	github.com/fluxcd/pkg/masktoken v0.4.0
 	github.com/fluxcd/pkg/oci v0.41.0
 	github.com/fluxcd/pkg/runtime v0.49.0
 	github.com/fluxcd/pkg/sourceignore v0.8.0
-	github.com/fluxcd/pkg/ssh v0.14.0
+	github.com/fluxcd/pkg/ssh v0.14.1
 	github.com/fluxcd/pkg/tar v0.8.0
 	github.com/fluxcd/pkg/testserver v0.7.0
-	github.com/fluxcd/pkg/version v0.4.0
+	github.com/fluxcd/pkg/version v0.4.1
 	github.com/fluxcd/source-controller/api v1.3.0
 	github.com/foxcpp/go-mockdns v1.1.0
 	github.com/go-git/go-billy/v5 v5.5.0
@@ -146,7 +147,7 @@ require (
 	github.com/chai2010/gettext-go v1.0.2 // indirect
 	github.com/chrismellard/docker-credential-acr-env v0.0.0-20230304212654-82a0ddb27589 // indirect
 	github.com/clbanning/mxj/v2 v2.7.0 // indirect
-	github.com/cloudflare/circl v1.3.9 // indirect
+	github.com/cloudflare/circl v1.4.0 // indirect
 	github.com/common-nighthawk/go-figure v0.0.0-20210622060536-734e95fb86be // indirect
 	github.com/containerd/containerd v1.7.20 // indirect
 	github.com/containerd/continuity v0.4.3 // indirect
@@ -371,13 +372,13 @@ require (
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.27.0 // indirect
 	golang.org/x/exp v0.0.0-20240719175910-8a7402abbf56 // indirect
-	golang.org/x/mod v0.20.0 // indirect
-	golang.org/x/net v0.28.0 // indirect
+	golang.org/x/mod v0.21.0 // indirect
+	golang.org/x/net v0.29.0 // indirect
 	golang.org/x/sys v0.25.0 // indirect
 	golang.org/x/term v0.24.0 // indirect
 	golang.org/x/text v0.18.0 // indirect
 	golang.org/x/time v0.6.0 // indirect
-	golang.org/x/tools v0.24.0 // indirect
+	golang.org/x/tools v0.25.0 // indirect
 	gomodules.xyz/jsonpatch/v2 v2.4.0 // indirect
 	google.golang.org/genproto v0.0.0-20240903143218-8af14fe29dc1 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20240827150818-7e3bb234dfed // indirect

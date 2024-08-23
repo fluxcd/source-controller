@@ -383,6 +383,19 @@ and &lsquo;known_hosts&rsquo; fields.</p>
 </tr>
 <tr>
 <td>
+<code>provider</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Provider used for authentication, can be &lsquo;azure&rsquo;, &lsquo;generic&rsquo;.
+When not specified, defaults to &lsquo;generic&rsquo;.</p>
+</td>
+</tr>
+<tr>
+<td>
 <code>interval</code><br>
 <em>
 <a href="https://pkg.go.dev/k8s.io/apimachinery/pkg/apis/meta/v1#Duration">
@@ -1706,6 +1719,19 @@ For HTTPS repositories the Secret must contain &lsquo;username&rsquo; and &lsquo
 fields for basic auth or &lsquo;bearerToken&rsquo; field for token auth.
 For SSH repositories the Secret must contain &lsquo;identity&rsquo;
 and &lsquo;known_hosts&rsquo; fields.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>provider</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Provider used for authentication, can be &lsquo;azure&rsquo;, &lsquo;generic&rsquo;.
+When not specified, defaults to &lsquo;generic&rsquo;.</p>
 </td>
 </tr>
 <tr>

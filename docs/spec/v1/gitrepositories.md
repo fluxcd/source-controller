@@ -212,6 +212,91 @@ For password-protected SSH private keys, the password must be provided
 via an additional `password` field in the secret. Flux CLI also supports
 this via the `--password` flag.
 
+### Provider
+
+`.spec.provider` is an optional field that allows specifying an OIDC provider
+used for authentication purposes.
+
+Supported options are:
+
+- `generic`
+- `azure`
+
+When provider is not specified, it defaults to `generic` indicating that
+mechanisms using `spec.secretRef` are used for authentication. 
+
+#### Azure
+
+The `azure` provider can be used to authenticate to Azure DevOps repositories
+automatically using Workload Identity. 
+
+##### Pre-requisites
+
+- Ensure that your Azure DevOps Organization is
+  [connected](https://learn.microsoft.com/en-us/azure/devops/organizations/accounts/connect-organization-to-azure-ad?view=azure-devops)
+  to Microsoft Entra.
+- Ensure Workload Identity is properly [set up on your
+  cluster](https://learn.microsoft.com/en-us/azure/aks/workload-identity-deploy-cluster#create-an-aks-cluster).
+
+##### Configure Flux controller
+
+- Create a managed identity to access Azure DevOps. Establish a federated
+  identity credential between the managed identity and the source-controller
+  service account. In the default installation, the source-controller service
+  account is located in the `flux-system` namespace with name
+  `source-controller`. Ensure the federated credential uses the correct
+  namespace and name of the source-controller service account. For more details,
+  please refer to this
+  [guide](https://azure.github.io/azure-workload-identity/docs/quick-start.html#6-establish-federated-identity-credential-between-the-identity-and-the-service-account-issuer--subject).
+
+- Add the managed identity to the Azure DevOps organization as a user. Ensure
+  that the managed identity has the necessary permissions to access the Azure
+  DevOps repository as described
+  [here](https://learn.microsoft.com/en-us/azure/devops/integrate/get-started/authentication/service-principal-managed-identity?view=azure-devops#2-add-and-manage-service-principals-in-an-azure-devops-organization).
+
+- Add the following patch to your bootstrap repository in
+  `flux-system/kustomization.yaml` file:
+
+
+```yaml
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - gotk-components.yaml
+  - gotk-sync.yaml
+patches:
+  - patch: |-
+      apiVersion: v1
+      kind: ServiceAccount
+      metadata:
+        name: source-controller
+        namespace: flux-system
+        annotations:
+          azure.workload.identity/client-id: <AZURE_CLIENT_ID>
+        labels:
+          azure.workload.identity/use: "true"
+  - patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: source-controller
+        namespace: flux-system
+        labels:
+          azure.workload.identity/use: "true"
+      spec:
+        template:
+          metadata:
+            labels:
+              azure.workload.identity/use: "true"
+```
+
+**Note:** When azure `provider` is used with `GitRepository`, the `.spec.url`
+must follow this format:
+
+```
+https://dev.azure.com/{your-organization}/{your-project}/_git/{your-repository}
+```
+
 ### Interval
 
 `.spec.interval` is a required field that specifies the interval at which the
