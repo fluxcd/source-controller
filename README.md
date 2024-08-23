@@ -22,7 +22,7 @@ and is a core component of the [GitOps toolkit](https://fluxcd.io/flux/component
 | [OCIRepository](docs/spec/v1beta2/ocirepositories.md) | `source.toolkit.fluxcd.io/v1beta2` |
 | [HelmRepository](docs/spec/v1/helmrepositories.md)    | `source.toolkit.fluxcd.io/v1`      |
 | [HelmChart](docs/spec/v1/helmcharts.md)               | `source.toolkit.fluxcd.io/v1`      |
-| [Bucket](docs/spec/v1beta2/buckets.md)                | `source.toolkit.fluxcd.io/v1beta2` |
+| [Bucket](docs/spec/v1/buckets.md)                     | `source.toolkit.fluxcd.io/v1`      |
 
 ## Features
 
