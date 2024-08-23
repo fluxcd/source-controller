@@ -104,9 +104,9 @@ func NewClient(bucket *sourcev1.Bucket, opts ...Option) (*MinioClient, error) {
 	switch bucketProvider := bucket.Spec.Provider; {
 	case o.secret != nil:
 		minioOpts.Creds = newCredsFromSecret(o.secret)
-	case bucketProvider == sourcev1.AmazonBucketProvider:
+	case bucketProvider == sourcev1.BucketProviderAmazon:
 		minioOpts.Creds = newAWSCreds(bucket, o.proxyURL)
-	case bucketProvider == sourcev1.GenericBucketProvider:
+	case bucketProvider == sourcev1.BucketProviderGeneric:
 		minioOpts.Creds = newGenericCreds(bucket, &o)
 	}
 
@@ -241,7 +241,7 @@ func ValidateSTSProvider(bucketProvider string, sts *sourcev1.BucketSTSSpec) err
 		sts.Provider)
 
 	switch bucketProvider {
-	case sourcev1.AmazonBucketProvider:
+	case sourcev1.BucketProviderAmazon:
 		switch sts.Provider {
 		case sourcev1.STSProviderAmazon:
 			if sts.SecretRef != nil {
@@ -254,7 +254,7 @@ func ValidateSTSProvider(bucketProvider string, sts *sourcev1.BucketSTSSpec) err
 		default:
 			return errProviderIncompatbility
 		}
-	case sourcev1.GenericBucketProvider:
+	case sourcev1.BucketProviderGeneric:
 		switch sts.Provider {
 		case sourcev1.STSProviderLDAP:
 			return nil
