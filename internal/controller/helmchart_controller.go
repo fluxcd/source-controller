@@ -65,7 +65,6 @@ import (
 	"github.com/fluxcd/pkg/tar"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
-	sourcev1beta2 "github.com/fluxcd/source-controller/api/v1beta2"
 	"github.com/fluxcd/source-controller/internal/cache"
 	serror "github.com/fluxcd/source-controller/internal/error"
 	"github.com/fluxcd/source-controller/internal/helm/chart"
@@ -191,7 +190,7 @@ func (r *HelmChartReconciler) SetupWithManagerAndOptions(ctx context.Context, mg
 			builder.WithPredicates(SourceRevisionChangePredicate{}),
 		).
 		Watches(
-			&sourcev1beta2.Bucket{},
+			&sourcev1.Bucket{},
 			handler.EnqueueRequestsFromMapFunc(r.requestsForBucketChange),
 			builder.WithPredicates(SourceRevisionChangePredicate{}),
 		).
@@ -502,7 +501,7 @@ func (r *HelmChartReconciler) reconcileSource(ctx context.Context, sp *patch.Ser
 	switch typedSource := s.(type) {
 	case *sourcev1.HelmRepository:
 		return r.buildFromHelmRepository(ctx, obj, typedSource, build)
-	case *sourcev1.GitRepository, *sourcev1beta2.Bucket:
+	case *sourcev1.GitRepository, *sourcev1.Bucket:
 		return r.buildFromTarballArtifact(ctx, obj, *typedSource.GetArtifact(), build)
 	default:
 		// Ending up here should generally not be possible
@@ -777,12 +776,12 @@ func (r *HelmChartReconciler) buildFromTarballArtifact(ctx context.Context, obj 
 		if obj.Spec.SourceRef.Kind == sourcev1.GitRepositoryKind {
 			rev = git.ExtractHashFromRevision(rev).String()
 		}
-		if obj.Spec.SourceRef.Kind == sourcev1beta2.BucketKind {
+		if obj.Spec.SourceRef.Kind == sourcev1.BucketKind {
 			if dig := digest.Digest(rev); dig.Validate() == nil {
 				rev = dig.Encoded()
 			}
 		}
-		if kind := obj.Spec.SourceRef.Kind; kind == sourcev1.GitRepositoryKind || kind == sourcev1beta2.BucketKind {
+		if kind := obj.Spec.SourceRef.Kind; kind == sourcev1.GitRepositoryKind || kind == sourcev1.BucketKind {
 			// The SemVer from the metadata is at times used in e.g. the label metadata for a resource
 			// in a chart, which has a limited length of 63 characters.
 			// To not fill most of this space with a full length SHA hex (40 characters for SHA-1, and
@@ -928,15 +927,15 @@ func (r *HelmChartReconciler) getSource(ctx context.Context, obj *sourcev1.HelmC
 			return nil, err
 		}
 		s = &repo
-	case sourcev1beta2.BucketKind:
-		var bucket sourcev1beta2.Bucket
+	case sourcev1.BucketKind:
+		var bucket sourcev1.Bucket
 		if err := r.Client.Get(ctx, namespacedName, &bucket); err != nil {
 			return nil, err
 		}
 		s = &bucket
 	default:
 		return nil, fmt.Errorf("unsupported source kind '%s', must be one of: %v", obj.Spec.SourceRef.Kind, []string{
-			sourcev1.HelmRepositoryKind, sourcev1.GitRepositoryKind, sourcev1beta2.BucketKind})
+			sourcev1.HelmRepositoryKind, sourcev1.GitRepositoryKind, sourcev1.BucketKind})
 	}
 	return s, nil
 }
@@ -1196,7 +1195,7 @@ func (r *HelmChartReconciler) requestsForGitRepositoryChange(ctx context.Context
 }
 
 func (r *HelmChartReconciler) requestsForBucketChange(ctx context.Context, o client.Object) []reconcile.Request {
-	bucket, ok := o.(*sourcev1beta2.Bucket)
+	bucket, ok := o.(*sourcev1.Bucket)
 	if !ok {
 		ctrl.LoggerFrom(ctx).Error(fmt.Errorf("expected a Bucket, got %T", o),
 			"failed to get reconcile requests for Bucket change")
@@ -1210,7 +1209,7 @@ func (r *HelmChartReconciler) requestsForBucketChange(ctx context.Context, o cli
 
 	var list sourcev1.HelmChartList
 	if err := r.List(ctx, &list, client.MatchingFields{
-		sourcev1.SourceIndexKey: fmt.Sprintf("%s/%s", sourcev1beta2.BucketKind, bucket.Name),
+		sourcev1.SourceIndexKey: fmt.Sprintf("%s/%s", sourcev1.BucketKind, bucket.Name),
 	}); err != nil {
 		ctrl.LoggerFrom(ctx).Error(err, "failed to list HelmCharts for Bucket change")
 		return nil

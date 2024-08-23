@@ -30,7 +30,7 @@ import (
 	"github.com/minio/minio-go/v7/pkg/s3utils"
 	corev1 "k8s.io/api/core/v1"
 
-	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
+	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 )
 
 // MinioClient is a minimal Minio client for fetching files from S3 compatible

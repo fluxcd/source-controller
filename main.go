@@ -247,7 +247,7 @@ func main() {
 	}).SetupWithManagerAndOptions(mgr, controller.BucketReconcilerOptions{
 		RateLimiter: helper.GetRateLimiter(rateLimiterOptions),
 	}); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", v1beta2.BucketKind)
+		setupLog.Error(err, "unable to create controller", "controller", v1.BucketKind)
 		os.Exit(1)
 	}
 

@@ -1,5 +1,5 @@
 /*
-Copyright 2022 The Flux authors
+Copyright 2024 The Flux authors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package v1beta2
+package v1
 
 import (
 	"time"
@@ -23,8 +23,6 @@ import (
 
 	"github.com/fluxcd/pkg/apis/acl"
 	"github.com/fluxcd/pkg/apis/meta"
-
-	apiv1 "github.com/fluxcd/source-controller/api/v1"
 )
 
 const (
@@ -33,22 +31,18 @@ const (
 )
 
 const (
-	// GenericBucketProvider for any S3 API compatible storage Bucket.
-	// Deprecated: use v1.BucketProviderGeneric.
-	GenericBucketProvider string = apiv1.BucketProviderGeneric
-	// AmazonBucketProvider for an AWS S3 object storage Bucket.
+	// BucketProviderGeneric for any S3 API compatible storage Bucket.
+	BucketProviderGeneric string = "generic"
+	// BucketProviderAmazon for an AWS S3 object storage Bucket.
 	// Provides support for retrieving credentials from the AWS EC2 service.
-	// Deprecated: use v1.BucketProviderAmazon.
-	AmazonBucketProvider string = apiv1.BucketProviderAmazon
-	// GoogleBucketProvider for a Google Cloud Storage Bucket.
+	BucketProviderAmazon string = "aws"
+	// BucketProviderGoogle for a Google Cloud Storage Bucket.
 	// Provides support for authentication using a workload identity.
-	// Deprecated: use v1.BucketProviderGoogle.
-	GoogleBucketProvider string = apiv1.BucketProviderGoogle
-	// AzureBucketProvider for an Azure Blob Storage Bucket.
+	BucketProviderGoogle string = "gcp"
+	// BucketProviderAzure for an Azure Blob Storage Bucket.
 	// Provides support for authentication using a Service Principal,
 	// Managed Identity or Shared Key.
-	// Deprecated: use v1.BucketProviderAzure.
-	AzureBucketProvider string = apiv1.BucketProviderAzure
+	BucketProviderAzure string = "azure"
 )
 
 // BucketSpec specifies the required configuration to produce an Artifact for
@@ -212,7 +206,7 @@ type BucketStatus struct {
 
 	// Artifact represents the last successful Bucket reconciliation.
 	// +optional
-	Artifact *apiv1.Artifact `json:"artifact,omitempty"`
+	Artifact *Artifact `json:"artifact,omitempty"`
 
 	// ObservedIgnore is the observed exclusion patterns used for constructing
 	// the source artifact.
@@ -233,7 +227,7 @@ const (
 )
 
 // GetConditions returns the status conditions of the object.
-func (in Bucket) GetConditions() []metav1.Condition {
+func (in *Bucket) GetConditions() []metav1.Condition {
 	return in.Status.Conditions
 }
 
@@ -243,19 +237,19 @@ func (in *Bucket) SetConditions(conditions []metav1.Condition) {
 }
 
 // GetRequeueAfter returns the duration after which the source must be reconciled again.
-func (in Bucket) GetRequeueAfter() time.Duration {
+func (in *Bucket) GetRequeueAfter() time.Duration {
 	return in.Spec.Interval.Duration
 }
 
 // GetArtifact returns the latest artifact from the source if present in the status sub-resource.
-func (in *Bucket) GetArtifact() *apiv1.Artifact {
+func (in *Bucket) GetArtifact() *Artifact {
 	return in.Status.Artifact
 }
 
 // +genclient
+// +kubebuilder:storageversion
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-// +kubebuilder:deprecatedversion:warning="v1beta2 Bucket is deprecated, upgrade to v1"
 // +kubebuilder:printcolumn:name="Endpoint",type=string,JSONPath=`.spec.endpoint`
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description=""
 // +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type==\"Ready\")].status",description=""

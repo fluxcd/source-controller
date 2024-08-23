@@ -52,8 +52,8 @@ import (
 	rreconcile "github.com/fluxcd/pkg/runtime/reconcile"
 	"github.com/fluxcd/pkg/sourceignore"
 
+	bucketv1 "github.com/fluxcd/source-controller/api/v1"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
-	bucketv1 "github.com/fluxcd/source-controller/api/v1beta2"
 	intdigest "github.com/fluxcd/source-controller/internal/digest"
 	serror "github.com/fluxcd/source-controller/internal/error"
 	"github.com/fluxcd/source-controller/internal/index"

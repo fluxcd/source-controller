@@ -9,12 +9,307 @@
 <p>Package v1 contains API Schema definitions for the source v1 API group</p>
 Resource Types:
 <ul class="simple"><li>
+<a href="#source.toolkit.fluxcd.io/v1.Bucket">Bucket</a>
+</li><li>
 <a href="#source.toolkit.fluxcd.io/v1.GitRepository">GitRepository</a>
 </li><li>
 <a href="#source.toolkit.fluxcd.io/v1.HelmChart">HelmChart</a>
 </li><li>
 <a href="#source.toolkit.fluxcd.io/v1.HelmRepository">HelmRepository</a>
 </li></ul>
+<h3 id="source.toolkit.fluxcd.io/v1.Bucket">Bucket
+</h3>
+<p>Bucket is the Schema for the buckets API.</p>
+<div class="md-typeset__scrollwrap">
+<div class="md-typeset__table">
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>apiVersion</code><br>
+string</td>
+<td>
+<code>source.toolkit.fluxcd.io/v1</code>
+</td>
+</tr>
+<tr>
+<td>
+<code>kind</code><br>
+string
+</td>
+<td>
+<code>Bucket</code>
+</td>
+</tr>
+<tr>
+<td>
+<code>metadata</code><br>
+<em>
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.19/#objectmeta-v1-meta">
+Kubernetes meta/v1.ObjectMeta
+</a>
+</em>
+</td>
+<td>
+Refer to the Kubernetes API documentation for the fields of the
+<code>metadata</code> field.
+</td>
+</tr>
+<tr>
+<td>
+<code>spec</code><br>
+<em>
+<a href="#source.toolkit.fluxcd.io/v1.BucketSpec">
+BucketSpec
+</a>
+</em>
+</td>
+<td>
+<br/>
+<br/>
+<table>
+<tr>
+<td>
+<code>provider</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Provider of the object storage bucket.
+Defaults to &lsquo;generic&rsquo;, which expects an S3 (API) compatible object
+storage.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>bucketName</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<p>BucketName is the name of the object storage bucket.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>endpoint</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<p>Endpoint is the object storage address the BucketName is located at.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>sts</code><br>
+<em>
+<a href="#source.toolkit.fluxcd.io/v1.BucketSTSSpec">
+BucketSTSSpec
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>STS specifies the required configuration to use a Security Token
+Service for fetching temporary credentials to authenticate in a
+Bucket provider.</p>
+<p>This field is only supported for the <code>aws</code> and <code>generic</code> providers.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>insecure</code><br>
+<em>
+bool
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Insecure allows connecting to a non-TLS HTTP Endpoint.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>region</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Region of the Endpoint where the BucketName is located in.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>prefix</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Prefix to use for server-side filtering of files in the Bucket.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>secretRef</code><br>
+<em>
+<a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/meta#LocalObjectReference">
+github.com/fluxcd/pkg/apis/meta.LocalObjectReference
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>SecretRef specifies the Secret containing authentication credentials
+for the Bucket.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>certSecretRef</code><br>
+<em>
+<a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/meta#LocalObjectReference">
+github.com/fluxcd/pkg/apis/meta.LocalObjectReference
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>CertSecretRef can be given the name of a Secret containing
+either or both of</p>
+<ul>
+<li>a PEM-encoded client certificate (<code>tls.crt</code>) and private
+key (<code>tls.key</code>);</li>
+<li>a PEM-encoded CA certificate (<code>ca.crt</code>)</li>
+</ul>
+<p>and whichever are supplied, will be used for connecting to the
+bucket. The client cert and key are useful if you are
+authenticating with a certificate; the CA cert is useful if
+you are using a self-signed server certificate. The Secret must
+be of type <code>Opaque</code> or <code>kubernetes.io/tls</code>.</p>
+<p>This field is only supported for the <code>generic</code> provider.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>proxySecretRef</code><br>
+<em>
+<a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/meta#LocalObjectReference">
+github.com/fluxcd/pkg/apis/meta.LocalObjectReference
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>ProxySecretRef specifies the Secret containing the proxy configuration
+to use while communicating with the Bucket server.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>interval</code><br>
+<em>
+<a href="https://pkg.go.dev/k8s.io/apimachinery/pkg/apis/meta/v1#Duration">
+Kubernetes meta/v1.Duration
+</a>
+</em>
+</td>
+<td>
+<p>Interval at which the Bucket Endpoint is checked for updates.
+This interval is approximate and may be subject to jitter to ensure
+efficient use of resources.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>timeout</code><br>
+<em>
+<a href="https://pkg.go.dev/k8s.io/apimachinery/pkg/apis/meta/v1#Duration">
+Kubernetes meta/v1.Duration
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Timeout for fetch operations, defaults to 60s.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>ignore</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Ignore overrides the set of excluded patterns in the .sourceignore format
+(which is the same as .gitignore). If not provided, a default will be used,
+consult the documentation for your version to find out what those are.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>suspend</code><br>
+<em>
+bool
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Suspend tells the controller to suspend the reconciliation of this
+Bucket.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>accessFrom</code><br>
+<em>
+<a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/acl#AccessFrom">
+github.com/fluxcd/pkg/apis/acl.AccessFrom
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>AccessFrom specifies an Access Control List for allowing cross-namespace
+references to this object.
+NOTE: Not implemented, provisional as of <a href="https://github.com/fluxcd/flux2/pull/2092">https://github.com/fluxcd/flux2/pull/2092</a></p>
+</td>
+</tr>
+</table>
+</td>
+</tr>
+<tr>
+<td>
+<code>status</code><br>
+<em>
+<a href="#source.toolkit.fluxcd.io/v1.BucketStatus">
+BucketStatus
+</a>
+</em>
+</td>
+<td>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
 <h3 id="source.toolkit.fluxcd.io/v1.GitRepository">GitRepository
 </h3>
 <p>GitRepository is the Schema for the gitrepositories API.</p>
@@ -711,6 +1006,7 @@ HelmRepositoryStatus
 </h3>
 <p>
 (<em>Appears on:</em>
+<a href="#source.toolkit.fluxcd.io/v1.BucketStatus">BucketStatus</a>, 
 <a href="#source.toolkit.fluxcd.io/v1.GitRepositoryStatus">GitRepositoryStatus</a>, 
 <a href="#source.toolkit.fluxcd.io/v1.HelmChartStatus">HelmChartStatus</a>, 
 <a href="#source.toolkit.fluxcd.io/v1.HelmRepositoryStatus">HelmRepositoryStatus</a>)
@@ -812,6 +1108,436 @@ map[string]string
 <td>
 <em>(Optional)</em>
 <p>Metadata holds upstream information such as OCI annotations.</p>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<h3 id="source.toolkit.fluxcd.io/v1.BucketSTSSpec">BucketSTSSpec
+</h3>
+<p>
+(<em>Appears on:</em>
+<a href="#source.toolkit.fluxcd.io/v1.BucketSpec">BucketSpec</a>)
+</p>
+<p>BucketSTSSpec specifies the required configuration to use a Security Token
+Service for fetching temporary credentials to authenticate in a Bucket
+provider.</p>
+<div class="md-typeset__scrollwrap">
+<div class="md-typeset__table">
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>provider</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<p>Provider of the Security Token Service.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>endpoint</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<p>Endpoint is the HTTP/S endpoint of the Security Token Service from
+where temporary credentials will be fetched.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>secretRef</code><br>
+<em>
+<a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/meta#LocalObjectReference">
+github.com/fluxcd/pkg/apis/meta.LocalObjectReference
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>SecretRef specifies the Secret containing authentication credentials
+for the STS endpoint. This Secret must contain the fields <code>username</code>
+and <code>password</code> and is supported only for the <code>ldap</code> provider.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>certSecretRef</code><br>
+<em>
+<a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/meta#LocalObjectReference">
+github.com/fluxcd/pkg/apis/meta.LocalObjectReference
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>CertSecretRef can be given the name of a Secret containing
+either or both of</p>
+<ul>
+<li>a PEM-encoded client certificate (<code>tls.crt</code>) and private
+key (<code>tls.key</code>);</li>
+<li>a PEM-encoded CA certificate (<code>ca.crt</code>)</li>
+</ul>
+<p>and whichever are supplied, will be used for connecting to the
+STS endpoint. The client cert and key are useful if you are
+authenticating with a certificate; the CA cert is useful if
+you are using a self-signed server certificate. The Secret must
+be of type <code>Opaque</code> or <code>kubernetes.io/tls</code>.</p>
+<p>This field is only supported for the <code>ldap</code> provider.</p>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<h3 id="source.toolkit.fluxcd.io/v1.BucketSpec">BucketSpec
+</h3>
+<p>
+(<em>Appears on:</em>
+<a href="#source.toolkit.fluxcd.io/v1.Bucket">Bucket</a>)
+</p>
+<p>BucketSpec specifies the required configuration to produce an Artifact for
+an object storage bucket.</p>
+<div class="md-typeset__scrollwrap">
+<div class="md-typeset__table">
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>provider</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Provider of the object storage bucket.
+Defaults to &lsquo;generic&rsquo;, which expects an S3 (API) compatible object
+storage.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>bucketName</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<p>BucketName is the name of the object storage bucket.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>endpoint</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<p>Endpoint is the object storage address the BucketName is located at.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>sts</code><br>
+<em>
+<a href="#source.toolkit.fluxcd.io/v1.BucketSTSSpec">
+BucketSTSSpec
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>STS specifies the required configuration to use a Security Token
+Service for fetching temporary credentials to authenticate in a
+Bucket provider.</p>
+<p>This field is only supported for the <code>aws</code> and <code>generic</code> providers.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>insecure</code><br>
+<em>
+bool
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Insecure allows connecting to a non-TLS HTTP Endpoint.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>region</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Region of the Endpoint where the BucketName is located in.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>prefix</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Prefix to use for server-side filtering of files in the Bucket.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>secretRef</code><br>
+<em>
+<a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/meta#LocalObjectReference">
+github.com/fluxcd/pkg/apis/meta.LocalObjectReference
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>SecretRef specifies the Secret containing authentication credentials
+for the Bucket.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>certSecretRef</code><br>
+<em>
+<a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/meta#LocalObjectReference">
+github.com/fluxcd/pkg/apis/meta.LocalObjectReference
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>CertSecretRef can be given the name of a Secret containing
+either or both of</p>
+<ul>
+<li>a PEM-encoded client certificate (<code>tls.crt</code>) and private
+key (<code>tls.key</code>);</li>
+<li>a PEM-encoded CA certificate (<code>ca.crt</code>)</li>
+</ul>
+<p>and whichever are supplied, will be used for connecting to the
+bucket. The client cert and key are useful if you are
+authenticating with a certificate; the CA cert is useful if
+you are using a self-signed server certificate. The Secret must
+be of type <code>Opaque</code> or <code>kubernetes.io/tls</code>.</p>
+<p>This field is only supported for the <code>generic</code> provider.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>proxySecretRef</code><br>
+<em>
+<a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/meta#LocalObjectReference">
+github.com/fluxcd/pkg/apis/meta.LocalObjectReference
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>ProxySecretRef specifies the Secret containing the proxy configuration
+to use while communicating with the Bucket server.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>interval</code><br>
+<em>
+<a href="https://pkg.go.dev/k8s.io/apimachinery/pkg/apis/meta/v1#Duration">
+Kubernetes meta/v1.Duration
+</a>
+</em>
+</td>
+<td>
+<p>Interval at which the Bucket Endpoint is checked for updates.
+This interval is approximate and may be subject to jitter to ensure
+efficient use of resources.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>timeout</code><br>
+<em>
+<a href="https://pkg.go.dev/k8s.io/apimachinery/pkg/apis/meta/v1#Duration">
+Kubernetes meta/v1.Duration
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Timeout for fetch operations, defaults to 60s.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>ignore</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Ignore overrides the set of excluded patterns in the .sourceignore format
+(which is the same as .gitignore). If not provided, a default will be used,
+consult the documentation for your version to find out what those are.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>suspend</code><br>
+<em>
+bool
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Suspend tells the controller to suspend the reconciliation of this
+Bucket.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>accessFrom</code><br>
+<em>
+<a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/acl#AccessFrom">
+github.com/fluxcd/pkg/apis/acl.AccessFrom
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>AccessFrom specifies an Access Control List for allowing cross-namespace
+references to this object.
+NOTE: Not implemented, provisional as of <a href="https://github.com/fluxcd/flux2/pull/2092">https://github.com/fluxcd/flux2/pull/2092</a></p>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<h3 id="source.toolkit.fluxcd.io/v1.BucketStatus">BucketStatus
+</h3>
+<p>
+(<em>Appears on:</em>
+<a href="#source.toolkit.fluxcd.io/v1.Bucket">Bucket</a>)
+</p>
+<p>BucketStatus records the observed state of a Bucket.</p>
+<div class="md-typeset__scrollwrap">
+<div class="md-typeset__table">
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>observedGeneration</code><br>
+<em>
+int64
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>ObservedGeneration is the last observed generation of the Bucket object.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>conditions</code><br>
+<em>
+<a href="https://pkg.go.dev/k8s.io/apimachinery/pkg/apis/meta/v1#Condition">
+[]Kubernetes meta/v1.Condition
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Conditions holds the conditions for the Bucket.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>url</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>URL is the dynamic fetch link for the latest Artifact.
+It is provided on a &ldquo;best effort&rdquo; basis, and using the precise
+BucketStatus.Artifact data is recommended.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>artifact</code><br>
+<em>
+<a href="#source.toolkit.fluxcd.io/v1.Artifact">
+Artifact
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Artifact represents the last successful Bucket reconciliation.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>observedIgnore</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>ObservedIgnore is the observed exclusion patterns used for constructing
+the source artifact.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>ReconcileRequestStatus</code><br>
+<em>
+<a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/meta#ReconcileRequestStatus">
+github.com/fluxcd/pkg/apis/meta.ReconcileRequestStatus
+</a>
+</em>
+</td>
+<td>
+<p>
+(Members of <code>ReconcileRequestStatus</code> are embedded into this type.)
+</p>
 </td>
 </tr>
 </tbody>

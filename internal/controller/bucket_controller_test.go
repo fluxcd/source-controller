@@ -44,7 +44,6 @@ import (
 	"github.com/fluxcd/pkg/runtime/patch"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
-	bucketv1 "github.com/fluxcd/source-controller/api/v1beta2"
 	intdigest "github.com/fluxcd/source-controller/internal/digest"
 	"github.com/fluxcd/source-controller/internal/index"
 	gcsmock "github.com/fluxcd/source-controller/internal/mock/gcs"
@@ -68,10 +67,10 @@ func TestBucketReconciler_deleteBeforeFinalizer(t *testing.T) {
 		g.Expect(k8sClient.Delete(ctx, namespace)).NotTo(HaveOccurred())
 	})
 
-	bucket := &bucketv1.Bucket{}
+	bucket := &sourcev1.Bucket{}
 	bucket.Name = "test-bucket"
 	bucket.Namespace = namespaceName
-	bucket.Spec = bucketv1.BucketSpec{
+	bucket.Spec = sourcev1.BucketSpec{
 		Interval:   metav1.Duration{Duration: interval},
 		BucketName: "foo",
 		Endpoint:   "bar",
@@ -124,12 +123,12 @@ func TestBucketReconciler_Reconcile(t *testing.T) {
 	g.Expect(testEnv.Create(ctx, secret)).To(Succeed())
 	defer testEnv.Delete(ctx, secret)
 
-	origObj := &bucketv1.Bucket{
+	origObj := &sourcev1.Bucket{
 		ObjectMeta: metav1.ObjectMeta{
 			GenerateName: "bucket-reconcile-",
 			Namespace:    "default",
 		},
-		Spec: bucketv1.BucketSpec{
+		Spec: sourcev1.BucketSpec{
 			Provider:   "generic",
 			BucketName: s3Server.BucketName,
 			Endpoint:   u.Host,
@@ -197,7 +196,7 @@ func TestBucketReconciler_Reconcile(t *testing.T) {
 func TestBucketReconciler_reconcileStorage(t *testing.T) {
 	tests := []struct {
 		name             string
-		beforeFunc       func(obj *bucketv1.Bucket, storage *Storage) error
+		beforeFunc       func(obj *sourcev1.Bucket, storage *Storage) error
 		want             sreconcile.Result
 		wantErr          bool
 		assertArtifact   *sourcev1.Artifact
@@ -206,7 +205,7 @@ func TestBucketReconciler_reconcileStorage(t *testing.T) {
 	}{
 		{
 			name: "garbage collects",
-			beforeFunc: func(obj *bucketv1.Bucket, storage *Storage) error {
+			beforeFunc: func(obj *sourcev1.Bucket, storage *Storage) error {
 				revisions := []string{"a", "b", "c", "d"}
 				for n := range revisions {
 					v := revisions[n]
@@ -256,7 +255,7 @@ func TestBucketReconciler_reconcileStorage(t *testing.T) {
 		},
 		{
 			name: "notices missing artifact in storage",
-			beforeFunc: func(obj *bucketv1.Bucket, storage *Storage) error {
+			beforeFunc: func(obj *sourcev1.Bucket, storage *Storage) error {
 				obj.Status.Artifact = &sourcev1.Artifact{
 					Path:     "/reconcile-storage/invalid.txt",
 					Revision: "d",
@@ -275,7 +274,7 @@ func TestBucketReconciler_reconcileStorage(t *testing.T) {
 		},
 		{
 			name: "notices empty artifact digest",
-			beforeFunc: func(obj *bucketv1.Bucket, storage *Storage) error {
+			beforeFunc: func(obj *sourcev1.Bucket, storage *Storage) error {
 				f := "empty-digest.txt"
 
 				obj.Status.Artifact = &sourcev1.Artifact{
@@ -306,7 +305,7 @@ func TestBucketReconciler_reconcileStorage(t *testing.T) {
 		},
 		{
 			name: "notices artifact digest mismatch",
-			beforeFunc: func(obj *bucketv1.Bucket, storage *Storage) error {
+			beforeFunc: func(obj *sourcev1.Bucket, storage *Storage) error {
 				f := "digest-mismatch.txt"
 
 				obj.Status.Artifact = &sourcev1.Artifact{
@@ -337,7 +336,7 @@ func TestBucketReconciler_reconcileStorage(t *testing.T) {
 		},
 		{
 			name: "updates hostname on diff from current",
-			beforeFunc: func(obj *bucketv1.Bucket, storage *Storage) error {
+			beforeFunc: func(obj *sourcev1.Bucket, storage *Storage) error {
 				obj.Status.Artifact = &sourcev1.Artifact{
 					Path:     "/reconcile-storage/hostname.txt",
 					Revision: "f",
@@ -380,14 +379,14 @@ func TestBucketReconciler_reconcileStorage(t *testing.T) {
 			r := &BucketReconciler{
 				Client: fakeclient.NewClientBuilder().
 					WithScheme(testEnv.GetScheme()).
-					WithStatusSubresource(&bucketv1.Bucket{}).
+					WithStatusSubresource(&sourcev1.Bucket{}).
 					Build(),
 				EventRecorder: record.NewFakeRecorder(32),
 				Storage:       testStorage,
 				patchOptions:  getPatchOptions(bucketReadyCondition.Owned, "sc"),
 			}
 
-			obj := &bucketv1.Bucket{
+			obj := &sourcev1.Bucket{
 				ObjectMeta: metav1.ObjectMeta{
 					GenerateName: "test-",
 					Generation:   1,
@@ -438,7 +437,7 @@ func TestBucketReconciler_reconcileSource_generic(t *testing.T) {
 		bucketObjects    []*s3mock.Object
 		middleware       http.Handler
 		secret           *corev1.Secret
-		beforeFunc       func(obj *bucketv1.Bucket)
+		beforeFunc       func(obj *sourcev1.Bucket)
 		want             sreconcile.Result
 		wantErr          bool
 		assertIndex      *index.Digester
@@ -472,7 +471,7 @@ func TestBucketReconciler_reconcileSource_generic(t *testing.T) {
 		{
 			name:       "Observes non-existing secretRef",
 			bucketName: "dummy",
-			beforeFunc: func(obj *bucketv1.Bucket) {
+			beforeFunc: func(obj *sourcev1.Bucket) {
 				obj.Spec.SecretRef = &meta.LocalObjectReference{
 					Name: "dummy",
 				}
@@ -495,7 +494,7 @@ func TestBucketReconciler_reconcileSource_generic(t *testing.T) {
 					Name: "dummy",
 				},
 			},
-			beforeFunc: func(obj *bucketv1.Bucket) {
+			beforeFunc: func(obj *sourcev1.Bucket) {
 				obj.Spec.SecretRef = &meta.LocalObjectReference{
 					Name: "dummy",
 				}
@@ -513,7 +512,7 @@ func TestBucketReconciler_reconcileSource_generic(t *testing.T) {
 		{
 			name:       "Observes non-existing certSecretRef",
 			bucketName: "dummy",
-			beforeFunc: func(obj *bucketv1.Bucket) {
+			beforeFunc: func(obj *sourcev1.Bucket) {
 				obj.Spec.CertSecretRef = &meta.LocalObjectReference{
 					Name: "dummy",
 				}
@@ -536,7 +535,7 @@ func TestBucketReconciler_reconcileSource_generic(t *testing.T) {
 					Name: "dummy",
 				},
 			},
-			beforeFunc: func(obj *bucketv1.Bucket) {
+			beforeFunc: func(obj *sourcev1.Bucket) {
 				obj.Spec.CertSecretRef = &meta.LocalObjectReference{
 					Name: "dummy",
 				}
@@ -554,7 +553,7 @@ func TestBucketReconciler_reconcileSource_generic(t *testing.T) {
 		{
 			name:       "Observes non-existing proxySecretRef",
 			bucketName: "dummy",
-			beforeFunc: func(obj *bucketv1.Bucket) {
+			beforeFunc: func(obj *sourcev1.Bucket) {
 				obj.Spec.ProxySecretRef = &meta.LocalObjectReference{
 					Name: "dummy",
 				}
@@ -577,7 +576,7 @@ func TestBucketReconciler_reconcileSource_generic(t *testing.T) {
 					Name: "dummy",
 				},
 			},
-			beforeFunc: func(obj *bucketv1.Bucket) {
+			beforeFunc: func(obj *sourcev1.Bucket) {
 				obj.Spec.ProxySecretRef = &meta.LocalObjectReference{
 					Name: "dummy",
 				}
@@ -595,8 +594,8 @@ func TestBucketReconciler_reconcileSource_generic(t *testing.T) {
 		{
 			name:       "Observes non-existing sts.secretRef",
 			bucketName: "dummy",
-			beforeFunc: func(obj *bucketv1.Bucket) {
-				obj.Spec.STS = &bucketv1.BucketSTSSpec{
+			beforeFunc: func(obj *sourcev1.Bucket) {
+				obj.Spec.STS = &sourcev1.BucketSTSSpec{
 					SecretRef: &meta.LocalObjectReference{Name: "dummy"},
 				}
 				conditions.MarkReconciling(obj, meta.ProgressingReason, "foo")
@@ -618,9 +617,9 @@ func TestBucketReconciler_reconcileSource_generic(t *testing.T) {
 					Name: "dummy",
 				},
 			},
-			beforeFunc: func(obj *bucketv1.Bucket) {
+			beforeFunc: func(obj *sourcev1.Bucket) {
 				obj.Spec.Provider = "generic"
-				obj.Spec.STS = &bucketv1.BucketSTSSpec{
+				obj.Spec.STS = &sourcev1.BucketSTSSpec{
 					Provider:  "ldap",
 					Endpoint:  "https://something",
 					SecretRef: &meta.LocalObjectReference{Name: "dummy"},
@@ -639,8 +638,8 @@ func TestBucketReconciler_reconcileSource_generic(t *testing.T) {
 		{
 			name:       "Observes non-existing sts.certSecretRef",
 			bucketName: "dummy",
-			beforeFunc: func(obj *bucketv1.Bucket) {
-				obj.Spec.STS = &bucketv1.BucketSTSSpec{
+			beforeFunc: func(obj *sourcev1.Bucket) {
+				obj.Spec.STS = &sourcev1.BucketSTSSpec{
 					CertSecretRef: &meta.LocalObjectReference{Name: "dummy"},
 				}
 				conditions.MarkReconciling(obj, meta.ProgressingReason, "foo")
@@ -662,9 +661,9 @@ func TestBucketReconciler_reconcileSource_generic(t *testing.T) {
 					Name: "dummy",
 				},
 			},
-			beforeFunc: func(obj *bucketv1.Bucket) {
+			beforeFunc: func(obj *sourcev1.Bucket) {
 				obj.Spec.Provider = "generic"
-				obj.Spec.STS = &bucketv1.BucketSTSSpec{
+				obj.Spec.STS = &sourcev1.BucketSTSSpec{
 					Provider:      "ldap",
 					Endpoint:      "https://something",
 					CertSecretRef: &meta.LocalObjectReference{Name: "dummy"},
@@ -683,7 +682,7 @@ func TestBucketReconciler_reconcileSource_generic(t *testing.T) {
 		{
 			name:       "Observes non-existing bucket name",
 			bucketName: "dummy",
-			beforeFunc: func(obj *bucketv1.Bucket) {
+			beforeFunc: func(obj *sourcev1.Bucket) {
 				obj.Spec.BucketName = "invalid"
 				conditions.MarkReconciling(obj, meta.ProgressingReason, "foo")
 				conditions.MarkUnknown(obj, meta.ReadyCondition, "foo", "bar")
@@ -691,7 +690,7 @@ func TestBucketReconciler_reconcileSource_generic(t *testing.T) {
 			wantErr:     true,
 			assertIndex: index.NewDigester(),
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.FetchFailedCondition, bucketv1.BucketOperationFailedReason, "bucket 'invalid' not found"),
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason, "bucket 'invalid' not found"),
 				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "foo"),
 				*conditions.UnknownCondition(meta.ReadyCondition, "foo", "bar"),
 			},
@@ -699,9 +698,9 @@ func TestBucketReconciler_reconcileSource_generic(t *testing.T) {
 		{
 			name:       "Observes incompatible sts.provider",
 			bucketName: "dummy",
-			beforeFunc: func(obj *bucketv1.Bucket) {
+			beforeFunc: func(obj *sourcev1.Bucket) {
 				obj.Spec.Provider = "generic"
-				obj.Spec.STS = &bucketv1.BucketSTSSpec{
+				obj.Spec.STS = &sourcev1.BucketSTSSpec{
 					Provider: "aws",
 				}
 				conditions.MarkReconciling(obj, meta.ProgressingReason, "foo")
@@ -718,9 +717,9 @@ func TestBucketReconciler_reconcileSource_generic(t *testing.T) {
 		{
 			name:       "Observes invalid sts.endpoint",
 			bucketName: "dummy",
-			beforeFunc: func(obj *bucketv1.Bucket) {
+			beforeFunc: func(obj *sourcev1.Bucket) {
 				obj.Spec.Provider = "generic"
-				obj.Spec.STS = &bucketv1.BucketSTSSpec{
+				obj.Spec.STS = &sourcev1.BucketSTSSpec{
 					Provider: "ldap",
 					Endpoint: "something\t",
 				}
@@ -737,7 +736,7 @@ func TestBucketReconciler_reconcileSource_generic(t *testing.T) {
 		},
 		{
 			name: "Transient bucket name API failure",
-			beforeFunc: func(obj *bucketv1.Bucket) {
+			beforeFunc: func(obj *sourcev1.Bucket) {
 				obj.Spec.Endpoint = "transient.example.com"
 				obj.Spec.BucketName = "unavailable"
 				conditions.MarkReconciling(obj, meta.ProgressingReason, "foo")
@@ -746,7 +745,7 @@ func TestBucketReconciler_reconcileSource_generic(t *testing.T) {
 			wantErr:     true,
 			assertIndex: index.NewDigester(),
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.FetchFailedCondition, bucketv1.BucketOperationFailedReason, "failed to confirm existence of 'unavailable' bucket"),
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason, "failed to confirm existence of 'unavailable' bucket"),
 				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "foo"),
 				*conditions.UnknownCondition(meta.ReadyCondition, "foo", "bar"),
 			},
@@ -786,7 +785,7 @@ func TestBucketReconciler_reconcileSource_generic(t *testing.T) {
 		{
 			name:       "spec.ignore overrides .sourceignore",
 			bucketName: "dummy",
-			beforeFunc: func(obj *bucketv1.Bucket) {
+			beforeFunc: func(obj *sourcev1.Bucket) {
 				ignore := "!ignored/file.txt"
 				obj.Spec.Ignore = &ignore
 			},
@@ -823,7 +822,7 @@ func TestBucketReconciler_reconcileSource_generic(t *testing.T) {
 		{
 			name:       "Up-to-date artifact",
 			bucketName: "dummy",
-			beforeFunc: func(obj *bucketv1.Bucket) {
+			beforeFunc: func(obj *sourcev1.Bucket) {
 				obj.Status.Artifact = &sourcev1.Artifact{
 					Revision: "sha256:b4c2a60ce44b67f5b659a95ce4e4cc9e2a86baf13afb72bd397c5384cbc0e479",
 				}
@@ -850,8 +849,8 @@ func TestBucketReconciler_reconcileSource_generic(t *testing.T) {
 		{
 			name:       "Removes FetchFailedCondition after reconciling source",
 			bucketName: "dummy",
-			beforeFunc: func(obj *bucketv1.Bucket) {
-				conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, bucketv1.BucketOperationFailedReason, "failed to read test file")
+			beforeFunc: func(obj *sourcev1.Bucket) {
+				conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason, "failed to read test file")
 			},
 			bucketObjects: []*s3mock.Object{
 				{
@@ -881,7 +880,7 @@ func TestBucketReconciler_reconcileSource_generic(t *testing.T) {
 					LastModified: time.Now(),
 				},
 			},
-			beforeFunc: func(obj *bucketv1.Bucket) {
+			beforeFunc: func(obj *sourcev1.Bucket) {
 				obj.Status.Artifact = &sourcev1.Artifact{
 					Path:     "some-path",
 					Revision: "some-rev",
@@ -904,7 +903,7 @@ func TestBucketReconciler_reconcileSource_generic(t *testing.T) {
 
 			clientBuilder := fakeclient.NewClientBuilder().
 				WithScheme(testEnv.Scheme()).
-				WithStatusSubresource(&bucketv1.Bucket{})
+				WithStatusSubresource(&sourcev1.Bucket{})
 
 			if tt.secret != nil {
 				clientBuilder.WithObjects(tt.secret)
@@ -918,12 +917,12 @@ func TestBucketReconciler_reconcileSource_generic(t *testing.T) {
 			}
 			tmpDir := t.TempDir()
 
-			obj := &bucketv1.Bucket{
+			obj := &sourcev1.Bucket{
 				ObjectMeta: metav1.ObjectMeta{
 					GenerateName: "test-bucket-",
 					Generation:   1,
 				},
-				Spec: bucketv1.BucketSpec{
+				Spec: sourcev1.BucketSpec{
 					Timeout: &metav1.Duration{Duration: timeout},
 				},
 			}
@@ -976,7 +975,7 @@ func TestBucketReconciler_reconcileSource_gcs(t *testing.T) {
 		bucketName       string
 		bucketObjects    []*gcsmock.Object
 		secret           *corev1.Secret
-		beforeFunc       func(obj *bucketv1.Bucket)
+		beforeFunc       func(obj *sourcev1.Bucket)
 		want             sreconcile.Result
 		wantErr          bool
 		assertIndex      *index.Digester
@@ -1003,7 +1002,7 @@ func TestBucketReconciler_reconcileSource_gcs(t *testing.T) {
 					"serviceaccount": []byte("testsa"),
 				},
 			},
-			beforeFunc: func(obj *bucketv1.Bucket) {
+			beforeFunc: func(obj *sourcev1.Bucket) {
 				obj.Spec.SecretRef = &meta.LocalObjectReference{
 					Name: "dummy",
 				}
@@ -1020,7 +1019,7 @@ func TestBucketReconciler_reconcileSource_gcs(t *testing.T) {
 		{
 			name:       "Observes non-existing secretRef",
 			bucketName: "dummy",
-			beforeFunc: func(obj *bucketv1.Bucket) {
+			beforeFunc: func(obj *sourcev1.Bucket) {
 				obj.Spec.SecretRef = &meta.LocalObjectReference{
 					Name: "dummy",
 				}
@@ -1044,7 +1043,7 @@ func TestBucketReconciler_reconcileSource_gcs(t *testing.T) {
 					Name: "dummy",
 				},
 			},
-			beforeFunc: func(obj *bucketv1.Bucket) {
+			beforeFunc: func(obj *sourcev1.Bucket) {
 				obj.Spec.SecretRef = &meta.LocalObjectReference{
 					Name: "dummy",
 				}
@@ -1063,7 +1062,7 @@ func TestBucketReconciler_reconcileSource_gcs(t *testing.T) {
 		{
 			name:       "Observes non-existing proxySecretRef",
 			bucketName: "dummy",
-			beforeFunc: func(obj *bucketv1.Bucket) {
+			beforeFunc: func(obj *sourcev1.Bucket) {
 				obj.Spec.ProxySecretRef = &meta.LocalObjectReference{
 					Name: "dummy",
 				}
@@ -1087,7 +1086,7 @@ func TestBucketReconciler_reconcileSource_gcs(t *testing.T) {
 					Name: "dummy",
 				},
 			},
-			beforeFunc: func(obj *bucketv1.Bucket) {
+			beforeFunc: func(obj *sourcev1.Bucket) {
 				obj.Spec.ProxySecretRef = &meta.LocalObjectReference{
 					Name: "dummy",
 				}
@@ -1106,7 +1105,7 @@ func TestBucketReconciler_reconcileSource_gcs(t *testing.T) {
 		{
 			name:       "Observes non-existing bucket name",
 			bucketName: "dummy",
-			beforeFunc: func(obj *bucketv1.Bucket) {
+			beforeFunc: func(obj *sourcev1.Bucket) {
 				obj.Spec.BucketName = "invalid"
 				conditions.MarkReconciling(obj, meta.ProgressingReason, "foo")
 				conditions.MarkUnknown(obj, meta.ReadyCondition, "foo", "bar")
@@ -1115,14 +1114,14 @@ func TestBucketReconciler_reconcileSource_gcs(t *testing.T) {
 			wantErr:     true,
 			assertIndex: index.NewDigester(),
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.FetchFailedCondition, bucketv1.BucketOperationFailedReason, "bucket 'invalid' not found"),
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason, "bucket 'invalid' not found"),
 				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "foo"),
 				*conditions.UnknownCondition(meta.ReadyCondition, "foo", "bar"),
 			},
 		},
 		{
 			name: "Transient bucket name API failure",
-			beforeFunc: func(obj *bucketv1.Bucket) {
+			beforeFunc: func(obj *sourcev1.Bucket) {
 				obj.Spec.Endpoint = "transient.example.com"
 				obj.Spec.BucketName = "unavailable"
 				conditions.MarkReconciling(obj, meta.ProgressingReason, "foo")
@@ -1132,7 +1131,7 @@ func TestBucketReconciler_reconcileSource_gcs(t *testing.T) {
 			wantErr:     true,
 			assertIndex: index.NewDigester(),
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.FetchFailedCondition, bucketv1.BucketOperationFailedReason, "failed to confirm existence of 'unavailable' bucket"),
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason, "failed to confirm existence of 'unavailable' bucket"),
 				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "foo"),
 				*conditions.UnknownCondition(meta.ReadyCondition, "foo", "bar"),
 			},
@@ -1172,7 +1171,7 @@ func TestBucketReconciler_reconcileSource_gcs(t *testing.T) {
 		{
 			name:       "spec.ignore overrides .sourceignore",
 			bucketName: "dummy",
-			beforeFunc: func(obj *bucketv1.Bucket) {
+			beforeFunc: func(obj *sourcev1.Bucket) {
 				ignore := "!ignored/file.txt"
 				obj.Spec.Ignore = &ignore
 			},
@@ -1209,7 +1208,7 @@ func TestBucketReconciler_reconcileSource_gcs(t *testing.T) {
 		{
 			name:       "Up-to-date artifact",
 			bucketName: "dummy",
-			beforeFunc: func(obj *bucketv1.Bucket) {
+			beforeFunc: func(obj *sourcev1.Bucket) {
 				obj.Status.Artifact = &sourcev1.Artifact{
 					Revision: "sha256:b4c2a60ce44b67f5b659a95ce4e4cc9e2a86baf13afb72bd397c5384cbc0e479",
 				}
@@ -1236,8 +1235,8 @@ func TestBucketReconciler_reconcileSource_gcs(t *testing.T) {
 		{
 			name:       "Removes FetchFailedCondition after reconciling source",
 			bucketName: "dummy",
-			beforeFunc: func(obj *bucketv1.Bucket) {
-				conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, bucketv1.BucketOperationFailedReason, "failed to read test file")
+			beforeFunc: func(obj *sourcev1.Bucket) {
+				conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.BucketOperationFailedReason, "failed to read test file")
 			},
 			bucketObjects: []*gcsmock.Object{
 				{
@@ -1267,7 +1266,7 @@ func TestBucketReconciler_reconcileSource_gcs(t *testing.T) {
 					Generation:  3,
 				},
 			},
-			beforeFunc: func(obj *bucketv1.Bucket) {
+			beforeFunc: func(obj *sourcev1.Bucket) {
 				obj.Status.Artifact = &sourcev1.Artifact{
 					Path:     "some-path",
 					Revision: "some-rev",
@@ -1291,7 +1290,7 @@ func TestBucketReconciler_reconcileSource_gcs(t *testing.T) {
 
 			clientBuilder := fakeclient.NewClientBuilder().
 				WithScheme(testEnv.Scheme()).
-				WithStatusSubresource(&bucketv1.Bucket{})
+				WithStatusSubresource(&sourcev1.Bucket{})
 
 			if tt.secret != nil {
 				clientBuilder.WithObjects(tt.secret)
@@ -1306,12 +1305,12 @@ func TestBucketReconciler_reconcileSource_gcs(t *testing.T) {
 			tmpDir := t.TempDir()
 
 			// Test bucket object.
-			obj := &bucketv1.Bucket{
+			obj := &sourcev1.Bucket{
 				ObjectMeta: metav1.ObjectMeta{
 					GenerateName: "test-bucket-",
 					Generation:   1,
 				},
-				Spec: bucketv1.BucketSpec{
+				Spec: sourcev1.BucketSpec{
 					BucketName: tt.bucketName,
 					Timeout:    &metav1.Duration{Duration: timeout},
 					Provider:   "gcp",
@@ -1368,15 +1367,15 @@ func TestBucketReconciler_reconcileSource_gcs(t *testing.T) {
 func TestBucketReconciler_reconcileArtifact(t *testing.T) {
 	tests := []struct {
 		name             string
-		beforeFunc       func(t *WithT, obj *bucketv1.Bucket, index *index.Digester, dir string)
-		afterFunc        func(t *WithT, obj *bucketv1.Bucket, dir string)
+		beforeFunc       func(t *WithT, obj *sourcev1.Bucket, index *index.Digester, dir string)
+		afterFunc        func(t *WithT, obj *sourcev1.Bucket, dir string)
 		want             sreconcile.Result
 		wantErr          bool
 		assertConditions []metav1.Condition
 	}{
 		{
 			name: "Archiving artifact to storage makes ArtifactInStorage=True",
-			beforeFunc: func(t *WithT, obj *bucketv1.Bucket, index *index.Digester, dir string) {
+			beforeFunc: func(t *WithT, obj *sourcev1.Bucket, index *index.Digester, dir string) {
 				obj.Spec.Interval = metav1.Duration{Duration: interval}
 				conditions.MarkReconciling(obj, meta.ProgressingReason, "foo")
 				conditions.MarkUnknown(obj, meta.ReadyCondition, "foo", "bar")
@@ -1390,7 +1389,7 @@ func TestBucketReconciler_reconcileArtifact(t *testing.T) {
 		},
 		{
 			name: "Up-to-date artifact should not persist and update status",
-			beforeFunc: func(t *WithT, obj *bucketv1.Bucket, index *index.Digester, dir string) {
+			beforeFunc: func(t *WithT, obj *sourcev1.Bucket, index *index.Digester, dir string) {
 				revision := index.Digest(intdigest.Canonical)
 				obj.Spec.Interval = metav1.Duration{Duration: interval}
 				// Incomplete artifact
@@ -1398,7 +1397,7 @@ func TestBucketReconciler_reconcileArtifact(t *testing.T) {
 				conditions.MarkReconciling(obj, meta.ProgressingReason, "foo")
 				conditions.MarkUnknown(obj, meta.ReadyCondition, "foo", "bar")
 			},
-			afterFunc: func(t *WithT, obj *bucketv1.Bucket, dir string) {
+			afterFunc: func(t *WithT, obj *sourcev1.Bucket, dir string) {
 				// Still incomplete
 				t.Expect(obj.Status.URL).To(BeEmpty())
 			},
@@ -1411,7 +1410,7 @@ func TestBucketReconciler_reconcileArtifact(t *testing.T) {
 		},
 		{
 			name: "Removes ArtifactOutdatedCondition after creating a new artifact",
-			beforeFunc: func(t *WithT, obj *bucketv1.Bucket, index *index.Digester, dir string) {
+			beforeFunc: func(t *WithT, obj *sourcev1.Bucket, index *index.Digester, dir string) {
 				obj.Spec.Interval = metav1.Duration{Duration: interval}
 				conditions.MarkTrue(obj, sourcev1.ArtifactOutdatedCondition, "Foo", "")
 				conditions.MarkReconciling(obj, meta.ProgressingReason, "foo")
@@ -1426,12 +1425,12 @@ func TestBucketReconciler_reconcileArtifact(t *testing.T) {
 		},
 		{
 			name: "Creates latest symlink to the created artifact",
-			beforeFunc: func(t *WithT, obj *bucketv1.Bucket, index *index.Digester, dir string) {
+			beforeFunc: func(t *WithT, obj *sourcev1.Bucket, index *index.Digester, dir string) {
 				obj.Spec.Interval = metav1.Duration{Duration: interval}
 				conditions.MarkReconciling(obj, meta.ProgressingReason, "foo")
 				conditions.MarkUnknown(obj, meta.ReadyCondition, "foo", "bar")
 			},
-			afterFunc: func(t *WithT, obj *bucketv1.Bucket, dir string) {
+			afterFunc: func(t *WithT, obj *sourcev1.Bucket, dir string) {
 				localPath := testStorage.LocalPath(*obj.GetArtifact())
 				symlinkPath := filepath.Join(filepath.Dir(localPath), "latest.tar.gz")
 				targetFile, err := os.Readlink(symlinkPath)
@@ -1447,7 +1446,7 @@ func TestBucketReconciler_reconcileArtifact(t *testing.T) {
 		},
 		{
 			name: "Dir path deleted",
-			beforeFunc: func(t *WithT, obj *bucketv1.Bucket, index *index.Digester, dir string) {
+			beforeFunc: func(t *WithT, obj *sourcev1.Bucket, index *index.Digester, dir string) {
 				t.Expect(os.RemoveAll(dir)).ToNot(HaveOccurred())
 				conditions.MarkReconciling(obj, meta.ProgressingReason, "foo")
 				conditions.MarkUnknown(obj, meta.ReadyCondition, "foo", "bar")
@@ -1462,7 +1461,7 @@ func TestBucketReconciler_reconcileArtifact(t *testing.T) {
 		},
 		{
 			name: "Dir path is not a directory",
-			beforeFunc: func(t *WithT, obj *bucketv1.Bucket, index *index.Digester, dir string) {
+			beforeFunc: func(t *WithT, obj *sourcev1.Bucket, index *index.Digester, dir string) {
 				// Remove the given directory and create a file for the same
 				// path.
 				t.Expect(os.RemoveAll(dir)).ToNot(HaveOccurred())
@@ -1472,7 +1471,7 @@ func TestBucketReconciler_reconcileArtifact(t *testing.T) {
 				conditions.MarkReconciling(obj, meta.ProgressingReason, "foo")
 				conditions.MarkUnknown(obj, meta.ReadyCondition, "foo", "bar")
 			},
-			afterFunc: func(t *WithT, obj *bucketv1.Bucket, dir string) {
+			afterFunc: func(t *WithT, obj *sourcev1.Bucket, dir string) {
 				t.Expect(os.RemoveAll(dir)).ToNot(HaveOccurred())
 			},
 			want:    sreconcile.ResultEmpty,
@@ -1491,7 +1490,7 @@ func TestBucketReconciler_reconcileArtifact(t *testing.T) {
 
 			clientBuilder := fakeclient.NewClientBuilder().
 				WithScheme(testEnv.GetScheme()).
-				WithStatusSubresource(&bucketv1.Bucket{})
+				WithStatusSubresource(&sourcev1.Bucket{})
 
 			r := &BucketReconciler{
 				Client:        clientBuilder.Build(),
@@ -1500,13 +1499,13 @@ func TestBucketReconciler_reconcileArtifact(t *testing.T) {
 				patchOptions:  getPatchOptions(bucketReadyCondition.Owned, "sc"),
 			}
 
-			obj := &bucketv1.Bucket{
+			obj := &sourcev1.Bucket{
 				ObjectMeta: metav1.ObjectMeta{
 					GenerateName: "test-bucket-",
 					Generation:   1,
 					Namespace:    "default",
 				},
-				Spec: bucketv1.BucketSpec{
+				Spec: sourcev1.BucketSpec{
 					Timeout: &metav1.Duration{Duration: timeout},
 				},
 			}
@@ -1547,13 +1546,13 @@ func TestBucketReconciler_reconcileArtifact(t *testing.T) {
 func TestBucketReconciler_statusConditions(t *testing.T) {
 	tests := []struct {
 		name             string
-		beforeFunc       func(obj *bucketv1.Bucket)
+		beforeFunc       func(obj *sourcev1.Bucket)
 		assertConditions []metav1.Condition
 		wantErr          bool
 	}{
 		{
 			name: "positive conditions only",
-			beforeFunc: func(obj *bucketv1.Bucket) {
+			beforeFunc: func(obj *sourcev1.Bucket) {
 				conditions.MarkTrue(obj, sourcev1.ArtifactInStorageCondition, meta.SucceededReason, "stored artifact for revision")
 			},
 			assertConditions: []metav1.Condition{
@@ -1563,7 +1562,7 @@ func TestBucketReconciler_statusConditions(t *testing.T) {
 		},
 		{
 			name: "multiple failures",
-			beforeFunc: func(obj *bucketv1.Bucket) {
+			beforeFunc: func(obj *sourcev1.Bucket) {
 				conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "failed to get secret")
 				conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition, sourcev1.DirCreationFailedReason, "failed to create directory")
 				conditions.MarkTrue(obj, sourcev1.ArtifactOutdatedCondition, "NewRevision", "some error")
@@ -1578,7 +1577,7 @@ func TestBucketReconciler_statusConditions(t *testing.T) {
 		},
 		{
 			name: "mixed positive and negative conditions",
-			beforeFunc: func(obj *bucketv1.Bucket) {
+			beforeFunc: func(obj *sourcev1.Bucket) {
 				conditions.MarkTrue(obj, sourcev1.ArtifactInStorageCondition, meta.SucceededReason, "stored artifact for revision")
 				conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "failed to get secret")
 			},
@@ -1595,10 +1594,10 @@ func TestBucketReconciler_statusConditions(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
 
-			obj := &bucketv1.Bucket{
+			obj := &sourcev1.Bucket{
 				TypeMeta: metav1.TypeMeta{
-					APIVersion: bucketv1.GroupVersion.String(),
-					Kind:       bucketv1.BucketKind,
+					APIVersion: sourcev1.GroupVersion.String(),
+					Kind:       sourcev1.BucketKind,
 				},
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-bucket",
@@ -1609,7 +1608,7 @@ func TestBucketReconciler_statusConditions(t *testing.T) {
 			c := fakeclient.NewClientBuilder().
 				WithScheme(testEnv.Scheme()).
 				WithObjects(obj).
-				WithStatusSubresource(&bucketv1.Bucket{}).
+				WithStatusSubresource(&sourcev1.Bucket{}).
 				Build()
 
 			serialPatcher := patch.NewSerialPatcher(obj, c)
@@ -1644,8 +1643,8 @@ func TestBucketReconciler_notify(t *testing.T) {
 		name             string
 		res              sreconcile.Result
 		resErr           error
-		oldObjBeforeFunc func(obj *bucketv1.Bucket)
-		newObjBeforeFunc func(obj *bucketv1.Bucket)
+		oldObjBeforeFunc func(obj *sourcev1.Bucket)
+		newObjBeforeFunc func(obj *sourcev1.Bucket)
 		wantEvent        string
 	}{
 		{
@@ -1657,7 +1656,7 @@ func TestBucketReconciler_notify(t *testing.T) {
 			name:   "new artifact",
 			res:    sreconcile.ResultSuccess,
 			resErr: nil,
-			newObjBeforeFunc: func(obj *bucketv1.Bucket) {
+			newObjBeforeFunc: func(obj *sourcev1.Bucket) {
 				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Digest: "yyy"}
 			},
 			wantEvent: "Normal NewArtifact stored artifact with 2 fetched files from",
@@ -1666,12 +1665,12 @@ func TestBucketReconciler_notify(t *testing.T) {
 			name:   "recovery from failure",
 			res:    sreconcile.ResultSuccess,
 			resErr: nil,
-			oldObjBeforeFunc: func(obj *bucketv1.Bucket) {
+			oldObjBeforeFunc: func(obj *sourcev1.Bucket) {
 				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Digest: "yyy"}
 				conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.GitOperationFailedReason, "fail")
 				conditions.MarkFalse(obj, meta.ReadyCondition, meta.FailedReason, "foo")
 			},
-			newObjBeforeFunc: func(obj *bucketv1.Bucket) {
+			newObjBeforeFunc: func(obj *sourcev1.Bucket) {
 				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Digest: "yyy"}
 				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "ready")
 			},
@@ -1681,12 +1680,12 @@ func TestBucketReconciler_notify(t *testing.T) {
 			name:   "recovery and new artifact",
 			res:    sreconcile.ResultSuccess,
 			resErr: nil,
-			oldObjBeforeFunc: func(obj *bucketv1.Bucket) {
+			oldObjBeforeFunc: func(obj *sourcev1.Bucket) {
 				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Digest: "yyy"}
 				conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.GitOperationFailedReason, "fail")
 				conditions.MarkFalse(obj, meta.ReadyCondition, meta.FailedReason, "foo")
 			},
-			newObjBeforeFunc: func(obj *bucketv1.Bucket) {
+			newObjBeforeFunc: func(obj *sourcev1.Bucket) {
 				obj.Status.Artifact = &sourcev1.Artifact{Revision: "aaa", Digest: "bbb"}
 				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "ready")
 			},
@@ -1696,11 +1695,11 @@ func TestBucketReconciler_notify(t *testing.T) {
 			name:   "no updates",
 			res:    sreconcile.ResultSuccess,
 			resErr: nil,
-			oldObjBeforeFunc: func(obj *bucketv1.Bucket) {
+			oldObjBeforeFunc: func(obj *sourcev1.Bucket) {
 				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Digest: "yyy"}
 				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "ready")
 			},
-			newObjBeforeFunc: func(obj *bucketv1.Bucket) {
+			newObjBeforeFunc: func(obj *sourcev1.Bucket) {
 				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Digest: "yyy"}
 				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "ready")
 			},
@@ -1713,8 +1712,8 @@ func TestBucketReconciler_notify(t *testing.T) {
 
 			recorder := record.NewFakeRecorder(32)
 
-			oldObj := &bucketv1.Bucket{
-				Spec: bucketv1.BucketSpec{
+			oldObj := &sourcev1.Bucket{
+				Spec: sourcev1.BucketSpec{
 					BucketName: "test-bucket",
 				},
 			}
@@ -1755,23 +1754,23 @@ func TestBucketReconciler_notify(t *testing.T) {
 func TestBucketReconciler_getProxyURL(t *testing.T) {
 	tests := []struct {
 		name        string
-		bucket      *bucketv1.Bucket
+		bucket      *sourcev1.Bucket
 		objects     []client.Object
 		expectedURL string
 		expectedErr string
 	}{
 		{
 			name: "empty proxySecretRef",
-			bucket: &bucketv1.Bucket{
-				Spec: bucketv1.BucketSpec{
+			bucket: &sourcev1.Bucket{
+				Spec: sourcev1.BucketSpec{
 					ProxySecretRef: nil,
 				},
 			},
 		},
 		{
 			name: "non-existing proxySecretRef",
-			bucket: &bucketv1.Bucket{
-				Spec: bucketv1.BucketSpec{
+			bucket: &sourcev1.Bucket{
+				Spec: sourcev1.BucketSpec{
 					ProxySecretRef: &meta.LocalObjectReference{
 						Name: "non-existing",
 					},
@@ -1781,8 +1780,8 @@ func TestBucketReconciler_getProxyURL(t *testing.T) {
 		},
 		{
 			name: "missing address in proxySecretRef",
-			bucket: &bucketv1.Bucket{
-				Spec: bucketv1.BucketSpec{
+			bucket: &sourcev1.Bucket{
+				Spec: sourcev1.BucketSpec{
 					ProxySecretRef: &meta.LocalObjectReference{
 						Name: "dummy",
 					},
@@ -1800,8 +1799,8 @@ func TestBucketReconciler_getProxyURL(t *testing.T) {
 		},
 		{
 			name: "invalid address in proxySecretRef",
-			bucket: &bucketv1.Bucket{
-				Spec: bucketv1.BucketSpec{
+			bucket: &sourcev1.Bucket{
+				Spec: sourcev1.BucketSpec{
 					ProxySecretRef: &meta.LocalObjectReference{
 						Name: "dummy",
 					},
@@ -1821,8 +1820,8 @@ func TestBucketReconciler_getProxyURL(t *testing.T) {
 		},
 		{
 			name: "no user, no password",
-			bucket: &bucketv1.Bucket{
-				Spec: bucketv1.BucketSpec{
+			bucket: &sourcev1.Bucket{
+				Spec: sourcev1.BucketSpec{
 					ProxySecretRef: &meta.LocalObjectReference{
 						Name: "dummy",
 					},
@@ -1842,8 +1841,8 @@ func TestBucketReconciler_getProxyURL(t *testing.T) {
 		},
 		{
 			name: "user, no password",
-			bucket: &bucketv1.Bucket{
-				Spec: bucketv1.BucketSpec{
+			bucket: &sourcev1.Bucket{
+				Spec: sourcev1.BucketSpec{
 					ProxySecretRef: &meta.LocalObjectReference{
 						Name: "dummy",
 					},
@@ -1864,8 +1863,8 @@ func TestBucketReconciler_getProxyURL(t *testing.T) {
 		},
 		{
 			name: "no user, password",
-			bucket: &bucketv1.Bucket{
-				Spec: bucketv1.BucketSpec{
+			bucket: &sourcev1.Bucket{
+				Spec: sourcev1.BucketSpec{
 					ProxySecretRef: &meta.LocalObjectReference{
 						Name: "dummy",
 					},
@@ -1886,8 +1885,8 @@ func TestBucketReconciler_getProxyURL(t *testing.T) {
 		},
 		{
 			name: "user, password",
-			bucket: &bucketv1.Bucket{
-				Spec: bucketv1.BucketSpec{
+			bucket: &sourcev1.Bucket{
+				Spec: sourcev1.BucketSpec{
 					ProxySecretRef: &meta.LocalObjectReference{
 						Name: "dummy",
 					},
@@ -1941,13 +1940,13 @@ func TestBucketReconciler_APIServerValidation_STS(t *testing.T) {
 	tests := []struct {
 		name           string
 		bucketProvider string
-		stsConfig      *bucketv1.BucketSTSSpec
+		stsConfig      *sourcev1.BucketSTSSpec
 		err            string
 	}{
 		{
 			name:           "gcp unsupported",
 			bucketProvider: "gcp",
-			stsConfig: &bucketv1.BucketSTSSpec{
+			stsConfig: &sourcev1.BucketSTSSpec{
 				Provider: "aws",
 				Endpoint: "http://test",
 			},
@@ -1956,7 +1955,7 @@ func TestBucketReconciler_APIServerValidation_STS(t *testing.T) {
 		{
 			name:           "azure unsupported",
 			bucketProvider: "azure",
-			stsConfig: &bucketv1.BucketSTSSpec{
+			stsConfig: &sourcev1.BucketSTSSpec{
 				Provider: "aws",
 				Endpoint: "http://test",
 			},
@@ -1965,7 +1964,7 @@ func TestBucketReconciler_APIServerValidation_STS(t *testing.T) {
 		{
 			name:           "aws supported",
 			bucketProvider: "aws",
-			stsConfig: &bucketv1.BucketSTSSpec{
+			stsConfig: &sourcev1.BucketSTSSpec{
 				Provider: "aws",
 				Endpoint: "http://test",
 			},
@@ -1973,7 +1972,7 @@ func TestBucketReconciler_APIServerValidation_STS(t *testing.T) {
 		{
 			name:           "invalid endpoint",
 			bucketProvider: "aws",
-			stsConfig: &bucketv1.BucketSTSSpec{
+			stsConfig: &sourcev1.BucketSTSSpec{
 				Provider: "aws",
 				Endpoint: "test",
 			},
@@ -1998,7 +1997,7 @@ func TestBucketReconciler_APIServerValidation_STS(t *testing.T) {
 		{
 			name:           "ldap unsupported for aws",
 			bucketProvider: "aws",
-			stsConfig: &bucketv1.BucketSTSSpec{
+			stsConfig: &sourcev1.BucketSTSSpec{
 				Provider: "ldap",
 				Endpoint: "http://test",
 			},
@@ -2007,7 +2006,7 @@ func TestBucketReconciler_APIServerValidation_STS(t *testing.T) {
 		{
 			name:           "aws unsupported for generic",
 			bucketProvider: "generic",
-			stsConfig: &bucketv1.BucketSTSSpec{
+			stsConfig: &sourcev1.BucketSTSSpec{
 				Provider: "aws",
 				Endpoint: "http://test",
 			},
@@ -2016,7 +2015,7 @@ func TestBucketReconciler_APIServerValidation_STS(t *testing.T) {
 		{
 			name:           "aws does not require a secret",
 			bucketProvider: "aws",
-			stsConfig: &bucketv1.BucketSTSSpec{
+			stsConfig: &sourcev1.BucketSTSSpec{
 				Provider:  "aws",
 				Endpoint:  "http://test",
 				SecretRef: &meta.LocalObjectReference{},
@@ -2026,7 +2025,7 @@ func TestBucketReconciler_APIServerValidation_STS(t *testing.T) {
 		{
 			name:           "aws does not require a cert secret",
 			bucketProvider: "aws",
-			stsConfig: &bucketv1.BucketSTSSpec{
+			stsConfig: &sourcev1.BucketSTSSpec{
 				Provider:      "aws",
 				Endpoint:      "http://test",
 				CertSecretRef: &meta.LocalObjectReference{},
@@ -2036,7 +2035,7 @@ func TestBucketReconciler_APIServerValidation_STS(t *testing.T) {
 		{
 			name:           "ldap may use a secret",
 			bucketProvider: "generic",
-			stsConfig: &bucketv1.BucketSTSSpec{
+			stsConfig: &sourcev1.BucketSTSSpec{
 				Provider:  "ldap",
 				Endpoint:  "http://test",
 				SecretRef: &meta.LocalObjectReference{},
@@ -2045,7 +2044,7 @@ func TestBucketReconciler_APIServerValidation_STS(t *testing.T) {
 		{
 			name:           "ldap may use a cert secret",
 			bucketProvider: "generic",
-			stsConfig: &bucketv1.BucketSTSSpec{
+			stsConfig: &sourcev1.BucketSTSSpec{
 				Provider:      "ldap",
 				Endpoint:      "http://test",
 				CertSecretRef: &meta.LocalObjectReference{},
@@ -2054,7 +2053,7 @@ func TestBucketReconciler_APIServerValidation_STS(t *testing.T) {
 		{
 			name:           "ldap may not use a secret or cert secret",
 			bucketProvider: "generic",
-			stsConfig: &bucketv1.BucketSTSSpec{
+			stsConfig: &sourcev1.BucketSTSSpec{
 				Provider: "ldap",
 				Endpoint: "http://test",
 			},
@@ -2065,12 +2064,12 @@ func TestBucketReconciler_APIServerValidation_STS(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
 
-			obj := &bucketv1.Bucket{
+			obj := &sourcev1.Bucket{
 				ObjectMeta: metav1.ObjectMeta{
 					GenerateName: "bucket-reconcile-",
 					Namespace:    "default",
 				},
-				Spec: bucketv1.BucketSpec{
+				Spec: sourcev1.BucketSpec{
 					Provider:   tt.bucketProvider,
 					BucketName: "test",
 					Endpoint:   "test",
