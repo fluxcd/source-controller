@@ -275,22 +275,6 @@ bool
 Bucket.</p>
 </td>
 </tr>
-<tr>
-<td>
-<code>accessFrom</code><br>
-<em>
-<a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/acl#AccessFrom">
-github.com/fluxcd/pkg/apis/acl.AccessFrom
-</a>
-</em>
-</td>
-<td>
-<em>(Optional)</em>
-<p>AccessFrom specifies an Access Control List for allowing cross-namespace
-references to this object.
-NOTE: Not implemented, provisional as of <a href="https://github.com/fluxcd/flux2/pull/2092">https://github.com/fluxcd/flux2/pull/2092</a></p>
-</td>
-</tr>
 </table>
 </td>
 </tr>
@@ -1419,22 +1403,6 @@ bool
 <em>(Optional)</em>
 <p>Suspend tells the controller to suspend the reconciliation of this
 Bucket.</p>
-</td>
-</tr>
-<tr>
-<td>
-<code>accessFrom</code><br>
-<em>
-<a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/acl#AccessFrom">
-github.com/fluxcd/pkg/apis/acl.AccessFrom
-</a>
-</em>
-</td>
-<td>
-<em>(Optional)</em>
-<p>AccessFrom specifies an Access Control List for allowing cross-namespace
-references to this object.
-NOTE: Not implemented, provisional as of <a href="https://github.com/fluxcd/flux2/pull/2092">https://github.com/fluxcd/flux2/pull/2092</a></p>
 </td>
 </tr>
 </tbody>

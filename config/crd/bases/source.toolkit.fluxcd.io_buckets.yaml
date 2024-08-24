@@ -54,34 +54,6 @@ spec:
               BucketSpec specifies the required configuration to produce an Artifact for
               an object storage bucket.
             properties:
-              accessFrom:
-                description: |-
-                  AccessFrom specifies an Access Control List for allowing cross-namespace
-                  references to this object.
-                  NOTE: Not implemented, provisional as of https://github.com/fluxcd/flux2/pull/2092
-                properties:
-                  namespaceSelectors:
-                    description: |-
-                      NamespaceSelectors is the list of namespace selectors to which this ACL applies.
-                      Items in this list are evaluated using a logical OR operation.
-                    items:
-                      description: |-
-                        NamespaceSelector selects the namespaces to which this ACL applies.
-                        An empty map of MatchLabels matches all namespaces in a cluster.
-                      properties:
-                        matchLabels:
-                          additionalProperties:
-                            type: string
-                          description: |-
-                            MatchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels
-                            map is equivalent to an element of matchExpressions, whose key field is "key", the
-                            operator is "In", and the values array contains only "value". The requirements are ANDed.
-                          type: object
-                      type: object
-                    type: array
-                required:
-                - namespaceSelectors
-                type: object
               bucketName:
                 description: BucketName is the name of the object storage bucket.
                 type: string
