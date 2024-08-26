@@ -52,7 +52,6 @@ import (
 	rreconcile "github.com/fluxcd/pkg/runtime/reconcile"
 	"github.com/fluxcd/pkg/sourceignore"
 
-	bucketv1 "github.com/fluxcd/source-controller/api/v1"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	intdigest "github.com/fluxcd/source-controller/internal/digest"
 	serror "github.com/fluxcd/source-controller/internal/error"
@@ -159,7 +158,7 @@ type BucketProvider interface {
 // bucketReconcileFunc is the function type for all the v1beta2.Bucket
 // (sub)reconcile functions. The type implementations are grouped and
 // executed serially to perform the complete reconcile of the object.
-type bucketReconcileFunc func(ctx context.Context, sp *patch.SerialPatcher, obj *bucketv1.Bucket, index *index.Digester, dir string) (sreconcile.Result, error)
+type bucketReconcileFunc func(ctx context.Context, sp *patch.SerialPatcher, obj *sourcev1.Bucket, index *index.Digester, dir string) (sreconcile.Result, error)
 
 func (r *BucketReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return r.SetupWithManagerAndOptions(mgr, BucketReconcilerOptions{})
@@ -169,7 +168,7 @@ func (r *BucketReconciler) SetupWithManagerAndOptions(mgr ctrl.Manager, opts Buc
 	r.patchOptions = getPatchOptions(bucketReadyCondition.Owned, r.ControllerName)
 
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&bucketv1.Bucket{}).
+		For(&sourcev1.Bucket{}).
 		WithEventFilter(predicate.Or(predicate.GenerationChangedPredicate{}, predicates.ReconcileRequestedPredicate{})).
 		WithOptions(controller.Options{
 			RateLimiter: opts.RateLimiter,
@@ -182,7 +181,7 @@ func (r *BucketReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 	log := ctrl.LoggerFrom(ctx)
 
 	// Fetch the Bucket
-	obj := &bucketv1.Bucket{}
+	obj := &sourcev1.Bucket{}
 	if err := r.Get(ctx, req.NamespacedName, obj); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
@@ -255,7 +254,7 @@ func (r *BucketReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 // reconcile iterates through the bucketReconcileFunc tasks for the
 // object. It returns early on the first call that returns
 // reconcile.ResultRequeue, or produces an error.
-func (r *BucketReconciler) reconcile(ctx context.Context, sp *patch.SerialPatcher, obj *bucketv1.Bucket, reconcilers []bucketReconcileFunc) (sreconcile.Result, error) {
+func (r *BucketReconciler) reconcile(ctx context.Context, sp *patch.SerialPatcher, obj *sourcev1.Bucket, reconcilers []bucketReconcileFunc) (sreconcile.Result, error) {
 	oldObj := obj.DeepCopy()
 
 	rreconcile.ProgressiveStatus(false, obj, meta.ProgressingReason, "reconciliation in progress")
@@ -326,7 +325,7 @@ func (r *BucketReconciler) reconcile(ctx context.Context, sp *patch.SerialPatche
 }
 
 // notify emits notification related to the reconciliation.
-func (r *BucketReconciler) notify(ctx context.Context, oldObj, newObj *bucketv1.Bucket, index *index.Digester, res sreconcile.Result, resErr error) {
+func (r *BucketReconciler) notify(ctx context.Context, oldObj, newObj *sourcev1.Bucket, index *index.Digester, res sreconcile.Result, resErr error) {
 	// Notify successful reconciliation for new artifact and recovery from any
 	// failure.
 	if resErr == nil && res == sreconcile.ResultSuccess && newObj.Status.Artifact != nil {
@@ -364,7 +363,7 @@ func (r *BucketReconciler) notify(ctx context.Context, oldObj, newObj *bucketv1.
 // condition is added.
 // The hostname of any URL in the Status of the object are updated, to ensure
 // they match the Storage server hostname of current runtime.
-func (r *BucketReconciler) reconcileStorage(ctx context.Context, sp *patch.SerialPatcher, obj *bucketv1.Bucket, _ *index.Digester, _ string) (sreconcile.Result, error) {
+func (r *BucketReconciler) reconcileStorage(ctx context.Context, sp *patch.SerialPatcher, obj *sourcev1.Bucket, _ *index.Digester, _ string) (sreconcile.Result, error) {
 	// Garbage collect previous advertised artifact(s) from storage
 	_ = r.garbageCollect(ctx, obj)
 
@@ -423,7 +422,7 @@ func (r *BucketReconciler) reconcileStorage(ctx context.Context, sp *patch.Seria
 // When a SecretRef is defined, it attempts to fetch the Secret before calling
 // the provider. If this fails, it records v1beta2.FetchFailedCondition=True on
 // the object and returns early.
-func (r *BucketReconciler) reconcileSource(ctx context.Context, sp *patch.SerialPatcher, obj *bucketv1.Bucket, index *index.Digester, dir string) (sreconcile.Result, error) {
+func (r *BucketReconciler) reconcileSource(ctx context.Context, sp *patch.SerialPatcher, obj *sourcev1.Bucket, index *index.Digester, dir string) (sreconcile.Result, error) {
 	secret, err := r.getSecret(ctx, obj.Spec.SecretRef, obj.GetNamespace())
 	if err != nil {
 		e := serror.NewGeneric(err, sourcev1.AuthenticationFailedReason)
@@ -441,7 +440,7 @@ func (r *BucketReconciler) reconcileSource(ctx context.Context, sp *patch.Serial
 	// Construct provider client
 	var provider BucketProvider
 	switch obj.Spec.Provider {
-	case bucketv1.BucketProviderGoogle:
+	case sourcev1.BucketProviderGoogle:
 		if err = gcp.ValidateSecret(secret); err != nil {
 			e := serror.NewGeneric(err, sourcev1.AuthenticationFailedReason)
 			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
@@ -459,7 +458,7 @@ func (r *BucketReconciler) reconcileSource(ctx context.Context, sp *patch.Serial
 			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
 			return sreconcile.ResultEmpty, e
 		}
-	case bucketv1.BucketProviderAzure:
+	case sourcev1.BucketProviderAzure:
 		if err = azure.ValidateSecret(secret); err != nil {
 			e := serror.NewGeneric(err, sourcev1.AuthenticationFailedReason)
 			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
@@ -545,7 +544,7 @@ func (r *BucketReconciler) reconcileSource(ctx context.Context, sp *patch.Serial
 
 	// Fetch etag index
 	if err = fetchEtagIndex(ctx, provider, obj, index, dir); err != nil {
-		e := serror.NewGeneric(err, bucketv1.BucketOperationFailedReason)
+		e := serror.NewGeneric(err, sourcev1.BucketOperationFailedReason)
 		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
 		return sreconcile.ResultEmpty, e
 	}
@@ -577,7 +576,7 @@ func (r *BucketReconciler) reconcileSource(ctx context.Context, sp *patch.Serial
 		}()
 
 		if err = fetchIndexFiles(ctx, provider, obj, index, dir); err != nil {
-			e := serror.NewGeneric(err, bucketv1.BucketOperationFailedReason)
+			e := serror.NewGeneric(err, sourcev1.BucketOperationFailedReason)
 			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
 			return sreconcile.ResultEmpty, e
 		}
@@ -596,7 +595,7 @@ func (r *BucketReconciler) reconcileSource(ctx context.Context, sp *patch.Serial
 // early.
 // On a successful archive, the Artifact in the Status of the object is set,
 // and the symlink in the Storage is updated to its path.
-func (r *BucketReconciler) reconcileArtifact(ctx context.Context, sp *patch.SerialPatcher, obj *bucketv1.Bucket, index *index.Digester, dir string) (sreconcile.Result, error) {
+func (r *BucketReconciler) reconcileArtifact(ctx context.Context, sp *patch.SerialPatcher, obj *sourcev1.Bucket, index *index.Digester, dir string) (sreconcile.Result, error) {
 	// Calculate revision
 	revision := index.Digest(intdigest.Canonical)
 
@@ -689,7 +688,7 @@ func (r *BucketReconciler) reconcileArtifact(ctx context.Context, sp *patch.Seri
 // reconcileDelete handles the deletion of the object.
 // It first garbage collects all Artifacts for the object from the Storage.
 // Removing the finalizer from the object if successful.
-func (r *BucketReconciler) reconcileDelete(ctx context.Context, obj *bucketv1.Bucket) (sreconcile.Result, error) {
+func (r *BucketReconciler) reconcileDelete(ctx context.Context, obj *sourcev1.Bucket) (sreconcile.Result, error) {
 	// Garbage collect the resource's artifacts
 	if err := r.garbageCollect(ctx, obj); err != nil {
 		// Return the error so we retry the failed garbage collection
@@ -708,7 +707,7 @@ func (r *BucketReconciler) reconcileDelete(ctx context.Context, obj *bucketv1.Bu
 // It removes all but the current Artifact from the Storage, unless the
 // deletion timestamp on the object is set. Which will result in the
 // removal of all Artifacts for the objects.
-func (r *BucketReconciler) garbageCollect(ctx context.Context, obj *bucketv1.Bucket) error {
+func (r *BucketReconciler) garbageCollect(ctx context.Context, obj *sourcev1.Bucket) error {
 	if !obj.DeletionTimestamp.IsZero() {
 		if deleted, err := r.Storage.RemoveAll(r.Storage.NewArtifactFor(obj.Kind, obj.GetObjectMeta(), "", "*")); err != nil {
 			return serror.NewGeneric(
@@ -776,7 +775,7 @@ func (r *BucketReconciler) getTLSConfig(ctx context.Context,
 
 // getProxyURL attempts to fetch a proxy URL from the object's proxy secret
 // reference.
-func (r *BucketReconciler) getProxyURL(ctx context.Context, obj *bucketv1.Bucket) (*url.URL, error) {
+func (r *BucketReconciler) getProxyURL(ctx context.Context, obj *sourcev1.Bucket) (*url.URL, error) {
 	namespace := obj.GetNamespace()
 	proxySecret, err := r.getSecret(ctx, obj.Spec.ProxySecretRef, namespace)
 	if err != nil || proxySecret == nil {
@@ -802,7 +801,7 @@ func (r *BucketReconciler) getProxyURL(ctx context.Context, obj *bucketv1.Bucket
 
 // getSTSSecret attempts to fetch the secret from the object's STS secret
 // reference.
-func (r *BucketReconciler) getSTSSecret(ctx context.Context, obj *bucketv1.Bucket) (*corev1.Secret, error) {
+func (r *BucketReconciler) getSTSSecret(ctx context.Context, obj *sourcev1.Bucket) (*corev1.Secret, error) {
 	if obj.Spec.STS == nil {
 		return nil, nil
 	}
@@ -811,7 +810,7 @@ func (r *BucketReconciler) getSTSSecret(ctx context.Context, obj *bucketv1.Bucke
 
 // getSTSTLSConfig attempts to fetch the certificate secret from the object's
 // STS configuration.
-func (r *BucketReconciler) getSTSTLSConfig(ctx context.Context, obj *bucketv1.Bucket) (*stdtls.Config, error) {
+func (r *BucketReconciler) getSTSTLSConfig(ctx context.Context, obj *sourcev1.Bucket) (*stdtls.Config, error) {
 	if obj.Spec.STS == nil {
 		return nil, nil
 	}
@@ -848,7 +847,7 @@ func (r *BucketReconciler) annotatedEventLogf(ctx context.Context,
 // bucket using the given provider, while filtering them using .sourceignore
 // rules. After fetching an object, the etag value in the index is updated to
 // the current value to ensure accuracy.
-func fetchEtagIndex(ctx context.Context, provider BucketProvider, obj *bucketv1.Bucket, index *index.Digester, tempDir string) error {
+func fetchEtagIndex(ctx context.Context, provider BucketProvider, obj *sourcev1.Bucket, index *index.Digester, tempDir string) error {
 	ctxTimeout, cancel := context.WithTimeout(ctx, obj.Spec.Timeout.Duration)
 	defer cancel()
 
@@ -902,7 +901,7 @@ func fetchEtagIndex(ctx context.Context, provider BucketProvider, obj *bucketv1.
 // using the given provider, and stores them into tempDir. It downloads in
 // parallel, but limited to the maxConcurrentBucketFetches.
 // Given an index is provided, the bucket is assumed to exist.
-func fetchIndexFiles(ctx context.Context, provider BucketProvider, obj *bucketv1.Bucket, index *index.Digester, tempDir string) error {
+func fetchIndexFiles(ctx context.Context, provider BucketProvider, obj *sourcev1.Bucket, index *index.Digester, tempDir string) error {
 	ctxTimeout, cancel := context.WithTimeout(ctx, obj.Spec.Timeout.Duration)
 	defer cancel()
 

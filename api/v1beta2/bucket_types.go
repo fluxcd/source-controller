@@ -34,17 +34,17 @@ const (
 
 const (
 	// BucketProviderGeneric for any S3 API compatible storage Bucket.
-	BucketProviderGeneric string = "generic"
+	BucketProviderGeneric string = apiv1.BucketProviderGeneric
 	// BucketProviderAmazon for an AWS S3 object storage Bucket.
 	// Provides support for retrieving credentials from the AWS EC2 service.
-	BucketProviderAmazon string = "aws"
+	BucketProviderAmazon string = apiv1.BucketProviderAmazon
 	// BucketProviderGoogle for a Google Cloud Storage Bucket.
 	// Provides support for authentication using a workload identity.
-	BucketProviderGoogle string = "gcp"
+	BucketProviderGoogle string = apiv1.BucketProviderGoogle
 	// BucketProviderAzure for an Azure Blob Storage Bucket.
 	// Provides support for authentication using a Service Principal,
 	// Managed Identity or Shared Key.
-	BucketProviderAzure string = "azure"
+	BucketProviderAzure string = apiv1.BucketProviderAzure
 
 	// GenericBucketProvider for any S3 API compatible storage Bucket.
 	//
@@ -53,7 +53,7 @@ const (
 	// AmazonBucketProvider for an AWS S3 object storage Bucket.
 	// Provides support for retrieving credentials from the AWS EC2 service.
 	//
-	// Deprecated: use v1.BucketProviderAmazon.
+	// Deprecated: use BucketProviderAmazon.
 	AmazonBucketProvider string = apiv1.BucketProviderAmazon
 	// GoogleBucketProvider for a Google Cloud Storage Bucket.
 	// Provides support for authentication using a workload identity.
