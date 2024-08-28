@@ -39,7 +39,7 @@ import (
 
 	"github.com/fluxcd/pkg/masktoken"
 
-	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
+	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 )
 
 var (

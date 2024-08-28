@@ -37,7 +37,7 @@ import (
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
 
-	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
+	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	testlistener "github.com/fluxcd/source-controller/tests/listener"
 	testproxy "github.com/fluxcd/source-controller/tests/proxy"
 )

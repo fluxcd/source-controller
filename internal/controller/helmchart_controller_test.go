@@ -1855,10 +1855,10 @@ func TestHelmChartReconciler_getSource(t *testing.T) {
 				Namespace: "foo",
 			},
 		},
-		&sourcev1beta2.Bucket{
+		&sourcev1.Bucket{
 			TypeMeta: metav1.TypeMeta{
-				Kind:       sourcev1beta2.BucketKind,
-				APIVersion: sourcev1beta2.GroupVersion.String(),
+				Kind:       sourcev1.BucketKind,
+				APIVersion: sourcev1.GroupVersion.String(),
 			},
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "bucket",

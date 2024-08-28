@@ -8,6 +8,7 @@ This is the v1 API specification for defining the desired state sources of Kuber
   + [GitRepository](gitrepositories.md)
   + [HelmRepository](helmrepositories.md)
   + [HelmChart](helmcharts.md)
+  + [Bucket](buckets.md)
 
 ## Implementation
 

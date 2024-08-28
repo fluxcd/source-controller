@@ -247,7 +247,7 @@ func main() {
 	}).SetupWithManagerAndOptions(mgr, controller.BucketReconcilerOptions{
 		RateLimiter: helper.GetRateLimiter(rateLimiterOptions),
 	}); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", v1beta2.BucketKind)
+		setupLog.Error(err, "unable to create controller", "controller", v1.BucketKind)
 		os.Exit(1)
 	}
 
@@ -351,7 +351,7 @@ func mustSetupManager(metricsAddr, healthAddr string, maxConcurrent int,
 				&v1.GitRepository{}:      {Label: watchSelector},
 				&v1.HelmRepository{}:     {Label: watchSelector},
 				&v1.HelmChart{}:          {Label: watchSelector},
-				&v1beta2.Bucket{}:        {Label: watchSelector},
+				&v1.Bucket{}:             {Label: watchSelector},
 				&v1beta2.OCIRepository{}: {Label: watchSelector},
 			},
 		},
