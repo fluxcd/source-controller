@@ -1746,12 +1746,12 @@ func TestOCIRepository_reconcileSource_verifyOCISourceTrustPolicyNotation(t *tes
 			usePolicyJson: true,
 			policyJson:    "{}",
 			wantErr:       true,
-			wantErrMsg:    "trust policy document is missing or has empty version, it must be specified",
+			wantErrMsg:    "trust policy document has empty version",
 			want:          sreconcile.ResultEmpty,
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new revision '<revision>' for '<url>'"),
 				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new revision '<revision>' for '<url>'"),
-				*conditions.FalseCondition(sourcev1.SourceVerifiedCondition, sourcev1.VerificationError, "trust policy document is missing or has empty version, it must be specified"),
+				*conditions.FalseCondition(sourcev1.SourceVerifiedCondition, sourcev1.VerificationError, "trust policy document has empty version, version must be specified"),
 			},
 		},
 		{
