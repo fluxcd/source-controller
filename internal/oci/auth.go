@@ -19,6 +19,7 @@ package oci
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"strings"
 
 	"github.com/fluxcd/pkg/oci/auth/login"
@@ -40,7 +41,7 @@ func (a Anonymous) Resolve(_ authn.Resource) (authn.Authenticator, error) {
 }
 
 // OIDCAuth generates the OIDC credential authenticator based on the specified cloud provider.
-func OIDCAuth(ctx context.Context, url, provider string) (authn.Authenticator, error) {
+func OIDCAuth(ctx context.Context, url, provider string, proxyURL *url.URL) (authn.Authenticator, error) {
 	u := strings.TrimPrefix(url, sourcev1.OCIRepositoryPrefix)
 	ref, err := name.ParseReference(u)
 	if err != nil {
@@ -57,5 +58,5 @@ func OIDCAuth(ctx context.Context, url, provider string) (authn.Authenticator, e
 		opts.GcpAutoLogin = true
 	}
 
-	return login.NewManager().Login(ctx, u, ref, opts)
+	return login.NewManager(login.WithProxyURL(proxyURL)).Login(ctx, u, ref, opts)
 }

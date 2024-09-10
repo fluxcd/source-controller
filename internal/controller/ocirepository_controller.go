@@ -354,9 +354,19 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 		return sreconcile.ResultEmpty, e
 	}
 
+	proxyURL, err := r.getProxyURL(ctx, obj)
+	if err != nil {
+		e := serror.NewGeneric(
+			fmt.Errorf("failed to get proxy address: %w", err),
+			sourcev1.AuthenticationFailedReason,
+		)
+		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
+		return sreconcile.ResultEmpty, e
+	}
+
 	if _, ok := keychain.(soci.Anonymous); obj.Spec.Provider != ociv1.GenericOCIProvider && ok {
 		var authErr error
-		auth, authErr = soci.OIDCAuth(ctxTimeout, obj.Spec.URL, obj.Spec.Provider)
+		auth, authErr = soci.OIDCAuth(ctxTimeout, obj.Spec.URL, obj.Spec.Provider, proxyURL)
 		if authErr != nil && !errors.Is(authErr, oci.ErrUnconfiguredProvider) {
 			e := serror.NewGeneric(
 				fmt.Errorf("failed to get credential from %s: %w", obj.Spec.Provider, authErr),
@@ -368,7 +378,7 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 	}
 
 	// Generate the transport for remote operations
-	transport, err := r.transport(ctx, obj)
+	transport, err := r.transport(ctx, obj, proxyURL)
 	if err != nil {
 		e := serror.NewGeneric(
 			fmt.Errorf("failed to generate transport for '%s': %w", obj.Spec.URL, err),
@@ -927,7 +937,7 @@ func (r *OCIRepositoryReconciler) keychain(ctx context.Context, obj *ociv1.OCIRe
 // the returned transport will include the TLS client and/or CA certificates.
 // If the insecure flag is set, the transport will skip the verification of the server's certificate.
 // Additionally, if a proxy is specified, transport will use it.
-func (r *OCIRepositoryReconciler) transport(ctx context.Context, obj *ociv1.OCIRepository) (*http.Transport, error) {
+func (r *OCIRepositoryReconciler) transport(ctx context.Context, obj *ociv1.OCIRepository, proxyURL *url.URL) (*http.Transport, error) {
 	transport := remote.DefaultTransport.(*http.Transport).Clone()
 
 	tlsConfig, err := r.getTLSConfig(ctx, obj)
@@ -938,10 +948,6 @@ func (r *OCIRepositoryReconciler) transport(ctx context.Context, obj *ociv1.OCIR
 		transport.TLSClientConfig = tlsConfig
 	}
 
-	proxyURL, err := r.getProxyURL(ctx, obj)
-	if err != nil {
-		return nil, err
-	}
 	if proxyURL != nil {
 		transport.Proxy = http.ProxyURL(proxyURL)
 	}
