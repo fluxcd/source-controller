@@ -137,7 +137,7 @@ func GetClientOpts(ctx context.Context, c client.Client, obj *sourcev1.HelmRepos
 			}
 		}
 	} else if obj.Spec.Provider != sourcev1beta2.GenericOCIProvider && obj.Spec.Type == sourcev1.HelmRepositoryTypeOCI && ociRepo {
-		authenticator, authErr := soci.OIDCAuth(ctx, obj.Spec.URL, obj.Spec.Provider)
+		authenticator, authErr := soci.OIDCAuth(ctx, obj.Spec.URL, obj.Spec.Provider, nil)
 		if authErr != nil && !errors.Is(authErr, oci.ErrUnconfiguredProvider) {
 			return nil, "", fmt.Errorf("failed to get credential from '%s': %w", obj.Spec.Provider, authErr)
 		}
