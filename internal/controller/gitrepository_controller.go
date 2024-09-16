@@ -27,6 +27,7 @@ import (
 	"time"
 
 	securejoin "github.com/cyphar/filepath-securejoin"
+	"github.com/fluxcd/pkg/auth/azure"
 	"github.com/fluxcd/pkg/runtime/logger"
 	"github.com/go-git/go-git/v5/plumbing/transport"
 	corev1 "k8s.io/api/core/v1"
@@ -647,6 +648,19 @@ func (r *GitRepositoryReconciler) getAuthOpts(ctx context.Context, obj *sourcev1
 	if err != nil {
 		return nil, err
 	}
+
+	// Configure provider authentication if specified in spec
+	if obj.Spec.Provider != "" && obj.Spec.Provider != sourcev1.GitProviderGeneric {
+		if obj.Spec.Provider == sourcev1.GitProviderAzure {
+			authOpts.ProviderOpts = &git.ProviderOptions{
+				Name: obj.Spec.Provider,
+				AzureOpts: []azure.OptFunc{
+					azure.WithAzureDevOpsScope(),
+				},
+			}
+		}
+	}
+
 	return authOpts, nil
 }
 
