@@ -2,6 +2,91 @@
 
 All notable changes to this project are documented in this file.
 
+## 1.4.0
+
+**Release date:** 2024-09-25
+
+This minor release promotes the Bucket API to GA, and comes with new features,
+improvements and bug fixes.
+
+### Bucket
+
+The `Bucket` API has been promoted from `v1beta2` to `v1` (GA).
+The `v1` API is backwards compatible with `v1beta2`.
+
+Bucket API now supports proxy through the field `.spec.proxySecretRef` and custom TLS client certificate and CA through the field `.spec.certSecretRef`.
+
+Bucket API now also supports specifying a custom STS configuration through the field `.spec.sts`. This is currently only supported for the providers `generic` and `aws`. When specifying a custom STS configuration one must specify which STS provider to use. For the `generic` bucket provider we support the `ldap` STS provider, and for the `aws` bucket provider we support the `aws` STS provider. For the `aws` STS provider, one may use the default main STS endpoint, or the regional STS endpoints, or even an interface endpoint.
+
+### OCIRepository
+
+OCIRepository API now supports proxy through the field `.spec.proxySecretRef`.
+
+**Warning**: Proxy is not supported for cosign keyless verification.
+
+### GitRepository
+
+GitRepository API now supports OIDC authentication for Azure DevOps repositories through the field `.spec.provider` using the value `azure`. See the docs for details [here](https://fluxcd.io/flux/components/source/gitrepositories/#provider).
+
+In addition, the Kubernetes dependencies have been updated to v1.31.1, Helm has
+been updated to v3.16.1 and various other controller dependencies have been
+updated to their latest version. The controller is now built with Go 1.23.
+
+Fixes:
+- helm: Use the default transport pool to preserve proxy settings
+  [#1490](https://github.com/fluxcd/source-controller/pull/1490)
+- Fix incorrect use of format strings with the conditions package.
+  [#1529](https://github.com/fluxcd/source-controller/pull/1529)
+- Fix HelmChart local dependency resolution for name-based path
+  [#1539](https://github.com/fluxcd/source-controller/pull/1539)
+- Fix Helm index validation for Artifactory
+  [#1516](https://github.com/fluxcd/source-controller/pull/1516)
+
+Improvements:
+- Promote Bucket API to v1
+  [#1592](https://github.com/fluxcd/source-controller/pull/1592)
+- Add .spec.certSecretRef to Bucket API
+  [#1475](https://github.com/fluxcd/source-controller/pull/1475)
+- Run ARM64 tests on GitHub runners
+  [#1512](https://github.com/fluxcd/source-controller/pull/1512)
+- Add support for .spec.proxySecretRef for generic provider of Bucket API
+  [#1500](https://github.com/fluxcd/source-controller/pull/1500)
+- Improve invalid proxy error message for Bucket API
+  [#1550](https://github.com/fluxcd/source-controller/pull/1550)
+- Add support for AWS STS endpoint in the Bucket API
+  [#1552](https://github.com/fluxcd/source-controller/pull/1552)
+- Add proxy support for GCS buckets
+  [#1565](https://github.com/fluxcd/source-controller/pull/1565)
+- azure-blob: Fix VisitObjects() in integration test
+  [#1574](https://github.com/fluxcd/source-controller/pull/1574)
+- Add proxy support for Azure buckets
+  [#1567](https://github.com/fluxcd/source-controller/pull/1567)
+- Add proxy support for AWS S3 buckets
+  [#1568](https://github.com/fluxcd/source-controller/pull/1568)
+- Add proxy support for OCIRepository API
+  [#1536](https://github.com/fluxcd/source-controller/pull/1536)
+- Add LDAP provider for Bucket STS API
+  [#1585](https://github.com/fluxcd/source-controller/pull/1585)
+- Introduce Bucket provider constants with the common part as a prefix
+  [#1589](https://github.com/fluxcd/source-controller/pull/1589)
+- OCIRepository: Configure proxy for OIDC auth
+  [#1607](https://github.com/fluxcd/source-controller/pull/1607)
+- [RFC-0007] Enable Azure OIDC for Azure DevOps repositories
+  [#1591](https://github.com/fluxcd/source-controller/pull/1591)
+- Build with Go 1.23
+  [#1582](https://github.com/fluxcd/source-controller/pull/1582)
+- Various dependency updates
+  [#1507](https://github.com/fluxcd/source-controller/pull/1507)
+  [#1576](https://github.com/fluxcd/source-controller/pull/1576)
+  [#1578](https://github.com/fluxcd/source-controller/pull/1578)
+  [#1579](https://github.com/fluxcd/source-controller/pull/1579)
+  [#1583](https://github.com/fluxcd/source-controller/pull/1583)
+  [#1588](https://github.com/fluxcd/source-controller/pull/1588)
+  [#1603](https://github.com/fluxcd/source-controller/pull/1603)
+  [#1610](https://github.com/fluxcd/source-controller/pull/1610)
+  [#1614](https://github.com/fluxcd/source-controller/pull/1614)
+  [#1618](https://github.com/fluxcd/source-controller/pull/1618)
+
 ## 1.3.0
 
 **Release date:** 2024-05-03
