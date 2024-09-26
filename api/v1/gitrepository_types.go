@@ -91,7 +91,6 @@ type GitRepositorySpec struct {
 	// Provider used for authentication, can be 'azure', 'generic'.
 	// When not specified, defaults to 'generic'.
 	// +kubebuilder:validation:Enum=generic;azure
-	// +kubebuilder:default:=generic
 	// +optional
 	Provider string `json:"provider,omitempty"`
 
@@ -301,6 +300,14 @@ func (in GitRepository) GetRequeueAfter() time.Duration {
 // the status sub-resource.
 func (in *GitRepository) GetArtifact() *Artifact {
 	return in.Status.Artifact
+}
+
+// GetProvider returns the Git authentication provider.
+func (v *GitRepository) GetProvider() string {
+	if v.Spec.Provider == "" {
+		return GitProviderGeneric
+	}
+	return v.Spec.Provider
 }
 
 // GetMode returns the declared GitVerificationMode, or a ModeGitHEAD default.
