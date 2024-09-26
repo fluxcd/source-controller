@@ -2,6 +2,19 @@
 
 All notable changes to this project are documented in this file.
 
+## 1.4.1
+
+**Release date:** 2024-09-26
+
+This patch release comes with a fix to the `GitRepository` API to keep it
+backwards compatible by removing the default value for `.spec.provider` field
+when not set in the API. The controller will internally consider an empty value
+for the provider as the `generic` provider.
+
+Fix:
+- GitRepo: Remove provider default value from API
+  [#1626](https://github.com/fluxcd/source-controller/pull/1626)
+
 ## 1.4.0
 
 **Release date:** 2024-09-25
