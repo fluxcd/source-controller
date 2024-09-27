@@ -9,7 +9,7 @@ replace github.com/fluxcd/source-controller/api => ./api
 replace github.com/opencontainers/go-digest => github.com/opencontainers/go-digest v1.0.1-0.20220411205349-bde1400a84be
 
 require (
-	cloud.google.com/go/compute/metadata v0.5.1
+	cloud.google.com/go/compute/metadata v0.5.2
 	cloud.google.com/go/storage v1.43.0
 	github.com/AdaLogics/go-fuzz-headers v0.0.0-20230811130428-ced1acdcaa24
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.14.0
@@ -64,7 +64,7 @@ require (
 	golang.org/x/crypto v0.27.0
 	golang.org/x/oauth2 v0.23.0
 	golang.org/x/sync v0.8.0
-	google.golang.org/api v0.198.0
+	google.golang.org/api v0.199.0
 	gotest.tools v2.2.0+incompatible
 	helm.sh/helm/v3 v3.16.1
 	k8s.io/api v0.31.1
@@ -78,7 +78,7 @@ require (
 
 require (
 	cloud.google.com/go v0.115.1 // indirect
-	cloud.google.com/go/auth v0.9.4 // indirect
+	cloud.google.com/go/auth v0.9.5 // indirect
 	cloud.google.com/go/auth/oauth2adapt v0.2.4 // indirect
 	cloud.google.com/go/iam v1.2.0 // indirect
 	dario.cat/mergo v1.0.1 // indirect
@@ -383,7 +383,7 @@ require (
 	google.golang.org/genproto v0.0.0-20240903143218-8af14fe29dc1 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20240827150818-7e3bb234dfed // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20240903143218-8af14fe29dc1 // indirect
-	google.golang.org/grpc v1.66.2 // indirect
+	google.golang.org/grpc v1.67.0 // indirect
 	google.golang.org/protobuf v1.34.2 // indirect
 	gopkg.in/evanphx/json-patch.v4 v4.12.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
