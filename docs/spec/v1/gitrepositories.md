@@ -221,6 +221,7 @@ Supported options are:
 
 - `generic`
 - `azure`
+- `github`
 
 When provider is not specified, it defaults to `generic` indicating that
 mechanisms using `spec.secretRef` are used for authentication. 
@@ -295,6 +296,64 @@ must follow this format:
 
 ```
 https://dev.azure.com/{your-organization}/{your-project}/_git/{your-repository}
+```
+#### GitHub
+
+The `github` provider can be used to authenticate to Git repositories using
+[GitHub Apps](https://docs.github.com/en/apps/overview).
+
+##### Pre-requisites
+
+- [Register](https://docs.github.com/en/apps/creating-github-apps/registering-a-github-app/registering-a-github-app)
+  the GitHub App with the necessary permissions and [generate a private
+  key](https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/managing-private-keys-for-github-apps)
+  for the app. 
+
+- [Install](https://docs.github.com/en/apps/using-github-apps/installing-your-own-github-app)
+  the app in the organization/account configuring access to the necessary
+  repositories.
+
+##### Configure GitHub App secret
+
+The GitHub App information is specified in `.spec.secretRef` in the format
+specified below:
+
+- Get the App ID from the app settings page at
+  `https://github.com/settings/apps/<app-name>`. 
+- Get the App Installation ID from the app installations page at
+`https://github.com/settings/installations`. Click the installed app, the URL
+will contain the installation ID
+`https://github.com/settings/installations/<installation-id>`. For
+organizations, the first part of the URL may be different, but it follows the
+same pattern.
+- The private key that was generated in the pre-requisites.
+- (Optional) GitHub Enterprise Server users can set the base URL to
+  `http(s)://HOSTNAME/api/v3`.
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: github-sa
+type: Opaque
+stringData:
+  githubAppID: "<app-id>"
+  githubAppInstallationID: "<app-installation-id>"
+  githubAppPrivateKey: |
+    -----BEGIN RSA PRIVATE KEY-----
+    ...
+    -----END RSA PRIVATE KEY-----
+  githubAppBaseURL: "<github-enterprise-api-url>" #optional, required only for GitHub Enterprise Server users
+```
+
+Alternatively, the Flux CLI can be used to automatically create the secret with
+the github app authentication information.
+
+```sh
+flux create secret githubapp ghapp-secret \
+    --app-id=1 \
+    --app-installation-id=3 \
+    --app-private-key=~/private-key.pem    
 ```
 
 ### Interval
