@@ -686,23 +686,35 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 func TestGitRepositoryReconciler_getAuthOpts_provider(t *testing.T) {
 	tests := []struct {
 		name                 string
+		url                  string
 		beforeFunc           func(obj *sourcev1.GitRepository)
 		wantProviderOptsName string
 	}{
 		{
 			name: "azure provider",
+			url:  "https://dev.azure.com/foo/bar/_git/baz",
 			beforeFunc: func(obj *sourcev1.GitRepository) {
 				obj.Spec.Provider = sourcev1.GitProviderAzure
 			},
 			wantProviderOptsName: sourcev1.GitProviderAzure,
 		},
 		{
+			name: "github provider",
+			url:  "https://github.com/org/repo.git",
+			beforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Spec.Provider = sourcev1.GitProviderGitHub
+			},
+			wantProviderOptsName: sourcev1.GitProviderGitHub,
+		},
+		{
 			name: "generic provider",
+			url:  "https://example.com/org/repo",
 			beforeFunc: func(obj *sourcev1.GitRepository) {
 				obj.Spec.Provider = sourcev1.GitProviderGeneric
 			},
 		},
 		{
+			url:  "https://example.com/org/repo",
 			name: "no provider",
 		},
 	}
@@ -712,7 +724,8 @@ func TestGitRepositoryReconciler_getAuthOpts_provider(t *testing.T) {
 			g := NewWithT(t)
 			obj := &sourcev1.GitRepository{}
 			r := &GitRepositoryReconciler{}
-			url, _ := url.Parse("https://dev.azure.com/foo/bar/_git/baz")
+			url, err := url.Parse(tt.url)
+			g.Expect(err).ToNot(HaveOccurred())
 
 			if tt.beforeFunc != nil {
 				tt.beforeFunc(obj)

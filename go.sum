@@ -202,6 +202,8 @@ github.com/blang/semver v3.5.1+incompatible h1:cQNTCjp13qL8KC3Nbxr/y2Bqb63oX6wdn
 github.com/blang/semver v3.5.1+incompatible/go.mod h1:kRBLl5iJ+tD4TcOOxsy/0fnwebNt5EWlYSAyrTnjyyk=
 github.com/blang/semver/v4 v4.0.0 h1:1PFHFE6yCCTv8C1TeyNNarDzntLi7wMI5i/pzqYIsAM=
 github.com/blang/semver/v4 v4.0.0/go.mod h1:IbckMUScFkM3pff0VJDNKRiT6TG/YpiHIM2yvyW5YoQ=
+github.com/bradleyfalzon/ghinstallation/v2 v2.11.0 h1:R9d0v+iobRHSaE4wKUnXFiZp53AL4ED5MzgEMwGTZag=
+github.com/bradleyfalzon/ghinstallation/v2 v2.11.0/go.mod h1:0LWKQwOHewXO/1acI6TtyE0Xc4ObDb2rFN7eHBAG71M=
 github.com/bshuster-repo/logrus-logstash-hook v1.0.0 h1:e+C0SB5R1pu//O4MQ3f9cFuPGoOVeF2fE4Og9otCc70=
 github.com/bshuster-repo/logrus-logstash-hook v1.0.0/go.mod h1:zsTqEiSzDgAa/8GZR7E1qaXrhYNDKBYy5/dWPTIflbk=
 github.com/bsm/ginkgo/v2 v2.7.0/go.mod h1:AiKlXPm7ItEHNc/2+OkrNG4E0ITzojb9/xWzvQ9XZ9w=
@@ -290,6 +292,12 @@ github.com/digitorus/timestamp v0.0.0-20231217203849-220c5c2851b7 h1:lxmTCgmHE1G
 github.com/digitorus/timestamp v0.0.0-20231217203849-220c5c2851b7/go.mod h1:GvWntX9qiTlOud0WkQ6ewFm0LPy5JUR1Xo0Ngbd1w6Y=
 github.com/dimchansky/utfbom v1.1.1 h1:vV6w1AhK4VMnhBno/TPVCoK9U/LP0PkLCS9tbxHdi/U=
 github.com/dimchansky/utfbom v1.1.1/go.mod h1:SxdoEBH5qIqFocHMyGOXVAybYJdr71b1Q/j0mACtrfE=
+github.com/dipti-pai/pkg/auth v0.0.0-20241112210126-09c286242cc8 h1:FlhPrNBTBXmrqkauOIEa2jyZD4lEzX6/dN6E8XxaJEE=
+github.com/dipti-pai/pkg/auth v0.0.0-20241112210126-09c286242cc8/go.mod h1:hBf1c8e7+5utvTIB38NDRpaciDIf9A63okkIEtH3zhA=
+github.com/dipti-pai/pkg/git v0.0.0-20241112210126-09c286242cc8 h1:XeByD9Qq8X0CmzKNnPtr0lSTSV//Yl0WfKs6i6Bz7QQ=
+github.com/dipti-pai/pkg/git v0.0.0-20241112210126-09c286242cc8/go.mod h1:LUbu8ljvEk+ACKSRUM3Jeb9dpME63+Qjn0mgbQS5xBI=
+github.com/dipti-pai/pkg/git/gogit v0.0.0-20241112210126-09c286242cc8 h1:ltsT6WuqvNudJtMClCVRwAVYWBb/uG5xCQJeaQQgtjs=
+github.com/dipti-pai/pkg/git/gogit v0.0.0-20241112210126-09c286242cc8/go.mod h1:olbXMpeNBlL2IL665+X9WpdIKDaVgUKuBbnBGbPN3K8=
 github.com/distribution/distribution/v3 v3.0.0-beta.1 h1:X+ELTxPuZ1Xe5MsD3kp2wfGUhc8I+MPfRis8dZ818Ic=
 github.com/distribution/distribution/v3 v3.0.0-beta.1/go.mod h1:O9O8uamhHzWWQVTjuQpyYUVm/ShPHPUDgvQMpHGVBDs=
 github.com/distribution/reference v0.6.0 h1:0IXCQ5g4/QMHHkarYzh5l+u8T3t73zM5QvfrDyIgxBk=
@@ -348,14 +356,8 @@ github.com/fluxcd/pkg/apis/event v0.10.1 h1:3PIAWOtEWblw7R2NUiEMFahRLs3cyYWXQpsM
 github.com/fluxcd/pkg/apis/event v0.10.1/go.mod h1:MuOoVHW27i0KOoEEerSOg49VdUy4etKc3thbQIeXAmg=
 github.com/fluxcd/pkg/apis/meta v1.6.1 h1:maLhcRJ3P/70ArLCY/LF/YovkxXbX+6sTWZwZQBeNq0=
 github.com/fluxcd/pkg/apis/meta v1.6.1/go.mod h1:YndB/gxgGZmKfqpAfFxyCDNFJFP0ikpeJzs66jwq280=
-github.com/fluxcd/pkg/auth v0.0.1 h1:3fMg1EdkQdY2Rv1qHbiPPWCBa27xsNeu09y9SuZk6Co=
-github.com/fluxcd/pkg/auth v0.0.1/go.mod h1:tdCkiB3/LBg7CcxX1fhVmM5ZjDIaOduK0XX88pBXie0=
 github.com/fluxcd/pkg/cache v0.0.4 h1:TM733caGoj58GFCOKQN3GajdSVmFx8yNx0HY6l5wV+M=
 github.com/fluxcd/pkg/cache v0.0.4/go.mod h1:jE7QdMvS9SZcdQaDhUYUm2/fV/KORA362iCNMLdH4pw=
-github.com/fluxcd/pkg/git v0.21.0 h1:5FfcKj9bDVz8KwoOQUOSJABLMeSdhvLBf7yctwwuMzc=
-github.com/fluxcd/pkg/git v0.21.0/go.mod h1:iCCmUCunoFLgntySJfIDxsHGYfS97ky990gEKIDZ9lo=
-github.com/fluxcd/pkg/git/gogit v0.21.0 h1:iR2kzW1XrcBDYuC8zVIAdC/2/aeXuRkZ9jupdd54E6I=
-github.com/fluxcd/pkg/git/gogit v0.21.0/go.mod h1:gyoSlEIqzsOiTwSL0iFuEiJat+W0uGgc+WEiCVC1xk8=
 github.com/fluxcd/pkg/gittestserver v0.13.1 h1:5rXF8ANlk6wtAsvqH7tI7gaO2zhMySftf7ALh0AhfU4=
 github.com/fluxcd/pkg/gittestserver v0.13.1/go.mod h1:nPO7ibtBRgLWFHTSvxI63zZubJXU82cVMH6nViVnHsY=
 github.com/fluxcd/pkg/helmtestserver v0.20.0 h1:eNeon7D92DYkTnBShGBS1l5blpjW7IQ21U0gTpArbiE=
@@ -526,6 +528,8 @@ github.com/google/go-containerregistry/pkg/authn/kubernetes v0.0.0-2023051620574
 github.com/google/go-containerregistry/pkg/authn/kubernetes v0.0.0-20230516205744-dbecb1de8cfa/go.mod h1:KdL98/Va8Dy1irB6lTxIRIQ7bQj4lbrlvqUzKEQ+ZBU=
 github.com/google/go-github/v55 v55.0.0 h1:4pp/1tNMB9X/LuAhs5i0KQAE40NmiR/y6prLNb9x9cg=
 github.com/google/go-github/v55 v55.0.0/go.mod h1:JLahOTA1DnXzhxEymmFF5PP2tSS9JVNj68mSZNDwskA=
+github.com/google/go-github/v62 v62.0.0 h1:/6mGCaRywZz9MuHyw9gD1CwsbmBX8GWsbFkwMmHdhl4=
+github.com/google/go-github/v62 v62.0.0/go.mod h1:EMxeUqGJq2xRu9DYBMwel/mr7kZrzUOfQmmpYrZn2a4=
 github.com/google/go-querystring v1.1.0 h1:AnCroh3fv4ZBgVIf1Iwtovgjaw/GiKJo8M8yD/fhyJ8=
 github.com/google/go-querystring v1.1.0/go.mod h1:Kcdr2DB4koayq7X8pmAG4sNG59So17icRSOU623lUBU=
 github.com/google/gofuzz v1.0.0/go.mod h1:dBl0BpW6vV/+mYPU4Po3pmUjxk6FQPldtuIdl/M65Eg=
