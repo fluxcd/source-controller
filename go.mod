@@ -137,6 +137,7 @@ require (
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/blang/semver v3.5.1+incompatible // indirect
 	github.com/blang/semver/v4 v4.0.0 // indirect
+	github.com/bradleyfalzon/ghinstallation/v2 v2.11.0 // indirect
 	github.com/bshuster-repo/logrus-logstash-hook v1.0.0 // indirect
 	github.com/buildkite/agent/v3 v3.76.2 // indirect
 	github.com/buildkite/go-pipeline v0.10.0 // indirect
@@ -221,6 +222,7 @@ require (
 	github.com/google/go-cmp v0.6.0 // indirect
 	github.com/google/go-containerregistry/pkg/authn/kubernetes v0.0.0-20230516205744-dbecb1de8cfa // indirect
 	github.com/google/go-github/v55 v55.0.0 // indirect
+	github.com/google/go-github/v62 v62.0.0 // indirect
 	github.com/google/go-querystring v1.1.0 // indirect
 	github.com/google/gofuzz v1.2.0 // indirect
 	github.com/google/s2a-go v0.1.8 // indirect
@@ -407,3 +409,9 @@ require (
 )
 
 retract v0.32.0 // Refers to incorrect ./api version.
+
+replace github.com/fluxcd/pkg/auth => github.com/dipti-pai/pkg/auth v0.0.0-20241112210126-09c286242cc8
+
+replace github.com/fluxcd/pkg/git/gogit => github.com/dipti-pai/pkg/git/gogit v0.0.0-20241112210126-09c286242cc8
+
+replace github.com/fluxcd/pkg/git => github.com/dipti-pai/pkg/git v0.0.0-20241112210126-09c286242cc8
