@@ -1,12 +1,12 @@
 module github.com/fluxcd/source-controller/api
 
-go 1.22.0
+go 1.22.7
 
 require (
-	github.com/fluxcd/pkg/apis/acl v0.3.0
-	github.com/fluxcd/pkg/apis/meta v1.6.1
-	k8s.io/apimachinery v0.31.1
-	sigs.k8s.io/controller-runtime v0.19.0
+	github.com/fluxcd/pkg/apis/acl v0.4.0
+	github.com/fluxcd/pkg/apis/meta v1.7.0
+	k8s.io/apimachinery v0.31.3
+	sigs.k8s.io/controller-runtime v0.19.3
 )
 
 // Fix CVE-2022-28948
