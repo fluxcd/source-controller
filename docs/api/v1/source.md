@@ -390,7 +390,7 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>Provider used for authentication, can be &lsquo;azure&rsquo;, &lsquo;generic&rsquo;.
+<p>Provider used for authentication, can be &lsquo;azure&rsquo;, &lsquo;github&rsquo;, &lsquo;generic&rsquo;.
 When not specified, defaults to &lsquo;generic&rsquo;.</p>
 </td>
 </tr>
@@ -1730,7 +1730,7 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>Provider used for authentication, can be &lsquo;azure&rsquo;, &lsquo;generic&rsquo;.
+<p>Provider used for authentication, can be &lsquo;azure&rsquo;, &lsquo;github&rsquo;, &lsquo;generic&rsquo;.
 When not specified, defaults to &lsquo;generic&rsquo;.</p>
 </td>
 </tr>
