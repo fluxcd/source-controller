@@ -237,9 +237,7 @@ func (r *HelmChartReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		}
 		result, retErr = summarizeHelper.SummarizeAndPatch(ctx, obj, summarizeOpts...)
 
-		// Always record suspend, readiness and duration metrics.
-		r.Metrics.RecordSuspend(ctx, obj, obj.Spec.Suspend)
-		r.Metrics.RecordReadiness(ctx, obj)
+		// Always record duration metrics.
 		r.Metrics.RecordDuration(ctx, obj, start)
 	}()
 
