@@ -35,6 +35,10 @@ const (
 	// GitProviderAzure provides support for authentication to azure
 	// repositories using Managed Identity.
 	GitProviderAzure string = "azure"
+
+	// GitProviderGitHub provides support for authentication to git
+	// repositories using GitHub App authentication
+	GitProviderGitHub string = "github"
 )
 
 const (
@@ -88,9 +92,9 @@ type GitRepositorySpec struct {
 	// +optional
 	SecretRef *meta.LocalObjectReference `json:"secretRef,omitempty"`
 
-	// Provider used for authentication, can be 'azure', 'generic'.
+	// Provider used for authentication, can be 'azure', 'github', 'generic'.
 	// When not specified, defaults to 'generic'.
-	// +kubebuilder:validation:Enum=generic;azure
+	// +kubebuilder:validation:Enum=generic;azure;github
 	// +optional
 	Provider string `json:"provider,omitempty"`
 
