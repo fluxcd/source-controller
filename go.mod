@@ -46,7 +46,7 @@ require (
 	github.com/google/go-containerregistry v0.20.2
 	github.com/google/go-containerregistry/pkg/authn/k8schain v0.0.0-20241111191718-6bce25ecf029
 	github.com/google/uuid v1.6.0
-	github.com/minio/minio-go/v7 v7.0.81
+	github.com/minio/minio-go/v7 v7.0.82
 	github.com/notaryproject/notation-core-go v1.1.0
 	github.com/notaryproject/notation-go v1.2.1
 	github.com/onsi/gomega v1.36.1
@@ -58,7 +58,7 @@ require (
 	github.com/phayes/freeport v0.0.0-20220201140144-74d24b5ae9f5
 	github.com/prometheus/client_golang v1.20.5
 	github.com/sigstore/cosign/v2 v2.4.1
-	github.com/sigstore/sigstore v1.8.10
+	github.com/sigstore/sigstore v1.8.11
 	github.com/sirupsen/logrus v1.9.3
 	github.com/spf13/pflag v1.0.5
 	golang.org/x/crypto v0.31.0
