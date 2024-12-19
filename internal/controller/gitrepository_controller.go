@@ -28,6 +28,7 @@ import (
 
 	securejoin "github.com/cyphar/filepath-securejoin"
 	"github.com/fluxcd/pkg/auth/azure"
+	"github.com/fluxcd/pkg/auth/github"
 	"github.com/fluxcd/pkg/runtime/logger"
 	"github.com/go-git/go-git/v5/plumbing/transport"
 	corev1 "k8s.io/api/core/v1"
@@ -504,13 +505,8 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 
 	authOpts, err := r.getAuthOpts(ctx, obj, *u)
 	if err != nil {
-		e := serror.NewGeneric(
-			fmt.Errorf("failed to configure authentication options: %w", err),
-			sourcev1.AuthenticationFailedReason,
-		)
-		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
 		// Return error as the world as observed may change
-		return sreconcile.ResultEmpty, e
+		return sreconcile.ResultEmpty, err
 	}
 
 	// Fetch the included artifact metadata.
@@ -637,26 +633,63 @@ func (r *GitRepositoryReconciler) getAuthOpts(ctx context.Context, obj *sourcev1
 		var err error
 		authData, err = r.getSecretData(ctx, obj.Spec.SecretRef.Name, obj.GetNamespace())
 		if err != nil {
-			return nil, fmt.Errorf("failed to get secret '%s/%s': %w", obj.GetNamespace(), obj.Spec.SecretRef.Name, err)
+			e := serror.NewGeneric(
+				fmt.Errorf("failed to get secret '%s/%s': %w", obj.GetNamespace(), obj.Spec.SecretRef.Name, err),
+				sourcev1.AuthenticationFailedReason,
+			)
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
+			return nil, e
 		}
 	}
 
 	// Configure authentication strategy to access the source
 	authOpts, err := git.NewAuthOptions(u, authData)
 	if err != nil {
-		return nil, err
+		e := serror.NewGeneric(
+			fmt.Errorf("failed to configure authentication options: %w", err),
+			sourcev1.AuthenticationFailedReason,
+		)
+		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
+		return nil, e
 	}
 
 	// Configure provider authentication if specified in spec
-	if obj.GetProvider() == sourcev1.GitProviderAzure {
+	switch obj.GetProvider() {
+	case sourcev1.GitProviderAzure:
 		authOpts.ProviderOpts = &git.ProviderOptions{
-			Name: obj.GetProvider(),
+			Name: sourcev1.GitProviderAzure,
 			AzureOpts: []azure.OptFunc{
 				azure.WithAzureDevOpsScope(),
 			},
 		}
-	}
+	case sourcev1.GitProviderGitHub:
+		// if provider is github, but secret ref is not specified
+		if obj.Spec.SecretRef == nil {
+			e := serror.NewStalling(
+				fmt.Errorf("secretRef with github app data must be specified when provider is set to github"),
+				sourcev1.InvalidProviderConfigurationReason,
+			)
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
+			return nil, e
+		}
 
+		authOpts.ProviderOpts = &git.ProviderOptions{
+			Name: sourcev1.GitProviderGitHub,
+			GitHubOpts: []github.OptFunc{
+				github.WithAppData(authData),
+			},
+		}
+	default:
+		// analyze secret, if it has github app data, perhaps provider should have been github.
+		if appID := authData[github.AppIDKey]; len(appID) != 0 {
+			e := serror.NewStalling(
+				fmt.Errorf("secretRef '%s/%s' has github app data but provider is not set to github", obj.GetNamespace(), obj.Spec.SecretRef.Name),
+				sourcev1.InvalidProviderConfigurationReason,
+			)
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
+			return nil, e
+		}
+	}
 	return authOpts, nil
 }
 
