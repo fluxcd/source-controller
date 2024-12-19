@@ -572,6 +572,50 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new upstream revision 'master@sha1:<commit>'"),
 			},
 		},
+		{
+			// This test is only for verifying the failure state when using
+			// provider auth. Protocol http is used for simplicity.
+			name:     "github provider without secret ref makes FetchFailed=True",
+			protocol: "http",
+			beforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Spec.Provider = sourcev1.GitProviderGitHub
+				conditions.MarkReconciling(obj, meta.ProgressingReason, "foo")
+				conditions.MarkUnknown(obj, meta.ReadyCondition, meta.ProgressingReason, "foo")
+			},
+			want:    sreconcile.ResultEmpty,
+			wantErr: true,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.InvalidProviderConfigurationReason, "secretRef with github app data must be specified when provider is set to github"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "foo"),
+				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "foo"),
+			},
+		},
+		{
+			// This test is only for verifying the failure state when using
+			// provider auth. Protocol http is used for simplicity.
+			name:     "empty provider with github app data in secret makes FetchFailed=True",
+			protocol: "http",
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "github-app-secret",
+				},
+				Data: map[string][]byte{
+					github.AppIDKey: []byte("1111"),
+				},
+			},
+			beforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Spec.SecretRef = &meta.LocalObjectReference{Name: "github-app-secret"}
+				conditions.MarkReconciling(obj, meta.ProgressingReason, "foo")
+				conditions.MarkUnknown(obj, meta.ReadyCondition, meta.ProgressingReason, "foo")
+			},
+			want:    sreconcile.ResultEmpty,
+			wantErr: true,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.InvalidProviderConfigurationReason, "secretRef '/github-app-secret' has github app data but provider is not set to github"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "foo"),
+				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "foo"),
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -711,17 +755,6 @@ func TestGitRepositoryReconciler_getAuthOpts_provider(t *testing.T) {
 			wantErr:              errors.New("secretRef with github app data must be specified when provider is set to github"),
 		},
 		{
-			name: "github provider with secret ref that does not exist",
-			url:  "https://github.com/org/repo.git",
-			beforeFunc: func(obj *sourcev1.GitRepository) {
-				obj.Spec.Provider = sourcev1.GitProviderGitHub
-				obj.Spec.SecretRef = &meta.LocalObjectReference{
-					Name: "githubAppSecret",
-				}
-			},
-			wantErr: errors.New("failed to get secret '/githubAppSecret': secrets \"githubAppSecret\" not found"),
-		},
-		{
 			name: "github provider with github app data in secret",
 			url:  "https://example.com/org/repo",
 			secret: &corev1.Secret{
@@ -767,6 +800,16 @@ func TestGitRepositoryReconciler_getAuthOpts_provider(t *testing.T) {
 			beforeFunc: func(obj *sourcev1.GitRepository) {
 				obj.Spec.Provider = sourcev1.GitProviderGeneric
 			},
+		},
+		{
+			name: "secret ref defined for non existing secret",
+			url:  "https://github.com/org/repo.git",
+			beforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Spec.SecretRef = &meta.LocalObjectReference{
+					Name: "authSecret",
+				}
+			},
+			wantErr: errors.New("failed to get secret '/authSecret': secrets \"authSecret\" not found"),
 		},
 		{
 			url:  "https://example.com/org/repo",

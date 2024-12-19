@@ -667,7 +667,7 @@ func (r *GitRepositoryReconciler) getAuthOpts(ctx context.Context, obj *sourcev1
 		if obj.Spec.SecretRef == nil {
 			e := serror.NewStalling(
 				fmt.Errorf("secretRef with github app data must be specified when provider is set to github"),
-				sourcev1.AuthenticationFailedReason,
+				sourcev1.InvalidProviderConfigurationReason,
 			)
 			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
 			return nil, e
@@ -684,7 +684,7 @@ func (r *GitRepositoryReconciler) getAuthOpts(ctx context.Context, obj *sourcev1
 		if appID := authData[github.AppIDKey]; len(appID) != 0 {
 			e := serror.NewStalling(
 				fmt.Errorf("secretRef '%s/%s' has github app data but provider is not set to github", obj.GetNamespace(), obj.Spec.SecretRef.Name),
-				sourcev1.AuthenticationFailedReason,
+				sourcev1.InvalidProviderConfigurationReason,
 			)
 			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
 			return nil, e
