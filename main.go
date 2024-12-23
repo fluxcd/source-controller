@@ -51,6 +51,7 @@ import (
 	"github.com/fluxcd/pkg/runtime/probes"
 
 	"github.com/fluxcd/source-controller/api/v1"
+	"github.com/fluxcd/source-controller/api/v1alpha1"
 	"github.com/fluxcd/source-controller/api/v1beta2"
 
 	// +kubebuilder:scaffold:imports
@@ -85,6 +86,7 @@ func init() {
 
 	utilruntime.Must(v1beta2.AddToScheme(scheme))
 	utilruntime.Must(v1.AddToScheme(scheme))
+	utilruntime.Must(v1alpha1.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme
 }
 
