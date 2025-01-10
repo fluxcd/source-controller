@@ -22,7 +22,7 @@ require (
 	github.com/docker/go-units v0.5.0
 	github.com/elazarl/goproxy v0.0.0-20241211082540-3df585cdee79
 	github.com/fluxcd/cli-utils v0.36.0-flux.11
-	github.com/fluxcd/pkg/apis/event v0.12.0
+	github.com/fluxcd/pkg/apis/event v0.13.0
 	github.com/fluxcd/pkg/apis/meta v1.9.0
 	github.com/fluxcd/pkg/auth v0.2.0
 	github.com/fluxcd/pkg/git v0.23.0
@@ -32,7 +32,7 @@ require (
 	github.com/fluxcd/pkg/lockedfile v0.5.0
 	github.com/fluxcd/pkg/masktoken v0.6.0
 	github.com/fluxcd/pkg/oci v0.43.0
-	github.com/fluxcd/pkg/runtime v0.51.0
+	github.com/fluxcd/pkg/runtime v0.52.0
 	github.com/fluxcd/pkg/sourceignore v0.10.0
 	github.com/fluxcd/pkg/ssh v0.16.0
 	github.com/fluxcd/pkg/tar v0.10.0
