@@ -2,6 +2,39 @@
 
 All notable changes to this project are documented in this file.
 
+## 1.5.0
+
+**Release date:** 2025-02-13
+
+This minor release comes with various bug fixes and improvements.
+
+### GitRepository
+
+The GitRepository API now supports authenticating through GitHub App
+for GitHub repositories. See
+[docs](https://fluxcd.io/flux/components/source/gitrepositories/#github).
+
+In addition, the Kubernetes dependencies have been updated to v1.32.1, Helm has
+been updated to v3.17.0 and various other controller dependencies have been
+updated to their latest version.
+
+Fixes:
+- Remove deprecated object metrics from controllers
+  [#1686](https://github.com/fluxcd/source-controller/pull/1686)
+
+Improvements:
+- [RFC-007] Implement GitHub app authentication for git repositories.
+  [#1647](https://github.com/fluxcd/source-controller/pull/1647)
+- Various dependency updates
+  [#1684](https://github.com/fluxcd/source-controller/pull/1684)
+  [#1689](https://github.com/fluxcd/source-controller/pull/1689)
+  [#1693](https://github.com/fluxcd/source-controller/pull/1693)
+  [#1705](https://github.com/fluxcd/source-controller/pull/1705)
+  [#1708](https://github.com/fluxcd/source-controller/pull/1708)
+  [#1709](https://github.com/fluxcd/source-controller/pull/1709)
+  [#1713](https://github.com/fluxcd/source-controller/pull/1713)
+  [#1716](https://github.com/fluxcd/source-controller/pull/1716)
+
 ## 1.4.1
 
 **Release date:** 2024-09-26
