@@ -848,8 +848,8 @@ github.com/poy/onpar v1.1.2/go.mod h1:6X8FLNoxyr9kkmnlqpK6LSoiOtrO6MICtWwEuWkLjz
 github.com/prometheus/client_golang v0.9.1/go.mod h1:7SWBe2y4D6OKWSNQJUaRYU/AaXPKyh/dDVn+NZz0KFw=
 github.com/prometheus/client_golang v1.0.0/go.mod h1:db9x61etRT2tGnBNRi70OPL5FsnadC4Ky3P0J6CfImo=
 github.com/prometheus/client_golang v1.1.0/go.mod h1:I1FGZT9+L76gKKOs5djB6ezCbFQP1xR9D75/vuwEF3g=
-github.com/prometheus/client_golang v1.20.5 h1:cxppBPuYhUnsO6yo/aoRol4L7q7UFfdm+bR9r+8l63Y=
-github.com/prometheus/client_golang v1.20.5/go.mod h1:PIEt8X02hGcP8JWbeHyeZ53Y/jReSnHgO035n//V5WE=
+github.com/prometheus/client_golang v1.21.0 h1:DIsaGmiaBkSangBgMtWdNfxbMNdku5IK6iNhrEqWvdA=
+github.com/prometheus/client_golang v1.21.0/go.mod h1:U9NM32ykUErtVBxdvD3zfi+EuFkkaBvMb09mIfe0Zgg=
 github.com/prometheus/client_model v0.0.0-20180712105110-5c3871d89910/go.mod h1:MbSGuTsp3dbXC40dX6PRTWyKYBIrTGTE9sqQNg2J8bo=
 github.com/prometheus/client_model v0.0.0-20190129233127-fd36f4220a90/go.mod h1:xMI15A0UPsDsEKsMN9yxemIoYk6Tm2C1GtYGdfGttqA=
 github.com/prometheus/client_model v0.0.0-20190812154241-14fe0d1b01d4/go.mod h1:xMI15A0UPsDsEKsMN9yxemIoYk6Tm2C1GtYGdfGttqA=
@@ -914,8 +914,8 @@ github.com/sigstore/protobuf-specs v0.4.0 h1:yoZbdh0kZYKOSiVbYyA8J3f2wLh5aUk2SQB
 github.com/sigstore/protobuf-specs v0.4.0/go.mod h1:FKW5NYhnnFQ/Vb9RKtQk91iYd0MKJ9AxyqInEwU6+OI=
 github.com/sigstore/rekor v1.3.6 h1:QvpMMJVWAp69a3CHzdrLelqEqpTM3ByQRt5B5Kspbi8=
 github.com/sigstore/rekor v1.3.6/go.mod h1:JDTSNNMdQ/PxdsS49DJkJ+pRJCO/83nbR5p3aZQteXc=
-github.com/sigstore/sigstore v1.8.14 h1:JqDkQ7PQCiCOerPRSkYr57Rj9sZO59fOcXDxvLsbNQw=
-github.com/sigstore/sigstore v1.8.14/go.mod h1:2lXojNsjZjkqu1//FWxq7qUcPB8Lq1KsR5hc+GkcC/4=
+github.com/sigstore/sigstore v1.8.15 h1:9HHnZmxjPQSTPXTCZc25HDxxSTWwsGMh/ZhWZZ39maU=
+github.com/sigstore/sigstore v1.8.15/go.mod h1:+Wa5mrG6A+Gss516YC9owy10q3IazqIRe0y1EoQRHHM=
 github.com/sigstore/sigstore-go v0.6.1 h1:tGkkv1oDIER+QYU5MrjqlttQOVDWfSkmYwMqkJhB/cg=
 github.com/sigstore/sigstore-go v0.6.1/go.mod h1:Xe5GHmUeACRFbomUWzVkf/xYCn8xVifb9DgqJrV2dIw=
 github.com/sigstore/sigstore/pkg/signature/kms/aws v1.8.8 h1:2zHmUvaYCwV6LVeTo+OAkTm8ykOGzA9uFlAjwDPAUWM=

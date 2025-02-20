@@ -56,9 +56,9 @@ require (
 	github.com/ory/dockertest/v3 v3.11.0
 	github.com/otiai10/copy v1.14.1
 	github.com/phayes/freeport v0.0.0-20220201140144-74d24b5ae9f5
-	github.com/prometheus/client_golang v1.20.5
+	github.com/prometheus/client_golang v1.21.0
 	github.com/sigstore/cosign/v2 v2.4.1
-	github.com/sigstore/sigstore v1.8.14
+	github.com/sigstore/sigstore v1.8.15
 	github.com/sirupsen/logrus v1.9.3
 	github.com/spf13/pflag v1.0.6
 	golang.org/x/crypto v0.33.0
