@@ -280,7 +280,7 @@ Without a [Secret reference](#secret-reference), authentication using a chain
 with:
 
 - [Environment credentials](https://pkg.go.dev/github.com/Azure/azure-sdk-for-go/sdk/azidentity#EnvironmentCredential)
-- [Workload Identity](https://pkg.go.dev/github.com/Azure/azure-sdk-for-go/sdk/azidentity@v1.3.0-beta.4#WorkloadIdentityCredential)
+- [Workload Identity](https://pkg.go.dev/github.com/Azure/azure-sdk-for-go/sdk/azidentity#WorkloadIdentityCredential)
 - [Managed Identity](https://pkg.go.dev/github.com/Azure/azure-sdk-for-go/sdk/azidentity#ManagedIdentityCredential)
   with the `AZURE_CLIENT_ID`
 - Managed Identity with a system-assigned identity
@@ -301,7 +301,7 @@ sets of `.data` fields:
   [Shared Key](https://pkg.go.dev/github.com/Azure/azure-sdk-for-go/sdk/storage/azblob#SharedKeyCredential).
 - `sasKey` for authenticating using a [SAS Token](https://docs.microsoft.com/en-us/azure/storage/common/storage-sas-overview)
 
-For any Managed Identity and/or Azure Active Directory authentication method,
+For any Managed Identity and/or Microsoft Entra ID (Formerly Azure Active Directory) authentication method,
 the base URL can be configured using `.data.authorityHost`. If not supplied,
 [`AzurePublicCloud` is assumed](https://pkg.go.dev/github.com/Azure/azure-sdk-for-go/sdk/azidentity#AuthorityHost).
 
