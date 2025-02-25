@@ -20,7 +20,7 @@ require (
 	github.com/distribution/distribution/v3 v3.0.0-rc.2
 	github.com/docker/cli v27.5.1+incompatible
 	github.com/docker/go-units v0.5.0
-	github.com/elazarl/goproxy v1.7.0
+	github.com/elazarl/goproxy v1.7.2
 	github.com/fluxcd/cli-utils v0.36.0-flux.12
 	github.com/fluxcd/pkg/apis/event v0.16.0
 	github.com/fluxcd/pkg/apis/meta v1.10.0
@@ -48,7 +48,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/minio/minio-go/v7 v7.0.87
 	github.com/notaryproject/notation-core-go v1.2.0
-	github.com/notaryproject/notation-go v1.3.0
+	github.com/notaryproject/notation-go v1.3.1
 	github.com/onsi/gomega v1.36.2
 	github.com/opencontainers/go-digest v1.0.0
 	github.com/opencontainers/go-digest/blake3 v0.0.0-20240426182413-22b78e47854a
@@ -61,8 +61,8 @@ require (
 	github.com/sigstore/sigstore v1.8.15
 	github.com/sirupsen/logrus v1.9.3
 	github.com/spf13/pflag v1.0.6
-	golang.org/x/crypto v0.33.0
-	golang.org/x/oauth2 v0.26.0
+	golang.org/x/crypto v0.35.0
+	golang.org/x/oauth2 v0.27.0
 	golang.org/x/sync v0.11.0
 	google.golang.org/api v0.211.0
 	gotest.tools v2.2.0+incompatible
@@ -387,7 +387,7 @@ require (
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.27.0 // indirect
 	golang.org/x/exp v0.0.0-20240719175910-8a7402abbf56 // indirect
-	golang.org/x/mod v0.22.0 // indirect
+	golang.org/x/mod v0.23.0 // indirect
 	golang.org/x/net v0.35.0 // indirect
 	golang.org/x/sys v0.30.0 // indirect
 	golang.org/x/term v0.29.0 // indirect
