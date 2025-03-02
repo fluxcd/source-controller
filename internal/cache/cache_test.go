@@ -85,3 +85,55 @@ func TestCache(t *testing.T) {
 	g.Expect(found).To(BeFalse())
 	g.Expect(item).To(BeNil())
 }
+
+func TestCacheExpiration(t *testing.T) {
+	g := NewWithT(t)
+	cache := New(10, 0)
+
+	key := "testKey"
+	value := "testValue"
+	expiration := 1 * time.Second
+
+	err := cache.Add(key, value, expiration)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	newExpiration := 2 * time.Second
+	cache.SetExpiration(key, newExpiration)
+	actualExpiration := cache.GetExpiration(key)
+
+	g.Expect(actualExpiration).Should(BeNumerically("~", newExpiration, 100*time.Millisecond))
+
+	g.Expect(cache.HasExpired(key)).To(BeFalse())
+
+	time.Sleep(newExpiration + 100*time.Millisecond)
+
+	g.Expect(cache.HasExpired(key)).To(BeTrue())
+
+	g.Expect(cache.GetExpiration(key)).To(BeZero())
+
+	nonExistentKey := "nonExistent"
+	cache.SetExpiration(nonExistentKey, 1*time.Second)
+	g.Expect(cache.GetExpiration(nonExistentKey)).To(BeZero())
+
+	g.Expect(cache.HasExpired(nonExistentKey)).To(BeTrue())
+}
+
+func TestCacheDeleteClear(t *testing.T) {
+	g := NewWithT(t)
+	cache := New(3, 0)
+
+	err := cache.Add("key1", "value1", 0)
+	g.Expect(err).ToNot(HaveOccurred())
+	err = cache.Add("key2", "value2", 0)
+	g.Expect(err).ToNot(HaveOccurred())
+	err = cache.Add("key3", "value3", 0)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	cache.Delete("key2")
+	_, found := cache.Get("key2")
+	g.Expect(found).To(BeFalse())
+	g.Expect(cache.ItemCount()).To(Equal(2))
+
+	cache.Clear()
+	g.Expect(cache.ItemCount()).To(Equal(0))
+}
