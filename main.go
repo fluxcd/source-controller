@@ -36,8 +36,10 @@ import (
 	ctrlcache "sigs.k8s.io/controller-runtime/pkg/cache"
 	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 	ctrlcfg "sigs.k8s.io/controller-runtime/pkg/config"
+	ctrlmetrics "sigs.k8s.io/controller-runtime/pkg/metrics"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
+	pkgcache "github.com/fluxcd/pkg/cache"
 	"github.com/fluxcd/pkg/git"
 	"github.com/fluxcd/pkg/runtime/client"
 	helper "github.com/fluxcd/pkg/runtime/controller"
@@ -50,7 +52,7 @@ import (
 	"github.com/fluxcd/pkg/runtime/pprof"
 	"github.com/fluxcd/pkg/runtime/probes"
 
-	"github.com/fluxcd/source-controller/api/v1"
+	v1 "github.com/fluxcd/source-controller/api/v1"
 	"github.com/fluxcd/source-controller/api/v1beta2"
 
 	// +kubebuilder:scaffold:imports
@@ -89,6 +91,10 @@ func init() {
 }
 
 func main() {
+	const (
+		tokenCacheDefaultMaxSize = 0
+	)
+
 	var (
 		metricsAddr              string
 		eventsAddr               string
@@ -114,6 +120,7 @@ func main() {
 		artifactRetentionTTL     time.Duration
 		artifactRetentionRecords int
 		artifactDigestAlgo       string
+		tokenCacheOptions        pkgcache.TokenFlags
 	)
 
 	flag.StringVar(&metricsAddr, "metrics-addr", envOrDefault("METRICS_ADDR", ":8080"),
@@ -160,6 +167,7 @@ func main() {
 	featureGates.BindFlags(flag.CommandLine)
 	watchOptions.BindFlags(flag.CommandLine)
 	intervalJitterOptions.BindFlags(flag.CommandLine)
+	tokenCacheOptions.BindFlags(flag.CommandLine, tokenCacheDefaultMaxSize)
 
 	flag.Parse()
 
@@ -187,6 +195,19 @@ func main() {
 	mustSetupHelmLimits(helmIndexLimit, helmChartLimit, helmChartFileLimit)
 	helmIndexCache, helmIndexCacheItemTTL := mustInitHelmCache(helmCacheMaxSize, helmCacheTTL, helmCachePurgeInterval)
 
+	var tokenCache *pkgcache.TokenCache
+	if tokenCacheOptions.MaxSize > 0 {
+		var err error
+		tokenCache, err = pkgcache.NewTokenCache(tokenCacheOptions.MaxSize,
+			pkgcache.WithMaxDuration(tokenCacheOptions.MaxDuration),
+			pkgcache.WithMetricsRegisterer(ctrlmetrics.Registry),
+			pkgcache.WithMetricsPrefix("gotk_token_"))
+		if err != nil {
+			setupLog.Error(err, "unable to create token cache")
+			os.Exit(1)
+		}
+	}
+
 	ctx := ctrl.SetupSignalHandler()
 
 	if err := (&controller.GitRepositoryReconciler{
@@ -198,6 +219,7 @@ func main() {
 	}).SetupWithManagerAndOptions(mgr, controller.GitRepositoryReconcilerOptions{
 		DependencyRequeueInterval: requeueDependency,
 		RateLimiter:               helper.GetRateLimiter(rateLimiterOptions),
+		TokenCache:                tokenCache,
 	}); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", v1.GitRepositoryKind)
 		os.Exit(1)
