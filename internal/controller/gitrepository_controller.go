@@ -47,6 +47,7 @@ import (
 
 	eventv1 "github.com/fluxcd/pkg/apis/event/v1beta1"
 	"github.com/fluxcd/pkg/apis/meta"
+	"github.com/fluxcd/pkg/cache"
 	"github.com/fluxcd/pkg/git"
 	"github.com/fluxcd/pkg/git/gogit"
 	"github.com/fluxcd/pkg/git/repository"
@@ -136,11 +137,14 @@ type GitRepositoryReconciler struct {
 	features          map[string]bool
 
 	patchOptions []patch.Option
+
+	tokenCache *cache.TokenCache
 }
 
 type GitRepositoryReconcilerOptions struct {
 	DependencyRequeueInterval time.Duration
 	RateLimiter               workqueue.TypedRateLimiter[reconcile.Request]
+	TokenCache                *cache.TokenCache
 }
 
 // gitRepositoryReconcileFunc is the function type for all the
@@ -159,6 +163,8 @@ func (r *GitRepositoryReconciler) SetupWithManagerAndOptions(mgr ctrl.Manager, o
 	if r.features == nil {
 		r.features = features.FeatureGates()
 	}
+
+	r.tokenCache = opts.TokenCache
 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&sourcev1.GitRepository{}, builder.WithPredicates(
@@ -677,6 +683,7 @@ func (r *GitRepositoryReconciler) getAuthOpts(ctx context.Context, obj *sourcev1
 			Name: sourcev1.GitProviderGitHub,
 			GitHubOpts: []github.OptFunc{
 				github.WithAppData(authData),
+				github.WithCache(r.tokenCache, sourcev1.GitRepositoryKind, obj.GetName(), obj.GetNamespace()),
 			},
 		}
 	default:
@@ -1088,6 +1095,9 @@ func (r *GitRepositoryReconciler) reconcileDelete(ctx context.Context, obj *sour
 
 	// Remove our finalizer from the list
 	controllerutil.RemoveFinalizer(obj, sourcev1.SourceFinalizer)
+
+	// Cleanup caches.
+	r.tokenCache.DeleteEventsForObject(sourcev1.GitRepositoryKind, obj.GetName(), obj.GetNamespace())
 
 	// Stop reconciliation as the object is being deleted
 	return sreconcile.ResultEmpty, nil
