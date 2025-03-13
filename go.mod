@@ -24,10 +24,10 @@ require (
 	github.com/fluxcd/cli-utils v0.36.0-flux.12
 	github.com/fluxcd/pkg/apis/event v0.16.0
 	github.com/fluxcd/pkg/apis/meta v1.10.0
-	github.com/fluxcd/pkg/auth v0.8.0
+	github.com/fluxcd/pkg/auth v0.9.0
 	github.com/fluxcd/pkg/cache v0.7.0
-	github.com/fluxcd/pkg/git v0.24.0
-	github.com/fluxcd/pkg/git/gogit v0.24.0
+	github.com/fluxcd/pkg/git v0.25.0
+	github.com/fluxcd/pkg/git/gogit v0.25.0
 	github.com/fluxcd/pkg/gittestserver v0.16.0
 	github.com/fluxcd/pkg/helmtestserver v0.23.0
 	github.com/fluxcd/pkg/lockedfile v0.5.0
