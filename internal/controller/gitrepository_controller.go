@@ -28,7 +28,7 @@ import (
 
 	securejoin "github.com/cyphar/filepath-securejoin"
 	"github.com/fluxcd/pkg/auth/azure"
-	"github.com/fluxcd/pkg/auth/github"
+	"github.com/fluxcd/pkg/git/github"
 	"github.com/fluxcd/pkg/runtime/logger"
 	"github.com/go-git/go-git/v5/plumbing/transport"
 	corev1 "k8s.io/api/core/v1"
