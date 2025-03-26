@@ -65,7 +65,9 @@ import (
 	"github.com/fluxcd/source-controller/internal/features"
 	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
 	"github.com/fluxcd/source-controller/internal/reconcile/summarize"
+	"github.com/fluxcd/source-controller/internal/tls"
 	"github.com/fluxcd/source-controller/internal/util"
+	gitclient "github.com/go-git/go-git/v5/plumbing/transport/client"
 )
 
 // gitRepositoryReadyCondition contains the information required to summarize a
@@ -444,6 +446,97 @@ func (r *GitRepositoryReconciler) reconcileStorage(ctx context.Context, sp *patc
 	return sreconcile.ResultSuccess, nil
 }
 
+// Interface to configure gitclient with custom TLS options
+// used for mTLS authentication.
+type GitClientConfigurer interface {
+	ConfigureGitClient(ctx context.Context, obj *sourcev1.GitRepository)
+	IsValid() bool
+}
+
+type GitClientHttpConfigurer struct {
+	SSLCertificateData map[string][]byte
+	Valid              bool
+	DefaultTransport   transport.Transport
+	MTLSTransport      transport.Transport
+}
+
+func (c *GitClientHttpConfigurer) IsValid() bool {
+	return c.Valid
+}
+
+func (c *GitClientHttpConfigurer) SetValid() {
+	c.Valid = true
+}
+
+func (c *GitClientHttpConfigurer) SetInvalid() {
+	c.Valid = false
+}
+
+// Ensures the secret contains the valid keys for the certificate & private key.
+func (r *GitRepositoryReconciler) isCertificateDataValid(sslCertificateData map[string][]byte) bool {
+	certBytes, keyBytes := sslCertificateData["tls.crt"], sslCertificateData["tls.key"]
+	// Validate that both the certificate and key data are present
+	return len(certBytes) > 0 && len(keyBytes) > 0
+}
+
+// Configure the gitclient with a tlsconfig containing the certifcates & CA specified in the spec.secretRef.name secret.
+func (h *GitClientHttpConfigurer) ConfigureGitClient(ctx context.Context, obj *sourcev1.GitRepository) {
+
+	if obj.Spec.SecretRef != nil {
+		sslCertificate := &corev1.Secret{
+			Data: h.SSLCertificateData,
+		}
+		tlsConfig, _, err := tls.KubeTLSClientConfigFromSecret(*sslCertificate, "")
+		if err != nil {
+			fmt.Println("Error generating TLS config:", err)
+			return
+		}
+
+		var transportHttp transport.Transport
+		if tlsConfig != nil {
+
+			transportHttp, err = HttpTransportwithCustomCerts(tlsConfig, ctx)
+			if err != nil {
+				fmt.Println("Error setting up transport:", err)
+				return
+			}
+		} else {
+			transportHttp = h.DefaultTransport
+		}
+
+		gitclient.InstallProtocol("https", transportHttp)
+
+	}
+
+}
+
+// configureHttpTransport sets up the HTTP transport configuration for the Git client.
+func (r *GitRepositoryReconciler) configureHttpTransport(ctx context.Context, obj *sourcev1.GitRepository) (*GitClientHttpConfigurer, error) {
+	httpTransportConfig := &GitClientHttpConfigurer{} // Initialize with defaults configuration
+
+	// Check if SecretRef is specified for the repository
+	if obj.Spec.SecretRef != nil {
+		// Fetch the SSL certificate data from the specified secret
+		sslCertificateData, err := r.getSecretData(ctx, obj.Spec.SecretRef.Name, obj.Namespace)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get secret '%s/%s': %w", obj.Namespace, obj.Spec.SecretRef.Name, err)
+		}
+
+		// Set up the HTTP transport configuration with the fetched certificate data
+		httpTransportConfig.SSLCertificateData = sslCertificateData
+		if r.isCertificateDataValid(sslCertificateData) {
+			httpTransportConfig.SetValid()
+		} else {
+			httpTransportConfig.SetInvalid()
+		}
+	} else {
+		// If no SecretRef is provided, mark the transport config as invalid or set defaults
+		httpTransportConfig.SetInvalid()
+	}
+
+	return httpTransportConfig, nil
+}
+
 // reconcileSource ensures the upstream Git repository and reference can be
 // cloned and checked out using the specified configuration, and observes its
 // state. It also checks if the included repositories are available for use.
@@ -536,8 +629,12 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 
 	// Persist the ArtifactSet.
 	*includes = *artifacts
+	httpTransportConfig, err := r.configureHttpTransport(ctx, obj)
+	if err != nil {
+		return sreconcile.ResultEmpty, err
+	}
 
-	c, err := r.gitCheckout(ctx, obj, authOpts, proxyOpts, dir, true)
+	c, err := r.gitCheckout(ctx, obj, authOpts, proxyOpts, dir, true, httpTransportConfig)
 	if err != nil {
 		return sreconcile.ResultEmpty, err
 	}
@@ -581,7 +678,7 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 
 		// If we can't skip the reconciliation, checkout again without any
 		// optimization.
-		c, err := r.gitCheckout(ctx, obj, authOpts, proxyOpts, dir, false)
+		c, err := r.gitCheckout(ctx, obj, authOpts, proxyOpts, dir, false, httpTransportConfig)
 		if err != nil {
 			return sreconcile.ResultEmpty, err
 		}
@@ -883,7 +980,7 @@ func (r *GitRepositoryReconciler) reconcileInclude(ctx context.Context, sp *patc
 // gitCheckout builds checkout options with the given configurations and
 // performs a git checkout.
 func (r *GitRepositoryReconciler) gitCheckout(ctx context.Context, obj *sourcev1.GitRepository,
-	authOpts *git.AuthOptions, proxyOpts *transport.ProxyOptions, dir string, optimized bool) (*git.Commit, error) {
+	authOpts *git.AuthOptions, proxyOpts *transport.ProxyOptions, dir string, optimized bool, clientConf GitClientConfigurer) (*git.Commit, error) {
 	// Configure checkout strategy.
 	cloneOpts := repository.CloneConfig{
 		RecurseSubmodules: obj.Spec.RecurseSubmodules,
@@ -915,6 +1012,9 @@ func (r *GitRepositoryReconciler) gitCheckout(ctx context.Context, obj *sourcev1
 	}
 	if proxyOpts != nil {
 		clientOpts = append(clientOpts, gogit.WithProxy(*proxyOpts))
+	}
+	if clientConf.IsValid() {
+		clientConf.ConfigureGitClient(ctx, obj)
 	}
 
 	gitReader, err := gogit.NewClient(dir, authOpts, clientOpts...)

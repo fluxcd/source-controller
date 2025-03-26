@@ -573,6 +573,33 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 			},
 		},
 		{
+			name:     "HTTPS with TLS certs authentication & custom CA Reconciling=True",
+			protocol: "https",
+			server: options{
+				publicKey:  tlsPublicKey,
+				privateKey: tlsPrivateKey,
+				ca:         tlsCA,
+			},
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "mtls-authentication",
+				},
+				Data: map[string][]byte{
+					"certFile": clientPublicKey,
+					"keyFile":  clientPrivateKey,
+					"caFile":   tlsCA,
+				},
+			},
+			beforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Spec.SecretRef = &meta.LocalObjectReference{Name: "mtls-authentication"}
+			},
+			want: sreconcile.ResultSuccess,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new upstream revision 'master@sha1:<commit>'"),
+				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new upstream revision 'master@sha1:<commit>'"),
+			},
+		},
+		{
 			// This test is only for verifying the failure state when using
 			// provider auth. Protocol http is used for simplicity.
 			name:     "github provider without secret ref makes FetchFailed=True",
