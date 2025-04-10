@@ -590,6 +590,16 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 	ctrl.LoggerFrom(ctx).V(logger.DebugLevel).Info("git repository checked out", "url", obj.Spec.URL, "revision", commitReference(obj, commit))
 	conditions.Delete(obj, sourcev1.FetchFailedCondition)
 
+	// Validate sparse checkout paths after successful checkout.
+	if err := r.validateSparseCheckoutPaths(ctx, obj, dir); err != nil {
+		e := serror.NewStalling(
+			fmt.Errorf("failed to sparse checkout directories : %w", err),
+			sourcev1.GitOperationFailedReason,
+		)
+		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
+		return sreconcile.ResultEmpty, e
+	}
+
 	// Verify commit signature
 	if result, err := r.verifySignature(ctx, obj, *commit); err != nil || result == sreconcile.ResultEmpty {
 		return result, err
@@ -812,6 +822,7 @@ func (r *GitRepositoryReconciler) reconcileArtifact(ctx context.Context, sp *pat
 	obj.Status.ObservedIgnore = obj.Spec.Ignore
 	obj.Status.ObservedRecurseSubmodules = obj.Spec.RecurseSubmodules
 	obj.Status.ObservedInclude = obj.Spec.Include
+	obj.Status.ObservedSparseCheckout = obj.Spec.SparseCheckout
 
 	// Remove the deprecated symlink.
 	// TODO(hidde): remove 2 minor versions from introduction of v1.
@@ -884,6 +895,7 @@ func (r *GitRepositoryReconciler) reconcileInclude(ctx context.Context, sp *patc
 // performs a git checkout.
 func (r *GitRepositoryReconciler) gitCheckout(ctx context.Context, obj *sourcev1.GitRepository,
 	authOpts *git.AuthOptions, proxyOpts *transport.ProxyOptions, dir string, optimized bool) (*git.Commit, error) {
+
 	// Configure checkout strategy.
 	cloneOpts := repository.CloneConfig{
 		RecurseSubmodules: obj.Spec.RecurseSubmodules,
@@ -896,7 +908,14 @@ func (r *GitRepositoryReconciler) gitCheckout(ctx context.Context, obj *sourcev1
 		cloneOpts.SemVer = ref.SemVer
 		cloneOpts.RefName = ref.Name
 	}
-
+	if obj.Spec.SparseCheckout != nil {
+		// Trim any leading "./" in the directory paths since underlying go-git API does not honor them.
+		sparseCheckoutDirs := make([]string, len(obj.Spec.SparseCheckout))
+		for i, path := range obj.Spec.SparseCheckout {
+			sparseCheckoutDirs[i] = strings.TrimPrefix(path, "./")
+		}
+		cloneOpts.SparseCheckoutDirectories = sparseCheckoutDirs
+	}
 	// Only if the object has an existing artifact in storage, attempt to
 	// short-circuit clone operation. reconcileStorage has already verified
 	// that the artifact exists.
@@ -1172,6 +1191,14 @@ func gitContentConfigChanged(obj *sourcev1.GitRepository, includes *artifactSet)
 	if requiresVerification(obj) {
 		return true
 	}
+	if len(obj.Spec.SparseCheckout) != len(obj.Status.ObservedSparseCheckout) {
+		return true
+	}
+	for index, dir := range obj.Spec.SparseCheckout {
+		if dir != obj.Status.ObservedSparseCheckout[index] {
+			return true
+		}
+	}
 
 	// Convert artifactSet to index addressable artifacts and ensure that it and
 	// the included artifacts include all the include from the spec.
@@ -1204,6 +1231,19 @@ func gitContentConfigChanged(obj *sourcev1.GitRepository, includes *artifactSet)
 		}
 	}
 	return false
+}
+
+// validateSparseCheckoutPaths checks if the sparse checkout paths exist in the cloned repository.
+func (r *GitRepositoryReconciler) validateSparseCheckoutPaths(ctx context.Context, obj *sourcev1.GitRepository, dir string) error {
+	if obj.Spec.SparseCheckout != nil {
+		for _, path := range obj.Spec.SparseCheckout {
+			fullPath := filepath.Join(dir, path)
+			if _, err := os.Lstat(fullPath); err != nil {
+				return fmt.Errorf("sparse checkout dir '%s' does not exist in repository: %w", path, err)
+			}
+		}
+	}
+	return nil
 }
 
 // Returns true if both GitRepositoryIncludes are equal.
