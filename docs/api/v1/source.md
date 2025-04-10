@@ -523,6 +523,20 @@ the GitRepository as cloned from the URL, using their default settings.</p>
 should be included in the Artifact produced for this GitRepository.</p>
 </td>
 </tr>
+<tr>
+<td>
+<code>sparseCheckout</code><br>
+<em>
+[]string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>SparseCheckout specifies a list of directories to checkout when cloning
+the repository. If specified, only these directories are included in the
+Artifact produced for this GitRepository.</p>
+</td>
+</tr>
 </table>
 </td>
 </tr>
@@ -1863,6 +1877,20 @@ the GitRepository as cloned from the URL, using their default settings.</p>
 should be included in the Artifact produced for this GitRepository.</p>
 </td>
 </tr>
+<tr>
+<td>
+<code>sparseCheckout</code><br>
+<em>
+[]string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>SparseCheckout specifies a list of directories to checkout when cloning
+the repository. If specified, only these directories are included in the
+Artifact produced for this GitRepository.</p>
+</td>
+</tr>
 </tbody>
 </table>
 </div>
@@ -1978,6 +2006,19 @@ configuration used to produce the current Artifact.</p>
 <td>
 <em>(Optional)</em>
 <p>ObservedInclude is the observed list of GitRepository resources used to
+produce the current Artifact.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>observedSparseCheckout</code><br>
+<em>
+[]string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>ObservedSparseCheckout is the observed list of directories used to
 produce the current Artifact.</p>
 </td>
 </tr>

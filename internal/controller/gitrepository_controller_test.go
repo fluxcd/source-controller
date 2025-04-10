@@ -3131,6 +3131,38 @@ func TestGitContentConfigChanged(t *testing.T) {
 			want: false,
 		},
 		{
+			name: "unobserved sparse checkout",
+			obj: sourcev1.GitRepository{
+				Spec:   sourcev1.GitRepositorySpec{SparseCheckout: []string{"a/b/c", "x/y/z"}},
+				Status: sourcev1.GitRepositoryStatus{ObservedSparseCheckout: []string{"a/b/c"}},
+			},
+			want: true,
+		},
+		{
+			name: "unobserved case sensitive sparse checkout",
+			obj: sourcev1.GitRepository{
+				Spec:   sourcev1.GitRepositorySpec{SparseCheckout: []string{"a/b/c", "x/y/Z"}},
+				Status: sourcev1.GitRepositoryStatus{ObservedSparseCheckout: []string{"a/b/c", "x/y/z"}},
+			},
+			want: true,
+		},
+		{
+			name: "observed sparse checkout",
+			obj: sourcev1.GitRepository{
+				Spec:   sourcev1.GitRepositorySpec{SparseCheckout: []string{"a/b/c", "x/y/z"}},
+				Status: sourcev1.GitRepositoryStatus{ObservedSparseCheckout: []string{"a/b/c", "x/y/z"}},
+			},
+			want: false,
+		},
+		{
+			name: "observed sparse checkout with leading slash",
+			obj: sourcev1.GitRepository{
+				Spec:   sourcev1.GitRepositorySpec{SparseCheckout: []string{"./a/b/c", "./x/y/z"}},
+				Status: sourcev1.GitRepositoryStatus{ObservedSparseCheckout: []string{"./a/b/c", "./x/y/z"}},
+			},
+			want: false,
+		},
+		{
 			name: "unobserved include",
 			obj: sourcev1.GitRepository{
 				Spec: sourcev1.GitRepositorySpec{
