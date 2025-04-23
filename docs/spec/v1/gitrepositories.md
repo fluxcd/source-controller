@@ -615,6 +615,28 @@ list](#default-exclusions), and may overrule the [`.sourceignore` file
 exclusions](#sourceignore-file). See [excluding files](#excluding-files)
 for more information.
 
+### Sparse checkout
+
+`.spec.sparseCheckout` is an optional field to specify list of directories to
+checkout when cloning the repository. If specified, only the specified directory
+contents will be present in the artifact produced for this repository.
+
+```yaml
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: GitRepository
+metadata:
+  name: podinfo
+  namespace: default
+spec:
+  interval: 5m
+  url: https://github.com/stefanprodan/podinfo
+  ref:
+    branch: master
+  sparseCheckout:
+  - charts
+  - kustomize
+```
+
 ### Suspend
 
 `.spec.suspend` is an optional field to suspend the reconciliation of a
@@ -1154,6 +1176,27 @@ status:
     repository:
       name: repo2
     toPath: bar
+  ...
+```
+
+### Observed Sparse Checkout
+
+The source-controller reports observed sparse checkout in the GitRepository's
+`.status.observedSparseCheckout`. The observed sparse checkout is the latest
+`.spec.sparseCheckout` value which resulted in a [ready
+state](#ready-gitrepository), or stalled due to error it can not recover from
+without human intervention. The value is the same as the [sparseCheckout in
+spec](#sparse-checkout). It indicates the sparse checkout configuration used in
+building the current artifact in storage. It is also used by the controller to
+determine if an artifact needs to be rebuilt.
+
+Example:
+```yaml
+status:
+  ...
+  observedSparseCheckout:
+  - charts
+  - kustomize
   ...
 ```
 
