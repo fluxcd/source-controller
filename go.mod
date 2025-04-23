@@ -20,14 +20,14 @@ require (
 	github.com/distribution/distribution/v3 v3.0.0-rc.2
 	github.com/docker/cli v27.5.1+incompatible
 	github.com/docker/go-units v0.5.0
-	github.com/elazarl/goproxy v1.7.0
+	github.com/elazarl/goproxy v1.7.2
 	github.com/fluxcd/cli-utils v0.36.0-flux.12
 	github.com/fluxcd/pkg/apis/event v0.16.0
 	github.com/fluxcd/pkg/apis/meta v1.10.0
 	github.com/fluxcd/pkg/auth v0.9.0
 	github.com/fluxcd/pkg/cache v0.7.0
-	github.com/fluxcd/pkg/git v0.25.0
-	github.com/fluxcd/pkg/git/gogit v0.25.0
+	github.com/fluxcd/pkg/git v0.26.0
+	github.com/fluxcd/pkg/git/gogit v0.26.0
 	github.com/fluxcd/pkg/gittestserver v0.16.0
 	github.com/fluxcd/pkg/helmtestserver v0.23.0
 	github.com/fluxcd/pkg/lockedfile v0.5.0
@@ -42,7 +42,7 @@ require (
 	github.com/fluxcd/source-controller/api v1.5.0
 	github.com/foxcpp/go-mockdns v1.1.0
 	github.com/go-git/go-billy/v5 v5.6.2
-	github.com/go-git/go-git/v5 v5.13.2
+	github.com/go-git/go-git/v5 v5.16.0
 	github.com/go-logr/logr v1.4.2
 	github.com/google/go-containerregistry v0.20.3
 	github.com/google/go-containerregistry/pkg/authn/k8schain v0.0.0-20241111191718-6bce25ecf029
@@ -110,7 +110,7 @@ require (
 	github.com/Masterminds/squirrel v1.5.4 // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/Nvveen/Gotty v0.0.0-20120604004816-cd527374f1e5 // indirect
-	github.com/ProtonMail/go-crypto v1.1.5 // indirect
+	github.com/ProtonMail/go-crypto v1.1.6 // indirect
 	github.com/ThalesIgnite/crypto11 v1.2.5 // indirect
 	github.com/alibabacloud-go/alibabacloud-gateway-spi v0.0.4 // indirect
 	github.com/alibabacloud-go/cr-20160607 v1.0.1 // indirect
@@ -155,7 +155,7 @@ require (
 	github.com/chai2010/gettext-go v1.0.2 // indirect
 	github.com/chrismellard/docker-credential-acr-env v0.0.0-20230304212654-82a0ddb27589 // indirect
 	github.com/clbanning/mxj/v2 v2.7.0 // indirect
-	github.com/cloudflare/circl v1.5.0 // indirect
+	github.com/cloudflare/circl v1.6.1 // indirect
 	github.com/cncf/xds/go v0.0.0-20240905190251-b4127c9b8d78 // indirect
 	github.com/common-nighthawk/go-figure v0.0.0-20210622060536-734e95fb86be // indirect
 	github.com/containerd/containerd v1.7.24 // indirect

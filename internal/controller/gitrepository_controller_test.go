@@ -387,6 +387,63 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 			},
 		},
 		{
+			name:     "HTTPS with mutual TLS makes Reconciling=True",
+			protocol: "https",
+			server: options{
+				publicKey:  tlsPublicKey,
+				privateKey: tlsPrivateKey,
+				ca:         tlsCA,
+			},
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "mtls-certs",
+				},
+				Data: map[string][]byte{
+					"ca.crt":  tlsCA,
+					"tls.crt": clientPublicKey,
+					"tls.key": clientPrivateKey,
+				},
+			},
+			beforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Spec.SecretRef = &meta.LocalObjectReference{Name: "mtls-certs"}
+			},
+			want: sreconcile.ResultSuccess,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new upstream revision 'master@sha1:<commit>'"),
+				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new upstream revision 'master@sha1:<commit>'"),
+			},
+		},
+		{
+			name:     "HTTPS with mutual TLS and invalid private key makes CheckoutFailed=True and returns error",
+			protocol: "https",
+			server: options{
+				publicKey:  tlsPublicKey,
+				privateKey: tlsPrivateKey,
+				ca:         tlsCA,
+			},
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "invalid-mtls-certs",
+				},
+				Data: map[string][]byte{
+					"ca.crt":  tlsCA,
+					"tls.crt": clientPublicKey,
+					"tls.key": []byte("invalid"),
+				},
+			},
+			beforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Spec.SecretRef = &meta.LocalObjectReference{Name: "invalid-mtls-certs"}
+				conditions.MarkReconciling(obj, meta.ProgressingReason, "foo")
+				conditions.MarkUnknown(obj, meta.ReadyCondition, meta.ProgressingReason, "foo")
+			},
+			wantErr: true,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.GitOperationFailedReason, "tls: failed to find any PEM data in key input"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "foo"),
+				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "foo"),
+			},
+		},
+		{
 			name:     "HTTPS with CAFile secret makes Reconciling=True",
 			protocol: "https",
 			server: options{

@@ -177,6 +177,31 @@ data:
   ca.crt: <BASE64>
 ```
 
+#### HTTPS Mutual TLS authentication
+
+To authenticate towards a Git repository over HTTPS using mutual TLS,
+the referenced Secret's `.data` should contain the following keys:
+
+* `tls.crt` and `tls.key`, to specify the client certificate and private key used
+  for TLS client authentication. These must be used in conjunction, i.e.
+  specifying one without the other will lead to an error.
+* `ca.crt`, to specify the CA certificate used to verify the server, which is
+  required if the server is using a self-signed certificate.
+
+```yaml
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: https-tls-certs
+  namespace: default
+type: Opaque
+data:
+  tls.crt: <BASE64>
+  tls.key: <BASE64>
+  ca.crt: <BASE64>
+```
+
 #### SSH authentication
 
 To authenticate towards a Git repository over SSH, the referenced Secret is
