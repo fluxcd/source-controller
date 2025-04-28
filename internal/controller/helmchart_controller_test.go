@@ -3040,8 +3040,8 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_verifySignatureNotation(t *t
 			wantErrMsg:      fmt.Sprintf("failed to verify the signature using provider 'notation': '%s' not found in secret '/notation-config'", snotation.DefaultTrustPolicyKey),
 			want:            sreconcile.ResultEmpty,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.FetchFailedCondition, "Unknown", fmt.Sprintf("failed to verify the signature using provider 'notation': '%s' not found in secret '/notation-config'", snotation.DefaultTrustPolicyKey)),
-				*conditions.FalseCondition(sourcev1.SourceVerifiedCondition, sourcev1.VerificationError, fmt.Sprintf("failed to verify the signature using provider 'notation': '%s' not found in secret '/notation-config'", snotation.DefaultTrustPolicyKey)),
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, "Unknown", "failed to verify the signature using provider 'notation': '%s' not found in secret '/notation-config'", snotation.DefaultTrustPolicyKey),
+				*conditions.FalseCondition(sourcev1.SourceVerifiedCondition, sourcev1.VerificationError, "failed to verify the signature using provider 'notation': '%s' not found in secret '/notation-config'", snotation.DefaultTrustPolicyKey),
 			},
 		},
 	}
