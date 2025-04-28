@@ -137,7 +137,7 @@ func ComputeReconcileResult(obj conditions.Setter, res Result, recErr error, rb 
 	switch t := recErr.(type) {
 	case *serror.Stalling:
 		if res == ResultEmpty {
-			conditions.MarkStalled(obj, t.Reason, t.Error())
+			conditions.MarkStalled(obj, t.Reason, "%s", t.Error())
 			// The current generation has been reconciled successfully and it
 			// has resulted in a stalled state. Return no error to stop further
 			// requeuing.
