@@ -15,7 +15,7 @@ require (
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.18.0
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.9.0
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.6.0
-	github.com/Masterminds/semver/v3 v3.3.1
+	github.com/Masterminds/semver/v3 v3.3.0
 	github.com/cyphar/filepath-securejoin v0.4.1
 	github.com/distribution/distribution/v3 v3.0.0
 	github.com/docker/cli v27.5.1+incompatible
@@ -27,12 +27,12 @@ require (
 	github.com/fluxcd/pkg/auth v0.10.0
 	github.com/fluxcd/pkg/cache v0.8.0
 	github.com/fluxcd/pkg/git v0.27.0
-	github.com/fluxcd/pkg/git/gogit v0.27.0
+	github.com/fluxcd/pkg/git/gogit v0.28.0
 	github.com/fluxcd/pkg/gittestserver v0.17.0
 	github.com/fluxcd/pkg/helmtestserver v0.24.0
 	github.com/fluxcd/pkg/lockedfile v0.6.0
 	github.com/fluxcd/pkg/masktoken v0.7.0
-	github.com/fluxcd/pkg/oci v0.46.0
+	github.com/fluxcd/pkg/oci v0.47.0
 	github.com/fluxcd/pkg/runtime v0.59.0
 	github.com/fluxcd/pkg/sourceignore v0.12.0
 	github.com/fluxcd/pkg/ssh v0.18.0
