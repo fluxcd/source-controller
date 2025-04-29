@@ -103,8 +103,8 @@ github.com/MakeNowJust/heredoc v1.0.0 h1:cXCdzVdstXyiTqTvfqk9SDHpKNjxuom+DOlyEeQ
 github.com/MakeNowJust/heredoc v1.0.0/go.mod h1:mG5amYoWBHf8vpLOuehzbGGw0EHxpZZ6lCpQ4fNJ8LE=
 github.com/Masterminds/goutils v1.1.1 h1:5nUrii3FMTL5diU80unEVvNevw1nH4+ZV4DSLVJLSYI=
 github.com/Masterminds/goutils v1.1.1/go.mod h1:8cTjp+g8YejhMuvIA5y2vz3BpJxksy863GQaJW2MFNU=
-github.com/Masterminds/semver/v3 v3.3.1 h1:QtNSWtVZ3nBfk8mAOu/B6v7FMJ+NHTIgUPi7rj+4nv4=
-github.com/Masterminds/semver/v3 v3.3.1/go.mod h1:4V+yj/TJE1HU9XfppCwVMZq3I84lprf4nC11bSS5beM=
+github.com/Masterminds/semver/v3 v3.3.0 h1:B8LGeaivUe71a5qox1ICM/JLl0NqZSW5CHyL+hmvYS0=
+github.com/Masterminds/semver/v3 v3.3.0/go.mod h1:4V+yj/TJE1HU9XfppCwVMZq3I84lprf4nC11bSS5beM=
 github.com/Masterminds/sprig/v3 v3.3.0 h1:mQh0Yrg1XPo6vjYXgtf5OtijNAKJRNcTdOOGZe3tPhs=
 github.com/Masterminds/sprig/v3 v3.3.0/go.mod h1:Zy1iXRYNqNLUolqCpL4uhk6SHUMAOSCzdgBfDb35Lz0=
 github.com/Masterminds/squirrel v1.5.4 h1:uUcX/aBc8O7Fg9kaISIUsHXdKuqehiXAMQTYX8afzqM=
@@ -380,8 +380,8 @@ github.com/fluxcd/pkg/cache v0.8.0 h1:juNNGmJ2qKK16oLgX3mFA20kyo+LcfPwIBjt9KGG+S
 github.com/fluxcd/pkg/cache v0.8.0/go.mod h1:jMwabjWfsC5lW8hE7NM3wtGNwSJ38Javx6EKbEi7INU=
 github.com/fluxcd/pkg/git v0.27.0 h1:/IHNNKQY2eopq3xWjUpvx6F3WmH2RqWQ3gmRyeBfcUg=
 github.com/fluxcd/pkg/git v0.27.0/go.mod h1:s0EFqP4jTKkUq0z/jSlsIhnIAl6HvPTnucrkSqRxE5Q=
-github.com/fluxcd/pkg/git/gogit v0.27.0 h1:JIlOHd3z8JWfe+Vnjz2dwBnF5faq9jjVhLqH1HhjxWU=
-github.com/fluxcd/pkg/git/gogit v0.27.0/go.mod h1:Jq7B+JKlZmKDlYk1CAVr2wfJJMLPlY8pK18g7UY7MaE=
+github.com/fluxcd/pkg/git/gogit v0.28.0 h1:Eyi+0r7QFHv1rlGeZw2kclAiMe59WNAADl/YyUjPygQ=
+github.com/fluxcd/pkg/git/gogit v0.28.0/go.mod h1:hMl2Q5UpnOJ5NmfI1qT9wrlV5Shb8LojXRKdokFu+DI=
 github.com/fluxcd/pkg/gittestserver v0.17.0 h1:JlBvWZQTDOI+np5Z+084m3DkeAH1hMusEybyRUDF63k=
 github.com/fluxcd/pkg/gittestserver v0.17.0/go.mod h1:E/40EmLoXcMqd6gLuLDC9F6KJxqHVGbBBeMNKk5XdxU=
 github.com/fluxcd/pkg/helmtestserver v0.24.0 h1:9sSfRG17GnDIup4sI8V+fdvKROtunU4JyIo34uvXq3Q=
@@ -390,8 +390,8 @@ github.com/fluxcd/pkg/lockedfile v0.6.0 h1:64RRMiPv3ZK9Y4sjI8c78kZAdfEo+Sjr2iP8a
 github.com/fluxcd/pkg/lockedfile v0.6.0/go.mod h1:gpdUVm7+05NIT1ZvzuNnHfnT81OhZtIySlxxkZ68pXk=
 github.com/fluxcd/pkg/masktoken v0.7.0 h1:pitmyOg2pUVdW+nn2Lk/xqm2TaA08uxvOC0ns3sz6bM=
 github.com/fluxcd/pkg/masktoken v0.7.0/go.mod h1:Lc1uoDjO1GY6+YdkK+ZqqBIBWquyV58nlSJ5S1N1IYU=
-github.com/fluxcd/pkg/oci v0.46.0 h1:0AoCvP5YyRi6kPWu5ZTexzfTUXLomqYretwcWW7qpVU=
-github.com/fluxcd/pkg/oci v0.46.0/go.mod h1:Nt9WWbtVq9SST+ItKcTctRJ4BrK5va3wQvn1CEGI7XY=
+github.com/fluxcd/pkg/oci v0.47.0 h1:eQ7syqy91Xcfd7Sgf64v5n+dfRAju/OBiXuOhZsgQAg=
+github.com/fluxcd/pkg/oci v0.47.0/go.mod h1:XBnI8+T6YFnIW4uEFojg7iIgHjKH7LXMpZARXJ9qmZk=
 github.com/fluxcd/pkg/runtime v0.59.0 h1:3OrFkMJB39NcQ2vhhoxqls59sQVSn8U+thhyLbsQoA4=
 github.com/fluxcd/pkg/runtime v0.59.0/go.mod h1:MFbfyNyyoYRgPxpdwC9/dCOkzo7Yxhu/cQ9NKyhvqc0=
 github.com/fluxcd/pkg/sourceignore v0.12.0 h1:jCIe6d50rQ3wdXPF0+PhhqN0XrTRIq3upMomPelI8Mw=
