@@ -1116,7 +1116,9 @@ func (r *GitRepositoryReconciler) reconcileDelete(ctx context.Context, obj *sour
 	controllerutil.RemoveFinalizer(obj, sourcev1.SourceFinalizer)
 
 	// Cleanup caches.
-	r.tokenCache.DeleteEventsForObject(sourcev1.GitRepositoryKind, obj.GetName(), obj.GetNamespace())
+	if r.tokenCache != nil {
+		r.tokenCache.DeleteEventsForObject(sourcev1.GitRepositoryKind, obj.GetName(), obj.GetNamespace())
+	}
 
 	// Stop reconciliation as the object is being deleted
 	return sreconcile.ResultEmpty, nil
