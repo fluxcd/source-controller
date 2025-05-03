@@ -899,7 +899,7 @@ func TestGitRepositoryReconciler_getAuthOpts_provider(t *testing.T) {
 			if tt.beforeFunc != nil {
 				tt.beforeFunc(obj)
 			}
-			opts, err := r.getAuthOpts(context.TODO(), obj, *url)
+			opts, err := r.getAuthOpts(context.TODO(), obj, *url, nil)
 
 			if tt.wantErr != nil {
 				g.Expect(err).To(HaveOccurred())
@@ -2267,6 +2267,7 @@ func TestGitRepositoryReconciler_getProxyOpts(t *testing.T) {
 		secret    string
 		err       string
 		proxyOpts *transport.ProxyOptions
+		proxyURL  *url.URL
 	}{
 		{
 			name:   "non-existent secret",
@@ -2286,16 +2287,22 @@ func TestGitRepositoryReconciler_getProxyOpts(t *testing.T) {
 				Username: "user",
 				Password: "pass",
 			},
+			proxyURL: &url.URL{
+				Scheme: "https",
+				Host:   "example.com",
+				User:   url.UserPassword("user", "pass"),
+			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
-			opts, err := r.getProxyOpts(context.TODO(), tt.secret, "default")
+			opts, proxyURL, err := r.getProxyOpts(context.TODO(), tt.secret, "default")
 			if opts != nil {
 				g.Expect(err).ToNot(HaveOccurred())
 				g.Expect(opts).To(Equal(tt.proxyOpts))
+				g.Expect(proxyURL).To(Equal(tt.proxyURL))
 			} else {
 				g.Expect(err).To(HaveOccurred())
 				g.Expect(err.Error()).To(ContainSubstring(tt.err))
