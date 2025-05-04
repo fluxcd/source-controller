@@ -27,7 +27,7 @@ import (
 	"time"
 
 	securejoin "github.com/cyphar/filepath-securejoin"
-	"github.com/fluxcd/pkg/auth/azure"
+	"github.com/fluxcd/pkg/auth"
 	"github.com/fluxcd/pkg/git/github"
 	"github.com/fluxcd/pkg/runtime/logger"
 	"github.com/go-git/go-git/v5/plumbing/transport"
@@ -485,9 +485,10 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 	}
 
 	var proxyOpts *transport.ProxyOptions
+	var proxyURL *url.URL
 	if obj.Spec.ProxySecretRef != nil {
 		var err error
-		proxyOpts, err = r.getProxyOpts(ctx, obj.Spec.ProxySecretRef.Name, obj.GetNamespace())
+		proxyOpts, proxyURL, err = r.getProxyOpts(ctx, obj.Spec.ProxySecretRef.Name, obj.GetNamespace())
 		if err != nil {
 			e := serror.NewGeneric(
 				fmt.Errorf("failed to configure proxy options: %w", err),
@@ -509,7 +510,7 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 		return sreconcile.ResultEmpty, e
 	}
 
-	authOpts, err := r.getAuthOpts(ctx, obj, *u)
+	authOpts, err := r.getAuthOpts(ctx, obj, *u, proxyURL)
 	if err != nil {
 		// Return error as the world as observed may change
 		return sreconcile.ResultEmpty, err
@@ -622,28 +623,45 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 // getProxyOpts fetches the secret containing the proxy settings, constructs a
 // transport.ProxyOptions object using those settings and then returns it.
 func (r *GitRepositoryReconciler) getProxyOpts(ctx context.Context, proxySecretName,
-	proxySecretNamespace string) (*transport.ProxyOptions, error) {
+	proxySecretNamespace string) (*transport.ProxyOptions, *url.URL, error) {
 	proxyData, err := r.getSecretData(ctx, proxySecretName, proxySecretNamespace)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get proxy secret '%s/%s': %w", proxySecretNamespace, proxySecretName, err)
+		return nil, nil, fmt.Errorf("failed to get proxy secret '%s/%s': %w", proxySecretNamespace, proxySecretName, err)
 	}
-	address, ok := proxyData["address"]
+	b, ok := proxyData["address"]
 	if !ok {
-		return nil, fmt.Errorf("invalid proxy secret '%s/%s': key 'address' is missing", proxySecretNamespace, proxySecretName)
+		return nil, nil, fmt.Errorf("invalid proxy secret '%s/%s': key 'address' is missing", proxySecretNamespace, proxySecretName)
 	}
 
+	address := string(b)
+	username := string(proxyData["username"])
+	password := string(proxyData["password"])
+
 	proxyOpts := &transport.ProxyOptions{
-		URL:      string(address),
-		Username: string(proxyData["username"]),
-		Password: string(proxyData["password"]),
+		URL:      address,
+		Username: username,
+		Password: password,
 	}
-	return proxyOpts, nil
+
+	proxyURL, err := url.Parse(string(address))
+	if err != nil {
+		return nil, nil, fmt.Errorf("invalid address in proxy secret '%s/%s': %w", proxySecretNamespace, proxySecretName, err)
+	}
+	switch {
+	case username != "" && password == "":
+		proxyURL.User = url.User(username)
+	case username != "" && password != "":
+		proxyURL.User = url.UserPassword(username, password)
+	}
+
+	return proxyOpts, proxyURL, nil
 }
 
 // getAuthOpts fetches the secret containing the auth options (if specified),
 // constructs a git.AuthOptions object using those options along with the provided
 // URL and returns it.
-func (r *GitRepositoryReconciler) getAuthOpts(ctx context.Context, obj *sourcev1.GitRepository, u url.URL) (*git.AuthOptions, error) {
+func (r *GitRepositoryReconciler) getAuthOpts(ctx context.Context, obj *sourcev1.GitRepository,
+	u url.URL, proxyURL *url.URL) (*git.AuthOptions, error) {
 	var authData map[string][]byte
 	if obj.Spec.SecretRef != nil {
 		var err error
@@ -659,7 +677,7 @@ func (r *GitRepositoryReconciler) getAuthOpts(ctx context.Context, obj *sourcev1
 	}
 
 	// Configure authentication strategy to access the source
-	authOpts, err := git.NewAuthOptions(u, authData)
+	opts, err := git.NewAuthOptions(u, authData)
 	if err != nil {
 		e := serror.NewGeneric(
 			fmt.Errorf("failed to configure authentication options: %w", err),
@@ -669,14 +687,28 @@ func (r *GitRepositoryReconciler) getAuthOpts(ctx context.Context, obj *sourcev1
 		return nil, e
 	}
 
+	var authOpts []auth.Option
+
+	if r.tokenCache != nil {
+		involvedObject := cache.InvolvedObject{
+			Kind:      sourcev1.GitRepositoryKind,
+			Name:      obj.GetName(),
+			Namespace: obj.GetNamespace(),
+			Operation: cache.OperationReconcile,
+		}
+		authOpts = append(authOpts, auth.WithCache(*r.tokenCache, involvedObject))
+	}
+
+	if proxyURL != nil {
+		authOpts = append(authOpts, auth.WithProxyURL(*proxyURL))
+	}
+
 	// Configure provider authentication if specified in spec
 	switch obj.GetProvider() {
 	case sourcev1.GitProviderAzure:
-		authOpts.ProviderOpts = &git.ProviderOptions{
-			Name: sourcev1.GitProviderAzure,
-			AzureOpts: []azure.OptFunc{
-				azure.WithAzureDevOpsScope(),
-			},
+		opts.ProviderOpts = &git.ProviderOptions{
+			Name:     sourcev1.GitProviderAzure,
+			AuthOpts: authOpts,
 		}
 	case sourcev1.GitProviderGitHub:
 		// if provider is github, but secret ref is not specified
@@ -689,11 +721,13 @@ func (r *GitRepositoryReconciler) getAuthOpts(ctx context.Context, obj *sourcev1
 			return nil, e
 		}
 
-		authOpts.ProviderOpts = &git.ProviderOptions{
+		opts.ProviderOpts = &git.ProviderOptions{
 			Name: sourcev1.GitProviderGitHub,
 			GitHubOpts: []github.OptFunc{
 				github.WithAppData(authData),
-				github.WithCache(r.tokenCache, sourcev1.GitRepositoryKind, obj.GetName(), obj.GetNamespace()),
+				github.WithProxyURL(proxyURL),
+				github.WithCache(r.tokenCache, sourcev1.GitRepositoryKind,
+					obj.GetName(), obj.GetNamespace(), cache.OperationReconcile),
 			},
 		}
 	default:
@@ -707,7 +741,7 @@ func (r *GitRepositoryReconciler) getAuthOpts(ctx context.Context, obj *sourcev1
 			return nil, e
 		}
 	}
-	return authOpts, nil
+	return opts, nil
 }
 
 func (r *GitRepositoryReconciler) getSecretData(ctx context.Context, name, namespace string) (map[string][]byte, error) {
@@ -1116,7 +1150,8 @@ func (r *GitRepositoryReconciler) reconcileDelete(ctx context.Context, obj *sour
 	controllerutil.RemoveFinalizer(obj, sourcev1.SourceFinalizer)
 
 	// Cleanup caches.
-	r.tokenCache.DeleteEventsForObject(sourcev1.GitRepositoryKind, obj.GetName(), obj.GetNamespace())
+	r.tokenCache.DeleteEventsForObject(sourcev1.GitRepositoryKind,
+		obj.GetName(), obj.GetNamespace(), cache.OperationReconcile)
 
 	// Stop reconciliation as the object is being deleted
 	return sreconcile.ResultEmpty, nil

@@ -24,10 +24,10 @@ require (
 	github.com/fluxcd/cli-utils v0.36.0-flux.13
 	github.com/fluxcd/pkg/apis/event v0.17.0
 	github.com/fluxcd/pkg/apis/meta v1.11.0
-	github.com/fluxcd/pkg/auth v0.10.0
-	github.com/fluxcd/pkg/cache v0.8.0
-	github.com/fluxcd/pkg/git v0.27.0
-	github.com/fluxcd/pkg/git/gogit v0.28.0
+	github.com/fluxcd/pkg/auth v0.11.0
+	github.com/fluxcd/pkg/cache v0.9.0
+	github.com/fluxcd/pkg/git v0.28.0
+	github.com/fluxcd/pkg/git/gogit v0.30.0
 	github.com/fluxcd/pkg/gittestserver v0.17.0
 	github.com/fluxcd/pkg/helmtestserver v0.24.0
 	github.com/fluxcd/pkg/lockedfile v0.6.0
@@ -164,7 +164,7 @@ require (
 	github.com/containerd/log v0.1.0 // indirect
 	github.com/containerd/platforms v0.2.1 // indirect
 	github.com/containerd/stargz-snapshotter/estargz v0.16.3 // indirect
-	github.com/coreos/go-oidc/v3 v3.12.0 // indirect
+	github.com/coreos/go-oidc/v3 v3.14.1 // indirect
 	github.com/coreos/go-systemd/v22 v22.5.0 // indirect
 	github.com/cyberphone/json-canonicalization v0.0.0-20231011164504-785e29786b46 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
