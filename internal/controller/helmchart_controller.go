@@ -70,7 +70,6 @@ import (
 	"github.com/fluxcd/source-controller/internal/helm/chart"
 	"github.com/fluxcd/source-controller/internal/helm/getter"
 	"github.com/fluxcd/source-controller/internal/helm/repository"
-	"github.com/fluxcd/source-controller/internal/oci"
 	soci "github.com/fluxcd/source-controller/internal/oci"
 	scosign "github.com/fluxcd/source-controller/internal/oci/cosign"
 	"github.com/fluxcd/source-controller/internal/oci/notation"
@@ -1255,7 +1254,7 @@ func observeChartBuild(ctx context.Context, sp *patch.SerialPatcher, pOpts []pat
 	if build.Complete() {
 		conditions.Delete(obj, sourcev1.FetchFailedCondition)
 		conditions.Delete(obj, sourcev1.BuildFailedCondition)
-		if build.VerifiedResult == oci.VerificationResultSuccess {
+		if build.VerifiedResult == soci.VerificationResultSuccess {
 			conditions.MarkTrue(obj, sourcev1.SourceVerifiedCondition, meta.SucceededReason, "verified signature of version %s", build.Version)
 		}
 	}

@@ -132,19 +132,17 @@ type GitRepositoryReconciler struct {
 
 	Storage        *Storage
 	ControllerName string
+	TokenCache     *cache.TokenCache
 
 	requeueDependency time.Duration
 	features          map[string]bool
 
 	patchOptions []patch.Option
-
-	tokenCache *cache.TokenCache
 }
 
 type GitRepositoryReconcilerOptions struct {
 	DependencyRequeueInterval time.Duration
 	RateLimiter               workqueue.TypedRateLimiter[reconcile.Request]
-	TokenCache                *cache.TokenCache
 }
 
 // gitRepositoryReconcileFunc is the function type for all the
@@ -163,8 +161,6 @@ func (r *GitRepositoryReconciler) SetupWithManagerAndOptions(mgr ctrl.Manager, o
 	if r.features == nil {
 		r.features = features.FeatureGates()
 	}
-
-	r.tokenCache = opts.TokenCache
 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&sourcev1.GitRepository{}, builder.WithPredicates(
@@ -689,14 +685,14 @@ func (r *GitRepositoryReconciler) getAuthOpts(ctx context.Context, obj *sourcev1
 
 	var authOpts []auth.Option
 
-	if r.tokenCache != nil {
+	if r.TokenCache != nil {
 		involvedObject := cache.InvolvedObject{
 			Kind:      sourcev1.GitRepositoryKind,
 			Name:      obj.GetName(),
 			Namespace: obj.GetNamespace(),
 			Operation: cache.OperationReconcile,
 		}
-		authOpts = append(authOpts, auth.WithCache(*r.tokenCache, involvedObject))
+		authOpts = append(authOpts, auth.WithCache(*r.TokenCache, involvedObject))
 	}
 
 	if proxyURL != nil {
@@ -726,7 +722,7 @@ func (r *GitRepositoryReconciler) getAuthOpts(ctx context.Context, obj *sourcev1
 			GitHubOpts: []github.OptFunc{
 				github.WithAppData(authData),
 				github.WithProxyURL(proxyURL),
-				github.WithCache(r.tokenCache, sourcev1.GitRepositoryKind,
+				github.WithCache(r.TokenCache, sourcev1.GitRepositoryKind,
 					obj.GetName(), obj.GetNamespace(), cache.OperationReconcile),
 			},
 		}
@@ -1150,7 +1146,7 @@ func (r *GitRepositoryReconciler) reconcileDelete(ctx context.Context, obj *sour
 	controllerutil.RemoveFinalizer(obj, sourcev1.SourceFinalizer)
 
 	// Cleanup caches.
-	r.tokenCache.DeleteEventsForObject(sourcev1.GitRepositoryKind,
+	r.TokenCache.DeleteEventsForObject(sourcev1.GitRepositoryKind,
 		obj.GetName(), obj.GetNamespace(), cache.OperationReconcile)
 
 	// Stop reconciliation as the object is being deleted

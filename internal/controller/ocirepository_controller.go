@@ -51,6 +51,8 @@ import (
 
 	eventv1 "github.com/fluxcd/pkg/apis/event/v1beta1"
 	"github.com/fluxcd/pkg/apis/meta"
+	"github.com/fluxcd/pkg/auth"
+	"github.com/fluxcd/pkg/cache"
 	"github.com/fluxcd/pkg/oci"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	helper "github.com/fluxcd/pkg/runtime/controller"
@@ -141,6 +143,7 @@ type OCIRepositoryReconciler struct {
 
 	Storage           *Storage
 	ControllerName    string
+	TokenCache        *cache.TokenCache
 	requeueDependency time.Duration
 
 	patchOptions []patch.Option
@@ -175,6 +178,7 @@ func (r *OCIRepositoryReconciler) SetupWithManagerAndOptions(mgr ctrl.Manager, o
 // +kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=ocirepositories/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=ocirepositories/finalizers,verbs=get;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
+// +kubebuilder:rbac:groups="",resources=serviceaccounts/token,verbs=create
 
 func (r *OCIRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, retErr error) {
 	start := time.Now()
@@ -328,7 +332,7 @@ func (r *OCIRepositoryReconciler) reconcile(ctx context.Context, sp *patch.Seria
 // If this fails, it records v1beta2.FetchFailedCondition=True on the object and returns early.
 func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch.SerialPatcher,
 	obj *ociv1.OCIRepository, metadata *sourcev1.Artifact, dir string) (sreconcile.Result, error) {
-	var auth authn.Authenticator
+	var authenticator authn.Authenticator
 
 	ctxTimeout, cancel := context.WithTimeout(ctx, obj.Spec.Timeout.Duration)
 	defer cancel()
@@ -363,9 +367,29 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 	}
 
 	if _, ok := keychain.(soci.Anonymous); obj.Spec.Provider != ociv1.GenericOCIProvider && ok {
+		var opts []auth.Option
+		if obj.Spec.ServiceAccountName != "" {
+			serviceAccount := client.ObjectKey{
+				Name:      obj.Spec.ServiceAccountName,
+				Namespace: obj.GetNamespace(),
+			}
+			opts = append(opts, auth.WithServiceAccount(serviceAccount, r.Client))
+		}
+		if r.TokenCache != nil {
+			involvedObject := cache.InvolvedObject{
+				Kind:      ociv1.OCIRepositoryKind,
+				Name:      obj.GetName(),
+				Namespace: obj.GetNamespace(),
+				Operation: cache.OperationReconcile,
+			}
+			opts = append(opts, auth.WithCache(*r.TokenCache, involvedObject))
+		}
+		if proxyURL != nil {
+			opts = append(opts, auth.WithProxyURL(*proxyURL))
+		}
 		var authErr error
-		auth, authErr = soci.OIDCAuth(ctxTimeout, obj.Spec.URL, obj.Spec.Provider, proxyURL)
-		if authErr != nil && !errors.Is(authErr, oci.ErrUnconfiguredProvider) {
+		authenticator, authErr = soci.OIDCAuth(ctxTimeout, obj.Spec.URL, obj.Spec.Provider, opts...)
+		if authErr != nil {
 			e := serror.NewGeneric(
 				fmt.Errorf("failed to get credential from %s: %w", obj.Spec.Provider, authErr),
 				sourcev1.AuthenticationFailedReason,
@@ -386,7 +410,7 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 		return sreconcile.ResultEmpty, e
 	}
 
-	opts := makeRemoteOptions(ctx, transport, keychain, auth)
+	opts := makeRemoteOptions(ctx, transport, keychain, authenticator)
 
 	// Determine which artifact revision to pull
 	ref, err := r.getArtifactRef(obj, opts)
@@ -446,7 +470,7 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 		conditions.GetObservedGeneration(obj, sourcev1.SourceVerifiedCondition) != obj.Generation ||
 		conditions.IsFalse(obj, sourcev1.SourceVerifiedCondition) {
 
-		result, err := r.verifySignature(ctx, obj, ref, keychain, auth, transport, opts...)
+		result, err := r.verifySignature(ctx, obj, ref, keychain, authenticator, transport, opts...)
 		if err != nil {
 			provider := obj.Spec.Verify.Provider
 			if obj.Spec.Verify.SecretRef == nil && obj.Spec.Verify.Provider == "cosign" {
@@ -1224,6 +1248,10 @@ func (r *OCIRepositoryReconciler) reconcileDelete(ctx context.Context, obj *ociv
 
 	// Remove our finalizer from the list
 	controllerutil.RemoveFinalizer(obj, sourcev1.SourceFinalizer)
+
+	// Cleanup caches.
+	r.TokenCache.DeleteEventsForObject(ociv1.OCIRepositoryKind,
+		obj.GetName(), obj.GetNamespace(), cache.OperationReconcile)
 
 	// Stop reconciliation as the object is being deleted
 	return sreconcile.ResultEmpty, nil
