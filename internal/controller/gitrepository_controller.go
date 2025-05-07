@@ -70,7 +70,7 @@ import (
 )
 
 // gitRepositoryReadyCondition contains the information required to summarize a
-// v1beta2.GitRepository Ready Condition.
+// v1.GitRepository Ready Condition.
 var gitRepositoryReadyCondition = summarize.Conditions{
 	Target: meta.ReadyCondition,
 	Owned: []string{
@@ -125,7 +125,7 @@ func getPatchOptions(ownedConditions []string, controllerName string) []patch.Op
 // +kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=gitrepositories/finalizers,verbs=get;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 
-// GitRepositoryReconciler reconciles a v1beta2.GitRepository object.
+// GitRepositoryReconciler reconciles a v1.GitRepository object.
 type GitRepositoryReconciler struct {
 	client.Client
 	kuberecorder.EventRecorder
@@ -147,7 +147,7 @@ type GitRepositoryReconcilerOptions struct {
 }
 
 // gitRepositoryReconcileFunc is the function type for all the
-// v1beta2.GitRepository (sub)reconcile functions.
+// v1.GitRepository (sub)reconcile functions.
 type gitRepositoryReconcileFunc func(ctx context.Context, sp *patch.SerialPatcher, obj *sourcev1.GitRepository, commit *git.Commit, includes *artifactSet, dir string) (sreconcile.Result, error)
 
 func (r *GitRepositoryReconciler) SetupWithManager(mgr ctrl.Manager) error {
@@ -447,23 +447,23 @@ func (r *GitRepositoryReconciler) reconcileStorage(ctx context.Context, sp *patc
 //
 // The included repositories are fetched and their metadata are stored. In case
 // one of the included repositories isn't ready, it records
-// v1beta2.IncludeUnavailableCondition=True and returns early. When all the
+// v1.IncludeUnavailableCondition=True and returns early. When all the
 // included repositories are ready, it removes
-// v1beta2.IncludeUnavailableCondition from the object.
+// v1.IncludeUnavailableCondition from the object.
 // When the included artifactSet differs from the current set in the Status of
-// the object, it marks the object with v1beta2.ArtifactOutdatedCondition=True.
+// the object, it marks the object with v1.ArtifactOutdatedCondition=True.
 // The repository is cloned to the given dir, using the specified configuration
 // to check out the reference. In case of an error during this process
-// (including transient errors), it records v1beta2.FetchFailedCondition=True
+// (including transient errors), it records v1.FetchFailedCondition=True
 // and returns early.
-// On a successful checkout, it removes v1beta2.FetchFailedCondition and
+// On a successful checkout, it removes v1.FetchFailedCondition and
 // compares the current revision of HEAD to the revision of the Artifact in the
-// Status of the object. It records v1beta2.ArtifactOutdatedCondition=True when
+// Status of the object. It records v1.ArtifactOutdatedCondition=True when
 // they differ.
 // If specified, the signature of the Git commit is verified. If the signature
 // can not be verified or the verification fails, it records
-// v1beta2.SourceVerifiedCondition=False and returns early. When successful,
-// it records v1beta2.SourceVerifiedCondition=True.
+// v1.SourceVerifiedCondition=False and returns early. When successful,
+// it records v1.SourceVerifiedCondition=True.
 // When all the above is successful, the given Commit pointer is set to the
 // commit of the checked out Git repository.
 //
@@ -787,7 +787,7 @@ func (r *GitRepositoryReconciler) getSecretData(ctx context.Context, name, names
 // (Status) data on the object does not match the given.
 //
 // The inspection of the given data to the object is differed, ensuring any
-// stale observations like v1beta2.ArtifactOutdatedCondition are removed.
+// stale observations like v1.ArtifactOutdatedCondition are removed.
 // If the given Artifact and/or artifactSet (includes) and observed artifact
 // content config do not differ from the object's current, it returns early.
 // Source ignore patterns are loaded, and the given directory is archived while
@@ -903,15 +903,15 @@ func (r *GitRepositoryReconciler) reconcileArtifact(ctx context.Context, sp *pat
 }
 
 // reconcileInclude reconciles the on the object specified
-// v1beta2.GitRepositoryInclude list by copying their Artifact (sub)contents to
+// v1.GitRepositoryInclude list by copying their Artifact (sub)contents to
 // the specified paths in the given directory.
 //
 // When one of the includes is unavailable, it marks the object with
-// v1beta2.IncludeUnavailableCondition=True and returns early.
+// v1.IncludeUnavailableCondition=True and returns early.
 // When the copy operations are successful, it removes the
-// v1beta2.IncludeUnavailableCondition from the object.
+// v1.IncludeUnavailableCondition from the object.
 // When the composed artifactSet differs from the current set in the Status of
-// the object, it marks the object with v1beta2.ArtifactOutdatedCondition=True.
+// the object, it marks the object with v1.ArtifactOutdatedCondition=True.
 func (r *GitRepositoryReconciler) reconcileInclude(ctx context.Context, sp *patch.SerialPatcher,
 	obj *sourcev1.GitRepository, _ *git.Commit, includes *artifactSet, dir string) (sreconcile.Result, error) {
 
@@ -1060,10 +1060,10 @@ func (r *GitRepositoryReconciler) fetchIncludes(ctx context.Context, obj *source
 // verifySignature verifies the signature of the given Git commit and/or its referencing tag
 // depending on the verification mode specified on the object.
 // If the signature can not be verified or the verification fails, it records
-// v1beta2.SourceVerifiedCondition=False and returns.
-// When successful, it records v1beta2.SourceVerifiedCondition=True.
+// v1.SourceVerifiedCondition=False and returns.
+// When successful, it records v1.SourceVerifiedCondition=True.
 // If no verification mode is specified on the object, the
-// v1beta2.SourceVerifiedCondition Condition is removed.
+// v1.SourceVerifiedCondition Condition is removed.
 func (r *GitRepositoryReconciler) verifySignature(ctx context.Context, obj *sourcev1.GitRepository, commit git.Commit) (sreconcile.Result, error) {
 	// Check if there is a commit verification is configured and remove any old
 	// observations if there is none

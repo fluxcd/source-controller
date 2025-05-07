@@ -16,6 +16,8 @@ Resource Types:
 <a href="#source.toolkit.fluxcd.io/v1.HelmChart">HelmChart</a>
 </li><li>
 <a href="#source.toolkit.fluxcd.io/v1.HelmRepository">HelmRepository</a>
+</li><li>
+<a href="#source.toolkit.fluxcd.io/v1.OCIRepository">OCIRepository</a>
 </li></ul>
 <h3 id="source.toolkit.fluxcd.io/v1.Bucket">Bucket
 </h3>
@@ -1013,6 +1015,292 @@ HelmRepositoryStatus
 </table>
 </div>
 </div>
+<h3 id="source.toolkit.fluxcd.io/v1.OCIRepository">OCIRepository
+</h3>
+<p>OCIRepository is the Schema for the ocirepositories API</p>
+<div class="md-typeset__scrollwrap">
+<div class="md-typeset__table">
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>apiVersion</code><br>
+string</td>
+<td>
+<code>source.toolkit.fluxcd.io/v1</code>
+</td>
+</tr>
+<tr>
+<td>
+<code>kind</code><br>
+string
+</td>
+<td>
+<code>OCIRepository</code>
+</td>
+</tr>
+<tr>
+<td>
+<code>metadata</code><br>
+<em>
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.19/#objectmeta-v1-meta">
+Kubernetes meta/v1.ObjectMeta
+</a>
+</em>
+</td>
+<td>
+Refer to the Kubernetes API documentation for the fields of the
+<code>metadata</code> field.
+</td>
+</tr>
+<tr>
+<td>
+<code>spec</code><br>
+<em>
+<a href="#source.toolkit.fluxcd.io/v1.OCIRepositorySpec">
+OCIRepositorySpec
+</a>
+</em>
+</td>
+<td>
+<br/>
+<br/>
+<table>
+<tr>
+<td>
+<code>url</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<p>URL is a reference to an OCI artifact repository hosted
+on a remote container registry.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>ref</code><br>
+<em>
+<a href="#source.toolkit.fluxcd.io/v1.OCIRepositoryRef">
+OCIRepositoryRef
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>The OCI reference to pull and monitor for changes,
+defaults to the latest tag.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>layerSelector</code><br>
+<em>
+<a href="#source.toolkit.fluxcd.io/v1.OCILayerSelector">
+OCILayerSelector
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>LayerSelector specifies which layer should be extracted from the OCI artifact.
+When not specified, the first layer found in the artifact is selected.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>provider</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>The provider used for authentication, can be &lsquo;aws&rsquo;, &lsquo;azure&rsquo;, &lsquo;gcp&rsquo; or &lsquo;generic&rsquo;.
+When not specified, defaults to &lsquo;generic&rsquo;.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>secretRef</code><br>
+<em>
+<a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/meta#LocalObjectReference">
+github.com/fluxcd/pkg/apis/meta.LocalObjectReference
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>SecretRef contains the secret name containing the registry login
+credentials to resolve image metadata.
+The secret must be of type kubernetes.io/dockerconfigjson.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>verify</code><br>
+<em>
+<a href="#source.toolkit.fluxcd.io/v1.OCIRepositoryVerification">
+OCIRepositoryVerification
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Verify contains the secret name containing the trusted public keys
+used to verify the signature and specifies which provider to use to check
+whether OCI image is authentic.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>serviceAccountName</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>ServiceAccountName is the name of the Kubernetes ServiceAccount used to authenticate
+the image pull if the service account has attached pull secrets. For more information:
+<a href="https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/#add-imagepullsecrets-to-a-service-account">https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/#add-imagepullsecrets-to-a-service-account</a></p>
+</td>
+</tr>
+<tr>
+<td>
+<code>certSecretRef</code><br>
+<em>
+<a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/meta#LocalObjectReference">
+github.com/fluxcd/pkg/apis/meta.LocalObjectReference
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>CertSecretRef can be given the name of a Secret containing
+either or both of</p>
+<ul>
+<li>a PEM-encoded client certificate (<code>tls.crt</code>) and private
+key (<code>tls.key</code>);</li>
+<li>a PEM-encoded CA certificate (<code>ca.crt</code>)</li>
+</ul>
+<p>and whichever are supplied, will be used for connecting to the
+registry. The client cert and key are useful if you are
+authenticating with a certificate; the CA cert is useful if
+you are using a self-signed server certificate. The Secret must
+be of type <code>Opaque</code> or <code>kubernetes.io/tls</code>.</p>
+<p>Note: Support for the <code>caFile</code>, <code>certFile</code> and <code>keyFile</code> keys have
+been deprecated.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>proxySecretRef</code><br>
+<em>
+<a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/meta#LocalObjectReference">
+github.com/fluxcd/pkg/apis/meta.LocalObjectReference
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>ProxySecretRef specifies the Secret containing the proxy configuration
+to use while communicating with the container registry.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>interval</code><br>
+<em>
+<a href="https://pkg.go.dev/k8s.io/apimachinery/pkg/apis/meta/v1#Duration">
+Kubernetes meta/v1.Duration
+</a>
+</em>
+</td>
+<td>
+<p>Interval at which the OCIRepository URL is checked for updates.
+This interval is approximate and may be subject to jitter to ensure
+efficient use of resources.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>timeout</code><br>
+<em>
+<a href="https://pkg.go.dev/k8s.io/apimachinery/pkg/apis/meta/v1#Duration">
+Kubernetes meta/v1.Duration
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>The timeout for remote OCI Repository operations like pulling, defaults to 60s.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>ignore</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Ignore overrides the set of excluded patterns in the .sourceignore format
+(which is the same as .gitignore). If not provided, a default will be used,
+consult the documentation for your version to find out what those are.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>insecure</code><br>
+<em>
+bool
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Insecure allows connecting to a non-TLS HTTP container registry.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>suspend</code><br>
+<em>
+bool
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>This flag tells the controller to suspend the reconciliation of this source.</p>
+</td>
+</tr>
+</table>
+</td>
+</tr>
+<tr>
+<td>
+<code>status</code><br>
+<em>
+<a href="#source.toolkit.fluxcd.io/v1.OCIRepositoryStatus">
+OCIRepositoryStatus
+</a>
+</em>
+</td>
+<td>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
 <h3 id="source.toolkit.fluxcd.io/v1.Artifact">Artifact
 </h3>
 <p>
@@ -1020,7 +1308,8 @@ HelmRepositoryStatus
 <a href="#source.toolkit.fluxcd.io/v1.BucketStatus">BucketStatus</a>, 
 <a href="#source.toolkit.fluxcd.io/v1.GitRepositoryStatus">GitRepositoryStatus</a>, 
 <a href="#source.toolkit.fluxcd.io/v1.HelmChartStatus">HelmChartStatus</a>, 
-<a href="#source.toolkit.fluxcd.io/v1.HelmRepositoryStatus">HelmRepositoryStatus</a>)
+<a href="#source.toolkit.fluxcd.io/v1.HelmRepositoryStatus">HelmRepositoryStatus</a>, 
+<a href="#source.toolkit.fluxcd.io/v1.OCIRepositoryStatus">OCIRepositoryStatus</a>)
 </p>
 <p>Artifact represents the output of a Source reconciliation.</p>
 <div class="md-typeset__scrollwrap">
@@ -2744,11 +3033,502 @@ string
 </table>
 </div>
 </div>
+<h3 id="source.toolkit.fluxcd.io/v1.OCILayerSelector">OCILayerSelector
+</h3>
+<p>
+(<em>Appears on:</em>
+<a href="#source.toolkit.fluxcd.io/v1.OCIRepositorySpec">OCIRepositorySpec</a>, 
+<a href="#source.toolkit.fluxcd.io/v1.OCIRepositoryStatus">OCIRepositoryStatus</a>)
+</p>
+<p>OCILayerSelector specifies which layer should be extracted from an OCI Artifact</p>
+<div class="md-typeset__scrollwrap">
+<div class="md-typeset__table">
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>mediaType</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>MediaType specifies the OCI media type of the layer
+which should be extracted from the OCI Artifact. The
+first layer matching this type is selected.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>operation</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Operation specifies how the selected layer should be processed.
+By default, the layer compressed content is extracted to storage.
+When the operation is set to &lsquo;copy&rsquo;, the layer compressed content
+is persisted to storage as it is.</p>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<h3 id="source.toolkit.fluxcd.io/v1.OCIRepositoryRef">OCIRepositoryRef
+</h3>
+<p>
+(<em>Appears on:</em>
+<a href="#source.toolkit.fluxcd.io/v1.OCIRepositorySpec">OCIRepositorySpec</a>)
+</p>
+<p>OCIRepositoryRef defines the image reference for the OCIRepository&rsquo;s URL</p>
+<div class="md-typeset__scrollwrap">
+<div class="md-typeset__table">
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>digest</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Digest is the image digest to pull, takes precedence over SemVer.
+The value should be in the format &lsquo;sha256:<HASH>&rsquo;.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>semver</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>SemVer is the range of tags to pull selecting the latest within
+the range, takes precedence over Tag.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>semverFilter</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>SemverFilter is a regex pattern to filter the tags within the SemVer range.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>tag</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Tag is the image tag to pull, defaults to latest.</p>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<h3 id="source.toolkit.fluxcd.io/v1.OCIRepositorySpec">OCIRepositorySpec
+</h3>
+<p>
+(<em>Appears on:</em>
+<a href="#source.toolkit.fluxcd.io/v1.OCIRepository">OCIRepository</a>)
+</p>
+<p>OCIRepositorySpec defines the desired state of OCIRepository</p>
+<div class="md-typeset__scrollwrap">
+<div class="md-typeset__table">
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>url</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<p>URL is a reference to an OCI artifact repository hosted
+on a remote container registry.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>ref</code><br>
+<em>
+<a href="#source.toolkit.fluxcd.io/v1.OCIRepositoryRef">
+OCIRepositoryRef
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>The OCI reference to pull and monitor for changes,
+defaults to the latest tag.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>layerSelector</code><br>
+<em>
+<a href="#source.toolkit.fluxcd.io/v1.OCILayerSelector">
+OCILayerSelector
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>LayerSelector specifies which layer should be extracted from the OCI artifact.
+When not specified, the first layer found in the artifact is selected.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>provider</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>The provider used for authentication, can be &lsquo;aws&rsquo;, &lsquo;azure&rsquo;, &lsquo;gcp&rsquo; or &lsquo;generic&rsquo;.
+When not specified, defaults to &lsquo;generic&rsquo;.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>secretRef</code><br>
+<em>
+<a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/meta#LocalObjectReference">
+github.com/fluxcd/pkg/apis/meta.LocalObjectReference
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>SecretRef contains the secret name containing the registry login
+credentials to resolve image metadata.
+The secret must be of type kubernetes.io/dockerconfigjson.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>verify</code><br>
+<em>
+<a href="#source.toolkit.fluxcd.io/v1.OCIRepositoryVerification">
+OCIRepositoryVerification
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Verify contains the secret name containing the trusted public keys
+used to verify the signature and specifies which provider to use to check
+whether OCI image is authentic.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>serviceAccountName</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>ServiceAccountName is the name of the Kubernetes ServiceAccount used to authenticate
+the image pull if the service account has attached pull secrets. For more information:
+<a href="https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/#add-imagepullsecrets-to-a-service-account">https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/#add-imagepullsecrets-to-a-service-account</a></p>
+</td>
+</tr>
+<tr>
+<td>
+<code>certSecretRef</code><br>
+<em>
+<a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/meta#LocalObjectReference">
+github.com/fluxcd/pkg/apis/meta.LocalObjectReference
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>CertSecretRef can be given the name of a Secret containing
+either or both of</p>
+<ul>
+<li>a PEM-encoded client certificate (<code>tls.crt</code>) and private
+key (<code>tls.key</code>);</li>
+<li>a PEM-encoded CA certificate (<code>ca.crt</code>)</li>
+</ul>
+<p>and whichever are supplied, will be used for connecting to the
+registry. The client cert and key are useful if you are
+authenticating with a certificate; the CA cert is useful if
+you are using a self-signed server certificate. The Secret must
+be of type <code>Opaque</code> or <code>kubernetes.io/tls</code>.</p>
+<p>Note: Support for the <code>caFile</code>, <code>certFile</code> and <code>keyFile</code> keys have
+been deprecated.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>proxySecretRef</code><br>
+<em>
+<a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/meta#LocalObjectReference">
+github.com/fluxcd/pkg/apis/meta.LocalObjectReference
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>ProxySecretRef specifies the Secret containing the proxy configuration
+to use while communicating with the container registry.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>interval</code><br>
+<em>
+<a href="https://pkg.go.dev/k8s.io/apimachinery/pkg/apis/meta/v1#Duration">
+Kubernetes meta/v1.Duration
+</a>
+</em>
+</td>
+<td>
+<p>Interval at which the OCIRepository URL is checked for updates.
+This interval is approximate and may be subject to jitter to ensure
+efficient use of resources.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>timeout</code><br>
+<em>
+<a href="https://pkg.go.dev/k8s.io/apimachinery/pkg/apis/meta/v1#Duration">
+Kubernetes meta/v1.Duration
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>The timeout for remote OCI Repository operations like pulling, defaults to 60s.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>ignore</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Ignore overrides the set of excluded patterns in the .sourceignore format
+(which is the same as .gitignore). If not provided, a default will be used,
+consult the documentation for your version to find out what those are.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>insecure</code><br>
+<em>
+bool
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Insecure allows connecting to a non-TLS HTTP container registry.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>suspend</code><br>
+<em>
+bool
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>This flag tells the controller to suspend the reconciliation of this source.</p>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<h3 id="source.toolkit.fluxcd.io/v1.OCIRepositoryStatus">OCIRepositoryStatus
+</h3>
+<p>
+(<em>Appears on:</em>
+<a href="#source.toolkit.fluxcd.io/v1.OCIRepository">OCIRepository</a>)
+</p>
+<p>OCIRepositoryStatus defines the observed state of OCIRepository</p>
+<div class="md-typeset__scrollwrap">
+<div class="md-typeset__table">
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>observedGeneration</code><br>
+<em>
+int64
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>ObservedGeneration is the last observed generation.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>conditions</code><br>
+<em>
+<a href="https://pkg.go.dev/k8s.io/apimachinery/pkg/apis/meta/v1#Condition">
+[]Kubernetes meta/v1.Condition
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Conditions holds the conditions for the OCIRepository.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>url</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>URL is the download link for the artifact output of the last OCI Repository sync.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>artifact</code><br>
+<em>
+<a href="#source.toolkit.fluxcd.io/v1.Artifact">
+Artifact
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Artifact represents the output of the last successful OCI Repository sync.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>contentConfigChecksum</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>ContentConfigChecksum is a checksum of all the configurations related to
+the content of the source artifact:
+- .spec.ignore
+- .spec.layerSelector
+observed in .status.observedGeneration version of the object. This can
+be used to determine if the content configuration has changed and the
+artifact needs to be rebuilt.
+It has the format of <code>&lt;algo&gt;:&lt;checksum&gt;</code>, for example: <code>sha256:&lt;checksum&gt;</code>.</p>
+<p>Deprecated: Replaced with explicit fields for observed artifact content
+config in the status.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>observedIgnore</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>ObservedIgnore is the observed exclusion patterns used for constructing
+the source artifact.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>observedLayerSelector</code><br>
+<em>
+<a href="#source.toolkit.fluxcd.io/v1.OCILayerSelector">
+OCILayerSelector
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>ObservedLayerSelector is the observed layer selector used for constructing
+the source artifact.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>ReconcileRequestStatus</code><br>
+<em>
+<a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/meta#ReconcileRequestStatus">
+github.com/fluxcd/pkg/apis/meta.ReconcileRequestStatus
+</a>
+</em>
+</td>
+<td>
+<p>
+(Members of <code>ReconcileRequestStatus</code> are embedded into this type.)
+</p>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
 <h3 id="source.toolkit.fluxcd.io/v1.OCIRepositoryVerification">OCIRepositoryVerification
 </h3>
 <p>
 (<em>Appears on:</em>
-<a href="#source.toolkit.fluxcd.io/v1.HelmChartSpec">HelmChartSpec</a>)
+<a href="#source.toolkit.fluxcd.io/v1.HelmChartSpec">HelmChartSpec</a>, 
+<a href="#source.toolkit.fluxcd.io/v1.OCIRepositorySpec">OCIRepositorySpec</a>)
 </p>
 <p>OCIRepositoryVerification verifies the authenticity of an OCI Artifact</p>
 <div class="md-typeset__scrollwrap">

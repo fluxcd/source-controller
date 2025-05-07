@@ -32,7 +32,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
-	sourcev1beta2 "github.com/fluxcd/source-controller/api/v1beta2"
 	"github.com/fluxcd/source-controller/internal/helm/registry"
 	soci "github.com/fluxcd/source-controller/internal/oci"
 	stls "github.com/fluxcd/source-controller/internal/tls"
@@ -135,7 +134,7 @@ func GetClientOpts(ctx context.Context, c client.Client, obj *sourcev1.HelmRepos
 				return nil, "", fmt.Errorf("failed to configure login options: %w", err)
 			}
 		}
-	} else if obj.Spec.Provider != sourcev1beta2.GenericOCIProvider && obj.Spec.Type == sourcev1.HelmRepositoryTypeOCI && ociRepo {
+	} else if obj.Spec.Provider != sourcev1.GenericOCIProvider && obj.Spec.Type == sourcev1.HelmRepositoryTypeOCI && ociRepo {
 		authenticator, authErr := soci.OIDCAuth(ctx, obj.Spec.URL, obj.Spec.Provider)
 		if authErr != nil {
 			return nil, "", fmt.Errorf("failed to get credential from '%s': %w", obj.Spec.Provider, authErr)
