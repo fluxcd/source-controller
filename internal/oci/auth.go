@@ -18,13 +18,12 @@ package oci
 
 import (
 	"context"
-	"fmt"
-	"net/url"
 	"strings"
 
-	"github.com/fluxcd/pkg/oci/auth/login"
 	"github.com/google/go-containerregistry/pkg/authn"
-	"github.com/google/go-containerregistry/pkg/name"
+
+	"github.com/fluxcd/pkg/auth"
+	authutils "github.com/fluxcd/pkg/auth/utils"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
 )
@@ -41,22 +40,7 @@ func (a Anonymous) Resolve(_ authn.Resource) (authn.Authenticator, error) {
 }
 
 // OIDCAuth generates the OIDC credential authenticator based on the specified cloud provider.
-func OIDCAuth(ctx context.Context, url, provider string, proxyURL *url.URL) (authn.Authenticator, error) {
+func OIDCAuth(ctx context.Context, url, provider string, opts ...auth.Option) (authn.Authenticator, error) {
 	u := strings.TrimPrefix(url, sourcev1.OCIRepositoryPrefix)
-	ref, err := name.ParseReference(u)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse URL '%s': %w", u, err)
-	}
-
-	opts := login.ProviderOptions{}
-	switch provider {
-	case sourcev1.AmazonOCIProvider:
-		opts.AwsAutoLogin = true
-	case sourcev1.AzureOCIProvider:
-		opts.AzureAutoLogin = true
-	case sourcev1.GoogleOCIProvider:
-		opts.GcpAutoLogin = true
-	}
-
-	return login.NewManager(login.WithProxyURL(proxyURL)).Login(ctx, u, ref, opts)
+	return authutils.GetArtifactRegistryCredentials(ctx, provider, u, opts...)
 }

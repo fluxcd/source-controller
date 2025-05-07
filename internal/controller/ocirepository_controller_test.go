@@ -872,9 +872,9 @@ func TestOCIRepository_CertSecret(t *testing.T) {
 
 	tlsSecretClientCert := corev1.Secret{
 		Data: map[string][]byte{
-			oci.CACert:     tlsCA,
-			oci.ClientCert: clientPublicKey,
-			oci.ClientKey:  clientPrivateKey,
+			"caFile":   tlsCA,
+			"certFile": clientPublicKey,
+			"keyFile":  clientPrivateKey,
 		},
 	}
 
@@ -907,9 +907,9 @@ func TestOCIRepository_CertSecret(t *testing.T) {
 			digest: pi.digest,
 			certSecret: &corev1.Secret{
 				Data: map[string][]byte{
-					oci.CACert:     tlsCA,
-					oci.ClientCert: clientPublicKey,
-					oci.ClientKey:  []byte("invalid-key"),
+					"caFile":   tlsCA,
+					"certFile": clientPublicKey,
+					"keyFile":  []byte("invalid-key"),
 				},
 			},
 			expectreadyconition:   false,

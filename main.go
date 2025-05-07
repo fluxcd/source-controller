@@ -216,10 +216,10 @@ func main() {
 		Metrics:        metrics,
 		Storage:        storage,
 		ControllerName: controllerName,
+		TokenCache:     tokenCache,
 	}).SetupWithManagerAndOptions(mgr, controller.GitRepositoryReconcilerOptions{
 		DependencyRequeueInterval: requeueDependency,
 		RateLimiter:               helper.GetRateLimiter(rateLimiterOptions),
-		TokenCache:                tokenCache,
 	}); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", v1.GitRepositoryKind)
 		os.Exit(1)
@@ -278,6 +278,7 @@ func main() {
 		Storage:        storage,
 		EventRecorder:  eventRecorder,
 		ControllerName: controllerName,
+		TokenCache:     tokenCache,
 		Metrics:        metrics,
 	}).SetupWithManagerAndOptions(mgr, controller.OCIRepositoryReconcilerOptions{
 		RateLimiter: helper.GetRateLimiter(rateLimiterOptions),
