@@ -77,7 +77,7 @@ import (
 const maxConcurrentBucketFetches = 100
 
 // bucketReadyCondition contains the information required to summarize a
-// v1beta2.Bucket Ready Condition.
+// v1.Bucket Ready Condition.
 var bucketReadyCondition = summarize.Conditions{
 	Target: meta.ReadyCondition,
 	Owned: []string{
@@ -117,7 +117,7 @@ var bucketFailConditions = []string{
 // +kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=buckets/finalizers,verbs=get;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch
 
-// BucketReconciler reconciles a v1beta2.Bucket object.
+// BucketReconciler reconciles a v1.Bucket object.
 type BucketReconciler struct {
 	client.Client
 	kuberecorder.EventRecorder
@@ -155,7 +155,7 @@ type BucketProvider interface {
 	Close(context.Context)
 }
 
-// bucketReconcileFunc is the function type for all the v1beta2.Bucket
+// bucketReconcileFunc is the function type for all the v1.Bucket
 // (sub)reconcile functions. The type implementations are grouped and
 // executed serially to perform the complete reconcile of the object.
 type bucketReconcileFunc func(ctx context.Context, sp *patch.SerialPatcher, obj *sourcev1.Bucket, index *index.Digester, dir string) (sreconcile.Result, error)
@@ -418,7 +418,7 @@ func (r *BucketReconciler) reconcileStorage(ctx context.Context, sp *patch.Seria
 // reconcileSource fetches the upstream bucket contents with the client for the
 // given object's Provider, and returns the result.
 // When a SecretRef is defined, it attempts to fetch the Secret before calling
-// the provider. If this fails, it records v1beta2.FetchFailedCondition=True on
+// the provider. If this fails, it records v1.FetchFailedCondition=True on
 // the object and returns early.
 func (r *BucketReconciler) reconcileSource(ctx context.Context, sp *patch.SerialPatcher, obj *sourcev1.Bucket, index *index.Digester, dir string) (sreconcile.Result, error) {
 	secret, err := r.getSecret(ctx, obj.Spec.SecretRef, obj.GetNamespace())
@@ -588,7 +588,7 @@ func (r *BucketReconciler) reconcileSource(ctx context.Context, sp *patch.Serial
 // (Status) data on the object does not match the given.
 //
 // The inspection of the given data to the object is differed, ensuring any
-// stale observations like v1beta2.ArtifactOutdatedCondition are removed.
+// stale observations like v1.ArtifactOutdatedCondition are removed.
 // If the given Artifact does not differ from the object's current, it returns
 // early.
 // On a successful archive, the Artifact in the Status of the object is set,
