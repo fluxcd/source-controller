@@ -49,6 +49,13 @@ func TestWithIndex(t *testing.T) {
 
 		g.Expect(d.digests).To(BeEmpty())
 	})
+
+	t.Run("handles nil index", func(t *testing.T) {
+		g := NewWithT(t)
+		d := &Digester{}
+		WithIndex(nil)(d)
+		g.Expect(d.index).To(BeNil())
+	})
 }
 
 func TestNewDigester(t *testing.T) {
@@ -71,6 +78,14 @@ func TestNewDigester(t *testing.T) {
 		g.Expect(d).ToNot(BeNil())
 		g.Expect(d.index).To(Equal(i))
 		g.Expect(d.digests).ToNot(BeNil())
+	})
+
+	t.Run("handles multiple WithIndex options, applying last one", func(t *testing.T) {
+		g := NewWithT(t)
+		firstIndex := map[string]string{"a": "b"}
+		secondIndex := map[string]string{"c": "d"}
+		d := NewDigester(WithIndex(firstIndex), WithIndex(secondIndex))
+		g.Expect(d.index).To(Equal(secondIndex))
 	})
 }
 
@@ -107,6 +122,13 @@ func TestDigester_Add(t *testing.T) {
 
 		g.Expect(d.digests).To(BeEmpty())
 	})
+
+	t.Run("adds empty key and value", func(t *testing.T) {
+		g := NewWithT(t)
+		d := NewDigester()
+		d.Add("", "")
+		g.Expect(d.index).To(HaveKeyWithValue("", ""))
+	})
 }
 
 func TestDigester_Delete(t *testing.T) {
@@ -138,6 +160,14 @@ func TestDigester_Delete(t *testing.T) {
 		d.Delete("foo")
 		g.Expect(d.digests).To(BeEmpty())
 	})
+
+	t.Run("deletes non-existent key without error", func(t *testing.T) {
+		g := NewWithT(t)
+		d := NewDigester()
+		d.Delete("non-existent")
+		g.Expect(d.index).To(BeEmpty())   // Index should remain empty
+		g.Expect(d.digests).To(BeEmpty()) // Digests should remain empty as no change
+	})
 }
 
 func TestDigester_Get(t *testing.T) {
@@ -161,17 +191,26 @@ func TestDigester_Has(t *testing.T) {
 }
 
 func TestDigester_Index(t *testing.T) {
-	g := NewWithT(t)
+	t.Run("returns a copy of the index", func(t *testing.T) {
+		g := NewWithT(t)
 
-	i := map[string]string{
-		"foo": "bar",
-		"bar": "baz",
-	}
-	d := NewDigester(WithIndex(i))
+		i := map[string]string{
+			"foo": "bar",
+			"bar": "baz",
+		}
+		d := NewDigester(WithIndex(i))
 
-	iCopy := d.Index()
-	g.Expect(iCopy).To(Equal(i))
-	g.Expect(iCopy).ToNot(BeIdenticalTo(i))
+		iCopy := d.Index()
+		g.Expect(iCopy).To(Equal(i))
+		g.Expect(iCopy).ToNot(BeIdenticalTo(i))
+	})
+
+	t.Run("returns an empty copy for an empty index", func(t *testing.T) {
+		g := NewWithT(t)
+		d := NewDigester()
+		emptyIndex := d.Index()
+		g.Expect(emptyIndex).To(BeEmpty())
+	})
 }
 
 func TestDigester_Len(t *testing.T) {
@@ -183,6 +222,8 @@ func TestDigester_Len(t *testing.T) {
 	}))
 
 	g.Expect(d.Len()).To(Equal(2))
+
+	g.Expect(NewDigester().Len()).To(Equal(0))
 }
 
 func TestDigester_String(t *testing.T) {
@@ -196,6 +237,8 @@ func TestDigester_String(t *testing.T) {
 	g.Expect(d.String()).To(Equal(`bar baz
 foo bar
 `))
+
+	g.Expect(NewDigester().String()).To(Equal(""))
 }
 
 func TestDigester_WriteTo(t *testing.T) {
