@@ -452,7 +452,7 @@ func int64p(i int64) *int64 {
 	return &i
 }
 
-func logOCIRepoStatus(t *testing.T, obj *sourcev1beta2.OCIRepository) {
+func logOCIRepoStatus(t *testing.T, obj *sourcev1.OCIRepository) {
 	sts, _ := yaml.Marshal(obj.Status)
 	t.Log(string(sts))
 }

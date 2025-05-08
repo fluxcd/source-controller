@@ -3028,12 +3028,12 @@ func TestOCIRepository_objectLevelWorkloadIdentityFeatureGate(t *testing.T) {
 	})
 	g.Expect(err).NotTo(HaveOccurred())
 
-	obj := &ociv1.OCIRepository{
+	obj := &sourcev1.OCIRepository{
 		ObjectMeta: metav1.ObjectMeta{
 			GenerateName: "ocirepository-reconcile",
 			Namespace:    ns.Name,
 		},
-		Spec: ociv1.OCIRepositorySpec{
+		Spec: sourcev1.OCIRepositorySpec{
 			URL:                "oci://ghcr.io/stefanprodan/manifests/podinfo",
 			Interval:           metav1.Duration{Duration: 60 * time.Minute},
 			Provider:           "aws",
@@ -3044,7 +3044,7 @@ func TestOCIRepository_objectLevelWorkloadIdentityFeatureGate(t *testing.T) {
 	g.Expect(testEnv.Create(ctx, obj)).To(Succeed())
 
 	key := client.ObjectKey{Name: obj.Name, Namespace: obj.Namespace}
-	resultobj := &ociv1.OCIRepository{}
+	resultobj := &sourcev1.OCIRepository{}
 
 	g.Eventually(func() bool {
 		if err := testEnv.Get(ctx, key, resultobj); err != nil {

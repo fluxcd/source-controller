@@ -108,9 +108,6 @@ type OCIRepositorySpec struct {
 	// authenticating with a certificate; the CA cert is useful if
 	// you are using a self-signed server certificate. The Secret must
 	// be of type `Opaque` or `kubernetes.io/tls`.
-	//
-	// Note: Support for the `caFile`, `certFile` and `keyFile` keys have
-	// been deprecated.
 	// +optional
 	CertSecretRef *meta.LocalObjectReference `json:"certSecretRef,omitempty"`
 
@@ -204,20 +201,6 @@ type OCIRepositoryStatus struct {
 	// Artifact represents the output of the last successful OCI Repository sync.
 	// +optional
 	Artifact *Artifact `json:"artifact,omitempty"`
-
-	// ContentConfigChecksum is a checksum of all the configurations related to
-	// the content of the source artifact:
-	//  - .spec.ignore
-	//  - .spec.layerSelector
-	// observed in .status.observedGeneration version of the object. This can
-	// be used to determine if the content configuration has changed and the
-	// artifact needs to be rebuilt.
-	// It has the format of `<algo>:<checksum>`, for example: `sha256:<checksum>`.
-	//
-	// Deprecated: Replaced with explicit fields for observed artifact content
-	// config in the status.
-	// +optional
-	ContentConfigChecksum string `json:"contentConfigChecksum,omitempty"`
 
 	// ObservedIgnore is the observed exclusion patterns used for constructing
 	// the source artifact.
