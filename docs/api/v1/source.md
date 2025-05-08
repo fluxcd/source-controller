@@ -1196,8 +1196,6 @@ registry. The client cert and key are useful if you are
 authenticating with a certificate; the CA cert is useful if
 you are using a self-signed server certificate. The Secret must
 be of type <code>Opaque</code> or <code>kubernetes.io/tls</code>.</p>
-<p>Note: Support for the <code>caFile</code>, <code>certFile</code> and <code>keyFile</code> keys have
-been deprecated.</p>
 </td>
 </tr>
 <tr>
@@ -3296,8 +3294,6 @@ registry. The client cert and key are useful if you are
 authenticating with a certificate; the CA cert is useful if
 you are using a self-signed server certificate. The Secret must
 be of type <code>Opaque</code> or <code>kubernetes.io/tls</code>.</p>
-<p>Note: Support for the <code>caFile</code>, <code>certFile</code> and <code>keyFile</code> keys have
-been deprecated.</p>
 </td>
 </tr>
 <tr>
@@ -3453,27 +3449,6 @@ Artifact
 <td>
 <em>(Optional)</em>
 <p>Artifact represents the output of the last successful OCI Repository sync.</p>
-</td>
-</tr>
-<tr>
-<td>
-<code>contentConfigChecksum</code><br>
-<em>
-string
-</em>
-</td>
-<td>
-<em>(Optional)</em>
-<p>ContentConfigChecksum is a checksum of all the configurations related to
-the content of the source artifact:
-- .spec.ignore
-- .spec.layerSelector
-observed in .status.observedGeneration version of the object. This can
-be used to determine if the content configuration has changed and the
-artifact needs to be rebuilt.
-It has the format of <code>&lt;algo&gt;:&lt;checksum&gt;</code>, for example: <code>sha256:&lt;checksum&gt;</code>.</p>
-<p>Deprecated: Replaced with explicit fields for observed artifact content
-config in the status.</p>
 </td>
 </tr>
 <tr>

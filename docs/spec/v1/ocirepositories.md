@@ -326,10 +326,6 @@ data:
   ca.crt: <BASE64>
 ```
 
-**Warning:** Support for the `caFile`, `certFile` and `keyFile` keys have been
-deprecated. If you have any Secrets using these keys and specified in an
-OCIRepository, the controller will log a deprecation warning.
-
 ### Proxy secret reference
 
 `.spec.proxySecretRef.name` is an optional field used to specify the name of a
@@ -1072,19 +1068,6 @@ configuration issue in the OCIRepository spec. When a reconciliation fails, the
 `Reconciling` Condition reason would be `ProgressingWithRetry`. When the
 reconciliation is performed again after the failure, the reason is updated to
 `Progressing`.
-
-### Content Configuration Checksum
-
-The source-controller calculates the SHA256 checksum of the various
-configurations of the OCIRepository that indicate a change in source and
-records it in `.status.contentConfigChecksum`. This field is used to determine
-if the source artifact needs to be rebuilt.
-
-**Deprecation Note:** `contentConfigChecksum` is no longer used and will be
-removed in the next API version. The individual components used for generating
-content configuration checksum now have explicit fields in the status. This
-makes the observations used by the controller for making artifact rebuild
-decisions more transparent and easier to debug.
 
 ### Observed Ignore
 

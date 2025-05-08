@@ -68,9 +68,6 @@ spec:
                   authenticating with a certificate; the CA cert is useful if
                   you are using a self-signed server certificate. The Secret must
                   be of type `Opaque` or `kubernetes.io/tls`.
-
-                  Note: Support for the `caFile`, `certFile` and `keyFile` keys have
-                  been deprecated.
                 properties:
                   name:
                     description: Name of the referent.
@@ -364,20 +361,6 @@ spec:
                   - type
                   type: object
                 type: array
-              contentConfigChecksum:
-                description: |-
-                  ContentConfigChecksum is a checksum of all the configurations related to
-                  the content of the source artifact:
-                   - .spec.ignore
-                   - .spec.layerSelector
-                  observed in .status.observedGeneration version of the object. This can
-                  be used to determine if the content configuration has changed and the
-                  artifact needs to be rebuilt.
-                  It has the format of `<algo>:<checksum>`, for example: `sha256:<checksum>`.
-
-                  Deprecated: Replaced with explicit fields for observed artifact content
-                  config in the status.
-                type: string
               lastHandledReconcileAt:
                 description: |-
                   LastHandledReconcileAt holds the value of the most recent
