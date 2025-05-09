@@ -52,7 +52,7 @@ import (
 
 const (
 	objectName string = "test.yaml"
-	objectEtag string = "2020beab5f1711919157756379622d1d"
+	objectEtag string = "b07bba5a280b58791bc78fb9fc414b09"
 )
 
 var (
@@ -801,7 +801,7 @@ func removeObjectFromBucket(ctx context.Context) {
 
 func getObjectFile() string {
 	return `
-	apiVersion: source.toolkit.fluxcd.io/v1beta2
+	apiVersion: source.toolkit.fluxcd.io/v1
 	kind: Bucket
 	metadata:
 	  name: podinfo

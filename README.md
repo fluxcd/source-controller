@@ -16,13 +16,13 @@ and is a core component of the [GitOps toolkit](https://fluxcd.io/flux/component
 
 ## APIs
 
-| Kind                                                  | API Version                        |
-|-------------------------------------------------------|------------------------------------|
-| [GitRepository](docs/spec/v1/gitrepositories.md)      | `source.toolkit.fluxcd.io/v1`      |
-| [OCIRepository](docs/spec/v1beta2/ocirepositories.md) | `source.toolkit.fluxcd.io/v1beta2` |
-| [HelmRepository](docs/spec/v1/helmrepositories.md)    | `source.toolkit.fluxcd.io/v1`      |
-| [HelmChart](docs/spec/v1/helmcharts.md)               | `source.toolkit.fluxcd.io/v1`      |
-| [Bucket](docs/spec/v1/buckets.md)                     | `source.toolkit.fluxcd.io/v1`      |
+| Kind                                               | API Version                   |
+|----------------------------------------------------|-------------------------------|
+| [GitRepository](docs/spec/v1/gitrepositories.md)   | `source.toolkit.fluxcd.io/v1` |
+| [OCIRepository](docs/spec/v1/ocirepositories.md)   | `source.toolkit.fluxcd.io/v1` |
+| [HelmRepository](docs/spec/v1/helmrepositories.md) | `source.toolkit.fluxcd.io/v1` |
+| [HelmChart](docs/spec/v1/helmcharts.md)            | `source.toolkit.fluxcd.io/v1` |
+| [Bucket](docs/spec/v1/buckets.md)                  | `source.toolkit.fluxcd.io/v1` |
 
 ## Features
 

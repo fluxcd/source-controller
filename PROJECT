@@ -40,4 +40,7 @@ resources:
 - group: source
   kind: Bucket
   version: v1
+- group: source
+  kind: OCIRepository
+  version: v1
 version: "2"
