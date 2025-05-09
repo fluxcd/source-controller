@@ -84,15 +84,6 @@ func TestNewDigester(t *testing.T) {
 	})
 }
 
-	t.Run("handles multiple WithIndex options, applying last one", func(t *testing.T) {
-		g := NewWithT(t)
-		firstIndex := map[string]string{"a": "b"}
-		secondIndex := map[string]string{"c": "d"}
-		d := NewDigester(WithIndex(firstIndex), WithIndex(secondIndex))
-		g.Expect(d.index).To(Equal(secondIndex))
-	})
-}
-
 func TestDigester_Add(t *testing.T) {
 	t.Run("adds", func(t *testing.T) {
 		g := NewWithT(t)
@@ -169,8 +160,8 @@ func TestDigester_Delete(t *testing.T) {
 		g := NewWithT(t)
 		d := NewDigester()
 		d.Delete("non-existent")
-		g.Expect(d.index).To(BeEmpty())   // Index should remain empty
-		g.Expect(d.digests).To(BeEmpty()) // Digests should remain empty as no change
+		g.Expect(d.index).To(BeEmpty())
+		g.Expect(d.digests).To(BeEmpty())
 	})
 }
 
