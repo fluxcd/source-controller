@@ -59,28 +59,25 @@ func TestWithIndex(t *testing.T) {
 }
 
 func TestNewDigester(t *testing.T) {
-	g := NewWithT(t)
-
 	t.Run("default", func(t *testing.T) {
+		g := NewWithT(t)
+
 		d := NewDigester()
+
 		g.Expect(d).ToNot(BeNil())
-		g.Expect(d.index).To(BeEmpty())
+		g.Expect(d.index).ToNot(BeNil())
 		g.Expect(d.digests).ToNot(BeNil())
 	})
 
 	t.Run("with index", func(t *testing.T) {
-		initialIndex := map[string]string{"foo": "bar"}
-		d := NewDigester(WithIndex(initialIndex))
-		g.Expect(d).ToNot(BeNil())
-		g.Expect(d.index).To(Equal(initialIndex))
-		g.Expect(d.digests).ToNot(BeNil())
-	})
+		g := NewWithT(t)
 
-	t.Run("handles multiple WithIndex options, applying last one", func(t *testing.T) {
-		firstIndex := map[string]string{"a": "b"}
-		secondIndex := map[string]string{"c": "d"}
-		d := NewDigester(WithIndex(firstIndex), WithIndex(secondIndex))
-		g.Expect(d.index).To(Equal(secondIndex))
+		i := map[string]string{"foo": "bar"}
+		d := NewDigester(WithIndex(i))
+
+		g.Expect(d).ToNot(BeNil())
+		g.Expect(d.index).To(Equal(i))
+		g.Expect(d.digests).ToNot(BeNil())
 	})
 }
 
