@@ -15,7 +15,7 @@ require (
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.18.0
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.9.0
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.6.0
-	github.com/Masterminds/semver/v3 v3.3.0
+	github.com/Masterminds/semver/v3 v3.3.1
 	github.com/cyphar/filepath-securejoin v0.4.1
 	github.com/distribution/distribution/v3 v3.0.0
 	github.com/docker/cli v27.5.1+incompatible
@@ -23,11 +23,11 @@ require (
 	github.com/elazarl/goproxy v1.7.2
 	github.com/fluxcd/cli-utils v0.36.0-flux.13
 	github.com/fluxcd/pkg/apis/event v0.17.0
-	github.com/fluxcd/pkg/apis/meta v1.11.0
-	github.com/fluxcd/pkg/auth v0.12.0
+	github.com/fluxcd/pkg/apis/meta v1.12.0
+	github.com/fluxcd/pkg/auth v0.13.0
 	github.com/fluxcd/pkg/cache v0.9.0
-	github.com/fluxcd/pkg/git v0.29.0
-	github.com/fluxcd/pkg/git/gogit v0.31.0
+	github.com/fluxcd/pkg/git v0.30.0
+	github.com/fluxcd/pkg/git/gogit v0.32.0
 	github.com/fluxcd/pkg/gittestserver v0.17.0
 	github.com/fluxcd/pkg/helmtestserver v0.24.0
 	github.com/fluxcd/pkg/lockedfile v0.6.0
@@ -48,23 +48,23 @@ require (
 	github.com/google/go-containerregistry/pkg/authn/k8schain v0.0.0-20241111191718-6bce25ecf029
 	github.com/google/uuid v1.6.0
 	github.com/minio/minio-go/v7 v7.0.91
-	github.com/notaryproject/notation-core-go v1.2.0
-	github.com/notaryproject/notation-go v1.3.0
+	github.com/notaryproject/notation-core-go v1.3.0
+	github.com/notaryproject/notation-go v1.3.2
 	github.com/onsi/gomega v1.37.0
 	github.com/opencontainers/go-digest v1.0.0
 	github.com/opencontainers/go-digest/blake3 v0.0.0-20240426182413-22b78e47854a
 	github.com/opencontainers/image-spec v1.1.1
-	github.com/ory/dockertest/v3 v3.11.0
+	github.com/ory/dockertest/v3 v3.12.0
 	github.com/otiai10/copy v1.14.1
 	github.com/phayes/freeport v0.0.0-20220201140144-74d24b5ae9f5
 	github.com/prometheus/client_golang v1.22.0
 	github.com/sigstore/cosign/v2 v2.4.1
-	github.com/sigstore/sigstore v1.8.15
+	github.com/sigstore/sigstore v1.9.4
 	github.com/sirupsen/logrus v1.9.3
 	github.com/spf13/pflag v1.0.6
-	golang.org/x/crypto v0.37.0
-	golang.org/x/oauth2 v0.29.0
-	golang.org/x/sync v0.13.0
+	golang.org/x/crypto v0.38.0
+	golang.org/x/oauth2 v0.30.0
+	golang.org/x/sync v0.14.0
 	google.golang.org/api v0.211.0
 	gotest.tools v2.2.0+incompatible
 	helm.sh/helm/v3 v3.17.3
@@ -72,7 +72,7 @@ require (
 	k8s.io/apimachinery v0.33.0
 	k8s.io/client-go v0.33.0
 	k8s.io/utils v0.0.0-20250321185631-1f6e0b77f77e
-	oras.land/oras-go/v2 v2.5.0
+	oras.land/oras-go/v2 v2.6.0
 	sigs.k8s.io/controller-runtime v0.20.4
 	sigs.k8s.io/yaml v1.4.0
 )
@@ -159,7 +159,7 @@ require (
 	github.com/cncf/xds/go v0.0.0-20240905190251-b4127c9b8d78 // indirect
 	github.com/common-nighthawk/go-figure v0.0.0-20210622060536-734e95fb86be // indirect
 	github.com/containerd/containerd v1.7.24 // indirect
-	github.com/containerd/continuity v0.4.3 // indirect
+	github.com/containerd/continuity v0.4.5 // indirect
 	github.com/containerd/errdefs v0.3.0 // indirect
 	github.com/containerd/log v0.1.0 // indirect
 	github.com/containerd/platforms v0.2.1 // indirect
@@ -325,7 +325,7 @@ require (
 	github.com/shibumi/go-pathspec v1.3.0 // indirect
 	github.com/shopspring/decimal v1.4.0 // indirect
 	github.com/sigstore/fulcio v1.6.3 // indirect
-	github.com/sigstore/protobuf-specs v0.4.0 // indirect
+	github.com/sigstore/protobuf-specs v0.4.1 // indirect
 	github.com/sigstore/rekor v1.3.6 // indirect
 	github.com/sigstore/timestamp-authority v1.2.2 // indirect
 	github.com/skeema/knownhosts v1.3.1 // indirect
@@ -387,9 +387,9 @@ require (
 	golang.org/x/exp v0.0.0-20240719175910-8a7402abbf56 // indirect
 	golang.org/x/mod v0.24.0 // indirect
 	golang.org/x/net v0.39.0 // indirect
-	golang.org/x/sys v0.32.0 // indirect
-	golang.org/x/term v0.31.0 // indirect
-	golang.org/x/text v0.24.0 // indirect
+	golang.org/x/sys v0.33.0 // indirect
+	golang.org/x/term v0.32.0 // indirect
+	golang.org/x/text v0.25.0 // indirect
 	golang.org/x/time v0.11.0 // indirect
 	golang.org/x/tools v0.32.0 // indirect
 	gomodules.xyz/jsonpatch/v2 v2.4.0 // indirect
