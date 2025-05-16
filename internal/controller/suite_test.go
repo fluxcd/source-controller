@@ -43,6 +43,7 @@ import (
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/yaml"
 
 	"github.com/distribution/distribution/v3/configuration"
 	dockerRegistry "github.com/distribution/distribution/v3/registry"
@@ -451,4 +452,9 @@ func randStringRunes(n int) string {
 
 func int64p(i int64) *int64 {
 	return &i
+}
+
+func logOCIRepoStatus(t *testing.T, obj *sourcev1beta2.OCIRepository) {
+	sts, _ := yaml.Marshal(obj.Status)
+	t.Log(string(sts))
 }

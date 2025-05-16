@@ -60,6 +60,7 @@ import (
 
 	kstatus "github.com/fluxcd/cli-utils/pkg/kstatus/status"
 	"github.com/fluxcd/pkg/apis/meta"
+	"github.com/fluxcd/pkg/auth"
 	"github.com/fluxcd/pkg/git"
 	"github.com/fluxcd/pkg/oci"
 	"github.com/fluxcd/pkg/runtime/conditions"
@@ -2971,10 +2972,10 @@ func TestOCIRepository_getArtifactRef(t *testing.T) {
 	}
 }
 
-func TestOCIRepository_stalled(t *testing.T) {
+func TestOCIRepository_invalidURL(t *testing.T) {
 	g := NewWithT(t)
 
-	ns, err := testEnv.CreateNamespace(ctx, "ocirepository-stalled-test")
+	ns, err := testEnv.CreateNamespace(ctx, "ocirepository-invalid-url-test")
 	g.Expect(err).ToNot(HaveOccurred())
 	defer func() { g.Expect(testEnv.Delete(ctx, ns)).To(Succeed()) }()
 
@@ -3011,6 +3012,74 @@ func TestOCIRepository_stalled(t *testing.T) {
 	stalledCondition := conditions.Get(&resultobj, meta.StalledCondition)
 	g.Expect(stalledCondition).ToNot(BeNil())
 	g.Expect(stalledCondition.Reason).Should(Equal(sourcev1.URLInvalidReason))
+}
+
+func TestOCIRepository_objectLevelWorkloadIdentityFeatureGate(t *testing.T) {
+	g := NewWithT(t)
+
+	ns, err := testEnv.CreateNamespace(ctx, "ocirepository-olwifg-test")
+	g.Expect(err).ToNot(HaveOccurred())
+	defer func() { g.Expect(testEnv.Delete(ctx, ns)).To(Succeed()) }()
+
+	err = testEnv.Create(ctx, &corev1.ServiceAccount{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: ns.Name,
+			Name:      "test",
+		},
+	})
+	g.Expect(err).NotTo(HaveOccurred())
+
+	obj := &ociv1.OCIRepository{
+		ObjectMeta: metav1.ObjectMeta{
+			GenerateName: "ocirepository-reconcile",
+			Namespace:    ns.Name,
+		},
+		Spec: ociv1.OCIRepositorySpec{
+			URL:                "oci://ghcr.io/stefanprodan/manifests/podinfo",
+			Interval:           metav1.Duration{Duration: 60 * time.Minute},
+			Provider:           "aws",
+			ServiceAccountName: "test",
+		},
+	}
+
+	g.Expect(testEnv.Create(ctx, obj)).To(Succeed())
+
+	key := client.ObjectKey{Name: obj.Name, Namespace: obj.Namespace}
+	resultobj := &ociv1.OCIRepository{}
+
+	g.Eventually(func() bool {
+		if err := testEnv.Get(ctx, key, resultobj); err != nil {
+			return false
+		}
+		return conditions.IsStalled(resultobj)
+	}).Should(BeTrue())
+
+	stalledCondition := conditions.Get(resultobj, meta.StalledCondition)
+	g.Expect(stalledCondition).ToNot(BeNil())
+	g.Expect(stalledCondition.Reason).Should(Equal(meta.FeatureGateDisabledReason))
+	g.Expect(stalledCondition.Message).Should(Equal("to use spec.serviceAccountName for provider authentication please enable the ObjectLevelWorkloadIdentity feature gate in the controller"))
+
+	t.Setenv(auth.EnvVarEnableObjectLevelWorkloadIdentity, "true")
+
+	g.Eventually(func() bool {
+		if err := testEnv.Get(ctx, key, resultobj); err != nil {
+			return false
+		}
+		resultobj.Annotations = map[string]string{
+			meta.ReconcileRequestAnnotation: time.Now().Format(time.RFC3339),
+		}
+		return testEnv.Update(ctx, resultobj) == nil
+	}).Should(BeTrue())
+
+	g.Expect(testEnv.Update(ctx, resultobj)).To(Succeed())
+	g.Eventually(func() bool {
+		if err := testEnv.Get(ctx, key, resultobj); err != nil {
+			return false
+		}
+		logOCIRepoStatus(t, resultobj)
+		return !conditions.IsReady(resultobj) &&
+			conditions.GetReason(resultobj, meta.ReadyCondition) == sourcev1.AuthenticationFailedReason
+	}).Should(BeTrue())
 }
 
 func TestOCIRepository_reconcileStorage(t *testing.T) {
