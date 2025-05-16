@@ -23,16 +23,16 @@ require (
 	github.com/elazarl/goproxy v1.7.2
 	github.com/fluxcd/cli-utils v0.36.0-flux.13
 	github.com/fluxcd/pkg/apis/event v0.17.0
-	github.com/fluxcd/pkg/apis/meta v1.11.0
-	github.com/fluxcd/pkg/auth v0.12.0
+	github.com/fluxcd/pkg/apis/meta v1.12.0
+	github.com/fluxcd/pkg/auth v0.14.0
 	github.com/fluxcd/pkg/cache v0.9.0
-	github.com/fluxcd/pkg/git v0.29.0
-	github.com/fluxcd/pkg/git/gogit v0.31.0
+	github.com/fluxcd/pkg/git v0.31.0
+	github.com/fluxcd/pkg/git/gogit v0.33.0
 	github.com/fluxcd/pkg/gittestserver v0.17.0
 	github.com/fluxcd/pkg/helmtestserver v0.24.0
 	github.com/fluxcd/pkg/lockedfile v0.6.0
 	github.com/fluxcd/pkg/masktoken v0.7.0
-	github.com/fluxcd/pkg/oci v0.48.0
+	github.com/fluxcd/pkg/oci v0.49.0
 	github.com/fluxcd/pkg/runtime v0.59.0
 	github.com/fluxcd/pkg/sourceignore v0.12.0
 	github.com/fluxcd/pkg/ssh v0.18.0

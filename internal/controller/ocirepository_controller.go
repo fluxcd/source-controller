@@ -369,6 +369,13 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 	if _, ok := keychain.(soci.Anonymous); obj.Spec.Provider != ociv1.GenericOCIProvider && ok {
 		var opts []auth.Option
 		if obj.Spec.ServiceAccountName != "" {
+			// Check object-level workload identity feature gate.
+			if !auth.IsObjectLevelWorkloadIdentityEnabled() {
+				const gate = auth.FeatureGateObjectLevelWorkloadIdentity
+				const msgFmt = "to use spec.serviceAccountName for provider authentication please enable the %s feature gate in the controller"
+				err := fmt.Errorf(msgFmt, gate)
+				return sreconcile.ResultEmpty, serror.NewStalling(err, meta.FeatureGateDisabledReason)
+			}
 			serviceAccount := client.ObjectKey{
 				Name:      obj.Spec.ServiceAccountName,
 				Namespace: obj.GetNamespace(),

@@ -28,6 +28,7 @@ import (
 
 	securejoin "github.com/cyphar/filepath-securejoin"
 	"github.com/fluxcd/pkg/auth"
+	authutils "github.com/fluxcd/pkg/auth/utils"
 	"github.com/fluxcd/pkg/git/github"
 	"github.com/fluxcd/pkg/runtime/logger"
 	"github.com/go-git/go-git/v5/plumbing/transport"
@@ -683,28 +684,28 @@ func (r *GitRepositoryReconciler) getAuthOpts(ctx context.Context, obj *sourcev1
 		return nil, e
 	}
 
-	var authOpts []auth.Option
+	// Configure provider authentication if specified.
+	var getCreds func() (*authutils.GitCredentials, error)
+	switch provider := obj.GetProvider(); provider {
+	case sourcev1.GitProviderAzure: // If AWS or GCP are added in the future they can be added here separated by a comma.
+		getCreds = func() (*authutils.GitCredentials, error) {
+			var opts []auth.Option
 
-	if r.TokenCache != nil {
-		involvedObject := cache.InvolvedObject{
-			Kind:      sourcev1.GitRepositoryKind,
-			Name:      obj.GetName(),
-			Namespace: obj.GetNamespace(),
-			Operation: cache.OperationReconcile,
-		}
-		authOpts = append(authOpts, auth.WithCache(*r.TokenCache, involvedObject))
-	}
+			if r.TokenCache != nil {
+				involvedObject := cache.InvolvedObject{
+					Kind:      sourcev1.GitRepositoryKind,
+					Name:      obj.GetName(),
+					Namespace: obj.GetNamespace(),
+					Operation: cache.OperationReconcile,
+				}
+				opts = append(opts, auth.WithCache(*r.TokenCache, involvedObject))
+			}
 
-	if proxyURL != nil {
-		authOpts = append(authOpts, auth.WithProxyURL(*proxyURL))
-	}
+			if proxyURL != nil {
+				opts = append(opts, auth.WithProxyURL(*proxyURL))
+			}
 
-	// Configure provider authentication if specified in spec
-	switch obj.GetProvider() {
-	case sourcev1.GitProviderAzure:
-		opts.ProviderOpts = &git.ProviderOptions{
-			Name:     sourcev1.GitProviderAzure,
-			AuthOpts: authOpts,
+			return authutils.GetGitCredentials(ctx, provider, opts...)
 		}
 	case sourcev1.GitProviderGitHub:
 		// if provider is github, but secret ref is not specified
@@ -717,14 +718,30 @@ func (r *GitRepositoryReconciler) getAuthOpts(ctx context.Context, obj *sourcev1
 			return nil, e
 		}
 
-		opts.ProviderOpts = &git.ProviderOptions{
-			Name: sourcev1.GitProviderGitHub,
-			GitHubOpts: []github.OptFunc{
-				github.WithAppData(authData),
-				github.WithProxyURL(proxyURL),
-				github.WithCache(r.TokenCache, sourcev1.GitRepositoryKind,
-					obj.GetName(), obj.GetNamespace(), cache.OperationReconcile),
-			},
+		getCreds = func() (*authutils.GitCredentials, error) {
+			var opts []github.OptFunc
+
+			if len(authData) > 0 {
+				opts = append(opts, github.WithAppData(authData))
+			}
+
+			if proxyURL != nil {
+				opts = append(opts, github.WithProxyURL(proxyURL))
+			}
+
+			if r.TokenCache != nil {
+				opts = append(opts, github.WithCache(r.TokenCache, sourcev1.GitRepositoryKind,
+					obj.GetName(), obj.GetNamespace(), cache.OperationReconcile))
+			}
+
+			username, password, err := github.GetCredentials(ctx, opts...)
+			if err != nil {
+				return nil, err
+			}
+			return &authutils.GitCredentials{
+				Username: username,
+				Password: password,
+			}, nil
 		}
 	default:
 		// analyze secret, if it has github app data, perhaps provider should have been github.
@@ -736,6 +753,20 @@ func (r *GitRepositoryReconciler) getAuthOpts(ctx context.Context, obj *sourcev1
 			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
 			return nil, e
 		}
+	}
+	if getCreds != nil {
+		creds, err := getCreds()
+		if err != nil {
+			e := serror.NewGeneric(
+				fmt.Errorf("failed to configure authentication options: %w", err),
+				sourcev1.AuthenticationFailedReason,
+			)
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
+			return nil, e
+		}
+		opts.BearerToken = creds.BearerToken
+		opts.Username = creds.Username
+		opts.Password = creds.Password
 	}
 	return opts, nil
 }
