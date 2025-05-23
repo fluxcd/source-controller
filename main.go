@@ -39,6 +39,7 @@ import (
 	ctrlmetrics "sigs.k8s.io/controller-runtime/pkg/metrics"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
+	"github.com/fluxcd/pkg/auth"
 	pkgcache "github.com/fluxcd/pkg/cache"
 	"github.com/fluxcd/pkg/git"
 	"github.com/fluxcd/pkg/runtime/client"
@@ -176,6 +177,14 @@ func main() {
 	if err := featureGates.WithLogger(setupLog).SupportedFeatures(features.FeatureGates()); err != nil {
 		setupLog.Error(err, "unable to load feature gates")
 		os.Exit(1)
+	}
+
+	switch enabled, err := features.Enabled(auth.FeatureGateObjectLevelWorkloadIdentity); {
+	case err != nil:
+		setupLog.Error(err, "unable to check feature gate "+auth.FeatureGateObjectLevelWorkloadIdentity)
+		os.Exit(1)
+	case enabled:
+		auth.EnableObjectLevelWorkloadIdentity()
 	}
 
 	if err := intervalJitterOptions.SetGlobalJitter(nil); err != nil {
