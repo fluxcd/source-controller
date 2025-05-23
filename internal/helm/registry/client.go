@@ -20,48 +20,29 @@ import (
 	"crypto/tls"
 	"io"
 	"net/http"
-	"os"
 
 	"helm.sh/helm/v3/pkg/registry"
-	"k8s.io/apimachinery/pkg/util/errors"
 )
 
-// ClientGenerator generates a registry client and a temporary credential file.
+// ClientGenerator generates a registry client.
 // The client is meant to be used for a single reconciliation.
-// The file is meant to be used for a single reconciliation and deleted after.
-func ClientGenerator(tlsConfig *tls.Config, isLogin, insecureHTTP bool) (*registry.Client, string, error) {
+func ClientGenerator(tlsConfig *tls.Config, isLogin, insecureHTTP bool) (*registry.Client, error) {
 	if isLogin {
-		// create a temporary file to store the credentials
-		// this is needed because otherwise the credentials are stored in ~/.docker/config.json.
-		credentialsFile, err := os.CreateTemp("", "credentials")
+		rClient, err := newClient(tlsConfig, insecureHTTP)
 		if err != nil {
-			return nil, "", err
+			return nil, err
 		}
-
-		var errs []error
-		rClient, err := newClient("", tlsConfig, insecureHTTP)
-		if err != nil {
-			errs = append(errs, err)
-			// attempt to delete the temporary file
-			if credentialsFile != nil {
-				err := os.Remove(credentialsFile.Name())
-				if err != nil {
-					errs = append(errs, err)
-				}
-			}
-			return nil, "", errors.NewAggregate(errs)
-		}
-		return rClient, credentialsFile.Name(), nil
+		return rClient, nil
 	}
 
-	rClient, err := newClient("", tlsConfig, insecureHTTP)
+	rClient, err := newClient(tlsConfig, insecureHTTP)
 	if err != nil {
-		return nil, "", err
+		return nil, err
 	}
-	return rClient, "", nil
+	return rClient, nil
 }
 
-func newClient(credentialsFile string, tlsConfig *tls.Config, insecureHTTP bool) (*registry.Client, error) {
+func newClient(tlsConfig *tls.Config, insecureHTTP bool) (*registry.Client, error) {
 	opts := []registry.ClientOption{
 		registry.ClientOptWriter(io.Discard),
 	}
@@ -75,9 +56,5 @@ func newClient(credentialsFile string, tlsConfig *tls.Config, insecureHTTP bool)
 			Transport: t,
 		}))
 	}
-	if credentialsFile != "" {
-		opts = append(opts, registry.ClientOptCredentialsFile(credentialsFile))
-	}
-
 	return registry.NewClient(opts...)
 }

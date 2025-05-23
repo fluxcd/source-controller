@@ -76,9 +76,7 @@ func (g *mockGetter) Get(_ string, _ ...helmgetter.Option) (*bytes.Buffer, error
 func TestDependencyManager_Clear(t *testing.T) {
 	g := NewWithT(t)
 
-	file, err := os.CreateTemp("", "")
-	g.Expect(err).ToNot(HaveOccurred())
-	ociRepoWithCreds, err := repository.NewOCIChartRepository("oci://example.com", repository.WithCredentialsFile(file.Name()))
+	ociRepoWithCreds, err := repository.NewOCIChartRepository("oci://example.com")
 	g.Expect(err).ToNot(HaveOccurred())
 
 	downloaders := map[string]repository.Downloader{
@@ -99,13 +97,7 @@ func TestDependencyManager_Clear(t *testing.T) {
 		case *repository.ChartRepository:
 			g.Expect(v.Index).To(BeNil())
 		case *repository.OCIChartRepository:
-			g.Expect(v.HasCredentials()).To(BeFalse())
 		}
-	}
-
-	if _, err := os.Stat(file.Name()); !errors.Is(err, os.ErrNotExist) {
-		err = os.Remove(file.Name())
-		g.Expect(err).ToNot(HaveOccurred())
 	}
 }
 

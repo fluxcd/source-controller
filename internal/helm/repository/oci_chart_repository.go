@@ -20,7 +20,6 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
-	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -66,9 +65,6 @@ type OCIChartRepository struct {
 
 	// RegistryClient is a client to use while downloading tags or charts from a registry.
 	RegistryClient RegistryClient
-
-	// credentialsFile is a temporary credentials file to use while downloading tags or charts from a registry.
-	credentialsFile string
 
 	// certificatesStore is a temporary store to use while downloading tags or charts from a registry.
 	certificatesStore string
@@ -123,14 +119,6 @@ func WithOCIGetter(providers getter.Providers) OCIChartRepositoryOption {
 func WithOCIGetterOptions(getterOpts []getter.Option) OCIChartRepositoryOption {
 	return func(r *OCIChartRepository) error {
 		r.Options = getterOpts
-		return nil
-	}
-}
-
-// WithCredentialsFile returns a ChartRepositoryOption that will set the credentials file
-func WithCredentialsFile(credentialsFile string) OCIChartRepositoryOption {
-	return func(r *OCIChartRepository) error {
-		r.credentialsFile = credentialsFile
 		return nil
 	}
 }
@@ -281,31 +269,13 @@ func (r *OCIChartRepository) Logout() error {
 	return nil
 }
 
-// HasCredentials returns true if the OCIChartRepository has credentials.
-func (r *OCIChartRepository) HasCredentials() bool {
-	return r.credentialsFile != ""
-}
-
-// Clear deletes the OCI registry credentials file.
-func (r *OCIChartRepository) Clear() error {
-	var errs error
-	// clean the credentials file if it exists
-	if r.credentialsFile != "" {
-		if err := os.Remove(r.credentialsFile); err != nil {
-			errs = errors.Join(errs, err)
-		}
-	}
-	r.credentialsFile = ""
-
-	// clean the certificates store if it exists
+// Clear deletes the OCI registry certificates store if it exists.
+func (r *OCIChartRepository) Clear() (err error) {
 	if r.certificatesStore != "" {
-		if err := os.RemoveAll(r.certificatesStore); err != nil {
-			errs = errors.Join(errs, err)
-		}
+		err = os.RemoveAll(r.certificatesStore)
 	}
 	r.certificatesStore = ""
-
-	return errs
+	return
 }
 
 // getLastMatchingVersionOrConstraint returns the last version that matches the given version string.

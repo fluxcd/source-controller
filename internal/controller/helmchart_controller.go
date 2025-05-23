@@ -143,11 +143,8 @@ type HelmChartReconciler struct {
 	patchOptions []patch.Option
 }
 
-// RegistryClientGeneratorFunc is a function that returns a registry client
-// and an optional file name.
-// The file is used to store the registry client credentials.
-// The caller is responsible for deleting the file.
-type RegistryClientGeneratorFunc func(tlsConfig *tls.Config, isLogin, insecure bool) (*helmreg.Client, string, error)
+// RegistryClientGeneratorFunc is a function that returns a registry client.
+type RegistryClientGeneratorFunc func(tlsConfig *tls.Config, isLogin, insecure bool) (*helmreg.Client, error)
 
 func (r *HelmChartReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
 	return r.SetupWithManagerAndOptions(ctx, mgr, HelmChartReconcilerOptions{})
@@ -552,11 +549,7 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 			return chartRepoConfigErrorReturn(err, obj)
 		}
 
-		// with this function call, we create a temporary file to store the credentials if needed.
-		// this is needed because otherwise the credentials are stored in ~/.docker/config.json.
-		// TODO@souleb: remove this once the registry move to Oras v2
-		// or rework to enable reusing credentials to avoid the unneccessary handshake operations
-		registryClient, credentialsFile, err := r.RegistryClientGenerator(clientOpts.TlsConfig, clientOpts.MustLoginToRegistry(), repo.Spec.Insecure)
+		registryClient, err := r.RegistryClientGenerator(clientOpts.TlsConfig, clientOpts.MustLoginToRegistry(), repo.Spec.Insecure)
 		if err != nil {
 			e := serror.NewGeneric(
 				fmt.Errorf("failed to construct Helm client: %w", err),
@@ -564,15 +557,6 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 			)
 			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
 			return sreconcile.ResultEmpty, e
-		}
-
-		if credentialsFile != "" {
-			defer func() {
-				if err := os.Remove(credentialsFile); err != nil {
-					r.eventLogf(ctx, obj, corev1.EventTypeWarning, meta.FailedReason,
-						"failed to delete temporary credentials file: %s", err)
-				}
-			}()
 		}
 
 		var verifiers []soci.Verifier
@@ -1026,28 +1010,19 @@ func (r *HelmChartReconciler) namespacedChartRepositoryCallback(ctx context.Cont
 
 		var chartRepo repository.Downloader
 		if helmreg.IsOCI(normalizedURL) {
-			registryClient, credentialsFile, err := r.RegistryClientGenerator(clientOpts.TlsConfig, clientOpts.MustLoginToRegistry(), obj.Spec.Insecure)
+			registryClient, err := r.RegistryClientGenerator(clientOpts.TlsConfig, clientOpts.MustLoginToRegistry(), obj.Spec.Insecure)
 			if err != nil {
 				return nil, fmt.Errorf("failed to create registry client: %w", err)
 			}
 
-			var errs []error
 			// Tell the chart repository to use the OCI client with the configured getter
 			getterOpts = append(getterOpts, helmgetter.WithRegistryClient(registryClient))
 			ociChartRepo, err := repository.NewOCIChartRepository(normalizedURL, repository.WithOCIGetter(r.Getters),
 				repository.WithOCIGetterOptions(getterOpts),
 				repository.WithOCIRegistryClient(registryClient),
-				repository.WithCertificatesStore(certsTmpDir),
-				repository.WithCredentialsFile(credentialsFile))
+				repository.WithCertificatesStore(certsTmpDir))
 			if err != nil {
-				errs = append(errs, fmt.Errorf("failed to create OCI chart repository: %w", err))
-				// clean up the credentialsFile
-				if credentialsFile != "" {
-					if err := os.Remove(credentialsFile); err != nil {
-						errs = append(errs, err)
-					}
-				}
-				return nil, kerrors.NewAggregate(errs)
+				return nil, fmt.Errorf("failed to create OCI chart repository: %w", err)
 			}
 
 			// If login options are configured, use them to login to the registry
@@ -1055,10 +1030,14 @@ func (r *HelmChartReconciler) namespacedChartRepositoryCallback(ctx context.Cont
 			if clientOpts.MustLoginToRegistry() {
 				err = ociChartRepo.Login(clientOpts.RegLoginOpts...)
 				if err != nil {
-					errs = append(errs, fmt.Errorf("failed to login to OCI chart repository: %w", err))
-					// clean up the credentialsFile
-					errs = append(errs, ociChartRepo.Clear())
-					return nil, kerrors.NewAggregate(errs)
+					err = fmt.Errorf("failed to login to OCI chart repository: %w", err)
+					if clearErr := ociChartRepo.Clear(); clearErr != nil {
+						var errs []error
+						errs = append(errs, err)
+						errs = append(errs, clearErr)
+						return nil, kerrors.NewAggregate(errs)
+					}
+					return nil, err
 				}
 			}
 
