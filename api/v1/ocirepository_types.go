@@ -1,5 +1,5 @@
 /*
-Copyright 2022 The Flux authors
+Copyright 2025 The Flux authors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package v1beta2
+package v1
 
 import (
 	"time"
@@ -22,12 +22,10 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fluxcd/pkg/apis/meta"
-
-	apiv1 "github.com/fluxcd/source-controller/api/v1"
 )
 
 const (
-	// OCIRepositoryKind is the string representation of a OCIRepository.
+	// OCIRepositoryKind is the string representation of an OCIRepository.
 	OCIRepositoryKind = "OCIRepository"
 
 	// OCIRepositoryPrefix is the prefix used for OCIRepository URLs.
@@ -90,7 +88,7 @@ type OCIRepositorySpec struct {
 	// used to verify the signature and specifies which provider to use to check
 	// whether OCI image is authentic.
 	// +optional
-	Verify *apiv1.OCIRepositoryVerification `json:"verify,omitempty"`
+	Verify *OCIRepositoryVerification `json:"verify,omitempty"`
 
 	// ServiceAccountName is the name of the Kubernetes ServiceAccount used to authenticate
 	// the image pull if the service account has attached pull secrets. For more information:
@@ -110,9 +108,6 @@ type OCIRepositorySpec struct {
 	// authenticating with a certificate; the CA cert is useful if
 	// you are using a self-signed server certificate. The Secret must
 	// be of type `Opaque` or `kubernetes.io/tls`.
-	//
-	// Note: Support for the `caFile`, `certFile` and `keyFile` keys have
-	// been deprecated.
 	// +optional
 	CertSecretRef *meta.LocalObjectReference `json:"certSecretRef,omitempty"`
 
@@ -205,21 +200,7 @@ type OCIRepositoryStatus struct {
 
 	// Artifact represents the output of the last successful OCI Repository sync.
 	// +optional
-	Artifact *apiv1.Artifact `json:"artifact,omitempty"`
-
-	// ContentConfigChecksum is a checksum of all the configurations related to
-	// the content of the source artifact:
-	//  - .spec.ignore
-	//  - .spec.layerSelector
-	// observed in .status.observedGeneration version of the object. This can
-	// be used to determine if the content configuration has changed and the
-	// artifact needs to be rebuilt.
-	// It has the format of `<algo>:<checksum>`, for example: `sha256:<checksum>`.
-	//
-	// Deprecated: Replaced with explicit fields for observed artifact content
-	// config in the status.
-	// +optional
-	ContentConfigChecksum string `json:"contentConfigChecksum,omitempty"`
+	Artifact *Artifact `json:"artifact,omitempty"`
 
 	// ObservedIgnore is the observed exclusion patterns used for constructing
 	// the source artifact.
@@ -260,7 +241,7 @@ func (in OCIRepository) GetRequeueAfter() time.Duration {
 
 // GetArtifact returns the latest Artifact from the OCIRepository if present in
 // the status sub-resource.
-func (in *OCIRepository) GetArtifact() *apiv1.Artifact {
+func (in *OCIRepository) GetArtifact() *Artifact {
 	return in.Status.Artifact
 }
 
@@ -283,10 +264,10 @@ func (in *OCIRepository) GetLayerOperation() string {
 }
 
 // +genclient
+// +kubebuilder:storageversion
 // +kubebuilder:object:root=true
 // +kubebuilder:resource:shortName=ocirepo
 // +kubebuilder:subresource:status
-// +kubebuilder:deprecatedversion:warning="v1beta2 OCIRepository is deprecated, upgrade to v1"
 // +kubebuilder:printcolumn:name="URL",type=string,JSONPath=`.spec.url`
 // +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type==\"Ready\")].status",description=""
 // +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.conditions[?(@.type==\"Ready\")].message",description=""

@@ -56,7 +56,6 @@ import (
 	"github.com/fluxcd/pkg/testserver"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
-	sourcev1beta2 "github.com/fluxcd/source-controller/api/v1beta2"
 	"github.com/fluxcd/source-controller/internal/cache"
 	// +kubebuilder:scaffold:imports
 )
@@ -274,7 +273,6 @@ func TestMain(m *testing.M) {
 	initTestTLS()
 
 	utilruntime.Must(sourcev1.AddToScheme(scheme.Scheme))
-	utilruntime.Must(sourcev1beta2.AddToScheme(scheme.Scheme))
 
 	testEnv = testenv.New(
 		testenv.WithCRDPath(filepath.Join("..", "..", "config", "crd", "bases")),

@@ -67,7 +67,6 @@ import (
 	"github.com/fluxcd/pkg/testserver"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
-	sourcev1beta2 "github.com/fluxcd/source-controller/api/v1beta2"
 	serror "github.com/fluxcd/source-controller/internal/error"
 	"github.com/fluxcd/source-controller/internal/helm/chart"
 	"github.com/fluxcd/source-controller/internal/helm/chart/secureloader"
@@ -1366,7 +1365,7 @@ func TestHelmChartReconciler_buildFromOCIHelmRepository(t *testing.T) {
 				Spec: sourcev1.HelmRepositorySpec{
 					URL:      fmt.Sprintf("oci://%s/testrepo", testRegistryServer.registryHost),
 					Timeout:  &metav1.Duration{Duration: timeout},
-					Provider: sourcev1beta2.GenericOCIProvider,
+					Provider: sourcev1.GenericOCIProvider,
 					Type:     sourcev1.HelmRepositoryTypeOCI,
 					Insecure: true,
 				},
@@ -2595,7 +2594,7 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_authStrategy(t *testing.T) {
 					Interval: metav1.Duration{Duration: interval},
 					Timeout:  &metav1.Duration{Duration: timeout},
 					Type:     sourcev1.HelmRepositoryTypeOCI,
-					Provider: sourcev1beta2.GenericOCIProvider,
+					Provider: sourcev1.GenericOCIProvider,
 					URL:      fmt.Sprintf("oci://%s/testrepo", server.registryHost),
 					Insecure: tt.insecure,
 				},
@@ -2798,7 +2797,7 @@ func TestHelmChartRepository_reconcileSource_verifyOCISourceSignature_keyless(t 
 				Spec: sourcev1.HelmRepositorySpec{
 					URL:      "oci://ghcr.io/stefanprodan/charts",
 					Timeout:  &metav1.Duration{Duration: timeout},
-					Provider: sourcev1beta2.GenericOCIProvider,
+					Provider: sourcev1.GenericOCIProvider,
 					Type:     sourcev1.HelmRepositoryTypeOCI,
 				},
 			}
@@ -3059,7 +3058,7 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_verifySignatureNotation(t *t
 				Spec: sourcev1.HelmRepositorySpec{
 					URL:      fmt.Sprintf("oci://%s/testrepo", server.registryHost),
 					Timeout:  &metav1.Duration{Duration: timeout},
-					Provider: sourcev1beta2.GenericOCIProvider,
+					Provider: sourcev1.GenericOCIProvider,
 					Type:     sourcev1.HelmRepositoryTypeOCI,
 					Insecure: true,
 				},
@@ -3332,7 +3331,7 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_verifySignatureCosign(t *tes
 				Spec: sourcev1.HelmRepositorySpec{
 					URL:      fmt.Sprintf("oci://%s/testrepo", server.registryHost),
 					Timeout:  &metav1.Duration{Duration: timeout},
-					Provider: sourcev1beta2.GenericOCIProvider,
+					Provider: sourcev1.GenericOCIProvider,
 					Type:     sourcev1.HelmRepositoryTypeOCI,
 					Insecure: true,
 				},
