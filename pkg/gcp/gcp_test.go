@@ -34,10 +34,10 @@ import (
 
 	"cloud.google.com/go/compute/metadata"
 	gcpstorage "cloud.google.com/go/storage"
+	. "github.com/onsi/gomega"
 	"google.golang.org/api/googleapi"
 	"google.golang.org/api/option"
 	raw "google.golang.org/api/storage/v1"
-	"gotest.tools/assert"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -146,16 +146,18 @@ func TestMain(m *testing.M) {
 }
 
 func TestNewClientWithSecretErr(t *testing.T) {
+	g := NewWithT(t)
 	gcpClient, err := NewClient(context.Background(), WithSecret(secret.DeepCopy()))
-	t.Log(err)
-	assert.Error(t, err, "dialing: invalid character 'e' looking for beginning of value")
-	assert.Assert(t, gcpClient == nil)
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(err.Error()).To(ContainSubstring("dialing: invalid character 'e' looking for beginning of value"))
+	g.Expect(gcpClient).To(BeNil())
 }
 
 func TestNewClientWithProxyErr(t *testing.T) {
+	g := NewWithT(t)
 	_, envADCIsSet := os.LookupEnv(envADC)
-	assert.Assert(t, !envADCIsSet)
-	assert.Assert(t, !metadata.OnGCE())
+	g.Expect(envADCIsSet).To(BeFalse())
+	g.Expect(metadata.OnGCE()).To(BeFalse())
 
 	tests := []struct {
 		name string
@@ -176,22 +178,25 @@ func TestNewClientWithProxyErr(t *testing.T) {
 	for _, tt := range tests {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			gt := NewWithT(t)
 			opts := append([]Option{WithProxyURL(&url.URL{})}, tt.opts...)
 			gcpClient, err := NewClient(context.Background(), opts...)
-			assert.Error(t, err, tt.err)
-			assert.Assert(t, gcpClient == nil)
+			gt.Expect(err).To(HaveOccurred())
+			gt.Expect(err.Error()).To(ContainSubstring(tt.err))
+			gt.Expect(gcpClient).To(BeNil())
 		})
 	}
 }
 
 func TestProxy(t *testing.T) {
+	g := NewWithT(t)
 	proxyAddr, proxyPort := testproxy.New(t)
 
 	err := os.Setenv(envGCSHost, fmt.Sprintf("https://%s", host))
-	assert.NilError(t, err)
+	g.Expect(err).ToNot(HaveOccurred())
 	defer func() {
 		err := os.Unsetenv(envGCSHost)
-		assert.NilError(t, err)
+		g.Expect(err).To(BeNil())
 	}()
 
 	tests := []struct {
@@ -213,6 +218,7 @@ func TestProxy(t *testing.T) {
 	for _, tt := range tests {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			gt := NewWithT(t)
 			opts := []Option{WithProxyURL(tt.proxyURL)}
 			opts = append(opts, func(o *options) {
 				o.newCustomHTTPClient = func(ctx context.Context, o *options) (*http.Client, error) {
@@ -224,40 +230,42 @@ func TestProxy(t *testing.T) {
 				}
 			})
 			gcpClient, err := NewClient(context.Background(), opts...)
-			assert.NilError(t, err)
-			assert.Assert(t, gcpClient != nil)
+			gt.Expect(err).To(BeNil())
 			gcpClient.Client.SetRetry(gcpstorage.WithMaxAttempts(1))
 			exists, err := gcpClient.BucketExists(context.Background(), bucketName)
 			if tt.err != "" {
-				assert.ErrorContains(t, err, tt.err)
+				gt.Expect(err.Error()).To(ContainSubstring(tt.err))
 			} else {
-				assert.NilError(t, err)
-				assert.Assert(t, exists)
+				gt.Expect(err).To(BeNil())
+				gt.Expect(exists).To(BeTrue())
 			}
 		})
 	}
 }
 
 func TestBucketExists(t *testing.T) {
+	g := NewWithT(t)
 	gcpClient := &GCSClient{
 		Client: client,
 	}
 	exists, err := gcpClient.BucketExists(context.Background(), bucketName)
-	assert.NilError(t, err)
-	assert.Assert(t, exists)
+	g.Expect(err).To(BeNil())
+	g.Expect(exists).To(BeTrue())
 }
 
 func TestBucketNotExists(t *testing.T) {
+	g := NewWithT(t)
 	bucket := "notexistsbucket"
 	gcpClient := &GCSClient{
 		Client: client,
 	}
 	exists, err := gcpClient.BucketExists(context.Background(), bucket)
-	assert.NilError(t, err)
-	assert.Assert(t, !exists)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(exists).To(BeFalse())
 }
 
 func TestVisitObjects(t *testing.T) {
+	g := NewWithT(t)
 	gcpClient := &GCSClient{
 		Client: client,
 	}
@@ -268,12 +276,13 @@ func TestVisitObjects(t *testing.T) {
 		etags = append(etags, etag)
 		return nil
 	})
-	assert.NilError(t, err)
-	assert.DeepEqual(t, keys, []string{objectName})
-	assert.DeepEqual(t, etags, []string{objectEtag})
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(keys).To(BeEquivalentTo([]string{objectName}))
+	g.Expect(etags).To(BeEquivalentTo([]string{objectEtag}))
 }
 
 func TestVisitObjectsErr(t *testing.T) {
+	g := NewWithT(t)
 	gcpClient := &GCSClient{
 		Client: client,
 	}
@@ -281,10 +290,12 @@ func TestVisitObjectsErr(t *testing.T) {
 	err := gcpClient.VisitObjects(context.Background(), badBucketName, "", func(key, etag string) error {
 		return nil
 	})
-	assert.Error(t, err, fmt.Sprintf("listing objects from bucket '%s' failed: storage: bucket doesn't exist", badBucketName))
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(err.Error()).To(ContainSubstring(fmt.Sprintf("listing objects from bucket '%s' failed: storage: bucket doesn't exist", badBucketName)))
 }
 
 func TestVisitObjectsCallbackErr(t *testing.T) {
+	g := NewWithT(t)
 	gcpClient := &GCSClient{
 		Client: client,
 	}
@@ -292,10 +303,12 @@ func TestVisitObjectsCallbackErr(t *testing.T) {
 	err := gcpClient.VisitObjects(context.Background(), bucketName, "", func(key, etag string) error {
 		return mockErr
 	})
-	assert.Error(t, err, mockErr.Error())
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(err.Error()).To(ContainSubstring(mockErr.Error()))
 }
 
 func TestFGetObject(t *testing.T) {
+	g := NewWithT(t)
 	tempDir := t.TempDir()
 	gcpClient := &GCSClient{
 		Client: client,
@@ -303,12 +316,13 @@ func TestFGetObject(t *testing.T) {
 	localPath := filepath.Join(tempDir, objectName)
 	etag, err := gcpClient.FGetObject(context.Background(), bucketName, objectName, localPath)
 	if err != io.EOF {
-		assert.NilError(t, err)
+		g.Expect(err).ToNot(HaveOccurred())
 	}
-	assert.Equal(t, etag, objectEtag)
+	g.Expect(etag).To(BeEquivalentTo(objectEtag))
 }
 
 func TestFGetObjectNotExists(t *testing.T) {
+	g := NewWithT(t)
 	object := "notexists.txt"
 	tempDir := t.TempDir()
 	gcsClient := &GCSClient{
@@ -317,19 +331,22 @@ func TestFGetObjectNotExists(t *testing.T) {
 	localPath := filepath.Join(tempDir, object)
 	_, err = gcsClient.FGetObject(context.Background(), bucketName, object, localPath)
 	if err != io.EOF {
-		assert.Error(t, err, "storage: object doesn't exist")
-		assert.Check(t, gcsClient.ObjectIsNotFound(err))
+		g.Expect(err).To(HaveOccurred())
+		g.Expect(err.Error()).To(ContainSubstring("object doesn't exist"))
+		g.Expect(gcsClient.ObjectIsNotFound(err)).To(BeTrue())
 	}
 }
 
 func TestFGetObjectDirectoryIsFileName(t *testing.T) {
+	g := NewWithT(t)
 	tempDir := t.TempDir()
 	gcpClient := &GCSClient{
 		Client: client,
 	}
 	_, err = gcpClient.FGetObject(context.Background(), bucketName, objectName, tempDir)
 	if err != io.EOF {
-		assert.Error(t, err, "filename is a directory")
+		g.Expect(err).To(HaveOccurred())
+		g.Expect(err.Error()).To(ContainSubstring("filename is a directory"))
 	}
 }
 
@@ -353,12 +370,14 @@ func TestValidateSecret(t *testing.T) {
 	for _, testCase := range testCases {
 		tt := testCase
 		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
 			t.Parallel()
 			err := ValidateSecret(tt.secret)
 			if tt.error {
-				assert.Error(t, err, fmt.Sprintf("invalid '%v' secret data: required fields 'serviceaccount'", tt.secret.Name))
+				g.Expect(err).To(HaveOccurred())
+				g.Expect(err.Error()).To(ContainSubstring(fmt.Sprintf("invalid '%v' secret data: required fields 'serviceaccount'", tt.secret.Name)))
 			} else {
-				assert.NilError(t, err)
+				g.Expect(err).ToNot(HaveOccurred())
 			}
 		})
 	}
