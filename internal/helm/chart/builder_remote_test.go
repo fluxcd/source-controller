@@ -19,6 +19,7 @@ package chart
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/url"
 	"os"
@@ -168,7 +169,7 @@ entries:
 			repository:  mockRepo(),
 			wantVersion: "0.1.0",
 			wantValues: chartutil.Values{
-				"replicaCount": float64(1),
+				"replicaCount": json.Number("1"),
 			},
 		},
 		{
@@ -316,7 +317,7 @@ func TestRemoteBuilder_BuildFromOCIChartRepository(t *testing.T) {
 			repository:  mockRepo(),
 			wantVersion: "0.1.0",
 			wantValues: chartutil.Values{
-				"replicaCount": float64(1),
+				"replicaCount": json.Number("1"),
 			},
 		},
 		{
@@ -325,7 +326,7 @@ func TestRemoteBuilder_BuildFromOCIChartRepository(t *testing.T) {
 			repository:  mockRepo(),
 			wantVersion: "0.1.0",
 			wantValues: chartutil.Values{
-				"replicaCount": float64(1),
+				"replicaCount": json.Number("1"),
 			},
 		},
 		{

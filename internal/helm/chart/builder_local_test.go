@@ -18,6 +18,7 @@ package chart
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"sync"
@@ -112,7 +113,7 @@ func TestLocalBuilder_Build(t *testing.T) {
 			name:      "default values",
 			reference: LocalReference{Path: "../testdata/charts/helmchart"},
 			wantValues: chartutil.Values{
-				"replicaCount": float64(1),
+				"replicaCount": json.Number("1"),
 			},
 			wantVersion:  "0.1.0",
 			wantPackaged: true,
@@ -136,7 +137,7 @@ fullnameOverride: "full-foo-name-override"`),
 				},
 			},
 			wantValues: chartutil.Values{
-				"replicaCount":     float64(20),
+				"replicaCount":     json.Number("20"),
 				"nameOverride":     "foo-name-override",
 				"fullnameOverride": "full-foo-name-override",
 			},
@@ -157,7 +158,7 @@ fullnameOverride: "full-foo-name-override"`),
 			name:      "v1 chart",
 			reference: LocalReference{Path: "./../testdata/charts/helmchart-v1"},
 			wantValues: chartutil.Values{
-				"replicaCount": float64(1),
+				"replicaCount": json.Number("1"),
 			},
 			wantVersion:  "0.2.0",
 			wantPackaged: true,
