@@ -39,7 +39,7 @@ func ClientGenerator(tlsConfig *tls.Config, isLogin, insecureHTTP bool) (*regist
 		}
 
 		var errs []error
-		rClient, err := newClient(credentialsFile.Name(), tlsConfig, insecureHTTP)
+		rClient, err := newClient("", tlsConfig, insecureHTTP)
 		if err != nil {
 			errs = append(errs, err)
 			// attempt to delete the temporary file
