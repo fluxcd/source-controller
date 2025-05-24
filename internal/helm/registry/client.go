@@ -38,6 +38,11 @@ func ClientGenerator(tlsConfig *tls.Config, isLogin, insecureHTTP bool) (*regist
 			return nil, "", err
 		}
 
+		err = os.WriteFile(credentialsFile.Name(), []byte("{}"), 0600)
+		if err != nil {
+			return nil, "", err
+		}
+
 		var errs []error
 		rClient, err := newClient(credentialsFile.Name(), tlsConfig, insecureHTTP)
 		if err != nil {
