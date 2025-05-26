@@ -121,6 +121,9 @@ static credentials are used for authentication, either with
 `spec.secretRef` or `spec.serviceAccountName`.
 If you do not specify `.spec.provider`, it defaults to `generic`.
 
+For a complete guide on how to set up authentication for cloud providers,
+see the integration [docs](/flux/integrations/).
+
 #### AWS
 
 The `aws` provider can be used to authenticate automatically using the EKS
@@ -267,12 +270,22 @@ kubectl create secret docker-registry ...
 
 ### Service Account reference
 
-`.spec.serviceAccountName` is an optional field to specify a name reference to a
-Service Account in the same namespace as the OCIRepository. The controller will
-fetch the image pull secrets attached to the service account and use them for authentication.
+`.spec.serviceAccountName` is an optional field to specify a Service Account
+in the same namespace as OCIRepository with purpose depending on the value of
+the `.spec.provider` field:
 
-**Note:** that for a publicly accessible image repository, you don't need to provide a `secretRef`
-nor `serviceAccountName`.
+- When `.spec.provider` is set to `generic`, the controller will fetch the image
+  pull secrets attached to the Service Account and use them for authentication.
+- When `.spec.provider` is set to `aws`, `azure`, or `gcp`, the Service Account
+  will be used for Workload Identity authentication. In this case, the controller
+  feature gate `ObjectLevelWorkloadIdentity` must be enabled, otherwise the
+  controller will error out.
+
+**Note:** that for a publicly accessible image repository, you don't need to
+provide a `secretRef` nor `serviceAccountName`.
+
+For a complete guide on how to set up authentication for cloud providers,
+see the integration [docs](/flux/integrations/).
 
 ### Cert secret reference
 
