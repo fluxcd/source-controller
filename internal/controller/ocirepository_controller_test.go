@@ -3070,7 +3070,6 @@ func TestOCIRepository_objectLevelWorkloadIdentityFeatureGate(t *testing.T) {
 		return testEnv.Update(ctx, resultobj) == nil
 	}).Should(BeTrue())
 
-	g.Expect(testEnv.Update(ctx, resultobj)).To(Succeed())
 	g.Eventually(func() bool {
 		if err := testEnv.Get(ctx, key, resultobj); err != nil {
 			return false
