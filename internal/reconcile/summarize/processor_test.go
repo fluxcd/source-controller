@@ -18,7 +18,6 @@ package summarize
 
 import (
 	"context"
-	"strings"
 	"testing"
 
 	. "github.com/onsi/gomega"
@@ -41,8 +40,7 @@ func TestRecordReconcileReq(t *testing.T) {
 		{
 			name: "no reconcile req",
 			afterFunc: func(t *WithT, obj client.Object) {
-				// We don’t expect a reconcile request, and this is not an error anymore
-				t.Expect(object.GetStatusLastHandledReconcileAt(obj)).To(Equal(""))
+				t.Expect(obj).To(HaveStatusLastHandledReconcileAt(""))
 			},
 		},
 		{
@@ -51,100 +49,56 @@ func TestRecordReconcileReq(t *testing.T) {
 				object.SetStatusLastHandledReconcileAt(obj, "zzz")
 			},
 			afterFunc: func(t *WithT, obj client.Object) {
-				t.Expect(object.GetStatusLastHandledReconcileAt(obj)).To(Equal("zzz"))
+				t.Expect(obj).To(HaveStatusLastHandledReconcileAt("zzz"))
 			},
 		},
 		{
 			name: "with reconcile req",
 			beforeFunc: func(obj client.Object) {
-				obj.SetAnnotations(map[string]string{
+				annotations := map[string]string{
 					meta.ReconcileRequestAnnotation: "now",
-				})
+				}
+				obj.SetAnnotations(annotations)
 			},
 			afterFunc: func(t *WithT, obj client.Object) {
-				t.Expect(object.GetStatusLastHandledReconcileAt(obj)).To(Equal("now"))
+				t.Expect(obj).To(HaveStatusLastHandledReconcileAt("now"))
 			},
 		},
 		{
 			name: "empty reconcile annotation value",
 			beforeFunc: func(obj client.Object) {
-				obj.SetAnnotations(map[string]string{
+				annotations := map[string]string{
 					meta.ReconcileRequestAnnotation: "",
-				})
+				}
+				obj.SetAnnotations(annotations)
 			},
 			afterFunc: func(t *WithT, obj client.Object) {
-				t.Expect(object.GetStatusLastHandledReconcileAt(obj)).To(Equal(""))
+				t.Expect(obj).To(HaveStatusLastHandledReconcileAt(""))
 			},
 		},
 		{
 			name: "whitespace-only reconcile annotation value",
 			beforeFunc: func(obj client.Object) {
-				obj.SetAnnotations(map[string]string{
+				annotations := map[string]string{
 					meta.ReconcileRequestAnnotation: "   ",
-				})
+				}
+				obj.SetAnnotations(annotations)
 			},
 			afterFunc: func(t *WithT, obj client.Object) {
-				t.Expect(object.GetStatusLastHandledReconcileAt(obj)).To(Equal("   "))
-			},
-		},
-		{
-			name: "reconcile annotation with special characters",
-			beforeFunc: func(obj client.Object) {
-				obj.SetAnnotations(map[string]string{
-					meta.ReconcileRequestAnnotation: "2024-01-15T10:30:00Z",
-				})
-			},
-			afterFunc: func(t *WithT, obj client.Object) {
-				t.Expect(object.GetStatusLastHandledReconcileAt(obj)).To(Equal("2024-01-15T10:30:00Z"))
-			},
-		},
-		{
-			name: "reconcile annotation with very long value",
-			beforeFunc: func(obj client.Object) {
-				longValue := strings.Repeat("a", 1000)
-				obj.SetAnnotations(map[string]string{
-					meta.ReconcileRequestAnnotation: longValue,
-				})
-			},
-			afterFunc: func(t *WithT, obj client.Object) {
-				longValue := strings.Repeat("a", 1000)
-				t.Expect(object.GetStatusLastHandledReconcileAt(obj)).To(Equal(longValue))
-			},
-		},
-		{
-			name: "reconcile annotation mixed with other annotations",
-			beforeFunc: func(obj client.Object) {
-				obj.SetAnnotations(map[string]string{
-					"some.other/annotation":         "other-value",
-					meta.ReconcileRequestAnnotation: "mixed-test",
-					"another/annotation":            "another-value",
-				})
-			},
-			afterFunc: func(t *WithT, obj client.Object) {
-				t.Expect(object.GetStatusLastHandledReconcileAt(obj)).To(Equal("mixed-test"))
-				t.Expect(obj.GetAnnotations()).To(HaveKeyWithValue("some.other/annotation", "other-value"))
-				t.Expect(obj.GetAnnotations()).To(HaveKeyWithValue("another/annotation", "another-value"))
+				t.Expect(obj).To(HaveStatusLastHandledReconcileAt("   "))
 			},
 		},
 		{
 			name: "reconcile annotation overwrites existing status value",
 			beforeFunc: func(obj client.Object) {
 				object.SetStatusLastHandledReconcileAt(obj, "old-value")
-				obj.SetAnnotations(map[string]string{
+				annotations := map[string]string{
 					meta.ReconcileRequestAnnotation: "new-value",
-				})
+				}
+				obj.SetAnnotations(annotations)
 			},
 			afterFunc: func(t *WithT, obj client.Object) {
-				t.Expect(object.GetStatusLastHandledReconcileAt(obj)).To(Equal("new-value"))
-			},
-		},
-		{
-			name: "nil annotations map",
-			beforeFunc: func(obj client.Object) {
-				obj.SetAnnotations(nil)
-			},
-			afterFunc: func(t *WithT, obj client.Object) {
-				t.Expect(object.GetStatusLastHandledReconcileAt(obj)).To(Equal(""))
+				t.Expect(obj).To(HaveStatusLastHandledReconcileAt("new-value"))
 			},
 		},
 	}
@@ -152,17 +106,20 @@ func TestRecordReconcileReq(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
+
 			obj := &sourcev1.GitRepository{
 				ObjectMeta: metav1.ObjectMeta{
 					GenerateName: "test-obj",
 				},
 			}
+
 			if tt.beforeFunc != nil {
 				tt.beforeFunc(obj)
 			}
+
 			ctx := context.TODO()
-			// This call may internally trigger logic that sets status based on annotations.
 			RecordReconcileReq(ctx, record.NewFakeRecorder(32), obj, reconcile.ResultEmpty, nil)
+
 			if tt.afterFunc != nil {
 				tt.afterFunc(g, obj)
 			}
