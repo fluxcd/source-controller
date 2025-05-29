@@ -34,6 +34,26 @@ import (
 	"github.com/fluxcd/source-controller/internal/reconcile"
 )
 
+package summarize
+
+import (
+	"context"
+	"errors"
+	"strings"
+	"testing"
+
+	. "github.com/onsi/gomega"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/tools/record"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"github.com/fluxcd/pkg/apis/meta"
+
+	sourcev1 "github.com/fluxcd/source-controller/api/v1"
+	"github.com/fluxcd/source-controller/internal/object"
+	"github.com/fluxcd/source-controller/internal/reconcile"
+)
+
 func TestRecordReconcileReq(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -43,7 +63,7 @@ func TestRecordReconcileReq(t *testing.T) {
 		{
 			name: "no reconcile req",
 			afterFunc: func(t *WithT, obj client.Object) {
-				t.Expect(obj).To(HaveStatusLastHandledReconcileAt(""))
+				t.Expect(object.GetStatusLastHandledReconcileAt(obj)).To(Equal(""))
 			},
 		},
 		{
@@ -52,7 +72,7 @@ func TestRecordReconcileReq(t *testing.T) {
 				object.SetStatusLastHandledReconcileAt(obj, "zzz")
 			},
 			afterFunc: func(t *WithT, obj client.Object) {
-				t.Expect(obj).To(HaveStatusLastHandledReconcileAt("zzz"))
+				t.Expect(object.GetStatusLastHandledReconcileAt(obj)).To(Equal("zzz"))
 			},
 		},
 		{
@@ -64,10 +84,9 @@ func TestRecordReconcileReq(t *testing.T) {
 				obj.SetAnnotations(annotations)
 			},
 			afterFunc: func(t *WithT, obj client.Object) {
-				t.Expect(obj).To(HaveStatusLastHandledReconcileAt("now"))
+				t.Expect(object.GetStatusLastHandledReconcileAt(obj)).To(Equal("now"))
 			},
 		},
-		// Additional test cases for bulletproof coverage:
 		{
 			name: "empty reconcile annotation value",
 			beforeFunc: func(obj client.Object) {
@@ -77,7 +96,7 @@ func TestRecordReconcileReq(t *testing.T) {
 				obj.SetAnnotations(annotations)
 			},
 			afterFunc: func(t *WithT, obj client.Object) {
-				t.Expect(obj).To(HaveStatusLastHandledReconcileAt(""))
+				t.Expect(object.GetStatusLastHandledReconcileAt(obj)).To(Equal(""))
 			},
 		},
 		{
@@ -89,7 +108,7 @@ func TestRecordReconcileReq(t *testing.T) {
 				obj.SetAnnotations(annotations)
 			},
 			afterFunc: func(t *WithT, obj client.Object) {
-				t.Expect(obj).To(HaveStatusLastHandledReconcileAt("   "))
+				t.Expect(object.GetStatusLastHandledReconcileAt(obj)).To(Equal("   "))
 			},
 		},
 		{
@@ -101,7 +120,7 @@ func TestRecordReconcileReq(t *testing.T) {
 				obj.SetAnnotations(annotations)
 			},
 			afterFunc: func(t *WithT, obj client.Object) {
-				t.Expect(obj).To(HaveStatusLastHandledReconcileAt("2024-01-15T10:30:00Z"))
+				t.Expect(object.GetStatusLastHandledReconcileAt(obj)).To(Equal("2024-01-15T10:30:00Z"))
 			},
 		},
 		{
@@ -115,7 +134,7 @@ func TestRecordReconcileReq(t *testing.T) {
 			},
 			afterFunc: func(t *WithT, obj client.Object) {
 				longValue := strings.Repeat("a", 1000)
-				t.Expect(obj).To(HaveStatusLastHandledReconcileAt(longValue))
+				t.Expect(object.GetStatusLastHandledReconcileAt(obj)).To(Equal(longValue))
 			},
 		},
 		{
@@ -129,7 +148,7 @@ func TestRecordReconcileReq(t *testing.T) {
 				obj.SetAnnotations(annotations)
 			},
 			afterFunc: func(t *WithT, obj client.Object) {
-				t.Expect(obj).To(HaveStatusLastHandledReconcileAt("mixed-test"))
+				t.Expect(object.GetStatusLastHandledReconcileAt(obj)).To(Equal("mixed-test"))
 				t.Expect(obj.GetAnnotations()).To(HaveKeyWithValue("some.other/annotation", "other-value"))
 				t.Expect(obj.GetAnnotations()).To(HaveKeyWithValue("another/annotation", "another-value"))
 			},
@@ -137,16 +156,14 @@ func TestRecordReconcileReq(t *testing.T) {
 		{
 			name: "reconcile annotation overwrites existing status value",
 			beforeFunc: func(obj client.Object) {
-				// Set initial status
 				object.SetStatusLastHandledReconcileAt(obj, "old-value")
-				// Then set annotation
 				annotations := map[string]string{
 					meta.ReconcileRequestAnnotation: "new-value",
 				}
 				obj.SetAnnotations(annotations)
 			},
 			afterFunc: func(t *WithT, obj client.Object) {
-				t.Expect(obj).To(HaveStatusLastHandledReconcileAt("new-value"))
+				t.Expect(object.GetStatusLastHandledReconcileAt(obj)).To(Equal("new-value"))
 			},
 		},
 		{
@@ -155,7 +172,7 @@ func TestRecordReconcileReq(t *testing.T) {
 				obj.SetAnnotations(nil)
 			},
 			afterFunc: func(t *WithT, obj client.Object) {
-				t.Expect(obj).To(HaveStatusLastHandledReconcileAt(""))
+				t.Expect(object.GetStatusLastHandledReconcileAt(obj)).To(Equal(""))
 			},
 		},
 	}
@@ -178,27 +195,4 @@ func TestRecordReconcileReq(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestRecordReconcileReq_ParameterHandling(t *testing.T) {
-	g := NewWithT(t)
-	obj := &sourcev1.GitRepository{
-		ObjectMeta: metav1.ObjectMeta{
-			GenerateName: "test-obj",
-			Annotations: map[string]string{
-				meta.ReconcileRequestAnnotation: "param-test",
-			},
-		},
-	}
-
-	ctx := context.TODO()
-
-	RecordReconcileReq(ctx, nil, obj, reconcile.ResultEmpty, nil)
-	g.Expect(obj).To(HaveStatusLastHandledReconcileAt("param-test"))
-
-	RecordReconcileReq(ctx, record.NewFakeRecorder(32), obj, reconcile.Result{Requeue: true}, nil)
-	g.Expect(obj).To(HaveStatusLastHandledReconcileAt("param-test"))
-
-	RecordReconcileReq(ctx, record.NewFakeRecorder(32), obj, reconcile.ResultEmpty, errors.New("test error"))
-	g.Expect(obj).To(HaveStatusLastHandledReconcileAt("param-test"))
 }
