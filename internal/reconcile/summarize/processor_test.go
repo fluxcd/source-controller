@@ -18,27 +18,6 @@ package summarize
 
 import (
 	"context"
-	"errors"
-	"strings"
-	"testing"
-
-	. "github.com/onsi/gomega"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/tools/record"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	"github.com/fluxcd/pkg/apis/meta"
-
-	sourcev1 "github.com/fluxcd/source-controller/api/v1"
-	"github.com/fluxcd/source-controller/internal/object"
-	"github.com/fluxcd/source-controller/internal/reconcile"
-)
-
-package summarize
-
-import (
-	"context"
-	"errors"
 	"strings"
 	"testing"
 
