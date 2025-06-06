@@ -65,6 +65,43 @@ func TestRecordReconcileReq(t *testing.T) {
 				t.Expect(obj).To(HaveStatusLastHandledReconcileAt("now"))
 			},
 		},
+		{
+			name: "empty reconcile annotation value",
+			beforeFunc: func(obj client.Object) {
+				annotations := map[string]string{
+					meta.ReconcileRequestAnnotation: "",
+				}
+				obj.SetAnnotations(annotations)
+			},
+			afterFunc: func(t *WithT, obj client.Object) {
+				t.Expect(obj).To(HaveStatusLastHandledReconcileAt(""))
+			},
+		},
+		{
+			name: "whitespace-only reconcile annotation value",
+			beforeFunc: func(obj client.Object) {
+				annotations := map[string]string{
+					meta.ReconcileRequestAnnotation: "   ",
+				}
+				obj.SetAnnotations(annotations)
+			},
+			afterFunc: func(t *WithT, obj client.Object) {
+				t.Expect(obj).To(HaveStatusLastHandledReconcileAt("   "))
+			},
+		},
+		{
+			name: "reconcile annotation overwrites existing status value",
+			beforeFunc: func(obj client.Object) {
+				object.SetStatusLastHandledReconcileAt(obj, "old-value")
+				annotations := map[string]string{
+					meta.ReconcileRequestAnnotation: "new-value",
+				}
+				obj.SetAnnotations(annotations)
+			},
+			afterFunc: func(t *WithT, obj client.Object) {
+				t.Expect(obj).To(HaveStatusLastHandledReconcileAt("new-value"))
+			},
+		},
 	}
 
 	for _, tt := range tests {
