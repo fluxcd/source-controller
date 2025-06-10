@@ -4,6 +4,10 @@ go 1.24.0
 
 replace github.com/fluxcd/source-controller/api => ./api
 
+// Pin go-git to fix SSH knownhosts key mismatch regression bug
+// xref: https://github.com/fluxcd/flux2/issues/5385
+replace github.com/go-git/go-git/v5 => github.com/go-git/go-git/v5 v5.16.3-0.20250610123634-8ac015a75d81
+
 // Pin semver to v3.3.0 to avoid breaking changes in v3.3.1
 // xref: https://github.com/fluxcd/source-controller/issues/1738
 replace github.com/Masterminds/semver/v3 => github.com/Masterminds/semver/v3 v3.3.0
@@ -46,7 +50,7 @@ require (
 	github.com/fluxcd/source-controller/api v1.6.0
 	github.com/foxcpp/go-mockdns v1.1.0
 	github.com/go-git/go-billy/v5 v5.6.2
-	github.com/go-git/go-git/v5 v5.16.2
+	github.com/go-git/go-git/v5 v5.16.3-0.20250610123634-8ac015a75d81
 	github.com/go-logr/logr v1.4.2
 	github.com/google/go-containerregistry v0.20.5
 	github.com/google/go-containerregistry/pkg/authn/k8schain v0.0.0-20241111191718-6bce25ecf029
@@ -68,7 +72,7 @@ require (
 	github.com/spf13/pflag v1.0.6
 	golang.org/x/crypto v0.38.0
 	golang.org/x/oauth2 v0.30.0
-	golang.org/x/sync v0.14.0
+	golang.org/x/sync v0.15.0
 	google.golang.org/api v0.227.0
 	gotest.tools v2.2.0+incompatible
 	helm.sh/helm/v3 v3.17.3
@@ -387,11 +391,11 @@ require (
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.27.0 // indirect
 	golang.org/x/exp v0.0.0-20241108190413-2d47ceb2692f // indirect
-	golang.org/x/mod v0.24.0 // indirect
+	golang.org/x/mod v0.25.0 // indirect
 	golang.org/x/net v0.40.0 // indirect
 	golang.org/x/sys v0.33.0 // indirect
 	golang.org/x/term v0.32.0 // indirect
-	golang.org/x/text v0.25.0 // indirect
+	golang.org/x/text v0.26.0 // indirect
 	golang.org/x/time v0.11.0 // indirect
 	golang.org/x/tools v0.33.0 // indirect
 	gomodules.xyz/jsonpatch/v2 v2.4.0 // indirect
