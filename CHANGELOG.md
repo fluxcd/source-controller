@@ -2,6 +2,22 @@
 
 All notable changes to this project are documented in this file.
 
+## 1.6.1
+
+**Release date:** 2025-06-13
+
+This patch release comes with a fix for the `knownhosts: key mismatch`
+error in the `GitRepository` API when using SSH authentication, and
+a fix for authentication with
+[public ECR repositories](https://fluxcd.io/flux/integrations/aws/#for-amazon-public-elastic-container-registry)
+in the `OCIRepository` API.
+
+Fix:
+- Fix authentication for public ECR
+  [#1825](https://github.com/fluxcd/source-controller/pull/1825)
+- Fix `knownhosts key mismatch` regression bug
+  [#1829](https://github.com/fluxcd/source-controller/pull/1829)
+
 ## 1.6.0
 
 **Release date:** 2025-05-27
