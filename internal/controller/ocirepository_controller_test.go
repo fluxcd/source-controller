@@ -2866,6 +2866,7 @@ func TestOCIRepository_getArtifactRef(t *testing.T) {
 		"6.1.5",
 		"6.1.6-rc.1",
 		"6.1.6",
+		"6.1.7_ref.1234567", // Version 6.1.7+ref.1234567, encoded as a tag
 	)
 	g.Expect(err).ToNot(HaveOccurred())
 
@@ -2898,12 +2899,12 @@ func TestOCIRepository_getArtifactRef(t *testing.T) {
 			want: "ghcr.io/stefanprodan/charts@" + imgs["6.1.6"].digest.String(),
 		},
 		{
-			name: "valid url with semver reference",
+			name: "valid url with semver reference and build identifier",
 			url:  fmt.Sprintf("oci://%s/podinfo", server.registryHost),
 			reference: &sourcev1.OCIRepositoryRef{
 				SemVer: ">= 6.1.6",
 			},
-			want: server.registryHost + "/podinfo:6.1.6",
+			want: server.registryHost + "/podinfo:6.1.7_ref.1234567",
 		},
 		{
 			name:    "invalid url without oci prefix",
