@@ -365,7 +365,7 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 		return sreconcile.ResultEmpty, e
 	}
 
-	if _, ok := keychain.(soci.Anonymous); obj.Spec.Provider != sourcev1.GenericOCIProvider && ok {
+	if _, ok := keychain.(soci.Anonymous); obj.Spec.Provider != "" && obj.Spec.Provider != sourcev1.GenericOCIProvider && ok {
 		var opts []auth.Option
 		if obj.Spec.ServiceAccountName != "" {
 			// Check object-level workload identity feature gate.

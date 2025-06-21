@@ -134,14 +134,12 @@ func GetClientOpts(ctx context.Context, c client.Client, obj *sourcev1.HelmRepos
 				return nil, "", fmt.Errorf("failed to configure login options: %w", err)
 			}
 		}
-	} else if obj.Spec.Provider != sourcev1.GenericOCIProvider && obj.Spec.Type == sourcev1.HelmRepositoryTypeOCI && ociRepo {
+	} else if p := obj.Spec.Provider; p != "" && p != sourcev1.GenericOCIProvider && obj.Spec.Type == sourcev1.HelmRepositoryTypeOCI && ociRepo {
 		authenticator, authErr := soci.OIDCAuth(ctx, obj.Spec.URL, obj.Spec.Provider)
 		if authErr != nil {
 			return nil, "", fmt.Errorf("failed to get credential from '%s': %w", obj.Spec.Provider, authErr)
 		}
-		if authenticator != nil {
-			hrOpts.Authenticator = authenticator
-		}
+		hrOpts.Authenticator = authenticator
 	}
 
 	if ociRepo {
