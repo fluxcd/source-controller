@@ -898,7 +898,11 @@ func (r *OCIRepositoryReconciler) getTagBySemver(repo name.Repository, exp strin
 
 	var matchingVersions []*semver.Version
 	for _, t := range validTags {
-		v, err := version.ParseVersion(t)
+		// Helm translates `+` to `_` in OCI tags, because `+` is not a valid tag character.
+		versionStr := strings.Replace(t, "_", "+", 1)
+		// It would be even better to use `org.opencontainers.image.version` annotation
+		// if present, but that adds a fetch for each tag.
+		v, err := version.ParseVersion(versionStr)
 		if err != nil {
 			continue
 		}
@@ -913,7 +917,8 @@ func (r *OCIRepositoryReconciler) getTagBySemver(repo name.Repository, exp strin
 	}
 
 	sort.Sort(sort.Reverse(semver.Collection(matchingVersions)))
-	return repo.Tag(matchingVersions[0].Original()), nil
+	asTag := strings.Replace(matchingVersions[0].Original(), "+", "_", 1)
+	return repo.Tag(asTag), nil
 }
 
 // keychain generates the credential keychain based on the resource
