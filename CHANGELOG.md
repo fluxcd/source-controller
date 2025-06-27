@@ -2,6 +2,17 @@
 
 All notable changes to this project are documented in this file.
 
+## 1.6.2
+
+**Release date:** 2025-06-27
+
+This patch release comes with a fix for `rsa-sha2-512` and `rsa-sha2-256` algorithms
+not being prioritized for `ssh-rsa` host keys.
+
+Fixes:
+- Fix: Prioritize sha2-512 and sha2-256 for ssh-rsa host keys
+  [#1839](https://github.com/fluxcd/source-controller/pull/1839)
+
 ## 1.6.1
 
 **Release date:** 2025-06-13
