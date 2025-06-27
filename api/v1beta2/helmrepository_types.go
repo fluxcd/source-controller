@@ -98,6 +98,12 @@ type HelmRepositorySpec struct {
 	// +optional
 	Insecure bool `json:"insecure,omitempty"`
 
+	// InsecureSkipVerify allows connecting to a HTTPS container registry without
+	// verifying the server's certificate chain and host name.
+	// This field is only taken into account if the .spec.type field is set to 'oci'.
+	// +optional
+	InsecureSkipVerify bool `json:"insecureSkipVerify,omitempty"`
+
 	// Timeout is used for the index fetch operation for an HTTPS helm repository,
 	// and for remote OCI Repository operations like pulling for an OCI helm
 	// chart by the associated HelmChart.

@@ -354,6 +354,15 @@ denying insecure non-TLS connections when fetching Helm chart OCI artifacts.
 **Note**: The insecure field is supported only for Helm OCI repositories.
 The `spec.type` field must be set to `oci`.
 
+### InsecureSkipVerify
+
+`.spec.insecureSkipVerify` is an optional field to allow connecting to a secure (HTTPS)
+container registry server without verifying the server's certificate chain and host name,
+if set to `true`. The default value is `false`,
+
+**Note**: The insecureSkipVerify field is supported only for Helm OCI repositories.
+The `spec.type` field must be set to `oci`.
+
 ### Interval
 
 **Note:** This field is ineffectual for [OCI Helm
