@@ -251,6 +251,9 @@ Supported options are:
 When provider is not specified, it defaults to `generic` indicating that
 mechanisms using `spec.secretRef` are used for authentication. 
 
+For a complete guide on how to set up authentication for cloud providers,
+see the integration [docs](/flux/integrations/).
+
 #### Azure
 
 The `azure` provider can be used to authenticate to Azure DevOps repositories

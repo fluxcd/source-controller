@@ -2,6 +2,113 @@
 
 All notable changes to this project are documented in this file.
 
+## 1.6.2
+
+**Release date:** 2025-06-27
+
+This patch release comes with a fix for `rsa-sha2-512` and `rsa-sha2-256` algorithms
+not being prioritized for `ssh-rsa` host keys.
+
+Fixes:
+- Fix: Prioritize sha2-512 and sha2-256 for ssh-rsa host keys
+  [#1839](https://github.com/fluxcd/source-controller/pull/1839)
+
+## 1.6.1
+
+**Release date:** 2025-06-13
+
+This patch release comes with a fix for the `knownhosts: key mismatch`
+error in the `GitRepository` API when using SSH authentication, and
+a fix for authentication with
+[public ECR repositories](https://fluxcd.io/flux/integrations/aws/#for-amazon-public-elastic-container-registry)
+in the `OCIRepository` API.
+
+Fix:
+- Fix authentication for public ECR
+  [#1825](https://github.com/fluxcd/source-controller/pull/1825)
+- Fix `knownhosts key mismatch` regression bug
+  [#1829](https://github.com/fluxcd/source-controller/pull/1829)
+
+## 1.6.0
+
+**Release date:** 2025-05-27
+
+This minor release promotes the OCIRepository API to GA, and comes with new features,
+improvements and bug fixes.
+
+### OCIRepository
+
+The `OCIRepository` API has been promoted from `v1beta2` to `v1` (GA).
+The `v1` API is backwards compatible with `v1beta2`.
+
+OCIRepository API now supports object-level workload identity by setting
+`.spec.provider` to one of `aws`, `azure`, or `gcp`, and setting
+`.spec.serviceAccountName` to the name of a service account in the same
+namespace that has been configured with appropriate cloud permissions.
+For this feature to work, the controller feature gate
+`ObjectLevelWorkloadIdentity` must be enabled. See a complete guide
+[here](https://fluxcd.io/flux/integrations/).
+
+OCIRepository API now caches registry credentials for cloud providers
+by default. This behavior can be disabled or fine-tuned by adjusting the
+token cache controller flags (see [docs](https://fluxcd.io/flux/components/source/options/)).
+The token cache also exposes metrics that are documented
+[here](https://fluxcd.io/flux/monitoring/metrics/#controller-metrics).
+
+### GitRepository
+
+GitRepository API now supports sparse checkout by setting a list
+of directories in the `.spec.sparseCheckout` field. This allows
+for optimizing the amount of data fetched from the Git repository.
+
+GitRepository API now supports mTLS authentication for HTTPS Git repositories
+by setting the fields `tls.crt`, `tls.key`, and `ca.crt` in the `.data` field
+of the referenced Secret in `.spec.secretRef`.
+
+GitRepository API now caches credentials for non-`generic` providers by default.
+This behavior can be disabled or fine-tuned by adjusting the
+token cache controller flags (see [docs](https://fluxcd.io/flux/components/source/options/)).
+The token cache also exposes metrics that are documented
+[here](https://fluxcd.io/flux/monitoring/metrics/#controller-metrics).
+
+### General updates
+
+In addition, the Kubernetes dependencies have been updated to v1.33 and
+various other controller dependencies have been updated to their latest
+version. The controller is now built with Go 1.24.
+
+Fixes:
+- Downgrade `Masterminds/semver` to v3.3.0
+  [#1785](https://github.com/fluxcd/source-controller/pull/1785)
+
+Improvements:
+- Promote OCIRepository API to v1 (GA)
+  [#1794](https://github.com/fluxcd/source-controller/pull/1794)
+- [RFC-0010] Introduce object-level workload identity for container registry APIs and cache credentials
+  [#1790](https://github.com/fluxcd/source-controller/pull/1790)
+  [#1802](https://github.com/fluxcd/source-controller/pull/1802)
+  [#1811](https://github.com/fluxcd/source-controller/pull/1811)
+- Implement Sparse Checkout for `GitRepository`
+  [#1774](https://github.com/fluxcd/source-controller/pull/1774)
+- Add Mutual TLS support to `GitRepository`
+  [#1778](https://github.com/fluxcd/source-controller/pull/1778)
+- Introduce token cache for `GitRepository`
+  [#1745](https://github.com/fluxcd/source-controller/pull/1745)
+  [#1788](https://github.com/fluxcd/source-controller/pull/1788)
+  [#1789](https://github.com/fluxcd/source-controller/pull/1789)
+- Build controller without CGO
+  [#1725](https://github.com/fluxcd/source-controller/pull/1725)
+- Various dependency updates
+  [#1812](https://github.com/fluxcd/source-controller/pull/1812)
+  [#1800](https://github.com/fluxcd/source-controller/pull/1800)
+  [#1810](https://github.com/fluxcd/source-controller/pull/1810)
+  [#1806](https://github.com/fluxcd/source-controller/pull/1806)
+  [#1782](https://github.com/fluxcd/source-controller/pull/1782)
+  [#1783](https://github.com/fluxcd/source-controller/pull/1783)
+  [#1775](https://github.com/fluxcd/source-controller/pull/1775)
+  [#1728](https://github.com/fluxcd/source-controller/pull/1728)
+  [#1722](https://github.com/fluxcd/source-controller/pull/1722)
+
 ## 1.5.0
 
 **Release date:** 2025-02-13

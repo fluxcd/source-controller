@@ -26,7 +26,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/fluxcd/pkg/apis/meta"
-	sourcev1 "github.com/fluxcd/source-controller/api/v1beta2"
+
+	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	"github.com/fluxcd/source-controller/internal/object"
 	"github.com/fluxcd/source-controller/internal/reconcile"
 )
@@ -62,6 +63,43 @@ func TestRecordReconcileReq(t *testing.T) {
 			},
 			afterFunc: func(t *WithT, obj client.Object) {
 				t.Expect(obj).To(HaveStatusLastHandledReconcileAt("now"))
+			},
+		},
+		{
+			name: "empty reconcile annotation value",
+			beforeFunc: func(obj client.Object) {
+				annotations := map[string]string{
+					meta.ReconcileRequestAnnotation: "",
+				}
+				obj.SetAnnotations(annotations)
+			},
+			afterFunc: func(t *WithT, obj client.Object) {
+				t.Expect(obj).To(HaveStatusLastHandledReconcileAt(""))
+			},
+		},
+		{
+			name: "whitespace-only reconcile annotation value",
+			beforeFunc: func(obj client.Object) {
+				annotations := map[string]string{
+					meta.ReconcileRequestAnnotation: "   ",
+				}
+				obj.SetAnnotations(annotations)
+			},
+			afterFunc: func(t *WithT, obj client.Object) {
+				t.Expect(obj).To(HaveStatusLastHandledReconcileAt("   "))
+			},
+		},
+		{
+			name: "reconcile annotation overwrites existing status value",
+			beforeFunc: func(obj client.Object) {
+				object.SetStatusLastHandledReconcileAt(obj, "old-value")
+				annotations := map[string]string{
+					meta.ReconcileRequestAnnotation: "new-value",
+				}
+				obj.SetAnnotations(annotations)
+			},
+			afterFunc: func(t *WithT, obj client.Object) {
+				t.Expect(obj).To(HaveStatusLastHandledReconcileAt("new-value"))
 			},
 		},
 	}

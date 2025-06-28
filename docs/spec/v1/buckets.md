@@ -134,6 +134,9 @@ Supported options are:
 
 If you do not specify `.spec.provider`, it defaults to `generic`.
 
+For a complete guide on how to set up authentication for cloud providers,
+see the integration [docs](/flux/integrations/).
+
 #### Generic
 
 When a Bucket's `spec.provider` is set to `generic`, the controller will

@@ -115,7 +115,6 @@ manifests: controller-gen  ## Generate manifests, e.g. CRD, RBAC, etc.
 	cd api; $(CONTROLLER_GEN) $(CRD_OPTIONS) rbac:roleName=manager-role paths="./..." output:crd:artifacts:config="../config/crd/bases"
 
 api-docs: gen-crd-api-reference-docs  ## Generate API reference documentation
-	$(GEN_CRD_API_REFERENCE_DOCS) -api-dir=./api/v1beta2 -config=./hack/api-docs/config.json -template-dir=./hack/api-docs/template -out-file=./docs/api/v1beta2/source.md
 	$(GEN_CRD_API_REFERENCE_DOCS) -api-dir=./api/v1 -config=./hack/api-docs/config.json -template-dir=./hack/api-docs/template -out-file=./docs/api/v1/source.md
 
 tidy:  ## Run go mod tidy
