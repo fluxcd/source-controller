@@ -115,7 +115,7 @@ func TestNewClientAndBucketExistsWithProxy(t *testing.T) {
 
 			ok, err := client.BucketExists(context.Background(), "podinfo")
 			if tt.err != "" {
-				g.Expect(err.Error()).To(ContainSubstring(tt.err))
+				g.Expect(err).To(MatchError(ContainSubstring(tt.err)))
 				g.Expect(ok).To(BeFalse())
 			} else {
 				g.Expect(err).ToNot(HaveOccurred())
