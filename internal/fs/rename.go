@@ -20,10 +20,12 @@ func renameFallback(err error, src, dst string) error {
 	// copy if we detect that case. syscall.EXDEV is the common name for the
 	// cross device link error which has varying output text across different
 	// operating systems.
+	// Rename may also fail if the directory already exists, which occurs when
+	// mapping to the root of another repo. Copy should still succeed.
 	terr, ok := err.(*os.LinkError)
 	if !ok {
 		return err
-	} else if terr.Err != syscall.EXDEV {
+	} else if terr.Err != syscall.EXDEV && terr.Err != syscall.EEXIST {
 		return fmt.Errorf("link error: cannot rename %s to %s: %w", src, dst, terr)
 	}
 
