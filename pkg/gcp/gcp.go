@@ -27,6 +27,7 @@ import (
 	"path/filepath"
 
 	gcpstorage "cloud.google.com/go/storage"
+	"github.com/fluxcd/pkg/runtime/secrets"
 	"github.com/go-logr/logr"
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/iterator"
@@ -151,7 +152,7 @@ func ValidateSecret(secret *corev1.Secret) error {
 		return nil
 	}
 	if _, exists := secret.Data["serviceaccount"]; !exists {
-		return fmt.Errorf("invalid '%s' secret data: required fields 'serviceaccount'", secret.Name)
+		return &secrets.KeyNotFoundError{Key: "serviceaccount", Secret: secret}
 	}
 	return nil
 }

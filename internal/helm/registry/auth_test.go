@@ -17,16 +17,22 @@ limitations under the License.
 package registry
 
 import (
+	"context"
 	"net/url"
 	"testing"
 
 	"github.com/google/go-containerregistry/pkg/authn"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	fakeclient "sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 const repoURL = "https://example.com"
 
+// TODO: Consider consolidating this test with TestLoginOptionFromSecretRef to eliminate code duplication
+// during a future refactoring. Currently kept separate to match the function separation.
 func TestLoginOptionFromSecret(t *testing.T) {
 	testURL := "oci://registry.example.com/foo/bar"
 	testUser := "flux"
@@ -134,6 +140,93 @@ func TestLoginOptionFromSecret(t *testing.T) {
 	}
 }
 
+func TestLoginOptionFromSecretRef(t *testing.T) {
+	testURL := "oci://registry.example.com/foo/bar"
+	testUser := "flux"
+	testPassword := "somepassword"
+	testDockerconfigjson := `{"auths":{"registry.example.com":{"username":"flux","password":"somepassword","auth":"Zmx1eDpzb21lcGFzc3dvcmQ="}}}`
+	testDockerconfigjsonHTTPS := `{"auths":{"https://registry.example.com":{"username":"flux","password":"somepassword","auth":"Zmx1eDpzb21lcGFzc3dvcmQ="}}}`
+
+	tests := []struct {
+		name    string
+		url     string
+		secret  *corev1.Secret
+		wantErr bool
+	}{
+		{
+			name:   "generic secret",
+			url:    testURL,
+			secret: newSecret(withGenericSecret(testUser, testPassword)),
+		},
+		{
+			name:   "generic secret without username",
+			url:    testURL,
+			secret: newSecret(withPasswordOnly(testPassword)),
+		},
+		{
+			name:   "generic secret without password",
+			url:    testURL,
+			secret: newSecret(withUsernameOnly(testUser)),
+		},
+		{
+			name:   "generic secret without username and password",
+			url:    testURL,
+			secret: newSecret(withEmptyData()),
+		},
+		{
+			name:   "docker-registry secret",
+			url:    testURL,
+			secret: newSecret(withDockerConfigSecret(testDockerconfigjson)),
+		},
+		{
+			name:    "docker-registry secret host mismatch",
+			url:     "oci://registry.gitlab.com",
+			secret:  newSecret(withDockerConfigSecret(testDockerconfigjson)),
+			wantErr: true,
+		},
+		{
+			name:    "docker-registry secret invalid host",
+			url:     "oci://registry .gitlab.com",
+			secret:  newSecret(withDockerConfigSecret(testDockerconfigjson)),
+			wantErr: true,
+		},
+		{
+			name:    "docker-registry secret invalid docker config",
+			url:     testURL,
+			secret:  newSecret(withDockerConfigSecret("foo")),
+			wantErr: true,
+		},
+		{
+			name:   "docker-registry secret with URL scheme",
+			url:    testURL,
+			secret: newSecret(withDockerConfigSecret(testDockerconfigjsonHTTPS)),
+		},
+		{
+			name:    "secret not found",
+			url:     testURL,
+			secret:  nil,
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+			ctx := context.TODO()
+
+			var objs []client.Object
+			if tt.secret != nil {
+				objs = append(objs, tt.secret)
+			}
+
+			c := fakeclient.NewClientBuilder().WithObjects(objs...).Build()
+
+			_, err := LoginOptionFromSecretRef(ctx, c, tt.url, "test-secret", "default")
+			g.Expect(err != nil).To(Equal(tt.wantErr))
+		})
+	}
+}
+
 func TestKeychainAdaptHelper(t *testing.T) {
 	g := NewWithT(t)
 	reg, err := url.Parse(repoURL)
@@ -190,4 +283,63 @@ func TestKeychainAdaptHelper(t *testing.T) {
 			}
 		})
 	}
+}
+
+type secretOption func(*corev1.Secret)
+
+func withGenericSecret(username, password string) secretOption {
+	return func(s *corev1.Secret) {
+		s.Type = corev1.SecretTypeOpaque
+		s.Data = map[string][]byte{
+			"username": []byte(username),
+			"password": []byte(password),
+		}
+	}
+}
+
+func withUsernameOnly(username string) secretOption {
+	return func(s *corev1.Secret) {
+		s.Type = corev1.SecretTypeOpaque
+		s.Data = map[string][]byte{
+			"username": []byte(username),
+		}
+	}
+}
+
+func withPasswordOnly(password string) secretOption {
+	return func(s *corev1.Secret) {
+		s.Type = corev1.SecretTypeOpaque
+		s.Data = map[string][]byte{
+			"password": []byte(password),
+		}
+	}
+}
+
+func withDockerConfigSecret(dockerConfig string) secretOption {
+	return func(s *corev1.Secret) {
+		s.Type = corev1.SecretTypeDockerConfigJson
+		s.Data = map[string][]byte{
+			".dockerconfigjson": []byte(dockerConfig),
+		}
+	}
+}
+
+func withEmptyData() secretOption {
+	return func(s *corev1.Secret) {
+		s.Type = corev1.SecretTypeOpaque
+		s.Data = map[string][]byte{}
+	}
+}
+
+func newSecret(opts ...secretOption) *corev1.Secret {
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-secret",
+			Namespace: "default",
+		},
+	}
+	for _, opt := range opts {
+		opt(secret)
+	}
+	return secret
 }

@@ -1342,8 +1342,8 @@ func (r *HelmChartReconciler) makeVerifiers(ctx context.Context, obj *sourcev1.H
 				Name:      secretRef.Name,
 			}
 
-			pubSecret, err := r.retrieveSecret(ctx, verifySecret)
-			if err != nil {
+			var pubSecret corev1.Secret
+			if err := r.Get(ctx, verifySecret, &pubSecret); err != nil {
 				return nil, err
 			}
 
@@ -1393,8 +1393,8 @@ func (r *HelmChartReconciler) makeVerifiers(ctx context.Context, obj *sourcev1.H
 			Name:      secretRef.Name,
 		}
 
-		pubSecret, err := r.retrieveSecret(ctx, verifySecret)
-		if err != nil {
+		var pubSecret corev1.Secret
+		if err := r.Get(ctx, verifySecret, &pubSecret); err != nil {
 			return nil, err
 		}
 
@@ -1441,16 +1441,4 @@ func (r *HelmChartReconciler) makeVerifiers(ctx context.Context, obj *sourcev1.H
 	default:
 		return nil, fmt.Errorf("unsupported verification provider: %s", obj.Spec.Verify.Provider)
 	}
-}
-
-// retrieveSecret retrieves a secret from the specified namespace with the given secret name.
-// It returns the retrieved secret and any error encountered during the retrieval process.
-func (r *HelmChartReconciler) retrieveSecret(ctx context.Context, verifySecret types.NamespacedName) (corev1.Secret, error) {
-
-	var pubSecret corev1.Secret
-
-	if err := r.Get(ctx, verifySecret, &pubSecret); err != nil {
-		return corev1.Secret{}, err
-	}
-	return pubSecret, nil
 }
