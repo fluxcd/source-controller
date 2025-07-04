@@ -481,7 +481,7 @@ func TestBucketReconciler_reconcileSource_generic(t *testing.T) {
 			wantErr:     true,
 			assertIndex: index.NewDigester(),
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "failed to get secret '/dummy': secrets \"dummy\" not found"),
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "secret 'default/dummy' not found"),
 				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "foo"),
 				*conditions.UnknownCondition(meta.ReadyCondition, "foo", "bar"),
 			},
@@ -491,8 +491,10 @@ func TestBucketReconciler_reconcileSource_generic(t *testing.T) {
 			bucketName: "dummy",
 			secret: &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: "dummy",
+					Name:      "dummy",
+					Namespace: "default",
 				},
+				Data: map[string][]byte{},
 			},
 			beforeFunc: func(obj *sourcev1.Bucket) {
 				obj.Spec.SecretRef = &meta.LocalObjectReference{
@@ -504,7 +506,7 @@ func TestBucketReconciler_reconcileSource_generic(t *testing.T) {
 			wantErr:     true,
 			assertIndex: index.NewDigester(),
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "invalid 'dummy' secret data: required fields 'accesskey' and 'secretkey'"),
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "secret 'default/dummy': key 'accesskey' not found"),
 				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "foo"),
 				*conditions.UnknownCondition(meta.ReadyCondition, "foo", "bar"),
 			},
@@ -522,7 +524,7 @@ func TestBucketReconciler_reconcileSource_generic(t *testing.T) {
 			wantErr:     true,
 			assertIndex: index.NewDigester(),
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "failed to get secret '/dummy': secrets \"dummy\" not found"),
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "failed to create TLS config: secret 'default/dummy' not found"),
 				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "foo"),
 				*conditions.UnknownCondition(meta.ReadyCondition, "foo", "bar"),
 			},
@@ -532,7 +534,8 @@ func TestBucketReconciler_reconcileSource_generic(t *testing.T) {
 			bucketName: "dummy",
 			secret: &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: "dummy",
+					Name:      "dummy",
+					Namespace: "default",
 				},
 			},
 			beforeFunc: func(obj *sourcev1.Bucket) {
@@ -547,7 +550,7 @@ func TestBucketReconciler_reconcileSource_generic(t *testing.T) {
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "foo"),
 				*conditions.UnknownCondition(meta.ReadyCondition, "foo", "bar"),
-				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "certificate secret does not contain any TLS configuration"),
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "failed to create TLS config: secret 'default/dummy' must contain either 'ca.crt' or both 'tls.crt' and 'tls.key'"),
 			},
 		},
 		{
@@ -563,7 +566,7 @@ func TestBucketReconciler_reconcileSource_generic(t *testing.T) {
 			wantErr:     true,
 			assertIndex: index.NewDigester(),
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "failed to get secret '/dummy': secrets \"dummy\" not found"),
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "secret 'default/dummy' not found"),
 				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "foo"),
 				*conditions.UnknownCondition(meta.ReadyCondition, "foo", "bar"),
 			},
@@ -573,7 +576,8 @@ func TestBucketReconciler_reconcileSource_generic(t *testing.T) {
 			bucketName: "dummy",
 			secret: &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: "dummy",
+					Name:      "dummy",
+					Namespace: "default",
 				},
 			},
 			beforeFunc: func(obj *sourcev1.Bucket) {
@@ -588,7 +592,7 @@ func TestBucketReconciler_reconcileSource_generic(t *testing.T) {
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "foo"),
 				*conditions.UnknownCondition(meta.ReadyCondition, "foo", "bar"),
-				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "invalid proxy secret '/dummy': key 'address' is missing"),
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "secret 'default/dummy': key 'address' not found"),
 			},
 		},
 		{
@@ -604,7 +608,7 @@ func TestBucketReconciler_reconcileSource_generic(t *testing.T) {
 			wantErr:     true,
 			assertIndex: index.NewDigester(),
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "failed to get secret '/dummy': secrets \"dummy\" not found"),
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "secret 'default/dummy' not found"),
 				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "foo"),
 				*conditions.UnknownCondition(meta.ReadyCondition, "foo", "bar"),
 			},
@@ -614,8 +618,10 @@ func TestBucketReconciler_reconcileSource_generic(t *testing.T) {
 			bucketName: "dummy",
 			secret: &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: "dummy",
+					Name:      "dummy",
+					Namespace: "default",
 				},
+				Data: map[string][]byte{},
 			},
 			beforeFunc: func(obj *sourcev1.Bucket) {
 				obj.Spec.Provider = "generic"
@@ -632,7 +638,7 @@ func TestBucketReconciler_reconcileSource_generic(t *testing.T) {
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "foo"),
 				*conditions.UnknownCondition(meta.ReadyCondition, "foo", "bar"),
-				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "invalid 'dummy' secret data for 'ldap' STS provider: required fields username, password"),
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "secret 'default/dummy': key 'username' not found"),
 			},
 		},
 		{
@@ -648,7 +654,7 @@ func TestBucketReconciler_reconcileSource_generic(t *testing.T) {
 			wantErr:     true,
 			assertIndex: index.NewDigester(),
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "failed to get secret '/dummy': secrets \"dummy\" not found"),
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "failed to get STS TLS config: secret 'default/dummy' not found"),
 				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "foo"),
 				*conditions.UnknownCondition(meta.ReadyCondition, "foo", "bar"),
 			},
@@ -658,7 +664,8 @@ func TestBucketReconciler_reconcileSource_generic(t *testing.T) {
 			bucketName: "dummy",
 			secret: &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: "dummy",
+					Name:      "dummy",
+					Namespace: "default",
 				},
 			},
 			beforeFunc: func(obj *sourcev1.Bucket) {
@@ -676,7 +683,7 @@ func TestBucketReconciler_reconcileSource_generic(t *testing.T) {
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "foo"),
 				*conditions.UnknownCondition(meta.ReadyCondition, "foo", "bar"),
-				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "failed to get STS TLS config: certificate secret does not contain any TLS configuration"),
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "failed to get STS TLS config: secret 'default/dummy' must contain either 'ca.crt' or both 'tls.crt' and 'tls.key'"),
 			},
 		},
 		{
@@ -921,6 +928,7 @@ func TestBucketReconciler_reconcileSource_generic(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{
 					GenerateName: "test-bucket-",
 					Generation:   1,
+					Namespace:    "default",
 				},
 				Spec: sourcev1.BucketSpec{
 					Timeout: &metav1.Duration{Duration: timeout},
@@ -994,7 +1002,8 @@ func TestBucketReconciler_reconcileSource_gcs(t *testing.T) {
 			},
 			secret: &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: "dummy",
+					Name:      "dummy",
+					Namespace: "default",
 				},
 				Data: map[string][]byte{
 					"accesskey":      []byte("key"),
@@ -1030,7 +1039,7 @@ func TestBucketReconciler_reconcileSource_gcs(t *testing.T) {
 			wantErr:     true,
 			assertIndex: index.NewDigester(),
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "failed to get secret '/dummy': secrets \"dummy\" not found"),
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "secret 'default/dummy' not found"),
 				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "foo"),
 				*conditions.UnknownCondition(meta.ReadyCondition, "foo", "bar"),
 			},
@@ -1040,8 +1049,10 @@ func TestBucketReconciler_reconcileSource_gcs(t *testing.T) {
 			bucketName: "dummy",
 			secret: &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: "dummy",
+					Name:      "dummy",
+					Namespace: "default",
 				},
+				Data: map[string][]byte{},
 			},
 			beforeFunc: func(obj *sourcev1.Bucket) {
 				obj.Spec.SecretRef = &meta.LocalObjectReference{
@@ -1054,7 +1065,7 @@ func TestBucketReconciler_reconcileSource_gcs(t *testing.T) {
 			wantErr:     true,
 			assertIndex: index.NewDigester(),
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "invalid 'dummy' secret data: required fields"),
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "secret 'default/dummy': key 'serviceaccount' not found"),
 				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "foo"),
 				*conditions.UnknownCondition(meta.ReadyCondition, "foo", "bar"),
 			},
@@ -1073,7 +1084,7 @@ func TestBucketReconciler_reconcileSource_gcs(t *testing.T) {
 			wantErr:     true,
 			assertIndex: index.NewDigester(),
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "failed to get secret '/dummy': secrets \"dummy\" not found"),
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "secret 'default/dummy' not found"),
 				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "foo"),
 				*conditions.UnknownCondition(meta.ReadyCondition, "foo", "bar"),
 			},
@@ -1083,7 +1094,8 @@ func TestBucketReconciler_reconcileSource_gcs(t *testing.T) {
 			bucketName: "dummy",
 			secret: &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: "dummy",
+					Name:      "dummy",
+					Namespace: "default",
 				},
 			},
 			beforeFunc: func(obj *sourcev1.Bucket) {
@@ -1097,7 +1109,7 @@ func TestBucketReconciler_reconcileSource_gcs(t *testing.T) {
 			wantErr:     true,
 			assertIndex: index.NewDigester(),
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "invalid proxy secret '/dummy': key 'address' is missing"),
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "secret 'default/dummy': key 'address' not found"),
 				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "foo"),
 				*conditions.UnknownCondition(meta.ReadyCondition, "foo", "bar"),
 			},
@@ -1309,6 +1321,7 @@ func TestBucketReconciler_reconcileSource_gcs(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{
 					GenerateName: "test-bucket-",
 					Generation:   1,
+					Namespace:    "default",
 				},
 				Spec: sourcev1.BucketSpec{
 					BucketName: tt.bucketName,
@@ -1746,191 +1759,6 @@ func TestBucketReconciler_notify(t *testing.T) {
 				if tt.wantEvent != "" {
 					t.Errorf("expected some event to be emitted")
 				}
-			}
-		})
-	}
-}
-
-func TestBucketReconciler_getProxyURL(t *testing.T) {
-	tests := []struct {
-		name        string
-		bucket      *sourcev1.Bucket
-		objects     []client.Object
-		expectedURL string
-		expectedErr string
-	}{
-		{
-			name: "empty proxySecretRef",
-			bucket: &sourcev1.Bucket{
-				Spec: sourcev1.BucketSpec{
-					ProxySecretRef: nil,
-				},
-			},
-		},
-		{
-			name: "non-existing proxySecretRef",
-			bucket: &sourcev1.Bucket{
-				Spec: sourcev1.BucketSpec{
-					ProxySecretRef: &meta.LocalObjectReference{
-						Name: "non-existing",
-					},
-				},
-			},
-			expectedErr: "failed to get secret '/non-existing': secrets \"non-existing\" not found",
-		},
-		{
-			name: "missing address in proxySecretRef",
-			bucket: &sourcev1.Bucket{
-				Spec: sourcev1.BucketSpec{
-					ProxySecretRef: &meta.LocalObjectReference{
-						Name: "dummy",
-					},
-				},
-			},
-			objects: []client.Object{
-				&corev1.Secret{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "dummy",
-					},
-					Data: map[string][]byte{},
-				},
-			},
-			expectedErr: "invalid proxy secret '/dummy': key 'address' is missing",
-		},
-		{
-			name: "invalid address in proxySecretRef",
-			bucket: &sourcev1.Bucket{
-				Spec: sourcev1.BucketSpec{
-					ProxySecretRef: &meta.LocalObjectReference{
-						Name: "dummy",
-					},
-				},
-			},
-			objects: []client.Object{
-				&corev1.Secret{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "dummy",
-					},
-					Data: map[string][]byte{
-						"address": {0x7f},
-					},
-				},
-			},
-			expectedErr: "failed to parse proxy address '\x7f': parse \"\\x7f\": net/url: invalid control character in URL",
-		},
-		{
-			name: "no user, no password",
-			bucket: &sourcev1.Bucket{
-				Spec: sourcev1.BucketSpec{
-					ProxySecretRef: &meta.LocalObjectReference{
-						Name: "dummy",
-					},
-				},
-			},
-			objects: []client.Object{
-				&corev1.Secret{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "dummy",
-					},
-					Data: map[string][]byte{
-						"address": []byte("http://proxy.example.com"),
-					},
-				},
-			},
-			expectedURL: "http://proxy.example.com",
-		},
-		{
-			name: "user, no password",
-			bucket: &sourcev1.Bucket{
-				Spec: sourcev1.BucketSpec{
-					ProxySecretRef: &meta.LocalObjectReference{
-						Name: "dummy",
-					},
-				},
-			},
-			objects: []client.Object{
-				&corev1.Secret{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "dummy",
-					},
-					Data: map[string][]byte{
-						"address":  []byte("http://proxy.example.com"),
-						"username": []byte("user"),
-					},
-				},
-			},
-			expectedURL: "http://user:@proxy.example.com",
-		},
-		{
-			name: "no user, password",
-			bucket: &sourcev1.Bucket{
-				Spec: sourcev1.BucketSpec{
-					ProxySecretRef: &meta.LocalObjectReference{
-						Name: "dummy",
-					},
-				},
-			},
-			objects: []client.Object{
-				&corev1.Secret{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "dummy",
-					},
-					Data: map[string][]byte{
-						"address":  []byte("http://proxy.example.com"),
-						"password": []byte("password"),
-					},
-				},
-			},
-			expectedURL: "http://:password@proxy.example.com",
-		},
-		{
-			name: "user, password",
-			bucket: &sourcev1.Bucket{
-				Spec: sourcev1.BucketSpec{
-					ProxySecretRef: &meta.LocalObjectReference{
-						Name: "dummy",
-					},
-				},
-			},
-			objects: []client.Object{
-				&corev1.Secret{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "dummy",
-					},
-					Data: map[string][]byte{
-						"address":  []byte("http://proxy.example.com"),
-						"username": []byte("user"),
-						"password": []byte("password"),
-					},
-				},
-			},
-			expectedURL: "http://user:password@proxy.example.com",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			g := NewWithT(t)
-
-			c := fakeclient.NewClientBuilder().
-				WithScheme(testEnv.Scheme()).
-				WithObjects(tt.objects...).
-				Build()
-
-			r := &BucketReconciler{
-				Client: c,
-			}
-
-			u, err := r.getProxyURL(ctx, tt.bucket)
-			if tt.expectedErr == "" {
-				g.Expect(err).To(BeNil())
-			} else {
-				g.Expect(err.Error()).To(ContainSubstring(tt.expectedErr))
-			}
-			if tt.expectedURL == "" {
-				g.Expect(u).To(BeNil())
-			} else {
-				g.Expect(u.String()).To(Equal(tt.expectedURL))
 			}
 		})
 	}

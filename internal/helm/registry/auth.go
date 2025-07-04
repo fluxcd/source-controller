@@ -18,16 +18,20 @@ package registry
 
 import (
 	"bytes"
+	"context"
+	"errors"
 	"fmt"
 	"net/url"
 
 	"github.com/docker/cli/cli/config"
 	"github.com/docker/cli/cli/config/credentials"
+	"github.com/fluxcd/pkg/runtime/secrets"
 	"github.com/fluxcd/source-controller/internal/helm/common"
 	"github.com/fluxcd/source-controller/internal/oci"
 	"github.com/google/go-containerregistry/pkg/authn"
 	"helm.sh/helm/v3/pkg/registry"
 	corev1 "k8s.io/api/core/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // helper is a subset of the Docker credential helper credentials.Helper interface used by NewKeychainFromHelper.
@@ -48,6 +52,9 @@ func (h helper) Get(serverURL string) (string, string, error) {
 // may either hold "username" and "password" fields or be of the corev1.SecretTypeDockerConfigJson type and hold
 // a corev1.DockerConfigJsonKey field with a complete Docker configuration. If both, "username" and "password" are
 // empty, a nil LoginOption and a nil error will be returned.
+//
+// TODO: Consider consolidating this function into LoginOptionFromSecretRef to eliminate code duplication
+// during a future refactoring. Currently kept separate for Docker config JSON handling reuse.
 func LoginOptionFromSecret(registryURL string, secret corev1.Secret) (authn.Keychain, error) {
 	var username, password string
 	parsedURL, err := url.Parse(registryURL)
@@ -83,6 +90,35 @@ func LoginOptionFromSecret(registryURL string, secret corev1.Secret) (authn.Keyc
 	case username == "" || password == "":
 		return nil, fmt.Errorf("invalid '%s' secret data: required fields 'username' and 'password'", secret.Name)
 	}
+	return authn.NewKeychainFromHelper(helper{registry: parsedURL.Host, username: username, password: password}), nil
+}
+
+// LoginOptionFromSecretRef derives authentication data using runtime/secrets.
+func LoginOptionFromSecretRef(ctx context.Context, c client.Client, registryURL, secretName, namespace string) (authn.Keychain, error) {
+	parsedURL, err := url.Parse(registryURL)
+	if err != nil {
+		return nil, fmt.Errorf("unable to parse registry URL '%s' while reconciling Secret '%s/%s': %w",
+			registryURL, namespace, secretName, err)
+	}
+
+	secretKey := client.ObjectKey{Name: secretName, Namespace: namespace}
+	var secret corev1.Secret
+	if err := c.Get(ctx, secretKey, &secret); err != nil {
+		return nil, fmt.Errorf("failed to get secret '%s/%s': %w", namespace, secretName, err)
+	}
+
+	if secret.Type == corev1.SecretTypeDockerConfigJson {
+		return LoginOptionFromSecret(registryURL, secret)
+	}
+
+	username, password, err := secrets.BasicAuthFromSecret(ctx, c, secretName, namespace)
+	if err != nil {
+		if errors.Is(err, secrets.ErrKeyNotFound) {
+			return oci.Anonymous{}, nil
+		}
+		return nil, err
+	}
+
 	return authn.NewKeychainFromHelper(helper{registry: parsedURL.Host, username: username, password: password}), nil
 }
 
