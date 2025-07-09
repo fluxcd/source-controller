@@ -36,9 +36,9 @@ import (
 	"github.com/Masterminds/semver/v3"
 	"github.com/google/go-containerregistry/pkg/name"
 
+	"github.com/fluxcd/pkg/http/transport"
 	"github.com/fluxcd/pkg/version"
 	"github.com/fluxcd/source-controller/internal/oci"
-	"github.com/fluxcd/source-controller/internal/transport"
 )
 
 // RegistryClient is an interface for interacting with OCI registries
