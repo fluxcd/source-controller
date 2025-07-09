@@ -34,6 +34,7 @@ require (
 	github.com/fluxcd/pkg/git/gogit v0.35.1
 	github.com/fluxcd/pkg/gittestserver v0.17.0
 	github.com/fluxcd/pkg/helmtestserver v0.24.0
+	github.com/fluxcd/pkg/http/transport v0.6.0
 	github.com/fluxcd/pkg/lockedfile v0.6.0
 	github.com/fluxcd/pkg/masktoken v0.7.0
 	github.com/fluxcd/pkg/oci v0.49.0

@@ -385,6 +385,8 @@ github.com/fluxcd/pkg/gittestserver v0.17.0 h1:JlBvWZQTDOI+np5Z+084m3DkeAH1hMusE
 github.com/fluxcd/pkg/gittestserver v0.17.0/go.mod h1:E/40EmLoXcMqd6gLuLDC9F6KJxqHVGbBBeMNKk5XdxU=
 github.com/fluxcd/pkg/helmtestserver v0.24.0 h1:9sSfRG17GnDIup4sI8V+fdvKROtunU4JyIo34uvXq3Q=
 github.com/fluxcd/pkg/helmtestserver v0.24.0/go.mod h1:jMCCzTV9r3N+0kD8Uo09nbgQ1iTaw54LFKKMlztlBhs=
+github.com/fluxcd/pkg/http/transport v0.6.0 h1:ryzy81tpNYWZ/qsDd3tLdO6Bfn1wYLI1zdbepPBY/mo=
+github.com/fluxcd/pkg/http/transport v0.6.0/go.mod h1:95TBlrNsDdKMDCKvJnne2VC3SuZ5/JIj+r/yssaXz4w=
 github.com/fluxcd/pkg/lockedfile v0.6.0 h1:64RRMiPv3ZK9Y4sjI8c78kZAdfEo+Sjr2iP8a9pZeZo=
 github.com/fluxcd/pkg/lockedfile v0.6.0/go.mod h1:gpdUVm7+05NIT1ZvzuNnHfnT81OhZtIySlxxkZ68pXk=
 github.com/fluxcd/pkg/masktoken v0.7.0 h1:pitmyOg2pUVdW+nn2Lk/xqm2TaA08uxvOC0ns3sz6bM=
