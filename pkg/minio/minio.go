@@ -23,8 +23,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"strings"
 
+	"github.com/fluxcd/pkg/runtime/secrets"
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 	"github.com/minio/minio-go/v7/pkg/s3utils"
@@ -221,12 +221,11 @@ func ValidateSecret(secret *corev1.Secret) error {
 	if secret == nil {
 		return nil
 	}
-	err := fmt.Errorf("invalid '%s' secret data: required fields 'accesskey' and 'secretkey'", secret.Name)
 	if _, ok := secret.Data["accesskey"]; !ok {
-		return err
+		return &secrets.KeyNotFoundError{Key: "accesskey", Secret: secret}
 	}
 	if _, ok := secret.Data["secretkey"]; !ok {
-		return err
+		return &secrets.KeyNotFoundError{Key: "secretkey", Secret: secret}
 	}
 	return nil
 }
@@ -282,15 +281,13 @@ func validateSTSSecretForProvider(stsProvider string, secret *corev1.Secret, key
 	if secret == nil {
 		return nil
 	}
-	err := fmt.Errorf("invalid '%s' secret data for '%s' STS provider: required fields %s",
-		secret.Name, stsProvider, strings.Join(keys, ", "))
-	if len(secret.Data) == 0 {
-		return err
+	if len(secret.Data) == 0 && len(keys) > 0 {
+		return &secrets.KeyNotFoundError{Key: keys[0], Secret: secret}
 	}
 	for _, key := range keys {
 		value, ok := secret.Data[key]
 		if !ok || len(value) == 0 {
-			return err
+			return &secrets.KeyNotFoundError{Key: key, Secret: secret}
 		}
 	}
 	return nil
