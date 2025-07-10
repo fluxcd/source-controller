@@ -573,7 +573,7 @@ func TestValidateSecret(t *testing.T) {
 			t.Parallel()
 			err := ValidateSecret(tt.secret)
 			if tt.error {
-				assert.Error(t, err, fmt.Sprintf("invalid '%v' secret data: required fields 'accesskey' and 'secretkey'", tt.secret.Name))
+				assert.Error(t, err, "secret 'default/minio-secret': key 'accesskey' not found")
 			} else {
 				assert.NilError(t, err)
 			}
@@ -696,50 +696,54 @@ func TestValidateSTSSecret(t *testing.T) {
 		{
 			name:     "empty ldap secret",
 			provider: "ldap",
-			secret:   &corev1.Secret{ObjectMeta: v1.ObjectMeta{Name: "ldap-secret"}},
-			err:      "invalid 'ldap-secret' secret data for 'ldap' STS provider: required fields username, password",
+			secret:   &corev1.Secret{ObjectMeta: v1.ObjectMeta{Name: "ldap-secret", Namespace: "default"}},
+			err:      "secret 'default/ldap-secret': key 'username' not found",
 		},
 		{
 			name:     "ldap secret missing password",
 			provider: "ldap",
 			secret: &corev1.Secret{
+				ObjectMeta: v1.ObjectMeta{Name: "ldap-secret", Namespace: "default"},
 				Data: map[string][]byte{
 					"username": []byte("user"),
 				},
 			},
-			err: "invalid '' secret data for 'ldap' STS provider: required fields username, password",
+			err: "secret 'default/ldap-secret': key 'password' not found",
 		},
 		{
 			name:     "ldap secret missing username",
 			provider: "ldap",
 			secret: &corev1.Secret{
+				ObjectMeta: v1.ObjectMeta{Name: "ldap-secret", Namespace: "default"},
 				Data: map[string][]byte{
 					"password": []byte("pass"),
 				},
 			},
-			err: "invalid '' secret data for 'ldap' STS provider: required fields username, password",
+			err: "secret 'default/ldap-secret': key 'username' not found",
 		},
 		{
 			name:     "ldap secret with empty username",
 			provider: "ldap",
 			secret: &corev1.Secret{
+				ObjectMeta: v1.ObjectMeta{Name: "ldap-secret", Namespace: "default"},
 				Data: map[string][]byte{
 					"username": []byte(""),
 					"password": []byte("pass"),
 				},
 			},
-			err: "invalid '' secret data for 'ldap' STS provider: required fields username, password",
+			err: "secret 'default/ldap-secret': key 'username' not found",
 		},
 		{
 			name:     "ldap secret with empty password",
 			provider: "ldap",
 			secret: &corev1.Secret{
+				ObjectMeta: v1.ObjectMeta{Name: "ldap-secret", Namespace: "default"},
 				Data: map[string][]byte{
 					"username": []byte("user"),
 					"password": []byte(""),
 				},
 			},
-			err: "invalid '' secret data for 'ldap' STS provider: required fields username, password",
+			err: "secret 'default/ldap-secret': key 'password' not found",
 		},
 	}
 

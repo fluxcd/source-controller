@@ -48,11 +48,11 @@ import (
 	"github.com/fluxcd/pkg/runtime/conditions"
 	conditionscheck "github.com/fluxcd/pkg/runtime/conditions/check"
 	"github.com/fluxcd/pkg/runtime/patch"
+	"github.com/fluxcd/pkg/runtime/secrets"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	"github.com/fluxcd/source-controller/internal/cache"
 	intdigest "github.com/fluxcd/source-controller/internal/digest"
-	"github.com/fluxcd/source-controller/internal/helm/getter"
 	"github.com/fluxcd/source-controller/internal/helm/repository"
 	intpredicates "github.com/fluxcd/source-controller/internal/predicates"
 	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
@@ -487,13 +487,15 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 			},
 			secret: &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: "ca-file",
+					Name:      "ca-file",
+					Namespace: "default",
 				},
 				Data: map[string][]byte{
 					"caFile": tlsCA,
 				},
 			},
 			beforeFunc: func(t *WithT, obj *sourcev1.HelmRepository, rev digest.Digest) {
+				obj.Namespace = "default"
 				obj.Spec.SecretRef = &meta.LocalObjectReference{Name: "ca-file"}
 			},
 			want: sreconcile.ResultSuccess,
@@ -518,7 +520,8 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 			},
 			secret: &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: "ca-file",
+					Name:      "ca-file",
+					Namespace: "default",
 				},
 				Data: map[string][]byte{
 					"caFile": tlsCA,
@@ -526,6 +529,7 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 				Type: corev1.SecretTypeDockerConfigJson,
 			},
 			beforeFunc: func(t *WithT, obj *sourcev1.HelmRepository, rev digest.Digest) {
+				obj.Namespace = "default"
 				obj.Spec.SecretRef = &meta.LocalObjectReference{Name: "ca-file"}
 			},
 			want: sreconcile.ResultSuccess,
@@ -719,20 +723,22 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 			protocol: "http",
 			secret: &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: "malformed-basic-auth",
+					Name:      "malformed-basic-auth",
+					Namespace: "default",
 				},
 				Data: map[string][]byte{
 					"username": []byte("git"),
 				},
 			},
 			beforeFunc: func(t *WithT, obj *sourcev1.HelmRepository, rev digest.Digest) {
+				obj.Namespace = "default"
 				obj.Spec.SecretRef = &meta.LocalObjectReference{Name: "malformed-basic-auth"}
 				conditions.MarkReconciling(obj, meta.ProgressingReason, "foo")
 				conditions.MarkUnknown(obj, meta.ReadyCondition, "foo", "bar")
 			},
 			wantErr: true,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "required fields 'username' and 'password"),
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "secret 'default/malformed-basic-auth': key 'password' not found"),
 				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "foo"),
 				*conditions.UnknownCondition(meta.ReadyCondition, "foo", "bar"),
 			},
@@ -873,6 +879,8 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 				clientBuilder.WithObjects(secret.DeepCopy())
 			}
 
+			fakeClient := clientBuilder.Build()
+
 			// Calculate the artifact digest for valid repos configurations.
 			getterOpts := []helmgetter.Option{
 				helmgetter.WithURL(server.URL()),
@@ -881,16 +889,14 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 			var tlsConf *tls.Config
 			validSecret := true
 			if secret != nil {
-				// Extract the client options from secret, ignoring any invalid
-				// value. validSecret is used to determine if the index digest
-				// should be calculated below.
-				var gOpts []helmgetter.Option
-				var serr error
-				gOpts, serr = getter.GetterOptionsFromSecret(*secret)
+				// Extract the client option from secret. validSecret is used to
+				// determine if the index digest should be calculated below.
+				username, password, serr := secrets.BasicAuthFromSecret(ctx, fakeClient, secret.Name, secret.Namespace)
 				if serr != nil {
 					validSecret = false
+				} else {
+					getterOpts = append(getterOpts, helmgetter.WithBasicAuth(username, password))
 				}
-				getterOpts = append(getterOpts, gOpts...)
 				repoURL := server.URL()
 				if tt.url != "" {
 					repoURL = tt.url
@@ -919,7 +925,7 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 
 			r := &HelmRepositoryReconciler{
 				EventRecorder: record.NewFakeRecorder(32),
-				Client:        clientBuilder.Build(),
+				Client:        fakeClient,
 				Storage:       testStorage,
 				Getters:       testGetters,
 				patchOptions:  getPatchOptions(helmRepositoryReadyCondition.Owned, "sc"),

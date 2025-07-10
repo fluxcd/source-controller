@@ -60,6 +60,7 @@ import (
 	"github.com/fluxcd/pkg/runtime/patch"
 	"github.com/fluxcd/pkg/runtime/predicates"
 	rreconcile "github.com/fluxcd/pkg/runtime/reconcile"
+	"github.com/fluxcd/pkg/runtime/secrets"
 	"github.com/fluxcd/pkg/sourceignore"
 	"github.com/fluxcd/pkg/tar"
 	"github.com/fluxcd/pkg/version"
@@ -77,7 +78,6 @@ import (
 	"github.com/fluxcd/source-controller/internal/oci/notation"
 	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
 	"github.com/fluxcd/source-controller/internal/reconcile/summarize"
-	"github.com/fluxcd/source-controller/internal/tls"
 	"github.com/fluxcd/source-controller/internal/util"
 )
 
@@ -355,14 +355,18 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 		return sreconcile.ResultEmpty, e
 	}
 
-	proxyURL, err := r.getProxyURL(ctx, obj)
-	if err != nil {
-		e := serror.NewGeneric(
-			fmt.Errorf("failed to get proxy address: %w", err),
-			sourcev1.AuthenticationFailedReason,
-		)
-		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
-		return sreconcile.ResultEmpty, e
+	var proxyURL *url.URL
+	if obj.Spec.ProxySecretRef != nil {
+		var err error
+		proxyURL, err = secrets.ProxyURLFromSecret(ctx, r.Client, obj.Spec.ProxySecretRef.Name, obj.GetNamespace())
+		if err != nil {
+			e := serror.NewGeneric(
+				fmt.Errorf("failed to get proxy address: %w", err),
+				sourcev1.AuthenticationFailedReason,
+			)
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
+			return sreconcile.ResultEmpty, e
+		}
 	}
 
 	if _, ok := keychain.(soci.Anonymous); obj.Spec.Provider != "" && obj.Spec.Provider != sourcev1.GenericOCIProvider && ok {
@@ -995,65 +999,12 @@ func (r *OCIRepositoryReconciler) getTLSConfig(ctx context.Context, obj *sourcev
 		return nil, nil
 	}
 
-	certSecretName := types.NamespacedName{
-		Namespace: obj.Namespace,
-		Name:      obj.Spec.CertSecretRef.Name,
-	}
-	var certSecret corev1.Secret
-	if err := r.Get(ctx, certSecretName, &certSecret); err != nil {
-		return nil, err
-	}
-
-	tlsConfig, _, err := tls.KubeTLSClientConfigFromSecret(certSecret, "")
+	tlsConfig, err := secrets.TLSConfigFromSecret(ctx, r.Client, obj.Spec.CertSecretRef.Name, obj.Namespace)
 	if err != nil {
 		return nil, err
 	}
-	if tlsConfig == nil {
-		tlsConfig, _, err = tls.TLSClientConfigFromSecret(certSecret, "")
-		if err != nil {
-			return nil, err
-		}
-		if tlsConfig != nil {
-			ctrl.LoggerFrom(ctx).
-				Info("warning: specifying TLS auth data via `certFile`/`keyFile`/`caFile` is deprecated, please use `tls.crt`/`tls.key`/`ca.crt` instead")
-		}
-	}
-
+	tlsConfig.MinVersion = cryptotls.VersionTLS12
 	return tlsConfig, nil
-}
-
-// getProxyURL gets the proxy configuration for the transport based on the
-// specified proxy secret reference in the OCIRepository object.
-func (r *OCIRepositoryReconciler) getProxyURL(ctx context.Context, obj *sourcev1.OCIRepository) (*url.URL, error) {
-	if obj.Spec.ProxySecretRef == nil || obj.Spec.ProxySecretRef.Name == "" {
-		return nil, nil
-	}
-
-	proxySecretName := types.NamespacedName{
-		Namespace: obj.Namespace,
-		Name:      obj.Spec.ProxySecretRef.Name,
-	}
-	var proxySecret corev1.Secret
-	if err := r.Get(ctx, proxySecretName, &proxySecret); err != nil {
-		return nil, err
-	}
-
-	proxyData := proxySecret.Data
-	address, ok := proxyData["address"]
-	if !ok {
-		return nil, fmt.Errorf("invalid proxy secret '%s/%s': key 'address' is missing",
-			obj.Namespace, obj.Spec.ProxySecretRef.Name)
-	}
-	proxyURL, err := url.Parse(string(address))
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse proxy address '%s': %w", address, err)
-	}
-	user, hasUser := proxyData["username"]
-	password, hasPassword := proxyData["password"]
-	if hasUser || hasPassword {
-		proxyURL.User = url.UserPassword(string(user), string(password))
-	}
-	return proxyURL, nil
 }
 
 // reconcileStorage ensures the current state of the storage matches the

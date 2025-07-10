@@ -356,7 +356,7 @@ func TestValidateSecret(t *testing.T) {
 			t.Parallel()
 			err := ValidateSecret(tt.secret)
 			if tt.error {
-				assert.Error(t, err, fmt.Sprintf("invalid '%v' secret data: required fields 'serviceaccount'", tt.secret.Name))
+				assert.Error(t, err, fmt.Sprintf("secret '%s/%s': key 'serviceaccount' not found", tt.secret.Namespace, tt.secret.Name))
 			} else {
 				assert.NilError(t, err)
 			}
