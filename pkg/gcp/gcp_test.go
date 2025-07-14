@@ -34,6 +34,7 @@ import (
 
 	"cloud.google.com/go/compute/metadata"
 	gcpstorage "cloud.google.com/go/storage"
+	. "github.com/onsi/gomega"
 	"google.golang.org/api/googleapi"
 	"google.golang.org/api/option"
 	raw "google.golang.org/api/storage/v1"
@@ -274,6 +275,7 @@ func TestVisitObjects(t *testing.T) {
 }
 
 func TestVisitObjectsErr(t *testing.T) {
+	g := NewWithT(t)
 	gcpClient := &GCSClient{
 		Client: client,
 	}
@@ -281,7 +283,9 @@ func TestVisitObjectsErr(t *testing.T) {
 	err := gcpClient.VisitObjects(context.Background(), badBucketName, "", func(key, etag string) error {
 		return nil
 	})
-	assert.Error(t, err, fmt.Sprintf("listing objects from bucket '%s' failed: storage: bucket doesn't exist", badBucketName))
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(err.Error()).To(ContainSubstring(
+		fmt.Sprintf("listing objects from bucket '%s' failed: storage: bucket doesn't exist", badBucketName)))
 }
 
 func TestVisitObjectsCallbackErr(t *testing.T) {
@@ -309,17 +313,16 @@ func TestFGetObject(t *testing.T) {
 }
 
 func TestFGetObjectNotExists(t *testing.T) {
+	g := NewWithT(t)
 	object := "notexists.txt"
 	tempDir := t.TempDir()
 	gcsClient := &GCSClient{
 		Client: client,
 	}
 	localPath := filepath.Join(tempDir, object)
-	_, err = gcsClient.FGetObject(context.Background(), bucketName, object, localPath)
-	if err != io.EOF {
-		assert.Error(t, err, "storage: object doesn't exist")
-		assert.Check(t, gcsClient.ObjectIsNotFound(err))
-	}
+	_, err := gcsClient.FGetObject(context.Background(), bucketName, object, localPath)
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(err.Error()).To(ContainSubstring("storage: object doesn't exist"))
 }
 
 func TestFGetObjectDirectoryIsFileName(t *testing.T) {

@@ -160,14 +160,14 @@ func ValidateSecret(secret *corev1.Secret) error {
 // exists, or returns a (client) error.
 func (c *GCSClient) BucketExists(ctx context.Context, bucketName string) (bool, error) {
 	_, err := c.Client.Bucket(bucketName).Attrs(ctx)
-	if err == gcpstorage.ErrBucketNotExist {
+	if err == nil {
+		return true, nil
+	}
+	if errors.Is(err, gcpstorage.ErrBucketNotExist) {
 		// Not returning error to be compatible with minio's API.
 		return false, nil
 	}
-	if err != nil {
-		return false, err
-	}
-	return true, nil
+	return false, err
 }
 
 // FGetObject gets the object from the provided object storage bucket, and
