@@ -657,7 +657,7 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 					Name: "github-app-secret",
 				},
 				Data: map[string][]byte{
-					github.AppIDKey: []byte("1111"),
+					github.KeyAppID: []byte("1111"),
 				},
 			},
 			beforeFunc: func(obj *sourcev1.GitRepository) {
@@ -817,9 +817,9 @@ func TestGitRepositoryReconciler_getAuthOpts_provider(t *testing.T) {
 					Name: "githubAppSecret",
 				},
 				Data: map[string][]byte{
-					github.AppIDKey:             []byte("123"),
-					github.AppInstallationIDKey: []byte("456"),
-					github.AppPrivateKey:        []byte("abc"),
+					github.KeyAppID:             []byte("123"),
+					github.KeyAppInstallationID: []byte("456"),
+					github.KeyAppPrivateKey:     []byte("abc"),
 				},
 			},
 			beforeFunc: func(obj *sourcev1.GitRepository) {
@@ -838,7 +838,7 @@ func TestGitRepositoryReconciler_getAuthOpts_provider(t *testing.T) {
 					Name: "githubAppSecret",
 				},
 				Data: map[string][]byte{
-					github.AppIDKey: []byte("123"),
+					github.KeyAppID: []byte("123"),
 				},
 			},
 			beforeFunc: func(obj *sourcev1.GitRepository) {
