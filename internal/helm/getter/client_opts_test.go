@@ -19,6 +19,7 @@ package getter
 import (
 	"context"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -64,7 +65,6 @@ func TestGetClientOpts(t *testing.T) {
 				Data: map[string][]byte{
 					"username": []byte("user"),
 					"password": []byte("pass"),
-					"caFile":   []byte("invalid"),
 				},
 			},
 			afterFunc: func(t *WithT, hcOpts *ClientOpts) {
@@ -186,6 +186,7 @@ func TestGetClientOpts_registryTLSLoginOption(t *testing.T) {
 		certSecret *corev1.Secret
 		authSecret *corev1.Secret
 		loginOptsN int
+		wantErrMsg string
 	}{
 		{
 			name: "with valid caFile",
@@ -225,7 +226,7 @@ func TestGetClientOpts_registryTLSLoginOption(t *testing.T) {
 					"password": []byte("pass"),
 				},
 			},
-			loginOptsN: 2,
+			wantErrMsg: "must contain either 'ca.crt' or both 'tls.crt' and 'tls.key'",
 		},
 		{
 			name:       "without cert secret",
@@ -271,6 +272,17 @@ func TestGetClientOpts_registryTLSLoginOption(t *testing.T) {
 			c := clientBuilder.Build()
 
 			clientOpts, tmpDir, err := GetClientOpts(context.TODO(), c, helmRepo, "https://ghcr.io/dummy")
+			if tt.wantErrMsg != "" {
+				if err == nil {
+					t.Errorf("GetClientOpts() expected error but got none")
+					return
+				}
+				if !strings.Contains(err.Error(), tt.wantErrMsg) {
+					t.Errorf("GetClientOpts() expected error containing %q but got %v", tt.wantErrMsg, err)
+					return
+				}
+				return
+			}
 			if err != nil {
 				t.Errorf("GetClientOpts() error = %v", err)
 				return
