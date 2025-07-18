@@ -644,7 +644,7 @@ func TestOCIRepository_reconcileSource_authStrategy(t *testing.T) {
 				},
 			},
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "%s", "cannot append certificate into certificate pool: invalid CA certificate"),
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "%s", "failed to parse CA certificate"),
 			},
 		},
 		{
@@ -913,7 +913,7 @@ func TestOCIRepository_CertSecret(t *testing.T) {
 				},
 			},
 			expectreadyconition:   false,
-			expectedstatusmessage: "failed to generate transport for '<url>': tls: failed to find any PEM data in key input",
+			expectedstatusmessage: "failed to generate transport for '<url>': failed to parse TLS certificate and key: tls: failed to find any PEM data in key input",
 		},
 	}
 
@@ -3702,191 +3702,6 @@ func TestOCIContentConfigChanged(t *testing.T) {
 			}
 
 			g.Expect(ociContentConfigChanged(obj)).To(Equal(tt.want))
-		})
-	}
-}
-
-func TestOCIRepositoryReconciler_getProxyURL(t *testing.T) {
-	tests := []struct {
-		name        string
-		ociRepo     *sourcev1.OCIRepository
-		objects     []client.Object
-		expectedURL string
-		expectedErr string
-	}{
-		{
-			name: "empty proxySecretRef",
-			ociRepo: &sourcev1.OCIRepository{
-				Spec: sourcev1.OCIRepositorySpec{
-					ProxySecretRef: nil,
-				},
-			},
-		},
-		{
-			name: "non-existing proxySecretRef",
-			ociRepo: &sourcev1.OCIRepository{
-				Spec: sourcev1.OCIRepositorySpec{
-					ProxySecretRef: &meta.LocalObjectReference{
-						Name: "non-existing",
-					},
-				},
-			},
-			expectedErr: "secrets \"non-existing\" not found",
-		},
-		{
-			name: "missing address in proxySecretRef",
-			ociRepo: &sourcev1.OCIRepository{
-				Spec: sourcev1.OCIRepositorySpec{
-					ProxySecretRef: &meta.LocalObjectReference{
-						Name: "dummy",
-					},
-				},
-			},
-			objects: []client.Object{
-				&corev1.Secret{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "dummy",
-					},
-					Data: map[string][]byte{},
-				},
-			},
-			expectedErr: "invalid proxy secret '/dummy': key 'address' is missing",
-		},
-		{
-			name: "invalid address in proxySecretRef",
-			ociRepo: &sourcev1.OCIRepository{
-				Spec: sourcev1.OCIRepositorySpec{
-					ProxySecretRef: &meta.LocalObjectReference{
-						Name: "dummy",
-					},
-				},
-			},
-			objects: []client.Object{
-				&corev1.Secret{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "dummy",
-					},
-					Data: map[string][]byte{
-						"address": {0x7f},
-					},
-				},
-			},
-			expectedErr: "failed to parse proxy address '\x7f': parse \"\\x7f\": net/url: invalid control character in URL",
-		},
-		{
-			name: "no user, no password",
-			ociRepo: &sourcev1.OCIRepository{
-				Spec: sourcev1.OCIRepositorySpec{
-					ProxySecretRef: &meta.LocalObjectReference{
-						Name: "dummy",
-					},
-				},
-			},
-			objects: []client.Object{
-				&corev1.Secret{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "dummy",
-					},
-					Data: map[string][]byte{
-						"address": []byte("http://proxy.example.com"),
-					},
-				},
-			},
-			expectedURL: "http://proxy.example.com",
-		},
-		{
-			name: "user, no password",
-			ociRepo: &sourcev1.OCIRepository{
-				Spec: sourcev1.OCIRepositorySpec{
-					ProxySecretRef: &meta.LocalObjectReference{
-						Name: "dummy",
-					},
-				},
-			},
-			objects: []client.Object{
-				&corev1.Secret{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "dummy",
-					},
-					Data: map[string][]byte{
-						"address":  []byte("http://proxy.example.com"),
-						"username": []byte("user"),
-					},
-				},
-			},
-			expectedURL: "http://user:@proxy.example.com",
-		},
-		{
-			name: "no user, password",
-			ociRepo: &sourcev1.OCIRepository{
-				Spec: sourcev1.OCIRepositorySpec{
-					ProxySecretRef: &meta.LocalObjectReference{
-						Name: "dummy",
-					},
-				},
-			},
-			objects: []client.Object{
-				&corev1.Secret{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "dummy",
-					},
-					Data: map[string][]byte{
-						"address":  []byte("http://proxy.example.com"),
-						"password": []byte("password"),
-					},
-				},
-			},
-			expectedURL: "http://:password@proxy.example.com",
-		},
-		{
-			name: "user, password",
-			ociRepo: &sourcev1.OCIRepository{
-				Spec: sourcev1.OCIRepositorySpec{
-					ProxySecretRef: &meta.LocalObjectReference{
-						Name: "dummy",
-					},
-				},
-			},
-			objects: []client.Object{
-				&corev1.Secret{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "dummy",
-					},
-					Data: map[string][]byte{
-						"address":  []byte("http://proxy.example.com"),
-						"username": []byte("user"),
-						"password": []byte("password"),
-					},
-				},
-			},
-			expectedURL: "http://user:password@proxy.example.com",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			g := NewWithT(t)
-
-			c := fakeclient.NewClientBuilder().
-				WithScheme(testEnv.Scheme()).
-				WithObjects(tt.objects...).
-				Build()
-
-			r := &OCIRepositoryReconciler{
-				Client: c,
-			}
-
-			u, err := r.getProxyURL(ctx, tt.ociRepo)
-			if tt.expectedErr == "" {
-				g.Expect(err).To(BeNil())
-			} else {
-				g.Expect(err.Error()).To(ContainSubstring(tt.expectedErr))
-			}
-			if tt.expectedURL == "" {
-				g.Expect(u).To(BeNil())
-			} else {
-				g.Expect(u.String()).To(Equal(tt.expectedURL))
-			}
 		})
 	}
 }

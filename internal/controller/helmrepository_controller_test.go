@@ -482,7 +482,7 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 				repoURL, err := repository.NormalizeURL(serverURL)
 				t.Expect(err).ToNot(HaveOccurred())
 
-				tlsConfig, err := secrets.TLSConfigFromSecret(context.TODO(), secret)
+				tlsConfig, err := secrets.TLSConfigFromSecret(context.TODO(), secret, serverURL, false)
 				t.Expect(err).ToNot(HaveOccurred())
 
 				getterOpts := []helmgetter.Option{
@@ -534,7 +534,7 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 				repoURL, err := repository.NormalizeURL(serverURL)
 				t.Expect(err).ToNot(HaveOccurred())
 
-				tlsConfig, err := secrets.TLSConfigFromSecret(context.TODO(), secret)
+				tlsConfig, err := secrets.TLSConfigFromSecret(context.TODO(), secret, serverURL, false)
 				t.Expect(err).ToNot(HaveOccurred())
 
 				getterOpts := []helmgetter.Option{
@@ -588,7 +588,7 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 				repoURL, err := repository.NormalizeURL(serverURL)
 				t.Expect(err).ToNot(HaveOccurred())
 
-				tlsConfig, err := secrets.TLSConfigFromSecret(context.TODO(), secret)
+				tlsConfig, err := secrets.TLSConfigFromSecret(context.TODO(), secret, serverURL, false)
 				t.Expect(err).ToNot(HaveOccurred())
 
 				getterOpts := []helmgetter.Option{

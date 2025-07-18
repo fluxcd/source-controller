@@ -43,7 +43,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/apimachinery/pkg/util/sets"
 	kuberecorder "k8s.io/client-go/tools/record"
 	"k8s.io/client-go/util/workqueue"
 	"k8s.io/utils/ptr"
@@ -60,6 +59,7 @@ import (
 	"github.com/fluxcd/pkg/runtime/patch"
 	"github.com/fluxcd/pkg/runtime/predicates"
 	rreconcile "github.com/fluxcd/pkg/runtime/reconcile"
+	"github.com/fluxcd/pkg/runtime/secrets"
 	"github.com/fluxcd/pkg/sourceignore"
 	"github.com/fluxcd/pkg/tar"
 	"github.com/fluxcd/pkg/version"
@@ -77,7 +77,6 @@ import (
 	"github.com/fluxcd/source-controller/internal/oci/notation"
 	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
 	"github.com/fluxcd/source-controller/internal/reconcile/summarize"
-	"github.com/fluxcd/source-controller/internal/tls"
 	"github.com/fluxcd/source-controller/internal/util"
 )
 
@@ -355,14 +354,21 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 		return sreconcile.ResultEmpty, e
 	}
 
-	proxyURL, err := r.getProxyURL(ctx, obj)
-	if err != nil {
-		e := serror.NewGeneric(
-			fmt.Errorf("failed to get proxy address: %w", err),
-			sourcev1.AuthenticationFailedReason,
-		)
-		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
-		return sreconcile.ResultEmpty, e
+	var proxyURL *url.URL
+	if obj.Spec.ProxySecretRef != nil {
+		var err error
+		proxyURL, err = secrets.ProxyURLFromSecretRef(ctx, r.Client, types.NamespacedName{
+			Name:      obj.Spec.ProxySecretRef.Name,
+			Namespace: obj.GetNamespace(),
+		})
+		if err != nil {
+			e := serror.NewGeneric(
+				fmt.Errorf("failed to get proxy address: %w", err),
+				sourcev1.AuthenticationFailedReason,
+			)
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
+			return sreconcile.ResultEmpty, e
+		}
 	}
 
 	if _, ok := keychain.(soci.Anonymous); obj.Spec.Provider != "" && obj.Spec.Provider != sourcev1.GenericOCIProvider && ok {
@@ -920,42 +926,34 @@ func (r *OCIRepositoryReconciler) getTagBySemver(repo name.Repository, exp strin
 // configuration. If no auth is specified a default keychain with
 // anonymous access is returned
 func (r *OCIRepositoryReconciler) keychain(ctx context.Context, obj *sourcev1.OCIRepository) (authn.Keychain, error) {
-	pullSecretNames := sets.NewString()
+	var imagePullSecrets []corev1.Secret
 
 	// lookup auth secret
 	if obj.Spec.SecretRef != nil {
-		pullSecretNames.Insert(obj.Spec.SecretRef.Name)
+		var imagePullSecret corev1.Secret
+		secretRef := types.NamespacedName{Namespace: obj.Namespace, Name: obj.Spec.SecretRef.Name}
+		err := r.Get(ctx, secretRef, &imagePullSecret)
+		if err != nil {
+			r.eventLogf(ctx, obj, eventv1.EventTypeTrace, sourcev1.AuthenticationFailedReason,
+				"auth secret '%s' not found", obj.Spec.SecretRef.Name)
+			return nil, err
+		}
+		imagePullSecrets = append(imagePullSecrets, imagePullSecret)
 	}
 
 	// lookup service account
 	if obj.Spec.ServiceAccountName != "" {
-		serviceAccountName := obj.Spec.ServiceAccountName
-		serviceAccount := corev1.ServiceAccount{}
-		err := r.Get(ctx, types.NamespacedName{Namespace: obj.Namespace, Name: serviceAccountName}, &serviceAccount)
+		saRef := types.NamespacedName{Namespace: obj.Namespace, Name: obj.Spec.ServiceAccountName}
+		saSecrets, err := secrets.PullSecretsFromServiceAccountRef(ctx, r.Client, saRef)
 		if err != nil {
 			return nil, err
 		}
-		for _, ips := range serviceAccount.ImagePullSecrets {
-			pullSecretNames.Insert(ips.Name)
-		}
+		imagePullSecrets = append(imagePullSecrets, saSecrets...)
 	}
 
 	// if no pullsecrets available return an AnonymousKeychain
-	if len(pullSecretNames) == 0 {
+	if len(imagePullSecrets) == 0 {
 		return soci.Anonymous{}, nil
-	}
-
-	// lookup image pull secrets
-	imagePullSecrets := make([]corev1.Secret, len(pullSecretNames))
-	for i, imagePullSecretName := range pullSecretNames.List() {
-		imagePullSecret := corev1.Secret{}
-		err := r.Get(ctx, types.NamespacedName{Namespace: obj.Namespace, Name: imagePullSecretName}, &imagePullSecret)
-		if err != nil {
-			r.eventLogf(ctx, obj, eventv1.EventTypeTrace, sourcev1.AuthenticationFailedReason,
-				"auth secret '%s' not found", imagePullSecretName)
-			return nil, err
-		}
-		imagePullSecrets[i] = imagePullSecret
 	}
 
 	return k8schain.NewFromPullSecrets(ctx, imagePullSecrets)
@@ -995,65 +993,11 @@ func (r *OCIRepositoryReconciler) getTLSConfig(ctx context.Context, obj *sourcev
 		return nil, nil
 	}
 
-	certSecretName := types.NamespacedName{
+	secretName := types.NamespacedName{
 		Namespace: obj.Namespace,
 		Name:      obj.Spec.CertSecretRef.Name,
 	}
-	var certSecret corev1.Secret
-	if err := r.Get(ctx, certSecretName, &certSecret); err != nil {
-		return nil, err
-	}
-
-	tlsConfig, _, err := tls.KubeTLSClientConfigFromSecret(certSecret, "")
-	if err != nil {
-		return nil, err
-	}
-	if tlsConfig == nil {
-		tlsConfig, _, err = tls.TLSClientConfigFromSecret(certSecret, "")
-		if err != nil {
-			return nil, err
-		}
-		if tlsConfig != nil {
-			ctrl.LoggerFrom(ctx).
-				Info("warning: specifying TLS auth data via `certFile`/`keyFile`/`caFile` is deprecated, please use `tls.crt`/`tls.key`/`ca.crt` instead")
-		}
-	}
-
-	return tlsConfig, nil
-}
-
-// getProxyURL gets the proxy configuration for the transport based on the
-// specified proxy secret reference in the OCIRepository object.
-func (r *OCIRepositoryReconciler) getProxyURL(ctx context.Context, obj *sourcev1.OCIRepository) (*url.URL, error) {
-	if obj.Spec.ProxySecretRef == nil || obj.Spec.ProxySecretRef.Name == "" {
-		return nil, nil
-	}
-
-	proxySecretName := types.NamespacedName{
-		Namespace: obj.Namespace,
-		Name:      obj.Spec.ProxySecretRef.Name,
-	}
-	var proxySecret corev1.Secret
-	if err := r.Get(ctx, proxySecretName, &proxySecret); err != nil {
-		return nil, err
-	}
-
-	proxyData := proxySecret.Data
-	address, ok := proxyData["address"]
-	if !ok {
-		return nil, fmt.Errorf("invalid proxy secret '%s/%s': key 'address' is missing",
-			obj.Namespace, obj.Spec.ProxySecretRef.Name)
-	}
-	proxyURL, err := url.Parse(string(address))
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse proxy address '%s': %w", address, err)
-	}
-	user, hasUser := proxyData["username"]
-	password, hasPassword := proxyData["password"]
-	if hasUser || hasPassword {
-		proxyURL.User = url.UserPassword(string(user), string(password))
-	}
-	return proxyURL, nil
+	return secrets.TLSConfigFromSecretRef(ctx, r.Client, secretName, obj.Spec.URL, obj.Spec.Insecure)
 }
 
 // reconcileStorage ensures the current state of the storage matches the
