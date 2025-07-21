@@ -122,7 +122,7 @@ func configureAuthentication(ctx context.Context, c client.Client, obj *sourcev1
 		}
 		certSecret = secret
 
-		tlsConfig, err := secrets.TLSConfigFromSecret(ctx, secret)
+		tlsConfig, err := secrets.TLSConfigFromSecret(ctx, secret, obj.Spec.URL, obj.Spec.Insecure)
 		if err != nil {
 			return false, nil, nil, fmt.Errorf("failed to construct Helm client's TLS config: %w", err)
 		}
@@ -138,7 +138,7 @@ func configureAuthentication(ctx context.Context, c client.Client, obj *sourcev1
 		}
 		authSecret = secret
 
-		methods, err := secrets.AuthMethodsFromSecret(ctx, secret)
+		methods, err := secrets.AuthMethodsFromSecret(ctx, secret, secrets.WithTLS(obj.Spec.URL, obj.Spec.Insecure))
 		if err != nil {
 			return false, nil, nil, fmt.Errorf("failed to detect authentication methods: %w", err)
 		}
