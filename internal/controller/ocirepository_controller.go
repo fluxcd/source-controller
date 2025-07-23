@@ -936,7 +936,7 @@ func (r *OCIRepositoryReconciler) keychain(ctx context.Context, obj *sourcev1.OC
 		if err != nil {
 			r.eventLogf(ctx, obj, eventv1.EventTypeTrace, sourcev1.AuthenticationFailedReason,
 				"auth secret '%s' not found", obj.Spec.SecretRef.Name)
-			return nil, err
+			return nil, fmt.Errorf("failed to get secret '%s': %w", secretRef, err)
 		}
 		imagePullSecrets = append(imagePullSecrets, imagePullSecret)
 	}
