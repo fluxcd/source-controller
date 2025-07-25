@@ -523,7 +523,7 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 		return chartRepoConfigErrorReturn(err, obj)
 	}
 
-	clientOpts, certsTmpDir, err := getter.GetClientOpts(ctxTimeout, r.Client, repo, normalizedURL)
+	clientOpts, err := getter.GetClientOpts(ctxTimeout, r.Client, repo, normalizedURL)
 	if err != nil && !errors.Is(err, getter.ErrDeprecatedTLSConfig) {
 		e := serror.NewGeneric(
 			err,
@@ -532,9 +532,9 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
 		return sreconcile.ResultEmpty, e
 	}
-	if certsTmpDir != "" {
+	if clientOpts.CertsTempDir != "" {
 		defer func() {
-			if err := os.RemoveAll(certsTmpDir); err != nil {
+			if err := os.RemoveAll(clientOpts.CertsTempDir); err != nil {
 				r.eventLogf(ctx, obj, corev1.EventTypeWarning, meta.FailedReason,
 					"failed to delete temporary certificates directory: %s", err)
 			}
@@ -1018,7 +1018,7 @@ func (r *HelmChartReconciler) namespacedChartRepositoryCallback(ctx context.Cont
 		ctxTimeout, cancel := context.WithTimeout(ctx, obj.GetTimeout())
 		defer cancel()
 
-		clientOpts, certsTmpDir, err := getter.GetClientOpts(ctxTimeout, r.Client, obj, normalizedURL)
+		clientOpts, err := getter.GetClientOpts(ctxTimeout, r.Client, obj, normalizedURL)
 		if err != nil && !errors.Is(err, getter.ErrDeprecatedTLSConfig) {
 			return nil, err
 		}
@@ -1037,7 +1037,7 @@ func (r *HelmChartReconciler) namespacedChartRepositoryCallback(ctx context.Cont
 			ociChartRepo, err := repository.NewOCIChartRepository(normalizedURL, repository.WithOCIGetter(r.Getters),
 				repository.WithOCIGetterOptions(getterOpts),
 				repository.WithOCIRegistryClient(registryClient),
-				repository.WithCertificatesStore(certsTmpDir),
+				repository.WithCertificatesStore(clientOpts.CertsTempDir),
 				repository.WithCredentialsFile(credentialsFile))
 			if err != nil {
 				errs = append(errs, fmt.Errorf("failed to create OCI chart repository: %w", err))
