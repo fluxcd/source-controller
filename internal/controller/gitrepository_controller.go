@@ -124,6 +124,7 @@ func getPatchOptions(ownedConditions []string, controllerName string) []patch.Op
 // +kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=gitrepositories/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=gitrepositories/finalizers,verbs=get;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
+// +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch
 
 // GitRepositoryReconciler reconciles a v1.GitRepository object.
 type GitRepositoryReconciler struct {
@@ -1073,25 +1074,66 @@ func (r *GitRepositoryReconciler) verifySignature(ctx context.Context, obj *sour
 		return sreconcile.ResultSuccess, nil
 	}
 
-	// Get secret with GPG data
-	publicKeySecret := types.NamespacedName{
-		Namespace: obj.Namespace,
-		Name:      obj.Spec.Verification.SecretRef.Name,
-	}
-	secret := &corev1.Secret{}
-	if err := r.Client.Get(ctx, publicKeySecret, secret); err != nil {
-		e := serror.NewGeneric(
-			fmt.Errorf("PGP public keys secret error: %w", err),
-			"VerificationError",
-		)
-		conditions.MarkFalse(obj, sourcev1.SourceVerifiedCondition, e.Reason, "%s", e)
-		return sreconcile.ResultEmpty, e
-	}
+		var keyRings []string
 
-	var keyRings []string
-	for _, v := range secret.Data {
-		keyRings = append(keyRings, string(v))
-	}
+	if obj.Spec.Verification.PublicKeyRef != nil {
+		// new cross-namespace logic
+		ref := obj.Spec.Verification.PublicKeyRef
+		switch ref.Kind {
+		case "Secret":
+			var secret corev1.Secret
+			if err := r.Client.Get(ctx, types.NamespacedName{
+				Namespace: ref.Namespace,
+				Name:      ref.Name,
+			}, &secret); err != nil {
+				e := serror.NewGeneric(
+					fmt.Errorf("PGP public keys secret error: %w", err),
+					"VerificationError",
+				)
+				conditions.MarkFalse(obj, sourcev1.SourceVerifiedCondition, e.Reason, "%s", e)
+				return sreconcile.ResultEmpty, e
+			}
+			for _, v := range secret.Data {
+				keyRings = append(keyRings, string(v))
+			}
+
+		case "ConfigMap":
+			var cm corev1.ConfigMap
+			if err := r.Client.Get(ctx, types.NamespacedName{
+				Namespace: ref.Namespace,
+				Name:      ref.Name,
+			}, &cm); err != nil {
+				e := serror.NewGeneric(
+					fmt.Errorf("PGP public keys configmap error: %w", err),
+					"VerificationError",
+				)
+				conditions.MarkFalse(obj, sourcev1.SourceVerifiedCondition, e.Reason, "%s", e)
+				return sreconcile.ResultEmpty, e
+			}
+			for _, v := range cm.Data {
+				keyRings = append(keyRings, v)
+			}
+		}
+	} else {
+		// fallback to same-namespace SecretRef
+		publicKeySecret := types.NamespacedName{
+			Namespace: obj.Namespace,
+			Name:      obj.Spec.Verification.SecretRef.Name,
+		}
+		secret := &corev1.Secret{}
+		if err := r.Client.Get(ctx, publicKeySecret, secret); err != nil {
+			e := serror.NewGeneric(
+				fmt.Errorf("PGP public keys secret error: %w", err),
+				"VerificationError",
+			)
+			conditions.MarkFalse(obj, sourcev1.SourceVerifiedCondition, e.Reason, "%s", e)
+			return sreconcile.ResultEmpty, e
+		}
+		for _, v := range secret.Data {
+			keyRings = append(keyRings, string(v))
+		}
+}
+
 
 	var message strings.Builder
 	if obj.Spec.Verification.VerifyTag() {
