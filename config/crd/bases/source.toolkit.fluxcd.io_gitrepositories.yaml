@@ -217,6 +217,31 @@ spec:
                     - Tag
                     - TagAndHEAD
                     type: string
+                  publicKeyRef:
+                    description: |-
+                      PublicKeyRef allows referencing a Secret or ConfigMap in another namespace
+                      that contains the public key(s) for verification.
+                    properties:
+                      kind:
+                        description: 'Kind of the object being referenced: Secret
+                          or ConfigMap.'
+                        enum:
+                        - Secret
+                        - ConfigMap
+                        type: string
+                      name:
+                        description: Name of the Secret or ConfigMap.
+                        minLength: 1
+                        type: string
+                      namespace:
+                        description: Namespace of the Secret or ConfigMap.
+                        minLength: 1
+                        type: string
+                    required:
+                    - kind
+                    - name
+                    - namespace
+                    type: object
                   secretRef:
                     description: |-
                       SecretRef specifies the Secret containing the public keys of trusted Git

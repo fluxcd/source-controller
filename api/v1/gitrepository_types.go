@@ -218,6 +218,23 @@ type GitRepositoryRef struct {
 	Commit string `json:"commit,omitempty"`
 }
 
+// CrossNamespaceObjectReference allows referencing a Secret or ConfigMap
+// in another namespace.
+type CrossNamespaceObjectReference struct {
+    // Name of the Secret or ConfigMap.
+    // +kubebuilder:validation:MinLength=1
+    Name string `json:"name"`
+
+    // Namespace of the Secret or ConfigMap.
+    // +kubebuilder:validation:MinLength=1
+    Namespace string `json:"namespace"`
+
+    // Kind of the object being referenced: Secret or ConfigMap.
+    // +kubebuilder:validation:Enum=Secret;ConfigMap
+    Kind string `json:"kind"`
+}
+
+
 // GitRepositoryVerification specifies the Git commit signature verification
 // strategy.
 type GitRepositoryVerification struct {
@@ -235,6 +252,11 @@ type GitRepositoryVerification struct {
 	// authors.
 	// +required
 	SecretRef meta.LocalObjectReference `json:"secretRef"`
+
+	// PublicKeyRef allows referencing a Secret or ConfigMap in another namespace
+	// that contains the public key(s) for verification.
+	// +optional
+	PublicKeyRef *CrossNamespaceObjectReference `json:"publicKeyRef,omitempty"`
 }
 
 // GitRepositoryStatus records the observed state of a Git repository.
