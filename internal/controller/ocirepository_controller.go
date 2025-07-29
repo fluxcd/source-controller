@@ -986,6 +986,11 @@ func (r *OCIRepositoryReconciler) transport(ctx context.Context, obj *sourcev1.O
 func (r *OCIRepositoryReconciler) getTLSConfig(ctx context.Context, obj *sourcev1.OCIRepository) (*cryptotls.Config, error) {
 	if obj.Spec.CertSecretRef == nil || obj.Spec.CertSecretRef.Name == "" {
 		if obj.Spec.Insecure {
+			// NOTE: This is the only place in Flux where InsecureSkipVerify is allowed.
+			// This exception is made for OCIRepository to maintain backward compatibility
+			// with tools like crane that require insecure connections without certificates.
+			// This only applies when no CertSecretRef is provided AND insecure is explicitly set.
+			// All other controllers must NOT allow InsecureSkipVerify per our security policy.
 			return &cryptotls.Config{
 				InsecureSkipVerify: true,
 			}, nil
@@ -997,7 +1002,7 @@ func (r *OCIRepositoryReconciler) getTLSConfig(ctx context.Context, obj *sourcev
 		Namespace: obj.Namespace,
 		Name:      obj.Spec.CertSecretRef.Name,
 	}
-	return secrets.TLSConfigFromSecretRef(ctx, r.Client, secretName, obj.Spec.URL, obj.Spec.Insecure)
+	return secrets.TLSConfigFromSecretRef(ctx, r.Client, secretName, obj.Spec.URL)
 }
 
 // reconcileStorage ensures the current state of the storage matches the

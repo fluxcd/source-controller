@@ -298,3 +298,49 @@ func TestGetClientOpts_registryTLSLoginOption(t *testing.T) {
 		})
 	}
 }
+
+func TestConfigureAuthentication_WithTargetURL(t *testing.T) {
+	g := NewWithT(t)
+
+	tlsCA, err := os.ReadFile("../../controller/testdata/certs/ca.pem")
+	if err != nil {
+		t.Errorf("could not read CA file: %s", err)
+		return
+	}
+
+	helmRepo := &helmv1.HelmRepository{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-repo",
+			Namespace: "default",
+		},
+		Spec: helmv1.HelmRepositorySpec{
+			URL: "https://example.com/charts",
+		},
+	}
+
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "auth-secret",
+			Namespace: "default",
+		},
+		Data: map[string][]byte{
+			"username": []byte("testuser"),
+			"password": []byte("testpass"),
+			"ca.crt":   tlsCA,
+		},
+	}
+
+	client := fakeclient.NewClientBuilder().WithObjects(secret).Build()
+	helmRepo.Spec.SecretRef = &meta.LocalObjectReference{Name: secret.Name}
+
+	opts := &ClientOpts{}
+	deprecatedTLS, certSecret, authSecret, err := configureAuthentication(context.TODO(), client, helmRepo, opts, helmRepo.Spec.URL)
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(deprecatedTLS).To(BeTrue()) // TLS from SecretRef is deprecated
+	g.Expect(certSecret).To(BeNil())
+	g.Expect(authSecret).To(Equal(secret))
+
+	// Regression test: verify ServerName is set from target URL when WithTargetURL is used
+	g.Expect(opts.TlsConfig).ToNot(BeNil())
+	g.Expect(opts.TlsConfig.ServerName).To(Equal("example.com"))
+}
