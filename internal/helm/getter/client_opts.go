@@ -122,7 +122,11 @@ func configureAuthentication(ctx context.Context, c client.Client, obj *sourcev1
 		}
 		certSecret = secret
 
-		tlsConfig, err := secrets.TLSConfigFromSecret(ctx, secret, obj.Spec.URL)
+		// NOTE: Use WithSystemCertPool to maintain backward compatibility with the existing
+		// extend approach (system CAs + user CA) rather than the default replace approach (user CA only).
+		// This ensures HelmRepository continues to work with both system and user-provided CA certificates.
+		var tlsOpts = []secrets.TLSConfigOption{secrets.WithSystemCertPool()}
+		tlsConfig, err := secrets.TLSConfigFromSecret(ctx, secret, obj.Spec.URL, tlsOpts...)
 		if err != nil {
 			return false, nil, nil, fmt.Errorf("failed to construct Helm client's TLS config: %w", err)
 		}
@@ -138,7 +142,14 @@ func configureAuthentication(ctx context.Context, c client.Client, obj *sourcev1
 		}
 		authSecret = secret
 
-		methods, err := secrets.AuthMethodsFromSecret(ctx, secret, secrets.WithTargetURL(obj.Spec.URL))
+		// NOTE: Use WithTLSSystemCertPool to maintain backward compatibility with the existing
+		// extend approach (system CAs + user CA) rather than the default replace approach (user CA only).
+		// This ensures HelmRepository auth methods work with both system and user-provided CA certificates.
+		var authOpts = []secrets.AuthMethodsOption{
+			secrets.WithTargetURL(obj.Spec.URL),
+			secrets.WithTLSSystemCertPool(),
+		}
+		methods, err := secrets.AuthMethodsFromSecret(ctx, secret, authOpts...)
 		if err != nil {
 			return false, nil, nil, fmt.Errorf("failed to detect authentication methods: %w", err)
 		}

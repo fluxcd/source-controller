@@ -1002,7 +1002,11 @@ func (r *OCIRepositoryReconciler) getTLSConfig(ctx context.Context, obj *sourcev
 		Namespace: obj.Namespace,
 		Name:      obj.Spec.CertSecretRef.Name,
 	}
-	return secrets.TLSConfigFromSecretRef(ctx, r.Client, secretName, obj.Spec.URL)
+	// NOTE: Use WithSystemCertPool to maintain backward compatibility with the existing
+	// extend approach (system CAs + user CA) rather than the default replace approach (user CA only).
+	// This ensures source-controller continues to work with both system and user-provided CA certificates.
+	var tlsOpts = []secrets.TLSConfigOption{secrets.WithSystemCertPool()}
+	return secrets.TLSConfigFromSecretRef(ctx, r.Client, secretName, obj.Spec.URL, tlsOpts...)
 }
 
 // reconcileStorage ensures the current state of the storage matches the

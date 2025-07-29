@@ -426,11 +426,11 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 		assertConditions []metav1.Condition
 	}{
 		{
-			name:     "HTTPS with certSecretRef pointing to non-matching CA cert but public repo URL fails",
+			name:     "HTTPS with certSecretRef non-matching CA succeeds via system CA pool",
 			protocol: "http",
 			url:      "https://stefanprodan.github.io/podinfo",
-			want:     sreconcile.ResultEmpty,
-			wantErr:  true,
+			want:     sreconcile.ResultSuccess,
+			wantErr:  false,
 			secret: &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "ca-file",
@@ -442,19 +442,10 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 			},
 			beforeFunc: func(t *WithT, obj *sourcev1.HelmRepository) {
 				obj.Spec.CertSecretRef = &meta.LocalObjectReference{Name: "ca-file"}
-				conditions.MarkReconciling(obj, meta.ProgressingReason, "foo")
-				conditions.MarkUnknown(obj, meta.ReadyCondition, "foo", "bar")
 			},
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.FetchFailedCondition, meta.FailedReason, "tls: failed to verify certificate: x509: certificate signed by unknown authority"),
-				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "foo"),
-				*conditions.UnknownCondition(meta.ReadyCondition, "foo", "bar"),
-			},
-			afterFunc: func(t *WithT, obj *sourcev1.HelmRepository, artifact sourcev1.Artifact, chartRepo *repository.ChartRepository) {
-				// No repo index due to fetch fail.
-				t.Expect(chartRepo.Path).To(BeEmpty())
-				t.Expect(chartRepo.Index).To(BeNil())
-				t.Expect(artifact.Revision).To(BeEmpty())
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new index revision"),
+				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new index revision"),
 			},
 		},
 		{
