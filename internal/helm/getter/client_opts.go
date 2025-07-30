@@ -118,7 +118,8 @@ func configureAuthentication(ctx context.Context, c client.Client, obj *sourcev1
 	if obj.Spec.CertSecretRef != nil {
 		secret, err := fetchSecret(ctx, c, obj.Spec.CertSecretRef.Name, obj.GetNamespace())
 		if err != nil {
-			return false, nil, nil, fmt.Errorf("failed to get TLS authentication secret: %w", err)
+			secretRef := types.NamespacedName{Namespace: obj.GetNamespace(), Name: obj.Spec.CertSecretRef.Name}
+			return false, nil, nil, fmt.Errorf("failed to get TLS authentication secret '%s': %w", secretRef, err)
 		}
 		certSecret = secret
 
@@ -138,7 +139,8 @@ func configureAuthentication(ctx context.Context, c client.Client, obj *sourcev1
 	if obj.Spec.SecretRef != nil {
 		secret, err := fetchSecret(ctx, c, obj.Spec.SecretRef.Name, obj.GetNamespace())
 		if err != nil {
-			return false, nil, nil, fmt.Errorf("failed to get authentication secret: %w", err)
+			secretRef := types.NamespacedName{Namespace: obj.GetNamespace(), Name: obj.Spec.SecretRef.Name}
+			return false, nil, nil, fmt.Errorf("failed to get authentication secret '%s': %w", secretRef, err)
 		}
 		authSecret = secret
 

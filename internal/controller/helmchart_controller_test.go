@@ -1035,12 +1035,12 @@ func TestHelmChartReconciler_buildFromHelmRepository(t *testing.T) {
 				}
 			},
 			want:    sreconcile.ResultEmpty,
-			wantErr: &serror.Generic{Err: errors.New("failed to get authentication secret: secrets \"invalid\" not found")},
+			wantErr: &serror.Generic{Err: errors.New("failed to get authentication secret '/invalid': secrets \"invalid\" not found")},
 			assertFunc: func(g *WithT, obj *sourcev1.HelmChart, build chart.Build) {
 				g.Expect(build.Complete()).To(BeFalse())
 
 				g.Expect(obj.Status.Conditions).To(conditions.MatchConditions([]metav1.Condition{
-					*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "failed to get authentication secret: secrets \"invalid\" not found"),
+					*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "failed to get authentication secret '/invalid': secrets \"invalid\" not found"),
 				}))
 			},
 		},
@@ -1304,12 +1304,12 @@ func TestHelmChartReconciler_buildFromOCIHelmRepository(t *testing.T) {
 				}
 			},
 			want:    sreconcile.ResultEmpty,
-			wantErr: &serror.Generic{Err: errors.New("failed to get authentication secret: secrets \"invalid\" not found")},
+			wantErr: &serror.Generic{Err: errors.New("failed to get authentication secret '/invalid': secrets \"invalid\" not found")},
 			assertFunc: func(g *WithT, obj *sourcev1.HelmChart, build chart.Build) {
 				g.Expect(build.Complete()).To(BeFalse())
 
 				g.Expect(obj.Status.Conditions).To(conditions.MatchConditions([]metav1.Condition{
-					*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "failed to get authentication secret: secrets \"invalid\" not found"),
+					*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "failed to get authentication secret '/invalid': secrets \"invalid\" not found"),
 				}))
 			},
 		},
