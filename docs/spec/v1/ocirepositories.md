@@ -287,19 +287,19 @@ provide a `secretRef` nor `serviceAccountName`.
 For a complete guide on how to set up authentication for cloud providers,
 see the integration [docs](/flux/integrations/).
 
-### Cert secret reference
+### Mutual TLS Authentication
 
 `.spec.certSecretRef.name` is an optional field to specify a secret containing
-TLS certificate data. The secret can contain the following keys:
+TLS certificate data for mutual TLS authentication.
+
+To authenticate towards an OCI repository using mutual TLS,
+the referenced Secret's `.data` should contain the following keys:
 
 * `tls.crt` and `tls.key`, to specify the client certificate and private key used
 for TLS client authentication. These must be used in conjunction, i.e.
 specifying one without the other will lead to an error.
 * `ca.crt`, to specify the CA certificate used to verify the server, which is
 required if the server is using a self-signed certificate.
-
-If the server is using a self-signed certificate and has TLS client
-authentication enabled, all three values are required.
 
 The Secret should be of type `Opaque` or `kubernetes.io/tls`. All the files in
 the Secret are expected to be [PEM-encoded][pem-encoding]. Assuming you have
