@@ -18,7 +18,7 @@ package controller
 
 import (
 	"context"
-	stdtls "crypto/tls"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"net/url"
@@ -50,6 +50,7 @@ import (
 	"github.com/fluxcd/pkg/runtime/patch"
 	"github.com/fluxcd/pkg/runtime/predicates"
 	rreconcile "github.com/fluxcd/pkg/runtime/reconcile"
+	"github.com/fluxcd/pkg/runtime/secrets"
 	"github.com/fluxcd/pkg/sourceignore"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
@@ -58,7 +59,6 @@ import (
 	"github.com/fluxcd/source-controller/internal/index"
 	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
 	"github.com/fluxcd/source-controller/internal/reconcile/summarize"
-	"github.com/fluxcd/source-controller/internal/tls"
 	"github.com/fluxcd/source-controller/pkg/azure"
 	"github.com/fluxcd/source-controller/pkg/gcp"
 	"github.com/fluxcd/source-controller/pkg/minio"
@@ -153,6 +153,15 @@ type BucketProvider interface {
 	ObjectIsNotFound(error) bool
 	// Close closes the provider's client, if supported.
 	Close(context.Context)
+}
+
+// bucketCredentials contains all credentials and configuration needed for bucket providers.
+type bucketCredentials struct {
+	secret       *corev1.Secret
+	proxyURL     *url.URL
+	tlsConfig    *tls.Config
+	stsSecret    *corev1.Secret
+	stsTLSConfig *tls.Config
 }
 
 // bucketReconcileFunc is the function type for all the v1.Bucket
@@ -421,162 +430,47 @@ func (r *BucketReconciler) reconcileStorage(ctx context.Context, sp *patch.Seria
 // the provider. If this fails, it records v1.FetchFailedCondition=True on
 // the object and returns early.
 func (r *BucketReconciler) reconcileSource(ctx context.Context, sp *patch.SerialPatcher, obj *sourcev1.Bucket, index *index.Digester, dir string) (sreconcile.Result, error) {
-	secret, err := r.getSecret(ctx, obj.Spec.SecretRef, obj.GetNamespace())
-	if err != nil {
-		e := serror.NewGeneric(err, sourcev1.AuthenticationFailedReason)
-		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
-		// Return error as the world as observed may change
-		return sreconcile.ResultEmpty, e
-	}
-	proxyURL, err := r.getProxyURL(ctx, obj)
+	creds, err := r.setupCredentials(ctx, obj)
 	if err != nil {
 		e := serror.NewGeneric(err, sourcev1.AuthenticationFailedReason)
 		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
 		return sreconcile.ResultEmpty, e
 	}
 
-	// Construct provider client
-	var provider BucketProvider
-	switch obj.Spec.Provider {
-	case sourcev1.BucketProviderGoogle:
-		if err = gcp.ValidateSecret(secret); err != nil {
+	provider, err := r.createBucketProvider(ctx, obj, creds)
+	if err != nil {
+		var stallingErr *serror.Stalling
+		var genericErr *serror.Generic
+		if errors.As(err, &stallingErr) {
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, stallingErr.Reason, "%s", stallingErr)
+			return sreconcile.ResultEmpty, stallingErr
+		} else if errors.As(err, &genericErr) {
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, genericErr.Reason, "%s", genericErr)
+			return sreconcile.ResultEmpty, genericErr
+		} else {
 			e := serror.NewGeneric(err, sourcev1.AuthenticationFailedReason)
-			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
-			return sreconcile.ResultEmpty, e
-		}
-		var opts []gcp.Option
-		if secret != nil {
-			opts = append(opts, gcp.WithSecret(secret))
-		}
-		if proxyURL != nil {
-			opts = append(opts, gcp.WithProxyURL(proxyURL))
-		}
-		if provider, err = gcp.NewClient(ctx, opts...); err != nil {
-			e := serror.NewGeneric(err, "ClientError")
-			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
-			return sreconcile.ResultEmpty, e
-		}
-	case sourcev1.BucketProviderAzure:
-		if err = azure.ValidateSecret(secret); err != nil {
-			e := serror.NewGeneric(err, sourcev1.AuthenticationFailedReason)
-			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
-			return sreconcile.ResultEmpty, e
-		}
-		var opts []azure.Option
-		if secret != nil {
-			opts = append(opts, azure.WithSecret(secret))
-		}
-		if proxyURL != nil {
-			opts = append(opts, azure.WithProxyURL(proxyURL))
-		}
-		if provider, err = azure.NewClient(obj, opts...); err != nil {
-			e := serror.NewGeneric(err, "ClientError")
-			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
-			return sreconcile.ResultEmpty, e
-		}
-	default:
-		if err = minio.ValidateSecret(secret); err != nil {
-			e := serror.NewGeneric(err, sourcev1.AuthenticationFailedReason)
-			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
-			return sreconcile.ResultEmpty, e
-		}
-		tlsConfig, err := r.getTLSConfig(ctx, obj.Spec.CertSecretRef, obj.GetNamespace(), obj.Spec.Endpoint)
-		if err != nil {
-			e := serror.NewGeneric(err, sourcev1.AuthenticationFailedReason)
-			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
-			return sreconcile.ResultEmpty, e
-		}
-		stsSecret, err := r.getSTSSecret(ctx, obj)
-		if err != nil {
-			e := serror.NewGeneric(err, sourcev1.AuthenticationFailedReason)
-			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
-			return sreconcile.ResultEmpty, e
-		}
-		stsTLSConfig, err := r.getSTSTLSConfig(ctx, obj)
-		if err != nil {
-			err := fmt.Errorf("failed to get STS TLS config: %w", err)
-			e := serror.NewGeneric(err, sourcev1.AuthenticationFailedReason)
-			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
-			return sreconcile.ResultEmpty, e
-		}
-		if sts := obj.Spec.STS; sts != nil {
-			if err := minio.ValidateSTSProvider(obj.Spec.Provider, sts); err != nil {
-				e := serror.NewStalling(err, sourcev1.InvalidSTSConfigurationReason)
-				conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
-				return sreconcile.ResultEmpty, e
-			}
-			if _, err := url.Parse(sts.Endpoint); err != nil {
-				err := fmt.Errorf("failed to parse STS endpoint '%s': %w", sts.Endpoint, err)
-				e := serror.NewStalling(err, sourcev1.URLInvalidReason)
-				conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
-				return sreconcile.ResultEmpty, e
-			}
-			if err := minio.ValidateSTSSecret(sts.Provider, stsSecret); err != nil {
-				e := serror.NewGeneric(err, sourcev1.AuthenticationFailedReason)
-				conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
-				return sreconcile.ResultEmpty, e
-			}
-		}
-		var opts []minio.Option
-		if secret != nil {
-			opts = append(opts, minio.WithSecret(secret))
-		}
-		if tlsConfig != nil {
-			opts = append(opts, minio.WithTLSConfig(tlsConfig))
-		}
-		if proxyURL != nil {
-			opts = append(opts, minio.WithProxyURL(proxyURL))
-		}
-		if stsSecret != nil {
-			opts = append(opts, minio.WithSTSSecret(stsSecret))
-		}
-		if stsTLSConfig != nil {
-			opts = append(opts, minio.WithSTSTLSConfig(stsTLSConfig))
-		}
-		if provider, err = minio.NewClient(obj, opts...); err != nil {
-			e := serror.NewGeneric(err, "ClientError")
 			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
 			return sreconcile.ResultEmpty, e
 		}
 	}
-
-	// Fetch etag index
-	if err = fetchEtagIndex(ctx, provider, obj, index, dir); err != nil {
+	changed, err := r.syncBucketArtifacts(ctx, provider, obj, index, dir)
+	if err != nil {
 		e := serror.NewGeneric(err, sourcev1.BucketOperationFailedReason)
 		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
 		return sreconcile.ResultEmpty, e
 	}
 
-	// Check if index has changed compared to current Artifact revision.
-	var changed bool
-	if artifact := obj.Status.Artifact; artifact != nil && artifact.Revision != "" {
-		curRev := digest.Digest(artifact.Revision)
-		changed = curRev.Validate() != nil || curRev != index.Digest(curRev.Algorithm())
-	}
-
-	// Fetch the bucket objects if required to.
-	if artifact := obj.GetArtifact(); artifact == nil || changed {
-		// Mark observations about the revision on the object
-		defer func() {
-			// As fetchIndexFiles can make last-minute modifications to the etag
-			// index, we need to re-calculate the revision at the end
-			revision := index.Digest(intdigest.Canonical)
-
-			message := fmt.Sprintf("new upstream revision '%s'", revision)
-			if obj.GetArtifact() != nil {
-				conditions.MarkTrue(obj, sourcev1.ArtifactOutdatedCondition, "NewRevision", "%s", message)
-			}
-			rreconcile.ProgressiveStatus(true, obj, meta.ProgressingReason, "building artifact: %s", message)
-			if err := sp.Patch(ctx, obj, r.patchOptions...); err != nil {
-				ctrl.LoggerFrom(ctx).Error(err, "failed to patch")
-				return
-			}
-		}()
-
-		if err = fetchIndexFiles(ctx, provider, obj, index, dir); err != nil {
-			e := serror.NewGeneric(err, sourcev1.BucketOperationFailedReason)
-			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
-			return sreconcile.ResultEmpty, e
+	// Update artifact status if changes were detected
+	if changed {
+		revision := index.Digest(intdigest.Canonical)
+		message := fmt.Sprintf("new upstream revision '%s'", revision)
+		if obj.GetArtifact() != nil {
+			conditions.MarkTrue(obj, sourcev1.ArtifactOutdatedCondition, "NewRevision", "%s", message)
+		}
+		rreconcile.ProgressiveStatus(true, obj, meta.ProgressingReason, "building artifact: %s", message)
+		if err := sp.Patch(ctx, obj, r.patchOptions...); err != nil {
+			ctrl.LoggerFrom(ctx).Error(err, "failed to patch")
+			return sreconcile.ResultEmpty, err
 		}
 	}
 
@@ -736,85 +630,6 @@ func (r *BucketReconciler) garbageCollect(ctx context.Context, obj *sourcev1.Buc
 	return nil
 }
 
-// getSecret attempts to fetch a Secret reference if specified. It returns any client error.
-func (r *BucketReconciler) getSecret(ctx context.Context, secretRef *meta.LocalObjectReference,
-	namespace string) (*corev1.Secret, error) {
-	if secretRef == nil {
-		return nil, nil
-	}
-	secretName := types.NamespacedName{
-		Namespace: namespace,
-		Name:      secretRef.Name,
-	}
-	secret := &corev1.Secret{}
-	if err := r.Get(ctx, secretName, secret); err != nil {
-		return nil, fmt.Errorf("failed to get secret '%s': %w", secretName.String(), err)
-	}
-	return secret, nil
-}
-
-// getTLSConfig attempts to fetch a TLS configuration from the given
-// Secret reference, namespace and endpoint.
-func (r *BucketReconciler) getTLSConfig(ctx context.Context,
-	secretRef *meta.LocalObjectReference, namespace, endpoint string) (*stdtls.Config, error) {
-	certSecret, err := r.getSecret(ctx, secretRef, namespace)
-	if err != nil || certSecret == nil {
-		return nil, err
-	}
-	tlsConfig, _, err := tls.KubeTLSClientConfigFromSecret(*certSecret, endpoint)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create TLS config: %w", err)
-	}
-	if tlsConfig == nil {
-		return nil, fmt.Errorf("certificate secret does not contain any TLS configuration")
-	}
-	return tlsConfig, nil
-}
-
-// getProxyURL attempts to fetch a proxy URL from the object's proxy secret
-// reference.
-func (r *BucketReconciler) getProxyURL(ctx context.Context, obj *sourcev1.Bucket) (*url.URL, error) {
-	namespace := obj.GetNamespace()
-	proxySecret, err := r.getSecret(ctx, obj.Spec.ProxySecretRef, namespace)
-	if err != nil || proxySecret == nil {
-		return nil, err
-	}
-	proxyData := proxySecret.Data
-	address, ok := proxyData["address"]
-	if !ok {
-		return nil, fmt.Errorf("invalid proxy secret '%s/%s': key 'address' is missing",
-			namespace, obj.Spec.ProxySecretRef.Name)
-	}
-	proxyURL, err := url.Parse(string(address))
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse proxy address '%s': %w", address, err)
-	}
-	user, hasUser := proxyData["username"]
-	password, hasPassword := proxyData["password"]
-	if hasUser || hasPassword {
-		proxyURL.User = url.UserPassword(string(user), string(password))
-	}
-	return proxyURL, nil
-}
-
-// getSTSSecret attempts to fetch the secret from the object's STS secret
-// reference.
-func (r *BucketReconciler) getSTSSecret(ctx context.Context, obj *sourcev1.Bucket) (*corev1.Secret, error) {
-	if obj.Spec.STS == nil {
-		return nil, nil
-	}
-	return r.getSecret(ctx, obj.Spec.STS.SecretRef, obj.GetNamespace())
-}
-
-// getSTSTLSConfig attempts to fetch the certificate secret from the object's
-// STS configuration.
-func (r *BucketReconciler) getSTSTLSConfig(ctx context.Context, obj *sourcev1.Bucket) (*stdtls.Config, error) {
-	if obj.Spec.STS == nil {
-		return nil, nil
-	}
-	return r.getTLSConfig(ctx, obj.Spec.STS.CertSecretRef, obj.GetNamespace(), obj.Spec.STS.Endpoint)
-}
-
 // eventLogf records events, and logs at the same time.
 //
 // This log is different from the debug log in the EventRecorder, in the sense
@@ -942,4 +757,169 @@ func fetchIndexFiles(ctx context.Context, provider BucketProvider, obj *sourcev1
 	}
 
 	return nil
+}
+
+// setupCredentials retrieves and validates secrets for authentication, TLS configuration, and proxy settings.
+// It returns all credentials needed for bucket providers.
+func (r *BucketReconciler) setupCredentials(ctx context.Context, obj *sourcev1.Bucket) (*bucketCredentials, error) {
+	var secret *corev1.Secret
+	if obj.Spec.SecretRef != nil {
+		secretName := types.NamespacedName{
+			Namespace: obj.GetNamespace(),
+			Name:      obj.Spec.SecretRef.Name,
+		}
+		secret = &corev1.Secret{}
+		if err := r.Get(ctx, secretName, secret); err != nil {
+			return nil, fmt.Errorf("failed to get secret '%s': %w", secretName, err)
+		}
+	}
+
+	var stsSecret *corev1.Secret
+	if obj.Spec.STS != nil && obj.Spec.STS.SecretRef != nil {
+		secretName := types.NamespacedName{
+			Namespace: obj.GetNamespace(),
+			Name:      obj.Spec.STS.SecretRef.Name,
+		}
+		stsSecret = &corev1.Secret{}
+		if err := r.Get(ctx, secretName, stsSecret); err != nil {
+			return nil, fmt.Errorf("failed to get STS secret '%s': %w", secretName, err)
+		}
+	}
+
+	var (
+		err          error
+		proxyURL     *url.URL
+		tlsConfig    *tls.Config
+		stsTLSConfig *tls.Config
+	)
+
+	if obj.Spec.ProxySecretRef != nil {
+		secretRef := types.NamespacedName{
+			Namespace: obj.GetNamespace(),
+			Name:      obj.Spec.ProxySecretRef.Name,
+		}
+		proxyURL, err = secrets.ProxyURLFromSecretRef(ctx, r.Client, secretRef)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get proxy URL: %w", err)
+		}
+	}
+
+	if obj.Spec.CertSecretRef != nil {
+		secretRef := types.NamespacedName{
+			Namespace: obj.GetNamespace(),
+			Name:      obj.Spec.CertSecretRef.Name,
+		}
+		tlsConfig, err = secrets.TLSConfigFromSecretRef(ctx, r.Client, secretRef, obj.Spec.Endpoint, secrets.WithSystemCertPool())
+		if err != nil {
+			return nil, fmt.Errorf("failed to get TLS config: %w", err)
+		}
+	}
+
+	if obj.Spec.STS != nil && obj.Spec.STS.CertSecretRef != nil {
+		secretRef := types.NamespacedName{
+			Namespace: obj.GetNamespace(),
+			Name:      obj.Spec.STS.CertSecretRef.Name,
+		}
+		stsTLSConfig, err = secrets.TLSConfigFromSecretRef(ctx, r.Client, secretRef, obj.Spec.STS.Endpoint, secrets.WithSystemCertPool())
+		if err != nil {
+			return nil, fmt.Errorf("failed to get STS TLS config: %w", err)
+		}
+	}
+
+	return &bucketCredentials{
+		secret:       secret,
+		proxyURL:     proxyURL,
+		tlsConfig:    tlsConfig,
+		stsSecret:    stsSecret,
+		stsTLSConfig: stsTLSConfig,
+	}, nil
+}
+
+// createBucketProvider creates a provider-specific bucket client using the given credentials and configuration.
+// It handles different bucket providers (AWS, GCP, Azure, generic) and returns the appropriate client.
+func (r *BucketReconciler) createBucketProvider(ctx context.Context, obj *sourcev1.Bucket, creds *bucketCredentials) (BucketProvider, error) {
+	switch obj.Spec.Provider {
+	case sourcev1.BucketProviderGoogle:
+		if err := gcp.ValidateSecret(creds.secret); err != nil {
+			return nil, err
+		}
+		var opts []gcp.Option
+		if creds.secret != nil {
+			opts = append(opts, gcp.WithSecret(creds.secret))
+		}
+		if creds.proxyURL != nil {
+			opts = append(opts, gcp.WithProxyURL(creds.proxyURL))
+		}
+		return gcp.NewClient(ctx, opts...)
+
+	case sourcev1.BucketProviderAzure:
+		if err := azure.ValidateSecret(creds.secret); err != nil {
+			return nil, err
+		}
+		var opts []azure.Option
+		if creds.secret != nil {
+			opts = append(opts, azure.WithSecret(creds.secret))
+		}
+		if creds.proxyURL != nil {
+			opts = append(opts, azure.WithProxyURL(creds.proxyURL))
+		}
+		return azure.NewClient(obj, opts...)
+
+	default:
+		if err := minio.ValidateSecret(creds.secret); err != nil {
+			return nil, err
+		}
+		if sts := obj.Spec.STS; sts != nil {
+			if err := minio.ValidateSTSProvider(obj.Spec.Provider, sts); err != nil {
+				return nil, serror.NewStalling(err, sourcev1.InvalidSTSConfigurationReason)
+			}
+			if _, err := url.Parse(sts.Endpoint); err != nil {
+				return nil, serror.NewStalling(fmt.Errorf("failed to parse STS endpoint '%s': %w", sts.Endpoint, err), sourcev1.URLInvalidReason)
+			}
+			if err := minio.ValidateSTSSecret(sts.Provider, creds.stsSecret); err != nil {
+				return nil, serror.NewGeneric(err, sourcev1.AuthenticationFailedReason)
+			}
+		}
+		var opts []minio.Option
+		if creds.secret != nil {
+			opts = append(opts, minio.WithSecret(creds.secret))
+		}
+		if creds.tlsConfig != nil {
+			opts = append(opts, minio.WithTLSConfig(creds.tlsConfig))
+		}
+		if creds.proxyURL != nil {
+			opts = append(opts, minio.WithProxyURL(creds.proxyURL))
+		}
+		if creds.stsSecret != nil {
+			opts = append(opts, minio.WithSTSSecret(creds.stsSecret))
+		}
+		if creds.stsTLSConfig != nil {
+			opts = append(opts, minio.WithSTSTLSConfig(creds.stsTLSConfig))
+		}
+		return minio.NewClient(obj, opts...)
+	}
+}
+
+// syncBucketArtifacts handles etag index retrieval and bucket object fetching.
+// It fetches the etag index from the provider and downloads objects to the specified directory.
+// Returns true if changes were detected and artifacts were updated.
+func (r *BucketReconciler) syncBucketArtifacts(ctx context.Context, provider BucketProvider, obj *sourcev1.Bucket, index *index.Digester, dir string) (bool, error) {
+	if err := fetchEtagIndex(ctx, provider, obj, index, dir); err != nil {
+		return false, err
+	}
+	var changed bool
+	if artifact := obj.Status.Artifact; artifact != nil && artifact.Revision != "" {
+		curRev := digest.Digest(artifact.Revision)
+		changed = curRev.Validate() != nil || curRev != index.Digest(curRev.Algorithm())
+	}
+
+	// Fetch the bucket objects if required to.
+	if artifact := obj.GetArtifact(); artifact == nil || changed {
+		if err := fetchIndexFiles(ctx, provider, obj, index, dir); err != nil {
+			return false, err
+		}
+		return true, nil
+	}
+
+	return false, nil
 }
