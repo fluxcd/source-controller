@@ -64,7 +64,7 @@ var (
 )
 
 // CopyDir recursively copies a directory tree, attempting to preserve permissions.
-// Source directory must exist, destination directory must *not* exist.
+// Source directory must exist.
 func CopyDir(src, dst string) error {
 	src = filepath.Clean(src)
 	dst = filepath.Clean(dst)
@@ -82,9 +82,6 @@ func CopyDir(src, dst string) error {
 	_, err = os.Stat(dst)
 	if err != nil && !os.IsNotExist(err) {
 		return err
-	}
-	if err == nil {
-		return errDstExist
 	}
 
 	if err = os.MkdirAll(dst, fi.Mode()); err != nil {
