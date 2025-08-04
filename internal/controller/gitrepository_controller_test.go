@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -348,6 +349,8 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 		server           options
 		secret           *corev1.Secret
 		beforeFunc       func(obj *sourcev1.GitRepository)
+		secretFunc       func(secret *corev1.Secret, baseURL string)
+		middlewareFunc   gittestserver.HTTPMiddleware
 		want             sreconcile.Result
 		wantErr          bool
 		assertConditions []metav1.Condition
@@ -527,6 +530,85 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "foo"),
 			},
 		},
+		{
+			name:     "mTLS GitHub App without ca.crt makes FetchFailed=True",
+			protocol: "https",
+			server: options{
+				publicKey:  tlsPublicKey,
+				privateKey: tlsPrivateKey,
+				ca:         tlsCA,
+			},
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{Name: "gh-app-no-ca"},
+				Data: map[string][]byte{
+					github.KeyAppID:             []byte("123"),
+					github.KeyAppInstallationID: []byte("456"),
+					github.KeyAppPrivateKey:     sshtestdata.PEMBytes["rsa"],
+				},
+			},
+			beforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Spec.Provider = sourcev1.GitProviderGitHub
+				obj.Spec.SecretRef = &meta.LocalObjectReference{Name: "gh-app-no-ca"}
+				conditions.MarkReconciling(obj, meta.ProgressingReason, "foo")
+				conditions.MarkUnknown(obj, meta.ReadyCondition, meta.ProgressingWithRetryReason, "foo")
+			},
+			secretFunc: func(secret *corev1.Secret, baseURL string) {
+				secret.Data[github.KeyAppBaseURL] = []byte(baseURL + "/api/v3")
+			},
+			wantErr: true,
+			assertConditions: []metav1.Condition{
+				// should record a FetchFailedCondition due to TLS handshake
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "x509: "),
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "foo"),
+				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingWithRetryReason, "foo"),
+			},
+		},
+		{
+			name:     "mTLS GitHub App with ca.crt makes Reconciling=True",
+			protocol: "https",
+			server: options{
+				publicKey:  tlsPublicKey,
+				privateKey: tlsPrivateKey,
+				ca:         tlsCA,
+				username:   github.AccessTokenUsername,
+				password:   "some-enterprise-token",
+			},
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{Name: "gh-app-ca"},
+				Data: map[string][]byte{
+					github.KeyAppID:             []byte("123"),
+					github.KeyAppInstallationID: []byte("456"),
+					github.KeyAppPrivateKey:     sshtestdata.PEMBytes["rsa"],
+				},
+			},
+			beforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Spec.Provider = sourcev1.GitProviderGitHub
+				obj.Spec.SecretRef = &meta.LocalObjectReference{Name: "gh-app-ca"}
+			},
+			secretFunc: func(secret *corev1.Secret, baseURL string) {
+				secret.Data[github.KeyAppBaseURL] = []byte(baseURL + "/api/v3")
+				secret.Data["ca.crt"] = tlsCA
+			},
+			middlewareFunc: func(handler http.Handler) http.Handler {
+				return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					if strings.HasPrefix(r.URL.Path, "/api/v3/app/installations/") {
+						w.WriteHeader(http.StatusOK)
+						tok := &github.AppToken{
+							Token:     "some-enterprise-token",
+							ExpiresAt: time.Now().Add(time.Hour),
+						}
+						_ = json.NewEncoder(w).Encode(tok)
+					}
+					handler.ServeHTTP(w, r)
+				})
+			},
+			wantErr: false,
+			want:    sreconcile.ResultSuccess,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new upstream revision 'master@sha1:<commit>'"),
+				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new upstream revision 'master@sha1:<commit>'"),
+			},
+		},
 		// TODO: Add test case for HTTPS with bearer token auth secret. It
 		// depends on gitkit to have support for bearer token based
 		// authentication.
@@ -695,6 +777,10 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 			defer os.RemoveAll(server.Root())
 			server.AutoCreate()
 
+			if tt.middlewareFunc != nil {
+				server.AddHTTPMiddlewares(tt.middlewareFunc)
+			}
+
 			repoPath := "/test.git"
 			localRepo, err := initGitRepo(server, "testdata/git/repository", git.DefaultBranch, repoPath)
 			g.Expect(err).NotTo(HaveOccurred())
@@ -737,6 +823,10 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 
 			if tt.beforeFunc != nil {
 				tt.beforeFunc(obj)
+			}
+
+			if tt.secretFunc != nil {
+				tt.secretFunc(secret, server.HTTPAddress())
 			}
 
 			clientBuilder := fakeclient.NewClientBuilder().
