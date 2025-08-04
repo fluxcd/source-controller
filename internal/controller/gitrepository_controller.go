@@ -31,6 +31,7 @@ import (
 	authutils "github.com/fluxcd/pkg/auth/utils"
 	"github.com/fluxcd/pkg/git/github"
 	"github.com/fluxcd/pkg/runtime/logger"
+	"github.com/fluxcd/pkg/runtime/secrets"
 	"github.com/go-git/go-git/v5/plumbing/transport"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -621,10 +622,11 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 // transport.ProxyOptions object using those settings and then returns it.
 func (r *GitRepositoryReconciler) getProxyOpts(ctx context.Context, proxySecretName,
 	proxySecretNamespace string) (*transport.ProxyOptions, *url.URL, error) {
-	proxyData, err := r.getSecretData(ctx, proxySecretName, proxySecretNamespace)
+	secret, err := r.getSecret(ctx, proxySecretName, proxySecretNamespace)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get proxy secret '%s/%s': %w", proxySecretNamespace, proxySecretName, err)
 	}
+	proxyData := secret.Data
 	b, ok := proxyData["address"]
 	if !ok {
 		return nil, nil, fmt.Errorf("invalid proxy secret '%s/%s': key 'address' is missing", proxySecretNamespace, proxySecretName)
@@ -659,10 +661,11 @@ func (r *GitRepositoryReconciler) getProxyOpts(ctx context.Context, proxySecretN
 // URL and returns it.
 func (r *GitRepositoryReconciler) getAuthOpts(ctx context.Context, obj *sourcev1.GitRepository,
 	u url.URL, proxyURL *url.URL) (*git.AuthOptions, error) {
+	var secret *corev1.Secret
 	var authData map[string][]byte
 	if obj.Spec.SecretRef != nil {
 		var err error
-		authData, err = r.getSecretData(ctx, obj.Spec.SecretRef.Name, obj.GetNamespace())
+		secret, err = r.getSecret(ctx, obj.Spec.SecretRef.Name, obj.GetNamespace())
 		if err != nil {
 			e := serror.NewGeneric(
 				fmt.Errorf("failed to get secret '%s/%s': %w", obj.GetNamespace(), obj.Spec.SecretRef.Name, err),
@@ -671,6 +674,7 @@ func (r *GitRepositoryReconciler) getAuthOpts(ctx context.Context, obj *sourcev1
 			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
 			return nil, e
 		}
+		authData = secret.Data
 	}
 
 	// Configure authentication strategy to access the source
@@ -719,22 +723,36 @@ func (r *GitRepositoryReconciler) getAuthOpts(ctx context.Context, obj *sourcev1
 		}
 
 		getCreds = func() (*authutils.GitCredentials, error) {
-			var opts []github.OptFunc
+			var appOpts []github.OptFunc
 
 			if len(authData) > 0 {
-				opts = append(opts, github.WithAppData(authData))
+				appOpts = append(appOpts, github.WithAppData(authData))
 			}
 
 			if proxyURL != nil {
-				opts = append(opts, github.WithProxyURL(proxyURL))
+				appOpts = append(appOpts, github.WithProxyURL(proxyURL))
 			}
 
 			if r.TokenCache != nil {
-				opts = append(opts, github.WithCache(r.TokenCache, sourcev1.GitRepositoryKind,
+				appOpts = append(appOpts, github.WithCache(r.TokenCache, sourcev1.GitRepositoryKind,
 					obj.GetName(), obj.GetNamespace(), cache.OperationReconcile))
 			}
 
-			username, password, err := github.GetCredentials(ctx, opts...)
+			if len(opts.CAFile) > 0 {
+				targetURL := fmt.Sprintf("%s://%s", u.Scheme, u.Host)
+				tlsConfig, err := secrets.TLSConfigFromSecret(ctx, secret, targetURL, secrets.WithSystemCertPool())
+				if err != nil {
+					e := serror.NewStalling(
+						fmt.Errorf("failed to configure TLS from secret '%s/%s': %w", obj.GetNamespace(), obj.Spec.SecretRef.Name, err),
+						sourcev1.AuthenticationFailedReason,
+					)
+					conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
+					return nil, e
+				}
+				appOpts = append(appOpts, github.WithTLSConfig(tlsConfig))
+			}
+
+			username, password, err := github.GetCredentials(ctx, appOpts...)
 			if err != nil {
 				return nil, err
 			}
@@ -771,16 +789,16 @@ func (r *GitRepositoryReconciler) getAuthOpts(ctx context.Context, obj *sourcev1
 	return opts, nil
 }
 
-func (r *GitRepositoryReconciler) getSecretData(ctx context.Context, name, namespace string) (map[string][]byte, error) {
+func (r *GitRepositoryReconciler) getSecret(ctx context.Context, name, namespace string) (*corev1.Secret, error) {
 	key := types.NamespacedName{
 		Namespace: namespace,
 		Name:      name,
 	}
-	var secret corev1.Secret
-	if err := r.Client.Get(ctx, key, &secret); err != nil {
-		return nil, err
+	secret := &corev1.Secret{}
+	if err := r.Client.Get(ctx, key, secret); err != nil {
+		return nil, fmt.Errorf("failed to get secret '%s/%s': %w", namespace, name, err)
 	}
-	return secret.Data, nil
+	return secret, nil
 }
 
 // reconcileArtifact archives a new Artifact to the Storage, if the current
