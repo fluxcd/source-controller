@@ -42,6 +42,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	testproxy "github.com/fluxcd/source-controller/tests/proxy"
 )
 
@@ -81,6 +82,22 @@ var (
 		Type: "Opaque",
 	}
 )
+
+// createTestBucket creates a test bucket for testing purposes
+func createTestBucket() *sourcev1.Bucket {
+	return &sourcev1.Bucket{
+		ObjectMeta: v1.ObjectMeta{
+			Name:      "test-bucket",
+			Namespace: "default",
+		},
+		Spec: sourcev1.BucketSpec{
+			BucketName: bucketName,
+			Endpoint:   "storage.googleapis.com",
+			Provider:   sourcev1.BucketProviderGoogle,
+			Interval:   v1.Duration{Duration: time.Minute * 5},
+		},
+	}
+}
 
 func TestMain(m *testing.M) {
 	hc, host, close = newTestServer(func(w http.ResponseWriter, r *http.Request) {
@@ -147,7 +164,8 @@ func TestMain(m *testing.M) {
 }
 
 func TestNewClientWithSecretErr(t *testing.T) {
-	gcpClient, err := NewClient(context.Background(), WithSecret(secret.DeepCopy()))
+	bucket := createTestBucket()
+	gcpClient, err := NewClient(context.Background(), bucket, WithSecret(secret.DeepCopy()))
 	t.Log(err)
 	assert.Error(t, err, "dialing: invalid character 'e' looking for beginning of value")
 	assert.Assert(t, gcpClient == nil)
@@ -158,31 +176,29 @@ func TestNewClientWithProxyErr(t *testing.T) {
 	assert.Assert(t, !envADCIsSet)
 	assert.Assert(t, !metadata.OnGCE())
 
-	tests := []struct {
-		name string
-		opts []Option
-		err  string
-	}{
-		{
-			name: "invalid secret",
-			opts: []Option{WithSecret(secret.DeepCopy())},
-			err:  "failed to create Google credentials from secret: invalid character 'e' looking for beginning of value",
-		},
-		{
-			name: "attempts default credentials",
-			err:  "failed to create Google HTTP transport: google: could not find default credentials. See https://cloud.google.com/docs/authentication/external/set-up-adc for more information",
-		},
-	}
+	t.Run("with secret", func(t *testing.T) {
+		g := NewWithT(t)
+		bucket := createTestBucket()
+		gcpClient, err := NewClient(context.Background(), bucket,
+			WithProxyURL(&url.URL{}),
+			WithSecret(secret.DeepCopy()))
+		g.Expect(err).To(HaveOccurred())
+		g.Expect(gcpClient).To(BeNil())
+		g.Expect(err.Error()).To(Equal("failed to create Google credentials from secret: invalid character 'e' looking for beginning of value"))
+	})
 
-	for _, tt := range tests {
-		tt := tt
-		t.Run(tt.name, func(t *testing.T) {
-			opts := append([]Option{WithProxyURL(&url.URL{})}, tt.opts...)
-			gcpClient, err := NewClient(context.Background(), opts...)
-			assert.Error(t, err, tt.err)
-			assert.Assert(t, gcpClient == nil)
-		})
-	}
+	t.Run("without secret", func(t *testing.T) {
+		g := NewWithT(t)
+		bucket := createTestBucket()
+		gcpClient, err := NewClient(context.Background(), bucket,
+			WithProxyURL(&url.URL{}))
+		g.Expect(err).NotTo(HaveOccurred())
+		g.Expect(gcpClient).NotTo(BeNil())
+		bucketAttrs, err := gcpClient.Client.Bucket("some-bucket").Attrs(context.Background())
+		g.Expect(err).To(HaveOccurred())
+		g.Expect(bucketAttrs).To(BeNil())
+		g.Expect(err.Error()).To(ContainSubstring("failed to create provider access token"))
+	})
 }
 
 func TestProxy(t *testing.T) {
@@ -224,7 +240,8 @@ func TestProxy(t *testing.T) {
 					return &http.Client{Transport: transport}, nil
 				}
 			})
-			gcpClient, err := NewClient(context.Background(), opts...)
+			bucket := createTestBucket()
+			gcpClient, err := NewClient(context.Background(), bucket, opts...)
 			assert.NilError(t, err)
 			assert.Assert(t, gcpClient != nil)
 			gcpClient.Client.SetRetry(gcpstorage.WithMaxAttempts(1))

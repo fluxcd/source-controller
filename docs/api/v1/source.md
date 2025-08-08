@@ -182,6 +182,20 @@ for the Bucket.</p>
 </tr>
 <tr>
 <td>
+<code>serviceAccountName</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>ServiceAccountName is the name of the Kubernetes ServiceAccount used to authenticate
+the bucket. For more information about workload identity:
+<a href="https://fluxcd.io/flux/components/source/buckets/#workload-identity">https://fluxcd.io/flux/components/source/buckets/#workload-identity</a></p>
+</td>
+</tr>
+<tr>
+<td>
 <code>certSecretRef</code><br>
 <em>
 <a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/meta#LocalObjectReference">
@@ -1620,6 +1634,20 @@ github.com/fluxcd/pkg/apis/meta.LocalObjectReference
 <em>(Optional)</em>
 <p>SecretRef specifies the Secret containing authentication credentials
 for the Bucket.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>serviceAccountName</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>ServiceAccountName is the name of the Kubernetes ServiceAccount used to authenticate
+the bucket. For more information about workload identity:
+<a href="https://fluxcd.io/flux/components/source/buckets/#workload-identity">https://fluxcd.io/flux/components/source/buckets/#workload-identity</a></p>
 </td>
 </tr>
 <tr>
