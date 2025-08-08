@@ -194,12 +194,7 @@ func (in *Bucket) GetInterval() metav1.Duration {
 
 // +genclient
 // +kubebuilder:object:root=true
-// +kubebuilder:subresource:status
-// +kubebuilder:deprecatedversion:warning="v1beta1 Bucket is deprecated, upgrade to v1"
-// +kubebuilder:printcolumn:name="Endpoint",type=string,JSONPath=`.spec.endpoint`
-// +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type==\"Ready\")].status",description=""
-// +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.conditions[?(@.type==\"Ready\")].message",description=""
-// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description=""
+// +kubebuilder:skipversion
 
 // Bucket is the Schema for the buckets API
 type Bucket struct {

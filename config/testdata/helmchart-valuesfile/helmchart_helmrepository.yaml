@@ -1,4 +1,4 @@
-apiVersion: source.toolkit.fluxcd.io/v1beta1
+apiVersion: source.toolkit.fluxcd.io/v1
 kind: HelmChart
 metadata:
   name: podinfo
@@ -8,6 +8,5 @@ spec:
     kind: HelmRepository
     name: podinfo
   chart: podinfo
-  valuesFile: values.yaml
   valuesFiles:
     - values-prod.yaml

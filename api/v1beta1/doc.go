@@ -15,6 +15,9 @@ limitations under the License.
 */
 
 // Package v1beta1 contains API Schema definitions for the source v1beta1 API group
+//
+// Deprecated: v1beta1 is no longer supported, use v1 instead.
+//
 // +kubebuilder:object:generate=true
 // +groupName=source.toolkit.fluxcd.io
 package v1beta1
