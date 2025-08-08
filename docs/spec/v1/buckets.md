@@ -651,6 +651,42 @@ When a Bucket's `.spec.provider` is set to `gcp`, the source-controller will
 attempt to communicate with the specified [Endpoint](#endpoint) using the
 [Google Client SDK](https://github.com/googleapis/google-api-go-client).
 
+The `gcp` provider can be used to authenticate automatically using OAuth scopes
+or Workload Identity, and by extension gain access to Google Cloud Storage.
+
+When the GKE nodes have the appropriate OAuth scope for accessing Google Cloud
+Storage, source-controller running on it will also have access to it.
+
+When using Workload Identity to enable access to Google Cloud Storage, add
+the following patch to your bootstrap repository, in the
+`flux-system/kustomization.yaml` file:
+
+```yaml
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - gotk-components.yaml
+  - gotk-sync.yaml
+patches:
+  - patch: |
+      apiVersion: v1
+      kind: ServiceAccount
+      metadata:
+        name: source-controller
+        annotations:
+          iam.gke.io/gcp-service-account: <identity-name>
+    target:
+      kind: ServiceAccount
+      name: source-controller
+```
+
+The Google Cloud Storage service uses the permission `storage.objects.get`
+that is located under the Storage Object Viewer role. If you need to list
+objects in the bucket, the needed permission is instead `storage.objects.list`
+which can be bound as part of the Storage Object Viewer role.
+Take a look at [this guide](https://cloud.google.com/kubernetes-engine/docs/how-to/workload-identity)
+for more information about setting up GKE Workload Identity.
+
 Without a [Secret reference](#secret-reference), authorization using a
 workload identity is attempted by default. The workload identity is obtained
 using the `GOOGLE_APPLICATION_CREDENTIALS` environment variable, falling back
@@ -662,14 +698,14 @@ The Provider allows for specifying the
 [Bucket location](https://cloud.google.com/storage/docs/locations) using the
 [`.spec.region` field](#region).
 
-##### GCP example
+##### GCP Controller-Level Workload Identity example
 
 ```yaml
 ---
 apiVersion: source.toolkit.fluxcd.io/v1
 kind: Bucket
 metadata:
-  name: gcp-workload-identity
+  name: gcp-controller-level-workload-identity
   namespace: default
 spec:
   interval: 5m0s
@@ -678,6 +714,44 @@ spec:
   endpoint: storage.googleapis.com
   region: us-east-1
   timeout: 30s
+```
+
+##### GCP Object-Level Workload Identity example
+
+**Note:** To use Object-Level Workload Identity (`.spec.serviceAccountName` with 
+cloud providers), the controller feature gate `ObjectLevelWorkloadIdentity` must 
+be enabled. Add the following environment variable to the source-controller 
+deployment:
+
+```yaml
+env:
+- name: ENABLE_OBJECT_LEVEL_WORKLOAD_IDENTITY
+  value: "true"
+```
+
+```yaml
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: Bucket
+metadata:
+  name: gcp-object-level-workload-identity
+  namespace: default
+spec:
+  interval: 5m0s
+  provider: gcp
+  bucketName: podinfo
+  endpoint: storage.googleapis.com
+  region: us-east-1
+  serviceAccountName: gcp-workload-identity-sa
+  timeout: 30s
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: gcp-workload-identity-sa
+  namespace: default
+  annotations:
+    iam.gke.io/gcp-service-account: <identity-name>
 ```
 
 ##### GCP static auth example
@@ -958,6 +1032,25 @@ Secret in the same namespace as the Bucket, containing authentication
 credentials for the object storage. For some `.spec.provider` implementations
 the presence of the field is required, see [Provider](#provider) for more
 details and examples.
+
+### Service Account reference
+
+`.spec.serviceAccountName` is an optional field to specify a Service Account
+in the same namespace as Bucket with purpose depending on the value of
+the `.spec.provider` field:
+
+- When `.spec.provider` is set to `generic`, the controller will fetch the image
+  pull secrets attached to the Service Account and use them for authentication.
+- When `.spec.provider` is set to `aws`, `azure`, or `gcp`, the Service Account
+  will be used for Workload Identity authentication. In this case, the controller
+  feature gate `ObjectLevelWorkloadIdentity` must be enabled, otherwise the
+  controller will error out.
+
+**Note:** that for a publicly accessible object storage, you don't need to
+provide a `secretRef` nor `serviceAccountName`.
+
+For a complete guide on how to set up authentication for cloud providers,
+see the integration [docs](/flux/integrations/).
 
 ### Prefix
 

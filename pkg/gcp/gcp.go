@@ -34,6 +34,11 @@ import (
 	htransport "google.golang.org/api/transport/http"
 	corev1 "k8s.io/api/core/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
+
+	"github.com/fluxcd/pkg/auth"
+	gcpauth "github.com/fluxcd/pkg/auth/gcp"
+
+	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 )
 
 var (
@@ -69,9 +74,17 @@ func WithProxyURL(proxyURL *url.URL) Option {
 	}
 }
 
+// WithAuth sets the auth options for workload identity authentication.
+func WithAuth(authOpts ...auth.Option) Option {
+	return func(o *options) {
+		o.authOpts = authOpts
+	}
+}
+
 type options struct {
 	secret   *corev1.Secret
 	proxyURL *url.URL
+	authOpts []auth.Option
 
 	// newCustomHTTPClient should create a new HTTP client for interacting with the GCS API.
 	// This is a test-only option required for mocking the real logic, which requires either
@@ -89,7 +102,7 @@ func newOptions() *options {
 
 // NewClient creates a new GCP storage client. The Client will automatically look for the Google Application
 // Credential environment variable or look for the Google Application Credential file.
-func NewClient(ctx context.Context, opts ...Option) (*GCSClient, error) {
+func NewClient(ctx context.Context, bucket *sourcev1.Bucket, opts ...Option) (*GCSClient, error) {
 	o := newOptions()
 	for _, opt := range opts {
 		opt(o)
@@ -97,16 +110,32 @@ func NewClient(ctx context.Context, opts ...Option) (*GCSClient, error) {
 
 	var clientOpts []option.ClientOption
 
+	// Authentication priority: Secret → AuthOpts (Workload Identity)
 	switch {
 	case o.secret != nil && o.proxyURL == nil:
 		clientOpts = append(clientOpts, option.WithCredentialsJSON(o.secret.Data["serviceaccount"]))
-	case o.proxyURL != nil:
+	case o.secret != nil && o.proxyURL != nil:
 		httpClient, err := o.newCustomHTTPClient(ctx, o)
 		if err != nil {
 			return nil, err
 		}
 		clientOpts = append(clientOpts, option.WithHTTPClient(httpClient))
+	case len(o.authOpts) > 0:
+		// Object-level workload identity: Create TokenSource using auth options
+		// pkg/auth/gcp.NewTokenSource handles ServiceAccount presence to determine object/controller-level
+		if o.proxyURL != nil {
+			httpClient, err := o.newCustomHTTPClient(ctx, o)
+			if err != nil {
+				return nil, err
+			}
+			clientOpts = append(clientOpts, option.WithHTTPClient(httpClient))
+		} else {
+			tokenSource := gcpauth.NewTokenSource(ctx, o.authOpts...)
+			clientOpts = append(clientOpts, option.WithTokenSource(tokenSource))
+		}
 	}
+	// No explicit authentication - controller-level workload identity uses Application Default Credentials
+	// TODO: https://github.com/fluxcd/flux2/issues/5465 will add lockdown support to prevent unintended usage of this fallback
 
 	client, err := gcpstorage.NewClient(ctx, clientOpts...)
 	if err != nil {
@@ -135,6 +164,9 @@ func newHTTPClient(ctx context.Context, o *options) (*http.Client, error) {
 			return nil, fmt.Errorf("failed to create Google credentials from secret: %w", err)
 		}
 		opts = append(opts, option.WithCredentials(creds))
+	} else if len(o.authOpts) > 0 {
+		tokenSource := gcpauth.NewTokenSource(ctx, o.authOpts...)
+		opts = append(opts, option.WithTokenSource(tokenSource))
 	}
 
 	transport, err := htransport.NewTransport(ctx, baseTransport, opts...)
