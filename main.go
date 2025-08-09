@@ -272,6 +272,7 @@ func main() {
 		Metrics:        metrics,
 		Storage:        storage,
 		ControllerName: controllerName,
+		TokenCache:     tokenCache,
 	}).SetupWithManagerAndOptions(mgr, controller.BucketReconcilerOptions{
 		RateLimiter: helper.GetRateLimiter(rateLimiterOptions),
 	}); err != nil {

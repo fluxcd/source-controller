@@ -437,6 +437,7 @@ func TestBucketReconciler_reconcileSource_generic(t *testing.T) {
 		bucketObjects    []*s3mock.Object
 		middleware       http.Handler
 		secret           *corev1.Secret
+		serviceAccount   *corev1.ServiceAccount
 		beforeFunc       func(obj *sourcev1.Bucket)
 		want             sreconcile.Result
 		wantErr          bool
@@ -910,6 +911,10 @@ func TestBucketReconciler_reconcileSource_generic(t *testing.T) {
 				clientBuilder.WithObjects(tt.secret)
 			}
 
+			if tt.serviceAccount != nil {
+				clientBuilder.WithObjects(tt.serviceAccount)
+			}
+
 			r := &BucketReconciler{
 				EventRecorder: record.NewFakeRecorder(32),
 				Client:        clientBuilder.Build(),
@@ -972,15 +977,17 @@ func TestBucketReconciler_reconcileSource_generic(t *testing.T) {
 
 func TestBucketReconciler_reconcileSource_gcs(t *testing.T) {
 	tests := []struct {
-		name             string
-		bucketName       string
-		bucketObjects    []*gcsmock.Object
-		secret           *corev1.Secret
-		beforeFunc       func(obj *sourcev1.Bucket)
-		want             sreconcile.Result
-		wantErr          bool
-		assertIndex      *index.Digester
-		assertConditions []metav1.Condition
+		name                               string
+		bucketName                         string
+		bucketObjects                      []*gcsmock.Object
+		secret                             *corev1.Secret
+		serviceAccount                     *corev1.ServiceAccount
+		beforeFunc                         func(obj *sourcev1.Bucket)
+		want                               sreconcile.Result
+		wantErr                            bool
+		assertIndex                        *index.Digester
+		assertConditions                   []metav1.Condition
+		disableObjectLevelWorkloadIdentity bool
 	}{
 		{
 			name:       "Reconciles GCS source",
@@ -1283,6 +1290,80 @@ func TestBucketReconciler_reconcileSource_gcs(t *testing.T) {
 				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new upstream revision 'sha256:b4c2a60ce44b67f5b659a95ce4e4cc9e2a86baf13afb72bd397c5384cbc0e479'"),
 			},
 		},
+		{
+			name:       "GCS Object-Level Workload Identity (no secret)",
+			bucketName: "dummy",
+			bucketObjects: []*gcsmock.Object{
+				{
+					Key:         "test.txt",
+					ContentType: "text/plain",
+					Content:     []byte("test"),
+					Generation:  3,
+				},
+			},
+			serviceAccount: &corev1.ServiceAccount{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-sa",
+				},
+			},
+			beforeFunc: func(obj *sourcev1.Bucket) {
+				obj.Spec.ServiceAccountName = "test-sa"
+			},
+			want: sreconcile.ResultSuccess,
+			assertIndex: index.NewDigester(index.WithIndex(map[string]string{
+				"test.txt": "098f6bcd4621d373cade4e832627b4f6",
+			})),
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new upstream revision 'sha256:b4c2a60ce44b67f5b659a95ce4e4cc9e2a86baf13afb72bd397c5384cbc0e479'"),
+				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new upstream revision 'sha256:b4c2a60ce44b67f5b659a95ce4e4cc9e2a86baf13afb72bd397c5384cbc0e479'"),
+			},
+		},
+		{
+			name:       "GCS Controller-Level Workload Identity (no secret, no SA)",
+			bucketName: "dummy",
+			bucketObjects: []*gcsmock.Object{
+				{
+					Key:         "test.txt",
+					ContentType: "text/plain",
+					Content:     []byte("test"),
+					Generation:  3,
+				},
+			},
+			beforeFunc: func(obj *sourcev1.Bucket) {
+				// ServiceAccountName は設定しない (Controller-Level)
+			},
+			want: sreconcile.ResultSuccess,
+			assertIndex: index.NewDigester(index.WithIndex(map[string]string{
+				"test.txt": "098f6bcd4621d373cade4e832627b4f6",
+			})),
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new upstream revision 'sha256:b4c2a60ce44b67f5b659a95ce4e4cc9e2a86baf13afb72bd397c5384cbc0e479'"),
+				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new upstream revision 'sha256:b4c2a60ce44b67f5b659a95ce4e4cc9e2a86baf13afb72bd397c5384cbc0e479'"),
+			},
+		},
+		{
+			name:       "GCS Object-Level fails when feature gate disabled",
+			bucketName: "dummy",
+			serviceAccount: &corev1.ServiceAccount{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-sa",
+				},
+			},
+			beforeFunc: func(obj *sourcev1.Bucket) {
+				obj.Spec.ServiceAccountName = "test-sa"
+				conditions.MarkReconciling(obj, meta.ProgressingReason, "foo")
+				conditions.MarkUnknown(obj, meta.ReadyCondition, "foo", "bar")
+			},
+			want:        sreconcile.ResultEmpty,
+			wantErr:     true,
+			assertIndex: index.NewDigester(),
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, meta.FeatureGateDisabledReason, "to use spec.serviceAccountName for provider authentication please enable the ObjectLevelWorkloadIdentity feature gate in the controller"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "foo"),
+				*conditions.UnknownCondition(meta.ReadyCondition, "foo", "bar"),
+			},
+			disableObjectLevelWorkloadIdentity: true,
+		},
 		// TODO: Middleware for mock server to test authentication using secret.
 	}
 	for _, tt := range tests {
@@ -1297,12 +1378,24 @@ func TestBucketReconciler_reconcileSource_gcs(t *testing.T) {
 				clientBuilder.WithObjects(tt.secret)
 			}
 
+			if tt.serviceAccount != nil {
+				clientBuilder.WithObjects(tt.serviceAccount)
+			}
+
 			r := &BucketReconciler{
 				EventRecorder: record.NewFakeRecorder(32),
 				Client:        clientBuilder.Build(),
 				Storage:       testStorage,
 				patchOptions:  getPatchOptions(bucketReadyCondition.Owned, "sc"),
 			}
+
+			// Handle ObjectLevelWorkloadIdentity feature gate environment variable
+			if tt.disableObjectLevelWorkloadIdentity {
+				t.Setenv("ENABLE_OBJECT_LEVEL_WORKLOAD_IDENTITY", "false")
+			} else if tt.serviceAccount != nil {
+				t.Setenv("ENABLE_OBJECT_LEVEL_WORKLOAD_IDENTITY", "true")
+			}
+
 			tmpDir := t.TempDir()
 
 			// Test bucket object.

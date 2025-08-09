@@ -51,6 +51,8 @@ const (
 // +kubebuilder:validation:XValidation:rule="self.provider != 'generic' || !has(self.sts) || self.sts.provider == 'ldap'", message="'ldap' is the only supported STS provider for the 'generic' Bucket provider"
 // +kubebuilder:validation:XValidation:rule="!has(self.sts) || self.sts.provider != 'aws' || !has(self.sts.secretRef)", message="spec.sts.secretRef is not required for the 'aws' STS provider"
 // +kubebuilder:validation:XValidation:rule="!has(self.sts) || self.sts.provider != 'aws' || !has(self.sts.certSecretRef)", message="spec.sts.certSecretRef is not required for the 'aws' STS provider"
+// +kubebuilder:validation:XValidation:rule="self.provider == 'gcp' || !has(self.serviceAccountName)", message="ServiceAccountName is only supported for the 'gcp' Bucket provider"
+// +kubebuilder:validation:XValidation:rule="!has(self.secretRef) || !has(self.serviceAccountName)", message="cannot set both .spec.secretRef and .spec.serviceAccountName"
 type BucketSpec struct {
 	// Provider of the object storage bucket.
 	// Defaults to 'generic', which expects an S3 (API) compatible object
@@ -92,6 +94,12 @@ type BucketSpec struct {
 	// for the Bucket.
 	// +optional
 	SecretRef *meta.LocalObjectReference `json:"secretRef,omitempty"`
+
+	// ServiceAccountName is the name of the Kubernetes ServiceAccount used to authenticate
+	// the bucket. For more information about workload identity:
+	// https://fluxcd.io/flux/components/source/buckets/#workload-identity
+	// +optional
+	ServiceAccountName string `json:"serviceAccountName,omitempty"`
 
 	// CertSecretRef can be given the name of a Secret containing
 	// either or both of
