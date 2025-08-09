@@ -52,6 +52,7 @@ const (
 // +kubebuilder:validation:XValidation:rule="!has(self.sts) || self.sts.provider != 'aws' || !has(self.sts.secretRef)", message="spec.sts.secretRef is not required for the 'aws' STS provider"
 // +kubebuilder:validation:XValidation:rule="!has(self.sts) || self.sts.provider != 'aws' || !has(self.sts.certSecretRef)", message="spec.sts.certSecretRef is not required for the 'aws' STS provider"
 // +kubebuilder:validation:XValidation:rule="self.provider == 'gcp' || !has(self.serviceAccountName)", message="ServiceAccountName is only supported for the 'gcp' Bucket provider"
+// +kubebuilder:validation:XValidation:rule="!has(self.secretRef) || !has(self.serviceAccountName)", message="cannot set both .spec.secretRef and .spec.serviceAccountName"
 type BucketSpec struct {
 	// Provider of the object storage bucket.
 	// Defaults to 'generic', which expects an S3 (API) compatible object

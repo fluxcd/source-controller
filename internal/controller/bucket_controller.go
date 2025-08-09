@@ -435,7 +435,7 @@ func (r *BucketReconciler) reconcileStorage(ctx context.Context, sp *patch.Seria
 // the provider. If this fails, it records v1.FetchFailedCondition=True on
 // the object and returns early.
 func (r *BucketReconciler) reconcileSource(ctx context.Context, sp *patch.SerialPatcher, obj *sourcev1.Bucket, index *index.Digester, dir string) (sreconcile.Result, error) {
-	usesObjectLevelWorkloadIdentity := obj.Spec.Provider != sourcev1.BucketProviderGeneric && obj.Spec.SecretRef == nil && obj.Spec.ServiceAccountName != ""
+	usesObjectLevelWorkloadIdentity := obj.Spec.Provider != "" && obj.Spec.Provider != sourcev1.BucketProviderGeneric && obj.Spec.ServiceAccountName != ""
 	if usesObjectLevelWorkloadIdentity {
 		if !auth.IsObjectLevelWorkloadIdentityEnabled() {
 			const gate = auth.FeatureGateObjectLevelWorkloadIdentity
@@ -608,10 +608,8 @@ func (r *BucketReconciler) reconcileDelete(ctx context.Context, obj *sourcev1.Bu
 	controllerutil.RemoveFinalizer(obj, sourcev1.SourceFinalizer)
 
 	// Cleanup caches.
-	if r.TokenCache != nil {
-		r.TokenCache.DeleteEventsForObject(sourcev1.BucketKind,
-			obj.GetName(), obj.GetNamespace(), cache.OperationReconcile)
-	}
+	r.TokenCache.DeleteEventsForObject(sourcev1.BucketKind,
+		obj.GetName(), obj.GetNamespace(), cache.OperationReconcile)
 
 	// Stop reconciliation as the object is being deleted
 	return sreconcile.ResultEmpty, nil

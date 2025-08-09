@@ -240,6 +240,8 @@ spec:
               rule: '!has(self.sts) || self.sts.provider != ''aws'' || !has(self.sts.certSecretRef)'
             - message: ServiceAccountName is only supported for the 'gcp' Bucket provider
               rule: self.provider == 'gcp' || !has(self.serviceAccountName)
+            - message: cannot set both .spec.secretRef and .spec.serviceAccountName
+              rule: '!has(self.secretRef) || !has(self.serviceAccountName)'
           status:
             default:
               observedGeneration: -1

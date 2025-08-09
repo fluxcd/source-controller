@@ -187,8 +187,8 @@ func TestNewClientWithProxyErr(t *testing.T) {
 			err:  "failed to create Google credentials from secret: invalid character 'e' looking for beginning of value",
 		},
 		{
-			name: "attempts default credentials",
-			err:  "failed to create Google HTTP transport: google: could not find default credentials. See https://cloud.google.com/docs/authentication/external/set-up-adc for more information",
+			name: "proxy only - fallback to Controller-Level Workload Identity",
+			// Behavior change: previously failed, now falls back to Controller-Level Workload Identity
 		},
 	}
 
@@ -198,8 +198,14 @@ func TestNewClientWithProxyErr(t *testing.T) {
 			bucket := createTestBucket()
 			opts := append([]Option{WithProxyURL(&url.URL{})}, tt.opts...)
 			gcpClient, err := NewClient(context.Background(), bucket, opts...)
-			assert.Error(t, err, tt.err)
-			assert.Assert(t, gcpClient == nil)
+			if tt.err != "" {
+				assert.Error(t, err, tt.err)
+				assert.Assert(t, gcpClient == nil)
+			} else {
+				// For proxy-only case, it should succeed with Controller-Level Workload Identity
+				assert.NilError(t, err)
+				assert.Assert(t, gcpClient != nil)
+			}
 		})
 	}
 }

@@ -651,48 +651,10 @@ When a Bucket's `.spec.provider` is set to `gcp`, the source-controller will
 attempt to communicate with the specified [Endpoint](#endpoint) using the
 [Google Client SDK](https://github.com/googleapis/google-api-go-client).
 
-The `gcp` provider can be used to authenticate automatically using OAuth scopes
-or Workload Identity, and by extension gain access to Google Cloud Storage.
+The `gcp` provider can be used to authenticate automatically using Workload Identity,
+and by extension gain access to Google Cloud Storage.
 
-When the GKE nodes have the appropriate OAuth scope for accessing Google Cloud
-Storage, source-controller running on it will also have access to it.
-
-When using Workload Identity to enable access to Google Cloud Storage, add
-the following patch to your bootstrap repository, in the
-`flux-system/kustomization.yaml` file:
-
-```yaml
-apiVersion: kustomize.config.k8s.io/v1beta1
-kind: Kustomization
-resources:
-  - gotk-components.yaml
-  - gotk-sync.yaml
-patches:
-  - patch: |
-      apiVersion: v1
-      kind: ServiceAccount
-      metadata:
-        name: source-controller
-        annotations:
-          iam.gke.io/gcp-service-account: <identity-name>
-    target:
-      kind: ServiceAccount
-      name: source-controller
-```
-
-The Google Cloud Storage service uses the permission `storage.objects.get`
-that is located under the Storage Object Viewer role. If you need to list
-objects in the bucket, the needed permission is instead `storage.objects.list`
-which can be bound as part of the Storage Object Viewer role.
-Take a look at [this guide](https://cloud.google.com/kubernetes-engine/docs/how-to/workload-identity)
-for more information about setting up GKE Workload Identity.
-
-Without a [Secret reference](#secret-reference), authorization using a
-workload identity is attempted by default. The workload identity is obtained
-using the `GOOGLE_APPLICATION_CREDENTIALS` environment variable, falling back
-to the Google Application Credential file in the config directory.
-When a reference is specified, it expects a Secret with a `.data.serviceaccount`
-value with a GCP service account JSON file.
+For detailed setup instructions, see: https://fluxcd.io/flux/integrations/gcp/#for-google-cloud-storage
 
 The Provider allows for specifying the
 [Bucket location](https://cloud.google.com/storage/docs/locations) using the
@@ -720,14 +682,7 @@ spec:
 
 **Note:** To use Object-Level Workload Identity (`.spec.serviceAccountName` with 
 cloud providers), the controller feature gate `ObjectLevelWorkloadIdentity` must 
-be enabled. Add the following environment variable to the source-controller 
-deployment:
-
-```yaml
-env:
-- name: ENABLE_OBJECT_LEVEL_WORKLOAD_IDENTITY
-  value: "true"
-```
+be enabled.
 
 ```yaml
 ---
@@ -1048,6 +1003,10 @@ the `.spec.provider` field:
 
 **Note:** that for a publicly accessible object storage, you don't need to
 provide a `secretRef` nor `serviceAccountName`.
+
+**Important:** `.spec.secretRef` and `.spec.serviceAccountName` are mutually
+exclusive and cannot be set at the same time. This constraint is enforced
+at the CRD level.
 
 For a complete guide on how to set up authentication for cloud providers,
 see the integration [docs](/flux/integrations/).

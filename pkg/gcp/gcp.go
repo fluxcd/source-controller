@@ -88,7 +88,7 @@ type options struct {
 
 	// newCustomHTTPClient should create a new HTTP client for interacting with the GCS API.
 	// This is a test-only option required for mocking the real logic, which requires either
-	// a valid Google Service Account Key or ADC. Both are not available in tests.
+	// a valid Google Service Account Key or Controller-Level Workload Identity. Both are not available in tests.
 	// The real logic is implemented in the newHTTPClient function, which is used when
 	// constructing the default options object.
 	newCustomHTTPClient func(context.Context, *options) (*http.Client, error)
@@ -110,7 +110,7 @@ func NewClient(ctx context.Context, bucket *sourcev1.Bucket, opts ...Option) (*G
 
 	var clientOpts []option.ClientOption
 
-	// Authentication priority: Secret → AuthOpts (Workload Identity)
+	// Authentication priority: Secret → AuthOpts (Workload Identity) → Controller-Level Workload Identity
 	switch {
 	case o.secret != nil && o.proxyURL == nil:
 		clientOpts = append(clientOpts, option.WithCredentialsJSON(o.secret.Data["serviceaccount"]))
@@ -120,22 +120,18 @@ func NewClient(ctx context.Context, bucket *sourcev1.Bucket, opts ...Option) (*G
 			return nil, err
 		}
 		clientOpts = append(clientOpts, option.WithHTTPClient(httpClient))
-	case len(o.authOpts) > 0:
-		// Object-level workload identity: Create TokenSource using auth options
-		// pkg/auth/gcp.NewTokenSource handles ServiceAccount presence to determine object/controller-level
+	default:
+		// Workload identity: Create TokenSource using auth options
+		tokenSource := gcpauth.NewTokenSource(ctx, o.authOpts...)
+		clientOpts = append(clientOpts, option.WithTokenSource(tokenSource))
 		if o.proxyURL != nil {
 			httpClient, err := o.newCustomHTTPClient(ctx, o)
 			if err != nil {
 				return nil, err
 			}
 			clientOpts = append(clientOpts, option.WithHTTPClient(httpClient))
-		} else {
-			tokenSource := gcpauth.NewTokenSource(ctx, o.authOpts...)
-			clientOpts = append(clientOpts, option.WithTokenSource(tokenSource))
 		}
 	}
-	// No explicit authentication - controller-level workload identity uses Application Default Credentials
-	// TODO: https://github.com/fluxcd/flux2/issues/5465 will add lockdown support to prevent unintended usage of this fallback
 
 	client, err := gcpstorage.NewClient(ctx, clientOpts...)
 	if err != nil {
