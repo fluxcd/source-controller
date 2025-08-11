@@ -137,3 +137,18 @@ Create a `.vscode/launch.json` file:
 
 Start debugging by either clicking `Run` > `Start Debugging` or using
 the relevant shortcut.
+
+### Debugging controller with IntelliJ
+
+Create the environment file containing details on how to load
+`libgit2` dependencies:
+```bash
+make env
+```
+
+Print the file removing the leading and trailing quotes (It assumes the variables values does not contain quotes themselves)
+```bash
+cat build/.env | tr -d '"'
+```
+
+Copy the output in your clipboard then click the green arrow of the function `Modify Run configuration` > `Edit Environment Variables` > `Paste`
