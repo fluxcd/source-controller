@@ -56,14 +56,14 @@ import (
 	"github.com/fluxcd/pkg/sourceignore"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
+	"github.com/fluxcd/source-controller/internal/bucket/azure"
+	"github.com/fluxcd/source-controller/internal/bucket/gcp"
+	"github.com/fluxcd/source-controller/internal/bucket/minio"
 	intdigest "github.com/fluxcd/source-controller/internal/digest"
 	serror "github.com/fluxcd/source-controller/internal/error"
 	"github.com/fluxcd/source-controller/internal/index"
 	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
 	"github.com/fluxcd/source-controller/internal/reconcile/summarize"
-	"github.com/fluxcd/source-controller/pkg/azure"
-	"github.com/fluxcd/source-controller/pkg/gcp"
-	"github.com/fluxcd/source-controller/pkg/minio"
 )
 
 // maxConcurrentBucketFetches is the upper bound on the goroutines used to
