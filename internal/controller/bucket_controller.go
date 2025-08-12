@@ -44,6 +44,8 @@ import (
 
 	eventv1 "github.com/fluxcd/pkg/apis/event/v1beta1"
 	"github.com/fluxcd/pkg/apis/meta"
+	"github.com/fluxcd/pkg/auth"
+	"github.com/fluxcd/pkg/cache"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	helper "github.com/fluxcd/pkg/runtime/controller"
 	"github.com/fluxcd/pkg/runtime/jitter"
@@ -116,6 +118,8 @@ var bucketFailConditions = []string{
 // +kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=buckets/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=buckets/finalizers,verbs=get;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch
+// +kubebuilder:rbac:groups="",resources=serviceaccounts,verbs=get;list;watch
+// +kubebuilder:rbac:groups="",resources=serviceaccounts/token,verbs=create
 
 // BucketReconciler reconciles a v1.Bucket object.
 type BucketReconciler struct {
@@ -125,6 +129,7 @@ type BucketReconciler struct {
 
 	Storage        *Storage
 	ControllerName string
+	TokenCache     *cache.TokenCache
 
 	patchOptions []patch.Option
 }
@@ -430,6 +435,18 @@ func (r *BucketReconciler) reconcileStorage(ctx context.Context, sp *patch.Seria
 // the provider. If this fails, it records v1.FetchFailedCondition=True on
 // the object and returns early.
 func (r *BucketReconciler) reconcileSource(ctx context.Context, sp *patch.SerialPatcher, obj *sourcev1.Bucket, index *index.Digester, dir string) (sreconcile.Result, error) {
+	usesObjectLevelWorkloadIdentity := obj.Spec.Provider != "" && obj.Spec.Provider != sourcev1.BucketProviderGeneric && obj.Spec.ServiceAccountName != ""
+	if usesObjectLevelWorkloadIdentity {
+		if !auth.IsObjectLevelWorkloadIdentityEnabled() {
+			const gate = auth.FeatureGateObjectLevelWorkloadIdentity
+			const msgFmt = "to use spec.serviceAccountName for provider authentication please enable the %s feature gate in the controller"
+			err := fmt.Errorf(msgFmt, gate)
+			e := serror.NewStalling(err, meta.FeatureGateDisabledReason)
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
+			return sreconcile.ResultEmpty, e
+		}
+	}
+
 	creds, err := r.setupCredentials(ctx, obj)
 	if err != nil {
 		e := serror.NewGeneric(err, sourcev1.AuthenticationFailedReason)
@@ -589,6 +606,10 @@ func (r *BucketReconciler) reconcileDelete(ctx context.Context, obj *sourcev1.Bu
 
 	// Remove our finalizer from the list
 	controllerutil.RemoveFinalizer(obj, sourcev1.SourceFinalizer)
+
+	// Cleanup caches.
+	r.TokenCache.DeleteEventsForObject(sourcev1.BucketKind,
+		obj.GetName(), obj.GetNamespace(), cache.OperationReconcile)
 
 	// Stop reconciliation as the object is being deleted
 	return sreconcile.ResultEmpty, nil
@@ -838,19 +859,47 @@ func (r *BucketReconciler) setupCredentials(ctx context.Context, obj *sourcev1.B
 // createBucketProvider creates a provider-specific bucket client using the given credentials and configuration.
 // It handles different bucket providers (AWS, GCP, Azure, generic) and returns the appropriate client.
 func (r *BucketReconciler) createBucketProvider(ctx context.Context, obj *sourcev1.Bucket, creds *bucketCredentials) (BucketProvider, error) {
+	var authOpts []auth.Option
+
+	if obj.Spec.ServiceAccountName != "" {
+		serviceAccount := client.ObjectKey{
+			Name:      obj.Spec.ServiceAccountName,
+			Namespace: obj.GetNamespace(),
+		}
+		authOpts = append(authOpts, auth.WithServiceAccount(serviceAccount, r.Client))
+	}
+
+	if r.TokenCache != nil {
+		involvedObject := cache.InvolvedObject{
+			Kind:      sourcev1.BucketKind,
+			Name:      obj.GetName(),
+			Namespace: obj.GetNamespace(),
+			Operation: cache.OperationReconcile,
+		}
+		authOpts = append(authOpts, auth.WithCache(*r.TokenCache, involvedObject))
+	}
+
+	if creds.proxyURL != nil {
+		authOpts = append(authOpts, auth.WithProxyURL(*creds.proxyURL))
+	}
+
 	switch obj.Spec.Provider {
 	case sourcev1.BucketProviderGoogle:
-		if err := gcp.ValidateSecret(creds.secret); err != nil {
-			return nil, err
-		}
 		var opts []gcp.Option
-		if creds.secret != nil {
-			opts = append(opts, gcp.WithSecret(creds.secret))
-		}
 		if creds.proxyURL != nil {
 			opts = append(opts, gcp.WithProxyURL(creds.proxyURL))
 		}
-		return gcp.NewClient(ctx, opts...)
+
+		if creds.secret != nil {
+			if err := gcp.ValidateSecret(creds.secret); err != nil {
+				return nil, err
+			}
+			opts = append(opts, gcp.WithSecret(creds.secret))
+		} else {
+			opts = append(opts, gcp.WithAuth(authOpts...))
+		}
+
+		return gcp.NewClient(ctx, obj, opts...)
 
 	case sourcev1.BucketProviderAzure:
 		if err := azure.ValidateSecret(creds.secret); err != nil {
