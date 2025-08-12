@@ -56,6 +56,7 @@ import (
 	intpredicates "github.com/fluxcd/source-controller/internal/predicates"
 	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
 	"github.com/fluxcd/source-controller/internal/reconcile/summarize"
+	"github.com/fluxcd/source-controller/internal/storage"
 )
 
 func TestHelmRepositoryReconciler_deleteBeforeFinalizer(t *testing.T) {
@@ -172,7 +173,7 @@ func TestHelmRepositoryReconciler_Reconcile(t *testing.T) {
 func TestHelmRepositoryReconciler_reconcileStorage(t *testing.T) {
 	tests := []struct {
 		name             string
-		beforeFunc       func(obj *sourcev1.HelmRepository, storage *Storage) error
+		beforeFunc       func(obj *sourcev1.HelmRepository, storage *storage.Storage) error
 		want             sreconcile.Result
 		wantErr          bool
 		assertArtifact   *sourcev1.Artifact
@@ -181,7 +182,7 @@ func TestHelmRepositoryReconciler_reconcileStorage(t *testing.T) {
 	}{
 		{
 			name: "garbage collects",
-			beforeFunc: func(obj *sourcev1.HelmRepository, storage *Storage) error {
+			beforeFunc: func(obj *sourcev1.HelmRepository, storage *storage.Storage) error {
 				revisions := []string{"a", "b", "c", "d"}
 				for n := range revisions {
 					v := revisions[n]
@@ -231,7 +232,7 @@ func TestHelmRepositoryReconciler_reconcileStorage(t *testing.T) {
 		},
 		{
 			name: "notices missing artifact in storage",
-			beforeFunc: func(obj *sourcev1.HelmRepository, storage *Storage) error {
+			beforeFunc: func(obj *sourcev1.HelmRepository, storage *storage.Storage) error {
 				obj.Status.Artifact = &sourcev1.Artifact{
 					Path:     "/reconcile-storage/invalid.txt",
 					Revision: "d",
@@ -250,7 +251,7 @@ func TestHelmRepositoryReconciler_reconcileStorage(t *testing.T) {
 		},
 		{
 			name: "notices empty artifact digest",
-			beforeFunc: func(obj *sourcev1.HelmRepository, storage *Storage) error {
+			beforeFunc: func(obj *sourcev1.HelmRepository, storage *storage.Storage) error {
 				f := "empty-digest.txt"
 
 				obj.Status.Artifact = &sourcev1.Artifact{
@@ -281,7 +282,7 @@ func TestHelmRepositoryReconciler_reconcileStorage(t *testing.T) {
 		},
 		{
 			name: "notices artifact digest mismatch",
-			beforeFunc: func(obj *sourcev1.HelmRepository, storage *Storage) error {
+			beforeFunc: func(obj *sourcev1.HelmRepository, storage *storage.Storage) error {
 				f := "digest-mismatch.txt"
 
 				obj.Status.Artifact = &sourcev1.Artifact{
@@ -312,7 +313,7 @@ func TestHelmRepositoryReconciler_reconcileStorage(t *testing.T) {
 		},
 		{
 			name: "updates hostname on diff from current",
-			beforeFunc: func(obj *sourcev1.HelmRepository, storage *Storage) error {
+			beforeFunc: func(obj *sourcev1.HelmRepository, storage *storage.Storage) error {
 				obj.Status.Artifact = &sourcev1.Artifact{
 					Path:     "/reconcile-storage/hostname.txt",
 					Revision: "f",

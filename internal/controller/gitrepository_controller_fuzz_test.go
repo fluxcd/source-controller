@@ -64,6 +64,7 @@ import (
 	"github.com/fluxcd/pkg/runtime/testenv"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
+	intstorage "github.com/fluxcd/source-controller/internal/storage"
 )
 
 var (
@@ -77,7 +78,7 @@ var (
 	cfg              *rest.Config
 	testEnv          *testenv.Environment
 
-	storage *Storage
+	storage *intstorage.Storage
 
 	examplePublicKey  []byte
 	examplePrivateKey []byte
@@ -477,7 +478,7 @@ func startEnvServer(setupReconcilers func(manager.Manager)) *envtest.Environment
 		panic(err)
 	}
 	defer os.RemoveAll(tmpStoragePath)
-	storage, err = NewStorage(tmpStoragePath, "localhost:5050", time.Minute*1, 2)
+	storage, err = intstorage.New(tmpStoragePath, "localhost:5050", time.Minute*1, 2)
 	if err != nil {
 		panic(err)
 	}

@@ -24,10 +24,10 @@ import (
 	"regexp"
 	"strings"
 
+	sourcefs "github.com/fluxcd/pkg/oci"
 	helmchart "helm.sh/helm/v3/pkg/chart"
 	"helm.sh/helm/v3/pkg/chartutil"
 
-	"github.com/fluxcd/source-controller/internal/fs"
 	"github.com/fluxcd/source-controller/internal/oci"
 )
 
@@ -219,7 +219,7 @@ func packageToPath(chart *helmchart.Chart, out string) error {
 	if err != nil {
 		return fmt.Errorf("failed to package chart: %w", err)
 	}
-	if err = fs.RenameWithFallback(p, out); err != nil {
+	if err = sourcefs.RenameWithFallback(p, out); err != nil {
 		return fmt.Errorf("failed to write chart to file: %w", err)
 	}
 	return nil

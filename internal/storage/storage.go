@@ -1,5 +1,5 @@
 /*
-Copyright 2020 The Flux authors
+Copyright 2025 The Flux authors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package controller
+package storage
 
 import (
 	"archive/tar"
@@ -37,12 +37,12 @@ import (
 	kerrors "k8s.io/apimachinery/pkg/util/errors"
 
 	"github.com/fluxcd/pkg/lockedfile"
+	"github.com/fluxcd/pkg/oci"
 	"github.com/fluxcd/pkg/sourceignore"
 	pkgtar "github.com/fluxcd/pkg/tar"
 
 	v1 "github.com/fluxcd/source-controller/api/v1"
 	intdigest "github.com/fluxcd/source-controller/internal/digest"
-	sourcefs "github.com/fluxcd/source-controller/internal/fs"
 )
 
 const GarbageCountLimit = 1000
@@ -73,8 +73,8 @@ type Storage struct {
 	ArtifactRetentionRecords int `json:"artifactRetentionRecords"`
 }
 
-// NewStorage creates the storage helper for a given path and hostname.
-func NewStorage(basePath string, hostname string, artifactRetentionTTL time.Duration, artifactRetentionRecords int) (*Storage, error) {
+// New creates the storage helper for a given path and hostname.
+func New(basePath string, hostname string, artifactRetentionTTL time.Duration, artifactRetentionRecords int) (*Storage, error) {
 	if f, err := os.Stat(basePath); os.IsNotExist(err) || !f.IsDir() {
 		return nil, fmt.Errorf("invalid dir path: %s", basePath)
 	}
@@ -480,7 +480,7 @@ func (s Storage) Archive(artifact *v1.Artifact, dir string, filter ArchiveFileFi
 		return err
 	}
 
-	if err := sourcefs.RenameWithFallback(tmpName, localPath); err != nil {
+	if err := oci.RenameWithFallback(tmpName, localPath); err != nil {
 		return err
 	}
 
@@ -522,7 +522,7 @@ func (s Storage) AtomicWriteFile(artifact *v1.Artifact, reader io.Reader, mode o
 		return err
 	}
 
-	if err := sourcefs.RenameWithFallback(tfName, localPath); err != nil {
+	if err := oci.RenameWithFallback(tfName, localPath); err != nil {
 		return err
 	}
 
@@ -560,7 +560,7 @@ func (s Storage) Copy(artifact *v1.Artifact, reader io.Reader) (err error) {
 		return err
 	}
 
-	if err := sourcefs.RenameWithFallback(tfName, localPath); err != nil {
+	if err := oci.RenameWithFallback(tfName, localPath); err != nil {
 		return err
 	}
 
@@ -620,7 +620,7 @@ func (s Storage) CopyToPath(artifact *v1.Artifact, subPath, toPath string) error
 	if err != nil {
 		return err
 	}
-	if err := sourcefs.RenameWithFallback(fromPath, toPath); err != nil {
+	if err := oci.RenameWithFallback(fromPath, toPath); err != nil {
 		return err
 	}
 	return nil

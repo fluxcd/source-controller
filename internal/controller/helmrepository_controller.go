@@ -58,6 +58,7 @@ import (
 	intpredicates "github.com/fluxcd/source-controller/internal/predicates"
 	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
 	"github.com/fluxcd/source-controller/internal/reconcile/summarize"
+	"github.com/fluxcd/source-controller/internal/storage"
 )
 
 // helmRepositoryReadyCondition contains the information required to summarize a
@@ -109,7 +110,7 @@ type HelmRepositoryReconciler struct {
 	helper.Metrics
 
 	Getters        helmgetter.Providers
-	Storage        *Storage
+	Storage        *storage.Storage
 	ControllerName string
 
 	Cache *cache.Cache

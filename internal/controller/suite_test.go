@@ -57,6 +57,7 @@ import (
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	"github.com/fluxcd/source-controller/internal/cache"
+	"github.com/fluxcd/source-controller/internal/storage"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -82,7 +83,7 @@ const (
 var (
 	k8sClient    client.Client
 	testEnv      *testenv.Environment
-	testStorage  *Storage
+	testStorage  *storage.Storage
 	testServer   *testserver.ArtifactServer
 	testMetricsH controller.Metrics
 	ctx          = ctrl.SetupSignalHandler()
@@ -430,12 +431,12 @@ func initTestTLS() {
 	}
 }
 
-func newTestStorage(s *testserver.HTTPServer) (*Storage, error) {
-	storage, err := NewStorage(s.Root(), s.URL(), retentionTTL, retentionRecords)
+func newTestStorage(s *testserver.HTTPServer) (*storage.Storage, error) {
+	st, err := storage.New(s.Root(), s.URL(), retentionTTL, retentionRecords)
 	if err != nil {
 		return nil, err
 	}
-	return storage, nil
+	return st, nil
 }
 
 var letterRunes = []rune("abcdefghijklmnopqrstuvwxyz1234567890")

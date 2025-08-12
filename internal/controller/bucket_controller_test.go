@@ -50,6 +50,7 @@ import (
 	s3mock "github.com/fluxcd/source-controller/internal/mock/s3"
 	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
 	"github.com/fluxcd/source-controller/internal/reconcile/summarize"
+	"github.com/fluxcd/source-controller/internal/storage"
 )
 
 // Environment variable to set the GCP Storage host for the GCP client.
@@ -196,7 +197,7 @@ func TestBucketReconciler_Reconcile(t *testing.T) {
 func TestBucketReconciler_reconcileStorage(t *testing.T) {
 	tests := []struct {
 		name             string
-		beforeFunc       func(obj *sourcev1.Bucket, storage *Storage) error
+		beforeFunc       func(obj *sourcev1.Bucket, storage *storage.Storage) error
 		want             sreconcile.Result
 		wantErr          bool
 		assertArtifact   *sourcev1.Artifact
@@ -205,7 +206,7 @@ func TestBucketReconciler_reconcileStorage(t *testing.T) {
 	}{
 		{
 			name: "garbage collects",
-			beforeFunc: func(obj *sourcev1.Bucket, storage *Storage) error {
+			beforeFunc: func(obj *sourcev1.Bucket, storage *storage.Storage) error {
 				revisions := []string{"a", "b", "c", "d"}
 				for n := range revisions {
 					v := revisions[n]
@@ -255,7 +256,7 @@ func TestBucketReconciler_reconcileStorage(t *testing.T) {
 		},
 		{
 			name: "notices missing artifact in storage",
-			beforeFunc: func(obj *sourcev1.Bucket, storage *Storage) error {
+			beforeFunc: func(obj *sourcev1.Bucket, storage *storage.Storage) error {
 				obj.Status.Artifact = &sourcev1.Artifact{
 					Path:     "/reconcile-storage/invalid.txt",
 					Revision: "d",
@@ -274,7 +275,7 @@ func TestBucketReconciler_reconcileStorage(t *testing.T) {
 		},
 		{
 			name: "notices empty artifact digest",
-			beforeFunc: func(obj *sourcev1.Bucket, storage *Storage) error {
+			beforeFunc: func(obj *sourcev1.Bucket, storage *storage.Storage) error {
 				f := "empty-digest.txt"
 
 				obj.Status.Artifact = &sourcev1.Artifact{
@@ -305,7 +306,7 @@ func TestBucketReconciler_reconcileStorage(t *testing.T) {
 		},
 		{
 			name: "notices artifact digest mismatch",
-			beforeFunc: func(obj *sourcev1.Bucket, storage *Storage) error {
+			beforeFunc: func(obj *sourcev1.Bucket, storage *storage.Storage) error {
 				f := "digest-mismatch.txt"
 
 				obj.Status.Artifact = &sourcev1.Artifact{
@@ -336,7 +337,7 @@ func TestBucketReconciler_reconcileStorage(t *testing.T) {
 		},
 		{
 			name: "updates hostname on diff from current",
-			beforeFunc: func(obj *sourcev1.Bucket, storage *Storage) error {
+			beforeFunc: func(obj *sourcev1.Bucket, storage *storage.Storage) error {
 				obj.Status.Artifact = &sourcev1.Artifact{
 					Path:     "/reconcile-storage/hostname.txt",
 					Revision: "f",

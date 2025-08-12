@@ -817,7 +817,7 @@ func getObjectFile() string {
 }
 
 func loadServerCertAndClientTLSConfig() (serverCert string, serverKey string, clientConf *tls.Config, err error) {
-	const certsDir = "../../internal/controller/testdata/certs"
+	const certsDir = "../../controller/testdata/certs"
 	clientConf = &tls.Config{}
 
 	serverCert, err = filepath.Abs(filepath.Join(certsDir, "server.pem"))
