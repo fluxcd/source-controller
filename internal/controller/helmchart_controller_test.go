@@ -75,6 +75,7 @@ import (
 	snotation "github.com/fluxcd/source-controller/internal/oci/notation"
 	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
 	"github.com/fluxcd/source-controller/internal/reconcile/summarize"
+	"github.com/fluxcd/source-controller/internal/storage"
 )
 
 func TestHelmChartReconciler_deleteBeforeFinalizer(t *testing.T) {
@@ -330,7 +331,7 @@ func TestHelmChartReconciler_Reconcile(t *testing.T) {
 func TestHelmChartReconciler_reconcileStorage(t *testing.T) {
 	tests := []struct {
 		name             string
-		beforeFunc       func(obj *sourcev1.HelmChart, storage *Storage) error
+		beforeFunc       func(obj *sourcev1.HelmChart, storage *storage.Storage) error
 		want             sreconcile.Result
 		wantErr          bool
 		assertArtifact   *sourcev1.Artifact
@@ -339,7 +340,7 @@ func TestHelmChartReconciler_reconcileStorage(t *testing.T) {
 	}{
 		{
 			name: "garbage collects",
-			beforeFunc: func(obj *sourcev1.HelmChart, storage *Storage) error {
+			beforeFunc: func(obj *sourcev1.HelmChart, storage *storage.Storage) error {
 				revisions := []string{"a", "b", "c", "d"}
 				for n := range revisions {
 					v := revisions[n]
@@ -389,7 +390,7 @@ func TestHelmChartReconciler_reconcileStorage(t *testing.T) {
 		},
 		{
 			name: "notices missing artifact in storage",
-			beforeFunc: func(obj *sourcev1.HelmChart, storage *Storage) error {
+			beforeFunc: func(obj *sourcev1.HelmChart, storage *storage.Storage) error {
 				obj.Status.Artifact = &sourcev1.Artifact{
 					Path:     "/reconcile-storage/invalid.txt",
 					Revision: "d",
@@ -408,7 +409,7 @@ func TestHelmChartReconciler_reconcileStorage(t *testing.T) {
 		},
 		{
 			name: "notices empty artifact digest",
-			beforeFunc: func(obj *sourcev1.HelmChart, storage *Storage) error {
+			beforeFunc: func(obj *sourcev1.HelmChart, storage *storage.Storage) error {
 				f := "empty-digest.txt"
 
 				obj.Status.Artifact = &sourcev1.Artifact{
@@ -439,7 +440,7 @@ func TestHelmChartReconciler_reconcileStorage(t *testing.T) {
 		},
 		{
 			name: "notices artifact digest mismatch",
-			beforeFunc: func(obj *sourcev1.HelmChart, storage *Storage) error {
+			beforeFunc: func(obj *sourcev1.HelmChart, storage *storage.Storage) error {
 				f := "digest-mismatch.txt"
 
 				obj.Status.Artifact = &sourcev1.Artifact{
@@ -470,7 +471,7 @@ func TestHelmChartReconciler_reconcileStorage(t *testing.T) {
 		},
 		{
 			name: "updates hostname on diff from current",
-			beforeFunc: func(obj *sourcev1.HelmChart, storage *Storage) error {
+			beforeFunc: func(obj *sourcev1.HelmChart, storage *storage.Storage) error {
 				obj.Status.Artifact = &sourcev1.Artifact{
 					Path:     "/reconcile-storage/hostname.txt",
 					Revision: "f",
@@ -568,7 +569,7 @@ func TestHelmChartReconciler_reconcileSource(t *testing.T) {
 
 	tmpDir := t.TempDir()
 
-	storage, err := NewStorage(tmpDir, "example.com", retentionTTL, retentionRecords)
+	storage, err := storage.New(tmpDir, "example.com", retentionTTL, retentionRecords)
 	g.Expect(err).ToNot(HaveOccurred())
 
 	gitArtifact := &sourcev1.Artifact{
@@ -1185,7 +1186,7 @@ func TestHelmChartReconciler_buildFromOCIHelmRepository(t *testing.T) {
 	metadata, err := loadTestChartToOCI(chartData, testRegistryServer, "", "", "")
 	g.Expect(err).NotTo(HaveOccurred())
 
-	storage, err := NewStorage(tmpDir, "example.com", retentionTTL, retentionRecords)
+	storage, err := storage.New(tmpDir, "example.com", retentionTTL, retentionRecords)
 	g.Expect(err).ToNot(HaveOccurred())
 
 	cachedArtifact := &sourcev1.Artifact{
@@ -1408,7 +1409,7 @@ func TestHelmChartReconciler_buildFromTarballArtifact(t *testing.T) {
 
 	tmpDir := t.TempDir()
 
-	storage, err := NewStorage(tmpDir, "example.com", retentionTTL, retentionRecords)
+	storage, err := storage.New(tmpDir, "example.com", retentionTTL, retentionRecords)
 	g.Expect(err).ToNot(HaveOccurred())
 
 	chartsArtifact := &sourcev1.Artifact{
@@ -2884,7 +2885,7 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_verifySignatureNotation(t *t
 	metadata, err := loadTestChartToOCI(chartData, server, "", "", "")
 	g.Expect(err).NotTo(HaveOccurred())
 
-	storage, err := NewStorage(tmpDir, server.registryHost, retentionTTL, retentionRecords)
+	storage, err := storage.New(tmpDir, server.registryHost, retentionTTL, retentionRecords)
 	g.Expect(err).ToNot(HaveOccurred())
 
 	cachedArtifact := &sourcev1.Artifact{
@@ -3208,7 +3209,7 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_verifySignatureCosign(t *tes
 	metadata, err := loadTestChartToOCI(chartData, server, "", "", "")
 	g.Expect(err).NotTo(HaveOccurred())
 
-	storage, err := NewStorage(tmpDir, server.registryHost, retentionTTL, retentionRecords)
+	storage, err := storage.New(tmpDir, server.registryHost, retentionTTL, retentionRecords)
 	g.Expect(err).ToNot(HaveOccurred())
 
 	cachedArtifact := &sourcev1.Artifact{

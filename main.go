@@ -54,6 +54,8 @@ import (
 	"github.com/fluxcd/pkg/runtime/probes"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
+	intstorage "github.com/fluxcd/source-controller/internal/storage"
+
 	// +kubebuilder:scaffold:imports
 
 	"github.com/fluxcd/source-controller/internal/cache"
@@ -436,7 +438,11 @@ func mustInitHelmCache(maxSize int, itemTTL, purgeInterval string) (*cache.Cache
 	return cache.New(maxSize, interval), ttl
 }
 
-func mustInitStorage(path string, storageAdvAddr string, artifactRetentionTTL time.Duration, artifactRetentionRecords int, artifactDigestAlgo string) *controller.Storage {
+func mustInitStorage(path string,
+	storageAdvAddr string,
+	artifactRetentionTTL time.Duration,
+	artifactRetentionRecords int,
+	artifactDigestAlgo string) *intstorage.Storage {
 	if storageAdvAddr == "" {
 		storageAdvAddr = determineAdvStorageAddr(storageAdvAddr)
 	}
@@ -450,7 +456,7 @@ func mustInitStorage(path string, storageAdvAddr string, artifactRetentionTTL ti
 		intdigest.Canonical = algo
 	}
 
-	storage, err := controller.NewStorage(path, storageAdvAddr, artifactRetentionTTL, artifactRetentionRecords)
+	storage, err := intstorage.New(path, storageAdvAddr, artifactRetentionTTL, artifactRetentionRecords)
 	if err != nil {
 		setupLog.Error(err, "unable to initialise storage")
 		os.Exit(1)

@@ -77,6 +77,7 @@ import (
 	"github.com/fluxcd/source-controller/internal/oci/notation"
 	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
 	"github.com/fluxcd/source-controller/internal/reconcile/summarize"
+	"github.com/fluxcd/source-controller/internal/storage"
 	"github.com/fluxcd/source-controller/internal/util"
 )
 
@@ -139,7 +140,7 @@ type OCIRepositoryReconciler struct {
 	helper.Metrics
 	kuberecorder.EventRecorder
 
-	Storage           *Storage
+	Storage           *storage.Storage
 	ControllerName    string
 	TokenCache        *cache.TokenCache
 	requeueDependency time.Duration
@@ -1165,7 +1166,7 @@ func (r *OCIRepositoryReconciler) reconcileArtifact(ctx context.Context, sp *pat
 			ps = append(ps, sourceignore.ReadPatterns(strings.NewReader(*obj.Spec.Ignore), ignoreDomain)...)
 		}
 
-		if err := r.Storage.Archive(&artifact, dir, SourceIgnoreFilter(ps, ignoreDomain)); err != nil {
+		if err := r.Storage.Archive(&artifact, dir, storage.SourceIgnoreFilter(ps, ignoreDomain)); err != nil {
 			e := serror.NewGeneric(
 				fmt.Errorf("unable to archive artifact to storage: %s", err),
 				sourcev1.ArchiveOperationFailedReason,

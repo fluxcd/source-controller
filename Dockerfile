@@ -26,7 +26,6 @@ RUN go mod download
 
 # Copy source code
 COPY main.go main.go
-COPY pkg/ pkg/
 COPY internal/ internal/
 
 ARG TARGETPLATFORM

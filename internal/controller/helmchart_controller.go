@@ -75,6 +75,7 @@ import (
 	"github.com/fluxcd/source-controller/internal/oci/notation"
 	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
 	"github.com/fluxcd/source-controller/internal/reconcile/summarize"
+	"github.com/fluxcd/source-controller/internal/storage"
 	"github.com/fluxcd/source-controller/internal/util"
 )
 
@@ -132,7 +133,7 @@ type HelmChartReconciler struct {
 	helper.Metrics
 
 	RegistryClientGenerator RegistryClientGeneratorFunc
-	Storage                 *Storage
+	Storage                 *storage.Storage
 	Getters                 helmgetter.Providers
 	ControllerName          string
 

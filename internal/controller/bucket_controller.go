@@ -64,6 +64,7 @@ import (
 	"github.com/fluxcd/source-controller/internal/index"
 	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
 	"github.com/fluxcd/source-controller/internal/reconcile/summarize"
+	"github.com/fluxcd/source-controller/internal/storage"
 )
 
 // maxConcurrentBucketFetches is the upper bound on the goroutines used to
@@ -127,7 +128,7 @@ type BucketReconciler struct {
 	kuberecorder.EventRecorder
 	helper.Metrics
 
-	Storage        *Storage
+	Storage        *storage.Storage
 	ControllerName string
 	TokenCache     *cache.TokenCache
 
