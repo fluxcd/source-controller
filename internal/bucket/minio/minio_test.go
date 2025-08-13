@@ -20,7 +20,6 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
-	"encoding/json"
 	"encoding/xml"
 	"errors"
 	"fmt"
@@ -76,6 +75,8 @@ var (
 	testServerCert string
 	// testServerKey is the path to the server key used to start the Minio and STS servers.
 	testServerKey string
+	// ctx is the common context used in tests.
+	ctx context.Context
 )
 
 var (
@@ -126,6 +127,9 @@ var (
 )
 
 func TestMain(m *testing.M) {
+	// Initialize common test context
+	ctx = context.Background()
+
 	// Uses a sensible default on Windows (TCP/HTTP) and Linux/MacOS (socket)
 	pool, err := dockertest.NewPool("")
 	if err != nil {
@@ -173,7 +177,7 @@ func TestMain(m *testing.M) {
 	testMinioAddress = fmt.Sprintf("127.0.0.1:%v", resource.GetPort("9000/tcp"))
 
 	// Construct a Minio client using the address of the Minio server.
-	testMinioClient, err = NewClient(bucketStub(bucket, testMinioAddress),
+	testMinioClient, err = NewClient(ctx, bucketStub(bucket, testMinioAddress),
 		WithSecret(secret.DeepCopy()),
 		WithTLSConfig(testTLSConfig))
 	if err != nil {
@@ -197,7 +201,6 @@ func TestMain(m *testing.M) {
 		log.Fatalf("could not connect to docker: %s", err)
 	}
 
-	ctx := context.Background()
 	createBucket(ctx)
 	addObjectToBucket(ctx)
 	run := m.Run()
@@ -208,7 +211,7 @@ func TestMain(m *testing.M) {
 }
 
 func TestNewClient(t *testing.T) {
-	minioClient, err := NewClient(bucketStub(bucket, testMinioAddress),
+	minioClient, err := NewClient(ctx, bucketStub(bucket, testMinioAddress),
 		WithSecret(secret.DeepCopy()),
 		WithTLSConfig(testTLSConfig))
 	assert.NilError(t, err)
@@ -216,35 +219,54 @@ func TestNewClient(t *testing.T) {
 }
 
 func TestNewClientEmptySecret(t *testing.T) {
-	minioClient, err := NewClient(bucketStub(bucket, testMinioAddress),
+	minioClient, err := NewClient(ctx, bucketStub(bucket, testMinioAddress),
 		WithSecret(emptySecret.DeepCopy()),
 		WithTLSConfig(testTLSConfig))
 	assert.NilError(t, err)
 	assert.Assert(t, minioClient != nil)
 }
 
-func TestNewClientAwsProvider(t *testing.T) {
-	minioClient, err := NewClient(bucketStub(bucketAwsProvider, testMinioAddress))
-	assert.NilError(t, err)
-	assert.Assert(t, minioClient != nil)
+func TestNewClientAWSProvider(t *testing.T) {
+	t.Run("with secret", func(t *testing.T) {
+		validSecret := corev1.Secret{
+			ObjectMeta: v1.ObjectMeta{
+				Name:      "valid-secret",
+				Namespace: "default",
+			},
+			Data: map[string][]byte{
+				"accesskey": []byte(testMinioRootUser),
+				"secretkey": []byte(testMinioRootPassword),
+			},
+			Type: "Opaque",
+		}
+
+		bucket := bucketStub(bucketAwsProvider, testMinioAddress)
+		minioClient, err := NewClient(ctx, bucket, WithSecret(&validSecret))
+		assert.NilError(t, err)
+		assert.Assert(t, minioClient != nil)
+	})
+
+	t.Run("without secret", func(t *testing.T) {
+		bucket := bucketStub(bucketAwsProvider, testMinioAddress)
+		minioClient, err := NewClient(ctx, bucket)
+		assert.ErrorContains(t, err, "AWS authentication failed")
+		assert.Assert(t, minioClient == nil)
+	})
 }
 
 func TestBucketExists(t *testing.T) {
-	ctx := context.Background()
 	exists, err := testMinioClient.BucketExists(ctx, bucketName)
 	assert.NilError(t, err)
 	assert.Assert(t, exists)
 }
 
 func TestBucketNotExists(t *testing.T) {
-	ctx := context.Background()
 	exists, err := testMinioClient.BucketExists(ctx, "notexistsbucket")
 	assert.NilError(t, err)
 	assert.Assert(t, !exists)
 }
 
 func TestFGetObject(t *testing.T) {
-	ctx := context.Background()
 	tempDir := t.TempDir()
 	path := filepath.Join(tempDir, sourceignore.IgnoreFile)
 	_, err := testMinioClient.FGetObject(ctx, bucketName, objectName, path)
@@ -252,41 +274,7 @@ func TestFGetObject(t *testing.T) {
 }
 
 func TestNewClientAndFGetObjectWithSTSEndpoint(t *testing.T) {
-	// start a mock AWS STS server
-	awsSTSListener, awsSTSAddr, awsSTSPort := testlistener.New(t)
-	awsSTSEndpoint := fmt.Sprintf("http://%s", awsSTSAddr)
-	awsSTSHandler := http.NewServeMux()
-	awsSTSHandler.HandleFunc("PUT "+credentials.TokenPath,
-		func(w http.ResponseWriter, r *http.Request) {
-			_, err := w.Write([]byte("mock-token"))
-			assert.NilError(t, err)
-		})
-	awsSTSHandler.HandleFunc("GET "+credentials.DefaultIAMSecurityCredsPath,
-		func(w http.ResponseWriter, r *http.Request) {
-			token := r.Header.Get(credentials.TokenRequestHeader)
-			assert.Equal(t, token, "mock-token")
-			_, err := w.Write([]byte("mock-role"))
-			assert.NilError(t, err)
-		})
 	var credsRetrieved bool
-	awsSTSHandler.HandleFunc("GET "+credentials.DefaultIAMSecurityCredsPath+"mock-role",
-		func(w http.ResponseWriter, r *http.Request) {
-			token := r.Header.Get(credentials.TokenRequestHeader)
-			assert.Equal(t, token, "mock-token")
-			err := json.NewEncoder(w).Encode(map[string]any{
-				"Code":            "Success",
-				"AccessKeyID":     testMinioRootUser,
-				"SecretAccessKey": testMinioRootPassword,
-			})
-			assert.NilError(t, err)
-			credsRetrieved = true
-		})
-	awsSTSServer := &http.Server{
-		Addr:    awsSTSAddr,
-		Handler: awsSTSHandler,
-	}
-	go awsSTSServer.Serve(awsSTSListener)
-	defer awsSTSServer.Shutdown(context.Background())
 
 	// start a mock LDAP STS server
 	ldapSTSListener, ldapSTSAddr, ldapSTSPort := testlistener.New(t)
@@ -313,7 +301,7 @@ func TestNewClientAndFGetObjectWithSTSEndpoint(t *testing.T) {
 		Handler: ldapSTSHandler,
 	}
 	go ldapSTSServer.ServeTLS(ldapSTSListener, testServerCert, testServerKey)
-	defer ldapSTSServer.Shutdown(context.Background())
+	defer ldapSTSServer.Shutdown(ctx)
 
 	// start proxy
 	proxyAddr, proxyPort := testproxy.New(t)
@@ -327,42 +315,6 @@ func TestNewClientAndFGetObjectWithSTSEndpoint(t *testing.T) {
 		ldapPassword string
 		err          string
 	}{
-		{
-			name:     "with correct aws endpoint",
-			provider: "aws",
-			stsSpec: &sourcev1.BucketSTSSpec{
-				Provider: "aws",
-				Endpoint: awsSTSEndpoint,
-			},
-		},
-		{
-			name:     "with incorrect aws endpoint",
-			provider: "aws",
-			stsSpec: &sourcev1.BucketSTSSpec{
-				Provider: "aws",
-				Endpoint: fmt.Sprintf("http://localhost:%d", awsSTSPort+1),
-			},
-			err: "connection refused",
-		},
-		{
-			name:     "with correct aws endpoint and proxy",
-			provider: "aws",
-			stsSpec: &sourcev1.BucketSTSSpec{
-				Provider: "aws",
-				Endpoint: awsSTSEndpoint,
-			},
-			opts: []Option{WithProxyURL(&url.URL{Scheme: "http", Host: proxyAddr})},
-		},
-		{
-			name:     "with correct aws endpoint and incorrect proxy",
-			provider: "aws",
-			stsSpec: &sourcev1.BucketSTSSpec{
-				Provider: "aws",
-				Endpoint: awsSTSEndpoint,
-			},
-			opts: []Option{WithProxyURL(&url.URL{Scheme: "http", Host: fmt.Sprintf("localhost:%d", proxyPort+1)})},
-			err:  "connection refused",
-		},
 		{
 			name:     "with correct ldap endpoint",
 			provider: "generic",
@@ -448,11 +400,10 @@ func TestNewClientAndFGetObjectWithSTSEndpoint(t *testing.T) {
 			opts := tt.opts
 			opts = append(opts, WithTLSConfig(testTLSConfig))
 
-			minioClient, err := NewClient(bucket, opts...)
+			minioClient, err := NewClient(ctx, bucket, opts...)
 			assert.NilError(t, err)
 			assert.Assert(t, minioClient != nil)
 
-			ctx := context.Background()
 			path := filepath.Join(t.TempDir(), sourceignore.IgnoreFile)
 			_, err = minioClient.FGetObject(ctx, bucketName, objectName, path)
 			if tt.err != "" {
@@ -487,13 +438,12 @@ func TestNewClientAndFGetObjectWithProxy(t *testing.T) {
 	// run test
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			minioClient, err := NewClient(bucketStub(bucket, testMinioAddress),
+			minioClient, err := NewClient(ctx, bucketStub(bucket, testMinioAddress),
 				WithSecret(secret.DeepCopy()),
 				WithTLSConfig(testTLSConfig),
 				WithProxyURL(tt.proxyURL))
 			assert.NilError(t, err)
 			assert.Assert(t, minioClient != nil)
-			ctx := context.Background()
 			tempDir := t.TempDir()
 			path := filepath.Join(tempDir, sourceignore.IgnoreFile)
 			_, err = minioClient.FGetObject(ctx, bucketName, objectName, path)
@@ -507,7 +457,6 @@ func TestNewClientAndFGetObjectWithProxy(t *testing.T) {
 }
 
 func TestFGetObjectNotExists(t *testing.T) {
-	ctx := context.Background()
 	tempDir := t.TempDir()
 	badKey := "invalid.txt"
 	path := filepath.Join(tempDir, badKey)
@@ -530,7 +479,6 @@ func TestVisitObjects(t *testing.T) {
 }
 
 func TestVisitObjectsErr(t *testing.T) {
-	ctx := context.Background()
 	badBucketName := "bad-bucket"
 	err := testMinioClient.VisitObjects(ctx, badBucketName, prefix, func(string, string) error {
 		return nil

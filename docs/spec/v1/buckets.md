@@ -199,6 +199,8 @@ The Provider allows for specifying the
 [Amazon AWS Region](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/using-regions-availability-zones.html#concepts-available-regions)
 using the [`.spec.region` field](#region).
 
+For detailed setup instructions, see: https://fluxcd.io/flux/integrations/aws/#for-amazon-simple-storage-service
+
 ##### AWS EC2 example
 
 **Note:** On EKS you have to create an [IAM role](#aws-iam-role-example) for
@@ -271,6 +273,55 @@ type: Opaque
 data:
   accesskey: <BASE64>
   secretkey: <BASE64>
+```
+
+##### AWS Controller-Level Workload Identity example
+
+```yaml
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: Bucket
+metadata:
+  name: aws-controller-level-workload-identity
+  namespace: default
+spec:
+  interval: 5m0s
+  provider: aws
+  bucketName: podinfo
+  endpoint: s3.amazonaws.com
+  region: us-east-1
+  timeout: 30s
+```
+
+##### AWS Object-Level Workload Identity example
+
+**Note:** To use Object-Level Workload Identity (`.spec.serviceAccountName` with 
+cloud providers), the controller feature gate `ObjectLevelWorkloadIdentity` must 
+be enabled.
+
+```yaml
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: Bucket
+metadata:
+  name: aws-object-level-workload-identity
+  namespace: default
+spec:
+  interval: 5m0s
+  provider: aws
+  bucketName: podinfo
+  endpoint: s3.amazonaws.com
+  region: us-east-1
+  serviceAccountName: aws-workload-identity-sa
+  timeout: 30s
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: aws-workload-identity-sa
+  namespace: default
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::123456789012:role/flux-bucket-role
 ```
 
 #### Azure
