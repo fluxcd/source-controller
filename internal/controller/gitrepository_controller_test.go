@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -33,7 +34,6 @@ import (
 	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
-	"github.com/go-git/go-git/v5/plumbing/transport"
 	"github.com/go-git/go-git/v5/storage/memory"
 	. "github.com/onsi/gomega"
 	sshtestdata "golang.org/x/crypto/ssh/testdata"
@@ -349,6 +349,8 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 		server           options
 		secret           *corev1.Secret
 		beforeFunc       func(obj *sourcev1.GitRepository)
+		secretFunc       func(secret *corev1.Secret, baseURL string)
+		middlewareFunc   gittestserver.HTTPMiddleware
 		want             sreconcile.Result
 		wantErr          bool
 		assertConditions []metav1.Condition
@@ -528,6 +530,85 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "foo"),
 			},
 		},
+		{
+			name:     "mTLS GitHub App without ca.crt makes FetchFailed=True",
+			protocol: "https",
+			server: options{
+				publicKey:  tlsPublicKey,
+				privateKey: tlsPrivateKey,
+				ca:         tlsCA,
+			},
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{Name: "gh-app-no-ca"},
+				Data: map[string][]byte{
+					github.KeyAppID:             []byte("123"),
+					github.KeyAppInstallationID: []byte("456"),
+					github.KeyAppPrivateKey:     sshtestdata.PEMBytes["rsa"],
+				},
+			},
+			beforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Spec.Provider = sourcev1.GitProviderGitHub
+				obj.Spec.SecretRef = &meta.LocalObjectReference{Name: "gh-app-no-ca"}
+				conditions.MarkReconciling(obj, meta.ProgressingReason, "foo")
+				conditions.MarkUnknown(obj, meta.ReadyCondition, meta.ProgressingWithRetryReason, "foo")
+			},
+			secretFunc: func(secret *corev1.Secret, baseURL string) {
+				secret.Data[github.KeyAppBaseURL] = []byte(baseURL + "/api/v3")
+			},
+			wantErr: true,
+			assertConditions: []metav1.Condition{
+				// should record a FetchFailedCondition due to TLS handshake
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "x509: "),
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "foo"),
+				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingWithRetryReason, "foo"),
+			},
+		},
+		{
+			name:     "mTLS GitHub App with ca.crt makes Reconciling=True",
+			protocol: "https",
+			server: options{
+				publicKey:  tlsPublicKey,
+				privateKey: tlsPrivateKey,
+				ca:         tlsCA,
+				username:   github.AccessTokenUsername,
+				password:   "some-enterprise-token",
+			},
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{Name: "gh-app-ca"},
+				Data: map[string][]byte{
+					github.KeyAppID:             []byte("123"),
+					github.KeyAppInstallationID: []byte("456"),
+					github.KeyAppPrivateKey:     sshtestdata.PEMBytes["rsa"],
+				},
+			},
+			beforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Spec.Provider = sourcev1.GitProviderGitHub
+				obj.Spec.SecretRef = &meta.LocalObjectReference{Name: "gh-app-ca"}
+			},
+			secretFunc: func(secret *corev1.Secret, baseURL string) {
+				secret.Data[github.KeyAppBaseURL] = []byte(baseURL + "/api/v3")
+				secret.Data["ca.crt"] = tlsCA
+			},
+			middlewareFunc: func(handler http.Handler) http.Handler {
+				return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					if strings.HasPrefix(r.URL.Path, "/api/v3/app/installations/") {
+						w.WriteHeader(http.StatusOK)
+						tok := &github.AppToken{
+							Token:     "some-enterprise-token",
+							ExpiresAt: time.Now().Add(time.Hour),
+						}
+						_ = json.NewEncoder(w).Encode(tok)
+					}
+					handler.ServeHTTP(w, r)
+				})
+			},
+			wantErr: false,
+			want:    sreconcile.ResultSuccess,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new upstream revision 'master@sha1:<commit>'"),
+				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new upstream revision 'master@sha1:<commit>'"),
+			},
+		},
 		// TODO: Add test case for HTTPS with bearer token auth secret. It
 		// depends on gitkit to have support for bearer token based
 		// authentication.
@@ -674,6 +755,34 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "foo"),
 			},
 		},
+		{
+			// This test is only for verifying the failure state when using
+			// provider auth. Protocol http is used for simplicity.
+			name:     "github provider without github app data in secret makes FetchFailed=True",
+			protocol: "http",
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "github-basic-auth",
+				},
+				Data: map[string][]byte{
+					"username": []byte("abc"),
+					"password": []byte("1234"),
+				},
+			},
+			beforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Spec.SecretRef = &meta.LocalObjectReference{Name: "github-basic-auth"}
+				obj.Spec.Provider = sourcev1.GitProviderGitHub
+				conditions.MarkReconciling(obj, meta.ProgressingReason, "foo")
+				conditions.MarkUnknown(obj, meta.ReadyCondition, meta.ProgressingReason, "foo")
+			},
+			want:    sreconcile.ResultEmpty,
+			wantErr: true,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.InvalidProviderConfigurationReason, "secretRef with github app data must be specified when provider is set to github"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "foo"),
+				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "foo"),
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -695,6 +804,10 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 			g.Expect(err).NotTo(HaveOccurred())
 			defer os.RemoveAll(server.Root())
 			server.AutoCreate()
+
+			if tt.middlewareFunc != nil {
+				server.AddHTTPMiddlewares(tt.middlewareFunc)
+			}
 
 			repoPath := "/test.git"
 			localRepo, err := initGitRepo(server, "testdata/git/repository", git.DefaultBranch, repoPath)
@@ -738,6 +851,10 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 
 			if tt.beforeFunc != nil {
 				tt.beforeFunc(obj)
+			}
+
+			if tt.secretFunc != nil {
+				tt.secretFunc(secret, server.HTTPAddress())
 			}
 
 			clientBuilder := fakeclient.NewClientBuilder().
@@ -849,6 +966,26 @@ func TestGitRepositoryReconciler_getAuthOpts_provider(t *testing.T) {
 				}
 			},
 			wantErr: "secretRef '/githubAppSecret' has github app data but provider is not set to github",
+		},
+		{
+			name: "github provider with basic auth secret",
+			url:  "https://github.com/org/repo.git",
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "basic-auth-secret",
+				},
+				Data: map[string][]byte{
+					"username": []byte("abc"),
+					"password": []byte("1234"),
+				},
+			},
+			beforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Spec.Provider = sourcev1.GitProviderGitHub
+				obj.Spec.SecretRef = &meta.LocalObjectReference{
+					Name: "basic-auth-secret",
+				}
+			},
+			wantErr: "secretRef with github app data must be specified when provider is set to github",
 		},
 		{
 			name: "generic provider",
@@ -2225,85 +2362,6 @@ func TestGitRepositoryReconciler_verifySignature(t *testing.T) {
 				g.Expect(*obj.Status.SourceVerificationMode).To(Equal(*tt.wantSourceVerificationMode))
 			} else {
 				g.Expect(obj.Status.SourceVerificationMode).To(BeNil())
-			}
-		})
-	}
-}
-
-func TestGitRepositoryReconciler_getProxyOpts(t *testing.T) {
-	invalidProxy := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "invalid-proxy",
-			Namespace: "default",
-		},
-		Data: map[string][]byte{
-			"url": []byte("https://example.com"),
-		},
-	}
-	validProxy := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "valid-proxy",
-			Namespace: "default",
-		},
-		Data: map[string][]byte{
-			"address":  []byte("https://example.com"),
-			"username": []byte("user"),
-			"password": []byte("pass"),
-		},
-	}
-
-	clientBuilder := fakeclient.NewClientBuilder().
-		WithScheme(testEnv.GetScheme()).
-		WithObjects(invalidProxy, validProxy)
-
-	r := &GitRepositoryReconciler{
-		Client: clientBuilder.Build(),
-	}
-
-	tests := []struct {
-		name      string
-		secret    string
-		err       string
-		proxyOpts *transport.ProxyOptions
-		proxyURL  *url.URL
-	}{
-		{
-			name:   "non-existent secret",
-			secret: "non-existent",
-			err:    "failed to get proxy secret 'default/non-existent': ",
-		},
-		{
-			name:   "invalid proxy secret",
-			secret: "invalid-proxy",
-			err:    "invalid proxy secret 'default/invalid-proxy': key 'address' is missing",
-		},
-		{
-			name:   "valid proxy secret",
-			secret: "valid-proxy",
-			proxyOpts: &transport.ProxyOptions{
-				URL:      "https://example.com",
-				Username: "user",
-				Password: "pass",
-			},
-			proxyURL: &url.URL{
-				Scheme: "https",
-				Host:   "example.com",
-				User:   url.UserPassword("user", "pass"),
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			g := NewWithT(t)
-			opts, proxyURL, err := r.getProxyOpts(context.TODO(), tt.secret, "default")
-			if opts != nil {
-				g.Expect(err).ToNot(HaveOccurred())
-				g.Expect(opts).To(Equal(tt.proxyOpts))
-				g.Expect(proxyURL).To(Equal(tt.proxyURL))
-			} else {
-				g.Expect(err).To(HaveOccurred())
-				g.Expect(err.Error()).To(ContainSubstring(tt.err))
 			}
 		})
 	}

@@ -30,15 +30,15 @@ require (
 	github.com/fluxcd/pkg/apis/meta v1.18.0
 	github.com/fluxcd/pkg/auth v0.21.0
 	github.com/fluxcd/pkg/cache v0.10.0
-	github.com/fluxcd/pkg/git v0.34.0
-	github.com/fluxcd/pkg/git/gogit v0.37.0
+	github.com/fluxcd/pkg/git v0.35.0
+	github.com/fluxcd/pkg/git/gogit v0.38.0
 	github.com/fluxcd/pkg/gittestserver v0.18.0
 	github.com/fluxcd/pkg/helmtestserver v0.26.0
 	github.com/fluxcd/pkg/http/transport v0.6.0
 	github.com/fluxcd/pkg/lockedfile v0.6.0
 	github.com/fluxcd/pkg/masktoken v0.7.0
 	github.com/fluxcd/pkg/oci v0.52.0
-	github.com/fluxcd/pkg/runtime v0.78.0
+	github.com/fluxcd/pkg/runtime v0.79.0
 	github.com/fluxcd/pkg/sourceignore v0.13.0
 	github.com/fluxcd/pkg/ssh v0.20.0
 	github.com/fluxcd/pkg/tar v0.13.0

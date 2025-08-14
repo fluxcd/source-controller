@@ -357,6 +357,11 @@ same pattern.
 - The private key that was generated in the pre-requisites.
 - (Optional) GitHub Enterprise Server users can set the base URL to
   `http(s)://HOSTNAME/api/v3`.
+- (Optional) If GitHub Enterprise Server uses a private CA, include its bundle (root and any intermediates) in `ca.crt`.
+  If the `ca.crt` is specified, then it will be used for TLS verification for all API / Git over `HTTPS` requests to the GitHub Enterprise Server.
+
+**NOTE:** If the secret contains `tls.crt`, `tls.key` then [mutual TLS configuration](#https-mutual-tls-authentication) will be automatically enabled. 
+Omit these keys if the GitHub server does not support mutual TLS.
 
 ```yaml
 apiVersion: v1
@@ -372,6 +377,10 @@ stringData:
     ...
     -----END RSA PRIVATE KEY-----
   githubAppBaseURL: "<github-enterprise-api-url>" #optional, required only for GitHub Enterprise Server users
+  ca.crt: | #optional, for GitHub Enterprise Server users
+    -----BEGIN CERTIFICATE-----
+    ...
+    -----END CERTIFICATE-----
 ```
 
 Alternatively, the Flux CLI can be used to automatically create the secret with
