@@ -831,7 +831,7 @@ func (r *BucketReconciler) setupCredentials(ctx context.Context, obj *sourcev1.B
 			Namespace: obj.GetNamespace(),
 			Name:      obj.Spec.CertSecretRef.Name,
 		}
-		tlsConfig, err = secrets.TLSConfigFromSecretRef(ctx, r.Client, secretRef, obj.Spec.Endpoint, secrets.WithSystemCertPool())
+		tlsConfig, err = secrets.TLSConfigFromSecretRef(ctx, r.Client, secretRef, secrets.WithSystemCertPool())
 		if err != nil {
 			return nil, fmt.Errorf("failed to get TLS config: %w", err)
 		}
@@ -842,7 +842,7 @@ func (r *BucketReconciler) setupCredentials(ctx context.Context, obj *sourcev1.B
 			Namespace: obj.GetNamespace(),
 			Name:      obj.Spec.STS.CertSecretRef.Name,
 		}
-		stsTLSConfig, err = secrets.TLSConfigFromSecretRef(ctx, r.Client, secretRef, obj.Spec.STS.Endpoint, secrets.WithSystemCertPool())
+		stsTLSConfig, err = secrets.TLSConfigFromSecretRef(ctx, r.Client, secretRef, secrets.WithSystemCertPool())
 		if err != nil {
 			return nil, fmt.Errorf("failed to get STS TLS config: %w", err)
 		}
