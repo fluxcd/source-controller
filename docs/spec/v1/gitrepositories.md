@@ -393,6 +393,24 @@ flux create secret githubapp ghapp-secret \
     --app-private-key=~/private-key.pem    
 ```
 
+### Service Account reference
+
+`.spec.serviceAccountName` is an optional field to specify a Service Account
+in the same namespace as GitRepository with purpose depending on the value of
+the `.spec.provider` field:
+
+- When `.spec.provider` is set to `azure`, the Service Account
+  will be used for Workload Identity authentication. In this case, the controller
+  feature gate `ObjectLevelWorkloadIdentity` must be enabled, otherwise the
+  controller will error out. For Azure DevOps specific setup, see the
+  [Azure DevOps integration guide](https://fluxcd.io/flux/integrations/azure/#for-azure-devops).
+
+**Note:** that for a publicly accessible git repository, you don't need to
+provide a `secretRef` nor `serviceAccountName`.
+
+For a complete guide on how to set up authentication for cloud providers,
+see the integration [docs](/flux/integrations/).
+
 ### Interval
 
 `.spec.interval` is a required field that specifies the interval at which the

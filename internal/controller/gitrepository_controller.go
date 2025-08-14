@@ -663,6 +663,22 @@ func (r *GitRepositoryReconciler) getAuthOpts(ctx context.Context, obj *sourcev1
 		getCreds = func() (*authutils.GitCredentials, error) {
 			var opts []auth.Option
 
+			if obj.Spec.ServiceAccountName != "" {
+				// Check object-level workload identity feature gate.
+				if !auth.IsObjectLevelWorkloadIdentityEnabled() {
+					const gate = auth.FeatureGateObjectLevelWorkloadIdentity
+					const msgFmt = "to use spec.serviceAccountName for provider authentication please enable the %s feature gate in the controller"
+					err := serror.NewStalling(fmt.Errorf(msgFmt, gate), meta.FeatureGateDisabledReason)
+					conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, meta.FeatureGateDisabledReason, "%s", err)
+					return nil, err
+				}
+				serviceAccount := client.ObjectKey{
+					Name:      obj.Spec.ServiceAccountName,
+					Namespace: obj.GetNamespace(),
+				}
+				opts = append(opts, auth.WithServiceAccount(serviceAccount, r.Client))
+			}
+
 			if r.TokenCache != nil {
 				involvedObject := cache.InvolvedObject{
 					Kind:      sourcev1.GitRepositoryKind,
@@ -742,6 +758,12 @@ func (r *GitRepositoryReconciler) getAuthOpts(ctx context.Context, obj *sourcev1
 	if getCreds != nil {
 		creds, err := getCreds()
 		if err != nil {
+			// Check if it's already a structured error and preserve it
+			switch err.(type) {
+			case *serror.Stalling, *serror.Generic:
+				return nil, err
+			}
+
 			e := serror.NewGeneric(
 				fmt.Errorf("failed to configure authentication options: %w", err),
 				sourcev1.AuthenticationFailedReason,
