@@ -127,7 +127,7 @@ func configureAuthentication(ctx context.Context, c client.Client, obj *sourcev1
 		// extend approach (system CAs + user CA) rather than the default replace approach (user CA only).
 		// This ensures HelmRepository continues to work with both system and user-provided CA certificates.
 		var tlsOpts = []secrets.TLSConfigOption{secrets.WithSystemCertPool()}
-		tlsConfig, err := secrets.TLSConfigFromSecret(ctx, secret, obj.Spec.URL, tlsOpts...)
+		tlsConfig, err := secrets.TLSConfigFromSecret(ctx, secret, tlsOpts...)
 		if err != nil {
 			return false, nil, nil, fmt.Errorf("failed to construct Helm client's TLS config: %w", err)
 		}
@@ -148,7 +148,6 @@ func configureAuthentication(ctx context.Context, c client.Client, obj *sourcev1
 		// extend approach (system CAs + user CA) rather than the default replace approach (user CA only).
 		// This ensures HelmRepository auth methods work with both system and user-provided CA certificates.
 		var authOpts = []secrets.AuthMethodsOption{
-			secrets.WithTargetURL(obj.Spec.URL),
 			secrets.WithTLSSystemCertPool(),
 		}
 		methods, err := secrets.AuthMethodsFromSecret(ctx, secret, authOpts...)

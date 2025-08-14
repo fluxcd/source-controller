@@ -689,8 +689,7 @@ func (r *GitRepositoryReconciler) getAuthOpts(ctx context.Context, obj *sourcev1
 			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
 			return nil, e
 		}
-		targetURL := fmt.Sprintf("%s://%s", u.Scheme, u.Host)
-		authMethods, err := secrets.AuthMethodsFromSecret(ctx, secret, secrets.WithTargetURL(targetURL), secrets.WithTLSSystemCertPool())
+		authMethods, err := secrets.AuthMethodsFromSecret(ctx, secret, secrets.WithTLSSystemCertPool())
 		if err != nil {
 			return nil, err
 		}
