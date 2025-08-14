@@ -145,7 +145,8 @@ spec:
               serviceAccountName:
                 description: |-
                   ServiceAccountName is the name of the Kubernetes ServiceAccount used to authenticate
-                  the bucket. For more information about workload identity:
+                  the bucket. This field is only supported for the 'gcp' and 'aws' providers.
+                  For more information about workload identity:
                   https://fluxcd.io/flux/components/source/buckets/#workload-identity
                 type: string
               sts:
@@ -238,8 +239,9 @@ spec:
               rule: '!has(self.sts) || self.sts.provider != ''aws'' || !has(self.sts.secretRef)'
             - message: spec.sts.certSecretRef is not required for the 'aws' STS provider
               rule: '!has(self.sts) || self.sts.provider != ''aws'' || !has(self.sts.certSecretRef)'
-            - message: ServiceAccountName is only supported for the 'gcp' Bucket provider
-              rule: self.provider == 'gcp' || !has(self.serviceAccountName)
+            - message: ServiceAccountName is only supported for the 'gcp' and 'aws'
+                Bucket providers
+              rule: self.provider == 'gcp' || self.provider == 'aws' || !has(self.serviceAccountName)
             - message: cannot set both .spec.secretRef and .spec.serviceAccountName
               rule: '!has(self.secretRef) || !has(self.serviceAccountName)'
           status:

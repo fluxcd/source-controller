@@ -33,7 +33,8 @@ const (
 	// BucketProviderGeneric for any S3 API compatible storage Bucket.
 	BucketProviderGeneric string = "generic"
 	// BucketProviderAmazon for an AWS S3 object storage Bucket.
-	// Provides support for retrieving credentials from the AWS EC2 service.
+	// Provides support for retrieving credentials from the AWS EC2 service
+	// and workload identity authentication.
 	BucketProviderAmazon string = "aws"
 	// BucketProviderGoogle for a Google Cloud Storage Bucket.
 	// Provides support for authentication using a workload identity.
@@ -51,7 +52,7 @@ const (
 // +kubebuilder:validation:XValidation:rule="self.provider != 'generic' || !has(self.sts) || self.sts.provider == 'ldap'", message="'ldap' is the only supported STS provider for the 'generic' Bucket provider"
 // +kubebuilder:validation:XValidation:rule="!has(self.sts) || self.sts.provider != 'aws' || !has(self.sts.secretRef)", message="spec.sts.secretRef is not required for the 'aws' STS provider"
 // +kubebuilder:validation:XValidation:rule="!has(self.sts) || self.sts.provider != 'aws' || !has(self.sts.certSecretRef)", message="spec.sts.certSecretRef is not required for the 'aws' STS provider"
-// +kubebuilder:validation:XValidation:rule="self.provider == 'gcp' || !has(self.serviceAccountName)", message="ServiceAccountName is only supported for the 'gcp' Bucket provider"
+// +kubebuilder:validation:XValidation:rule="self.provider == 'gcp' || self.provider == 'aws' || !has(self.serviceAccountName)", message="ServiceAccountName is only supported for the 'gcp' and 'aws' Bucket providers"
 // +kubebuilder:validation:XValidation:rule="!has(self.secretRef) || !has(self.serviceAccountName)", message="cannot set both .spec.secretRef and .spec.serviceAccountName"
 type BucketSpec struct {
 	// Provider of the object storage bucket.
@@ -96,7 +97,8 @@ type BucketSpec struct {
 	SecretRef *meta.LocalObjectReference `json:"secretRef,omitempty"`
 
 	// ServiceAccountName is the name of the Kubernetes ServiceAccount used to authenticate
-	// the bucket. For more information about workload identity:
+	// the bucket. This field is only supported for the 'gcp' and 'aws' providers.
+	// For more information about workload identity:
 	// https://fluxcd.io/flux/components/source/buckets/#workload-identity
 	// +optional
 	ServiceAccountName string `json:"serviceAccountName,omitempty"`

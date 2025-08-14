@@ -884,6 +884,14 @@ func (r *BucketReconciler) createBucketProvider(ctx context.Context, obj *source
 		authOpts = append(authOpts, auth.WithProxyURL(*creds.proxyURL))
 	}
 
+	if obj.Spec.Region != "" {
+		authOpts = append(authOpts, auth.WithSTSRegion(obj.Spec.Region))
+	}
+
+	if sts := obj.Spec.STS; sts != nil {
+		authOpts = append(authOpts, auth.WithSTSEndpoint(sts.Endpoint))
+	}
+
 	switch obj.Spec.Provider {
 	case sourcev1.BucketProviderGoogle:
 		var opts []gcp.Option
@@ -933,6 +941,8 @@ func (r *BucketReconciler) createBucketProvider(ctx context.Context, obj *source
 		var opts []minio.Option
 		if creds.secret != nil {
 			opts = append(opts, minio.WithSecret(creds.secret))
+		} else if obj.Spec.Provider == sourcev1.BucketProviderAmazon {
+			opts = append(opts, minio.WithAuth(authOpts...))
 		}
 		if creds.tlsConfig != nil {
 			opts = append(opts, minio.WithTLSConfig(creds.tlsConfig))
@@ -946,7 +956,7 @@ func (r *BucketReconciler) createBucketProvider(ctx context.Context, obj *source
 		if creds.stsTLSConfig != nil {
 			opts = append(opts, minio.WithSTSTLSConfig(creds.stsTLSConfig))
 		}
-		return minio.NewClient(obj, opts...)
+		return minio.NewClient(ctx, obj, opts...)
 	}
 }
 

@@ -30,6 +30,9 @@ import (
 	"github.com/minio/minio-go/v7/pkg/s3utils"
 	corev1 "k8s.io/api/core/v1"
 
+	"github.com/fluxcd/pkg/auth"
+	awsauth "github.com/fluxcd/pkg/auth/aws"
+
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 )
 
@@ -46,6 +49,7 @@ type options struct {
 	tlsConfig    *tls.Config
 	stsTLSConfig *tls.Config
 	proxyURL     *url.URL
+	authOpts     []auth.Option
 }
 
 // Option is a function that configures the Minio client.
@@ -86,8 +90,15 @@ func WithSTSTLSConfig(tlsConfig *tls.Config) Option {
 	}
 }
 
+// WithAuth sets the auth options for workload identity authentication.
+func WithAuth(authOpts ...auth.Option) Option {
+	return func(o *options) {
+		o.authOpts = authOpts
+	}
+}
+
 // NewClient creates a new Minio storage client.
-func NewClient(bucket *sourcev1.Bucket, opts ...Option) (*MinioClient, error) {
+func NewClient(ctx context.Context, bucket *sourcev1.Bucket, opts ...Option) (*MinioClient, error) {
 	var o options
 	for _, opt := range opts {
 		opt(&o)
@@ -105,7 +116,11 @@ func NewClient(bucket *sourcev1.Bucket, opts ...Option) (*MinioClient, error) {
 	case o.secret != nil:
 		minioOpts.Creds = newCredsFromSecret(o.secret)
 	case bucketProvider == sourcev1.BucketProviderAmazon:
-		minioOpts.Creds = newAWSCreds(bucket, o.proxyURL)
+		creds, err := newAWSCreds(ctx, &o)
+		if err != nil {
+			return nil, err
+		}
+		minioOpts.Creds = creds
 	case bucketProvider == sourcev1.BucketProviderGeneric:
 		minioOpts.Creds = newGenericCreds(bucket, &o)
 	}
@@ -159,23 +174,30 @@ func newCredsFromSecret(secret *corev1.Secret) *credentials.Credentials {
 }
 
 // newAWSCreds creates a new Minio credentials object for `aws` bucket provider.
-func newAWSCreds(bucket *sourcev1.Bucket, proxyURL *url.URL) *credentials.Credentials {
-	stsEndpoint := ""
-	if sts := bucket.Spec.STS; sts != nil {
-		stsEndpoint = sts.Endpoint
+//
+// This function is only called when Secret authentication is not available.
+//
+// Uses AWS SDK's config.LoadDefaultConfig() which supports:
+// - Workload Identity (IRSA/EKS Pod Identity)
+// - EC2 instance profiles
+// - Environment variables
+// - Shared credentials files
+// - All other AWS SDK authentication methods
+func newAWSCreds(ctx context.Context, o *options) (*credentials.Credentials, error) {
+	var opts auth.Options
+	opts.Apply(o.authOpts...)
+
+	awsCredsProvider := awsauth.NewCredentialsProvider(ctx, o.authOpts...)
+	awsCreds, err := awsCredsProvider.Retrieve(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("AWS authentication failed: %w", err)
 	}
 
-	creds := credentials.NewIAM(stsEndpoint)
-	if proxyURL != nil {
-		transport := http.DefaultTransport.(*http.Transport).Clone()
-		transport.Proxy = http.ProxyURL(proxyURL)
-		client := &http.Client{Transport: transport}
-		creds = credentials.New(&credentials.IAM{
-			Client:   client,
-			Endpoint: stsEndpoint,
-		})
-	}
-	return creds
+	return credentials.NewStaticV4(
+		awsCreds.AccessKeyID,
+		awsCreds.SecretAccessKey,
+		awsCreds.SessionToken,
+	), nil
 }
 
 // newGenericCreds creates a new Minio credentials object for the `generic` bucket provider.

@@ -190,7 +190,8 @@ string
 <td>
 <em>(Optional)</em>
 <p>ServiceAccountName is the name of the Kubernetes ServiceAccount used to authenticate
-the bucket. For more information about workload identity:
+the bucket. This field is only supported for the &lsquo;gcp&rsquo; and &lsquo;aws&rsquo; providers.
+For more information about workload identity:
 <a href="https://fluxcd.io/flux/components/source/buckets/#workload-identity">https://fluxcd.io/flux/components/source/buckets/#workload-identity</a></p>
 </td>
 </tr>
@@ -1646,7 +1647,8 @@ string
 <td>
 <em>(Optional)</em>
 <p>ServiceAccountName is the name of the Kubernetes ServiceAccount used to authenticate
-the bucket. For more information about workload identity:
+the bucket. This field is only supported for the &lsquo;gcp&rsquo; and &lsquo;aws&rsquo; providers.
+For more information about workload identity:
 <a href="https://fluxcd.io/flux/components/source/buckets/#workload-identity">https://fluxcd.io/flux/components/source/buckets/#workload-identity</a></p>
 </td>
 </tr>
