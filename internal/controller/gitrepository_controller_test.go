@@ -48,6 +48,7 @@ import (
 
 	kstatus "github.com/fluxcd/cli-utils/pkg/kstatus/status"
 	"github.com/fluxcd/pkg/apis/meta"
+	"github.com/fluxcd/pkg/auth"
 	"github.com/fluxcd/pkg/git"
 	"github.com/fluxcd/pkg/git/github"
 	"github.com/fluxcd/pkg/gittestserver"
@@ -918,6 +919,15 @@ func TestGitRepositoryReconciler_getAuthOpts_provider(t *testing.T) {
 				obj.Spec.Provider = sourcev1.GitProviderAzure
 			},
 			wantErr: "ManagedIdentityCredential",
+		},
+		{
+			name: "azure provider with service account and feature gate for object-level identity disabled",
+			url:  "https://dev.azure.com/foo/bar/_git/baz",
+			beforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Spec.Provider = sourcev1.GitProviderAzure
+				obj.Spec.ServiceAccountName = "azure-sa"
+			},
+			wantErr: auth.FeatureGateObjectLevelWorkloadIdentity,
 		},
 		{
 			name: "github provider with no secret ref",

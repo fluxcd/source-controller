@@ -413,6 +413,19 @@ When not specified, defaults to &lsquo;generic&rsquo;.</p>
 </tr>
 <tr>
 <td>
+<code>serviceAccountName</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>ServiceAccountName is the name of the Kubernetes ServiceAccount used to
+authenticate to the GitRepository. This field is only supported for &lsquo;azure&rsquo; provider.</p>
+</td>
+</tr>
+<tr>
+<td>
 <code>interval</code><br>
 <em>
 <a href="https://pkg.go.dev/k8s.io/apimachinery/pkg/apis/meta/v1#Duration">
@@ -2063,6 +2076,19 @@ string
 <em>(Optional)</em>
 <p>Provider used for authentication, can be &lsquo;azure&rsquo;, &lsquo;github&rsquo;, &lsquo;generic&rsquo;.
 When not specified, defaults to &lsquo;generic&rsquo;.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>serviceAccountName</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>ServiceAccountName is the name of the Kubernetes ServiceAccount used to
+authenticate to the GitRepository. This field is only supported for &lsquo;azure&rsquo; provider.</p>
 </td>
 </tr>
 <tr>
