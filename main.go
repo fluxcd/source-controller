@@ -121,6 +121,7 @@ func main() {
 		artifactRetentionRecords int
 		artifactDigestAlgo       string
 		tokenCacheOptions        pkgcache.TokenFlags
+		defaultServiceAccount    string
 	)
 
 	flag.StringVar(&metricsAddr, "metrics-addr", envOrDefault("METRICS_ADDR", ":8080"),
@@ -159,6 +160,8 @@ func main() {
 		"The maximum number of artifacts to be kept in storage after a garbage collection.")
 	flag.StringVar(&artifactDigestAlgo, "artifact-digest-algo", intdigest.Canonical.String(),
 		"The algorithm to use to calculate the digest of artifacts.")
+	flag.StringVar(&defaultServiceAccount, auth.ControllerFlagDefaultServiceAccount,
+		"", "Default service account to use for workload identity when not specified in resources.")
 
 	clientOptions.BindFlags(flag.CommandLine)
 	logOptions.BindFlags(flag.CommandLine)
@@ -173,6 +176,10 @@ func main() {
 
 	logger.SetLogger(logger.NewLogger(logOptions))
 
+	if defaultServiceAccount != "" {
+		auth.SetDefaultServiceAccount(defaultServiceAccount)
+	}
+
 	if err := featureGates.WithLogger(setupLog).SupportedFeatures(features.FeatureGates()); err != nil {
 		setupLog.Error(err, "unable to load feature gates")
 		os.Exit(1)
@@ -184,6 +191,11 @@ func main() {
 		os.Exit(1)
 	case enabled:
 		auth.EnableObjectLevelWorkloadIdentity()
+	}
+
+	if auth.InconsistentObjectLevelConfiguration() {
+		setupLog.Error(auth.ErrInconsistentObjectLevelConfiguration, "invalid configuration")
+		os.Exit(1)
 	}
 
 	if err := intervalJitterOptions.SetGlobalJitter(nil); err != nil {

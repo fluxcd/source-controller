@@ -3059,7 +3059,8 @@ func TestOCIRepository_objectLevelWorkloadIdentityFeatureGate(t *testing.T) {
 	g.Expect(stalledCondition.Reason).Should(Equal(meta.FeatureGateDisabledReason))
 	g.Expect(stalledCondition.Message).Should(Equal("to use spec.serviceAccountName for provider authentication please enable the ObjectLevelWorkloadIdentity feature gate in the controller"))
 
-	t.Setenv(auth.EnvVarEnableObjectLevelWorkloadIdentity, "true")
+	auth.EnableObjectLevelWorkloadIdentity()
+	t.Cleanup(auth.DisableObjectLevelWorkloadIdentity)
 
 	g.Eventually(func() bool {
 		if err := testEnv.Get(ctx, key, resultobj); err != nil {

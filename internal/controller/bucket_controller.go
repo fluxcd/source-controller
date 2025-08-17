@@ -860,14 +860,13 @@ func (r *BucketReconciler) setupCredentials(ctx context.Context, obj *sourcev1.B
 // createBucketProvider creates a provider-specific bucket client using the given credentials and configuration.
 // It handles different bucket providers (AWS, GCP, Azure, generic) and returns the appropriate client.
 func (r *BucketReconciler) createBucketProvider(ctx context.Context, obj *sourcev1.Bucket, creds *bucketCredentials) (BucketProvider, error) {
-	var authOpts []auth.Option
+	authOpts := []auth.Option{
+		auth.WithClient(r.Client),
+		auth.WithServiceAccountNamespace(obj.GetNamespace()),
+	}
 
 	if obj.Spec.ServiceAccountName != "" {
-		serviceAccount := client.ObjectKey{
-			Name:      obj.Spec.ServiceAccountName,
-			Namespace: obj.GetNamespace(),
-		}
-		authOpts = append(authOpts, auth.WithServiceAccount(serviceAccount, r.Client))
+		authOpts = append(authOpts, auth.WithServiceAccountName(obj.Spec.ServiceAccountName))
 	}
 
 	if r.TokenCache != nil {
