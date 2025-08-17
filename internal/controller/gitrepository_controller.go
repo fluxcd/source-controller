@@ -661,7 +661,10 @@ func (r *GitRepositoryReconciler) getAuthOpts(ctx context.Context, obj *sourcev1
 	switch provider := obj.GetProvider(); provider {
 	case sourcev1.GitProviderAzure: // If AWS or GCP are added in the future they can be added here separated by a comma.
 		getCreds = func() (*authutils.GitCredentials, error) {
-			var opts []auth.Option
+			opts := []auth.Option{
+				auth.WithClient(r.Client),
+				auth.WithServiceAccountNamespace(obj.GetNamespace()),
+			}
 
 			if obj.Spec.ServiceAccountName != "" {
 				// Check object-level workload identity feature gate.
@@ -672,11 +675,8 @@ func (r *GitRepositoryReconciler) getAuthOpts(ctx context.Context, obj *sourcev1
 					conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, meta.FeatureGateDisabledReason, "%s", err)
 					return nil, err
 				}
-				serviceAccount := client.ObjectKey{
-					Name:      obj.Spec.ServiceAccountName,
-					Namespace: obj.GetNamespace(),
-				}
-				opts = append(opts, auth.WithServiceAccount(serviceAccount, r.Client))
+				// Set ServiceAccountName only if explicitly specified
+				opts = append(opts, auth.WithServiceAccountName(obj.Spec.ServiceAccountName))
 			}
 
 			if r.TokenCache != nil {

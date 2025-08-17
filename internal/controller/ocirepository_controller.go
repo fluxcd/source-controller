@@ -373,7 +373,11 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 	}
 
 	if _, ok := keychain.(soci.Anonymous); obj.Spec.Provider != "" && obj.Spec.Provider != sourcev1.GenericOCIProvider && ok {
-		var opts []auth.Option
+		opts := []auth.Option{
+			auth.WithClient(r.Client),
+			auth.WithServiceAccountNamespace(obj.GetNamespace()),
+		}
+
 		if obj.Spec.ServiceAccountName != "" {
 			// Check object-level workload identity feature gate.
 			if !auth.IsObjectLevelWorkloadIdentityEnabled() {
@@ -382,11 +386,8 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 				err := fmt.Errorf(msgFmt, gate)
 				return sreconcile.ResultEmpty, serror.NewStalling(err, meta.FeatureGateDisabledReason)
 			}
-			serviceAccount := client.ObjectKey{
-				Name:      obj.Spec.ServiceAccountName,
-				Namespace: obj.GetNamespace(),
-			}
-			opts = append(opts, auth.WithServiceAccount(serviceAccount, r.Client))
+			// Set ServiceAccountName only if explicitly specified
+			opts = append(opts, auth.WithServiceAccountName(obj.Spec.ServiceAccountName))
 		}
 		if r.TokenCache != nil {
 			involvedObject := cache.InvolvedObject{

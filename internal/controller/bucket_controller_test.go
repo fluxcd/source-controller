@@ -38,6 +38,7 @@ import (
 
 	kstatus "github.com/fluxcd/cli-utils/pkg/kstatus/status"
 	"github.com/fluxcd/pkg/apis/meta"
+	"github.com/fluxcd/pkg/auth"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	conditionscheck "github.com/fluxcd/pkg/runtime/conditions/check"
 	"github.com/fluxcd/pkg/runtime/jitter"
@@ -1390,11 +1391,10 @@ func TestBucketReconciler_reconcileSource_gcs(t *testing.T) {
 				patchOptions:  getPatchOptions(bucketReadyCondition.Owned, "sc"),
 			}
 
-			// Handle ObjectLevelWorkloadIdentity feature gate environment variable
-			if tt.disableObjectLevelWorkloadIdentity {
-				t.Setenv("ENABLE_OBJECT_LEVEL_WORKLOAD_IDENTITY", "false")
-			} else if tt.serviceAccount != nil {
-				t.Setenv("ENABLE_OBJECT_LEVEL_WORKLOAD_IDENTITY", "true")
+			// Handle ObjectLevelWorkloadIdentity feature gate
+			if !tt.disableObjectLevelWorkloadIdentity {
+				auth.EnableObjectLevelWorkloadIdentity()
+				t.Cleanup(auth.DisableObjectLevelWorkloadIdentity)
 			}
 
 			tmpDir := t.TempDir()
