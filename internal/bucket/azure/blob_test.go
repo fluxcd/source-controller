@@ -106,7 +106,8 @@ func TestNewClientAndBucketExistsWithProxy(t *testing.T) {
 				},
 			}
 
-			client, err := NewClient(bucket,
+			client, err := NewClient(t.Context(),
+				bucket,
 				WithProxyURL(tt.proxyURL),
 				withoutCredentials(),
 				withoutRetries())
@@ -472,7 +473,7 @@ func Test_sasTokenFromSecret(t *testing.T) {
 func Test_chainCredentialWithSecret(t *testing.T) {
 	g := NewWithT(t)
 
-	got, err := chainCredentialWithSecret(nil)
+	got, err := chainCredentialWithSecret(t.Context(), nil)
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(got).To(BeAssignableToTypeOf(&azidentity.ChainedTokenCredential{}))
 }

@@ -920,7 +920,8 @@ func (r *BucketReconciler) createBucketProvider(ctx context.Context, obj *source
 		if creds.proxyURL != nil {
 			opts = append(opts, azure.WithProxyURL(creds.proxyURL))
 		}
-		return azure.NewClient(obj, opts...)
+		opts = append(opts, azure.WithAuth(authOpts...))
+		return azure.NewClient(ctx, obj, opts...)
 
 	default:
 		if err := minio.ValidateSecret(creds.secret); err != nil {
