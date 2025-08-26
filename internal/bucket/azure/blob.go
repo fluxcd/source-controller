@@ -37,6 +37,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 
+	"github.com/fluxcd/pkg/auth"
+	azureauth "github.com/fluxcd/pkg/auth/azure"
 	"github.com/fluxcd/pkg/masktoken"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
@@ -87,6 +89,7 @@ type options struct {
 	proxyURL           *url.URL
 	withoutCredentials bool
 	withoutRetries     bool
+	authOpts           []auth.Option
 }
 
 // withoutCredentials forces the BlobClient to not use any credentials.
@@ -104,6 +107,13 @@ func withoutCredentials() Option {
 func withoutRetries() Option {
 	return func(o *options) {
 		o.withoutRetries = true
+	}
+}
+
+// WithAuth sets the auth options for workload identity authentication.
+func WithAuth(authOpts ...auth.Option) Option {
+	return func(o *options) {
+		o.authOpts = authOpts
 	}
 }
 
@@ -130,7 +140,7 @@ func withoutRetries() Option {
 //
 // If no credentials are found, and the azidentity.ChainedTokenCredential can
 // not be established. A simple client without credentials is returned.
-func NewClient(obj *sourcev1.Bucket, opts ...Option) (c *BlobClient, err error) {
+func NewClient(ctx context.Context, obj *sourcev1.Bucket, opts ...Option) (c *BlobClient, err error) {
 	c = &BlobClient{}
 
 	var o options
@@ -192,7 +202,7 @@ func NewClient(obj *sourcev1.Bucket, opts ...Option) (c *BlobClient, err error) 
 	// Compose token chain based on environment.
 	// This functions as a replacement for azidentity.NewDefaultAzureCredential
 	// to not shell out.
-	token, err = chainCredentialWithSecret(o.secret)
+	token, err = chainCredentialWithSecret(ctx, o.secret, o.authOpts...)
 	if err != nil {
 		err = fmt.Errorf("failed to create environment credential chain: %w", err)
 		return nil, err
@@ -470,7 +480,7 @@ func sasTokenFromSecret(ep string, secret *corev1.Secret) (string, error) {
 //   - azidentity.ManagedIdentityCredential with defaults.
 //
 // If no valid token is created, it returns nil.
-func chainCredentialWithSecret(secret *corev1.Secret) (azcore.TokenCredential, error) {
+func chainCredentialWithSecret(ctx context.Context, secret *corev1.Secret, opts ...auth.Option) (azcore.TokenCredential, error) {
 	var creds []azcore.TokenCredential
 
 	credOpts := &azidentity.EnvironmentCredentialOptions{}
@@ -483,28 +493,7 @@ func chainCredentialWithSecret(secret *corev1.Secret) (azcore.TokenCredential, e
 	if token, _ := azidentity.NewEnvironmentCredential(credOpts); token != nil {
 		creds = append(creds, token)
 	}
-	if clientID := os.Getenv("AZURE_CLIENT_ID"); clientID != "" {
-		if file, ok := os.LookupEnv("AZURE_FEDERATED_TOKEN_FILE"); ok {
-			if _, ok := os.LookupEnv("AZURE_AUTHORITY_HOST"); ok {
-				if tenantID, ok := os.LookupEnv("AZURE_TENANT_ID"); ok {
-					if token, _ := azidentity.NewWorkloadIdentityCredential(&azidentity.WorkloadIdentityCredentialOptions{
-						ClientID:      clientID,
-						TenantID:      tenantID,
-						TokenFilePath: file,
-					}); token != nil {
-						creds = append(creds, token)
-					}
-				}
-			}
-		}
-
-		if token, _ := azidentity.NewManagedIdentityCredential(&azidentity.ManagedIdentityCredentialOptions{
-			ID: azidentity.ClientID(clientID),
-		}); token != nil {
-			creds = append(creds, token)
-		}
-	}
-	if token, _ := azidentity.NewManagedIdentityCredential(nil); token != nil {
+	if token := azureauth.NewTokenCredential(ctx, opts...); token != nil {
 		creds = append(creds, token)
 	}
 

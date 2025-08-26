@@ -567,83 +567,39 @@ metadata:
 spec:
   interval: 5m0s
   provider: azure
-  bucketName: testsas
-  endpoint: https://testfluxsas.blob.core.windows.net
+  bucketName: testwi
+  endpoint: https://testfluxwi.blob.core.windows.net
 ```
 
-##### Deprecated: Managed Identity with AAD Pod Identity
+##### Azure Object-Level Workload Identity example
 
-If you are using [aad pod identity](https://azure.github.io/aad-pod-identity/docs),
-You need to create an Azure Identity and give it access to Azure Blob Storage.
-
-```sh
-export IDENTITY_NAME="blob-access"
-
-az role assignment create --role "Storage Blob Data Reader"  \
---assignee-object-id "$(az identity show -n $IDENTITY_NAME -o tsv --query principalId  -g $RESOURCE_GROUP)" \
---scope "/subscriptions/<SUBSCRIPTION-ID>/resourceGroups/$RESOURCE_GROUP/providers/Microsoft.Storage/storageAccounts/<account-name>/blobServices/default/containers/<container-name>"
-
-export IDENTITY_CLIENT_ID="$(az identity show -n ${IDENTITY_NAME} -g ${RESOURCE_GROUP} -otsv --query clientId)"
-export IDENTITY_RESOURCE_ID="$(az identity show -n ${IDENTITY_NAME} -otsv --query id)"
-```
-
-Create an AzureIdentity object that references the identity created above:
+**Note:** To use Object-Level Workload Identity (`.spec.serviceAccountName` with 
+cloud providers), the controller feature gate `ObjectLevelWorkloadIdentity` must 
+be enabled.
 
 ```yaml
 ---
-apiVersion: aadpodidentity.k8s.io/v1
-kind: AzureIdentity
-metadata:
-  name:  # source-controller label will match this name
-  namespace: flux-system
-spec:
-  clientID: <IDENTITY_CLIENT_ID>
-  resourceID: <IDENTITY_RESOURCE_ID>
-  type: 0  # user-managed identity
-```
-
-Create an AzureIdentityBinding object that binds Pods with a specific selector
-with the AzureIdentity created:
-
-```yaml
-apiVersion: "aadpodidentity.k8s.io/v1"
-kind: AzureIdentityBinding
-metadata:
-  name: ${IDENTITY_NAME}-binding
-spec:
-  azureIdentity: ${IDENTITY_NAME}
-  selector: ${IDENTITY_NAME}
-```
-
-Label the source-controller Deployment correctly so that it can match an identity binding:
-
-```yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: kustomize-controller
-  namespace: flux-system
-spec:
-  template:
-    metadata:
-      labels:
-        aadpodidbinding: ${IDENTITY_NAME}  # match the AzureIdentity name
-```
-
-If you have set up aad-pod-identity correctly and labeled the source-controller
-Deployment, then you don't need to reference a Secret.
-
-```yaml
 apiVersion: source.toolkit.fluxcd.io/v1
 kind: Bucket
 metadata:
-  name: azure-bucket
-  namespace: flux-system
+  name: azure-object-level-workload-identity
+  namespace: default
 spec:
   interval: 5m0s
   provider: azure
-  bucketName: testsas
-  endpoint: https://testfluxsas.blob.core.windows.net
+  bucketName: testwi
+  endpoint: https://testfluxwi.blob.core.windows.net
+  serviceAccountName: azure-workload-identity-sa
+  timeout: 30s
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: azure-workload-identity-sa
+  namespace: default
+  annotations:
+    azure.workload.identity/client-id: <AZURE_CLIENT_ID>
+    azure.workload.identity/tenant-id: <AZURE_TENANT_ID>
 ```
 
 ##### Azure Blob SAS Token example
