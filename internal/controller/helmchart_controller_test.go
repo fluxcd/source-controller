@@ -50,6 +50,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
 	oras "oras.land/oras-go/v2/registry/remote"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -1967,7 +1969,18 @@ func TestHelmChartReconciler_getSource(t *testing.T) {
 				return
 			}
 
-			g.Expect(got).To(Equal(tt.want))
+			// TODO(stefan): Remove this workaround when the controller-runtime fake client restores TypeMeta
+			// https://github.com/kubernetes-sigs/controller-runtime/issues/3302
+			unstructuredGot, err := runtime.DefaultUnstructuredConverter.ToUnstructured(got)
+			g.Expect(err).ToNot(HaveOccurred())
+			gotName, _, err := unstructured.NestedFieldCopy(unstructuredGot, "metadata", "name")
+			g.Expect(err).ToNot(HaveOccurred())
+			unstructuredWant, err := runtime.DefaultUnstructuredConverter.ToUnstructured(tt.want)
+			g.Expect(err).ToNot(HaveOccurred())
+			wantName, _, err := unstructured.NestedFieldCopy(unstructuredWant, "metadata", "name")
+			g.Expect(err).ToNot(HaveOccurred())
+
+			g.Expect(gotName).To(Equal(wantName))
 			g.Expect(err).ToNot(HaveOccurred())
 		})
 	}

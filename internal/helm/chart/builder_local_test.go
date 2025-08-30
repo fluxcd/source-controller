@@ -93,7 +93,7 @@ func TestLocalBuilder_Build(t *testing.T) {
 			name:      "invalid version metadata",
 			reference: LocalReference{Path: "../testdata/charts/helmchart"},
 			buildOpts: BuildOptions{VersionMetadata: "^"},
-			wantErr:   "Invalid Metadata string",
+			wantErr:   "invalid metadata string",
 		},
 		{
 			name:         "with version metadata",

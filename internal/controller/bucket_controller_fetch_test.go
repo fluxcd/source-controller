@@ -24,7 +24,7 @@ import (
 	"testing"
 	"time"
 
-	"gotest.tools/assert"
+	. "github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
@@ -119,7 +119,8 @@ func Test_fetchEtagIndex(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		assert.Equal(t, index.Len(), 3)
+		g := NewWithT(t)
+		g.Expect(index.Len()).To(Equal(3))
 	})
 
 	t.Run("an error while bucket does not exist", func(t *testing.T) {
@@ -129,7 +130,9 @@ func Test_fetchEtagIndex(t *testing.T) {
 
 		index := index.NewDigester()
 		err := fetchEtagIndex(context.TODO(), client, bucket.DeepCopy(), index, tmp)
-		assert.ErrorContains(t, err, "not found")
+		g := NewWithT(t)
+		g.Expect(err).To(HaveOccurred())
+		g.Expect(err.Error()).To(ContainSubstring("not found"))
 	})
 
 	t.Run("filters with .sourceignore rules", func(t *testing.T) {
@@ -153,7 +156,8 @@ func Test_fetchEtagIndex(t *testing.T) {
 		if ok := index.Has("foo.txt"); ok {
 			t.Error(fmt.Errorf("expected 'foo.txt' index item to not exist"))
 		}
-		assert.Equal(t, index.Len(), 1)
+		g := NewWithT(t)
+		g.Expect(index.Len()).To(Equal(1))
 	})
 
 	t.Run("filters with ignore rules from object", func(t *testing.T) {
@@ -177,7 +181,8 @@ func Test_fetchEtagIndex(t *testing.T) {
 			t.Error(err)
 		}
 
-		assert.Equal(t, index.Len(), 1)
+		g := NewWithT(t)
+		g.Expect(index.Len()).To(Equal(1))
 		if ok := index.Has("foo.txt"); !ok {
 			t.Error(fmt.Errorf("expected 'foo.txt' index item to exist"))
 		}
@@ -243,7 +248,8 @@ func Test_fetchFiles(t *testing.T) {
 			t.Fatal(err)
 		}
 		f := index.Get("foo.yaml")
-		assert.Equal(t, f, "etag2")
+		g := NewWithT(t)
+		g.Expect(f).To(Equal("etag2"))
 	})
 
 	t.Run("a disappeared index entry is removed from the index", func(t *testing.T) {
@@ -262,8 +268,9 @@ func Test_fetchFiles(t *testing.T) {
 			t.Fatal(err)
 		}
 		f := index.Get("foo.yaml")
-		assert.Equal(t, f, "etag1")
-		assert.Check(t, !index.Has("bar.yaml"))
+		g := NewWithT(t)
+		g.Expect(f).To(Equal("etag1"))
+		g.Expect(index.Has("bar.yaml")).To(BeFalse())
 	})
 
 	t.Run("can fetch more than maxConcurrentFetches", func(t *testing.T) {

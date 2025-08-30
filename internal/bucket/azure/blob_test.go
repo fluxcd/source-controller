@@ -45,7 +45,7 @@ import (
 func TestNewClientAndBucketExistsWithProxy(t *testing.T) {
 	g := NewWithT(t)
 
-	proxyAddr, proxyPort := testproxy.New(t)
+	proxyAddr, _ := testproxy.New(t)
 
 	// start mock bucket server
 	bucketListener, bucketAddr, _ := testlistener.New(t)
@@ -91,7 +91,7 @@ func TestNewClientAndBucketExistsWithProxy(t *testing.T) {
 		{
 			name:     "with incorrect proxy",
 			endpoint: bucketEndpoint,
-			proxyURL: &url.URL{Scheme: "http", Host: fmt.Sprintf("localhost:%d", proxyPort+1)},
+			proxyURL: &url.URL{Scheme: "http", Host: fmt.Sprintf("localhost:%d", 1)},
 			err:      "connection refused",
 		},
 	}
