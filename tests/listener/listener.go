@@ -22,7 +22,7 @@ import (
 	"strings"
 	"testing"
 
-	"gotest.tools/assert"
+	. "github.com/onsi/gomega"
 )
 
 // New creates a TCP listener on a random port and returns
@@ -33,14 +33,15 @@ func New(t *testing.T) (net.Listener, string, int) {
 	t.Helper()
 
 	lis, err := net.Listen("tcp", "localhost:0")
-	assert.NilError(t, err)
+	g := NewWithT(t)
+	g.Expect(err).NotTo(HaveOccurred())
 	t.Cleanup(func() { lis.Close() })
 
 	addr := lis.Addr().String()
 	addrParts := strings.Split(addr, ":")
 	portStr := addrParts[len(addrParts)-1]
 	port, err := strconv.Atoi(portStr)
-	assert.NilError(t, err)
+	g.Expect(err).NotTo(HaveOccurred())
 
 	return lis, addr, port
 }

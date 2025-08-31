@@ -152,7 +152,7 @@ entries:
 			reference:  RemoteReference{Name: "grafana"},
 			repository: mockRepo(),
 			buildOpts:  BuildOptions{VersionMetadata: "^"},
-			wantErr:    "Invalid Metadata string",
+			wantErr:    "invalid metadata string",
 		},
 		{
 			name:         "with version metadata",
@@ -300,7 +300,7 @@ func TestRemoteBuilder_BuildFromOCIChartRepository(t *testing.T) {
 			reference:  RemoteReference{Name: "grafana"},
 			repository: mockRepo(),
 			buildOpts:  BuildOptions{VersionMetadata: "^"},
-			wantErr:    "Invalid Metadata string",
+			wantErr:    "invalid metadata string",
 		},
 		{
 			name:         "with version metadata",

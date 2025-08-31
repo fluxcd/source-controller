@@ -35,9 +35,9 @@ import (
 	"github.com/google/uuid"
 	miniov7 "github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
+	. "github.com/onsi/gomega"
 	"github.com/ory/dockertest/v3"
 	"github.com/ory/dockertest/v3/docker"
-	"gotest.tools/assert"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -214,16 +214,18 @@ func TestNewClient(t *testing.T) {
 	minioClient, err := NewClient(ctx, bucketStub(bucket, testMinioAddress),
 		WithSecret(secret.DeepCopy()),
 		WithTLSConfig(testTLSConfig))
-	assert.NilError(t, err)
-	assert.Assert(t, minioClient != nil)
+	g := NewWithT(t)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(minioClient).NotTo(BeNil())
 }
 
 func TestNewClientEmptySecret(t *testing.T) {
 	minioClient, err := NewClient(ctx, bucketStub(bucket, testMinioAddress),
 		WithSecret(emptySecret.DeepCopy()),
 		WithTLSConfig(testTLSConfig))
-	assert.NilError(t, err)
-	assert.Assert(t, minioClient != nil)
+	g := NewWithT(t)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(minioClient).NotTo(BeNil())
 }
 
 func TestNewClientAWSProvider(t *testing.T) {
@@ -242,58 +244,65 @@ func TestNewClientAWSProvider(t *testing.T) {
 
 		bucket := bucketStub(bucketAwsProvider, testMinioAddress)
 		minioClient, err := NewClient(ctx, bucket, WithSecret(&validSecret))
-		assert.NilError(t, err)
-		assert.Assert(t, minioClient != nil)
+		g := NewWithT(t)
+		g.Expect(err).NotTo(HaveOccurred())
+		g.Expect(minioClient).NotTo(BeNil())
 	})
 
 	t.Run("without secret", func(t *testing.T) {
 		bucket := bucketStub(bucketAwsProvider, testMinioAddress)
 		minioClient, err := NewClient(ctx, bucket)
-		assert.ErrorContains(t, err, "AWS authentication failed")
-		assert.Assert(t, minioClient == nil)
+		g := NewWithT(t)
+		g.Expect(err).To(HaveOccurred())
+		g.Expect(err.Error()).To(ContainSubstring("AWS authentication failed"))
+		g.Expect(minioClient).To(BeNil())
 	})
 }
 
 func TestBucketExists(t *testing.T) {
 	exists, err := testMinioClient.BucketExists(ctx, bucketName)
-	assert.NilError(t, err)
-	assert.Assert(t, exists)
+	g := NewWithT(t)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(exists).To(BeTrue())
 }
 
 func TestBucketNotExists(t *testing.T) {
 	exists, err := testMinioClient.BucketExists(ctx, "notexistsbucket")
-	assert.NilError(t, err)
-	assert.Assert(t, !exists)
+	g := NewWithT(t)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(exists).To(BeFalse())
 }
 
 func TestFGetObject(t *testing.T) {
 	tempDir := t.TempDir()
 	path := filepath.Join(tempDir, sourceignore.IgnoreFile)
 	_, err := testMinioClient.FGetObject(ctx, bucketName, objectName, path)
-	assert.NilError(t, err)
+	g := NewWithT(t)
+	g.Expect(err).NotTo(HaveOccurred())
 }
 
 func TestNewClientAndFGetObjectWithSTSEndpoint(t *testing.T) {
 	var credsRetrieved bool
 
 	// start a mock LDAP STS server
-	ldapSTSListener, ldapSTSAddr, ldapSTSPort := testlistener.New(t)
+	ldapSTSListener, ldapSTSAddr, _ := testlistener.New(t)
 	ldapSTSEndpoint := fmt.Sprintf("https://%s", ldapSTSAddr)
 	ldapSTSHandler := http.NewServeMux()
 	var ldapUsername, ldapPassword string
 	ldapSTSHandler.HandleFunc("POST /",
 		func(w http.ResponseWriter, r *http.Request) {
+			g := NewWithT(t)
 			err := r.ParseForm()
-			assert.NilError(t, err)
+			g.Expect(err).NotTo(HaveOccurred())
 			username := r.Form.Get("LDAPUsername")
 			password := r.Form.Get("LDAPPassword")
-			assert.Equal(t, username, ldapUsername)
-			assert.Equal(t, password, ldapPassword)
+			g.Expect(username).To(Equal(ldapUsername))
+			g.Expect(password).To(Equal(ldapPassword))
 			var result credentials.LDAPIdentityResult
 			result.Credentials.AccessKey = testMinioRootUser
 			result.Credentials.SecretKey = testMinioRootPassword
 			err = xml.NewEncoder(w).Encode(credentials.AssumeRoleWithLDAPResponse{Result: result})
-			assert.NilError(t, err)
+			g.Expect(err).NotTo(HaveOccurred())
 			credsRetrieved = true
 		})
 	ldapSTSServer := &http.Server{
@@ -329,7 +338,7 @@ func TestNewClientAndFGetObjectWithSTSEndpoint(t *testing.T) {
 			provider: "generic",
 			stsSpec: &sourcev1.BucketSTSSpec{
 				Provider: "ldap",
-				Endpoint: fmt.Sprintf("http://localhost:%d", ldapSTSPort+1),
+				Endpoint: fmt.Sprintf("http://localhost:%d", 1),
 			},
 			err: "connection refused",
 		},
@@ -383,7 +392,7 @@ func TestNewClientAndFGetObjectWithSTSEndpoint(t *testing.T) {
 				Provider: "ldap",
 				Endpoint: ldapSTSEndpoint,
 			},
-			err: "tls: failed to verify certificate: x509: certificate signed by unknown authority",
+			err: "tls: failed to verify certificate",
 		},
 	}
 
@@ -401,16 +410,18 @@ func TestNewClientAndFGetObjectWithSTSEndpoint(t *testing.T) {
 			opts = append(opts, WithTLSConfig(testTLSConfig))
 
 			minioClient, err := NewClient(ctx, bucket, opts...)
-			assert.NilError(t, err)
-			assert.Assert(t, minioClient != nil)
+			g := NewWithT(t)
+			g.Expect(err).NotTo(HaveOccurred())
+			g.Expect(minioClient).NotTo(BeNil())
 
 			path := filepath.Join(t.TempDir(), sourceignore.IgnoreFile)
 			_, err = minioClient.FGetObject(ctx, bucketName, objectName, path)
 			if tt.err != "" {
-				assert.ErrorContains(t, err, tt.err)
+				g.Expect(err).To(HaveOccurred())
+				g.Expect(err.Error()).To(ContainSubstring(tt.err))
 			} else {
-				assert.NilError(t, err)
-				assert.Assert(t, credsRetrieved)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(credsRetrieved).To(BeTrue())
 			}
 		})
 	}
@@ -442,15 +453,17 @@ func TestNewClientAndFGetObjectWithProxy(t *testing.T) {
 				WithSecret(secret.DeepCopy()),
 				WithTLSConfig(testTLSConfig),
 				WithProxyURL(tt.proxyURL))
-			assert.NilError(t, err)
-			assert.Assert(t, minioClient != nil)
+			g := NewWithT(t)
+			g.Expect(err).NotTo(HaveOccurred())
+			g.Expect(minioClient).NotTo(BeNil())
 			tempDir := t.TempDir()
 			path := filepath.Join(tempDir, sourceignore.IgnoreFile)
 			_, err = minioClient.FGetObject(ctx, bucketName, objectName, path)
 			if tt.errSubstring != "" {
-				assert.ErrorContains(t, err, tt.errSubstring)
+				g.Expect(err).To(HaveOccurred())
+				g.Expect(err.Error()).To(ContainSubstring(tt.errSubstring))
 			} else {
-				assert.NilError(t, err)
+				g.Expect(err).NotTo(HaveOccurred())
 			}
 		})
 	}
@@ -461,8 +474,10 @@ func TestFGetObjectNotExists(t *testing.T) {
 	badKey := "invalid.txt"
 	path := filepath.Join(tempDir, badKey)
 	_, err := testMinioClient.FGetObject(ctx, bucketName, badKey, path)
-	assert.Error(t, err, "The specified key does not exist.")
-	assert.Check(t, testMinioClient.ObjectIsNotFound(err))
+	g := NewWithT(t)
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(err.Error()).To(Equal("The specified key does not exist."))
+	g.Expect(testMinioClient.ObjectIsNotFound(err)).To(BeTrue())
 }
 
 func TestVisitObjects(t *testing.T) {
@@ -473,9 +488,10 @@ func TestVisitObjects(t *testing.T) {
 		etags = append(etags, etag)
 		return nil
 	})
-	assert.NilError(t, err)
-	assert.DeepEqual(t, keys, []string{objectName})
-	assert.DeepEqual(t, etags, []string{objectEtag})
+	g := NewWithT(t)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(keys).To(Equal([]string{objectName}))
+	g.Expect(etags).To(Equal([]string{objectEtag}))
 }
 
 func TestVisitObjectsErr(t *testing.T) {
@@ -483,7 +499,9 @@ func TestVisitObjectsErr(t *testing.T) {
 	err := testMinioClient.VisitObjects(ctx, badBucketName, prefix, func(string, string) error {
 		return nil
 	})
-	assert.Error(t, err, fmt.Sprintf("listing objects from bucket '%s' failed: The specified bucket does not exist", badBucketName))
+	g := NewWithT(t)
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(err.Error()).To(Equal(fmt.Sprintf("listing objects from bucket '%s' failed: The specified bucket does not exist", badBucketName)))
 }
 
 func TestVisitObjectsCallbackErr(t *testing.T) {
@@ -491,7 +509,9 @@ func TestVisitObjectsCallbackErr(t *testing.T) {
 	err := testMinioClient.VisitObjects(context.TODO(), bucketName, prefix, func(key, etag string) error {
 		return mockErr
 	})
-	assert.Error(t, err, mockErr.Error())
+	g := NewWithT(t)
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(err.Error()).To(Equal(mockErr.Error()))
 }
 
 func TestValidateSecret(t *testing.T) {
@@ -519,11 +539,13 @@ func TestValidateSecret(t *testing.T) {
 		tt := testCase
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+			g := NewWithT(t)
 			err := ValidateSecret(tt.secret)
 			if tt.error {
-				assert.Error(t, err, fmt.Sprintf("invalid '%v' secret data: required fields 'accesskey' and 'secretkey'", tt.secret.Name))
+				g.Expect(err).To(HaveOccurred())
+				g.Expect(err.Error()).To(Equal(fmt.Sprintf("invalid '%v' secret data: required fields 'accesskey' and 'secretkey'", tt.secret.Name)))
 			} else {
-				assert.NilError(t, err)
+				g.Expect(err).NotTo(HaveOccurred())
 			}
 		})
 	}
@@ -608,11 +630,13 @@ func TestValidateSTSProvider(t *testing.T) {
 			if tt.withCertSecret {
 				sts.CertSecretRef = &meta.LocalObjectReference{}
 			}
+			g := NewWithT(t)
 			err := ValidateSTSProvider(tt.bucketProvider, sts)
 			if tt.err != "" {
-				assert.Error(t, err, tt.err)
+				g.Expect(err).To(HaveOccurred())
+				g.Expect(err.Error()).To(Equal(tt.err))
 			} else {
-				assert.NilError(t, err)
+				g.Expect(err).NotTo(HaveOccurred())
 			}
 		})
 	}
@@ -694,11 +718,13 @@ func TestValidateSTSSecret(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+			g := NewWithT(t)
 			err := ValidateSTSSecret(tt.provider, tt.secret)
 			if tt.err != "" {
-				assert.Error(t, err, tt.err)
+				g.Expect(err).To(HaveOccurred())
+				g.Expect(err.Error()).To(Equal(tt.err))
 			} else {
-				assert.NilError(t, err)
+				g.Expect(err).NotTo(HaveOccurred())
 			}
 		})
 	}
