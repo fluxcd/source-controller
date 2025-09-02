@@ -52,7 +52,7 @@ const (
 // +kubebuilder:validation:XValidation:rule="self.provider != 'generic' || !has(self.sts) || self.sts.provider == 'ldap'", message="'ldap' is the only supported STS provider for the 'generic' Bucket provider"
 // +kubebuilder:validation:XValidation:rule="!has(self.sts) || self.sts.provider != 'aws' || !has(self.sts.secretRef)", message="spec.sts.secretRef is not required for the 'aws' STS provider"
 // +kubebuilder:validation:XValidation:rule="!has(self.sts) || self.sts.provider != 'aws' || !has(self.sts.certSecretRef)", message="spec.sts.certSecretRef is not required for the 'aws' STS provider"
-// +kubebuilder:validation:XValidation:rule="self.provider == 'gcp' || self.provider == 'aws' || !has(self.serviceAccountName)", message="ServiceAccountName is only supported for the 'gcp' and 'aws' Bucket providers"
+// +kubebuilder:validation:XValidation:rule="self.provider != 'generic' || !has(self.serviceAccountName)", message="ServiceAccountName is not supported for the 'generic' Bucket provider"
 // +kubebuilder:validation:XValidation:rule="!has(self.secretRef) || !has(self.serviceAccountName)", message="cannot set both .spec.secretRef and .spec.serviceAccountName"
 type BucketSpec struct {
 	// Provider of the object storage bucket.
