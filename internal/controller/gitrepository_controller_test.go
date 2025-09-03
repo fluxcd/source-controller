@@ -699,7 +699,7 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 			beforeFunc: func(obj *sourcev1.GitRepository) {
 				obj.Spec.SecretRef = &meta.LocalObjectReference{Name: "basic-auth"}
 				obj.Status = sourcev1.GitRepositoryStatus{
-					Artifact: &sourcev1.Artifact{
+					Artifact: &meta.Artifact{
 						Revision: "staging/some-revision",
 						Path:     randStringRunes(10),
 					},
@@ -1166,7 +1166,7 @@ func TestGitRepositoryReconciler_reconcileSource_checkoutStrategy(t *testing.T) 
 			},
 			beforeFunc: func(obj *sourcev1.GitRepository, latestRev string) {
 				obj.Status = sourcev1.GitRepositoryStatus{
-					Artifact: &sourcev1.Artifact{
+					Artifact: &meta.Artifact{
 						Revision: "staging/some-revision",
 						Path:     randStringRunes(10),
 					},
@@ -1187,7 +1187,7 @@ func TestGitRepositoryReconciler_reconcileSource_checkoutStrategy(t *testing.T) 
 			beforeFunc: func(obj *sourcev1.GitRepository, latestRev string) {
 				// Add existing artifact on the object and storage.
 				obj.Status = sourcev1.GitRepositoryStatus{
-					Artifact: &sourcev1.Artifact{
+					Artifact: &meta.Artifact{
 						Revision: "staging@sha1:" + latestRev,
 						Path:     randStringRunes(10),
 					},
@@ -1210,7 +1210,7 @@ func TestGitRepositoryReconciler_reconcileSource_checkoutStrategy(t *testing.T) 
 				obj.Spec.Ignore = ptr.To("foo")
 				// Add existing artifact on the object and storage.
 				obj.Status = sourcev1.GitRepositoryStatus{
-					Artifact: &sourcev1.Artifact{
+					Artifact: &meta.Artifact{
 						Revision: "staging@sha1:" + latestRev,
 						Path:     randStringRunes(10),
 					},
@@ -1341,7 +1341,7 @@ func TestGitRepositoryReconciler_reconcileArtifact(t *testing.T) {
 		{
 			name:     "Archiving artifact to storage with includes makes ArtifactInStorage=True",
 			dir:      "testdata/git/repository",
-			includes: artifactSet{&sourcev1.Artifact{Revision: "main@sha1:b9b3feadba509cb9b22e968a5d27e96c2bc2ff91"}},
+			includes: artifactSet{&meta.Artifact{Revision: "main@sha1:b9b3feadba509cb9b22e968a5d27e96c2bc2ff91"}},
 			beforeFunc: func(obj *sourcev1.GitRepository) {
 				obj.Spec.Interval = metav1.Duration{Duration: interval}
 				obj.Spec.Include = []sourcev1.GitRepositoryInclude{
@@ -1361,14 +1361,14 @@ func TestGitRepositoryReconciler_reconcileArtifact(t *testing.T) {
 		{
 			name:     "Up-to-date artifact should not update status",
 			dir:      "testdata/git/repository",
-			includes: artifactSet{&sourcev1.Artifact{Revision: "main@sha1:b9b3feadba509cb9b22e968a5d27e96c2bc2ff91", Digest: "some-checksum"}},
+			includes: artifactSet{&meta.Artifact{Revision: "main@sha1:b9b3feadba509cb9b22e968a5d27e96c2bc2ff91", Digest: "some-checksum"}},
 			beforeFunc: func(obj *sourcev1.GitRepository) {
 				obj.Spec.Interval = metav1.Duration{Duration: interval}
 				obj.Spec.Include = []sourcev1.GitRepositoryInclude{
 					{GitRepositoryRef: meta.LocalObjectReference{Name: "foo"}},
 				}
-				obj.Status.Artifact = &sourcev1.Artifact{Revision: "main@sha1:b9b3feadba509cb9b22e968a5d27e96c2bc2ff91"}
-				obj.Status.IncludedArtifacts = []*sourcev1.Artifact{{Revision: "main@sha1:b9b3feadba509cb9b22e968a5d27e96c2bc2ff91", Digest: "some-checksum"}}
+				obj.Status.Artifact = &meta.Artifact{Revision: "main@sha1:b9b3feadba509cb9b22e968a5d27e96c2bc2ff91"}
+				obj.Status.IncludedArtifacts = []*meta.Artifact{{Revision: "main@sha1:b9b3feadba509cb9b22e968a5d27e96c2bc2ff91", Digest: "some-checksum"}}
 				obj.Status.ObservedInclude = obj.Spec.Include
 			},
 			want: sreconcile.ResultSuccess,
@@ -1587,7 +1587,7 @@ func TestGitRepositoryReconciler_reconcileInclude(t *testing.T) {
 					},
 				}
 				if d.withArtifact {
-					obj.Status.Artifact = &sourcev1.Artifact{
+					obj.Status.Artifact = &meta.Artifact{
 						Path:           d.name + ".tar.gz",
 						Revision:       d.name,
 						LastUpdateTime: metav1.Now(),
@@ -1682,7 +1682,7 @@ func TestGitRepositoryReconciler_reconcileStorage(t *testing.T) {
 		beforeFunc       func(obj *sourcev1.GitRepository, storage *storage.Storage) error
 		want             sreconcile.Result
 		wantErr          bool
-		assertArtifact   *sourcev1.Artifact
+		assertArtifact   *meta.Artifact
 		assertConditions []metav1.Condition
 		assertPaths      []string
 	}{
@@ -1692,7 +1692,7 @@ func TestGitRepositoryReconciler_reconcileStorage(t *testing.T) {
 				revisions := []string{"a", "b", "c", "d"}
 				for n := range revisions {
 					v := revisions[n]
-					obj.Status.Artifact = &sourcev1.Artifact{
+					obj.Status.Artifact = &meta.Artifact{
 						Path:     fmt.Sprintf("/reconcile-storage/%s.txt", v),
 						Revision: v,
 					}
@@ -1710,7 +1710,7 @@ func TestGitRepositoryReconciler_reconcileStorage(t *testing.T) {
 				conditions.MarkTrue(obj, meta.ReadyCondition, "foo", "bar")
 				return nil
 			},
-			assertArtifact: &sourcev1.Artifact{
+			assertArtifact: &meta.Artifact{
 				Path:     "/reconcile-storage/d.txt",
 				Revision: "d",
 				Digest:   "sha256:18ac3e7343f016890c510e93f935261169d9e3f565436429830faf0934f4f8e4",
@@ -1739,7 +1739,7 @@ func TestGitRepositoryReconciler_reconcileStorage(t *testing.T) {
 		{
 			name: "notices missing artifact in storage",
 			beforeFunc: func(obj *sourcev1.GitRepository, storage *storage.Storage) error {
-				obj.Status.Artifact = &sourcev1.Artifact{
+				obj.Status.Artifact = &meta.Artifact{
 					Path:     "/reconcile-storage/invalid.txt",
 					Revision: "e",
 				}
@@ -1760,7 +1760,7 @@ func TestGitRepositoryReconciler_reconcileStorage(t *testing.T) {
 			beforeFunc: func(obj *sourcev1.GitRepository, storage *storage.Storage) error {
 				f := "empty-digest.txt"
 
-				obj.Status.Artifact = &sourcev1.Artifact{
+				obj.Status.Artifact = &meta.Artifact{
 					Path:     fmt.Sprintf("/reconcile-storage/%s.txt", f),
 					Revision: "fake",
 				}
@@ -1791,7 +1791,7 @@ func TestGitRepositoryReconciler_reconcileStorage(t *testing.T) {
 			beforeFunc: func(obj *sourcev1.GitRepository, storage *storage.Storage) error {
 				f := "digest-mismatch.txt"
 
-				obj.Status.Artifact = &sourcev1.Artifact{
+				obj.Status.Artifact = &meta.Artifact{
 					Path:     fmt.Sprintf("/reconcile-storage/%s.txt", f),
 					Revision: "fake",
 				}
@@ -1820,7 +1820,7 @@ func TestGitRepositoryReconciler_reconcileStorage(t *testing.T) {
 		{
 			name: "updates hostname on diff from current",
 			beforeFunc: func(obj *sourcev1.GitRepository, storage *storage.Storage) error {
-				obj.Status.Artifact = &sourcev1.Artifact{
+				obj.Status.Artifact = &meta.Artifact{
 					Path:     "/reconcile-storage/hostname.txt",
 					Revision: "f",
 					Digest:   "sha256:3b9c358f36f0a31b6ad3e14f309c7cf198ac9246e8316f9ce543d5b19ac02b80",
@@ -1839,7 +1839,7 @@ func TestGitRepositoryReconciler_reconcileStorage(t *testing.T) {
 			assertPaths: []string{
 				"/reconcile-storage/hostname.txt",
 			},
-			assertArtifact: &sourcev1.Artifact{
+			assertArtifact: &meta.Artifact{
 				Path:     "/reconcile-storage/hostname.txt",
 				Revision: "f",
 				Digest:   "sha256:3b9c358f36f0a31b6ad3e14f309c7cf198ac9246e8316f9ce543d5b19ac02b80",
@@ -2799,7 +2799,7 @@ func TestGitRepositoryReconciler_notify(t *testing.T) {
 			res:    sreconcile.ResultSuccess,
 			resErr: nil,
 			newObjBeforeFunc: func(obj *sourcev1.GitRepository) {
-				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Digest: "yyy"}
+				obj.Status.Artifact = &meta.Artifact{Revision: "xxx", Digest: "yyy"}
 			},
 			commit:    concreteCommit,
 			wantEvent: "Normal NewArtifact stored artifact for commit 'test commit'",
@@ -2809,12 +2809,12 @@ func TestGitRepositoryReconciler_notify(t *testing.T) {
 			res:    sreconcile.ResultSuccess,
 			resErr: nil,
 			oldObjBeforeFunc: func(obj *sourcev1.GitRepository) {
-				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Digest: "yyy"}
+				obj.Status.Artifact = &meta.Artifact{Revision: "xxx", Digest: "yyy"}
 				conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.GitOperationFailedReason, "fail")
 				conditions.MarkFalse(obj, meta.ReadyCondition, meta.FailedReason, "foo")
 			},
 			newObjBeforeFunc: func(obj *sourcev1.GitRepository) {
-				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Digest: "yyy"}
+				obj.Status.Artifact = &meta.Artifact{Revision: "xxx", Digest: "yyy"}
 				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "ready")
 			},
 			commit:    concreteCommit,
@@ -2825,12 +2825,12 @@ func TestGitRepositoryReconciler_notify(t *testing.T) {
 			res:    sreconcile.ResultSuccess,
 			resErr: nil,
 			oldObjBeforeFunc: func(obj *sourcev1.GitRepository) {
-				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Digest: "yyy"}
+				obj.Status.Artifact = &meta.Artifact{Revision: "xxx", Digest: "yyy"}
 				conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.GitOperationFailedReason, "fail")
 				conditions.MarkFalse(obj, meta.ReadyCondition, meta.FailedReason, "foo")
 			},
 			newObjBeforeFunc: func(obj *sourcev1.GitRepository) {
-				obj.Status.Artifact = &sourcev1.Artifact{Revision: "aaa", Digest: "bbb"}
+				obj.Status.Artifact = &meta.Artifact{Revision: "aaa", Digest: "bbb"}
 				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "ready")
 			},
 			commit:    concreteCommit,
@@ -2841,11 +2841,11 @@ func TestGitRepositoryReconciler_notify(t *testing.T) {
 			res:    sreconcile.ResultSuccess,
 			resErr: nil,
 			oldObjBeforeFunc: func(obj *sourcev1.GitRepository) {
-				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Digest: "yyy"}
+				obj.Status.Artifact = &meta.Artifact{Revision: "xxx", Digest: "yyy"}
 				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "ready")
 			},
 			newObjBeforeFunc: func(obj *sourcev1.GitRepository) {
-				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Digest: "yyy"}
+				obj.Status.Artifact = &meta.Artifact{Revision: "xxx", Digest: "yyy"}
 				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "ready")
 			},
 		},
@@ -2854,12 +2854,12 @@ func TestGitRepositoryReconciler_notify(t *testing.T) {
 			res:    sreconcile.ResultEmpty,
 			resErr: noopErr,
 			oldObjBeforeFunc: func(obj *sourcev1.GitRepository) {
-				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Digest: "yyy"}
+				obj.Status.Artifact = &meta.Artifact{Revision: "xxx", Digest: "yyy"}
 				conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.GitOperationFailedReason, "fail")
 				conditions.MarkFalse(obj, meta.ReadyCondition, meta.FailedReason, "foo")
 			},
 			newObjBeforeFunc: func(obj *sourcev1.GitRepository) {
-				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Digest: "yyy"}
+				obj.Status.Artifact = &meta.Artifact{Revision: "xxx", Digest: "yyy"}
 				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "ready")
 			},
 			commit:    partialCommit, // no-op will always result in partial commit.
@@ -2950,7 +2950,7 @@ func TestGitRepositoryReconciler_fetchIncludes(t *testing.T) {
 				{name: "b", toPath: "b/", shouldExist: true},
 			},
 			wantErr: false,
-			wantArtifactSet: []*sourcev1.Artifact{
+			wantArtifactSet: []*meta.Artifact{
 				{Revision: "a"},
 				{Revision: "b"},
 			},
@@ -3008,7 +3008,7 @@ func TestGitRepositoryReconciler_fetchIncludes(t *testing.T) {
 					},
 				}
 				if d.withArtifact {
-					obj.Status.Artifact = &sourcev1.Artifact{
+					obj.Status.Artifact = &meta.Artifact{
 						Path:           d.name + ".tar.gz",
 						Revision:       d.name,
 						LastUpdateTime: metav1.Now(),
@@ -3166,7 +3166,7 @@ func TestGitContentConfigChanged(t *testing.T) {
 	tests := []struct {
 		name      string
 		obj       sourcev1.GitRepository
-		artifacts []*sourcev1.Artifact
+		artifacts []*meta.Artifact
 		want      bool
 	}{
 		{
@@ -3266,10 +3266,10 @@ func TestGitContentConfigChanged(t *testing.T) {
 							ToPath:           "baz",
 						},
 					},
-					IncludedArtifacts: []*sourcev1.Artifact{{Revision: "aaa", Digest: "bbb"}},
+					IncludedArtifacts: []*meta.Artifact{{Revision: "aaa", Digest: "bbb"}},
 				},
 			},
-			artifacts: []*sourcev1.Artifact{
+			artifacts: []*meta.Artifact{
 				{Revision: "aaa", Digest: "bbb"},
 			},
 			want: false,
@@ -3294,10 +3294,10 @@ func TestGitContentConfigChanged(t *testing.T) {
 							ToPath:           "baz",
 						},
 					},
-					IncludedArtifacts: []*sourcev1.Artifact{{Revision: "aaa", Digest: "bbb"}},
+					IncludedArtifacts: []*meta.Artifact{{Revision: "aaa", Digest: "bbb"}},
 				},
 			},
-			artifacts: []*sourcev1.Artifact{
+			artifacts: []*meta.Artifact{
 				{Revision: "ccc", Digest: "bbb"},
 			},
 			want: true,
@@ -3322,10 +3322,10 @@ func TestGitContentConfigChanged(t *testing.T) {
 							ToPath:           "baz",
 						},
 					},
-					IncludedArtifacts: []*sourcev1.Artifact{{Revision: "aaa", Digest: "bbb"}},
+					IncludedArtifacts: []*meta.Artifact{{Revision: "aaa", Digest: "bbb"}},
 				},
 			},
-			artifacts: []*sourcev1.Artifact{
+			artifacts: []*meta.Artifact{
 				{Revision: "aaa", Digest: "ddd"},
 			},
 			want: true,
@@ -3350,10 +3350,10 @@ func TestGitContentConfigChanged(t *testing.T) {
 							ToPath:           "baz",
 						},
 					},
-					IncludedArtifacts: []*sourcev1.Artifact{{Revision: "aaa", Digest: "bbb"}},
+					IncludedArtifacts: []*meta.Artifact{{Revision: "aaa", Digest: "bbb"}},
 				},
 			},
-			artifacts: []*sourcev1.Artifact{
+			artifacts: []*meta.Artifact{
 				{Revision: "aaa", Digest: "bbb"},
 			},
 			want: true,
@@ -3376,13 +3376,13 @@ func TestGitContentConfigChanged(t *testing.T) {
 					},
 				},
 				Status: sourcev1.GitRepositoryStatus{
-					IncludedArtifacts: []*sourcev1.Artifact{
+					IncludedArtifacts: []*meta.Artifact{
 						{Revision: "aaa", Digest: "bbb"},
 						{Revision: "ccc", Digest: "ccc"},
 					},
 				},
 			},
-			artifacts: []*sourcev1.Artifact{
+			artifacts: []*meta.Artifact{
 				{Revision: "aaa", Digest: "bbb"},
 				{Revision: "ccc", Digest: "ddd"},
 			},
@@ -3418,13 +3418,13 @@ func TestGitContentConfigChanged(t *testing.T) {
 							ToPath:           "baz",
 						},
 					},
-					IncludedArtifacts: []*sourcev1.Artifact{
+					IncludedArtifacts: []*meta.Artifact{
 						{Revision: "aaa", Digest: "bbb"},
 						{Revision: "ccc", Digest: "ccc"},
 					},
 				},
 			},
-			artifacts: []*sourcev1.Artifact{
+			artifacts: []*meta.Artifact{
 				{Revision: "aaa", Digest: "bbb"},
 			},
 			want: true,
@@ -3459,12 +3459,12 @@ func TestGitContentConfigChanged(t *testing.T) {
 							ToPath:           "baz",
 						},
 					},
-					IncludedArtifacts: []*sourcev1.Artifact{
+					IncludedArtifacts: []*meta.Artifact{
 						{Revision: "aaa", Digest: "bbb"},
 					},
 				},
 			},
-			artifacts: []*sourcev1.Artifact{
+			artifacts: []*meta.Artifact{
 				{Revision: "aaa", Digest: "bbb"},
 				{Revision: "ccc", Digest: "ccc"},
 			},

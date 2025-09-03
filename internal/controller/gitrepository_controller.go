@@ -938,7 +938,7 @@ func (r *GitRepositoryReconciler) reconcileInclude(ctx context.Context, sp *patc
 		// such that the index of artifactSet matches with the index of Include.
 		// Hence, index is used here to pick the associated artifact from
 		// includes.
-		var artifact *sourcev1.Artifact
+		var artifact *meta.Artifact
 		for j, art := range *includes {
 			if i == j {
 				artifact = art
@@ -1271,7 +1271,7 @@ func gitContentConfigChanged(obj *sourcev1.GitRepository, includes *artifactSet)
 
 	// Convert artifactSet to index addressable artifacts and ensure that it and
 	// the included artifacts include all the include from the spec.
-	artifacts := []*sourcev1.Artifact(*includes)
+	artifacts := []*meta.Artifact(*includes)
 	if len(obj.Spec.Include) != len(artifacts) {
 		return true
 	}

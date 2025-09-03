@@ -20,6 +20,8 @@ import (
 	"time"
 
 	"k8s.io/apimachinery/pkg/runtime"
+
+	"github.com/fluxcd/pkg/apis/meta"
 )
 
 const (
@@ -41,5 +43,5 @@ type Source interface {
 	GetRequeueAfter() time.Duration
 	// GetArtifact returns the latest artifact from the source if present in
 	// the status sub-resource.
-	GetArtifact() *Artifact
+	GetArtifact() *meta.Artifact
 }

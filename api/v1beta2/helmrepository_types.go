@@ -23,8 +23,6 @@ import (
 
 	"github.com/fluxcd/pkg/apis/acl"
 	"github.com/fluxcd/pkg/apis/meta"
-
-	apiv1 "github.com/fluxcd/source-controller/api/v1"
 )
 
 const (
@@ -152,7 +150,7 @@ type HelmRepositoryStatus struct {
 
 	// Artifact represents the last successful HelmRepository reconciliation.
 	// +optional
-	Artifact *apiv1.Artifact `json:"artifact,omitempty"`
+	Artifact *meta.Artifact `json:"artifact,omitempty"`
 
 	meta.ReconcileRequestStatus `json:",inline"`
 }
@@ -193,7 +191,7 @@ func (in HelmRepository) GetTimeout() time.Duration {
 
 // GetArtifact returns the latest artifact from the source if present in the
 // status sub-resource.
-func (in *HelmRepository) GetArtifact() *apiv1.Artifact {
+func (in *HelmRepository) GetArtifact() *meta.Artifact {
 	return in.Status.Artifact
 }
 

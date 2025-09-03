@@ -149,7 +149,7 @@ type HelmChartStatus struct {
 
 	// Artifact represents the output of the last successful reconciliation.
 	// +optional
-	Artifact *Artifact `json:"artifact,omitempty"`
+	Artifact *meta.Artifact `json:"artifact,omitempty"`
 
 	meta.ReconcileRequestStatus `json:",inline"`
 }
@@ -182,7 +182,7 @@ func (in HelmChart) GetRequeueAfter() time.Duration {
 
 // GetArtifact returns the latest artifact from the source if present in the
 // status sub-resource.
-func (in *HelmChart) GetArtifact() *Artifact {
+func (in *HelmChart) GetArtifact() *meta.Artifact {
 	return in.Status.Artifact
 }
 

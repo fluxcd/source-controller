@@ -697,7 +697,7 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 // v1.Artifact.
 // In case of a failure it records v1.FetchFailedCondition on the chart
 // object, and returns early.
-func (r *HelmChartReconciler) buildFromTarballArtifact(ctx context.Context, obj *sourcev1.HelmChart, source sourcev1.Artifact, b *chart.Build) (sreconcile.Result, error) {
+func (r *HelmChartReconciler) buildFromTarballArtifact(ctx context.Context, obj *sourcev1.HelmChart, source meta.Artifact, b *chart.Build) (sreconcile.Result, error) {
 	// Create temporary working directory
 	tmpDir, err := util.TempDirForObj("", obj)
 	if err != nil {

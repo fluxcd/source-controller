@@ -201,7 +201,7 @@ func TestBucketReconciler_reconcileStorage(t *testing.T) {
 		beforeFunc       func(obj *sourcev1.Bucket, storage *storage.Storage) error
 		want             sreconcile.Result
 		wantErr          bool
-		assertArtifact   *sourcev1.Artifact
+		assertArtifact   *meta.Artifact
 		assertConditions []metav1.Condition
 		assertPaths      []string
 	}{
@@ -211,7 +211,7 @@ func TestBucketReconciler_reconcileStorage(t *testing.T) {
 				revisions := []string{"a", "b", "c", "d"}
 				for n := range revisions {
 					v := revisions[n]
-					obj.Status.Artifact = &sourcev1.Artifact{
+					obj.Status.Artifact = &meta.Artifact{
 						Path:     fmt.Sprintf("/reconcile-storage/%s.txt", v),
 						Revision: v,
 					}
@@ -229,7 +229,7 @@ func TestBucketReconciler_reconcileStorage(t *testing.T) {
 				conditions.MarkTrue(obj, meta.ReadyCondition, "foo", "bar")
 				return nil
 			},
-			assertArtifact: &sourcev1.Artifact{
+			assertArtifact: &meta.Artifact{
 				Path:     "/reconcile-storage/d.txt",
 				Revision: "d",
 				Digest:   "sha256:18ac3e7343f016890c510e93f935261169d9e3f565436429830faf0934f4f8e4",
@@ -258,7 +258,7 @@ func TestBucketReconciler_reconcileStorage(t *testing.T) {
 		{
 			name: "notices missing artifact in storage",
 			beforeFunc: func(obj *sourcev1.Bucket, storage *storage.Storage) error {
-				obj.Status.Artifact = &sourcev1.Artifact{
+				obj.Status.Artifact = &meta.Artifact{
 					Path:     "/reconcile-storage/invalid.txt",
 					Revision: "d",
 				}
@@ -279,7 +279,7 @@ func TestBucketReconciler_reconcileStorage(t *testing.T) {
 			beforeFunc: func(obj *sourcev1.Bucket, storage *storage.Storage) error {
 				f := "empty-digest.txt"
 
-				obj.Status.Artifact = &sourcev1.Artifact{
+				obj.Status.Artifact = &meta.Artifact{
 					Path:     fmt.Sprintf("/reconcile-storage/%s.txt", f),
 					Revision: "fake",
 				}
@@ -310,7 +310,7 @@ func TestBucketReconciler_reconcileStorage(t *testing.T) {
 			beforeFunc: func(obj *sourcev1.Bucket, storage *storage.Storage) error {
 				f := "digest-mismatch.txt"
 
-				obj.Status.Artifact = &sourcev1.Artifact{
+				obj.Status.Artifact = &meta.Artifact{
 					Path:     fmt.Sprintf("/reconcile-storage/%s.txt", f),
 					Revision: "fake",
 				}
@@ -339,7 +339,7 @@ func TestBucketReconciler_reconcileStorage(t *testing.T) {
 		{
 			name: "updates hostname on diff from current",
 			beforeFunc: func(obj *sourcev1.Bucket, storage *storage.Storage) error {
-				obj.Status.Artifact = &sourcev1.Artifact{
+				obj.Status.Artifact = &meta.Artifact{
 					Path:     "/reconcile-storage/hostname.txt",
 					Revision: "f",
 					Digest:   "sha256:3b9c358f36f0a31b6ad3e14f309c7cf198ac9246e8316f9ce543d5b19ac02b80",
@@ -358,7 +358,7 @@ func TestBucketReconciler_reconcileStorage(t *testing.T) {
 			assertPaths: []string{
 				"/reconcile-storage/hostname.txt",
 			},
-			assertArtifact: &sourcev1.Artifact{
+			assertArtifact: &meta.Artifact{
 				Path:     "/reconcile-storage/hostname.txt",
 				Revision: "f",
 				Digest:   "sha256:3b9c358f36f0a31b6ad3e14f309c7cf198ac9246e8316f9ce543d5b19ac02b80",
@@ -827,7 +827,7 @@ func TestBucketReconciler_reconcileSource_generic(t *testing.T) {
 			name:       "Up-to-date artifact",
 			bucketName: "dummy",
 			beforeFunc: func(obj *sourcev1.Bucket) {
-				obj.Status.Artifact = &sourcev1.Artifact{
+				obj.Status.Artifact = &meta.Artifact{
 					Revision: "sha256:b4c2a60ce44b67f5b659a95ce4e4cc9e2a86baf13afb72bd397c5384cbc0e479",
 				}
 				conditions.MarkReconciling(obj, meta.ProgressingReason, "foo")
@@ -885,7 +885,7 @@ func TestBucketReconciler_reconcileSource_generic(t *testing.T) {
 				},
 			},
 			beforeFunc: func(obj *sourcev1.Bucket) {
-				obj.Status.Artifact = &sourcev1.Artifact{
+				obj.Status.Artifact = &meta.Artifact{
 					Path:     "some-path",
 					Revision: "some-rev",
 				}
@@ -1219,7 +1219,7 @@ func TestBucketReconciler_reconcileSource_gcs(t *testing.T) {
 			name:       "Up-to-date artifact",
 			bucketName: "dummy",
 			beforeFunc: func(obj *sourcev1.Bucket) {
-				obj.Status.Artifact = &sourcev1.Artifact{
+				obj.Status.Artifact = &meta.Artifact{
 					Revision: "sha256:b4c2a60ce44b67f5b659a95ce4e4cc9e2a86baf13afb72bd397c5384cbc0e479",
 				}
 				conditions.MarkReconciling(obj, meta.ProgressingReason, "foo")
@@ -1277,7 +1277,7 @@ func TestBucketReconciler_reconcileSource_gcs(t *testing.T) {
 				},
 			},
 			beforeFunc: func(obj *sourcev1.Bucket) {
-				obj.Status.Artifact = &sourcev1.Artifact{
+				obj.Status.Artifact = &meta.Artifact{
 					Path:     "some-path",
 					Revision: "some-rev",
 				}
@@ -1488,7 +1488,7 @@ func TestBucketReconciler_reconcileArtifact(t *testing.T) {
 				revision := index.Digest(intdigest.Canonical)
 				obj.Spec.Interval = metav1.Duration{Duration: interval}
 				// Incomplete artifact
-				obj.Status.Artifact = &sourcev1.Artifact{Revision: revision.String()}
+				obj.Status.Artifact = &meta.Artifact{Revision: revision.String()}
 				conditions.MarkReconciling(obj, meta.ProgressingReason, "foo")
 				conditions.MarkUnknown(obj, meta.ReadyCondition, "foo", "bar")
 			},
@@ -1751,7 +1751,7 @@ func TestBucketReconciler_notify(t *testing.T) {
 			res:    sreconcile.ResultSuccess,
 			resErr: nil,
 			newObjBeforeFunc: func(obj *sourcev1.Bucket) {
-				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Digest: "yyy"}
+				obj.Status.Artifact = &meta.Artifact{Revision: "xxx", Digest: "yyy"}
 			},
 			wantEvent: "Normal NewArtifact stored artifact with 2 fetched files from",
 		},
@@ -1760,12 +1760,12 @@ func TestBucketReconciler_notify(t *testing.T) {
 			res:    sreconcile.ResultSuccess,
 			resErr: nil,
 			oldObjBeforeFunc: func(obj *sourcev1.Bucket) {
-				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Digest: "yyy"}
+				obj.Status.Artifact = &meta.Artifact{Revision: "xxx", Digest: "yyy"}
 				conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.GitOperationFailedReason, "fail")
 				conditions.MarkFalse(obj, meta.ReadyCondition, meta.FailedReason, "foo")
 			},
 			newObjBeforeFunc: func(obj *sourcev1.Bucket) {
-				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Digest: "yyy"}
+				obj.Status.Artifact = &meta.Artifact{Revision: "xxx", Digest: "yyy"}
 				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "ready")
 			},
 			wantEvent: "Normal Succeeded stored artifact with 2 fetched files from",
@@ -1775,12 +1775,12 @@ func TestBucketReconciler_notify(t *testing.T) {
 			res:    sreconcile.ResultSuccess,
 			resErr: nil,
 			oldObjBeforeFunc: func(obj *sourcev1.Bucket) {
-				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Digest: "yyy"}
+				obj.Status.Artifact = &meta.Artifact{Revision: "xxx", Digest: "yyy"}
 				conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.GitOperationFailedReason, "fail")
 				conditions.MarkFalse(obj, meta.ReadyCondition, meta.FailedReason, "foo")
 			},
 			newObjBeforeFunc: func(obj *sourcev1.Bucket) {
-				obj.Status.Artifact = &sourcev1.Artifact{Revision: "aaa", Digest: "bbb"}
+				obj.Status.Artifact = &meta.Artifact{Revision: "aaa", Digest: "bbb"}
 				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "ready")
 			},
 			wantEvent: "Normal NewArtifact stored artifact with 2 fetched files from",
@@ -1790,11 +1790,11 @@ func TestBucketReconciler_notify(t *testing.T) {
 			res:    sreconcile.ResultSuccess,
 			resErr: nil,
 			oldObjBeforeFunc: func(obj *sourcev1.Bucket) {
-				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Digest: "yyy"}
+				obj.Status.Artifact = &meta.Artifact{Revision: "xxx", Digest: "yyy"}
 				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "ready")
 			},
 			newObjBeforeFunc: func(obj *sourcev1.Bucket) {
-				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Digest: "yyy"}
+				obj.Status.Artifact = &meta.Artifact{Revision: "xxx", Digest: "yyy"}
 				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "ready")
 			},
 		},

@@ -203,7 +203,7 @@ func (in *BucketStatus) DeepCopyInto(out *BucketStatus) {
 	}
 	if in.Artifact != nil {
 		in, out := &in.Artifact, &out.Artifact
-		*out = new(apiv1.Artifact)
+		*out = new(meta.Artifact)
 		(*in).DeepCopyInto(*out)
 	}
 	if in.ObservedIgnore != nil {
@@ -377,16 +377,16 @@ func (in *GitRepositoryStatus) DeepCopyInto(out *GitRepositoryStatus) {
 	}
 	if in.Artifact != nil {
 		in, out := &in.Artifact, &out.Artifact
-		*out = new(apiv1.Artifact)
+		*out = new(meta.Artifact)
 		(*in).DeepCopyInto(*out)
 	}
 	if in.IncludedArtifacts != nil {
 		in, out := &in.IncludedArtifacts, &out.IncludedArtifacts
-		*out = make([]*apiv1.Artifact, len(*in))
+		*out = make([]*meta.Artifact, len(*in))
 		for i := range *in {
 			if (*in)[i] != nil {
 				in, out := &(*in)[i], &(*out)[i]
-				*out = new(apiv1.Artifact)
+				*out = new(meta.Artifact)
 				(*in).DeepCopyInto(*out)
 			}
 		}
@@ -538,7 +538,7 @@ func (in *HelmChartStatus) DeepCopyInto(out *HelmChartStatus) {
 	}
 	if in.Artifact != nil {
 		in, out := &in.Artifact, &out.Artifact
-		*out = new(apiv1.Artifact)
+		*out = new(meta.Artifact)
 		(*in).DeepCopyInto(*out)
 	}
 	out.ReconcileRequestStatus = in.ReconcileRequestStatus
@@ -661,7 +661,7 @@ func (in *HelmRepositoryStatus) DeepCopyInto(out *HelmRepositoryStatus) {
 	}
 	if in.Artifact != nil {
 		in, out := &in.Artifact, &out.Artifact
-		*out = new(apiv1.Artifact)
+		*out = new(meta.Artifact)
 		(*in).DeepCopyInto(*out)
 	}
 	out.ReconcileRequestStatus = in.ReconcileRequestStatus
@@ -849,7 +849,7 @@ func (in *OCIRepositoryStatus) DeepCopyInto(out *OCIRepositoryStatus) {
 	}
 	if in.Artifact != nil {
 		in, out := &in.Artifact, &out.Artifact
-		*out = new(apiv1.Artifact)
+		*out = new(meta.Artifact)
 		(*in).DeepCopyInto(*out)
 	}
 	if in.ObservedIgnore != nil {

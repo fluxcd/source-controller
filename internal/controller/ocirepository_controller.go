@@ -132,7 +132,7 @@ func (e invalidOCIURLError) Error() string {
 // ociRepositoryReconcileFunc is the function type for all the v1.OCIRepository
 // (sub)reconcile functions. The type implementations are grouped and
 // executed serially to perform the complete reconcile of the object.
-type ociRepositoryReconcileFunc func(ctx context.Context, sp *patch.SerialPatcher, obj *sourcev1.OCIRepository, metadata *sourcev1.Artifact, dir string) (sreconcile.Result, error)
+type ociRepositoryReconcileFunc func(ctx context.Context, sp *patch.SerialPatcher, obj *sourcev1.OCIRepository, metadata *meta.Artifact, dir string) (sreconcile.Result, error)
 
 // OCIRepositoryReconciler reconciles a v1.OCIRepository object
 type OCIRepositoryReconciler struct {
@@ -301,7 +301,7 @@ func (r *OCIRepositoryReconciler) reconcile(ctx context.Context, sp *patch.Seria
 	var (
 		res      sreconcile.Result
 		resErr   error
-		metadata = sourcev1.Artifact{}
+		metadata = meta.Artifact{}
 	)
 
 	// Run the sub-reconcilers and build the result of reconciliation.
@@ -330,7 +330,7 @@ func (r *OCIRepositoryReconciler) reconcile(ctx context.Context, sp *patch.Seria
 // reconcileSource fetches the upstream OCI artifact metadata and content.
 // If this fails, it records v1.FetchFailedCondition=True on the object and returns early.
 func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch.SerialPatcher,
-	obj *sourcev1.OCIRepository, metadata *sourcev1.Artifact, dir string) (sreconcile.Result, error) {
+	obj *sourcev1.OCIRepository, metadata *meta.Artifact, dir string) (sreconcile.Result, error) {
 	var authenticator authn.Authenticator
 
 	ctxTimeout, cancel := context.WithTimeout(ctx, obj.Spec.Timeout.Duration)
@@ -455,7 +455,7 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
 		return sreconcile.ResultEmpty, e
 	}
-	metaArtifact := &sourcev1.Artifact{Revision: revision}
+	metaArtifact := &meta.Artifact{Revision: revision}
 	metaArtifact.DeepCopyInto(metadata)
 
 	// Mark observations about the revision on the object
@@ -1024,7 +1024,7 @@ func (r *OCIRepositoryReconciler) getTLSConfig(ctx context.Context, obj *sourcev
 // The hostname of any URL in the Status of the object are updated, to ensure
 // they match the Storage server hostname of current runtime.
 func (r *OCIRepositoryReconciler) reconcileStorage(ctx context.Context, sp *patch.SerialPatcher,
-	obj *sourcev1.OCIRepository, _ *sourcev1.Artifact, _ string) (sreconcile.Result, error) {
+	obj *sourcev1.OCIRepository, _ *meta.Artifact, _ string) (sreconcile.Result, error) {
 	// Garbage collect previous advertised artifact(s) from storage
 	_ = r.garbageCollect(ctx, obj)
 
@@ -1087,7 +1087,7 @@ func (r *OCIRepositoryReconciler) reconcileStorage(ctx context.Context, sp *patc
 // On a successful archive, the Artifact in the Status of the object is set,
 // and the symlink in the Storage is updated to its path.
 func (r *OCIRepositoryReconciler) reconcileArtifact(ctx context.Context, sp *patch.SerialPatcher,
-	obj *sourcev1.OCIRepository, metadata *sourcev1.Artifact, dir string) (sreconcile.Result, error) {
+	obj *sourcev1.OCIRepository, metadata *meta.Artifact, dir string) (sreconcile.Result, error) {
 	// Create artifact
 	artifact := r.Storage.NewArtifactFor(obj.Kind, obj, metadata.Revision,
 		fmt.Sprintf("%s.tar.gz", r.digestFromRevision(metadata.Revision)))
