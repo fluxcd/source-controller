@@ -1,0 +1,20 @@
+# permissions for end users to view externalartifacts.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: externalartifacts-viewer-role
+rules:
+- apiGroups:
+  - source.toolkit.fluxcd.io
+  resources:
+  - externalartifacts
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - source.toolkit.fluxcd.io
+  resources:
+  - externalartifacts/status
+  verbs:
+  - get

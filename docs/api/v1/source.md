@@ -1756,6 +1756,165 @@ github.com/fluxcd/pkg/apis/meta.ReconcileRequestStatus
 </table>
 </div>
 </div>
+<h3 id="source.toolkit.fluxcd.io/v1.ExternalArtifact">ExternalArtifact
+</h3>
+<p>ExternalArtifact is the Schema for the external artifacts API</p>
+<div class="md-typeset__scrollwrap">
+<div class="md-typeset__table">
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>metadata</code><br>
+<em>
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.19/#objectmeta-v1-meta">
+Kubernetes meta/v1.ObjectMeta
+</a>
+</em>
+</td>
+<td>
+Refer to the Kubernetes API documentation for the fields of the
+<code>metadata</code> field.
+</td>
+</tr>
+<tr>
+<td>
+<code>spec</code><br>
+<em>
+<a href="#source.toolkit.fluxcd.io/v1.ExternalArtifactSpec">
+ExternalArtifactSpec
+</a>
+</em>
+</td>
+<td>
+<br/>
+<br/>
+<table>
+<tr>
+<td>
+<code>sourceRef</code><br>
+<em>
+<a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/meta#NamespacedObjectKindReference">
+github.com/fluxcd/pkg/apis/meta.NamespacedObjectKindReference
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>SourceRef points to the Kubernetes custom resource for
+which the artifact is generated.</p>
+</td>
+</tr>
+</table>
+</td>
+</tr>
+<tr>
+<td>
+<code>status</code><br>
+<em>
+<a href="#source.toolkit.fluxcd.io/v1.ExternalArtifactStatus">
+ExternalArtifactStatus
+</a>
+</em>
+</td>
+<td>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<h3 id="source.toolkit.fluxcd.io/v1.ExternalArtifactSpec">ExternalArtifactSpec
+</h3>
+<p>
+(<em>Appears on:</em>
+<a href="#source.toolkit.fluxcd.io/v1.ExternalArtifact">ExternalArtifact</a>)
+</p>
+<p>ExternalArtifactSpec defines the desired state of ExternalArtifact</p>
+<div class="md-typeset__scrollwrap">
+<div class="md-typeset__table">
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>sourceRef</code><br>
+<em>
+<a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/meta#NamespacedObjectKindReference">
+github.com/fluxcd/pkg/apis/meta.NamespacedObjectKindReference
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>SourceRef points to the Kubernetes custom resource for
+which the artifact is generated.</p>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<h3 id="source.toolkit.fluxcd.io/v1.ExternalArtifactStatus">ExternalArtifactStatus
+</h3>
+<p>
+(<em>Appears on:</em>
+<a href="#source.toolkit.fluxcd.io/v1.ExternalArtifact">ExternalArtifact</a>)
+</p>
+<p>ExternalArtifactStatus defines the observed state of ExternalArtifact</p>
+<div class="md-typeset__scrollwrap">
+<div class="md-typeset__table">
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>artifact</code><br>
+<em>
+<a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/meta#Artifact">
+github.com/fluxcd/pkg/apis/meta.Artifact
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Artifact represents the output of an ExternalArtifact reconciliation.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>conditions</code><br>
+<em>
+<a href="https://pkg.go.dev/k8s.io/apimachinery/pkg/apis/meta/v1#Condition">
+[]Kubernetes meta/v1.Condition
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Conditions holds the conditions for the ExternalArtifact.</p>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
 <h3 id="source.toolkit.fluxcd.io/v1.GitRepositoryInclude">GitRepositoryInclude
 </h3>
 <p>
