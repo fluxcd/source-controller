@@ -299,6 +299,7 @@ spec:
                       consumption, e.g. by another controller applying the Artifact contents.
                     type: string
                 required:
+                - digest
                 - lastUpdateTime
                 - path
                 - revision
@@ -696,6 +697,7 @@ spec:
                       consumption, e.g. by another controller applying the Artifact contents.
                     type: string
                 required:
+                - digest
                 - lastUpdateTime
                 - path
                 - revision

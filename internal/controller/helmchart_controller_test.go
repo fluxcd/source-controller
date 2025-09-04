@@ -336,7 +336,7 @@ func TestHelmChartReconciler_reconcileStorage(t *testing.T) {
 		beforeFunc       func(obj *sourcev1.HelmChart, storage *storage.Storage) error
 		want             sreconcile.Result
 		wantErr          bool
-		assertArtifact   *sourcev1.Artifact
+		assertArtifact   *meta.Artifact
 		assertConditions []metav1.Condition
 		assertPaths      []string
 	}{
@@ -346,7 +346,7 @@ func TestHelmChartReconciler_reconcileStorage(t *testing.T) {
 				revisions := []string{"a", "b", "c", "d"}
 				for n := range revisions {
 					v := revisions[n]
-					obj.Status.Artifact = &sourcev1.Artifact{
+					obj.Status.Artifact = &meta.Artifact{
 						Path:     fmt.Sprintf("/reconcile-storage/%s.txt", v),
 						Revision: v,
 					}
@@ -364,7 +364,7 @@ func TestHelmChartReconciler_reconcileStorage(t *testing.T) {
 				conditions.MarkTrue(obj, meta.ReadyCondition, "foo", "bar")
 				return nil
 			},
-			assertArtifact: &sourcev1.Artifact{
+			assertArtifact: &meta.Artifact{
 				Path:     "/reconcile-storage/d.txt",
 				Revision: "d",
 				Digest:   "sha256:18ac3e7343f016890c510e93f935261169d9e3f565436429830faf0934f4f8e4",
@@ -393,7 +393,7 @@ func TestHelmChartReconciler_reconcileStorage(t *testing.T) {
 		{
 			name: "notices missing artifact in storage",
 			beforeFunc: func(obj *sourcev1.HelmChart, storage *storage.Storage) error {
-				obj.Status.Artifact = &sourcev1.Artifact{
+				obj.Status.Artifact = &meta.Artifact{
 					Path:     "/reconcile-storage/invalid.txt",
 					Revision: "d",
 				}
@@ -414,7 +414,7 @@ func TestHelmChartReconciler_reconcileStorage(t *testing.T) {
 			beforeFunc: func(obj *sourcev1.HelmChart, storage *storage.Storage) error {
 				f := "empty-digest.txt"
 
-				obj.Status.Artifact = &sourcev1.Artifact{
+				obj.Status.Artifact = &meta.Artifact{
 					Path:     fmt.Sprintf("/reconcile-storage/%s.txt", f),
 					Revision: "fake",
 				}
@@ -445,7 +445,7 @@ func TestHelmChartReconciler_reconcileStorage(t *testing.T) {
 			beforeFunc: func(obj *sourcev1.HelmChart, storage *storage.Storage) error {
 				f := "digest-mismatch.txt"
 
-				obj.Status.Artifact = &sourcev1.Artifact{
+				obj.Status.Artifact = &meta.Artifact{
 					Path:     fmt.Sprintf("/reconcile-storage/%s.txt", f),
 					Revision: "fake",
 				}
@@ -474,7 +474,7 @@ func TestHelmChartReconciler_reconcileStorage(t *testing.T) {
 		{
 			name: "updates hostname on diff from current",
 			beforeFunc: func(obj *sourcev1.HelmChart, storage *storage.Storage) error {
-				obj.Status.Artifact = &sourcev1.Artifact{
+				obj.Status.Artifact = &meta.Artifact{
 					Path:     "/reconcile-storage/hostname.txt",
 					Revision: "f",
 					Digest:   "sha256:3b9c358f36f0a31b6ad3e14f309c7cf198ac9246e8316f9ce543d5b19ac02b80",
@@ -493,7 +493,7 @@ func TestHelmChartReconciler_reconcileStorage(t *testing.T) {
 			assertPaths: []string{
 				"/reconcile-storage/hostname.txt",
 			},
-			assertArtifact: &sourcev1.Artifact{
+			assertArtifact: &meta.Artifact{
 				Path:     "/reconcile-storage/hostname.txt",
 				Revision: "f",
 				Digest:   "sha256:3b9c358f36f0a31b6ad3e14f309c7cf198ac9246e8316f9ce543d5b19ac02b80",
@@ -574,7 +574,7 @@ func TestHelmChartReconciler_reconcileSource(t *testing.T) {
 	storage, err := storage.New(tmpDir, "example.com", retentionTTL, retentionRecords)
 	g.Expect(err).ToNot(HaveOccurred())
 
-	gitArtifact := &sourcev1.Artifact{
+	gitArtifact := &meta.Artifact{
 		Revision: "mock-ref/abcdefg12345678",
 		Path:     "mock.tgz",
 	}
@@ -641,7 +641,7 @@ func TestHelmChartReconciler_reconcileSource(t *testing.T) {
 					Name: "gitrepository",
 					Kind: sourcev1.GitRepositoryKind,
 				}
-				obj.Status.Artifact = &sourcev1.Artifact{
+				obj.Status.Artifact = &meta.Artifact{
 					Path:     "some-path",
 					Revision: "some-rev",
 				}
@@ -919,7 +919,7 @@ func TestHelmChartReconciler_buildFromHelmRepository(t *testing.T) {
 			beforeFunc: func(obj *sourcev1.HelmChart, repository *sourcev1.HelmRepository) {
 				obj.Spec.Chart = chartName
 				obj.Spec.Version = chartVersion
-				obj.Status.Artifact = &sourcev1.Artifact{Path: chartName + "-" + chartVersion + ".tgz"}
+				obj.Status.Artifact = &meta.Artifact{Path: chartName + "-" + chartVersion + ".tgz"}
 			},
 			want: sreconcile.ResultSuccess,
 			assertFunc: func(g *WithT, obj *sourcev1.HelmChart, build chart.Build) {
@@ -934,7 +934,7 @@ func TestHelmChartReconciler_buildFromHelmRepository(t *testing.T) {
 			beforeFunc: func(obj *sourcev1.HelmChart, repository *sourcev1.HelmRepository) {
 				obj.Spec.Chart = chartName
 				obj.Spec.Version = chartVersion
-				obj.Status.Artifact = &sourcev1.Artifact{Path: chartName + "-" + chartVersion + ".tgz"}
+				obj.Status.Artifact = &meta.Artifact{Path: chartName + "-" + chartVersion + ".tgz"}
 				obj.Status.ObservedValuesFiles = []string{"values.yaml", "override.yaml"}
 			},
 			want: sreconcile.ResultSuccess,
@@ -1017,7 +1017,7 @@ func TestHelmChartReconciler_buildFromHelmRepository(t *testing.T) {
 				obj.Spec.Version = chartVersion
 
 				obj.Status.ObservedGeneration = 2
-				obj.Status.Artifact = &sourcev1.Artifact{Path: chartName + "-" + chartVersion + ".tgz"}
+				obj.Status.Artifact = &meta.Artifact{Path: chartName + "-" + chartVersion + ".tgz"}
 			},
 			want: sreconcile.ResultSuccess,
 			assertFunc: func(g *WithT, obj *sourcev1.HelmChart, build chart.Build) {
@@ -1135,7 +1135,7 @@ func TestHelmChartReconciler_buildFromHelmRepository(t *testing.T) {
 					Timeout: &metav1.Duration{Duration: timeout},
 				},
 				Status: sourcev1.HelmRepositoryStatus{
-					Artifact: &sourcev1.Artifact{
+					Artifact: &meta.Artifact{
 						Path: "index.yaml",
 					},
 				},
@@ -1191,7 +1191,7 @@ func TestHelmChartReconciler_buildFromOCIHelmRepository(t *testing.T) {
 	storage, err := storage.New(tmpDir, "example.com", retentionTTL, retentionRecords)
 	g.Expect(err).ToNot(HaveOccurred())
 
-	cachedArtifact := &sourcev1.Artifact{
+	cachedArtifact := &meta.Artifact{
 		Revision: "0.1.0",
 		Path:     metadata.Name + "-" + metadata.Version + ".tgz",
 	}
@@ -1267,7 +1267,7 @@ func TestHelmChartReconciler_buildFromOCIHelmRepository(t *testing.T) {
 			beforeFunc: func(obj *sourcev1.HelmChart, repository *sourcev1.HelmRepository) {
 				obj.Spec.Chart = metadata.Name
 				obj.Spec.Version = metadata.Version
-				obj.Status.Artifact = &sourcev1.Artifact{Path: metadata.Name + "-" + metadata.Version + ".tgz"}
+				obj.Status.Artifact = &meta.Artifact{Path: metadata.Name + "-" + metadata.Version + ".tgz"}
 			},
 			want: sreconcile.ResultSuccess,
 			assertFunc: func(g *WithT, obj *sourcev1.HelmChart, build chart.Build) {
@@ -1286,7 +1286,7 @@ func TestHelmChartReconciler_buildFromOCIHelmRepository(t *testing.T) {
 				obj.Spec.Version = metadata.Version
 
 				obj.Status.ObservedGeneration = 2
-				obj.Status.Artifact = &sourcev1.Artifact{Path: metadata.Name + "-" + metadata.Version + ".tgz"}
+				obj.Status.Artifact = &meta.Artifact{Path: metadata.Name + "-" + metadata.Version + ".tgz"}
 			},
 			want: sreconcile.ResultSuccess,
 			assertFunc: func(g *WithT, obj *sourcev1.HelmChart, build chart.Build) {
@@ -1414,17 +1414,17 @@ func TestHelmChartReconciler_buildFromTarballArtifact(t *testing.T) {
 	storage, err := storage.New(tmpDir, "example.com", retentionTTL, retentionRecords)
 	g.Expect(err).ToNot(HaveOccurred())
 
-	chartsArtifact := &sourcev1.Artifact{
+	chartsArtifact := &meta.Artifact{
 		Revision: "mock-ref/abcdefg12345678",
 		Path:     "mock.tgz",
 	}
 	g.Expect(storage.Archive(chartsArtifact, "testdata/charts", nil)).To(Succeed())
-	yamlArtifact := &sourcev1.Artifact{
+	yamlArtifact := &meta.Artifact{
 		Revision: "9876abcd",
 		Path:     "values.yaml",
 	}
 	g.Expect(storage.CopyFromPath(yamlArtifact, "testdata/charts/helmchart/values.yaml")).To(Succeed())
-	cachedArtifact := &sourcev1.Artifact{
+	cachedArtifact := &meta.Artifact{
 		Revision: "0.1.0",
 		Path:     "cached.tgz",
 	}
@@ -1432,7 +1432,7 @@ func TestHelmChartReconciler_buildFromTarballArtifact(t *testing.T) {
 
 	tests := []struct {
 		name       string
-		source     sourcev1.Artifact
+		source     meta.Artifact
 		beforeFunc func(obj *sourcev1.HelmChart)
 		want       sreconcile.Result
 		wantErr    error
@@ -1563,7 +1563,7 @@ func TestHelmChartReconciler_buildFromTarballArtifact(t *testing.T) {
 		},
 		{
 			name:    "Empty source artifact",
-			source:  sourcev1.Artifact{},
+			source:  meta.Artifact{},
 			want:    sreconcile.ResultEmpty,
 			wantErr: &serror.Generic{Err: errors.New("no such file or directory")},
 			assertFunc: func(g *WithT, build chart.Build) {
@@ -1678,7 +1678,7 @@ func TestHelmChartReconciler_reconcileArtifact(t *testing.T) {
 				Path:    filepath.Join(testStorage.BasePath, "testdata/charts/helmchart-0.1.0.tgz"),
 			},
 			beforeFunc: func(obj *sourcev1.HelmChart) {
-				obj.Status.Artifact = &sourcev1.Artifact{
+				obj.Status.Artifact = &meta.Artifact{
 					Path: "testdata/charts/helmchart-0.1.0.tgz",
 				}
 			},
@@ -1700,7 +1700,7 @@ func TestHelmChartReconciler_reconcileArtifact(t *testing.T) {
 			},
 			beforeFunc: func(obj *sourcev1.HelmChart) {
 				obj.Status.ObservedChartName = "helmchart"
-				obj.Status.Artifact = &sourcev1.Artifact{
+				obj.Status.Artifact = &meta.Artifact{
 					Revision: "0.1.0",
 					Path:     "testdata/charts/helmchart-0.1.0.tgz",
 				}
@@ -2298,7 +2298,7 @@ func TestHelmChartReconciler_notify(t *testing.T) {
 			res:    sreconcile.ResultSuccess,
 			resErr: nil,
 			newObjBeforeFunc: func(obj *sourcev1.HelmChart) {
-				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Digest: "yyy"}
+				obj.Status.Artifact = &meta.Artifact{Revision: "xxx", Digest: "yyy"}
 			},
 			wantEvent: "Normal ChartPackageSucceeded packaged",
 		},
@@ -2307,12 +2307,12 @@ func TestHelmChartReconciler_notify(t *testing.T) {
 			res:    sreconcile.ResultSuccess,
 			resErr: nil,
 			oldObjBeforeFunc: func(obj *sourcev1.HelmChart) {
-				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Digest: "yyy"}
+				obj.Status.Artifact = &meta.Artifact{Revision: "xxx", Digest: "yyy"}
 				conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.GitOperationFailedReason, "fail")
 				conditions.MarkFalse(obj, meta.ReadyCondition, meta.FailedReason, "foo")
 			},
 			newObjBeforeFunc: func(obj *sourcev1.HelmChart) {
-				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Digest: "yyy"}
+				obj.Status.Artifact = &meta.Artifact{Revision: "xxx", Digest: "yyy"}
 				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "ready")
 			},
 			wantEvent: "Normal ChartPackageSucceeded packaged",
@@ -2322,12 +2322,12 @@ func TestHelmChartReconciler_notify(t *testing.T) {
 			res:    sreconcile.ResultSuccess,
 			resErr: nil,
 			oldObjBeforeFunc: func(obj *sourcev1.HelmChart) {
-				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Digest: "yyy"}
+				obj.Status.Artifact = &meta.Artifact{Revision: "xxx", Digest: "yyy"}
 				conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.GitOperationFailedReason, "fail")
 				conditions.MarkFalse(obj, meta.ReadyCondition, meta.FailedReason, "foo")
 			},
 			newObjBeforeFunc: func(obj *sourcev1.HelmChart) {
-				obj.Status.Artifact = &sourcev1.Artifact{Revision: "aaa", Digest: "bbb"}
+				obj.Status.Artifact = &meta.Artifact{Revision: "aaa", Digest: "bbb"}
 				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "ready")
 			},
 			wantEvent: "Normal ChartPackageSucceeded packaged",
@@ -2337,11 +2337,11 @@ func TestHelmChartReconciler_notify(t *testing.T) {
 			res:    sreconcile.ResultSuccess,
 			resErr: nil,
 			oldObjBeforeFunc: func(obj *sourcev1.HelmChart) {
-				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Digest: "yyy"}
+				obj.Status.Artifact = &meta.Artifact{Revision: "xxx", Digest: "yyy"}
 				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "ready")
 			},
 			newObjBeforeFunc: func(obj *sourcev1.HelmChart) {
-				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Digest: "yyy"}
+				obj.Status.Artifact = &meta.Artifact{Revision: "xxx", Digest: "yyy"}
 				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "ready")
 			},
 		},
@@ -2901,7 +2901,7 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_verifySignatureNotation(t *t
 	storage, err := storage.New(tmpDir, server.registryHost, retentionTTL, retentionRecords)
 	g.Expect(err).ToNot(HaveOccurred())
 
-	cachedArtifact := &sourcev1.Artifact{
+	cachedArtifact := &meta.Artifact{
 		Revision: "0.1.0",
 		Path:     metadata.Name + "-" + metadata.Version + ".tgz",
 	}
@@ -3006,7 +3006,7 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_verifySignatureNotation(t *t
 				obj.Spec.Version = metadata.Version
 				obj.Spec.Verify = nil
 				conditions.MarkFalse(obj, sourcev1.SourceVerifiedCondition, "VerifyFailed", "fail msg")
-				obj.Status.Artifact = &sourcev1.Artifact{Path: metadata.Name + "-" + metadata.Version + ".tgz"}
+				obj.Status.Artifact = &meta.Artifact{Path: metadata.Name + "-" + metadata.Version + ".tgz"}
 			},
 			want: sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
@@ -3225,7 +3225,7 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_verifySignatureCosign(t *tes
 	storage, err := storage.New(tmpDir, server.registryHost, retentionTTL, retentionRecords)
 	g.Expect(err).ToNot(HaveOccurred())
 
-	cachedArtifact := &sourcev1.Artifact{
+	cachedArtifact := &meta.Artifact{
 		Revision: "0.1.0",
 		Path:     metadata.Name + "-" + metadata.Version + ".tgz",
 	}
@@ -3318,7 +3318,7 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_verifySignatureCosign(t *tes
 				obj.Spec.Version = metadata.Version
 				obj.Spec.Verify = nil
 				conditions.MarkFalse(obj, sourcev1.SourceVerifiedCondition, "VerifyFailed", "fail msg")
-				obj.Status.Artifact = &sourcev1.Artifact{Path: metadata.Name + "-" + metadata.Version + ".tgz"}
+				obj.Status.Artifact = &meta.Artifact{Path: metadata.Name + "-" + metadata.Version + ".tgz"}
 			},
 			want: sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{

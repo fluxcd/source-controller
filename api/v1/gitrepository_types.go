@@ -256,12 +256,12 @@ type GitRepositoryStatus struct {
 
 	// Artifact represents the last successful GitRepository reconciliation.
 	// +optional
-	Artifact *Artifact `json:"artifact,omitempty"`
+	Artifact *meta.Artifact `json:"artifact,omitempty"`
 
 	// IncludedArtifacts contains a list of the last successfully included
 	// Artifacts as instructed by GitRepositorySpec.Include.
 	// +optional
-	IncludedArtifacts []*Artifact `json:"includedArtifacts,omitempty"`
+	IncludedArtifacts []*meta.Artifact `json:"includedArtifacts,omitempty"`
 
 	// ObservedIgnore is the observed exclusion patterns used for constructing
 	// the source artifact.
@@ -319,7 +319,7 @@ func (in GitRepository) GetRequeueAfter() time.Duration {
 
 // GetArtifact returns the latest Artifact from the GitRepository if present in
 // the status sub-resource.
-func (in *GitRepository) GetArtifact() *Artifact {
+func (in *GitRepository) GetArtifact() *meta.Artifact {
 	return in.Status.Artifact
 }
 

@@ -200,7 +200,7 @@ type OCIRepositoryStatus struct {
 
 	// Artifact represents the output of the last successful OCI Repository sync.
 	// +optional
-	Artifact *Artifact `json:"artifact,omitempty"`
+	Artifact *meta.Artifact `json:"artifact,omitempty"`
 
 	// ObservedIgnore is the observed exclusion patterns used for constructing
 	// the source artifact.
@@ -241,7 +241,7 @@ func (in OCIRepository) GetRequeueAfter() time.Duration {
 
 // GetArtifact returns the latest Artifact from the OCIRepository if present in
 // the status sub-resource.
-func (in *OCIRepository) GetArtifact() *Artifact {
+func (in *OCIRepository) GetArtifact() *meta.Artifact {
 	return in.Status.Artifact
 }
 

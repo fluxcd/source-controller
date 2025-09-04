@@ -25,12 +25,14 @@ import (
 	"io/fs"
 	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strings"
 	"time"
 
 	securejoin "github.com/cyphar/filepath-securejoin"
+	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/go-git/go-git/v5/plumbing/format/gitignore"
 	"github.com/opencontainers/go-digest"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -41,7 +43,6 @@ import (
 	"github.com/fluxcd/pkg/sourceignore"
 	pkgtar "github.com/fluxcd/pkg/tar"
 
-	v1 "github.com/fluxcd/source-controller/api/v1"
 	intdigest "github.com/fluxcd/source-controller/internal/digest"
 )
 
@@ -86,10 +87,10 @@ func New(basePath string, hostname string, artifactRetentionTTL time.Duration, a
 	}, nil
 }
 
-// NewArtifactFor returns a new v1.Artifact.
-func (s Storage) NewArtifactFor(kind string, metadata metav1.Object, revision, fileName string) v1.Artifact {
-	path := v1.ArtifactPath(kind, metadata.GetNamespace(), metadata.GetName(), fileName)
-	artifact := v1.Artifact{
+// NewArtifactFor returns a new meta.Artifact.
+func (s Storage) NewArtifactFor(kind string, metadata metav1.Object, revision, fileName string) meta.Artifact {
+	path := ArtifactPath(kind, metadata.GetNamespace(), metadata.GetName(), fileName)
+	artifact := meta.Artifact{
 		Path:     path,
 		Revision: revision,
 	}
@@ -97,8 +98,8 @@ func (s Storage) NewArtifactFor(kind string, metadata metav1.Object, revision, f
 	return artifact
 }
 
-// SetArtifactURL sets the URL on the given v1.Artifact.
-func (s Storage) SetArtifactURL(artifact *v1.Artifact) {
+// SetArtifactURL sets the URL on the given meta.Artifact.
+func (s Storage) SetArtifactURL(artifact *meta.Artifact) {
 	if artifact.Path == "" {
 		return
 	}
@@ -119,19 +120,19 @@ func (s Storage) SetHostname(URL string) string {
 	return u.String()
 }
 
-// MkdirAll calls os.MkdirAll for the given v1.Artifact base dir.
-func (s Storage) MkdirAll(artifact v1.Artifact) error {
+// MkdirAll calls os.MkdirAll for the given meta.Artifact base dir.
+func (s Storage) MkdirAll(artifact meta.Artifact) error {
 	dir := filepath.Dir(s.LocalPath(artifact))
 	return os.MkdirAll(dir, 0o700)
 }
 
-// Remove calls os.Remove for the given v1.Artifact path.
-func (s Storage) Remove(artifact v1.Artifact) error {
+// Remove calls os.Remove for the given meta.Artifact path.
+func (s Storage) Remove(artifact meta.Artifact) error {
 	return os.Remove(s.LocalPath(artifact))
 }
 
-// RemoveAll calls os.RemoveAll for the given v1.Artifact base dir.
-func (s Storage) RemoveAll(artifact v1.Artifact) (string, error) {
+// RemoveAll calls os.RemoveAll for the given meta.Artifact base dir.
+func (s Storage) RemoveAll(artifact meta.Artifact) (string, error) {
 	var deletedDir string
 	dir := filepath.Dir(s.LocalPath(artifact))
 	// Check if the dir exists.
@@ -142,8 +143,8 @@ func (s Storage) RemoveAll(artifact v1.Artifact) (string, error) {
 	return deletedDir, os.RemoveAll(dir)
 }
 
-// RemoveAllButCurrent removes all files for the given v1.Artifact base dir, excluding the current one.
-func (s Storage) RemoveAllButCurrent(artifact v1.Artifact) ([]string, error) {
+// RemoveAllButCurrent removes all files for the given meta.Artifact base dir, excluding the current one.
+func (s Storage) RemoveAllButCurrent(artifact meta.Artifact) ([]string, error) {
 	deletedFiles := []string{}
 	localPath := s.LocalPath(artifact)
 	dir := filepath.Dir(localPath)
@@ -176,7 +177,7 @@ func (s Storage) RemoveAllButCurrent(artifact v1.Artifact) ([]string, error) {
 // 1. collect all artifact files with an expired ttl
 // 2. if we satisfy maxItemsToBeRetained, then return
 // 3. else, collect all artifact files till the latest n files remain, where n=maxItemsToBeRetained
-func (s Storage) getGarbageFiles(artifact v1.Artifact, totalCountLimit, maxItemsToBeRetained int, ttl time.Duration) (garbageFiles []string, _ error) {
+func (s Storage) getGarbageFiles(artifact meta.Artifact, totalCountLimit, maxItemsToBeRetained int, ttl time.Duration) (garbageFiles []string, _ error) {
 	localPath := s.LocalPath(artifact)
 	dir := filepath.Dir(localPath)
 	artifactFilesWithCreatedTs := make(map[time.Time]string)
@@ -263,7 +264,7 @@ func (s Storage) getGarbageFiles(artifact v1.Artifact, totalCountLimit, maxItems
 
 // GarbageCollect removes all garbage files in the artifact dir according to the provided
 // retention options.
-func (s Storage) GarbageCollect(ctx context.Context, artifact v1.Artifact, timeout time.Duration) ([]string, error) {
+func (s Storage) GarbageCollect(ctx context.Context, artifact meta.Artifact, timeout time.Duration) ([]string, error) {
 	delFilesChan := make(chan []string)
 	errChan := make(chan error)
 	// Abort if it takes more than the provided timeout duration.
@@ -324,8 +325,8 @@ func stringInSlice(a string, list []string) bool {
 	return false
 }
 
-// ArtifactExist returns a boolean indicating whether the v1.Artifact exists in storage and is a regular file.
-func (s Storage) ArtifactExist(artifact v1.Artifact) bool {
+// ArtifactExist returns a boolean indicating whether the meta.Artifact exists in storage and is a regular file.
+func (s Storage) ArtifactExist(artifact meta.Artifact) bool {
 	fi, err := os.Lstat(s.LocalPath(artifact))
 	if err != nil {
 		return false
@@ -333,10 +334,10 @@ func (s Storage) ArtifactExist(artifact v1.Artifact) bool {
 	return fi.Mode().IsRegular()
 }
 
-// VerifyArtifact verifies if the Digest of the v1.Artifact matches the digest
+// VerifyArtifact verifies if the Digest of the meta.Artifact matches the digest
 // of the file in Storage. It returns an error if the digests don't match, or
 // if it can't be verified.
-func (s Storage) VerifyArtifact(artifact v1.Artifact) error {
+func (s Storage) VerifyArtifact(artifact meta.Artifact) error {
 	if artifact.Digest == "" {
 		return fmt.Errorf("artifact has no digest")
 	}
@@ -380,11 +381,11 @@ func SourceIgnoreFilter(ps []gitignore.Pattern, domain []string) ArchiveFileFilt
 	}
 }
 
-// Archive atomically archives the given directory as a tarball to the given v1.Artifact path, excluding
+// Archive atomically archives the given directory as a tarball to the given meta.Artifact path, excluding
 // directories and any ArchiveFileFilter matches. While archiving, any environment specific data (for example,
 // the user and group name) is stripped from file headers.
 // If successful, it sets the digest and last update time on the artifact.
-func (s Storage) Archive(artifact *v1.Artifact, dir string, filter ArchiveFileFilter) (err error) {
+func (s Storage) Archive(artifact *meta.Artifact, dir string, filter ArchiveFileFilter) (err error) {
 	if f, err := os.Stat(dir); os.IsNotExist(err) || !f.IsDir() {
 		return fmt.Errorf("invalid dir path: %s", dir)
 	}
@@ -491,9 +492,9 @@ func (s Storage) Archive(artifact *v1.Artifact, dir string, filter ArchiveFileFi
 	return nil
 }
 
-// AtomicWriteFile atomically writes the io.Reader contents to the v1.Artifact path.
+// AtomicWriteFile atomically writes the io.Reader contents to the meta.Artifact path.
 // If successful, it sets the digest and last update time on the artifact.
-func (s Storage) AtomicWriteFile(artifact *v1.Artifact, reader io.Reader, mode os.FileMode) (err error) {
+func (s Storage) AtomicWriteFile(artifact *meta.Artifact, reader io.Reader, mode os.FileMode) (err error) {
 	localPath := s.LocalPath(*artifact)
 	tf, err := os.CreateTemp(filepath.Split(localPath))
 	if err != nil {
@@ -533,9 +534,9 @@ func (s Storage) AtomicWriteFile(artifact *v1.Artifact, reader io.Reader, mode o
 	return nil
 }
 
-// Copy atomically copies the io.Reader contents to the v1.Artifact path.
+// Copy atomically copies the io.Reader contents to the meta.Artifact path.
 // If successful, it sets the digest and last update time on the artifact.
-func (s Storage) Copy(artifact *v1.Artifact, reader io.Reader) (err error) {
+func (s Storage) Copy(artifact *meta.Artifact, reader io.Reader) (err error) {
 	localPath := s.LocalPath(*artifact)
 	tf, err := os.CreateTemp(filepath.Split(localPath))
 	if err != nil {
@@ -571,9 +572,9 @@ func (s Storage) Copy(artifact *v1.Artifact, reader io.Reader) (err error) {
 	return nil
 }
 
-// CopyFromPath atomically copies the contents of the given path to the path of the v1.Artifact.
+// CopyFromPath atomically copies the contents of the given path to the path of the meta.Artifact.
 // If successful, the digest and last update time on the artifact is set.
-func (s Storage) CopyFromPath(artifact *v1.Artifact, path string) (err error) {
+func (s Storage) CopyFromPath(artifact *meta.Artifact, path string) (err error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return err
@@ -588,7 +589,7 @@ func (s Storage) CopyFromPath(artifact *v1.Artifact, path string) (err error) {
 }
 
 // CopyToPath copies the contents in the (sub)path of the given artifact to the given path.
-func (s Storage) CopyToPath(artifact *v1.Artifact, subPath, toPath string) error {
+func (s Storage) CopyToPath(artifact *meta.Artifact, subPath, toPath string) error {
 	// create a tmp directory to store artifact
 	tmp, err := os.MkdirTemp("", "flux-include-")
 	if err != nil {
@@ -626,8 +627,8 @@ func (s Storage) CopyToPath(artifact *v1.Artifact, subPath, toPath string) error
 	return nil
 }
 
-// Symlink creates or updates a symbolic link for the given v1.Artifact and returns the URL for the symlink.
-func (s Storage) Symlink(artifact v1.Artifact, linkName string) (string, error) {
+// Symlink creates or updates a symbolic link for the given meta.Artifact and returns the URL for the symlink.
+func (s Storage) Symlink(artifact meta.Artifact, linkName string) (string, error) {
 	localPath := s.LocalPath(artifact)
 	dir := filepath.Dir(localPath)
 	link := filepath.Join(dir, linkName)
@@ -648,15 +649,15 @@ func (s Storage) Symlink(artifact v1.Artifact, linkName string) (string, error) 
 	return fmt.Sprintf("http://%s/%s", s.Hostname, filepath.Join(filepath.Dir(artifact.Path), linkName)), nil
 }
 
-// Lock creates a file lock for the given v1.Artifact.
-func (s Storage) Lock(artifact v1.Artifact) (unlock func(), err error) {
+// Lock creates a file lock for the given meta.Artifact.
+func (s Storage) Lock(artifact meta.Artifact) (unlock func(), err error) {
 	lockFile := s.LocalPath(artifact) + ".lock"
 	mutex := lockedfile.MutexAt(lockFile)
 	return mutex.Lock()
 }
 
 // LocalPath returns the secure local path of the given artifact (that is: relative to the Storage.BasePath).
-func (s Storage) LocalPath(artifact v1.Artifact) string {
+func (s Storage) LocalPath(artifact meta.Artifact) string {
 	if artifact.Path == "" {
 		return ""
 	}
@@ -716,4 +717,17 @@ func setDefaultMode(h *tar.Header) {
 		h.Mode = defaultFileMode
 		return
 	}
+}
+
+// ArtifactDir returns the artifact dir path in the form of
+// '<kind>/<namespace>/<name>'.
+func ArtifactDir(kind, namespace, name string) string {
+	kind = strings.ToLower(kind)
+	return path.Join(kind, namespace, name)
+}
+
+// ArtifactPath returns the artifact path in the form of
+// '<kind>/<namespace>/name>/<filename>'.
+func ArtifactPath(kind, namespace, name, filename string) string {
+	return path.Join(ArtifactDir(kind, namespace, name), filename)
 }

@@ -23,8 +23,6 @@ import (
 
 	"github.com/fluxcd/pkg/apis/acl"
 	"github.com/fluxcd/pkg/apis/meta"
-
-	apiv1 "github.com/fluxcd/source-controller/api/v1"
 )
 
 const (
@@ -214,12 +212,12 @@ type GitRepositoryStatus struct {
 
 	// Artifact represents the last successful GitRepository reconciliation.
 	// +optional
-	Artifact *apiv1.Artifact `json:"artifact,omitempty"`
+	Artifact *meta.Artifact `json:"artifact,omitempty"`
 
 	// IncludedArtifacts contains a list of the last successfully included
 	// Artifacts as instructed by GitRepositorySpec.Include.
 	// +optional
-	IncludedArtifacts []*apiv1.Artifact `json:"includedArtifacts,omitempty"`
+	IncludedArtifacts []*meta.Artifact `json:"includedArtifacts,omitempty"`
 
 	// ContentConfigChecksum is a checksum of all the configurations related to
 	// the content of the source artifact:
@@ -282,7 +280,7 @@ func (in GitRepository) GetRequeueAfter() time.Duration {
 
 // GetArtifact returns the latest Artifact from the GitRepository if present in
 // the status sub-resource.
-func (in *GitRepository) GetArtifact() *apiv1.Artifact {
+func (in *GitRepository) GetArtifact() *meta.Artifact {
 	return in.Status.Artifact
 }
 

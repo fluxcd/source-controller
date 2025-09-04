@@ -16,9 +16,11 @@ limitations under the License.
 
 package controller
 
-import sourcev1 "github.com/fluxcd/source-controller/api/v1"
+import (
+	"github.com/fluxcd/pkg/apis/meta"
+)
 
-type artifactSet []*sourcev1.Artifact
+type artifactSet []*meta.Artifact
 
 // Diff returns true if any of the revisions in the artifactSet does not match any of the given artifacts.
 func (s artifactSet) Diff(set artifactSet) bool {
