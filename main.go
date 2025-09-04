@@ -18,8 +18,6 @@ package main
 
 import (
 	"fmt"
-	"net"
-	"net/http"
 	"os"
 	"time"
 
@@ -39,6 +37,10 @@ import (
 	ctrlmetrics "sigs.k8s.io/controller-runtime/pkg/metrics"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
+	artcfg "github.com/fluxcd/pkg/artifact/config"
+	artdigest "github.com/fluxcd/pkg/artifact/digest"
+	artsrv "github.com/fluxcd/pkg/artifact/server"
+	artstore "github.com/fluxcd/pkg/artifact/storage"
 	"github.com/fluxcd/pkg/auth"
 	pkgcache "github.com/fluxcd/pkg/cache"
 	"github.com/fluxcd/pkg/git"
@@ -54,13 +56,11 @@ import (
 	"github.com/fluxcd/pkg/runtime/probes"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
-	intstorage "github.com/fluxcd/source-controller/internal/storage"
 
 	// +kubebuilder:scaffold:imports
 
 	"github.com/fluxcd/source-controller/internal/cache"
 	"github.com/fluxcd/source-controller/internal/controller"
-	intdigest "github.com/fluxcd/source-controller/internal/digest"
 	"github.com/fluxcd/source-controller/internal/features"
 	"github.com/fluxcd/source-controller/internal/helm"
 	"github.com/fluxcd/source-controller/internal/helm/registry"
@@ -96,32 +96,27 @@ func main() {
 	)
 
 	var (
-		metricsAddr              string
-		eventsAddr               string
-		healthAddr               string
-		storagePath              string
-		storageAddr              string
-		storageAdvAddr           string
-		concurrent               int
-		requeueDependency        time.Duration
-		helmIndexLimit           int64
-		helmChartLimit           int64
-		helmChartFileLimit       int64
-		clientOptions            client.Options
-		logOptions               logger.Options
-		leaderElectionOptions    leaderelection.Options
-		rateLimiterOptions       helper.RateLimiterOptions
-		featureGates             feathelper.FeatureGates
-		watchOptions             helper.WatchOptions
-		intervalJitterOptions    jitter.IntervalOptions
-		helmCacheMaxSize         int
-		helmCacheTTL             string
-		helmCachePurgeInterval   string
-		artifactRetentionTTL     time.Duration
-		artifactRetentionRecords int
-		artifactDigestAlgo       string
-		tokenCacheOptions        pkgcache.TokenFlags
-		defaultServiceAccount    string
+		metricsAddr            string
+		eventsAddr             string
+		healthAddr             string
+		concurrent             int
+		requeueDependency      time.Duration
+		helmIndexLimit         int64
+		helmChartLimit         int64
+		helmChartFileLimit     int64
+		artifactOptions        artcfg.Options
+		clientOptions          client.Options
+		logOptions             logger.Options
+		leaderElectionOptions  leaderelection.Options
+		rateLimiterOptions     helper.RateLimiterOptions
+		featureGates           feathelper.FeatureGates
+		watchOptions           helper.WatchOptions
+		intervalJitterOptions  jitter.IntervalOptions
+		helmCacheMaxSize       int
+		helmCacheTTL           string
+		helmCachePurgeInterval string
+		tokenCacheOptions      pkgcache.TokenFlags
+		defaultServiceAccount  string
 	)
 
 	flag.StringVar(&metricsAddr, "metrics-addr", envOrDefault("METRICS_ADDR", ":8080"),
@@ -129,12 +124,6 @@ func main() {
 	flag.StringVar(&eventsAddr, "events-addr", envOrDefault("EVENTS_ADDR", ""),
 		"The address of the events receiver.")
 	flag.StringVar(&healthAddr, "health-addr", ":9440", "The address the health endpoint binds to.")
-	flag.StringVar(&storagePath, "storage-path", envOrDefault("STORAGE_PATH", ""),
-		"The local storage path.")
-	flag.StringVar(&storageAddr, "storage-addr", envOrDefault("STORAGE_ADDR", ":9090"),
-		"The address the static file server binds to.")
-	flag.StringVar(&storageAdvAddr, "storage-adv-addr", envOrDefault("STORAGE_ADV_ADDR", ""),
-		"The advertised address of the static file server.")
 	flag.IntVar(&concurrent, "concurrent", 2, "The number of concurrent reconciles per controller.")
 	flag.Int64Var(&helmIndexLimit, "helm-index-max-size", helm.MaxIndexSize,
 		"The max allowed size in bytes of a Helm repository index file.")
@@ -154,15 +143,10 @@ func main() {
 		"The list of key exchange algorithms to use for ssh connections, arranged from most preferred to the least.")
 	flag.StringSliceVar(&git.HostKeyAlgos, "ssh-hostkey-algos", []string{},
 		"The list of hostkey algorithms to use for ssh connections, arranged from most preferred to the least.")
-	flag.DurationVar(&artifactRetentionTTL, "artifact-retention-ttl", 60*time.Second,
-		"The duration of time that artifacts from previous reconciliations will be kept in storage before being garbage collected.")
-	flag.IntVar(&artifactRetentionRecords, "artifact-retention-records", 2,
-		"The maximum number of artifacts to be kept in storage after a garbage collection.")
-	flag.StringVar(&artifactDigestAlgo, "artifact-digest-algo", intdigest.Canonical.String(),
-		"The algorithm to use to calculate the digest of artifacts.")
 	flag.StringVar(&defaultServiceAccount, auth.ControllerFlagDefaultServiceAccount,
 		"", "Default service account to use for workload identity when not specified in resources.")
 
+	artifactOptions.BindFlags(flag.CommandLine)
 	clientOptions.BindFlags(flag.CommandLine)
 	logOptions.BindFlags(flag.CommandLine)
 	leaderElectionOptions.BindFlags(flag.CommandLine)
@@ -210,7 +194,19 @@ func main() {
 	metrics := helper.NewMetrics(mgr, metrics.MustMakeRecorder(), sourcev1.SourceFinalizer)
 	cacheRecorder := cache.MustMakeMetrics()
 	eventRecorder := mustSetupEventRecorder(mgr, eventsAddr, controllerName)
-	storage := mustInitStorage(storagePath, storageAdvAddr, artifactRetentionTTL, artifactRetentionRecords, artifactDigestAlgo)
+
+	algo, err := artdigest.AlgorithmForName(artifactOptions.ArtifactDigestAlgo)
+	if err != nil {
+		setupLog.Error(err, "unable to configure canonical digest algorithm")
+		os.Exit(1)
+	}
+	artdigest.Canonical = algo
+
+	storage, err := artstore.New(&artifactOptions)
+	if err != nil {
+		setupLog.Error(err, "unable to configure artifact storage")
+		os.Exit(1)
+	}
 
 	mustSetupHelmLimits(helmIndexLimit, helmChartLimit, helmChartFileLimit)
 	helmIndexCache, helmIndexCacheItemTTL := mustInitHelmCache(helmCacheMaxSize, helmCacheTTL, helmCachePurgeInterval)
@@ -315,24 +311,17 @@ func main() {
 		// to handle that.
 		<-mgr.Elected()
 
-		startFileServer(storage.BasePath, storageAddr)
+		// Start the artifact server if running as leader.
+		if err := artsrv.Start(ctx, &artifactOptions); err != nil {
+			setupLog.Error(err, "artifact server error")
+			os.Exit(1)
+		}
 	}()
 
 	setupLog.Info("starting manager")
 	if err := mgr.Start(ctx); err != nil {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
-	}
-}
-
-func startFileServer(path string, address string) {
-	setupLog.Info("starting file server")
-	fs := http.FileServer(http.Dir(path))
-	mux := http.NewServeMux()
-	mux.Handle("/", fs)
-	err := http.ListenAndServe(address, mux)
-	if err != nil {
-		setupLog.Error(err, "file server error")
 	}
 }
 
@@ -448,55 +437,6 @@ func mustInitHelmCache(maxSize int, itemTTL, purgeInterval string) (*cache.Cache
 	}
 
 	return cache.New(maxSize, interval), ttl
-}
-
-func mustInitStorage(path string,
-	storageAdvAddr string,
-	artifactRetentionTTL time.Duration,
-	artifactRetentionRecords int,
-	artifactDigestAlgo string) *intstorage.Storage {
-	if storageAdvAddr == "" {
-		storageAdvAddr = determineAdvStorageAddr(storageAdvAddr)
-	}
-
-	if artifactDigestAlgo != intdigest.Canonical.String() {
-		algo, err := intdigest.AlgorithmForName(artifactDigestAlgo)
-		if err != nil {
-			setupLog.Error(err, "unable to configure canonical digest algorithm")
-			os.Exit(1)
-		}
-		intdigest.Canonical = algo
-	}
-
-	storage, err := intstorage.New(path, storageAdvAddr, artifactRetentionTTL, artifactRetentionRecords)
-	if err != nil {
-		setupLog.Error(err, "unable to initialise storage")
-		os.Exit(1)
-	}
-	return storage
-}
-
-func determineAdvStorageAddr(storageAddr string) string {
-	host, port, err := net.SplitHostPort(storageAddr)
-	if err != nil {
-		setupLog.Error(err, "unable to parse storage address")
-		os.Exit(1)
-	}
-	switch host {
-	case "":
-		host = "localhost"
-	case "0.0.0.0":
-		host = os.Getenv("HOSTNAME")
-		if host == "" {
-			hn, err := os.Hostname()
-			if err != nil {
-				setupLog.Error(err, "0.0.0.0 specified in storage addr but hostname is invalid")
-				os.Exit(1)
-			}
-			host = hn
-		}
-	}
-	return net.JoinHostPort(host, port)
 }
 
 func envOrDefault(envName, defaultValue string) string {

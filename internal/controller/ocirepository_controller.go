@@ -50,6 +50,7 @@ import (
 
 	eventv1 "github.com/fluxcd/pkg/apis/event/v1beta1"
 	"github.com/fluxcd/pkg/apis/meta"
+	"github.com/fluxcd/pkg/artifact/storage"
 	"github.com/fluxcd/pkg/auth"
 	"github.com/fluxcd/pkg/cache"
 	"github.com/fluxcd/pkg/oci"
@@ -77,7 +78,6 @@ import (
 	"github.com/fluxcd/source-controller/internal/oci/notation"
 	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
 	"github.com/fluxcd/source-controller/internal/reconcile/summarize"
-	"github.com/fluxcd/source-controller/internal/storage"
 	"github.com/fluxcd/source-controller/internal/util"
 )
 

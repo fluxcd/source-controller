@@ -60,6 +60,8 @@ import (
 
 	kstatus "github.com/fluxcd/cli-utils/pkg/kstatus/status"
 	"github.com/fluxcd/pkg/apis/meta"
+	intdigest "github.com/fluxcd/pkg/artifact/digest"
+	"github.com/fluxcd/pkg/artifact/storage"
 	"github.com/fluxcd/pkg/auth"
 	"github.com/fluxcd/pkg/git"
 	"github.com/fluxcd/pkg/oci"
@@ -69,11 +71,9 @@ import (
 	"github.com/fluxcd/pkg/tar"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
-	intdigest "github.com/fluxcd/source-controller/internal/digest"
 	serror "github.com/fluxcd/source-controller/internal/error"
 	snotation "github.com/fluxcd/source-controller/internal/oci/notation"
 	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
-	"github.com/fluxcd/source-controller/internal/storage"
 	testproxy "github.com/fluxcd/source-controller/tests/proxy"
 )
 

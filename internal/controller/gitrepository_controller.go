@@ -49,6 +49,7 @@ import (
 
 	eventv1 "github.com/fluxcd/pkg/apis/event/v1beta1"
 	"github.com/fluxcd/pkg/apis/meta"
+	"github.com/fluxcd/pkg/artifact/storage"
 	"github.com/fluxcd/pkg/cache"
 	"github.com/fluxcd/pkg/git"
 	"github.com/fluxcd/pkg/git/gogit"
@@ -59,7 +60,6 @@ import (
 	"github.com/fluxcd/pkg/runtime/patch"
 	"github.com/fluxcd/pkg/runtime/predicates"
 	rreconcile "github.com/fluxcd/pkg/runtime/reconcile"
-
 	"github.com/fluxcd/pkg/sourceignore"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
@@ -67,7 +67,6 @@ import (
 	"github.com/fluxcd/source-controller/internal/features"
 	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
 	"github.com/fluxcd/source-controller/internal/reconcile/summarize"
-	"github.com/fluxcd/source-controller/internal/storage"
 	"github.com/fluxcd/source-controller/internal/util"
 )
 

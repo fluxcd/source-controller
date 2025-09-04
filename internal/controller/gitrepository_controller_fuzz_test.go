@@ -59,12 +59,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 
+	intstorage "github.com/fluxcd/pkg/artifact/digest"
 	"github.com/fluxcd/pkg/gittestserver"
 	"github.com/fluxcd/pkg/runtime/controller"
 	"github.com/fluxcd/pkg/runtime/testenv"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
-	intstorage "github.com/fluxcd/source-controller/internal/storage"
 )
 
 var (

@@ -18,12 +18,13 @@ require (
 	github.com/Masterminds/semver/v3 v3.4.0
 	github.com/cyphar/filepath-securejoin v0.4.1
 	github.com/distribution/distribution/v3 v3.0.0
-	github.com/docker/cli v28.3.3+incompatible
+	github.com/docker/cli v28.4.0+incompatible
 	github.com/docker/go-units v0.5.0
 	github.com/elazarl/goproxy v1.7.2
 	github.com/fluxcd/cli-utils v0.36.0-flux.15
 	github.com/fluxcd/pkg/apis/event v0.19.0
 	github.com/fluxcd/pkg/apis/meta v1.21.0
+	github.com/fluxcd/pkg/artifact v0.2.0
 	github.com/fluxcd/pkg/auth v0.30.0
 	github.com/fluxcd/pkg/cache v0.11.0
 	github.com/fluxcd/pkg/git v0.36.0
@@ -31,10 +32,9 @@ require (
 	github.com/fluxcd/pkg/gittestserver v0.20.0
 	github.com/fluxcd/pkg/helmtestserver v0.29.0
 	github.com/fluxcd/pkg/http/transport v0.7.0
-	github.com/fluxcd/pkg/lockedfile v0.7.0
 	github.com/fluxcd/pkg/masktoken v0.8.0
-	github.com/fluxcd/pkg/oci v0.54.0
-	github.com/fluxcd/pkg/runtime v0.82.0
+	github.com/fluxcd/pkg/oci v0.55.0
+	github.com/fluxcd/pkg/runtime v0.83.0
 	github.com/fluxcd/pkg/sourceignore v0.14.0
 	github.com/fluxcd/pkg/ssh v0.21.0
 	github.com/fluxcd/pkg/tar v0.14.0
@@ -53,7 +53,6 @@ require (
 	github.com/notaryproject/notation-go v1.3.2
 	github.com/onsi/gomega v1.38.2
 	github.com/opencontainers/go-digest v1.0.0
-	github.com/opencontainers/go-digest/blake3 v0.0.0-20250116041648-1e56c6daea3b
 	github.com/opencontainers/image-spec v1.1.1
 	github.com/ory/dockertest/v3 v3.12.0
 	github.com/otiai10/copy v1.14.1
@@ -62,7 +61,7 @@ require (
 	github.com/sigstore/cosign/v2 v2.5.2
 	github.com/sigstore/sigstore v1.9.5
 	github.com/sirupsen/logrus v1.9.3
-	github.com/spf13/pflag v1.0.7
+	github.com/spf13/pflag v1.0.10
 	golang.org/x/crypto v0.41.0
 	golang.org/x/oauth2 v0.30.0
 	golang.org/x/sync v0.16.0
@@ -193,6 +192,7 @@ require (
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/fluxcd/gitkit v0.6.0 // indirect
 	github.com/fluxcd/pkg/apis/acl v0.9.0 // indirect
+	github.com/fluxcd/pkg/lockedfile v0.7.0 // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
 	github.com/fxamacker/cbor/v2 v2.9.0 // indirect
 	github.com/go-asn1-ber/asn1-ber v1.5.7 // indirect
@@ -296,6 +296,7 @@ require (
 	github.com/nozzle/throttler v0.0.0-20180817012639-2ea982251481 // indirect
 	github.com/oklog/ulid v1.3.1 // indirect
 	github.com/oleiade/reflections v1.1.0 // indirect
+	github.com/opencontainers/go-digest/blake3 v0.0.0-20250813155314-89707e38ad1a // indirect
 	github.com/opencontainers/runc v1.2.4 // indirect
 	github.com/opentracing/opentracing-go v1.2.0 // indirect
 	github.com/otiai10/mint v1.6.3 // indirect

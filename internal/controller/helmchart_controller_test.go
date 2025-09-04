@@ -34,6 +34,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/fluxcd/pkg/artifact/config"
+	"github.com/fluxcd/pkg/artifact/digest"
 	"github.com/notaryproject/notation-core-go/signature/cose"
 	"github.com/notaryproject/notation-core-go/testhelper"
 	"github.com/notaryproject/notation-go"
@@ -61,6 +63,7 @@ import (
 
 	kstatus "github.com/fluxcd/cli-utils/pkg/kstatus/status"
 	"github.com/fluxcd/pkg/apis/meta"
+	"github.com/fluxcd/pkg/artifact/storage"
 	"github.com/fluxcd/pkg/helmtestserver"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	conditionscheck "github.com/fluxcd/pkg/runtime/conditions/check"
@@ -77,7 +80,6 @@ import (
 	snotation "github.com/fluxcd/source-controller/internal/oci/notation"
 	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
 	"github.com/fluxcd/source-controller/internal/reconcile/summarize"
-	"github.com/fluxcd/source-controller/internal/storage"
 )
 
 func TestHelmChartReconciler_deleteBeforeFinalizer(t *testing.T) {
@@ -571,14 +573,22 @@ func TestHelmChartReconciler_reconcileSource(t *testing.T) {
 
 	tmpDir := t.TempDir()
 
-	storage, err := storage.New(tmpDir, "example.com", retentionTTL, retentionRecords)
+	opts := &config.Options{
+		StoragePath:              tmpDir,
+		StorageAddress:           "example.com",
+		StorageAdvAddress:        "example.com",
+		ArtifactRetentionTTL:     retentionTTL,
+		ArtifactRetentionRecords: retentionRecords,
+		ArtifactDigestAlgo:       digest.Canonical.String(),
+	}
+	st, err := storage.New(opts)
 	g.Expect(err).ToNot(HaveOccurred())
 
 	gitArtifact := &meta.Artifact{
 		Revision: "mock-ref/abcdefg12345678",
 		Path:     "mock.tgz",
 	}
-	g.Expect(storage.Archive(gitArtifact, "testdata/charts", nil)).To(Succeed())
+	g.Expect(st.Archive(gitArtifact, "testdata/charts", nil)).To(Succeed())
 
 	tests := []struct {
 		name       string
@@ -785,7 +795,7 @@ func TestHelmChartReconciler_reconcileSource(t *testing.T) {
 			r := &HelmChartReconciler{
 				Client:        clientBuilder.Build(),
 				EventRecorder: record.NewFakeRecorder(32),
-				Storage:       storage,
+				Storage:       st,
 				patchOptions:  getPatchOptions(helmChartReadyCondition.Owned, "sc"),
 			}
 
@@ -1115,14 +1125,14 @@ func TestHelmChartReconciler_buildFromHelmRepository(t *testing.T) {
 				clientBuilder.WithObjects(tt.secret.DeepCopy())
 			}
 
-			storage, err := newTestStorage(server)
+			testStorage, err := newTestStorage(server)
 			g.Expect(err).ToNot(HaveOccurred())
 
 			r := &HelmChartReconciler{
 				Client:        clientBuilder.Build(),
 				EventRecorder: record.NewFakeRecorder(32),
 				Getters:       testGetters,
-				Storage:       storage,
+				Storage:       testStorage,
 				patchOptions:  getPatchOptions(helmChartReadyCondition.Owned, "sc"),
 			}
 
@@ -1188,14 +1198,22 @@ func TestHelmChartReconciler_buildFromOCIHelmRepository(t *testing.T) {
 	metadata, err := loadTestChartToOCI(chartData, testRegistryServer, "", "", "")
 	g.Expect(err).NotTo(HaveOccurred())
 
-	storage, err := storage.New(tmpDir, "example.com", retentionTTL, retentionRecords)
+	opts := &config.Options{
+		StoragePath:              tmpDir,
+		StorageAddress:           "example.com",
+		StorageAdvAddress:        "example.com",
+		ArtifactRetentionTTL:     retentionTTL,
+		ArtifactRetentionRecords: retentionRecords,
+		ArtifactDigestAlgo:       digest.Canonical.String(),
+	}
+	st, err := storage.New(opts)
 	g.Expect(err).ToNot(HaveOccurred())
 
 	cachedArtifact := &meta.Artifact{
 		Revision: "0.1.0",
 		Path:     metadata.Name + "-" + metadata.Version + ".tgz",
 	}
-	g.Expect(storage.CopyFromPath(cachedArtifact, "testdata/charts/helmchart-0.1.0.tgz")).To(Succeed())
+	g.Expect(st.CopyFromPath(cachedArtifact, "testdata/charts/helmchart-0.1.0.tgz")).To(Succeed())
 
 	tests := []struct {
 		name       string
@@ -1273,7 +1291,7 @@ func TestHelmChartReconciler_buildFromOCIHelmRepository(t *testing.T) {
 			assertFunc: func(g *WithT, obj *sourcev1.HelmChart, build chart.Build) {
 				g.Expect(build.Name).To(Equal(metadata.Name))
 				g.Expect(build.Version).To(Equal(metadata.Version))
-				g.Expect(build.Path).To(Equal(storage.LocalPath(*cachedArtifact.DeepCopy())))
+				g.Expect(build.Path).To(Equal(st.LocalPath(*cachedArtifact.DeepCopy())))
 				g.Expect(build.Path).To(BeARegularFile())
 				g.Expect(build.ValuesFiles).To(BeEmpty())
 			},
@@ -1292,7 +1310,7 @@ func TestHelmChartReconciler_buildFromOCIHelmRepository(t *testing.T) {
 			assertFunc: func(g *WithT, obj *sourcev1.HelmChart, build chart.Build) {
 				g.Expect(build.Name).To(Equal(metadata.Name))
 				g.Expect(build.Version).To(Equal(metadata.Version))
-				g.Expect(build.Path).ToNot(Equal(storage.LocalPath(*cachedArtifact.DeepCopy())))
+				g.Expect(build.Path).ToNot(Equal(st.LocalPath(*cachedArtifact.DeepCopy())))
 				g.Expect(build.Path).To(BeARegularFile())
 			},
 			cleanFunc: func(g *WithT, build *chart.Build) {
@@ -1356,7 +1374,7 @@ func TestHelmChartReconciler_buildFromOCIHelmRepository(t *testing.T) {
 				Client:                  clientBuilder.Build(),
 				EventRecorder:           record.NewFakeRecorder(32),
 				Getters:                 testGetters,
-				Storage:                 storage,
+				Storage:                 st,
 				RegistryClientGenerator: registry.ClientGenerator,
 				patchOptions:            getPatchOptions(helmChartReadyCondition.Owned, "sc"),
 			}
@@ -1411,24 +1429,32 @@ func TestHelmChartReconciler_buildFromTarballArtifact(t *testing.T) {
 
 	tmpDir := t.TempDir()
 
-	storage, err := storage.New(tmpDir, "example.com", retentionTTL, retentionRecords)
+	opts := &config.Options{
+		StoragePath:              tmpDir,
+		StorageAddress:           "example.com",
+		StorageAdvAddress:        "example.com",
+		ArtifactRetentionTTL:     retentionTTL,
+		ArtifactRetentionRecords: retentionRecords,
+		ArtifactDigestAlgo:       digest.Canonical.String(),
+	}
+	st, err := storage.New(opts)
 	g.Expect(err).ToNot(HaveOccurred())
 
 	chartsArtifact := &meta.Artifact{
 		Revision: "mock-ref/abcdefg12345678",
 		Path:     "mock.tgz",
 	}
-	g.Expect(storage.Archive(chartsArtifact, "testdata/charts", nil)).To(Succeed())
+	g.Expect(st.Archive(chartsArtifact, "testdata/charts", nil)).To(Succeed())
 	yamlArtifact := &meta.Artifact{
 		Revision: "9876abcd",
 		Path:     "values.yaml",
 	}
-	g.Expect(storage.CopyFromPath(yamlArtifact, "testdata/charts/helmchart/values.yaml")).To(Succeed())
+	g.Expect(st.CopyFromPath(yamlArtifact, "testdata/charts/helmchart/values.yaml")).To(Succeed())
 	cachedArtifact := &meta.Artifact{
 		Revision: "0.1.0",
 		Path:     "cached.tgz",
 	}
-	g.Expect(storage.CopyFromPath(cachedArtifact, "testdata/charts/helmchart-0.1.0.tgz")).To(Succeed())
+	g.Expect(st.CopyFromPath(cachedArtifact, "testdata/charts/helmchart-0.1.0.tgz")).To(Succeed())
 
 	tests := []struct {
 		name       string
@@ -1518,7 +1544,7 @@ func TestHelmChartReconciler_buildFromTarballArtifact(t *testing.T) {
 			assertFunc: func(g *WithT, build chart.Build) {
 				g.Expect(build.Name).To(Equal("helmchart"))
 				g.Expect(build.Version).To(Equal("0.1.0"))
-				g.Expect(build.Path).To(Equal(storage.LocalPath(*cachedArtifact.DeepCopy())))
+				g.Expect(build.Path).To(Equal(st.LocalPath(*cachedArtifact.DeepCopy())))
 				g.Expect(build.Path).To(BeARegularFile())
 				g.Expect(build.ValuesFiles).To(BeEmpty())
 			},
@@ -1535,7 +1561,7 @@ func TestHelmChartReconciler_buildFromTarballArtifact(t *testing.T) {
 			assertFunc: func(g *WithT, build chart.Build) {
 				g.Expect(build.Name).To(Equal("helmchart"))
 				g.Expect(build.Version).To(Equal("0.1.0"))
-				g.Expect(build.Path).To(Equal(storage.LocalPath(*cachedArtifact.DeepCopy())))
+				g.Expect(build.Path).To(Equal(st.LocalPath(*cachedArtifact.DeepCopy())))
 				g.Expect(build.Path).To(BeARegularFile())
 				g.Expect(build.ValuesFiles).To(Equal([]string{"values.yaml", "override.yaml"}))
 			},
@@ -1553,7 +1579,7 @@ func TestHelmChartReconciler_buildFromTarballArtifact(t *testing.T) {
 			assertFunc: func(g *WithT, build chart.Build) {
 				g.Expect(build.Name).To(Equal("helmchart"))
 				g.Expect(build.Version).To(Equal("0.1.0"))
-				g.Expect(build.Path).ToNot(Equal(storage.LocalPath(*cachedArtifact.DeepCopy())))
+				g.Expect(build.Path).ToNot(Equal(st.LocalPath(*cachedArtifact.DeepCopy())))
 				g.Expect(build.Path).To(BeARegularFile())
 				g.Expect(build.ValuesFiles).To(BeEmpty())
 			},
@@ -1590,7 +1616,7 @@ func TestHelmChartReconciler_buildFromTarballArtifact(t *testing.T) {
 					WithStatusSubresource(&sourcev1.HelmChart{}).
 					Build(),
 				EventRecorder:           record.NewFakeRecorder(32),
-				Storage:                 storage,
+				Storage:                 st,
 				Getters:                 testGetters,
 				RegistryClientGenerator: registry.ClientGenerator,
 				patchOptions:            getPatchOptions(helmChartReadyCondition.Owned, "sc"),
@@ -2898,19 +2924,26 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_verifySignatureNotation(t *t
 	metadata, err := loadTestChartToOCI(chartData, server, "", "", "")
 	g.Expect(err).NotTo(HaveOccurred())
 
-	storage, err := storage.New(tmpDir, server.registryHost, retentionTTL, retentionRecords)
+	opts := &config.Options{
+		StoragePath:              tmpDir,
+		StorageAddress:           server.registryHost,
+		ArtifactRetentionTTL:     retentionTTL,
+		ArtifactRetentionRecords: retentionRecords,
+		ArtifactDigestAlgo:       digest.Canonical.String(),
+	}
+	st, err := storage.New(opts)
 	g.Expect(err).ToNot(HaveOccurred())
 
 	cachedArtifact := &meta.Artifact{
 		Revision: "0.1.0",
 		Path:     metadata.Name + "-" + metadata.Version + ".tgz",
 	}
-	g.Expect(storage.CopyFromPath(cachedArtifact, "testdata/charts/helmchart-0.1.0.tgz")).To(Succeed())
+	g.Expect(st.CopyFromPath(cachedArtifact, "testdata/charts/helmchart-0.1.0.tgz")).To(Succeed())
 
 	certTuple := testhelper.GetRSASelfSignedSigningCertTuple("notation self-signed certs for testing")
 	certs := []*x509.Certificate{certTuple.Cert}
 
-	signer, err := signer.New(certTuple.PrivateKey, certs)
+	sg, err := signer.New(certTuple.PrivateKey, certs)
 	g.Expect(err).ToNot(HaveOccurred())
 
 	policyDocument := trustpolicy.Document{
@@ -3120,7 +3153,7 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_verifySignatureNotation(t *t
 				Client:                  clientBuilder.Build(),
 				EventRecorder:           record.NewFakeRecorder(32),
 				Getters:                 testGetters,
-				Storage:                 storage,
+				Storage:                 st,
 				RegistryClientGenerator: registry.ClientGenerator,
 				patchOptions:            getPatchOptions(helmChartReadyCondition.Owned, "sc"),
 			}
@@ -3162,7 +3195,7 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_verifySignatureNotation(t *t
 					ArtifactReference: artifact,
 				}
 
-				_, err = notation.Sign(ctx, signer, repo, signOptions)
+				_, err = notation.Sign(ctx, sg, repo, signOptions)
 				g.Expect(err).ToNot(HaveOccurred())
 			}
 
@@ -3222,14 +3255,21 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_verifySignatureCosign(t *tes
 	metadata, err := loadTestChartToOCI(chartData, server, "", "", "")
 	g.Expect(err).NotTo(HaveOccurred())
 
-	storage, err := storage.New(tmpDir, server.registryHost, retentionTTL, retentionRecords)
+	opts := &config.Options{
+		StoragePath:              tmpDir,
+		StorageAddress:           server.registryHost,
+		ArtifactRetentionTTL:     retentionTTL,
+		ArtifactRetentionRecords: retentionRecords,
+		ArtifactDigestAlgo:       digest.Canonical.String(),
+	}
+	st, err := storage.New(opts)
 	g.Expect(err).ToNot(HaveOccurred())
 
 	cachedArtifact := &meta.Artifact{
 		Revision: "0.1.0",
 		Path:     metadata.Name + "-" + metadata.Version + ".tgz",
 	}
-	g.Expect(storage.CopyFromPath(cachedArtifact, "testdata/charts/helmchart-0.1.0.tgz")).To(Succeed())
+	g.Expect(st.CopyFromPath(cachedArtifact, "testdata/charts/helmchart-0.1.0.tgz")).To(Succeed())
 
 	pf := func(b bool) ([]byte, error) {
 		return []byte("cosign-password"), nil
@@ -3365,7 +3405,7 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_verifySignatureCosign(t *tes
 				Client:                  clientBuilder.Build(),
 				EventRecorder:           record.NewFakeRecorder(32),
 				Getters:                 testGetters,
-				Storage:                 storage,
+				Storage:                 st,
 				RegistryClientGenerator: registry.ClientGenerator,
 				patchOptions:            getPatchOptions(helmChartReadyCondition.Owned, "sc"),
 			}

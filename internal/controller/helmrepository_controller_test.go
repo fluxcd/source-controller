@@ -43,6 +43,8 @@ import (
 
 	kstatus "github.com/fluxcd/cli-utils/pkg/kstatus/status"
 	"github.com/fluxcd/pkg/apis/meta"
+	intdigest "github.com/fluxcd/pkg/artifact/digest"
+	"github.com/fluxcd/pkg/artifact/storage"
 	"github.com/fluxcd/pkg/helmtestserver"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	conditionscheck "github.com/fluxcd/pkg/runtime/conditions/check"
@@ -51,12 +53,10 @@ import (
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	"github.com/fluxcd/source-controller/internal/cache"
-	intdigest "github.com/fluxcd/source-controller/internal/digest"
 	"github.com/fluxcd/source-controller/internal/helm/repository"
 	intpredicates "github.com/fluxcd/source-controller/internal/predicates"
 	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
 	"github.com/fluxcd/source-controller/internal/reconcile/summarize"
-	"github.com/fluxcd/source-controller/internal/storage"
 )
 
 func TestHelmRepositoryReconciler_deleteBeforeFinalizer(t *testing.T) {
