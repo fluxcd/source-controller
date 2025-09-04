@@ -44,6 +44,8 @@ import (
 
 	eventv1 "github.com/fluxcd/pkg/apis/event/v1beta1"
 	"github.com/fluxcd/pkg/apis/meta"
+	intdigest "github.com/fluxcd/pkg/artifact/digest"
+	"github.com/fluxcd/pkg/artifact/storage"
 	"github.com/fluxcd/pkg/auth"
 	"github.com/fluxcd/pkg/cache"
 	"github.com/fluxcd/pkg/runtime/conditions"
@@ -59,12 +61,10 @@ import (
 	"github.com/fluxcd/source-controller/internal/bucket/azure"
 	"github.com/fluxcd/source-controller/internal/bucket/gcp"
 	"github.com/fluxcd/source-controller/internal/bucket/minio"
-	intdigest "github.com/fluxcd/source-controller/internal/digest"
 	serror "github.com/fluxcd/source-controller/internal/error"
 	"github.com/fluxcd/source-controller/internal/index"
 	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
 	"github.com/fluxcd/source-controller/internal/reconcile/summarize"
-	"github.com/fluxcd/source-controller/internal/storage"
 )
 
 // maxConcurrentBucketFetches is the upper bound on the goroutines used to

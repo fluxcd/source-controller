@@ -38,6 +38,8 @@ import (
 
 	kstatus "github.com/fluxcd/cli-utils/pkg/kstatus/status"
 	"github.com/fluxcd/pkg/apis/meta"
+	intdigest "github.com/fluxcd/pkg/artifact/digest"
+	"github.com/fluxcd/pkg/artifact/storage"
 	"github.com/fluxcd/pkg/auth"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	conditionscheck "github.com/fluxcd/pkg/runtime/conditions/check"
@@ -45,13 +47,11 @@ import (
 	"github.com/fluxcd/pkg/runtime/patch"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
-	intdigest "github.com/fluxcd/source-controller/internal/digest"
 	"github.com/fluxcd/source-controller/internal/index"
 	gcsmock "github.com/fluxcd/source-controller/internal/mock/gcs"
 	s3mock "github.com/fluxcd/source-controller/internal/mock/s3"
 	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
 	"github.com/fluxcd/source-controller/internal/reconcile/summarize"
-	"github.com/fluxcd/source-controller/internal/storage"
 )
 
 // Environment variable to set the GCP Storage host for the GCP client.

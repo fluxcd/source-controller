@@ -32,6 +32,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/distribution/distribution/v3/configuration"
+	dockerRegistry "github.com/distribution/distribution/v3/registry"
+	_ "github.com/distribution/distribution/v3/registry/auth/htpasswd"
+	_ "github.com/distribution/distribution/v3/registry/storage/driver/inmemory"
 	"github.com/foxcpp/go-mockdns"
 	"github.com/phayes/freeport"
 	"github.com/sirupsen/logrus"
@@ -45,11 +49,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/yaml"
 
-	"github.com/distribution/distribution/v3/configuration"
-	dockerRegistry "github.com/distribution/distribution/v3/registry"
-	_ "github.com/distribution/distribution/v3/registry/auth/htpasswd"
-	_ "github.com/distribution/distribution/v3/registry/storage/driver/inmemory"
-
+	"github.com/fluxcd/pkg/artifact/config"
+	"github.com/fluxcd/pkg/artifact/digest"
+	"github.com/fluxcd/pkg/artifact/storage"
 	"github.com/fluxcd/pkg/runtime/controller"
 	"github.com/fluxcd/pkg/runtime/metrics"
 	"github.com/fluxcd/pkg/runtime/testenv"
@@ -57,7 +59,6 @@ import (
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	"github.com/fluxcd/source-controller/internal/cache"
-	"github.com/fluxcd/source-controller/internal/storage"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -432,7 +433,15 @@ func initTestTLS() {
 }
 
 func newTestStorage(s *testserver.HTTPServer) (*storage.Storage, error) {
-	st, err := storage.New(s.Root(), s.URL(), retentionTTL, retentionRecords)
+	opts := &config.Options{
+		StoragePath:              s.Root(),
+		StorageAddress:           s.URL(),
+		StorageAdvAddress:        s.URL(),
+		ArtifactRetentionTTL:     retentionTTL,
+		ArtifactRetentionRecords: retentionRecords,
+		ArtifactDigestAlgo:       digest.Canonical.String(),
+	}
+	st, err := storage.New(opts)
 	if err != nil {
 		return nil, err
 	}

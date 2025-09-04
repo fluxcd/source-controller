@@ -48,6 +48,7 @@ import (
 
 	kstatus "github.com/fluxcd/cli-utils/pkg/kstatus/status"
 	"github.com/fluxcd/pkg/apis/meta"
+	"github.com/fluxcd/pkg/artifact/storage"
 	"github.com/fluxcd/pkg/auth"
 	"github.com/fluxcd/pkg/git"
 	"github.com/fluxcd/pkg/git/github"
@@ -64,7 +65,6 @@ import (
 	"github.com/fluxcd/source-controller/internal/features"
 	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
 	"github.com/fluxcd/source-controller/internal/reconcile/summarize"
-	"github.com/fluxcd/source-controller/internal/storage"
 )
 
 const (
@@ -1503,6 +1503,8 @@ func TestGitRepositoryReconciler_reconcileInclude(t *testing.T) {
 
 	server, err := testserver.NewTempArtifactServer()
 	g.Expect(err).NotTo(HaveOccurred())
+	server.Start()
+	defer server.Stop()
 	storage, err := newTestStorage(server.HTTPServer)
 	g.Expect(err).NotTo(HaveOccurred())
 	defer os.RemoveAll(storage.BasePath)
