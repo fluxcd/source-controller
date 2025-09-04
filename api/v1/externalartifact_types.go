@@ -17,10 +17,15 @@ limitations under the License.
 package v1
 
 import (
+	"time"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fluxcd/pkg/apis/meta"
 )
+
+// ExternalArtifactKind is the string representation of the ExternalArtifact.
+const ExternalArtifactKind = "ExternalArtifact"
 
 // ExternalArtifactSpec defines the desired state of ExternalArtifact
 type ExternalArtifactSpec struct {
@@ -39,6 +44,18 @@ type ExternalArtifactStatus struct {
 	// Conditions holds the conditions for the ExternalArtifact.
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
+}
+
+// GetRequeueAfter returns the duration after which the ExternalArtifact
+// must be reconciled again.
+func (in ExternalArtifact) GetRequeueAfter() time.Duration {
+	return time.Minute
+}
+
+// GetArtifact returns the latest Artifact from the ExternalArtifact if
+// present in the status sub-resource.
+func (in *ExternalArtifact) GetArtifact() *meta.Artifact {
+	return in.Status.Artifact
 }
 
 // +kubebuilder:object:root=true
