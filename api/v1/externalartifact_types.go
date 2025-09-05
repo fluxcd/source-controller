@@ -46,16 +46,26 @@ type ExternalArtifactStatus struct {
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }
 
-// GetRequeueAfter returns the duration after which the ExternalArtifact
-// must be reconciled again.
-func (in ExternalArtifact) GetRequeueAfter() time.Duration {
-	return time.Minute
+// GetConditions returns the status conditions of the object.
+func (in *ExternalArtifact) GetConditions() []metav1.Condition {
+	return in.Status.Conditions
+}
+
+// SetConditions sets the status conditions on the object.
+func (in *ExternalArtifact) SetConditions(conditions []metav1.Condition) {
+	in.Status.Conditions = conditions
 }
 
 // GetArtifact returns the latest Artifact from the ExternalArtifact if
 // present in the status sub-resource.
 func (in *ExternalArtifact) GetArtifact() *meta.Artifact {
 	return in.Status.Artifact
+}
+
+// GetRequeueAfter returns the duration after which the ExternalArtifact
+// must be reconciled again.
+func (in *ExternalArtifact) GetRequeueAfter() time.Duration {
+	return time.Minute
 }
 
 // +kubebuilder:object:root=true
