@@ -24,17 +24,17 @@ require (
 	github.com/fluxcd/cli-utils v0.36.0-flux.15
 	github.com/fluxcd/pkg/apis/event v0.19.0
 	github.com/fluxcd/pkg/apis/meta v1.21.0
-	github.com/fluxcd/pkg/artifact v0.2.0
-	github.com/fluxcd/pkg/auth v0.30.0
+	github.com/fluxcd/pkg/artifact v0.3.0
+	github.com/fluxcd/pkg/auth v0.31.0
 	github.com/fluxcd/pkg/cache v0.11.0
 	github.com/fluxcd/pkg/git v0.36.0
 	github.com/fluxcd/pkg/git/gogit v0.40.0
 	github.com/fluxcd/pkg/gittestserver v0.20.0
-	github.com/fluxcd/pkg/helmtestserver v0.29.0
+	github.com/fluxcd/pkg/helmtestserver v0.30.0
 	github.com/fluxcd/pkg/http/transport v0.7.0
 	github.com/fluxcd/pkg/masktoken v0.8.0
-	github.com/fluxcd/pkg/oci v0.55.0
-	github.com/fluxcd/pkg/runtime v0.83.0
+	github.com/fluxcd/pkg/oci v0.56.0
+	github.com/fluxcd/pkg/runtime v0.84.0
 	github.com/fluxcd/pkg/sourceignore v0.14.0
 	github.com/fluxcd/pkg/ssh v0.21.0
 	github.com/fluxcd/pkg/tar v0.14.0
@@ -66,13 +66,13 @@ require (
 	golang.org/x/oauth2 v0.30.0
 	golang.org/x/sync v0.16.0
 	google.golang.org/api v0.248.0
-	helm.sh/helm/v3 v3.18.6
+	helm.sh/helm/v3 v3.19.0
 	k8s.io/api v0.34.0
 	k8s.io/apimachinery v0.34.0
 	k8s.io/client-go v0.34.0
 	k8s.io/utils v0.0.0-20250604170112-4c0f3b243397
 	oras.land/oras-go/v2 v2.6.0
-	sigs.k8s.io/controller-runtime v0.22.0
+	sigs.k8s.io/controller-runtime v0.22.1
 	sigs.k8s.io/yaml v1.6.0
 )
 
@@ -159,7 +159,7 @@ require (
 	github.com/cloudflare/circl v1.6.1 // indirect
 	github.com/cncf/xds/go v0.0.0-20250501225837-2ac532fd4443 // indirect
 	github.com/common-nighthawk/go-figure v0.0.0-20210622060536-734e95fb86be // indirect
-	github.com/containerd/containerd v1.7.27 // indirect
+	github.com/containerd/containerd v1.7.28 // indirect
 	github.com/containerd/continuity v0.4.5 // indirect
 	github.com/containerd/errdefs v1.0.0 // indirect
 	github.com/containerd/log v0.1.0 // indirect
@@ -338,7 +338,7 @@ require (
 	github.com/sourcegraph/conc v0.3.0 // indirect
 	github.com/spf13/afero v1.12.0 // indirect
 	github.com/spf13/cast v1.7.1 // indirect
-	github.com/spf13/cobra v1.9.1 // indirect
+	github.com/spf13/cobra v1.10.1 // indirect
 	github.com/spf13/viper v1.20.1 // indirect
 	github.com/spiffe/go-spiffe/v2 v2.5.0 // indirect
 	github.com/subosito/gotenv v1.6.0 // indirect
