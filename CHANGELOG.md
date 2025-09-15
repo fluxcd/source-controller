@@ -2,6 +2,75 @@
 
 All notable changes to this project are documented in this file.
 
+## 1.7.0
+
+**Release date:** 2025-09-15
+
+This minor release comes with new features, improvements and bug fixes.
+
+### ExternalArtifact
+
+A new [ExternalArtifact](https://github.com/fluxcd/source-controller/blob/main/docs/spec/v1/externalartifacts.md) API has been added to the `source.toolkit.fluxcd.io` group. This API enables advanced source composition and decomposition patterns implemented by the [source-watcher](https://github.com/fluxcd/source-watcher) controller.
+
+### GitRepository
+
+GitRepository controller now includes fixes for stalling issues and improved error handling. Multi-tenant workload identity support has been added for Azure repositories when the `ObjectLevelWorkloadIdentity` feature gate is enabled. TLS configuration support has been added for GitHub App authentication.
+
+### Bucket
+
+Bucket controller now supports multi-tenant workload identity for AWS, Azure and GCP providers when the `ObjectLevelWorkloadIdentity` feature gate is enabled. A default service account flag has been added for lockdown scenarios.
+
+### General updates
+
+The controller now supports system certificate pools for improved CA compatibility, and TLS ServerName pinning has been removed from TLS configuration for better flexibility. A `--default-service-account=<sa name>` flag was introduced for workload identity multi-tenancy lockdown.
+
+In addition, the Kubernetes dependencies have been updated to v1.34, Helm
+has been updated to v3.19 and various other controller dependencies have
+been updated to their latest version. The controller is now built with
+Go 1.25.
+
+Fixes:
+- Fix GitRepository controller stalling when it shouldn't
+  [#1865](https://github.com/fluxcd/source-controller/pull/1865)
+
+Improvements:
+- [RFC-0010] Add multi-tenant workload identity support for GCP Bucket
+  [#1862](https://github.com/fluxcd/source-controller/pull/1862)
+- [RFC-0010] Add multi-tenant workload identity support for AWS Bucket
+  [#1868](https://github.com/fluxcd/source-controller/pull/1868)
+- [RFC-0010] Add multi-tenant workload identity support for Azure GitRepository
+  [#1871](https://github.com/fluxcd/source-controller/pull/1871)
+- [RFC-0010] Add default-service-account for lockdown
+  [#1872](https://github.com/fluxcd/source-controller/pull/1872)
+- [RFC-0010] Add multi-tenant workload identity support for Azure Blob Storage
+  [#1875](https://github.com/fluxcd/source-controller/pull/1875)
+- [RFC-0012] Add ExternalArtifact API documentation
+  [#1881](https://github.com/fluxcd/source-controller/pull/1881)
+- [RFC-0012] Refactor controller to use `fluxcd/pkg/artifact`
+  [#1883](https://github.com/fluxcd/source-controller/pull/1883)
+- Migrate OCIRepository controller to runtime/secrets
+  [#1851](https://github.com/fluxcd/source-controller/pull/1851)
+- Migrate Bucket controller to runtime/secrets
+  [#1852](https://github.com/fluxcd/source-controller/pull/1852)
+- Add TLS config for GitHub App authentication
+  [#1860](https://github.com/fluxcd/source-controller/pull/1860)
+- Remove ServerName pinning from TLS config
+  [#1870](https://github.com/fluxcd/source-controller/pull/1870)
+- Extract storage operations to a dedicated package
+  [#1864](https://github.com/fluxcd/source-controller/pull/1864)
+- Remove deprecated APIs in group `source.toolkit.fluxcd.io/v1beta1`
+  [#1861](https://github.com/fluxcd/source-controller/pull/1861)
+- Migrate tests from gotest to gomega
+  [#1876](https://github.com/fluxcd/source-controller/pull/1876)
+- Update dependencies
+  [#1888](https://github.com/fluxcd/source-controller/pull/1888)
+  [#1880](https://github.com/fluxcd/source-controller/pull/1880)
+  [#1878](https://github.com/fluxcd/source-controller/pull/1878)
+  [#1876](https://github.com/fluxcd/source-controller/pull/1876)
+  [#1874](https://github.com/fluxcd/source-controller/pull/1874)
+  [#1850](https://github.com/fluxcd/source-controller/pull/1850)
+  [#1844](https://github.com/fluxcd/source-controller/pull/1844)
+
 ## 1.6.2
 
 **Release date:** 2025-06-27
