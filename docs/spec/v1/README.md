@@ -19,3 +19,4 @@ This is the v1 API specification for defining the desired state sources of Kuber
 
 * [kustomize-controller](https://github.com/fluxcd/kustomize-controller/)
 * [helm-controller](https://github.com/fluxcd/helm-controller/)
+* [source-watcher](https://github.com/fluxcd/source-watcher/)
