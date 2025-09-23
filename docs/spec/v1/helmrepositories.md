@@ -153,6 +153,9 @@ A HelmRepository also needs a
 
 Possible values are `default` for a Helm HTTP/S repository, or `oci` for an OCI Helm repository.
 
+**Note:**: For improved support for OCI Helm charts, please use the
+[`OCIRepository`](ocirepositories.md) API.
+
 ### Provider
 
 `.spec.provider` is an optional field that allows specifying an OIDC provider used
