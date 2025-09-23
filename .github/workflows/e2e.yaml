@@ -1,46 +1,28 @@
 name: e2e
-
 on:
   workflow_dispatch:
   pull_request:
-    branches:
-      - 'main'
-      - 'release/**'
   push:
     branches:
       - 'main'
       - 'release/**'
-
-permissions:
-  contents: read # for actions/checkout to fetch code
-
 jobs:
-
   kind-linux-amd64:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read # for reading the repository code.
     steps:
-      - name: Checkout
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
-      - name: Setup Go
-        uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+      - name: Test suite setup
+        uses: fluxcd/gha-workflows/.github/actions/setup-kubernetes@v0.3.0
         with:
           go-version: 1.25.x
-          cache-dependency-path: |
-            **/go.sum
-            **/go.mod
+      - name: Verify
+        run: make verify
       - name: Enable integration tests
         # Only run integration tests for main and release branches
         if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/')
         run: |
           echo 'GO_TAGS=integration' >> $GITHUB_ENV
-      - name: Setup Kubernetes
-        uses: helm/kind-action@a1b0e391336a6ee6713a0583f8c6240d70863de3 # v1.12.0
-        with:
-          cluster_name: kind
-      - name: Setup Kustomize
-        uses: fluxcd/pkg/actions/kustomize@main
-      - name: Setup Helm
-        uses: fluxcd/pkg/actions/helm@main
       - name: Run E2E tests
         env:
           SKIP_COSIGN_VERIFICATION: true
