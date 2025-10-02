@@ -164,7 +164,7 @@ func TestGetClientOpts(t *testing.T) {
 			}
 			c := clientBuilder.Build()
 
-			clientOpts, _, err := GetClientOpts(context.TODO(), c, helmRepo, "https://ghcr.io/dummy")
+			clientOpts, err := GetClientOpts(context.TODO(), c, helmRepo, "https://ghcr.io/dummy")
 			if tt.err != nil {
 				g.Expect(err).To(Equal(tt.err))
 			} else {
@@ -207,7 +207,7 @@ func TestGetClientOpts_registryTLSLoginOption(t *testing.T) {
 					"password": []byte("pass"),
 				},
 			},
-			loginOptsN: 3,
+			loginOptsN: 2,
 		},
 		{
 			name: "without caFile",
@@ -271,7 +271,7 @@ func TestGetClientOpts_registryTLSLoginOption(t *testing.T) {
 			}
 			c := clientBuilder.Build()
 
-			clientOpts, tmpDir, err := GetClientOpts(context.TODO(), c, helmRepo, "https://ghcr.io/dummy")
+			clientOpts, err := GetClientOpts(context.TODO(), c, helmRepo, "https://ghcr.io/dummy")
 			if tt.wantErrMsg != "" {
 				if err == nil {
 					t.Errorf("GetClientOpts() expected error but got none")
@@ -286,9 +286,6 @@ func TestGetClientOpts_registryTLSLoginOption(t *testing.T) {
 			if err != nil {
 				t.Errorf("GetClientOpts() error = %v", err)
 				return
-			}
-			if tmpDir != "" {
-				defer os.RemoveAll(tmpDir)
 			}
 			if tt.loginOptsN != len(clientOpts.RegLoginOpts) {
 				// we should have a login option but no TLS option

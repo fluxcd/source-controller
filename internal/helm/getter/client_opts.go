@@ -21,8 +21,6 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
-	"os"
-	"path"
 
 	"github.com/google/go-containerregistry/pkg/authn"
 	helmgetter "helm.sh/helm/v3/pkg/getter"
@@ -69,7 +67,7 @@ func (o ClientOpts) MustLoginToRegistry() bool {
 // auth mechanisms.
 // A temporary directory is created to store the certs files if needed and its path is returned along with the options object. It is the
 // caller's responsibility to clean up the directory.
-func GetClientOpts(ctx context.Context, c client.Client, obj *sourcev1.HelmRepository, url string) (*ClientOpts, string, error) {
+func GetClientOpts(ctx context.Context, c client.Client, obj *sourcev1.HelmRepository, url string) (*ClientOpts, error) {
 	// This function configures authentication for Helm repositories based on the provided secrets:
 	// - CertSecretRef: TLS client certificates (always takes priority)
 	// - SecretRef: Can contain Basic Auth or TLS certificates (deprecated)
@@ -84,17 +82,16 @@ func GetClientOpts(ctx context.Context, c client.Client, obj *sourcev1.HelmRepos
 	}
 
 	// Process secrets and configure authentication
-	deprecatedTLS, certSecret, authSecret, err := configureAuthentication(ctx, c, obj, opts, url)
+	deprecatedTLS, _, authSecret, err := configureAuthentication(ctx, c, obj, opts)
 	if err != nil {
-		return nil, "", err
+		return nil, err
 	}
 
 	// Setup OCI registry specific configurations if needed
-	var tempCertDir string
 	if obj.Spec.Type == sourcev1.HelmRepositoryTypeOCI {
-		tempCertDir, err = configureOCIRegistryWithSecrets(ctx, obj, opts, url, certSecret, authSecret)
+		err = configureOCIRegistryWithSecrets(ctx, obj, opts, url, authSecret)
 		if err != nil {
-			return nil, "", err
+			return nil, err
 		}
 	}
 
@@ -103,7 +100,7 @@ func GetClientOpts(ctx context.Context, c client.Client, obj *sourcev1.HelmRepos
 		deprecatedErr = ErrDeprecatedTLSConfig
 	}
 
-	return opts, tempCertDir, deprecatedErr
+	return opts, deprecatedErr
 }
 
 // configureAuthentication processes all secret references and sets up authentication.
@@ -111,7 +108,7 @@ func GetClientOpts(ctx context.Context, c client.Client, obj *sourcev1.HelmRepos
 // - deprecatedTLS: true if TLS config comes from SecretRef (deprecated pattern)
 // - certSecret: the secret from CertSecretRef (nil if not specified)
 // - authSecret: the secret from SecretRef (nil if not specified)
-func configureAuthentication(ctx context.Context, c client.Client, obj *sourcev1.HelmRepository, opts *ClientOpts, url string) (bool, *corev1.Secret, *corev1.Secret, error) {
+func configureAuthentication(ctx context.Context, c client.Client, obj *sourcev1.HelmRepository, opts *ClientOpts) (bool, *corev1.Secret, *corev1.Secret, error) {
 	var deprecatedTLS bool
 	var certSecret, authSecret *corev1.Secret
 
@@ -171,12 +168,12 @@ func configureAuthentication(ctx context.Context, c client.Client, obj *sourcev1
 }
 
 // configureOCIRegistryWithSecrets sets up OCI-specific configurations using pre-fetched secrets
-func configureOCIRegistryWithSecrets(ctx context.Context, obj *sourcev1.HelmRepository, opts *ClientOpts, url string, certSecret, authSecret *corev1.Secret) (string, error) {
+func configureOCIRegistryWithSecrets(ctx context.Context, obj *sourcev1.HelmRepository, opts *ClientOpts, url string, authSecret *corev1.Secret) error {
 	// Configure OCI authentication from authSecret if available
 	if authSecret != nil {
 		keychain, err := registry.LoginOptionFromSecret(url, *authSecret)
 		if err != nil {
-			return "", fmt.Errorf("failed to configure login options: %w", err)
+			return fmt.Errorf("failed to configure login options: %w", err)
 		}
 		opts.Keychain = keychain
 	}
@@ -185,7 +182,7 @@ func configureOCIRegistryWithSecrets(ctx context.Context, obj *sourcev1.HelmRepo
 	if obj.Spec.SecretRef == nil && obj.Spec.Provider != "" && obj.Spec.Provider != sourcev1.GenericOCIProvider {
 		authenticator, err := soci.OIDCAuth(ctx, url, obj.Spec.Provider)
 		if err != nil {
-			return "", fmt.Errorf("failed to get credential from '%s': %w", obj.Spec.Provider, err)
+			return fmt.Errorf("failed to get credential from '%s': %w", obj.Spec.Provider, err)
 		}
 		opts.Authenticator = authenticator
 	}
@@ -193,40 +190,14 @@ func configureOCIRegistryWithSecrets(ctx context.Context, obj *sourcev1.HelmRepo
 	// Setup registry login options
 	loginOpt, err := registry.NewLoginOption(opts.Authenticator, opts.Keychain, url)
 	if err != nil {
-		return "", err
+		return err
 	}
 
 	if loginOpt != nil {
 		opts.RegLoginOpts = []helmreg.LoginOption{loginOpt, helmreg.LoginOptInsecure(obj.Spec.Insecure)}
 	}
 
-	// Handle TLS certificate files for OCI
-	var tempCertDir string
-	if opts.TlsConfig != nil {
-		tempCertDir, err = os.MkdirTemp("", "helm-repo-oci-certs")
-		if err != nil {
-			return "", fmt.Errorf("cannot create temporary directory: %w", err)
-		}
-
-		var tlsSecret *corev1.Secret
-		if certSecret != nil {
-			tlsSecret = certSecret
-		} else if authSecret != nil {
-			tlsSecret = authSecret
-		}
-
-		certFile, keyFile, caFile, err := storeTLSCertificateFilesForOCI(ctx, tlsSecret, nil, tempCertDir)
-		if err != nil {
-			return "", fmt.Errorf("cannot write certs files to path: %w", err)
-		}
-
-		tlsLoginOpt := registry.TLSLoginOption(certFile, keyFile, caFile)
-		if tlsLoginOpt != nil {
-			opts.RegLoginOpts = append(opts.RegLoginOpts, tlsLoginOpt)
-		}
-	}
-
-	return tempCertDir, nil
+	return nil
 }
 
 func fetchSecret(ctx context.Context, c client.Client, name, namespace string) (*corev1.Secret, error) {
@@ -239,58 +210,4 @@ func fetchSecret(ctx context.Context, c client.Client, name, namespace string) (
 		return nil, err
 	}
 	return &secret, nil
-}
-
-// storeTLSCertificateFilesForOCI writes TLS certificate data from secrets to files for OCI registry authentication.
-// Helm OCI registry client requires certificate file paths rather than in-memory data,
-// so we need to temporarily write the certificate data to disk.
-// Returns paths to the written cert, key, and CA files (any of which may be empty if not present).
-func storeTLSCertificateFilesForOCI(ctx context.Context, certSecret, authSecret *corev1.Secret, path string) (string, string, string, error) {
-	var (
-		certFile string
-		keyFile  string
-		caFile   string
-		err      error
-	)
-
-	// Try to get TLS data from certSecret first, then authSecret
-	var tlsSecret *corev1.Secret
-	if certSecret != nil {
-		tlsSecret = certSecret
-	} else if authSecret != nil {
-		tlsSecret = authSecret
-	}
-
-	if tlsSecret != nil {
-		if certData, exists := tlsSecret.Data[secrets.KeyTLSCert]; exists {
-			if keyData, keyExists := tlsSecret.Data[secrets.KeyTLSPrivateKey]; keyExists {
-				certFile, err = writeToFile(certData, certFileName, path)
-				if err != nil {
-					return "", "", "", err
-				}
-				keyFile, err = writeToFile(keyData, keyFileName, path)
-				if err != nil {
-					return "", "", "", err
-				}
-			}
-		}
-
-		if caData, exists := tlsSecret.Data[secrets.KeyCACert]; exists {
-			caFile, err = writeToFile(caData, caFileName, path)
-			if err != nil {
-				return "", "", "", err
-			}
-		}
-	}
-
-	return certFile, keyFile, caFile, nil
-}
-
-func writeToFile(data []byte, filename, tmpDir string) (string, error) {
-	file := path.Join(tmpDir, filename)
-	err := os.WriteFile(file, data, 0o600)
-	if err != nil {
-		return "", err
-	}
-	return file, nil
 }
