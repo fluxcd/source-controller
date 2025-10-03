@@ -195,14 +195,19 @@ func configureOCIRegistryWithSecrets(ctx context.Context, obj *sourcev1.HelmRepo
 	if err != nil {
 		return "", err
 	}
-
-	if loginOpt != nil {
-		opts.RegLoginOpts = []helmreg.LoginOption{loginOpt, helmreg.LoginOptInsecure(obj.Spec.Insecure)}
+	if loginOpt == nil {
+		return "", nil
 	}
+	opts.RegLoginOpts = []helmreg.LoginOption{loginOpt, helmreg.LoginOptInsecure(obj.Spec.Insecure)}
 
-	// Handle TLS certificate files for OCI
+	// Handle TLS for login options
 	var tempCertDir string
 	if opts.TlsConfig != nil {
+		// Until Helm 3.19 only a file-based login option for TLS is supported.
+		// In Helm 4 (or in Helm 3.20+ if it ever gets released), a simpler
+		// in-memory login option for TLS will be available:
+		// https://github.com/helm/helm/pull/31076
+
 		tempCertDir, err = os.MkdirTemp("", "helm-repo-oci-certs")
 		if err != nil {
 			return "", fmt.Errorf("cannot create temporary directory: %w", err)
