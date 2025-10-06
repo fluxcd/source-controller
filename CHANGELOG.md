@@ -2,6 +2,23 @@
 
 All notable changes to this project are documented in this file.
 
+## 1.7.1
+
+**Release date:** 2025-10-06
+
+This patch release comes with a fix for TLS certs handling in the
+HelmChart reconciler when auth credentials are not specified.
+
+Fixes:
+- Fix HelmChart reconciler appending login options when they do not exist
+  [#1904](https://github.com/fluxcd/source-controller/pull/1904)
+
+Improvements:
+- ci: Fix release workflow
+  [#1897](https://github.com/fluxcd/source-controller/pull/1897)
+- Point to OCIRepository in HelmRepository docs
+  [#1893](https://github.com/fluxcd/source-controller/pull/1893)
+
 ## 1.7.0
 
 **Release date:** 2025-09-15
