@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented in this file.
 
+## 1.7.3
+
+**Release date:** 2025-10-28
+
+This patch release fixes support for SOCKS5 proxy in the controller APIs.
+
+Fixes:
+- Restore SOCKS5 proxy support
+  [#1916](https://github.com/fluxcd/source-controller/pull/1916)
+
 ## 1.7.2
 
 **Release date:** 2025-10-08
