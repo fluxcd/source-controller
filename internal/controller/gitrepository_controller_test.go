@@ -17,10 +17,13 @@ limitations under the License.
 package controller
 
 import (
+	"archive/tar"
+	"compress/gzip"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -1496,6 +1499,163 @@ func TestGitRepositoryReconciler_reconcileArtifact(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestGitRepositoryReconciler_reconcileArtifact_symlinks(t *testing.T) {
+	g := NewWithT(t)
+
+	// Create a temporary directory structure with symlinks
+	tmpDir := t.TempDir()
+
+	// Create target directory with content
+	targetDir := filepath.Join(tmpDir, "library", "cozy-lib")
+	g.Expect(os.MkdirAll(targetDir, 0o750)).To(Succeed())
+
+	// Create a file in the target directory
+	targetFile := filepath.Join(targetDir, "Chart.yaml")
+	g.Expect(os.WriteFile(targetFile, []byte("name: cozy-lib\nversion: 1.0.0\n"), 0o600)).To(Succeed())
+
+	// Create a subdirectory with content
+	templatesDir := filepath.Join(targetDir, "templates")
+	g.Expect(os.MkdirAll(templatesDir, 0o750)).To(Succeed())
+	templateFile := filepath.Join(templatesDir, "deployment.yaml")
+	g.Expect(os.WriteFile(templateFile, []byte("apiVersion: apps/v1\n"), 0o600)).To(Succeed())
+
+	// Create source directory structure
+	sourceDir := filepath.Join(tmpDir, "apps", "tenant", "charts")
+	g.Expect(os.MkdirAll(sourceDir, 0o750)).To(Succeed())
+
+	// Create symlink pointing to target directory
+	symlinkPath := filepath.Join(sourceDir, "cozy-lib")
+	relativeTarget := filepath.Join("..", "..", "library", "cozy-lib")
+	g.Expect(os.Symlink(relativeTarget, symlinkPath)).To(Succeed())
+
+	// Create a regular file in source directory
+	regularFile := filepath.Join(sourceDir, "Chart.yaml")
+	g.Expect(os.WriteFile(regularFile, []byte("name: tenant\nversion: 1.0.0\n"), 0o600)).To(Succeed())
+
+	server, err := testserver.NewTempArtifactServer()
+	g.Expect(err).NotTo(HaveOccurred())
+	server.Start()
+	defer server.Stop()
+	storage, err := newTestStorage(server.HTTPServer)
+	g.Expect(err).NotTo(HaveOccurred())
+	defer os.RemoveAll(storage.BasePath)
+
+	r := &GitRepositoryReconciler{
+		EventRecorder: record.NewFakeRecorder(32),
+		Storage:       storage,
+		features:      features.FeatureGates(),
+		patchOptions:  getPatchOptions(gitRepositoryReadyCondition.Owned, "sc"),
+	}
+
+	obj := &sourcev1.GitRepository{
+		ObjectMeta: metav1.ObjectMeta{
+			GenerateName: "reconcile-artifact-symlinks-",
+			Generation:   1,
+		},
+		Status: sourcev1.GitRepositoryStatus{},
+		Spec: sourcev1.GitRepositorySpec{
+			Interval: metav1.Duration{Duration: interval},
+		},
+	}
+
+	commit := git.Commit{
+		Hash:      []byte("test-commit-hash"),
+		Reference: "refs/heads/main",
+	}
+	var includes artifactSet
+	sp := patch.NewSerialPatcher(obj, r.Client)
+
+	got, err := r.reconcileArtifact(ctx, sp, obj, &commit, &includes, tmpDir)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(got).To(Equal(sreconcile.ResultSuccess))
+	g.Expect(obj.GetArtifact()).ToNot(BeNil())
+
+	// Verify that the artifact was created
+	artifactPath := storage.LocalPath(*obj.GetArtifact())
+	g.Expect(artifactPath).To(BeAnExistingFile())
+
+	// Extract and verify archive contents
+	extractDir := t.TempDir()
+	g.Expect(extractArchive(artifactPath, extractDir)).To(Succeed())
+
+	// Verify that symlink content is included in the archive
+	// The symlink should be resolved and its content should be present
+	symlinkResolvedPath := filepath.Join(extractDir, "apps", "tenant", "charts", "cozy-lib")
+	g.Expect(symlinkResolvedPath).To(BeADirectory())
+
+	// Verify that files from the symlink target are present
+	chartFile := filepath.Join(symlinkResolvedPath, "Chart.yaml")
+	g.Expect(chartFile).To(BeAnExistingFile())
+	content, err := os.ReadFile(chartFile)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(string(content)).To(ContainSubstring("name: cozy-lib"))
+
+	// Verify that subdirectories are included
+	templatesPath := filepath.Join(symlinkResolvedPath, "templates", "deployment.yaml")
+	g.Expect(templatesPath).To(BeAnExistingFile())
+
+	// Verify that regular files are still present
+	regularFilePath := filepath.Join(extractDir, "apps", "tenant", "charts", "Chart.yaml")
+	g.Expect(regularFilePath).To(BeAnExistingFile())
+
+	// Verify that the symlink itself is NOT present (it should be replaced)
+	// Check that it's a directory, not a symlink
+	info, err := os.Lstat(symlinkResolvedPath)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(info.Mode()&os.ModeSymlink).To(BeZero(), "symlink should be resolved to a directory")
+}
+
+// extractArchive extracts a tar.gz archive to the given directory
+func extractArchive(archivePath, destDir string) error {
+	file, err := os.Open(archivePath)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	gzr, err := gzip.NewReader(file)
+	if err != nil {
+		return err
+	}
+	defer gzr.Close()
+
+	tr := tar.NewReader(gzr)
+	for {
+		header, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return err
+		}
+
+		target := filepath.Join(destDir, header.Name)
+		switch header.Typeflag {
+		case tar.TypeDir:
+			if err := os.MkdirAll(target, os.FileMode(header.Mode)); err != nil {
+				return err
+			}
+		case tar.TypeReg:
+			if err := os.MkdirAll(filepath.Dir(target), 0o750); err != nil {
+				return err
+			}
+			f, err := os.Create(target)
+			if err != nil {
+				return err
+			}
+			if _, err := io.Copy(f, tr); err != nil {
+				f.Close()
+				return err
+			}
+			f.Close()
+			if err := os.Chmod(target, os.FileMode(header.Mode)); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 func TestGitRepositoryReconciler_reconcileInclude(t *testing.T) {
