@@ -1391,6 +1391,12 @@ func resolveSymlinks(rootDir string) error {
 			}
 
 			// Security check: ensure target is within root directory
+			// First check: target must be an absolute path that starts with rootDir
+			if !strings.HasPrefix(target, rootDir+string(filepath.Separator)) && target != rootDir {
+				// Symlink points outside root directory - skip it
+				return nil
+			}
+			// Second check: use filepath.Rel to catch edge cases with ../
 			relPath, err := filepath.Rel(rootDir, target)
 			if err != nil || strings.HasPrefix(relPath, "..") {
 				// Symlink points outside root directory - skip it
