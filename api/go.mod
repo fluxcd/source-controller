@@ -4,9 +4,9 @@ go 1.25.0
 
 require (
 	github.com/fluxcd/pkg/apis/acl v0.9.0
-	github.com/fluxcd/pkg/apis/meta v1.22.0
-	k8s.io/apimachinery v0.34.1
-	sigs.k8s.io/controller-runtime v0.22.2
+	github.com/fluxcd/pkg/apis/meta v1.23.0
+	k8s.io/apimachinery v0.34.2
+	sigs.k8s.io/controller-runtime v0.22.4
 )
 
 require (
