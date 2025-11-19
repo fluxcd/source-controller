@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented in this file.
 
+## 1.7.4
+
+**Release date:** 2025-11-19
+
+This patch release fixes Azure Workload Identity in Azure China Cloud.
+
+Improvements:
+- Upgrade k8s to 1.34.2, c-r to 0.22.4 and helm to 3.19.2
+  [#1938](https://github.com/fluxcd/source-controller/pull/1938)
+- Upgrade Helm to 3.19.1
+  [#1934](https://github.com/fluxcd/source-controller/pull/1934)
+
 ## 1.7.3
 
 **Release date:** 2025-10-28
