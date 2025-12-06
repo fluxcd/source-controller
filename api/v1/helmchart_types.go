@@ -28,6 +28,7 @@ import (
 const HelmChartKind = "HelmChart"
 
 // HelmChartSpec specifies the desired state of a Helm chart.
+// +kubebuilder:validation:XValidation:rule="!has(self.verify) || self.sourceRef.kind == 'HelmRepository'",message="spec.verify is only supported when spec.sourceRef.kind is 'HelmRepository'"
 type HelmChartSpec struct {
 	// Chart is the name or path the Helm chart is available at in the
 	// SourceRef.
