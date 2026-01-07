@@ -142,10 +142,6 @@ type HelmChartReconciler struct {
 	patchOptions []patch.Option
 }
 
-func (r *HelmChartReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
-	return r.SetupWithManagerAndOptions(ctx, mgr, HelmChartReconcilerOptions{})
-}
-
 type HelmChartReconcilerOptions struct {
 	RateLimiter workqueue.TypedRateLimiter[reconcile.Request]
 }
@@ -173,7 +169,7 @@ const (
 	indexKeyHelmChartSource = ".metadata.helmChartSource"
 )
 
-func (r *HelmChartReconciler) SetupWithManagerAndOptions(ctx context.Context, mgr ctrl.Manager, opts HelmChartReconcilerOptions) error {
+func (r *HelmChartReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, opts HelmChartReconcilerOptions) error {
 	r.patchOptions = getPatchOptions(helmChartReadyCondition.Owned, r.ControllerName)
 
 	if err := mgr.GetCache().IndexField(ctx, &sourcev1.HelmRepository{}, indexKeyHelmRepositoryURL,

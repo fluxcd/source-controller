@@ -129,11 +129,7 @@ type HelmRepositoryReconcilerOptions struct {
 // object.
 type helmRepositoryReconcileFunc func(ctx context.Context, sp *patch.SerialPatcher, obj *sourcev1.HelmRepository, artifact *meta.Artifact, repo *repository.ChartRepository) (sreconcile.Result, error)
 
-func (r *HelmRepositoryReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	return r.SetupWithManagerAndOptions(mgr, HelmRepositoryReconcilerOptions{})
-}
-
-func (r *HelmRepositoryReconciler) SetupWithManagerAndOptions(mgr ctrl.Manager, opts HelmRepositoryReconcilerOptions) error {
+func (r *HelmRepositoryReconciler) SetupWithManager(mgr ctrl.Manager, opts HelmRepositoryReconcilerOptions) error {
 	r.patchOptions = getPatchOptions(helmRepositoryReadyCondition.Owned, r.ControllerName)
 
 	return ctrl.NewControllerManagedBy(mgr).

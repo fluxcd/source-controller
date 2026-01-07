@@ -175,11 +175,7 @@ type bucketCredentials struct {
 // executed serially to perform the complete reconcile of the object.
 type bucketReconcileFunc func(ctx context.Context, sp *patch.SerialPatcher, obj *sourcev1.Bucket, index *index.Digester, dir string) (sreconcile.Result, error)
 
-func (r *BucketReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	return r.SetupWithManagerAndOptions(mgr, BucketReconcilerOptions{})
-}
-
-func (r *BucketReconciler) SetupWithManagerAndOptions(mgr ctrl.Manager, opts BucketReconcilerOptions) error {
+func (r *BucketReconciler) SetupWithManager(mgr ctrl.Manager, opts BucketReconcilerOptions) error {
 	r.patchOptions = getPatchOptions(bucketReadyCondition.Owned, r.ControllerName)
 
 	return ctrl.NewControllerManagedBy(mgr).

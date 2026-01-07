@@ -232,7 +232,7 @@ func main() {
 		Storage:        storage,
 		ControllerName: controllerName,
 		TokenCache:     tokenCache,
-	}).SetupWithManagerAndOptions(mgr, controller.GitRepositoryReconcilerOptions{
+	}).SetupWithManager(mgr, controller.GitRepositoryReconcilerOptions{
 		DependencyRequeueInterval: requeueDependency,
 		RateLimiter:               helper.GetRateLimiter(rateLimiterOptions),
 	}); err != nil {
@@ -250,7 +250,7 @@ func main() {
 		Cache:          helmIndexCache,
 		TTL:            helmIndexCacheItemTTL,
 		CacheRecorder:  cacheRecorder,
-	}).SetupWithManagerAndOptions(mgr, controller.HelmRepositoryReconcilerOptions{
+	}).SetupWithManager(mgr, controller.HelmRepositoryReconcilerOptions{
 		RateLimiter: helper.GetRateLimiter(rateLimiterOptions),
 	}); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", sourcev1.HelmRepositoryKind)
@@ -267,7 +267,7 @@ func main() {
 		Cache:          helmIndexCache,
 		TTL:            helmIndexCacheItemTTL,
 		CacheRecorder:  cacheRecorder,
-	}).SetupWithManagerAndOptions(ctx, mgr, controller.HelmChartReconcilerOptions{
+	}).SetupWithManager(ctx, mgr, controller.HelmChartReconcilerOptions{
 		RateLimiter: helper.GetRateLimiter(rateLimiterOptions),
 	}); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", sourcev1.HelmChartKind)
@@ -281,7 +281,7 @@ func main() {
 		Storage:        storage,
 		ControllerName: controllerName,
 		TokenCache:     tokenCache,
-	}).SetupWithManagerAndOptions(mgr, controller.BucketReconcilerOptions{
+	}).SetupWithManager(mgr, controller.BucketReconcilerOptions{
 		RateLimiter: helper.GetRateLimiter(rateLimiterOptions),
 	}); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", sourcev1.BucketKind)
@@ -295,7 +295,7 @@ func main() {
 		ControllerName: controllerName,
 		TokenCache:     tokenCache,
 		Metrics:        metrics,
-	}).SetupWithManagerAndOptions(mgr, controller.OCIRepositoryReconcilerOptions{
+	}).SetupWithManager(mgr, controller.OCIRepositoryReconcilerOptions{
 		RateLimiter: helper.GetRateLimiter(rateLimiterOptions),
 	}); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", sourcev1.OCIRepositoryKind)

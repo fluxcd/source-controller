@@ -321,7 +321,7 @@ func TestMain(m *testing.M) {
 		EventRecorder: record.NewFakeRecorder(32),
 		Metrics:       testMetricsH,
 		Storage:       testStorage,
-	}).SetupWithManagerAndOptions(testEnv, GitRepositoryReconcilerOptions{
+	}).SetupWithManager(testEnv, GitRepositoryReconcilerOptions{
 		RateLimiter: controller.GetDefaultRateLimiter(),
 	}); err != nil {
 		panic(fmt.Sprintf("Failed to start GitRepositoryReconciler: %v", err))
@@ -332,7 +332,7 @@ func TestMain(m *testing.M) {
 		EventRecorder: record.NewFakeRecorder(32),
 		Metrics:       testMetricsH,
 		Storage:       testStorage,
-	}).SetupWithManagerAndOptions(testEnv, BucketReconcilerOptions{
+	}).SetupWithManager(testEnv, BucketReconcilerOptions{
 		RateLimiter: controller.GetDefaultRateLimiter(),
 	}); err != nil {
 		panic(fmt.Sprintf("Failed to start BucketReconciler: %v", err))
@@ -346,7 +346,7 @@ func TestMain(m *testing.M) {
 		EventRecorder: record.NewFakeRecorder(32),
 		Metrics:       testMetricsH,
 		Storage:       testStorage,
-	}).SetupWithManagerAndOptions(testEnv, OCIRepositoryReconcilerOptions{
+	}).SetupWithManager(testEnv, OCIRepositoryReconcilerOptions{
 		RateLimiter: controller.GetDefaultRateLimiter(),
 	}); err != nil {
 		panic(fmt.Sprintf("Failed to start OCIRepositoryReconciler: %v", err))
@@ -361,7 +361,7 @@ func TestMain(m *testing.M) {
 		Cache:         testCache,
 		TTL:           1 * time.Second,
 		CacheRecorder: cacheRecorder,
-	}).SetupWithManagerAndOptions(testEnv, HelmRepositoryReconcilerOptions{
+	}).SetupWithManager(testEnv, HelmRepositoryReconcilerOptions{
 		RateLimiter: controller.GetDefaultRateLimiter(),
 	}); err != nil {
 		panic(fmt.Sprintf("Failed to start HelmRepositoryReconciler: %v", err))
@@ -376,7 +376,7 @@ func TestMain(m *testing.M) {
 		Cache:         testCache,
 		TTL:           1 * time.Second,
 		CacheRecorder: cacheRecorder,
-	}).SetupWithManagerAndOptions(ctx, testEnv, HelmChartReconcilerOptions{
+	}).SetupWithManager(ctx, testEnv, HelmChartReconcilerOptions{
 		RateLimiter: controller.GetDefaultRateLimiter(),
 	}); err != nil {
 		panic(fmt.Sprintf("Failed to start HelmChartReconciler: %v", err))

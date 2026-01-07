@@ -151,11 +151,7 @@ type GitRepositoryReconcilerOptions struct {
 // v1.GitRepository (sub)reconcile functions.
 type gitRepositoryReconcileFunc func(ctx context.Context, sp *patch.SerialPatcher, obj *sourcev1.GitRepository, commit *git.Commit, includes *artifactSet, dir string) (sreconcile.Result, error)
 
-func (r *GitRepositoryReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	return r.SetupWithManagerAndOptions(mgr, GitRepositoryReconcilerOptions{})
-}
-
-func (r *GitRepositoryReconciler) SetupWithManagerAndOptions(mgr ctrl.Manager, opts GitRepositoryReconcilerOptions) error {
+func (r *GitRepositoryReconciler) SetupWithManager(mgr ctrl.Manager, opts GitRepositoryReconcilerOptions) error {
 	r.patchOptions = getPatchOptions(gitRepositoryReadyCondition.Owned, r.ControllerName)
 
 	r.requeueDependency = opts.DependencyRequeueInterval
@@ -328,7 +324,7 @@ func (r *GitRepositoryReconciler) reconcile(ctx context.Context, sp *patch.Seria
 func (r *GitRepositoryReconciler) notify(ctx context.Context, oldObj, newObj *sourcev1.GitRepository, commit git.Commit, res sreconcile.Result, resErr error) {
 	// Notify successful reconciliation for new artifact, no-op reconciliation
 	// and recovery from any failure.
-	if r.shouldNotify(oldObj, newObj, res, resErr) {
+	if r.shouldNotify(newObj, res, resErr) {
 		annotations := map[string]string{
 			fmt.Sprintf("%s/%s", sourcev1.GroupVersion.Group, eventv1.MetaRevisionKey): newObj.Status.Artifact.Revision,
 			fmt.Sprintf("%s/%s", sourcev1.GroupVersion.Group, eventv1.MetaDigestKey):   newObj.Status.Artifact.Digest,
@@ -362,7 +358,7 @@ func (r *GitRepositoryReconciler) notify(ctx context.Context, oldObj, newObj *so
 // notification should be sent. It decides about the final informational
 // notifications after the reconciliation. Failure notification and in-line
 // notifications are not handled here.
-func (r *GitRepositoryReconciler) shouldNotify(oldObj, newObj *sourcev1.GitRepository, res sreconcile.Result, resErr error) bool {
+func (r *GitRepositoryReconciler) shouldNotify(newObj *sourcev1.GitRepository, res sreconcile.Result, resErr error) bool {
 	// Notify for successful reconciliation.
 	if resErr == nil && res == sreconcile.ResultSuccess && newObj.Status.Artifact != nil {
 		return true
@@ -595,7 +591,7 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 	conditions.Delete(obj, sourcev1.FetchFailedCondition)
 
 	// Validate sparse checkout paths after successful checkout.
-	if err := r.validateSparseCheckoutPaths(ctx, obj, dir); err != nil {
+	if err := r.validateSparseCheckoutPaths(obj, dir); err != nil {
 		e := serror.NewGeneric(
 			fmt.Errorf("failed to sparse checkout directories : %w", err),
 			sourcev1.GitOperationFailedReason,
@@ -1302,7 +1298,7 @@ func gitContentConfigChanged(obj *sourcev1.GitRepository, includes *artifactSet)
 }
 
 // validateSparseCheckoutPaths checks if the sparse checkout paths exist in the cloned repository.
-func (r *GitRepositoryReconciler) validateSparseCheckoutPaths(ctx context.Context, obj *sourcev1.GitRepository, dir string) error {
+func (r *GitRepositoryReconciler) validateSparseCheckoutPaths(obj *sourcev1.GitRepository, dir string) error {
 	if obj.Spec.SparseCheckout != nil {
 		for _, path := range obj.Spec.SparseCheckout {
 			fullPath := filepath.Join(dir, path)

@@ -69,13 +69,6 @@ func waitForSourceReadyWithArtifact(ctx context.Context, g *WithT, obj condition
 	waitForSourceReady(ctx, g, obj, true)
 }
 
-// waitForSourceReadyWithoutArtifact is a generic test helper to wait for an object
-// to be ready of any source kind that don't have artifact in status when ready.
-func waitForSourceReadyWithoutArtifact(ctx context.Context, g *WithT, obj conditions.Setter) {
-	g.THelper()
-	waitForSourceReady(ctx, g, obj, false)
-}
-
 // waitForSourceReady is a generic test helper to wait for an object to be
 // ready of any source kind.
 func waitForSourceReady(ctx context.Context, g *WithT, obj conditions.Setter, withArtifact bool) {
@@ -114,14 +107,6 @@ func waitForSourceReady(ctx context.Context, g *WithT, obj conditions.Setter, wi
 func testSuspendedObjectDeleteWithArtifact(ctx context.Context, g *WithT, obj conditions.Setter) {
 	g.THelper()
 	testSuspendedObjectDelete(ctx, g, obj, true)
-}
-
-// testSuspendedObjectDeleteWithoutArtifact is a generic test helper to test if
-// a suspended object can be deleted for objects that don't have artifact in
-// status when ready.
-func testSuspendedObjectDeleteWithoutArtifact(ctx context.Context, g *WithT, obj conditions.Setter) {
-	g.THelper()
-	testSuspendedObjectDelete(ctx, g, obj, false)
 }
 
 // testSuspendedObjectDelete is a generic test helper to test if a suspended
