@@ -25,9 +25,9 @@ import (
 
 	. "github.com/onsi/gomega"
 	"github.com/otiai10/copy"
-	helmchart "helm.sh/helm/v3/pkg/chart"
-	"helm.sh/helm/v3/pkg/chartutil"
-	"helm.sh/helm/v3/pkg/repo"
+	"helm.sh/helm/v4/pkg/chart/common"
+	helmchart "helm.sh/helm/v4/pkg/chart/v2"
+	repo "helm.sh/helm/v4/pkg/repo/v1"
 
 	"github.com/fluxcd/source-controller/internal/helm/chart/secureloader"
 	"github.com/fluxcd/source-controller/internal/helm/repository"
@@ -66,10 +66,10 @@ func TestLocalBuilder_Build(t *testing.T) {
 		name                string
 		reference           Reference
 		buildOpts           BuildOptions
-		valuesFiles         []helmchart.File
+		valuesFiles         []common.File
 		repositories        map[string]repository.Downloader
 		dependentChartPaths []string
-		wantValues          chartutil.Values
+		wantValues          common.Values
 		wantVersion         string
 		wantPackaged        bool
 		wantErr             string
@@ -111,7 +111,7 @@ func TestLocalBuilder_Build(t *testing.T) {
 		{
 			name:      "default values",
 			reference: LocalReference{Path: "../testdata/charts/helmchart"},
-			wantValues: chartutil.Values{
+			wantValues: common.Values{
 				"replicaCount": float64(1),
 			},
 			wantVersion:  "0.1.0",
@@ -123,7 +123,7 @@ func TestLocalBuilder_Build(t *testing.T) {
 			buildOpts: BuildOptions{
 				ValuesFiles: []string{"custom-values1.yaml", "custom-values2.yaml"},
 			},
-			valuesFiles: []helmchart.File{
+			valuesFiles: []common.File{
 				{
 					Name: "custom-values1.yaml",
 					Data: []byte(`replicaCount: 11
@@ -135,7 +135,7 @@ nameOverride: "foo-name-override"`),
 fullnameOverride: "full-foo-name-override"`),
 				},
 			},
-			wantValues: chartutil.Values{
+			wantValues: common.Values{
 				"replicaCount":     float64(20),
 				"nameOverride":     "foo-name-override",
 				"fullnameOverride": "full-foo-name-override",
@@ -156,7 +156,7 @@ fullnameOverride: "full-foo-name-override"`),
 		{
 			name:      "v1 chart",
 			reference: LocalReference{Path: "./../testdata/charts/helmchart-v1"},
-			wantValues: chartutil.Values{
+			wantValues: common.Values{
 				"replicaCount": float64(1),
 			},
 			wantVersion:  "0.2.0",
@@ -282,7 +282,7 @@ func TestLocalBuilder_Build_CachedChart(t *testing.T) {
 func Test_mergeFileValues(t *testing.T) {
 	tests := []struct {
 		name          string
-		files         []*helmchart.File
+		files         []*common.File
 		paths         []string
 		ignoreMissing bool
 		wantValues    map[string]interface{}
@@ -291,7 +291,7 @@ func Test_mergeFileValues(t *testing.T) {
 	}{
 		{
 			name: "merges values from files",
-			files: []*helmchart.File{
+			files: []*common.File{
 				{Name: "a.yaml", Data: []byte("a: b")},
 				{Name: "b.yaml", Data: []byte("b: c")},
 				{Name: "c.yaml", Data: []byte("b: d")},
@@ -310,7 +310,7 @@ func Test_mergeFileValues(t *testing.T) {
 		},
 		{
 			name: "unmarshal error",
-			files: []*helmchart.File{
+			files: []*common.File{
 				{Name: "invalid", Data: []byte("abcd")},
 			},
 			paths:   []string{"invalid"},
@@ -323,7 +323,7 @@ func Test_mergeFileValues(t *testing.T) {
 		},
 		{
 			name: "ignore missing files",
-			files: []*helmchart.File{
+			files: []*common.File{
 				{Name: "a.yaml", Data: []byte("a: b")},
 			},
 			paths:         []string{"a.yaml", "b.yaml"},

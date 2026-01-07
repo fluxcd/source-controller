@@ -29,9 +29,9 @@ import (
 
 	. "github.com/onsi/gomega"
 	"github.com/opencontainers/go-digest"
-	"helm.sh/helm/v3/pkg/chart"
-	helmgetter "helm.sh/helm/v3/pkg/getter"
-	"helm.sh/helm/v3/pkg/repo"
+	chart "helm.sh/helm/v4/pkg/chart/v2"
+	helmgetter "helm.sh/helm/v4/pkg/getter"
+	repo "helm.sh/helm/v4/pkg/repo/v1"
 
 	"github.com/fluxcd/source-controller/internal/helm"
 )

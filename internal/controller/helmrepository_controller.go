@@ -22,13 +22,12 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
-	"strings"
 	"time"
 
 	"github.com/docker/go-units"
 	"github.com/opencontainers/go-digest"
-	helmgetter "helm.sh/helm/v3/pkg/getter"
-	helmreg "helm.sh/helm/v3/pkg/registry"
+	helmgetter "helm.sh/helm/v4/pkg/getter"
+	helmreg "helm.sh/helm/v4/pkg/registry"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	kuberecorder "k8s.io/client-go/tools/record"
@@ -396,7 +395,7 @@ func (r *HelmRepositoryReconciler) reconcileSource(ctx context.Context, sp *patc
 	obj *sourcev1.HelmRepository, artifact *meta.Artifact, chartRepo *repository.ChartRepository) (sreconcile.Result, error) {
 	// Ensure it's not an OCI URL. API validation ensures that only
 	// http/https/oci scheme are allowed.
-	if strings.HasPrefix(obj.Spec.URL, helmreg.OCIScheme) {
+	if helmreg.IsOCI(obj.Spec.URL) {
 		err := fmt.Errorf("'oci' URL scheme cannot be used with 'default' HelmRepository type")
 		e := serror.NewStalling(
 			fmt.Errorf("invalid Helm repository URL: %w", err),
@@ -416,7 +415,7 @@ func (r *HelmRepositoryReconciler) reconcileSource(ctx context.Context, sp *patc
 		return sreconcile.ResultEmpty, e
 	}
 
-	clientOpts, _, err := getter.GetClientOpts(ctx, r.Client, obj, normalizedURL)
+	clientOpts, err := getter.GetClientOpts(ctx, r.Client, obj, normalizedURL)
 	if err != nil {
 		if errors.Is(err, getter.ErrDeprecatedTLSConfig) {
 			ctrl.LoggerFrom(ctx).
@@ -432,7 +431,7 @@ func (r *HelmRepositoryReconciler) reconcileSource(ctx context.Context, sp *patc
 	}
 
 	// Construct Helm chart repository with options and download index
-	newChartRepo, err := repository.NewChartRepository(obj.Spec.URL, "", r.Getters, clientOpts.TlsConfig, clientOpts.GetterOpts...)
+	newChartRepo, err := repository.NewChartRepository(obj.Spec.URL, "", r.Getters, clientOpts.TLSConfig, clientOpts.GetterOpts...)
 	if err != nil {
 		switch err.(type) {
 		case *url.Error:

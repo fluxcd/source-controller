@@ -25,9 +25,9 @@ import (
 	"path/filepath"
 
 	"github.com/Masterminds/semver/v3"
-	helmchart "helm.sh/helm/v3/pkg/chart"
-	"helm.sh/helm/v3/pkg/chartutil"
-	"helm.sh/helm/v3/pkg/repo"
+	helmchart "helm.sh/helm/v4/pkg/chart/v2"
+	chartutil "helm.sh/helm/v4/pkg/chart/v2/util"
+	repo "helm.sh/helm/v4/pkg/repo/v1"
 	"sigs.k8s.io/yaml"
 
 	sourcefs "github.com/fluxcd/pkg/oci"

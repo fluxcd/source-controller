@@ -28,10 +28,11 @@ import (
 	"testing"
 
 	. "github.com/onsi/gomega"
-	helmchart "helm.sh/helm/v3/pkg/chart"
-	"helm.sh/helm/v3/pkg/chartutil"
-	helmgetter "helm.sh/helm/v3/pkg/getter"
-	"helm.sh/helm/v3/pkg/registry"
+	"helm.sh/helm/v4/pkg/chart/common"
+	helmchart "helm.sh/helm/v4/pkg/chart/v2"
+	chartutil "helm.sh/helm/v4/pkg/chart/v2/util"
+	helmgetter "helm.sh/helm/v4/pkg/getter"
+	"helm.sh/helm/v4/pkg/registry"
 
 	"github.com/fluxcd/source-controller/internal/helm/chart/secureloader"
 	"github.com/fluxcd/source-controller/internal/helm/repository"
@@ -120,7 +121,7 @@ entries:
 		reference    Reference
 		buildOpts    BuildOptions
 		repository   *repository.ChartRepository
-		wantValues   chartutil.Values
+		wantValues   common.Values
 		wantVersion  string
 		wantPackaged bool
 		wantErr      string
@@ -167,7 +168,7 @@ entries:
 			reference:   RemoteReference{Name: "grafana"},
 			repository:  mockRepo(),
 			wantVersion: "0.1.0",
-			wantValues: chartutil.Values{
+			wantValues: common.Values{
 				"replicaCount": float64(1),
 			},
 		},
@@ -179,7 +180,7 @@ entries:
 			},
 			repository:  mockRepo(),
 			wantVersion: "6.17.4",
-			wantValues: chartutil.Values{
+			wantValues: common.Values{
 				"a": "b",
 				"b": "d",
 			},
@@ -268,7 +269,7 @@ func TestRemoteBuilder_BuildFromOCIChartRepository(t *testing.T) {
 		reference    Reference
 		buildOpts    BuildOptions
 		repository   *repository.OCIChartRepository
-		wantValues   chartutil.Values
+		wantValues   common.Values
 		wantVersion  string
 		wantPackaged bool
 		wantErr      string
@@ -315,7 +316,7 @@ func TestRemoteBuilder_BuildFromOCIChartRepository(t *testing.T) {
 			reference:   RemoteReference{Name: "grafana"},
 			repository:  mockRepo(),
 			wantVersion: "0.1.0",
-			wantValues: chartutil.Values{
+			wantValues: common.Values{
 				"replicaCount": float64(1),
 			},
 		},
@@ -324,7 +325,7 @@ func TestRemoteBuilder_BuildFromOCIChartRepository(t *testing.T) {
 			reference:   RemoteReference{Name: "another/grafana"},
 			repository:  mockRepo(),
 			wantVersion: "0.1.0",
-			wantValues: chartutil.Values{
+			wantValues: common.Values{
 				"replicaCount": float64(1),
 			},
 		},
@@ -336,7 +337,7 @@ func TestRemoteBuilder_BuildFromOCIChartRepository(t *testing.T) {
 			},
 			repository:  mockRepo(),
 			wantVersion: "6.17.4",
-			wantValues: chartutil.Values{
+			wantValues: common.Values{
 				"a": "b",
 				"b": "d",
 			},
@@ -455,7 +456,7 @@ func Test_mergeChartValues(t *testing.T) {
 		{
 			name: "merges values",
 			chart: &helmchart.Chart{
-				Files: []*helmchart.File{
+				Files: []*common.File{
 					{Name: "a.yaml", Data: []byte("a: b")},
 					{Name: "b.yaml", Data: []byte("b: c")},
 					{Name: "c.yaml", Data: []byte("b: d")},
@@ -471,7 +472,7 @@ func Test_mergeChartValues(t *testing.T) {
 		{
 			name: "uses chart values",
 			chart: &helmchart.Chart{
-				Files: []*helmchart.File{
+				Files: []*common.File{
 					{Name: "c.yaml", Data: []byte("b: d")},
 				},
 				Values: map[string]interface{}{
@@ -488,7 +489,7 @@ func Test_mergeChartValues(t *testing.T) {
 		{
 			name: "unmarshal error",
 			chart: &helmchart.Chart{
-				Files: []*helmchart.File{
+				Files: []*common.File{
 					{Name: "invalid", Data: []byte("abcd")},
 				},
 			},
@@ -504,7 +505,7 @@ func Test_mergeChartValues(t *testing.T) {
 		{
 			name: "merges values ignoring file missing",
 			chart: &helmchart.Chart{
-				Files: []*helmchart.File{
+				Files: []*common.File{
 					{Name: "a.yaml", Data: []byte("a: b")},
 				},
 			},

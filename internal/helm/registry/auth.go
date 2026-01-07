@@ -18,37 +18,38 @@ package registry
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"net/url"
 
 	"github.com/docker/cli/cli/config"
 	"github.com/docker/cli/cli/config/credentials"
+	"github.com/google/go-containerregistry/pkg/authn"
+	corev1 "k8s.io/api/core/v1"
+	"oras.land/oras-go/v2/registry/remote/auth"
+
 	"github.com/fluxcd/source-controller/internal/helm/common"
 	"github.com/fluxcd/source-controller/internal/oci"
-	"github.com/google/go-containerregistry/pkg/authn"
-	"helm.sh/helm/v3/pkg/registry"
-	corev1 "k8s.io/api/core/v1"
 )
 
 // helper is a subset of the Docker credential helper credentials.Helper interface used by NewKeychainFromHelper.
 type helper struct {
 	registry           string
 	username, password string
-	err                error
 }
 
 func (h helper) Get(serverURL string) (string, string, error) {
 	if serverURL != h.registry {
 		return "", "", fmt.Errorf("unexpected serverURL: %s", serverURL)
 	}
-	return h.username, h.password, h.err
+	return h.username, h.password, nil
 }
 
-// LoginOptionFromSecret derives authentication data from a Secret to login to an OCI registry. This Secret
+// KeychainFromSecret derives authentication data from a Secret to login to an OCI registry. This Secret
 // may either hold "username" and "password" fields or be of the corev1.SecretTypeDockerConfigJson type and hold
 // a corev1.DockerConfigJsonKey field with a complete Docker configuration. If both, "username" and "password" are
 // empty, a nil LoginOption and a nil error will be returned.
-func LoginOptionFromSecret(registryURL string, secret corev1.Secret) (authn.Keychain, error) {
+func KeychainFromSecret(registryURL string, secret corev1.Secret) (authn.Keychain, error) {
 	var username, password string
 	parsedURL, err := url.Parse(registryURL)
 	if err != nil {
@@ -86,31 +87,22 @@ func LoginOptionFromSecret(registryURL string, secret corev1.Secret) (authn.Keyc
 	return authn.NewKeychainFromHelper(helper{registry: parsedURL.Host, username: username, password: password}), nil
 }
 
-// KeyChainAdaptHelper returns an ORAS credentials callback configured with the authorization data
-// from the given authn keychain. This allows for example to make use of credential helpers from
-// cloud providers.
-// Ref: https://github.com/google/go-containerregistry/tree/main/pkg/authn
-func KeychainAdaptHelper(keyChain authn.Keychain) func(string) (registry.LoginOption, error) {
-	return func(registryURL string) (registry.LoginOption, error) {
-		parsedURL, err := url.Parse(registryURL)
-		if err != nil {
-			return nil, fmt.Errorf("unable to parse registry URL '%s'", registryURL)
-		}
-		authenticator, err := keyChain.Resolve(common.StringResource{Registry: parsedURL.Host})
-		if err != nil {
-			return nil, fmt.Errorf("unable to resolve credentials for registry '%s': %w", registryURL, err)
-		}
-
-		return AuthAdaptHelper(authenticator)
+// credsFromKeychain returns oras v2 credentials from a go-containerregistry Keychain.
+func credsFromKeychain(registryURL string, keyChain authn.Keychain) (auth.CredentialFunc, error) {
+	parsedURL, err := url.Parse(registryURL)
+	if err != nil {
+		return nil, fmt.Errorf("unable to parse registry URL '%s'", registryURL)
 	}
+	authenticator, err := keyChain.Resolve(common.StringResource{Registry: parsedURL.Host})
+	if err != nil {
+		return nil, fmt.Errorf("unable to resolve credentials for registry '%s': %w", registryURL, err)
+	}
+	return credsFromAuthenticator(authenticator)
 }
 
-// AuthAdaptHelper returns an ORAS credentials callback configured with the authorization data
-// from the given authn authenticator. This allows for example to make use of credential helpers from
-// cloud providers.
-// Ref: https://github.com/google/go-containerregistry/tree/main/pkg/authn
-func AuthAdaptHelper(auth authn.Authenticator) (registry.LoginOption, error) {
-	authConfig, err := auth.Authorization()
+// credsFromAuthenticator returns oras v2 credentials from a go-containerregistry Authenticator.
+func credsFromAuthenticator(authenticator authn.Authenticator) (auth.CredentialFunc, error) {
+	authConfig, err := authenticator.Authorization()
 	if err != nil {
 		return nil, fmt.Errorf("unable to get authentication data from OIDC: %w", err)
 	}
@@ -124,29 +116,20 @@ func AuthAdaptHelper(auth authn.Authenticator) (registry.LoginOption, error) {
 	case username == "" || password == "":
 		return nil, fmt.Errorf("invalid auth data: required fields 'username' and 'password'")
 	}
-	return registry.LoginOptBasicAuth(username, password), nil
+
+	return func(ctx context.Context, hostport string) (auth.Credential, error) {
+		return auth.Credential{Username: username, Password: password}, nil
+	}, nil
 }
 
-// NewLoginOption returns a registry login option for the given HelmRepository.
-// If the HelmRepository does not specify a secretRef, a nil login option is returned.
-func NewLoginOption(auth authn.Authenticator, keychain authn.Keychain, registryURL string) (registry.LoginOption, error) {
+func NewCredentials(auth authn.Authenticator, keychain authn.Keychain, registryURL string) (auth.CredentialFunc, error) {
 	if auth != nil {
-		return AuthAdaptHelper(auth)
+		return credsFromAuthenticator(auth)
 	}
 
 	if keychain != nil {
-		return KeychainAdaptHelper(keychain)(registryURL)
+		return credsFromKeychain(registryURL, keychain)
 	}
 
 	return nil, nil
-}
-
-// TLSLoginOption returns a LoginOption that can be used to configure the TLS client.
-// It requires either the caFile or both certFile and keyFile to be not blank.
-func TLSLoginOption(certFile, keyFile, caFile string) registry.LoginOption {
-	if (certFile != "" && keyFile != "") || caFile != "" {
-		return registry.LoginOptTLSClientConfig(certFile, keyFile, caFile)
-	}
-
-	return nil
 }

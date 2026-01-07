@@ -22,7 +22,7 @@ import (
 	"time"
 
 	flag "github.com/spf13/pflag"
-	"helm.sh/helm/v3/pkg/getter"
+	"helm.sh/helm/v4/pkg/getter"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -63,7 +63,6 @@ import (
 	"github.com/fluxcd/source-controller/internal/controller"
 	"github.com/fluxcd/source-controller/internal/features"
 	"github.com/fluxcd/source-controller/internal/helm"
-	"github.com/fluxcd/source-controller/internal/helm/registry"
 )
 
 const controllerName = "source-controller"
@@ -259,16 +258,15 @@ func main() {
 	}
 
 	if err := (&controller.HelmChartReconciler{
-		Client:                  mgr.GetClient(),
-		RegistryClientGenerator: registry.ClientGenerator,
-		Storage:                 storage,
-		Getters:                 getters,
-		EventRecorder:           eventRecorder,
-		Metrics:                 metrics,
-		ControllerName:          controllerName,
-		Cache:                   helmIndexCache,
-		TTL:                     helmIndexCacheItemTTL,
-		CacheRecorder:           cacheRecorder,
+		Client:         mgr.GetClient(),
+		Storage:        storage,
+		Getters:        getters,
+		EventRecorder:  eventRecorder,
+		Metrics:        metrics,
+		ControllerName: controllerName,
+		Cache:          helmIndexCache,
+		TTL:            helmIndexCacheItemTTL,
+		CacheRecorder:  cacheRecorder,
 	}).SetupWithManagerAndOptions(ctx, mgr, controller.HelmChartReconcilerOptions{
 		RateLimiter: helper.GetRateLimiter(rateLimiterOptions),
 	}); err != nil {

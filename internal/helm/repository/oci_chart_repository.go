@@ -20,24 +20,23 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
-	"errors"
 	"fmt"
 	"net/url"
-	"os"
 	"path"
 	"sort"
 	"strings"
 
-	"helm.sh/helm/v3/pkg/chart"
-	"helm.sh/helm/v3/pkg/getter"
-	"helm.sh/helm/v3/pkg/registry"
-	"helm.sh/helm/v3/pkg/repo"
+	chart "helm.sh/helm/v4/pkg/chart/v2"
+	"helm.sh/helm/v4/pkg/getter"
+	"helm.sh/helm/v4/pkg/registry"
+	repo "helm.sh/helm/v4/pkg/repo/v1"
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/google/go-containerregistry/pkg/name"
 
 	"github.com/fluxcd/pkg/http/transport"
 	"github.com/fluxcd/pkg/version"
+
 	"github.com/fluxcd/source-controller/internal/oci"
 )
 
@@ -45,8 +44,6 @@ import (
 // It is used by the OCIChartRepository to retrieve chart versions
 // from OCI registries
 type RegistryClient interface {
-	Login(host string, opts ...registry.LoginOption) error
-	Logout(host string, opts ...registry.LogoutOption) error
 	Tags(url string) ([]string, error)
 }
 
@@ -66,12 +63,6 @@ type OCIChartRepository struct {
 
 	// RegistryClient is a client to use while downloading tags or charts from a registry.
 	RegistryClient RegistryClient
-
-	// credentialsFile is a temporary credentials file to use while downloading tags or charts from a registry.
-	credentialsFile string
-
-	// certificatesStore is a temporary store to use while downloading tags or charts from a registry.
-	certificatesStore string
 
 	// verifiers is a list of verifiers to use when verifying a chart.
 	verifiers []oci.Verifier
@@ -123,22 +114,6 @@ func WithOCIGetter(providers getter.Providers) OCIChartRepositoryOption {
 func WithOCIGetterOptions(getterOpts []getter.Option) OCIChartRepositoryOption {
 	return func(r *OCIChartRepository) error {
 		r.Options = getterOpts
-		return nil
-	}
-}
-
-// WithCredentialsFile returns a ChartRepositoryOption that will set the credentials file
-func WithCredentialsFile(credentialsFile string) OCIChartRepositoryOption {
-	return func(r *OCIChartRepository) error {
-		r.credentialsFile = credentialsFile
-		return nil
-	}
-}
-
-// WithCertificatesStore returns a ChartRepositoryOption that will set the certificates store
-func WithCertificatesStore(store string) OCIChartRepositoryOption {
-	return func(r *OCIChartRepository) error {
-		r.certificatesStore = store
 		return nil
 	}
 }
@@ -261,51 +236,9 @@ func (r *OCIChartRepository) DownloadChart(chart *repo.ChartVersion) (*bytes.Buf
 	return b, nil
 }
 
-// Login attempts to login to the OCI registry.
-// It returns an error on failure.
-func (r *OCIChartRepository) Login(opts ...registry.LoginOption) error {
-	err := r.RegistryClient.Login(r.URL.Host, opts...)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-// Logout attempts to logout from the OCI registry.
-// It returns an error on failure.
-func (r *OCIChartRepository) Logout() error {
-	err := r.RegistryClient.Logout(r.URL.Host)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-// HasCredentials returns true if the OCIChartRepository has credentials.
-func (r *OCIChartRepository) HasCredentials() bool {
-	return r.credentialsFile != ""
-}
-
-// Clear deletes the OCI registry credentials file.
+// Clear deletes the OCI registry certificates store.
 func (r *OCIChartRepository) Clear() error {
-	var errs error
-	// clean the credentials file if it exists
-	if r.credentialsFile != "" {
-		if err := os.Remove(r.credentialsFile); err != nil {
-			errs = errors.Join(errs, err)
-		}
-	}
-	r.credentialsFile = ""
-
-	// clean the certificates store if it exists
-	if r.certificatesStore != "" {
-		if err := os.RemoveAll(r.certificatesStore); err != nil {
-			errs = errors.Join(errs, err)
-		}
-	}
-	r.certificatesStore = ""
-
-	return errs
+	return nil
 }
 
 // getLastMatchingVersionOrConstraint returns the last version that matches the given version string.

@@ -31,8 +31,9 @@ import (
 	"regexp"
 	"strings"
 
-	helmchart "helm.sh/helm/v3/pkg/chart"
-	"helm.sh/helm/v3/pkg/chartutil"
+	"helm.sh/helm/v4/pkg/chart/common"
+	helmchart "helm.sh/helm/v4/pkg/chart/v2"
+	chartutil "helm.sh/helm/v4/pkg/chart/v2/util"
 	"sigs.k8s.io/yaml"
 
 	"github.com/fluxcd/source-controller/internal/helm"
@@ -41,7 +42,7 @@ import (
 var drivePathPattern = regexp.MustCompile(`^[a-zA-Z]:/`)
 
 // OverwriteChartDefaultValues overwrites the chart default values file with the given data.
-func OverwriteChartDefaultValues(chart *helmchart.Chart, vals chartutil.Values) (bool, error) {
+func OverwriteChartDefaultValues(chart *helmchart.Chart, vals common.Values) (bool, error) {
 	if vals == nil {
 		return false, nil
 	}

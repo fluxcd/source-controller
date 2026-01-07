@@ -27,7 +27,7 @@ import (
 	"testing/fstest"
 
 	. "github.com/onsi/gomega"
-	"helm.sh/helm/v3/pkg/chart"
+	chart "helm.sh/helm/v4/pkg/chart/v2"
 	"sigs.k8s.io/yaml"
 
 	"github.com/fluxcd/source-controller/internal/helm"
