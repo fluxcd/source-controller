@@ -20,28 +20,38 @@ package secureloader
 import (
 	"io"
 
-	"helm.sh/helm/v3/pkg/chart"
-	"helm.sh/helm/v3/pkg/chart/loader"
+	"helm.sh/helm/v4/pkg/chart/loader"
+	"helm.sh/helm/v4/pkg/chart/loader/archive"
+	chart "helm.sh/helm/v4/pkg/chart/v2"
+	loaderv2 "helm.sh/helm/v4/pkg/chart/v2/loader"
 )
 
-// FileLoader is equal to Helm's.
-// Redeclared to avoid having to deal with multiple package imports,
-// possibly resulting in using the non-secure directory loader.
-type FileLoader = loader.FileLoader
+// FileLoader wraps Helm's loader.FileLoader to implement the
+// secureloader interface.
+type FileLoader string
+
+func (f FileLoader) Load() (*chart.Chart, error) {
+	l := loader.FileLoader(f)
+	c, err := l.Load()
+	if err != nil {
+		return nil, err
+	}
+	return c.(*chart.Chart), nil
+}
 
 // LoadFile loads from an archive file.
 func LoadFile(name string) (*chart.Chart, error) {
-	return loader.LoadFile(name)
+	return loaderv2.LoadFile(name)
 }
 
 // LoadArchiveFiles reads in files out of an archive into memory. This function
 // performs important path security checks and should always be used before
 // expanding a tarball
-func LoadArchiveFiles(in io.Reader) ([]*loader.BufferedFile, error) {
-	return loader.LoadArchiveFiles(in)
+func LoadArchiveFiles(in io.Reader) ([]*archive.BufferedFile, error) {
+	return archive.LoadArchiveFiles(in)
 }
 
 // LoadArchive loads from a reader containing a compressed tar archive.
 func LoadArchive(in io.Reader) (*chart.Chart, error) {
-	return loader.LoadArchive(in)
+	return loaderv2.LoadArchive(in)
 }

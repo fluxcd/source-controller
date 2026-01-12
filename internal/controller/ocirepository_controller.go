@@ -153,12 +153,7 @@ type OCIRepositoryReconcilerOptions struct {
 	RateLimiter               workqueue.TypedRateLimiter[reconcile.Request]
 }
 
-// SetupWithManager sets up the controller with the Manager.
-func (r *OCIRepositoryReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	return r.SetupWithManagerAndOptions(mgr, OCIRepositoryReconcilerOptions{})
-}
-
-func (r *OCIRepositoryReconciler) SetupWithManagerAndOptions(mgr ctrl.Manager, opts OCIRepositoryReconcilerOptions) error {
+func (r *OCIRepositoryReconciler) SetupWithManager(mgr ctrl.Manager, opts OCIRepositoryReconcilerOptions) error {
 	r.patchOptions = getPatchOptions(ociRepositoryReadyCondition.Owned, r.ControllerName)
 
 	r.requeueDependency = opts.DependencyRequeueInterval

@@ -34,8 +34,9 @@ import (
 	"strings"
 
 	securejoin "github.com/cyphar/filepath-securejoin"
-	"helm.sh/helm/v3/pkg/chart"
-	"helm.sh/helm/v3/pkg/chart/loader"
+	"helm.sh/helm/v4/pkg/chart/loader/archive"
+	chart "helm.sh/helm/v4/pkg/chart/v2"
+	"helm.sh/helm/v4/pkg/chart/v2/loader"
 
 	"github.com/fluxcd/source-controller/internal/helm"
 	"github.com/fluxcd/source-controller/internal/helm/chart/secureloader/ignore"
@@ -151,7 +152,7 @@ type secureFileWalker struct {
 	absChartPath string
 	maxSize      int64
 	rules        *ignore.Rules
-	files        []*loader.BufferedFile
+	files        []*archive.BufferedFile
 }
 
 func newSecureFileWalker(root, absChartPath string, maxSize int64, rules *ignore.Rules) *secureFileWalker {
@@ -161,7 +162,7 @@ func newSecureFileWalker(root, absChartPath string, maxSize int64, rules *ignore
 		absChartPath: absChartPath,
 		maxSize:      maxSize,
 		rules:        rules,
-		files:        make([]*loader.BufferedFile, 0),
+		files:        make([]*archive.BufferedFile, 0),
 	}
 }
 
@@ -226,7 +227,7 @@ func (w *secureFileWalker) walk(name, absName string, fi os.FileInfo, err error)
 	}
 	data = bytes.TrimPrefix(data, utf8bom)
 
-	w.files = append(w.files, &loader.BufferedFile{Name: n, Data: data})
+	w.files = append(w.files, &archive.BufferedFile{Name: n, Data: data})
 	return nil
 }
 

@@ -23,8 +23,9 @@ import (
 
 	. "github.com/onsi/gomega"
 	"github.com/otiai10/copy"
-	helmchart "helm.sh/helm/v3/pkg/chart"
-	"helm.sh/helm/v3/pkg/chartutil"
+	"helm.sh/helm/v4/pkg/chart/common"
+	helmchart "helm.sh/helm/v4/pkg/chart/v2"
+	chartutil "helm.sh/helm/v4/pkg/chart/v2/util"
 
 	"github.com/fluxcd/source-controller/internal/helm"
 )
@@ -45,7 +46,7 @@ var (
 
 	originalValuesFixture = []byte(`override: original
 `)
-	chartFilesFixture = []*helmchart.File{
+	chartFilesFixture = []*common.File{
 		{
 			Name: "values.yaml",
 			Data: originalValuesFixture,
@@ -63,8 +64,8 @@ var (
 
 func TestOverwriteChartDefaultValues(t *testing.T) {
 	invalidChartFixture := chartFixture
-	invalidChartFixture.Raw = []*helmchart.File{}
-	invalidChartFixture.Files = []*helmchart.File{}
+	invalidChartFixture.Raw = []*common.File{}
+	invalidChartFixture.Files = []*common.File{}
 
 	testCases := []struct {
 		desc      string
@@ -103,7 +104,7 @@ func TestOverwriteChartDefaultValues(t *testing.T) {
 			g := NewWithT(t)
 
 			fixture := tt.chart
-			vals, err := chartutil.ReadValues(tt.data)
+			vals, err := common.ReadValues(tt.data)
 			g.Expect(err).ToNot(HaveOccurred())
 			ok, err := OverwriteChartDefaultValues(&fixture, vals)
 			g.Expect(ok).To(Equal(tt.ok))

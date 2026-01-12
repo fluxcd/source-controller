@@ -40,8 +40,8 @@ import (
 	"github.com/phayes/freeport"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/crypto/bcrypt"
-	"helm.sh/helm/v3/pkg/getter"
-	helmreg "helm.sh/helm/v3/pkg/registry"
+	"helm.sh/helm/v4/pkg/getter"
+	helmreg "helm.sh/helm/v4/pkg/registry"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/record"
@@ -104,11 +104,13 @@ var (
 )
 
 var (
-	tlsPublicKey     []byte
-	tlsPrivateKey    []byte
-	tlsCA            []byte
-	clientPublicKey  []byte
-	clientPrivateKey []byte
+	tlsPublicKey            []byte
+	tlsPrivateKey           []byte
+	tlsCA                   []byte
+	clientPublicKey         []byte
+	clientPrivateKey        []byte
+	clientInvalidPublicKey  []byte
+	clientInvalidPrivateKey []byte
 )
 
 var (
@@ -319,7 +321,7 @@ func TestMain(m *testing.M) {
 		EventRecorder: record.NewFakeRecorder(32),
 		Metrics:       testMetricsH,
 		Storage:       testStorage,
-	}).SetupWithManagerAndOptions(testEnv, GitRepositoryReconcilerOptions{
+	}).SetupWithManager(testEnv, GitRepositoryReconcilerOptions{
 		RateLimiter: controller.GetDefaultRateLimiter(),
 	}); err != nil {
 		panic(fmt.Sprintf("Failed to start GitRepositoryReconciler: %v", err))
@@ -330,7 +332,7 @@ func TestMain(m *testing.M) {
 		EventRecorder: record.NewFakeRecorder(32),
 		Metrics:       testMetricsH,
 		Storage:       testStorage,
-	}).SetupWithManagerAndOptions(testEnv, BucketReconcilerOptions{
+	}).SetupWithManager(testEnv, BucketReconcilerOptions{
 		RateLimiter: controller.GetDefaultRateLimiter(),
 	}); err != nil {
 		panic(fmt.Sprintf("Failed to start BucketReconciler: %v", err))
@@ -344,7 +346,7 @@ func TestMain(m *testing.M) {
 		EventRecorder: record.NewFakeRecorder(32),
 		Metrics:       testMetricsH,
 		Storage:       testStorage,
-	}).SetupWithManagerAndOptions(testEnv, OCIRepositoryReconcilerOptions{
+	}).SetupWithManager(testEnv, OCIRepositoryReconcilerOptions{
 		RateLimiter: controller.GetDefaultRateLimiter(),
 	}); err != nil {
 		panic(fmt.Sprintf("Failed to start OCIRepositoryReconciler: %v", err))
@@ -359,7 +361,7 @@ func TestMain(m *testing.M) {
 		Cache:         testCache,
 		TTL:           1 * time.Second,
 		CacheRecorder: cacheRecorder,
-	}).SetupWithManagerAndOptions(testEnv, HelmRepositoryReconcilerOptions{
+	}).SetupWithManager(testEnv, HelmRepositoryReconcilerOptions{
 		RateLimiter: controller.GetDefaultRateLimiter(),
 	}); err != nil {
 		panic(fmt.Sprintf("Failed to start HelmRepositoryReconciler: %v", err))
@@ -374,7 +376,7 @@ func TestMain(m *testing.M) {
 		Cache:         testCache,
 		TTL:           1 * time.Second,
 		CacheRecorder: cacheRecorder,
-	}).SetupWithManagerAndOptions(ctx, testEnv, HelmChartReconcilerOptions{
+	}).SetupWithManager(ctx, testEnv, HelmChartReconcilerOptions{
 		RateLimiter: controller.GetDefaultRateLimiter(),
 	}); err != nil {
 		panic(fmt.Sprintf("Failed to start HelmChartReconciler: %v", err))
@@ -427,6 +429,14 @@ func initTestTLS() {
 		panic(err)
 	}
 	clientPublicKey, err = os.ReadFile("testdata/certs/client.pem")
+	if err != nil {
+		panic(err)
+	}
+	clientInvalidPrivateKey, err = os.ReadFile("testdata/certs/client-key-invalid.pem")
+	if err != nil {
+		panic(err)
+	}
+	clientInvalidPublicKey, err = os.ReadFile("testdata/certs/client-invalid.pem")
 	if err != nil {
 		panic(err)
 	}

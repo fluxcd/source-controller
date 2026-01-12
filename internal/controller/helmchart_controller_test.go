@@ -46,9 +46,9 @@ import (
 	coptions "github.com/sigstore/cosign/v2/cmd/cosign/cli/options"
 	"github.com/sigstore/cosign/v2/cmd/cosign/cli/sign"
 	"github.com/sigstore/cosign/v2/pkg/cosign"
-	hchart "helm.sh/helm/v3/pkg/chart"
-	"helm.sh/helm/v3/pkg/chart/loader"
-	helmreg "helm.sh/helm/v3/pkg/registry"
+	hchart "helm.sh/helm/v4/pkg/chart/v2"
+	"helm.sh/helm/v4/pkg/chart/v2/loader"
+	helmreg "helm.sh/helm/v4/pkg/registry"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -75,7 +75,6 @@ import (
 	serror "github.com/fluxcd/source-controller/internal/error"
 	"github.com/fluxcd/source-controller/internal/helm/chart"
 	"github.com/fluxcd/source-controller/internal/helm/chart/secureloader"
-	"github.com/fluxcd/source-controller/internal/helm/registry"
 	"github.com/fluxcd/source-controller/internal/oci"
 	snotation "github.com/fluxcd/source-controller/internal/oci/notation"
 	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
@@ -1298,10 +1297,20 @@ func TestHelmChartReconciler_buildFromOCIHelmRepository(t *testing.T) {
 		},
 		{
 			name: "Forces build on generation change",
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "auth",
+				},
+				Data: map[string][]byte{
+					"username": []byte(testRegistryUsername),
+					"password": []byte(testRegistryPassword),
+				},
+			},
 			beforeFunc: func(obj *sourcev1.HelmChart, repository *sourcev1.HelmRepository) {
 				obj.Generation = 3
 				obj.Spec.Chart = metadata.Name
 				obj.Spec.Version = metadata.Version
+				repository.Spec.SecretRef = &meta.LocalObjectReference{Name: "auth"}
 
 				obj.Status.ObservedGeneration = 2
 				obj.Status.Artifact = &meta.Artifact{Path: metadata.Name + "-" + metadata.Version + ".tgz"}
@@ -1371,12 +1380,11 @@ func TestHelmChartReconciler_buildFromOCIHelmRepository(t *testing.T) {
 			}
 
 			r := &HelmChartReconciler{
-				Client:                  clientBuilder.Build(),
-				EventRecorder:           record.NewFakeRecorder(32),
-				Getters:                 testGetters,
-				Storage:                 st,
-				RegistryClientGenerator: registry.ClientGenerator,
-				patchOptions:            getPatchOptions(helmChartReadyCondition.Owned, "sc"),
+				Client:        clientBuilder.Build(),
+				EventRecorder: record.NewFakeRecorder(32),
+				Getters:       testGetters,
+				Storage:       st,
+				patchOptions:  getPatchOptions(helmChartReadyCondition.Owned, "sc"),
 			}
 
 			repository := &sourcev1.HelmRepository{
@@ -1615,11 +1623,10 @@ func TestHelmChartReconciler_buildFromTarballArtifact(t *testing.T) {
 					WithScheme(testEnv.Scheme()).
 					WithStatusSubresource(&sourcev1.HelmChart{}).
 					Build(),
-				EventRecorder:           record.NewFakeRecorder(32),
-				Storage:                 st,
-				Getters:                 testGetters,
-				RegistryClientGenerator: registry.ClientGenerator,
-				patchOptions:            getPatchOptions(helmChartReadyCondition.Owned, "sc"),
+				EventRecorder: record.NewFakeRecorder(32),
+				Storage:       st,
+				Getters:       testGetters,
+				patchOptions:  getPatchOptions(helmChartReadyCondition.Owned, "sc"),
 			}
 
 			obj := &sourcev1.HelmChart{
@@ -2437,6 +2444,7 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_authStrategy(t *testing.T) {
 		providerImg      string
 		want             sreconcile.Result
 		wantErr          bool
+		wantErrMsg       string
 		assertConditions []metav1.Condition
 	}{
 		{
@@ -2491,7 +2499,7 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_authStrategy(t *testing.T) {
 				Data: map[string][]byte{},
 			},
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.FetchFailedCondition, "Unknown", "unknown build error: failed to login to OCI registry"),
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, "Unknown", "unknown build error: failed to authenticate with the Helm repository"),
 			},
 		},
 		{
@@ -2600,6 +2608,29 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_authStrategy(t *testing.T) {
 				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: pulled 'helmchart' chart with version '0.1.0'"),
 			},
 		},
+		{
+			name:       "HTTPS With CA cert and client cert auth, invalid key",
+			want:       sreconcile.ResultEmpty,
+			wantErr:    true,
+			wantErrMsg: "tls: unknown certificate authority",
+			registryOpts: registryOptions{
+				withTLS:            true,
+				withClientCertAuth: true,
+			},
+			certSecret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "certs-secretref",
+				},
+				Data: map[string][]byte{
+					"ca.crt":  tlsCA,
+					"tls.crt": clientInvalidPublicKey,
+					"tls.key": clientInvalidPrivateKey,
+				},
+			},
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, "Unknown", "unknown build error: failed to authenticate with the Helm repository"),
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -2645,7 +2676,7 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_authStrategy(t *testing.T) {
 			}
 			// If a provider specific image is provided, overwrite existing URL
 			// set earlier. It'll fail, but it's necessary to set them because
-			// the login check expects the URLs to be of certain pattern.
+			// the authentication check expects the URLs to be of certain pattern.
 			if tt.providerImg != "" {
 				repo.Spec.URL = tt.providerImg
 			}
@@ -2687,11 +2718,10 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_authStrategy(t *testing.T) {
 			}
 
 			r := &HelmChartReconciler{
-				Client:                  clientBuilder.Build(),
-				EventRecorder:           record.NewFakeRecorder(32),
-				Getters:                 testGetters,
-				RegistryClientGenerator: registry.ClientGenerator,
-				patchOptions:            getPatchOptions(helmChartReadyCondition.Owned, "sc"),
+				Client:        clientBuilder.Build(),
+				EventRecorder: record.NewFakeRecorder(32),
+				Getters:       testGetters,
+				patchOptions:  getPatchOptions(helmChartReadyCondition.Owned, "sc"),
 			}
 
 			var b chart.Build
@@ -2718,6 +2748,9 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_authStrategy(t *testing.T) {
 			got, err := r.reconcileSource(ctx, sp, obj, &b)
 			if tt.wantErr {
 				g.Expect(err).To(HaveOccurred())
+				if tt.wantErrMsg != "" {
+					g.Expect(err.Error()).To(ContainSubstring(tt.wantErrMsg))
+				}
 			} else {
 				g.Expect(err).ToNot(HaveOccurred())
 				g.Expect(got).To(Equal(tt.want))
@@ -2844,12 +2877,11 @@ func TestHelmChartRepository_reconcileSource_verifyOCISourceSignature_keyless(t 
 			clientBuilder.WithObjects(repository)
 
 			r := &HelmChartReconciler{
-				Client:                  clientBuilder.Build(),
-				EventRecorder:           record.NewFakeRecorder(32),
-				Getters:                 testGetters,
-				Storage:                 testStorage,
-				RegistryClientGenerator: registry.ClientGenerator,
-				patchOptions:            getPatchOptions(helmChartReadyCondition.Owned, "sc"),
+				Client:        clientBuilder.Build(),
+				EventRecorder: record.NewFakeRecorder(32),
+				Getters:       testGetters,
+				Storage:       testStorage,
+				patchOptions:  getPatchOptions(helmChartReadyCondition.Owned, "sc"),
 			}
 
 			obj := &sourcev1.HelmChart{
@@ -3150,12 +3182,11 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_verifySignatureNotation(t *t
 			clientBuilder.WithObjects(repository, secret, caSecret)
 
 			r := &HelmChartReconciler{
-				Client:                  clientBuilder.Build(),
-				EventRecorder:           record.NewFakeRecorder(32),
-				Getters:                 testGetters,
-				Storage:                 st,
-				RegistryClientGenerator: registry.ClientGenerator,
-				patchOptions:            getPatchOptions(helmChartReadyCondition.Owned, "sc"),
+				Client:        clientBuilder.Build(),
+				EventRecorder: record.NewFakeRecorder(32),
+				Getters:       testGetters,
+				Storage:       st,
+				patchOptions:  getPatchOptions(helmChartReadyCondition.Owned, "sc"),
 			}
 
 			obj := &sourcev1.HelmChart{
@@ -3402,12 +3433,11 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_verifySignatureCosign(t *tes
 			clientBuilder.WithObjects(repository, secret)
 
 			r := &HelmChartReconciler{
-				Client:                  clientBuilder.Build(),
-				EventRecorder:           record.NewFakeRecorder(32),
-				Getters:                 testGetters,
-				Storage:                 st,
-				RegistryClientGenerator: registry.ClientGenerator,
-				patchOptions:            getPatchOptions(helmChartReadyCondition.Owned, "sc"),
+				Client:        clientBuilder.Build(),
+				EventRecorder: record.NewFakeRecorder(32),
+				Getters:       testGetters,
+				Storage:       st,
+				patchOptions:  getPatchOptions(helmChartReadyCondition.Owned, "sc"),
 			}
 
 			obj := &sourcev1.HelmChart{

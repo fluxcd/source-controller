@@ -25,8 +25,8 @@ import (
 	"strings"
 
 	sourcefs "github.com/fluxcd/pkg/oci"
-	helmchart "helm.sh/helm/v3/pkg/chart"
-	"helm.sh/helm/v3/pkg/chartutil"
+	helmchart "helm.sh/helm/v4/pkg/chart/v2"
+	chartutil "helm.sh/helm/v4/pkg/chart/v2/util"
 
 	"github.com/fluxcd/source-controller/internal/oci"
 )

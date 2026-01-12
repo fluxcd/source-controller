@@ -24,12 +24,6 @@ import (
 	"github.com/fluxcd/pkg/apis/meta"
 )
 
-const (
-	// SourceIndexKey is the key used for indexing objects based on their
-	// referenced Source.
-	SourceIndexKey string = ".metadata.source"
-)
-
 // Source interface must be supported by all API types.
 // Source is the interface that provides generic access to the Artifact and
 // interval. It must be supported by all kinds of the source.toolkit.fluxcd.io

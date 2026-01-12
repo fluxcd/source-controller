@@ -68,7 +68,7 @@ func TestGetClientOpts(t *testing.T) {
 				},
 			},
 			afterFunc: func(t *WithT, hcOpts *ClientOpts) {
-				t.Expect(hcOpts.TlsConfig).ToNot(BeNil())
+				t.Expect(hcOpts.TLSConfig).ToNot(BeNil())
 				t.Expect(len(hcOpts.GetterOpts)).To(Equal(4))
 			},
 		},
@@ -85,7 +85,7 @@ func TestGetClientOpts(t *testing.T) {
 				},
 			},
 			afterFunc: func(t *WithT, hcOpts *ClientOpts) {
-				t.Expect(hcOpts.TlsConfig).ToNot(BeNil())
+				t.Expect(hcOpts.TLSConfig).ToNot(BeNil())
 				t.Expect(len(hcOpts.GetterOpts)).To(Equal(4))
 			},
 			err: ErrDeprecatedTLSConfig,
@@ -164,7 +164,7 @@ func TestGetClientOpts(t *testing.T) {
 			}
 			c := clientBuilder.Build()
 
-			clientOpts, _, err := GetClientOpts(context.TODO(), c, helmRepo, "https://ghcr.io/dummy")
+			clientOpts, err := GetClientOpts(context.TODO(), c, helmRepo, "https://ghcr.io/dummy")
 			if tt.err != nil {
 				g.Expect(err).To(Equal(tt.err))
 			} else {
@@ -185,7 +185,8 @@ func TestGetClientOpts_registryTLSLoginOption(t *testing.T) {
 		name       string
 		certSecret *corev1.Secret
 		authSecret *corev1.Secret
-		loginOptsN int
+		expectAuth bool
+		expectTLS  bool
 		wantErrMsg string
 	}{
 		{
@@ -207,7 +208,8 @@ func TestGetClientOpts_registryTLSLoginOption(t *testing.T) {
 					"password": []byte("pass"),
 				},
 			},
-			loginOptsN: 3,
+			expectAuth: true,
+			expectTLS:  true,
 		},
 		{
 			name: "without caFile",
@@ -240,7 +242,8 @@ func TestGetClientOpts_registryTLSLoginOption(t *testing.T) {
 					"password": []byte("pass"),
 				},
 			},
-			loginOptsN: 2,
+			expectAuth: true,
+			expectTLS:  false,
 		},
 	}
 	for _, tt := range tests {
@@ -271,7 +274,7 @@ func TestGetClientOpts_registryTLSLoginOption(t *testing.T) {
 			}
 			c := clientBuilder.Build()
 
-			clientOpts, tmpDir, err := GetClientOpts(context.TODO(), c, helmRepo, "https://ghcr.io/dummy")
+			clientOpts, err := GetClientOpts(context.TODO(), c, helmRepo, "https://ghcr.io/dummy")
 			if tt.wantErrMsg != "" {
 				if err == nil {
 					t.Errorf("GetClientOpts() expected error but got none")
@@ -287,13 +290,23 @@ func TestGetClientOpts_registryTLSLoginOption(t *testing.T) {
 				t.Errorf("GetClientOpts() error = %v", err)
 				return
 			}
-			if tmpDir != "" {
-				defer os.RemoveAll(tmpDir)
+			if tt.expectAuth {
+				if clientOpts.OCIAuth == nil {
+					t.Errorf("GetClientOpts() expected OCIAuth to be set but was nil")
+				}
+			} else {
+				if clientOpts.OCIAuth != nil {
+					t.Errorf("GetClientOpts() expected OCIAuth to be nil but was set")
+				}
 			}
-			if tt.loginOptsN != len(clientOpts.RegLoginOpts) {
-				// we should have a login option but no TLS option
-				t.Errorf("expected length of %d for clientOpts.RegLoginOpts but got %d", tt.loginOptsN, len(clientOpts.RegLoginOpts))
-				return
+			if tt.expectTLS {
+				if clientOpts.TLSConfig == nil {
+					t.Errorf("GetClientOpts() expected TLSConfig to be set but was nil")
+				}
+			} else {
+				if clientOpts.TLSConfig != nil {
+					t.Errorf("GetClientOpts() expected TLSConfig to be nil but was set")
+				}
 			}
 		})
 	}

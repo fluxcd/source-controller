@@ -20,7 +20,7 @@ import (
 	"bytes"
 	"context"
 
-	"helm.sh/helm/v3/pkg/repo"
+	repo "helm.sh/helm/v4/pkg/repo/v1"
 
 	"github.com/fluxcd/source-controller/internal/oci"
 )

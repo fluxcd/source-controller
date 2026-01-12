@@ -22,7 +22,7 @@ import (
 	"time"
 
 	flag "github.com/spf13/pflag"
-	"helm.sh/helm/v3/pkg/getter"
+	"helm.sh/helm/v4/pkg/getter"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -63,7 +63,6 @@ import (
 	"github.com/fluxcd/source-controller/internal/controller"
 	"github.com/fluxcd/source-controller/internal/features"
 	"github.com/fluxcd/source-controller/internal/helm"
-	"github.com/fluxcd/source-controller/internal/helm/registry"
 )
 
 const controllerName = "source-controller"
@@ -233,7 +232,7 @@ func main() {
 		Storage:        storage,
 		ControllerName: controllerName,
 		TokenCache:     tokenCache,
-	}).SetupWithManagerAndOptions(mgr, controller.GitRepositoryReconcilerOptions{
+	}).SetupWithManager(mgr, controller.GitRepositoryReconcilerOptions{
 		DependencyRequeueInterval: requeueDependency,
 		RateLimiter:               helper.GetRateLimiter(rateLimiterOptions),
 	}); err != nil {
@@ -251,7 +250,7 @@ func main() {
 		Cache:          helmIndexCache,
 		TTL:            helmIndexCacheItemTTL,
 		CacheRecorder:  cacheRecorder,
-	}).SetupWithManagerAndOptions(mgr, controller.HelmRepositoryReconcilerOptions{
+	}).SetupWithManager(mgr, controller.HelmRepositoryReconcilerOptions{
 		RateLimiter: helper.GetRateLimiter(rateLimiterOptions),
 	}); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", sourcev1.HelmRepositoryKind)
@@ -259,17 +258,16 @@ func main() {
 	}
 
 	if err := (&controller.HelmChartReconciler{
-		Client:                  mgr.GetClient(),
-		RegistryClientGenerator: registry.ClientGenerator,
-		Storage:                 storage,
-		Getters:                 getters,
-		EventRecorder:           eventRecorder,
-		Metrics:                 metrics,
-		ControllerName:          controllerName,
-		Cache:                   helmIndexCache,
-		TTL:                     helmIndexCacheItemTTL,
-		CacheRecorder:           cacheRecorder,
-	}).SetupWithManagerAndOptions(ctx, mgr, controller.HelmChartReconcilerOptions{
+		Client:         mgr.GetClient(),
+		Storage:        storage,
+		Getters:        getters,
+		EventRecorder:  eventRecorder,
+		Metrics:        metrics,
+		ControllerName: controllerName,
+		Cache:          helmIndexCache,
+		TTL:            helmIndexCacheItemTTL,
+		CacheRecorder:  cacheRecorder,
+	}).SetupWithManager(ctx, mgr, controller.HelmChartReconcilerOptions{
 		RateLimiter: helper.GetRateLimiter(rateLimiterOptions),
 	}); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", sourcev1.HelmChartKind)
@@ -283,7 +281,7 @@ func main() {
 		Storage:        storage,
 		ControllerName: controllerName,
 		TokenCache:     tokenCache,
-	}).SetupWithManagerAndOptions(mgr, controller.BucketReconcilerOptions{
+	}).SetupWithManager(mgr, controller.BucketReconcilerOptions{
 		RateLimiter: helper.GetRateLimiter(rateLimiterOptions),
 	}); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", sourcev1.BucketKind)
@@ -297,7 +295,7 @@ func main() {
 		ControllerName: controllerName,
 		TokenCache:     tokenCache,
 		Metrics:        metrics,
-	}).SetupWithManagerAndOptions(mgr, controller.OCIRepositoryReconcilerOptions{
+	}).SetupWithManager(mgr, controller.OCIRepositoryReconcilerOptions{
 		RateLimiter: helper.GetRateLimiter(rateLimiterOptions),
 	}); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", sourcev1.OCIRepositoryKind)

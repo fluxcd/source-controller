@@ -24,7 +24,7 @@ import (
 	"testing"
 
 	. "github.com/onsi/gomega"
-	"helm.sh/helm/v3/pkg/chartutil"
+	chartutil "helm.sh/helm/v4/pkg/chart/v2/util"
 
 	"github.com/fluxcd/source-controller/internal/helm/chart/secureloader"
 )

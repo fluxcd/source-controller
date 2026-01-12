@@ -128,7 +128,7 @@ func TestLoginOptionFromSecret(t *testing.T) {
 			secret.Data = tt.secretData
 			secret.Type = tt.secretType
 
-			_, err := LoginOptionFromSecret(tt.url, secret)
+			_, err := KeychainFromSecret(tt.url, secret)
 			g.Expect(err != nil).To(Equal(tt.wantErr))
 		})
 	}
@@ -176,7 +176,7 @@ func TestKeychainAdaptHelper(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
-			loginOpt, err := KeychainAdaptHelper(tt.auth)(repoURL)
+			loginOpt, err := credsFromKeychain(repoURL, tt.auth)
 			if tt.wantErr {
 				g.Expect(err).To(HaveOccurred())
 				return
