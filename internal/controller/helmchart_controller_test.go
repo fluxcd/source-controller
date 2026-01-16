@@ -3468,7 +3468,7 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_verifySignatureCosign(t *tes
 					Timeout: timeout,
 				}
 
-				err = sign.SignCmd(ro, ko, coptions.SignOptions{
+				err = sign.SignCmd(ctx, ro, ko, coptions.SignOptions{
 					Upload:           true,
 					SkipConfirmation: true,
 					TlogUpload:       false,

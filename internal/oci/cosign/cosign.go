@@ -27,6 +27,7 @@ import (
 	coptions "github.com/sigstore/cosign/v3/cmd/cosign/cli/options"
 	"github.com/sigstore/cosign/v3/cmd/cosign/cli/rekor"
 	"github.com/sigstore/cosign/v3/pkg/cosign"
+	"github.com/sigstore/cosign/v3/pkg/oci"
 
 	ociremote "github.com/sigstore/cosign/v3/pkg/oci/remote"
 	"github.com/sigstore/sigstore/pkg/cryptoutils"
@@ -81,6 +82,8 @@ func NewCosignVerifier(ctx context.Context, opts ...Options) (*CosignVerifier, e
 	}
 
 	checkOpts := &cosign.CheckOpts{}
+	// enable bundles by default -- this is the future direction of cosign
+	checkOpts.NewBundleFormat = true
 
 	ro := coptions.RegistryOptions{}
 	co, err := ro.ClientOpts(ctx)
@@ -119,6 +122,13 @@ func NewCosignVerifier(ctx context.Context, opts ...Options) (*CosignVerifier, e
 			return nil, fmt.Errorf("unable to create Rekor client: %w", err)
 		}
 
+		// Initialize TrustedMaterial for v3/Bundle verification
+		if checkOpts.TrustedMaterial, err = cosign.TrustedRoot(); err != nil {
+			return nil, fmt.Errorf("unable to initialize trusted root: %w", err)
+		}
+
+		// Initialize legacy setup for v2 compatibility
+
 		// This performs an online fetch of the Rekor public keys, but this is needed
 		// for verifying tlog entries (both online and offline).
 		// TODO(hidde): above note is important to keep in mind when we implement
@@ -147,10 +157,25 @@ func NewCosignVerifier(ctx context.Context, opts ...Options) (*CosignVerifier, e
 }
 
 // Verify verifies the authenticity of the given ref OCI image.
+// Both cosign v2 signatures and cosign v3 bundles are supported by
+// attempting to discover bundles before verification.
+// Bundles can be located either via the OCI 1.1 referrer API or an
+// OCI 1.0 referrer tag.
 // It returns a boolean indicating if the verification was successful.
 // It returns an error if the verification fails, nil otherwise.
 func (v *CosignVerifier) Verify(ctx context.Context, ref name.Reference) (soci.VerificationResult, error) {
-	signatures, _, err := cosign.VerifyImageSignatures(ctx, ref, v.opts)
+	var signatures []oci.Signature
+	// copy options since we'll need to change them based on bundle discovery on the ref
+	opts := *v.opts
+	newBundles, _, err := cosign.GetBundles(ctx, ref, opts.RegistryClientOpts)
+	// if no bundles are returned, let's fallback to the cosign v2 behavior, similar to the cosign CLI
+	if len(newBundles) == 0 || err != nil {
+		opts.NewBundleFormat = false
+		signatures, _, err = cosign.VerifyImageSignatures(ctx, ref, &opts)
+	} else {
+		opts.NewBundleFormat = true
+		signatures, _, err = cosign.VerifyImageAttestations(ctx, ref, &opts)
+	}
 	if err != nil {
 		return soci.VerificationResultFailed, err
 	}

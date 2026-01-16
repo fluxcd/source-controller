@@ -2211,7 +2211,7 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignatureCosign(t *testing
 				ro := &coptions.RootOptions{
 					Timeout: timeout,
 				}
-				err = sign.SignCmd(ro, ko, coptions.SignOptions{
+				err = sign.SignCmd(ctx, ro, ko, coptions.SignOptions{
 					Upload:           true,
 					SkipConfirmation: true,
 					TlogUpload:       false,
