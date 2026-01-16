@@ -31,7 +31,7 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	"github.com/notaryproject/notation-go/verifier/trustpolicy"
 	"github.com/opencontainers/go-digest"
-	"github.com/sigstore/cosign/v2/pkg/cosign"
+	"github.com/sigstore/cosign/v3/pkg/cosign"
 	helmgetter "helm.sh/helm/v4/pkg/getter"
 	helmreg "helm.sh/helm/v4/pkg/registry"
 	helmrepo "helm.sh/helm/v4/pkg/repo/v1"

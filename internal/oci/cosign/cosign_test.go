@@ -28,7 +28,7 @@ import (
 	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	. "github.com/onsi/gomega"
-	"github.com/sigstore/cosign/v2/pkg/cosign"
+	"github.com/sigstore/cosign/v3/pkg/cosign"
 
 	testproxy "github.com/fluxcd/source-controller/tests/proxy"
 	testregistry "github.com/fluxcd/source-controller/tests/registry"
