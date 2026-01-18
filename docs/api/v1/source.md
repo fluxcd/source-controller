@@ -1151,8 +1151,42 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>The provider used for authentication, can be &lsquo;aws&rsquo;, &lsquo;azure&rsquo;, &lsquo;gcp&rsquo; or &lsquo;generic&rsquo;.
-When not specified, defaults to &lsquo;generic&rsquo;.</p>
+<p>Provider is the provider used for authentication, can be &lsquo;aws&rsquo;, &lsquo;azure&rsquo;,
+&lsquo;gcp&rsquo; or &lsquo;generic&rsquo;. When not specified, defaults to &lsquo;generic&rsquo;.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>credential</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Credential specifies the type of credential that will be sent to the input provider.
+Supported values are:</p>
+<ul>
+<li>ServiceAccountToken: The controller will generate a Kubernetes
+ServiceAccount token and send it as a bearer token in the OCI
+registry calls. If ServiceAccountName is not specified, the
+ServiceAccount of the controller will be used to generate the
+token. Can only be used with the &lsquo;generic&rsquo; provider.</li>
+</ul>
+</td>
+</tr>
+<tr>
+<td>
+<code>audiences</code><br>
+<em>
+[]string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Audiences specifies the audience claim to be set in JWT credentials,
+like the ServiceAccountToken credential. Required when using JWT
+credentials.</p>
 </td>
 </tr>
 <tr>
@@ -3323,8 +3357,42 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>The provider used for authentication, can be &lsquo;aws&rsquo;, &lsquo;azure&rsquo;, &lsquo;gcp&rsquo; or &lsquo;generic&rsquo;.
-When not specified, defaults to &lsquo;generic&rsquo;.</p>
+<p>Provider is the provider used for authentication, can be &lsquo;aws&rsquo;, &lsquo;azure&rsquo;,
+&lsquo;gcp&rsquo; or &lsquo;generic&rsquo;. When not specified, defaults to &lsquo;generic&rsquo;.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>credential</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Credential specifies the type of credential that will be sent to the input provider.
+Supported values are:</p>
+<ul>
+<li>ServiceAccountToken: The controller will generate a Kubernetes
+ServiceAccount token and send it as a bearer token in the OCI
+registry calls. If ServiceAccountName is not specified, the
+ServiceAccount of the controller will be used to generate the
+token. Can only be used with the &lsquo;generic&rsquo; provider.</li>
+</ul>
+</td>
+</tr>
+<tr>
+<td>
+<code>audiences</code><br>
+<em>
+[]string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Audiences specifies the audience claim to be set in JWT credentials,
+like the ServiceAccountToken credential. Required when using JWT
+credentials.</p>
 </td>
 </tr>
 <tr>

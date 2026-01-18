@@ -52,6 +52,7 @@ import (
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/artifact/storage"
 	"github.com/fluxcd/pkg/auth"
+	"github.com/fluxcd/pkg/auth/serviceaccounttoken"
 	"github.com/fluxcd/pkg/cache"
 	"github.com/fluxcd/pkg/oci"
 	"github.com/fluxcd/pkg/runtime/conditions"
@@ -367,10 +368,22 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 		}
 	}
 
-	if _, ok := keychain.(soci.Anonymous); obj.Spec.Provider != "" && obj.Spec.Provider != sourcev1.GenericOCIProvider && ok {
+	provider := obj.Spec.Provider
+	if _, ok := keychain.(soci.Anonymous); ok &&
+		(provider != "" && provider != sourcev1.GenericOCIProvider) ||
+		obj.Spec.Credential == serviceaccounttoken.CredentialName {
+
 		opts := []auth.Option{
 			auth.WithClient(r.Client),
 			auth.WithServiceAccountNamespace(obj.GetNamespace()),
+		}
+
+		if obj.Spec.Credential == serviceaccounttoken.CredentialName {
+			provider = serviceaccounttoken.CredentialName
+		}
+
+		if a := obj.Spec.Audiences; len(a) > 0 {
+			opts = append(opts, auth.WithAudiences(a...))
 		}
 
 		if obj.Spec.ServiceAccountName != "" {
@@ -384,6 +397,7 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 			// Set ServiceAccountName only if explicitly specified
 			opts = append(opts, auth.WithServiceAccountName(obj.Spec.ServiceAccountName))
 		}
+
 		if r.TokenCache != nil {
 			involvedObject := cache.InvolvedObject{
 				Kind:      sourcev1.OCIRepositoryKind,
@@ -393,14 +407,16 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 			}
 			opts = append(opts, auth.WithCache(*r.TokenCache, involvedObject))
 		}
+
 		if proxyURL != nil {
 			opts = append(opts, auth.WithProxyURL(*proxyURL))
 		}
+
 		var authErr error
-		authenticator, authErr = soci.OIDCAuth(ctxTimeout, obj.Spec.URL, obj.Spec.Provider, opts...)
+		authenticator, authErr = soci.OIDCAuth(ctxTimeout, obj.Spec.URL, provider, opts...)
 		if authErr != nil {
 			e := serror.NewGeneric(
-				fmt.Errorf("failed to get credential from %s: %w", obj.Spec.Provider, authErr),
+				fmt.Errorf("failed to get credential from %s: %w", provider, authErr),
 				sourcev1.AuthenticationFailedReason,
 			)
 			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)

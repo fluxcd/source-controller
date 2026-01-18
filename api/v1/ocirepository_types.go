@@ -54,6 +54,9 @@ const (
 )
 
 // OCIRepositorySpec defines the desired state of OCIRepository
+// +kubebuilder:validation:XValidation:rule="!has(self.audiences) || size(self.audiences) == 0 || (has(self.credential) && self.credential == 'ServiceAccountToken')", message="spec.audiences can be set only when spec.credential is set to 'ServiceAccountToken'"
+// +kubebuilder:validation:XValidation:rule="!has(self.credential) || self.credential != 'ServiceAccountToken' || (has(self.audiences) && size(self.audiences) > 0)", message="spec.audiences must be set when spec.credential is set to 'ServiceAccountToken'"
+// +kubebuilder:validation:XValidation:rule="!has(self.credential) || self.credential != 'ServiceAccountToken' || !has(self.provider) || self.provider == 'generic'", message="spec.credential 'ServiceAccountToken' can only be used with spec.provider 'generic'"
 type OCIRepositorySpec struct {
 	// URL is a reference to an OCI artifact repository hosted
 	// on a remote container registry.
@@ -71,12 +74,31 @@ type OCIRepositorySpec struct {
 	// +optional
 	LayerSelector *OCILayerSelector `json:"layerSelector,omitempty"`
 
-	// The provider used for authentication, can be 'aws', 'azure', 'gcp' or 'generic'.
-	// When not specified, defaults to 'generic'.
+	// Provider is the provider used for authentication, can be 'aws', 'azure',
+	// 'gcp' or 'generic'. When not specified, defaults to 'generic'.
 	// +kubebuilder:validation:Enum=generic;aws;azure;gcp
 	// +kubebuilder:default:=generic
 	// +optional
 	Provider string `json:"provider,omitempty"`
+
+	// Credential specifies the type of credential that will be sent to the input provider.
+	// Supported values are:
+	//
+	//   - ServiceAccountToken: The controller will generate a Kubernetes
+	//     ServiceAccount token and send it as a bearer token in the OCI
+	//     registry calls. If ServiceAccountName is not specified, the
+	//     ServiceAccount of the controller will be used to generate the
+	//     token. Can only be used with the 'generic' provider.
+	//
+	// +kubebuilder:validation:Enum=ServiceAccountToken
+	// +optional
+	Credential string `json:"credential,omitempty"`
+
+	// Audiences specifies the audience claim to be set in JWT credentials,
+	// like the ServiceAccountToken credential. Required when using JWT
+	// credentials.
+	// +optional
+	Audiences []string `json:"audiences,omitempty"`
 
 	// SecretRef contains the secret name containing the registry login
 	// credentials to resolve image metadata.

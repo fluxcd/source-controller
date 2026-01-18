@@ -54,6 +54,14 @@ spec:
           spec:
             description: OCIRepositorySpec defines the desired state of OCIRepository
             properties:
+              audiences:
+                description: |-
+                  Audiences specifies the audience claim to be set in JWT credentials,
+                  like the ServiceAccountToken credential. Required when using JWT
+                  credentials.
+                items:
+                  type: string
+                type: array
               certSecretRef:
                 description: |-
                   CertSecretRef can be given the name of a Secret containing
@@ -75,6 +83,19 @@ spec:
                 required:
                 - name
                 type: object
+              credential:
+                description: |-
+                  Credential specifies the type of credential that will be sent to the input provider.
+                  Supported values are:
+
+                    - ServiceAccountToken: The controller will generate a Kubernetes
+                      ServiceAccount token and send it as a bearer token in the OCI
+                      registry calls. If ServiceAccountName is not specified, the
+                      ServiceAccount of the controller will be used to generate the
+                      token. Can only be used with the 'generic' provider.
+                enum:
+                - ServiceAccountToken
+                type: string
               ignore:
                 description: |-
                   Ignore overrides the set of excluded patterns in the .sourceignore format
@@ -117,8 +138,8 @@ spec:
               provider:
                 default: generic
                 description: |-
-                  The provider used for authentication, can be 'aws', 'azure', 'gcp' or 'generic'.
-                  When not specified, defaults to 'generic'.
+                  Provider is the provider used for authentication, can be 'aws', 'azure',
+                  'gcp' or 'generic'. When not specified, defaults to 'generic'.
                 enum:
                 - generic
                 - aws
@@ -253,6 +274,18 @@ spec:
             - interval
             - url
             type: object
+            x-kubernetes-validations:
+            - message: spec.audiences can be set only when spec.credential is set
+                to 'ServiceAccountToken'
+              rule: '!has(self.audiences) || size(self.audiences) == 0 || (has(self.credential)
+                && self.credential == ''ServiceAccountToken'')'
+            - message: spec.audiences must be set when spec.credential is set to 'ServiceAccountToken'
+              rule: '!has(self.credential) || self.credential != ''ServiceAccountToken''
+                || (has(self.audiences) && size(self.audiences) > 0)'
+            - message: spec.credential 'ServiceAccountToken' can only be used with
+                spec.provider 'generic'
+              rule: '!has(self.credential) || self.credential != ''ServiceAccountToken''
+                || !has(self.provider) || self.provider == ''generic'''
           status:
             default:
               observedGeneration: -1

@@ -427,6 +427,8 @@ func TestOCIRepository_reconcileSource_authStrategy(t *testing.T) {
 		insecure         bool
 		provider         string
 		providerImg      string
+		credential       string
+		audiences        []string
 		want             sreconcile.Result
 		wantErr          bool
 		assertConditions []metav1.Condition
@@ -711,6 +713,19 @@ func TestOCIRepository_reconcileSource_authStrategy(t *testing.T) {
 				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "%s", "building artifact: new revision '<revision>' for '<url>'"),
 			},
 		},
+		{
+			name:       "with ServiceAccountToken credential",
+			wantErr:    true,
+			credential: "ServiceAccountToken",
+			audiences:  []string{"test-audience"},
+			craneOpts: []crane.Option{
+				crane.Insecure,
+			},
+			insecure: true,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "%s", "failed to get credential from ServiceAccountToken"),
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -754,6 +769,13 @@ func TestOCIRepository_reconcileSource_authStrategy(t *testing.T) {
 			// the login check expects the URLs to be of certain pattern.
 			if tt.providerImg != "" {
 				obj.Spec.URL = tt.providerImg
+			}
+
+			if tt.credential != "" {
+				obj.Spec.Credential = tt.credential
+			}
+			if len(tt.audiences) > 0 {
+				obj.Spec.Audiences = tt.audiences
 			}
 
 			if tt.secretOpts.username != "" && tt.secretOpts.password != "" {
@@ -3080,6 +3102,89 @@ func TestOCIRepository_objectLevelWorkloadIdentityFeatureGate(t *testing.T) {
 		return !conditions.IsReady(resultobj) &&
 			conditions.GetReason(resultobj, meta.ReadyCondition) == sourcev1.AuthenticationFailedReason
 	}).Should(BeTrue())
+}
+
+func TestOCIRepositoryReconciler_APIServerValidation_Credential(t *testing.T) {
+	tests := []struct {
+		name       string
+		provider   string
+		credential string
+		audiences  []string
+		err        string
+	}{
+		{
+			name:       "ServiceAccountToken requires audiences",
+			credential: "ServiceAccountToken",
+			err:        "spec.audiences must be set when spec.credential is set to 'ServiceAccountToken'",
+		},
+		{
+			name:      "audiences requires ServiceAccountToken credential",
+			audiences: []string{"test-audience"},
+			err:       "spec.audiences can be set only when spec.credential is set to 'ServiceAccountToken'",
+		},
+		{
+			name:       "ServiceAccountToken only works with generic provider",
+			provider:   "aws",
+			credential: "ServiceAccountToken",
+			audiences:  []string{"test-audience"},
+			err:        "spec.credential 'ServiceAccountToken' can only be used with spec.provider 'generic'",
+		},
+		{
+			name:       "ServiceAccountToken works with generic provider",
+			provider:   "generic",
+			credential: "ServiceAccountToken",
+			audiences:  []string{"test-audience"},
+		},
+		{
+			name:       "ServiceAccountToken works with default provider",
+			credential: "ServiceAccountToken",
+			audiences:  []string{"test-audience"},
+		},
+		{
+			name:     "aws provider can be created without credential",
+			provider: "aws",
+		},
+		{
+			name:     "generic provider can be created without credential",
+			provider: "generic",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			obj := &sourcev1.OCIRepository{
+				ObjectMeta: metav1.ObjectMeta{
+					GenerateName: "ocirepository-validation-",
+					Namespace:    "default",
+				},
+				Spec: sourcev1.OCIRepositorySpec{
+					URL:        "oci://ghcr.io/test/test",
+					Interval:   metav1.Duration{Duration: interval},
+					Timeout:    &metav1.Duration{Duration: timeout},
+					Provider:   tt.provider,
+					Credential: tt.credential,
+					Audiences:  tt.audiences,
+				},
+			}
+
+			err := testEnv.Create(ctx, obj)
+			if err == nil {
+				defer func() {
+					err := testEnv.Delete(ctx, obj)
+					g.Expect(err).NotTo(HaveOccurred())
+				}()
+			}
+
+			if tt.err != "" {
+				g.Expect(err).To(HaveOccurred())
+				g.Expect(err.Error()).To(ContainSubstring(tt.err))
+			} else {
+				g.Expect(err).NotTo(HaveOccurred())
+			}
+		})
+	}
 }
 
 func TestOCIRepository_reconcileStorage(t *testing.T) {

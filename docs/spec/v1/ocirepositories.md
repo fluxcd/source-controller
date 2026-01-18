@@ -255,6 +255,99 @@ which can be bound as part of the Container Registry Service Agent role.
 Take a look at [this guide](https://cloud.google.com/kubernetes-engine/docs/how-to/workload-identity)
 for more information about setting up GKE Workload Identity.
 
+### Credential
+
+`.spec.credential` is an optional field that specifies the type of credential
+to use for authentication.
+
+Supported values are:
+
+- `ServiceAccountToken`
+
+#### ServiceAccountToken
+
+The `ServiceAccountToken` credential type instructs the controller to generate
+a Kubernetes ServiceAccount token and use it as a bearer token in OCI registry
+calls. This is useful for authenticating with OCI registries that support
+Kubernetes ServiceAccount token authentication, such as registries configured
+with OIDC federation to trust tokens from a Kubernetes cluster.
+
+When using `ServiceAccountToken`, you must also specify the
+[`.spec.audiences`](#audiences) field to set the audience claim in the token.
+
+If `.spec.serviceAccountName` is specified, the controller will generate a
+token for that ServiceAccount. Otherwise, the controller's own ServiceAccount
+will be used.
+
+**Note:** The `ServiceAccountToken` credential can only be used with the
+`generic` provider (or when no provider is specified, which defaults to
+`generic`).
+
+Example:
+
+```yaml
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: OCIRepository
+metadata:
+  name: example
+  namespace: default
+spec:
+  interval: 5m0s
+  url: oci://registry.example.com/my-org/my-artifact
+  credential: ServiceAccountToken
+  audiences:
+    - registry.example.com
+```
+
+To use a specific ServiceAccount for token generation:
+
+```yaml
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: OCIRepository
+metadata:
+  name: example
+  namespace: default
+spec:
+  interval: 5m0s
+  url: oci://registry.example.com/my-org/my-artifact
+  credential: ServiceAccountToken
+  audiences:
+    - registry.example.com
+  serviceAccountName: my-service-account
+```
+
+**Note:** When using `.spec.serviceAccountName` with `ServiceAccountToken`,
+the controller feature gate `ObjectLevelWorkloadIdentity` must be enabled.
+
+### Audiences
+
+`.spec.audiences` is a field to specify the audience claims to be set in JWT
+credentials. This field is required when `.spec.credential` is set to
+`ServiceAccountToken`.
+
+The audiences are typically the identifiers of the services that will validate
+the token. For OCI registries, this is usually the registry hostname or a
+specific audience value configured in the registry's OIDC settings.
+
+Example:
+
+```yaml
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: OCIRepository
+metadata:
+  name: example
+  namespace: default
+spec:
+  interval: 5m0s
+  url: oci://registry.example.com/my-org/my-artifact
+  credential: ServiceAccountToken
+  audiences:
+    - registry.example.com
+```
+
 ### Secret reference
 
 `.spec.secretRef.name` is an optional field to specify a name reference to a
