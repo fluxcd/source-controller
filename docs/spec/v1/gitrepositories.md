@@ -346,19 +346,14 @@ The `github` provider can be used to authenticate to Git repositories using
 The GitHub App information is specified in `.spec.secretRef` in the format
 specified below:
 
-- Get the App ID from the app settings page at
-  `https://github.com/settings/apps/<app-name>`. 
-- Get the App Installation ID from the app installations page at
-`https://github.com/settings/installations`. Click the installed app, the URL
-will contain the installation ID
-`https://github.com/settings/installations/<installation-id>`. For
-organizations, the first part of the URL may be different, but it follows the
-same pattern.
+- Get the App ID from the app settings page at `https://github.com/settings/apps/<app-name>`.
 - The private key that was generated in the pre-requisites.
 - (Optional) GitHub Enterprise Server users can set the base URL to
   `http(s)://HOSTNAME/api/v3`.
-- (Optional) If GitHub Enterprise Server uses a private CA, include its bundle (root and any intermediates) in `ca.crt`.
-  If the `ca.crt` is specified, then it will be used for TLS verification for all API / Git over `HTTPS` requests to the GitHub Enterprise Server.
+- (Optional) If GitHub Enterprise Server uses a private CA, include its
+  bundle (root and any intermediates) in `ca.crt`.
+  If the `ca.crt` is specified, then it will be used for TLS verification
+  for all API / Git over `HTTPS` requests to the GitHub Enterprise Server.
 
 **NOTE:** If the secret contains `tls.crt`, `tls.key` then [mutual TLS configuration](#https-mutual-tls-authentication) will be automatically enabled. 
 Omit these keys if the GitHub server does not support mutual TLS.
@@ -371,6 +366,7 @@ metadata:
 type: Opaque
 stringData:
   githubAppID: "<app-id>"
+  githubAppInstallationOwner: "<github-org-or-user>"
   githubAppInstallationID: "<app-installation-id>"
   githubAppPrivateKey: |
     -----BEGIN RSA PRIVATE KEY-----
@@ -383,14 +379,19 @@ stringData:
     -----END CERTIFICATE-----
 ```
 
+Exactly one of `githubAppInstallationOwner` or `githubAppInstallationID` must be provided.
+If neither or both are provided, the reconciliation will fail with a misconfiguration error.
+When `githubAppInstallationOwner` is provided, the controller will look for the installation
+ID corresponding to the owner using the GitHub API.
+
 Alternatively, the Flux CLI can be used to automatically create the secret with
 the github app authentication information.
 
 ```sh
 flux create secret githubapp ghapp-secret \
     --app-id=1 \
-    --app-installation-id=3 \
-    --app-private-key=~/private-key.pem    
+    --app-installation-owner=my-org \
+    --app-private-key=~/private-key.pem
 ```
 
 ### Service Account reference
