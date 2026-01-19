@@ -27,7 +27,7 @@ require (
 	github.com/fluxcd/pkg/artifact v0.5.0
 	github.com/fluxcd/pkg/auth v0.33.0
 	github.com/fluxcd/pkg/cache v0.12.0
-	github.com/fluxcd/pkg/git v0.39.0
+	github.com/fluxcd/pkg/git v0.40.0
 	github.com/fluxcd/pkg/gittestserver v0.23.0
 	github.com/fluxcd/pkg/helmtestserver v0.34.0
 	github.com/fluxcd/pkg/http/transport v0.7.0

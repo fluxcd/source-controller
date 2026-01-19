@@ -378,8 +378,8 @@ github.com/fluxcd/pkg/auth v0.33.0 h1:3ccwqpBr8uWEQgl15b7S0PwJ9EgtcKObg4J1jnaof2
 github.com/fluxcd/pkg/auth v0.33.0/go.mod h1:ZAFC8pNZxhe+7RV2cQO1K9X62HM8BbRBnCE118oY/0A=
 github.com/fluxcd/pkg/cache v0.12.0 h1:mabABT3jIfuo84VbIW+qvfqMZ7PbM5tXQgQvA2uo2rc=
 github.com/fluxcd/pkg/cache v0.12.0/go.mod h1:HL/9cgBmwCdKIr3JH57rxrGdb7rOgX5Z1eJlHsaV1vE=
-github.com/fluxcd/pkg/git v0.39.0 h1:QydLWcsOso1BkO/ctE6ELlCFkhnGwpF2dUVa+R4aLp0=
-github.com/fluxcd/pkg/git v0.39.0/go.mod h1:MPhYH/ir7jr7cgQd75kWPHCGuJBu+sg7jzi0JPTSkKA=
+github.com/fluxcd/pkg/git v0.40.0 h1:B23gcdNqHQcVpp9P2BU4mrfFXGA8XFYi9mpy+5RDAQA=
+github.com/fluxcd/pkg/git v0.40.0/go.mod h1:MPhYH/ir7jr7cgQd75kWPHCGuJBu+sg7jzi0JPTSkKA=
 github.com/fluxcd/pkg/gittestserver v0.23.0 h1:o4tb4ic2GHf2xWHTf/07w/wVLFSvbybQ9bdhtWgDnS8=
 github.com/fluxcd/pkg/gittestserver v0.23.0/go.mod h1:b+rbFRu8HTtTFJ7mr437nHIO12pEodYqvQ3QUDHgFIQ=
 github.com/fluxcd/pkg/helmtestserver v0.34.0 h1:a6toTMPO6WfdohrkYCrs6vwOJK4VXpODLKc5311GawY=
