@@ -18,6 +18,7 @@ limitations under the License.
 package secureloader
 
 import (
+	"fmt"
 	"io"
 
 	"helm.sh/helm/v4/pkg/chart/loader"
@@ -32,11 +33,15 @@ type FileLoader string
 
 func (f FileLoader) Load() (*chart.Chart, error) {
 	l := loader.FileLoader(f)
-	c, err := l.Load()
+	charter, err := l.Load()
 	if err != nil {
 		return nil, err
 	}
-	return c.(*chart.Chart), nil
+	c, ok := charter.(*chart.Chart)
+	if !ok {
+		return nil, fmt.Errorf("only the Chart API v2 is supported")
+	}
+	return c, nil
 }
 
 // LoadFile loads from an archive file.
