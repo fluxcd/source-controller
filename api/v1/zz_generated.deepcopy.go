@@ -876,6 +876,11 @@ func (in *OCIRepositorySpec) DeepCopyInto(out *OCIRepositorySpec) {
 		*out = new(OCILayerSelector)
 		**out = **in
 	}
+	if in.Audiences != nil {
+		in, out := &in.Audiences, &out.Audiences
+		*out = make([]string, len(*in))
+		copy(*out, *in)
+	}
 	if in.SecretRef != nil {
 		in, out := &in.SecretRef, &out.SecretRef
 		*out = new(meta.LocalObjectReference)
