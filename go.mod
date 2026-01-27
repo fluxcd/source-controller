@@ -8,6 +8,8 @@ replace github.com/fluxcd/source-controller/api => ./api
 // xref: https://github.com/opencontainers/go-digest/pull/66
 replace github.com/opencontainers/go-digest => github.com/opencontainers/go-digest v1.0.1-0.20220411205349-bde1400a84be
 
+replace helm.sh/helm/v4 => github.com/matheuscscp/helm/v4 v4.0.0-20260127110952-d7010ed3cf54
+
 require (
 	cloud.google.com/go/compute/metadata v0.9.0
 	cloud.google.com/go/storage v1.57.0
@@ -21,7 +23,7 @@ require (
 	github.com/docker/cli v28.5.0+incompatible
 	github.com/docker/go-units v0.5.0
 	github.com/elazarl/goproxy v1.7.2
-	github.com/fluxcd/cli-utils v0.37.0-flux.1
+	github.com/fluxcd/cli-utils v0.37.1-flux.1
 	github.com/fluxcd/pkg/apis/event v0.21.0
 	github.com/fluxcd/pkg/apis/meta v1.23.0
 	github.com/fluxcd/pkg/artifact v0.5.0
@@ -29,7 +31,7 @@ require (
 	github.com/fluxcd/pkg/cache v0.12.0
 	github.com/fluxcd/pkg/git v0.40.0
 	github.com/fluxcd/pkg/gittestserver v0.23.0
-	github.com/fluxcd/pkg/helmtestserver v0.35.0
+	github.com/fluxcd/pkg/helmtestserver v0.36.1-0.20260127115646-ece0e2b66d6c
 	github.com/fluxcd/pkg/http/transport v0.7.0
 	github.com/fluxcd/pkg/masktoken v0.8.0
 	github.com/fluxcd/pkg/oci v0.58.0
@@ -61,8 +63,8 @@ require (
 	github.com/sigstore/sigstore v1.9.5
 	github.com/sirupsen/logrus v1.9.3
 	github.com/spf13/pflag v1.0.10
-	golang.org/x/crypto v0.46.0
-	golang.org/x/oauth2 v0.33.0
+	golang.org/x/crypto v0.47.0
+	golang.org/x/oauth2 v0.34.0
 	golang.org/x/sync v0.19.0
 	google.golang.org/api v0.256.0
 	helm.sh/helm/v4 v4.1.0
@@ -71,7 +73,7 @@ require (
 	k8s.io/client-go v0.35.0
 	k8s.io/utils v0.0.0-20251002143259-bc988d571ff4
 	oras.land/oras-go/v2 v2.6.0
-	sigs.k8s.io/controller-runtime v0.22.4
+	sigs.k8s.io/controller-runtime v0.23.0
 	sigs.k8s.io/yaml v1.6.0
 )
 
@@ -388,7 +390,7 @@ require (
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	golang.org/x/exp v0.0.0-20250408133849-7e4ce0ab07d0 // indirect
 	golang.org/x/mod v0.31.0 // indirect
-	golang.org/x/net v0.48.0 // indirect
+	golang.org/x/net v0.49.0 // indirect
 	golang.org/x/sys v0.40.0 // indirect
 	golang.org/x/term v0.39.0 // indirect
 	golang.org/x/text v0.33.0 // indirect
