@@ -861,7 +861,7 @@ func TestOCIRepository_CertSecret(t *testing.T) {
 	clientTLSCert, err := tls.X509KeyPair(clientPublicKey, clientPrivateKey)
 	g.Expect(err).ToNot(HaveOccurred())
 
-	transport := http.DefaultTransport.(*http.Transport)
+	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.TLSClientConfig = &tls.Config{
 		RootCAs:      pool,
 		Certificates: []tls.Certificate{clientTLSCert},
@@ -1589,6 +1589,19 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignatureNotation(t *testi
 
 				if tt.insecure {
 					remoteRepo.PlainHTTP = true
+				}
+
+				// Configure transport to trust the local registry CA
+				transport := http.DefaultTransport.(*http.Transport).Clone()
+				if !tt.insecure {
+					pool := x509.NewCertPool()
+					pool.AppendCertsFromPEM(tlsCA)
+					transport.TLSClientConfig = &tls.Config{
+						RootCAs: pool,
+					}
+				}
+				remoteRepo.Client = &http.Client{
+					Transport: transport,
 				}
 
 				repo := registry.NewRepository(remoteRepo)
@@ -3550,7 +3563,7 @@ func pushMultiplePodinfoImages(serverURL string, insecure bool, versions ...stri
 	if insecure {
 		opts = append(opts, crane.Insecure)
 	} else {
-		transport := http.DefaultTransport.(*http.Transport)
+		transport := http.DefaultTransport.(*http.Transport).Clone()
 		pool := x509.NewCertPool()
 		pool.AppendCertsFromPEM(tlsCA)
 		transport.TLSClientConfig = &tls.Config{
