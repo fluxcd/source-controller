@@ -170,6 +170,8 @@ func TestPrivateKeyVerificationWithProxy(t *testing.T) {
 		},
 	}
 
+	vf := NewCosignVerifierFactory()
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
@@ -183,7 +185,7 @@ func TestPrivateKeyVerificationWithProxy(t *testing.T) {
 			opts = append(opts, WithRemoteOptions(remote.WithTransport(transport)))
 			opts = append(opts, WithPublicKey(keys.PublicBytes))
 
-			verifier, err := NewCosignVerifier(ctx, opts...)
+			verifier, err := vf.NewCosignVerifier(ctx, opts...)
 			g.Expect(err).NotTo(HaveOccurred())
 
 			_, err = verifier.Verify(ctx, ref)

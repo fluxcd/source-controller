@@ -72,9 +72,14 @@ import (
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	serror "github.com/fluxcd/source-controller/internal/error"
+	scosign "github.com/fluxcd/source-controller/internal/oci/cosign"
 	snotation "github.com/fluxcd/source-controller/internal/oci/notation"
 	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
 	testproxy "github.com/fluxcd/source-controller/tests/proxy"
+)
+
+var (
+	testCosignVerifierFactory = scosign.NewCosignVerifierFactory()
 )
 
 func TestOCIRepositoryReconciler_deleteBeforeFinalizer(t *testing.T) {
@@ -103,9 +108,10 @@ func TestOCIRepositoryReconciler_deleteBeforeFinalizer(t *testing.T) {
 	g.Expect(k8sClient.Delete(ctx, ocirepo)).NotTo(HaveOccurred())
 
 	r := &OCIRepositoryReconciler{
-		Client:        k8sClient,
-		EventRecorder: record.NewFakeRecorder(32),
-		Storage:       testStorage,
+		Client:                k8sClient,
+		EventRecorder:         record.NewFakeRecorder(32),
+		Storage:               testStorage,
+		CosignVerifierFactory: testCosignVerifierFactory,
 	}
 	// NOTE: Only a real API server responds with an error in this scenario.
 	_, err := r.Reconcile(ctx, ctrl.Request{NamespacedName: client.ObjectKeyFromObject(ocirepo)})
@@ -798,10 +804,11 @@ func TestOCIRepository_reconcileSource_authStrategy(t *testing.T) {
 			}
 
 			r := &OCIRepositoryReconciler{
-				Client:        clientBuilder.Build(),
-				EventRecorder: record.NewFakeRecorder(32),
-				Storage:       testStorage,
-				patchOptions:  getPatchOptions(ociRepositoryReadyCondition.Owned, "sc"),
+				Client:                clientBuilder.Build(),
+				EventRecorder:         record.NewFakeRecorder(32),
+				Storage:               testStorage,
+				CosignVerifierFactory: testCosignVerifierFactory,
+				patchOptions:          getPatchOptions(ociRepositoryReadyCondition.Owned, "sc"),
 			}
 
 			opts := makeRemoteOptions(ctx, makeTransport(tt.insecure), authn.DefaultKeychain, nil)
@@ -1257,10 +1264,11 @@ func TestOCIRepository_reconcileSource_remoteReference(t *testing.T) {
 		WithStatusSubresource(&sourcev1.OCIRepository{})
 
 	r := &OCIRepositoryReconciler{
-		Client:        clientBuilder.Build(),
-		EventRecorder: record.NewFakeRecorder(32),
-		Storage:       testStorage,
-		patchOptions:  getPatchOptions(ociRepositoryReadyCondition.Owned, "sc"),
+		Client:                clientBuilder.Build(),
+		EventRecorder:         record.NewFakeRecorder(32),
+		Storage:               testStorage,
+		CosignVerifierFactory: testCosignVerifierFactory,
+		patchOptions:          getPatchOptions(ociRepositoryReadyCondition.Owned, "sc"),
 	}
 
 	for _, tt := range tests {
@@ -1459,10 +1467,11 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignatureNotation(t *testi
 		WithStatusSubresource(&sourcev1.OCIRepository{})
 
 	r := &OCIRepositoryReconciler{
-		Client:        clientBuilder.Build(),
-		EventRecorder: record.NewFakeRecorder(32),
-		Storage:       testStorage,
-		patchOptions:  getPatchOptions(ociRepositoryReadyCondition.Owned, "sc"),
+		Client:                clientBuilder.Build(),
+		EventRecorder:         record.NewFakeRecorder(32),
+		Storage:               testStorage,
+		CosignVerifierFactory: testCosignVerifierFactory,
+		patchOptions:          getPatchOptions(ociRepositoryReadyCondition.Owned, "sc"),
 	}
 
 	certTuple := testhelper.GetRSASelfSignedSigningCertTuple("notation self-signed certs for testing")
@@ -1822,10 +1831,11 @@ func TestOCIRepository_reconcileSource_verifyOCISourceTrustPolicyNotation(t *tes
 		WithStatusSubresource(&sourcev1.OCIRepository{})
 
 	r := &OCIRepositoryReconciler{
-		Client:        clientBuilder.Build(),
-		EventRecorder: record.NewFakeRecorder(32),
-		Storage:       testStorage,
-		patchOptions:  getPatchOptions(ociRepositoryReadyCondition.Owned, "sc"),
+		Client:                clientBuilder.Build(),
+		EventRecorder:         record.NewFakeRecorder(32),
+		Storage:               testStorage,
+		CosignVerifierFactory: testCosignVerifierFactory,
+		patchOptions:          getPatchOptions(ociRepositoryReadyCondition.Owned, "sc"),
 	}
 
 	certTuple := testhelper.GetRSASelfSignedSigningCertTuple("notation self-signed certs for testing")
@@ -2118,10 +2128,11 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignatureCosign(t *testing
 		WithStatusSubresource(&sourcev1.OCIRepository{})
 
 	r := &OCIRepositoryReconciler{
-		Client:        clientBuilder.Build(),
-		EventRecorder: record.NewFakeRecorder(32),
-		Storage:       testStorage,
-		patchOptions:  getPatchOptions(ociRepositoryReadyCondition.Owned, "sc"),
+		Client:                clientBuilder.Build(),
+		EventRecorder:         record.NewFakeRecorder(32),
+		Storage:               testStorage,
+		CosignVerifierFactory: testCosignVerifierFactory,
+		patchOptions:          getPatchOptions(ociRepositoryReadyCondition.Owned, "sc"),
 	}
 
 	pf := func(b bool) ([]byte, error) {
@@ -2384,10 +2395,11 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignature_keyless(t *testi
 		WithStatusSubresource(&sourcev1.OCIRepository{})
 
 	r := &OCIRepositoryReconciler{
-		Client:        clientBuilder.Build(),
-		EventRecorder: record.NewFakeRecorder(32),
-		Storage:       testStorage,
-		patchOptions:  getPatchOptions(ociRepositoryReadyCondition.Owned, "sc"),
+		Client:                clientBuilder.Build(),
+		EventRecorder:         record.NewFakeRecorder(32),
+		Storage:               testStorage,
+		CosignVerifierFactory: testCosignVerifierFactory,
+		patchOptions:          getPatchOptions(ociRepositoryReadyCondition.Owned, "sc"),
 	}
 
 	for _, tt := range tests {
@@ -3344,9 +3356,10 @@ func TestOCIRepository_ReconcileDelete(t *testing.T) {
 	g := NewWithT(t)
 
 	r := &OCIRepositoryReconciler{
-		EventRecorder: record.NewFakeRecorder(32),
-		Storage:       testStorage,
-		patchOptions:  getPatchOptions(ociRepositoryReadyCondition.Owned, "sc"),
+		EventRecorder:         record.NewFakeRecorder(32),
+		Storage:               testStorage,
+		CosignVerifierFactory: testCosignVerifierFactory,
+		patchOptions:          getPatchOptions(ociRepositoryReadyCondition.Owned, "sc"),
 	}
 
 	obj := &sourcev1.OCIRepository{

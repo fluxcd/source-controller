@@ -111,9 +111,10 @@ func TestHelmChartReconciler_deleteBeforeFinalizer(t *testing.T) {
 	g.Expect(k8sClient.Delete(ctx, helmchart)).NotTo(HaveOccurred())
 
 	r := &HelmChartReconciler{
-		Client:        k8sClient,
-		EventRecorder: record.NewFakeRecorder(32),
-		Storage:       testStorage,
+		Client:                k8sClient,
+		EventRecorder:         record.NewFakeRecorder(32),
+		Storage:               testStorage,
+		CosignVerifierFactory: testCosignVerifierFactory,
 	}
 	// NOTE: Only a real API server responds with an error in this scenario.
 	_, err := r.Reconcile(ctx, ctrl.Request{NamespacedName: client.ObjectKeyFromObject(helmchart)})
@@ -792,10 +793,11 @@ func TestHelmChartReconciler_reconcileSource(t *testing.T) {
 			}
 
 			r := &HelmChartReconciler{
-				Client:        clientBuilder.Build(),
-				EventRecorder: record.NewFakeRecorder(32),
-				Storage:       st,
-				patchOptions:  getPatchOptions(helmChartReadyCondition.Owned, "sc"),
+				Client:                clientBuilder.Build(),
+				EventRecorder:         record.NewFakeRecorder(32),
+				Storage:               st,
+				CosignVerifierFactory: testCosignVerifierFactory,
+				patchOptions:          getPatchOptions(helmChartReadyCondition.Owned, "sc"),
 			}
 
 			obj := sourcev1.HelmChart{
@@ -1128,11 +1130,12 @@ func TestHelmChartReconciler_buildFromHelmRepository(t *testing.T) {
 			g.Expect(err).ToNot(HaveOccurred())
 
 			r := &HelmChartReconciler{
-				Client:        clientBuilder.Build(),
-				EventRecorder: record.NewFakeRecorder(32),
-				Getters:       testGetters,
-				Storage:       testStorage,
-				patchOptions:  getPatchOptions(helmChartReadyCondition.Owned, "sc"),
+				Client:                clientBuilder.Build(),
+				EventRecorder:         record.NewFakeRecorder(32),
+				Getters:               testGetters,
+				Storage:               testStorage,
+				CosignVerifierFactory: testCosignVerifierFactory,
+				patchOptions:          getPatchOptions(helmChartReadyCondition.Owned, "sc"),
 			}
 
 			repository := &sourcev1.HelmRepository{
@@ -1380,11 +1383,12 @@ func TestHelmChartReconciler_buildFromOCIHelmRepository(t *testing.T) {
 			}
 
 			r := &HelmChartReconciler{
-				Client:        clientBuilder.Build(),
-				EventRecorder: record.NewFakeRecorder(32),
-				Getters:       testGetters,
-				Storage:       st,
-				patchOptions:  getPatchOptions(helmChartReadyCondition.Owned, "sc"),
+				Client:                clientBuilder.Build(),
+				EventRecorder:         record.NewFakeRecorder(32),
+				Getters:               testGetters,
+				Storage:               st,
+				CosignVerifierFactory: testCosignVerifierFactory,
+				patchOptions:          getPatchOptions(helmChartReadyCondition.Owned, "sc"),
 			}
 
 			repository := &sourcev1.HelmRepository{
@@ -1907,8 +1911,9 @@ func TestHelmChartReconciler_getSource(t *testing.T) {
 		WithObjects(mocks...)
 
 	r := &HelmChartReconciler{
-		Client:       clientBuilder.Build(),
-		patchOptions: getPatchOptions(helmChartReadyCondition.Owned, "sc"),
+		Client:                clientBuilder.Build(),
+		CosignVerifierFactory: testCosignVerifierFactory,
+		patchOptions:          getPatchOptions(helmChartReadyCondition.Owned, "sc"),
 	}
 
 	tests := []struct {
@@ -2023,9 +2028,10 @@ func TestHelmChartReconciler_reconcileDelete(t *testing.T) {
 	g := NewWithT(t)
 
 	r := &HelmChartReconciler{
-		EventRecorder: record.NewFakeRecorder(32),
-		Storage:       testStorage,
-		patchOptions:  getPatchOptions(helmChartReadyCondition.Owned, "sc"),
+		EventRecorder:         record.NewFakeRecorder(32),
+		Storage:               testStorage,
+		CosignVerifierFactory: testCosignVerifierFactory,
+		patchOptions:          getPatchOptions(helmChartReadyCondition.Owned, "sc"),
 	}
 
 	obj := &sourcev1.HelmChart{
@@ -2163,7 +2169,8 @@ func TestHelmChartReconciler_reconcileSubRecs(t *testing.T) {
 					WithScheme(testEnv.GetScheme()).
 					WithStatusSubresource(&sourcev1.HelmChart{}).
 					Build(),
-				patchOptions: getPatchOptions(helmChartReadyCondition.Owned, "sc"),
+				CosignVerifierFactory: testCosignVerifierFactory,
+				patchOptions:          getPatchOptions(helmChartReadyCondition.Owned, "sc"),
 			}
 			obj := &sourcev1.HelmChart{
 				ObjectMeta: metav1.ObjectMeta{
@@ -2877,11 +2884,12 @@ func TestHelmChartRepository_reconcileSource_verifyOCISourceSignature_keyless(t 
 			clientBuilder.WithObjects(repository)
 
 			r := &HelmChartReconciler{
-				Client:        clientBuilder.Build(),
-				EventRecorder: record.NewFakeRecorder(32),
-				Getters:       testGetters,
-				Storage:       testStorage,
-				patchOptions:  getPatchOptions(helmChartReadyCondition.Owned, "sc"),
+				Client:                clientBuilder.Build(),
+				EventRecorder:         record.NewFakeRecorder(32),
+				Getters:               testGetters,
+				Storage:               testStorage,
+				CosignVerifierFactory: testCosignVerifierFactory,
+				patchOptions:          getPatchOptions(helmChartReadyCondition.Owned, "sc"),
 			}
 
 			obj := &sourcev1.HelmChart{
@@ -3182,11 +3190,12 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_verifySignatureNotation(t *t
 			clientBuilder.WithObjects(repository, secret, caSecret)
 
 			r := &HelmChartReconciler{
-				Client:        clientBuilder.Build(),
-				EventRecorder: record.NewFakeRecorder(32),
-				Getters:       testGetters,
-				Storage:       st,
-				patchOptions:  getPatchOptions(helmChartReadyCondition.Owned, "sc"),
+				Client:                clientBuilder.Build(),
+				EventRecorder:         record.NewFakeRecorder(32),
+				Getters:               testGetters,
+				Storage:               testStorage,
+				CosignVerifierFactory: testCosignVerifierFactory,
+				patchOptions:          getPatchOptions(helmChartReadyCondition.Owned, "sc"),
 			}
 
 			obj := &sourcev1.HelmChart{
@@ -3433,11 +3442,12 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_verifySignatureCosign(t *tes
 			clientBuilder.WithObjects(repository, secret)
 
 			r := &HelmChartReconciler{
-				Client:        clientBuilder.Build(),
-				EventRecorder: record.NewFakeRecorder(32),
-				Getters:       testGetters,
-				Storage:       st,
-				patchOptions:  getPatchOptions(helmChartReadyCondition.Owned, "sc"),
+				Client:                clientBuilder.Build(),
+				EventRecorder:         record.NewFakeRecorder(32),
+				Getters:               testGetters,
+				Storage:               st,
+				CosignVerifierFactory: testCosignVerifierFactory,
+				patchOptions:          getPatchOptions(helmChartReadyCondition.Owned, "sc"),
 			}
 
 			obj := &sourcev1.HelmChart{

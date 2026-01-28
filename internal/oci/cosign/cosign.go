@@ -20,6 +20,8 @@ import (
 	"context"
 	"crypto"
 	"fmt"
+	"sync"
+	"time"
 
 	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
@@ -30,6 +32,7 @@ import (
 	"github.com/sigstore/cosign/v3/pkg/oci"
 
 	ociremote "github.com/sigstore/cosign/v3/pkg/oci/remote"
+	"github.com/sigstore/sigstore-go/pkg/root"
 	"github.com/sigstore/sigstore/pkg/cryptoutils"
 	"github.com/sigstore/sigstore/pkg/signature"
 
@@ -74,8 +77,30 @@ type CosignVerifier struct {
 	opts *cosign.CheckOpts
 }
 
-// NewCosignVerifier initializes a new CosignVerifier.
-func NewCosignVerifier(ctx context.Context, opts ...Options) (*CosignVerifier, error) {
+// CosignVerifierFactory is a factory for creating Verifiers with shared state.
+// A mutex is used to ensure a TUF trustedRoot is initialized and shared for all
+// NewCosignVerifier's. In the event that a trustedRoot can't be initialized, the
+// factory rate-limits creation based on an internal retryInterval.
+// Only the v3/bundle compatible trustedRoot is shared by the factory.
+// Keys for v2 retain the behavior from previous versions of Flux.
+type CosignVerifierFactory struct {
+	trustedMaterial root.TrustedMaterial
+	mu              sync.Mutex
+	initErr         error
+	lastAttempt     time.Time
+	retryInterval   time.Duration
+}
+
+// NewCosignVerifierFactory initializes a new CosignVerifierFactory.
+// TrustedRoot creation attempts are rate-limited to every minute.
+func NewCosignVerifierFactory() *CosignVerifierFactory {
+	return &CosignVerifierFactory{
+		retryInterval: time.Minute,
+	}
+}
+
+// NewCosignVerifier initializes a new CosignVerifier using the factory's shared state.
+func (f *CosignVerifierFactory) NewCosignVerifier(ctx context.Context, opts ...Options) (*CosignVerifier, error) {
 	o := options{}
 	for _, opt := range opts {
 		opt(&o)
@@ -123,8 +148,28 @@ func NewCosignVerifier(ctx context.Context, opts ...Options) (*CosignVerifier, e
 		}
 
 		// Initialize TrustedMaterial for v3/Bundle verification
-		if checkOpts.TrustedMaterial, err = cosign.TrustedRoot(); err != nil {
-			return nil, fmt.Errorf("unable to initialize trusted root: %w", err)
+		f.mu.Lock()
+		if f.trustedMaterial != nil {
+			checkOpts.TrustedMaterial = f.trustedMaterial
+			f.mu.Unlock()
+		} else {
+			// Check if we should init or retry
+			if f.initErr == nil || time.Since(f.lastAttempt) >= f.retryInterval {
+				f.lastAttempt = time.Now()
+				// TODO(stealthybox): it would be nice to control the http client here for the TrustedRoot fetcher
+				//  with the current state of this part of the cosign SDK, that would involve duplicating a lot of
+				//  their ENV, options, and defaulting code.
+				f.trustedMaterial, f.initErr = cosign.TrustedRoot()
+			}
+
+			err := f.initErr
+			tm := f.trustedMaterial
+			f.mu.Unlock()
+
+			if err != nil {
+				return nil, fmt.Errorf("unable to initialize trusted root: %w", err)
+			}
+			checkOpts.TrustedMaterial = tm
 		}
 
 		// Initialize legacy setup for v2 compatibility
