@@ -31,7 +31,7 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	"github.com/notaryproject/notation-go/verifier/trustpolicy"
 	"github.com/opencontainers/go-digest"
-	"github.com/sigstore/cosign/v2/pkg/cosign"
+	"github.com/sigstore/cosign/v3/pkg/cosign"
 	helmgetter "helm.sh/helm/v4/pkg/getter"
 	helmreg "helm.sh/helm/v4/pkg/registry"
 	helmrepo "helm.sh/helm/v4/pkg/repo/v1"
@@ -131,9 +131,10 @@ type HelmChartReconciler struct {
 	kuberecorder.EventRecorder
 	helper.Metrics
 
-	Storage        *storage.Storage
-	Getters        helmgetter.Providers
-	ControllerName string
+	Storage               *storage.Storage
+	Getters               helmgetter.Providers
+	ControllerName        string
+	CosignVerifierFactory *scosign.CosignVerifierFactory
 
 	Cache *cache.Cache
 	TTL   time.Duration
@@ -1330,7 +1331,7 @@ func (r *HelmChartReconciler) makeVerifiers(ctx context.Context, obj *sourcev1.H
 			for k, data := range pubSecret.Data {
 				// search for public keys in the secret
 				if strings.HasSuffix(k, ".pub") {
-					verifier, err := scosign.NewCosignVerifier(ctx, append(defaultCosignOciOpts, scosign.WithPublicKey(data))...)
+					verifier, err := r.CosignVerifierFactory.NewCosignVerifier(ctx, append(defaultCosignOciOpts, scosign.WithPublicKey(data))...)
 					if err != nil {
 						return nil, err
 					}
@@ -1354,7 +1355,7 @@ func (r *HelmChartReconciler) makeVerifiers(ctx context.Context, obj *sourcev1.H
 		}
 		defaultCosignOciOpts = append(defaultCosignOciOpts, scosign.WithIdentities(identities))
 
-		verifier, err := scosign.NewCosignVerifier(ctx, defaultCosignOciOpts...)
+		verifier, err := r.CosignVerifierFactory.NewCosignVerifier(ctx, defaultCosignOciOpts...)
 		if err != nil {
 			return nil, err
 		}

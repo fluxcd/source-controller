@@ -2,7 +2,7 @@
 apiVersion: source.toolkit.fluxcd.io/v1
 kind: OCIRepository
 metadata:
-  name: podinfo-deploy-signed-with-key
+  name: podinfo-deploy-signed-with-v2-key
 spec:
   interval: 5m
   url: oci://ghcr.io/stefanprodan/podinfo-deploy

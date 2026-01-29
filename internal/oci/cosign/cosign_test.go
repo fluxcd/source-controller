@@ -28,7 +28,7 @@ import (
 	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	. "github.com/onsi/gomega"
-	"github.com/sigstore/cosign/v2/pkg/cosign"
+	"github.com/sigstore/cosign/v3/pkg/cosign"
 
 	testproxy "github.com/fluxcd/source-controller/tests/proxy"
 	testregistry "github.com/fluxcd/source-controller/tests/registry"
@@ -170,6 +170,8 @@ func TestPrivateKeyVerificationWithProxy(t *testing.T) {
 		},
 	}
 
+	vf := NewCosignVerifierFactory()
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
@@ -183,7 +185,7 @@ func TestPrivateKeyVerificationWithProxy(t *testing.T) {
 			opts = append(opts, WithRemoteOptions(remote.WithTransport(transport)))
 			opts = append(opts, WithPublicKey(keys.PublicBytes))
 
-			verifier, err := NewCosignVerifier(ctx, opts...)
+			verifier, err := vf.NewCosignVerifier(ctx, opts...)
 			g.Expect(err).NotTo(HaveOccurred())
 
 			_, err = verifier.Verify(ctx, ref)

@@ -1,0 +1,14 @@
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: OCIRepository
+metadata:
+  name: podinfo-deploy-signed-with-v3-key
+spec:
+  interval: 5m
+  url: oci://ghcr.io/fluxcd-testing/cosign-testing/v3/podinfo-deploy
+  ref:
+    semver: "6.9.4"
+  verify:
+    provider: cosign
+    secretRef:
+      name: cosign-testing-key

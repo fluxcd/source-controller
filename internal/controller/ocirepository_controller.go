@@ -39,7 +39,7 @@ import (
 	gcrv1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	"github.com/notaryproject/notation-go/verifier/trustpolicy"
-	"github.com/sigstore/cosign/v2/pkg/cosign"
+	"github.com/sigstore/cosign/v3/pkg/cosign"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -140,10 +140,11 @@ type OCIRepositoryReconciler struct {
 	helper.Metrics
 	kuberecorder.EventRecorder
 
-	Storage           *storage.Storage
-	ControllerName    string
-	TokenCache        *cache.TokenCache
-	requeueDependency time.Duration
+	Storage               *storage.Storage
+	ControllerName        string
+	TokenCache            *cache.TokenCache
+	CosignVerifierFactory *scosign.CosignVerifierFactory
+	requeueDependency     time.Duration
 
 	patchOptions []patch.Option
 }
@@ -696,7 +697,7 @@ func (r *OCIRepositoryReconciler) verifySignature(ctx context.Context, obj *sour
 			for k, data := range pubSecret.Data {
 				// search for public keys in the secret
 				if strings.HasSuffix(k, ".pub") {
-					verifier, err := scosign.NewCosignVerifier(ctxTimeout, append(defaultCosignOciOpts, scosign.WithPublicKey(data))...)
+					verifier, err := r.CosignVerifierFactory.NewCosignVerifier(ctxTimeout, append(defaultCosignOciOpts, scosign.WithPublicKey(data))...)
 					if err != nil {
 						return soci.VerificationResultFailed, err
 					}
@@ -732,7 +733,7 @@ func (r *OCIRepositoryReconciler) verifySignature(ctx context.Context, obj *sour
 		}
 		defaultCosignOciOpts = append(defaultCosignOciOpts, scosign.WithIdentities(identities))
 
-		verifier, err := scosign.NewCosignVerifier(ctxTimeout, defaultCosignOciOpts...)
+		verifier, err := r.CosignVerifierFactory.NewCosignVerifier(ctxTimeout, defaultCosignOciOpts...)
 		if err != nil {
 			return soci.VerificationResultFailed, err
 		}

@@ -1,0 +1,26 @@
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmRepository
+metadata:
+  name: podinfo-cosign-v3
+spec:
+  url: oci://ghcr.io/fluxcd-testing/cosign-testing/v3/charts
+  type: "oci"
+  interval: 1m
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmChart
+metadata:
+  name: podinfo-cosign-v3-keyless
+spec:
+  chart: podinfo
+  sourceRef:
+    kind: HelmRepository
+    name: podinfo-cosign-v3
+  version: '6.9.4'
+  interval: 1m
+  verify:
+    provider: cosign
+    matchOIDCIdentity:
+    - issuer: ^https://token\.actions\.githubusercontent\.com$
+      subject: ^https://github\.com/fluxcd-testing/cosign-testing/\.github/workflows/release\.yml@refs/tags/.*

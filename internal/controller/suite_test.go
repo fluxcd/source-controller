@@ -23,7 +23,6 @@ import (
 	"crypto/x509"
 	"fmt"
 	"io"
-	"log"
 	"math/rand"
 	"net"
 	"net/http"
@@ -36,7 +35,7 @@ import (
 	dockerRegistry "github.com/distribution/distribution/v3/registry"
 	_ "github.com/distribution/distribution/v3/registry/auth/htpasswd"
 	_ "github.com/distribution/distribution/v3/registry/storage/driver/inmemory"
-	"github.com/foxcpp/go-mockdns"
+	"github.com/miekg/dns"
 	"github.com/phayes/freeport"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/crypto/bcrypt"
@@ -123,7 +122,7 @@ type registryClientTestServer struct {
 	registryHost   string
 	workspaceDir   string
 	registryClient *helmreg.Client
-	dnsServer      *mockdns.Server
+	registry       *dockerRegistry.Registry
 }
 
 type registryOptions struct {
@@ -157,23 +156,11 @@ func setupRegistryServer(ctx context.Context, workspaceDir string, opts registry
 	}
 
 	// Change the registry host to a host which is not localhost and
-	// mock DNS to map example.com to 127.0.0.1.
+	// TestMain() will create a DNS proxy to map example.com to 127.0.0.1.
 	// This is required because Docker enforces HTTP if the registry
 	// is hosted on localhost/127.0.0.1.
 	if opts.withTLS {
 		server.registryHost = fmt.Sprintf("example.com:%d", port)
-		// Disable DNS server logging as it is extremely chatty.
-		dnsLog := log.Default()
-		dnsLog.SetOutput(io.Discard)
-		server.dnsServer, err = mockdns.NewServerWithLogger(map[string]mockdns.Zone{
-			"example.com.": {
-				A: []string{"127.0.0.1"},
-			},
-		}, dnsLog, false)
-		if err != nil {
-			return nil, err
-		}
-		server.dnsServer.PatchNet(net.DefaultResolver)
 	} else {
 		server.registryHost = fmt.Sprintf("127.0.0.1:%d", port)
 	}
@@ -230,6 +217,7 @@ func setupRegistryServer(ctx context.Context, workspaceDir string, opts registry
 	if err != nil {
 		return nil, fmt.Errorf("failed to create docker registry: %w", err)
 	}
+	server.registry = registry
 
 	// init test client
 	helmClient, err := helmreg.NewClient(clientOpts...)
@@ -239,7 +227,7 @@ func setupRegistryServer(ctx context.Context, workspaceDir string, opts registry
 	server.registryClient = helmClient
 
 	// Start Docker registry
-	go registry.ListenAndServe()
+	go server.registry.ListenAndServe()
 
 	return server, nil
 }
@@ -267,14 +255,31 @@ func tlsConfiguredHTTPCLient() (*http.Client, error) {
 }
 
 func (r *registryClientTestServer) Close() {
-	if r.dnsServer != nil {
-		mockdns.UnpatchNet(net.DefaultResolver)
-		r.dnsServer.Close()
+	if r.registry != nil {
+		_ = r.registry.Shutdown(ctx)
 	}
 }
 
 func TestMain(m *testing.M) {
 	initTestTLS()
+
+	// Setup global test DNS proxy
+	dnsServer, addr, err := startDNSProxy("1.1.1.1:53")
+	if err != nil {
+		panic(fmt.Sprintf("failed to create test DNS proxy: %v", err))
+	}
+	defer dnsServer.Shutdown()
+
+	origDial := net.DefaultResolver.Dial
+	origPreferGo := net.DefaultResolver.PreferGo
+	net.DefaultResolver.PreferGo = true
+	net.DefaultResolver.Dial = func(ctx context.Context, network, address string) (net.Conn, error) {
+		return net.Dial("udp", addr)
+	}
+	defer func() {
+		net.DefaultResolver.Dial = origDial
+		net.DefaultResolver.PreferGo = origPreferGo
+	}()
 
 	utilruntime.Must(sourcev1.AddToScheme(scheme.Scheme))
 
@@ -283,7 +288,6 @@ func TestMain(m *testing.M) {
 		testenv.WithMaxConcurrentReconciles(4),
 	)
 
-	var err error
 	// Initialize a cacheless client for tests that need the latest objects.
 	k8sClient, err = client.New(testEnv.Config, client.Options{Scheme: scheme.Scheme})
 	if err != nil {
@@ -408,6 +412,44 @@ func TestMain(m *testing.M) {
 	}
 
 	os.Exit(code)
+}
+
+func startDNSProxy(upstream string) (*dns.Server, string, error) {
+	pc, err := net.ListenPacket("udp", "127.0.0.1:0")
+	if err != nil {
+		return nil, "", err
+	}
+
+	server := &dns.Server{
+		PacketConn: pc,
+		Handler: dns.HandlerFunc(func(w dns.ResponseWriter, r *dns.Msg) {
+			m := new(dns.Msg)
+			m.SetReply(r)
+			m.RecursionAvailable = true
+
+			for _, q := range r.Question {
+				if q.Name == "example.com." && q.Qtype == dns.TypeA {
+					rr, _ := dns.NewRR("example.com. 3600 IN A 127.0.0.1")
+					m.Answer = append(m.Answer, rr)
+				} else {
+					// Forward
+					c := new(dns.Client)
+					in, _, err := c.Exchange(r, upstream)
+					if err == nil {
+						m.Answer = append(m.Answer, in.Answer...)
+						m.Ns = append(m.Ns, in.Ns...)
+						m.Extra = append(m.Extra, in.Extra...)
+						m.Rcode = in.Rcode
+					} else {
+						m.Rcode = dns.RcodeServerFailure
+					}
+				}
+			}
+			w.WriteMsg(m)
+		}),
+	}
+	go server.ActivateAndServe()
+	return server, pc.LocalAddr().String(), nil
 }
 
 func initTestTLS() {

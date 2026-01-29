@@ -63,6 +63,7 @@ import (
 	"github.com/fluxcd/source-controller/internal/controller"
 	"github.com/fluxcd/source-controller/internal/features"
 	"github.com/fluxcd/source-controller/internal/helm"
+	scosign "github.com/fluxcd/source-controller/internal/oci/cosign"
 )
 
 const controllerName = "source-controller"
@@ -186,6 +187,8 @@ func main() {
 		os.Exit(1)
 	}
 
+	CosignVerifierFactory := scosign.NewCosignVerifierFactory()
+
 	mgr := mustSetupManager(metricsAddr, healthAddr, concurrent, watchOptions, clientOptions, leaderElectionOptions)
 
 	probes.SetupChecks(mgr, setupLog)
@@ -258,15 +261,16 @@ func main() {
 	}
 
 	if err := (&controller.HelmChartReconciler{
-		Client:         mgr.GetClient(),
-		Storage:        storage,
-		Getters:        getters,
-		EventRecorder:  eventRecorder,
-		Metrics:        metrics,
-		ControllerName: controllerName,
-		Cache:          helmIndexCache,
-		TTL:            helmIndexCacheItemTTL,
-		CacheRecorder:  cacheRecorder,
+		Client:                mgr.GetClient(),
+		Storage:               storage,
+		Getters:               getters,
+		EventRecorder:         eventRecorder,
+		Metrics:               metrics,
+		ControllerName:        controllerName,
+		CosignVerifierFactory: CosignVerifierFactory,
+		Cache:                 helmIndexCache,
+		TTL:                   helmIndexCacheItemTTL,
+		CacheRecorder:         cacheRecorder,
 	}).SetupWithManager(ctx, mgr, controller.HelmChartReconcilerOptions{
 		RateLimiter: helper.GetRateLimiter(rateLimiterOptions),
 	}); err != nil {
@@ -289,12 +293,13 @@ func main() {
 	}
 
 	if err := (&controller.OCIRepositoryReconciler{
-		Client:         mgr.GetClient(),
-		Storage:        storage,
-		EventRecorder:  eventRecorder,
-		ControllerName: controllerName,
-		TokenCache:     tokenCache,
-		Metrics:        metrics,
+		Client:                mgr.GetClient(),
+		Storage:               storage,
+		EventRecorder:         eventRecorder,
+		ControllerName:        controllerName,
+		TokenCache:            tokenCache,
+		CosignVerifierFactory: CosignVerifierFactory,
+		Metrics:               metrics,
 	}).SetupWithManager(mgr, controller.OCIRepositoryReconcilerOptions{
 		RateLimiter: helper.GetRateLimiter(rateLimiterOptions),
 	}); err != nil {
