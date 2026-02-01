@@ -33,7 +33,7 @@ require (
 	github.com/fluxcd/pkg/http/transport v0.7.0
 	github.com/fluxcd/pkg/masktoken v0.8.0
 	github.com/fluxcd/pkg/oci v0.59.0
-	github.com/fluxcd/pkg/runtime v0.96.0
+	github.com/fluxcd/pkg/runtime v0.97.0
 	github.com/fluxcd/pkg/sourceignore v0.16.0
 	github.com/fluxcd/pkg/ssh v0.24.0
 	github.com/fluxcd/pkg/tar v0.17.0
@@ -46,11 +46,11 @@ require (
 	github.com/google/go-containerregistry v0.20.7
 	github.com/google/go-containerregistry/pkg/authn/k8schain v0.0.0-20250613215107-59a4b8593039
 	github.com/google/uuid v1.6.0
-	github.com/miekg/dns v1.1.61
+	github.com/miekg/dns v1.1.72
 	github.com/minio/minio-go/v7 v7.0.98
 	github.com/notaryproject/notation-core-go v1.3.0
 	github.com/notaryproject/notation-go v1.3.2
-	github.com/onsi/gomega v1.39.0
+	github.com/onsi/gomega v1.39.1
 	github.com/opencontainers/go-digest v1.0.0
 	github.com/opencontainers/image-spec v1.1.1
 	github.com/ory/dockertest/v3 v3.12.0
@@ -65,7 +65,7 @@ require (
 	golang.org/x/crypto v0.47.0
 	golang.org/x/oauth2 v0.34.0
 	golang.org/x/sync v0.19.0
-	google.golang.org/api v0.261.0
+	google.golang.org/api v0.264.0
 	helm.sh/helm/v4 v4.1.0
 	k8s.io/api v0.35.0
 	k8s.io/apimachinery v0.35.0
@@ -79,7 +79,7 @@ require (
 require (
 	cel.dev/expr v0.25.1 // indirect
 	cloud.google.com/go v0.121.6 // indirect
-	cloud.google.com/go/auth v0.18.0 // indirect
+	cloud.google.com/go/auth v0.18.1 // indirect
 	cloud.google.com/go/auth/oauth2adapt v0.2.8 // indirect
 	cloud.google.com/go/iam v1.5.3 // indirect
 	cloud.google.com/go/monitoring v1.24.3 // indirect
@@ -404,7 +404,7 @@ require (
 	gomodules.xyz/jsonpatch/v2 v2.5.0 // indirect
 	google.golang.org/genproto v0.0.0-20251202230838-ff82c1b0f217 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20251222181119-0a764e51fe1b // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20260120174246-409b4a993575 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20260122232226-8e98ce8d340d // indirect
 	google.golang.org/grpc v1.78.0 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/evanphx/json-patch.v4 v4.13.0 // indirect
