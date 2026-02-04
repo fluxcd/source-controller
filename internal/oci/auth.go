@@ -25,7 +25,7 @@ import (
 	"github.com/fluxcd/pkg/auth"
 	authutils "github.com/fluxcd/pkg/auth/utils"
 
-	sourcev1 "github.com/fluxcd/source-controller/api/v1"
+	sourcev1 "github.com/werf/nelm-source-controller/api/v1"
 )
 
 // Anonymous is an authn.AuthConfig that always returns an anonymous

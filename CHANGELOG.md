@@ -66,7 +66,7 @@ This minor release comes with new features, improvements and bug fixes.
 
 ### ExternalArtifact
 
-A new [ExternalArtifact](https://github.com/fluxcd/source-controller/blob/main/docs/spec/v1/externalartifacts.md) API has been added to the `source.toolkit.fluxcd.io` group. This API enables advanced source composition and decomposition patterns implemented by the [source-watcher](https://github.com/fluxcd/source-watcher) controller.
+A new [ExternalArtifact](https://github.com/fluxcd/source-controller/blob/main/docs/spec/v1/externalartifacts.md) API has been added to the `source.werf.io` group. This API enables advanced source composition and decomposition patterns implemented by the [source-watcher](https://github.com/fluxcd/source-watcher) controller.
 
 ### GitRepository
 
@@ -114,7 +114,7 @@ Improvements:
   [#1870](https://github.com/fluxcd/source-controller/pull/1870)
 - Extract storage operations to a dedicated package
   [#1864](https://github.com/fluxcd/source-controller/pull/1864)
-- Remove deprecated APIs in group `source.toolkit.fluxcd.io/v1beta1`
+- Remove deprecated APIs in group `source.werf.io/v1beta1`
   [#1861](https://github.com/fluxcd/source-controller/pull/1861)
 - Migrate tests from gotest to gomega
   [#1876](https://github.com/fluxcd/source-controller/pull/1876)
@@ -381,7 +381,7 @@ For `HelmRepository` of type `oci`, the `.spec.insecure` field allows connecting
 over HTTP to an insecure non-TLS container registry. 
 
 To upgrade from `v1beta2`, after deploying the new CRD and controller,
-set  `apiVersion: source.toolkit.fluxcd.io/v1` in the YAML files that
+set  `apiVersion: source.werf.io/v1` in the YAML files that
 contain `HelmRepository` definitions.
 Bumping the API version in manifests can be done gradually.
 It is advised not to delay this procedure as the beta versions will be removed after 6 months.
@@ -416,7 +416,7 @@ Helm v3.14.4, and various other dependencies to their latest version
 to patch upstream CVEs.
 
 Improvements:
-- Promote Helm APIs to `source.toolkit.fluxcd.io/v1` (GA)
+- Promote Helm APIs to `source.werf.io/v1` (GA)
   [#1428](https://github.com/fluxcd/source-controller/pull/1428)
 - Add `.spec.ignoreMissingValuesFiles` to HelmChart API
   [#1447](https://github.com/fluxcd/source-controller/pull/1447)
@@ -899,7 +899,7 @@ The `GitRepository` kind was promoted from v1beta2 to v1 (GA) and deprecated fie
 
 The common types `Artifact`, `Conditions` and the `Source` interface were promoted to v1.
 
-The `gitrepositories.source.toolkit.fluxcd.io` CRD contains the following versions:
+The `gitrepositories.source.werf.io` CRD contains the following versions:
 - v1 (storage version)
 - v1beta2 (deprecated)
 - v1beta1 (deprecated)
@@ -914,7 +914,7 @@ The `GitRepository` v1 API is backwards compatible with v1beta2, except for the 
 - the `.status.url` was removed in favor of the absolute `.status.artifact.url`
 
 To upgrade from v1beta2, after deploying the new CRD and controller,
-set  `apiVersion: source.toolkit.fluxcd.io/v1` in the YAML files that
+set  `apiVersion: source.werf.io/v1` in the YAML files that
 contain `GitRepository` definitions and remove the deprecated fields if any.
 Bumping the API version in manifests can be done gradually.
 It is advised to not delay this procedure as the beta versions will be removed after 6 months.
@@ -941,7 +941,7 @@ labels applied to work as expected.
 ### Full changelog
 
 Improvements:
-- GA: Promote `GitRepository` API to `source.toolkit.fluxcd.io/v1`
+- GA: Promote `GitRepository` API to `source.werf.io/v1`
   [#1056](https://github.com/fluxcd/source-controller/pull/1056)
 - Add reconciler sharding capability based on label selector
   [#1059](https://github.com/fluxcd/source-controller/pull/1059)
@@ -1926,7 +1926,7 @@ Introduction of a secure directory loader which improves the handling
 of Helm charts paths.
 
 Improvements:
-- update toolkit.fluxcd.io docs links
+- update werf.io docs links
   [#651](https://github.com/fluxcd/source-controller/pull/651)
 - Add optional in-memory cache of HelmRepository index files
   [#626](https://github.com/fluxcd/source-controller/pull/626)
@@ -2003,7 +2003,7 @@ Fixes:
 
 This prerelease ensures (Kubernetes) Event annotations are prefixed with the
 FQDN of the Source API Group. For example, `revision` is now
-`source.toolkit.fluxcd.io/revision`.
+`source.werf.io/revision`.
 
 This to facilitate improvements to the notification-controller, where
 annotations prefixed with the FQDN of the Group of the Involved Object will be
@@ -2128,7 +2128,7 @@ widely tested.
 
 ### API changes
 
-The `source.toolkit.fluxcd.io/v1beta2` API is backwards compatible with `v1beta1`.
+The `source.werf.io/v1beta2` API is backwards compatible with `v1beta1`.
 
 - Introduction of `Reconciling` and `Stalled` Condition types for [better
   integration with `kstatus`](https://github.com/kubernetes-sigs/cli-utils/blob/master/pkg/kstatus/README.md#conditions).
@@ -3118,7 +3118,7 @@ and a histogram with the reconciliation duration in seconds:
 **Release date:** 2020-09-30
 
 This is the first MINOR prerelease, it promotes the
-`source.toolkit.fluxcd.io` API to `v1beta1` and removes support for
+`source.werf.io` API to `v1beta1` and removes support for
 `v1alpha1`.
 
 Going forward, changes to the API will be accompanied by a conversion
@@ -3230,7 +3230,7 @@ and it's possible to configure the timeout of index downloads.
 **Release date:** 2020-07-31
 
 This prerelease comes with a breaking change, the 
-CRDs group has been renamed to `source.toolkit.fluxcd.io`.
+CRDs group has been renamed to `source.werf.io`.
 
 ## 0.0.6
 

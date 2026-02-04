@@ -94,7 +94,7 @@ const (
 Pull the index of a public Helm repository every ten minutes:
 
 ```yaml
-apiVersion: source.toolkit.fluxcd.io/v1beta1
+apiVersion: source.werf.io/v1beta1
 kind: HelmRepository
 metadata:
   name: stable
@@ -107,7 +107,7 @@ spec:
 Pull the index of a private Helm repository every minute:
 
 ```yaml
-apiVersion: source.toolkit.fluxcd.io/v1beta1
+apiVersion: source.werf.io/v1beta1
 kind: HelmRepository
 metadata:
   name: private

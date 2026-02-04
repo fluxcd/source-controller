@@ -30,8 +30,8 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/sigstore/cosign/v2/pkg/cosign"
 
-	testproxy "github.com/fluxcd/source-controller/tests/proxy"
-	testregistry "github.com/fluxcd/source-controller/tests/registry"
+	testproxy "github.com/werf/nelm-source-controller/tests/proxy"
+	testregistry "github.com/werf/nelm-source-controller/tests/registry"
 )
 
 func TestOptions(t *testing.T) {

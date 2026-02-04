@@ -19,5 +19,5 @@ limitations under the License.
 // Deprecated: v1beta1 is no longer supported, use v1 instead.
 //
 // +kubebuilder:object:generate=true
-// +groupName=source.toolkit.fluxcd.io
+// +groupName=source.werf.io
 package v1beta1

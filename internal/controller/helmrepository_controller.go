@@ -51,14 +51,14 @@ import (
 	"github.com/fluxcd/pkg/runtime/predicates"
 	rreconcile "github.com/fluxcd/pkg/runtime/reconcile"
 
-	sourcev1 "github.com/fluxcd/source-controller/api/v1"
-	"github.com/fluxcd/source-controller/internal/cache"
-	serror "github.com/fluxcd/source-controller/internal/error"
-	"github.com/fluxcd/source-controller/internal/helm/getter"
-	"github.com/fluxcd/source-controller/internal/helm/repository"
-	intpredicates "github.com/fluxcd/source-controller/internal/predicates"
-	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
-	"github.com/fluxcd/source-controller/internal/reconcile/summarize"
+	sourcev1 "github.com/werf/nelm-source-controller/api/v1"
+	"github.com/werf/nelm-source-controller/internal/cache"
+	serror "github.com/werf/nelm-source-controller/internal/error"
+	"github.com/werf/nelm-source-controller/internal/helm/getter"
+	"github.com/werf/nelm-source-controller/internal/helm/repository"
+	intpredicates "github.com/werf/nelm-source-controller/internal/predicates"
+	sreconcile "github.com/werf/nelm-source-controller/internal/reconcile"
+	"github.com/werf/nelm-source-controller/internal/reconcile/summarize"
 )
 
 // helmRepositoryReadyCondition contains the information required to summarize a
@@ -98,9 +98,9 @@ var helmRepositoryFailConditions = []string{
 	sourcev1.StorageOperationFailedCondition,
 }
 
-// +kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=helmrepositories,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=helmrepositories/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=helmrepositories/finalizers,verbs=get;create;update;patch;delete
+// +kubebuilder:rbac:groups=source.werf.io,resources=helmrepositories,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=source.werf.io,resources=helmrepositories/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=source.werf.io,resources=helmrepositories/finalizers,verbs=get;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 
 // HelmRepositoryReconciler reconciles a v1.HelmRepository object.

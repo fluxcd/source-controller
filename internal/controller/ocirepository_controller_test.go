@@ -70,11 +70,11 @@ import (
 	"github.com/fluxcd/pkg/runtime/patch"
 	"github.com/fluxcd/pkg/tar"
 
-	sourcev1 "github.com/fluxcd/source-controller/api/v1"
-	serror "github.com/fluxcd/source-controller/internal/error"
-	snotation "github.com/fluxcd/source-controller/internal/oci/notation"
-	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
-	testproxy "github.com/fluxcd/source-controller/tests/proxy"
+	sourcev1 "github.com/werf/nelm-source-controller/api/v1"
+	serror "github.com/werf/nelm-source-controller/internal/error"
+	snotation "github.com/werf/nelm-source-controller/internal/oci/notation"
+	sreconcile "github.com/werf/nelm-source-controller/internal/reconcile"
+	testproxy "github.com/werf/nelm-source-controller/tests/proxy"
 )
 
 func TestOCIRepositoryReconciler_deleteBeforeFinalizer(t *testing.T) {

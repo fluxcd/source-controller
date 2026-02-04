@@ -30,7 +30,7 @@ const (
 
 // Source interface must be supported by all API types.
 // Source is the interface that provides generic access to the Artifact and
-// interval. It must be supported by all kinds of the source.toolkit.fluxcd.io
+// interval. It must be supported by all kinds of the source.werf.io
 // API group.
 //
 // Deprecated: use the Source interface from api/v1 instead. This type will be

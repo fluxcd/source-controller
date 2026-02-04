@@ -1,8 +1,6 @@
-module github.com/fluxcd/source-controller
+module github.com/werf/nelm-source-controller
 
 go 1.25.0
-
-replace github.com/fluxcd/source-controller/api => ./api
 
 // Replace digest lib to master to gather access to BLAKE3.
 // xref: https://github.com/opencontainers/go-digest/pull/66
@@ -40,7 +38,6 @@ require (
 	github.com/fluxcd/pkg/tar v0.16.0
 	github.com/fluxcd/pkg/testserver v0.13.0
 	github.com/fluxcd/pkg/version v0.11.0
-	github.com/fluxcd/source-controller/api v1.7.0
 	github.com/foxcpp/go-mockdns v1.1.0
 	github.com/go-git/go-billy/v5 v5.6.2
 	github.com/go-git/go-git/v5 v5.16.3
@@ -62,6 +59,7 @@ require (
 	github.com/sigstore/sigstore v1.9.5
 	github.com/sirupsen/logrus v1.9.3
 	github.com/spf13/pflag v1.0.10
+	github.com/werf/nelm-source-controller/api main
 	golang.org/x/crypto v0.44.0
 	golang.org/x/oauth2 v0.33.0
 	golang.org/x/sync v0.18.0

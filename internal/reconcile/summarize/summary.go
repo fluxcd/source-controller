@@ -29,7 +29,7 @@ import (
 	"github.com/fluxcd/pkg/runtime/conditions"
 	"github.com/fluxcd/pkg/runtime/patch"
 
-	"github.com/fluxcd/source-controller/internal/reconcile"
+	"github.com/werf/nelm-source-controller/internal/reconcile"
 )
 
 // Conditions contains all the conditions information needed to summarize the

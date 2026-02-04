@@ -51,12 +51,12 @@ import (
 	"github.com/fluxcd/pkg/runtime/patch"
 	"github.com/fluxcd/pkg/runtime/secrets"
 
-	sourcev1 "github.com/fluxcd/source-controller/api/v1"
-	"github.com/fluxcd/source-controller/internal/cache"
-	"github.com/fluxcd/source-controller/internal/helm/repository"
-	intpredicates "github.com/fluxcd/source-controller/internal/predicates"
-	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
-	"github.com/fluxcd/source-controller/internal/reconcile/summarize"
+	sourcev1 "github.com/werf/nelm-source-controller/api/v1"
+	"github.com/werf/nelm-source-controller/internal/cache"
+	"github.com/werf/nelm-source-controller/internal/helm/repository"
+	intpredicates "github.com/werf/nelm-source-controller/internal/predicates"
+	sreconcile "github.com/werf/nelm-source-controller/internal/reconcile"
+	"github.com/werf/nelm-source-controller/internal/reconcile/summarize"
 )
 
 func TestHelmRepositoryReconciler_deleteBeforeFinalizer(t *testing.T) {

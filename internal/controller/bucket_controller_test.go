@@ -46,12 +46,12 @@ import (
 	"github.com/fluxcd/pkg/runtime/jitter"
 	"github.com/fluxcd/pkg/runtime/patch"
 
-	sourcev1 "github.com/fluxcd/source-controller/api/v1"
-	"github.com/fluxcd/source-controller/internal/index"
-	gcsmock "github.com/fluxcd/source-controller/internal/mock/gcs"
-	s3mock "github.com/fluxcd/source-controller/internal/mock/s3"
-	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
-	"github.com/fluxcd/source-controller/internal/reconcile/summarize"
+	sourcev1 "github.com/werf/nelm-source-controller/api/v1"
+	"github.com/werf/nelm-source-controller/internal/index"
+	gcsmock "github.com/werf/nelm-source-controller/internal/mock/gcs"
+	s3mock "github.com/werf/nelm-source-controller/internal/mock/s3"
+	sreconcile "github.com/werf/nelm-source-controller/internal/reconcile"
+	"github.com/werf/nelm-source-controller/internal/reconcile/summarize"
 )
 
 // Environment variable to set the GCP Storage host for the GCP client.

@@ -22,7 +22,7 @@ import (
 
 	"helm.sh/helm/v3/pkg/repo"
 
-	"github.com/fluxcd/source-controller/internal/oci"
+	"github.com/werf/nelm-source-controller/internal/oci"
 )
 
 // Downloader is used to download a chart from a remote Helm repository or OCI Helm repository.

@@ -32,8 +32,8 @@ import (
 	helmchart "helm.sh/helm/v3/pkg/chart"
 	"k8s.io/apimachinery/pkg/util/errors"
 
-	"github.com/fluxcd/source-controller/internal/helm/chart/secureloader"
-	"github.com/fluxcd/source-controller/internal/helm/repository"
+	"github.com/werf/nelm-source-controller/internal/helm/chart/secureloader"
+	"github.com/werf/nelm-source-controller/internal/helm/repository"
 )
 
 // GetChartDownloaderCallback must return a Downloader for the

@@ -27,8 +27,8 @@ import (
 	. "github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	sourcev1 "github.com/fluxcd/source-controller/api/v1"
-	"github.com/fluxcd/source-controller/internal/index"
+	sourcev1 "github.com/werf/nelm-source-controller/api/v1"
+	"github.com/werf/nelm-source-controller/internal/index"
 )
 
 type mockBucketObject struct {

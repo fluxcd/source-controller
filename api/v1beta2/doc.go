@@ -16,5 +16,5 @@ limitations under the License.
 
 // Package v1beta2 contains API Schema definitions for the source v1beta2 API group
 // +kubebuilder:object:generate=true
-// +groupName=source.toolkit.fluxcd.io
+// +groupName=source.werf.io
 package v1beta2

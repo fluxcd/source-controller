@@ -55,15 +55,15 @@ import (
 	"github.com/fluxcd/pkg/runtime/pprof"
 	"github.com/fluxcd/pkg/runtime/probes"
 
-	sourcev1 "github.com/fluxcd/source-controller/api/v1"
+	sourcev1 "github.com/werf/nelm-source-controller/api/v1"
 
 	// +kubebuilder:scaffold:imports
 
-	"github.com/fluxcd/source-controller/internal/cache"
-	"github.com/fluxcd/source-controller/internal/controller"
-	"github.com/fluxcd/source-controller/internal/features"
-	"github.com/fluxcd/source-controller/internal/helm"
-	"github.com/fluxcd/source-controller/internal/helm/registry"
+	"github.com/werf/nelm-source-controller/internal/cache"
+	"github.com/werf/nelm-source-controller/internal/controller"
+	"github.com/werf/nelm-source-controller/internal/features"
+	"github.com/werf/nelm-source-controller/internal/helm"
+	"github.com/werf/nelm-source-controller/internal/helm/registry"
 )
 
 const controllerName = "source-controller"

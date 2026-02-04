@@ -33,9 +33,9 @@ import (
 
 	"github.com/fluxcd/pkg/runtime/secrets"
 
-	sourcev1 "github.com/fluxcd/source-controller/api/v1"
-	"github.com/fluxcd/source-controller/internal/helm/registry"
-	soci "github.com/fluxcd/source-controller/internal/oci"
+	sourcev1 "github.com/werf/nelm-source-controller/api/v1"
+	"github.com/werf/nelm-source-controller/internal/helm/registry"
+	soci "github.com/werf/nelm-source-controller/internal/oci"
 )
 
 const (

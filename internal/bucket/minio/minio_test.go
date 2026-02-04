@@ -44,9 +44,9 @@ import (
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/sourceignore"
 
-	sourcev1 "github.com/fluxcd/source-controller/api/v1"
-	testlistener "github.com/fluxcd/source-controller/tests/listener"
-	testproxy "github.com/fluxcd/source-controller/tests/proxy"
+	sourcev1 "github.com/werf/nelm-source-controller/api/v1"
+	testlistener "github.com/werf/nelm-source-controller/tests/listener"
+	testproxy "github.com/werf/nelm-source-controller/tests/proxy"
 )
 
 const (
@@ -775,7 +775,7 @@ func removeObjectFromBucket(ctx context.Context) {
 
 func getObjectFile() string {
 	return `
-	apiVersion: source.toolkit.fluxcd.io/v1
+	apiVersion: source.werf.io/v1
 	kind: Bucket
 	metadata:
 	  name: podinfo

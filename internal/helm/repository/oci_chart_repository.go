@@ -38,7 +38,7 @@ import (
 
 	"github.com/fluxcd/pkg/http/transport"
 	"github.com/fluxcd/pkg/version"
-	"github.com/fluxcd/source-controller/internal/oci"
+	"github.com/werf/nelm-source-controller/internal/oci"
 )
 
 // RegistryClient is an interface for interacting with OCI registries

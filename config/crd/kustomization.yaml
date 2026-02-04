@@ -1,10 +1,10 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
-- bases/source.toolkit.fluxcd.io_gitrepositories.yaml
-- bases/source.toolkit.fluxcd.io_helmrepositories.yaml
-- bases/source.toolkit.fluxcd.io_helmcharts.yaml
-- bases/source.toolkit.fluxcd.io_buckets.yaml
-- bases/source.toolkit.fluxcd.io_ocirepositories.yaml
-- bases/source.toolkit.fluxcd.io_externalartifacts.yaml
+- bases/source.werf.io_gitrepositories.yaml
+- bases/source.werf.io_helmrepositories.yaml
+- bases/source.werf.io_helmcharts.yaml
+- bases/source.werf.io_buckets.yaml
+- bases/source.werf.io_ocirepositories.yaml
+- bases/source.werf.io_externalartifacts.yaml
 # +kubebuilder:scaffold:crdkustomizeresource

@@ -60,11 +60,11 @@ import (
 	"github.com/fluxcd/pkg/ssh"
 	"github.com/fluxcd/pkg/testserver"
 
-	sourcev1 "github.com/fluxcd/source-controller/api/v1"
-	serror "github.com/fluxcd/source-controller/internal/error"
-	"github.com/fluxcd/source-controller/internal/features"
-	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
-	"github.com/fluxcd/source-controller/internal/reconcile/summarize"
+	sourcev1 "github.com/werf/nelm-source-controller/api/v1"
+	serror "github.com/werf/nelm-source-controller/internal/error"
+	"github.com/werf/nelm-source-controller/internal/features"
+	sreconcile "github.com/werf/nelm-source-controller/internal/reconcile"
+	"github.com/werf/nelm-source-controller/internal/reconcile/summarize"
 )
 
 const (
@@ -2964,7 +2964,7 @@ func TestGitRepositoryReconciler_fetchIncludes(t *testing.T) {
 			},
 			wantErr: true,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.IncludeUnavailableCondition, "NotFound", "could not get resource for include 'a': gitrepositories.source.toolkit.fluxcd.io \"a\" not found"),
+				*conditions.TrueCondition(sourcev1.IncludeUnavailableCondition, "NotFound", "could not get resource for include 'a': gitrepositories.source.werf.io \"a\" not found"),
 			},
 		},
 		{

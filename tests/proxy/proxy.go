@@ -22,7 +22,7 @@ import (
 
 	"github.com/elazarl/goproxy"
 
-	testlistener "github.com/fluxcd/source-controller/tests/listener"
+	testlistener "github.com/werf/nelm-source-controller/tests/listener"
 )
 
 // New creates a new goproxy server on a random port and returns

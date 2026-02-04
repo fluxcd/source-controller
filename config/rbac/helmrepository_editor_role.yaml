@@ -5,7 +5,7 @@ metadata:
   name: helmrepository-editor-role
 rules:
 - apiGroups:
-  - source.toolkit.fluxcd.io
+  - source.werf.io
   resources:
   - helmrepositories
   verbs:
@@ -17,7 +17,7 @@ rules:
   - update
   - watch
 - apiGroups:
-  - source.toolkit.fluxcd.io
+  - source.werf.io
   resources:
   - helmrepositories/status
   verbs:

@@ -4,9 +4,9 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.19.0
-  name: gitrepositories.source.toolkit.fluxcd.io
+  name: gitrepositories.source.werf.io
 spec:
-  group: source.toolkit.fluxcd.io
+  group: source.werf.io
   names:
     kind: GitRepository
     listKind: GitRepositoryList

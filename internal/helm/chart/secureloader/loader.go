@@ -28,7 +28,7 @@ import (
 	"helm.sh/helm/v3/pkg/chart"
 	"helm.sh/helm/v3/pkg/chart/loader"
 
-	"github.com/fluxcd/source-controller/internal/helm"
+	"github.com/werf/nelm-source-controller/internal/helm"
 )
 
 // Loader returns a new loader.ChartLoader appropriate for the given chart

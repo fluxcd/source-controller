@@ -26,7 +26,7 @@ import (
 	. "github.com/onsi/gomega"
 	"helm.sh/helm/v3/pkg/chartutil"
 
-	"github.com/fluxcd/source-controller/internal/helm/chart/secureloader"
+	"github.com/werf/nelm-source-controller/internal/helm/chart/secureloader"
 )
 
 func TestLocalReference_Validate(t *testing.T) {

@@ -1,4 +1,4 @@
-# source.toolkit.fluxcd.io/v1
+# source.werf.io/v1
 
 This is the v1 API specification for defining the desired state sources of Kubernetes clusters.
 

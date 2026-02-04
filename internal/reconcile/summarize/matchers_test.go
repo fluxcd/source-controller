@@ -23,7 +23,7 @@ import (
 	"github.com/onsi/gomega/types"
 	"k8s.io/apimachinery/pkg/runtime"
 
-	"github.com/fluxcd/source-controller/internal/object"
+	"github.com/werf/nelm-source-controller/internal/object"
 )
 
 // HaveStatusObservedGeneration returns a custom matcher to check if a

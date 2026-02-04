@@ -30,8 +30,8 @@ import (
 	"helm.sh/helm/v3/pkg/chart"
 	"sigs.k8s.io/yaml"
 
-	"github.com/fluxcd/source-controller/internal/helm"
-	"github.com/fluxcd/source-controller/internal/helm/chart/secureloader/ignore"
+	"github.com/werf/nelm-source-controller/internal/helm"
+	"github.com/werf/nelm-source-controller/internal/helm/chart/secureloader/ignore"
 )
 
 func TestSecureDirLoader_Load(t *testing.T) {

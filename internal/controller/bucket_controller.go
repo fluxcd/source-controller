@@ -57,14 +57,14 @@ import (
 	"github.com/fluxcd/pkg/runtime/secrets"
 	"github.com/fluxcd/pkg/sourceignore"
 
-	sourcev1 "github.com/fluxcd/source-controller/api/v1"
-	"github.com/fluxcd/source-controller/internal/bucket/azure"
-	"github.com/fluxcd/source-controller/internal/bucket/gcp"
-	"github.com/fluxcd/source-controller/internal/bucket/minio"
-	serror "github.com/fluxcd/source-controller/internal/error"
-	"github.com/fluxcd/source-controller/internal/index"
-	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
-	"github.com/fluxcd/source-controller/internal/reconcile/summarize"
+	sourcev1 "github.com/werf/nelm-source-controller/api/v1"
+	"github.com/werf/nelm-source-controller/internal/bucket/azure"
+	"github.com/werf/nelm-source-controller/internal/bucket/gcp"
+	"github.com/werf/nelm-source-controller/internal/bucket/minio"
+	serror "github.com/werf/nelm-source-controller/internal/error"
+	"github.com/werf/nelm-source-controller/internal/index"
+	sreconcile "github.com/werf/nelm-source-controller/internal/reconcile"
+	"github.com/werf/nelm-source-controller/internal/reconcile/summarize"
 )
 
 // maxConcurrentBucketFetches is the upper bound on the goroutines used to
@@ -115,9 +115,9 @@ var bucketFailConditions = []string{
 	sourcev1.StorageOperationFailedCondition,
 }
 
-// +kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=buckets,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=buckets/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=buckets/finalizers,verbs=get;create;update;patch;delete
+// +kubebuilder:rbac:groups=source.werf.io,resources=buckets,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=source.werf.io,resources=buckets/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=source.werf.io,resources=buckets/finalizers,verbs=get;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=serviceaccounts,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=serviceaccounts/token,verbs=create

@@ -4,9 +4,9 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.19.0
-  name: helmcharts.source.toolkit.fluxcd.io
+  name: helmcharts.source.werf.io
 spec:
-  group: source.toolkit.fluxcd.io
+  group: source.werf.io
   names:
     kind: HelmChart
     listKind: HelmChartList

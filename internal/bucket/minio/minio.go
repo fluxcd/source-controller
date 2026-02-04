@@ -33,7 +33,7 @@ import (
 	"github.com/fluxcd/pkg/auth"
 	awsauth "github.com/fluxcd/pkg/auth/aws"
 
-	sourcev1 "github.com/fluxcd/source-controller/api/v1"
+	sourcev1 "github.com/werf/nelm-source-controller/api/v1"
 )
 
 // MinioClient is a minimal Minio client for fetching files from S3 compatible

@@ -132,7 +132,7 @@ entries may overrule default exclusions.
 Another option is to use the `spec.ignore` field, for example:
 
 ```yaml
-apiVersion: source.toolkit.fluxcd.io/v1beta1
+apiVersion: source.werf.io/v1beta1
 kind: Bucket
 metadata:
   name: podinfo
@@ -158,7 +158,7 @@ Authentication credentials can be provided with a Kubernetes secret that contain
 `accesskey` and `secretkey` fields:
 
 ```yaml
-apiVersion: source.toolkit.fluxcd.io/v1beta1
+apiVersion: source.werf.io/v1beta1
 kind: Bucket
 metadata:
   name: podinfo
@@ -193,7 +193,7 @@ When the provider is `aws` and the `secretRef` is not specified,
 the credentials are retrieve from the EC2 service:
 
 ```yaml
-apiVersion: source.toolkit.fluxcd.io/v1beta1
+apiVersion: source.werf.io/v1beta1
 kind: Bucket
 metadata:
   name: podinfo

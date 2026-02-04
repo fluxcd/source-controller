@@ -2,24 +2,24 @@
 <p>Packages:</p>
 <ul class="simple">
 <li>
-<a href="#source.toolkit.fluxcd.io%2fv1beta2">source.toolkit.fluxcd.io/v1beta2</a>
+<a href="#source.werf.io%2fv1beta2">source.werf.io/v1beta2</a>
 </li>
 </ul>
-<h2 id="source.toolkit.fluxcd.io/v1beta2">source.toolkit.fluxcd.io/v1beta2</h2>
+<h2 id="source.werf.io/v1beta2">source.werf.io/v1beta2</h2>
 <p>Package v1beta2 contains API Schema definitions for the source v1beta2 API group</p>
 Resource Types:
 <ul class="simple"><li>
-<a href="#source.toolkit.fluxcd.io/v1beta2.Bucket">Bucket</a>
+<a href="#source.werf.io/v1beta2.Bucket">Bucket</a>
 </li><li>
-<a href="#source.toolkit.fluxcd.io/v1beta2.GitRepository">GitRepository</a>
+<a href="#source.werf.io/v1beta2.GitRepository">GitRepository</a>
 </li><li>
-<a href="#source.toolkit.fluxcd.io/v1beta2.HelmChart">HelmChart</a>
+<a href="#source.werf.io/v1beta2.HelmChart">HelmChart</a>
 </li><li>
-<a href="#source.toolkit.fluxcd.io/v1beta2.HelmRepository">HelmRepository</a>
+<a href="#source.werf.io/v1beta2.HelmRepository">HelmRepository</a>
 </li><li>
-<a href="#source.toolkit.fluxcd.io/v1beta2.OCIRepository">OCIRepository</a>
+<a href="#source.werf.io/v1beta2.OCIRepository">OCIRepository</a>
 </li></ul>
-<h3 id="source.toolkit.fluxcd.io/v1beta2.Bucket">Bucket
+<h3 id="source.werf.io/v1beta2.Bucket">Bucket
 </h3>
 <p>Bucket is the Schema for the buckets API.</p>
 <div class="md-typeset__scrollwrap">
@@ -37,7 +37,7 @@ Resource Types:
 <code>apiVersion</code><br>
 string</td>
 <td>
-<code>source.toolkit.fluxcd.io/v1beta2</code>
+<code>source.werf.io/v1beta2</code>
 </td>
 </tr>
 <tr>
@@ -67,7 +67,7 @@ Refer to the Kubernetes API documentation for the fields of the
 <td>
 <code>spec</code><br>
 <em>
-<a href="#source.toolkit.fluxcd.io/v1beta2.BucketSpec">
+<a href="#source.werf.io/v1beta2.BucketSpec">
 BucketSpec
 </a>
 </em>
@@ -116,7 +116,7 @@ string
 <td>
 <code>sts</code><br>
 <em>
-<a href="#source.toolkit.fluxcd.io/v1beta2.BucketSTSSpec">
+<a href="#source.werf.io/v1beta2.BucketSTSSpec">
 BucketSTSSpec
 </a>
 </em>
@@ -300,7 +300,7 @@ NOTE: Not implemented, provisional as of <a href="https://github.com/fluxcd/flux
 <td>
 <code>status</code><br>
 <em>
-<a href="#source.toolkit.fluxcd.io/v1beta2.BucketStatus">
+<a href="#source.werf.io/v1beta2.BucketStatus">
 BucketStatus
 </a>
 </em>
@@ -312,7 +312,7 @@ BucketStatus
 </table>
 </div>
 </div>
-<h3 id="source.toolkit.fluxcd.io/v1beta2.GitRepository">GitRepository
+<h3 id="source.werf.io/v1beta2.GitRepository">GitRepository
 </h3>
 <p>GitRepository is the Schema for the gitrepositories API.</p>
 <div class="md-typeset__scrollwrap">
@@ -330,7 +330,7 @@ BucketStatus
 <code>apiVersion</code><br>
 string</td>
 <td>
-<code>source.toolkit.fluxcd.io/v1beta2</code>
+<code>source.werf.io/v1beta2</code>
 </td>
 </tr>
 <tr>
@@ -360,7 +360,7 @@ Refer to the Kubernetes API documentation for the fields of the
 <td>
 <code>spec</code><br>
 <em>
-<a href="#source.toolkit.fluxcd.io/v1beta2.GitRepositorySpec">
+<a href="#source.werf.io/v1beta2.GitRepositorySpec">
 GitRepositorySpec
 </a>
 </em>
@@ -430,7 +430,7 @@ Kubernetes meta/v1.Duration
 <td>
 <code>ref</code><br>
 <em>
-<a href="#source.toolkit.fluxcd.io/v1beta2.GitRepositoryRef">
+<a href="#source.werf.io/v1beta2.GitRepositoryRef">
 GitRepositoryRef
 </a>
 </em>
@@ -445,7 +445,7 @@ changes, defaults to the &lsquo;master&rsquo; branch.</p>
 <td>
 <code>verify</code><br>
 <em>
-<a href="#source.toolkit.fluxcd.io/v1beta2.GitRepositoryVerification">
+<a href="#source.werf.io/v1beta2.GitRepositoryVerification">
 GitRepositoryVerification
 </a>
 </em>
@@ -515,7 +515,7 @@ the GitRepository as cloned from the URL, using their default settings.</p>
 <td>
 <code>include</code><br>
 <em>
-<a href="#source.toolkit.fluxcd.io/v1beta2.GitRepositoryInclude">
+<a href="#source.werf.io/v1beta2.GitRepositoryInclude">
 []GitRepositoryInclude
 </a>
 </em>
@@ -548,7 +548,7 @@ NOTE: Not implemented, provisional as of <a href="https://github.com/fluxcd/flux
 <td>
 <code>status</code><br>
 <em>
-<a href="#source.toolkit.fluxcd.io/v1beta2.GitRepositoryStatus">
+<a href="#source.werf.io/v1beta2.GitRepositoryStatus">
 GitRepositoryStatus
 </a>
 </em>
@@ -560,7 +560,7 @@ GitRepositoryStatus
 </table>
 </div>
 </div>
-<h3 id="source.toolkit.fluxcd.io/v1beta2.HelmChart">HelmChart
+<h3 id="source.werf.io/v1beta2.HelmChart">HelmChart
 </h3>
 <p>HelmChart is the Schema for the helmcharts API.</p>
 <div class="md-typeset__scrollwrap">
@@ -578,7 +578,7 @@ GitRepositoryStatus
 <code>apiVersion</code><br>
 string</td>
 <td>
-<code>source.toolkit.fluxcd.io/v1beta2</code>
+<code>source.werf.io/v1beta2</code>
 </td>
 </tr>
 <tr>
@@ -608,7 +608,7 @@ Refer to the Kubernetes API documentation for the fields of the
 <td>
 <code>spec</code><br>
 <em>
-<a href="#source.toolkit.fluxcd.io/v1beta2.HelmChartSpec">
+<a href="#source.werf.io/v1beta2.HelmChartSpec">
 HelmChartSpec
 </a>
 </em>
@@ -646,7 +646,7 @@ GitRepository and Bucket sources. Defaults to latest when omitted.</p>
 <td>
 <code>sourceRef</code><br>
 <em>
-<a href="#source.toolkit.fluxcd.io/v1beta2.LocalHelmChartSourceReference">
+<a href="#source.werf.io/v1beta2.LocalHelmChartSourceReference">
 LocalHelmChartSourceReference
 </a>
 </em>
@@ -783,7 +783,7 @@ Chart dependencies, which are not bundled in the umbrella chart artifact, are no
 <td>
 <code>status</code><br>
 <em>
-<a href="#source.toolkit.fluxcd.io/v1beta2.HelmChartStatus">
+<a href="#source.werf.io/v1beta2.HelmChartStatus">
 HelmChartStatus
 </a>
 </em>
@@ -795,7 +795,7 @@ HelmChartStatus
 </table>
 </div>
 </div>
-<h3 id="source.toolkit.fluxcd.io/v1beta2.HelmRepository">HelmRepository
+<h3 id="source.werf.io/v1beta2.HelmRepository">HelmRepository
 </h3>
 <p>HelmRepository is the Schema for the helmrepositories API.</p>
 <div class="md-typeset__scrollwrap">
@@ -813,7 +813,7 @@ HelmChartStatus
 <code>apiVersion</code><br>
 string</td>
 <td>
-<code>source.toolkit.fluxcd.io/v1beta2</code>
+<code>source.werf.io/v1beta2</code>
 </td>
 </tr>
 <tr>
@@ -843,7 +843,7 @@ Refer to the Kubernetes API documentation for the fields of the
 <td>
 <code>spec</code><br>
 <em>
-<a href="#source.toolkit.fluxcd.io/v1beta2.HelmRepositorySpec">
+<a href="#source.werf.io/v1beta2.HelmRepositorySpec">
 HelmRepositorySpec
 </a>
 </em>
@@ -1036,7 +1036,7 @@ When not specified, defaults to &lsquo;generic&rsquo;.</p>
 <td>
 <code>status</code><br>
 <em>
-<a href="#source.toolkit.fluxcd.io/v1beta2.HelmRepositoryStatus">
+<a href="#source.werf.io/v1beta2.HelmRepositoryStatus">
 HelmRepositoryStatus
 </a>
 </em>
@@ -1048,7 +1048,7 @@ HelmRepositoryStatus
 </table>
 </div>
 </div>
-<h3 id="source.toolkit.fluxcd.io/v1beta2.OCIRepository">OCIRepository
+<h3 id="source.werf.io/v1beta2.OCIRepository">OCIRepository
 </h3>
 <p>OCIRepository is the Schema for the ocirepositories API</p>
 <div class="md-typeset__scrollwrap">
@@ -1066,7 +1066,7 @@ HelmRepositoryStatus
 <code>apiVersion</code><br>
 string</td>
 <td>
-<code>source.toolkit.fluxcd.io/v1beta2</code>
+<code>source.werf.io/v1beta2</code>
 </td>
 </tr>
 <tr>
@@ -1096,7 +1096,7 @@ Refer to the Kubernetes API documentation for the fields of the
 <td>
 <code>spec</code><br>
 <em>
-<a href="#source.toolkit.fluxcd.io/v1beta2.OCIRepositorySpec">
+<a href="#source.werf.io/v1beta2.OCIRepositorySpec">
 OCIRepositorySpec
 </a>
 </em>
@@ -1121,7 +1121,7 @@ on a remote container registry.</p>
 <td>
 <code>ref</code><br>
 <em>
-<a href="#source.toolkit.fluxcd.io/v1beta2.OCIRepositoryRef">
+<a href="#source.werf.io/v1beta2.OCIRepositoryRef">
 OCIRepositoryRef
 </a>
 </em>
@@ -1136,7 +1136,7 @@ defaults to the latest tag.</p>
 <td>
 <code>layerSelector</code><br>
 <em>
-<a href="#source.toolkit.fluxcd.io/v1beta2.OCILayerSelector">
+<a href="#source.werf.io/v1beta2.OCILayerSelector">
 OCILayerSelector
 </a>
 </em>
@@ -1322,7 +1322,7 @@ bool
 <td>
 <code>status</code><br>
 <em>
-<a href="#source.toolkit.fluxcd.io/v1beta2.OCIRepositoryStatus">
+<a href="#source.werf.io/v1beta2.OCIRepositoryStatus">
 OCIRepositoryStatus
 </a>
 </em>
@@ -1334,7 +1334,7 @@ OCIRepositoryStatus
 </table>
 </div>
 </div>
-<h3 id="source.toolkit.fluxcd.io/v1beta2.Artifact">Artifact
+<h3 id="source.werf.io/v1beta2.Artifact">Artifact
 </h3>
 <p>Artifact represents the output of a Source reconciliation.</p>
 <p>Deprecated: use Artifact from api/v1 instead. This type will be removed in
@@ -1455,11 +1455,11 @@ map[string]string
 </table>
 </div>
 </div>
-<h3 id="source.toolkit.fluxcd.io/v1beta2.BucketSTSSpec">BucketSTSSpec
+<h3 id="source.werf.io/v1beta2.BucketSTSSpec">BucketSTSSpec
 </h3>
 <p>
 (<em>Appears on:</em>
-<a href="#source.toolkit.fluxcd.io/v1beta2.BucketSpec">BucketSpec</a>)
+<a href="#source.werf.io/v1beta2.BucketSpec">BucketSpec</a>)
 </p>
 <p>BucketSTSSpec specifies the required configuration to use a Security Token
 Service for fetching temporary credentials to authenticate in a Bucket
@@ -1543,11 +1543,11 @@ be of type <code>Opaque</code> or <code>kubernetes.io/tls</code>.</p>
 </table>
 </div>
 </div>
-<h3 id="source.toolkit.fluxcd.io/v1beta2.BucketSpec">BucketSpec
+<h3 id="source.werf.io/v1beta2.BucketSpec">BucketSpec
 </h3>
 <p>
 (<em>Appears on:</em>
-<a href="#source.toolkit.fluxcd.io/v1beta2.Bucket">Bucket</a>)
+<a href="#source.werf.io/v1beta2.Bucket">Bucket</a>)
 </p>
 <p>BucketSpec specifies the required configuration to produce an Artifact for
 an object storage bucket.</p>
@@ -1601,7 +1601,7 @@ string
 <td>
 <code>sts</code><br>
 <em>
-<a href="#source.toolkit.fluxcd.io/v1beta2.BucketSTSSpec">
+<a href="#source.werf.io/v1beta2.BucketSTSSpec">
 BucketSTSSpec
 </a>
 </em>
@@ -1782,11 +1782,11 @@ NOTE: Not implemented, provisional as of <a href="https://github.com/fluxcd/flux
 </table>
 </div>
 </div>
-<h3 id="source.toolkit.fluxcd.io/v1beta2.BucketStatus">BucketStatus
+<h3 id="source.werf.io/v1beta2.BucketStatus">BucketStatus
 </h3>
 <p>
 (<em>Appears on:</em>
-<a href="#source.toolkit.fluxcd.io/v1beta2.Bucket">Bucket</a>)
+<a href="#source.werf.io/v1beta2.Bucket">Bucket</a>)
 </p>
 <p>BucketStatus records the observed state of a Bucket.</p>
 <div class="md-typeset__scrollwrap">
@@ -1885,12 +1885,12 @@ github.com/fluxcd/pkg/apis/meta.ReconcileRequestStatus
 </table>
 </div>
 </div>
-<h3 id="source.toolkit.fluxcd.io/v1beta2.GitRepositoryInclude">GitRepositoryInclude
+<h3 id="source.werf.io/v1beta2.GitRepositoryInclude">GitRepositoryInclude
 </h3>
 <p>
 (<em>Appears on:</em>
-<a href="#source.toolkit.fluxcd.io/v1beta2.GitRepositorySpec">GitRepositorySpec</a>, 
-<a href="#source.toolkit.fluxcd.io/v1beta2.GitRepositoryStatus">GitRepositoryStatus</a>)
+<a href="#source.werf.io/v1beta2.GitRepositorySpec">GitRepositorySpec</a>, 
+<a href="#source.werf.io/v1beta2.GitRepositoryStatus">GitRepositoryStatus</a>)
 </p>
 <p>GitRepositoryInclude specifies a local reference to a GitRepository which
 Artifact (sub-)contents must be included, and where they should be placed.</p>
@@ -1948,11 +1948,11 @@ the GitRepositoryRef.</p>
 </table>
 </div>
 </div>
-<h3 id="source.toolkit.fluxcd.io/v1beta2.GitRepositoryRef">GitRepositoryRef
+<h3 id="source.werf.io/v1beta2.GitRepositoryRef">GitRepositoryRef
 </h3>
 <p>
 (<em>Appears on:</em>
-<a href="#source.toolkit.fluxcd.io/v1beta2.GitRepositorySpec">GitRepositorySpec</a>)
+<a href="#source.werf.io/v1beta2.GitRepositorySpec">GitRepositorySpec</a>)
 </p>
 <p>GitRepositoryRef specifies the Git reference to resolve and checkout.</p>
 <div class="md-typeset__scrollwrap">
@@ -2033,11 +2033,11 @@ the commit is expected to exist.</p>
 </table>
 </div>
 </div>
-<h3 id="source.toolkit.fluxcd.io/v1beta2.GitRepositorySpec">GitRepositorySpec
+<h3 id="source.werf.io/v1beta2.GitRepositorySpec">GitRepositorySpec
 </h3>
 <p>
 (<em>Appears on:</em>
-<a href="#source.toolkit.fluxcd.io/v1beta2.GitRepository">GitRepository</a>)
+<a href="#source.werf.io/v1beta2.GitRepository">GitRepository</a>)
 </p>
 <p>GitRepositorySpec specifies the required configuration to produce an
 Artifact for a Git repository.</p>
@@ -2112,7 +2112,7 @@ Kubernetes meta/v1.Duration
 <td>
 <code>ref</code><br>
 <em>
-<a href="#source.toolkit.fluxcd.io/v1beta2.GitRepositoryRef">
+<a href="#source.werf.io/v1beta2.GitRepositoryRef">
 GitRepositoryRef
 </a>
 </em>
@@ -2127,7 +2127,7 @@ changes, defaults to the &lsquo;master&rsquo; branch.</p>
 <td>
 <code>verify</code><br>
 <em>
-<a href="#source.toolkit.fluxcd.io/v1beta2.GitRepositoryVerification">
+<a href="#source.werf.io/v1beta2.GitRepositoryVerification">
 GitRepositoryVerification
 </a>
 </em>
@@ -2197,7 +2197,7 @@ the GitRepository as cloned from the URL, using their default settings.</p>
 <td>
 <code>include</code><br>
 <em>
-<a href="#source.toolkit.fluxcd.io/v1beta2.GitRepositoryInclude">
+<a href="#source.werf.io/v1beta2.GitRepositoryInclude">
 []GitRepositoryInclude
 </a>
 </em>
@@ -2227,11 +2227,11 @@ NOTE: Not implemented, provisional as of <a href="https://github.com/fluxcd/flux
 </table>
 </div>
 </div>
-<h3 id="source.toolkit.fluxcd.io/v1beta2.GitRepositoryStatus">GitRepositoryStatus
+<h3 id="source.werf.io/v1beta2.GitRepositoryStatus">GitRepositoryStatus
 </h3>
 <p>
 (<em>Appears on:</em>
-<a href="#source.toolkit.fluxcd.io/v1beta2.GitRepository">GitRepository</a>)
+<a href="#source.werf.io/v1beta2.GitRepository">GitRepository</a>)
 </p>
 <p>GitRepositoryStatus records the observed state of a Git repository.</p>
 <div class="md-typeset__scrollwrap">
@@ -2366,7 +2366,7 @@ configuration used to produce the current Artifact.</p>
 <td>
 <code>observedInclude</code><br>
 <em>
-<a href="#source.toolkit.fluxcd.io/v1beta2.GitRepositoryInclude">
+<a href="#source.werf.io/v1beta2.GitRepositoryInclude">
 []GitRepositoryInclude
 </a>
 </em>
@@ -2396,11 +2396,11 @@ github.com/fluxcd/pkg/apis/meta.ReconcileRequestStatus
 </table>
 </div>
 </div>
-<h3 id="source.toolkit.fluxcd.io/v1beta2.GitRepositoryVerification">GitRepositoryVerification
+<h3 id="source.werf.io/v1beta2.GitRepositoryVerification">GitRepositoryVerification
 </h3>
 <p>
 (<em>Appears on:</em>
-<a href="#source.toolkit.fluxcd.io/v1beta2.GitRepositorySpec">GitRepositorySpec</a>)
+<a href="#source.werf.io/v1beta2.GitRepositorySpec">GitRepositorySpec</a>)
 </p>
 <p>GitRepositoryVerification specifies the Git commit signature verification
 strategy.</p>
@@ -2443,11 +2443,11 @@ authors.</p>
 </table>
 </div>
 </div>
-<h3 id="source.toolkit.fluxcd.io/v1beta2.HelmChartSpec">HelmChartSpec
+<h3 id="source.werf.io/v1beta2.HelmChartSpec">HelmChartSpec
 </h3>
 <p>
 (<em>Appears on:</em>
-<a href="#source.toolkit.fluxcd.io/v1beta2.HelmChart">HelmChart</a>)
+<a href="#source.werf.io/v1beta2.HelmChart">HelmChart</a>)
 </p>
 <p>HelmChartSpec specifies the desired state of a Helm chart.</p>
 <div class="md-typeset__scrollwrap">
@@ -2489,7 +2489,7 @@ GitRepository and Bucket sources. Defaults to latest when omitted.</p>
 <td>
 <code>sourceRef</code><br>
 <em>
-<a href="#source.toolkit.fluxcd.io/v1beta2.LocalHelmChartSourceReference">
+<a href="#source.werf.io/v1beta2.LocalHelmChartSourceReference">
 LocalHelmChartSourceReference
 </a>
 </em>
@@ -2623,11 +2623,11 @@ Chart dependencies, which are not bundled in the umbrella chart artifact, are no
 </table>
 </div>
 </div>
-<h3 id="source.toolkit.fluxcd.io/v1beta2.HelmChartStatus">HelmChartStatus
+<h3 id="source.werf.io/v1beta2.HelmChartStatus">HelmChartStatus
 </h3>
 <p>
 (<em>Appears on:</em>
-<a href="#source.toolkit.fluxcd.io/v1beta2.HelmChart">HelmChart</a>)
+<a href="#source.werf.io/v1beta2.HelmChart">HelmChart</a>)
 </p>
 <p>HelmChartStatus records the observed state of the HelmChart.</p>
 <div class="md-typeset__scrollwrap">
@@ -2754,11 +2754,11 @@ github.com/fluxcd/pkg/apis/meta.ReconcileRequestStatus
 </table>
 </div>
 </div>
-<h3 id="source.toolkit.fluxcd.io/v1beta2.HelmRepositorySpec">HelmRepositorySpec
+<h3 id="source.werf.io/v1beta2.HelmRepositorySpec">HelmRepositorySpec
 </h3>
 <p>
 (<em>Appears on:</em>
-<a href="#source.toolkit.fluxcd.io/v1beta2.HelmRepository">HelmRepository</a>)
+<a href="#source.werf.io/v1beta2.HelmRepository">HelmRepository</a>)
 </p>
 <p>HelmRepositorySpec specifies the required configuration to produce an
 Artifact for a Helm repository index YAML.</p>
@@ -2953,11 +2953,11 @@ When not specified, defaults to &lsquo;generic&rsquo;.</p>
 </table>
 </div>
 </div>
-<h3 id="source.toolkit.fluxcd.io/v1beta2.HelmRepositoryStatus">HelmRepositoryStatus
+<h3 id="source.werf.io/v1beta2.HelmRepositoryStatus">HelmRepositoryStatus
 </h3>
 <p>
 (<em>Appears on:</em>
-<a href="#source.toolkit.fluxcd.io/v1beta2.HelmRepository">HelmRepository</a>)
+<a href="#source.werf.io/v1beta2.HelmRepository">HelmRepository</a>)
 </p>
 <p>HelmRepositoryStatus records the observed state of the HelmRepository.</p>
 <div class="md-typeset__scrollwrap">
@@ -3044,11 +3044,11 @@ github.com/fluxcd/pkg/apis/meta.ReconcileRequestStatus
 </table>
 </div>
 </div>
-<h3 id="source.toolkit.fluxcd.io/v1beta2.LocalHelmChartSourceReference">LocalHelmChartSourceReference
+<h3 id="source.werf.io/v1beta2.LocalHelmChartSourceReference">LocalHelmChartSourceReference
 </h3>
 <p>
 (<em>Appears on:</em>
-<a href="#source.toolkit.fluxcd.io/v1beta2.HelmChartSpec">HelmChartSpec</a>)
+<a href="#source.werf.io/v1beta2.HelmChartSpec">HelmChartSpec</a>)
 </p>
 <p>LocalHelmChartSourceReference contains enough information to let you locate
 the typed referenced object at namespace level.</p>
@@ -3101,12 +3101,12 @@ string
 </table>
 </div>
 </div>
-<h3 id="source.toolkit.fluxcd.io/v1beta2.OCILayerSelector">OCILayerSelector
+<h3 id="source.werf.io/v1beta2.OCILayerSelector">OCILayerSelector
 </h3>
 <p>
 (<em>Appears on:</em>
-<a href="#source.toolkit.fluxcd.io/v1beta2.OCIRepositorySpec">OCIRepositorySpec</a>, 
-<a href="#source.toolkit.fluxcd.io/v1beta2.OCIRepositoryStatus">OCIRepositoryStatus</a>)
+<a href="#source.werf.io/v1beta2.OCIRepositorySpec">OCIRepositorySpec</a>, 
+<a href="#source.werf.io/v1beta2.OCIRepositoryStatus">OCIRepositoryStatus</a>)
 </p>
 <p>OCILayerSelector specifies which layer should be extracted from an OCI Artifact</p>
 <div class="md-typeset__scrollwrap">
@@ -3152,11 +3152,11 @@ is persisted to storage as it is.</p>
 </table>
 </div>
 </div>
-<h3 id="source.toolkit.fluxcd.io/v1beta2.OCIRepositoryRef">OCIRepositoryRef
+<h3 id="source.werf.io/v1beta2.OCIRepositoryRef">OCIRepositoryRef
 </h3>
 <p>
 (<em>Appears on:</em>
-<a href="#source.toolkit.fluxcd.io/v1beta2.OCIRepositorySpec">OCIRepositorySpec</a>)
+<a href="#source.werf.io/v1beta2.OCIRepositorySpec">OCIRepositorySpec</a>)
 </p>
 <p>OCIRepositoryRef defines the image reference for the OCIRepository&rsquo;s URL</p>
 <div class="md-typeset__scrollwrap">
@@ -3223,11 +3223,11 @@ string
 </table>
 </div>
 </div>
-<h3 id="source.toolkit.fluxcd.io/v1beta2.OCIRepositorySpec">OCIRepositorySpec
+<h3 id="source.werf.io/v1beta2.OCIRepositorySpec">OCIRepositorySpec
 </h3>
 <p>
 (<em>Appears on:</em>
-<a href="#source.toolkit.fluxcd.io/v1beta2.OCIRepository">OCIRepository</a>)
+<a href="#source.werf.io/v1beta2.OCIRepository">OCIRepository</a>)
 </p>
 <p>OCIRepositorySpec defines the desired state of OCIRepository</p>
 <div class="md-typeset__scrollwrap">
@@ -3256,7 +3256,7 @@ on a remote container registry.</p>
 <td>
 <code>ref</code><br>
 <em>
-<a href="#source.toolkit.fluxcd.io/v1beta2.OCIRepositoryRef">
+<a href="#source.werf.io/v1beta2.OCIRepositoryRef">
 OCIRepositoryRef
 </a>
 </em>
@@ -3271,7 +3271,7 @@ defaults to the latest tag.</p>
 <td>
 <code>layerSelector</code><br>
 <em>
-<a href="#source.toolkit.fluxcd.io/v1beta2.OCILayerSelector">
+<a href="#source.werf.io/v1beta2.OCILayerSelector">
 OCILayerSelector
 </a>
 </em>
@@ -3454,11 +3454,11 @@ bool
 </table>
 </div>
 </div>
-<h3 id="source.toolkit.fluxcd.io/v1beta2.OCIRepositoryStatus">OCIRepositoryStatus
+<h3 id="source.werf.io/v1beta2.OCIRepositoryStatus">OCIRepositoryStatus
 </h3>
 <p>
 (<em>Appears on:</em>
-<a href="#source.toolkit.fluxcd.io/v1beta2.OCIRepository">OCIRepository</a>)
+<a href="#source.werf.io/v1beta2.OCIRepository">OCIRepository</a>)
 </p>
 <p>OCIRepositoryStatus defines the observed state of OCIRepository</p>
 <div class="md-typeset__scrollwrap">
@@ -3561,7 +3561,7 @@ the source artifact.</p>
 <td>
 <code>observedLayerSelector</code><br>
 <em>
-<a href="#source.toolkit.fluxcd.io/v1beta2.OCILayerSelector">
+<a href="#source.werf.io/v1beta2.OCILayerSelector">
 OCILayerSelector
 </a>
 </em>
@@ -3591,11 +3591,11 @@ github.com/fluxcd/pkg/apis/meta.ReconcileRequestStatus
 </table>
 </div>
 </div>
-<h3 id="source.toolkit.fluxcd.io/v1beta2.Source">Source
+<h3 id="source.werf.io/v1beta2.Source">Source
 </h3>
 <p>Source interface must be supported by all API types.
 Source is the interface that provides generic access to the Artifact and
-interval. It must be supported by all kinds of the source.toolkit.fluxcd.io
+interval. It must be supported by all kinds of the source.werf.io
 API group.</p>
 <p>Deprecated: use the Source interface from api/v1 instead. This type will be
 removed in a future release.</p>

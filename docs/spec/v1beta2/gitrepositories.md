@@ -13,7 +13,7 @@ resolved reference.
 
 ```yaml
 ---
-apiVersion: source.toolkit.fluxcd.io/v1beta2
+apiVersion: source.werf.io/v1beta2
 kind: GitRepository
 metadata:
   name: podinfo
@@ -247,7 +247,7 @@ To Git checkout a specified branch, use `.spec.ref.branch`:
 
 ```yaml
 ---
-apiVersion: source.toolkit.fluxcd.io/v1beta2
+apiVersion: source.werf.io/v1beta2
 kind: GitRepository
 metadata:
   name: <repository-name>
@@ -264,7 +264,7 @@ To Git checkout a specified tag, use `.spec.ref.tag`:
 
 ```yaml
 ---
-apiVersion: source.toolkit.fluxcd.io/v1beta2
+apiVersion: source.werf.io/v1beta2
 kind: GitRepository
 metadata:
   name: <repository-name>
@@ -283,7 +283,7 @@ use `.spec.ref.semver`:
 
 ```yaml
 ---
-apiVersion: source.toolkit.fluxcd.io/v1beta2
+apiVersion: source.werf.io/v1beta2
 kind: GitRepository
 metadata:
   name: <repository-name>
@@ -304,7 +304,7 @@ use `.spec.ref.name`:
 
 ```yaml
 ---
-apiVersion: source.toolkit.fluxcd.io/v1beta2
+apiVersion: source.werf.io/v1beta2
 kind: GitRepository
 metadata:
   name: <repository-name>
@@ -326,7 +326,7 @@ To Git checkout a specified commit, use `.spec.ref.commit`:
 
 ```yaml
 ---
-apiVersion: source.toolkit.fluxcd.io/v1beta2
+apiVersion: source.werf.io/v1beta2
 kind: GitRepository
 metadata:
   name: <repository-name>
@@ -341,7 +341,7 @@ commit must exist:
 
 ```yaml
 ---
-apiVersion: source.toolkit.fluxcd.io/v1beta2
+apiVersion: source.werf.io/v1beta2
 kind: GitRepository
 metadata:
   name: <repository-name>
@@ -363,7 +363,7 @@ signatures. The field offers two subfields:
 
 ```yaml
 ---
-apiVersion: source.toolkit.fluxcd.io/v1beta1
+apiVersion: source.werf.io/v1beta1
 kind: GitRepository
 metadata:
   name: podinfo
@@ -489,7 +489,7 @@ multiple benefits over regular submodules:
 
 ```yaml
 ---
-apiVersion: source.toolkit.fluxcd.io/v1beta2
+apiVersion: source.werf.io/v1beta2
 kind: GitRepository
 metadata:
   name: include-example
@@ -534,7 +534,7 @@ exclusions.
 
 ```yaml
 ---
-apiVersion: source.toolkit.fluxcd.io/v1beta2
+apiVersion: source.werf.io/v1beta2
 kind: GitRepository
 metadata:
   name: <repository-name>
@@ -591,7 +591,7 @@ In your YAML declaration:
 
 ```yaml
 ---
-apiVersion: source.toolkit.fluxcd.io/v1beta2
+apiVersion: source.werf.io/v1beta2
 kind: GitRepository
 metadata:
   name: <repository-name>
@@ -622,7 +622,7 @@ In your YAML declaration, comment out (or remove) the field:
 
 ```yaml
 ---
-apiVersion: source.toolkit.fluxcd.io/v1beta2
+apiVersion: source.werf.io/v1beta2
 kind: GitRepository
 metadata:
   name: <repository-name>
@@ -728,7 +728,7 @@ can be retrieved in-cluster from the `.status.artifact.url` HTTP address.
 
 ```yaml
 ---
-apiVersion: source.toolkit.fluxcd.io/v1beta2
+apiVersion: source.werf.io/v1beta2
 kind: GitRepository
 metadata:
   name: <repository-name>

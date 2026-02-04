@@ -29,8 +29,8 @@ import (
 	"github.com/fluxcd/pkg/runtime/conditions"
 	"github.com/fluxcd/pkg/runtime/patch"
 
-	sourcev1 "github.com/fluxcd/source-controller/api/v1"
-	serror "github.com/fluxcd/source-controller/internal/error"
+	sourcev1 "github.com/werf/nelm-source-controller/api/v1"
+	serror "github.com/werf/nelm-source-controller/internal/error"
 )
 
 func TestLowestRequeuingResult(t *testing.T) {

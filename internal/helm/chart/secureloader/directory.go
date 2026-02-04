@@ -37,9 +37,9 @@ import (
 	"helm.sh/helm/v3/pkg/chart"
 	"helm.sh/helm/v3/pkg/chart/loader"
 
-	"github.com/fluxcd/source-controller/internal/helm"
-	"github.com/fluxcd/source-controller/internal/helm/chart/secureloader/ignore"
-	"github.com/fluxcd/source-controller/internal/helm/chart/secureloader/sympath"
+	"github.com/werf/nelm-source-controller/internal/helm"
+	"github.com/werf/nelm-source-controller/internal/helm/chart/secureloader/ignore"
+	"github.com/werf/nelm-source-controller/internal/helm/chart/secureloader/sympath"
 )
 
 var (

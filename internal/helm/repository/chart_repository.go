@@ -41,8 +41,8 @@ import (
 	"github.com/fluxcd/pkg/version"
 
 	"github.com/fluxcd/pkg/http/transport"
-	"github.com/fluxcd/source-controller/internal/helm"
-	"github.com/fluxcd/source-controller/internal/oci"
+	"github.com/werf/nelm-source-controller/internal/helm"
+	"github.com/werf/nelm-source-controller/internal/oci"
 )
 
 var (

@@ -31,7 +31,7 @@ import (
 	"github.com/sigstore/sigstore/pkg/cryptoutils"
 	"github.com/sigstore/sigstore/pkg/signature"
 
-	soci "github.com/fluxcd/source-controller/internal/oci"
+	soci "github.com/werf/nelm-source-controller/internal/oci"
 )
 
 // options is a struct that holds options for verifier.

@@ -29,8 +29,8 @@ import (
 	"helm.sh/helm/v3/pkg/chartutil"
 	"helm.sh/helm/v3/pkg/repo"
 
-	"github.com/fluxcd/source-controller/internal/helm/chart/secureloader"
-	"github.com/fluxcd/source-controller/internal/helm/repository"
+	"github.com/werf/nelm-source-controller/internal/helm/chart/secureloader"
+	"github.com/werf/nelm-source-controller/internal/helm/repository"
 )
 
 func TestLocalBuilder_Build(t *testing.T) {

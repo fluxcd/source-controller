@@ -33,9 +33,9 @@ import (
 	"github.com/notaryproject/notation-go/verifier/trustpolicy"
 	. "github.com/onsi/gomega"
 
-	"github.com/fluxcd/source-controller/internal/oci"
-	testproxy "github.com/fluxcd/source-controller/tests/proxy"
-	testregistry "github.com/fluxcd/source-controller/tests/registry"
+	"github.com/werf/nelm-source-controller/internal/oci"
+	testproxy "github.com/werf/nelm-source-controller/tests/proxy"
+	testregistry "github.com/werf/nelm-source-controller/tests/registry"
 )
 
 func TestOptions(t *testing.T) {

@@ -1,4 +1,4 @@
-apiVersion: source.toolkit.fluxcd.io/v1
+apiVersion: source.werf.io/v1
 kind: HelmChart
 metadata:
   name: helmchart-sample

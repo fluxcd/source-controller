@@ -23,7 +23,7 @@ import (
 
 	"github.com/fluxcd/pkg/apis/meta"
 
-	apiv1 "github.com/fluxcd/source-controller/api/v1"
+	apiv1 "github.com/werf/nelm-source-controller/api/v1"
 )
 
 const (

@@ -1,4 +1,4 @@
-domain: toolkit.fluxcd.io
+domain: werf.io
 repo: github.com/fluxcd/source-controller
 resources:
 - group: source

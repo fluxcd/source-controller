@@ -62,12 +62,12 @@ import (
 	rreconcile "github.com/fluxcd/pkg/runtime/reconcile"
 	"github.com/fluxcd/pkg/sourceignore"
 
-	sourcev1 "github.com/fluxcd/source-controller/api/v1"
-	serror "github.com/fluxcd/source-controller/internal/error"
-	"github.com/fluxcd/source-controller/internal/features"
-	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
-	"github.com/fluxcd/source-controller/internal/reconcile/summarize"
-	"github.com/fluxcd/source-controller/internal/util"
+	sourcev1 "github.com/werf/nelm-source-controller/api/v1"
+	serror "github.com/werf/nelm-source-controller/internal/error"
+	"github.com/werf/nelm-source-controller/internal/features"
+	sreconcile "github.com/werf/nelm-source-controller/internal/reconcile"
+	"github.com/werf/nelm-source-controller/internal/reconcile/summarize"
+	"github.com/werf/nelm-source-controller/internal/util"
 )
 
 // gitRepositoryReadyCondition contains the information required to summarize a
@@ -121,9 +121,9 @@ func getPatchOptions(ownedConditions []string, controllerName string) []patch.Op
 	}
 }
 
-// +kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=gitrepositories,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=gitrepositories/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=gitrepositories/finalizers,verbs=get;create;update;patch;delete
+// +kubebuilder:rbac:groups=source.werf.io,resources=gitrepositories,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=source.werf.io,resources=gitrepositories/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=source.werf.io,resources=gitrepositories/finalizers,verbs=get;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 
 // GitRepositoryReconciler reconciles a v1.GitRepository object.

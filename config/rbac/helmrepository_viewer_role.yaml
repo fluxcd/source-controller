@@ -5,7 +5,7 @@ metadata:
   name: helmrepository-viewer-role
 rules:
 - apiGroups:
-  - source.toolkit.fluxcd.io
+  - source.werf.io
   resources:
   - helmrepositories
   verbs:
@@ -13,7 +13,7 @@ rules:
   - list
   - watch
 - apiGroups:
-  - source.toolkit.fluxcd.io
+  - source.werf.io
   resources:
   - helmrepositories/status
   verbs:

@@ -35,7 +35,7 @@ import (
 	"helm.sh/helm/v3/pkg/chartutil"
 	"sigs.k8s.io/yaml"
 
-	"github.com/fluxcd/source-controller/internal/helm"
+	"github.com/werf/nelm-source-controller/internal/helm"
 )
 
 var drivePathPattern = regexp.MustCompile(`^[a-zA-Z]:/`)

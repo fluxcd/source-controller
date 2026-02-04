@@ -28,7 +28,7 @@ import (
 	helmchart "helm.sh/helm/v3/pkg/chart"
 	"helm.sh/helm/v3/pkg/chartutil"
 
-	"github.com/fluxcd/source-controller/internal/oci"
+	"github.com/werf/nelm-source-controller/internal/oci"
 )
 
 // Reference holds information to locate a chart.

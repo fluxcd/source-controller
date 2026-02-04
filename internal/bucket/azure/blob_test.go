@@ -37,9 +37,9 @@ import (
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
 
-	sourcev1 "github.com/fluxcd/source-controller/api/v1"
-	testlistener "github.com/fluxcd/source-controller/tests/listener"
-	testproxy "github.com/fluxcd/source-controller/tests/proxy"
+	sourcev1 "github.com/werf/nelm-source-controller/api/v1"
+	testlistener "github.com/werf/nelm-source-controller/tests/listener"
+	testproxy "github.com/werf/nelm-source-controller/tests/proxy"
 )
 
 func TestNewClientAndBucketExistsWithProxy(t *testing.T) {

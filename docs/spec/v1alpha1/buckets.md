@@ -117,7 +117,7 @@ entries may overrule default exclusions.
 Another option is to use the `spec.ignore` field, for example:
 
 ```yaml
-apiVersion: source.toolkit.fluxcd.io/v1alpha1
+apiVersion: source.werf.io/v1alpha1
 kind: Bucket
 metadata:
   name: podinfo
@@ -142,7 +142,7 @@ Authentication credentials can be provided with a Kubernetes secret that contain
 `accesskey` and `secretkey` fields:
 
 ```yaml
-apiVersion: source.toolkit.fluxcd.io/v1alpha1
+apiVersion: source.werf.io/v1alpha1
 kind: Bucket
 metadata:
   name: podinfo

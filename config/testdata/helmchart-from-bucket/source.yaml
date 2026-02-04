@@ -1,5 +1,5 @@
 ---
-apiVersion: source.toolkit.fluxcd.io/v1
+apiVersion: source.werf.io/v1
 kind: Bucket
 metadata:
   name: charts
@@ -13,7 +13,7 @@ spec:
   secretRef:
     name: minio-credentials
 ---
-apiVersion: source.toolkit.fluxcd.io/v1
+apiVersion: source.werf.io/v1
 kind: HelmChart
 metadata:
   name: helmchart-bucket

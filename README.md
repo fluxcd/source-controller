@@ -9,7 +9,7 @@
 The source-controller is a Kubernetes operator, specialised in artifacts acquisition
 from external sources such as Git, OCI, Helm repositories and S3-compatible buckets.
 The source-controller implements the
-[source.toolkit.fluxcd.io](docs/spec/README.md) API
+[source.werf.io](docs/spec/README.md) API
 and is a core component of the [GitOps toolkit](https://fluxcd.io/flux/components/).
 
 ![overview](docs/diagrams/source-controller-overview.png)
@@ -18,11 +18,11 @@ and is a core component of the [GitOps toolkit](https://fluxcd.io/flux/component
 
 | Kind                                               | API Version                   |
 |----------------------------------------------------|-------------------------------|
-| [GitRepository](docs/spec/v1/gitrepositories.md)   | `source.toolkit.fluxcd.io/v1` |
-| [OCIRepository](docs/spec/v1/ocirepositories.md)   | `source.toolkit.fluxcd.io/v1` |
-| [HelmRepository](docs/spec/v1/helmrepositories.md) | `source.toolkit.fluxcd.io/v1` |
-| [HelmChart](docs/spec/v1/helmcharts.md)            | `source.toolkit.fluxcd.io/v1` |
-| [Bucket](docs/spec/v1/buckets.md)                  | `source.toolkit.fluxcd.io/v1` |
+| [GitRepository](docs/spec/v1/gitrepositories.md)   | `source.werf.io/v1` |
+| [OCIRepository](docs/spec/v1/ocirepositories.md)   | `source.werf.io/v1` |
+| [HelmRepository](docs/spec/v1/helmrepositories.md) | `source.werf.io/v1` |
+| [HelmChart](docs/spec/v1/helmcharts.md)            | `source.werf.io/v1` |
+| [Bucket](docs/spec/v1/buckets.md)                  | `source.werf.io/v1` |
 
 ## Features
 

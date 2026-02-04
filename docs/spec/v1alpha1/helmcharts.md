@@ -102,7 +102,7 @@ const (
 Pull a specific chart version every five minutes:
 
 ```yaml
-apiVersion: source.toolkit.fluxcd.io/v1alpha1
+apiVersion: source.werf.io/v1alpha1
 kind: HelmChart
 metadata:
   name: redis
@@ -118,7 +118,7 @@ spec:
 Pull the latest chart version that matches the semver range every ten minutes:
 
 ```yaml
-apiVersion: source.toolkit.fluxcd.io/v1alpha1
+apiVersion: source.werf.io/v1alpha1
 kind: HelmChart
 metadata:
   name: redis
@@ -135,7 +135,7 @@ Check a Git repository every ten minutes for a new `version` in the
 `Chart.yaml`, and package a new chart if the revision differs:
 
 ```yaml
-apiVersion: source.toolkit.fluxcd.io/v1alpha1
+apiVersion: source.werf.io/v1alpha1
 kind: HelmChart
 metadata:
   name: podinfo
@@ -151,7 +151,7 @@ Check a S3 compatible bucket every ten minutes for a new `version` in the
 `Chart.yaml`, and package a new chart if the revision differs:
 
 ```yaml
-apiVersion: source.toolkit.fluxcd.io/v1alpha1
+apiVersion: source.werf.io/v1alpha1
 kind: HelmChart
 metadata:
   name: podinfo

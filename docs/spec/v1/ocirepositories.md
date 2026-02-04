@@ -13,7 +13,7 @@ resolved digest.
 
 ```yaml
 ---
-apiVersion: source.toolkit.fluxcd.io/v1
+apiVersion: source.werf.io/v1
 kind: OCIRepository
 metadata:
   name: podinfo
@@ -315,7 +315,7 @@ Example usage:
 
 ```yaml
 ---
-apiVersion: source.toolkit.fluxcd.io/v1
+apiVersion: source.werf.io/v1
 kind: OCIRepository
 metadata:
   name: example
@@ -426,7 +426,7 @@ To pull a specific tag, use `.spec.ref.tag`:
 
 ```yaml
 ---
-apiVersion: source.toolkit.fluxcd.io/v1
+apiVersion: source.werf.io/v1
 kind: OCIRepository
 metadata:
   name: <repository-name>
@@ -443,7 +443,7 @@ use `.spec.ref.semver`:
 
 ```yaml
 ---
-apiVersion: source.toolkit.fluxcd.io/v1
+apiVersion: source.werf.io/v1
 kind: OCIRepository
 metadata:
   name: <repository-name>
@@ -467,7 +467,7 @@ is set.
 
 ```yaml
 ---
-apiVersion: source.toolkit.fluxcd.io/v1
+apiVersion: source.werf.io/v1
 kind: OCIRepository
 metadata:
   name: podinfo
@@ -492,7 +492,7 @@ To pull a specific digest, use `.spec.ref.digest`:
 
 ```yaml
 ---
-apiVersion: source.toolkit.fluxcd.io/v1
+apiVersion: source.werf.io/v1
 kind: OCIRepository
 metadata:
   name: <repository-name>
@@ -513,7 +513,7 @@ To extract a layer matching a specific
 
 ```yaml
 ---
-apiVersion: source.toolkit.fluxcd.io/v1
+apiVersion: source.werf.io/v1
 kind: OCIRepository
 metadata:
   name: <repository-name>
@@ -565,7 +565,7 @@ or via the [Cosign Keyless](https://github.com/sigstore/cosign/blob/main/KEYLESS
 
 ```yaml
 ---
-apiVersion: source.toolkit.fluxcd.io/v1
+apiVersion: source.werf.io/v1
 kind: OCIRepository
 metadata:
   name: <repository-name>
@@ -627,7 +627,7 @@ Example of verifying artifacts signed by the
 [Cosign GitHub Action](https://github.com/sigstore/cosign-installer) with GitHub OIDC Token:
 
 ```yaml
-apiVersion: source.toolkit.fluxcd.io/v1
+apiVersion: source.werf.io/v1
 kind: OCIRepository
 metadata:
   name: podinfo
@@ -654,7 +654,7 @@ trust policy and CA certificate.
 
 ```yaml
 ---
-apiVersion: source.toolkit.fluxcd.io/v1
+apiVersion: source.werf.io/v1
 kind: OCIRepository
 metadata:
   name: <repository-name>
@@ -715,7 +715,7 @@ the [`.spec.ignore` field](#ignore).
 
 ```yaml
 ---
-apiVersion: source.toolkit.fluxcd.io/v1
+apiVersion: source.werf.io/v1
 kind: OCIRepository
 metadata:
   name: <repository-name>
@@ -782,7 +782,7 @@ In your YAML declaration:
 
 ```yaml
 ---
-apiVersion: source.toolkit.fluxcd.io/v1
+apiVersion: source.werf.io/v1
 kind: OCIRepository
 metadata:
   name: <repository-name>
@@ -813,7 +813,7 @@ In your YAML declaration, comment out (or remove) the field:
 
 ```yaml
 ---
-apiVersion: source.toolkit.fluxcd.io/v1
+apiVersion: source.werf.io/v1
 kind: OCIRepository
 metadata:
   name: <repository-name>
@@ -928,7 +928,7 @@ can be retrieved in-cluster from the `.status.artifact.url` HTTP address.
 #### Artifact example
 
 ```yaml
-apiVersion: source.toolkit.fluxcd.io/v1
+apiVersion: source.werf.io/v1
 kind: OCIRepository
 metadata:
   name: <repository-name>

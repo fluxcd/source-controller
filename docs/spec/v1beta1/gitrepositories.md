@@ -169,7 +169,7 @@ entries may overrule default exclusions.
 Another option is to use the `spec.ignore` field, for example:
 
 ```yaml
-apiVersion: source.toolkit.fluxcd.io/v1beta1
+apiVersion: source.werf.io/v1beta1
 kind: GitRepository
 metadata:
   name: podinfo
@@ -214,7 +214,7 @@ option to select the git library while accepting the drawbacks.
 Pull the master branch from a repository in Azure DevOps.
 
 ```yaml
-apiVersion: source.toolkit.fluxcd.io/v1beta1
+apiVersion: source.werf.io/v1beta1
 kind: GitRepository
 metadata:
   name: podinfo
@@ -247,7 +247,7 @@ libgit2 v1.1.1 at the moment.
 Pull the master branch of a public repository every minute:
 
 ```yaml
-apiVersion: source.toolkit.fluxcd.io/v1beta1
+apiVersion: source.werf.io/v1beta1
 kind: GitRepository
 metadata:
   name: podinfo
@@ -260,7 +260,7 @@ spec:
 Pull a specific branch:
 
 ```yaml
-apiVersion: source.toolkit.fluxcd.io/v1beta1
+apiVersion: source.werf.io/v1beta1
 kind: GitRepository
 metadata:
   name: podinfo
@@ -275,7 +275,7 @@ spec:
 Checkout a specific commit from a branch:
 
 ```yaml
-apiVersion: source.toolkit.fluxcd.io/v1beta1
+apiVersion: source.werf.io/v1beta1
 kind: GitRepository
 metadata:
   name: podinfo
@@ -291,7 +291,7 @@ spec:
 Checkout a specific commit:
 
 ```yaml
-apiVersion: source.toolkit.fluxcd.io/v1beta1
+apiVersion: source.werf.io/v1beta1
 kind: GitRepository
 metadata:
   name: podinfo
@@ -306,7 +306,7 @@ spec:
 Pull a specific tag:
 
 ```yaml
-apiVersion: source.toolkit.fluxcd.io/v1beta1
+apiVersion: source.werf.io/v1beta1
 kind: GitRepository
 metadata:
   name: podinfo
@@ -321,7 +321,7 @@ spec:
 Pull tag based on a [semver range](https://github.com/Masterminds/semver#checking-version-constraints):
 
 ```yaml
-apiVersion: source.toolkit.fluxcd.io/v1beta1
+apiVersion: source.werf.io/v1beta1
 kind: GitRepository
 metadata:
   name: podinfo
@@ -338,7 +338,7 @@ spec:
 HTTPS authentication requires a Kubernetes secret with `username` and `password` fields:
 
 ```yaml
-apiVersion: source.toolkit.fluxcd.io/v1beta1
+apiVersion: source.werf.io/v1beta1
 kind: GitRepository
 metadata:
   name: podinfo
@@ -365,7 +365,7 @@ data:
 Cloning over HTTPS from a Git repository with a self-signed certificate:
 
 ```yaml
-apiVersion: source.toolkit.fluxcd.io/v1beta1
+apiVersion: source.werf.io/v1beta1
 kind: GitRepository
 metadata:
   name: podinfo
@@ -396,7 +396,7 @@ can be omitted.
 SSH authentication requires a Kubernetes secret with `identity` and `known_hosts` fields:
 
 ```yaml
-apiVersion: source.toolkit.fluxcd.io/v1beta1
+apiVersion: source.werf.io/v1beta1
 kind: GitRepository
 metadata:
   name: podinfo
@@ -450,7 +450,7 @@ kubectl create secret generic ssh-credentials \
 Verify the OpenPGP signature for the commit that master branch HEAD points to:
 
 ```yaml
-apiVersion: source.toolkit.fluxcd.io/v1beta1
+apiVersion: source.werf.io/v1beta1
 kind: GitRepository
 metadata:
   name: podinfo
@@ -493,7 +493,7 @@ With `spec.recurseSubmodules` you can configure the controller to
 clone a specific branch including its Git submodules:
 
 ```yaml
-apiVersion: source.toolkit.fluxcd.io/v1beta1
+apiVersion: source.werf.io/v1beta1
 kind: GitRepository
 metadata:
   name: repo-with-submodules
@@ -534,7 +534,7 @@ regular submodules:
 * Multiple `GitRepositories` could include the same repository, which decreases the amount of cloning done compared to using submodules.
 
 ```yaml
-apiVersion: source.toolkit.fluxcd.io/v1beta1
+apiVersion: source.werf.io/v1beta1
 kind: GitRepository
 metadata:
   name: app-repo
@@ -547,7 +547,7 @@ spec:
   ref:
     branch: main
 ---
-apiVersion: source.toolkit.fluxcd.io/v1beta1
+apiVersion: source.werf.io/v1beta1
 kind: GitRepository
 metadata:
   name: config-repo

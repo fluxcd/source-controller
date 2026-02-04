@@ -36,7 +36,7 @@ import (
 
 	"github.com/fluxcd/pkg/oci"
 
-	testlistener "github.com/fluxcd/source-controller/tests/listener"
+	testlistener "github.com/werf/nelm-source-controller/tests/listener"
 )
 
 func New(t *testing.T) string {

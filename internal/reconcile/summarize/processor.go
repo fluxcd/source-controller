@@ -26,9 +26,9 @@ import (
 
 	eventv1 "github.com/fluxcd/pkg/apis/event/v1beta1"
 	"github.com/fluxcd/pkg/apis/meta"
-	serror "github.com/fluxcd/source-controller/internal/error"
-	"github.com/fluxcd/source-controller/internal/object"
-	"github.com/fluxcd/source-controller/internal/reconcile"
+	serror "github.com/werf/nelm-source-controller/internal/error"
+	"github.com/werf/nelm-source-controller/internal/object"
+	"github.com/werf/nelm-source-controller/internal/reconcile"
 )
 
 // ResultProcessor processes the results of reconciliation (the object, result

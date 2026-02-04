@@ -25,7 +25,7 @@ import (
 	"github.com/fluxcd/pkg/runtime/conditions"
 	"github.com/fluxcd/pkg/runtime/patch"
 
-	serror "github.com/fluxcd/source-controller/internal/error"
+	serror "github.com/werf/nelm-source-controller/internal/error"
 )
 
 // Result is a type for creating an abstraction for the controller-runtime

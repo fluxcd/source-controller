@@ -36,9 +36,9 @@ import (
 	conditionscheck "github.com/fluxcd/pkg/runtime/conditions/check"
 	"github.com/fluxcd/pkg/runtime/patch"
 
-	sourcev1 "github.com/fluxcd/source-controller/api/v1"
-	serror "github.com/fluxcd/source-controller/internal/error"
-	"github.com/fluxcd/source-controller/internal/reconcile"
+	sourcev1 "github.com/werf/nelm-source-controller/api/v1"
+	serror "github.com/werf/nelm-source-controller/internal/error"
+	"github.com/werf/nelm-source-controller/internal/reconcile"
 )
 
 // This tests the scenario where SummarizeAndPatch is used at the very end of a

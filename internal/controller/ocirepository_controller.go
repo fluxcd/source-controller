@@ -71,14 +71,14 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
-	sourcev1 "github.com/fluxcd/source-controller/api/v1"
-	serror "github.com/fluxcd/source-controller/internal/error"
-	soci "github.com/fluxcd/source-controller/internal/oci"
-	scosign "github.com/fluxcd/source-controller/internal/oci/cosign"
-	"github.com/fluxcd/source-controller/internal/oci/notation"
-	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
-	"github.com/fluxcd/source-controller/internal/reconcile/summarize"
-	"github.com/fluxcd/source-controller/internal/util"
+	sourcev1 "github.com/werf/nelm-source-controller/api/v1"
+	serror "github.com/werf/nelm-source-controller/internal/error"
+	soci "github.com/werf/nelm-source-controller/internal/oci"
+	scosign "github.com/werf/nelm-source-controller/internal/oci/cosign"
+	"github.com/werf/nelm-source-controller/internal/oci/notation"
+	sreconcile "github.com/werf/nelm-source-controller/internal/reconcile"
+	"github.com/werf/nelm-source-controller/internal/reconcile/summarize"
+	"github.com/werf/nelm-source-controller/internal/util"
 )
 
 // ociRepositoryReadyCondition contains the information required to summarize a
@@ -173,9 +173,9 @@ func (r *OCIRepositoryReconciler) SetupWithManagerAndOptions(mgr ctrl.Manager, o
 		Complete(r)
 }
 
-// +kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=ocirepositories,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=ocirepositories/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=ocirepositories/finalizers,verbs=get;create;update;patch;delete
+// +kubebuilder:rbac:groups=source.werf.io,resources=ocirepositories,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=source.werf.io,resources=ocirepositories/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=source.werf.io,resources=ocirepositories/finalizers,verbs=get;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 // +kubebuilder:rbac:groups="",resources=serviceaccounts/token,verbs=create
 

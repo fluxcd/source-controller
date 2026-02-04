@@ -30,7 +30,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	fakeclient "sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	helmv1 "github.com/fluxcd/source-controller/api/v1"
+	helmv1 "github.com/werf/nelm-source-controller/api/v1"
 )
 
 func TestGetClientOpts(t *testing.T) {

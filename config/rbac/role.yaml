@@ -27,7 +27,7 @@ rules:
   verbs:
   - create
 - apiGroups:
-  - source.toolkit.fluxcd.io
+  - source.werf.io
   resources:
   - buckets
   - gitrepositories
@@ -43,7 +43,7 @@ rules:
   - update
   - watch
 - apiGroups:
-  - source.toolkit.fluxcd.io
+  - source.werf.io
   resources:
   - buckets/finalizers
   - gitrepositories/finalizers
@@ -57,7 +57,7 @@ rules:
   - patch
   - update
 - apiGroups:
-  - source.toolkit.fluxcd.io
+  - source.werf.io
   resources:
   - buckets/status
   - gitrepositories/status

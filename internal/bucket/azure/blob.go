@@ -41,7 +41,7 @@ import (
 	azureauth "github.com/fluxcd/pkg/auth/azure"
 	"github.com/fluxcd/pkg/masktoken"
 
-	sourcev1 "github.com/fluxcd/source-controller/api/v1"
+	sourcev1 "github.com/werf/nelm-source-controller/api/v1"
 )
 
 var (

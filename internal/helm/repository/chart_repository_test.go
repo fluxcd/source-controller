@@ -33,7 +33,7 @@ import (
 	helmgetter "helm.sh/helm/v3/pkg/getter"
 	"helm.sh/helm/v3/pkg/repo"
 
-	"github.com/fluxcd/source-controller/internal/helm"
+	"github.com/werf/nelm-source-controller/internal/helm"
 )
 
 var now = time.Now()

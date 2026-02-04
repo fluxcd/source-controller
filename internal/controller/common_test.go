@@ -27,7 +27,7 @@ import (
 	"github.com/fluxcd/pkg/runtime/conditions"
 	"github.com/fluxcd/pkg/runtime/patch"
 
-	"github.com/fluxcd/source-controller/internal/object"
+	"github.com/werf/nelm-source-controller/internal/object"
 )
 
 // waitForSourceDeletion is a generic test helper to wait for object deletion of

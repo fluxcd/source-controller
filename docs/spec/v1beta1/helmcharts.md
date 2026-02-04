@@ -147,7 +147,7 @@ const (
 Pull a specific chart version every five minutes:
 
 ```yaml
-apiVersion: source.toolkit.fluxcd.io/v1beta1
+apiVersion: source.werf.io/v1beta1
 kind: HelmChart
 metadata:
   name: redis
@@ -165,7 +165,7 @@ Pull the latest chart version that matches the [semver range](https://github.com
 every ten minutes:
 
 ```yaml
-apiVersion: source.toolkit.fluxcd.io/v1beta1
+apiVersion: source.werf.io/v1beta1
 kind: HelmChart
 metadata:
   name: redis
@@ -183,7 +183,7 @@ Check a Git repository every ten minutes for a new `version` in the
 `Chart.yaml`, and package a new chart if the revision differs:
 
 ```yaml
-apiVersion: source.toolkit.fluxcd.io/v1beta1
+apiVersion: source.werf.io/v1beta1
 kind: HelmChart
 metadata:
   name: podinfo
@@ -200,7 +200,7 @@ Check a S3 compatible bucket every ten minutes for a new `version` in the
 `Chart.yaml`, and package a new chart if the revision differs:
 
 ```yaml
-apiVersion: source.toolkit.fluxcd.io/v1beta1
+apiVersion: source.werf.io/v1beta1
 kind: HelmChart
 metadata:
   name: podinfo
@@ -217,7 +217,7 @@ Override default values with alternative values files relative to the
 path in the SourceRef:
 
 ```yaml
-apiVersion: source.toolkit.fluxcd.io/v1beta1
+apiVersion: source.werf.io/v1beta1
 kind: HelmChart
 metadata:
   name: redis
@@ -235,7 +235,7 @@ spec:
 ```
 
 ```yaml
-apiVersion: source.toolkit.fluxcd.io/v1beta1
+apiVersion: source.werf.io/v1beta1
 kind: HelmChart
 metadata:
   name: podinfo
@@ -254,7 +254,7 @@ spec:
 Reconcile with every change to the source revision:
 
 ```yaml
-apiVersion: source.toolkit.fluxcd.io/v1beta1
+apiVersion: source.werf.io/v1beta1
 kind: HelmChart
 metadata:
   name: podinfo

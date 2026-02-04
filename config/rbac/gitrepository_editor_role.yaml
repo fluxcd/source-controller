@@ -5,7 +5,7 @@ metadata:
   name: gitrepository-editor-role
 rules:
 - apiGroups:
-  - source.toolkit.fluxcd.io
+  - source.werf.io
   resources:
   - gitrepositories
   verbs:
@@ -17,7 +17,7 @@ rules:
   - update
   - watch
 - apiGroups:
-  - source.toolkit.fluxcd.io
+  - source.werf.io
   resources:
   - gitrepositories/status
   verbs:

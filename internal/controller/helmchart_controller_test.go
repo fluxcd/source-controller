@@ -71,15 +71,15 @@ import (
 	"github.com/fluxcd/pkg/runtime/patch"
 	"github.com/fluxcd/pkg/testserver"
 
-	sourcev1 "github.com/fluxcd/source-controller/api/v1"
-	serror "github.com/fluxcd/source-controller/internal/error"
-	"github.com/fluxcd/source-controller/internal/helm/chart"
-	"github.com/fluxcd/source-controller/internal/helm/chart/secureloader"
-	"github.com/fluxcd/source-controller/internal/helm/registry"
-	"github.com/fluxcd/source-controller/internal/oci"
-	snotation "github.com/fluxcd/source-controller/internal/oci/notation"
-	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
-	"github.com/fluxcd/source-controller/internal/reconcile/summarize"
+	sourcev1 "github.com/werf/nelm-source-controller/api/v1"
+	serror "github.com/werf/nelm-source-controller/internal/error"
+	"github.com/werf/nelm-source-controller/internal/helm/chart"
+	"github.com/werf/nelm-source-controller/internal/helm/chart/secureloader"
+	"github.com/werf/nelm-source-controller/internal/helm/registry"
+	"github.com/werf/nelm-source-controller/internal/oci"
+	snotation "github.com/werf/nelm-source-controller/internal/oci/notation"
+	sreconcile "github.com/werf/nelm-source-controller/internal/reconcile"
+	"github.com/werf/nelm-source-controller/internal/reconcile/summarize"
 )
 
 func TestHelmChartReconciler_deleteBeforeFinalizer(t *testing.T) {
@@ -682,12 +682,12 @@ func TestHelmChartReconciler_reconcileSource(t *testing.T) {
 				conditions.MarkUnknown(obj, meta.ReadyCondition, "foo", "bar")
 			},
 			want:    sreconcile.ResultEmpty,
-			wantErr: &serror.Generic{Err: errors.New("gitrepositories.source.toolkit.fluxcd.io \"unavailable\" not found")},
+			wantErr: &serror.Generic{Err: errors.New("gitrepositories.source.werf.io \"unavailable\" not found")},
 			assertFunc: func(g *WithT, build chart.Build, obj sourcev1.HelmChart) {
 				g.Expect(build.Complete()).To(BeFalse())
 
 				g.Expect(obj.Status.Conditions).To(conditions.MatchConditions([]metav1.Condition{
-					*conditions.TrueCondition(sourcev1.FetchFailedCondition, "SourceUnavailable", "failed to get source: gitrepositories.source.toolkit.fluxcd.io \"unavailable\" not found"),
+					*conditions.TrueCondition(sourcev1.FetchFailedCondition, "SourceUnavailable", "failed to get source: gitrepositories.source.werf.io \"unavailable\" not found"),
 					*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "foo"),
 					*conditions.UnknownCondition(meta.ReadyCondition, "foo", "bar"),
 				}))

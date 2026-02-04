@@ -28,7 +28,7 @@ import (
 
 	"github.com/fluxcd/pkg/runtime/transform"
 
-	"github.com/fluxcd/source-controller/internal/helm/chart/secureloader"
+	"github.com/werf/nelm-source-controller/internal/helm/chart/secureloader"
 )
 
 type localChartBuilder struct {

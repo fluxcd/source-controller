@@ -13,7 +13,7 @@ configuration:
 
 ```yaml
 ---
-apiVersion: source.toolkit.fluxcd.io/v1beta2
+apiVersion: source.werf.io/v1beta2
 kind: HelmChart
 metadata:
   name: podinfo
@@ -278,7 +278,7 @@ The `cosign` provider can be used to verify the signature of an OCI artifact usi
 
 ```yaml
 ---
-apiVersion: source.toolkit.fluxcd.io/v1beta2
+apiVersion: source.werf.io/v1beta2
 kind: HelmChart
 metadata:
   name: podinfo
@@ -340,7 +340,7 @@ Example of verifying  HelmCharts signed by the
 [Cosign GitHub Action](https://github.com/sigstore/cosign-installer) with GitHub OIDC Token:
 
 ```yaml
-apiVersion: source.toolkit.fluxcd.io/v1beta2
+apiVersion: source.werf.io/v1beta2
 kind: HelmChart
 metadata:
   name: podinfo
@@ -361,7 +361,7 @@ spec:
 
 ```yaml
 ---
-apiVersion: source.toolkit.fluxcd.io/v1beta2
+apiVersion: source.werf.io/v1beta2
 kind: HelmRepository
 metadata:
   name: podinfo
@@ -384,7 +384,7 @@ trust policy and CA certificate.
 
 ```yaml
 ---
-apiVersion: source.toolkit.fluxcd.io/v1beta2
+apiVersion: source.werf.io/v1beta2
 kind: HelmChart
 metadata:
   name: podinfo
@@ -464,7 +464,7 @@ In your YAML declaration:
 
 ```yaml
 ---
-apiVersion: source.toolkit.fluxcd.io/v1beta2
+apiVersion: source.werf.io/v1beta2
 kind: HelmChart
 metadata:
   name: <chart-name>
@@ -489,7 +489,7 @@ In your YAML declaration, comment out (or remove) the field:
 
 ```yaml
 ---
-apiVersion: source.toolkit.fluxcd.io/v1beta2
+apiVersion: source.werf.io/v1beta2
 kind: HelmChart
 metadata:
   name: <chart-name>
@@ -637,7 +637,7 @@ and can be retrieved in-cluster from the `.status.artifact.url` HTTP address.
 
 ```yaml
 ---
-apiVersion: source.toolkit.fluxcd.io/v1beta2
+apiVersion: source.werf.io/v1beta2
 kind: HelmChart
 metadata:
   name: <chart-name>
@@ -659,7 +659,7 @@ with the `HelmChart` object generation. For example, if the chart version is
 
 ```yaml
 ---
-apiVersion: source.toolkit.fluxcd.io/v1beta2
+apiVersion: source.werf.io/v1beta2
 kind: HelmChart
 metadata:
   name: <chart-name>
@@ -684,7 +684,7 @@ the `status.artifact.revision` value will be `6.0.3+4e5cbb7b97d0`.
 
 ```yaml
 ---
-apiVersion: source.toolkit.fluxcd.io/v1beta2
+apiVersion: source.werf.io/v1beta2
 kind: HelmChart
 metadata:
   name: <chart-name>

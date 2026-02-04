@@ -1,5 +1,5 @@
 ---
-apiVersion: source.toolkit.fluxcd.io/v1
+apiVersion: source.werf.io/v1
 kind: HelmRepository
 metadata:
   name: podinfo-notation
@@ -8,7 +8,7 @@ spec:
   type: "oci"
   interval: 1m
 ---
-apiVersion: source.toolkit.fluxcd.io/v1
+apiVersion: source.werf.io/v1
 kind: HelmChart
 metadata:
   name: podinfo-notation

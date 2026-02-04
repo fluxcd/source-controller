@@ -14,7 +14,7 @@ The following is an example of a ExternalArtifact produced by a 3rd party
 source controller:
 
 ```yaml
-apiVersion: source.toolkit.fluxcd.io/v1
+apiVersion: source.werf.io/v1
 kind: ExternalArtifact
 metadata:
   name: my-artifact

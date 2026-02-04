@@ -14,7 +14,7 @@ compatible API (e.g. [Minio](https://min.io)):
 
 ```yaml
 ---
-apiVersion: source.toolkit.fluxcd.io/v1
+apiVersion: source.werf.io/v1
 kind: Bucket
 metadata:
   name: minio-bucket
@@ -158,7 +158,7 @@ The Provider allows for specifying a region the bucket is in using the
 
 ```yaml
 ---
-apiVersion: source.toolkit.fluxcd.io/v1
+apiVersion: source.werf.io/v1
 kind: Bucket
 metadata:
   name: generic-insecure
@@ -208,7 +208,7 @@ the source-controller service account that grants access to the bucket.
 
 ```yaml
 ---
-apiVersion: source.toolkit.fluxcd.io/v1
+apiVersion: source.werf.io/v1
 kind: Bucket
 metadata:
   name: aws
@@ -250,7 +250,7 @@ Replace `<bucket-name>` with the specified `.spec.bucketName`.
 
 ```yaml
 ---
-apiVersion: source.toolkit.fluxcd.io/v1
+apiVersion: source.werf.io/v1
 kind: Bucket
 metadata:
   name: aws
@@ -279,7 +279,7 @@ data:
 
 ```yaml
 ---
-apiVersion: source.toolkit.fluxcd.io/v1
+apiVersion: source.werf.io/v1
 kind: Bucket
 metadata:
   name: aws-controller-level-workload-identity
@@ -301,7 +301,7 @@ be enabled.
 
 ```yaml
 ---
-apiVersion: source.toolkit.fluxcd.io/v1
+apiVersion: source.werf.io/v1
 kind: Bucket
 metadata:
   name: aws-object-level-workload-identity
@@ -363,7 +363,7 @@ the base URL can be configured using `.data.authorityHost`. If not supplied,
 
 ```yaml
 ---
-apiVersion: source.toolkit.fluxcd.io/v1
+apiVersion: source.werf.io/v1
 kind: Bucket
 metadata:
   name: azure-public
@@ -380,7 +380,7 @@ spec:
 
 ```yaml
 ---
-apiVersion: source.toolkit.fluxcd.io/v1
+apiVersion: source.werf.io/v1
 kind: Bucket
 metadata:
   name: azure-service-principal-secret
@@ -409,7 +409,7 @@ data:
 
 ```yaml
 ---
-apiVersion: source.toolkit.fluxcd.io/v1
+apiVersion: source.werf.io/v1
 kind: Bucket
 metadata:
   name: azure-service-principal-cert
@@ -441,7 +441,7 @@ data:
 
 ```yaml
 ---
-apiVersion: source.toolkit.fluxcd.io/v1
+apiVersion: source.werf.io/v1
 kind: Bucket
 metadata:
   name: azure-managed-identity
@@ -468,7 +468,7 @@ data:
 
 ```yaml
 ---
-apiVersion: source.toolkit.fluxcd.io/v1
+apiVersion: source.werf.io/v1
 kind: Bucket
 metadata:
   name: azure-shared-key
@@ -559,7 +559,7 @@ Deployment and ServiceAccount, then you don't need to reference a Secret. For mo
 please see [documentation](https://azure.github.io/azure-workload-identity/docs/quick-start.html).
 
 ```yaml
-apiVersion: source.toolkit.fluxcd.io/v1
+apiVersion: source.werf.io/v1
 kind: Bucket
 metadata:
   name: azure-bucket
@@ -579,7 +579,7 @@ be enabled.
 
 ```yaml
 ---
-apiVersion: source.toolkit.fluxcd.io/v1
+apiVersion: source.werf.io/v1
 kind: Bucket
 metadata:
   name: azure-object-level-workload-identity
@@ -606,7 +606,7 @@ metadata:
 
 ```yaml
 ---
-apiVersion: source.toolkit.fluxcd.io/v1
+apiVersion: source.werf.io/v1
 kind: Bucket
 metadata:
   name: azure-sas-token
@@ -660,7 +660,7 @@ For detailed setup instructions, see: https://fluxcd.io/flux/integrations/gcp/#f
 
 ```yaml
 ---
-apiVersion: source.toolkit.fluxcd.io/v1
+apiVersion: source.werf.io/v1
 kind: Bucket
 metadata:
   name: gcp-controller-level-workload-identity
@@ -682,7 +682,7 @@ be enabled.
 
 ```yaml
 ---
-apiVersion: source.toolkit.fluxcd.io/v1
+apiVersion: source.werf.io/v1
 kind: Bucket
 metadata:
   name: gcp-object-level-workload-identity
@@ -709,7 +709,7 @@ metadata:
 
 ```yaml
 ---
-apiVersion: source.toolkit.fluxcd.io/v1
+apiVersion: source.werf.io/v1
 kind: Bucket
 metadata:
   name: gcp-secret
@@ -814,7 +814,7 @@ Example for the `ldap` provider:
 
 ```yaml
 ---
-apiVersion: source.toolkit.fluxcd.io/v1
+apiVersion: source.werf.io/v1
 kind: Bucket
 metadata:
   name: example
@@ -904,7 +904,7 @@ Example usage:
 
 ```yaml
 ---
-apiVersion: source.toolkit.fluxcd.io/v1
+apiVersion: source.werf.io/v1
 kind: Bucket
 metadata:
   name: example
@@ -1062,7 +1062,7 @@ file exclusions.
 
 ```yaml
 ---
-apiVersion: source.toolkit.fluxcd.io/v1
+apiVersion: source.werf.io/v1
 kind: Bucket
 metadata:
   name: <bucket-name>
@@ -1119,7 +1119,7 @@ In your YAML declaration:
 
 ```yaml
 ---
-apiVersion: source.toolkit.fluxcd.io/v1
+apiVersion: source.werf.io/v1
 kind: Bucket
 metadata:
   name: <bucket-name>
@@ -1150,7 +1150,7 @@ In your YAML declaration, comment out (or remove) the field:
 
 ```yaml
 ---
-apiVersion: source.toolkit.fluxcd.io/v1
+apiVersion: source.werf.io/v1
 kind: Bucket
 metadata:
   name: <bucket-name>
@@ -1255,7 +1255,7 @@ The Artifact file is a gzip compressed TAR archive
 
 ```yaml
 ---
-apiVersion: source.toolkit.fluxcd.io/v1
+apiVersion: source.werf.io/v1
 kind: Bucket
 metadata:
   name: <bucket-name>

@@ -39,8 +39,8 @@ import (
 	oauth "oras.land/oras-go/v2/registry/remote/auth"
 	retryhttp "oras.land/oras-go/v2/registry/remote/retry"
 
-	"github.com/fluxcd/source-controller/internal/helm/common"
-	"github.com/fluxcd/source-controller/internal/oci"
+	"github.com/werf/nelm-source-controller/internal/helm/common"
+	"github.com/werf/nelm-source-controller/internal/oci"
 )
 
 // name of the trustpolicy file defined in the Secret containing
