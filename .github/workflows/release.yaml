@@ -1,66 +1,66 @@
-name: release
-on:
-  push:
-    tags:
-      - 'v*'
-  workflow_dispatch:
-    inputs:
-      tag:
-        description: 'image tag prefix'
-        default: 'rc'
-        required: true
-jobs:
-  release:
-    permissions:
-      contents: write # for creating the GitHub release.
-      id-token: write # for creating OIDC tokens for signing.
-      packages: write # for pushing and signing container images.
-    uses: fluxcd/gha-workflows/.github/workflows/controller-release.yaml@v0.4.0
-    with:
-      controller: ${{ github.event.repository.name }}
-      release-candidate-prefix: ${{ github.event.inputs.tag }}
-    secrets:
-      github-token: ${{ secrets.GITHUB_TOKEN }}
-      dockerhub-token: ${{ secrets.DOCKER_FLUXCD_PASSWORD }}
-  release-provenance:
-    needs: [release]
-    permissions:
-      actions: read # for detecting the Github Actions environment.
-      id-token: write # for creating OIDC tokens for signing.
-      contents: write # for uploading attestations to GitHub releases.
-    if: startsWith(github.ref, 'refs/tags/v')
-    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.1.0
-    with:
-      provenance-name: "provenance.intoto.jsonl"
-      base64-subjects: "${{ needs.release.outputs.release-digests }}"
-      upload-assets: true
-  dockerhub-provenance:
-    needs: [release]
-    permissions:
-      contents: read # for reading the repository code.
-      actions: read # for detecting the Github Actions environment.
-      id-token: write # for creating OIDC tokens for signing.
-      packages: write # for uploading attestations.
-    if: startsWith(github.ref, 'refs/tags/v')
-    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_container_slsa3.yml@v2.1.0
-    with:
-      image: ${{ needs.release.outputs.image-name }}
-      digest: ${{ needs.release.outputs.image-digest }}
-      registry-username: ${{ github.repository_owner == 'fluxcd' && 'fluxcdbot' || github.repository_owner }}
-    secrets:
-      registry-password: ${{ secrets.DOCKER_FLUXCD_PASSWORD }}
-  ghcr-provenance:
-    needs: [release]
-    permissions:
-      contents: read # for reading the repository code.
-      actions: read # for detecting the Github Actions environment.
-      id-token: write # for creating OIDC tokens for signing.
-      packages: write # for uploading attestations.
-    if: startsWith(github.ref, 'refs/tags/v')
-    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_container_slsa3.yml@v2.1.0
-    with:
-      image: ghcr.io/${{ needs.release.outputs.image-name }}
-      digest: ${{ needs.release.outputs.image-digest }}
-      registry-username: fluxcdbot # not necessary for ghcr.io
-    secrets:
-      registry-password: ${{ secrets.GITHUB_TOKEN }}
+#name: release
+#on:
+#  push:
+#    tags:
+#      - 'v*'
+#  workflow_dispatch:
+#    inputs:
+#      tag:
+#        description: 'image tag prefix'
+#        default: 'rc'
+#        required: true
+#jobs:
+#  release:
+#    permissions:
+#      contents: write # for creating the GitHub release.
+#      id-token: write # for creating OIDC tokens for signing.
+#      packages: write # for pushing and signing container images.
+#    uses: fluxcd/gha-workflows/.github/workflows/controller-release.yaml@v0.4.0
+#    with:
+#      controller: ${{ github.event.repository.name }}
+#      release-candidate-prefix: ${{ github.event.inputs.tag }}
+#    secrets:
+#      github-token: ${{ secrets.GITHUB_TOKEN }}
+#      dockerhub-token: ${{ secrets.DOCKER_FLUXCD_PASSWORD }}
+#  release-provenance:
+#    needs: [release]
+#    permissions:
+#      actions: read # for detecting the Github Actions environment.
+#      id-token: write # for creating OIDC tokens for signing.
+#      contents: write # for uploading attestations to GitHub releases.
+#    if: startsWith(github.ref, 'refs/tags/v')
+#    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.1.0
+#    with:
+#      provenance-name: "provenance.intoto.jsonl"
+#      base64-subjects: "${{ needs.release.outputs.release-digests }}"
+#      upload-assets: true
+#  dockerhub-provenance:
+#    needs: [release]
+#    permissions:
+#      contents: read # for reading the repository code.
+#      actions: read # for detecting the Github Actions environment.
+#      id-token: write # for creating OIDC tokens for signing.
+#      packages: write # for uploading attestations.
+#    if: startsWith(github.ref, 'refs/tags/v')
+#    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_container_slsa3.yml@v2.1.0
+#    with:
+#      image: ${{ needs.release.outputs.image-name }}
+#      digest: ${{ needs.release.outputs.image-digest }}
+#      registry-username: ${{ github.repository_owner == 'fluxcd' && 'fluxcdbot' || github.repository_owner }}
+#    secrets:
+#      registry-password: ${{ secrets.DOCKER_FLUXCD_PASSWORD }}
+#  ghcr-provenance:
+#    needs: [release]
+#    permissions:
+#      contents: read # for reading the repository code.
+#      actions: read # for detecting the Github Actions environment.
+#      id-token: write # for creating OIDC tokens for signing.
+#      packages: write # for uploading attestations.
+#    if: startsWith(github.ref, 'refs/tags/v')
+#    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_container_slsa3.yml@v2.1.0
+#    with:
+#      image: ghcr.io/${{ needs.release.outputs.image-name }}
+#      digest: ${{ needs.release.outputs.image-digest }}
+#      registry-username: fluxcdbot # not necessary for ghcr.io
+#    secrets:
+#      registry-password: ${{ secrets.GITHUB_TOKEN }}

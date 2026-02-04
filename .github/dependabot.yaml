@@ -1,40 +1,40 @@
-version: 2
-
-updates:
-  - package-ecosystem: "gomod"
-    directory: "/"
-    labels: ["dependencies"]
-    schedule:
-      interval: "monthly"
-    groups:
-      go-deps:
-        patterns:
-          - "*"
-    allow:
-      - dependency-type: "direct"
-    ignore:
-      # Cloud SDK are updated manually
-      - dependency-name: "cloud.google.com/*"
-      - dependency-name: "github.com/Azure/azure-sdk-for-go/*"
-      # Kubernetes deps are updated by fluxcd/pkg/runtime
-      - dependency-name: "k8s.io/*"
-      - dependency-name: "sigs.k8s.io/*"
-      - dependency-name: "github.com/go-logr/*"
-      # OCI deps are updated by fluxcd/pkg/oci
-      - dependency-name: "github.com/docker/*"
-      - dependency-name: "github.com/distribution/*"
-      - dependency-name: "github.com/google/go-containerregistry*"
-      - dependency-name: "github.com/opencontainers/*"
-      # Helm deps are updated by fluxcd/pkg/helmtestserver
-      - dependency-name: "helm.sh/helm/*"
-      # Flux APIs are updated at release time
-      - dependency-name: "github.com/fluxcd/source-controller/api"
-  - package-ecosystem: "github-actions"
-    directory: "/"
-    labels: ["area/ci", "dependencies"]
-    groups:
-      ci:
-        patterns:
-          - "*"
-    schedule:
-      interval: "monthly"
+#version: 2
+#
+#updates:
+#  - package-ecosystem: "gomod"
+#    directory: "/"
+#    labels: ["dependencies"]
+#    schedule:
+#      interval: "monthly"
+#    groups:
+#      go-deps:
+#        patterns:
+#          - "*"
+#    allow:
+#      - dependency-type: "direct"
+#    ignore:
+#      # Cloud SDK are updated manually
+#      - dependency-name: "cloud.google.com/*"
+#      - dependency-name: "github.com/Azure/azure-sdk-for-go/*"
+#      # Kubernetes deps are updated by fluxcd/pkg/runtime
+#      - dependency-name: "k8s.io/*"
+#      - dependency-name: "sigs.k8s.io/*"
+#      - dependency-name: "github.com/go-logr/*"
+#      # OCI deps are updated by fluxcd/pkg/oci
+#      - dependency-name: "github.com/docker/*"
+#      - dependency-name: "github.com/distribution/*"
+#      - dependency-name: "github.com/google/go-containerregistry*"
+#      - dependency-name: "github.com/opencontainers/*"
+#      # Helm deps are updated by fluxcd/pkg/helmtestserver
+#      - dependency-name: "helm.sh/helm/*"
+#      # Flux APIs are updated at release time
+#      - dependency-name: "github.com/fluxcd/source-controller/api"
+#  - package-ecosystem: "github-actions"
+#    directory: "/"
+#    labels: ["area/ci", "dependencies"]
+#    groups:
+#      ci:
+#        patterns:
+#          - "*"
+#    schedule:
+#      interval: "monthly"
