@@ -50,8 +50,8 @@ import (
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/artifact/storage"
 	"github.com/fluxcd/pkg/auth"
+	"github.com/fluxcd/pkg/auth/githubapp"
 	"github.com/fluxcd/pkg/git"
-	"github.com/fluxcd/pkg/git/github"
 	"github.com/fluxcd/pkg/gittestserver"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	conditionscheck "github.com/fluxcd/pkg/runtime/conditions/check"
@@ -542,9 +542,9 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 			secret: &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{Name: "gh-app-no-ca"},
 				Data: map[string][]byte{
-					github.KeyAppID:             []byte("123"),
-					github.KeyAppInstallationID: []byte("456"),
-					github.KeyAppPrivateKey:     sshtestdata.PEMBytes["rsa"],
+					githubapp.KeyAppID:             []byte("123"),
+					githubapp.KeyAppInstallationID: []byte("456"),
+					githubapp.KeyAppPrivateKey:     sshtestdata.PEMBytes["rsa"],
 				},
 			},
 			beforeFunc: func(obj *sourcev1.GitRepository) {
@@ -554,7 +554,7 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 				conditions.MarkUnknown(obj, meta.ReadyCondition, meta.ProgressingWithRetryReason, "foo")
 			},
 			secretFunc: func(secret *corev1.Secret, baseURL string) {
-				secret.Data[github.KeyAppBaseURL] = []byte(baseURL + "/api/v3")
+				secret.Data[githubapp.KeyAppBaseURL] = []byte(baseURL + "/api/v3")
 			},
 			wantErr: true,
 			assertConditions: []metav1.Condition{
@@ -571,15 +571,15 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 				publicKey:  tlsPublicKey,
 				privateKey: tlsPrivateKey,
 				ca:         tlsCA,
-				username:   github.AccessTokenUsername,
+				username:   githubapp.AccessTokenUsername,
 				password:   "some-enterprise-token",
 			},
 			secret: &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{Name: "gh-app-ca"},
 				Data: map[string][]byte{
-					github.KeyAppID:             []byte("123"),
-					github.KeyAppInstallationID: []byte("456"),
-					github.KeyAppPrivateKey:     sshtestdata.PEMBytes["rsa"],
+					githubapp.KeyAppID:             []byte("123"),
+					githubapp.KeyAppInstallationID: []byte("456"),
+					githubapp.KeyAppPrivateKey:     sshtestdata.PEMBytes["rsa"],
 				},
 			},
 			beforeFunc: func(obj *sourcev1.GitRepository) {
@@ -587,14 +587,14 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 				obj.Spec.SecretRef = &meta.LocalObjectReference{Name: "gh-app-ca"}
 			},
 			secretFunc: func(secret *corev1.Secret, baseURL string) {
-				secret.Data[github.KeyAppBaseURL] = []byte(baseURL + "/api/v3")
+				secret.Data[githubapp.KeyAppBaseURL] = []byte(baseURL + "/api/v3")
 				secret.Data["ca.crt"] = tlsCA
 			},
 			middlewareFunc: func(handler http.Handler) http.Handler {
 				return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					if strings.HasPrefix(r.URL.Path, "/api/v3/app/installations/") {
 						w.WriteHeader(http.StatusOK)
-						tok := &github.AppToken{
+						tok := &githubapp.AppToken{
 							Token:     "some-enterprise-token",
 							ExpiresAt: time.Now().Add(time.Hour),
 						}
@@ -740,7 +740,7 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 					Name: "github-app-secret",
 				},
 				Data: map[string][]byte{
-					github.KeyAppID: []byte("1111"),
+					githubapp.KeyAppID: []byte("1111"),
 				},
 			},
 			beforeFunc: func(obj *sourcev1.GitRepository) {
@@ -945,9 +945,9 @@ func TestGitRepositoryReconciler_getAuthOpts_provider(t *testing.T) {
 					Name: "githubAppSecret",
 				},
 				Data: map[string][]byte{
-					github.KeyAppID:             []byte("123"),
-					github.KeyAppInstallationID: []byte("456"),
-					github.KeyAppPrivateKey:     []byte("abc"),
+					githubapp.KeyAppID:             []byte("123"),
+					githubapp.KeyAppInstallationID: []byte("456"),
+					githubapp.KeyAppPrivateKey:     []byte("abc"),
 				},
 			},
 			beforeFunc: func(obj *sourcev1.GitRepository) {
@@ -966,7 +966,7 @@ func TestGitRepositoryReconciler_getAuthOpts_provider(t *testing.T) {
 					Name: "githubAppSecret",
 				},
 				Data: map[string][]byte{
-					github.KeyAppID: []byte("123"),
+					githubapp.KeyAppID: []byte("123"),
 				},
 			},
 			beforeFunc: func(obj *sourcev1.GitRepository) {

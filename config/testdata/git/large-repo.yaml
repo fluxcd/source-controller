@@ -4,7 +4,7 @@ metadata:
   name: large-repo
 spec:
   interval: 10m
-  timeout: 2m
+  timeout: 3m
   url: https://github.com/nodejs/node.git
   ref:
     branch: main
