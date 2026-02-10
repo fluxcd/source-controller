@@ -28,8 +28,8 @@ import (
 
 	securejoin "github.com/cyphar/filepath-securejoin"
 	"github.com/fluxcd/pkg/auth"
+	"github.com/fluxcd/pkg/auth/githubapp"
 	authutils "github.com/fluxcd/pkg/auth/utils"
-	"github.com/fluxcd/pkg/git/github"
 	"github.com/fluxcd/pkg/runtime/logger"
 	"github.com/fluxcd/pkg/runtime/secrets"
 	"github.com/go-git/go-git/v5/plumbing/transport"
@@ -713,24 +713,24 @@ func (r *GitRepositoryReconciler) getAuthOpts(ctx context.Context, obj *sourcev1
 			return nil, e
 		}
 		getCreds = func() (*authutils.GitCredentials, error) {
-			var appOpts []github.OptFunc
+			var appOpts []githubapp.OptFunc
 
-			appOpts = append(appOpts, github.WithAppData(authMethods.GitHubAppData))
+			appOpts = append(appOpts, githubapp.WithAppData(authMethods.GitHubAppData))
 
 			if proxyURL != nil {
-				appOpts = append(appOpts, github.WithProxyURL(proxyURL))
+				appOpts = append(appOpts, githubapp.WithProxyURL(proxyURL))
 			}
 
 			if r.TokenCache != nil {
-				appOpts = append(appOpts, github.WithCache(r.TokenCache, sourcev1.GitRepositoryKind,
+				appOpts = append(appOpts, githubapp.WithCache(r.TokenCache, sourcev1.GitRepositoryKind,
 					obj.GetName(), obj.GetNamespace(), cache.OperationReconcile))
 			}
 
 			if authMethods.HasTLS() {
-				appOpts = append(appOpts, github.WithTLSConfig(authMethods.TLS))
+				appOpts = append(appOpts, githubapp.WithTLSConfig(authMethods.TLS))
 			}
 
-			username, password, err := github.GetCredentials(ctx, appOpts...)
+			username, password, err := githubapp.GetCredentials(ctx, appOpts...)
 			if err != nil {
 				return nil, err
 			}
@@ -741,7 +741,7 @@ func (r *GitRepositoryReconciler) getAuthOpts(ctx context.Context, obj *sourcev1
 		}
 	default:
 		// analyze secret, if it has github app data, perhaps provider should have been github.
-		if appID := authData[github.KeyAppID]; len(appID) != 0 {
+		if appID := authData[githubapp.KeyAppID]; len(appID) != 0 {
 			e := serror.NewGeneric(
 				fmt.Errorf("secretRef '%s/%s' has github app data but provider is not set to github", obj.GetNamespace(), obj.Spec.SecretRef.Name),
 				sourcev1.InvalidProviderConfigurationReason,
