@@ -198,12 +198,7 @@ func (in *HelmRepository) GetArtifact() *meta.Artifact {
 // +genclient
 // +kubebuilder:object:root=true
 // +kubebuilder:resource:shortName=helmrepo
-// +kubebuilder:subresource:status
-// +kubebuilder:deprecatedversion:warning="v1beta2 HelmRepository is deprecated, upgrade to v1"
-// +kubebuilder:printcolumn:name="URL",type=string,JSONPath=`.spec.url`
-// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description=""
-// +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type==\"Ready\")].status",description=""
-// +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.conditions[?(@.type==\"Ready\")].message",description=""
+// +kubebuilder:skipversion
 
 // HelmRepository is the Schema for the helmrepositories API.
 type HelmRepository struct {

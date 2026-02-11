@@ -217,15 +217,7 @@ func (in *HelmChart) GetValuesFiles() []string {
 // +genclient
 // +kubebuilder:object:root=true
 // +kubebuilder:resource:shortName=hc
-// +kubebuilder:subresource:status
-// +kubebuilder:deprecatedversion:warning="v1beta2 HelmChart is deprecated, upgrade to v1"
-// +kubebuilder:printcolumn:name="Chart",type=string,JSONPath=`.spec.chart`
-// +kubebuilder:printcolumn:name="Version",type=string,JSONPath=`.spec.version`
-// +kubebuilder:printcolumn:name="Source Kind",type=string,JSONPath=`.spec.sourceRef.kind`
-// +kubebuilder:printcolumn:name="Source Name",type=string,JSONPath=`.spec.sourceRef.name`
-// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description=""
-// +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type==\"Ready\")].status",description=""
-// +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.conditions[?(@.type==\"Ready\")].message",description=""
+// +kubebuilder:skipversion
 
 // HelmChart is the Schema for the helmcharts API.
 type HelmChart struct {
