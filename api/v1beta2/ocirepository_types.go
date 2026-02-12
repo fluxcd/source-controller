@@ -285,12 +285,7 @@ func (in *OCIRepository) GetLayerOperation() string {
 // +genclient
 // +kubebuilder:object:root=true
 // +kubebuilder:resource:shortName=ocirepo
-// +kubebuilder:subresource:status
-// +kubebuilder:deprecatedversion:warning="v1beta2 OCIRepository is deprecated, upgrade to v1"
-// +kubebuilder:printcolumn:name="URL",type=string,JSONPath=`.spec.url`
-// +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type==\"Ready\")].status",description=""
-// +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.conditions[?(@.type==\"Ready\")].message",description=""
-// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description=""
+// +kubebuilder:skipversion
 
 // OCIRepository is the Schema for the ocirepositories API
 type OCIRepository struct {
