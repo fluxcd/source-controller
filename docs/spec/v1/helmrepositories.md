@@ -153,8 +153,9 @@ A HelmRepository also needs a
 
 Possible values are `default` for a Helm HTTP/S repository, or `oci` for an OCI Helm repository.
 
-**Note:**: For improved support for OCI Helm charts, please use the
-[`OCIRepository`](ocirepositories.md) API.
+**Note:**: The `oci` type is in maintenance mode. For improved support for
+OCI Helm charts, please use the [`OCIRepository`](ocirepositories.md) API.
+For more information, see [#5696](https://github.com/fluxcd/flux2/issues/5696).
 
 ### Provider
 
