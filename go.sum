@@ -371,8 +371,8 @@ github.com/fluxcd/pkg/apis/meta v1.25.0 h1:fmZgMoe7yITGfhFqdOs7w2GOu3Y/2Vvz4+4p/
 github.com/fluxcd/pkg/apis/meta v1.25.0/go.mod h1:1D92RqAet0/n/cH5S0khBXweirHWkw9rCO0V4NCY6xc=
 github.com/fluxcd/pkg/artifact v0.8.0 h1:9PI+jGvgZzObYQeC6Myg4j2dctAD42C0kjxvfbvdufk=
 github.com/fluxcd/pkg/artifact v0.8.0/go.mod h1:p3QugDJKttgI0XYI6M0Rb8pHs9Qfldh1BgVwn7GcTAU=
-github.com/fluxcd/pkg/auth v0.38.0 h1:9sslEwJp2lGZKQyXU5X/AEMil8eXkApQz8AQXZM0rf0=
-github.com/fluxcd/pkg/auth v0.38.0/go.mod h1:038UyC92mnW1mzZ/A2fHJQUpuhPkJzw39ppChuOdYfI=
+github.com/fluxcd/pkg/auth v0.38.2 h1:AjB64oZO1Er3fxJUw1hRbN6J+2Cf0HWgZIOBE5xUtn8=
+github.com/fluxcd/pkg/auth v0.38.2/go.mod h1:038UyC92mnW1mzZ/A2fHJQUpuhPkJzw39ppChuOdYfI=
 github.com/fluxcd/pkg/cache v0.13.0 h1:MqtlgOwIVcGKKgV422e39O+KFSVMWuExKeRaMDBjJlk=
 github.com/fluxcd/pkg/cache v0.13.0/go.mod h1:0xRZ1hitrIFQ6pl68ke2wZLbIqA2VLzY78HpDo9DVxs=
 github.com/fluxcd/pkg/git v0.43.0 h1:11LKsTHw+yx3rcGSrSbkURcdc4huUv3FxQZhHIAMofc=
