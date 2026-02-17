@@ -2,6 +2,63 @@
 
 All notable changes to this project are documented in this file.
 
+## 1.8.0
+
+**Release date:** 2026-02-17
+
+This minor release comes with Helm v4 support, cosign v3 verification,
+and various improvements.
+
+⚠️ The `v1beta2` APIs were removed. Before upgrading the CRDs, Flux users
+must run [`flux migrate`](https://github.com/fluxcd/flux2/pull/5473) to
+migrate the cluster storage off `v1beta2`.
+
+### HelmChart
+
+The HelmChart controller now uses Helm v4. The `HelmRepository` type `oci`
+has been moved to maintenance mode, users should migrate to `OCIRepository`.
+
+CRD validation for `v1` has been aligned with `v1beta2` so that invalid
+specs are rejected at admission time.
+
+### OCIRepository
+
+The OCIRepository controller now supports verifying artifacts signed with
+both cosign v2 and cosign v3.
+
+### GitRepository
+
+The `github` provider now supports looking up the GitHub App installation ID
+automatically, removing the need to configure it manually.
+
+### General updates
+
+In addition, the Kubernetes dependencies have been updated to v1.35.0 and
+the controller is now built with Go 1.26.
+
+Improvements:
+- Upgrade Helm to v4
+  [#1953](https://github.com/fluxcd/source-controller/pull/1953)
+  [#1958](https://github.com/fluxcd/source-controller/pull/1958)
+  [#1980](https://github.com/fluxcd/source-controller/pull/1980)
+- Discover cosign v3 NewBundleFormat for verification
+  [#1961](https://github.com/fluxcd/source-controller/pull/1961)
+- Introduce support for looking up GH app installation ID
+  [#1963](https://github.com/fluxcd/source-controller/pull/1963)
+- Remove deprecated APIs in group `source.toolkit.fluxcd.io/v1beta2`
+  [#1983](https://github.com/fluxcd/source-controller/pull/1983)
+- Docs: Move `HelmRepository` type `oci` to maintenance mode
+  [#1985](https://github.com/fluxcd/source-controller/pull/1985)
+- sourcev1: align CRD validation with v1beta2
+  [#1944](https://github.com/fluxcd/source-controller/pull/1944)
+- Various dependency updates
+  [#1967](https://github.com/fluxcd/source-controller/pull/1967)
+  [#1972](https://github.com/fluxcd/source-controller/pull/1972)
+  [#1981](https://github.com/fluxcd/source-controller/pull/1981)
+  [#1984](https://github.com/fluxcd/source-controller/pull/1984)
+  [#1986](https://github.com/fluxcd/source-controller/pull/1986)
+  [#1987](https://github.com/fluxcd/source-controller/pull/1987)
+
 ## 1.7.4
 
 **Release date:** 2025-11-19
