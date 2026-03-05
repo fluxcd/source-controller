@@ -105,8 +105,8 @@ type LocalHelmChartSourceReference struct {
 	APIVersion string `json:"apiVersion,omitempty"`
 
 	// Kind of the referent, valid values are ('HelmRepository', 'GitRepository',
-	// 'Bucket').
-	// +kubebuilder:validation:Enum=HelmRepository;GitRepository;Bucket
+	// 'Bucket', 'ExternalArtifact').
+	// +kubebuilder:validation:Enum=HelmRepository;GitRepository;Bucket;ExternalArtifact
 	// +required
 	Kind string `json:"kind"`
 

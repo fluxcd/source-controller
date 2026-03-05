@@ -201,6 +201,11 @@ func (r *HelmChartReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Man
 			handler.EnqueueRequestsFromMapFunc(r.requestsForBucketChange),
 			builder.WithPredicates(SourceRevisionChangePredicate{}),
 		).
+		Watches(
+			&sourcev1.ExternalArtifact{},
+			handler.EnqueueRequestsFromMapFunc(r.requestsForExternalArtifactChange),
+			builder.WithPredicates(SourceRevisionChangePredicate{}),
+		).
 		WithOptions(controller.Options{
 			RateLimiter: opts.RateLimiter,
 		}).
@@ -507,6 +512,8 @@ func (r *HelmChartReconciler) reconcileSource(ctx context.Context, sp *patch.Ser
 	case *sourcev1.HelmRepository:
 		return r.buildFromHelmRepository(ctx, obj, typedSource, build)
 	case *sourcev1.GitRepository, *sourcev1.Bucket:
+		return r.buildFromTarballArtifact(ctx, obj, *typedSource.GetArtifact(), build)
+	case *sourcev1.ExternalArtifact:
 		return r.buildFromTarballArtifact(ctx, obj, *typedSource.GetArtifact(), build)
 	default:
 		// Ending up here should generally not be possible
@@ -931,9 +938,15 @@ func (r *HelmChartReconciler) getSource(ctx context.Context, obj *sourcev1.HelmC
 			return nil, err
 		}
 		s = &bucket
+	case sourcev1.ExternalArtifactKind:
+		var ea sourcev1.ExternalArtifact
+		if err := r.Client.Get(ctx, namespacedName, &ea); err != nil {
+			return nil, err
+		}
+		s = &ea
 	default:
 		return nil, fmt.Errorf("unsupported source kind '%s', must be one of: %v", obj.Spec.SourceRef.Kind, []string{
-			sourcev1.HelmRepositoryKind, sourcev1.GitRepositoryKind, sourcev1.BucketKind})
+			sourcev1.HelmRepositoryKind, sourcev1.GitRepositoryKind, sourcev1.BucketKind, sourcev1.ExternalArtifactKind})
 	}
 	return s, nil
 }
@@ -1196,6 +1209,36 @@ func (r *HelmChartReconciler) requestsForBucketChange(ctx context.Context, o cli
 	var reqs []reconcile.Request
 	for i, v := range list.Items {
 		if !bucket.GetArtifact().HasRevision(v.Status.ObservedSourceArtifactRevision) {
+			reqs = append(reqs, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(&list.Items[i])})
+		}
+	}
+	return reqs
+}
+
+func (r *HelmChartReconciler) requestsForExternalArtifactChange(ctx context.Context, o client.Object) []reconcile.Request {
+	ea, ok := o.(*sourcev1.ExternalArtifact)
+	if !ok {
+		ctrl.LoggerFrom(ctx).Error(fmt.Errorf("expected an ExternalArtifact, got %T", o),
+			"failed to get reconcile requests for ExternalArtifact change")
+		return nil
+	}
+
+	// If we do not have an artifact, we have no requests to make
+	if ea.GetArtifact() == nil {
+		return nil
+	}
+
+	var list sourcev1.HelmChartList
+	if err := r.List(ctx, &list, client.MatchingFields{
+		indexKeyHelmChartSource: fmt.Sprintf("%s/%s", sourcev1.ExternalArtifactKind, ea.Name),
+	}); err != nil {
+		ctrl.LoggerFrom(ctx).Error(err, "failed to list HelmCharts for ExternalArtifact change")
+		return nil
+	}
+
+	var reqs []reconcile.Request
+	for i, v := range list.Items {
+		if !ea.GetArtifact().HasRevision(v.Status.ObservedSourceArtifactRevision) {
 			reqs = append(reqs, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(&list.Items[i])})
 		}
 	}
