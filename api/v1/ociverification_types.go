@@ -38,6 +38,13 @@ type OCIRepositoryVerification struct {
 	// specified matchers match against the identity.
 	// +optional
 	MatchOIDCIdentity []OIDCIdentityMatch `json:"matchOIDCIdentity,omitempty"`
+
+	// TrustedRootSecretRef specifies the Kubernetes Secret containing a
+	// Sigstore trusted_root.json file. This enables verification against
+	// self-hosted Sigstore infrastructure (custom Fulcio CA, self-hosted
+	// Rekor instance). The Secret must contain a key named "trusted_root.json".
+	// +optional
+	TrustedRootSecretRef *meta.LocalObjectReference `json:"trustedRootSecretRef,omitempty"`
 }
 
 // OIDCIdentityMatch specifies options for verifying the certificate identity,

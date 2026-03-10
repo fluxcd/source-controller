@@ -641,11 +641,64 @@ spec:
         subject: "^https://github.com/stefanprodan/podinfo.*$"
 ```
 
-The controller verifies the signatures using the Fulcio root CA and the Rekor
-instance hosted at [rekor.sigstore.dev](https://rekor.sigstore.dev/).
+By default, the controller verifies the signatures using the Fulcio root CA and
+the Rekor instance hosted at [rekor.sigstore.dev](https://rekor.sigstore.dev/).
 
-Note that keyless verification is an **experimental feature**, using
-custom root CAs or self-hosted Rekor instances are not currently supported.
+##### Custom Sigstore infrastructure (self-hosted Rekor / Fulcio)
+
+To verify artifacts signed with a self-hosted Sigstore deployment, provide a
+Sigstore `trusted_root.json` via the `.spec.verify.trustedRootSecretRef` field.
+The trusted root bundles the Fulcio root CA chain, Rekor public key and URL,
+CT log keys, and optionally TSA certificates. The Rekor URL is extracted
+automatically from the `baseUrl` field in the transparency log entries.
+
+The `trusted_root.json` file follows the
+[Sigstore trusted root format](https://github.com/sigstore/protobuf-specs).
+
+Generate the file using `cosign trusted-root create`:
+
+```sh
+cosign trusted-root create \
+  --fulcio="url=https://fulcio.example.com,certificate-chain=/path/to/fulcio-chain.pem" \
+  --rekor="url=https://rekor.example.com,public-key=/path/to/rekor.pub,start-time=2024-01-01T00:00:00Z" \
+  --ctfe="url=https://ctfe.example.com,public-key=/path/to/ctfe.pub,start-time=2024-01-01T00:00:00Z" \
+  --out trusted_root.json
+```
+
+The `--tsa` flag can also be used if a custom timestamp authority is deployed:
+
+```sh
+cosign trusted-root create \
+  --tsa="url=https://tsa.example.com/api/v1/timestamp,certificate-chain=/path/to/tsa-chain.pem" \
+  ...
+```
+
+Create the Kubernetes Secret from the generated file:
+
+```sh
+kubectl create secret generic sigstore-trusted-root \
+  --from-file=trusted_root.json=./trusted_root.json \
+  -n <namespace>
+```
+
+Reference it in the OCIRepository:
+
+```yaml
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: OCIRepository
+metadata:
+  name: podinfo
+spec:
+  interval: 5m
+  url: oci://registry.example.com/manifests/podinfo
+  verify:
+    provider: cosign
+    trustedRootSecretRef:
+      name: sigstore-trusted-root
+    matchOIDCIdentity:
+      - issuer: "^https://oidc-issuer.example.com$"
+        subject: "^https://ci.example.com/.*$"
+```
 
 #### Notation
 
