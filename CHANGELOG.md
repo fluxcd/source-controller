@@ -2,6 +2,20 @@
 
 All notable changes to this project are documented in this file.
 
+## 1.8.1
+
+**Release date:** 2026-03-12
+
+This patch release fixes Azure Container Registry authentication by using the
+ACR-specific auth scope instead of the generic registry scope.
+
+Improvements:
+- Remove no longer needed workaround for Flux 2.8
+  [#1993](https://github.com/fluxcd/source-controller/pull/1993)
+- Update fluxcd/pkg dependencies
+  [#2001](https://github.com/fluxcd/source-controller/pull/2001)
+  [#2005](https://github.com/fluxcd/source-controller/pull/2005)
+
 ## 1.8.0
 
 **Release date:** 2026-02-17
