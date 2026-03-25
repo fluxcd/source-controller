@@ -333,7 +333,11 @@ func (c *BlobClient) FGetObject(ctx context.Context, bucketName, objectName, loc
 // If the underlying client or the visit callback returns an error,
 // it returns early.
 func (c *BlobClient) VisitObjects(ctx context.Context, bucketName string, prefix string, visit func(path, etag string) error) error {
-	items := c.NewListBlobsFlatPager(bucketName, nil)
+	opts := &azblob.ListBlobsFlatOptions{}
+	if prefix != "" {
+		opts.Prefix = &prefix
+	}
+	items := c.NewListBlobsFlatPager(bucketName, opts)
 	for items.More() {
 		resp, err := items.NextPage(ctx)
 		if err != nil {
