@@ -28,7 +28,6 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
-	"k8s.io/client-go/tools/record"
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	ctrlcache "sigs.k8s.io/controller-runtime/pkg/cache"
@@ -195,7 +194,12 @@ func main() {
 
 	metrics := helper.NewMetrics(mgr, metrics.MustMakeRecorder(), sourcev1.SourceFinalizer)
 	cacheRecorder := cache.MustMakeMetrics()
-	eventRecorder := mustSetupEventRecorder(mgr, eventsAddr, controllerName)
+
+	eventRecorder, err := events.NewRecorder(mgr, ctrl.Log, eventsAddr, controllerName)
+	if err != nil {
+		setupLog.Error(err, "unable to create event recorder")
+		os.Exit(1)
+	}
 
 	algo, err := artdigest.AlgorithmForName(artifactOptions.ArtifactDigestAlgo)
 	if err != nil {
@@ -326,15 +330,6 @@ func main() {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
 	}
-}
-
-func mustSetupEventRecorder(mgr ctrl.Manager, eventsAddr, controllerName string) record.EventRecorder {
-	eventRecorder, err := events.NewRecorder(mgr, ctrl.Log, eventsAddr, controllerName)
-	if err != nil {
-		setupLog.Error(err, "unable to create event recorder")
-		os.Exit(1)
-	}
-	return eventRecorder
 }
 
 func mustSetupManager(metricsAddr, healthAddr string, maxConcurrent int,

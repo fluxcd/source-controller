@@ -43,7 +43,6 @@ import (
 	helmreg "helm.sh/helm/v4/pkg/registry"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/kubernetes/scheme"
-	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/yaml"
@@ -52,6 +51,7 @@ import (
 	"github.com/fluxcd/pkg/artifact/digest"
 	"github.com/fluxcd/pkg/artifact/storage"
 	"github.com/fluxcd/pkg/runtime/controller"
+	"github.com/fluxcd/pkg/runtime/events"
 	"github.com/fluxcd/pkg/runtime/metrics"
 	"github.com/fluxcd/pkg/runtime/testenv"
 	"github.com/fluxcd/pkg/testserver"
@@ -322,7 +322,7 @@ func TestMain(m *testing.M) {
 
 	if err := (&GitRepositoryReconciler{
 		Client:        testEnv,
-		EventRecorder: record.NewFakeRecorder(32),
+		EventRecorder: events.NewFakeRecorder(32, false),
 		Metrics:       testMetricsH,
 		Storage:       testStorage,
 	}).SetupWithManager(testEnv, GitRepositoryReconcilerOptions{
@@ -333,7 +333,7 @@ func TestMain(m *testing.M) {
 
 	if err := (&BucketReconciler{
 		Client:        testEnv,
-		EventRecorder: record.NewFakeRecorder(32),
+		EventRecorder: events.NewFakeRecorder(32, false),
 		Metrics:       testMetricsH,
 		Storage:       testStorage,
 	}).SetupWithManager(testEnv, BucketReconcilerOptions{
@@ -347,7 +347,7 @@ func TestMain(m *testing.M) {
 
 	if err := (&OCIRepositoryReconciler{
 		Client:        testEnv,
-		EventRecorder: record.NewFakeRecorder(32),
+		EventRecorder: events.NewFakeRecorder(32, false),
 		Metrics:       testMetricsH,
 		Storage:       testStorage,
 	}).SetupWithManager(testEnv, OCIRepositoryReconcilerOptions{
@@ -358,7 +358,7 @@ func TestMain(m *testing.M) {
 
 	if err := (&HelmRepositoryReconciler{
 		Client:        testEnv,
-		EventRecorder: record.NewFakeRecorder(32),
+		EventRecorder: events.NewFakeRecorder(32, false),
 		Metrics:       testMetricsH,
 		Getters:       testGetters,
 		Storage:       testStorage,
@@ -373,7 +373,7 @@ func TestMain(m *testing.M) {
 
 	if err := (&HelmChartReconciler{
 		Client:        testEnv,
-		EventRecorder: record.NewFakeRecorder(32),
+		EventRecorder: events.NewFakeRecorder(32, false),
 		Metrics:       testMetricsH,
 		Getters:       testGetters,
 		Storage:       testStorage,
