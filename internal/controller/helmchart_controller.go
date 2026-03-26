@@ -38,9 +38,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apierrs "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	kuberecorder "k8s.io/client-go/tools/record"
 	"k8s.io/client-go/util/workqueue"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -51,12 +49,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	eventv1 "github.com/fluxcd/pkg/apis/event/v1beta1"
+	eventv1 "github.com/fluxcd/pkg/apis/event/v1"
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/artifact/storage"
 	"github.com/fluxcd/pkg/git"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	helper "github.com/fluxcd/pkg/runtime/controller"
+	"github.com/fluxcd/pkg/runtime/events"
 	"github.com/fluxcd/pkg/runtime/jitter"
 	"github.com/fluxcd/pkg/runtime/patch"
 	"github.com/fluxcd/pkg/runtime/predicates"
@@ -128,7 +127,7 @@ var helmChartFailConditions = []string{
 // HelmChartReconciler reconciles a HelmChart object
 type HelmChartReconciler struct {
 	client.Client
-	kuberecorder.EventRecorder
+	events.EventRecorder
 	helper.Metrics
 
 	Storage               *storage.Storage
@@ -348,13 +347,13 @@ func (r *HelmChartReconciler) notify(ctx context.Context, oldObj, newObj *source
 
 		// Notify on new artifact and failure recovery.
 		if !oldObj.GetArtifact().HasDigest(newObj.GetArtifact().Digest) {
-			r.AnnotatedEventf(newObj, annotations, corev1.EventTypeNormal,
-				reasonForBuild(build), "%s", build.Summary())
+			r.AnnotatedEventf(newObj, nil, annotations, corev1.EventTypeNormal,
+				reasonForBuild(build), eventv1.ActionApplied, "%s", build.Summary())
 			ctrl.LoggerFrom(ctx).Info(build.Summary())
 		} else {
 			if sreconcile.FailureRecovery(oldObj, newObj, helmChartFailConditions) {
-				r.AnnotatedEventf(newObj, annotations, corev1.EventTypeNormal,
-					reasonForBuild(build), "%s", build.Summary())
+				r.AnnotatedEventf(newObj, nil, annotations, corev1.EventTypeNormal,
+					reasonForBuild(build), eventv1.ActionApplied, "%s", build.Summary())
 				ctrl.LoggerFrom(ctx).Info(build.Summary())
 			}
 		}
@@ -388,7 +387,7 @@ func (r *HelmChartReconciler) reconcileStorage(ctx context.Context, sp *patch.Se
 		// matches the actual artifact
 		if !artifactMissing {
 			if err := r.Storage.VerifyArtifact(*artifact); err != nil {
-				r.Eventf(obj, corev1.EventTypeWarning, "ArtifactVerificationFailed", "failed to verify integrity of artifact: %s", err.Error())
+				r.Eventf(obj, nil, corev1.EventTypeWarning, "ArtifactVerificationFailed", eventv1.ActionFailed, "failed to verify integrity of artifact: %s", err.Error())
 
 				if err = r.Storage.Remove(*artifact); err != nil {
 					return sreconcile.ResultEmpty, fmt.Errorf("failed to remove artifact after digest mismatch: %w", err)
@@ -460,7 +459,7 @@ func (r *HelmChartReconciler) reconcileSource(ctx context.Context, sp *patch.Ser
 		if helmRepo, ok := s.(*sourcev1.HelmRepository); !ok || helmRepo.Spec.Type != sourcev1.HelmRepositoryTypeOCI {
 			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, "NoSourceArtifact",
 				"no artifact available for %s source '%s'", obj.Spec.SourceRef.Kind, obj.Spec.SourceRef.Name)
-			r.eventLogf(ctx, obj, eventv1.EventTypeTrace, "NoSourceArtifact",
+			sreconcile.EventLogf(ctx, r, obj, eventv1.EventTypeTrace, "NoSourceArtifact",
 				"no artifact available for %s source '%s'", obj.Spec.SourceRef.Kind, obj.Spec.SourceRef.Name)
 			return sreconcile.ResultRequeue, nil
 		}
@@ -482,7 +481,7 @@ func (r *HelmChartReconciler) reconcileSource(ctx context.Context, sp *patch.Ser
 		// a sudden (partial) disappearance of observed state.
 		// TODO(hidde): include specific name/version information?
 		if depNum := build.ResolvedDependencies; build.Complete() && depNum > 0 {
-			r.Eventf(obj, eventv1.EventTypeTrace, "ResolvedDependencies", "resolved %d chart dependencies", depNum)
+			r.Eventf(obj, nil, eventv1.EventTypeTrace, "ResolvedDependencies", eventv1.ActionReconciled, "resolved %d chart dependencies", depNum)
 		}
 
 		// Handle any build error
@@ -623,7 +622,7 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 					// If we succeed in loading the index, cache it.
 					if httpChartRepo.Index != nil {
 						if err = r.Cache.Set(repo.GetArtifact().Path, httpChartRepo.Index, r.TTL); err != nil {
-							r.eventLogf(ctx, obj, eventv1.EventTypeTrace, sourcev1.CacheOperationFailedReason, "failed to cache index: %s", err)
+							sreconcile.EventLogf(ctx, r, obj, eventv1.EventTypeTrace, sourcev1.CacheOperationFailedReason, "failed to cache index: %s", err)
 						}
 					}
 				}()
@@ -752,7 +751,7 @@ func (r *HelmChartReconciler) buildFromTarballArtifact(ctx context.Context, obj 
 	defer func() {
 		err := dm.Clear()
 		if err != nil {
-			r.eventLogf(ctx, obj, corev1.EventTypeWarning, meta.FailedReason,
+			sreconcile.EventLogf(ctx, r, obj, corev1.EventTypeWarning, meta.FailedReason,
 				"dependency manager cleanup error: %s", err)
 		}
 	}()
@@ -845,7 +844,7 @@ func (r *HelmChartReconciler) reconcileArtifact(ctx context.Context, _ *patch.Se
 
 	// Return early if the build path equals the current artifact path
 	if curArtifact := obj.GetArtifact(); curArtifact != nil && r.Storage.LocalPath(*curArtifact) == b.Path {
-		r.eventLogf(ctx, obj, eventv1.EventTypeTrace, sourcev1.ArtifactUpToDateReason, "artifact up-to-date with remote revision: '%s'", artifact.Revision)
+		sreconcile.EventLogf(ctx, r, obj, eventv1.EventTypeTrace, sourcev1.ArtifactUpToDateReason, "artifact up-to-date with remote revision: '%s'", artifact.Revision)
 		return sreconcile.ResultSuccess, nil
 	}
 
@@ -894,7 +893,7 @@ func (r *HelmChartReconciler) reconcileArtifact(ctx context.Context, _ *patch.Se
 	// Update symlink on a "best effort" basis
 	symURL, err := r.Storage.Symlink(artifact, "latest.tar.gz")
 	if err != nil {
-		r.eventLogf(ctx, obj, eventv1.EventTypeTrace, sourcev1.SymlinkUpdateFailedReason,
+		sreconcile.EventLogf(ctx, r, obj, eventv1.EventTypeTrace, sourcev1.SymlinkUpdateFailedReason,
 			"failed to update status URL symlink: %s", err)
 	}
 	if symURL != "" {
@@ -968,7 +967,7 @@ func (r *HelmChartReconciler) garbageCollect(ctx context.Context, obj *sourcev1.
 				"GarbageCollectionFailed",
 			)
 		} else if deleted != "" {
-			r.eventLogf(ctx, obj, eventv1.EventTypeTrace, "GarbageCollectionSucceeded",
+			sreconcile.EventLogf(ctx, r, obj, eventv1.EventTypeTrace, "GarbageCollectionSucceeded",
 				"garbage collected artifacts for deleted resource")
 		}
 		obj.Status.Artifact = nil
@@ -983,7 +982,7 @@ func (r *HelmChartReconciler) garbageCollect(ctx context.Context, obj *sourcev1.
 			)
 		}
 		if len(delFiles) > 0 {
-			r.eventLogf(ctx, obj, eventv1.EventTypeTrace, "GarbageCollectionSucceeded",
+			sreconcile.EventLogf(ctx, r, obj, eventv1.EventTypeTrace, "GarbageCollectionSucceeded",
 				"garbage collected %d artifacts", len(delFiles))
 			return nil
 		}
@@ -1200,22 +1199,6 @@ func (r *HelmChartReconciler) requestsForBucketChange(ctx context.Context, o cli
 		}
 	}
 	return reqs
-}
-
-// eventLogf records events, and logs at the same time.
-//
-// This log is different from the debug log in the EventRecorder, in the sense
-// that this is a simple log. While the debug log contains complete details
-// about the event.
-func (r *HelmChartReconciler) eventLogf(ctx context.Context, obj runtime.Object, eventType string, reason string, messageFmt string, args ...interface{}) {
-	msg := fmt.Sprintf(messageFmt, args...)
-	// Log and emit event.
-	if eventType == corev1.EventTypeWarning {
-		ctrl.LoggerFrom(ctx).Error(errors.New(reason), msg)
-	} else {
-		ctrl.LoggerFrom(ctx).Info(msg)
-	}
-	r.Eventf(obj, eventType, reason, "%s", msg)
 }
 
 // observeChartBuild records the observation on the given given build and error on the object.
