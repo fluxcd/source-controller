@@ -30,19 +30,22 @@ import (
 
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
+	eventsv1 "k8s.io/api/events/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	fakeclient "sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	kstatus "github.com/fluxcd/cli-utils/pkg/kstatus/status"
+
+	eventv1 "github.com/fluxcd/pkg/apis/event/v1"
 	"github.com/fluxcd/pkg/apis/meta"
 	intdigest "github.com/fluxcd/pkg/artifact/digest"
 	"github.com/fluxcd/pkg/artifact/storage"
 	"github.com/fluxcd/pkg/auth"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	conditionscheck "github.com/fluxcd/pkg/runtime/conditions/check"
+	"github.com/fluxcd/pkg/runtime/events"
 	"github.com/fluxcd/pkg/runtime/jitter"
 	"github.com/fluxcd/pkg/runtime/patch"
 
@@ -84,9 +87,9 @@ func TestBucketReconciler_deleteBeforeFinalizer(t *testing.T) {
 	g.Expect(k8sClient.Delete(ctx, bucket)).NotTo(HaveOccurred())
 
 	r := &BucketReconciler{
-		Client:        k8sClient,
-		EventRecorder: record.NewFakeRecorder(32),
-		Storage:       testStorage,
+		Client:   k8sClient,
+		Recorder: events.NewFakeRecorder(32, false),
+		Storage:  testStorage,
 	}
 	// NOTE: Only a real API server responds with an error in this scenario.
 	_, err := r.Reconcile(ctx, ctrl.Request{NamespacedName: client.ObjectKeyFromObject(bucket)})
@@ -383,9 +386,9 @@ func TestBucketReconciler_reconcileStorage(t *testing.T) {
 					WithScheme(testEnv.GetScheme()).
 					WithStatusSubresource(&sourcev1.Bucket{}).
 					Build(),
-				EventRecorder: record.NewFakeRecorder(32),
-				Storage:       testStorage,
-				patchOptions:  getPatchOptions(bucketReadyCondition.Owned, "sc"),
+				Recorder:     events.NewFakeRecorder(32, false),
+				Storage:      testStorage,
+				patchOptions: getPatchOptions(bucketReadyCondition.Owned, "sc"),
 			}
 
 			obj := &sourcev1.Bucket{
@@ -918,10 +921,10 @@ func TestBucketReconciler_reconcileSource_generic(t *testing.T) {
 			}
 
 			r := &BucketReconciler{
-				EventRecorder: record.NewFakeRecorder(32),
-				Client:        clientBuilder.Build(),
-				Storage:       testStorage,
-				patchOptions:  getPatchOptions(bucketReadyCondition.Owned, "sc"),
+				Recorder:     events.NewFakeRecorder(32, false),
+				Client:       clientBuilder.Build(),
+				Storage:      testStorage,
+				patchOptions: getPatchOptions(bucketReadyCondition.Owned, "sc"),
 			}
 			tmpDir := t.TempDir()
 
@@ -1437,10 +1440,10 @@ func TestBucketReconciler_reconcileSource_gcs(t *testing.T) {
 			}
 
 			r := &BucketReconciler{
-				EventRecorder: record.NewFakeRecorder(32),
-				Client:        clientBuilder.Build(),
-				Storage:       testStorage,
-				patchOptions:  getPatchOptions(bucketReadyCondition.Owned, "sc"),
+				Recorder:     events.NewFakeRecorder(32, false),
+				Client:       clientBuilder.Build(),
+				Storage:      testStorage,
+				patchOptions: getPatchOptions(bucketReadyCondition.Owned, "sc"),
 			}
 
 			// Handle ObjectLevelWorkloadIdentity feature gate
@@ -1640,10 +1643,10 @@ func TestBucketReconciler_reconcileArtifact(t *testing.T) {
 				WithStatusSubresource(&sourcev1.Bucket{})
 
 			r := &BucketReconciler{
-				Client:        clientBuilder.Build(),
-				EventRecorder: record.NewFakeRecorder(32),
-				Storage:       testStorage,
-				patchOptions:  getPatchOptions(bucketReadyCondition.Owned, "sc"),
+				Client:       clientBuilder.Build(),
+				Recorder:     events.NewFakeRecorder(32, false),
+				Storage:      testStorage,
+				patchOptions: getPatchOptions(bucketReadyCondition.Owned, "sc"),
 			}
 
 			obj := &sourcev1.Bucket{
@@ -1764,7 +1767,7 @@ func TestBucketReconciler_statusConditions(t *testing.T) {
 			}
 
 			ctx := context.TODO()
-			summarizeHelper := summarize.NewHelper(record.NewFakeRecorder(32), serialPatcher)
+			summarizeHelper := summarize.NewHelper(events.NewFakeRecorder(32, false), serialPatcher)
 			summarizeOpts := []summarize.Option{
 				summarize.WithConditions(bucketReadyCondition),
 				summarize.WithReconcileResult(sreconcile.ResultSuccess),
@@ -1791,7 +1794,7 @@ func TestBucketReconciler_notify(t *testing.T) {
 		resErr           error
 		oldObjBeforeFunc func(obj *sourcev1.Bucket)
 		newObjBeforeFunc func(obj *sourcev1.Bucket)
-		wantEvent        string
+		wantEvent        *eventsv1.Event
 	}{
 		{
 			name:   "error - no event",
@@ -1805,7 +1808,12 @@ func TestBucketReconciler_notify(t *testing.T) {
 			newObjBeforeFunc: func(obj *sourcev1.Bucket) {
 				obj.Status.Artifact = &meta.Artifact{Revision: "xxx", Digest: "yyy"}
 			},
-			wantEvent: "Normal NewArtifact stored artifact with 2 fetched files from",
+			wantEvent: &eventsv1.Event{
+				Type:   "Normal",
+				Reason: "NewArtifact",
+				Action: eventv1.ActionApplied,
+				Note:   "stored artifact with 2 fetched files from",
+			},
 		},
 		{
 			name:   "recovery from failure",
@@ -1820,7 +1828,12 @@ func TestBucketReconciler_notify(t *testing.T) {
 				obj.Status.Artifact = &meta.Artifact{Revision: "xxx", Digest: "yyy"}
 				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "ready")
 			},
-			wantEvent: "Normal Succeeded stored artifact with 2 fetched files from",
+			wantEvent: &eventsv1.Event{
+				Type:   "Normal",
+				Reason: "Succeeded",
+				Action: eventv1.ActionReconciled,
+				Note:   "stored artifact with 2 fetched files from",
+			},
 		},
 		{
 			name:   "recovery and new artifact",
@@ -1835,7 +1848,12 @@ func TestBucketReconciler_notify(t *testing.T) {
 				obj.Status.Artifact = &meta.Artifact{Revision: "aaa", Digest: "bbb"}
 				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "ready")
 			},
-			wantEvent: "Normal NewArtifact stored artifact with 2 fetched files from",
+			wantEvent: &eventsv1.Event{
+				Type:   "Normal",
+				Reason: "NewArtifact",
+				Action: eventv1.ActionApplied,
+				Note:   "stored artifact with 2 fetched files from",
+			},
 		},
 		{
 			name:   "no updates",
@@ -1856,7 +1874,7 @@ func TestBucketReconciler_notify(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
 
-			recorder := record.NewFakeRecorder(32)
+			recorder := events.NewFakeRecorder(32, false)
 
 			oldObj := &sourcev1.Bucket{
 				Spec: sourcev1.BucketSpec{
@@ -1873,8 +1891,8 @@ func TestBucketReconciler_notify(t *testing.T) {
 			}
 
 			reconciler := &BucketReconciler{
-				EventRecorder: recorder,
-				patchOptions:  getPatchOptions(bucketReadyCondition.Owned, "sc"),
+				Recorder:     recorder,
+				patchOptions: getPatchOptions(bucketReadyCondition.Owned, "sc"),
 			}
 			index := index.NewDigester(index.WithIndex(map[string]string{
 				"zzz": "qqq",
@@ -1884,12 +1902,15 @@ func TestBucketReconciler_notify(t *testing.T) {
 
 			select {
 			case x, ok := <-recorder.Events:
-				g.Expect(ok).To(Equal(tt.wantEvent != ""), "unexpected event received")
-				if tt.wantEvent != "" {
-					g.Expect(x).To(ContainSubstring(tt.wantEvent))
+				g.Expect(ok).To(Equal(tt.wantEvent != nil), "unexpected event received")
+				if tt.wantEvent != nil {
+					g.Expect(x.Type).To(Equal(tt.wantEvent.Type))
+					g.Expect(x.Reason).To(Equal(tt.wantEvent.Reason))
+					g.Expect(x.Action).To(Equal(tt.wantEvent.Action))
+					g.Expect(x.Note).To(ContainSubstring(tt.wantEvent.Note))
 				}
 			default:
-				if tt.wantEvent != "" {
+				if tt.wantEvent != nil {
 					t.Errorf("expected some event to be emitted")
 				}
 			}
