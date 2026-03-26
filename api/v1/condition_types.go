@@ -75,6 +75,10 @@ const (
 	// check failed.
 	VerificationError string = "VerificationError"
 
+	// ArtifactVerificationFailedReason signals that the integrity verification
+	// of an Artifact in storage failed.
+	ArtifactVerificationFailedReason string = "ArtifactVerificationFailed"
+
 	// DirCreationFailedReason signals a failure caused by a directory creation
 	// operation.
 	DirCreationFailedReason string = "DirectoryCreationFailed"
@@ -101,6 +105,18 @@ const (
 	// ArtifactUpToDateReason signals that an existing Artifact is up-to-date
 	// with the Source.
 	ArtifactUpToDateReason string = "ArtifactUpToDate"
+
+	// NewArtifactReason signals that a new Artifact has been stored for the
+	// Source.
+	NewArtifactReason string = "NewArtifact"
+
+	// NoSourceArtifactReason signals that the referenced Source does not yet
+	// have an Artifact available.
+	NoSourceArtifactReason string = "NoSourceArtifact"
+
+	// GarbageCollectionSucceededReason signals that garbage collection of
+	// stale artifacts from storage succeeded.
+	GarbageCollectionSucceededReason string = "GarbageCollectionSucceeded"
 
 	// CacheOperationFailedReason signals a failure in cache operation.
 	CacheOperationFailedReason string = "CacheOperationFailed"
