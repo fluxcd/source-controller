@@ -1,0 +1,10 @@
+name: upgrade-fluxcd-pkg
+
+on:
+  workflow_dispatch:
+
+jobs:
+  upgrade-fluxcd-pkg:
+    uses: fluxcd/gha-workflows/.github/workflows/upgrade-fluxcd-pkg.yaml@v0.9.0
+    secrets:
+      github-token: ${{ secrets.BOT_GITHUB_TOKEN }}
