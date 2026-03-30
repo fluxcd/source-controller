@@ -40,8 +40,8 @@ require (
 	github.com/fluxcd/pkg/testserver v0.13.0
 	github.com/fluxcd/pkg/version v0.14.0
 	github.com/fluxcd/source-controller/api v1.8.0
-	github.com/go-git/go-billy/v5 v5.7.0
-	github.com/go-git/go-git/v5 v5.16.5
+	github.com/go-git/go-billy/v5 v5.8.0
+	github.com/go-git/go-git/v5 v5.17.1
 	github.com/go-logr/logr v1.4.3
 	github.com/google/go-containerregistry v0.20.7
 	github.com/google/go-containerregistry/pkg/authn/k8schain v0.0.0-20260205022027-93aa2732266a
