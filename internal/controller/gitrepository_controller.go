@@ -33,6 +33,7 @@ import (
 	"github.com/fluxcd/pkg/runtime/logger"
 	"github.com/fluxcd/pkg/runtime/secrets"
 	"github.com/go-git/go-git/v5/plumbing/transport"
+	ssh "golang.org/x/crypto/ssh"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -649,6 +650,21 @@ func (r *GitRepositoryReconciler) getAuthOpts(ctx context.Context, obj *sourcev1
 		)
 		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
 		return nil, e
+	}
+
+	// Check if SSH identity key is encrypted but no password was provided.
+	if opts.Transport == git.SSH && len(opts.Identity) > 0 && opts.Password == "" {
+		_, err := ssh.ParseRawPrivateKey(opts.Identity)
+		var missingErr *ssh.PassphraseMissingError
+		if errors.As(err, &missingErr) {
+			e := serror.NewGeneric(
+				fmt.Errorf("SSH identity key is encrypted but no 'password' field was provided in the secret '%s/%s'",
+					obj.GetNamespace(), obj.Spec.SecretRef.Name),
+				sourcev1.AuthenticationFailedReason,
+			)
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
+			return nil, e
+		}
 	}
 
 	// Configure provider authentication if specified.
