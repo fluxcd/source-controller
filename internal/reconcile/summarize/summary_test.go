@@ -26,7 +26,6 @@ import (
 	. "github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	fakeclient "sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -34,6 +33,7 @@ import (
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	conditionscheck "github.com/fluxcd/pkg/runtime/conditions/check"
+	"github.com/fluxcd/pkg/runtime/events"
 	"github.com/fluxcd/pkg/runtime/patch"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
@@ -351,7 +351,7 @@ func TestSummarizeAndPatch(t *testing.T) {
 
 			serialPatcher := patch.NewSerialPatcher(obj, c)
 
-			summaryHelper := NewHelper(record.NewFakeRecorder(32), serialPatcher)
+			summaryHelper := NewHelper(events.NewFakeRecorder(32, false), serialPatcher)
 			summaryOpts := []Option{
 				WithReconcileResult(tt.result),
 				WithReconcileError(tt.reconcileErr),
@@ -479,7 +479,7 @@ func TestSummarizeAndPatch_Intermediate(t *testing.T) {
 			g.Expect(c.Create(ctx, obj)).To(Succeed())
 			serialPatcher := patch.NewSerialPatcher(obj, c)
 
-			summaryHelper := NewHelper(record.NewFakeRecorder(32), serialPatcher)
+			summaryHelper := NewHelper(events.NewFakeRecorder(32, false), serialPatcher)
 			summaryOpts := []Option{
 				WithConditions(tt.conditions...),
 				WithResultBuilder(reconcile.AlwaysRequeueResultBuilder{RequeueAfter: interval}),

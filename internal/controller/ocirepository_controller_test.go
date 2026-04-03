@@ -48,9 +48,9 @@ import (
 	"github.com/sigstore/cosign/v3/cmd/cosign/cli/sign"
 	"github.com/sigstore/cosign/v3/pkg/cosign"
 	corev1 "k8s.io/api/core/v1"
+	eventsv1 "k8s.io/api/events/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/tools/record"
 	"k8s.io/utils/ptr"
 	oras "oras.land/oras-go/v2/registry/remote"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -59,6 +59,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	kstatus "github.com/fluxcd/cli-utils/pkg/kstatus/status"
+	eventv1 "github.com/fluxcd/pkg/apis/event/v1"
 	"github.com/fluxcd/pkg/apis/meta"
 	intdigest "github.com/fluxcd/pkg/artifact/digest"
 	"github.com/fluxcd/pkg/artifact/storage"
@@ -67,6 +68,7 @@ import (
 	"github.com/fluxcd/pkg/oci"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	conditionscheck "github.com/fluxcd/pkg/runtime/conditions/check"
+	"github.com/fluxcd/pkg/runtime/events"
 	"github.com/fluxcd/pkg/runtime/patch"
 	"github.com/fluxcd/pkg/tar"
 
@@ -109,7 +111,7 @@ func TestOCIRepositoryReconciler_deleteBeforeFinalizer(t *testing.T) {
 
 	r := &OCIRepositoryReconciler{
 		Client:                k8sClient,
-		EventRecorder:         record.NewFakeRecorder(32),
+		EventRecorder:         events.NewFakeRecorder(32, false),
 		Storage:               testStorage,
 		CosignVerifierFactory: testCosignVerifierFactory,
 	}
@@ -805,7 +807,7 @@ func TestOCIRepository_reconcileSource_authStrategy(t *testing.T) {
 
 			r := &OCIRepositoryReconciler{
 				Client:                clientBuilder.Build(),
-				EventRecorder:         record.NewFakeRecorder(32),
+				EventRecorder:         events.NewFakeRecorder(32, false),
 				Storage:               testStorage,
 				CosignVerifierFactory: testCosignVerifierFactory,
 				patchOptions:          getPatchOptions(ociRepositoryReadyCondition.Owned, "sc"),
@@ -1265,7 +1267,7 @@ func TestOCIRepository_reconcileSource_remoteReference(t *testing.T) {
 
 	r := &OCIRepositoryReconciler{
 		Client:                clientBuilder.Build(),
-		EventRecorder:         record.NewFakeRecorder(32),
+		EventRecorder:         events.NewFakeRecorder(32, false),
 		Storage:               testStorage,
 		CosignVerifierFactory: testCosignVerifierFactory,
 		patchOptions:          getPatchOptions(ociRepositoryReadyCondition.Owned, "sc"),
@@ -1468,7 +1470,7 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignatureNotation(t *testi
 
 	r := &OCIRepositoryReconciler{
 		Client:                clientBuilder.Build(),
-		EventRecorder:         record.NewFakeRecorder(32),
+		EventRecorder:         events.NewFakeRecorder(32, false),
 		Storage:               testStorage,
 		CosignVerifierFactory: testCosignVerifierFactory,
 		patchOptions:          getPatchOptions(ociRepositoryReadyCondition.Owned, "sc"),
@@ -1832,7 +1834,7 @@ func TestOCIRepository_reconcileSource_verifyOCISourceTrustPolicyNotation(t *tes
 
 	r := &OCIRepositoryReconciler{
 		Client:                clientBuilder.Build(),
-		EventRecorder:         record.NewFakeRecorder(32),
+		EventRecorder:         events.NewFakeRecorder(32, false),
 		Storage:               testStorage,
 		CosignVerifierFactory: testCosignVerifierFactory,
 		patchOptions:          getPatchOptions(ociRepositoryReadyCondition.Owned, "sc"),
@@ -2129,7 +2131,7 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignatureCosign(t *testing
 
 	r := &OCIRepositoryReconciler{
 		Client:                clientBuilder.Build(),
-		EventRecorder:         record.NewFakeRecorder(32),
+		EventRecorder:         events.NewFakeRecorder(32, false),
 		Storage:               testStorage,
 		CosignVerifierFactory: testCosignVerifierFactory,
 		patchOptions:          getPatchOptions(ociRepositoryReadyCondition.Owned, "sc"),
@@ -2396,7 +2398,7 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignature_keyless(t *testi
 
 	r := &OCIRepositoryReconciler{
 		Client:                clientBuilder.Build(),
-		EventRecorder:         record.NewFakeRecorder(32),
+		EventRecorder:         events.NewFakeRecorder(32, false),
 		Storage:               testStorage,
 		CosignVerifierFactory: testCosignVerifierFactory,
 		patchOptions:          getPatchOptions(ociRepositoryReadyCondition.Owned, "sc"),
@@ -2582,7 +2584,7 @@ func TestOCIRepository_reconcileSource_noop(t *testing.T) {
 
 	r := &OCIRepositoryReconciler{
 		Client:        clientBuilder.Build(),
-		EventRecorder: record.NewFakeRecorder(32),
+		EventRecorder: events.NewFakeRecorder(32, false),
 		Storage:       testStorage,
 		patchOptions:  getPatchOptions(ociRepositoryReadyCondition.Owned, "sc"),
 	}
@@ -2814,7 +2816,7 @@ func TestOCIRepository_reconcileArtifact(t *testing.T) {
 
 	r := &OCIRepositoryReconciler{
 		Client:        clientBuilder.Build(),
-		EventRecorder: record.NewFakeRecorder(32),
+		EventRecorder: events.NewFakeRecorder(32, false),
 		Storage:       testStorage,
 		patchOptions:  getPatchOptions(ociRepositoryReadyCondition.Owned, "sc"),
 	}
@@ -2962,7 +2964,7 @@ func TestOCIRepository_getArtifactRef(t *testing.T) {
 
 	r := &OCIRepositoryReconciler{
 		Client:        clientBuilder.Build(),
-		EventRecorder: record.NewFakeRecorder(32),
+		EventRecorder: events.NewFakeRecorder(32, false),
 		Storage:       testStorage,
 		patchOptions:  getPatchOptions(ociRepositoryReadyCondition.Owned, "sc"),
 	}
@@ -3293,7 +3295,7 @@ func TestOCIRepository_reconcileStorage(t *testing.T) {
 
 	r := &OCIRepositoryReconciler{
 		Client:        clientBuilder.Build(),
-		EventRecorder: record.NewFakeRecorder(32),
+		EventRecorder: events.NewFakeRecorder(32, false),
 		Storage:       testStorage,
 		patchOptions:  getPatchOptions(ociRepositoryReadyCondition.Owned, "sc"),
 	}
@@ -3356,7 +3358,7 @@ func TestOCIRepository_ReconcileDelete(t *testing.T) {
 	g := NewWithT(t)
 
 	r := &OCIRepositoryReconciler{
-		EventRecorder:         record.NewFakeRecorder(32),
+		EventRecorder:         events.NewFakeRecorder(32, false),
 		Storage:               testStorage,
 		CosignVerifierFactory: testCosignVerifierFactory,
 		patchOptions:          getPatchOptions(ociRepositoryReadyCondition.Owned, "sc"),
@@ -3395,7 +3397,7 @@ func TestOCIRepositoryReconciler_notify(t *testing.T) {
 		oldObjBeforeFunc func(obj *sourcev1.OCIRepository)
 		newObjBeforeFunc func(obj *sourcev1.OCIRepository)
 		commit           git.Commit
-		wantEvent        string
+		wantEvent        *eventsv1.Event
 	}{
 		{
 			name:   "error - no event",
@@ -3417,7 +3419,12 @@ func TestOCIRepositoryReconciler_notify(t *testing.T) {
 					},
 				}
 			},
-			wantEvent: "Normal NewArtifact stored artifact with revision 'xxx' from 'oci://newurl.io', origin source 'https://github.com/stefanprodan/podinfo', origin revision '6.1.8/b3b00fe35424a45d373bf4c7214178bc36fd7872'",
+			wantEvent: &eventsv1.Event{
+				Type:   "Normal",
+				Reason: "NewArtifact",
+				Action: eventv1.ActionApplied,
+				Note:   "stored artifact with revision 'xxx' from 'oci://newurl.io', origin source 'https://github.com/stefanprodan/podinfo', origin revision '6.1.8/b3b00fe35424a45d373bf4c7214178bc36fd7872'",
+			},
 		},
 		{
 			name:   "recovery from failure",
@@ -3433,7 +3440,12 @@ func TestOCIRepositoryReconciler_notify(t *testing.T) {
 				obj.Status.Artifact = &meta.Artifact{Revision: "xxx", Digest: "yyy"}
 				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "ready")
 			},
-			wantEvent: "Normal Succeeded stored artifact with revision 'xxx' from 'oci://newurl.io'",
+			wantEvent: &eventsv1.Event{
+				Type:   "Normal",
+				Reason: "Succeeded",
+				Action: eventv1.ActionReconciled,
+				Note:   "stored artifact with revision 'xxx' from 'oci://newurl.io'",
+			},
 		},
 		{
 			name:   "recovery and new artifact",
@@ -3449,7 +3461,12 @@ func TestOCIRepositoryReconciler_notify(t *testing.T) {
 				obj.Status.Artifact = &meta.Artifact{Revision: "aaa", Digest: "bbb"}
 				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "ready")
 			},
-			wantEvent: "Normal NewArtifact stored artifact with revision 'aaa' from 'oci://newurl.io'",
+			wantEvent: &eventsv1.Event{
+				Type:   "Normal",
+				Reason: "NewArtifact",
+				Action: eventv1.ActionApplied,
+				Note:   "stored artifact with revision 'aaa' from 'oci://newurl.io'",
+			},
 		},
 		{
 			name:   "no updates",
@@ -3478,7 +3495,7 @@ func TestOCIRepositoryReconciler_notify(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
-			recorder := record.NewFakeRecorder(32)
+			recorder := events.NewFakeRecorder(32, false)
 
 			oldObj := &sourcev1.OCIRepository{}
 			newObj := oldObj.DeepCopy()
@@ -3498,12 +3515,15 @@ func TestOCIRepositoryReconciler_notify(t *testing.T) {
 
 			select {
 			case x, ok := <-recorder.Events:
-				g.Expect(ok).To(Equal(tt.wantEvent != ""), "unexpected event received")
-				if tt.wantEvent != "" {
-					g.Expect(x).To(ContainSubstring(tt.wantEvent))
+				g.Expect(ok).To(Equal(tt.wantEvent != nil), "unexpected event received")
+				if tt.wantEvent != nil {
+					g.Expect(x.Type).To(Equal(tt.wantEvent.Type))
+					g.Expect(x.Reason).To(Equal(tt.wantEvent.Reason))
+					g.Expect(x.Action).To(Equal(tt.wantEvent.Action))
+					g.Expect(x.Note).To(ContainSubstring(tt.wantEvent.Note))
 				}
 			default:
-				if tt.wantEvent != "" {
+				if tt.wantEvent != nil {
 					t.Errorf("expected some event to be emitted")
 				}
 			}
