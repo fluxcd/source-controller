@@ -2,6 +2,22 @@
 
 All notable changes to this project are documented in this file.
 
+## 1.8.2
+
+**Release date:** 2026-04-07
+
+This patch release fixes the Azure Blob prefix option not being passed
+to the storage client, and improves the error message when using encrypted
+SSH keys without a password.
+
+Fixes:
+- Fix azure blob prefix option not passed
+  [#2014](https://github.com/fluxcd/source-controller/pull/2014)
+
+Improvements:
+- Improve error message for encrypted SSH keys without password
+  [#2013](https://github.com/fluxcd/source-controller/pull/2013)
+
 ## 1.8.1
 
 **Release date:** 2026-03-12
