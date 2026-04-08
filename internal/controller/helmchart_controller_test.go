@@ -50,11 +50,11 @@ import (
 	"helm.sh/helm/v4/pkg/chart/v2/loader"
 	helmreg "helm.sh/helm/v4/pkg/registry"
 	corev1 "k8s.io/api/core/v1"
+	eventsv1 "k8s.io/api/events/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/client-go/tools/record"
 	oras "oras.land/oras-go/v2/registry/remote"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -62,11 +62,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	kstatus "github.com/fluxcd/cli-utils/pkg/kstatus/status"
+	eventv1 "github.com/fluxcd/pkg/apis/event/v1"
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/artifact/storage"
 	"github.com/fluxcd/pkg/helmtestserver"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	conditionscheck "github.com/fluxcd/pkg/runtime/conditions/check"
+	"github.com/fluxcd/pkg/runtime/events"
 	"github.com/fluxcd/pkg/runtime/jitter"
 	"github.com/fluxcd/pkg/runtime/patch"
 	"github.com/fluxcd/pkg/testserver"
@@ -112,7 +114,7 @@ func TestHelmChartReconciler_deleteBeforeFinalizer(t *testing.T) {
 
 	r := &HelmChartReconciler{
 		Client:                k8sClient,
-		EventRecorder:         record.NewFakeRecorder(32),
+		EventRecorder:         events.NewFakeRecorder(32, false),
 		Storage:               testStorage,
 		CosignVerifierFactory: testCosignVerifierFactory,
 	}
@@ -520,7 +522,7 @@ func TestHelmChartReconciler_reconcileStorage(t *testing.T) {
 					WithScheme(testEnv.GetScheme()).
 					WithStatusSubresource(&sourcev1.HelmChart{}).
 					Build(),
-				EventRecorder: record.NewFakeRecorder(32),
+				EventRecorder: events.NewFakeRecorder(32, false),
 				Storage:       testStorage,
 				patchOptions:  getPatchOptions(helmChartReadyCondition.Owned, "sc"),
 			}
@@ -794,7 +796,7 @@ func TestHelmChartReconciler_reconcileSource(t *testing.T) {
 
 			r := &HelmChartReconciler{
 				Client:                clientBuilder.Build(),
-				EventRecorder:         record.NewFakeRecorder(32),
+				EventRecorder:         events.NewFakeRecorder(32, false),
 				Storage:               st,
 				CosignVerifierFactory: testCosignVerifierFactory,
 				patchOptions:          getPatchOptions(helmChartReadyCondition.Owned, "sc"),
@@ -1131,7 +1133,7 @@ func TestHelmChartReconciler_buildFromHelmRepository(t *testing.T) {
 
 			r := &HelmChartReconciler{
 				Client:                clientBuilder.Build(),
-				EventRecorder:         record.NewFakeRecorder(32),
+				EventRecorder:         events.NewFakeRecorder(32, false),
 				Getters:               testGetters,
 				Storage:               testStorage,
 				CosignVerifierFactory: testCosignVerifierFactory,
@@ -1384,7 +1386,7 @@ func TestHelmChartReconciler_buildFromOCIHelmRepository(t *testing.T) {
 
 			r := &HelmChartReconciler{
 				Client:                clientBuilder.Build(),
-				EventRecorder:         record.NewFakeRecorder(32),
+				EventRecorder:         events.NewFakeRecorder(32, false),
 				Getters:               testGetters,
 				Storage:               st,
 				CosignVerifierFactory: testCosignVerifierFactory,
@@ -1627,7 +1629,7 @@ func TestHelmChartReconciler_buildFromTarballArtifact(t *testing.T) {
 					WithScheme(testEnv.Scheme()).
 					WithStatusSubresource(&sourcev1.HelmChart{}).
 					Build(),
-				EventRecorder: record.NewFakeRecorder(32),
+				EventRecorder: events.NewFakeRecorder(32, false),
 				Storage:       st,
 				Getters:       testGetters,
 				patchOptions:  getPatchOptions(helmChartReadyCondition.Owned, "sc"),
@@ -1838,7 +1840,7 @@ func TestHelmChartReconciler_reconcileArtifact(t *testing.T) {
 					WithScheme(testEnv.GetScheme()).
 					WithStatusSubresource(&sourcev1.HelmChart{}).
 					Build(),
-				EventRecorder: record.NewFakeRecorder(32),
+				EventRecorder: events.NewFakeRecorder(32, false),
 				Storage:       testStorage,
 				patchOptions:  getPatchOptions(helmChartReadyCondition.Owned, "sc"),
 			}
@@ -2028,7 +2030,7 @@ func TestHelmChartReconciler_reconcileDelete(t *testing.T) {
 	g := NewWithT(t)
 
 	r := &HelmChartReconciler{
-		EventRecorder:         record.NewFakeRecorder(32),
+		EventRecorder:         events.NewFakeRecorder(32, false),
 		Storage:               testStorage,
 		CosignVerifierFactory: testCosignVerifierFactory,
 		patchOptions:          getPatchOptions(helmChartReadyCondition.Owned, "sc"),
@@ -2298,7 +2300,7 @@ func TestHelmChartReconciler_statusConditions(t *testing.T) {
 			}
 
 			ctx := context.TODO()
-			summarizeHelper := summarize.NewHelper(record.NewFakeRecorder(32), serialPatcher)
+			summarizeHelper := summarize.NewHelper(events.NewFakeRecorder(32, false), serialPatcher)
 			summarizeOpts := []summarize.Option{
 				summarize.WithConditions(helmChartReadyCondition),
 				summarize.WithBiPolarityConditionTypes(sourcev1.SourceVerifiedCondition),
@@ -2326,7 +2328,7 @@ func TestHelmChartReconciler_notify(t *testing.T) {
 		resErr           error
 		oldObjBeforeFunc func(obj *sourcev1.HelmChart)
 		newObjBeforeFunc func(obj *sourcev1.HelmChart)
-		wantEvent        string
+		wantEvent        *eventsv1.Event
 	}{
 		{
 			name:   "error - no event",
@@ -2340,7 +2342,12 @@ func TestHelmChartReconciler_notify(t *testing.T) {
 			newObjBeforeFunc: func(obj *sourcev1.HelmChart) {
 				obj.Status.Artifact = &meta.Artifact{Revision: "xxx", Digest: "yyy"}
 			},
-			wantEvent: "Normal ChartPackageSucceeded packaged",
+			wantEvent: &eventsv1.Event{
+				Type:   "Normal",
+				Reason: "ChartPackageSucceeded",
+				Action: eventv1.ActionApplied,
+				Note:   "packaged",
+			},
 		},
 		{
 			name:   "recovery from failure",
@@ -2355,7 +2362,12 @@ func TestHelmChartReconciler_notify(t *testing.T) {
 				obj.Status.Artifact = &meta.Artifact{Revision: "xxx", Digest: "yyy"}
 				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "ready")
 			},
-			wantEvent: "Normal ChartPackageSucceeded packaged",
+			wantEvent: &eventsv1.Event{
+				Type:   "Normal",
+				Reason: "ChartPackageSucceeded",
+				Action: eventv1.ActionApplied,
+				Note:   "packaged",
+			},
 		},
 		{
 			name:   "recovery and new artifact",
@@ -2370,7 +2382,12 @@ func TestHelmChartReconciler_notify(t *testing.T) {
 				obj.Status.Artifact = &meta.Artifact{Revision: "aaa", Digest: "bbb"}
 				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "ready")
 			},
-			wantEvent: "Normal ChartPackageSucceeded packaged",
+			wantEvent: &eventsv1.Event{
+				Type:   "Normal",
+				Reason: "ChartPackageSucceeded",
+				Action: eventv1.ActionApplied,
+				Note:   "packaged",
+			},
 		},
 		{
 			name:   "no updates",
@@ -2390,7 +2407,7 @@ func TestHelmChartReconciler_notify(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
-			recorder := record.NewFakeRecorder(32)
+			recorder := events.NewFakeRecorder(32, false)
 
 			oldObj := &sourcev1.HelmChart{}
 			newObj := oldObj.DeepCopy()
@@ -2416,12 +2433,15 @@ func TestHelmChartReconciler_notify(t *testing.T) {
 
 			select {
 			case x, ok := <-recorder.Events:
-				g.Expect(ok).To(Equal(tt.wantEvent != ""), "unexpected event received")
-				if tt.wantEvent != "" {
-					g.Expect(x).To(ContainSubstring(tt.wantEvent))
+				g.Expect(ok).To(Equal(tt.wantEvent != nil), "unexpected event received")
+				if tt.wantEvent != nil {
+					g.Expect(x.Type).To(Equal(tt.wantEvent.Type))
+					g.Expect(x.Reason).To(Equal(tt.wantEvent.Reason))
+					g.Expect(x.Action).To(Equal(tt.wantEvent.Action))
+					g.Expect(x.Note).To(ContainSubstring(tt.wantEvent.Note))
 				}
 			default:
-				if tt.wantEvent != "" {
+				if tt.wantEvent != nil {
 					t.Errorf("expected some event to be emitted")
 				}
 			}
@@ -2726,7 +2746,7 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_authStrategy(t *testing.T) {
 
 			r := &HelmChartReconciler{
 				Client:        clientBuilder.Build(),
-				EventRecorder: record.NewFakeRecorder(32),
+				EventRecorder: events.NewFakeRecorder(32, false),
 				Getters:       testGetters,
 				patchOptions:  getPatchOptions(helmChartReadyCondition.Owned, "sc"),
 			}
@@ -2885,7 +2905,7 @@ func TestHelmChartRepository_reconcileSource_verifyOCISourceSignature_keyless(t 
 
 			r := &HelmChartReconciler{
 				Client:                clientBuilder.Build(),
-				EventRecorder:         record.NewFakeRecorder(32),
+				EventRecorder:         events.NewFakeRecorder(32, false),
 				Getters:               testGetters,
 				Storage:               testStorage,
 				CosignVerifierFactory: testCosignVerifierFactory,
@@ -3191,7 +3211,7 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_verifySignatureNotation(t *t
 
 			r := &HelmChartReconciler{
 				Client:                clientBuilder.Build(),
-				EventRecorder:         record.NewFakeRecorder(32),
+				EventRecorder:         events.NewFakeRecorder(32, false),
 				Getters:               testGetters,
 				Storage:               testStorage,
 				CosignVerifierFactory: testCosignVerifierFactory,
@@ -3443,7 +3463,7 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_verifySignatureCosign(t *tes
 
 			r := &HelmChartReconciler{
 				Client:                clientBuilder.Build(),
-				EventRecorder:         record.NewFakeRecorder(32),
+				EventRecorder:         events.NewFakeRecorder(32, false),
 				Getters:               testGetters,
 				Storage:               st,
 				CosignVerifierFactory: testCosignVerifierFactory,
