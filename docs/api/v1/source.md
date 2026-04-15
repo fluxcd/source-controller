@@ -407,7 +407,7 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>Provider used for authentication, can be &lsquo;azure&rsquo;, &lsquo;github&rsquo;, &lsquo;generic&rsquo;.
+<p>Provider used for authentication, can be &lsquo;aws&rsquo;, &lsquo;azure&rsquo;, &lsquo;github&rsquo;, &lsquo;generic&rsquo;.
 When not specified, defaults to &lsquo;generic&rsquo;.</p>
 </td>
 </tr>
@@ -421,7 +421,7 @@ string
 <td>
 <em>(Optional)</em>
 <p>ServiceAccountName is the name of the Kubernetes ServiceAccount used to
-authenticate to the GitRepository. This field is only supported for &lsquo;azure&rsquo; provider.</p>
+authenticate to the GitRepository. This field is only supported for &lsquo;azure&rsquo; and &lsquo;aws&rsquo; providers.</p>
 </td>
 </tr>
 <tr>
@@ -2120,7 +2120,7 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>Provider used for authentication, can be &lsquo;azure&rsquo;, &lsquo;github&rsquo;, &lsquo;generic&rsquo;.
+<p>Provider used for authentication, can be &lsquo;aws&rsquo;, &lsquo;azure&rsquo;, &lsquo;github&rsquo;, &lsquo;generic&rsquo;.
 When not specified, defaults to &lsquo;generic&rsquo;.</p>
 </td>
 </tr>
@@ -2134,7 +2134,7 @@ string
 <td>
 <em>(Optional)</em>
 <p>ServiceAccountName is the name of the Kubernetes ServiceAccount used to
-authenticate to the GitRepository. This field is only supported for &lsquo;azure&rsquo; provider.</p>
+authenticate to the GitRepository. This field is only supported for &lsquo;azure&rsquo; and &lsquo;aws&rsquo; providers.</p>
 </td>
 </tr>
 <tr>

@@ -930,6 +930,23 @@ func TestGitRepositoryReconciler_getAuthOpts_provider(t *testing.T) {
 			wantErr: auth.FeatureGateObjectLevelWorkloadIdentity,
 		},
 		{
+			name: "aws provider with non codecommit URL",
+			url:  "https://github.com/org/repo.git",
+			beforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Spec.Provider = sourcev1.GitProviderAWS
+			},
+			wantErr: "failed to create provider access token for the controller",
+		},
+		{
+			name: "aws provider with service account and feature gate for object-level identity disabled",
+			url:  "https://git-codecommit.us-east-1.amazonaws.com/v1/repos/my-repo",
+			beforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Spec.Provider = sourcev1.GitProviderAWS
+				obj.Spec.ServiceAccountName = "aws-sa"
+			},
+			wantErr: auth.FeatureGateObjectLevelWorkloadIdentity,
+		},
+		{
 			name: "github provider with no secret ref",
 			url:  "https://github.com/org/repo.git",
 			beforeFunc: func(obj *sourcev1.GitRepository) {

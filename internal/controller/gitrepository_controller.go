@@ -670,11 +670,13 @@ func (r *GitRepositoryReconciler) getAuthOpts(ctx context.Context, obj *sourcev1
 	// Configure provider authentication if specified.
 	var getCreds func() (*authutils.GitCredentials, error)
 	switch provider := obj.GetProvider(); provider {
-	case sourcev1.GitProviderAzure: // If AWS or GCP are added in the future they can be added here separated by a comma.
+	// If other providers (GCP, etc.) are added in the future they can be added here separated by a comma.
+	case sourcev1.GitProviderAzure, sourcev1.GitProviderAWS:
 		getCreds = func() (*authutils.GitCredentials, error) {
 			opts := []auth.Option{
 				auth.WithClient(r.Client),
 				auth.WithServiceAccountNamespace(obj.GetNamespace()),
+				auth.WithGitURL(u),
 			}
 
 			if obj.Spec.ServiceAccountName != "" {

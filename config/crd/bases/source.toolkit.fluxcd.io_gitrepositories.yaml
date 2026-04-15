@@ -105,10 +105,11 @@ spec:
                 type: string
               provider:
                 description: |-
-                  Provider used for authentication, can be 'azure', 'github', 'generic'.
+                  Provider used for authentication, can be 'aws', 'azure', 'github', 'generic'.
                   When not specified, defaults to 'generic'.
                 enum:
                 - generic
+                - aws
                 - azure
                 - github
                 type: string
@@ -177,7 +178,7 @@ spec:
               serviceAccountName:
                 description: |-
                   ServiceAccountName is the name of the Kubernetes ServiceAccount used to
-                  authenticate to the GitRepository. This field is only supported for 'azure' provider.
+                  authenticate to the GitRepository. This field is only supported for 'azure' and 'aws' providers.
                 type: string
               sparseCheckout:
                 description: |-
@@ -242,8 +243,9 @@ spec:
             type: object
             x-kubernetes-validations:
             - message: serviceAccountName can only be set when provider is 'azure'
-              rule: '!has(self.serviceAccountName) || (has(self.provider) && self.provider
-                == ''azure'')'
+                or 'aws'
+              rule: '!has(self.serviceAccountName) || (has(self.provider) && (self.provider
+                == ''azure'' || self.provider == ''aws''))'
           status:
             default:
               observedGeneration: -1
