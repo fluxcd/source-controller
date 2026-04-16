@@ -24,19 +24,19 @@ require (
 	github.com/fluxcd/cli-utils v0.37.2-flux.1
 	github.com/fluxcd/pkg/apis/event v0.25.0
 	github.com/fluxcd/pkg/apis/meta v1.26.0
-	github.com/fluxcd/pkg/artifact v0.11.0
-	github.com/fluxcd/pkg/auth v0.40.0
+	github.com/fluxcd/pkg/artifact v0.13.0
+	github.com/fluxcd/pkg/auth v0.41.0
 	github.com/fluxcd/pkg/cache v0.13.0
 	github.com/fluxcd/pkg/git v0.46.0
 	github.com/fluxcd/pkg/gittestserver v0.26.0
 	github.com/fluxcd/pkg/helmtestserver v0.38.0
 	github.com/fluxcd/pkg/http/transport v0.7.0
 	github.com/fluxcd/pkg/masktoken v0.8.0
-	github.com/fluxcd/pkg/oci v0.63.0
+	github.com/fluxcd/pkg/oci v0.65.0
 	github.com/fluxcd/pkg/runtime v0.103.0
 	github.com/fluxcd/pkg/sourceignore v0.17.0
 	github.com/fluxcd/pkg/ssh v0.24.0
-	github.com/fluxcd/pkg/tar v0.17.0
+	github.com/fluxcd/pkg/tar v1.1.0
 	github.com/fluxcd/pkg/testserver v0.13.0
 	github.com/fluxcd/pkg/version v0.14.0
 	github.com/fluxcd/source-controller/api v1.8.0
@@ -141,6 +141,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.35.17 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sts v1.41.9 // indirect
 	github.com/aws/smithy-go v1.24.2 // indirect
+	github.com/aws/smithy-go/aws-http-auth v1.1.3 // indirect
 	github.com/awslabs/amazon-ecr-credential-helper/ecr-login v0.12.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/blang/semver v3.5.1+incompatible // indirect
