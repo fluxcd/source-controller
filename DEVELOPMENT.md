@@ -54,6 +54,62 @@ Run the controller locally:
 make run
 ```
 
+### Debugging tips
+
+**Limit watched namespaces**
+
+Set `RUNTIME_NAMESPACE` to restrict the controller to a single namespace,
+which reduces noise when debugging a specific issue:
+
+```sh
+export RUNTIME_NAMESPACE=flux-system
+make run
+```
+
+**Decrease concurrency**
+
+Lower `--concurrent` to `1` so that reconcile loops run sequentially,
+making it easier to follow logs and reproduce ordering issues:
+
+```sh
+make run ARGS="--concurrent=1"
+```
+
+**Set the controller hostname**
+
+The controller uses the `HOSTNAME` environment variable as its identity
+for leader election. When running locally, set it to match the
+in-cluster deployment name to avoid lease conflicts:
+
+```sh
+export HOSTNAME=source-controller
+make run
+```
+
+**Suspend irrelevant objects**
+
+Suspend Flux objects that are unrelated to the issue you are
+investigating so that their reconciliation does not add log noise:
+
+```sh
+kubectl -n flux-system patch gitrepository <name> \
+  --type=merge -p '{"spec":{"suspend":true}}'
+```
+
+Replace `gitrepository` with `helmrepository`, `ocirepository`, or
+`bucket` as appropriate.
+
+**Scale down the in-cluster controller**
+
+If `source-controller` is already running in your cluster, scale it
+down before running locally to avoid competing reconciliations:
+
+```sh
+kubectl -n flux-system scale deployment/source-controller --replicas=0
+# restore when done:
+kubectl -n flux-system scale deployment/source-controller --replicas=1
+```
+
 ## How to install the controller
 
 ### Building the container image
