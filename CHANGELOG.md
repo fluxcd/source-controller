@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented in this file.
 
+## 1.8.3
+
+**Release date:** 2026-04-21
+
+This patch release updates go-git to v5.18.0, which includes performance
+improvements for Git operations, and comes with dependency updates.
+
+Improvements:
+- Update go-git to v5.18.0 (includes perf improvements)
+  [#2031](https://github.com/fluxcd/source-controller/pull/2031)
+  [#2036](https://github.com/fluxcd/source-controller/pull/2036)
+
 ## 1.8.2
 
 **Release date:** 2026-04-07
