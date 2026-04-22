@@ -30,7 +30,6 @@ import (
 	helmreg "helm.sh/helm/v4/pkg/registry"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	kuberecorder "k8s.io/client-go/tools/record"
 	"k8s.io/client-go/util/workqueue"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -39,12 +38,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	eventv1 "github.com/fluxcd/pkg/apis/event/v1beta1"
+	eventv1 "github.com/fluxcd/pkg/apis/event/v1"
 	"github.com/fluxcd/pkg/apis/meta"
 	intdigest "github.com/fluxcd/pkg/artifact/digest"
 	"github.com/fluxcd/pkg/artifact/storage"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	helper "github.com/fluxcd/pkg/runtime/controller"
+	"github.com/fluxcd/pkg/runtime/events"
 	"github.com/fluxcd/pkg/runtime/jitter"
 	"github.com/fluxcd/pkg/runtime/patch"
 	"github.com/fluxcd/pkg/runtime/predicates"
@@ -105,7 +105,7 @@ var helmRepositoryFailConditions = []string{
 // HelmRepositoryReconciler reconciles a v1.HelmRepository object.
 type HelmRepositoryReconciler struct {
 	client.Client
-	kuberecorder.EventRecorder
+	events.EventRecorder
 	helper.Metrics
 
 	Getters        helmgetter.Providers
@@ -299,13 +299,13 @@ func (r *HelmRepositoryReconciler) notify(ctx context.Context, oldObj, newObj *s
 
 		// Notify on new artifact and failure recovery.
 		if !oldObj.GetArtifact().HasDigest(newObj.GetArtifact().Digest) {
-			r.AnnotatedEventf(newObj, annotations, corev1.EventTypeNormal,
-				"NewArtifact", message)
+			r.AnnotatedEventf(newObj, nil, annotations, corev1.EventTypeNormal,
+				"NewArtifact", eventv1.ActionApplied, message)
 			ctrl.LoggerFrom(ctx).Info(message)
 		} else {
 			if sreconcile.FailureRecovery(oldObj, newObj, helmRepositoryFailConditions) {
-				r.AnnotatedEventf(newObj, annotations, corev1.EventTypeNormal,
-					meta.SucceededReason, message)
+				r.AnnotatedEventf(newObj, nil, annotations, corev1.EventTypeNormal,
+					meta.SucceededReason, eventv1.ActionReconciled, message)
 				ctrl.LoggerFrom(ctx).Info(message)
 			}
 		}
@@ -340,7 +340,7 @@ func (r *HelmRepositoryReconciler) reconcileStorage(ctx context.Context, sp *pat
 		// matches the actual artifact
 		if !artifactMissing {
 			if err := r.Storage.VerifyArtifact(*artifact); err != nil {
-				r.Eventf(obj, corev1.EventTypeWarning, "ArtifactVerificationFailed", "failed to verify integrity of artifact: %s", err.Error())
+				r.Eventf(obj, nil, corev1.EventTypeWarning, "ArtifactVerificationFailed", eventv1.ActionFailed, "failed to verify integrity of artifact: %s", err.Error())
 
 				if err = r.Storage.Remove(*artifact); err != nil {
 					return sreconcile.ResultEmpty, fmt.Errorf("failed to remove artifact after digest mismatch: %w", err)
@@ -687,13 +687,15 @@ func (r *HelmRepositoryReconciler) garbageCollect(ctx context.Context, obj *sour
 // about the event.
 func (r *HelmRepositoryReconciler) eventLogf(ctx context.Context, obj runtime.Object, eventType string, reason string, messageFmt string, args ...interface{}) {
 	msg := fmt.Sprintf(messageFmt, args...)
+	action := eventv1.ActionReconciled
 	// Log and emit event.
 	if eventType == corev1.EventTypeWarning {
 		ctrl.LoggerFrom(ctx).Error(errors.New(reason), msg)
+		action = eventv1.ActionFailed
 	} else {
 		ctrl.LoggerFrom(ctx).Info(msg)
 	}
-	r.Eventf(obj, eventType, reason, msg)
+	r.Eventf(obj, nil, eventType, reason, action, msg)
 }
 
 // migrateToStatic is HelmRepository OCI migration to static object.

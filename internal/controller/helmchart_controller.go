@@ -40,7 +40,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	kuberecorder "k8s.io/client-go/tools/record"
 	"k8s.io/client-go/util/workqueue"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -51,12 +50,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	eventv1 "github.com/fluxcd/pkg/apis/event/v1beta1"
+	eventv1 "github.com/fluxcd/pkg/apis/event/v1"
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/artifact/storage"
 	"github.com/fluxcd/pkg/git"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	helper "github.com/fluxcd/pkg/runtime/controller"
+	"github.com/fluxcd/pkg/runtime/events"
 	"github.com/fluxcd/pkg/runtime/jitter"
 	"github.com/fluxcd/pkg/runtime/patch"
 	"github.com/fluxcd/pkg/runtime/predicates"
@@ -128,7 +128,7 @@ var helmChartFailConditions = []string{
 // HelmChartReconciler reconciles a HelmChart object
 type HelmChartReconciler struct {
 	client.Client
-	kuberecorder.EventRecorder
+	events.EventRecorder
 	helper.Metrics
 
 	Storage               *storage.Storage
@@ -348,13 +348,13 @@ func (r *HelmChartReconciler) notify(ctx context.Context, oldObj, newObj *source
 
 		// Notify on new artifact and failure recovery.
 		if !oldObj.GetArtifact().HasDigest(newObj.GetArtifact().Digest) {
-			r.AnnotatedEventf(newObj, annotations, corev1.EventTypeNormal,
-				reasonForBuild(build), build.Summary())
+			r.AnnotatedEventf(newObj, nil, annotations, corev1.EventTypeNormal,
+				reasonForBuild(build), eventv1.ActionApplied, build.Summary())
 			ctrl.LoggerFrom(ctx).Info(build.Summary())
 		} else {
 			if sreconcile.FailureRecovery(oldObj, newObj, helmChartFailConditions) {
-				r.AnnotatedEventf(newObj, annotations, corev1.EventTypeNormal,
-					reasonForBuild(build), build.Summary())
+				r.AnnotatedEventf(newObj, nil, annotations, corev1.EventTypeNormal,
+					reasonForBuild(build), eventv1.ActionApplied, build.Summary())
 				ctrl.LoggerFrom(ctx).Info(build.Summary())
 			}
 		}
@@ -388,7 +388,7 @@ func (r *HelmChartReconciler) reconcileStorage(ctx context.Context, sp *patch.Se
 		// matches the actual artifact
 		if !artifactMissing {
 			if err := r.Storage.VerifyArtifact(*artifact); err != nil {
-				r.Eventf(obj, corev1.EventTypeWarning, "ArtifactVerificationFailed", "failed to verify integrity of artifact: %s", err.Error())
+				r.Eventf(obj, nil, corev1.EventTypeWarning, "ArtifactVerificationFailed", eventv1.ActionFailed, "failed to verify integrity of artifact: %s", err.Error())
 
 				if err = r.Storage.Remove(*artifact); err != nil {
 					return sreconcile.ResultEmpty, fmt.Errorf("failed to remove artifact after digest mismatch: %w", err)
@@ -482,7 +482,7 @@ func (r *HelmChartReconciler) reconcileSource(ctx context.Context, sp *patch.Ser
 		// a sudden (partial) disappearance of observed state.
 		// TODO(hidde): include specific name/version information?
 		if depNum := build.ResolvedDependencies; build.Complete() && depNum > 0 {
-			r.Eventf(obj, eventv1.EventTypeTrace, "ResolvedDependencies", "resolved %d chart dependencies", depNum)
+			r.Eventf(obj, nil, eventv1.EventTypeTrace, "ResolvedDependencies", eventv1.ActionReconciled, "resolved %d chart dependencies", depNum)
 		}
 
 		// Handle any build error
@@ -1209,13 +1209,15 @@ func (r *HelmChartReconciler) requestsForBucketChange(ctx context.Context, o cli
 // about the event.
 func (r *HelmChartReconciler) eventLogf(ctx context.Context, obj runtime.Object, eventType string, reason string, messageFmt string, args ...interface{}) {
 	msg := fmt.Sprintf(messageFmt, args...)
+	action := eventv1.ActionReconciled
 	// Log and emit event.
 	if eventType == corev1.EventTypeWarning {
+		action = eventv1.ActionFailed
 		ctrl.LoggerFrom(ctx).Error(errors.New(reason), msg)
 	} else {
 		ctrl.LoggerFrom(ctx).Info(msg)
 	}
-	r.Eventf(obj, eventType, reason, msg)
+	r.Eventf(obj, nil, eventType, reason, action, msg)
 }
 
 // observeChartBuild records the observation on the given given build and error on the object.

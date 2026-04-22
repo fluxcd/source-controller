@@ -30,6 +30,7 @@ import (
 	"github.com/fluxcd/pkg/auth"
 	"github.com/fluxcd/pkg/auth/githubapp"
 	authutils "github.com/fluxcd/pkg/auth/utils"
+	"github.com/fluxcd/pkg/runtime/events"
 	"github.com/fluxcd/pkg/runtime/logger"
 	"github.com/fluxcd/pkg/runtime/secrets"
 	"github.com/go-git/go-git/v5/plumbing/transport"
@@ -37,7 +38,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	kuberecorder "k8s.io/client-go/tools/record"
 	"k8s.io/client-go/util/workqueue"
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -48,7 +48,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	eventv1 "github.com/fluxcd/pkg/apis/event/v1beta1"
+	eventv1 "github.com/fluxcd/pkg/apis/event/v1"
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/artifact/storage"
 	"github.com/fluxcd/pkg/cache"
@@ -130,7 +130,7 @@ func getPatchOptions(ownedConditions []string, controllerName string) []patch.Op
 // GitRepositoryReconciler reconciles a v1.GitRepository object.
 type GitRepositoryReconciler struct {
 	client.Client
-	kuberecorder.EventRecorder
+	events.EventRecorder
 	helper.Metrics
 
 	Storage        *storage.Storage
@@ -342,13 +342,13 @@ func (r *GitRepositoryReconciler) notify(ctx context.Context, oldObj, newObj *so
 
 		// Notify on new artifact and failure recovery.
 		if !oldObj.GetArtifact().HasDigest(newObj.GetArtifact().Digest) {
-			r.AnnotatedEventf(newObj, annotations, corev1.EventTypeNormal,
-				"NewArtifact", message)
+			r.AnnotatedEventf(newObj, nil, annotations, corev1.EventTypeNormal,
+				"NewArtifact", eventv1.ActionApplied, message)
 			ctrl.LoggerFrom(ctx).Info(message)
 		} else {
 			if sreconcile.FailureRecovery(oldObj, newObj, gitRepositoryFailConditions) {
-				r.AnnotatedEventf(newObj, annotations, corev1.EventTypeNormal,
-					meta.SucceededReason, message)
+				r.AnnotatedEventf(newObj, nil, annotations, corev1.EventTypeNormal,
+					meta.SucceededReason, eventv1.ActionReconciled, message)
 				ctrl.LoggerFrom(ctx).Info(message)
 			}
 		}
@@ -402,7 +402,7 @@ func (r *GitRepositoryReconciler) reconcileStorage(ctx context.Context, sp *patc
 		// matches the actual artifact
 		if !artifactMissing {
 			if err := r.Storage.VerifyArtifact(*artifact); err != nil {
-				r.Eventf(obj, corev1.EventTypeWarning, "ArtifactVerificationFailed", "failed to verify integrity of artifact: %s", err.Error())
+				r.Eventf(obj, nil, corev1.EventTypeWarning, "ArtifactVerificationFailed", eventv1.ActionFailed, "failed to verify integrity of artifact: %s", err.Error())
 
 				if err = r.Storage.Remove(*artifact); err != nil {
 					return sreconcile.ResultEmpty, fmt.Errorf("failed to remove artifact after digest mismatch: %w", err)
@@ -1245,13 +1245,15 @@ func (r *GitRepositoryReconciler) garbageCollect(ctx context.Context, obj *sourc
 // about the event.
 func (r *GitRepositoryReconciler) eventLogf(ctx context.Context, obj runtime.Object, eventType string, reason string, messageFmt string, args ...interface{}) {
 	msg := fmt.Sprintf(messageFmt, args...)
+	action := eventv1.ActionReconciled
 	// Log and emit event.
 	if eventType == corev1.EventTypeWarning {
+		action = eventv1.ActionFailed
 		ctrl.LoggerFrom(ctx).Error(errors.New(reason), msg)
 	} else {
 		ctrl.LoggerFrom(ctx).Info(msg)
 	}
-	r.Eventf(obj, eventType, reason, msg)
+	r.Eventf(obj, nil, eventType, reason, action, msg)
 }
 
 // gitContentConfigChanged evaluates the current spec with the observations of
