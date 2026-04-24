@@ -279,9 +279,9 @@ For a full list of available regions and their endpoints, see the
 
 ##### Configure Flux controller
 
-1. Configure authentication using your preferred method - https://fluxcd.io/flux/integrations/aws/#authentication.
+1. Configure authentication using your preferred [method](https://fluxcd.io/flux/integrations/aws/#authentication).
 
-    Example IAM role policy:
+    Example IAM role policy (see [docs](https://fluxcd.io/flux/integrations/aws/#for-amazon-codecommit) for more details):
 
     ```json
     {
@@ -308,6 +308,7 @@ For a full list of available regions and their endpoints, see the
     spec:
       interval: 5m0s
       provider: aws
+      serviceAccountName: my-tenant # optional (used for object-level workload identity)
       url: https://git-codecommit.<region>.amazonaws.com/v1/repos/<repository-name>
       ref:
         branch: main
