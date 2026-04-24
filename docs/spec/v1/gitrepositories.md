@@ -245,6 +245,7 @@ used for authentication purposes.
 Supported options are:
 
 - `generic`
+- `aws`
 - `azure`
 - `github`
 
@@ -253,6 +254,65 @@ mechanisms using `spec.secretRef` are used for authentication.
 
 For a complete guide on how to set up authentication for cloud providers,
 see the integration [docs](/flux/integrations/).
+
+#### AWS
+
+The `aws` provider can be used to authenticate to
+[AWS CodeCommit](https://docs.aws.amazon.com/codecommit/latest/userguide/welcome.html)
+repositories using IAM credentials sourced from the controller runtime identity.
+
+**Note:** When the `aws` provider is used, `.spec.url` must be an AWS
+CodeCommit HTTPS endpoint in the format
+`https://git-codecommit.<region>.amazonaws.com/v1/repos/<repository-name>`.
+For a full list of available regions and their endpoints, see the
+[AWS CodeCommit regions documentation](https://docs.aws.amazon.com/codecommit/latest/userguide/regions.html#regions-git).
+
+##### Pre-requisites
+
+- An EKS cluster with either
+  [EKS Pod Identity](https://fluxcd.io/flux/integrations/aws/#with-eks-pod-identity)
+  or
+  [IAM Roles for Service Accounts (IRSA)](https://fluxcd.io/flux/integrations/aws/#with-oidc-federation)
+  configured.
+- An IAM role with the `codecommit:GitPull` permission for the target
+  repository.
+
+##### Configure Flux controller
+
+1. Configure authentication using your preferred [method](https://fluxcd.io/flux/integrations/aws/#authentication).
+
+    Example IAM role policy (see [docs](https://fluxcd.io/flux/integrations/aws/#for-amazon-codecommit) for more details):
+
+    ```json
+    {
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Effect": "Allow",
+                "Action": "codecommit:GitPull",
+                "Resource": "arn:aws:codecommit:<region>:<account-id>:<repository-name>"
+            }
+        ]
+    }
+    ```
+
+2. Configure AWS CodeCommit `GitRepository`
+
+    ```yaml
+    ---
+    apiVersion: source.toolkit.fluxcd.io/v1
+    kind: GitRepository
+    metadata:
+      name: codecommit-repository
+      namespace: flux-system
+    spec:
+      interval: 5m0s
+      provider: aws
+      serviceAccountName: my-tenant # optional (used for object-level workload identity)
+      url: https://git-codecommit.<region>.amazonaws.com/v1/repos/<repository-name>
+      ref:
+        branch: main
+    ```
 
 #### Azure
 
