@@ -935,7 +935,7 @@ func TestGitRepositoryReconciler_getAuthOpts_provider(t *testing.T) {
 			beforeFunc: func(obj *sourcev1.GitRepository) {
 				obj.Spec.Provider = sourcev1.GitProviderAWS
 			},
-			wantErr: "failed to create provider access token for the controller",
+			wantErr: "invalid AWS CodeCommit Git URL: github.com",
 		},
 		{
 			name: "aws provider with service account and feature gate for object-level identity disabled",
