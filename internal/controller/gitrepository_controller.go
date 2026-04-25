@@ -668,11 +668,11 @@ func (r *GitRepositoryReconciler) getAuthOpts(ctx context.Context, obj *sourcev1
 	}
 
 	// Configure provider authentication if specified.
-	var getCreds func() (*authutils.GitCredentials, error)
+	var getCreds func() (*auth.GitCredentials, error)
 	switch provider := obj.GetProvider(); provider {
 	// If other providers (GCP, etc.) are added in the future they can be added here separated by a comma.
 	case sourcev1.GitProviderAzure, sourcev1.GitProviderAWS:
-		getCreds = func() (*authutils.GitCredentials, error) {
+		getCreds = func() (*auth.GitCredentials, error) {
 			opts := []auth.Option{
 				auth.WithClient(r.Client),
 				auth.WithServiceAccountNamespace(obj.GetNamespace()),
@@ -730,7 +730,7 @@ func (r *GitRepositoryReconciler) getAuthOpts(ctx context.Context, obj *sourcev1
 			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
 			return nil, e
 		}
-		getCreds = func() (*authutils.GitCredentials, error) {
+		getCreds = func() (*auth.GitCredentials, error) {
 			var appOpts []githubapp.OptFunc
 
 			appOpts = append(appOpts, githubapp.WithAppData(authMethods.GitHubAppData))
@@ -752,7 +752,7 @@ func (r *GitRepositoryReconciler) getAuthOpts(ctx context.Context, obj *sourcev1
 			if err != nil {
 				return nil, err
 			}
-			return &authutils.GitCredentials{
+			return &auth.GitCredentials{
 				Username: username,
 				Password: password,
 			}, nil
