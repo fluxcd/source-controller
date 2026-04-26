@@ -701,7 +701,7 @@ kubectl create secret generic pgp-public-keys \
 pattern format](https://git-scm.com/docs/gitignore#_pattern_format). Paths
 matching the defined rules are excluded while archiving.
 
-When specified, `.spec.ignore` overrides the [default exclusion
+When specified, `.spec.ignore` extends the [default exclusion
 list](#default-exclusions), and may overrule the [`.sourceignore` file
 exclusions](#sourceignore-file). See [excluding files](#excluding-files)
 for more information.
@@ -851,7 +851,7 @@ placed in the repository root or in subdirectories.
 #### Ignore spec
 
 Another option is to define the exclusions within the GitRepository spec, using
-the [`.spec.ignore` field](#ignore). Specified rules override the [default
+the [`.spec.ignore` field](#ignore). Specified rules extend the [default
 exclusion list](#default-exclusions), and may overrule `.sourceignore` file
 exclusions.
 
