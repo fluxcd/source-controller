@@ -2,6 +2,17 @@
 
 All notable changes to this project are documented in this file.
 
+## 1.8.4
+
+**Release date:** 2026-05-12
+
+This patch release comes with dependency updates, including go-git v5.19.0
+which fixes [CVE-2026-45022](https://github.com/advisories/GHSA-389r-gv7p-r3rp).
+
+Improvements:
+- Update fluxcd/pkg dependencies
+  [#2045](https://github.com/fluxcd/source-controller/pull/2045)
+
 ## 1.8.3
 
 **Release date:** 2026-04-21
