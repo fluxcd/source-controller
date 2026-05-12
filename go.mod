@@ -27,8 +27,8 @@ require (
 	github.com/fluxcd/pkg/artifact v0.8.1
 	github.com/fluxcd/pkg/auth v0.38.4
 	github.com/fluxcd/pkg/cache v0.13.0
-	github.com/fluxcd/pkg/git v0.43.2
-	github.com/fluxcd/pkg/gittestserver v0.25.2
+	github.com/fluxcd/pkg/git v0.43.3
+	github.com/fluxcd/pkg/gittestserver v0.25.3
 	github.com/fluxcd/pkg/helmtestserver v0.37.2
 	github.com/fluxcd/pkg/http/transport v0.7.0
 	github.com/fluxcd/pkg/masktoken v0.8.0
@@ -40,8 +40,8 @@ require (
 	github.com/fluxcd/pkg/testserver v0.13.0
 	github.com/fluxcd/pkg/version v0.12.0
 	github.com/fluxcd/source-controller/api v1.8.3
-	github.com/go-git/go-billy/v5 v5.8.0
-	github.com/go-git/go-git/v5 v5.18.0
+	github.com/go-git/go-billy/v5 v5.9.0
+	github.com/go-git/go-git/v5 v5.19.0
 	github.com/go-logr/logr v1.4.3
 	github.com/google/go-containerregistry v0.21.3
 	github.com/google/go-containerregistry/pkg/authn/k8schain v0.0.0-20260205022027-93aa2732266a
@@ -307,7 +307,7 @@ require (
 	github.com/pelletier/go-toml/v2 v2.2.4 // indirect
 	github.com/peterbourgon/diskv v2.0.1+incompatible // indirect
 	github.com/philhofer/fwd v1.2.0 // indirect
-	github.com/pjbgf/sha1cd v0.5.0 // indirect
+	github.com/pjbgf/sha1cd v0.6.0 // indirect
 	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/planetscale/vtprotobuf v0.6.1-0.20240319094008-0393e58bdf10 // indirect
