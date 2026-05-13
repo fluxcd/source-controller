@@ -680,6 +680,16 @@ func (r *OCIRepositoryReconciler) verifySignature(ctx context.Context, obj *sour
 			scosign.WithRemoteOptions(opt...),
 		}
 
+		// If a trusted root secret is provided, read and pass it to the verifier.
+		if trustedRootRef := obj.Spec.Verify.TrustedRootSecretRef; trustedRootRef != nil {
+			data, err := readTrustedRootFromSecret(ctxTimeout, r.Client, obj.Namespace, trustedRootRef)
+			if err != nil {
+				return soci.VerificationResultFailed, fmt.Errorf("failed to read trusted root from secret '%s/%s': %w",
+					obj.Namespace, trustedRootRef.Name, err)
+			}
+			defaultCosignOciOpts = append(defaultCosignOciOpts, scosign.WithTrustedRoot(data))
+		}
+
 		// get the public keys from the given secret
 		if secretRef := obj.Spec.Verify.SecretRef; secretRef != nil {
 
@@ -1355,6 +1365,29 @@ func layerSelectorEqual(a, b *sourcev1.OCILayerSelector) bool {
 		return true
 	}
 	return *a == *b
+}
+
+const trustedRootKey = "trusted_root.json"
+
+// readTrustedRootFromSecret reads and returns the trusted_root.json data from
+// the Kubernetes Secret referenced by the given LocalObjectReference.
+func readTrustedRootFromSecret(ctx context.Context, c client.Reader, namespace string, ref *meta.LocalObjectReference) ([]byte, error) {
+	secretName := types.NamespacedName{
+		Namespace: namespace,
+		Name:      ref.Name,
+	}
+
+	var secret corev1.Secret
+	if err := c.Get(ctx, secretName, &secret); err != nil {
+		return nil, err
+	}
+
+	data, ok := secret.Data[trustedRootKey]
+	if !ok {
+		return nil, fmt.Errorf("'%s' not found in secret '%s'", trustedRootKey, secretName.String())
+	}
+
+	return data, nil
 }
 
 func filterTags(filter string) filterFunc {
