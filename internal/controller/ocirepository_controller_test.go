@@ -43,6 +43,7 @@ import (
 	"github.com/notaryproject/notation-go/signer"
 	"github.com/notaryproject/notation-go/verifier/trustpolicy"
 	. "github.com/onsi/gomega"
+	"github.com/onsi/gomega/types"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	coptions "github.com/sigstore/cosign/v3/cmd/cosign/cli/options"
 	"github.com/sigstore/cosign/v3/cmd/cosign/cli/sign"
@@ -2892,6 +2893,8 @@ func TestOCIRepository_getArtifactRef(t *testing.T) {
 		"6.1.5",
 		"6.1.6-rc.1",
 		"6.1.6",
+		"6.2.1_ref.1234567", // Version 6.2.1+ref.1234567, encoded as a tag
+		"6.2.1",             // Version 6.2.1, same precedence as 6.2.1, per semver rule 10
 	)
 	g.Expect(err).ToNot(HaveOccurred())
 
@@ -2899,13 +2902,14 @@ func TestOCIRepository_getArtifactRef(t *testing.T) {
 		name      string
 		url       string
 		reference *sourcev1.OCIRepositoryRef
+		selector  *sourcev1.OCILayerSelector
 		wantErr   bool
-		want      string
+		want      types.GomegaMatcher
 	}{
 		{
 			name: "valid url with no reference",
 			url:  "oci://ghcr.io/stefanprodan/charts",
-			want: "ghcr.io/stefanprodan/charts:latest",
+			want: Equal("ghcr.io/stefanprodan/charts:latest"),
 		},
 		{
 			name: "valid url with tag reference",
@@ -2913,7 +2917,7 @@ func TestOCIRepository_getArtifactRef(t *testing.T) {
 			reference: &sourcev1.OCIRepositoryRef{
 				Tag: "6.1.6",
 			},
-			want: "ghcr.io/stefanprodan/charts:6.1.6",
+			want: Equal("ghcr.io/stefanprodan/charts:6.1.6"),
 		},
 		{
 			name: "valid url with digest reference",
@@ -2921,15 +2925,29 @@ func TestOCIRepository_getArtifactRef(t *testing.T) {
 			reference: &sourcev1.OCIRepositoryRef{
 				Digest: imgs["6.1.6"].digest.String(),
 			},
-			want: "ghcr.io/stefanprodan/charts@" + imgs["6.1.6"].digest.String(),
+			want: Equal("ghcr.io/stefanprodan/charts@" + imgs["6.1.6"].digest.String()),
 		},
 		{
 			name: "valid url with semver reference",
 			url:  fmt.Sprintf("oci://%s/podinfo", server.registryHost),
 			reference: &sourcev1.OCIRepositoryRef{
-				SemVer: ">= 6.1.6",
+				SemVer: "~6.1.x",
 			},
-			want: server.registryHost + "/podinfo:6.1.6",
+			want: Equal(server.registryHost + "/podinfo:6.1.6"),
+		},
+		{
+			name: "valid url with semver reference and build identifier",
+			url:  fmt.Sprintf("oci://%s/podinfo", server.registryHost),
+			reference: &sourcev1.OCIRepositoryRef{
+				SemVer: ">= 6.2.0",
+			},
+			selector: &sourcev1.OCILayerSelector{
+				MediaType: "application/vnd.cncf.helm.chart.content.v1.tar+gzip",
+			},
+			// Build info does not have a defined sort order in SemVer, so these
+			// two are equivalently new.
+			want: Or(Equal(server.registryHost+"/podinfo:6.2.1_ref.1234567"),
+				Equal(server.registryHost+"/podinfo:6.2.1")),
 		},
 		{
 			name:    "invalid url without oci prefix",
@@ -2943,7 +2961,7 @@ func TestOCIRepository_getArtifactRef(t *testing.T) {
 				SemVer:       ">= 6.1.x-0",
 				SemverFilter: ".*-rc.*",
 			},
-			want: server.registryHost + "/podinfo:6.1.6-rc.1",
+			want: Equal(server.registryHost + "/podinfo:6.1.6-rc.1"),
 		},
 		{
 			name: "valid url with semver filter and unexisting version",
@@ -2984,6 +3002,9 @@ func TestOCIRepository_getArtifactRef(t *testing.T) {
 			if tt.reference != nil {
 				obj.Spec.Reference = tt.reference
 			}
+			if tt.selector != nil {
+				obj.Spec.LayerSelector = tt.selector
+			}
 
 			opts := makeRemoteOptions(ctx, makeTransport(true), authn.DefaultKeychain, nil)
 			got, err := r.getArtifactRef(obj, opts)
@@ -2992,7 +3013,7 @@ func TestOCIRepository_getArtifactRef(t *testing.T) {
 				return
 			}
 			g.Expect(err).ToNot(HaveOccurred())
-			g.Expect(got.String()).To(Equal(tt.want))
+			g.Expect(got.String()).To(tt.want)
 		})
 	}
 }

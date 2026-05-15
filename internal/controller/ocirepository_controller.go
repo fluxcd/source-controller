@@ -40,6 +40,7 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	"github.com/notaryproject/notation-go/verifier/trustpolicy"
 	"github.com/sigstore/cosign/v3/pkg/cosign"
+	"helm.sh/helm/v4/pkg/registry"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -871,7 +872,7 @@ func (r *OCIRepositoryReconciler) getArtifactRef(obj *sourcev1.OCIRepository, op
 		}
 
 		if obj.Spec.Reference.SemVer != "" {
-			return r.getTagBySemver(repo, obj.Spec.Reference.SemVer, filterTags(obj.Spec.Reference.SemverFilter), options)
+			return r.getTagBySemver(repo, obj.Spec.Reference.SemVer, filterTags(obj.Spec.Reference.SemverFilter), obj.GetLayerMediaType(), options)
 		}
 
 		if obj.Spec.Reference.Tag != "" {
@@ -884,7 +885,7 @@ func (r *OCIRepositoryReconciler) getArtifactRef(obj *sourcev1.OCIRepository, op
 
 // getTagBySemver call the remote container registry, fetches all the tags from the repository,
 // and returns the latest tag according to the semver expression.
-func (r *OCIRepositoryReconciler) getTagBySemver(repo name.Repository, exp string, filter filterFunc, options []remote.Option) (name.Reference, error) {
+func (r *OCIRepositoryReconciler) getTagBySemver(repo name.Repository, exp string, filter filterFunc, mediaType string, options []remote.Option) (name.Reference, error) {
 	tags, err := remote.List(repo, options...)
 	if err != nil {
 		return nil, err
@@ -901,8 +902,9 @@ func (r *OCIRepositoryReconciler) getTagBySemver(repo name.Repository, exp strin
 	}
 
 	var matchingVersions []*semver.Version
-	for _, t := range validTags {
-		v, err := version.ParseVersion(t)
+	for _, ociTag := range validTags {
+		semVerTag := convertOCIToSemVerTag(ociTag, mediaType)
+		v, err := version.ParseVersion(semVerTag)
 		if err != nil {
 			continue
 		}
@@ -916,8 +918,42 @@ func (r *OCIRepositoryReconciler) getTagBySemver(repo name.Repository, exp strin
 		return nil, fmt.Errorf("no match found for semver: %s", exp)
 	}
 
+	// Find the latest SemVer.
 	sort.Sort(sort.Reverse(semver.Collection(matchingVersions)))
-	return repo.Tag(matchingVersions[0].Original()), nil
+	semVerTag := matchingVersions[0].Original()
+
+	// Convert the latest SemVer to an OCI tag and return the reference.
+	ociTag := convertSemVerToOCITag(semVerTag, mediaType)
+	return repo.Tag(ociTag), nil
+}
+
+// convertSemVerToOCITag converts a SemVer tag to an OCI tag
+// according to rules defined by the media type.
+//
+// For OCI Helm charts, the conversion is mapping `+` to `_`,
+// because `+` is not permitted in OCI tags, while `_` is not
+// permitted in SemVer. Each character not being permitted in
+// one of the two sides establishes a perfect bijection between,
+// which then makes the mapping implemented by Helm (and honored
+// here) completely safe.
+func convertSemVerToOCITag(semVer, mediaType string) string {
+	if mediaType == registry.ChartLayerMediaType {
+		return strings.ReplaceAll(semVer, "+", "_")
+	}
+	return semVer
+}
+
+// convertOCIToSemVerTag converts an OCI tag to a SemVer tag
+// according to rules defined by the media type.
+//
+// For OCI Helm charts, the conversion is mapping `_` to `+`,
+// see the comment above on convertSemVerToOCITag for the
+// mapping in the opposite direction and rationale.
+func convertOCIToSemVerTag(ociTag, mediaType string) string {
+	if mediaType == registry.ChartLayerMediaType {
+		return strings.ReplaceAll(ociTag, "_", "+")
+	}
+	return ociTag
 }
 
 // keychain generates the credential keychain based on the resource
