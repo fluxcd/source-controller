@@ -88,16 +88,16 @@ func recordEvent(recorder kuberecorder.EventRecorder, obj client.Object, eventTy
 	case corev1.EventTypeNormal:
 		if notification {
 			// K8s native event and notification-controller event.
-			recorder.Eventf(obj, corev1.EventTypeNormal, reason, err.Error())
+			recorder.Eventf(obj, corev1.EventTypeNormal, reason, "%s", err.Error())
 		} else {
 			// K8s native event only.
-			recorder.Eventf(obj, eventv1.EventTypeTrace, reason, err.Error())
+			recorder.Eventf(obj, eventv1.EventTypeTrace, reason, "%s", err.Error())
 		}
 	case corev1.EventTypeWarning:
 		// TODO: Due to the current implementation of the event recorder, all
 		// the K8s warning events are also sent as notification controller
 		// notifications. Once the recorder becomes capable of separating the
 		// two, conditionally record events.
-		recorder.Eventf(obj, corev1.EventTypeWarning, reason, err.Error())
+		recorder.Eventf(obj, corev1.EventTypeWarning, reason, "%s", err.Error())
 	}
 }

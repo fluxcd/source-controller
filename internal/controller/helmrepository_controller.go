@@ -300,12 +300,12 @@ func (r *HelmRepositoryReconciler) notify(ctx context.Context, oldObj, newObj *s
 		// Notify on new artifact and failure recovery.
 		if !oldObj.GetArtifact().HasDigest(newObj.GetArtifact().Digest) {
 			r.AnnotatedEventf(newObj, annotations, corev1.EventTypeNormal,
-				"NewArtifact", message)
+				"NewArtifact", "%s", message)
 			ctrl.LoggerFrom(ctx).Info(message)
 		} else {
 			if sreconcile.FailureRecovery(oldObj, newObj, helmRepositoryFailConditions) {
 				r.AnnotatedEventf(newObj, annotations, corev1.EventTypeNormal,
-					meta.SucceededReason, message)
+					meta.SucceededReason, "%s", message)
 				ctrl.LoggerFrom(ctx).Info(message)
 			}
 		}
@@ -693,7 +693,7 @@ func (r *HelmRepositoryReconciler) eventLogf(ctx context.Context, obj runtime.Ob
 	} else {
 		ctrl.LoggerFrom(ctx).Info(msg)
 	}
-	r.Eventf(obj, eventType, reason, msg)
+	r.Eventf(obj, eventType, reason, "%s", msg)
 }
 
 // migrateToStatic is HelmRepository OCI migration to static object.
