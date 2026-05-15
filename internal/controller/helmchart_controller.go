@@ -349,12 +349,12 @@ func (r *HelmChartReconciler) notify(ctx context.Context, oldObj, newObj *source
 		// Notify on new artifact and failure recovery.
 		if !oldObj.GetArtifact().HasDigest(newObj.GetArtifact().Digest) {
 			r.AnnotatedEventf(newObj, annotations, corev1.EventTypeNormal,
-				reasonForBuild(build), build.Summary())
+				reasonForBuild(build), "%s", build.Summary())
 			ctrl.LoggerFrom(ctx).Info(build.Summary())
 		} else {
 			if sreconcile.FailureRecovery(oldObj, newObj, helmChartFailConditions) {
 				r.AnnotatedEventf(newObj, annotations, corev1.EventTypeNormal,
-					reasonForBuild(build), build.Summary())
+					reasonForBuild(build), "%s", build.Summary())
 				ctrl.LoggerFrom(ctx).Info(build.Summary())
 			}
 		}
@@ -1215,7 +1215,7 @@ func (r *HelmChartReconciler) eventLogf(ctx context.Context, obj runtime.Object,
 	} else {
 		ctrl.LoggerFrom(ctx).Info(msg)
 	}
-	r.Eventf(obj, eventType, reason, msg)
+	r.Eventf(obj, eventType, reason, "%s", msg)
 }
 
 // observeChartBuild records the observation on the given given build and error on the object.
