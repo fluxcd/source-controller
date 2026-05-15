@@ -96,27 +96,28 @@ func main() {
 	)
 
 	var (
-		metricsAddr            string
-		eventsAddr             string
-		healthAddr             string
-		concurrent             int
-		requeueDependency      time.Duration
-		helmIndexLimit         int64
-		helmChartLimit         int64
-		helmChartFileLimit     int64
-		artifactOptions        artcfg.Options
-		clientOptions          client.Options
-		logOptions             logger.Options
-		leaderElectionOptions  leaderelection.Options
-		rateLimiterOptions     helper.RateLimiterOptions
-		featureGates           feathelper.FeatureGates
-		watchOptions           helper.WatchOptions
-		intervalJitterOptions  jitter.IntervalOptions
-		helmCacheMaxSize       int
-		helmCacheTTL           string
-		helmCachePurgeInterval string
-		tokenCacheOptions      pkgcache.TokenFlags
-		defaultServiceAccount  string
+		metricsAddr               string
+		eventsAddr                string
+		healthAddr                string
+		concurrent                int
+		requeueDependency         time.Duration
+		helmIndexLimit            int64
+		helmChartLimit            int64
+		helmChartFileLimit        int64
+		artifactOptions           artcfg.Options
+		clientOptions             client.Options
+		logOptions                logger.Options
+		leaderElectionOptions     leaderelection.Options
+		rateLimiterOptions        helper.RateLimiterOptions
+		featureGates              feathelper.FeatureGates
+		watchOptions              helper.WatchOptions
+		intervalJitterOptions     jitter.IntervalOptions
+		helmCacheMaxSize          int
+		helmCacheTTL              string
+		helmCachePurgeInterval    string
+		tokenCacheOptions         pkgcache.TokenFlags
+		defaultServiceAccount     string
+		ociSkipRegistryValidation bool
 	)
 
 	flag.StringVar(&metricsAddr, "metrics-addr", envOrDefault("METRICS_ADDR", ":8080"),
@@ -145,6 +146,9 @@ func main() {
 		"The list of hostkey algorithms to use for ssh connections, arranged from most preferred to the least.")
 	flag.StringVar(&defaultServiceAccount, auth.ControllerFlagDefaultServiceAccount,
 		"", "Default service account to use for workload identity when not specified in resources.")
+	flag.BoolVar(&ociSkipRegistryValidation, auth.ControllerFlagOCISkipRegistryValidation, false,
+		"Skip OCI registry domain validation for cloud provider authentication. "+
+			"Enables using custom registry proxies/gateways with workload identity.")
 
 	artifactOptions.BindFlags(flag.CommandLine)
 	clientOptions.BindFlags(flag.CommandLine)
@@ -162,6 +166,10 @@ func main() {
 
 	if defaultServiceAccount != "" {
 		auth.SetDefaultServiceAccount(defaultServiceAccount)
+	}
+
+	if ociSkipRegistryValidation {
+		auth.SetOCISkipRegistryValidation(true)
 	}
 
 	if err := featureGates.WithLogger(setupLog).SupportedFeatures(features.FeatureGates()); err != nil {
