@@ -22,11 +22,11 @@ import (
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	kerrors "k8s.io/apimachinery/pkg/util/errors"
-	kuberecorder "k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/runtime/conditions"
+	"github.com/fluxcd/pkg/runtime/events"
 	"github.com/fluxcd/pkg/runtime/patch"
 
 	"github.com/fluxcd/source-controller/internal/reconcile"
@@ -50,12 +50,12 @@ type Conditions struct {
 
 // Helper is SummarizeAndPatch helper.
 type Helper struct {
-	recorder      kuberecorder.EventRecorder
+	recorder      events.EventRecorder
 	serialPatcher *patch.SerialPatcher
 }
 
 // NewHelper returns an initialized Helper.
-func NewHelper(recorder kuberecorder.EventRecorder, serialPatcher *patch.SerialPatcher) *Helper {
+func NewHelper(recorder events.EventRecorder, serialPatcher *patch.SerialPatcher) *Helper {
 	return &Helper{
 		recorder:      recorder,
 		serialPatcher: serialPatcher,
