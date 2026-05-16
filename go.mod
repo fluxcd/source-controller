@@ -21,7 +21,7 @@ require (
 	github.com/docker/cli v29.3.0+incompatible
 	github.com/docker/go-units v0.5.0
 	github.com/elazarl/goproxy v1.8.3
-	github.com/fluxcd/cli-utils v1.2.0
+	github.com/fluxcd/cli-utils v1.2.1
 	github.com/fluxcd/pkg/apis/event v0.24.1
 	github.com/fluxcd/pkg/apis/meta v1.25.1
 	github.com/fluxcd/pkg/artifact v0.8.1
@@ -67,12 +67,12 @@ require (
 	golang.org/x/sync v0.20.0
 	google.golang.org/api v0.272.0
 	helm.sh/helm/v4 v4.2.0
-	k8s.io/api v0.36.0
-	k8s.io/apimachinery v0.36.0
-	k8s.io/client-go v0.36.0
+	k8s.io/api v0.36.1
+	k8s.io/apimachinery v0.36.1
+	k8s.io/client-go v0.36.1
 	k8s.io/utils v0.0.0-20260210185600-b8788abfbbc2
 	oras.land/oras-go/v2 v2.6.0
-	sigs.k8s.io/controller-runtime v0.24.0
+	sigs.k8s.io/controller-runtime v0.24.1
 	sigs.k8s.io/yaml v1.6.0
 )
 
