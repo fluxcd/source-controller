@@ -235,6 +235,9 @@ func (c *GCSClient) FGetObject(ctx context.Context, bucketName, objectName, loca
 		GenerationMatch: objAttr.Generation,
 	}).NewReader(ctx)
 	if err != nil {
+		if cerr := objectFile.Close(); cerr != nil {
+			ctrl.LoggerFrom(ctx).Error(cerr, "failed to close file after reader error")
+		}
 		return "", err
 	}
 	defer func() {
@@ -245,6 +248,9 @@ func (c *GCSClient) FGetObject(ctx context.Context, bucketName, objectName, loca
 
 	// Write Object to file.
 	if _, err := io.Copy(objectFile, objectReader); err != nil {
+		if cerr := objectFile.Close(); cerr != nil {
+			ctrl.LoggerFrom(ctx).Error(cerr, "failed to close file after copy error")
+		}
 		return "", err
 	}
 
