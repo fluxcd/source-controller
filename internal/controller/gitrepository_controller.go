@@ -1317,7 +1317,10 @@ func gitContentConfigChanged(obj *sourcev1.GitRepository, includes *artifactSet)
 func (r *GitRepositoryReconciler) validateSparseCheckoutPaths(obj *sourcev1.GitRepository, dir string) error {
 	if obj.Spec.SparseCheckout != nil {
 		for _, path := range obj.Spec.SparseCheckout {
-			fullPath := filepath.Join(dir, path)
+			fullPath, err := securejoin.SecureJoin(dir, path)
+			if err != nil {
+				return fmt.Errorf("sparse checkout dir '%s' cannot be resolved: %w", path, err)
+			}
 			if _, err := os.Lstat(fullPath); err != nil {
 				return fmt.Errorf("sparse checkout dir '%s' does not exist in repository: %w", path, err)
 			}
