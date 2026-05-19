@@ -3101,6 +3101,72 @@ func resetChmod(path string, dirMode os.FileMode, fileMode os.FileMode) error {
 	return nil
 }
 
+func TestGitRepositoryReconciler_validateSparseCheckoutPaths(t *testing.T) {
+	tests := []struct {
+		name        string
+		paths       []string
+		beforeFunc  func(t *WithT, dir string)
+		wantErr     bool
+		errContains string
+	}{
+		{
+			name: "no paths configured",
+		},
+		{
+			name:  "configured path exists in the working directory",
+			paths: []string{"a/b"},
+			beforeFunc: func(t *WithT, dir string) {
+				t.Expect(os.MkdirAll(filepath.Join(dir, "a", "b"), 0o700)).To(Succeed())
+			},
+		},
+		{
+			name:        "configured path is missing from the working directory",
+			paths:       []string{"missing"},
+			wantErr:     true,
+			errContains: "missing",
+		},
+		{
+			name:  "configured path is resolved relative to the working directory",
+			paths: []string{"../sibling"},
+			beforeFunc: func(t *WithT, dir string) {
+				// Create a sibling of the working directory; the path must
+				// not resolve to it.
+				t.Expect(os.MkdirAll(filepath.Join(filepath.Dir(dir), "sibling"), 0o700)).To(Succeed())
+			},
+			wantErr:     true,
+			errContains: "../sibling",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			parent := t.TempDir()
+			dir := filepath.Join(parent, "work")
+			g.Expect(os.Mkdir(dir, 0o700)).To(Succeed())
+			if tt.beforeFunc != nil {
+				tt.beforeFunc(g, dir)
+			}
+
+			obj := &sourcev1.GitRepository{
+				Spec: sourcev1.GitRepositorySpec{SparseCheckout: tt.paths},
+			}
+
+			r := &GitRepositoryReconciler{}
+			err := r.validateSparseCheckoutPaths(obj, dir)
+			if tt.wantErr {
+				g.Expect(err).To(HaveOccurred())
+				if tt.errContains != "" {
+					g.Expect(err.Error()).To(ContainSubstring(tt.errContains))
+				}
+				return
+			}
+			g.Expect(err).NotTo(HaveOccurred())
+		})
+	}
+}
+
 func TestGitRepositoryIncludeEqual(t *testing.T) {
 	tests := []struct {
 		name string
