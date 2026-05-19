@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -288,5 +289,44 @@ func Test_fetchFiles(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+	})
+
+	t.Run("resolves object keys relative to the working directory", func(t *testing.T) {
+		g := NewWithT(t)
+
+		// Place the working directory inside a parent so we can observe
+		// where files end up on disk.
+		parent := t.TempDir()
+		tmp := filepath.Join(parent, "work")
+		g.Expect(os.Mkdir(tmp, 0o700)).To(Succeed())
+
+		client := mockBucketClient{bucketName: bucketName}
+		client.addObject("../sibling.yaml", mockBucketObject{etag: "etag1", data: "sibling"})
+
+		index := client.objectsToDigestIndex()
+
+		err := fetchIndexFiles(context.TODO(), client, bucket.DeepCopy(), index, tmp)
+		g.Expect(err).ToNot(HaveOccurred())
+
+		// All fetched files must live under the working directory.
+		var outside []string
+		walkErr := filepath.Walk(parent, func(p string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+			if info.IsDir() {
+				return nil
+			}
+			rel, relErr := filepath.Rel(tmp, p)
+			if relErr != nil {
+				return relErr
+			}
+			if strings.HasPrefix(rel, "..") {
+				outside = append(outside, p)
+			}
+			return nil
+		})
+		g.Expect(walkErr).ToNot(HaveOccurred())
+		g.Expect(outside).To(BeEmpty(), "files placed outside the working directory: %v", outside)
 	})
 }
