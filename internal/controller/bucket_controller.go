@@ -27,6 +27,7 @@ import (
 	"strings"
 	"time"
 
+	securejoin "github.com/cyphar/filepath-securejoin"
 	"github.com/opencontainers/go-digest"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/sync/semaphore"
@@ -752,7 +753,10 @@ func fetchIndexFiles(ctx context.Context, provider BucketProvider, obj *sourcev1
 			}
 			group.Go(func() error {
 				defer sem.Release(1)
-				localPath := filepath.Join(tempDir, k)
+				localPath, err := securejoin.SecureJoin(tempDir, k)
+				if err != nil {
+					return fmt.Errorf("failed to resolve path for '%s' object: %w", k, err)
+				}
 				etag, err := provider.FGetObject(ctxTimeout, obj.Spec.BucketName, k, localPath)
 				if err != nil {
 					if provider.ObjectIsNotFound(err) {
