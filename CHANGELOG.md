@@ -2,6 +2,34 @@
 
 All notable changes to this project are documented in this file.
 
+## 1.8.5
+
+**Release date:** 2026-05-20
+
+This patch release hardens path handling in the source reconcilers and updates
+go-git to v5.19.1, which fixes
+[CVE-2026-45571](https://github.com/advisories/GHSA-crhj-59gh-8x96) (crafted
+repositories may modify the main and submodule `.git` directories) and
+[CVE-2026-45570](https://github.com/advisories/GHSA-m7cr-m3pv-hgrp) (improper
+single-quote escaping in the SSH transport). It also fixes Helm chart
+resolution for OCI tags that encode semver build metadata, updates Helm to
+v4.2.0 to align with helm-controller, and adds support for GCP sovereign cloud
+artifact registries via the fluxcd/pkg update.
+
+Fixes:
+- Improve path handling in source reconcilers
+  [#2055](https://github.com/fluxcd/source-controller/pull/2055)
+- Support Helm semver encoding in OCI repositories
+  [#2051](https://github.com/fluxcd/source-controller/pull/2051)
+
+Improvements:
+- Update Helm to v4.2.0
+  [#2049](https://github.com/fluxcd/source-controller/pull/2049)
+- Upgrade k8s to 1.36.1, c-r to 0.24.1, cli-utils to 1.2.1
+  [#2052](https://github.com/fluxcd/source-controller/pull/2052)
+- Update fluxcd/pkg dependencies
+  [#2056](https://github.com/fluxcd/source-controller/pull/2056)
+
 ## 1.8.4
 
 **Release date:** 2026-05-12
