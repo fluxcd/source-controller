@@ -87,6 +87,18 @@ type HelmChartSpec struct {
 	// Chart dependencies, which are not bundled in the umbrella chart artifact, are not verified.
 	// +optional
 	Verify *OCIRepositoryVerification `json:"verify,omitempty"`
+
+	// MinAge is the minimum age a chart version must have before it is
+	// published as an artifact. This can be used to reduce exposure to
+	// supply-chain attacks by ensuring a newly published chart version has
+	// had time for community scrutiny before being deployed.
+	// The age is computed from the chart's creation timestamp in the Helm
+	// repository index. When the creation timestamp is unavailable (e.g.
+	// OCI registries without annotations), the field is ignored.
+	// +kubebuilder:validation:Type=string
+	// +kubebuilder:validation:Pattern="^([0-9]+(\\.[0-9]+)?(ms|s|m|h))+$"
+	// +optional
+	MinAge *metav1.Duration `json:"minAge,omitempty"`
 }
 
 const (
@@ -163,6 +175,10 @@ const (
 	// ChartPackageSucceededReason signals that the package of the Helm
 	// chart succeeded.
 	ChartPackageSucceededReason string = "ChartPackageSucceeded"
+
+	// ChartVersionTooNewReason signals that the resolved chart version does
+	// not yet satisfy the MinAge requirement.
+	ChartVersionTooNewReason string = "ChartVersionTooNew"
 )
 
 // GetConditions returns the status conditions of the object.

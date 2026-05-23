@@ -23,6 +23,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
 	sourcefs "github.com/fluxcd/pkg/oci"
 	helmchart "helm.sh/helm/v4/pkg/chart/v2"
@@ -156,6 +157,11 @@ type Build struct {
 	// VerifiedResult indicates the results of verifying the chart.
 	// If no verification was performed, this field should be VerificationResultIgnored.
 	VerifiedResult oci.VerificationResult
+	// CreatedAt is the timestamp at which the chart version was published in
+	// the source repository, as reported by the Helm repository index.
+	// It is zero when the source does not provide a creation timestamp
+	// (e.g. OCI registries without creation annotations).
+	CreatedAt time.Time
 }
 
 // Summary returns a human-readable summary of the Build.

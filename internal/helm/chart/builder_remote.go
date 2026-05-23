@@ -179,6 +179,7 @@ func generateBuildResult(cv *repo.ChartVersion, opts BuildOptions) (*Build, bool
 	result.Version = cv.Version
 	result.Name = cv.Name
 	result.VerifiedResult = oci.VerificationResultIgnored
+	result.CreatedAt = cv.Created
 
 	// Set build specific metadata if instructed
 	if opts.VersionMetadata != "" {

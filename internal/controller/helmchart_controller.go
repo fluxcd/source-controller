@@ -275,6 +275,7 @@ func (r *HelmChartReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	reconcilers := []helmChartReconcileFunc{
 		r.reconcileStorage,
 		r.reconcileSource,
+		r.reconcileMinAge,
 		r.reconcileArtifact,
 	}
 	recResult, retErr = r.reconcile(ctx, serialPatcher, obj, reconcilers)
@@ -815,6 +816,32 @@ func (r *HelmChartReconciler) buildFromTarballArtifact(ctx context.Context, obj 
 
 	*b = *build
 	return sreconcile.ResultSuccess, nil
+}
+
+// reconcileMinAge checks whether the resolved chart version satisfies the
+// MinAge requirement on the object. If the chart was published less than
+// MinAge ago (using the creation timestamp from the Helm repository index),
+// it sets ArtifactInStorageCondition=False and returns a Waiting error so
+// that reconcileArtifact is skipped until the age requirement is met.
+func (r *HelmChartReconciler) reconcileMinAge(_ context.Context, _ *patch.SerialPatcher, obj *sourcev1.HelmChart, b *chart.Build) (sreconcile.Result, error) {
+	if obj.Spec.MinAge == nil || b.CreatedAt.IsZero() {
+		return sreconcile.ResultSuccess, nil
+	}
+	elapsed := time.Since(b.CreatedAt)
+	if elapsed >= obj.Spec.MinAge.Duration {
+		return sreconcile.ResultSuccess, nil
+	}
+	remaining := obj.Spec.MinAge.Duration - elapsed
+	conditions.MarkFalse(obj, sourcev1.ArtifactInStorageCondition, sourcev1.ChartVersionTooNewReason,
+		"chart version %s was published %s ago, waiting for minimum age of %s",
+		b.Version, elapsed.Truncate(time.Second), obj.Spec.MinAge.Duration)
+	e := serror.NewWaiting(
+		fmt.Errorf("chart version %s does not meet minimum age requirement (age: %s, minimum: %s)",
+			b.Version, elapsed.Truncate(time.Second), obj.Spec.MinAge.Duration),
+		sourcev1.ChartVersionTooNewReason,
+	)
+	e.RequeueAfter = remaining
+	return sreconcile.ResultEmpty, e
 }
 
 // reconcileArtifact archives a new Artifact to the Storage, if the current

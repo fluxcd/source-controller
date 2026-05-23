@@ -26,6 +26,7 @@ spec:
     kind: HelmRepository
     name: podinfo
   version: '5.*'
+  minAge: 168h  # only promote chart versions published at least 7 days ago
 ```
 
 In the above example:
@@ -178,6 +179,48 @@ the latest version of the chart with value `*`.
 
 Version can be a fixed semver, minor or patch semver range of a specific
 version (i.e. `4.0.x`) or any semver range (i.e. `>=4.0.0 <5.0.0`).
+
+### Minimum age
+
+`.spec.minAge` is an optional field to specify the minimum age a chart version
+must have been published before it is promoted as an Artifact. The value must be
+in a [Go recognized duration string format](https://pkg.go.dev/time#ParseDuration),
+e.g. `168h` (7 days) or `24h30m`.
+
+When set, the controller compares the chart version's publish timestamp (as
+recorded in the Helm repository index) against the current time. If the
+elapsed time is less than `minAge`, the Artifact is not published and the
+controller requeues the object for the exact remaining duration, so it is
+promoted as soon as the requirement is met.
+
+This is useful as a supply chain security measure: delaying the automatic
+promotion of a new chart version gives time to detect and respond to a
+compromised or malicious release before it reaches your clusters.
+
+```yaml
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmChart
+metadata:
+  name: podinfo
+  namespace: default
+spec:
+  interval: 1h
+  chart: podinfo
+  version: ">=6.0.0"
+  sourceRef:
+    kind: HelmRepository
+    name: podinfo
+  minAge: 168h  # only promote chart versions that are at least 7 days old
+```
+
+**Note:** `minAge` only applies when the source reference is a `HelmRepository`.
+For `GitRepository` and `Bucket` sources the publish timestamp is not available
+and the field is ignored.
+
+When a chart version does not yet meet the minimum age requirement, the
+controller sets a Condition on the HelmChart — see
+[ChartVersionTooNew](#chartversiontoonew) for details.
 
 ### Values files
 
@@ -811,6 +854,35 @@ configuration issue in the HelmChart spec. When a reconciliation fails, the
 `Reconciling` Condition reason would be `ProgressingWithRetry`. When the
 reconciliation is performed again after the failure, the reason is updated to
 `Progressing`.
+
+#### ChartVersionTooNew
+
+When [`.spec.minAge`](#minimum-age) is set and the resolved chart version has
+not yet been published long enough, the controller marks the Artifact as not
+ready and sets a Condition with the following attributes in the HelmChart's
+`.status.conditions`:
+
+- `type: ArtifactInStorage`
+- `status: "False"`
+- `reason: ChartVersionTooNew`
+
+The `message` field reports the current age of the chart version and the
+configured minimum, for example:
+
+```
+chart version 6.12.0 was published 2h30m0s ago, waiting for minimum age of 168h0m0s
+```
+
+The controller requeues the object for exactly the remaining duration, so no
+manual intervention is required. Once the minimum age is reached the object
+reconciles normally and the Artifact is published.
+
+An Event with reason `ChartVersionTooNew` is also emitted:
+
+```console
+LAST SEEN   TYPE     REASON               OBJECT               MESSAGE
+0s          Normal   ChartVersionTooNew   helmchart/podinfo    chart version 6.12.0 does not meet minimum age requirement (age: 2h30m0s, minimum: 168h0m0s)
+```
 
 #### Stalled HelmChart
 

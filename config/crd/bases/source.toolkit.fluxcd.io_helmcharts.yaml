@@ -80,6 +80,17 @@ spec:
                   efficient use of resources.
                 pattern: ^([0-9]+(\.[0-9]+)?(ms|s|m|h))+$
                 type: string
+              minAge:
+                description: |-
+                  MinAge is the minimum age a chart version must have before it is
+                  published as an artifact. This can be used to reduce exposure to
+                  supply-chain attacks by ensuring a newly published chart version has
+                  had time for community scrutiny before being deployed.
+                  The age is computed from the chart's creation timestamp in the Helm
+                  repository index. When the creation timestamp is unavailable (e.g.
+                  OCI registries without annotations), the field is ignored.
+                pattern: ^([0-9]+(\.[0-9]+)?(ms|s|m|h))+$
+                type: string
               reconcileStrategy:
                 default: ChartVersion
                 description: |-
