@@ -38,8 +38,8 @@ import (
 	. "github.com/onsi/gomega"
 	sshtestdata "golang.org/x/crypto/ssh/testdata"
 	corev1 "k8s.io/api/core/v1"
+	eventsv1 "k8s.io/api/events/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/tools/record"
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -47,6 +47,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	kstatus "github.com/fluxcd/cli-utils/pkg/kstatus/status"
+	eventv1 "github.com/fluxcd/pkg/apis/event/v1"
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/artifact/storage"
 	"github.com/fluxcd/pkg/auth"
@@ -55,6 +56,7 @@ import (
 	"github.com/fluxcd/pkg/gittestserver"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	conditionscheck "github.com/fluxcd/pkg/runtime/conditions/check"
+	"github.com/fluxcd/pkg/runtime/events"
 	"github.com/fluxcd/pkg/runtime/jitter"
 	"github.com/fluxcd/pkg/runtime/patch"
 	"github.com/fluxcd/pkg/ssh"
@@ -198,7 +200,7 @@ func TestGitRepositoryReconciler_deleteBeforeFinalizer(t *testing.T) {
 
 	r := &GitRepositoryReconciler{
 		Client:        k8sClient,
-		EventRecorder: record.NewFakeRecorder(32),
+		EventRecorder: events.NewFakeRecorder(32, false),
 		Storage:       testStorage,
 	}
 	// NOTE: Only a real API server responds with an error in this scenario.
@@ -311,7 +313,7 @@ func TestGitRepositoryReconciler_reconcileSource_emptyRepository(t *testing.T) {
 
 	r := &GitRepositoryReconciler{
 		Client:        clientBuilder.Build(),
-		EventRecorder: record.NewFakeRecorder(32),
+		EventRecorder: events.NewFakeRecorder(32, false),
 		Storage:       testStorage,
 		patchOptions:  getPatchOptions(gitRepositoryReadyCondition.Owned, "sc"),
 	}
@@ -868,7 +870,7 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 
 			r := &GitRepositoryReconciler{
 				Client:        clientBuilder.Build(),
-				EventRecorder: record.NewFakeRecorder(32),
+				EventRecorder: events.NewFakeRecorder(32, false),
 				Storage:       testStorage,
 				patchOptions:  getPatchOptions(gitRepositoryReadyCondition.Owned, "sc"),
 			}
@@ -1050,7 +1052,7 @@ func TestGitRepositoryReconciler_getAuthOpts_provider(t *testing.T) {
 
 			obj := &sourcev1.GitRepository{}
 			r := &GitRepositoryReconciler{
-				EventRecorder: record.NewFakeRecorder(32),
+				EventRecorder: events.NewFakeRecorder(32, false),
 				Client:        clientBuilder.Build(),
 				features:      features.FeatureGates(),
 				patchOptions:  getPatchOptions(gitRepositoryReadyCondition.Owned, "sc"),
@@ -1271,7 +1273,7 @@ func TestGitRepositoryReconciler_reconcileSource_checkoutStrategy(t *testing.T) 
 			WithScheme(testEnv.GetScheme()).
 			WithStatusSubresource(&sourcev1.GitRepository{}).
 			Build(),
-		EventRecorder: record.NewFakeRecorder(32),
+		EventRecorder: events.NewFakeRecorder(32, false),
 		Storage:       testStorage,
 		patchOptions:  getPatchOptions(gitRepositoryReadyCondition.Owned, "sc"),
 	}
@@ -1475,7 +1477,7 @@ func TestGitRepositoryReconciler_reconcileArtifact(t *testing.T) {
 			resetChmod(tt.dir, 0o750, 0o600)
 
 			r := &GitRepositoryReconciler{
-				EventRecorder: record.NewFakeRecorder(32),
+				EventRecorder: events.NewFakeRecorder(32, false),
 				Storage:       testStorage,
 				features:      features.FeatureGates(),
 				patchOptions:  getPatchOptions(gitRepositoryReadyCondition.Owned, "sc"),
@@ -1626,7 +1628,7 @@ func TestGitRepositoryReconciler_reconcileInclude(t *testing.T) {
 
 			r := &GitRepositoryReconciler{
 				Client:            clientBuilder.Build(),
-				EventRecorder:     record.NewFakeRecorder(32),
+				EventRecorder:     events.NewFakeRecorder(32, false),
 				Storage:           storage,
 				requeueDependency: dependencyInterval,
 				features:          features.FeatureGates(),
@@ -1883,7 +1885,7 @@ func TestGitRepositoryReconciler_reconcileStorage(t *testing.T) {
 					WithScheme(testEnv.GetScheme()).
 					WithStatusSubresource(&sourcev1.GitRepository{}).
 					Build(),
-				EventRecorder: record.NewFakeRecorder(32),
+				EventRecorder: events.NewFakeRecorder(32, false),
 				Storage:       testStorage,
 				features:      features.FeatureGates(),
 				patchOptions:  getPatchOptions(gitRepositoryReadyCondition.Owned, "sc"),
@@ -1937,7 +1939,7 @@ func TestGitRepositoryReconciler_reconcileDelete(t *testing.T) {
 	g := NewWithT(t)
 
 	r := &GitRepositoryReconciler{
-		EventRecorder: record.NewFakeRecorder(32),
+		EventRecorder: events.NewFakeRecorder(32, false),
 		Storage:       testStorage,
 		features:      features.FeatureGates(),
 		patchOptions:  getPatchOptions(gitRepositoryReadyCondition.Owned, "sc"),
@@ -2362,7 +2364,7 @@ func TestGitRepositoryReconciler_verifySignature(t *testing.T) {
 			}
 
 			r := &GitRepositoryReconciler{
-				EventRecorder: record.NewFakeRecorder(32),
+				EventRecorder: events.NewFakeRecorder(32, false),
 				Client:        clientBuilder.Build(),
 				features:      features.FeatureGates(),
 				patchOptions:  getPatchOptions(gitRepositoryReadyCondition.Owned, "sc"),
@@ -2515,7 +2517,7 @@ func TestGitRepositoryReconciler_ConditionsUpdate(t *testing.T) {
 
 			r := &GitRepositoryReconciler{
 				Client:        clientBuilder.Build(),
-				EventRecorder: record.NewFakeRecorder(32),
+				EventRecorder: events.NewFakeRecorder(32, false),
 				Storage:       testStorage,
 				features:      features.FeatureGates(),
 				patchOptions:  getPatchOptions(gitRepositoryReadyCondition.Owned, "sc"),
@@ -2765,7 +2767,7 @@ func TestGitRepositoryReconciler_statusConditions(t *testing.T) {
 			}
 
 			ctx := context.TODO()
-			summarizeHelper := summarize.NewHelper(record.NewFakeRecorder(32), serialPatcher)
+			summarizeHelper := summarize.NewHelper(events.NewFakeRecorder(32, false), serialPatcher)
 			summarizeOpts := []summarize.Option{
 				summarize.WithConditions(gitRepositoryReadyCondition),
 				summarize.WithBiPolarityConditionTypes(sourcev1.SourceVerifiedCondition),
@@ -2806,7 +2808,7 @@ func TestGitRepositoryReconciler_notify(t *testing.T) {
 		oldObjBeforeFunc func(obj *sourcev1.GitRepository)
 		newObjBeforeFunc func(obj *sourcev1.GitRepository)
 		commit           git.Commit
-		wantEvent        string
+		wantEvent        *eventsv1.Event
 	}{
 		{
 			name:   "error - no event",
@@ -2820,8 +2822,13 @@ func TestGitRepositoryReconciler_notify(t *testing.T) {
 			newObjBeforeFunc: func(obj *sourcev1.GitRepository) {
 				obj.Status.Artifact = &meta.Artifact{Revision: "xxx", Digest: "yyy"}
 			},
-			commit:    concreteCommit,
-			wantEvent: "Normal NewArtifact stored artifact for commit 'test commit'",
+			commit: concreteCommit,
+			wantEvent: &eventsv1.Event{
+				Type:   "Normal",
+				Reason: "NewArtifact",
+				Action: eventv1.ActionApplied,
+				Note:   "stored artifact for commit 'test commit'",
+			},
 		},
 		{
 			name:   "recovery from failure",
@@ -2836,8 +2843,13 @@ func TestGitRepositoryReconciler_notify(t *testing.T) {
 				obj.Status.Artifact = &meta.Artifact{Revision: "xxx", Digest: "yyy"}
 				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "ready")
 			},
-			commit:    concreteCommit,
-			wantEvent: "Normal Succeeded stored artifact for commit 'test commit'",
+			commit: concreteCommit,
+			wantEvent: &eventsv1.Event{
+				Type:   "Normal",
+				Reason: "Succeeded",
+				Action: eventv1.ActionReconciled,
+				Note:   "stored artifact for commit 'test commit'",
+			},
 		},
 		{
 			name:   "recovery and new artifact",
@@ -2852,8 +2864,13 @@ func TestGitRepositoryReconciler_notify(t *testing.T) {
 				obj.Status.Artifact = &meta.Artifact{Revision: "aaa", Digest: "bbb"}
 				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "ready")
 			},
-			commit:    concreteCommit,
-			wantEvent: "Normal NewArtifact stored artifact for commit 'test commit'",
+			commit: concreteCommit,
+			wantEvent: &eventsv1.Event{
+				Type:   "Normal",
+				Reason: "NewArtifact",
+				Action: eventv1.ActionApplied,
+				Note:   "stored artifact for commit 'test commit'",
+			},
 		},
 		{
 			name:   "no updates",
@@ -2881,15 +2898,20 @@ func TestGitRepositoryReconciler_notify(t *testing.T) {
 				obj.Status.Artifact = &meta.Artifact{Revision: "xxx", Digest: "yyy"}
 				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "ready")
 			},
-			commit:    partialCommit, // no-op will always result in partial commit.
-			wantEvent: "Normal Succeeded stored artifact for commit 'sha1:b9b3feadba509cb9b22e968a5d27e96c2bc2ff91'",
+			commit: partialCommit, // no-op will always result in partial commit.
+			wantEvent: &eventsv1.Event{
+				Type:   "Normal",
+				Reason: "Succeeded",
+				Action: eventv1.ActionReconciled,
+				Note:   "stored artifact for commit 'sha1:b9b3feadba509cb9b22e968a5d27e96c2bc2ff91'",
+			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
-			recorder := record.NewFakeRecorder(32)
+			recorder := events.NewFakeRecorder(32, false)
 
 			oldObj := &sourcev1.GitRepository{}
 			newObj := oldObj.DeepCopy()
@@ -2910,12 +2932,15 @@ func TestGitRepositoryReconciler_notify(t *testing.T) {
 
 			select {
 			case x, ok := <-recorder.Events:
-				g.Expect(ok).To(Equal(tt.wantEvent != ""), "unexpected event received")
-				if tt.wantEvent != "" {
-					g.Expect(x).To(ContainSubstring(tt.wantEvent))
+				g.Expect(ok).To(Equal(tt.wantEvent != nil), "unexpected event received")
+				if tt.wantEvent != nil {
+					g.Expect(x.Type).To(Equal(tt.wantEvent.Type))
+					g.Expect(x.Reason).To(Equal(tt.wantEvent.Reason))
+					g.Expect(x.Action).To(Equal(tt.wantEvent.Action))
+					g.Expect(x.Note).To(ContainSubstring(tt.wantEvent.Note))
 				}
 			default:
-				if tt.wantEvent != "" {
+				if tt.wantEvent != nil {
 					t.Errorf("expected some event to be emitted")
 				}
 			}
@@ -3046,7 +3071,7 @@ func TestGitRepositoryReconciler_fetchIncludes(t *testing.T) {
 
 			r := &GitRepositoryReconciler{
 				Client:        clientBuilder.Build(),
-				EventRecorder: record.NewFakeRecorder(32),
+				EventRecorder: events.NewFakeRecorder(32, false),
 				patchOptions:  getPatchOptions(gitRepositoryReadyCondition.Owned, "sc"),
 			}
 
