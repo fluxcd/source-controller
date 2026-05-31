@@ -568,7 +568,7 @@ func (r *BucketReconciler) reconcileArtifact(ctx context.Context, sp *patch.Seri
 	// Archive directory to storage
 	if err := r.Storage.Archive(&artifact, dir, nil); err != nil {
 		e := serror.NewGeneric(
-			fmt.Errorf("unable to archive artifact to storage: %s", err),
+			fmt.Errorf("unable to archive artifact to storage: %w", err),
 			sourcev1.ArchiveOperationFailedReason,
 		)
 		conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition, e.Reason, "%s", e)
@@ -622,7 +622,7 @@ func (r *BucketReconciler) garbageCollect(ctx context.Context, obj *sourcev1.Buc
 	if !obj.DeletionTimestamp.IsZero() {
 		if deleted, err := r.Storage.RemoveAll(r.Storage.NewArtifactFor(obj.Kind, obj.GetObjectMeta(), "", "*")); err != nil {
 			return serror.NewGeneric(
-				fmt.Errorf("garbage collection for deleted resource failed: %s", err),
+				fmt.Errorf("garbage collection for deleted resource failed: %w", err),
 				"GarbageCollectionFailed",
 			)
 		} else if deleted != "" {

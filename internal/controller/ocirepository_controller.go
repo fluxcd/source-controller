@@ -537,6 +537,7 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
 		return sreconcile.ResultEmpty, e
 	}
+	defer blob.Close()
 
 	// Persist layer content to storage using the specified operation
 	switch obj.GetLayerOperation() {
@@ -1201,7 +1202,7 @@ func (r *OCIRepositoryReconciler) reconcileArtifact(ctx context.Context, sp *pat
 
 		if err := r.Storage.Archive(&artifact, dir, storage.SourceIgnoreFilter(ps, ignoreDomain)); err != nil {
 			e := serror.NewGeneric(
-				fmt.Errorf("unable to archive artifact to storage: %s", err),
+				fmt.Errorf("unable to archive artifact to storage: %w", err),
 				sourcev1.ArchiveOperationFailedReason,
 			)
 			conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition, e.Reason, "%s", e)
