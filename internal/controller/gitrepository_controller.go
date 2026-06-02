@@ -559,7 +559,7 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 		// Check if the content config contributing to the artifact has changed.
 		if !gitContentConfigChanged(obj, includes) {
 			ge := serror.NewGeneric(
-				fmt.Errorf("no changes since last reconcilation: observed revision '%s'",
+				fmt.Errorf("no changes since last reconciliation: observed revision '%s'",
 					commitReference(obj, commit)), sourcev1.GitOperationSucceedReason,
 			)
 			ge.Notification = false
