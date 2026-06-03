@@ -41,9 +41,10 @@ import (
 
 // options is a struct that holds options for verifier.
 type options struct {
-	publicKey  []byte
-	rOpt       []remote.Option
-	identities []cosign.Identity
+	publicKey   []byte
+	rOpt        []remote.Option
+	identities  []cosign.Identity
+	trustedRoot []byte
 }
 
 // Options is a function that configures the options applied to a Verifier.
@@ -69,6 +70,16 @@ func WithRemoteOptions(opts ...remote.Option) Options {
 func WithIdentities(identities []cosign.Identity) Options {
 	return func(opts *options) {
 		opts.identities = identities
+	}
+}
+
+// WithTrustedRoot sets the Sigstore trusted root JSON bytes. When provided,
+// verification uses the custom trusted root instead of the public Sigstore
+// TUF root. The Rekor URL is extracted from the trusted root's transparency
+// log entries.
+func WithTrustedRoot(trustedRoot []byte) Options {
+	return func(opts *options) {
+		opts.trustedRoot = trustedRoot
 	}
 }
 
@@ -123,8 +134,7 @@ func (f *CosignVerifierFactory) NewCosignVerifier(ctx context.Context, opts ...O
 
 	checkOpts.RegistryClientOpts = co
 
-	// If a public key is provided, it will use it to verify the signature.
-	// If there is no public key provided, it will try keyless verification.
+	// If a public key is provided, use it to verify the signature.
 	// https://github.com/sigstore/cosign/blob/main/KEYLESS.md.
 	if len(o.publicKey) > 0 {
 		checkOpts.Offline = true
@@ -141,64 +151,107 @@ func (f *CosignVerifierFactory) NewCosignVerifier(ctx context.Context, opts ...O
 		if err != nil {
 			return nil, err
 		}
-	} else {
-		checkOpts.RekorClient, err = rekor.NewClient(coptions.DefaultRekorURL)
+
+		return &CosignVerifier{opts: checkOpts}, nil
+	}
+
+	// Keyless verification: when a custom trusted root is provided, use it
+	// directly instead of the public Sigstore infrastructure. The Rekor URL
+	// is extracted from the trusted root's transparency log entries.
+	if len(o.trustedRoot) > 0 {
+		customRoot, err := root.NewTrustedRootFromJSON(o.trustedRoot)
+		if err != nil {
+			return nil, fmt.Errorf("unable to parse trusted root: %w", err)
+		}
+
+		checkOpts.TrustedMaterial = customRoot
+
+		rekorURL, err := rekorURLFromTrustedRoot(customRoot)
+		if err != nil {
+			return nil, fmt.Errorf("unable to extract Rekor URL from trusted root: %w", err)
+		}
+
+		checkOpts.RekorClient, err = rekor.NewClient(rekorURL)
 		if err != nil {
 			return nil, fmt.Errorf("unable to create Rekor client: %w", err)
 		}
 
-		// Initialize TrustedMaterial for v3/Bundle verification
-		f.mu.Lock()
-		if f.trustedMaterial != nil {
-			checkOpts.TrustedMaterial = f.trustedMaterial
-			f.mu.Unlock()
-		} else {
-			// Check if we should init or retry
-			if f.initErr == nil || time.Since(f.lastAttempt) >= f.retryInterval {
-				f.lastAttempt = time.Now()
-				// TODO(stealthybox): it would be nice to control the http client here for the TrustedRoot fetcher
-				//  with the current state of this part of the cosign SDK, that would involve duplicating a lot of
-				//  their ENV, options, and defaulting code.
-				f.trustedMaterial, f.initErr = cosign.TrustedRoot()
-			}
+		return &CosignVerifier{opts: checkOpts}, nil
+	}
 
-			err := f.initErr
-			tm := f.trustedMaterial
-			f.mu.Unlock()
+	// Keyless verification using the public Sigstore infrastructure.
+	checkOpts.RekorClient, err = rekor.NewClient(coptions.DefaultRekorURL)
+	if err != nil {
+		return nil, fmt.Errorf("unable to create Rekor client: %w", err)
+	}
 
-			if err != nil {
-				return nil, fmt.Errorf("unable to initialize trusted root: %w", err)
-			}
-			checkOpts.TrustedMaterial = tm
+	// Initialize TrustedMaterial for v3/Bundle verification.
+	f.mu.Lock()
+	if f.trustedMaterial != nil {
+		checkOpts.TrustedMaterial = f.trustedMaterial
+		f.mu.Unlock()
+	} else {
+		// Check if we should init or retry.
+		if f.initErr == nil || time.Since(f.lastAttempt) >= f.retryInterval {
+			f.lastAttempt = time.Now()
+			// TODO(stealthybox): it would be nice to control the http client here for the TrustedRoot fetcher
+			//  with the current state of this part of the cosign SDK, that would involve duplicating a lot of
+			//  their ENV, options, and defaulting code.
+			f.trustedMaterial, f.initErr = cosign.TrustedRoot()
 		}
 
-		// Initialize legacy setup for v2 compatibility
+		err := f.initErr
+		tm := f.trustedMaterial
+		f.mu.Unlock()
 
-		// This performs an online fetch of the Rekor public keys, but this is needed
-		// for verifying tlog entries (both online and offline).
-		// TODO(hidde): above note is important to keep in mind when we implement
-		//  "offline" tlog above.
-		if checkOpts.RekorPubKeys, err = cosign.GetRekorPubs(ctx); err != nil {
-			return nil, fmt.Errorf("unable to get Rekor public keys: %w", err)
-		}
-
-		checkOpts.CTLogPubKeys, err = cosign.GetCTLogPubs(ctx)
 		if err != nil {
-			return nil, fmt.Errorf("unable to get CTLog public keys: %w", err)
+			return nil, fmt.Errorf("unable to initialize trusted root: %w", err)
 		}
+		checkOpts.TrustedMaterial = tm
+	}
 
-		if checkOpts.RootCerts, err = fulcio.GetRoots(); err != nil {
-			return nil, fmt.Errorf("unable to get Fulcio root certs: %w", err)
-		}
+	// Initialize legacy setup for v2 compatibility.
 
-		if checkOpts.IntermediateCerts, err = fulcio.GetIntermediates(); err != nil {
-			return nil, fmt.Errorf("unable to get Fulcio intermediate certs: %w", err)
+	// This performs an online fetch of the Rekor public keys, but this is needed
+	// for verifying tlog entries (both online and offline).
+	// TODO(hidde): above note is important to keep in mind when we implement
+	//  "offline" tlog above.
+	if checkOpts.RekorPubKeys, err = cosign.GetRekorPubs(ctx); err != nil {
+		return nil, fmt.Errorf("unable to get Rekor public keys: %w", err)
+	}
+
+	checkOpts.CTLogPubKeys, err = cosign.GetCTLogPubs(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("unable to get CTLog public keys: %w", err)
+	}
+
+	if checkOpts.RootCerts, err = fulcio.GetRoots(); err != nil {
+		return nil, fmt.Errorf("unable to get Fulcio root certs: %w", err)
+	}
+
+	if checkOpts.IntermediateCerts, err = fulcio.GetIntermediates(); err != nil {
+		return nil, fmt.Errorf("unable to get Fulcio intermediate certs: %w", err)
+	}
+
+	return &CosignVerifier{opts: checkOpts}, nil
+}
+
+// rekorURLFromTrustedRoot extracts the Rekor base URL from a trusted root's
+// transparency log entries. It returns the BaseURL of the first entry that
+// has one set.
+func rekorURLFromTrustedRoot(tr *root.TrustedRoot) (string, error) {
+	logs := tr.RekorLogs()
+	if len(logs) == 0 {
+		return "", fmt.Errorf("no transparency log entries found in trusted root")
+	}
+
+	for _, log := range logs {
+		if log.BaseURL != "" {
+			return log.BaseURL, nil
 		}
 	}
 
-	return &CosignVerifier{
-		opts: checkOpts,
-	}, nil
+	return "", fmt.Errorf("no transparency log entry with a BaseURL found in trusted root")
 }
 
 // Verify verifies the authenticity of the given ref OCI image.

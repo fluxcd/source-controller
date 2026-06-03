@@ -3661,6 +3661,23 @@ signing. The artifact&rsquo;s identity is deemed to be verified if any of the
 specified matchers match against the identity.</p>
 </td>
 </tr>
+<tr>
+<td>
+<code>trustedRootSecretRef</code><br>
+<em>
+<a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/meta#LocalObjectReference">
+github.com/fluxcd/pkg/apis/meta.LocalObjectReference
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>TrustedRootSecretRef specifies the Kubernetes Secret containing a
+Sigstore trusted_root.json file. This enables verification against
+self-hosted Sigstore infrastructure (custom Fulcio CA, self-hosted
+Rekor instance). The Secret must contain a key named &ldquo;trusted_root.json&rdquo;.</p>
+</td>
+</tr>
 </tbody>
 </table>
 </div>
