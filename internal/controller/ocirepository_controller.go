@@ -680,6 +680,8 @@ func (r *OCIRepositoryReconciler) verifySignature(ctx context.Context, obj *sour
 	case "cosign":
 		defaultCosignOciOpts := []scosign.Options{
 			scosign.WithRemoteOptions(opt...),
+			scosign.WithInsecure(obj.Spec.Insecure),
+			scosign.WithTLSConfig(transport.TLSClientConfig),
 		}
 
 		// If a trusted root secret is provided, read and pass it to the verifier.
