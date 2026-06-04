@@ -349,12 +349,12 @@ func (r *BucketReconciler) notify(ctx context.Context, oldObj, newObj *sourcev1.
 		// Notify on new artifact and failure recovery.
 		if !oldObj.GetArtifact().HasDigest(newObj.GetArtifact().Digest) {
 			r.AnnotatedEventf(newObj, annotations, corev1.EventTypeNormal,
-				"NewArtifact", message)
+				"NewArtifact", "%s", message)
 			ctrl.LoggerFrom(ctx).Info(message)
 		} else {
 			if sreconcile.FailureRecovery(oldObj, newObj, bucketFailConditions) {
 				r.AnnotatedEventf(newObj, annotations, corev1.EventTypeNormal,
-					meta.SucceededReason, message)
+					meta.SucceededReason, "%s", message)
 				ctrl.LoggerFrom(ctx).Info(message)
 			}
 		}
@@ -672,7 +672,7 @@ func (r *BucketReconciler) annotatedEventLogf(ctx context.Context,
 	} else {
 		ctrl.LoggerFrom(ctx).Info(msg)
 	}
-	r.AnnotatedEventf(obj, annotations, eventType, reason, msg)
+	r.AnnotatedEventf(obj, annotations, eventType, reason, "%s", msg)
 }
 
 // fetchEtagIndex fetches the current etagIndex for the in the obj specified
