@@ -19,6 +19,7 @@ package cosign
 import (
 	"context"
 	"crypto"
+	"crypto/tls"
 	"fmt"
 	"sync"
 	"time"
@@ -27,9 +28,10 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	"github.com/sigstore/cosign/v3/cmd/cosign/cli/fulcio"
 	coptions "github.com/sigstore/cosign/v3/cmd/cosign/cli/options"
-	"github.com/sigstore/cosign/v3/cmd/cosign/cli/rekor"
 	"github.com/sigstore/cosign/v3/pkg/cosign"
 	"github.com/sigstore/cosign/v3/pkg/oci"
+	rekorclient "github.com/sigstore/rekor/pkg/client"
+	rekorgenclient "github.com/sigstore/rekor/pkg/generated/client"
 
 	ociremote "github.com/sigstore/cosign/v3/pkg/oci/remote"
 	"github.com/sigstore/sigstore-go/pkg/root"
@@ -45,6 +47,8 @@ type options struct {
 	rOpt        []remote.Option
 	identities  []cosign.Identity
 	trustedRoot []byte
+	insecure    bool
+	tlsConfig   *tls.Config
 }
 
 // Options is a function that configures the options applied to a Verifier.
@@ -83,9 +87,27 @@ func WithTrustedRoot(trustedRoot []byte) Options {
 	}
 }
 
+// WithInsecure sets the verifier to use HTTP when discovering v3 bundle
+// signatures from the container registry via OCI referrers tag fallback.
+// Does not affect Rekor connections.
+func WithInsecure(insecure bool) Options {
+	return func(opts *options) {
+		opts.insecure = insecure
+	}
+}
+
+// WithTLSConfig sets the TLS configuration for Rekor client connections.
+// When nil, the system trust store is used.
+func WithTLSConfig(tlsConfig *tls.Config) Options {
+	return func(opts *options) {
+		opts.tlsConfig = tlsConfig
+	}
+}
+
 // CosignVerifier is a struct which is responsible for executing verification logic.
 type CosignVerifier struct {
-	opts *cosign.CheckOpts
+	opts     *cosign.CheckOpts
+	insecure bool
 }
 
 // CosignVerifierFactory is a factory for creating Verifiers with shared state.
@@ -152,7 +174,7 @@ func (f *CosignVerifierFactory) NewCosignVerifier(ctx context.Context, opts ...O
 			return nil, err
 		}
 
-		return &CosignVerifier{opts: checkOpts}, nil
+		return &CosignVerifier{opts: checkOpts, insecure: o.insecure}, nil
 	}
 
 	// Keyless verification: when a custom trusted root is provided, use it
@@ -171,16 +193,16 @@ func (f *CosignVerifierFactory) NewCosignVerifier(ctx context.Context, opts ...O
 			return nil, fmt.Errorf("unable to extract Rekor URL from trusted root: %w", err)
 		}
 
-		checkOpts.RekorClient, err = rekor.NewClient(rekorURL)
+		checkOpts.RekorClient, err = newRekorClient(rekorURL, o.tlsConfig)
 		if err != nil {
 			return nil, fmt.Errorf("unable to create Rekor client: %w", err)
 		}
 
-		return &CosignVerifier{opts: checkOpts}, nil
+		return &CosignVerifier{opts: checkOpts, insecure: o.insecure}, nil
 	}
 
 	// Keyless verification using the public Sigstore infrastructure.
-	checkOpts.RekorClient, err = rekor.NewClient(coptions.DefaultRekorURL)
+	checkOpts.RekorClient, err = newRekorClient(coptions.DefaultRekorURL, o.tlsConfig)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create Rekor client: %w", err)
 	}
@@ -233,7 +255,17 @@ func (f *CosignVerifierFactory) NewCosignVerifier(ctx context.Context, opts ...O
 		return nil, fmt.Errorf("unable to get Fulcio intermediate certs: %w", err)
 	}
 
-	return &CosignVerifier{opts: checkOpts}, nil
+	return &CosignVerifier{opts: checkOpts, insecure: o.insecure}, nil
+}
+
+// newRekorClient creates a Rekor client with optional TLS configuration.
+// If tlsConfig is nil, the default system trust store is used.
+func newRekorClient(rekorURL string, tlsConfig *tls.Config) (*rekorgenclient.Rekor, error) {
+	opts := []rekorclient.Option{rekorclient.WithUserAgent(coptions.UserAgent())}
+	if tlsConfig != nil {
+		opts = append(opts, rekorclient.WithTLSConfig(tlsConfig))
+	}
+	return rekorclient.GetRekorClient(rekorURL, opts...)
 }
 
 // rekorURLFromTrustedRoot extracts the Rekor base URL from a trusted root's
@@ -265,14 +297,21 @@ func (v *CosignVerifier) Verify(ctx context.Context, ref name.Reference) (soci.V
 	var signatures []oci.Signature
 	// copy options since we'll need to change them based on bundle discovery on the ref
 	opts := *v.opts
-	newBundles, _, err := cosign.GetBundles(ctx, ref, opts.RegistryClientOpts)
+
+	// Pass insecure to GetBundles for internal bundle digest references.
+	var nameOpts []name.Option
+	if v.insecure {
+		nameOpts = append(nameOpts, name.Insecure)
+	}
+
+	newBundles, _, err := cosign.GetBundles(ctx, ref, opts.RegistryClientOpts, nameOpts...)
 	// if no bundles are returned, let's fallback to the cosign v2 behavior, similar to the cosign CLI
 	if len(newBundles) == 0 || err != nil {
 		opts.NewBundleFormat = false
 		signatures, _, err = cosign.VerifyImageSignatures(ctx, ref, &opts)
 	} else {
 		opts.NewBundleFormat = true
-		signatures, _, err = cosign.VerifyImageAttestations(ctx, ref, &opts)
+		signatures, _, err = cosign.VerifyImageAttestations(ctx, ref, &opts, nameOpts...)
 	}
 	if err != nil {
 		return soci.VerificationResultFailed, err

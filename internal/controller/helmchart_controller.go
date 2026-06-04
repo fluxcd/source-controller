@@ -1313,6 +1313,7 @@ func (r *HelmChartReconciler) makeVerifiers(ctx context.Context, obj *sourcev1.H
 	case "cosign":
 		defaultCosignOciOpts := []scosign.Options{
 			scosign.WithRemoteOptions(verifyOpts...),
+			scosign.WithTLSConfig(clientOpts.TLSConfig),
 		}
 
 		// get the public keys from the given secret
