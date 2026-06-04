@@ -33,3 +33,73 @@ jobs:
         continue-on-error: true
         run: |
           kubectl -n source-system logs -l app=source-controller
+
+  sigstore-linux-amd64:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Test suite setup
+        uses: fluxcd/gha-workflows/.github/actions/setup-kubernetes@v0.9.0
+        with:
+          go-version: 1.26.x
+      - name: Setup cosign
+        env:
+          COSIGN_VERSION: v3.0.6
+          COSIGN_SHA256: c956e5dfcac53d52bcf058360d579472f0c1d2d9b69f55209e256fe7783f4c74
+        run: |
+          curl -fsSL "https://github.com/sigstore/cosign/releases/download/${COSIGN_VERSION}/cosign-linux-amd64" -o /usr/local/bin/cosign
+          echo "${COSIGN_SHA256}  /usr/local/bin/cosign" | sha256sum -c -
+          chmod +x /usr/local/bin/cosign
+      - name: Setup Flux CLI
+        run: curl -fsSL https://fluxcd.io/install.sh | bash
+      - name: Create cluster and registries
+        run: hack/sigstore-test/kind-up.sh
+      - name: Install sigstore stack
+        run: hack/sigstore-test/setup-sigstore.sh
+      - name: Patch Fulcio config
+        run: |
+          kubectl -n fulcio-system get cm fulcio-server-config -o json | \
+            python3 -c "
+          import json, sys
+          cm = json.load(sys.stdin)
+          config = json.loads(cm['data']['config.json'])
+          config['OIDCIssuers']['https://kubernetes.default.svc.cluster.local'] = {
+              'IssuerURL': 'https://kubernetes.default.svc.cluster.local',
+              'ClientID': 'sigstore',
+              'Type': 'kubernetes'
+          }
+          cm['data']['config.json'] = json.dumps(config, indent=2)
+          json.dump(cm, sys.stdout)
+          " | kubectl apply -f -
+          kubectl -n fulcio-system rollout restart deploy/fulcio-server
+          kubectl -n fulcio-system rollout status deploy/fulcio-server --timeout=2m
+      - name: Expose sigstore services
+        run: |
+          kubectl -n rekor-system expose deploy rekor-server --name=rekor-np --type=NodePort --port=80 --target-port=3000
+          cat <<EOF | kubectl apply -f -
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: fulcio-np
+            namespace: fulcio-system
+          spec:
+            type: NodePort
+            selector:
+              app.kubernetes.io/name: fulcio
+              app.kubernetes.io/instance: scaffold
+            ports:
+            - port: 80
+              targetPort: 5555
+              protocol: TCP
+          EOF
+      - name: Build and deploy source-controller
+        run: |
+          BUILD_PLATFORM=linux/amd64 hack/sigstore-test/build-and-load.sh
+      - name: Run sigstore verification tests
+        run: hack/sigstore-test/test-signing.sh
+      - name: Print controller logs
+        if: always()
+        continue-on-error: true
+        run: |
+          kubectl -n source-system logs deploy/source-controller
