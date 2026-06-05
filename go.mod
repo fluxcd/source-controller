@@ -25,9 +25,9 @@ require (
 	github.com/fluxcd/pkg/apis/event v0.26.0
 	github.com/fluxcd/pkg/apis/meta v1.29.0
 	github.com/fluxcd/pkg/artifact v0.16.0
-	github.com/fluxcd/pkg/auth v0.51.0
+	github.com/fluxcd/pkg/auth v0.52.0
 	github.com/fluxcd/pkg/cache v0.14.0
-	github.com/fluxcd/pkg/git v0.50.0
+	github.com/fluxcd/pkg/git v0.51.0
 	github.com/fluxcd/pkg/gittestserver v0.29.0
 	github.com/fluxcd/pkg/helmtestserver v0.39.0
 	github.com/fluxcd/pkg/http/transport v0.8.0
