@@ -2046,12 +2046,12 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignatureCosign(t *testing
 				Tag: "6.1.5",
 			},
 			wantErr:    true,
-			wantErrMsg: "failed to verify the signature using provider 'cosign': no matching signatures were found for '<url>'",
+			wantErrMsg: "failed to verify the signature using provider 'cosign': no matching signatures were found for '<digest_url>'",
 			want:       sreconcile.ResultEmpty,
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new revision '<revision>' for '<url>'"),
 				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new revision '<revision>' for '<url>'"),
-				*conditions.FalseCondition(sourcev1.SourceVerifiedCondition, sourcev1.VerificationError, "failed to verify the signature using provider '<provider>': no matching signatures were found for '<url>'"),
+				*conditions.FalseCondition(sourcev1.SourceVerifiedCondition, sourcev1.VerificationError, "failed to verify the signature using provider '<provider>': no matching signatures were found for '<digest_url>'"),
 			},
 		},
 		{
@@ -2248,9 +2248,11 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignatureCosign(t *testing
 			}
 
 			image := podinfoVersions[tt.reference.Tag]
+			digestURL := artifactRef.Context().Digest(image.digest.String()).String()
 			assertConditions := tt.assertConditions
 			for k := range assertConditions {
 				assertConditions[k].Message = strings.ReplaceAll(assertConditions[k].Message, "<revision>", fmt.Sprintf("%s@%s", tt.reference.Tag, image.digest.String()))
+				assertConditions[k].Message = strings.ReplaceAll(assertConditions[k].Message, "<digest_url>", digestURL)
 				assertConditions[k].Message = strings.ReplaceAll(assertConditions[k].Message, "<url>", artifactRef.String())
 				assertConditions[k].Message = strings.ReplaceAll(assertConditions[k].Message, "<provider>", "cosign")
 			}
@@ -2269,6 +2271,7 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignatureCosign(t *testing
 			artifact := &meta.Artifact{}
 			got, err := r.reconcileSource(ctx, sp, obj, artifact, tmpDir)
 			if tt.wantErr {
+				tt.wantErrMsg = strings.ReplaceAll(tt.wantErrMsg, "<digest_url>", digestURL)
 				tt.wantErrMsg = strings.ReplaceAll(tt.wantErrMsg, "<url>", artifactRef.String())
 				g.Expect(err).ToNot(BeNil())
 				g.Expect(err.Error()).To(ContainSubstring(tt.wantErrMsg))

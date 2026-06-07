@@ -442,7 +442,6 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 	}
 
 	// Get the upstream revision from the artifact digest
-	// TODO: getRevision resolves the digest, which may change before image is fetched, so it should probaly update ref
 	revision, err := r.getRevision(ref, opts)
 	if err != nil {
 		e := serror.NewGeneric(
@@ -454,6 +453,8 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 	}
 	metaArtifact := &meta.Artifact{Revision: revision}
 	metaArtifact.DeepCopyInto(metadata)
+
+	digestRef := ref.Context().Digest(r.digestFromRevision(revision))
 
 	// Mark observations about the revision on the object
 	defer func() {
@@ -481,7 +482,7 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 		conditions.GetObservedGeneration(obj, sourcev1.SourceVerifiedCondition) != obj.Generation ||
 		conditions.IsFalse(obj, sourcev1.SourceVerifiedCondition) {
 
-		result, err := r.verifySignature(ctx, obj, ref, keychain, authenticator, transport, opts...)
+		result, err := r.verifySignature(ctx, obj, digestRef, keychain, authenticator, transport, opts...)
 		if err != nil {
 			provider := obj.Spec.Verify.Provider
 			if obj.Spec.Verify.SecretRef == nil && obj.Spec.Verify.Provider == "cosign" {
@@ -508,7 +509,7 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 	}
 
 	// Pull artifact from the remote container registry
-	img, err := remote.Image(ref, opts...)
+	img, err := remote.Image(digestRef, opts...)
 	if err != nil {
 		e := serror.NewGeneric(
 			fmt.Errorf("failed to pull artifact from '%s': %w", obj.Spec.URL, err),
