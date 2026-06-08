@@ -14,8 +14,10 @@ SKIP_COSIGN_VERIFICATION ?= false
 # Allows for defining additional Docker buildx arguments,
 # e.g. '--push'.
 BUILD_ARGS ?=
-# Architectures to build images for
-BUILD_PLATFORMS ?= linux/amd64,linux/arm64,linux/arm/v7
+# Host architecture, used so local builds and envtest target the host.
+LOCALARCH ?= $(shell go env GOARCH)
+# Architectures to build images for; defaults to the host architecture.
+BUILD_PLATFORMS ?= linux/$(LOCALARCH)
 
 # Go additional tag arguments, e.g. 'integration',
 # this is append to the tag arguments required for static builds
@@ -49,17 +51,8 @@ export GOBIN=$(shell go env GOBIN)
 endif
 export PATH:=${GOBIN}:${PATH}
 
-# Architecture to use envtest with
-ifeq ($(shell uname -m),x86_64)
-ENVTEST_ARCH ?= amd64
-else
-ENVTEST_ARCH ?= arm64
-endif
-
-ifeq ($(shell uname -s),Darwin)
-# Envtest only supports darwin-amd64
-ENVTEST_ARCH=amd64
-endif
+# Architecture to use envtest with; defaults to the host architecture.
+ENVTEST_ARCH ?= $(LOCALARCH)
 
 all: manager
 
