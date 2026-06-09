@@ -242,7 +242,8 @@ type GitRepositoryVerification struct {
 	Mode GitVerificationMode `json:"mode,omitempty"`
 
 	// SecretRef specifies the Secret containing the public keys of trusted Git
-	// authors.
+	// authors. PGP public keys must be stored under keys with the .asc suffix,
+	// and SSH public keys must be stored under keys with the .sshpub suffix.
 	// +required
 	SecretRef meta.LocalObjectReference `json:"secretRef"`
 }
