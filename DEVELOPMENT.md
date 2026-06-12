@@ -69,10 +69,13 @@ make run
 **Decrease concurrency**
 
 Lower `--concurrent` to `1` so that reconcile loops run sequentially,
-making it easier to follow logs and reproduce ordering issues:
+making it easier to follow logs and reproduce ordering issues. The `run`
+target does not pass extra arguments through, so invoke `go run` directly
+with the same flags it uses:
 
 ```sh
-make run ARGS="--concurrent=1"
+mkdir -p bin/data
+go run ./main.go --storage-adv-addr=:0 --storage-path=$(pwd)/bin/data --concurrent=1
 ```
 
 **Set the controller hostname**
