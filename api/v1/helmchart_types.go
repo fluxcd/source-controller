@@ -86,7 +86,7 @@ type HelmChartSpec struct {
 	// This field is only supported when using HelmRepository source with spec.type 'oci'.
 	// Chart dependencies, which are not bundled in the umbrella chart artifact, are not verified.
 	// +optional
-	Verify *OCIRepositoryVerification `json:"verify,omitempty"`
+	Verify *HelmChartVerification `json:"verify,omitempty"`
 }
 
 const (
