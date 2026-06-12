@@ -2491,7 +2491,8 @@ github.com/fluxcd/pkg/apis/meta.LocalObjectReference
 </td>
 <td>
 <p>SecretRef specifies the Secret containing the public keys of trusted Git
-authors.</p>
+authors. PGP public keys must be stored under keys with the .asc suffix,
+and SSH public keys must be stored under keys with the .sshpub suffix.</p>
 </td>
 </tr>
 </tbody>

@@ -639,7 +639,10 @@ signatures. The field offers two subfields:
      the commit object pointed to by the tag.
 
 - `.secretRef.name`, to specify a reference to a Secret in the same namespace as
-  the GitRepository. Containing the (PGP) public keys of trusted Git authors.
+  the GitRepository. Containing the public keys of trusted Git authors. PGP
+  public keys must be stored under keys with the `.asc` suffix, and SSH public
+  keys must be stored under keys with the `.sshpub` suffix. Keys without a
+  recognized suffix are treated as PGP key rings for backward compatibility.
 
 ```yaml
 ---
@@ -694,6 +697,44 @@ kubectl create secret generic pgp-public-keys \
     --from-file=author2.asc \
     -o yaml
 ```
+
+#### SSH verification
+
+SSH-signed commits and tags can also be verified. Store SSH public keys in
+`authorized_keys` format under keys with the `.sshpub` suffix in the same
+Secret:
+
+```yaml
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: verification-keys
+  namespace: default
+type: Opaque
+data:
+  author1.asc: <BASE64 PGP public key>
+  author2.sshpub: <BASE64 SSH public key>
+```
+
+Generating an SSH key pair and creating the Secret:
+
+```sh
+# Generate an SSH key pair for signing
+ssh-keygen -t ed25519 -N '' -f /tmp/signing_key
+# Generate secret with the public key
+kubectl create secret generic verification-keys \
+    --from-file=author2.sshpub=/tmp/signing_key.pub \
+    -o yaml
+```
+
+A single Secret can contain both PGP (`.asc`) and SSH (`.sshpub`) keys. The
+controller detects the signature type of each Git object (PGP or SSH) and
+dispatches verification accordingly.
+
+PGP verification reports the PGP key ID in the success message (e.g.
+`5982D0279C227FFD`), while SSH verification reports the SHA256 fingerprint
+(e.g. `SHA256:uNiVztksCsDhcc0u9e8BgrJXVGDaf6s7kOsTmI9N7sM`).
 
 ### Ignore
 

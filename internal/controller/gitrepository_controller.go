@@ -71,6 +71,41 @@ import (
 	"github.com/fluxcd/source-controller/internal/util"
 )
 
+const (
+	// publicKeyPGPSuffix is the Secret data key suffix for PGP public keys.
+	publicKeyPGPSuffix = ".asc"
+	// publicKeySSHSuffix is the Secret data key suffix for SSH public keys.
+	publicKeySSHSuffix = ".sshpub"
+)
+
+// gitSigner abstracts the verification methods shared by git.Commit and git.Tag.
+type gitSigner interface {
+	SignatureType() string
+	VerifyPGP(keyRings ...string) (string, error)
+	VerifySSH(authorizedKeys ...string) (string, error)
+}
+
+// verifyGitObject dispatches signature verification based on the signature type
+// of the given git object. It returns the key identity (PGP key ID or SSH
+// fingerprint) on success, or an error if verification fails or the required
+// key type is missing from the Secret.
+func verifyGitObject(obj gitSigner, keyRings []string, authorizedKeys []string) (string, error) {
+	switch obj.SignatureType() {
+	case "openpgp":
+		if len(keyRings) == 0 {
+			return "", fmt.Errorf("PGP signature detected but no PGP public keys found in secret (keys with %s suffix)", publicKeyPGPSuffix)
+		}
+		return obj.VerifyPGP(keyRings...)
+	case "ssh":
+		if len(authorizedKeys) == 0 {
+			return "", fmt.Errorf("SSH signature detected but no SSH public keys found in secret (keys with %s suffix)", publicKeySSHSuffix)
+		}
+		return obj.VerifySSH(authorizedKeys...)
+	default:
+		return "", fmt.Errorf("unsupported signature type: %s", obj.SignatureType())
+	}
+}
+
 // gitRepositoryReadyCondition contains the information required to summarize a
 // v1.GitRepository Ready Condition.
 var gitRepositoryReadyCondition = summarize.Conditions{
@@ -1093,7 +1128,7 @@ func (r *GitRepositoryReconciler) verifySignature(ctx context.Context, obj *sour
 		return sreconcile.ResultSuccess, nil
 	}
 
-	// Get secret with GPG data
+	// Get secret with public key data
 	publicKeySecret := types.NamespacedName{
 		Namespace: obj.Namespace,
 		Name:      obj.Spec.Verification.SecretRef.Name,
@@ -1101,7 +1136,7 @@ func (r *GitRepositoryReconciler) verifySignature(ctx context.Context, obj *sour
 	secret := &corev1.Secret{}
 	if err := r.Client.Get(ctx, publicKeySecret, secret); err != nil {
 		e := serror.NewGeneric(
-			fmt.Errorf("PGP public keys secret error: %w", err),
+			fmt.Errorf("public keys secret error: %w", err),
 			"VerificationError",
 		)
 		conditions.MarkFalse(obj, sourcev1.SourceVerifiedCondition, e.Reason, "%s", e)
@@ -1109,8 +1144,16 @@ func (r *GitRepositoryReconciler) verifySignature(ctx context.Context, obj *sour
 	}
 
 	var keyRings []string
-	for _, v := range secret.Data {
-		keyRings = append(keyRings, string(v))
+	var authorizedKeys []string
+	for k, v := range secret.Data {
+		if strings.HasSuffix(k, publicKeySSHSuffix) {
+			authorizedKeys = append(authorizedKeys, string(v))
+		} else if strings.HasSuffix(k, publicKeyPGPSuffix) {
+			keyRings = append(keyRings, string(v))
+		} else {
+			// Provide fallback to support previous undocumented behavior
+			keyRings = append(keyRings, string(v))
+		}
 	}
 
 	var message strings.Builder
@@ -1140,38 +1183,34 @@ func (r *GitRepositoryReconciler) verifySignature(ctx context.Context, obj *sour
 			return sreconcile.ResultEmpty, err
 		}
 
-		// Verify tag with GPG data from secret
-		tagEntity, err := tag.Verify(keyRings...)
+		entity, err := verifyGitObject(tag, keyRings, authorizedKeys)
 		if err != nil {
 			e := serror.NewGeneric(
 				fmt.Errorf("signature verification of tag '%s' failed: %w", tag.String(), err),
 				"InvalidTagSignature",
 			)
 			conditions.MarkFalse(obj, sourcev1.SourceVerifiedCondition, e.Reason, "%s", e)
-			// Return error in the hope the secret changes
 			return sreconcile.ResultEmpty, e
 		}
 
-		message.WriteString(fmt.Sprintf("verified signature of\n\t- tag '%s' with key '%s'", tag.String(), tagEntity))
+		message.WriteString(fmt.Sprintf("verified signature of\n\t- tag '%s' with key '%s'", tag.String(), entity))
 	}
 
 	if obj.Spec.Verification.VerifyHEAD() {
-		// Verify commit with GPG data from secret
-		headEntity, err := commit.Verify(keyRings...)
+		entity, err := verifyGitObject(&commit, keyRings, authorizedKeys)
 		if err != nil {
 			e := serror.NewGeneric(
 				fmt.Errorf("signature verification of commit '%s' failed: %w", commit.Hash.String(), err),
 				"InvalidCommitSignature",
 			)
 			conditions.MarkFalse(obj, sourcev1.SourceVerifiedCondition, e.Reason, "%s", e)
-			// Return error in the hope the secret changes
 			return sreconcile.ResultEmpty, e
 		}
 		// If we also verified the tag previously, then append to the message.
 		if message.Len() > 0 {
-			message.WriteString(fmt.Sprintf("\n\t- commit '%s' with key '%s'", commit.Hash.String(), headEntity))
+			message.WriteString(fmt.Sprintf("\n\t- commit '%s' with key '%s'", commit.Hash.String(), entity))
 		} else {
-			message.WriteString(fmt.Sprintf("verified signature of\n\t- commit '%s' with key '%s'", commit.Hash.String(), headEntity))
+			message.WriteString(fmt.Sprintf("verified signature of\n\t- commit '%s' with key '%s'", commit.Hash.String(), entity))
 		}
 	}
 

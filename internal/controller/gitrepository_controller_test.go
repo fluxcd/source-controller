@@ -169,6 +169,40 @@ QuWtsDnYbvDHtTpu1NZChVrnr/l1k3C2fcLhV1s583AvhGMkbgSXkQ==
 =Tdjz
 -----END PGP PUBLIC KEY BLOCK-----
 `
+
+	encodedSSHCommitFixture = `tree 7c5bd8f246ab8e8c6a5749c3d2f44018aa029fb8
+author Test User <sign-user@example.com> 1767225600 +0000
+committer Test User <sign-user@example.com> 1767225600 +0000
+
+Test commit signed with ed25519
+`
+
+	signatureSSHCommitFixture = `-----BEGIN SSH SIGNATURE-----
+U1NIU0lHAAAAAQAAADMAAAALc3NoLWVkMjU1MTkAAAAgrYSEhPKV/65kzG2JLYU+586anT
+AORbbZ0UW9qzon28EAAAADZ2l0AAAAAAAAAAZzaGE1MTIAAABTAAAAC3NzaC1lZDI1NTE5
+AAAAQD72vwusTGiRbH8ZtPm53vl065Ocv6Sp6VbHq4mkONAM0mzDLrD7BmAgWkjtmL2JpK
+msqgFJcKs6Z3E1zH86fQ0=
+-----END SSH SIGNATURE-----
+`
+
+	encodedSSHTagFixture = `object b01ca16de562c561f62427eb0a30cb775d1c1dab
+type commit
+tag test-tag-ed25519
+tagger Test User <sign-user@example.com> 1767225600 +0000
+
+Test tag signed with ed25519
+`
+
+	signatureSSHTagFixture = `-----BEGIN SSH SIGNATURE-----
+U1NIU0lHAAAAAQAAADMAAAALc3NoLWVkMjU1MTkAAAAgrYSEhPKV/65kzG2JLYU+586anT
+AORbbZ0UW9qzon28EAAAADZ2l0AAAAAAAAAAZzaGE1MTIAAABTAAAAC3NzaC1lZDI1NTE5
+AAAAQOZe8xDqF1oktx3h9p3EQKSx13zFVHQ2YcpF/HfeuQusKA1tvJY+T+ykPH4+zbva93
+KXi2P5xm89dQni0kTeAAY=
+-----END SSH SIGNATURE-----
+`
+
+	sshAuthorizedKeysFixture = `ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIK2EhITylf+uZMxtiS2FPufOmp0wDkW22dFFvas6J9vB test-ed25519@example.com
+`
 )
 
 func TestGitRepositoryReconciler_deleteBeforeFinalizer(t *testing.T) {
@@ -2223,7 +2257,7 @@ func TestGitRepositoryReconciler_verifySignature(t *testing.T) {
 			},
 		},
 		{
-			name: "Invalid commit makes SourceVerifiedCondition=False and returns error",
+			name: "No PGP keys in secret makes SourceVerifiedCondition=False and returns error",
 			secret: &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "existing",
@@ -2245,7 +2279,7 @@ func TestGitRepositoryReconciler_verifySignature(t *testing.T) {
 			},
 			wantErr: true,
 			assertConditions: []metav1.Condition{
-				*conditions.FalseCondition(sourcev1.SourceVerifiedCondition, "InvalidCommitSignature", "signature verification of commit 'shasum' failed: unable to verify Git commit: unable to verify payload with any of the given key rings"),
+				*conditions.FalseCondition(sourcev1.SourceVerifiedCondition, "InvalidCommitSignature", "signature verification of commit 'shasum' failed: PGP signature detected but no PGP public keys found in secret (keys with .asc suffix)"),
 			},
 		},
 		{
@@ -2325,7 +2359,7 @@ func TestGitRepositoryReconciler_verifySignature(t *testing.T) {
 			},
 			wantErr: true,
 			assertConditions: []metav1.Condition{
-				*conditions.FalseCondition(sourcev1.SourceVerifiedCondition, "VerificationError", "PGP public keys secret error: secrets \"none-existing\" not found"),
+				*conditions.FalseCondition(sourcev1.SourceVerifiedCondition, "VerificationError", "public keys secret error: secrets \"none-existing\" not found"),
 			},
 		},
 		{
@@ -2346,6 +2380,372 @@ func TestGitRepositoryReconciler_verifySignature(t *testing.T) {
 			},
 			want:             sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{},
+		},
+		{
+			name: "Valid SSH-signed commit with mode=HEAD makes SourceVerifiedCondition=True",
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "ssh-keys",
+				},
+				Data: map[string][]byte{
+					"author1.sshpub": []byte(sshAuthorizedKeysFixture),
+				},
+			},
+			commit: git.Commit{
+				Hash:      []byte("shasum"),
+				Encoded:   []byte(encodedSSHCommitFixture),
+				Signature: signatureSSHCommitFixture,
+			},
+			beforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Spec.Interval = metav1.Duration{Duration: interval}
+				obj.Spec.Verification = &sourcev1.GitRepositoryVerification{
+					Mode: sourcev1.ModeGitHEAD,
+					SecretRef: meta.LocalObjectReference{
+						Name: "ssh-keys",
+					},
+				}
+			},
+			want:                       sreconcile.ResultSuccess,
+			wantSourceVerificationMode: ptrToVerificationMode(sourcev1.ModeGitHEAD),
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.SourceVerifiedCondition, meta.SucceededReason, "verified signature of\n\t- commit 'shasum' with key 'SHA256:SDB4adE/BP2VLwX9Pdf7aFUwW9JNdzoPSsHjd/wZIw4'"),
+			},
+		},
+		{
+			name: "Valid SSH-signed tag with mode=Tag makes SourceVerifiedCondition=True",
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "ssh-keys",
+				},
+				Data: map[string][]byte{
+					"author1.sshpub": []byte(sshAuthorizedKeysFixture),
+				},
+			},
+			commit: git.Commit{
+				ReferencingTag: &git.Tag{
+					Name:      "v0.1.0",
+					Hash:      []byte("shasum"),
+					Encoded:   []byte(encodedSSHTagFixture),
+					Signature: signatureSSHTagFixture,
+				},
+			},
+			beforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Spec.Reference = &sourcev1.GitRepositoryRef{
+					Tag: "v0.1.0",
+				}
+				obj.Spec.Interval = metav1.Duration{Duration: interval}
+				obj.Spec.Verification = &sourcev1.GitRepositoryVerification{
+					Mode: sourcev1.ModeGitTag,
+					SecretRef: meta.LocalObjectReference{
+						Name: "ssh-keys",
+					},
+				}
+			},
+			want:                       sreconcile.ResultSuccess,
+			wantSourceVerificationMode: ptrToVerificationMode(sourcev1.ModeGitTag),
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.SourceVerifiedCondition, meta.SucceededReason, "verified signature of\n\t- tag 'v0.1.0@shasum' with key 'SHA256:SDB4adE/BP2VLwX9Pdf7aFUwW9JNdzoPSsHjd/wZIw4'"),
+			},
+		},
+		{
+			name: "Valid SSH-signed tag and commit with mode=TagAndHEAD makes SourceVerifiedCondition=True",
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "ssh-keys",
+				},
+				Data: map[string][]byte{
+					"author1.sshpub": []byte(sshAuthorizedKeysFixture),
+				},
+			},
+			commit: git.Commit{
+				Hash:      []byte("shasum"),
+				Encoded:   []byte(encodedSSHCommitFixture),
+				Signature: signatureSSHCommitFixture,
+				ReferencingTag: &git.Tag{
+					Name:      "v0.1.0",
+					Hash:      []byte("shasum"),
+					Encoded:   []byte(encodedSSHTagFixture),
+					Signature: signatureSSHTagFixture,
+				},
+			},
+			beforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Spec.Reference = &sourcev1.GitRepositoryRef{
+					Tag: "v0.1.0",
+				}
+				obj.Spec.Interval = metav1.Duration{Duration: interval}
+				obj.Spec.Verification = &sourcev1.GitRepositoryVerification{
+					Mode: sourcev1.ModeGitTagAndHEAD,
+					SecretRef: meta.LocalObjectReference{
+						Name: "ssh-keys",
+					},
+				}
+			},
+			want:                       sreconcile.ResultSuccess,
+			wantSourceVerificationMode: ptrToVerificationMode(sourcev1.ModeGitTagAndHEAD),
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.SourceVerifiedCondition, meta.SucceededReason, "verified signature of\n\t- tag 'v0.1.0@shasum' with key 'SHA256:SDB4adE/BP2VLwX9Pdf7aFUwW9JNdzoPSsHjd/wZIw4'\n\t- commit 'shasum' with key 'SHA256:SDB4adE/BP2VLwX9Pdf7aFUwW9JNdzoPSsHjd/wZIw4'"),
+			},
+		},
+		{
+			name: "SSH-signed commit but Secret only has .asc keys makes SourceVerifiedCondition=False",
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "pgp-keys-only",
+				},
+				Data: map[string][]byte{
+					"author1.asc": []byte(armoredKeyRingFixture),
+				},
+			},
+			commit: git.Commit{
+				Hash:      []byte("shasum"),
+				Encoded:   []byte(encodedSSHCommitFixture),
+				Signature: signatureSSHCommitFixture,
+			},
+			beforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Spec.Interval = metav1.Duration{Duration: interval}
+				obj.Spec.Verification = &sourcev1.GitRepositoryVerification{
+					Mode: sourcev1.ModeGitHEAD,
+					SecretRef: meta.LocalObjectReference{
+						Name: "pgp-keys-only",
+					},
+				}
+			},
+			wantErr: true,
+			assertConditions: []metav1.Condition{
+				*conditions.FalseCondition(sourcev1.SourceVerifiedCondition, "InvalidCommitSignature", "SSH signature detected but no SSH public keys found in secret (keys with .sshpub suffix)"),
+			},
+		},
+		{
+			name: "PGP-signed commit but Secret only has .sshpub keys makes SourceVerifiedCondition=False",
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "ssh-keys-only",
+				},
+				Data: map[string][]byte{
+					"author1.sshpub": []byte(sshAuthorizedKeysFixture),
+				},
+			},
+			commit: git.Commit{
+				Hash:      []byte("shasum"),
+				Encoded:   []byte(encodedCommitFixture),
+				Signature: signatureCommitFixture,
+			},
+			beforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Spec.Interval = metav1.Duration{Duration: interval}
+				obj.Spec.Verification = &sourcev1.GitRepositoryVerification{
+					Mode: sourcev1.ModeGitHEAD,
+					SecretRef: meta.LocalObjectReference{
+						Name: "ssh-keys-only",
+					},
+				}
+			},
+			wantErr: true,
+			assertConditions: []metav1.Condition{
+				*conditions.FalseCondition(sourcev1.SourceVerifiedCondition, "InvalidCommitSignature", "PGP signature detected but no PGP public keys found in secret (keys with .asc suffix)"),
+			},
+		},
+		{
+			name: "SSH-signed tag but Secret only has .asc keys makes SourceVerifiedCondition=False",
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "pgp-keys-only",
+				},
+				Data: map[string][]byte{
+					"author1.asc": []byte(armoredKeyRingFixture),
+				},
+			},
+			commit: git.Commit{
+				ReferencingTag: &git.Tag{
+					Name:      "v0.1.0",
+					Hash:      []byte("shasum"),
+					Encoded:   []byte(encodedSSHTagFixture),
+					Signature: signatureSSHTagFixture,
+				},
+			},
+			beforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Spec.Reference = &sourcev1.GitRepositoryRef{
+					Tag: "v0.1.0",
+				}
+				obj.Spec.Interval = metav1.Duration{Duration: interval}
+				obj.Spec.Verification = &sourcev1.GitRepositoryVerification{
+					Mode: sourcev1.ModeGitTag,
+					SecretRef: meta.LocalObjectReference{
+						Name: "pgp-keys-only",
+					},
+				}
+			},
+			wantErr: true,
+			assertConditions: []metav1.Condition{
+				*conditions.FalseCondition(sourcev1.SourceVerifiedCondition, "InvalidTagSignature", "signature verification of tag 'v0.1.0@shasum' failed: SSH signature detected but no SSH public keys found in secret (keys with .sshpub suffix)"),
+			},
+		},
+		{
+			name: "Invalid SSH key in .sshpub entry makes SourceVerifiedCondition=False",
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "invalid-ssh-key",
+				},
+				Data: map[string][]byte{
+					"author1.sshpub": []byte("ssh-ed25519 INVALIDKEY test@example.com"),
+				},
+			},
+			commit: git.Commit{
+				Hash:      []byte("shasum"),
+				Encoded:   []byte(encodedSSHCommitFixture),
+				Signature: signatureSSHCommitFixture,
+			},
+			beforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Spec.Interval = metav1.Duration{Duration: interval}
+				obj.Spec.Verification = &sourcev1.GitRepositoryVerification{
+					Mode: sourcev1.ModeGitHEAD,
+					SecretRef: meta.LocalObjectReference{
+						Name: "invalid-ssh-key",
+					},
+				}
+			},
+			wantErr: true,
+			assertConditions: []metav1.Condition{
+				*conditions.FalseCondition(sourcev1.SourceVerifiedCondition, "InvalidCommitSignature", "signature verification of commit 'shasum' failed: unable to verify Git commit SSH signature"),
+			},
+		},
+		{
+			name: "Mixed: PGP-signed tag and SSH-signed commit with both key types in Secret and mode=TagAndHEAD makes SourceVerifiedCondition=True",
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "mixed-keys",
+				},
+				Data: map[string][]byte{
+					"author1.asc":    []byte(armoredKeyRingFixture),
+					"author1.sshpub": []byte(sshAuthorizedKeysFixture),
+				},
+			},
+			commit: git.Commit{
+				Hash:      []byte("shasum"),
+				Encoded:   []byte(encodedSSHCommitFixture),
+				Signature: signatureSSHCommitFixture,
+				ReferencingTag: &git.Tag{
+					Name:      "v0.1.0",
+					Hash:      []byte("shasum"),
+					Encoded:   []byte(encodedTagFixture),
+					Signature: signatureTagFixture,
+				},
+			},
+			beforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Spec.Reference = &sourcev1.GitRepositoryRef{
+					Tag: "v0.1.0",
+				}
+				obj.Spec.Interval = metav1.Duration{Duration: interval}
+				obj.Spec.Verification = &sourcev1.GitRepositoryVerification{
+					Mode: sourcev1.ModeGitTagAndHEAD,
+					SecretRef: meta.LocalObjectReference{
+						Name: "mixed-keys",
+					},
+				}
+			},
+			want:                       sreconcile.ResultSuccess,
+			wantSourceVerificationMode: ptrToVerificationMode(sourcev1.ModeGitTagAndHEAD),
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.SourceVerifiedCondition, meta.SucceededReason, "verified signature of\n\t- tag 'v0.1.0@shasum' with key '5982D0279C227FFD'\n\t- commit 'shasum' with key 'SHA256:SDB4adE/BP2VLwX9Pdf7aFUwW9JNdzoPSsHjd/wZIw4'"),
+			},
+		},
+		{
+			name: "Mixed: SSH-signed tag and PGP-signed commit with both key types in Secret and mode=TagAndHEAD makes SourceVerifiedCondition=True",
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "mixed-keys-reverse",
+				},
+				Data: map[string][]byte{
+					"author1.asc":    []byte(armoredKeyRingFixture),
+					"author1.sshpub": []byte(sshAuthorizedKeysFixture),
+				},
+			},
+			commit: git.Commit{
+				Hash:      []byte("shasum"),
+				Encoded:   []byte(encodedCommitFixture),
+				Signature: signatureCommitFixture,
+				ReferencingTag: &git.Tag{
+					Name:      "v0.1.0",
+					Hash:      []byte("shasum"),
+					Encoded:   []byte(encodedSSHTagFixture),
+					Signature: signatureSSHTagFixture,
+				},
+			},
+			beforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Spec.Reference = &sourcev1.GitRepositoryRef{
+					Tag: "v0.1.0",
+				}
+				obj.Spec.Interval = metav1.Duration{Duration: interval}
+				obj.Spec.Verification = &sourcev1.GitRepositoryVerification{
+					Mode: sourcev1.ModeGitTagAndHEAD,
+					SecretRef: meta.LocalObjectReference{
+						Name: "mixed-keys-reverse",
+					},
+				}
+			},
+			want:                       sreconcile.ResultSuccess,
+			wantSourceVerificationMode: ptrToVerificationMode(sourcev1.ModeGitTagAndHEAD),
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.SourceVerifiedCondition, meta.SucceededReason, "verified signature of\n\t- tag 'v0.1.0@shasum' with key 'SHA256:SDB4adE/BP2VLwX9Pdf7aFUwW9JNdzoPSsHjd/wZIw4'\n\t- commit 'shasum' with key '5982D0279C227FFD'"),
+			},
+		},
+		{
+			name: "Unsupported signature type makes SourceVerifiedCondition=False",
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "existing",
+				},
+				Data: map[string][]byte{
+					"foo": []byte(armoredKeyRingFixture),
+				},
+			},
+			commit: git.Commit{
+				Hash:      []byte("shasum"),
+				Encoded:   []byte(encodedCommitFixture),
+				Signature: "-----BEGIN SIGNED MESSAGE-----\nsome x509 signature\n-----END SIGNED MESSAGE-----",
+			},
+			beforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Spec.Interval = metav1.Duration{Duration: interval}
+				obj.Spec.Verification = &sourcev1.GitRepositoryVerification{
+					Mode: sourcev1.ModeGitHEAD,
+					SecretRef: meta.LocalObjectReference{
+						Name: "existing",
+					},
+				}
+			},
+			wantErr: true,
+			assertConditions: []metav1.Condition{
+				*conditions.FalseCondition(sourcev1.SourceVerifiedCondition, "InvalidCommitSignature", "unsupported signature type: x509"),
+			},
+		},
+		{
+			name: "Valid commit with explicit .asc key suffix makes SourceVerifiedCondition=True",
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "explicit-asc",
+				},
+				Data: map[string][]byte{
+					"foo.asc": []byte(armoredKeyRingFixture),
+				},
+			},
+			commit: git.Commit{
+				Hash:      []byte("shasum"),
+				Encoded:   []byte(encodedCommitFixture),
+				Signature: signatureCommitFixture,
+			},
+			beforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Spec.Interval = metav1.Duration{Duration: interval}
+				obj.Spec.Verification = &sourcev1.GitRepositoryVerification{
+					Mode: sourcev1.ModeGitHEAD,
+					SecretRef: meta.LocalObjectReference{
+						Name: "explicit-asc",
+					},
+				}
+			},
+			want:                       sreconcile.ResultSuccess,
+			wantSourceVerificationMode: ptrToVerificationMode(sourcev1.ModeGitHEAD),
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.SourceVerifiedCondition, meta.SucceededReason, "verified signature of\n\t- commit 'shasum' with key '5982D0279C227FFD'"),
+			},
 		},
 	}
 
