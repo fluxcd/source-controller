@@ -1,13 +1,13 @@
-github.com/Masterminds/semver/v3 v3.4.0 h1:Zog+i5UMtVoCU8oKka5P7i9q9HgrJeGzI9SA1Xbatp0=
-github.com/Masterminds/semver/v3 v3.4.0/go.mod h1:4V+yj/TJE1HU9XfppCwVMZq3I84lprf4nC11bSS5beM=
+github.com/Masterminds/semver/v3 v3.5.0 h1:kQceYJfbupGfZOKZQg0kou0DgAKhzDg2NZPAwZ/2OOE=
+github.com/Masterminds/semver/v3 v3.5.0/go.mod h1:4V+yj/TJE1HU9XfppCwVMZq3I84lprf4nC11bSS5beM=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc h1:U9qPSI2PIWSS1VwoXQT9A3Wy9MM3WgvqSxFWenqJduM=
 github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/fluxcd/pkg/apis/acl v0.10.0 h1:KPfAmELNvtvaz8wixnm/MYXqa+MJf7ntVVMUU93Aenk=
 github.com/fluxcd/pkg/apis/acl v0.10.0/go.mod h1:a87i2A7AlFO5N2J8CxtzaUCCDmuLLWOHwkKu3eJF5fY=
-github.com/fluxcd/pkg/apis/meta v1.29.0 h1:JRFbAqLQ9YJG5AXBb0urvH9ySYZ/WJqq1dPhfzCRvPs=
-github.com/fluxcd/pkg/apis/meta v1.29.0/go.mod h1:3DmYMnyH3XdY8/g2gXfsVIGEd/zpcB2PEkuurv2vgHU=
+github.com/fluxcd/pkg/apis/meta v1.30.0 h1:26TOd1hbamH3c5KOb/CIMGpUDB4G4JV+WCcPyUhmuaM=
+github.com/fluxcd/pkg/apis/meta v1.30.0/go.mod h1:q1YjUeCmf0syhkZoMcRmP3pkBaLKFLl7g0mUvVGG4CM=
 github.com/fxamacker/cbor/v2 v2.9.2 h1:X4Ksno9+x3cz0TZv69ec1hxP/+tymuR8PXQJyDwfh78=
 github.com/fxamacker/cbor/v2 v2.9.2/go.mod h1:vM4b+DJCtHn+zz7h3FFp/hDAI9WNWCsZj23V5ytsSxQ=
 github.com/go-logr/logr v1.4.3 h1:CjnDlHq8ikf6E492q6eKboGOC0T8CDaOvkHCIg8idEI=

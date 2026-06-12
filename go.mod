@@ -22,23 +22,23 @@ require (
 	github.com/docker/go-units v0.5.0
 	github.com/elazarl/goproxy v1.8.4
 	github.com/fluxcd/cli-utils v1.2.1
-	github.com/fluxcd/pkg/apis/event v0.26.0
-	github.com/fluxcd/pkg/apis/meta v1.29.0
-	github.com/fluxcd/pkg/artifact v0.17.0
-	github.com/fluxcd/pkg/auth v0.52.0
+	github.com/fluxcd/pkg/apis/event v0.27.0
+	github.com/fluxcd/pkg/apis/meta v1.30.0
+	github.com/fluxcd/pkg/artifact v0.18.0
+	github.com/fluxcd/pkg/auth v0.53.0
 	github.com/fluxcd/pkg/cache v0.14.0
-	github.com/fluxcd/pkg/git v0.51.0
+	github.com/fluxcd/pkg/git v0.52.0
 	github.com/fluxcd/pkg/gittestserver v0.29.0
-	github.com/fluxcd/pkg/helmtestserver v0.39.0
+	github.com/fluxcd/pkg/helmtestserver v0.40.0
 	github.com/fluxcd/pkg/http/transport v0.8.0
 	github.com/fluxcd/pkg/masktoken v0.9.0
-	github.com/fluxcd/pkg/oci v0.67.0
-	github.com/fluxcd/pkg/runtime v0.109.0
+	github.com/fluxcd/pkg/oci v0.68.0
+	github.com/fluxcd/pkg/runtime v0.110.0
 	github.com/fluxcd/pkg/sourceignore v0.18.0
 	github.com/fluxcd/pkg/ssh v0.25.0
 	github.com/fluxcd/pkg/tar v1.2.0
 	github.com/fluxcd/pkg/testserver v0.14.0
-	github.com/fluxcd/pkg/version v0.15.0
+	github.com/fluxcd/pkg/version v0.16.0
 	github.com/fluxcd/source-controller/api v1.8.0
 	github.com/go-git/go-billy/v5 v5.9.0
 	github.com/go-git/go-git/v5 v5.19.1
@@ -63,16 +63,16 @@ require (
 	github.com/sigstore/sigstore-go v1.2.0
 	github.com/sirupsen/logrus v1.9.4
 	github.com/spf13/pflag v1.0.10
-	golang.org/x/crypto v0.52.0
+	golang.org/x/crypto v0.53.0
 	golang.org/x/oauth2 v0.36.0
-	golang.org/x/sync v0.20.0
+	golang.org/x/sync v0.21.0
 	google.golang.org/api v0.283.0
-	helm.sh/helm/v4 v4.2.0
+	helm.sh/helm/v4 v4.2.1
 	k8s.io/api v0.36.1
 	k8s.io/apimachinery v0.36.1
 	k8s.io/client-go v0.36.1
 	k8s.io/utils v0.0.0-20260507154919-ff6756f316d2
-	oras.land/oras-go/v2 v2.6.0
+	oras.land/oras-go/v2 v2.6.1
 	sigs.k8s.io/controller-runtime v0.24.1
 	sigs.k8s.io/yaml v1.6.0
 )
@@ -344,7 +344,7 @@ require (
 	github.com/subosito/gotenv v1.6.0 // indirect
 	github.com/syndtr/goleveldb v1.0.1-0.20220721030215-126854af5e6d // indirect
 	github.com/tetratelabs/wabin v0.0.0-20230304001439-f6f874872834 // indirect
-	github.com/tetratelabs/wazero v1.11.0 // indirect
+	github.com/tetratelabs/wazero v1.12.0 // indirect
 	github.com/thales-e-security/pool v0.0.2 // indirect
 	github.com/theupdateframework/go-tuf v0.7.0 // indirect
 	github.com/theupdateframework/go-tuf/v2 v2.4.2-0.20260407074541-7e8f69f906ef // indirect
@@ -396,9 +396,9 @@ require (
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	golang.org/x/mod v0.36.0 // indirect
 	golang.org/x/net v0.55.0 // indirect
-	golang.org/x/sys v0.45.0 // indirect
-	golang.org/x/term v0.43.0 // indirect
-	golang.org/x/text v0.37.0 // indirect
+	golang.org/x/sys v0.46.0 // indirect
+	golang.org/x/term v0.44.0 // indirect
+	golang.org/x/text v0.38.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
 	golang.org/x/tools v0.45.0 // indirect
 	gomodules.xyz/jsonpatch/v2 v2.5.0 // indirect
