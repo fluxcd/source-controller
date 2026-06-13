@@ -47,6 +47,26 @@ type OCIRepositoryVerification struct {
 	TrustedRootSecretRef *meta.LocalObjectReference `json:"trustedRootSecretRef,omitempty"`
 }
 
+// HelmChartVerification verifies the authenticity of an OCI Artifact
+type HelmChartVerification struct {
+	// Provider specifies the technology used to sign the OCI Artifact.
+	// +kubebuilder:validation:Enum=cosign;notation
+	// +kubebuilder:default:=cosign
+	Provider string `json:"provider"`
+
+	// SecretRef specifies the Kubernetes Secret containing the
+	// trusted public keys.
+	// +optional
+	SecretRef *meta.LocalObjectReference `json:"secretRef,omitempty"`
+
+	// MatchOIDCIdentity specifies the identity matching criteria to use
+	// while verifying an OCI artifact which was signed using Cosign keyless
+	// signing. The artifact's identity is deemed to be verified if any of the
+	// specified matchers match against the identity.
+	// +optional
+	MatchOIDCIdentity []OIDCIdentityMatch `json:"matchOIDCIdentity,omitempty"`
+}
+
 // OIDCIdentityMatch specifies options for verifying the certificate identity,
 // i.e. the issuer and the subject of the certificate.
 type OIDCIdentityMatch struct {

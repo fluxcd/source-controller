@@ -2903,7 +2903,7 @@ func TestHelmChartRepository_reconcileSource_verifyOCISourceSignature_keyless(t 
 					},
 					Version: tt.version,
 					Chart:   "podinfo",
-					Verify: &sourcev1.OCIRepositoryVerification{
+					Verify: &sourcev1.HelmChartVerification{
 						Provider: "cosign",
 					},
 				},
@@ -3017,7 +3017,7 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_verifySignatureNotation(t *t
 			beforeFunc: func(obj *sourcev1.HelmChart) {
 				obj.Spec.Chart = metadata.Name
 				obj.Spec.Version = metadata.Version
-				obj.Spec.Verify = &sourcev1.OCIRepositoryVerification{
+				obj.Spec.Verify = &sourcev1.HelmChartVerification{
 					Provider:  "notation",
 					SecretRef: &meta.LocalObjectReference{Name: "notation-config"},
 				}
@@ -3036,7 +3036,7 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_verifySignatureNotation(t *t
 			beforeFunc: func(obj *sourcev1.HelmChart) {
 				obj.Spec.Chart = metadata.Name
 				obj.Spec.Version = metadata.Version
-				obj.Spec.Verify = &sourcev1.OCIRepositoryVerification{
+				obj.Spec.Verify = &sourcev1.HelmChartVerification{
 					Provider:  "notation",
 					SecretRef: &meta.LocalObjectReference{Name: "notation-config"},
 				}
@@ -3057,7 +3057,7 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_verifySignatureNotation(t *t
 			beforeFunc: func(obj *sourcev1.HelmChart) {
 				obj.Spec.Chart = metadata.Name
 				obj.Spec.Version = metadata.Version
-				obj.Spec.Verify = &sourcev1.OCIRepositoryVerification{
+				obj.Spec.Verify = &sourcev1.HelmChartVerification{
 					Provider:  "notation",
 					SecretRef: &meta.LocalObjectReference{Name: "notation-config"},
 				}
@@ -3096,7 +3096,7 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_verifySignatureNotation(t *t
 			beforeFunc: func(obj *sourcev1.HelmChart) {
 				obj.Spec.Chart = metadata.Name
 				obj.Spec.Version = metadata.Version
-				obj.Spec.Verify = &sourcev1.OCIRepositoryVerification{
+				obj.Spec.Verify = &sourcev1.HelmChartVerification{
 					Provider:  "notation",
 					SecretRef: &meta.LocalObjectReference{Name: "notation-config"},
 				}
@@ -3116,7 +3116,7 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_verifySignatureNotation(t *t
 			beforeFunc: func(obj *sourcev1.HelmChart) {
 				obj.Spec.Chart = metadata.Name
 				obj.Spec.Version = metadata.Version
-				obj.Spec.Verify = &sourcev1.OCIRepositoryVerification{
+				obj.Spec.Verify = &sourcev1.HelmChartVerification{
 					Provider:  "notation",
 					SecretRef: &meta.LocalObjectReference{Name: "notation-config"},
 				}
@@ -3341,7 +3341,7 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_verifySignatureCosign(t *tes
 			beforeFunc: func(obj *sourcev1.HelmChart) {
 				obj.Spec.Chart = metadata.Name
 				obj.Spec.Version = metadata.Version
-				obj.Spec.Verify = &sourcev1.OCIRepositoryVerification{
+				obj.Spec.Verify = &sourcev1.HelmChartVerification{
 					Provider:  "cosign",
 					SecretRef: &meta.LocalObjectReference{Name: "cosign-key"},
 				}
@@ -3359,7 +3359,7 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_verifySignatureCosign(t *tes
 			beforeFunc: func(obj *sourcev1.HelmChart) {
 				obj.Spec.Chart = metadata.Name
 				obj.Spec.Version = metadata.Version
-				obj.Spec.Verify = &sourcev1.OCIRepositoryVerification{
+				obj.Spec.Verify = &sourcev1.HelmChartVerification{
 					Provider: "cosign",
 				}
 			},
@@ -3376,7 +3376,7 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_verifySignatureCosign(t *tes
 			beforeFunc: func(obj *sourcev1.HelmChart) {
 				obj.Spec.Chart = metadata.Name
 				obj.Spec.Version = metadata.Version
-				obj.Spec.Verify = &sourcev1.OCIRepositoryVerification{
+				obj.Spec.Verify = &sourcev1.HelmChartVerification{
 					Provider:  "cosign",
 					SecretRef: &meta.LocalObjectReference{Name: "cosign-key"},
 				}
