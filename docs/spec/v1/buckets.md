@@ -1022,7 +1022,7 @@ as a more efficient way of excluding files.
 pattern format](https://git-scm.com/docs/gitignore#_pattern_format). Storage
 objects which keys match the defined rules are excluded while fetching.
 
-When specified, `.spec.ignore` overrides the [default exclusion
+When specified, `.spec.ignore` extends the [default exclusion
 list](#default-exclusions), and may overrule the [`.sourceignore` file
 exclusions](#sourceignore-file). See [excluding files](#excluding-files)
 for more information.
