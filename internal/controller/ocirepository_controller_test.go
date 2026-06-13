@@ -690,7 +690,7 @@ func TestOCIRepository_reconcileSource_authStrategy(t *testing.T) {
 				crane.Insecure,
 			},
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "%s", "failed to get credential from"),
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.OCIPullFailedReason, "%s", "failed to get access token for artifact registry"),
 			},
 		},
 		{
@@ -3127,7 +3127,7 @@ func TestOCIRepository_objectLevelWorkloadIdentityFeatureGate(t *testing.T) {
 		}
 		logOCIRepoStatus(t, resultobj)
 		return !conditions.IsReady(resultobj) &&
-			conditions.GetReason(resultobj, meta.ReadyCondition) == sourcev1.AuthenticationFailedReason
+			conditions.GetReason(resultobj, meta.ReadyCondition) == sourcev1.OCIPullFailedReason
 	}).Should(BeTrue())
 }
 
