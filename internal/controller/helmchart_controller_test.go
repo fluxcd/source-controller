@@ -2516,7 +2516,7 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_authStrategy(t *testing.T) {
 			provider:    "aws",
 			providerImg: "oci://123456789000.dkr.ecr.us-east-2.amazonaws.com/test",
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.FetchFailedCondition, "Unknown", "unknown build error: failed to get credential from"),
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, "Unknown", "unknown build error: unable to get authentication data from OIDC: failed to get access token for artifact registry"),
 			},
 		},
 		{
