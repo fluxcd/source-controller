@@ -1,0 +1,18 @@
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: OCIRepository
+metadata:
+  name: test-v2-keyless
+spec:
+  interval: 5m
+  url: oci://sigstore-test-registry:5000/test/v2-keyless
+  ref:
+    tag: v1
+  insecure: true
+  verify:
+    provider: cosign
+    trustedRootSecretRef:
+      name: sigstore-trusted-root
+    matchOIDCIdentity:
+    - issuer: "^https://kubernetes\\.default\\.svc"
+      subject: "^https://kubernetes\\.io/namespaces/default/serviceaccounts/default$"
