@@ -2,6 +2,59 @@
 
 All notable changes to this project are documented in this file.
 
+## 1.9.0
+
+**Release date:** 2026-06-17
+
+This minor release comes with new authentication and verification features
+for the source APIs, along with various improvements, fixes and dependency
+updates.
+
+### GitRepository
+
+The GitRepository controller now supports AWS CodeCommit as a Git provider,
+allowing authentication to CodeCommit repositories.
+
+Git commit and tag verification now supports SSH signatures in addition to
+OpenPGP, so commits and tags signed with SSH keys can be verified via
+`.spec.verify`.
+
+### OCIRepository
+
+The OCIRepository controller now supports configuring a custom Sigstore
+trusted root for keyless signature verification, via a Secret referenced in
+the verification configuration.
+
+OCI artifacts are now resolved and stored strictly by their content digest.
+
+Fixes:
+- cosign: fix v3 bundle verify on http and private CA registries and pass TLS to Rekor
+  [#2061](https://github.com/fluxcd/source-controller/pull/2061)
+- Close OCI blob reader and wrap errors consistently across controllers
+  [#2066](https://github.com/fluxcd/source-controller/pull/2066)
+- Remove unimplemented field from HelmChart CRD
+  [#2080](https://github.com/fluxcd/source-controller/pull/2080)
+
+Improvements:
+- AWS CodeCommit support
+  [#2035](https://github.com/fluxcd/source-controller/pull/2035)
+- Add git commit/tag SSH signature verification
+  [#2077](https://github.com/fluxcd/source-controller/pull/2077)
+- Add custom Sigstore trusted root support
+  [#2003](https://github.com/fluxcd/source-controller/pull/2003)
+- Ensure OCI artifacts are handled strictly by digest
+  [#2075](https://github.com/fluxcd/source-controller/pull/2075)
+- build: target host architecture for local builds and envtest
+  [#2076](https://github.com/fluxcd/source-controller/pull/2076)
+- Various dependency updates
+  [#2067](https://github.com/fluxcd/source-controller/pull/2067)
+  [#2071](https://github.com/fluxcd/source-controller/pull/2071)
+  [#2072](https://github.com/fluxcd/source-controller/pull/2072)
+  [#2073](https://github.com/fluxcd/source-controller/pull/2073)
+  [#2078](https://github.com/fluxcd/source-controller/pull/2078)
+  [#2079](https://github.com/fluxcd/source-controller/pull/2079)
+  [#2081](https://github.com/fluxcd/source-controller/pull/2081)
+
 ## 1.8.5
 
 **Release date:** 2026-05-20
