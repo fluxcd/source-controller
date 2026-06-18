@@ -18,6 +18,7 @@ package cosign
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -30,6 +31,7 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	. "github.com/onsi/gomega"
 	"github.com/sigstore/cosign/v3/pkg/cosign"
+	"github.com/sigstore/cosign/v3/pkg/oci"
 	"github.com/sigstore/sigstore-go/pkg/root"
 
 	testproxy "github.com/fluxcd/source-controller/tests/proxy"
@@ -233,6 +235,88 @@ func TestNewCosignVerifierWithTrustedRoot(t *testing.T) {
 		g.Expect(err).To(HaveOccurred())
 		g.Expect(err.Error()).To(ContainSubstring("unable to parse trusted root"))
 	})
+}
+
+func TestVerifyWithRekorURLs(t *testing.T) {
+	tests := []struct {
+		name         string
+		opts         cosign.CheckOpts
+		rekorURLs    []string
+		verify       func(attempt int, opts cosign.CheckOpts) ([]oci.Signature, error)
+		wantAttempts []bool
+		wantErr      string
+	}{
+		{
+			name:      "retries each Rekor URL for legacy online lookup",
+			rekorURLs: []string{"https://rekor-a.example.com", "https://rekor-b.example.com"},
+			verify: func(_ int, _ cosign.CheckOpts) ([]oci.Signature, error) {
+				return nil, errors.New("verify failed")
+			},
+			wantAttempts: []bool{false, true, true},
+			wantErr:      "rekor \"https://rekor-b.example.com\"",
+		},
+		{
+			name:      "returns successful Rekor retry",
+			rekorURLs: []string{"https://rekor-a.example.com", "https://rekor-b.example.com"},
+			verify: func(attempt int, _ cosign.CheckOpts) ([]oci.Signature, error) {
+				if attempt == 1 {
+					return []oci.Signature{nil}, nil
+				}
+				return nil, errors.New("verify failed")
+			},
+			wantAttempts: []bool{false, true},
+		},
+		{
+			name:      "does not retry bundle verification",
+			opts:      cosign.CheckOpts{NewBundleFormat: true},
+			rekorURLs: []string{"https://rekor-a.example.com"},
+			verify: func(_ int, _ cosign.CheckOpts) ([]oci.Signature, error) {
+				return nil, errors.New("bundle failed")
+			},
+			wantAttempts: []bool{false},
+			wantErr:      "bundle failed",
+		},
+		{
+			name:      "does not retry when tlog verification is ignored",
+			opts:      cosign.CheckOpts{IgnoreTlog: true},
+			rekorURLs: []string{"https://rekor-a.example.com"},
+			verify: func(_ int, _ cosign.CheckOpts) ([]oci.Signature, error) {
+				return nil, errors.New("verify failed")
+			},
+			wantAttempts: []bool{false},
+			wantErr:      "verify failed",
+		},
+		{
+			name:      "does not retry without Rekor URLs",
+			rekorURLs: nil,
+			verify: func(_ int, _ cosign.CheckOpts) ([]oci.Signature, error) {
+				return nil, errors.New("verify failed")
+			},
+			wantAttempts: []bool{false},
+			wantErr:      "verify failed",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+			verifier := &CosignVerifier{rekorURLs: tt.rekorURLs}
+			var attempts []bool
+			signatures, err := verifier.verifyWithRekorURLs(tt.opts, func(opts cosign.CheckOpts) ([]oci.Signature, error) {
+				attempts = append(attempts, opts.RekorClient != nil)
+				return tt.verify(len(attempts)-1, opts)
+			})
+
+			g.Expect(attempts).To(Equal(tt.wantAttempts))
+			if tt.wantErr != "" {
+				g.Expect(err).To(HaveOccurred())
+				g.Expect(err.Error()).To(ContainSubstring(tt.wantErr))
+				return
+			}
+			g.Expect(err).NotTo(HaveOccurred())
+			g.Expect(signatures).To(HaveLen(1))
+		})
+	}
 }
 
 // trustedRootJSON returns a minimal valid trusted_root.json with the given
