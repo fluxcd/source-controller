@@ -22,6 +22,7 @@ import (
 	"net/http"
 	"net/url"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/google/go-containerregistry/pkg/authn"
@@ -148,22 +149,38 @@ func TestOptions(t *testing.T) {
 	}
 }
 
-func TestRekorURLFromTrustedRoot(t *testing.T) {
+func TestRekorURLsFromTrustedRoot(t *testing.T) {
 	tests := []struct {
-		name    string
-		json    string
-		wantURL string
-		wantErr string
+		name     string
+		json     string
+		wantURLs []string
 	}{
 		{
-			name:    "extracts base URL from tlog entry",
-			json:    trustedRootJSON("https://rekor.example.com"),
-			wantURL: "https://rekor.example.com",
+			name:     "extracts base URL from tlog entry",
+			json:     trustedRootJSON("https://rekor.example.com"),
+			wantURLs: []string{"https://rekor.example.com"},
 		},
 		{
-			name:    "error when no tlogs",
-			json:    `{"mediaType":"application/vnd.dev.sigstore.trustedroot+json;version=0.1","tlogs":[]}`,
-			wantErr: "no transparency log entries found",
+			name: "sorts and deduplicates base URLs from all tlog entries",
+			json: trustedRootWithTLogsJSON(
+				rekorTLogJSON("https://rekor-b.example.com", "wNI9atQGlz+VWfO6LRygH4QUfY/8W4RFwiT5i5WRgB0="),
+				rekorTLogJSON("https://rekor-a.example.com", "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="),
+				rekorTLogJSON("https://rekor-b.example.com", "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB="),
+				rekorTLogJSON("", "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC="),
+			),
+			wantURLs: []string{"https://rekor-a.example.com", "https://rekor-b.example.com"},
+		},
+		{
+			name:     "returns empty slice when no tlogs",
+			json:     `{"mediaType":"application/vnd.dev.sigstore.trustedroot+json;version=0.1","tlogs":[]}`,
+			wantURLs: nil,
+		},
+		{
+			name: "returns empty slice when tlogs have no base URLs",
+			json: trustedRootWithTLogsJSON(
+				rekorTLogJSON("", "wNI9atQGlz+VWfO6LRygH4QUfY/8W4RFwiT5i5WRgB0="),
+			),
+			wantURLs: nil,
 		},
 	}
 
@@ -172,20 +189,14 @@ func TestRekorURLFromTrustedRoot(t *testing.T) {
 			g := NewWithT(t)
 
 			tr, err := root.NewTrustedRootFromJSON([]byte(tt.json))
-			if tt.wantErr != "" {
-				// If parsing succeeds with no tlogs, check rekorURLFromTrustedRoot.
-				if err == nil {
-					_, err = rekorURLFromTrustedRoot(tr)
-					g.Expect(err).To(HaveOccurred())
-					g.Expect(err.Error()).To(ContainSubstring(tt.wantErr))
-				}
-				return
-			}
 			g.Expect(err).NotTo(HaveOccurred())
 
-			gotURL, err := rekorURLFromTrustedRoot(tr)
-			g.Expect(err).NotTo(HaveOccurred())
-			g.Expect(gotURL).To(Equal(tt.wantURL))
+			gotURLs := rekorURLsFromTrustedRoot(tr)
+			if tt.wantURLs == nil {
+				g.Expect(gotURLs).To(BeEmpty())
+				return
+			}
+			g.Expect(gotURLs).To(Equal(tt.wantURLs))
 		})
 	}
 }
@@ -211,7 +222,8 @@ func TestNewCosignVerifierWithTrustedRoot(t *testing.T) {
 		g.Expect(err).NotTo(HaveOccurred())
 		g.Expect(verifier).NotTo(BeNil())
 		g.Expect(verifier.opts.TrustedMaterial).NotTo(BeNil())
-		g.Expect(verifier.opts.RekorClient).NotTo(BeNil())
+		g.Expect(verifier.opts.RekorClient).To(BeNil())
+		g.Expect(verifier.rekorURLs).To(Equal([]string{"https://rekor.custom.example.com"}))
 	})
 
 	t.Run("invalid trusted root JSON", func(t *testing.T) {
@@ -281,6 +293,26 @@ func trustedRootJSON(rekorURL string) string {
     }
   ]
 }`, rekorURL)
+}
+
+func trustedRootWithTLogsJSON(tlogs ...string) string {
+	return fmt.Sprintf(`{
+  "mediaType": "application/vnd.dev.sigstore.trustedroot+json;version=0.1",
+  "tlogs": [%s]
+}`, strings.Join(tlogs, ","))
+}
+
+func rekorTLogJSON(rekorURL, keyID string) string {
+	return fmt.Sprintf(`{
+  "baseUrl": %q,
+  "hashAlgorithm": "SHA2_256",
+  "publicKey": {
+    "rawBytes": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE2G2Y+2tabdTV5BcGiBIx0a9fAFwrkBbmLSGtks4L3qX6yYY0zufBnhC8Ur/iy55GhWP/9A/bY2LhC30M9+RYtw==",
+    "keyDetails": "PKIX_ECDSA_P256_SHA_256",
+    "validFor": {"start": "2021-01-12T11:53:27.000Z"}
+  },
+  "logId": {"keyId": %q}
+}`, rekorURL, keyID)
 }
 
 func TestPrivateKeyVerificationWithProxy(t *testing.T) {

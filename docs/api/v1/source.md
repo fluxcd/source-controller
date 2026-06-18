@@ -3737,9 +3737,14 @@ github.com/fluxcd/pkg/apis/meta.LocalObjectReference
 <td>
 <em>(Optional)</em>
 <p>TrustedRootSecretRef specifies the Kubernetes Secret containing a
-Sigstore trusted_root.json file. This enables verification against
-self-hosted Sigstore infrastructure (custom Fulcio CA, self-hosted
-Rekor instance). The Secret must contain a key named &ldquo;trusted_root.json&rdquo;.</p>
+Sigstore trusted_root.json file. This enables verification against custom
+Sigstore trust material, including private Fulcio CAs, Rekor logs, CT
+logs and TSAs. The Secret must contain a key named &ldquo;trusted_root.json&rdquo;.
+Verification policy is auto-detected from the trusted root contents:
+Rekor entries require tlog inclusion proofs, TSA entries require signed
+timestamps, and CT log entries require SCT verification for keyless
+signatures. Keyless verification requires Fulcio and at least one of
+Rekor or TSA material.</p>
 </td>
 </tr>
 </tbody>
