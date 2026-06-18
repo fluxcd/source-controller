@@ -5,7 +5,8 @@ set -euo pipefail
 CLUSTER_NAME="${CLUSTER_NAME:-sigstore-test}"
 IMG="${IMG:-test/source-controller}"
 TAG="${TAG:-latest}"
-BUILD_PLATFORM="${BUILD_PLATFORM:-linux/arm64}"
+ARCH=$(uname -m | sed 's/aarch64/arm64/;s/x86_64/amd64/')
+BUILD_PLATFORM="${BUILD_PLATFORM:-linux/${ARCH}}"
 
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 
