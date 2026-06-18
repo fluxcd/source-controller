@@ -1,0 +1,21 @@
+---
+# Negative test: keyless verification with an empty trusted root that has
+# no Fulcio, no Rekor and no TSA material. The verifier must reject the
+# configuration because there is nothing to verify against.
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: OCIRepository
+metadata:
+  name: test-wrong-empty-trustedroot
+spec:
+  interval: 5m
+  url: oci://sigstore-test-registry:5000/test/v3-keyless
+  ref:
+    tag: v1
+  insecure: true
+  verify:
+    provider: cosign
+    trustedRootSecretRef:
+      name: sigstore-empty-root
+    matchOIDCIdentity:
+    - issuer: "^https://kubernetes\\.default\\.svc"
+      subject: "^https://kubernetes\\.io/namespaces/default/serviceaccounts/default$"

@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # test-signing.sh: Validate cosign v2/v3 x key-pair/keyless verification flows
-# against a custom Sigstore trusted root.
+# including custom Sigstore trusted-root auto-detection of Rekor / Fulcio / TSA.
 #
 # Prerequisites (driven by hack/sigstore-test/Makefile):
 #   - kind cluster + registries: make up registries
 #   - sigstore stack + fulcio config + rekor/fulcio NodePorts: make sigstore
+#   - timestamp authority + tsa-np NodePort: make tsa
 #   - source-controller deployed: make build
 set -euo pipefail
 
@@ -24,6 +25,12 @@ REKOR_NP=$(kubectl -n rekor-system get svc rekor-np -o jsonpath='{.spec.ports[0]
 FULCIO_NP=$(kubectl -n fulcio-system get svc fulcio-np -o jsonpath='{.spec.ports[0].nodePort}')
 REKOR_URL="http://${NODE_IP}:${REKOR_NP}"
 FULCIO_URL="http://${NODE_IP}:${FULCIO_NP}"
+TSA_NP=$(kubectl -n tsa-system get svc tsa-np -o jsonpath='{.spec.ports[0].nodePort}' 2>/dev/null || true)
+if [ -n "${TSA_NP}" ]; then
+  TSA_URL="http://${NODE_IP}:${TSA_NP}/api/v1/timestamp"
+else
+  TSA_URL=""
+fi
 
 # --- Setup keys and secrets ---
 
@@ -56,6 +63,54 @@ cosign trusted-root create \
   --ctfe="url=http://ctlog.ctlog-system.svc,public-key=$PKI_DIR/ctfe.pub,start-time=2024-01-01T00:00:00Z" \
   --out "$PKI_DIR/wrong_trusted_root.json"
 
+# Fulcio-only trusted root: no Rekor, no ctfe. Drives auto-detection to
+# IgnoreTlog=true, IgnoreSCT=true, UseSignedTimestamps=false.
+cosign trusted-root create \
+  --fulcio="url=http://fulcio-server.fulcio-system.svc,certificate-chain=$PKI_DIR/fulcio.crt.pem" \
+  --out "$PKI_DIR/trusted_root_fulcio.json"
+
+# Fulcio + Rekor + CT trusted root. Drives auto-detection to require both
+# tlog and SCT verification for keyless signatures without requiring TSA.
+cosign trusted-root create \
+  --fulcio="url=http://fulcio-server.fulcio-system.svc,certificate-chain=$PKI_DIR/fulcio.crt.pem" \
+  --rekor="url=http://rekor-server.rekor-system.svc,public-key=$PKI_DIR/rekor.pub,start-time=2024-01-01T00:00:00Z" \
+  --ctfe="url=http://ctlog.ctlog-system.svc,public-key=$PKI_DIR/ctfe.pub,start-time=2024-01-01T00:00:00Z" \
+  --out "$PKI_DIR/trusted_root_fulcio_ct.json"
+
+# Fulcio + Rekor + wrong CT trusted root. Negative counterpart that pins
+# IgnoreSCT=false: SCT verification must run and fail against the wrong key.
+cosign trusted-root create \
+  --fulcio="url=http://fulcio-server.fulcio-system.svc,certificate-chain=$PKI_DIR/fulcio.crt.pem" \
+  --rekor="url=http://rekor-server.rekor-system.svc,public-key=$PKI_DIR/rekor.pub,start-time=2024-01-01T00:00:00Z" \
+  --ctfe="url=http://ctlog.ctlog-system.svc,public-key=$KEYS_DIR/wrong.pub,start-time=2024-01-01T00:00:00Z" \
+  --out "$PKI_DIR/wrong_ct_root.json"
+
+# Rekor-only trusted root: no Fulcio, no ctfe. Drives auto-detection to
+# IgnoreTlog=false, IgnoreSCT=true. Used to enforce tlog inclusion alongside
+# a private-key signature, without keyless cert chain validation.
+cosign trusted-root create \
+  --rekor="url=http://rekor-server.rekor-system.svc,public-key=$PKI_DIR/rekor.pub,start-time=2024-01-01T00:00:00Z" \
+  --out "$PKI_DIR/trusted_root_rekor.json"
+
+# Empty trusted root: no components at all. The verifier must reject this
+# configuration for keyless because there is nothing to verify against.
+cat > "$PKI_DIR/trusted_root_empty.json" <<'EOF'
+{"mediaType":"application/vnd.dev.sigstore.trustedroot+json;version=0.1"}
+EOF
+
+# Fulcio + TSA trusted root: keyless verification with RFC3161 signed
+# timestamps instead of a Rekor inclusion proof. Models GitHub-style
+# immutable releases where the bundle ships a TSA timestamp and skips
+# the transparency log. Only created when a TSA is reachable.
+TSA_CHAIN="${SCRIPT_DIR}/pki/tsa/chain.pem"
+if [ -n "${TSA_URL}" ] && [ -s "${TSA_CHAIN}" ]; then
+  cosign trusted-root create \
+    --fulcio="url=http://fulcio-server.fulcio-system.svc,certificate-chain=$PKI_DIR/fulcio.crt.pem" \
+    --ctfe="url=http://ctlog.ctlog-system.svc,public-key=$PKI_DIR/ctfe.pub,start-time=2024-01-01T00:00:00Z" \
+    --tsa="url=http://tsa-server.tsa-system.svc,certificate-chain=${TSA_CHAIN}" \
+    --out "$PKI_DIR/trusted_root_fulcio_tsa.json"
+fi
+
 kubectl -n "$NS" create secret generic cosign-test-key \
   --from-file=cosign.pub="$KEYS_DIR/test.pub" --dry-run=client -o yaml | kubectl apply -f -
 kubectl -n "$NS" create secret generic cosign-wrong-key \
@@ -64,6 +119,20 @@ kubectl -n "$NS" create secret generic sigstore-trusted-root \
   --from-file=trusted_root.json="$PKI_DIR/trusted_root.json" --dry-run=client -o yaml | kubectl apply -f -
 kubectl -n "$NS" create secret generic sigstore-wrong-root \
   --from-file=trusted_root.json="$PKI_DIR/wrong_trusted_root.json" --dry-run=client -o yaml | kubectl apply -f -
+kubectl -n "$NS" create secret generic sigstore-trusted-root-fulcio \
+  --from-file=trusted_root.json="$PKI_DIR/trusted_root_fulcio.json" --dry-run=client -o yaml | kubectl apply -f -
+kubectl -n "$NS" create secret generic sigstore-trusted-root-fulcio-ct \
+  --from-file=trusted_root.json="$PKI_DIR/trusted_root_fulcio_ct.json" --dry-run=client -o yaml | kubectl apply -f -
+kubectl -n "$NS" create secret generic sigstore-wrong-ct-root \
+  --from-file=trusted_root.json="$PKI_DIR/wrong_ct_root.json" --dry-run=client -o yaml | kubectl apply -f -
+kubectl -n "$NS" create secret generic sigstore-trusted-root-rekor \
+  --from-file=trusted_root.json="$PKI_DIR/trusted_root_rekor.json" --dry-run=client -o yaml | kubectl apply -f -
+kubectl -n "$NS" create secret generic sigstore-empty-root \
+  --from-file=trusted_root.json="$PKI_DIR/trusted_root_empty.json" --dry-run=client -o yaml | kubectl apply -f -
+if [ -s "$PKI_DIR/trusted_root_fulcio_tsa.json" ]; then
+  kubectl -n "$NS" create secret generic sigstore-trusted-root-fulcio-tsa \
+    --from-file=trusted_root.json="$PKI_DIR/trusted_root_fulcio_tsa.json" --dry-run=client -o yaml | kubectl apply -f -
+fi
 kubectl -n "$NS" create secret docker-registry registry-creds \
   --docker-server="sigstore-test-registry:5000" \
   --docker-username=user --docker-password=pass \
@@ -139,6 +208,31 @@ cosign_sign_keyless \
   --allow-insecure-registry --use-signing-config=false \
   --yes "$REG/test/v3-keyless:v1"
 
+if [ -s "$PKI_DIR/trusted_root_fulcio_tsa.json" ] && [ -n "${TSA_URL}" ]; then
+  echo "Run cosign v3 bundle keyless + TSA tests (no tlog)"
+  # Image-level cosign sign omits NewBundleFormat from KeyOpts in v3.0.6,
+  # so the rfc3161 timestamp path requires going through a signing config
+  # rather than the explicit --timestamp-server-url flag.
+  #
+  # Always regenerate: the config embeds FULCIO_URL/TSA_URL, which include
+  # the cluster's NodePorts. Those are allocated dynamically and change when
+  # the cluster is recreated, so a cached config would pin stale ports.
+  cosign signing-config create \
+    --no-default-fulcio --no-default-rekor --no-default-tsa --no-default-oidc \
+    --fulcio="url=${FULCIO_URL},api-version=1,start-time=2024-01-01T00:00:00Z,operator=flux-test" \
+    --tsa="url=${TSA_URL},api-version=1,start-time=2024-01-01T00:00:00Z,operator=flux-test" \
+    --tsa-config="EXACT:1" \
+    --oidc-provider="url=https://kubernetes.default.svc.cluster.local,api-version=1,start-time=2024-01-01T00:00:00Z,operator=flux-test" \
+    --out "$KEYS_DIR/signing-config-keyless-tsa.json"
+  push_artifact "$REG/test/v3-keyless-tsa:v1"
+  cosign_sign_keyless \
+    --trusted-root="$PKI_DIR/trusted_root_fulcio_tsa.json" \
+    --signing-config="$KEYS_DIR/signing-config-keyless-tsa.json" \
+    --new-bundle-format=true \
+    --allow-insecure-registry \
+    --yes "$REG/test/v3-keyless-tsa:v1"
+fi
+
 echo "Run cosign v3 key-pair with tlog tests"
 push_artifact "$REG/test/v3-key-tlog:v1"
 COSIGN_PASSWORD="" cosign sign --key="$KEYS_DIR/test.key" \
@@ -183,8 +277,15 @@ kubectl -n "$NS" apply -f "${TESTDATA}/v2-keyless-trustedroot.yaml"
 kubectl -n "$NS" apply -f "${TESTDATA}/v3-keyless-trustedroot.yaml"
 kubectl -n "$NS" apply -f "${TESTDATA}/v3-key-tlog.yaml"
 kubectl -n "$NS" apply -f "${TESTDATA}/combined-secretref-trustedroot.yaml"
+kubectl -n "$NS" apply -f "${TESTDATA}/keyed-rekor-required.yaml"
+kubectl -n "$NS" apply -f "${TESTDATA}/keyed-rekor-only-trustedroot.yaml"
+kubectl -n "$NS" apply -f "${TESTDATA}/keyless-fulcio-ct.yaml"
 kubectl -n "$NS" apply -f "${TESTDATA}/registry-auth.yaml"
 kubectl -n "$NS" apply -f "${TESTDATA}/registry2-fallback.yaml"
+
+if [ -s "$PKI_DIR/trusted_root_fulcio_tsa.json" ] && [ -n "${TSA_URL}" ]; then
+  kubectl -n "$NS" apply -f "${TESTDATA}/keyless-fulcio-tsa.yaml"
+fi
 
 # wait_ready logs before blocking on each OCIRepository so a hang names the
 # object it is stuck on instead of stalling silently.
@@ -200,21 +301,39 @@ wait_ready test-v2-keyless
 wait_ready test-v3-keyless
 wait_ready test-v3-key-tlog
 wait_ready test-combined
+wait_ready test-keyed-rekor-required
+wait_ready test-keyed-rekor-only
+wait_ready test-v3-keyless-ct
 wait_ready test-authed
 wait_ready test-v3-key-fallback
 wait_ready test-v3-keyless-fallback
 wait_ready test-v3-key-tlog-fallback
 
+if [ -s "$PKI_DIR/trusted_root_fulcio_tsa.json" ] && [ -n "${TSA_URL}" ]; then
+  wait_ready test-v3-keyless-tsa
+fi
+
 echo "Run negative verification tests"
 kubectl -n "$NS" apply -f "${TESTDATA}/wrong-key.yaml"
 kubectl -n "$NS" apply -f "${TESTDATA}/wrong-identity.yaml"
 kubectl -n "$NS" apply -f "${TESTDATA}/wrong-rekor-key.yaml"
+kubectl -n "$NS" apply -f "${TESTDATA}/wrong-keyed-rekor-required.yaml"
+kubectl -n "$NS" apply -f "${TESTDATA}/wrong-empty-trustedroot.yaml"
+kubectl -n "$NS" apply -f "${TESTDATA}/wrong-ct-key.yaml"
 
+# Negative cases that depend on a reachable TSA.
 NEGATIVE_CASES=(
   test-wrong-key
   test-wrong-identity
   test-wrong-rekor
+  test-wrong-keyed-rekor-required
+  test-wrong-empty-trustedroot
+  test-wrong-ct
 )
+if [ -s "$PKI_DIR/trusted_root_fulcio_tsa.json" ] && [ -n "${TSA_URL}" ]; then
+  kubectl -n "$NS" apply -f "${TESTDATA}/wrong-no-tsa.yaml"
+  NEGATIVE_CASES+=(test-wrong-no-tsa)
+fi
 
 # Assert each negative case reaches Ready=False with reason VerificationError
 # and never flips to Ready=True. A plain one-shot grep races reconciliation:
