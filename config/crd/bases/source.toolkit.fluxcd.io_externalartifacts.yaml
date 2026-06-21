@@ -16,7 +16,7 @@ spec:
     listKind: ExternalArtifactList
     plural: externalartifacts
     shortNames:
-    - hc
+    - ea
     singular: externalartifact
   scope: Namespaced
   versions:

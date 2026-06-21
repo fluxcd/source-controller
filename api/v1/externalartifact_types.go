@@ -69,7 +69,7 @@ func (in *ExternalArtifact) GetRequeueAfter() time.Duration {
 }
 
 // +kubebuilder:object:root=true
-// +kubebuilder:resource:shortName=hc,categories=all;fluxcd;fluxcd-sources
+// +kubebuilder:resource:shortName=ea,categories=all;fluxcd;fluxcd-sources
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description=""
 // +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type==\"Ready\")].status",description=""
