@@ -197,7 +197,6 @@ func (in *HelmRepository) GetArtifact() *meta.Artifact {
 
 // +genclient
 // +kubebuilder:object:root=true
-// +kubebuilder:resource:shortName=helmrepo
 // +kubebuilder:skipversion
 
 // HelmRepository is the Schema for the helmrepositories API.

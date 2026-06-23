@@ -8,9 +8,15 @@ metadata:
 spec:
   group: source.toolkit.fluxcd.io
   names:
+    categories:
+    - all
+    - fluxcd
+    - fluxcd-sources
     kind: ExternalArtifact
     listKind: ExternalArtifactList
     plural: externalartifacts
+    shortNames:
+    - ea
     singular: externalartifact
   scope: Namespaced
   versions:
