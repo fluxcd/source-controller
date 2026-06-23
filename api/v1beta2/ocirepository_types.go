@@ -284,7 +284,6 @@ func (in *OCIRepository) GetLayerOperation() string {
 
 // +genclient
 // +kubebuilder:object:root=true
-// +kubebuilder:resource:shortName=ocirepo
 // +kubebuilder:skipversion
 
 // OCIRepository is the Schema for the ocirepositories API

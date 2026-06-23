@@ -8,6 +8,10 @@ metadata:
 spec:
   group: source.toolkit.fluxcd.io
   names:
+    categories:
+    - all
+    - fluxcd
+    - fluxcd-sources
     kind: OCIRepository
     listKind: OCIRepositoryList
     plural: ocirepositories
