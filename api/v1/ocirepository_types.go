@@ -266,7 +266,7 @@ func (in *OCIRepository) GetLayerOperation() string {
 // +genclient
 // +kubebuilder:storageversion
 // +kubebuilder:object:root=true
-// +kubebuilder:resource:shortName=ocirepo
+// +kubebuilder:resource:shortName=ocirepo,categories=all;fluxcd;fluxcd-sources
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="URL",type=string,JSONPath=`.spec.url`
 // +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type==\"Ready\")].status",description=""

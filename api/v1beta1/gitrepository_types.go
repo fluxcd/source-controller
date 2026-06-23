@@ -266,7 +266,6 @@ func (in *GitRepository) GetInterval() metav1.Duration {
 
 // +genclient
 // +kubebuilder:object:root=true
-// +kubebuilder:resource:shortName=gitrepo
 // +kubebuilder:skipversion
 
 // GitRepository is the Schema for the gitrepositories API

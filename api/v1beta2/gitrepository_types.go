@@ -286,7 +286,6 @@ func (in *GitRepository) GetArtifact() *meta.Artifact {
 
 // +genclient
 // +kubebuilder:object:root=true
-// +kubebuilder:resource:shortName=gitrepo
 // +kubebuilder:skipversion
 
 // GitRepository is the Schema for the gitrepositories API.

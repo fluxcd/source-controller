@@ -195,7 +195,7 @@ func (in *HelmRepository) GetArtifact() *meta.Artifact {
 // +genclient
 // +kubebuilder:storageversion
 // +kubebuilder:object:root=true
-// +kubebuilder:resource:shortName=helmrepo
+// +kubebuilder:resource:shortName=helmrepo,categories=all;fluxcd;fluxcd-sources
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="URL",type=string,JSONPath=`.spec.url`
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description=""
