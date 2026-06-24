@@ -3381,7 +3381,7 @@ func TestGitRepositoryReconciler_fetchIncludes(t *testing.T) {
 			},
 			wantErr: true,
 			assertConditions: []metav1.Condition{
-				*conditions.TrueCondition(sourcev1.IncludeUnavailableCondition, "NotFound", "could not get resource for include 'a': gitrepositories.source.toolkit.fluxcd.io \"a\" not found"),
+				*conditions.TrueCondition(sourcev1.IncludeUnavailableCondition, "NotFound", "could not get resource for include 'a': gitrepositories.cd.qdrant.io \"a\" not found"),
 			},
 		},
 		{

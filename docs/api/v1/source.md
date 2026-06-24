@@ -9,17 +9,17 @@
 <p>Package v1 contains API Schema definitions for the source v1 API group</p>
 Resource Types:
 <ul class="simple"><li>
-<a href="#source.toolkit.fluxcd.io/v1.Bucket">Bucket</a>
+<a href="#cd.qdrant.io/v1.Bucket">Bucket</a>
 </li><li>
-<a href="#source.toolkit.fluxcd.io/v1.GitRepository">GitRepository</a>
+<a href="#cd.qdrant.io/v1.GitRepository">GitRepository</a>
 </li><li>
 <a href="#cd.qdrant.io/v1.HelmChart">HelmChart</a>
 </li><li>
-<a href="#source.toolkit.fluxcd.io/v1.HelmRepository">HelmRepository</a>
+<a href="#cd.qdrant.io/v1.HelmRepository">HelmRepository</a>
 </li><li>
-<a href="#source.toolkit.fluxcd.io/v1.OCIRepository">OCIRepository</a>
+<a href="#cd.qdrant.io/v1.OCIRepository">OCIRepository</a>
 </li></ul>
-<h3 id="source.toolkit.fluxcd.io/v1.Bucket">Bucket
+<h3 id="cd.qdrant.io/v1.Bucket">Bucket
 </h3>
 <p>Bucket is the Schema for the buckets API.</p>
 <div class="md-typeset__scrollwrap">
@@ -37,7 +37,7 @@ Resource Types:
 <code>apiVersion</code><br>
 string</td>
 <td>
-<code>source.toolkit.fluxcd.io/v1</code>
+<code>cd.qdrant.io/v1</code>
 </td>
 </tr>
 <tr>
@@ -67,7 +67,7 @@ Refer to the Kubernetes API documentation for the fields of the
 <td>
 <code>spec</code><br>
 <em>
-<a href="#source.toolkit.fluxcd.io/v1.BucketSpec">
+<a href="#cd.qdrant.io/v1.BucketSpec">
 BucketSpec
 </a>
 </em>
@@ -116,7 +116,7 @@ string
 <td>
 <code>sts</code><br>
 <em>
-<a href="#source.toolkit.fluxcd.io/v1.BucketSTSSpec">
+<a href="#cd.qdrant.io/v1.BucketSTSSpec">
 BucketSTSSpec
 </a>
 </em>
@@ -299,7 +299,7 @@ Bucket.</p>
 <td>
 <code>status</code><br>
 <em>
-<a href="#source.toolkit.fluxcd.io/v1.BucketStatus">
+<a href="#cd.qdrant.io/v1.BucketStatus">
 BucketStatus
 </a>
 </em>
@@ -311,7 +311,7 @@ BucketStatus
 </table>
 </div>
 </div>
-<h3 id="source.toolkit.fluxcd.io/v1.GitRepository">GitRepository
+<h3 id="cd.qdrant.io/v1.GitRepository">GitRepository
 </h3>
 <p>GitRepository is the Schema for the gitrepositories API.</p>
 <div class="md-typeset__scrollwrap">
@@ -757,7 +757,7 @@ source.</p>
 <td>
 <code>verify</code><br>
 <em>
-<a href="#source.toolkit.fluxcd.io/v1.HelmChartVerification">
+<a href="#cd.qdrant.io/v1.HelmChartVerification">
 HelmChartVerification
 </a>
 </em>
@@ -1043,7 +1043,7 @@ HelmRepositoryStatus
 </table>
 </div>
 </div>
-<h3 id="source.toolkit.fluxcd.io/v1.OCIRepository">OCIRepository
+<h3 id="cd.qdrant.io/v1.OCIRepository">OCIRepository
 </h3>
 <p>OCIRepository is the Schema for the ocirepositories API</p>
 <div class="md-typeset__scrollwrap">
@@ -1061,7 +1061,7 @@ HelmRepositoryStatus
 <code>apiVersion</code><br>
 string</td>
 <td>
-<code>source.toolkit.fluxcd.io/v1</code>
+<code>cd.qdrant.io/v1</code>
 </td>
 </tr>
 <tr>
@@ -1091,7 +1091,7 @@ Refer to the Kubernetes API documentation for the fields of the
 <td>
 <code>spec</code><br>
 <em>
-<a href="#source.toolkit.fluxcd.io/v1.OCIRepositorySpec">
+<a href="#cd.qdrant.io/v1.OCIRepositorySpec">
 OCIRepositorySpec
 </a>
 </em>
@@ -1116,7 +1116,7 @@ on a remote container registry.</p>
 <td>
 <code>ref</code><br>
 <em>
-<a href="#source.toolkit.fluxcd.io/v1.OCIRepositoryRef">
+<a href="#cd.qdrant.io/v1.OCIRepositoryRef">
 OCIRepositoryRef
 </a>
 </em>
@@ -1131,7 +1131,7 @@ defaults to the latest tag.</p>
 <td>
 <code>layerSelector</code><br>
 <em>
-<a href="#source.toolkit.fluxcd.io/v1.OCILayerSelector">
+<a href="#cd.qdrant.io/v1.OCILayerSelector">
 OCILayerSelector
 </a>
 </em>
@@ -1175,7 +1175,7 @@ The secret must be of type kubernetes.io/dockerconfigjson.</p>
 <td>
 <code>verify</code><br>
 <em>
-<a href="#source.toolkit.fluxcd.io/v1.OCIRepositoryVerification">
+<a href="#cd.qdrant.io/v1.OCIRepositoryVerification">
 OCIRepositoryVerification
 </a>
 </em>
@@ -1315,7 +1315,7 @@ bool
 <td>
 <code>status</code><br>
 <em>
-<a href="#source.toolkit.fluxcd.io/v1.OCIRepositoryStatus">
+<a href="#cd.qdrant.io/v1.OCIRepositoryStatus">
 OCIRepositoryStatus
 </a>
 </em>
@@ -1327,11 +1327,11 @@ OCIRepositoryStatus
 </table>
 </div>
 </div>
-<h3 id="source.toolkit.fluxcd.io/v1.BucketSTSSpec">BucketSTSSpec
+<h3 id="cd.qdrant.io/v1.BucketSTSSpec">BucketSTSSpec
 </h3>
 <p>
 (<em>Appears on:</em>
-<a href="#source.toolkit.fluxcd.io/v1.BucketSpec">BucketSpec</a>)
+<a href="#cd.qdrant.io/v1.BucketSpec">BucketSpec</a>)
 </p>
 <p>BucketSTSSpec specifies the required configuration to use a Security Token
 Service for fetching temporary credentials to authenticate in a Bucket
@@ -1415,11 +1415,11 @@ be of type <code>Opaque</code> or <code>kubernetes.io/tls</code>.</p>
 </table>
 </div>
 </div>
-<h3 id="source.toolkit.fluxcd.io/v1.BucketSpec">BucketSpec
+<h3 id="cd.qdrant.io/v1.BucketSpec">BucketSpec
 </h3>
 <p>
 (<em>Appears on:</em>
-<a href="#source.toolkit.fluxcd.io/v1.Bucket">Bucket</a>)
+<a href="#cd.qdrant.io/v1.Bucket">Bucket</a>)
 </p>
 <p>BucketSpec specifies the required configuration to produce an Artifact for
 an object storage bucket.</p>
@@ -1473,7 +1473,7 @@ string
 <td>
 <code>sts</code><br>
 <em>
-<a href="#source.toolkit.fluxcd.io/v1.BucketSTSSpec">
+<a href="#cd.qdrant.io/v1.BucketSTSSpec">
 BucketSTSSpec
 </a>
 </em>
@@ -1653,11 +1653,11 @@ Bucket.</p>
 </table>
 </div>
 </div>
-<h3 id="source.toolkit.fluxcd.io/v1.BucketStatus">BucketStatus
+<h3 id="cd.qdrant.io/v1.BucketStatus">BucketStatus
 </h3>
 <p>
 (<em>Appears on:</em>
-<a href="#source.toolkit.fluxcd.io/v1.Bucket">Bucket</a>)
+<a href="#cd.qdrant.io/v1.Bucket">Bucket</a>)
 </p>
 <p>BucketStatus records the observed state of a Bucket.</p>
 <div class="md-typeset__scrollwrap">
@@ -1756,7 +1756,7 @@ github.com/fluxcd/pkg/apis/meta.ReconcileRequestStatus
 </table>
 </div>
 </div>
-<h3 id="source.toolkit.fluxcd.io/v1.ExternalArtifact">ExternalArtifact
+<h3 id="cd.qdrant.io/v1.ExternalArtifact">ExternalArtifact
 </h3>
 <p>ExternalArtifact is the Schema for the external artifacts API</p>
 <div class="md-typeset__scrollwrap">
@@ -1787,7 +1787,7 @@ Refer to the Kubernetes API documentation for the fields of the
 <td>
 <code>spec</code><br>
 <em>
-<a href="#source.toolkit.fluxcd.io/v1.ExternalArtifactSpec">
+<a href="#cd.qdrant.io/v1.ExternalArtifactSpec">
 ExternalArtifactSpec
 </a>
 </em>
@@ -1818,7 +1818,7 @@ which the artifact is generated.</p>
 <td>
 <code>status</code><br>
 <em>
-<a href="#source.toolkit.fluxcd.io/v1.ExternalArtifactStatus">
+<a href="#cd.qdrant.io/v1.ExternalArtifactStatus">
 ExternalArtifactStatus
 </a>
 </em>
@@ -1830,11 +1830,11 @@ ExternalArtifactStatus
 </table>
 </div>
 </div>
-<h3 id="source.toolkit.fluxcd.io/v1.ExternalArtifactSpec">ExternalArtifactSpec
+<h3 id="cd.qdrant.io/v1.ExternalArtifactSpec">ExternalArtifactSpec
 </h3>
 <p>
 (<em>Appears on:</em>
-<a href="#source.toolkit.fluxcd.io/v1.ExternalArtifact">ExternalArtifact</a>)
+<a href="#cd.qdrant.io/v1.ExternalArtifact">ExternalArtifact</a>)
 </p>
 <p>ExternalArtifactSpec defines the desired state of ExternalArtifact</p>
 <div class="md-typeset__scrollwrap">
@@ -1866,11 +1866,11 @@ which the artifact is generated.</p>
 </table>
 </div>
 </div>
-<h3 id="source.toolkit.fluxcd.io/v1.ExternalArtifactStatus">ExternalArtifactStatus
+<h3 id="cd.qdrant.io/v1.ExternalArtifactStatus">ExternalArtifactStatus
 </h3>
 <p>
 (<em>Appears on:</em>
-<a href="#source.toolkit.fluxcd.io/v1.ExternalArtifact">ExternalArtifact</a>)
+<a href="#cd.qdrant.io/v1.ExternalArtifact">ExternalArtifact</a>)
 </p>
 <p>ExternalArtifactStatus defines the observed state of ExternalArtifact</p>
 <div class="md-typeset__scrollwrap">
@@ -2638,7 +2638,7 @@ source.</p>
 <td>
 <code>verify</code><br>
 <em>
-<a href="#source.toolkit.fluxcd.io/v1.HelmChartVerification">
+<a href="#cd.qdrant.io/v1.HelmChartVerification">
 HelmChartVerification
 </a>
 </em>
@@ -2787,11 +2787,11 @@ github.com/fluxcd/pkg/apis/meta.ReconcileRequestStatus
 </table>
 </div>
 </div>
-<h3 id="source.toolkit.fluxcd.io/v1.HelmChartVerification">HelmChartVerification
+<h3 id="cd.qdrant.io/v1.HelmChartVerification">HelmChartVerification
 </h3>
 <p>
 (<em>Appears on:</em>
-<a href="#source.toolkit.fluxcd.io/v1.HelmChartSpec">HelmChartSpec</a>)
+<a href="#cd.qdrant.io/v1.HelmChartSpec">HelmChartSpec</a>)
 </p>
 <p>HelmChartVerification verifies the authenticity of an OCI Artifact</p>
 <div class="md-typeset__scrollwrap">
@@ -2834,7 +2834,7 @@ trusted public keys.</p>
 <td>
 <code>matchOIDCIdentity</code><br>
 <em>
-<a href="#source.toolkit.fluxcd.io/v1.OIDCIdentityMatch">
+<a href="#cd.qdrant.io/v1.OIDCIdentityMatch">
 []OIDCIdentityMatch
 </a>
 </em>
@@ -2851,7 +2851,7 @@ specified matchers match against the identity.</p>
 </table>
 </div>
 </div>
-<h3 id="source.toolkit.fluxcd.io/v1.HelmRepositorySpec">HelmRepositorySpec
+<h3 id="cd.qdrant.io/v1.HelmRepositorySpec">HelmRepositorySpec
 </h3>
 <p>
 (<em>Appears on:</em>
@@ -3198,12 +3198,12 @@ string
 </table>
 </div>
 </div>
-<h3 id="source.toolkit.fluxcd.io/v1.OCILayerSelector">OCILayerSelector
+<h3 id="cd.qdrant.io/v1.OCILayerSelector">OCILayerSelector
 </h3>
 <p>
 (<em>Appears on:</em>
-<a href="#source.toolkit.fluxcd.io/v1.OCIRepositorySpec">OCIRepositorySpec</a>, 
-<a href="#source.toolkit.fluxcd.io/v1.OCIRepositoryStatus">OCIRepositoryStatus</a>)
+<a href="#cd.qdrant.io/v1.OCIRepositorySpec">OCIRepositorySpec</a>, 
+<a href="#cd.qdrant.io/v1.OCIRepositoryStatus">OCIRepositoryStatus</a>)
 </p>
 <p>OCILayerSelector specifies which layer should be extracted from an OCI Artifact</p>
 <div class="md-typeset__scrollwrap">
@@ -3249,11 +3249,11 @@ is persisted to storage as it is.</p>
 </table>
 </div>
 </div>
-<h3 id="source.toolkit.fluxcd.io/v1.OCIRepositoryRef">OCIRepositoryRef
+<h3 id="cd.qdrant.io/v1.OCIRepositoryRef">OCIRepositoryRef
 </h3>
 <p>
 (<em>Appears on:</em>
-<a href="#source.toolkit.fluxcd.io/v1.OCIRepositorySpec">OCIRepositorySpec</a>)
+<a href="#cd.qdrant.io/v1.OCIRepositorySpec">OCIRepositorySpec</a>)
 </p>
 <p>OCIRepositoryRef defines the image reference for the OCIRepository&rsquo;s URL</p>
 <div class="md-typeset__scrollwrap">
@@ -3320,11 +3320,11 @@ string
 </table>
 </div>
 </div>
-<h3 id="source.toolkit.fluxcd.io/v1.OCIRepositorySpec">OCIRepositorySpec
+<h3 id="cd.qdrant.io/v1.OCIRepositorySpec">OCIRepositorySpec
 </h3>
 <p>
 (<em>Appears on:</em>
-<a href="#source.toolkit.fluxcd.io/v1.OCIRepository">OCIRepository</a>)
+<a href="#cd.qdrant.io/v1.OCIRepository">OCIRepository</a>)
 </p>
 <p>OCIRepositorySpec defines the desired state of OCIRepository</p>
 <div class="md-typeset__scrollwrap">
@@ -3353,7 +3353,7 @@ on a remote container registry.</p>
 <td>
 <code>ref</code><br>
 <em>
-<a href="#source.toolkit.fluxcd.io/v1.OCIRepositoryRef">
+<a href="#cd.qdrant.io/v1.OCIRepositoryRef">
 OCIRepositoryRef
 </a>
 </em>
@@ -3368,7 +3368,7 @@ defaults to the latest tag.</p>
 <td>
 <code>layerSelector</code><br>
 <em>
-<a href="#source.toolkit.fluxcd.io/v1.OCILayerSelector">
+<a href="#cd.qdrant.io/v1.OCILayerSelector">
 OCILayerSelector
 </a>
 </em>
@@ -3412,7 +3412,7 @@ The secret must be of type kubernetes.io/dockerconfigjson.</p>
 <td>
 <code>verify</code><br>
 <em>
-<a href="#source.toolkit.fluxcd.io/v1.OCIRepositoryVerification">
+<a href="#cd.qdrant.io/v1.OCIRepositoryVerification">
 OCIRepositoryVerification
 </a>
 </em>
@@ -3549,11 +3549,11 @@ bool
 </table>
 </div>
 </div>
-<h3 id="source.toolkit.fluxcd.io/v1.OCIRepositoryStatus">OCIRepositoryStatus
+<h3 id="cd.qdrant.io/v1.OCIRepositoryStatus">OCIRepositoryStatus
 </h3>
 <p>
 (<em>Appears on:</em>
-<a href="#source.toolkit.fluxcd.io/v1.OCIRepository">OCIRepository</a>)
+<a href="#cd.qdrant.io/v1.OCIRepository">OCIRepository</a>)
 </p>
 <p>OCIRepositoryStatus defines the observed state of OCIRepository</p>
 <div class="md-typeset__scrollwrap">
@@ -3635,7 +3635,7 @@ the source artifact.</p>
 <td>
 <code>observedLayerSelector</code><br>
 <em>
-<a href="#source.toolkit.fluxcd.io/v1.OCILayerSelector">
+<a href="#cd.qdrant.io/v1.OCILayerSelector">
 OCILayerSelector
 </a>
 </em>
@@ -3665,11 +3665,11 @@ github.com/fluxcd/pkg/apis/meta.ReconcileRequestStatus
 </table>
 </div>
 </div>
-<h3 id="source.toolkit.fluxcd.io/v1.OCIRepositoryVerification">OCIRepositoryVerification
+<h3 id="cd.qdrant.io/v1.OCIRepositoryVerification">OCIRepositoryVerification
 </h3>
 <p>
 (<em>Appears on:</em>
-<a href="#source.toolkit.fluxcd.io/v1.OCIRepositorySpec">OCIRepositorySpec</a>)
+<a href="#cd.qdrant.io/v1.OCIRepositorySpec">OCIRepositorySpec</a>)
 </p>
 <p>OCIRepositoryVerification verifies the authenticity of an OCI Artifact</p>
 <div class="md-typeset__scrollwrap">
@@ -3750,8 +3750,8 @@ Rekor instance). The Secret must contain a key named &ldquo;trusted_root.json&rd
 </h3>
 <p>
 (<em>Appears on:</em>
-<a href="#source.toolkit.fluxcd.io/v1.HelmChartVerification">HelmChartVerification</a>, 
-<a href="#source.toolkit.fluxcd.io/v1.OCIRepositoryVerification">OCIRepositoryVerification</a>)
+<a href="#cd.qdrant.io/v1.HelmChartVerification">HelmChartVerification</a>, 
+<a href="#cd.qdrant.io/v1.OCIRepositoryVerification">OCIRepositoryVerification</a>)
 </p>
 <p>OIDCIdentityMatch specifies options for verifying the certificate identity,
 i.e. the issuer and the subject of the certificate.</p>

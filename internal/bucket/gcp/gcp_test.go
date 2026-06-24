@@ -501,7 +501,7 @@ func getBucket() *raw.Bucket {
 
 func getObjectFile() string {
 	return `
-	apiVersion: source.toolkit.fluxcd.io/v1beta1
+	apiVersion: cd.qdrant.io/v1beta1
 	kind: Bucket
 	metadata:
 	  name: podinfo

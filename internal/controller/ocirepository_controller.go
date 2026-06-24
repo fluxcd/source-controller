@@ -170,9 +170,9 @@ func (r *OCIRepositoryReconciler) SetupWithManager(mgr ctrl.Manager, opts OCIRep
 		Complete(r)
 }
 
-// +kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=ocirepositories,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=ocirepositories/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=ocirepositories/finalizers,verbs=get;create;update;patch;delete
+// +kubebuilder:rbac:groups=cd.qdrant.io,resources=ocirepositories,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=cd.qdrant.io,resources=ocirepositories/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=cd.qdrant.io,resources=ocirepositories/finalizers,verbs=get;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 // +kubebuilder:rbac:groups="",resources=serviceaccounts/token,verbs=create
 

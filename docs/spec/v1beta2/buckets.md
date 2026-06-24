@@ -786,7 +786,7 @@ Example for the `ldap` provider:
 
 ```yaml
 ---
-apiVersion: source.toolkit.fluxcd.io/v1beta2
+apiVersion: cd.qdrant.io/v1beta2
 kind: Bucket
 metadata:
   name: example

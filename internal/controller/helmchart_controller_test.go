@@ -682,12 +682,12 @@ func TestHelmChartReconciler_reconcileSource(t *testing.T) {
 				conditions.MarkUnknown(obj, meta.ReadyCondition, "foo", "bar")
 			},
 			want:    sreconcile.ResultEmpty,
-			wantErr: &serror.Generic{Err: errors.New("gitrepositories.source.toolkit.fluxcd.io \"unavailable\" not found")},
+			wantErr: &serror.Generic{Err: errors.New("gitrepositories.cd.qdrant.io \"unavailable\" not found")},
 			assertFunc: func(g *WithT, build chart.Build, obj sourcev1.HelmChart) {
 				g.Expect(build.Complete()).To(BeFalse())
 
 				g.Expect(obj.Status.Conditions).To(conditions.MatchConditions([]metav1.Condition{
-					*conditions.TrueCondition(sourcev1.FetchFailedCondition, "SourceUnavailable", "failed to get source: gitrepositories.source.toolkit.fluxcd.io \"unavailable\" not found"),
+					*conditions.TrueCondition(sourcev1.FetchFailedCondition, "SourceUnavailable", "failed to get source: gitrepositories.cd.qdrant.io \"unavailable\" not found"),
 					*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "foo"),
 					*conditions.UnknownCondition(meta.ReadyCondition, "foo", "bar"),
 				}))

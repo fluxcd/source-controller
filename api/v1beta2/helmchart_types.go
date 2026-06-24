@@ -216,7 +216,7 @@ func (in *HelmChart) GetValuesFiles() []string {
 
 // +genclient
 // +kubebuilder:object:root=true
-// +kubebuilder:resource:shortName=hc
+// +kubebuilder:resource:shortName=qdranthc
 // +kubebuilder:skipversion
 
 // HelmChart is the Schema for the helmcharts API.

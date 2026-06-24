@@ -27,7 +27,7 @@ rules:
   verbs:
   - create
 - apiGroups:
-  - source.toolkit.fluxcd.io
+  - cd.qdrant.io
   resources:
   - buckets
   - gitrepositories

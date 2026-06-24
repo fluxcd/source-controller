@@ -4,19 +4,19 @@ resources:
 - group: cd
   kind: GitRepository
   version: v1
-- group: source
+- group: cd
   kind: HelmRepository
   version: v1
-- group: source
+- group: cd
   kind: HelmChart
   version: v1
-- group: source
+- group: cd
   kind: Bucket
   version: v1
-- group: source
+- group: cd
   kind: OCIRepository
   version: v1
-- group: source
+- group: cd
   kind: ExternalArtifact
   version: v1
 version: "2"

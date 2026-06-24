@@ -116,9 +116,9 @@ var bucketFailConditions = []string{
 	sourcev1.StorageOperationFailedCondition,
 }
 
-// +kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=buckets,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=buckets/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=buckets/finalizers,verbs=get;create;update;patch;delete
+// +kubebuilder:rbac:groups=cd.qdrant.io,resources=buckets,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=cd.qdrant.io,resources=buckets/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=cd.qdrant.io,resources=buckets/finalizers,verbs=get;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=serviceaccounts,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=serviceaccounts/token,verbs=create

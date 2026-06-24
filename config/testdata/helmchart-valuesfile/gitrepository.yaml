@@ -1,4 +1,4 @@
-apiVersion: source.toolkit.fluxcd.io/v1
+apiVersion: cd.qdrant.io/v1
 kind: GitRepository
 metadata:
   name: podinfo

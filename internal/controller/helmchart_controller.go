@@ -120,9 +120,9 @@ var helmChartFailConditions = []string{
 	sourcev1.StorageOperationFailedCondition,
 }
 
-// +kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=helmcharts,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=helmcharts/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=helmcharts/finalizers,verbs=get;create;update;patch;delete
+// +kubebuilder:rbac:groups=cd.qdrant.io,resources=helmcharts,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=cd.qdrant.io,resources=helmcharts/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=cd.qdrant.io,resources=helmcharts/finalizers,verbs=get;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 
 // HelmChartReconciler reconciles a HelmChart object
