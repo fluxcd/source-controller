@@ -13,6 +13,11 @@ replace (
 // xref: https://github.com/opencontainers/go-digest/pull/66
 replace github.com/opencontainers/go-digest => github.com/opencontainers/go-digest v1.0.1-0.20220411205349-bde1400a84be
 
+// Force the patched go-jose v3 (only pulled transitively) to clear
+// CVE-2026-34986 (JWE DoS). Remove once an upstream dependency requires
+// >= v3.0.5 directly.
+replace github.com/go-jose/go-jose/v3 => github.com/go-jose/go-jose/v3 v3.0.5
+
 require (
 	cloud.google.com/go/compute/metadata v0.9.0
 	cloud.google.com/go/storage v1.62.3
