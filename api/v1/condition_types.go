@@ -111,4 +111,8 @@ const (
 
 	// InvalidSTSConfigurationReason signals that the STS configurtion is invalid.
 	InvalidSTSConfigurationReason string = "InvalidSTSConfiguration"
+
+	// InvalidProviderConfigurationReason signals that the provider
+	// configuration is invalid.
+	InvalidProviderConfigurationReason string = "InvalidProviderConfiguration"
 )

@@ -25,18 +25,22 @@ import (
 	"strings"
 
 	securejoin "github.com/cyphar/filepath-securejoin"
-	"helm.sh/helm/v3/pkg/chart"
-	"helm.sh/helm/v3/pkg/chart/loader"
+	chart "helm.sh/helm/v4/pkg/chart/v2"
 
 	"github.com/fluxcd/source-controller/internal/helm"
 )
+
+// FileLoaderV2 is the interface implemented by chart v2 loaders.
+type FileLoaderV2 interface {
+	Load() (*chart.Chart, error)
+}
 
 // Loader returns a new loader.ChartLoader appropriate for the given chart
 // name. That being, SecureDirLoader when name is a directory, and
 // FileLoader when it's a file.
 // Name can be an absolute or relative path, but always has to be inside
 // root.
-func Loader(root, name string) (loader.ChartLoader, error) {
+func Loader(root, name string) (FileLoaderV2, error) {
 	root, err := filepath.Abs(root)
 	if err != nil {
 		return nil, err

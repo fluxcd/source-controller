@@ -28,3 +28,18 @@
 - name: backport:release/v1.3.x
   description: To be backported to release/v1.3.x
   color: '#ffd700'
+- name: backport:release/v1.4.x
+  description: To be backported to release/v1.4.x
+  color: '#ffd700'
+- name: backport:release/v1.5.x
+  description: To be backported to release/v1.5.x
+  color: '#ffd700'
+- name: backport:release/v1.6.x
+  description: To be backported to release/v1.6.x
+  color: '#ffd700'
+- name: backport:release/v1.7.x
+  description: To be backported to release/v1.7.x
+  color: '#ffd700'
+- name: backport:release/v1.8.x
+  description: To be backported to release/v1.8.x
+  color: '#ffd700'

@@ -27,6 +27,22 @@ import (
 const (
 	// GitRepositoryKind is the string representation of a GitRepository.
 	GitRepositoryKind = "GitRepository"
+
+	// GitProviderGeneric provides support for authentication using
+	// credentials specified in secretRef.
+	GitProviderGeneric string = "generic"
+
+	// GitProviderAzure provides support for authentication to azure
+	// repositories using Managed Identity.
+	GitProviderAzure string = "azure"
+
+	// GitProviderGitHub provides support for authentication to git
+	// repositories using GitHub App authentication
+	GitProviderGitHub string = "github"
+
+	// GitProviderAWS provides support for authentication to AWS CodeCommit
+	// repositories using IAM credentials.
+	GitProviderAWS string = "aws"
 )
 
 const (
@@ -65,6 +81,7 @@ const (
 
 // GitRepositorySpec specifies the required configuration to produce an
 // Artifact for a Git repository.
+// +kubebuilder:validation:XValidation:rule="!has(self.serviceAccountName) || (has(self.provider) && (self.provider == 'azure' || self.provider == 'aws'))",message="serviceAccountName can only be set when provider is 'azure' or 'aws'"
 type GitRepositorySpec struct {
 	// URL specifies the Git repository URL, it can be an HTTP/S or SSH address.
 	// +kubebuilder:validation:Pattern="^(http|https|ssh)://.*$"
@@ -79,6 +96,17 @@ type GitRepositorySpec struct {
 	// and 'known_hosts' fields.
 	// +optional
 	SecretRef *meta.LocalObjectReference `json:"secretRef,omitempty"`
+
+	// Provider used for authentication, can be 'aws', 'azure', 'github', 'generic'.
+	// When not specified, defaults to 'generic'.
+	// +kubebuilder:validation:Enum=generic;aws;azure;github
+	// +optional
+	Provider string `json:"provider,omitempty"`
+
+	// ServiceAccountName is the name of the Kubernetes ServiceAccount used to
+	// authenticate to the GitRepository. This field is only supported for 'azure' and 'aws' providers.
+	// +optional
+	ServiceAccountName string `json:"serviceAccountName,omitempty"`
 
 	// Interval at which the GitRepository URL is checked for updates.
 	// This interval is approximate and may be subject to jitter to ensure
@@ -130,6 +158,12 @@ type GitRepositorySpec struct {
 	// should be included in the Artifact produced for this GitRepository.
 	// +optional
 	Include []GitRepositoryInclude `json:"include,omitempty"`
+
+	// SparseCheckout specifies a list of directories to checkout when cloning
+	// the repository. If specified, only these directories are included in the
+	// Artifact produced for this GitRepository.
+	// +optional
+	SparseCheckout []string `json:"sparseCheckout,omitempty"`
 }
 
 // GitRepositoryInclude specifies a local reference to a GitRepository which
@@ -208,7 +242,8 @@ type GitRepositoryVerification struct {
 	Mode GitVerificationMode `json:"mode,omitempty"`
 
 	// SecretRef specifies the Secret containing the public keys of trusted Git
-	// authors.
+	// authors. PGP public keys must be stored under keys with the .asc suffix,
+	// and SSH public keys must be stored under keys with the .sshpub suffix.
 	// +required
 	SecretRef meta.LocalObjectReference `json:"secretRef"`
 }
@@ -226,12 +261,12 @@ type GitRepositoryStatus struct {
 
 	// Artifact represents the last successful GitRepository reconciliation.
 	// +optional
-	Artifact *Artifact `json:"artifact,omitempty"`
+	Artifact *meta.Artifact `json:"artifact,omitempty"`
 
 	// IncludedArtifacts contains a list of the last successfully included
 	// Artifacts as instructed by GitRepositorySpec.Include.
 	// +optional
-	IncludedArtifacts []*Artifact `json:"includedArtifacts,omitempty"`
+	IncludedArtifacts []*meta.Artifact `json:"includedArtifacts,omitempty"`
 
 	// ObservedIgnore is the observed exclusion patterns used for constructing
 	// the source artifact.
@@ -247,6 +282,11 @@ type GitRepositoryStatus struct {
 	// produce the current Artifact.
 	// +optional
 	ObservedInclude []GitRepositoryInclude `json:"observedInclude,omitempty"`
+
+	// ObservedSparseCheckout is the observed list of directories used to
+	// produce the current Artifact.
+	// +optional
+	ObservedSparseCheckout []string `json:"observedSparseCheckout,omitempty"`
 
 	// SourceVerificationMode is the last used verification mode indicating
 	// which Git object(s) have been verified.
@@ -284,8 +324,16 @@ func (in GitRepository) GetRequeueAfter() time.Duration {
 
 // GetArtifact returns the latest Artifact from the GitRepository if present in
 // the status sub-resource.
-func (in *GitRepository) GetArtifact() *Artifact {
+func (in *GitRepository) GetArtifact() *meta.Artifact {
 	return in.Status.Artifact
+}
+
+// GetProvider returns the Git authentication provider.
+func (v *GitRepository) GetProvider() string {
+	if v.Spec.Provider == "" {
+		return GitProviderGeneric
+	}
+	return v.Spec.Provider
 }
 
 // GetMode returns the declared GitVerificationMode, or a ModeGitHEAD default.

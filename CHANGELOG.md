@@ -2,6 +2,560 @@
 
 All notable changes to this project are documented in this file.
 
+## 1.9.0
+
+**Release date:** 2026-06-17
+
+This minor release comes with new authentication and verification features
+for the source APIs, along with various improvements, fixes and dependency
+updates.
+
+### GitRepository
+
+The GitRepository controller now supports AWS CodeCommit as a Git provider,
+allowing authentication to CodeCommit repositories.
+
+Git commit and tag verification now supports SSH signatures in addition to
+OpenPGP, so commits and tags signed with SSH keys can be verified via
+`.spec.verify`.
+
+### OCIRepository
+
+The OCIRepository controller now supports configuring a custom Sigstore
+trusted root for keyless signature verification, via a Secret referenced in
+the verification configuration.
+
+OCI artifacts are now resolved and stored strictly by their content digest.
+
+Fixes:
+- cosign: fix v3 bundle verify on http and private CA registries and pass TLS to Rekor
+  [#2061](https://github.com/fluxcd/source-controller/pull/2061)
+- Close OCI blob reader and wrap errors consistently across controllers
+  [#2066](https://github.com/fluxcd/source-controller/pull/2066)
+- Remove unimplemented field from HelmChart CRD
+  [#2080](https://github.com/fluxcd/source-controller/pull/2080)
+
+Improvements:
+- AWS CodeCommit support
+  [#2035](https://github.com/fluxcd/source-controller/pull/2035)
+- Add git commit/tag SSH signature verification
+  [#2077](https://github.com/fluxcd/source-controller/pull/2077)
+- Add custom Sigstore trusted root support
+  [#2003](https://github.com/fluxcd/source-controller/pull/2003)
+- Ensure OCI artifacts are handled strictly by digest
+  [#2075](https://github.com/fluxcd/source-controller/pull/2075)
+- build: target host architecture for local builds and envtest
+  [#2076](https://github.com/fluxcd/source-controller/pull/2076)
+- Various dependency updates
+  [#2067](https://github.com/fluxcd/source-controller/pull/2067)
+  [#2071](https://github.com/fluxcd/source-controller/pull/2071)
+  [#2072](https://github.com/fluxcd/source-controller/pull/2072)
+  [#2073](https://github.com/fluxcd/source-controller/pull/2073)
+  [#2078](https://github.com/fluxcd/source-controller/pull/2078)
+  [#2079](https://github.com/fluxcd/source-controller/pull/2079)
+  [#2081](https://github.com/fluxcd/source-controller/pull/2081)
+
+## 1.8.5
+
+**Release date:** 2026-05-20
+
+This patch release hardens path handling in the source reconcilers and updates
+go-git to v5.19.1, which fixes
+[CVE-2026-45571](https://github.com/advisories/GHSA-crhj-59gh-8x96) (crafted
+repositories may modify the main and submodule `.git` directories) and
+[CVE-2026-45570](https://github.com/advisories/GHSA-m7cr-m3pv-hgrp) (improper
+single-quote escaping in the SSH transport). It also fixes Helm chart
+resolution for OCI tags that encode semver build metadata, updates Helm to
+v4.2.0 to align with helm-controller, and adds support for GCP sovereign cloud
+artifact registries via the fluxcd/pkg update.
+
+Fixes:
+- Improve path handling in source reconcilers
+  [#2055](https://github.com/fluxcd/source-controller/pull/2055)
+- Support Helm semver encoding in OCI repositories
+  [#2051](https://github.com/fluxcd/source-controller/pull/2051)
+
+Improvements:
+- Update Helm to v4.2.0
+  [#2049](https://github.com/fluxcd/source-controller/pull/2049)
+- Upgrade k8s to 1.36.1, c-r to 0.24.1, cli-utils to 1.2.1
+  [#2052](https://github.com/fluxcd/source-controller/pull/2052)
+- Update fluxcd/pkg dependencies
+  [#2056](https://github.com/fluxcd/source-controller/pull/2056)
+
+## 1.8.4
+
+**Release date:** 2026-05-12
+
+This patch release comes with dependency updates, including go-git v5.19.0
+which fixes [CVE-2026-45022](https://github.com/advisories/GHSA-389r-gv7p-r3rp).
+
+Improvements:
+- Update fluxcd/pkg dependencies
+  [#2045](https://github.com/fluxcd/source-controller/pull/2045)
+
+## 1.8.3
+
+**Release date:** 2026-04-21
+
+This patch release updates go-git to v5.18.0, which includes performance
+improvements for Git operations, and comes with dependency updates.
+
+Improvements:
+- Update go-git to v5.18.0 (includes perf improvements)
+  [#2031](https://github.com/fluxcd/source-controller/pull/2031)
+  [#2036](https://github.com/fluxcd/source-controller/pull/2036)
+
+## 1.8.2
+
+**Release date:** 2026-04-07
+
+This patch release fixes the Azure Blob prefix option not being passed
+to the storage client, and improves the error message when using encrypted
+SSH keys without a password.
+
+Fixes:
+- Fix azure blob prefix option not passed
+  [#2014](https://github.com/fluxcd/source-controller/pull/2014)
+
+Improvements:
+- Improve error message for encrypted SSH keys without password
+  [#2013](https://github.com/fluxcd/source-controller/pull/2013)
+
+## 1.8.1
+
+**Release date:** 2026-03-12
+
+This patch release fixes Azure Container Registry authentication by using the
+ACR-specific auth scope instead of the generic registry scope.
+
+Improvements:
+- Remove no longer needed workaround for Flux 2.8
+  [#1993](https://github.com/fluxcd/source-controller/pull/1993)
+- Update fluxcd/pkg dependencies
+  [#2001](https://github.com/fluxcd/source-controller/pull/2001)
+  [#2005](https://github.com/fluxcd/source-controller/pull/2005)
+
+## 1.8.0
+
+**Release date:** 2026-02-17
+
+This minor release comes with Helm v4 support, cosign v3 verification,
+and various improvements.
+
+⚠️ The `v1beta2` APIs were removed. Before upgrading the CRDs, Flux users
+must run [`flux migrate`](https://github.com/fluxcd/flux2/pull/5473) to
+migrate the cluster storage off `v1beta2`.
+
+### HelmChart
+
+The HelmChart controller now uses Helm v4. The `HelmRepository` type `oci`
+has been moved to maintenance mode, users should migrate to `OCIRepository`.
+
+CRD validation for `v1` has been aligned with `v1beta2` so that invalid
+specs are rejected at admission time.
+
+### OCIRepository
+
+The OCIRepository controller now supports verifying artifacts signed with
+both cosign v2 and cosign v3.
+
+### GitRepository
+
+The `github` provider now supports looking up the GitHub App installation ID
+automatically, removing the need to configure it manually.
+
+### General updates
+
+In addition, the Kubernetes dependencies have been updated to v1.35.0 and
+the controller is now built with Go 1.26.
+
+Improvements:
+- Upgrade Helm to v4
+  [#1953](https://github.com/fluxcd/source-controller/pull/1953)
+  [#1958](https://github.com/fluxcd/source-controller/pull/1958)
+  [#1980](https://github.com/fluxcd/source-controller/pull/1980)
+- Discover cosign v3 NewBundleFormat for verification
+  [#1961](https://github.com/fluxcd/source-controller/pull/1961)
+- Introduce support for looking up GH app installation ID
+  [#1963](https://github.com/fluxcd/source-controller/pull/1963)
+- Remove deprecated APIs in group `source.toolkit.fluxcd.io/v1beta2`
+  [#1983](https://github.com/fluxcd/source-controller/pull/1983)
+- Docs: Move `HelmRepository` type `oci` to maintenance mode
+  [#1985](https://github.com/fluxcd/source-controller/pull/1985)
+- sourcev1: align CRD validation with v1beta2
+  [#1944](https://github.com/fluxcd/source-controller/pull/1944)
+- Various dependency updates
+  [#1967](https://github.com/fluxcd/source-controller/pull/1967)
+  [#1972](https://github.com/fluxcd/source-controller/pull/1972)
+  [#1981](https://github.com/fluxcd/source-controller/pull/1981)
+  [#1984](https://github.com/fluxcd/source-controller/pull/1984)
+  [#1986](https://github.com/fluxcd/source-controller/pull/1986)
+  [#1987](https://github.com/fluxcd/source-controller/pull/1987)
+
+## 1.7.4
+
+**Release date:** 2025-11-19
+
+This patch release fixes Azure Workload Identity in Azure China Cloud.
+
+Improvements:
+- Upgrade k8s to 1.34.2, c-r to 0.22.4 and helm to 3.19.2
+  [#1938](https://github.com/fluxcd/source-controller/pull/1938)
+- Upgrade Helm to 3.19.1
+  [#1934](https://github.com/fluxcd/source-controller/pull/1934)
+
+## 1.7.3
+
+**Release date:** 2025-10-28
+
+This patch release fixes support for SOCKS5 proxy in the controller APIs.
+
+Fixes:
+- Restore SOCKS5 proxy support
+  [#1916](https://github.com/fluxcd/source-controller/pull/1916)
+
+## 1.7.2
+
+**Release date:** 2025-10-08
+
+This patch release comes with various dependency updates.
+
+The controller is now built with Go 1.25.2 which includes
+fixes for vulnerabilities in the Go stdlib:
+[CVE-2025-58183](https://github.com/golang/go/issues/75677),
+[CVE-2025-58188](https://github.com/golang/go/issues/75675)
+and many others. The full list of security fixes can be found
+[here](https://groups.google.com/g/golang-announce/c/4Emdl2iQ_bI/m/qZN5nc-mBgAJ).
+
+Improvements:
+- Update dependencies to Kubernetes v1.34.1 and Go 1.25.2
+  [#1908](https://github.com/fluxcd/source-controller/pull/1908)
+
+## 1.7.1
+
+**Release date:** 2025-10-06
+
+This patch release comes with a fix for TLS certs handling in the
+HelmChart reconciler when auth credentials are not specified.
+
+Fixes:
+- Fix HelmChart reconciler appending login options when they do not exist
+  [#1904](https://github.com/fluxcd/source-controller/pull/1904)
+
+Improvements:
+- ci: Fix release workflow
+  [#1897](https://github.com/fluxcd/source-controller/pull/1897)
+- Point to OCIRepository in HelmRepository docs
+  [#1893](https://github.com/fluxcd/source-controller/pull/1893)
+
+## 1.7.0
+
+**Release date:** 2025-09-15
+
+This minor release comes with new features, improvements and bug fixes.
+
+### ExternalArtifact
+
+A new [ExternalArtifact](https://github.com/fluxcd/source-controller/blob/main/docs/spec/v1/externalartifacts.md) API has been added to the `source.toolkit.fluxcd.io` group. This API enables advanced source composition and decomposition patterns implemented by the [source-watcher](https://github.com/fluxcd/source-watcher) controller.
+
+### GitRepository
+
+GitRepository controller now includes fixes for stalling issues and improved error handling. Multi-tenant workload identity support has been added for Azure repositories when the `ObjectLevelWorkloadIdentity` feature gate is enabled. TLS configuration support has been added for GitHub App authentication.
+
+### Bucket
+
+Bucket controller now supports multi-tenant workload identity for AWS, Azure and GCP providers when the `ObjectLevelWorkloadIdentity` feature gate is enabled. A default service account flag has been added for lockdown scenarios.
+
+### General updates
+
+The controller now supports system certificate pools for improved CA compatibility, and TLS ServerName pinning has been removed from TLS configuration for better flexibility. A `--default-service-account=<sa name>` flag was introduced for workload identity multi-tenancy lockdown.
+
+In addition, the Kubernetes dependencies have been updated to v1.34, Helm
+has been updated to v3.19 and various other controller dependencies have
+been updated to their latest version. The controller is now built with
+Go 1.25.
+
+Fixes:
+- Fix GitRepository controller stalling when it shouldn't
+  [#1865](https://github.com/fluxcd/source-controller/pull/1865)
+
+Improvements:
+- [RFC-0010] Add multi-tenant workload identity support for GCP Bucket
+  [#1862](https://github.com/fluxcd/source-controller/pull/1862)
+- [RFC-0010] Add multi-tenant workload identity support for AWS Bucket
+  [#1868](https://github.com/fluxcd/source-controller/pull/1868)
+- [RFC-0010] Add multi-tenant workload identity support for Azure GitRepository
+  [#1871](https://github.com/fluxcd/source-controller/pull/1871)
+- [RFC-0010] Add default-service-account for lockdown
+  [#1872](https://github.com/fluxcd/source-controller/pull/1872)
+- [RFC-0010] Add multi-tenant workload identity support for Azure Blob Storage
+  [#1875](https://github.com/fluxcd/source-controller/pull/1875)
+- [RFC-0012] Add ExternalArtifact API documentation
+  [#1881](https://github.com/fluxcd/source-controller/pull/1881)
+- [RFC-0012] Refactor controller to use `fluxcd/pkg/artifact`
+  [#1883](https://github.com/fluxcd/source-controller/pull/1883)
+- Migrate OCIRepository controller to runtime/secrets
+  [#1851](https://github.com/fluxcd/source-controller/pull/1851)
+- Migrate Bucket controller to runtime/secrets
+  [#1852](https://github.com/fluxcd/source-controller/pull/1852)
+- Add TLS config for GitHub App authentication
+  [#1860](https://github.com/fluxcd/source-controller/pull/1860)
+- Remove ServerName pinning from TLS config
+  [#1870](https://github.com/fluxcd/source-controller/pull/1870)
+- Extract storage operations to a dedicated package
+  [#1864](https://github.com/fluxcd/source-controller/pull/1864)
+- Remove deprecated APIs in group `source.toolkit.fluxcd.io/v1beta1`
+  [#1861](https://github.com/fluxcd/source-controller/pull/1861)
+- Migrate tests from gotest to gomega
+  [#1876](https://github.com/fluxcd/source-controller/pull/1876)
+- Update dependencies
+  [#1888](https://github.com/fluxcd/source-controller/pull/1888)
+  [#1880](https://github.com/fluxcd/source-controller/pull/1880)
+  [#1878](https://github.com/fluxcd/source-controller/pull/1878)
+  [#1876](https://github.com/fluxcd/source-controller/pull/1876)
+  [#1874](https://github.com/fluxcd/source-controller/pull/1874)
+  [#1850](https://github.com/fluxcd/source-controller/pull/1850)
+  [#1844](https://github.com/fluxcd/source-controller/pull/1844)
+
+## 1.6.2
+
+**Release date:** 2025-06-27
+
+This patch release comes with a fix for `rsa-sha2-512` and `rsa-sha2-256` algorithms
+not being prioritized for `ssh-rsa` host keys.
+
+Fixes:
+- Fix: Prioritize sha2-512 and sha2-256 for ssh-rsa host keys
+  [#1839](https://github.com/fluxcd/source-controller/pull/1839)
+
+## 1.6.1
+
+**Release date:** 2025-06-13
+
+This patch release comes with a fix for the `knownhosts: key mismatch`
+error in the `GitRepository` API when using SSH authentication, and
+a fix for authentication with
+[public ECR repositories](https://fluxcd.io/flux/integrations/aws/#for-amazon-public-elastic-container-registry)
+in the `OCIRepository` API.
+
+Fix:
+- Fix authentication for public ECR
+  [#1825](https://github.com/fluxcd/source-controller/pull/1825)
+- Fix `knownhosts key mismatch` regression bug
+  [#1829](https://github.com/fluxcd/source-controller/pull/1829)
+
+## 1.6.0
+
+**Release date:** 2025-05-27
+
+This minor release promotes the OCIRepository API to GA, and comes with new features,
+improvements and bug fixes.
+
+### OCIRepository
+
+The `OCIRepository` API has been promoted from `v1beta2` to `v1` (GA).
+The `v1` API is backwards compatible with `v1beta2`.
+
+OCIRepository API now supports object-level workload identity by setting
+`.spec.provider` to one of `aws`, `azure`, or `gcp`, and setting
+`.spec.serviceAccountName` to the name of a service account in the same
+namespace that has been configured with appropriate cloud permissions.
+For this feature to work, the controller feature gate
+`ObjectLevelWorkloadIdentity` must be enabled. See a complete guide
+[here](https://fluxcd.io/flux/integrations/).
+
+OCIRepository API now caches registry credentials for cloud providers
+by default. This behavior can be disabled or fine-tuned by adjusting the
+token cache controller flags (see [docs](https://fluxcd.io/flux/components/source/options/)).
+The token cache also exposes metrics that are documented
+[here](https://fluxcd.io/flux/monitoring/metrics/#controller-metrics).
+
+### GitRepository
+
+GitRepository API now supports sparse checkout by setting a list
+of directories in the `.spec.sparseCheckout` field. This allows
+for optimizing the amount of data fetched from the Git repository.
+
+GitRepository API now supports mTLS authentication for HTTPS Git repositories
+by setting the fields `tls.crt`, `tls.key`, and `ca.crt` in the `.data` field
+of the referenced Secret in `.spec.secretRef`.
+
+GitRepository API now caches credentials for non-`generic` providers by default.
+This behavior can be disabled or fine-tuned by adjusting the
+token cache controller flags (see [docs](https://fluxcd.io/flux/components/source/options/)).
+The token cache also exposes metrics that are documented
+[here](https://fluxcd.io/flux/monitoring/metrics/#controller-metrics).
+
+### General updates
+
+In addition, the Kubernetes dependencies have been updated to v1.33 and
+various other controller dependencies have been updated to their latest
+version. The controller is now built with Go 1.24.
+
+Fixes:
+- Downgrade `Masterminds/semver` to v3.3.0
+  [#1785](https://github.com/fluxcd/source-controller/pull/1785)
+
+Improvements:
+- Promote OCIRepository API to v1 (GA)
+  [#1794](https://github.com/fluxcd/source-controller/pull/1794)
+- [RFC-0010] Introduce object-level workload identity for container registry APIs and cache credentials
+  [#1790](https://github.com/fluxcd/source-controller/pull/1790)
+  [#1802](https://github.com/fluxcd/source-controller/pull/1802)
+  [#1811](https://github.com/fluxcd/source-controller/pull/1811)
+- Implement Sparse Checkout for `GitRepository`
+  [#1774](https://github.com/fluxcd/source-controller/pull/1774)
+- Add Mutual TLS support to `GitRepository`
+  [#1778](https://github.com/fluxcd/source-controller/pull/1778)
+- Introduce token cache for `GitRepository`
+  [#1745](https://github.com/fluxcd/source-controller/pull/1745)
+  [#1788](https://github.com/fluxcd/source-controller/pull/1788)
+  [#1789](https://github.com/fluxcd/source-controller/pull/1789)
+- Build controller without CGO
+  [#1725](https://github.com/fluxcd/source-controller/pull/1725)
+- Various dependency updates
+  [#1812](https://github.com/fluxcd/source-controller/pull/1812)
+  [#1800](https://github.com/fluxcd/source-controller/pull/1800)
+  [#1810](https://github.com/fluxcd/source-controller/pull/1810)
+  [#1806](https://github.com/fluxcd/source-controller/pull/1806)
+  [#1782](https://github.com/fluxcd/source-controller/pull/1782)
+  [#1783](https://github.com/fluxcd/source-controller/pull/1783)
+  [#1775](https://github.com/fluxcd/source-controller/pull/1775)
+  [#1728](https://github.com/fluxcd/source-controller/pull/1728)
+  [#1722](https://github.com/fluxcd/source-controller/pull/1722)
+
+## 1.5.0
+
+**Release date:** 2025-02-13
+
+This minor release comes with various bug fixes and improvements.
+
+### GitRepository
+
+The GitRepository API now supports authenticating through GitHub App
+for GitHub repositories. See
+[docs](https://fluxcd.io/flux/components/source/gitrepositories/#github).
+
+In addition, the Kubernetes dependencies have been updated to v1.32.1, Helm has
+been updated to v3.17.0 and various other controller dependencies have been
+updated to their latest version.
+
+Fixes:
+- Remove deprecated object metrics from controllers
+  [#1686](https://github.com/fluxcd/source-controller/pull/1686)
+
+Improvements:
+- [RFC-007] Implement GitHub app authentication for git repositories.
+  [#1647](https://github.com/fluxcd/source-controller/pull/1647)
+- Various dependency updates
+  [#1684](https://github.com/fluxcd/source-controller/pull/1684)
+  [#1689](https://github.com/fluxcd/source-controller/pull/1689)
+  [#1693](https://github.com/fluxcd/source-controller/pull/1693)
+  [#1705](https://github.com/fluxcd/source-controller/pull/1705)
+  [#1708](https://github.com/fluxcd/source-controller/pull/1708)
+  [#1709](https://github.com/fluxcd/source-controller/pull/1709)
+  [#1713](https://github.com/fluxcd/source-controller/pull/1713)
+  [#1716](https://github.com/fluxcd/source-controller/pull/1716)
+
+## 1.4.1
+
+**Release date:** 2024-09-26
+
+This patch release comes with a fix to the `GitRepository` API to keep it
+backwards compatible by removing the default value for `.spec.provider` field
+when not set in the API. The controller will internally consider an empty value
+for the provider as the `generic` provider.
+
+Fix:
+- GitRepo: Remove provider default value from API
+  [#1626](https://github.com/fluxcd/source-controller/pull/1626)
+
+## 1.4.0
+
+**Release date:** 2024-09-25
+
+This minor release promotes the Bucket API to GA, and comes with new features,
+improvements and bug fixes.
+
+### Bucket
+
+The `Bucket` API has been promoted from `v1beta2` to `v1` (GA).
+The `v1` API is backwards compatible with `v1beta2`.
+
+Bucket API now supports proxy through the field `.spec.proxySecretRef` and custom TLS client certificate and CA through the field `.spec.certSecretRef`.
+
+Bucket API now also supports specifying a custom STS configuration through the field `.spec.sts`. This is currently only supported for the providers `generic` and `aws`. When specifying a custom STS configuration one must specify which STS provider to use. For the `generic` bucket provider we support the `ldap` STS provider, and for the `aws` bucket provider we support the `aws` STS provider. For the `aws` STS provider, one may use the default main STS endpoint, or the regional STS endpoints, or even an interface endpoint.
+
+### OCIRepository
+
+OCIRepository API now supports proxy through the field `.spec.proxySecretRef`.
+
+**Warning**: Proxy is not supported for cosign keyless verification.
+
+### GitRepository
+
+GitRepository API now supports OIDC authentication for Azure DevOps repositories through the field `.spec.provider` using the value `azure`. See the docs for details [here](https://fluxcd.io/flux/components/source/gitrepositories/#provider).
+
+In addition, the Kubernetes dependencies have been updated to v1.31.1, Helm has
+been updated to v3.16.1 and various other controller dependencies have been
+updated to their latest version. The controller is now built with Go 1.23.
+
+Fixes:
+- helm: Use the default transport pool to preserve proxy settings
+  [#1490](https://github.com/fluxcd/source-controller/pull/1490)
+- Fix incorrect use of format strings with the conditions package.
+  [#1529](https://github.com/fluxcd/source-controller/pull/1529)
+- Fix HelmChart local dependency resolution for name-based path
+  [#1539](https://github.com/fluxcd/source-controller/pull/1539)
+- Fix Helm index validation for Artifactory
+  [#1516](https://github.com/fluxcd/source-controller/pull/1516)
+
+Improvements:
+- Promote Bucket API to v1
+  [#1592](https://github.com/fluxcd/source-controller/pull/1592)
+- Add .spec.certSecretRef to Bucket API
+  [#1475](https://github.com/fluxcd/source-controller/pull/1475)
+- Run ARM64 tests on GitHub runners
+  [#1512](https://github.com/fluxcd/source-controller/pull/1512)
+- Add support for .spec.proxySecretRef for generic provider of Bucket API
+  [#1500](https://github.com/fluxcd/source-controller/pull/1500)
+- Improve invalid proxy error message for Bucket API
+  [#1550](https://github.com/fluxcd/source-controller/pull/1550)
+- Add support for AWS STS endpoint in the Bucket API
+  [#1552](https://github.com/fluxcd/source-controller/pull/1552)
+- Add proxy support for GCS buckets
+  [#1565](https://github.com/fluxcd/source-controller/pull/1565)
+- azure-blob: Fix VisitObjects() in integration test
+  [#1574](https://github.com/fluxcd/source-controller/pull/1574)
+- Add proxy support for Azure buckets
+  [#1567](https://github.com/fluxcd/source-controller/pull/1567)
+- Add proxy support for AWS S3 buckets
+  [#1568](https://github.com/fluxcd/source-controller/pull/1568)
+- Add proxy support for OCIRepository API
+  [#1536](https://github.com/fluxcd/source-controller/pull/1536)
+- Add LDAP provider for Bucket STS API
+  [#1585](https://github.com/fluxcd/source-controller/pull/1585)
+- Introduce Bucket provider constants with the common part as a prefix
+  [#1589](https://github.com/fluxcd/source-controller/pull/1589)
+- OCIRepository: Configure proxy for OIDC auth
+  [#1607](https://github.com/fluxcd/source-controller/pull/1607)
+- [RFC-0007] Enable Azure OIDC for Azure DevOps repositories
+  [#1591](https://github.com/fluxcd/source-controller/pull/1591)
+- Build with Go 1.23
+  [#1582](https://github.com/fluxcd/source-controller/pull/1582)
+- Various dependency updates
+  [#1507](https://github.com/fluxcd/source-controller/pull/1507)
+  [#1576](https://github.com/fluxcd/source-controller/pull/1576)
+  [#1578](https://github.com/fluxcd/source-controller/pull/1578)
+  [#1579](https://github.com/fluxcd/source-controller/pull/1579)
+  [#1583](https://github.com/fluxcd/source-controller/pull/1583)
+  [#1588](https://github.com/fluxcd/source-controller/pull/1588)
+  [#1603](https://github.com/fluxcd/source-controller/pull/1603)
+  [#1610](https://github.com/fluxcd/source-controller/pull/1610)
+  [#1614](https://github.com/fluxcd/source-controller/pull/1614)
+  [#1618](https://github.com/fluxcd/source-controller/pull/1618)
+
 ## 1.3.0
 
 **Release date:** 2024-05-03

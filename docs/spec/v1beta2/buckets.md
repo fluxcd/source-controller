@@ -756,15 +756,75 @@ configuration. A Security Token Service (STS) is a web service that issues
 temporary security credentials. By adding this field, one may specify the
 STS endpoint from where temporary credentials will be fetched.
 
+This field is only supported for the `aws` and `generic` bucket [providers](#provider).
+
 If using `.spec.sts`, the following fields are required:
 
 - `.spec.sts.provider`, the Security Token Service provider. The only supported
-  option is `aws`.
+  option for the `generic` bucket provider is `ldap`. The only supported option
+  for the `aws` bucket provider is `aws`.
 - `.spec.sts.endpoint`, the HTTP/S endpoint of the Security Token Service. In
-  the case of AWS, this can be `https://sts.amazonaws.com`, or a Regional STS
-  Endpoint, or an Interface Endpoint created inside a VPC.
+  the case of `aws` this can be `https://sts.amazonaws.com`, or a Regional STS
+  Endpoint, or an Interface Endpoint created inside a VPC. In the case of
+  `ldap` this must be the LDAP server endpoint.
 
-This field is only supported for the `aws` bucket provider.
+When using the `ldap` provider, the following fields may also be specified:
+
+- `.spec.sts.secretRef.name`, the name of the Secret containing the LDAP
+  credentials. The Secret must contain the following keys:
+  - `username`, the username to authenticate with.
+  - `password`, the password to authenticate with.
+- `.spec.sts.certSecretRef.name`, the name of the Secret containing the
+  TLS configuration for communicating with the STS endpoint. The contents
+  of this Secret must follow the same structure of
+  [`.spec.certSecretRef.name`](#cert-secret-reference).
+
+If [`.spec.proxySecretRef.name`](#proxy-secret-reference) is specified,
+the proxy configuration will be used for commucating with the STS endpoint.
+
+Example for the `ldap` provider:
+
+```yaml
+---
+apiVersion: source.toolkit.fluxcd.io/v1beta2
+kind: Bucket
+metadata:
+  name: example
+  namespace: example
+spec:
+  interval: 5m
+  bucketName: example
+  provider: generic
+  endpoint: minio.example.com
+  sts:
+    provider: ldap
+    endpoint: https://ldap.example.com
+    secretRef:
+      name: ldap-credentials
+    certSecretRef:
+      name: ldap-tls
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: ldap-credentials
+  namespace: example
+type: Opaque
+stringData:
+  username: <username>
+  password: <password>
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: ldap-tls
+  namespace: example
+type: kubernetes.io/tls # or Opaque
+stringData:
+  tls.crt: <PEM-encoded cert>
+  tls.key: <PEM-encoded key>
+  ca.crt: <PEM-encoded cert>
+```
 
 ### Bucket name
 

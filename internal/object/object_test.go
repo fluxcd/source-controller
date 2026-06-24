@@ -24,6 +24,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	"github.com/fluxcd/pkg/apis/meta"
+
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 )
 
@@ -127,7 +129,7 @@ func TestGetArtifact(t *testing.T) {
 	g.Expect(artifact).To(BeNil())
 
 	// Get set artifact value.
-	obj.Status.Artifact = &sourcev1.Artifact{Path: "aaa", Revision: "zzz"}
+	obj.Status.Artifact = &meta.Artifact{Path: "aaa", Revision: "zzz"}
 	artifact, err = GetArtifact(obj)
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(artifact).ToNot(BeNil())

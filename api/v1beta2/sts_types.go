@@ -20,4 +20,7 @@ const (
 	// STSProviderAmazon represents the AWS provider for Security Token Service.
 	// Provides support for fetching temporary credentials from an AWS STS endpoint.
 	STSProviderAmazon string = "aws"
+	// STSProviderLDAP represents the LDAP provider for Security Token Service.
+	// Provides support for fetching temporary credentials from an LDAP endpoint.
+	STSProviderLDAP string = "ldap"
 )

@@ -28,9 +28,6 @@ import (
 const (
 	// HelmRepositoryKind is the string representation of a HelmRepository.
 	HelmRepositoryKind = "HelmRepository"
-	// HelmRepositoryURLIndexKey is the key used for indexing HelmRepository
-	// objects by their HelmRepositorySpec.URL.
-	HelmRepositoryURLIndexKey = ".metadata.helmRepositoryURL"
 	// HelmRepositoryTypeDefault is the default HelmRepository type.
 	// It is used when no type is specified and corresponds to a Helm repository.
 	HelmRepositoryTypeDefault = "default"
@@ -150,7 +147,7 @@ type HelmRepositoryStatus struct {
 
 	// Artifact represents the last successful HelmRepository reconciliation.
 	// +optional
-	Artifact *Artifact `json:"artifact,omitempty"`
+	Artifact *meta.Artifact `json:"artifact,omitempty"`
 
 	meta.ReconcileRequestStatus `json:",inline"`
 }
@@ -191,7 +188,7 @@ func (in HelmRepository) GetTimeout() time.Duration {
 
 // GetArtifact returns the latest artifact from the source if present in the
 // status sub-resource.
-func (in *HelmRepository) GetArtifact() *Artifact {
+func (in *HelmRepository) GetArtifact() *meta.Artifact {
 	return in.Status.Artifact
 }
 

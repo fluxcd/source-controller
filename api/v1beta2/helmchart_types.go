@@ -166,7 +166,7 @@ type HelmChartStatus struct {
 
 	// Artifact represents the output of the last successful reconciliation.
 	// +optional
-	Artifact *apiv1.Artifact `json:"artifact,omitempty"`
+	Artifact *meta.Artifact `json:"artifact,omitempty"`
 
 	meta.ReconcileRequestStatus `json:",inline"`
 }
@@ -199,7 +199,7 @@ func (in HelmChart) GetRequeueAfter() time.Duration {
 
 // GetArtifact returns the latest artifact from the source if present in the
 // status sub-resource.
-func (in *HelmChart) GetArtifact() *apiv1.Artifact {
+func (in *HelmChart) GetArtifact() *meta.Artifact {
 	return in.Status.Artifact
 }
 
@@ -216,16 +216,8 @@ func (in *HelmChart) GetValuesFiles() []string {
 
 // +genclient
 // +kubebuilder:object:root=true
-// +kubebuilder:resource:shortName=qdranthc
-// +kubebuilder:subresource:status
-// +kubebuilder:deprecatedversion:warning="v1beta2 HelmChart is deprecated, upgrade to v1"
-// +kubebuilder:printcolumn:name="Chart",type=string,JSONPath=`.spec.chart`
-// +kubebuilder:printcolumn:name="Version",type=string,JSONPath=`.spec.version`
-// +kubebuilder:printcolumn:name="Source Kind",type=string,JSONPath=`.spec.sourceRef.kind`
-// +kubebuilder:printcolumn:name="Source Name",type=string,JSONPath=`.spec.sourceRef.name`
-// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description=""
-// +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type==\"Ready\")].status",description=""
-// +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.conditions[?(@.type==\"Ready\")].message",description=""
+// +kubebuilder:resource:shortName=hc
+// +kubebuilder:skipversion
 
 // HelmChart is the Schema for the helmcharts API.
 type HelmChart struct {

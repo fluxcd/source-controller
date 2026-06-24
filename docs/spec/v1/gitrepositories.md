@@ -177,6 +177,31 @@ data:
   ca.crt: <BASE64>
 ```
 
+#### HTTPS Mutual TLS authentication
+
+To authenticate towards a Git repository over HTTPS using mutual TLS,
+the referenced Secret's `.data` should contain the following keys:
+
+* `tls.crt` and `tls.key`, to specify the client certificate and private key used
+  for TLS client authentication. These must be used in conjunction, i.e.
+  specifying one without the other will lead to an error.
+* `ca.crt`, to specify the CA certificate used to verify the server, which is
+  required if the server is using a self-signed certificate.
+
+```yaml
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: https-tls-certs
+  namespace: default
+type: Opaque
+data:
+  tls.crt: <BASE64>
+  tls.key: <BASE64>
+  ca.crt: <BASE64>
+```
+
 #### SSH authentication
 
 To authenticate towards a Git repository over SSH, the referenced Secret is
@@ -211,6 +236,241 @@ flux create secret git podinfo-auth \
 For password-protected SSH private keys, the password must be provided
 via an additional `password` field in the secret. Flux CLI also supports
 this via the `--password` flag.
+
+### Provider
+
+`.spec.provider` is an optional field that allows specifying an OIDC provider
+used for authentication purposes.
+
+Supported options are:
+
+- `generic`
+- `aws`
+- `azure`
+- `github`
+
+When provider is not specified, it defaults to `generic` indicating that
+mechanisms using `spec.secretRef` are used for authentication. 
+
+For a complete guide on how to set up authentication for cloud providers,
+see the integration [docs](/flux/integrations/).
+
+#### AWS
+
+The `aws` provider can be used to authenticate to
+[AWS CodeCommit](https://docs.aws.amazon.com/codecommit/latest/userguide/welcome.html)
+repositories using IAM credentials sourced from the controller runtime identity.
+
+**Note:** When the `aws` provider is used, `.spec.url` must be an AWS
+CodeCommit HTTPS endpoint in the format
+`https://git-codecommit.<region>.amazonaws.com/v1/repos/<repository-name>`.
+For a full list of available regions and their endpoints, see the
+[AWS CodeCommit regions documentation](https://docs.aws.amazon.com/codecommit/latest/userguide/regions.html#regions-git).
+
+##### Pre-requisites
+
+- An EKS cluster with either
+  [EKS Pod Identity](https://fluxcd.io/flux/integrations/aws/#with-eks-pod-identity)
+  or
+  [IAM Roles for Service Accounts (IRSA)](https://fluxcd.io/flux/integrations/aws/#with-oidc-federation)
+  configured.
+- An IAM role with the `codecommit:GitPull` permission for the target
+  repository.
+
+##### Configure Flux controller
+
+1. Configure authentication using your preferred [method](https://fluxcd.io/flux/integrations/aws/#authentication).
+
+    Example IAM role policy (see [docs](https://fluxcd.io/flux/integrations/aws/#for-amazon-codecommit) for more details):
+
+    ```json
+    {
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Effect": "Allow",
+                "Action": "codecommit:GitPull",
+                "Resource": "arn:aws:codecommit:<region>:<account-id>:<repository-name>"
+            }
+        ]
+    }
+    ```
+
+2. Configure AWS CodeCommit `GitRepository`
+
+    ```yaml
+    ---
+    apiVersion: source.toolkit.fluxcd.io/v1
+    kind: GitRepository
+    metadata:
+      name: codecommit-repository
+      namespace: flux-system
+    spec:
+      interval: 5m0s
+      provider: aws
+      serviceAccountName: my-tenant # optional (used for object-level workload identity)
+      url: https://git-codecommit.<region>.amazonaws.com/v1/repos/<repository-name>
+      ref:
+        branch: main
+    ```
+
+#### Azure
+
+The `azure` provider can be used to authenticate to Azure DevOps repositories
+automatically using Workload Identity. 
+
+##### Pre-requisites
+
+- Ensure that your Azure DevOps Organization is
+  [connected](https://learn.microsoft.com/en-us/azure/devops/organizations/accounts/connect-organization-to-azure-ad?view=azure-devops)
+  to Microsoft Entra.
+- Ensure Workload Identity is properly [set up on your
+  cluster](https://learn.microsoft.com/en-us/azure/aks/workload-identity-deploy-cluster#create-an-aks-cluster).
+
+##### Configure Flux controller
+
+- Create a managed identity to access Azure DevOps. Establish a federated
+  identity credential between the managed identity and the source-controller
+  service account. In the default installation, the source-controller service
+  account is located in the `flux-system` namespace with name
+  `source-controller`. Ensure the federated credential uses the correct
+  namespace and name of the source-controller service account. For more details,
+  please refer to this
+  [guide](https://azure.github.io/azure-workload-identity/docs/quick-start.html#6-establish-federated-identity-credential-between-the-identity-and-the-service-account-issuer--subject).
+
+- Add the managed identity to the Azure DevOps organization as a user. Ensure
+  that the managed identity has the necessary permissions to access the Azure
+  DevOps repository as described
+  [here](https://learn.microsoft.com/en-us/azure/devops/integrate/get-started/authentication/service-principal-managed-identity?view=azure-devops#2-add-and-manage-service-principals-in-an-azure-devops-organization).
+
+- Add the following patch to your bootstrap repository in
+  `flux-system/kustomization.yaml` file:
+
+
+```yaml
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - gotk-components.yaml
+  - gotk-sync.yaml
+patches:
+  - patch: |-
+      apiVersion: v1
+      kind: ServiceAccount
+      metadata:
+        name: source-controller
+        namespace: flux-system
+        annotations:
+          azure.workload.identity/client-id: <AZURE_CLIENT_ID>
+        labels:
+          azure.workload.identity/use: "true"
+  - patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: source-controller
+        namespace: flux-system
+        labels:
+          azure.workload.identity/use: "true"
+      spec:
+        template:
+          metadata:
+            labels:
+              azure.workload.identity/use: "true"
+```
+
+**Note:** When azure `provider` is used with `GitRepository`, the `.spec.url`
+must follow this format:
+
+```
+https://dev.azure.com/{your-organization}/{your-project}/_git/{your-repository}
+```
+#### GitHub
+
+The `github` provider can be used to authenticate to Git repositories using
+[GitHub Apps](https://docs.github.com/en/apps/overview).
+
+##### Pre-requisites
+
+- [Register](https://docs.github.com/en/apps/creating-github-apps/registering-a-github-app/registering-a-github-app)
+  the GitHub App with the necessary permissions and [generate a private
+  key](https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/managing-private-keys-for-github-apps)
+  for the app. 
+
+- [Install](https://docs.github.com/en/apps/using-github-apps/installing-your-own-github-app)
+  the app in the organization/account configuring access to the necessary
+  repositories.
+
+##### Configure GitHub App secret
+
+The GitHub App information is specified in `.spec.secretRef` in the format
+specified below:
+
+- Get the App ID from the app settings page at `https://github.com/settings/apps/<app-name>`.
+- The private key that was generated in the pre-requisites.
+- (Optional) GitHub Enterprise Server users can set the base URL to
+  `http(s)://HOSTNAME/api/v3`.
+- (Optional) If GitHub Enterprise Server uses a private CA, include its
+  bundle (root and any intermediates) in `ca.crt`.
+  If the `ca.crt` is specified, then it will be used for TLS verification
+  for all API / Git over `HTTPS` requests to the GitHub Enterprise Server.
+
+**NOTE:** If the secret contains `tls.crt`, `tls.key` then [mutual TLS configuration](#https-mutual-tls-authentication) will be automatically enabled. 
+Omit these keys if the GitHub server does not support mutual TLS.
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: github-sa
+type: Opaque
+stringData:
+  githubAppID: "<app-id>"
+  githubAppInstallationOwner: "<github-org-or-user>"
+  githubAppInstallationID: "<app-installation-id>"
+  githubAppPrivateKey: |
+    -----BEGIN RSA PRIVATE KEY-----
+    ...
+    -----END RSA PRIVATE KEY-----
+  githubAppBaseURL: "<github-enterprise-api-url>" #optional, required only for GitHub Enterprise Server users
+  ca.crt: | #optional, for GitHub Enterprise Server users
+    -----BEGIN CERTIFICATE-----
+    ...
+    -----END CERTIFICATE-----
+```
+
+Exactly one of `githubAppInstallationOwner` or `githubAppInstallationID` must be provided.
+If neither or both are provided, the reconciliation will fail with a misconfiguration error.
+When `githubAppInstallationOwner` is provided, the controller will look for the installation
+ID corresponding to the owner using the GitHub API.
+
+Alternatively, the Flux CLI can be used to automatically create the secret with
+the github app authentication information.
+
+```sh
+flux create secret githubapp ghapp-secret \
+    --app-id=1 \
+    --app-installation-owner=my-org \
+    --app-private-key=~/private-key.pem
+```
+
+### Service Account reference
+
+`.spec.serviceAccountName` is an optional field to specify a Service Account
+in the same namespace as GitRepository with purpose depending on the value of
+the `.spec.provider` field:
+
+- When `.spec.provider` is set to `azure`, the Service Account
+  will be used for Workload Identity authentication. In this case, the controller
+  feature gate `ObjectLevelWorkloadIdentity` must be enabled, otherwise the
+  controller will error out. For Azure DevOps specific setup, see the
+  [Azure DevOps integration guide](https://fluxcd.io/flux/integrations/azure/#for-azure-devops).
+
+**Note:** that for a publicly accessible git repository, you don't need to
+provide a `secretRef` nor `serviceAccountName`.
+
+For a complete guide on how to set up authentication for cloud providers,
+see the integration [docs](/flux/integrations/).
 
 ### Interval
 
@@ -379,7 +639,10 @@ signatures. The field offers two subfields:
      the commit object pointed to by the tag.
 
 - `.secretRef.name`, to specify a reference to a Secret in the same namespace as
-  the GitRepository. Containing the (PGP) public keys of trusted Git authors.
+  the GitRepository. Containing the public keys of trusted Git authors. PGP
+  public keys must be stored under keys with the `.asc` suffix, and SSH public
+  keys must be stored under keys with the `.sshpub` suffix. Keys without a
+  recognized suffix are treated as PGP key rings for backward compatibility.
 
 ```yaml
 ---
@@ -435,6 +698,44 @@ kubectl create secret generic pgp-public-keys \
     -o yaml
 ```
 
+#### SSH verification
+
+SSH-signed commits and tags can also be verified. Store SSH public keys in
+`authorized_keys` format under keys with the `.sshpub` suffix in the same
+Secret:
+
+```yaml
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: verification-keys
+  namespace: default
+type: Opaque
+data:
+  author1.asc: <BASE64 PGP public key>
+  author2.sshpub: <BASE64 SSH public key>
+```
+
+Generating an SSH key pair and creating the Secret:
+
+```sh
+# Generate an SSH key pair for signing
+ssh-keygen -t ed25519 -N '' -f /tmp/signing_key
+# Generate secret with the public key
+kubectl create secret generic verification-keys \
+    --from-file=author2.sshpub=/tmp/signing_key.pub \
+    -o yaml
+```
+
+A single Secret can contain both PGP (`.asc`) and SSH (`.sshpub`) keys. The
+controller detects the signature type of each Git object (PGP or SSH) and
+dispatches verification accordingly.
+
+PGP verification reports the PGP key ID in the success message (e.g.
+`5982D0279C227FFD`), while SSH verification reports the SHA256 fingerprint
+(e.g. `SHA256:uNiVztksCsDhcc0u9e8BgrJXVGDaf6s7kOsTmI9N7sM`).
+
 ### Ignore
 
 `.spec.ignore` is an optional field to specify rules in [the `.gitignore`
@@ -445,6 +746,28 @@ When specified, `.spec.ignore` overrides the [default exclusion
 list](#default-exclusions), and may overrule the [`.sourceignore` file
 exclusions](#sourceignore-file). See [excluding files](#excluding-files)
 for more information.
+
+### Sparse checkout
+
+`.spec.sparseCheckout` is an optional field to specify list of directories to
+checkout when cloning the repository. If specified, only the specified directory
+contents will be present in the artifact produced for this repository.
+
+```yaml
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: GitRepository
+metadata:
+  name: podinfo
+  namespace: default
+spec:
+  interval: 5m
+  url: https://github.com/stefanprodan/podinfo
+  ref:
+    branch: master
+  sparseCheckout:
+  - charts
+  - kustomize
+```
 
 ### Suspend
 
@@ -985,6 +1308,27 @@ status:
     repository:
       name: repo2
     toPath: bar
+  ...
+```
+
+### Observed Sparse Checkout
+
+The source-controller reports observed sparse checkout in the GitRepository's
+`.status.observedSparseCheckout`. The observed sparse checkout is the latest
+`.spec.sparseCheckout` value which resulted in a [ready
+state](#ready-gitrepository), or stalled due to error it can not recover from
+without human intervention. The value is the same as the [sparseCheckout in
+spec](#sparse-checkout). It indicates the sparse checkout configuration used in
+building the current artifact in storage. It is also used by the controller to
+determine if an artifact needs to be rebuilt.
+
+Example:
+```yaml
+status:
+  ...
+  observedSparseCheckout:
+  - charts
+  - kustomize
   ...
 ```
 

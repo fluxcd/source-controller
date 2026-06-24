@@ -23,7 +23,6 @@ import (
 	"crypto/x509"
 	"fmt"
 	"io"
-	"log"
 	"math/rand"
 	"net"
 	"net/http"
@@ -32,30 +31,32 @@ import (
 	"testing"
 	"time"
 
-	"github.com/foxcpp/go-mockdns"
+	"github.com/distribution/distribution/v3/configuration"
+	dockerRegistry "github.com/distribution/distribution/v3/registry"
+	_ "github.com/distribution/distribution/v3/registry/auth/htpasswd"
+	_ "github.com/distribution/distribution/v3/registry/storage/driver/inmemory"
+	"github.com/miekg/dns"
 	"github.com/phayes/freeport"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/crypto/bcrypt"
-	"helm.sh/helm/v3/pkg/getter"
-	helmreg "helm.sh/helm/v3/pkg/registry"
+	"helm.sh/helm/v4/pkg/getter"
+	helmreg "helm.sh/helm/v4/pkg/registry"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/yaml"
 
-	"github.com/distribution/distribution/v3/configuration"
-	dockerRegistry "github.com/distribution/distribution/v3/registry"
-	_ "github.com/distribution/distribution/v3/registry/auth/htpasswd"
-	_ "github.com/distribution/distribution/v3/registry/storage/driver/inmemory"
-
+	"github.com/fluxcd/pkg/artifact/config"
+	"github.com/fluxcd/pkg/artifact/digest"
+	"github.com/fluxcd/pkg/artifact/storage"
 	"github.com/fluxcd/pkg/runtime/controller"
 	"github.com/fluxcd/pkg/runtime/metrics"
 	"github.com/fluxcd/pkg/runtime/testenv"
 	"github.com/fluxcd/pkg/testserver"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
-	sourcev1beta2 "github.com/fluxcd/source-controller/api/v1beta2"
 	"github.com/fluxcd/source-controller/internal/cache"
 	// +kubebuilder:scaffold:imports
 )
@@ -82,7 +83,7 @@ const (
 var (
 	k8sClient    client.Client
 	testEnv      *testenv.Environment
-	testStorage  *Storage
+	testStorage  *storage.Storage
 	testServer   *testserver.ArtifactServer
 	testMetricsH controller.Metrics
 	ctx          = ctrl.SetupSignalHandler()
@@ -102,11 +103,13 @@ var (
 )
 
 var (
-	tlsPublicKey     []byte
-	tlsPrivateKey    []byte
-	tlsCA            []byte
-	clientPublicKey  []byte
-	clientPrivateKey []byte
+	tlsPublicKey            []byte
+	tlsPrivateKey           []byte
+	tlsCA                   []byte
+	clientPublicKey         []byte
+	clientPrivateKey        []byte
+	clientInvalidPublicKey  []byte
+	clientInvalidPrivateKey []byte
 )
 
 var (
@@ -119,7 +122,7 @@ type registryClientTestServer struct {
 	registryHost   string
 	workspaceDir   string
 	registryClient *helmreg.Client
-	dnsServer      *mockdns.Server
+	registry       *dockerRegistry.Registry
 }
 
 type registryOptions struct {
@@ -153,23 +156,11 @@ func setupRegistryServer(ctx context.Context, workspaceDir string, opts registry
 	}
 
 	// Change the registry host to a host which is not localhost and
-	// mock DNS to map example.com to 127.0.0.1.
+	// TestMain() will create a DNS proxy to map example.com to 127.0.0.1.
 	// This is required because Docker enforces HTTP if the registry
 	// is hosted on localhost/127.0.0.1.
 	if opts.withTLS {
 		server.registryHost = fmt.Sprintf("example.com:%d", port)
-		// Disable DNS server logging as it is extremely chatty.
-		dnsLog := log.Default()
-		dnsLog.SetOutput(io.Discard)
-		server.dnsServer, err = mockdns.NewServerWithLogger(map[string]mockdns.Zone{
-			"example.com.": {
-				A: []string{"127.0.0.1"},
-			},
-		}, dnsLog, false)
-		if err != nil {
-			return nil, err
-		}
-		server.dnsServer.PatchNet(net.DefaultResolver)
 	} else {
 		server.registryHost = fmt.Sprintf("127.0.0.1:%d", port)
 	}
@@ -226,6 +217,7 @@ func setupRegistryServer(ctx context.Context, workspaceDir string, opts registry
 	if err != nil {
 		return nil, fmt.Errorf("failed to create docker registry: %w", err)
 	}
+	server.registry = registry
 
 	// init test client
 	helmClient, err := helmreg.NewClient(clientOpts...)
@@ -235,7 +227,7 @@ func setupRegistryServer(ctx context.Context, workspaceDir string, opts registry
 	server.registryClient = helmClient
 
 	// Start Docker registry
-	go registry.ListenAndServe()
+	go server.registry.ListenAndServe()
 
 	return server, nil
 }
@@ -263,24 +255,39 @@ func tlsConfiguredHTTPCLient() (*http.Client, error) {
 }
 
 func (r *registryClientTestServer) Close() {
-	if r.dnsServer != nil {
-		mockdns.UnpatchNet(net.DefaultResolver)
-		r.dnsServer.Close()
+	if r.registry != nil {
+		_ = r.registry.Shutdown(ctx)
 	}
 }
 
 func TestMain(m *testing.M) {
 	initTestTLS()
 
+	// Setup global test DNS proxy
+	dnsServer, addr, err := startDNSProxy("1.1.1.1:53")
+	if err != nil {
+		panic(fmt.Sprintf("failed to create test DNS proxy: %v", err))
+	}
+	defer dnsServer.Shutdown()
+
+	origDial := net.DefaultResolver.Dial
+	origPreferGo := net.DefaultResolver.PreferGo
+	net.DefaultResolver.PreferGo = true
+	net.DefaultResolver.Dial = func(ctx context.Context, network, address string) (net.Conn, error) {
+		return net.Dial("udp", addr)
+	}
+	defer func() {
+		net.DefaultResolver.Dial = origDial
+		net.DefaultResolver.PreferGo = origPreferGo
+	}()
+
 	utilruntime.Must(sourcev1.AddToScheme(scheme.Scheme))
-	utilruntime.Must(sourcev1beta2.AddToScheme(scheme.Scheme))
 
 	testEnv = testenv.New(
 		testenv.WithCRDPath(filepath.Join("..", "..", "config", "crd", "bases")),
 		testenv.WithMaxConcurrentReconciles(4),
 	)
 
-	var err error
 	// Initialize a cacheless client for tests that need the latest objects.
 	k8sClient, err = client.New(testEnv.Config, client.Options{Scheme: scheme.Scheme})
 	if err != nil {
@@ -318,7 +325,7 @@ func TestMain(m *testing.M) {
 		EventRecorder: record.NewFakeRecorder(32),
 		Metrics:       testMetricsH,
 		Storage:       testStorage,
-	}).SetupWithManagerAndOptions(testEnv, GitRepositoryReconcilerOptions{
+	}).SetupWithManager(testEnv, GitRepositoryReconcilerOptions{
 		RateLimiter: controller.GetDefaultRateLimiter(),
 	}); err != nil {
 		panic(fmt.Sprintf("Failed to start GitRepositoryReconciler: %v", err))
@@ -329,7 +336,7 @@ func TestMain(m *testing.M) {
 		EventRecorder: record.NewFakeRecorder(32),
 		Metrics:       testMetricsH,
 		Storage:       testStorage,
-	}).SetupWithManagerAndOptions(testEnv, BucketReconcilerOptions{
+	}).SetupWithManager(testEnv, BucketReconcilerOptions{
 		RateLimiter: controller.GetDefaultRateLimiter(),
 	}); err != nil {
 		panic(fmt.Sprintf("Failed to start BucketReconciler: %v", err))
@@ -343,7 +350,7 @@ func TestMain(m *testing.M) {
 		EventRecorder: record.NewFakeRecorder(32),
 		Metrics:       testMetricsH,
 		Storage:       testStorage,
-	}).SetupWithManagerAndOptions(testEnv, OCIRepositoryReconcilerOptions{
+	}).SetupWithManager(testEnv, OCIRepositoryReconcilerOptions{
 		RateLimiter: controller.GetDefaultRateLimiter(),
 	}); err != nil {
 		panic(fmt.Sprintf("Failed to start OCIRepositoryReconciler: %v", err))
@@ -358,7 +365,7 @@ func TestMain(m *testing.M) {
 		Cache:         testCache,
 		TTL:           1 * time.Second,
 		CacheRecorder: cacheRecorder,
-	}).SetupWithManagerAndOptions(testEnv, HelmRepositoryReconcilerOptions{
+	}).SetupWithManager(testEnv, HelmRepositoryReconcilerOptions{
 		RateLimiter: controller.GetDefaultRateLimiter(),
 	}); err != nil {
 		panic(fmt.Sprintf("Failed to start HelmRepositoryReconciler: %v", err))
@@ -373,7 +380,7 @@ func TestMain(m *testing.M) {
 		Cache:         testCache,
 		TTL:           1 * time.Second,
 		CacheRecorder: cacheRecorder,
-	}).SetupWithManagerAndOptions(ctx, testEnv, HelmChartReconcilerOptions{
+	}).SetupWithManager(ctx, testEnv, HelmChartReconcilerOptions{
 		RateLimiter: controller.GetDefaultRateLimiter(),
 	}); err != nil {
 		panic(fmt.Sprintf("Failed to start HelmChartReconciler: %v", err))
@@ -407,6 +414,44 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
+func startDNSProxy(upstream string) (*dns.Server, string, error) {
+	pc, err := net.ListenPacket("udp", "127.0.0.1:0")
+	if err != nil {
+		return nil, "", err
+	}
+
+	server := &dns.Server{
+		PacketConn: pc,
+		Handler: dns.HandlerFunc(func(w dns.ResponseWriter, r *dns.Msg) {
+			m := new(dns.Msg)
+			m.SetReply(r)
+			m.RecursionAvailable = true
+
+			for _, q := range r.Question {
+				if q.Name == "example.com." && q.Qtype == dns.TypeA {
+					rr, _ := dns.NewRR("example.com. 3600 IN A 127.0.0.1")
+					m.Answer = append(m.Answer, rr)
+				} else {
+					// Forward
+					c := new(dns.Client)
+					in, _, err := c.Exchange(r, upstream)
+					if err == nil {
+						m.Answer = append(m.Answer, in.Answer...)
+						m.Ns = append(m.Ns, in.Ns...)
+						m.Extra = append(m.Extra, in.Extra...)
+						m.Rcode = in.Rcode
+					} else {
+						m.Rcode = dns.RcodeServerFailure
+					}
+				}
+			}
+			w.WriteMsg(m)
+		}),
+	}
+	go server.ActivateAndServe()
+	return server, pc.LocalAddr().String(), nil
+}
+
 func initTestTLS() {
 	var err error
 	tlsPublicKey, err = os.ReadFile("testdata/certs/server.pem")
@@ -429,14 +474,30 @@ func initTestTLS() {
 	if err != nil {
 		panic(err)
 	}
+	clientInvalidPrivateKey, err = os.ReadFile("testdata/certs/client-key-invalid.pem")
+	if err != nil {
+		panic(err)
+	}
+	clientInvalidPublicKey, err = os.ReadFile("testdata/certs/client-invalid.pem")
+	if err != nil {
+		panic(err)
+	}
 }
 
-func newTestStorage(s *testserver.HTTPServer) (*Storage, error) {
-	storage, err := NewStorage(s.Root(), s.URL(), retentionTTL, retentionRecords)
+func newTestStorage(s *testserver.HTTPServer) (*storage.Storage, error) {
+	opts := &config.Options{
+		StoragePath:              s.Root(),
+		StorageAddress:           s.URL(),
+		StorageAdvAddress:        s.URL(),
+		ArtifactRetentionTTL:     retentionTTL,
+		ArtifactRetentionRecords: retentionRecords,
+		ArtifactDigestAlgo:       digest.Canonical.String(),
+	}
+	st, err := storage.New(opts)
 	if err != nil {
 		return nil, err
 	}
-	return storage, nil
+	return st, nil
 }
 
 var letterRunes = []rune("abcdefghijklmnopqrstuvwxyz1234567890")
@@ -451,4 +512,9 @@ func randStringRunes(n int) string {
 
 func int64p(i int64) *int64 {
 	return &i
+}
+
+func logOCIRepoStatus(t *testing.T, obj *sourcev1.OCIRepository) {
+	sts, _ := yaml.Marshal(obj.Status)
+	t.Log(string(sts))
 }

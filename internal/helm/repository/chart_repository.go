@@ -33,16 +33,16 @@ import (
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/opencontainers/go-digest"
-	"helm.sh/helm/v3/pkg/chart"
-	"helm.sh/helm/v3/pkg/getter"
-	"helm.sh/helm/v3/pkg/repo"
+	chart "helm.sh/helm/v4/pkg/chart/v2"
+	"helm.sh/helm/v4/pkg/getter"
+	repo "helm.sh/helm/v4/pkg/repo/v1"
 	"sigs.k8s.io/yaml"
 
 	"github.com/fluxcd/pkg/version"
 
+	"github.com/fluxcd/pkg/http/transport"
 	"github.com/fluxcd/source-controller/internal/helm"
 	"github.com/fluxcd/source-controller/internal/oci"
-	"github.com/fluxcd/source-controller/internal/transport"
 )
 
 var (

@@ -1,34 +1,12 @@
 name: backport
-
 on:
   pull_request_target:
     types: [closed, labeled]
-
-permissions:
-  contents: read
-
 jobs:
-  pull-request:
-    runs-on: ubuntu-latest
+  backport:
     permissions:
-      contents: write
-      pull-requests: write
-    if: github.event.pull_request.state == 'closed' && github.event.pull_request.merged && (github.event_name != 'labeled' || startsWith('backport:', github.event.label.name))
-    steps:
-      - name: Checkout
-        uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-      - name: Create backport PRs
-        uses: korthout/backport-action@bd410d37cdcae80be6d969823ff5a225fe5c833f # v3.0.2
-        # xref: https://github.com/korthout/backport-action#inputs
-        with:
-          # Use token to allow workflows to be triggered for the created PR
-          github_token: ${{ secrets.BOT_GITHUB_TOKEN }}
-          # Match labels with a pattern `backport:<target-branch>`
-          label_pattern: '^backport:([^ ]+)$'
-          # A bit shorter pull-request title than the default
-          pull_title: '[${target_branch}] ${pull_title}'
-          # Simpler PR description than default
-          pull_description: |-
-            Automated backport to `${target_branch}`, triggered by a label in #${pull_number}.
+      contents: write # for reading and creating branches.
+      pull-requests: write # for creating pull requests against release branches.
+    uses: fluxcd/gha-workflows/.github/workflows/backport.yaml@v0.11.0
+    secrets:
+      github-token: ${{ secrets.BOT_GITHUB_TOKEN }}

@@ -23,8 +23,7 @@ import (
 	"testing"
 
 	. "github.com/onsi/gomega"
-	"helm.sh/helm/v3/pkg/chart"
-	"helm.sh/helm/v3/pkg/chart/loader"
+	chart "helm.sh/helm/v4/pkg/chart/v2"
 	"sigs.k8s.io/yaml"
 
 	"github.com/fluxcd/source-controller/internal/helm"
@@ -42,7 +41,7 @@ func TestLoader(t *testing.T) {
 
 		got, err := Loader(tmpDir, fakeChart)
 		g.Expect(err).ToNot(HaveOccurred())
-		g.Expect(got).To(Equal(loader.FileLoader(fakeChart)))
+		g.Expect(got).To(Equal(FileLoader(fakeChart)))
 	})
 
 	t.Run("dir loader", func(t *testing.T) {

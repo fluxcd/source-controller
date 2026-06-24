@@ -160,7 +160,7 @@ func TestHelmRepositoryOCIMigrationPredicate_Update(t *testing.T) {
 					Type: sourcev1.HelmRepositoryTypeDefault,
 				}
 				oldObj.Status = sourcev1.HelmRepositoryStatus{
-					Artifact:           &sourcev1.Artifact{},
+					Artifact:           &meta.Artifact{},
 					URL:                "http://some-address",
 					ObservedGeneration: 3,
 				}

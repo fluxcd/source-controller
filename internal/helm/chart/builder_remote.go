@@ -25,14 +25,14 @@ import (
 	"path/filepath"
 
 	"github.com/Masterminds/semver/v3"
-	helmchart "helm.sh/helm/v3/pkg/chart"
-	"helm.sh/helm/v3/pkg/chartutil"
-	"helm.sh/helm/v3/pkg/repo"
+	helmchart "helm.sh/helm/v4/pkg/chart/v2"
+	chartutil "helm.sh/helm/v4/pkg/chart/v2/util"
+	repo "helm.sh/helm/v4/pkg/repo/v1"
 	"sigs.k8s.io/yaml"
 
+	sourcefs "github.com/fluxcd/pkg/oci"
 	"github.com/fluxcd/pkg/runtime/transform"
 
-	"github.com/fluxcd/source-controller/internal/fs"
 	"github.com/fluxcd/source-controller/internal/helm/chart/secureloader"
 	"github.com/fluxcd/source-controller/internal/helm/repository"
 	"github.com/fluxcd/source-controller/internal/oci"
@@ -290,7 +290,7 @@ func validatePackageAndWriteToPath(reader io.Reader, out string) error {
 	if err = meta.Validate(); err != nil {
 		return fmt.Errorf("failed to validate metadata of written chart: %w", err)
 	}
-	if err = fs.RenameWithFallback(tmpFile.Name(), out); err != nil {
+	if err = sourcefs.RenameWithFallback(tmpFile.Name(), out); err != nil {
 		return fmt.Errorf("failed to write chart to file: %w", err)
 	}
 	return nil

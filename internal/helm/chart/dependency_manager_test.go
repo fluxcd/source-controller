@@ -28,10 +28,10 @@ import (
 	"testing"
 
 	. "github.com/onsi/gomega"
-	helmchart "helm.sh/helm/v3/pkg/chart"
-	helmgetter "helm.sh/helm/v3/pkg/getter"
-	"helm.sh/helm/v3/pkg/registry"
-	"helm.sh/helm/v3/pkg/repo"
+	helmchart "helm.sh/helm/v4/pkg/chart/v2"
+	helmgetter "helm.sh/helm/v4/pkg/getter"
+	"helm.sh/helm/v4/pkg/registry"
+	repo "helm.sh/helm/v4/pkg/repo/v1"
 
 	"github.com/fluxcd/source-controller/internal/helm/chart/secureloader"
 	"github.com/fluxcd/source-controller/internal/helm/repository"
@@ -76,9 +76,7 @@ func (g *mockGetter) Get(_ string, _ ...helmgetter.Option) (*bytes.Buffer, error
 func TestDependencyManager_Clear(t *testing.T) {
 	g := NewWithT(t)
 
-	file, err := os.CreateTemp("", "")
-	g.Expect(err).ToNot(HaveOccurred())
-	ociRepoWithCreds, err := repository.NewOCIChartRepository("oci://example.com", repository.WithCredentialsFile(file.Name()))
+	ociRepoWithCreds, err := repository.NewOCIChartRepository("oci://example.com")
 	g.Expect(err).ToNot(HaveOccurred())
 
 	downloaders := map[string]repository.Downloader{
@@ -99,13 +97,8 @@ func TestDependencyManager_Clear(t *testing.T) {
 		case *repository.ChartRepository:
 			g.Expect(v.Index).To(BeNil())
 		case *repository.OCIChartRepository:
-			g.Expect(v.HasCredentials()).To(BeFalse())
+			// nothing to check
 		}
-	}
-
-	if _, err := os.Stat(file.Name()); !errors.Is(err, os.ErrNotExist) {
-		err = os.Remove(file.Name())
-		g.Expect(err).ToNot(HaveOccurred())
 	}
 }
 

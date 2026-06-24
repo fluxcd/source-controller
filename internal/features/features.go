@@ -19,7 +19,10 @@ limitations under the License.
 // states.
 package features
 
-import feathelper "github.com/fluxcd/pkg/runtime/features"
+import (
+	"github.com/fluxcd/pkg/auth"
+	feathelper "github.com/fluxcd/pkg/runtime/features"
+)
 
 const (
 	// CacheSecretsAndConfigMaps controls whether secrets and configmaps should be cached.
@@ -33,6 +36,10 @@ var features = map[string]bool{
 	// CacheSecretsAndConfigMaps
 	// opt-in from v0.34
 	CacheSecretsAndConfigMaps: false,
+}
+
+func init() {
+	auth.SetFeatureGates(features)
 }
 
 // FeatureGates contains a list of all supported feature gates and

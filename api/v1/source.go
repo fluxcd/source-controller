@@ -20,12 +20,8 @@ import (
 	"time"
 
 	"k8s.io/apimachinery/pkg/runtime"
-)
 
-const (
-	// SourceIndexKey is the key used for indexing objects based on their
-	// referenced Source.
-	SourceIndexKey string = ".metadata.source"
+	"github.com/fluxcd/pkg/apis/meta"
 )
 
 // Source interface must be supported by all API types.
@@ -41,5 +37,5 @@ type Source interface {
 	GetRequeueAfter() time.Duration
 	// GetArtifact returns the latest artifact from the source if present in
 	// the status sub-resource.
-	GetArtifact() *Artifact
+	GetArtifact() *meta.Artifact
 }

@@ -21,7 +21,7 @@ import (
 	"net/url"
 	"strings"
 
-	helmreg "helm.sh/helm/v3/pkg/registry"
+	helmreg "helm.sh/helm/v4/pkg/registry"
 )
 
 const (

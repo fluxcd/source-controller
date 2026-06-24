@@ -28,6 +28,7 @@ import (
 const HelmChartKind = "HelmChart"
 
 // HelmChartSpec specifies the desired state of a Helm chart.
+// +kubebuilder:validation:XValidation:rule="!has(self.verify) || self.sourceRef.kind == 'HelmRepository'",message="spec.verify is only supported when spec.sourceRef.kind is 'HelmRepository'"
 type HelmChartSpec struct {
 	// Chart is the name or path the Helm chart is available at in the
 	// SourceRef.
@@ -85,7 +86,7 @@ type HelmChartSpec struct {
 	// This field is only supported when using HelmRepository source with spec.type 'oci'.
 	// Chart dependencies, which are not bundled in the umbrella chart artifact, are not verified.
 	// +optional
-	Verify *OCIRepositoryVerification `json:"verify,omitempty"`
+	Verify *HelmChartVerification `json:"verify,omitempty"`
 }
 
 const (
@@ -149,7 +150,7 @@ type HelmChartStatus struct {
 
 	// Artifact represents the output of the last successful reconciliation.
 	// +optional
-	Artifact *Artifact `json:"artifact,omitempty"`
+	Artifact *meta.Artifact `json:"artifact,omitempty"`
 
 	meta.ReconcileRequestStatus `json:",inline"`
 }
@@ -182,7 +183,7 @@ func (in HelmChart) GetRequeueAfter() time.Duration {
 
 // GetArtifact returns the latest artifact from the source if present in the
 // status sub-resource.
-func (in *HelmChart) GetArtifact() *Artifact {
+func (in *HelmChart) GetArtifact() *meta.Artifact {
 	return in.Status.Artifact
 }
 

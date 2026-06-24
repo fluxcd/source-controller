@@ -15,133 +15,24 @@ rules:
   - ""
   resources:
   - secrets
+  - serviceaccounts
   verbs:
   - get
   - list
   - watch
 - apiGroups:
-  - cd.qdrant.io
+  - ""
+  resources:
+  - serviceaccounts/token
+  verbs:
+  - create
+- apiGroups:
+  - source.toolkit.fluxcd.io
   resources:
   - buckets
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - cd.qdrant.io
-  resources:
-  - buckets/finalizers
-  verbs:
-  - create
-  - delete
-  - get
-  - patch
-  - update
-- apiGroups:
-  - cd.qdrant.io
-  resources:
-  - buckets/status
-  verbs:
-  - get
-  - patch
-  - update
-- apiGroups:
-  - cd.qdrant.io
-  resources:
   - gitrepositories
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - cd.qdrant.io
-  resources:
-  - gitrepositories/finalizers
-  verbs:
-  - create
-  - delete
-  - get
-  - patch
-  - update
-- apiGroups:
-  - cd.qdrant.io
-  resources:
-  - gitrepositories/status
-  verbs:
-  - get
-  - patch
-  - update
-- apiGroups:
-  - cd.qdrant.io
-  resources:
   - helmcharts
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - cd.qdrant.io
-  resources:
-  - helmcharts/finalizers
-  verbs:
-  - create
-  - delete
-  - get
-  - patch
-  - update
-- apiGroups:
-  - cd.qdrant.io
-  resources:
-  - helmcharts/status
-  verbs:
-  - get
-  - patch
-  - update
-- apiGroups:
-  - cd.qdrant.io
-  resources:
   - helmrepositories
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - cd.qdrant.io
-  resources:
-  - helmrepositories/finalizers
-  verbs:
-  - create
-  - delete
-  - get
-  - patch
-  - update
-- apiGroups:
-  - cd.qdrant.io
-  resources:
-  - helmrepositories/status
-  verbs:
-  - get
-  - patch
-  - update
-- apiGroups:
-  - cd.qdrant.io
-  resources:
   - ocirepositories
   verbs:
   - create
@@ -154,6 +45,10 @@ rules:
 - apiGroups:
   - cd.qdrant.io
   resources:
+  - buckets/finalizers
+  - gitrepositories/finalizers
+  - helmcharts/finalizers
+  - helmrepositories/finalizers
   - ocirepositories/finalizers
   verbs:
   - create
@@ -164,6 +59,10 @@ rules:
 - apiGroups:
   - cd.qdrant.io
   resources:
+  - buckets/status
+  - gitrepositories/status
+  - helmcharts/status
+  - helmrepositories/status
   - ocirepositories/status
   verbs:
   - get

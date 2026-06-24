@@ -24,7 +24,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 
-	sourcev1 "github.com/fluxcd/source-controller/api/v1"
+	"github.com/fluxcd/pkg/apis/meta"
 )
 
 var (
@@ -148,7 +148,7 @@ func SetSuspend(obj runtime.Object, val bool) error {
 }
 
 // GetArtifact returns the status.artifact of a given runtime object.
-func GetArtifact(obj runtime.Object) (*sourcev1.Artifact, error) {
+func GetArtifact(obj runtime.Object) (*meta.Artifact, error) {
 	u, err := toUnstructured(obj)
 	if err != nil {
 		return nil, err
@@ -165,7 +165,7 @@ func GetArtifact(obj runtime.Object) (*sourcev1.Artifact, error) {
 	if err != nil {
 		return nil, err
 	}
-	outArtifact := &sourcev1.Artifact{}
+	outArtifact := &meta.Artifact{}
 	if err := json.Unmarshal(enc, outArtifact); err != nil {
 		return nil, err
 	}

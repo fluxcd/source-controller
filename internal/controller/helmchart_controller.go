@@ -18,7 +18,6 @@ package controller
 
 import (
 	"context"
-	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -32,16 +31,15 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	"github.com/notaryproject/notation-go/verifier/trustpolicy"
 	"github.com/opencontainers/go-digest"
-	"github.com/sigstore/cosign/v2/pkg/cosign"
-	helmgetter "helm.sh/helm/v3/pkg/getter"
-	helmreg "helm.sh/helm/v3/pkg/registry"
-	helmrepo "helm.sh/helm/v3/pkg/repo"
+	"github.com/sigstore/cosign/v3/pkg/cosign"
+	helmgetter "helm.sh/helm/v4/pkg/getter"
+	helmreg "helm.sh/helm/v4/pkg/registry"
+	helmrepo "helm.sh/helm/v4/pkg/repo/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrs "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	kerrors "k8s.io/apimachinery/pkg/util/errors"
 	kuberecorder "k8s.io/client-go/tools/record"
 	"k8s.io/client-go/util/workqueue"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -55,6 +53,7 @@ import (
 
 	eventv1 "github.com/fluxcd/pkg/apis/event/v1beta1"
 	"github.com/fluxcd/pkg/apis/meta"
+	"github.com/fluxcd/pkg/artifact/storage"
 	"github.com/fluxcd/pkg/git"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	helper "github.com/fluxcd/pkg/runtime/controller"
@@ -65,13 +64,12 @@ import (
 	"github.com/fluxcd/pkg/tar"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
-	sourcev1beta2 "github.com/fluxcd/source-controller/api/v1beta2"
 	"github.com/fluxcd/source-controller/internal/cache"
 	serror "github.com/fluxcd/source-controller/internal/error"
 	"github.com/fluxcd/source-controller/internal/helm/chart"
 	"github.com/fluxcd/source-controller/internal/helm/getter"
+	"github.com/fluxcd/source-controller/internal/helm/registry"
 	"github.com/fluxcd/source-controller/internal/helm/repository"
-	"github.com/fluxcd/source-controller/internal/oci"
 	soci "github.com/fluxcd/source-controller/internal/oci"
 	scosign "github.com/fluxcd/source-controller/internal/oci/cosign"
 	"github.com/fluxcd/source-controller/internal/oci/notation"
@@ -133,27 +131,16 @@ type HelmChartReconciler struct {
 	kuberecorder.EventRecorder
 	helper.Metrics
 
-	RegistryClientGenerator RegistryClientGeneratorFunc
-	Storage                 *Storage
-	Getters                 helmgetter.Providers
-	ControllerName          string
-	LeaderElection          *bool
+	Storage               *storage.Storage
+	Getters               helmgetter.Providers
+	ControllerName        string
+	CosignVerifierFactory *scosign.CosignVerifierFactory
 
 	Cache *cache.Cache
 	TTL   time.Duration
 	*cache.CacheRecorder
 
 	patchOptions []patch.Option
-}
-
-// RegistryClientGeneratorFunc is a function that returns a registry client
-// and an optional file name.
-// The file is used to store the registry client credentials.
-// The caller is responsible for deleting the file.
-type RegistryClientGeneratorFunc func(tlsConfig *tls.Config, isLogin, insecure bool) (*helmreg.Client, string, error)
-
-func (r *HelmChartReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
-	return r.SetupWithManagerAndOptions(ctx, mgr, HelmChartReconcilerOptions{})
 }
 
 type HelmChartReconcilerOptions struct {
@@ -165,14 +152,32 @@ type HelmChartReconcilerOptions struct {
 // executed serially to perform the complete reconcile of the object.
 type helmChartReconcileFunc func(ctx context.Context, sp *patch.SerialPatcher, obj *sourcev1.HelmChart, build *chart.Build) (sreconcile.Result, error)
 
-func (r *HelmChartReconciler) SetupWithManagerAndOptions(ctx context.Context, mgr ctrl.Manager, opts HelmChartReconcilerOptions) error {
+const (
+	// The following index keys were moved from the api/v1 package here
+	// because they are not really APIs (there's nothing users or SDK
+	// users can do with them, it's entirely an implementation detail).
+
+	// indexKeyHelmRepositoryURL is used for allowing umbrella HelmChart
+	// objects to reference remote dependencies that can be resolved to
+	// HelmRepository objects in the same namespace (so the HelmChart
+	// controller can use their configuration to access the remote chart,
+	// e.g. authentication configuration).
+	indexKeyHelmRepositoryURL = ".metadata.helmRepositoryURL"
+
+	// indexKeyHelmChartSource is used for watching the sources a HelmChart
+	// can refer to and trigger their reconciliations according to relevant
+	// events on the watched sources.
+	indexKeyHelmChartSource = ".metadata.helmChartSource"
+)
+
+func (r *HelmChartReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, opts HelmChartReconcilerOptions) error {
 	r.patchOptions = getPatchOptions(helmChartReadyCondition.Owned, r.ControllerName)
 
-	if err := mgr.GetCache().IndexField(ctx, &sourcev1.HelmRepository{}, sourcev1.HelmRepositoryURLIndexKey,
+	if err := mgr.GetCache().IndexField(ctx, &sourcev1.HelmRepository{}, indexKeyHelmRepositoryURL,
 		r.indexHelmRepositoryByURL); err != nil {
 		return fmt.Errorf("failed setting index fields: %w", err)
 	}
-	if err := mgr.GetCache().IndexField(ctx, &sourcev1.HelmChart{}, sourcev1.SourceIndexKey,
+	if err := mgr.GetCache().IndexField(ctx, &sourcev1.HelmChart{}, indexKeyHelmChartSource,
 		r.indexHelmChartBySource); err != nil {
 		return fmt.Errorf("failed setting index fields: %w", err)
 	}
@@ -192,7 +197,7 @@ func (r *HelmChartReconciler) SetupWithManagerAndOptions(ctx context.Context, mg
 			builder.WithPredicates(SourceRevisionChangePredicate{}),
 		).
 		Watches(
-			&sourcev1beta2.Bucket{},
+			&sourcev1.Bucket{},
 			handler.EnqueueRequestsFromMapFunc(r.requestsForBucketChange),
 			builder.WithPredicates(SourceRevisionChangePredicate{}),
 		).
@@ -240,9 +245,7 @@ func (r *HelmChartReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		}
 		result, retErr = summarizeHelper.SummarizeAndPatch(ctx, obj, summarizeOpts...)
 
-		// Always record suspend, readiness and duration metrics.
-		r.Metrics.RecordSuspend(ctx, obj, obj.Spec.Suspend)
-		r.Metrics.RecordReadiness(ctx, obj)
+		// Always record duration metrics.
 		r.Metrics.RecordDuration(ctx, obj, start)
 	}()
 
@@ -347,12 +350,12 @@ func (r *HelmChartReconciler) notify(ctx context.Context, oldObj, newObj *source
 		// Notify on new artifact and failure recovery.
 		if !oldObj.GetArtifact().HasDigest(newObj.GetArtifact().Digest) {
 			r.AnnotatedEventf(newObj, annotations, corev1.EventTypeNormal,
-				reasonForBuild(build), build.Summary())
+				reasonForBuild(build), "%s", build.Summary())
 			ctrl.LoggerFrom(ctx).Info(build.Summary())
 		} else {
 			if sreconcile.FailureRecovery(oldObj, newObj, helmChartFailConditions) {
 				r.AnnotatedEventf(newObj, annotations, corev1.EventTypeNormal,
-					reasonForBuild(build), build.Summary())
+					reasonForBuild(build), "%s", build.Summary())
 				ctrl.LoggerFrom(ctx).Info(build.Summary())
 			}
 		}
@@ -409,7 +412,7 @@ func (r *HelmChartReconciler) reconcileStorage(ctx context.Context, sp *patch.Se
 		if artifactMissing {
 			msg += ": disappeared from storage"
 		}
-		rreconcile.ProgressiveStatus(true, obj, meta.ProgressingReason, msg)
+		rreconcile.ProgressiveStatus(true, obj, meta.ProgressingReason, "%s", msg)
 		conditions.Delete(obj, sourcev1.ArtifactInStorageCondition)
 		if err := sp.Patch(ctx, obj, r.patchOptions...); err != nil {
 			return sreconcile.ResultEmpty, serror.NewGeneric(err, sourcev1.PatchOperationFailedReason)
@@ -504,7 +507,7 @@ func (r *HelmChartReconciler) reconcileSource(ctx context.Context, sp *patch.Ser
 	switch typedSource := s.(type) {
 	case *sourcev1.HelmRepository:
 		return r.buildFromHelmRepository(ctx, obj, typedSource, build)
-	case *sourcev1.GitRepository, *sourcev1beta2.Bucket:
+	case *sourcev1.GitRepository, *sourcev1.Bucket:
 		return r.buildFromTarballArtifact(ctx, obj, *typedSource.GetArtifact(), build)
 	default:
 		// Ending up here should generally not be possible
@@ -520,7 +523,7 @@ func (r *HelmChartReconciler) reconcileSource(ctx context.Context, sp *patch.Ser
 // object, and returns early.
 func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *sourcev1.HelmChart,
 	repo *sourcev1.HelmRepository, b *chart.Build) (sreconcile.Result, error) {
-	// Used to login with the repository declared provider
+	// Used to get the client options for the repository
 	ctxTimeout, cancel := context.WithTimeout(ctx, repo.GetTimeout())
 	defer cancel()
 
@@ -529,7 +532,7 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 		return chartRepoConfigErrorReturn(err, obj)
 	}
 
-	clientOpts, certsTmpDir, err := getter.GetClientOpts(ctxTimeout, r.Client, repo, normalizedURL)
+	clientOpts, err := getter.GetClientOpts(ctxTimeout, r.Client, repo, normalizedURL)
 	if err != nil && !errors.Is(err, getter.ErrDeprecatedTLSConfig) {
 		e := serror.NewGeneric(
 			err,
@@ -537,14 +540,6 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 		)
 		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
 		return sreconcile.ResultEmpty, e
-	}
-	if certsTmpDir != "" {
-		defer func() {
-			if err := os.RemoveAll(certsTmpDir); err != nil {
-				r.eventLogf(ctx, obj, corev1.EventTypeWarning, meta.FailedReason,
-					"failed to delete temporary certificates directory: %s", err)
-			}
-		}()
 	}
 
 	getterOpts := clientOpts.GetterOpts
@@ -558,11 +553,7 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 			return chartRepoConfigErrorReturn(err, obj)
 		}
 
-		// with this function call, we create a temporary file to store the credentials if needed.
-		// this is needed because otherwise the credentials are stored in ~/.docker/config.json.
-		// TODO@souleb: remove this once the registry move to Oras v2
-		// or rework to enable reusing credentials to avoid the unneccessary handshake operations
-		registryClient, credentialsFile, err := r.RegistryClientGenerator(clientOpts.TlsConfig, clientOpts.MustLoginToRegistry(), repo.Spec.Insecure)
+		registryClient, err := registry.NewClient(clientOpts.OCIAuth, clientOpts.TLSConfig, repo.Spec.Insecure)
 		if err != nil {
 			e := serror.NewGeneric(
 				fmt.Errorf("failed to construct Helm client: %w", err),
@@ -570,15 +561,6 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 			)
 			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
 			return sreconcile.ResultEmpty, e
-		}
-
-		if credentialsFile != "" {
-			defer func() {
-				if err := os.Remove(credentialsFile); err != nil {
-					r.eventLogf(ctx, obj, corev1.EventTypeWarning, meta.FailedReason,
-						"failed to delete temporary credentials file: %s", err)
-				}
-			}()
 		}
 
 		var verifiers []soci.Verifier
@@ -615,22 +597,9 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 			return chartRepoConfigErrorReturn(err, obj)
 		}
 
-		// If login options are configured, use them to login to the registry
-		// The OCIGetter will later retrieve the stored credentials to pull the chart
-		if clientOpts.MustLoginToRegistry() {
-			err = ociChartRepo.Login(clientOpts.RegLoginOpts...)
-			if err != nil {
-				e := serror.NewGeneric(
-					fmt.Errorf("failed to login to OCI registry: %w", err),
-					sourcev1.AuthenticationFailedReason,
-				)
-				conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
-				return sreconcile.ResultEmpty, e
-			}
-		}
 		chartRepo = ociChartRepo
 	default:
-		httpChartRepo, err := repository.NewChartRepository(normalizedURL, r.Storage.LocalPath(*repo.GetArtifact()), r.Getters, clientOpts.TlsConfig, getterOpts...)
+		httpChartRepo, err := repository.NewChartRepository(normalizedURL, r.Storage.LocalPath(*repo.GetArtifact()), r.Getters, clientOpts.TLSConfig, getterOpts...)
 		if err != nil {
 			return chartRepoConfigErrorReturn(err, obj)
 		}
@@ -690,6 +659,33 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 	ref := chart.RemoteReference{Name: obj.Spec.Chart, Version: obj.Spec.Version}
 	build, err := cb.Build(ctx, ref, util.TempPathForObj("", ".tgz", obj), opts)
 	if err != nil {
+		var containsAuthError bool
+		for _, reason := range []string{
+			// basic auth
+			"401", "unauthorized", "authentication required",
+			// TLS
+			"tls", "unknown certificate authority",
+		} {
+			if strings.Contains(err.Error(), reason) {
+				containsAuthError = true
+				break
+			}
+		}
+		if containsAuthError {
+			e := serror.NewGeneric(
+				// Here we use %s instead of %w to avoid wrapping the error.
+				// We do this because the error here is a BuildError. But we
+				// just detected that it is actually an authentication error.
+				// We do this to avoid confusion in the higher levels of the
+				// reconciliation, which would see a BuildError instead of
+				// an authentication error and mark the FetchFailedCondition
+				// incorrectly.
+				fmt.Errorf("failed to authenticate with the Helm repository: %s", err.Error()),
+				sourcev1.AuthenticationFailedReason,
+			)
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
+			return sreconcile.ResultEmpty, e
+		}
 		return sreconcile.ResultEmpty, err
 	}
 
@@ -702,7 +698,7 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 // v1.Artifact.
 // In case of a failure it records v1.FetchFailedCondition on the chart
 // object, and returns early.
-func (r *HelmChartReconciler) buildFromTarballArtifact(ctx context.Context, obj *sourcev1.HelmChart, source sourcev1.Artifact, b *chart.Build) (sreconcile.Result, error) {
+func (r *HelmChartReconciler) buildFromTarballArtifact(ctx context.Context, obj *sourcev1.HelmChart, source meta.Artifact, b *chart.Build) (sreconcile.Result, error) {
 	// Create temporary working directory
 	tmpDir, err := util.TempDirForObj("", obj)
 	if err != nil {
@@ -779,12 +775,12 @@ func (r *HelmChartReconciler) buildFromTarballArtifact(ctx context.Context, obj 
 		if obj.Spec.SourceRef.Kind == sourcev1.GitRepositoryKind {
 			rev = git.ExtractHashFromRevision(rev).String()
 		}
-		if obj.Spec.SourceRef.Kind == sourcev1beta2.BucketKind {
+		if obj.Spec.SourceRef.Kind == sourcev1.BucketKind {
 			if dig := digest.Digest(rev); dig.Validate() == nil {
 				rev = dig.Encoded()
 			}
 		}
-		if kind := obj.Spec.SourceRef.Kind; kind == sourcev1.GitRepositoryKind || kind == sourcev1beta2.BucketKind {
+		if kind := obj.Spec.SourceRef.Kind; kind == sourcev1.GitRepositoryKind || kind == sourcev1.BucketKind {
 			// The SemVer from the metadata is at times used in e.g. the label metadata for a resource
 			// in a chart, which has a limited length of 63 characters.
 			// To not fill most of this space with a full length SHA hex (40 characters for SHA-1, and
@@ -930,15 +926,15 @@ func (r *HelmChartReconciler) getSource(ctx context.Context, obj *sourcev1.HelmC
 			return nil, err
 		}
 		s = &repo
-	case sourcev1beta2.BucketKind:
-		var bucket sourcev1beta2.Bucket
+	case sourcev1.BucketKind:
+		var bucket sourcev1.Bucket
 		if err := r.Client.Get(ctx, namespacedName, &bucket); err != nil {
 			return nil, err
 		}
 		s = &bucket
 	default:
 		return nil, fmt.Errorf("unsupported source kind '%s', must be one of: %v", obj.Spec.SourceRef.Kind, []string{
-			sourcev1.HelmRepositoryKind, sourcev1.GitRepositoryKind, sourcev1beta2.BucketKind})
+			sourcev1.HelmRepositoryKind, sourcev1.GitRepositoryKind, sourcev1.BucketKind})
 	}
 	return s, nil
 }
@@ -989,7 +985,7 @@ func (r *HelmChartReconciler) garbageCollect(ctx context.Context, obj *sourcev1.
 		}
 		if len(delFiles) > 0 {
 			r.eventLogf(ctx, obj, eventv1.EventTypeTrace, "GarbageCollectionSucceeded",
-				fmt.Sprintf("garbage collected %d artifacts", len(delFiles)))
+				"garbage collected %d artifacts", len(delFiles))
 			return nil
 		}
 	}
@@ -1020,11 +1016,11 @@ func (r *HelmChartReconciler) namespacedChartRepositoryCallback(ctx context.Cont
 			}
 		}
 
-		// Used to login with the repository declared provider
+		// Used to get the client options for the repository
 		ctxTimeout, cancel := context.WithTimeout(ctx, obj.GetTimeout())
 		defer cancel()
 
-		clientOpts, certsTmpDir, err := getter.GetClientOpts(ctxTimeout, r.Client, obj, normalizedURL)
+		clientOpts, err := getter.GetClientOpts(ctxTimeout, r.Client, obj, normalizedURL)
 		if err != nil && !errors.Is(err, getter.ErrDeprecatedTLSConfig) {
 			return nil, err
 		}
@@ -1032,45 +1028,23 @@ func (r *HelmChartReconciler) namespacedChartRepositoryCallback(ctx context.Cont
 
 		var chartRepo repository.Downloader
 		if helmreg.IsOCI(normalizedURL) {
-			registryClient, credentialsFile, err := r.RegistryClientGenerator(clientOpts.TlsConfig, clientOpts.MustLoginToRegistry(), obj.Spec.Insecure)
+			registryClient, err := registry.NewClient(clientOpts.OCIAuth, clientOpts.TLSConfig, obj.Spec.Insecure)
 			if err != nil {
 				return nil, fmt.Errorf("failed to create registry client: %w", err)
 			}
 
-			var errs []error
 			// Tell the chart repository to use the OCI client with the configured getter
 			getterOpts = append(getterOpts, helmgetter.WithRegistryClient(registryClient))
 			ociChartRepo, err := repository.NewOCIChartRepository(normalizedURL, repository.WithOCIGetter(r.Getters),
 				repository.WithOCIGetterOptions(getterOpts),
-				repository.WithOCIRegistryClient(registryClient),
-				repository.WithCertificatesStore(certsTmpDir),
-				repository.WithCredentialsFile(credentialsFile))
+				repository.WithOCIRegistryClient(registryClient))
 			if err != nil {
-				errs = append(errs, fmt.Errorf("failed to create OCI chart repository: %w", err))
-				// clean up the credentialsFile
-				if credentialsFile != "" {
-					if err := os.Remove(credentialsFile); err != nil {
-						errs = append(errs, err)
-					}
-				}
-				return nil, kerrors.NewAggregate(errs)
-			}
-
-			// If login options are configured, use them to login to the registry
-			// The OCIGetter will later retrieve the stored credentials to pull the chart
-			if clientOpts.MustLoginToRegistry() {
-				err = ociChartRepo.Login(clientOpts.RegLoginOpts...)
-				if err != nil {
-					errs = append(errs, fmt.Errorf("failed to login to OCI chart repository: %w", err))
-					// clean up the credentialsFile
-					errs = append(errs, ociChartRepo.Clear())
-					return nil, kerrors.NewAggregate(errs)
-				}
+				return nil, fmt.Errorf("failed to create OCI chart repository: %w", err)
 			}
 
 			chartRepo = ociChartRepo
 		} else {
-			httpChartRepo, err := repository.NewChartRepository(normalizedURL, "", r.Getters, clientOpts.TlsConfig, getterOpts...)
+			httpChartRepo, err := repository.NewChartRepository(normalizedURL, "", r.Getters, clientOpts.TLSConfig, getterOpts...)
 			if err != nil {
 				return nil, err
 			}
@@ -1101,10 +1075,12 @@ func (r *HelmChartReconciler) namespacedChartRepositoryCallback(ctx context.Cont
 	}
 }
 
+// resolveDependencyRepository attempts to find a HelmRepository in the given namespace matching the given URL.
+// It allows umbrella charts referencing remote dependencies to be inflated for packaging.
 func (r *HelmChartReconciler) resolveDependencyRepository(ctx context.Context, url string, namespace string) (*sourcev1.HelmRepository, error) {
 	listOpts := []client.ListOption{
 		client.InNamespace(namespace),
-		client.MatchingFields{sourcev1.HelmRepositoryURLIndexKey: url},
+		client.MatchingFields{indexKeyHelmRepositoryURL: url},
 		client.Limit(1),
 	}
 	var list sourcev1.HelmRepositoryList
@@ -1152,7 +1128,7 @@ func (r *HelmChartReconciler) requestsForHelmRepositoryChange(ctx context.Contex
 
 	var list sourcev1.HelmChartList
 	if err := r.List(ctx, &list, client.MatchingFields{
-		sourcev1.SourceIndexKey: fmt.Sprintf("%s/%s", sourcev1.HelmRepositoryKind, repo.Name),
+		indexKeyHelmChartSource: fmt.Sprintf("%s/%s", sourcev1.HelmRepositoryKind, repo.Name),
 	}); err != nil {
 		ctrl.LoggerFrom(ctx).Error(err, "failed to list HelmCharts for HelmRepository change")
 		return nil
@@ -1182,7 +1158,7 @@ func (r *HelmChartReconciler) requestsForGitRepositoryChange(ctx context.Context
 
 	var list sourcev1.HelmChartList
 	if err := r.List(ctx, &list, client.MatchingFields{
-		sourcev1.SourceIndexKey: fmt.Sprintf("%s/%s", sourcev1.GitRepositoryKind, repo.Name),
+		indexKeyHelmChartSource: fmt.Sprintf("%s/%s", sourcev1.GitRepositoryKind, repo.Name),
 	}); err != nil {
 		ctrl.LoggerFrom(ctx).Error(err, "failed to list HelmCharts for GitRepository change")
 		return nil
@@ -1198,7 +1174,7 @@ func (r *HelmChartReconciler) requestsForGitRepositoryChange(ctx context.Context
 }
 
 func (r *HelmChartReconciler) requestsForBucketChange(ctx context.Context, o client.Object) []reconcile.Request {
-	bucket, ok := o.(*sourcev1beta2.Bucket)
+	bucket, ok := o.(*sourcev1.Bucket)
 	if !ok {
 		ctrl.LoggerFrom(ctx).Error(fmt.Errorf("expected a Bucket, got %T", o),
 			"failed to get reconcile requests for Bucket change")
@@ -1212,7 +1188,7 @@ func (r *HelmChartReconciler) requestsForBucketChange(ctx context.Context, o cli
 
 	var list sourcev1.HelmChartList
 	if err := r.List(ctx, &list, client.MatchingFields{
-		sourcev1.SourceIndexKey: fmt.Sprintf("%s/%s", sourcev1beta2.BucketKind, bucket.Name),
+		indexKeyHelmChartSource: fmt.Sprintf("%s/%s", sourcev1.BucketKind, bucket.Name),
 	}); err != nil {
 		ctrl.LoggerFrom(ctx).Error(err, "failed to list HelmCharts for Bucket change")
 		return nil
@@ -1240,7 +1216,7 @@ func (r *HelmChartReconciler) eventLogf(ctx context.Context, obj runtime.Object,
 	} else {
 		ctrl.LoggerFrom(ctx).Info(msg)
 	}
-	r.Eventf(obj, eventType, reason, msg)
+	r.Eventf(obj, eventType, reason, "%s", msg)
 }
 
 // observeChartBuild records the observation on the given given build and error on the object.
@@ -1260,7 +1236,7 @@ func observeChartBuild(ctx context.Context, sp *patch.SerialPatcher, pOpts []pat
 	if build.Complete() {
 		conditions.Delete(obj, sourcev1.FetchFailedCondition)
 		conditions.Delete(obj, sourcev1.BuildFailedCondition)
-		if build.VerifiedResult == oci.VerificationResultSuccess {
+		if build.VerifiedResult == soci.VerificationResultSuccess {
 			conditions.MarkTrue(obj, sourcev1.SourceVerifiedCondition, meta.SucceededReason, "verified signature of version %s", build.Version)
 		}
 	}
@@ -1338,6 +1314,7 @@ func (r *HelmChartReconciler) makeVerifiers(ctx context.Context, obj *sourcev1.H
 	case "cosign":
 		defaultCosignOciOpts := []scosign.Options{
 			scosign.WithRemoteOptions(verifyOpts...),
+			scosign.WithTLSConfig(clientOpts.TLSConfig),
 		}
 
 		// get the public keys from the given secret
@@ -1356,7 +1333,7 @@ func (r *HelmChartReconciler) makeVerifiers(ctx context.Context, obj *sourcev1.H
 			for k, data := range pubSecret.Data {
 				// search for public keys in the secret
 				if strings.HasSuffix(k, ".pub") {
-					verifier, err := scosign.NewCosignVerifier(ctx, append(defaultCosignOciOpts, scosign.WithPublicKey(data))...)
+					verifier, err := r.CosignVerifierFactory.NewCosignVerifier(ctx, append(defaultCosignOciOpts, scosign.WithPublicKey(data))...)
 					if err != nil {
 						return nil, err
 					}
@@ -1380,7 +1357,7 @@ func (r *HelmChartReconciler) makeVerifiers(ctx context.Context, obj *sourcev1.H
 		}
 		defaultCosignOciOpts = append(defaultCosignOciOpts, scosign.WithIdentities(identities))
 
-		verifier, err := scosign.NewCosignVerifier(ctx, defaultCosignOciOpts...)
+		verifier, err := r.CosignVerifierFactory.NewCosignVerifier(ctx, defaultCosignOciOpts...)
 		if err != nil {
 			return nil, err
 		}

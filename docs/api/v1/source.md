@@ -9,13 +9,309 @@
 <p>Package v1 contains API Schema definitions for the source v1 API group</p>
 Resource Types:
 <ul class="simple"><li>
-<a href="#cd.qdrant.io/v1.GitRepository">GitRepository</a>
+<a href="#source.toolkit.fluxcd.io/v1.Bucket">Bucket</a>
+</li><li>
+<a href="#source.toolkit.fluxcd.io/v1.GitRepository">GitRepository</a>
 </li><li>
 <a href="#cd.qdrant.io/v1.HelmChart">HelmChart</a>
 </li><li>
-<a href="#cd.qdrant.io/v1.HelmRepository">HelmRepository</a>
+<a href="#source.toolkit.fluxcd.io/v1.HelmRepository">HelmRepository</a>
+</li><li>
+<a href="#source.toolkit.fluxcd.io/v1.OCIRepository">OCIRepository</a>
 </li></ul>
-<h3 id="cd.qdrant.io/v1.GitRepository">GitRepository
+<h3 id="source.toolkit.fluxcd.io/v1.Bucket">Bucket
+</h3>
+<p>Bucket is the Schema for the buckets API.</p>
+<div class="md-typeset__scrollwrap">
+<div class="md-typeset__table">
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>apiVersion</code><br>
+string</td>
+<td>
+<code>source.toolkit.fluxcd.io/v1</code>
+</td>
+</tr>
+<tr>
+<td>
+<code>kind</code><br>
+string
+</td>
+<td>
+<code>Bucket</code>
+</td>
+</tr>
+<tr>
+<td>
+<code>metadata</code><br>
+<em>
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.19/#objectmeta-v1-meta">
+Kubernetes meta/v1.ObjectMeta
+</a>
+</em>
+</td>
+<td>
+Refer to the Kubernetes API documentation for the fields of the
+<code>metadata</code> field.
+</td>
+</tr>
+<tr>
+<td>
+<code>spec</code><br>
+<em>
+<a href="#source.toolkit.fluxcd.io/v1.BucketSpec">
+BucketSpec
+</a>
+</em>
+</td>
+<td>
+<br/>
+<br/>
+<table>
+<tr>
+<td>
+<code>provider</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Provider of the object storage bucket.
+Defaults to &lsquo;generic&rsquo;, which expects an S3 (API) compatible object
+storage.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>bucketName</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<p>BucketName is the name of the object storage bucket.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>endpoint</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<p>Endpoint is the object storage address the BucketName is located at.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>sts</code><br>
+<em>
+<a href="#source.toolkit.fluxcd.io/v1.BucketSTSSpec">
+BucketSTSSpec
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>STS specifies the required configuration to use a Security Token
+Service for fetching temporary credentials to authenticate in a
+Bucket provider.</p>
+<p>This field is only supported for the <code>aws</code> and <code>generic</code> providers.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>insecure</code><br>
+<em>
+bool
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Insecure allows connecting to a non-TLS HTTP Endpoint.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>region</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Region of the Endpoint where the BucketName is located in.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>prefix</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Prefix to use for server-side filtering of files in the Bucket.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>secretRef</code><br>
+<em>
+<a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/meta#LocalObjectReference">
+github.com/fluxcd/pkg/apis/meta.LocalObjectReference
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>SecretRef specifies the Secret containing authentication credentials
+for the Bucket.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>serviceAccountName</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>ServiceAccountName is the name of the Kubernetes ServiceAccount used to authenticate
+the bucket. This field is only supported for the &lsquo;gcp&rsquo; and &lsquo;aws&rsquo; providers.
+For more information about workload identity:
+<a href="https://fluxcd.io/flux/components/source/buckets/#workload-identity">https://fluxcd.io/flux/components/source/buckets/#workload-identity</a></p>
+</td>
+</tr>
+<tr>
+<td>
+<code>certSecretRef</code><br>
+<em>
+<a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/meta#LocalObjectReference">
+github.com/fluxcd/pkg/apis/meta.LocalObjectReference
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>CertSecretRef can be given the name of a Secret containing
+either or both of</p>
+<ul>
+<li>a PEM-encoded client certificate (<code>tls.crt</code>) and private
+key (<code>tls.key</code>);</li>
+<li>a PEM-encoded CA certificate (<code>ca.crt</code>)</li>
+</ul>
+<p>and whichever are supplied, will be used for connecting to the
+bucket. The client cert and key are useful if you are
+authenticating with a certificate; the CA cert is useful if
+you are using a self-signed server certificate. The Secret must
+be of type <code>Opaque</code> or <code>kubernetes.io/tls</code>.</p>
+<p>This field is only supported for the <code>generic</code> provider.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>proxySecretRef</code><br>
+<em>
+<a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/meta#LocalObjectReference">
+github.com/fluxcd/pkg/apis/meta.LocalObjectReference
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>ProxySecretRef specifies the Secret containing the proxy configuration
+to use while communicating with the Bucket server.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>interval</code><br>
+<em>
+<a href="https://pkg.go.dev/k8s.io/apimachinery/pkg/apis/meta/v1#Duration">
+Kubernetes meta/v1.Duration
+</a>
+</em>
+</td>
+<td>
+<p>Interval at which the Bucket Endpoint is checked for updates.
+This interval is approximate and may be subject to jitter to ensure
+efficient use of resources.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>timeout</code><br>
+<em>
+<a href="https://pkg.go.dev/k8s.io/apimachinery/pkg/apis/meta/v1#Duration">
+Kubernetes meta/v1.Duration
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Timeout for fetch operations, defaults to 60s.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>ignore</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Ignore overrides the set of excluded patterns in the .sourceignore format
+(which is the same as .gitignore). If not provided, a default will be used,
+consult the documentation for your version to find out what those are.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>suspend</code><br>
+<em>
+bool
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Suspend tells the controller to suspend the reconciliation of this
+Bucket.</p>
+</td>
+</tr>
+</table>
+</td>
+</tr>
+<tr>
+<td>
+<code>status</code><br>
+<em>
+<a href="#source.toolkit.fluxcd.io/v1.BucketStatus">
+BucketStatus
+</a>
+</em>
+</td>
+<td>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<h3 id="source.toolkit.fluxcd.io/v1.GitRepository">GitRepository
 </h3>
 <p>GitRepository is the Schema for the gitrepositories API.</p>
 <div class="md-typeset__scrollwrap">
@@ -100,6 +396,32 @@ For HTTPS repositories the Secret must contain &lsquo;username&rsquo; and &lsquo
 fields for basic auth or &lsquo;bearerToken&rsquo; field for token auth.
 For SSH repositories the Secret must contain &lsquo;identity&rsquo;
 and &lsquo;known_hosts&rsquo; fields.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>provider</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Provider used for authentication, can be &lsquo;aws&rsquo;, &lsquo;azure&rsquo;, &lsquo;github&rsquo;, &lsquo;generic&rsquo;.
+When not specified, defaults to &lsquo;generic&rsquo;.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>serviceAccountName</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>ServiceAccountName is the name of the Kubernetes ServiceAccount used to
+authenticate to the GitRepository. This field is only supported for &lsquo;azure&rsquo; and &lsquo;aws&rsquo; providers.</p>
 </td>
 </tr>
 <tr>
@@ -229,6 +551,20 @@ the GitRepository as cloned from the URL, using their default settings.</p>
 <em>(Optional)</em>
 <p>Include specifies a list of GitRepository resources which Artifacts
 should be included in the Artifact produced for this GitRepository.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>sparseCheckout</code><br>
+<em>
+[]string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>SparseCheckout specifies a list of directories to checkout when cloning
+the repository. If specified, only these directories are included in the
+Artifact produced for this GitRepository.</p>
 </td>
 </tr>
 </table>
@@ -421,8 +757,8 @@ source.</p>
 <td>
 <code>verify</code><br>
 <em>
-<a href="#cd.qdrant.io/v1.OCIRepositoryVerification">
-OCIRepositoryVerification
+<a href="#source.toolkit.fluxcd.io/v1.HelmChartVerification">
+HelmChartVerification
 </a>
 </em>
 </td>
@@ -707,15 +1043,9 @@ HelmRepositoryStatus
 </table>
 </div>
 </div>
-<h3 id="cd.qdrant.io/v1.Artifact">Artifact
+<h3 id="source.toolkit.fluxcd.io/v1.OCIRepository">OCIRepository
 </h3>
-<p>
-(<em>Appears on:</em>
-<a href="#cd.qdrant.io/v1.GitRepositoryStatus">GitRepositoryStatus</a>, 
-<a href="#cd.qdrant.io/v1.HelmChartStatus">HelmChartStatus</a>, 
-<a href="#cd.qdrant.io/v1.HelmRepositoryStatus">HelmRepositoryStatus</a>)
-</p>
-<p>Artifact represents the output of a Source reconciliation.</p>
+<p>OCIRepository is the Schema for the ocirepositories API</p>
 <div class="md-typeset__scrollwrap">
 <div class="md-typeset__table">
 <table>
@@ -728,15 +1058,642 @@ HelmRepositoryStatus
 <tbody>
 <tr>
 <td>
-<code>path</code><br>
+<code>apiVersion</code><br>
+string</td>
+<td>
+<code>source.toolkit.fluxcd.io/v1</code>
+</td>
+</tr>
+<tr>
+<td>
+<code>kind</code><br>
+string
+</td>
+<td>
+<code>OCIRepository</code>
+</td>
+</tr>
+<tr>
+<td>
+<code>metadata</code><br>
+<em>
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.19/#objectmeta-v1-meta">
+Kubernetes meta/v1.ObjectMeta
+</a>
+</em>
+</td>
+<td>
+Refer to the Kubernetes API documentation for the fields of the
+<code>metadata</code> field.
+</td>
+</tr>
+<tr>
+<td>
+<code>spec</code><br>
+<em>
+<a href="#source.toolkit.fluxcd.io/v1.OCIRepositorySpec">
+OCIRepositorySpec
+</a>
+</em>
+</td>
+<td>
+<br/>
+<br/>
+<table>
+<tr>
+<td>
+<code>url</code><br>
 <em>
 string
 </em>
 </td>
 <td>
-<p>Path is the relative file path of the Artifact. It can be used to locate
-the file in the root of the Artifact storage on the local file system of
-the controller managing the Source.</p>
+<p>URL is a reference to an OCI artifact repository hosted
+on a remote container registry.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>ref</code><br>
+<em>
+<a href="#source.toolkit.fluxcd.io/v1.OCIRepositoryRef">
+OCIRepositoryRef
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>The OCI reference to pull and monitor for changes,
+defaults to the latest tag.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>layerSelector</code><br>
+<em>
+<a href="#source.toolkit.fluxcd.io/v1.OCILayerSelector">
+OCILayerSelector
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>LayerSelector specifies which layer should be extracted from the OCI artifact.
+When not specified, the first layer found in the artifact is selected.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>provider</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>The provider used for authentication, can be &lsquo;aws&rsquo;, &lsquo;azure&rsquo;, &lsquo;gcp&rsquo; or &lsquo;generic&rsquo;.
+When not specified, defaults to &lsquo;generic&rsquo;.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>secretRef</code><br>
+<em>
+<a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/meta#LocalObjectReference">
+github.com/fluxcd/pkg/apis/meta.LocalObjectReference
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>SecretRef contains the secret name containing the registry login
+credentials to resolve image metadata.
+The secret must be of type kubernetes.io/dockerconfigjson.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>verify</code><br>
+<em>
+<a href="#source.toolkit.fluxcd.io/v1.OCIRepositoryVerification">
+OCIRepositoryVerification
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Verify contains the secret name containing the trusted public keys
+used to verify the signature and specifies which provider to use to check
+whether OCI image is authentic.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>serviceAccountName</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>ServiceAccountName is the name of the Kubernetes ServiceAccount used to authenticate
+the image pull if the service account has attached pull secrets. For more information:
+<a href="https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/#add-imagepullsecrets-to-a-service-account">https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/#add-imagepullsecrets-to-a-service-account</a></p>
+</td>
+</tr>
+<tr>
+<td>
+<code>certSecretRef</code><br>
+<em>
+<a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/meta#LocalObjectReference">
+github.com/fluxcd/pkg/apis/meta.LocalObjectReference
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>CertSecretRef can be given the name of a Secret containing
+either or both of</p>
+<ul>
+<li>a PEM-encoded client certificate (<code>tls.crt</code>) and private
+key (<code>tls.key</code>);</li>
+<li>a PEM-encoded CA certificate (<code>ca.crt</code>)</li>
+</ul>
+<p>and whichever are supplied, will be used for connecting to the
+registry. The client cert and key are useful if you are
+authenticating with a certificate; the CA cert is useful if
+you are using a self-signed server certificate. The Secret must
+be of type <code>Opaque</code> or <code>kubernetes.io/tls</code>.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>proxySecretRef</code><br>
+<em>
+<a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/meta#LocalObjectReference">
+github.com/fluxcd/pkg/apis/meta.LocalObjectReference
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>ProxySecretRef specifies the Secret containing the proxy configuration
+to use while communicating with the container registry.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>interval</code><br>
+<em>
+<a href="https://pkg.go.dev/k8s.io/apimachinery/pkg/apis/meta/v1#Duration">
+Kubernetes meta/v1.Duration
+</a>
+</em>
+</td>
+<td>
+<p>Interval at which the OCIRepository URL is checked for updates.
+This interval is approximate and may be subject to jitter to ensure
+efficient use of resources.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>timeout</code><br>
+<em>
+<a href="https://pkg.go.dev/k8s.io/apimachinery/pkg/apis/meta/v1#Duration">
+Kubernetes meta/v1.Duration
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>The timeout for remote OCI Repository operations like pulling, defaults to 60s.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>ignore</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Ignore overrides the set of excluded patterns in the .sourceignore format
+(which is the same as .gitignore). If not provided, a default will be used,
+consult the documentation for your version to find out what those are.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>insecure</code><br>
+<em>
+bool
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Insecure allows connecting to a non-TLS HTTP container registry.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>suspend</code><br>
+<em>
+bool
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>This flag tells the controller to suspend the reconciliation of this source.</p>
+</td>
+</tr>
+</table>
+</td>
+</tr>
+<tr>
+<td>
+<code>status</code><br>
+<em>
+<a href="#source.toolkit.fluxcd.io/v1.OCIRepositoryStatus">
+OCIRepositoryStatus
+</a>
+</em>
+</td>
+<td>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<h3 id="source.toolkit.fluxcd.io/v1.BucketSTSSpec">BucketSTSSpec
+</h3>
+<p>
+(<em>Appears on:</em>
+<a href="#source.toolkit.fluxcd.io/v1.BucketSpec">BucketSpec</a>)
+</p>
+<p>BucketSTSSpec specifies the required configuration to use a Security Token
+Service for fetching temporary credentials to authenticate in a Bucket
+provider.</p>
+<div class="md-typeset__scrollwrap">
+<div class="md-typeset__table">
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>provider</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<p>Provider of the Security Token Service.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>endpoint</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<p>Endpoint is the HTTP/S endpoint of the Security Token Service from
+where temporary credentials will be fetched.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>secretRef</code><br>
+<em>
+<a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/meta#LocalObjectReference">
+github.com/fluxcd/pkg/apis/meta.LocalObjectReference
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>SecretRef specifies the Secret containing authentication credentials
+for the STS endpoint. This Secret must contain the fields <code>username</code>
+and <code>password</code> and is supported only for the <code>ldap</code> provider.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>certSecretRef</code><br>
+<em>
+<a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/meta#LocalObjectReference">
+github.com/fluxcd/pkg/apis/meta.LocalObjectReference
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>CertSecretRef can be given the name of a Secret containing
+either or both of</p>
+<ul>
+<li>a PEM-encoded client certificate (<code>tls.crt</code>) and private
+key (<code>tls.key</code>);</li>
+<li>a PEM-encoded CA certificate (<code>ca.crt</code>)</li>
+</ul>
+<p>and whichever are supplied, will be used for connecting to the
+STS endpoint. The client cert and key are useful if you are
+authenticating with a certificate; the CA cert is useful if
+you are using a self-signed server certificate. The Secret must
+be of type <code>Opaque</code> or <code>kubernetes.io/tls</code>.</p>
+<p>This field is only supported for the <code>ldap</code> provider.</p>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<h3 id="source.toolkit.fluxcd.io/v1.BucketSpec">BucketSpec
+</h3>
+<p>
+(<em>Appears on:</em>
+<a href="#source.toolkit.fluxcd.io/v1.Bucket">Bucket</a>)
+</p>
+<p>BucketSpec specifies the required configuration to produce an Artifact for
+an object storage bucket.</p>
+<div class="md-typeset__scrollwrap">
+<div class="md-typeset__table">
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>provider</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Provider of the object storage bucket.
+Defaults to &lsquo;generic&rsquo;, which expects an S3 (API) compatible object
+storage.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>bucketName</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<p>BucketName is the name of the object storage bucket.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>endpoint</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<p>Endpoint is the object storage address the BucketName is located at.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>sts</code><br>
+<em>
+<a href="#source.toolkit.fluxcd.io/v1.BucketSTSSpec">
+BucketSTSSpec
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>STS specifies the required configuration to use a Security Token
+Service for fetching temporary credentials to authenticate in a
+Bucket provider.</p>
+<p>This field is only supported for the <code>aws</code> and <code>generic</code> providers.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>insecure</code><br>
+<em>
+bool
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Insecure allows connecting to a non-TLS HTTP Endpoint.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>region</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Region of the Endpoint where the BucketName is located in.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>prefix</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Prefix to use for server-side filtering of files in the Bucket.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>secretRef</code><br>
+<em>
+<a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/meta#LocalObjectReference">
+github.com/fluxcd/pkg/apis/meta.LocalObjectReference
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>SecretRef specifies the Secret containing authentication credentials
+for the Bucket.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>serviceAccountName</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>ServiceAccountName is the name of the Kubernetes ServiceAccount used to authenticate
+the bucket. This field is only supported for the &lsquo;gcp&rsquo; and &lsquo;aws&rsquo; providers.
+For more information about workload identity:
+<a href="https://fluxcd.io/flux/components/source/buckets/#workload-identity">https://fluxcd.io/flux/components/source/buckets/#workload-identity</a></p>
+</td>
+</tr>
+<tr>
+<td>
+<code>certSecretRef</code><br>
+<em>
+<a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/meta#LocalObjectReference">
+github.com/fluxcd/pkg/apis/meta.LocalObjectReference
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>CertSecretRef can be given the name of a Secret containing
+either or both of</p>
+<ul>
+<li>a PEM-encoded client certificate (<code>tls.crt</code>) and private
+key (<code>tls.key</code>);</li>
+<li>a PEM-encoded CA certificate (<code>ca.crt</code>)</li>
+</ul>
+<p>and whichever are supplied, will be used for connecting to the
+bucket. The client cert and key are useful if you are
+authenticating with a certificate; the CA cert is useful if
+you are using a self-signed server certificate. The Secret must
+be of type <code>Opaque</code> or <code>kubernetes.io/tls</code>.</p>
+<p>This field is only supported for the <code>generic</code> provider.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>proxySecretRef</code><br>
+<em>
+<a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/meta#LocalObjectReference">
+github.com/fluxcd/pkg/apis/meta.LocalObjectReference
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>ProxySecretRef specifies the Secret containing the proxy configuration
+to use while communicating with the Bucket server.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>interval</code><br>
+<em>
+<a href="https://pkg.go.dev/k8s.io/apimachinery/pkg/apis/meta/v1#Duration">
+Kubernetes meta/v1.Duration
+</a>
+</em>
+</td>
+<td>
+<p>Interval at which the Bucket Endpoint is checked for updates.
+This interval is approximate and may be subject to jitter to ensure
+efficient use of resources.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>timeout</code><br>
+<em>
+<a href="https://pkg.go.dev/k8s.io/apimachinery/pkg/apis/meta/v1#Duration">
+Kubernetes meta/v1.Duration
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Timeout for fetch operations, defaults to 60s.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>ignore</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Ignore overrides the set of excluded patterns in the .sourceignore format
+(which is the same as .gitignore). If not provided, a default will be used,
+consult the documentation for your version to find out what those are.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>suspend</code><br>
+<em>
+bool
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Suspend tells the controller to suspend the reconciliation of this
+Bucket.</p>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<h3 id="source.toolkit.fluxcd.io/v1.BucketStatus">BucketStatus
+</h3>
+<p>
+(<em>Appears on:</em>
+<a href="#source.toolkit.fluxcd.io/v1.Bucket">Bucket</a>)
+</p>
+<p>BucketStatus records the observed state of a Bucket.</p>
+<div class="md-typeset__scrollwrap">
+<div class="md-typeset__table">
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>observedGeneration</code><br>
+<em>
+int64
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>ObservedGeneration is the last observed generation of the Bucket object.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>conditions</code><br>
+<em>
+<a href="https://pkg.go.dev/k8s.io/apimachinery/pkg/apis/meta/v1#Condition">
+[]Kubernetes meta/v1.Condition
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Conditions holds the conditions for the Bucket.</p>
 </td>
 </tr>
 <tr>
@@ -747,71 +1704,211 @@ string
 </em>
 </td>
 <td>
-<p>URL is the HTTP address of the Artifact as exposed by the controller
-managing the Source. It can be used to retrieve the Artifact for
-consumption, e.g. by another controller applying the Artifact contents.</p>
-</td>
-</tr>
-<tr>
-<td>
-<code>revision</code><br>
-<em>
-string
-</em>
-</td>
-<td>
-<p>Revision is a human-readable identifier traceable in the origin source
-system. It can be a Git commit SHA, Git tag, a Helm chart version, etc.</p>
-</td>
-</tr>
-<tr>
-<td>
-<code>digest</code><br>
-<em>
-string
-</em>
-</td>
-<td>
 <em>(Optional)</em>
-<p>Digest is the digest of the file in the form of &lsquo;<algorithm>:<checksum>&rsquo;.</p>
+<p>URL is the dynamic fetch link for the latest Artifact.
+It is provided on a &ldquo;best effort&rdquo; basis, and using the precise
+BucketStatus.Artifact data is recommended.</p>
 </td>
 </tr>
 <tr>
 <td>
-<code>lastUpdateTime</code><br>
+<code>artifact</code><br>
 <em>
-<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.19/#time-v1-meta">
-Kubernetes meta/v1.Time
+<a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/meta#Artifact">
+github.com/fluxcd/pkg/apis/meta.Artifact
 </a>
 </em>
 </td>
 <td>
-<p>LastUpdateTime is the timestamp corresponding to the last update of the
-Artifact.</p>
+<em>(Optional)</em>
+<p>Artifact represents the last successful Bucket reconciliation.</p>
 </td>
 </tr>
 <tr>
 <td>
-<code>size</code><br>
+<code>observedIgnore</code><br>
 <em>
-int64
+string
 </em>
 </td>
 <td>
 <em>(Optional)</em>
-<p>Size is the number of bytes in the file.</p>
+<p>ObservedIgnore is the observed exclusion patterns used for constructing
+the source artifact.</p>
 </td>
 </tr>
+<tr>
+<td>
+<code>ReconcileRequestStatus</code><br>
+<em>
+<a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/meta#ReconcileRequestStatus">
+github.com/fluxcd/pkg/apis/meta.ReconcileRequestStatus
+</a>
+</em>
+</td>
+<td>
+<p>
+(Members of <code>ReconcileRequestStatus</code> are embedded into this type.)
+</p>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<h3 id="source.toolkit.fluxcd.io/v1.ExternalArtifact">ExternalArtifact
+</h3>
+<p>ExternalArtifact is the Schema for the external artifacts API</p>
+<div class="md-typeset__scrollwrap">
+<div class="md-typeset__table">
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
 <tr>
 <td>
 <code>metadata</code><br>
 <em>
-map[string]string
+<a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.19/#objectmeta-v1-meta">
+Kubernetes meta/v1.ObjectMeta
+</a>
+</em>
+</td>
+<td>
+Refer to the Kubernetes API documentation for the fields of the
+<code>metadata</code> field.
+</td>
+</tr>
+<tr>
+<td>
+<code>spec</code><br>
+<em>
+<a href="#source.toolkit.fluxcd.io/v1.ExternalArtifactSpec">
+ExternalArtifactSpec
+</a>
+</em>
+</td>
+<td>
+<br/>
+<br/>
+<table>
+<tr>
+<td>
+<code>sourceRef</code><br>
+<em>
+<a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/meta#NamespacedObjectKindReference">
+github.com/fluxcd/pkg/apis/meta.NamespacedObjectKindReference
+</a>
 </em>
 </td>
 <td>
 <em>(Optional)</em>
-<p>Metadata holds upstream information such as OCI annotations.</p>
+<p>SourceRef points to the Kubernetes custom resource for
+which the artifact is generated.</p>
+</td>
+</tr>
+</table>
+</td>
+</tr>
+<tr>
+<td>
+<code>status</code><br>
+<em>
+<a href="#source.toolkit.fluxcd.io/v1.ExternalArtifactStatus">
+ExternalArtifactStatus
+</a>
+</em>
+</td>
+<td>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<h3 id="source.toolkit.fluxcd.io/v1.ExternalArtifactSpec">ExternalArtifactSpec
+</h3>
+<p>
+(<em>Appears on:</em>
+<a href="#source.toolkit.fluxcd.io/v1.ExternalArtifact">ExternalArtifact</a>)
+</p>
+<p>ExternalArtifactSpec defines the desired state of ExternalArtifact</p>
+<div class="md-typeset__scrollwrap">
+<div class="md-typeset__table">
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>sourceRef</code><br>
+<em>
+<a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/meta#NamespacedObjectKindReference">
+github.com/fluxcd/pkg/apis/meta.NamespacedObjectKindReference
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>SourceRef points to the Kubernetes custom resource for
+which the artifact is generated.</p>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<h3 id="source.toolkit.fluxcd.io/v1.ExternalArtifactStatus">ExternalArtifactStatus
+</h3>
+<p>
+(<em>Appears on:</em>
+<a href="#source.toolkit.fluxcd.io/v1.ExternalArtifact">ExternalArtifact</a>)
+</p>
+<p>ExternalArtifactStatus defines the observed state of ExternalArtifact</p>
+<div class="md-typeset__scrollwrap">
+<div class="md-typeset__table">
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>artifact</code><br>
+<em>
+<a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/meta#Artifact">
+github.com/fluxcd/pkg/apis/meta.Artifact
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Artifact represents the output of an ExternalArtifact reconciliation.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>conditions</code><br>
+<em>
+<a href="https://pkg.go.dev/k8s.io/apimachinery/pkg/apis/meta/v1#Condition">
+[]Kubernetes meta/v1.Condition
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Conditions holds the conditions for the ExternalArtifact.</p>
 </td>
 </tr>
 </tbody>
@@ -1016,6 +2113,32 @@ and &lsquo;known_hosts&rsquo; fields.</p>
 </tr>
 <tr>
 <td>
+<code>provider</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Provider used for authentication, can be &lsquo;aws&rsquo;, &lsquo;azure&rsquo;, &lsquo;github&rsquo;, &lsquo;generic&rsquo;.
+When not specified, defaults to &lsquo;generic&rsquo;.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>serviceAccountName</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>ServiceAccountName is the name of the Kubernetes ServiceAccount used to
+authenticate to the GitRepository. This field is only supported for &lsquo;azure&rsquo; and &lsquo;aws&rsquo; providers.</p>
+</td>
+</tr>
+<tr>
+<td>
 <code>interval</code><br>
 <em>
 <a href="https://pkg.go.dev/k8s.io/apimachinery/pkg/apis/meta/v1#Duration">
@@ -1143,6 +2266,20 @@ the GitRepository as cloned from the URL, using their default settings.</p>
 should be included in the Artifact produced for this GitRepository.</p>
 </td>
 </tr>
+<tr>
+<td>
+<code>sparseCheckout</code><br>
+<em>
+[]string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>SparseCheckout specifies a list of directories to checkout when cloning
+the repository. If specified, only these directories are included in the
+Artifact produced for this GitRepository.</p>
+</td>
+</tr>
 </tbody>
 </table>
 </div>
@@ -1195,8 +2332,8 @@ object.</p>
 <td>
 <code>artifact</code><br>
 <em>
-<a href="#cd.qdrant.io/v1.Artifact">
-Artifact
+<a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/meta#Artifact">
+github.com/fluxcd/pkg/apis/meta.Artifact
 </a>
 </em>
 </td>
@@ -1209,8 +2346,8 @@ Artifact
 <td>
 <code>includedArtifacts</code><br>
 <em>
-<a href="#cd.qdrant.io/v1.Artifact">
-[]Artifact
+<a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/meta#Artifact">
+[]github.com/fluxcd/pkg/apis/meta.Artifact
 </a>
 </em>
 </td>
@@ -1258,6 +2395,19 @@ configuration used to produce the current Artifact.</p>
 <td>
 <em>(Optional)</em>
 <p>ObservedInclude is the observed list of GitRepository resources used to
+produce the current Artifact.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>observedSparseCheckout</code><br>
+<em>
+[]string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>ObservedSparseCheckout is the observed list of directories used to
 produce the current Artifact.</p>
 </td>
 </tr>
@@ -1341,7 +2491,8 @@ github.com/fluxcd/pkg/apis/meta.LocalObjectReference
 </td>
 <td>
 <p>SecretRef specifies the Secret containing the public keys of trusted Git
-authors.</p>
+authors. PGP public keys must be stored under keys with the .asc suffix,
+and SSH public keys must be stored under keys with the .sshpub suffix.</p>
 </td>
 </tr>
 </tbody>
@@ -1487,8 +2638,8 @@ source.</p>
 <td>
 <code>verify</code><br>
 <em>
-<a href="#cd.qdrant.io/v1.OCIRepositoryVerification">
-OCIRepositoryVerification
+<a href="#source.toolkit.fluxcd.io/v1.HelmChartVerification">
+HelmChartVerification
 </a>
 </em>
 </td>
@@ -1607,8 +2758,8 @@ BucketStatus.Artifact data is recommended.</p>
 <td>
 <code>artifact</code><br>
 <em>
-<a href="#cd.qdrant.io/v1.Artifact">
-Artifact
+<a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/meta#Artifact">
+github.com/fluxcd/pkg/apis/meta.Artifact
 </a>
 </em>
 </td>
@@ -1636,7 +2787,71 @@ github.com/fluxcd/pkg/apis/meta.ReconcileRequestStatus
 </table>
 </div>
 </div>
-<h3 id="cd.qdrant.io/v1.HelmRepositorySpec">HelmRepositorySpec
+<h3 id="source.toolkit.fluxcd.io/v1.HelmChartVerification">HelmChartVerification
+</h3>
+<p>
+(<em>Appears on:</em>
+<a href="#source.toolkit.fluxcd.io/v1.HelmChartSpec">HelmChartSpec</a>)
+</p>
+<p>HelmChartVerification verifies the authenticity of an OCI Artifact</p>
+<div class="md-typeset__scrollwrap">
+<div class="md-typeset__table">
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>provider</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<p>Provider specifies the technology used to sign the OCI Artifact.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>secretRef</code><br>
+<em>
+<a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/meta#LocalObjectReference">
+github.com/fluxcd/pkg/apis/meta.LocalObjectReference
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>SecretRef specifies the Kubernetes Secret containing the
+trusted public keys.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>matchOIDCIdentity</code><br>
+<em>
+<a href="#source.toolkit.fluxcd.io/v1.OIDCIdentityMatch">
+[]OIDCIdentityMatch
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>MatchOIDCIdentity specifies the identity matching criteria to use
+while verifying an OCI artifact which was signed using Cosign keyless
+signing. The artifact&rsquo;s identity is deemed to be verified if any of the
+specified matchers match against the identity.</p>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<h3 id="source.toolkit.fluxcd.io/v1.HelmRepositorySpec">HelmRepositorySpec
 </h3>
 <p>
 (<em>Appears on:</em>
@@ -1897,8 +3112,8 @@ HelmRepositoryStatus.Artifact data is recommended.</p>
 <td>
 <code>artifact</code><br>
 <em>
-<a href="#cd.qdrant.io/v1.Artifact">
-Artifact
+<a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/meta#Artifact">
+github.com/fluxcd/pkg/apis/meta.Artifact
 </a>
 </em>
 </td>
@@ -1983,11 +3198,478 @@ string
 </table>
 </div>
 </div>
-<h3 id="cd.qdrant.io/v1.OCIRepositoryVerification">OCIRepositoryVerification
+<h3 id="source.toolkit.fluxcd.io/v1.OCILayerSelector">OCILayerSelector
 </h3>
 <p>
 (<em>Appears on:</em>
-<a href="#cd.qdrant.io/v1.HelmChartSpec">HelmChartSpec</a>)
+<a href="#source.toolkit.fluxcd.io/v1.OCIRepositorySpec">OCIRepositorySpec</a>, 
+<a href="#source.toolkit.fluxcd.io/v1.OCIRepositoryStatus">OCIRepositoryStatus</a>)
+</p>
+<p>OCILayerSelector specifies which layer should be extracted from an OCI Artifact</p>
+<div class="md-typeset__scrollwrap">
+<div class="md-typeset__table">
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>mediaType</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>MediaType specifies the OCI media type of the layer
+which should be extracted from the OCI Artifact. The
+first layer matching this type is selected.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>operation</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Operation specifies how the selected layer should be processed.
+By default, the layer compressed content is extracted to storage.
+When the operation is set to &lsquo;copy&rsquo;, the layer compressed content
+is persisted to storage as it is.</p>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<h3 id="source.toolkit.fluxcd.io/v1.OCIRepositoryRef">OCIRepositoryRef
+</h3>
+<p>
+(<em>Appears on:</em>
+<a href="#source.toolkit.fluxcd.io/v1.OCIRepositorySpec">OCIRepositorySpec</a>)
+</p>
+<p>OCIRepositoryRef defines the image reference for the OCIRepository&rsquo;s URL</p>
+<div class="md-typeset__scrollwrap">
+<div class="md-typeset__table">
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>digest</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Digest is the image digest to pull, takes precedence over SemVer.
+The value should be in the format &lsquo;sha256:<HASH>&rsquo;.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>semver</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>SemVer is the range of tags to pull selecting the latest within
+the range, takes precedence over Tag.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>semverFilter</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>SemverFilter is a regex pattern to filter the tags within the SemVer range.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>tag</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Tag is the image tag to pull, defaults to latest.</p>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<h3 id="source.toolkit.fluxcd.io/v1.OCIRepositorySpec">OCIRepositorySpec
+</h3>
+<p>
+(<em>Appears on:</em>
+<a href="#source.toolkit.fluxcd.io/v1.OCIRepository">OCIRepository</a>)
+</p>
+<p>OCIRepositorySpec defines the desired state of OCIRepository</p>
+<div class="md-typeset__scrollwrap">
+<div class="md-typeset__table">
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>url</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<p>URL is a reference to an OCI artifact repository hosted
+on a remote container registry.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>ref</code><br>
+<em>
+<a href="#source.toolkit.fluxcd.io/v1.OCIRepositoryRef">
+OCIRepositoryRef
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>The OCI reference to pull and monitor for changes,
+defaults to the latest tag.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>layerSelector</code><br>
+<em>
+<a href="#source.toolkit.fluxcd.io/v1.OCILayerSelector">
+OCILayerSelector
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>LayerSelector specifies which layer should be extracted from the OCI artifact.
+When not specified, the first layer found in the artifact is selected.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>provider</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>The provider used for authentication, can be &lsquo;aws&rsquo;, &lsquo;azure&rsquo;, &lsquo;gcp&rsquo; or &lsquo;generic&rsquo;.
+When not specified, defaults to &lsquo;generic&rsquo;.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>secretRef</code><br>
+<em>
+<a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/meta#LocalObjectReference">
+github.com/fluxcd/pkg/apis/meta.LocalObjectReference
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>SecretRef contains the secret name containing the registry login
+credentials to resolve image metadata.
+The secret must be of type kubernetes.io/dockerconfigjson.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>verify</code><br>
+<em>
+<a href="#source.toolkit.fluxcd.io/v1.OCIRepositoryVerification">
+OCIRepositoryVerification
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Verify contains the secret name containing the trusted public keys
+used to verify the signature and specifies which provider to use to check
+whether OCI image is authentic.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>serviceAccountName</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>ServiceAccountName is the name of the Kubernetes ServiceAccount used to authenticate
+the image pull if the service account has attached pull secrets. For more information:
+<a href="https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/#add-imagepullsecrets-to-a-service-account">https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/#add-imagepullsecrets-to-a-service-account</a></p>
+</td>
+</tr>
+<tr>
+<td>
+<code>certSecretRef</code><br>
+<em>
+<a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/meta#LocalObjectReference">
+github.com/fluxcd/pkg/apis/meta.LocalObjectReference
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>CertSecretRef can be given the name of a Secret containing
+either or both of</p>
+<ul>
+<li>a PEM-encoded client certificate (<code>tls.crt</code>) and private
+key (<code>tls.key</code>);</li>
+<li>a PEM-encoded CA certificate (<code>ca.crt</code>)</li>
+</ul>
+<p>and whichever are supplied, will be used for connecting to the
+registry. The client cert and key are useful if you are
+authenticating with a certificate; the CA cert is useful if
+you are using a self-signed server certificate. The Secret must
+be of type <code>Opaque</code> or <code>kubernetes.io/tls</code>.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>proxySecretRef</code><br>
+<em>
+<a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/meta#LocalObjectReference">
+github.com/fluxcd/pkg/apis/meta.LocalObjectReference
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>ProxySecretRef specifies the Secret containing the proxy configuration
+to use while communicating with the container registry.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>interval</code><br>
+<em>
+<a href="https://pkg.go.dev/k8s.io/apimachinery/pkg/apis/meta/v1#Duration">
+Kubernetes meta/v1.Duration
+</a>
+</em>
+</td>
+<td>
+<p>Interval at which the OCIRepository URL is checked for updates.
+This interval is approximate and may be subject to jitter to ensure
+efficient use of resources.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>timeout</code><br>
+<em>
+<a href="https://pkg.go.dev/k8s.io/apimachinery/pkg/apis/meta/v1#Duration">
+Kubernetes meta/v1.Duration
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>The timeout for remote OCI Repository operations like pulling, defaults to 60s.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>ignore</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Ignore overrides the set of excluded patterns in the .sourceignore format
+(which is the same as .gitignore). If not provided, a default will be used,
+consult the documentation for your version to find out what those are.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>insecure</code><br>
+<em>
+bool
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Insecure allows connecting to a non-TLS HTTP container registry.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>suspend</code><br>
+<em>
+bool
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>This flag tells the controller to suspend the reconciliation of this source.</p>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<h3 id="source.toolkit.fluxcd.io/v1.OCIRepositoryStatus">OCIRepositoryStatus
+</h3>
+<p>
+(<em>Appears on:</em>
+<a href="#source.toolkit.fluxcd.io/v1.OCIRepository">OCIRepository</a>)
+</p>
+<p>OCIRepositoryStatus defines the observed state of OCIRepository</p>
+<div class="md-typeset__scrollwrap">
+<div class="md-typeset__table">
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>observedGeneration</code><br>
+<em>
+int64
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>ObservedGeneration is the last observed generation.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>conditions</code><br>
+<em>
+<a href="https://pkg.go.dev/k8s.io/apimachinery/pkg/apis/meta/v1#Condition">
+[]Kubernetes meta/v1.Condition
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Conditions holds the conditions for the OCIRepository.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>url</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>URL is the download link for the artifact output of the last OCI Repository sync.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>artifact</code><br>
+<em>
+<a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/meta#Artifact">
+github.com/fluxcd/pkg/apis/meta.Artifact
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Artifact represents the output of the last successful OCI Repository sync.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>observedIgnore</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>ObservedIgnore is the observed exclusion patterns used for constructing
+the source artifact.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>observedLayerSelector</code><br>
+<em>
+<a href="#source.toolkit.fluxcd.io/v1.OCILayerSelector">
+OCILayerSelector
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>ObservedLayerSelector is the observed layer selector used for constructing
+the source artifact.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>ReconcileRequestStatus</code><br>
+<em>
+<a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/meta#ReconcileRequestStatus">
+github.com/fluxcd/pkg/apis/meta.ReconcileRequestStatus
+</a>
+</em>
+</td>
+<td>
+<p>
+(Members of <code>ReconcileRequestStatus</code> are embedded into this type.)
+</p>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<h3 id="source.toolkit.fluxcd.io/v1.OCIRepositoryVerification">OCIRepositoryVerification
+</h3>
+<p>
+(<em>Appears on:</em>
+<a href="#source.toolkit.fluxcd.io/v1.OCIRepositorySpec">OCIRepositorySpec</a>)
 </p>
 <p>OCIRepositoryVerification verifies the authenticity of an OCI Artifact</p>
 <div class="md-typeset__scrollwrap">
@@ -2043,6 +3725,23 @@ signing. The artifact&rsquo;s identity is deemed to be verified if any of the
 specified matchers match against the identity.</p>
 </td>
 </tr>
+<tr>
+<td>
+<code>trustedRootSecretRef</code><br>
+<em>
+<a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/meta#LocalObjectReference">
+github.com/fluxcd/pkg/apis/meta.LocalObjectReference
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>TrustedRootSecretRef specifies the Kubernetes Secret containing a
+Sigstore trusted_root.json file. This enables verification against
+self-hosted Sigstore infrastructure (custom Fulcio CA, self-hosted
+Rekor instance). The Secret must contain a key named &ldquo;trusted_root.json&rdquo;.</p>
+</td>
+</tr>
 </tbody>
 </table>
 </div>
@@ -2051,7 +3750,8 @@ specified matchers match against the identity.</p>
 </h3>
 <p>
 (<em>Appears on:</em>
-<a href="#cd.qdrant.io/v1.OCIRepositoryVerification">OCIRepositoryVerification</a>)
+<a href="#source.toolkit.fluxcd.io/v1.HelmChartVerification">HelmChartVerification</a>, 
+<a href="#source.toolkit.fluxcd.io/v1.OCIRepositoryVerification">OCIRepositoryVerification</a>)
 </p>
 <p>OIDCIdentityMatch specifies options for verifying the certificate identity,
 i.e. the issuer and the subject of the certificate.</p>

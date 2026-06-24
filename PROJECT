@@ -4,37 +4,19 @@ resources:
 - group: cd
   kind: GitRepository
   version: v1
-- group: cd
-  kind: GitRepository
-  version: v1beta2
-- group: cd
+- group: source
   kind: HelmRepository
   version: v1
-- group: cd
-  kind: HelmRepository
-  version: v1beta2
-- group: cd
+- group: source
   kind: HelmChart
   version: v1
-- group: cd
-  kind: HelmChart
-  version: v1beta2
-- group: cd
+- group: source
   kind: Bucket
-  version: v1beta2
-- group: cd
-  kind: GitRepository
-  version: v1beta1
-- group: cd
-  kind: HelmRepository
-  version: v1beta1
-- group: cd
-  kind: HelmChart
-  version: v1beta1
-- group: cd
-  kind: Bucket
-  version: v1beta1
-- group: cd
+  version: v1
+- group: source
   kind: OCIRepository
-  version: v1beta2
+  version: v1
+- group: source
+  kind: ExternalArtifact
+  version: v1
 version: "2"

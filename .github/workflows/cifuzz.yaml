@@ -4,27 +4,16 @@ on:
     branches:
       - 'main'
       - 'release/**'
-    paths-ignore:
-      - 'CHANGELOG.md'
-      - 'README.md'
-      - 'MAINTAINERS'
-
-permissions:
-  contents: read
-
 jobs:
   smoketest:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read # for reading the repository code.
     steps:
-      - name: Checkout
-        uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
-      - name: Setup Go
-        uses: actions/setup-go@0a12ed9d6a96ab950c8f026ed9f722fe0da7ef32 # v5.0.2
+      - name: Test suite setup
+        uses: fluxcd/gha-workflows/.github/actions/setup-kubernetes@v0.11.0
         with:
           go-version: 1.26.x
-          cache-dependency-path: |
-            **/go.sum
-            **/go.mod
       - name: Smoke test Fuzzers
         run: make fuzz-smoketest
         env:

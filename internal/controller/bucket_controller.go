@@ -18,7 +18,7 @@ package controller
 
 import (
 	"context"
-	stdtls "crypto/tls"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"net/url"
@@ -27,6 +27,7 @@ import (
 	"strings"
 	"time"
 
+	securejoin "github.com/cyphar/filepath-securejoin"
 	"github.com/opencontainers/go-digest"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/sync/semaphore"
@@ -44,25 +45,27 @@ import (
 
 	eventv1 "github.com/fluxcd/pkg/apis/event/v1beta1"
 	"github.com/fluxcd/pkg/apis/meta"
+	intdigest "github.com/fluxcd/pkg/artifact/digest"
+	"github.com/fluxcd/pkg/artifact/storage"
+	"github.com/fluxcd/pkg/auth"
+	"github.com/fluxcd/pkg/cache"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	helper "github.com/fluxcd/pkg/runtime/controller"
 	"github.com/fluxcd/pkg/runtime/jitter"
 	"github.com/fluxcd/pkg/runtime/patch"
 	"github.com/fluxcd/pkg/runtime/predicates"
 	rreconcile "github.com/fluxcd/pkg/runtime/reconcile"
+	"github.com/fluxcd/pkg/runtime/secrets"
 	"github.com/fluxcd/pkg/sourceignore"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
-	bucketv1 "github.com/fluxcd/source-controller/api/v1beta2"
-	intdigest "github.com/fluxcd/source-controller/internal/digest"
+	"github.com/fluxcd/source-controller/internal/bucket/azure"
+	"github.com/fluxcd/source-controller/internal/bucket/gcp"
+	"github.com/fluxcd/source-controller/internal/bucket/minio"
 	serror "github.com/fluxcd/source-controller/internal/error"
 	"github.com/fluxcd/source-controller/internal/index"
 	sreconcile "github.com/fluxcd/source-controller/internal/reconcile"
 	"github.com/fluxcd/source-controller/internal/reconcile/summarize"
-	"github.com/fluxcd/source-controller/internal/tls"
-	"github.com/fluxcd/source-controller/pkg/azure"
-	"github.com/fluxcd/source-controller/pkg/gcp"
-	"github.com/fluxcd/source-controller/pkg/minio"
 )
 
 // maxConcurrentBucketFetches is the upper bound on the goroutines used to
@@ -78,7 +81,7 @@ import (
 const maxConcurrentBucketFetches = 100
 
 // bucketReadyCondition contains the information required to summarize a
-// v1beta2.Bucket Ready Condition.
+// v1.Bucket Ready Condition.
 var bucketReadyCondition = summarize.Conditions{
 	Target: meta.ReadyCondition,
 	Owned: []string{
@@ -117,16 +120,18 @@ var bucketFailConditions = []string{
 // +kubebuilder:rbac:groups=cd.qdrant.io,resources=buckets/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=cd.qdrant.io,resources=buckets/finalizers,verbs=get;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch
+// +kubebuilder:rbac:groups="",resources=serviceaccounts,verbs=get;list;watch
+// +kubebuilder:rbac:groups="",resources=serviceaccounts/token,verbs=create
 
-// BucketReconciler reconciles a v1beta2.Bucket object.
+// BucketReconciler reconciles a v1.Bucket object.
 type BucketReconciler struct {
 	client.Client
 	kuberecorder.EventRecorder
 	helper.Metrics
 
-	Storage        *Storage
+	Storage        *storage.Storage
 	ControllerName string
-	LeaderElection *bool
+	TokenCache     *cache.TokenCache
 
 	patchOptions []patch.Option
 }
@@ -157,20 +162,25 @@ type BucketProvider interface {
 	Close(context.Context)
 }
 
-// bucketReconcileFunc is the function type for all the v1beta2.Bucket
-// (sub)reconcile functions. The type implementations are grouped and
-// executed serially to perform the complete reconcile of the object.
-type bucketReconcileFunc func(ctx context.Context, sp *patch.SerialPatcher, obj *bucketv1.Bucket, index *index.Digester, dir string) (sreconcile.Result, error)
-
-func (r *BucketReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	return r.SetupWithManagerAndOptions(mgr, BucketReconcilerOptions{})
+// bucketCredentials contains all credentials and configuration needed for bucket providers.
+type bucketCredentials struct {
+	secret       *corev1.Secret
+	proxyURL     *url.URL
+	tlsConfig    *tls.Config
+	stsSecret    *corev1.Secret
+	stsTLSConfig *tls.Config
 }
 
-func (r *BucketReconciler) SetupWithManagerAndOptions(mgr ctrl.Manager, opts BucketReconcilerOptions) error {
+// bucketReconcileFunc is the function type for all the v1.Bucket
+// (sub)reconcile functions. The type implementations are grouped and
+// executed serially to perform the complete reconcile of the object.
+type bucketReconcileFunc func(ctx context.Context, sp *patch.SerialPatcher, obj *sourcev1.Bucket, index *index.Digester, dir string) (sreconcile.Result, error)
+
+func (r *BucketReconciler) SetupWithManager(mgr ctrl.Manager, opts BucketReconcilerOptions) error {
 	r.patchOptions = getPatchOptions(bucketReadyCondition.Owned, r.ControllerName)
 
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&bucketv1.Bucket{}).
+		For(&sourcev1.Bucket{}).
 		WithEventFilter(predicate.Or(predicate.GenerationChangedPredicate{}, predicates.ReconcileRequestedPredicate{})).
 		WithOptions(controller.Options{
 			RateLimiter:        opts.RateLimiter,
@@ -184,7 +194,7 @@ func (r *BucketReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 	log := ctrl.LoggerFrom(ctx)
 
 	// Fetch the Bucket
-	obj := &bucketv1.Bucket{}
+	obj := &sourcev1.Bucket{}
 	if err := r.Get(ctx, req.NamespacedName, obj); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
@@ -215,9 +225,7 @@ func (r *BucketReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 		}
 		result, retErr = summarizeHelper.SummarizeAndPatch(ctx, obj, summarizeOpts...)
 
-		// Always record suspend, readiness and duration metrics.
-		r.Metrics.RecordSuspend(ctx, obj, obj.Spec.Suspend)
-		r.Metrics.RecordReadiness(ctx, obj)
+		// Always record duration metrics.
 		r.Metrics.RecordDuration(ctx, obj, start)
 	}()
 
@@ -257,7 +265,7 @@ func (r *BucketReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 // reconcile iterates through the bucketReconcileFunc tasks for the
 // object. It returns early on the first call that returns
 // reconcile.ResultRequeue, or produces an error.
-func (r *BucketReconciler) reconcile(ctx context.Context, sp *patch.SerialPatcher, obj *bucketv1.Bucket, reconcilers []bucketReconcileFunc) (sreconcile.Result, error) {
+func (r *BucketReconciler) reconcile(ctx context.Context, sp *patch.SerialPatcher, obj *sourcev1.Bucket, reconcilers []bucketReconcileFunc) (sreconcile.Result, error) {
 	oldObj := obj.DeepCopy()
 
 	rreconcile.ProgressiveStatus(false, obj, meta.ProgressingReason, "reconciliation in progress")
@@ -328,7 +336,7 @@ func (r *BucketReconciler) reconcile(ctx context.Context, sp *patch.SerialPatche
 }
 
 // notify emits notification related to the reconciliation.
-func (r *BucketReconciler) notify(ctx context.Context, oldObj, newObj *bucketv1.Bucket, index *index.Digester, res sreconcile.Result, resErr error) {
+func (r *BucketReconciler) notify(ctx context.Context, oldObj, newObj *sourcev1.Bucket, index *index.Digester, res sreconcile.Result, resErr error) {
 	// Notify successful reconciliation for new artifact and recovery from any
 	// failure.
 	if resErr == nil && res == sreconcile.ResultSuccess && newObj.Status.Artifact != nil {
@@ -342,12 +350,12 @@ func (r *BucketReconciler) notify(ctx context.Context, oldObj, newObj *bucketv1.
 		// Notify on new artifact and failure recovery.
 		if !oldObj.GetArtifact().HasDigest(newObj.GetArtifact().Digest) {
 			r.AnnotatedEventf(newObj, annotations, corev1.EventTypeNormal,
-				"NewArtifact", message)
+				"NewArtifact", "%s", message)
 			ctrl.LoggerFrom(ctx).Info(message)
 		} else {
 			if sreconcile.FailureRecovery(oldObj, newObj, bucketFailConditions) {
 				r.AnnotatedEventf(newObj, annotations, corev1.EventTypeNormal,
-					meta.SucceededReason, message)
+					meta.SucceededReason, "%s", message)
 				ctrl.LoggerFrom(ctx).Info(message)
 			}
 		}
@@ -366,7 +374,7 @@ func (r *BucketReconciler) notify(ctx context.Context, oldObj, newObj *bucketv1.
 // condition is added.
 // The hostname of any URL in the Status of the object are updated, to ensure
 // they match the Storage server hostname of current runtime.
-func (r *BucketReconciler) reconcileStorage(ctx context.Context, sp *patch.SerialPatcher, obj *bucketv1.Bucket, _ *index.Digester, _ string) (sreconcile.Result, error) {
+func (r *BucketReconciler) reconcileStorage(ctx context.Context, sp *patch.SerialPatcher, obj *sourcev1.Bucket, _ *index.Digester, _ string) (sreconcile.Result, error) {
 	// Garbage collect previous advertised artifact(s) from storage
 	_ = r.garbageCollect(ctx, obj)
 
@@ -404,7 +412,7 @@ func (r *BucketReconciler) reconcileStorage(ctx context.Context, sp *patch.Seria
 		if artifactMissing {
 			msg += ": disappeared from storage"
 		}
-		rreconcile.ProgressiveStatus(true, obj, meta.ProgressingReason, msg)
+		rreconcile.ProgressiveStatus(true, obj, meta.ProgressingReason, "%s", msg)
 		conditions.Delete(obj, sourcev1.ArtifactInStorageCondition)
 		if err := sp.Patch(ctx, obj, r.patchOptions...); err != nil {
 			return sreconcile.ResultEmpty, serror.NewGeneric(err, sourcev1.PatchOperationFailedReason)
@@ -423,141 +431,62 @@ func (r *BucketReconciler) reconcileStorage(ctx context.Context, sp *patch.Seria
 // reconcileSource fetches the upstream bucket contents with the client for the
 // given object's Provider, and returns the result.
 // When a SecretRef is defined, it attempts to fetch the Secret before calling
-// the provider. If this fails, it records v1beta2.FetchFailedCondition=True on
+// the provider. If this fails, it records v1.FetchFailedCondition=True on
 // the object and returns early.
-func (r *BucketReconciler) reconcileSource(ctx context.Context, sp *patch.SerialPatcher, obj *bucketv1.Bucket, index *index.Digester, dir string) (sreconcile.Result, error) {
-	secret, err := r.getSecret(ctx, obj.Spec.SecretRef, obj.GetNamespace())
+func (r *BucketReconciler) reconcileSource(ctx context.Context, sp *patch.SerialPatcher, obj *sourcev1.Bucket, index *index.Digester, dir string) (sreconcile.Result, error) {
+	usesObjectLevelWorkloadIdentity := obj.Spec.Provider != "" && obj.Spec.Provider != sourcev1.BucketProviderGeneric && obj.Spec.ServiceAccountName != ""
+	if usesObjectLevelWorkloadIdentity {
+		if !auth.IsObjectLevelWorkloadIdentityEnabled() {
+			const gate = auth.FeatureGateObjectLevelWorkloadIdentity
+			const msgFmt = "to use spec.serviceAccountName for provider authentication please enable the %s feature gate in the controller"
+			err := fmt.Errorf(msgFmt, gate)
+			e := serror.NewStalling(err, meta.FeatureGateDisabledReason)
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
+			return sreconcile.ResultEmpty, e
+		}
+	}
+
+	creds, err := r.setupCredentials(ctx, obj)
 	if err != nil {
 		e := serror.NewGeneric(err, sourcev1.AuthenticationFailedReason)
 		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
-		// Return error as the world as observed may change
 		return sreconcile.ResultEmpty, e
 	}
-	proxyURL, err := r.getProxyURL(ctx, obj)
+
+	provider, err := r.createBucketProvider(ctx, obj, creds)
 	if err != nil {
-		e := serror.NewGeneric(err, sourcev1.AuthenticationFailedReason)
+		var stallingErr *serror.Stalling
+		var genericErr *serror.Generic
+		if errors.As(err, &stallingErr) {
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, stallingErr.Reason, "%s", stallingErr)
+			return sreconcile.ResultEmpty, stallingErr
+		} else if errors.As(err, &genericErr) {
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, genericErr.Reason, "%s", genericErr)
+			return sreconcile.ResultEmpty, genericErr
+		} else {
+			e := serror.NewGeneric(err, sourcev1.AuthenticationFailedReason)
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
+			return sreconcile.ResultEmpty, e
+		}
+	}
+	changed, err := r.syncBucketArtifacts(ctx, provider, obj, index, dir)
+	if err != nil {
+		e := serror.NewGeneric(err, sourcev1.BucketOperationFailedReason)
 		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
 		return sreconcile.ResultEmpty, e
 	}
 
-	// Construct provider client
-	var provider BucketProvider
-	switch obj.Spec.Provider {
-	case bucketv1.GoogleBucketProvider:
-		if err = gcp.ValidateSecret(secret); err != nil {
-			e := serror.NewGeneric(err, sourcev1.AuthenticationFailedReason)
-			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
-			return sreconcile.ResultEmpty, e
+	// Update artifact status if changes were detected
+	if changed {
+		revision := index.Digest(intdigest.Canonical)
+		message := fmt.Sprintf("new upstream revision '%s'", revision)
+		if obj.GetArtifact() != nil {
+			conditions.MarkTrue(obj, sourcev1.ArtifactOutdatedCondition, "NewRevision", "%s", message)
 		}
-		var opts []gcp.Option
-		if secret != nil {
-			opts = append(opts, gcp.WithSecret(secret))
-		}
-		if proxyURL != nil {
-			opts = append(opts, gcp.WithProxyURL(proxyURL))
-		}
-		if provider, err = gcp.NewClient(ctx, opts...); err != nil {
-			e := serror.NewGeneric(err, "ClientError")
-			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
-			return sreconcile.ResultEmpty, e
-		}
-	case bucketv1.AzureBucketProvider:
-		if err = azure.ValidateSecret(secret); err != nil {
-			e := serror.NewGeneric(err, sourcev1.AuthenticationFailedReason)
-			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
-			return sreconcile.ResultEmpty, e
-		}
-		var opts []azure.Option
-		if secret != nil {
-			opts = append(opts, azure.WithSecret(secret))
-		}
-		if proxyURL != nil {
-			opts = append(opts, azure.WithProxyURL(proxyURL))
-		}
-		if provider, err = azure.NewClient(obj, opts...); err != nil {
-			e := serror.NewGeneric(err, "ClientError")
-			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
-			return sreconcile.ResultEmpty, e
-		}
-	default:
-		if err = minio.ValidateSecret(secret); err != nil {
-			e := serror.NewGeneric(err, sourcev1.AuthenticationFailedReason)
-			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
-			return sreconcile.ResultEmpty, e
-		}
-		if sts := obj.Spec.STS; sts != nil {
-			if err := minio.ValidateSTSProvider(obj.Spec.Provider, sts.Provider); err != nil {
-				e := serror.NewStalling(err, sourcev1.InvalidSTSConfigurationReason)
-				conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
-				return sreconcile.ResultEmpty, e
-			}
-			if _, err := url.Parse(sts.Endpoint); err != nil {
-				err := fmt.Errorf("failed to parse STS endpoint '%s': %w", sts.Endpoint, err)
-				e := serror.NewStalling(err, sourcev1.URLInvalidReason)
-				conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
-				return sreconcile.ResultEmpty, e
-			}
-		}
-		tlsConfig, err := r.getTLSConfig(ctx, obj)
-		if err != nil {
-			e := serror.NewGeneric(err, sourcev1.AuthenticationFailedReason)
-			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
-			return sreconcile.ResultEmpty, e
-		}
-		var opts []minio.Option
-		if secret != nil {
-			opts = append(opts, minio.WithSecret(secret))
-		}
-		if tlsConfig != nil {
-			opts = append(opts, minio.WithTLSConfig(tlsConfig))
-		}
-		if proxyURL != nil {
-			opts = append(opts, minio.WithProxyURL(proxyURL))
-		}
-		if provider, err = minio.NewClient(obj, opts...); err != nil {
-			e := serror.NewGeneric(err, "ClientError")
-			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
-			return sreconcile.ResultEmpty, e
-		}
-	}
-
-	// Fetch etag index
-	if err = fetchEtagIndex(ctx, provider, obj, index, dir); err != nil {
-		e := serror.NewGeneric(err, bucketv1.BucketOperationFailedReason)
-		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
-		return sreconcile.ResultEmpty, e
-	}
-
-	// Check if index has changed compared to current Artifact revision.
-	var changed bool
-	if artifact := obj.Status.Artifact; artifact != nil && artifact.Revision != "" {
-		curRev := digest.Digest(artifact.Revision)
-		changed = curRev.Validate() != nil || curRev != index.Digest(curRev.Algorithm())
-	}
-
-	// Fetch the bucket objects if required to.
-	if artifact := obj.GetArtifact(); artifact == nil || changed {
-		// Mark observations about the revision on the object
-		defer func() {
-			// As fetchIndexFiles can make last-minute modifications to the etag
-			// index, we need to re-calculate the revision at the end
-			revision := index.Digest(intdigest.Canonical)
-
-			message := fmt.Sprintf("new upstream revision '%s'", revision)
-			if obj.GetArtifact() != nil {
-				conditions.MarkTrue(obj, sourcev1.ArtifactOutdatedCondition, "NewRevision", "%s", message)
-			}
-			rreconcile.ProgressiveStatus(true, obj, meta.ProgressingReason, "building artifact: %s", message)
-			if err := sp.Patch(ctx, obj, r.patchOptions...); err != nil {
-				ctrl.LoggerFrom(ctx).Error(err, "failed to patch")
-				return
-			}
-		}()
-
-		if err = fetchIndexFiles(ctx, provider, obj, index, dir); err != nil {
-			e := serror.NewGeneric(err, bucketv1.BucketOperationFailedReason)
-			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
-			return sreconcile.ResultEmpty, e
+		rreconcile.ProgressiveStatus(true, obj, meta.ProgressingReason, "building artifact: %s", message)
+		if err := sp.Patch(ctx, obj, r.patchOptions...); err != nil {
+			ctrl.LoggerFrom(ctx).Error(err, "failed to patch")
+			return sreconcile.ResultEmpty, err
 		}
 	}
 
@@ -569,12 +498,12 @@ func (r *BucketReconciler) reconcileSource(ctx context.Context, sp *patch.Serial
 // (Status) data on the object does not match the given.
 //
 // The inspection of the given data to the object is differed, ensuring any
-// stale observations like v1beta2.ArtifactOutdatedCondition are removed.
+// stale observations like v1.ArtifactOutdatedCondition are removed.
 // If the given Artifact does not differ from the object's current, it returns
 // early.
 // On a successful archive, the Artifact in the Status of the object is set,
 // and the symlink in the Storage is updated to its path.
-func (r *BucketReconciler) reconcileArtifact(ctx context.Context, sp *patch.SerialPatcher, obj *bucketv1.Bucket, index *index.Digester, dir string) (sreconcile.Result, error) {
+func (r *BucketReconciler) reconcileArtifact(ctx context.Context, sp *patch.SerialPatcher, obj *sourcev1.Bucket, index *index.Digester, dir string) (sreconcile.Result, error) {
 	// Calculate revision
 	revision := index.Digest(intdigest.Canonical)
 
@@ -640,7 +569,7 @@ func (r *BucketReconciler) reconcileArtifact(ctx context.Context, sp *patch.Seri
 	// Archive directory to storage
 	if err := r.Storage.Archive(&artifact, dir, nil); err != nil {
 		e := serror.NewGeneric(
-			fmt.Errorf("unable to archive artifact to storage: %s", err),
+			fmt.Errorf("unable to archive artifact to storage: %w", err),
 			sourcev1.ArchiveOperationFailedReason,
 		)
 		conditions.MarkTrue(obj, sourcev1.StorageOperationFailedCondition, e.Reason, "%s", e)
@@ -667,7 +596,7 @@ func (r *BucketReconciler) reconcileArtifact(ctx context.Context, sp *patch.Seri
 // reconcileDelete handles the deletion of the object.
 // It first garbage collects all Artifacts for the object from the Storage.
 // Removing the finalizer from the object if successful.
-func (r *BucketReconciler) reconcileDelete(ctx context.Context, obj *bucketv1.Bucket) (sreconcile.Result, error) {
+func (r *BucketReconciler) reconcileDelete(ctx context.Context, obj *sourcev1.Bucket) (sreconcile.Result, error) {
 	// Garbage collect the resource's artifacts
 	if err := r.garbageCollect(ctx, obj); err != nil {
 		// Return the error so we retry the failed garbage collection
@@ -676,6 +605,10 @@ func (r *BucketReconciler) reconcileDelete(ctx context.Context, obj *bucketv1.Bu
 
 	// Remove our finalizer from the list
 	controllerutil.RemoveFinalizer(obj, sourcev1.SourceFinalizer)
+
+	// Cleanup caches.
+	r.TokenCache.DeleteEventsForObject(sourcev1.BucketKind,
+		obj.GetName(), obj.GetNamespace(), cache.OperationReconcile)
 
 	// Stop reconciliation as the object is being deleted
 	return sreconcile.ResultEmpty, nil
@@ -686,11 +619,11 @@ func (r *BucketReconciler) reconcileDelete(ctx context.Context, obj *bucketv1.Bu
 // It removes all but the current Artifact from the Storage, unless the
 // deletion timestamp on the object is set. Which will result in the
 // removal of all Artifacts for the objects.
-func (r *BucketReconciler) garbageCollect(ctx context.Context, obj *bucketv1.Bucket) error {
+func (r *BucketReconciler) garbageCollect(ctx context.Context, obj *sourcev1.Bucket) error {
 	if !obj.DeletionTimestamp.IsZero() {
 		if deleted, err := r.Storage.RemoveAll(r.Storage.NewArtifactFor(obj.Kind, obj.GetObjectMeta(), "", "*")); err != nil {
 			return serror.NewGeneric(
-				fmt.Errorf("garbage collection for deleted resource failed: %s", err),
+				fmt.Errorf("garbage collection for deleted resource failed: %w", err),
 				"GarbageCollectionFailed",
 			)
 		} else if deleted != "" {
@@ -710,67 +643,11 @@ func (r *BucketReconciler) garbageCollect(ctx context.Context, obj *bucketv1.Buc
 		}
 		if len(delFiles) > 0 {
 			r.eventLogf(ctx, obj, eventv1.EventTypeTrace, "GarbageCollectionSucceeded",
-				fmt.Sprintf("garbage collected %d artifacts", len(delFiles)))
+				"garbage collected %d artifacts", len(delFiles))
 			return nil
 		}
 	}
 	return nil
-}
-
-// getSecret attempts to fetch a Secret reference if specified. It returns any client error.
-func (r *BucketReconciler) getSecret(ctx context.Context, secretRef *meta.LocalObjectReference,
-	namespace string) (*corev1.Secret, error) {
-	if secretRef == nil {
-		return nil, nil
-	}
-	secretName := types.NamespacedName{
-		Namespace: namespace,
-		Name:      secretRef.Name,
-	}
-	secret := &corev1.Secret{}
-	if err := r.Get(ctx, secretName, secret); err != nil {
-		return nil, fmt.Errorf("failed to get secret '%s': %w", secretName.String(), err)
-	}
-	return secret, nil
-}
-
-func (r *BucketReconciler) getTLSConfig(ctx context.Context, obj *bucketv1.Bucket) (*stdtls.Config, error) {
-	certSecret, err := r.getSecret(ctx, obj.Spec.CertSecretRef, obj.GetNamespace())
-	if err != nil || certSecret == nil {
-		return nil, err
-	}
-	tlsConfig, _, err := tls.KubeTLSClientConfigFromSecret(*certSecret, obj.Spec.Endpoint)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create TLS config: %w", err)
-	}
-	if tlsConfig == nil {
-		return nil, fmt.Errorf("certificate secret does not contain any TLS configuration")
-	}
-	return tlsConfig, nil
-}
-
-func (r *BucketReconciler) getProxyURL(ctx context.Context, obj *bucketv1.Bucket) (*url.URL, error) {
-	namespace := obj.GetNamespace()
-	proxySecret, err := r.getSecret(ctx, obj.Spec.ProxySecretRef, namespace)
-	if err != nil || proxySecret == nil {
-		return nil, err
-	}
-	proxyData := proxySecret.Data
-	address, ok := proxyData["address"]
-	if !ok {
-		return nil, fmt.Errorf("invalid proxy secret '%s/%s': key 'address' is missing",
-			namespace, obj.Spec.ProxySecretRef.Name)
-	}
-	proxyURL, err := url.Parse(string(address))
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse proxy address '%s': %w", address, err)
-	}
-	user, hasUser := proxyData["username"]
-	password, hasPassword := proxyData["password"]
-	if hasUser || hasPassword {
-		proxyURL.User = url.UserPassword(string(user), string(password))
-	}
-	return proxyURL, nil
 }
 
 // eventLogf records events, and logs at the same time.
@@ -796,14 +673,14 @@ func (r *BucketReconciler) annotatedEventLogf(ctx context.Context,
 	} else {
 		ctrl.LoggerFrom(ctx).Info(msg)
 	}
-	r.AnnotatedEventf(obj, annotations, eventType, reason, msg)
+	r.AnnotatedEventf(obj, annotations, eventType, reason, "%s", msg)
 }
 
 // fetchEtagIndex fetches the current etagIndex for the in the obj specified
 // bucket using the given provider, while filtering them using .sourceignore
 // rules. After fetching an object, the etag value in the index is updated to
 // the current value to ensure accuracy.
-func fetchEtagIndex(ctx context.Context, provider BucketProvider, obj *bucketv1.Bucket, index *index.Digester, tempDir string) error {
+func fetchEtagIndex(ctx context.Context, provider BucketProvider, obj *sourcev1.Bucket, index *index.Digester, tempDir string) error {
 	ctxTimeout, cancel := context.WithTimeout(ctx, obj.Spec.Timeout.Duration)
 	defer cancel()
 
@@ -857,7 +734,7 @@ func fetchEtagIndex(ctx context.Context, provider BucketProvider, obj *bucketv1.
 // using the given provider, and stores them into tempDir. It downloads in
 // parallel, but limited to the maxConcurrentBucketFetches.
 // Given an index is provided, the bucket is assumed to exist.
-func fetchIndexFiles(ctx context.Context, provider BucketProvider, obj *bucketv1.Bucket, index *index.Digester, tempDir string) error {
+func fetchIndexFiles(ctx context.Context, provider BucketProvider, obj *sourcev1.Bucket, index *index.Digester, tempDir string) error {
 	ctxTimeout, cancel := context.WithTimeout(ctx, obj.Spec.Timeout.Duration)
 	defer cancel()
 
@@ -877,7 +754,10 @@ func fetchIndexFiles(ctx context.Context, provider BucketProvider, obj *bucketv1
 			}
 			group.Go(func() error {
 				defer sem.Release(1)
-				localPath := filepath.Join(tempDir, k)
+				localPath, err := securejoin.SecureJoin(tempDir, k)
+				if err != nil {
+					return fmt.Errorf("failed to resolve path for '%s' object: %w", k, err)
+				}
 				etag, err := provider.FGetObject(ctxTimeout, obj.Spec.BucketName, k, localPath)
 				if err != nil {
 					if provider.ObjectIsNotFound(err) {
@@ -900,4 +780,207 @@ func fetchIndexFiles(ctx context.Context, provider BucketProvider, obj *bucketv1
 	}
 
 	return nil
+}
+
+// setupCredentials retrieves and validates secrets for authentication, TLS configuration, and proxy settings.
+// It returns all credentials needed for bucket providers.
+func (r *BucketReconciler) setupCredentials(ctx context.Context, obj *sourcev1.Bucket) (*bucketCredentials, error) {
+	var secret *corev1.Secret
+	if obj.Spec.SecretRef != nil {
+		secretName := types.NamespacedName{
+			Namespace: obj.GetNamespace(),
+			Name:      obj.Spec.SecretRef.Name,
+		}
+		secret = &corev1.Secret{}
+		if err := r.Get(ctx, secretName, secret); err != nil {
+			return nil, fmt.Errorf("failed to get secret '%s': %w", secretName, err)
+		}
+	}
+
+	var stsSecret *corev1.Secret
+	if obj.Spec.STS != nil && obj.Spec.STS.SecretRef != nil {
+		secretName := types.NamespacedName{
+			Namespace: obj.GetNamespace(),
+			Name:      obj.Spec.STS.SecretRef.Name,
+		}
+		stsSecret = &corev1.Secret{}
+		if err := r.Get(ctx, secretName, stsSecret); err != nil {
+			return nil, fmt.Errorf("failed to get STS secret '%s': %w", secretName, err)
+		}
+	}
+
+	var (
+		err          error
+		proxyURL     *url.URL
+		tlsConfig    *tls.Config
+		stsTLSConfig *tls.Config
+	)
+
+	if obj.Spec.ProxySecretRef != nil {
+		secretRef := types.NamespacedName{
+			Namespace: obj.GetNamespace(),
+			Name:      obj.Spec.ProxySecretRef.Name,
+		}
+		proxyURL, err = secrets.ProxyURLFromSecretRef(ctx, r.Client, secretRef)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get proxy URL: %w", err)
+		}
+	}
+
+	if obj.Spec.CertSecretRef != nil {
+		secretRef := types.NamespacedName{
+			Namespace: obj.GetNamespace(),
+			Name:      obj.Spec.CertSecretRef.Name,
+		}
+		tlsConfig, err = secrets.TLSConfigFromSecretRef(ctx, r.Client, secretRef, secrets.WithSystemCertPool())
+		if err != nil {
+			return nil, fmt.Errorf("failed to get TLS config: %w", err)
+		}
+	}
+
+	if obj.Spec.STS != nil && obj.Spec.STS.CertSecretRef != nil {
+		secretRef := types.NamespacedName{
+			Namespace: obj.GetNamespace(),
+			Name:      obj.Spec.STS.CertSecretRef.Name,
+		}
+		stsTLSConfig, err = secrets.TLSConfigFromSecretRef(ctx, r.Client, secretRef, secrets.WithSystemCertPool())
+		if err != nil {
+			return nil, fmt.Errorf("failed to get STS TLS config: %w", err)
+		}
+	}
+
+	return &bucketCredentials{
+		secret:       secret,
+		proxyURL:     proxyURL,
+		tlsConfig:    tlsConfig,
+		stsSecret:    stsSecret,
+		stsTLSConfig: stsTLSConfig,
+	}, nil
+}
+
+// createBucketProvider creates a provider-specific bucket client using the given credentials and configuration.
+// It handles different bucket providers (AWS, GCP, Azure, generic) and returns the appropriate client.
+func (r *BucketReconciler) createBucketProvider(ctx context.Context, obj *sourcev1.Bucket, creds *bucketCredentials) (BucketProvider, error) {
+	authOpts := []auth.Option{
+		auth.WithClient(r.Client),
+		auth.WithServiceAccountNamespace(obj.GetNamespace()),
+	}
+
+	if obj.Spec.ServiceAccountName != "" {
+		authOpts = append(authOpts, auth.WithServiceAccountName(obj.Spec.ServiceAccountName))
+	}
+
+	if r.TokenCache != nil {
+		involvedObject := cache.InvolvedObject{
+			Kind:      sourcev1.BucketKind,
+			Name:      obj.GetName(),
+			Namespace: obj.GetNamespace(),
+			Operation: cache.OperationReconcile,
+		}
+		authOpts = append(authOpts, auth.WithCache(*r.TokenCache, involvedObject))
+	}
+
+	if creds.proxyURL != nil {
+		authOpts = append(authOpts, auth.WithProxyURL(*creds.proxyURL))
+	}
+
+	if obj.Spec.Region != "" {
+		authOpts = append(authOpts, auth.WithSTSRegion(obj.Spec.Region))
+	}
+
+	if sts := obj.Spec.STS; sts != nil {
+		authOpts = append(authOpts, auth.WithSTSEndpoint(sts.Endpoint))
+	}
+
+	switch obj.Spec.Provider {
+	case sourcev1.BucketProviderGoogle:
+		var opts []gcp.Option
+		if creds.proxyURL != nil {
+			opts = append(opts, gcp.WithProxyURL(creds.proxyURL))
+		}
+
+		if creds.secret != nil {
+			if err := gcp.ValidateSecret(creds.secret); err != nil {
+				return nil, err
+			}
+			opts = append(opts, gcp.WithSecret(creds.secret))
+		} else {
+			opts = append(opts, gcp.WithAuth(authOpts...))
+		}
+
+		return gcp.NewClient(ctx, obj, opts...)
+
+	case sourcev1.BucketProviderAzure:
+		if err := azure.ValidateSecret(creds.secret); err != nil {
+			return nil, err
+		}
+		var opts []azure.Option
+		if creds.secret != nil {
+			opts = append(opts, azure.WithSecret(creds.secret))
+		}
+		if creds.proxyURL != nil {
+			opts = append(opts, azure.WithProxyURL(creds.proxyURL))
+		}
+		opts = append(opts, azure.WithAuth(authOpts...))
+		return azure.NewClient(ctx, obj, opts...)
+
+	default:
+		if err := minio.ValidateSecret(creds.secret); err != nil {
+			return nil, err
+		}
+		if sts := obj.Spec.STS; sts != nil {
+			if err := minio.ValidateSTSProvider(obj.Spec.Provider, sts); err != nil {
+				return nil, serror.NewStalling(err, sourcev1.InvalidSTSConfigurationReason)
+			}
+			if _, err := url.Parse(sts.Endpoint); err != nil {
+				return nil, serror.NewStalling(fmt.Errorf("failed to parse STS endpoint '%s': %w", sts.Endpoint, err), sourcev1.URLInvalidReason)
+			}
+			if err := minio.ValidateSTSSecret(sts.Provider, creds.stsSecret); err != nil {
+				return nil, serror.NewGeneric(err, sourcev1.AuthenticationFailedReason)
+			}
+		}
+		var opts []minio.Option
+		if creds.secret != nil {
+			opts = append(opts, minio.WithSecret(creds.secret))
+		} else if obj.Spec.Provider == sourcev1.BucketProviderAmazon {
+			opts = append(opts, minio.WithAuth(authOpts...))
+		}
+		if creds.tlsConfig != nil {
+			opts = append(opts, minio.WithTLSConfig(creds.tlsConfig))
+		}
+		if creds.proxyURL != nil {
+			opts = append(opts, minio.WithProxyURL(creds.proxyURL))
+		}
+		if creds.stsSecret != nil {
+			opts = append(opts, minio.WithSTSSecret(creds.stsSecret))
+		}
+		if creds.stsTLSConfig != nil {
+			opts = append(opts, minio.WithSTSTLSConfig(creds.stsTLSConfig))
+		}
+		return minio.NewClient(ctx, obj, opts...)
+	}
+}
+
+// syncBucketArtifacts handles etag index retrieval and bucket object fetching.
+// It fetches the etag index from the provider and downloads objects to the specified directory.
+// Returns true if changes were detected and artifacts were updated.
+func (r *BucketReconciler) syncBucketArtifacts(ctx context.Context, provider BucketProvider, obj *sourcev1.Bucket, index *index.Digester, dir string) (bool, error) {
+	if err := fetchEtagIndex(ctx, provider, obj, index, dir); err != nil {
+		return false, err
+	}
+	var changed bool
+	if artifact := obj.Status.Artifact; artifact != nil && artifact.Revision != "" {
+		curRev := digest.Digest(artifact.Revision)
+		changed = curRev.Validate() != nil || curRev != index.Digest(curRev.Algorithm())
+	}
+
+	// Fetch the bucket objects if required to.
+	if artifact := obj.GetArtifact(); artifact == nil || changed {
+		if err := fetchIndexFiles(ctx, provider, obj, index, dir); err != nil {
+			return false, err
+		}
+		return true, nil
+	}
+
+	return false, nil
 }

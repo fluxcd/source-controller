@@ -31,8 +31,8 @@ import (
 	"github.com/google/go-containerregistry/pkg/crane"
 	gcrv1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/mutate"
+	. "github.com/onsi/gomega"
 	"github.com/sirupsen/logrus"
-	"gotest.tools/assert"
 
 	"github.com/fluxcd/pkg/oci"
 
@@ -45,7 +45,8 @@ func New(t *testing.T) string {
 	// Get a free random port and release it so the registry can use it.
 	listener, addr, _ := testlistener.New(t)
 	err := listener.Close()
-	assert.NilError(t, err)
+	g := NewWithT(t)
+	g.Expect(err).NotTo(HaveOccurred())
 
 	config := &configuration.Configuration{}
 	config.HTTP.Addr = addr
@@ -56,7 +57,7 @@ func New(t *testing.T) string {
 	logrus.SetOutput(io.Discard)
 
 	r, err := registry.NewRegistry(context.Background(), config)
-	assert.NilError(t, err)
+	g.Expect(err).NotTo(HaveOccurred())
 
 	go r.ListenAndServe()
 

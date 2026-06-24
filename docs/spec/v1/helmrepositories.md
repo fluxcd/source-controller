@@ -153,6 +153,10 @@ A HelmRepository also needs a
 
 Possible values are `default` for a Helm HTTP/S repository, or `oci` for an OCI Helm repository.
 
+**Note:**: The `oci` type is in maintenance mode. For improved support for
+OCI Helm charts, please use the [`OCIRepository`](ocirepositories.md) API.
+For more information, see [#5696](https://github.com/fluxcd/flux2/issues/5696).
+
 ### Provider
 
 `.spec.provider` is an optional field that allows specifying an OIDC provider used
@@ -439,19 +443,19 @@ deprecated. Please use [`.spec.certSecretRef`](#cert-secret-reference) instead.
 If the controller uses the secret specified by this field to configure TLS, then
 a deprecation warning will be logged.
 
-### Cert secret reference
+### Mutual TLS Authentication
 
 `.spec.certSecretRef.name` is an optional field to specify a secret containing
-TLS certificate data. The secret can contain the following keys:
+TLS certificate data for mutual TLS authentication.
+
+To authenticate towards a Helm repository using mutual TLS,
+the referenced Secret's `.data` should contain the following keys:
 
 * `tls.crt` and `tls.key`, to specify the client certificate and private key used
 for TLS client authentication. These must be used in conjunction, i.e.
 specifying one without the other will lead to an error.
 * `ca.crt`, to specify the CA certificate used to verify the server, which is
 required if the server is using a self-signed certificate.
-
-If the server is using a self-signed certificate and has TLS client
-authentication enabled, all three values are required.
 
 The Secret should be of type `Opaque` or `kubernetes.io/tls`. All the files in
 the Secret are expected to be [PEM-encoded][pem-encoding]. Assuming you have

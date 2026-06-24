@@ -19,24 +19,25 @@ package controller
 import (
 	"fmt"
 
-	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/types"
+
+	"github.com/fluxcd/pkg/apis/meta"
 )
 
 // MatchArtifact returns a custom matcher to check equality of a v1beta1.Artifact, the timestamp and URL are ignored.
-func MatchArtifact(expected *sourcev1.Artifact) types.GomegaMatcher {
+func MatchArtifact(expected *meta.Artifact) types.GomegaMatcher {
 	return &matchArtifact{
 		expected: expected,
 	}
 }
 
 type matchArtifact struct {
-	expected *sourcev1.Artifact
+	expected *meta.Artifact
 }
 
 func (m matchArtifact) Match(actual interface{}) (success bool, err error) {
-	actualArtifact, ok := actual.(*sourcev1.Artifact)
+	actualArtifact, ok := actual.(*meta.Artifact)
 	if !ok {
 		return false, fmt.Errorf("actual should be a pointer to an Artifact")
 	}

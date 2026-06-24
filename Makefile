@@ -14,8 +14,10 @@ SKIP_COSIGN_VERIFICATION ?= false
 # Allows for defining additional Docker buildx arguments,
 # e.g. '--push'.
 BUILD_ARGS ?=
-# Architectures to build images for
-BUILD_PLATFORMS ?= linux/amd64,linux/arm64,linux/arm/v7
+# Host architecture, used so local builds and envtest target the host.
+LOCALARCH ?= $(shell go env GOARCH)
+# Architectures to build images for; defaults to the host architecture.
+BUILD_PLATFORMS ?= linux/$(LOCALARCH)
 
 # Go additional tag arguments, e.g. 'integration',
 # this is append to the tag arguments required for static builds
@@ -38,7 +40,7 @@ FUZZ_TIME ?= 1m
 GO_STATIC_FLAGS=-ldflags "-s -w" -tags 'netgo,osusergo,static_build$(addprefix ,,$(GO_TAGS))'
 
 # API (doc) generation utilities
-CONTROLLER_GEN_VERSION ?= v0.15.0
+CONTROLLER_GEN_VERSION ?= v0.21.0
 GEN_API_REF_DOCS_VERSION ?= e327d0730470cbd61b06300f81c5fcf91c23c113
 
 # If gobin not set, create one on ./build and add to path.
@@ -49,17 +51,8 @@ export GOBIN=$(shell go env GOBIN)
 endif
 export PATH:=${GOBIN}:${PATH}
 
-# Architecture to use envtest with
-ifeq ($(shell uname -m),x86_64)
-ENVTEST_ARCH ?= amd64
-else
-ENVTEST_ARCH ?= arm64
-endif
-
-ifeq ($(shell uname -s),Darwin)
-# Envtest only supports darwin-amd64
-ENVTEST_ARCH=amd64
-endif
+# Architecture to use envtest with; defaults to the host architecture.
+ENVTEST_ARCH ?= $(LOCALARCH)
 
 all: manager
 
@@ -115,12 +108,11 @@ manifests: controller-gen  ## Generate manifests, e.g. CRD, RBAC, etc.
 	cd api; $(CONTROLLER_GEN) $(CRD_OPTIONS) rbac:roleName=manager-role paths="./..." output:crd:artifacts:config="../config/crd/bases"
 
 api-docs: gen-crd-api-reference-docs  ## Generate API reference documentation
-	$(GEN_CRD_API_REFERENCE_DOCS) -api-dir=./api/v1beta2 -config=./hack/api-docs/config.json -template-dir=./hack/api-docs/template -out-file=./docs/api/v1beta2/source.md
 	$(GEN_CRD_API_REFERENCE_DOCS) -api-dir=./api/v1 -config=./hack/api-docs/config.json -template-dir=./hack/api-docs/template -out-file=./docs/api/v1/source.md
 
 tidy:  ## Run go mod tidy
-	cd api; rm -f go.sum; go mod tidy -compat=1.22
-	rm -f go.sum; go mod tidy -compat=1.22
+	cd api; rm -f go.sum; go mod tidy -compat=1.26
+	rm -f go.sum; go mod tidy -compat=1.26
 
 fmt:  ## Run go fmt against code
 	go fmt ./...

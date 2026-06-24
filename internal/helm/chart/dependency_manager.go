@@ -29,7 +29,7 @@ import (
 	securejoin "github.com/cyphar/filepath-securejoin"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/sync/semaphore"
-	helmchart "helm.sh/helm/v3/pkg/chart"
+	helmchart "helm.sh/helm/v4/pkg/chart/v2"
 	"k8s.io/apimachinery/pkg/util/errors"
 
 	"github.com/fluxcd/source-controller/internal/helm/chart/secureloader"

@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -33,7 +34,6 @@ import (
 	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
-	"github.com/go-git/go-git/v5/plumbing/transport"
 	"github.com/go-git/go-git/v5/storage/memory"
 	. "github.com/onsi/gomega"
 	sshtestdata "golang.org/x/crypto/ssh/testdata"
@@ -48,6 +48,9 @@ import (
 
 	kstatus "github.com/fluxcd/cli-utils/pkg/kstatus/status"
 	"github.com/fluxcd/pkg/apis/meta"
+	"github.com/fluxcd/pkg/artifact/storage"
+	"github.com/fluxcd/pkg/auth"
+	"github.com/fluxcd/pkg/auth/githubapp"
 	"github.com/fluxcd/pkg/git"
 	"github.com/fluxcd/pkg/gittestserver"
 	"github.com/fluxcd/pkg/runtime/conditions"
@@ -165,6 +168,40 @@ zh1+m2pFDEhWZkaFtQbSEpXMIJ9DsCoyQL4Knl+89VxHsrIyAJsmGb3V8xvtv5w9
 QuWtsDnYbvDHtTpu1NZChVrnr/l1k3C2fcLhV1s583AvhGMkbgSXkQ==
 =Tdjz
 -----END PGP PUBLIC KEY BLOCK-----
+`
+
+	encodedSSHCommitFixture = `tree 7c5bd8f246ab8e8c6a5749c3d2f44018aa029fb8
+author Test User <sign-user@example.com> 1767225600 +0000
+committer Test User <sign-user@example.com> 1767225600 +0000
+
+Test commit signed with ed25519
+`
+
+	signatureSSHCommitFixture = `-----BEGIN SSH SIGNATURE-----
+U1NIU0lHAAAAAQAAADMAAAALc3NoLWVkMjU1MTkAAAAgrYSEhPKV/65kzG2JLYU+586anT
+AORbbZ0UW9qzon28EAAAADZ2l0AAAAAAAAAAZzaGE1MTIAAABTAAAAC3NzaC1lZDI1NTE5
+AAAAQD72vwusTGiRbH8ZtPm53vl065Ocv6Sp6VbHq4mkONAM0mzDLrD7BmAgWkjtmL2JpK
+msqgFJcKs6Z3E1zH86fQ0=
+-----END SSH SIGNATURE-----
+`
+
+	encodedSSHTagFixture = `object b01ca16de562c561f62427eb0a30cb775d1c1dab
+type commit
+tag test-tag-ed25519
+tagger Test User <sign-user@example.com> 1767225600 +0000
+
+Test tag signed with ed25519
+`
+
+	signatureSSHTagFixture = `-----BEGIN SSH SIGNATURE-----
+U1NIU0lHAAAAAQAAADMAAAALc3NoLWVkMjU1MTkAAAAgrYSEhPKV/65kzG2JLYU+586anT
+AORbbZ0UW9qzon28EAAAADZ2l0AAAAAAAAAAZzaGE1MTIAAABTAAAAC3NzaC1lZDI1NTE5
+AAAAQOZe8xDqF1oktx3h9p3EQKSx13zFVHQ2YcpF/HfeuQusKA1tvJY+T+ykPH4+zbva93
+KXi2P5xm89dQni0kTeAAY=
+-----END SSH SIGNATURE-----
+`
+
+	sshAuthorizedKeysFixture = `ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIK2EhITylf+uZMxtiS2FPufOmp0wDkW22dFFvas6J9vB test-ed25519@example.com
 `
 )
 
@@ -347,6 +384,8 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 		server           options
 		secret           *corev1.Secret
 		beforeFunc       func(obj *sourcev1.GitRepository)
+		secretFunc       func(secret *corev1.Secret, baseURL string)
+		middlewareFunc   gittestserver.HTTPMiddleware
 		want             sreconcile.Result
 		wantErr          bool
 		assertConditions []metav1.Condition
@@ -383,6 +422,63 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new upstream revision 'master@sha1:<commit>'"),
 				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new upstream revision 'master@sha1:<commit>'"),
+			},
+		},
+		{
+			name:     "HTTPS with mutual TLS makes Reconciling=True",
+			protocol: "https",
+			server: options{
+				publicKey:  tlsPublicKey,
+				privateKey: tlsPrivateKey,
+				ca:         tlsCA,
+			},
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "mtls-certs",
+				},
+				Data: map[string][]byte{
+					"ca.crt":  tlsCA,
+					"tls.crt": clientPublicKey,
+					"tls.key": clientPrivateKey,
+				},
+			},
+			beforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Spec.SecretRef = &meta.LocalObjectReference{Name: "mtls-certs"}
+			},
+			want: sreconcile.ResultSuccess,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new upstream revision 'master@sha1:<commit>'"),
+				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new upstream revision 'master@sha1:<commit>'"),
+			},
+		},
+		{
+			name:     "HTTPS with mutual TLS and invalid private key makes CheckoutFailed=True and returns error",
+			protocol: "https",
+			server: options{
+				publicKey:  tlsPublicKey,
+				privateKey: tlsPrivateKey,
+				ca:         tlsCA,
+			},
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "invalid-mtls-certs",
+				},
+				Data: map[string][]byte{
+					"ca.crt":  tlsCA,
+					"tls.crt": clientPublicKey,
+					"tls.key": []byte("invalid"),
+				},
+			},
+			beforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Spec.SecretRef = &meta.LocalObjectReference{Name: "invalid-mtls-certs"}
+				conditions.MarkReconciling(obj, meta.ProgressingReason, "foo")
+				conditions.MarkUnknown(obj, meta.ReadyCondition, meta.ProgressingReason, "foo")
+			},
+			wantErr: true,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.GitOperationFailedReason, "tls: failed to find any PEM data in key input"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "foo"),
+				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "foo"),
 			},
 		},
 		{
@@ -467,6 +563,85 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.GitOperationFailedReason, "x509: "),
 				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "foo"),
 				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "foo"),
+			},
+		},
+		{
+			name:     "mTLS GitHub App without ca.crt makes FetchFailed=True",
+			protocol: "https",
+			server: options{
+				publicKey:  tlsPublicKey,
+				privateKey: tlsPrivateKey,
+				ca:         tlsCA,
+			},
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{Name: "gh-app-no-ca"},
+				Data: map[string][]byte{
+					githubapp.KeyAppID:             []byte("123"),
+					githubapp.KeyAppInstallationID: []byte("456"),
+					githubapp.KeyAppPrivateKey:     sshtestdata.PEMBytes["rsa"],
+				},
+			},
+			beforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Spec.Provider = sourcev1.GitProviderGitHub
+				obj.Spec.SecretRef = &meta.LocalObjectReference{Name: "gh-app-no-ca"}
+				conditions.MarkReconciling(obj, meta.ProgressingReason, "foo")
+				conditions.MarkUnknown(obj, meta.ReadyCondition, meta.ProgressingWithRetryReason, "foo")
+			},
+			secretFunc: func(secret *corev1.Secret, baseURL string) {
+				secret.Data[githubapp.KeyAppBaseURL] = []byte(baseURL + "/api/v3")
+			},
+			wantErr: true,
+			assertConditions: []metav1.Condition{
+				// should record a FetchFailedCondition due to TLS handshake
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "x509: "),
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "foo"),
+				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingWithRetryReason, "foo"),
+			},
+		},
+		{
+			name:     "mTLS GitHub App with ca.crt makes Reconciling=True",
+			protocol: "https",
+			server: options{
+				publicKey:  tlsPublicKey,
+				privateKey: tlsPrivateKey,
+				ca:         tlsCA,
+				username:   githubapp.AccessTokenUsername,
+				password:   "some-enterprise-token",
+			},
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{Name: "gh-app-ca"},
+				Data: map[string][]byte{
+					githubapp.KeyAppID:             []byte("123"),
+					githubapp.KeyAppInstallationID: []byte("456"),
+					githubapp.KeyAppPrivateKey:     sshtestdata.PEMBytes["rsa"],
+				},
+			},
+			beforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Spec.Provider = sourcev1.GitProviderGitHub
+				obj.Spec.SecretRef = &meta.LocalObjectReference{Name: "gh-app-ca"}
+			},
+			secretFunc: func(secret *corev1.Secret, baseURL string) {
+				secret.Data[githubapp.KeyAppBaseURL] = []byte(baseURL + "/api/v3")
+				secret.Data["ca.crt"] = tlsCA
+			},
+			middlewareFunc: func(handler http.Handler) http.Handler {
+				return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					if strings.HasPrefix(r.URL.Path, "/api/v3/app/installations/") {
+						w.WriteHeader(http.StatusOK)
+						tok := &githubapp.AppToken{
+							Token:     "some-enterprise-token",
+							ExpiresAt: time.Now().Add(time.Hour),
+						}
+						_ = json.NewEncoder(w).Encode(tok)
+					}
+					handler.ServeHTTP(w, r)
+				})
+			},
+			wantErr: false,
+			want:    sreconcile.ResultSuccess,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new upstream revision 'master@sha1:<commit>'"),
+				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new upstream revision 'master@sha1:<commit>'"),
 			},
 		},
 		// TODO: Add test case for HTTPS with bearer token auth secret. It
@@ -558,7 +733,7 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 			beforeFunc: func(obj *sourcev1.GitRepository) {
 				obj.Spec.SecretRef = &meta.LocalObjectReference{Name: "basic-auth"}
 				obj.Status = sourcev1.GitRepositoryStatus{
-					Artifact: &sourcev1.Artifact{
+					Artifact: &meta.Artifact{
 						Revision: "staging/some-revision",
 						Path:     randStringRunes(10),
 					},
@@ -569,6 +744,78 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 				*conditions.TrueCondition(sourcev1.ArtifactOutdatedCondition, "NewRevision", "new upstream revision 'master@sha1:<commit>'"),
 				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new upstream revision 'master@sha1:<commit>'"),
 				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new upstream revision 'master@sha1:<commit>'"),
+			},
+		},
+		{
+			// This test is only for verifying the failure state when using
+			// provider auth. Protocol http is used for simplicity.
+			name:     "github provider without secret ref makes FetchFailed=True",
+			protocol: "http",
+			beforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Spec.Provider = sourcev1.GitProviderGitHub
+				conditions.MarkReconciling(obj, meta.ProgressingReason, "foo")
+				conditions.MarkUnknown(obj, meta.ReadyCondition, meta.ProgressingReason, "foo")
+			},
+			want:    sreconcile.ResultEmpty,
+			wantErr: true,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.InvalidProviderConfigurationReason, "secretRef with github app data must be specified when provider is set to github"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "foo"),
+				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "foo"),
+			},
+		},
+		{
+			// This test is only for verifying the failure state when using
+			// provider auth. Protocol http is used for simplicity.
+			name:     "empty provider with github app data in secret makes FetchFailed=True",
+			protocol: "http",
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "github-app-secret",
+				},
+				Data: map[string][]byte{
+					githubapp.KeyAppID: []byte("1111"),
+				},
+			},
+			beforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Spec.SecretRef = &meta.LocalObjectReference{Name: "github-app-secret"}
+				conditions.MarkReconciling(obj, meta.ProgressingReason, "foo")
+				conditions.MarkUnknown(obj, meta.ReadyCondition, meta.ProgressingReason, "foo")
+			},
+			want:    sreconcile.ResultEmpty,
+			wantErr: true,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.InvalidProviderConfigurationReason, "secretRef '/github-app-secret' has github app data but provider is not set to github"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "foo"),
+				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "foo"),
+			},
+		},
+		{
+			// This test is only for verifying the failure state when using
+			// provider auth. Protocol http is used for simplicity.
+			name:     "github provider without github app data in secret makes FetchFailed=True",
+			protocol: "http",
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "github-basic-auth",
+				},
+				Data: map[string][]byte{
+					"username": []byte("abc"),
+					"password": []byte("1234"),
+				},
+			},
+			beforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Spec.SecretRef = &meta.LocalObjectReference{Name: "github-basic-auth"}
+				obj.Spec.Provider = sourcev1.GitProviderGitHub
+				conditions.MarkReconciling(obj, meta.ProgressingReason, "foo")
+				conditions.MarkUnknown(obj, meta.ReadyCondition, meta.ProgressingReason, "foo")
+			},
+			want:    sreconcile.ResultEmpty,
+			wantErr: true,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.InvalidProviderConfigurationReason, "secretRef with github app data must be specified when provider is set to github"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "foo"),
+				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "foo"),
 			},
 		},
 	}
@@ -592,6 +839,10 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 			g.Expect(err).NotTo(HaveOccurred())
 			defer os.RemoveAll(server.Root())
 			server.AutoCreate()
+
+			if tt.middlewareFunc != nil {
+				server.AddHTTPMiddlewares(tt.middlewareFunc)
+			}
 
 			repoPath := "/test.git"
 			localRepo, err := initGitRepo(server, "testdata/git/repository", git.DefaultBranch, repoPath)
@@ -637,6 +888,10 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 				tt.beforeFunc(obj)
 			}
 
+			if tt.secretFunc != nil {
+				tt.secretFunc(secret, server.HTTPAddress())
+			}
+
 			clientBuilder := fakeclient.NewClientBuilder().
 				WithScheme(testEnv.GetScheme()).
 				WithStatusSubresource(&sourcev1.GitRepository{})
@@ -679,6 +934,182 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 			// In-progress status condition validity.
 			checker := conditionscheck.NewInProgressChecker(r.Client)
 			checker.WithT(g).CheckErr(ctx, obj)
+		})
+	}
+}
+
+func TestGitRepositoryReconciler_getAuthOpts_provider(t *testing.T) {
+	tests := []struct {
+		name       string
+		url        string
+		secret     *corev1.Secret
+		beforeFunc func(obj *sourcev1.GitRepository)
+		wantErr    string
+	}{
+		{
+			name: "azure provider",
+			url:  "https://dev.azure.com/foo/bar/_git/baz",
+			beforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Spec.Provider = sourcev1.GitProviderAzure
+			},
+			wantErr: "ManagedIdentityCredential",
+		},
+		{
+			name: "azure provider with service account and feature gate for object-level identity disabled",
+			url:  "https://dev.azure.com/foo/bar/_git/baz",
+			beforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Spec.Provider = sourcev1.GitProviderAzure
+				obj.Spec.ServiceAccountName = "azure-sa"
+			},
+			wantErr: auth.FeatureGateObjectLevelWorkloadIdentity,
+		},
+		{
+			name: "aws provider with non codecommit URL",
+			url:  "https://github.com/org/repo.git",
+			beforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Spec.Provider = sourcev1.GitProviderAWS
+			},
+			wantErr: "invalid AWS CodeCommit Git URL: github.com",
+		},
+		{
+			name: "aws provider with service account and feature gate for object-level identity disabled",
+			url:  "https://git-codecommit.us-east-1.amazonaws.com/v1/repos/my-repo",
+			beforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Spec.Provider = sourcev1.GitProviderAWS
+				obj.Spec.ServiceAccountName = "aws-sa"
+			},
+			wantErr: auth.FeatureGateObjectLevelWorkloadIdentity,
+		},
+		{
+			name: "github provider with no secret ref",
+			url:  "https://github.com/org/repo.git",
+			beforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Spec.Provider = sourcev1.GitProviderGitHub
+			},
+			wantErr: "secretRef with github app data must be specified when provider is set to github",
+		},
+		{
+			name: "github provider with github app data in secret",
+			url:  "https://example.com/org/repo",
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "githubAppSecret",
+				},
+				Data: map[string][]byte{
+					githubapp.KeyAppID:             []byte("123"),
+					githubapp.KeyAppInstallationID: []byte("456"),
+					githubapp.KeyAppPrivateKey:     []byte("abc"),
+				},
+			},
+			beforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Spec.Provider = sourcev1.GitProviderGitHub
+				obj.Spec.SecretRef = &meta.LocalObjectReference{
+					Name: "githubAppSecret",
+				}
+			},
+			wantErr: "Key must be a PEM encoded PKCS1 or PKCS8 key",
+		},
+		{
+			name: "generic provider with github app data in secret",
+			url:  "https://example.com/org/repo",
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "githubAppSecret",
+				},
+				Data: map[string][]byte{
+					githubapp.KeyAppID: []byte("123"),
+				},
+			},
+			beforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Spec.Provider = sourcev1.GitProviderGeneric
+				obj.Spec.SecretRef = &meta.LocalObjectReference{
+					Name: "githubAppSecret",
+				}
+			},
+			wantErr: "secretRef '/githubAppSecret' has github app data but provider is not set to github",
+		},
+		{
+			name: "github provider with basic auth secret",
+			url:  "https://github.com/org/repo.git",
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "basic-auth-secret",
+				},
+				Data: map[string][]byte{
+					"username": []byte("abc"),
+					"password": []byte("1234"),
+				},
+			},
+			beforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Spec.Provider = sourcev1.GitProviderGitHub
+				obj.Spec.SecretRef = &meta.LocalObjectReference{
+					Name: "basic-auth-secret",
+				}
+			},
+			wantErr: "secretRef with github app data must be specified when provider is set to github",
+		},
+		{
+			name: "generic provider",
+			url:  "https://example.com/org/repo",
+			beforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Spec.Provider = sourcev1.GitProviderGeneric
+			},
+		},
+		{
+			name: "secret ref defined for non existing secret",
+			url:  "https://github.com/org/repo.git",
+			beforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Spec.SecretRef = &meta.LocalObjectReference{
+					Name: "authSecret",
+				}
+			},
+			wantErr: "failed to get secret '/authSecret': secrets \"authSecret\" not found",
+		},
+		{
+			url:  "https://example.com/org/repo",
+			name: "no provider",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+			clientBuilder := fakeclient.NewClientBuilder().
+				WithScheme(testEnv.GetScheme()).
+				WithStatusSubresource(&sourcev1.GitRepository{})
+
+			if tt.secret != nil {
+				clientBuilder.WithObjects(tt.secret)
+			}
+
+			obj := &sourcev1.GitRepository{}
+			r := &GitRepositoryReconciler{
+				EventRecorder: record.NewFakeRecorder(32),
+				Client:        clientBuilder.Build(),
+				features:      features.FeatureGates(),
+				patchOptions:  getPatchOptions(gitRepositoryReadyCondition.Owned, "sc"),
+			}
+
+			url, err := url.Parse(tt.url)
+			g.Expect(err).ToNot(HaveOccurred())
+
+			if tt.beforeFunc != nil {
+				tt.beforeFunc(obj)
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
+			opts, err := r.getAuthOpts(ctx, obj, *url, nil)
+
+			if tt.wantErr != "" {
+				g.Expect(err).To(HaveOccurred())
+				g.Expect(err.Error()).To(ContainSubstring(tt.wantErr))
+			} else {
+				g.Expect(err).ToNot(HaveOccurred())
+				g.Expect(opts).ToNot(BeNil())
+				g.Expect(opts.BearerToken).To(BeEmpty())
+				g.Expect(opts.Username).To(BeEmpty())
+				g.Expect(opts.Password).To(BeEmpty())
+			}
 		})
 	}
 }
@@ -786,7 +1217,7 @@ func TestGitRepositoryReconciler_reconcileSource_checkoutStrategy(t *testing.T) 
 			},
 			beforeFunc: func(obj *sourcev1.GitRepository, latestRev string) {
 				obj.Status = sourcev1.GitRepositoryStatus{
-					Artifact: &sourcev1.Artifact{
+					Artifact: &meta.Artifact{
 						Revision: "staging/some-revision",
 						Path:     randStringRunes(10),
 					},
@@ -807,7 +1238,7 @@ func TestGitRepositoryReconciler_reconcileSource_checkoutStrategy(t *testing.T) 
 			beforeFunc: func(obj *sourcev1.GitRepository, latestRev string) {
 				// Add existing artifact on the object and storage.
 				obj.Status = sourcev1.GitRepositoryStatus{
-					Artifact: &sourcev1.Artifact{
+					Artifact: &meta.Artifact{
 						Revision: "staging@sha1:" + latestRev,
 						Path:     randStringRunes(10),
 					},
@@ -830,7 +1261,7 @@ func TestGitRepositoryReconciler_reconcileSource_checkoutStrategy(t *testing.T) 
 				obj.Spec.Ignore = ptr.To("foo")
 				// Add existing artifact on the object and storage.
 				obj.Status = sourcev1.GitRepositoryStatus{
-					Artifact: &sourcev1.Artifact{
+					Artifact: &meta.Artifact{
 						Revision: "staging@sha1:" + latestRev,
 						Path:     randStringRunes(10),
 					},
@@ -961,7 +1392,7 @@ func TestGitRepositoryReconciler_reconcileArtifact(t *testing.T) {
 		{
 			name:     "Archiving artifact to storage with includes makes ArtifactInStorage=True",
 			dir:      "testdata/git/repository",
-			includes: artifactSet{&sourcev1.Artifact{Revision: "main@sha1:b9b3feadba509cb9b22e968a5d27e96c2bc2ff91"}},
+			includes: artifactSet{&meta.Artifact{Revision: "main@sha1:b9b3feadba509cb9b22e968a5d27e96c2bc2ff91"}},
 			beforeFunc: func(obj *sourcev1.GitRepository) {
 				obj.Spec.Interval = metav1.Duration{Duration: interval}
 				obj.Spec.Include = []sourcev1.GitRepositoryInclude{
@@ -981,14 +1412,14 @@ func TestGitRepositoryReconciler_reconcileArtifact(t *testing.T) {
 		{
 			name:     "Up-to-date artifact should not update status",
 			dir:      "testdata/git/repository",
-			includes: artifactSet{&sourcev1.Artifact{Revision: "main@sha1:b9b3feadba509cb9b22e968a5d27e96c2bc2ff91", Digest: "some-checksum"}},
+			includes: artifactSet{&meta.Artifact{Revision: "main@sha1:b9b3feadba509cb9b22e968a5d27e96c2bc2ff91", Digest: "some-checksum"}},
 			beforeFunc: func(obj *sourcev1.GitRepository) {
 				obj.Spec.Interval = metav1.Duration{Duration: interval}
 				obj.Spec.Include = []sourcev1.GitRepositoryInclude{
 					{GitRepositoryRef: meta.LocalObjectReference{Name: "foo"}},
 				}
-				obj.Status.Artifact = &sourcev1.Artifact{Revision: "main@sha1:b9b3feadba509cb9b22e968a5d27e96c2bc2ff91"}
-				obj.Status.IncludedArtifacts = []*sourcev1.Artifact{{Revision: "main@sha1:b9b3feadba509cb9b22e968a5d27e96c2bc2ff91", Digest: "some-checksum"}}
+				obj.Status.Artifact = &meta.Artifact{Revision: "main@sha1:b9b3feadba509cb9b22e968a5d27e96c2bc2ff91"}
+				obj.Status.IncludedArtifacts = []*meta.Artifact{{Revision: "main@sha1:b9b3feadba509cb9b22e968a5d27e96c2bc2ff91", Digest: "some-checksum"}}
 				obj.Status.ObservedInclude = obj.Spec.Include
 			},
 			want: sreconcile.ResultSuccess,
@@ -1123,6 +1554,8 @@ func TestGitRepositoryReconciler_reconcileInclude(t *testing.T) {
 
 	server, err := testserver.NewTempArtifactServer()
 	g.Expect(err).NotTo(HaveOccurred())
+	server.Start()
+	defer server.Stop()
 	storage, err := newTestStorage(server.HTTPServer)
 	g.Expect(err).NotTo(HaveOccurred())
 	defer os.RemoveAll(storage.BasePath)
@@ -1207,7 +1640,7 @@ func TestGitRepositoryReconciler_reconcileInclude(t *testing.T) {
 					},
 				}
 				if d.withArtifact {
-					obj.Status.Artifact = &sourcev1.Artifact{
+					obj.Status.Artifact = &meta.Artifact{
 						Path:           d.name + ".tar.gz",
 						Revision:       d.name,
 						LastUpdateTime: metav1.Now(),
@@ -1299,20 +1732,20 @@ func TestGitRepositoryReconciler_reconcileInclude(t *testing.T) {
 func TestGitRepositoryReconciler_reconcileStorage(t *testing.T) {
 	tests := []struct {
 		name             string
-		beforeFunc       func(obj *sourcev1.GitRepository, storage *Storage) error
+		beforeFunc       func(obj *sourcev1.GitRepository, storage *storage.Storage) error
 		want             sreconcile.Result
 		wantErr          bool
-		assertArtifact   *sourcev1.Artifact
+		assertArtifact   *meta.Artifact
 		assertConditions []metav1.Condition
 		assertPaths      []string
 	}{
 		{
 			name: "garbage collects",
-			beforeFunc: func(obj *sourcev1.GitRepository, storage *Storage) error {
+			beforeFunc: func(obj *sourcev1.GitRepository, storage *storage.Storage) error {
 				revisions := []string{"a", "b", "c", "d"}
 				for n := range revisions {
 					v := revisions[n]
-					obj.Status.Artifact = &sourcev1.Artifact{
+					obj.Status.Artifact = &meta.Artifact{
 						Path:     fmt.Sprintf("/reconcile-storage/%s.txt", v),
 						Revision: v,
 					}
@@ -1330,7 +1763,7 @@ func TestGitRepositoryReconciler_reconcileStorage(t *testing.T) {
 				conditions.MarkTrue(obj, meta.ReadyCondition, "foo", "bar")
 				return nil
 			},
-			assertArtifact: &sourcev1.Artifact{
+			assertArtifact: &meta.Artifact{
 				Path:     "/reconcile-storage/d.txt",
 				Revision: "d",
 				Digest:   "sha256:18ac3e7343f016890c510e93f935261169d9e3f565436429830faf0934f4f8e4",
@@ -1358,8 +1791,8 @@ func TestGitRepositoryReconciler_reconcileStorage(t *testing.T) {
 		},
 		{
 			name: "notices missing artifact in storage",
-			beforeFunc: func(obj *sourcev1.GitRepository, storage *Storage) error {
-				obj.Status.Artifact = &sourcev1.Artifact{
+			beforeFunc: func(obj *sourcev1.GitRepository, storage *storage.Storage) error {
+				obj.Status.Artifact = &meta.Artifact{
 					Path:     "/reconcile-storage/invalid.txt",
 					Revision: "e",
 				}
@@ -1377,10 +1810,10 @@ func TestGitRepositoryReconciler_reconcileStorage(t *testing.T) {
 		},
 		{
 			name: "notices empty artifact digest",
-			beforeFunc: func(obj *sourcev1.GitRepository, storage *Storage) error {
+			beforeFunc: func(obj *sourcev1.GitRepository, storage *storage.Storage) error {
 				f := "empty-digest.txt"
 
-				obj.Status.Artifact = &sourcev1.Artifact{
+				obj.Status.Artifact = &meta.Artifact{
 					Path:     fmt.Sprintf("/reconcile-storage/%s.txt", f),
 					Revision: "fake",
 				}
@@ -1408,10 +1841,10 @@ func TestGitRepositoryReconciler_reconcileStorage(t *testing.T) {
 		},
 		{
 			name: "notices artifact digest mismatch",
-			beforeFunc: func(obj *sourcev1.GitRepository, storage *Storage) error {
+			beforeFunc: func(obj *sourcev1.GitRepository, storage *storage.Storage) error {
 				f := "digest-mismatch.txt"
 
-				obj.Status.Artifact = &sourcev1.Artifact{
+				obj.Status.Artifact = &meta.Artifact{
 					Path:     fmt.Sprintf("/reconcile-storage/%s.txt", f),
 					Revision: "fake",
 				}
@@ -1439,8 +1872,8 @@ func TestGitRepositoryReconciler_reconcileStorage(t *testing.T) {
 		},
 		{
 			name: "updates hostname on diff from current",
-			beforeFunc: func(obj *sourcev1.GitRepository, storage *Storage) error {
-				obj.Status.Artifact = &sourcev1.Artifact{
+			beforeFunc: func(obj *sourcev1.GitRepository, storage *storage.Storage) error {
+				obj.Status.Artifact = &meta.Artifact{
 					Path:     "/reconcile-storage/hostname.txt",
 					Revision: "f",
 					Digest:   "sha256:3b9c358f36f0a31b6ad3e14f309c7cf198ac9246e8316f9ce543d5b19ac02b80",
@@ -1459,7 +1892,7 @@ func TestGitRepositoryReconciler_reconcileStorage(t *testing.T) {
 			assertPaths: []string{
 				"/reconcile-storage/hostname.txt",
 			},
-			assertArtifact: &sourcev1.Artifact{
+			assertArtifact: &meta.Artifact{
 				Path:     "/reconcile-storage/hostname.txt",
 				Revision: "f",
 				Digest:   "sha256:3b9c358f36f0a31b6ad3e14f309c7cf198ac9246e8316f9ce543d5b19ac02b80",
@@ -1824,7 +2257,7 @@ func TestGitRepositoryReconciler_verifySignature(t *testing.T) {
 			},
 		},
 		{
-			name: "Invalid commit makes SourceVerifiedCondition=False and returns error",
+			name: "No PGP keys in secret makes SourceVerifiedCondition=False and returns error",
 			secret: &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "existing",
@@ -1846,7 +2279,7 @@ func TestGitRepositoryReconciler_verifySignature(t *testing.T) {
 			},
 			wantErr: true,
 			assertConditions: []metav1.Condition{
-				*conditions.FalseCondition(sourcev1.SourceVerifiedCondition, "InvalidCommitSignature", "signature verification of commit 'shasum' failed: unable to verify Git commit: unable to verify payload with any of the given key rings"),
+				*conditions.FalseCondition(sourcev1.SourceVerifiedCondition, "InvalidCommitSignature", "signature verification of commit 'shasum' failed: PGP signature detected but no PGP public keys found in secret (keys with .asc suffix)"),
 			},
 		},
 		{
@@ -1926,7 +2359,7 @@ func TestGitRepositoryReconciler_verifySignature(t *testing.T) {
 			},
 			wantErr: true,
 			assertConditions: []metav1.Condition{
-				*conditions.FalseCondition(sourcev1.SourceVerifiedCondition, "VerificationError", "PGP public keys secret error: secrets \"none-existing\" not found"),
+				*conditions.FalseCondition(sourcev1.SourceVerifiedCondition, "VerificationError", "public keys secret error: secrets \"none-existing\" not found"),
 			},
 		},
 		{
@@ -1947,6 +2380,372 @@ func TestGitRepositoryReconciler_verifySignature(t *testing.T) {
 			},
 			want:             sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{},
+		},
+		{
+			name: "Valid SSH-signed commit with mode=HEAD makes SourceVerifiedCondition=True",
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "ssh-keys",
+				},
+				Data: map[string][]byte{
+					"author1.sshpub": []byte(sshAuthorizedKeysFixture),
+				},
+			},
+			commit: git.Commit{
+				Hash:      []byte("shasum"),
+				Encoded:   []byte(encodedSSHCommitFixture),
+				Signature: signatureSSHCommitFixture,
+			},
+			beforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Spec.Interval = metav1.Duration{Duration: interval}
+				obj.Spec.Verification = &sourcev1.GitRepositoryVerification{
+					Mode: sourcev1.ModeGitHEAD,
+					SecretRef: meta.LocalObjectReference{
+						Name: "ssh-keys",
+					},
+				}
+			},
+			want:                       sreconcile.ResultSuccess,
+			wantSourceVerificationMode: ptrToVerificationMode(sourcev1.ModeGitHEAD),
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.SourceVerifiedCondition, meta.SucceededReason, "verified signature of\n\t- commit 'shasum' with key 'SHA256:SDB4adE/BP2VLwX9Pdf7aFUwW9JNdzoPSsHjd/wZIw4'"),
+			},
+		},
+		{
+			name: "Valid SSH-signed tag with mode=Tag makes SourceVerifiedCondition=True",
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "ssh-keys",
+				},
+				Data: map[string][]byte{
+					"author1.sshpub": []byte(sshAuthorizedKeysFixture),
+				},
+			},
+			commit: git.Commit{
+				ReferencingTag: &git.Tag{
+					Name:      "v0.1.0",
+					Hash:      []byte("shasum"),
+					Encoded:   []byte(encodedSSHTagFixture),
+					Signature: signatureSSHTagFixture,
+				},
+			},
+			beforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Spec.Reference = &sourcev1.GitRepositoryRef{
+					Tag: "v0.1.0",
+				}
+				obj.Spec.Interval = metav1.Duration{Duration: interval}
+				obj.Spec.Verification = &sourcev1.GitRepositoryVerification{
+					Mode: sourcev1.ModeGitTag,
+					SecretRef: meta.LocalObjectReference{
+						Name: "ssh-keys",
+					},
+				}
+			},
+			want:                       sreconcile.ResultSuccess,
+			wantSourceVerificationMode: ptrToVerificationMode(sourcev1.ModeGitTag),
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.SourceVerifiedCondition, meta.SucceededReason, "verified signature of\n\t- tag 'v0.1.0@shasum' with key 'SHA256:SDB4adE/BP2VLwX9Pdf7aFUwW9JNdzoPSsHjd/wZIw4'"),
+			},
+		},
+		{
+			name: "Valid SSH-signed tag and commit with mode=TagAndHEAD makes SourceVerifiedCondition=True",
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "ssh-keys",
+				},
+				Data: map[string][]byte{
+					"author1.sshpub": []byte(sshAuthorizedKeysFixture),
+				},
+			},
+			commit: git.Commit{
+				Hash:      []byte("shasum"),
+				Encoded:   []byte(encodedSSHCommitFixture),
+				Signature: signatureSSHCommitFixture,
+				ReferencingTag: &git.Tag{
+					Name:      "v0.1.0",
+					Hash:      []byte("shasum"),
+					Encoded:   []byte(encodedSSHTagFixture),
+					Signature: signatureSSHTagFixture,
+				},
+			},
+			beforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Spec.Reference = &sourcev1.GitRepositoryRef{
+					Tag: "v0.1.0",
+				}
+				obj.Spec.Interval = metav1.Duration{Duration: interval}
+				obj.Spec.Verification = &sourcev1.GitRepositoryVerification{
+					Mode: sourcev1.ModeGitTagAndHEAD,
+					SecretRef: meta.LocalObjectReference{
+						Name: "ssh-keys",
+					},
+				}
+			},
+			want:                       sreconcile.ResultSuccess,
+			wantSourceVerificationMode: ptrToVerificationMode(sourcev1.ModeGitTagAndHEAD),
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.SourceVerifiedCondition, meta.SucceededReason, "verified signature of\n\t- tag 'v0.1.0@shasum' with key 'SHA256:SDB4adE/BP2VLwX9Pdf7aFUwW9JNdzoPSsHjd/wZIw4'\n\t- commit 'shasum' with key 'SHA256:SDB4adE/BP2VLwX9Pdf7aFUwW9JNdzoPSsHjd/wZIw4'"),
+			},
+		},
+		{
+			name: "SSH-signed commit but Secret only has .asc keys makes SourceVerifiedCondition=False",
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "pgp-keys-only",
+				},
+				Data: map[string][]byte{
+					"author1.asc": []byte(armoredKeyRingFixture),
+				},
+			},
+			commit: git.Commit{
+				Hash:      []byte("shasum"),
+				Encoded:   []byte(encodedSSHCommitFixture),
+				Signature: signatureSSHCommitFixture,
+			},
+			beforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Spec.Interval = metav1.Duration{Duration: interval}
+				obj.Spec.Verification = &sourcev1.GitRepositoryVerification{
+					Mode: sourcev1.ModeGitHEAD,
+					SecretRef: meta.LocalObjectReference{
+						Name: "pgp-keys-only",
+					},
+				}
+			},
+			wantErr: true,
+			assertConditions: []metav1.Condition{
+				*conditions.FalseCondition(sourcev1.SourceVerifiedCondition, "InvalidCommitSignature", "SSH signature detected but no SSH public keys found in secret (keys with .sshpub suffix)"),
+			},
+		},
+		{
+			name: "PGP-signed commit but Secret only has .sshpub keys makes SourceVerifiedCondition=False",
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "ssh-keys-only",
+				},
+				Data: map[string][]byte{
+					"author1.sshpub": []byte(sshAuthorizedKeysFixture),
+				},
+			},
+			commit: git.Commit{
+				Hash:      []byte("shasum"),
+				Encoded:   []byte(encodedCommitFixture),
+				Signature: signatureCommitFixture,
+			},
+			beforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Spec.Interval = metav1.Duration{Duration: interval}
+				obj.Spec.Verification = &sourcev1.GitRepositoryVerification{
+					Mode: sourcev1.ModeGitHEAD,
+					SecretRef: meta.LocalObjectReference{
+						Name: "ssh-keys-only",
+					},
+				}
+			},
+			wantErr: true,
+			assertConditions: []metav1.Condition{
+				*conditions.FalseCondition(sourcev1.SourceVerifiedCondition, "InvalidCommitSignature", "PGP signature detected but no PGP public keys found in secret (keys with .asc suffix)"),
+			},
+		},
+		{
+			name: "SSH-signed tag but Secret only has .asc keys makes SourceVerifiedCondition=False",
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "pgp-keys-only",
+				},
+				Data: map[string][]byte{
+					"author1.asc": []byte(armoredKeyRingFixture),
+				},
+			},
+			commit: git.Commit{
+				ReferencingTag: &git.Tag{
+					Name:      "v0.1.0",
+					Hash:      []byte("shasum"),
+					Encoded:   []byte(encodedSSHTagFixture),
+					Signature: signatureSSHTagFixture,
+				},
+			},
+			beforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Spec.Reference = &sourcev1.GitRepositoryRef{
+					Tag: "v0.1.0",
+				}
+				obj.Spec.Interval = metav1.Duration{Duration: interval}
+				obj.Spec.Verification = &sourcev1.GitRepositoryVerification{
+					Mode: sourcev1.ModeGitTag,
+					SecretRef: meta.LocalObjectReference{
+						Name: "pgp-keys-only",
+					},
+				}
+			},
+			wantErr: true,
+			assertConditions: []metav1.Condition{
+				*conditions.FalseCondition(sourcev1.SourceVerifiedCondition, "InvalidTagSignature", "signature verification of tag 'v0.1.0@shasum' failed: SSH signature detected but no SSH public keys found in secret (keys with .sshpub suffix)"),
+			},
+		},
+		{
+			name: "Invalid SSH key in .sshpub entry makes SourceVerifiedCondition=False",
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "invalid-ssh-key",
+				},
+				Data: map[string][]byte{
+					"author1.sshpub": []byte("ssh-ed25519 INVALIDKEY test@example.com"),
+				},
+			},
+			commit: git.Commit{
+				Hash:      []byte("shasum"),
+				Encoded:   []byte(encodedSSHCommitFixture),
+				Signature: signatureSSHCommitFixture,
+			},
+			beforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Spec.Interval = metav1.Duration{Duration: interval}
+				obj.Spec.Verification = &sourcev1.GitRepositoryVerification{
+					Mode: sourcev1.ModeGitHEAD,
+					SecretRef: meta.LocalObjectReference{
+						Name: "invalid-ssh-key",
+					},
+				}
+			},
+			wantErr: true,
+			assertConditions: []metav1.Condition{
+				*conditions.FalseCondition(sourcev1.SourceVerifiedCondition, "InvalidCommitSignature", "signature verification of commit 'shasum' failed: unable to verify Git commit SSH signature"),
+			},
+		},
+		{
+			name: "Mixed: PGP-signed tag and SSH-signed commit with both key types in Secret and mode=TagAndHEAD makes SourceVerifiedCondition=True",
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "mixed-keys",
+				},
+				Data: map[string][]byte{
+					"author1.asc":    []byte(armoredKeyRingFixture),
+					"author1.sshpub": []byte(sshAuthorizedKeysFixture),
+				},
+			},
+			commit: git.Commit{
+				Hash:      []byte("shasum"),
+				Encoded:   []byte(encodedSSHCommitFixture),
+				Signature: signatureSSHCommitFixture,
+				ReferencingTag: &git.Tag{
+					Name:      "v0.1.0",
+					Hash:      []byte("shasum"),
+					Encoded:   []byte(encodedTagFixture),
+					Signature: signatureTagFixture,
+				},
+			},
+			beforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Spec.Reference = &sourcev1.GitRepositoryRef{
+					Tag: "v0.1.0",
+				}
+				obj.Spec.Interval = metav1.Duration{Duration: interval}
+				obj.Spec.Verification = &sourcev1.GitRepositoryVerification{
+					Mode: sourcev1.ModeGitTagAndHEAD,
+					SecretRef: meta.LocalObjectReference{
+						Name: "mixed-keys",
+					},
+				}
+			},
+			want:                       sreconcile.ResultSuccess,
+			wantSourceVerificationMode: ptrToVerificationMode(sourcev1.ModeGitTagAndHEAD),
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.SourceVerifiedCondition, meta.SucceededReason, "verified signature of\n\t- tag 'v0.1.0@shasum' with key '5982D0279C227FFD'\n\t- commit 'shasum' with key 'SHA256:SDB4adE/BP2VLwX9Pdf7aFUwW9JNdzoPSsHjd/wZIw4'"),
+			},
+		},
+		{
+			name: "Mixed: SSH-signed tag and PGP-signed commit with both key types in Secret and mode=TagAndHEAD makes SourceVerifiedCondition=True",
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "mixed-keys-reverse",
+				},
+				Data: map[string][]byte{
+					"author1.asc":    []byte(armoredKeyRingFixture),
+					"author1.sshpub": []byte(sshAuthorizedKeysFixture),
+				},
+			},
+			commit: git.Commit{
+				Hash:      []byte("shasum"),
+				Encoded:   []byte(encodedCommitFixture),
+				Signature: signatureCommitFixture,
+				ReferencingTag: &git.Tag{
+					Name:      "v0.1.0",
+					Hash:      []byte("shasum"),
+					Encoded:   []byte(encodedSSHTagFixture),
+					Signature: signatureSSHTagFixture,
+				},
+			},
+			beforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Spec.Reference = &sourcev1.GitRepositoryRef{
+					Tag: "v0.1.0",
+				}
+				obj.Spec.Interval = metav1.Duration{Duration: interval}
+				obj.Spec.Verification = &sourcev1.GitRepositoryVerification{
+					Mode: sourcev1.ModeGitTagAndHEAD,
+					SecretRef: meta.LocalObjectReference{
+						Name: "mixed-keys-reverse",
+					},
+				}
+			},
+			want:                       sreconcile.ResultSuccess,
+			wantSourceVerificationMode: ptrToVerificationMode(sourcev1.ModeGitTagAndHEAD),
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.SourceVerifiedCondition, meta.SucceededReason, "verified signature of\n\t- tag 'v0.1.0@shasum' with key 'SHA256:SDB4adE/BP2VLwX9Pdf7aFUwW9JNdzoPSsHjd/wZIw4'\n\t- commit 'shasum' with key '5982D0279C227FFD'"),
+			},
+		},
+		{
+			name: "Unsupported signature type makes SourceVerifiedCondition=False",
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "existing",
+				},
+				Data: map[string][]byte{
+					"foo": []byte(armoredKeyRingFixture),
+				},
+			},
+			commit: git.Commit{
+				Hash:      []byte("shasum"),
+				Encoded:   []byte(encodedCommitFixture),
+				Signature: "-----BEGIN SIGNED MESSAGE-----\nsome x509 signature\n-----END SIGNED MESSAGE-----",
+			},
+			beforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Spec.Interval = metav1.Duration{Duration: interval}
+				obj.Spec.Verification = &sourcev1.GitRepositoryVerification{
+					Mode: sourcev1.ModeGitHEAD,
+					SecretRef: meta.LocalObjectReference{
+						Name: "existing",
+					},
+				}
+			},
+			wantErr: true,
+			assertConditions: []metav1.Condition{
+				*conditions.FalseCondition(sourcev1.SourceVerifiedCondition, "InvalidCommitSignature", "unsupported signature type: x509"),
+			},
+		},
+		{
+			name: "Valid commit with explicit .asc key suffix makes SourceVerifiedCondition=True",
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "explicit-asc",
+				},
+				Data: map[string][]byte{
+					"foo.asc": []byte(armoredKeyRingFixture),
+				},
+			},
+			commit: git.Commit{
+				Hash:      []byte("shasum"),
+				Encoded:   []byte(encodedCommitFixture),
+				Signature: signatureCommitFixture,
+			},
+			beforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Spec.Interval = metav1.Duration{Duration: interval}
+				obj.Spec.Verification = &sourcev1.GitRepositoryVerification{
+					Mode: sourcev1.ModeGitHEAD,
+					SecretRef: meta.LocalObjectReference{
+						Name: "explicit-asc",
+					},
+				}
+			},
+			want:                       sreconcile.ResultSuccess,
+			wantSourceVerificationMode: ptrToVerificationMode(sourcev1.ModeGitHEAD),
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.SourceVerifiedCondition, meta.SucceededReason, "verified signature of\n\t- commit 'shasum' with key '5982D0279C227FFD'"),
+			},
 		},
 	}
 
@@ -1992,78 +2791,6 @@ func TestGitRepositoryReconciler_verifySignature(t *testing.T) {
 				g.Expect(*obj.Status.SourceVerificationMode).To(Equal(*tt.wantSourceVerificationMode))
 			} else {
 				g.Expect(obj.Status.SourceVerificationMode).To(BeNil())
-			}
-		})
-	}
-}
-
-func TestGitRepositoryReconciler_getProxyOpts(t *testing.T) {
-	invalidProxy := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "invalid-proxy",
-			Namespace: "default",
-		},
-		Data: map[string][]byte{
-			"url": []byte("https://example.com"),
-		},
-	}
-	validProxy := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "valid-proxy",
-			Namespace: "default",
-		},
-		Data: map[string][]byte{
-			"address":  []byte("https://example.com"),
-			"username": []byte("user"),
-			"password": []byte("pass"),
-		},
-	}
-
-	clientBuilder := fakeclient.NewClientBuilder().
-		WithScheme(testEnv.GetScheme()).
-		WithObjects(invalidProxy, validProxy)
-
-	r := &GitRepositoryReconciler{
-		Client: clientBuilder.Build(),
-	}
-
-	tests := []struct {
-		name      string
-		secret    string
-		err       string
-		proxyOpts *transport.ProxyOptions
-	}{
-		{
-			name:   "non-existent secret",
-			secret: "non-existent",
-			err:    "failed to get proxy secret 'default/non-existent': ",
-		},
-		{
-			name:   "invalid proxy secret",
-			secret: "invalid-proxy",
-			err:    "invalid proxy secret 'default/invalid-proxy': key 'address' is missing",
-		},
-		{
-			name:   "valid proxy secret",
-			secret: "valid-proxy",
-			proxyOpts: &transport.ProxyOptions{
-				URL:      "https://example.com",
-				Username: "user",
-				Password: "pass",
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			g := NewWithT(t)
-			opts, err := r.getProxyOpts(context.TODO(), tt.secret, "default")
-			if opts != nil {
-				g.Expect(err).ToNot(HaveOccurred())
-				g.Expect(opts).To(Equal(tt.proxyOpts))
-			} else {
-				g.Expect(err).To(HaveOccurred())
-				g.Expect(err.Error()).To(ContainSubstring(tt.err))
 			}
 		})
 	}
@@ -2491,7 +3218,7 @@ func TestGitRepositoryReconciler_notify(t *testing.T) {
 			res:    sreconcile.ResultSuccess,
 			resErr: nil,
 			newObjBeforeFunc: func(obj *sourcev1.GitRepository) {
-				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Digest: "yyy"}
+				obj.Status.Artifact = &meta.Artifact{Revision: "xxx", Digest: "yyy"}
 			},
 			commit:    concreteCommit,
 			wantEvent: "Normal NewArtifact stored artifact for commit 'test commit'",
@@ -2501,12 +3228,12 @@ func TestGitRepositoryReconciler_notify(t *testing.T) {
 			res:    sreconcile.ResultSuccess,
 			resErr: nil,
 			oldObjBeforeFunc: func(obj *sourcev1.GitRepository) {
-				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Digest: "yyy"}
+				obj.Status.Artifact = &meta.Artifact{Revision: "xxx", Digest: "yyy"}
 				conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.GitOperationFailedReason, "fail")
 				conditions.MarkFalse(obj, meta.ReadyCondition, meta.FailedReason, "foo")
 			},
 			newObjBeforeFunc: func(obj *sourcev1.GitRepository) {
-				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Digest: "yyy"}
+				obj.Status.Artifact = &meta.Artifact{Revision: "xxx", Digest: "yyy"}
 				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "ready")
 			},
 			commit:    concreteCommit,
@@ -2517,12 +3244,12 @@ func TestGitRepositoryReconciler_notify(t *testing.T) {
 			res:    sreconcile.ResultSuccess,
 			resErr: nil,
 			oldObjBeforeFunc: func(obj *sourcev1.GitRepository) {
-				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Digest: "yyy"}
+				obj.Status.Artifact = &meta.Artifact{Revision: "xxx", Digest: "yyy"}
 				conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.GitOperationFailedReason, "fail")
 				conditions.MarkFalse(obj, meta.ReadyCondition, meta.FailedReason, "foo")
 			},
 			newObjBeforeFunc: func(obj *sourcev1.GitRepository) {
-				obj.Status.Artifact = &sourcev1.Artifact{Revision: "aaa", Digest: "bbb"}
+				obj.Status.Artifact = &meta.Artifact{Revision: "aaa", Digest: "bbb"}
 				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "ready")
 			},
 			commit:    concreteCommit,
@@ -2533,11 +3260,11 @@ func TestGitRepositoryReconciler_notify(t *testing.T) {
 			res:    sreconcile.ResultSuccess,
 			resErr: nil,
 			oldObjBeforeFunc: func(obj *sourcev1.GitRepository) {
-				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Digest: "yyy"}
+				obj.Status.Artifact = &meta.Artifact{Revision: "xxx", Digest: "yyy"}
 				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "ready")
 			},
 			newObjBeforeFunc: func(obj *sourcev1.GitRepository) {
-				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Digest: "yyy"}
+				obj.Status.Artifact = &meta.Artifact{Revision: "xxx", Digest: "yyy"}
 				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "ready")
 			},
 		},
@@ -2546,12 +3273,12 @@ func TestGitRepositoryReconciler_notify(t *testing.T) {
 			res:    sreconcile.ResultEmpty,
 			resErr: noopErr,
 			oldObjBeforeFunc: func(obj *sourcev1.GitRepository) {
-				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Digest: "yyy"}
+				obj.Status.Artifact = &meta.Artifact{Revision: "xxx", Digest: "yyy"}
 				conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, sourcev1.GitOperationFailedReason, "fail")
 				conditions.MarkFalse(obj, meta.ReadyCondition, meta.FailedReason, "foo")
 			},
 			newObjBeforeFunc: func(obj *sourcev1.GitRepository) {
-				obj.Status.Artifact = &sourcev1.Artifact{Revision: "xxx", Digest: "yyy"}
+				obj.Status.Artifact = &meta.Artifact{Revision: "xxx", Digest: "yyy"}
 				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "ready")
 			},
 			commit:    partialCommit, // no-op will always result in partial commit.
@@ -2642,7 +3369,7 @@ func TestGitRepositoryReconciler_fetchIncludes(t *testing.T) {
 				{name: "b", toPath: "b/", shouldExist: true},
 			},
 			wantErr: false,
-			wantArtifactSet: []*sourcev1.Artifact{
+			wantArtifactSet: []*meta.Artifact{
 				{Revision: "a"},
 				{Revision: "b"},
 			},
@@ -2700,7 +3427,7 @@ func TestGitRepositoryReconciler_fetchIncludes(t *testing.T) {
 					},
 				}
 				if d.withArtifact {
-					obj.Status.Artifact = &sourcev1.Artifact{
+					obj.Status.Artifact = &meta.Artifact{
 						Path:           d.name + ".tar.gz",
 						Revision:       d.name,
 						LastUpdateTime: metav1.Now(),
@@ -2772,6 +3499,72 @@ func resetChmod(path string, dirMode os.FileMode, fileMode os.FileMode) error {
 	}
 
 	return nil
+}
+
+func TestGitRepositoryReconciler_validateSparseCheckoutPaths(t *testing.T) {
+	tests := []struct {
+		name        string
+		paths       []string
+		beforeFunc  func(t *WithT, dir string)
+		wantErr     bool
+		errContains string
+	}{
+		{
+			name: "no paths configured",
+		},
+		{
+			name:  "configured path exists in the working directory",
+			paths: []string{"a/b"},
+			beforeFunc: func(t *WithT, dir string) {
+				t.Expect(os.MkdirAll(filepath.Join(dir, "a", "b"), 0o700)).To(Succeed())
+			},
+		},
+		{
+			name:        "configured path is missing from the working directory",
+			paths:       []string{"missing"},
+			wantErr:     true,
+			errContains: "missing",
+		},
+		{
+			name:  "configured path is resolved relative to the working directory",
+			paths: []string{"../sibling"},
+			beforeFunc: func(t *WithT, dir string) {
+				// Create a sibling of the working directory; the path must
+				// not resolve to it.
+				t.Expect(os.MkdirAll(filepath.Join(filepath.Dir(dir), "sibling"), 0o700)).To(Succeed())
+			},
+			wantErr:     true,
+			errContains: "../sibling",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			parent := t.TempDir()
+			dir := filepath.Join(parent, "work")
+			g.Expect(os.Mkdir(dir, 0o700)).To(Succeed())
+			if tt.beforeFunc != nil {
+				tt.beforeFunc(g, dir)
+			}
+
+			obj := &sourcev1.GitRepository{
+				Spec: sourcev1.GitRepositorySpec{SparseCheckout: tt.paths},
+			}
+
+			r := &GitRepositoryReconciler{}
+			err := r.validateSparseCheckoutPaths(obj, dir)
+			if tt.wantErr {
+				g.Expect(err).To(HaveOccurred())
+				if tt.errContains != "" {
+					g.Expect(err.Error()).To(ContainSubstring(tt.errContains))
+				}
+				return
+			}
+			g.Expect(err).NotTo(HaveOccurred())
+		})
+	}
 }
 
 func TestGitRepositoryIncludeEqual(t *testing.T) {
@@ -2858,7 +3651,7 @@ func TestGitContentConfigChanged(t *testing.T) {
 	tests := []struct {
 		name      string
 		obj       sourcev1.GitRepository
-		artifacts []*sourcev1.Artifact
+		artifacts []*meta.Artifact
 		want      bool
 	}{
 		{
@@ -2896,6 +3689,38 @@ func TestGitContentConfigChanged(t *testing.T) {
 			want: false,
 		},
 		{
+			name: "unobserved sparse checkout",
+			obj: sourcev1.GitRepository{
+				Spec:   sourcev1.GitRepositorySpec{SparseCheckout: []string{"a/b/c", "x/y/z"}},
+				Status: sourcev1.GitRepositoryStatus{ObservedSparseCheckout: []string{"a/b/c"}},
+			},
+			want: true,
+		},
+		{
+			name: "unobserved case sensitive sparse checkout",
+			obj: sourcev1.GitRepository{
+				Spec:   sourcev1.GitRepositorySpec{SparseCheckout: []string{"a/b/c", "x/y/Z"}},
+				Status: sourcev1.GitRepositoryStatus{ObservedSparseCheckout: []string{"a/b/c", "x/y/z"}},
+			},
+			want: true,
+		},
+		{
+			name: "observed sparse checkout",
+			obj: sourcev1.GitRepository{
+				Spec:   sourcev1.GitRepositorySpec{SparseCheckout: []string{"a/b/c", "x/y/z"}},
+				Status: sourcev1.GitRepositoryStatus{ObservedSparseCheckout: []string{"a/b/c", "x/y/z"}},
+			},
+			want: false,
+		},
+		{
+			name: "observed sparse checkout with leading slash",
+			obj: sourcev1.GitRepository{
+				Spec:   sourcev1.GitRepositorySpec{SparseCheckout: []string{"./a/b/c", "./x/y/z"}},
+				Status: sourcev1.GitRepositoryStatus{ObservedSparseCheckout: []string{"./a/b/c", "./x/y/z"}},
+			},
+			want: false,
+		},
+		{
 			name: "unobserved include",
 			obj: sourcev1.GitRepository{
 				Spec: sourcev1.GitRepositorySpec{
@@ -2926,10 +3751,10 @@ func TestGitContentConfigChanged(t *testing.T) {
 							ToPath:           "baz",
 						},
 					},
-					IncludedArtifacts: []*sourcev1.Artifact{{Revision: "aaa", Digest: "bbb"}},
+					IncludedArtifacts: []*meta.Artifact{{Revision: "aaa", Digest: "bbb"}},
 				},
 			},
-			artifacts: []*sourcev1.Artifact{
+			artifacts: []*meta.Artifact{
 				{Revision: "aaa", Digest: "bbb"},
 			},
 			want: false,
@@ -2954,10 +3779,10 @@ func TestGitContentConfigChanged(t *testing.T) {
 							ToPath:           "baz",
 						},
 					},
-					IncludedArtifacts: []*sourcev1.Artifact{{Revision: "aaa", Digest: "bbb"}},
+					IncludedArtifacts: []*meta.Artifact{{Revision: "aaa", Digest: "bbb"}},
 				},
 			},
-			artifacts: []*sourcev1.Artifact{
+			artifacts: []*meta.Artifact{
 				{Revision: "ccc", Digest: "bbb"},
 			},
 			want: true,
@@ -2982,10 +3807,10 @@ func TestGitContentConfigChanged(t *testing.T) {
 							ToPath:           "baz",
 						},
 					},
-					IncludedArtifacts: []*sourcev1.Artifact{{Revision: "aaa", Digest: "bbb"}},
+					IncludedArtifacts: []*meta.Artifact{{Revision: "aaa", Digest: "bbb"}},
 				},
 			},
-			artifacts: []*sourcev1.Artifact{
+			artifacts: []*meta.Artifact{
 				{Revision: "aaa", Digest: "ddd"},
 			},
 			want: true,
@@ -3010,10 +3835,10 @@ func TestGitContentConfigChanged(t *testing.T) {
 							ToPath:           "baz",
 						},
 					},
-					IncludedArtifacts: []*sourcev1.Artifact{{Revision: "aaa", Digest: "bbb"}},
+					IncludedArtifacts: []*meta.Artifact{{Revision: "aaa", Digest: "bbb"}},
 				},
 			},
-			artifacts: []*sourcev1.Artifact{
+			artifacts: []*meta.Artifact{
 				{Revision: "aaa", Digest: "bbb"},
 			},
 			want: true,
@@ -3036,13 +3861,13 @@ func TestGitContentConfigChanged(t *testing.T) {
 					},
 				},
 				Status: sourcev1.GitRepositoryStatus{
-					IncludedArtifacts: []*sourcev1.Artifact{
+					IncludedArtifacts: []*meta.Artifact{
 						{Revision: "aaa", Digest: "bbb"},
 						{Revision: "ccc", Digest: "ccc"},
 					},
 				},
 			},
-			artifacts: []*sourcev1.Artifact{
+			artifacts: []*meta.Artifact{
 				{Revision: "aaa", Digest: "bbb"},
 				{Revision: "ccc", Digest: "ddd"},
 			},
@@ -3078,13 +3903,13 @@ func TestGitContentConfigChanged(t *testing.T) {
 							ToPath:           "baz",
 						},
 					},
-					IncludedArtifacts: []*sourcev1.Artifact{
+					IncludedArtifacts: []*meta.Artifact{
 						{Revision: "aaa", Digest: "bbb"},
 						{Revision: "ccc", Digest: "ccc"},
 					},
 				},
 			},
-			artifacts: []*sourcev1.Artifact{
+			artifacts: []*meta.Artifact{
 				{Revision: "aaa", Digest: "bbb"},
 			},
 			want: true,
@@ -3119,12 +3944,12 @@ func TestGitContentConfigChanged(t *testing.T) {
 							ToPath:           "baz",
 						},
 					},
-					IncludedArtifacts: []*sourcev1.Artifact{
+					IncludedArtifacts: []*meta.Artifact{
 						{Revision: "aaa", Digest: "bbb"},
 					},
 				},
 			},
-			artifacts: []*sourcev1.Artifact{
+			artifacts: []*meta.Artifact{
 				{Revision: "aaa", Digest: "bbb"},
 				{Revision: "ccc", Digest: "ccc"},
 			},
