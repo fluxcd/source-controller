@@ -157,9 +157,9 @@ func getPatchOptions(ownedConditions []string, controllerName string) []patch.Op
 	}
 }
 
-// +kubebuilder:rbac:groups=cd.qdrant.io,resources=gitrepositories,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=cd.qdrant.io,resources=gitrepositories/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=cd.qdrant.io,resources=gitrepositories/finalizers,verbs=get;create;update;patch;delete
+// +kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=gitrepositories,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=gitrepositories/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=gitrepositories/finalizers,verbs=get;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 
 // GitRepositoryReconciler reconciles a v1.GitRepository object.
@@ -201,8 +201,7 @@ func (r *GitRepositoryReconciler) SetupWithManager(mgr ctrl.Manager, opts GitRep
 			predicate.Or(predicate.GenerationChangedPredicate{}, predicates.ReconcileRequestedPredicate{}),
 		)).
 		WithOptions(controller.Options{
-			RateLimiter:        opts.RateLimiter,
-			NeedLeaderElection: r.LeaderElection,
+			RateLimiter: opts.RateLimiter,
 		}).
 		Complete(r)
 }

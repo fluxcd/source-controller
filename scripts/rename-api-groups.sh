@@ -2,6 +2,15 @@
 
 set -e
 
+# Portable in-place sed flag: GNU sed (Linux) uses `-i`, while BSD/macOS sed
+# requires an explicit (empty) backup suffix `-i ''`. Detect which one we have
+# and build the flag as an array so it can be passed through xargs.
+if sed --version >/dev/null 2>&1; then
+    SEDI=(-i)
+else
+    SEDI=(-i '')
+fi
+
 declare -A replacements
 
 replacements=(
@@ -19,14 +28,14 @@ replacements=(
 replace_files_content() {
     for pattern in "${!replacements[@]}"; do
         echo "Renaming '$pattern' to '${replacements[$pattern]}'"
-        find . -type f \( -name '*.go' -o -name '*.yml' -o -name '*.yaml' -o -path './docs/*.md' -o -name 'PROJECT' \) | xargs sed -i '' "s/$pattern/${replacements[$pattern]}/g"
+        find . -type f \( -name '*.go' -o -name '*.yml' -o -name '*.yaml' -o -path './docs/*.md' -o -name 'PROJECT' \) | xargs sed "${SEDI[@]}" "s/$pattern/${replacements[$pattern]}/g"
     done
 
     # special ones (multiline)
-    find . -type f \( -name '*.go' -o -name '*.yml' -o -name '*.yaml' -o -path './docs/*.md' -o -name 'PROJECT' \) | xargs sed -i '' '/shortNames:/,/^ *-/s/- gitrepo/- qdrantgitrepo/'
-    find . -type f \( -name '*.go' -o -name '*.yml' -o -name '*.yaml' -o -path './docs/*.md' -o -name 'PROJECT' \) | xargs sed -i '' '/shortNames:/,/^ *-/s/- hc/- qdranthc/'
-    find . -type f \( -name '*.go' -o -name '*.yml' -o -name '*.yaml' -o -path './docs/*.md' -o -name 'PROJECT' \) | xargs sed -i '' '/shortNames:/,/^ *-/s/- helmrepo/- qdranthelmrepo/'
-    find . -type f \( -name '*.go' -o -name '*.yml' -o -name '*.yaml' -o -path './docs/*.md' -o -name 'PROJECT' \) | xargs sed -i '' '/shortNames:/,/^ *-/s/- ocirepo/- qdrantocirepo/'
+    find . -type f \( -name '*.go' -o -name '*.yml' -o -name '*.yaml' -o -path './docs/*.md' -o -name 'PROJECT' \) | xargs sed "${SEDI[@]}" '/shortNames:/,/^ *-/s/- gitrepo/- qdrantgitrepo/'
+    find . -type f \( -name '*.go' -o -name '*.yml' -o -name '*.yaml' -o -path './docs/*.md' -o -name 'PROJECT' \) | xargs sed "${SEDI[@]}" '/shortNames:/,/^ *-/s/- hc/- qdranthc/'
+    find . -type f \( -name '*.go' -o -name '*.yml' -o -name '*.yaml' -o -path './docs/*.md' -o -name 'PROJECT' \) | xargs sed "${SEDI[@]}" '/shortNames:/,/^ *-/s/- helmrepo/- qdranthelmrepo/'
+    find . -type f \( -name '*.go' -o -name '*.yml' -o -name '*.yaml' -o -path './docs/*.md' -o -name 'PROJECT' \) | xargs sed "${SEDI[@]}" '/shortNames:/,/^ *-/s/- ocirepo/- qdrantocirepo/'
 }
 
 copy_crd_base_files() {
