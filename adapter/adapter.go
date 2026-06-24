@@ -1,30 +1,31 @@
 package adapter
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"net/http"
 	"os"
 	"time"
 
+	artcfg "github.com/fluxcd/pkg/artifact/config"
+	artdigest "github.com/fluxcd/pkg/artifact/digest"
+	artstore "github.com/fluxcd/pkg/artifact/storage"
 	helper "github.com/fluxcd/pkg/runtime/controller"
 	"github.com/fluxcd/pkg/runtime/events"
-	"github.com/fluxcd/source-controller/internal/helm/registry"
-
-	"context"
-
-	"github.com/fluxcd/source-controller/api/v1beta2"
-	"github.com/fluxcd/source-controller/internal/cache"
-	"github.com/fluxcd/source-controller/internal/controller"
-	intdigest "github.com/fluxcd/source-controller/internal/digest"
-	"helm.sh/helm/v3/pkg/getter"
-	v1 "k8s.io/api/apps/v1"
+	"helm.sh/helm/v4/pkg/getter"
+	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/util/workqueue"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	sourcev1 "github.com/fluxcd/source-controller/api/v1"
+	"github.com/fluxcd/source-controller/internal/cache"
+	"github.com/fluxcd/source-controller/internal/controller"
+	scosign "github.com/fluxcd/source-controller/internal/oci/cosign"
 )
 
 var (
@@ -44,8 +45,8 @@ var (
 
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
-	utilruntime.Must(v1beta2.AddToScheme(scheme))
-	utilruntime.Must(v1.AddToScheme(scheme))
+	utilruntime.Must(sourcev1.AddToScheme(scheme))
+	utilruntime.Must(appsv1.AddToScheme(scheme))
 }
 
 type SourceAdapter struct {
@@ -55,7 +56,12 @@ type SourceAdapter struct {
 	ControllerName    string
 	ReconcilerOptions ReconcilerOptions
 	MetricOptions     helper.Metrics
-	LeaderElection    *bool
+	// LeaderElection is retained for backwards compatibility. As of the
+	// upstream v1.9.0 realignment the reconcilers no longer expose a
+	// per-reconciler leader election toggle; leadership is governed by the
+	// controller manager passed to SetupSourceReconcilers, so this field is
+	// no longer wired to the individual reconcilers.
+	LeaderElection *bool
 }
 type ReconcilerOptions struct {
 	RateLimiter               workqueue.TypedRateLimiter[reconcile.Request]
@@ -68,9 +74,10 @@ func SetupSourceReconcilers(mgr ctrl.Manager, adapter SourceAdapter) error {
 		adapter.getFileServerAddress(),
 		60*time.Second,
 		2,
-		intdigest.Canonical.String(),
+		artdigest.Canonical.String(),
 	)
 	cacheRecorder := cache.MustMakeMetrics()
+	cosignVerifierFactory := scosign.NewCosignVerifierFactory()
 
 	helmIndexCache, helmIndexCacheItemTTL := mustInitHelmCache(0, "15m", "1m")
 	eventRecorder, err := events.NewRecorder(mgr, ctrl.Log, "", adapter.ControllerName)
@@ -88,8 +95,7 @@ func SetupSourceReconcilers(mgr ctrl.Manager, adapter SourceAdapter) error {
 		Cache:          helmIndexCache,
 		TTL:            helmIndexCacheItemTTL,
 		CacheRecorder:  cacheRecorder,
-		LeaderElection: adapter.LeaderElection,
-	}).SetupWithManagerAndOptions(mgr, controller.HelmRepositoryReconcilerOptions{
+	}).SetupWithManager(mgr, controller.HelmRepositoryReconcilerOptions{
 		RateLimiter: adapter.ReconcilerOptions.RateLimiter,
 	}); err != nil {
 		return err
@@ -101,8 +107,7 @@ func SetupSourceReconcilers(mgr ctrl.Manager, adapter SourceAdapter) error {
 		Metrics:        adapter.MetricOptions,
 		Storage:        storage,
 		ControllerName: adapter.ControllerName,
-		LeaderElection: adapter.LeaderElection,
-	}).SetupWithManagerAndOptions(mgr, controller.GitRepositoryReconcilerOptions{
+	}).SetupWithManager(mgr, controller.GitRepositoryReconcilerOptions{
 		DependencyRequeueInterval: adapter.ReconcilerOptions.DependencyRequeueInterval,
 		RateLimiter:               adapter.ReconcilerOptions.RateLimiter,
 	}); err != nil {
@@ -115,26 +120,24 @@ func SetupSourceReconcilers(mgr ctrl.Manager, adapter SourceAdapter) error {
 		Metrics:        adapter.MetricOptions,
 		Storage:        storage,
 		ControllerName: adapter.ControllerName,
-		LeaderElection: adapter.LeaderElection,
-	}).SetupWithManagerAndOptions(mgr, controller.BucketReconcilerOptions{
+	}).SetupWithManager(mgr, controller.BucketReconcilerOptions{
 		RateLimiter: adapter.ReconcilerOptions.RateLimiter,
 	}); err != nil {
 		return err
 	}
 
 	if err := (&controller.HelmChartReconciler{
-		Client:                  mgr.GetClient(),
-		RegistryClientGenerator: registry.ClientGenerator,
-		Storage:                 storage,
-		Getters:                 getters,
-		EventRecorder:           eventRecorder,
-		Metrics:                 adapter.MetricOptions,
-		ControllerName:          adapter.ControllerName,
-		Cache:                   helmIndexCache,
-		TTL:                     helmIndexCacheItemTTL,
-		CacheRecorder:           cacheRecorder,
-		LeaderElection:          adapter.LeaderElection,
-	}).SetupWithManagerAndOptions(adapter.Context, mgr, controller.HelmChartReconcilerOptions{
+		Client:                mgr.GetClient(),
+		Storage:               storage,
+		Getters:               getters,
+		EventRecorder:         eventRecorder,
+		Metrics:               adapter.MetricOptions,
+		ControllerName:        adapter.ControllerName,
+		CosignVerifierFactory: cosignVerifierFactory,
+		Cache:                 helmIndexCache,
+		TTL:                   helmIndexCacheItemTTL,
+		CacheRecorder:         cacheRecorder,
+	}).SetupWithManager(adapter.Context, mgr, controller.HelmChartReconcilerOptions{
 		RateLimiter: adapter.ReconcilerOptions.RateLimiter,
 	}); err != nil {
 		return err
@@ -160,21 +163,28 @@ func (a *SourceAdapter) getFileServerAddress() string {
 	return fmt.Sprintf(":%d", port)
 }
 
-func mustInitStorage(path string, storageAdvAddr string, artifactRetentionTTL time.Duration, artifactRetentionRecords int, artifactDigestAlgo string) *controller.Storage {
+func mustInitStorage(path string, storageAdvAddr string, artifactRetentionTTL time.Duration, artifactRetentionRecords int, artifactDigestAlgo string) *artstore.Storage {
 	if storageAdvAddr == "" {
 		storageAdvAddr = determineAdvStorageAddr(storageAdvAddr)
 	}
 
-	if artifactDigestAlgo != intdigest.Canonical.String() {
-		algo, err := intdigest.AlgorithmForName(artifactDigestAlgo)
+	if artifactDigestAlgo != artdigest.Canonical.String() {
+		algo, err := artdigest.AlgorithmForName(artifactDigestAlgo)
 		if err != nil {
 			setupLog.Error(err, "unable to configure canonical digest algorithm")
 			os.Exit(1)
 		}
-		intdigest.Canonical = algo
+		artdigest.Canonical = algo
 	}
 
-	storage, err := controller.NewStorage(path, storageAdvAddr, artifactRetentionTTL, artifactRetentionRecords)
+	storage, err := artstore.New(&artcfg.Options{
+		StoragePath:              path,
+		StorageAddress:           storageAdvAddr,
+		StorageAdvAddress:        storageAdvAddr,
+		ArtifactRetentionTTL:     artifactRetentionTTL,
+		ArtifactRetentionRecords: artifactRetentionRecords,
+		ArtifactDigestAlgo:       artifactDigestAlgo,
+	})
 	if err != nil {
 		setupLog.Error(err, "unable to initialise storage")
 		os.Exit(1)
