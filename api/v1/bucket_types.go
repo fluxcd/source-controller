@@ -252,6 +252,7 @@ func (in *Bucket) GetArtifact() *meta.Artifact {
 // +genclient
 // +kubebuilder:storageversion
 // +kubebuilder:object:root=true
+// +kubebuilder:resource:categories=all;fluxcd;fluxcd-sources
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="Endpoint",type=string,JSONPath=`.spec.endpoint`
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description=""
