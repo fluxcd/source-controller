@@ -160,7 +160,7 @@ type HelmChartStatus struct {
 
 	// URL is the dynamic fetch link for the latest Artifact.
 	// It is provided on a "best effort" basis, and using the precise
-	// BucketStatus.Artifact data is recommended.
+	// HelmChartStatus.Artifact data is recommended.
 	// +optional
 	URL string `json:"url,omitempty"`
 

@@ -344,7 +344,7 @@ spec:
                 description: |-
                   URL is the dynamic fetch link for the latest Artifact.
                   It is provided on a "best effort" basis, and using the precise
-                  BucketStatus.Artifact data is recommended.
+                  HelmChartStatus.Artifact data is recommended.
                 type: string
             type: object
         type: object
