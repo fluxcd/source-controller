@@ -21,19 +21,19 @@ require (
 	github.com/docker/cli v29.5.3+incompatible
 	github.com/docker/go-units v0.5.0
 	github.com/elazarl/goproxy v1.8.4
-	github.com/fluxcd/cli-utils v1.2.1
-	github.com/fluxcd/pkg/apis/event v0.27.0
-	github.com/fluxcd/pkg/apis/meta v1.30.0
-	github.com/fluxcd/pkg/artifact v0.18.0
-	github.com/fluxcd/pkg/auth v0.54.0
+	github.com/fluxcd/cli-utils v1.2.2
+	github.com/fluxcd/pkg/apis/event v0.27.1
+	github.com/fluxcd/pkg/apis/meta v1.30.1
+	github.com/fluxcd/pkg/artifact v0.18.1
+	github.com/fluxcd/pkg/auth v0.54.1
 	github.com/fluxcd/pkg/cache v0.14.0
 	github.com/fluxcd/pkg/git v0.52.0
 	github.com/fluxcd/pkg/gittestserver v0.29.0
-	github.com/fluxcd/pkg/helmtestserver v0.40.0
+	github.com/fluxcd/pkg/helmtestserver v0.40.1
 	github.com/fluxcd/pkg/http/transport v0.8.0
 	github.com/fluxcd/pkg/masktoken v0.9.0
 	github.com/fluxcd/pkg/oci v0.68.0
-	github.com/fluxcd/pkg/runtime v0.110.0
+	github.com/fluxcd/pkg/runtime v0.110.1
 	github.com/fluxcd/pkg/sourceignore v0.18.0
 	github.com/fluxcd/pkg/ssh v0.25.0
 	github.com/fluxcd/pkg/tar v1.2.0
@@ -50,7 +50,7 @@ require (
 	github.com/minio/minio-go/v7 v7.2.0
 	github.com/notaryproject/notation-core-go v1.3.0
 	github.com/notaryproject/notation-go v1.3.2
-	github.com/onsi/gomega v1.41.0
+	github.com/onsi/gomega v1.42.1
 	github.com/opencontainers/go-digest v1.0.0
 	github.com/opencontainers/image-spec v1.1.1
 	github.com/ory/dockertest/v3 v3.12.0
@@ -67,10 +67,10 @@ require (
 	golang.org/x/oauth2 v0.36.0
 	golang.org/x/sync v0.21.0
 	google.golang.org/api v0.283.0
-	helm.sh/helm/v4 v4.2.1
-	k8s.io/api v0.36.1
-	k8s.io/apimachinery v0.36.1
-	k8s.io/client-go v0.36.1
+	helm.sh/helm/v4 v4.2.2
+	k8s.io/api v0.36.2
+	k8s.io/apimachinery v0.36.2
+	k8s.io/client-go v0.36.2
 	k8s.io/utils v0.0.0-20260507154919-ff6756f316d2
 	oras.land/oras-go/v2 v2.6.1
 	sigs.k8s.io/controller-runtime v0.24.1
@@ -242,7 +242,7 @@ require (
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/go-containerregistry/pkg/authn/kubernetes v0.0.0-20250225234217-098045d5e61f // indirect
 	github.com/google/go-github/v73 v73.0.0 // indirect
-	github.com/google/go-github/v82 v82.0.0 // indirect
+	github.com/google/go-github/v87 v87.0.0 // indirect
 	github.com/google/go-querystring v1.2.0 // indirect
 	github.com/google/s2a-go v0.1.9 // indirect
 	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510 // indirect
@@ -395,7 +395,7 @@ require (
 	go.yaml.in/yaml/v2 v2.4.4 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	golang.org/x/mod v0.36.0 // indirect
-	golang.org/x/net v0.55.0 // indirect
+	golang.org/x/net v0.56.0 // indirect
 	golang.org/x/sys v0.46.0 // indirect
 	golang.org/x/term v0.44.0 // indirect
 	golang.org/x/text v0.38.0 // indirect
@@ -413,13 +413,13 @@ require (
 	gopkg.in/warnings.v0 v0.1.2 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
-	k8s.io/apiextensions-apiserver v0.36.1 // indirect
-	k8s.io/apiserver v0.36.1 // indirect
-	k8s.io/cli-runtime v0.36.1 // indirect
-	k8s.io/component-base v0.36.1 // indirect
+	k8s.io/apiextensions-apiserver v0.36.2 // indirect
+	k8s.io/apiserver v0.36.2 // indirect
+	k8s.io/cli-runtime v0.36.2 // indirect
+	k8s.io/component-base v0.36.2 // indirect
 	k8s.io/klog/v2 v2.140.0 // indirect
 	k8s.io/kube-openapi v0.0.0-20260603220949-865597e52e25 // indirect
-	k8s.io/kubectl v0.36.1 // indirect
+	k8s.io/kubectl v0.36.2 // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
 	sigs.k8s.io/kustomize/api v0.21.1 // indirect
 	sigs.k8s.io/kustomize/kyaml v0.21.1 // indirect
