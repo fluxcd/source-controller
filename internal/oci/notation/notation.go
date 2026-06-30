@@ -366,6 +366,11 @@ func (v *NotationVerifier) remoteRepo(repoUrl string) (*oras.Repository, error) 
 			"User-Agent": {"flux"},
 		},
 		Credential: credentialProvider,
+		// Cache the registry authorization token so that the manifest
+		// resolution, signature listing and signature blob fetches performed
+		// during a single verification reuse the same token instead of
+		// re-authenticating on every request.
+		Cache: oauth.NewCache(),
 	}
 
 	remoteRepo.Client = repoClient
