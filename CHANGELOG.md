@@ -2,6 +2,22 @@
 
 All notable changes to this project are documented in this file.
 
+## 1.9.1
+
+**Release date:** 2026-06-30
+
+This patch release updates Kubernetes to 1.36.2 and the fluxcd/pkg dependencies,
+adds kubectl categories to the source-controller CRDs and documents the
+controller's command-line options.
+
+Improvements:
+- Add categories to source-controller CRDs
+  [#2090](https://github.com/fluxcd/source-controller/pull/2090)
+- Document controller options
+  [#2094](https://github.com/fluxcd/source-controller/pull/2094)
+- Update fluxcd/pkg dependencies
+  [#2092](https://github.com/fluxcd/source-controller/pull/2092)
+
 ## 1.9.0
 
 **Release date:** 2026-06-17
