@@ -75,6 +75,7 @@ func (in *ExternalArtifact) GetRequeueAfter() time.Duration {
 // +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type==\"Ready\")].status",description=""
 // +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.conditions[?(@.type==\"Ready\")].message",description=""
 // +kubebuilder:printcolumn:name="Source",type="string",JSONPath=".spec.sourceRef.name",description=""
+// +kubebuilder:metadata:annotations="kustomize.toolkit.fluxcd.io/substitute=disabled"
 
 // ExternalArtifact is the Schema for the external artifacts API
 type ExternalArtifact struct {
