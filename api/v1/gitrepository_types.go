@@ -138,7 +138,7 @@ type GitRepositorySpec struct {
 	// +optional
 	ProxySecretRef *meta.LocalObjectReference `json:"proxySecretRef,omitempty"`
 
-	// Ignore overrides the set of excluded patterns in the .sourceignore format
+	// Ignore extends the set of excluded patterns in the .sourceignore format
 	// (which is the same as .gitignore). If not provided, a default will be used,
 	// consult the documentation for your version to find out what those are.
 	// +optional
