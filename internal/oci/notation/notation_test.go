@@ -18,11 +18,15 @@ package notation
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"path"
 	"reflect"
+	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/go-logr/logr"
@@ -32,6 +36,7 @@ import (
 	"github.com/notaryproject/notation-go"
 	"github.com/notaryproject/notation-go/verifier/trustpolicy"
 	. "github.com/onsi/gomega"
+	oauth "oras.land/oras-go/v2/registry/remote/auth"
 
 	"github.com/fluxcd/source-controller/internal/oci"
 	testproxy "github.com/fluxcd/source-controller/tests/proxy"
@@ -540,6 +545,154 @@ func TestRepoUrlWithDigest(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestRemoteRepoAuthCache(t *testing.T) {
+	testCases := []struct {
+		name      string
+		auth      authn.Authenticator
+		keychain  authn.Keychain
+		transport bool
+	}{
+		{
+			name: "anonymous",
+		},
+		{
+			name: "with authenticator",
+			auth: &authn.Basic{Username: "foo", Password: "bar"},
+		},
+		{
+			name:     "with keychain",
+			keychain: authn.DefaultKeychain,
+		},
+		{
+			name:      "with custom transport",
+			auth:      &authn.Basic{Username: "foo", Password: "bar"},
+			transport: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			v := &NotationVerifier{
+				auth:     tc.auth,
+				keychain: tc.keychain,
+			}
+			if tc.transport {
+				v.transport = http.DefaultTransport.(*http.Transport).Clone()
+			}
+
+			repo, err := v.remoteRepo("ghcr.io/stefanprodan/charts/podinfo")
+			g.Expect(err).NotTo(HaveOccurred())
+
+			client, ok := repo.Client.(*oauth.Client)
+			g.Expect(ok).To(BeTrue(), "expected repository client to be *oauth.Client")
+
+			// The auth cache must be set so that the manifest resolution,
+			// signature listing and signature blob fetches performed during a
+			// single verification reuse the same registry token instead of
+			// re-authenticating on every request.
+			g.Expect(client.Cache).NotTo(BeNil())
+		})
+	}
+}
+
+// TestRemoteRepoAuthTokenReuse exercises the registry authorization flow against
+// a fake bearer-auth registry and counts how many times the token endpoint is
+// hit. It demonstrates the effect of the auth cache fix: without a cache every
+// registry request performs its own token exchange (modelling the pre-fix
+// behaviour), whereas the client built by remoteRepo fetches the token once and
+// reuses it for all subsequent requests of the same scope.
+func TestRemoteRepoAuthTokenReuse(t *testing.T) {
+	g := NewWithT(t)
+
+	const (
+		repository  = "test/podinfo"
+		bearerToken = "secret-token"
+		numRequests = 5
+	)
+	scope := oauth.ScopeRepository(repository, "pull")
+
+	var tokenRequests atomic.Int32
+
+	var baseURL string
+	mux := http.NewServeMux()
+	// Token endpoint: counts every issuance and returns a static token.
+	mux.HandleFunc("/token", func(w http.ResponseWriter, r *http.Request) {
+		tokenRequests.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"token":        bearerToken,
+			"access_token": bearerToken,
+			"expires_in":   3600,
+		})
+	})
+	// Registry endpoint: challenges unauthenticated requests with a bearer
+	// challenge pointing at the token endpoint, and accepts the issued token.
+	mux.HandleFunc("/v2/", func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer "+bearerToken {
+			w.Header().Set("Www-Authenticate",
+				fmt.Sprintf(`Bearer realm="%s/token",service="registry",scope=%q`, baseURL, scope))
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	})
+
+	server := httptest.NewServer(mux)
+	defer server.Close()
+	baseURL = server.URL
+	host := strings.TrimPrefix(baseURL, "http://")
+
+	anonymousCredential := func(context.Context, string) (oauth.Credential, error) {
+		return oauth.EmptyCredential, nil
+	}
+
+	// doRequests issues n authenticated GET requests through the given client,
+	// setting the scope hint on the context exactly like the ORAS repository
+	// methods do during verification.
+	doRequests := func(client *oauth.Client, n int) {
+		for i := 0; i < n; i++ {
+			ctx := oauth.WithScopesForHost(context.Background(), host, scope)
+			req, err := http.NewRequestWithContext(ctx, http.MethodGet,
+				fmt.Sprintf("%s/v2/%s/manifests/latest", baseURL, repository), nil)
+			g.Expect(err).NotTo(HaveOccurred())
+			resp, err := client.Do(req)
+			g.Expect(err).NotTo(HaveOccurred())
+			resp.Body.Close()
+			g.Expect(resp.StatusCode).To(Equal(http.StatusOK))
+		}
+	}
+
+	// Before the fix: an ORAS client without a cache re-authenticates on every
+	// request, so the token endpoint is hit once per request.
+	tokenRequests.Store(0)
+	noCacheClient := &oauth.Client{
+		Client:     server.Client(),
+		Header:     http.Header{"User-Agent": {"flux"}},
+		Credential: anonymousCredential,
+		// Cache is deliberately unset to model the pre-fix behaviour.
+	}
+	doRequests(noCacheClient, numRequests)
+	g.Expect(tokenRequests.Load()).To(Equal(int32(numRequests)),
+		"without an auth cache each request performs its own token exchange")
+
+	// After the fix: remoteRepo wires an auth cache, so the token is fetched
+	// once and reused for all subsequent requests of the same scope.
+	tokenRequests.Store(0)
+	v := &NotationVerifier{insecure: true}
+	repo, err := v.remoteRepo(fmt.Sprintf("%s/%s", host, repository))
+	g.Expect(err).NotTo(HaveOccurred())
+	cachedClient, ok := repo.Client.(*oauth.Client)
+	g.Expect(ok).To(BeTrue(), "expected repository client to be *oauth.Client")
+	g.Expect(cachedClient.Cache).NotTo(BeNil())
+	// Route the cached client through the test server's HTTP client.
+	cachedClient.Client = server.Client()
+	doRequests(cachedClient, numRequests)
+	g.Expect(tokenRequests.Load()).To(Equal(int32(1)),
+		"with an auth cache the token is fetched once and reused across requests")
 }
 
 func TestVerificationWithProxy(t *testing.T) {
