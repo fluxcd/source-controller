@@ -235,7 +235,3 @@ type HelmChartList struct {
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []HelmChart `json:"items"`
 }
-
-func init() {
-	SchemeBuilder.Register(&HelmChart{}, &HelmChartList{})
-}

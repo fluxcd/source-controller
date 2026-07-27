@@ -93,7 +93,3 @@ type ExternalArtifactList struct {
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []ExternalArtifact `json:"items"`
 }
-
-func init() {
-	SchemeBuilder.Register(&ExternalArtifact{}, &ExternalArtifactList{})
-}
