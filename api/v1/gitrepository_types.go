@@ -384,7 +384,3 @@ type GitRepositoryList struct {
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []GitRepository `json:"items"`
 }
-
-func init() {
-	SchemeBuilder.Register(&GitRepository{}, &GitRepositoryList{})
-}

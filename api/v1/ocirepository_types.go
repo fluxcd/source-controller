@@ -291,7 +291,3 @@ type OCIRepositoryList struct {
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []OCIRepository `json:"items"`
 }
-
-func init() {
-	SchemeBuilder.Register(&OCIRepository{}, &OCIRepositoryList{})
-}
