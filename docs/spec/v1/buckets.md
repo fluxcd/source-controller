@@ -750,6 +750,13 @@ Where the (base64 decoded) value of `.data.serviceaccount` looks like this:
 }
 ```
 
+Only service account keys are accepted, i.e. the `type` field must be set to
+`service_account`. Other Google credential configurations, such as
+`external_account` (workload identity federation), are rejected. To authenticate
+without a static key, use Workload Identity as shown in the
+[GCP Controller-Level](#gcp-controller-level-workload-identity-example) and
+[GCP Object-Level](#gcp-object-level-workload-identity-example) examples.
+
 ### Interval
 
 `.spec.interval` is a required field that specifies the interval which the
