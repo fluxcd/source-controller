@@ -38,13 +38,18 @@ type mockBucketObject struct {
 }
 
 type mockBucketClient struct {
-	bucketName string
-	objects    map[string]mockBucketObject
+	bucketName      string
+	objects         map[string]mockBucketObject
+	bucketExistsErr error
+	visitErr        error
 }
 
 var errMockNotFound = fmt.Errorf("not found")
 
 func (m mockBucketClient) BucketExists(_ context.Context, name string) (bool, error) {
+	if m.bucketExistsErr != nil {
+		return false, m.bucketExistsErr
+	}
 	return name == m.bucketName, nil
 }
 
@@ -71,6 +76,9 @@ func (m mockBucketClient) ObjectIsNotFound(e error) bool {
 }
 
 func (m mockBucketClient) VisitObjects(_ context.Context, _ string, _ string, f func(key, etag string) error) error {
+	if m.visitErr != nil {
+		return m.visitErr
+	}
 	for key, obj := range m.objects {
 		if err := f(key, obj.etag); err != nil {
 			return err
@@ -134,6 +142,38 @@ func Test_fetchEtagIndex(t *testing.T) {
 		g := NewWithT(t)
 		g.Expect(err).To(HaveOccurred())
 		g.Expect(err.Error()).To(ContainSubstring("not found"))
+	})
+
+	t.Run("sanitizes bucket existence error", func(t *testing.T) {
+		g := NewWithT(t)
+		tmp := t.TempDir()
+
+		client := mockBucketClient{
+			bucketName:      bucketName,
+			bucketExistsErr: fmt.Errorf(`Get "https://account.blob.core.windows.net/container?comp=list&sv=2022-11-02&sig=credential": dial tcp: connection refused`),
+		}
+
+		index := index.NewDigester()
+		err := fetchEtagIndex(context.TODO(), client, bucket.DeepCopy(), index, tmp)
+		g.Expect(err).To(HaveOccurred())
+		g.Expect(err.Error()).To(ContainSubstring("https://account.blob.core.windows.net/container"))
+		g.Expect(err.Error()).ToNot(ContainSubstring("sig="))
+	})
+
+	t.Run("sanitizes object listing error", func(t *testing.T) {
+		g := NewWithT(t)
+		tmp := t.TempDir()
+
+		client := mockBucketClient{
+			bucketName: bucketName,
+			visitErr:   fmt.Errorf(`Get "https://account.blob.core.windows.net/container?comp=list&sv=2022-11-02&sig=credential": read: connection reset by peer`),
+		}
+
+		index := index.NewDigester()
+		err := fetchEtagIndex(context.TODO(), client, bucket.DeepCopy(), index, tmp)
+		g.Expect(err).To(HaveOccurred())
+		g.Expect(err.Error()).To(ContainSubstring("https://account.blob.core.windows.net/container"))
+		g.Expect(err.Error()).ToNot(ContainSubstring("sig="))
 	})
 
 	t.Run("filters with .sourceignore rules", func(t *testing.T) {
