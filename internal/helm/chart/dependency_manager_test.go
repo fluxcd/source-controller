@@ -281,6 +281,20 @@ func TestDependencyManager_build(t *testing.T) {
 	}
 }
 
+func TestDependencyManager_build_PanicRecovery(t *testing.T) {
+	g := NewWithT(t)
+
+	dm := NewDependencyManager(WithDownloaderCallback(func(url string) (repository.Downloader, error) {
+		panic("downloader callback error")
+	}))
+	err := dm.build(context.TODO(), LocalReference{}, &helmchart.Chart{}, map[string]*helmchart.Dependency{
+		"example": {Repository: "https://example.com"},
+	})
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(err.Error()).To(ContainSubstring("failed to add dependency 'example'"))
+	g.Expect(err.Error()).To(ContainSubstring("downloader callback error"))
+}
+
 func TestDependencyManager_addLocalDependency(t *testing.T) {
 	tests := []struct {
 		name      string
