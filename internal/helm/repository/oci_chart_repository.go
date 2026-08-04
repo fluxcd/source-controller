@@ -33,6 +33,7 @@ import (
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/google/go-containerregistry/pkg/name"
+	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 
 	"github.com/fluxcd/pkg/http/transport"
 	"github.com/fluxcd/pkg/version"
@@ -45,6 +46,7 @@ import (
 // from OCI registries
 type RegistryClient interface {
 	Tags(url string) ([]string, error)
+	Resolve(ref string) (ocispec.Descriptor, error)
 }
 
 // OCIChartRepository represents a Helm chart repository, and the configuration
@@ -312,11 +314,23 @@ func (r *OCIChartRepository) VerifyChart(ctx context.Context, chart *repo.ChartV
 		return oci.VerificationResultFailed, fmt.Errorf("invalid chart reference: %s", err)
 	}
 
+	// Resolve the reference to a digest and pin the chart URL to it,
+	// so verification and download refer to the same content.
+	desc, err := r.RegistryClient.Resolve(ref.String())
+	if err != nil {
+		return oci.VerificationResultFailed, fmt.Errorf("failed to resolve digest for '%s': %w", chart.URLs[0], err)
+	}
+	if err := desc.Digest.Validate(); err != nil {
+		return oci.VerificationResultFailed, fmt.Errorf("invalid digest resolved for '%s': %w", chart.URLs[0], err)
+	}
+	digestRef := ref.Context().Digest(desc.Digest.String())
+	chart.URLs[0] = fmt.Sprintf("%s://%s", registry.OCIScheme, digestRef.String())
+
 	verificationResult := oci.VerificationResultFailed
 
 	// verify the chart
 	for _, verifier := range r.verifiers {
-		result, err := verifier.Verify(ctx, ref)
+		result, err := verifier.Verify(ctx, digestRef)
 		if err != nil {
 			return result, fmt.Errorf("failed to verify %s: %w", chart.URLs[0], err)
 		}
@@ -330,5 +344,5 @@ func (r *OCIChartRepository) VerifyChart(ctx context.Context, chart *repo.ChartV
 		return verificationResult, nil
 	}
 
-	return oci.VerificationResultFailed, fmt.Errorf("no matching signatures were found for '%s'", ref.Name())
+	return oci.VerificationResultFailed, fmt.Errorf("no matching signatures were found for '%s'", digestRef.Name())
 }
