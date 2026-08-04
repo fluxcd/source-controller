@@ -1336,6 +1336,9 @@ func (r *OCIRepositoryReconciler) notify(ctx context.Context, oldObj, newObj *so
 			if val, ok := info[oci.RevisionAnnotation]; ok {
 				revision = val
 			}
+			if revision != "" {
+				annotations[fmt.Sprintf("%s/%s", sourcev1.GroupVersion.Group, eventv1.MetaOriginRevisionKey)] = revision
+			}
 			if source != "" && revision != "" {
 				message = fmt.Sprintf("%s, origin source '%s', origin revision '%s'", message, source, revision)
 			}
