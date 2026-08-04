@@ -686,7 +686,7 @@ func fetchEtagIndex(ctx context.Context, provider BucketProvider, obj *sourcev1.
 	// Confirm bucket exists
 	exists, err := provider.BucketExists(ctxTimeout, obj.Spec.BucketName)
 	if err != nil {
-		return fmt.Errorf("failed to confirm existence of '%s' bucket: %w", obj.Spec.BucketName, err)
+		return fmt.Errorf("failed to confirm existence of '%s' bucket: %w", obj.Spec.BucketName, serror.SanitizeError(err))
 	}
 	if !exists {
 		err = fmt.Errorf("bucket '%s' not found", obj.Spec.BucketName)
@@ -724,7 +724,7 @@ func fetchEtagIndex(ctx context.Context, provider BucketProvider, obj *sourcev1.
 		return nil
 	})
 	if err != nil {
-		return fmt.Errorf("indexation of objects from bucket '%s' failed: %w", obj.Spec.BucketName, err)
+		return fmt.Errorf("indexation of objects from bucket '%s' failed: %w", obj.Spec.BucketName, serror.SanitizeError(err))
 	}
 	return nil
 }
@@ -751,7 +751,12 @@ func fetchIndexFiles(ctx context.Context, provider BucketProvider, obj *sourcev1
 			if err := sem.Acquire(groupCtx, 1); err != nil {
 				return err
 			}
-			group.Go(func() error {
+			group.Go(func() (err error) {
+				defer func() {
+					if r := recover(); r != nil {
+						err = fmt.Errorf("failed to get '%s' object: %v", k, r)
+					}
+				}()
 				defer sem.Release(1)
 				localPath, err := securejoin.SecureJoin(tempDir, k)
 				if err != nil {
