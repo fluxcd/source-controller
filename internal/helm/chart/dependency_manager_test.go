@@ -28,6 +28,8 @@ import (
 	"testing"
 
 	. "github.com/onsi/gomega"
+	"github.com/opencontainers/go-digest"
+	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	helmchart "helm.sh/helm/v4/pkg/chart/v2"
 	helmgetter "helm.sh/helm/v4/pkg/getter"
 	"helm.sh/helm/v4/pkg/registry"
@@ -39,6 +41,10 @@ import (
 
 type mockTagsGetter struct {
 	tags map[string][]string
+}
+
+func (m *mockTagsGetter) Resolve(ref string) (ocispec.Descriptor, error) {
+	return ocispec.Descriptor{Digest: digest.FromString(ref)}, nil
 }
 
 func (m *mockTagsGetter) Tags(requestURL string) ([]string, error) {
