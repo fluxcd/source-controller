@@ -2908,7 +2908,8 @@ func TestHelmChartRepository_reconcileSource_verifyOCISourceSignature_keyless(t 
 					},
 				},
 			}
-			chartUrl := fmt.Sprintf("%s/%s:%s", repository.Spec.URL, obj.Spec.Chart, obj.Spec.Version)
+			chartDigest := tt.revision[strings.Index(tt.revision, "@")+1:]
+			chartUrl := fmt.Sprintf("%s/%s@%s", repository.Spec.URL, obj.Spec.Chart, chartDigest)
 
 			assertConditions := tt.assertConditions
 			for k := range assertConditions {
@@ -3210,7 +3211,9 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_verifySignatureNotation(t *t
 				},
 			}
 
-			chartUrl := fmt.Sprintf("oci://%s/testrepo/%s:%s", server.registryHost, metadata.Name, metadata.Version)
+			chartDesc, err := server.registryClient.Resolve(fmt.Sprintf("%s/testrepo/%s:%s", server.registryHost, metadata.Name, metadata.Version))
+			g.Expect(err).ToNot(HaveOccurred())
+			chartUrl := fmt.Sprintf("oci://%s/testrepo/%s@%s", server.registryHost, metadata.Name, chartDesc.Digest)
 
 			if tt.beforeFunc != nil {
 				tt.beforeFunc(obj)
@@ -3462,7 +3465,9 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_verifySignatureCosign(t *tes
 				},
 			}
 
-			chartUrl := fmt.Sprintf("oci://%s/testrepo/%s:%s", server.registryHost, metadata.Name, metadata.Version)
+			chartDesc, err := server.registryClient.Resolve(fmt.Sprintf("%s/testrepo/%s:%s", server.registryHost, metadata.Name, metadata.Version))
+			g.Expect(err).ToNot(HaveOccurred())
+			chartUrl := fmt.Sprintf("oci://%s/testrepo/%s@%s", server.registryHost, metadata.Name, chartDesc.Digest)
 
 			if tt.beforeFunc != nil {
 				tt.beforeFunc(obj)

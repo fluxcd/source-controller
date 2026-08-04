@@ -28,6 +28,8 @@ import (
 	"testing"
 
 	. "github.com/onsi/gomega"
+	"github.com/opencontainers/go-digest"
+	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"helm.sh/helm/v4/pkg/chart/common"
 	helmchart "helm.sh/helm/v4/pkg/chart/v2"
 	chartutil "helm.sh/helm/v4/pkg/chart/v2/util"
@@ -49,6 +51,11 @@ func (m *mockRegistryClient) Tags(url string) ([]string, error) {
 		return tags, nil
 	}
 	return nil, fmt.Errorf("no tags found for %s", url)
+}
+
+func (m *mockRegistryClient) Resolve(ref string) (ocispec.Descriptor, error) {
+	m.requestedURL = ref
+	return ocispec.Descriptor{Digest: digest.FromString(ref)}, nil
 }
 
 func (m *mockRegistryClient) Login(url string, opts ...registry.LoginOption) error {
