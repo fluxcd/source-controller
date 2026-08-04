@@ -828,6 +828,22 @@ entries:
       home: https://github.com/something/else
       digest: "sha256:1234567890abcdef"
 `
+var indexWithEmptyEntries = `
+apiVersion: v1
+entries:
+  nginx:
+    - null
+    - urls:
+        - https://charts.helm.sh/stable/nginx-0.2.0.tgz
+      name: nginx
+      description: string
+      version: 0.2.0
+      home: https://github.com/something/else
+      digest: "sha256:1234567890abcdef"
+    - null
+  alpine:
+    - null
+`
 var indexWithLastVersionInvalid = `
 apiVersion: v1
 entries:
@@ -862,6 +878,10 @@ func TestIndexFromBytes_InvalidEntries(t *testing.T) {
 			source: "indexWithLastVersionInvalid",
 			data:   indexWithLastVersionInvalid,
 		},
+		{
+			source: "indexWithEmptyEntries",
+			data:   indexWithEmptyEntries,
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.source, func(t *testing.T) {
@@ -874,6 +894,10 @@ func TestIndexFromBytes_InvalidEntries(t *testing.T) {
 				t.Error("expected one chart version not to be filtered out")
 			}
 			for _, v := range cvs {
+				if v == nil {
+					t.Error("empty entry was not filtered out")
+					continue
+				}
 				if v.Version == "0..1.0" {
 					t.Error("malformed version was not filtered out")
 				}
