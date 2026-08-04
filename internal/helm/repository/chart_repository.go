@@ -90,6 +90,7 @@ func IndexFromBytes(b []byte) (*repo.IndexFile, error) {
 	for name, cvs := range i.Entries {
 		for idx := len(cvs) - 1; idx >= 0; idx-- {
 			if cvs[idx] == nil {
+				cvs = append(cvs[:idx], cvs[idx+1:]...)
 				continue
 			}
 			// When metadata section missing, initialize with no data

@@ -153,11 +153,15 @@ func (dm *DependencyManager) build(ctx context.Context, ref Reference, c *helmch
 		sem := semaphore.NewWeighted(current)
 		c := &chartWithLock{Chart: c}
 		for name, dep := range deps {
-			name, dep := name, dep
 			if err := sem.Acquire(groupCtx, 1); err != nil {
 				return err
 			}
 			group.Go(func() (err error) {
+				defer func() {
+					if r := recover(); r != nil {
+						err = fmt.Errorf("failed to add dependency '%s': %v", name, r)
+					}
+				}()
 				defer sem.Release(1)
 				if isLocalDep(dep) {
 					localRef, ok := ref.(LocalReference)
