@@ -977,6 +977,30 @@ func TestBucketReconciler_reconcileSource_generic(t *testing.T) {
 	}
 }
 
+// gcsServiceAccountKey is a dummy GCP service account key. The private key is
+// not a valid PEM block, so it can only be used against the mock GCS server.
+const gcsServiceAccountKey = `{
+  "type": "service_account",
+  "project_id": "dummy",
+  "private_key_id": "dummy",
+  "private_key": "-----BEGIN PRIVATE KEY-----\ndummy\n-----END PRIVATE KEY-----\n",
+  "client_email": "dummy@dummy.iam.gserviceaccount.com",
+  "client_id": "1",
+  "token_uri": "https://oauth2.googleapis.com/token"
+}`
+
+// gcsExternalAccountConfig is a workload identity federation configuration,
+// which is not a supported value for the 'serviceaccount' secret field.
+const gcsExternalAccountConfig = `{
+  "type": "external_account",
+  "audience": "//iam.googleapis.com/projects/1/locations/global/workloadIdentityPools/p/providers/v",
+  "subject_token_type": "urn:ietf:params:oauth:token-type:jwt",
+  "token_url": "https://sts.googleapis.com/v1/token",
+  "credential_source": {
+    "file": "/var/run/service-account/token"
+  }
+}`
+
 func TestBucketReconciler_reconcileSource_gcs(t *testing.T) {
 	tests := []struct {
 		name                               string
@@ -1009,7 +1033,7 @@ func TestBucketReconciler_reconcileSource_gcs(t *testing.T) {
 				Data: map[string][]byte{
 					"accesskey":      []byte("key"),
 					"secretkey":      []byte("secret"),
-					"serviceaccount": []byte("testsa"),
+					"serviceaccount": []byte(gcsServiceAccountKey),
 				},
 			},
 			beforeFunc: func(obj *sourcev1.Bucket) {
@@ -1065,6 +1089,34 @@ func TestBucketReconciler_reconcileSource_gcs(t *testing.T) {
 			assertIndex: index.NewDigester(),
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "invalid 'dummy' secret data: required fields"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "foo"),
+				*conditions.UnknownCondition(meta.ReadyCondition, "foo", "bar"),
+			},
+		},
+		{
+			name:       "Observes unsupported credential type in secretRef",
+			bucketName: "dummy",
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "dummy",
+				},
+				Data: map[string][]byte{
+					"serviceaccount": []byte(gcsExternalAccountConfig),
+				},
+			},
+			beforeFunc: func(obj *sourcev1.Bucket) {
+				obj.Spec.SecretRef = &meta.LocalObjectReference{
+					Name: "dummy",
+				}
+				conditions.MarkReconciling(obj, meta.ProgressingReason, "foo")
+				conditions.MarkUnknown(obj, meta.ReadyCondition, "foo", "bar")
+			},
+			want:        sreconcile.ResultEmpty,
+			wantErr:     true,
+			assertIndex: index.NewDigester(),
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason,
+					"invalid 'dummy' secret data: 'serviceaccount' must contain a service account key with 'type' set to 'service_account'"),
 				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "foo"),
 				*conditions.UnknownCondition(meta.ReadyCondition, "foo", "bar"),
 			},

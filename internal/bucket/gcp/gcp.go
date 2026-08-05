@@ -18,6 +18,7 @@ package gcp
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -26,9 +27,9 @@ import (
 	"os"
 	"path/filepath"
 
+	"cloud.google.com/go/auth/credentials"
 	gcpstorage "cloud.google.com/go/storage"
 	"github.com/go-logr/logr"
-	"golang.org/x/oauth2/google"
 	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
 	htransport "google.golang.org/api/transport/http"
@@ -112,7 +113,20 @@ func NewClient(ctx context.Context, bucket *sourcev1.Bucket, opts ...Option) (*G
 
 	switch {
 	case o.secret != nil && o.proxyURL == nil:
-		clientOpts = append(clientOpts, option.WithCredentialsJSON(o.secret.Data["serviceaccount"]))
+		if os.Getenv("STORAGE_EMULATOR_HOST") != "" {
+			// The storage client runs unauthenticated when the emulator host is
+			// set and rejects credential options passed alongside it. Validate
+			// the secret, but let the client run unauthenticated.
+			if err := ValidateSecret(o.secret); err != nil {
+				return nil, err
+			}
+		} else {
+			credsOpt, err := staticCredentialsOption(o.secret)
+			if err != nil {
+				return nil, err
+			}
+			clientOpts = append(clientOpts, credsOpt)
+		}
 	case o.secret == nil && o.proxyURL == nil:
 		tokenSource := gcpauth.NewTokenSource(ctx, o.authOpts...)
 		clientOpts = append(clientOpts, option.WithTokenSource(tokenSource))
@@ -142,15 +156,11 @@ func newHTTPClient(ctx context.Context, o *options) (*http.Client, error) {
 	var opts []option.ClientOption
 
 	if o.secret != nil {
-		// Here we can't use option.WithCredentialsJSON() because htransport.NewTransport()
-		// won't know what scopes to use and yield a 400 Bad Request error when retrieving
-		// the OAuth token. Instead we use google.CredentialsFromJSON(), which allows us to
-		// specify the GCS read-only scope.
-		creds, err := google.CredentialsFromJSON(ctx, o.secret.Data["serviceaccount"], gcpstorage.ScopeReadOnly)
+		credsOpt, err := staticCredentialsOption(o.secret)
 		if err != nil {
-			return nil, fmt.Errorf("failed to create Google credentials from secret: %w", err)
+			return nil, err
 		}
-		opts = append(opts, option.WithCredentials(creds))
+		opts = append(opts, credsOpt)
 	} else { // Workload Identity.
 		tokenSource := gcpauth.NewTokenSource(ctx, o.authOpts...)
 		opts = append(opts, option.WithTokenSource(tokenSource))
@@ -163,16 +173,53 @@ func newHTTPClient(ctx context.Context, o *options) (*http.Client, error) {
 	return &http.Client{Transport: transport}, nil
 }
 
+// staticCredentialsOption returns a client option holding type-checked Google
+// credentials built from the service account key in the given Secret,
+// restricted to the GCS read-only scope.
+func staticCredentialsOption(secret *corev1.Secret) (option.ClientOption, error) {
+	key, err := serviceAccountKey(secret)
+	if err != nil {
+		return nil, err
+	}
+	creds, err := credentials.NewCredentialsFromJSON(credentials.ServiceAccount, key, &credentials.DetectOptions{
+		Scopes: []string{gcpstorage.ScopeReadOnly},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create Google credentials from secret: %w", err)
+	}
+	return option.WithAuthCredentials(creds), nil
+}
+
+// serviceAccountKey returns the service account key held in the 'serviceaccount'
+// field of the given Secret. Only Google service account keys are supported;
+// any other credential configuration type is rejected.
+func serviceAccountKey(secret *corev1.Secret) ([]byte, error) {
+	key, exists := secret.Data["serviceaccount"]
+	if !exists {
+		return nil, fmt.Errorf("invalid '%s' secret data: required fields 'serviceaccount'", secret.Name)
+	}
+	var creds struct {
+		Type string `json:"type"`
+	}
+	// The parser error is not wrapped, as it may quote the malformed input.
+	if err := json.Unmarshal(key, &creds); err != nil {
+		return nil, fmt.Errorf("invalid '%s' secret data: failed to parse 'serviceaccount' as JSON", secret.Name)
+	}
+	if creds.Type != string(credentials.ServiceAccount) {
+		return nil, fmt.Errorf("invalid '%s' secret data: 'serviceaccount' must contain a service account key with 'type' set to '%s'",
+			secret.Name, credentials.ServiceAccount)
+	}
+	return key, nil
+}
+
 // ValidateSecret validates the credential secret. The provided Secret may
 // be nil.
 func ValidateSecret(secret *corev1.Secret) error {
 	if secret == nil {
 		return nil
 	}
-	if _, exists := secret.Data["serviceaccount"]; !exists {
-		return fmt.Errorf("invalid '%s' secret data: required fields 'serviceaccount'", secret.Name)
-	}
-	return nil
+	_, err := serviceAccountKey(secret)
+	return err
 }
 
 // BucketExists returns if an object storage bucket with the provided name
