@@ -25,15 +25,15 @@ require (
 	github.com/fluxcd/cli-utils v1.2.2
 	github.com/fluxcd/pkg/apis/event v0.27.1
 	github.com/fluxcd/pkg/apis/meta v1.30.1
-	github.com/fluxcd/pkg/artifact v0.18.1
-	github.com/fluxcd/pkg/auth v0.54.1
+	github.com/fluxcd/pkg/artifact v0.18.2
+	github.com/fluxcd/pkg/auth v0.54.2
 	github.com/fluxcd/pkg/cache v0.14.0
 	github.com/fluxcd/pkg/git v0.52.0
 	github.com/fluxcd/pkg/gittestserver v0.29.0
 	github.com/fluxcd/pkg/helmtestserver v0.40.1
 	github.com/fluxcd/pkg/http/transport v0.8.0
 	github.com/fluxcd/pkg/masktoken v0.9.0
-	github.com/fluxcd/pkg/oci v0.68.0
+	github.com/fluxcd/pkg/oci v0.68.1
 	github.com/fluxcd/pkg/runtime v0.110.1
 	github.com/fluxcd/pkg/sourceignore v0.18.0
 	github.com/fluxcd/pkg/ssh v0.25.0
