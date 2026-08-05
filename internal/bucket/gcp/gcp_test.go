@@ -66,7 +66,7 @@ var (
 			Namespace: "default",
 		},
 		Data: map[string][]byte{
-			"serviceaccount": []byte("ewogICAgInR5cGUiOiAic2VydmljZV9hY2NvdW50IiwKICAgICJwcm9qZWN0X2lkIjogInBvZGluZm8iLAogICAgInByaXZhdGVfa2V5X2lkIjogIjI4cXdnaDNnZGY1aGozZ2I1ZmozZ3N1NXlmZ2gzNGY0NTMyNDU2OGh5MiIsCiAgICAicHJpdmF0ZV9rZXkiOiAiLS0tLS1CRUdJTiBQUklWQVRFIEtFWS0tLS0tXG5Id2V0aGd5MTIzaHVnZ2hoaGJkY3U2MzU2ZGd5amhzdmd2R0ZESFlnY2RqYnZjZGhic3g2M2Ncbjc2dGd5Y2ZlaHVoVkdURllmdzZ0N3lkZ3lWZ3lkaGV5aHVnZ3ljdWhland5NnQzNWZ0aHl1aGVndmNldGZcblRGVUhHVHlnZ2h1Ymh4ZTY1eWd0NnRneWVkZ3kzMjZodWN5dnN1aGJoY3Zjc2poY3NqaGNzdmdkdEhGQ0dpXG5IY3llNnR5eWczZ2Z5dWhjaGNzYmh5Z2NpamRiaHl5VEY2NnR1aGNldnVoZGNiaHVoaHZmdGN1aGJoM3VoN3Q2eVxuZ2d2ZnRVSGJoNnQ1cmZ0aGh1R1ZSdGZqaGJmY3JkNXI2N3l1aHV2Z0ZUWWpndnRmeWdoYmZjZHJoeWpoYmZjdGZkZnlodmZnXG50Z3ZnZ3RmeWdodmZ0NnR1Z3ZURjVyNjZ0dWpoZ3ZmcnR5aGhnZmN0Nnk3eXRmcjVjdHZnaGJoaHZ0Z2hoanZjdHRmeWNmXG5mZnhmZ2hqYnZnY2d5dDY3dWpiZ3ZjdGZ5aFZDN3VodmdjeWp2aGhqdnl1amNcbmNnZ2hndmdjZmhnZzc2NTQ1NHRjZnRoaGdmdHloaHZ2eXZ2ZmZnZnJ5eXU3N3JlcmVkc3dmdGhoZ2ZjZnR5Y2ZkcnR0ZmhmL1xuLS0tLS1FTkQgUFJJVkFURSBLRVktLS0tLVxuIiwKICAgICJjbGllbnRfZW1haWwiOiAidGVzdEBwb2RpbmZvLmlhbS5nc2VydmljZWFjY291bnQuY29tIiwKICAgICJjbGllbnRfaWQiOiAiMzI2NTc2MzQ2Nzg3NjI1MzY3NDYiLAogICAgImF1dGhfdXJpIjogImh0dHBzOi8vYWNjb3VudHMuZ29vZ2xlLmNvbS9vL29hdXRoMi9hdXRoIiwKICAgICJ0b2tlbl91cmkiOiAiaHR0cHM6Ly9vYXV0aDIuZ29vZ2xlYXBpcy5jb20vdG9rZW4iLAogICAgImF1dGhfcHJvdmlkZXJfeDUwOV9jZXJ0X3VybCI6ICJodHRwczovL3d3dy5nb29nbGVhcGlzLmNvbS9vYXV0aDIvdjEvY2VydHMiLAogICAgImNsaWVudF94NTA5X2NlcnRfdXJsIjogImh0dHBzOi8vd3d3Lmdvb2dsZWFwaXMuY29tL3JvYm90L3YxL21ldGFkYXRhL3g1MDkvdGVzdCU0MHBvZGluZm8uaWFtLmdzZXJ2aWNlYWNjb3VudC5jb20iCn0="),
+			"serviceaccount": []byte(serviceAccountJSON),
 		},
 		Type: "Opaque",
 	}
@@ -80,7 +80,56 @@ var (
 		},
 		Type: "Opaque",
 	}
+	malformedSecret = corev1.Secret{
+		ObjectMeta: v1.ObjectMeta{
+			Name:      "gcp-secret",
+			Namespace: "default",
+		},
+		Data: map[string][]byte{
+			"serviceaccount": []byte("not-json"),
+		},
+		Type: "Opaque",
+	}
+	externalAccountSecret = corev1.Secret{
+		ObjectMeta: v1.ObjectMeta{
+			Name:      "gcp-secret",
+			Namespace: "default",
+		},
+		Data: map[string][]byte{
+			"serviceaccount": []byte(externalAccountJSON),
+		},
+		Type: "Opaque",
+	}
 )
+
+// serviceAccountJSON is a dummy GCP service account key. The private key is a
+// throwaway RSA key generated for this test only; it does not belong to any
+// real service account and cannot be used to retrieve tokens, only to
+// exercise credential construction.
+const serviceAccountJSON = `{
+    "type": "service_account",
+    "project_id": "podinfo",
+    "private_key_id": "28qwgh3gdf5hj3gb5fj3gsu5yfgh34f45324568hy2",
+    "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKYwggSiAgEAAoIBAQC02OoAWFKPVfE2\nTVYmdQKb8WRZo8ciQomAYb7WluGqa6avPu/9z7+q4K7hZtN/9Q2t0EvvBuKXTL8+\nV+AUV2N+oi4nY7T2yq3Ebc66R/c21o9sNvYJog6S8HWtOOd0tvotrvrjFQnfcCX5\nzC48HC9PgUjHAeR8kacYlpKbaEobRI1i9AfN5deuS5tsI0Di8Ag6lGf7G+0gHUpM\nLmUttJCleOltOl1Xwb57/zZCgGwB5VdkaBtkq6KW0xxwhOqF1RiFuGOUf+vRNjfj\nLPx58XSTL0TNtYa3M8koBLMaVznY5du6Pqpq1VBSUo3Yw0Z8DwxErZBICkvwbEsQ\njmQNpK+5AgMBAAECgf8l/OqQ5/yi3z3fI9LU55jrHBzx0QiJycnYWq/ocG+dIyYz\ngz6MsiowwSf7CpgJNaojhX2hCz4A474uxyBRJYotlfB1lbXA1KvSEL7Vom64T8zd\njmEtGApRRosLHmKAKDw+tfxwqhqvNLLFcuTDYg6nqyCYE22x1pnWMGR1AJMqGgFr\nSjfTl2wtSQzT705Cd3oNoItqPdYh4Ky6dxImfiHcj237mFXWy9e5x6l0N7ShJzqS\nH3t8s5wnxjt9jAK7NBqCFSxvYyKSO7MTLBlOLUdM8KuzjsYgKw0e2j+D4LhXKc/N\n1nXY2hUgq4NAOnYoK4HUAkOcN34wLjxTvp6wlwECgYEA7pkh0/QPrGVZ9bjAExq6\nCY9Z+gejUDOHWl4aWQeZA36g3FvlPgHTFTB7hMbmABbVEjCbLrnSFe9aMQsYm0O2\n/4MAUAqXX9bV134YK3kbtYH2qXX/60oGjACcbx0CIzOAO8prF7h0MKol065POaK8\nLGupztnn1fP/cH3GXF/cVLkCgYEAwgmD874uAYrXGPZ25PjH+J+L2IGj7WIa173O\ni+WJe/5Lp/A/fp9zr/ln5x2t5Pg7btysayGz1e8TGfrEBJ8ADzIm9z9ale9XHRz5\nVIBqO+bh3PW+iBs2ocZkfMtXigDCkIBP/lutvzvcFN/fsvGw1DF8PCmN6no6/gC5\nwzNjswECgYEAmbzp4xx7jOWxVXc5rBWokchgfY62WFMbf8rqxzryCSJqnBJKX+3l\nCN44eJGAWcZcfF/9Xdo12BRl1PwFWuYC4BiU9v4cE5DmMPf6suhSRl37ha2WvRDx\nrvwl0CKs4empUt1Wq+4aT9ESlpbWTZjiDu1AeRxHGcEicmVYjuTln2ECgYEAkciC\naiQN/ryoxSmPxJKh88szT7R/TD/0OPlzcKpBdHZns0KPAfyc967kAMHMwAY86RtF\nM6x7qBVafZ9pnKs1aTVeD097KMFM6yO0tGdS6bSbJ98+ipYfosYjA5vnJllR1S2C\nbHHHBbHctZZKRPDP0W1okO8LoAq7vdEfwGgg1QECgYBBuHECqDcz+buKSZRAQqRm\ngqt4hdcu+qRMqleZY4WPNHAZoPna9hU+7EFM+D1qsB6iZxzsUXzKF9gmJfB+Zvcn\nmLQq0YXDeXBt2KWeQSyQLM2bBW0J3aFIpilaP3VRcXUPEF7FstT0DC+SkydbANIf\n5IiZW7E1qU/WBIWMkD4WuA==\n-----END PRIVATE KEY-----\n",
+    "client_email": "test@podinfo.iam.gserviceaccount.com",
+    "client_id": "32657634678762536746",
+    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+    "token_uri": "https://oauth2.googleapis.com/token",
+    "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+    "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/test%40podinfo.iam.gserviceaccount.com"
+}`
+
+// externalAccountJSON is a workload identity federation configuration, which
+// is not a supported credential type for the 'serviceaccount' secret field.
+const externalAccountJSON = `{
+    "type": "external_account",
+    "audience": "//iam.googleapis.com/projects/1/locations/global/workloadIdentityPools/p/providers/v",
+    "subject_token_type": "urn:ietf:params:oauth:token-type:jwt",
+    "token_url": "https://sts.googleapis.com/v1/token",
+    "credential_source": {
+        "file": "/var/run/service-account/token"
+    }
+}`
 
 // createTestBucket creates a test bucket for testing purposes
 func createTestBucket() *sourcev1.Bucket {
@@ -162,14 +211,48 @@ func TestMain(m *testing.M) {
 	os.Exit(run)
 }
 
-func TestNewClientWithSecretErr(t *testing.T) {
-	bucket := createTestBucket()
-	gcpClient, err := NewClient(context.Background(), bucket, WithSecret(secret.DeepCopy()))
-	t.Log(err)
-	g := NewWithT(t)
-	g.Expect(err).To(HaveOccurred())
-	g.Expect(err.Error()).To(Equal("dialing: invalid character 'e' looking for beginning of value"))
-	g.Expect(gcpClient).To(BeNil())
+func TestNewClientWithSecret(t *testing.T) {
+	tests := []struct {
+		name    string
+		secret  *corev1.Secret
+		wantErr string
+	}{
+		{
+			name:   "service account key",
+			secret: secret.DeepCopy(),
+		},
+		{
+			name:    "missing serviceaccount field",
+			secret:  badSecret.DeepCopy(),
+			wantErr: "invalid 'gcp-secret' secret data: required fields 'serviceaccount'",
+		},
+		{
+			name:    "serviceaccount is not JSON",
+			secret:  malformedSecret.DeepCopy(),
+			wantErr: "invalid 'gcp-secret' secret data: failed to parse 'serviceaccount' as JSON",
+		},
+		{
+			name:    "unsupported credential type",
+			secret:  externalAccountSecret.DeepCopy(),
+			wantErr: "invalid 'gcp-secret' secret data: 'serviceaccount' must contain a service account key with 'type' set to 'service_account'",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+			gcpClient, err := NewClient(context.Background(), createTestBucket(), WithSecret(tt.secret))
+			if tt.wantErr != "" {
+				g.Expect(err).To(HaveOccurred())
+				g.Expect(err.Error()).To(Equal(tt.wantErr))
+				g.Expect(gcpClient).To(BeNil())
+				return
+			}
+			g.Expect(err).NotTo(HaveOccurred())
+			g.Expect(gcpClient).NotTo(BeNil())
+			gcpClient.Close(context.Background())
+		})
+	}
 }
 
 func TestNewClientWithProxyErr(t *testing.T) {
@@ -184,9 +267,20 @@ func TestNewClientWithProxyErr(t *testing.T) {
 		gcpClient, err := NewClient(context.Background(), bucket,
 			WithProxyURL(&url.URL{}),
 			WithSecret(secret.DeepCopy()))
+		g.Expect(err).NotTo(HaveOccurred())
+		g.Expect(gcpClient).NotTo(BeNil())
+		gcpClient.Close(context.Background())
+	})
+
+	t.Run("with unsupported credential type", func(t *testing.T) {
+		g := NewWithT(t)
+		bucket := createTestBucket()
+		gcpClient, err := NewClient(context.Background(), bucket,
+			WithProxyURL(&url.URL{}),
+			WithSecret(externalAccountSecret.DeepCopy()))
 		g.Expect(err).To(HaveOccurred())
 		g.Expect(gcpClient).To(BeNil())
-		g.Expect(err.Error()).To(Equal("failed to create Google credentials from secret: invalid character 'e' looking for beginning of value"))
+		g.Expect(err.Error()).To(Equal("invalid 'gcp-secret' secret data: 'serviceaccount' must contain a service account key with 'type' set to 'service_account'"))
 	})
 
 	t.Run("without secret", func(t *testing.T) {
@@ -369,18 +463,32 @@ func TestFGetObjectDirectoryIsFileName(t *testing.T) {
 func TestValidateSecret(t *testing.T) {
 	t.Parallel()
 	testCases := []struct {
-		name   string
-		secret *corev1.Secret
-		error  bool
+		name    string
+		secret  *corev1.Secret
+		wantErr string
 	}{
 		{
-			name:   "valid secret",
+			name:   "nil secret",
+			secret: nil,
+		},
+		{
+			name:   "service account key",
 			secret: secret.DeepCopy(),
 		},
 		{
-			name:   "invalid secret",
-			secret: badSecret.DeepCopy(),
-			error:  true,
+			name:    "missing serviceaccount field",
+			secret:  badSecret.DeepCopy(),
+			wantErr: "invalid 'gcp-secret' secret data: required fields 'serviceaccount'",
+		},
+		{
+			name:    "serviceaccount is not JSON",
+			secret:  malformedSecret.DeepCopy(),
+			wantErr: "invalid 'gcp-secret' secret data: failed to parse 'serviceaccount' as JSON",
+		},
+		{
+			name:    "unsupported credential type",
+			secret:  externalAccountSecret.DeepCopy(),
+			wantErr: "invalid 'gcp-secret' secret data: 'serviceaccount' must contain a service account key with 'type' set to 'service_account'",
 		},
 	}
 	for _, testCase := range testCases {
@@ -389,9 +497,9 @@ func TestValidateSecret(t *testing.T) {
 			t.Parallel()
 			err := ValidateSecret(tt.secret)
 			g := NewWithT(t)
-			if tt.error {
+			if tt.wantErr != "" {
 				g.Expect(err).To(HaveOccurred())
-				g.Expect(err.Error()).To(Equal(fmt.Sprintf("invalid '%v' secret data: required fields 'serviceaccount'", tt.secret.Name)))
+				g.Expect(err.Error()).To(Equal(tt.wantErr))
 			} else {
 				g.Expect(err).NotTo(HaveOccurred())
 			}
