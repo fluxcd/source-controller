@@ -135,6 +135,7 @@ type HelmChartReconciler struct {
 	Getters               helmgetter.Providers
 	ControllerName        string
 	CosignVerifierFactory *scosign.CosignVerifierFactory
+	AllowInsecureHTTP     bool
 
 	Cache *cache.Cache
 	TTL   time.Duration
@@ -487,7 +488,12 @@ func (r *HelmChartReconciler) reconcileSource(ctx context.Context, sp *patch.Ser
 
 		// Handle any build error
 		if retErr != nil {
-			if buildErr := new(chart.BuildError); errors.As(retErr, &buildErr) {
+			// Prefer Stalling (e.g. insecure HTTP blocked from dependency callback)
+			// so it is not rewritten as a generic/DependencyBuildError.
+			var stalling *serror.Stalling
+			if errors.As(retErr, &stalling) {
+				retErr = stalling
+			} else if buildErr := new(chart.BuildError); errors.As(retErr, &buildErr) {
 				retErr = serror.NewGeneric(
 					buildErr,
 					buildErr.Reason.Reason,
@@ -550,6 +556,15 @@ func (r *HelmChartReconciler) buildFromHelmRepository(ctx context.Context, obj *
 		if !helmreg.IsOCI(normalizedURL) {
 			err := fmt.Errorf("invalid OCI registry URL: %s", normalizedURL)
 			return chartRepoConfigErrorReturn(err, obj)
+		}
+
+		if repo.Spec.Insecure && !r.AllowInsecureHTTP {
+			e := serror.NewStalling(
+				fmt.Errorf("%w", helper.ErrInsecureHTTPBlocked),
+				meta.InsecureConnectionsDisallowedReason,
+			)
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
+			return sreconcile.ResultEmpty, e
 		}
 
 		registryClient, err := registry.NewClient(clientOpts.OCIAuth, clientOpts.TLSConfig, repo.Spec.Insecure)
@@ -1027,6 +1042,12 @@ func (r *HelmChartReconciler) namespacedChartRepositoryCallback(ctx context.Cont
 
 		var chartRepo repository.Downloader
 		if helmreg.IsOCI(normalizedURL) {
+			if obj.Spec.Insecure && !r.AllowInsecureHTTP {
+				return nil, serror.NewStalling(
+					fmt.Errorf("%w", helper.ErrInsecureHTTPBlocked),
+					meta.InsecureConnectionsDisallowedReason,
+				)
+			}
 			registryClient, err := registry.NewClient(clientOpts.OCIAuth, clientOpts.TLSConfig, obj.Spec.Insecure)
 			if err != nil {
 				return nil, fmt.Errorf("failed to create registry client: %w", err)
@@ -1245,6 +1266,19 @@ func observeChartBuild(ctx context.Context, sp *patch.SerialPatcher, pOpts []pat
 	}
 
 	if err != nil {
+		// Propagate Stalling reasons (e.g. insecure HTTP) even when wrapped in BuildError.
+		var stalling *serror.Stalling
+		if errors.As(err, &stalling) {
+			conditions.Delete(obj, sourcev1.BuildFailedCondition)
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, stalling.Reason, "%s", stalling)
+			return
+		}
+		if errors.Is(err, helper.ErrInsecureHTTPBlocked) {
+			conditions.Delete(obj, sourcev1.BuildFailedCondition)
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, meta.InsecureConnectionsDisallowedReason, "%s", err)
+			return
+		}
+
 		var buildErr *chart.BuildError
 		if ok := errors.As(err, &buildErr); !ok {
 			buildErr = &chart.BuildError{

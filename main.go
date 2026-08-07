@@ -117,6 +117,7 @@ func main() {
 		helmCachePurgeInterval string
 		tokenCacheOptions      pkgcache.TokenFlags
 		defaultServiceAccount  string
+		connOptions            helper.ConnectionOptions
 	)
 
 	flag.StringVar(&metricsAddr, "metrics-addr", envOrDefault("METRICS_ADDR", ":8080"),
@@ -155,6 +156,7 @@ func main() {
 	watchOptions.BindFlags(flag.CommandLine)
 	intervalJitterOptions.BindFlags(flag.CommandLine)
 	tokenCacheOptions.BindFlags(flag.CommandLine, tokenCacheDefaultMaxSize)
+	connOptions.BindFlags(flag.CommandLine)
 
 	flag.Parse()
 
@@ -166,6 +168,11 @@ func main() {
 
 	if err := featureGates.WithLogger(setupLog).SupportedFeatures(features.FeatureGates()); err != nil {
 		setupLog.Error(err, "unable to load feature gates")
+		os.Exit(1)
+	}
+
+	if err := connOptions.CheckEnvironmentCompatibility(); err != nil {
+		setupLog.Error(err, "invalid connection options")
 		os.Exit(1)
 	}
 
@@ -229,12 +236,13 @@ func main() {
 	ctx := ctrl.SetupSignalHandler()
 
 	if err := (&controller.GitRepositoryReconciler{
-		Client:         mgr.GetClient(),
-		EventRecorder:  eventRecorder,
-		Metrics:        metrics,
-		Storage:        storage,
-		ControllerName: controllerName,
-		TokenCache:     tokenCache,
+		Client:            mgr.GetClient(),
+		EventRecorder:     eventRecorder,
+		Metrics:           metrics,
+		Storage:           storage,
+		ControllerName:    controllerName,
+		TokenCache:        tokenCache,
+		AllowInsecureHTTP: connOptions.AllowHTTP,
 	}).SetupWithManager(mgr, controller.GitRepositoryReconcilerOptions{
 		DependencyRequeueInterval: requeueDependency,
 		RateLimiter:               helper.GetRateLimiter(rateLimiterOptions),
@@ -244,15 +252,16 @@ func main() {
 	}
 
 	if err := (&controller.HelmRepositoryReconciler{
-		Client:         mgr.GetClient(),
-		EventRecorder:  eventRecorder,
-		Metrics:        metrics,
-		Storage:        storage,
-		Getters:        getters,
-		ControllerName: controllerName,
-		Cache:          helmIndexCache,
-		TTL:            helmIndexCacheItemTTL,
-		CacheRecorder:  cacheRecorder,
+		Client:            mgr.GetClient(),
+		EventRecorder:     eventRecorder,
+		Metrics:           metrics,
+		Storage:           storage,
+		Getters:           getters,
+		ControllerName:    controllerName,
+		Cache:             helmIndexCache,
+		TTL:               helmIndexCacheItemTTL,
+		CacheRecorder:     cacheRecorder,
+		AllowInsecureHTTP: connOptions.AllowHTTP,
 	}).SetupWithManager(mgr, controller.HelmRepositoryReconcilerOptions{
 		RateLimiter: helper.GetRateLimiter(rateLimiterOptions),
 	}); err != nil {
@@ -271,6 +280,7 @@ func main() {
 		Cache:                 helmIndexCache,
 		TTL:                   helmIndexCacheItemTTL,
 		CacheRecorder:         cacheRecorder,
+		AllowInsecureHTTP:     connOptions.AllowHTTP,
 	}).SetupWithManager(ctx, mgr, controller.HelmChartReconcilerOptions{
 		RateLimiter: helper.GetRateLimiter(rateLimiterOptions),
 	}); err != nil {
@@ -279,12 +289,13 @@ func main() {
 	}
 
 	if err := (&controller.BucketReconciler{
-		Client:         mgr.GetClient(),
-		EventRecorder:  eventRecorder,
-		Metrics:        metrics,
-		Storage:        storage,
-		ControllerName: controllerName,
-		TokenCache:     tokenCache,
+		Client:            mgr.GetClient(),
+		EventRecorder:     eventRecorder,
+		Metrics:           metrics,
+		Storage:           storage,
+		ControllerName:    controllerName,
+		TokenCache:        tokenCache,
+		AllowInsecureHTTP: connOptions.AllowHTTP,
 	}).SetupWithManager(mgr, controller.BucketReconcilerOptions{
 		RateLimiter: helper.GetRateLimiter(rateLimiterOptions),
 	}); err != nil {
@@ -300,6 +311,7 @@ func main() {
 		TokenCache:            tokenCache,
 		CosignVerifierFactory: CosignVerifierFactory,
 		Metrics:               metrics,
+		AllowInsecureHTTP:     connOptions.AllowHTTP,
 	}).SetupWithManager(mgr, controller.OCIRepositoryReconcilerOptions{
 		RateLimiter: helper.GetRateLimiter(rateLimiterOptions),
 	}); err != nil {

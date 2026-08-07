@@ -108,9 +108,10 @@ type HelmRepositoryReconciler struct {
 	kuberecorder.EventRecorder
 	helper.Metrics
 
-	Getters        helmgetter.Providers
-	Storage        *storage.Storage
-	ControllerName string
+	Getters           helmgetter.Providers
+	Storage           *storage.Storage
+	ControllerName    string
+	AllowInsecureHTTP bool
 
 	Cache *cache.Cache
 	TTL   time.Duration
@@ -406,6 +407,14 @@ func (r *HelmRepositoryReconciler) reconcileSource(ctx context.Context, sp *patc
 		e := serror.NewStalling(
 			fmt.Errorf("invalid Helm repository URL: %w", err),
 			sourcev1.URLInvalidReason,
+		)
+		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
+		return sreconcile.ResultEmpty, e
+	}
+	if u, err := url.Parse(normalizedURL); err == nil && u.Scheme == "http" && !r.AllowInsecureHTTP {
+		e := serror.NewStalling(
+			fmt.Errorf("%w", helper.ErrInsecureHTTPBlocked),
+			meta.InsecureConnectionsDisallowedReason,
 		)
 		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
 		return sreconcile.ResultEmpty, e

@@ -110,6 +110,7 @@ func TestOCIRepositoryReconciler_deleteBeforeFinalizer(t *testing.T) {
 	g.Expect(k8sClient.Delete(ctx, ocirepo)).NotTo(HaveOccurred())
 
 	r := &OCIRepositoryReconciler{
+		AllowInsecureHTTP:     true,
 		Client:                k8sClient,
 		EventRecorder:         record.NewFakeRecorder(32),
 		Storage:               testStorage,
@@ -412,6 +413,45 @@ func TestOCIRepository_Reconcile_MediaType(t *testing.T) {
 			}, timeout).Should(BeTrue())
 		})
 	}
+}
+
+func TestOCIRepository_reconcileSource_insecureHTTP(t *testing.T) {
+	g := NewWithT(t)
+
+	obj := &sourcev1.OCIRepository{
+		ObjectMeta: metav1.ObjectMeta{
+			GenerateName: "insecure-http-",
+			Generation:   1,
+		},
+		Spec: sourcev1.OCIRepositorySpec{
+			URL:      "oci://example.com/org/repo",
+			Interval: metav1.Duration{Duration: interval},
+			Timeout:  &metav1.Duration{Duration: timeout},
+			Insecure: true,
+		},
+	}
+
+	r := &OCIRepositoryReconciler{
+		AllowInsecureHTTP: false,
+		Client: fakeclient.NewClientBuilder().
+			WithScheme(testEnv.GetScheme()).
+			WithStatusSubresource(&sourcev1.OCIRepository{}).
+			Build(),
+		EventRecorder:         record.NewFakeRecorder(32),
+		Storage:               testStorage,
+		CosignVerifierFactory: testCosignVerifierFactory,
+		patchOptions:          getPatchOptions(ociRepositoryReadyCondition.Owned, "sc"),
+	}
+
+	sp := patch.NewSerialPatcher(obj, r.Client)
+	_, err := r.reconcileSource(ctx, sp, obj, &meta.Artifact{}, t.TempDir())
+	g.Expect(err).To(HaveOccurred())
+	var stalling *serror.Stalling
+	g.Expect(errors.As(err, &stalling)).To(BeTrue())
+	g.Expect(stalling.Reason).To(Equal(meta.InsecureConnectionsDisallowedReason))
+	g.Expect(obj.Status.Conditions).To(conditions.MatchConditions([]metav1.Condition{
+		*conditions.TrueCondition(sourcev1.FetchFailedCondition, meta.InsecureConnectionsDisallowedReason, "use of insecure plain HTTP connections is blocked"),
+	}))
 }
 
 func TestOCIRepository_reconcileSource_authStrategy(t *testing.T) {
@@ -806,6 +846,7 @@ func TestOCIRepository_reconcileSource_authStrategy(t *testing.T) {
 			}
 
 			r := &OCIRepositoryReconciler{
+				AllowInsecureHTTP:     true,
 				Client:                clientBuilder.Build(),
 				EventRecorder:         record.NewFakeRecorder(32),
 				Storage:               testStorage,
@@ -1266,6 +1307,7 @@ func TestOCIRepository_reconcileSource_remoteReference(t *testing.T) {
 		WithStatusSubresource(&sourcev1.OCIRepository{})
 
 	r := &OCIRepositoryReconciler{
+		AllowInsecureHTTP:     true,
 		Client:                clientBuilder.Build(),
 		EventRecorder:         record.NewFakeRecorder(32),
 		Storage:               testStorage,
@@ -1469,6 +1511,7 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignatureNotation(t *testi
 		WithStatusSubresource(&sourcev1.OCIRepository{})
 
 	r := &OCIRepositoryReconciler{
+		AllowInsecureHTTP:     true,
 		Client:                clientBuilder.Build(),
 		EventRecorder:         record.NewFakeRecorder(32),
 		Storage:               testStorage,
@@ -1833,6 +1876,7 @@ func TestOCIRepository_reconcileSource_verifyOCISourceTrustPolicyNotation(t *tes
 		WithStatusSubresource(&sourcev1.OCIRepository{})
 
 	r := &OCIRepositoryReconciler{
+		AllowInsecureHTTP:     true,
 		Client:                clientBuilder.Build(),
 		EventRecorder:         record.NewFakeRecorder(32),
 		Storage:               testStorage,
@@ -2130,6 +2174,7 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignatureCosign(t *testing
 		WithStatusSubresource(&sourcev1.OCIRepository{})
 
 	r := &OCIRepositoryReconciler{
+		AllowInsecureHTTP:     true,
 		Client:                clientBuilder.Build(),
 		EventRecorder:         record.NewFakeRecorder(32),
 		Storage:               testStorage,
@@ -2400,6 +2445,7 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignature_keyless(t *testi
 		WithStatusSubresource(&sourcev1.OCIRepository{})
 
 	r := &OCIRepositoryReconciler{
+		AllowInsecureHTTP:     true,
 		Client:                clientBuilder.Build(),
 		EventRecorder:         record.NewFakeRecorder(32),
 		Storage:               testStorage,
@@ -2586,10 +2632,11 @@ func TestOCIRepository_reconcileSource_noop(t *testing.T) {
 		WithStatusSubresource(&sourcev1.OCIRepository{})
 
 	r := &OCIRepositoryReconciler{
-		Client:        clientBuilder.Build(),
-		EventRecorder: record.NewFakeRecorder(32),
-		Storage:       testStorage,
-		patchOptions:  getPatchOptions(ociRepositoryReadyCondition.Owned, "sc"),
+		AllowInsecureHTTP: true,
+		Client:            clientBuilder.Build(),
+		EventRecorder:     record.NewFakeRecorder(32),
+		Storage:           testStorage,
+		patchOptions:      getPatchOptions(ociRepositoryReadyCondition.Owned, "sc"),
 	}
 
 	for _, tt := range tests {
@@ -2818,10 +2865,11 @@ func TestOCIRepository_reconcileArtifact(t *testing.T) {
 		WithStatusSubresource(&sourcev1.OCIRepository{})
 
 	r := &OCIRepositoryReconciler{
-		Client:        clientBuilder.Build(),
-		EventRecorder: record.NewFakeRecorder(32),
-		Storage:       testStorage,
-		patchOptions:  getPatchOptions(ociRepositoryReadyCondition.Owned, "sc"),
+		AllowInsecureHTTP: true,
+		Client:            clientBuilder.Build(),
+		EventRecorder:     record.NewFakeRecorder(32),
+		Storage:           testStorage,
+		patchOptions:      getPatchOptions(ociRepositoryReadyCondition.Owned, "sc"),
 	}
 
 	for _, tt := range tests {
@@ -2983,10 +3031,11 @@ func TestOCIRepository_getArtifactRef(t *testing.T) {
 		WithStatusSubresource(&sourcev1.OCIRepository{})
 
 	r := &OCIRepositoryReconciler{
-		Client:        clientBuilder.Build(),
-		EventRecorder: record.NewFakeRecorder(32),
-		Storage:       testStorage,
-		patchOptions:  getPatchOptions(ociRepositoryReadyCondition.Owned, "sc"),
+		AllowInsecureHTTP: true,
+		Client:            clientBuilder.Build(),
+		EventRecorder:     record.NewFakeRecorder(32),
+		Storage:           testStorage,
+		patchOptions:      getPatchOptions(ociRepositoryReadyCondition.Owned, "sc"),
 	}
 
 	for _, tt := range tests {
@@ -3317,10 +3366,11 @@ func TestOCIRepository_reconcileStorage(t *testing.T) {
 		WithStatusSubresource(&sourcev1.OCIRepository{})
 
 	r := &OCIRepositoryReconciler{
-		Client:        clientBuilder.Build(),
-		EventRecorder: record.NewFakeRecorder(32),
-		Storage:       testStorage,
-		patchOptions:  getPatchOptions(ociRepositoryReadyCondition.Owned, "sc"),
+		AllowInsecureHTTP: true,
+		Client:            clientBuilder.Build(),
+		EventRecorder:     record.NewFakeRecorder(32),
+		Storage:           testStorage,
+		patchOptions:      getPatchOptions(ociRepositoryReadyCondition.Owned, "sc"),
 	}
 
 	for _, tt := range tests {
@@ -3381,6 +3431,7 @@ func TestOCIRepository_ReconcileDelete(t *testing.T) {
 	g := NewWithT(t)
 
 	r := &OCIRepositoryReconciler{
+		AllowInsecureHTTP:     true,
 		EventRecorder:         record.NewFakeRecorder(32),
 		Storage:               testStorage,
 		CosignVerifierFactory: testCosignVerifierFactory,
@@ -3525,8 +3576,9 @@ func TestOCIRepositoryReconciler_notify(t *testing.T) {
 			}
 
 			reconciler := &OCIRepositoryReconciler{
-				EventRecorder: recorder,
-				patchOptions:  getPatchOptions(ociRepositoryReadyCondition.Owned, "sc"),
+				AllowInsecureHTTP: true,
+				EventRecorder:     recorder,
+				patchOptions:      getPatchOptions(ociRepositoryReadyCondition.Owned, "sc"),
 			}
 			reconciler.notify(ctx, oldObj, newObj, tt.res, tt.resErr)
 

@@ -231,9 +231,10 @@ func TestGitRepositoryReconciler_deleteBeforeFinalizer(t *testing.T) {
 	g.Expect(k8sClient.Delete(ctx, gitRepo)).NotTo(HaveOccurred())
 
 	r := &GitRepositoryReconciler{
-		Client:        k8sClient,
-		EventRecorder: record.NewFakeRecorder(32),
-		Storage:       testStorage,
+		AllowInsecureHTTP: true,
+		Client:            k8sClient,
+		EventRecorder:     record.NewFakeRecorder(32),
+		Storage:           testStorage,
 	}
 	// NOTE: Only a real API server responds with an error in this scenario.
 	_, err := r.Reconcile(ctx, ctrl.Request{NamespacedName: client.ObjectKeyFromObject(gitRepo)})
@@ -344,10 +345,11 @@ func TestGitRepositoryReconciler_reconcileSource_emptyRepository(t *testing.T) {
 		WithStatusSubresource(&sourcev1.GitRepository{})
 
 	r := &GitRepositoryReconciler{
-		Client:        clientBuilder.Build(),
-		EventRecorder: record.NewFakeRecorder(32),
-		Storage:       testStorage,
-		patchOptions:  getPatchOptions(gitRepositoryReadyCondition.Owned, "sc"),
+		AllowInsecureHTTP: true,
+		Client:            clientBuilder.Build(),
+		EventRecorder:     record.NewFakeRecorder(32),
+		Storage:           testStorage,
+		patchOptions:      getPatchOptions(gitRepositoryReadyCondition.Owned, "sc"),
 	}
 
 	g.Expect(r.Client.Create(context.TODO(), obj)).ToNot(HaveOccurred())
@@ -367,6 +369,75 @@ func TestGitRepositoryReconciler_reconcileSource_emptyRepository(t *testing.T) {
 	g.Expect(err).To(HaveOccurred())
 	g.Expect(got).To(Equal(sreconcile.ResultEmpty))
 	g.Expect(commit).ToNot(BeNil())
+}
+
+func TestGitRepositoryReconciler_reconcileSource_insecureHTTP(t *testing.T) {
+	tests := []struct {
+		name              string
+		url               string
+		allowInsecureHTTP bool
+		wantStalling      bool
+		assertConditions  []metav1.Condition
+	}{
+		{
+			name:              "HTTP URL with AllowInsecureHTTP false stalls with InsecureConnectionsDisallowed",
+			url:               "http://github.com/example/repo",
+			allowInsecureHTTP: false,
+			wantStalling:      true,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, meta.InsecureConnectionsDisallowedReason, "use of insecure plain HTTP connections is blocked"),
+			},
+		},
+		{
+			name:              "HTTP URL with AllowInsecureHTTP true does not stall for insecure HTTP",
+			url:               "http://github.com/example/repo",
+			allowInsecureHTTP: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			obj := &sourcev1.GitRepository{
+				ObjectMeta: metav1.ObjectMeta{
+					GenerateName: "insecure-http-",
+					Generation:   1,
+				},
+				Spec: sourcev1.GitRepositorySpec{
+					URL:      tt.url,
+					Interval: metav1.Duration{Duration: interval},
+					Timeout:  &metav1.Duration{Duration: timeout},
+				},
+			}
+
+			r := &GitRepositoryReconciler{
+				AllowInsecureHTTP: tt.allowInsecureHTTP,
+				Client: fakeclient.NewClientBuilder().
+					WithScheme(testEnv.GetScheme()).
+					WithStatusSubresource(&sourcev1.GitRepository{}).
+					Build(),
+				EventRecorder: record.NewFakeRecorder(32),
+				Storage:       testStorage,
+				patchOptions:  getPatchOptions(gitRepositoryReadyCondition.Owned, "sc"),
+			}
+
+			sp := patch.NewSerialPatcher(obj, r.Client)
+			var commit git.Commit
+			var includes artifactSet
+			_, err := r.reconcileSource(context.TODO(), sp, obj, &commit, &includes, t.TempDir())
+			g.Expect(err).To(HaveOccurred())
+			var stalling *serror.Stalling
+			if tt.wantStalling {
+				g.Expect(errors.As(err, &stalling)).To(BeTrue())
+				g.Expect(stalling.Reason).To(Equal(meta.InsecureConnectionsDisallowedReason))
+				g.Expect(obj.Status.Conditions).To(conditions.MatchConditions(tt.assertConditions))
+			} else {
+				g.Expect(errors.As(err, &stalling)).To(BeFalse())
+				g.Expect(conditions.GetReason(obj, sourcev1.FetchFailedCondition)).ToNot(Equal(meta.InsecureConnectionsDisallowedReason))
+			}
+		})
+	}
 }
 
 func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
@@ -901,10 +972,11 @@ func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
 			}
 
 			r := &GitRepositoryReconciler{
-				Client:        clientBuilder.Build(),
-				EventRecorder: record.NewFakeRecorder(32),
-				Storage:       testStorage,
-				patchOptions:  getPatchOptions(gitRepositoryReadyCondition.Owned, "sc"),
+				AllowInsecureHTTP: true,
+				Client:            clientBuilder.Build(),
+				EventRecorder:     record.NewFakeRecorder(32),
+				Storage:           testStorage,
+				patchOptions:      getPatchOptions(gitRepositoryReadyCondition.Owned, "sc"),
 			}
 
 			tmpDir := t.TempDir()
@@ -1084,10 +1156,11 @@ func TestGitRepositoryReconciler_getAuthOpts_provider(t *testing.T) {
 
 			obj := &sourcev1.GitRepository{}
 			r := &GitRepositoryReconciler{
-				EventRecorder: record.NewFakeRecorder(32),
-				Client:        clientBuilder.Build(),
-				features:      features.FeatureGates(),
-				patchOptions:  getPatchOptions(gitRepositoryReadyCondition.Owned, "sc"),
+				AllowInsecureHTTP: true,
+				EventRecorder:     record.NewFakeRecorder(32),
+				Client:            clientBuilder.Build(),
+				features:          features.FeatureGates(),
+				patchOptions:      getPatchOptions(gitRepositoryReadyCondition.Owned, "sc"),
 			}
 
 			url, err := url.Parse(tt.url)
@@ -1301,6 +1374,7 @@ func TestGitRepositoryReconciler_reconcileSource_checkoutStrategy(t *testing.T) 
 	}
 
 	r := &GitRepositoryReconciler{
+		AllowInsecureHTTP: true,
 		Client: fakeclient.NewClientBuilder().
 			WithScheme(testEnv.GetScheme()).
 			WithStatusSubresource(&sourcev1.GitRepository{}).
@@ -1509,10 +1583,11 @@ func TestGitRepositoryReconciler_reconcileArtifact(t *testing.T) {
 			resetChmod(tt.dir, 0o750, 0o600)
 
 			r := &GitRepositoryReconciler{
-				EventRecorder: record.NewFakeRecorder(32),
-				Storage:       testStorage,
-				features:      features.FeatureGates(),
-				patchOptions:  getPatchOptions(gitRepositoryReadyCondition.Owned, "sc"),
+				AllowInsecureHTTP: true,
+				EventRecorder:     record.NewFakeRecorder(32),
+				Storage:           testStorage,
+				features:          features.FeatureGates(),
+				patchOptions:      getPatchOptions(gitRepositoryReadyCondition.Owned, "sc"),
 			}
 
 			obj := &sourcev1.GitRepository{
@@ -1659,6 +1734,7 @@ func TestGitRepositoryReconciler_reconcileInclude(t *testing.T) {
 			}
 
 			r := &GitRepositoryReconciler{
+				AllowInsecureHTTP: true,
 				Client:            clientBuilder.Build(),
 				EventRecorder:     record.NewFakeRecorder(32),
 				Storage:           storage,
@@ -1913,6 +1989,7 @@ func TestGitRepositoryReconciler_reconcileStorage(t *testing.T) {
 			}()
 
 			r := &GitRepositoryReconciler{
+				AllowInsecureHTTP: true,
 				Client: fakeclient.NewClientBuilder().
 					WithScheme(testEnv.GetScheme()).
 					WithStatusSubresource(&sourcev1.GitRepository{}).
@@ -1971,10 +2048,11 @@ func TestGitRepositoryReconciler_reconcileDelete(t *testing.T) {
 	g := NewWithT(t)
 
 	r := &GitRepositoryReconciler{
-		EventRecorder: record.NewFakeRecorder(32),
-		Storage:       testStorage,
-		features:      features.FeatureGates(),
-		patchOptions:  getPatchOptions(gitRepositoryReadyCondition.Owned, "sc"),
+		AllowInsecureHTTP: true,
+		EventRecorder:     record.NewFakeRecorder(32),
+		Storage:           testStorage,
+		features:          features.FeatureGates(),
+		patchOptions:      getPatchOptions(gitRepositoryReadyCondition.Owned, "sc"),
 	}
 
 	obj := &sourcev1.GitRepository{
@@ -2762,10 +2840,11 @@ func TestGitRepositoryReconciler_verifySignature(t *testing.T) {
 			}
 
 			r := &GitRepositoryReconciler{
-				EventRecorder: record.NewFakeRecorder(32),
-				Client:        clientBuilder.Build(),
-				features:      features.FeatureGates(),
-				patchOptions:  getPatchOptions(gitRepositoryReadyCondition.Owned, "sc"),
+				AllowInsecureHTTP: true,
+				EventRecorder:     record.NewFakeRecorder(32),
+				Client:            clientBuilder.Build(),
+				features:          features.FeatureGates(),
+				patchOptions:      getPatchOptions(gitRepositoryReadyCondition.Owned, "sc"),
 			}
 
 			obj := &sourcev1.GitRepository{
@@ -2914,11 +2993,12 @@ func TestGitRepositoryReconciler_ConditionsUpdate(t *testing.T) {
 				WithStatusSubresource(&sourcev1.GitRepository{})
 
 			r := &GitRepositoryReconciler{
-				Client:        clientBuilder.Build(),
-				EventRecorder: record.NewFakeRecorder(32),
-				Storage:       testStorage,
-				features:      features.FeatureGates(),
-				patchOptions:  getPatchOptions(gitRepositoryReadyCondition.Owned, "sc"),
+				AllowInsecureHTTP: true,
+				Client:            clientBuilder.Build(),
+				EventRecorder:     record.NewFakeRecorder(32),
+				Storage:           testStorage,
+				features:          features.FeatureGates(),
+				patchOptions:      getPatchOptions(gitRepositoryReadyCondition.Owned, "sc"),
 			}
 
 			key := client.ObjectKeyFromObject(obj)
@@ -3302,9 +3382,10 @@ func TestGitRepositoryReconciler_notify(t *testing.T) {
 			}
 
 			reconciler := &GitRepositoryReconciler{
-				EventRecorder: recorder,
-				features:      features.FeatureGates(),
-				patchOptions:  getPatchOptions(gitRepositoryReadyCondition.Owned, "sc"),
+				AllowInsecureHTTP: true,
+				EventRecorder:     recorder,
+				features:          features.FeatureGates(),
+				patchOptions:      getPatchOptions(gitRepositoryReadyCondition.Owned, "sc"),
 			}
 			reconciler.notify(ctx, oldObj, newObj, tt.commit, tt.res, tt.resErr)
 
@@ -3445,9 +3526,10 @@ func TestGitRepositoryReconciler_fetchIncludes(t *testing.T) {
 			}
 
 			r := &GitRepositoryReconciler{
-				Client:        clientBuilder.Build(),
-				EventRecorder: record.NewFakeRecorder(32),
-				patchOptions:  getPatchOptions(gitRepositoryReadyCondition.Owned, "sc"),
+				AllowInsecureHTTP: true,
+				Client:            clientBuilder.Build(),
+				EventRecorder:     record.NewFakeRecorder(32),
+				patchOptions:      getPatchOptions(gitRepositoryReadyCondition.Owned, "sc"),
 			}
 
 			obj := &sourcev1.GitRepository{

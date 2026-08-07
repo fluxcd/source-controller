@@ -111,6 +111,7 @@ func TestHelmChartReconciler_deleteBeforeFinalizer(t *testing.T) {
 	g.Expect(k8sClient.Delete(ctx, helmchart)).NotTo(HaveOccurred())
 
 	r := &HelmChartReconciler{
+		AllowInsecureHTTP:     true,
 		Client:                k8sClient,
 		EventRecorder:         record.NewFakeRecorder(32),
 		Storage:               testStorage,
@@ -516,6 +517,7 @@ func TestHelmChartReconciler_reconcileStorage(t *testing.T) {
 			}()
 
 			r := &HelmChartReconciler{
+				AllowInsecureHTTP: true,
 				Client: fakeclient.NewClientBuilder().
 					WithScheme(testEnv.GetScheme()).
 					WithStatusSubresource(&sourcev1.HelmChart{}).
@@ -793,6 +795,7 @@ func TestHelmChartReconciler_reconcileSource(t *testing.T) {
 			}
 
 			r := &HelmChartReconciler{
+				AllowInsecureHTTP:     true,
 				Client:                clientBuilder.Build(),
 				EventRecorder:         record.NewFakeRecorder(32),
 				Storage:               st,
@@ -1130,6 +1133,7 @@ func TestHelmChartReconciler_buildFromHelmRepository(t *testing.T) {
 			g.Expect(err).ToNot(HaveOccurred())
 
 			r := &HelmChartReconciler{
+				AllowInsecureHTTP:     true,
 				Client:                clientBuilder.Build(),
 				EventRecorder:         record.NewFakeRecorder(32),
 				Getters:               testGetters,
@@ -1383,6 +1387,7 @@ func TestHelmChartReconciler_buildFromOCIHelmRepository(t *testing.T) {
 			}
 
 			r := &HelmChartReconciler{
+				AllowInsecureHTTP:     true,
 				Client:                clientBuilder.Build(),
 				EventRecorder:         record.NewFakeRecorder(32),
 				Getters:               testGetters,
@@ -1623,6 +1628,7 @@ func TestHelmChartReconciler_buildFromTarballArtifact(t *testing.T) {
 			g := NewWithT(t)
 
 			r := &HelmChartReconciler{
+				AllowInsecureHTTP: true,
 				Client: fakeclient.NewClientBuilder().
 					WithScheme(testEnv.Scheme()).
 					WithStatusSubresource(&sourcev1.HelmChart{}).
@@ -1834,6 +1840,7 @@ func TestHelmChartReconciler_reconcileArtifact(t *testing.T) {
 			g := NewWithT(t)
 
 			r := &HelmChartReconciler{
+				AllowInsecureHTTP: true,
 				Client: fakeclient.NewClientBuilder().
 					WithScheme(testEnv.GetScheme()).
 					WithStatusSubresource(&sourcev1.HelmChart{}).
@@ -1911,6 +1918,7 @@ func TestHelmChartReconciler_getSource(t *testing.T) {
 		WithObjects(mocks...)
 
 	r := &HelmChartReconciler{
+		AllowInsecureHTTP:     true,
 		Client:                clientBuilder.Build(),
 		CosignVerifierFactory: testCosignVerifierFactory,
 		patchOptions:          getPatchOptions(helmChartReadyCondition.Owned, "sc"),
@@ -2028,6 +2036,7 @@ func TestHelmChartReconciler_reconcileDelete(t *testing.T) {
 	g := NewWithT(t)
 
 	r := &HelmChartReconciler{
+		AllowInsecureHTTP:     true,
 		EventRecorder:         record.NewFakeRecorder(32),
 		Storage:               testStorage,
 		CosignVerifierFactory: testCosignVerifierFactory,
@@ -2165,6 +2174,7 @@ func TestHelmChartReconciler_reconcileSubRecs(t *testing.T) {
 			g := NewWithT(t)
 
 			r := &HelmChartReconciler{
+				AllowInsecureHTTP: true,
 				Client: fakeclient.NewClientBuilder().
 					WithScheme(testEnv.GetScheme()).
 					WithStatusSubresource(&sourcev1.HelmChart{}).
@@ -2403,8 +2413,9 @@ func TestHelmChartReconciler_notify(t *testing.T) {
 			}
 
 			reconciler := &HelmChartReconciler{
-				EventRecorder: recorder,
-				patchOptions:  getPatchOptions(helmChartReadyCondition.Owned, "sc"),
+				AllowInsecureHTTP: true,
+				EventRecorder:     recorder,
+				patchOptions:      getPatchOptions(helmChartReadyCondition.Owned, "sc"),
 			}
 			build := &chart.Build{
 				Name:     "foo",
@@ -2725,10 +2736,11 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_authStrategy(t *testing.T) {
 			}
 
 			r := &HelmChartReconciler{
-				Client:        clientBuilder.Build(),
-				EventRecorder: record.NewFakeRecorder(32),
-				Getters:       testGetters,
-				patchOptions:  getPatchOptions(helmChartReadyCondition.Owned, "sc"),
+				AllowInsecureHTTP: true,
+				Client:            clientBuilder.Build(),
+				EventRecorder:     record.NewFakeRecorder(32),
+				Getters:           testGetters,
+				patchOptions:      getPatchOptions(helmChartReadyCondition.Owned, "sc"),
 			}
 
 			var b chart.Build
@@ -2765,6 +2777,60 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_authStrategy(t *testing.T) {
 			g.Expect(obj.Status.Conditions).To(conditions.MatchConditions(tt.assertConditions))
 		})
 	}
+}
+
+func TestHelmChartReconciler_buildFromHelmRepository_insecureHTTP(t *testing.T) {
+	g := NewWithT(t)
+
+	repo := &sourcev1.HelmRepository{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "oci-insecure",
+			Namespace: "default",
+		},
+		Spec: sourcev1.HelmRepositorySpec{
+			URL:      "oci://example.com/test/repo",
+			Type:     sourcev1.HelmRepositoryTypeOCI,
+			Insecure: true,
+			Timeout:  &metav1.Duration{Duration: timeout},
+		},
+	}
+	obj := &sourcev1.HelmChart{
+		ObjectMeta: metav1.ObjectMeta{
+			GenerateName: "insecure-http-",
+			Generation:   1,
+		},
+		Spec: sourcev1.HelmChartSpec{
+			Chart:   "chart",
+			Version: "0.1.0",
+			SourceRef: sourcev1.LocalHelmChartSourceReference{
+				Kind: sourcev1.HelmRepositoryKind,
+				Name: repo.Name,
+			},
+			Interval: metav1.Duration{Duration: interval},
+		},
+	}
+
+	r := &HelmChartReconciler{
+		AllowInsecureHTTP: false,
+		Client: fakeclient.NewClientBuilder().
+			WithScheme(testEnv.GetScheme()).
+			WithStatusSubresource(&sourcev1.HelmChart{}).
+			WithObjects(repo).
+			Build(),
+		EventRecorder: record.NewFakeRecorder(32),
+		Getters:       testGetters,
+		patchOptions:  getPatchOptions(helmChartReadyCondition.Owned, "sc"),
+	}
+
+	var b chart.Build
+	_, err := r.buildFromHelmRepository(context.TODO(), obj, repo, &b)
+	g.Expect(err).To(HaveOccurred())
+	var stalling *serror.Stalling
+	g.Expect(errors.As(err, &stalling)).To(BeTrue())
+	g.Expect(stalling.Reason).To(Equal(meta.InsecureConnectionsDisallowedReason))
+	g.Expect(obj.Status.Conditions).To(conditions.MatchConditions([]metav1.Condition{
+		*conditions.TrueCondition(sourcev1.FetchFailedCondition, meta.InsecureConnectionsDisallowedReason, "use of insecure plain HTTP connections is blocked"),
+	}))
 }
 
 func TestHelmChartRepository_reconcileSource_verifyOCISourceSignature_keyless(t *testing.T) {
@@ -2884,6 +2950,7 @@ func TestHelmChartRepository_reconcileSource_verifyOCISourceSignature_keyless(t 
 			clientBuilder.WithObjects(repository)
 
 			r := &HelmChartReconciler{
+				AllowInsecureHTTP:     true,
 				Client:                clientBuilder.Build(),
 				EventRecorder:         record.NewFakeRecorder(32),
 				Getters:               testGetters,
@@ -3191,6 +3258,7 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_verifySignatureNotation(t *t
 			clientBuilder.WithObjects(repository, secret, caSecret)
 
 			r := &HelmChartReconciler{
+				AllowInsecureHTTP:     true,
 				Client:                clientBuilder.Build(),
 				EventRecorder:         record.NewFakeRecorder(32),
 				Getters:               testGetters,
@@ -3445,6 +3513,7 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_verifySignatureCosign(t *tes
 			clientBuilder.WithObjects(repository, secret)
 
 			r := &HelmChartReconciler{
+				AllowInsecureHTTP:     true,
 				Client:                clientBuilder.Build(),
 				EventRecorder:         record.NewFakeRecorder(32),
 				Getters:               testGetters,
