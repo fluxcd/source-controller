@@ -88,6 +88,7 @@ type options struct {
 	secret             *corev1.Secret
 	proxyURL           *url.URL
 	withoutCredentials bool
+	objectLevelIdentity bool
 	withoutRetries     bool
 	authOpts           []auth.Option
 }
@@ -96,6 +97,16 @@ type options struct {
 // This is a test-only option useful for testing the client with HTTP
 // endpoints (without TLS) alongside all the other options unrelated to
 // credentials.
+// WithObjectLevelIdentity signals that the Bucket requests object-level workload
+// identity, i.e. it sets .spec.serviceAccountName. Without this signal, and without
+// controller-level identity configured in the environment, no token credential is
+// added to the chain and the bucket is treated as publicly reachable.
+func WithObjectLevelIdentity() Option {
+	return func(o *options) {
+		o.objectLevelIdentity = true
+	}
+}
+
 func withoutCredentials() Option {
 	return func(o *options) {
 		o.withoutCredentials = true
@@ -202,7 +213,7 @@ func NewClient(ctx context.Context, obj *sourcev1.Bucket, opts ...Option) (c *Bl
 	// Compose token chain based on environment.
 	// This functions as a replacement for azidentity.NewDefaultAzureCredential
 	// to not shell out.
-	token, err = chainCredentialWithSecret(ctx, o.secret, o.authOpts...)
+	token, err = chainCredentialWithSecret(ctx, o.secret, o.objectLevelIdentity, o.authOpts...)
 	if err != nil {
 		err = fmt.Errorf("failed to create environment credential chain: %w", err)
 		return nil, err
@@ -502,7 +513,7 @@ func sasTokenFromSecret(ep string, secret *corev1.Secret) (string, error) {
 //   - azidentity.ManagedIdentityCredential with defaults.
 //
 // If no valid token is created, it returns nil.
-func chainCredentialWithSecret(ctx context.Context, secret *corev1.Secret, opts ...auth.Option) (azcore.TokenCredential, error) {
+func chainCredentialWithSecret(ctx context.Context, secret *corev1.Secret, objectLevelIdentity bool, opts ...auth.Option) (azcore.TokenCredential, error) {
 	var creds []azcore.TokenCredential
 
 	credOpts := &azidentity.EnvironmentCredentialOptions{}
@@ -515,8 +526,13 @@ func chainCredentialWithSecret(ctx context.Context, secret *corev1.Secret, opts 
 	if token, _ := azidentity.NewEnvironmentCredential(credOpts); token != nil {
 		creds = append(creds, token)
 	}
-	if token := azureauth.NewTokenCredential(ctx, opts...); token != nil {
-		creds = append(creds, token)
+	// azureauth.NewTokenCredential never returns nil, so its presence in the chain
+	// cannot signal that any identity is actually configured. Add it only when an
+	// identity has been requested, either per-object via .spec.serviceAccountName or
+	// controller-wide via the environment. Otherwise the chain stays empty and the
+	// caller falls back to an unauthenticated client, as documented for public buckets.
+	if objectLevelIdentity || hasControllerLevelIdentity() {
+		creds = append(creds, azureauth.NewTokenCredential(ctx, opts...))
 	}
 
 	if len(creds) > 0 {
@@ -524,6 +540,18 @@ func chainCredentialWithSecret(ctx context.Context, secret *corev1.Secret, opts 
 	}
 
 	return nil, nil
+}
+
+// hasControllerLevelIdentity reports whether the controller's environment carries an
+// Azure identity. These are the variables the workload and managed identity flows in
+// fluxcd/pkg/auth read; if none is set there is nothing for a token credential to use.
+func hasControllerLevelIdentity() bool {
+	for _, env := range []string{"AZURE_CLIENT_ID", "AZURE_FEDERATED_TOKEN_FILE"} {
+		if os.Getenv(env) != "" {
+			return true
+		}
+	}
+	return false
 }
 
 // extractAccountNameFromEndpoint extracts the Azure account name from the

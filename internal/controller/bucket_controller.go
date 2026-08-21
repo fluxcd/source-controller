@@ -925,6 +925,9 @@ func (r *BucketReconciler) createBucketProvider(ctx context.Context, obj *source
 		if creds.proxyURL != nil {
 			opts = append(opts, azure.WithProxyURL(creds.proxyURL))
 		}
+		if obj.Spec.ServiceAccountName != "" {
+			opts = append(opts, azure.WithObjectLevelIdentity())
+		}
 		opts = append(opts, azure.WithAuth(authOpts...))
 		return azure.NewClient(ctx, obj, opts...)
 

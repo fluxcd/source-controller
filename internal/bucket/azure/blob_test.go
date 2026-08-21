@@ -657,11 +657,34 @@ func TestBlobClient_VisitObjects_MissingFields(t *testing.T) {
 }
 
 func Test_chainCredentialWithSecret(t *testing.T) {
-	g := NewWithT(t)
+	t.Run("no secret and no identity yields no credential", func(t *testing.T) {
+		g := NewWithT(t)
 
-	got, err := chainCredentialWithSecret(t.Context(), nil)
-	g.Expect(err).ToNot(HaveOccurred())
-	g.Expect(got).To(BeAssignableToTypeOf(&azidentity.ChainedTokenCredential{}))
+		// Documented behaviour: "If no chain can be established, the bucket is
+		// assumed to be publicly reachable." The caller relies on a nil credential
+		// to build an unauthenticated client.
+		got, err := chainCredentialWithSecret(t.Context(), nil, false)
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(got).To(BeNil())
+	})
+
+	t.Run("object-level identity yields a credential", func(t *testing.T) {
+		g := NewWithT(t)
+
+		got, err := chainCredentialWithSecret(t.Context(), nil, true)
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(got).To(BeAssignableToTypeOf(&azidentity.ChainedTokenCredential{}))
+	})
+
+	t.Run("controller-level identity yields a credential", func(t *testing.T) {
+		g := NewWithT(t)
+
+		t.Setenv("AZURE_CLIENT_ID", "00000000-0000-0000-0000-000000000000")
+
+		got, err := chainCredentialWithSecret(t.Context(), nil, false)
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(got).To(BeAssignableToTypeOf(&azidentity.ChainedTokenCredential{}))
+	})
 }
 
 func Test_extractAccountNameFromEndpoint1(t *testing.T) {
