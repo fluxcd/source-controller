@@ -339,8 +339,7 @@ with:
   with the `AZURE_CLIENT_ID`
 - Managed Identity with a system-assigned identity
 
-is attempted by default. If no chain can be established, the bucket
-is assumed to be publicly reachable.
+is attempted by default.
 
 When a reference is specified, it expects a Secret with one of the following
 sets of `.data` fields:
@@ -358,23 +357,6 @@ sets of `.data` fields:
 For any Managed Identity and/or Microsoft Entra ID (Formerly Azure Active Directory) authentication method,
 the base URL can be configured using `.data.authorityHost`. If not supplied,
 [`AzurePublicCloud` is assumed](https://pkg.go.dev/github.com/Azure/azure-sdk-for-go/sdk/azidentity#AuthorityHost).
-
-##### Azure example
-
-```yaml
----
-apiVersion: source.toolkit.fluxcd.io/v1
-kind: Bucket
-metadata:
-  name: azure-public
-  namespace: default
-spec:
-  interval: 5m0s
-  provider: azure
-  bucketName: podinfo
-  endpoint: https://podinfoaccount.blob.core.windows.net
-  timeout: 30s
-```
 
 ##### Azure Service Principal Secret example
 
@@ -1003,9 +985,6 @@ the `.spec.provider` field:
   will be used for Workload Identity authentication. In this case, the controller
   feature gate `ObjectLevelWorkloadIdentity` must be enabled, otherwise the
   controller will error out.
-
-**Note:** that for a publicly accessible object storage, you don't need to
-provide a `secretRef` nor `serviceAccountName`.
 
 **Important:** `.spec.secretRef` and `.spec.serviceAccountName` are mutually
 exclusive and cannot be set at the same time. This constraint is enforced

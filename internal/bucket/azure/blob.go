@@ -207,13 +207,8 @@ func NewClient(ctx context.Context, obj *sourcev1.Bucket, opts ...Option) (c *Bl
 		err = fmt.Errorf("failed to create environment credential chain: %w", err)
 		return nil, err
 	}
-	if token != nil {
-		c.Client, err = azblob.NewClient(obj.Spec.Endpoint, token, clientOpts)
-		return
-	}
 
-	// Fallback to simple client.
-	c.Client, err = azblob.NewClientWithNoCredential(obj.Spec.Endpoint, clientOpts)
+	c.Client, err = azblob.NewClient(obj.Spec.Endpoint, token, clientOpts)
 	return
 }
 
@@ -501,7 +496,8 @@ func sasTokenFromSecret(ep string, secret *corev1.Secret) (string, error) {
 //     environment variable, if found.
 //   - azidentity.ManagedIdentityCredential with defaults.
 //
-// If no valid token is created, it returns nil.
+// The chain always contains at least one credential, so this never returns a nil
+// TokenCredential; Azure buckets are not supported without authentication.
 func chainCredentialWithSecret(ctx context.Context, secret *corev1.Secret, opts ...auth.Option) (azcore.TokenCredential, error) {
 	var creds []azcore.TokenCredential
 
@@ -519,11 +515,7 @@ func chainCredentialWithSecret(ctx context.Context, secret *corev1.Secret, opts 
 		creds = append(creds, token)
 	}
 
-	if len(creds) > 0 {
-		return azidentity.NewChainedTokenCredential(creds, nil)
-	}
-
-	return nil, nil
+	return azidentity.NewChainedTokenCredential(creds, nil)
 }
 
 // extractAccountNameFromEndpoint extracts the Azure account name from the
