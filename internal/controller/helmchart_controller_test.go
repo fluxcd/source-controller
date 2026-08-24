@@ -879,7 +879,7 @@ func TestHelmChartReconciler_buildFromHelmRepository(t *testing.T) {
 		beforeFunc func(obj *sourcev1.HelmChart, repository *sourcev1.HelmRepository)
 		want       sreconcile.Result
 		wantErr    error
-		assertFunc func(g *WithT, obj *sourcev1.HelmChart, build chart.Build, storage *storage.Storage)
+		assertFunc func(g *WithT, obj *sourcev1.HelmChart, build chart.Build, testStorage *storage.Storage)
 		cleanFunc  func(g *WithT, build *chart.Build)
 	}{
 		{
@@ -937,10 +937,10 @@ func TestHelmChartReconciler_buildFromHelmRepository(t *testing.T) {
 				obj.Status.Artifact = &meta.Artifact{Path: chartName + "-" + chartVersion + ".tgz"}
 			},
 			want: sreconcile.ResultSuccess,
-			assertFunc: func(g *WithT, obj *sourcev1.HelmChart, build chart.Build, storage *storage.Storage) {
+			assertFunc: func(g *WithT, obj *sourcev1.HelmChart, build chart.Build, testStorage *storage.Storage) {
 				g.Expect(build.Name).To(Equal(chartName))
 				g.Expect(build.Version).To(Equal(chartVersion))
-				g.Expect(build.Path).To(Equal(storage.LocalPath(*obj.Status.Artifact)))
+				g.Expect(build.Path).To(Equal(testStorage.LocalPath(*obj.Status.Artifact)))
 				g.Expect(build.Path).To(BeARegularFile())
 			},
 		},
@@ -953,10 +953,10 @@ func TestHelmChartReconciler_buildFromHelmRepository(t *testing.T) {
 				obj.Status.ObservedValuesFiles = []string{"values.yaml", "override.yaml"}
 			},
 			want: sreconcile.ResultSuccess,
-			assertFunc: func(g *WithT, obj *sourcev1.HelmChart, build chart.Build, storage *storage.Storage) {
+			assertFunc: func(g *WithT, obj *sourcev1.HelmChart, build chart.Build, testStorage *storage.Storage) {
 				g.Expect(build.Name).To(Equal(chartName))
 				g.Expect(build.Version).To(Equal(chartVersion))
-				g.Expect(build.Path).To(Equal(storage.LocalPath(*obj.Status.Artifact)))
+				g.Expect(build.Path).To(Equal(testStorage.LocalPath(*obj.Status.Artifact)))
 				g.Expect(build.Path).To(BeARegularFile())
 				g.Expect(build.ValuesFiles).To(Equal([]string{"values.yaml", "override.yaml"}))
 			},
@@ -1035,10 +1035,10 @@ func TestHelmChartReconciler_buildFromHelmRepository(t *testing.T) {
 				obj.Status.Artifact = &meta.Artifact{Path: chartName + "-" + chartVersion + ".tgz"}
 			},
 			want: sreconcile.ResultSuccess,
-			assertFunc: func(g *WithT, obj *sourcev1.HelmChart, build chart.Build, storage *storage.Storage) {
+			assertFunc: func(g *WithT, obj *sourcev1.HelmChart, build chart.Build, testStorage *storage.Storage) {
 				g.Expect(build.Name).To(Equal(chartName))
 				g.Expect(build.Version).To(Equal(chartVersion))
-				g.Expect(build.Path).ToNot(Equal(storage.LocalPath(*obj.Status.Artifact)))
+				g.Expect(build.Path).ToNot(Equal(testStorage.LocalPath(*obj.Status.Artifact)))
 				g.Expect(build.Path).To(BeARegularFile())
 			},
 			cleanFunc: func(g *WithT, build *chart.Build) {
@@ -1105,10 +1105,7 @@ func TestHelmChartReconciler_buildFromHelmRepository(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
 
-			serverRoot := t.TempDir()
-			g.Expect(os.CopyFS(serverRoot, os.DirFS(serverFactory.Root()))).To(Succeed())
-
-			server := testserver.NewHTTPServer(serverRoot)
+			server := testserver.NewHTTPServer(serverFactory.Root())
 			server.Start()
 			defer server.Stop()
 
@@ -1133,8 +1130,7 @@ func TestHelmChartReconciler_buildFromHelmRepository(t *testing.T) {
 				clientBuilder.WithObjects(tt.secret.DeepCopy())
 			}
 
-			testStorage, err := newTestStorage(server)
-			g.Expect(err).ToNot(HaveOccurred())
+			testStorage := newTestStorageForTest(t)
 
 			r := &HelmChartReconciler{
 				Client:                clientBuilder.Build(),
@@ -1168,6 +1164,11 @@ func TestHelmChartReconciler_buildFromHelmRepository(t *testing.T) {
 
 			if tt.beforeFunc != nil {
 				tt.beforeFunc(obj, repository)
+			}
+			if obj.Status.Artifact != nil {
+				artifact, err := os.ReadFile(filepath.Join(serverFactory.Root(), obj.Status.Artifact.Path))
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(os.WriteFile(testStorage.LocalPath(*obj.Status.Artifact), artifact, 0o600)).To(Succeed())
 			}
 
 			var b chart.Build

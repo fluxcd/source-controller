@@ -36,6 +36,7 @@ import (
 	_ "github.com/distribution/distribution/v3/registry/auth/htpasswd"
 	_ "github.com/distribution/distribution/v3/registry/storage/driver/inmemory"
 	"github.com/miekg/dns"
+	. "github.com/onsi/gomega"
 	"github.com/phayes/freeport"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/crypto/bcrypt"
@@ -485,10 +486,14 @@ func initTestTLS() {
 }
 
 func newTestStorage(s *testserver.HTTPServer) (*storage.Storage, error) {
+	return newTestStorageAt(s.Root(), s.URL())
+}
+
+func newTestStorageAt(root, address string) (*storage.Storage, error) {
 	opts := &config.Options{
-		StoragePath:              s.Root(),
-		StorageAddress:           s.URL(),
-		StorageAdvAddress:        s.URL(),
+		StoragePath:              root,
+		StorageAddress:           address,
+		StorageAdvAddress:        address,
 		ArtifactRetentionTTL:     retentionTTL,
 		ArtifactRetentionRecords: retentionRecords,
 		ArtifactDigestAlgo:       digest.Canonical.String(),
@@ -500,18 +505,100 @@ func newTestStorage(s *testserver.HTTPServer) (*storage.Storage, error) {
 	return st, nil
 }
 
-func newTestStorageForTest(t *testing.T) *storage.Storage {
+func newTestStorageForTest(t testing.TB) *storage.Storage {
 	t.Helper()
 
-	server := testserver.NewHTTPServer(t.TempDir())
-	server.Start()
-	t.Cleanup(server.Stop)
-
-	st, err := newTestStorage(server)
+	root, err := os.MkdirTemp(testServer.Root(), "test-storage-")
 	if err != nil {
-		t.Fatalf("Failed to create a test storage: %v", err)
+		t.Fatalf("failed to create test storage directory: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := os.RemoveAll(root); err != nil {
+			t.Errorf("failed to remove test storage directory: %v", err)
+		}
+	})
+
+	address := testServer.URL() + "/" + filepath.Base(root)
+	st, err := newTestStorageAt(root, address)
+	if err != nil {
+		t.Fatalf("failed to create test storage: %v", err)
 	}
 	return st
+}
+
+func assertTestStorageArtifact(t testing.TB, st *storage.Storage, artifactPath, content string) {
+	t.Helper()
+	g := NewWithT(t)
+
+	g.Expect(os.WriteFile(filepath.Join(st.BasePath, artifactPath), []byte(content), 0o600)).To(Succeed())
+
+	requestCtx, cancel := context.WithTimeout(t.Context(), timeout)
+	defer cancel()
+	request, err := http.NewRequestWithContext(requestCtx, http.MethodGet, st.Hostname+"/"+artifactPath, nil)
+	g.Expect(err).NotTo(HaveOccurred())
+	response, err := http.DefaultClient.Do(request)
+	g.Expect(err).NotTo(HaveOccurred())
+	defer func() {
+		g.Expect(response.Body.Close()).To(Succeed())
+	}()
+
+	g.Expect(response.StatusCode).To(Equal(http.StatusOK))
+	body, err := io.ReadAll(response.Body)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(string(body)).To(Equal(content))
+}
+
+func TestNewTestStorageForTest(t *testing.T) {
+	t.Run("isolates artifact roots and URLs", func(t *testing.T) {
+		g := NewWithT(t)
+		first := newTestStorageForTest(t)
+		second := newTestStorageForTest(t)
+
+		g.Expect(first.BasePath).NotTo(Equal(second.BasePath))
+		g.Expect(first.Hostname).NotTo(Equal(second.Hostname))
+
+		const artifactPath = "artifact.txt"
+		artifacts := []struct {
+			name    string
+			storage *storage.Storage
+			content string
+		}{
+			{name: "first storage", storage: first, content: "first"},
+			{name: "second storage", storage: second, content: "second"},
+		}
+
+		for _, tt := range artifacts {
+			t.Run(tt.name, func(t *testing.T) {
+				assertTestStorageArtifact(t, tt.storage, artifactPath, tt.content)
+			})
+		}
+	})
+
+	t.Run("supports parallel test cases", func(t *testing.T) {
+		for _, content := range []string{"first", "second", "third", "fourth"} {
+			t.Run(content, func(t *testing.T) {
+				t.Parallel()
+				st := newTestStorageForTest(t)
+				assertTestStorageArtifact(t, st, "artifact.txt", content)
+			})
+		}
+	})
+
+	t.Run("removes its artifact root during cleanup", func(t *testing.T) {
+		g := NewWithT(t)
+		var root string
+
+		t.Run("create storage", func(t *testing.T) {
+			g := NewWithT(t)
+			st := newTestStorageForTest(t)
+			root = st.BasePath
+			g.Expect(os.WriteFile(filepath.Join(root, "artifact.txt"), []byte("content"), 0o600)).To(Succeed())
+		})
+
+		_, err := os.Stat(root)
+		g.Expect(err).To(HaveOccurred())
+		g.Expect(os.IsNotExist(err)).To(BeTrue())
+	})
 }
 
 var letterRunes = []rune("abcdefghijklmnopqrstuvwxyz1234567890")
