@@ -81,12 +81,12 @@ const (
 )
 
 var (
-	k8sClient    client.Client
-	testEnv      *testenv.Environment
-	testStorage  *storage.Storage
-	testServer   *testserver.ArtifactServer
-	testMetricsH controller.Metrics
-	ctx          = ctrl.SetupSignalHandler()
+	k8sClient      client.Client
+	testEnv        *testenv.Environment
+	managerStorage *storage.Storage
+	testServer     *testserver.ArtifactServer
+	testMetricsH   controller.Metrics
+	ctx            = ctrl.SetupSignalHandler()
 )
 
 var (
@@ -301,7 +301,7 @@ func TestMain(m *testing.M) {
 	fmt.Println("Starting the test storage server")
 	testServer.Start()
 
-	testStorage, err = newTestStorage(testServer.HTTPServer)
+	managerStorage, err = newTestStorage(testServer.HTTPServer)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to create a test storage: %v", err))
 	}
@@ -324,7 +324,7 @@ func TestMain(m *testing.M) {
 		Client:        testEnv,
 		EventRecorder: record.NewFakeRecorder(32),
 		Metrics:       testMetricsH,
-		Storage:       testStorage,
+		Storage:       managerStorage,
 	}).SetupWithManager(testEnv, GitRepositoryReconcilerOptions{
 		RateLimiter: controller.GetDefaultRateLimiter(),
 	}); err != nil {
@@ -335,7 +335,7 @@ func TestMain(m *testing.M) {
 		Client:        testEnv,
 		EventRecorder: record.NewFakeRecorder(32),
 		Metrics:       testMetricsH,
-		Storage:       testStorage,
+		Storage:       managerStorage,
 	}).SetupWithManager(testEnv, BucketReconcilerOptions{
 		RateLimiter: controller.GetDefaultRateLimiter(),
 	}); err != nil {
@@ -349,7 +349,7 @@ func TestMain(m *testing.M) {
 		Client:        testEnv,
 		EventRecorder: record.NewFakeRecorder(32),
 		Metrics:       testMetricsH,
-		Storage:       testStorage,
+		Storage:       managerStorage,
 	}).SetupWithManager(testEnv, OCIRepositoryReconcilerOptions{
 		RateLimiter: controller.GetDefaultRateLimiter(),
 	}); err != nil {
@@ -361,7 +361,7 @@ func TestMain(m *testing.M) {
 		EventRecorder: record.NewFakeRecorder(32),
 		Metrics:       testMetricsH,
 		Getters:       testGetters,
-		Storage:       testStorage,
+		Storage:       managerStorage,
 		Cache:         testCache,
 		TTL:           1 * time.Second,
 		CacheRecorder: cacheRecorder,
@@ -376,7 +376,7 @@ func TestMain(m *testing.M) {
 		EventRecorder: record.NewFakeRecorder(32),
 		Metrics:       testMetricsH,
 		Getters:       testGetters,
-		Storage:       testStorage,
+		Storage:       managerStorage,
 		Cache:         testCache,
 		TTL:           1 * time.Second,
 		CacheRecorder: cacheRecorder,
@@ -498,6 +498,20 @@ func newTestStorage(s *testserver.HTTPServer) (*storage.Storage, error) {
 		return nil, err
 	}
 	return st, nil
+}
+
+func newTestStorageForTest(t *testing.T) *storage.Storage {
+	t.Helper()
+
+	server := testserver.NewHTTPServer(t.TempDir())
+	server.Start()
+	t.Cleanup(server.Stop)
+
+	st, err := newTestStorage(server)
+	if err != nil {
+		t.Fatalf("Failed to create a test storage: %v", err)
+	}
+	return st
 }
 
 var letterRunes = []rune("abcdefghijklmnopqrstuvwxyz1234567890")

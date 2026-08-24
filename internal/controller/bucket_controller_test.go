@@ -58,6 +58,8 @@ import (
 const EnvGcpStorageHost = "STORAGE_EMULATOR_HOST"
 
 func TestBucketReconciler_deleteBeforeFinalizer(t *testing.T) {
+	testStorage := newTestStorageForTest(t)
+
 	g := NewWithT(t)
 
 	namespaceName := "bucket-" + randStringRunes(5)
@@ -196,6 +198,8 @@ func TestBucketReconciler_Reconcile(t *testing.T) {
 }
 
 func TestBucketReconciler_reconcileStorage(t *testing.T) {
+	testStorage := newTestStorageForTest(t)
+
 	tests := []struct {
 		name             string
 		beforeFunc       func(obj *sourcev1.Bucket, storage *storage.Storage) error
@@ -433,6 +437,8 @@ func TestBucketReconciler_reconcileStorage(t *testing.T) {
 }
 
 func TestBucketReconciler_reconcileSource_generic(t *testing.T) {
+	testStorage := newTestStorageForTest(t)
+
 	tests := []struct {
 		name             string
 		bucketName       string
@@ -1002,6 +1008,8 @@ const gcsExternalAccountConfig = `{
 }`
 
 func TestBucketReconciler_reconcileSource_gcs(t *testing.T) {
+	testStorage := newTestStorageForTest(t)
+
 	tests := []struct {
 		name                               string
 		bucketName                         string
@@ -1512,6 +1520,8 @@ func TestBucketReconciler_reconcileSource_gcs(t *testing.T) {
 }
 
 func TestBucketReconciler_reconcileArtifact(t *testing.T) {
+	testStorage := newTestStorageForTest(t)
+
 	tests := []struct {
 		name             string
 		beforeFunc       func(t *WithT, obj *sourcev1.Bucket, index *index.Digester, dir string)

@@ -206,6 +206,8 @@ KXi2P5xm89dQni0kTeAAY=
 )
 
 func TestGitRepositoryReconciler_deleteBeforeFinalizer(t *testing.T) {
+	testStorage := newTestStorageForTest(t)
+
 	g := NewWithT(t)
 
 	namespaceName := "gitrepo-" + randStringRunes(5)
@@ -318,6 +320,8 @@ func TestGitRepositoryReconciler_Reconcile(t *testing.T) {
 }
 
 func TestGitRepositoryReconciler_reconcileSource_emptyRepository(t *testing.T) {
+	testStorage := newTestStorageForTest(t)
+
 	g := NewWithT(t)
 
 	server, err := gittestserver.NewTempGitServer()
@@ -370,6 +374,8 @@ func TestGitRepositoryReconciler_reconcileSource_emptyRepository(t *testing.T) {
 }
 
 func TestGitRepositoryReconciler_reconcileSource_authStrategy(t *testing.T) {
+	testStorage := newTestStorageForTest(t)
+
 	type options struct {
 		username   string
 		password   string
@@ -1115,6 +1121,8 @@ func TestGitRepositoryReconciler_getAuthOpts_provider(t *testing.T) {
 }
 
 func TestGitRepositoryReconciler_reconcileSource_checkoutStrategy(t *testing.T) {
+	testStorage := newTestStorageForTest(t)
+
 	g := NewWithT(t)
 
 	branches := []string{"staging"}
@@ -1365,6 +1373,8 @@ func TestGitRepositoryReconciler_reconcileSource_checkoutStrategy(t *testing.T) 
 }
 
 func TestGitRepositoryReconciler_reconcileArtifact(t *testing.T) {
+	testStorage := newTestStorageForTest(t)
+
 	tests := []struct {
 		name             string
 		dir              string
@@ -1730,6 +1740,8 @@ func TestGitRepositoryReconciler_reconcileInclude(t *testing.T) {
 }
 
 func TestGitRepositoryReconciler_reconcileStorage(t *testing.T) {
+	testStorage := newTestStorageForTest(t)
+
 	tests := []struct {
 		name             string
 		beforeFunc       func(obj *sourcev1.GitRepository, storage *storage.Storage) error
@@ -1968,6 +1980,8 @@ func TestGitRepositoryReconciler_reconcileStorage(t *testing.T) {
 }
 
 func TestGitRepositoryReconciler_reconcileDelete(t *testing.T) {
+	testStorage := newTestStorageForTest(t)
+
 	g := NewWithT(t)
 
 	r := &GitRepositoryReconciler{
@@ -2797,6 +2811,8 @@ func TestGitRepositoryReconciler_verifySignature(t *testing.T) {
 }
 
 func TestGitRepositoryReconciler_ConditionsUpdate(t *testing.T) {
+	testStorage := newTestStorageForTest(t)
+
 	g := NewWithT(t)
 
 	server, err := gittestserver.NewTempGitServer()

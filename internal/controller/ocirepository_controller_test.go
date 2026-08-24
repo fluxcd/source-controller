@@ -84,6 +84,8 @@ var (
 )
 
 func TestOCIRepositoryReconciler_deleteBeforeFinalizer(t *testing.T) {
+	testStorage := newTestStorageForTest(t)
+
 	g := NewWithT(t)
 
 	namespaceName := "ocirepo-" + randStringRunes(5)
@@ -240,7 +242,7 @@ func TestOCIRepository_Reconcile(t *testing.T) {
 			g.Expect(obj.Status.Artifact.Metadata[oci.RevisionAnnotation]).To(ContainSubstring(tt.tag))
 
 			// Check if the artifact storage path matches the expected file path
-			localPath := testStorage.LocalPath(*obj.Status.Artifact)
+			localPath := managerStorage.LocalPath(*obj.Status.Artifact)
 			t.Logf("artifact local path: %s", localPath)
 
 			f, err := os.Open(localPath)
@@ -414,6 +416,8 @@ func TestOCIRepository_Reconcile_MediaType(t *testing.T) {
 }
 
 func TestOCIRepository_reconcileSource_authStrategy(t *testing.T) {
+	testStorage := newTestStorageForTest(t)
+
 	type secretOptions struct {
 		username      string
 		password      string
@@ -1130,6 +1134,8 @@ func TestOCIRepository_ProxySecret(t *testing.T) {
 }
 
 func TestOCIRepository_reconcileSource_remoteReference(t *testing.T) {
+	testStorage := newTestStorageForTest(t)
+
 	g := NewWithT(t)
 
 	tmpDir := t.TempDir()
@@ -1315,6 +1321,8 @@ func TestOCIRepository_reconcileSource_remoteReference(t *testing.T) {
 }
 
 func TestOCIRepository_reconcileSource_verifyOCISourceSignatureNotation(t *testing.T) {
+	testStorage := newTestStorageForTest(t)
+
 	g := NewWithT(t)
 
 	tests := []struct {
@@ -1669,6 +1677,8 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignatureNotation(t *testi
 }
 
 func TestOCIRepository_reconcileSource_verifyOCISourceTrustPolicyNotation(t *testing.T) {
+	testStorage := newTestStorageForTest(t)
+
 	g := NewWithT(t)
 
 	tests := []struct {
@@ -2013,6 +2023,8 @@ func TestOCIRepository_reconcileSource_verifyOCISourceTrustPolicyNotation(t *tes
 }
 
 func TestOCIRepository_reconcileSource_verifyOCISourceSignatureCosign(t *testing.T) {
+	testStorage := newTestStorageForTest(t)
+
 	g := NewWithT(t)
 
 	tests := []struct {
@@ -2285,6 +2297,8 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignatureCosign(t *testing
 }
 
 func TestOCIRepository_reconcileSource_verifyOCISourceSignature_keyless(t *testing.T) {
+	testStorage := newTestStorageForTest(t)
+
 	tests := []struct {
 		name             string
 		reference        *sourcev1.OCIRepositoryRef
@@ -2461,6 +2475,8 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignature_keyless(t *testi
 }
 
 func TestOCIRepository_reconcileSource_noop(t *testing.T) {
+	testStorage := newTestStorageForTest(t)
+
 	g := NewWithT(t)
 
 	testRevision := "6.1.5@sha256:8e4057c22d531d40e12b065443cb0d80394b7257c4dc557cb1fbd4dce892b86d"
@@ -2634,6 +2650,8 @@ func TestOCIRepository_reconcileSource_noop(t *testing.T) {
 }
 
 func TestOCIRepository_reconcileArtifact(t *testing.T) {
+	testStorage := newTestStorageForTest(t)
+
 	tests := []struct {
 		name             string
 		targetPath       string
@@ -2880,6 +2898,8 @@ func TestOCIRepository_reconcileArtifact(t *testing.T) {
 }
 
 func TestOCIRepository_getArtifactRef(t *testing.T) {
+	testStorage := newTestStorageForTest(t)
+
 	g := NewWithT(t)
 
 	tmpDir := t.TempDir()
@@ -3132,6 +3152,8 @@ func TestOCIRepository_objectLevelWorkloadIdentityFeatureGate(t *testing.T) {
 }
 
 func TestOCIRepository_reconcileStorage(t *testing.T) {
+	testStorage := newTestStorageForTest(t)
+
 	tests := []struct {
 		name             string
 		beforeFunc       func(obj *sourcev1.OCIRepository, storage *storage.Storage) error
@@ -3377,6 +3399,8 @@ func TestOCIRepository_reconcileStorage(t *testing.T) {
 }
 
 func TestOCIRepository_ReconcileDelete(t *testing.T) {
+	testStorage := newTestStorageForTest(t)
+
 	g := NewWithT(t)
 
 	r := &OCIRepositoryReconciler{
