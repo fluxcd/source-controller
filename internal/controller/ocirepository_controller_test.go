@@ -60,6 +60,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	kstatus "github.com/fluxcd/cli-utils/pkg/kstatus/status"
+	eventv1 "github.com/fluxcd/pkg/apis/event/v1beta1"
 	"github.com/fluxcd/pkg/apis/meta"
 	intdigest "github.com/fluxcd/pkg/artifact/digest"
 	"github.com/fluxcd/pkg/artifact/storage"
@@ -3413,13 +3414,14 @@ func TestOCIRepositoryReconciler_notify(t *testing.T) {
 	noopErr.Ignore = true
 
 	tests := []struct {
-		name             string
-		res              sreconcile.Result
-		resErr           error
-		oldObjBeforeFunc func(obj *sourcev1.OCIRepository)
-		newObjBeforeFunc func(obj *sourcev1.OCIRepository)
-		commit           git.Commit
-		wantEvent        string
+		name               string
+		res                sreconcile.Result
+		resErr             error
+		oldObjBeforeFunc   func(obj *sourcev1.OCIRepository)
+		newObjBeforeFunc   func(obj *sourcev1.OCIRepository)
+		commit             git.Commit
+		wantEvent          string
+		wantOriginRevision string
 	}{
 		{
 			name:   "error - no event",
@@ -3441,7 +3443,8 @@ func TestOCIRepositoryReconciler_notify(t *testing.T) {
 					},
 				}
 			},
-			wantEvent: "Normal NewArtifact stored artifact with revision 'xxx' from 'oci://newurl.io', origin source 'https://github.com/stefanprodan/podinfo', origin revision '6.1.8/b3b00fe35424a45d373bf4c7214178bc36fd7872'",
+			wantEvent:          "Normal NewArtifact stored artifact with revision 'xxx' from 'oci://newurl.io', origin source 'https://github.com/stefanprodan/podinfo', origin revision '6.1.8/b3b00fe35424a45d373bf4c7214178bc36fd7872'",
+			wantOriginRevision: "6.1.8/b3b00fe35424a45d373bf4c7214178bc36fd7872",
 		},
 		{
 			name:   "recovery from failure",
@@ -3454,10 +3457,17 @@ func TestOCIRepositoryReconciler_notify(t *testing.T) {
 			},
 			newObjBeforeFunc: func(obj *sourcev1.OCIRepository) {
 				obj.Spec.URL = "oci://newurl.io"
-				obj.Status.Artifact = &meta.Artifact{Revision: "xxx", Digest: "yyy"}
+				obj.Status.Artifact = &meta.Artifact{
+					Revision: "xxx",
+					Digest:   "yyy",
+					Metadata: map[string]string{
+						oci.RevisionAnnotation: "6.1.8/b3b00fe35424a45d373bf4c7214178bc36fd7872",
+					},
+				}
 				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "ready")
 			},
-			wantEvent: "Normal Succeeded stored artifact with revision 'xxx' from 'oci://newurl.io'",
+			wantEvent:          "Normal Succeeded stored artifact with revision 'xxx' from 'oci://newurl.io'",
+			wantOriginRevision: "6.1.8/b3b00fe35424a45d373bf4c7214178bc36fd7872",
 		},
 		{
 			name:   "recovery and new artifact",
@@ -3525,6 +3535,12 @@ func TestOCIRepositoryReconciler_notify(t *testing.T) {
 				g.Expect(ok).To(Equal(tt.wantEvent != ""), "unexpected event received")
 				if tt.wantEvent != "" {
 					g.Expect(x).To(ContainSubstring(tt.wantEvent))
+					originRevisionKey := fmt.Sprintf("%s/%s", sourcev1.GroupVersion.Group, eventv1.MetaOriginRevisionKey)
+					if tt.wantOriginRevision != "" {
+						g.Expect(x).To(ContainSubstring(fmt.Sprintf("%s:%s", originRevisionKey, tt.wantOriginRevision)))
+					} else {
+						g.Expect(x).NotTo(ContainSubstring(originRevisionKey))
+					}
 				}
 			default:
 				if tt.wantEvent != "" {

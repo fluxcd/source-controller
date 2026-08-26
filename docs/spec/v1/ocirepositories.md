@@ -953,6 +953,13 @@ LAST SEEN   TYPE     REASON                OBJECT                               
 94s         Warning  OCIOperationFailed    ocirepository/<repository-name>      failed to pull artifact from 'oci://ghcr.io/stefanprodan/manifests/podinfo': couldn't find tag "0.0.1"
 ```
 
+When `.status.artifact.metadata` contains a non-empty
+`org.opencontainers.image.revision` annotation, the controller forwards its
+value in `NewArtifact` and recovery `Succeeded` Events using the
+`source.toolkit.fluxcd.io/originRevision` annotation. The
+notification-controller exposes this value as `originRevision` in the Event
+metadata sent to notification consumers.
+
 Besides being reported in Events, the reconciliation errors are also logged by
 the controller. The Flux CLI offer commands for filtering the logs for a
 specific OCIRepository, e.g.
