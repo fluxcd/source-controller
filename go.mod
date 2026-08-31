@@ -34,7 +34,7 @@ require (
 	github.com/fluxcd/pkg/http/transport v0.8.0
 	github.com/fluxcd/pkg/masktoken v0.9.0
 	github.com/fluxcd/pkg/oci v0.68.1
-	github.com/fluxcd/pkg/runtime v0.110.2
+	github.com/fluxcd/pkg/runtime v0.110.3
 	github.com/fluxcd/pkg/sourceignore v0.18.0
 	github.com/fluxcd/pkg/ssh v0.25.0
 	github.com/fluxcd/pkg/tar v1.2.0
