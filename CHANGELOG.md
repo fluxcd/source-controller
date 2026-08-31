@@ -2,6 +2,21 @@
 
 All notable changes to this project are documented in this file.
 
+## 1.9.5
+
+**Release date:** 2026-08-31
+
+This patch release upgrades Helm to v4.2.4 to stay in sync with helm-controller
+1.6, which moved back from the Flux fork of Helm to upstream. It also updates
+the fluxcd/pkg dependencies, which bring Kubernetes to 1.36.4.
+
+Improvements:
+- Upgrade helm to 4.2.4 (sync with HC 1.6)
+  [#2140](https://github.com/fluxcd/source-controller/pull/2140)
+- Update fluxcd/pkg dependencies
+  [#2141](https://github.com/fluxcd/source-controller/pull/2141)
+  [#2142](https://github.com/fluxcd/source-controller/pull/2142)
+
 ## 1.9.4
 
 **Release date:** 2026-08-07
