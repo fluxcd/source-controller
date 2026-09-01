@@ -82,6 +82,8 @@ import (
 )
 
 func TestHelmChartReconciler_deleteBeforeFinalizer(t *testing.T) {
+	testStorage := newTestStorageForTest(t)
+
 	g := NewWithT(t)
 
 	namespaceName := "helmchart-" + randStringRunes(5)
@@ -333,6 +335,8 @@ func TestHelmChartReconciler_Reconcile(t *testing.T) {
 }
 
 func TestHelmChartReconciler_reconcileStorage(t *testing.T) {
+	testStorage := newTestStorageForTest(t)
+
 	tests := []struct {
 		name             string
 		beforeFunc       func(obj *sourcev1.HelmChart, storage *storage.Storage) error
@@ -875,7 +879,7 @@ func TestHelmChartReconciler_buildFromHelmRepository(t *testing.T) {
 		beforeFunc func(obj *sourcev1.HelmChart, repository *sourcev1.HelmRepository)
 		want       sreconcile.Result
 		wantErr    error
-		assertFunc func(g *WithT, obj *sourcev1.HelmChart, build chart.Build)
+		assertFunc func(g *WithT, obj *sourcev1.HelmChart, build chart.Build, testStorage *storage.Storage)
 		cleanFunc  func(g *WithT, build *chart.Build)
 	}{
 		{
@@ -884,7 +888,7 @@ func TestHelmChartReconciler_buildFromHelmRepository(t *testing.T) {
 				obj.Spec.Chart = "helmchart"
 			},
 			want: sreconcile.ResultSuccess,
-			assertFunc: func(g *WithT, _ *sourcev1.HelmChart, build chart.Build) {
+			assertFunc: func(g *WithT, _ *sourcev1.HelmChart, build chart.Build, _ *storage.Storage) {
 				g.Expect(build.Name).To(Equal(chartName))
 				g.Expect(build.Version).To(Equal(higherChartVersion))
 				g.Expect(build.Path).ToNot(BeEmpty())
@@ -915,7 +919,7 @@ func TestHelmChartReconciler_buildFromHelmRepository(t *testing.T) {
 				repository.Spec.SecretRef = &meta.LocalObjectReference{Name: "auth"}
 			},
 			want: sreconcile.ResultSuccess,
-			assertFunc: func(g *WithT, _ *sourcev1.HelmChart, build chart.Build) {
+			assertFunc: func(g *WithT, _ *sourcev1.HelmChart, build chart.Build, _ *storage.Storage) {
 				g.Expect(build.Name).To(Equal(chartName))
 				g.Expect(build.Version).To(Equal(chartVersion))
 				g.Expect(build.Path).ToNot(BeEmpty())
@@ -933,10 +937,10 @@ func TestHelmChartReconciler_buildFromHelmRepository(t *testing.T) {
 				obj.Status.Artifact = &meta.Artifact{Path: chartName + "-" + chartVersion + ".tgz"}
 			},
 			want: sreconcile.ResultSuccess,
-			assertFunc: func(g *WithT, obj *sourcev1.HelmChart, build chart.Build) {
+			assertFunc: func(g *WithT, obj *sourcev1.HelmChart, build chart.Build, testStorage *storage.Storage) {
 				g.Expect(build.Name).To(Equal(chartName))
 				g.Expect(build.Version).To(Equal(chartVersion))
-				g.Expect(build.Path).To(Equal(filepath.Join(serverFactory.Root(), obj.Status.Artifact.Path)))
+				g.Expect(build.Path).To(Equal(testStorage.LocalPath(*obj.Status.Artifact)))
 				g.Expect(build.Path).To(BeARegularFile())
 			},
 		},
@@ -949,10 +953,10 @@ func TestHelmChartReconciler_buildFromHelmRepository(t *testing.T) {
 				obj.Status.ObservedValuesFiles = []string{"values.yaml", "override.yaml"}
 			},
 			want: sreconcile.ResultSuccess,
-			assertFunc: func(g *WithT, obj *sourcev1.HelmChart, build chart.Build) {
+			assertFunc: func(g *WithT, obj *sourcev1.HelmChart, build chart.Build, testStorage *storage.Storage) {
 				g.Expect(build.Name).To(Equal(chartName))
 				g.Expect(build.Version).To(Equal(chartVersion))
-				g.Expect(build.Path).To(Equal(filepath.Join(serverFactory.Root(), obj.Status.Artifact.Path)))
+				g.Expect(build.Path).To(Equal(testStorage.LocalPath(*obj.Status.Artifact)))
 				g.Expect(build.Path).To(BeARegularFile())
 				g.Expect(build.ValuesFiles).To(Equal([]string{"values.yaml", "override.yaml"}))
 			},
@@ -965,7 +969,7 @@ func TestHelmChartReconciler_buildFromHelmRepository(t *testing.T) {
 				obj.Spec.ValuesFiles = []string{"values.yaml", "override.yaml"}
 			},
 			want: sreconcile.ResultSuccess,
-			assertFunc: func(g *WithT, _ *sourcev1.HelmChart, build chart.Build) {
+			assertFunc: func(g *WithT, _ *sourcev1.HelmChart, build chart.Build, _ *storage.Storage) {
 				g.Expect(build.Name).To(Equal(chartName))
 				g.Expect(build.Version).To(Equal(higherChartVersion + "+3"))
 				g.Expect(build.Path).ToNot(BeEmpty())
@@ -993,7 +997,7 @@ func TestHelmChartReconciler_buildFromHelmRepository(t *testing.T) {
 				obj.Spec.IgnoreMissingValuesFiles = true
 			},
 			want: sreconcile.ResultSuccess,
-			assertFunc: func(g *WithT, obj *sourcev1.HelmChart, build chart.Build) {
+			assertFunc: func(g *WithT, obj *sourcev1.HelmChart, build chart.Build, _ *storage.Storage) {
 				g.Expect(build.Name).To(Equal(chartName))
 				g.Expect(build.Version).To(Equal(chartVersion + "+0"))
 				g.Expect(build.ValuesFiles).To(BeEmpty())
@@ -1011,7 +1015,7 @@ func TestHelmChartReconciler_buildFromHelmRepository(t *testing.T) {
 				obj.Spec.IgnoreMissingValuesFiles = true
 			},
 			want: sreconcile.ResultSuccess,
-			assertFunc: func(g *WithT, obj *sourcev1.HelmChart, build chart.Build) {
+			assertFunc: func(g *WithT, obj *sourcev1.HelmChart, build chart.Build, _ *storage.Storage) {
 				g.Expect(build.Name).To(Equal(chartName))
 				g.Expect(build.Version).To(Equal(chartVersion + "+0"))
 				g.Expect(build.ValuesFiles).To(Equal([]string{"values.yaml", "override.yaml"}))
@@ -1031,10 +1035,10 @@ func TestHelmChartReconciler_buildFromHelmRepository(t *testing.T) {
 				obj.Status.Artifact = &meta.Artifact{Path: chartName + "-" + chartVersion + ".tgz"}
 			},
 			want: sreconcile.ResultSuccess,
-			assertFunc: func(g *WithT, obj *sourcev1.HelmChart, build chart.Build) {
+			assertFunc: func(g *WithT, obj *sourcev1.HelmChart, build chart.Build, testStorage *storage.Storage) {
 				g.Expect(build.Name).To(Equal(chartName))
 				g.Expect(build.Version).To(Equal(chartVersion))
-				g.Expect(build.Path).ToNot(Equal(filepath.Join(serverFactory.Root(), obj.Status.Artifact.Path)))
+				g.Expect(build.Path).ToNot(Equal(testStorage.LocalPath(*obj.Status.Artifact)))
 				g.Expect(build.Path).To(BeARegularFile())
 			},
 			cleanFunc: func(g *WithT, build *chart.Build) {
@@ -1050,7 +1054,7 @@ func TestHelmChartReconciler_buildFromHelmRepository(t *testing.T) {
 			},
 			want:    sreconcile.ResultEmpty,
 			wantErr: &serror.Generic{Err: errors.New("failed to get authentication secret '/invalid': secrets \"invalid\" not found")},
-			assertFunc: func(g *WithT, obj *sourcev1.HelmChart, build chart.Build) {
+			assertFunc: func(g *WithT, obj *sourcev1.HelmChart, build chart.Build, _ *storage.Storage) {
 				g.Expect(build.Complete()).To(BeFalse())
 
 				g.Expect(obj.Status.Conditions).To(conditions.MatchConditions([]metav1.Condition{
@@ -1065,7 +1069,7 @@ func TestHelmChartReconciler_buildFromHelmRepository(t *testing.T) {
 			},
 			want:    sreconcile.ResultEmpty,
 			wantErr: &serror.Stalling{Err: errors.New("scheme \"file\" not supported")},
-			assertFunc: func(g *WithT, obj *sourcev1.HelmChart, build chart.Build) {
+			assertFunc: func(g *WithT, obj *sourcev1.HelmChart, build chart.Build, _ *storage.Storage) {
 				g.Expect(build.Complete()).To(BeFalse())
 
 				g.Expect(obj.Status.Conditions).To(conditions.MatchConditions([]metav1.Condition{
@@ -1080,7 +1084,7 @@ func TestHelmChartReconciler_buildFromHelmRepository(t *testing.T) {
 			},
 			want:    sreconcile.ResultEmpty,
 			wantErr: &serror.Stalling{Err: errors.New("missing protocol scheme")},
-			assertFunc: func(g *WithT, obj *sourcev1.HelmChart, build chart.Build) {
+			assertFunc: func(g *WithT, obj *sourcev1.HelmChart, build chart.Build, _ *storage.Storage) {
 				g.Expect(build.Complete()).To(BeFalse())
 
 				g.Expect(obj.Status.Conditions).To(conditions.MatchConditions([]metav1.Condition{
@@ -1126,8 +1130,7 @@ func TestHelmChartReconciler_buildFromHelmRepository(t *testing.T) {
 				clientBuilder.WithObjects(tt.secret.DeepCopy())
 			}
 
-			testStorage, err := newTestStorage(server)
-			g.Expect(err).ToNot(HaveOccurred())
+			testStorage := newTestStorageForTest(t)
 
 			r := &HelmChartReconciler{
 				Client:                clientBuilder.Build(),
@@ -1162,6 +1165,11 @@ func TestHelmChartReconciler_buildFromHelmRepository(t *testing.T) {
 			if tt.beforeFunc != nil {
 				tt.beforeFunc(obj, repository)
 			}
+			if obj.Status.Artifact != nil {
+				artifact, err := os.ReadFile(filepath.Join(serverFactory.Root(), obj.Status.Artifact.Path))
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(os.WriteFile(testStorage.LocalPath(*obj.Status.Artifact), artifact, 0o600)).To(Succeed())
+			}
 
 			var b chart.Build
 			if tt.cleanFunc != nil {
@@ -1177,7 +1185,7 @@ func TestHelmChartReconciler_buildFromHelmRepository(t *testing.T) {
 			g.Expect(got).To(Equal(tt.want))
 
 			if tt.assertFunc != nil {
-				tt.assertFunc(g, obj, b)
+				tt.assertFunc(g, obj, b, testStorage)
 			}
 		})
 	}
@@ -1668,6 +1676,8 @@ func TestHelmChartReconciler_buildFromTarballArtifact(t *testing.T) {
 }
 
 func TestHelmChartReconciler_reconcileArtifact(t *testing.T) {
+	testStorage := newTestStorageForTest(t)
+
 	tests := []struct {
 		name             string
 		build            *chart.Build
@@ -2025,6 +2035,8 @@ func TestHelmChartReconciler_getSource(t *testing.T) {
 }
 
 func TestHelmChartReconciler_reconcileDelete(t *testing.T) {
+	testStorage := newTestStorageForTest(t)
+
 	g := NewWithT(t)
 
 	r := &HelmChartReconciler{
@@ -2768,6 +2780,8 @@ func TestHelmChartReconciler_reconcileSourceFromOCI_authStrategy(t *testing.T) {
 }
 
 func TestHelmChartRepository_reconcileSource_verifyOCISourceSignature_keyless(t *testing.T) {
+	testStorage := newTestStorageForTest(t)
+
 	tests := []struct {
 		name             string
 		version          string
@@ -2944,6 +2958,8 @@ func TestHelmChartRepository_reconcileSource_verifyOCISourceSignature_keyless(t 
 }
 
 func TestHelmChartReconciler_reconcileSourceFromOCI_verifySignatureNotation(t *testing.T) {
+	testStorage := newTestStorageForTest(t)
+
 	g := NewWithT(t)
 
 	tmpDir := t.TempDir()

@@ -60,6 +60,8 @@ import (
 )
 
 func TestHelmRepositoryReconciler_deleteBeforeFinalizer(t *testing.T) {
+	testStorage := newTestStorageForTest(t)
+
 	g := NewWithT(t)
 
 	namespaceName := "helmrepo-" + randStringRunes(5)
@@ -171,6 +173,8 @@ func TestHelmRepositoryReconciler_Reconcile(t *testing.T) {
 }
 
 func TestHelmRepositoryReconciler_reconcileStorage(t *testing.T) {
+	testStorage := newTestStorageForTest(t)
+
 	tests := []struct {
 		name             string
 		beforeFunc       func(obj *sourcev1.HelmRepository, storage *storage.Storage) error
@@ -405,6 +409,8 @@ func TestHelmRepositoryReconciler_reconcileStorage(t *testing.T) {
 }
 
 func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
+	testStorage := newTestStorageForTest(t)
+
 	type options struct {
 		username   string
 		password   string
@@ -1073,6 +1079,8 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 }
 
 func TestHelmRepositoryReconciler_reconcileArtifact(t *testing.T) {
+	testStorage := newTestStorageForTest(t)
+
 	tests := []struct {
 		name             string
 		cache            *cache.Cache
