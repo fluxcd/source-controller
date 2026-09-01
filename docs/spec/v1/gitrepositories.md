@@ -607,8 +607,9 @@ spec:
 ``` 
 
 This field takes precedence over all other fields. It can be combined with
-`.spec.ref.branch` to perform a shallow clone of the branch, in which the
-commit must exist:
+`.spec.ref.branch` to restrict the clone to a single branch, in which the
+commit must exist. Note that this is not a shallow clone: the commit is
+fetched with the full history of that branch.
 
 ```yaml
 ---
