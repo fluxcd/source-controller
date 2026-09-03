@@ -456,8 +456,15 @@ func (r *HelmChartReconciler) reconcileSource(ctx context.Context, sp *patch.Ser
 
 	// Assert source has an artifact
 	if s.GetArtifact() == nil || !r.Storage.ArtifactExist(*s.GetArtifact()) {
-		// Set the condition to indicate that the source has no artifact for all types except OCI HelmRepository
-		if helmRepo, ok := s.(*sourcev1.HelmRepository); !ok || helmRepo.Spec.Type != sourcev1.HelmRepositoryTypeOCI {
+		// OCI HelmRepository sources do not produce artifacts themselves, but a
+		// failed source reconcile should still block chart builds to avoid
+		// surfacing a later generic build error on the HelmChart.
+		if helmRepo, ok := s.(*sourcev1.HelmRepository); ok && helmRepo.Spec.Type == sourcev1.HelmRepositoryTypeOCI {
+			if ready := conditions.Get(helmRepo, meta.ReadyCondition); ready != nil && ready.Status == metav1.ConditionFalse {
+				conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, ready.Reason, "%s", ready.Message)
+				return sreconcile.ResultRequeue, nil
+			}
+		} else {
 			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, "NoSourceArtifact",
 				"no artifact available for %s source '%s'", obj.Spec.SourceRef.Kind, obj.Spec.SourceRef.Name)
 			r.eventLogf(ctx, obj, eventv1.EventTypeTrace, "NoSourceArtifact",
