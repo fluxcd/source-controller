@@ -1,0 +1,23 @@
+---
+# Negative test: keyless verification against a Fulcio + Rekor + CT trusted
+# root whose CT public key did NOT sign the certificate's embedded SCT. This
+# pins IgnoreSCT=false: because a CT log is present, SCT verification must run
+# and fail against the wrong CT key. If the verifier regressed IgnoreSCT to
+# true, this fixture would wrongly succeed.
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: OCIRepository
+metadata:
+  name: test-wrong-ct
+spec:
+  interval: 5m
+  url: oci://sigstore-test-registry:5000/test/v3-keyless
+  ref:
+    tag: v1
+  insecure: true
+  verify:
+    provider: cosign
+    trustedRootSecretRef:
+      name: sigstore-wrong-ct-root
+    matchOIDCIdentity:
+    - issuer: "^https://kubernetes\\.default\\.svc"
+      subject: "^https://kubernetes\\.io/namespaces/default/serviceaccounts/default$"

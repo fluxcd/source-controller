@@ -5,7 +5,8 @@ set -eoux pipefail
 CREATE_CLUSTER="${CREATE_CLUSTER:-true}"
 KIND_CLUSTER_NAME="${KIND_CLUSTER_NAME:-kind}"
 LOAD_IMG_INTO_KIND="${LOAD_IMG_INTO_KIND:-true}"
-BUILD_PLATFORM="${BUILD_PLATFORM:-linux/amd64}"
+ARCH=$(uname -m | sed 's/aarch64/arm64/;s/x86_64/amd64/')
+BUILD_PLATFORM="${BUILD_PLATFORM:-linux/${ARCH}}"
 
 IMG=test/source-controller
 TAG=latest

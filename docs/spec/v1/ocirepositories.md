@@ -644,16 +644,37 @@ spec:
 By default, the controller verifies the signatures using the Fulcio root CA and
 the Rekor instance hosted at [rekor.sigstore.dev](https://rekor.sigstore.dev/).
 
-##### Custom Sigstore infrastructure (self-hosted Rekor / Fulcio)
+##### Custom Sigstore infrastructure
 
-To verify artifacts signed with a self-hosted Sigstore deployment, provide a
-Sigstore `trusted_root.json` via the `.spec.verify.trustedRootSecretRef` field.
-The trusted root bundles the Fulcio root CA chain, Rekor public key and URL,
-CT log keys, and optionally TSA certificates. The Rekor URL is extracted
-automatically from the `baseUrl` field in the transparency log entries.
+To verify artifacts signed with private or self-hosted Sigstore components,
+provide a Sigstore `trusted_root.json` via the
+`.spec.verify.trustedRootSecretRef` field. The trusted root can contain Fulcio
+root CA chains, Rekor transparency logs, CT logs and timestamping authorities
+(TSAs). The Secret must contain a key named `trusted_root.json`.
 
 The `trusted_root.json` file follows the
 [Sigstore trusted root format](https://github.com/sigstore/protobuf-specs).
+Its Fulcio CAs, Rekor logs, CT logs and TSAs are sets of trust material. A
+trusted root can include multiple entries of each type, for example during log
+or CA rotation.
+
+The controller auto-detects verification policy from the trusted root contents:
+
+| Trusted root contents | Verification behavior |
+| --- | --- |
+| Rekor transparency logs | Rekor inclusion proof is required. Bundled signatures are verified against the Rekor log IDs and public keys in the trusted root. For legacy online lookup, all non-empty Rekor `baseUrl` values are tried deterministically. |
+| No Rekor transparency logs | Rekor inclusion proof verification is skipped. |
+| Timestamping authorities | RFC3161 signed timestamps are required. Existing signatures without a valid timestamp from one of the trusted TSAs will fail verification. |
+| No timestamping authorities | Signed timestamps are not required. |
+| CT logs | Keyless signatures require an embedded SCT that verifies against one of the trusted CT logs. CT logs are ignored for public-key signatures. |
+| No CT logs | SCT verification is skipped. |
+
+For keyless verification, the trusted root must contain Fulcio and at least one
+durable time source, either Rekor or TSA. This prevents accepting a keyless
+signature with only an identity certificate and no transparency log inclusion or
+trusted timestamp. For public-key signatures, Fulcio and CT log material are not
+used, but Rekor and TSA material can be used to require tlog inclusion and
+signed timestamps in addition to the public-key check.
 
 Generate the file using `cosign trusted-root create`:
 
@@ -665,7 +686,11 @@ cosign trusted-root create \
   --out trusted_root.json
 ```
 
-The `--tsa` flag can also be used if a custom timestamp authority is deployed:
+The `--rekor`, `--fulcio`, `--ctfe`, and `--tsa` flags may be repeated when the
+trusted root needs to contain multiple instances. Include older trust material
+while existing signed artifacts depend on it.
+
+The `--tsa` flag can be used when a custom timestamp authority is deployed:
 
 ```sh
 cosign trusted-root create \

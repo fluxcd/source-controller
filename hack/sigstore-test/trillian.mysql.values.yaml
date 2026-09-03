@@ -1,0 +1,47 @@
+# Trillian database overrides for the sigstore scaffold Helm release.
+#
+# The chart defaults to an old db_server tag built on MySQL 5.7, which hits
+# MySQL bug #96525: on newer kindest/node images (kind v0.32.0 ships v1.36.1)
+# containerd runs with an effectively unbounded RLIMIT_NOFILE (~1e9), and
+# MySQL 5.7 sizes an allocation against that limit, ballooning to >8GiB RSS
+# and getting OOM-killed in seconds. MySQL 8.x fixed the bug; v1.7.3 ships
+# MySQL 8.4.8, which Trillian and Sigstore both run in production.
+#
+# Two compatibility fixups for the 8.4 image:
+#   - args: the chart default --ignore-db-dir=lost+found was removed in MySQL
+#     8.0 and makes 8.x abort on startup, so clear it.
+#   - probes: the chart execs /etc/init.d/mysql, which the Oracle-Linux-based
+#     8.4 image does not ship. Use `mysqladmin ping` over TCP instead. The
+#     plain `mysqladmin ping` connects to the default unix socket
+#     (/var/run/mysqld/mysqld.sock), but the 8.4 image's mysqld creates its
+#     socket at /var/lib/mysql/mysql.sock, so a socket ping fails with
+#     "connect to server at 'localhost' failed" even though the server is up.
+#     A failing readiness probe drops the pod from the trillian-mysql Service
+#     endpoints, so createdb and the log server get "connection refused" and
+#     the whole stack stalls. Forcing --protocol=tcp -h 127.0.0.1 pings the
+#     same TCP 3306 the clients use. The chart renders only liveness/readiness
+#     (no startupProbe), so the liveness probe uses a generous
+#     initialDelaySeconds + failureThreshold to tolerate a slow first-run init.
+trillian:
+  mysql:
+    image:
+      # Same db_server image/registry the chart uses by default, pinned to
+      # v1.7.3 (MySQL 8.4.8) instead of the chart's v1.5.3 (MySQL 5.7).
+      registry: gcr.io
+      repository: trillian-opensource-ci/db_server
+      version: v1.7.3
+    args: []
+    livenessProbe:
+      initialDelaySeconds: 60
+      periodSeconds: 10
+      timeoutSeconds: 5
+      failureThreshold: 18
+      exec:
+        command: ["mysqladmin", "--protocol=tcp", "-h", "127.0.0.1", "ping"]
+    readinessProbe:
+      initialDelaySeconds: 10
+      periodSeconds: 10
+      timeoutSeconds: 5
+      failureThreshold: 6
+      exec:
+        command: ["mysqladmin", "--protocol=tcp", "-h", "127.0.0.1", "ping"]

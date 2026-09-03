@@ -1,0 +1,17 @@
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: OCIRepository
+metadata:
+  name: test-authed
+spec:
+  interval: 5m
+  url: oci://sigstore-test-registry:5000/test/authed
+  ref:
+    tag: v1
+  insecure: true
+  secretRef:
+    name: registry-creds
+  verify:
+    provider: cosign
+    secretRef:
+      name: cosign-test-key
