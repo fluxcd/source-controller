@@ -47,6 +47,7 @@ import (
 	"github.com/fluxcd/pkg/runtime/patch"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
+	serror "github.com/fluxcd/source-controller/internal/error"
 	"github.com/fluxcd/source-controller/internal/index"
 	gcsmock "github.com/fluxcd/source-controller/internal/mock/gcs"
 	s3mock "github.com/fluxcd/source-controller/internal/mock/s3"
@@ -84,9 +85,10 @@ func TestBucketReconciler_deleteBeforeFinalizer(t *testing.T) {
 	g.Expect(k8sClient.Delete(ctx, bucket)).NotTo(HaveOccurred())
 
 	r := &BucketReconciler{
-		Client:        k8sClient,
-		EventRecorder: record.NewFakeRecorder(32),
-		Storage:       testStorage,
+		AllowInsecureHTTP: true,
+		Client:            k8sClient,
+		EventRecorder:     record.NewFakeRecorder(32),
+		Storage:           testStorage,
 	}
 	// NOTE: Only a real API server responds with an error in this scenario.
 	_, err := r.Reconcile(ctx, ctrl.Request{NamespacedName: client.ObjectKeyFromObject(bucket)})
@@ -379,6 +381,7 @@ func TestBucketReconciler_reconcileStorage(t *testing.T) {
 			}()
 
 			r := &BucketReconciler{
+				AllowInsecureHTTP: true,
 				Client: fakeclient.NewClientBuilder().
 					WithScheme(testEnv.GetScheme()).
 					WithStatusSubresource(&sourcev1.Bucket{}).
@@ -918,10 +921,11 @@ func TestBucketReconciler_reconcileSource_generic(t *testing.T) {
 			}
 
 			r := &BucketReconciler{
-				EventRecorder: record.NewFakeRecorder(32),
-				Client:        clientBuilder.Build(),
-				Storage:       testStorage,
-				patchOptions:  getPatchOptions(bucketReadyCondition.Owned, "sc"),
+				AllowInsecureHTTP: true,
+				EventRecorder:     record.NewFakeRecorder(32),
+				Client:            clientBuilder.Build(),
+				Storage:           testStorage,
+				patchOptions:      getPatchOptions(bucketReadyCondition.Owned, "sc"),
 			}
 			tmpDir := t.TempDir()
 
@@ -1000,6 +1004,84 @@ const gcsExternalAccountConfig = `{
     "file": "/var/run/service-account/token"
   }
 }`
+
+func TestBucketReconciler_reconcileSource_insecureHTTP(t *testing.T) {
+	tests := []struct {
+		name              string
+		provider          string
+		insecure          bool
+		allowInsecureHTTP bool
+		wantReason        string
+		wantMsg           string
+	}{
+		{
+			name:              "generic insecure with AllowInsecureHTTP false stalls",
+			provider:          sourcev1.BucketProviderGeneric,
+			insecure:          true,
+			allowInsecureHTTP: false,
+			wantReason:        meta.InsecureConnectionsDisallowedReason,
+			wantMsg:           "use of insecure plain HTTP connections is blocked",
+		},
+		{
+			name:              "azure insecure is unsupported",
+			provider:          sourcev1.BucketProviderAzure,
+			insecure:          true,
+			allowInsecureHTTP: true,
+			wantReason:        meta.UnsupportedConnectionTypeReason,
+			wantMsg:           "use of insecure HTTP connections isn't allowed for azure storage",
+		},
+		{
+			name:              "gcp insecure is unsupported",
+			provider:          sourcev1.BucketProviderGoogle,
+			insecure:          true,
+			allowInsecureHTTP: true,
+			wantReason:        meta.UnsupportedConnectionTypeReason,
+			wantMsg:           "use of insecure HTTP connections isn't allowed for gcp storage",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			obj := &sourcev1.Bucket{
+				ObjectMeta: metav1.ObjectMeta{
+					GenerateName: "insecure-http-",
+					Generation:   1,
+				},
+				Spec: sourcev1.BucketSpec{
+					Provider:   tt.provider,
+					BucketName: "dummy",
+					Endpoint:   "example.com",
+					Insecure:   tt.insecure,
+					Timeout:    &metav1.Duration{Duration: timeout},
+				},
+			}
+
+			r := &BucketReconciler{
+				AllowInsecureHTTP: tt.allowInsecureHTTP,
+				Client: fakeclient.NewClientBuilder().
+					WithScheme(testEnv.GetScheme()).
+					WithStatusSubresource(&sourcev1.Bucket{}).
+					Build(),
+				EventRecorder: record.NewFakeRecorder(32),
+				Storage:       testStorage,
+				patchOptions:  getPatchOptions(bucketReadyCondition.Owned, "sc"),
+			}
+
+			sp := patch.NewSerialPatcher(obj, r.Client)
+			_, err := r.reconcileSource(context.TODO(), sp, obj, index.NewDigester(), t.TempDir())
+			g.Expect(err).To(HaveOccurred())
+			var stalling *serror.Stalling
+			g.Expect(errors.As(err, &stalling)).To(BeTrue())
+			g.Expect(stalling.Reason).To(Equal(tt.wantReason))
+			g.Expect(err.Error()).To(ContainSubstring(tt.wantMsg))
+			g.Expect(obj.Status.Conditions).To(conditions.MatchConditions([]metav1.Condition{
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, tt.wantReason, "%s", tt.wantMsg),
+			}))
+		})
+	}
+}
 
 func TestBucketReconciler_reconcileSource_gcs(t *testing.T) {
 	tests := []struct {
@@ -1437,10 +1519,11 @@ func TestBucketReconciler_reconcileSource_gcs(t *testing.T) {
 			}
 
 			r := &BucketReconciler{
-				EventRecorder: record.NewFakeRecorder(32),
-				Client:        clientBuilder.Build(),
-				Storage:       testStorage,
-				patchOptions:  getPatchOptions(bucketReadyCondition.Owned, "sc"),
+				AllowInsecureHTTP: true,
+				EventRecorder:     record.NewFakeRecorder(32),
+				Client:            clientBuilder.Build(),
+				Storage:           testStorage,
+				patchOptions:      getPatchOptions(bucketReadyCondition.Owned, "sc"),
 			}
 
 			// Handle ObjectLevelWorkloadIdentity feature gate
@@ -1640,10 +1723,11 @@ func TestBucketReconciler_reconcileArtifact(t *testing.T) {
 				WithStatusSubresource(&sourcev1.Bucket{})
 
 			r := &BucketReconciler{
-				Client:        clientBuilder.Build(),
-				EventRecorder: record.NewFakeRecorder(32),
-				Storage:       testStorage,
-				patchOptions:  getPatchOptions(bucketReadyCondition.Owned, "sc"),
+				AllowInsecureHTTP: true,
+				Client:            clientBuilder.Build(),
+				EventRecorder:     record.NewFakeRecorder(32),
+				Storage:           testStorage,
+				patchOptions:      getPatchOptions(bucketReadyCondition.Owned, "sc"),
 			}
 
 			obj := &sourcev1.Bucket{
@@ -1873,8 +1957,9 @@ func TestBucketReconciler_notify(t *testing.T) {
 			}
 
 			reconciler := &BucketReconciler{
-				EventRecorder: recorder,
-				patchOptions:  getPatchOptions(bucketReadyCondition.Owned, "sc"),
+				AllowInsecureHTTP: true,
+				EventRecorder:     recorder,
+				patchOptions:      getPatchOptions(bucketReadyCondition.Owned, "sc"),
 			}
 			index := index.NewDigester(index.WithIndex(map[string]string{
 				"zzz": "qqq",

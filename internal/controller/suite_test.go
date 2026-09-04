@@ -321,10 +321,11 @@ func TestMain(m *testing.M) {
 	defer testRegistryServer.Close()
 
 	if err := (&GitRepositoryReconciler{
-		Client:        testEnv,
-		EventRecorder: record.NewFakeRecorder(32),
-		Metrics:       testMetricsH,
-		Storage:       testStorage,
+		AllowInsecureHTTP: true,
+		Client:            testEnv,
+		EventRecorder:     record.NewFakeRecorder(32),
+		Metrics:           testMetricsH,
+		Storage:           testStorage,
 	}).SetupWithManager(testEnv, GitRepositoryReconcilerOptions{
 		RateLimiter: controller.GetDefaultRateLimiter(),
 	}); err != nil {
@@ -332,10 +333,11 @@ func TestMain(m *testing.M) {
 	}
 
 	if err := (&BucketReconciler{
-		Client:        testEnv,
-		EventRecorder: record.NewFakeRecorder(32),
-		Metrics:       testMetricsH,
-		Storage:       testStorage,
+		AllowInsecureHTTP: true,
+		Client:            testEnv,
+		EventRecorder:     record.NewFakeRecorder(32),
+		Metrics:           testMetricsH,
+		Storage:           testStorage,
 	}).SetupWithManager(testEnv, BucketReconcilerOptions{
 		RateLimiter: controller.GetDefaultRateLimiter(),
 	}); err != nil {
@@ -346,10 +348,11 @@ func TestMain(m *testing.M) {
 	cacheRecorder := cache.MustMakeMetrics()
 
 	if err := (&OCIRepositoryReconciler{
-		Client:        testEnv,
-		EventRecorder: record.NewFakeRecorder(32),
-		Metrics:       testMetricsH,
-		Storage:       testStorage,
+		AllowInsecureHTTP: true,
+		Client:            testEnv,
+		EventRecorder:     record.NewFakeRecorder(32),
+		Metrics:           testMetricsH,
+		Storage:           testStorage,
 	}).SetupWithManager(testEnv, OCIRepositoryReconcilerOptions{
 		RateLimiter: controller.GetDefaultRateLimiter(),
 	}); err != nil {
@@ -357,14 +360,15 @@ func TestMain(m *testing.M) {
 	}
 
 	if err := (&HelmRepositoryReconciler{
-		Client:        testEnv,
-		EventRecorder: record.NewFakeRecorder(32),
-		Metrics:       testMetricsH,
-		Getters:       testGetters,
-		Storage:       testStorage,
-		Cache:         testCache,
-		TTL:           1 * time.Second,
-		CacheRecorder: cacheRecorder,
+		AllowInsecureHTTP: true,
+		Client:            testEnv,
+		EventRecorder:     record.NewFakeRecorder(32),
+		Metrics:           testMetricsH,
+		Getters:           testGetters,
+		Storage:           testStorage,
+		Cache:             testCache,
+		TTL:               1 * time.Second,
+		CacheRecorder:     cacheRecorder,
 	}).SetupWithManager(testEnv, HelmRepositoryReconcilerOptions{
 		RateLimiter: controller.GetDefaultRateLimiter(),
 	}); err != nil {
@@ -372,14 +376,15 @@ func TestMain(m *testing.M) {
 	}
 
 	if err := (&HelmChartReconciler{
-		Client:        testEnv,
-		EventRecorder: record.NewFakeRecorder(32),
-		Metrics:       testMetricsH,
-		Getters:       testGetters,
-		Storage:       testStorage,
-		Cache:         testCache,
-		TTL:           1 * time.Second,
-		CacheRecorder: cacheRecorder,
+		AllowInsecureHTTP: true,
+		Client:            testEnv,
+		EventRecorder:     record.NewFakeRecorder(32),
+		Metrics:           testMetricsH,
+		Getters:           testGetters,
+		Storage:           testStorage,
+		Cache:             testCache,
+		TTL:               1 * time.Second,
+		CacheRecorder:     cacheRecorder,
 	}).SetupWithManager(ctx, testEnv, HelmChartReconcilerOptions{
 		RateLimiter: controller.GetDefaultRateLimiter(),
 	}); err != nil {

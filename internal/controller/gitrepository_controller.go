@@ -168,9 +168,10 @@ type GitRepositoryReconciler struct {
 	kuberecorder.EventRecorder
 	helper.Metrics
 
-	Storage        *storage.Storage
-	ControllerName string
-	TokenCache     *cache.TokenCache
+	Storage           *storage.Storage
+	ControllerName    string
+	TokenCache        *cache.TokenCache
+	AllowInsecureHTTP bool
 
 	requeueDependency time.Duration
 	features          map[string]bool
@@ -540,6 +541,22 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 		e := serror.NewStalling(
 			fmt.Errorf("failed to parse url '%s': %w", obj.Spec.URL, err),
 			sourcev1.URLInvalidReason,
+		)
+		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
+		return sreconcile.ResultEmpty, e
+	}
+	if u.Scheme == "http" && !r.AllowInsecureHTTP {
+		e := serror.NewStalling(
+			fmt.Errorf("%w", helper.ErrInsecureHTTPBlocked),
+			meta.InsecureConnectionsDisallowedReason,
+		)
+		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
+		return sreconcile.ResultEmpty, e
+	}
+	if proxyURL != nil && proxyURL.Scheme == "http" && !r.AllowInsecureHTTP {
+		e := serror.NewStalling(
+			fmt.Errorf("%w", helper.ErrInsecureHTTPBlocked),
+			meta.InsecureConnectionsDisallowedReason,
 		)
 		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
 		return sreconcile.ResultEmpty, e

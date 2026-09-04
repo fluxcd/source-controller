@@ -36,6 +36,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/record"
+	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	fakeclient "sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -85,9 +86,10 @@ func TestHelmRepositoryReconciler_deleteBeforeFinalizer(t *testing.T) {
 	g.Expect(k8sClient.Delete(ctx, helmrepo)).NotTo(HaveOccurred())
 
 	r := &HelmRepositoryReconciler{
-		Client:        k8sClient,
-		EventRecorder: record.NewFakeRecorder(32),
-		Storage:       testStorage,
+		AllowInsecureHTTP: true,
+		Client:            k8sClient,
+		EventRecorder:     record.NewFakeRecorder(32),
+		Storage:           testStorage,
 	}
 	// NOTE: Only a real API server responds with an error in this scenario.
 	_, err := r.Reconcile(ctx, ctrl.Request{NamespacedName: client.ObjectKeyFromObject(helmrepo)})
@@ -350,6 +352,7 @@ func TestHelmRepositoryReconciler_reconcileStorage(t *testing.T) {
 			g := NewWithT(t)
 
 			r := &HelmRepositoryReconciler{
+				AllowInsecureHTTP: true,
 				Client: fakeclient.NewClientBuilder().
 					WithScheme(testEnv.GetScheme()).
 					WithStatusSubresource(&sourcev1.HelmRepository{}).
@@ -414,17 +417,18 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 	}
 
 	tests := []struct {
-		name             string
-		protocol         string
-		server           options
-		url              string
-		secret           *corev1.Secret
-		beforeFunc       func(t *WithT, obj *sourcev1.HelmRepository)
-		revFunc          func(t *WithT, server *helmtestserver.HelmServer, secret *corev1.Secret) digest.Digest
-		afterFunc        func(t *WithT, obj *sourcev1.HelmRepository, artifact meta.Artifact, chartRepo *repository.ChartRepository)
-		want             sreconcile.Result
-		wantErr          bool
-		assertConditions []metav1.Condition
+		name              string
+		protocol          string
+		server            options
+		url               string
+		secret            *corev1.Secret
+		beforeFunc        func(t *WithT, obj *sourcev1.HelmRepository)
+		revFunc           func(t *WithT, server *helmtestserver.HelmServer, secret *corev1.Secret) digest.Digest
+		afterFunc         func(t *WithT, obj *sourcev1.HelmRepository, artifact meta.Artifact, chartRepo *repository.ChartRepository)
+		want              sreconcile.Result
+		wantErr           bool
+		allowInsecureHTTP *bool
+		assertConditions  []metav1.Condition
 	}{
 		{
 			name:     "HTTPS with certSecretRef non-matching CA succeeds via system CA pool",
@@ -783,6 +787,27 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 			},
 		},
 		{
+			name:     "HTTP URL with AllowInsecureHTTP false stalls with InsecureConnectionsDisallowed",
+			protocol: "http",
+			beforeFunc: func(t *WithT, obj *sourcev1.HelmRepository) {
+				conditions.MarkReconciling(obj, meta.ProgressingReason, "foo")
+				conditions.MarkUnknown(obj, meta.ReadyCondition, "foo", "bar")
+			},
+			want:              sreconcile.ResultEmpty,
+			wantErr:           true,
+			allowInsecureHTTP: ptr.To(false),
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.FetchFailedCondition, meta.InsecureConnectionsDisallowedReason, "use of insecure plain HTTP connections is blocked"),
+				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "foo"),
+				*conditions.UnknownCondition(meta.ReadyCondition, "foo", "bar"),
+			},
+			afterFunc: func(t *WithT, obj *sourcev1.HelmRepository, artifact meta.Artifact, chartRepo *repository.ChartRepository) {
+				t.Expect(chartRepo.Path).To(BeEmpty())
+				t.Expect(chartRepo.Index).To(BeNil())
+				t.Expect(artifact.Revision).To(BeEmpty())
+			},
+		},
+		{
 			name:     "Invalid URL makes FetchFailed=True and returns stalling error",
 			protocol: "http",
 			beforeFunc: func(t *WithT, obj *sourcev1.HelmRepository) {
@@ -1027,12 +1052,17 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 				rev = tt.revFunc(g, server, secret)
 			}
 
+			allowInsecureHTTP := true
+			if tt.allowInsecureHTTP != nil {
+				allowInsecureHTTP = *tt.allowInsecureHTTP
+			}
 			r := &HelmRepositoryReconciler{
-				EventRecorder: record.NewFakeRecorder(32),
-				Client:        clientBuilder.Build(),
-				Storage:       testStorage,
-				Getters:       testGetters,
-				patchOptions:  getPatchOptions(helmRepositoryReadyCondition.Owned, "sc"),
+				AllowInsecureHTTP: allowInsecureHTTP,
+				EventRecorder:     record.NewFakeRecorder(32),
+				Client:            clientBuilder.Build(),
+				Storage:           testStorage,
+				Getters:           testGetters,
+				patchOptions:      getPatchOptions(helmRepositoryReadyCondition.Owned, "sc"),
 			}
 			if tt.beforeFunc != nil {
 				tt.beforeFunc(g, obj)
@@ -1167,6 +1197,7 @@ func TestHelmRepositoryReconciler_reconcileArtifact(t *testing.T) {
 			g := NewWithT(t)
 
 			r := &HelmRepositoryReconciler{
+				AllowInsecureHTTP: true,
 				Client: fakeclient.NewClientBuilder().
 					WithScheme(testEnv.GetScheme()).
 					WithStatusSubresource(&sourcev1.HelmRepository{}).
@@ -1334,6 +1365,7 @@ func TestHelmRepositoryReconciler_reconcileSubRecs(t *testing.T) {
 			g := NewWithT(t)
 
 			r := &HelmRepositoryReconciler{
+				AllowInsecureHTTP: true,
 				Client: fakeclient.NewClientBuilder().
 					WithScheme(testEnv.GetScheme()).
 					WithStatusSubresource(&sourcev1.HelmRepository{}).
@@ -1555,8 +1587,9 @@ func TestHelmRepositoryReconciler_notify(t *testing.T) {
 			}
 
 			reconciler := &HelmRepositoryReconciler{
-				EventRecorder: recorder,
-				patchOptions:  getPatchOptions(helmRepositoryReadyCondition.Owned, "sc"),
+				AllowInsecureHTTP: true,
+				EventRecorder:     recorder,
+				patchOptions:      getPatchOptions(helmRepositoryReadyCondition.Owned, "sc"),
 			}
 			chartRepo := repository.ChartRepository{
 				URL: "some-address",

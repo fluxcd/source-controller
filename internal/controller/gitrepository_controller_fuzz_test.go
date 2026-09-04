@@ -450,8 +450,9 @@ func ensureDependencies() error {
 
 	startEnvServer(func(m manager.Manager) {
 		utilruntime.Must((&GitRepositoryReconciler{
-			Client:  m.GetClient(),
-			Storage: storage,
+			AllowInsecureHTTP: true,
+			Client:            m.GetClient(),
+			Storage:           storage,
 		}).SetupWithManagerAndOptions(m, GitRepositoryReconcilerOptions{
 			RateLimiter: controller.GetDefaultRateLimiter(),
 		}))

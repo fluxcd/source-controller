@@ -145,6 +145,7 @@ type OCIRepositoryReconciler struct {
 	ControllerName        string
 	TokenCache            *cache.TokenCache
 	CosignVerifierFactory *scosign.CosignVerifierFactory
+	AllowInsecureHTTP     bool
 	requeueDependency     time.Duration
 
 	patchOptions []patch.Option
@@ -341,6 +342,15 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 		conditions.Delete(obj, sourcev1.SourceVerifiedCondition)
 	}
 
+	if obj.Spec.Insecure && !r.AllowInsecureHTTP {
+		e := serror.NewStalling(
+			fmt.Errorf("%w", helper.ErrInsecureHTTPBlocked),
+			meta.InsecureConnectionsDisallowedReason,
+		)
+		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
+		return sreconcile.ResultEmpty, e
+	}
+
 	// Generate the registry credential keychain either from static credentials or using cloud OIDC
 	keychain, err := r.keychain(ctx, obj)
 	if err != nil {
@@ -363,6 +373,14 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 			e := serror.NewGeneric(
 				fmt.Errorf("failed to get proxy address: %w", err),
 				sourcev1.AuthenticationFailedReason,
+			)
+			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
+			return sreconcile.ResultEmpty, e
+		}
+		if proxyURL.Scheme == "http" && !r.AllowInsecureHTTP {
+			e := serror.NewStalling(
+				fmt.Errorf("%w", helper.ErrInsecureHTTPBlocked),
+				meta.InsecureConnectionsDisallowedReason,
 			)
 			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
 			return sreconcile.ResultEmpty, e

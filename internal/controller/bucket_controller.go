@@ -129,9 +129,10 @@ type BucketReconciler struct {
 	kuberecorder.EventRecorder
 	helper.Metrics
 
-	Storage        *storage.Storage
-	ControllerName string
-	TokenCache     *cache.TokenCache
+	Storage           *storage.Storage
+	ControllerName    string
+	TokenCache        *cache.TokenCache
+	AllowInsecureHTTP bool
 
 	patchOptions []patch.Option
 }
@@ -865,6 +866,26 @@ func (r *BucketReconciler) setupCredentials(ctx context.Context, obj *sourcev1.B
 // createBucketProvider creates a provider-specific bucket client using the given credentials and configuration.
 // It handles different bucket providers (AWS, GCP, Azure, generic) and returns the appropriate client.
 func (r *BucketReconciler) createBucketProvider(ctx context.Context, obj *sourcev1.Bucket, creds *bucketCredentials) (BucketProvider, error) {
+	provider := obj.Spec.Provider
+	if (provider == sourcev1.BucketProviderAzure || provider == sourcev1.BucketProviderGoogle) && obj.Spec.Insecure {
+		return nil, serror.NewStalling(
+			fmt.Errorf("use of insecure HTTP connections isn't allowed for %s storage", provider),
+			meta.UnsupportedConnectionTypeReason,
+		)
+	}
+	if obj.Spec.Insecure && !r.AllowInsecureHTTP {
+		return nil, serror.NewStalling(
+			fmt.Errorf("%w", helper.ErrInsecureHTTPBlocked),
+			meta.InsecureConnectionsDisallowedReason,
+		)
+	}
+	if creds.proxyURL != nil && creds.proxyURL.Scheme == "http" && !r.AllowInsecureHTTP {
+		return nil, serror.NewStalling(
+			fmt.Errorf("%w", helper.ErrInsecureHTTPBlocked),
+			meta.InsecureConnectionsDisallowedReason,
+		)
+	}
+
 	authOpts := []auth.Option{
 		auth.WithClient(r.Client),
 		auth.WithServiceAccountNamespace(obj.GetNamespace()),
