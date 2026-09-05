@@ -22,10 +22,10 @@ import (
 
 	. "github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/fluxcd/pkg/apis/meta"
+	"github.com/fluxcd/pkg/runtime/events"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	"github.com/fluxcd/source-controller/internal/object"
@@ -119,7 +119,7 @@ func TestRecordReconcileReq(t *testing.T) {
 			}
 
 			ctx := context.TODO()
-			RecordReconcileReq(ctx, record.NewFakeRecorder(32), obj, reconcile.ResultEmpty, nil)
+			RecordReconcileReq(ctx, events.NewFakeRecorder(32, false), obj, reconcile.ResultEmpty, nil)
 
 			if tt.afterFunc != nil {
 				tt.afterFunc(g, obj)
