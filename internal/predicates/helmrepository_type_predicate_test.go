@@ -39,7 +39,7 @@ func TestHelmRepositoryOCIMigrationPredicate_Create(t *testing.T) {
 			beforeFunc: func(o *sourcev1.HelmRepository) {
 				o.Spec.Type = sourcev1.HelmRepositoryTypeOCI
 			},
-			want: false,
+			want: true,
 		},
 		{
 			name: "new oci helm repo with default observed gen status",
@@ -58,13 +58,26 @@ func TestHelmRepositoryOCIMigrationPredicate_Create(t *testing.T) {
 			want: true,
 		},
 		{
-			name: "old oci helm repo with status only",
+			name: "static oci helm repo with Ready",
 			beforeFunc: func(o *sourcev1.HelmRepository) {
 				o.Spec.Type = sourcev1.HelmRepositoryTypeOCI
 				o.Status = sourcev1.HelmRepositoryStatus{
 					ObservedGeneration: 3,
 				}
-				conditions.MarkTrue(o, meta.ReadyCondition, "foo", "bar")
+				conditions.MarkTrue(o, meta.ReadyCondition, sourcev1.NoIndexReason, "bar")
+			},
+			want: false,
+		},
+		{
+			name: "oci helm repo with leftover artifact",
+			beforeFunc: func(o *sourcev1.HelmRepository) {
+				o.Spec.Type = sourcev1.HelmRepositoryTypeOCI
+				o.Status = sourcev1.HelmRepositoryStatus{
+					ObservedGeneration: 3,
+					Artifact:           &meta.Artifact{},
+					URL:                "http://some-address",
+				}
+				conditions.MarkTrue(o, meta.ReadyCondition, meta.SucceededReason, "fetched index")
 			},
 			want: true,
 		},
@@ -76,7 +89,7 @@ func TestHelmRepositoryOCIMigrationPredicate_Create(t *testing.T) {
 				o.Status = sourcev1.HelmRepositoryStatus{
 					ObservedGeneration: 3,
 				}
-				conditions.MarkTrue(o, meta.ReadyCondition, "foo", "bar")
+				conditions.MarkTrue(o, meta.ReadyCondition, sourcev1.NoIndexReason, "bar")
 			},
 			want: true,
 		},
@@ -111,7 +124,7 @@ func TestHelmRepositoryOCIMigrationPredicate_Update(t *testing.T) {
 		want       bool
 	}{
 		{
-			name: "update oci repo",
+			name: "update empty oci repo",
 			beforeFunc: func(oldObj, newObj *sourcev1.HelmRepository) {
 				oldObj.Spec = sourcev1.HelmRepositorySpec{
 					Type: sourcev1.HelmRepositoryTypeOCI,
@@ -120,10 +133,23 @@ func TestHelmRepositoryOCIMigrationPredicate_Update(t *testing.T) {
 				*newObj = *oldObj.DeepCopy()
 				newObj.Spec.URL = "oci://foo/baz"
 			},
+			want: true,
+		},
+		{
+			name: "update static oci repo with Ready",
+			beforeFunc: func(oldObj, newObj *sourcev1.HelmRepository) {
+				oldObj.Spec = sourcev1.HelmRepositorySpec{
+					Type: sourcev1.HelmRepositoryTypeOCI,
+					URL:  "oci://foo/bar",
+				}
+				conditions.MarkTrue(oldObj, meta.ReadyCondition, sourcev1.NoIndexReason, "bar")
+				*newObj = *oldObj.DeepCopy()
+				newObj.Spec.URL = "oci://foo/baz"
+			},
 			want: false,
 		},
 		{
-			name: "migrate old oci repo with status only",
+			name: "migrate old oci repo with leftover artifact",
 			beforeFunc: func(oldObj, newObj *sourcev1.HelmRepository) {
 				oldObj.Generation = 2
 				oldObj.Spec = sourcev1.HelmRepositorySpec{
@@ -131,8 +157,10 @@ func TestHelmRepositoryOCIMigrationPredicate_Update(t *testing.T) {
 				}
 				oldObj.Status = sourcev1.HelmRepositoryStatus{
 					ObservedGeneration: 2,
+					Artifact:           &meta.Artifact{},
+					URL:                "http://some-address",
 				}
-				conditions.MarkTrue(oldObj, meta.ReadyCondition, "foo", "bar")
+				conditions.MarkTrue(oldObj, meta.ReadyCondition, meta.SucceededReason, "fetched index")
 
 				*newObj = *oldObj.DeepCopy()
 				newObj.Generation = 3
@@ -227,11 +255,19 @@ func TestHelmRepositoryOCIMigrationPredicate_Delete(t *testing.T) {
 			want: true,
 		},
 		{
+			name: "static oci without finalizer",
+			beforeFunc: func(obj *sourcev1.HelmRepository) {
+				obj.Spec.Type = sourcev1.HelmRepositoryTypeOCI
+				conditions.MarkTrue(obj, meta.ReadyCondition, sourcev1.NoIndexReason, "bar")
+			},
+			want: false,
+		},
+		{
 			name: "oci without finalizer or status",
 			beforeFunc: func(obj *sourcev1.HelmRepository) {
 				obj.Spec.Type = sourcev1.HelmRepositoryTypeOCI
 			},
-			want: false,
+			want: true,
 		},
 		{
 			name: "default helm repo",

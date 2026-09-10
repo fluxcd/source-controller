@@ -1756,6 +1756,10 @@ func TestHelmRepositoryReconciler_ReconcileTypeUpdatePredicateFilter(t *testing.
 			!intpredicates.HelmRepositoryOCIRequireMigration(obj)
 	}, timeout).Should(BeTrue())
 
+	g.Expect(obj.GetArtifact()).To(BeNil())
+	g.Expect(conditions.IsReady(obj)).To(BeTrue())
+	g.Expect(conditions.Get(obj, meta.ReadyCondition).Reason).To(Equal(sourcev1.NoIndexReason))
+
 	g.Expect(testEnv.Delete(ctx, obj)).To(Succeed())
 
 	// Wait for HelmRepository to be deleted
@@ -1963,6 +1967,9 @@ func TestHelmRepositoryReconciler_ociMigration(t *testing.T) {
 		_ = testEnv.Get(ctx, hrKey, hr)
 		return !intpredicates.HelmRepositoryOCIRequireMigration(hr)
 	}, timeout, time.Second).Should(BeTrue())
+	g.Expect(conditions.IsReady(hr)).To(BeTrue())
+	g.Expect(conditions.Get(hr, meta.ReadyCondition).Reason).To(Equal(sourcev1.NoIndexReason))
+	g.Expect(controllerutil.ContainsFinalizer(hr, sourcev1.SourceFinalizer)).To(BeFalse())
 
 	// Migrates updated object with finalizer.
 
@@ -1976,6 +1983,8 @@ func TestHelmRepositoryReconciler_ociMigration(t *testing.T) {
 		_ = testEnv.Get(ctx, hrKey, hr)
 		return !intpredicates.HelmRepositoryOCIRequireMigration(hr)
 	}, timeout, time.Second).Should(BeTrue())
+	g.Expect(conditions.IsReady(hr)).To(BeTrue())
+	g.Expect(conditions.Get(hr, meta.ReadyCondition).Reason).To(Equal(sourcev1.NoIndexReason))
 
 	// Migrates deleted object with finalizer.
 
@@ -2016,4 +2025,149 @@ func TestHelmRepositoryReconciler_ociMigration(t *testing.T) {
 		}
 		return false
 	}, timeout).Should(BeTrue())
+}
+
+func TestHelmRepositoryReconciler_ociReadyCondition(t *testing.T) {
+	g := NewWithT(t)
+
+	ns, err := testEnv.CreateNamespace(ctx, "hr-oci-ready-test")
+	g.Expect(err).ToNot(HaveOccurred())
+	t.Cleanup(func() {
+		g.Expect(testEnv.Cleanup(ctx, ns)).ToNot(HaveOccurred())
+	})
+
+	hr := &sourcev1.HelmRepository{
+		ObjectMeta: metav1.ObjectMeta{
+			GenerateName: "hr-oci-",
+			Namespace:    ns.Name,
+		},
+		Spec: sourcev1.HelmRepositorySpec{
+			Type:     sourcev1.HelmRepositoryTypeOCI,
+			URL:      "oci://ghcr.io/stefanprodan/charts",
+			Interval: metav1.Duration{Duration: interval},
+		},
+	}
+	g.Expect(testEnv.Create(ctx, hr)).ToNot(HaveOccurred())
+
+	waitForSourceReady(ctx, g, hr, false)
+
+	g.Expect(hr.GetArtifact()).To(BeNil())
+	g.Expect(hr.Status.URL).To(BeEmpty())
+	g.Expect(controllerutil.ContainsFinalizer(hr, sourcev1.SourceFinalizer)).To(BeFalse())
+	g.Expect(conditions.Get(hr, meta.ReadyCondition).Reason).To(Equal(sourcev1.NoIndexReason))
+	g.Expect(conditions.Get(hr, meta.ReadyCondition).Message).To(ContainSubstring("do not produce an index artifact"))
+	g.Expect(intpredicates.HelmRepositoryOCIRequireMigration(hr)).To(BeFalse())
+
+	// Spec updates on a static Ready object must not wipe the condition.
+	patchHelper, err := patch.NewHelper(hr, testEnv.Client)
+	g.Expect(err).ToNot(HaveOccurred())
+	hr.Spec.URL = "oci://ghcr.io/stefanprodan/charts/podinfo"
+	g.Expect(patchHelper.Patch(ctx, hr)).ToNot(HaveOccurred())
+
+	g.Consistently(func() bool {
+		if err := testEnv.Get(ctx, client.ObjectKeyFromObject(hr), hr); err != nil {
+			return false
+		}
+		ready := conditions.Get(hr, meta.ReadyCondition)
+		return conditions.IsReady(hr) && ready != nil && ready.Reason == sourcev1.NoIndexReason && hr.GetArtifact() == nil
+	}, 2*time.Second, 200*time.Millisecond).Should(BeTrue())
+}
+
+func TestHelmRepositoryReconciler_migrationToStatic(t *testing.T) {
+	g := NewWithT(t)
+
+	obj := &sourcev1.HelmRepository{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "oci-repo",
+			Namespace:  "default",
+			Generation: 1,
+			Finalizers: []string{sourcev1.SourceFinalizer},
+		},
+		Spec: sourcev1.HelmRepositorySpec{
+			Type:     sourcev1.HelmRepositoryTypeOCI,
+			URL:      "oci://example.com/charts",
+			Interval: metav1.Duration{Duration: interval},
+		},
+		Status: sourcev1.HelmRepositoryStatus{
+			ObservedGeneration: 1,
+			URL:                "http://source-controller/index.yaml",
+			Artifact:           &meta.Artifact{Path: "old-index.yaml"},
+		},
+	}
+	conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "fetched index")
+
+	r := &HelmRepositoryReconciler{
+		Client: fakeclient.NewClientBuilder().
+			WithScheme(testEnv.GetScheme()).
+			WithObjects(obj).
+			WithStatusSubresource(&sourcev1.HelmRepository{}).
+			Build(),
+		EventRecorder: record.NewFakeRecorder(32),
+		Storage:       testStorage,
+	}
+
+	_, err := r.Reconcile(context.TODO(), ctrl.Request{NamespacedName: client.ObjectKeyFromObject(obj)})
+	g.Expect(err).ToNot(HaveOccurred())
+
+	got := &sourcev1.HelmRepository{}
+	g.Expect(r.Client.Get(context.TODO(), client.ObjectKeyFromObject(obj), got)).To(Succeed())
+	g.Expect(controllerutil.ContainsFinalizer(got, sourcev1.SourceFinalizer)).To(BeFalse())
+	g.Expect(got.GetArtifact()).To(BeNil())
+	g.Expect(got.Status.URL).To(BeEmpty())
+	g.Expect(conditions.IsReady(got)).To(BeTrue())
+	g.Expect(conditions.Get(got, meta.ReadyCondition).Reason).To(Equal(sourcev1.NoIndexReason))
+	g.Expect(got.Status.ObservedGeneration).To(Equal(got.Generation))
+	g.Expect(intpredicates.HelmRepositoryOCIRequireMigration(got)).To(BeFalse())
+
+	// A second reconcile must not wipe Ready.
+	_, err = r.Reconcile(context.TODO(), ctrl.Request{NamespacedName: client.ObjectKeyFromObject(obj)})
+	g.Expect(err).ToNot(HaveOccurred())
+	got2 := &sourcev1.HelmRepository{}
+	g.Expect(r.Client.Get(context.TODO(), client.ObjectKeyFromObject(obj), got2)).To(Succeed())
+	g.Expect(conditions.IsReady(got2)).To(BeTrue())
+	g.Expect(conditions.Get(got2, meta.ReadyCondition).Reason).To(Equal(sourcev1.NoIndexReason))
+	g.Expect(got2.GetArtifact()).To(BeNil())
+}
+
+func TestHelmRepositoryReconciler_migrationToStatic_emptyStatus(t *testing.T) {
+	g := NewWithT(t)
+
+	obj := &sourcev1.HelmRepository{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "oci-empty",
+			Namespace:  "default",
+			Generation: 1,
+		},
+		Spec: sourcev1.HelmRepositorySpec{
+			Type:     sourcev1.HelmRepositoryTypeOCI,
+			URL:      "oci://example.com/charts",
+			Interval: metav1.Duration{Duration: interval},
+		},
+	}
+
+	r := &HelmRepositoryReconciler{
+		Client: fakeclient.NewClientBuilder().
+			WithScheme(testEnv.GetScheme()).
+			WithObjects(obj).
+			WithStatusSubresource(&sourcev1.HelmRepository{}).
+			Build(),
+		EventRecorder: record.NewFakeRecorder(32),
+		Storage:       testStorage,
+	}
+
+	_, err := r.Reconcile(context.TODO(), ctrl.Request{NamespacedName: client.ObjectKeyFromObject(obj)})
+	g.Expect(err).ToNot(HaveOccurred())
+
+	got := &sourcev1.HelmRepository{}
+	g.Expect(r.Client.Get(context.TODO(), client.ObjectKeyFromObject(obj), got)).To(Succeed())
+	g.Expect(conditions.IsReady(got)).To(BeTrue())
+	g.Expect(conditions.Get(got, meta.ReadyCondition).Reason).To(Equal(sourcev1.NoIndexReason))
+	g.Expect(intpredicates.HelmRepositoryOCIRequireMigration(got)).To(BeFalse())
+
+	_, err = r.Reconcile(context.TODO(), ctrl.Request{NamespacedName: client.ObjectKeyFromObject(obj)})
+	g.Expect(err).ToNot(HaveOccurred())
+	got2 := &sourcev1.HelmRepository{}
+	g.Expect(r.Client.Get(context.TODO(), client.ObjectKeyFromObject(obj), got2)).To(Succeed())
+	g.Expect(conditions.IsReady(got2)).To(BeTrue())
+	g.Expect(conditions.Get(got2, meta.ReadyCondition).Reason).To(Equal(sourcev1.NoIndexReason))
 }

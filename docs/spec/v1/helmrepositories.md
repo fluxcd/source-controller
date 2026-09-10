@@ -131,12 +131,12 @@ You can run this example by saving the manifest into `helmrepository.yaml`.
 
    ```console
    NAME      URL                                 AGE     READY   STATUS
-   podinfo   oci://ghcr.io/stefanprodan/charts   3m22s
+   podinfo   oci://ghcr.io/stefanprodan/charts   3m22s   True    OCI HelmRepositories do not produce an index artifact; charts are resolved on demand
    ```
 
-Because the OCI Helm repository is a data container, there's nothing to report
-for `READY` and `STATUS` columns above. The existence of the object can be
-considered to be ready for use.
+The controller sets `Ready=True` with reason `NoIndex`. OCI Helm repositories
+do not produce an index Artifact; [HelmCharts](helmcharts.md) resolve charts
+from the registry on demand.
 
 ## Writing a HelmRepository spec
 
@@ -522,10 +522,11 @@ For practical information, see
 
 ## Working with HelmRepositories
 
-**Note:** This section does not apply to [OCI Helm
-Repositories](#helm-oci-repository), being a data container, once created, they
-are ready to used by [HelmCharts](helmcharts.md).
- 
+**Note:** Triggering a reconcile and fetching an index Artifact do not apply to
+[OCI Helm Repositories](#helm-oci-repository). They are static data containers.
+Waiting for `Ready` does apply: the controller sets `Ready=True` with reason
+`NoIndex` after the object is recorded as a static source.
+
 ### Triggering a reconcile
 
 To manually tell the source-controller to reconcile a HelmRepository outside the
@@ -626,9 +627,10 @@ flux resume source helm <repository-name>
 
 ### Debugging a HelmRepository
 
-**Note:** This section does not apply to [OCI Helm
-Repositories](#helm-oci-repository), being a data container, they are static
-objects that don't require debugging if valid.
+**Note:** [OCI Helm Repositories](#helm-oci-repository) do not fetch an index.
+Chart pull failures are reported on the [HelmChart](helmcharts.md). The
+HelmRepository itself reports `Ready=True` with reason `NoIndex` when it has
+been recorded as a static source.
 
 There are several ways to gather information about a HelmRepository for debugging
 purposes.
@@ -695,9 +697,9 @@ specific HelmRepository, e.g. `flux logs --level=error --kind=HelmRepository --n
 
 ## HelmRepository Status
 
-**Note:** This section does not apply to [OCI Helm
-Repositories](#helm-oci-repository), they do not contain any information in the
-status.
+**Note:** [OCI Helm Repositories](#helm-oci-repository) do not report an
+Artifact. They set a `Ready=True` condition with reason `NoIndex`. The rest of
+this section describes HTTP/S Helm repositories.
 
 ### Artifact
 
@@ -782,12 +784,22 @@ characteristics:
 - The revision of the reported Artifact is up-to-date with the latest
   revision of the Helm repository.
 
+[OCI Helm Repositories](#helm-oci-repository) are marked ready without an
+Artifact. Charts are resolved on demand by [HelmChart](helmcharts.md).
+
 When the HelmRepository is "ready", the controller sets a Condition with the following
 attributes in the HelmRepository's `.status.conditions`:
 
 - `type: Ready`
 - `status: "True"`
 - `reason: Succeeded`
+
+For [OCI Helm Repositories](#helm-oci-repository), there is no Artifact. After
+the object is recorded as a static source, the controller sets:
+
+- `type: Ready`
+- `status: "True"`
+- `reason: NoIndex`
 
 This `Ready` Condition will retain a status value of `"True"` until the
 HelmRepository is marked as [reconciling](#reconciling-helmrepository), or e.g.

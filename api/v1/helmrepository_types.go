@@ -156,6 +156,10 @@ const (
 	// IndexationFailedReason signals that the HelmRepository index fetch
 	// failed.
 	IndexationFailedReason string = "IndexationFailed"
+
+	// NoIndexReason signals that the HelmRepository is of type OCI and does
+	// not produce an index Artifact. Charts are resolved on demand.
+	NoIndexReason string = "NoIndex"
 )
 
 // GetConditions returns the status conditions of the object.
