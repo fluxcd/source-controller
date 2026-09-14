@@ -55,8 +55,9 @@ func (HelmRepositoryOCIMigrationPredicate) Delete(e event.DeleteEvent) bool {
 // returns true.
 //
 // An OCI object is fully migrated when the source finalizer is gone, no
-// leftover index Artifact remains, and Ready=True is set. Empty status is
-// not treated as migrated so a one-shot reconcile can set that condition.
+// leftover index Artifact remains, and Ready=True is set with reason
+// NoIndex. Empty status and stale Ready (for example Succeeded) are not
+// treated as migrated so a one-shot reconcile can establish that condition.
 func HelmRepositoryOCIRequireMigration(o client.Object) bool {
 	if o == nil {
 		return false
@@ -84,10 +85,12 @@ func HelmRepositoryOCIRequireMigration(o client.Object) bool {
 }
 
 // isOCIHelmRepositoryStatic reports whether an OCI HelmRepository has completed
-// migration to a static object with Ready=True and no leftover index Artifact.
+// migration to a static object with Ready=True reason NoIndex and no leftover
+// index Artifact.
 func isOCIHelmRepositoryStatic(obj *sourcev1.HelmRepository) bool {
 	if obj.Status.Artifact != nil || obj.Status.URL != "" {
 		return false
 	}
-	return conditions.IsTrue(obj, meta.ReadyCondition)
+	return conditions.IsTrue(obj, meta.ReadyCondition) &&
+		conditions.GetReason(obj, meta.ReadyCondition) == sourcev1.NoIndexReason
 }
