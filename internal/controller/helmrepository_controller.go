@@ -352,6 +352,9 @@ func (r *HelmRepositoryReconciler) reconcileStorage(ctx context.Context, sp *pat
 
 		// If the artifact is missing, remove it from the object
 		if artifactMissing {
+			if r.Cache != nil {
+				r.Cache.Delete(artifact.Path)
+			}
 			obj.Status.Artifact = nil
 			obj.Status.URL = ""
 		}
@@ -587,6 +590,15 @@ func (r *HelmRepositoryReconciler) reconcileArtifact(ctx context.Context, sp *pa
 		return sreconcile.ResultEmpty, e
 	}
 
+	// Evict the index of the previous revision from the cache, as it is
+	// no longer referenced by the object and would otherwise occupy a
+	// cache slot until its TTL expires.
+	if r.Cache != nil {
+		if prev := obj.GetArtifact(); prev != nil && prev.Path != artifact.Path {
+			r.Cache.Delete(prev.Path)
+		}
+	}
+
 	// Record it on the object.
 	obj.Status.Artifact = artifact.DeepCopy()
 
@@ -655,6 +667,10 @@ func (r *HelmRepositoryReconciler) garbageCollect(ctx context.Context, obj *sour
 		} else if deleted != "" {
 			r.eventLogf(ctx, obj, eventv1.EventTypeTrace, "GarbageCollectionSucceeded",
 				"garbage collected artifacts for deleted resource")
+		}
+		// Evict the index from the cache.
+		if r.Cache != nil && obj.GetArtifact() != nil {
+			r.Cache.Delete(obj.GetArtifact().Path)
 		}
 		// Clean status sub-resource
 		obj.Status.Artifact = nil

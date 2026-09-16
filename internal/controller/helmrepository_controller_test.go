@@ -179,6 +179,7 @@ func TestHelmRepositoryReconciler_reconcileStorage(t *testing.T) {
 		assertArtifact   *meta.Artifact
 		assertConditions []metav1.Condition
 		assertPaths      []string
+		assertEvicted    bool
 	}{
 		{
 			name: "garbage collects",
@@ -244,6 +245,7 @@ func TestHelmRepositoryReconciler_reconcileStorage(t *testing.T) {
 			assertPaths: []string{
 				"!/reconcile-storage/invalid.txt",
 			},
+			assertEvicted: true,
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: disappeared from storage"),
 				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: disappeared from storage"),
@@ -275,6 +277,7 @@ func TestHelmRepositoryReconciler_reconcileStorage(t *testing.T) {
 			assertPaths: []string{
 				"!/reconcile-storage/empty-digest.txt",
 			},
+			assertEvicted: true,
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: disappeared from storage"),
 				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: disappeared from storage"),
@@ -306,6 +309,7 @@ func TestHelmRepositoryReconciler_reconcileStorage(t *testing.T) {
 			assertPaths: []string{
 				"!/reconcile-storage/digest-mismatch.txt",
 			},
+			assertEvicted: true,
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: disappeared from storage"),
 				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: disappeared from storage"),
@@ -356,6 +360,8 @@ func TestHelmRepositoryReconciler_reconcileStorage(t *testing.T) {
 					Build(),
 				EventRecorder: record.NewFakeRecorder(32),
 				Storage:       testStorage,
+				Cache:         cache.New(10, time.Minute),
+				TTL:           time.Minute,
 				patchOptions:  getPatchOptions(helmRepositoryReadyCondition.Owned, "sc"),
 			}
 
@@ -367,6 +373,12 @@ func TestHelmRepositoryReconciler_reconcileStorage(t *testing.T) {
 			}
 			if tt.beforeFunc != nil {
 				g.Expect(tt.beforeFunc(obj, testStorage)).To(Succeed())
+			}
+
+			var cachedPath string
+			if a := obj.GetArtifact(); a != nil {
+				cachedPath = a.Path
+				g.Expect(r.Cache.Set(cachedPath, &repo.IndexFile{}, time.Minute)).To(Succeed())
 			}
 
 			g.Expect(r.Client.Create(context.TODO(), obj)).ToNot(HaveOccurred())
@@ -387,6 +399,11 @@ func TestHelmRepositoryReconciler_reconcileStorage(t *testing.T) {
 				g.Expect(obj.Status.Artifact.URL).To(Equal(tt.assertArtifact.URL))
 			}
 			g.Expect(obj.Status.Conditions).To(conditions.MatchConditions(tt.assertConditions))
+
+			if cachedPath != "" {
+				_, ok := r.Cache.Get(cachedPath)
+				g.Expect(ok).To(Equal(!tt.assertEvicted))
+			}
 
 			for _, p := range tt.assertPaths {
 				absoluteP := filepath.Join(testStorage.BasePath, p)
@@ -1073,6 +1090,10 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 }
 
 func TestHelmRepositoryReconciler_reconcileArtifact(t *testing.T) {
+	// The cache is at capacity with the previous revision and an index of
+	// another repository, the new revision can only be added after eviction.
+	evictCache := cache.New(2, time.Minute)
+
 	tests := []struct {
 		name             string
 		cache            *cache.Cache
@@ -1113,6 +1134,32 @@ func TestHelmRepositoryReconciler_reconcileArtifact(t *testing.T) {
 				i, ok := cache.Get(obj.GetArtifact().Path)
 				t.Expect(ok).To(BeTrue())
 				t.Expect(i).To(BeAssignableToTypeOf(&repo.IndexFile{}))
+			},
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.ArtifactInStorageCondition, meta.SucceededReason, "stored artifact: revision 'existing'"),
+			},
+		},
+		{
+			name:  "Archiving new revision evicts the previous revision from cache",
+			cache: evictCache,
+			beforeFunc: func(t *WithT, obj *sourcev1.HelmRepository, artifact meta.Artifact, index *repository.ChartRepository) {
+				index.Index = &repo.IndexFile{
+					APIVersion: "v1",
+					Generated:  time.Now(),
+				}
+				obj.Spec.Interval = metav1.Duration{Duration: interval}
+				prev := testStorage.NewArtifactFor(obj.Kind, obj, "previous", "index-previous.yaml")
+				obj.Status.Artifact = &prev
+				t.Expect(evictCache.Set(prev.Path, &repo.IndexFile{}, time.Minute)).To(Succeed())
+				t.Expect(evictCache.Set("helmrepository/default/other/index-other.yaml", &repo.IndexFile{}, time.Minute)).To(Succeed())
+			},
+			want: sreconcile.ResultSuccess,
+			afterFunc: func(t *WithT, obj *sourcev1.HelmRepository, c *cache.Cache) {
+				t.Expect(c.ItemCount()).To(Equal(2))
+				_, ok := c.Get(obj.GetArtifact().Path)
+				t.Expect(ok).To(BeTrue())
+				_, ok = c.Get("helmrepository/default/other/index-other.yaml")
+				t.Expect(ok).To(BeTrue())
 			},
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(sourcev1.ArtifactInStorageCondition, meta.SucceededReason, "stored artifact: revision 'existing'"),
@@ -1220,6 +1267,59 @@ func TestHelmRepositoryReconciler_reconcileArtifact(t *testing.T) {
 			if tt.afterFunc != nil {
 				tt.afterFunc(g, obj, tt.cache)
 			}
+		})
+	}
+}
+
+func TestHelmRepositoryReconciler_garbageCollectEvictsCache(t *testing.T) {
+	tests := []struct {
+		name       string
+		beforeFunc func(obj *sourcev1.HelmRepository)
+	}{
+		{
+			name: "deleted object",
+			beforeFunc: func(obj *sourcev1.HelmRepository) {
+				obj.DeletionTimestamp = &metav1.Time{Time: time.Now()}
+			},
+		},
+		{
+			name: "type changed to OCI",
+			beforeFunc: func(obj *sourcev1.HelmRepository) {
+				obj.Spec.Type = sourcev1.HelmRepositoryTypeOCI
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			c := cache.New(10, time.Minute)
+			r := &HelmRepositoryReconciler{
+				EventRecorder: record.NewFakeRecorder(32),
+				Storage:       testStorage,
+				Cache:         c,
+				TTL:           time.Minute,
+			}
+
+			obj := &sourcev1.HelmRepository{
+				TypeMeta: metav1.TypeMeta{
+					Kind: sourcev1.HelmRepositoryKind,
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "cache-evict",
+					Namespace: "default",
+				},
+			}
+			artifact := testStorage.NewArtifactFor(obj.Kind, obj, "existing", "index-existing.yaml")
+			obj.Status.Artifact = &artifact
+			g.Expect(c.Set(artifact.Path, &repo.IndexFile{}, time.Minute)).To(Succeed())
+
+			tt.beforeFunc(obj)
+
+			g.Expect(r.garbageCollect(context.TODO(), obj)).To(Succeed())
+			g.Expect(obj.GetArtifact()).To(BeNil())
+			g.Expect(c.ItemCount()).To(Equal(0))
 		})
 	}
 }

@@ -598,6 +598,10 @@ then cache the index. The cached index TTL is refreshed every time the
 Helm repository index is loaded with the `helm-cache-ttl` value.
 
 The cache is purged of expired items every `helm-cache-purge-interval`.
+When a `HelmRepository` index changes, or the `HelmRepository` is deleted,
+the controller removes the index of the previous revision from the cache.
+An index still in use by a `HelmChart` reconciliation may be added back,
+in which case it is removed once its TTL expires.
 
 When the cache is full, no more items can be added to the cache, and the
 source-controller will report a warning event instead.
