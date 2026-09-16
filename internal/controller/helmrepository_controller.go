@@ -453,7 +453,7 @@ func (r *HelmRepositoryReconciler) reconcileSource(ctx context.Context, sp *patc
 	// Fetch the repository index from remote.
 	if err := newChartRepo.CacheIndex(); err != nil {
 		e := serror.NewGeneric(
-			fmt.Errorf("failed to fetch Helm repository index: %w", err),
+			invalidChartRepoError(obj.Spec.URL, err),
 			meta.FailedReason,
 		)
 		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
@@ -479,7 +479,7 @@ func (r *HelmRepositoryReconciler) reconcileSource(ctx context.Context, sp *patc
 	// Load the cached repository index to ensure it passes validation.
 	if err := chartRepo.LoadFromPath(); err != nil {
 		e := serror.NewGeneric(
-			fmt.Errorf("failed to load Helm repository from index YAML: %w", err),
+			invalidChartRepoError(obj.Spec.URL, err),
 			sourcev1.IndexationFailedReason,
 		)
 		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
@@ -738,4 +738,11 @@ func (r *HelmRepositoryReconciler) migrationToStatic(ctx context.Context, sp *pa
 	}
 
 	return ctrl.Result{}, nil
+}
+
+// invalidChartRepoError formats an error indicating the given URL is not
+// a valid Helm chart repository or cannot be reached, mirroring the
+// `helm repo add` CLI output.
+func invalidChartRepoError(repoURL string, err error) error {
+	return fmt.Errorf("looks like %q is not a valid chart repository or cannot be reached: %w", repoURL, err)
 }
