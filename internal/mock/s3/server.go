@@ -45,6 +45,9 @@ type Server struct {
 
 	BucketName string
 	Objects    []*Object
+	// AccessKey is the access key requests must be signed with.
+	// If empty, requests are not checked for credentials.
+	AccessKey string
 }
 
 func NewServer(bucketName string) *Server {
@@ -75,6 +78,11 @@ func (s *Server) HTTPAddress() string {
 }
 
 func (s *Server) handler(w http.ResponseWriter, r *http.Request) {
+	if s.AccessKey != "" && !strings.Contains(r.Header.Get("Authorization"), "Credential="+s.AccessKey+"/") {
+		writeError(w, r, http.StatusForbidden, "AccessDenied", "Access Denied.")
+		return
+	}
+
 	key := path.Base(r.URL.Path)
 
 	switch key {
@@ -121,6 +129,11 @@ func (s *Server) handler(w http.ResponseWriter, r *http.Request) {
 </ListBucketResult>
 		`, s.BucketName, len(s.Objects), contents)
 	default:
+		if !strings.HasPrefix(r.URL.Path, "/"+s.BucketName+"/") {
+			writeError(w, r, http.StatusNotFound, "NoSuchBucket", "The specified bucket does not exist")
+			return
+		}
+
 		key, err := filepath.Rel("/"+s.BucketName, r.URL.Path)
 		if err != nil {
 			w.WriteHeader(500)
@@ -153,5 +166,15 @@ func (s *Server) handler(w http.ResponseWriter, r *http.Request) {
 
 		w.WriteHeader(200)
 		w.Write(found.Content)
+	}
+}
+
+// writeError writes an S3 error response, the body is omitted for HEAD requests.
+func writeError(w http.ResponseWriter, r *http.Request, status int, code, message string) {
+	w.Header().Add("Content-Type", "application/xml")
+	w.WriteHeader(status)
+	if r.Method != http.MethodHead {
+		fmt.Fprintf(w, `<?xml version="1.0" encoding="UTF-8"?>
+<Error><Code>%s</Code><Message>%s</Message></Error>`, code, message)
 	}
 }

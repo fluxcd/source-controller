@@ -28,16 +28,12 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
-	miniov7 "github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 	. "github.com/onsi/gomega"
-	"github.com/ory/dockertest/v3"
-	"github.com/ory/dockertest/v3/docker"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -45,6 +41,7 @@ import (
 	"github.com/fluxcd/pkg/sourceignore"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
+	s3mock "github.com/fluxcd/source-controller/internal/mock/s3"
 	testlistener "github.com/fluxcd/source-controller/tests/listener"
 	testproxy "github.com/fluxcd/source-controller/tests/proxy"
 )
@@ -55,25 +52,22 @@ const (
 )
 
 var (
-	// testMinioVersion is the version (image tag) of the Minio server image
-	// used to test against.
-	testMinioVersion = "RELEASE.2024-05-07T06-41-25Z"
-	// testMinioRootUser is the root user of the Minio server.
-	testMinioRootUser = "fluxcd"
-	// testMinioRootPassword is the root password of the Minio server.
-	testMinioRootPassword = "passw0rd!"
-	// testVaultAddress is the address of the Minio server, it is set
-	// by TestMain after booting it.
-	testMinioAddress string
+	// testAccessKey is the access key accepted by the S3 server.
+	testAccessKey = "fluxcd"
+	// testSecretKey is the secret key of the S3 server.
+	testSecretKey = "passw0rd!"
+	// testS3Address is the address of the S3 server, it is set
+	// by TestMain after starting it.
+	testS3Address string
 	// testMinioClient is the Minio client used to test against, it is set
-	// by TestMain after booting the Minio server.
+	// by TestMain after starting the S3 server.
 	testMinioClient *MinioClient
-	// testTLSConfig is the TLS configuration used to connect to the Minio server.
+	// testTLSConfig is the TLS configuration used to connect to the S3 server.
 	testTLSConfig *tls.Config
-	// testServerCert is the path to the server certificate used to start the Minio
+	// testServerCert is the path to the server certificate used to start the S3
 	// and STS servers.
 	testServerCert string
-	// testServerKey is the path to the server key used to start the Minio and STS servers.
+	// testServerKey is the path to the server key used to start the S3 and STS servers.
 	testServerKey string
 	// ctx is the common context used in tests.
 	ctx context.Context
@@ -88,8 +82,8 @@ var (
 			Namespace: "default",
 		},
 		Data: map[string][]byte{
-			"accesskey": []byte(testMinioRootUser),
-			"secretkey": []byte(testMinioRootPassword),
+			"accesskey": []byte(testAccessKey),
+			"secretkey": []byte(testSecretKey),
 		},
 		Type: "Opaque",
 	}
@@ -130,88 +124,53 @@ func TestMain(m *testing.M) {
 	// Initialize common test context
 	ctx = context.Background()
 
-	// Uses a sensible default on Windows (TCP/HTTP) and Linux/MacOS (socket)
-	pool, err := dockertest.NewPool("")
-	if err != nil {
-		log.Fatalf("could not connect to docker: %s", err)
-	}
-
-	// Load a private key and certificate from a self-signed CA for the Minio server and
-	// a client TLS configuration to connect to the Minio server.
+	// Load a private key and certificate from a self-signed CA for the S3 server and
+	// a client TLS configuration to connect to the S3 server.
+	var err error
 	testServerCert, testServerKey, testTLSConfig, err = loadServerCertAndClientTLSConfig()
 	if err != nil {
 		log.Fatalf("could not load server cert and client TLS config: %s", err)
 	}
 
-	// Pull the image, create a container based on it, and run it
-	resource, err := pool.RunWithOptions(&dockertest.RunOptions{
-		Repository: "minio/minio",
-		Tag:        testMinioVersion,
-		ExposedPorts: []string{
-			"9000/tcp",
-			"9001/tcp",
-		},
-		Env: []string{
-			"MINIO_ROOT_USER=" + testMinioRootUser,
-			"MINIO_ROOT_PASSWORD=" + testMinioRootPassword,
-		},
-		Cmd: []string{"server", "/data", "--console-address", ":9001"},
-		Mounts: []string{
-			fmt.Sprintf("%s:/root/.minio/certs/public.crt", testServerCert),
-			fmt.Sprintf("%s:/root/.minio/certs/private.key", testServerKey),
-		},
-	}, func(config *docker.HostConfig) {
-		config.AutoRemove = true
-	})
+	serverCert, err := tls.LoadX509KeyPair(testServerCert, testServerKey)
 	if err != nil {
-		log.Fatalf("could not start resource: %s", err)
+		log.Fatalf("could not load server cert and key: %s", err)
 	}
 
-	purgeResource := func() {
-		if err := pool.Purge(resource); err != nil {
-			log.Printf("could not purge resource: %s", err)
-		}
+	// Start an in-process S3 server serving the test bucket.
+	server := s3mock.NewServer(bucketName)
+	server.AccessKey = testAccessKey
+	server.Objects = []*s3mock.Object{
+		{
+			Key:          objectName,
+			Content:      []byte(getObjectFile()),
+			ContentType:  "text/x-yaml",
+			LastModified: time.Now(),
+		},
 	}
+	server.StartTLS(&tls.Config{Certificates: []tls.Certificate{serverCert}})
 
-	// Set the address of the Minio server used for testing.
-	testMinioAddress = fmt.Sprintf("127.0.0.1:%v", resource.GetPort("9000/tcp"))
+	u, err := url.Parse(server.HTTPAddress())
+	if err != nil {
+		log.Fatalf("could not parse S3 server address: %s", err)
+	}
+	testS3Address = u.Host
 
-	// Construct a Minio client using the address of the Minio server.
-	testMinioClient, err = NewClient(ctx, bucketStub(bucket, testMinioAddress),
+	// Construct a Minio client using the address of the S3 server.
+	testMinioClient, err = NewClient(ctx, bucketStub(bucket, testS3Address),
 		WithSecret(secret.DeepCopy()),
 		WithTLSConfig(testTLSConfig))
 	if err != nil {
 		log.Fatalf("cannot create Minio client: %s", err)
 	}
 
-	// Wait until Minio is ready to serve requests...
-	if err := pool.Retry(func() error {
-		hCancel, err := testMinioClient.HealthCheck(1 * time.Second)
-		if err != nil {
-			log.Fatalf("cannot start Minio health check: %s", err)
-		}
-		defer hCancel()
-
-		if !testMinioClient.IsOnline() {
-			return fmt.Errorf("client is offline: Minio is not ready")
-		}
-		return nil
-	}); err != nil {
-		purgeResource()
-		log.Fatalf("could not connect to docker: %s", err)
-	}
-
-	createBucket(ctx)
-	addObjectToBucket(ctx)
 	run := m.Run()
-	removeObjectFromBucket(ctx)
-	deleteBucket(ctx)
-	purgeResource()
+	server.Stop()
 	os.Exit(run)
 }
 
 func TestNewClient(t *testing.T) {
-	minioClient, err := NewClient(ctx, bucketStub(bucket, testMinioAddress),
+	minioClient, err := NewClient(ctx, bucketStub(bucket, testS3Address),
 		WithSecret(secret.DeepCopy()),
 		WithTLSConfig(testTLSConfig))
 	g := NewWithT(t)
@@ -220,7 +179,7 @@ func TestNewClient(t *testing.T) {
 }
 
 func TestNewClientEmptySecret(t *testing.T) {
-	minioClient, err := NewClient(ctx, bucketStub(bucket, testMinioAddress),
+	minioClient, err := NewClient(ctx, bucketStub(bucket, testS3Address),
 		WithSecret(emptySecret.DeepCopy()),
 		WithTLSConfig(testTLSConfig))
 	g := NewWithT(t)
@@ -236,13 +195,13 @@ func TestNewClientAWSProvider(t *testing.T) {
 				Namespace: "default",
 			},
 			Data: map[string][]byte{
-				"accesskey": []byte(testMinioRootUser),
-				"secretkey": []byte(testMinioRootPassword),
+				"accesskey": []byte(testAccessKey),
+				"secretkey": []byte(testSecretKey),
 			},
 			Type: "Opaque",
 		}
 
-		bucket := bucketStub(bucketAwsProvider, testMinioAddress)
+		bucket := bucketStub(bucketAwsProvider, testS3Address)
 		minioClient, err := NewClient(ctx, bucket, WithSecret(&validSecret))
 		g := NewWithT(t)
 		g.Expect(err).NotTo(HaveOccurred())
@@ -250,7 +209,7 @@ func TestNewClientAWSProvider(t *testing.T) {
 	})
 
 	t.Run("without secret", func(t *testing.T) {
-		bucket := bucketStub(bucketAwsProvider, testMinioAddress)
+		bucket := bucketStub(bucketAwsProvider, testS3Address)
 		minioClient, err := NewClient(ctx, bucket)
 		g := NewWithT(t)
 		g.Expect(err).To(HaveOccurred())
@@ -281,6 +240,22 @@ func TestFGetObject(t *testing.T) {
 	g.Expect(err).NotTo(HaveOccurred())
 }
 
+func TestFGetObjectInvalidCredentials(t *testing.T) {
+	invalidSecret := secret.DeepCopy()
+	invalidSecret.Data["accesskey"] = []byte("invalid")
+
+	minioClient, err := NewClient(ctx, bucketStub(bucket, testS3Address),
+		WithSecret(invalidSecret),
+		WithTLSConfig(testTLSConfig))
+	g := NewWithT(t)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	path := filepath.Join(t.TempDir(), sourceignore.IgnoreFile)
+	_, err = minioClient.FGetObject(ctx, bucketName, objectName, path)
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(err.Error()).To(ContainSubstring("Access Denied"))
+}
+
 func TestNewClientAndFGetObjectWithSTSEndpoint(t *testing.T) {
 	var credsRetrieved bool
 
@@ -299,8 +274,8 @@ func TestNewClientAndFGetObjectWithSTSEndpoint(t *testing.T) {
 			g.Expect(username).To(Equal(ldapUsername))
 			g.Expect(password).To(Equal(ldapPassword))
 			var result credentials.LDAPIdentityResult
-			result.Credentials.AccessKey = testMinioRootUser
-			result.Credentials.SecretKey = testMinioRootPassword
+			result.Credentials.AccessKey = testAccessKey
+			result.Credentials.SecretKey = testSecretKey
 			err = xml.NewEncoder(w).Encode(credentials.AssumeRoleWithLDAPResponse{Result: result})
 			g.Expect(err).NotTo(HaveOccurred())
 			credsRetrieved = true
@@ -402,7 +377,7 @@ func TestNewClientAndFGetObjectWithSTSEndpoint(t *testing.T) {
 			ldapUsername = tt.ldapUsername
 			ldapPassword = tt.ldapPassword
 
-			bucket := bucketStub(bucket, testMinioAddress)
+			bucket := bucketStub(bucket, testS3Address)
 			bucket.Spec.Provider = tt.provider
 			bucket.Spec.STS = tt.stsSpec
 
@@ -449,7 +424,7 @@ func TestNewClientAndFGetObjectWithProxy(t *testing.T) {
 	// run test
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			minioClient, err := NewClient(ctx, bucketStub(bucket, testMinioAddress),
+			minioClient, err := NewClient(ctx, bucketStub(bucket, testS3Address),
 				WithSecret(secret.DeepCopy()),
 				WithTLSConfig(testTLSConfig),
 				WithProxyURL(tt.proxyURL))
@@ -735,42 +710,6 @@ func bucketStub(bucket sourcev1.Bucket, endpoint string) *sourcev1.Bucket {
 	b.Spec.Endpoint = endpoint
 	b.Spec.Insecure = false
 	return b
-}
-
-func createBucket(ctx context.Context) {
-	if err := testMinioClient.Client.MakeBucket(ctx, bucketName, miniov7.MakeBucketOptions{}); err != nil {
-		exists, errBucketExists := testMinioClient.BucketExists(ctx, bucketName)
-		if errBucketExists == nil && exists {
-			deleteBucket(ctx)
-		} else {
-			log.Fatalf("could not create bucket: %s", err)
-		}
-	}
-}
-
-func deleteBucket(ctx context.Context) {
-	if err := testMinioClient.Client.RemoveBucket(ctx, bucketName); err != nil {
-		log.Println(err)
-	}
-}
-
-func addObjectToBucket(ctx context.Context) {
-	fileReader := strings.NewReader(getObjectFile())
-	fileSize := fileReader.Size()
-	_, err := testMinioClient.Client.PutObject(ctx, bucketName, objectName, fileReader, fileSize, miniov7.PutObjectOptions{
-		ContentType: "text/x-yaml",
-	})
-	if err != nil {
-		log.Println(err)
-	}
-}
-
-func removeObjectFromBucket(ctx context.Context) {
-	if err := testMinioClient.Client.RemoveObject(ctx, bucketName, objectName, miniov7.RemoveObjectOptions{
-		GovernanceBypass: true,
-	}); err != nil {
-		log.Println(err)
-	}
 }
 
 func getObjectFile() string {
