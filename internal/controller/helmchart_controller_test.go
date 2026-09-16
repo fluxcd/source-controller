@@ -779,6 +779,43 @@ func TestHelmChartReconciler_reconcileSource(t *testing.T) {
 				}))
 			},
 		},
+		{
+			name: "ResultRequeue when OCI HelmRepository source is not ready",
+			source: &sourcev1.HelmRepository{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "helmrepository",
+					Namespace: "default",
+				},
+				Spec: sourcev1.HelmRepositorySpec{
+					Type: sourcev1.HelmRepositoryTypeOCI,
+					URL:  "oci://example.com/charts",
+				},
+				Status: sourcev1.HelmRepositoryStatus{
+					Conditions: []metav1.Condition{
+						*conditions.FalseCondition(meta.ReadyCondition, sourcev1.AuthenticationFailedReason, "failed to login to OCI registry"),
+					},
+				},
+			},
+			beforeFunc: func(obj *sourcev1.HelmChart) {
+				obj.Spec.Chart = "helmchart"
+				obj.Spec.SourceRef = sourcev1.LocalHelmChartSourceReference{
+					Name: "helmrepository",
+					Kind: sourcev1.HelmRepositoryKind,
+				}
+				conditions.MarkReconciling(obj, meta.ProgressingReason, "foo")
+				conditions.MarkUnknown(obj, meta.ReadyCondition, meta.ProgressingReason, "foo")
+			},
+			want: sreconcile.ResultRequeue,
+			assertFunc: func(g *WithT, build chart.Build, obj sourcev1.HelmChart) {
+				g.Expect(build.Complete()).To(BeFalse())
+
+				g.Expect(obj.Status.Conditions).To(conditions.MatchConditions([]metav1.Condition{
+					*conditions.TrueCondition(sourcev1.FetchFailedCondition, sourcev1.AuthenticationFailedReason, "failed to login to OCI registry"),
+					*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "foo"),
+					*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "foo"),
+				}))
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
