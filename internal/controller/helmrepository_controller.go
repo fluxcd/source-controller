@@ -712,6 +712,8 @@ func (r *HelmRepositoryReconciler) eventLogf(ctx context.Context, obj runtime.Ob
 	r.Eventf(obj, eventType, reason, "%s", msg)
 }
 
+const ociHelmRepositoryNoIndexMessage = "OCI HelmRepositories do not produce an index artifact; charts are resolved on demand"
+
 // migrateToStatic is HelmRepository OCI migration to static object.
 func (r *HelmRepositoryReconciler) migrationToStatic(ctx context.Context, sp *patch.SerialPatcher, obj *sourcev1.HelmRepository) (result ctrl.Result, err error) {
 	// Skip migration if suspended and not being deleted.
@@ -724,14 +726,22 @@ func (r *HelmRepositoryReconciler) migrationToStatic(ctx context.Context, sp *pa
 		return ctrl.Result{}, nil
 	}
 
-	// Delete any artifact.
+	// Delete any leftover HTTP-style artifact.
 	_, err = r.reconcileDelete(ctx, obj)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
-	// Delete finalizer and reset the status.
+	// Remove the source finalizer; OCI objects are static data containers.
 	controllerutil.RemoveFinalizer(obj, sourcev1.SourceFinalizer)
-	obj.Status = sourcev1.HelmRepositoryStatus{}
+
+	if obj.DeletionTimestamp.IsZero() {
+		obj.Status = sourcev1.HelmRepositoryStatus{
+			ObservedGeneration: obj.GetGeneration(),
+		}
+		conditions.MarkTrue(obj, meta.ReadyCondition, sourcev1.NoIndexReason, "%s", ociHelmRepositoryNoIndexMessage)
+	} else {
+		obj.Status = sourcev1.HelmRepositoryStatus{}
+	}
 
 	if err := sp.Patch(ctx, obj); err != nil {
 		return ctrl.Result{}, err

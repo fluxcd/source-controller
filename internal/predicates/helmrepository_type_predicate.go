@@ -22,6 +22,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
+	"github.com/fluxcd/pkg/apis/meta"
+	"github.com/fluxcd/pkg/runtime/conditions"
+
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 )
 
@@ -48,8 +51,13 @@ func (HelmRepositoryOCIMigrationPredicate) Delete(e event.DeleteEvent) bool {
 }
 
 // HelmRepositoryOCIRequireMigration returns if a given HelmRepository of type
-// OCI requires migration to static object. For non-OCI HelmRepository, it
+// OCI requires migration to a static object. For non-OCI HelmRepository, it
 // returns true.
+//
+// An OCI object is fully migrated when the source finalizer is gone, no
+// leftover index Artifact remains, and Ready=True is set with reason
+// NoIndex. Empty status and stale Ready (for example Succeeded) are not
+// treated as migrated so a one-shot reconcile can establish that condition.
 func HelmRepositoryOCIRequireMigration(o client.Object) bool {
 	if o == nil {
 		return false
@@ -65,22 +73,24 @@ func HelmRepositoryOCIRequireMigration(o client.Object) bool {
 		return true
 	}
 
-	if controllerutil.ContainsFinalizer(hr, sourcev1.SourceFinalizer) || !hasEmptyHelmRepositoryStatus(hr) {
+	if controllerutil.ContainsFinalizer(hr, sourcev1.SourceFinalizer) {
 		return true
 	}
 
-	return false
+	if isOCIHelmRepositoryStatic(hr) {
+		return false
+	}
+
+	return true
 }
 
-// hasEmptyHelmRepositoryStatus checks if the status of a HelmRepository is
-// empty.
-func hasEmptyHelmRepositoryStatus(obj *sourcev1.HelmRepository) bool {
-	if obj.Status.ObservedGeneration == 0 &&
-		obj.Status.Conditions == nil &&
-		obj.Status.URL == "" &&
-		obj.Status.Artifact == nil &&
-		obj.Status.ReconcileRequestStatus.LastHandledReconcileAt == "" {
-		return true
+// isOCIHelmRepositoryStatic reports whether an OCI HelmRepository has completed
+// migration to a static object with Ready=True reason NoIndex and no leftover
+// index Artifact.
+func isOCIHelmRepositoryStatic(obj *sourcev1.HelmRepository) bool {
+	if obj.Status.Artifact != nil || obj.Status.URL != "" {
+		return false
 	}
-	return false
+	return conditions.IsTrue(obj, meta.ReadyCondition) &&
+		conditions.GetReason(obj, meta.ReadyCondition) == sourcev1.NoIndexReason
 }
