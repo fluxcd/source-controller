@@ -852,6 +852,13 @@ multiple benefits over regular submodules:
 - Multiple `GitRepository` objects could include the same repository, which
   decreases the amount of cloning done compared to using submodules.
 
+Changes to an included Artifact's revision or digest trigger reconciliation
+outside the interval window. The including Artifact retains its own Git revision;
+its digest reflects the combined contents. This also propagates changes through
+nested includes. Include references are local to the GitRepository's namespace.
+Avoid circular includes: to prevent immediate rebuild loops, changes are not
+propagated along cyclic include edges. Those repositories remain interval-driven.
+
 ```yaml
 ---
 apiVersion: source.toolkit.fluxcd.io/v1

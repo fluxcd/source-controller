@@ -45,6 +45,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -196,10 +197,18 @@ func (r *GitRepositoryReconciler) SetupWithManager(mgr ctrl.Manager, opts GitRep
 		r.features = features.FeatureGates()
 	}
 
+	if err := mgr.GetCache().IndexField(context.Background(), &sourcev1.GitRepository{},
+		indexKeyGitRepositoryInclude, indexGitRepositoryIncludes); err != nil {
+		return fmt.Errorf("failed indexing GitRepository includes: %w", err)
+	}
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&sourcev1.GitRepository{}, builder.WithPredicates(
 			predicate.Or(predicate.GenerationChangedPredicate{}, predicates.ReconcileRequestedPredicate{}),
 		)).
+		Watches(&sourcev1.GitRepository{},
+			handler.EnqueueRequestsFromMapFunc(r.requestsForIncludeChange),
+			builder.WithPredicates(SourceRevisionChangePredicate{})).
 		WithOptions(controller.Options{
 			RateLimiter: opts.RateLimiter,
 		}).
