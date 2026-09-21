@@ -104,7 +104,7 @@ Git repository.
 **Note:** Unlike using `git`, the
 [shorter scp-like syntax](https://git-scm.com/book/en/v2/Git-on-the-Server-The-Protocols#_the_ssh_protocol)
 is not supported for SSH addresses (e.g. `user@example.com:repository.git`).
-Instead, the valid URL format is `ssh://user@example.com:22/repository.git`.
+Instead, the valid URL format is `ssh://user@example.com/repository.git` (only 1 `:` allowed).
 
 ### Secret reference
 
@@ -220,6 +220,7 @@ stringData:
     -----BEGIN OPENSSH PRIVATE KEY-----
     ...
     -----END OPENSSH PRIVATE KEY-----
+  # The list of public SSH host keys can be obtained by running `ssh-keyscan <host>`
   known_hosts: |
     github.com ecdsa-sha2-nistp256 AAAA...
 ```
