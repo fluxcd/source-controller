@@ -23,6 +23,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -34,6 +35,7 @@ import (
 	"github.com/fluxcd/pkg/runtime/logger"
 	"github.com/fluxcd/pkg/runtime/secrets"
 	"github.com/go-git/go-git/v5/plumbing/transport"
+	"github.com/opencontainers/go-digest"
 	ssh "golang.org/x/crypto/ssh"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -592,7 +594,9 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 	// reconciliation can be skipped if other configurations have not changed.
 	if !git.IsConcreteCommit(*commit) {
 		// Check if the content config contributing to the artifact has changed.
-		if !gitContentConfigChanged(obj, includes) {
+		// A change to the verification policy (e.g. a key rotation) also
+		// requires a new verification of the unchanged revision.
+		if !gitContentConfigChanged(obj, includes) && !r.verificationPolicyChanged(ctx, obj) {
 			ge := serror.NewGeneric(
 				fmt.Errorf("no changes since last reconciliation: observed revision '%s'",
 					commitReference(obj, commit)), sourcev1.GitOperationSucceedReason,
@@ -1112,6 +1116,64 @@ func (r *GitRepositoryReconciler) fetchIncludes(ctx context.Context, obj *source
 	return &artifacts, nil
 }
 
+// verificationKeys returns the PGP key rings and SSH authorized keys contained
+// in the given Secret. Data entries with an SSH public key suffix are treated as
+// authorized keys, entries with a PGP public key suffix (or no known suffix) as
+// PGP key rings.
+func verificationKeys(secret *corev1.Secret) (keyRings, authorizedKeys []string) {
+	for k, v := range secret.Data {
+		switch {
+		case strings.HasSuffix(k, publicKeySSHSuffix):
+			authorizedKeys = append(authorizedKeys, string(v))
+		case strings.HasSuffix(k, publicKeyPGPSuffix):
+			keyRings = append(keyRings, string(v))
+		default:
+			// Provide fallback to support previous undocumented behavior
+			keyRings = append(keyRings, string(v))
+		}
+	}
+	return keyRings, authorizedKeys
+}
+
+// verificationFingerprint returns a stable fingerprint of the public keys in
+// the given Secret, independent of the Secret name or the data key names. It is
+// used to detect a change in the verification policy, e.g. a key rotation, that
+// requires the current revision to be verified again.
+func verificationFingerprint(secret *corev1.Secret) string {
+	keyRings, authorizedKeys := verificationKeys(secret)
+	sort.Strings(keyRings)
+	sort.Strings(authorizedKeys)
+
+	var b strings.Builder
+	for _, k := range keyRings {
+		b.WriteString("pgp:")
+		b.WriteString(k)
+		b.WriteByte(0)
+	}
+	for _, k := range authorizedKeys {
+		b.WriteString("ssh:")
+		b.WriteString(k)
+		b.WriteByte(0)
+	}
+	return digest.Canonical.FromString(b.String()).String()
+}
+
+// verificationPolicyChanged returns true if the public keys trusted for
+// verification differ from the ones used for the last successful verification,
+// or if the current policy can not be determined. A changed policy requires the
+// current revision to be verified again, even if it did not change.
+func (r *GitRepositoryReconciler) verificationPolicyChanged(ctx context.Context, obj *sourcev1.GitRepository) bool {
+	if obj.Spec.Verification == nil || obj.Spec.Verification.Mode == "" {
+		return false
+	}
+	secret, err := r.getSecret(ctx, obj.Spec.Verification.SecretRef.Name, obj.GetNamespace())
+	if err != nil {
+		// Return true so the full reconciliation surfaces the error.
+		return true
+	}
+	return verificationFingerprint(secret) != obj.Status.SourceVerificationFingerprint
+}
+
 // verifySignature verifies the signature of the given Git commit and/or its referencing tag
 // depending on the verification mode specified on the object.
 // If the signature can not be verified or the verification fails, it records
@@ -1124,6 +1186,7 @@ func (r *GitRepositoryReconciler) verifySignature(ctx context.Context, obj *sour
 	// observations if there is none
 	if obj.Spec.Verification == nil || obj.Spec.Verification.Mode == "" {
 		obj.Status.SourceVerificationMode = nil
+		obj.Status.SourceVerificationFingerprint = ""
 		conditions.Delete(obj, sourcev1.SourceVerifiedCondition)
 		return sreconcile.ResultSuccess, nil
 	}
@@ -1143,18 +1206,7 @@ func (r *GitRepositoryReconciler) verifySignature(ctx context.Context, obj *sour
 		return sreconcile.ResultEmpty, e
 	}
 
-	var keyRings []string
-	var authorizedKeys []string
-	for k, v := range secret.Data {
-		if strings.HasSuffix(k, publicKeySSHSuffix) {
-			authorizedKeys = append(authorizedKeys, string(v))
-		} else if strings.HasSuffix(k, publicKeyPGPSuffix) {
-			keyRings = append(keyRings, string(v))
-		} else {
-			// Provide fallback to support previous undocumented behavior
-			keyRings = append(keyRings, string(v))
-		}
-	}
+	keyRings, authorizedKeys := verificationKeys(secret)
 
 	var message strings.Builder
 	if obj.Spec.Verification.VerifyTag() {
@@ -1217,6 +1269,7 @@ func (r *GitRepositoryReconciler) verifySignature(ctx context.Context, obj *sour
 	reason := meta.SucceededReason
 	mode := obj.Spec.Verification.GetMode()
 	obj.Status.SourceVerificationMode = &mode
+	obj.Status.SourceVerificationFingerprint = verificationFingerprint(secret)
 	conditions.MarkTrue(obj, sourcev1.SourceVerifiedCondition, reason, "%s", message.String())
 	sreconcile.EventLogf(ctx, r, obj, eventv1.EventTypeTrace, reason, sourcev1.ActionVerifySource, "%s", message.String())
 	return sreconcile.ResultSuccess, nil

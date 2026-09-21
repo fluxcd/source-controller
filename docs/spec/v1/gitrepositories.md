@@ -1342,6 +1342,16 @@ mode in spec](#verification). The verification status is applicable only to the
 latest Git repository revision used to successfully build and store an
 artifact.
 
+### Source Verification Fingerprint
+
+The source-controller reports a fingerprint of the public keys it used to verify
+the Git object(s) in the GitRepository's
+`.status.sourceVerificationFingerprint`. The fingerprint is derived from the key
+material in the referenced Secret and does not depend on the Secret name or the
+Secret data key names. It is used by the controller to detect a change in the
+verification policy, such as a key rotation, that requires the current revision
+to be verified again even when its revision did not change.
+
 ### Observed Generation
 
 The source-controller reports an [observed generation][typical-status-properties]

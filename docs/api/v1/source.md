@@ -2420,6 +2420,21 @@ produce the current Artifact.</p>
 </tr>
 <tr>
 <td>
+<code>sourceVerificationFingerprint</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>SourceVerificationFingerprint is the fingerprint of the public keys used
+to verify the signature of the Git object(s) for the current Artifact.
+It is used to detect changes to the verification policy, such as a key
+rotation, that require the current revision to be verified again.</p>
+</td>
+</tr>
+<tr>
+<td>
 <code>sourceVerificationMode</code><br>
 <em>
 <a href="#source.toolkit.fluxcd.io/v1.GitVerificationMode">
