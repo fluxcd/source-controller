@@ -406,7 +406,7 @@ The `github` provider can be used to authenticate to Git repositories using
 The GitHub App information is specified in `.spec.secretRef` in the format
 specified below:
 
-- Get the App ID from the app settings page at `https://github.com/settings/apps/<app-name>`.
+- Get the App ID or Client ID from the app settings page at `https://github.com/settings/apps/<app-name>`.
 - The private key that was generated in the pre-requisites.
 - (Optional) GitHub Enterprise Server users can set the base URL to
   `http(s)://HOSTNAME/api/v3`.
@@ -426,6 +426,7 @@ metadata:
 type: Opaque
 stringData:
   githubAppID: "<app-id>"
+  githubAppClientID: "<client-id>"
   githubAppInstallationOwner: "<github-org-or-user>"
   githubAppInstallationID: "<app-installation-id>"
   githubAppPrivateKey: |
@@ -438,6 +439,9 @@ stringData:
     ...
     -----END CERTIFICATE-----
 ```
+
+Exactly one of `githubAppID` or `githubAppClientID` must be provided.
+If neither or both are provided, the reconciliation will fail with a misconfiguration error.
 
 Exactly one of `githubAppInstallationOwner` or `githubAppInstallationID` must be provided.
 If neither or both are provided, the reconciliation will fail with a misconfiguration error.
