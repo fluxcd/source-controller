@@ -344,6 +344,14 @@ func (c *BlobClient) FGetObject(ctx context.Context, bucketName, objectName, loc
 	return etag, nil
 }
 
+// quoteETag returns the ETag in the quoted form used by Get Blob responses.
+func quoteETag(etag string) string {
+	if etag == "" || etag[0] == '"' {
+		return etag
+	}
+	return `"` + etag + `"`
+}
+
 // VisitObjects iterates over the items in the provided object storage
 // bucket, calling visit for every item.
 // If the underlying client or the visit callback returns an error,
@@ -371,7 +379,7 @@ func (c *BlobClient) VisitObjects(ctx context.Context, bucketName string, prefix
 			}
 			var etag string
 			if blob.Properties != nil && blob.Properties.ETag != nil {
-				etag = fmt.Sprintf("%x", *blob.Properties.ETag)
+				etag = quoteETag(string(*blob.Properties.ETag))
 			}
 			if err := visit(*blob.Name, etag); err != nil {
 				err = fmt.Errorf("listing objects from bucket '%s' failed: %w", bucketName, err)
