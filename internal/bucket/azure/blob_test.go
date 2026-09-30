@@ -542,13 +542,15 @@ func TestBlobClient_VisitObjects_Prefix(t *testing.T) {
 				withoutRetries())
 			g.Expect(err).ToNot(HaveOccurred())
 
-			var visited []string
+			visited := map[string]string{}
 			err = client.VisitObjects(t.Context(), bucketName, tt.prefix, func(path, etag string) error {
-				visited = append(visited, path)
+				visited[path] = etag
 				return nil
 			})
 			g.Expect(err).ToNot(HaveOccurred())
-			g.Expect(visited).To(Equal([]string{tt.prefix + "file.txt"}))
+			g.Expect(visited).To(Equal(map[string]string{
+				tt.prefix + "file.txt": `"0x8D9B2A2A2A2A2A2"`,
+			}))
 		})
 	}
 }
