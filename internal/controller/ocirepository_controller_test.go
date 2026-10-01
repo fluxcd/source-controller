@@ -51,6 +51,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/utils/ptr"
 	oras "oras.land/oras-go/v2/registry/remote"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -100,7 +101,7 @@ func TestOCIRepositoryReconciler_deleteBeforeFinalizer(t *testing.T) {
 	ocirepo.Name = "test-ocirepo"
 	ocirepo.Namespace = namespaceName
 	ocirepo.Spec = sourcev1.OCIRepositorySpec{
-		Interval: metav1.Duration{Duration: interval},
+		Interval: &metav1.Duration{Duration: interval},
 		URL:      "oci://example.com",
 	}
 	// Add a test finalizer to prevent the object from getting deleted.
@@ -118,6 +119,83 @@ func TestOCIRepositoryReconciler_deleteBeforeFinalizer(t *testing.T) {
 	// NOTE: Only a real API server responds with an error in this scenario.
 	_, err := r.Reconcile(ctx, ctrl.Request{NamespacedName: client.ObjectKeyFromObject(ocirepo)})
 	g.Expect(err).NotTo(HaveOccurred())
+}
+
+func TestOCIRepository_CELValidation(t *testing.T) {
+	g := NewWithT(t)
+
+	namespaceName := "ocirepo-" + randStringRunes(5)
+	namespace := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{Name: namespaceName},
+	}
+	g.Expect(k8sClient.Create(ctx, namespace)).ToNot(HaveOccurred())
+	t.Cleanup(func() {
+		g.Expect(k8sClient.Delete(ctx, namespace)).NotTo(HaveOccurred())
+	})
+
+	tests := []struct {
+		name    string
+		spec    map[string]interface{}
+		wantErr []string
+	}{
+		{
+			name:    "missing spec",
+			wantErr: []string{"spec.url is required", "spec.interval is required"},
+		},
+		{
+			name:    "empty spec",
+			spec:    map[string]interface{}{},
+			wantErr: []string{"spec.url is required", "spec.interval is required"},
+		},
+		{
+			name: "missing url",
+			spec: map[string]interface{}{
+				"interval": "1m",
+			},
+			wantErr: []string{"spec.url is required"},
+		},
+		{
+			name: "missing interval",
+			spec: map[string]interface{}{
+				"url": "oci://example.com",
+			},
+			wantErr: []string{"spec.interval is required"},
+		},
+		{
+			name: "valid",
+			spec: map[string]interface{}{
+				"url":      "oci://example.com",
+				"interval": "1m",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			obj := &unstructured.Unstructured{}
+			obj.SetGroupVersionKind(sourcev1.GroupVersion.WithKind(sourcev1.OCIRepositoryKind))
+			obj.SetName("test-" + randStringRunes(5))
+			obj.SetNamespace(namespaceName)
+			if tt.spec != nil {
+				obj.Object["spec"] = tt.spec
+			}
+
+			err := k8sClient.Create(ctx, obj)
+			if len(tt.wantErr) == 0 {
+				g.Expect(err).ToNot(HaveOccurred())
+				g.Expect(k8sClient.Delete(ctx, obj)).ToNot(HaveOccurred())
+				return
+			}
+
+			g.Expect(err).To(HaveOccurred())
+			g.Expect(apierrors.IsInvalid(err)).To(BeTrue())
+			for _, want := range tt.wantErr {
+				g.Expect(err.Error()).To(ContainSubstring(want))
+			}
+		})
+	}
 }
 
 func TestOCIRepository_Reconcile(t *testing.T) {
@@ -197,7 +275,7 @@ func TestOCIRepository_Reconcile(t *testing.T) {
 				},
 				Spec: sourcev1.OCIRepositorySpec{
 					URL:       tt.url,
-					Interval:  metav1.Duration{Duration: 60 * time.Minute},
+					Interval:  &metav1.Duration{Duration: 60 * time.Minute},
 					Reference: &sourcev1.OCIRepositoryRef{},
 					Insecure:  true,
 				},
@@ -365,7 +443,7 @@ func TestOCIRepository_Reconcile_MediaType(t *testing.T) {
 				},
 				Spec: sourcev1.OCIRepositorySpec{
 					URL:      tt.url,
-					Interval: metav1.Duration{Duration: 60 * time.Minute},
+					Interval: &metav1.Duration{Duration: 60 * time.Minute},
 					Reference: &sourcev1.OCIRepositoryRef{
 						Tag: tt.tag,
 					},
@@ -735,7 +813,7 @@ func TestOCIRepository_reconcileSource_authStrategy(t *testing.T) {
 					Generation:   1,
 				},
 				Spec: sourcev1.OCIRepositorySpec{
-					Interval: metav1.Duration{Duration: interval},
+					Interval: &metav1.Duration{Duration: interval},
 					Timeout:  &metav1.Duration{Duration: timeout},
 				},
 			}
@@ -943,7 +1021,7 @@ func TestOCIRepository_CertSecret(t *testing.T) {
 				},
 				Spec: sourcev1.OCIRepositorySpec{
 					URL:       tt.url,
-					Interval:  metav1.Duration{Duration: 60 * time.Minute},
+					Interval:  &metav1.Duration{Duration: 60 * time.Minute},
 					Reference: &sourcev1.OCIRepositoryRef{Digest: tt.digest.String()},
 				},
 			}
@@ -1069,7 +1147,7 @@ func TestOCIRepository_ProxySecret(t *testing.T) {
 				},
 				Spec: sourcev1.OCIRepositorySpec{
 					URL:       tt.url,
-					Interval:  metav1.Duration{Duration: 60 * time.Minute},
+					Interval:  &metav1.Duration{Duration: 60 * time.Minute},
 					Reference: &sourcev1.OCIRepositoryRef{Digest: tt.digest.String()},
 				},
 			}
@@ -1282,7 +1360,7 @@ func TestOCIRepository_reconcileSource_remoteReference(t *testing.T) {
 				},
 				Spec: sourcev1.OCIRepositorySpec{
 					URL:      fmt.Sprintf("oci://%s/podinfo", server.registryHost),
-					Interval: metav1.Duration{Duration: interval},
+					Interval: &metav1.Duration{Duration: interval},
 					Timeout:  &metav1.Duration{Duration: timeout},
 					Insecure: true,
 				},
@@ -1535,7 +1613,7 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignatureNotation(t *testi
 					Verify: &sourcev1.OCIRepositoryVerification{
 						Provider: "notation",
 					},
-					Interval: metav1.Duration{Duration: interval},
+					Interval: &metav1.Duration{Duration: interval},
 					Timeout:  &metav1.Duration{Duration: timeout},
 				},
 			}
@@ -1869,7 +1947,7 @@ func TestOCIRepository_reconcileSource_verifyOCISourceTrustPolicyNotation(t *tes
 					Verify: &sourcev1.OCIRepositoryVerification{
 						Provider: "notation",
 					},
-					Interval: metav1.Duration{Duration: interval},
+					Interval: &metav1.Duration{Duration: interval},
 					Timeout:  &metav1.Duration{Duration: timeout},
 				},
 			}
@@ -2194,7 +2272,7 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignatureCosign(t *testing
 					Verify: &sourcev1.OCIRepositoryVerification{
 						Provider: "cosign",
 					},
-					Interval: metav1.Duration{Duration: interval},
+					Interval: &metav1.Duration{Duration: interval},
 					Timeout:  &metav1.Duration{Duration: timeout},
 				},
 			}
@@ -2421,7 +2499,7 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignature_keyless(t *testi
 					Verify: &sourcev1.OCIRepositoryVerification{
 						Provider: "cosign",
 					},
-					Interval:  metav1.Duration{Duration: interval},
+					Interval:  &metav1.Duration{Duration: interval},
 					Timeout:   &metav1.Duration{Duration: timeout},
 					Reference: tt.reference,
 				},
@@ -2604,7 +2682,7 @@ func TestOCIRepository_reconcileSource_noop(t *testing.T) {
 				Spec: sourcev1.OCIRepositorySpec{
 					URL:       fmt.Sprintf("oci://%s/podinfo", server.registryHost),
 					Reference: &sourcev1.OCIRepositoryRef{Tag: "6.1.5"},
-					Interval:  metav1.Duration{Duration: interval},
+					Interval:  &metav1.Duration{Duration: interval},
 					Timeout:   &metav1.Duration{Duration: timeout},
 					Insecure:  true,
 				},
@@ -2997,7 +3075,7 @@ func TestOCIRepository_getArtifactRef(t *testing.T) {
 				},
 				Spec: sourcev1.OCIRepositorySpec{
 					URL:      tt.url,
-					Interval: metav1.Duration{Duration: interval},
+					Interval: &metav1.Duration{Duration: interval},
 					Timeout:  &metav1.Duration{Duration: timeout},
 					Insecure: true,
 				},
@@ -3036,7 +3114,7 @@ func TestOCIRepository_invalidURL(t *testing.T) {
 		},
 		Spec: sourcev1.OCIRepositorySpec{
 			URL:      "oci://ghcr.io/test/test:v1",
-			Interval: metav1.Duration{Duration: 60 * time.Minute},
+			Interval: &metav1.Duration{Duration: 60 * time.Minute},
 		},
 	}
 
@@ -3086,7 +3164,7 @@ func TestOCIRepository_objectLevelWorkloadIdentityFeatureGate(t *testing.T) {
 		},
 		Spec: sourcev1.OCIRepositorySpec{
 			URL:                "oci://ghcr.io/stefanprodan/manifests/podinfo",
-			Interval:           metav1.Duration{Duration: 60 * time.Minute},
+			Interval:           &metav1.Duration{Duration: 60 * time.Minute},
 			Provider:           "aws",
 			ServiceAccountName: "test",
 		},

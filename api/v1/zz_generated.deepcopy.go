@@ -921,7 +921,11 @@ func (in *OCIRepositorySpec) DeepCopyInto(out *OCIRepositorySpec) {
 		*out = new(meta.LocalObjectReference)
 		**out = **in
 	}
-	out.Interval = in.Interval
+	if in.Interval != nil {
+		in, out := &in.Interval, &out.Interval
+		*out = new(metav1.Duration)
+		**out = **in
+	}
 	if in.Timeout != nil {
 		in, out := &in.Timeout, &out.Timeout
 		*out = new(metav1.Duration)
