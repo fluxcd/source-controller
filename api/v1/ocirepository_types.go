@@ -58,8 +58,8 @@ type OCIRepositorySpec struct {
 	// URL is a reference to an OCI artifact repository hosted
 	// on a remote container registry.
 	// +kubebuilder:validation:Pattern="^oci://.*$"
-	// +required
-	URL string `json:"url"`
+	// +optional
+	URL string `json:"url,omitempty"`
 
 	// The OCI reference to pull and monitor for changes,
 	// defaults to the latest tag.
@@ -121,8 +121,8 @@ type OCIRepositorySpec struct {
 	// efficient use of resources.
 	// +kubebuilder:validation:Type=string
 	// +kubebuilder:validation:Pattern="^([0-9]+(\\.[0-9]+)?(ms|s|m|h))+$"
-	// +required
-	Interval metav1.Duration `json:"interval"`
+	// +optional
+	Interval metav1.Duration `json:"interval,omitempty"`
 
 	// The timeout for remote OCI Repository operations like pulling, defaults to 60s.
 	// +kubebuilder:default="60s"
@@ -273,6 +273,8 @@ func (in *OCIRepository) GetLayerOperation() string {
 // +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.conditions[?(@.type==\"Ready\")].message",description=""
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description=""
 // +kubebuilder:metadata:annotations="kustomize.toolkit.fluxcd.io/substitute=disabled"
+// +kubebuilder:validation:XValidation:rule="has(self.spec) && has(self.spec.url)",message="spec.url is required"
+// +kubebuilder:validation:XValidation:rule="has(self.spec) && has(self.spec.interval)",message="spec.interval is required"
 
 // OCIRepository is the Schema for the ocirepositories API
 type OCIRepository struct {

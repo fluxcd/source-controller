@@ -267,9 +267,6 @@ spec:
                 required:
                 - provider
                 type: object
-            required:
-            - interval
-            - url
             type: object
           status:
             default:
@@ -423,6 +420,11 @@ spec:
                 type: string
             type: object
         type: object
+        x-kubernetes-validations:
+        - message: spec.url is required
+          rule: has(self.spec) && has(self.spec.url)
+        - message: spec.interval is required
+          rule: has(self.spec) && has(self.spec.interval)
     served: true
     storage: true
     subresources:
