@@ -1029,6 +1029,25 @@ func TestGitRepositoryReconciler_getAuthOpts_provider(t *testing.T) {
 			wantErr: "secretRef '/githubAppSecret' has github app data but provider is not set to github",
 		},
 		{
+			name: "generic provider with github app client id in secret",
+			url:  "https://example.com/org/repo",
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "githubAppSecret",
+				},
+				Data: map[string][]byte{
+					githubapp.KeyAppClientID: []byte("Iv23liXXXXXXX"),
+				},
+			},
+			beforeFunc: func(obj *sourcev1.GitRepository) {
+				obj.Spec.Provider = sourcev1.GitProviderGeneric
+				obj.Spec.SecretRef = &meta.LocalObjectReference{
+					Name: "githubAppSecret",
+				}
+			},
+			wantErr: "secretRef '/githubAppSecret' has github app data but provider is not set to github",
+		},
+		{
 			name: "github provider with basic auth secret",
 			url:  "https://github.com/org/repo.git",
 			secret: &corev1.Secret{

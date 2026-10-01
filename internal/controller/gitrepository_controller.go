@@ -794,7 +794,7 @@ func (r *GitRepositoryReconciler) getAuthOpts(ctx context.Context, obj *sourcev1
 		}
 	default:
 		// analyze secret, if it has github app data, perhaps provider should have been github.
-		if appID := authData[githubapp.KeyAppID]; len(appID) != 0 {
+		if len(authData[githubapp.KeyAppID]) != 0 || len(authData[githubapp.KeyAppClientID]) != 0 {
 			e := serror.NewGeneric(
 				fmt.Errorf("secretRef '%s/%s' has github app data but provider is not set to github", obj.GetNamespace(), obj.Spec.SecretRef.Name),
 				sourcev1.InvalidProviderConfigurationReason,
