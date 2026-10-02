@@ -33,3 +33,34 @@ jobs:
         continue-on-error: true
         run: |
           kubectl -n source-system logs -l app=source-controller
+
+  sigstore-linux-amd64:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Test suite setup
+        uses: fluxcd/gha-workflows/.github/actions/setup-kubernetes@v0.12.0
+        with:
+          go-version: 1.26.x
+          cluster-name: sigstore-test
+          kind-config: hack/sigstore-test/kind-cluster.yaml
+      - name: Setup cosign
+        uses: sigstore/cosign-installer@v4.1.2
+      - name: Setup Flux CLI
+        uses: fluxcd/flux2/action@v2.8.8
+      - name: Start registries
+        run: make -C hack/sigstore-test registries
+      - name: Install sigstore stack
+        run: make -C hack/sigstore-test sigstore
+      - name: Install timestamp authority
+        run: make -C hack/sigstore-test tsa
+      - name: Build and deploy source-controller
+        run: BUILD_PLATFORM=linux/amd64 make -C hack/sigstore-test build
+      - name: Run sigstore verification tests
+        run: make -C hack/sigstore-test test
+      - name: Print controller logs
+        if: always()
+        continue-on-error: true
+        run: |
+          kubectl -n source-system logs deploy/source-controller

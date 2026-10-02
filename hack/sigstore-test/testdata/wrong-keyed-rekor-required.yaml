@@ -1,0 +1,21 @@
+---
+# Negative test: keyed signature without a Rekor inclusion proof combined
+# with a trusted root that contains Rekor logs. Auto-detection requires
+# tlog verification, the v3-key signature does not carry one, so the
+# OCIRepository must surface a VerificationError.
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: OCIRepository
+metadata:
+  name: test-wrong-keyed-rekor-required
+spec:
+  interval: 5m
+  url: oci://sigstore-test-registry:5000/test/v3-key
+  ref:
+    tag: v1
+  insecure: true
+  verify:
+    provider: cosign
+    secretRef:
+      name: cosign-test-key
+    trustedRootSecretRef:
+      name: sigstore-trusted-root
