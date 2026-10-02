@@ -17,8 +17,10 @@ limitations under the License.
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"time"
 
 	flag "github.com/spf13/pflag"
@@ -63,6 +65,7 @@ import (
 	"github.com/fluxcd/source-controller/internal/features"
 	"github.com/fluxcd/source-controller/internal/helm"
 	scosign "github.com/fluxcd/source-controller/internal/oci/cosign"
+	"github.com/fluxcd/source-controller/internal/util"
 )
 
 const controllerName = "source-controller"
@@ -158,6 +161,8 @@ func main() {
 	flag.Parse()
 
 	logger.SetLogger(logger.NewLogger(logOptions))
+
+	staleTempDirs := setupTempRoot()
 
 	if defaultServiceAccount != "" {
 		auth.SetDefaultServiceAccount(defaultServiceAccount)
@@ -325,6 +330,8 @@ func main() {
 		}
 	}()
 
+	purgeStaleTempDirs(ctx, staleTempDirs)
+
 	setupLog.Info("starting manager")
 	if err := mgr.Start(ctx); err != nil {
 		setupLog.Error(err, "problem running manager")
@@ -444,4 +451,40 @@ func envOrDefault(envName, defaultValue string) string {
 	}
 
 	return defaultValue
+}
+
+// setupTempRoot points TMPDIR at a directory of this controller's own, so
+// that every temporary file and directory it creates, including those of the
+// Helm and Git libraries, lands in one place. Whatever a previous process
+// left there, because it exited without running its deferred cleanup, is
+// moved aside and returned for purgeStaleTempDirs to remove.
+func setupTempRoot() []string {
+	root := filepath.Join(os.TempDir(), controllerName)
+	stale, err := util.PrepareTempRoot(root)
+	if err != nil {
+		setupLog.Error(err, "unable to set up tmp dir")
+		os.Exit(1)
+	}
+	if err := os.Setenv("TMPDIR", root); err != nil {
+		setupLog.Error(err, "unable to set TMPDIR")
+		os.Exit(1)
+	}
+	return stale
+}
+
+// purgeStaleTempDirs removes the leftovers found by setupTempRoot in the
+// background, so that the manager startup is not delayed.
+func purgeStaleTempDirs(ctx context.Context, dirs []string) {
+	const purgeTimeout = 2 * time.Minute
+
+	if len(dirs) == 0 {
+		return
+	}
+
+	setupLog.Info("purging stale tmp dirs", "count", len(dirs))
+	go func() {
+		ctx, cancel := context.WithTimeout(ctx, purgeTimeout)
+		defer cancel()
+		util.PurgeTempRoots(ctx, setupLog, dirs)
+	}()
 }
