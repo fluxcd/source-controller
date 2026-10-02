@@ -43,7 +43,6 @@ import (
 	helmreg "helm.sh/helm/v4/pkg/registry"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/kubernetes/scheme"
-	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/yaml"
@@ -52,6 +51,7 @@ import (
 	"github.com/fluxcd/pkg/artifact/digest"
 	"github.com/fluxcd/pkg/artifact/storage"
 	"github.com/fluxcd/pkg/runtime/controller"
+	"github.com/fluxcd/pkg/runtime/events"
 	"github.com/fluxcd/pkg/runtime/metrics"
 	"github.com/fluxcd/pkg/runtime/testenv"
 	"github.com/fluxcd/pkg/testserver"
@@ -177,7 +177,7 @@ func setupRegistryServer(ctx context.Context, workspaceDir string, opts registry
 		}
 
 		htpasswdPath := filepath.Join(workspaceDir, testRegistryHtpasswdFileBasename)
-		if err = os.WriteFile(htpasswdPath, []byte(fmt.Sprintf("%s:%s\n", testRegistryUsername, string(pwBytes))), 0644); err != nil {
+		if err = os.WriteFile(htpasswdPath, fmt.Appendf(nil, "%s:%s\n", testRegistryUsername, string(pwBytes)), 0644); err != nil {
 			return nil, fmt.Errorf("failed to create htpasswd file: %s", err)
 		}
 
@@ -321,10 +321,10 @@ func TestMain(m *testing.M) {
 	defer testRegistryServer.Close()
 
 	if err := (&GitRepositoryReconciler{
-		Client:        testEnv,
-		EventRecorder: record.NewFakeRecorder(32),
-		Metrics:       testMetricsH,
-		Storage:       testStorage,
+		Client:   testEnv,
+		Recorder: events.NewFakeRecorder(32, false),
+		Metrics:  testMetricsH,
+		Storage:  testStorage,
 	}).SetupWithManager(testEnv, GitRepositoryReconcilerOptions{
 		RateLimiter: controller.GetDefaultRateLimiter(),
 	}); err != nil {
@@ -332,10 +332,10 @@ func TestMain(m *testing.M) {
 	}
 
 	if err := (&BucketReconciler{
-		Client:        testEnv,
-		EventRecorder: record.NewFakeRecorder(32),
-		Metrics:       testMetricsH,
-		Storage:       testStorage,
+		Client:   testEnv,
+		Recorder: events.NewFakeRecorder(32, false),
+		Metrics:  testMetricsH,
+		Storage:  testStorage,
 	}).SetupWithManager(testEnv, BucketReconcilerOptions{
 		RateLimiter: controller.GetDefaultRateLimiter(),
 	}); err != nil {
@@ -346,10 +346,10 @@ func TestMain(m *testing.M) {
 	cacheRecorder := cache.MustMakeMetrics()
 
 	if err := (&OCIRepositoryReconciler{
-		Client:        testEnv,
-		EventRecorder: record.NewFakeRecorder(32),
-		Metrics:       testMetricsH,
-		Storage:       testStorage,
+		Client:   testEnv,
+		Recorder: events.NewFakeRecorder(32, false),
+		Metrics:  testMetricsH,
+		Storage:  testStorage,
 	}).SetupWithManager(testEnv, OCIRepositoryReconcilerOptions{
 		RateLimiter: controller.GetDefaultRateLimiter(),
 	}); err != nil {
@@ -358,7 +358,7 @@ func TestMain(m *testing.M) {
 
 	if err := (&HelmRepositoryReconciler{
 		Client:        testEnv,
-		EventRecorder: record.NewFakeRecorder(32),
+		Recorder:      events.NewFakeRecorder(32, false),
 		Metrics:       testMetricsH,
 		Getters:       testGetters,
 		Storage:       testStorage,
@@ -373,7 +373,7 @@ func TestMain(m *testing.M) {
 
 	if err := (&HelmChartReconciler{
 		Client:        testEnv,
-		EventRecorder: record.NewFakeRecorder(32),
+		Recorder:      events.NewFakeRecorder(32, false),
 		Metrics:       testMetricsH,
 		Getters:       testGetters,
 		Storage:       testStorage,

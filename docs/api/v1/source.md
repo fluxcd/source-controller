@@ -1327,6 +1327,11 @@ OCIRepositoryStatus
 </table>
 </div>
 </div>
+<h3 id="source.toolkit.fluxcd.io/v1.Action">Action
+(<code>string</code> alias)</h3>
+<p>Action describes an observable stage of a source reconcile loop, from
+reconciling the local artifact storage through acquiring and verifying the
+upstream source, packaging the artifact and finalizing on deletion.</p>
 <h3 id="source.toolkit.fluxcd.io/v1.BucketSTSSpec">BucketSTSSpec
 </h3>
 <p>
