@@ -274,7 +274,7 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>Ignore overrides the set of excluded patterns in the .sourceignore format
+<p>Ignore extends the set of excluded patterns in the .sourceignore format
 (which is the same as .gitignore). If not provided, a default will be used,
 consult the documentation for your version to find out what those are.</p>
 </td>
@@ -507,7 +507,7 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>Ignore overrides the set of excluded patterns in the .sourceignore format
+<p>Ignore extends the set of excluded patterns in the .sourceignore format
 (which is the same as .gitignore). If not provided, a default will be used,
 consult the documentation for your version to find out what those are.</p>
 </td>
@@ -1279,7 +1279,7 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>Ignore overrides the set of excluded patterns in the .sourceignore format
+<p>Ignore extends the set of excluded patterns in the .sourceignore format
 (which is the same as .gitignore). If not provided, a default will be used,
 consult the documentation for your version to find out what those are.</p>
 </td>
@@ -1636,7 +1636,7 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>Ignore overrides the set of excluded patterns in the .sourceignore format
+<p>Ignore extends the set of excluded patterns in the .sourceignore format
 (which is the same as .gitignore). If not provided, a default will be used,
 consult the documentation for your version to find out what those are.</p>
 </td>
@@ -2225,7 +2225,7 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>Ignore overrides the set of excluded patterns in the .sourceignore format
+<p>Ignore extends the set of excluded patterns in the .sourceignore format
 (which is the same as .gitignore). If not provided, a default will be used,
 consult the documentation for your version to find out what those are.</p>
 </td>
@@ -3521,7 +3521,7 @@ string
 </td>
 <td>
 <em>(Optional)</em>
-<p>Ignore overrides the set of excluded patterns in the .sourceignore format
+<p>Ignore extends the set of excluded patterns in the .sourceignore format
 (which is the same as .gitignore). If not provided, a default will be used,
 consult the documentation for your version to find out what those are.</p>
 </td>
