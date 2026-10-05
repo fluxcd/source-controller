@@ -2149,6 +2149,7 @@ func TestGitRepositoryReconciler_verifySignature(t *testing.T) {
 			name: "Source verification mode in status is unset if there's no verification in spec",
 			beforeFunc: func(obj *sourcev1.GitRepository) {
 				obj.Status.SourceVerificationMode = ptrToVerificationMode(sourcev1.ModeGitHEAD)
+				obj.Status.SourceVerificationFingerprint = "stale-fingerprint"
 				obj.Spec.Verification = nil
 			},
 			want: sreconcile.ResultSuccess,
@@ -2789,8 +2790,12 @@ func TestGitRepositoryReconciler_verifySignature(t *testing.T) {
 			g.Expect(got).To(Equal(tt.want))
 			if tt.wantSourceVerificationMode != nil {
 				g.Expect(*obj.Status.SourceVerificationMode).To(Equal(*tt.wantSourceVerificationMode))
+				if tt.secret != nil {
+					g.Expect(obj.Status.SourceVerificationFingerprint).To(Equal(verificationFingerprint(tt.secret)))
+				}
 			} else {
 				g.Expect(obj.Status.SourceVerificationMode).To(BeNil())
+				g.Expect(obj.Status.SourceVerificationFingerprint).To(BeEmpty())
 			}
 		})
 	}
@@ -4103,6 +4108,219 @@ func Test_requiresVerification(t *testing.T) {
 			g := NewWithT(t)
 			verificationRequired := requiresVerification(tt.obj)
 			g.Expect(verificationRequired).To(Equal(tt.want))
+		})
+	}
+}
+
+func Test_verificationFingerprint(t *testing.T) {
+	g := NewWithT(t)
+
+	pgpKey := armoredKeyRingFixture
+	sshKey := "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIExampleKeyForFingerprintTests"
+
+	// The same key material stored under a different data key must yield the
+	// same fingerprint, as the policy is defined by the keys, not their names.
+	base := &corev1.Secret{Data: map[string][]byte{"foo": []byte(pgpKey)}}
+	sameKey := &corev1.Secret{Data: map[string][]byte{"bar.asc": []byte(pgpKey)}}
+	g.Expect(verificationFingerprint(base)).To(Equal(verificationFingerprint(sameKey)))
+
+	// The fingerprint must be stable regardless of the map iteration order.
+	mixed := &corev1.Secret{Data: map[string][]byte{
+		"a.asc":    []byte(pgpKey),
+		"b.sshpub": []byte(sshKey),
+		"c.sshpub": []byte(sshKey + "\n"),
+	}}
+	g.Expect(verificationFingerprint(mixed)).To(Equal(verificationFingerprint(mixed)))
+
+	// Adding an SSH key changes the fingerprint.
+	g.Expect(verificationFingerprint(mixed)).ToNot(Equal(verificationFingerprint(base)))
+
+	// Changing the key material changes the fingerprint.
+	changed := &corev1.Secret{Data: map[string][]byte{"foo": []byte(pgpKey + "\n")}}
+	g.Expect(verificationFingerprint(changed)).ToNot(Equal(verificationFingerprint(base)))
+}
+
+func TestGitRepositoryReconciler_verificationPolicyChanged(t *testing.T) {
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "keys", Namespace: "default"},
+		Data:       map[string][]byte{"foo": []byte(armoredKeyRingFixture)},
+	}
+	rotatedSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "keys", Namespace: "default"},
+		Data:       map[string][]byte{"foo": []byte(armoredKeyRingFixture + "\n")},
+	}
+
+	newObj := func(mode sourcev1.GitVerificationMode, fingerprint string) *sourcev1.GitRepository {
+		obj := &sourcev1.GitRepository{
+			ObjectMeta: metav1.ObjectMeta{Name: "repo", Namespace: "default"},
+			Spec: sourcev1.GitRepositorySpec{
+				Verification: &sourcev1.GitRepositoryVerification{
+					Mode:      mode,
+					SecretRef: meta.LocalObjectReference{Name: "keys"},
+				},
+			},
+		}
+		obj.Status.SourceVerificationFingerprint = fingerprint
+		return obj
+	}
+
+	tests := []struct {
+		name   string
+		obj    *sourcev1.GitRepository
+		secret *corev1.Secret
+		want   bool
+	}{
+		{
+			name: "no verification configured",
+			obj:  &sourcev1.GitRepository{},
+			want: false,
+		},
+		{
+			name: "verification without mode",
+			obj: &sourcev1.GitRepository{
+				Spec: sourcev1.GitRepositorySpec{
+					Verification: &sourcev1.GitRepositoryVerification{
+						SecretRef: meta.LocalObjectReference{Name: "keys"},
+					},
+				},
+			},
+			want: false,
+		},
+		{
+			name: "missing secret requires verification",
+			obj:  newObj(sourcev1.ModeGitHEAD, ""),
+			want: true,
+		},
+		{
+			name:   "unchanged keys do not require verification",
+			obj:    newObj(sourcev1.ModeGitHEAD, verificationFingerprint(secret)),
+			secret: secret,
+			want:   false,
+		},
+		{
+			name:   "rotated keys require verification",
+			obj:    newObj(sourcev1.ModeGitHEAD, verificationFingerprint(secret)),
+			secret: rotatedSecret,
+			want:   true,
+		},
+		{
+			name:   "missing observed fingerprint requires verification",
+			obj:    newObj(sourcev1.ModeGitHEAD, ""),
+			secret: secret,
+			want:   true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+			clientBuilder := fakeclient.NewClientBuilder().WithScheme(testEnv.GetScheme())
+			if tt.secret != nil {
+				clientBuilder = clientBuilder.WithObjects(tt.secret)
+			}
+			r := &GitRepositoryReconciler{Client: clientBuilder.Build()}
+			g.Expect(r.verificationPolicyChanged(ctx, tt.obj)).To(Equal(tt.want))
+		})
+	}
+}
+
+func TestGitRepositoryReconciler_reconcileSource_verificationPolicyChange(t *testing.T) {
+	g := NewWithT(t)
+
+	server, err := gittestserver.NewTempGitServer()
+	g.Expect(err).NotTo(HaveOccurred())
+	defer os.RemoveAll(server.Root())
+	server.AutoCreate()
+	g.Expect(server.StartHTTP()).To(Succeed())
+	defer server.StopHTTP()
+
+	repoPath := "/test.git"
+	localRepo, err := initGitRepo(server, "testdata/git/repository", git.DefaultBranch, repoPath)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	headRef, err := localRepo.Head()
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(remoteBranchForHead(localRepo, headRef, "staging")).To(Succeed())
+
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "keys", Namespace: "default"},
+		Data:       map[string][]byte{"foo": []byte(armoredKeyRingFixture)},
+	}
+
+	tests := []struct {
+		name             string
+		fingerprint      string
+		wantVerification bool
+	}{
+		{
+			name:        "unchanged policy skips verification of the unchanged revision",
+			fingerprint: verificationFingerprint(secret),
+		},
+		{
+			name:             "changed policy reverifies the unchanged revision",
+			fingerprint:      "stale",
+			wantVerification: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			obj := &sourcev1.GitRepository{
+				ObjectMeta: metav1.ObjectMeta{
+					GenerateName: "verification-policy-",
+					Namespace:    "default",
+					Generation:   1,
+				},
+				Spec: sourcev1.GitRepositorySpec{
+					Interval: metav1.Duration{Duration: interval},
+					Timeout:  &metav1.Duration{Duration: timeout},
+					URL:      server.HTTPAddress() + repoPath,
+					Reference: &sourcev1.GitRepositoryRef{
+						Branch: "staging",
+					},
+					Verification: &sourcev1.GitRepositoryVerification{
+						Mode:      sourcev1.ModeGitHEAD,
+						SecretRef: meta.LocalObjectReference{Name: "keys"},
+					},
+				},
+				Status: sourcev1.GitRepositoryStatus{
+					Artifact: &meta.Artifact{
+						Revision: "staging@sha1:" + headRef.Hash().String(),
+						Path:     randStringRunes(10),
+					},
+					SourceVerificationMode:        ptrToVerificationMode(sourcev1.ModeGitHEAD),
+					SourceVerificationFingerprint: tt.fingerprint,
+				},
+			}
+			conditions.MarkTrue(obj, sourcev1.ArtifactInStorageCondition, meta.SucceededReason, "foo")
+
+			c := fakeclient.NewClientBuilder().
+				WithScheme(testEnv.GetScheme()).
+				WithObjects(obj, secret).
+				WithStatusSubresource(&sourcev1.GitRepository{}).
+				Build()
+			r := &GitRepositoryReconciler{
+				Client:       c,
+				Recorder:     events.NewFakeRecorder(32, false),
+				Storage:      testStorage,
+				patchOptions: getPatchOptions(gitRepositoryReadyCondition.Owned, "sc"),
+			}
+
+			var commit git.Commit
+			var includes artifactSet
+			sp := patch.NewSerialPatcher(obj, c)
+			_, err := r.reconcileSource(ctx, sp, obj, &commit, &includes, t.TempDir())
+			g.Expect(err).To(HaveOccurred())
+
+			if tt.wantVerification {
+				// The full checkout is performed, but the unsigned test commit
+				// fails verification.
+				g.Expect(err.Error()).To(ContainSubstring("signature verification of commit"))
+			} else {
+				g.Expect(err.Error()).To(ContainSubstring("no changes since last reconciliation"))
+			}
 		})
 	}
 }
