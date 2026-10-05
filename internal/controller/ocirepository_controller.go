@@ -328,7 +328,7 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 	obj *sourcev1.OCIRepository, metadata *meta.Artifact, dir string) (sreconcile.Result, error) {
 	var authenticator authn.Authenticator
 
-	ctxTimeout, cancel := context.WithTimeout(ctx, obj.Spec.Timeout.Duration)
+	ctxTimeout, cancel := context.WithTimeout(ctx, obj.GetTimeout())
 	defer cancel()
 
 	// Remove previously failed source verification status conditions. The
@@ -671,7 +671,7 @@ func (r *OCIRepositoryReconciler) verifySignature(ctx context.Context, obj *sour
 	ref name.Reference, keychain authn.Keychain, auth authn.Authenticator,
 	transport *http.Transport, opt ...remote.Option) (soci.VerificationResult, error) {
 
-	ctxTimeout, cancel := context.WithTimeout(ctx, obj.Spec.Timeout.Duration)
+	ctxTimeout, cancel := context.WithTimeout(ctx, obj.GetTimeout())
 	defer cancel()
 
 	provider := obj.Spec.Verify.Provider

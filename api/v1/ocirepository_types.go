@@ -58,8 +58,8 @@ type OCIRepositorySpec struct {
 	// URL is a reference to an OCI artifact repository hosted
 	// on a remote container registry.
 	// +kubebuilder:validation:Pattern="^oci://.*$"
-	// +required
-	URL string `json:"url"`
+	// +optional
+	URL string `json:"url,omitempty"`
 
 	// The OCI reference to pull and monitor for changes,
 	// defaults to the latest tag.
@@ -74,7 +74,6 @@ type OCIRepositorySpec struct {
 	// The provider used for authentication, can be 'aws', 'azure', 'gcp' or 'generic'.
 	// When not specified, defaults to 'generic'.
 	// +kubebuilder:validation:Enum=generic;aws;azure;gcp
-	// +kubebuilder:default:=generic
 	// +optional
 	Provider string `json:"provider,omitempty"`
 
@@ -121,11 +120,10 @@ type OCIRepositorySpec struct {
 	// efficient use of resources.
 	// +kubebuilder:validation:Type=string
 	// +kubebuilder:validation:Pattern="^([0-9]+(\\.[0-9]+)?(ms|s|m|h))+$"
-	// +required
-	Interval metav1.Duration `json:"interval"`
+	// +optional
+	Interval *metav1.Duration `json:"interval,omitempty"`
 
 	// The timeout for remote OCI Repository operations like pulling, defaults to 60s.
-	// +kubebuilder:default="60s"
 	// +kubebuilder:validation:Type=string
 	// +kubebuilder:validation:Pattern="^([0-9]+(\\.[0-9]+)?(ms|s|m))+$"
 	// +optional
@@ -236,6 +234,9 @@ func (in *OCIRepository) SetConditions(conditions []metav1.Condition) {
 // GetRequeueAfter returns the duration after which the OCIRepository must be
 // reconciled again.
 func (in OCIRepository) GetRequeueAfter() time.Duration {
+	if in.Spec.Interval == nil {
+		return 0
+	}
 	return in.Spec.Interval.Duration
 }
 
@@ -263,6 +264,14 @@ func (in *OCIRepository) GetLayerOperation() string {
 	return in.Spec.LayerSelector.Operation
 }
 
+// GetTimeout applies the 60s default via code to avoid using the CRD schema default.
+func (in *OCIRepository) GetTimeout() time.Duration {
+	if in.Spec.Timeout == nil {
+		return 60 * time.Second
+	}
+	return in.Spec.Timeout.Duration
+}
+
 // +genclient
 // +kubebuilder:storageversion
 // +kubebuilder:object:root=true
@@ -273,6 +282,8 @@ func (in *OCIRepository) GetLayerOperation() string {
 // +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.conditions[?(@.type==\"Ready\")].message",description=""
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description=""
 // +kubebuilder:metadata:annotations="kustomize.toolkit.fluxcd.io/substitute=disabled"
+// +kubebuilder:validation:XValidation:rule="has(self.spec) && has(self.spec.url)",message="spec.url is required"
+// +kubebuilder:validation:XValidation:rule="has(self.spec) && has(self.spec.interval)",message="spec.interval is required"
 
 // OCIRepository is the Schema for the ocirepositories API
 type OCIRepository struct {

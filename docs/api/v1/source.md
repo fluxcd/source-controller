@@ -1108,6 +1108,7 @@ string
 </em>
 </td>
 <td>
+<em>(Optional)</em>
 <p>URL is a reference to an OCI artifact repository hosted
 on a remote container registry.</p>
 </td>
@@ -1251,6 +1252,7 @@ Kubernetes meta/v1.Duration
 </em>
 </td>
 <td>
+<em>(Optional)</em>
 <p>Interval at which the OCIRepository URL is checked for updates.
 This interval is approximate and may be subject to jitter to ensure
 efficient use of resources.</p>
@@ -3350,6 +3352,7 @@ string
 </em>
 </td>
 <td>
+<em>(Optional)</em>
 <p>URL is a reference to an OCI artifact repository hosted
 on a remote container registry.</p>
 </td>
@@ -3493,6 +3496,7 @@ Kubernetes meta/v1.Duration
 </em>
 </td>
 <td>
+<em>(Optional)</em>
 <p>Interval at which the OCIRepository URL is checked for updates.
 This interval is approximate and may be subject to jitter to ensure
 efficient use of resources.</p>
