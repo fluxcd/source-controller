@@ -412,6 +412,13 @@ spec:
                     - copy
                     type: string
                 type: object
+              sourceVerificationFingerprint:
+                description: |-
+                  SourceVerificationFingerprint is the fingerprint of the verification
+                  material used to verify the signature of the current Artifact. It is
+                  used to detect changes to the verification policy, such as a key
+                  rotation, that require the current revision to be verified again.
+                type: string
               url:
                 description: URL is the download link for the artifact output of the
                   last OCI Repository sync.

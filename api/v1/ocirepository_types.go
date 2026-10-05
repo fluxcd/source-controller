@@ -210,6 +210,13 @@ type OCIRepositoryStatus struct {
 	// +optional
 	ObservedLayerSelector *OCILayerSelector `json:"observedLayerSelector,omitempty"`
 
+	// SourceVerificationFingerprint is the fingerprint of the verification
+	// material used to verify the signature of the current Artifact. It is
+	// used to detect changes to the verification policy, such as a key
+	// rotation, that require the current revision to be verified again.
+	// +optional
+	SourceVerificationFingerprint string `json:"sourceVerificationFingerprint,omitempty"`
+
 	meta.ReconcileRequestStatus `json:",inline"`
 }
 
