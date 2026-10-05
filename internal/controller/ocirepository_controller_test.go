@@ -1397,18 +1397,19 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignatureNotation(t *testi
 	g := NewWithT(t)
 
 	tests := []struct {
-		name             string
-		reference        *sourcev1.OCIRepositoryRef
-		insecure         bool
-		want             sreconcile.Result
-		wantErr          bool
-		wantErrMsg       string
-		shouldSign       bool
-		useDigest        bool
-		addMultipleCerts bool
-		provideNoCert    bool
-		beforeFunc       func(obj *sourcev1.OCIRepository, tag, revision string)
-		assertConditions []metav1.Condition
+		name                    string
+		reference               *sourcev1.OCIRepositoryRef
+		insecure                bool
+		want                    sreconcile.Result
+		wantErr                 bool
+		wantErrMsg              string
+		shouldSign              bool
+		useDigest               bool
+		addMultipleCerts        bool
+		provideNoCert           bool
+		verifiedWithCurrentKeys bool
+		beforeFunc              func(obj *sourcev1.OCIRepository, tag, revision string)
+		assertConditions        []metav1.Condition
 	}{
 		{
 			name: "signed image should pass verification",
@@ -1468,6 +1469,9 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignatureNotation(t *testi
 			name:       "no verify for already verified, verified condition remains the same",
 			reference:  &sourcev1.OCIRepositoryRef{Tag: "6.1.4"},
 			shouldSign: true,
+			// The recorded fingerprint matches the referenced keys, so the
+			// verification can be skipped.
+			verifiedWithCurrentKeys: true,
 			beforeFunc: func(obj *sourcev1.OCIRepository, tag, revision string) {
 				// Artifact present and custom verified condition reason/message.
 				obj.Status.Artifact = &meta.Artifact{Revision: fmt.Sprintf("%s@%s", tag, revision)}
@@ -1476,6 +1480,21 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignatureNotation(t *testi
 			want: sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(sourcev1.SourceVerifiedCondition, "Verified", "verified"),
+			},
+		},
+		{
+			name:       "same artifact, verified before with rotated keys, verify again",
+			reference:  &sourcev1.OCIRepositoryRef{Tag: "6.1.4"},
+			shouldSign: true,
+			beforeFunc: func(obj *sourcev1.OCIRepository, tag, revision string) {
+				obj.Status.Artifact = &meta.Artifact{Revision: fmt.Sprintf("%s@%s", tag, revision)}
+				conditions.MarkTrue(obj, sourcev1.SourceVerifiedCondition, "Verified", "verified")
+				// The recorded fingerprint no longer matches the referenced keys.
+				obj.Status.SourceVerificationFingerprint = "stale"
+			},
+			want: sreconcile.ResultSuccess,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.SourceVerifiedCondition, meta.SucceededReason, "verified signature of revision <revision>"),
 			},
 		},
 		{
@@ -1722,6 +1741,9 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignatureNotation(t *testi
 
 			if tt.beforeFunc != nil {
 				tt.beforeFunc(obj, image.tag, image.digest.String())
+			}
+			if tt.verifiedWithCurrentKeys {
+				obj.Status.SourceVerificationFingerprint = verificationMaterialFingerprint(obj.Spec.Verify.Provider, secret, nil)
 			}
 
 			g.Expect(r.Client.Create(ctx, obj)).ToNot(HaveOccurred())
@@ -2095,16 +2117,17 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignatureCosign(t *testing
 	g := NewWithT(t)
 
 	tests := []struct {
-		name             string
-		reference        *sourcev1.OCIRepositoryRef
-		insecure         bool
-		want             sreconcile.Result
-		wantErr          bool
-		wantErrMsg       string
-		shouldSign       bool
-		keyless          bool
-		beforeFunc       func(obj *sourcev1.OCIRepository, tag, revision string)
-		assertConditions []metav1.Condition
+		name                    string
+		reference               *sourcev1.OCIRepositoryRef
+		insecure                bool
+		want                    sreconcile.Result
+		wantErr                 bool
+		wantErrMsg              string
+		shouldSign              bool
+		keyless                 bool
+		verifiedWithCurrentKeys bool
+		beforeFunc              func(obj *sourcev1.OCIRepository, tag, revision string)
+		assertConditions        []metav1.Condition
 	}{
 		{
 			name: "signed image should pass verification",
@@ -2177,6 +2200,9 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignatureCosign(t *testing
 			name:       "no verify for already verified, verified condition remains the same",
 			reference:  &sourcev1.OCIRepositoryRef{Tag: "6.1.4"},
 			shouldSign: true,
+			// The recorded fingerprint matches the referenced keys, so the
+			// verification can be skipped.
+			verifiedWithCurrentKeys: true,
 			beforeFunc: func(obj *sourcev1.OCIRepository, tag, revision string) {
 				// Artifact present and custom verified condition reason/message.
 				obj.Status.Artifact = &meta.Artifact{Revision: fmt.Sprintf("%s@%s", tag, revision)}
@@ -2185,6 +2211,21 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignatureCosign(t *testing
 			want: sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(sourcev1.SourceVerifiedCondition, "Verified", "verified"),
+			},
+		},
+		{
+			name:       "same artifact, verified before with rotated keys, verify again",
+			reference:  &sourcev1.OCIRepositoryRef{Tag: "6.1.4"},
+			shouldSign: true,
+			beforeFunc: func(obj *sourcev1.OCIRepository, tag, revision string) {
+				obj.Status.Artifact = &meta.Artifact{Revision: fmt.Sprintf("%s@%s", tag, revision)}
+				conditions.MarkTrue(obj, sourcev1.SourceVerifiedCondition, "Verified", "verified")
+				// The recorded fingerprint no longer matches the referenced keys.
+				obj.Status.SourceVerificationFingerprint = "stale"
+			},
+			want: sreconcile.ResultSuccess,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.SourceVerifiedCondition, meta.SucceededReason, "verified signature of revision <revision>"),
 			},
 		},
 		{
@@ -2338,6 +2379,9 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignatureCosign(t *testing
 
 			if tt.beforeFunc != nil {
 				tt.beforeFunc(obj, image.tag, image.digest.String())
+			}
+			if tt.verifiedWithCurrentKeys {
+				obj.Status.SourceVerificationFingerprint = verificationMaterialFingerprint(obj.Spec.Verify.Provider, secret, nil)
 			}
 
 			g.Expect(r.Client.Create(ctx, obj)).ToNot(HaveOccurred())
@@ -3873,6 +3917,120 @@ func TestOCIContentConfigChanged(t *testing.T) {
 			}
 
 			g.Expect(ociContentConfigChanged(obj)).To(Equal(tt.want))
+		})
+	}
+}
+
+func Test_verificationMaterialFingerprint(t *testing.T) {
+	g := NewWithT(t)
+
+	pubKey := []byte("cosign public key")
+	cert := []byte("notation certificate")
+	policy := []byte(`{"version":"1.0"}`)
+
+	// The same key material stored under a different data key must yield the
+	// same fingerprint, as the policy is defined by the keys, not their names.
+	cosignBase := &corev1.Secret{Data: map[string][]byte{"cosign.pub": pubKey}}
+	cosignSameKey := &corev1.Secret{Data: map[string][]byte{"other.pub": pubKey}}
+	g.Expect(verificationMaterialFingerprint("cosign", cosignBase, nil)).
+		To(Equal(verificationMaterialFingerprint("cosign", cosignSameKey, nil)))
+
+	// Changing the key material changes the fingerprint.
+	cosignRotated := &corev1.Secret{Data: map[string][]byte{"cosign.pub": append(pubKey, '!')}}
+	g.Expect(verificationMaterialFingerprint("cosign", cosignRotated, nil)).
+		ToNot(Equal(verificationMaterialFingerprint("cosign", cosignBase, nil)))
+
+	// Data entries that are not public keys are ignored for cosign.
+	cosignWithUnrelated := &corev1.Secret{Data: map[string][]byte{"cosign.pub": pubKey, "unrelated": []byte("x")}}
+	g.Expect(verificationMaterialFingerprint("cosign", cosignWithUnrelated, nil)).
+		To(Equal(verificationMaterialFingerprint("cosign", cosignBase, nil)))
+
+	// The notation trust policy and certificates contribute to the fingerprint.
+	notationBase := &corev1.Secret{Data: map[string][]byte{"trustpolicy.json": policy, "ca.crt": cert}}
+	notationRotatedPolicy := &corev1.Secret{Data: map[string][]byte{"trustpolicy.json": append(policy, '!'), "ca.crt": cert}}
+	notationRotatedCert := &corev1.Secret{Data: map[string][]byte{"trustpolicy.json": policy, "ca.crt": append(cert, '!')}}
+	g.Expect(verificationMaterialFingerprint("notation", notationBase, nil)).
+		ToNot(Equal(verificationMaterialFingerprint("notation", notationRotatedPolicy, nil)))
+	g.Expect(verificationMaterialFingerprint("notation", notationBase, nil)).
+		ToNot(Equal(verificationMaterialFingerprint("notation", notationRotatedCert, nil)))
+
+	// The trusted root contributes to the fingerprint.
+	trustedRoot := []byte(`{"mediaType":"application/vnd.dev.sigstore.trustedroot+json;version=0.1"}`)
+	g.Expect(verificationMaterialFingerprint("cosign", cosignBase, trustedRoot)).
+		ToNot(Equal(verificationMaterialFingerprint("cosign", cosignBase, nil)))
+}
+
+func TestOCIRepositoryReconciler_verificationPolicyChanged(t *testing.T) {
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "cosign-key", Namespace: "default"},
+		Data:       map[string][]byte{"cosign.pub": []byte("key")},
+	}
+	rotatedSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "cosign-key", Namespace: "default"},
+		Data:       map[string][]byte{"cosign.pub": []byte("rotated-key")},
+	}
+
+	newObj := func(secretRef *meta.LocalObjectReference, fingerprint string) *sourcev1.OCIRepository {
+		obj := &sourcev1.OCIRepository{
+			ObjectMeta: metav1.ObjectMeta{Name: "oci", Namespace: "default"},
+			Spec: sourcev1.OCIRepositorySpec{
+				Verify: &sourcev1.OCIRepositoryVerification{Provider: "cosign"},
+			},
+		}
+		if secretRef != nil {
+			obj.Spec.Verify.SecretRef = secretRef
+		}
+		obj.Status.SourceVerificationFingerprint = fingerprint
+		return obj
+	}
+
+	keyRef := &meta.LocalObjectReference{Name: "cosign-key"}
+
+	tests := []struct {
+		name   string
+		obj    *sourcev1.OCIRepository
+		secret *corev1.Secret
+		want   bool
+	}{
+		{
+			name: "no verification configured",
+			obj:  &sourcev1.OCIRepository{},
+			want: false,
+		},
+		{
+			name: "missing secret requires verification",
+			obj:  newObj(keyRef, ""),
+			want: true,
+		},
+		{
+			name:   "unchanged keys do not require verification",
+			obj:    newObj(keyRef, verificationMaterialFingerprint("cosign", secret, nil)),
+			secret: secret,
+			want:   false,
+		},
+		{
+			name:   "rotated keys require verification",
+			obj:    newObj(keyRef, verificationMaterialFingerprint("cosign", secret, nil)),
+			secret: rotatedSecret,
+			want:   true,
+		},
+		{
+			name:   "missing observed fingerprint requires verification",
+			obj:    newObj(keyRef, ""),
+			secret: secret,
+			want:   true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+			clientBuilder := fakeclient.NewClientBuilder().WithScheme(testEnv.GetScheme())
+			if tt.secret != nil {
+				clientBuilder = clientBuilder.WithObjects(tt.secret)
+			}
+			r := &OCIRepositoryReconciler{Client: clientBuilder.Build()}
+			g.Expect(r.verificationPolicyChanged(ctx, tt.obj)).To(Equal(tt.want))
 		})
 	}
 }

@@ -38,6 +38,7 @@ import (
 	gcrv1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	"github.com/notaryproject/notation-go/verifier/trustpolicy"
+	"github.com/opencontainers/go-digest"
 	"github.com/sigstore/cosign/v3/pkg/cosign"
 	"helm.sh/helm/v4/pkg/registry"
 	corev1 "k8s.io/api/core/v1"
@@ -473,12 +474,15 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 	// - the upstream digest differs from the one in storage (revision drift)
 	// - the OCIRepository spec has changed (generation drift)
 	// - the previous reconciliation resulted in a failed artifact verification (retry with exponential backoff)
+	// - the verification policy (e.g. a key rotation) has changed (policy drift)
 	if obj.Spec.Verify == nil {
 		// Remove old observations if verification was disabled
 		conditions.Delete(obj, sourcev1.SourceVerifiedCondition)
+		obj.Status.SourceVerificationFingerprint = ""
 	} else if !obj.GetArtifact().HasRevision(revision) ||
 		conditions.GetObservedGeneration(obj, sourcev1.SourceVerifiedCondition) != obj.Generation ||
-		conditions.IsFalse(obj, sourcev1.SourceVerifiedCondition) {
+		conditions.IsFalse(obj, sourcev1.SourceVerifiedCondition) ||
+		r.verificationPolicyChanged(ctx, obj) {
 
 		result, err := r.verifySignature(ctx, obj, digestRef, keychain, authenticator, transport, opts...)
 		if err != nil {
@@ -496,6 +500,9 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 
 		if result == soci.VerificationResultSuccess {
 			conditions.MarkTrue(obj, sourcev1.SourceVerifiedCondition, meta.SucceededReason, "verified signature of revision %s", revision)
+			if fingerprint, err := r.verificationFingerprint(ctx, obj); err == nil {
+				obj.Status.SourceVerificationFingerprint = fingerprint
+			}
 		}
 	}
 
@@ -659,6 +666,108 @@ func (r *OCIRepositoryReconciler) getRevision(ref name.Reference, options []remo
 func (r *OCIRepositoryReconciler) digestFromRevision(revision string) string {
 	parts := strings.Split(revision, "@")
 	return parts[len(parts)-1]
+}
+
+// verificationPolicyChanged returns true if the verification material referenced
+// by the object differs from the one used for the last successful verification,
+// or if the current policy can not be determined. A changed policy requires the
+// current revision to be verified again, even if it did not change.
+func (r *OCIRepositoryReconciler) verificationPolicyChanged(ctx context.Context, obj *sourcev1.OCIRepository) bool {
+	if obj.Spec.Verify == nil {
+		return false
+	}
+	fingerprint, err := r.verificationFingerprint(ctx, obj)
+	if err != nil {
+		// Return true so the full reconciliation surfaces the error.
+		return true
+	}
+	return fingerprint != obj.Status.SourceVerificationFingerprint
+}
+
+// verificationFingerprint returns a stable fingerprint of the verification
+// material referenced by the object. It is used to detect a change in the
+// verification policy, e.g. a key rotation, that requires the current revision
+// to be verified again even if it did not change.
+func (r *OCIRepositoryReconciler) verificationFingerprint(ctx context.Context, obj *sourcev1.OCIRepository) (string, error) {
+	verify := obj.Spec.Verify
+	if verify == nil {
+		return "", nil
+	}
+
+	var trustedRoot []byte
+	if ref := verify.TrustedRootSecretRef; ref != nil && verify.Provider == "cosign" {
+		data, err := readTrustedRootFromSecret(ctx, r.Client, obj.Namespace, ref)
+		if err != nil {
+			return "", err
+		}
+		trustedRoot = data
+	}
+
+	var secret *corev1.Secret
+	if ref := verify.SecretRef; ref != nil {
+		s, err := r.retrieveSecret(ctx, types.NamespacedName{Namespace: obj.Namespace, Name: ref.Name})
+		if err != nil {
+			return "", err
+		}
+		secret = &s
+	}
+
+	return verificationMaterialFingerprint(verify.Provider, secret, trustedRoot), nil
+}
+
+// verificationMaterialFingerprint returns a stable fingerprint of the given
+// verification material. It is independent of the Secret name and of the data
+// key names, as the policy is defined by the material itself, not its location.
+func verificationMaterialFingerprint(provider string, secret *corev1.Secret, trustedRoot []byte) string {
+	var b strings.Builder
+	b.WriteString("provider:")
+	b.WriteString(provider)
+	b.WriteByte(0)
+
+	if len(trustedRoot) > 0 {
+		b.WriteString("trustedroot:")
+		b.Write(trustedRoot)
+		b.WriteByte(0)
+	}
+
+	if secret != nil {
+		switch provider {
+		case "notation":
+			if data, ok := secret.Data[notation.DefaultTrustPolicyKey]; ok {
+				b.WriteString("trustpolicy:")
+				b.Write(data)
+				b.WriteByte(0)
+			}
+			var certs []string
+			for k, v := range secret.Data {
+				if strings.HasSuffix(k, ".crt") || strings.HasSuffix(k, ".pem") {
+					certs = append(certs, string(v))
+				}
+			}
+			sort.Strings(certs)
+			for _, cert := range certs {
+				b.WriteString("cert:")
+				b.WriteString(cert)
+				b.WriteByte(0)
+			}
+		default:
+			// cosign: the public keys used for verification.
+			var keys []string
+			for k, v := range secret.Data {
+				if strings.HasSuffix(k, ".pub") {
+					keys = append(keys, string(v))
+				}
+			}
+			sort.Strings(keys)
+			for _, key := range keys {
+				b.WriteString("pub:")
+				b.WriteString(key)
+				b.WriteByte(0)
+			}
+		}
+	}
+
+	return digest.Canonical.FromString(b.String()).String()
 }
 
 // verifySignature verifies the authenticity of the given image reference URL.

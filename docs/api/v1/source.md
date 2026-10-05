@@ -3672,6 +3672,21 @@ the source artifact.</p>
 </tr>
 <tr>
 <td>
+<code>sourceVerificationFingerprint</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>SourceVerificationFingerprint is the fingerprint of the verification
+material used to verify the signature of the current Artifact. It is
+used to detect changes to the verification policy, such as a key
+rotation, that require the current revision to be verified again.</p>
+</td>
+</tr>
+<tr>
+<td>
 <code>ReconcileRequestStatus</code><br>
 <em>
 <a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/meta#ReconcileRequestStatus">
