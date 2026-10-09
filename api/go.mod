@@ -5,7 +5,8 @@ go 1.26.0
 require (
 	github.com/fluxcd/pkg/apis/acl v0.11.0
 	github.com/fluxcd/pkg/apis/meta v1.32.0
-	k8s.io/apimachinery v0.37.0
+	k8s.io/apiextensions-apiserver v0.37.1
+	k8s.io/apimachinery v0.37.1
 )
 
 require (

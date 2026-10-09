@@ -1918,6 +1918,20 @@ github.com/fluxcd/pkg/apis/meta.Artifact
 <p>Conditions holds the conditions for the ExternalArtifact.</p>
 </td>
 </tr>
+<tr>
+<td>
+<code>exportedInputs</code><br>
+<em>
+map[string]*k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1.JSON
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>ExportedInputs holds a map of structured data optionally extracted from the source resource.
+It may be used, for example, by downstream consumers such as templating engines like
+ResourceSet to consume these inputs for implementing templating logic.</p>
+</td>
+</tr>
 </tbody>
 </table>
 </div>
