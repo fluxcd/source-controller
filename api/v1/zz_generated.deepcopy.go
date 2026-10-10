@@ -23,6 +23,7 @@ package v1
 import (
 	"github.com/fluxcd/pkg/apis/acl"
 	"github.com/fluxcd/pkg/apis/meta"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 )
@@ -282,6 +283,22 @@ func (in *ExternalArtifactStatus) DeepCopyInto(out *ExternalArtifactStatus) {
 		*out = make([]metav1.Condition, len(*in))
 		for i := range *in {
 			(*in)[i].DeepCopyInto(&(*out)[i])
+		}
+	}
+	if in.ExportedInputs != nil {
+		in, out := &in.ExportedInputs, &out.ExportedInputs
+		*out = make(map[string]*apiextensionsv1.JSON, len(*in))
+		for key, val := range *in {
+			var outVal *apiextensionsv1.JSON
+			if val == nil {
+				(*out)[key] = nil
+			} else {
+				inVal := (*in)[key]
+				in, out := &inVal, &outVal
+				*out = new(apiextensionsv1.JSON)
+				(*in).DeepCopyInto(*out)
+			}
+			(*out)[key] = outVal
 		}
 	}
 }

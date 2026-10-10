@@ -112,3 +112,14 @@ the following attributes to the ExternalArtifact's `.status.conditions`:
 
 The `message` field should contain a human-readable message indicating
 the reason for the failure.
+
+### Exported Inputs
+
+The ExternalArtifact can optionally report structured data extracted from the source
+resource in the `.status.exportedInputs` field.
+
+The `.status.exportedInputs` contains a map where the keys are strings and the values
+are JSON objects representing the extracted data.
+
+This field is useful, for example, for downstream consumers such as templating engines
+like ResourceSet to consume these inputs for implementing templating logic.
