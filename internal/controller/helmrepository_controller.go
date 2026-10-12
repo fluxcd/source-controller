@@ -29,6 +29,7 @@ import (
 	helmgetter "helm.sh/helm/v4/pkg/getter"
 	helmreg "helm.sh/helm/v4/pkg/registry"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/client-go/util/workqueue"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -152,6 +153,20 @@ func (r *HelmRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	// Fetch the HelmRepository
 	obj := &sourcev1.HelmRepository{}
 	if err := r.Get(ctx, req.NamespacedName, obj); err != nil {
+		if apierrors.IsNotFound(err) {
+			// The object is gone from the cluster, so the deferred metrics
+			// recording below never runs for it. Drop its duration series
+			// here directly, otherwise objects deleted without a reconcile
+			// pass that observes the deletion accumulate in the registry
+			// until the controller restarts.
+			if r.Metrics.MetricsRecorder != nil {
+				r.Metrics.MetricsRecorder.DeleteDuration(corev1.ObjectReference{
+					Kind:      sourcev1.HelmRepositoryKind,
+					Name:      req.Name,
+					Namespace: req.Namespace,
+				})
+			}
+		}
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 

@@ -18,17 +18,58 @@ package controller
 
 import (
 	"context"
+	"testing"
 
 	. "github.com/onsi/gomega"
+	"github.com/prometheus/client_golang/prometheus"
+	dto "github.com/prometheus/client_model/go"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/runtime/conditions"
+	"github.com/fluxcd/pkg/runtime/metrics"
 	"github.com/fluxcd/pkg/runtime/patch"
 
 	"github.com/fluxcd/source-controller/internal/object"
 )
+
+// durationSeriesExists reports whether gotk_reconcile_duration_seconds has a
+// series for the given kind/name/namespace, read directly from the
+// *prometheus.HistogramVec since the Recorder has no presence-check method.
+func durationSeriesExists(t *testing.T, rec *metrics.Recorder, kind, name, namespace string) bool {
+	t.Helper()
+
+	var hv *prometheus.HistogramVec
+	for _, c := range rec.Collectors() {
+		if v, ok := c.(*prometheus.HistogramVec); ok {
+			hv = v
+			break
+		}
+	}
+	if hv == nil {
+		t.Fatal("no *prometheus.HistogramVec collector found on the recorder")
+	}
+
+	ch := make(chan prometheus.Metric, 64)
+	hv.Collect(ch)
+	close(ch)
+
+	for m := range ch {
+		var pb dto.Metric
+		if err := m.Write(&pb); err != nil {
+			t.Fatalf("failed to write metric: %v", err)
+		}
+		labels := make(map[string]string, len(pb.GetLabel()))
+		for _, lp := range pb.GetLabel() {
+			labels[lp.GetName()] = lp.GetValue()
+		}
+		if labels["kind"] == kind && labels["name"] == name && labels["namespace"] == namespace {
+			return true
+		}
+	}
+	return false
+}
 
 // waitForSourceDeletion is a generic test helper to wait for object deletion of
 // any source kind.
