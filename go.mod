@@ -48,7 +48,7 @@ require (
 	github.com/google/go-containerregistry/pkg/authn/k8schain v0.0.0-20260602205845-4b7672c7705a
 	github.com/google/uuid v1.6.0
 	github.com/miekg/dns v1.1.72
-	github.com/minio/minio-go/v7 v7.2.0
+	github.com/minio/minio-go/v7 v7.2.1
 	github.com/notaryproject/notation-core-go v1.3.0
 	github.com/notaryproject/notation-go v1.3.2
 	github.com/onsi/gomega v1.43.0
