@@ -406,7 +406,7 @@ The `github` provider can be used to authenticate to Git repositories using
 The GitHub App information is specified in `.spec.secretRef` in the format
 specified below:
 
-- Get the App ID from the app settings page at `https://github.com/settings/apps/<app-name>`.
+- Get the App ID or Client ID from the app settings page at `https://github.com/settings/apps/<app-name>`.
 - The private key that was generated in the pre-requisites.
 - (Optional) GitHub Enterprise Server users can set the base URL to
   `http(s)://HOSTNAME/api/v3`.
@@ -426,6 +426,7 @@ metadata:
 type: Opaque
 stringData:
   githubAppID: "<app-id>"
+  githubAppClientID: "<client-id>"
   githubAppInstallationOwner: "<github-org-or-user>"
   githubAppInstallationID: "<app-installation-id>"
   githubAppPrivateKey: |
@@ -438,6 +439,9 @@ stringData:
     ...
     -----END CERTIFICATE-----
 ```
+
+Exactly one of `githubAppID` or `githubAppClientID` must be provided.
+If neither or both are provided, the reconciliation will fail with a misconfiguration error.
 
 Exactly one of `githubAppInstallationOwner` or `githubAppInstallationID` must be provided.
 If neither or both are provided, the reconciliation will fail with a misconfiguration error.
@@ -1341,6 +1345,16 @@ repository to create an artifact in the GitRepository's
 mode in spec](#verification). The verification status is applicable only to the
 latest Git repository revision used to successfully build and store an
 artifact.
+
+### Source Verification Fingerprint
+
+The source-controller reports a fingerprint of the public keys it used to verify
+the Git object(s) in the GitRepository's
+`.status.sourceVerificationFingerprint`. The fingerprint is derived from the key
+material in the referenced Secret and does not depend on the Secret name or the
+Secret data key names. It is used by the controller to detect a change in the
+verification policy, such as a key rotation, that requires the current revision
+to be verified again even when its revision did not change.
 
 ### Observed Generation
 

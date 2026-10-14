@@ -2,6 +2,28 @@
 
 All notable changes to this project are documented in this file.
 
+## 1.9.6
+
+**Release date:** 2026-10-01
+
+This patch release normalizes Azure Blob listing ETags so that the listing digest
+stays consistent with the stored artifact revision and unchanged containers are no
+longer re-downloaded on every reconcile, and evicts stale Helm repository index
+entries from the cache so that repositories with frequently changing indexes no
+longer fail with "Cache is full".
+
+Fixes:
+- Normalize Azure listing ETags
+  [#2171](https://github.com/fluxcd/source-controller/pull/2171)
+- Evict stale Helm index entries from cache
+  [#2152](https://github.com/fluxcd/source-controller/pull/2152)
+
+Improvements:
+- Replace MinIO server with in-process S3 mock in tests
+  [#2153](https://github.com/fluxcd/source-controller/pull/2153)
+- Correct the shallow clone claim for commit plus branch in the GitRepository docs
+  [#2147](https://github.com/fluxcd/source-controller/pull/2147)
+
 ## 1.9.5
 
 **Release date:** 2026-08-31

@@ -51,7 +51,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/tools/record"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/utils/ptr"
 	oras "oras.land/oras-go/v2/registry/remote"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -60,7 +60,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	kstatus "github.com/fluxcd/cli-utils/pkg/kstatus/status"
-	eventv1 "github.com/fluxcd/pkg/apis/event/v1beta1"
+	eventv1 "github.com/fluxcd/pkg/apis/event/v1"
 	"github.com/fluxcd/pkg/apis/meta"
 	intdigest "github.com/fluxcd/pkg/artifact/digest"
 	"github.com/fluxcd/pkg/artifact/storage"
@@ -69,6 +69,7 @@ import (
 	"github.com/fluxcd/pkg/oci"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	conditionscheck "github.com/fluxcd/pkg/runtime/conditions/check"
+	"github.com/fluxcd/pkg/runtime/events"
 	"github.com/fluxcd/pkg/runtime/patch"
 	"github.com/fluxcd/pkg/tar"
 
@@ -100,7 +101,7 @@ func TestOCIRepositoryReconciler_deleteBeforeFinalizer(t *testing.T) {
 	ocirepo.Name = "test-ocirepo"
 	ocirepo.Namespace = namespaceName
 	ocirepo.Spec = sourcev1.OCIRepositorySpec{
-		Interval: metav1.Duration{Duration: interval},
+		Interval: &metav1.Duration{Duration: interval},
 		URL:      "oci://example.com",
 	}
 	// Add a test finalizer to prevent the object from getting deleted.
@@ -111,13 +112,90 @@ func TestOCIRepositoryReconciler_deleteBeforeFinalizer(t *testing.T) {
 
 	r := &OCIRepositoryReconciler{
 		Client:                k8sClient,
-		EventRecorder:         record.NewFakeRecorder(32),
+		Recorder:              events.NewFakeRecorder(32, false),
 		Storage:               testStorage,
 		CosignVerifierFactory: testCosignVerifierFactory,
 	}
 	// NOTE: Only a real API server responds with an error in this scenario.
 	_, err := r.Reconcile(ctx, ctrl.Request{NamespacedName: client.ObjectKeyFromObject(ocirepo)})
 	g.Expect(err).NotTo(HaveOccurred())
+}
+
+func TestOCIRepository_CELValidation(t *testing.T) {
+	g := NewWithT(t)
+
+	namespaceName := "ocirepo-" + randStringRunes(5)
+	namespace := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{Name: namespaceName},
+	}
+	g.Expect(k8sClient.Create(ctx, namespace)).ToNot(HaveOccurred())
+	t.Cleanup(func() {
+		g.Expect(k8sClient.Delete(ctx, namespace)).NotTo(HaveOccurred())
+	})
+
+	tests := []struct {
+		name    string
+		spec    map[string]interface{}
+		wantErr []string
+	}{
+		{
+			name:    "missing spec",
+			wantErr: []string{"spec.url is required", "spec.interval is required"},
+		},
+		{
+			name:    "empty spec",
+			spec:    map[string]interface{}{},
+			wantErr: []string{"spec.url is required", "spec.interval is required"},
+		},
+		{
+			name: "missing url",
+			spec: map[string]interface{}{
+				"interval": "1m",
+			},
+			wantErr: []string{"spec.url is required"},
+		},
+		{
+			name: "missing interval",
+			spec: map[string]interface{}{
+				"url": "oci://example.com",
+			},
+			wantErr: []string{"spec.interval is required"},
+		},
+		{
+			name: "valid",
+			spec: map[string]interface{}{
+				"url":      "oci://example.com",
+				"interval": "1m",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			obj := &unstructured.Unstructured{}
+			obj.SetGroupVersionKind(sourcev1.GroupVersion.WithKind(sourcev1.OCIRepositoryKind))
+			obj.SetName("test-" + randStringRunes(5))
+			obj.SetNamespace(namespaceName)
+			if tt.spec != nil {
+				obj.Object["spec"] = tt.spec
+			}
+
+			err := k8sClient.Create(ctx, obj)
+			if len(tt.wantErr) == 0 {
+				g.Expect(err).ToNot(HaveOccurred())
+				g.Expect(k8sClient.Delete(ctx, obj)).ToNot(HaveOccurred())
+				return
+			}
+
+			g.Expect(err).To(HaveOccurred())
+			g.Expect(apierrors.IsInvalid(err)).To(BeTrue())
+			for _, want := range tt.wantErr {
+				g.Expect(err.Error()).To(ContainSubstring(want))
+			}
+		})
+	}
 }
 
 func TestOCIRepository_Reconcile(t *testing.T) {
@@ -197,7 +275,7 @@ func TestOCIRepository_Reconcile(t *testing.T) {
 				},
 				Spec: sourcev1.OCIRepositorySpec{
 					URL:       tt.url,
-					Interval:  metav1.Duration{Duration: 60 * time.Minute},
+					Interval:  &metav1.Duration{Duration: 60 * time.Minute},
 					Reference: &sourcev1.OCIRepositoryRef{},
 					Insecure:  true,
 				},
@@ -365,7 +443,7 @@ func TestOCIRepository_Reconcile_MediaType(t *testing.T) {
 				},
 				Spec: sourcev1.OCIRepositorySpec{
 					URL:      tt.url,
-					Interval: metav1.Duration{Duration: 60 * time.Minute},
+					Interval: &metav1.Duration{Duration: 60 * time.Minute},
 					Reference: &sourcev1.OCIRepositoryRef{
 						Tag: tt.tag,
 					},
@@ -735,7 +813,7 @@ func TestOCIRepository_reconcileSource_authStrategy(t *testing.T) {
 					Generation:   1,
 				},
 				Spec: sourcev1.OCIRepositorySpec{
-					Interval: metav1.Duration{Duration: interval},
+					Interval: &metav1.Duration{Duration: interval},
 					Timeout:  &metav1.Duration{Duration: timeout},
 				},
 			}
@@ -771,8 +849,8 @@ func TestOCIRepository_reconcileSource_authStrategy(t *testing.T) {
 					},
 					Type: corev1.SecretTypeDockerConfigJson,
 					Data: map[string][]byte{
-						".dockerconfigjson": []byte(fmt.Sprintf(`{"auths": {%q: {"username": %q, "password": %q}}}`,
-							server.registryHost, tt.secretOpts.username, tt.secretOpts.password)),
+						".dockerconfigjson": fmt.Appendf(nil, `{"auths": {%q: {"username": %q, "password": %q}}}`,
+							server.registryHost, tt.secretOpts.username, tt.secretOpts.password),
 					},
 				}
 				clientBuilder.WithObjects(secret)
@@ -807,7 +885,7 @@ func TestOCIRepository_reconcileSource_authStrategy(t *testing.T) {
 
 			r := &OCIRepositoryReconciler{
 				Client:                clientBuilder.Build(),
-				EventRecorder:         record.NewFakeRecorder(32),
+				Recorder:              events.NewFakeRecorder(32, false),
 				Storage:               testStorage,
 				CosignVerifierFactory: testCosignVerifierFactory,
 				patchOptions:          getPatchOptions(ociRepositoryReadyCondition.Owned, "sc"),
@@ -943,7 +1021,7 @@ func TestOCIRepository_CertSecret(t *testing.T) {
 				},
 				Spec: sourcev1.OCIRepositorySpec{
 					URL:       tt.url,
-					Interval:  metav1.Duration{Duration: 60 * time.Minute},
+					Interval:  &metav1.Duration{Duration: 60 * time.Minute},
 					Reference: &sourcev1.OCIRepositoryRef{Digest: tt.digest.String()},
 				},
 			}
@@ -1033,7 +1111,7 @@ func TestOCIRepository_ProxySecret(t *testing.T) {
 			digest: pi.digest,
 			proxySecret: &corev1.Secret{
 				Data: map[string][]byte{
-					"address": []byte(fmt.Sprintf("http://%s", proxyAddr)),
+					"address": fmt.Appendf(nil, "http://%s", proxyAddr),
 				},
 			},
 			expectreadyconition:   true,
@@ -1045,7 +1123,7 @@ func TestOCIRepository_ProxySecret(t *testing.T) {
 			digest: pi.digest,
 			proxySecret: &corev1.Secret{
 				Data: map[string][]byte{
-					"address": []byte(fmt.Sprintf("http://localhost:%d", proxyPort+1)),
+					"address": fmt.Appendf(nil, "http://localhost:%d", proxyPort+1),
 				},
 			},
 			expectreadyconition:   false,
@@ -1069,7 +1147,7 @@ func TestOCIRepository_ProxySecret(t *testing.T) {
 				},
 				Spec: sourcev1.OCIRepositorySpec{
 					URL:       tt.url,
-					Interval:  metav1.Duration{Duration: 60 * time.Minute},
+					Interval:  &metav1.Duration{Duration: 60 * time.Minute},
 					Reference: &sourcev1.OCIRepositoryRef{Digest: tt.digest.String()},
 				},
 			}
@@ -1267,7 +1345,7 @@ func TestOCIRepository_reconcileSource_remoteReference(t *testing.T) {
 
 	r := &OCIRepositoryReconciler{
 		Client:                clientBuilder.Build(),
-		EventRecorder:         record.NewFakeRecorder(32),
+		Recorder:              events.NewFakeRecorder(32, false),
 		Storage:               testStorage,
 		CosignVerifierFactory: testCosignVerifierFactory,
 		patchOptions:          getPatchOptions(ociRepositoryReadyCondition.Owned, "sc"),
@@ -1282,7 +1360,7 @@ func TestOCIRepository_reconcileSource_remoteReference(t *testing.T) {
 				},
 				Spec: sourcev1.OCIRepositorySpec{
 					URL:      fmt.Sprintf("oci://%s/podinfo", server.registryHost),
-					Interval: metav1.Duration{Duration: interval},
+					Interval: &metav1.Duration{Duration: interval},
 					Timeout:  &metav1.Duration{Duration: timeout},
 					Insecure: true,
 				},
@@ -1319,18 +1397,19 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignatureNotation(t *testi
 	g := NewWithT(t)
 
 	tests := []struct {
-		name             string
-		reference        *sourcev1.OCIRepositoryRef
-		insecure         bool
-		want             sreconcile.Result
-		wantErr          bool
-		wantErrMsg       string
-		shouldSign       bool
-		useDigest        bool
-		addMultipleCerts bool
-		provideNoCert    bool
-		beforeFunc       func(obj *sourcev1.OCIRepository, tag, revision string)
-		assertConditions []metav1.Condition
+		name                    string
+		reference               *sourcev1.OCIRepositoryRef
+		insecure                bool
+		want                    sreconcile.Result
+		wantErr                 bool
+		wantErrMsg              string
+		shouldSign              bool
+		useDigest               bool
+		addMultipleCerts        bool
+		provideNoCert           bool
+		verifiedWithCurrentKeys bool
+		beforeFunc              func(obj *sourcev1.OCIRepository, tag, revision string)
+		assertConditions        []metav1.Condition
 	}{
 		{
 			name: "signed image should pass verification",
@@ -1390,6 +1469,9 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignatureNotation(t *testi
 			name:       "no verify for already verified, verified condition remains the same",
 			reference:  &sourcev1.OCIRepositoryRef{Tag: "6.1.4"},
 			shouldSign: true,
+			// The recorded fingerprint matches the referenced keys, so the
+			// verification can be skipped.
+			verifiedWithCurrentKeys: true,
 			beforeFunc: func(obj *sourcev1.OCIRepository, tag, revision string) {
 				// Artifact present and custom verified condition reason/message.
 				obj.Status.Artifact = &meta.Artifact{Revision: fmt.Sprintf("%s@%s", tag, revision)}
@@ -1398,6 +1480,21 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignatureNotation(t *testi
 			want: sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(sourcev1.SourceVerifiedCondition, "Verified", "verified"),
+			},
+		},
+		{
+			name:       "same artifact, verified before with rotated keys, verify again",
+			reference:  &sourcev1.OCIRepositoryRef{Tag: "6.1.4"},
+			shouldSign: true,
+			beforeFunc: func(obj *sourcev1.OCIRepository, tag, revision string) {
+				obj.Status.Artifact = &meta.Artifact{Revision: fmt.Sprintf("%s@%s", tag, revision)}
+				conditions.MarkTrue(obj, sourcev1.SourceVerifiedCondition, "Verified", "verified")
+				// The recorded fingerprint no longer matches the referenced keys.
+				obj.Status.SourceVerificationFingerprint = "stale"
+			},
+			want: sreconcile.ResultSuccess,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.SourceVerifiedCondition, meta.SucceededReason, "verified signature of revision <revision>"),
 			},
 		},
 		{
@@ -1470,7 +1567,7 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignatureNotation(t *testi
 
 	r := &OCIRepositoryReconciler{
 		Client:                clientBuilder.Build(),
-		EventRecorder:         record.NewFakeRecorder(32),
+		Recorder:              events.NewFakeRecorder(32, false),
 		Storage:               testStorage,
 		CosignVerifierFactory: testCosignVerifierFactory,
 		patchOptions:          getPatchOptions(ociRepositoryReadyCondition.Owned, "sc"),
@@ -1535,7 +1632,7 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignatureNotation(t *testi
 					Verify: &sourcev1.OCIRepositoryVerification{
 						Provider: "notation",
 					},
-					Interval: metav1.Duration{Duration: interval},
+					Interval: &metav1.Duration{Duration: interval},
 					Timeout:  &metav1.Duration{Duration: timeout},
 				},
 			}
@@ -1644,6 +1741,9 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignatureNotation(t *testi
 
 			if tt.beforeFunc != nil {
 				tt.beforeFunc(obj, image.tag, image.digest.String())
+			}
+			if tt.verifiedWithCurrentKeys {
+				obj.Status.SourceVerificationFingerprint = verificationMaterialFingerprint(obj.Spec.Verify.Provider, secret, nil)
 			}
 
 			g.Expect(r.Client.Create(ctx, obj)).ToNot(HaveOccurred())
@@ -1803,12 +1903,12 @@ func TestOCIRepository_reconcileSource_verifyOCISourceTrustPolicyNotation(t *tes
 			usePolicyJson: true,
 			policyJson:    "{\"version\": \"1.0\u000A\", \"trust_policies\": []}",
 			wantErr:       true,
-			wantErrMsg:    fmt.Sprintf("error occurred while parsing %s: invalid character '\\n' in string literal", snotation.DefaultTrustPolicyKey),
+			wantErrMsg:    fmt.Sprintf("error occurred while parsing %s: invalid character '\\n' in string", snotation.DefaultTrustPolicyKey),
 			want:          sreconcile.ResultEmpty,
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new revision '<revision>' for '<url>'"),
 				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new revision '<revision>' for '<url>'"),
-				*conditions.FalseCondition(sourcev1.SourceVerifiedCondition, sourcev1.VerificationError, "error occurred while parsing %s: invalid character '\\n' in string literal", snotation.DefaultTrustPolicyKey),
+				*conditions.FalseCondition(sourcev1.SourceVerifiedCondition, sourcev1.VerificationError, "error occurred while parsing %s: invalid character '\\n' in string", snotation.DefaultTrustPolicyKey),
 			},
 		},
 		{
@@ -1834,7 +1934,7 @@ func TestOCIRepository_reconcileSource_verifyOCISourceTrustPolicyNotation(t *tes
 
 	r := &OCIRepositoryReconciler{
 		Client:                clientBuilder.Build(),
-		EventRecorder:         record.NewFakeRecorder(32),
+		Recorder:              events.NewFakeRecorder(32, false),
 		Storage:               testStorage,
 		CosignVerifierFactory: testCosignVerifierFactory,
 		patchOptions:          getPatchOptions(ociRepositoryReadyCondition.Owned, "sc"),
@@ -1869,7 +1969,7 @@ func TestOCIRepository_reconcileSource_verifyOCISourceTrustPolicyNotation(t *tes
 					Verify: &sourcev1.OCIRepositoryVerification{
 						Provider: "notation",
 					},
-					Interval: metav1.Duration{Duration: interval},
+					Interval: &metav1.Duration{Duration: interval},
 					Timeout:  &metav1.Duration{Duration: timeout},
 				},
 			}
@@ -2017,16 +2117,17 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignatureCosign(t *testing
 	g := NewWithT(t)
 
 	tests := []struct {
-		name             string
-		reference        *sourcev1.OCIRepositoryRef
-		insecure         bool
-		want             sreconcile.Result
-		wantErr          bool
-		wantErrMsg       string
-		shouldSign       bool
-		keyless          bool
-		beforeFunc       func(obj *sourcev1.OCIRepository, tag, revision string)
-		assertConditions []metav1.Condition
+		name                    string
+		reference               *sourcev1.OCIRepositoryRef
+		insecure                bool
+		want                    sreconcile.Result
+		wantErr                 bool
+		wantErrMsg              string
+		shouldSign              bool
+		keyless                 bool
+		verifiedWithCurrentKeys bool
+		beforeFunc              func(obj *sourcev1.OCIRepository, tag, revision string)
+		assertConditions        []metav1.Condition
 	}{
 		{
 			name: "signed image should pass verification",
@@ -2099,6 +2200,9 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignatureCosign(t *testing
 			name:       "no verify for already verified, verified condition remains the same",
 			reference:  &sourcev1.OCIRepositoryRef{Tag: "6.1.4"},
 			shouldSign: true,
+			// The recorded fingerprint matches the referenced keys, so the
+			// verification can be skipped.
+			verifiedWithCurrentKeys: true,
 			beforeFunc: func(obj *sourcev1.OCIRepository, tag, revision string) {
 				// Artifact present and custom verified condition reason/message.
 				obj.Status.Artifact = &meta.Artifact{Revision: fmt.Sprintf("%s@%s", tag, revision)}
@@ -2107,6 +2211,21 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignatureCosign(t *testing
 			want: sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(sourcev1.SourceVerifiedCondition, "Verified", "verified"),
+			},
+		},
+		{
+			name:       "same artifact, verified before with rotated keys, verify again",
+			reference:  &sourcev1.OCIRepositoryRef{Tag: "6.1.4"},
+			shouldSign: true,
+			beforeFunc: func(obj *sourcev1.OCIRepository, tag, revision string) {
+				obj.Status.Artifact = &meta.Artifact{Revision: fmt.Sprintf("%s@%s", tag, revision)}
+				conditions.MarkTrue(obj, sourcev1.SourceVerifiedCondition, "Verified", "verified")
+				// The recorded fingerprint no longer matches the referenced keys.
+				obj.Status.SourceVerificationFingerprint = "stale"
+			},
+			want: sreconcile.ResultSuccess,
+			assertConditions: []metav1.Condition{
+				*conditions.TrueCondition(sourcev1.SourceVerifiedCondition, meta.SucceededReason, "verified signature of revision <revision>"),
 			},
 		},
 		{
@@ -2131,7 +2250,7 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignatureCosign(t *testing
 
 	r := &OCIRepositoryReconciler{
 		Client:                clientBuilder.Build(),
-		EventRecorder:         record.NewFakeRecorder(32),
+		Recorder:              events.NewFakeRecorder(32, false),
 		Storage:               testStorage,
 		CosignVerifierFactory: testCosignVerifierFactory,
 		patchOptions:          getPatchOptions(ociRepositoryReadyCondition.Owned, "sc"),
@@ -2194,7 +2313,7 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignatureCosign(t *testing
 					Verify: &sourcev1.OCIRepositoryVerification{
 						Provider: "cosign",
 					},
-					Interval: metav1.Duration{Duration: interval},
+					Interval: &metav1.Duration{Duration: interval},
 					Timeout:  &metav1.Duration{Duration: timeout},
 				},
 			}
@@ -2260,6 +2379,9 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignatureCosign(t *testing
 
 			if tt.beforeFunc != nil {
 				tt.beforeFunc(obj, image.tag, image.digest.String())
+			}
+			if tt.verifiedWithCurrentKeys {
+				obj.Status.SourceVerificationFingerprint = verificationMaterialFingerprint(obj.Spec.Verify.Provider, secret, nil)
 			}
 
 			g.Expect(r.Client.Create(ctx, obj)).ToNot(HaveOccurred())
@@ -2401,7 +2523,7 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignature_keyless(t *testi
 
 	r := &OCIRepositoryReconciler{
 		Client:                clientBuilder.Build(),
-		EventRecorder:         record.NewFakeRecorder(32),
+		Recorder:              events.NewFakeRecorder(32, false),
 		Storage:               testStorage,
 		CosignVerifierFactory: testCosignVerifierFactory,
 		patchOptions:          getPatchOptions(ociRepositoryReadyCondition.Owned, "sc"),
@@ -2421,7 +2543,7 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignature_keyless(t *testi
 					Verify: &sourcev1.OCIRepositoryVerification{
 						Provider: "cosign",
 					},
-					Interval:  metav1.Duration{Duration: interval},
+					Interval:  &metav1.Duration{Duration: interval},
 					Timeout:   &metav1.Duration{Duration: timeout},
 					Reference: tt.reference,
 				},
@@ -2464,7 +2586,7 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignature_keyless(t *testi
 func TestOCIRepository_reconcileSource_noop(t *testing.T) {
 	g := NewWithT(t)
 
-	testRevision := "6.1.5@sha256:8e4057c22d531d40e12b065443cb0d80394b7257c4dc557cb1fbd4dce892b86d"
+	testRevision := "6.1.5@sha256:091e263d80b3d3a520abf966c42a30e6d911d5339bdb8b7fbc8e98d88a1911f2"
 
 	tmpDir := t.TempDir()
 	server, err := setupRegistryServer(ctx, tmpDir, registryOptions{})
@@ -2586,10 +2708,10 @@ func TestOCIRepository_reconcileSource_noop(t *testing.T) {
 		WithStatusSubresource(&sourcev1.OCIRepository{})
 
 	r := &OCIRepositoryReconciler{
-		Client:        clientBuilder.Build(),
-		EventRecorder: record.NewFakeRecorder(32),
-		Storage:       testStorage,
-		patchOptions:  getPatchOptions(ociRepositoryReadyCondition.Owned, "sc"),
+		Client:       clientBuilder.Build(),
+		Recorder:     events.NewFakeRecorder(32, false),
+		Storage:      testStorage,
+		patchOptions: getPatchOptions(ociRepositoryReadyCondition.Owned, "sc"),
 	}
 
 	for _, tt := range tests {
@@ -2604,7 +2726,7 @@ func TestOCIRepository_reconcileSource_noop(t *testing.T) {
 				Spec: sourcev1.OCIRepositorySpec{
 					URL:       fmt.Sprintf("oci://%s/podinfo", server.registryHost),
 					Reference: &sourcev1.OCIRepositoryRef{Tag: "6.1.5"},
-					Interval:  metav1.Duration{Duration: interval},
+					Interval:  &metav1.Duration{Duration: interval},
 					Timeout:   &metav1.Duration{Duration: timeout},
 					Insecure:  true,
 				},
@@ -2661,7 +2783,7 @@ func TestOCIRepository_reconcileArtifact(t *testing.T) {
 				"latest.tar.gz",
 			},
 			afterFunc: func(g *WithT, obj *sourcev1.OCIRepository) {
-				g.Expect(obj.Status.Artifact.Digest).To(Equal("sha256:6a5bd135a816ec0ad246c41cfdd87629e40ef6520001aeb2d0118a703abe9e7a"))
+				g.Expect(obj.Status.Artifact.Digest).To(Equal("sha256:ce886936428db3b380e29ff52805cf05537c25a536583f104a04faf87af80acd"))
 			},
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(sourcev1.ArtifactInStorageCondition, meta.SucceededReason, "stored artifact for digest"),
@@ -2679,7 +2801,7 @@ func TestOCIRepository_reconcileArtifact(t *testing.T) {
 				"latest.tar.gz",
 			},
 			afterFunc: func(g *WithT, obj *sourcev1.OCIRepository) {
-				g.Expect(obj.Status.Artifact.Digest).To(Equal("sha256:9102e9c8626e48821a91a4963436f1673cd85f8fb3deb843c992f85b995c38ea"))
+				g.Expect(obj.Status.Artifact.Digest).To(Equal("sha256:b45c0a200b6c37afb55c832eae5ba81161a707846258ecd3861d53e459ea9957"))
 			},
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(sourcev1.ArtifactInStorageCondition, meta.SucceededReason, "stored artifact for digest"),
@@ -2818,10 +2940,10 @@ func TestOCIRepository_reconcileArtifact(t *testing.T) {
 		WithStatusSubresource(&sourcev1.OCIRepository{})
 
 	r := &OCIRepositoryReconciler{
-		Client:        clientBuilder.Build(),
-		EventRecorder: record.NewFakeRecorder(32),
-		Storage:       testStorage,
-		patchOptions:  getPatchOptions(ociRepositoryReadyCondition.Owned, "sc"),
+		Client:       clientBuilder.Build(),
+		Recorder:     events.NewFakeRecorder(32, false),
+		Storage:      testStorage,
+		patchOptions: getPatchOptions(ociRepositoryReadyCondition.Owned, "sc"),
 	}
 
 	for _, tt := range tests {
@@ -2983,10 +3105,10 @@ func TestOCIRepository_getArtifactRef(t *testing.T) {
 		WithStatusSubresource(&sourcev1.OCIRepository{})
 
 	r := &OCIRepositoryReconciler{
-		Client:        clientBuilder.Build(),
-		EventRecorder: record.NewFakeRecorder(32),
-		Storage:       testStorage,
-		patchOptions:  getPatchOptions(ociRepositoryReadyCondition.Owned, "sc"),
+		Client:       clientBuilder.Build(),
+		Recorder:     events.NewFakeRecorder(32, false),
+		Storage:      testStorage,
+		patchOptions: getPatchOptions(ociRepositoryReadyCondition.Owned, "sc"),
 	}
 
 	for _, tt := range tests {
@@ -2997,7 +3119,7 @@ func TestOCIRepository_getArtifactRef(t *testing.T) {
 				},
 				Spec: sourcev1.OCIRepositorySpec{
 					URL:      tt.url,
-					Interval: metav1.Duration{Duration: interval},
+					Interval: &metav1.Duration{Duration: interval},
 					Timeout:  &metav1.Duration{Duration: timeout},
 					Insecure: true,
 				},
@@ -3036,7 +3158,7 @@ func TestOCIRepository_invalidURL(t *testing.T) {
 		},
 		Spec: sourcev1.OCIRepositorySpec{
 			URL:      "oci://ghcr.io/test/test:v1",
-			Interval: metav1.Duration{Duration: 60 * time.Minute},
+			Interval: &metav1.Duration{Duration: 60 * time.Minute},
 		},
 	}
 
@@ -3086,7 +3208,7 @@ func TestOCIRepository_objectLevelWorkloadIdentityFeatureGate(t *testing.T) {
 		},
 		Spec: sourcev1.OCIRepositorySpec{
 			URL:                "oci://ghcr.io/stefanprodan/manifests/podinfo",
-			Interval:           metav1.Duration{Duration: 60 * time.Minute},
+			Interval:           &metav1.Duration{Duration: 60 * time.Minute},
 			Provider:           "aws",
 			ServiceAccountName: "test",
 		},
@@ -3317,10 +3439,10 @@ func TestOCIRepository_reconcileStorage(t *testing.T) {
 		WithStatusSubresource(&sourcev1.OCIRepository{})
 
 	r := &OCIRepositoryReconciler{
-		Client:        clientBuilder.Build(),
-		EventRecorder: record.NewFakeRecorder(32),
-		Storage:       testStorage,
-		patchOptions:  getPatchOptions(ociRepositoryReadyCondition.Owned, "sc"),
+		Client:       clientBuilder.Build(),
+		Recorder:     events.NewFakeRecorder(32, false),
+		Storage:      testStorage,
+		patchOptions: getPatchOptions(ociRepositoryReadyCondition.Owned, "sc"),
 	}
 
 	for _, tt := range tests {
@@ -3381,7 +3503,7 @@ func TestOCIRepository_ReconcileDelete(t *testing.T) {
 	g := NewWithT(t)
 
 	r := &OCIRepositoryReconciler{
-		EventRecorder:         record.NewFakeRecorder(32),
+		Recorder:              events.NewFakeRecorder(32, false),
 		Storage:               testStorage,
 		CosignVerifierFactory: testCosignVerifierFactory,
 		patchOptions:          getPatchOptions(ociRepositoryReadyCondition.Owned, "sc"),
@@ -3414,14 +3536,13 @@ func TestOCIRepositoryReconciler_notify(t *testing.T) {
 	noopErr.Ignore = true
 
 	tests := []struct {
-		name               string
-		res                sreconcile.Result
-		resErr             error
-		oldObjBeforeFunc   func(obj *sourcev1.OCIRepository)
-		newObjBeforeFunc   func(obj *sourcev1.OCIRepository)
-		commit             git.Commit
-		wantEvent          string
-		wantOriginRevision string
+		name             string
+		res              sreconcile.Result
+		resErr           error
+		oldObjBeforeFunc func(obj *sourcev1.OCIRepository)
+		newObjBeforeFunc func(obj *sourcev1.OCIRepository)
+		commit           git.Commit
+		wantEvent        *corev1.Event
 	}{
 		{
 			name:   "error - no event",
@@ -3443,8 +3564,17 @@ func TestOCIRepositoryReconciler_notify(t *testing.T) {
 					},
 				}
 			},
-			wantEvent:          "Normal NewArtifact stored artifact with revision 'xxx' from 'oci://newurl.io', origin source 'https://github.com/stefanprodan/podinfo', origin revision '6.1.8/b3b00fe35424a45d373bf4c7214178bc36fd7872'",
-			wantOriginRevision: "6.1.8/b3b00fe35424a45d373bf4c7214178bc36fd7872",
+			wantEvent: &corev1.Event{
+				ObjectMeta: metav1.ObjectMeta{
+					Annotations: map[string]string{
+						fmt.Sprintf("%s/%s", sourcev1.GroupVersion.Group, eventv1.MetaOriginRevisionKey): "6.1.8/b3b00fe35424a45d373bf4c7214178bc36fd7872",
+					},
+				},
+				Type:    corev1.EventTypeNormal,
+				Reason:  sourcev1.NewArtifactReason,
+				Action:  sourcev1.ActionReconcile.String(),
+				Message: "stored artifact with revision 'xxx' from 'oci://newurl.io', origin source 'https://github.com/stefanprodan/podinfo', origin revision '6.1.8/b3b00fe35424a45d373bf4c7214178bc36fd7872'",
+			},
 		},
 		{
 			name:   "recovery from failure",
@@ -3466,8 +3596,17 @@ func TestOCIRepositoryReconciler_notify(t *testing.T) {
 				}
 				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "ready")
 			},
-			wantEvent:          "Normal Succeeded stored artifact with revision 'xxx' from 'oci://newurl.io'",
-			wantOriginRevision: "6.1.8/b3b00fe35424a45d373bf4c7214178bc36fd7872",
+			wantEvent: &corev1.Event{
+				ObjectMeta: metav1.ObjectMeta{
+					Annotations: map[string]string{
+						fmt.Sprintf("%s/%s", sourcev1.GroupVersion.Group, eventv1.MetaOriginRevisionKey): "6.1.8/b3b00fe35424a45d373bf4c7214178bc36fd7872",
+					},
+				},
+				Type:    corev1.EventTypeNormal,
+				Reason:  meta.SucceededReason,
+				Action:  sourcev1.ActionReconcile.String(),
+				Message: "stored artifact with revision 'xxx' from 'oci://newurl.io'",
+			},
 		},
 		{
 			name:   "recovery and new artifact",
@@ -3483,7 +3622,12 @@ func TestOCIRepositoryReconciler_notify(t *testing.T) {
 				obj.Status.Artifact = &meta.Artifact{Revision: "aaa", Digest: "bbb"}
 				conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "ready")
 			},
-			wantEvent: "Normal NewArtifact stored artifact with revision 'aaa' from 'oci://newurl.io'",
+			wantEvent: &corev1.Event{
+				Type:    corev1.EventTypeNormal,
+				Reason:  sourcev1.NewArtifactReason,
+				Action:  sourcev1.ActionReconcile.String(),
+				Message: "stored artifact with revision 'aaa' from 'oci://newurl.io'",
+			},
 		},
 		{
 			name:   "no updates",
@@ -3512,7 +3656,7 @@ func TestOCIRepositoryReconciler_notify(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			g := NewWithT(t)
-			recorder := record.NewFakeRecorder(32)
+			recorder := events.NewFakeRecorder(32, false)
 
 			oldObj := &sourcev1.OCIRepository{}
 			newObj := oldObj.DeepCopy()
@@ -3525,25 +3669,28 @@ func TestOCIRepositoryReconciler_notify(t *testing.T) {
 			}
 
 			reconciler := &OCIRepositoryReconciler{
-				EventRecorder: recorder,
-				patchOptions:  getPatchOptions(ociRepositoryReadyCondition.Owned, "sc"),
+				Recorder:     recorder,
+				patchOptions: getPatchOptions(ociRepositoryReadyCondition.Owned, "sc"),
 			}
 			reconciler.notify(ctx, oldObj, newObj, tt.res, tt.resErr)
 
 			select {
 			case x, ok := <-recorder.Events:
-				g.Expect(ok).To(Equal(tt.wantEvent != ""), "unexpected event received")
-				if tt.wantEvent != "" {
-					g.Expect(x).To(ContainSubstring(tt.wantEvent))
+				g.Expect(ok).To(Equal(tt.wantEvent != nil), "unexpected event received")
+				if tt.wantEvent != nil {
+					g.Expect(x.Type).To(Equal(tt.wantEvent.Type))
+					g.Expect(x.Reason).To(Equal(tt.wantEvent.Reason))
+					g.Expect(x.Action).To(Equal(tt.wantEvent.Action))
+					g.Expect(x.Message).To(ContainSubstring(tt.wantEvent.Message))
 					originRevisionKey := fmt.Sprintf("%s/%s", sourcev1.GroupVersion.Group, eventv1.MetaOriginRevisionKey)
-					if tt.wantOriginRevision != "" {
-						g.Expect(x).To(ContainSubstring(fmt.Sprintf("%s:%s", originRevisionKey, tt.wantOriginRevision)))
+					if want, ok := tt.wantEvent.Annotations[originRevisionKey]; ok {
+						g.Expect(x.Annotations).To(HaveKeyWithValue(originRevisionKey, want))
 					} else {
-						g.Expect(x).NotTo(ContainSubstring(originRevisionKey))
+						g.Expect(x.Annotations).NotTo(HaveKey(originRevisionKey))
 					}
 				}
 			default:
-				if tt.wantEvent != "" {
+				if tt.wantEvent != nil {
 					t.Errorf("expected some event to be emitted")
 				}
 			}
@@ -3770,6 +3917,120 @@ func TestOCIContentConfigChanged(t *testing.T) {
 			}
 
 			g.Expect(ociContentConfigChanged(obj)).To(Equal(tt.want))
+		})
+	}
+}
+
+func Test_verificationMaterialFingerprint(t *testing.T) {
+	g := NewWithT(t)
+
+	pubKey := []byte("cosign public key")
+	cert := []byte("notation certificate")
+	policy := []byte(`{"version":"1.0"}`)
+
+	// The same key material stored under a different data key must yield the
+	// same fingerprint, as the policy is defined by the keys, not their names.
+	cosignBase := &corev1.Secret{Data: map[string][]byte{"cosign.pub": pubKey}}
+	cosignSameKey := &corev1.Secret{Data: map[string][]byte{"other.pub": pubKey}}
+	g.Expect(verificationMaterialFingerprint("cosign", cosignBase, nil)).
+		To(Equal(verificationMaterialFingerprint("cosign", cosignSameKey, nil)))
+
+	// Changing the key material changes the fingerprint.
+	cosignRotated := &corev1.Secret{Data: map[string][]byte{"cosign.pub": append(pubKey, '!')}}
+	g.Expect(verificationMaterialFingerprint("cosign", cosignRotated, nil)).
+		ToNot(Equal(verificationMaterialFingerprint("cosign", cosignBase, nil)))
+
+	// Data entries that are not public keys are ignored for cosign.
+	cosignWithUnrelated := &corev1.Secret{Data: map[string][]byte{"cosign.pub": pubKey, "unrelated": []byte("x")}}
+	g.Expect(verificationMaterialFingerprint("cosign", cosignWithUnrelated, nil)).
+		To(Equal(verificationMaterialFingerprint("cosign", cosignBase, nil)))
+
+	// The notation trust policy and certificates contribute to the fingerprint.
+	notationBase := &corev1.Secret{Data: map[string][]byte{"trustpolicy.json": policy, "ca.crt": cert}}
+	notationRotatedPolicy := &corev1.Secret{Data: map[string][]byte{"trustpolicy.json": append(policy, '!'), "ca.crt": cert}}
+	notationRotatedCert := &corev1.Secret{Data: map[string][]byte{"trustpolicy.json": policy, "ca.crt": append(cert, '!')}}
+	g.Expect(verificationMaterialFingerprint("notation", notationBase, nil)).
+		ToNot(Equal(verificationMaterialFingerprint("notation", notationRotatedPolicy, nil)))
+	g.Expect(verificationMaterialFingerprint("notation", notationBase, nil)).
+		ToNot(Equal(verificationMaterialFingerprint("notation", notationRotatedCert, nil)))
+
+	// The trusted root contributes to the fingerprint.
+	trustedRoot := []byte(`{"mediaType":"application/vnd.dev.sigstore.trustedroot+json;version=0.1"}`)
+	g.Expect(verificationMaterialFingerprint("cosign", cosignBase, trustedRoot)).
+		ToNot(Equal(verificationMaterialFingerprint("cosign", cosignBase, nil)))
+}
+
+func TestOCIRepositoryReconciler_verificationPolicyChanged(t *testing.T) {
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "cosign-key", Namespace: "default"},
+		Data:       map[string][]byte{"cosign.pub": []byte("key")},
+	}
+	rotatedSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "cosign-key", Namespace: "default"},
+		Data:       map[string][]byte{"cosign.pub": []byte("rotated-key")},
+	}
+
+	newObj := func(secretRef *meta.LocalObjectReference, fingerprint string) *sourcev1.OCIRepository {
+		obj := &sourcev1.OCIRepository{
+			ObjectMeta: metav1.ObjectMeta{Name: "oci", Namespace: "default"},
+			Spec: sourcev1.OCIRepositorySpec{
+				Verify: &sourcev1.OCIRepositoryVerification{Provider: "cosign"},
+			},
+		}
+		if secretRef != nil {
+			obj.Spec.Verify.SecretRef = secretRef
+		}
+		obj.Status.SourceVerificationFingerprint = fingerprint
+		return obj
+	}
+
+	keyRef := &meta.LocalObjectReference{Name: "cosign-key"}
+
+	tests := []struct {
+		name   string
+		obj    *sourcev1.OCIRepository
+		secret *corev1.Secret
+		want   bool
+	}{
+		{
+			name: "no verification configured",
+			obj:  &sourcev1.OCIRepository{},
+			want: false,
+		},
+		{
+			name: "missing secret requires verification",
+			obj:  newObj(keyRef, ""),
+			want: true,
+		},
+		{
+			name:   "unchanged keys do not require verification",
+			obj:    newObj(keyRef, verificationMaterialFingerprint("cosign", secret, nil)),
+			secret: secret,
+			want:   false,
+		},
+		{
+			name:   "rotated keys require verification",
+			obj:    newObj(keyRef, verificationMaterialFingerprint("cosign", secret, nil)),
+			secret: rotatedSecret,
+			want:   true,
+		},
+		{
+			name:   "missing observed fingerprint requires verification",
+			obj:    newObj(keyRef, ""),
+			secret: secret,
+			want:   true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+			clientBuilder := fakeclient.NewClientBuilder().WithScheme(testEnv.GetScheme())
+			if tt.secret != nil {
+				clientBuilder = clientBuilder.WithObjects(tt.secret)
+			}
+			r := &OCIRepositoryReconciler{Client: clientBuilder.Build()}
+			g.Expect(r.verificationPolicyChanged(ctx, tt.obj)).To(Equal(tt.want))
 		})
 	}
 }

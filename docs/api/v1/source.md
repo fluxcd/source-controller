@@ -1108,6 +1108,7 @@ string
 </em>
 </td>
 <td>
+<em>(Optional)</em>
 <p>URL is a reference to an OCI artifact repository hosted
 on a remote container registry.</p>
 </td>
@@ -1251,6 +1252,7 @@ Kubernetes meta/v1.Duration
 </em>
 </td>
 <td>
+<em>(Optional)</em>
 <p>Interval at which the OCIRepository URL is checked for updates.
 This interval is approximate and may be subject to jitter to ensure
 efficient use of resources.</p>
@@ -1327,6 +1329,11 @@ OCIRepositoryStatus
 </table>
 </div>
 </div>
+<h3 id="source.toolkit.fluxcd.io/v1.Action">Action
+(<code>string</code> alias)</h3>
+<p>Action describes an observable stage of a source reconcile loop, from
+reconciling the local artifact storage through acquiring and verifying the
+upstream source, packaging the artifact and finalizing on deletion.</p>
 <h3 id="source.toolkit.fluxcd.io/v1.BucketSTSSpec">BucketSTSSpec
 </h3>
 <p>
@@ -1911,6 +1918,20 @@ github.com/fluxcd/pkg/apis/meta.Artifact
 <p>Conditions holds the conditions for the ExternalArtifact.</p>
 </td>
 </tr>
+<tr>
+<td>
+<code>exportedInputs</code><br>
+<em>
+map[string]*k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1.JSON
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>ExportedInputs holds a map of structured data optionally extracted from the source resource.
+It may be used, for example, by downstream consumers such as templating engines like
+ResourceSet to consume these inputs for implementing templating logic.</p>
+</td>
+</tr>
 </tbody>
 </table>
 </div>
@@ -2409,6 +2430,21 @@ produce the current Artifact.</p>
 <em>(Optional)</em>
 <p>ObservedSparseCheckout is the observed list of directories used to
 produce the current Artifact.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>sourceVerificationFingerprint</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>SourceVerificationFingerprint is the fingerprint of the public keys used
+to verify the signature of the Git object(s) for the current Artifact.
+It is used to detect changes to the verification policy, such as a key
+rotation, that require the current revision to be verified again.</p>
 </td>
 </tr>
 <tr>
@@ -3345,6 +3381,7 @@ string
 </em>
 </td>
 <td>
+<em>(Optional)</em>
 <p>URL is a reference to an OCI artifact repository hosted
 on a remote container registry.</p>
 </td>
@@ -3488,6 +3525,7 @@ Kubernetes meta/v1.Duration
 </em>
 </td>
 <td>
+<em>(Optional)</em>
 <p>Interval at which the OCIRepository URL is checked for updates.
 This interval is approximate and may be subject to jitter to ensure
 efficient use of resources.</p>
@@ -3644,6 +3682,21 @@ OCILayerSelector
 <em>(Optional)</em>
 <p>ObservedLayerSelector is the observed layer selector used for constructing
 the source artifact.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>sourceVerificationFingerprint</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>SourceVerificationFingerprint is the fingerprint of the verification
+material used to verify the signature of the current Artifact. It is
+used to detect changes to the verification policy, such as a key
+rotation, that require the current revision to be verified again.</p>
 </td>
 </tr>
 <tr>

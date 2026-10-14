@@ -288,6 +288,13 @@ type GitRepositoryStatus struct {
 	// +optional
 	ObservedSparseCheckout []string `json:"observedSparseCheckout,omitempty"`
 
+	// SourceVerificationFingerprint is the fingerprint of the public keys used
+	// to verify the signature of the Git object(s) for the current Artifact.
+	// It is used to detect changes to the verification policy, such as a key
+	// rotation, that require the current revision to be verified again.
+	// +optional
+	SourceVerificationFingerprint string `json:"sourceVerificationFingerprint,omitempty"`
+
 	// SourceVerificationMode is the last used verification mode indicating
 	// which Git object(s) have been verified.
 	// +optional

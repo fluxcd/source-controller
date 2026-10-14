@@ -25,9 +25,12 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
+	"sync"
 	"testing"
 	"time"
 
@@ -216,6 +219,76 @@ func TestNewClientAWSProvider(t *testing.T) {
 		g.Expect(err.Error()).To(ContainSubstring("AWS authentication failed"))
 		g.Expect(minioClient).To(BeNil())
 	})
+}
+
+func TestNewClientAWSRegionEndpoint(t *testing.T) {
+	// credentialScopeRegion extracts the region from the SigV4 credential scope
+	// so that the Authorization header itself is never part of a failure message.
+	credentialScopeRegion := regexp.MustCompile(`Credential=[^/]+/\d{8}/([^/]+)/s3/aws4_request`)
+
+	tests := []struct {
+		name   string
+		region string
+	}{
+		{
+			name:   "existing region",
+			region: "us-west-2",
+		},
+		{
+			name:   "ap-southeast-6 region",
+			region: "ap-southeast-6",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			// The proxy captures the outgoing request instead of forwarding it,
+			// so no connection to AWS is made.
+			var (
+				mu         sync.Mutex
+				gotHost    string
+				gotRegion  string
+				gotRequest bool
+			)
+			proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				mu.Lock()
+				defer mu.Unlock()
+				gotRequest = true
+				gotHost = r.URL.Host
+				if m := credentialScopeRegion.FindStringSubmatch(r.Header.Get("Authorization")); len(m) == 2 {
+					gotRegion = m[1]
+				}
+				w.WriteHeader(http.StatusOK)
+			}))
+			defer proxy.Close()
+
+			proxyURL, err := url.Parse(proxy.URL)
+			g.Expect(err).NotTo(HaveOccurred())
+
+			b := bucketAwsProvider.DeepCopy()
+			b.Spec.Endpoint = fmt.Sprintf("s3.%s.amazonaws.com", tt.region)
+			b.Spec.Region = tt.region
+			b.Spec.Insecure = true
+
+			minioClient, err := NewClient(ctx, b,
+				WithSecret(secret.DeepCopy()),
+				WithProxyURL(proxyURL))
+			g.Expect(err).NotTo(HaveOccurred())
+			g.Expect(minioClient).NotTo(BeNil())
+
+			exists, err := minioClient.BucketExists(ctx, b.Spec.BucketName)
+			g.Expect(err).NotTo(HaveOccurred())
+			g.Expect(exists).To(BeTrue())
+
+			mu.Lock()
+			defer mu.Unlock()
+			g.Expect(gotRequest).To(BeTrue(), "expected request through proxy")
+			g.Expect(gotHost).To(Equal(fmt.Sprintf("%s.s3.dualstack.%s.amazonaws.com", b.Spec.BucketName, tt.region)))
+			g.Expect(gotRegion).To(Equal(tt.region))
+		})
+	}
 }
 
 func TestBucketExists(t *testing.T) {

@@ -644,6 +644,12 @@ spec:
 By default, the controller verifies the signatures using the Fulcio root CA and
 the Rekor instance hosted at [rekor.sigstore.dev](https://rekor.sigstore.dev/).
 
+Note that rotations of the public Sigstore trust anchors (Fulcio, Rekor, CT log
+and TSA keys) are not detected. When no `.spec.verify.trustedRootSecretRef` is
+set, the `SourceVerified` condition is not re-evaluated on a trust root change,
+so verification is retried only when the artifact revision or the spec changes.
+To track a specific trust root, pin it with `.spec.verify.trustedRootSecretRef`.
+
 ##### Custom Sigstore infrastructure (self-hosted Rekor / Fulcio)
 
 To verify artifacts signed with a self-hosted Sigstore deployment, provide a
@@ -1182,6 +1188,17 @@ status:
     operation: copy
   ...
 ```
+
+### Source Verification Fingerprint
+
+The source-controller reports a fingerprint of the verification material it used
+to verify the signature of the current Artifact in the OCIRepository's
+`.status.sourceVerificationFingerprint`. The fingerprint is derived from the
+referenced Secrets, such as the Cosign public keys or the Notation trust policy
+and certificates, and does not depend on the Secret names. It is used by the
+controller to detect a change in the verification policy, such as a key
+rotation, that requires the current revision to be verified again even when its
+revision did not change.
 
 ### Observed Generation
 

@@ -44,11 +44,8 @@ CONTROLLER_GEN_VERSION ?= v0.21.0
 GEN_API_REF_DOCS_VERSION ?= e327d0730470cbd61b06300f81c5fcf91c23c113
 
 # If gobin not set, create one on ./build and add to path.
-ifeq (,$(shell go env GOBIN))
-export GOBIN=$(BUILD_DIR)/gobin
-else
-export GOBIN=$(shell go env GOBIN)
-endif
+GOBIN ?= $(BUILD_DIR)/gobin
+export GOBIN
 export PATH:=${GOBIN}:${PATH}
 
 # Architecture to use envtest with; defaults to the host architecture.
@@ -111,8 +108,8 @@ api-docs: gen-crd-api-reference-docs  ## Generate API reference documentation
 	$(GEN_CRD_API_REFERENCE_DOCS) -api-dir=./api/v1 -config=./hack/api-docs/config.json -template-dir=./hack/api-docs/template -out-file=./docs/api/v1/source.md
 
 tidy:  ## Run go mod tidy
-	cd api; rm -f go.sum; go mod tidy -compat=1.26
-	rm -f go.sum; go mod tidy -compat=1.26
+	cd api; rm -f go.sum; go mod tidy -compat=1.27
+	rm -f go.sum; go mod tidy -compat=1.27
 
 fmt:  ## Run go fmt against code
 	go fmt ./...

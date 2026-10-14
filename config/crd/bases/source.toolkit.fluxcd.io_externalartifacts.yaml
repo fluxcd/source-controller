@@ -190,6 +190,14 @@ spec:
                   - type
                   type: object
                 type: array
+              exportedInputs:
+                additionalProperties:
+                  x-kubernetes-preserve-unknown-fields: true
+                description: |-
+                  ExportedInputs holds a map of structured data optionally extracted from the source resource.
+                  It may be used, for example, by downstream consumers such as templating engines like
+                  ResourceSet to consume these inputs for implementing templating logic.
+                type: object
             type: object
         type: object
     served: true

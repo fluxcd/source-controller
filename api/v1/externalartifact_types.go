@@ -19,6 +19,7 @@ package v1
 import (
 	"time"
 
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fluxcd/pkg/apis/meta"
@@ -44,6 +45,12 @@ type ExternalArtifactStatus struct {
 	// Conditions holds the conditions for the ExternalArtifact.
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
+
+	// ExportedInputs holds a map of structured data optionally extracted from the source resource.
+	// It may be used, for example, by downstream consumers such as templating engines like
+	// ResourceSet to consume these inputs for implementing templating logic.
+	// +optional
+	ExportedInputs map[string]*apiextensionsv1.JSON `json:"exportedInputs,omitempty"`
 }
 
 // GetConditions returns the status conditions of the object.

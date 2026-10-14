@@ -20,7 +20,6 @@ import (
 	"context"
 	cryptotls "crypto/tls"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -39,17 +38,16 @@ import (
 	gcrv1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	"github.com/notaryproject/notation-go/verifier/trustpolicy"
+	"github.com/opencontainers/go-digest"
 	"github.com/sigstore/cosign/v3/pkg/cosign"
 	"helm.sh/helm/v4/pkg/registry"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	kuberecorder "k8s.io/client-go/tools/record"
 	"k8s.io/client-go/util/workqueue"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	eventv1 "github.com/fluxcd/pkg/apis/event/v1beta1"
+	eventv1 "github.com/fluxcd/pkg/apis/event/v1"
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/artifact/storage"
 	"github.com/fluxcd/pkg/auth"
@@ -57,6 +55,7 @@ import (
 	"github.com/fluxcd/pkg/oci"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	helper "github.com/fluxcd/pkg/runtime/controller"
+	"github.com/fluxcd/pkg/runtime/events"
 	"github.com/fluxcd/pkg/runtime/jitter"
 	"github.com/fluxcd/pkg/runtime/patch"
 	"github.com/fluxcd/pkg/runtime/predicates"
@@ -139,7 +138,7 @@ type ociRepositoryReconcileFunc func(ctx context.Context, sp *patch.SerialPatche
 type OCIRepositoryReconciler struct {
 	client.Client
 	helper.Metrics
-	kuberecorder.EventRecorder
+	events.Recorder
 
 	Storage               *storage.Storage
 	ControllerName        string
@@ -195,7 +194,7 @@ func (r *OCIRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	// Always attempt to patch the object and status after each reconciliation
 	// NOTE: The final runtime result and error are set in this block.
 	defer func() {
-		summarizeHelper := summarize.NewHelper(r.EventRecorder, serialPatcher)
+		summarizeHelper := summarize.NewHelper(r.Recorder, serialPatcher)
 		summarizeOpts := []summarize.Option{
 			summarize.WithConditions(ociRepositoryReadyCondition),
 			summarize.WithBiPolarityConditionTypes(sourcev1.SourceVerifiedCondition),
@@ -330,7 +329,7 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 	obj *sourcev1.OCIRepository, metadata *meta.Artifact, dir string) (sreconcile.Result, error) {
 	var authenticator authn.Authenticator
 
-	ctxTimeout, cancel := context.WithTimeout(ctx, obj.Spec.Timeout.Duration)
+	ctxTimeout, cancel := context.WithTimeout(ctx, obj.GetTimeout())
 	defer cancel()
 
 	// Remove previously failed source verification status conditions. The
@@ -475,12 +474,15 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 	// - the upstream digest differs from the one in storage (revision drift)
 	// - the OCIRepository spec has changed (generation drift)
 	// - the previous reconciliation resulted in a failed artifact verification (retry with exponential backoff)
+	// - the verification policy (e.g. a key rotation) has changed (policy drift)
 	if obj.Spec.Verify == nil {
 		// Remove old observations if verification was disabled
 		conditions.Delete(obj, sourcev1.SourceVerifiedCondition)
+		obj.Status.SourceVerificationFingerprint = ""
 	} else if !obj.GetArtifact().HasRevision(revision) ||
 		conditions.GetObservedGeneration(obj, sourcev1.SourceVerifiedCondition) != obj.Generation ||
-		conditions.IsFalse(obj, sourcev1.SourceVerifiedCondition) {
+		conditions.IsFalse(obj, sourcev1.SourceVerifiedCondition) ||
+		r.verificationPolicyChanged(ctx, obj) {
 
 		result, err := r.verifySignature(ctx, obj, digestRef, keychain, authenticator, transport, opts...)
 		if err != nil {
@@ -498,6 +500,9 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 
 		if result == soci.VerificationResultSuccess {
 			conditions.MarkTrue(obj, sourcev1.SourceVerifiedCondition, meta.SucceededReason, "verified signature of revision %s", revision)
+			if fingerprint, err := r.verificationFingerprint(ctx, obj); err == nil {
+				obj.Status.SourceVerificationFingerprint = fingerprint
+			}
 		}
 	}
 
@@ -663,6 +668,108 @@ func (r *OCIRepositoryReconciler) digestFromRevision(revision string) string {
 	return parts[len(parts)-1]
 }
 
+// verificationPolicyChanged returns true if the verification material referenced
+// by the object differs from the one used for the last successful verification,
+// or if the current policy can not be determined. A changed policy requires the
+// current revision to be verified again, even if it did not change.
+func (r *OCIRepositoryReconciler) verificationPolicyChanged(ctx context.Context, obj *sourcev1.OCIRepository) bool {
+	if obj.Spec.Verify == nil {
+		return false
+	}
+	fingerprint, err := r.verificationFingerprint(ctx, obj)
+	if err != nil {
+		// Return true so the full reconciliation surfaces the error.
+		return true
+	}
+	return fingerprint != obj.Status.SourceVerificationFingerprint
+}
+
+// verificationFingerprint returns a stable fingerprint of the verification
+// material referenced by the object. It is used to detect a change in the
+// verification policy, e.g. a key rotation, that requires the current revision
+// to be verified again even if it did not change.
+func (r *OCIRepositoryReconciler) verificationFingerprint(ctx context.Context, obj *sourcev1.OCIRepository) (string, error) {
+	verify := obj.Spec.Verify
+	if verify == nil {
+		return "", nil
+	}
+
+	var trustedRoot []byte
+	if ref := verify.TrustedRootSecretRef; ref != nil && verify.Provider == "cosign" {
+		data, err := readTrustedRootFromSecret(ctx, r.Client, obj.Namespace, ref)
+		if err != nil {
+			return "", err
+		}
+		trustedRoot = data
+	}
+
+	var secret *corev1.Secret
+	if ref := verify.SecretRef; ref != nil {
+		s, err := r.retrieveSecret(ctx, types.NamespacedName{Namespace: obj.Namespace, Name: ref.Name})
+		if err != nil {
+			return "", err
+		}
+		secret = &s
+	}
+
+	return verificationMaterialFingerprint(verify.Provider, secret, trustedRoot), nil
+}
+
+// verificationMaterialFingerprint returns a stable fingerprint of the given
+// verification material. It is independent of the Secret name and of the data
+// key names, as the policy is defined by the material itself, not its location.
+func verificationMaterialFingerprint(provider string, secret *corev1.Secret, trustedRoot []byte) string {
+	var b strings.Builder
+	b.WriteString("provider:")
+	b.WriteString(provider)
+	b.WriteByte(0)
+
+	if len(trustedRoot) > 0 {
+		b.WriteString("trustedroot:")
+		b.Write(trustedRoot)
+		b.WriteByte(0)
+	}
+
+	if secret != nil {
+		switch provider {
+		case "notation":
+			if data, ok := secret.Data[notation.DefaultTrustPolicyKey]; ok {
+				b.WriteString("trustpolicy:")
+				b.Write(data)
+				b.WriteByte(0)
+			}
+			var certs []string
+			for k, v := range secret.Data {
+				if strings.HasSuffix(k, ".crt") || strings.HasSuffix(k, ".pem") {
+					certs = append(certs, string(v))
+				}
+			}
+			sort.Strings(certs)
+			for _, cert := range certs {
+				b.WriteString("cert:")
+				b.WriteString(cert)
+				b.WriteByte(0)
+			}
+		default:
+			// cosign: the public keys used for verification.
+			var keys []string
+			for k, v := range secret.Data {
+				if strings.HasSuffix(k, ".pub") {
+					keys = append(keys, string(v))
+				}
+			}
+			sort.Strings(keys)
+			for _, key := range keys {
+				b.WriteString("pub:")
+				b.WriteString(key)
+				b.WriteByte(0)
+			}
+		}
+	}
+
+	return digest.Canonical.FromString(b.String()).String()
+}
+
 // verifySignature verifies the authenticity of the given image reference URL.
 // It supports two different verification providers: cosign and notation.
 // First, it tries to use a key if a Secret with a valid public key is provided.
@@ -673,7 +780,7 @@ func (r *OCIRepositoryReconciler) verifySignature(ctx context.Context, obj *sour
 	ref name.Reference, keychain authn.Keychain, auth authn.Authenticator,
 	transport *http.Transport, opt ...remote.Option) (soci.VerificationResult, error) {
 
-	ctxTimeout, cancel := context.WithTimeout(ctx, obj.Spec.Timeout.Duration)
+	ctxTimeout, cancel := context.WithTimeout(ctx, obj.GetTimeout())
 	defer cancel()
 
 	provider := obj.Spec.Verify.Provider
@@ -982,7 +1089,7 @@ func (r *OCIRepositoryReconciler) keychain(ctx context.Context, obj *sourcev1.OC
 		secretRef := types.NamespacedName{Namespace: obj.Namespace, Name: obj.Spec.SecretRef.Name}
 		err := r.Get(ctx, secretRef, &imagePullSecret)
 		if err != nil {
-			r.eventLogf(ctx, obj, eventv1.EventTypeTrace, sourcev1.AuthenticationFailedReason,
+			sreconcile.EventLogf(ctx, r, obj, eventv1.EventTypeTrace, sourcev1.AuthenticationFailedReason, sourcev1.ActionReconcileSource,
 				"auth secret '%s' not found", obj.Spec.SecretRef.Name)
 			return nil, fmt.Errorf("failed to get secret '%s': %w", secretRef, err)
 		}
@@ -1085,7 +1192,7 @@ func (r *OCIRepositoryReconciler) reconcileStorage(ctx context.Context, sp *patc
 		// matches the actual artifact
 		if !artifactMissing {
 			if err := r.Storage.VerifyArtifact(*artifact); err != nil {
-				r.Eventf(obj, corev1.EventTypeWarning, "ArtifactVerificationFailed", "failed to verify integrity of artifact: %s", err.Error())
+				r.Eventf(obj, nil, corev1.EventTypeWarning, sourcev1.ArtifactVerificationFailedReason, sourcev1.ActionReconcileStorage.String(), "failed to verify integrity of artifact: %s", err.Error())
 
 				if err = r.Storage.Remove(*artifact); err != nil {
 					return sreconcile.ResultEmpty, fmt.Errorf("failed to remove artifact after digest mismatch: %w", err)
@@ -1149,7 +1256,7 @@ func (r *OCIRepositoryReconciler) reconcileArtifact(ctx context.Context, sp *pat
 
 	// The artifact is up-to-date
 	if obj.GetArtifact().HasRevision(artifact.Revision) && !ociContentConfigChanged(obj) {
-		r.eventLogf(ctx, obj, eventv1.EventTypeTrace, sourcev1.ArtifactUpToDateReason,
+		sreconcile.EventLogf(ctx, r, obj, eventv1.EventTypeTrace, sourcev1.ArtifactUpToDateReason, sourcev1.ActionReconcileArtifact,
 			"artifact up-to-date with remote revision: '%s'", artifact.Revision)
 		return sreconcile.ResultSuccess, nil
 	}
@@ -1232,7 +1339,7 @@ func (r *OCIRepositoryReconciler) reconcileArtifact(ctx context.Context, sp *pat
 	// Update symlink on a "best effort" basis
 	url, err := r.Storage.Symlink(artifact, "latest.tar.gz")
 	if err != nil {
-		r.eventLogf(ctx, obj, eventv1.EventTypeTrace, sourcev1.SymlinkUpdateFailedReason,
+		sreconcile.EventLogf(ctx, r, obj, eventv1.EventTypeTrace, sourcev1.SymlinkUpdateFailedReason, sourcev1.ActionReconcileArtifact,
 			"failed to update status URL symlink: %s", err)
 	}
 	if url != "" {
@@ -1276,7 +1383,7 @@ func (r *OCIRepositoryReconciler) garbageCollect(ctx context.Context, obj *sourc
 				"GarbageCollectionFailed",
 			)
 		} else if deleted != "" {
-			r.eventLogf(ctx, obj, eventv1.EventTypeTrace, "GarbageCollectionSucceeded",
+			sreconcile.EventLogf(ctx, r, obj, eventv1.EventTypeTrace, sourcev1.GarbageCollectionSucceededReason, sourcev1.ActionFinalize,
 				"garbage collected artifacts for deleted resource")
 		}
 		obj.Status.Artifact = nil
@@ -1291,28 +1398,12 @@ func (r *OCIRepositoryReconciler) garbageCollect(ctx context.Context, obj *sourc
 			)
 		}
 		if len(delFiles) > 0 {
-			r.eventLogf(ctx, obj, eventv1.EventTypeTrace, "GarbageCollectionSucceeded",
+			sreconcile.EventLogf(ctx, r, obj, eventv1.EventTypeTrace, sourcev1.GarbageCollectionSucceededReason, sourcev1.ActionGarbageCollect,
 				"garbage collected %d artifacts", len(delFiles))
 			return nil
 		}
 	}
 	return nil
-}
-
-// eventLogf records events, and logs at the same time.
-//
-// This log is different from the debug log in the EventRecorder, in the sense
-// that this is a simple log. While the debug log contains complete details
-// about the event.
-func (r *OCIRepositoryReconciler) eventLogf(ctx context.Context, obj runtime.Object, eventType string, reason string, messageFmt string, args ...interface{}) {
-	msg := fmt.Sprintf(messageFmt, args...)
-	// Log and emit event.
-	if eventType == corev1.EventTypeWarning {
-		ctrl.LoggerFrom(ctx).Error(errors.New(reason), msg)
-	} else {
-		ctrl.LoggerFrom(ctx).Info(msg)
-	}
-	r.Eventf(obj, eventType, reason, "%s", msg)
 }
 
 // notify emits notification related to the reconciliation.
@@ -1346,13 +1437,13 @@ func (r *OCIRepositoryReconciler) notify(ctx context.Context, oldObj, newObj *so
 
 		// Notify on new artifact and failure recovery.
 		if !oldObj.GetArtifact().HasDigest(newObj.GetArtifact().Digest) {
-			r.AnnotatedEventf(newObj, annotations, corev1.EventTypeNormal,
-				"NewArtifact", "%s", message)
+			r.AnnotatedEventf(newObj, nil, annotations, corev1.EventTypeNormal,
+				sourcev1.NewArtifactReason, sourcev1.ActionReconcile.String(), "%s", message)
 			ctrl.LoggerFrom(ctx).Info(message)
 		} else {
 			if sreconcile.FailureRecovery(oldObj, newObj, ociRepositoryFailConditions) {
-				r.AnnotatedEventf(newObj, annotations, corev1.EventTypeNormal,
-					meta.SucceededReason, "%s", message)
+				r.AnnotatedEventf(newObj, nil, annotations, corev1.EventTypeNormal,
+					meta.SucceededReason, sourcev1.ActionReconcile.String(), "%s", message)
 				ctrl.LoggerFrom(ctx).Info(message)
 			}
 		}

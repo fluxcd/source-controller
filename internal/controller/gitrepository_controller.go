@@ -23,6 +23,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -30,14 +31,14 @@ import (
 	"github.com/fluxcd/pkg/auth"
 	"github.com/fluxcd/pkg/auth/githubapp"
 	authutils "github.com/fluxcd/pkg/auth/utils"
+	"github.com/fluxcd/pkg/runtime/events"
 	"github.com/fluxcd/pkg/runtime/logger"
 	"github.com/fluxcd/pkg/runtime/secrets"
 	"github.com/go-git/go-git/v5/plumbing/transport"
+	"github.com/opencontainers/go-digest"
 	ssh "golang.org/x/crypto/ssh"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	kuberecorder "k8s.io/client-go/tools/record"
 	"k8s.io/client-go/util/workqueue"
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -48,7 +49,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	eventv1 "github.com/fluxcd/pkg/apis/event/v1beta1"
+	eventv1 "github.com/fluxcd/pkg/apis/event/v1"
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/artifact/storage"
 	"github.com/fluxcd/pkg/cache"
@@ -165,7 +166,7 @@ func getPatchOptions(ownedConditions []string, controllerName string) []patch.Op
 // GitRepositoryReconciler reconciles a v1.GitRepository object.
 type GitRepositoryReconciler struct {
 	client.Client
-	kuberecorder.EventRecorder
+	events.Recorder
 	helper.Metrics
 
 	Storage        *storage.Storage
@@ -225,7 +226,7 @@ func (r *GitRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	// Always attempt to patch the object and status after each reconciliation
 	// NOTE: The final runtime result and error are set in this block.
 	defer func() {
-		summarizeHelper := summarize.NewHelper(r.EventRecorder, serialPatcher)
+		summarizeHelper := summarize.NewHelper(r.Recorder, serialPatcher)
 		summarizeOpts := []summarize.Option{
 			summarize.WithConditions(gitRepositoryReadyCondition),
 			summarize.WithBiPolarityConditionTypes(sourcev1.SourceVerifiedCondition),
@@ -375,15 +376,16 @@ func (r *GitRepositoryReconciler) notify(ctx context.Context, oldObj, newObj *so
 			message = fmt.Sprintf("stored artifact for commit '%s'", commitReference(newObj, &commit))
 		}
 
+		action := sourcev1.ActionReconcile
 		// Notify on new artifact and failure recovery.
 		if !oldObj.GetArtifact().HasDigest(newObj.GetArtifact().Digest) {
-			r.AnnotatedEventf(newObj, annotations, corev1.EventTypeNormal,
-				"NewArtifact", "%s", message)
+			r.AnnotatedEventf(newObj, nil, annotations, corev1.EventTypeNormal,
+				sourcev1.NewArtifactReason, action.String(), "%s", message)
 			ctrl.LoggerFrom(ctx).Info(message)
 		} else {
 			if sreconcile.FailureRecovery(oldObj, newObj, gitRepositoryFailConditions) {
-				r.AnnotatedEventf(newObj, annotations, corev1.EventTypeNormal,
-					meta.SucceededReason, "%s", message)
+				r.AnnotatedEventf(newObj, nil, annotations, corev1.EventTypeNormal,
+					meta.SucceededReason, action.String(), "%s", message)
 				ctrl.LoggerFrom(ctx).Info(message)
 			}
 		}
@@ -437,7 +439,7 @@ func (r *GitRepositoryReconciler) reconcileStorage(ctx context.Context, sp *patc
 		// matches the actual artifact
 		if !artifactMissing {
 			if err := r.Storage.VerifyArtifact(*artifact); err != nil {
-				r.Eventf(obj, corev1.EventTypeWarning, "ArtifactVerificationFailed", "failed to verify integrity of artifact: %s", err.Error())
+				r.Eventf(obj, nil, corev1.EventTypeWarning, sourcev1.ArtifactVerificationFailedReason, sourcev1.ActionReconcileStorage.String(), "failed to verify integrity of artifact: %s", err.Error())
 
 				if err = r.Storage.Remove(*artifact); err != nil {
 					return sreconcile.ResultEmpty, fmt.Errorf("failed to remove artifact after digest mismatch: %w", err)
@@ -592,7 +594,9 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 	// reconciliation can be skipped if other configurations have not changed.
 	if !git.IsConcreteCommit(*commit) {
 		// Check if the content config contributing to the artifact has changed.
-		if !gitContentConfigChanged(obj, includes) {
+		// A change to the verification policy (e.g. a key rotation) also
+		// requires a new verification of the unchanged revision.
+		if !gitContentConfigChanged(obj, includes) && !r.verificationPolicyChanged(ctx, obj) {
 			ge := serror.NewGeneric(
 				fmt.Errorf("no changes since last reconciliation: observed revision '%s'",
 					commitReference(obj, commit)), sourcev1.GitOperationSucceedReason,
@@ -794,7 +798,7 @@ func (r *GitRepositoryReconciler) getAuthOpts(ctx context.Context, obj *sourcev1
 		}
 	default:
 		// analyze secret, if it has github app data, perhaps provider should have been github.
-		if appID := authData[githubapp.KeyAppID]; len(appID) != 0 {
+		if len(authData[githubapp.KeyAppID]) != 0 || len(authData[githubapp.KeyAppClientID]) != 0 {
 			e := serror.NewGeneric(
 				fmt.Errorf("secretRef '%s/%s' has github app data but provider is not set to github", obj.GetNamespace(), obj.Spec.SecretRef.Name),
 				sourcev1.InvalidProviderConfigurationReason,
@@ -870,7 +874,7 @@ func (r *GitRepositoryReconciler) reconcileArtifact(ctx context.Context, sp *pat
 	if curArtifact := obj.GetArtifact(); curArtifact.HasRevision(artifact.Revision) &&
 		!includes.Diff(obj.Status.IncludedArtifacts) &&
 		!gitContentConfigChanged(obj, includes) {
-		r.eventLogf(ctx, obj, eventv1.EventTypeTrace, sourcev1.ArtifactUpToDateReason, "artifact up-to-date with remote revision: '%s'", curArtifact.Revision)
+		sreconcile.EventLogf(ctx, r, obj, eventv1.EventTypeTrace, sourcev1.ArtifactUpToDateReason, sourcev1.ActionReconcileArtifact, "artifact up-to-date with remote revision: '%s'", curArtifact.Revision)
 		return sreconcile.ResultSuccess, nil
 	}
 
@@ -947,7 +951,7 @@ func (r *GitRepositoryReconciler) reconcileArtifact(ctx context.Context, sp *pat
 	if fi, err := os.Lstat(r.Storage.LocalPath(artifact)); err == nil {
 		if fi.Mode()&os.ModeSymlink != 0 {
 			if err := os.Remove(r.Storage.LocalPath(*symArtifact)); err != nil {
-				r.eventLogf(ctx, obj, eventv1.EventTypeTrace, sourcev1.SymlinkUpdateFailedReason,
+				sreconcile.EventLogf(ctx, r, obj, eventv1.EventTypeTrace, sourcev1.SymlinkUpdateFailedReason, sourcev1.ActionReconcileArtifact,
 					"failed to remove (deprecated) symlink: %s", err)
 			}
 		}
@@ -1112,6 +1116,64 @@ func (r *GitRepositoryReconciler) fetchIncludes(ctx context.Context, obj *source
 	return &artifacts, nil
 }
 
+// verificationKeys returns the PGP key rings and SSH authorized keys contained
+// in the given Secret. Data entries with an SSH public key suffix are treated as
+// authorized keys, entries with a PGP public key suffix (or no known suffix) as
+// PGP key rings.
+func verificationKeys(secret *corev1.Secret) (keyRings, authorizedKeys []string) {
+	for k, v := range secret.Data {
+		switch {
+		case strings.HasSuffix(k, publicKeySSHSuffix):
+			authorizedKeys = append(authorizedKeys, string(v))
+		case strings.HasSuffix(k, publicKeyPGPSuffix):
+			keyRings = append(keyRings, string(v))
+		default:
+			// Provide fallback to support previous undocumented behavior
+			keyRings = append(keyRings, string(v))
+		}
+	}
+	return keyRings, authorizedKeys
+}
+
+// verificationFingerprint returns a stable fingerprint of the public keys in
+// the given Secret, independent of the Secret name or the data key names. It is
+// used to detect a change in the verification policy, e.g. a key rotation, that
+// requires the current revision to be verified again.
+func verificationFingerprint(secret *corev1.Secret) string {
+	keyRings, authorizedKeys := verificationKeys(secret)
+	sort.Strings(keyRings)
+	sort.Strings(authorizedKeys)
+
+	var b strings.Builder
+	for _, k := range keyRings {
+		b.WriteString("pgp:")
+		b.WriteString(k)
+		b.WriteByte(0)
+	}
+	for _, k := range authorizedKeys {
+		b.WriteString("ssh:")
+		b.WriteString(k)
+		b.WriteByte(0)
+	}
+	return digest.Canonical.FromString(b.String()).String()
+}
+
+// verificationPolicyChanged returns true if the public keys trusted for
+// verification differ from the ones used for the last successful verification,
+// or if the current policy can not be determined. A changed policy requires the
+// current revision to be verified again, even if it did not change.
+func (r *GitRepositoryReconciler) verificationPolicyChanged(ctx context.Context, obj *sourcev1.GitRepository) bool {
+	if obj.Spec.Verification == nil || obj.Spec.Verification.Mode == "" {
+		return false
+	}
+	secret, err := r.getSecret(ctx, obj.Spec.Verification.SecretRef.Name, obj.GetNamespace())
+	if err != nil {
+		// Return true so the full reconciliation surfaces the error.
+		return true
+	}
+	return verificationFingerprint(secret) != obj.Status.SourceVerificationFingerprint
+}
+
 // verifySignature verifies the signature of the given Git commit and/or its referencing tag
 // depending on the verification mode specified on the object.
 // If the signature can not be verified or the verification fails, it records
@@ -1124,6 +1186,7 @@ func (r *GitRepositoryReconciler) verifySignature(ctx context.Context, obj *sour
 	// observations if there is none
 	if obj.Spec.Verification == nil || obj.Spec.Verification.Mode == "" {
 		obj.Status.SourceVerificationMode = nil
+		obj.Status.SourceVerificationFingerprint = ""
 		conditions.Delete(obj, sourcev1.SourceVerifiedCondition)
 		return sreconcile.ResultSuccess, nil
 	}
@@ -1143,18 +1206,7 @@ func (r *GitRepositoryReconciler) verifySignature(ctx context.Context, obj *sour
 		return sreconcile.ResultEmpty, e
 	}
 
-	var keyRings []string
-	var authorizedKeys []string
-	for k, v := range secret.Data {
-		if strings.HasSuffix(k, publicKeySSHSuffix) {
-			authorizedKeys = append(authorizedKeys, string(v))
-		} else if strings.HasSuffix(k, publicKeyPGPSuffix) {
-			keyRings = append(keyRings, string(v))
-		} else {
-			// Provide fallback to support previous undocumented behavior
-			keyRings = append(keyRings, string(v))
-		}
-	}
+	keyRings, authorizedKeys := verificationKeys(secret)
 
 	var message strings.Builder
 	if obj.Spec.Verification.VerifyTag() {
@@ -1217,8 +1269,9 @@ func (r *GitRepositoryReconciler) verifySignature(ctx context.Context, obj *sour
 	reason := meta.SucceededReason
 	mode := obj.Spec.Verification.GetMode()
 	obj.Status.SourceVerificationMode = &mode
+	obj.Status.SourceVerificationFingerprint = verificationFingerprint(secret)
 	conditions.MarkTrue(obj, sourcev1.SourceVerifiedCondition, reason, "%s", message.String())
-	r.eventLogf(ctx, obj, eventv1.EventTypeTrace, reason, "%s", message.String())
+	sreconcile.EventLogf(ctx, r, obj, eventv1.EventTypeTrace, reason, sourcev1.ActionVerifySource, "%s", message.String())
 	return sreconcile.ResultSuccess, nil
 }
 
@@ -1256,7 +1309,7 @@ func (r *GitRepositoryReconciler) garbageCollect(ctx context.Context, obj *sourc
 				"GarbageCollectionFailed",
 			)
 		} else if deleted != "" {
-			r.eventLogf(ctx, obj, eventv1.EventTypeTrace, "GarbageCollectionSucceeded",
+			sreconcile.EventLogf(ctx, r, obj, eventv1.EventTypeTrace, sourcev1.GarbageCollectionSucceededReason, sourcev1.ActionFinalize,
 				"garbage collected artifacts for deleted resource")
 		}
 		obj.Status.Artifact = nil
@@ -1271,28 +1324,12 @@ func (r *GitRepositoryReconciler) garbageCollect(ctx context.Context, obj *sourc
 			)
 		}
 		if len(delFiles) > 0 {
-			r.eventLogf(ctx, obj, eventv1.EventTypeTrace, "GarbageCollectionSucceeded",
+			sreconcile.EventLogf(ctx, r, obj, eventv1.EventTypeTrace, sourcev1.GarbageCollectionSucceededReason, sourcev1.ActionGarbageCollect,
 				"garbage collected %d artifacts", len(delFiles))
 			return nil
 		}
 	}
 	return nil
-}
-
-// eventLogf records events, and logs at the same time.
-//
-// This log is different from the debug log in the EventRecorder, in the sense
-// that this is a simple log. While the debug log contains complete details
-// about the event.
-func (r *GitRepositoryReconciler) eventLogf(ctx context.Context, obj runtime.Object, eventType string, reason string, messageFmt string, args ...interface{}) {
-	msg := fmt.Sprintf(messageFmt, args...)
-	// Log and emit event.
-	if eventType == corev1.EventTypeWarning {
-		ctrl.LoggerFrom(ctx).Error(errors.New(reason), msg)
-	} else {
-		ctrl.LoggerFrom(ctx).Info(msg)
-	}
-	r.Eventf(obj, eventType, reason, "%s", msg)
 }
 
 // gitContentConfigChanged evaluates the current spec with the observations of
