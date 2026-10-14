@@ -1420,7 +1420,7 @@ func TestGitRepositoryReconciler_reconcileArtifact(t *testing.T) {
 			},
 			afterFunc: func(t *WithT, obj *sourcev1.GitRepository) {
 				t.Expect(obj.GetArtifact()).ToNot(BeNil())
-				t.Expect(obj.GetArtifact().Digest).To(Equal("sha256:34d9af1a2fcfaef3ee9487d67dc2d642bc7babdb9444a5f60d1f32df32e4de7d"))
+				t.Expect(obj.GetArtifact().Digest).To(Equal("sha256:2c48db51d50dceb7279654e418499ab7de3dd2b9a6222daee143a052f61098e5"))
 				t.Expect(obj.Status.IncludedArtifacts).ToNot(BeEmpty())
 			},
 			want: sreconcile.ResultSuccess,
@@ -1455,7 +1455,7 @@ func TestGitRepositoryReconciler_reconcileArtifact(t *testing.T) {
 			},
 			afterFunc: func(t *WithT, obj *sourcev1.GitRepository) {
 				t.Expect(obj.GetArtifact()).ToNot(BeNil())
-				t.Expect(obj.GetArtifact().Digest).To(Equal("sha256:a17037f96f541a47bdadcd12ab40b943c50a9ffd25dc8a30a5e9af52971fd94f"))
+				t.Expect(obj.GetArtifact().Digest).To(Equal("sha256:4f9675c308097afcfe19c27c1f60dda0c614956e8c0cd8c69c316e04a3c1c988"))
 			},
 			want: sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
@@ -1470,7 +1470,7 @@ func TestGitRepositoryReconciler_reconcileArtifact(t *testing.T) {
 			},
 			afterFunc: func(t *WithT, obj *sourcev1.GitRepository) {
 				t.Expect(obj.GetArtifact()).ToNot(BeNil())
-				t.Expect(obj.GetArtifact().Digest).To(Equal("sha256:ad9943d761b30e943e2a770ea9083a40fc03f09846efd61f6c442cc48fefad11"))
+				t.Expect(obj.GetArtifact().Digest).To(Equal("sha256:169385354ad25968566b4d297e7451288ce664f3ee6641f2daa7604af139373f"))
 			},
 			want: sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
@@ -1486,7 +1486,7 @@ func TestGitRepositoryReconciler_reconcileArtifact(t *testing.T) {
 			},
 			afterFunc: func(t *WithT, obj *sourcev1.GitRepository) {
 				t.Expect(obj.GetArtifact()).ToNot(BeNil())
-				t.Expect(obj.GetArtifact().Digest).To(Equal("sha256:34d9af1a2fcfaef3ee9487d67dc2d642bc7babdb9444a5f60d1f32df32e4de7d"))
+				t.Expect(obj.GetArtifact().Digest).To(Equal("sha256:2c48db51d50dceb7279654e418499ab7de3dd2b9a6222daee143a052f61098e5"))
 			},
 			want: sreconcile.ResultSuccess,
 			assertConditions: []metav1.Condition{
