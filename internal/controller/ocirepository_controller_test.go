@@ -1903,12 +1903,12 @@ func TestOCIRepository_reconcileSource_verifyOCISourceTrustPolicyNotation(t *tes
 			usePolicyJson: true,
 			policyJson:    "{\"version\": \"1.0\u000A\", \"trust_policies\": []}",
 			wantErr:       true,
-			wantErrMsg:    fmt.Sprintf("error occurred while parsing %s: invalid character '\\n' in string literal", snotation.DefaultTrustPolicyKey),
+			wantErrMsg:    fmt.Sprintf("error occurred while parsing %s: invalid character '\\n' in string", snotation.DefaultTrustPolicyKey),
 			want:          sreconcile.ResultEmpty,
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(meta.ReconcilingCondition, meta.ProgressingReason, "building artifact: new revision '<revision>' for '<url>'"),
 				*conditions.UnknownCondition(meta.ReadyCondition, meta.ProgressingReason, "building artifact: new revision '<revision>' for '<url>'"),
-				*conditions.FalseCondition(sourcev1.SourceVerifiedCondition, sourcev1.VerificationError, "error occurred while parsing %s: invalid character '\\n' in string literal", snotation.DefaultTrustPolicyKey),
+				*conditions.FalseCondition(sourcev1.SourceVerifiedCondition, sourcev1.VerificationError, "error occurred while parsing %s: invalid character '\\n' in string", snotation.DefaultTrustPolicyKey),
 			},
 		},
 		{
@@ -2586,7 +2586,7 @@ func TestOCIRepository_reconcileSource_verifyOCISourceSignature_keyless(t *testi
 func TestOCIRepository_reconcileSource_noop(t *testing.T) {
 	g := NewWithT(t)
 
-	testRevision := "6.1.5@sha256:8e4057c22d531d40e12b065443cb0d80394b7257c4dc557cb1fbd4dce892b86d"
+	testRevision := "6.1.5@sha256:091e263d80b3d3a520abf966c42a30e6d911d5339bdb8b7fbc8e98d88a1911f2"
 
 	tmpDir := t.TempDir()
 	server, err := setupRegistryServer(ctx, tmpDir, registryOptions{})
@@ -2783,7 +2783,7 @@ func TestOCIRepository_reconcileArtifact(t *testing.T) {
 				"latest.tar.gz",
 			},
 			afterFunc: func(g *WithT, obj *sourcev1.OCIRepository) {
-				g.Expect(obj.Status.Artifact.Digest).To(Equal("sha256:6a5bd135a816ec0ad246c41cfdd87629e40ef6520001aeb2d0118a703abe9e7a"))
+				g.Expect(obj.Status.Artifact.Digest).To(Equal("sha256:ce886936428db3b380e29ff52805cf05537c25a536583f104a04faf87af80acd"))
 			},
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(sourcev1.ArtifactInStorageCondition, meta.SucceededReason, "stored artifact for digest"),
@@ -2801,7 +2801,7 @@ func TestOCIRepository_reconcileArtifact(t *testing.T) {
 				"latest.tar.gz",
 			},
 			afterFunc: func(g *WithT, obj *sourcev1.OCIRepository) {
-				g.Expect(obj.Status.Artifact.Digest).To(Equal("sha256:9102e9c8626e48821a91a4963436f1673cd85f8fb3deb843c992f85b995c38ea"))
+				g.Expect(obj.Status.Artifact.Digest).To(Equal("sha256:b45c0a200b6c37afb55c832eae5ba81161a707846258ecd3861d53e459ea9957"))
 			},
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(sourcev1.ArtifactInStorageCondition, meta.SucceededReason, "stored artifact for digest"),
