@@ -246,6 +246,14 @@ type GitRepositoryVerification struct {
 	// and SSH public keys must be stored under keys with the .sshpub suffix.
 	// +required
 	SecretRef meta.LocalObjectReference `json:"secretRef"`
+
+	// ForwardOnly, when true, rejects a revision that is not a descendant of
+	// the last verified revision recorded in
+	// .status.sourceVerificationRevision, such as a branch force-pushed to an
+	// older commit or a tag moved backwards. Not supported with
+	// .spec.ref.semver.
+	// +optional
+	ForwardOnly bool `json:"forwardOnly,omitempty"`
 }
 
 // GitRepositoryStatus records the observed state of a Git repository.
@@ -300,7 +308,15 @@ type GitRepositoryStatus struct {
 	// +optional
 	SourceVerificationMode *GitVerificationMode `json:"sourceVerificationMode,omitempty"`
 
+	// SourceVerificationRevision is the last revision whose Git object(s)
+	// were successfully verified. It is the baseline for forward-only
+	// verification: when .spec.verify.forwardOnly is set, a new revision
+	// must be a descendant of this revision.
+	// +optional
+	SourceVerificationRevision string `json:"sourceVerificationRevision,omitempty"`
+
 	meta.ReconcileRequestStatus `json:",inline"`
+	meta.ForceRequestStatus     `json:",inline"`
 }
 
 const (
@@ -333,6 +349,18 @@ func (in GitRepository) GetRequeueAfter() time.Duration {
 // the status sub-resource.
 func (in *GitRepository) GetArtifact() *meta.Artifact {
 	return in.Status.Artifact
+}
+
+// GetLastHandledReconcileRequest returns the last handled reconcile request
+// value recorded in the status.
+func (in *GitRepository) GetLastHandledReconcileRequest() string {
+	return in.Status.GetLastHandledReconcileRequest()
+}
+
+// GetLastHandledForceRequestStatus returns a pointer to the last handled
+// force request value recorded in the status.
+func (in *GitRepository) GetLastHandledForceRequestStatus() *string {
+	return &in.Status.LastHandledForceAt
 }
 
 // GetProvider returns the Git authentication provider.

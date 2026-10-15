@@ -412,3 +412,5 @@ require (
 )
 
 retract v0.32.0 // Refers to incorrect ./api version.
+
+replace github.com/fluxcd/pkg/git => github.com/ruslan-shaydullin/pkg/git v0.55.1-0.20261015144952-74aba21a4653

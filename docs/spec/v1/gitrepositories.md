@@ -630,7 +630,7 @@ spec:
 ### Verification
 
 `.spec.verify` is an optional field to enable the verification of Git commit
-signatures. The field offers two subfields:
+signatures. The field offers the following subfields:
 
 - `.mode`, to specify what Git object(s) should be verified. Supported
   values are:
@@ -648,6 +648,10 @@ signatures. The field offers two subfields:
   public keys must be stored under keys with the `.asc` suffix, and SSH public
   keys must be stored under keys with the `.sshpub` suffix. Keys without a
   recognized suffix are treated as PGP key rings for backward compatibility.
+
+- `.forwardOnly`, to additionally require that every new revision descends from
+  the last verified revision. Defaults to `false`. See [forward-only
+  verification](#forward-only-verification).
 
 ```yaml
 ---
@@ -740,6 +744,90 @@ dispatches verification accordingly.
 PGP verification reports the PGP key ID in the success message (e.g.
 `5982D0279C227FFD`), while SSH verification reports the SHA256 fingerprint
 (e.g. `SHA256:uNiVztksCsDhcc0u9e8BgrJXVGDaf6s7kOsTmI9N7sM`).
+
+#### Forward-only verification
+
+`.spec.verify.forwardOnly` is an optional boolean field. When set to `true`, a
+revision that passes signature verification is only accepted if it descends
+from the last verified revision, as recorded in
+[`.status.sourceVerificationRevision`](#source-verification-revision). This
+rejects a branch that was force-pushed to an older commit, a tag that was moved
+to an older commit, and any rewritten history, even when the resulting HEAD
+carries a valid signature of a trusted author.
+
+```yaml
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: GitRepository
+metadata:
+  name: podinfo
+  namespace: default
+spec:
+  interval: 1m
+  url: https://github.com/stefanprodan/podinfo
+  ref:
+    branch: master
+  verify:
+    mode: HEAD
+    forwardOnly: true
+    secretRef:
+      name: pgp-public-keys
+```
+
+The check compares history and nothing else: any signed descendant is accepted,
+including a work-in-progress commit of a trusted author that someone with push
+access fast-forwarded the branch to. It does not replace code review, and it
+does not protect against a compromised trusted key. A legitimate rollback is
+done with `git revert`, which produces a new signed descendant and is accepted
+without further action.
+
+The signature of the HEAD and/or tag object is verified before the history is
+inspected, so an unsigned revision is rejected without additional Git
+operations.
+
+To inspect the history, the controller clones the last 100 commits of the
+reference instead of only its tip whenever the reference changed. If the last
+verified revision is not among them, the clone is discarded and the last 500
+commits are cloned into a fresh directory. If it is still not found, the
+revision is rejected. Each clone runs within [`.spec.timeout`](#timeout), so a
+reconciliation of a large repository takes longer than before and may take up
+to twice the timeout; raise the timeout if a clone does not complete in time. A revision checked out by `.spec.ref.commit`, or by a
+`.spec.ref.name` that is neither a branch nor a tag (for example
+`refs/pull/420/head`), is cloned with its full history as before, and the whole
+history is inspected. A rebased pull request branch is therefore rejected.
+
+`.spec.ref.semver` is not supported together with `forwardOnly`, because
+release tags cut from release branches are frequently not descendants of each
+other. The GitRepository is marked as stalled with reason
+`InvalidVerificationMode`.
+
+`.status.sourceVerificationRevision` is recorded on every successful
+verification, whether `forwardOnly` is set or not, so enabling the field on an
+existing object takes effect from the next reconciliation on. When `forwardOnly`
+is enabled and no such revision has been recorded yet, the controller verifies
+the current revision again, records it as the baseline, and emits the event
+`forward-only baseline established at '<revision>'`. The baseline is lost, and
+the next revision is accepted without a history check, when the object is
+recreated, when it is restored without its status, or when `.spec.verify` is
+removed and the repository is checked out again.
+
+When a revision is rejected, the controller sets `SourceVerified=False` and
+`Ready=False` with reason `NonFastForwardRevision`, emits a warning event, and
+keeps the current Artifact and baseline. Controllers consuming the Artifact,
+such as kustomize-controller, keep applying the last verified revision. The
+reconciliation is retried with an exponential backoff; for a branch or tag
+reference that does not change in the meantime, the retries do not clone the
+repository again.
+
+To accept a revision that does not descend from the baseline, for example after
+history was deliberately rewritten, verify the revision on the Git server and
+request a [forced reconciliation](#triggering-a-reconcile). The revision on the
+server at that moment is verified, recorded as the new baseline, and the event
+`forward-only baseline reset to '<revision>' by force request` is emitted. The
+annotations are not part of the manifest in Git, so this also works for a
+GitRepository that is itself applied by Flux, such as `flux-system`, where
+pinning `.spec.ref.commit` would require a commit in the rejected history or
+would be reverted by kustomize-controller.
 
 ### Ignore
 
@@ -937,6 +1025,24 @@ Using `flux`:
 
 ```sh
 flux reconcile source git <repository-name>
+```
+
+When [forward-only verification](#forward-only-verification) has rejected a
+revision that should be accepted anyway, the baseline can be reset by
+additionally annotating the GitRepository with `reconcile.fluxcd.io/forceAt`
+set to the same value. Both annotations must be set in the same operation. The
+revision on the remote at the time of the reconciliation is verified and
+recorded as the new baseline, and the value is reported in
+[`.status.lastHandledForceAt`](#last-handled-force-at). The value is consumed
+by the reconciliation it triggers; if that reconciliation fails before the
+revision is verified, for example because the clone times out, request it again
+with a new value:
+
+```sh
+TOKEN="$(date +%s)"; \
+kubectl annotate --field-manager=flux-client-side-apply --overwrite gitrepository/<repository-name> \
+"reconcile.fluxcd.io/requestedAt=$TOKEN" \
+"reconcile.fluxcd.io/forceAt=$TOKEN"
 ```
 
 ### Waiting for `Ready`
@@ -1212,6 +1318,8 @@ factors:
   non-existing Secret.
 - A specified Include is unavailable.
 - The verification of the Git commit signature failed.
+- The revision does not descend from the last verified revision while
+  [forward-only verification](#forward-only-verification) is enabled.
 - The credentials in the referenced Secret are invalid.
 - The GitRepository spec contains a generic misconfiguration.
 - A storage related failure when storing the artifact.
@@ -1236,6 +1344,10 @@ the following attributes is added to the GitRepository's `.status.conditions`:
 - `type: SourceVerifiedCondition`
 - `status: "False"`
 - `reason: Failed`
+
+When [forward-only verification](#forward-only-verification) rejects a
+revision, the `reason` is `NonFastForwardRevision` and the message names the
+rejected revision and the last verified revision.
 
 While the GitRepository has one or more of these Conditions, the controller
 will continue to attempt to produce an Artifact for the resource with an
@@ -1356,6 +1468,16 @@ Secret data key names. It is used by the controller to detect a change in the
 verification policy, such as a key rotation, that requires the current revision
 to be verified again even when its revision did not change.
 
+### Source Verification Revision
+
+The source-controller reports the last revision whose Git object(s) were
+successfully verified in the GitRepository's
+`.status.sourceVerificationRevision`, in the same format as the [Artifact
+revision](#artifact). It is recorded whenever verification succeeds and serves
+as the baseline for [forward-only verification](#forward-only-verification):
+when `.spec.verify.forwardOnly` is set, a new revision must descend from it.
+The field is cleared when `.spec.verify` is removed.
+
 ### Observed Generation
 
 The source-controller reports an [observed generation][typical-status-properties]
@@ -1371,6 +1493,14 @@ annotation value it acted on in the `.status.lastHandledReconcileAt` field.
 
 For practical information about this field, see [triggering a
 reconcile](#triggering-a-reconcile).
+
+### Last Handled Force At
+
+The source-controller reports the last `reconcile.fluxcd.io/forceAt`
+annotation value it handled in the `.status.lastHandledForceAt` field. See
+[triggering a reconcile](#triggering-a-reconcile) for how the annotation is
+used to reset the [forward-only verification](#forward-only-verification)
+baseline.
 
 [typical-status-properties]: https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md#typical-status-properties
 [kstatus-spec]: https://github.com/kubernetes-sigs/cli-utils/tree/master/pkg/kstatus

@@ -2464,6 +2464,21 @@ which Git object(s) have been verified.</p>
 </tr>
 <tr>
 <td>
+<code>sourceVerificationRevision</code><br>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>SourceVerificationRevision is the last revision whose Git object(s)
+were successfully verified. It is the baseline for forward-only
+verification: when .spec.verify.forwardOnly is set, a new revision
+must be a descendant of this revision.</p>
+</td>
+</tr>
+<tr>
+<td>
 <code>ReconcileRequestStatus</code><br>
 <em>
 <a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/meta#ReconcileRequestStatus">
@@ -2474,6 +2489,21 @@ github.com/fluxcd/pkg/apis/meta.ReconcileRequestStatus
 <td>
 <p>
 (Members of <code>ReconcileRequestStatus</code> are embedded into this type.)
+</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>ForceRequestStatus</code><br>
+<em>
+<a href="https://pkg.go.dev/github.com/fluxcd/pkg/apis/meta#ForceRequestStatus">
+github.com/fluxcd/pkg/apis/meta.ForceRequestStatus
+</a>
+</em>
+</td>
+<td>
+<p>
+(Members of <code>ForceRequestStatus</code> are embedded into this type.)
 </p>
 </td>
 </tr>
@@ -2529,6 +2559,22 @@ github.com/fluxcd/pkg/apis/meta.LocalObjectReference
 <p>SecretRef specifies the Secret containing the public keys of trusted Git
 authors. PGP public keys must be stored under keys with the .asc suffix,
 and SSH public keys must be stored under keys with the .sshpub suffix.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>forwardOnly</code><br>
+<em>
+bool
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>ForwardOnly, when true, rejects a revision that is not a descendant of
+the last verified revision recorded in
+.status.sourceVerificationRevision, such as a branch force-pushed to an
+older commit or a tag moved backwards. Not supported with
+.spec.ref.semver.</p>
 </td>
 </tr>
 </tbody>

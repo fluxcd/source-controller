@@ -25,6 +25,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	securejoin "github.com/cyphar/filepath-securejoin"
@@ -177,6 +178,11 @@ type GitRepositoryReconciler struct {
 	features          map[string]bool
 
 	patchOptions []patch.Option
+
+	// rejectedRevisions caches, per object, the last revision rejected by
+	// forward-only verification (forwardOnlyRejection) so that retries do
+	// not clone while the remote reference still points to it.
+	rejectedRevisions sync.Map
 }
 
 type GitRepositoryReconcilerOptions struct {
@@ -516,6 +522,23 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 		conditions.Delete(obj, sourcev1.SourceVerifiedCondition)
 	}
 
+	// A force request lets forward-only verification accept a revision that
+	// does not descend from the current baseline. It is evaluated once per
+	// reconciliation, which also records the handled annotation value.
+	forceRequested := meta.ShouldHandleForceRequest(obj)
+	if forceRequested {
+		r.rejectedRevisions.Delete(client.ObjectKeyFromObject(obj))
+	}
+
+	if forwardOnlyEnabled(obj) && isSemVerReference(obj.Spec.Reference) {
+		e := serror.NewStalling(
+			errors.New("forward-only verification is not supported with .spec.ref.semver"),
+			"InvalidVerificationMode",
+		)
+		conditions.MarkFalse(obj, sourcev1.SourceVerifiedCondition, e.Reason, "%s", e)
+		return sreconcile.ResultEmpty, e
+	}
+
 	var proxyOpts *transport.ProxyOptions
 	var proxyURL *url.URL
 	if obj.Spec.ProxySecretRef != nil {
@@ -575,7 +598,14 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 	// Persist the ArtifactSet.
 	*includes = *artifacts
 
-	c, err := r.gitCheckout(ctx, obj, authOpts, proxyOpts, dir, true)
+	// With forward-only verification and a baseline to look for, clone
+	// enough history to find the baseline instead of only the tip.
+	var depth int
+	if forwardOnlyEnabled(obj) && obj.Status.SourceVerificationRevision != "" && !forceRequested {
+		depth = forwardOnlyCloneDepth
+	}
+
+	c, err := r.gitCheckout(ctx, obj, authOpts, proxyOpts, dir, true, depth)
 	if err != nil {
 		return sreconcile.ResultEmpty, err
 	}
@@ -589,6 +619,14 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 	}
 	// Assign the commit to the shared commit reference.
 	*commit = *c
+
+	// Repeat a cached forward-only rejection while the remote reference
+	// still points to the rejected revision.
+	if rej, ok := r.cachedForwardOnlyRejection(obj); ok && rej.revision == commitReference(obj, commit) {
+		e := serror.NewGeneric(errors.New(rej.message), nonFastForwardRevisionReason)
+		conditions.MarkFalse(obj, sourcev1.SourceVerifiedCondition, e.Reason, "%s", e)
+		return sreconcile.ResultEmpty, e
+	}
 
 	// If it's a partial commit obtained from an existing artifact, check if the
 	// reconciliation can be skipped if other configurations have not changed.
@@ -620,8 +658,12 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 		}
 
 		// If we can't skip the reconciliation, checkout again without any
-		// optimization.
-		c, err := r.gitCheckout(ctx, obj, authOpts, proxyOpts, dir, false)
+		// optimization. An unchanged revision that is the baseline needs no
+		// history.
+		if commitReference(obj, commit) == obj.Status.SourceVerificationRevision {
+			depth = 0
+		}
+		c, err := r.gitCheckout(ctx, obj, authOpts, proxyOpts, dir, false, depth)
 		if err != nil {
 			return sreconcile.ResultEmpty, err
 		}
@@ -640,8 +682,9 @@ func (r *GitRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 		return sreconcile.ResultEmpty, e
 	}
 
-	// Verify commit signature
-	if result, err := r.verifySignature(ctx, obj, *commit); err != nil || result == sreconcile.ResultEmpty {
+	// Verify the commit signature and, if enabled, that the revision
+	// descends from the last verified revision.
+	if result, err := r.verifySource(ctx, obj, authOpts, proxyOpts, dir, commit, forceRequested); err != nil || result == sreconcile.ResultEmpty {
 		return result, err
 	}
 
@@ -1012,14 +1055,16 @@ func (r *GitRepositoryReconciler) reconcileInclude(ctx context.Context, sp *patc
 }
 
 // gitCheckout builds checkout options with the given configurations and
-// performs a git checkout.
+// performs a git checkout. A positive depth limits the history of the clone
+// to that number of commits; otherwise only the tip is cloned.
 func (r *GitRepositoryReconciler) gitCheckout(ctx context.Context, obj *sourcev1.GitRepository,
-	authOpts *git.AuthOptions, proxyOpts *transport.ProxyOptions, dir string, optimized bool) (*git.Commit, error) {
+	authOpts *git.AuthOptions, proxyOpts *transport.ProxyOptions, dir string, optimized bool, depth int) (*git.Commit, error) {
 
 	// Configure checkout strategy.
 	cloneOpts := repository.CloneConfig{
 		RecurseSubmodules: obj.Spec.RecurseSubmodules,
 		ShallowClone:      true,
+		Depth:             depth,
 	}
 	if ref := obj.Spec.Reference; ref != nil {
 		cloneOpts.Branch = ref.Branch
@@ -1042,6 +1087,13 @@ func (r *GitRepositoryReconciler) gitCheckout(ctx context.Context, obj *sourcev1
 	if optimized && conditions.IsTrue(obj, sourcev1.ArtifactInStorageCondition) {
 		if artifact := obj.GetArtifact(); artifact != nil {
 			cloneOpts.LastObservedCommit = artifact.Revision
+		}
+	}
+	// A revision rejected by forward-only verification is retried without a
+	// clone for as long as the remote reference still points to it.
+	if optimized {
+		if rej, ok := r.cachedForwardOnlyRejection(obj); ok {
+			cloneOpts.LastObservedCommit = rej.revision
 		}
 	}
 
@@ -1166,6 +1218,11 @@ func (r *GitRepositoryReconciler) verificationPolicyChanged(ctx context.Context,
 	if obj.Spec.Verification == nil || obj.Spec.Verification.Mode == "" {
 		return false
 	}
+	// Forward-only verification needs a baseline, which only a full
+	// verification records.
+	if obj.Spec.Verification.ForwardOnly && obj.Status.SourceVerificationRevision == "" {
+		return true
+	}
 	secret, err := r.getSecret(ctx, obj.Spec.Verification.SecretRef.Name, obj.GetNamespace())
 	if err != nil {
 		// Return true so the full reconciliation surfaces the error.
@@ -1187,6 +1244,7 @@ func (r *GitRepositoryReconciler) verifySignature(ctx context.Context, obj *sour
 	if obj.Spec.Verification == nil || obj.Spec.Verification.Mode == "" {
 		obj.Status.SourceVerificationMode = nil
 		obj.Status.SourceVerificationFingerprint = ""
+		obj.Status.SourceVerificationRevision = ""
 		conditions.Delete(obj, sourcev1.SourceVerifiedCondition)
 		return sreconcile.ResultSuccess, nil
 	}
@@ -1291,6 +1349,7 @@ func (r *GitRepositoryReconciler) reconcileDelete(ctx context.Context, obj *sour
 	// Cleanup caches.
 	r.TokenCache.DeleteEventsForObject(sourcev1.GitRepositoryKind,
 		obj.GetName(), obj.GetNamespace(), cache.OperationReconcile)
+	r.rejectedRevisions.Delete(client.ObjectKeyFromObject(obj))
 
 	// Stop reconciliation as the object is being deleted
 	return sreconcile.ResultEmpty, nil

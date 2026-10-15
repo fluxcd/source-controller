@@ -214,6 +214,14 @@ spec:
                   Verification specifies the configuration to verify the Git commit
                   signature(s).
                 properties:
+                  forwardOnly:
+                    description: |-
+                      ForwardOnly, when true, rejects a revision that is not a descendant of
+                      the last verified revision recorded in
+                      .status.sourceVerificationRevision, such as a branch force-pushed to an
+                      older commit or a tag moved backwards. Not supported with
+                      .spec.ref.semver.
+                    type: boolean
                   mode:
                     default: HEAD
                     description: |-
@@ -414,6 +422,12 @@ spec:
                   - url
                   type: object
                 type: array
+              lastHandledForceAt:
+                description: |-
+                  LastHandledForceAt holds the value of the most recent
+                  force request value, so a change of the annotation value
+                  can be detected.
+                type: string
               lastHandledReconcileAt:
                 description: |-
                   LastHandledReconcileAt holds the value of the most recent
@@ -488,6 +502,13 @@ spec:
                 description: |-
                   SourceVerificationMode is the last used verification mode indicating
                   which Git object(s) have been verified.
+                type: string
+              sourceVerificationRevision:
+                description: |-
+                  SourceVerificationRevision is the last revision whose Git object(s)
+                  were successfully verified. It is the baseline for forward-only
+                  verification: when .spec.verify.forwardOnly is set, a new revision
+                  must be a descendant of this revision.
                 type: string
             type: object
         type: object

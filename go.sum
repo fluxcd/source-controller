@@ -360,8 +360,6 @@ github.com/fluxcd/pkg/auth v0.62.0 h1:ZhrkfoLTaH5Q095sNGLZ47zLYw/AHw4nVnPAspGwT/
 github.com/fluxcd/pkg/auth v0.62.0/go.mod h1:46lKYjDvx5Q7fsq09ZC1BxXJcstTOfm2X/NFLLFn7wA=
 github.com/fluxcd/pkg/cache v0.17.0 h1:197ST7bSJD2Nw4G01y5cMjtWQpwQsyjpl2ox4MaGeU8=
 github.com/fluxcd/pkg/cache v0.17.0/go.mod h1:OW3fncHhPnPZFZav5FdEa//cyMHSndI0JS+IM69LXOU=
-github.com/fluxcd/pkg/git v0.55.0 h1:jMdW0uAYuzcwIL5rJq5pmDd+jSrgOe6eIOZfdrcAvO8=
-github.com/fluxcd/pkg/git v0.55.0/go.mod h1:s9AK9ZEG9CtAgkcX4QhQphLsaDBTje32tT5V3knpj1I=
 github.com/fluxcd/pkg/gittestserver v0.32.0 h1:y1wbnEaOXpEYqAxGMxcsXZTH6W4QjFyTj6m1d1ytjY0=
 github.com/fluxcd/pkg/gittestserver v0.32.0/go.mod h1:Cp4hpAePUXnSaeESHKitnvORCn+xT4fOKuZljkRBqVo=
 github.com/fluxcd/pkg/helmtestserver v0.44.0 h1:VaJegpUI6KXxGQkiVoMAwzVkvWHNmqdEk77Y74S2vRE=
@@ -838,6 +836,8 @@ github.com/rs/xid v1.6.0 h1:fV591PaemRlL6JfRxGDEPl69wICngIQ3shQtzfy2gxU=
 github.com/rs/xid v1.6.0/go.mod h1:7XoLgs4eV+QndskICGsho+ADou8ySMSjJKDIan90Nz0=
 github.com/rubenv/sql-migrate v1.8.1 h1:EPNwCvjAowHI3TnZ+4fQu3a915OpnQoPAjTXCGOy2U0=
 github.com/rubenv/sql-migrate v1.8.1/go.mod h1:BTIKBORjzyxZDS6dzoiw6eAFYJ1iNlGAtjn4LGeVjS8=
+github.com/ruslan-shaydullin/pkg/git v0.55.1-0.20261015144952-74aba21a4653 h1:k7kScfYftV0S46GpcjXU7kduFYXV2HCgMcVYUsDX5W8=
+github.com/ruslan-shaydullin/pkg/git v0.55.1-0.20261015144952-74aba21a4653/go.mod h1:s9AK9ZEG9CtAgkcX4QhQphLsaDBTje32tT5V3knpj1I=
 github.com/russross/blackfriday/v2 v2.1.0 h1:JIOH55/0cWyOuilr9/qlrm0BSXldqnqwMsf35Ld67mk=
 github.com/russross/blackfriday/v2 v2.1.0/go.mod h1:+Rmxgy9KzJVeS9/2gXHxylqXiyQDYRxCVz55jmeOWTM=
 github.com/ryanuber/go-glob v1.0.0 h1:iQh3xXAumdQ+4Ufa5b25cRpC5TYKlno6hsv6Cb3pkBk=

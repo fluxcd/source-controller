@@ -18,7 +18,10 @@ package controller
 
 import (
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"net/http"
@@ -26,6 +29,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -36,9 +40,11 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/go-git/go-git/v5/storage/memory"
 	. "github.com/onsi/gomega"
+	gossh "golang.org/x/crypto/ssh"
 	sshtestdata "golang.org/x/crypto/ssh/testdata"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -51,6 +57,7 @@ import (
 	"github.com/fluxcd/pkg/auth"
 	"github.com/fluxcd/pkg/auth/githubapp"
 	"github.com/fluxcd/pkg/git"
+	"github.com/fluxcd/pkg/git/signature"
 	"github.com/fluxcd/pkg/gittestserver"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	conditionscheck "github.com/fluxcd/pkg/runtime/conditions/check"
@@ -2169,6 +2176,7 @@ func TestGitRepositoryReconciler_verifySignature(t *testing.T) {
 			beforeFunc: func(obj *sourcev1.GitRepository) {
 				obj.Status.SourceVerificationMode = ptrToVerificationMode(sourcev1.ModeGitHEAD)
 				obj.Status.SourceVerificationFingerprint = "stale-fingerprint"
+				obj.Status.SourceVerificationRevision = "main@sha1:shasum"
 				obj.Spec.Verification = nil
 			},
 			want: sreconcile.ResultSuccess,
@@ -2815,6 +2823,7 @@ func TestGitRepositoryReconciler_verifySignature(t *testing.T) {
 			} else {
 				g.Expect(obj.Status.SourceVerificationMode).To(BeNil())
 				g.Expect(obj.Status.SourceVerificationFingerprint).To(BeEmpty())
+				g.Expect(obj.Status.SourceVerificationRevision).To(BeEmpty())
 			}
 		})
 	}
@@ -4228,6 +4237,27 @@ func TestGitRepositoryReconciler_verificationPolicyChanged(t *testing.T) {
 			secret: secret,
 			want:   true,
 		},
+		{
+			name: "forward-only without a baseline requires verification",
+			obj: func() *sourcev1.GitRepository {
+				obj := newObj(sourcev1.ModeGitHEAD, verificationFingerprint(secret))
+				obj.Spec.Verification.ForwardOnly = true
+				return obj
+			}(),
+			secret: secret,
+			want:   true,
+		},
+		{
+			name: "forward-only with a baseline and unchanged keys does not require verification",
+			obj: func() *sourcev1.GitRepository {
+				obj := newObj(sourcev1.ModeGitHEAD, verificationFingerprint(secret))
+				obj.Spec.Verification.ForwardOnly = true
+				obj.Status.SourceVerificationRevision = "main@sha1:shasum"
+				return obj
+			}(),
+			secret: secret,
+			want:   false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -4340,6 +4370,523 @@ func TestGitRepositoryReconciler_reconcileSource_verificationPolicyChange(t *tes
 			} else {
 				g.Expect(err.Error()).To(ContainSubstring("no changes since last reconciliation"))
 			}
+		})
+	}
+}
+
+// forwardOnlyTest hosts a Git server and a repository of signed commits for
+// forward-only verification tests. The scenarios share one upstream
+// repository and run in order; each pushes the references it needs.
+type forwardOnlyTest struct {
+	server   *gittestserver.GitServer
+	repoPath string
+	repo     *gogit.Repository
+	signer   signature.Signer
+	secret   *corev1.Secret
+	clones   atomic.Int32
+}
+
+func newForwardOnlyTest(t *testing.T) *forwardOnlyTest {
+	t.Helper()
+	g := NewWithT(t)
+
+	f := &forwardOnlyTest{repoPath: "/forward-only.git"}
+
+	server, err := gittestserver.NewTempGitServer()
+	g.Expect(err).NotTo(HaveOccurred())
+	t.Cleanup(func() { os.RemoveAll(server.Root()) })
+	server.AutoCreate()
+	// Count the clones: a clone fetches a pack with a POST, while the
+	// LastObservedCommit fast path only lists the references with a GET.
+	server.AddHTTPMiddlewares(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+			if req.Method == http.MethodPost && strings.HasSuffix(req.URL.Path, "/git-upload-pack") {
+				f.clones.Add(1)
+			}
+			next.ServeHTTP(w, req)
+		})
+	})
+	g.Expect(server.StartHTTP()).To(Succeed())
+	t.Cleanup(server.StopHTTP)
+	f.server = server
+
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	g.Expect(err).NotTo(HaveOccurred())
+	block, err := gossh.MarshalPrivateKey(priv, "")
+	g.Expect(err).NotTo(HaveOccurred())
+	f.signer, err = signature.NewSSHSigner(pem.EncodeToMemory(block), nil)
+	g.Expect(err).NotTo(HaveOccurred())
+	sshPub, err := gossh.NewPublicKey(pub)
+	g.Expect(err).NotTo(HaveOccurred())
+	f.secret = &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "trusted-keys", Namespace: "default"},
+		Data:       map[string][]byte{"signer.sshpub": gossh.MarshalAuthorizedKey(sshPub)},
+	}
+
+	f.repo, err = gogit.Init(memory.NewStorage(), memfs.New())
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(f.repo.Storer.SetReference(plumbing.NewSymbolicReference(plumbing.HEAD, plumbing.NewBranchReferenceName("main")))).To(Succeed())
+	_, err = f.repo.CreateRemote(&config.RemoteConfig{
+		Name: gogit.DefaultRemoteName,
+		URLs: []string{server.HTTPAddressWithCredentials() + f.repoPath},
+	})
+	g.Expect(err).NotTo(HaveOccurred())
+	return f
+}
+
+// commit adds a file and commits it on the checked out branch, signed with
+// the trusted key unless signed is false. Parents override HEAD.
+func (f *forwardOnlyTest) commit(t *testing.T, name string, signed bool, parents ...plumbing.Hash) plumbing.Hash {
+	t.Helper()
+	g := NewWithT(t)
+	wt, err := f.repo.Worktree()
+	g.Expect(err).NotTo(HaveOccurred())
+	file, err := wt.Filesystem.Create(name)
+	g.Expect(err).NotTo(HaveOccurred())
+	_, err = file.Write([]byte(name + "\n"))
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(file.Close()).To(Succeed())
+	_, err = wt.Add(name)
+	g.Expect(err).NotTo(HaveOccurred())
+	opts := &gogit.CommitOptions{
+		Author:  &object.Signature{Name: "Trusted Signer", Email: "signer@example.com", When: time.Now()},
+		Parents: parents,
+	}
+	if signed {
+		opts.Signer = f.signer
+	}
+	h, err := wt.Commit("add "+name, opts)
+	g.Expect(err).NotTo(HaveOccurred())
+	return h
+}
+
+// checkout points the given branch at the given commit and checks it out.
+func (f *forwardOnlyTest) checkout(t *testing.T, branch string, hash plumbing.Hash) {
+	t.Helper()
+	g := NewWithT(t)
+	wt, err := f.repo.Worktree()
+	g.Expect(err).NotTo(HaveOccurred())
+	ref := plumbing.NewBranchReferenceName(branch)
+	g.Expect(f.repo.Storer.SetReference(plumbing.NewHashReference(ref, hash))).To(Succeed())
+	g.Expect(wt.Checkout(&gogit.CheckoutOptions{Branch: ref, Force: true})).To(Succeed())
+}
+
+// push points the local reference at the given hash and force-pushes it.
+func (f *forwardOnlyTest) push(t *testing.T, ref string, hash plumbing.Hash) {
+	t.Helper()
+	g := NewWithT(t)
+	g.Expect(f.repo.Storer.SetReference(plumbing.NewHashReference(plumbing.ReferenceName(ref), hash))).To(Succeed())
+	err := f.repo.Push(&gogit.PushOptions{
+		RefSpecs: []config.RefSpec{config.RefSpec("+" + ref + ":" + ref)},
+		Force:    true,
+	})
+	if !errors.Is(err, gogit.NoErrAlreadyUpToDate) {
+		g.Expect(err).NotTo(HaveOccurred())
+	}
+}
+
+// signedTag creates a tag object signed with the trusted key that points to
+// the given commit, and force-pushes it. go-git can only sign tags with a PGP
+// key, so the object is assembled by hand.
+func (f *forwardOnlyTest) signedTag(t *testing.T, name string, target plumbing.Hash) {
+	t.Helper()
+	g := NewWithT(t)
+	tag := &object.Tag{
+		Name:       name,
+		Tagger:     object.Signature{Name: "Trusted Signer", Email: "signer@example.com", When: time.Now()},
+		Message:    name + "\n",
+		TargetType: plumbing.CommitObject,
+		Target:     target,
+	}
+	unsigned := &plumbing.MemoryObject{}
+	g.Expect(tag.EncodeWithoutSignature(unsigned)).To(Succeed())
+	payload, err := unsigned.Reader()
+	g.Expect(err).NotTo(HaveOccurred())
+	sig, err := f.signer.Sign(payload)
+	g.Expect(err).NotTo(HaveOccurred())
+	tag.PGPSignature = string(sig)
+	encoded := f.repo.Storer.NewEncodedObject()
+	g.Expect(tag.Encode(encoded)).To(Succeed())
+	h, err := f.repo.Storer.SetEncodedObject(encoded)
+	g.Expect(err).NotTo(HaveOccurred())
+	f.push(t, plumbing.NewTagReferenceName(name).String(), h)
+}
+
+// object returns a GitRepository with HEAD verification enabled. With an
+// artifact revision, the object looks like one that has produced an Artifact
+// for that revision; the baseline is the last verified revision.
+func (f *forwardOnlyTest) object(forwardOnly bool, ref *sourcev1.GitRepositoryRef, artifact, baseline string) *sourcev1.GitRepository {
+	obj := &sourcev1.GitRepository{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "forward-only-" + randStringRunes(5),
+			Namespace:  "default",
+			UID:        types.UID(randStringRunes(10)),
+			Generation: 1,
+		},
+		Spec: sourcev1.GitRepositorySpec{
+			Interval:  metav1.Duration{Duration: interval},
+			Timeout:   &metav1.Duration{Duration: timeout},
+			URL:       f.server.HTTPAddress() + f.repoPath,
+			Reference: ref,
+			Verification: &sourcev1.GitRepositoryVerification{
+				Mode:        sourcev1.ModeGitHEAD,
+				SecretRef:   meta.LocalObjectReference{Name: f.secret.Name},
+				ForwardOnly: forwardOnly,
+			},
+		},
+		Status: sourcev1.GitRepositoryStatus{
+			SourceVerificationRevision: baseline,
+		},
+	}
+	if artifact != "" {
+		obj.Status.Artifact = &meta.Artifact{Revision: artifact, Path: randStringRunes(10)}
+		obj.Status.SourceVerificationMode = ptrToVerificationMode(sourcev1.ModeGitHEAD)
+		obj.Status.SourceVerificationFingerprint = verificationFingerprint(f.secret)
+		conditions.MarkTrue(obj, sourcev1.ArtifactInStorageCondition, meta.SucceededReason, "stored artifact for revision '%s'", artifact)
+	}
+	return obj
+}
+
+// reconciler returns a reconciler whose client holds the trusted keys and the
+// object, and its event recorder.
+func (f *forwardOnlyTest) reconciler(obj *sourcev1.GitRepository) (*GitRepositoryReconciler, *events.FakeRecorder) {
+	recorder := events.NewFakeRecorder(64, false)
+	c := fakeclient.NewClientBuilder().
+		WithScheme(testEnv.GetScheme()).
+		WithObjects(obj, f.secret).
+		WithStatusSubresource(&sourcev1.GitRepository{}).
+		Build()
+	return &GitRepositoryReconciler{
+		Client:       c,
+		Recorder:     recorder,
+		Storage:      testStorage,
+		patchOptions: getPatchOptions(gitRepositoryReadyCondition.Owned, "sc"),
+	}, recorder
+}
+
+// reconcile runs the source reconciliation for the object and returns the
+// observed commit, the result, the error and the number of clones performed.
+func (f *forwardOnlyTest) reconcile(t *testing.T, r *GitRepositoryReconciler, obj *sourcev1.GitRepository) (git.Commit, sreconcile.Result, error, int32) {
+	t.Helper()
+	var commit git.Commit
+	var includes artifactSet
+	before := f.clones.Load()
+	sp := patch.NewSerialPatcher(obj, r.Client)
+	res, err := r.reconcileSource(ctx, sp, obj, &commit, &includes, t.TempDir())
+	return commit, res, err, f.clones.Load() - before
+}
+
+// errorReason returns the reason of a reconciler error.
+func errorReason(err error) string {
+	var ge *serror.Generic
+	var se *serror.Stalling
+	switch {
+	case errors.As(err, &ge):
+		return ge.Reason
+	case errors.As(err, &se):
+		return se.Reason
+	}
+	return ""
+}
+
+// eventMessages returns the messages of the events recorded so far.
+func eventMessages(recorder *events.FakeRecorder) []string {
+	var messages []string
+	for {
+		select {
+		case e := <-recorder.Events:
+			messages = append(messages, e.Message)
+		default:
+			return messages
+		}
+	}
+}
+
+func TestGitRepositoryReconciler_reconcileSource_forwardOnly(t *testing.T) {
+	f := newForwardOnlyTest(t)
+
+	const main, other, pull, token = "refs/heads/main", "refs/heads/other", "refs/pull/1/head", "token"
+	mainRef := &sourcev1.GitRepositoryRef{Branch: "main"}
+	rev := func(name string, h plumbing.Hash) string { return name + "@sha1:" + h.String() }
+
+	// History: c1 <- c2 <- c3 <- c4 (unsigned); c2 <- s1 merged into m(c3, s1);
+	// 150 signed commits on m up to tip150, an unsigned u on tip150, and
+	// forwardOnlyDeepCloneDepth+1 signed commits on m up to tipDeep; d1 on
+	// branch other from c1.
+	c1 := f.commit(t, "c1", true)
+	c2 := f.commit(t, "c2", true)
+	c3 := f.commit(t, "c3", true)
+	c4 := f.commit(t, "c4", false)
+	f.checkout(t, "side", c2)
+	s1 := f.commit(t, "s1", true)
+	f.checkout(t, "main", c3)
+	m := f.commit(t, "m", true, c3, s1)
+	tip := m
+	for i := 1; i <= 150; i++ {
+		tip = f.commit(t, fmt.Sprintf("deep-%d", i), true)
+	}
+	tip150 := tip
+	u := f.commit(t, "unsigned-deep", false)
+	f.checkout(t, "main", tip150)
+	for i := 151; i <= forwardOnlyDeepCloneDepth+1; i++ {
+		tip = f.commit(t, fmt.Sprintf("deep-%d", i), true)
+	}
+	tipDeep := tip
+	f.checkout(t, "other", c1)
+	d1 := f.commit(t, "d1", true)
+	f.push(t, main, c2)
+	// The remote HEAD of the test server points to master; a clone by commit
+	// needs it to exist.
+	f.push(t, "refs/heads/master", c2)
+
+	tagRef := &sourcev1.GitRepositoryRef{Tag: "v1.0.0"}
+	tagObject := func() *sourcev1.GitRepository {
+		obj := f.object(true, tagRef, rev("v1.0.0", c2), rev("v1.0.0", c2))
+		obj.Spec.Verification.Mode = sourcev1.ModeGitTagAndHEAD
+		obj.Status.SourceVerificationMode = ptrToVerificationMode(sourcev1.ModeGitTagAndHEAD)
+		return obj
+	}
+	forceRequest := func(obj *sourcev1.GitRepository) {
+		obj.SetAnnotations(map[string]string{meta.ReconcileRequestAnnotation: token, meta.ForceRequestAnnotation: token})
+	}
+	const nonFastForward = "NonFastForwardRevision"
+	notDescendant := "is not a descendant of the last verified revision"
+
+	steps := []struct {
+		name     string
+		push     map[string]plumbing.Hash // references to force-push first
+		setup    func(t *testing.T)       // other changes to the remote
+		object   *sourcev1.GitRepository  // nil reuses the previous object and reconciler
+		mutate   func(obj *sourcev1.GitRepository)
+		reason   string        // expected error reason; empty for success
+		message  string        // substring expected in the error
+		revision plumbing.Hash // expected observed commit
+		baseline string        // expected status.sourceVerificationRevision
+		clones   int32         // expected number of clones
+		event    string        // substring expected in a recorded event
+		check    func(g Gomega, obj *sourcev1.GitRepository)
+	}{
+		{
+			name: "rollback is accepted when forwardOnly is disabled", push: map[string]plumbing.Hash{main: c1},
+			object:   f.object(false, mainRef, rev("main", c2), rev("main", c2)),
+			revision: c1, baseline: rev("main", c1), clones: 1,
+		},
+		{
+			name: "rollback is rejected", object: f.object(true, mainRef, rev("main", c2), rev("main", c2)),
+			reason: nonFastForward, message: "revision '" + rev("main", c1) + "' " + notDescendant + " '" + rev("main", c2) + "'; request a forced reconciliation with the reconcile.fluxcd.io/forceAt annotation",
+			baseline: rev("main", c2), clones: 1,
+			check: func(g Gomega, obj *sourcev1.GitRepository) {
+				g.Expect(obj.Status.Artifact.Revision).To(Equal(rev("main", c2)))
+				g.Expect(obj.Status.SourceVerificationFingerprint).To(Equal(verificationFingerprint(f.secret)))
+				g.Expect(conditions.GetReason(obj, sourcev1.SourceVerifiedCondition)).To(Equal(nonFastForward))
+			},
+		},
+		{
+			name:   "rejection is repeated without a clone while the remote is unchanged",
+			reason: nonFastForward, message: notDescendant, baseline: rev("main", c2), clones: 0,
+			check: func(g Gomega, obj *sourcev1.GitRepository) {
+				g.Expect(conditions.GetMessage(obj, sourcev1.SourceVerifiedCondition)).To(ContainSubstring(notDescendant))
+			},
+		},
+		{
+			name: "return to the verified revision clears the rejection", push: map[string]plumbing.Hash{main: c2},
+			revision: c2, baseline: rev("main", c2), clones: 1,
+			check: func(g Gomega, obj *sourcev1.GitRepository) {
+				g.Expect(conditions.IsTrue(obj, sourcev1.SourceVerifiedCondition)).To(BeTrue())
+				g.Expect(conditions.Has(obj, sourcev1.ArtifactOutdatedCondition)).To(BeFalse())
+			},
+		},
+		{
+			name:   "unchanged revision takes the fast path again",
+			reason: sourcev1.GitOperationSucceedReason, message: "no changes since last reconciliation", clones: 0,
+		},
+		{
+			name: "cached rejection does not outlive the baseline", push: map[string]plumbing.Hash{main: c1},
+			object: f.object(true, mainRef, rev("main", c2), rev("main", c2)),
+			reason: nonFastForward, message: notDescendant, clones: 1,
+		},
+		{
+			name:     "a cleared baseline is established at the rejected revision",
+			mutate:   func(obj *sourcev1.GitRepository) { obj.Status.SourceVerificationRevision = "" },
+			revision: c1, baseline: rev("main", c1), clones: 1, event: "forward-only baseline established at '" + rev("main", c1) + "'",
+		},
+		{
+			name:   "cached rejection does not outlive the object generation",
+			object: f.object(true, mainRef, rev("main", c2), rev("main", c2)),
+			reason: nonFastForward, message: notDescendant, clones: 1,
+		},
+		{
+			name: "a new generation without forwardOnly accepts the revision",
+			mutate: func(obj *sourcev1.GitRepository) {
+				obj.Generation = 2
+				obj.Spec.Verification.ForwardOnly = false
+			},
+			revision: c1, baseline: rev("main", c1), clones: 1,
+		},
+		{
+			name: "signed descendant is accepted", push: map[string]plumbing.Hash{main: c3},
+			object:   f.object(true, mainRef, rev("main", c2), rev("main", c2)),
+			revision: c3, baseline: rev("main", c3), clones: 1,
+		},
+		{
+			name: "unsigned descendant is rejected by signature verification", push: map[string]plumbing.Hash{main: c4},
+			object: f.object(true, mainRef, rev("main", c3), rev("main", c3)),
+			reason: "InvalidCommitSignature", baseline: rev("main", c3), clones: 1,
+		},
+		{
+			name: "merge commit is accepted with the baseline on the first parent", push: map[string]plumbing.Hash{main: m},
+			object:   f.object(true, mainRef, rev("main", c3), rev("main", c3)),
+			revision: m, baseline: rev("main", m), clones: 1,
+		},
+		{
+			name:     "merge commit is accepted with the baseline on the second parent",
+			object:   f.object(true, mainRef, rev("main", s1), rev("main", s1)),
+			revision: m, baseline: rev("main", m), clones: 1,
+		},
+		{
+			name: "baseline beyond the first clone depth is found by a second clone", push: map[string]plumbing.Hash{main: tip150},
+			object:   f.object(true, mainRef, rev("main", m), rev("main", m)),
+			revision: tip150, baseline: rev("main", tip150), clones: 2,
+		},
+		{
+			name: "unsigned HEAD beyond the first clone depth does not clone again", push: map[string]plumbing.Hash{main: u},
+			object: f.object(true, mainRef, rev("main", m), rev("main", m)),
+			reason: "InvalidCommitSignature", baseline: rev("main", m), clones: 1,
+		},
+		{
+			name: "baseline beyond the second clone depth is rejected", push: map[string]plumbing.Hash{main: tipDeep},
+			object: f.object(true, mainRef, rev("main", m), rev("main", m)),
+			reason: nonFastForward, message: fmt.Sprintf("the latter was not found within the last %d commits", forwardOnlyDeepCloneDepth),
+			baseline: rev("main", m), clones: 2,
+		},
+		{
+			name: "rollback is rejected without an artifact in storage", push: map[string]plumbing.Hash{main: m},
+			object: f.object(true, mainRef, "", rev("main", tipDeep)),
+			reason: nonFastForward, message: notDescendant, baseline: rev("main", tipDeep), clones: 1,
+		},
+		{
+			name: "first verification establishes the baseline", push: map[string]plumbing.Hash{main: tipDeep},
+			object:   f.object(true, mainRef, "", ""),
+			revision: tipDeep, baseline: rev("main", tipDeep), clones: 1, event: "forward-only baseline established at '" + rev("main", tipDeep) + "'",
+			check: func(g Gomega, obj *sourcev1.GitRepository) {
+				g.Expect(conditions.GetMessage(obj, sourcev1.SourceVerifiedCondition)).To(ContainSubstring("forward-only baseline established at"))
+			},
+		},
+		{
+			name:     "missing baseline is established on an unchanged revision",
+			object:   f.object(true, mainRef, rev("main", tipDeep), ""),
+			revision: tipDeep, baseline: rev("main", tipDeep), clones: 1, event: "forward-only baseline established at",
+		},
+		{
+			name: "switching to a branch that does not descend from the baseline is rejected", push: map[string]plumbing.Hash{other: d1},
+			object: f.object(true, &sourcev1.GitRepositoryRef{Branch: "other"}, rev("main", tipDeep), rev("main", tipDeep)),
+			reason: nonFastForward, message: notDescendant, baseline: rev("main", tipDeep), clones: 1,
+		},
+		{
+			name: "a force request makes the revision the new baseline", mutate: forceRequest,
+			revision: d1, baseline: rev("other", d1), clones: 1, event: "forward-only baseline reset to '" + rev("other", d1) + "' by force request",
+			check: func(g Gomega, obj *sourcev1.GitRepository) {
+				g.Expect(obj.Status.LastHandledForceAt).To(Equal(token))
+			},
+		},
+		{
+			name: "the same force request does not apply again", push: map[string]plumbing.Hash{other: c1},
+			mutate: func(obj *sourcev1.GitRepository) { obj.Status.Artifact.Revision = rev("other", d1) },
+			reason: nonFastForward, message: notDescendant, baseline: rev("other", d1), clones: 1,
+		},
+		{
+			name: "tag moved to an older commit is rejected", setup: func(t *testing.T) { f.signedTag(t, "v1.0.0", c1) },
+			object: tagObject(), reason: nonFastForward, message: notDescendant, baseline: rev("v1.0.0", c2), clones: 1,
+		},
+		{
+			name: "tag moved to a descendant is accepted", setup: func(t *testing.T) { f.signedTag(t, "v1.0.0", c3) },
+			object: tagObject(), revision: c3, baseline: rev("v1.0.0", c3), clones: 1,
+		},
+		{
+			name:   "commit pinned to an older commit is rejected",
+			object: f.object(true, &sourcev1.GitRepositoryRef{Commit: c1.String()}, rev("main", c2), rev("main", c2)),
+			reason: nonFastForward, message: notDescendant, baseline: rev("main", c2), clones: 1,
+		},
+		{
+			name:   "cached rejection is repeated for a pinned commit after its clone",
+			reason: nonFastForward, message: notDescendant, baseline: rev("main", c2), clones: 1,
+		},
+		{
+			name:     "commit pinned to a descendant is accepted",
+			object:   f.object(true, &sourcev1.GitRepositoryRef{Commit: c3.String()}, rev("main", c2), rev("main", c2)),
+			revision: c3, baseline: "sha1:" + c3.String(), clones: 1,
+		},
+		{
+			// d1 must stay reachable from a branch for the full clone.
+			name: "pull request reference pointed at a non-descendant is rejected", push: map[string]plumbing.Hash{pull: d1, other: d1},
+			object: f.object(true, &sourcev1.GitRepositoryRef{Name: pull}, rev(pull, c2), rev(pull, c2)),
+			reason: nonFastForward, message: notDescendant, baseline: rev(pull, c2), clones: 1,
+		},
+		{
+			name: "pull request reference moved to a descendant is accepted", push: map[string]plumbing.Hash{pull: c3},
+			object:   f.object(true, &sourcev1.GitRepositoryRef{Name: pull}, rev(pull, c2), rev(pull, c2)),
+			revision: c3, baseline: rev(pull, c3), clones: 1,
+		},
+		{
+			name:   "baseline without a valid commit hash is rejected",
+			object: f.object(true, mainRef, rev("main", c2), "main@sha1:not-a-hash"),
+			reason: nonFastForward, message: "has no valid commit hash", baseline: "main@sha1:not-a-hash", clones: 1,
+		},
+		{
+			name:   "semver reference is not supported",
+			object: f.object(true, &sourcev1.GitRepositoryRef{SemVer: ">=1.0.0"}, rev("v1.0.0", c3), rev("v1.0.0", c3)),
+			reason: "InvalidVerificationMode", message: "forward-only verification is not supported with .spec.ref.semver", clones: 0,
+			check: func(g Gomega, obj *sourcev1.GitRepository) {
+				g.Expect(conditions.IsFalse(obj, sourcev1.SourceVerifiedCondition)).To(BeTrue())
+			},
+		},
+	}
+
+	var (
+		obj      *sourcev1.GitRepository
+		r        *GitRepositoryReconciler
+		recorder *events.FakeRecorder
+	)
+	for _, s := range steps {
+		t.Run(s.name, func(t *testing.T) {
+			g := NewWithT(t)
+			for ref, h := range s.push {
+				f.push(t, ref, h)
+			}
+			if s.setup != nil {
+				s.setup(t)
+			}
+			if s.object != nil {
+				obj = s.object
+				r, recorder = f.reconciler(obj)
+			}
+			if s.mutate != nil {
+				s.mutate(obj)
+			}
+
+			commit, res, err, clones := f.reconcile(t, r, obj)
+			if s.reason == "" {
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(res).To(Equal(sreconcile.ResultSuccess))
+			} else {
+				g.Expect(err).To(HaveOccurred())
+				g.Expect(errorReason(err)).To(Equal(s.reason), err.Error())
+				g.Expect(err.Error()).To(ContainSubstring(s.message))
+			}
+			if !s.revision.IsZero() {
+				g.Expect(commit.Hash.String()).To(Equal(s.revision.String()))
+			}
+			if s.baseline != "" {
+				g.Expect(obj.Status.SourceVerificationRevision).To(Equal(s.baseline))
+			}
+			g.Expect(clones).To(Equal(s.clones))
+			if s.event != "" {
+				g.Expect(eventMessages(recorder)).To(ContainElement(ContainSubstring(s.event)))
+			}
+			if s.check != nil {
+				s.check(g, obj)
+			}
+			t.Logf("%s: err=%v", s.name, err)
 		})
 	}
 }
