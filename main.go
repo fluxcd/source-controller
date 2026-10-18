@@ -17,6 +17,7 @@ limitations under the License.
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"time"
@@ -159,25 +160,19 @@ func main() {
 
 	logger.SetLogger(logger.NewLogger(logOptions))
 
-	if defaultServiceAccount != "" {
-		auth.SetDefaultServiceAccount(defaultServiceAccount)
-	}
-
 	if err := featureGates.WithLogger(setupLog).SupportedFeatures(features.FeatureGates()); err != nil {
 		setupLog.Error(err, "unable to load feature gates")
 		os.Exit(1)
 	}
 
-	switch enabled, err := features.Enabled(auth.FeatureGateObjectLevelWorkloadIdentity); {
-	case err != nil:
+	objectLevelWorkloadIdentity, err := features.Enabled(auth.FeatureGateObjectLevelWorkloadIdentity)
+	if err != nil {
 		setupLog.Error(err, "unable to check feature gate "+auth.FeatureGateObjectLevelWorkloadIdentity)
 		os.Exit(1)
-	case enabled:
-		auth.EnableObjectLevelWorkloadIdentity()
 	}
-
-	if auth.InconsistentObjectLevelConfiguration() {
-		setupLog.Error(auth.ErrInconsistentObjectLevelConfiguration, "invalid configuration")
+	if defaultServiceAccount != "" && !objectLevelWorkloadIdentity {
+		setupLog.Error(errors.New("cannot set default service accounts when the "+
+			auth.FeatureGateObjectLevelWorkloadIdentity+" feature gate is not enabled"), "invalid configuration")
 		os.Exit(1)
 	}
 
@@ -233,12 +228,14 @@ func main() {
 	ctx := ctrl.SetupSignalHandler()
 
 	if err := (&controller.GitRepositoryReconciler{
-		Client:         mgr.GetClient(),
-		Recorder:       eventRecorder,
-		Metrics:        metrics,
-		Storage:        storage,
-		ControllerName: controllerName,
-		TokenCache:     tokenCache,
+		Client:                      mgr.GetClient(),
+		Recorder:                    eventRecorder,
+		Metrics:                     metrics,
+		Storage:                     storage,
+		ControllerName:              controllerName,
+		TokenCache:                  tokenCache,
+		DefaultServiceAccount:       defaultServiceAccount,
+		ObjectLevelWorkloadIdentity: objectLevelWorkloadIdentity,
 	}).SetupWithManager(mgr, controller.GitRepositoryReconcilerOptions{
 		DependencyRequeueInterval: requeueDependency,
 		RateLimiter:               helper.GetRateLimiter(rateLimiterOptions),
@@ -283,12 +280,14 @@ func main() {
 	}
 
 	if err := (&controller.BucketReconciler{
-		Client:         mgr.GetClient(),
-		Recorder:       eventRecorder,
-		Metrics:        metrics,
-		Storage:        storage,
-		ControllerName: controllerName,
-		TokenCache:     tokenCache,
+		Client:                      mgr.GetClient(),
+		Recorder:                    eventRecorder,
+		Metrics:                     metrics,
+		Storage:                     storage,
+		ControllerName:              controllerName,
+		TokenCache:                  tokenCache,
+		DefaultServiceAccount:       defaultServiceAccount,
+		ObjectLevelWorkloadIdentity: objectLevelWorkloadIdentity,
 	}).SetupWithManager(mgr, controller.BucketReconcilerOptions{
 		RateLimiter: helper.GetRateLimiter(rateLimiterOptions),
 	}); err != nil {
@@ -297,13 +296,15 @@ func main() {
 	}
 
 	if err := (&controller.OCIRepositoryReconciler{
-		Client:                mgr.GetClient(),
-		Storage:               storage,
-		Recorder:              eventRecorder,
-		ControllerName:        controllerName,
-		TokenCache:            tokenCache,
-		CosignVerifierFactory: CosignVerifierFactory,
-		Metrics:               metrics,
+		Client:                      mgr.GetClient(),
+		Storage:                     storage,
+		Recorder:                    eventRecorder,
+		ControllerName:              controllerName,
+		TokenCache:                  tokenCache,
+		CosignVerifierFactory:       CosignVerifierFactory,
+		Metrics:                     metrics,
+		DefaultServiceAccount:       defaultServiceAccount,
+		ObjectLevelWorkloadIdentity: objectLevelWorkloadIdentity,
 	}).SetupWithManager(mgr, controller.OCIRepositoryReconcilerOptions{
 		RateLimiter: helper.GetRateLimiter(rateLimiterOptions),
 	}); err != nil {

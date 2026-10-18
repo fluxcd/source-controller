@@ -40,7 +40,6 @@ import (
 	"github.com/fluxcd/pkg/apis/meta"
 	intdigest "github.com/fluxcd/pkg/artifact/digest"
 	"github.com/fluxcd/pkg/artifact/storage"
-	"github.com/fluxcd/pkg/auth"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	conditionscheck "github.com/fluxcd/pkg/runtime/conditions/check"
 	"github.com/fluxcd/pkg/runtime/events"
@@ -1438,16 +1437,11 @@ func TestBucketReconciler_reconcileSource_gcs(t *testing.T) {
 			}
 
 			r := &BucketReconciler{
-				Recorder:     events.NewFakeRecorder(32, false),
-				Client:       clientBuilder.Build(),
-				Storage:      testStorage,
-				patchOptions: getPatchOptions(bucketReadyCondition.Owned, "sc"),
-			}
-
-			// Handle ObjectLevelWorkloadIdentity feature gate
-			if !tt.disableObjectLevelWorkloadIdentity {
-				auth.EnableObjectLevelWorkloadIdentity()
-				t.Cleanup(auth.DisableObjectLevelWorkloadIdentity)
+				Recorder:                    events.NewFakeRecorder(32, false),
+				Client:                      clientBuilder.Build(),
+				Storage:                     testStorage,
+				patchOptions:                getPatchOptions(bucketReadyCondition.Owned, "sc"),
+				ObjectLevelWorkloadIdentity: !tt.disableObjectLevelWorkloadIdentity,
 			}
 
 			tmpDir := t.TempDir()
