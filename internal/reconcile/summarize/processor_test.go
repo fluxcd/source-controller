@@ -21,7 +21,6 @@ import (
 	"testing"
 
 	. "github.com/onsi/gomega"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/fluxcd/pkg/apis/meta"
@@ -109,9 +108,7 @@ func TestRecordReconcileReq(t *testing.T) {
 			g := NewWithT(t)
 
 			obj := &sourcev1.GitRepository{
-				ObjectMeta: metav1.ObjectMeta{
-					GenerateName: "test-obj",
-				},
+				GenerateName: "test-obj",
 			}
 
 			if tt.beforeFunc != nil {

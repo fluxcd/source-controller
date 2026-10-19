@@ -64,7 +64,7 @@ func TestHelmRepositoryReconciler_deleteBeforeFinalizer(t *testing.T) {
 
 	namespaceName := "helmrepo-" + randStringRunes(5)
 	namespace := &corev1.Namespace{
-		ObjectMeta: metav1.ObjectMeta{Name: namespaceName},
+		Name: namespaceName,
 	}
 	g.Expect(k8sClient.Create(ctx, namespace)).ToNot(HaveOccurred())
 	t.Cleanup(func() {
@@ -108,10 +108,8 @@ func TestHelmRepositoryReconciler_Reconcile(t *testing.T) {
 	defer testServer.Stop()
 
 	origObj := &sourcev1.HelmRepository{
-		ObjectMeta: metav1.ObjectMeta{
-			GenerateName: "helmrepository-reconcile-",
-			Namespace:    "default",
-		},
+		GenerateName: "helmrepository-reconcile-",
+		Namespace:    "default",
 		Spec: sourcev1.HelmRepositorySpec{
 			Interval: metav1.Duration{Duration: interval},
 			URL:      testServer.URL(),
@@ -210,7 +208,7 @@ func TestHelmRepositoryReconciler_reconcileStorage(t *testing.T) {
 				Revision: "d",
 				Digest:   "sha256:18ac3e7343f016890c510e93f935261169d9e3f565436429830faf0934f4f8e4",
 				URL:      testStorage.Hostname + "/reconcile-storage/d.txt",
-				Size:     int64p(int64(len("d"))),
+				Size:     new(int64(len("d"))),
 			},
 			assertPaths: []string{
 				"/reconcile-storage/d.txt",
@@ -342,7 +340,7 @@ func TestHelmRepositoryReconciler_reconcileStorage(t *testing.T) {
 				Revision: "f",
 				Digest:   "sha256:3b9c358f36f0a31b6ad3e14f309c7cf198ac9246e8316f9ce543d5b19ac02b80",
 				URL:      testStorage.Hostname + "/reconcile-storage/hostname.txt",
-				Size:     int64p(int64(len("file"))),
+				Size:     new(int64(len("file"))),
 			},
 			assertConditions: []metav1.Condition{
 				*conditions.TrueCondition(meta.ReadyCondition, "foo", "bar"),
@@ -366,10 +364,8 @@ func TestHelmRepositoryReconciler_reconcileStorage(t *testing.T) {
 			}
 
 			obj := &sourcev1.HelmRepository{
-				ObjectMeta: metav1.ObjectMeta{
-					GenerateName: "test-",
-					Generation:   1,
-				},
+				GenerateName: "test-",
+				Generation:   1,
 			}
 			if tt.beforeFunc != nil {
 				g.Expect(tt.beforeFunc(obj, testStorage)).To(Succeed())
@@ -450,10 +446,8 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 			want:     sreconcile.ResultSuccess,
 			wantErr:  false,
 			secret: &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "ca-file",
-					Namespace: "default",
-				},
+				Name:      "ca-file",
+				Namespace: "default",
 				Data: map[string][]byte{
 					"ca.crt": tlsCA,
 				},
@@ -475,10 +469,8 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 				ca:         tlsCA,
 			},
 			secret: &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "ca-file",
-					Namespace: "default",
-				},
+				Name:      "ca-file",
+				Namespace: "default",
 				Data: map[string][]byte{
 					"ca.crt": tlsCA,
 				},
@@ -527,10 +519,8 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 				ca:         tlsCA,
 			},
 			secret: &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "ca-file",
-					Namespace: "default",
-				},
+				Name:      "ca-file",
+				Namespace: "default",
 				Data: map[string][]byte{
 					"caFile": tlsCA,
 				},
@@ -580,10 +570,8 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 				ca:         tlsCA,
 			},
 			secret: &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "ca-file",
-					Namespace: "default",
-				},
+				Name:      "ca-file",
+				Namespace: "default",
 				Data: map[string][]byte{
 					"caFile": tlsCA,
 				},
@@ -664,10 +652,8 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 				password: "1234",
 			},
 			secret: &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "basic-auth",
-					Namespace: "default",
-				},
+				Name:      "basic-auth",
+				Namespace: "default",
 				Data: map[string][]byte{
 					"username": []byte("git"),
 					"password": []byte("1234"),
@@ -718,10 +704,8 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 				password: "1234",
 			},
 			secret: &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "basic-auth",
-					Namespace: "default",
-				},
+				Name:      "basic-auth",
+				Namespace: "default",
 				Data: map[string][]byte{
 					"username": []byte("git"),
 					"password": []byte("1234"),
@@ -773,10 +757,8 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 				ca:         tlsCA,
 			},
 			secret: &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "invalid-ca",
-					Namespace: "default",
-				},
+				Name:      "invalid-ca",
+				Namespace: "default",
 				Data: map[string][]byte{
 					"ca.crt": []byte("invalid"),
 				},
@@ -868,10 +850,8 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 			name:     "Malformed secret returns FetchFailed=True and returns error",
 			protocol: "http",
 			secret: &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "malformed-basic-auth",
-					Namespace: "default",
-				},
+				Name:      "malformed-basic-auth",
+				Namespace: "default",
 				Data: map[string][]byte{
 					"username": []byte("git"),
 				},
@@ -977,11 +957,9 @@ func TestHelmRepositoryReconciler_reconcileSource(t *testing.T) {
 
 	for _, tt := range tests {
 		obj := &sourcev1.HelmRepository{
-			ObjectMeta: metav1.ObjectMeta{
-				GenerateName: "auth-strategy-",
-				Generation:   1,
-				Namespace:    "default",
-			},
+			GenerateName: "auth-strategy-",
+			Generation:   1,
+			Namespace:    "default",
 			Spec: sourcev1.HelmRepositorySpec{
 				Interval: metav1.Duration{Duration: interval},
 				Timeout:  &metav1.Duration{Duration: timeout},
@@ -1226,14 +1204,10 @@ func TestHelmRepositoryReconciler_reconcileArtifact(t *testing.T) {
 			}
 
 			obj := &sourcev1.HelmRepository{
-				TypeMeta: metav1.TypeMeta{
-					Kind: sourcev1.HelmRepositoryKind,
-				},
-				ObjectMeta: metav1.ObjectMeta{
-					GenerateName: "test-bucket-",
-					Generation:   1,
-					Namespace:    "default",
-				},
+				Kind:         sourcev1.HelmRepositoryKind,
+				GenerateName: "test-bucket-",
+				Generation:   1,
+				Namespace:    "default",
 				Spec: sourcev1.HelmRepositorySpec{
 					Timeout: &metav1.Duration{Duration: timeout},
 					URL:     "https://example.com/index.yaml",
@@ -1303,13 +1277,9 @@ func TestHelmRepositoryReconciler_garbageCollectEvictsCache(t *testing.T) {
 			}
 
 			obj := &sourcev1.HelmRepository{
-				TypeMeta: metav1.TypeMeta{
-					Kind: sourcev1.HelmRepositoryKind,
-				},
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "cache-evict",
-					Namespace: "default",
-				},
+				Kind:      sourcev1.HelmRepositoryKind,
+				Name:      "cache-evict",
+				Namespace: "default",
 			}
 			artifact := testStorage.NewArtifactFor(obj.Kind, obj, "existing", "index-existing.yaml")
 			obj.Status.Artifact = &artifact
@@ -1441,10 +1411,8 @@ func TestHelmRepositoryReconciler_reconcileSubRecs(t *testing.T) {
 				patchOptions: getPatchOptions(helmRepositoryReadyCondition.Owned, "sc"),
 			}
 			obj := &sourcev1.HelmRepository{
-				ObjectMeta: metav1.ObjectMeta{
-					GenerateName: "test-",
-					Generation:   tt.generation,
-				},
+				GenerateName: "test-",
+				Generation:   tt.generation,
 				Status: sourcev1.HelmRepositoryStatus{
 					ObservedGeneration: tt.observedGeneration,
 				},
@@ -1520,14 +1488,10 @@ func TestHelmRepositoryReconciler_statusConditions(t *testing.T) {
 			g := NewWithT(t)
 
 			obj := &sourcev1.HelmRepository{
-				TypeMeta: metav1.TypeMeta{
-					Kind:       sourcev1.HelmRepositoryKind,
-					APIVersion: sourcev1.GroupVersion.String(),
-				},
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "helmrepo",
-					Namespace: "foo",
-				},
+				Kind:       sourcev1.HelmRepositoryKind,
+				APIVersion: sourcev1.GroupVersion.String(),
+				Name:       "helmrepo",
+				Namespace:  "foo",
 			}
 
 			clientBuilder := fakeclient.NewClientBuilder().
@@ -1715,10 +1679,8 @@ func TestHelmRepositoryReconciler_ReconcileTypeUpdatePredicateFilter(t *testing.
 	defer testServer.Stop()
 
 	obj := &sourcev1.HelmRepository{
-		ObjectMeta: metav1.ObjectMeta{
-			GenerateName: "helmrepository-reconcile-",
-			Namespace:    "default",
-		},
+		GenerateName: "helmrepository-reconcile-",
+		Namespace:    "default",
 		Spec: sourcev1.HelmRepositorySpec{
 			Interval: metav1.Duration{Duration: interval},
 			URL:      testServer.URL(),
@@ -1804,10 +1766,8 @@ func TestHelmRepositoryReconciler_ReconcileSpecUpdatePredicateFilter(t *testing.
 	defer testServer.Stop()
 
 	obj := &sourcev1.HelmRepository{
-		ObjectMeta: metav1.ObjectMeta{
-			GenerateName: "helmrepository-reconcile-",
-			Namespace:    "default",
-		},
+		GenerateName: "helmrepository-reconcile-",
+		Namespace:    "default",
 		Spec: sourcev1.HelmRepositorySpec{
 			Interval: metav1.Duration{Duration: interval},
 			URL:      testServer.URL(),
@@ -1906,10 +1866,8 @@ func TestHelmRepositoryReconciler_InMemoryCaching(t *testing.T) {
 	defer func() { g.Expect(testEnv.Delete(ctx, ns)).To(Succeed()) }()
 
 	helmRepo := &sourcev1.HelmRepository{
-		ObjectMeta: metav1.ObjectMeta{
-			GenerateName: "helmrepository-",
-			Namespace:    ns.Name,
-		},
+		GenerateName: "helmrepository-",
+		Namespace:    ns.Name,
 		Spec: sourcev1.HelmRepositorySpec{
 			URL: testServer.URL(),
 		},
@@ -1965,10 +1923,8 @@ func TestHelmRepositoryReconciler_ociMigration(t *testing.T) {
 	})
 
 	hr := &sourcev1.HelmRepository{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      fmt.Sprintf("hr-%s", randStringRunes(5)),
-			Namespace: testns.Name,
-		},
+		Name:      fmt.Sprintf("hr-%s", randStringRunes(5)),
+		Namespace: testns.Name,
 	}
 	hrKey := client.ObjectKeyFromObject(hr)
 

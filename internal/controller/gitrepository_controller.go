@@ -694,8 +694,7 @@ func (r *GitRepositoryReconciler) getAuthOpts(ctx context.Context, obj *sourcev1
 	// Check if SSH identity key is encrypted but no password was provided.
 	if opts.Transport == git.SSH && len(opts.Identity) > 0 && opts.Password == "" {
 		_, err := ssh.ParseRawPrivateKey(opts.Identity)
-		var missingErr *ssh.PassphraseMissingError
-		if errors.As(err, &missingErr) {
+		if _, ok := errors.AsType[*ssh.PassphraseMissingError](err); ok {
 			e := serror.NewGeneric(
 				fmt.Errorf("SSH identity key is encrypted but no 'password' field was provided in the secret '%s/%s'",
 					obj.GetNamespace(), obj.Spec.SecretRef.Name),
