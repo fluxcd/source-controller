@@ -345,6 +345,8 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 		conditions.Delete(obj, sourcev1.SourceVerifiedCondition)
 	}
 
+	provider := obj.GetProvider()
+
 	// Apply the default ServiceAccount when the object does not specify one, so
 	// that both the keychain and the auth library are aware of it.
 	saName := obj.Spec.ServiceAccountName
@@ -367,33 +369,30 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 		}
 	}
 
-	// Build the authentication spec. This is done even when no
-	// ServiceAccount is specified, as some inputs are validated regardless.
-	var cryptoSpec *cryptov1.Spec
-	if sa != nil || (obj.Spec.Provider != "" && obj.Spec.Provider != sourcev1.GenericOCIProvider) {
-		buildOpts := []cryptov1.Option{
-			cryptov1.WithServiceProvider(obj.Spec.Provider),
-			cryptov1.WithOCI(),
+	// Build the authentication spec. BuildSpec is safe to call even when there
+	// is no ServiceAccount or provider-specific configuration: it returns a
+	// spec with a nil Auth in that case.
+	buildOpts := []cryptov1.Option{
+		cryptov1.WithServiceProvider(provider),
+		cryptov1.WithOCI(),
+	}
+	if sa != nil {
+		buildOpts = append(buildOpts, cryptov1.WithAnnotations(sa.Annotations))
+		if len(sa.ImagePullSecrets) > 0 {
+			buildOpts = append(buildOpts, cryptov1.WithImagePullSecrets())
 		}
-		if sa != nil {
-			buildOpts = append(buildOpts, cryptov1.WithAnnotations(sa.Annotations))
-			if len(sa.ImagePullSecrets) > 0 {
-				buildOpts = append(buildOpts, cryptov1.WithImagePullSecrets())
-			}
-		}
-		if obj.Spec.CertSecretRef != nil {
-			buildOpts = append(buildOpts, cryptov1.WithCertSecretRef())
-		}
-		var err error
-		cryptoSpec, err = cryptov1.BuildSpec(buildOpts...)
-		if err != nil {
-			e := serror.NewGeneric(
-				fmt.Errorf("failed to validate configuration: %w", err),
-				sourcev1.AuthenticationFailedReason,
-			)
-			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
-			return sreconcile.ResultEmpty, e
-		}
+	}
+	if obj.Spec.CertSecretRef != nil {
+		buildOpts = append(buildOpts, cryptov1.WithCertSecretRef())
+	}
+	cryptoSpec, err := cryptov1.BuildSpec(buildOpts...)
+	if err != nil {
+		e := serror.NewGeneric(
+			fmt.Errorf("failed to validate configuration: %w", err),
+			sourcev1.AuthenticationFailedReason,
+		)
+		conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
+		return sreconcile.ResultEmpty, e
 	}
 
 	// Generate the registry credential keychain either from static credentials
@@ -430,7 +429,9 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 		}
 	}
 
-	if _, ok := keychain.(soci.Anonymous); obj.Spec.Provider != "" && obj.Spec.Provider != sourcev1.GenericOCIProvider && ok {
+	// Workload identity kicks in when the provider is not generic or
+	// the SA has opted into object-level workload identity.
+	if _, ok := keychain.(soci.Anonymous); ok && (provider != sourcev1.GenericOCIProvider || cryptoSpec.Auth.OptedIn()) {
 		// Check the object-level workload identity feature gate.
 		if sa != nil && !r.ObjectLevelWorkloadIdentity {
 			const gate = auth.FeatureGateObjectLevelWorkloadIdentity
@@ -455,10 +456,10 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 			opts = append(opts, auth.WithProxyURL(*proxyURL))
 		}
 		var authErr error
-		authenticator, authErr = soci.OIDCAuth(ctxTimeout, obj.Spec.URL, obj.Spec.Provider, opts...)
+		authenticator, authErr = soci.OIDCAuth(ctxTimeout, obj.Spec.URL, provider, opts...)
 		if authErr != nil {
 			e := serror.NewGeneric(
-				fmt.Errorf("failed to get credential from %s: %w", obj.Spec.Provider, authErr),
+				fmt.Errorf("failed to get credential from %s: %w", provider, authErr),
 				sourcev1.AuthenticationFailedReason,
 			)
 			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, e.Reason, "%s", e)
