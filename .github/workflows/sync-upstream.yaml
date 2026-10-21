@@ -1,0 +1,130 @@
+name: sync-upstream
+
+# Opens a pull request that merges the latest upstream release of
+# fluxcd/source-controller into this fork. The pull request always gets opened:
+# if the merge has conflicts or the result does not build, CI on the pull
+# request fails and someone has to take care of it. See "Maintaining the fork
+# up to date" in the README.
+
+on:
+  schedule:
+    # Weekdays, early morning UTC.
+    - cron: '0 6 * * 1-5'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Upstream release tag to sync, e.g. v1.9.6 (default: the latest stable release)'
+        required: false
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: sync-upstream
+  cancel-in-progress: false
+
+env:
+  UPSTREAM_URL: https://github.com/fluxcd/source-controller.git
+
+jobs:
+  sync:
+    if: github.repository_owner == 'qdrant'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          fetch-depth: 0
+          # BOT_GITHUB_TOKEN instead of GITHUB_TOKEN: pushes and pull requests
+          # made with GITHUB_TOKEN do not trigger the CI workflows, and the
+          # whole point is for CI to judge the result.
+          token: ${{ secrets.BOT_GITHUB_TOKEN }}
+          persist-credentials: true # zizmor: ignore[artipacked] needed to push the sync branch
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+
+      - name: Configure git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Find the upstream release to sync
+        id: target
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+        run: scripts/sync-upstream.sh target "$INPUT_TAG"
+
+      - name: Skip if the sync branch or a pull request already exists
+        id: existing
+        if: steps.target.outputs.status == 'needs-sync'
+        env:
+          GH_TOKEN: ${{ secrets.BOT_GITHUB_TOKEN }}
+          BRANCH: ${{ steps.target.outputs.branch }}
+        run: |
+          # --state all: a pull request that was closed without merging is a
+          # decision not to take this release. Do not reopen it every morning.
+          prs=$(gh pr list --state all --head "$BRANCH" --json number --jq 'length')
+          if [ "$prs" != "0" ] || git ls-remote --exit-code --heads origin "$BRANCH" > /dev/null; then
+            echo "Branch or pull request for $BRANCH already exists, nothing to do."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Merge the upstream release
+        id: merge
+        if: steps.target.outputs.status == 'needs-sync' && steps.existing.outputs.skip == 'false'
+        env:
+          TAG: ${{ steps.target.outputs.tag }}
+        run: scripts/sync-upstream.sh merge "$TAG"
+
+      - name: Push branch and open pull request
+        if: steps.merge.outputs.status == 'merged' || steps.merge.outputs.status == 'conflict'
+        env:
+          GH_TOKEN: ${{ secrets.BOT_GITHUB_TOKEN }}
+          TAG: ${{ steps.merge.outputs.tag }}
+          BRANCH: ${{ steps.merge.outputs.branch }}
+          MERGE_STATUS: ${{ steps.merge.outputs.status }}
+          CONFLICTS_FILE: ${{ steps.merge.outputs.conflicts_file }}
+        run: |
+          upstream_repo=${UPSTREAM_URL%.git}
+          {
+            echo "Merges upstream [\`${TAG}\`](${upstream_repo}/releases/tag/${TAG}) and re-applies the Qdrant adaptations (\`scripts/rename-api-groups.sh\`, \`make tidy\`)."
+            echo
+            echo "Opened automatically by the \`sync-upstream\` workflow. **CI is the verdict**: if it is red, this release needs work before it can be taken."
+            echo
+            if [ "$MERGE_STATUS" = "conflict" ]; then
+              echo "### Merge conflicts"
+              echo
+              echo "The merge had conflicts. The conflict markers are committed as-is, so CI fails until they are resolved. Conflicting files:"
+              echo
+              sed 's/^/- `/; s/$/`/' "$CONFLICTS_FILE"
+              echo
+            fi
+            echo "### Reviewing"
+            echo
+            echo "The merge commit from upstream is not worth reviewing. Look at the commits that follow it (rename script, \`make tidy\`) and at CI."
+            echo
+            echo "### After merging"
+            echo
+            echo "- [ ] Tag the fork release: \`${TAG}-qdrant.1\` and \`api/${TAG}-qdrant.1\` (bump the number for a re-release of the same upstream version)."
+            echo "- [ ] fluxcd-helm-controller: update its \`source-controller/api\` replace and \`SOURCE_BRANCH\` in the Makefile to the new tag."
+            echo "- [ ] qdrant-cloud-agent: bump the \`replace\` lines in \`go.mod\`, \`make download-crd-deps\` and review the CRD diff (see docs/upgrading-flux-controller-crds.md)."
+          } > pr-body.md
+          git push origin "$BRANCH"
+          draft=()
+          if [ "$MERGE_STATUS" = "conflict" ]; then
+            draft=(--draft)
+          fi
+          gh pr create \
+            --base main \
+            --head "$BRANCH" \
+            --title "Sync upstream ${TAG}" \
+            --body-file pr-body.md \
+            "${draft[@]}"

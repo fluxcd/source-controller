@@ -1,0 +1,29 @@
+name: conflict-markers
+
+# Fails when a file contains unresolved merge conflict markers. The
+# sync-upstream workflow commits conflicts as-is so that the pull request cannot
+# go green by accident, but a conflict in a file that no test builds (for
+# example another workflow) would otherwise be invisible to CI.
+
+on:
+  pull_request:
+
+permissions: {}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Fail on unresolved conflict markers
+        run: |
+          if git grep -nE '^(<<<<<<<|>>>>>>>) '; then
+            echo "::error::Unresolved merge conflict markers found, see the lines above."
+            exit 1
+          fi

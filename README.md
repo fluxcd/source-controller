@@ -18,6 +18,39 @@ by our custom ones.
 
 ### Maintaining the fork up to date
 
+#### Automated: the `sync-upstream` workflow
+
+The [`sync-upstream`](.github/workflows/sync-upstream.yaml) workflow runs on
+weekdays (and on demand from the Actions tab, optionally for a specific
+tag). When upstream publishes a new stable release (`vX.Y.Z`), it opens a PR
+named `Sync upstream vX.Y.Z` that merges the tag, runs
+`./scripts/rename-api-groups.sh` and `make tidy`. It uses
+[`scripts/sync-upstream.sh`](scripts/sync-upstream.sh), which you can also run
+locally to reproduce what the workflow did.
+
+The PR is always opened and **CI is the verdict**. If the merge had conflicts,
+the PR is a draft with the conflict markers committed, and the
+[`conflict-markers`](.github/workflows/conflict-markers.yaml) check fails until
+they are resolved. If it merged cleanly but does not build or pass the tests, CI is
+red and someone needs to fix it on the PR branch. The workflow never merges or
+tags anything. Closing a PR without merging tells it to leave that release
+alone.
+
+The workflow authenticates with the `BOT_GITHUB_TOKEN` secret, not with
+`GITHUB_TOKEN`: pushes and PRs made with `GITHUB_TOKEN` do not trigger CI. The
+token must be able to push branches and open PRs, and also to push changes to
+files under `.github/workflows/`, because upstream releases regularly modify
+them (for a classic PAT that means the `workflow` scope, for a fine-grained
+token or a GitHub App the "Workflows" write permission).
+
+Compatibility with the cloud-agent is not checked here: the agent's own CI is
+the gate once its `replace` lines are bumped to the new fork release.
+
+#### Manual
+
+Use this when the workflow cannot help, e.g. to sync something that is not a
+release tag.
+
 - Configure and fetch upstream/main.
 - Create your development branch from origin/main and merge upstream/main into
   it. You can run the merge with `-X theirs` option.
