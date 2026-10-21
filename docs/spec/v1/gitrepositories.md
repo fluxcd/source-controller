@@ -465,10 +465,13 @@ in the same namespace as GitRepository with purpose depending on the value of
 the `.spec.provider` field:
 
 - When `.spec.provider` is set to `azure`, the Service Account
-  will be used for Workload Identity authentication. In this case, the controller
-  feature gate `ObjectLevelWorkloadIdentity` must be enabled, otherwise the
-  controller will error out. For Azure DevOps specific setup, see the
+  will be used for Workload Identity authentication. For Azure DevOps specific setup, see the
   [Azure DevOps integration guide](https://fluxcd.io/flux/integrations/azure/#for-azure-devops).
+
+For a complete guide to the ServiceAccount annotations used for object-level
+workload identity, including the `spiffe` credential provider, see the
+[ServiceAccount annotations](/flux/integrations/serviceaccount-annotations)
+docs.
 
 **Note:** that for a publicly accessible git repository, you don't need to
 provide a `secretRef` nor `serviceAccountName`.

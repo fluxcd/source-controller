@@ -63,6 +63,7 @@ import (
 	rreconcile "github.com/fluxcd/pkg/runtime/reconcile"
 	"github.com/fluxcd/pkg/runtime/secrets"
 	"github.com/fluxcd/pkg/sourceignore"
+	fluxbroker "github.com/fluxcd/pkg/spiffe/broker"
 	"github.com/fluxcd/pkg/tar"
 	"github.com/fluxcd/pkg/version"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -146,8 +147,7 @@ type OCIRepositoryReconciler struct {
 	TokenCache            *cache.TokenCache
 	CosignVerifierFactory *scosign.CosignVerifierFactory
 	DefaultServiceAccount string
-
-	ObjectLevelWorkloadIdentity bool
+	SPIFFEBroker          fluxbroker.Interface
 
 	requeueDependency time.Duration
 
@@ -376,6 +376,9 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 		cryptov1.WithServiceProvider(provider),
 		cryptov1.WithOCI(),
 	}
+	if obj.Spec.SecretRef != nil {
+		buildOpts = append(buildOpts, cryptov1.WithSecretRefAuth())
+	}
 	if sa != nil {
 		buildOpts = append(buildOpts, cryptov1.WithAnnotations(sa.Annotations))
 		if len(sa.ImagePullSecrets) > 0 {
@@ -432,18 +435,11 @@ func (r *OCIRepositoryReconciler) reconcileSource(ctx context.Context, sp *patch
 	// Workload identity kicks in when the provider is not generic or
 	// the SA has opted into object-level workload identity.
 	if _, ok := keychain.(soci.Anonymous); ok && (provider != sourcev1.GenericOCIProvider || cryptoSpec.Auth.OptedIn()) {
-		// Check the object-level workload identity feature gate.
-		if sa != nil && !r.ObjectLevelWorkloadIdentity {
-			const gate = auth.FeatureGateObjectLevelWorkloadIdentity
-			const msgFmt = "to use spec.serviceAccountName for provider authentication please enable the %s feature gate in the controller"
-			err := fmt.Errorf(msgFmt, gate)
-			return sreconcile.ResultEmpty, serror.NewStalling(err, meta.FeatureGateDisabledReason)
-		}
-
 		opts := auth.OptionsFromSpec(cryptoSpec.Auth)
 		opts = append(opts,
 			auth.WithClient(r.Client),
-			auth.WithObject(sourcev1.GroupVersion.Group, sourcev1.OCIRepositoryKind, obj))
+			auth.WithObject(sourcev1.GroupVersion.Group, sourcev1.OCIRepositoryKind, obj),
+			auth.WithSPIFFEBroker(r.SPIFFEBroker))
 		if sa != nil {
 			opts = append(opts, auth.WithServiceAccountName(sa.Name))
 		}

@@ -18,7 +18,6 @@ package main
 
 import (
 	"crypto/tls"
-	"errors"
 	"fmt"
 	"os"
 	"time"
@@ -57,6 +56,7 @@ import (
 	"github.com/fluxcd/pkg/runtime/pprof"
 	"github.com/fluxcd/pkg/runtime/probes"
 	fluxspiffe "github.com/fluxcd/pkg/spiffe"
+	fluxbroker "github.com/fluxcd/pkg/spiffe/broker"
 
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 
@@ -122,6 +122,8 @@ func main() {
 		defaultServiceAccount     string
 		authorizedArtifactClients []string
 		authorizedEventServers    []string
+		spiffeBrokerEndpoint      string
+		spiffeBrokerIDs           []string
 	)
 
 	flag.StringVar(&metricsAddr, "metrics-addr", envOrDefault("METRICS_ADDR", ":8080"),
@@ -154,6 +156,10 @@ func main() {
 		"SPIFFE ID authorized to fetch artifacts from the artifact server. Can be repeated.")
 	flag.StringArrayVar(&authorizedEventServers, fluxspiffe.ControllerFlagAuthorizedEventServerSPIFFEID, nil,
 		"SPIFFE ID of an event server authorized to receive events. Can be repeated.")
+	flag.StringVar(&spiffeBrokerEndpoint, fluxspiffe.ControllerFlagSPIFFEBrokerEndpoint, "",
+		"The gRPC URL of the SPIFFE Broker endpoint.")
+	flag.StringArrayVar(&spiffeBrokerIDs, fluxspiffe.ControllerFlagSPIFFEBrokerID, nil,
+		"SPIFFE ID of the SPIFFE Broker endpoint. Can be repeated.")
 
 	artifactOptions.BindFlags(flag.CommandLine)
 	clientOptions.BindFlags(flag.CommandLine)
@@ -176,17 +182,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	objectLevelWorkloadIdentity, err := features.Enabled(auth.FeatureGateObjectLevelWorkloadIdentity)
-	if err != nil {
-		setupLog.Error(err, "unable to check feature gate "+auth.FeatureGateObjectLevelWorkloadIdentity)
-		os.Exit(1)
-	}
-	if defaultServiceAccount != "" && !objectLevelWorkloadIdentity {
-		setupLog.Error(errors.New("cannot set default service accounts when the "+
-			auth.FeatureGateObjectLevelWorkloadIdentity+" feature gate is not enabled"), "invalid configuration")
-		os.Exit(1)
-	}
-
 	if err := intervalJitterOptions.SetGlobalJitter(nil); err != nil {
 		setupLog.Error(err, "unable to set global jitter")
 		os.Exit(1)
@@ -206,7 +201,9 @@ func main() {
 	cacheRecorder := cache.MustMakeMetrics()
 
 	var eventTLSConfig *tls.Config
-	if len(authorizedArtifactClients) > 0 || len(authorizedEventServers) > 0 {
+	var spiffeBroker fluxbroker.Client
+	if len(authorizedArtifactClients) > 0 || len(authorizedEventServers) > 0 ||
+		spiffeBrokerEndpoint != "" || len(spiffeBrokerIDs) > 0 {
 		source, err := workloadapi.NewX509Source(ctx)
 		if err != nil {
 			setupLog.Error(err, "unable to create SPIFFE X.509 source")
@@ -235,6 +232,21 @@ func main() {
 				os.Exit(1)
 			}
 			setupLog.Info("event server will use inter-controller mTLS via SPIFFE", "spiffeIDs", authorizedEventServers)
+		}
+
+		if spiffeBrokerEndpoint != "" || len(spiffeBrokerIDs) > 0 {
+			spiffeBroker, err = fluxbroker.New(spiffeBrokerEndpoint, spiffeBrokerIDs, source)
+			if err != nil {
+				setupLog.Error(err, "unable to create SPIFFE Broker client")
+				os.Exit(1)
+			}
+			defer func() {
+				if err := spiffeBroker.Close(); err != nil {
+					setupLog.Error(err, "unable to close SPIFFE Broker client")
+				}
+			}()
+			setupLog.Info("object-level workload identity will use the SPIFFE Broker API",
+				"endpoint", spiffeBrokerEndpoint, "spiffeIDs", spiffeBrokerIDs)
 		}
 	}
 
@@ -278,14 +290,14 @@ func main() {
 	}
 
 	if err := (&controller.GitRepositoryReconciler{
-		Client:                      mgr.GetClient(),
-		Recorder:                    eventRecorder,
-		Metrics:                     metrics,
-		Storage:                     storage,
-		ControllerName:              controllerName,
-		TokenCache:                  tokenCache,
-		DefaultServiceAccount:       defaultServiceAccount,
-		ObjectLevelWorkloadIdentity: objectLevelWorkloadIdentity,
+		Client:                mgr.GetClient(),
+		Recorder:              eventRecorder,
+		Metrics:               metrics,
+		Storage:               storage,
+		ControllerName:        controllerName,
+		TokenCache:            tokenCache,
+		DefaultServiceAccount: defaultServiceAccount,
+		SPIFFEBroker:          spiffeBroker,
 	}).SetupWithManager(mgr, controller.GitRepositoryReconcilerOptions{
 		DependencyRequeueInterval: requeueDependency,
 		RateLimiter:               helper.GetRateLimiter(rateLimiterOptions),
@@ -330,14 +342,14 @@ func main() {
 	}
 
 	if err := (&controller.BucketReconciler{
-		Client:                      mgr.GetClient(),
-		Recorder:                    eventRecorder,
-		Metrics:                     metrics,
-		Storage:                     storage,
-		ControllerName:              controllerName,
-		TokenCache:                  tokenCache,
-		DefaultServiceAccount:       defaultServiceAccount,
-		ObjectLevelWorkloadIdentity: objectLevelWorkloadIdentity,
+		Client:                mgr.GetClient(),
+		Recorder:              eventRecorder,
+		Metrics:               metrics,
+		Storage:               storage,
+		ControllerName:        controllerName,
+		TokenCache:            tokenCache,
+		DefaultServiceAccount: defaultServiceAccount,
+		SPIFFEBroker:          spiffeBroker,
 	}).SetupWithManager(mgr, controller.BucketReconcilerOptions{
 		RateLimiter: helper.GetRateLimiter(rateLimiterOptions),
 	}); err != nil {
@@ -346,15 +358,15 @@ func main() {
 	}
 
 	if err := (&controller.OCIRepositoryReconciler{
-		Client:                      mgr.GetClient(),
-		Storage:                     storage,
-		Recorder:                    eventRecorder,
-		ControllerName:              controllerName,
-		TokenCache:                  tokenCache,
-		CosignVerifierFactory:       CosignVerifierFactory,
-		Metrics:                     metrics,
-		DefaultServiceAccount:       defaultServiceAccount,
-		ObjectLevelWorkloadIdentity: objectLevelWorkloadIdentity,
+		Client:                mgr.GetClient(),
+		Storage:               storage,
+		Recorder:              eventRecorder,
+		ControllerName:        controllerName,
+		TokenCache:            tokenCache,
+		CosignVerifierFactory: CosignVerifierFactory,
+		Metrics:               metrics,
+		DefaultServiceAccount: defaultServiceAccount,
+		SPIFFEBroker:          spiffeBroker,
 	}).SetupWithManager(mgr, controller.OCIRepositoryReconcilerOptions{
 		RateLimiter: helper.GetRateLimiter(rateLimiterOptions),
 	}); err != nil {

@@ -295,10 +295,6 @@ spec:
 
 ##### AWS Object-Level Workload Identity example
 
-**Note:** To use Object-Level Workload Identity (`.spec.serviceAccountName` with 
-cloud providers), the controller feature gate `ObjectLevelWorkloadIdentity` must 
-be enabled.
-
 ```yaml
 ---
 apiVersion: source.toolkit.fluxcd.io/v1
@@ -573,10 +569,6 @@ spec:
 
 ##### Azure Object-Level Workload Identity example
 
-**Note:** To use Object-Level Workload Identity (`.spec.serviceAccountName` with 
-cloud providers), the controller feature gate `ObjectLevelWorkloadIdentity` must 
-be enabled.
-
 ```yaml
 ---
 apiVersion: source.toolkit.fluxcd.io/v1
@@ -675,10 +667,6 @@ spec:
 ```
 
 ##### GCP Object-Level Workload Identity example
-
-**Note:** To use Object-Level Workload Identity (`.spec.serviceAccountName` with 
-cloud providers), the controller feature gate `ObjectLevelWorkloadIdentity` must 
-be enabled.
 
 ```yaml
 ---
@@ -1000,9 +988,12 @@ the `.spec.provider` field:
 - When `.spec.provider` is set to `generic`, the controller will fetch the image
   pull secrets attached to the Service Account and use them for authentication.
 - When `.spec.provider` is set to `aws`, `azure`, or `gcp`, the Service Account
-  will be used for Workload Identity authentication. In this case, the controller
-  feature gate `ObjectLevelWorkloadIdentity` must be enabled, otherwise the
-  controller will error out.
+  will be used for Workload Identity authentication.
+
+For a complete guide to the ServiceAccount annotations used for object-level
+workload identity, including the `spiffe` credential provider, see the
+[ServiceAccount annotations](/flux/integrations/serviceaccount-annotations)
+docs.
 
 **Note:** that for a publicly accessible object storage, you don't need to
 provide a `secretRef` nor `serviceAccountName`.

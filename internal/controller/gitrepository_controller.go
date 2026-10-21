@@ -34,6 +34,7 @@ import (
 	"github.com/fluxcd/pkg/runtime/events"
 	"github.com/fluxcd/pkg/runtime/logger"
 	"github.com/fluxcd/pkg/runtime/secrets"
+	fluxbroker "github.com/fluxcd/pkg/spiffe/broker"
 	"github.com/go-git/go-git/v5/plumbing/transport"
 	"github.com/opencontainers/go-digest"
 	ssh "golang.org/x/crypto/ssh"
@@ -174,8 +175,7 @@ type GitRepositoryReconciler struct {
 	TokenCache     *cache.TokenCache
 
 	DefaultServiceAccount string
-
-	ObjectLevelWorkloadIdentity bool
+	SPIFFEBroker          fluxbroker.Interface
 
 	requeueDependency time.Duration
 
@@ -708,19 +708,9 @@ func (r *GitRepositoryReconciler) getAuthOpts(ctx context.Context, obj *sourcev1
 	// Configure provider authentication if specified.
 	provider := obj.GetProvider()
 	withCerts := len(opts.ClientCert) > 0 || len(opts.ClientKey) > 0 || len(opts.CAFile) > 0
-
-	// Check the object-level workload identity feature gate for the providers
-	// that use the ServiceAccount for authentication.
-	switch provider {
-	case sourcev1.GitProviderAzure, sourcev1.GitProviderAWS:
-		if obj.Spec.ServiceAccountName != "" && !r.ObjectLevelWorkloadIdentity {
-			const gate = auth.FeatureGateObjectLevelWorkloadIdentity
-			const msgFmt = "to use spec.serviceAccountName for provider authentication please enable the %s feature gate in the controller"
-			err := serror.NewStalling(fmt.Errorf(msgFmt, gate), meta.FeatureGateDisabledReason)
-			conditions.MarkTrue(obj, sourcev1.FetchFailedCondition, meta.FeatureGateDisabledReason, "%s", err)
-			return nil, err
-		}
-	}
+	withAuth := obj.Spec.SecretRef != nil &&
+		(opts.Username != "" || opts.Password != "" || opts.BearerToken != "" || len(opts.Identity) > 0 ||
+			len(authData[githubapp.KeyAppID]) > 0 || len(authData[githubapp.KeyAppClientID]) > 0)
 
 	// Resolve the ServiceAccount once, applying the default ServiceAccount when
 	// the object does not specify one.
@@ -755,6 +745,9 @@ func (r *GitRepositoryReconciler) getAuthOpts(ctx context.Context, obj *sourcev1
 		if withCerts {
 			buildOpts = append(buildOpts, cryptov1.WithSecretRefCerts())
 		}
+		if withAuth {
+			buildOpts = append(buildOpts, cryptov1.WithSecretRefAuth())
+		}
 		if provider == sourcev1.GitProviderGitHub && len(authData[githubapp.KeyAppBaseURL]) > 0 {
 			buildOpts = append(buildOpts, cryptov1.WithGitHubEnterpriseServer())
 		}
@@ -779,7 +772,8 @@ func (r *GitRepositoryReconciler) getAuthOpts(ctx context.Context, obj *sourcev1
 			authOpts = append(authOpts,
 				auth.WithClient(r.Client),
 				auth.WithGitURL(u),
-				auth.WithObject(sourcev1.GroupVersion.Group, sourcev1.GitRepositoryKind, obj))
+				auth.WithObject(sourcev1.GroupVersion.Group, sourcev1.GitRepositoryKind, obj),
+				auth.WithSPIFFEBroker(r.SPIFFEBroker))
 			if sa != nil {
 				authOpts = append(authOpts, auth.WithServiceAccountName(sa.Name))
 			}

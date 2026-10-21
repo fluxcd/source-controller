@@ -5,7 +5,8 @@
 # It creates a dedicated kind cluster with a ServiceAccount issuer reachable
 # from a Zot container on the kind network, deploys source-controller, and
 # verifies that an OCIRepository using the generic provider authenticates to
-# Zot with a projected ServiceAccount token.
+# Zot with a projected ServiceAccount token. It also installs SPIRE with the
+# SPIFFE Broker API and verifies the same using JWT-SVIDs.
 set -euo pipefail
 
 IMG="${IMG:-test/source-controller:latest}"
@@ -25,6 +26,25 @@ REPO_B="zot-e2e-b"
 OCIREPO_A="zot-oidc-a"
 OCIREPO_B="zot-oidc-b"
 REV="test"
+
+# SPIFFE Broker API test setup.
+SPIRE_NAMESPACE="spire"
+SPIRE_TRUST_DOMAIN="example.org"
+SPIRE_SERVER_IMAGE="${SPIRE_SERVER_IMAGE:-ghcr.io/spiffe/spire-server:1.15.5}"
+SPIRE_AGENT_IMAGE="${SPIRE_AGENT_IMAGE:-ghcr.io/spiffe/spire-agent:1.15.5}"
+SPIRE_OIDC_IMAGE="${SPIRE_OIDC_IMAGE:-ghcr.io/spiffe/oidc-discovery-provider:1.15.5}"
+BROKER_SA="default"
+SPIRE_BROKER_ENDPOINT="dns:///spire-broker.spire:8443"
+SPIRE_BROKER_ID="spiffe://${SPIRE_TRUST_DOMAIN}/spire/agent/k8s_psat/broker-cluster/"
+SPIRE_OIDC_ISSUER="http://${CLUSTER}-control-plane:8082"
+JWT_SA_NAME="zot-puller-jwt"
+JWT_SA_NAME_B="zot-puller-jwt-b"
+JWT_OBJ_TYPE="ocirepositories.source.toolkit.fluxcd.io"
+JWT_OCIREPO_A="zot-jwt-a"
+JWT_OCIREPO_B="zot-jwt-b"
+JWT_OCIREPO_A_CROSS="zot-jwt-a-cross"
+JWT_SPIFFE_A="spiffe://${SPIRE_TRUST_DOMAIN}/zot/ocirepositories/${JWT_OCIREPO_A}"
+JWT_SPIFFE_B="spiffe://${SPIRE_TRUST_DOMAIN}/zot/ocirepositories/${JWT_OCIREPO_B}"
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 WORKDIR="$(mktemp -d)"
@@ -153,6 +173,477 @@ flux push artifact "oci://localhost:${ZOT_HOST_PORT}/${REPO_B}:${REV}" \
     --revision="${REV}"
 docker rm -f "${ZOT_CONTAINER}" >/dev/null
 
+
+##############################################################################
+log "Installing SPIRE with the SPIFFE Broker API and OIDC discovery"
+##############################################################################
+kubectl create namespace "${SPIRE_NAMESPACE}" --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+
+kubectl apply -f - >/dev/null <<EOF
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: spire-server
+  namespace: ${SPIRE_NAMESPACE}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: spire-server
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "nodes"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["authentication.k8s.io"]
+    resources: ["tokenreviews"]
+    verbs: ["get", "create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: spire-server
+subjects:
+  - kind: ServiceAccount
+    name: spire-server
+    namespace: ${SPIRE_NAMESPACE}
+roleRef:
+  kind: ClusterRole
+  name: spire-server
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: spire-server
+  namespace: ${SPIRE_NAMESPACE}
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    resourceNames: ["spire-bundle"]
+    verbs: ["get", "patch"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["create"]
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["create", "update", "get"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: spire-server
+  namespace: ${SPIRE_NAMESPACE}
+subjects:
+  - kind: ServiceAccount
+    name: spire-server
+    namespace: ${SPIRE_NAMESPACE}
+roleRef:
+  kind: Role
+  name: spire-server
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: spire-bundle
+  namespace: ${SPIRE_NAMESPACE}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: spire-server
+  namespace: ${SPIRE_NAMESPACE}
+data:
+  server.conf: |
+    server {
+      bind_address = "0.0.0.0"
+      bind_port = "8081"
+      trust_domain = "${SPIRE_TRUST_DOMAIN}"
+      data_dir = "/run/spire/data"
+      log_level = "INFO"
+      default_x509_svid_ttl = "1h"
+      ca_ttl = "12h"
+      jwt_issuer = "${SPIRE_OIDC_ISSUER}"
+    }
+
+    plugins {
+      DataStore "sql" {
+        plugin_data {
+          database_type = "sqlite3"
+          connection_string = "/run/spire/data/datastore.sqlite3"
+        }
+      }
+
+      NodeAttestor "k8s_psat" {
+        plugin_data {
+          clusters = {
+            "broker-cluster" = {
+              service_account_allow_list = ["${SPIRE_NAMESPACE}:spire-agent"]
+            }
+          }
+        }
+      }
+
+      KeyManager "disk" {
+        plugin_data {
+          keys_path = "/run/spire/data/keys.json"
+        }
+      }
+
+      BundlePublisher "k8s_configmap" {
+        plugin_data {
+          clusters = {
+            "broker-cluster" = {
+              configmap_name = "spire-bundle"
+              configmap_key  = "bundle.crt"
+              namespace      = "${SPIRE_NAMESPACE}"
+              format         = "pem"
+            }
+          }
+        }
+      }
+    }
+
+    health_checks {
+      listener_enabled = true
+      bind_address = "0.0.0.0"
+      bind_port = 8080
+      live_path = "/live"
+      ready_path = "/ready"
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: spire-server
+  namespace: ${SPIRE_NAMESPACE}
+  labels:
+    app: spire-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: spire-server
+  template:
+    metadata:
+      labels:
+        app: spire-server
+    spec:
+      serviceAccountName: spire-server
+      containers:
+        - name: spire-server
+          image: ${SPIRE_SERVER_IMAGE}
+          args: ["-config", "/run/spire/config/server.conf"]
+          ports:
+            - containerPort: 8081
+          volumeMounts:
+            - name: spire-config
+              mountPath: /run/spire/config
+              readOnly: true
+          livenessProbe:
+            httpGet:
+              path: /live
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 5
+      volumes:
+        - name: spire-config
+          configMap:
+            name: spire-server
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: spire-server
+  namespace: ${SPIRE_NAMESPACE}
+spec:
+  ports:
+    - name: grpc
+      port: 8081
+      targetPort: 8081
+  selector:
+    app: spire-server
+EOF
+kubectl -n "${SPIRE_NAMESPACE}" rollout status deployment/spire-server --timeout=5m
+
+NODE_UID="$(kubectl get nodes -o jsonpath='{.items[0].metadata.uid}')"
+AGENT_ID="spiffe://${SPIRE_TRUST_DOMAIN}/spire/agent/k8s_psat/broker-cluster/${NODE_UID}"
+
+create_entry() {
+    local spiffe_id="$1"
+    shift
+    kubectl -n "${SPIRE_NAMESPACE}" exec deployment/spire-server -- \
+        /opt/spire/bin/spire-server entry create \
+            -spiffeID "${spiffe_id}" \
+            -parentID "${AGENT_ID}" \
+            "$@" >/dev/null
+}
+
+create_entry "spiffe://${SPIRE_TRUST_DOMAIN}/oidc-discovery-provider" \
+    -selector "k8s:ns:${SPIRE_NAMESPACE}" \
+    -selector "k8s:sa:spire-agent" \
+    -selector "k8s:container-name:oidc-discovery-provider"
+create_entry "spiffe://${SPIRE_TRUST_DOMAIN}/ns/${NS}/sa/${BROKER_SA}" \
+    -selector "k8s:ns:${NS}" \
+    -selector "k8s:sa:${BROKER_SA}"
+create_entry "${JWT_SPIFFE_A}" \
+    -selector "k8s:resource:${JWT_OBJ_TYPE}" \
+    -selector "k8s:namespace:${APP_NS}" \
+    -selector "k8s:name:${JWT_OCIREPO_A}"
+create_entry "${JWT_SPIFFE_B}" \
+    -selector "k8s:resource:${JWT_OBJ_TYPE}" \
+    -selector "k8s:namespace:${APP_NS}" \
+    -selector "k8s:name:${JWT_OCIREPO_B}"
+
+kubectl apply -f - >/dev/null <<EOF
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: spire-agent
+  namespace: ${SPIRE_NAMESPACE}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: spire-agent
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "nodes", "nodes/proxy"]
+    verbs: ["get", "list"]
+  - apiGroups: ["source.toolkit.fluxcd.io"]
+    resources: ["ocirepositories"]
+    verbs: ["get", "list"]
+  - apiGroups: ["image.toolkit.fluxcd.io"]
+    resources: ["imagerepositories"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: spire-agent
+subjects:
+  - kind: ServiceAccount
+    name: spire-agent
+    namespace: ${SPIRE_NAMESPACE}
+roleRef:
+  kind: ClusterRole
+  name: spire-agent
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: spire-agent
+  namespace: ${SPIRE_NAMESPACE}
+data:
+  agent.conf: |
+    agent {
+      data_dir = "/run/spire"
+      log_level = "INFO"
+      server_address = "spire-server"
+      server_port = "8081"
+      socket_path = "/run/spire/agent-sockets/api.sock"
+      trust_bundle_path = "/run/spire/bundle/bundle.crt"
+      trust_domain = "${SPIRE_TRUST_DOMAIN}"
+
+      experimental {
+        broker {
+          bind_address = "0.0.0.0:8443"
+          brokers = [
+            {
+              id = "spiffe://${SPIRE_TRUST_DOMAIN}/ns/${NS}/sa/${BROKER_SA}"
+              allowed_reference_types = [
+                {
+                  type_url = "type.googleapis.com/spiffe.broker.KubernetesObjectReference"
+                  allow_over_tcp = true
+                },
+              ]
+            },
+          ]
+        }
+      }
+    }
+
+    plugins {
+      NodeAttestor "k8s_psat" {
+        plugin_data {
+          cluster = "broker-cluster"
+        }
+      }
+
+      KeyManager "memory" {
+        plugin_data {}
+      }
+
+      WorkloadAttestor "k8s" {
+        plugin_data {
+          skip_kubelet_verification = true
+          node_name_env = "MY_NODE_NAME"
+
+          experimental {
+            broker {
+              access_policy = "permissive"
+              brokers = [
+                {
+                  id = "spiffe://${SPIRE_TRUST_DOMAIN}/ns/${NS}/sa/${BROKER_SA}"
+                },
+              ]
+            }
+          }
+        }
+      }
+    }
+
+    health_checks {
+      listener_enabled = true
+      bind_address = "0.0.0.0"
+      bind_port = 8080
+      live_path = "/live"
+      ready_path = "/ready"
+    }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: spire-oidc
+  namespace: ${SPIRE_NAMESPACE}
+data:
+  oidc.conf: |
+    log_level = "INFO"
+    domains = ["${CLUSTER}-control-plane"]
+    insecure_addr = "0.0.0.0:8082"
+    allow_insecure_scheme = true
+    jwt_issuer = "${SPIRE_OIDC_ISSUER}"
+    jwks_uri = "${SPIRE_OIDC_ISSUER}/keys"
+    workload_api {
+      socket_path = "/run/spire/agent-sockets/api.sock"
+      trust_domain = "${SPIRE_TRUST_DOMAIN}"
+    }
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: spire-agent
+  namespace: ${SPIRE_NAMESPACE}
+  labels:
+    app: spire-agent
+spec:
+  selector:
+    matchLabels:
+      app: spire-agent
+  template:
+    metadata:
+      labels:
+        app: spire-agent
+    spec:
+      hostPID: true
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      serviceAccountName: spire-agent
+      containers:
+        - name: spire-agent
+          image: ${SPIRE_AGENT_IMAGE}
+          args: ["-config", "/run/spire/config/agent.conf"]
+          env:
+            - name: MY_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          ports:
+            - name: broker
+              containerPort: 8443
+            - name: healthz
+              containerPort: 8080
+          volumeMounts:
+            - name: spire-config
+              mountPath: /run/spire/config
+              readOnly: true
+            - name: spire-bundle
+              mountPath: /run/spire/bundle
+              readOnly: true
+            - name: spire-agent-socket
+              mountPath: /run/spire/agent-sockets
+            - name: spire-token
+              mountPath: /var/run/secrets/tokens
+          livenessProbe:
+            httpGet:
+              path: /live
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 10
+        - name: oidc-discovery-provider
+          image: ${SPIRE_OIDC_IMAGE}
+          args: ["-config", "/run/spire/oidc/oidc.conf"]
+          ports:
+            - name: oidc
+              containerPort: 8082
+          readinessProbe:
+            httpGet:
+              path: /.well-known/openid-configuration
+              port: 8082
+              httpHeaders:
+                - name: Host
+                  value: ${CLUSTER}-control-plane
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          volumeMounts:
+            - name: spire-oidc
+              mountPath: /run/spire/oidc
+              readOnly: true
+            - name: spire-agent-socket
+              mountPath: /run/spire/agent-sockets
+      volumes:
+        - name: spire-config
+          configMap:
+            name: spire-agent
+        - name: spire-bundle
+          configMap:
+            name: spire-bundle
+        - name: spire-oidc
+          configMap:
+            name: spire-oidc
+        - name: spire-agent-socket
+          hostPath:
+            path: /run/spire/agent-sockets
+            type: DirectoryOrCreate
+        - name: spire-token
+          projected:
+            sources:
+              - serviceAccountToken:
+                  path: spire-agent
+                  expirationSeconds: 7200
+                  audience: spire-server
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: spire-broker
+  namespace: ${SPIRE_NAMESPACE}
+spec:
+  selector:
+    app: spire-agent
+  ports:
+    - name: broker
+      port: 8443
+      targetPort: 8443
+EOF
+kubectl -n "${SPIRE_NAMESPACE}" rollout status daemonset/spire-agent --timeout=5m
+
 ##############################################################################
 log "Starting Zot with OIDC bearer authentication"
 ##############################################################################
@@ -175,6 +666,10 @@ cat > "${WORKDIR}/zot-auth.json" <<EOF
             "issuer": "${OIDC_ISSUER}",
             "audiences": ["${AUDIENCE}"],
             "certificateAuthorityFile": "/etc/zot/kind-ca.pem"
+          },
+          {
+            "issuer": "${SPIRE_OIDC_ISSUER}",
+            "audiences": ["${AUDIENCE}"]
           }
         ]
       }
@@ -184,7 +679,7 @@ cat > "${WORKDIR}/zot-auth.json" <<EOF
         "${REPO_A}": {
           "policies": [
             {
-              "users": ["${OIDC_ISSUER}/system:serviceaccount:${APP_NS}:${SA_NAME}"],
+              "users": ["${OIDC_ISSUER}/system:serviceaccount:${APP_NS}:${SA_NAME}", "${SPIRE_OIDC_ISSUER}/${JWT_SPIFFE_A}"],
               "actions": ["read"]
             }
           ],
@@ -193,7 +688,7 @@ cat > "${WORKDIR}/zot-auth.json" <<EOF
         "${REPO_B}": {
           "policies": [
             {
-              "users": ["${OIDC_ISSUER}/system:serviceaccount:${APP_NS}:${SA_NAME_B}"],
+              "users": ["${OIDC_ISSUER}/system:serviceaccount:${APP_NS}:${SA_NAME_B}", "${SPIRE_OIDC_ISSUER}/${JWT_SPIFFE_B}"],
               "actions": ["read"]
             }
           ],
@@ -227,9 +722,42 @@ log "Deploying source-controller"
 kind load docker-image "${IMG}" --name "${CLUSTER}"
 make -C "${ROOT_DIR}" install >/dev/null
 make -C "${ROOT_DIR}" dev-deploy IMG="${IMG%:*}" TAG="${IMG##*:}" >/dev/null
-kubectl -n "${NS}" patch deploy/source-controller --type=json \
-    -p='[{"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--feature-gates=ObjectLevelWorkloadIdentity=true"}]' >/dev/null
+kubectl -n "${NS}" patch deploy/source-controller --type=json -p "$(cat <<EOF
+[
+  {"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--spiffe-broker-endpoint=${SPIRE_BROKER_ENDPOINT}"},
+  {"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--spiffe-broker-id=${SPIRE_BROKER_ID}"}
+]
+EOF
+)" >/dev/null
+kubectl -n "${NS}" patch deploy/source-controller --type=strategic -p "$(cat <<EOF
+spec:
+  template:
+    spec:
+      containers:
+        - name: manager
+          env:
+            - name: SPIFFE_ENDPOINT_SOCKET
+              value: unix:///spiffe-workload-api/api.sock
+          volumeMounts:
+            - name: spiffe-workload-api
+              mountPath: /spiffe-workload-api
+              readOnly: true
+      volumes:
+        - name: spiffe-workload-api
+          hostPath:
+            path: /run/spire/agent-sockets
+EOF
+)" >/dev/null
 kubectl -n "${NS}" rollout status deploy/source-controller --timeout=2m
+for _ in $(seq 1 30); do
+    logs="$(kubectl -n "${NS}" logs deploy/source-controller)"
+    if grep -qF "object-level workload identity will use the SPIFFE Broker API" <<<"${logs}"; then
+        break
+    fi
+    sleep 1
+done
+grep -qF "object-level workload identity will use the SPIFFE Broker API" <<<"${logs}" \
+    || fail "source-controller did not log SPIFFE Broker API usage"
 
 ##############################################################################
 log "Creating ServiceAccounts and OCIRepositories"
@@ -262,6 +790,24 @@ metadata:
     credential.auth.fluxcd.io/provider: kubernetes
     credential.auth.fluxcd.io/type: jwt
     credential.auth.fluxcd.io/audiences: wrong-audience
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ${JWT_SA_NAME}
+  annotations:
+    credential.auth.fluxcd.io/provider: spiffe
+    credential.auth.fluxcd.io/type: jwt
+    credential.auth.fluxcd.io/audiences: ${AUDIENCE}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ${JWT_SA_NAME_B}
+  annotations:
+    credential.auth.fluxcd.io/provider: spiffe
+    credential.auth.fluxcd.io/type: jwt
+    credential.auth.fluxcd.io/audiences: ${AUDIENCE}
 EOF
 
 kubectl -n "${APP_NS}" apply -f - >/dev/null <<EOF
@@ -339,6 +885,51 @@ spec:
   url: oci://${ZOT_CONTAINER}:${ZOT_PORT}/${REPO_A}
   ref:
     tag: ${REV}
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: OCIRepository
+metadata:
+  name: ${JWT_OCIREPO_A}
+  namespace: ${APP_NS}
+spec:
+  interval: 1m
+  timeout: 30s
+  insecure: true
+  provider: generic
+  serviceAccountName: ${JWT_SA_NAME}
+  url: oci://${ZOT_CONTAINER}:${ZOT_PORT}/${REPO_A}
+  ref:
+    tag: ${REV}
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: OCIRepository
+metadata:
+  name: ${JWT_OCIREPO_B}
+  namespace: ${APP_NS}
+spec:
+  interval: 1m
+  timeout: 30s
+  insecure: true
+  provider: generic
+  serviceAccountName: ${JWT_SA_NAME_B}
+  url: oci://${ZOT_CONTAINER}:${ZOT_PORT}/${REPO_B}
+  ref:
+    tag: ${REV}
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: OCIRepository
+metadata:
+  name: ${JWT_OCIREPO_A_CROSS}
+  namespace: ${APP_NS}
+spec:
+  interval: 1m
+  timeout: 30s
+  insecure: true
+  provider: generic
+  serviceAccountName: ${JWT_SA_NAME}
+  url: oci://${ZOT_CONTAINER}:${ZOT_PORT}/${REPO_B}
+  ref:
+    tag: ${REV}
 EOF
 
 log "Waiting for the owned-repository OCIRepositories to become Ready"
@@ -347,6 +938,13 @@ kubectl -n "${APP_NS}" wait "ocirepository/${OCIREPO_A}" \
 kubectl -n "${APP_NS}" wait "ocirepository/${OCIREPO_B}" \
     --for=condition=Ready --timeout=3m
 info "Each ServiceAccount authenticated to its own repository"
+
+log "Waiting for the JWT-SVID OCIRepositories to become Ready"
+kubectl -n "${APP_NS}" wait "ocirepository/${JWT_OCIREPO_A}" \
+    --for=condition=Ready --timeout=3m
+kubectl -n "${APP_NS}" wait "ocirepository/${JWT_OCIREPO_B}" \
+    --for=condition=Ready --timeout=3m
+info "Each JWT-SVID identity authenticated to its own repository"
 
 expect_denied() {
     local name="$1" status msg
@@ -358,7 +956,7 @@ expect_denied() {
         if [ "${status}" = "True" ]; then
             fail "OCIRepository ${name} unexpectedly succeeded"
         fi
-        if [ "${status}" = "False" ] && printf '%s' "${msg}" | grep -qiE '401|403|unauthorized|forbidden|denied|authentication'; then
+        if [ "${status}" = "False" ] && printf '%s' "${msg}" | grep -qiE '401|403|unauthorized|forbidden|denied|authentication|permission|svid|spiffe'; then
             info "OCIRepository ${name} correctly denied"
             return 0
         fi
@@ -371,5 +969,6 @@ log "Verifying cross-ServiceAccount access is denied"
 expect_denied "${OCIREPO_A}-cross"
 expect_denied "${OCIREPO_B}-cross"
 expect_denied "${OCIREPO_A}-wrong-audience"
+expect_denied "${JWT_OCIREPO_A_CROSS}"
 
-log "SUCCESS: each ServiceAccount accessed only its own repository"
+log "SUCCESS: each ServiceAccount and JWT-SVID identity accessed only its own repository"
